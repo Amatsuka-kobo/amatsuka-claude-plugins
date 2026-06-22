@@ -1,0 +1,33 @@
+{
+  "name": "decision-kernel-mcp",
+  "version": "0.0.1-dev",
+  "description": "",
+  "type": "module",
+  "main": "dist/server.js",
+  "author": "Phyllis",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "tsx scripts/build.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@types/node": "^26.0.0",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.8.0",
+      "onFail": "download"
+    }
+  },
+  "volta": {
+    "node": "26.3.1",
+    "pnpm": "11.8.0"
+  }
+}

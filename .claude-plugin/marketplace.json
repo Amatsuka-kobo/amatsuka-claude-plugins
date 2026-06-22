@@ -1,0 +1,14 @@
+{
+  "name": "amatsuka-claude-plugins",
+  "owner": {
+    "name": "Phyllis",
+    "email": "phyllisphillis998@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "codiel",
+      "source": "./plugins/codiel",
+      "description": "GitHub issue の内容を取得・分析し、設計・開発・PR起票・レビューまでを一気通貫で行うオーケストレーター"
+    }
+  ]
+}
