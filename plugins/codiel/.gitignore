@@ -1,4 +1,4 @@
 .claude
 CLAUDE.md
-harness-docs/*.md
-!harness-docs/*.example.md
+docs/*.md
+!docs/*.example.md
