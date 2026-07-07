@@ -67,3 +67,129 @@ test("get --active はアクティブ run の一覧を返す", () => {
   assert.equal(r.out.runs.length, 1);
   assert.equal(r.out.runs[0].state.issue, 1);
 });
+
+test("stop は終端状態のときに失敗する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["stop", "--issue", "1", "--reason", "test"]);
+  const r = run(root, ["stop", "--issue", "1", "--reason", "test again"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /すでに終端状態です/);
+});
+
+test("start-phase は前ステージ未passedなら失敗する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  const r = run(root, ["start-phase", "design", "--issue", "1"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /init/);
+});
+
+test("GATEDフェーズは pass-gate(PROCEED)でのみ passed になる", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  let r = run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "ev1", "--verdict", "ASK"]);
+  assert.equal(r.code, 1);
+  r = run(root, ["complete-phase", "init", "--issue", "1"]);
+  assert.equal(r.code, 1); // GATED に complete-phase は使えない
+  r = run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "ev1", "--verdict", "PROCEED"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.out.state.phases["init"].status, "passed");
+  assert.equal(r.out.state.phases["init"].evaluationId, "ev1");
+});
+
+test("並列ステージ(test-spec/dev-plan)は design passed 後に両方 start できる", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e1", "--verdict", "PROCEED"]);
+  run(root, ["start-phase", "design", "--issue", "1"]);
+  run(root, ["pass-gate", "design", "--issue", "1", "--evaluation-id", "e2", "--verdict", "PROCEED"]);
+  assert.equal(run(root, ["start-phase", "test-spec", "--issue", "1"]).code, 0);
+  assert.equal(run(root, ["start-phase", "dev-plan", "--issue", "1"]).code, 0);
+  // 片方だけ passed では implement に進めない
+  run(root, ["pass-gate", "test-spec", "--issue", "1", "--evaluation-id", "e3", "--verdict", "PROCEED"]);
+  assert.equal(run(root, ["start-phase", "implement", "--issue", "1"]).code, 1);
+});
+
+test("mark-ask / resume で awaiting_human を往復できる", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  let r = run(root, ["mark-ask", "init", "--issue", "1", "--evaluation-id", "e1"]);
+  assert.equal(r.out.state.status, "awaiting_human");
+  assert.equal(r.out.state.phases["init"].status, "awaiting_human");
+  r = run(root, ["resume", "--issue", "1"]);
+  assert.equal(r.out.state.status, "active");
+  assert.equal(r.out.state.phases["init"].status, "in_progress");
+});
+
+test("record-attempt は上限超過で exit 3 + awaiting_human", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  for (let i = 0; i < 5; i++) assert.equal(run(root, ["record-attempt", "init", "--issue", "1"]).code, 0);
+  const r = run(root, ["record-attempt", "init", "--issue", "1"]);
+  assert.equal(r.code, 3);
+  assert.equal(run(root, ["get", "--issue", "1"]).out.state.status, "awaiting_human");
+});
+
+test("pr フェーズの complete-phase は --pr-url 必須", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  run(root, ["start-phase", "pr", "--issue", "1"]);
+  assert.equal(run(root, ["complete-phase", "pr", "--issue", "1"]).code, 1);
+  const r = run(root, ["complete-phase", "pr", "--issue", "1", "--pr-url", "https://example.test/pr/1"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.out.state.pr.url, "https://example.test/pr/1");
+});
+
+test("finalize は全フェーズ passed 後のみ成功し awaiting_outcome にする", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  assert.equal(run(root, ["finalize", "--issue", "1"]).code, 1);
+  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  run(root, ["start-phase", "pr", "--issue", "1"]);
+  run(root, ["complete-phase", "pr", "--issue", "1", "--pr-url", "u"]);
+  for (const ph of ["review", "fix-loop", "triage"]) {
+    run(root, ["start-phase", ph, "--issue", "1"]);
+    if (ph === "fix-loop") run(root, ["pass-gate", ph, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+    else run(root, ["complete-phase", ph, "--issue", "1"]);
+  }
+  const r = run(root, ["finalize", "--issue", "1"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.out.state.status, "awaiting_outcome");
+});
+
+test("record-outcome approved は completed にする", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  assert.equal(run(root, ["record-outcome", "--issue", "1", "--outcome", "approved"]).code, 1);
+  // (finalize まで進めるヘルパーを流してから)
+  fullRun(root, "1");
+  const r = run(root, ["record-outcome", "--issue", "1", "--outcome", "approved"]);
+  assert.equal(r.out.state.status, "completed");
+});
+
+// テストヘルパー
+function passThrough(root, phases) {
+  for (const ph of phases) {
+    run(root, ["start-phase", ph, "--issue", "1"]);
+    run(root, ["pass-gate", ph, "--issue", "1", "--evaluation-id", `e-${ph}`, "--verdict", "PROCEED"]);
+  }
+}
+
+function fullRun(root, issue) {
+  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  run(root, ["start-phase", "pr", "--issue", issue]);
+  run(root, ["complete-phase", "pr", "--issue", issue, "--pr-url", "u"]);
+  run(root, ["start-phase", "review", "--issue", issue]);
+  run(root, ["complete-phase", "review", "--issue", issue]);
+  run(root, ["start-phase", "fix-loop", "--issue", issue]);
+  run(root, ["pass-gate", "fix-loop", "--issue", issue, "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  run(root, ["start-phase", "triage", "--issue", issue]);
+  run(root, ["complete-phase", "triage", "--issue", issue]);
+  run(root, ["finalize", "--issue", issue]);
+}
