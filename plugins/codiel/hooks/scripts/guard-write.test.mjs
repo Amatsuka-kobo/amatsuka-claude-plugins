@@ -54,3 +54,27 @@ test("implement フェーズ中: src は allow、specs の cases.md は ask", ()
   assert.equal(hook(root, "Edit", path.join(root, ".codiel/specs/screen-login/spec.md")).permissionDecision, "ask");
   assert.equal(hook(root, "Write", path.join(root, ".codiel/specs/screen-login/scripts/login.spec.ts")).permissionDecision, "allow");
 });
+
+test("cwd がサブディレクトリでも state.json への絶対パス書き込みは deny(バイパス再現)", () => {
+  const root = setupRun();
+  const srcDir = path.join(root, "src");
+  fs.mkdirSync(srcDir, { recursive: true });
+  const abs = path.join(root, ".codiel/runs/issue-1/try-1/state.json");
+  const r = hook(srcDir, "Write", abs);
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("state.json 保護は大文字パスでもバイパスされない(ケース非依存)", () => {
+  const root = setupRun();
+  const abs = path.join(root, ".CODIEL/RUNS/issue-1/try-1/state.json");
+  const r = hook(root, "Write", abs);
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("cwd がサブディレクトリでも文書フェーズ制御が機能する(root/src への書き込みは ask)", () => {
+  const root = setupRun();
+  const srcDir = path.join(root, "src");
+  fs.mkdirSync(srcDir, { recursive: true });
+  const r = hook(srcDir, "Write", path.join(root, "src/app.ts"));
+  assert.equal(r.permissionDecision, "ask");
+});

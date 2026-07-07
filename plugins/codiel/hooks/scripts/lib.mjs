@@ -38,3 +38,17 @@ export function readDomains(root) {
   if (!m) return null;
   try { return JSON.parse(m[1]); } catch { return null; }
 }
+
+// startDir から上方向に `.codiel` ディレクトリを持つ祖先を探す。
+// 見つかればそのディレクトリを、見つからなければ startDir をそのまま返す(フォールバック)。
+// cwd がプロジェクトルートのサブディレクトリの場合でも、run 探索やフェーズ制御を
+// プロジェクトルート基準で行えるようにするためのもの。
+export function findProjectRoot(startDir) {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, ".codiel"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return startDir;
+    dir = parent;
+  }
+}
