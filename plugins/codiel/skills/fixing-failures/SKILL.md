@@ -43,8 +43,9 @@ fix-loop フェーズで使うスキル。`implementing` スキルの修正モ�
    `implementing` スキルの HARD-GATE と同じ扱い。
 6. **最小修正を実装する**: 3〜4 で特定した原因を解消する最小限の変更のみを行う。
    原因と無関係な箇所の「ついでの修正」は行わない。
-7. **対象ケースを再実行する**: 修正した NG ケースが OK になることを、実際の実行出力で確認する
-   (見た目で「直ったはず」と判断しない)。
+7. **対象の解消を再確認する**: 系統 (a) では修正した NG ケースを再実行し OK になることを、
+   系統 (b) では指摘された事象が解消したことを(手順 2 で再現に使った方法の再実行で)、
+   いずれも実際の実行出力で確認する(見た目で「直ったはず」と判断しない)。
 8. **回帰(全件)を再実行する**: 対象ケースの修正が既存の他ケースを壊していないか、
    `running-regression-tests` が定める回帰範囲全体で再確認する。対象ケースだけの再実行で
    完了としない。
@@ -92,7 +93,7 @@ digraph fixing_failures {
   node [fontname="sans-serif"];
 
   receive [label="入力系統(a)test-loopの4項目 または\n(b)fix-loopの所見+対象ファイルを受け取る", shape=box];
-  complete_input [label="4項目は揃っているか?", shape=diamond];
+  complete_input [label="入力契約の項目は揃っているか?\n(a)4項目 / (b)所見5項目+対象ファイル", shape=diamond];
   request_more [label="不足分の提示を要求\n(推測で埋めない)", shape=box];
 
   reproduce [label="再現手順どおりに\n再現する", shape=box];
