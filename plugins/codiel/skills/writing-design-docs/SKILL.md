@@ -29,9 +29,8 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
    対応付ける。満たされない基準が残っていないか確認する。
 5. `## 方針` には代替案を**最低 2 つ**書き、採用理由・却下理由を明記する。単一案の正当化ではなく
    比較によって採用根拠を示す。
-6. `## 影響を受ける機能単位` に unit-id を列挙する。命名規則は次のとおり:
-   フロントエンドは画面ごとに `screen-*`、バックエンドは API ごとに `api-*`、データ層は
-   モデル/マイグレーションごとに `model-*`。ドメインの区別が付かない汎用プロジェクトは `feat-*`。
+6. `## 影響を受ける機能単位` に unit-id を列挙する。命名規則(`screen-*`/`api-*`/`model-*`/`feat-*`)
+   の正式な定義は `writing-test-specs` スキルにある(本スキルはそれを前提に一覧を作るのみ)。
    この一覧は test-spec フェーズが `.codiel/specs/<unit-id>/` を作成・更新する入力になるため、
    既存 unit の流用か新規 unit かを判別できる粒度で書く。
 7. YAGNI: `issue.md` に書かれていない要件・受け入れ基準にない機能を設計に追加しない。
@@ -89,7 +88,8 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
 そのまま走査し、各 unit-id について `.codiel/specs/<unit-id>/spec.md` を新規作成または更新する。
 ここで unit を一つでも漏らすと、その機能単位は spec.md が更新されないまま実装が進み、
 回帰テストの対象からも漏れる。既存の `.codiel/specs/` にある unit と重複しないか、
-新規 unit なら命名規則(`screen-*`/`api-*`/`model-*`/`feat-*`)に沿っているかを列挙時に確認する。
+新規 unit なら命名規則(正式な定義は `writing-test-specs` スキル)に沿っているかを
+列挙時に確認する。
 
 ## コミット責務
 
