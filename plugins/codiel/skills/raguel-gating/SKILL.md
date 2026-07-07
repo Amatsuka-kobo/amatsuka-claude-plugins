@@ -77,15 +77,42 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    (何がどう引っかかったかが伝わる要約。`casePath` の場所も添える)。
 2. `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --issue N --evaluation-id <evaluationId>`
    で run を `awaiting_human` にして停止する。
-3. 人間の裁定を待つ。裁定が出たら **必ず** `mcp__raguel__record_outcome` で結末を記録する
-   (承認なら `approved`、差し戻し・却下なら `rejected`)。`evaluationId` には、この ASK を出した
-   evaluate 呼び出しの evaluationId(mark-ask で `state.phases[<phase>].evaluationId` に記録済みの値)
-   を使う。判例として次回以降の判定に還流する。
-4. 裁定が「修正して続行」なら `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で再開する。
-   **`resume` はフェーズを `in_progress` に戻すだけで `passed` にはしない**。resume 後は必ず、
-   人間の指示に沿って成果物を修正した上で(修正不要な裁定でも)**再度 evaluate を呼び直し**、
-   `PROCEED` が返って初めて `pass-gate` する再ゲートの手順を通る(次フェーズへの遷移は経由しない)。
-   裁定が「中止」なら STOP と同じ手順(下記)で終了させる。
+3. 人間の裁定を待つ。裁定は次の 2 つのいずれかに分岐する。**AI が「多分大丈夫」で代理判断すること
+   (どちらの分岐かを勝手に選ぶこと)は禁止**(Red Flags 参照)。裁定が「中止」なら STOP と同じ手順
+   (下記)で終了させる。
+
+#### 裁定 A: 修正して再提出
+
+1. 人間の指示に沿って成果物を修正する。
+2. `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で再開する。
+   **`resume` はフェーズを `in_progress` に戻すだけで `passed` にはしない**。
+3. 修正済みの成果物で **再度 evaluate を呼び直す**。`PROCEED` が返って初めて
+   `pass-gate --verdict PROCEED` する通常の再ゲート手順を通る(次フェーズへの遷移はここでは経由しない。
+   pass-gate 後にあらためて「PROCEED」の手順に合流する)。
+4. 再 evaluate の結果が `resubmission-loop` 等により再度 `ASK` になることがある。その場合も
+   握り潰さず、もう一度人間の裁定を仰ぐ(3 に戻る。AI が自己判断で通してはならない)。`STOP` が
+   返れば STOP の手順に従う。
+5. 最終的な裁定が固まったら `mcp__raguel__record_outcome` で結末を記録する(承認なら `approved`、
+   差し戻し・却下なら `rejected`。`evaluationId` は最初に ASK を出した evaluate 呼び出しの
+   evaluationId = mark-ask で `state.phases[<phase>].evaluationId` に記録済みの値)。判例として
+   次回以降の判定に還流する。
+
+#### 裁定 B: このまま承認(as-is)
+
+成果物は修正せず、ASK の指摘を踏まえた上でそのまま先へ進めてよいと人間が判断した場合。
+**このケースでは再 evaluate を呼ばない**。同一 `runId` に対して短時間で再度 evaluate すると、
+sealed な `common/resubmission-loop` ルールが「暴走的な再提出」として検知し、判定が
+フェイルクローズドに固定されて先に進めなくなる(ライブロック)。そのためこの分岐だけは evaluate を
+経由せず、`--human-approved` によってゲートを通過させる。これがこのゲートで唯一の正規の
+迂回路であり、他のケースに転用してはならない。
+
+1. `mcp__raguel__record_outcome`(`outcome: "approved"`、`evaluationId` は ASK を出した evaluate 呼び出しの
+   evaluationId)で「人間が as-is 承認した」という裁定を判例化する。**この記録を飛ばして次に進まない**。
+2. `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で `in_progress` に戻す。
+3. `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --issue N --evaluation-id <ASK の evaluationId> --verdict ASK --human-approved`
+   でゲートを通過させる。`state.phases[<phase>].verdict` は `"ASK"` のまま、`humanApproved: true` が
+   記録されるため、「Raguel は ASK を返したが人間が as-is 承認して通過した」という事実が監査ログとして
+   正直に残る(verdict を `PROCEED` に書き換えて隠すことはしない)。
 
 ### STOP
 
@@ -136,10 +163,15 @@ run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `
 なければ `state.phases["implement"].evaluationId`。
 
 <HARD-GATE>
-- **evaluate ツールを呼ばずに `pass-gate` しない。`evaluationId` の捏造は絶対禁止**。
+- **実在しない `evaluationId` での `pass-gate` は禁止。`evaluationId` の捏造は絶対禁止**。
   Raguel からその場で返ってきた本物の `evaluationId` 以外を渡すことは、ゲートそのものの無効化であり許されない。
+  **`--human-approved` はこの原則の唯一の正規の例外**であり、`mcp__raguel__record_outcome`
+  (`outcome: "approved"`)を記録済みの、実在する ASK の `evaluationId` に対してのみ許される
+  (裁定 B の手順を参照)。record_outcome を経ていない `evaluationId` や、AI が自己判断で作った
+  `evaluationId` に `--human-approved` を付けて通すことは、捏造と同じくゲートの無効化である。
 - **STOP / ASK の握り潰し禁止**。verdict が `ASK` または `STOP` なのに `PROCEED` として扱う、
   findings を人間に見せずに進める、STOP 後に別の evaluate を呼び直して verdict を上書きしようとする、
+  ASK に対して人間の裁定(裁定 A / 裁定 B)を経ずに AI が独断で `--human-approved` を付与する、
   のいずれも禁止。
 </HARD-GATE>
 
@@ -151,6 +183,7 @@ run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `
 | 「前回 PROCEED だったから今回も呼ばなくていい」 | フェーズが変われば成果物も objective も別物。`resubmission-loop` 検知も呼び出しの継続があって初めて機能する。呼ばない run は判例としても蓄積されない。 |
 | 「軽微な diff だから evaluate_code は過剰」 | 重さ判定(weight tier)は Raguel 側の決定論ロジックが行う。「軽く見える危険な変更」を人間・AI の目で先に篩い落とす行為自体が、Raguel が対策している攻撃パターン。呼び出しコストを気にして省略していい理由にはならない。 |
 | 「ASK だが人間は多分承認するので進めてよい」 | 「多分」は推測であり ASK の意味そのものを無効化する。ASK は人間の判断を要求している合図であり、AI が代理で承認したことにするのは自己承認の別形態。必ず停止して裁定を待つ。 |
+| 「as-is 承認だから自分の判断で `--human-approved` を使ってよい」 | `--human-approved` は人間の明示裁定(裁定 B)と `mcp__raguel__record_outcome`(`approved`)記録の後にのみ使える唯一の正規経路。AI が自己判断で先回りして付与するのは `evaluationId` 捏造と同じ「ゲートの自己無効化」であり、STOP/ASK の握り潰しと同様に禁止。 |
 
 ## プロセスフローチャート
 
@@ -166,10 +199,15 @@ digraph raguel_gate {
   next [label="次フェーズへ自動遷移", shape=ellipse];
 
   ask [label="findings を人間に提示\ncodiel-state mark-ask", shape=box, style=filled, fillcolor="#fff2cc"];
-  human [label="人間の裁定", shape=diamond];
-  record_ask [label="mcp__raguel__record_outcome\n(approved / rejected)", shape=box];
-  resume [label="codiel-state resume\n(in_progress に戻すのみ)", shape=box];
-  refix [label="成果物を修正\n(人間の指示に沿って)", shape=box];
+  human [label="人間の裁定?", shape=diamond];
+
+  refix [label="裁定A: 成果物を修正\n(人間の指示に沿って)", shape=box];
+  resume_a [label="codiel-state resume\n(in_progress に戻すのみ)", shape=box];
+  record_a [label="record_outcome\n(approved / rejected)", shape=box];
+
+  record_ha [label="裁定B: record_outcome\n(approved, ASKのevaluationId)", shape=box];
+  resume_b [label="codiel-state resume", shape=box];
+  pass_gate_ha [label="pass-gate --verdict ASK\n--human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
 
   stop_run [label="codiel-state stop --reason", shape=box, style=filled, fillcolor="#ffcccc"];
   gotchas [label="recording-gotchas 起動", shape=box];
@@ -183,11 +221,17 @@ digraph raguel_gate {
   proceed -> next;
 
   ask -> human;
-  human -> record_ask;
-  record_ask -> resume [label="続行の裁定"];
-  record_ask -> stop_run [label="中止の裁定"];
-  resume -> refix;
-  refix -> evaluate;
+  human -> refix [label="裁定A: 修正して再提出"];
+  human -> record_ha [label="裁定B: as-is 承認"];
+  human -> stop_run [label="中止の裁定"];
+
+  refix -> resume_a;
+  resume_a -> evaluate [label="再 evaluate\n(resubmission-loop に注意)"];
+  evaluate -> record_a [style=dashed, label="裁定が固まったら"];
+
+  record_ha -> resume_b;
+  resume_b -> pass_gate_ha;
+  pass_gate_ha -> next;
 
   stop_run -> gotchas;
   gotchas -> stopped;

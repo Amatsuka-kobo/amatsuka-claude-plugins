@@ -99,6 +99,34 @@ test("GATEDフェーズは pass-gate(PROCEED)でのみ passed になる", () => 
   assert.equal(r.out.state.phases["init"].evaluationId, "ev1");
 });
 
+test("pass-gate は --human-approved 指定時に ASK を受理し humanApproved を記録する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  const r = run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e1", "--verdict", "ASK", "--human-approved"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.out.state.phases["init"].status, "passed");
+  assert.equal(r.out.state.phases["init"].verdict, "ASK");
+  assert.equal(r.out.state.phases["init"].humanApproved, true);
+});
+
+test("pass-gate は --human-approved なしでは ASK を従来どおり拒否する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  const r = run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e1", "--verdict", "ASK"]);
+  assert.equal(r.code, 1);
+});
+
+test("--human-approved で passed になったフェーズの次フェーズを start-phase できる", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e1", "--verdict", "ASK", "--human-approved"]);
+  const r = run(root, ["start-phase", "design", "--issue", "1"]);
+  assert.equal(r.code, 0);
+});
+
 test("並列ステージ(test-spec/dev-plan)は design passed 後に両方 start できる", () => {
   const root = tmpProject();
   run(root, ["init", "--issue", "1"]);

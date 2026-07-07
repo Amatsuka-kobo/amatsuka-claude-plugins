@@ -84,10 +84,15 @@ function loadRun(root, flags) {
 }
 
 export function main(argv, root = process.cwd()) {
-  // Handle --active flag specially: remove it from argv to avoid parseArgs eating the next arg
+  // Handle --active / --human-approved specially: boolean flags with no value,
+  // remove them from argv first to avoid parseArgs eating the next arg.
   const hasActive = argv.includes("--active");
   if (hasActive) {
     argv = argv.filter(arg => arg !== "--active");
+  }
+  const hasHumanApproved = argv.includes("--human-approved");
+  if (hasHumanApproved) {
+    argv = argv.filter(arg => arg !== "--human-approved");
   }
 
   const { pos, flags } = parseArgs(argv);
@@ -160,8 +165,11 @@ export function main(argv, root = process.cwd()) {
     const ph = latest.state.phases[phase];
     if (ph.status !== "in_progress") fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`);
     if (!flags["evaluation-id"]) fail("--evaluation-id が必要です");
-    if (flags.verdict !== "PROCEED") fail(`verdict が PROCEED ではありません: ${flags.verdict}。ASK は mark-ask、STOP は stop を使用`);
-    ph.status = "passed"; ph.evaluationId = flags["evaluation-id"]; ph.verdict = "PROCEED";
+    const acceptedVerdicts = hasHumanApproved ? ["PROCEED", "ASK"] : ["PROCEED"];
+    if (!acceptedVerdicts.includes(flags.verdict))
+      fail(`verdict が PROCEED ではありません: ${flags.verdict}。ASK は mark-ask、STOP は stop を使用`);
+    ph.status = "passed"; ph.evaluationId = flags["evaluation-id"]; ph.verdict = flags.verdict;
+    if (hasHumanApproved) ph.humanApproved = true;
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
   }
