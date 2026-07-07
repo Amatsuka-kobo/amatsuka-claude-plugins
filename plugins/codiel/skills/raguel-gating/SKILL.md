@@ -29,7 +29,14 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 ## チェックリスト
 
-ゲートを 1 回通すたびに、実行者は以下をタスク化して順に消化する。
+### コマンド起動時(1 回)
+
+`/codiel:run` / `/codiel:test` などの codiel コマンドが起動したら、フェーズ処理に入る前に:
+
+1. **outcome 自動同期を行う**(「outcome の自動同期」参照)。ゲートのたびに行うものではなく、
+   コマンド起動の冒頭で 1 回だけ行う。
+
+### ゲートを 1 回通すたびに
 
 1. **state を読む**: `codiel-state get --issue N` で現在の `state.json` を取得し、
    `raguelRunId`(`issue-123-try-N` 形式)を確認する。これが Raguel へ渡す `runId` になる。
@@ -40,7 +47,6 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 4. **verdict で分岐する**(下記「verdict 別ハンドリング」)。
 5. **PROCEED なら次フェーズのディスパッチプロンプトに前フェーズの findings 要約を含める**
   (「findings の引き継ぎ」参照)。
-6. **codiel コマンド起動の冒頭で outcome 自動同期を行う**(「outcome の自動同期」参照)。
 
 ## フェーズ→ツール対応表
 
@@ -72,8 +78,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 2. `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --issue N --evaluation-id <evaluationId>`
    で run を `awaiting_human` にして停止する。
 3. 人間の裁定を待つ。裁定が出たら **必ず** `mcp__raguel__record_outcome` で結末を記録する
-   (承認なら `approved`、差し戻し・却下なら `rejected`)。判例として次回以降の判定に還流する。
-4. 裁定が「修正して続行」なら `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で再開。
+   (承認なら `approved`、差し戻し・却下なら `rejected`)。`evaluationId` には、この ASK を出した
+   evaluate 呼び出しの evaluationId(mark-ask で `state.phases[<phase>].evaluationId` に記録済みの値)
+   を使う。判例として次回以降の判定に還流する。
+4. 裁定が「修正して続行」なら `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で再開する。
+   **`resume` はフェーズを `in_progress` に戻すだけで `passed` にはしない**。resume 後は必ず、
+   人間の指示に沿って成果物を修正した上で(修正不要な裁定でも)**再度 evaluate を呼び直し**、
+   `PROCEED` が返って初めて `pass-gate` する再ゲートの手順を通る(次フェーズへの遷移は経由しない)。
    裁定が「中止」なら STOP と同じ手順(下記)で終了させる。
 
 ### STOP
@@ -100,19 +111,29 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 ## outcome の自動同期
 
-`/codiel:run` / `/codiel:test` などすべての codiel コマンドは、**起動時に**以下を行う。
+`/codiel:run` / `/codiel:test` などすべての codiel コマンドは、**起動時に 1 回**以下を行う。
 
-1. `node <plugin-root>/scripts/codiel-state.mjs get --active` で `awaiting_outcome` の run を列挙する。
-2. 各 run について `gh pr view <url> --json state,mergedAt` で PR の現況を確認する。
+1. `node <plugin-root>/scripts/codiel-state.mjs get --active` を実行する。この実装は
+   `active` / `awaiting_human` / `awaiting_outcome` の run を **すべて** `runs` に含めて返す。
+   同期対象はそのうち **`state.status === "awaiting_outcome"` かつ `state.pr.url` が null でないもの**
+   だけに絞り込む(それ以外の run はここでは何もしない)。
+2. 絞り込んだ各 run について `gh pr view <state.pr.url> --json state,mergedAt` で PR の現況を確認する。
 3. 結果に応じて分岐する:
-   - **マージ済み(`mergedAt` が非 null)** → `mcp__raguel__record_outcome`(`outcome: "approved"`)を呼び、
-     続けて `node <plugin-root>/scripts/codiel-state.mjs record-outcome --issue N --outcome approved`。
-   - **マージされずクローズ(`state: "CLOSED"` かつ `mergedAt` が null)** → 同様に `outcome: "rejected"` で
-     両方を記録する。
+   - **マージ済み(`mergedAt` が非 null)** → `mcp__raguel__record_outcome`(`outcome: "approved"`、
+     `evaluationId` は下記の選定順)を呼び、続けて
+     `node <plugin-root>/scripts/codiel-state.mjs record-outcome --issue N --outcome approved`。
+   - **マージされずクローズ(`state: "CLOSED"` かつ `mergedAt` が null)** → 同様に `outcome: "rejected"`
+     (`evaluationId` は下記の選定順)で両方を記録する。
    - **オープンのまま(`state: "OPEN"`)** → 何もしない。次回の起動時にまた確認する。
 4. **incident(PROCEED したのに実害が出た)は自動検知できない**。人間が明示的に申告したときのみ、
-   `mcp__raguel__record_outcome`(`outcome: "incident"`)+ `codiel-state record-outcome --outcome incident` を
-   記録する。最も価値の高い失敗判例なので、申告を勝手に補ったり省略したりしない。
+   `mcp__raguel__record_outcome`(`outcome: "incident"`、`evaluationId` は下記の選定順)+
+   `codiel-state record-outcome --outcome incident` を記録する。最も価値の高い失敗判例なので、
+   申告を勝手に補ったり省略したりしない。
+
+run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `evaluationId` は、
+**「最後にコードを検査した evaluate」の evaluationId** を使う。優先順は次のとおり:
+`state.phases["fix-loop"].evaluationId` → なければ `state.phases["test-loop"].evaluationId` →
+なければ `state.phases["implement"].evaluationId`。
 
 <HARD-GATE>
 - **evaluate ツールを呼ばずに `pass-gate` しない。`evaluationId` の捏造は絶対禁止**。
@@ -147,7 +168,8 @@ digraph raguel_gate {
   ask [label="findings を人間に提示\ncodiel-state mark-ask", shape=box, style=filled, fillcolor="#fff2cc"];
   human [label="人間の裁定", shape=diamond];
   record_ask [label="mcp__raguel__record_outcome\n(approved / rejected)", shape=box];
-  resume [label="codiel-state resume", shape=box];
+  resume [label="codiel-state resume\n(in_progress に戻すのみ)", shape=box];
+  refix [label="成果物を修正\n(人間の指示に沿って)", shape=box];
 
   stop_run [label="codiel-state stop --reason", shape=box, style=filled, fillcolor="#ffcccc"];
   gotchas [label="recording-gotchas 起動", shape=box];
@@ -164,7 +186,8 @@ digraph raguel_gate {
   human -> record_ask;
   record_ask -> resume [label="続行の裁定"];
   record_ask -> stop_run [label="中止の裁定"];
-  resume -> next;
+  resume -> refix;
+  refix -> evaluate;
 
   stop_run -> gotchas;
   gotchas -> stopped;
