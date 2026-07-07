@@ -58,7 +58,9 @@ implementer は Bash を持つため、`codiel-planner` / `codiel-architect`(Bas
 コミットメッセージ規約:
 
 ```
-codiel(implement): <ステップ名または修正内容> (issue-N try-M)
+codiel(implement): <ステップ名> (issue-N try-M)           # 通常モード
+codiel(test-loop): <修正内容> (issue-N try-M)              # test-loop の修正モード
+codiel(fix-loop): <修正内容> (issue-N try-M)               # fix-loop の修正モード
 ```
 
 `issue-N try-M` は現在の runId/try(例: `issue-42 try-1`)をそのまま使う。この形式は
@@ -128,7 +130,7 @@ digraph implementing {
   escalate [label="修正せず報告(ASKへ)", shape=box, style=filled, fillcolor="#ffe0b3"];
   minimal_fix [label="最小修正を実装する", shape=box];
   verify_fix [label="検証コマンドを再実行し\n通るか確認", shape=diamond];
-  commit_fix [label="git commit\ncodiel(implement): <修正内容> (issue-N try-M)", shape=box];
+  commit_fix [label="git commit\ncodiel(<test-loop|fix-loop>): <修正内容> (issue-N try-M)", shape=box];
 
   report [label="完了報告\n(実施ステップ/変更ファイル/検証コマンドと結果/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 

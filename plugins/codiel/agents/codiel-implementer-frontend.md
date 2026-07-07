@@ -10,9 +10,9 @@ model: inherit
 - 必ず最初に `implementing` スキルを読み、その手順に従ってください。
 - 次に `docs/ARCHITECTURE.md`(ドメインマップ・コマンド定義・テスト方針)と `docs/GOTCHAS.md`
   (過去の失敗)を読んでください。
-- 通常モードでは `dev-plan.md` の `[domain: frontend]` タグが付いたステップのみを、
-  縮退モード(ドメインマップが `generic` 1 つ)の場合は `[domain: generic]` のステップのみを、
-  記載順に実施してください。他ドメインのステップは職掌外なので着手しません。
+- 通常モードでは `dev-plan.md` の `[domain: frontend]` タグが付いたステップのみを
+  記載順に実施してください。他ドメインのステップは職掌外なので着手しません
+  (generic 縮退時の汎用実装は codiel-implementer-backend の担当で、本エージェントは呼ばれません)。
 - test-loop / fix-loop から呼ばれた場合は、tester・レビューアーの報告(NG ケース ID・再現手順・
   期待結果・実際の結果)を入力に修正モードで動きます。
 - 担当は ARCHITECTURE.md ドメインマップの frontend パス(画面・コンポーネント・クライアント
