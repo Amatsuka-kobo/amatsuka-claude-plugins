@@ -13,8 +13,9 @@ description: Codiel の dev-plan フェーズで design.md を入力に dev-plan
 
 `dev-plan.md` は implement フェーズが読む唯一の実行手順書であり、各ステップの `[domain: ...]`
 タグは `orchestrating-runs` が「どの implementer(frontend/backend/data)にディスパッチするか」を
-機械的に決める入力になる。同時に hooks の書き込み制御(guard-write)がアクティブ run の現在フェーズと
-`docs/ARCHITECTURE.md` のドメインマップを突き合わせて implementer の書き込み先を判定する。ここで
+機械的に決める入力になる。また各 implementer のエージェント定義は「担当ドメインのパスにのみ書く」
+という規律を持ち、ドメインタグはその規律の判定基準になる(hooks はエージェント個体を識別できないため、
+ドメイン規律はエージェント定義側で担保される)。ここで
 ドメインタグを誤ったり、複数ドメインの変更を一つのステップに混ぜると、誤った implementer が呼ばれるか、
 hooks が正当な書き込みを ask で止める誤爆を招く。両者ともこのタグを機械的にしか読まないため、
 曖昧・複合のタグは下流のどこかで必ず事故になる。
@@ -81,8 +82,15 @@ dev-plan は test-spec と並列ディスパッチされるが、test-spec の�
 - **orchestrating-runs(implement フェーズ)**: ステップのドメインタグを読み、
   `codiel-implementer-frontend` / `-backend` / `-data` のいずれにディスパッチするかを決める。
   `generic` 縮退時は `codiel-implementer-backend` を汎用実装者として使う。
-- **hooks(guard-write)**: アクティブ run の現在フェーズと `docs/ARCHITECTURE.md` のドメインマップを
-  突き合わせ、implementer がタグに対応する glob 以外に書き込もうとした場合に ask(人間に確認)を挟む。
+- **implementer のドメイン規律**: 各 implementer のエージェント定義が「担当ドメイン(タグに対応する
+  ARCHITECTURE.md の glob)のパスにのみ書く」ことを職務規律として持つ。hooks(guard-write)は
+  フェーズ単位の制御(コードフェーズ中の spec.md / cases.md 保護、文書フェーズ中のコード領域 ask)を
+  機械的に担い、エージェント個体の識別はできないためドメイン単位の機械的制御は行わない。
+
+**どのドメイン glob にも一致しない共有コード**(例: `src/lib/` のドメイン横断ユーティリティ)への変更は、
+その変更を必要とする機能側のステップに含め、そのステップのドメインタグを付ける。複数ドメインが同じ
+共有コード変更を必要とする場合は、共有コード変更だけを独立した先行ステップに切り出し、主たる利用側の
+ドメインタグを 1 つ付ける(タグなし・複数タグのステップは作らない)。
 
 ドメインを跨ぐ作業を一つのステップにまとめると、この 2 箇所のどちらかが必ず機能不全になる。
 ディスパッチ側は単一の implementer しか呼べないため半分のファイルが未実装のまま進むか、

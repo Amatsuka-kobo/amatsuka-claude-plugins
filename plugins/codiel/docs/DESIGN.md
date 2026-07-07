@@ -43,7 +43,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、implementer / reviewer も汎用 1 体で回す |
 | runId / 再挑戦 | runId は `issue-123` 形式。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 Issue の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
-| 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(ドメインマップ外の共有コード等での誤爆に備える) |
+| 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
 
@@ -348,7 +348,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [8]) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
-| PreToolUse | Edit / Write(役割別書き込み制御) | アクティブ run の現在フェーズ + ドメインマップ(§9)を参照し、役割毎の許可 glob 外への書き込みを **ask**(人間に確認)。例: implementer-frontend が backend パスへ書く、tester が cases.md やプロダクトコードへ書く、文書フェーズ中に `src/**` へ書く。deny にしないのは、ドメインマップに載らない共有コード等への正当な書き込みで誤爆し得るため |
+| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位(implementer-frontend が backend パスへ書く等)の機械的制御は行わない** — hooks はツール呼び出しの発行元エージェントを識別できないため、ドメイン規律は各エージェント定義の職務規律(+レビューアーの検査)で担保する |
 | SubagentStop | 各フェーズ完了時 | 期待される成果物ファイルが存在し空でないかを検証。欠けていればフィードバックを返して差し戻す |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止) |
 
