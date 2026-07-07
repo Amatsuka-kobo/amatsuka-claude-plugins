@@ -15,7 +15,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | 論点 | 決定 |
 |---|---|
 | superpowers の扱い | スタイルのみ模倣。依存しない自前スキル群 |
-| 人間の承認ゲート | Raguel の ASK / STOP のみ。PROCEED が続く限り完全自律 |
+| 人間の承認ゲート | Raguel の ASK / STOP のみ。PROCEED が続く限り完全自律。例外は triage フェーズ(§2 [8])で、medium 以下のレビュー指摘の起票は要件上ユーザーの指示で行う |
 | 成果物の置き場 | 対象プロジェクトの `.codiel/` 配下。feature ブランチにコミットする |
 | コマンド構成 | `/codiel:run <issue番号>`(オーケストレーター)+ `/codiel:test`(単独テスト実行)。state による再開機能 |
 | 実行モデル | メインセッション=オーケストレーター。各フェーズは専用サブエージェント(fresh コンテキスト・ツール制限付き)が実行 |
@@ -71,9 +71,17 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
    ▼
 [7] fix-loop    critical & high を該当ドメインの implementer が修正 → 回帰テスト再実行
                 → 再レビュー → critical/high ゼロ & テスト合格まで反復(試行上限あり)
+                medium 以下の指摘は修正せず triage へ持ち越す
                 ▶ Raguel: 修正毎に evaluate_code
    ▼
-[8] finalize    結果レポートを出力し、state を awaiting_outcome にして終了。
+[8] triage      medium / low の指摘を一覧化してユーザーに提示(state は awaiting_human)。
+                **ユーザーの指示のもと**、起票対象に選ばれた指摘を gh issue create で
+                別 Issue として起票する(見送り・まとめて 1 件などの裁量もユーザーに委ねる)。
+                起票済み Issue の番号は review-<n>.md と PR コメントに追記して追跡可能にする
+                ▶ Raguel ゲートなし(人間が直接指示するフェーズのため)。
+                  ただし gh issue create は hooks により triage フェーズ以外では実行不可(§8)
+   ▼
+[9] finalize    結果レポートを出力し、state を awaiting_outcome にして終了。
                 以後の codiel コマンド起動時に PR 状態を自動検知して record_outcome を呼び、
                 Raguel に判例を還流する(下記「outcome の自動同期」)
 ```
@@ -248,7 +256,8 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | `running-regression-tests` | verification-before-completion | スクリプト安定化ループ(A)と TDD 修正ループ(B)の運転規約(§5)。回帰範囲の決定。HARD-GATE:「出力を見ずに合格を主張しない」「異常終了とテスト NG を混同しない」 |
 | `fixing-failures` | systematic-debugging | NG ケースの修正。根本原因特定→最小修正。**テストスクリプト・cases.md を触る修正の禁止**。「テストの方が間違っている」と思ったら ASK へ |
 | `reviewing-diffs` | requesting-code-review | 設計書・テスト仕様書・Issue を基準に diff をレビュー。severity 定義(critical/high/medium/low)、`gh pr review` / `gh pr comment` での投稿形式。5 観点の reviewer 共通プロセス(観点別の職務は各エージェント定義に記載) |
-| `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止 |
+| `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
+| `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方、Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認。HARD-GATE:「ユーザーの指示なしに起票しない」 |
 | `recording-gotchas` | (独自・成長機構) | 失敗(STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)から「プロジェクト固有で再発しうる教訓」を抽出し GOTCHAS.md に追記する基準と書式 |
 
 ## 7. Agents(ツール制限 = 構造的ハーネス)
@@ -297,6 +306,7 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 - ツール権限は全員 Read, Grep, Glob, Bash(gh pr diff / comment / review 用)。**Edit・Write なし**。
 - diff のドメインに応じて frontend/backend/data を選択参加、**doc / security は常時参加**。並列ディスパッチ。
 - 所見はオーケストレーターが統合して severity 順に review-<n>.md へ記録し、PR コメントに投稿。
+- **critical / high は fix-loop で修正**、**medium / low は triage フェーズでユーザーの指示のもと別 Issue 化**(§2 [8])。
 
 この分離により「テスターが期待値を緩めて合格させる」「レビューアーが自分で直して自己承認する」
 という利益相反経路が権限レベルで存在しなくなる(Raguel の「自己評価は採用しない」原則のエージェント版)。
@@ -309,6 +319,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | フック | 対象 | 内容 |
 |---|---|---|
 | PreToolUse | Bash(`gh pr create`, `git push`) | state.json を参照し、「テスト green + implement/test-loop の verdict が PROCEED」でなければ **deny**。保護ブランチ(main 等)への push は常に deny |
+| PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [8]) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
 | PreToolUse | Edit / Write(役割別書き込み制御) | アクティブ run の現在フェーズ + ドメインマップ(§9)を参照し、役割毎の許可 glob 外への書き込みを **ask**(人間に確認)。例: implementer-frontend が backend パスへ書く、tester が cases.md やプロダクトコードへ書く、文書フェーズ中に `src/**` へ書く。deny にしないのは、ドメインマップに載らない共有コード等への正当な書き込みで誤爆し得るため |
@@ -379,6 +390,7 @@ plugins/codiel/
     fixing-failures/SKILL.md
     reviewing-diffs/SKILL.md
     fixing-review-findings/SKILL.md
+    filing-followup-issues/SKILL.md
     recording-gotchas/SKILL.md
   agents/
     codiel-analyst.md
@@ -407,5 +419,5 @@ plugins/codiel/
 2. **M2 骨格**: `/codiel:run` コマンド + `orchestrating-runs` / `raguel-gating` スキル + 文書系フェーズ(init〜dev-plan)のスキル・エージェント
 3. **M3 実装系**: implementer 3 体 + `implementing` スキル + implement フェーズの Raguel ゲート統合
 4. **M4 テスト系**: テスト資産モデル(specs/)+ tester + `scripting-tests` / `running-regression-tests` / `fixing-failures` + `/codiel:test` コマンド
-5. **M5 レビュー系**: PR 作成 + reviewer 5 体 + `reviewing-diffs` / `fixing-review-findings` + fix-loop
+5. **M5 レビュー系**: PR 作成 + reviewer 5 体 + `reviewing-diffs` / `fixing-review-findings` + fix-loop + triage(`filing-followup-issues`)
 6. **M6 成長機構**: `recording-gotchas` + outcome 自動同期 + try 再挑戦フロー
