@@ -181,7 +181,9 @@ test-loop の内部運転(スクリプト安定化 → TDD 修正の二段構え
 `fixing-failures` に、fix-loop の指摘対応は `fixing-review-findings` に定める。オーケストレーターの
 役割は次の 2 点のみ:
 
-1. 修正のたびに `node <plugin-root>/scripts/codiel-state.mjs record-attempt <phase> --issue N` を呼ぶ。
+1. 修正のためのサブエージェント・ディスパッチ 1 往復ごとに(= 1 attempt)
+   `node <plugin-root>/scripts/codiel-state.mjs record-attempt <phase> --issue N` を呼ぶ。
+   **record-attempt を呼ぶのはオーケストレーターのみ**(tester / implementer は呼ばない。二重計上の防止)。
 2. exit code が `3`(試行上限超過・`capExceeded`)なら、**raguel-gating の ASK と同じ扱い**にする
    (`awaiting_human` は `record-attempt` 内部で既にセットされている。findings 相当の情報を人間に
    提示し裁定を待つ。自分で「あと1回だけ」と続行してはならない)。

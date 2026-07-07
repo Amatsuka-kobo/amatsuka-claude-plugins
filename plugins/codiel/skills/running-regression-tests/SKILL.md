@@ -50,11 +50,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 2. `docs/ARCHITECTURE.md` の「コマンド定義」節を読み、ユニットテスト等の実行コマンドを確認する。
 3. **(A) スクリプト安定化ループ**: `scripting-tests` の手順に従い、対象 unit すべてのスクリプトを
    実行する。異常終了(判定が出ないケース)があればスクリプトを修正して再実行する。
-   run 経由の場合、**修正して再実行するたびに** 実行者自身の Bash で
-   `node <plugin-root>/scripts/codiel-state.mjs record-attempt test-loop --issue N` を呼ぶ。
-   `exit code 3`(`capExceeded: true`)なら、それ以上の修正を続けず ASK 相当としてその場で止まり
-   raguel-gating の ASK ハンドリングに合流させるためオーケストレーターへ報告する(「あと 1 回だけ」と
-   自己判断で続行しない)。単独実行モードでは `record-attempt` を呼ばない。
+   **試行回数の記録(`record-attempt`)は state を扱うオーケストレーターの専権であり、
+   tester / implementer は呼ばない**。run 経由の場合、オーケストレーターが
+   tester / implementer を**1 回ディスパッチするたび(1 往復 = 1 attempt)**に
+   `node <plugin-root>/scripts/codiel-state.mjs record-attempt test-loop --issue N` を呼ぶ
+   (`orchestrating-runs` §5 のループ運転)。`exit code 3`(`capExceeded: true`)なら
+   それ以上ディスパッチせず raguel-gating の ASK ハンドリングに合流する(「あと 1 回だけ」と
+   自己判断で続行しない)。単独実行モードでは `record-attempt` は発生しない。
 4. 対象 unit の全ケースが OK/NG いずれかの判定を出すまで 3 を繰り返す。
 5. 全ケースが判定を出したら NG の有無を確認する。NG がなければ手順 7 へ。
    **NG があれば (B) TDD 修正ループへ**: NG ケースごとに「ケース ID・再現手順・期待結果
@@ -62,9 +64,9 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    が定める入力契約)。run 経由ならオーケストレーター経由で該当ドメインの implementer へ差し戻す。
    **単独実行モードではディスパッチせず、NG のまま報告して終了する**。
 6. (run 経由のみ)implementer が `fixing-failures` の手順で修正し返してきたら、**回帰範囲全体
-   (手順 1 の対象 unit すべて)を再実行する**(修正対象の unit だけを再実行しない)。実行者自身の
-   Bash で修正のたびに `record-attempt test-loop --issue N` を呼び、`exit 3` なら手順 3 と同様に
-   ASK 相当として止める。全ケース OK になるまで手順 3〜6 を繰り返す。
+   (手順 1 の対象 unit すべて)を再実行する**(修正対象の unit だけを再実行しない)。
+   この修正ディスパッチもオーケストレーターが 1 往復ごとに `record-attempt test-loop --issue N` を
+   呼んで数える(`exit 3` なら手順 3 と同様に ASK)。全ケース OK になるまで手順 3〜6 を繰り返す。
 7. `docs/ARCHITECTURE.md` の「コマンド定義」節のユニットテストコマンドを実行し、結果(pass/fail の
    件数、失敗があれば出力抜粋)を控える。
 8. 判定(`green` / `red` / `broken`)を決める(下記「判定基準」)。
@@ -141,7 +143,7 @@ digraph running_regression_tests {
   loop_a [label="(A) scripting-tests の手順で\nスクリプト実行", shape=box];
   broken [label="異常終了があるか?", shape=diamond];
   fix_script [label="スクリプトを修正", shape=box];
-  record_a [label="record-attempt test-loop\n(run経由のみ)", shape=box];
+  record_a [label="record-attempt test-loop\n(オーケストレーターが\nディスパッチ毎に・run経由のみ)", shape=box];
   cap_a [label="exit 3\n(capExceeded)?", shape=diamond];
   ask_stop [label="ASK相当で停止\nオーケストレーターへ報告", shape=box, style=filled, fillcolor="#fff2cc"];
   all_judged [label="全ケースが\nOK/NGの判定を出したか?", shape=diamond];
@@ -150,7 +152,7 @@ digraph running_regression_tests {
   standalone_end [label="単独実行: ディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   handoff [label="オーケストレーター経由で\n該当implementerへ差し戻し(B)", shape=box];
   loop_b [label="(B) fixing-failures の手順で\nimplementerが修正", shape=box];
-  record_b [label="record-attempt test-loop\n(修正のたびに)", shape=box];
+  record_b [label="record-attempt test-loop\n(オーケストレーターが\n修正ディスパッチ毎に)", shape=box];
   cap_b [label="exit 3\n(capExceeded)?", shape=diamond];
   rerun_all [label="回帰範囲全体を再実行", shape=box];
   unit_test [label="ARCHITECTURE.mdのtestコマンドを実行", shape=box];
