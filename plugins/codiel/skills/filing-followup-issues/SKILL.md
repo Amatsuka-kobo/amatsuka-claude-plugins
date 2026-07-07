@@ -18,7 +18,7 @@ triage は `init / design / … / fix-loop` と異なり **非 GATED フェー�
 入力は `reports/review-<n>.md` の所見のうち **medium / low のみ**。critical/high は本スキルの
 対象外であり、`fixing-review-findings` が fix-loop で必ず処理し終えているはずである
 (`reviewing-diffs` の severity 定義表のとおり下流の扱いが分かれる)。`fixing-review-findings`
-が記録する「反論済み一覧」は critical/high 専用の記録であり、medium/low を扱う本スキールとは
+が記録する「反論済み一覧」は critical/high 専用の記録であり、medium/low を扱う本スキルとは
 **対象が別物**である。反論済み所見を triage で拾い直す必要はない(scope が重ならない)。
 
 ## プラグインルート参照規約
@@ -34,7 +34,10 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 ## チェックリスト
 
 1. 最新の `reports/review-<n>.md` を読み、medium/low の所見だけを抽出する(critical/high は
-   すでに fix-loop で処理済みのはずであり、対象に含めない)。
+   すでに fix-loop で処理済みのはずであり、対象に含めない)。**既に「フォローアップ: #N」の
+   注記が付いている所見は起票済みなので除外する**(triage 途中でセッションが切れて再開した場合の
+   二重提示・二重起票の防止。`gh issue list --search` の重複確認はキーワード一致頼みで
+   フェイルセーフにならないため、この除外が一次防壁)。
 2. 抽出した所見を**番号付き一覧**(番号・severity・要約・対象 `src/...:42`)にしてユーザーに提示する。
 3. **起票対象の選択・複数所見のまとめ方・見送りをユーザーに確認する**(AskUserQuestion か平文で
    問いかける)。まとめる/見送るの裁量はユーザーにあり、オーケストレーターが勝手に判断しない。
@@ -42,7 +45,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    「ユーザーの回答を待つ」という運転自体がこのフェーズの唯一のゲートである)。
 4. ユーザーが起票対象を指示したら、対象ごとに以下を行う。
 5. **ISSUE_TEMPLATE の探索**: Glob で次を探す。
-   - `.github/ISSUE_TEMPLATE/*.yml`(GitHub フォーム形式)
+   - `.github/ISSUE_TEMPLATE/*.yml` と `*.yaml`(GitHub フォーム形式)
    - `.github/ISSUE_TEMPLATE/*.md`(Markdown 形式、frontmatter 付き)
    - `.github/ISSUE_TEMPLATE.md`(レガシー単一テンプレート)
    複数ヒットする場合、指摘の種類(バグ/改善/タスク)に最も合うものを選ぶ(詳細は次節)。
@@ -51,7 +54,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    確認する。ヒットがあれば起票を保留し、該当 Issue へのリンクをユーザーに提示して
    「新規起票する/既存 Issue に集約する/見送る」の判断を仰ぐ(ここも自己判断しない)。
 7. 選んだテンプレート(または既定書式)を最大限埋めた本文を組み立て、
-   `gh issue create --title "<タイトル>" --body "<本文>" --label "<ラベル>"` で起票する。
+   `gh issue create --title "<タイトル>" --body "<本文>" --label "<ラベル>"` で起票する
+   (テンプレートの labels が複数ある場合は `--label` を複数回指定する)。
 8. 起票後、Issue 番号を `reports/review-<n>.md` の該当所見の行に追記し、
    `gh pr comment <PR番号> --body "フォローアップ: #<Issue番号>"` で PR にコメントを投稿する。
 9. 全対象(見送られたものを除く)の処理が終わったら
@@ -99,7 +103,7 @@ medium|low
 
 ## 起票済み Issue の記録書式(`reports/review-<n>.md` への追記)
 
-該当所見の行末に次の形式で追記する。
+該当所見ブロック(`### [severity] <要約>` から始まる一連の箇条書き)の末尾に次の形式で追記する。
 
 ```markdown
 → フォローアップ: #<Issue番号>

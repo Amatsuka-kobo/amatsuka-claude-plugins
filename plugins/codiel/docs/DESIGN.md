@@ -94,7 +94,9 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
                 (verdict は "SKIPPED" として監査記録に残る。未開始=pending のときのみ可)
                 ▶ Raguel: 修正毎に evaluate_code
    ▼
-[8] triage      medium / low の指摘を一覧化してユーザーに提示(state は awaiting_human)。
+[8] triage      medium / low の指摘を一覧化してユーザーに提示し、指示を待つ
+                (state 機構上は phases.triage が in_progress のまま。非 GATED フェーズのため
+                mark-ask は使わず、「回答が来るまで進まない」運転で待機する)。
                 **ユーザーの指示のもと**、起票対象に選ばれた指摘を gh issue create で
                 別 Issue として起票する(見送り・まとめて 1 件などの裁量もユーザーに委ねる)。
                 リポジトリに ISSUE_TEMPLATE があれば指摘の種類に応じて適切なテンプレートを
