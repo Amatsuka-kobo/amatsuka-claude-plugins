@@ -2,7 +2,7 @@
   "mcpServers": {
     "raguel": {
       "command": "node",
-      "args": ["raguel-mcp/dist/server.mjs"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/raguel-mcp/dist/server.mjs"]
     }
   }
 }

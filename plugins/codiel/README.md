@@ -2,10 +2,54 @@
 
 GitHub issue の内容を取得・分析し、設計・開発・PR起票・レビューまでを一気通貫で行うオーケストレーターです。
 
+## コマンド
+
+### `/codiel:run <issue番号>`
+
+GitHub Issue #`<issue番号>` を起点に、設計→実装→テスト→PR→レビューまでを自律実行します。
+未完了の run(試行)があれば自動的に再開します。内部では `orchestrating-runs` スキルの手順に従い、
+以下の 9 フェーズを順に進めます(各フェーズは Raguel MCP のゲートを通過して初めて次に進みます)。
+
+```
+[0] init         Issue を取得・分析しスコープを決定、feature ブランチと run を初期化
+                 ▶ Raguel: evaluate_decision
+[1] design       設計書 design.md を執筆                       ▶ Raguel: evaluate_design
+[2] test-spec ∥ dev-plan  並列: テスト仕様書+テストケース作成 / 開発手順書作成
+                                                                ▶ Raguel: evaluate_plan ×2
+[3] implement    開発手順書に従い TDD で実装(domain 別 implementer)
+                                                                ▶ Raguel: evaluate_code
+[4] test-loop    (A) テストスクリプト安定化 → (B) NG=バグを TDD で修正、全ケース OK まで反復
+                                                                ▶ Raguel: evaluate_code(修正の都度)
+[5] pr           PR 作成(テスト green かつコード PROCEED を hooks が検証)
+[6] review       ドメイン別レビューアー + doc/security レビューアーを並列ディスパッチ、所見を PR に投稿
+[7] fix-loop     critical/high を修正 → 回帰テスト → 再レビュー、ゼロになるまで反復(所見が無ければ skip)
+                                                                ▶ Raguel: evaluate_code(修正の都度)
+[8] triage       medium/low の指摘をユーザーに提示し、指示のもとフォローアップ Issue を起票
+[9] finalize     結果レポートを出力し run を終了(以後 PR のマージ/クローズを検知して自動で outcome を記録)
+```
+
+詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
+二段ループ・スキル/エージェント構成・hooks 仕様などを記載)。
+
+### `/codiel:test [unit-id...]`
+
+`.codiel/specs/` のテスト仕様に基づく回帰テストを、run とは独立に単体実行します。unit-id を省略すると全 unit が対象です。
+NG があってもコード修正はディスパッチせず、結果を `.codiel/reports/` にレポートするだけに留めます
+(state 遷移や record_outcome は行いません)。
+
+## セットアップ
+
+1. このプラグインを Claude Code にインストールします(marketplace 経由、または `--plugin-dir` で直接指定)。
+2. 対象プロジェクトで初めて `/codiel:run` を実行すると、`docs/ARCHITECTURE.md` が存在しない場合に
+   `scripts/install-harness.sh` が自動実行され、`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` / `CLAUDE.md` の
+   ひな形と `.codiel/` 配下のディレクトリが作成されます。
+3. 作成された `docs/ARCHITECTURE.md` に、ドメインマップ(frontend/backend/data の境界)やビルド・テストコマンドなど
+   プロジェクト固有の情報を記入してください。implementer/tester 系のスキルはこの宣言に従って動作します。
+
 ## raguel-mcp
 
 Codiel オーケストレータ―の基幹システム。名前は「他の天使たちの行いを監視する天使 Raguel」に由来。
-LLM が出した回答をチェックし、機械的に PROCEED（続行）/ ASK（人に確認）/ STOP（停止）を判断するツールを提供する MCP サーバー。
+LLM が出した回答をチェックし、機械的に PROCEED(続行)/ ASK(人に確認)/ STOP(停止)を判断するツールを提供する MCP サーバー。
 
 ## 開発手法
 
@@ -30,7 +74,7 @@ ln -s ../commands .claude/commands
 ln -s ../hooks .claude/hooks
 ln -s ../skills .claude/skills
 ln -s ../settings.json .claude/settings.json
-cp harness-docs/ARCHITECTURE.example.md harness-docs/ARCHITECTURE.md
-cp harness-docs/GOTCHAS.example.md harness-docs/GOTCHAS.md
+cp docs/ARCHITECTURE.example.md docs/ARCHITECTURE.md
+cp docs/GOTCHAS.example.md docs/GOTCHAS.md
 cp CLAUDE.example.md CLAUDE.md
 ```
