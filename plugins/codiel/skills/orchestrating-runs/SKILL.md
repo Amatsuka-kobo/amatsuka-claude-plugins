@@ -95,7 +95,7 @@ Raguel ゲートを経ず `complete-phase` で完了する。
 | [3] implement | codiel-implementer-{frontend,backend,data}(ステップのドメインタグで選択) | implementing | `dev-plan.md`(該当ステップ)、docs/ARCHITECTURE.md、docs/GOTCHAS.md | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
 | [4A] test-loop(スクリプト安定化) | codiel-tester | scripting-tests, running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | codiel-tester(自分の変更を自分でコミット) |
 | [4B] test-loop(TDD 修正) | codiel-implementer-{該当ドメイン} | fixing-failures | NG ケース ID + 再現手順 + 期待結果 | コード修正 diff | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
-| [5] pr | オーケストレーター本体(ディスパッチなし) | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`gh pr create`) | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
+| [5] pr | オーケストレーター本体(ディスパッチなし) | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する) | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
 | [6] review | codiel-reviewer-{frontend,backend,data}(diff のドメインで選択参加)+ codiel-reviewer-doc/-security(常時参加) | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | ―(reviewer は Edit/Write を持たず変更しない) |
 | [7] fix-loop | codiel-implementer-{該当ドメイン}(修正)+ codiel-tester(回帰再実行)+ reviewer 陣(再レビュー) | fixing-review-findings, running-regression-tests, reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | 担当 implementer / codiel-tester(自分の変更を自分でコミット) |
 | [8] triage | オーケストレーター本体(ユーザーの指示のもと) | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [8] の運用) | ―(コード変更なし) |
@@ -206,9 +206,11 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reas
 ## 6. 再開手順
 
 1. `node <plugin-root>/scripts/codiel-state.mjs get --issue N` で `state.json` を取得する。
-2. `state.phase` から続行する(すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に
+2. `git switch <state.branch>` で run のブランチに切り替える(カレントブランチが別 run や
+   ベースブランチのままだと、成果物コミットが誤ったブランチに乗る)。
+3. `state.phase` から続行する(すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に
    従い、`in_progress` のフェーズから再開する)。
-3. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに
+4. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに
    直近の findings を再提示し、raguel-gating の ASK ハンドリング(裁定 A / 裁定 B / 中止)に従って
    人間の裁定を待つ。**再開できると思って勝手に続行しない**。
 

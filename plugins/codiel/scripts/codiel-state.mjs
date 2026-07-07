@@ -168,8 +168,8 @@ export function main(argv, root = process.cwd()) {
     const st = latest.state;
     if (st.status !== "active") fail(`run が active ではありません(${st.status})。resume してください`);
     const ph = st.phases[phase];
-    if (!["pending", "in_progress"].includes(ph.status))
-      fail(`フェーズ ${phase} は ${ph.status} のためスキップできません`);
+    if (ph.status !== "pending")
+      fail(`フェーズ ${phase} は ${ph.status} のためスキップできません(開始済みのループは pass-gate で通過する)`);
     const stageIdx = STAGES.findIndex((s) => s.includes(phase));
     for (let i = 0; i < stageIdx; i++)
       for (const prev of STAGES[i])

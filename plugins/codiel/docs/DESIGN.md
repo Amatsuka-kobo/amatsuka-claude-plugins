@@ -89,6 +89,9 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 [7] fix-loop    critical & high を該当ドメインの implementer が修正 → 回帰テスト再実行
                 → 再レビュー → critical/high ゼロ & テスト合格まで反復(試行上限あり)
                 medium 以下の指摘は修正せず triage へ持ち越す
+                レビューで critical/high がゼロなら fix-loop は開始せず
+                `codiel-state skip-phase fix-loop --reason ...` でスキップする
+                (verdict は "SKIPPED" として監査記録に残る。未開始=pending のときのみ可)
                 ▶ Raguel: 修正毎に evaluate_code
    ▼
 [8] triage      medium / low の指摘を一覧化してユーザーに提示(state は awaiting_human)。
