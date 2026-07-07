@@ -77,6 +77,8 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 [8] triage      medium / low の指摘を一覧化してユーザーに提示(state は awaiting_human)。
                 **ユーザーの指示のもと**、起票対象に選ばれた指摘を gh issue create で
                 別 Issue として起票する(見送り・まとめて 1 件などの裁量もユーザーに委ねる)。
+                リポジトリに ISSUE_TEMPLATE があれば指摘の種類に応じて適切なテンプレートを
+                選択し、その項目を最大限埋めて起票する。
                 起票済み Issue の番号は review-<n>.md と PR コメントに追記して追跡可能にする
                 ▶ Raguel ゲートなし(人間が直接指示するフェーズのため)。
                   ただし gh issue create は hooks により triage フェーズ以外では実行不可(§8)
@@ -257,7 +259,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | `fixing-failures` | systematic-debugging | NG ケースの修正。根本原因特定→最小修正。**テストスクリプト・cases.md を触る修正の禁止**。「テストの方が間違っている」と思ったら ASK へ |
 | `reviewing-diffs` | requesting-code-review | 設計書・テスト仕様書・Issue を基準に diff をレビュー。severity 定義(critical/high/medium/low)、`gh pr review` / `gh pr comment` での投稿形式。5 観点の reviewer 共通プロセス(観点別の職務は各エージェント定義に記載) |
 | `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
-| `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方、Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認。HARD-GATE:「ユーザーの指示なしに起票しない」 |
+| `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方、Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認。**ISSUE_TEMPLATE の活用**: `.github/ISSUE_TEMPLATE/`(form 形式 .yml / markdown 形式 .md)や `.github/ISSUE_TEMPLATE.md` を探索し、指摘の種類(バグ / 改善 / タスク等)に最も合うテンプレートを選択、その項目・ラベル・タイトル接頭辞を最大限活かして本文を構成する。テンプレートがない場合のみ既定書式で起票。HARD-GATE:「ユーザーの指示なしに起票しない」 |
 | `recording-gotchas` | (独自・成長機構) | 失敗(STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)から「プロジェクト固有で再発しうる教訓」を抽出し GOTCHAS.md に追記する基準と書式 |
 
 ## 7. Agents(ツール制限 = 構造的ハーネス)
