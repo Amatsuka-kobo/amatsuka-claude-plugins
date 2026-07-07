@@ -112,3 +112,34 @@ test("run あり(phase=implement)で git push origin codiel/issue-1-try-1 は de
   const r = hook(root, "git push origin codiel/issue-1-try-1");
   assert.equal(r.permissionDecision, "deny");
 });
+
+test("git -C <dir> push --force はバイパスされず deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git -C ../repo push --force origin feature");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git -C <dir> push origin main はバイパスされず deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git -C ../repo push origin main");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("awaiting_human 中(phase=init)の gh pr create は deny(ゲートスキップ防止)", () => {
+  const root = setupRun();
+  cli(root, ["mark-ask", "init", "--issue", "1", "--evaluation-id", "e"]);
+  const r = hook(root, "gh pr create");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git push origin main-refactor-branch は保護ブランチではないので allow(pr, test-loop passed)", () => {
+  const root = setupRunAtPr();
+  const r = hook(root, "git push origin main-refactor-branch");
+  assert.equal(r.permissionDecision, "allow");
+});
+
+test("git push upstream main は remote 名に関わらず deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git push upstream main");
+  assert.equal(r.permissionDecision, "deny");
+});
