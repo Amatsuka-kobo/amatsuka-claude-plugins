@@ -100,8 +100,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 #### 裁定 B: このまま承認(as-is)
 
 成果物は修正せず、ASK の指摘を踏まえた上でそのまま先へ進めてよいと人間が判断した場合。
-**このケースでは再 evaluate を呼ばない**。同一 `runId` に対して短時間で再度 evaluate すると、
-sealed な `common/resubmission-loop` ルールが「暴走的な再提出」として検知し、判定が
+**このケースでは再 evaluate を呼ばない**。同一 `runId` に対して無変更(または近似)の成果物を
+再提出すると、sealed な `common/resubmission-loop` ルールが内容類似度で「暴走的な再提出」として検知し、判定が
 フェイルクローズドに固定されて先に進めなくなる(ライブロック)。そのためこの分岐だけは evaluate を
 経由せず、`--human-approved` によってゲートを通過させる。これがこのゲートで唯一の正規の
 迂回路であり、他のケースに転用してはならない。
@@ -135,6 +135,10 @@ sealed な `common/resubmission-loop` ルールが「暴走的な再提出」と
 これにより、たとえば design フェーズで指摘された懸念を implement フェーズの implementer が
 無視せず踏まえられる。findings の全文(evidence.excerpt 等)は転記しない
 (`casePath` を渡し、必要なら読みに行かせる)。
+
+**裁定 B(as-is 承認)で通過した場合は必ず引き継ぐ**: verdict が ASK のまま進んだフェーズの findings は
+「人間が承知の上で受け入れたリスク」であり、次フェーズの実行者に「承認済みだが未解消の指摘」として
+明示的に渡す(PROCEED 通過時よりも引き継ぎの価値が高い)。
 
 ## outcome の自動同期
 

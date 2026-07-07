@@ -120,7 +120,11 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 
 - **PROCEED** → 次フェーズへ自動遷移
 - **ASK** → findings を人間に提示して停止(state は `awaiting_human`)。
-  人間の裁定を `record_outcome` で記録し、再開(修正指示つき差し戻し or 続行)または中止
+  人間の裁定を `record_outcome` で記録し、再開(修正指示つき差し戻し or 続行)または中止。
+  裁定が「as-is 承認」の場合は**再 evaluate せず**(sealed な resubmission-loop ルールと衝突しライブロックするため)、
+  `codiel-state pass-gate --verdict ASK --human-approved` で通過させる。verdict は ASK のまま
+  `humanApproved: true` が監査記録として残る。これがゲートの唯一の正規例外で、
+  `record_outcome(approved)` の記録が前提条件(運用規約は raguel-gating スキル)
 - **STOP** → run を停止。`recording-gotchas` スキルを起動して失敗を GOTCHAS.md に記録
 - **ループ上限超過**(test-loop / fix-loop の試行回数)→ ASK に倒す。
   Raguel の `common/resubmission-loop` ルールと合わせて二重の暴走防止
@@ -337,7 +341,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 | フック | 対象 | 内容 |
 |---|---|---|
-| PreToolUse | Bash(`gh pr create`, `git push`) | state.json を参照し、「テスト green + implement/test-loop の verdict が PROCEED」でなければ **deny**。保護ブランチ(main 等)への push は常に deny |
+| PreToolUse | Bash(`gh pr create`, `git push`) | state.json を参照し、「テスト green + implement/test-loop が passed(PROCEED または human-approved の ASK)」でなければ **deny**。保護ブランチ(main 等)への push は常に deny |
 | PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [8]) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
