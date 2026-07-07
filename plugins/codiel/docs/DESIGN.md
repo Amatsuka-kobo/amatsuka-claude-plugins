@@ -317,7 +317,7 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 
 | エージェント | 担当 | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
-| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash | 書き込みは hooks で `.codiel/specs/**/scripts/` と reports に制限。**プロダクトコードと cases.md(期待値)は書けない** — スクリプトは直せるが期待値と実装は直せない |
+| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash | **プロダクトコードと cases.md(期待値)は書かない** — スクリプトは直せるが期待値と実装は直せない。cases.md への書き込みは hooks が ask で機械的に検知、それ以外の境界はエージェント定義の職務規律で担保 |
 
 ### レビュー系(観点別 5 体・全員読み取り専用)
 
