@@ -15,10 +15,13 @@ RED→GREEN→REFACTOR の TDD サイクルで実行し、プロダクトコー�
 
 - **通常モード(implement フェーズ)**: `dev-plan.md` を入力に、自ドメインの `[domain: ...]` タグが
   付いたステップを順に実施する。
-- **修正モード(test-loop の (B) TDD 修正ループ / fix-loop)**: tester やレビューアーからの報告
-  (NG ケース ID・再現手順・期待結果・実際の結果)を入力に、該当箇所を修正する。詳細な debugging の
-  手順(再現→根本原因特定→最小修正の進め方)は `fixing-failures` スキルに従う。本スキルはこのモードでも
-  「dev-plan にない変更をしない」「テスト資産を書き換えない」という規律を維持する責務を持つ。
+- **修正モード(test-loop の (B) TDD 修正ループ / fix-loop)**: 入力は次の 2 系統のいずれか。
+  (a) テスト NG 由来(test-loop): tester からの報告(NG ケース ID・再現手順・期待結果・実際の結果)
+  の 4 項目。(b) レビュー所見由来(fix-loop): オーケストレーター(`fixing-review-findings`)から
+  渡される所見(severity・対象・内容・根拠・提案)+ 対象ファイル。どちらの系統でも、詳細な
+  debugging の手順(再現→根本原因特定→最小修正→回帰)は `fixing-failures` スキルに従う。本スキルは
+  このモードでも「dev-plan にない変更をしない」「テスト資産を書き換えない」という規律を維持する
+  責務を持つ。
 
 ユニットテストの要否・フレームワーク・配置は `docs/ARCHITECTURE.md` の `## テスト方針` 宣言に従う。
 そこで「ユニットテスト不要」と明記されている場合に限り RED を省略してよい。宣言がある限り、
@@ -42,9 +45,11 @@ RED→GREEN→REFACTOR の TDD サイクルで実行し、プロダクトコー�
    4. ステップの「検証コマンド」を実行し、「完了条件」を満たすか確認する。満たさなければ 5-2 に戻る。
    5. 満たしたら、そのステップの変更のみを `git commit`(コミット規約は後述)する。
    6. 自ドメインの未完了ステップが残っていれば 5 に戻る。全て完了したら報告へ。
-6. **修正モード**: tester/reviewer の報告(NG ケース ID・再現手順・期待結果・実際の結果)を受け取り、
-   `fixing-failures` スキルの手順で再現→根本原因特定→最小修正を行う。修正後に検証コマンドを再実行し、
-   コミットする。「テストの方が間違っている」と判断した場合は HARD-GATE に従い修正せず報告する。
+6. **修正モード**: 入力系統 (a) テスト NG 由来(NG ケース ID・再現手順・期待結果・実際の結果)または
+   (b) レビュー所見由来(所見: severity・対象・内容・根拠・提案 + 対象ファイル)のいずれかを受け取り、
+   どちらでも `fixing-failures` スキルの手順で再現→根本原因特定→最小修正→回帰を行う。修正後に
+   検証コマンドを再実行し、コミットする。「テストの方が間違っている」と判断した場合は HARD-GATE に
+   従い修正せず報告する。
 7. 完了報告を書く(実施ステップ / 変更ファイル一覧 / 実行した検証コマンドと結果 / コミットハッシュ)。
 
 ## コミット責務
@@ -123,7 +128,8 @@ digraph implementing {
   commit_step [label="git commit\ncodiel(implement): <ステップ名> (issue-N try-M)", shape=box];
   more_steps [label="自ドメインに\n未完了ステップが残る?", shape=diamond];
 
-  receive [label="NGケースID+再現手順+\n期待結果+実際の結果を受け取る", shape=box];
+  receive_a [label="(a)テストNG由来:\nNGケースID+再現手順+\n期待結果+実際の結果", shape=box];
+  receive_b [label="(b)レビュー所見由来:\n所見(severity/対象/内容/根拠/提案)\n+対象ファイル", shape=box];
   reproduce [label="再現する\n(fixing-failures スキルの手順)", shape=box];
   root_cause [label="根本原因を特定する", shape=box];
   spec_wrong [label="テストの方が\n間違っていると判断?", shape=diamond];
@@ -136,7 +142,8 @@ digraph implementing {
 
   read_plan -> read_arch -> mode;
   mode -> next_step [label="通常モード"];
-  mode -> receive [label="修正モード\n(test-loop/fix-loop)"];
+  mode -> receive_a [label="修正モード(a)\ntest-loop"];
+  mode -> receive_b [label="修正モード(b)\nfix-loop"];
 
   next_step -> need_test;
   need_test -> red [label="必要"];
@@ -148,7 +155,9 @@ digraph implementing {
   more_steps -> next_step [label="Yes"];
   more_steps -> report [label="No"];
 
-  receive -> reproduce -> root_cause -> spec_wrong;
+  receive_a -> reproduce;
+  receive_b -> reproduce;
+  reproduce -> root_cause -> spec_wrong;
   spec_wrong -> escalate [label="Yes"];
   spec_wrong -> minimal_fix [label="No"];
   minimal_fix -> verify_fix;

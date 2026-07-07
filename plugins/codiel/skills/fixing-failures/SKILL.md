@@ -1,18 +1,21 @@
 ---
 name: fixing-failures
-description: Codiel の test-loop フェーズ (B) TDD 修正ループで codiel-implementer-frontend / -backend / -data が NG ケースを修正するとき使用する(`implementing` スキルの修正モードから参照される)。原因を特定せず手当たり次第に直したくなる場面・症状だけ握り潰して緑にしたくなる場面でこそ必ず使用する。
+description: Codiel の test-loop フェーズ (B) TDD 修正ループ、および fix-loop フェーズで codiel-implementer-frontend / -backend / -data が NG ケース・レビュー所見を修正するとき使用する(`implementing` スキルの修正モードから参照される)。原因を特定せず手当たり次第に直したくなる場面・症状だけ握り潰して緑にしたくなる場面でこそ必ず使用する。
 ---
 
 # NG ケース修正(systematic-debugging)規約
 
 ## 概要
 
-`codiel-implementer-frontend` / `-backend` / `-data` が test-loop の (B) TDD 修正ループで使う
-スキル。`running-regression-tests` から渡される「NG ケース ID・再現手順・期待結果・実際の結果」
-の 4 項目を入力に、**再現 → 根本原因の特定 → 最小修正 → 対象ケース再実行 → 回帰(全件)再実行**の
-順で進める。`implementing` スキルの修正モードから呼ばれ、「dev-plan にない変更をしない」
-「テスト資産を書き換えない」という規律は `implementing` 側の責務のまま維持される。本スキルは
-その中の**デバッグの進め方**そのものを定める。
+`codiel-implementer-frontend` / `-backend` / `-data` が test-loop の (B) TDD 修正ループ、および
+fix-loop フェーズで使うスキル。`implementing` スキルの修正モードが定める 2 系統の入力
+(a) テスト NG 由来(test-loop): `running-regression-tests` から渡される「NG ケース ID・再現手順・
+期待結果・実際の結果」の 4 項目 / (b) レビュー所見由来(fix-loop): `fixing-review-findings` から
+渡される所見(severity・対象・内容・根拠・提案)+ 対象ファイル、のいずれを受け取った場合も
+**再現 → 根本原因の特定 → 最小修正 → 対象ケース再実行 → 回帰(全件)再実行**の順で進める。
+`implementing` スキルの修正モードから呼ばれ、「dev-plan にない変更をしない」「テスト資産を
+書き換えない」という規律は `implementing` 側の責務のまま維持される。本スキルはその中の
+**デバッグの進め方**そのものを定める。
 
 「症状を消せば直った」という判断は最も危険な合理化である。原因を特定せずに直した修正は、
 その場では NG が OK に変わって見えても、別の入力で同じ根本原因が再発する。本スキルの手順は
@@ -20,12 +23,16 @@ description: Codiel の test-loop フェーズ (B) TDD 修正ループで codiel
 
 ## チェックリスト
 
-1. `running-regression-tests` / `scripting-tests` から渡された NG ケースの 4 項目(ケース ID・
-   再現手順・期待結果・実際の結果)を確認する。4 項目のいずれかが欠けている場合、推測で埋めず、
-   差し戻し元(オーケストレーター経由で tester)に不足分の提示を求める。
-2. **再現する**: 渡された再現手順どおりに手を動かし(または既存のテストスクリプトを実行し)、
-   実際の結果が報告どおりに再現することを確認する。再現しない場合は、環境差・タイミング差の
-   可能性を疑い、再現条件を絞り込むまで根本原因の特定に進まない。
+1. 入力系統を確認する。(a) テスト NG 由来なら `running-regression-tests` / `scripting-tests` から
+   渡された NG ケースの 4 項目(ケース ID・再現手順・期待結果・実際の結果)、(b) レビュー所見由来
+   なら `fixing-review-findings` から渡された所見(severity・対象・内容・根拠・提案)+ 対象ファイル
+   が揃っているか確認する。いずれかが欠けている場合、推測で埋めず、差し戻し元(オーケストレーター
+   経由で tester または fixing-review-findings)に不足分の提示を求める。
+2. **再現する**: (a) テスト NG 由来では渡された再現手順どおりに手を動かし(または既存のテスト
+   スクリプトを実行し)、実際の結果が報告どおりに再現することを確認する。(b) レビュー所見由来では
+   指摘された問題を該当ファイル・行で再現・確認する(`fixing-review-findings` で検証済みの根拠を
+   引き継ぎ、ゼロから調べ直さない)。いずれの系統でも再現しない場合は、環境差・タイミング差・
+   認識違いの可能性を疑い、再現条件を絞り込むまで根本原因の特定に進まない。
 3. **根本原因を特定する**: コード・ログ・実行結果を読み、原因を**1 文で言語化**する
    (例:「`formatDate` がタイムゾーンを考慮せず UTC のまま表示している」)。
 4. **裏取りする**: 3 で言語化した原因が正しければ再現手順の結果を説明できるはずである。
@@ -42,8 +49,9 @@ description: Codiel の test-loop フェーズ (B) TDD 修正ループで codiel
    `running-regression-tests` が定める回帰範囲全体で再確認する。対象ケースだけの再実行で
    完了としない。
 9. 検証コマンド・回帰結果が揃ったら、`implementing` のコミット規約(`codiel(test-loop): <修正内容>
-   (issue-N try-M)`)でコミットし、完了報告(修正内容・根本原因・変更ファイル・再実行結果・
-   コミットハッシュ)を書く。
+   (issue-N try-M)` または `codiel(fix-loop): <修正内容> (issue-N try-M)`。呼ばれたフェーズ名に
+   合わせる)でコミットし、完了報告(修正内容・根本原因・変更ファイル・再実行結果・コミットハッシュ)
+   を書く。
 
 ## 「最小修正」の判断基準
 
@@ -83,7 +91,7 @@ digraph fixing_failures {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  receive [label="NGケースの4項目を受け取る\n(ケースID/再現手順/期待結果/実際の結果)", shape=box];
+  receive [label="入力系統(a)test-loopの4項目 または\n(b)fix-loopの所見+対象ファイルを受け取る", shape=box];
   complete_input [label="4項目は揃っているか?", shape=diamond];
   request_more [label="不足分の提示を要求\n(推測で埋めない)", shape=box];
 
@@ -102,7 +110,7 @@ digraph fixing_failures {
   regress_all [label="回帰範囲全体を再実行\n(running-regression-tests)", shape=box];
   regress_ok [label="回帰は全てOKか?", shape=diamond];
 
-  commit [label="git commit\ncodiel(test-loop): <修正内容> (issue-N try-M)", shape=box];
+  commit [label="git commit\ncodiel(test-loop|fix-loop): <修正内容> (issue-N try-M)", shape=box];
   report [label="完了報告\n(修正内容/根本原因/変更ファイル/再実行結果/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   receive -> complete_input;

@@ -13,6 +13,11 @@ description: Codiel の review フェーズ(および fix-loop の再レビュ�
 **レビュー担当個人の好みのコーディングスタイルではない**。「自分ならこう書く」という指摘は
 根拠が文書にない限り low 止まりとする。
 
+fix-loop の再レビューでは、上記に加えて `fixing-review-findings` が申し送る「反論済み所見一覧」
+(所見の要約・反論根拠・PR コメント URL)が入力に含まれることがある。この一覧にある所見は原則
+再報告しない。再主張するのは反論を覆す**新たな根拠**がある場合のみで、その根拠を所見書式の
+「根拠」欄に明記する。
+
 レビューは**両方向**で行う。片方向だけでは設計逸脱を見逃す。
 
 - **未達方向**: design.md / spec.md / issue.md の受け入れ基準にあるのに、diff に実装が見当たらない。
@@ -29,6 +34,7 @@ reviewer は**所見をテキストで返すだけ**で、ファイルには一�
 ## チェックリスト
 
 1. `design.md` / `.codiel/specs/**` の該当 `spec.md`・`cases.md` / `issue.md` の受け入れ基準を読む。
+   fix-loop の再レビューでは、申し送られた「反論済み所見一覧」も確認する。
 2. `gh pr diff <PR番号>` で diff を取得する。`gh pr view <PR番号>` で PR 概要・変更ファイル一覧を
    確認する。diff が大きくても**全ファイルに目を通す**(サンプリングで一部だけ見て済ませない)。
 3. 自分の観点(下記「観点別の焦点」)に該当する変更点を洗い出す。
@@ -38,7 +44,8 @@ reviewer は**所見をテキストで返すだけ**で、ファイルには一�
 5. 必要に応じてテスト・型検査を**読み取り実行**して裏取りする(`npm test` / `npm run typecheck` 等。
    ARCHITECTURE.md のコマンド定義に従う)。実行結果を書き換えたり、失敗を握り潰したりしない。
 6. 問題を見つけたら下記の所見書式でまとめる。severity は次節の定義に従って機械的に判定する
-   (「なんとなく重大そう」で決めない)。
+   (「なんとなく重大そう」で決めない)。「反論済み所見一覧」に該当し、かつ反論を覆す新たな根拠が
+   ない場合は再報告しない。
 7. 所見がゼロの観点があっても、**確認した項目と確認方法を必ず報告する**(無言 approve 禁止)。
 8. 所見一覧(空の場合は確認記録)をテキストで返す。ファイルへの書き込みは行わない。
 
@@ -119,14 +126,14 @@ digraph reviewing_diffs {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_docs [label="design.md / spec.md・cases.md /\nissue.md の受け入れ基準を読む", shape=box];
+  read_docs [label="design.md / spec.md・cases.md /\nissue.md の受け入れ基準を読む\n(再レビュー時は反論済み一覧も)", shape=box];
   get_diff [label="gh pr diff / gh pr view で\n全ファイルの diff を取得", shape=box];
   scope [label="自分の観点に該当する\n変更点を洗い出す", shape=box];
   check_missing [label="未達方向: 基準にあるのに\n実装が見当たらないか?", shape=diamond];
   check_deviation [label="逸脱方向: 基準にないのに\n実装されていないか?", shape=diamond];
   verify [label="必要ならテスト・型検査を\n読み取り実行して裏取り", shape=box];
   classify [label="severity を定義表に沿って判定\n(critical/high/medium/low)", shape=box];
-  write_finding [label="所見書式で記述", shape=box];
+  write_finding [label="所見書式で記述\n(反論済み一覧は新根拠なければ除外)", shape=box];
   more [label="未確認の観点・変更点が残っているか?", shape=diamond];
   zero_findings [label="所見ゼロの観点がある場合、\n確認項目と確認方法を記録", shape=box];
   report [label="所見(または確認記録)を\nテキストで返す(ファイル書き込みなし)", shape=ellipse, style=filled, fillcolor="#ccffcc"];

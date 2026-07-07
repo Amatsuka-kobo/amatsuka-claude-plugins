@@ -25,11 +25,15 @@ description: Codiel の fix-loop フェーズでオーケストレーターが�
    オーケストレーターは Agent ツールで読み取り専用のサブエージェント(Explore 等)に調査を
    委譲してよい。ただし**修正の要否を最終判断するのはオーケストレーター自身**であり、
    調査結果を鵜呑みにするだけの委譲(判断の丸投げ)はしない。
-2. **妥当と判断したら**、該当ドメインの implementer へ「所見(severity・対象・内容)+ 根拠 +
-   対象ファイル」を添えてディスパッチする(`implementing` スキルの修正モードを使わせる。
-   `orchestrating-runs` §3 のディスパッチテンプレートに準じる)。
+2. **妥当と判断したら**、該当ドメインの implementer へ `implementing` スキルの修正モードの契約
+   (b) レビュー所見由来(所見: severity・対象・内容・根拠・提案 + 対象ファイル)の形式で
+   ディスパッチする(`orchestrating-runs` §3 のディスパッチテンプレートに準じる)。
 3. **不当と判断したら修正せず**、根拠を添えて PR コメントで反論する。反論も「対応しない」という
    決定の一形態であり、**必ず PR 上に記録する**(黙って無視することは握り潰しと区別がつかない)。
+
+反論した所見は「反論済み一覧」(所見の要約・反論根拠・PR コメント URL)として記録し、再レビュー
+時の reviewer への申し送りと、残件数(critical/high ゼロ判定)の両方で参照する。ただし reviewer
+が**新たな根拠**を伴って再主張した所見は反論済み扱いを解除し未決に戻す。
 
 修正後は `running-regression-tests` で回帰を再実行し、`reviewing-diffs` の該当観点 reviewer を
 再ディスパッチして再レビューする。critical/high がゼロになり、かつ回帰が green になるまでこの
@@ -55,11 +59,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    として除外する。除外した件数も後で triage へ引き継ぐため覚えておく)。
 2. 所見ごとに、対象ファイル・行・design.md/spec.md/issue.md の根拠を突き合わせて技術的に検証する。
    必要なら読み取り専用サブエージェントへ調査を委譲するが、妥当性の最終判断は自分で行う。
-3. 妥当と判断した所見は、該当ドメインの implementer へ「所見 + 根拠 + 対象ファイル」を添えて
-   ディスパッチする(1 所見ずつでも複数所見まとめてでもよいが、ドメインが混在する場合は
-   ドメインごとに分けてディスパッチする)。
-4. 不当と判断した所見は、下記「PR 反論記録書式」に従い `gh api`(該当所見のコメントへの返信、
-   なければ新規コメント)で反論を投稿する。修正はしない。
+3. 妥当と判断した所見は、該当ドメインの implementer へ `implementing` の契約 (b) レビュー所見由来
+   の形式(所見: severity・対象・内容・根拠・提案 + 対象ファイル)でディスパッチする(1 所見ずつ
+   でも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分けてディスパッチする)。
+4. 不当と判断した所見は、`reports/review-<n>.md` に記録された PR コメント URL への返信として、
+   下記「PR 反論記録書式」に従い `gh api` で反論を投稿する(URL が未記録なら新規コメントでよい)。
+   修正はしない。反論後は所見の要約・反論根拠・投稿した PR コメント URL を「反論済み一覧」に
+   追記する。
 5. ディスパッチ 1 往復(implementer への修正依頼 → 完了報告)ごとに
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --issue N` を呼ぶ。
    exit code が `3`(`capExceeded`)なら、それ以上ディスパッチせず `raguel-gating` の ASK
@@ -71,12 +77,22 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    ARCHITECTURE.md のテストコマンド)を再実行する(修正対象のケースだけの再実行にしない)。
 8. 回帰が green になったら、diff のドメインに応じた `codiel-reviewer-*`(+ 常時参加の
    doc/security)を再ディスパッチし、`reviewing-diffs` の手順で `review-<n+1>.md` を作る。
-9. `review-<n+1>.md` の critical/high 件数を確認する。1 件でも残っていれば手順 2 に戻る。
-   ゼロになったら手順 10 へ。
+   ディスパッチ時の申し送りに「反論済み一覧」を含め、reviewer が新たな根拠なしに同一所見を
+   再報告しないようにする。
+9. `review-<n+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
+   除外する(ただし reviewer が新たな根拠を伴って再主張したものは未決に戻し件数に含める)。
+   除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 10 へ。
 10. 最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
     `node <plugin-root>/scripts/codiel-state.mjs pass-gate fix-loop --issue N --evaluation-id <id>
     --verdict PROCEED` を呼んでフェーズを完了させる(`pass-gate` はループの最後に 1 回だけ呼ぶ。
     修正の度に呼ぶのは `record-attempt` と `evaluate_code` であり、`pass-gate` ではない)。
+
+## 所見と PR コメントの対応付け
+
+所見を PR へ投稿する(`reviewing-diffs` の「所見の統合と投稿」節、および再レビュー後)際、
+オーケストレーターは投稿した各行コメントの URL(または ID)を `reports/review-<n>.md` の該当所見に
+追記する。以降の「反論」「対応」の返信は常にこの URL に対して行う(所見テキストの一致だけで
+コメントを探し直さない)。
 
 ## PR 反論記録書式
 
@@ -134,8 +150,8 @@ digraph fixing_review_findings {
   findings [label="review-<n>.md の\ncritical/high 所見を一覧化", shape=box];
   verify [label="技術的に検証する\n(必要なら読み取り調査を委譲)", shape=box];
   valid [label="妥当か?", shape=diamond];
-  dispatch [label="implementer へディスパッチ\n(所見+根拠+対象ファイル)", shape=box];
-  rebut [label="PRコメントで反論\n(修正しない)", shape=box, style=filled, fillcolor="#ffe0b3"];
+  dispatch [label="implementer へディスパッチ\n(契約(b): 所見+根拠+提案+対象ファイル)", shape=box];
+  rebut [label="PRコメントで反論\n(修正しない)\n反論済み一覧に追記", shape=box, style=filled, fillcolor="#ffe0b3"];
   record_attempt [label="record-attempt fix-loop\n(ディスパッチ1往復ごと)", shape=box];
   cap [label="exit 3\n(capExceeded)?", shape=diamond];
   ask [label="ASK相当で停止\n(raguel-gatingへ合流)", shape=box, style=filled, fillcolor="#fff2cc"];
@@ -143,8 +159,8 @@ digraph fixing_review_findings {
   verdict [label="verdict?", shape=diamond];
   stop_ask [label="STOP/ASKハンドリング\n(raguel-gating)", shape=box, style=filled, fillcolor="#fff2cc"];
   regress [label="running-regression-tests で\n回帰全体を再実行", shape=box];
-  rereview [label="該当観点reviewerを再ディスパッチ\n(reviewing-diffs)\nreview-<n+1>.md 作成", shape=box];
-  remaining [label="critical/highが\n残っているか?", shape=diamond];
+  rereview [label="該当観点reviewerを再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
+  remaining [label="反論済み一覧を除いて\ncritical/highが残っているか?\n(新根拠の再主張は未決に戻す)", shape=diamond];
   passgate [label="pass-gate fix-loop\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
   triage [label="triageフェーズへ\n(medium/lowはここで)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   skip [label="critical/high が最初から0件\n=> skip-phase fix-loop\n(orchestrating-runs)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
