@@ -143,3 +143,65 @@ test("git push upstream main は remote 名に関わらず deny", () => {
   const r = hook(root, "git push upstream main");
   assert.equal(r.permissionDecision, "deny");
 });
+
+// --- 修正1: 保護ブランチ判定の refspec 対応 ---
+
+test("git push origin +main は force refspec 記法でも deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git push origin +main");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git push origin HEAD:refs/heads/main は src:dest 形式でも deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git push origin HEAD:refs/heads/main");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git push origin refs/heads/master は refs/heads/ 完全形でも deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git push origin refs/heads/master");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git push origin codiel/main-fix は保護ブランチ判定に掛からない(pr, test-loop passed で allow)", () => {
+  const root = setupRunAtPr();
+  const r = hook(root, "git push origin codiel/main-fix");
+  assert.equal(r.permissionDecision, "allow");
+});
+
+// --- 修正2: push 検知をサブコマンド解析に変更 ---
+
+test("git stash push は push コマンドと誤判定されず allow(implement フェーズ)", () => {
+  const root = setupRun();
+  setupRunAtImplement(root);
+  const r = hook(root, "git stash push");
+  assert.equal(r.permissionDecision, "allow");
+});
+
+test("git stash push -m wip は push コマンドと誤判定されず allow(implement フェーズ)", () => {
+  const root = setupRun();
+  setupRunAtImplement(root);
+  const r = hook(root, "git stash push -m wip");
+  assert.equal(r.permissionDecision, "allow");
+});
+
+test("git config push.default simple は push コマンドと誤判定されず allow(implement フェーズ)", () => {
+  const root = setupRun();
+  setupRunAtImplement(root);
+  const r = hook(root, "git config push.default simple");
+  assert.equal(r.permissionDecision, "allow");
+});
+
+test("git -C ../x push origin feature はサブコマンド解析後も push と判定されフェーズゲートで deny", () => {
+  const root = setupRun();
+  setupRunAtImplement(root);
+  const r = hook(root, "git -C ../x push origin feature");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git -C ../x push --force origin main は run なしでも force push として deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git -C ../x push --force origin main");
+  assert.equal(r.permissionDecision, "deny");
+});
