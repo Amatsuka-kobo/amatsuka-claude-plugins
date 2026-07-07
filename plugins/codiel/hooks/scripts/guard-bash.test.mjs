@@ -231,3 +231,17 @@ test("git push --force-with-lease origin feature は force push として deny",
   const r = hook(root, "git push --force-with-lease origin feature");
   assert.equal(r.permissionDecision, "deny");
 });
+
+// --- 修正: state.json への cp/mv/dd/install 経由の書き込みを捕捉 ---
+
+test("cp で state.json への書き込みは deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "cp /tmp/x.json .codiel/runs/issue-1/try-1/state.json");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("mv (state.json と無関係)は allow", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "mv a b");
+  assert.equal(r.permissionDecision, "allow");
+});

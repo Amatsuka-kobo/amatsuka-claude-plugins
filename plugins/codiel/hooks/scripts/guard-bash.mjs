@@ -106,6 +106,7 @@ try {
     [hasForcePush(gitInvocations), "force push"],
     [pushesToProtectedBranch(gitInvocations), "保護ブランチ(main/master)への push"],
     [/(>|>>|\btee\b|\bsed\s+-i\b)[^\n]*\.codiel\/runs\/[^\s]*state\.json/.test(cmd), "state.json へのシェル経由の書き込み"],
+    [/\b(cp|mv|dd|install)\b[^\n;|&]*\.codiel\/runs\/[^\s]*state\.json/.test(cmd), "state.json への cp/mv/dd/install 経由の書き込み"],
   ];
   for (const [triggered, why] of ALWAYS_DENY) if (triggered) emit("deny", `禁止コマンド: ${why}`);
 

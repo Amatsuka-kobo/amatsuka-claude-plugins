@@ -38,7 +38,10 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 - [ ] 3. 現在フェーズから、フェーズ進行表の定型(start-phase → ディスパッチ → 成果物検証 → raguel-gating
       でゲート → pass-gate/complete-phase)を順に実行する
 - [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に厳密に従う(自己判断しない)
-- [ ] 5. 全フェーズ `passed` になったら `finalize` を実行し、結果レポートを出力して終了する
+- [ ] 5. 全フェーズ `passed` になったら
+      `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N` を呼ぶ(全フェーズ passed を
+      検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない)。
+      結果レポートを出力して終了する
 
 ## 0. 前提チェック(フェイルクローズド)
 
@@ -60,6 +63,9 @@ run を開始する前に、必ず次を確認する。ひとつでも欠けて�
 node <plugin-root>/scripts/codiel-state.mjs get --issue N
 ```
 
+- **同時にアクティブにできる run は 1 つだけ**(hooks の `findActiveRun` は単一 run の存在を前提に
+  動作する)。別 Issue の run を新たに開始する前に、既存の `active`/`awaiting_human` の run を
+  `finalize`(全フェーズ完了時)または `codiel-state stop --reason`(中止時)して終端状態にすること。
 - run が存在し `status` が終端(`stopped` / `awaiting_outcome` / `completed` / `rejected`)でなければ、
   その `state.phase` から再開する(「再開手順」参照)。
 - **run が存在しない場合、`codiel-state get` は非ゼロ終了し stderr にエラーメッセージを出す。
@@ -83,8 +89,10 @@ node <plugin-root>/scripts/codiel-state.mjs get --issue N
 各フェーズは共通の定型で進行する: `start-phase` → サブエージェントをディスパッチ → 成果物ファイルの
 存在を検証 → `raguel-gating` でゲート → `pass-gate`(GATED フェーズ)または `complete-phase`
 (非 GATED フェーズ)。GATED フェーズは `init / design / test-spec / dev-plan / implement / test-loop / fix-loop`
-の 7 つで、Raguel の evaluate を経ないと `passed` にできない。`pr / review / triage / finalize` は
-Raguel ゲートを経ず `complete-phase` で完了する。
+の 7 つで、Raguel の evaluate を経ないと `passed` にできない。`pr / review / triage` は
+Raguel ゲートを経ず `complete-phase` で完了する。`finalize` だけは `complete-phase` ではなく
+専用コマンド `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N` で完了させる
+(全フェーズ `passed` を検証した上で `status` を `awaiting_outcome` にする)。
 
 | フェーズ | 担当エージェント | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 | コミット担当 |
 |---|---|---|---|---|---|---|
@@ -97,9 +105,9 @@ Raguel ゲートを経ず `complete-phase` で完了する。
 | [4B] test-loop(TDD 修正) | codiel-implementer-{該当ドメイン} | fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
 | [5] pr | オーケストレーター本体(ディスパッチなし) | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する) | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
 | [6] review | codiel-reviewer-{frontend,backend,data}(diff のドメインで選択参加)+ codiel-reviewer-doc/-security(常時参加)。**所見の統合・`reports/review-<n>.md` への記録・PR コメント投稿はオーケストレーターが行う** | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | オーケストレーター(review レポートのコミットも) |
-| [7] fix-loop | codiel-implementer-{該当ドメイン}(修正)+ codiel-tester(回帰再実行)+ reviewer 陣(再レビュー) | fixing-review-findings, running-regression-tests, reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | 担当 implementer / codiel-tester(自分の変更を自分でコミット) |
-| [8] triage | オーケストレーター本体(ユーザーの指示のもと) | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [8] の運用) | ―(コード変更なし) |
-| [9] finalize | オーケストレーター本体 | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | complete-phase(`status` を `awaiting_outcome` へ) | ―(コード変更なし) |
+| [7] fix-loop | codiel-implementer-{該当ドメイン}(修正)+ codiel-tester(回帰再実行)+ reviewer 陣(再レビュー) | fixing-review-findings, running-regression-tests, reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | 担当 implementer / codiel-tester(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・reviewer 再ディスパッチ前にオーケストレーターが `git push` して PR ブランチを最新化する**(reviewer は `gh pr diff` を読むため、push しないと stale diff を見て同一所見を再報告する。guard-bash は fix-loop フェーズ + test-loop passed でこの push を許可済み) |
+| [8] triage | オーケストレーター本体(ユーザーの指示のもと) | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [8] の運用) | オーケストレーター(`review-<n>.md` への Issue 番号追記分。コード変更はなし) |
+| [9] finalize | オーケストレーター本体 | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない) | ―(コード変更なし) |
 
 - **test-spec と dev-plan は単一メッセージで 2 体並列ディスパッチする**(Task ツールの呼び出しを 1 回の
   応答の中に 2 件含める)。片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
@@ -107,6 +115,8 @@ Raguel ゲートを経ず `complete-phase` で完了する。
 - critical/high が review でゼロだった場合、fix-loop は実作業なしで
   `node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reason "<理由>"`
   でスキップする(詳細は「5. ループ運転」節)。
+- fix-loop の修正サイクルでは、回帰 green の後・reviewer 再ディスパッチの前に必ず
+  `git push` して PR を最新化する(詳細は `fixing-review-findings` 手順 8 を参照)。
 
 ### 2.1 成果物コミット規約
 

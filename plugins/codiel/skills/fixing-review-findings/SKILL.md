@@ -75,14 +75,17 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    従う(自己判断で握り潰さない)。
 7. 修正が反映されたら `running-regression-tests` の手順で回帰全体(影響 unit + 既存全 unit +
    ARCHITECTURE.md のテストコマンド)を再実行する(修正対象のケースだけの再実行にしない)。
-8. 回帰が green になったら、diff のドメインに応じた `codiel-reviewer-*`(+ 常時参加の
-   doc/security)を再ディスパッチし、`reviewing-diffs` の手順で `review-<n+1>.md` を作る。
-   ディスパッチ時の申し送りに「反論済み一覧」を含め、reviewer が新たな根拠なしに同一所見を
-   再報告しないようにする。
-9. `review-<n+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
-   除外する(ただし reviewer が新たな根拠を伴って再主張したものは未決に戻し件数に含める)。
-   除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 10 へ。
-10. 最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
+8. 回帰が green になったら、**オーケストレーターが `git push` して PR ブランチ(`state.branch`)を
+   リモートへ最新化する**(reviewer は `gh pr diff` で PR の diff を読むため、push を怠ると
+   reviewer は修正前の stale な diff を見ることになり、既に対応済みの所見を再度報告してしまう。
+   guard-bash は fix-loop フェーズ + test-loop passed の条件下でこの push を許可済み)。
+9. push 後、diff のドメインに応じた `codiel-reviewer-*`(+ 常時参加の doc/security)を
+   再ディスパッチし、`reviewing-diffs` の手順で `review-<n+1>.md` を作る。ディスパッチ時の
+   申し送りに「反論済み一覧」を含め、reviewer が新たな根拠なしに同一所見を再報告しないようにする。
+10. `review-<n+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
+    除外する(ただし reviewer が新たな根拠を伴って再主張したものは未決に戻し件数に含める)。
+    除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 11 へ。
+11. 最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
     `node <plugin-root>/scripts/codiel-state.mjs pass-gate fix-loop --issue N --evaluation-id <id>
     --verdict PROCEED` を呼んでフェーズを完了させる(`pass-gate` はループの最後に 1 回だけ呼ぶ。
     修正の度に呼ぶのは `record-attempt` と `evaluate_code` であり、`pass-gate` ではない)。
@@ -159,6 +162,7 @@ digraph fixing_review_findings {
   verdict [label="verdict?", shape=diamond];
   stop_ask [label="STOP/ASKハンドリング\n(raguel-gating)", shape=box, style=filled, fillcolor="#fff2cc"];
   regress [label="running-regression-tests で\n回帰全体を再実行", shape=box];
+  push [label="git push で\nPRブランチを最新化\n(reviewerのstale diff防止)", shape=box, style=filled, fillcolor="#d9e8ff"];
   rereview [label="該当観点reviewerを再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
   remaining [label="反論済み一覧を除いて\ncritical/highが残っているか?\n(新根拠の再主張は未決に戻す)", shape=diamond];
   passgate [label="pass-gate fix-loop\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
@@ -175,7 +179,7 @@ digraph fixing_review_findings {
   evaluate -> verdict;
   verdict -> stop_ask [label="STOP/ASK"];
   verdict -> regress [label="PROCEED"];
-  regress -> rereview -> remaining;
+  regress -> push -> rereview -> remaining;
   remaining -> verify [label="残りあり"];
   remaining -> passgate [label="ゼロ"];
   rebut -> remaining;

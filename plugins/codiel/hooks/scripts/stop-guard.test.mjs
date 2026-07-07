@@ -166,3 +166,39 @@ test("subagent-stop: 入力に stop_hook_active: true → run active でも出�
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout.trim(), "");
 });
+
+// --- 修正: 並列ステージ(test-spec/dev-plan)で複数フェーズが同時に in_progress の場合の誤 block 防止 ---
+
+// design を passed にしたところで止める(test-spec/dev-plan を並列で start できる状態)
+function setupRunAtParallelStages() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-stop-"));
+  cli(root, ["init", "--issue", "1"]);
+  cli(root, ["start-phase", "init", "--issue", "1"]);
+  const passGate = (phase) =>
+    cli(root, ["pass-gate", phase, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  passGate("init");
+  cli(root, ["start-phase", "design", "--issue", "1"]);
+  passGate("design");
+  return root;
+}
+
+test("subagent-stop: test-spec と dev-plan が両方 in_progress → dev-plan.md が無くても出力なし(どのサブエージェントの停止か識別不能なため検査スキップ)", () => {
+  const root = setupRunAtParallelStages();
+  cli(root, ["start-phase", "test-spec", "--issue", "1"]);
+  cli(root, ["start-phase", "dev-plan", "--issue", "1"]);
+  const result = callHook(SUBAGENT_STOP, root);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stdout.trim(), "");
+});
+
+test("subagent-stop: dev-plan のみ in_progress(test-spec は passed 済み)で dev-plan.md が無い → {decision:block}(既存挙動維持)", () => {
+  const root = setupRunAtParallelStages();
+  cli(root, ["start-phase", "test-spec", "--issue", "1"]);
+  cli(root, ["pass-gate", "test-spec", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(root, ["start-phase", "dev-plan", "--issue", "1"]);
+  const result = callHook(SUBAGENT_STOP, root);
+  assert.equal(result.exitCode, 0);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.decision, "block");
+  assert.match(parsed.reason, /dev-plan\.md/);
+});

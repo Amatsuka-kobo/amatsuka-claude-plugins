@@ -161,6 +161,7 @@ export function main(argv, root = process.cwd()) {
 
   if (cmd === "skip-phase") {
     const phase = pos[1];
+    if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`);
     if (!SKIPPABLE.has(phase))
       fail(`${phase} はスキップできません(skip-phase は fix-loop のみ対応)`);
     if (!flags.reason) fail("--reason が必要です");
@@ -201,6 +202,7 @@ export function main(argv, root = process.cwd()) {
 
   if (cmd === "complete-phase") {
     const phase = pos[1];
+    if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`);
     if (GATED.has(phase)) fail(`${phase} はゲート対象フェーズです(pass-gate を使用)`);
     const latest = loadRun(root, flags);
     const ph = latest.state.phases[phase];
@@ -216,6 +218,7 @@ export function main(argv, root = process.cwd()) {
 
   if (cmd === "mark-ask") {
     const phase = pos[1];
+    if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`);
     const latest = loadRun(root, flags);
     latest.state.phases[phase].status = "awaiting_human";
     latest.state.phases[phase].evaluationId = flags["evaluation-id"] ?? null;
@@ -237,6 +240,7 @@ export function main(argv, root = process.cwd()) {
 
   if (cmd === "record-attempt") {
     const phase = pos[1];
+    if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`);
     const latest = loadRun(root, flags);
     const ph = latest.state.phases[phase];
     ph.attempts = (ph.attempts ?? 0) + 1;

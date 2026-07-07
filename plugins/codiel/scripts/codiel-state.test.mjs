@@ -240,6 +240,38 @@ test("skip-phase fix-loop は review が passed でない状態では失敗す�
   assert.equal(r.code, 1);
 });
 
+test("complete-phase は不正なフェーズ名を拒否する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  const r = run(root, ["complete-phase", "bogus", "--issue", "1"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /不正なフェーズ/);
+});
+
+test("mark-ask は不正なフェーズ名を拒否する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  const r = run(root, ["mark-ask", "bogus", "--issue", "1", "--evaluation-id", "e"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /不正なフェーズ/);
+});
+
+test("record-attempt は不正なフェーズ名を拒否する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  const r = run(root, ["record-attempt", "bogus", "--issue", "1"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /不正なフェーズ/);
+});
+
+test("skip-phase は不正なフェーズ名を拒否する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  const r = run(root, ["skip-phase", "bogus", "--issue", "1", "--reason", "理由"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /不正なフェーズ/);
+});
+
 // テストヘルパー
 function passThrough(root, phases) {
   for (const ph of phases) {

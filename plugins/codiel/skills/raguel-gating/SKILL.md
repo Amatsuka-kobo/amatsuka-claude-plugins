@@ -83,14 +83,16 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 #### 裁定 A: 修正して再提出
 
-1. 人間の指示に沿って成果物を修正する。
-2. `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で再開する。
+1. `node <plugin-root>/scripts/codiel-state.mjs resume --issue N` で再開する。
    **`resume` はフェーズを `in_progress` に戻すだけで `passed` にはしない**。
+   `awaiting_human` 中は guard-write のフェーズ制御(`in_progress` フェーズ以外への書き込み制限)が
+   効かないため、成果物を修正する前に必ず `resume` してフェーズを `in_progress` に戻しておく。
+2. 人間の指示に沿って成果物を修正する。
 3. 修正済みの成果物で **再度 evaluate を呼び直す**。`PROCEED` が返って初めて
    `pass-gate --verdict PROCEED` する通常の再ゲート手順を通る(次フェーズへの遷移はここでは経由しない。
    pass-gate 後にあらためて「PROCEED」の手順に合流する)。
 4. 再 evaluate の結果が `resubmission-loop` 等により再度 `ASK` になることがある。その場合も
-   握り潰さず、もう一度人間の裁定を仰ぐ(3 に戻る。AI が自己判断で通してはならない)。`STOP` が
+   握り潰さず、もう一度人間の裁定を仰ぐ(2 に戻る。AI が自己判断で通してはならない)。`STOP` が
    返れば STOP の手順に従う。
 5. 最終的な裁定が固まったら `mcp__raguel__record_outcome` で結末を記録する(承認なら `approved`、
    差し戻し・却下なら `rejected`。`evaluationId` は最初に ASK を出した evaluate 呼び出しの
@@ -205,8 +207,8 @@ digraph raguel_gate {
   ask [label="findings を人間に提示\ncodiel-state mark-ask", shape=box, style=filled, fillcolor="#fff2cc"];
   human [label="人間の裁定?", shape=diamond];
 
-  refix [label="裁定A: 成果物を修正\n(人間の指示に沿って)", shape=box];
-  resume_a [label="codiel-state resume\n(in_progress に戻すのみ)", shape=box];
+  resume_a [label="裁定A: codiel-state resume\n(in_progress に戻すのみ)", shape=box];
+  refix [label="成果物を修正\n(人間の指示に沿って)", shape=box];
   record_a [label="record_outcome\n(approved / rejected)", shape=box];
 
   record_ha [label="裁定B: record_outcome\n(approved, ASKのevaluationId)", shape=box];
@@ -225,12 +227,12 @@ digraph raguel_gate {
   proceed -> next;
 
   ask -> human;
-  human -> refix [label="裁定A: 修正して再提出"];
+  human -> resume_a [label="裁定A: 修正して再提出"];
   human -> record_ha [label="裁定B: as-is 承認"];
   human -> stop_run [label="中止の裁定"];
 
-  refix -> resume_a;
-  resume_a -> evaluate [label="再 evaluate\n(resubmission-loop に注意)"];
+  resume_a -> refix;
+  refix -> evaluate [label="再 evaluate\n(resubmission-loop に注意)"];
   evaluate -> record_a [style=dashed, label="裁定が固まったら"];
 
   record_ha -> resume_b;
