@@ -1,7 +1,7 @@
 {
-  "name": "decision-kernel-mcp",
+  "name": "raguel-mcp",
   "version": "0.0.1-dev",
-  "description": "",
+  "description": "Raguel — AI の成果物を検査し PROCEED / ASK / STOP を判定する MCP サーバー",
   "type": "module",
   "main": "dist/server.js",
   "author": "Phyllis",

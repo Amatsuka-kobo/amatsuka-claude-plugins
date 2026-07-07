@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "decision-kernel": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/decision-kernel-mcp/dist/server.mjs",
+    "raguel": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/raguel-mcp/dist/server.mjs",
       "args": ["--port", "8080"]
     }
   }

@@ -21768,6 +21768,6 @@ var EMPTY_COMPLETION_RESULT = {
 
 // src/server.ts
 var _server = new McpServer({
-  name: "decision-kernel-mcp",
+  name: "raguel-mcp",
   version: "0.0.1"
 });
