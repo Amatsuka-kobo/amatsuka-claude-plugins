@@ -6,6 +6,7 @@ export const STAGES = [["init"],["design"],["test-spec","dev-plan"],["implement"
   ["test-loop"],["pr"],["review"],["fix-loop"],["triage"],["finalize"]];
 export const PHASES = STAGES.flat();
 export const GATED = new Set(["init","design","test-spec","dev-plan","implement","test-loop","fix-loop"]);
+export const SKIPPABLE = new Set(["fix-loop"]);
 const TERMINAL = new Set(["stopped","awaiting_outcome","completed","rejected"]);
 
 const fail = (msg, code = 1) => { process.stderr.write(msg + "\n"); process.exit(code); };
@@ -153,6 +154,30 @@ export function main(argv, root = process.cwd()) {
     if (!["pending", "in_progress"].includes(st.phases[phase].status))
       fail(`フェーズ ${phase} は ${st.phases[phase].status} のため開始できません`);
     st.phases[phase].status = "in_progress";
+    st.phase = phase;
+    writeState(latest.statePath, st);
+    return ok({ statePath: latest.statePath, state: st });
+  }
+
+  if (cmd === "skip-phase") {
+    const phase = pos[1];
+    if (!SKIPPABLE.has(phase))
+      fail(`${phase} はスキップできません(skip-phase は fix-loop のみ対応)`);
+    if (!flags.reason) fail("--reason が必要です");
+    const latest = loadRun(root, flags);
+    const st = latest.state;
+    if (st.status !== "active") fail(`run が active ではありません(${st.status})。resume してください`);
+    const ph = st.phases[phase];
+    if (!["pending", "in_progress"].includes(ph.status))
+      fail(`フェーズ ${phase} は ${ph.status} のためスキップできません`);
+    const stageIdx = STAGES.findIndex((s) => s.includes(phase));
+    for (let i = 0; i < stageIdx; i++)
+      for (const prev of STAGES[i])
+        if (st.phases[prev].status !== "passed")
+          fail(`前フェーズが未完了です: ${prev}(${st.phases[prev].status})`);
+    ph.status = "passed";
+    ph.verdict = "SKIPPED";
+    ph.note = flags.reason;
     st.phase = phase;
     writeState(latest.statePath, st);
     return ok({ statePath: latest.statePath, state: st });

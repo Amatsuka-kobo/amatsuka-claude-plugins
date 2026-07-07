@@ -201,12 +201,59 @@ test("record-outcome approved は completed にする", () => {
   assert.equal(r.out.state.status, "completed");
 });
 
+test("skip-phase fix-loop は review まで passed なら passed/verdict SKIPPED にでき、続けて triage を start できる", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  throughReview(root, "1");
+  const r = run(root, ["skip-phase", "fix-loop", "--issue", "1", "--reason", "critical/high ゼロ"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.out.state.phases["fix-loop"].status, "passed");
+  assert.equal(r.out.state.phases["fix-loop"].verdict, "SKIPPED");
+  assert.equal(r.out.state.phases["fix-loop"].note, "critical/high ゼロ");
+  const r2 = run(root, ["start-phase", "triage", "--issue", "1"]);
+  assert.equal(r2.code, 0);
+});
+
+test("skip-phase は fix-loop 以外のフェーズでは失敗する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  const r = run(root, ["skip-phase", "implement", "--issue", "1", "--reason", "理由"]);
+  assert.equal(r.code, 1);
+});
+
+test("skip-phase は --reason なしでは失敗する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  throughReview(root, "1");
+  const r = run(root, ["skip-phase", "fix-loop", "--issue", "1"]);
+  assert.equal(r.code, 1);
+});
+
+test("skip-phase fix-loop は review が passed でない状態では失敗する", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  run(root, ["start-phase", "pr", "--issue", "1"]);
+  run(root, ["complete-phase", "pr", "--issue", "1", "--pr-url", "u"]);
+  run(root, ["start-phase", "review", "--issue", "1"]); // review は in_progress のまま(未 passed)
+  const r = run(root, ["skip-phase", "fix-loop", "--issue", "1", "--reason", "理由"]);
+  assert.equal(r.code, 1);
+});
+
 // テストヘルパー
 function passThrough(root, phases) {
   for (const ph of phases) {
     run(root, ["start-phase", ph, "--issue", "1"]);
     run(root, ["pass-gate", ph, "--issue", "1", "--evaluation-id", `e-${ph}`, "--verdict", "PROCEED"]);
   }
+}
+
+function throughReview(root, issue) {
+  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  run(root, ["start-phase", "pr", "--issue", issue]);
+  run(root, ["complete-phase", "pr", "--issue", issue, "--pr-url", "u"]);
+  run(root, ["start-phase", "review", "--issue", issue]);
+  run(root, ["complete-phase", "review", "--issue", issue]);
 }
 
 function fullRun(root, issue) {
