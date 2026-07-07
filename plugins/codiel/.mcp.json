@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "raguel": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/raguel-mcp/dist/server.mjs",
-      "args": ["--port", "8080"]
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/raguel-mcp/dist/server.mjs"]
     }
   }
 }
