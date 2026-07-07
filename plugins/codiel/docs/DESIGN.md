@@ -329,7 +329,8 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 | `codiel-reviewer-doc` | doc | 設計書/テスト仕様書/実装の相互整合・ARCHITECTURE.md との乖離・ドキュメント更新漏れ |
 | `codiel-reviewer-security` | security | 認可・入力検証・シークレット・依存脆弱性・インジェクション |
 
-- ツール権限は全員 Read, Grep, Glob, Bash(gh pr diff / comment / review 用)。**Edit・Write なし**。
+- ツール権限は全員 Read, Grep, Glob, Bash(gh pr diff / gh pr view の**読み取り専用**)。**Edit・Write なし**。
+  所見はテキストで返し、PR への投稿(`gh pr review --comment` / 行コメント)は**オーケストレーターの職務**。
 - diff のドメインに応じて frontend/backend/data を選択参加、**doc / security は常時参加**。並列ディスパッチ。
 - 所見はオーケストレーターが統合して severity 順に review-<n>.md へ記録し、PR コメントに投稿。
 - **critical / high は fix-loop で修正**、**medium / low は triage フェーズでユーザーの指示のもと別 Issue 化**(§2 [8])。
