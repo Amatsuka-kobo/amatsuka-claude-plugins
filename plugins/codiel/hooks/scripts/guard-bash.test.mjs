@@ -205,3 +205,29 @@ test("git -C ../x push --force origin main は run なしでも force push と�
   const r = hook(root, "git -C ../x push --force origin main");
   assert.equal(r.permissionDecision, "deny");
 });
+
+// --- 修正3: 絶対パス・& 区切り・サブシェルでの git 起動検出回帰 ---
+
+test("/usr/bin/git push --force origin main は絶対パスの git でも force push として deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "/usr/bin/git push --force origin main");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git status & git push --force origin main は & 区切りでも force push として deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git status & git push --force origin main");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("(git push --force origin main) はサブシェル内でも force push として deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "(git push --force origin main)");
+  assert.equal(r.permissionDecision, "deny");
+});
+
+test("git push --force-with-lease origin feature は force push として deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
+  const r = hook(root, "git push --force-with-lease origin feature");
+  assert.equal(r.permissionDecision, "deny");
+});
