@@ -4,6 +4,14 @@ GitHub issue の内容を取得・分析し、設計・開発・PR起票・レ�
 
 ## コマンド
 
+### `/codiel:init`
+
+対象プロジェクトに Codiel ハーネスを初期化します。対話インタビュー(技術スタック・ドメイン分割・
+コマンド定義・保護パス等の 8 テーマ)の回答から、プロジェクトに合った `docs/ARCHITECTURE.md` /
+`CLAUDE.md` / `raguel.config.yaml` を生成し、`docs/GOTCHAS.md` の雛形と `.codiel/` 配下の
+ディレクトリを配置します。既存ファイルは壊さず不足分だけを追記するため、再実行は常に安全です
+(不足セクションの補完になります)。内部では `initializing-harness` スキルの手順に従います。
+
 ### `/codiel:run <issue番号>`
 
 GitHub Issue #`<issue番号>` を起点に、設計→実装→テスト→PR→レビューまでを自律実行します。
@@ -40,11 +48,11 @@ NG があってもコード修正はディスパッチせず、結果を `.codie
 ## セットアップ
 
 1. このプラグインを Claude Code にインストールします(marketplace 経由、または `--plugin-dir` で直接指定)。
-2. 対象プロジェクトで初めて `/codiel:run` を実行すると、`docs/ARCHITECTURE.md` が存在しない場合に
-   `scripts/install-harness.sh` が自動実行され、`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` / `CLAUDE.md` の
-   ひな形と `.codiel/` 配下のディレクトリが作成されます。
-3. 作成された `docs/ARCHITECTURE.md` に、ドメインマップ(frontend/backend/data の境界)やビルド・テストコマンドなど
-   プロジェクト固有の情報を記入してください。implementer/tester 系のスキルはこの宣言に従って動作します。
+2. 対象プロジェクトのルートで `/codiel:init` を実行します。対話インタビューに答えると、
+   `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` / `CLAUDE.md` / `raguel.config.yaml` と
+   `.codiel/` 配下のディレクトリが、プロジェクトに合った内容で作成されます。
+3. `/codiel:run <issue番号>` で run を開始します。未初期化のまま `/codiel:run` を実行した場合は
+   `/codiel:init` の実行を案内して終了します(フェイルクローズド)。
 
 ## raguel-mcp
 

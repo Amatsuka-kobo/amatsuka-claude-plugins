@@ -3,9 +3,9 @@
 <!-- 記入ガイド
 このファイルは Codiel ハーネス(docs/ARCHITECTURE.md・docs/GOTCHAS.md・.codiel/ 配下)を
 正しく運用するための決まりを、対象プロジェクトの CLAUDE.md に常駐させるための雛形です。
-`scripts/install-harness.sh` がこのファイルをプロジェクト直下の CLAUDE.md としてコピーします
-(既に CLAUDE.md が存在する場合は上書きせず skip するので、既存プロジェクトでは下記の
-「## Codiel ハーネス運用ルール」セクションを既存の CLAUDE.md に手動でマージしてください)。
+`/codiel:init`(initializing-harness スキル)がこのファイルの「## Codiel ハーネス運用ルール」
+セクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md がなければ新規作成し、
+既にある場合は同セクションがなければ末尾に追記、あれば変更しません)。
 7 項目は DESIGN.md §9 に定義された規則そのままです。文言は変更してよいが、規則の内容
 (何を・いつ・どう扱うか)は削らないこと。
 -->
