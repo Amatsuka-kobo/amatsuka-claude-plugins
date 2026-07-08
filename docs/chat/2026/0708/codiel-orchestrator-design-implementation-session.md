@@ -99,3 +99,39 @@ superpowers:subagent-driven-development で 20 タスクを「実装サブエー
 # AI
 
 本記録を作成。
+
+## セッション6: プラグイン仕様の確認とディレクトリ再編
+
+# hiro0209
+
+このリポジトリに含まれる CLAUDE.md、.claude、docs の内容は、プラグインとして読み込まれたときに参照されるのは避けたいが、プラグインの仕様的にどうなのか。
+
+# AI
+
+claude-code-guide エージェントで公式ドキュメント(plugins-reference)を裏取りして回答:
+
+- **CLAUDE.md**: 明文で非対応(「プラグインルートの CLAUDE.md はプロジェクトコンテキストとして読み込まれない」)
+- **.claude/**: プラグインの読み込み対象外で効果なし
+- **docs/ 等の任意ファイル**: 自動では一切読まれない。自動読み込みは plugin.json / commands / agents / skills / hooks / .mcp.json / .lsp.json / output-styles / themes / bin 等の決まったコンポーネントのみ
+- 注意点: インストール時は**プラグインディレクトリ全体**が `~/.claude/plugins/cache` にコピーされる(コンテキスト注入はされないが配布はされる)。逆に `docs/*.example.md`・`scripts/` は install-harness.sh とスキルが参照するため配布必須
+
+# hiro0209
+
+ディレクトリ構造の再編を行った。これからは amatsuka-claude-plugins 直下で作業する。codiel に scripts ファイルが含まれるが、これの扱いはどうなるか?
+
+# AI
+
+`scripts/` は現状のままで正しく機能すると回答:
+
+- プラグインディレクトリ全体がキャッシュへコピーされるので `scripts/codiel-state.mjs`・`install-harness.sh`・`hooks/scripts/*.mjs` は配布される。自動読み込みコンポーネントではないが、実行時に明示パスで呼ばれるだけのファイルなので問題ない
+- 参照経路はすべてプラグイン内で完結: スキルは `node <plugin-root>/scripts/codiel-state.mjs`、hooks は `${CLAUDE_PLUGIN_ROOT}/hooks/scripts/...`、install-harness.sh は orchestrating-runs の前提チェックが実行
+- スクリプト本体はキャッシュから読まれるが、codiel-state は `process.cwd()`(対象プロジェクトのルート)基準で `.codiel/` を操作するため、state・テスト資産は正しくユーザー側に作られる
+- `bin/`(PATH 追加)は §0 の制約(ユーザーに CLI 操作を要求しない)どおり意図的に不使用。テストファイルの同梱は実害なし
+
+# hiro0209
+
+コミットお願いします。その後、ここまでの会話を chat ファイルに追記してください。
+
+# AI
+
+再編をコミット(`0f29683`): chat 記録・実装計画をリポジトリ直下 `docs/` へ移動、開発用 CLAUDE.md / .claude/ をルートへ配置、プラグイン内の開発用コピーと .gitignore を削除。本セクションを追記。
