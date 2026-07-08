@@ -1,0 +1,16 @@
+{
+  "description": "chat スキルの自動適用: docs/chat/ を持つプロジェクトで、実質的な会話が未記録のままターンが終わるとき chat-recorder への記録委譲を促す",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/check-chat-recorded.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
