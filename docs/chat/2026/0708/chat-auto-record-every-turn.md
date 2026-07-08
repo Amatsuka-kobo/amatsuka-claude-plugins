@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-08
 - 参加者: hiro0209, AI (Claude Fable 5)
-- 成果物: `docs/superpowers/specs/2026-07-08-chat-auto-record-every-turn-design.md`（コミット 77dc2c5）、`docs/superpowers/plans/2026-07-08-chat-auto-record-every-turn.md`（コミット d6ffec0）、実装コミット 432a4f7（Task 1）・c8e345e（Task 2）・268b926（README fix）、ブランチ `feat/chat-auto-record-every-turn`
+- 成果物: `docs/superpowers/specs/2026-07-08-chat-auto-record-every-turn-design.md`（コミット 77dc2c5）、`docs/superpowers/plans/2026-07-08-chat-auto-record-every-turn.md`（コミット d6ffec0）、実装コミット 432a4f7（Task 1）・c8e345e（Task 2）・268b926（README fix）、マージ完了 main @ 268b926、会話記録コミット a90fa19
 - 前提: `plugins/task-utility/hooks/scripts/check-chat-recorded.mjs`、`plugins/task-utility/skills/chat/SKILL.md`
 
 ---
@@ -183,4 +183,35 @@ README.md を新仕様に更新。コミット 268b926。
 
 ---
 
-注意事項: 実装完了・全テスト 42/42 パス・最終レビュー承認済み。次のステップは統合方法の選択(ローカルマージ / PR / 保持 / 破棄)。マージ後は新セッション開始による手動確認が必須(1 ターン目で記録ファイル新規作成 → 2 ターン目で同一ファイルに追記を確認)。このセッション記録ファイル自体(`docs/chat/2026/0708/chat-auto-record-every-turn.md`)も最終的にコミットが必要。
+## セッション5: main へのマージと実装完了
+
+# hiro0209
+
+> 1
+
+# AI
+
+main にローカルでマージを実行した。結果は以下のとおり。
+
+**マージの実行：**
+
+- ブランチ `feat/chat-auto-record-every-turn` を main にファストフォワードマージ
+- main は 268b926 へ進行(最新の README.md fix コミット)
+- フィーチャーブランチは削除
+
+**テスト確認：**
+
+マージ後に全スクリプトテストスイートを実行。42/42 パス確認。
+
+**会話記録のコミット：**
+
+セッション1〜4を記録したファイル `docs/chat/2026/0708/chat-auto-record-every-turn.md` をコミット a90fa19(docs(chat))。
+
+**残作業と確認手順：**
+
+- **新セッション1ターン目での新規記録作成確認** — 次に新しいセッションを開始すれば、フック設定がセッション開始時にスナップショットされるため、新ロジック(位置比較・毎ターン化)で記録ファイルが作成されることを自然に確認できる。このセッション内での追加確認は不要。
+- **git push のリモート公開** — プロジェクト設定で push が拒否されている(origin/main より 6 コミット先行)。リモートへの公開はお手元で `git push` を実行してください。
+
+---
+
+注意事項: マージ完了。main @ 268b926 へ進行(ファストフォワード)。テスト全 42/42 パス・フィーチャーブランチ削除完了。会話記録もコミット a90fa19 で確定。次のステップは新セッション開始による手動確認(1 ターン目で記録ファイル新規作成)と git push の手動実行。
