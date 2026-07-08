@@ -21,7 +21,7 @@
     "vtsls@claude-code-lsps": true,
     "context7@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
-    "claude-md-manager@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "mcp-server-dev@claude-plugins-official": true,
