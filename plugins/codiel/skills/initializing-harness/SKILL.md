@@ -39,7 +39,7 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(doc
 | A | `docs/ARCHITECTURE.md` | ファイルが存在し、` ```json codiel:domains ` フェンスブロックが有効な JSON としてパースできる(手順 5 と同じ node コマンドで確認してよい) |
 | B | `CLAUDE.md` | ファイルが存在し、`## Codiel ハーネス運用ルール` 見出しを含む |
 | C | `docs/GOTCHAS.md` | ファイルが存在する |
-| D | `raguel.config.yaml` | ファイルが存在する |
+| D | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
 | E | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
 
 - 5 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
@@ -78,7 +78,7 @@ AskUserQuestion ツールで **1 テーマずつ**質問する(一度に複数�
 | 4 | ドメイン分割 | frontend / backend / data それぞれの書き込み許可パス glob。分割が馴染まなければ `{ "generic": ["**"] }` に縮退 | ` ```json codiel:domains ` ブロック |
 | 5 | コマンド定義 | test / lint / typecheck / build / e2e の実行コマンド(プロジェクトルートで実行できる形) | 「コマンド定義」表 |
 | 6 | テスト方針 | E2E フレームワークと実行方法、ユニットテストの要否・フレームワーク・配置規約 | 「テスト方針」節 |
-| 7 | 保護パス | 触ってはいけない/特に慎重を要するパスの glob | ARCHITECTURE「保護パス」節 + `raguel.config.yaml` の `rules.code/protected-paths.globs`(**同一の回答から両方を生成する**) |
+| 7 | 保護パス | 触ってはいけない/特に慎重を要するパスの glob | ARCHITECTURE「保護パス」節 + `raguel.config.yaml` の `rules."code/protected-paths".globs`(**同一の回答から両方を生成する**) |
 | 8 | 規約 | コーディング規約 / ベースブランチ / ブランチ・PR 命名 / Definition of Done | 「規約」節 |
 
 ## 4. 生成と自動マージ
@@ -108,6 +108,11 @@ AskUserQuestion ツールで **1 テーマずつ**質問する(一度に複数�
     プロジェクト固有の上書き(テーマ 7 の保護パス globs)だけを書いた最小ファイルを
     生成する。デフォルト全量をコピーしない。
   - 既存: 触らない(存在すれば現状調査 D で「揃っている」扱いになる)。
+- **修復の例外**: 既存 `docs/ARCHITECTURE.md` の ` ```json codiel:domains ` ブロックが壊れて
+  いる(JSON 不正等で readDomains が読めない)場合、および既存 `raguel.config.yaml` が YAML
+  として読めない・保護パスが ARCHITECTURE.md と不整合な場合に限り、問題箇所と修正案を提示して
+  **ユーザーの明示承認を得た上で**、該当ブロック・該当キーのみを置換してよい。それ以外の
+  既存記述は不改変のまま維持する。
 
 ## 5. 検証(フェイルクローズドの前倒し)
 
@@ -128,7 +133,7 @@ run 開始時に初めて発覚していた不備を、init 完了時点で検�
 
    (`<plugin-root>` は絶対パスに展開して実行する)
 2. **保護パスの整合確認**: `docs/ARCHITECTURE.md` の「保護パス」節と `raguel.config.yaml` の
-   `rules.code/protected-paths.globs` を両方 Read し、glob の集合が一致していることを確認する。
+   `rules."code/protected-paths".globs` を両方 Read し、glob の集合が一致していることを確認する。
 3. 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 
 ## 6. 完了報告
@@ -141,7 +146,8 @@ run 開始時に初めて発覚していた不備を、init 完了時点で検�
 <HARD-GATE>
 - **承認なしに書き込まない**。手順 4 のドラフト/差分提示と承認の取得は、ファイルが新規でも
   既存でも省略できない。
-- **既存記述を削除・改変しない**。ARCHITECTURE.md / CLAUDE.md への変更は不足分の追記のみ。
+- **既存記述を削除・改変しない**。ARCHITECTURE.md / CLAUDE.md への変更は不足分の追記のみ
+  (手順 4 の「修復の例外」で明示承認を得た置換を除く)。
 - **検証(手順 5)を省略して完了報告しない**。domains ブロックが readDomains で読めることを
   確認するまで初期化は完了していない。
 - **コードベース解析で回答を代替しない**。ドメインマップ・コマンド定義等の内容はユーザーの
