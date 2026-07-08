@@ -19,7 +19,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
   LLM が必要な処理はすべて Claude Code の機構(メインセッション・サブエージェント)か、
   Raguel MCP が内部で行う `claude` CLI ヘッドレス実行(ユーザーの既存ログイン=サブスクリプション認証)で賄う。
 - **CLI 単体での運用(Python スクリプトや独自 CLI をユーザーが直接叩く運用)は想定しない**。
-  ユーザーとの接点は Claude Code のスラッシュコマンド(`/codiel:run`, `/codiel:test`)のみ。
+  ユーザーとの接点は Claude Code のスラッシュコマンド(`/codiel:init`, `/codiel:run`, `/codiel:test`)のみ。
 - 同梱スクリプト(`codiel-state`、hooks、install-harness.sh)は **node / bash のみ**で書く
   (Claude Code と raguel-mcp が既に依存しているランタイムに閉じる。Python 等の追加ランタイムを要求しない)。
   これらはオーケストレーターや hooks が内部的に呼ぶ決定論的な補助であり、LLM 呼び出しを含まない。
@@ -357,7 +357,11 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 ## 9. docs(プロジェクト毎に成長するハーネス資産)
 
-対象プロジェクトに配置する 3 点セット。`scripts/install-harness.sh` が example をコピーして初期化する。
+対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
+対話インタビューで初期化する: GOTCHAS.md と `.codiel/` 配下は同スキルが呼ぶ
+`scripts/install-harness.sh` が機械的に配置し、ARCHITECTURE.md / CLAUDE.md /
+raguel.config.yaml はインタビューの回答から生成する(既存ファイルは不足分のみ追記)。
+`/codiel:run` は資産配置を行わず、未初期化を検出したら `/codiel:init` を案内して終了する。
 
 ### docs/ARCHITECTURE.md(← ARCHITECTURE.example.md)
 
@@ -404,9 +408,11 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 plugins/codiel/
   .claude-plugin/plugin.json
   commands/
+    init.md                    # /codiel:init(薄い入口。initializing-harness を起動)
     run.md                    # /codiel:run <issue番号>(薄い入口。orchestrating-runs を起動)
     test.md                   # /codiel:test [unit-id...](単独テスト実行。§5)
   skills/
+    initializing-harness/SKILL.md(+ raguel.config.example.yaml)
     orchestrating-runs/SKILL.md
     raguel-gating/SKILL.md
     analyzing-issues/SKILL.md
@@ -434,7 +440,7 @@ plugins/codiel/
     scripts/                  # フックスクリプト(node)
   scripts/
     codiel-state.mjs          # state 遷移の検証つき CLI(§3)
-    install-harness.sh        # example docs を対象プロジェクトへコピー
+    install-harness.sh        # GOTCHAS 雛形と .codiel/ を機械的に配置(initializing-harness から呼ばれる)
   docs/
     DESIGN.md                 # 本書
     ARCHITECTURE.example.md / GOTCHAS.example.md
