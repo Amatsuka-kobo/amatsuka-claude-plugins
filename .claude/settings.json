@@ -1,23 +1,34 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "Bash(python3 -c ' *)",
+      "Bash(git commit *)",
+      "Bash(git pull *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)"
+    ],
+    "deny": [
+      "Bash(git * main)",
+      "Bash(git push *)"
+    ]
+  },
   "model": "sonnet",
   "enabledPlugins": {
     "task-utility@amatsuka-claude-plugins": true,
-    "superpowers@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
-    "serena@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
-    "claude-md-manager@claude-plugins-official": true,
-    "mcp-server-dev@claude-plugins-official": true,
+    "pyright@claude-code-lsps": true,
     "vtsls@claude-code-lsps": true,
-    "pyright@claude-code-lsps": true
-  },
-  "permissions": {
-    "allow": [
-      "Bash(python3 -c ' *)",
-      "Read(//home/hiro0209/.claude/plugins/**)",
-      "Read(//home/hiro0209/.claude/**)"
-    ]
+    "context7@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-md-manager@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "mcp-server-dev@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "serena@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true
   }
 }
