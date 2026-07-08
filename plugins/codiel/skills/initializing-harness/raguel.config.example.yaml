@@ -1,5 +1,5 @@
 # raguel.config.yaml — Raguel 設定(内蔵デフォルトへの差分オーバーレイ)
-# 解決順: 環境変数 RAGUEL_CONFIG のパス → <プロジェクトルート>/raguel.config.yaml → 内蔵デフォルト。
+# 解決順: 環境変数 RAGUEL_CONFIG のパス → raguel-mcp 起動時の cwd(通常はプロジェクトルート)/raguel.config.yaml → 内蔵デフォルト。
 # ここに書いた値だけが内蔵デフォルトに深マージされる。デフォルト全量をコピーしないこと。
 # 保護パスの globs は docs/ARCHITECTURE.md の「保護パス」節と必ず一致させる(片方だけ更新して乖離させない)。
 version: 1
