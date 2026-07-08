@@ -51,30 +51,13 @@ NG があってもコード修正はディスパッチせず、結果を `.codie
 Codiel オーケストレータ―の基幹システム。名前は「他の天使たちの行いを監視する天使 Raguel」に由来。
 LLM が出した回答をチェックし、機械的に PROCEED(続行)/ ASK(人に確認)/ STOP(停止)を判断するツールを提供する MCP サーバー。
 
-## 開発手法
+### 開発手法
 
 このプロジェクトでは、Node.js のバージョニングに Volta を推奨しています。
 パッケージマネージャーは PNPM です。
 リンター・フォーマッターに Biome を使用しています。
 
-## エディターについて
+### エディターについて
 
 Biome 拡張機能を入れた VSCode を推奨しています。
 リンター・フォーマッターが効く関係で、 raguel-mcp フォルダで作業するようにします。
-
-## Claude Code での開発
-
-MCP サーバー以外の部分を Claude Code を使って開発する場合、各種ハーネス資産と Skills 等を .claude に置くことができます。(任意)
-ここで作成したファイルは .gitignore でリモートに反映されない設定にしています。
-
-```bash
-mkdir .claude
-ln -s ../agents .claude/agents
-ln -s ../commands .claude/commands
-ln -s ../hooks .claude/hooks
-ln -s ../skills .claude/skills
-ln -s ../settings.json .claude/settings.json
-cp docs/ARCHITECTURE.example.md docs/ARCHITECTURE.md
-cp docs/GOTCHAS.example.md docs/GOTCHAS.md
-cp CLAUDE.example.md CLAUDE.md
-```
