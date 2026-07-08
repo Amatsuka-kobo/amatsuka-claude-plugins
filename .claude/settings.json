@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "enabledPlugins": {
+    "task-utility@amatsuka-claude-plugins": true,
+    "superpowers@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "serena@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "claude-md-manager@claude-plugins-official": true,
+    "mcp-server-dev@claude-plugins-official": true,
+    "vtsls@claude-code-lsps": true,
+    "pyright@claude-code-lsps": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Read(//home/hiro0209/.claude/plugins/**)",
+      "Read(//home/hiro0209/.claude/**)"
+    ]
+  }
+}
