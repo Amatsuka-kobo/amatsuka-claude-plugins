@@ -15,3 +15,12 @@
 # Codiel/Raguel の制約(重要)
 
 Codiel と raguel-mcp は **Anthropic API を使用できないユーザーも使える**ことが必須要件。API クライアントの追加・`ANTHROPIC_API_KEY` 前提の実装・ユーザーへの CLI 直接操作の要求は、どれだけ便利に見えても採用しない。LLM が必要な処理は Claude Code の機構(メインセッション/サブエージェント)か `claude` CLI のヘッドレス実行(ユーザーの既存サブスク認証)に閉じる。詳細は `plugins/codiel/docs/DESIGN.md` §0。
+
+# 開発コマンド
+
+ルートに統一 package.json は無く、ツールチェーンはディレクトリごとに分散している。
+
+| 対象 | コマンド |
+| --- | --- |
+| raguel-mcp(ビルド/テスト/型) | `cd plugins/codiel/raguel-mcp && pnpm build` / `pnpm test`(vitest) / `pnpm typecheck` |
+| スクリプト系テスト | `node --test plugins/codiel/scripts/*.test.mjs plugins/task-utility/scripts/*.test.mjs` |
