@@ -43,7 +43,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、implementer / reviewer も汎用 1 体で回す |
 | runId / 再挑戦 | runId は `issue-123` 形式。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 Issue の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
-| 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(ドメインマップ外の共有コード等での誤爆に備える) |
+| 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
 
@@ -89,9 +89,14 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 [7] fix-loop    critical & high を該当ドメインの implementer が修正 → 回帰テスト再実行
                 → 再レビュー → critical/high ゼロ & テスト合格まで反復(試行上限あり)
                 medium 以下の指摘は修正せず triage へ持ち越す
+                レビューで critical/high がゼロなら fix-loop は開始せず
+                `codiel-state skip-phase fix-loop --reason ...` でスキップする
+                (verdict は "SKIPPED" として監査記録に残る。未開始=pending のときのみ可)
                 ▶ Raguel: 修正毎に evaluate_code
    ▼
-[8] triage      medium / low の指摘を一覧化してユーザーに提示(state は awaiting_human)。
+[8] triage      medium / low の指摘を一覧化してユーザーに提示し、指示を待つ
+                (state 機構上は phases.triage が in_progress のまま。非 GATED フェーズのため
+                mark-ask は使わず、「回答が来るまで進まない」運転で待機する)。
                 **ユーザーの指示のもと**、起票対象に選ばれた指摘を gh issue create で
                 別 Issue として起票する(見送り・まとめて 1 件などの裁量もユーザーに委ねる)。
                 リポジトリに ISSUE_TEMPLATE があれば指摘の種類に応じて適切なテンプレートを
@@ -120,7 +125,11 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 
 - **PROCEED** → 次フェーズへ自動遷移
 - **ASK** → findings を人間に提示して停止(state は `awaiting_human`)。
-  人間の裁定を `record_outcome` で記録し、再開(修正指示つき差し戻し or 続行)または中止
+  人間の裁定を `record_outcome` で記録し、再開(修正指示つき差し戻し or 続行)または中止。
+  裁定が「as-is 承認」の場合は**再 evaluate せず**(sealed な resubmission-loop ルールと衝突しライブロックするため)、
+  `codiel-state pass-gate --verdict ASK --human-approved` で通過させる。verdict は ASK のまま
+  `humanApproved: true` が監査記録として残る。これがゲートの唯一の正規例外で、
+  `record_outcome(approved)` の記録が前提条件(運用規約は raguel-gating スキル)
 - **STOP** → run を停止。`recording-gotchas` スキルを起動して失敗を GOTCHAS.md に記録
 - **ループ上限超過**(test-loop / fix-loop の試行回数)→ ASK に倒す。
   Raguel の `common/resubmission-loop` ルールと合わせて二重の暴走防止
@@ -224,7 +233,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
                期待値(cases.md)の変更・プロダクトコードの変更は禁止
 (B) TDD 修正ループ(担当: 該当ドメインの implementer)
     NG ケース = バグ。テストが先にあり実装が追いつく TDD の構図で、
-    implementer に「NG ケース ID + 再現手順 + 期待結果」を渡してコード修正をディスパッチ
+    implementer に「NG ケース ID + 再現手順 + 期待結果 + 実際の結果」を渡してコード修正をディスパッチ
     → tester が再実行 → 全ケース OK まで反復(試行上限あり)
     HARD-GATE: implementer はテストスクリプト・cases.md を変更できない(hooks で強制)。
                「テストの方が間違っている」と判断した場合は修正せず ASK に上げる
@@ -310,7 +319,7 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 
 | エージェント | 担当 | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
-| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash | 書き込みは hooks で `.codiel/specs/**/scripts/` と reports に制限。**プロダクトコードと cases.md(期待値)は書けない** — スクリプトは直せるが期待値と実装は直せない |
+| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash | **プロダクトコードと cases.md(期待値)は書かない** — スクリプトは直せるが期待値と実装は直せない。cases.md への書き込みは hooks が ask で機械的に検知、それ以外の境界はエージェント定義の職務規律で担保 |
 
 ### レビュー系(観点別 5 体・全員読み取り専用)
 
@@ -322,7 +331,8 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 | `codiel-reviewer-doc` | doc | 設計書/テスト仕様書/実装の相互整合・ARCHITECTURE.md との乖離・ドキュメント更新漏れ |
 | `codiel-reviewer-security` | security | 認可・入力検証・シークレット・依存脆弱性・インジェクション |
 
-- ツール権限は全員 Read, Grep, Glob, Bash(gh pr diff / comment / review 用)。**Edit・Write なし**。
+- ツール権限は全員 Read, Grep, Glob, Bash(gh pr diff / gh pr view の**読み取り専用**)。**Edit・Write なし**。
+  所見はテキストで返し、PR への投稿(`gh pr review --comment` / 行コメント)は**オーケストレーターの職務**。
 - diff のドメインに応じて frontend/backend/data を選択参加、**doc / security は常時参加**。並列ディスパッチ。
 - 所見はオーケストレーターが統合して severity 順に review-<n>.md へ記録し、PR コメントに投稿。
 - **critical / high は fix-loop で修正**、**medium / low は triage フェーズでユーザーの指示のもと別 Issue 化**(§2 [8])。
@@ -337,11 +347,11 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 | フック | 対象 | 内容 |
 |---|---|---|
-| PreToolUse | Bash(`gh pr create`, `git push`) | state.json を参照し、「テスト green + implement/test-loop の verdict が PROCEED」でなければ **deny**。保護ブランチ(main 等)への push は常に deny |
+| PreToolUse | Bash(`gh pr create`, `git push`) | state.json を参照し、「テスト green + implement/test-loop が passed(PROCEED または human-approved の ASK)」でなければ **deny**。保護ブランチ(main 等)への push は常に deny |
 | PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [8]) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
-| PreToolUse | Edit / Write(役割別書き込み制御) | アクティブ run の現在フェーズ + ドメインマップ(§9)を参照し、役割毎の許可 glob 外への書き込みを **ask**(人間に確認)。例: implementer-frontend が backend パスへ書く、tester が cases.md やプロダクトコードへ書く、文書フェーズ中に `src/**` へ書く。deny にしないのは、ドメインマップに載らない共有コード等への正当な書き込みで誤爆し得るため |
+| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位(implementer-frontend が backend パスへ書く等)の機械的制御は行わない** — hooks はツール呼び出しの発行元エージェントを識別できないため、ドメイン規律は各エージェント定義の職務規律(+レビューアーの検査)で担保する |
 | SubagentStop | 各フェーズ完了時 | 期待される成果物ファイルが存在し空でないかを検証。欠けていればフィードバックを返して差し戻す |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止) |
 

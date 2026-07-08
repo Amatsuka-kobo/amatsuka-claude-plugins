@@ -1,0 +1,164 @@
+---
+name: writing-dev-plans
+description: Codiel の dev-plan フェーズで design.md を入力に dev-plan.md を執筆するとき使用する。ドメインを跨ぐ作業を一つのステップにまとめたくなる場面・設計にない作業(ついでのリファクタ)をステップに混ぜたくなる場面でこそ必ず使用する。
+---
+
+# 開発手順書執筆規約
+
+## 概要
+
+`codiel-planner` が dev-plan フェーズで使うスキル。`design.md`(目的・方針・変更対象・影響を受ける
+機能単位)と `docs/ARCHITECTURE.md`(ドメインマップ・コマンド定義・テスト方針)を入力に、
+`design.md` の変更対象をドメイン単位の実行可能なステップ列へ分解し `dev-plan.md` として構造化する。
+
+`dev-plan.md` は implement フェーズが読む唯一の実行手順書であり、各ステップの `[domain: ...]`
+タグは `orchestrating-runs` が「どの implementer(frontend/backend/data)にディスパッチするか」を
+機械的に決める入力になる。また各 implementer のエージェント定義は「担当ドメインのパスにのみ書く」
+という規律を持ち、ドメインタグはその規律の判定基準になる(hooks はエージェント個体を識別できないため、
+ドメイン規律はエージェント定義側で担保される)。ここで
+ドメインタグを誤ったり、複数ドメインの変更を一つのステップに混ぜると、誤った implementer が呼ばれるか、
+hooks が正当な書き込みを ask で止める誤爆を招く。両者ともこのタグを機械的にしか読まないため、
+曖昧・複合のタグは下流のどこかで必ず事故になる。
+
+dev-plan は test-spec と並列ディスパッチされるが、test-spec の出力(`cases.md`)を入力にしない。
+`design.md` のみを入力とする独立した成果物であり、`evaluate_plan` は test-spec と dev-plan それぞれに
+独立してゲートされる。
+
+本スキルの責務は「`design.md` の変更対象を、ドメイン単位に分割された実行可能なステップへ分解すること」
+にある。コードを書くことではない。
+
+## チェックリスト
+
+1. `design.md` の `## 目的` `## 方針` `## 変更対象` `## 影響を受ける機能単位` を読む。
+2. `docs/ARCHITECTURE.md` の ` ```json codiel:domains ` ブロック(ドメインマップ)と
+   `## コマンド定義` `## テスト方針` を読む。ドメインマップが `{ "generic": ["**"] }` に縮退している
+   場合、以降の domain タグはすべて `generic` を使う。
+3. `## 変更対象` の各行を、ドメインマップの glob と突き合わせて所属ドメインごとにグルーピングする。
+   1 件の変更が複数ドメインにまたがる場合(例: フロントエンドの型とバックエンドの API を同時に触る)は、
+   その変更内容自体をドメインごとに分割し、別々のステップに割り振る。
+4. グループを実行順に並べる。依存関係(例: スキーマ変更 → 生成コード → API 実装 → 画面反映)を踏まえて
+   ステップの順序を決める。
+5. 各ステップに下記の出力書式を適用し、`変更ファイル / 内容 / ユニットテスト / 完了条件 / 検証コマンド`
+   を埋める。
+6. ユニットテストは `docs/ARCHITECTURE.md` の `## テスト方針` に宣言されたフレームワーク・配置規約に
+   従う。独自の配置やフレームワークを持ち込まない。
+7. 検証コマンドは `docs/ARCHITECTURE.md` の `## コマンド定義` に列挙されたコマンドをそのまま使う。
+   定義にないコマンドを新しく作らない。
+8. 完了条件は「〜が実装されている」のような曖昧な文ではなく、「`pnpm test` が該当ファイルで green」
+   「エンドポイントが 201 を返す」のように機械的に yes/no 判定できる文にする。
+9. 自己チェック: `design.md` の `## 変更対象` に列挙された全ファイルが、いずれかのステップの
+   「変更ファイル」に現れているか確認する。現れていないファイルがあれば、それを含むステップを追加する。
+10. YAGNI: `design.md` に記載のない作業(ついでのリファクタ・関連しない改善)をステップに追加しない。
+11. 出力書式どおりに `dev-plan.md` を作成する。
+
+## 出力書式
+
+後続フェーズ(implement)が機械的に読む書式。見出し名・箇条書きの項目名・`[domain: ...]` の位置を
+変更せず、以下をそのまま使う。
+
+```markdown
+## Step 1: <名称> [domain: backend]
+- 変更ファイル: `src/server/...`
+- 内容: <何をどう変えるか>
+- ユニットテスト: <ARCHITECTURE.md のテスト方針に従い、書くべきテストと配置>
+- 完了条件: <検証可能な条件>
+- 検証コマンド: `pnpm test ...`
+
+## Step 2: <名称> [domain: frontend]
+- 変更ファイル: `src/app/...`
+- 内容: <何をどう変えるか>
+- ユニットテスト: <...>
+- 完了条件: <...>
+- 検証コマンド: <...>
+```
+
+ステップ番号は 1 から連番。`domain` の値はドメインマップのキー(`frontend` / `backend` / `data`、
+縮退時は `generic`)のいずれか一つ。**各ステップは単一ドメインでなければならない。**
+
+## ドメインタグと下流接続
+
+`[domain: ...]` は装飾ではなく、2 箇所から機械的に参照される制御信号である。
+
+- **orchestrating-runs(implement フェーズ)**: ステップのドメインタグを読み、
+  `codiel-implementer-frontend` / `-backend` / `-data` のいずれにディスパッチするかを決める。
+  `generic` 縮退時は `codiel-implementer-backend` を汎用実装者として使う。
+- **implementer のドメイン規律**: 各 implementer のエージェント定義が「担当ドメイン(タグに対応する
+  ARCHITECTURE.md の glob)のパスにのみ書く」ことを職務規律として持つ。hooks(guard-write)は
+  フェーズ単位の制御(コードフェーズ中の spec.md / cases.md 保護、文書フェーズ中のコード領域 ask)を
+  機械的に担い、エージェント個体の識別はできないためドメイン単位の機械的制御は行わない。
+
+**どのドメイン glob にも一致しない共有コード**(例: `src/lib/` のドメイン横断ユーティリティ)への変更は、
+その変更を必要とする機能側のステップに含め、そのステップのドメインタグを付ける。複数ドメインが同じ
+共有コード変更を必要とする場合は、共有コード変更だけを独立した先行ステップに切り出し、主たる利用側の
+ドメインタグを 1 つ付ける(タグなし・複数タグのステップは作らない)。
+
+ドメインを跨ぐ作業を一つのステップにまとめると、この 2 箇所のどちらかが必ず機能不全になる。
+ディスパッチ側は単一の implementer しか呼べないため半分のファイルが未実装のまま進むか、
+hooks 側が「タグ外への書き込み」として正当な変更を止めてしまう。ドメインを跨ぐ作業は必ず
+チェックリスト 3 の手順でステップを分割する。
+
+## コミット責務
+
+`codiel-planner` は Bash を持たないため `dev-plan.md` を自らコミットする手段がない。
+`orchestrating-runs` の成果物コミット規約により、dev-plan フェーズの成果物は Raguel の
+`evaluate_plan` ゲート通過直後にオーケストレーター自身がコミットする。planner は `dev-plan.md` を
+書いて報告するところまでが職務。
+
+<HARD-GATE>
+コードを書かない・変更しない。`dev-plan.md` のみが成果物である。`codiel-planner` には Edit も Bash も
+与えられておらず、これは権限設計上の裏付けであって偶然の制約ではない(`docs/DESIGN.md` §7 参照)。
+また、`design.md` にない作業(ついでのリファクタ・関連しない改善)をステップに追加しない。
+dev-plan は design の実行手順書であって、新たな設計判断を行う場ではない。
+</HARD-GATE>
+
+## Red Flags(合理化への反論)
+
+| 思考 | 現実 |
+|---|---|
+| 「この変更は frontend と backend にまたがるが、まとめて 1 ステップに書いた方が効率的」 | ステップの domain タグは単一である前提で implementer ディスパッチと hooks の書き込み制御が動く。複数ドメインを 1 ステップに混ぜると、誤った implementer が呼ばれるか、正当な書き込みが hooks の ask 確認で止まる。 |
+| 「ついでにこのファイルの命名も直しておこう」 | `design.md` の `## 変更対象` にない変更は YAGNI 違反であり、`evaluate_plan` が採用根拠を検証できないスコープ外の作業になる。dev-plan.md は design.md の実行手順であって新たな設計の場ではない。 |
+| 「完了条件は『正しく動作すること』で十分」 | 機械的に検証できない完了条件は、implement / test-loop で「完了したかどうか」を誰も判定できない状態を作る。検証コマンドとセットで yes/no 判定可能な文にする。 |
+| 「検証コマンドは思いつくものを書けばよい」 | `docs/ARCHITECTURE.md` の `## コマンド定義` にないコマンドは tester・オーケストレーターの検証と食い違う。プロジェクトに宣言された正規コマンドのみを使う。 |
+| 「変更対象ファイルが多いので代表的な数ファイルだけステップに書けば十分」 | `design.md` の変更対象は全て何らかのステップに現れる必要がある。漏れたファイルは implement フェーズで変更されないまま進み、design.md とのずれが実装漏れとして残る。 |
+
+## プロセスフローチャート
+
+```dot
+digraph writing_dev_plans {
+  rankdir=TB;
+  node [fontname="sans-serif"];
+
+  read_design [label="design.md を読む\n(目的/方針/変更対象/影響unit)", shape=box];
+  read_arch [label="ARCHITECTURE.md を読む\n(ドメインマップ/コマンド定義/テスト方針)", shape=box];
+  group [label="変更対象をドメインマップの\nglob で突き合わせグルーピング", shape=box];
+  split_check [label="1件の変更が\n複数ドメインにまたがる?", shape=diamond];
+  split [label="ドメインごとに変更内容を分割", shape=box];
+  order [label="依存関係を踏まえ\nステップ順序を決める", shape=box];
+  write_steps [label="各ステップを出力書式で記述\n(変更ファイル/内容/ユニットテスト/\n完了条件/検証コマンド)", shape=box];
+  check_commands [label="検証コマンドは\nコマンド定義に存在するか?", shape=diamond];
+  fix_commands [label="コマンド定義にある\nコマンドに差し替え", shape=box];
+  coverage [label="design.mdの変更対象が\n全てステップに現れるか?", shape=diamond];
+  add_step [label="漏れたファイルを含む\nステップを追加", shape=box];
+  yagni [label="design.mdにない作業を\n足していないか?", shape=diamond];
+  trim [label="要件外のステップ/項目を削る", shape=box];
+  write [label="dev-plan.md を出力書式で作成", shape=box];
+  done [label="planner 報告\n(dev-plan.md パス + ステップ数 + ドメイン内訳)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  gate [label="raguel-gating:\ndev-plan ゲート(evaluate_plan)\nへ引き継ぎ", shape=ellipse];
+
+  read_design -> read_arch -> group -> split_check;
+  split_check -> split [label="Yes"];
+  split -> group;
+  split_check -> order [label="No"];
+  order -> write_steps -> check_commands;
+  check_commands -> fix_commands [label="No: 未定義コマンド"];
+  fix_commands -> check_commands;
+  check_commands -> coverage [label="Yes"];
+  coverage -> add_step [label="No: 漏れあり"];
+  add_step -> coverage;
+  coverage -> yagni [label="Yes"];
+  yagni -> trim [label="Yes: 過剰なステップあり"];
+  trim -> yagni;
+  yagni -> write [label="No"];
+  write -> done -> gate;
+}
+```
