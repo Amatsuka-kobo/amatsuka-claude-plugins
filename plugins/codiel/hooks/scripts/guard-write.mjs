@@ -3,7 +3,7 @@ import path from "node:path";
 import { readStdin, emit, pass, findProjectRoot } from "./lib.mjs";
 import { findActiveRun } from "../../scripts/codiel-state.mjs";
 
-const DOC_PHASES = new Set(["init", "design", "test-spec", "dev-plan"]);
+const DOC_PHASES = new Set(["init", "discuss", "design", "test-spec", "dev-plan"]);
 const CODE_PHASES = new Set(["implement", "test-loop", "fix-loop"]);
 
 try {
