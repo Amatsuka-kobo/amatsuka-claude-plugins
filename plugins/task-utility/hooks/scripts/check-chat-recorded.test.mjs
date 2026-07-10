@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check-chat-recorded.mjs');
 
 const user = (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
+const nag = (extra = '') =>
+  JSON.stringify({ type: 'user', isMeta: true, message: { role: 'user', content: '<!--chat-recorder-nag-->\n' + extra } });
 const toolUse = (name, filePath) =>
   JSON.stringify({
     type: 'assistant',
@@ -89,6 +91,21 @@ test('ハーネス注入(< 始まり)やツール結果だけならターンが�
   ];
   const res = run({ lines });
   assert.equal(res.stdout.trim(), '');
+});
+
+test('同一未記録状態では 2 回目は差し戻さない(nag-once)', () => {
+  const res = run({ lines: [user('質問です'), nag()] });
+  assert.equal(res.stdout.trim(), '');
+});
+
+test('nag の後に新しい実発言が来たら再度 block する', () => {
+  const res = run({ lines: [user('質問1'), nag(), user('質問2')] });
+  assert.equal(JSON.parse(res.stdout).decision, 'block');
+});
+
+test('block reason にマーカーが含まれる', () => {
+  const res = run({ lines: [user('質問です')] });
+  assert.match(JSON.parse(res.stdout).reason, /<!--chat-recorder-nag-->/);
 });
 
 test('stop_hook_active のときは再差し戻ししない', () => {
