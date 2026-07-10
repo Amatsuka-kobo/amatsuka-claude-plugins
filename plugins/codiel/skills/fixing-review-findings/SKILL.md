@@ -7,7 +7,7 @@ description: Codiel の fix-loop フェーズでオーケストレーターが�
 
 ## 概要
 
-`orchestrating-runs` の [7] fix-loop フェーズで**オーケストレーター自身**が使うスキルである。
+`orchestrating-runs` の [8] fix-loop フェーズで**オーケストレーター自身**が使うスキルである。
 `reviewing-diffs` / `implementing` など他のフェーズスキルの多くはサブエージェントが使うのに対し、
 本スキルは `raguel-gating` と同様にオーケストレーターの進行規約であり、オーケストレーターが
 自分でコードを直すことは許されない(HARD-GATE参照)。修正は常に該当ドメイン implementer への

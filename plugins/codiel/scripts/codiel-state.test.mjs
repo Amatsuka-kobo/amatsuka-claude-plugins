@@ -123,7 +123,7 @@ test("--human-approved で passed になったフェーズの次フェーズを 
   run(root, ["init", "--issue", "1"]);
   run(root, ["start-phase", "init", "--issue", "1"]);
   run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e1", "--verdict", "ASK", "--human-approved"]);
-  const r = run(root, ["start-phase", "design", "--issue", "1"]);
+  const r = run(root, ["start-phase", "discuss", "--issue", "1"]);
   assert.equal(r.code, 0);
 });
 
@@ -132,6 +132,8 @@ test("並列ステージ(test-spec/dev-plan)は design passed 後に両方 start
   run(root, ["init", "--issue", "1"]);
   run(root, ["start-phase", "init", "--issue", "1"]);
   run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e1", "--verdict", "PROCEED"]);
+  run(root, ["start-phase", "discuss", "--issue", "1"]);
+  run(root, ["complete-phase", "discuss", "--issue", "1"]);
   run(root, ["start-phase", "design", "--issue", "1"]);
   run(root, ["pass-gate", "design", "--issue", "1", "--evaluation-id", "e2", "--verdict", "PROCEED"]);
   assert.equal(run(root, ["start-phase", "test-spec", "--issue", "1"]).code, 0);
@@ -166,7 +168,7 @@ test("record-attempt は上限超過で exit 3 + awaiting_human", () => {
 test("pr フェーズの complete-phase は --pr-url 必須", () => {
   const root = tmpProject();
   run(root, ["init", "--issue", "1"]);
-  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  passThrough(root, ["init", "discuss", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
   run(root, ["start-phase", "pr", "--issue", "1"]);
   assert.equal(run(root, ["complete-phase", "pr", "--issue", "1"]).code, 1);
   const r = run(root, ["complete-phase", "pr", "--issue", "1", "--pr-url", "https://example.test/pr/1"]);
@@ -178,7 +180,7 @@ test("finalize は全フェーズ passed 後のみ成功し awaiting_outcome に
   const root = tmpProject();
   run(root, ["init", "--issue", "1"]);
   assert.equal(run(root, ["finalize", "--issue", "1"]).code, 1);
-  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  passThrough(root, ["init", "discuss", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
   run(root, ["start-phase", "pr", "--issue", "1"]);
   run(root, ["complete-phase", "pr", "--issue", "1", "--pr-url", "u"]);
   for (const ph of ["review", "fix-loop", "triage"]) {
@@ -232,7 +234,7 @@ test("skip-phase は --reason なしでは失敗する", () => {
 test("skip-phase fix-loop は review が passed でない状態では失敗する", () => {
   const root = tmpProject();
   run(root, ["init", "--issue", "1"]);
-  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  passThrough(root, ["init", "discuss", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
   run(root, ["start-phase", "pr", "--issue", "1"]);
   run(root, ["complete-phase", "pr", "--issue", "1", "--pr-url", "u"]);
   run(root, ["start-phase", "review", "--issue", "1"]); // review は in_progress のまま(未 passed)
@@ -272,16 +274,41 @@ test("skip-phase は不正なフェーズ名を拒否する", () => {
   assert.match(r.err, /不正なフェーズ/);
 });
 
+test("discuss は init passed 後に start でき、complete-phase で passed になる(pass-gate は拒否)", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  assert.equal(run(root, ["start-phase", "discuss", "--issue", "1"]).code, 0);
+  const rGate = run(root, ["pass-gate", "discuss", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  assert.equal(rGate.code, 1);
+  assert.match(rGate.err, /ゲート対象フェーズではありません/);
+  const r = run(root, ["complete-phase", "discuss", "--issue", "1"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.out.state.phases["discuss"].status, "passed");
+});
+
+test("design は discuss が passed になるまで start できない", () => {
+  const root = tmpProject();
+  run(root, ["init", "--issue", "1"]);
+  run(root, ["start-phase", "init", "--issue", "1"]);
+  run(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  const r = run(root, ["start-phase", "design", "--issue", "1"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /discuss/);
+});
+
 // テストヘルパー
 function passThrough(root, phases) {
   for (const ph of phases) {
     run(root, ["start-phase", ph, "--issue", "1"]);
-    run(root, ["pass-gate", ph, "--issue", "1", "--evaluation-id", `e-${ph}`, "--verdict", "PROCEED"]);
+    if (ph === "discuss") run(root, ["complete-phase", ph, "--issue", "1"]);
+    else run(root, ["pass-gate", ph, "--issue", "1", "--evaluation-id", `e-${ph}`, "--verdict", "PROCEED"]);
   }
 }
 
 function throughReview(root, issue) {
-  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  passThrough(root, ["init", "discuss", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
   run(root, ["start-phase", "pr", "--issue", issue]);
   run(root, ["complete-phase", "pr", "--issue", issue, "--pr-url", "u"]);
   run(root, ["start-phase", "review", "--issue", issue]);
@@ -289,7 +316,7 @@ function throughReview(root, issue) {
 }
 
 function fullRun(root, issue) {
-  passThrough(root, ["init", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
+  passThrough(root, ["init", "discuss", "design", "test-spec", "dev-plan", "implement", "test-loop"]);
   run(root, ["start-phase", "pr", "--issue", issue]);
   run(root, ["complete-phase", "pr", "--issue", issue, "--pr-url", "u"]);
   run(root, ["start-phase", "review", "--issue", issue]);

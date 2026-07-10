@@ -4,7 +4,7 @@ import path from "node:path";
 import { readStdin, findProjectRoot } from "./lib.mjs";
 import { findActiveRun } from "../../scripts/codiel-state.mjs";
 
-const ARTIFACTS = { init: "issue.md", design: "design.md", "dev-plan": "dev-plan.md" };
+const ARTIFACTS = { init: "issue.md", discuss: "agenda.md", design: "design.md", "dev-plan": "dev-plan.md" };
 const input = await readStdin();
 if (!input.stop_hook_active) {
   const run = findActiveRun(findProjectRoot(input.cwd));
