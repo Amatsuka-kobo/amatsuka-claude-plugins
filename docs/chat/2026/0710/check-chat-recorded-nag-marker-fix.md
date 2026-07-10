@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-10
 - 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: `plugins/task-utility/hooks/scripts/check-chat-recorded.mjs`（NAG_MARKER ガード追加）、`plugins/task-utility/hooks/scripts/check-chat-recorded.test.mjs`（テスト3件追加、全45テスト通過）
+- 成果物: `plugins/task-utility/hooks/scripts/check-chat-recorded.mjs`（NAG_MARKER ガード追加）、`plugins/task-utility/hooks/scripts/check-chat-recorded.test.mjs`（テスト3件追加、全45テスト通過）、コミット `7b37f2c`（フック本体とテスト）、コミット `95fe60e`（このセッションの記録）
 - 前提: Google Drive ドキュメント「chat-recorder Stop フック 無限ループ 修正方針(mjs 専用)」（https://drive.google.com/file/d/1hXTlZAnTAUxef3tBIJBFsosNsBOkUuDy/view?usp=sharing）
 
 ---
@@ -48,6 +48,29 @@ Stop フックの無限ループガードが `stop_hook_active`(旧コード 12�
 - この修正は「フックの出力自体を状態として使う」パターン。Stop フックは毎回トランスクリプトを全走査するため、状態ファイルや環境変数なしで冪等性（ターンごと最大1回）を実現でき、セッション再開後も正しく機能する
 - 異常系（エージェントが記録を無視した場合）は `lastRecord` が前進しないが、`lastNag > lastUserTurn` で2回目以降は素通しになり、「技術的に記録できない場合は諦めてよい」という既存設計許容と同じ結末に収束
 - 新しい実発言が来ると `lastUserTurn` が `lastNag` を追い越すため、次ターンでは再び1回だけ差し戻せる → 記録の督促機能自体は失われない
+
+---
+
+## セッション2: コミット実行
+
+# phyllis998
+
+> コミットお願いします
+
+# AI
+
+ワーキングツリーのステータスを確認し、フック本体・テスト・チャット記録をコミット。
+
+**実行内容**:
+1. `git status` と `git diff` でワーキングツリーの状態を把握
+2. フック修正（`check-chat-recorded.mjs`）とテスト（`check-chat-recorded.test.mjs`）をコミット → コミットハッシュ `7b37f2c`
+3. 本セッションのチャット記録をコミット → コミットハッシュ `95fe60e`
+
+**コミット メッセージ**:
+- `7b37f2c`: `fix(task-utility): Stop フックの差し戻し無限ループを nag-once ガードで修正`
+- `95fe60e`: `docs(chat): Stop フック無限ループ修正セッションの記録を追加`
+
+**コミット後の状態**: ワーキングツリーには本セッションと無関係な変更が残存（`ONBOARDING.md`、`README.md`、未追跡の `scripts/` と `docs/chat/2026/0710/revelation-hooks-design.md` — 別セッションの revelation hooks 作業のもの）。これらは意図的にコミット対象から除外した。
 
 ---
 
