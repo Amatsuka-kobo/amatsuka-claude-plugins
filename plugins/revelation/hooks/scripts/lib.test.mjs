@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hasSkillInvocation } from "./lib.mjs";
+import { hasSkillInvocation, lastAssistantModel } from "./lib.mjs";
 
 function writeTranscript(lines) {
   const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rev-lib-")), "t.jsonl");
@@ -14,6 +14,11 @@ function writeTranscript(lines) {
 const skillUse = (skill) => ({
   type: "assistant",
   message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+});
+
+const assistantWithModel = (model) => ({
+  type: "assistant",
+  message: { model, content: [{ type: "text", text: "hi" }] },
 });
 
 test("Skill tool_use があれば true", () => {
@@ -40,4 +45,25 @@ test("壊れた JSON 行はスキップして残りを読む", () => {
 
 test("transcript が存在しなければ throw(フェイルオープン判断は呼び出し側)", () => {
   assert.throws(() => hasSkillInvocation("/nonexistent/t.jsonl", "revelation:fable-restraint"));
+});
+
+test("lastAssistantModel: assistant イベントの model を返す(複数あれば最後のもの)", () => {
+  const p = writeTranscript([assistantWithModel("claude-opus-4-8"), assistantWithModel("claude-fable-5")]);
+  assert.equal(lastAssistantModel(p), "claude-fable-5");
+});
+
+test("lastAssistantModel: assistant イベントが無ければ null", () => {
+  const p = writeTranscript([
+    { type: "user", message: { content: [{ type: "text", text: "hello" }] } },
+  ]);
+  assert.equal(lastAssistantModel(p), null);
+});
+
+test("lastAssistantModel: 壊れた JSON 行はスキップする", () => {
+  const p = writeTranscript(['{"model" broken json', JSON.stringify(assistantWithModel("claude-sonnet-5"))]);
+  assert.equal(lastAssistantModel(p), "claude-sonnet-5");
+});
+
+test("lastAssistantModel: transcript が存在しなければ throw", () => {
+  assert.throws(() => lastAssistantModel("/nonexistent/t.jsonl"));
 });
