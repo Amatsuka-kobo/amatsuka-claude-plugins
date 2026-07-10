@@ -179,3 +179,10 @@ test('サブディレクトリから実行してもリポジトリルートの�
   assert.equal(out.templates.length, 1);
   assert.equal(out.templates[0].name, 'Bug');
 });
+
+test('読めないエントリ(ディレクトリ等)はスキップして exit 0 を保つ', () => {
+  const dir = withTemplates({ 'bug.md': '---\nname: Bug\n---\n' });
+  fs.mkdirSync(path.join(dir, '.github', 'ISSUE_TEMPLATE', 'weird.yml'));
+  const out = runScript(dir);
+  assert.deepEqual(out.templates.map((t) => t.file), ['bug.md']);
+});
