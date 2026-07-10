@@ -24,6 +24,8 @@ model: inherit
     パス・コマンドが追加されたのに ARCHITECTURE.md が更新されていない、等)。
   - 今回の変更で更新すべきドキュメント(README・API ドキュメント・ARCHITECTURE.md 等)の
     更新漏れがないか。
+  - design.md が discussion.md(設計ディスカッションの合意記録)の「状態: 決定」の論点と
+    整合しているかも検査する。黙って覆されている決定があれば severity: high で指摘する。
 - コードを修正しません(読み取り専用の権限のみ持ちます)。問題を見つけても自分で直さず、
   `reviewing-diffs` の所見書式で報告してください。
 - Bash は `gh pr diff` / `gh pr view` / テスト・型検査の読み取り実行にのみ使います。
