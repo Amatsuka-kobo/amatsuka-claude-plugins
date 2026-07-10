@@ -8,7 +8,7 @@ description: /codiel:run で GitHub Issue 駆動の開発 run を進行すると
 ## 概要
 
 `/codiel:run <issue番号>` はメインセッション自身がオーケストレーターとなり、Issue を起点に
-init → design → test-spec/dev-plan → implement → test-loop → pr → review → fix-loop → triage → finalize
+init → discuss → design → test-spec/dev-plan → implement → test-loop → pr → review → fix-loop → triage → finalize
 の全フェーズを進行させる。各フェーズの実作業(分析・設計・実装・テスト・レビュー)はすべて
 専用サブエージェントにディスパッチし、成果物は Raguel MCP のゲートを経てのみ次フェーズへ進む。
 オーケストレーター自身は「進行管理」のみを行い、コードも文書もレビューも自分では書かない。
@@ -16,6 +16,10 @@ init → design → test-spec/dev-plan → implement → test-loop → pr → re
 Raguel ゲートの呼び出し規約(evaluate ツール対応・verdict 別ハンドリング・record_outcome の運用)は
 すべて `raguel-gating` スキルに一元化されている。本スキルはそれを**参照する**だけで、手順を
 再記述しない(二重記述は将来の矛盾源になるため)。
+
+設計工程は人間と共同で行う: discuss フェーズ(論点の合意)と design フェーズのウォークスルー
+(設計書の確認)が常設の人間参加ポイントであり、進行規約は `facilitating-design-discussions`
+スキルに一元化されている。
 
 ## プラグインルート参照規約
 
@@ -37,6 +41,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
       `git switch -c <state.branch>`(詳細は「1. run の解決」参照)
 - [ ] 3. 現在フェーズから、フェーズ進行表の定型(start-phase → ディスパッチ → 成果物検証 → raguel-gating
       でゲート → pass-gate/complete-phase)を順に実行する
+      (discuss は raguel-gating を経ず、facilitating-design-discussions に従って進行し
+      complete-phase で完了する)
 - [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に厳密に従う(自己判断しない)
 - [ ] 5. 全フェーズ `passed` になったら
       `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N` を呼ぶ(全フェーズ passed を
@@ -87,25 +93,28 @@ node <plugin-root>/scripts/codiel-state.mjs get --issue N
 各フェーズは共通の定型で進行する: `start-phase` → サブエージェントをディスパッチ → 成果物ファイルの
 存在を検証 → `raguel-gating` でゲート → `pass-gate`(GATED フェーズ)または `complete-phase`
 (非 GATED フェーズ)。GATED フェーズは `init / design / test-spec / dev-plan / implement / test-loop / fix-loop`
-の 7 つで、Raguel の evaluate を経ないと `passed` にできない。`pr / review / triage` は
-Raguel ゲートを経ず `complete-phase` で完了する。`finalize` だけは `complete-phase` ではなく
+の 7 つで、Raguel の evaluate を経ないと `passed` にできない。`discuss / pr / review / triage` は
+Raguel ゲートを経ず `complete-phase` で完了する
+(discuss は人間が直接参加するフェーズであり、triage と同じ理屈でゲートを置かない)。
+`finalize` だけは `complete-phase` ではなく
 専用コマンド `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N` で完了させる
 (全フェーズ `passed` を検証した上で `status` を `awaiting_outcome` にする)。
 
 | フェーズ | 担当エージェント | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 | コミット担当 |
 |---|---|---|---|---|---|---|
 | [0] init | codiel-analyst | analyzing-issues | Issue(`gh issue view`)、docs/ARCHITECTURE.md、docs/GOTCHAS.md | `issue.md` | pass-gate(`evaluate_decision`) | オーケストレーター(ゲート通過直後) |
-| [1] design | codiel-architect | writing-design-docs | `issue.md`、docs/ARCHITECTURE.md、docs/GOTCHAS.md | `design.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
-| [2a] test-spec | codiel-test-designer | writing-test-specs | `design.md`(影響 unit 一覧)、既存 `.codiel/specs/<unit-id>/spec.md`(あれば) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
-| [2b] dev-plan | codiel-planner | writing-dev-plans | `design.md` | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
-| [3] implement | codiel-implementer-{frontend,backend,data}(ステップのドメインタグで選択) | implementing | `dev-plan.md`(該当ステップ)、docs/ARCHITECTURE.md、docs/GOTCHAS.md | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
-| [4A] test-loop(スクリプト安定化) | codiel-tester | scripting-tests, running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | codiel-tester(自分の変更を自分でコミット) |
-| [4B] test-loop(TDD 修正) | codiel-implementer-{該当ドメイン} | fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
-| [5] pr | オーケストレーター本体(ディスパッチなし) | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する) | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
-| [6] review | codiel-reviewer-{frontend,backend,data}(diff のドメインで選択参加)+ codiel-reviewer-doc/-security(常時参加)。**所見の統合・`reports/review-<n>.md` への記録・PR コメント投稿はオーケストレーターが行う** | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | オーケストレーター(review レポートのコミットも) |
-| [7] fix-loop | codiel-implementer-{該当ドメイン}(修正)+ codiel-tester(回帰再実行)+ reviewer 陣(再レビュー) | fixing-review-findings, running-regression-tests, reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | 担当 implementer / codiel-tester(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・reviewer 再ディスパッチ前にオーケストレーターが `git push` して PR ブランチを最新化する**(reviewer は `gh pr diff` を読むため、push しないと stale diff を見て同一所見を再報告する。guard-bash は fix-loop フェーズ + test-loop passed でこの push を許可済み) |
-| [8] triage | オーケストレーター本体(ユーザーの指示のもと) | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [8] の運用) | オーケストレーター(`review-<n>.md` への Issue 番号追記分。コード変更はなし) |
-| [9] finalize | オーケストレーター本体 | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない) | ―(コード変更なし) |
+| [1] discuss | codiel-architect(アジェンダ作成)→ オーケストレーター本体(ディスカッション進行・記録) | preparing-design-agendas(architect)/ facilitating-design-discussions(オーケストレーター) | `issue.md`、docs/ARCHITECTURE.md、docs/GOTCHAS.md | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
+| [2] design | codiel-architect | writing-design-docs | `issue.md`、`discussion.md`、docs/ARCHITECTURE.md、docs/GOTCHAS.md | `design.md` | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、ユーザー承認を得てから evaluate する** | オーケストレーター(ゲート通過直後) |
+| [3a] test-spec | codiel-test-designer | writing-test-specs | `design.md`(影響 unit 一覧)、既存 `.codiel/specs/<unit-id>/spec.md`(あれば) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
+| [3b] dev-plan | codiel-planner | writing-dev-plans | `design.md` | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
+| [4] implement | codiel-implementer-{frontend,backend,data}(ステップのドメインタグで選択) | implementing | `dev-plan.md`(該当ステップ)、docs/ARCHITECTURE.md、docs/GOTCHAS.md | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
+| [5A] test-loop(スクリプト安定化) | codiel-tester | scripting-tests, running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | codiel-tester(自分の変更を自分でコミット) |
+| [5B] test-loop(TDD 修正) | codiel-implementer-{該当ドメイン} | fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
+| [6] pr | オーケストレーター本体(ディスパッチなし) | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する) | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
+| [7] review | codiel-reviewer-{frontend,backend,data}(diff のドメインで選択参加)+ codiel-reviewer-doc/-security(常時参加)。**所見の統合・`reports/review-<n>.md` への記録・PR コメント投稿はオーケストレーターが行う** | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | オーケストレーター(review レポートのコミットも) |
+| [8] fix-loop | codiel-implementer-{該当ドメイン}(修正)+ codiel-tester(回帰再実行)+ reviewer 陣(再レビュー) | fixing-review-findings, running-regression-tests, reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | 担当 implementer / codiel-tester(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・reviewer 再ディスパッチ前にオーケストレーターが `git push` して PR ブランチを最新化する**(reviewer は `gh pr diff` を読むため、push しないと stale diff を見て同一所見を再報告する。guard-bash は fix-loop フェーズ + test-loop passed でこの push を許可済み) |
+| [9] triage | オーケストレーター本体(ユーザーの指示のもと) | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [9] の運用) | オーケストレーター(`review-<n>.md` への Issue 番号追記分。コード変更はなし) |
+| [10] finalize | オーケストレーター本体 | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない) | ―(コード変更なし) |
 
 - **test-spec と dev-plan は単一メッセージで 2 体並列ディスパッチする**(Task ツールの呼び出しを 1 回の
   応答の中に 2 件含める)。片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
@@ -121,8 +130,9 @@ Raguel ゲートを経ず `complete-phase` で完了する。`finalize` だけ�
 `codiel-architect` / `codiel-test-designer` / `codiel-planner` は Bash を持たず、自分の成果物を
 自分でコミットできない(§7 の権限設計どおり)。したがって成果物のコミット責務はフェーズの種類で分かれる。
 
-- **文書系フェーズ(init / design / test-spec / dev-plan)**: 成果物(`issue.md` / `design.md` /
-  `spec.md`・`cases.md` / `dev-plan.md`)は、**ゲート通過直後にオーケストレーター自身が**
+- **文書系フェーズ(init / discuss / design / test-spec / dev-plan)**: 成果物(`issue.md` /
+  `agenda.md`・`discussion.md` / `design.md` / `spec.md`・`cases.md` / `dev-plan.md`)は、
+  **ゲート通過直後にオーケストレーター自身が**
   ```
   git add <成果物パス>
   git commit -m "codiel(<phase>): <要約> (issue-N try-M)"
@@ -130,7 +140,9 @@ Raguel ゲートを経ず `complete-phase` で完了する。`finalize` だけ�
   でコミットする。これは「実装行為」ではなく**進行管理としてのコミット**であり、HARD-GATE の
   「オーケストレーターは自分で実装・レビュー・テスト作成をしない」には抵触しない
   (オーケストレーターは成果物の中身を一切書いていない。サブエージェントが書いた成果物をそのまま
-  記録するだけである)。
+  記録するだけである)。discuss は Raguel ゲートを持たないため、「ゲート通過直後」ではなく
+  **complete-phase の直前**にコミットする(facilitating-design-discussions チェックリスト 8
+  のとおり)。
 - **コード系フェーズ(implement / test-loop / fix-loop)**: 担当サブエージェント(implementer /
   codiel-tester。いずれも Bash を保持)が**自分の変更を自分でコミットする**。オーケストレーターは
   これらのフェーズではコミットしない。
@@ -220,6 +232,9 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reas
    ベースブランチのままだと、成果物コミットが誤ったブランチに乗る)。
 3. `state.phase` から続行する(すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に
    従い、`in_progress` のフェーズから再開する)。
+   discuss フェーズで中断していた場合の再開位置(アジェンダ作成から/未決論点から/最終確認から)は
+   facilitating-design-discussions の「中断再開」節に従う。design フェーズで design.md が既に存在する
+   場合は、ウォークスルーの再提示から再開する。
 4. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに
    直近の findings を再提示し、raguel-gating の ASK ハンドリング(裁定 A / 裁定 B / 中止)に従って
    人間の裁定を待つ。**再開できると思って勝手に続行しない**。
@@ -227,7 +242,9 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reas
 <HARD-GATE>
 - **オーケストレーターは自分で実装・レビュー・テスト作成をしない**。すべてサブエージェントへの
   ディスパッチを経由する。コード・design.md・review コメント等をオーケストレーター自身が書くことは
-  一切禁止。
+  一切禁止。なお `discussion.md` への合意の記録・ウォークスルーの進行は「進行管理」であり本項に
+  抵触しない(`review-<n>.md` と同じ分類。根拠は facilitating-design-discussions の概要)。
+  ただし agenda.md / design.md の**内容**をオーケストレーターが書くことは引き続き禁止。
 - **Raguel ゲートの省略禁止**。GATED フェーズを `evaluate_*` なしに `passed` にしようとする行為
   (`pass-gate` の `--evaluation-id` を捏造する、evaluate を呼ばずに次フェーズへ進むなど)は
   raguel-gating の HARD-GATE と同様に禁止。
@@ -262,17 +279,18 @@ digraph codiel_run {
   init_run [label="codiel-state init\ngit switch -c <branch>", shape=box];
 
   init [label="[0] init\ncodiel-analyst", shape=box];
-  design [label="[1] design\ncodiel-architect", shape=box];
-  testspec [label="[2a] test-spec\ncodiel-test-designer", shape=box];
-  devplan [label="[2b] dev-plan\ncodiel-planner", shape=box];
+  discuss [label="[1] discuss\narchitect(アジェンダ)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
+  design [label="[2] design\ncodiel-architect\n+ウォークスルー(ユーザー承認)", shape=box];
+  testspec [label="[3a] test-spec\ncodiel-test-designer", shape=box];
+  devplan [label="[3b] dev-plan\ncodiel-planner", shape=box];
   parallel [label="単一メッセージで並列ディスパッチ", shape=note];
-  implement [label="[3] implement\ncodiel-implementer-*", shape=box];
-  testloop [label="[4] test-loop\n(A)tester (B)implementer", shape=box];
-  pr [label="[5] pr\ngh pr create", shape=box];
-  review [label="[6] review\nreviewer 選択参加+doc/security", shape=box];
-  fixloop [label="[7] fix-loop\nimplementer/tester/reviewer", shape=box];
-  triage [label="[8] triage\nユーザー指示+filing-followup-issues", shape=box];
-  finalize [label="[9] finalize\n結果レポート", shape=box];
+  implement [label="[4] implement\ncodiel-implementer-*", shape=box];
+  testloop [label="[5] test-loop\n(A)tester (B)implementer", shape=box];
+  pr [label="[6] pr\ngh pr create", shape=box];
+  review [label="[7] review\nreviewer 選択参加+doc/security", shape=box];
+  fixloop [label="[8] fix-loop\nimplementer/tester/reviewer", shape=box];
+  triage [label="[9] triage\nユーザー指示+filing-followup-issues", shape=box];
+  finalize [label="[10] finalize\n結果レポート", shape=box];
 
   human [label="人間の裁定待ち\n(awaiting_human)", shape=box, style=filled, fillcolor="#fff2cc"];
   stopped [label="run 停止\nrecording-gotchas", shape=box, style=filled, fillcolor="#ffcccc"];
@@ -284,7 +302,8 @@ digraph codiel_run {
   resume -> init;
   init_run -> init;
 
-  init -> design [label="PROCEED"];
+  init -> discuss [label="PROCEED"];
+  discuss -> design [label="合意記録+complete-phase"];
   design -> testspec [label="PROCEED"];
   design -> devplan [label="PROCEED"];
   testspec -> parallel [style=dashed];
