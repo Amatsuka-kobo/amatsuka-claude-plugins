@@ -1,6 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "model": "sonnet",
   "permissions": {
     "allow": [
       "Bash(node *)",
@@ -14,6 +13,24 @@
       "Bash(git push *)"
     ]
   },
+  "model": "sonnet",
+  "enabledPlugins": {
+    "task-utility@amatsuka-claude-plugins": true,
+    "revelation@amatsuka-claude-plugins": true,
+    "context7@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": true,
+    "mcp-server-dev@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "serena@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "pyright@claude-code-lsps": true,
+    "mdbase-lsp@claude-code-lsps": true,
+    "vtsls@claude-code-lsps": true,
+    "bash-language-server@claude-code-lsps": true
+  },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {
       "source": {
@@ -23,24 +40,9 @@
     },
     "claude-code-lsps": {
       "source": {
-        "source": "github",
-        "repo": "boostvolt/claude-code-lsps"
+        "source": "git",
+        "url": "https://github.com/Piebald-AI/claude-code-lsps.git"
       }
     }
-  },
-  "enabledPlugins": {
-    "task-utility@amatsuka-claude-plugins": true,
-    "revelation@amatsuka-claude-plugins": true,
-    "pyright@claude-code-lsps": true,
-    "vtsls@claude-code-lsps": true,
-    "context7@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true,
-    "explanatory-output-style@claude-plugins-official": true,
-    "mcp-server-dev@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
-    "serena@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true
   }
 }
