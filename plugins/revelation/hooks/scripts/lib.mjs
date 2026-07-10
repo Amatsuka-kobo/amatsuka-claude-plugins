@@ -17,6 +17,12 @@ export function emit(decision, reason) {
   process.exit(0);
 }
 
+// 「意見なし」の素通し。permissionDecision: "allow" は許可システムをバイパスして
+// 自動実行になってしまうため、素通しでは何も出力せずに終了する。
+export function pass() {
+  process.exit(0);
+}
+
 // transcript(JSONL)に、指定スキルの Skill ツール呼び出しが記録されているか。
 // 注入されたトリガー表など「テキスト中のスキル名」に誤反応しないよう、
 // tool_use エントリ(name === "Skill")の input.skill だけを見る。
