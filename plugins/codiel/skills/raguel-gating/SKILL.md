@@ -42,7 +42,9 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    `raguelRunId`(`issue-123-try-N` 形式)を確認する。これが Raguel へ渡す `runId` になる。
 2. **objective を用意する**: `issue.md` の要件・受け入れ基準から 1〜2 文で objective を書く。
    フェーズが変わっても run を通じて一貫した文言にする(objective がブレると crosscheck パネルの
-   整合性判定が弱くなる)。
+   整合性判定が弱くなる)。init ゲートでは、issue.md に不明点が残っていても「不明点は後続の discuss フェーズで
+   ユーザーと対話的に解消される」ことを decision 文に含める(不明点の存在だけを理由に
+   ASK へ倒す必要はないという文脈を Raguel に渡す。解消の場が保証されているため)。
 3. **フェーズ→ツール対応表(下記)に従い evaluate ツールを呼ぶ**。`runId` と `objective` は全呼び出し必須。
 4. **verdict で分岐する**(下記「verdict 別ハンドリング」)。
 5. **PROCEED なら次フェーズのディスパッチプロンプトに前フェーズの findings 要約を含める**
@@ -53,11 +55,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 | フェーズ | 呼び出すツール | 成果物として渡すもの |
 |---|---|---|
 | init | `mcp__raguel__evaluate_decision` | `decision`=「この解釈・スコープで進む」という判断文 |
-| design | `mcp__raguel__evaluate_design` | `design`= design.md の内容 |
+| design | `mcp__raguel__evaluate_design` | `design`= design.md の内容(objective には discussion.md の合意との整合を検査対象として一文含める。ウォークスルーのユーザー承認後に呼ぶこと) |
 | test-spec | `mcp__raguel__evaluate_plan` | `plan`= 該当 unit の spec.md/cases.md 更新内容(dev-plan とは独立にゲート) |
 | dev-plan | `mcp__raguel__evaluate_plan` | `plan`= dev-plan.md の内容(test-spec とは独立にゲート) |
 | implement / test-loop / fix-loop の各修正 | `mcp__raguel__evaluate_code` | `diff` または `files[]` + `testResults`(あれば) |
 
+- `discuss` は Raguel ゲート対象外(`pr / review / triage` と同様)。人間が直接参加する
+  フェーズであり、合意内容の検査は design ゲートが design.md と discussion.md の整合として担う。
 - 全呼び出し共通の必須引数: `runId`(= `state.raguelRunId`)、`objective`(issue.md の要件から 1〜2 文)。
 - test-spec と dev-plan は並列実行されるフェーズだが、Raguel へは**それぞれ独立に** `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
