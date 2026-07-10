@@ -118,7 +118,7 @@ medium|low
   への越境であり行わない。
 - **`gh issue create` の実行はこのフェーズでのみ許される**。`guard-bash`(hooks)は
   アクティブ run の現在フェーズが triage でなければ `gh issue create` を機械的に deny する
-  (`docs/DESIGN.md` §8 / §2 [8])。本 HARD-GATE(手続き上の縛り)と hooks の deny は
+  (`docs/DESIGN.md` §8 / §2 [9])。本 HARD-GATE(手続き上の縛り)と hooks の deny は
   **二層防御**であり、片方が漏れても他方が起票を止める設計になっている。
 </HARD-GATE>
 
