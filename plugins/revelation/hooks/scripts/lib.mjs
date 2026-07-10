@@ -42,3 +42,17 @@ export function hasSkillInvocation(transcriptPath, skillName) {
   }
   return false;
 }
+
+// transcript(JSONL)の assistant イベントから、最後に現れた message.model(モデル ID)を返す。
+// assistant イベントが無ければ null。ファイルが読めなければ throw(フェイルオープンの判断は呼び出し側)。
+export function lastAssistantModel(transcriptPath) {
+  const raw = fs.readFileSync(transcriptPath, "utf8");
+  let model = null;
+  for (const line of raw.split("\n")) {
+    if (!line.includes('"model"')) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e?.type === "assistant" && typeof e?.message?.model === "string") model = e.message.model;
+  }
+  return model;
+}

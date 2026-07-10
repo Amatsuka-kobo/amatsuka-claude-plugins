@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readStdin, emit, pass, hasSkillInvocation } from "./lib.mjs";
+import { readStdin, emit, pass, hasSkillInvocation, lastAssistantModel } from "./lib.mjs";
 
 const TOOL_TO_SKILL = new Map([
   ["Edit", "revelation:fable-restraint"],
@@ -21,6 +21,10 @@ try {
 
   let invoked = false;
   try {
+    // revelation は Fable 未満のモデル(Opus 含む)が対象。Fable 自身のセッションでは差し戻さない。
+    const model = lastAssistantModel(input.transcript_path);
+    if (model && model.includes("fable")) pass();
+
     invoked = hasSkillInvocation(input.transcript_path, skill);
   } catch {
     pass(); // transcript が読めない → フェイルオープン

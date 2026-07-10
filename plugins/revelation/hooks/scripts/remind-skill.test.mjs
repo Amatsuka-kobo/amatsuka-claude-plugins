@@ -40,6 +40,11 @@ const skillUseLine = (skill) => JSON.stringify({
   message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
 });
 
+const assistantModelLine = (model) => JSON.stringify({
+  type: "assistant",
+  message: { model, content: [{ type: "text", text: "hi" }] },
+});
+
 test("未読の Edit は deny(fable-restraint への誘導)、同一セッション2回目は素通し(無出力)", () => {
   const ctx = setup();
   fs.writeFileSync(ctx.transcript, "\n");
@@ -103,4 +108,19 @@ test("マーカーディレクトリの作成に失敗すると素通し(無出�
   fs.writeFileSync(ctx.stateDir, "");
   const r = hook(ctx, "Edit");
   assert.equal(r, null);
+});
+
+test("Fable セッション(model に fable を含む)では未読でも Edit は素通し(マーカーも作られない)", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-fable-5") + "\n");
+  assert.equal(hook(ctx, "Edit"), null);
+  assert.equal(fs.existsSync(ctx.stateDir), false);
+});
+
+test("Opus セッションは対象のまま(従来どおり deny)", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-opus-4-8") + "\n");
+  const r = hook(ctx, "Edit");
+  assert.equal(r.permissionDecision, "deny");
+  assert.match(r.permissionDecisionReason, /revelation:fable-restraint/);
 });
