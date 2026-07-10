@@ -83,7 +83,10 @@ test("discuss フェーズ中: .codiel 配下(agenda.md/discussion.md)は素通�
   cli(["start-phase", "discuss", "--issue", "1"]);
   assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/agenda.md")), null);
   assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/discussion.md")), null);
-  assert.equal(hook(root, "Write", path.join(root, "src/app.ts")).permissionDecision, "ask");
+  const r = hook(root, "Write", path.join(root, "src/app.ts"));
+  assert.equal(r.permissionDecision, "ask");
+  assert.match(r.permissionDecisionReason, /文書フェーズ\(discuss\)/);
+  assert.equal(hook(root, "Write", path.join(root, "docs/notes.md")), null);
 });
 
 test("cwd がサブディレクトリでも文書フェーズ制御が機能する(root/src への書き込みは ask)", () => {
