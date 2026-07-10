@@ -132,6 +132,7 @@ digraph writing_design_docs {
   node [fontname="sans-serif"];
 
   read_issue [label="issue.md を読む\n(要件/受け入れ基準/スコープ)", shape=box];
+  read_discussion [label="discussion.md を読む\n(合意の決定/未決を確認)", shape=box];
   read_docs [label="ARCHITECTURE.md / GOTCHAS.md を読む", shape=box];
   read_existing [label="変更対象の既存ファイルを Read", shape=box];
   map_criteria [label="受け入れ基準を\n方針/変更対象に対応付け", shape=box];
@@ -148,7 +149,7 @@ digraph writing_design_docs {
   done [label="architect 報告\n(design.md パス + 影響 unit 数)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ndesign ゲート(evaluate_design)\nへ引き継ぎ", shape=ellipse];
 
-  read_issue -> read_docs -> read_existing -> map_criteria -> check_criteria;
+  read_issue -> read_discussion -> read_docs -> read_existing -> map_criteria -> check_criteria;
   check_criteria -> map_criteria [label="No: 未対応の基準あり"];
   check_criteria -> alternatives [label="Yes"];
   alternatives -> targets -> units -> yagni;
