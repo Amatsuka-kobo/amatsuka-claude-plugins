@@ -23,4 +23,4 @@ Codiel と raguel-mcp は **Anthropic API を使用できないユーザーも�
 | 対象 | コマンド |
 | --- | --- |
 | raguel-mcp(ビルド/テスト/型) | `cd plugins/codiel/raguel-mcp && pnpm build` / `pnpm test`(vitest) / `pnpm typecheck` |
-| スクリプト系テスト | `node --test plugins/codiel/scripts/*.test.mjs plugins/task-utility/scripts/*.test.mjs` |
+| スクリプト系テスト | `node --test plugins/codiel/scripts/*.test.mjs plugins/task-utility/scripts/*.test.mjs plugins/revelation/hooks/scripts/*.test.mjs` |

@@ -20,6 +20,13 @@ Revelation は**単体で機能する規律のベースライン**として設�
 
 superpowers 等の詳細なプロセススキル(systematic-debugging、test-driven-development、verification-before-completion など)が同居する環境では、個別の局面ではそちらの詳細な手順が優先される。Revelation はそれらと矛盾しない範囲の横断的な規律として補完的に機能する。プロセススキルが存在しない環境では、Revelation だけで最低限の規律を担保する。
 
-## 既知の制約
+## フック層
 
-このスキル群は、モデルが自発的にスキルを invoke する規律を持っていることに依存する。皮肉なことに、規律を最も必要とするモデルほどこの前提が弱い。フック(SessionStart 等)によるチートシートの強制注入は将来の検討事項。
+スキルの自発的な invoke に依存する pull 型の仕組みは、規律を最も必要とする下位モデルほど機能しない(実運用で「そもそも invoke しない」ことを確認済み)。このため `hooks/` に2層の補助を持つ:
+
+1. **SessionStart トリガー表注入** — セッション開始時に約10行のトリガー表(いつ・どのスキルを invoke するか)を注入する。チートシート全文は注入しない(スキル本体との二重管理と「読んだ気」の逆効果を避ける)。
+2. **PreToolUse リマインド** — 最初の Edit/Write の前に `fable-restraint`、最初の Agent/Task の前に `fable-subagents` が未読なら、1回だけ差し戻して invoke を促す。判定不能時はすべて素通し(フェイルオープン)。
+
+設計の詳細と将来課題(モデル判別による出し分け等)は `docs/DESIGN.md` を参照。
+
+テスト: `node --test plugins/revelation/hooks/scripts/*.test.mjs`
