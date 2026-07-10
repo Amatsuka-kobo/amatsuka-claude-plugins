@@ -6,9 +6,12 @@ import fs from "node:fs"; import os from "node:os"; import path from "node:path"
 const HOOK = new URL("./guard-bash.mjs", import.meta.url).pathname;
 const CLI = new URL("../../scripts/codiel-state.mjs", import.meta.url).pathname;
 
+// stdout が空(= permissionDecision 出力なし、素通し)なら null を返す。
+// deny/ask など出力がある場合は hookSpecificOutput を返す。
 function hook(cwd, command) {
   const input = JSON.stringify({ cwd, tool_name: "Bash", tool_input: { command } });
   const out = execFileSync("node", [HOOK], { input, encoding: "utf8" });
+  if (out === "") return null;
   return JSON.parse(out).hookSpecificOutput;
 }
 
@@ -75,10 +78,10 @@ test("state.json へのシェルリダイレクトは deny", () => {
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("run なしで gh issue create は allow", () => {
+test("run なしで gh issue create は素通し(無出力)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
   const r = hook(root, "gh issue create -t x");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
 test("run あり(phase=init)で gh issue create は deny", () => {
@@ -87,10 +90,10 @@ test("run あり(phase=init)で gh issue create は deny", () => {
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("run あり(phase=pr, test-loop passed)で gh pr create は allow", () => {
+test("run あり(phase=pr, test-loop passed)で gh pr create は素通し(無出力)", () => {
   const root = setupRunAtPr();
   const r = hook(root, "gh pr create");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
 test("run あり(phase=implement)で gh pr create は deny", () => {
@@ -100,10 +103,10 @@ test("run あり(phase=implement)で gh pr create は deny", () => {
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("run あり(phase=pr, test-loop passed)で git push origin codiel/issue-1-try-1 は allow", () => {
+test("run あり(phase=pr, test-loop passed)で git push origin codiel/issue-1-try-1 は素通し(無出力)", () => {
   const root = setupRunAtPr();
   const r = hook(root, "git push origin codiel/issue-1-try-1");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
 test("run あり(phase=implement)で git push origin codiel/issue-1-try-1 は deny", () => {
@@ -132,10 +135,10 @@ test("awaiting_human 中(phase=init)の gh pr create は deny(ゲートスキッ
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("git push origin main-refactor-branch は保護ブランチではないので allow(pr, test-loop passed)", () => {
+test("git push origin main-refactor-branch は保護ブランチではないので素通し(無出力、pr, test-loop passed)", () => {
   const root = setupRunAtPr();
   const r = hook(root, "git push origin main-refactor-branch");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
 test("git push upstream main は remote 名に関わらず deny", () => {
@@ -164,33 +167,33 @@ test("git push origin refs/heads/master は refs/heads/ 完全形でも deny", (
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("git push origin codiel/main-fix は保護ブランチ判定に掛からない(pr, test-loop passed で allow)", () => {
+test("git push origin codiel/main-fix は保護ブランチ判定に掛からない(pr, test-loop passed で素通し・無出力)", () => {
   const root = setupRunAtPr();
   const r = hook(root, "git push origin codiel/main-fix");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
 // --- 修正2: push 検知をサブコマンド解析に変更 ---
 
-test("git stash push は push コマンドと誤判定されず allow(implement フェーズ)", () => {
+test("git stash push は push コマンドと誤判定されず素通し(無出力、implement フェーズ)", () => {
   const root = setupRun();
   setupRunAtImplement(root);
   const r = hook(root, "git stash push");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
-test("git stash push -m wip は push コマンドと誤判定されず allow(implement フェーズ)", () => {
+test("git stash push -m wip は push コマンドと誤判定されず素通し(無出力、implement フェーズ)", () => {
   const root = setupRun();
   setupRunAtImplement(root);
   const r = hook(root, "git stash push -m wip");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
-test("git config push.default simple は push コマンドと誤判定されず allow(implement フェーズ)", () => {
+test("git config push.default simple は push コマンドと誤判定されず素通し(無出力、implement フェーズ)", () => {
   const root = setupRun();
   setupRunAtImplement(root);
   const r = hook(root, "git config push.default simple");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
 test("git -C ../x push origin feature はサブコマンド解析後も push と判定されフェーズゲートで deny", () => {
@@ -240,8 +243,8 @@ test("cp で state.json への書き込みは deny", () => {
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("mv (state.json と無関係)は allow", () => {
+test("mv (state.json と無関係)は素通し(無出力)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"));
   const r = hook(root, "mv a b");
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });

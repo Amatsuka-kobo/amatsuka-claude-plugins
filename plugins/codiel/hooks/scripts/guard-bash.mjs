@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readStdin, emit, findProjectRoot } from "./lib.mjs";
+import { readStdin, emit, pass, findProjectRoot } from "./lib.mjs";
 import { findActiveRun } from "../../scripts/codiel-state.mjs";
 
 // git の「サブコマンド」を正規表現ではなくトークン解析で特定する。
@@ -125,7 +125,7 @@ try {
     if (isGitPush && (!["pr", "fix-loop", "triage", "finalize"].includes(phase) || !testLoopPassed))
       emit("deny", `push は test-loop 合格後の pr 以降のフェーズでのみ可能です(現在: ${phase})`);
   }
-  emit("allow", "");
+  pass();
 } catch (e) {
   emit("ask", `guard-bash の内部エラー(フェイルクローズド): ${e.message}`);
 }

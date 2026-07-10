@@ -6,9 +6,12 @@ import fs from "node:fs"; import os from "node:os"; import path from "node:path"
 const HOOK = new URL("./guard-write.mjs", import.meta.url).pathname;
 const CLI = new URL("../../scripts/codiel-state.mjs", import.meta.url).pathname;
 
+// stdout が空(= permissionDecision 出力なし、素通し)なら null を返す。
+// deny/ask など出力がある場合は hookSpecificOutput を返す。
 function hook(cwd, toolName, filePath) {
   const input = JSON.stringify({ cwd, tool_name: toolName, tool_input: { file_path: filePath } });
   const out = execFileSync("node", [HOOK], { input, encoding: "utf8" });
+  if (out === "") return null;
   return JSON.parse(out).hookSpecificOutput;
 }
 function setupRun(phasesToPass = []) {
@@ -28,19 +31,19 @@ test("state.json への直接書き込みは run の有無に関わらず deny",
   assert.equal(r.permissionDecision, "deny");
 });
 
-test("アクティブ run がなければ通常の書き込みは allow", () => {
+test("アクティブ run がなければ通常の書き込みは素通し(無出力)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"));
   const r = hook(root, "Edit", path.join(root, "src/index.ts"));
-  assert.equal(r.permissionDecision, "allow");
+  assert.equal(r, null);
 });
 
-test("文書フェーズ(init)中の src への書き込みは ask", () => {
+test("文書フェーズ(init)中の src への書き込みは ask、.codiel 配下は素通し(無出力)", () => {
   const root = setupRun();
   assert.equal(hook(root, "Write", path.join(root, "src/app.ts")).permissionDecision, "ask");
-  assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/issue.md")).permissionDecision, "allow");
+  assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/issue.md")), null);
 });
 
-test("implement フェーズ中: src は allow、specs の cases.md は ask", () => {
+test("implement フェーズ中: src は素通し、specs の cases.md は ask", () => {
   const root = setupRun();
   const cli = (args) => execFileSync("node", [CLI, ...args], { cwd: root });
   cli(["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
@@ -49,10 +52,10 @@ test("implement フェーズ中: src は allow、specs の cases.md は ask", ()
     cli(["pass-gate", ph, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
   }
   cli(["start-phase", "implement", "--issue", "1"]);
-  assert.equal(hook(root, "Edit", path.join(root, "src/app.ts")).permissionDecision, "allow");
+  assert.equal(hook(root, "Edit", path.join(root, "src/app.ts")), null);
   assert.equal(hook(root, "Edit", path.join(root, ".codiel/specs/screen-login/cases.md")).permissionDecision, "ask");
   assert.equal(hook(root, "Edit", path.join(root, ".codiel/specs/screen-login/spec.md")).permissionDecision, "ask");
-  assert.equal(hook(root, "Write", path.join(root, ".codiel/specs/screen-login/scripts/login.spec.ts")).permissionDecision, "allow");
+  assert.equal(hook(root, "Write", path.join(root, ".codiel/specs/screen-login/scripts/login.spec.ts")), null);
 });
 
 test("cwd がサブディレクトリでも state.json への絶対パス書き込みは deny(バイパス再現)", () => {
