@@ -72,8 +72,12 @@ function parseTemplate(file, content) {
 
 let templates = [];
 let blankIssuesEnabled = true;
-if (tplDir && fs.existsSync(tplDir)) {
-  const files = fs.readdirSync(tplDir).sort();
+if (tplDir) {
+  let files = [];
+  try {
+    // ISSUE_TEMPLATE がディレクトリでない・読めない場合はテンプレート無し扱い(exit 0 を保つ)
+    files = fs.readdirSync(tplDir).sort();
+  } catch {}
   // 読めないエントリ(ディレクトリ・権限なし等)はスキップし、常に JSON 出力までたどり着く
   const read = (f) => {
     try {

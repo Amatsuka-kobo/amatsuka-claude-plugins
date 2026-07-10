@@ -186,3 +186,21 @@ test('読めないエントリ(ディレクトリ等)はスキップして exit 
   const out = runScript(dir);
   assert.deepEqual(out.templates.map((t) => t.file), ['bug.md']);
 });
+
+test('ISSUE_TEMPLATE がディレクトリでなくファイルでも exit 0 でテンプレート無し扱い', () => {
+  const dir = gitRepo('git@github.com:owner/repo.git');
+  fs.mkdirSync(path.join(dir, '.github'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.github', 'ISSUE_TEMPLATE'), 'not a directory');
+  const out = runScript(dir);
+  assert.deepEqual(out.templates, []);
+  assert.equal(out.blankIssuesEnabled, true);
+});
+
+test('複数テンプレートはファイル名昇順で返る', () => {
+  const dir = withTemplates({
+    'b_bug.md': '---\nname: Bug\n---\n',
+    'a_feature.yml': 'name: Feature\n',
+  });
+  const out = runScript(dir);
+  assert.deepEqual(out.templates.map((t) => t.file), ['a_feature.yml', 'b_bug.md']);
+});
