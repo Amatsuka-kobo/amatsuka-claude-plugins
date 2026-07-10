@@ -74,11 +74,22 @@ let templates = [];
 let blankIssuesEnabled = true;
 if (tplDir && fs.existsSync(tplDir)) {
   const files = fs.readdirSync(tplDir).sort();
+  // 読めないエントリ(ディレクトリ・権限なし等)はスキップし、常に JSON 出力までたどり着く
+  const read = (f) => {
+    try {
+      return fs.readFileSync(path.join(tplDir, f), 'utf8');
+    } catch {
+      return null;
+    }
+  };
   templates = files
     .filter((f) => /\.(md|ya?ml)$/.test(f) && f !== 'config.yml')
-    .map((f) => parseTemplate(f, fs.readFileSync(path.join(tplDir, f), 'utf8')));
-  if (files.includes('config.yml')) {
-    const config = parseTopLevel(fs.readFileSync(path.join(tplDir, 'config.yml'), 'utf8'));
+    .map((f) => ({ f, content: read(f) }))
+    .filter(({ content }) => content !== null)
+    .map(({ f, content }) => parseTemplate(f, content));
+  const configRaw = files.includes('config.yml') ? read('config.yml') : null;
+  if (configRaw !== null) {
+    const config = parseTopLevel(configRaw);
     if (config.blank_issues_enabled !== undefined) {
       blankIssuesEnabled = config.blank_issues_enabled !== 'false';
     }
