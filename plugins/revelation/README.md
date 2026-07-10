@@ -25,7 +25,7 @@ superpowers 等の詳細なプロセススキル(systematic-debugging、test-dri
 スキルの自発的な invoke に依存する pull 型の仕組みは、規律を最も必要とする下位モデルほど機能しない(実運用で「そもそも invoke しない」ことを確認済み)。このため `hooks/` に2層の補助を持つ:
 
 1. **SessionStart トリガー表注入** — セッション開始時に約10行のトリガー表(いつ・どのスキルを invoke するか)を注入する。チートシート全文は注入しない(スキル本体との二重管理と「読んだ気」の逆効果を避ける)。
-2. **PreToolUse リマインド** — 最初の Edit/Write の前に `fable-restraint`、最初の Agent/Task の前に `fable-subagents` が未読なら、1回だけ差し戻して invoke を促す。判定不能時はすべて素通し(フェイルオープン)。
+2. **PreToolUse リマインド** — 最初の Edit/Write の前に `fable-restraint`、最初の Agent/Task の前に `fable-subagents` が未読なら、1回だけ差し戻して読ませる。判定は行為者単位: サブエージェント発の呼び出しは本人の transcript(モデル・既読状態)で判定し、Skill ツールを持たない可能性があるため SKILL.md の Read で読ませる。本人が Fable の場合とスクリプト化済みの自前エージェントは素通し。判定不能時はすべて素通し(フェイルオープン)。
 
 設計の詳細と将来課題(モデル判別による出し分け等)は `docs/DESIGN.md` を参照。
 

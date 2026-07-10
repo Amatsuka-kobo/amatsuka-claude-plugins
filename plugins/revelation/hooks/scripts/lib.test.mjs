@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hasSkillInvocation, lastAssistantModel } from "./lib.mjs";
+import { hasSkillInvocation, hasSkillFileRead, lastAssistantModel, subagentTranscriptPath } from "./lib.mjs";
 
 function writeTranscript(lines) {
   const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rev-lib-")), "t.jsonl");
@@ -66,4 +66,37 @@ test("lastAssistantModel: 壊れた JSON 行はスキップする", () => {
 
 test("lastAssistantModel: transcript が存在しなければ throw", () => {
   assert.throws(() => lastAssistantModel("/nonexistent/t.jsonl"));
+});
+
+const readUse = (filePath) => ({
+  type: "assistant",
+  message: { content: [{ type: "tool_use", name: "Read", input: { file_path: filePath } }] },
+});
+
+test("hasSkillFileRead: 対応する SKILL.md への Read tool_use があれば true", () => {
+  const p = writeTranscript([readUse("/opt/plugins/revelation/skills/fable-restraint/SKILL.md")]);
+  assert.equal(hasSkillFileRead(p, "revelation:fable-restraint"), true);
+});
+
+test("hasSkillFileRead: 別スキルの SKILL.md への Read では false", () => {
+  const p = writeTranscript([readUse("/opt/plugins/revelation/skills/fable-subagents/SKILL.md")]);
+  assert.equal(hasSkillFileRead(p, "revelation:fable-restraint"), false);
+});
+
+test("hasSkillFileRead: テキスト中にパスが現れるだけでは false", () => {
+  const p = writeTranscript([
+    { type: "user", message: { content: [{ type: "text", text: 'Read せよ: skills/fable-restraint/SKILL.md ("name":"Read")' }] } },
+  ]);
+  assert.equal(hasSkillFileRead(p, "revelation:fable-restraint"), false);
+});
+
+test("hasSkillFileRead: transcript が存在しなければ throw", () => {
+  assert.throws(() => hasSkillFileRead("/nonexistent/t.jsonl", "revelation:fable-restraint"));
+});
+
+test("subagentTranscriptPath: メイン transcript と同じ階層の <session>/subagents/agent-<id>.jsonl を返す", () => {
+  assert.equal(
+    subagentTranscriptPath("/proj/dir/sess-1.jsonl", "sess-1", "abc123"),
+    "/proj/dir/sess-1/subagents/agent-abc123.jsonl",
+  );
 });

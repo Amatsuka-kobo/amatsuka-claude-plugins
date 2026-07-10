@@ -1,5 +1,5 @@
 {
   "name": "revelation",
   "description": "上位モデル(Fable 5)の仕事の進め方 — タスク分解・自己検証・次の一手の選び方 — を、より小さいモデルが再現できるスキルとして提供する",
-  "version": "1.0.1-dev"
+  "version": "1.1.0-dev"
 }

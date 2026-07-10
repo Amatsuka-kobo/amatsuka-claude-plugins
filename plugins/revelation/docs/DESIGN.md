@@ -51,18 +51,23 @@ pull 型(自発 invoke)→ 第1層(push)→ 第2層(enforcement)の三段構え�
 | `Edit\|Write` | `fable-restraint` | 最初のコード変更の直前に規律を読ませる |
 | `Agent\|Task` | `fable-subagents` | 最初のサブエージェント起動の直前に読ませる |
 
-- `remind-skill.mjs` は stdin のフック入力から `transcript_path` を取り、トランスクリプトを grep して該当スキルの invoke 履歴を確認する。
-- **未読なら** `permissionDecision: "deny"` +「先に `revelation:fable-restraint` を Skill ツールで invoke してから再試行せよ」という理由を返す。deny の理由はモデルにフィードバックされるため、下位モデルでも決定的に invoke へ誘導される。
-- **セッションごと・スキルごとに最大1回**だけ差し戻す。差し戻し時にセッション ID をキーとするマーカーファイル(OS の一時ディレクトリ配下)を置き、2回目以降は素通しにしてループを防ぐ。
-- 既読(invoke 履歴あり)なら素通し。
+- `remind-skill.mjs` は stdin のフック入力から**行為者本人**のトランスクリプトを特定し、該当スキルの既読履歴を確認する。サブエージェント発の呼び出しでは `transcript_path` が常にメインセッションを指す(実測)ため、入力の `agent_id` から本人の transcript(`<transcript の dir>/<session_id>/subagents/agent-<agent_id>.jsonl`)を引く。
+- **未読なら** `permissionDecision: "deny"` +「先に読んでから再試行せよ」という理由を返す。deny の理由はモデルにフィードバックされるため、下位モデルでも決定的に誘導される。誘導先は行為者により変える:
+  - メインセッション → Skill ツールで invoke(失敗時は Read で SKILL.md 直読みのフォールバックを案内)。
+  - サブエージェント → 最初から Read ツールで SKILL.md の絶対パスを読ませる(Skill ツールを持たないエージェントがあるため。スキルの実体は Markdown なので Read でも規律注入として等価)。
+- 「指示に従わずそのまま再試行してよい」とは**案内しない**。マーカーによる2回目素通しは詰み防止の安全網であって、文面で宣伝すると下位モデルが「スキルが見つからない」と称して安易に逃げる(実際に観測された)。
+- **行為者ごと・スキルごとに最大1回**だけ差し戻す。マーカーファイルのキーは `セッションID-agent_id(メインは "main")-スキル名`。エージェント単位にすることで、サブエージェントの差し戻しが親の枠を消費する相互汚染を防ぐ。
+- 既読(Skill invoke 履歴、または該当 SKILL.md への Read 履歴)なら素通し。
+- プロンプトが完全にスクリプト化された自前エージェント(`SKIP_AGENT_TYPES`、例: `task-utility:chat-recorder`)は素通し。行動の自由度が無く、差し戻しの往復コストに見合わないため。
 - `fable-method` は第2層では扱わない。「着手前」に対応する自然なツールゲートがないため、第1層のトリガー表に任せる。TodoWrite をゲートにする案は、TODO を書かないまま着手するケースを拾えないため過剰な複雑化と判断した。
 - codiel の `guard-*.mjs` と同じ command フック構造であり、リポジトリの既存パターンに沿う。
 
 ## 4. エラー処理・エッジケース
 
 - transcript が読めない・形式が想定外・マーカーファイルの書き込み失敗 → **素通し(フェイルオープン)**。規律の補助でユーザーの作業を止めない。
-- この規律の対象は Fable 未満のすべてのモデル(Opus を含む)。第2層(`remind-skill.mjs`)は transcript の assistant イベントの `message.model` から Fable セッションを判別し、Fable 自身のセッションでは差し戻しをスキップする(`lastAssistantModel`、`plugins/revelation/hooks/scripts/lib.mjs`)。第1層(SessionStart)は発火時点で assistant メッセージが存在せずコードでの判別ができないため、`trigger-map.md` 側の文言(「Fable として動作している場合はこの表に従う必要はない」)で対処する。
-- PreToolUse はサブエージェントのツール呼び出しにも効くため、第2層はサブエージェント内の無規律も部分的にカバーする。ただしサブエージェントの中には Skill ツールを持たないものもあり、その場合 deny メッセージの指示(Skill ツールで invoke してから再試行)には従えない。deny メッセージ末尾に「Skill ツールが使えない環境ではそのまま同じ操作を再試行すればよい(2回目は素通しされる)」旨を明記し、1回だけの差し戻しで詰まないようにしている。
+- この規律の対象は Fable 未満のすべてのモデル(Opus を含む)。第2層(`remind-skill.mjs`)は**行為者本人**の transcript の assistant イベントの `message.model` から Fable を判別し、本人が Fable なら差し戻しをスキップする(`lastAssistantModel`、`plugins/revelation/hooks/scripts/lib.mjs`)。Fable 親 + Sonnet サブエージェントの構成でも、Sonnet サブエージェントには正しく差し戻される。第1層(SessionStart)は発火時点で assistant メッセージが存在せずコードでの判別ができないため、`trigger-map.md` 側の文言(「Fable として動作している場合はこの表に従う必要はない」)で対処する。
+- PreToolUse はサブエージェントのツール呼び出しにも発火する(実測)。そのときフック入力の `session_id` / `transcript_path` はメインセッションのもので、`agent_id` / `agent_type` フィールドが追加される。本人の transcript は `subagentTranscriptPath` で導出する。このレイアウトは Claude Code の非公開の内部仕様のため、ファイルが存在しなければ**素通し(フェイルオープン)** — 将来レイアウトが変わっても「効かなくなる」だけで作業は止まらない。
+- deny された Task/Agent 呼び出しではサブエージェントは起動されず、transcript ファイルも作られない(実測)。deny の理由は呼び出し元(親)にツールエラーとして返る。
 - スラッシュコマンド等、Skill の `tool_use` 以外の経路でスキル内容を得た場合は `hasSkillInvocation` の既読判定に引っかからず、初回の Edit/Write/Task/Agent で1回 deny される。実害は小さく(2回目以降は素通し)、判定ロジックを複雑化させないためこの挙動を許容する。
 
 ## 5. 検証
