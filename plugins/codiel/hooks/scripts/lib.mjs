@@ -18,6 +18,12 @@ export function emit(decision, reason) {
   process.exit(0);
 }
 
+// 「意見なし」の素通し。permissionDecision: "allow" は許可システムをバイパスして
+// 自動実行になってしまうため、素通しでは何も出力せずに終了する。
+export function pass() {
+  process.exit(0);
+}
+
 export function globToRegExp(glob) {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
