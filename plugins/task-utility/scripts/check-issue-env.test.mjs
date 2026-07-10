@@ -97,3 +97,85 @@ test('gh があり認証済みなら両方 true', () => {
   assert.equal(out.ghInstalled, true);
   assert.equal(out.ghAuthenticated, true);
 });
+
+function withTemplates(files) {
+  const dir = gitRepo('git@github.com:owner/repo.git');
+  const tplDir = path.join(dir, '.github', 'ISSUE_TEMPLATE');
+  fs.mkdirSync(tplDir, { recursive: true });
+  for (const [name, content] of Object.entries(files)) {
+    fs.writeFileSync(path.join(tplDir, name), content);
+  }
+  return dir;
+}
+
+test('テンプレートが無ければ templates は空、blankIssuesEnabled は true', () => {
+  const out = runScript(gitRepo('git@github.com:owner/repo.git'));
+  assert.deepEqual(out.templates, []);
+  assert.equal(out.blankIssuesEnabled, true);
+});
+
+test('md テンプレートの frontmatter からトップレベルキーを抽出する', () => {
+  const dir = withTemplates({
+    'bug_report.md': [
+      '---',
+      'name: バグ報告',
+      'about: 動作不良の報告',
+      'title: "[Bug] "',
+      'labels: bug, help wanted',
+      '---',
+      '',
+      '## 再現手順',
+    ].join('\n'),
+  });
+  const out = runScript(dir);
+  assert.deepEqual(out.templates, [
+    {
+      file: 'bug_report.md',
+      name: 'バグ報告',
+      about: '動作不良の報告',
+      title: '[Bug] ',
+      labels: ['bug', 'help wanted'],
+    },
+  ]);
+});
+
+test('yml フォームは description を about に正規化し、複数行 labels も拾う', () => {
+  const dir = withTemplates({
+    'feature.yml': [
+      'name: 機能要望',
+      'description: 新機能の提案',
+      'labels:',
+      '  - enhancement',
+      '  - "needs triage"',
+      'body:',
+      '  - type: markdown',
+      '    attributes:',
+      '      value: 説明',
+    ].join('\n'),
+  });
+  const out = runScript(dir);
+  assert.equal(out.templates.length, 1);
+  assert.equal(out.templates[0].name, '機能要望');
+  assert.equal(out.templates[0].about, '新機能の提案');
+  assert.deepEqual(out.templates[0].labels, ['enhancement', 'needs triage']);
+});
+
+test('inline 配列の labels もパースでき、config.yml は templates に含めない', () => {
+  const dir = withTemplates({
+    'task.yml': 'name: タスク\nlabels: ["chore", "docs"]\n',
+    'config.yml': 'blank_issues_enabled: false\n',
+  });
+  const out = runScript(dir);
+  assert.deepEqual(out.templates.map((t) => t.file), ['task.yml']);
+  assert.deepEqual(out.templates[0].labels, ['chore', 'docs']);
+  assert.equal(out.blankIssuesEnabled, false);
+});
+
+test('サブディレクトリから実行してもリポジトリルートのテンプレートを検出する', () => {
+  const dir = withTemplates({ 'bug.md': '---\nname: Bug\n---\n' });
+  const sub = path.join(dir, 'src');
+  fs.mkdirSync(sub);
+  const out = runScript(sub);
+  assert.equal(out.templates.length, 1);
+  assert.equal(out.templates[0].name, 'Bug');
+});

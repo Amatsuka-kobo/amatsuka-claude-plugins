@@ -4,6 +4,8 @@
 // issue-craft スキル専用ではなく、Issue 系スキル共通の前提チェックとして使う。
 // 使い方: node check-issue-env.mjs [projectDir]
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const cwd = process.argv[2] ?? process.cwd();
 
@@ -25,4 +27,68 @@ const ghInstalled = spawnSync('gh', ['--version'], { encoding: 'utf8' }).status 
 const ghAuthenticated =
   ghInstalled && spawnSync('gh', ['auth', 'status'], { encoding: 'utf8' }).status === 0;
 
-console.log(JSON.stringify({ isGitRepo, remoteUrl, repoSlug, ghInstalled, ghAuthenticated }, null, 2));
+// テンプレートはリポジトリルート直下の .github/ISSUE_TEMPLATE/ から検出する
+const repoRoot = isGitRepo ? git('rev-parse', '--show-toplevel') : null;
+const tplDir = repoRoot ? path.join(repoRoot, '.github', 'ISSUE_TEMPLATE') : null;
+
+const unquote = (v) => v.replace(/^(["'])(.*)\1$/, '$2');
+
+// YAML パーサは使わず、トップレベル(行頭・インデント無し)のキーのみ簡易抽出する。
+// labels は inline 配列・カンマ区切り・直後の「- item」複数行リストの3形式に対応
+function parseTopLevel(src) {
+  const top = {};
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (!m) continue;
+    let value = m[2].trim();
+    if (!value) {
+      const items = [];
+      while (i + 1 < lines.length && /^\s+-\s+/.test(lines[i + 1])) {
+        items.push(lines[++i].replace(/^\s+-\s+/, '').trim());
+      }
+      value = items.join(',');
+    }
+    top[m[1]] = value;
+  }
+  return top;
+}
+
+function parseTemplate(file, content) {
+  let src = content;
+  if (file.endsWith('.md')) {
+    src = content.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
+  }
+  const top = parseTopLevel(src);
+  const labelsRaw = top.labels?.match(/^\[(.*)\]$/)?.[1] ?? top.labels ?? '';
+  return {
+    file,
+    name: unquote(top.name ?? ''),
+    about: unquote(top.description ?? top.about ?? ''),
+    title: unquote(top.title ?? ''),
+    labels: labelsRaw.split(',').map((s) => unquote(s.trim())).filter(Boolean),
+  };
+}
+
+let templates = [];
+let blankIssuesEnabled = true;
+if (tplDir && fs.existsSync(tplDir)) {
+  const files = fs.readdirSync(tplDir).sort();
+  templates = files
+    .filter((f) => /\.(md|ya?ml)$/.test(f) && f !== 'config.yml')
+    .map((f) => parseTemplate(f, fs.readFileSync(path.join(tplDir, f), 'utf8')));
+  if (files.includes('config.yml')) {
+    const config = parseTopLevel(fs.readFileSync(path.join(tplDir, 'config.yml'), 'utf8'));
+    if (config.blank_issues_enabled !== undefined) {
+      blankIssuesEnabled = config.blank_issues_enabled !== 'false';
+    }
+  }
+}
+
+console.log(
+  JSON.stringify(
+    { isGitRepo, remoteUrl, repoSlug, ghInstalled, ghAuthenticated, templates, blankIssuesEnabled },
+    null,
+    2,
+  ),
+);
