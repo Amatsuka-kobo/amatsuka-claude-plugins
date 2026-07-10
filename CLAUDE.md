@@ -6,11 +6,11 @@
 
 あまつか工房産 Claude Code プラグインの Marketplace(`.claude-plugin/marketplace.json` + `plugins/*`)。各プラグインの詳細はそれぞれの README/DESIGN を参照。
 
-| プラグイン | 役割 |
-| --- | --- |
-| `plugins/codiel` | GitHub issue から設計・実装・PR・レビューまでを一気通貫で行うオーケストレーター(+ `raguel-mcp`: 成果物を検査する MCP サーバー) |
-| `plugins/revelation` | 上位モデル(Fable5)の振る舞いを下位モデルに再現させるスキル群 |
-| `plugins/task-utility` | タスク進行を支援するユーティリティスキル群 |
+| プラグイン             | 役割                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `plugins/codiel`       | GitHub issue から設計・実装・PR・レビューまでを一気通貫で行うオーケストレーター(+ `raguel-mcp`: 成果物を検査する MCP サーバー) |
+| `plugins/revelation`   | 上位モデル(Fable5)の振る舞いを下位モデルに再現させるスキル群                                                                   |
+| `plugins/task-utility` | タスク進行を支援するユーティリティスキル群                                                                                     |
 
 # Codiel/Raguel の制約(重要)
 
@@ -20,7 +20,12 @@ Codiel と raguel-mcp は **Anthropic API を使用できないユーザーも�
 
 ルートに統一 package.json は無く、ツールチェーンはディレクトリごとに分散している。
 
-| 対象 | コマンド |
-| --- | --- |
-| raguel-mcp(ビルド/テスト/型) | `cd plugins/codiel/raguel-mcp && pnpm build` / `pnpm test`(vitest) / `pnpm typecheck` |
-| スクリプト系テスト | `node --test plugins/codiel/scripts/*.test.mjs plugins/task-utility/scripts/*.test.mjs plugins/revelation/hooks/scripts/*.test.mjs` |
+| 対象                         | コマンド                                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| raguel-mcp(ビルド/テスト/型) | `cd plugins/codiel/raguel-mcp && pnpm build` / `pnpm test`(vitest) / `pnpm typecheck`                                               |
+| スクリプト系テスト           | `node --test plugins/codiel/scripts/*.test.mjs plugins/task-utility/scripts/*.test.mjs plugins/revelation/hooks/scripts/*.test.mjs` |
+
+# プラグインのアップデート
+
+プラグインの改修を行った場合、その内容の大きさに応じて `.claude-plugins/plugin.json` のバージョンを上げるようにしてください。
+ただし自動で行うのはマイナーバージョン(n1.n2.n3 / alpha.n4 の n2以降)のアップデートのみで、変更の多さからメジャーバージョン(n1)を上げる判断をした場合は、人間に必ず確認するようにしてください。
