@@ -7,7 +7,7 @@ description: Codiel の triage フェーズでオーケストレーター本体�
 
 ## 概要
 
-`orchestrating-runs` の [8] triage フェーズで**オーケストレーター自身**が使うスキルである。
+`orchestrating-runs` の [9] triage フェーズで**オーケストレーター自身**が使うスキルである。
 `fixing-review-findings` と同様にオーケストレーターの進行規約であり、サブエージェントへの
 ディスパッチは発生しない(起票作業そのものをオーケストレーターが行う)。
 

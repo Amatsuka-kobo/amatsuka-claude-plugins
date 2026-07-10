@@ -29,7 +29,7 @@ fix-loop の再レビューでは、上記に加えて `fixing-review-findings` 
 reviewer は**所見をテキストで返すだけ**で、ファイルには一切書かない(Write を持たない)。
 所見の統合(`reports/review-<n>.md` への記録)と PR への投稿(`gh pr review --comment` /
 `gh api` での行コメント)は**オーケストレーターの職務**であり、reviewer 自身は行わない
-(`orchestrating-runs` §2 フェーズ進行表 [6] review 参照)。
+(`orchestrating-runs` §2 フェーズ進行表 [7] review 参照)。
 
 ## チェックリスト
 
