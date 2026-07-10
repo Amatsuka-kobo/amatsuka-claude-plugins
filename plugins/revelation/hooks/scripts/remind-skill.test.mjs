@@ -19,12 +19,13 @@ function setup() {
 
 // stdout が空(= permissionDecision 出力なし、素通し)なら null を返す。
 // deny など出力がある場合は hookSpecificOutput を返す。
-function hook(ctx, toolName, transcriptPath) {
+function hook(ctx, toolName, transcriptPath, extra = {}) {
   const input = JSON.stringify({
     session_id: ctx.session,
     tool_name: toolName,
     transcript_path: transcriptPath ?? ctx.transcript,
     cwd: os.tmpdir(),
+    ...extra,
   });
   const out = execFileSync("node", [HOOK], {
     input,
@@ -123,4 +124,90 @@ test("Opus セッションは対象のまま(従来どおり deny)", () => {
   const r = hook(ctx, "Edit");
   assert.equal(r.permissionDecision, "deny");
   assert.match(r.permissionDecisionReason, /revelation:fable-restraint/);
+});
+
+test("親向け deny 文面: 「そのまま再試行してよい」の救済文を含まず、Skill 失敗時の Read フォールバックを含む", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, "\n");
+  const r = hook(ctx, "Edit");
+  assert.equal(r.permissionDecision, "deny");
+  assert.doesNotMatch(r.permissionDecisionReason, /そのまま同じ操作を再試行/);
+  assert.match(r.permissionDecisionReason, /Read ツール/);
+  assert.match(r.permissionDecisionReason, /skills\/fable-restraint\/SKILL\.md/);
+});
+
+// --- サブエージェント発の呼び出し(agent_id / agent_type あり) ---
+
+// メイン transcript の隣に <session>/subagents/agent-<id>.jsonl を作る
+function writeSubTranscript(ctx, agentId, lines) {
+  const p = path.join(path.dirname(ctx.transcript), ctx.session, "subagents", `agent-${agentId}.jsonl`);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, lines.join("\n") + "\n");
+  return p;
+}
+
+test("サブエージェント発: 本人のモデルで判定し deny、文面は SKILL.md への Read を指示する", () => {
+  const ctx = setup();
+  // 親は Fable でも、サブエージェント本人が Sonnet なら差し戻す
+  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-fable-5") + "\n");
+  writeSubTranscript(ctx, "sub1", [assistantModelLine("claude-sonnet-5")]);
+  const r = hook(ctx, "Write", null, { agent_id: "sub1", agent_type: "general-purpose" });
+  assert.equal(r.permissionDecision, "deny");
+  assert.match(r.permissionDecisionReason, /Read ツール/);
+  assert.match(r.permissionDecisionReason, /skills\/fable-restraint\/SKILL\.md/);
+});
+
+test("サブエージェント発: 本人が Fable なら親が Sonnet でも素通し", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-sonnet-5") + "\n");
+  writeSubTranscript(ctx, "sub1", [assistantModelLine("claude-fable-5")]);
+  assert.equal(hook(ctx, "Write", null, { agent_id: "sub1", agent_type: "general-purpose" }), null);
+});
+
+test("サブエージェント発: 本人が対応スキルを invoke 済みなら素通し", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, "\n");
+  writeSubTranscript(ctx, "sub1", [
+    assistantModelLine("claude-sonnet-5"),
+    skillUseLine("revelation:fable-restraint"),
+  ]);
+  assert.equal(hook(ctx, "Edit", null, { agent_id: "sub1", agent_type: "general-purpose" }), null);
+});
+
+test("サブエージェント発: 本人が SKILL.md を Read 済みなら素通し", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, "\n");
+  const readLine = JSON.stringify({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/any/where/skills/fable-restraint/SKILL.md" } }] },
+  });
+  writeSubTranscript(ctx, "sub1", [assistantModelLine("claude-sonnet-5"), readLine]);
+  assert.equal(hook(ctx, "Edit", null, { agent_id: "sub1", agent_type: "general-purpose" }), null);
+});
+
+test("サブエージェント発: 本人の transcript が見つからなければ素通し(内部レイアウト変更へのフェイルオープン)", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, "\n");
+  assert.equal(hook(ctx, "Edit", null, { agent_id: "ghost", agent_type: "general-purpose" }), null);
+});
+
+test("マーカーはエージェント単位: サブエージェントの deny が親の差し戻し枠を消費しない", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, "\n");
+  writeSubTranscript(ctx, "sub1", [assistantModelLine("claude-sonnet-5")]);
+  // サブエージェントが先に deny を受けても…
+  assert.equal(hook(ctx, "Edit", null, { agent_id: "sub1", agent_type: "general-purpose" }).permissionDecision, "deny");
+  // 親の初回 Edit は依然として deny される(相互汚染なし)
+  assert.equal(hook(ctx, "Edit").permissionDecision, "deny");
+  // それぞれ2回目は素通し
+  assert.equal(hook(ctx, "Edit", null, { agent_id: "sub1", agent_type: "general-purpose" }), null);
+  assert.equal(hook(ctx, "Edit"), null);
+});
+
+test("スクリプト化された自前エージェント(task-utility:chat-recorder)は素通し(マーカーも作られない)", () => {
+  const ctx = setup();
+  fs.writeFileSync(ctx.transcript, "\n");
+  writeSubTranscript(ctx, "rec1", [assistantModelLine("claude-haiku-4-5-20251001")]);
+  assert.equal(hook(ctx, "Write", null, { agent_id: "rec1", agent_type: "task-utility:chat-recorder" }), null);
+  assert.equal(fs.existsSync(ctx.stateDir), false);
 });
