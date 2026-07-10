@@ -2,8 +2,8 @@
 
 - 日付: 2026-07-10
 - 参加者: phyllis998, AI (Claude Fable 5)
-- 成果物: `docs/superpowers/specs/2026-07-10-task-utility-issue-craft-design.md`(コミット `3eab5cf`)、`docs/superpowers/plans/2026-07-10-task-utility-issue-craft.md`(コミット `a3566d8`)
-- 前提: `/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins/CLAUDE.md`、`plugins/task-utility/` 配下の既存構成
+- 成果物: `plugins/task-utility/skills/issue-craft/SKILL.md`、`plugins/task-utility/scripts/check-issue-env.{mjs,test.mjs}`(テスト17本)、README・plugin.json 1.1.0-dev。コミット `2fa6970`, `6d6ff45`, `3ee2e3a`, `84e3385`, `5ee55c8`, `8869e7f`, `cb17f55`, `6f7116c`。main を 6f7116c へ ff マージ済み
+- 前提: `/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins/CLAUDE.md`、`plugins/task-utility/` 配下の既存構成、設計書 `docs/superpowers/specs/2026-07-10-task-utility-issue-craft-design.md` (コミット `3eab5cf`)、実装計画 `docs/superpowers/plans/2026-07-10-task-utility-issue-craft.md` (コミット `a3566d8`)
 
 ---
 
@@ -157,4 +157,57 @@ task-utility プラグインの構造と既存スキル( `chat` など)を確認
 
 ---
 
-注意事項: セッション4 で Task 1 の実装・レビュー・フィックス を完了。再レビュー結果待ちで、Task 2 以降の実装は再レビュー承認後に進める予定。Task 1 の失敗経緯(仕様違反の正規表現 + docs/chat 未コミット変更の混入)は設計フェーズでは検出できなかった実装特性に基づくもので、TDD + サブエージェント駆動を通じて早期検出・修正できた。
+## セッション5: Task 2〜5 と最終レビュー・マージ完了
+
+# AI
+
+セッション4 で Task 1 のフィックス再レビューをバックグラウンド実行中だった。以下のように続行した。
+
+**Task 1 再レビュー承認**: フィックスコミット `6d6ff45` に対する Sonnet 再レビューが完了。Haiku フィックス者が repoSlug 正規表現を修正・テスト追加した内容について、レビュアーが修正確認と回帰テストを独立実行。結果は Critical/Important なし、指摘なく承認。
+
+**Task 2 実装(gh 検出)**：フィックス承認を受けて Task 2(gh インストール・認証判定)を Haiku 実装者へディスパッチ。TDD で偽 `gh` ファイル + PATH 制御による実機非依存テスト実装。テスト8件すべて通過、コミット `3ee2e3a`。レビュアーによる検査で指摘なく一発承認。
+
+**並行セッションのコミット混在に気づく**: Task 2 レビューパッケージ作成時に、想定外のコミット `42bba75 docs(codiel): discuss フェーズ導入の設計書` が ブランチに混在していることを検出。ユーザーの並行セッション(codiel 関連の設計)が同一ブランチ上で並行実行されていた状況を確認。Task 2 レビュー範囲を task-utility に限定(コミット `3ee2e3a` のみ)するよう修正し、codiel コミット群は巻き込まず。
+
+**Task 3 実装(テンプレート検出)**: `check-issue-env.mjs` の Issue テンプレート検出と `.github/ISSUE_TEMPLATE/config.yml` 解析機能を実装。md/yml 混在、複数行 labels、サブディレクトリ実行対応。テスト13件で計画を上回る実装。コミット `84e3385`。
+
+**Task 3 レビュー - Important 1件検出**: Sonnet レビュアーが以下の実バグを検出：
+- readFileSync による読取が例外を投げるが、事前検証が ISSUE_TEMPLATE ディレクトリが存在する場合だけで、ディレクトリ内のファイル読取失敗やパス配下のディレクトリ存在を無防備。テンプレート候補がファイルではなくディレクトリだった場合 ENOTDIR で落ちる。計画の「読取失敗スキップ」実装が不完全。
+
+**Task 3 フィックス**: 読取失敗時に例外をキャッチしてスキップするようラップ。回帰テストとして「テンプレート候補がディレクトリだった場合」を追加。修正後テスト14件すべて通過、コミット `5ee55c8`。
+
+**Task 3 再レビュー承認**: フィックスコミット `5ee55c8` に対する Sonnet 再レビューで Critical/Important なし、指摘なく承認。読取例外防御とテストカバレッジを確認。
+
+**Task 4 実装(SKILL.md)**: issue-craft スキルの本体 SKILL.md を作成。セッション1・2の設計書に基づき、6段階フロー(環境チェック→操作手段決定→テンプレート/言語確認→ブレストーミング→ドラフト提示→起票)、複数起票モード、Issue 間相互参照、言語厳守ルール、エラー処理を全文記載。コミット `8869e7f`。
+
+**Task 4 レビュー - brief と一字一句確認**: Sonnet レビュアーが計画の SKILL.md 全文と実装を一字一句対照。相違なく、計画通りの実装を確認。指摘なく承認。
+
+**Task 5 実装(README・バージョンアップ)**: `plugins/task-utility/README.md` に issue-craft セクションを追記。`plugins/task-utility/.claude-plugins/plugin.json` のバージョンを 1.0.1-dev から 1.1.0-dev へ更新。全プラグイン script テスト実行(`node --test`)で環境チェックと SKILL 仕様の整合性確認。テスト32件すべて通過、コミット `cb17f55`。
+
+**Task 5 レビュー - 独立テスト実行確認**: Sonnet レビュアーが 32/32 pass を独立環境で確認。マージ前の全テスト実行による品質保証確認。指摘なく承認。
+
+**最終ブランチレビュー(Opus 上位モデル)**: ブランチ全体( `feat/task-utility-issue-craft` @ `6f7116c` vs main @ `0ebd8f8` )の差分をコードレビュー。以下を検出：
+
+- **Critical / Important**: なし
+- **Minor 2件**: 
+  1. `.github/ISSUE_TEMPLATE` がディレクトリではなく単一ファイルの場合の ENOTDIR エラー経路未テスト → テストケース追加を提案
+  2. `templates` 配列の順序(ファイルシステムのソート順 vs 定義順)がテストで検証されていない → ソート順テスト追加を提案
+
+指摘内容を実装に反映することを指定。
+
+**最終フィックス**: Opus の Minor 2件の提案を実装に取り込む。ISSUE_TEMPLATE ファイルの ENOTDIR テスト、templates 配列のソート順テスト追加。修正後テスト17件すべて通過、コミット `6f7116c`。
+
+**最終再確認(Opus)**: `6f7116c` に対して再確認。17/17 pass を独立実行で検証。以下を確定：
+- "Ready to merge = Yes"
+- 計画との相違なし
+- テストカバレッジ十分
+
+**マージ決定と実行**: Opus の「Ready to merge」確認を受けて、ユーザーが「main へマージ」を明示選択。全体テスト実行(`node --test` 全プラグイン)で97/97 pass 確認。その後、並行セッションが checkout 中のため分岐切替不可の状況を踏まえ、`git branch -f main 6f7116c` で main を ff。
+
+**マージ状況**: ブランチ `feat/task-utility-issue-craft` @ `6f7116c` を main へ ff マージ完了。ただし、並行セッション(codiel)のコミット `34d75c4` はブランチに残置され、ブランチ削除も行わず。残課題として記録。
+
+Test 17 件(check-issue-env)と全体テスト 97 件の計114件を実行。Issue Template ENOTDIR・ソート順を含む最終修正により、実運用での edge case カバレッジも確保。
+
+---
+
+注意事項: セッション5 で Task 2～5 全体レビュー・最終フィックス・マージまでを完了。並行セッション(codiel)のコミット混在により、レビュー・マージ範囲の調整が必要だったが、タスク境界を厳密に保つことで対応。残課題は2件：(1) issue-craft スキルの実機確認(リアルの GitHub Issue 起票テスト)、(2) 並行セッション終了後のブランチ後始末(コミット 34d75c4 の整理、ブランチ削除)。
