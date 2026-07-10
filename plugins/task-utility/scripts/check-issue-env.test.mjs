@@ -59,3 +59,8 @@ test('GitHub 以外のリモートでは repoSlug が null', () => {
   assert.equal(out.remoteUrl, 'git@gitlab.com:owner/repo.git');
   assert.equal(out.repoSlug, null);
 });
+
+test('github.com を含むだけの別ホストでは repoSlug が null', () => {
+  assert.equal(runScript(gitRepo('git@notgithub.com:owner/repo.git')).repoSlug, null);
+  assert.equal(runScript(gitRepo('https://mygithub.com/owner/repo')).repoSlug, null);
+});

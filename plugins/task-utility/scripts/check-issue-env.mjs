@@ -15,7 +15,9 @@ function git(...args) {
 const isGitRepo = git('rev-parse', '--is-inside-work-tree') === 'true';
 const remoteUrl = isGitRepo ? git('remote', 'get-url', 'origin') : null;
 
-// SSH (git@github.com:owner/repo.git) と HTTPS (https://github.com/owner/repo) の両形式に対応
-const repoSlug = remoteUrl?.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1] ?? null;
+// SSH (git@github.com:owner/repo.git) と HTTPS (https://github.com/owner/repo) の両形式に対応。
+// ホスト名は github.com 完全一致(notgithub.com 等の部分一致を弾く)
+const repoSlug =
+  remoteUrl?.match(/^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/)?.[1] ?? null;
 
 console.log(JSON.stringify({ isGitRepo, remoteUrl, repoSlug }, null, 2));
