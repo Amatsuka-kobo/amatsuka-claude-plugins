@@ -37,6 +37,8 @@ function setupRunAtImplement() {
   const passGate = (phase) =>
     cli(root, ["pass-gate", phase, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
   passGate("init");
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   for (const ph of ["design", "test-spec", "dev-plan"]) {
     cli(root, ["start-phase", ph, "--issue", "1"]);
     passGate(ph);
@@ -144,6 +146,8 @@ test("subagent-stop: run active で phase=design かつ design.md が無い → 
   cli(root, ["init", "--issue", "1"]);
   cli(root, ["start-phase", "init", "--issue", "1"]);
   cli(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   cli(root, ["start-phase", "design", "--issue", "1"]);
 
   const result = callHook(SUBAGENT_STOP, root);
@@ -177,6 +181,8 @@ function setupRunAtParallelStages() {
   const passGate = (phase) =>
     cli(root, ["pass-gate", phase, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
   passGate("init");
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   cli(root, ["start-phase", "design", "--issue", "1"]);
   passGate("design");
   return root;
