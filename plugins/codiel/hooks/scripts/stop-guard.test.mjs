@@ -37,6 +37,8 @@ function setupRunAtImplement() {
   const passGate = (phase) =>
     cli(root, ["pass-gate", phase, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
   passGate("init");
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   for (const ph of ["design", "test-spec", "dev-plan"]) {
     cli(root, ["start-phase", ph, "--issue", "1"]);
     passGate(ph);
@@ -144,6 +146,8 @@ test("subagent-stop: run active で phase=design かつ design.md が無い → 
   cli(root, ["init", "--issue", "1"]);
   cli(root, ["start-phase", "init", "--issue", "1"]);
   cli(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   cli(root, ["start-phase", "design", "--issue", "1"]);
 
   const result = callHook(SUBAGENT_STOP, root);
@@ -177,6 +181,8 @@ function setupRunAtParallelStages() {
   const passGate = (phase) =>
     cli(root, ["pass-gate", phase, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
   passGate("init");
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   cli(root, ["start-phase", "design", "--issue", "1"]);
   passGate("design");
   return root;
@@ -201,4 +207,31 @@ test("subagent-stop: dev-plan のみ in_progress(test-spec は passed 済み)で
   const parsed = JSON.parse(result.stdout);
   assert.equal(parsed.decision, "block");
   assert.match(parsed.reason, /dev-plan\.md/);
+});
+
+test("subagent-stop: run active で phase=discuss かつ agenda.md が無い → {decision:block}", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-stop-"));
+  cli(root, ["init", "--issue", "1"]);
+  cli(root, ["start-phase", "init", "--issue", "1"]);
+  cli(root, ["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+
+  const result1 = callHook(SUBAGENT_STOP, root);
+  assert.equal(result1.exitCode, 0);
+  const parsed = JSON.parse(result1.stdout);
+  assert.equal(parsed.decision, "block");
+  assert.match(parsed.reason, /agenda\.md/);
+
+  const agendaFile = path.join(root, ".codiel/runs/issue-1/try-1/agenda.md");
+  fs.writeFileSync(agendaFile, "# agenda\n");
+  const result2 = callHook(SUBAGENT_STOP, root);
+  assert.equal(result2.exitCode, 0);
+  assert.equal(result2.stdout.trim(), "");
+});
+
+test("stop-guard: ブロック文言が discuss の回答待ち停止を正当な停止として案内する", () => {
+  const root = setupRunAtInit();
+  const result = callHook(STOP_GUARD, root);
+  const parsed = JSON.parse(result.stdout);
+  assert.match(parsed.reason, /discuss/);
 });

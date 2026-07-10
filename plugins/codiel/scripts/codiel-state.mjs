@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const STAGES = [["init"],["design"],["test-spec","dev-plan"],["implement"],
+export const STAGES = [["init"],["discuss"],["design"],["test-spec","dev-plan"],["implement"],
   ["test-loop"],["pr"],["review"],["fix-loop"],["triage"],["finalize"]];
 export const PHASES = STAGES.flat();
 export const GATED = new Set(["init","design","test-spec","dev-plan","implement","test-loop","fix-loop"]);

@@ -8,7 +8,9 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 
 - スキルの記述様式は superpowers を模倣する(チェックリスト・プロセスフローチャート・Red Flags 表・HARD-GATE)。
   ただし superpowers への依存はなく、プラグインとして自己完結する。
-- 人間の固定承認ポイントは設けない。**人間が介入するのは Raguel が ASK / STOP を出したときのみ**。
+- **設計工程は人間と共同で行う**: discuss フェーズ(論点の合意)・design ウォークスルー
+  (設計書の確認)・triage(起票指示)が常設の人間参加ポイント。それ以外のフェーズに固定
+  承認ポイントはなく、人間が介入するのは Raguel が ASK / STOP を出したときのみ。
 - **Claude Code 上で完結するプラグインである**(下記「実行環境の制約」)。
 
 ## 0. 実行環境の制約(最重要)
@@ -32,7 +34,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 |---|---|
 | 実行環境 | Claude Code 上で完結。Anthropic API 不使用・Python 等の追加ランタイム不使用・ユーザーへの CLI 操作要求なし(§0) |
 | superpowers の扱い | スタイルのみ模倣。依存しない自前スキル群 |
-| 人間の承認ゲート | Raguel の ASK / STOP のみ。PROCEED が続く限り完全自律。例外は triage フェーズ(§2 [8])で、medium 以下のレビュー指摘の起票は要件上ユーザーの指示で行う |
+| 人間の承認ゲート | discuss フェーズ・design ウォークスルー・triage は常設の人間参加ポイント。それ以外は Raguel の ASK / STOP のみで、PROCEED が続く限り自律 |
 | 成果物の置き場 | 対象プロジェクトの `.codiel/` 配下。feature ブランチにコミットする |
 | コマンド構成 | `/codiel:run <issue番号>`(オーケストレーター)+ `/codiel:test`(単独テスト実行)。state による再開機能 |
 | 実行モデル | メインセッション=オーケストレーター。各フェーズは専用サブエージェント(fresh コンテキスト・ツール制限付き)が実行 |
@@ -44,6 +46,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | runId / 再挑戦 | runId は `issue-123` 形式。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 Issue の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
 | 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
+| 設計ディスカッション | 常に実施・アジェンダ駆動型(論点抽出=architect、進行と記録=オーケストレーター、決定=ユーザー)。discuss は非 GATED、ウォークスルーは design フェーズ内。詳細は `docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md` |
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
 
@@ -55,22 +58,31 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
                 → feature ブランチ作成 → .codiel/runs/<runId>/ 初期化
                 ▶ Raguel: evaluate_decision(「この解釈・スコープで進む」という判断)
    ▼
-[1] design      設計書 design.md を執筆。影響を受ける機能単位(画面・API・データモデル)を列挙
+[1] discuss     architect が論点リスト agenda.md を作成(選択肢・トレードオフ・推奨案。
+                issue.md の不明点は全件論点化)→ オーケストレーターがユーザーと
+                ディスカッション(「すべて推奨案で進める」ショートカットあり)
+                → 合意を discussion.md に記録し、ユーザーの最終確認を経て完了
+                ▶ Raguel ゲートなし(人間が直接参加するフェーズ。合意の検査は
+                  後続の evaluate_design が design.md との整合として担う)
+   ▼
+[2] design      設計書 design.md を執筆。影響を受ける機能単位(画面・API・データモデル)を列挙
+                執筆後、オーケストレーターが design.md の要点をユーザーに提示するウォークスルーを行い、
+                修正要望があれば architect を再ディスパッチ。ユーザー承認後に evaluate_design。
                 ▶ Raguel: evaluate_design
    ▼
-[2] test-spec ∥ dev-plan   並列実行:
+[3] test-spec ∥ dev-plan   並列実行:
                 (a) test-spec: 影響を受ける機能単位ごとにテスト仕様書を新規作成 or 更新し、
                     続けてテストケースを(再)生成(§4 テスト資産モデル)
                 (b) dev-plan: 開発手順書を作成。各ステップにドメイン(frontend/backend/data)をタグ付け
                 ▶ Raguel: evaluate_plan ×2(それぞれ独立にゲート)
    ▼
-[3] implement   開発手順書に従い TDD で実装。ステップのドメインタグに応じて
+[4] implement   開発手順書に従い TDD で実装。ステップのドメインタグに応じて
                 frontend / backend / data の implementer にディスパッチ。
                 ユニットテストは ARCHITECTURE.md のテスト方針宣言に従い implementer が作成する
                 (仕様書駆動の E2E テストとは別レイヤー)
                 ▶ Raguel: evaluate_code(diff + testResults)
    ▼
-[4] test-loop   二段構え(§5 test-loop の詳細):
+[5] test-loop   二段構え(§5 test-loop の詳細):
                 (A) スクリプト安定化: テストケースを実行するスクリプトを作成し、
                     正常終了(全ケースが OK/NG の判定を出す)まで何度でもスクリプトを修正
                 (B) TDD 修正: スクリプトが正常に回るようになって初めて、NG=バグとして
@@ -79,14 +91,14 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
                 ▶ Raguel: コード修正・テストスクリプト修正の度に evaluate_code
                   (同一 runId のため resubmission-loop 検知が効く)
    ▼
-[5] pr          PR 作成(設計書・テスト仕様書・テストケース込みの diff)
+[6] pr          PR 作成(設計書・テスト仕様書・テストケース込みの diff)
                 ▶ hooks が「テスト green + code PROCEED」を state で検証してから許可
    ▼
-[6] review      diff のドメインに応じたレビューアー(frontend/backend/data)
+[7] review      diff のドメインに応じたレビューアー(frontend/backend/data)
                 + 常時参加のレビューアー(doc/security)を並列ディスパッチ。
                 所見を統合し PR コメントに投稿(severity: critical / high / medium / low)
    ▼
-[7] fix-loop    critical & high を該当ドメインの implementer が修正 → 回帰テスト再実行
+[8] fix-loop    critical & high を該当ドメインの implementer が修正 → 回帰テスト再実行
                 → 再レビュー → critical/high ゼロ & テスト合格まで反復(試行上限あり)
                 medium 以下の指摘は修正せず triage へ持ち越す
                 レビューで critical/high がゼロなら fix-loop は開始せず
@@ -94,7 +106,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
                 (verdict は "SKIPPED" として監査記録に残る。未開始=pending のときのみ可)
                 ▶ Raguel: 修正毎に evaluate_code
    ▼
-[8] triage      medium / low の指摘を一覧化してユーザーに提示し、指示を待つ
+[9] triage      medium / low の指摘を一覧化してユーザーに提示し、指示を待つ
                 (state 機構上は phases.triage が in_progress のまま。非 GATED フェーズのため
                 mark-ask は使わず、「回答が来るまで進まない」運転で待機する)。
                 **ユーザーの指示のもと**、起票対象に選ばれた指摘を gh issue create で
@@ -105,7 +117,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
                 ▶ Raguel ゲートなし(人間が直接指示するフェーズのため)。
                   ただし gh issue create は hooks により triage フェーズ以外では実行不可(§8)
    ▼
-[9] finalize    結果レポートを出力し、state を awaiting_outcome にして終了。
+[10] finalize   結果レポートを出力し、state を awaiting_outcome にして終了。
                 以後の codiel コマンド起動時に PR 状態を自動検知して record_outcome を呼び、
                 Raguel に判例を還流する(下記「outcome の自動同期」)
 ```
@@ -150,6 +162,8 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
     try-<n>/                # 同一 Issue の挑戦毎のフォルダ(再挑戦で try-2, try-3, …)
       state.json            # フェーズ進捗・ゲート記録・試行カウンタ(直接編集は hooks で禁止)
       issue.md              # Issue スナップショット + 分析結果(要件・受け入れ基準・スコープ/非スコープ)
+      agenda.md             # ディスカッション論点リスト(選択肢・トレードオフ・推奨案)
+      discussion.md         # ユーザーとの合意記録(論点毎の決定・理由・却下案)
       design.md             # 設計書(影響を受ける機能単位の列挙を含む)
       dev-plan.md           # 開発手順書(ステップ毎にドメインタグ)
       reports/
@@ -270,12 +284,14 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 |---|---|
 | `orchestrating-runs` | `/codiel:run` の本体プロセス。state 駆動のフェーズ進行、サブエージェントのディスパッチ規約(担当スキル名・入出力パス・ARCHITECTURE/GOTCHAS 参照を必ず含める・ドメインタグによる implementer/reviewer の選択)、再開手順、ループ上限管理。HARD-GATE:「オーケストレーターは自分で実装・レビューしない」「Raguel ゲートを省略して遷移しない」 |
 | `raguel-gating` | Raguel 呼び出し規約。フェーズ→evaluate ツールの対応、objective の書き方、verdict 別ハンドリング、findings の次フェーズへの引き継ぎ、record_outcome の運用(承認・却下・incident)。Red Flags:「PROCEED 確実だからスキップ」「前回 PROCEED だったから今回も不要」等 |
+| `facilitating-design-discussions` | discuss フェーズの進行規約。論点の提示順序、AskUserQuestion と自由議論の使い分け、「すべて推奨案で進める」ショートカット、discussion.md の記録書式、design フェーズの設計ウォークスルー手順。HARD-GATE:「合意の捏造禁止」「アジェンダの改変禁止」 |
 
 ### フェーズ用(各サブエージェントが読む)
 
 | スキル | 模倣元 | 内容 |
 |---|---|---|
 | `analyzing-issues` | brainstorming(要件探索部) | Issue から要件・受け入れ基準・スコープ・非スコープを抽出し issue.md に構造化。曖昧な点は推測で補完せず「不明点」として列挙(Raguel の ASK 材料になる) |
+| `preparing-design-agendas` | (独自) | issue.md・ARCHITECTURE.md・既存コードから、ユーザーと合意すべき論点(方針分岐・不明点・スコープ線引き)を抽出し agenda.md に構造化する。選択肢 2 つ以上+トレードオフ+推奨案。issue.md の不明点は全件論点化。HARD-GATE:「不明点を agenda から落とさない」 |
 | `writing-design-docs` | brainstorming(設計部) | issue.md + ARCHITECTURE.md + GOTCHAS.md を入力に設計書を執筆。YAGNI、既存パターン踏襲、変更対象ファイルの明示、**影響を受ける機能単位(unit)の列挙**、代替案の検討記録 |
 | `writing-test-specs` | (独自) | unit の同定・命名規則、`.codiel/specs/<unit-id>/` の三層構造(spec.md → cases.md)の新規作成・**更新と再生成**の手順。実装詳細ではなく振る舞いをテストする。期待結果は受け入れ基準から導出する |
 | `writing-dev-plans` | writing-plans | 設計書を工程分解した開発手順書。各ステップに「変更ファイル・完了条件・検証コマンド・**ドメインタグ(frontend/backend/data)**」 |
@@ -299,7 +315,7 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 | エージェント | 担当フェーズ | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
 | `codiel-analyst` | init | Read, Grep, Glob, Write, Bash | Issue 取得(gh issue view)と issue.md 執筆のみ |
-| `codiel-architect` | design | Read, Grep, Glob, Write | **Edit なし・Bash なし** — コードを触れない |
+| `codiel-architect` | discuss(アジェンダ作成)/ design | Read, Grep, Glob, Write | **Edit なし・Bash なし** — コードを触れない |
 | `codiel-test-designer` | test-spec | Read, Grep, Glob, Write, Edit | spec.md / cases.md の新規作成と**更新**。書き込み先は hooks で `.codiel/specs/**` に制限 |
 | `codiel-planner` | dev-plan | Read, Grep, Glob, Write | **Edit なし・Bash なし** |
 
@@ -335,7 +351,7 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
   所見はテキストで返し、PR への投稿(`gh pr review --comment` / 行コメント)は**オーケストレーターの職務**。
 - diff のドメインに応じて frontend/backend/data を選択参加、**doc / security は常時参加**。並列ディスパッチ。
 - 所見はオーケストレーターが統合して severity 順に review-<n>.md へ記録し、PR コメントに投稿。
-- **critical / high は fix-loop で修正**、**medium / low は triage フェーズでユーザーの指示のもと別 Issue 化**(§2 [8])。
+- **critical / high は fix-loop で修正**、**medium / low は triage フェーズでユーザーの指示のもと別 Issue 化**(§2 [9])。
 
 この分離により「テスターが期待値を緩めて合格させる」「レビューアーが自分で直して自己承認する」
 という利益相反経路が権限レベルで存在しなくなる(Raguel の「自己評価は採用しない」原則のエージェント版)。
@@ -348,10 +364,10 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | フック | 対象 | 内容 |
 |---|---|---|
 | PreToolUse | Bash(`gh pr create`, `git push`) | state.json を参照し、「テスト green + implement/test-loop が passed(PROCEED または human-approved の ASK)」でなければ **deny**。保護ブランチ(main 等)への push は常に deny |
-| PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [8]) |
+| PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [9]) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
-| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位(implementer-frontend が backend パスへ書く等)の機械的制御は行わない** — hooks はツール呼び出しの発行元エージェントを識別できないため、ドメイン規律は各エージェント定義の職務規律(+レビューアーの検査)で担保する |
+| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(init/discuss/design/test-spec/dev-plan)中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位(implementer-frontend が backend パスへ書く等)の機械的制御は行わない** — hooks はツール呼び出しの発行元エージェントを識別できないため、ドメイン規律は各エージェント定義の職務規律(+レビューアーの検査)で担保する |
 | SubagentStop | 各フェーズ完了時 | 期待される成果物ファイルが存在し空でないかを検証。欠けていればフィードバックを返して差し戻す |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止) |
 
@@ -415,7 +431,9 @@ plugins/codiel/
     initializing-harness/SKILL.md(+ raguel.config.example.yaml)
     orchestrating-runs/SKILL.md
     raguel-gating/SKILL.md
+    facilitating-design-discussions/SKILL.md
     analyzing-issues/SKILL.md
+    preparing-design-agendas/SKILL.md
     writing-design-docs/SKILL.md
     writing-test-specs/SKILL.md
     writing-dev-plans/SKILL.md

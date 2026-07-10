@@ -47,6 +47,8 @@ test("implement フェーズ中: src は素通し、specs の cases.md は ask",
   const root = setupRun();
   const cli = (args) => execFileSync("node", [CLI, ...args], { cwd: root });
   cli(["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(["start-phase", "discuss", "--issue", "1"]);
+  cli(["complete-phase", "discuss", "--issue", "1"]);
   for (const ph of ["design", "test-spec", "dev-plan"]) {
     cli(["start-phase", ph, "--issue", "1"]);
     cli(["pass-gate", ph, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
@@ -72,6 +74,19 @@ test("state.json 保護は大文字パスでもバイパスされない(ケー�
   const abs = path.join(root, ".CODIEL/RUNS/issue-1/try-1/state.json");
   const r = hook(root, "Write", abs);
   assert.equal(r.permissionDecision, "deny");
+});
+
+test("discuss フェーズ中: .codiel 配下(agenda.md/discussion.md)は素通し、src への書き込みは ask", () => {
+  const root = setupRun();
+  const cli = (args) => execFileSync("node", [CLI, ...args], { cwd: root });
+  cli(["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(["start-phase", "discuss", "--issue", "1"]);
+  assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/agenda.md")), null);
+  assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/discussion.md")), null);
+  const r = hook(root, "Write", path.join(root, "src/app.ts"));
+  assert.equal(r.permissionDecision, "ask");
+  assert.match(r.permissionDecisionReason, /文書フェーズ\(discuss\)/);
+  assert.equal(hook(root, "Write", path.join(root, "docs/notes.md")), null);
 });
 
 test("cwd がサブディレクトリでも文書フェーズ制御が機能する(root/src への書き込みは ask)", () => {
