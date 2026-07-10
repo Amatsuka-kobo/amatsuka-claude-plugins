@@ -76,6 +76,16 @@ test("state.json 保護は大文字パスでもバイパスされない(ケー�
   assert.equal(r.permissionDecision, "deny");
 });
 
+test("discuss フェーズ中: .codiel 配下(agenda.md/discussion.md)は素通し、src への書き込みは ask", () => {
+  const root = setupRun();
+  const cli = (args) => execFileSync("node", [CLI, ...args], { cwd: root });
+  cli(["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(["start-phase", "discuss", "--issue", "1"]);
+  assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/agenda.md")), null);
+  assert.equal(hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/discussion.md")), null);
+  assert.equal(hook(root, "Write", path.join(root, "src/app.ts")).permissionDecision, "ask");
+});
+
 test("cwd がサブディレクトリでも文書フェーズ制御が機能する(root/src への書き込みは ask)", () => {
   const root = setupRun();
   const srcDir = path.join(root, "src");
