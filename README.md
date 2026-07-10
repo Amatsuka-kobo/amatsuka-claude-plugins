@@ -16,12 +16,12 @@
 あまつか Claude Plugins のように、非公式コミュニティ産の Marketplace は以下のようにして Claude Code に追加することができます。
 
 ```bash
-/plugin marketplace add <このレポジトリのURL>
+/plugin marketplace add <このリポジトリのURL>
 ```
 
 ### プラグインのインストール
 
-Marketplace を追加後、このレポジトリにあるプラグインをインストールすることができます。
+Marketplace を追加後、このリポジトリにあるプラグインをインストールすることができます。
 
 ```bash
 # プラグインの一覧を表示
