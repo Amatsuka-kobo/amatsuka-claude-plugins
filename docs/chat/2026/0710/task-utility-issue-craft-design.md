@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-10
 - 参加者: phyllis998, AI (Claude Fable 5)
-- 成果物: `docs/superpowers/specs/2026-07-10-task-utility-issue-craft-design.md`、コミット `3eab5cf`
+- 成果物: `docs/superpowers/specs/2026-07-10-task-utility-issue-craft-design.md`(コミット `3eab5cf`)、`docs/superpowers/plans/2026-07-10-task-utility-issue-craft.md`(コミット `a3566d8`)
 - 前提: `/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins/CLAUDE.md`、`plugins/task-utility/` 配下の既存構成
 
 ---
@@ -92,4 +92,39 @@ task-utility プラグインの構造と既存スキル( `chat` など)を確認
 
 ---
 
-注意事項: セッション2で複数起票モードと既存 Issue 分解ツールの方針が決定された。後者は別スキルとして後日設計するため、本セッションでの実装対象は issue-craft(単一・複数の統合)と check-issue-env.mjs のみ。
+## セッション3: 実装計画作成
+
+# phyllis998
+
+> 実装計画に進んでください
+
+セッション2の設計にユーザーから承認。実装計画作成への進行を指示。
+
+# AI
+
+セッション2の設計承認を受けた。writing-plans スキルに従い、実装計画を作成する段階に進む。
+
+**既存スクリプトのスタイル確認**: `plugins/task-utility/scripts/extract-conversation.mjs` および `extract-conversation.test.mjs` を読み、コード例の正確さを確保。コメントは日本語、テスト名も日本語、TDD 形式(失敗するテスト → 実装 → テスト通過 → コミット)を確認。
+
+**マーケットプレイス設定確認**: `.claude-plugin/marketplace.json` がバージョンキーを持つか確認。持たないことを確認し、プラグイン.json(`.claude-plugins/plugin.json`)のバージョン更新のみが必要と判定。
+
+**実装計画の作成**: 5 タスク構成で計画を作成し、`docs/superpowers/plans/2026-07-10-task-utility-issue-craft.md` に保存。コミット `a3566d8`。
+
+**計画の構成**:
+1. **Task 1**: `check-issue-env.mjs` — git リポジトリ / リモート / repoSlug 判定(TDD)。GitHub SSH・HTTPS 両形式対応。テスト5件。
+2. **Task 2**: gh の検出(インストール・認証判定)。偽の `gh` 実行ファイル+PATH 制御で実機非依存テスト。テスト8件に増加。
+3. **Task 3**: Issue テンプレート検出と `config.yml`。md/yml 混在、複数行 labels、サブディレクトリ実行対応。テスト13件に増加。スモーク確認も実施。
+4. **Task 4**: SKILL.md 本体。計画内に全文を記載(markdown ブロック)。6段階フロー、複数起票モード、Issue 間相互参照。テスト対象外(振る舞いは仕様書に従う)。
+5. **Task 5**: README 追記・バージョン 1.1.0-dev へのアップ・全体テスト。`node --test` の複合実行。
+
+**セルフレビュー**: パーサの端ケース(複数行 labels、body: の巻き込み、クォート付き title の空白保持)を確認し、計画内の実装コードでの整合性を検証。
+
+**実行方法の提示**: ユーザーに2つの選択肢を提示
+- **サブエージェント駆動(推奨)**: タスクごとに新サブエージェントをディスパッチ。CLAUDE.md の「実装系は Sonnet に委譲」方針に整合。
+- **インライン実行**: このセッションで executing-plans スキルを使い、チェックポイント挟みながら一括実行。
+
+実行方法の選択待ちで終了。
+
+---
+
+注意事項: セッション3で実装計画を作成しました。計画は 5 タスク・Node 標準モジュールのみ・node --test TDD 形式・CLI 直接操作なし・Anthropic API 不使用で、CLAUDE.md の各制約を満たしています。実装を進める際は、サブエージェント駆動またはインライン executing-plans スキルのいずれかでユーザーが選択してください。
