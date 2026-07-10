@@ -47,6 +47,8 @@ test("implement フェーズ中: src は素通し、specs の cases.md は ask",
   const root = setupRun();
   const cli = (args) => execFileSync("node", [CLI, ...args], { cwd: root });
   cli(["pass-gate", "init", "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
+  cli(["start-phase", "discuss", "--issue", "1"]);
+  cli(["complete-phase", "discuss", "--issue", "1"]);
   for (const ph of ["design", "test-spec", "dev-plan"]) {
     cli(["start-phase", ph, "--issue", "1"]);
     cli(["pass-gate", ph, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);

@@ -33,6 +33,8 @@ function setupRunAtImplement(root) {
   const passGate = (phase) =>
     cli(root, ["pass-gate", phase, "--issue", "1", "--evaluation-id", "e", "--verdict", "PROCEED"]);
   passGate("init");
+  cli(root, ["start-phase", "discuss", "--issue", "1"]);
+  cli(root, ["complete-phase", "discuss", "--issue", "1"]);
   for (const ph of ["design", "test-spec", "dev-plan"]) {
     cli(root, ["start-phase", ph, "--issue", "1"]);
     passGate(ph);
