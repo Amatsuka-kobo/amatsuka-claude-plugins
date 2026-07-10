@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-10
 - 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: `plugins/revelation/docs/DESIGN.md`(コミット `0e47f97`)、`docs/superpowers/plans/2026-07-10-revelation-hooks.md`(コミット `207f7f2`)、feat/revelation-hooks ブランチ（コミット `d59c940` / `5fe2da6` / `ecee165` / `ad4b9b9` / `e24d414`）、main @ `e24d414`（マージ完了）
+- 成果物: `plugins/revelation/docs/DESIGN.md`(コミット `0e47f97`)、`docs/superpowers/plans/2026-07-10-revelation-hooks.md`(コミット `207f7f2`)、feat/revelation-hooks ブランチ（コミット `d59c940` / `5fe2da6` / `ecee165` / `ad4b9b9` / `e24d414`）、main @ `e24d414`（マージ完了）、セッション9実装成果コミット `5f5656c` / `0f6671a`
 - 前提: `plugins/revelation/README.md`(既知の制約)、`plugins/revelation/skills/*/SKILL.md`(スキル定義)、`plugins/codiel/hooks/hooks.json`、`plugins/task-utility/hooks/hooks.json`、`plugins/revelation/docs/DESIGN.md`(§4/§6)、`.superpowers/sdd/progress.md`(開発台帳)
 
 ---
@@ -319,7 +319,7 @@ fail-open 設計が正常に機能している事例。作業は止まらず、�
 
 # AI
 
-改修案(b)「`agent_id`/`agent_type` によるサブエージェント判別」の詳細な設計空間を掘り下げる前に、成立性を左右する実測事実を確認。**サブエージェント初回ツール呼び出し時点で、そのサブエージェント自身のトランスクリプト(`agent-<id>.jsonl`)がフックから読め、本人のモデルが取得できるか**を検証。この条件が満たされれば、ゲート判定やマーカーを「エージェント単位」に切り替え可能になり、設計の自由度が大きく広がる。
+改修案(b)「`agent_id`/`agent_type` によるサブエージェント判別」の詳細な設計空間を掘り下げる前に、成立性を左右する実測事実を確認。**サブエージェント初回ツール呼び出し時点で、そのサブエージェント自身のトランスクリプト(`agent-<id>.jsonl`)がフックから読め、本人のモデルが取得できるか**を検証。この条件が満たされれば、ゲート判定やマーカーを「エージェント単位」にできて設計の幅が大きく広がる。
 
 **実測結果**:
 
@@ -338,16 +338,16 @@ fail-open 設計が正常に機能している事例。作業は止まらず、�
 
 **レベル1: サブエージェント発は素通しする**(`if (input.agent_id) pass()`)
 
-最小の改修で、観測された問題は両方消える — chat-recorder への無意味な deny が無くなり、マーカーの「親の分をサブエージェントが消費する」相互汚染も起きなくなる。CC の内部レイアウトに依存しないので壊れにくい。
+最小の改修で、観測された問題は両方消えます — chat-recorder への無意味な deny が無くなり、マーカーの「親の分をサブエージェントが消費する」相互汚染も起きなくなる。CC の内部レイアウトに依存しないので壊れにくい。
 
-ただし重大なトレードオフがある。**あなたの実際の使い方(Fable 親 + Sonnet サブエージェント)では、規律が最も必要な Sonnet に何も届かなくなる**。現状でも Fable 親のセッションではゲートが親モデル基準で全部素通しなので実害は増えませんが、「第2層がサブエージェントを部分カバーする」という DESIGN.md の建前は正式に放棄することになります。しかも Fable 親は revelation の対象外なので `fable-subagents` を読まず、プロンプトへの規律埋め込みも体系的には起きない。つまりレベル1だけだと、Fable 親配下の Sonnet は完全に規律の空白地帯です。
+ただし重大なトレードオフがあります。**あなたの実際の使い方(Fable 親 + Sonnet サブエージェント)では、規律が最も必要な Sonnet に何も届かなくなる**。現状でも Fable 親のセッションではゲートが親モデル基準で全部素通しなので実害は増えませんが、「第2層がサブエージェントを部分カバーする」という DESIGN.md の建前は正式に放棄することになります。しかも Fable 親は revelation の対象外なので `fable-subagents` を読まず、プロンプトへの規律埋め込みも体系的には起きない。つまりレベル1だけだと、Fable 親配下の Sonnet は完全に規律の空白地帯です。
 
 **レベル2: エージェント単位で判定する**(推奨)
 
-`agent_id` があれば上記2のパスでそのエージェント自身のトランスクリプトを解決し、すべての判定を「行為者本人」基準に切り替える：
+`agent_id` があれば上記2のパスでそのエージェント自身のトランスクリプトを解決し、すべての判定を「行為者本人」基準に切り替えます:
 
 - **ゲート**: 本人のモデルで判定。Fable 親 + Sonnet サブエージェント → 正しく差し戻される(現状の最大の穴が塞がる)。逆に Sonnet 親 + Fable サブエージェントは素通し。
-- **既読判定**: 本人のトランスクリプトを見る。ここで Skill ツールを持たないエージェント対策として、deny 文面をサブエージェント向けに変え「**Read ツールで `<プラグインroot>/skills/fable-restraint/SKILL.md` を読んでから再試行**」と絶対パスで指示する(フックは自分の場所を知っているのでパスを組み立てられる)。既読判定も「Skill invoke **または** その SKILL.md への Read」を見る。スキルの実体はただの Markdown なので、Read で読めば規律注入としては等価です。
+- **既読判定**: 本人のトランスクリプトを見る。ここで Skill ツールが無いエージェント対策として、deny 文面をサブエージェント向けに変え「**Read ツールで `<プラグインroot>/skills/fable-restraint/SKILL.md` を読んでから再試行**」と絶対パスで指示する(フックは自分の場所を知っているのでパスを組み立てられる)。既読判定も「Skill invoke **または** その SKILL.md への Read」を見る。スキルの実体はただの Markdown なので、Read で読めば規律注入としては等価です。
 - **マーカー**: `${session_id}-${agent_id || "main"}-${skill}` にして相互汚染を排除。
 
 リスクは `subagents/agent-<id>.jsonl` というレイアウトが非公開の内部仕様であること。ファイルが見つからなければ素通し(既存のフェイルオープン方針と同じ)にすれば、CC のバージョンアップで壊れても「効かなくなる」だけで作業は止まりません。コストは各サブエージェントにつきスキルごと1回の差し戻し往復が増えること — 並列に多数のエージェントを撒くワークフローでは無視できない摩擦になり得ます。
@@ -416,4 +416,41 @@ fail-open 設計が正常に機能している事例。作業は止まらず、�
 
 ---
 
-注意事項: 診断の訂正 — deny は親に正しく届いており、宛先は「起動後のサブエージェント」ではなく「起動前の親エージェント」である。親の Sonnet がフォールバック指示に従った結果、作業は進行したが、規律注入の設計意図を潜り抜けた。改修完了 — (a) rescue 文言の完全廃止 (b) agent_id による層別判定・スキップリスト・エージェント単位マーカー を実装。ユニットテスト13ケース+既存32ケース全65パス、実機 e2e 検証成功。
+## セッション10: コミット実行
+
+# phyllis998
+
+> コミットお願いします
+
+# AI
+
+リポジトリの慣例に合わせ、プラグイン改修とチャット記録を別コミットに分割。
+
+**コミット 1: プラグイン本体**
+
+- ハッシュ: `5f5656c`
+- メッセージ: `feat(revelation): PreToolUse リマインドを行為者(エージェント)単位の判定に刷新`
+- 対象ファイル7件：
+  - `plugins/revelation/hooks/scripts/lib.mjs` — `hasSkillFileRead` / `subagentTranscriptPath` ヘルパー追加
+  - `plugins/revelation/hooks/scripts/lib.test.mjs` — ヘルパー関数テスト 6 ケース
+  - `plugins/revelation/hooks/scripts/remind-skill.mjs` — Fable ゲート・エージェント単位判定・スキップリスト・救済文面刷新
+  - `plugins/revelation/hooks/scripts/remind-skill.test.mjs` — レベル2+3テスト 7 ケース
+  - `plugins/revelation/docs/DESIGN.md` — § 3・§ 4 更新(エージェント単位判定・スキップリスト仕様、非公開仕様依存の説明)
+  - `plugins/revelation/README.md` — 「モデル判別」「エージェント単位ゲート」セクション追加
+  - `plugins/revelation/.claude-plugin/plugin.json` — バージョン 1.0.1-dev → 1.1.0-dev
+
+**コミット 2: チャット記録**
+
+- ハッシュ: `0f6671a`
+- メッセージ: `chore: Revelationフック調査・改修チャットの記録`
+- 対象ファイル1件：`docs/chat/2026/0710/revelation-hooks-design.md`(セッション1-9を記録)
+
+**確認**:
+
+- テスト全65件 GREEN
+- ワーキングツリー クリーン
+- push は deny 設定のため実施しない
+
+---
+
+注意事項: セッション9の実装で、下位モデル(Sonnet/Haiku)がサブエージェント(chat-recorder 除く)で正しく规律を受け取る構成に変わった。(a) rescue 文言廃止 + (b) レベル2+3 の効果で、Fable親配下のSonnet も含めて層別判定が機能。全テスト GREEN、実機 e2e 検証成功。
