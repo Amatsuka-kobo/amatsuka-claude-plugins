@@ -20,4 +20,9 @@ const remoteUrl = isGitRepo ? git('remote', 'get-url', 'origin') : null;
 const repoSlug =
   remoteUrl?.match(/^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/)?.[1] ?? null;
 
-console.log(JSON.stringify({ isGitRepo, remoteUrl, repoSlug }, null, 2));
+// gh 未インストール時、spawnSync は ENOENT で status: null を返す(例外は投げない)
+const ghInstalled = spawnSync('gh', ['--version'], { encoding: 'utf8' }).status === 0;
+const ghAuthenticated =
+  ghInstalled && spawnSync('gh', ['auth', 'status'], { encoding: 'utf8' }).status === 0;
+
+console.log(JSON.stringify({ isGitRepo, remoteUrl, repoSlug, ghInstalled, ghAuthenticated }, null, 2));

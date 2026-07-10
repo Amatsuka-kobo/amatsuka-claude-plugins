@@ -64,3 +64,36 @@ test('github.com を含むだけの別ホストでは repoSlug が null', () => 
   assert.equal(runScript(gitRepo('git@notgithub.com:owner/repo.git')).repoSlug, null);
   assert.equal(runScript(gitRepo('https://mygithub.com/owner/repo')).repoSlug, null);
 });
+
+// PATH 制御用: 実物の git だけを持つ bin ディレクトリを作る(スクリプトが spawn するのは git と gh のみ)
+function fakeBin({ gh } = {}) {
+  const dir = tmpdir();
+  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  fs.symlinkSync(realGit, path.join(dir, 'git'));
+  if (gh) {
+    const file = path.join(dir, 'gh');
+    fs.writeFileSync(file, gh);
+    fs.chmodSync(file, 0o755);
+  }
+  return dir;
+}
+
+test('gh が PATH に無ければ ghInstalled/ghAuthenticated とも false', () => {
+  const out = runScript(tmpdir(), [fakeBin()]);
+  assert.equal(out.ghInstalled, false);
+  assert.equal(out.ghAuthenticated, false);
+});
+
+test('gh はあるが未認証なら ghInstalled: true, ghAuthenticated: false', () => {
+  const bin = fakeBin({ gh: '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\nexit 1\n' });
+  const out = runScript(tmpdir(), [bin]);
+  assert.equal(out.ghInstalled, true);
+  assert.equal(out.ghAuthenticated, false);
+});
+
+test('gh があり認証済みなら両方 true', () => {
+  const bin = fakeBin({ gh: '#!/bin/sh\nexit 0\n' });
+  const out = runScript(tmpdir(), [bin]);
+  assert.equal(out.ghInstalled, true);
+  assert.equal(out.ghAuthenticated, true);
+});
