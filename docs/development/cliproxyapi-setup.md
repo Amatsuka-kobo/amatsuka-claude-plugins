@@ -40,7 +40,7 @@ cli-proxy-api --help
 
 ### Docker を使う場合
 
-ローカルに実行ファイルを配置する代わりに、公式の Docker イメージと Compose 構成で CLIProxyAPI を動かすこともできます。構成の詳細は[公式リポジトリの Docker 関連ファイル](https://github.com/router-for-me/CLIProxyAPI)を参照してください。この手順書では独自の Compose ファイルは用意しません。
+ローカルに実行ファイルを配置する代わりに、公式の Docker イメージと Compose 構成で CLIProxyAPI を動かすこともできます。具体的な手順は[公式の Docker Compose 手順](https://help.router-for.me/docker/docker-compose)を、構成の詳細は[公式リポジトリの Docker 関連ファイル](https://github.com/router-for-me/CLIProxyAPI)を参照してください。この手順書では独自の Compose ファイルは用意しません。
 
 - ローカル実行ファイル方式と Docker 方式を同時に起動しないでください。どちらも `8317` を使うため競合します。
 - 設定ファイル、OAuth 認証情報（`auth-dir`）、ログは、コンテナの外側のディレクトリへボリュームとして保存してください。コンテナを削除すると内容が消えるためです。
