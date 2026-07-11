@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-10
 - 参加者: phyllis998, AI (Claude Opus 4 / Haiku 4.5)
-- 成果物: 設計書 `docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md`(コミット 42bba75)、実装計画 `docs/superpowers/plans/2026-07-10-codiel-discuss-phase.md`(コミット e020f0c)、worktree ブランチ `feat/codiel-discuss-phase` 上のコミット d99823b(Task 1)・d1d60ee・9e28714(Task 2)、台帳 `.superpowers/sdd/progress.md`
+- 成果物: 設計書 `docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md`(コミット 42bba75)、実装計画 `docs/superpowers/plans/2026-07-10-codiel-discuss-phase.md`(コミット e020f0c)、worktree ブランチ `feat/codiel-discuss-phase` 上のコミット d99823b(Task 1)～d69f65f(Task 10)、台帳 `.superpowers/sdd/progress.md`、マージコミット 573ff3b、修正コミット 039bd65
 - 前提: `plugins/codiel/docs/DESIGN.md`、brainstorming スキル、subagent-driven-development スキル
 
 ---
@@ -60,23 +60,27 @@ brainstorming スキルと Codiel の既存コード・設計フェーズの実�
 Subagent-Driven による実装開始。以下の進行:
 
 **ブランチ設定**
+
 - `main` から `feat/codiel-discuss-phase` を作成
 - 設計書・計画のコミットをそこに cherry-pick
 - subagent-driven-development スキルに従い、タスクごとにサブエージェントをディスパッチ
 - `.superpowers/sdd/progress.md` に進捗台帳を作成
 
 **Task 1 実装**
+
 - STAGES に discuss を挿入、既存テスト4ファイルのフェーズ列を追随させるタスク
 - サブエージェントが実装・テスト実行(全 green)
 - コミット d99823b で完了
 
 **並行セッション問題と worktree 移行(重要な失敗経緯)**
+
 - Task 1 の実装後、`main` ブランチのコミットが異なる並行セッション(`feat/task-utility-issue-craft`)に誤って乗っていることが判明
 - 根本原因: Subagent-Driven 実行時に、エージェント側が別のワーキングツリー(`.claude/worktrees/codiel-discuss`)ではなく、共有ディレクトリで作業。その際、git の現在ブランチが混同され、実装者のコミットが誤ったブランチに乗る事故が発生
 - 対応: `feat/task-utility-issue-craft` ブランチを原状回復(cherry-pick 前に戻す)。以後、専用 worktree(`.claude/worktrees/codiel-discuss`)を活用して、ブランチの分離を徹底
 - この worktree 移行により、以降のタスク実装はすべて `feat/codiel-discuss-phase` ブランチの專用ツリーで行われるようになり、並行セッションの干渉を排除
 
 **Task 2 実装と修正サイクル**
+
 - `guard-write` の DOC_PHASES 追加タスク
 - 初回実装: コミット d1d60ee
 - レビューで Important 指摘: テスト `should prevent writes outside DOC_PHASES` が「弁別できない」(いずれの条件でも pass してしまう)と判定
@@ -88,8 +92,49 @@ Subagent-Driven による実装開始。以下の進行:
 
 ---
 
-注意事項: 
-- worktree `.claude/worktrees/codiel-discuss` を使用した Subagent-Driven 実行により、並行セッション問題は解決。以後のタスク(3以降)は worktree で実装・レビューが進行
-- 成果物は全て worktree ブランチ `feat/codiel-discuss-phase` 上に乗っている(コミット d99823b, d1d60ee, 9e28714)
-- 台帳 `.superpowers/sdd/progress.md` は随時更新
-- Task 2 の再レビュー結果依存で、Task 3 進行の判断が決まる
+## セッション4: Task 2再レビュー承認～Task 3–10・最終レビュー・マージ
+
+# USER
+
+> 続けてください
+
+# AI
+
+Task 2 の再レビューが承認され、継続実行。以下の進行:
+
+**Task 2 最終化～Task 3–10 完走**
+
+- Task 2 再レビューで承認取得
+- Task 3: hooks の discuss 追随(subagent-stop.mjs / stop-guard.mjs)。HARD-GATE 追加、agenda.md 検証、文言調整。レビュー通過
+- Task 4: `preparing-design-agendas` スキル新規作成。architect 用・agenda.md 生成。SKILL.md、テスト、integration 実装。レビュー通過
+- Task 5: `facilitating-design-discussions` スキル新規作成。orchestrator 用・discussion.md 進行管理。SKILL.md、テスト、integration 実装。レビュー通過
+- Task 6: architect / writing-design-docs 改修。architect に「baseline」「enhancer」2モード化、合意入力(discussion.md)の拘束追加。orchestrating-runs の進行表・フローチャート・HARD-GATE 反映。レビュー通過
+- Task 7: orchestrating-runs スキル改修。discuss / design / triage フェーズのフローチャート統合、人間参加ポイント明記、トレーサビリティ強化。レビュー通過
+- Task 8: raguel-gating スキル追随。新しい objective 規約(discuss / facilitating に対する逆向き HARD-GATE など)に対応。テスト 94/94 pass。レビュー通過
+- Task 9: DESIGN.md/README のフェーズ番号振り直し。参照パス総ざらい(§2 [8] など)、reviewer-doc の検査観点統合。レビュー通過
+- Task 10: 最後の仕上げ(バージョン 1.0.0-alpha.3 へのアップ、全テスト・スペック突き合わせ)。テスト suite 全 pass。実装中に worktree 外ブランチでコミットが誤乗する事故が再発、検出後に即座に cherry-pick で復旧し worktree に再乗。最終レビュー依頼
+
+各タスクの実装・レビューは Subagent-Driven で反復実行。サブエージェントが実装・テスト・レビューパッケージ生成、親エージェント(Haiku)がレビュー承認・台帳更新を担当。
+
+**最終ブランチ全体レビュー**
+
+- requesting-code-review スキルで whole-branch review を最上位モデル(Opus)にディスパッチ
+- レビュー結果: **With fixes** — 兄弟スキル3ファイル(preparing-design-agendas / facilitating-design-discussions / orchestrating-runs)のフェーズ参照に off-by-one エラー・writing-design-docs のフローチャート参照矛盾を指摘
+- 修正内容: コミット 039bd65 で該当参照パス・フローチャート図を修正
+- 修正後再レビュー結果: **Ready to merge = Yes**(131/131 pass、残存所見ゼロ)
+
+**マージと最終テスト**
+
+- finishing-a-development-branch スキルで main へのマージを実施
+- マージコミット 573ff3b(コンフリクトなし)
+- マージ後テスト suite: 148/148 pass
+- worktree と worktree ブランチ(`.claude/worktrees/codiel-discuss` / `feat/codiel-discuss-phase`)を削除
+- `main` ブランチ未 push(ユーザー指示待ち)
+
+---
+
+注意事項:
+
+- ブランチ全体の修正・テストは completed
+- `main` へのマージは local で完了、remote push は未実施
+- 並行セッション問題(Task 実装中の worktree 外作業)は Task 10 でも再発したが、cherry-pick での原状回復で解決

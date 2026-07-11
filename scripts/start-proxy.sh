@@ -1,4 +1,4 @@
 #!/bin/bash
-# CLI Proxy API の起動スクリプト
+# CLIProxyAPIの起動スクリプト
 
-cli-proxy-api --config "cliproxyapi.config.yaml"
+cli-proxy-api --config ./cliproxyapi.config.yaml
