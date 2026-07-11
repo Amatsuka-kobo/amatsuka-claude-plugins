@@ -1,49 +1,204 @@
-# 環境構築
+# 開発環境のセットアップ
 
-ここでプラグイン開発を行う際の環境構築手順です。
+この文書は、あまつか工房のメンバーが、このリポジトリで開発するための環境を準備する手順です。初めて環境を構築する人でも進められるよう、必須の作業を順番に説明します。
+
+主な対象環境は WSL2/Linux です。すべてのコマンドは、特に説明がない限りターミナルで実行してください。
+
+## この文書のゴール
+
+次の状態になればセットアップ完了です。
+
+- Volta で管理された Node.js LTS、npm、npx が利用できる
+- `uv` と `uvx` が利用でき、Claude Code から Serena MCP に接続できる
+- Claude Code から Context7 MCP を利用できる
+- 担当するファイルに必要な LSP が利用できる
+
+Codex／CLIProxyAPI は任意設定です。Codex のアカウント(ChatGPT/OpenAI の Codex 契約)を持っているメンバーだけ、最後の案内から詳細ページへ進んでください。
+
+## 必須ツール
+
+### Volta と Node.js
+
+このプロジェクトでは、Node.js のバージョン管理に Volta を推奨しています。Node.js は、各プラグインの `.mjs` スクリプト、`node --test`、LSP のインストール、Context7 のセットアップに必要です。
+
+WSL2/Linux では、Volta の公式インストーラーを実行します。
+
+```bash
+curl https://get.volta.sh | bash
+```
+
+インストーラーは Volta の保存先を `PATH` へ追加します。完了後は新しいターミナルを開き、次のコマンドで Volta が利用できることを確認してください。
+
+```bash
+volta --version
+```
+
+Volta で最新の LTS 版 Node.js をインストールします。Volta では、バージョンを省略した `node` が最新の LTS を表します。
+
+```bash
+volta install node
+```
+
+Node.js と、同時に利用可能になる npm、npx を確認します。
+
+```bash
+node --version
+npm --version
+npx --version
+```
+
+### uv
+
+`uv` は Python のパッケージ／ツールランナーです。この環境では、Serena MCP サーバーを `uvx` で起動するために必要です。
+
+WSL2/Linux では、公式の standalone installer を実行します。
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+完了後は新しいターミナルを開き、`uv` と `uvx` を確認します。
+
+```bash
+uv --version
+uvx --version
+```
+
+Claude Code に登録された Serena MCP の接続状態を確認します。
+
+```bash
+claude mcp list
+```
+
+一覧の `plugin:serena:serena` が `Connected` になっていれば完了です。Serena の起動コマンドを手動で実行する必要はありません。
+
+## Claude Code の共通ツール
+
+### Context7
+
+Context7 は、Claude Code がライブラリやフレームワークの最新ドキュメントを取得するための MCP サーバーです。LSP のような補完ツールではなく、技術調査で古い情報を使わないために利用します。
+
+この手順には Node.js と `npx` が必要です。先に必須ツールのセットアップを完了してください。
+
+次のコマンドは、Context7 を Claude Code のグローバル設定へ登録します。リポジトリの外で作業するときも同じ設定を利用できます。
+
+```bash
+npx ctx7 setup --claude --mcp --yes
+```
+
+オプションの意味は次のとおりです。
+
+- `--claude`: Claude Code 向けに設定する
+- `--mcp`: Context7 を MCP サーバーとして登録する
+- `--yes`: 確認プロンプトを省略する
+
+登録されたことを確認します。
+
+```bash
+claude mcp list
+```
+
+一覧に `context7` が表示されれば完了です。問題がある場合はログを確認します。
+
+```bash
+claude mcp logs context7
+```
+
+プロジェクト単位で設定したい場合は `--project` を追加できますが、工房の標準環境ではグローバル設定を使用します。
 
 ## LSP
 
-Claude Code で効率よく開発を行うため、以下の LSP プラグインを有効化しています。
+LSP（Language Server Protocol）は、コードや文書の補完、エラー表示、定義への移動などを提供する仕組みです。担当するファイルに応じて必要な言語サーバーをインストールしてください。
 
-- pyright (Python)
-- vtsls (TypeScript/JavaScript)
-- bash-language-server (ShellScript)
-- mdbase-lsp (Markdown)
+| 言語サーバー           | 対象                   | 主な用途            |
+| ---------------------- | ---------------------- | ------------------- |
+| `pyright`              | Python                 | 補完と静的診断      |
+| `vtsls`                | TypeScript／JavaScript | 補完と静的診断      |
+| `bash-language-server` | Shell Script           | 補完と静的診断      |
+| `mdbase-lsp`           | Markdown               | Markdown の編集支援 |
 
-これらを使用するには、各言語を扱う言語サーバーをインストールする必要があります。
+### npm でインストールする言語サーバー
 
-## pyright (Python)
+次の3つは、どのディレクトリから実行しても構いません。`npm install -g` は現在のユーザー環境へコマンドを追加します。
 
-Python 用の言語サーバーインストール手順です。
+#### Python: pyright
 
 ```bash
 npm install -g pyright
+pyright --version
 ```
 
-## vtsls (TypeScript/JavaScript)
-
-TypeScript/JavaScript 用の言語サーバーインストール手順です。
+#### TypeScript／JavaScript: vtsls
 
 ```bash
 npm install -g @vtsls/language-server
+vtsls --version
 ```
 
-## bash-language-server (ShellScript)
-
-ShellScript 用の言語サーバーインストール手順です。
+#### Shell Script: bash-language-server
 
 ```bash
 npm install -g bash-language-server
+bash-language-server --version
 ```
 
-## mdbase-lsp (Markdown)
+各コマンドでバージョンが表示されれば完了です。
 
-Markdown 用の言語サーバーインストール手順です。
-GitHub から外部リポジトリを clone し、ビルドして、パスを通す必要があります。
-ビルドには Rust の実行環境と C 言語のコンパイラが必要です。
-前提環境をインストールし、mdbase-lspのインストールまで行うスクリプトを実行してください。
+### Markdown: mdbase-lsp
+
+`mdbase-lsp` は、このリポジトリのインストールスクリプトを使って導入します。このスクリプトは Debian／Ubuntu 系の WSL2/Linux を前提とし、次の処理を行います。
+
+- `apt` と `sudo` を使って不足パッケージをインストールする
+- `git`、C言語のビルド環境、Rust を準備する
+- 外部リポジトリを `$HOME/third-party` へ clone する
+- Rust で `mdbase-lsp` をビルドする
+- `$HOME/.local/bin/mdbase-lsp` にシンボリックリンクを作る
+
+内容を確認したうえで、リポジトリのルートから実行してください。
 
 ```bash
 scripts/install-mdbase.sh
 ```
+
+導入後、次のコマンドで確認します。
+
+```bash
+mdbase-lsp --help
+```
+
+コマンドが見つからない場合は、`$HOME/.local/bin` が `PATH` に含まれているか確認してください。
+
+## セットアップ確認
+
+最後に、必要なコマンドをまとめて確認します。
+
+```bash
+volta --version
+node --version
+npm --version
+npx --version
+uv --version
+uvx --version
+claude --version
+claude mcp list
+pyright --version
+vtsls --version
+bash-language-server --version
+mdbase-lsp --help
+```
+
+担当しない言語の LSP は未導入でも構いません。Context7 と、担当するファイルに必要な LSP が確認できればセットアップ完了です。
+
+## 任意設定
+
+Codex または Claude Code を CLIProxyAPI 経由で利用する場合は、[CLIProxyAPI のセットアップ](docs/development/cliproxyapi-setup.md)を参照してください。Codex のアカウントを持っていない場合は、この設定は不要です。
+
+## トラブル時の確認
+
+1. コマンドを実行したディレクトリが手順と一致しているか確認する
+2. `volta --version`、`node --version`、`npm --version`、`npx --version` が成功するか確認する
+3. `uv --version` と `uvx --version` が成功するか確認する
+4. `claude mcp list` で `plugin:serena:serena` と `context7` の接続状態を確認する
+5. グローバルにインストールしたコマンドの保存先が `PATH` に含まれているか確認する
+6. Context7 は `claude mcp logs context7` でログを確認する
+7. `mdbase-lsp` は `$HOME/.local/bin/mdbase-lsp` が存在するか確認する
