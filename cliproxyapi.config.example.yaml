@@ -1,0 +1,36 @@
+host: "127.0.0.1"
+port: 8317
+
+auth-dir: "~/.cli-proxy-api"
+
+api-keys:
+  - "replace-with-a-random-local-key"
+
+oauth-model-alias:
+  codex:
+    - name: "gpt-5.6-sol"
+      alias: "claude-gpt-5-6-sol"
+    - name: "gpt-5.6-terra"
+      alias: "claude-gpt-5-6-terra"
+    - name: "gpt-5.6-luna"
+      alias: "claude-gpt-5-6-luna"
+
+oauth-excluded-models:
+  claude:
+    - "claude-3-7-sonnet-20250219"
+    - "claude-3-5-haiku-20241022"
+    - "claude-sonnet-4-6"
+    - "claude-opus-4-20250514"
+    - "claude-opus-4-6"
+    - "claude-opus-4-7"
+    - "claude-opus-4-5-20251101"
+    - "claude-sonnet-4-5-20250929"
+    - "claude-opus-4-1-20250805"
+    - "claude-sonnet-4-20250514"
+  codex:
+    - "gpt-5.5"
+    - "gpt-5.4"
+    - "gpt-5.4-mini"
+    - "gpt-image-1.5"
+    - "gpt-image-2"
+    - "gpt-5.3-codex-spark"

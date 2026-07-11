@@ -13,11 +13,10 @@
       "Bash(git push *)"
     ]
   },
-  "model": "sonnet",
+  "defaultModel": "sonnet",
   "enabledPlugins": {
     "task-utility@amatsuka-claude-plugins": true,
     "revelation@amatsuka-claude-plugins": true,
-    "context7@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
@@ -29,7 +28,8 @@
     "pyright@claude-code-lsps": true,
     "mdbase-lsp@claude-code-lsps": true,
     "vtsls@claude-code-lsps": true,
-    "bash-language-server@claude-code-lsps": true
+    "bash-language-server@claude-code-lsps": true,
+    "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {
@@ -43,6 +43,15 @@
         "source": "git",
         "url": "https://github.com/Piebald-AI/claude-code-lsps.git"
       }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
     }
+  },
+  "env": {
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5[1m]"
   }
 }
