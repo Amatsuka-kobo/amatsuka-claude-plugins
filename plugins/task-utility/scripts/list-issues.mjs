@@ -37,10 +37,12 @@ function gh(...a) {
   return { ok: true, stdout: res.stdout };
 }
 
-// --paginate はページごとの JSON 配列を連結して出力するため、][ をカンマに置換して 1 配列に戻す
+// --paginate --slurp はページごとの JSON 配列をさらに配列でラップして出力する(gh >= 2.40)。
+// 末尾の空ページ([...][] 相当)が来ても壊れず、値の中に "][" のような文字列が
+// 含まれていても誤って書き換わらない。ページ配列を JSON.parse してから flat() で 1 配列に戻す
 function parsePaginated(stdout, step) {
   try {
-    return JSON.parse(stdout.trim().replace(/\]\s*\[/g, ','));
+    return JSON.parse(stdout.trim()).flat();
   } catch (e) {
     fail(step, `JSON パースに失敗: ${e.message}`);
   }
@@ -55,11 +57,11 @@ try {
   fail('user', `JSON パースに失敗: ${e.message}`);
 }
 
-const issuesRes = gh('api', '--paginate', 'repos/{owner}/{repo}/issues?state=open&per_page=100');
+const issuesRes = gh('api', '--paginate', '--slurp', 'repos/{owner}/{repo}/issues?state=open&per_page=100');
 if (!issuesRes.ok) fail('issues', issuesRes.error);
 const rawIssues = parsePaginated(issuesRes.stdout, 'issues');
 
-const labelsRes = gh('api', '--paginate', 'repos/{owner}/{repo}/labels?per_page=100');
+const labelsRes = gh('api', '--paginate', '--slurp', 'repos/{owner}/{repo}/labels?per_page=100');
 if (!labelsRes.ok) fail('labels', labelsRes.error);
 const rawLabels = parsePaginated(labelsRes.stdout, 'labels');
 

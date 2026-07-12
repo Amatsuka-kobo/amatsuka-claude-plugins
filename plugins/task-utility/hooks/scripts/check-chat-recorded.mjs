@@ -74,7 +74,7 @@ const reason = [
   `- トランスクリプト: ${transcriptPath}`,
   `- 抽出コマンド: node "${pluginRoot}/scripts/extract-conversation.mjs" "${transcriptPath}"`,
   `- スキル定義: ${pluginRoot}/skills/chat/SKILL.md`,
-  '- ユーザーの GitHub ユーザー名、日付、この会話の成果物(ファイルパス・コミット)、前提となる資料',
+  '- ユーザーの GitHub ユーザー名と git のユーザー名(`git config user.name`。記録ディレクトリ名に使う)、日付、この会話の成果物(ファイルパス・コミット)、前提となる資料',
   '- 既存の記録ファイルがあれば新規作成せず、未記録のターンだけをそのファイルに追記するよう指示すること。',
   'トランスクリプトが読めない等、技術的に記録できない場合のみ、その理由をユーザーに一言伝えてから終了して構いません。',
 ].join('\n');

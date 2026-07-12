@@ -49,18 +49,19 @@ function fakeGh(responses, failPattern) {
 }
 
 const USER = JSON.stringify({ login: 'alice' });
-const ISSUES = JSON.stringify([
+// --slurp はページごとの配列をさらに配列でラップする(ページ 1 件でも [[...]])
+const ISSUES = JSON.stringify([[
   { number: 1, title: '古いバグ', body: 'x'.repeat(600), labels: [{ name: 'bug' }], assignees: [],
     user: { login: 'alice' }, comments: 2, updated_at: '2026-01-01T00:00:00Z' },
   { number: 2, title: '新しい要望', body: null, labels: [], assignees: [{ login: 'bob' }],
     user: { login: 'bob' }, comments: 0, updated_at: '2026-06-30T00:00:00Z' },
   { number: 3, title: 'PR は除外', pull_request: {}, labels: [], assignees: [],
     user: { login: 'alice' }, comments: 0, updated_at: '2026-06-30T00:00:00Z' },
-]);
-const LABELS = JSON.stringify([
+]]);
+const LABELS = JSON.stringify([[
   { name: 'bug', description: 'バグ報告' },
   { name: 'feature', description: '' },
-]);
+]]);
 const NOW = ['--now', '2026-07-01T00:00:00Z'];
 
 test('--stale-days が正の整数でなければ step: args', () => {
@@ -111,22 +112,25 @@ test('--stale-days で閾値を変えられる', () => {
 });
 
 test('Issue が 0 件なら issues: []', () => {
-  const dir = fakeGh({ 'user.json': USER, 'issues.json': '[]', 'labels.json': LABELS });
+  const dir = fakeGh({ 'user.json': USER, 'issues.json': '[[]]', 'labels.json': LABELS });
   const out = runScript([...NOW], dir);
   assert.equal(out.ok, true);
   assert.deepEqual(out.issues, []);
 });
 
-test('--paginate の連結された複数 JSON 配列をマージできる', () => {
-  const page1 = JSON.stringify([{ number: 1, title: 'A', body: '', labels: [], assignees: [], user: { login: 'a' }, comments: 0, updated_at: '2026-06-30T00:00:00Z' }]);
-  const page2 = JSON.stringify([{ number: 2, title: 'B', body: '', labels: [], assignees: [], user: { login: 'a' }, comments: 0, updated_at: '2026-06-30T00:00:00Z' }]);
-  const dir = fakeGh({ 'user.json': USER, 'issues.json': page1 + page2, 'labels.json': LABELS });
+test('--paginate --slurp の複数ページ・末尾の空ページ・] [ を含むタイトルを扱える', () => {
+  const issueA = { number: 1, title: 'A', body: '', labels: [], assignees: [], user: { login: 'a' }, comments: 0, updated_at: '2026-06-30T00:00:00Z' };
+  const issueB = { number: 2, title: '[UI] [P1] fix', body: '', labels: [], assignees: [], user: { login: 'a' }, comments: 0, updated_at: '2026-06-30T00:00:00Z' };
+  // ページ 1・ページ 2・末尾の空ページ([...][] に相当)
+  const pages = JSON.stringify([[issueA], [issueB], []]);
+  const dir = fakeGh({ 'user.json': USER, 'issues.json': pages, 'labels.json': LABELS });
   const out = runScript([...NOW], dir);
   assert.deepEqual(out.issues.map((i) => i.number), [1, 2]);
+  assert.equal(out.issues[1].title, '[UI] [P1] fix'); // 文字列内の "] [" が誤って書き換わらない
 });
 
 test('Issue 取得が失敗したら step: issues で stderr を返す', () => {
-  const dir = fakeGh({ 'user.json': USER, 'issues.json': '[]', 'labels.json': LABELS }, '*"/issues?"*');
+  const dir = fakeGh({ 'user.json': USER, 'issues.json': '[[]]', 'labels.json': LABELS }, '*"/issues?"*');
   const out = runScript([...NOW], dir);
   assert.equal(out.ok, false);
   assert.equal(out.step, 'issues');
@@ -134,6 +138,6 @@ test('Issue 取得が失敗したら step: issues で stderr を返す', () => {
 });
 
 test('ラベル取得が失敗したら step: labels', () => {
-  const dir = fakeGh({ 'user.json': USER, 'issues.json': '[]', 'labels.json': LABELS }, '*"/labels?"*');
+  const dir = fakeGh({ 'user.json': USER, 'issues.json': '[[]]', 'labels.json': LABELS }, '*"/labels?"*');
   assert.equal(runScript([...NOW], dir).step, 'labels');
 });

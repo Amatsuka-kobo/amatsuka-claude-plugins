@@ -17,15 +17,22 @@ const args = process.argv.slice(2);
 let dir = process.cwd();
 let since = null;
 let user = null;
+let userProvided = false;
 let latest = null;
 const keywords = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--dir') dir = args[++i] ?? dir;
   else if (a === '--since') since = args[++i] ?? '';
-  else if (a === '--user') user = args[++i] ?? '';
+  else if (a === '--user') { userProvided = true; user = args[++i] ?? ''; }
   else if (a === '--latest') latest = /^\d+$/.test(args[i + 1] ?? '') ? Number(args[++i]) : 3;
   else keywords.push(a);
+}
+// resume スキルは `--user "$(git config user.name)"` を渡すため、git のユーザー名が
+// 未設定(空文字)だと従来はフィルタ無し(全ユーザー対象)に化けてしまっていた。
+// 空値のまま黙って通さず、意図がわかる形でエラーにする
+if (userProvided && !user) {
+  output({ ok: false, error: '--user に空の値は指定できません(git config user.name が未設定の可能性)' });
 }
 if (since !== null && !/^\d{4}-\d{2}-\d{2}$/.test(since)) {
   output({ ok: false, error: `--since は YYYY-MM-DD 形式で指定してください: ${since}` });
