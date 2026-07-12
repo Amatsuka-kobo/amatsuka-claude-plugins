@@ -150,3 +150,22 @@ test('--latest でも unindexed を返す(INDEX.md 不在時は全記録が unin
   const out = runScript(['--dir', dir, '--latest']);
   assert.deepEqual(out.unindexed, ['2026/0101/alice/a.md']);
 });
+
+test('読めないファイル(chmod 000)があっても exit 0 で JSON を返し、そのファイルはヒットから外れる(grep モード)', {
+  skip: process.getuid && process.getuid() === 0 ? 'root は権限を無視するためスキップ' : false,
+}, () => {
+  const dir = fixture({
+    '2026/0101/alice/readable.md': '# 読める記録\nキーワード x',
+    '2026/0102/alice/trap.md': '# 読めない記録\nキーワード x',
+  });
+  const trapPath = path.join(dir, 'docs/chat/2026/0102/alice/trap.md');
+  fs.chmodSync(trapPath, 0o000);
+  try {
+    const out = runScript(['--dir', dir, 'キーワード']);
+    assert.equal(out.ok, true);
+    assert.equal(out.mode, 'grep');
+    assert.deepEqual(out.hits.map((h) => h.path), ['2026/0101/alice/readable.md']);
+  } finally {
+    fs.chmodSync(trapPath, 0o644); // 後片付け(mkdtemp ディレクトリの削除に支障が出ないように)
+  }
+});
