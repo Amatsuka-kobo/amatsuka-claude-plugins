@@ -2,8 +2,8 @@
 
 - 日付: 2026-07-12
 - 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）
-- 前提: CLAUDE.md、agents-claude-only.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル
+- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）
+- 前提: CLAUDE.md、agents-claude-only.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル、superpowers:writing-plans スキル
 
 ---
 
@@ -380,4 +380,40 @@ plugins/basic-design/
 
 ---
 
-注意事項：設計書は Haiku レビュー修正後のコミット a592938 の状態。引き続きユーザーレビュー待機中。
+## セッション7: 実装計画の作成と実行方法の確認
+
+# phyllis998
+
+> 実装計画に進んでください
+
+# AI
+
+**何をしたか**：ユーザーから実装計画作成の指示を受け、writing-plans スキルを invoke して実装計画を作成。Haiku レビューを実施し、指摘を反映してコミット。実行方法（Subagent-Driven vs Inline Execution）の確認待機中。
+
+**実施内容**：
+
+1. **実装計画作成**（コミット 2dd5966）：
+   - ファイル：`docs/superpowers/plans/2026-07-12-basic-design-stage1.md`
+   - 対象：Stage 1（変換パイプライン基盤 + ER図の縦一本）
+   - 構成：9 タスク（土台・xml-util・validate・layout-er・render-drawio・render-html・design-gen CLI・er-diagram スキル・マーケットプレイス登録）
+   - 各タスクは TDD フロー（テスト → 失敗確認 → 実装 → 成功確認 → コミット）に対応
+   - Stage 2（残り 3 図種）、Stage 3（Markdown 系スキル+入口スキル統合）、Stage 4（Drive オプトイン連携）は段階的に計画予定
+
+2. **Haiku レビュー実施**（コミット bd677b0）：
+   - 実装計画を Haiku サブエージェントでレビュー。「理解したこと」として、タスク間の型・名前の整合性確認、設計書 Stage 1 要件の網羅性確認を実施
+   - 発見された曖昧さ 5 点を反映：
+     - `CLAUDE_PLUGIN_ROOT` 環境変数の出どころ明記
+     - テストヘルパーとテストの位置づけ分離
+     - mxGraph の親相対座標系（親セル基準）への注意記載
+     - design-gen.mjs の CLI 引数・エッジケースの詳細化
+     - セルフチェック方向性（スキルはドッグフーディング、実機確認は手動）の明記
+
+**決定と理由**：実装計画を段階的に分割（Stage 1-4）することで、ER図基盤の完成後に横断的な改善や追加図種の追加を計画的に進められるよう設計。Haiku レビューで実装者が迷う観点を事前抽出し、計画の実装可能性を向上。
+
+**残り確認事項**：実行方法の選択待機中。2 つの方法から選択予定：
+1. **Subagent-Driven（推奨）**：タスクごとに新しいサブエージェントを起動、タスク間で私がレビュー。コンテキスト清潔性・レビューゲート有効。
+2. **Inline Execution**：本セッションで私が直接、チェックポイント挟みながら順に実行。
+
+---
+
+注意事項：実装計画作成・Haiku レビュー反映完了。実行方法の確認待機中。
