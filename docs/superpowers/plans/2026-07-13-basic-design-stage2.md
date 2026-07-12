@@ -1006,6 +1006,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 セルの出力順: zones → nodes → lines → edges(draw.io は文書順が z 順なので、ゾーンが背景になる)。
 
+**ER バイト不変の検証手順**: コミット済みの `samples/order-system.drawio` は spec からの再生成結果とバイト一致することが Stage 1 最終レビューで確認済み。これを回帰の基準に使う(Step 4 参照)。
+
 - [ ] **Step 1: 失敗するテストを追記**
 
 `plugins/basic-design/scripts/render-drawio.test.mjs` の末尾に追記:
@@ -1212,6 +1214,8 @@ export function renderDrawio(layout) {
 
 Run: `node --test plugins/basic-design/scripts/render-drawio.test.mjs`
 Expected: PASS(既存 5 + 新規 5 = 10 tests)
+
+さらに ER バイト不変を直接確認: `node plugins/basic-design/scripts/design-gen.mjs plugins/basic-design/samples/order-system.spec.json --format drawio` を実行し、`git diff plugins/basic-design/samples/order-system.drawio` が**空である**こと(差分が出たら ER パスの transcribe ミス — 修正してから進む)。
 
 - [ ] **Step 5: コミット**
 
@@ -1529,6 +1533,8 @@ Expected: PASS(既存 5 + 新規 5 = 10 tests)
 
 注意: 既存テスト「外部リソース参照が無い」は `src="https?:` / `link href` を見るためマーカー追加で壊れない。ER エッジは cardinality を持つため marker 属性が付かず、既存アサーションのまま通る。
 
+さらに ER の見た目回帰を直接確認: `node plugins/basic-design/scripts/design-gen.mjs plugins/basic-design/samples/order-system.spec.json --format html` を実行し、`git diff plugins/basic-design/samples/order-system.html` の差分が **defs マーカー・追加 CSS・空の zones/lines グループ・showPanel の変更のみ**であること(ノード・エッジの SVG 座標や rows 描画に差分が出たら transcribe ミス)。確認後、差分は次タスクのサンプル一括再生成で確定するため、ここでは `git checkout -- plugins/basic-design/samples/` で戻す。
+
 - [ ] **Step 5: コミット**
 
 ```bash
@@ -1717,15 +1723,16 @@ Expected: PASS(全ファイル、fail 0)
 }
 ```
 
-各サンプルを生成:
+各サンプルを生成(ER サンプルも再生成して HTML テンプレート変更を反映):
 
 ```bash
 node plugins/basic-design/scripts/design-gen.mjs plugins/basic-design/samples/ec-screen-flow.spec.json --format both
 node plugins/basic-design/scripts/design-gen.mjs plugins/basic-design/samples/web-architecture.spec.json --format both
 node plugins/basic-design/scripts/design-gen.mjs plugins/basic-design/samples/login-sequence.spec.json --format both
+node plugins/basic-design/scripts/design-gen.mjs plugins/basic-design/samples/order-system.spec.json --format both
 ```
 
-Expected: 各コマンドで `{"ok":true,"files":[...2件...]}`、exit 0
+Expected: 各コマンドで `{"ok":true,"files":[...2件...]}`、exit 0。`git diff plugins/basic-design/samples/order-system.drawio` は空(ER の .drawio はバイト不変)。order-system.html には Task 6 のテンプレート変更分のみ差分が出る(正常)
 
 - [ ] **Step 6: コミット**
 
