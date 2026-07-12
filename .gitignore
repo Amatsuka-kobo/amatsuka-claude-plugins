@@ -1,5 +1,11 @@
+# 一時ファイル等
 node_modules
 .superpowers/
-static/
+
+# CLI Proxy APIの設定ファイル
+static/management.html
 cliproxyapi.config.yaml
+
+# claude関連
 .claude/agents
+CLAUDE.md
