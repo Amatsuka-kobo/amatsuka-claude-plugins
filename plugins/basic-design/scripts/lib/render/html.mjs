@@ -3,22 +3,64 @@ import { escapeXml } from '../xml-util.mjs';
 const PAD = 40;
 
 export function renderHtml(layout, spec) {
-  const width = Math.max(...layout.nodes.map((n) => n.x + n.width)) + PAD * 2;
-  const height = Math.max(...layout.nodes.map((n) => n.y + n.height)) + PAD * 2;
+  const zones = layout.zones ?? [];
+  const lines = layout.lines ?? [];
+  const boxes = [...layout.nodes, ...zones];
+  const width = Math.max(
+    ...boxes.map((b) => b.x + b.width),
+    ...lines.map((l) => l.x),
+  ) + PAD * 2;
+  const height = Math.max(
+    ...boxes.map((b) => b.y + b.height),
+    ...lines.map((l) => l.y2),
+    ...layout.edges.flatMap((e) => (e.fromPt ? [e.fromPt.y, e.toPt.y] : [])),
+  ) + PAD * 2;
   const byId = new Map(layout.nodes.map((n) => [n.id, n]));
+
+  const zoneSvg = zones
+    .map((zone) =>
+      `<g class="zone">` +
+      `<rect x="${zone.x + PAD}" y="${zone.y + PAD}" width="${zone.width}" height="${zone.height}"/>` +
+      `<text x="${zone.x + PAD + 8}" y="${zone.y + PAD + 18}" class="zone-label">${escapeXml(zone.label)}</text>` +
+      `</g>`,
+    )
+    .join('\n');
+
+  const lineSvg = lines
+    .map((line) =>
+      `<line class="lifeline" x1="${line.x + PAD}" y1="${line.y1 + PAD}" x2="${line.x + PAD}" y2="${line.y2 + PAD}"/>`,
+    )
+    .join('\n');
 
   const edgeSvg = layout.edges
     .map((edge) => {
-      const a = byId.get(edge.from);
-      const b = byId.get(edge.to);
-      const x1 = a.x + a.width / 2 + PAD;
-      const y1 = a.y + a.height / 2 + PAD;
-      const x2 = b.x + b.width / 2 + PAD;
-      const y2 = b.y + b.height / 2 + PAD;
+      let x1;
+      let y1;
+      let x2;
+      let y2;
+      if (edge.fromPt) {
+        x1 = edge.fromPt.x + PAD;
+        y1 = edge.fromPt.y + PAD;
+        x2 = edge.toPt.x + PAD;
+        y2 = edge.toPt.y + PAD;
+      } else {
+        const a = byId.get(edge.from);
+        const b = byId.get(edge.to);
+        x1 = a.x + a.width / 2 + PAD;
+        y1 = a.y + a.height / 2 + PAD;
+        x2 = b.x + b.width / 2 + PAD;
+        y2 = b.y + b.height / 2 + PAD;
+      }
       const label = [edge.label, edge.cardinality].filter(Boolean).join(' ');
+      const styleClass = edge.style ? ` ${edge.style}` : '';
+      const marker = edge.cardinality
+        ? ''
+        : edge.style === 'async' || edge.style === 'return'
+          ? ' marker-end="url(#arrow-open)"'
+          : ' marker-end="url(#arrow)"';
       return (
-        `<g class="edge" data-id="${escapeXml(edge.id)}" data-from="${escapeXml(edge.from)}" data-to="${escapeXml(edge.to)}">` +
-        `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>` +
+        `<g class="edge${styleClass}" data-id="${escapeXml(edge.id)}" data-from="${escapeXml(edge.from)}" data-to="${escapeXml(edge.to)}">` +
+        `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${marker}/>` +
         `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle" class="edge-label">${escapeXml(label)}</text>` +
         `</g>`
       );
@@ -27,18 +69,33 @@ export function renderHtml(layout, spec) {
 
   const nodeSvg = layout.nodes
     .map((node) => {
-      const rows = node.rows
-        .map((row, i) => {
-          const rowY = node.headerHeight + i * node.rowHeight + node.rowHeight / 2;
-          return `<text x="8" y="${rowY}" dominant-baseline="middle" class="row">${escapeXml(row.text)}</text>`;
-        })
-        .join('');
+      let body;
+      if (node.rows) {
+        const rows = node.rows
+          .map((row, i) => {
+            const rowY = node.headerHeight + i * node.rowHeight + node.rowHeight / 2;
+            return `<text x="8" y="${rowY}" dominant-baseline="middle" class="row">${escapeXml(row.text)}</text>`;
+          })
+          .join('');
+        body =
+          `<rect width="${node.width}" height="${node.height}" class="node-box"/>` +
+          `<rect width="${node.width}" height="${node.headerHeight}" class="node-header"/>` +
+          `<text x="${node.width / 2}" y="${node.headerHeight / 2}" text-anchor="middle" dominant-baseline="middle" class="node-title">${escapeXml(node.label)}</text>` +
+          rows;
+      } else if (node.shape === 'terminal') {
+        body =
+          `<ellipse cx="${node.width / 2}" cy="${node.height / 2}" rx="${node.width / 2}" ry="${node.height / 2}" class="node-box"/>` +
+          `<text x="${node.width / 2}" y="${node.height / 2}" text-anchor="middle" dominant-baseline="middle" class="node-title">${escapeXml(node.label)}</text>`;
+      } else {
+        const rx = node.shape === 'actor' ? 0 : 8;
+        const fillClass = node.shape === 'actor' ? ' node-header-fill' : '';
+        body =
+          `<rect width="${node.width}" height="${node.height}" rx="${rx}" class="node-box${fillClass}"/>` +
+          `<text x="${node.width / 2}" y="${node.height / 2}" text-anchor="middle" dominant-baseline="middle" class="node-title">${escapeXml(node.label)}</text>`;
+      }
       return (
         `<g class="node" data-id="${escapeXml(node.id)}" transform="translate(${node.x + PAD},${node.y + PAD})">` +
-        `<rect width="${node.width}" height="${node.height}" class="node-box"/>` +
-        `<rect width="${node.width}" height="${node.headerHeight}" class="node-header"/>` +
-        `<text x="${node.width / 2}" y="${node.headerHeight / 2}" text-anchor="middle" dominant-baseline="middle" class="node-title">${escapeXml(node.label)}</text>` +
-        rows +
+        body +
         `</g>`
       );
     })
@@ -69,6 +126,12 @@ export function renderHtml(layout, spec) {
   svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
   .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
   .hl line, .pv line { stroke: #1a63c9; stroke-width: 2.5; }
+  .zone rect { fill: #f5f5f5; stroke: #666; }
+  .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
+  .lifeline { stroke: #999; stroke-dasharray: 6 4; }
+  .edge.return line { stroke-dasharray: 6 4; }
+  .node-header-fill { fill: #e8eef7; }
+  #arrow path { fill: #666; }
   aside { width: 280px; border-left: 1px solid #ddd; padding: 12px; overflow-y: auto; background: #fff; }
   aside h2 { font-size: 14px; margin: 0 0 8px; }
   aside table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -78,6 +141,16 @@ export function renderHtml(layout, spec) {
 <body>
 <main>
 <svg id="canvas" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
+<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#666"/></marker>
+</defs>
+<g id="zones">
+${zoneSvg}
+</g>
+<g id="lines">
+${lineSvg}
+</g>
 <g id="edges">
 ${edgeSvg}
 </g>
@@ -192,19 +265,35 @@ ${nodeSvg}
       const node = layout.nodes.find((n) => n.id === g.dataset.id);
       panelTitle.textContent = node.label;
       const table = document.createElement('table');
-      for (const row of node.rows) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.textContent = row.text;
-        tr.appendChild(td);
-        table.appendChild(tr);
+      if (node.rows) {
+        for (const row of node.rows) {
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.textContent = row.text;
+          tr.appendChild(td);
+          table.appendChild(tr);
+        }
+      } else {
+        for (const [k, v] of Object.entries(node.meta ?? {})) {
+          if (v === '' || v === undefined) continue;
+          const tr = document.createElement('tr');
+          const td1 = document.createElement('td');
+          const td2 = document.createElement('td');
+          td1.textContent = k;
+          td2.textContent = String(v);
+          tr.append(td1, td2);
+          table.appendChild(tr);
+        }
       }
       panelBody.appendChild(table);
     } else {
       const edge = layout.edges.find((ed) => ed.id === g.dataset.id);
       panelTitle.textContent = edge.label || edge.id;
       const dl = document.createElement('table');
-      for (const [k, v] of [['from', edge.from], ['to', edge.to], ['cardinality', edge.cardinality]]) {
+      const fields = [['from', edge.from], ['to', edge.to]];
+      if (edge.cardinality) fields.push(['cardinality', edge.cardinality]);
+      if (edge.style) fields.push(['style', edge.style]);
+      for (const [k, v] of fields) {
         const tr = document.createElement('tr');
         const td1 = document.createElement('td');
         const td2 = document.createElement('td');
