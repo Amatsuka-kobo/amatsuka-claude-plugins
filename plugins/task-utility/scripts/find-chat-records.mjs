@@ -69,10 +69,16 @@ const records = walk(chatDir)
   .filter(Boolean);
 
 // INDEX.md(1 ファイル 1 行の索引)。行形式: - `path` | date | user | 要旨
+// 存在しても読めない(EACCES、ディレクトリ等)場合は存在しない扱いにして grep フォールバックする
 const indexPath = path.join(chatDir, 'INDEX.md');
-const indexLines = fs.existsSync(indexPath)
-  ? fs.readFileSync(indexPath, 'utf8').split('\n').filter((l) => l.startsWith('- `'))
-  : null;
+let indexLines = null;
+if (fs.existsSync(indexPath)) {
+  try {
+    indexLines = fs.readFileSync(indexPath, 'utf8').split('\n').filter((l) => l.startsWith('- `'));
+  } catch {
+    indexLines = null;
+  }
+}
 const indexedPaths = new Set((indexLines ?? []).map((l) => l.match(/^- `([^`]+)`/)?.[1]).filter(Boolean));
 const unindexed = records.filter((r) => !indexedPaths.has(r.path)).map((r) => r.path);
 
