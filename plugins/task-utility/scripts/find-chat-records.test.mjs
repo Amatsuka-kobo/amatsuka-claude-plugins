@@ -169,3 +169,14 @@ test('読めないファイル(chmod 000)があっても exit 0 で JSON を返�
     fs.chmodSync(trapPath, 0o644); // 後片付け(mkdtemp ディレクトリの削除に支障が出ないように)
   }
 });
+
+test('INDEX.md が読めない(ディレクトリ)場合も grep モードにフォールバックし exit 0 で JSON を返す', () => {
+  const dir = fixture({
+    '2026/0101/alice/design.md': '# 設計セッション\nストリーミング方式を採用',
+  });
+  fs.mkdirSync(path.join(dir, 'docs', 'chat', 'INDEX.md'));
+  const out = runScript(['--dir', dir, 'ストリーミング']);
+  assert.equal(out.ok, true);
+  assert.equal(out.mode, 'grep');
+  assert.deepEqual(out.hits.map((h) => h.path), ['2026/0101/alice/design.md']);
+});
