@@ -82,3 +82,33 @@ test('relations は省略可', () => {
   delete spec.relations;
   assert.deepEqual(validateSpec(spec), []);
 });
+
+test('relations が配列でない場合はエラー(throw しない)', () => {
+  const spec = { ...validSpec(), relations: {} };
+  assert.doesNotThrow(() => validateSpec(spec));
+  const errors = validateSpec(spec);
+  assert.ok(errors.some((e) => e.includes('relations')));
+});
+
+test('entities の要素が null の場合はエラー(throw しない)', () => {
+  const spec = { ...validSpec(), entities: [null] };
+  assert.doesNotThrow(() => validateSpec(spec));
+  const errors = validateSpec(spec);
+  assert.ok(errors.some((e) => e.includes('entities')));
+});
+
+test('columns の要素が null の場合はエラー(throw しない)', () => {
+  const spec = validSpec();
+  spec.entities[0].columns = [null];
+  assert.doesNotThrow(() => validateSpec(spec));
+  const errors = validateSpec(spec);
+  assert.ok(errors.some((e) => e.includes('columns')));
+});
+
+test('relations の要素が null の場合はエラー(throw しない)', () => {
+  const spec = validSpec();
+  spec.relations = [null];
+  assert.doesNotThrow(() => validateSpec(spec));
+  const errors = validateSpec(spec);
+  assert.ok(errors.some((e) => e.includes('relations')));
+});
