@@ -30,6 +30,10 @@ function validateEr(spec) {
   const names = new Set();
   for (const [i, entity] of spec.entities.entries()) {
     const where = `entities[${i}]`;
+    if (entity === null || typeof entity !== 'object') {
+      errors.push(`${where}: オブジェクトではありません`);
+      continue;
+    }
     if (typeof entity.name !== 'string' || entity.name.trim() === '') {
       errors.push(`${where}.name: 必須です(空でない文字列)`);
       continue;
@@ -43,13 +47,26 @@ function validateEr(spec) {
       continue;
     }
     for (const [j, column] of entity.columns.entries()) {
+      if (column === null || typeof column !== 'object') {
+        errors.push(`entities(${entity.name}).columns[${j}]: オブジェクトではありません`);
+        continue;
+      }
       if (typeof column.name !== 'string' || column.name.trim() === '') {
         errors.push(`entities(${entity.name}).columns[${j}].name: 必須です(空でない文字列)`);
       }
     }
   }
-  for (const [i, rel] of (spec.relations ?? []).entries()) {
+  const relations = spec.relations ?? [];
+  if (!Array.isArray(relations)) {
+    errors.push('relations: 配列ではありません');
+    return errors;
+  }
+  for (const [i, rel] of relations.entries()) {
     const where = `relations[${i}]`;
+    if (rel === null || typeof rel !== 'object') {
+      errors.push(`${where}: オブジェクトではありません`);
+      continue;
+    }
     for (const end of ['from', 'to']) {
       if (!names.has(rel[end])) {
         errors.push(`${where}.${end}: エンティティ "${rel[end]}" は entities に定義されていません`);
