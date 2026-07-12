@@ -19,6 +19,11 @@
       "name": "task-utility",
       "source": "./plugins/task-utility",
       "description": "タスクの進め方を支援するユーティリティ群"
+    },
+    {
+      "name": "basic-design",
+      "source": "./plugins/basic-design",
+      "description": "基本設計フェーズの成果物(ER図・画面遷移図・システム構成図など)をブレインストーミングで作成するツール群"
     }
   ]
 }

@@ -1,0 +1,48 @@
+{
+  "type": "er",
+  "title": "受注管理システム ER図(サンプル)",
+  "entities": [
+    {
+      "name": "users",
+      "label": "ユーザー",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "email", "type": "VARCHAR(255)", "unique": true },
+        { "name": "name", "type": "VARCHAR(100)" }
+      ]
+    },
+    {
+      "name": "orders",
+      "label": "注文",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "user_id", "type": "BIGINT", "fk": true },
+        { "name": "ordered_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "order_items",
+      "label": "注文明細",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "order_id", "type": "BIGINT", "fk": true },
+        { "name": "product_id", "type": "BIGINT", "fk": true },
+        { "name": "quantity", "type": "INT" }
+      ]
+    },
+    {
+      "name": "products",
+      "label": "商品",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "name", "type": "VARCHAR(200)" },
+        { "name": "price", "type": "DECIMAL(10,2)" }
+      ]
+    }
+  ],
+  "relations": [
+    { "from": "users", "to": "orders", "cardinality": "1:N", "label": "発注する" },
+    { "from": "orders", "to": "order_items", "cardinality": "1:N" },
+    { "from": "products", "to": "order_items", "cardinality": "1:N" }
+  ]
+}
