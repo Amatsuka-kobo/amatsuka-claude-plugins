@@ -379,9 +379,11 @@ LayoutResult = {
 
 レイアウト方針(設計書 §7): リレーション接続数の多いエンティティ順に、`ceil(sqrt(n))` 列のグリッドへ配置。行の高さはその行内の最大ノード高+ギャップ。保証ラインは「矩形が重ならない」こと。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [ ] **Step 1: テストヘルパーと失敗するテストを書く**
 
-`plugins/basic-design/scripts/test-helpers.mjs`(テスト用ヘルパー。先に作る):
+テスト対象ではない共有ヘルパー(重なり判定)を先に作ってから、テスト本体を書く。TDD の「先に書くテスト」は layout-er.test.mjs のほうであり、ヘルパーはテストコードの一部として扱う。
+
+`plugins/basic-design/scripts/test-helpers.mjs`:
 
 ```js
 export function rectsOverlap(a, b) {
@@ -589,6 +591,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - ノードの mxCell id は `n-<node.id>` にプレフィックスする(mxGraph のルートセル id "0"・"1" との衝突回避)。行セルは `n-<node.id>-row<番号>`、エッジは `e-<edge.id>`
 - エンティティは swimlane(childLayout=stackLayout)、カラム行はその子セル
 - カーディナリティは ER 矢印(ERone / ERmany)にマップする
+- **座標系**: エンティティの mxGeometry はキャンバス絶対座標(layout の x, y そのまま)。カラム行の mxGeometry は **親 swimlane からの相対座標**(y = headerHeight + 行番号 × rowHeight、x は省略 = 0)。Task 6 の SVG も行は親 `<g>` 相対だが、あちらは text 要素の縦中央合わせで rowHeight/2 を足す点だけが違う
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -1187,6 +1190,20 @@ test('不正な --format は exit 1', async () => {
   assert.ok(json.errors.some((e) => e.includes('pdf')));
 });
 
+test('--format に値が無い場合も exit 1', async () => {
+  const { specPath } = await writeSpec(validSpec);
+  const { code, json } = await runCli([specPath, '--format']);
+  assert.equal(code, 1);
+  assert.equal(json.ok, false);
+});
+
+test('--format 省略時は both として動く', async () => {
+  const { specPath } = await writeSpec(validSpec);
+  const { code, json } = await runCli([specPath]);
+  assert.equal(code, 0);
+  assert.equal(json.files.length, 2);
+});
+
 test('存在しない spec ファイルは exit 1', async () => {
   const { code, json } = await runCli(['/no/such/file.spec.json', '--format', 'both']);
   assert.equal(code, 1);
@@ -1280,7 +1297,7 @@ main();
 - [ ] **Step 4: テストが通ることを確認**
 
 Run: `node --test plugins/basic-design/scripts/design-gen.test.mjs`
-Expected: PASS(7 tests)
+Expected: PASS(9 tests)
 
 - [ ] **Step 5: 全テストを通しで確認**
 
@@ -1307,6 +1324,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: Task 7 の CLI 契約(`${CLAUDE_PLUGIN_ROOT}/scripts/design-gen.mjs`)
 - Produces: ユーザーが「ER図を作って」で発動できるスキル。Stage 3 の入口スキルはこのスキルへ委譲する
+
+`${CLAUDE_PLUGIN_ROOT}` は Claude Code がスキル実行時に提供する標準環境変数で、インストールされたプラグインのルートディレクトリを指す。既存の使用例: `plugins/task-utility/skills/issue-craft/SKILL.md` の `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-issue-env.mjs"`。プラグイン側での定義・設定は不要。
 
 スキルはコードを持たないため自動テストなし(設計書 §12)。検証は Step 3 のセルフチェックとドッグフーディング。
 
@@ -1475,7 +1494,7 @@ git コミットはユーザーの指示があったときのみ行う。
 
 - SKILL.md の frontmatter が issue-craft と同じ形式(name / description のみ、description に発動条件と「明示的な依頼があったときのみ」の一文)
 - 手順に「承認前に生成しない」「エラー時は spec 修正のみ、2 回で STOP」が含まれる
-- spec-schema.md のフィールドが Task 3 の validate.mjs の検証項目と一致している(type/title/entities/name/columns/relations/from/to/cardinality)
+- spec-schema.md のフィールドが Task 3 で**実装済みの** `plugins/basic-design/scripts/lib/validate.mjs` の検証項目と一致している(type/title/entities/name/columns/relations/from/to/cardinality)。このチェックは「先に存在する validate.mjs に、後から書いた文書を合わせる」方向で行う
 
 - [ ] **Step 4: コミット**
 
