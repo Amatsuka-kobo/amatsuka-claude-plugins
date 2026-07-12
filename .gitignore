@@ -2,3 +2,4 @@ node_modules
 .superpowers/
 static/
 cliproxyapi.config.yaml
+.claude/agents
