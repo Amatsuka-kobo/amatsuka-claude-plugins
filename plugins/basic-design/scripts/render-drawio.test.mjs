@@ -65,3 +65,76 @@ test('N:M は両端 ERmany', () => {
   const xml = renderDrawio(l);
   assert.ok(/startArrow=ERmany;[^"]*endArrow=ERmany;/.test(xml));
 });
+
+// ---- Stage 2: 汎用シーングラフ ----
+
+test('ゾーンが z- プレフィックスで nodes より先に出力される', () => {
+  const xml = renderDrawio({
+    type: 'architecture',
+    title: 'x',
+    zones: [{ id: 'aws', label: 'AWS', x: 0, y: 0, width: 400, height: 200 }],
+    nodes: [{ id: 'app', label: 'App', shape: 'box', x: 20, y: 50, width: 140, height: 60 }],
+    edges: [],
+  });
+  assert.ok(/id="z-aws"[^>]*vertex="1"/.test(xml));
+  assert.ok(xml.indexOf('id="z-aws"') < xml.indexOf('id="n-app"'));
+});
+
+test('shape 別のノードスタイル(box は rounded、terminal は ellipse、actor は fontStyle=1)', () => {
+  const xml = renderDrawio({
+    type: 'screen-flow',
+    title: 'x',
+    nodes: [
+      { id: 'a', label: 'A', shape: 'box', x: 0, y: 0, width: 180, height: 60 },
+      { id: 'b', label: 'B', shape: 'terminal', x: 300, y: 0, width: 180, height: 60 },
+      { id: 'c', label: 'C', shape: 'actor', x: 600, y: 0, width: 140, height: 50 },
+    ],
+    edges: [],
+  });
+  assert.ok(/id="n-a"[^>]*style="rounded=1;/.test(xml));
+  assert.ok(/id="n-b"[^>]*style="ellipse;/.test(xml));
+  assert.ok(/id="n-c"[^>]*style="[^"]*fontStyle=1;"/.test(xml));
+});
+
+test('ライフラインが破線エッジセルとして座標指定で出力される', () => {
+  const xml = renderDrawio({
+    type: 'sequence',
+    title: 'x',
+    nodes: [{ id: 'u', label: 'U', shape: 'actor', x: 0, y: 0, width: 140, height: 50 }],
+    lines: [{ x: 70, y1: 50, y2: 300, owner: 'u' }],
+    edges: [],
+  });
+  assert.ok(/id="l-1"[^>]*edge="1"/.test(xml));
+  assert.ok(xml.includes('<mxPoint x="70" y="50" as="sourcePoint"/>'));
+  assert.ok(xml.includes('<mxPoint x="70" y="300" as="targetPoint"/>'));
+  assert.ok(/id="l-1"[^>]*dashed=1/.test(xml));
+});
+
+test('座標指定エッジ(fromPt/toPt)が sourcePoint/targetPoint で出力され、style が反映される', () => {
+  const xml = renderDrawio({
+    type: 'sequence',
+    title: 'x',
+    nodes: [],
+    edges: [
+      { id: 'msg1', from: 'u', to: 'w', label: '要求', style: 'sync', fromPt: { x: 70, y: 100 }, toPt: { x: 300, y: 100 } },
+      { id: 'msg2', from: 'w', to: 'u', label: '応答', style: 'return', fromPt: { x: 300, y: 150 }, toPt: { x: 70, y: 150 } },
+    ],
+  });
+  assert.ok(/id="e-msg1"[^>]*value="要求"/.test(xml));
+  assert.ok(xml.includes('<mxPoint x="70" y="100" as="sourcePoint"/>'));
+  assert.ok(/id="e-msg2"[^>]*style="[^"]*dashed=1;[^"]*endArrow=open;/.test(xml));
+});
+
+test('source/target 型の非 ER エッジは block 矢印になる', () => {
+  const xml = renderDrawio({
+    type: 'screen-flow',
+    title: 'x',
+    nodes: [
+      { id: 'a', label: 'A', shape: 'box', x: 0, y: 0, width: 180, height: 60 },
+      { id: 'b', label: 'B', shape: 'box', x: 300, y: 0, width: 180, height: 60 },
+    ],
+    edges: [{ id: 't1', from: 'a', to: 'b', label: '遷移', style: 'arrow' }],
+  });
+  assert.ok(/id="e-t1"[^>]*source="n-a" target="n-b"/.test(xml));
+  assert.ok(/id="e-t1"[^>]*endArrow=block;endFill=1;/.test(xml));
+});
