@@ -12,7 +12,7 @@
 
 ## chat スキル
 
-会話を `docs/chat/YYYY/MMDD/*.md` に永続記録する。粒度契約(ユーザー発言=原文引用、AI発言=構造化要約、失敗は道筋ごと記録、網羅性の明記)は `skills/chat/SKILL.md` を参照。
+会話を `docs/chat/YYYY/MMDD/<作業者名>/*.md`(作業者名は git のユーザー名)に永続記録する。粒度契約(ユーザー発言=原文引用、AI発言=構造化要約、失敗は道筋ごと記録、網羅性の明記)は `skills/chat/SKILL.md` を参照。
 
 ## 会話の自動記録(Stop フック + chat-recorder エージェント)
 
