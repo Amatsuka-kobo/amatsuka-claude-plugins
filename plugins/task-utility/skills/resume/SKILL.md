@@ -27,6 +27,8 @@ description: ユーザーがセッションの再開を依頼したとき(「続
 node "${CLAUDE_PLUGIN_ROOT}/scripts/find-chat-records.mjs" --latest 3 --user "$(git config user.name)"
 ```
 
+`git config user.name` が未設定(空)の場合はスクリプトがエラーを返すので、本人に作業者名を確認してから `--user <名前>` で再実行する。
+
 - 本人(`git config user.name`)の記録の新しい順に 3 件を取得する
 - 本人の記録が 0 件で他者の記録があるときは、その旨を伝えて、他者の記録から選ぶかユーザーに確認する
 - ユーザーが「◯◯の続き」とトピックを指定した場合は、`--latest` ではなくキーワード検索(`node .../find-chat-records.mjs --user <name> <keyword>...`)で対象を特定する

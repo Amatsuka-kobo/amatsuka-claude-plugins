@@ -82,6 +82,12 @@ test('--latest: 同日内は mtime 降順', () => {
   assert.deepEqual(out.hits.map((h) => h.title), ['二', '一']);
 });
 
+test('--user に空文字を指定すると ok: false(git config user.name 未設定を想定)', () => {
+  const dir = fixture({ '2026/0101/alice/a.md': '# A\n' });
+  const out = runScript(['--dir', dir, '--latest', '--user', '']);
+  assert.equal(out.ok, false);
+});
+
 test('--latest --user: 指定ユーザーの記録だけを返す', () => {
   const dir = fixture({
     '2026/0101/alice/a.md': '# A\n',
