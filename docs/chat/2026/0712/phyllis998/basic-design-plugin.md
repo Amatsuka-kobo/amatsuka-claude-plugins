@@ -1,8 +1,8 @@
-# 基本設計支援プラグイン「basic-design」の設計ブレインストーミング
+# 基本設計支援プラグイン「basic-design」の設計・実装ブレインストーミング
 
-- 日付: 2026-07-12
+- 日付: 2026-07-12 / 2026-07-13（実装）
 - 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）
+- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）；Stage 1 実装完了 ブランチ `feat/basic-design-stage1` 10 コミット（97c3d27 土台、83d4f3c xml-util、6844511 validate、0e53871 layout-er、b97204f render-drawio、55fc72a render-html、a9bedb7 design-gen CLI、964be5e er-diagram スキル、1498a82 marketplace+サンプル、fe435de バリデータ修正）、テスト 42/42 pass、最終ブランチレビュー(Fable)合格
 - 前提: CLAUDE.md、agents-claude-only.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル、superpowers:writing-plans スキル
 
 ---
@@ -372,7 +372,7 @@ plugins/basic-design/
 - **保存先スラッグ統一**：`docs/design/<図種>/<スラッグ>/` 形式の統一、Drive 同名ファイルの扱い（アップロード前にユーザー確認）、`.local.md` の形式例を明記
 - **design-gen.mjs の入出力契約**：check-issue-env.mjs と同じ「JSON を stdout に返す CLI」の流儀を明記。入力は spec JSON（stdin または ファイル引数）、出力は `{success, data, errors}` 構造
 - **テスト戦略の範囲**：重なり判定アサーション検証、実機互換性（Draw.io 互換性）は手動確認、スキル本体はドッグフーディング（実務ブレスト形式で検証）
-- **実装の段階分け**：ER図の縦一本 → 残り図種 → Markdown系スキル+入口スキル統合 → Drive オプトイン連携、と段階的に実装可能な構成に明記
+- **実装の段階分け**：ER図の縦一本 → 残り図種 → Markdown系+入口スキル統合 → Drive オプトイン連携、と段階的に実装可能な構成に明記
 
 **決定と理由**：spec スキーマの完全定義や marketplace.json の追記例など、実装計画・実装時に決めるのが適切な項目は、参照ファイルへの委譲として設計書に位置づけ。Haiku による理解検証で設計の実装可能性を整理し、実装フェーズの判断基準を明確化。並列実行排除、段階実装の明記により、スキル間の相互参照コスト削減。
 
@@ -416,4 +416,51 @@ plugins/basic-design/
 
 ---
 
-注意事項：実装計画作成・Haiku レビュー反映完了。実行方法の確認待機中。
+## セッション8: Subagent-Driven Development による Stage 1 実装完了
+
+# phyllis998
+
+> 1で進めてください
+
+# AI
+
+**何をしたか**：ユーザーから Subagent-Driven Development での実装実行指示を受け、superpowers:subagent-driven-development スキルを invoke。全 9 タスクを順序立てて実装し、各タスク実装後に Haiku/Sonnet レビュアーによるレビューを実施。全てのタスク実装とレビューが完了し、最終ブランチ全体レビュー（Fable）を実施。
+
+**実施内容**：
+
+1. **ブランチ準備**：feature ブランチ `feat/basic-design-stage1` を作成（base: main @ 2c53b55）。進捗台帳を記録開始。
+
+2. **全 9 タスクの実装と個別レビュー**（各タスク TDD フロー対応）：
+   - **Task 1（土台）**：コミット 97c3d27。plugin.json / README.md / ディレクトリ構造作成。一発通過。
+   - **Task 2（xml-util）**：コミット 83d4f3c。escapeXml ユーティリティ実装・テスト 5/5 pass。一発通過。
+   - **Task 3（validate）**：コミット 6844511。spec JSON バリデーション（必須フィールド・ID一意性・参照整合性）実装・テスト。Haiku/Sonnet レビュー合格。
+   - **Task 4（layout-er）**：コミット 0e53871。ER図レイアウトエンジン（グリッド配置+重なり判定）実装・テスト。レビュー合格。
+   - **Task 5（render-drawio）**：コミット b97204f。mxGraph XML レンダラ実装（swimlane + ER矢印）。テスト実装済み。レビュー合格。
+   - **Task 6（render-html）**：コミット 55fc72a。SVG + インタラクティブ HTML レンダラ実装（ズーム・パン・ハイライト・詳細パネル）。レビュー合格。
+   - **Task 7（design-gen CLI）**：コミット a9bedb7。CLI エントリポイント実装（JSON in/out 契約対応）。**brief にバグ検出**：CLI 引数の引数解析部が不正。テスト側で検出・修正。一発通過（修正後）。
+   - **Task 8（er-diagram スキル）**：コミット 964be5e。SKILL.md + spec-schema.md 作成。ブレスト→ドラフト承認→生成フローの実装。Haiku/Sonnet レビュー合格。
+   - **Task 9（marketplace 登録+サンプル）**：コミット 1498a82。marketplace.json 追記、CLAUDE.md ローカル編集（.gitignore のため記録なし）。サンプル `plugins/basic-design/samples/order-system.{spec.json,drawio,html}` 生成・実機確認待機。レビュー合格。
+
+3. **最終ブランチ全体レビュー**（Fable）：
+   - 実施対象：ブランチ全 10 コミット（上記 9 タスク + 1 修正コミット）。
+   - **検出結果**：Important 1 件「構造不正な spec JSON をバリデータに入力した場合、クラッシュレポートが返される」。バリデータの例外処理漏れが原因。
+   - **対応**：修正コミット fe435de で例外捕捉・エラーメッセージ返却に修正。再レビューで **Ready to merge: Yes** 判定。
+
+4. **テスト結果**：全 42 件パス（重なり判定アサーション、XML エスケープ、CLI 契約、クラッシュ耐性）。
+
+**決定と理由**：
+- Subagent-Driven Development により、タスク間でコンテキストを分離。各サブエージェントが brief から専念して実装・テスト→レビューサイクルを回すことで、実装品質の一貫性と透明性を確保。
+- 最終ブランチレビュー（Fable）での全体検証により、個別タスクレビューでは見落とすユースケース（構造不正 spec 入力）を検出し、本番への信頼性を向上。
+- brief の解析バグ（Task 7）は、テストが検出・修正。スキルが正仕様を仕様通り検証する仕組みが働いたことを示す。
+
+**残り確認事項**：実装が完了しました。以下のいずれかで進めてください：
+1. **main にローカルマージ**：feat/basic-design-stage1 を main に統合（プッシュなし）
+2. **プッシュして Pull Request 作成**：リモートにプッシュしてレビュー待機
+3. **ブランチをこのまま残す**：後で対応する
+4. **この作業を破棄**：ブランチを削除
+
+**後続フォロー**：Stage 1 実装物のブラウザ実機確認（`samples/order-system.drawio` を app.diagrams.net で開く、`samples/order-system.html` をブラウザで開く）はユーザーにお願いする事項として残っています。
+
+---
+
+注意事項：Stage 1 実装完了。マージ方法の確認待機中。サンプル生成物のブラウザ実機確認は後続フォロー。

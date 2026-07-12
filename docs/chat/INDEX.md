@@ -1,5 +1,5 @@
 # Chat Records Index
 
 - `2026/0712/phyllis998/agent-definitions-audit.md` | 2026-07-12 | phyllis998 | エージェント定義と方針の整合性検査・修正（6 セッション：agents-with-codex.md 準拠への段階的修正、フォールバック削除、Luna の役割追加で完了）
-- `2026/0712/phyllis998/basic-design-plugin.md` | 2026-07-12 | phyllis998 | 基本設計支援プラグイン「basic-design」の設計・実装方針策定（7 セッション：HTML インタラクティブ出力・ローカル保存基本・Drive オプトイン、spec スキーマ確定、設計書完成 dc5d14c/a6e9f17、Haiku レビュー実施・8 観点修正 a592938、Stage 1 実装計画作成 2dd5966、Haiku レビュー・5 観点修正 bd677b0、実行方法確認中）
+- `2026/0712/phyllis998/basic-design-plugin.md` | 2026-07-12 | phyllis998 | 基本設計支援プラグイン「basic-design」の設計・実装完了（8 セッション：要件確認・設計 3 セクション→実装計画作成→Stage 1 実装（Subagent-Driven 9 タスク・10 コミット・テスト 42/42 pass）→最終ブランチレビュー（Fable）合格、マージ方法確認待機、サンプル実機確認待機）
 - `2026/0712/phyllis998/task-utility-missing-features.md` | 2026-07-12 | phyllis998 | task-utility 機能拡張（chat-recall / resume / issue-triage）の設計・実装・デプロイ完了
