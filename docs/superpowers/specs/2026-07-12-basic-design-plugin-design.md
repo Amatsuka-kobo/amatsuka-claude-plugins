@@ -118,13 +118,15 @@ issue-craft の型を踏襲する:
   "type": "screen-flow",
   "title": "...",
   "screens": [
-    { "id": "login", "label": "ログイン画面", "group": "認証" }
+    { "id": "login", "label": "ログイン画面", "group": "認証", "kind": "start" }
   ],
   "transitions": [
     { "from": "login", "to": "home", "trigger": "ログイン成功" }
   ]
 }
 ```
+
+- `kind` は省略可(`start` / `end` / 省略=通常画面)。開始・終了点の観点をスキーマで表現する
 
 ### システム構成図 (`type: "architecture"`)
 
@@ -157,6 +159,8 @@ issue-craft の型を踏襲する:
   ]
 }
 ```
+
+- `style` は省略可(省略=同期 / `async` / `return`)。同期・非同期・応答の観点をスキーマで表現する
 
 ## 7. 変換スクリプト(design-gen.mjs)
 
