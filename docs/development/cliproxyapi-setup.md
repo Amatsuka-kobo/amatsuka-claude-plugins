@@ -151,6 +151,22 @@ claude
 
 CLIProxyAPI が停止している状態でこの起動をすると、Claude Code は接続できません。利用できるモデルは、実施した OAuth の状態と、設定の `oauth-model-alias` / `oauth-excluded-models` に依存します。
 
+## 6. Claude Code から GPT サブエージェントを使う（任意）
+
+Claude Code では、通常 `/model` コマンドで選択した場合以外で GPT モデルのエージェントを使用することはできません。
+それを解消するために `claude-gpt-5-6-sol` / `claude-gpt-5-6-terra` / `claude-gpt-5-6-sol` をモデルに指定した Agents 定義を用意しています。
+それらを `.claude/agents` フォルダに置くことで Claude Code は GPT モデルのサブエージェントを起動できるようになります。
+
+`.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
+GPT Agents は `codex` フォルダに置いてあるので、そこからのシンボリックリンクを作ることを推奨します。
+
+```bash
+mkdir .claude/agents
+ln -s ../codex/gpt-sol.md .claude/agents/gpt-sol.md
+ln -s ../codex/gpt-terra.md .claude/agents/gpt-terra.md
+ln -s ../codex/gpt-luna.md .claude/agents/gpt-luna.md
+```
+
 ## トラブルシューティング
 
 | 症状                               | 最初の確認                                    | 主な対応                                             |
