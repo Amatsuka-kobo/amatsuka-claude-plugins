@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>受注管理システム ER図(サンプル)</title>
+<title>ログイン処理シーケンス図(サンプル)</title>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -35,7 +35,7 @@
 </head>
 <body>
 <main>
-<svg id="canvas" viewBox="0 0 600 382" xmlns="http://www.w3.org/2000/svg">
+<svg id="canvas" viewBox="0 0 880 510" xmlns="http://www.w3.org/2000/svg">
 <defs>
 <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
 <marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#666"/></marker>
@@ -44,18 +44,24 @@
 
 </g>
 <g id="lines">
-
+<line class="lifeline" x1="110" y1="90" x2="110" y2="470"/>
+<line class="lifeline" x1="330" y1="90" x2="330" y2="470"/>
+<line class="lifeline" x1="550" y1="90" x2="550" y2="470"/>
+<line class="lifeline" x1="770" y1="90" x2="770" y2="470"/>
 </g>
 <g id="edges">
-<g class="edge" data-id="rel1" data-from="users" data-to="orders"><line x1="150" y1="288" x2="150" y2="94"/><text x="150" y="185" text-anchor="middle" class="edge-label">発注する 1:N</text></g>
-<g class="edge" data-id="rel2" data-from="orders" data-to="order_items"><line x1="150" y1="94" x2="450" y2="107"/><text x="300" y="94.5" text-anchor="middle" class="edge-label">1:N</text></g>
-<g class="edge" data-id="rel3" data-from="products" data-to="order_items"><line x1="450" y1="288" x2="450" y2="107"/><text x="450" y="191.5" text-anchor="middle" class="edge-label">1:N</text></g>
+<g class="edge sync" data-id="msg1" data-from="user" data-to="web"><line x1="110" y1="140" x2="330" y2="140" marker-end="url(#arrow)"/><text x="220" y="134" text-anchor="middle" class="edge-label">ログイン要求</text></g>
+<g class="edge sync" data-id="msg2" data-from="web" data-to="auth"><line x1="330" y1="190" x2="550" y2="190" marker-end="url(#arrow)"/><text x="440" y="184" text-anchor="middle" class="edge-label">認証リクエスト</text></g>
+<g class="edge sync" data-id="msg3" data-from="auth" data-to="db"><line x1="550" y1="240" x2="770" y2="240" marker-end="url(#arrow)"/><text x="660" y="234" text-anchor="middle" class="edge-label">ユーザー照会</text></g>
+<g class="edge return" data-id="msg4" data-from="db" data-to="auth"><line x1="770" y1="290" x2="550" y2="290" marker-end="url(#arrow-open)"/><text x="660" y="284" text-anchor="middle" class="edge-label">ユーザー情報</text></g>
+<g class="edge return" data-id="msg5" data-from="auth" data-to="web"><line x1="550" y1="340" x2="330" y2="340" marker-end="url(#arrow-open)"/><text x="440" y="334" text-anchor="middle" class="edge-label">トークン発行</text></g>
+<g class="edge return" data-id="msg6" data-from="web" data-to="user"><line x1="330" y1="390" x2="110" y2="390" marker-end="url(#arrow-open)"/><text x="220" y="384" text-anchor="middle" class="edge-label">ホーム画面表示</text></g>
 </g>
 <g id="nodes">
-<g class="node" data-id="orders" transform="translate(40,40)"><rect width="220" height="108" class="node-box"/><rect width="220" height="30" class="node-header"/><text x="110" y="15" text-anchor="middle" dominant-baseline="middle" class="node-title">注文(orders)</text><text x="8" y="43" dominant-baseline="middle" class="row">[PK] id : BIGINT</text><text x="8" y="69" dominant-baseline="middle" class="row">[FK] user_id : BIGINT</text><text x="8" y="95" dominant-baseline="middle" class="row">ordered_at : TIMESTAMP</text></g>
-<g class="node" data-id="order_items" transform="translate(340,40)"><rect width="220" height="134" class="node-box"/><rect width="220" height="30" class="node-header"/><text x="110" y="15" text-anchor="middle" dominant-baseline="middle" class="node-title">注文明細(order_items)</text><text x="8" y="43" dominant-baseline="middle" class="row">[PK] id : BIGINT</text><text x="8" y="69" dominant-baseline="middle" class="row">[FK] order_id : BIGINT</text><text x="8" y="95" dominant-baseline="middle" class="row">[FK] product_id : BIGINT</text><text x="8" y="121" dominant-baseline="middle" class="row">quantity : INT</text></g>
-<g class="node" data-id="users" transform="translate(40,234)"><rect width="220" height="108" class="node-box"/><rect width="220" height="30" class="node-header"/><text x="110" y="15" text-anchor="middle" dominant-baseline="middle" class="node-title">ユーザー(users)</text><text x="8" y="43" dominant-baseline="middle" class="row">[PK] id : BIGINT</text><text x="8" y="69" dominant-baseline="middle" class="row">[UQ] email : VARCHAR(255)</text><text x="8" y="95" dominant-baseline="middle" class="row">name : VARCHAR(100)</text></g>
-<g class="node" data-id="products" transform="translate(340,234)"><rect width="220" height="108" class="node-box"/><rect width="220" height="30" class="node-header"/><text x="110" y="15" text-anchor="middle" dominant-baseline="middle" class="node-title">商品(products)</text><text x="8" y="43" dominant-baseline="middle" class="row">[PK] id : BIGINT</text><text x="8" y="69" dominant-baseline="middle" class="row">name : VARCHAR(200)</text><text x="8" y="95" dominant-baseline="middle" class="row">price : DECIMAL(10,2)</text></g>
+<g class="node" data-id="user" transform="translate(40,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">ユーザー</text></g>
+<g class="node" data-id="web" transform="translate(260,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">Web アプリ</text></g>
+<g class="node" data-id="auth" transform="translate(480,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">認証 API</text></g>
+<g class="node" data-id="db" transform="translate(700,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">DB</text></g>
 </g>
 </svg>
 </main>
@@ -63,8 +69,8 @@
 <h2 id="panel-title"></h2>
 <div id="panel-body"></div>
 </aside>
-<script type="application/json" id="design-spec">{"type":"er","title":"受注管理システム ER図(サンプル)","entities":[{"name":"users","label":"ユーザー","columns":[{"name":"id","type":"BIGINT","pk":true},{"name":"email","type":"VARCHAR(255)","unique":true},{"name":"name","type":"VARCHAR(100)"}]},{"name":"orders","label":"注文","columns":[{"name":"id","type":"BIGINT","pk":true},{"name":"user_id","type":"BIGINT","fk":true},{"name":"ordered_at","type":"TIMESTAMP"}]},{"name":"order_items","label":"注文明細","columns":[{"name":"id","type":"BIGINT","pk":true},{"name":"order_id","type":"BIGINT","fk":true},{"name":"product_id","type":"BIGINT","fk":true},{"name":"quantity","type":"INT"}]},{"name":"products","label":"商品","columns":[{"name":"id","type":"BIGINT","pk":true},{"name":"name","type":"VARCHAR(200)"},{"name":"price","type":"DECIMAL(10,2)"}]}],"relations":[{"from":"users","to":"orders","cardinality":"1:N","label":"発注する"},{"from":"orders","to":"order_items","cardinality":"1:N"},{"from":"products","to":"order_items","cardinality":"1:N"}]}</script>
-<script type="application/json" id="design-layout">{"type":"er","title":"受注管理システム ER図(サンプル)","nodes":[{"id":"orders","label":"注文(orders)","x":0,"y":0,"width":220,"height":108,"headerHeight":30,"rowHeight":26,"rows":[{"text":"[PK] id : BIGINT","meta":{"name":"id","type":"BIGINT","pk":true}},{"text":"[FK] user_id : BIGINT","meta":{"name":"user_id","type":"BIGINT","fk":true}},{"text":"ordered_at : TIMESTAMP","meta":{"name":"ordered_at","type":"TIMESTAMP"}}]},{"id":"order_items","label":"注文明細(order_items)","x":300,"y":0,"width":220,"height":134,"headerHeight":30,"rowHeight":26,"rows":[{"text":"[PK] id : BIGINT","meta":{"name":"id","type":"BIGINT","pk":true}},{"text":"[FK] order_id : BIGINT","meta":{"name":"order_id","type":"BIGINT","fk":true}},{"text":"[FK] product_id : BIGINT","meta":{"name":"product_id","type":"BIGINT","fk":true}},{"text":"quantity : INT","meta":{"name":"quantity","type":"INT"}}]},{"id":"users","label":"ユーザー(users)","x":0,"y":194,"width":220,"height":108,"headerHeight":30,"rowHeight":26,"rows":[{"text":"[PK] id : BIGINT","meta":{"name":"id","type":"BIGINT","pk":true}},{"text":"[UQ] email : VARCHAR(255)","meta":{"name":"email","type":"VARCHAR(255)","unique":true}},{"text":"name : VARCHAR(100)","meta":{"name":"name","type":"VARCHAR(100)"}}]},{"id":"products","label":"商品(products)","x":300,"y":194,"width":220,"height":108,"headerHeight":30,"rowHeight":26,"rows":[{"text":"[PK] id : BIGINT","meta":{"name":"id","type":"BIGINT","pk":true}},{"text":"name : VARCHAR(200)","meta":{"name":"name","type":"VARCHAR(200)"}},{"text":"price : DECIMAL(10,2)","meta":{"name":"price","type":"DECIMAL(10,2)"}}]}],"edges":[{"id":"rel1","from":"users","to":"orders","label":"発注する","cardinality":"1:N"},{"id":"rel2","from":"orders","to":"order_items","label":"","cardinality":"1:N"},{"id":"rel3","from":"products","to":"order_items","label":"","cardinality":"1:N"}]}</script>
+<script type="application/json" id="design-spec">{"type":"sequence","title":"ログイン処理シーケンス図(サンプル)","actors":[{"id":"user","label":"ユーザー","kind":"actor"},{"id":"web","label":"Web アプリ"},{"id":"auth","label":"認証 API"},{"id":"db","label":"DB"}],"messages":[{"from":"user","to":"web","label":"ログイン要求"},{"from":"web","to":"auth","label":"認証リクエスト"},{"from":"auth","to":"db","label":"ユーザー照会"},{"from":"db","to":"auth","label":"ユーザー情報","style":"return"},{"from":"auth","to":"web","label":"トークン発行","style":"return"},{"from":"web","to":"user","label":"ホーム画面表示","style":"return"}]}</script>
+<script type="application/json" id="design-layout">{"type":"sequence","title":"ログイン処理シーケンス図(サンプル)","nodes":[{"id":"user","label":"ユーザー","shape":"actor","x":0,"y":0,"width":140,"height":50,"meta":{"kind":"actor"}},{"id":"web","label":"Web アプリ","shape":"actor","x":220,"y":0,"width":140,"height":50,"meta":{"kind":"system"}},{"id":"auth","label":"認証 API","shape":"actor","x":440,"y":0,"width":140,"height":50,"meta":{"kind":"system"}},{"id":"db","label":"DB","shape":"actor","x":660,"y":0,"width":140,"height":50,"meta":{"kind":"system"}}],"lines":[{"x":70,"y1":50,"y2":430,"owner":"user"},{"x":290,"y1":50,"y2":430,"owner":"web"},{"x":510,"y1":50,"y2":430,"owner":"auth"},{"x":730,"y1":50,"y2":430,"owner":"db"}],"edges":[{"id":"msg1","from":"user","to":"web","label":"ログイン要求","style":"sync","fromPt":{"x":70,"y":100},"toPt":{"x":290,"y":100}},{"id":"msg2","from":"web","to":"auth","label":"認証リクエスト","style":"sync","fromPt":{"x":290,"y":150},"toPt":{"x":510,"y":150}},{"id":"msg3","from":"auth","to":"db","label":"ユーザー照会","style":"sync","fromPt":{"x":510,"y":200},"toPt":{"x":730,"y":200}},{"id":"msg4","from":"db","to":"auth","label":"ユーザー情報","style":"return","fromPt":{"x":730,"y":250},"toPt":{"x":510,"y":250}},{"id":"msg5","from":"auth","to":"web","label":"トークン発行","style":"return","fromPt":{"x":510,"y":300},"toPt":{"x":290,"y":300}},{"id":"msg6","from":"web","to":"user","label":"ホーム画面表示","style":"return","fromPt":{"x":290,"y":350},"toPt":{"x":70,"y":350}}]}</script>
 <script>
 (() => {
   const svg = document.getElementById('canvas');

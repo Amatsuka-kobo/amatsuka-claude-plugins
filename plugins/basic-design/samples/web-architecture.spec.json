@@ -1,0 +1,22 @@
+{
+  "type": "architecture",
+  "title": "Web システム構成図(サンプル)",
+  "zones": [
+    { "id": "aws", "label": "AWS", "children": ["alb", "web", "app", "db"] }
+  ],
+  "nodes": [
+    { "id": "browser", "label": "ブラウザ" },
+    { "id": "cdn", "label": "CDN" },
+    { "id": "alb", "label": "ALB" },
+    { "id": "web", "label": "Web Server", "icon": "server" },
+    { "id": "app", "label": "App Server", "icon": "server" },
+    { "id": "db", "label": "PostgreSQL", "icon": "database" }
+  ],
+  "edges": [
+    { "from": "browser", "to": "cdn", "label": "HTTPS" },
+    { "from": "browser", "to": "alb", "label": "HTTPS" },
+    { "from": "alb", "to": "web", "label": "HTTP" },
+    { "from": "web", "to": "app", "label": "HTTP" },
+    { "from": "app", "to": "db", "label": "SQL" }
+  ]
+}
