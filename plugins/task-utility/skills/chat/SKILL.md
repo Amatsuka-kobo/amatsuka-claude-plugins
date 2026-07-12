@@ -11,7 +11,8 @@ description: AIとの会話をMarkdown形式でdocs/chat/に永続記録する�
 
 ## 保存場所
 
-- パス: `docs/chat/YYYY/MMDD/<内容を表すケバブケース名>.md`
+- パス: `docs/chat/YYYY/MMDD/<作業者名>/<内容を表すケバブケース名>.md`
+- `<作業者名>` は git のユーザー名(`git config user.name` の値)。取得できない場合は必ず本人に確認する
 - 同じ作業の続きを記録するときは、新規ファイルを作らず既存ファイルにセッション見出しを増やして追記する
 
 ## ファイルの構成(この順で書く)
@@ -62,7 +63,7 @@ description: AIとの会話をMarkdown形式でdocs/chat/に永続記録する�
 - 日付: 2026-01-15
 - 参加者: exampleuser, AI (Claude Sonnet 5)
 - 成果物: `docs/DESIGN-csv-export.md`、コミット `f00ba55`
-- 前提: `docs/chat/2026/0110/reporting-requirements.md`
+- 前提: `docs/chat/2026/0110/exampleuser/reporting-requirements.md`
 
 ---
 
