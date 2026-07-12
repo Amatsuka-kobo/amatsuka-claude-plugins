@@ -2,8 +2,8 @@
 
 - 日付: 2026-07-12 / 2026-07-13（実装）
 - 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）；Stage 1 実装完了 ブランチ `feat/basic-design-stage1` 10 コミット（97c3d27 土台、83d4f3c xml-util、6844511 validate、0e53871 layout-er、b97204f render-drawio、55fc72a render-html、a9bedb7 design-gen CLI、964be5e er-diagram スキル、1498a82 marketplace+サンプル、fe435de バリデータ修正）、テスト 42/42 pass、最終ブランチレビュー(Fable)合格
-- 前提: CLAUDE.md、agents-claude-only.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル、superpowers:writing-plans スキル
+- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）；Stage 1 実装完了・ローカルマージ完了 ブランチ `feat/basic-design-stage1` 10 コミット（97c3d27 土台、83d4f3c xml-util、6844511 validate、0e53871 layout-er、b97204f render-drawio、55fc72a render-html、a9bedb7 design-gen CLI、964be5e er-diagram スキル、1498a82 marketplace+サンプル、fe435de バリデータ修正）、テスト 42/42 pass、最終ブランチレビュー(Fable)合格、main @ 8f250dd で fast-forward マージ済み
+- 前提: CLAUDE.md、agents-claude-only.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル、superpowers:writing-plans スキル、docs/superpowers/plans/2026-07-12-basic-design-stage1.md
 
 ---
 
@@ -463,4 +463,36 @@ plugins/basic-design/
 
 ---
 
-注意事項：Stage 1 実装完了。マージ方法の確認待機中。サンプル生成物のブラウザ実機確認は後続フォロー。
+## セッション9: Stage 1 実装のローカルマージ実施
+
+# phyllis998
+
+> 1でお願いします
+
+# AI
+
+**何をしたか**：ユーザーから「1でお願いします」（main へのローカルマージ）指示を受け、feat/basic-design-stage1 ブランチを main に fast-forward マージ。マージ後のテスト実行で全 42 件パス確認。フィーチャーブランチは削除完了。
+
+**実施内容**：
+
+1. **マージ実行**：main ブランチへ切り替え、feat/basic-design-stage1 を fast-forward マージ。main @ 8f250dd。
+2. **テスト確認**：マージ後、全テストスイート実行。結果 42/42 パス（重なり判定・XML エスケープ・CLI 契約・クラッシュ耐性の全項目合格）。
+3. **クリーンアップ**：feat/basic-design-stage1 ブランチを削除完了。
+
+**状態確認**：main はローカルのみの状態。origin へのプッシュは未実施（ユーザー指示待ち）。
+
+**成果物確認**：ブランチ Stage 1 実装物（10 コミット・42 テスト合格・最終レビュー合格）が main に統合。er-diagram スキルが発動可能な状態。
+
+**後続フォロー**：
+1. **実機確認**（ユーザー実施待ち）：
+   - `plugins/basic-design/samples/order-system.drawio` を app.diagrams.net で開き、4 エンティティ+3 リレーションが崩れず表示されること
+   - `plugins/basic-design/samples/order-system.html` をブラウザで開き、ズーム・パン・クリックハイライト・詳細パネルが動くこと
+
+2. **次ステージの計画**（ユーザー指示待ち）：
+   - **Stage 2**：画面遷移図・システム構成図・シーケンス図の追加実装
+   - **Stage 3**：api-list / nfr-checklist / 入口スキル basic-design の実装
+   - **Stage 4**：Google Drive オプトイン連携の実装
+
+---
+
+注意事項：Stage 1 実装完了・ローカルマージ完了。サンプル生成物のブラウザ実機確認と次ステージ計画はユーザー指示待ち。origin へのプッシュはご指示があれば実施。
