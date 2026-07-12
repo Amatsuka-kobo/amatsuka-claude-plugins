@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-12
 - 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: `CLAUDE.md`（修正）、`plugins/task-utility/.claude-plugin/plugin.json`（ディレクトリ統一）
+- 成果物: `CLAUDE.md`（修正）、`plugins/task-utility/.claude-plugin/plugin.json`（ディレクトリ統一）、ブランチ `chore/claude-md-audit` にコミット `5d2062e`（CLAUDE.md 是正）、`c141ead`（チャット記録）
 - 前提: CLAUDE.md（監査対象）、claude-md-management:claude-md-improver スキル
 
 ---
@@ -100,4 +100,41 @@
 
 ---
 
-注意事項：コミットはまだ実施していません（`M CLAUDE.md` と `R`(git mv) がステージング待ち）。成果物をコミットするか、ひとまず未コミット状態で保留するかはユーザー判断にお任せします。
+## セッション3: アーキテクチャマップ追記とコミット
+
+# phyllis998
+
+> アーキテクチャマップ追記とコミットお願いします
+
+# AI
+
+**何をしたか**：各プラグインの構造を確認し、CLAUDE.md 概要直後に「プラグイン構成」索引表を追加。その後、`main` からブランチを切って2つのコミットを作成。
+
+**実施内容**：
+
+1. **アーキテクチャマップ追記（CLAUDE.md）**：概要節の直後に「## プラグイン構成」セクションを新規追加。以下の3行マップを挿入：
+   - codiel: Raguel MCP サーバー（Claude Code との Bridge）、主要ディレクトリ `raguel-mcp/`（ビルド・型・テスト）
+   - revelation: Prompt Auto-Versioning スキル詰め合わせ、主要ディレクトリ `hooks/`（バージョニング・パッチ適用ロジック）
+   - task-utility: タスク管理・会話記録スキル詰め合わせ、主要ディレクトリ `skills/`（chat / issue-split / task など）
+   
+   各プラグインの詳細は README/DESIGN 参照と明記し、冗長を避けた1行見出しベース。
+
+2. **ブランチ作成とコミット**：
+   - `main` から `chore/claude-md-audit` ブランチを切成
+   - **第1コミット** `5d2062e docs: CLAUDE.md 監査に基づく是正とプラグイン構成の追加`
+     - CLAUDE.md の「プラグインのアップデート」節の是正（Issue ① ③）
+     - 「プラグイン構成」セクション追加（Issue ② 解消による注記削除）
+     - `git mv` による `plugins/task-utility/.claude-plugins` → `.claude-plugin` の変更を include
+   - **第2コミット** `c141ead chore: チャット記録(CLAUDE.md 監査)`
+     - `docs/chat/2026/0712/claude-md-audit.md` の初期記録を分離（リポジトリ慣習の `chore: チャット記録` に合わせて別コミット）
+
+**決定と理由**：
+- セッション開始時点で既に未コミット状態だった「エージェント運用方針」の編集も CLAUDE.md に含まれていたため、セッション全体の変更を第1コミットに統合。第2コミットは会話記録の履歴保全を目的に分離。
+
+**バージョン更新判断**：task-utility のバージョンは据え置き（`1.2.0-dev` のまま）。`.claude-plugin` への rename は構造是正であり、ユーザーが見るパッケージの機能・挙動を変えないため、CLAUDE.md バージョン更新方針の「改修の大きさに応じて」には該当しないと判断。
+
+**未実施**：PR 作成と main へのマージは見送り。ご希望あれば別途対応可能。
+
+---
+
+注意事項：未コミット変更なし。全変更は `chore/claude-md-audit` ブランチに2コミット済み。PR / main へのマージ、または task-utility バージョン bump が必要な場合はお申し付けください。
