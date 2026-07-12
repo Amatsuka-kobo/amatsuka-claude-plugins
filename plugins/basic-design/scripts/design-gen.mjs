@@ -3,10 +3,18 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { validateSpec } from './lib/validate.mjs';
 import { layoutEr } from './lib/layout/er.mjs';
+import { layoutScreenFlow } from './lib/layout/screen-flow.mjs';
+import { layoutArchitecture } from './lib/layout/architecture.mjs';
+import { layoutSequence } from './lib/layout/sequence.mjs';
 import { renderDrawio } from './lib/render/drawio.mjs';
 import { renderHtml } from './lib/render/html.mjs';
 
-const LAYOUTS = { er: layoutEr };
+const LAYOUTS = {
+  er: layoutEr,
+  'screen-flow': layoutScreenFlow,
+  architecture: layoutArchitecture,
+  sequence: layoutSequence,
+};
 const FORMATS = ['drawio', 'html', 'both'];
 
 function fail(errors) {

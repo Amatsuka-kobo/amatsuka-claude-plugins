@@ -110,3 +110,53 @@ test('JSON として読めない spec ファイルは exit 1', async () => {
   assert.equal(code, 1);
   assert.equal(json.ok, false);
 });
+
+// ---- Stage 2: 3 図種の生成 ----
+
+const flowSpec = {
+  type: 'screen-flow',
+  title: '画面遷移',
+  screens: [
+    { id: 'login', label: 'ログイン', kind: 'start' },
+    { id: 'home', label: 'ホーム' },
+  ],
+  transitions: [{ from: 'login', to: 'home', trigger: '成功' }],
+};
+
+const archSpec = {
+  type: 'architecture',
+  title: '構成図',
+  zones: [{ id: 'aws', label: 'AWS', children: ['app'] }],
+  nodes: [
+    { id: 'browser', label: 'ブラウザ' },
+    { id: 'app', label: 'App' },
+  ],
+  edges: [{ from: 'browser', to: 'app', label: 'HTTPS' }],
+};
+
+const seqSpec = {
+  type: 'sequence',
+  title: 'シーケンス',
+  actors: [
+    { id: 'u', label: 'ユーザー' },
+    { id: 'w', label: 'Web' },
+  ],
+  messages: [
+    { from: 'u', to: 'w', label: '要求' },
+    { from: 'w', to: 'u', label: '応答', style: 'return' },
+  ],
+};
+
+for (const [name, spec] of [['screen-flow', flowSpec], ['architecture', archSpec], ['sequence', seqSpec]]) {
+  test(`${name}: --format both で 2 ファイル生成される`, async () => {
+    const { specPath } = await writeSpec(spec, `${name}.spec.json`);
+    const { code, json } = await runCli([specPath, '--format', 'both']);
+    assert.equal(code, 0);
+    assert.equal(json.ok, true);
+    assert.equal(json.files.length, 2);
+    const drawio = await readFile(json.files.find((f) => f.endsWith('.drawio')), 'utf8');
+    assert.ok(drawio.startsWith('<mxfile'));
+    const html = await readFile(json.files.find((f) => f.endsWith('.html')), 'utf8');
+    assert.ok(html.startsWith('<!doctype html>'));
+  });
+}

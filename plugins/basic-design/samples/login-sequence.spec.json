@@ -1,0 +1,18 @@
+{
+  "type": "sequence",
+  "title": "ログイン処理シーケンス図(サンプル)",
+  "actors": [
+    { "id": "user", "label": "ユーザー", "kind": "actor" },
+    { "id": "web", "label": "Web アプリ" },
+    { "id": "auth", "label": "認証 API" },
+    { "id": "db", "label": "DB" }
+  ],
+  "messages": [
+    { "from": "user", "to": "web", "label": "ログイン要求" },
+    { "from": "web", "to": "auth", "label": "認証リクエスト" },
+    { "from": "auth", "to": "db", "label": "ユーザー照会" },
+    { "from": "db", "to": "auth", "label": "ユーザー情報", "style": "return" },
+    { "from": "auth", "to": "web", "label": "トークン発行", "style": "return" },
+    { "from": "web", "to": "user", "label": "ホーム画面表示", "style": "return" }
+  ]
+}
