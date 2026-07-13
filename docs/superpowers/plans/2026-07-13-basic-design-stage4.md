@@ -337,7 +337,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ## 完了条件(Stage 4)
 
-- check-drive-config.mjs のテスト 6 件を含む全 98 テストがパス
+- check-drive-config.mjs のテスト 8 件を含む全 100 テストがパス
 - 設定なしのとき、どのスキルも Drive に言及しない(drive-upload.md の手順 1 で完結)
 - 設定ありのとき、承認 → MCP Tool 探索 → アップロード or 導入案内 STOP の分岐が文書化されている
 - 設計書 §13 の 4 段階すべてが実装済み
