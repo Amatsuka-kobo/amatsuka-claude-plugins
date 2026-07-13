@@ -62,7 +62,17 @@ export function routeOrthogonal(fromNode, toNode, obstacles) {
   const tcy = centerY(toNode);
   const dx = tcx - fcx;
   const dy = tcy - fcy;
-  const horizontal = Math.abs(dx) >= Math.abs(dy);
+  const xSeparated =
+    fromNode.x + fromNode.width <= toNode.x ||
+    toNode.x + toNode.width <= fromNode.x;
+  const ySeparated =
+    fromNode.y + fromNode.height <= toNode.y ||
+    toNode.y + toNode.height <= fromNode.y;
+
+  // 支配軸の投影が重なる場合、その軸の対向アンカーは互いの矩形側へ
+  // 入り込むことがある。もう一方の軸で矩形が分離していればそちらを使う。
+  const horizontal =
+    xSeparated !== ySeparated ? xSeparated : Math.abs(dx) >= Math.abs(dy);
 
   let fromA;
   let toA;

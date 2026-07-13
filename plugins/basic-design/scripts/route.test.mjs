@@ -41,6 +41,39 @@ function assertClearOf(points, rect) {
   }
 }
 
+function pointInsideRect(point, rect) {
+  return (
+    rect.x < point.x &&
+    point.x < rect.x + rect.width &&
+    rect.y < point.y &&
+    point.y < rect.y + rect.height
+  );
+}
+
+function segHitsRectInterior(a, b, rect) {
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
+  return (
+    minX < rect.x + rect.width &&
+    rect.x < maxX &&
+    minY < rect.y + rect.height &&
+    rect.y < maxY
+  );
+}
+
+function assertClearOfNodeInteriors(points, ...nodes) {
+  for (let i = 0; i < points.length - 1; i++) {
+    for (const node of nodes) {
+      assert.ok(
+        !segHitsRectInterior(points[i], points[i + 1], node),
+        `segment ${i} が自ノード内部と交差した`,
+      );
+    }
+  }
+}
+
 test('整列した2ノード・障害物なし → 2点(アンカーが辺上)', () => {
   const from = { x: 0, y: 0, width: 100, height: 60 };
   const to = { x: 300, y: 0, width: 100, height: 60 };
@@ -93,4 +126,57 @@ test('直線経路上の障害物は迂回する(整列ケースでも避ける)
   assertAxisAligned(pts);
   assert.ok(pts.length >= 3);
   assertClearOf(pts, blocking);
+});
+
+test('支配軸の投影が重なる場合も自ノード矩形を貫通しない', () => {
+  const from = { x: 0, y: 0, width: 300, height: 60 };
+  const to = { x: 250, y: 100, width: 300, height: 60 };
+  const pts = routeOrthogonal(from, to, []);
+
+  assertAxisAligned(pts);
+  assertClearOfNodeInteriors(pts, from, to);
+  for (const point of pts.slice(1, -1)) {
+    assert.ok(!pointInsideRect(point, from));
+    assert.ok(!pointInsideRect(point, to));
+  }
+});
+
+test('決定的グリッド全組み合わせで直交し中間点が自ノード内部に入らない', () => {
+  const coordinates = [-400, -240, -120, 0, 120, 240, 400];
+  const dimensions = [
+    { width: 60, height: 40 },
+    { width: 120, height: 80 },
+    { width: 300, height: 60 },
+  ];
+  let cases = 0;
+
+  for (const fromSize of dimensions) {
+    const from = { x: 0, y: 0, ...fromSize };
+    for (const toSize of dimensions) {
+      for (const x of coordinates) {
+        for (const y of coordinates) {
+          const to = { x, y, ...toSize };
+          const overlaps =
+            from.x < to.x + to.width &&
+            to.x < from.x + from.width &&
+            from.y < to.y + to.height &&
+            to.y < from.y + from.height;
+          if (overlaps) continue;
+
+          const pts = routeOrthogonal(from, to, []);
+          assertAxisAligned(pts);
+          assertClearOfNodeInteriors(pts, from, to);
+          for (const point of pts.slice(1, -1)) {
+            assert.ok(
+              !pointInsideRect(point, from) && !pointInsideRect(point, to),
+              `中間点 (${point.x},${point.y}) が自ノード内部にある`,
+            );
+          }
+          cases++;
+        }
+      }
+    }
+  }
+
+  assert.ok(cases >= 300, `検証ケース数 ${cases} >= 300`);
 });
