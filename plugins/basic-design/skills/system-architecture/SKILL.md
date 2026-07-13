@@ -70,6 +70,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/design-gen.mjs" <保存先>/<名前>.spec.js
 
 git コミットはユーザーの指示があったときのみ行う。
 
+ローカル保存の完了後、`${CLAUDE_PLUGIN_ROOT}/skills/shared/drive-upload.md` の手順で Google Drive へのアップロードを確認する(設定が無ければ何も起きない)。
+
 ## 既存図の更新
 
 同名の `.spec.json` が既にある場合は、それを読み込んで現状を把握し、差分をブレストしてから spec を更新・再生成する。`.drawio` に手修正が入っている可能性をユーザーに確認し、手修正があるなら上書きせず別名での生成を提案する(spec が正 / 手修正後は .drawio が正、の原則)。
