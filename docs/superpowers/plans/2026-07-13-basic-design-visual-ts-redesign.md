@@ -195,7 +195,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `DiagramSpec` union、`Layout`、`validateSpec(unknown):string[]`、`escapeXml(unknown):string`。
 
-- [ ] **Step 1: 正規型を作る**
+- [x] **Step 1: 正規型を作る**
 
 ```ts
 export type DiagramType = "architecture" | "screen-flow" | "er" | "sequence"
@@ -212,7 +212,7 @@ export interface SequenceSpec { type:"sequence"; title:string; actors:Array<{id:
 export type DiagramSpec = ArchitectureSpec | ScreenFlowSpec | ErSpec | SequenceSpec
 ```
 
-- [ ] **Step 2: 現行33 validation test と kind test を移植する**
+- [x] **Step 2: 現行33 validation test と kind test を移植する**
 
 ```ts
 import { expect, test } from "vitest"
@@ -226,7 +226,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/validate.test.ts`
 
 Expected: FAIL。module 未作成。
 
-- [ ] **Step 3: validation と XML escape を移植する**
+- [x] **Step 3: validation と XML escape を移植する**
 
 ```ts
 export const SUPPORTED_TYPES = ["er","screen-flow","architecture","sequence"] as const
@@ -282,7 +282,7 @@ const XML: Record<string,string> = {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot
 export function escapeXml(value: unknown): string { return String(value).replace(/[&<>"']/g, c => XML[c]) }
 ```
 
-- [ ] **Step 4: verify / commit**
+- [x] **Step 4: verify / commit**
 
 Run: `cd plugins/basic-design && pnpm test -- src/validate.test.ts src/xml-util.test.ts && pnpm typecheck`
 
