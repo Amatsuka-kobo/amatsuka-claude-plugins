@@ -308,7 +308,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `THEME`、`iconSvg(KindKey)`、`iconEmoji(KindKey)`、`decorateLayout(spec,layout):Layout`。
 
-- [ ] **Step 1: 優先順位 test を書き failure 確認**
+- [x] **Step 1: 優先順位 test を書き failure 確認**
 
 ```ts
 test("explicit kind wins and unknown explicit kind is generic", () => {
@@ -321,7 +321,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/decorate.test.ts`
 
 Expected: FAIL。module 未作成。
 
-- [ ] **Step 2: token と推定を実装する**
+- [x] **Step 2: token と推定を実装する**
 
 ```ts
 export const THEME = { palette:{ generic:{fill:"#F8FAFC",stroke:"#64748B",icon:"#475569",text:"#0F172A"}, user:{fill:"#EFF6FF",stroke:"#3B82F6",icon:"#2563EB",text:"#1E3A8A"}, api:{fill:"#ECFEFF",stroke:"#0891B2",icon:"#0E7490",text:"#164E63"}, data:{fill:"#F5F3FF",stroke:"#8B5CF6",icon:"#7C3AED",text:"#4C1D95"}, messaging:{fill:"#FFF7ED",stroke:"#F97316",icon:"#EA580C",text:"#7C2D12"}, external:{fill:"#FDF2F8",stroke:"#DB2777",icon:"#BE185D",text:"#831843"}, screen:{fill:"#F0FDF4",stroke:"#22C55E",icon:"#16A34A",text:"#14532D"}, entity:{fill:"#FFFBEB",stroke:"#D97706",icon:"#B45309",text:"#78350F"} }, zone:{fill:"#F8FAFC",stroke:"#CBD5E1",chip:"#E2E8F0"}, edge:"#475569",labelBackground:"#FFFFFF",fontFamily:"system-ui, sans-serif",radius:12,shadow:"0 6px 18px rgba(15,23,42,.12)" } as const
@@ -364,13 +364,13 @@ export function iconSvg(kind: KindKey): string {
 
 `SVG_PATH` は8 key すべてを持つ `Record<KindKey,string>` とし、generic=角丸矩形、user=人物、api=3本の service line、data=database cylinder、messaging=吹き出し、external=外向き矢印、screen=browser frame、entity=table grid の固定 path を入れる。
 
-- [ ] **Step 3: 4 sample 全 node の inline snapshot を固定する**
+- [x] **Step 3: 4 sample 全 node の inline snapshot を固定する**
 
 Run: `cd plugins/basic-design && pnpm test -- src/decorate.test.ts -u`
 
 Expected: sample 実 ID と kindKey の非空配列4件が test file に入り PASS。通常実行でも差分なし。
 
-- [ ] **Step 4: verify / commit**
+- [x] **Step 4: verify / commit**
 
 Run: `cd plugins/basic-design && pnpm test -- src/decorate.test.ts && pnpm typecheck`
 
