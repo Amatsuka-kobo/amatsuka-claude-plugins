@@ -14,13 +14,13 @@
   .node-header { fill: #e8eef7; stroke: #333; }
   .node-title { font-weight: bold; font-size: 13px; }
   .row { font-size: 12px; fill: #222; }
-  .edge line { stroke: #666; stroke-width: 1.5; }
+  .edge line, .edge polyline { stroke: #666; stroke-width: 1.5; fill: none; }
   .edge-label { font-size: 11px; fill: #444; }
   .node, .edge { transition: opacity .15s; }
   svg.has-selection .node:not(.hl), svg.has-selection .edge:not(.hl) { opacity: .25; }
   svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
   .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
-  .hl line, .pv line { stroke: #1a63c9; stroke-width: 2.5; }
+  .hl line, .pv line, .hl polyline, .pv polyline { stroke: #1a63c9; stroke-width: 2.5; }
   .zone rect { fill: #f5f5f5; stroke: #666; }
   .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
   .lifeline { stroke: #999; stroke-dasharray: 6 4; }

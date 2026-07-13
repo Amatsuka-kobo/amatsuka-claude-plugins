@@ -14,13 +14,13 @@
   .node-header { fill: #e8eef7; stroke: #333; }
   .node-title { font-weight: bold; font-size: 13px; }
   .row { font-size: 12px; fill: #222; }
-  .edge line { stroke: #666; stroke-width: 1.5; }
+  .edge line, .edge polyline { stroke: #666; stroke-width: 1.5; fill: none; }
   .edge-label { font-size: 11px; fill: #444; }
   .node, .edge { transition: opacity .15s; }
   svg.has-selection .node:not(.hl), svg.has-selection .edge:not(.hl) { opacity: .25; }
   svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
   .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
-  .hl line, .pv line { stroke: #1a63c9; stroke-width: 2.5; }
+  .hl line, .pv line, .hl polyline, .pv polyline { stroke: #1a63c9; stroke-width: 2.5; }
   .zone rect { fill: #f5f5f5; stroke: #666; }
   .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
   .lifeline { stroke: #999; stroke-dasharray: 6 4; }
@@ -47,11 +47,11 @@
 
 </g>
 <g id="edges">
-<g class="edge arrow" data-id="e1" data-from="browser" data-to="cdn"><line x1="530" y1="100" x2="710" y2="100" marker-end="url(#arrow)"/><text x="620" y="94" text-anchor="middle" class="edge-label">HTTPS</text></g>
-<g class="edge arrow" data-id="e2" data-from="browser" data-to="alb"><line x1="530" y1="100" x2="130" y2="120" marker-end="url(#arrow)"/><text x="330" y="104" text-anchor="middle" class="edge-label">HTTPS</text></g>
-<g class="edge arrow" data-id="e3" data-from="alb" data-to="web"><line x1="130" y1="120" x2="310" y2="120" marker-end="url(#arrow)"/><text x="220" y="114" text-anchor="middle" class="edge-label">HTTP</text></g>
-<g class="edge arrow" data-id="e4" data-from="web" data-to="app"><line x1="310" y1="120" x2="130" y2="220" marker-end="url(#arrow)"/><text x="220" y="164" text-anchor="middle" class="edge-label">HTTP</text></g>
-<g class="edge arrow" data-id="e5" data-from="app" data-to="db"><line x1="130" y1="220" x2="310" y2="220" marker-end="url(#arrow)"/><text x="220" y="214" text-anchor="middle" class="edge-label">SQL</text></g>
+<g class="edge arrow" data-id="e1" data-from="browser" data-to="cdn"><polyline points="600,100 640,100" fill="none" marker-end="url(#arrow)"/><text x="620" y="94" text-anchor="middle" class="edge-label">HTTPS</text></g>
+<g class="edge arrow" data-id="e2" data-from="browser" data-to="alb"><polyline points="460,100 460,58 200,58 200,120" fill="none" marker-end="url(#arrow)"/><text x="330" y="52" text-anchor="middle" class="edge-label">HTTPS</text></g>
+<g class="edge arrow" data-id="e3" data-from="alb" data-to="web"><polyline points="200,120 240,120" fill="none" marker-end="url(#arrow)"/><text x="220" y="114" text-anchor="middle" class="edge-label">HTTP</text></g>
+<g class="edge arrow" data-id="e4" data-from="web" data-to="app"><polyline points="240,120 220,120 220,220 200,220" fill="none" marker-end="url(#arrow)"/><text x="220" y="164" text-anchor="middle" class="edge-label">HTTP</text></g>
+<g class="edge arrow" data-id="e5" data-from="app" data-to="db"><polyline points="200,220 240,220" fill="none" marker-end="url(#arrow)"/><text x="220" y="214" text-anchor="middle" class="edge-label">SQL</text></g>
 </g>
 <g id="nodes">
 <g class="node" data-id="alb" transform="translate(60,90)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">ALB</text></g>
