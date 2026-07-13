@@ -69,3 +69,8 @@ test('CRLF 改行のファイルも読める', async () => {
   const dir = await makeProject('---\r\ndrive_folder_id: "1Crlf"\r\n---\r\n');
   assert.deepEqual(await runCli(dir), { configured: true, driveFolderId: '1Crlf' });
 });
+
+test('UTF-8 BOM 付きのファイルも読める', async () => {
+  const dir = await makeProject('\uFEFF---\ndrive_folder_id: "1Bom"\n---\n');
+  assert.deepEqual(await runCli(dir), { configured: true, driveFolderId: '1Bom' });
+});

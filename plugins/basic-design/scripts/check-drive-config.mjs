@@ -10,7 +10,7 @@ function readDriveConfig(root) {
   } catch {
     return { configured: false, driveFolderId: null };
   }
-  const lines = content.split(/\r?\n/);
+  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/);
   if (lines[0] !== '---') {
     return { configured: false, driveFolderId: null };
   }
