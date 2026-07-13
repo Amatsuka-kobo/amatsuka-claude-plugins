@@ -544,7 +544,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `renderHtml(layout,spec):string`、`renderDrawio(layout):string`。ELK/route import 禁止。
 
-- [ ] **Step 1: visual/interaction failing tests**
+- [x] **Step 1: visual/interaction failing tests**
 
 ```ts
 test("HTML is themed/self-contained/interactive",()=>{const h=renderHtml(layout,spec);expect(h).toContain('class="node-card kind-api"');expect(h).toContain('class="edge-label-bg"');expect(h).toContain('id="design-layout"');expect(h).toContain('addEventListener("wheel"');expect(h).not.toMatch(/<script[^>]+src=|<link[^>]+href=/)})
@@ -555,7 +555,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/render/html.test.ts src/render
 
 Expected: FAIL。
 
-- [ ] **Step 2: HTML renderer を実装する**
+- [x] **Step 2: HTML renderer を実装する**
 
 ```ts
 function edgeSvg(e:LayoutEdge){const p=e.points.map(v=>`${v.x},${v.y}`).join(" ");const label=e.labelBox?`<g class="edge-label"><rect class="edge-label-bg" x="${e.labelBox.x}" y="${e.labelBox.y}" width="${e.labelBox.width}" height="${e.labelBox.height}" rx="5"/><text x="${e.labelBox.x+e.labelBox.width/2}" y="${e.labelBox.y+13}" text-anchor="middle">${escapeXml(e.label)}</text></g>`:"";return `<g class="edge" data-id="${escapeXml(e.id)}" data-from="${escapeXml(e.from)}" data-to="${escapeXml(e.to)}"><polyline points="${p}" fill="none"/>${label}</g>`}
@@ -583,7 +583,7 @@ function connected(id) {
 
 `onWheel` は pointer 位置を中心に viewBox を拡縮、pointer handlers は drag 差分で viewBox を移動する。`select(id)` は直接接続する node/edge のみを highlight し、panel は node の rows/meta または edge の from/to/cardinality/style を表示する。
 
-- [ ] **Step 3: drawio renderer を実装する**
+- [x] **Step 3: drawio renderer を実装する**
 
 renderer 冒頭で `import { THEME } from "../theme.js"`、`import { escapeXml } from "../xml-util.js"`、`import { iconEmoji } from "./icons.js"` を明示する。
 
@@ -595,7 +595,7 @@ function edgeCell(e:LayoutEdge){return `<mxCell id="e-${escapeXml(e.id)}" value=
 
 全 edge は上記 source/target cell + Layout waypoint。sequence の sourcePoint 分岐や routeOrthogonal は作らない。style sync/async/return と cardinality arrow を draw.io style へ変換する。zone は parent=`1` の背景 cell、entity row は parent=`n-${entityId}` の child vertex として現行 style を移植する。
 
-- [ ] **Step 4: 既存 renderer test を移植して verify**
+- [x] **Step 4: 既存 renderer test を移植して verify**
 
 現行 renderer tests を次の assertion 群として移す。HTML: XML escape、embedded JSON `<` escape、determinism、zone group、lifeline、terminal ellipse、edge polyline、empty label、node selection data、detail panel、no external resource、full document。drawio: XML escape、determinism、zone cell、lifeline cell、terminal style、generic edge、sequence style、ER cardinality、waypoint、empty waypoint、entity rows、mxfile root。
 
@@ -603,7 +603,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/render/html.test.ts src/render
 
 Expected: PASS。
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add plugins/basic-design/src/render/{html,html.test,drawio,drawio.test}.ts
