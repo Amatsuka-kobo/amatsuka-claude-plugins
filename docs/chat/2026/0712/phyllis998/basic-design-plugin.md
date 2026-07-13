@@ -1,9 +1,9 @@
 # 基本設計支援プラグイン「basic-design」の設計・実装ブレインストーミング
 
-- 日付: 2026-07-12 / 2026-07-13（実装）
-- 参加者: phyllis998, AI (Claude Haiku 4.5)
-- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）；Stage 1 実装完了・ローカルマージ完了 ブランチ `feat/basic-design-stage1` 10 コミット（97c3d27 土台、83d4f3c xml-util、6844511 validate、0e53871 layout-er、b97204f render-drawio、55fc72a render-html、a9bedb7 design-gen CLI、964be5e er-diagram スキル、1498a82 marketplace+サンプル、fe435de バリデータ修正）、テスト 42/42 pass、最終ブランチレビュー(Fable)合格、main @ 8f250dd で fast-forward マージ済み；**Stage 2-4 自律実行完了**：Stage 2 計画コミット `fca55b6`+レビュー反映 `b440c19`、9 タスク実装→最終レビュー OK(用語集文言修正 `fbd16b1`)→main へ fast-forward マージ、92/92 pass、v0.2.0-dev；Stage 3 計画 `0f1b671`+レビュー反映 `9e10a0c`、4 タスク実装→最終レビュー OK(文言修正 `355e3ba`)→main へ fast-forward マージ、92/92 pass、v0.3.0-dev、CLAUDE.md ローカル行更新；Stage 4 計画 `98d32c6`+レビュー反映 `742cd1f`、3 タスク実装→最終レビュー OK(BOM対応 `f4338ea`)→main へ fast-forward マージ、101/101 pass、v0.4.0-dev
-- 前提: CLAUDE.md、agents-claude-only.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル、superpowers:writing-plans スキル、docs/superpowers/plans/2026-07-12-basic-design-stage1.md、docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md
+- 日付: 2026-07-12 / 2026-07-13（実装 Stages 1-4）/ 2026-07-13（エッジ直交ルーティング修正）
+- 参加者: phyllis998, AI (Claude Haiku 4.5 / Claude Sonnet 5)
+- 成果物: 設計ドキュメント `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`、コミット `dc5d14c`（設計書作成）、`a6e9f17`（セルフレビュー修正）、`a592938`（Haiku レビュー修正）；実装計画 `docs/superpowers/plans/2026-07-12-basic-design-stage1.md`、コミット `2dd5966`（計画作成）、`bd677b0`（Haiku レビュー修正）；Stage 1 実装完了・ローカルマージ完了 ブランチ `feat/basic-design-stage1` 10 コミット（97c3d27 土台、83d4f3c xml-util、6844511 validate、0e53871 layout-er、b97204f render-drawio、55fc72a render-html、a9bedb7 design-gen CLI、964be5e er-diagram スキル、1498a82 marketplace+サンプル、fe435de バリデータ修正）、テスト 42/42 pass、最終ブランチレビュー(Fable)合格、main @ 8f250dd で fast-forward マージ済み；**Stage 2-4 自律実行完了**：Stage 2 計画コミット `fca55b6`+レビュー反映 `b440c19`、9 タスク実装→最終レビュー OK(用語集文言修正 `fbd16b1`)→main へ fast-forward マージ、92/92 pass、v0.2.0-dev；Stage 3 計画 `0f1b671`+レビュー反映 `9e10a0c`、4 タスク実装→最終レビュー OK(文言修正 `355e3ba`)→main へ fast-forward マージ、92/92 pass、v0.3.0-dev、CLAUDE.md ローカル行更新；Stage 4 計画 `98d32c6`+レビュー反映 `742cd1f`、3 タスク実装→最終レビュー OK(BOM対応 `f4338ea`)→main へ fast-forward マージ、101/101 pass、v0.4.0-dev；**セッション12: エッジ直交ルーティング実装** ブランチ `fix/basic-design-edge-routing` コミット `50145b5`（直交ルーティングエンジン lib/route.mjs 新設）`611f75f`（HTML polyline 化・Draw.io orthogonalEdgeStyle+waypoint 埋め込み）、Sonnet レビュー Important 指摘（射影重複時に自ノード矩形を貫通、fuzz 1.9%）→agents-with-codex.md への運用方針切り替え（ユーザーが CLAUDE.md を恒久変更）に伴い Codex/GPT Sol に委譲→分離軸優先方向決定・テスト 2 件で解消（コミット `dc9a514`）、再レビュー Ready to merge: Yes（fuzz 20万試行 0 件）、main へ fast-forward マージ、112/112 pass、v0.4.1-dev、ER .drawio バイト不変
+- 前提: CLAUDE.md、agents-claude-only.md、agents-with-codex.md、plugins/task-utility/skills/issue-craft/SKILL.md、superpowers:brainstorming スキル、superpowers:writing-plans スキル、docs/superpowers/plans/2026-07-12-basic-design-stage1.md、docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md
 
 ---
 
@@ -612,4 +612,72 @@ plugins/basic-design/
 
 ---
 
-注意事項：**basic-design プラグインの全 4 Stage 実装完了。現在の状態：main @ v0.4.0-dev、101/101 test pass。サンプル実機確認（複数種）とドッグフーディング、origin へのプッシュはユーザー確認待ち。**
+## セッション12: Web システム構成図のエッジ直交ルーティング実装
+
+# phyllis998
+
+> Webシステム構成図について、これでは線が被っていて見づらいので、極力線が他のオブジェクトに被らないように修正してください。
+
+# AI
+
+**何をしたか**：ユーザーから Web システム構成図の線（エッジ）が他のオブジェクトと被って見づらいという指摘を受け、直交ルーティング（orthogonal routing）による障害物回避の実装を決定。最初は Sonnet の全体レビューで Important 指摘を検出したが、エージェント運用方針の切り替え（agents-with-codex.md）に伴い Codex/GPT Sol に修正を委譲。修正後は fuzz テスト 20 万試行で貫通 0 件を確認し、main へ fast-forward マージで完了。
+
+**実装の概要**：
+
+**原因分析**：構成図・画面遷移図のエッジが「ノード中心から中心への直線」で描かれていたため、間にあるノードを貫通していた（例：browser → alb の線が Web Server ノードを通過）。
+
+**実装内容**：
+
+1. **直交ルーティングエンジン** (`lib/route.mjs`)を新設：
+   - 他ノードの矩形（マージン 12px で膨張させた障害物）と交差しない経路を探索
+   - 優先順位：直線 → Z 字（複数チャネル候補）→ 外周迂回
+   - 分離軸アルゴリズムで投影重複の判定を実装
+
+2. **HTML 側の対応**：
+   - エッジを `<polyline>` の直角折れ線に変更
+   - 矢印・ラベル・クリックハイライトは従来どおり機能
+
+3. **Draw.io 側の対応**：
+   - `orthogonalEdgeStyle` + 経由点（waypoint）を埋め込み
+   - app.diagrams.net で開いても折れ線が再現され、手で動かせる
+
+**適用範囲**：システム構成図と画面遷移図のみ。ER図の .drawio はバイト単位で不変（回帰なし検証済み）、シーケンス図の水平メッセージ線も従来どおり。
+
+**品質確認フロー**：
+
+1. **初期実装の Sonnet レビュー**（Important 1 件）：
+   - 課題：「2 ノードの投影が重なる配置だと線が自分のノードを貫通しうる」との不具合報告
+   - 原因：初期ルーティング実装で分離軸判定の不完全性
+   - fuzz テストの結果：1.9% の確率で貫通を再現
+
+2. **修正対応**（Codex/GPT Sol に委譲）：
+   - ユーザーが CLAUDE.md に `agents-with-codex.md` を明示的に有効化
+   - メモリに記録：Codex/GPT Sol系への修正委譲が新運用方針
+   - 分離軸優先の方向決定 + テスト 2 件を追加実装
+
+3. **再レビュー結果**：
+   - **Ready to merge: Yes**
+   - fuzz テスト 20 万試行で貫通 0 件
+   - 座標レベルで検証：web-architecture の全 5 本の線が、端点以外のどのノードにも被らないことを確認
+
+**コミット列**：
+- `50145b5`：lib/route.mjs の直交ルーティングエンジン実装
+- `611f75f`：HTML polyline 化・Draw.io orthogonalEdgeStyle+waypoint 埋め込み
+- `dc9a514`（修正）：分離軸優先判定の強化・テスト 2 件追加（Codex/GPT Sol による修正）
+
+**決定と理由**：
+- 直交ルーティングは、自動レイアウトの限界を補うため、「Draw.io 上で人が微調整する前提」という設計ラインの中で実装。完全最適化ではなく「重ならない初期配置」の保証を目指す。
+- Codex への委譲は、agents-with-codex.md で定義されたエージェント運用方針に従い、実装の品質向上と透明性を両立。修正の判断軸（分離軸優先）を明示的に記録。
+- 20 万試行 fuzz テストは、数学的證明の代わりになる実務的な品質指標。web-architecture サンプルのユースケース検証により、実装の信頼性を確認。
+
+**マージ完了**：
+- ブランチ `fix/basic-design-edge-routing` を main へ fast-forward マージ（main @ dc9a514）
+- テスト **112/112 pass**（回帰テスト 101 件 + エッジルーティング関連テスト 11 件）
+- プラグイン version：**v0.4.1-dev**
+- ER の .drawio はバイト不変確認済み
+
+**成果物確認**：`plugins/basic-design/samples/web-architecture.html`（または .drawio）を開き直すと、browser → alb の線がノード群の上を迂回する折れ線になっているのが確認できます。
+
+---
+
+注意事項：**basic-design プラグインの全実装完了と品質確保フロー確立。現在の状態：main @ v0.4.1-dev、112/112 test pass。エッジ直交ルーティングの実装に伴い、agents-with-codex.md への運用方針切り替えを確認・記録。サンプル実機確認（複数種）とドッグフーディング、origin へのプッシュはユーザー確認待ち。**
