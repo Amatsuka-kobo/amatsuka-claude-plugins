@@ -128,7 +128,7 @@ test("drawio uses palette emoji shadow waypoint", () => {
 test("title and node labels are XML-escaped", () => {
   const xml = renderDrawio(erLayout())
   expect(xml).toContain('<diagram name="テスト &lt;ER図&gt;">')
-  expect(xml).toContain('<mxCell id="n-users-row2" value="email &amp; name"')
+  expect(xml).toContain('<mxCell id="users-row2" value="email &amp; name"')
 })
 
 test("renderDrawio is deterministic for the same input", () => {
@@ -200,8 +200,9 @@ test("entity rows render as child cells with header offsets", () => {
   const xml = renderDrawio(erLayout())
   expect(xml).toContain('<mxCell id="n-users" value="ユーザー(users)"')
   expect(xml).toMatch(/id="n-users"[^>]*style="swimlane;/)
-  expect(xml).toMatch(/id="n-users-row1"[^>]*parent="n-users"/)
-  expect(xml).toMatch(/id="n-users-row2"[^>]*>\s*<mxGeometry y="56" width="220" height="26"/)
+  expect(xml).toMatch(/id="users-row1"[^>]*parent="n-users"/)
+  expect(xml).toContain("strokeColor=#E2E8F0;fillColor=#FFFFFF")
+  expect(xml).toMatch(/id="users-row2"[^>]*>\s*<mxGeometry y="56" width="220" height="26"/)
 })
 
 test("output has a valid mxfile root structure", () => {

@@ -1,0 +1,167 @@
+{
+  "type": "er",
+  "title": "複雑な EC 注文・配送・決済データモデル",
+  "entities": [
+    {
+      "name": "users",
+      "label": "ユーザー",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "email", "type": "VARCHAR(255)", "unique": true },
+        { "name": "display_name", "type": "VARCHAR(100)" },
+        { "name": "password_hash", "type": "VARCHAR(255)" },
+        { "name": "phone_number", "type": "VARCHAR(30)", "unique": true },
+        { "name": "status", "type": "VARCHAR(20)" },
+        { "name": "created_at", "type": "TIMESTAMP" },
+        { "name": "updated_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "orders",
+      "label": "注文",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "user_id", "type": "BIGINT", "fk": true },
+        { "name": "order_number", "type": "VARCHAR(32)", "unique": true },
+        { "name": "status", "type": "VARCHAR(30)" },
+        { "name": "subtotal_amount", "type": "DECIMAL(12,2)" },
+        { "name": "discount_amount", "type": "DECIMAL(12,2)" },
+        { "name": "shipping_amount", "type": "DECIMAL(12,2)" },
+        { "name": "total_amount", "type": "DECIMAL(12,2)" },
+        { "name": "ordered_at", "type": "TIMESTAMP" },
+        { "name": "created_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "order_items",
+      "label": "注文明細",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "order_id", "type": "BIGINT", "fk": true },
+        { "name": "product_id", "type": "BIGINT", "fk": true },
+        { "name": "product_name", "type": "VARCHAR(200)" },
+        { "name": "quantity", "type": "INTEGER" },
+        { "name": "unit_price", "type": "DECIMAL(12,2)" },
+        { "name": "line_total", "type": "DECIMAL(12,2)" },
+        { "name": "created_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "products",
+      "label": "商品",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "category_id", "type": "BIGINT", "fk": true },
+        { "name": "sku", "type": "VARCHAR(64)", "unique": true },
+        { "name": "name", "type": "VARCHAR(200)" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "price", "type": "DECIMAL(12,2)" },
+        { "name": "stock_quantity", "type": "INTEGER" },
+        { "name": "is_active", "type": "BOOLEAN" },
+        { "name": "created_at", "type": "TIMESTAMP" },
+        { "name": "updated_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "categories",
+      "label": "商品カテゴリ",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "parent_id", "type": "BIGINT", "fk": true },
+        { "name": "slug", "type": "VARCHAR(120)", "unique": true },
+        { "name": "name", "type": "VARCHAR(100)" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "sort_order", "type": "INTEGER" },
+        { "name": "created_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "payments",
+      "label": "決済",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "order_id", "type": "BIGINT", "fk": true, "unique": true },
+        { "name": "transaction_id", "type": "VARCHAR(100)", "unique": true },
+        { "name": "provider", "type": "VARCHAR(30)" },
+        { "name": "method", "type": "VARCHAR(30)" },
+        { "name": "amount", "type": "DECIMAL(12,2)" },
+        { "name": "status", "type": "VARCHAR(30)" },
+        { "name": "paid_at", "type": "TIMESTAMP" },
+        { "name": "created_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "shipments",
+      "label": "配送",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "order_id", "type": "BIGINT", "fk": true },
+        { "name": "address_id", "type": "BIGINT", "fk": true },
+        { "name": "tracking_number", "type": "VARCHAR(100)", "unique": true },
+        { "name": "carrier", "type": "VARCHAR(50)" },
+        { "name": "status", "type": "VARCHAR(30)" },
+        { "name": "shipped_at", "type": "TIMESTAMP" },
+        { "name": "delivered_at", "type": "TIMESTAMP" },
+        { "name": "created_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "addresses",
+      "label": "配送先住所",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "user_id", "type": "BIGINT", "fk": true },
+        { "name": "label", "type": "VARCHAR(50)" },
+        { "name": "postal_code", "type": "VARCHAR(10)" },
+        { "name": "prefecture", "type": "VARCHAR(20)" },
+        { "name": "city", "type": "VARCHAR(100)" },
+        { "name": "street", "type": "VARCHAR(200)" },
+        { "name": "is_default", "type": "BOOLEAN" },
+        { "name": "created_at", "type": "TIMESTAMP" }
+      ]
+    },
+    {
+      "name": "coupons",
+      "label": "クーポン",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "code", "type": "VARCHAR(50)", "unique": true },
+        { "name": "description", "type": "VARCHAR(255)" },
+        { "name": "discount_type", "type": "VARCHAR(20)" },
+        { "name": "discount_value", "type": "DECIMAL(12,2)" },
+        { "name": "minimum_order_amount", "type": "DECIMAL(12,2)" },
+        { "name": "valid_from", "type": "TIMESTAMP" },
+        { "name": "valid_until", "type": "TIMESTAMP" },
+        { "name": "usage_limit", "type": "INTEGER" },
+        { "name": "is_active", "type": "BOOLEAN" }
+      ]
+    },
+    {
+      "name": "order_coupons",
+      "label": "注文適用クーポン",
+      "columns": [
+        { "name": "id", "type": "BIGINT", "pk": true },
+        { "name": "order_id", "type": "BIGINT", "fk": true },
+        { "name": "coupon_id", "type": "BIGINT", "fk": true },
+        { "name": "discount_amount", "type": "DECIMAL(12,2)" },
+        { "name": "applied_at", "type": "TIMESTAMP" }
+      ]
+    }
+  ],
+  "relations": [
+    { "from": "users", "to": "orders", "cardinality": "1:N", "label": "ユーザーは複数の注文を持つ" },
+    { "from": "orders", "to": "order_items", "cardinality": "1:N", "label": "注文は複数の明細を持つ" },
+    { "from": "products", "to": "order_items", "cardinality": "1:N", "label": "商品は複数の明細に登場する" },
+    { "from": "order_items", "to": "products", "cardinality": "N:1", "label": "明細は一つの商品を参照する" },
+    { "from": "categories", "to": "products", "cardinality": "1:N", "label": "カテゴリは複数の商品を分類する" },
+    { "from": "products", "to": "categories", "cardinality": "N:1", "label": "商品は一つのカテゴリに属する" },
+    { "from": "orders", "to": "payments", "cardinality": "1:1", "label": "注文に対する決済" },
+    { "from": "payments", "to": "orders", "cardinality": "1:1", "label": "決済対象の注文" },
+    { "from": "orders", "to": "shipments", "cardinality": "1:N", "label": "注文は分割配送される場合がある" },
+    { "from": "shipments", "to": "orders", "cardinality": "N:1", "label": "配送は一つの注文に属する" },
+    { "from": "shipments", "to": "addresses", "cardinality": "N:1", "label": "配送先住所" },
+    { "from": "users", "to": "addresses", "cardinality": "1:N", "label": "ユーザーは複数の住所を登録できる" },
+    { "from": "orders", "to": "order_coupons", "cardinality": "1:N", "label": "注文に適用されたクーポン記録" },
+    { "from": "orders", "to": "coupons", "cardinality": "N:M", "label": "注文とクーポンの多対多関係（order_coupons 経由）" }
+  ]
+}

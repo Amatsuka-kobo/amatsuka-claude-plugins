@@ -134,6 +134,22 @@ test("HTML is themed/self-contained/interactive", () => {
   expect(h).not.toMatch(/<script[^>]+src=|<link[^>]+href=/)
 })
 
+test("ER row badges render PK/FK/UQ colors", () => {
+  const value = layout()
+  value.nodes[0].rows = [
+    { text: "id", meta: { pk: true } },
+    { text: "owner_id", meta: { fk: true } },
+    { text: "email", meta: { unique: true } },
+  ]
+  const html = renderHtml(value, spec())
+  expect(html).toContain('class="badge badge-pk">PK</tspan>')
+  expect(html).toContain('class="badge badge-fk">FK</tspan>')
+  expect(html).toContain('class="badge badge-unique">UQ</tspan>')
+  expect(html).toContain(".badge-pk{fill:#F59E0B}")
+  expect(html).toContain(".badge-fk{fill:#8B5CF6}")
+  expect(html).toContain(".badge-unique{fill:#0EA5E9}")
+})
+
 test("row text is escaped inside SVG", () => {
   const html = renderHtml(layout(), spec())
   expect(html).toContain("email &lt;/script&gt;")

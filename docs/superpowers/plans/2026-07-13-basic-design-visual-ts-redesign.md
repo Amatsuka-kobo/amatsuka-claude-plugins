@@ -628,7 +628,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `layoutEr(spec):Promise<Layout>`、PK/FK/UQ badge、cardinality label。
 
-- [ ] **Step 1: failing ER test**
+- [x] **Step 1: failing ER test**
 
 ```ts
 test("ER preserves rows/cardinality/points",async()=>{const l=await layoutEr(er);expect(l.nodes[0]).toMatchObject({shape:"entity",headerHeight:36,rowHeight:28});expect(l.edges[0]).toMatchObject({cardinality:"1:N"});expect(l.edges[0].points.length).toBeGreaterThanOrEqual(2);expect(assertLayoutHasNoOverlaps(l)).toEqual([])})
@@ -638,7 +638,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/graph.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 2: ER graph を実装する**
+- [x] **Step 2: ER graph を実装する**
 
 ```ts
 const children=spec.entities.map(e=>({id:e.name,width:240,height:36+e.columns.length*28}))
@@ -660,7 +660,7 @@ const rows=entity.columns.map(column=>({
 const layoutEdge={id:`rel${i+1}`,from:r.from,to:r.to,label:r.label??"",cardinality:r.cardinality,points:points(elkEdge),labelBox:labelBox(elkEdge)}
 ```
 
-- [ ] **Step 3: ER renderer を実装する**
+- [x] **Step 3: ER renderer を実装する**
 
 ```ts
 function badges(meta:Record<string,unknown>){return (["pk","fk","unique"] as const).filter(k=>meta[k]===true).map(k=>`<span class="badge badge-${k}">${k==="unique"?"UQ":k.toUpperCase()}</span>`).join("")}
@@ -674,7 +674,7 @@ drawio row cell は次の構造で entity cell の child とし、`ERone/ERmany`
 function rowCell(node:LayoutNode,row:LayoutRow,index:number){return `<mxCell id="${escapeXml(node.id)}-row${index+1}" value="${escapeXml(row.text)}" style="text;html=1;strokeColor=#E2E8F0;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=10;fontSize=12;" vertex="1" parent="n-${escapeXml(node.id)}"><mxGeometry y="${node.headerHeight!+index*node.rowHeight!}" width="${node.width}" height="${node.rowHeight}" as="geometry"/></mxCell>`}
 ```
 
-- [ ] **Step 4: complex fixture/property test**
+- [x] **Step 4: complex fixture/property test**
 
 `complex-er.spec.json` は `users/orders/order_items/products/categories/payments/shipments/addresses/coupons/order_coupons` の10 entity と14 relation を持ち、`1:1` / `1:N` / `N:1` / `N:M` を各1件以上、PK/FK/UQ column を各2件以上含める。test は node 10/edge 14 と overlap 0 を検査する。通らない場合のみ、設計書で許可された「現行 degree grid の固定 node + ELK orthogonal routing」へ退避する。自作 router は復活させない。
 
@@ -682,7 +682,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/graph.test.ts src/rende
 
 Expected: PASS。
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add plugins/basic-design/src/layout/{graph,graph.test}.ts plugins/basic-design/src/render/{html,html.test,drawio,drawio.test}.ts plugins/basic-design/src/fixtures/complex-er.spec.json

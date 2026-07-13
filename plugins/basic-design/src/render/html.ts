@@ -46,6 +46,13 @@ function lineSvg(line: NonNullable<Layout["lines"]>[number]): string {
   return `<line class="lifeline" x1="${line.x}" y1="${line.y1}" x2="${line.x}" y2="${line.y2}"/>`
 }
 
+function badges(meta: Record<string, unknown>): string {
+  return (["pk", "fk", "unique"] as const)
+    .filter((key) => meta[key] === true)
+    .map((key) => `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan>`)
+    .join("")
+}
+
 function nodeSvg(node: LayoutNode): string {
   const cls = `node-card kind-${node.kindKey}`
   let body: string
@@ -58,7 +65,7 @@ function nodeSvg(node: LayoutNode): string {
         return (
           `<g class="row" transform="translate(0,${rowY})">` +
           `<rect class="row-bg" width="${node.width}" height="${rowHeight}"/>` +
-          `<text class="row-text" x="10" y="${rowHeight / 2}" dominant-baseline="middle">${escapeXml(row.text)}</text>` +
+          `<text class="row-text" x="10" y="${rowHeight / 2}" dominant-baseline="middle">${badges(row.meta)}${escapeXml(row.text)}</text>` +
           `</g>`
         )
       })
@@ -269,7 +276,7 @@ ${paletteCss()}
 .node-title{font-weight:600;font-size:13px;fill:var(--text,${THEME.palette.generic.text});}
 .node-icon svg{width:${ICON_SIZE}px;height:${ICON_SIZE}px;color:var(--icon,${THEME.palette.generic.icon});}
 .row-bg{fill:transparent;}
-.row-text{font-size:12px;fill:#1F2937;}
+.row-text{font-size:12px;fill:#1F2937;}.badge{font-weight:700}.badge-pk{fill:#F59E0B}.badge-fk{fill:#8B5CF6}.badge-unique{fill:#0EA5E9}
 .edge polyline{stroke:${THEME.edge};stroke-width:1.5;fill:none;}
 .edge.return polyline{stroke-dasharray:6 4;}
 .edge-label-bg{fill:${THEME.labelBackground};stroke:#E2E8F0;}
