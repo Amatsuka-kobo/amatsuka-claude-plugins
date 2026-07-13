@@ -104,6 +104,8 @@ AskUserQuestion で次を確認する:
 
 承認された内容を `docs/design/nfr/<名前>.md` に保存する。ファイル名はケバブケース(例: `order-system-nfr.md`)。git コミットはユーザーの指示があったときのみ行う。
 
+ローカル保存の完了後、`${CLAUDE_PLUGIN_ROOT}/skills/shared/drive-upload.md` の手順で Google Drive へのアップロードを確認する(設定が無ければ何も起きない)。
+
 ## 既存チェックリストの更新
 
 同名のファイルが既にある場合は、それを読み込んで現状を把握し、変更のある分類だけを再ブレストして全文を更新する。
