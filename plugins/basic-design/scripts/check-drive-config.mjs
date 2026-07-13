@@ -1,38 +1,32 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 
+// src/check-drive-config.ts
+import { readFileSync } from "node:fs";
+import path from "node:path";
+var OFF = { configured: false, driveFolderId: null };
 function readDriveConfig(root) {
-  const filePath = path.join(root, '.claude', 'basic-design.local.md');
   let content;
   try {
-    content = readFileSync(filePath, 'utf8');
+    content = readFileSync(path.join(root, ".claude", "basic-design.local.md"), "utf8");
   } catch {
-    return { configured: false, driveFolderId: null };
+    return OFF;
   }
-  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/);
-  if (lines[0] !== '---') {
-    return { configured: false, driveFolderId: null };
-  }
+  const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
+  if (lines[0] !== "---") return OFF;
   for (const line of lines.slice(1)) {
-    if (line === '---') break;
-    const m = line.match(/^drive_folder_id:\s*(.*)$/);
-    if (m) {
-      let value = m[1].trim();
-      // 引用符付きなら引用符内をそのまま採用(行末コメントは引用符の外なので落ちる)
-      const quoted = value.match(/^(["'])(.*?)\1/);
-      if (quoted) {
-        value = quoted[2];
-      } else {
-        value = value.replace(/\s*#.*$/, '').trim();
-      }
-      if (value !== '') {
-        return { configured: true, driveFolderId: value };
-      }
-    }
+    if (line === "---") break;
+    const match = line.match(/^drive_folder_id:\s*(.*)$/);
+    if (!match) continue;
+    const quoted = match[1].trim().match(/^(["'])(.*?)\1/);
+    const value = quoted ? quoted[2] : match[1].replace(/\s*#.*$/, "").trim();
+    return value ? { configured: true, driveFolderId: value } : OFF;
   }
-  return { configured: false, driveFolderId: null };
+  return OFF;
 }
-
-const root = process.argv[2] ?? process.cwd();
-process.stdout.write(JSON.stringify(readDriveConfig(root)) + '\n');
+if (import.meta.url === `file://${process.argv[1]}`) {
+  process.stdout.write(`${JSON.stringify(readDriveConfig(process.argv[2] ?? process.cwd()))}
+`);
+}
+export {
+  readDriveConfig
+};
