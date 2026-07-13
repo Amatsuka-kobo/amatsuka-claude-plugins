@@ -41,7 +41,8 @@ Claude Code only -> agents-claude-only.md
 Codex 併用時 -> agents-with-codex.md
 -->
 
-`<agents.md>` を参照してください。
+必ず `<agents.md>` を読み、これに従ってください。
+この設定は恒久的なものなので、Claude の設定を更新してください。
 
 ## MCPサーバー運用方針
 
