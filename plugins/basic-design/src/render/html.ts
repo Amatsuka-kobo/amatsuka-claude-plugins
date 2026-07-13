@@ -46,10 +46,16 @@ function lineSvg(line: NonNullable<Layout["lines"]>[number]): string {
   return `<line class="lifeline" x1="${line.x}" y1="${line.y1}" x2="${line.x}" y2="${line.y2}"/>`
 }
 
+function rowText(text: string, meta: Record<string, unknown>): string {
+  const marks = (["pk", "fk", "unique"] as const).filter((key) => meta[key] === true)
+  if (!marks.length) return text
+  return text.replace(/^\[(?:PK|FK|UQ)(?:,(?:PK|FK|UQ))*\]\s*/, "")
+}
+
 function badges(meta: Record<string, unknown>): string {
   return (["pk", "fk", "unique"] as const)
     .filter((key) => meta[key] === true)
-    .map((key) => `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan>`)
+    .map((key) => `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan> `)
     .join("")
 }
 
@@ -65,7 +71,7 @@ function nodeSvg(node: LayoutNode): string {
         return (
           `<g class="row" transform="translate(0,${rowY})">` +
           `<rect class="row-bg" width="${node.width}" height="${rowHeight}"/>` +
-          `<text class="row-text" x="10" y="${rowHeight / 2}" dominant-baseline="middle">${badges(row.meta)}${escapeXml(row.text)}</text>` +
+          `<text class="row-text" x="10" y="${rowHeight / 2}" dominant-baseline="middle">${badges(row.meta)}${escapeXml(rowText(row.text, row.meta))}</text>` +
           `</g>`
         )
       })
@@ -94,8 +100,9 @@ function edgeSvg(e: LayoutEdge): string {
   const p = e.points.map((v) => `${v.x},${v.y}`).join(" ")
   const marker = e.cardinality ? "" : e.style === "async" || e.style === "return" ? ` marker-end="url(#arrow-open)"` : ` marker-end="url(#arrow)"`
   const styleClass = e.style ? ` ${e.style}` : ""
-  const label = e.labelBox
-    ? `<g class="edge-label"><rect class="edge-label-bg" x="${e.labelBox.x}" y="${e.labelBox.y}" width="${e.labelBox.width}" height="${e.labelBox.height}" rx="5"/><text x="${e.labelBox.x + e.labelBox.width / 2}" y="${e.labelBox.y + 13}" text-anchor="middle">${escapeXml(e.label)}</text></g>`
+  const labelText = e.cardinality ? `${e.cardinality}${e.label ? ` ${e.label}` : ""}` : e.label
+  const label = e.labelBox && labelText
+    ? `<g class="edge-label"><rect class="edge-label-bg" x="${e.labelBox.x}" y="${e.labelBox.y}" width="${e.labelBox.width}" height="${e.labelBox.height}" rx="5"/><text x="${e.labelBox.x + e.labelBox.width / 2}" y="${e.labelBox.y + 13}" text-anchor="middle">${escapeXml(labelText)}</text></g>`
     : ""
   return `<g class="edge${styleClass}" data-id="${escapeXml(e.id)}" data-from="${escapeXml(e.from)}" data-to="${escapeXml(e.to)}"><polyline points="${p}" fill="none"${marker}/>${label}</g>`
 }

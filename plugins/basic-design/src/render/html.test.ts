@@ -150,6 +150,20 @@ test("ER row badges render PK/FK/UQ colors", () => {
   expect(html).toContain(".badge-unique{fill:#0EA5E9}")
 })
 
+test("ER badges do not duplicate bracket prefixes", () => {
+  const html = renderHtml(layout(), spec())
+  expect(html).toContain('class="badge badge-pk">PK</tspan> id : BIGINT')
+  expect(html).not.toContain('class="badge badge-pk">PK</tspan>[PK]')
+})
+
+test("ER cardinality is visible even without relation label", () => {
+  const value = layout()
+  value.edges[0].label = ""
+  const html = renderHtml(value, spec())
+  expect(html).toContain(">1:N</text>")
+  expect(html).not.toMatch(/class="edge-label"[^>]*><rect[^>]*><\/rect>/)
+})
+
 test("row text is escaped inside SVG", () => {
   const html = renderHtml(layout(), spec())
   expect(html).toContain("email &lt;/script&gt;")
