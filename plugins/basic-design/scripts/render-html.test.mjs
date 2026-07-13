@@ -124,6 +124,48 @@ test('ライフラインとポイント指定エッジ(return は破線クラス
   assert.ok(html.includes('x1="110"'));
 });
 
+// ---- 直交エッジルーティング ----
+
+test('障害物を挟む source/target エッジは polyline になり障害物矩形を避ける', () => {
+  const PAD = 40;
+  const from = { id: 'a', label: 'A', shape: 'box', x: 0, y: 100, width: 140, height: 60, meta: {} };
+  const mid = { id: 'm', label: 'M', shape: 'box', x: 200, y: 100, width: 140, height: 60, meta: {} };
+  const to = { id: 'b', label: 'B', shape: 'box', x: 400, y: 100, width: 140, height: 60, meta: {} };
+  const html = renderHtml({
+    type: 'architecture',
+    title: 'obst',
+    nodes: [from, mid, to],
+    edges: [{ id: 'e1', from: 'a', to: 'b', label: '接続', style: 'arrow' }],
+  }, { type: 'architecture' });
+
+  // polyline で描画され marker-end が維持される
+  const m = html.match(/data-id="e1"[^>]*>\s*<polyline points="([^"]+)" fill="none" marker-end="url\(#arrow\)"/);
+  assert.ok(m, 'e1 が marker-end 付き polyline で出力される');
+  const pts = m[1].trim().split(/\s+/).map((s) => {
+    const [x, y] = s.split(',').map(Number);
+    return { x, y };
+  });
+  assert.ok(pts.length > 2, `点数 ${pts.length} > 2`);
+
+  // 障害物 m の HTML 矩形(PAD 加算後)をどのセグメントも貫通しない
+  const rect = { x: mid.x + PAD, y: mid.y + PAD, x2: mid.x + mid.width + PAD, y2: mid.y + mid.height + PAD };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    const hit = minX < rect.x2 && rect.x < maxX && minY < rect.y2 && rect.y < maxY;
+    assert.ok(!hit, `segment ${i} が障害物 m を貫通した`);
+  }
+});
+
+test('CSS が polyline を line と同様に扱う', () => {
+  const html = renderHtml(flowLayout(), { type: 'screen-flow' });
+  assert.ok(html.includes('.edge line, .edge polyline'));
+});
+
 test('viewBox がライフラインとゾーンを含む大きさになる', () => {
   const html = renderHtml({
     type: 'sequence',

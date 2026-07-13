@@ -1,4 +1,5 @@
 import { escapeXml } from '../xml-util.mjs';
+import { routeOrthogonal } from '../route.mjs';
 
 const PAD = 40;
 
@@ -34,6 +35,34 @@ export function renderHtml(layout, spec) {
 
   const edgeSvg = layout.edges
     .map((edge) => {
+      const label = [edge.label, edge.cardinality].filter(Boolean).join(' ');
+      const styleClass = edge.style ? ` ${edge.style}` : '';
+      const marker = edge.cardinality
+        ? ''
+        : edge.style === 'async' || edge.style === 'return'
+          ? ' marker-end="url(#arrow-open)"'
+          : ' marker-end="url(#arrow)"';
+      const open = `<g class="edge${styleClass}" data-id="${escapeXml(edge.id)}" data-from="${escapeXml(edge.from)}" data-to="${escapeXml(edge.to)}">`;
+
+      // 非 ER の source/target 型エッジ(architecture / screen-flow)は障害物回避の直交ルーティング
+      if (edge.style && !edge.fromPt && !edge.cardinality) {
+        const a = byId.get(edge.from);
+        const b = byId.get(edge.to);
+        const obstacles = layout.nodes.filter((n) => n.id !== edge.from && n.id !== edge.to);
+        const pts = routeOrthogonal(a, b, obstacles).map((p) => ({ x: p.x + PAD, y: p.y + PAD }));
+        const points = pts.map((p) => `${p.x},${p.y}`).join(' ');
+        const segCount = pts.length - 1;
+        const idx = Math.floor((segCount - 1) / 2); // 中央セグメント(偶数なら下側)
+        const lx = (pts[idx].x + pts[idx + 1].x) / 2;
+        const ly = (pts[idx].y + pts[idx + 1].y) / 2;
+        return (
+          open +
+          `<polyline points="${points}" fill="none"${marker}/>` +
+          `<text x="${lx}" y="${ly - 6}" text-anchor="middle" class="edge-label">${escapeXml(label)}</text>` +
+          `</g>`
+        );
+      }
+
       let x1;
       let y1;
       let x2;
@@ -51,15 +80,8 @@ export function renderHtml(layout, spec) {
         x2 = b.x + b.width / 2 + PAD;
         y2 = b.y + b.height / 2 + PAD;
       }
-      const label = [edge.label, edge.cardinality].filter(Boolean).join(' ');
-      const styleClass = edge.style ? ` ${edge.style}` : '';
-      const marker = edge.cardinality
-        ? ''
-        : edge.style === 'async' || edge.style === 'return'
-          ? ' marker-end="url(#arrow-open)"'
-          : ' marker-end="url(#arrow)"';
       return (
-        `<g class="edge${styleClass}" data-id="${escapeXml(edge.id)}" data-from="${escapeXml(edge.from)}" data-to="${escapeXml(edge.to)}">` +
+        open +
         `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${marker}/>` +
         `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle" class="edge-label">${escapeXml(label)}</text>` +
         `</g>`
@@ -119,13 +141,13 @@ export function renderHtml(layout, spec) {
   .node-header { fill: #e8eef7; stroke: #333; }
   .node-title { font-weight: bold; font-size: 13px; }
   .row { font-size: 12px; fill: #222; }
-  .edge line { stroke: #666; stroke-width: 1.5; }
+  .edge line, .edge polyline { stroke: #666; stroke-width: 1.5; fill: none; }
   .edge-label { font-size: 11px; fill: #444; }
   .node, .edge { transition: opacity .15s; }
   svg.has-selection .node:not(.hl), svg.has-selection .edge:not(.hl) { opacity: .25; }
   svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
   .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
-  .hl line, .pv line { stroke: #1a63c9; stroke-width: 2.5; }
+  .hl line, .pv line, .hl polyline, .pv polyline { stroke: #1a63c9; stroke-width: 2.5; }
   .zone rect { fill: #f5f5f5; stroke: #666; }
   .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
   .lifeline { stroke: #999; stroke-dasharray: 6 4; }
