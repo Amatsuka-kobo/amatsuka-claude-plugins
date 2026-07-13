@@ -17,7 +17,7 @@ const EDGE_STYLES: Record<NonNullable<LayoutEdge["style"]>, string> = {
   return: "rounded=0;dashed=1;endArrow=open;endFill=0;",
 }
 
-const ROW_STYLE = "text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=8;overflow=hidden;"
+const ROW_STYLE = "text;html=1;strokeColor=#E2E8F0;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=10;fontSize=12;"
 const LIFELINE_STYLE = `endArrow=none;dashed=1;strokeColor=#94A3B8;`
 const ZONE_STYLE = `rounded=1;arcSize=8;fillColor=${THEME.zone.fill};strokeColor=${THEME.zone.stroke};verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;`
 
@@ -49,7 +49,7 @@ function nodeCell(node: LayoutNode): string {
     const rows = node.rows.map((row, i) => {
       const rowY = headerHeight + i * rowHeight
       return (
-        `<mxCell id="${escapeXml(`${nodeId}-row${i + 1}`)}" value="${escapeXml(row.text)}" style="${ROW_STYLE}" vertex="1" parent="${escapeXml(nodeId)}">` +
+        `<mxCell id="${escapeXml(node.id)}-row${i + 1}" value="${escapeXml(row.text)}" style="${ROW_STYLE}" vertex="1" parent="${escapeXml(nodeId)}">` +
         `<mxGeometry y="${rowY}" width="${node.width}" height="${rowHeight}" as="geometry"/>` +
         `</mxCell>`
       )

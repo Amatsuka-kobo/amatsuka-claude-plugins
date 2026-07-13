@@ -1,6 +1,6 @@
 import ELK from "elkjs/lib/elk.bundled.js"
 import type { ElkExtendedEdge, ElkLabel, ElkNode } from "elkjs"
-import type { ArchitectureSpec, Box, Layout, LayoutEdge, LayoutNode, ScreenFlowSpec } from "../types.js"
+import type { ArchitectureSpec, Box, ErSpec, Layout, LayoutEdge, LayoutNode, ScreenFlowSpec } from "../types.js"
 
 const elk = new ELK()
 const BASE = {
@@ -94,6 +94,73 @@ export async function layoutScreenFlow(spec: ScreenFlowSpec): Promise<Layout> {
     nodes,
     edges: layoutEdges(transitions.map((item) => ({ from: item.from, to: item.to, label: item.trigger })), result.edges ?? [], "t"),
   }
+}
+
+function formatColumn(column: ErSpec["entities"][number]["columns"][number]): string {
+  const marks = [column.pk && "PK", column.fk && "FK", column.unique && "UQ"].filter(Boolean)
+  const prefix = marks.length ? `[${marks.join(",")}] ` : ""
+  return column.type ? `${prefix}${column.name} : ${column.type}` : `${prefix}${column.name}`
+}
+
+export async function layoutEr(spec: ErSpec): Promise<Layout> {
+  const relations = spec.relations ?? []
+  const root: ElkNode = {
+    id: "root",
+    layoutOptions: { ...BASE, "elk.direction": "DOWN" },
+    children: spec.entities.map((entity) => ({ id: entity.name, width: 240, height: 36 + entity.columns.length * 28 })),
+    edges: relations.map((relation, index) => {
+      const text = `${relation.cardinality} ${relation.label ?? ""}`.trim()
+      return {
+        id: `rel${index + 1}`,
+        sources: [relation.from],
+        targets: [relation.to],
+        labels: [{ text, width: Math.max(56, text.length * 7 + 16), height: 18 }],
+      }
+    }),
+  }
+  const result = await elk.layout(root)
+  const placedById = new Map((result.children ?? []).map((node) => [node.id, node]))
+  const nodes: LayoutNode[] = spec.entities.map((entity) => {
+    const placed = placedById.get(entity.name)
+    if (!placed || placed.x === undefined || placed.y === undefined) throw new Error(`ELK entity ${entity.name} is missing coordinates`)
+    return {
+      id: entity.name,
+      label: entity.label ?? entity.name,
+      shape: "entity",
+      kindKey: "generic",
+      x: placed.x,
+      y: placed.y,
+      width: placed.width ?? 240,
+      height: placed.height ?? 36 + entity.columns.length * 28,
+      headerHeight: 36,
+      rowHeight: 28,
+      rows: entity.columns.map((column) => ({
+        text: formatColumn(column),
+        meta: {
+          name: column.name,
+          type: column.type ?? "",
+          pk: column.pk === true,
+          fk: column.fk === true,
+          unique: column.unique === true,
+        },
+      })),
+      meta: {},
+    }
+  })
+  const edges: LayoutEdge[] = relations.map((relation, index) => {
+    const routed = (result.edges ?? []).find((edge) => edge.id === `rel${index + 1}`)
+    if (!routed) throw new Error(`ELK edge rel${index + 1} is missing`)
+    return {
+      id: `rel${index + 1}`,
+      from: relation.from,
+      to: relation.to,
+      label: relation.label ?? "",
+      cardinality: relation.cardinality,
+      points: points(routed),
+      labelBox: labelBox(routed),
+    }
+  })
+  return { type: "er", title: spec.title, nodes, edges }
 }
 
 export async function layoutArchitecture(spec: ArchitectureSpec): Promise<Layout> {
