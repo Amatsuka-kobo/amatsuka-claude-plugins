@@ -105,6 +105,16 @@ test('引数省略時はカレントディレクトリを使う', async () => {
   const { stdout } = await run('node', [CLI], { cwd: dir });
   assert.deepEqual(JSON.parse(stdout), { configured: true, driveFolderId: '1Cwd' });
 });
+
+test('引用符付きの値に行末コメントが付いても正しく剥がす', async () => {
+  const dir = await makeProject('---\ndrive_folder_id: "1AbC"   # フォルダ URL 末尾の ID\n---\n');
+  assert.deepEqual(await runCli(dir), { configured: true, driveFolderId: '1AbC' });
+});
+
+test('CRLF 改行のファイルも読める', async () => {
+  const dir = await makeProject('---\r\ndrive_folder_id: "1Crlf"\r\n---\r\n');
+  assert.deepEqual(await runCli(dir), { configured: true, driveFolderId: '1Crlf' });
+});
 ```
 
 - [ ] **Step 2: テストが失敗することを確認**
@@ -137,7 +147,14 @@ function readDriveConfig(root) {
     if (line === '---') break;
     const m = line.match(/^drive_folder_id:\s*(.*)$/);
     if (m) {
-      const value = m[1].trim().replace(/^["']|["']$/g, '').replace(/\s*#.*$/, '').trim();
+      let value = m[1].trim();
+      // 引用符付きなら引用符内をそのまま採用(行末コメントは引用符の外なので落ちる)
+      const quoted = value.match(/^(["'])(.*?)\1/);
+      if (quoted) {
+        value = quoted[2];
+      } else {
+        value = value.replace(/\s*#.*$/, '').trim();
+      }
       if (value !== '') {
         return { configured: true, driveFolderId: value };
       }
@@ -153,14 +170,14 @@ process.stdout.write(JSON.stringify(readDriveConfig(root)) + '\n');
 - [ ] **Step 4: テストが通ることを確認**
 
 Run: `node --test plugins/basic-design/scripts/check-drive-config.test.mjs`
-Expected: PASS(6 tests)
+Expected: PASS(8 tests)
 
-注意: 実装の `.replace(/\s*#.*$/, '')` はコメント除去(設定例の `# 省略時は...` に対応)。引用符剥がしの後に行う順序に意味がある(引用符内の `#` を守る完全性より単純さを優先 — フォルダ ID に `#` は含まれない)。
+注意: 引用符付きの値は「最初の引用符ペアの中身」をそのまま採用する(行末コメントは引用符の外なので自然に落ちる)。引用符なしの値のみ `#` 以降をコメントとして除去する。
 
 - [ ] **Step 5: 全体通しとコミット**
 
 Run: `node --test plugins/basic-design/scripts/*.test.mjs`
-Expected: PASS(98 tests, fail 0)
+Expected: PASS(100 tests, fail 0)
 
 ```bash
 git add plugins/basic-design/scripts/
@@ -211,7 +228,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/check-drive-config.mjs"
 
 1. 自分の利用可能ツール一覧から、**Google Drive へのファイルアップロードができる MCP Tool** を探す
 2. **見つかった場合**: 対象ファイル(生成物 .drawio / .html / .md のみ。**spec JSON は対象外**)を `driveFolderId` のフォルダへアップロードする
-   - アップロード前に、同名ファイルが既に Drive 上にあるかを確認できるツールがあれば確認し、**ある場合は「上書き更新か、別名で追加か」をユーザーに確認**する。確認できない場合はその旨を伝えてから実行する
+   - **アップロード前に同名ファイルの有無を必ず扱う**: Drive 上のファイル一覧・検索ができるツールがあればそれで確認し、既にある場合は「上書き更新か、別名で追加か」をユーザーに確認する。確認手段が無い場合は「同名ファイルの有無を確認できない(重複や意図しない上書きが起こりうる)」ことを伝え、**続行するかをユーザーに確認してから**実行する
    - 成功したら、アップロード先(ファイル名と可能なら URL)を報告する
    - 失敗したら生のエラーをそのまま報告して STOP(ローカル保存は完了している。勝手なリトライをしない)
 3. **見つからない場合**: 次を伝えて STOP:
