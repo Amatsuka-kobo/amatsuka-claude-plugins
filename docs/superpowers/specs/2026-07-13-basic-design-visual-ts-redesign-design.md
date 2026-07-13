@@ -27,16 +27,17 @@ basic-design が生成する図(システム構成図・画面遷移図・ER図�
 
 ## 全体構成
 
-### パッケージ構成(raguel-mcp 準拠)
+### パッケージ構成(raguel-mcp 準拠、出力先は現行の scripts/ を維持)
 
 ```
-plugins/basic-design/design-gen/
+plugins/basic-design/
 ├── package.json        # pnpm / vitest / typecheck / esbuild build(raguel-mcp と同系)
 ├── tsconfig.json       # raguel-mcp と同設定(strict, esnext, bundler resolution)
-├── scripts/build.ts    # esbuild: src/cli.ts → dist/design-gen.mjs(単一バンドル)
-├── dist/design-gen.mjs # ビルド成果物。git にコミットして配布(raguel-mcp 方式)
+├── build.ts            # esbuild: src/cli.ts → scripts/design-gen.mjs、
+│                       #          src/check-drive-config.ts → scripts/check-drive-config.mjs
 ├── src/
 │   ├── cli.ts              # 現 design-gen.mjs 相当(引数・JSON 出力仕様は不変)
+│   ├── check-drive-config.ts
 │   ├── validate.ts         # spec バリデーション(現 validate.mjs 移植)
 │   ├── types.ts            # Spec / Layout / Theme の型定義
 │   ├── layout/
@@ -50,16 +51,22 @@ plugins/basic-design/design-gen/
 │   │   └── icons.ts        # インライン SVG アイコンセット
 │   ├── xml-util.ts
 │   └── *.test.ts           # vitest(src 併置)
-└── (check-drive-config.mjs も同パッケージへ TS 移植)
+├── scripts/
+│   ├── design-gen.mjs          # esbuild 単一バンドル(コミット対象)
+│   └── check-drive-config.mjs  # 同上
+└── skills/ / samples / .claude-plugin/(既存のまま)
 ```
 
-- 旧 `scripts/lib/**`・`scripts/route.mjs`・`scripts/*.test.mjs` は削除(elkjs とテスト移植が代替)
-- 各 SKILL.md の実行コマンドを `node "${CLAUDE_PLUGIN_ROOT}/design-gen/dist/design-gen.mjs"` へ更新
-- CLAUDE.md の開発コマンド表を更新(`cd plugins/basic-design/design-gen && pnpm build / pnpm test / pnpm typecheck`)
+- ビルド成果物(単一バンドル .mjs)を**現行と同じ `scripts/` に出力**するため、各 SKILL.md の実行コマンド `node "${CLAUDE_PLUGIN_ROOT}/scripts/design-gen.mjs"` は**変更不要**
+- ソースは `src/` に置き、esbuild スクリプトは出力先の `scripts/` と紛れないようパッケージルートの `build.ts` とする
+- 旧 `scripts/lib/**`・`scripts/route.mjs`・`scripts/*.test.mjs`・`scripts/test-helpers.mjs` は削除(elkjs とテスト移植が代替)。移行完了後の `scripts/` はビルド成果物のみになる
+- CLAUDE.md の開発コマンド表を更新(`cd plugins/basic-design && pnpm build / pnpm test / pnpm typecheck`)
 
 ### 配布方式の根拠
 
 スキルは `node "${CLAUDE_PLUGIN_ROOT}/…"` を直接実行するため、利用者の環境に node_modules は存在しない。raguel-mcp と同じく **esbuild で依存を焼き込んだ単一バンドルを git にコミット**することで、利用者は従来どおり `node` コマンドだけで実行できる。elkjs は純 JS・実行時依存ゼロなのでバンドルに問題なく含められる(バンドルサイズは約 1.4MB 増)。
+
+検討した代替案: elkjs は依存ゼロの単一ファイル(`elk.bundled.js`)としても配布されるため、「tsc + ベンダリング」(esbuild なし)も成立する。しかし raguel-mcp とのツールチェーン統一を優先して esbuild 方式を採用した(ユーザー決定)。出力先はビルド成果物専用の `dist/` ではなく、現行のスキル呼び出しパスを維持できる `scripts/` とする(同じくユーザー決定)。
 
 ## レイアウト設計
 
@@ -161,7 +168,7 @@ layout 結果の各ノードに `kindKey`(テーマのパレットキー)を付�
 
 ## check-drive-config の扱い
 
-`check-drive-config.mjs` は Drive 設定ファイルの読み取り検査のみの小さな CLI。`src/check-drive-config.ts` として移植し、esbuild のエントリポイントに追加して `dist/check-drive-config.mjs` を出力する(機能変更なし。既存テストを vitest に移植)。
+`check-drive-config.mjs` は Drive 設定ファイルの読み取り検査のみの小さな CLI。`src/check-drive-config.ts` として移植し、esbuild のエントリポイントに追加して `scripts/check-drive-config.mjs` を出力する(機能変更なし。既存テストを vitest に移植)。
 
 ## バージョニング
 
