@@ -1,0 +1,26 @@
+{
+  "type": "sequence",
+  "title": "ログインと決済処理",
+  "actors": [
+    { "id": "user", "label": "ユーザー", "kind": "actor" },
+    { "id": "web", "label": "Web" },
+    { "id": "api", "label": "API" },
+    { "id": "auth", "label": "認証サービス" },
+    { "id": "db", "label": "DB" },
+    { "id": "payment", "label": "決済サービス" }
+  ],
+  "messages": [
+    { "from": "user", "to": "web", "label": "ログイン要求" },
+    { "from": "web", "to": "api", "label": "認証確認" },
+    { "from": "api", "to": "auth", "label": "資格情報検証", "style": "async" },
+    { "from": "auth", "to": "db", "label": "ユーザー照会" },
+    { "from": "db", "to": "auth", "label": "ユーザー情報", "style": "return" },
+    { "from": "auth", "to": "api", "label": "認証結果", "style": "return" },
+    { "from": "api", "to": "web", "label": "セッショントークン", "style": "return" },
+    { "from": "web", "to": "user", "label": "ログイン成功" },
+    { "from": "user", "to": "web", "label": "購入要求" },
+    { "from": "web", "to": "api", "label": "注文作成", "style": "async" },
+    { "from": "api", "to": "payment", "label": "決済実行", "style": "async" },
+    { "from": "payment", "to": "api", "label": "決済結果", "style": "return" }
+  ]
+}

@@ -394,7 +394,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `layoutSequence(spec: SequenceSpec): Promise<Layout>`、`assertLayoutHasNoOverlaps(layout: Layout): string[]`。全 layouter を `Promise<Layout>` に統一し、Task 8 の dispatch に分岐を持たせない。
 
-- [ ] **Step 1: points/label test を書き failure 確認**
+- [x] **Step 1: points/label test を書き failure 確認**
 
 ```ts
 test("sequence uses points and labelBox", async () => {
@@ -409,7 +409,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/sequence.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 2: geometry assertions を実装する**
+- [x] **Step 2: geometry assertions を実装する**
 
 ```ts
 export function boxesOverlap(a:Box,b:Box){return a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y}
@@ -436,7 +436,7 @@ export function assertLayoutHasNoOverlaps(layout:Layout):string[]{
 
 境界への接触は overlap としない。source/target node についても、接続端点1点だけを1px内側へ縮め、それ以外の segment が node interior を横切れば failure とする。
 
-- [ ] **Step 3: sequence を共通 Layout へ移植する**
+- [x] **Step 3: sequence を共通 Layout へ移植する**
 
 ```ts
 export async function layoutSequence(spec:SequenceSpec):Promise<Layout>{
@@ -449,7 +449,7 @@ return {id:`msg${i+1}`,from:msg.from,to:msg.to,label:msg.label??"",style:msg.sty
 }
 ```
 
-- [ ] **Step 4: complex fixture と property test**
+- [x] **Step 4: complex fixture と property test**
 
 `complex-sequence.spec.json` は actor ID `user/web/api/auth/db/payment` の6件、message 12件を持つ。style 未指定(sync)、`async`、`return` を各2件以上含め、すべて異なる actor 間にする。test は `expect(layout.nodes).toHaveLength(6)`、`expect(layout.edges).toHaveLength(12)`、`expect(assertLayoutHasNoOverlaps(layout)).toEqual([])` を含める。
 
