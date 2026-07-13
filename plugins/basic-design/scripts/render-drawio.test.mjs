@@ -138,3 +138,38 @@ test('source/target 型の非 ER エッジは block 矢印になる', () => {
   assert.ok(/id="e-t1"[^>]*source="n-a" target="n-b"/.test(xml));
   assert.ok(/id="e-t1"[^>]*endArrow=block;endFill=1;/.test(xml));
 });
+
+// ---- 直交エッジルーティング ----
+
+test('障害物を挟む source/target エッジは orthogonalEdgeStyle と waypoint を持つ', () => {
+  const xml = renderDrawio({
+    type: 'architecture',
+    title: 'obst',
+    nodes: [
+      { id: 'a', label: 'A', shape: 'box', x: 0, y: 100, width: 140, height: 60 },
+      { id: 'm', label: 'M', shape: 'box', x: 200, y: 100, width: 140, height: 60 },
+      { id: 'b', label: 'B', shape: 'box', x: 400, y: 100, width: 140, height: 60 },
+    ],
+    edges: [{ id: 'e1', from: 'a', to: 'b', label: '接続', style: 'arrow' }],
+  });
+  assert.ok(/id="e-e1"[^>]*style="edgeStyle=orthogonalEdgeStyle;/.test(xml));
+  const cell = xml.match(/<mxCell id="e-e1"[\s\S]*?<\/mxCell>/)[0];
+  assert.ok(cell.includes('<Array as="points">'));
+  assert.ok(/<mxPoint x="[-\d.]+" y="[-\d.]+"\/>/.test(cell));
+});
+
+test('障害物なしの整列 source/target エッジは Array を持たない', () => {
+  const xml = renderDrawio({
+    type: 'architecture',
+    title: 'aligned',
+    nodes: [
+      { id: 'a', label: 'A', shape: 'box', x: 0, y: 0, width: 140, height: 60 },
+      { id: 'b', label: 'B', shape: 'box', x: 400, y: 0, width: 140, height: 60 },
+    ],
+    edges: [{ id: 'e1', from: 'a', to: 'b', label: '接続', style: 'arrow' }],
+  });
+  const cell = xml.match(/<mxCell id="e-e1"[\s\S]*?<\/mxCell>/)[0];
+  assert.ok(/id="e-e1"[^>]*style="edgeStyle=orthogonalEdgeStyle;/.test(xml));
+  assert.ok(!cell.includes('<Array'));
+  assert.ok(cell.includes('<mxGeometry relative="1" as="geometry"/>'));
+});
