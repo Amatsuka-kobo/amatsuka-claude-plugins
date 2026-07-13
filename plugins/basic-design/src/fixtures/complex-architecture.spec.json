@@ -1,0 +1,66 @@
+{
+  "type": "architecture",
+  "title": "複雑なクラウドサービス構成",
+  "zones": [
+    {
+      "id": "edge-zone",
+      "label": "エッジ層",
+      "children": ["cdn", "waf", "gateway"]
+    },
+    {
+      "id": "service-zone",
+      "label": "サービス層",
+      "children": ["user-api", "order-api", "worker"]
+    },
+    {
+      "id": "data-zone",
+      "label": "データ層",
+      "children": ["user-db", "order-db", "cache"]
+    },
+    {
+      "id": "integration-zone",
+      "label": "連携層",
+      "children": ["queue", "mailer", "payment-adapter"]
+    }
+  ],
+  "nodes": [
+    { "id": "cdn", "label": "CDN", "kind": "external", "icon": "cloud" },
+    { "id": "waf", "label": "WAF", "kind": "security", "icon": "shield" },
+    { "id": "gateway", "label": "API Gateway", "kind": "api", "icon": "gateway" },
+    { "id": "user-api", "label": "User API", "kind": "api", "icon": "api" },
+    { "id": "order-api", "label": "Order API", "kind": "api", "icon": "api" },
+    { "id": "worker", "label": "Job Worker", "kind": "compute", "icon": "server" },
+    { "id": "user-db", "label": "User Database", "kind": "data", "icon": "database" },
+    { "id": "order-db", "label": "Order Database", "kind": "data", "icon": "database" },
+    { "id": "cache", "label": "Redis Cache", "kind": "data", "icon": "cache" },
+    { "id": "queue", "label": "Message Queue", "kind": "messaging", "icon": "queue" },
+    { "id": "mailer", "label": "Mail Service", "kind": "external", "icon": "mail" },
+    { "id": "payment-adapter", "label": "Payment Adapter", "kind": "external", "icon": "credit-card" },
+    { "id": "browser", "label": "Web Browser", "kind": "user", "icon": "browser" },
+    { "id": "admin-console", "label": "Admin Console", "kind": "user", "icon": "screen" },
+    { "id": "analytics", "label": "Analytics", "kind": "external", "icon": "chart" },
+    { "id": "partner-api", "label": "Partner API", "kind": "external", "icon": "api" }
+  ],
+  "edges": [
+    { "from": "cdn", "to": "waf", "label": "静的配信" },
+    { "from": "waf", "to": "gateway", "label": "検査済み HTTPS" },
+    { "from": "user-api", "to": "order-api", "label": "内部 API" },
+    { "from": "order-api", "to": "worker", "label": "ジョブ投入" },
+    { "from": "user-db", "to": "order-db", "label": "参照整合性" },
+    { "from": "order-db", "to": "cache", "label": "キャッシュ更新" },
+    { "from": "queue", "to": "mailer", "label": "通知配信" },
+    { "from": "mailer", "to": "payment-adapter", "label": "決済通知" },
+    { "from": "gateway", "to": "user-api", "label": "ユーザー要求" },
+    { "from": "waf", "to": "order-api", "label": "注文要求" },
+    { "from": "gateway", "to": "order-api", "label": "注文 API" },
+    { "from": "worker", "to": "user-db", "label": "ユーザー更新" },
+    { "from": "worker", "to": "order-db", "label": "注文更新" },
+    { "from": "order-api", "to": "queue", "label": "イベント発行" },
+    { "from": "cache", "to": "queue", "label": "キャッシュイベント" },
+    { "from": "payment-adapter", "to": "cdn", "label": "決済結果" },
+    { "from": "browser", "to": "gateway", "label": "HTTPS" },
+    { "from": "gateway", "to": "admin-console", "label": "管理画面" },
+    { "from": "analytics", "to": "order-db", "label": "分析抽出" },
+    { "from": "partner-api", "to": "user-api", "label": "連携要求" }
+  ]
+}

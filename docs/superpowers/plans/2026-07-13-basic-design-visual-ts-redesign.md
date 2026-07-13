@@ -479,7 +479,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `layoutScreenFlow(spec):Promise<Layout>`、`layoutArchitecture(spec):Promise<Layout>`。
 
-- [ ] **Step 1: failing tests を書く**
+- [x] **Step 1: failing tests を書く**
 
 ```ts
 test("screen flow is RIGHT and routed",async()=>{const l=await layoutScreenFlow(flow);expect(node(l,"start").x).toBeLessThan(node(l,"end").x);expect(l.edges.every(e=>e.points.length>=2)).toBe(true);expect(assertLayoutHasNoOverlaps(l)).toEqual([])})
@@ -490,7 +490,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/graph.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 2: ELK options と正規化を実装する**
+- [x] **Step 2: ELK options と正規化を実装する**
 
 ```ts
 import ELK from "elkjs/lib/elk.bundled.js"
@@ -502,11 +502,11 @@ function points(edge:ElkExtendedEdge){const sections=edge.sections??[];if(!secti
 
 edge label は `{text,width:max(48,text.length*7+16),height:18}`。出力 label の x/y/width/height を `labelBox` にする。
 
-- [ ] **Step 3: screen-flow を実装する**
+- [x] **Step 3: screen-flow を実装する**
 
 root options は `{...BASE,"elk.direction":"RIGHT"}`、node 180x60。start/end は `terminal`。transition index を `t1...` に保ち points/labelBox を正規化する。
 
-- [ ] **Step 4: architecture compound zone を実装する**
+- [x] **Step 4: architecture compound zone を実装する**
 
 ```ts
 const root:ElkNode={id:"root",layoutOptions:{...BASE,"elk.direction":"DOWN","elk.hierarchyHandling":"INCLUDE_CHILDREN"},children:[...zones.map(z=>({id:`zone:${z.id}`,layoutOptions:{...BASE,"elk.direction":"DOWN","elk.padding":"[top=52,left=28,bottom=28,right=28]"},children:z.children.map(id=>({id,width:160,height:68}))})),...unzoned],edges}
@@ -514,7 +514,7 @@ const root:ElkNode={id:"root",layoutOptions:{...BASE,"elk.direction":"DOWN","elk
 
 nested node 座標へ zone x/y を加算して絶対化する。meta は `{icon,zone}`。
 
-- [ ] **Step 5: sample + complex property tests**
+- [x] **Step 5: sample + complex property tests**
 
 `complex-screen-flow.spec.json` は screen 12件、transition 16件で、start/end、2分岐、2合流、1戻り edge を含める。`complex-architecture.spec.json` は zone 4件、node 16件、edge 20件で、zone 内 edge 8件、zone 間 edge 8件、unzoned 接続4件を含める。各 fixture はすべての参照先 ID が存在する完全な JSON object として作る。sample 2件と fixtures 2件で全 overlap 0。failure 時は自作 router を書かず BASE spacing を増やす。
 
@@ -522,7 +522,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/graph.test.ts && pnpm t
 
 Expected: PASS。
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add plugins/basic-design/src/layout/{graph,graph.test}.ts plugins/basic-design/src/fixtures/complex-{screen-flow,architecture}.spec.json

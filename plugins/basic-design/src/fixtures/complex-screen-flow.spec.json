@@ -1,0 +1,36 @@
+{
+  "type": "screen-flow",
+  "title": "複雑な EC サイト画面遷移",
+  "screens": [
+    { "id": "splash", "label": "スプラッシュ", "group": "起動", "kind": "start" },
+    { "id": "login", "label": "ログイン", "group": "認証" },
+    { "id": "mfa", "label": "二要素認証", "group": "認証" },
+    { "id": "home", "label": "ホーム", "group": "メイン" },
+    { "id": "catalog", "label": "商品一覧", "group": "購買" },
+    { "id": "search", "label": "検索結果", "group": "購買" },
+    { "id": "detail", "label": "商品詳細", "group": "購買" },
+    { "id": "cart", "label": "カート", "group": "購買" },
+    { "id": "checkout", "label": "購入手続き", "group": "決済" },
+    { "id": "payment", "label": "決済確認", "group": "決済" },
+    { "id": "success", "label": "注文完了", "group": "完了", "kind": "end" },
+    { "id": "help", "label": "ヘルプ", "group": "サポート" }
+  ],
+  "transitions": [
+    { "from": "splash", "to": "login", "trigger": "起動完了" },
+    { "from": "login", "to": "mfa", "trigger": "認証情報を送信" },
+    { "from": "login", "to": "help", "trigger": "ログインできない" },
+    { "from": "help", "to": "login", "trigger": "ログインへ戻る" },
+    { "from": "mfa", "to": "home", "trigger": "認証成功" },
+    { "from": "mfa", "to": "login", "trigger": "認証失敗" },
+    { "from": "home", "to": "catalog", "trigger": "商品を探す" },
+    { "from": "home", "to": "help", "trigger": "サポートを開く" },
+    { "from": "catalog", "to": "detail", "trigger": "商品を選択" },
+    { "from": "catalog", "to": "search", "trigger": "条件を変更" },
+    { "from": "search", "to": "catalog", "trigger": "一覧へ戻る" },
+    { "from": "detail", "to": "cart", "trigger": "カートに入れる" },
+    { "from": "detail", "to": "catalog", "trigger": "商品一覧へ戻る" },
+    { "from": "cart", "to": "checkout", "trigger": "レジへ進む" },
+    { "from": "checkout", "to": "payment", "trigger": "支払い方法を確認" },
+    { "from": "payment", "to": "success", "trigger": "注文を確定" }
+  ]
+}
