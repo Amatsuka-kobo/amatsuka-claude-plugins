@@ -1,5 +1,5 @@
 {
   "name": "basic-design",
   "description": "基本設計フェーズの成果物(ER図・画面遷移図・システム構成図など)をブレインストーミングで作成するツール群",
-  "version": "0.3.0-dev"
+  "version": "0.4.0-dev"
 }
