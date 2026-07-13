@@ -457,7 +457,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/sequence.test.ts && pnp
 
 Expected: PASS。
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add plugins/basic-design/src/layout/{geometry,sequence,sequence.test}.ts plugins/basic-design/src/fixtures/complex-sequence.spec.json
