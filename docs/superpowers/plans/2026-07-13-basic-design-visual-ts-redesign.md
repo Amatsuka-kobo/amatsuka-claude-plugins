@@ -869,7 +869,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: 承認済み8 samples、scripts/ は2 bundleのみ、manifest `0.5.0-dev`。
 
-- [ ] **Step 1: 全検証後に4 samples を再生成する**
+- [x] **Step 1: 全検証後に4 samples を再生成する**
 
 Run:
 
@@ -883,28 +883,28 @@ node scripts/design-gen.mjs samples/login-sequence.spec.json --format both
 
 Expected: failure 0。各 CLI は `{"ok":true,"files":["/absolute/<base>.drawio","/absolute/<base>.html"]}` の JSON 1行。配列順は drawio、html。
 
-- [ ] **Step 2: generated structure smoke test**
+- [x] **Step 2: generated structure smoke test**
 
 Run:
 
 ```bash
 cd plugins/basic-design
-rg -L 'id="design-layout"' samples/*.html
+rg --files-without-match 'id="design-layout"' samples/*.html
 rg -n '<script[^>]+src=|<link[^>]+href=' samples/*.html
-rg -L '<mxfile host="basic-design">' samples/*.drawio
+rg --files-without-match '<mxfile host="basic-design">' samples/*.drawio
 ```
 
 Expected: 全コマンド無出力。
 
-- [ ] **Step 3: 人間 HTML チェックポイントで STOP**
+- [x] **Step 3: 人間 HTML チェックポイントで STOP**
 
 4 HTML をブラウザで確認依頼する。確認項目: overlap なし、kind 色/icon、zone/terminal/entity/lifeline、PK/FK/UQ/cardinality、sync/async/return、zoom/pan/select/hover/detail、文字切れなし。`HTML 4件承認` を得るまで次へ進まない。
 
-- [ ] **Step 4: 人間 drawio チェックポイントで STOP**
+- [x] **Step 4: 人間 drawio チェックポイントで STOP**
 
 4 drawio を diagrams.net で確認依頼する。確認項目: open 成功、palette/emoji/shadow、waypoint が node を横切らない、zone/ER/cardinality/lifeline/arrow、編集可能。`drawio 4件承認` を得るまで次へ進まない。
 
-- [ ] **Step 5: 両承認後だけ旧 JS source/tests を削除する**
+- [x] **Step 5: 両承認後だけ旧 JS source/tests を削除する**
 
 ```bash
 rm -rf plugins/basic-design/scripts/lib
@@ -913,13 +913,13 @@ rm -f plugins/basic-design/scripts/{route,validate,render-drawio,render-html,lay
 
 Expected: `scripts/` は `design-gen.mjs` と `check-drive-config.mjs` のみ。
 
-- [ ] **Step 6: manifest を exact 更新する**
+- [x] **Step 6: manifest を exact 更新する**
 
 ```json
 {"name":"basic-design","description":"基本設計フェーズの成果物(ER図・画面遷移図・システム構成図など)をブレインストーミングで作成するツール群","version":"0.5.0-dev"}
 ```
 
-- [ ] **Step 7: clean/frozen/bundle-only 最終検証**
+- [x] **Step 7: clean/frozen/bundle-only 最終検証**
 
 Run:
 
@@ -935,7 +935,7 @@ mv node_modules.verify-backup node_modules
 
 Expected: install/test/typecheck/build PASS、rg 無出力、node_modules 不在でも2 CLI が JSON 1行で成功。失敗時も backup を必ず戻す。
 
-- [ ] **Step 8: sample commit と最終 cleanup commit**
+- [x] **Step 8: sample commit と最終 cleanup commit**
 
 sample 承認直後:
 
