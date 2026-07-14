@@ -51,9 +51,6 @@ Claude Code only -> agents-claude-only.md
 Codex 併用時 -> agents-with-codex.md
 -->
 
-必ず `agents-with-codex.md` を読み、これに従ってください。
-この設定は恒久的なものなので、Claude の設定を更新してください。
-
 ## MCPサーバー運用方針
 
 ライブラリやプログラミング言語などの技術スタックの調査は `Context7` を、
