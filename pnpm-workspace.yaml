@@ -1,0 +1,8 @@
+packages:
+  - plugins/basic-design
+  - plugins/codiel
+  - plugins/codiel/raguel-mcp
+  - plugins/task-utility
+  - plugins/revelation
+allowBuilds:
+  esbuild: true

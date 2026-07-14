@@ -6,13 +6,15 @@
 		"useIgnoreFile": false
 	},
 	"files": {
-		"includes": ["**/*.ts", "**/*.js"],
-    "experimentalScannerIgnores": [
-      "**/dist",
-      "**/.vscode",
-      "**/node_modules"
-    ]
-	},
+  "includes": ["**/*.ts", "**/*.js"],
+  "experimentalScannerIgnores": [
+    "**/dist",
+    "**/scripts",
+    "**/.vscode",
+    "**/node_modules",
+    "**/docs"
+  ]
+},
 	"formatter": {
 		"enabled": true,
     "useEditorconfig": true,
