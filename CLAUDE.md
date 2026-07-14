@@ -10,22 +10,22 @@
 | `codiel`       | GitHub issue を取得・分析し、設計→開発→PR 起票→レビューまでを一気通貫で行うオーケストレーター                                                                   | `skills/`(工程別スキル群)、`raguel-mcp/`(ゲーティング用 MCP サーバー / TypeScript)、`agents/`・`commands/`・`hooks/`・`scripts/`、`docs/DESIGN.md` |
 | `revelation`   | 上位モデル(Fable 5)の仕事の進め方を、より小さいモデルが再現できるスキルとして提供                                                                               | `skills/`(fable-method / fable-restraint / fable-subagents)、`hooks/`(該当スキルの invoke を促す)                                                  |
 | `task-utility` | タスクの進め方を支援するユーティリティ群                                                                                                                        | `skills/`(chat / issue-craft / issue-split)、`agents/`・`hooks/`・`scripts/`                                                                       |
-| `basic-design` | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群。図は spec JSON 経由で .drawio / HTML を生成 | `skills/`(入口 basic-design +図種別+Markdown系)、`scripts/`(esbuild バンドル済み CLI)                                                                       |
+| `basic-design` | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群。図は spec JSON 経由で .drawio / HTML を生成 | `skills/`(入口 basic-design +図種別+Markdown系)、`scripts/`(esbuild バンドル済み CLI)                                                              |
 
-## Codiel/Raguel の制約(重要)
+## プラグイン開発の制約（重要）
 
-Codiel と raguel-mcp は **Anthropic API を使用できないユーザーも使える**ことが必須要件。API クライアントの追加・`ANTHROPIC_API_KEY` 前提の実装・ユーザーへの CLI 直接操作の要求は、どれだけ便利に見えても採用しない。LLM が必要な処理は Claude Code の機構(メインセッション/サブエージェント)か `claude` CLI のヘッドレス実行(ユーザーの既存サブスク認証)に閉じる。詳細は `plugins/codiel/docs/DESIGN.md` §0。
+このリポジトリのプラグインは **Anthropic API を使用できないユーザーも使える**ことが必須要件。API クライアントの追加・`ANTHROPIC_API_KEY` 前提の実装・ユーザーへの CLI 直接操作の要求は、どれだけ便利に見えても採用しない。LLM が必要な処理は Claude Code の機構(メインセッション/サブエージェント)か `claude` CLI のヘッドレス実行(ユーザーの既存サブスク認証)に閉じる。
 
 ## 開発コマンド
 
 ツールチェーンは root の pnpm workspace に集約されている(packages: basic-design / codiel / codiel/raguel-mcp / task-utility / revelation)。すべて root で実行する。
 
-| コマンド | 内容 |
-| --- | --- |
-| `pnpm build` | 全パッケージの esbuild バンドル生成(`plugins/*/scripts/*.mjs`、`raguel-mcp/dist/server.mjs`) |
-| `pnpm test` | vitest で全テスト実行(`plugins/**/__test__/**/*.test.ts`) |
-| `pnpm typecheck` | tsc --noEmit(root tsconfig で全パッケージ) |
-| `pnpm lint` | biome check |
+| コマンド         | 内容                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `pnpm build`     | 全パッケージの esbuild バンドル生成(`plugins/*/scripts/*.mjs`、`raguel-mcp/dist/server.mjs`) |
+| `pnpm test`      | vitest で全テスト実行(`plugins/**/__test__/**/*.test.ts`)                                    |
+| `pnpm typecheck` | tsc --noEmit(root tsconfig で全パッケージ)                                                   |
+| `pnpm lint`      | biome check                                                                                  |
 
 バンドル出力は git 管理(プラグイン利用者はビルド不要)。ソース(`plugins/*/src/`)を変更したら `pnpm build` を実行し、生成物の差分もコミットすること。
 
@@ -46,8 +46,22 @@ Claude Code only -> agents-claude-only.md
 Codex 併用時 -> agents-with-codex.md
 -->
 
-必ず `agents-with-codex.md` を読み、これに従ってください。
-この設定は恒久的なものなので、Claude の設定を更新してください。
+`Fable`/`Opus` はオーケストレーション・分析・設計・計画・監査業務のみを行い、レビューを `Sonnet` に、複雑なコーディングを `GPT Sol` に、通常のコーディングトとそれ以外のタスクを `GPT Terra` に、軽いタスクを `GPT Luna` にやらせてください。
+重いレビュー(最終レビューなど)はオーケストレーター自身が行ってください。
+`Fable` は設計書を元にした実装計画を立てる業務を `Opus` に委譲してください。
+
+### 設計・実装計画
+
+出力した設計書や実装計画書は、まず `Haiku` にレビューさせてください。
+レビューの結果理解したことを出力させ、出力された理解における間違いの修正や補足が必要な観点を、設計書・実装計画書に盛り込んでください。
+
+### アドバイザー
+
+設計・計画・レビュー・実装のタスクに詰まった時、アドバイザーとして `GPT Sol` を呼び出し、助言を求めてください。
+
+### Claudeの設定
+
+このエージェント運用方針は恒久的なものなので、Claude の設定を更新してください。
 
 ## MCPサーバー運用方針
 
