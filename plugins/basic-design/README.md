@@ -19,10 +19,6 @@
 - Stage 3: API/IF 一覧・非機能要件チェックリスト・入口オーケストレーションスキル(basic-design)
 - Stage 4: Google Drive アップロード(オプトイン、Drive 系 MCP Tool 経由)
 
-## 開発
-
-テスト: `node --test plugins/basic-design/scripts/*.test.mjs`(リポジトリルートから)
-
 ## 図生成スクリプトの開発
 
 `cd plugins/basic-design && pnpm install && pnpm test && pnpm typecheck && pnpm build`
