@@ -1,8 +1,8 @@
 import { expect, test } from "vitest"
-import { assertLayoutHasNoOverlaps } from "./geometry.js"
-import { layoutSequence } from "./sequence.js"
-import type { SequenceSpec } from "../types.js"
-import complexSpec from "../fixtures/complex-sequence.spec.json" with { type: "json" }
+import { assertLayoutHasNoOverlaps } from "../geometry.js"
+import { layoutSequence } from "../sequence.js"
+import type { SequenceSpec } from "../../types.js"
+import complexSpec from "../../fixtures/complex-sequence.spec.json" with { type: "json" }
 
 const spec: SequenceSpec = {
   type: "sequence",

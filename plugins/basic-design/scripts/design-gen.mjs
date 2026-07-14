@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/.pnpm/elkjs@0.11.1/node_modules/elkjs/lib/elk.bundled.js
+// ../../node_modules/.pnpm/elkjs@0.11.1/node_modules/elkjs/lib/elk.bundled.js
 var require_elk_bundled = __commonJS({
-  "node_modules/.pnpm/elkjs@0.11.1/node_modules/elkjs/lib/elk.bundled.js"(exports, module) {
+  "../../node_modules/.pnpm/elkjs@0.11.1/node_modules/elkjs/lib/elk.bundled.js"(exports, module) {
     (function(f) {
       if (typeof exports === "object" && typeof module !== "undefined") {
         module.exports = f();

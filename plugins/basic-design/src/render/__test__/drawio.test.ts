@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
-import type { Layout } from "../types.js"
-import { renderDrawio } from "./drawio.js"
+import type { Layout } from "../../types.js"
+import { renderDrawio } from "../drawio.js"
 
 function layout(): Layout {
   return {

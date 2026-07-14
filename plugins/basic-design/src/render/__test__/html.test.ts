@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
-import type { ArchitectureSpec, ErSpec, Layout, ScreenFlowSpec, SequenceSpec } from "../types.js"
-import { renderHtml } from "./html.js"
+import type { ArchitectureSpec, ErSpec, Layout, ScreenFlowSpec, SequenceSpec } from "../../types.js"
+import { renderHtml } from "../html.js"
 
 function layout(): Layout {
   return {

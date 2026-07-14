@@ -5,10 +5,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 import { expect, test } from "vitest"
-import { readDriveConfig } from "./check-drive-config.js"
+import { readDriveConfig } from "../check-drive-config.js"
 
 const execFileAsync = promisify(execFile)
-const BUNDLED_CLI = fileURLToPath(new URL("../scripts/check-drive-config.mjs", import.meta.url))
+const BUNDLED_CLI = fileURLToPath(new URL("../../scripts/check-drive-config.mjs", import.meta.url))
 
 async function project(content: string | null) {
   const root = await mkdtemp(path.join(tmpdir(), "drive-"))
