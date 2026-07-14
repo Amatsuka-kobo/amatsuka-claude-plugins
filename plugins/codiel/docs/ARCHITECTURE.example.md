@@ -56,7 +56,7 @@ tests/
 <!-- 記入ガイド
 frontend / backend / data それぞれが書き込んでよいパスを glob で宣言する。
 hooks(guard-write)と implementer/reviewer のディスパッチ選択がこのブロックを機械的に読む
-(hooks/scripts/lib.mjs の readDomains が「```json codiel:domains」で始まるフェンスブロックを
+(scripts/lib.mjs の readDomains が「```json codiel:domains」で始まるフェンスブロックを
 正規表現で抽出する)。
 - ブロックの開始行は必ず ```json codiel:domains(スペース区切りでこの文字列そのまま)にする
 - ブロック内は有効な JSON のみ(コメント不可)
