@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire as __basicDesignCreateRequire } from "node:module"; const require = __basicDesignCreateRequire(import.meta.url);
 
 // src/check-drive-config.ts
 import { readFileSync } from "node:fs";
