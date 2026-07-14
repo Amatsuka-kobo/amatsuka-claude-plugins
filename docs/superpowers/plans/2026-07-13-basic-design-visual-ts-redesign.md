@@ -804,7 +804,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: kind semantics、不変 CLI path。
 - Produces: 任意 kind schema、kind 確認手順、pnpm commands、elkjs 更新手順。
 
-- [ ] **Step 1: 4 schema へ exact 文面を追加する**
+- [x] **Step 1: 4 schema へ exact 文面を追加する**
 
 ```markdown
 - `kind` (任意文字列): 色・アイコンの種別。推奨値は `generic` / `user` / `api` / `data` / `messaging` / `external` / `screen` / `entity`。未知値は生成エラーにせず `generic` 表示になる。
@@ -812,7 +812,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 例は architecture `api`、screen `screen`(start/end shape 値は維持)、ER `entity`、sequence `user|generic|external`。
 
-- [ ] **Step 2: 4 SKILL.md の spec 作成直前へ追加する**
+- [x] **Step 2: 4 SKILL.md の spec 作成直前へ追加する**
 
 ```markdown
 - 各ノードの視覚種別 `kind` を確認する。ユーザーが判断しない場合はラベル・icon・ゾーンから推定候補を提示して確認し、確定値を spec に明示する。
@@ -820,13 +820,13 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 図種別の推奨値も schema と同じに書く。実行 command は変更しない。
 
-- [ ] **Step 3: command 不変を検査する**
+- [x] **Step 3: command 不変を検査する**
 
 Run: `rg -n 'node "\$\{CLAUDE_PLUGIN_ROOT\}/scripts/design-gen\.mjs"' plugins/basic-design/skills/{system-architecture,screen-flow,er-diagram,sequence-diagram}/SKILL.md`
 
 Expected: 4件。
 
-- [ ] **Step 4: README / CLAUDE.md を更新する**
+- [x] **Step 4: README / CLAUDE.md を更新する**
 
 ```markdown
 ## 図生成スクリプトの開発
@@ -840,7 +840,9 @@ CLAUDE.md command row:
 | basic-design(ビルド/テスト/型) | `cd plugins/basic-design && pnpm build` / `pnpm test`(vitest) / `pnpm typecheck` |
 ```
 
-- [ ] **Step 5: verify / commit**
+注: ルート `CLAUDE.md` は gitignore のためコミット対象外(作業ツリーのみ更新)。
+
+- [x] **Step 5: verify / commit**
 
 Run: `git diff --check -- CLAUDE.md plugins/basic-design/README.md plugins/basic-design/skills && cd plugins/basic-design && pnpm test && pnpm typecheck`
 
