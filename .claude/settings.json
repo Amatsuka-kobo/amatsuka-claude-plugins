@@ -21,7 +21,7 @@
       "Bash(sudo *)"
     ]
   },
-  "defaultModel": "sonnet",
+  "defaultModel": "fable",
   "enabledPlugins": {
     "task-utility@amatsuka-claude-plugins": true,
     "revelation@amatsuka-claude-plugins": true,
