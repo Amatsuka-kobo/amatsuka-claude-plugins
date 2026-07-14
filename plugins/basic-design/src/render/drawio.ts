@@ -18,6 +18,7 @@ const EDGE_STYLES: Record<NonNullable<LayoutEdge["style"]>, string> = {
 }
 
 const ROW_STYLE = "text;html=1;strokeColor=#E2E8F0;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=10;fontSize=12;"
+const LABEL_STYLE = `text;html=1;strokeColor=none;fillColor=${THEME.labelBackground};align=center;verticalAlign=middle;spacing=0;`
 const LIFELINE_STYLE = `endArrow=none;dashed=1;strokeColor=#94A3B8;`
 const ZONE_STYLE = `rounded=1;arcSize=8;fillColor=${THEME.zone.fill};strokeColor=${THEME.zone.stroke};verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;`
 
@@ -86,25 +87,43 @@ function lineCell(line: NonNullable<Layout["lines"]>[number], index: number): st
   )
 }
 
-function waypointXml(edge: LayoutEdge): string {
+function edgePointsXml(edge: LayoutEdge): string {
+  const source = edge.points[0]
+  const target = edge.points[edge.points.length - 1]
   const interior = edge.points.slice(1, -1)
-  return interior.length ? `<Array as="points">${interior.map((p) => `<mxPoint x="${p.x}" y="${p.y}"/>`).join("")}</Array>` : ""
+  return (
+    `<mxPoint x="${source.x}" y="${source.y}" as="sourcePoint"/>` +
+    (interior.length ? `<Array as="points">${interior.map((point) => `<mxPoint x="${point.x}" y="${point.y}"/>`).join("")}</Array>` : "") +
+    `<mxPoint x="${target.x}" y="${target.y}" as="targetPoint"/>`
+  )
 }
 
 function edgeStyleFor(edge: LayoutEdge): string {
   if (edge.cardinality) {
     const [startArrow, endArrow] = CARDINALITY_ARROWS[edge.cardinality]
-    return `edgeStyle=entityRelationEdgeStyle;rounded=0;startArrow=${startArrow};startFill=0;endArrow=${endArrow};endFill=0;`
+    return `rounded=0;startArrow=${startArrow};startFill=0;endArrow=${endArrow};endFill=0;`
   }
-  return `edgeStyle=orthogonalEdgeStyle;${EDGE_STYLES[edge.style ?? "arrow"]}`
+  return EDGE_STYLES[edge.style ?? "arrow"]
+}
+
+function labelCell(edge: LayoutEdge): string {
+  if (!edge.label || !edge.labelBox) return ""
+  const box = edge.labelBox
+  return (
+    `<mxCell id="${escapeXml(`label-${edge.id}`)}" value="${escapeXml(edge.label)}" style="${LABEL_STYLE}" vertex="1" parent="1">` +
+    `<mxGeometry x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" as="geometry"/>` +
+    `</mxCell>`
+  )
 }
 
 function edgeCell(edge: LayoutEdge): string {
   const style = edgeStyleFor(edge)
+  const value = edge.labelBox ? "" : escapeXml(edge.label)
   return (
-    `<mxCell id="${escapeXml(`e-${edge.id}`)}" value="${escapeXml(edge.label)}" style="${style}" edge="1" parent="1" source="${escapeXml(`n-${edge.from}`)}" target="${escapeXml(`n-${edge.to}`)}">` +
-    `<mxGeometry relative="1" as="geometry">${waypointXml(edge)}</mxGeometry>` +
-    `</mxCell>`
+    `<mxCell id="${escapeXml(`e-${edge.id}`)}" value="${value}" style="${style}" edge="1" parent="1">` +
+    `<mxGeometry relative="1" as="geometry">${edgePointsXml(edge)}</mxGeometry>` +
+    `</mxCell>` +
+    labelCell(edge)
   )
 }
 

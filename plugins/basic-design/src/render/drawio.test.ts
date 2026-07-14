@@ -154,10 +154,10 @@ test("terminal shape uses ellipse style", () => {
   expect(xml).toMatch(/id="n-login"[^>]*style="ellipse;/)
 })
 
-test("generic screen-flow edge uses block arrow", () => {
+test("generic screen-flow edge uses block arrow without cell references", () => {
   const xml = renderDrawio(layout())
-  expect(xml).toMatch(/id="e-e1"[^>]*source="n-svc" target="n-db"/)
-  expect(xml).toContain("endArrow=block;endFill=1;")
+  expect(xml).toMatch(/id="e-e1"[^>]*endArrow=block;endFill=1;/)
+  expect(xml).not.toMatch(/id="e-e1"[^>]*(?:source|target)=/)
 })
 
 test("sequence message styles map to distinct edge styles", () => {
@@ -166,10 +166,10 @@ test("sequence message styles map to distinct edge styles", () => {
   expect(xml).toMatch(/id="e-msg2"[^>]*style="[^"]*dashed=1;[^"]*endArrow=open;/)
 })
 
-test("ER cardinality renders ER arrow pairs", () => {
+test("ER cardinality renders ER arrow pairs without cell references", () => {
   const xml = renderDrawio(erLayout())
-  expect(xml).toMatch(/id="e-rel1"[^>]*source="n-users" target="n-orders"/)
   expect(xml).toMatch(/id="e-rel1"[^>]*startArrow=ERone;[^"]*endArrow=ERmany;/)
+  expect(xml).not.toMatch(/id="e-rel1"[^>]*(?:source|target)=/)
   expect(xml).toContain('value="発注する"')
 })
 
@@ -182,18 +182,34 @@ test("N:M cardinality renders both ends as ERmany", () => {
   expect(xml).toMatch(/startArrow=ERmany;[^"]*endArrow=ERmany;/)
 })
 
-test("multi-point edges render interior points as waypoints", () => {
+test("multi-point edges render every Layout point as absolute coordinates", () => {
   const xml = renderDrawio(layout())
   const cell = xml.match(/<mxCell id="e-e1"[\s\S]*?<\/mxCell>/)?.[0] ?? ""
+  expect(cell).not.toMatch(/ source=| target=/)
+  expect(cell).not.toContain("edgeStyle=")
+  expect(cell).toContain('<mxPoint x="160" y="34" as="sourcePoint"/>')
   expect(cell).toContain('<Array as="points">')
   expect(cell).toContain('<mxPoint x="220" y="34"/>')
   expect(cell).toContain('<mxPoint x="220" y="100"/>')
+  expect(cell).toContain('<mxPoint x="300" y="34" as="targetPoint"/>')
 })
 
-test("two-point edges render without waypoints", () => {
-  const xml = renderDrawio(erLayout())
-  const cell = xml.match(/<mxCell id="e-rel1"[\s\S]*?<\/mxCell>/)?.[0] ?? ""
+test("two-point sequence messages use absolute source and target points", () => {
+  const xml = renderDrawio(sequenceLayout())
+  const cell = xml.match(/<mxCell id="e-msg1"[\s\S]*?<\/mxCell>/)?.[0] ?? ""
+  expect(cell).not.toMatch(/ source=| target=/)
+  expect(cell).toContain('<mxPoint x="70" y="100" as="sourcePoint"/>')
+  expect(cell).toContain('<mxPoint x="290" y="100" as="targetPoint"/>')
   expect(cell).not.toContain("<Array")
+})
+
+test("edge labels render as absolute boxes from Layout labelBox", () => {
+  const l = erLayout()
+  l.edges[0].labelBox = { x: 230, y: 12, width: 58, height: 18 }
+  const xml = renderDrawio(l)
+  expect(xml).toMatch(/id="e-rel1"[^>]*value=""/)
+  expect(xml).toMatch(/id="label-rel1"[^>]*value="発注する"[^>]*vertex="1"/)
+  expect(xml).toMatch(/id="label-rel1"[\s\S]*?<mxGeometry x="230" y="12" width="58" height="18" as="geometry"\/>/)
 })
 
 test("entity rows render as child cells with header offsets", () => {
