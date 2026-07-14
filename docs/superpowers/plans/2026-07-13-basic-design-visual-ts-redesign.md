@@ -705,7 +705,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: sample 4 + complex 4 の性質 suite、`main(argv):Promise<void>`、現行 CLI 契約。
 
-- [ ] **Step 1: parameterized overlap test**
+- [x] **Step 1: parameterized overlap test**
 
 ```ts
 import { readFileSync } from "node:fs"
@@ -719,7 +719,7 @@ Run: `cd plugins/basic-design && pnpm test -- src/layout/overlap.test.ts`
 
 Expected: 具体 overlap ID を含む FAIL または8件 PASS。FAIL 時は ELK spacing または sequence `MESSAGE_GAP` の固定値だけを増やし、自作 collision loop は追加しない。
 
-- [ ] **Step 2: subprocess CLI failing tests を移植する**
+- [x] **Step 2: subprocess CLI failing tests を移植する**
 
 現行12ケースを、次の assertion 名で同じ file に移す: `usage failure`、`invalid format`、`missing format value`、`unreadable spec`、`invalid JSON`、`validation errors`、`default both`、`drawio only`、`html only`、`screen-flow success`、`architecture success`、`sequence success`。ER success は `default both` の fixture を ER にする。さらに `.spec.json` と通常 `.json` の basename、stdout 1行、stderr empty、exit code を各該当 test で確認する。
 
@@ -727,7 +727,7 @@ Expected: 具体 overlap ID を含む FAIL または8件 PASS。FAIL 時は ELK 
 test("failure is one JSON line",async()=>{const r=await invoke([]);expect(r.code).toBe(1);expect(r.stderr).toBe("");expect(r.stdout.trim().split("\n")).toHaveLength(1);expect(JSON.parse(r.stdout)).toEqual({ok:false,errors:["usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"]})})
 ```
 
-- [ ] **Step 3: async CLI を実装する**
+- [x] **Step 3: async CLI を実装する**
 
 ```ts
 const LAYOUTS:Record<DiagramSpec["type"],(spec:never)=>Promise<Layout>>={architecture:layoutArchitecture as never,"screen-flow":layoutScreenFlow as never,er:layoutEr as never,sequence:layoutSequence as never}
@@ -758,14 +758,14 @@ if(import.meta.url===`file://${process.argv[1]}`)main().catch(e=>fail([`図の�
 
 成功例(`--format both`)は `{"ok":true,"files":["/abs/path/ec-screen-flow.drawio","/abs/path/ec-screen-flow.html"]}`。配列順は drawio、html。format が単独なら対応する1件だけを返す。
 
-- [ ] **Step 4: 2-entry build にする**
+- [x] **Step 4: 2-entry build にする**
 
 ```ts
 import esbuild from "esbuild"
 await esbuild.build({bundle:true,entryPoints:{"design-gen":"./src/cli.ts","check-drive-config":"./src/check-drive-config.ts"},outdir:"./scripts",outExtension:{".js":".mjs"},platform:"node",format:"esm",sourcemap:false,target:"node20",banner:{js:'import { createRequire as __basicDesignCreateRequire } from "node:module"; const require = __basicDesignCreateRequire(import.meta.url);'}})
 ```
 
-- [ ] **Step 5: build/CLI/bundle verify**
+- [x] **Step 5: build/CLI/bundle verify**
 
 Run: `cd plugins/basic-design && pnpm build && pnpm test && pnpm typecheck && node scripts/design-gen.mjs samples/ec-screen-flow.spec.json --format html`
 
@@ -775,7 +775,7 @@ Run: `cd plugins/basic-design && node -e 'const s=require("node:fs").readFileSyn
 
 Expected: exit 0(外部 elkjs import なし)。
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add plugins/basic-design/src/{cli,cli.test}.ts plugins/basic-design/src/layout/overlap.test.ts plugins/basic-design/build.ts plugins/basic-design/scripts/*.mjs
