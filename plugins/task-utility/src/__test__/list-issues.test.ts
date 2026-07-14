@@ -9,7 +9,7 @@ const SCRIPT = fileURLToPath(new URL("../list-issues.ts", import.meta.url))
 
 const mockEnv = (binDir: string) => ({
   ...process.env,
-  PATH: `${binDir}${path.delimiter}${path.dirname(process.execPath)}`,
+  PATH: `${binDir}${path.delimiter}${path.dirname(process.execPath)}`
 })
 
 // スクリプトを起動し stdout の JSON を返す。binDir 指定時は PATH をそのディレクトリだけに差し替える(gh モック用)
@@ -28,7 +28,10 @@ function tmpdir(): string {
 const CAT_BIN = ["/bin/cat", "/usr/bin/cat"].find((p) => fs.existsSync(p))
 
 // gh モック: 応答 JSON はファイルに置き、case 分岐で cat する(クォート事故防止)
-function fakeGh(responses: Record<string, string>, failPattern?: string): string {
+function fakeGh(
+  responses: Record<string, string>,
+  failPattern?: string
+): string {
   const dir = tmpdir()
   for (const [name, content] of Object.entries(responses)) {
     fs.writeFileSync(path.join(dir, name), content)
@@ -37,12 +40,14 @@ function fakeGh(responses: Record<string, string>, failPattern?: string): string
   const lines = [
     "#!/bin/sh",
     'case "$*" in',
-    ...(failPattern ? [`  ${failPattern}) echo "boom (HTTP 500)" >&2; exit 1 ;;`] : []),
+    ...(failPattern
+      ? [`  ${failPattern}) echo "boom (HTTP 500)" >&2; exit 1 ;;`]
+      : []),
     `  "api user") cat "${dir}/user.json" ;;`,
     `  *"/issues?"*) cat "${dir}/issues.json" ;;`,
     `  *"/labels?"*) cat "${dir}/labels.json" ;;`,
     "  *) exit 1 ;;",
-    "esac",
+    "esac"
   ]
   const file = path.join(dir, "gh")
   fs.writeFileSync(file, `${lines.join("\n")}\n`)
@@ -52,18 +57,46 @@ function fakeGh(responses: Record<string, string>, failPattern?: string): string
 
 const USER = JSON.stringify({ login: "alice" })
 // --slurp はページごとの配列をさらに配列でラップする(ページ 1 件でも [[...]])
-const ISSUES = JSON.stringify([[
-  { number: 1, title: "古いバグ", body: "x".repeat(600), labels: [{ name: "bug" }], assignees: [],
-    user: { login: "alice" }, comments: 2, updated_at: "2026-01-01T00:00:00Z" },
-  { number: 2, title: "新しい要望", body: null, labels: [], assignees: [{ login: "bob" }],
-    user: { login: "bob" }, comments: 0, updated_at: "2026-06-30T00:00:00Z" },
-  { number: 3, title: "PR は除外", pull_request: {}, labels: [], assignees: [],
-    user: { login: "alice" }, comments: 0, updated_at: "2026-06-30T00:00:00Z" },
-]])
-const LABELS = JSON.stringify([[
-  { name: "bug", description: "バグ報告" },
-  { name: "feature", description: "" },
-]])
+const ISSUES = JSON.stringify([
+  [
+    {
+      number: 1,
+      title: "古いバグ",
+      body: "x".repeat(600),
+      labels: [{ name: "bug" }],
+      assignees: [],
+      user: { login: "alice" },
+      comments: 2,
+      updated_at: "2026-01-01T00:00:00Z"
+    },
+    {
+      number: 2,
+      title: "新しい要望",
+      body: null,
+      labels: [],
+      assignees: [{ login: "bob" }],
+      user: { login: "bob" },
+      comments: 0,
+      updated_at: "2026-06-30T00:00:00Z"
+    },
+    {
+      number: 3,
+      title: "PR は除外",
+      pull_request: {},
+      labels: [],
+      assignees: [],
+      user: { login: "alice" },
+      comments: 0,
+      updated_at: "2026-06-30T00:00:00Z"
+    }
+  ]
+])
+const LABELS = JSON.stringify([
+  [
+    { name: "bug", description: "バグ報告" },
+    { name: "feature", description: "" }
+  ]
+])
 const NOW = ["--now", "2026-07-01T00:00:00Z"]
 
 test("--stale-days が正の整数でなければ step: args", () => {
@@ -83,7 +116,11 @@ test("gh が PATH に無ければ step: user の失敗", () => {
 })
 
 test("正常系: PR 除外・stale 判定・body 切り詰め・ラベル一覧・ログインを返す", () => {
-  const dir = fakeGh({ "user.json": USER, "issues.json": ISSUES, "labels.json": LABELS })
+  const dir = fakeGh({
+    "user.json": USER,
+    "issues.json": ISSUES,
+    "labels.json": LABELS
+  })
   const out = runScript([...NOW], dir)
   expect(out.ok).toBe(true)
   expect(out.currentLogin).toBe("alice")
@@ -102,37 +139,70 @@ test("正常系: PR 除外・stale 判定・body 切り詰め・ラベル一覧�
   expect(fresh.stale).toBe(false)
   expect(out.labels).toEqual([
     { name: "bug", description: "バグ報告" },
-    { name: "feature", description: "" },
+    { name: "feature", description: "" }
   ])
 })
 
 test("--stale-days で閾値を変えられる", () => {
-  const dir = fakeGh({ "user.json": USER, "issues.json": ISSUES, "labels.json": LABELS })
+  const dir = fakeGh({
+    "user.json": USER,
+    "issues.json": ISSUES,
+    "labels.json": LABELS
+  })
   const out = runScript([...NOW, "--stale-days", "365"], dir)
   expect(out.staleDaysThreshold).toBe(365)
   expect(out.issues[0].stale).toBe(false)
 })
 
 test("Issue が 0 件なら issues: []", () => {
-  const dir = fakeGh({ "user.json": USER, "issues.json": "[[]]", "labels.json": LABELS })
+  const dir = fakeGh({
+    "user.json": USER,
+    "issues.json": "[[]]",
+    "labels.json": LABELS
+  })
   const out = runScript([...NOW], dir)
   expect(out.ok).toBe(true)
   expect(out.issues).toEqual([])
 })
 
-test('--paginate --slurp の複数ページ・末尾の空ページ・] [ を含むタイトルを扱える', () => {
-  const issueA = { number: 1, title: "A", body: "", labels: [], assignees: [], user: { login: "a" }, comments: 0, updated_at: "2026-06-30T00:00:00Z" }
-  const issueB = { number: 2, title: "[UI] [P1] fix", body: "", labels: [], assignees: [], user: { login: "a" }, comments: 0, updated_at: "2026-06-30T00:00:00Z" }
+test("--paginate --slurp の複数ページ・末尾の空ページ・] [ を含むタイトルを扱える", () => {
+  const issueA = {
+    number: 1,
+    title: "A",
+    body: "",
+    labels: [],
+    assignees: [],
+    user: { login: "a" },
+    comments: 0,
+    updated_at: "2026-06-30T00:00:00Z"
+  }
+  const issueB = {
+    number: 2,
+    title: "[UI] [P1] fix",
+    body: "",
+    labels: [],
+    assignees: [],
+    user: { login: "a" },
+    comments: 0,
+    updated_at: "2026-06-30T00:00:00Z"
+  }
   // ページ 1・ページ 2・末尾の空ページ([...][] に相当)
   const pages = JSON.stringify([[issueA], [issueB], []])
-  const dir = fakeGh({ "user.json": USER, "issues.json": pages, "labels.json": LABELS })
+  const dir = fakeGh({
+    "user.json": USER,
+    "issues.json": pages,
+    "labels.json": LABELS
+  })
   const out = runScript([...NOW], dir)
   expect(out.issues.map((i: { number: number }) => i.number)).toEqual([1, 2])
   expect(out.issues[1].title).toBe("[UI] [P1] fix") // 文字列内の "] [" が誤って書き換わらない
 })
 
 test("Issue 取得が失敗したら step: issues で stderr を返す", () => {
-  const dir = fakeGh({ "user.json": USER, "issues.json": "[[]]", "labels.json": LABELS }, '*"/issues?"*')
+  const dir = fakeGh(
+    { "user.json": USER, "issues.json": "[[]]", "labels.json": LABELS },
+    '*"/issues?"*'
+  )
   const out = runScript([...NOW], dir)
   expect(out.ok).toBe(false)
   expect(out.step).toBe("issues")
@@ -140,6 +210,9 @@ test("Issue 取得が失敗したら step: issues で stderr を返す", () => {
 })
 
 test("ラベル取得が失敗したら step: labels", () => {
-  const dir = fakeGh({ "user.json": USER, "issues.json": "[[]]", "labels.json": LABELS }, '*"/labels?"*')
+  const dir = fakeGh(
+    { "user.json": USER, "issues.json": "[[]]", "labels.json": LABELS },
+    '*"/labels?"*'
+  )
   expect(runScript([...NOW], dir).step).toBe("labels")
 })

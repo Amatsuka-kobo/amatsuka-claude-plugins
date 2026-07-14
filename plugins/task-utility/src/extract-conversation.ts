@@ -46,7 +46,11 @@ const push = (role: Section["role"], part: string): void => {
 for (const line of fs.readFileSync(file, "utf8").split("\n")) {
   if (!line.trim()) continue
   let e: TranscriptEntry
-  try { e = JSON.parse(line) as TranscriptEntry } catch { continue }
+  try {
+    e = JSON.parse(line) as TranscriptEntry
+  } catch {
+    continue
+  }
   const msg = e.message
   if (!msg || e.isSidechain) continue // サブエージェントの往復は含めない
 
@@ -61,10 +65,17 @@ for (const line of fs.readFileSync(file, "utf8").split("\n")) {
         push("ASSISTANT", c.text.trim())
       } else if (c.type === "tool_use") {
         const hint = c.input?.description ?? c.input?.file_path ?? ""
-        push("ASSISTANT", `(tool: ${c.name}${hint ? ` — ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`)
+        push(
+          "ASSISTANT",
+          `(tool: ${c.name}${hint ? ` — ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`
+        )
       }
     }
   }
 }
 
-console.log(sections.map((s) => `## ${s.role}\n\n${s.parts.join("\n\n")}`).join("\n\n---\n\n"))
+console.log(
+  sections
+    .map((s) => `## ${s.role}\n\n${s.parts.join("\n\n")}`)
+    .join("\n\n---\n\n")
+)

@@ -1,5 +1,11 @@
-import type { Box, DiagramSpec, Layout, LayoutEdge, LayoutNode } from "../types.js"
 import { THEME } from "../theme.js"
+import type {
+  Box,
+  DiagramSpec,
+  Layout,
+  LayoutEdge,
+  LayoutNode
+} from "../types.js"
 import { escapeXml } from "../xml-util.js"
 import { iconSvg } from "./icons.js"
 
@@ -15,7 +21,10 @@ function labelChipWidth(text: string): number {
 }
 
 function sizedIcon(node: LayoutNode, x: number, y: number): string {
-  const svg = iconSvg(node.kindKey).replace("<svg ", `<svg width="${ICON_SIZE}" height="${ICON_SIZE}" `)
+  const svg = iconSvg(node.kindKey).replace(
+    "<svg ",
+    `<svg width="${ICON_SIZE}" height="${ICON_SIZE}" `
+  )
   return `<g class="node-icon" transform="translate(${x},${y})">${svg}</g>`
 }
 
@@ -23,10 +32,30 @@ function extent(layout: Layout): { width: number; height: number } {
   const zones = layout.zones ?? []
   const lines = layout.lines ?? []
   const boxes: Box[] = [...layout.nodes, ...zones]
-  const edgeXs = layout.edges.flatMap((e) => [...e.points.map((p) => p.x), ...(e.labelBox ? [e.labelBox.x + e.labelBox.width] : [])])
-  const edgeYs = layout.edges.flatMap((e) => [...e.points.map((p) => p.y), ...(e.labelBox ? [e.labelBox.y + e.labelBox.height] : [])])
-  const width = Math.max(0, ...boxes.map((b) => b.x + b.width), ...lines.map((l) => l.x), ...edgeXs) + PAD * 2
-  const height = Math.max(0, ...boxes.map((b) => b.y + b.height), ...lines.map((l) => l.y2), ...edgeYs) + PAD * 2
+  const edgeXs = layout.edges.flatMap((e) => [
+    ...e.points.map((p) => p.x),
+    ...(e.labelBox ? [e.labelBox.x + e.labelBox.width] : [])
+  ])
+  const edgeYs = layout.edges.flatMap((e) => [
+    ...e.points.map((p) => p.y),
+    ...(e.labelBox ? [e.labelBox.y + e.labelBox.height] : [])
+  ])
+  const width =
+    Math.max(
+      0,
+      ...boxes.map((b) => b.x + b.width),
+      ...lines.map((l) => l.x),
+      ...edgeXs
+    ) +
+    PAD * 2
+  const height =
+    Math.max(
+      0,
+      ...boxes.map((b) => b.y + b.height),
+      ...lines.map((l) => l.y2),
+      ...edgeYs
+    ) +
+    PAD * 2
   return { width, height }
 }
 
@@ -47,7 +76,9 @@ function lineSvg(line: NonNullable<Layout["lines"]>[number]): string {
 }
 
 function rowText(text: string, meta: Record<string, unknown>): string {
-  const marks = (["pk", "fk", "unique"] as const).filter((key) => meta[key] === true)
+  const marks = (["pk", "fk", "unique"] as const).filter(
+    (key) => meta[key] === true
+  )
   if (!marks.length) return text
   return text.replace(/^\[(?:PK|FK|UQ)(?:,(?:PK|FK|UQ))*\]\s*/, "")
 }
@@ -55,7 +86,10 @@ function rowText(text: string, meta: Record<string, unknown>): string {
 function badges(meta: Record<string, unknown>): string {
   return (["pk", "fk", "unique"] as const)
     .filter((key) => meta[key] === true)
-    .map((key) => `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan> `)
+    .map(
+      (key) =>
+        `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan> `
+    )
     .join("")
 }
 
@@ -98,18 +132,28 @@ function nodeSvg(node: LayoutNode): string {
 
 function edgeSvg(e: LayoutEdge): string {
   const p = e.points.map((v) => `${v.x},${v.y}`).join(" ")
-  const marker = e.cardinality ? "" : e.style === "async" || e.style === "return" ? ` marker-end="url(#arrow-open)"` : ` marker-end="url(#arrow)"`
+  const marker = e.cardinality
+    ? ""
+    : e.style === "async" || e.style === "return"
+      ? ` marker-end="url(#arrow-open)"`
+      : ` marker-end="url(#arrow)"`
   const styleClass = e.style ? ` ${e.style}` : ""
-  const labelText = e.cardinality ? `${e.cardinality}${e.label ? ` ${e.label}` : ""}` : e.label
-  const label = e.labelBox && labelText
-    ? `<g class="edge-label"><rect class="edge-label-bg" x="${e.labelBox.x}" y="${e.labelBox.y}" width="${e.labelBox.width}" height="${e.labelBox.height}" rx="5"/><text x="${e.labelBox.x + e.labelBox.width / 2}" y="${e.labelBox.y + 13}" text-anchor="middle">${escapeXml(labelText)}</text></g>`
-    : ""
+  const labelText = e.cardinality
+    ? `${e.cardinality}${e.label ? ` ${e.label}` : ""}`
+    : e.label
+  const label =
+    e.labelBox && labelText
+      ? `<g class="edge-label"><rect class="edge-label-bg" x="${e.labelBox.x}" y="${e.labelBox.y}" width="${e.labelBox.width}" height="${e.labelBox.height}" rx="5"/><text x="${e.labelBox.x + e.labelBox.width / 2}" y="${e.labelBox.y + 13}" text-anchor="middle">${escapeXml(labelText)}</text></g>`
+      : ""
   return `<g class="edge${styleClass}" data-id="${escapeXml(e.id)}" data-from="${escapeXml(e.from)}" data-to="${escapeXml(e.to)}"><polyline points="${p}" fill="none"${marker}/>${label}</g>`
 }
 
 function paletteCss(): string {
   return Object.entries(THEME.palette)
-    .map(([kind, colors]) => `.kind-${kind}{--fill:${colors.fill};--stroke:${colors.stroke};--icon:${colors.icon};--text:${colors.text};}`)
+    .map(
+      ([kind, colors]) =>
+        `.kind-${kind}{--fill:${colors.fill};--stroke:${colors.stroke};--icon:${colors.icon};--text:${colors.text};}`
+    )
     .join("")
 }
 

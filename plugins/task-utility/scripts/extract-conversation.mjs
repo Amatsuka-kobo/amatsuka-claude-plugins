@@ -34,11 +34,16 @@ for (const line of fs.readFileSync(file, "utf8").split("\n")) {
         push("ASSISTANT", c.text.trim());
       } else if (c.type === "tool_use") {
         const hint = c.input?.description ?? c.input?.file_path ?? "";
-        push("ASSISTANT", `(tool: ${c.name}${hint ? ` \u2014 ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`);
+        push(
+          "ASSISTANT",
+          `(tool: ${c.name}${hint ? ` \u2014 ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`
+        );
       }
     }
   }
 }
-console.log(sections.map((s) => `## ${s.role}
+console.log(
+  sections.map((s) => `## ${s.role}
 
-${s.parts.join("\n\n")}`).join("\n\n---\n\n"));
+${s.parts.join("\n\n")}`).join("\n\n---\n\n")
+);

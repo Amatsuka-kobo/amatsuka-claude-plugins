@@ -17,23 +17,40 @@ var STAGES = [
   ["finalize"]
 ];
 var PHASES = STAGES.flat();
-var GATED = /* @__PURE__ */ new Set(["init", "design", "test-spec", "dev-plan", "implement", "test-loop", "fix-loop"]);
+var GATED = /* @__PURE__ */ new Set([
+  "init",
+  "design",
+  "test-spec",
+  "dev-plan",
+  "implement",
+  "test-loop",
+  "fix-loop"
+]);
 var SKIPPABLE = /* @__PURE__ */ new Set(["fix-loop"]);
-var TERMINAL = /* @__PURE__ */ new Set(["stopped", "awaiting_outcome", "completed", "rejected"]);
+var TERMINAL = /* @__PURE__ */ new Set([
+  "stopped",
+  "awaiting_outcome",
+  "completed",
+  "rejected"
+]);
 var fail = (msg, code = 1) => {
-  process.stderr.write(msg + "\n");
+  process.stderr.write(`${msg}
+`);
   process.exit(code);
 };
 var ok = (obj) => {
-  process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
+  process.stdout.write(`${JSON.stringify(obj, null, 2)}
+`);
+  return void 0;
 };
 function readState(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 function writeState(p, state) {
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  const tmp = p + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + "\n");
+  const tmp = `${p}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}
+`);
   fs.renameSync(tmp, p);
 }
 function runDir(root, issue) {
@@ -64,7 +81,14 @@ function parseArgs(argv) {
 }
 function newState(issue, tryN) {
   const phases = {};
-  for (const ph of PHASES) phases[ph] = { status: "pending", attempts: 0, evaluationId: null, verdict: null, note: null };
+  for (const ph of PHASES)
+    phases[ph] = {
+      status: "pending",
+      attempts: 0,
+      evaluationId: null,
+      verdict: null,
+      note: null
+    };
   const now = (/* @__PURE__ */ new Date()).toISOString();
   return {
     version: 1,
@@ -105,7 +129,9 @@ function main(argv, root = process.cwd()) {
     if (!flags.issue) fail("--issue \u304C\u5FC5\u8981\u3067\u3059");
     const latest = latestTry(root, flags.issue);
     if (latest && !TERMINAL.has(latest.state.status))
-      fail(`\u672A\u5B8C\u4E86\u306E try \u304C\u3042\u308A\u307E\u3059: ${latest.statePath}(status: ${latest.state.status})\u3002resume \u3059\u308B\u304B stop \u3057\u3066\u304F\u3060\u3055\u3044`);
+      fail(
+        `\u672A\u5B8C\u4E86\u306E try \u304C\u3042\u308A\u307E\u3059: ${latest.statePath}(status: ${latest.state.status})\u3002resume \u3059\u308B\u304B stop \u3057\u3066\u304F\u3060\u3055\u3044`
+      );
     const tryN = latest ? latest.tryN + 1 : 1;
     const dir = path.join(runDir(root, flags.issue), `try-${tryN}`);
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true });
@@ -133,7 +159,8 @@ function main(argv, root = process.cwd()) {
   }
   if (cmd === "stop") {
     const latest = loadRun(root, flags);
-    if (TERMINAL.has(latest.state.status)) fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
+    if (TERMINAL.has(latest.state.status))
+      fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
     latest.state.status = "stopped";
     latest.state.stopReason = flags.reason ?? null;
     writeState(latest.statePath, latest.state);
@@ -144,14 +171,17 @@ function main(argv, root = process.cwd()) {
     if (!PHASES.includes(phase)) fail(`\u4E0D\u6B63\u306A\u30D5\u30A7\u30FC\u30BA: ${phase}`);
     const latest = loadRun(root, flags);
     const st = latest.state;
-    if (st.status !== "active") fail(`run \u304C active \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${st.status})\u3002resume \u3057\u3066\u304F\u3060\u3055\u3044`);
+    if (st.status !== "active")
+      fail(`run \u304C active \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${st.status})\u3002resume \u3057\u3066\u304F\u3060\u3055\u3044`);
     const stageIdx = STAGES.findIndex((s) => s.includes(phase));
     for (let i = 0; i < stageIdx; i++)
       for (const prev of STAGES[i])
         if (st.phases[prev].status !== "passed")
           fail(`\u524D\u30D5\u30A7\u30FC\u30BA\u304C\u672A\u5B8C\u4E86\u3067\u3059: ${prev}(${st.phases[prev].status})`);
     if (!["pending", "in_progress"].includes(st.phases[phase].status))
-      fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F ${st.phases[phase].status} \u306E\u305F\u3081\u958B\u59CB\u3067\u304D\u307E\u305B\u3093`);
+      fail(
+        `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F ${st.phases[phase].status} \u306E\u305F\u3081\u958B\u59CB\u3067\u304D\u307E\u305B\u3093`
+      );
     st.phases[phase].status = "in_progress";
     st.phase = phase;
     writeState(latest.statePath, st);
@@ -165,10 +195,13 @@ function main(argv, root = process.cwd()) {
     if (!flags.reason) fail("--reason \u304C\u5FC5\u8981\u3067\u3059");
     const latest = loadRun(root, flags);
     const st = latest.state;
-    if (st.status !== "active") fail(`run \u304C active \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${st.status})\u3002resume \u3057\u3066\u304F\u3060\u3055\u3044`);
+    if (st.status !== "active")
+      fail(`run \u304C active \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${st.status})\u3002resume \u3057\u3066\u304F\u3060\u3055\u3044`);
     const ph = st.phases[phase];
     if (ph.status !== "pending")
-      fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F ${ph.status} \u306E\u305F\u3081\u30B9\u30AD\u30C3\u30D7\u3067\u304D\u307E\u305B\u3093(\u958B\u59CB\u6E08\u307F\u306E\u30EB\u30FC\u30D7\u306F pass-gate \u3067\u901A\u904E\u3059\u308B)`);
+      fail(
+        `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F ${ph.status} \u306E\u305F\u3081\u30B9\u30AD\u30C3\u30D7\u3067\u304D\u307E\u305B\u3093(\u958B\u59CB\u6E08\u307F\u306E\u30EB\u30FC\u30D7\u306F pass-gate \u3067\u901A\u904E\u3059\u308B)`
+      );
     const stageIdx = STAGES.findIndex((s) => s.includes(phase));
     for (let i = 0; i < stageIdx; i++)
       for (const prev of STAGES[i])
@@ -183,14 +216,18 @@ function main(argv, root = process.cwd()) {
   }
   if (cmd === "pass-gate") {
     const phase = pos[1];
-    if (!GATED.has(phase)) fail(`${phase} \u306F\u30B2\u30FC\u30C8\u5BFE\u8C61\u30D5\u30A7\u30FC\u30BA\u3067\u306F\u3042\u308A\u307E\u305B\u3093(complete-phase \u3092\u4F7F\u7528)`);
+    if (!GATED.has(phase))
+      fail(`${phase} \u306F\u30B2\u30FC\u30C8\u5BFE\u8C61\u30D5\u30A7\u30FC\u30BA\u3067\u306F\u3042\u308A\u307E\u305B\u3093(complete-phase \u3092\u4F7F\u7528)`);
     const latest = loadRun(root, flags);
     const ph = latest.state.phases[phase];
-    if (ph.status !== "in_progress") fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
+    if (ph.status !== "in_progress")
+      fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
     if (!flags["evaluation-id"]) fail("--evaluation-id \u304C\u5FC5\u8981\u3067\u3059");
     const acceptedVerdicts = hasHumanApproved ? ["PROCEED", "ASK"] : ["PROCEED"];
     if (!acceptedVerdicts.includes(flags.verdict))
-      fail(`verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u306F mark-ask\u3001STOP \u306F stop \u3092\u4F7F\u7528`);
+      fail(
+        `verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u306F mark-ask\u3001STOP \u306F stop \u3092\u4F7F\u7528`
+      );
     ph.status = "passed";
     ph.evaluationId = flags["evaluation-id"];
     ph.verdict = flags.verdict;
@@ -201,10 +238,12 @@ function main(argv, root = process.cwd()) {
   if (cmd === "complete-phase") {
     const phase = pos[1];
     if (!PHASES.includes(phase)) fail(`\u4E0D\u6B63\u306A\u30D5\u30A7\u30FC\u30BA: ${phase}`);
-    if (GATED.has(phase)) fail(`${phase} \u306F\u30B2\u30FC\u30C8\u5BFE\u8C61\u30D5\u30A7\u30FC\u30BA\u3067\u3059(pass-gate \u3092\u4F7F\u7528)`);
+    if (GATED.has(phase))
+      fail(`${phase} \u306F\u30B2\u30FC\u30C8\u5BFE\u8C61\u30D5\u30A7\u30FC\u30BA\u3067\u3059(pass-gate \u3092\u4F7F\u7528)`);
     const latest = loadRun(root, flags);
     const ph = latest.state.phases[phase];
-    if (ph.status !== "in_progress") fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
+    if (ph.status !== "in_progress")
+      fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
     if (phase === "pr") {
       if (!flags["pr-url"]) fail("pr \u30D5\u30A7\u30FC\u30BA\u306B\u306F --pr-url \u304C\u5FC5\u8981\u3067\u3059");
       latest.state.pr.url = flags["pr-url"];
@@ -227,7 +266,8 @@ function main(argv, root = process.cwd()) {
   }
   if (cmd === "resume") {
     const latest = loadRun(root, flags);
-    if (latest.state.status !== "awaiting_human") fail(`awaiting_human \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${latest.state.status})`);
+    if (latest.state.status !== "awaiting_human")
+      fail(`awaiting_human \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${latest.state.status})`);
     latest.state.status = "active";
     for (const ph of Object.values(latest.state.phases))
       if (ph.status === "awaiting_human") ph.status = "in_progress";
@@ -243,19 +283,28 @@ function main(argv, root = process.cwd()) {
     if (ph.attempts > latest.state.limits.maxFixAttempts) {
       latest.state.status = "awaiting_human";
       writeState(latest.statePath, latest.state);
-      ok({ statePath: latest.statePath, state: latest.state, capExceeded: true });
+      ok({
+        statePath: latest.statePath,
+        state: latest.state,
+        capExceeded: true
+      });
       process.exit(3);
     }
     writeState(latest.statePath, latest.state);
-    return ok({ statePath: latest.statePath, state: latest.state, capExceeded: false });
+    return ok({
+      statePath: latest.statePath,
+      state: latest.state,
+      capExceeded: false
+    });
   }
   if (cmd === "finalize") {
     const latest = loadRun(root, flags);
     for (const [name, ph] of Object.entries(latest.state.phases)) {
       if (name === "finalize") continue;
-      if (ph.status !== "passed") fail(`\u30D5\u30A7\u30FC\u30BA ${name} \u304C\u672A\u5B8C\u4E86\u3067\u3059(${ph.status})`);
+      if (ph.status !== "passed")
+        fail(`\u30D5\u30A7\u30FC\u30BA ${name} \u304C\u672A\u5B8C\u4E86\u3067\u3059(${ph.status})`);
     }
-    latest.state.phases["finalize"].status = "passed";
+    latest.state.phases.finalize.status = "passed";
     latest.state.status = "awaiting_outcome";
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
@@ -263,12 +312,19 @@ function main(argv, root = process.cwd()) {
   if (cmd === "record-outcome") {
     const latest = loadRun(root, flags);
     const outcome = flags.outcome;
-    if (!["approved", "rejected", "incident"].includes(outcome)) fail(`\u4E0D\u6B63\u306A outcome: ${outcome}`);
-    if (!["awaiting_outcome", "completed", "rejected"].includes(latest.state.status))
+    if (!["approved", "rejected", "incident"].includes(outcome))
+      fail(`\u4E0D\u6B63\u306A outcome: ${outcome}`);
+    if (!["awaiting_outcome", "completed", "rejected"].includes(
+      latest.state.status
+    ))
       fail(`outcome \u3092\u8A18\u9332\u3067\u304D\u308B\u72B6\u614B\u3067\u306F\u3042\u308A\u307E\u305B\u3093(${latest.state.status})`);
     if (outcome === "approved") latest.state.status = "completed";
     if (outcome === "rejected") latest.state.status = "rejected";
-    if (outcome === "incident") latest.state.incidents.push({ at: (/* @__PURE__ */ new Date()).toISOString(), note: flags.note ?? null });
+    if (outcome === "incident")
+      latest.state.incidents.push({
+        at: (/* @__PURE__ */ new Date()).toISOString(),
+        note: flags.note ?? null
+      });
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
   }

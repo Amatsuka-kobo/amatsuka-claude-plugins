@@ -1,6 +1,11 @@
 import type { DiagramType } from "./types.js"
 
-export const SUPPORTED_TYPES = ["er", "screen-flow", "architecture", "sequence"] as const
+export const SUPPORTED_TYPES = [
+  "er",
+  "screen-flow",
+  "architecture",
+  "sequence"
+] as const
 
 const CARDINALITIES = ["1:1", "1:N", "N:1", "N:M"] as const
 
@@ -10,7 +15,9 @@ export function validateSpec(spec: unknown): string[] {
   }
   const value = spec as Record<string, unknown>
   if (!SUPPORTED_TYPES.includes(value.type as DiagramType)) {
-    return [`type: 未対応の図種 "${value.type}" です(対応: ${SUPPORTED_TYPES.join(", ")})`]
+    return [
+      `type: 未対応の図種 "${value.type}" です(対応: ${SUPPORTED_TYPES.join(", ")})`
+    ]
   }
   const errors: string[] = []
   if (typeof value.title !== "string" || value.title.trim() === "") {
@@ -20,12 +27,13 @@ export function validateSpec(spec: unknown): string[] {
   return errors
 }
 
-const RULES: Record<DiagramType, (spec: Record<string, unknown>) => string[]> = {
-  er: validateEr,
-  "screen-flow": validateScreenFlow,
-  architecture: validateArchitecture,
-  sequence: validateSequence,
-}
+const RULES: Record<DiagramType, (spec: Record<string, unknown>) => string[]> =
+  {
+    er: validateEr,
+    "screen-flow": validateScreenFlow,
+    architecture: validateArchitecture,
+    sequence: validateSequence
+  }
 
 function validateEr(spec: Record<string, unknown>): string[] {
   const errors: string[] = []
@@ -56,12 +64,16 @@ function validateEr(spec: Record<string, unknown>): string[] {
     }
     e.columns.forEach((column: unknown, j: number) => {
       if (column === null || typeof column !== "object") {
-        errors.push(`entities(${e.name}).columns[${j}]: オブジェクトではありません`)
+        errors.push(
+          `entities(${e.name}).columns[${j}]: オブジェクトではありません`
+        )
         return
       }
       const c = column as Record<string, unknown>
       if (typeof c.name !== "string" || c.name.trim() === "") {
-        errors.push(`entities(${e.name}).columns[${j}].name: 必須です(空でない文字列)`)
+        errors.push(
+          `entities(${e.name}).columns[${j}].name: 必須です(空でない文字列)`
+        )
       }
     })
   })
@@ -79,11 +91,17 @@ function validateEr(spec: Record<string, unknown>): string[] {
     const r = rel as Record<string, unknown>
     for (const end of ["from", "to"] as const) {
       if (!names.has(r[end] as string)) {
-        errors.push(`${where}.${end}: エンティティ "${r[end]}" は entities に定義されていません`)
+        errors.push(
+          `${where}.${end}: エンティティ "${r[end]}" は entities に定義されていません`
+        )
       }
     }
-    if (!CARDINALITIES.includes(r.cardinality as (typeof CARDINALITIES)[number])) {
-      errors.push(`${where}.cardinality: "${r.cardinality}" は不正です(対応: ${CARDINALITIES.join(", ")})`)
+    if (
+      !CARDINALITIES.includes(r.cardinality as (typeof CARDINALITIES)[number])
+    ) {
+      errors.push(
+        `${where}.cardinality: "${r.cardinality}" は不正です(対応: ${CARDINALITIES.join(", ")})`
+      )
     }
   })
   return errors
@@ -127,7 +145,9 @@ function validateScreenFlow(spec: Record<string, unknown>): string[] {
     const tr = t as Record<string, unknown>
     for (const end of ["from", "to"] as const) {
       if (!ids.has(tr[end] as string)) {
-        errors.push(`${where}.${end}: 画面 "${tr[end]}" は screens に定義されていません`)
+        errors.push(
+          `${where}.${end}: 画面 "${tr[end]}" は screens に定義されていません`
+        )
       }
     }
   })
@@ -177,20 +197,28 @@ function validateArchitecture(spec: Record<string, unknown>): string[] {
       return
     }
     if (zoneIds.has(z.id) || nodeIds.has(z.id)) {
-      errors.push(`${where}.id: "${z.id}" が重複しています(ゾーン・ノード間で一意であること)`)
+      errors.push(
+        `${where}.id: "${z.id}" が重複しています(ゾーン・ノード間で一意であること)`
+      )
     }
     zoneIds.add(z.id)
     if (!Array.isArray(z.children) || z.children.length === 0) {
-      errors.push(`${where}(${z.id}).children: 1 件以上のノード id の配列が必須です`)
+      errors.push(
+        `${where}(${z.id}).children: 1 件以上のノード id の配列が必須です`
+      )
       return
     }
     z.children.forEach((childId: unknown, j: number) => {
       if (!nodeIds.has(childId as string)) {
-        errors.push(`zones(${z.id}).children[${j}]: ノード "${childId}" は nodes に定義されていません`)
+        errors.push(
+          `zones(${z.id}).children[${j}]: ノード "${childId}" は nodes に定義されていません`
+        )
         return
       }
       if (assigned.has(childId as string)) {
-        errors.push(`zones(${z.id}).children[${j}]: ノード "${childId}" は複数のゾーンに属しています`)
+        errors.push(
+          `zones(${z.id}).children[${j}]: ノード "${childId}" は複数のゾーンに属しています`
+        )
       }
       assigned.add(childId as string)
     })
@@ -209,7 +237,9 @@ function validateArchitecture(spec: Record<string, unknown>): string[] {
     const e = edge as Record<string, unknown>
     for (const end of ["from", "to"] as const) {
       if (!nodeIds.has(e[end] as string)) {
-        errors.push(`${where}.${end}: ノード "${e[end]}" は nodes に定義されていません`)
+        errors.push(
+          `${where}.${end}: ノード "${e[end]}" は nodes に定義されていません`
+        )
       }
     }
   })
@@ -254,14 +284,21 @@ function validateSequence(spec: Record<string, unknown>): string[] {
     const m = msg as Record<string, unknown>
     for (const end of ["from", "to"] as const) {
       if (!ids.has(m[end] as string)) {
-        errors.push(`${where}.${end}: アクター "${m[end]}" は actors に定義されていません`)
+        errors.push(
+          `${where}.${end}: アクター "${m[end]}" は actors に定義されていません`
+        )
       }
     }
     if (m.from === m.to && ids.has(m.from as string)) {
       errors.push(`${where}: from と to が同一(自己メッセージ)は未対応です`)
     }
-    if (m.style !== undefined && !["async", "return"].includes(m.style as string)) {
-      errors.push(`${where}.style: "${m.style}" は不正です(対応: async, return、または省略=同期)`)
+    if (
+      m.style !== undefined &&
+      !["async", "return"].includes(m.style as string)
+    ) {
+      errors.push(
+        `${where}.style: "${m.style}" は不正です(対応: async, return、または省略=同期)`
+      )
     }
   })
   return errors

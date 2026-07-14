@@ -8,7 +8,10 @@ var OFF = { configured: false, driveFolderId: null };
 function readDriveConfig(root) {
   let content;
   try {
-    content = readFileSync(path.join(root, ".claude", "basic-design.local.md"), "utf8");
+    content = readFileSync(
+      path.join(root, ".claude", "basic-design.local.md"),
+      "utf8"
+    );
   } catch {
     return OFF;
   }
@@ -24,10 +27,9 @@ function readDriveConfig(root) {
   }
   return OFF;
 }
-if (import.meta.url === `file://${process.argv[1]}`) {
-  process.stdout.write(`${JSON.stringify(readDriveConfig(process.argv[2] ?? process.cwd()))}
-`);
-}
-export {
-  readDriveConfig
-};
+
+// src/check-drive-config-cli.ts
+process.stdout.write(
+  `${JSON.stringify(readDriveConfig(process.argv[2] ?? process.cwd()))}
+`
+);

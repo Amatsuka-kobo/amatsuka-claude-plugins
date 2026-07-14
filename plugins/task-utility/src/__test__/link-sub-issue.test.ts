@@ -9,7 +9,7 @@ const SCRIPT = fileURLToPath(new URL("../link-sub-issue.ts", import.meta.url))
 
 const mockEnv = (binDir: string) => ({
   ...process.env,
-  PATH: `${binDir}${path.delimiter}${path.dirname(process.execPath)}`,
+  PATH: `${binDir}${path.delimiter}${path.dirname(process.execPath)}`
 })
 
 // スクリプトを起動し stdout の JSON を返す。binDir 指定時は PATH をそのディレクトリだけに差し替える(gh モック用)
@@ -27,7 +27,10 @@ function tmpdir(): string {
 function fakeGh(scriptLines: string[]): string {
   const dir = tmpdir()
   const file = path.join(dir, "gh")
-  fs.writeFileSync(file, `${scriptLines.join("\n").replaceAll("__DIR__", dir)}\n`)
+  fs.writeFileSync(
+    file,
+    `${scriptLines.join("\n").replaceAll("__DIR__", dir)}\n`
+  )
   fs.chmodSync(file, 0o755)
   return dir
 }
@@ -64,13 +67,18 @@ test("正常系: 子の内部 ID を取得し、-F sub_issue_id=<ID> で親に P
     '  "api repos/o/r/issues/12") echo \'{"id": 999888, "number": 12}\' ;;',
     "  *sub_issues*) echo '{}' ;;",
     "  *) exit 1 ;;",
-    "esac",
+    "esac"
   ])
   const out = runScript(["o/r", "5", "12"], dir)
   expect(out).toEqual({ ok: true, parent: 5, child: 12, subIssueId: 999888 })
-  const calls = fs.readFileSync(path.join(dir, "calls.log"), "utf8").trim().split("\n")
+  const calls = fs
+    .readFileSync(path.join(dir, "calls.log"), "utf8")
+    .trim()
+    .split("\n")
   expect(calls[0]).toBe("api repos/o/r/issues/12")
-  expect(calls[1]).toBe("api -X POST repos/o/r/issues/5/sub_issues -F sub_issue_id=999888")
+  expect(calls[1]).toBe(
+    "api -X POST repos/o/r/issues/5/sub_issues -F sub_issue_id=999888"
+  )
 })
 
 test("子 Issue の取得が失敗したら step: get-child で stderr を返す", () => {
@@ -87,7 +95,7 @@ test("リンク POST が失敗したら step: link で stderr を返す", () => 
     'case "$*" in',
     '  "api repos/o/r/issues/12") echo \'{"id": 999888}\' ;;',
     '  *) echo "sub-issues not supported (HTTP 404)" >&2; exit 1 ;;',
-    "esac",
+    "esac"
   ])
   const out = runScript(["o/r", "5", "12"], dir)
   expect(out.ok).toBe(false)

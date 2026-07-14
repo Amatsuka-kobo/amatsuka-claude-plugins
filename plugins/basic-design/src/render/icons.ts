@@ -8,7 +8,7 @@ const SVG_PATH: Record<KindKey, string> = {
   messaging: `<path d="M4 5h16v10H9l-4 4V5z" />`,
   external: `<path d="M7 17 17 7M9 7h8v8" />`,
   screen: `<rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" />`,
-  entity: `<rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" />`,
+  entity: `<rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" />`
 }
 
 const EMOJI: Record<KindKey, string> = {
@@ -19,7 +19,7 @@ const EMOJI: Record<KindKey, string> = {
   messaging: "✉",
   external: "↗",
   screen: "▣",
-  entity: "▦",
+  entity: "▦"
 }
 
 export function iconEmoji(kind: KindKey): string {

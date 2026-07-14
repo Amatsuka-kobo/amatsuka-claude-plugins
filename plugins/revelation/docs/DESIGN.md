@@ -23,10 +23,13 @@ plugins/revelation/
 ├── hooks/
 │   ├── hooks.json                      # SessionStart + PreToolUse の定義
 │   ├── trigger-map.md                  # 第1層で注入するトリガー表(約10行)
-│   └── scripts/
-│       ├── inject-trigger-map.mjs      # 第1層: SessionStart
-│       ├── remind-skill.mjs            # 第2層: PreToolUse
-│       └── remind-skill.test.mjs       # node --test 用ユニットテスト
+├── scripts/
+│   ├── inject-trigger-map.mjs          # 第1層: SessionStart のバンドル
+│   └── remind-skill.mjs                # 第2層: PreToolUse のバンドル
+├── src/
+│   ├── inject-trigger-map.ts           # 第1層: SessionStart のソース
+│   ├── remind-skill.ts                 # 第2層: PreToolUse のソース
+│   └── __test__/                       # vitest ユニットテスト
 └── skills/                             # 変更なし
 ```
 
@@ -65,14 +68,14 @@ pull 型(自発 invoke)→ 第1層(push)→ 第2層(enforcement)の三段構え�
 ## 4. エラー処理・エッジケース
 
 - transcript が読めない・形式が想定外・マーカーファイルの書き込み失敗 → **素通し(フェイルオープン)**。規律の補助でユーザーの作業を止めない。
-- この規律の対象は Fable 未満のすべてのモデル(Opus を含む)。第2層(`remind-skill.mjs`)は**行為者本人**の transcript の assistant イベントの `message.model` から Fable を判別し、本人が Fable なら差し戻しをスキップする(`lastAssistantModel`、`plugins/revelation/hooks/scripts/lib.mjs`)。Fable 親 + Sonnet サブエージェントの構成でも、Sonnet サブエージェントには正しく差し戻される。第1層(SessionStart)は発火時点で assistant メッセージが存在せずコードでの判別ができないため、`trigger-map.md` 側の文言(「Fable として動作している場合はこの表に従う必要はない」)で対処する。
+- この規律の対象は Fable 未満のすべてのモデル(Opus を含む)。第2層(`scripts/remind-skill.mjs`、ソース: `src/remind-skill.ts`)は**行為者本人**の transcript の assistant イベントの `message.model` から Fable を判別し、本人が Fable なら差し戻しをスキップする(`lastAssistantModel`、`plugins/revelation/src/lib.ts`)。Fable 親 + Sonnet サブエージェントの構成でも、Sonnet サブエージェントには正しく差し戻される。第1層(SessionStart)は発火時点で assistant メッセージが存在せずコードでの判別ができないため、`trigger-map.md` 側の文言(「Fable として動作している場合はこの表に従う必要はない」)で対処する。
 - PreToolUse はサブエージェントのツール呼び出しにも発火する(実測)。そのときフック入力の `session_id` / `transcript_path` はメインセッションのもので、`agent_id` / `agent_type` フィールドが追加される。本人の transcript は `subagentTranscriptPath` で導出する。このレイアウトは Claude Code の非公開の内部仕様のため、ファイルが存在しなければ**素通し(フェイルオープン)** — 将来レイアウトが変わっても「効かなくなる」だけで作業は止まらない。
 - deny された Task/Agent 呼び出しではサブエージェントは起動されず、transcript ファイルも作られない(実測)。deny の理由は呼び出し元(親)にツールエラーとして返る。
 - スラッシュコマンド等、Skill の `tool_use` 以外の経路でスキル内容を得た場合は `hasSkillInvocation` の既読判定に引っかからず、初回の Edit/Write/Task/Agent で1回 deny される。実害は小さく(2回目以降は素通し)、判定ロジックを複雑化させないためこの挙動を許容する。
 
 ## 5. 検証
 
-- **ユニットテスト**: `node --test plugins/revelation/hooks/scripts/*.test.mjs`。transcript のフィクスチャ(invoke 済み/未 invoke/読めない)を与えて deny/allow 判定とマーカーの一回性を確認する。
+- **ユニットテスト**: root で `pnpm test` を実行する(テストソース: `plugins/revelation/src/__test__/*.test.ts`)。transcript のフィクスチャ(invoke 済み/未 invoke/読めない)を与えて deny/allow 判定とマーカーの一回性を確認する。
 - **実機確認**: Sonnet/Haiku セッションを起動し、以下を観測する。
   1. セッション冒頭にトリガー表が注入される。
   2. スキル未読のまま Edit/Write すると1回だけ差し戻され、モデルがスキルを invoke してから再試行する。

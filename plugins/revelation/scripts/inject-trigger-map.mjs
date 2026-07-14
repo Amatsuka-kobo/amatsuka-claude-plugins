@@ -8,12 +8,13 @@ try {
     "utf8"
   );
   process.stdout.write(
-    JSON.stringify({
+    `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "SessionStart",
         additionalContext: content
       }
-    }) + "\n"
+    })}
+`
   );
 } catch {
 }

@@ -1,6 +1,15 @@
 import type { DiagramSpec, KindKey, Layout, LayoutNode } from "./types.js"
 
-const KNOWN = new Set<KindKey>(["generic", "user", "api", "data", "messaging", "external", "screen", "entity"])
+const KNOWN = new Set<KindKey>([
+  "generic",
+  "user",
+  "api",
+  "data",
+  "messaging",
+  "external",
+  "screen",
+  "entity"
+])
 
 const ALIASES: Array<[RegExp, KindKey]> = [
   [/(user|actor|利用者|ユーザー)/i, "user"],
@@ -9,7 +18,7 @@ const ALIASES: Array<[RegExp, KindKey]> = [
   [/(queue|topic|kafka|message|イベント)/i, "messaging"],
   [/(external|partner|vendor|外部|決済)/i, "external"],
   [/(screen|page|画面|start|end)/i, "screen"],
-  [/(entity|table|master|テーブル)/i, "entity"],
+  [/(entity|table|master|テーブル)/i, "entity"]
 ]
 
 function normalize(value: unknown): KindKey | undefined {
@@ -19,7 +28,10 @@ function normalize(value: unknown): KindKey | undefined {
   return ALIASES.find(([pattern]) => pattern.test(value))?.[1]
 }
 
-function findSource(spec: DiagramSpec, id: string): { kind?: string; icon?: string } | undefined {
+function findSource(
+  spec: DiagramSpec,
+  id: string
+): { kind?: string; icon?: string } | undefined {
   switch (spec.type) {
     case "architecture":
       return spec.nodes.find((x) => x.id === id)
@@ -46,5 +58,11 @@ function resolveKind(spec: DiagramSpec, node: LayoutNode): KindKey {
 }
 
 export function decorateLayout(spec: DiagramSpec, layout: Layout): Layout {
-  return { ...layout, nodes: layout.nodes.map((node) => ({ ...node, kindKey: resolveKind(spec, node) })) }
+  return {
+    ...layout,
+    nodes: layout.nodes.map((node) => ({
+      ...node,
+      kindKey: resolveKind(spec, node)
+    }))
+  }
 }

@@ -1,8 +1,10 @@
 import { expect, test } from "vitest"
+import complexSpec from "../../fixtures/complex-sequence.spec.json" with {
+  type: "json"
+}
+import type { SequenceSpec } from "../../types.js"
 import { assertLayoutHasNoOverlaps } from "../geometry.js"
 import { layoutSequence } from "../sequence.js"
-import type { SequenceSpec } from "../../types.js"
-import complexSpec from "../../fixtures/complex-sequence.spec.json" with { type: "json" }
 
 const spec: SequenceSpec = {
   type: "sequence",
@@ -10,19 +12,25 @@ const spec: SequenceSpec = {
   actors: [
     { id: "user", label: "ユーザー", kind: "actor" },
     { id: "web", label: "Web" },
-    { id: "db", label: "DB" },
+    { id: "db", label: "DB" }
   ],
   messages: [
     { from: "user", to: "web", label: "ログイン要求" },
     { from: "web", to: "db", label: "照会", style: "async" },
     { from: "db", to: "web", label: "結果", style: "return" },
-    { from: "web", to: "user", label: "トークン", style: "return" },
-  ],
+    { from: "web", to: "user", label: "トークン", style: "return" }
+  ]
 }
 
 test("sequence uses points and labelBox", async () => {
   const result = await layoutSequence(spec)
-  expect(result.edges[0]).toMatchObject({ style: "sync", points: [{ x: 70, y: 114 }, { x: 290, y: 114 }] })
+  expect(result.edges[0]).toMatchObject({
+    style: "sync",
+    points: [
+      { x: 70, y: 114 },
+      { x: 290, y: 114 }
+    ]
+  })
   expect(result.edges[0].labelBox).toMatchObject({ height: 18 })
   expect("fromPt" in result.edges[0]).toBe(false)
 })

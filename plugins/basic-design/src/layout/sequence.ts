@@ -23,22 +23,25 @@ export async function layoutSequence(spec: SequenceSpec): Promise<Layout> {
       width: ACTOR_WIDTH,
       height: ACTOR_HEIGHT,
       kindKey: "generic",
-      meta: { kind: actor.kind ?? "system" },
+      meta: { kind: actor.kind ?? "system" }
     }
   })
 
   const lines = spec.actors.map((actor) => ({
+    // biome-ignore lint/style/noNonNullAssertion: 直前の actors.map で全 actor id を登録済み
     x: center.get(actor.id)!,
     y1: ACTOR_HEIGHT,
     y2: bottomY,
-    owner: actor.id,
+    owner: actor.id
   }))
 
   const edges: LayoutEdge[] = messages.map((msg, i) => {
     const y = ACTOR_HEIGHT + (i + 1) * MESSAGE_GAP
     const points = [
+      // biome-ignore lint/style/noNonNullAssertion: validateSpec 済みで message の actor 参照は存在する
       { x: center.get(msg.from)!, y },
-      { x: center.get(msg.to)!, y },
+      // biome-ignore lint/style/noNonNullAssertion: validateSpec 済みで message の actor 参照は存在する
+      { x: center.get(msg.to)!, y }
     ]
     const width = Math.max(48, (msg.label ?? "").length * 7 + 16)
     return {
@@ -46,11 +49,21 @@ export async function layoutSequence(spec: SequenceSpec): Promise<Layout> {
       from: msg.from,
       to: msg.to,
       label: msg.label ?? "",
-      style: msg.style === "return" ? "return" : msg.style === "async" ? "async" : "sync",
+      style:
+        msg.style === "return"
+          ? "return"
+          : msg.style === "async"
+            ? "async"
+            : "sync",
       points,
       labelBox: msg.label
-        ? { x: (points[0].x + points[1].x - width) / 2, y: y - 22, width, height: 18 }
-        : undefined,
+        ? {
+            x: (points[0].x + points[1].x - width) / 2,
+            y: y - 22,
+            width,
+            height: 18
+          }
+        : undefined
     }
   })
 

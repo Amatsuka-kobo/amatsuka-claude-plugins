@@ -41,10 +41,7 @@ open Issue を棚卸しし、ラベル提案・古い Issue の生死確認(既�
 ## 動作確認
 
 ```bash
-node --test plugins/task-utility/hooks/scripts/check-chat-recorded.test.mjs \
-            plugins/task-utility/scripts/extract-conversation.test.mjs \
-            plugins/task-utility/scripts/check-issue-env.test.mjs \
-            plugins/task-utility/scripts/link-sub-issue.test.mjs \
-            plugins/task-utility/scripts/find-chat-records.test.mjs \
-            plugins/task-utility/scripts/list-issues.test.mjs
+pnpm test
 ```
+
+テストソースは `plugins/task-utility/src/**/__test__/*.test.ts` に配置する。

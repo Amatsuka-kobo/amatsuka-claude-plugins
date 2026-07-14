@@ -34,11 +34,16 @@ let now = Date.now()
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--stale-days") {
     const v = args[++i]
-    if (!/^\d+$/.test(v ?? "")) fail("args", `--stale-days は正の整数で指定してください: ${v ?? "(missing)"}`)
+    if (!/^\d+$/.test(v ?? ""))
+      fail(
+        "args",
+        `--stale-days は正の整数で指定してください: ${v ?? "(missing)"}`
+      )
     staleDaysThreshold = Number(v)
   } else if (args[i] === "--now") {
     const t = Date.parse(args[++i] ?? "")
-    if (Number.isNaN(t)) fail("args", "--now は ISO 8601 形式で指定してください")
+    if (Number.isNaN(t))
+      fail("args", "--now は ISO 8601 形式で指定してください")
     now = t
   } else {
     fail("args", `不明な引数: ${args[i]}`)
@@ -46,10 +51,19 @@ for (let i = 0; i < args.length; i++) {
 }
 
 // gh 未インストール時、spawnSync は ENOENT で status: null を返す(例外は投げない)
-function gh(...a: string[]): { ok: true; stdout: string } | { ok: false; error: string } {
+function gh(
+  ...a: string[]
+): { ok: true; stdout: string } | { ok: false; error: string } {
   const res = spawnSync("gh", a, { encoding: "utf8" })
   if (res.status !== 0) {
-    return { ok: false, error: (res.stderr || res.stdout || String(res.error ?? "gh の実行に失敗")).trim() }
+    return {
+      ok: false,
+      error: (
+        res.stderr ||
+        res.stdout ||
+        String(res.error ?? "gh の実行に失敗")
+      ).trim()
+    }
   }
   return { ok: true, stdout: res.stdout }
 }
@@ -61,7 +75,10 @@ function parsePaginated(stdout: string, step: string): unknown[] {
   try {
     return (JSON.parse(stdout.trim()) as unknown[]).flat()
   } catch (e) {
-    fail(step, `JSON パースに失敗: ${e instanceof Error ? e.message : String(e)}`)
+    fail(
+      step,
+      `JSON パースに失敗: ${e instanceof Error ? e.message : String(e)}`
+    )
   }
 }
 
@@ -71,14 +88,27 @@ let currentLogin: string
 try {
   currentLogin = (JSON.parse(userRes.stdout) as { login: string }).login
 } catch (e) {
-  fail("user", `JSON パースに失敗: ${e instanceof Error ? e.message : String(e)}`)
+  fail(
+    "user",
+    `JSON パースに失敗: ${e instanceof Error ? e.message : String(e)}`
+  )
 }
 
-const issuesRes = gh("api", "--paginate", "--slurp", "repos/{owner}/{repo}/issues?state=open&per_page=100")
+const issuesRes = gh(
+  "api",
+  "--paginate",
+  "--slurp",
+  "repos/{owner}/{repo}/issues?state=open&per_page=100"
+)
 if (!issuesRes.ok) fail("issues", issuesRes.error)
 const rawIssues = parsePaginated(issuesRes.stdout, "issues") as GhIssue[]
 
-const labelsRes = gh("api", "--paginate", "--slurp", "repos/{owner}/{repo}/labels?per_page=100")
+const labelsRes = gh(
+  "api",
+  "--paginate",
+  "--slurp",
+  "repos/{owner}/{repo}/labels?per_page=100"
+)
 if (!labelsRes.ok) fail("labels", labelsRes.error)
 const rawLabels = parsePaginated(labelsRes.stdout, "labels") as GhLabel[]
 
@@ -97,10 +127,19 @@ const issues = rawIssues
       updatedAt: i.updated_at,
       commentsCount: i.comments ?? 0,
       staleDays,
-      stale: staleDays > staleDaysThreshold,
+      stale: staleDays > staleDaysThreshold
     }
   })
 
-const labels = rawLabels.map((l) => ({ name: l.name, description: l.description ?? "" }))
+const labels = rawLabels.map((l) => ({
+  name: l.name,
+  description: l.description ?? ""
+}))
 
-console.log(JSON.stringify({ ok: true, currentLogin, staleDaysThreshold, issues, labels }, null, 2))
+console.log(
+  JSON.stringify(
+    { ok: true, currentLogin, staleDaysThreshold, issues, labels },
+    null,
+    2
+  )
+)

@@ -1,7 +1,11 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { decorateLayout } from "./decorate.js"
-import { layoutArchitecture, layoutEr, layoutScreenFlow } from "./layout/graph.js"
+import {
+  layoutArchitecture,
+  layoutEr,
+  layoutScreenFlow
+} from "./layout/graph.js"
 import { layoutSequence } from "./layout/sequence.js"
 import { renderDrawio } from "./render/drawio.js"
 import { renderHtml } from "./render/html.js"
@@ -12,7 +16,7 @@ const LAYOUTS: Record<DiagramSpec["type"], (spec: never) => Promise<Layout>> = {
   architecture: layoutArchitecture as never,
   "screen-flow": layoutScreenFlow as never,
   er: layoutEr as never,
-  sequence: layoutSequence as never,
+  sequence: layoutSequence as never
 }
 const FORMATS = ["drawio", "html", "both"] as const
 
@@ -23,11 +27,16 @@ function fail(errors: string[]): never {
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const formatIndex = argv.indexOf("--format")
-  const specArg = argv.find((arg, index) => !arg.startsWith("--") && (formatIndex === -1 || index !== formatIndex + 1))
+  const specArg = argv.find(
+    (arg, index) =>
+      !arg.startsWith("--") && (formatIndex === -1 || index !== formatIndex + 1)
+  )
   const format = formatIndex === -1 ? "both" : argv[formatIndex + 1]
 
-  if (!specArg) fail(["usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"])
-  if (!FORMATS.includes(format as never)) fail([`--format: "${format}" は不正です(対応: ${FORMATS.join(", ")})`])
+  if (!specArg)
+    fail(["usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"])
+  if (!FORMATS.includes(format as never))
+    fail([`--format: "${format}" は不正です(対応: ${FORMATS.join(", ")})`])
 
   let unknown: unknown
   try {
@@ -44,7 +53,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const layout = decorateLayout(spec, await LAYOUTS[spec.type](spec as never))
     const dir = path.dirname(path.resolve(specArg))
     const name = path.basename(specArg)
-    const base = name.endsWith(".spec.json") ? name.slice(0, -".spec.json".length) : name.replace(/\.json$/, "")
+    const base = name.endsWith(".spec.json")
+      ? name.slice(0, -".spec.json".length)
+      : name.replace(/\.json$/, "")
     const files: string[] = []
     if (format === "drawio" || format === "both") {
       const out = path.join(dir, `${base}.drawio`)
@@ -62,6 +73,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => fail([`図の生成に失敗しました: ${(error as Error).message}`]))
-}
+main().catch((error) =>
+  fail([`図の生成に失敗しました: ${(error as Error).message}`])
+)

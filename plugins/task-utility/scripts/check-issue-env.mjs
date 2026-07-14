@@ -11,7 +11,9 @@ function git(...args) {
 }
 var isGitRepo = git("rev-parse", "--is-inside-work-tree") === "true";
 var remoteUrl = isGitRepo ? git("remote", "get-url", "origin") : null;
-var repoSlug = remoteUrl?.match(/^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/)?.[1] ?? null;
+var repoSlug = remoteUrl?.match(
+  /^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
+)?.[1] ?? null;
 var ghInstalled = spawnSync("gh", ["--version"], { encoding: "utf8" }).status === 0;
 var ghAuthenticated = ghInstalled && spawnSync("gh", ["auth", "status"], { encoding: "utf8" }).status === 0;
 var repoRoot = isGitRepo ? git("rev-parse", "--show-toplevel") : null;
@@ -65,7 +67,9 @@ if (tplDir) {
       return null;
     }
   };
-  templates = files.filter((f) => /\.(md|ya?ml)$/.test(f) && f !== "config.yml").map((f) => ({ f, content: read(f) })).filter((entry) => entry.content !== null).map(({ f, content }) => parseTemplate(f, content));
+  templates = files.filter((f) => /\.(md|ya?ml)$/.test(f) && f !== "config.yml").map((f) => ({ f, content: read(f) })).filter(
+    (entry) => entry.content !== null
+  ).map(({ f, content }) => parseTemplate(f, content));
   const configRaw = files.includes("config.yml") ? read("config.yml") : null;
   if (configRaw !== null) {
     const config = parseTopLevel(configRaw);
@@ -76,7 +80,15 @@ if (tplDir) {
 }
 console.log(
   JSON.stringify(
-    { isGitRepo, remoteUrl, repoSlug, ghInstalled, ghAuthenticated, templates, blankIssuesEnabled },
+    {
+      isGitRepo,
+      remoteUrl,
+      repoSlug,
+      ghInstalled,
+      ghAuthenticated,
+      templates,
+      blankIssuesEnabled
+    },
     null,
     2
   )

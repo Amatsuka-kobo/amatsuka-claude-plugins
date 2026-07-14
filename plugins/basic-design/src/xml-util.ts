@@ -3,7 +3,7 @@ const XML_ESCAPES: Record<string, string> = {
   "<": "&lt;",
   ">": "&gt;",
   '"': "&quot;",
-  "'": "&apos;",
+  "'": "&apos;"
 }
 
 export function escapeXml(value: unknown): string {

@@ -7,8 +7,28 @@ function layout(): Layout {
     type: "architecture",
     title: "構成",
     nodes: [
-      { id: "svc", label: "API", shape: "box", kindKey: "api", x: 0, y: 0, width: 160, height: 68, meta: {} },
-      { id: "db", label: "DB", shape: "box", kindKey: "data", x: 300, y: 0, width: 160, height: 68, meta: {} },
+      {
+        id: "svc",
+        label: "API",
+        shape: "box",
+        kindKey: "api",
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 68,
+        meta: {}
+      },
+      {
+        id: "db",
+        label: "DB",
+        shape: "box",
+        kindKey: "data",
+        x: 300,
+        y: 0,
+        width: 160,
+        height: 68,
+        meta: {}
+      }
     ],
     edges: [
       {
@@ -21,10 +41,10 @@ function layout(): Layout {
           { x: 160, y: 34 },
           { x: 220, y: 34 },
           { x: 220, y: 100 },
-          { x: 300, y: 34 },
-        ],
-      },
-    ],
+          { x: 300, y: 34 }
+        ]
+      }
+    ]
   }
 }
 
@@ -47,8 +67,8 @@ function erLayout(): Layout {
         meta: {},
         rows: [
           { text: "[PK] id : BIGINT", meta: {} },
-          { text: "email & name", meta: {} },
-        ],
+          { text: "email & name", meta: {} }
+        ]
       },
       {
         id: "orders",
@@ -62,8 +82,8 @@ function erLayout(): Layout {
         headerHeight: 30,
         rowHeight: 26,
         meta: {},
-        rows: [{ text: "[PK] id", meta: {} }],
-      },
+        rows: [{ text: "[PK] id", meta: {} }]
+      }
     ],
     edges: [
       {
@@ -74,10 +94,10 @@ function erLayout(): Layout {
         cardinality: "1:N",
         points: [
           { x: 220, y: 41 },
-          { x: 300, y: 28 },
-        ],
-      },
-    ],
+          { x: 300, y: 28 }
+        ]
+      }
+    ]
   }
 }
 
@@ -86,9 +106,21 @@ function architectureLayoutWithZoneAndLine(): Layout {
     type: "architecture",
     title: "構成2",
     zones: [{ id: "aws", label: "AWS", x: 0, y: 0, width: 400, height: 200 }],
-    nodes: [{ id: "app", label: "App", shape: "box", kindKey: "generic", x: 20, y: 50, width: 140, height: 60, meta: {} }],
+    nodes: [
+      {
+        id: "app",
+        label: "App",
+        shape: "box",
+        kindKey: "generic",
+        x: 20,
+        y: 50,
+        width: 140,
+        height: 60,
+        meta: {}
+      }
+    ],
     lines: [{ x: 70, y1: 50, y2: 300, owner: "app" }],
-    edges: [],
+    edges: []
   }
 }
 
@@ -97,13 +129,53 @@ function sequenceLayout(): Layout {
     type: "sequence",
     title: "seq",
     nodes: [
-      { id: "u", label: "U", shape: "actor", kindKey: "user", x: 0, y: 0, width: 140, height: 50, meta: {} },
-      { id: "w", label: "W", shape: "actor", kindKey: "generic", x: 220, y: 0, width: 140, height: 50, meta: {} },
+      {
+        id: "u",
+        label: "U",
+        shape: "actor",
+        kindKey: "user",
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 50,
+        meta: {}
+      },
+      {
+        id: "w",
+        label: "W",
+        shape: "actor",
+        kindKey: "generic",
+        x: 220,
+        y: 0,
+        width: 140,
+        height: 50,
+        meta: {}
+      }
     ],
     edges: [
-      { id: "msg1", from: "u", to: "w", label: "要求", style: "sync", points: [{ x: 70, y: 100 }, { x: 290, y: 100 }] },
-      { id: "msg2", from: "w", to: "u", label: "応答", style: "return", points: [{ x: 290, y: 150 }, { x: 70, y: 150 }] },
-    ],
+      {
+        id: "msg1",
+        from: "u",
+        to: "w",
+        label: "要求",
+        style: "sync",
+        points: [
+          { x: 70, y: 100 },
+          { x: 290, y: 100 }
+        ]
+      },
+      {
+        id: "msg2",
+        from: "w",
+        to: "u",
+        label: "応答",
+        style: "return",
+        points: [
+          { x: 290, y: 150 },
+          { x: 70, y: 150 }
+        ]
+      }
+    ]
   }
 }
 
@@ -111,8 +183,20 @@ function terminalLayout(): Layout {
   return {
     type: "screen-flow",
     title: "flow",
-    nodes: [{ id: "login", label: "ログイン", shape: "terminal", kindKey: "screen", x: 0, y: 0, width: 180, height: 60, meta: {} }],
-    edges: [],
+    nodes: [
+      {
+        id: "login",
+        label: "ログイン",
+        shape: "terminal",
+        kindKey: "screen",
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 60,
+        meta: {}
+      }
+    ],
+    edges: []
   }
 }
 
@@ -163,7 +247,9 @@ test("generic screen-flow edge uses block arrow without cell references", () => 
 test("sequence message styles map to distinct edge styles", () => {
   const xml = renderDrawio(sequenceLayout())
   expect(xml).toMatch(/id="e-msg1"[^>]*value="要求"/)
-  expect(xml).toMatch(/id="e-msg2"[^>]*style="[^"]*dashed=1;[^"]*endArrow=open;/)
+  expect(xml).toMatch(
+    /id="e-msg2"[^>]*style="[^"]*dashed=1;[^"]*endArrow=open;/
+  )
 })
 
 test("ER cardinality renders ER arrow pairs without cell references", () => {
@@ -209,7 +295,9 @@ test("edge labels render as absolute boxes from Layout labelBox", () => {
   const xml = renderDrawio(l)
   expect(xml).toMatch(/id="e-rel1"[^>]*value=""/)
   expect(xml).toMatch(/id="label-rel1"[^>]*value="発注する"[^>]*vertex="1"/)
-  expect(xml).toMatch(/id="label-rel1"[\s\S]*?<mxGeometry x="230" y="12" width="58" height="18" as="geometry"\/>/)
+  expect(xml).toMatch(
+    /id="label-rel1"[\s\S]*?<mxGeometry x="230" y="12" width="58" height="18" as="geometry"\/>/
+  )
 })
 
 test("entity rows render as child cells with header offsets", () => {
@@ -218,7 +306,9 @@ test("entity rows render as child cells with header offsets", () => {
   expect(xml).toMatch(/id="n-users"[^>]*style="swimlane;/)
   expect(xml).toMatch(/id="users-row1"[^>]*parent="n-users"/)
   expect(xml).toContain("strokeColor=#E2E8F0;fillColor=#FFFFFF")
-  expect(xml).toMatch(/id="users-row2"[^>]*>\s*<mxGeometry y="56" width="220" height="26"/)
+  expect(xml).toMatch(
+    /id="users-row2"[^>]*>\s*<mxGeometry y="56" width="220" height="26"/
+  )
 })
 
 test("output has a valid mxfile root structure", () => {

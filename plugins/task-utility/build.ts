@@ -8,12 +8,12 @@ await esbuild.build({
     "find-chat-records": "./src/find-chat-records.ts",
     "link-sub-issue": "./src/link-sub-issue.ts",
     "list-issues": "./src/list-issues.ts",
-    "check-chat-recorded": "./src/hooks/check-chat-recorded.ts",
+    "check-chat-recorded": "./src/hooks/check-chat-recorded.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
   platform: "node",
   format: "esm",
   sourcemap: false,
-  target: "node26",
+  target: "node26"
 })

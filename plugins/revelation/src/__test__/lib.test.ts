@@ -18,9 +18,9 @@ function writeTranscript(lines: TranscriptLine[]): string {
   )
   fs.writeFileSync(
     p,
-    lines
+    `${lines
       .map((l) => (typeof l === "string" ? l : JSON.stringify(l)))
-      .join("\n") + "\n"
+      .join("\n")}\n`
   )
   return p
 }

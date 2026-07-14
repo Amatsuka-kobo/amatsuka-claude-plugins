@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import type { Artifact, RaguelConfig, RuleContext } from "../../../core/types.js"
+import type {
+  Artifact,
+  RaguelConfig,
+  RuleContext
+} from "../../../core/types.js"
 import { secretsRule } from "../secrets.js"
 
 function makeArtifact(content: string): Artifact {

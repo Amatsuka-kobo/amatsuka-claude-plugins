@@ -1,12 +1,20 @@
-#!/usr/bin/env node
 import { readFileSync } from "node:fs"
 import path from "node:path"
-export interface DriveConfig { configured: boolean; driveFolderId: string | null }
+export interface DriveConfig {
+  configured: boolean
+  driveFolderId: string | null
+}
 const OFF: DriveConfig = { configured: false, driveFolderId: null }
 export function readDriveConfig(root: string): DriveConfig {
   let content: string
-  try { content = readFileSync(path.join(root, ".claude", "basic-design.local.md"), "utf8") }
-  catch { return OFF }
+  try {
+    content = readFileSync(
+      path.join(root, ".claude", "basic-design.local.md"),
+      "utf8"
+    )
+  } catch {
+    return OFF
+  }
   const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/)
   if (lines[0] !== "---") return OFF
   for (const line of lines.slice(1)) {
@@ -18,7 +26,4 @@ export function readDriveConfig(root: string): DriveConfig {
     return value ? { configured: true, driveFolderId: value } : OFF
   }
   return OFF
-}
-if (import.meta.url === `file://${process.argv[1]}`) {
-  process.stdout.write(`${JSON.stringify(readDriveConfig(process.argv[2] ?? process.cwd()))}\n`)
 }

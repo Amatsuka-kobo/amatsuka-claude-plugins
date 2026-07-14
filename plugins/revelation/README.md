@@ -29,4 +29,4 @@ superpowers 等の詳細なプロセススキル(systematic-debugging、test-dri
 
 設計の詳細と将来課題(モデル判別による出し分け等)は `docs/DESIGN.md` を参照。
 
-テスト: `node --test plugins/revelation/hooks/scripts/*.test.mjs`
+テスト: `pnpm test`(ソース: `plugins/revelation/src/__test__/*.test.ts`)

@@ -16,13 +16,14 @@ async function readStdin() {
 }
 function emit(decision, reason) {
   process.stdout.write(
-    JSON.stringify({
+    `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: decision,
         permissionDecisionReason: reason
       }
-    }) + "\n"
+    })}
+`
   );
   process.exit(0);
 }
@@ -121,7 +122,7 @@ try {
   }
   try {
     const model = lastAssistantModel(transcript);
-    if (model && model.includes("fable")) pass();
+    if (model?.includes("fable")) pass();
     if (hasSkillInvocation(transcript, skill)) pass();
     if (hasSkillFileRead(transcript, skill)) pass();
   } catch {

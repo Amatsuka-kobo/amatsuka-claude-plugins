@@ -7,13 +7,16 @@ async function readStdin() {
   return JSON.parse(data);
 }
 function emit(decision, reason) {
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: decision,
-      permissionDecisionReason: reason
-    }
-  }) + "\n");
+  process.stdout.write(
+    `${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: decision,
+        permissionDecisionReason: reason
+      }
+    })}
+`
+  );
   process.exit(0);
 }
 function pass() {

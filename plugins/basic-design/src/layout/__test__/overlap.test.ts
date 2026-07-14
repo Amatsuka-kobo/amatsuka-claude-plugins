@@ -8,7 +8,9 @@ import { layoutArchitecture, layoutEr, layoutScreenFlow } from "../graph.js"
 import { layoutSequence } from "../sequence.js"
 
 const load = (relative: string) =>
-  JSON.parse(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8")) as DiagramSpec
+  JSON.parse(
+    readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8")
+  ) as DiagramSpec
 
 const CASES = [
   ["../../../samples/web-architecture.spec.json", layoutArchitecture],
@@ -18,11 +20,14 @@ const CASES = [
   ["../../fixtures/complex-architecture.spec.json", layoutArchitecture],
   ["../../fixtures/complex-screen-flow.spec.json", layoutScreenFlow],
   ["../../fixtures/complex-er.spec.json", layoutEr],
-  ["../../fixtures/complex-sequence.spec.json", layoutSequence],
+  ["../../fixtures/complex-sequence.spec.json", layoutSequence]
 ] as const
 
 test.each(CASES)("%s has no overlaps", async (specPath, layoutSpec) => {
   const spec = load(specPath)
-  const layout = decorateLayout(spec, await (layoutSpec as (value: never) => Promise<Layout>)(spec as never))
+  const layout = decorateLayout(
+    spec,
+    await (layoutSpec as (value: never) => Promise<Layout>)(spec as never)
+  )
   expect(assertLayoutHasNoOverlaps(layout)).toEqual([])
 })

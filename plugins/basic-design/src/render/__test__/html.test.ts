@@ -1,5 +1,11 @@
 import { expect, test } from "vitest"
-import type { ArchitectureSpec, ErSpec, Layout, ScreenFlowSpec, SequenceSpec } from "../../types.js"
+import type {
+  ArchitectureSpec,
+  ErSpec,
+  Layout,
+  ScreenFlowSpec,
+  SequenceSpec
+} from "../../types.js"
 import { renderHtml } from "../html.js"
 
 function layout(): Layout {
@@ -21,8 +27,8 @@ function layout(): Layout {
         meta: {},
         rows: [
           { text: "[PK] id : BIGINT", meta: { name: "id", pk: true } },
-          { text: "email </script>", meta: { name: "email" } },
-        ],
+          { text: "email </script>", meta: { name: "email" } }
+        ]
       },
       {
         id: "orders",
@@ -36,8 +42,8 @@ function layout(): Layout {
         headerHeight: 30,
         rowHeight: 26,
         meta: {},
-        rows: [{ text: "[PK] id", meta: { name: "id" } }],
-      },
+        rows: [{ text: "[PK] id", meta: { name: "id" } }]
+      }
     ],
     edges: [
       {
@@ -48,16 +54,20 @@ function layout(): Layout {
         cardinality: "1:N",
         points: [
           { x: 220, y: 41 },
-          { x: 300, y: 28 },
+          { x: 300, y: 28 }
         ],
-        labelBox: { x: 240, y: 20, width: 48, height: 18 },
-      },
-    ],
+        labelBox: { x: 240, y: 20, width: 48, height: 18 }
+      }
+    ]
   }
 }
 
 function spec(): ErSpec {
-  return { type: "er", title: "テスト <ER図>", entities: [{ name: "users", columns: [] }] }
+  return {
+    type: "er",
+    title: "テスト <ER図>",
+    entities: [{ name: "users", columns: [] }]
+  }
 }
 
 function architectureLayout(): Layout {
@@ -65,8 +75,20 @@ function architectureLayout(): Layout {
     type: "architecture",
     title: "構成",
     zones: [{ id: "aws", label: "AWS", x: 0, y: 0, width: 400, height: 200 }],
-    nodes: [{ id: "app", label: "App", shape: "box", kindKey: "generic", x: 20, y: 50, width: 140, height: 60, meta: {} }],
-    edges: [],
+    nodes: [
+      {
+        id: "app",
+        label: "App",
+        shape: "box",
+        kindKey: "generic",
+        x: 20,
+        y: 50,
+        width: 140,
+        height: 60,
+        meta: {}
+      }
+    ],
+    edges: []
   }
 }
 
@@ -79,8 +101,28 @@ function screenFlowLayout(): Layout {
     type: "screen-flow",
     title: "画面遷移",
     nodes: [
-      { id: "login", label: "ログイン", shape: "terminal", kindKey: "screen", x: 0, y: 0, width: 180, height: 60, meta: {} },
-      { id: "home", label: "ホーム", shape: "box", kindKey: "screen", x: 280, y: 0, width: 180, height: 60, meta: {} },
+      {
+        id: "login",
+        label: "ログイン",
+        shape: "terminal",
+        kindKey: "screen",
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 60,
+        meta: {}
+      },
+      {
+        id: "home",
+        label: "ホーム",
+        shape: "box",
+        kindKey: "screen",
+        x: 280,
+        y: 0,
+        width: 180,
+        height: 60,
+        meta: {}
+      }
     ],
     edges: [
       {
@@ -91,10 +133,10 @@ function screenFlowLayout(): Layout {
         style: "arrow",
         points: [
           { x: 180, y: 30 },
-          { x: 280, y: 30 },
-        ],
-      },
-    ],
+          { x: 280, y: 30 }
+        ]
+      }
+    ]
   }
 }
 
@@ -107,17 +149,57 @@ function sequenceLayout(): Layout {
     type: "sequence",
     title: "シーケンス",
     nodes: [
-      { id: "u", label: "U", shape: "actor", kindKey: "user", x: 0, y: 0, width: 140, height: 50, meta: {} },
-      { id: "w", label: "W", shape: "actor", kindKey: "generic", x: 220, y: 0, width: 140, height: 50, meta: {} },
+      {
+        id: "u",
+        label: "U",
+        shape: "actor",
+        kindKey: "user",
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 50,
+        meta: {}
+      },
+      {
+        id: "w",
+        label: "W",
+        shape: "actor",
+        kindKey: "generic",
+        x: 220,
+        y: 0,
+        width: 140,
+        height: 50,
+        meta: {}
+      }
     ],
     lines: [
       { x: 70, y1: 50, y2: 250, owner: "u" },
-      { x: 290, y1: 50, y2: 250, owner: "w" },
+      { x: 290, y1: 50, y2: 250, owner: "w" }
     ],
     edges: [
-      { id: "msg1", from: "u", to: "w", label: "要求", style: "sync", points: [{ x: 70, y: 100 }, { x: 290, y: 100 }] },
-      { id: "msg2", from: "w", to: "u", label: "応答", style: "return", points: [{ x: 290, y: 150 }, { x: 70, y: 150 }] },
-    ],
+      {
+        id: "msg1",
+        from: "u",
+        to: "w",
+        label: "要求",
+        style: "sync",
+        points: [
+          { x: 70, y: 100 },
+          { x: 290, y: 100 }
+        ]
+      },
+      {
+        id: "msg2",
+        from: "w",
+        to: "u",
+        label: "応答",
+        style: "return",
+        points: [
+          { x: 290, y: 150 },
+          { x: 70, y: 150 }
+        ]
+      }
+    ]
   }
 }
 
@@ -139,7 +221,7 @@ test("ER row badges render PK/FK/UQ colors", () => {
   value.nodes[0].rows = [
     { text: "id", meta: { pk: true } },
     { text: "owner_id", meta: { fk: true } },
-    { text: "email", meta: { unique: true } },
+    { text: "email", meta: { unique: true } }
   ]
   const html = renderHtml(value, spec())
   expect(html).toContain('class="badge badge-pk">PK</tspan>')
@@ -171,7 +253,8 @@ test("row text is escaped inside SVG", () => {
 
 test("embedded JSON escapes < to avoid premature script termination", () => {
   const html = renderHtml(layout(), spec())
-  const jsonPart = html.split('id="design-layout">')[1]?.split("</script>")[0] ?? ""
+  const jsonPart =
+    html.split('id="design-layout">')[1]?.split("</script>")[0] ?? ""
   expect(jsonPart).not.toContain("</script")
   expect(jsonPart).toContain("\\u003c")
 })
@@ -183,7 +266,9 @@ test("renderHtml is deterministic for the same input", () => {
 test("zones render as .zone group before nodes", () => {
   const html = renderHtml(architectureLayout(), architectureSpec())
   expect(html).toContain('<g class="zone">')
-  expect(html.indexOf('class="zone"')).toBeLessThan(html.indexOf('data-id="app"'))
+  expect(html.indexOf('class="zone"')).toBeLessThan(
+    html.indexOf('data-id="app"')
+  )
 })
 
 test("sequence lifelines render one per line", () => {
@@ -196,14 +281,18 @@ test("sequence lifelines render one per line", () => {
 test("terminal shape renders as ellipse, box as rounded rect", () => {
   const html = renderHtml(screenFlowLayout(), screenFlowSpec())
   expect(html).toContain("<ellipse")
-  expect(html).toMatch(/<g class="node" data-id="home"[^>]*>[\s\S]*?<rect[^>]*rx="12"/)
+  expect(html).toMatch(
+    /<g class="node" data-id="home"[^>]*>[\s\S]*?<rect[^>]*rx="12"/
+  )
 })
 
 test("edges render as polylines carrying selection data", () => {
   const html = renderHtml(screenFlowLayout(), screenFlowSpec())
   expect(html).toContain('<g class="node" data-id="login"')
   expect(html).toContain('data-from="login" data-to="home"')
-  expect(html).toContain('<polyline points="180,30 280,30" fill="none" marker-end="url(#arrow)"/>')
+  expect(html).toContain(
+    '<polyline points="180,30 280,30" fill="none" marker-end="url(#arrow)"/>'
+  )
 })
 
 test("edge without label renders no edge-label group", () => {
