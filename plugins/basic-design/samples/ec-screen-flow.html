@@ -4,42 +4,47 @@
 <meta charset="utf-8">
 <title>EC サイト画面遷移図(サンプル)</title>
 <style>
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; }
-  main { flex: 1; overflow: hidden; background: #fafafa; }
-  svg { width: 100%; height: 100%; cursor: grab; }
-  svg.panning { cursor: grabbing; }
-  .node-box { fill: #fff; stroke: #333; }
-  .node-header { fill: #e8eef7; stroke: #333; }
-  .node-title { font-weight: bold; font-size: 13px; }
-  .row { font-size: 12px; fill: #222; }
-  .edge line, .edge polyline { stroke: #666; stroke-width: 1.5; fill: none; }
-  .edge-label { font-size: 11px; fill: #444; }
-  .node, .edge { transition: opacity .15s; }
-  svg.has-selection .node:not(.hl), svg.has-selection .edge:not(.hl) { opacity: .25; }
-  svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
-  .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
-  .hl line, .pv line, .hl polyline, .pv polyline { stroke: #1a63c9; stroke-width: 2.5; }
-  .zone rect { fill: #f5f5f5; stroke: #666; }
-  .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
-  .lifeline { stroke: #999; stroke-dasharray: 6 4; }
-  .edge.return line { stroke-dasharray: 6 4; }
-  .node-header-fill { fill: #e8eef7; }
-  #arrow path { fill: #666; }
-  aside { width: 280px; border-left: 1px solid #ddd; padding: 12px; overflow-y: auto; background: #fff; }
-  aside h2 { font-size: 14px; margin: 0 0 8px; }
-  aside table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  aside td { border-bottom: 1px solid #eee; padding: 4px 2px; }
+:root{color-scheme:light;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:system-ui, sans-serif;display:flex;height:100vh;}
+main{flex:1;overflow:hidden;background:#F1F5F9;}
+svg{width:100%;height:100%;cursor:grab;}
+svg.panning{cursor:grabbing;}
+.kind-generic{--fill:#F8FAFC;--stroke:#64748B;--icon:#475569;--text:#0F172A;}.kind-user{--fill:#EFF6FF;--stroke:#3B82F6;--icon:#2563EB;--text:#1E3A8A;}.kind-api{--fill:#ECFEFF;--stroke:#0891B2;--icon:#0E7490;--text:#164E63;}.kind-data{--fill:#F5F3FF;--stroke:#8B5CF6;--icon:#7C3AED;--text:#4C1D95;}.kind-messaging{--fill:#FFF7ED;--stroke:#F97316;--icon:#EA580C;--text:#7C2D12;}.kind-external{--fill:#FDF2F8;--stroke:#DB2777;--icon:#BE185D;--text:#831843;}.kind-screen{--fill:#F0FDF4;--stroke:#22C55E;--icon:#16A34A;--text:#14532D;}.kind-entity{--fill:#FFFBEB;--stroke:#D97706;--icon:#B45309;--text:#78350F;}
+.node-card{fill:var(--fill,#F8FAFC);stroke:var(--stroke,#64748B);stroke-width:1.5;filter:url(#soft-shadow);}
+.node-header{fill:var(--stroke,#64748B);opacity:.12;}
+.node-title{font-weight:600;font-size:13px;fill:var(--text,#0F172A);}
+.node-icon svg{width:24px;height:24px;color:var(--icon,#475569);}
+.row-bg{fill:transparent;}
+.row-text{font-size:12px;fill:#1F2937;}.badge{font-weight:700}.badge-pk{fill:#F59E0B}.badge-fk{fill:#8B5CF6}.badge-unique{fill:#0EA5E9}
+.edge polyline{stroke:#475569;stroke-width:1.5;fill:none;}
+.edge.return polyline{stroke-dasharray:6 4;}
+.edge-label-bg{fill:#FFFFFF;stroke:#E2E8F0;}
+.edge-label text{font-size:11px;fill:#334155;}
+.node,.edge{transition:opacity .15s;}
+svg.has-selection .node:not(.hl),svg.has-selection .edge:not(.hl){opacity:.25;}
+svg.has-hover .node:not(.pv):not(.hl),svg.has-hover .edge:not(.pv):not(.hl){opacity:.5;}
+.hl .node-card,.pv .node-card{stroke-width:2.5;}
+.hl polyline,.pv polyline{stroke:#1a63c9;stroke-width:2.5;}
+.zone-bg{fill:#F8FAFC;stroke:#CBD5E1;}
+.zone-chip-bg{fill:#E2E8F0;}
+.zone-chip-text{font-size:12px;font-weight:600;fill:#334155;}
+.lifeline{stroke:#94A3B8;stroke-dasharray:6 4;}
+aside{width:280px;border-left:1px solid #E2E8F0;padding:16px;overflow-y:auto;background:#fff;}
+aside h2{font-size:14px;margin:0 0 12px;}
+aside table{width:100%;border-collapse:collapse;font-size:12px;}
+aside td{border-bottom:1px solid #F1F5F9;padding:6px 4px;}
 </style>
 </head>
 <body>
 <main>
-<svg id="canvas" viewBox="0 0 1940 140" xmlns="http://www.w3.org/2000/svg">
+<svg id="canvas" viewBox="0 0 2178 309" xmlns="http://www.w3.org/2000/svg">
 <defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
-<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#666"/></marker>
+<filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0F172A" flood-opacity=".12"/></filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker>
+<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#475569"/></marker>
 </defs>
+<g class="viewport" transform="translate(40,40)">
 <g id="zones">
 
 </g>
@@ -47,22 +52,23 @@
 
 </g>
 <g id="edges">
-<g class="edge arrow" data-id="t1" data-from="login" data-to="home"><polyline points="220,70 320,70" fill="none" marker-end="url(#arrow)"/><text x="270" y="64" text-anchor="middle" class="edge-label">ログイン成功</text></g>
-<g class="edge arrow" data-id="t2" data-from="home" data-to="product-list"><polyline points="500,70 600,70" fill="none" marker-end="url(#arrow)"/><text x="550" y="64" text-anchor="middle" class="edge-label">カテゴリ選択</text></g>
-<g class="edge arrow" data-id="t3" data-from="product-list" data-to="product-detail"><polyline points="780,70 880,70" fill="none" marker-end="url(#arrow)"/><text x="830" y="64" text-anchor="middle" class="edge-label">商品選択</text></g>
-<g class="edge arrow" data-id="t4" data-from="product-detail" data-to="cart"><polyline points="1060,70 1160,70" fill="none" marker-end="url(#arrow)"/><text x="1110" y="64" text-anchor="middle" class="edge-label">カートに入れる</text></g>
-<g class="edge arrow" data-id="t5" data-from="cart" data-to="checkout"><polyline points="1340,70 1440,70" fill="none" marker-end="url(#arrow)"/><text x="1390" y="64" text-anchor="middle" class="edge-label">レジへ進む</text></g>
-<g class="edge arrow" data-id="t6" data-from="checkout" data-to="order-complete"><polyline points="1620,70 1720,70" fill="none" marker-end="url(#arrow)"/><text x="1670" y="64" text-anchor="middle" class="edge-label">注文確定</text></g>
-<g class="edge arrow" data-id="t7" data-from="order-complete" data-to="home"><polyline points="1720,70 1720,28 500,28 500,70" fill="none" marker-end="url(#arrow)"/><text x="1110" y="22" text-anchor="middle" class="edge-label">トップへ戻る</text></g>
+<g class="edge arrow" data-id="t1" data-from="login" data-to="home"><polyline points="955,199 1164,199" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="1030.5" y="202" width="58" height="18" rx="5"/><text x="1059.5" y="215" text-anchor="middle">ログイン成功</text></g></g>
+<g class="edge arrow" data-id="t2" data-from="home" data-to="product-list"><polyline points="1344,189 1546,189" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="1416" y="192" width="58" height="18" rx="5"/><text x="1445" y="205" text-anchor="middle">カテゴリ選択</text></g></g>
+<g class="edge arrow" data-id="t3" data-from="product-list" data-to="product-detail"><polyline points="1726,189 1918,189" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="1798" y="192" width="48" height="18" rx="5"/><text x="1822" y="205" text-anchor="middle">商品選択</text></g></g>
+<g class="edge arrow" data-id="t4" data-from="product-detail" data-to="cart"><polyline points="1918,169 1856,169 1856,28 218,28 218,63 208,63" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="1027" y="31" width="65" height="18" rx="5"/><text x="1059.5" y="44" text-anchor="middle">カートに入れる</text></g></g>
+<g class="edge arrow" data-id="t5" data-from="cart" data-to="checkout"><polyline points="208,83 403,83" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="280" y="86" width="51" height="18" rx="5"/><text x="305.5" y="99" text-anchor="middle">レジへ進む</text></g></g>
+<g class="edge arrow" data-id="t6" data-from="checkout" data-to="order-complete"><polyline points="583,83 775,83" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="655" y="86" width="48" height="18" rx="5"/><text x="679" y="99" text-anchor="middle">注文確定</text></g></g>
+<g class="edge arrow" data-id="t7" data-from="order-complete" data-to="home"><polyline points="955,83 1102,83 1102,179 1164,179" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="1030.5" y="86" width="58" height="18" rx="5"/><text x="1059.5" y="99" text-anchor="middle">トップへ戻る</text></g></g>
 </g>
 <g id="nodes">
-<g class="node" data-id="login" transform="translate(40,40)"><ellipse cx="90" cy="30" rx="90" ry="30" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">ログイン</text></g>
-<g class="node" data-id="home" transform="translate(320,40)"><rect width="180" height="60" rx="8" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">ホーム</text></g>
-<g class="node" data-id="product-list" transform="translate(600,40)"><rect width="180" height="60" rx="8" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">商品一覧</text></g>
-<g class="node" data-id="product-detail" transform="translate(880,40)"><rect width="180" height="60" rx="8" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">商品詳細</text></g>
-<g class="node" data-id="cart" transform="translate(1160,40)"><rect width="180" height="60" rx="8" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">カート</text></g>
-<g class="node" data-id="checkout" transform="translate(1440,40)"><rect width="180" height="60" rx="8" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">購入手続き</text></g>
-<g class="node" data-id="order-complete" transform="translate(1720,40)"><ellipse cx="90" cy="30" rx="90" ry="30" class="node-box"/><text x="90" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">注文完了</text></g>
+<g class="node" data-id="login" transform="translate(775,169)"><ellipse class="node-card kind-screen" cx="90" cy="30" rx="90" ry="30"/><text class="node-title" x="90" y="30" text-anchor="middle" dominant-baseline="middle">ログイン</text></g>
+<g class="node" data-id="home" transform="translate(1164,159)"><rect class="node-card kind-screen" width="180" height="60" rx="12"/><g class="node-icon" transform="translate(10,18)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /></svg></g><text class="node-title" x="42" y="30" dominant-baseline="middle">ホーム</text></g>
+<g class="node" data-id="product-list" transform="translate(1546,159)"><rect class="node-card kind-screen" width="180" height="60" rx="12"/><g class="node-icon" transform="translate(10,18)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /></svg></g><text class="node-title" x="42" y="30" dominant-baseline="middle">商品一覧</text></g>
+<g class="node" data-id="product-detail" transform="translate(1918,149)"><rect class="node-card kind-screen" width="180" height="60" rx="12"/><g class="node-icon" transform="translate(10,18)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /></svg></g><text class="node-title" x="42" y="30" dominant-baseline="middle">商品詳細</text></g>
+<g class="node" data-id="cart" transform="translate(28,43)"><rect class="node-card kind-screen" width="180" height="60" rx="12"/><g class="node-icon" transform="translate(10,18)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /></svg></g><text class="node-title" x="42" y="30" dominant-baseline="middle">カート</text></g>
+<g class="node" data-id="checkout" transform="translate(403,53)"><rect class="node-card kind-screen" width="180" height="60" rx="12"/><g class="node-icon" transform="translate(10,18)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18" /></svg></g><text class="node-title" x="42" y="30" dominant-baseline="middle">購入手続き</text></g>
+<g class="node" data-id="order-complete" transform="translate(775,53)"><ellipse class="node-card kind-screen" cx="90" cy="30" rx="90" ry="30"/><text class="node-title" x="90" y="30" text-anchor="middle" dominant-baseline="middle">注文完了</text></g>
+</g>
 </g>
 </svg>
 </main>
@@ -71,148 +77,152 @@
 <div id="panel-body"></div>
 </aside>
 <script type="application/json" id="design-spec">{"type":"screen-flow","title":"EC サイト画面遷移図(サンプル)","screens":[{"id":"login","label":"ログイン","group":"認証","kind":"start"},{"id":"home","label":"ホーム"},{"id":"product-list","label":"商品一覧"},{"id":"product-detail","label":"商品詳細"},{"id":"cart","label":"カート"},{"id":"checkout","label":"購入手続き"},{"id":"order-complete","label":"注文完了","kind":"end"}],"transitions":[{"from":"login","to":"home","trigger":"ログイン成功"},{"from":"home","to":"product-list","trigger":"カテゴリ選択"},{"from":"product-list","to":"product-detail","trigger":"商品選択"},{"from":"product-detail","to":"cart","trigger":"カートに入れる"},{"from":"cart","to":"checkout","trigger":"レジへ進む"},{"from":"checkout","to":"order-complete","trigger":"注文確定"},{"from":"order-complete","to":"home","trigger":"トップへ戻る"}]}</script>
-<script type="application/json" id="design-layout">{"type":"screen-flow","title":"EC サイト画面遷移図(サンプル)","nodes":[{"id":"login","label":"ログイン","shape":"terminal","x":0,"y":0,"width":180,"height":60,"meta":{"group":"認証","kind":"start"}},{"id":"home","label":"ホーム","shape":"box","x":280,"y":0,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"product-list","label":"商品一覧","shape":"box","x":560,"y":0,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"product-detail","label":"商品詳細","shape":"box","x":840,"y":0,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"cart","label":"カート","shape":"box","x":1120,"y":0,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"checkout","label":"購入手続き","shape":"box","x":1400,"y":0,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"order-complete","label":"注文完了","shape":"terminal","x":1680,"y":0,"width":180,"height":60,"meta":{"group":"","kind":"end"}}],"edges":[{"id":"t1","from":"login","to":"home","label":"ログイン成功","style":"arrow"},{"id":"t2","from":"home","to":"product-list","label":"カテゴリ選択","style":"arrow"},{"id":"t3","from":"product-list","to":"product-detail","label":"商品選択","style":"arrow"},{"id":"t4","from":"product-detail","to":"cart","label":"カートに入れる","style":"arrow"},{"id":"t5","from":"cart","to":"checkout","label":"レジへ進む","style":"arrow"},{"id":"t6","from":"checkout","to":"order-complete","label":"注文確定","style":"arrow"},{"id":"t7","from":"order-complete","to":"home","label":"トップへ戻る","style":"arrow"}]}</script>
+<script type="application/json" id="design-layout">{"type":"screen-flow","title":"EC サイト画面遷移図(サンプル)","nodes":[{"id":"login","label":"ログイン","shape":"terminal","kindKey":"screen","x":775,"y":169,"width":180,"height":60,"meta":{"group":"認証","kind":"start"}},{"id":"home","label":"ホーム","shape":"box","kindKey":"screen","x":1164,"y":159,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"product-list","label":"商品一覧","shape":"box","kindKey":"screen","x":1546,"y":159,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"product-detail","label":"商品詳細","shape":"box","kindKey":"screen","x":1918,"y":149,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"cart","label":"カート","shape":"box","kindKey":"screen","x":28,"y":43,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"checkout","label":"購入手続き","shape":"box","kindKey":"screen","x":403,"y":53,"width":180,"height":60,"meta":{"group":"","kind":"screen"}},{"id":"order-complete","label":"注文完了","shape":"terminal","kindKey":"screen","x":775,"y":53,"width":180,"height":60,"meta":{"group":"","kind":"end"}}],"edges":[{"id":"t1","from":"login","to":"home","label":"ログイン成功","style":"arrow","points":[{"x":955,"y":199},{"x":1164,"y":199}],"labelBox":{"x":1030.5,"y":202,"width":58,"height":18}},{"id":"t2","from":"home","to":"product-list","label":"カテゴリ選択","style":"arrow","points":[{"x":1344,"y":189},{"x":1546,"y":189}],"labelBox":{"x":1416,"y":192,"width":58,"height":18}},{"id":"t3","from":"product-list","to":"product-detail","label":"商品選択","style":"arrow","points":[{"x":1726,"y":189},{"x":1918,"y":189}],"labelBox":{"x":1798,"y":192,"width":48,"height":18}},{"id":"t4","from":"product-detail","to":"cart","label":"カートに入れる","style":"arrow","points":[{"x":1918,"y":169},{"x":1856,"y":169},{"x":1856,"y":28},{"x":218,"y":28},{"x":218,"y":63},{"x":208,"y":63}],"labelBox":{"x":1027,"y":31,"width":65,"height":18}},{"id":"t5","from":"cart","to":"checkout","label":"レジへ進む","style":"arrow","points":[{"x":208,"y":83},{"x":403,"y":83}],"labelBox":{"x":280,"y":86,"width":51,"height":18}},{"id":"t6","from":"checkout","to":"order-complete","label":"注文確定","style":"arrow","points":[{"x":583,"y":83},{"x":775,"y":83}],"labelBox":{"x":655,"y":86,"width":48,"height":18}},{"id":"t7","from":"order-complete","to":"home","label":"トップへ戻る","style":"arrow","points":[{"x":955,"y":83},{"x":1102,"y":83},{"x":1102,"y":179},{"x":1164,"y":179}],"labelBox":{"x":1030.5,"y":86,"width":58,"height":18}}]}</script>
 <script>
 (() => {
-  const svg = document.getElementById('canvas');
-  const layout = JSON.parse(document.getElementById('design-layout').textContent);
-  const panel = document.getElementById('panel');
-  const panelTitle = document.getElementById('panel-title');
-  const panelBody = document.getElementById('panel-body');
-  const vb = svg.viewBox.baseVal;
+  const svg = document.getElementById("canvas")
+  const layout = JSON.parse(document.getElementById("design-layout").textContent)
+  const panel = document.getElementById("panel")
+  const panelTitle = document.getElementById("panel-title")
+  const panelBody = document.getElementById("panel-body")
+  const vb = svg.viewBox.baseVal
 
-  // --- ズーム(ポインタ位置を中心に) ---
-  svg.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const scale = e.deltaY < 0 ? 0.9 : 1.1;
-    const rect = svg.getBoundingClientRect();
-    const px = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width;
-    const py = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height;
-    vb.x = px - (px - vb.x) * scale;
-    vb.y = py - (py - vb.y) * scale;
-    vb.width *= scale;
-    vb.height *= scale;
-  }, { passive: false });
+  function onWheel(e) {
+    e.preventDefault()
+    const scale = e.deltaY < 0 ? 0.9 : 1.1
+    const rect = svg.getBoundingClientRect()
+    const px = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width
+    const py = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height
+    vb.x = px - (px - vb.x) * scale
+    vb.y = py - (py - vb.y) * scale
+    vb.width *= scale
+    vb.height *= scale
+  }
 
-  // --- パン(ドラッグ) ---
-  let drag = null;
-  svg.addEventListener('pointerdown', (e) => {
-    drag = { cx: e.clientX, cy: e.clientY, vx: vb.x, vy: vb.y, moved: false };
-    svg.classList.add('panning');
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const rect = svg.getBoundingClientRect();
-    const dx = ((e.clientX - drag.cx) / rect.width) * vb.width;
-    const dy = ((e.clientY - drag.cy) / rect.height) * vb.height;
-    if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) drag.moved = true;
-    vb.x = drag.vx - dx;
-    vb.y = drag.vy - dy;
-  });
-  window.addEventListener('pointerup', () => {
-    svg.classList.remove('panning');
-    setTimeout(() => { drag = null; }, 0);
-  });
+  let drag = null
+  function onPointerDown(e) {
+    drag = { cx: e.clientX, cy: e.clientY, vx: vb.x, vy: vb.y, moved: false }
+    svg.classList.add("panning")
+  }
+  function onPointerMove(e) {
+    if (!drag) return
+    const rect = svg.getBoundingClientRect()
+    const dx = ((e.clientX - drag.cx) / rect.width) * vb.width
+    const dy = ((e.clientY - drag.cy) / rect.height) * vb.height
+    if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) drag.moved = true
+    vb.x = drag.vx - dx
+    vb.y = drag.vy - dy
+  }
+  function onPointerUp() {
+    svg.classList.remove("panning")
+    setTimeout(() => { drag = null }, 0)
+  }
 
-  // --- 接続集合の計算 ---
-  function connected(g) {
-    const set = new Set([g]);
-    if (g.classList.contains('node')) {
-      const id = g.dataset.id;
-      svg.querySelectorAll('.edge').forEach((eg) => {
-        if (eg.dataset.from === id || eg.dataset.to === id) {
-          set.add(eg);
-          const otherId = eg.dataset.from === id ? eg.dataset.to : eg.dataset.from;
-          const other = svg.querySelector('.node[data-id="' + CSS.escape(otherId) + '"]');
-          if (other) set.add(other);
-        }
-      });
-    } else {
-      for (const key of ['from', 'to']) {
-        const n = svg.querySelector('.node[data-id="' + CSS.escape(g.dataset[key]) + '"]');
-        if (n) set.add(n);
-      }
+  svg.addEventListener("wheel", onWheel, { passive: false })
+  svg.addEventListener("pointerdown", onPointerDown)
+  svg.addEventListener("pointermove", onPointerMove)
+  svg.addEventListener("pointerup", onPointerUp)
+  svg.addEventListener("pointerleave", onPointerUp)
+
+  function connected(id) {
+    return layout.edges.filter(edge => edge.from === id || edge.to === id)
+  }
+
+  function neighborIds(id) {
+    const edges = connected(id)
+    return [id, ...edges.flatMap(edge => [edge.id, edge.from === id ? edge.to : edge.from])]
+  }
+
+  function markAll(ids, cls) {
+    for (const id of ids) {
+      const el = svg.querySelector('[data-id="' + CSS.escape(id) + '"]')
+      if (el) el.classList.add(cls)
     }
-    return set;
   }
 
-  // --- 選択(クリック) ---
+  function relatedIds(id) {
+    const node = layout.nodes.find(n => n.id === id)
+    if (node) return neighborIds(id)
+    const edge = layout.edges.find(ed => ed.id === id)
+    return edge ? [edge.id, edge.from, edge.to] : []
+  }
+
   function clearSelection() {
-    svg.classList.remove('has-selection');
-    svg.querySelectorAll('.hl').forEach((el) => el.classList.remove('hl'));
-    panel.hidden = true;
+    svg.classList.remove("has-selection")
+    svg.querySelectorAll(".hl").forEach(el => el.classList.remove("hl"))
+    panel.hidden = true
   }
-  svg.addEventListener('click', (e) => {
-    if (drag && drag.moved) return; // パン後のクリックは無視
-    const g = e.target.closest('.node, .edge');
-    clearSelection();
-    if (!g) return;
-    svg.classList.add('has-selection');
-    connected(g).forEach((el) => el.classList.add('hl'));
-    showPanel(g);
-  });
 
-  // --- ホバー(プレビュー) ---
-  svg.addEventListener('pointerover', (e) => {
-    const g = e.target.closest('.node, .edge');
-    if (!g) return;
-    svg.classList.add('has-hover');
-    connected(g).forEach((el) => el.classList.add('pv'));
-  });
-  svg.addEventListener('pointerout', () => {
-    svg.classList.remove('has-hover');
-    svg.querySelectorAll('.pv').forEach((el) => el.classList.remove('pv'));
-  });
-
-  // --- 詳細パネル(レイアウト JSON から図種非依存に描画) ---
-  function showPanel(g) {
-    panel.hidden = false;
-    panelBody.textContent = '';
-    if (g.classList.contains('node')) {
-      const node = layout.nodes.find((n) => n.id === g.dataset.id);
-      panelTitle.textContent = node.label;
-      const table = document.createElement('table');
+  function showPanel(id) {
+    const node = layout.nodes.find(n => n.id === id)
+    const edge = node ? undefined : layout.edges.find(ed => ed.id === id)
+    if (!node && !edge) return
+    panel.hidden = false
+    panelBody.textContent = ""
+    const table = document.createElement("table")
+    if (node) {
+      panelTitle.textContent = node.label
       if (node.rows) {
         for (const row of node.rows) {
-          const tr = document.createElement('tr');
-          const td = document.createElement('td');
-          td.textContent = row.text;
-          tr.appendChild(td);
-          table.appendChild(tr);
+          const tr = document.createElement("tr")
+          const td = document.createElement("td")
+          td.textContent = row.text
+          tr.appendChild(td)
+          table.appendChild(tr)
         }
       } else {
         for (const [k, v] of Object.entries(node.meta ?? {})) {
-          if (v === '' || v === undefined) continue;
-          const tr = document.createElement('tr');
-          const td1 = document.createElement('td');
-          const td2 = document.createElement('td');
-          td1.textContent = k;
-          td2.textContent = String(v);
-          tr.append(td1, td2);
-          table.appendChild(tr);
+          if (v === "" || v === undefined) continue
+          const tr = document.createElement("tr")
+          const td1 = document.createElement("td")
+          const td2 = document.createElement("td")
+          td1.textContent = k
+          td2.textContent = String(v)
+          tr.append(td1, td2)
+          table.appendChild(tr)
         }
       }
-      panelBody.appendChild(table);
-    } else {
-      const edge = layout.edges.find((ed) => ed.id === g.dataset.id);
-      panelTitle.textContent = edge.label || edge.id;
-      const dl = document.createElement('table');
-      const fields = [['from', edge.from], ['to', edge.to]];
-      if (edge.cardinality) fields.push(['cardinality', edge.cardinality]);
-      if (edge.style) fields.push(['style', edge.style]);
+    } else if (edge) {
+      panelTitle.textContent = edge.label || edge.id
+      const fields = [["from", edge.from], ["to", edge.to]]
+      if (edge.cardinality) fields.push(["cardinality", edge.cardinality])
+      if (edge.style) fields.push(["style", edge.style])
       for (const [k, v] of fields) {
-        const tr = document.createElement('tr');
-        const td1 = document.createElement('td');
-        const td2 = document.createElement('td');
-        td1.textContent = k;
-        td2.textContent = v || '';
-        tr.append(td1, td2);
-        dl.appendChild(tr);
+        const tr = document.createElement("tr")
+        const td1 = document.createElement("td")
+        const td2 = document.createElement("td")
+        td1.textContent = k
+        td2.textContent = v || ""
+        tr.append(td1, td2)
+        table.appendChild(tr)
       }
-      panelBody.appendChild(dl);
     }
+    panelBody.appendChild(table)
   }
-})();
+
+  function select(id) {
+    clearSelection()
+    svg.classList.add("has-selection")
+    markAll(relatedIds(id), "hl")
+    showPanel(id)
+  }
+
+  function preview(id) {
+    svg.classList.add("has-hover")
+    markAll(relatedIds(id), "pv")
+  }
+
+  function clearPreview() {
+    svg.classList.remove("has-hover")
+    svg.querySelectorAll(".pv").forEach(el => el.classList.remove("pv"))
+  }
+
+  for (const item of document.querySelectorAll("[data-id]")) {
+    item.addEventListener("click", () => select(item.dataset.id))
+    item.addEventListener("pointerenter", () => preview(item.dataset.id))
+    item.addEventListener("pointerleave", clearPreview)
+  }
+})()
 </script>
 </body>
 </html>

@@ -4,62 +4,68 @@
 <meta charset="utf-8">
 <title>Web システム構成図(サンプル)</title>
 <style>
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; }
-  main { flex: 1; overflow: hidden; background: #fafafa; }
-  svg { width: 100%; height: 100%; cursor: grab; }
-  svg.panning { cursor: grabbing; }
-  .node-box { fill: #fff; stroke: #333; }
-  .node-header { fill: #e8eef7; stroke: #333; }
-  .node-title { font-weight: bold; font-size: 13px; }
-  .row { font-size: 12px; fill: #222; }
-  .edge line, .edge polyline { stroke: #666; stroke-width: 1.5; fill: none; }
-  .edge-label { font-size: 11px; fill: #444; }
-  .node, .edge { transition: opacity .15s; }
-  svg.has-selection .node:not(.hl), svg.has-selection .edge:not(.hl) { opacity: .25; }
-  svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
-  .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
-  .hl line, .pv line, .hl polyline, .pv polyline { stroke: #1a63c9; stroke-width: 2.5; }
-  .zone rect { fill: #f5f5f5; stroke: #666; }
-  .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
-  .lifeline { stroke: #999; stroke-dasharray: 6 4; }
-  .edge.return line { stroke-dasharray: 6 4; }
-  .node-header-fill { fill: #e8eef7; }
-  #arrow path { fill: #666; }
-  aside { width: 280px; border-left: 1px solid #ddd; padding: 12px; overflow-y: auto; background: #fff; }
-  aside h2 { font-size: 14px; margin: 0 0 8px; }
-  aside table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  aside td { border-bottom: 1px solid #eee; padding: 4px 2px; }
+:root{color-scheme:light;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:system-ui, sans-serif;display:flex;height:100vh;}
+main{flex:1;overflow:hidden;background:#F1F5F9;}
+svg{width:100%;height:100%;cursor:grab;}
+svg.panning{cursor:grabbing;}
+.kind-generic{--fill:#F8FAFC;--stroke:#64748B;--icon:#475569;--text:#0F172A;}.kind-user{--fill:#EFF6FF;--stroke:#3B82F6;--icon:#2563EB;--text:#1E3A8A;}.kind-api{--fill:#ECFEFF;--stroke:#0891B2;--icon:#0E7490;--text:#164E63;}.kind-data{--fill:#F5F3FF;--stroke:#8B5CF6;--icon:#7C3AED;--text:#4C1D95;}.kind-messaging{--fill:#FFF7ED;--stroke:#F97316;--icon:#EA580C;--text:#7C2D12;}.kind-external{--fill:#FDF2F8;--stroke:#DB2777;--icon:#BE185D;--text:#831843;}.kind-screen{--fill:#F0FDF4;--stroke:#22C55E;--icon:#16A34A;--text:#14532D;}.kind-entity{--fill:#FFFBEB;--stroke:#D97706;--icon:#B45309;--text:#78350F;}
+.node-card{fill:var(--fill,#F8FAFC);stroke:var(--stroke,#64748B);stroke-width:1.5;filter:url(#soft-shadow);}
+.node-header{fill:var(--stroke,#64748B);opacity:.12;}
+.node-title{font-weight:600;font-size:13px;fill:var(--text,#0F172A);}
+.node-icon svg{width:24px;height:24px;color:var(--icon,#475569);}
+.row-bg{fill:transparent;}
+.row-text{font-size:12px;fill:#1F2937;}.badge{font-weight:700}.badge-pk{fill:#F59E0B}.badge-fk{fill:#8B5CF6}.badge-unique{fill:#0EA5E9}
+.edge polyline{stroke:#475569;stroke-width:1.5;fill:none;}
+.edge.return polyline{stroke-dasharray:6 4;}
+.edge-label-bg{fill:#FFFFFF;stroke:#E2E8F0;}
+.edge-label text{font-size:11px;fill:#334155;}
+.node,.edge{transition:opacity .15s;}
+svg.has-selection .node:not(.hl),svg.has-selection .edge:not(.hl){opacity:.25;}
+svg.has-hover .node:not(.pv):not(.hl),svg.has-hover .edge:not(.pv):not(.hl){opacity:.5;}
+.hl .node-card,.pv .node-card{stroke-width:2.5;}
+.hl polyline,.pv polyline{stroke:#1a63c9;stroke-width:2.5;}
+.zone-bg{fill:#F8FAFC;stroke:#CBD5E1;}
+.zone-chip-bg{fill:#E2E8F0;}
+.zone-chip-text{font-size:12px;font-weight:600;fill:#334155;}
+.lifeline{stroke:#94A3B8;stroke-dasharray:6 4;}
+aside{width:280px;border-left:1px solid #E2E8F0;padding:16px;overflow-y:auto;background:#fff;}
+aside h2{font-size:14px;margin:0 0 12px;}
+aside table{width:100%;border-collapse:collapse;font-size:12px;}
+aside td{border-bottom:1px solid #F1F5F9;padding:6px 4px;}
 </style>
 </head>
 <body>
 <main>
-<svg id="canvas" viewBox="0 0 820 310" xmlns="http://www.w3.org/2000/svg">
+<svg id="canvas" viewBox="0 0 540 1185" xmlns="http://www.w3.org/2000/svg">
 <defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
-<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#666"/></marker>
+<filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0F172A" flood-opacity=".12"/></filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker>
+<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#475569"/></marker>
 </defs>
+<g class="viewport" transform="translate(40,40)">
 <g id="zones">
-<g class="zone"><rect x="40" y="40" width="360" height="230"/><text x="48" y="58" class="zone-label">AWS</text></g>
+<g class="zone"><rect class="zone-bg" x="28" y="267" width="216" height="838" rx="12"/><g class="zone-chip" transform="translate(40,279)"><rect class="zone-chip-bg" width="48" height="22" rx="11"/><text class="zone-chip-text" x="24" y="15" text-anchor="middle">AWS</text></g></g>
 </g>
 <g id="lines">
 
 </g>
 <g id="edges">
-<g class="edge arrow" data-id="e1" data-from="browser" data-to="cdn"><polyline points="600,100 640,100" fill="none" marker-end="url(#arrow)"/><text x="620" y="94" text-anchor="middle" class="edge-label">HTTPS</text></g>
-<g class="edge arrow" data-id="e2" data-from="browser" data-to="alb"><polyline points="460,100 460,58 200,58 200,120" fill="none" marker-end="url(#arrow)"/><text x="330" y="52" text-anchor="middle" class="edge-label">HTTPS</text></g>
-<g class="edge arrow" data-id="e3" data-from="alb" data-to="web"><polyline points="200,120 240,120" fill="none" marker-end="url(#arrow)"/><text x="220" y="114" text-anchor="middle" class="edge-label">HTTP</text></g>
-<g class="edge arrow" data-id="e4" data-from="web" data-to="app"><polyline points="240,120 220,120 220,220 200,220" fill="none" marker-end="url(#arrow)"/><text x="220" y="164" text-anchor="middle" class="edge-label">HTTP</text></g>
-<g class="edge arrow" data-id="e5" data-from="app" data-to="db"><polyline points="200,220 240,220" fill="none" marker-end="url(#arrow)"/><text x="220" y="214" text-anchor="middle" class="edge-label">SQL</text></g>
+<g class="edge arrow" data-id="e1" data-from="browser" data-to="cdn"><polyline points="189.333,96 189.333,106 380,106 380,267" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="383" y="168" width="51" height="18" rx="5"/><text x="408.5" y="181" text-anchor="middle">HTTPS</text></g></g>
+<g class="edge arrow" data-id="e2" data-from="browser" data-to="alb"><polyline points="136,96 136,319" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="83" y="168" width="51" height="18" rx="5"/><text x="108.5" y="181" text-anchor="middle">HTTPS</text></g></g>
+<g class="edge arrow" data-id="e3" data-from="alb" data-to="web"><polyline points="136,387 136,549" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="86" y="459" width="48" height="18" rx="5"/><text x="110" y="472" text-anchor="middle">HTTP</text></g></g>
+<g class="edge arrow" data-id="e4" data-from="web" data-to="app"><polyline points="136,617 136,779" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="86" y="689" width="48" height="18" rx="5"/><text x="110" y="702" text-anchor="middle">HTTP</text></g></g>
+<g class="edge arrow" data-id="e5" data-from="app" data-to="db"><polyline points="136,847 136,1009" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="86" y="919" width="48" height="18" rx="5"/><text x="110" y="932" text-anchor="middle">SQL</text></g></g>
 </g>
 <g id="nodes">
-<g class="node" data-id="alb" transform="translate(60,90)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">ALB</text></g>
-<g class="node" data-id="web" transform="translate(240,90)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">Web Server</text></g>
-<g class="node" data-id="app" transform="translate(60,190)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">App Server</text></g>
-<g class="node" data-id="db" transform="translate(240,190)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">PostgreSQL</text></g>
-<g class="node" data-id="browser" transform="translate(460,70)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">ブラウザ</text></g>
-<g class="node" data-id="cdn" transform="translate(640,70)"><rect width="140" height="60" rx="8" class="node-box"/><text x="70" y="30" text-anchor="middle" dominant-baseline="middle" class="node-title">CDN</text></g>
+<g class="node" data-id="alb" transform="translate(56,319)"><rect class="node-card kind-generic" width="160" height="68" rx="12"/><g class="node-icon" transform="translate(10,22)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="34" dominant-baseline="middle">ALB</text></g>
+<g class="node" data-id="web" transform="translate(56,549)"><rect class="node-card kind-generic" width="160" height="68" rx="12"/><g class="node-icon" transform="translate(10,22)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="34" dominant-baseline="middle">Web Server</text></g>
+<g class="node" data-id="app" transform="translate(56,779)"><rect class="node-card kind-generic" width="160" height="68" rx="12"/><g class="node-icon" transform="translate(10,22)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="34" dominant-baseline="middle">App Server</text></g>
+<g class="node" data-id="db" transform="translate(56,1009)"><rect class="node-card kind-data" width="160" height="68" rx="12"/><g class="node-icon" transform="translate(10,22)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></svg></g><text class="node-title" x="42" y="34" dominant-baseline="middle">PostgreSQL</text></g>
+<g class="node" data-id="browser" transform="translate(82.66666666666666,28)"><rect class="node-card kind-generic" width="160" height="68" rx="12"/><g class="node-icon" transform="translate(10,22)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="34" dominant-baseline="middle">ブラウザ</text></g>
+<g class="node" data-id="cdn" transform="translate(300,267)"><rect class="node-card kind-generic" width="160" height="68" rx="12"/><g class="node-icon" transform="translate(10,22)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="34" dominant-baseline="middle">CDN</text></g>
+</g>
 </g>
 </svg>
 </main>
@@ -68,148 +74,152 @@
 <div id="panel-body"></div>
 </aside>
 <script type="application/json" id="design-spec">{"type":"architecture","title":"Web システム構成図(サンプル)","zones":[{"id":"aws","label":"AWS","children":["alb","web","app","db"]}],"nodes":[{"id":"browser","label":"ブラウザ"},{"id":"cdn","label":"CDN"},{"id":"alb","label":"ALB"},{"id":"web","label":"Web Server","icon":"server"},{"id":"app","label":"App Server","icon":"server"},{"id":"db","label":"PostgreSQL","icon":"database"}],"edges":[{"from":"browser","to":"cdn","label":"HTTPS"},{"from":"browser","to":"alb","label":"HTTPS"},{"from":"alb","to":"web","label":"HTTP"},{"from":"web","to":"app","label":"HTTP"},{"from":"app","to":"db","label":"SQL"}]}</script>
-<script type="application/json" id="design-layout">{"type":"architecture","title":"Web システム構成図(サンプル)","zones":[{"id":"aws","label":"AWS","x":0,"y":0,"width":360,"height":230}],"nodes":[{"id":"alb","label":"ALB","shape":"box","x":20,"y":50,"width":140,"height":60,"meta":{"icon":"","zone":"aws"}},{"id":"web","label":"Web Server","shape":"box","x":200,"y":50,"width":140,"height":60,"meta":{"icon":"server","zone":"aws"}},{"id":"app","label":"App Server","shape":"box","x":20,"y":150,"width":140,"height":60,"meta":{"icon":"server","zone":"aws"}},{"id":"db","label":"PostgreSQL","shape":"box","x":200,"y":150,"width":140,"height":60,"meta":{"icon":"database","zone":"aws"}},{"id":"browser","label":"ブラウザ","shape":"box","x":420,"y":30,"width":140,"height":60,"meta":{"icon":"","zone":""}},{"id":"cdn","label":"CDN","shape":"box","x":600,"y":30,"width":140,"height":60,"meta":{"icon":"","zone":""}}],"edges":[{"id":"e1","from":"browser","to":"cdn","label":"HTTPS","style":"arrow"},{"id":"e2","from":"browser","to":"alb","label":"HTTPS","style":"arrow"},{"id":"e3","from":"alb","to":"web","label":"HTTP","style":"arrow"},{"id":"e4","from":"web","to":"app","label":"HTTP","style":"arrow"},{"id":"e5","from":"app","to":"db","label":"SQL","style":"arrow"}]}</script>
+<script type="application/json" id="design-layout">{"type":"architecture","title":"Web システム構成図(サンプル)","zones":[{"id":"aws","label":"AWS","x":28,"y":267,"width":216,"height":838}],"nodes":[{"id":"alb","label":"ALB","shape":"box","kindKey":"generic","x":56,"y":319,"width":160,"height":68,"meta":{"icon":"","zone":"aws"}},{"id":"web","label":"Web Server","shape":"box","kindKey":"generic","x":56,"y":549,"width":160,"height":68,"meta":{"icon":"server","zone":"aws"}},{"id":"app","label":"App Server","shape":"box","kindKey":"generic","x":56,"y":779,"width":160,"height":68,"meta":{"icon":"server","zone":"aws"}},{"id":"db","label":"PostgreSQL","shape":"box","kindKey":"data","x":56,"y":1009,"width":160,"height":68,"meta":{"icon":"database","zone":"aws"}},{"id":"browser","label":"ブラウザ","shape":"box","kindKey":"generic","x":82.66666666666666,"y":28,"width":160,"height":68,"meta":{"icon":"","zone":""}},{"id":"cdn","label":"CDN","shape":"box","kindKey":"generic","x":300,"y":267,"width":160,"height":68,"meta":{"icon":"","zone":""}}],"edges":[{"id":"e1","from":"browser","to":"cdn","label":"HTTPS","style":"arrow","points":[{"x":189.333,"y":96},{"x":189.333,"y":106},{"x":380,"y":106},{"x":380,"y":267}],"labelBox":{"x":383,"y":168,"width":51,"height":18}},{"id":"e2","from":"browser","to":"alb","label":"HTTPS","style":"arrow","points":[{"x":136,"y":96},{"x":136,"y":319}],"labelBox":{"x":83,"y":168,"width":51,"height":18}},{"id":"e3","from":"alb","to":"web","label":"HTTP","style":"arrow","points":[{"x":136,"y":387},{"x":136,"y":549}],"labelBox":{"x":86,"y":459,"width":48,"height":18}},{"id":"e4","from":"web","to":"app","label":"HTTP","style":"arrow","points":[{"x":136,"y":617},{"x":136,"y":779}],"labelBox":{"x":86,"y":689,"width":48,"height":18}},{"id":"e5","from":"app","to":"db","label":"SQL","style":"arrow","points":[{"x":136,"y":847},{"x":136,"y":1009}],"labelBox":{"x":86,"y":919,"width":48,"height":18}}]}</script>
 <script>
 (() => {
-  const svg = document.getElementById('canvas');
-  const layout = JSON.parse(document.getElementById('design-layout').textContent);
-  const panel = document.getElementById('panel');
-  const panelTitle = document.getElementById('panel-title');
-  const panelBody = document.getElementById('panel-body');
-  const vb = svg.viewBox.baseVal;
+  const svg = document.getElementById("canvas")
+  const layout = JSON.parse(document.getElementById("design-layout").textContent)
+  const panel = document.getElementById("panel")
+  const panelTitle = document.getElementById("panel-title")
+  const panelBody = document.getElementById("panel-body")
+  const vb = svg.viewBox.baseVal
 
-  // --- ズーム(ポインタ位置を中心に) ---
-  svg.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const scale = e.deltaY < 0 ? 0.9 : 1.1;
-    const rect = svg.getBoundingClientRect();
-    const px = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width;
-    const py = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height;
-    vb.x = px - (px - vb.x) * scale;
-    vb.y = py - (py - vb.y) * scale;
-    vb.width *= scale;
-    vb.height *= scale;
-  }, { passive: false });
+  function onWheel(e) {
+    e.preventDefault()
+    const scale = e.deltaY < 0 ? 0.9 : 1.1
+    const rect = svg.getBoundingClientRect()
+    const px = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width
+    const py = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height
+    vb.x = px - (px - vb.x) * scale
+    vb.y = py - (py - vb.y) * scale
+    vb.width *= scale
+    vb.height *= scale
+  }
 
-  // --- パン(ドラッグ) ---
-  let drag = null;
-  svg.addEventListener('pointerdown', (e) => {
-    drag = { cx: e.clientX, cy: e.clientY, vx: vb.x, vy: vb.y, moved: false };
-    svg.classList.add('panning');
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const rect = svg.getBoundingClientRect();
-    const dx = ((e.clientX - drag.cx) / rect.width) * vb.width;
-    const dy = ((e.clientY - drag.cy) / rect.height) * vb.height;
-    if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) drag.moved = true;
-    vb.x = drag.vx - dx;
-    vb.y = drag.vy - dy;
-  });
-  window.addEventListener('pointerup', () => {
-    svg.classList.remove('panning');
-    setTimeout(() => { drag = null; }, 0);
-  });
+  let drag = null
+  function onPointerDown(e) {
+    drag = { cx: e.clientX, cy: e.clientY, vx: vb.x, vy: vb.y, moved: false }
+    svg.classList.add("panning")
+  }
+  function onPointerMove(e) {
+    if (!drag) return
+    const rect = svg.getBoundingClientRect()
+    const dx = ((e.clientX - drag.cx) / rect.width) * vb.width
+    const dy = ((e.clientY - drag.cy) / rect.height) * vb.height
+    if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) drag.moved = true
+    vb.x = drag.vx - dx
+    vb.y = drag.vy - dy
+  }
+  function onPointerUp() {
+    svg.classList.remove("panning")
+    setTimeout(() => { drag = null }, 0)
+  }
 
-  // --- 接続集合の計算 ---
-  function connected(g) {
-    const set = new Set([g]);
-    if (g.classList.contains('node')) {
-      const id = g.dataset.id;
-      svg.querySelectorAll('.edge').forEach((eg) => {
-        if (eg.dataset.from === id || eg.dataset.to === id) {
-          set.add(eg);
-          const otherId = eg.dataset.from === id ? eg.dataset.to : eg.dataset.from;
-          const other = svg.querySelector('.node[data-id="' + CSS.escape(otherId) + '"]');
-          if (other) set.add(other);
-        }
-      });
-    } else {
-      for (const key of ['from', 'to']) {
-        const n = svg.querySelector('.node[data-id="' + CSS.escape(g.dataset[key]) + '"]');
-        if (n) set.add(n);
-      }
+  svg.addEventListener("wheel", onWheel, { passive: false })
+  svg.addEventListener("pointerdown", onPointerDown)
+  svg.addEventListener("pointermove", onPointerMove)
+  svg.addEventListener("pointerup", onPointerUp)
+  svg.addEventListener("pointerleave", onPointerUp)
+
+  function connected(id) {
+    return layout.edges.filter(edge => edge.from === id || edge.to === id)
+  }
+
+  function neighborIds(id) {
+    const edges = connected(id)
+    return [id, ...edges.flatMap(edge => [edge.id, edge.from === id ? edge.to : edge.from])]
+  }
+
+  function markAll(ids, cls) {
+    for (const id of ids) {
+      const el = svg.querySelector('[data-id="' + CSS.escape(id) + '"]')
+      if (el) el.classList.add(cls)
     }
-    return set;
   }
 
-  // --- 選択(クリック) ---
+  function relatedIds(id) {
+    const node = layout.nodes.find(n => n.id === id)
+    if (node) return neighborIds(id)
+    const edge = layout.edges.find(ed => ed.id === id)
+    return edge ? [edge.id, edge.from, edge.to] : []
+  }
+
   function clearSelection() {
-    svg.classList.remove('has-selection');
-    svg.querySelectorAll('.hl').forEach((el) => el.classList.remove('hl'));
-    panel.hidden = true;
+    svg.classList.remove("has-selection")
+    svg.querySelectorAll(".hl").forEach(el => el.classList.remove("hl"))
+    panel.hidden = true
   }
-  svg.addEventListener('click', (e) => {
-    if (drag && drag.moved) return; // パン後のクリックは無視
-    const g = e.target.closest('.node, .edge');
-    clearSelection();
-    if (!g) return;
-    svg.classList.add('has-selection');
-    connected(g).forEach((el) => el.classList.add('hl'));
-    showPanel(g);
-  });
 
-  // --- ホバー(プレビュー) ---
-  svg.addEventListener('pointerover', (e) => {
-    const g = e.target.closest('.node, .edge');
-    if (!g) return;
-    svg.classList.add('has-hover');
-    connected(g).forEach((el) => el.classList.add('pv'));
-  });
-  svg.addEventListener('pointerout', () => {
-    svg.classList.remove('has-hover');
-    svg.querySelectorAll('.pv').forEach((el) => el.classList.remove('pv'));
-  });
-
-  // --- 詳細パネル(レイアウト JSON から図種非依存に描画) ---
-  function showPanel(g) {
-    panel.hidden = false;
-    panelBody.textContent = '';
-    if (g.classList.contains('node')) {
-      const node = layout.nodes.find((n) => n.id === g.dataset.id);
-      panelTitle.textContent = node.label;
-      const table = document.createElement('table');
+  function showPanel(id) {
+    const node = layout.nodes.find(n => n.id === id)
+    const edge = node ? undefined : layout.edges.find(ed => ed.id === id)
+    if (!node && !edge) return
+    panel.hidden = false
+    panelBody.textContent = ""
+    const table = document.createElement("table")
+    if (node) {
+      panelTitle.textContent = node.label
       if (node.rows) {
         for (const row of node.rows) {
-          const tr = document.createElement('tr');
-          const td = document.createElement('td');
-          td.textContent = row.text;
-          tr.appendChild(td);
-          table.appendChild(tr);
+          const tr = document.createElement("tr")
+          const td = document.createElement("td")
+          td.textContent = row.text
+          tr.appendChild(td)
+          table.appendChild(tr)
         }
       } else {
         for (const [k, v] of Object.entries(node.meta ?? {})) {
-          if (v === '' || v === undefined) continue;
-          const tr = document.createElement('tr');
-          const td1 = document.createElement('td');
-          const td2 = document.createElement('td');
-          td1.textContent = k;
-          td2.textContent = String(v);
-          tr.append(td1, td2);
-          table.appendChild(tr);
+          if (v === "" || v === undefined) continue
+          const tr = document.createElement("tr")
+          const td1 = document.createElement("td")
+          const td2 = document.createElement("td")
+          td1.textContent = k
+          td2.textContent = String(v)
+          tr.append(td1, td2)
+          table.appendChild(tr)
         }
       }
-      panelBody.appendChild(table);
-    } else {
-      const edge = layout.edges.find((ed) => ed.id === g.dataset.id);
-      panelTitle.textContent = edge.label || edge.id;
-      const dl = document.createElement('table');
-      const fields = [['from', edge.from], ['to', edge.to]];
-      if (edge.cardinality) fields.push(['cardinality', edge.cardinality]);
-      if (edge.style) fields.push(['style', edge.style]);
+    } else if (edge) {
+      panelTitle.textContent = edge.label || edge.id
+      const fields = [["from", edge.from], ["to", edge.to]]
+      if (edge.cardinality) fields.push(["cardinality", edge.cardinality])
+      if (edge.style) fields.push(["style", edge.style])
       for (const [k, v] of fields) {
-        const tr = document.createElement('tr');
-        const td1 = document.createElement('td');
-        const td2 = document.createElement('td');
-        td1.textContent = k;
-        td2.textContent = v || '';
-        tr.append(td1, td2);
-        dl.appendChild(tr);
+        const tr = document.createElement("tr")
+        const td1 = document.createElement("td")
+        const td2 = document.createElement("td")
+        td1.textContent = k
+        td2.textContent = v || ""
+        tr.append(td1, td2)
+        table.appendChild(tr)
       }
-      panelBody.appendChild(dl);
     }
+    panelBody.appendChild(table)
   }
-})();
+
+  function select(id) {
+    clearSelection()
+    svg.classList.add("has-selection")
+    markAll(relatedIds(id), "hl")
+    showPanel(id)
+  }
+
+  function preview(id) {
+    svg.classList.add("has-hover")
+    markAll(relatedIds(id), "pv")
+  }
+
+  function clearPreview() {
+    svg.classList.remove("has-hover")
+    svg.querySelectorAll(".pv").forEach(el => el.classList.remove("pv"))
+  }
+
+  for (const item of document.querySelectorAll("[data-id]")) {
+    item.addEventListener("click", () => select(item.dataset.id))
+    item.addEventListener("pointerenter", () => preview(item.dataset.id))
+    item.addEventListener("pointerleave", clearPreview)
+  }
+})()
 </script>
 </body>
 </html>

@@ -4,64 +4,70 @@
 <meta charset="utf-8">
 <title>ログイン処理シーケンス図(サンプル)</title>
 <style>
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; }
-  main { flex: 1; overflow: hidden; background: #fafafa; }
-  svg { width: 100%; height: 100%; cursor: grab; }
-  svg.panning { cursor: grabbing; }
-  .node-box { fill: #fff; stroke: #333; }
-  .node-header { fill: #e8eef7; stroke: #333; }
-  .node-title { font-weight: bold; font-size: 13px; }
-  .row { font-size: 12px; fill: #222; }
-  .edge line, .edge polyline { stroke: #666; stroke-width: 1.5; fill: none; }
-  .edge-label { font-size: 11px; fill: #444; }
-  .node, .edge { transition: opacity .15s; }
-  svg.has-selection .node:not(.hl), svg.has-selection .edge:not(.hl) { opacity: .25; }
-  svg.has-hover .node:not(.pv):not(.hl), svg.has-hover .edge:not(.pv):not(.hl) { opacity: .5; }
-  .hl .node-box, .pv .node-box { stroke: #1a63c9; stroke-width: 2; }
-  .hl line, .pv line, .hl polyline, .pv polyline { stroke: #1a63c9; stroke-width: 2.5; }
-  .zone rect { fill: #f5f5f5; stroke: #666; }
-  .zone-label { font-size: 12px; font-weight: bold; fill: #444; }
-  .lifeline { stroke: #999; stroke-dasharray: 6 4; }
-  .edge.return line { stroke-dasharray: 6 4; }
-  .node-header-fill { fill: #e8eef7; }
-  #arrow path { fill: #666; }
-  aside { width: 280px; border-left: 1px solid #ddd; padding: 12px; overflow-y: auto; background: #fff; }
-  aside h2 { font-size: 14px; margin: 0 0 8px; }
-  aside table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  aside td { border-bottom: 1px solid #eee; padding: 4px 2px; }
+:root{color-scheme:light;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:system-ui, sans-serif;display:flex;height:100vh;}
+main{flex:1;overflow:hidden;background:#F1F5F9;}
+svg{width:100%;height:100%;cursor:grab;}
+svg.panning{cursor:grabbing;}
+.kind-generic{--fill:#F8FAFC;--stroke:#64748B;--icon:#475569;--text:#0F172A;}.kind-user{--fill:#EFF6FF;--stroke:#3B82F6;--icon:#2563EB;--text:#1E3A8A;}.kind-api{--fill:#ECFEFF;--stroke:#0891B2;--icon:#0E7490;--text:#164E63;}.kind-data{--fill:#F5F3FF;--stroke:#8B5CF6;--icon:#7C3AED;--text:#4C1D95;}.kind-messaging{--fill:#FFF7ED;--stroke:#F97316;--icon:#EA580C;--text:#7C2D12;}.kind-external{--fill:#FDF2F8;--stroke:#DB2777;--icon:#BE185D;--text:#831843;}.kind-screen{--fill:#F0FDF4;--stroke:#22C55E;--icon:#16A34A;--text:#14532D;}.kind-entity{--fill:#FFFBEB;--stroke:#D97706;--icon:#B45309;--text:#78350F;}
+.node-card{fill:var(--fill,#F8FAFC);stroke:var(--stroke,#64748B);stroke-width:1.5;filter:url(#soft-shadow);}
+.node-header{fill:var(--stroke,#64748B);opacity:.12;}
+.node-title{font-weight:600;font-size:13px;fill:var(--text,#0F172A);}
+.node-icon svg{width:24px;height:24px;color:var(--icon,#475569);}
+.row-bg{fill:transparent;}
+.row-text{font-size:12px;fill:#1F2937;}.badge{font-weight:700}.badge-pk{fill:#F59E0B}.badge-fk{fill:#8B5CF6}.badge-unique{fill:#0EA5E9}
+.edge polyline{stroke:#475569;stroke-width:1.5;fill:none;}
+.edge.return polyline{stroke-dasharray:6 4;}
+.edge-label-bg{fill:#FFFFFF;stroke:#E2E8F0;}
+.edge-label text{font-size:11px;fill:#334155;}
+.node,.edge{transition:opacity .15s;}
+svg.has-selection .node:not(.hl),svg.has-selection .edge:not(.hl){opacity:.25;}
+svg.has-hover .node:not(.pv):not(.hl),svg.has-hover .edge:not(.pv):not(.hl){opacity:.5;}
+.hl .node-card,.pv .node-card{stroke-width:2.5;}
+.hl polyline,.pv polyline{stroke:#1a63c9;stroke-width:2.5;}
+.zone-bg{fill:#F8FAFC;stroke:#CBD5E1;}
+.zone-chip-bg{fill:#E2E8F0;}
+.zone-chip-text{font-size:12px;font-weight:600;fill:#334155;}
+.lifeline{stroke:#94A3B8;stroke-dasharray:6 4;}
+aside{width:280px;border-left:1px solid #E2E8F0;padding:16px;overflow-y:auto;background:#fff;}
+aside h2{font-size:14px;margin:0 0 12px;}
+aside table{width:100%;border-collapse:collapse;font-size:12px;}
+aside td{border-bottom:1px solid #F1F5F9;padding:6px 4px;}
 </style>
 </head>
 <body>
 <main>
-<svg id="canvas" viewBox="0 0 880 510" xmlns="http://www.w3.org/2000/svg">
+<svg id="canvas" viewBox="0 0 880 608" xmlns="http://www.w3.org/2000/svg">
 <defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
-<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#666"/></marker>
+<filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0F172A" flood-opacity=".12"/></filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker>
+<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#475569"/></marker>
 </defs>
+<g class="viewport" transform="translate(40,40)">
 <g id="zones">
 
 </g>
 <g id="lines">
-<line class="lifeline" x1="110" y1="90" x2="110" y2="470"/>
-<line class="lifeline" x1="330" y1="90" x2="330" y2="470"/>
-<line class="lifeline" x1="550" y1="90" x2="550" y2="470"/>
-<line class="lifeline" x1="770" y1="90" x2="770" y2="470"/>
+<line class="lifeline" x1="70" y1="50" x2="70" y2="528"/>
+<line class="lifeline" x1="290" y1="50" x2="290" y2="528"/>
+<line class="lifeline" x1="510" y1="50" x2="510" y2="528"/>
+<line class="lifeline" x1="730" y1="50" x2="730" y2="528"/>
 </g>
 <g id="edges">
-<g class="edge sync" data-id="msg1" data-from="user" data-to="web"><line x1="110" y1="140" x2="330" y2="140" marker-end="url(#arrow)"/><text x="220" y="134" text-anchor="middle" class="edge-label">ログイン要求</text></g>
-<g class="edge sync" data-id="msg2" data-from="web" data-to="auth"><line x1="330" y1="190" x2="550" y2="190" marker-end="url(#arrow)"/><text x="440" y="184" text-anchor="middle" class="edge-label">認証リクエスト</text></g>
-<g class="edge sync" data-id="msg3" data-from="auth" data-to="db"><line x1="550" y1="240" x2="770" y2="240" marker-end="url(#arrow)"/><text x="660" y="234" text-anchor="middle" class="edge-label">ユーザー照会</text></g>
-<g class="edge return" data-id="msg4" data-from="db" data-to="auth"><line x1="770" y1="290" x2="550" y2="290" marker-end="url(#arrow-open)"/><text x="660" y="284" text-anchor="middle" class="edge-label">ユーザー情報</text></g>
-<g class="edge return" data-id="msg5" data-from="auth" data-to="web"><line x1="550" y1="340" x2="330" y2="340" marker-end="url(#arrow-open)"/><text x="440" y="334" text-anchor="middle" class="edge-label">トークン発行</text></g>
-<g class="edge return" data-id="msg6" data-from="web" data-to="user"><line x1="330" y1="390" x2="110" y2="390" marker-end="url(#arrow-open)"/><text x="220" y="384" text-anchor="middle" class="edge-label">ホーム画面表示</text></g>
+<g class="edge sync" data-id="msg1" data-from="user" data-to="web"><polyline points="70,114 290,114" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="151" y="92" width="58" height="18" rx="5"/><text x="180" y="105" text-anchor="middle">ログイン要求</text></g></g>
+<g class="edge sync" data-id="msg2" data-from="web" data-to="auth"><polyline points="290,178 510,178" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="367.5" y="156" width="65" height="18" rx="5"/><text x="400" y="169" text-anchor="middle">認証リクエスト</text></g></g>
+<g class="edge sync" data-id="msg3" data-from="auth" data-to="db"><polyline points="510,242 730,242" fill="none" marker-end="url(#arrow)"/><g class="edge-label"><rect class="edge-label-bg" x="591" y="220" width="58" height="18" rx="5"/><text x="620" y="233" text-anchor="middle">ユーザー照会</text></g></g>
+<g class="edge return" data-id="msg4" data-from="db" data-to="auth"><polyline points="730,306 510,306" fill="none" marker-end="url(#arrow-open)"/><g class="edge-label"><rect class="edge-label-bg" x="591" y="284" width="58" height="18" rx="5"/><text x="620" y="297" text-anchor="middle">ユーザー情報</text></g></g>
+<g class="edge return" data-id="msg5" data-from="auth" data-to="web"><polyline points="510,370 290,370" fill="none" marker-end="url(#arrow-open)"/><g class="edge-label"><rect class="edge-label-bg" x="371" y="348" width="58" height="18" rx="5"/><text x="400" y="361" text-anchor="middle">トークン発行</text></g></g>
+<g class="edge return" data-id="msg6" data-from="web" data-to="user"><polyline points="290,434 70,434" fill="none" marker-end="url(#arrow-open)"/><g class="edge-label"><rect class="edge-label-bg" x="147.5" y="412" width="65" height="18" rx="5"/><text x="180" y="425" text-anchor="middle">ホーム画面表示</text></g></g>
 </g>
 <g id="nodes">
-<g class="node" data-id="user" transform="translate(40,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">ユーザー</text></g>
-<g class="node" data-id="web" transform="translate(260,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">Web アプリ</text></g>
-<g class="node" data-id="auth" transform="translate(480,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">認証 API</text></g>
-<g class="node" data-id="db" transform="translate(700,40)"><rect width="140" height="50" rx="0" class="node-box node-header-fill"/><text x="70" y="25" text-anchor="middle" dominant-baseline="middle" class="node-title">DB</text></g>
+<g class="node" data-id="user" transform="translate(0,0)"><rect class="node-card kind-user" width="140" height="50" rx="4"/><g class="node-icon" transform="translate(10,13)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg></g><text class="node-title" x="42" y="25" dominant-baseline="middle">ユーザー</text></g>
+<g class="node" data-id="web" transform="translate(220,0)"><rect class="node-card kind-generic" width="140" height="50" rx="4"/><g class="node-icon" transform="translate(10,13)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="25" dominant-baseline="middle">Web アプリ</text></g>
+<g class="node" data-id="auth" transform="translate(440,0)"><rect class="node-card kind-generic" width="140" height="50" rx="4"/><g class="node-icon" transform="translate(10,13)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="25" dominant-baseline="middle">認証 API</text></g>
+<g class="node" data-id="db" transform="translate(660,0)"><rect class="node-card kind-generic" width="140" height="50" rx="4"/><g class="node-icon" transform="translate(10,13)"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="4" /></svg></g><text class="node-title" x="42" y="25" dominant-baseline="middle">DB</text></g>
+</g>
 </g>
 </svg>
 </main>
@@ -70,148 +76,152 @@
 <div id="panel-body"></div>
 </aside>
 <script type="application/json" id="design-spec">{"type":"sequence","title":"ログイン処理シーケンス図(サンプル)","actors":[{"id":"user","label":"ユーザー","kind":"actor"},{"id":"web","label":"Web アプリ"},{"id":"auth","label":"認証 API"},{"id":"db","label":"DB"}],"messages":[{"from":"user","to":"web","label":"ログイン要求"},{"from":"web","to":"auth","label":"認証リクエスト"},{"from":"auth","to":"db","label":"ユーザー照会"},{"from":"db","to":"auth","label":"ユーザー情報","style":"return"},{"from":"auth","to":"web","label":"トークン発行","style":"return"},{"from":"web","to":"user","label":"ホーム画面表示","style":"return"}]}</script>
-<script type="application/json" id="design-layout">{"type":"sequence","title":"ログイン処理シーケンス図(サンプル)","nodes":[{"id":"user","label":"ユーザー","shape":"actor","x":0,"y":0,"width":140,"height":50,"meta":{"kind":"actor"}},{"id":"web","label":"Web アプリ","shape":"actor","x":220,"y":0,"width":140,"height":50,"meta":{"kind":"system"}},{"id":"auth","label":"認証 API","shape":"actor","x":440,"y":0,"width":140,"height":50,"meta":{"kind":"system"}},{"id":"db","label":"DB","shape":"actor","x":660,"y":0,"width":140,"height":50,"meta":{"kind":"system"}}],"lines":[{"x":70,"y1":50,"y2":430,"owner":"user"},{"x":290,"y1":50,"y2":430,"owner":"web"},{"x":510,"y1":50,"y2":430,"owner":"auth"},{"x":730,"y1":50,"y2":430,"owner":"db"}],"edges":[{"id":"msg1","from":"user","to":"web","label":"ログイン要求","style":"sync","fromPt":{"x":70,"y":100},"toPt":{"x":290,"y":100}},{"id":"msg2","from":"web","to":"auth","label":"認証リクエスト","style":"sync","fromPt":{"x":290,"y":150},"toPt":{"x":510,"y":150}},{"id":"msg3","from":"auth","to":"db","label":"ユーザー照会","style":"sync","fromPt":{"x":510,"y":200},"toPt":{"x":730,"y":200}},{"id":"msg4","from":"db","to":"auth","label":"ユーザー情報","style":"return","fromPt":{"x":730,"y":250},"toPt":{"x":510,"y":250}},{"id":"msg5","from":"auth","to":"web","label":"トークン発行","style":"return","fromPt":{"x":510,"y":300},"toPt":{"x":290,"y":300}},{"id":"msg6","from":"web","to":"user","label":"ホーム画面表示","style":"return","fromPt":{"x":290,"y":350},"toPt":{"x":70,"y":350}}]}</script>
+<script type="application/json" id="design-layout">{"type":"sequence","title":"ログイン処理シーケンス図(サンプル)","nodes":[{"id":"user","label":"ユーザー","shape":"actor","x":0,"y":0,"width":140,"height":50,"kindKey":"user","meta":{"kind":"actor"}},{"id":"web","label":"Web アプリ","shape":"actor","x":220,"y":0,"width":140,"height":50,"kindKey":"generic","meta":{"kind":"system"}},{"id":"auth","label":"認証 API","shape":"actor","x":440,"y":0,"width":140,"height":50,"kindKey":"generic","meta":{"kind":"system"}},{"id":"db","label":"DB","shape":"actor","x":660,"y":0,"width":140,"height":50,"kindKey":"generic","meta":{"kind":"system"}}],"lines":[{"x":70,"y1":50,"y2":528,"owner":"user"},{"x":290,"y1":50,"y2":528,"owner":"web"},{"x":510,"y1":50,"y2":528,"owner":"auth"},{"x":730,"y1":50,"y2":528,"owner":"db"}],"edges":[{"id":"msg1","from":"user","to":"web","label":"ログイン要求","style":"sync","points":[{"x":70,"y":114},{"x":290,"y":114}],"labelBox":{"x":151,"y":92,"width":58,"height":18}},{"id":"msg2","from":"web","to":"auth","label":"認証リクエスト","style":"sync","points":[{"x":290,"y":178},{"x":510,"y":178}],"labelBox":{"x":367.5,"y":156,"width":65,"height":18}},{"id":"msg3","from":"auth","to":"db","label":"ユーザー照会","style":"sync","points":[{"x":510,"y":242},{"x":730,"y":242}],"labelBox":{"x":591,"y":220,"width":58,"height":18}},{"id":"msg4","from":"db","to":"auth","label":"ユーザー情報","style":"return","points":[{"x":730,"y":306},{"x":510,"y":306}],"labelBox":{"x":591,"y":284,"width":58,"height":18}},{"id":"msg5","from":"auth","to":"web","label":"トークン発行","style":"return","points":[{"x":510,"y":370},{"x":290,"y":370}],"labelBox":{"x":371,"y":348,"width":58,"height":18}},{"id":"msg6","from":"web","to":"user","label":"ホーム画面表示","style":"return","points":[{"x":290,"y":434},{"x":70,"y":434}],"labelBox":{"x":147.5,"y":412,"width":65,"height":18}}]}</script>
 <script>
 (() => {
-  const svg = document.getElementById('canvas');
-  const layout = JSON.parse(document.getElementById('design-layout').textContent);
-  const panel = document.getElementById('panel');
-  const panelTitle = document.getElementById('panel-title');
-  const panelBody = document.getElementById('panel-body');
-  const vb = svg.viewBox.baseVal;
+  const svg = document.getElementById("canvas")
+  const layout = JSON.parse(document.getElementById("design-layout").textContent)
+  const panel = document.getElementById("panel")
+  const panelTitle = document.getElementById("panel-title")
+  const panelBody = document.getElementById("panel-body")
+  const vb = svg.viewBox.baseVal
 
-  // --- ズーム(ポインタ位置を中心に) ---
-  svg.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const scale = e.deltaY < 0 ? 0.9 : 1.1;
-    const rect = svg.getBoundingClientRect();
-    const px = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width;
-    const py = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height;
-    vb.x = px - (px - vb.x) * scale;
-    vb.y = py - (py - vb.y) * scale;
-    vb.width *= scale;
-    vb.height *= scale;
-  }, { passive: false });
+  function onWheel(e) {
+    e.preventDefault()
+    const scale = e.deltaY < 0 ? 0.9 : 1.1
+    const rect = svg.getBoundingClientRect()
+    const px = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width
+    const py = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height
+    vb.x = px - (px - vb.x) * scale
+    vb.y = py - (py - vb.y) * scale
+    vb.width *= scale
+    vb.height *= scale
+  }
 
-  // --- パン(ドラッグ) ---
-  let drag = null;
-  svg.addEventListener('pointerdown', (e) => {
-    drag = { cx: e.clientX, cy: e.clientY, vx: vb.x, vy: vb.y, moved: false };
-    svg.classList.add('panning');
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const rect = svg.getBoundingClientRect();
-    const dx = ((e.clientX - drag.cx) / rect.width) * vb.width;
-    const dy = ((e.clientY - drag.cy) / rect.height) * vb.height;
-    if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) drag.moved = true;
-    vb.x = drag.vx - dx;
-    vb.y = drag.vy - dy;
-  });
-  window.addEventListener('pointerup', () => {
-    svg.classList.remove('panning');
-    setTimeout(() => { drag = null; }, 0);
-  });
+  let drag = null
+  function onPointerDown(e) {
+    drag = { cx: e.clientX, cy: e.clientY, vx: vb.x, vy: vb.y, moved: false }
+    svg.classList.add("panning")
+  }
+  function onPointerMove(e) {
+    if (!drag) return
+    const rect = svg.getBoundingClientRect()
+    const dx = ((e.clientX - drag.cx) / rect.width) * vb.width
+    const dy = ((e.clientY - drag.cy) / rect.height) * vb.height
+    if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) drag.moved = true
+    vb.x = drag.vx - dx
+    vb.y = drag.vy - dy
+  }
+  function onPointerUp() {
+    svg.classList.remove("panning")
+    setTimeout(() => { drag = null }, 0)
+  }
 
-  // --- 接続集合の計算 ---
-  function connected(g) {
-    const set = new Set([g]);
-    if (g.classList.contains('node')) {
-      const id = g.dataset.id;
-      svg.querySelectorAll('.edge').forEach((eg) => {
-        if (eg.dataset.from === id || eg.dataset.to === id) {
-          set.add(eg);
-          const otherId = eg.dataset.from === id ? eg.dataset.to : eg.dataset.from;
-          const other = svg.querySelector('.node[data-id="' + CSS.escape(otherId) + '"]');
-          if (other) set.add(other);
-        }
-      });
-    } else {
-      for (const key of ['from', 'to']) {
-        const n = svg.querySelector('.node[data-id="' + CSS.escape(g.dataset[key]) + '"]');
-        if (n) set.add(n);
-      }
+  svg.addEventListener("wheel", onWheel, { passive: false })
+  svg.addEventListener("pointerdown", onPointerDown)
+  svg.addEventListener("pointermove", onPointerMove)
+  svg.addEventListener("pointerup", onPointerUp)
+  svg.addEventListener("pointerleave", onPointerUp)
+
+  function connected(id) {
+    return layout.edges.filter(edge => edge.from === id || edge.to === id)
+  }
+
+  function neighborIds(id) {
+    const edges = connected(id)
+    return [id, ...edges.flatMap(edge => [edge.id, edge.from === id ? edge.to : edge.from])]
+  }
+
+  function markAll(ids, cls) {
+    for (const id of ids) {
+      const el = svg.querySelector('[data-id="' + CSS.escape(id) + '"]')
+      if (el) el.classList.add(cls)
     }
-    return set;
   }
 
-  // --- 選択(クリック) ---
+  function relatedIds(id) {
+    const node = layout.nodes.find(n => n.id === id)
+    if (node) return neighborIds(id)
+    const edge = layout.edges.find(ed => ed.id === id)
+    return edge ? [edge.id, edge.from, edge.to] : []
+  }
+
   function clearSelection() {
-    svg.classList.remove('has-selection');
-    svg.querySelectorAll('.hl').forEach((el) => el.classList.remove('hl'));
-    panel.hidden = true;
+    svg.classList.remove("has-selection")
+    svg.querySelectorAll(".hl").forEach(el => el.classList.remove("hl"))
+    panel.hidden = true
   }
-  svg.addEventListener('click', (e) => {
-    if (drag && drag.moved) return; // パン後のクリックは無視
-    const g = e.target.closest('.node, .edge');
-    clearSelection();
-    if (!g) return;
-    svg.classList.add('has-selection');
-    connected(g).forEach((el) => el.classList.add('hl'));
-    showPanel(g);
-  });
 
-  // --- ホバー(プレビュー) ---
-  svg.addEventListener('pointerover', (e) => {
-    const g = e.target.closest('.node, .edge');
-    if (!g) return;
-    svg.classList.add('has-hover');
-    connected(g).forEach((el) => el.classList.add('pv'));
-  });
-  svg.addEventListener('pointerout', () => {
-    svg.classList.remove('has-hover');
-    svg.querySelectorAll('.pv').forEach((el) => el.classList.remove('pv'));
-  });
-
-  // --- 詳細パネル(レイアウト JSON から図種非依存に描画) ---
-  function showPanel(g) {
-    panel.hidden = false;
-    panelBody.textContent = '';
-    if (g.classList.contains('node')) {
-      const node = layout.nodes.find((n) => n.id === g.dataset.id);
-      panelTitle.textContent = node.label;
-      const table = document.createElement('table');
+  function showPanel(id) {
+    const node = layout.nodes.find(n => n.id === id)
+    const edge = node ? undefined : layout.edges.find(ed => ed.id === id)
+    if (!node && !edge) return
+    panel.hidden = false
+    panelBody.textContent = ""
+    const table = document.createElement("table")
+    if (node) {
+      panelTitle.textContent = node.label
       if (node.rows) {
         for (const row of node.rows) {
-          const tr = document.createElement('tr');
-          const td = document.createElement('td');
-          td.textContent = row.text;
-          tr.appendChild(td);
-          table.appendChild(tr);
+          const tr = document.createElement("tr")
+          const td = document.createElement("td")
+          td.textContent = row.text
+          tr.appendChild(td)
+          table.appendChild(tr)
         }
       } else {
         for (const [k, v] of Object.entries(node.meta ?? {})) {
-          if (v === '' || v === undefined) continue;
-          const tr = document.createElement('tr');
-          const td1 = document.createElement('td');
-          const td2 = document.createElement('td');
-          td1.textContent = k;
-          td2.textContent = String(v);
-          tr.append(td1, td2);
-          table.appendChild(tr);
+          if (v === "" || v === undefined) continue
+          const tr = document.createElement("tr")
+          const td1 = document.createElement("td")
+          const td2 = document.createElement("td")
+          td1.textContent = k
+          td2.textContent = String(v)
+          tr.append(td1, td2)
+          table.appendChild(tr)
         }
       }
-      panelBody.appendChild(table);
-    } else {
-      const edge = layout.edges.find((ed) => ed.id === g.dataset.id);
-      panelTitle.textContent = edge.label || edge.id;
-      const dl = document.createElement('table');
-      const fields = [['from', edge.from], ['to', edge.to]];
-      if (edge.cardinality) fields.push(['cardinality', edge.cardinality]);
-      if (edge.style) fields.push(['style', edge.style]);
+    } else if (edge) {
+      panelTitle.textContent = edge.label || edge.id
+      const fields = [["from", edge.from], ["to", edge.to]]
+      if (edge.cardinality) fields.push(["cardinality", edge.cardinality])
+      if (edge.style) fields.push(["style", edge.style])
       for (const [k, v] of fields) {
-        const tr = document.createElement('tr');
-        const td1 = document.createElement('td');
-        const td2 = document.createElement('td');
-        td1.textContent = k;
-        td2.textContent = v || '';
-        tr.append(td1, td2);
-        dl.appendChild(tr);
+        const tr = document.createElement("tr")
+        const td1 = document.createElement("td")
+        const td2 = document.createElement("td")
+        td1.textContent = k
+        td2.textContent = v || ""
+        tr.append(td1, td2)
+        table.appendChild(tr)
       }
-      panelBody.appendChild(dl);
     }
+    panelBody.appendChild(table)
   }
-})();
+
+  function select(id) {
+    clearSelection()
+    svg.classList.add("has-selection")
+    markAll(relatedIds(id), "hl")
+    showPanel(id)
+  }
+
+  function preview(id) {
+    svg.classList.add("has-hover")
+    markAll(relatedIds(id), "pv")
+  }
+
+  function clearPreview() {
+    svg.classList.remove("has-hover")
+    svg.querySelectorAll(".pv").forEach(el => el.classList.remove("pv"))
+  }
+
+  for (const item of document.querySelectorAll("[data-id]")) {
+    item.addEventListener("click", () => select(item.dataset.id))
+    item.addEventListener("pointerenter", () => preview(item.dataset.id))
+    item.addEventListener("pointerleave", clearPreview)
+  }
+})()
 </script>
 </body>
 </html>
