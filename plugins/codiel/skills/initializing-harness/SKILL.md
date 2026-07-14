@@ -122,7 +122,7 @@ run 開始時に初めて発覚していた不備を、init 完了時点で検�
    オーケストレーターと**同一の解析系**(`lib.mjs` の `readDomains`)で読めることを確認する:
 
    ```
-   node -e 'import("<plugin-root>/hooks/scripts/lib.mjs").then(({ readDomains }) => {
+   node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomains }) => {
      const d = readDomains(process.cwd());
      const ok = d && !Array.isArray(d) && Object.keys(d).length > 0 &&
        Object.values(d).every(v => Array.isArray(v) && v.length > 0 && v.every(g => typeof g === "string"));

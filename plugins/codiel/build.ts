@@ -8,6 +8,7 @@ await esbuild.build({
     "stop-guard": "./src/hooks/stop-guard.ts",
     "subagent-stop": "./src/hooks/subagent-stop.ts",
     "codiel-state": "./src/codiel-state-cli.ts",
+    lib: "./src/hooks/lib.ts",
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
