@@ -10,7 +10,7 @@ const SCRIPT = fileURLToPath(new URL("../check-issue-env.ts", import.meta.url))
 
 const mockEnv = (binDir: string) => ({
   ...process.env,
-  PATH: `${binDir}${path.delimiter}${path.dirname(process.execPath)}`,
+  PATH: `${binDir}${path.delimiter}${path.dirname(process.execPath)}`
 })
 
 // スクリプトを起動し stdout の JSON を返す。pathDirs 指定時は PATH を差し替える(gh 検出テスト用)
@@ -27,7 +27,8 @@ function tmpdir(): string {
 function gitRepo(remoteUrl: string | null): string {
   const dir = tmpdir()
   execFileSync("git", ["init", "-q"], { cwd: dir })
-  if (remoteUrl) execFileSync("git", ["remote", "add", "origin", remoteUrl], { cwd: dir })
+  if (remoteUrl)
+    execFileSync("git", ["remote", "add", "origin", remoteUrl], { cwd: dir })
   return dir
 }
 
@@ -63,14 +64,20 @@ test("GitHub 以外のリモートでは repoSlug が null", () => {
 })
 
 test("github.com を含むだけの別ホストでは repoSlug が null", () => {
-  expect(runScript(gitRepo("git@notgithub.com:owner/repo.git")).repoSlug).toBe(null)
-  expect(runScript(gitRepo("https://mygithub.com/owner/repo")).repoSlug).toBe(null)
+  expect(runScript(gitRepo("git@notgithub.com:owner/repo.git")).repoSlug).toBe(
+    null
+  )
+  expect(runScript(gitRepo("https://mygithub.com/owner/repo")).repoSlug).toBe(
+    null
+  )
 })
 
 // PATH 制御用: 実物の git だけを持つ bin ディレクトリを作る(スクリプトが spawn するのは git と gh のみ)
 function fakeBin({ gh }: { gh?: string } = {}): string {
   const dir = tmpdir()
-  const realGit = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim()
+  const realGit = execFileSync("sh", ["-c", "command -v git"], {
+    encoding: "utf8"
+  }).trim()
   fs.symlinkSync(realGit, path.join(dir, "git"))
   if (gh) {
     const file = path.join(dir, "gh")
@@ -87,7 +94,9 @@ test("gh が PATH に無ければ ghInstalled/ghAuthenticated とも false", () 
 })
 
 test("gh はあるが未認証なら ghInstalled: true, ghAuthenticated: false", () => {
-  const bin = fakeBin({ gh: '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\nexit 1\n' })
+  const bin = fakeBin({
+    gh: '#!/bin/sh\n[ "$1" = "--version" ] && exit 0\nexit 1\n'
+  })
   const out = runScript(tmpdir(), [bin])
   expect(out.ghInstalled).toBe(true)
   expect(out.ghAuthenticated).toBe(false)
@@ -126,8 +135,8 @@ test("md テンプレートの frontmatter からトップレベルキーを抽�
       "labels: bug, help wanted",
       "---",
       "",
-      "## 再現手順",
-    ].join("\n"),
+      "## 再現手順"
+    ].join("\n")
   })
   const out = runScript(dir)
   expect(out.templates).toEqual([
@@ -136,8 +145,8 @@ test("md テンプレートの frontmatter からトップレベルキーを抽�
       name: "バグ報告",
       about: "動作不良の報告",
       title: "[Bug] ",
-      labels: ["bug", "help wanted"],
-    },
+      labels: ["bug", "help wanted"]
+    }
   ])
 })
 
@@ -152,8 +161,8 @@ test("yml フォームは description を about に正規化し、複数行 labe
       "body:",
       "  - type: markdown",
       "    attributes:",
-      "      value: 説明",
-    ].join("\n"),
+      "      value: 説明"
+    ].join("\n")
   })
   const out = runScript(dir)
   expect(out.templates.length).toBe(1)
@@ -165,10 +174,12 @@ test("yml フォームは description を about に正規化し、複数行 labe
 test("inline 配列の labels もパースでき、config.yml は templates に含めない", () => {
   const dir = withTemplates({
     "task.yml": 'name: タスク\nlabels: ["chore", "docs"]\n',
-    "config.yml": "blank_issues_enabled: false\n",
+    "config.yml": "blank_issues_enabled: false\n"
   })
   const out = runScript(dir)
-  expect(out.templates.map((t: { file: string }) => t.file)).toEqual(["task.yml"])
+  expect(out.templates.map((t: { file: string }) => t.file)).toEqual([
+    "task.yml"
+  ])
   expect(out.templates[0].labels).toEqual(["chore", "docs"])
   expect(out.blankIssuesEnabled).toBe(false)
 })
@@ -192,7 +203,10 @@ test("読めないエントリ(ディレクトリ等)はスキップして exit 
 test("ISSUE_TEMPLATE がディレクトリでなくファイルでも exit 0 でテンプレート無し扱い", () => {
   const dir = gitRepo("git@github.com:owner/repo.git")
   fs.mkdirSync(path.join(dir, ".github"), { recursive: true })
-  fs.writeFileSync(path.join(dir, ".github", "ISSUE_TEMPLATE"), "not a directory")
+  fs.writeFileSync(
+    path.join(dir, ".github", "ISSUE_TEMPLATE"),
+    "not a directory"
+  )
   const out = runScript(dir)
   expect(out.templates).toEqual([])
   expect(out.blankIssuesEnabled).toBe(true)
@@ -201,8 +215,11 @@ test("ISSUE_TEMPLATE がディレクトリでなくファイルでも exit 0 で
 test("複数テンプレートはファイル名昇順で返る", () => {
   const dir = withTemplates({
     "b_bug.md": "---\nname: Bug\n---\n",
-    "a_feature.yml": "name: Feature\n",
+    "a_feature.yml": "name: Feature\n"
   })
   const out = runScript(dir)
-  expect(out.templates.map((t: { file: string }) => t.file)).toEqual(["a_feature.yml", "b_bug.md"])
+  expect(out.templates.map((t: { file: string }) => t.file)).toEqual([
+    "a_feature.yml",
+    "b_bug.md"
+  ])
 })

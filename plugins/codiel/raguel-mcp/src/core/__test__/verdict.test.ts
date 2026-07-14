@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest"
-import type { Finding, MetaReport, PanelReport, RaguelConfig } from "../types.js"
-import { maxScoreVariance, type SynthesisInput, synthesize } from "../verdict.js"
+import type {
+  Finding,
+  MetaReport,
+  PanelReport,
+  RaguelConfig
+} from "../types.js"
+import {
+  maxScoreVariance,
+  type SynthesisInput,
+  synthesize
+} from "../verdict.js"
 
 const config: RaguelConfig = {
   version: 1,

@@ -20,16 +20,22 @@ const remoteUrl = isGitRepo ? git("remote", "get-url", "origin") : null
 // SSH (git@github.com:owner/repo.git) と HTTPS (https://github.com/owner/repo) の両形式に対応。
 // ホスト名は github.com 完全一致(notgithub.com 等の部分一致を弾く)
 const repoSlug =
-  remoteUrl?.match(/^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/)?.[1] ?? null
+  remoteUrl?.match(
+    /^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
+  )?.[1] ?? null
 
 // gh 未インストール時、spawnSync は ENOENT で status: null を返す(例外は投げない)
-const ghInstalled = spawnSync("gh", ["--version"], { encoding: "utf8" }).status === 0
+const ghInstalled =
+  spawnSync("gh", ["--version"], { encoding: "utf8" }).status === 0
 const ghAuthenticated =
-  ghInstalled && spawnSync("gh", ["auth", "status"], { encoding: "utf8" }).status === 0
+  ghInstalled &&
+  spawnSync("gh", ["auth", "status"], { encoding: "utf8" }).status === 0
 
 // テンプレートはリポジトリルート直下の .github/ISSUE_TEMPLATE/ から検出する
 const repoRoot = isGitRepo ? git("rev-parse", "--show-toplevel") : null
-const tplDir = repoRoot ? path.join(repoRoot, ".github", "ISSUE_TEMPLATE") : null
+const tplDir = repoRoot
+  ? path.join(repoRoot, ".github", "ISSUE_TEMPLATE")
+  : null
 
 const unquote = (v: string): string => v.replace(/^(["'])(.*)\1$/, "$2")
 
@@ -66,7 +72,10 @@ function parseTemplate(file: string, content: string) {
     name: unquote(top.name ?? ""),
     about: unquote(top.description ?? top.about ?? ""),
     title: unquote(top.title ?? ""),
-    labels: labelsRaw.split(",").map((s) => unquote(s.trim())).filter(Boolean),
+    labels: labelsRaw
+      .split(",")
+      .map((s) => unquote(s.trim()))
+      .filter(Boolean)
   }
 }
 
@@ -89,7 +98,9 @@ if (tplDir) {
   templates = files
     .filter((f) => /\.(md|ya?ml)$/.test(f) && f !== "config.yml")
     .map((f) => ({ f, content: read(f) }))
-    .filter((entry): entry is { f: string; content: string } => entry.content !== null)
+    .filter(
+      (entry): entry is { f: string; content: string } => entry.content !== null
+    )
     .map(({ f, content }) => parseTemplate(f, content))
   const configRaw = files.includes("config.yml") ? read("config.yml") : null
   if (configRaw !== null) {
@@ -102,8 +113,16 @@ if (tplDir) {
 
 console.log(
   JSON.stringify(
-    { isGitRepo, remoteUrl, repoSlug, ghInstalled, ghAuthenticated, templates, blankIssuesEnabled },
+    {
+      isGitRepo,
+      remoteUrl,
+      repoSlug,
+      ghInstalled,
+      ghAuthenticated,
+      templates,
+      blankIssuesEnabled
+    },
     null,
-    2,
-  ),
+    2
+  )
 )

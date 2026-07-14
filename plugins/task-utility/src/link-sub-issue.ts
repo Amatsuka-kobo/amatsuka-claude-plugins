@@ -21,16 +21,28 @@ function parseIssueNumber(raw: string | undefined, label: string): number {
 
 const [slug, parentArg, childArg] = process.argv.slice(2)
 if (!/^[^/\s]+\/[^/\s]+$/.test(slug ?? "")) {
-  fail("args", `リポジトリは owner/repo 形式で指定してください: ${slug ?? "(missing)"}`)
+  fail(
+    "args",
+    `リポジトリは owner/repo 形式で指定してください: ${slug ?? "(missing)"}`
+  )
 }
 const parent = parseIssueNumber(parentArg, "親 Issue 番号")
 const child = parseIssueNumber(childArg, "子 Issue 番号")
 
 // gh 未インストール時、spawnSync は ENOENT で status: null を返す(例外は投げない)
-function gh(...args: string[]): { ok: true; stdout: string } | { ok: false; error: string } {
+function gh(
+  ...args: string[]
+): { ok: true; stdout: string } | { ok: false; error: string } {
   const res = spawnSync("gh", args, { encoding: "utf8" })
   if (res.status !== 0) {
-    return { ok: false, error: (res.stderr || res.stdout || String(res.error ?? "gh の実行に失敗")).trim() }
+    return {
+      ok: false,
+      error: (
+        res.stderr ||
+        res.stdout ||
+        String(res.error ?? "gh の実行に失敗")
+      ).trim()
+    }
   }
   return { ok: true, stdout: res.stdout }
 }
@@ -42,12 +54,25 @@ let childId: unknown
 try {
   childId = (JSON.parse(childRes.stdout) as { id?: unknown }).id
 } catch (e) {
-  fail("get-child", `子 Issue 応答の JSON パースに失敗: ${e instanceof Error ? e.message : String(e)}`)
+  fail(
+    "get-child",
+    `子 Issue 応答の JSON パースに失敗: ${e instanceof Error ? e.message : String(e)}`
+  )
 }
-if (!Number.isInteger(childId)) fail("get-child", `子 Issue の内部 ID が取得できません: ${childId}`)
+if (!Number.isInteger(childId))
+  fail("get-child", `子 Issue の内部 ID が取得できません: ${childId}`)
 
 // 2. 親 Issue に Sub-issue としてリンク(-F で数値型のまま送る。-f だと文字列になり API に拒否される)
-const linkRes = gh("api", "-X", "POST", `repos/${slug}/issues/${parent}/sub_issues`, "-F", `sub_issue_id=${childId}`)
+const linkRes = gh(
+  "api",
+  "-X",
+  "POST",
+  `repos/${slug}/issues/${parent}/sub_issues`,
+  "-F",
+  `sub_issue_id=${childId}`
+)
 if (!linkRes.ok) fail("link", linkRes.error)
 
-console.log(JSON.stringify({ ok: true, parent, child, subIssueId: childId }, null, 2))
+console.log(
+  JSON.stringify({ ok: true, parent, child, subIssueId: childId }, null, 2)
+)

@@ -21,14 +21,21 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--user") {
     userProvided = true;
     user = args[++i] ?? "";
-  } else if (a === "--latest") latest = /^\d+$/.test(args[i + 1] ?? "") ? Number(args[++i]) : 3;
+  } else if (a === "--latest")
+    latest = /^\d+$/.test(args[i + 1] ?? "") ? Number(args[++i]) : 3;
   else keywords.push(a);
 }
 if (userProvided && !user) {
-  output({ ok: false, error: "--user \u306B\u7A7A\u306E\u5024\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093(git config user.name \u304C\u672A\u8A2D\u5B9A\u306E\u53EF\u80FD\u6027)" });
+  output({
+    ok: false,
+    error: "--user \u306B\u7A7A\u306E\u5024\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093(git config user.name \u304C\u672A\u8A2D\u5B9A\u306E\u53EF\u80FD\u6027)"
+  });
 }
 if (since !== null && !/^\d{4}-\d{2}-\d{2}$/.test(since)) {
-  output({ ok: false, error: `--since \u306F YYYY-MM-DD \u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044: ${since}` });
+  output({
+    ok: false,
+    error: `--since \u306F YYYY-MM-DD \u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044: ${since}`
+  });
 }
 if (latest === null && keywords.length === 0) {
   output({ ok: false, error: "\u30AD\u30FC\u30EF\u30FC\u30C9\u307E\u305F\u306F --latest \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044" });
@@ -56,7 +63,12 @@ var records = walk(chatDir).map((abs) => {
   const rel = path.relative(chatDir, abs).replaceAll("\\", "/");
   const m = rel.match(/^(\d{4})\/(\d{4})\/(?:([^/]+)\/)?[^/]+\.md$/);
   if (!m) return null;
-  return { path: rel, date: `${m[1]}-${m[2].slice(0, 2)}-${m[2].slice(2)}`, user: m[3] ?? null, abs };
+  return {
+    path: rel,
+    date: `${m[1]}-${m[2].slice(0, 2)}-${m[2].slice(2)}`,
+    user: m[3] ?? null,
+    abs
+  };
 }).filter((record) => record !== null);
 var indexPath = path.join(chatDir, "INDEX.md");
 var indexLines = null;
@@ -67,7 +79,9 @@ if (fs.existsSync(indexPath)) {
     indexLines = null;
   }
 }
-var indexedPaths = new Set((indexLines ?? []).map((l) => l.match(/^- `([^`]+)`/)?.[1]).filter((p) => p !== void 0));
+var indexedPaths = new Set(
+  (indexLines ?? []).map((l) => l.match(/^- `([^`]+)`/)?.[1]).filter((p) => p !== void 0)
+);
 var unindexed = records.filter((r) => !indexedPaths.has(r.path)).map((r) => r.path);
 var inScope = (r) => (!user || r.user === user) && (!since || r.date >= since);
 var titleFromContent = (content) => content.match(/^# (.+)$/m)?.[1] ?? null;
@@ -86,7 +100,14 @@ var mtimeOf = (abs) => {
   }
 };
 if (latest !== null) {
-  const hits2 = records.filter(inScope).sort((a, b) => b.date.localeCompare(a.date) || mtimeOf(b.abs) - mtimeOf(a.abs)).slice(0, latest).map((r) => ({ path: r.path, date: r.date, user: r.user, title: title(r.abs) }));
+  const hits2 = records.filter(inScope).sort(
+    (a, b) => b.date.localeCompare(a.date) || mtimeOf(b.abs) - mtimeOf(a.abs)
+  ).slice(0, latest).map((r) => ({
+    path: r.path,
+    date: r.date,
+    user: r.user,
+    title: title(r.abs)
+  }));
   output({ ok: true, mode: "latest", hits: hits2, unindexed });
 }
 var kw = keywords.map((k) => k.toLowerCase());
@@ -99,7 +120,13 @@ if (indexLines) {
     const r = p ? byPath.get(p) : null;
     if (!r || !inScope(r) || !hasKw(line)) continue;
     const summary = line.split(" | ")[3]?.trim() ?? null;
-    hits2.push({ path: r.path, date: r.date, user: r.user, title: summary, matches: [line] });
+    hits2.push({
+      path: r.path,
+      date: r.date,
+      user: r.user,
+      title: summary,
+      matches: [line]
+    });
   }
   output({ ok: true, mode: "index", hits: hits2, unindexed });
 }
@@ -118,7 +145,13 @@ for (const r of records.filter(inScope)) {
     found.push(lines.slice(Math.max(0, i - 1), i + 2).join("\n"));
   }
   if (found.length) {
-    hits.push({ path: r.path, date: r.date, user: r.user, title: titleFromContent(content), matches: found });
+    hits.push({
+      path: r.path,
+      date: r.date,
+      user: r.user,
+      title: titleFromContent(content),
+      matches: found
+    });
   }
 }
 output({ ok: true, mode: "grep", hits, unindexed });

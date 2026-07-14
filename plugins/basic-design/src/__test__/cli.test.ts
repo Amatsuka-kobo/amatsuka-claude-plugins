@@ -7,16 +7,18 @@ import { promisify } from "node:util"
 import { expect, test } from "vitest"
 
 const execFileAsync = promisify(execFile)
-const BUNDLED_CLI = fileURLToPath(new URL("../../scripts/design-gen.mjs", import.meta.url))
+const BUNDLED_CLI = fileURLToPath(
+  new URL("../../scripts/design-gen.mjs", import.meta.url)
+)
 
 const erSpec = {
   type: "er",
   title: "テスト ER図",
   entities: [
     { name: "users", columns: [{ name: "id", pk: true }] },
-    { name: "orders", columns: [{ name: "id", pk: true }] },
+    { name: "orders", columns: [{ name: "id", pk: true }] }
   ],
-  relations: [{ from: "users", to: "orders", cardinality: "1:N" }],
+  relations: [{ from: "users", to: "orders", cardinality: "1:N" }]
 }
 
 const screenFlowSpec = {
@@ -24,9 +26,9 @@ const screenFlowSpec = {
   title: "画面遷移",
   screens: [
     { id: "login", label: "ログイン", kind: "start" },
-    { id: "home", label: "ホーム" },
+    { id: "home", label: "ホーム" }
   ],
-  transitions: [{ from: "login", to: "home", trigger: "成功" }],
+  transitions: [{ from: "login", to: "home", trigger: "成功" }]
 }
 
 const architectureSpec = {
@@ -35,9 +37,9 @@ const architectureSpec = {
   zones: [{ id: "aws", label: "AWS", children: ["app"] }],
   nodes: [
     { id: "browser", label: "ブラウザ" },
-    { id: "app", label: "App" },
+    { id: "app", label: "App" }
   ],
-  edges: [{ from: "browser", to: "app", label: "HTTPS" }],
+  edges: [{ from: "browser", to: "app", label: "HTTPS" }]
 }
 
 const sequenceSpec = {
@@ -45,12 +47,12 @@ const sequenceSpec = {
   title: "シーケンス",
   actors: [
     { id: "u", label: "ユーザー" },
-    { id: "w", label: "Web" },
+    { id: "w", label: "Web" }
   ],
   messages: [
     { from: "u", to: "w", label: "要求" },
-    { from: "w", to: "u", label: "応答", style: "return" },
-  ],
+    { from: "w", to: "u", label: "応答", style: "return" }
+  ]
 }
 
 async function writeSpec(spec: unknown, filename = "sample.spec.json") {
@@ -62,18 +64,33 @@ async function writeSpec(spec: unknown, filename = "sample.spec.json") {
 
 async function invoke(args: string[]) {
   try {
-    const { stdout, stderr } = await execFileAsync("node", [BUNDLED_CLI, ...args])
+    const { stdout, stderr } = await execFileAsync("node", [
+      BUNDLED_CLI,
+      ...args
+    ])
     return { code: 0, stdout, stderr }
   } catch (error) {
-    const failure = error as Error & { code: number; stdout: string; stderr: string }
-    return { code: failure.code, stdout: failure.stdout, stderr: failure.stderr }
+    const failure = error as Error & {
+      code: number
+      stdout: string
+      stderr: string
+    }
+    return {
+      code: failure.code,
+      stdout: failure.stdout,
+      stderr: failure.stderr
+    }
   }
 }
 
 function expectOneJsonLine(result: { stdout: string; stderr: string }) {
   expect(result.stderr).toBe("")
   expect(result.stdout.trim().split("\n")).toHaveLength(1)
-  return JSON.parse(result.stdout) as { ok: boolean; files?: string[]; errors?: string[] }
+  return JSON.parse(result.stdout) as {
+    ok: boolean
+    files?: string[]
+    errors?: string[]
+  }
 }
 
 test("usage failure", async () => {
@@ -81,7 +98,9 @@ test("usage failure", async () => {
   expect(result.code).toBe(1)
   expect(expectOneJsonLine(result)).toEqual({
     ok: false,
-    errors: ["usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"],
+    errors: [
+      "usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"
+    ]
   })
 })
 
@@ -91,7 +110,7 @@ test("invalid format", async () => {
   expect(result.code).toBe(1)
   expect(expectOneJsonLine(result)).toEqual({
     ok: false,
-    errors: ['--format: "pdf" は不正です(対応: drawio, html, both)'],
+    errors: ['--format: "pdf" は不正です(対応: drawio, html, both)']
   })
 })
 
@@ -101,7 +120,7 @@ test("missing format value", async () => {
   expect(result.code).toBe(1)
   expect(expectOneJsonLine(result)).toEqual({
     ok: false,
-    errors: ['--format: "undefined" は不正です(対応: drawio, html, both)'],
+    errors: ['--format: "undefined" は不正です(対応: drawio, html, both)']
   })
 })
 
@@ -140,7 +159,10 @@ test("default both", async () => {
   const json = expectOneJsonLine(result)
   expect(json).toEqual({
     ok: true,
-    files: [path.join(path.dirname(specPath), "sample.drawio"), path.join(path.dirname(specPath), "sample.html")],
+    files: [
+      path.join(path.dirname(specPath), "sample.drawio"),
+      path.join(path.dirname(specPath), "sample.html")
+    ]
   })
   for (const file of json.files ?? []) await access(file)
 })
@@ -150,8 +172,13 @@ test("drawio only", async () => {
   const result = await invoke([specPath, "--format", "drawio"])
   expect(result.code).toBe(0)
   const json = expectOneJsonLine(result)
-  expect(json).toEqual({ ok: true, files: [path.join(dir, "er-diagram.drawio")] })
-  expect(await readFile(path.join(dir, "er-diagram.drawio"), "utf8")).toMatch(/^<mxfile/)
+  expect(json).toEqual({
+    ok: true,
+    files: [path.join(dir, "er-diagram.drawio")]
+  })
+  expect(await readFile(path.join(dir, "er-diagram.drawio"), "utf8")).toMatch(
+    /^<mxfile/
+  )
 })
 
 test("html only", async () => {
@@ -160,20 +187,27 @@ test("html only", async () => {
   expect(result.code).toBe(0)
   const json = expectOneJsonLine(result)
   expect(json).toEqual({ ok: true, files: [path.join(dir, "sample.html")] })
-  expect(await readFile(path.join(dir, "sample.html"), "utf8")).toMatch(/^<!doctype html>/)
+  expect(await readFile(path.join(dir, "sample.html"), "utf8")).toMatch(
+    /^<!doctype html>/
+  )
 })
 
 test.each([
   ["screen-flow success", screenFlowSpec],
   ["architecture success", architectureSpec],
-  ["sequence success", sequenceSpec],
+  ["sequence success", sequenceSpec]
 ] as const)("%s", async (_name, spec) => {
   const { specPath } = await writeSpec(spec, `${spec.type}.spec.json`)
   const result = await invoke([specPath, "--format", "both"])
   expect(result.code).toBe(0)
   const json = expectOneJsonLine(result)
   expect(json.ok).toBe(true)
-  expect(json.files?.map((file) => path.basename(file))).toEqual([`${spec.type}.drawio`, `${spec.type}.html`])
-  expect(await readFile(json.files![0], "utf8")).toMatch(/^<mxfile/)
-  expect(await readFile(json.files![1], "utf8")).toMatch(/^<!doctype html>/)
+  expect(json.files?.map((file) => path.basename(file))).toEqual([
+    `${spec.type}.drawio`,
+    `${spec.type}.html`
+  ])
+  expect(json.files).toHaveLength(2)
+  if (!json.files) throw new Error("files が返されませんでした")
+  expect(await readFile(json.files[0], "utf8")).toMatch(/^<mxfile/)
+  expect(await readFile(json.files[1], "utf8")).toMatch(/^<!doctype html>/)
 })

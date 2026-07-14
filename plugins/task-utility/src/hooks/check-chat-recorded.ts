@@ -10,7 +10,11 @@ import path from "node:path"
 // 「実ユーザー発言 1 回につき差し戻し 1 回まで」を保証する(無限ループ防止)。
 const NAG_MARKER = "<!--chat-recorder-nag-->"
 
-let input: { stop_hook_active?: boolean; cwd?: string; transcript_path?: string } = {}
+let input: {
+  stop_hook_active?: boolean
+  cwd?: string
+  transcript_path?: string
+} = {}
 try {
   input = JSON.parse(fs.readFileSync(0, "utf8"))
 } catch {
@@ -37,7 +41,8 @@ let lineNo = 0
 for (const line of fs.readFileSync(transcriptPath, "utf8").split("\n")) {
   lineNo++
   if (!line.trim()) continue
-  let e
+  // biome-ignore lint/suspicious/noExplicitAny: Claude transcript の可変 JSON 構造を段階的に検査する
+  let e: Record<string, any>
   try {
     e = JSON.parse(line)
   } catch {
@@ -62,7 +67,10 @@ for (const line of fs.readFileSync(transcriptPath, "utf8").split("\n")) {
         c.input.file_path.replaceAll("\\", "/").includes("docs/chat/")
       ) {
         lastRecord = lineNo
-      } else if (c.name === "Agent" && String(c.input?.subagent_type ?? "").includes("chat-recorder")) {
+      } else if (
+        c.name === "Agent" &&
+        String(c.input?.subagent_type ?? "").includes("chat-recorder")
+      ) {
         lastRecord = lineNo
       }
     }
@@ -73,7 +81,8 @@ if (lastUserTurn === -1 || lastUserTurn <= lastRecord) process.exit(0)
 // 直近の実発言より後に既に差し戻し済みなら、同一ターンでは二度目の差し戻しをしない
 if (lastNag > lastUserTurn) process.exit(0)
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || "<task-utility plugin root>"
+const pluginRoot =
+  process.env.CLAUDE_PLUGIN_ROOT || "<task-utility plugin root>"
 const reason = [
   NAG_MARKER,
   "この会話には docs/chat/ にまだ記録されていないターンがあります(task-utility chat スキルの対象です)。",
@@ -84,7 +93,7 @@ const reason = [
   `- スキル定義: ${pluginRoot}/skills/chat/SKILL.md`,
   "- ユーザーの GitHub ユーザー名と git のユーザー名(`git config user.name`。記録ディレクトリ名に使う)、日付、この会話の成果物(ファイルパス・コミット)、前提となる資料",
   "- 既存の記録ファイルがあれば新規作成せず、未記録のターンだけをそのファイルに追記するよう指示すること。",
-  "トランスクリプトが読めない等、技術的に記録できない場合のみ、その理由をユーザーに一言伝えてから終了して構いません。",
+  "トランスクリプトが読めない等、技術的に記録できない場合のみ、その理由をユーザーに一言伝えてから終了して構いません。"
 ].join("\n")
 
 console.log(JSON.stringify({ decision: "block", reason }))

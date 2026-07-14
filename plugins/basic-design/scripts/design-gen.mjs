@@ -92083,12 +92083,21 @@ var require_elk_bundled = __commonJS({
   }
 });
 
-// src/cli.ts
+// src/design-gen-cli.ts
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 // src/decorate.ts
-var KNOWN = /* @__PURE__ */ new Set(["generic", "user", "api", "data", "messaging", "external", "screen", "entity"]);
+var KNOWN = /* @__PURE__ */ new Set([
+  "generic",
+  "user",
+  "api",
+  "data",
+  "messaging",
+  "external",
+  "screen",
+  "entity"
+]);
 var ALIASES = [
   [/(user|actor|利用者|ユーザー)/i, "user"],
   [/(api|gateway|service|サーバー)/i, "api"],
@@ -92129,7 +92138,13 @@ function resolveKind(spec, node) {
   return "generic";
 }
 function decorateLayout(spec, layout) {
-  return { ...layout, nodes: layout.nodes.map((node) => ({ ...node, kindKey: resolveKind(spec, node) })) };
+  return {
+    ...layout,
+    nodes: layout.nodes.map((node) => ({
+      ...node,
+      kindKey: resolveKind(spec, node)
+    }))
+  };
 }
 
 // src/layout/graph.ts
@@ -92149,12 +92164,23 @@ function edgeLabel(text) {
 }
 function points(edge) {
   const sections = edge.sections ?? [];
-  if (!sections.length) throw new Error(`ELK edge ${edge.id} has no routed section`);
-  return sections.flatMap((section, index) => [section.startPoint, ...section.bendPoints ?? [], section.endPoint].slice(index ? 1 : 0)).map(({ x, y }) => ({ x: Math.round(x * 1e3) / 1e3, y: Math.round(y * 1e3) / 1e3 }));
+  if (!sections.length)
+    throw new Error(`ELK edge ${edge.id} has no routed section`);
+  return sections.flatMap(
+    (section, index) => [
+      section.startPoint,
+      ...section.bendPoints ?? [],
+      section.endPoint
+    ].slice(index ? 1 : 0)
+  ).map(({ x, y }) => ({
+    x: Math.round(x * 1e3) / 1e3,
+    y: Math.round(y * 1e3) / 1e3
+  }));
 }
 function labelBox(edge) {
   const label = edge.labels?.[0];
-  if (!label || label.x === void 0 || label.y === void 0 || label.width === void 0 || label.height === void 0) return void 0;
+  if (!label || label.x === void 0 || label.y === void 0 || label.width === void 0 || label.height === void 0)
+    return void 0;
   return { x: label.x, y: label.y, width: label.width, height: label.height };
 }
 function elkEdges(edges, prefix) {
@@ -92177,7 +92203,10 @@ function layoutEdges(input, output, prefix, offsetFor = () => ({ x: 0, y: 0 })) 
       to: edge.to,
       label: edge.label ?? "",
       style: "arrow",
-      points: points(routed).map((point) => ({ x: point.x + offset.x, y: point.y + offset.y })),
+      points: points(routed).map((point) => ({
+        x: point.x + offset.x,
+        y: point.y + offset.y
+      })),
       labelBox: box ? { ...box, x: box.x + offset.x, y: box.y + offset.y } : void 0
     };
   });
@@ -92187,14 +92216,28 @@ async function layoutScreenFlow(spec) {
   const root = {
     id: "root",
     layoutOptions: { ...BASE, "elk.direction": "RIGHT" },
-    children: spec.screens.map((screen) => ({ id: screen.id, width: 180, height: 60 })),
-    edges: elkEdges(transitions.map((item) => ({ from: item.from, to: item.to, label: item.trigger })), "t")
+    children: spec.screens.map((screen) => ({
+      id: screen.id,
+      width: 180,
+      height: 60
+    })),
+    edges: elkEdges(
+      transitions.map((item) => ({
+        from: item.from,
+        to: item.to,
+        label: item.trigger
+      })),
+      "t"
+    )
   };
   const result = await elk.layout(root);
-  const resultById = new Map((result.children ?? []).map((node) => [node.id, node]));
+  const resultById = new Map(
+    (result.children ?? []).map((node) => [node.id, node])
+  );
   const nodes = spec.screens.map((screen) => {
     const placed = resultById.get(screen.id);
-    if (!placed || placed.x === void 0 || placed.y === void 0) throw new Error(`ELK node ${screen.id} is missing coordinates`);
+    if (!placed || placed.x === void 0 || placed.y === void 0)
+      throw new Error(`ELK node ${screen.id} is missing coordinates`);
     return {
       id: screen.id,
       label: screen.label ?? screen.id,
@@ -92211,11 +92254,23 @@ async function layoutScreenFlow(spec) {
     type: "screen-flow",
     title: spec.title,
     nodes,
-    edges: layoutEdges(transitions.map((item) => ({ from: item.from, to: item.to, label: item.trigger })), result.edges ?? [], "t")
+    edges: layoutEdges(
+      transitions.map((item) => ({
+        from: item.from,
+        to: item.to,
+        label: item.trigger
+      })),
+      result.edges ?? [],
+      "t"
+    )
   };
 }
 function formatColumn(column) {
-  const marks = [column.pk && "PK", column.fk && "FK", column.unique && "UQ"].filter(Boolean);
+  const marks = [
+    column.pk && "PK",
+    column.fk && "FK",
+    column.unique && "UQ"
+  ].filter(Boolean);
   const prefix = marks.length ? `[${marks.join(",")}] ` : "";
   return column.type ? `${prefix}${column.name} : ${column.type}` : `${prefix}${column.name}`;
 }
@@ -92224,22 +92279,31 @@ async function layoutEr(spec) {
   const root = {
     id: "root",
     layoutOptions: { ...BASE, "elk.direction": "DOWN" },
-    children: spec.entities.map((entity) => ({ id: entity.name, width: 240, height: 36 + entity.columns.length * 28 })),
+    children: spec.entities.map((entity) => ({
+      id: entity.name,
+      width: 240,
+      height: 36 + entity.columns.length * 28
+    })),
     edges: relations.map((relation, index) => {
       const text = `${relation.cardinality} ${relation.label ?? ""}`.trim();
       return {
         id: `rel${index + 1}`,
         sources: [relation.from],
         targets: [relation.to],
-        labels: [{ text, width: Math.max(56, text.length * 7 + 16), height: 18 }]
+        labels: [
+          { text, width: Math.max(56, text.length * 7 + 16), height: 18 }
+        ]
       };
     })
   };
   const result = await elk.layout(root);
-  const placedById = new Map((result.children ?? []).map((node) => [node.id, node]));
+  const placedById = new Map(
+    (result.children ?? []).map((node) => [node.id, node])
+  );
   const nodes = spec.entities.map((entity) => {
     const placed = placedById.get(entity.name);
-    if (!placed || placed.x === void 0 || placed.y === void 0) throw new Error(`ELK entity ${entity.name} is missing coordinates`);
+    if (!placed || placed.x === void 0 || placed.y === void 0)
+      throw new Error(`ELK entity ${entity.name} is missing coordinates`);
     return {
       id: entity.name,
       label: entity.label ?? entity.name,
@@ -92265,7 +92329,9 @@ async function layoutEr(spec) {
     };
   });
   const edges = relations.map((relation, index) => {
-    const routed = (result.edges ?? []).find((edge) => edge.id === `rel${index + 1}`);
+    const routed = (result.edges ?? []).find(
+      (edge) => edge.id === `rel${index + 1}`
+    );
     if (!routed) throw new Error(`ELK edge rel${index + 1} is missing`);
     return {
       id: `rel${index + 1}`,
@@ -92286,11 +92352,19 @@ async function layoutArchitecture(spec) {
   const edges = spec.edges ?? [];
   const root = {
     id: "root",
-    layoutOptions: { ...BASE, "elk.direction": "DOWN", "elk.hierarchyHandling": "INCLUDE_CHILDREN" },
+    layoutOptions: {
+      ...BASE,
+      "elk.direction": "DOWN",
+      "elk.hierarchyHandling": "INCLUDE_CHILDREN"
+    },
     children: [
       ...zones.map((zone) => ({
         id: `zone:${zone.id}`,
-        layoutOptions: { ...BASE, "elk.direction": "DOWN", "elk.padding": "[top=52,left=28,bottom=28,right=28]" },
+        layoutOptions: {
+          ...BASE,
+          "elk.direction": "DOWN",
+          "elk.padding": "[top=52,left=28,bottom=28,right=28]"
+        },
         children: zone.children.map((id) => ({ id, width: 160, height: 68 }))
       })),
       ...spec.nodes.filter((node) => !zoned.has(node.id)).map((node) => ({ id: node.id, width: 160, height: 68 }))
@@ -92306,10 +92380,18 @@ async function layoutArchitecture(spec) {
     const y = child.y ?? 0;
     const zone = placedZones.get(child.id);
     if (zone) {
-      layoutZones.push({ id: zone.id, label: zone.label ?? zone.id, x, y, width: child.width ?? 0, height: child.height ?? 0 });
+      layoutZones.push({
+        id: zone.id,
+        label: zone.label ?? zone.id,
+        x,
+        y,
+        width: child.width ?? 0,
+        height: child.height ?? 0
+      });
       for (const nested of child.children ?? []) {
         const source = nodeById.get(nested.id);
-        if (!source) throw new Error(`architecture node ${nested.id} is missing`);
+        if (!source)
+          throw new Error(`architecture node ${nested.id} is missing`);
         nodes.push({
           id: source.id,
           label: source.label ?? source.id,
@@ -92379,6 +92461,7 @@ async function layoutSequence(spec) {
     };
   });
   const lines = spec.actors.map((actor) => ({
+    // biome-ignore lint/style/noNonNullAssertion: 直前の actors.map で全 actor id を登録済み
     x: center.get(actor.id),
     y1: ACTOR_HEIGHT,
     y2: bottomY,
@@ -92387,7 +92470,9 @@ async function layoutSequence(spec) {
   const edges = messages.map((msg, i) => {
     const y = ACTOR_HEIGHT + (i + 1) * MESSAGE_GAP;
     const points2 = [
+      // biome-ignore lint/style/noNonNullAssertion: validateSpec 済みで message の actor 参照は存在する
       { x: center.get(msg.from), y },
+      // biome-ignore lint/style/noNonNullAssertion: validateSpec 済みで message の actor 参照は存在する
       { x: center.get(msg.to), y }
     ];
     const width = Math.max(48, (msg.label ?? "").length * 7 + 16);
@@ -92398,7 +92483,12 @@ async function layoutSequence(spec) {
       label: msg.label ?? "",
       style: msg.style === "return" ? "return" : msg.style === "async" ? "async" : "sync",
       points: points2,
-      labelBox: msg.label ? { x: (points2[0].x + points2[1].x - width) / 2, y: y - 22, width, height: 18 } : void 0
+      labelBox: msg.label ? {
+        x: (points2[0].x + points2[1].x - width) / 2,
+        y: y - 22,
+        width,
+        height: 18
+      } : void 0
     };
   });
   return { type: "sequence", title: spec.title, nodes, lines, edges };
@@ -92407,14 +92497,54 @@ async function layoutSequence(spec) {
 // src/theme.ts
 var THEME = {
   palette: {
-    generic: { fill: "#F8FAFC", stroke: "#64748B", icon: "#475569", text: "#0F172A" },
-    user: { fill: "#EFF6FF", stroke: "#3B82F6", icon: "#2563EB", text: "#1E3A8A" },
-    api: { fill: "#ECFEFF", stroke: "#0891B2", icon: "#0E7490", text: "#164E63" },
-    data: { fill: "#F5F3FF", stroke: "#8B5CF6", icon: "#7C3AED", text: "#4C1D95" },
-    messaging: { fill: "#FFF7ED", stroke: "#F97316", icon: "#EA580C", text: "#7C2D12" },
-    external: { fill: "#FDF2F8", stroke: "#DB2777", icon: "#BE185D", text: "#831843" },
-    screen: { fill: "#F0FDF4", stroke: "#22C55E", icon: "#16A34A", text: "#14532D" },
-    entity: { fill: "#FFFBEB", stroke: "#D97706", icon: "#B45309", text: "#78350F" }
+    generic: {
+      fill: "#F8FAFC",
+      stroke: "#64748B",
+      icon: "#475569",
+      text: "#0F172A"
+    },
+    user: {
+      fill: "#EFF6FF",
+      stroke: "#3B82F6",
+      icon: "#2563EB",
+      text: "#1E3A8A"
+    },
+    api: {
+      fill: "#ECFEFF",
+      stroke: "#0891B2",
+      icon: "#0E7490",
+      text: "#164E63"
+    },
+    data: {
+      fill: "#F5F3FF",
+      stroke: "#8B5CF6",
+      icon: "#7C3AED",
+      text: "#4C1D95"
+    },
+    messaging: {
+      fill: "#FFF7ED",
+      stroke: "#F97316",
+      icon: "#EA580C",
+      text: "#7C2D12"
+    },
+    external: {
+      fill: "#FDF2F8",
+      stroke: "#DB2777",
+      icon: "#BE185D",
+      text: "#831843"
+    },
+    screen: {
+      fill: "#F0FDF4",
+      stroke: "#22C55E",
+      icon: "#16A34A",
+      text: "#14532D"
+    },
+    entity: {
+      fill: "#FFFBEB",
+      stroke: "#D97706",
+      icon: "#B45309",
+      text: "#78350F"
+    }
   },
   zone: { fill: "#F8FAFC", stroke: "#CBD5E1", chip: "#E2E8F0" },
   edge: "#475569",
@@ -92540,7 +92670,9 @@ function renderDrawio(layout) {
   const cells = [];
   for (const zone of layout.zones ?? []) cells.push(zoneCell(zone));
   for (const node of layout.nodes) cells.push(nodeCell(node));
-  (layout.lines ?? []).forEach((line, i) => cells.push(lineCell(line, i)));
+  for (const [i, line] of (layout.lines ?? []).entries()) {
+    cells.push(lineCell(line, i));
+  }
   for (const edge of layout.edges) cells.push(edgeCell(edge));
   return `<mxfile host="basic-design"><diagram name="${escapeXml(layout.title)}"><mxGraphModel dx="800" dy="600" grid="1" gridSize="10"><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cells.join("")}</root></mxGraphModel></diagram></mxfile>`;
 }
@@ -92555,17 +92687,36 @@ function labelChipWidth(text) {
   return Math.max(48, text.length * 7 + 16);
 }
 function sizedIcon(node, x, y) {
-  const svg = iconSvg(node.kindKey).replace("<svg ", `<svg width="${ICON_SIZE}" height="${ICON_SIZE}" `);
+  const svg = iconSvg(node.kindKey).replace(
+    "<svg ",
+    `<svg width="${ICON_SIZE}" height="${ICON_SIZE}" `
+  );
   return `<g class="node-icon" transform="translate(${x},${y})">${svg}</g>`;
 }
 function extent(layout) {
   const zones = layout.zones ?? [];
   const lines = layout.lines ?? [];
   const boxes = [...layout.nodes, ...zones];
-  const edgeXs = layout.edges.flatMap((e) => [...e.points.map((p) => p.x), ...e.labelBox ? [e.labelBox.x + e.labelBox.width] : []]);
-  const edgeYs = layout.edges.flatMap((e) => [...e.points.map((p) => p.y), ...e.labelBox ? [e.labelBox.y + e.labelBox.height] : []]);
-  const width = Math.max(0, ...boxes.map((b) => b.x + b.width), ...lines.map((l) => l.x), ...edgeXs) + PAD * 2;
-  const height = Math.max(0, ...boxes.map((b) => b.y + b.height), ...lines.map((l) => l.y2), ...edgeYs) + PAD * 2;
+  const edgeXs = layout.edges.flatMap((e) => [
+    ...e.points.map((p) => p.x),
+    ...e.labelBox ? [e.labelBox.x + e.labelBox.width] : []
+  ]);
+  const edgeYs = layout.edges.flatMap((e) => [
+    ...e.points.map((p) => p.y),
+    ...e.labelBox ? [e.labelBox.y + e.labelBox.height] : []
+  ]);
+  const width = Math.max(
+    0,
+    ...boxes.map((b) => b.x + b.width),
+    ...lines.map((l) => l.x),
+    ...edgeXs
+  ) + PAD * 2;
+  const height = Math.max(
+    0,
+    ...boxes.map((b) => b.y + b.height),
+    ...lines.map((l) => l.y2),
+    ...edgeYs
+  ) + PAD * 2;
   return { width, height };
 }
 function zoneSvg(zone) {
@@ -92576,12 +92727,16 @@ function lineSvg(line) {
   return `<line class="lifeline" x1="${line.x}" y1="${line.y1}" x2="${line.x}" y2="${line.y2}"/>`;
 }
 function rowText(text, meta) {
-  const marks = ["pk", "fk", "unique"].filter((key) => meta[key] === true);
+  const marks = ["pk", "fk", "unique"].filter(
+    (key) => meta[key] === true
+  );
   if (!marks.length) return text;
   return text.replace(/^\[(?:PK|FK|UQ)(?:,(?:PK|FK|UQ))*\]\s*/, "");
 }
 function badges(meta) {
-  return ["pk", "fk", "unique"].filter((key) => meta[key] === true).map((key) => `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan> `).join("");
+  return ["pk", "fk", "unique"].filter((key) => meta[key] === true).map(
+    (key) => `<tspan class="badge badge-${key}">${key === "unique" ? "UQ" : key.toUpperCase()}</tspan> `
+  ).join("");
 }
 function nodeSvg(node) {
   const cls = `node-card kind-${node.kindKey}`;
@@ -92611,7 +92766,9 @@ function edgeSvg(e) {
   return `<g class="edge${styleClass}" data-id="${escapeXml(e.id)}" data-from="${escapeXml(e.from)}" data-to="${escapeXml(e.to)}"><polyline points="${p}" fill="none"${marker}/>${label}</g>`;
 }
 function paletteCss() {
-  return Object.entries(THEME.palette).map(([kind, colors]) => `.kind-${kind}{--fill:${colors.fill};--stroke:${colors.stroke};--icon:${colors.icon};--text:${colors.text};}`).join("");
+  return Object.entries(THEME.palette).map(
+    ([kind, colors]) => `.kind-${kind}{--fill:${colors.fill};--stroke:${colors.stroke};--icon:${colors.icon};--text:${colors.text};}`
+  ).join("");
 }
 var INTERACTION_SCRIPT = `(() => {
   const svg = document.getElementById("canvas")
@@ -92840,7 +92997,12 @@ ${INTERACTION_SCRIPT}
 }
 
 // src/validate.ts
-var SUPPORTED_TYPES = ["er", "screen-flow", "architecture", "sequence"];
+var SUPPORTED_TYPES = [
+  "er",
+  "screen-flow",
+  "architecture",
+  "sequence"
+];
 var CARDINALITIES = ["1:1", "1:N", "N:1", "N:M"];
 function validateSpec(spec) {
   if (spec === null || typeof spec !== "object" || Array.isArray(spec)) {
@@ -92848,7 +93010,9 @@ function validateSpec(spec) {
   }
   const value = spec;
   if (!SUPPORTED_TYPES.includes(value.type)) {
-    return [`type: \u672A\u5BFE\u5FDC\u306E\u56F3\u7A2E "${value.type}" \u3067\u3059(\u5BFE\u5FDC: ${SUPPORTED_TYPES.join(", ")})`];
+    return [
+      `type: \u672A\u5BFE\u5FDC\u306E\u56F3\u7A2E "${value.type}" \u3067\u3059(\u5BFE\u5FDC: ${SUPPORTED_TYPES.join(", ")})`
+    ];
   }
   const errors = [];
   if (typeof value.title !== "string" || value.title.trim() === "") {
@@ -92892,12 +93056,16 @@ function validateEr(spec) {
     }
     e.columns.forEach((column, j) => {
       if (column === null || typeof column !== "object") {
-        errors.push(`entities(${e.name}).columns[${j}]: \u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306F\u3042\u308A\u307E\u305B\u3093`);
+        errors.push(
+          `entities(${e.name}).columns[${j}]: \u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306F\u3042\u308A\u307E\u305B\u3093`
+        );
         return;
       }
       const c = column;
       if (typeof c.name !== "string" || c.name.trim() === "") {
-        errors.push(`entities(${e.name}).columns[${j}].name: \u5FC5\u9808\u3067\u3059(\u7A7A\u3067\u306A\u3044\u6587\u5B57\u5217)`);
+        errors.push(
+          `entities(${e.name}).columns[${j}].name: \u5FC5\u9808\u3067\u3059(\u7A7A\u3067\u306A\u3044\u6587\u5B57\u5217)`
+        );
       }
     });
   });
@@ -92915,11 +93083,15 @@ function validateEr(spec) {
     const r = rel;
     for (const end of ["from", "to"]) {
       if (!names.has(r[end])) {
-        errors.push(`${where}.${end}: \u30A8\u30F3\u30C6\u30A3\u30C6\u30A3 "${r[end]}" \u306F entities \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`);
+        errors.push(
+          `${where}.${end}: \u30A8\u30F3\u30C6\u30A3\u30C6\u30A3 "${r[end]}" \u306F entities \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`
+        );
       }
     }
     if (!CARDINALITIES.includes(r.cardinality)) {
-      errors.push(`${where}.cardinality: "${r.cardinality}" \u306F\u4E0D\u6B63\u3067\u3059(\u5BFE\u5FDC: ${CARDINALITIES.join(", ")})`);
+      errors.push(
+        `${where}.cardinality: "${r.cardinality}" \u306F\u4E0D\u6B63\u3067\u3059(\u5BFE\u5FDC: ${CARDINALITIES.join(", ")})`
+      );
     }
   });
   return errors;
@@ -92962,7 +93134,9 @@ function validateScreenFlow(spec) {
     const tr = t;
     for (const end of ["from", "to"]) {
       if (!ids.has(tr[end])) {
-        errors.push(`${where}.${end}: \u753B\u9762 "${tr[end]}" \u306F screens \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`);
+        errors.push(
+          `${where}.${end}: \u753B\u9762 "${tr[end]}" \u306F screens \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`
+        );
       }
     }
   });
@@ -93011,20 +93185,28 @@ function validateArchitecture(spec) {
       return;
     }
     if (zoneIds.has(z.id) || nodeIds.has(z.id)) {
-      errors.push(`${where}.id: "${z.id}" \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059(\u30BE\u30FC\u30F3\u30FB\u30CE\u30FC\u30C9\u9593\u3067\u4E00\u610F\u3067\u3042\u308B\u3053\u3068)`);
+      errors.push(
+        `${where}.id: "${z.id}" \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059(\u30BE\u30FC\u30F3\u30FB\u30CE\u30FC\u30C9\u9593\u3067\u4E00\u610F\u3067\u3042\u308B\u3053\u3068)`
+      );
     }
     zoneIds.add(z.id);
     if (!Array.isArray(z.children) || z.children.length === 0) {
-      errors.push(`${where}(${z.id}).children: 1 \u4EF6\u4EE5\u4E0A\u306E\u30CE\u30FC\u30C9 id \u306E\u914D\u5217\u304C\u5FC5\u9808\u3067\u3059`);
+      errors.push(
+        `${where}(${z.id}).children: 1 \u4EF6\u4EE5\u4E0A\u306E\u30CE\u30FC\u30C9 id \u306E\u914D\u5217\u304C\u5FC5\u9808\u3067\u3059`
+      );
       return;
     }
     z.children.forEach((childId, j) => {
       if (!nodeIds.has(childId)) {
-        errors.push(`zones(${z.id}).children[${j}]: \u30CE\u30FC\u30C9 "${childId}" \u306F nodes \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`);
+        errors.push(
+          `zones(${z.id}).children[${j}]: \u30CE\u30FC\u30C9 "${childId}" \u306F nodes \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`
+        );
         return;
       }
       if (assigned.has(childId)) {
-        errors.push(`zones(${z.id}).children[${j}]: \u30CE\u30FC\u30C9 "${childId}" \u306F\u8907\u6570\u306E\u30BE\u30FC\u30F3\u306B\u5C5E\u3057\u3066\u3044\u307E\u3059`);
+        errors.push(
+          `zones(${z.id}).children[${j}]: \u30CE\u30FC\u30C9 "${childId}" \u306F\u8907\u6570\u306E\u30BE\u30FC\u30F3\u306B\u5C5E\u3057\u3066\u3044\u307E\u3059`
+        );
       }
       assigned.add(childId);
     });
@@ -93043,7 +93225,9 @@ function validateArchitecture(spec) {
     const e = edge;
     for (const end of ["from", "to"]) {
       if (!nodeIds.has(e[end])) {
-        errors.push(`${where}.${end}: \u30CE\u30FC\u30C9 "${e[end]}" \u306F nodes \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`);
+        errors.push(
+          `${where}.${end}: \u30CE\u30FC\u30C9 "${e[end]}" \u306F nodes \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`
+        );
       }
     }
   });
@@ -93087,20 +93271,24 @@ function validateSequence(spec) {
     const m = msg;
     for (const end of ["from", "to"]) {
       if (!ids.has(m[end])) {
-        errors.push(`${where}.${end}: \u30A2\u30AF\u30BF\u30FC "${m[end]}" \u306F actors \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`);
+        errors.push(
+          `${where}.${end}: \u30A2\u30AF\u30BF\u30FC "${m[end]}" \u306F actors \u306B\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u307E\u305B\u3093`
+        );
       }
     }
     if (m.from === m.to && ids.has(m.from)) {
       errors.push(`${where}: from \u3068 to \u304C\u540C\u4E00(\u81EA\u5DF1\u30E1\u30C3\u30BB\u30FC\u30B8)\u306F\u672A\u5BFE\u5FDC\u3067\u3059`);
     }
     if (m.style !== void 0 && !["async", "return"].includes(m.style)) {
-      errors.push(`${where}.style: "${m.style}" \u306F\u4E0D\u6B63\u3067\u3059(\u5BFE\u5FDC: async, return\u3001\u307E\u305F\u306F\u7701\u7565=\u540C\u671F)`);
+      errors.push(
+        `${where}.style: "${m.style}" \u306F\u4E0D\u6B63\u3067\u3059(\u5BFE\u5FDC: async, return\u3001\u307E\u305F\u306F\u7701\u7565=\u540C\u671F)`
+      );
     }
   });
   return errors;
 }
 
-// src/cli.ts
+// src/design-gen-cli.ts
 var LAYOUTS = {
   architecture: layoutArchitecture,
   "screen-flow": layoutScreenFlow,
@@ -93115,10 +93303,14 @@ function fail(errors) {
 }
 async function main(argv = process.argv.slice(2)) {
   const formatIndex = argv.indexOf("--format");
-  const specArg = argv.find((arg, index) => !arg.startsWith("--") && (formatIndex === -1 || index !== formatIndex + 1));
+  const specArg = argv.find(
+    (arg, index) => !arg.startsWith("--") && (formatIndex === -1 || index !== formatIndex + 1)
+  );
   const format = formatIndex === -1 ? "both" : argv[formatIndex + 1];
-  if (!specArg) fail(["usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"]);
-  if (!FORMATS.includes(format)) fail([`--format: "${format}" \u306F\u4E0D\u6B63\u3067\u3059(\u5BFE\u5FDC: ${FORMATS.join(", ")})`]);
+  if (!specArg)
+    fail(["usage: node design-gen.mjs <spec.json> --format <drawio|html|both>"]);
+  if (!FORMATS.includes(format))
+    fail([`--format: "${format}" \u306F\u4E0D\u6B63\u3067\u3059(\u5BFE\u5FDC: ${FORMATS.join(", ")})`]);
   let unknown;
   try {
     unknown = JSON.parse(readFileSync(specArg, "utf8"));
@@ -93150,9 +93342,9 @@ async function main(argv = process.argv.slice(2)) {
     fail([`\u56F3\u306E\u751F\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${error.message}`]);
   }
 }
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => fail([`\u56F3\u306E\u751F\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${error.message}`]));
-}
+main().catch(
+  (error) => fail([`\u56F3\u306E\u751F\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${error.message}`])
+);
 export {
   main
 };

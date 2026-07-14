@@ -38,13 +38,13 @@ export async function readStdin(): Promise<HookInput> {
 
 export function emit(decision: "deny" | "ask", reason: string): never {
   process.stdout.write(
-    JSON.stringify({
+    `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: decision,
         permissionDecisionReason: reason
       }
-    }) + "\n"
+    })}\n`
   )
   process.exit(0)
 }

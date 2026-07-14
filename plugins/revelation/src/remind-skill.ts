@@ -60,7 +60,7 @@ try {
   try {
     // revelation は Fable 未満のモデル(Opus 含む)が対象。本人が Fable なら差し戻さない。
     const model = lastAssistantModel(transcript)
-    if (model && model.includes("fable")) pass()
+    if (model?.includes("fable")) pass()
 
     if (hasSkillInvocation(transcript, skill)) pass()
     if (hasSkillFileRead(transcript, skill)) pass()

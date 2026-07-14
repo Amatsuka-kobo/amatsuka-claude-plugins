@@ -1,30 +1,35 @@
-import type { Layout, LayoutEdge, LayoutNode } from "../types.js"
 import { THEME } from "../theme.js"
+import type { Layout, LayoutEdge, LayoutNode } from "../types.js"
 import { escapeXml } from "../xml-util.js"
 import { iconEmoji } from "./icons.js"
 
-const CARDINALITY_ARROWS: Record<NonNullable<LayoutEdge["cardinality"]>, [string, string]> = {
+const CARDINALITY_ARROWS: Record<
+  NonNullable<LayoutEdge["cardinality"]>,
+  [string, string]
+> = {
   "1:1": ["ERone", "ERone"],
   "1:N": ["ERone", "ERmany"],
   "N:1": ["ERmany", "ERone"],
-  "N:M": ["ERmany", "ERmany"],
+  "N:M": ["ERmany", "ERmany"]
 }
 
 const EDGE_STYLES: Record<NonNullable<LayoutEdge["style"]>, string> = {
   arrow: "rounded=0;endArrow=block;endFill=1;",
   sync: "rounded=0;endArrow=block;endFill=1;",
   async: "rounded=0;endArrow=open;endFill=0;",
-  return: "rounded=0;dashed=1;endArrow=open;endFill=0;",
+  return: "rounded=0;dashed=1;endArrow=open;endFill=0;"
 }
 
-const ROW_STYLE = "text;html=1;strokeColor=#E2E8F0;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=10;fontSize=12;"
+const ROW_STYLE =
+  "text;html=1;strokeColor=#E2E8F0;fillColor=#FFFFFF;align=left;verticalAlign=middle;spacingLeft=10;fontSize=12;"
 const LABEL_STYLE = `text;html=1;strokeColor=none;fillColor=${THEME.labelBackground};align=center;verticalAlign=middle;spacing=0;`
 const LIFELINE_STYLE = `endArrow=none;dashed=1;strokeColor=#94A3B8;`
 const ZONE_STYLE = `rounded=1;arcSize=8;fillColor=${THEME.zone.fill};strokeColor=${THEME.zone.stroke};verticalAlign=top;fontStyle=1;align=left;spacingLeft=8;`
 
 function nodeStyle(node: LayoutNode): string {
   const t = THEME.palette[node.kindKey]
-  const shapePart = node.shape === "terminal" ? "ellipse;" : "rounded=1;arcSize=16;"
+  const shapePart =
+    node.shape === "terminal" ? "ellipse;" : "rounded=1;arcSize=16;"
   const fontPart = node.shape === "actor" ? "fontStyle=1;" : ""
   return `${shapePart}whiteSpace=wrap;html=1;shadow=1;fillColor=${t.fill};strokeColor=${t.stroke};fontColor=${t.text};${fontPart}`
 }
@@ -77,7 +82,10 @@ function zoneCell(zone: NonNullable<Layout["zones"]>[number]): string {
   )
 }
 
-function lineCell(line: NonNullable<Layout["lines"]>[number], index: number): string {
+function lineCell(
+  line: NonNullable<Layout["lines"]>[number],
+  index: number
+): string {
   return (
     `<mxCell id="l-${index + 1}" style="${LIFELINE_STYLE}" edge="1" parent="1">` +
     `<mxGeometry relative="1" as="geometry">` +
@@ -93,7 +101,9 @@ function edgePointsXml(edge: LayoutEdge): string {
   const interior = edge.points.slice(1, -1)
   return (
     `<mxPoint x="${source.x}" y="${source.y}" as="sourcePoint"/>` +
-    (interior.length ? `<Array as="points">${interior.map((point) => `<mxPoint x="${point.x}" y="${point.y}"/>`).join("")}</Array>` : "") +
+    (interior.length
+      ? `<Array as="points">${interior.map((point) => `<mxPoint x="${point.x}" y="${point.y}"/>`).join("")}</Array>`
+      : "") +
     `<mxPoint x="${target.x}" y="${target.y}" as="targetPoint"/>`
   )
 }
@@ -131,7 +141,9 @@ export function renderDrawio(layout: Layout): string {
   const cells: string[] = []
   for (const zone of layout.zones ?? []) cells.push(zoneCell(zone))
   for (const node of layout.nodes) cells.push(nodeCell(node))
-  ;(layout.lines ?? []).forEach((line, i) => cells.push(lineCell(line, i)))
+  for (const [i, line] of (layout.lines ?? []).entries()) {
+    cells.push(lineCell(line, i))
+  }
   for (const edge of layout.edges) cells.push(edgeCell(edge))
   return (
     `<mxfile host="basic-design">` +

@@ -83,7 +83,7 @@ test("fable-restraint invoke 済みなら Write は素通し(無出力、マー�
   const ctx = setup()
   fs.writeFileSync(
     ctx.transcript,
-    skillUseLine("revelation:fable-restraint") + "\n"
+    `${skillUseLine("revelation:fable-restraint")}\n`
   )
   expect(hook(ctx, "Write")).toBeNull()
   // 既読による素通しはマーカーを消費しない(deny 履歴が残らない)
@@ -94,7 +94,7 @@ test("Task/Agent は fable-subagents を要求する(restraint 既読でも別�
   const ctx = setup()
   fs.writeFileSync(
     ctx.transcript,
-    skillUseLine("revelation:fable-restraint") + "\n"
+    `${skillUseLine("revelation:fable-restraint")}\n`
   )
   const r = hook(ctx, "Task")
   expect(r?.permissionDecision).toBe("deny")
@@ -140,14 +140,14 @@ test("マーカーディレクトリの作成に失敗すると素通し(無出�
 
 test("Fable セッション(model に fable を含む)では未読でも Edit は素通し(マーカーも作られない)", () => {
   const ctx = setup()
-  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-fable-5") + "\n")
+  fs.writeFileSync(ctx.transcript, `${assistantModelLine("claude-fable-5")}\n`)
   expect(hook(ctx, "Edit")).toBeNull()
   expect(fs.existsSync(ctx.stateDir)).toBe(false)
 })
 
 test("Opus セッションは対象のまま(従来どおり deny)", () => {
   const ctx = setup()
-  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-opus-4-8") + "\n")
+  fs.writeFileSync(ctx.transcript, `${assistantModelLine("claude-opus-4-8")}\n`)
   const r = hook(ctx, "Edit")
   expect(r?.permissionDecision).toBe("deny")
   expect(r?.permissionDecisionReason).toMatch(/revelation:fable-restraint/)
@@ -180,14 +180,14 @@ function writeSubTranscript(
     `agent-${agentId}.jsonl`
   )
   fs.mkdirSync(path.dirname(p), { recursive: true })
-  fs.writeFileSync(p, lines.join("\n") + "\n")
+  fs.writeFileSync(p, `${lines.join("\n")}\n`)
   return p
 }
 
 test("サブエージェント発: 本人のモデルで判定し deny、文面は SKILL.md への Read を指示する", () => {
   const ctx = setup()
   // 親は Fable でも、サブエージェント本人が Sonnet なら差し戻す
-  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-fable-5") + "\n")
+  fs.writeFileSync(ctx.transcript, `${assistantModelLine("claude-fable-5")}\n`)
   writeSubTranscript(ctx, "sub1", [assistantModelLine("claude-sonnet-5")])
   const r = hook(ctx, "Write", null, {
     agent_id: "sub1",
@@ -202,7 +202,7 @@ test("サブエージェント発: 本人のモデルで判定し deny、文面�
 
 test("サブエージェント発: 本人が Fable なら親が Sonnet でも素通し", () => {
   const ctx = setup()
-  fs.writeFileSync(ctx.transcript, assistantModelLine("claude-sonnet-5") + "\n")
+  fs.writeFileSync(ctx.transcript, `${assistantModelLine("claude-sonnet-5")}\n`)
   writeSubTranscript(ctx, "sub1", [assistantModelLine("claude-fable-5")])
   expect(
     hook(ctx, "Write", null, {
