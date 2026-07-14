@@ -11,10 +11,12 @@
     ],
     "ask": [
       "Bash(git push *)",
-      "Bash(git * main)"
+      "Bash(git * main)",
+      "Bash(rm *)"
     ],
     "deny": [
-      "Bash(rm -rf *)",
+      "Bash(rm -rf ./)",
+      "Bash(rm -rf /)",
       "Bash(git push --force *)",
       "Bash(sudo *)"
     ]
