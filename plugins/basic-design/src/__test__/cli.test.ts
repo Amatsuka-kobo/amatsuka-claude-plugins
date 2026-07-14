@@ -7,7 +7,7 @@ import { promisify } from "node:util"
 import { expect, test } from "vitest"
 
 const execFileAsync = promisify(execFile)
-const BUNDLED_CLI = fileURLToPath(new URL("../scripts/design-gen.mjs", import.meta.url))
+const BUNDLED_CLI = fileURLToPath(new URL("../../scripts/design-gen.mjs", import.meta.url))
 
 const erSpec = {
   type: "er",

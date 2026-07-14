@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { validateSpec } from "./validate.js"
+import { validateSpec } from "../validate.js"
 
 const validSpec = (): any => ({
   type: "er",

@@ -8,7 +8,7 @@ await esbuild.build({
   platform: "node",
   format: "esm",
   sourcemap: false,
-  target: "node20",
+  target: "node26",
   banner: {
     js: 'import { createRequire as __basicDesignCreateRequire } from "node:module"; const require = __basicDesignCreateRequire(import.meta.url);',
   },

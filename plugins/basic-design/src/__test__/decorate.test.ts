@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { decorateLayout } from "./decorate.js"
-import type { DiagramSpec, Layout, LayoutNode } from "./types.js"
+import { decorateLayout } from "../decorate.js"
+import type { DiagramSpec, Layout, LayoutNode } from "../types.js"
 
 function loadSample(fileName: string): DiagramSpec {
-  const path = fileURLToPath(new URL(`../samples/${fileName}`, import.meta.url))
+  const path = fileURLToPath(new URL(`../../samples/${fileName}`, import.meta.url))
   return JSON.parse(readFileSync(path, "utf8")) as DiagramSpec
 }
 

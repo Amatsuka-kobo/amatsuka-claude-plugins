@@ -1,13 +1,13 @@
 import { expect, test } from "vitest"
-import architecture from "../../samples/web-architecture.spec.json" with { type: "json" }
-import flow from "../../samples/ec-screen-flow.spec.json" with { type: "json" }
-import er from "../../samples/order-system.spec.json" with { type: "json" }
-import complexArchitecture from "../fixtures/complex-architecture.spec.json" with { type: "json" }
-import complexFlow from "../fixtures/complex-screen-flow.spec.json" with { type: "json" }
-import complexEr from "../fixtures/complex-er.spec.json" with { type: "json" }
-import type { ArchitectureSpec, Box, ErSpec, Layout, LayoutNode, ScreenFlowSpec } from "../types.js"
-import { assertLayoutHasNoOverlaps } from "./geometry.js"
-import { layoutArchitecture, layoutEr, layoutScreenFlow } from "./graph.js"
+import architecture from "../../../samples/web-architecture.spec.json" with { type: "json" }
+import flow from "../../../samples/ec-screen-flow.spec.json" with { type: "json" }
+import er from "../../../samples/order-system.spec.json" with { type: "json" }
+import complexArchitecture from "../../fixtures/complex-architecture.spec.json" with { type: "json" }
+import complexFlow from "../../fixtures/complex-screen-flow.spec.json" with { type: "json" }
+import complexEr from "../../fixtures/complex-er.spec.json" with { type: "json" }
+import type { ArchitectureSpec, Box, ErSpec, Layout, LayoutNode, ScreenFlowSpec } from "../../types.js"
+import { assertLayoutHasNoOverlaps } from "../geometry.js"
+import { layoutArchitecture, layoutEr, layoutScreenFlow } from "../graph.js"
 
 function node(layout: Layout, id: string): LayoutNode {
   const result = layout.nodes.find((item) => item.id === id)
