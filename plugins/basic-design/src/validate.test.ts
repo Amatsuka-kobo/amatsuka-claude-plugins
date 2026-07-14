@@ -140,10 +140,10 @@ test("screen-flow: id 重複はエラー", () => {
   expect(validateSpec(spec).some((e) => e.includes("login") && e.includes("重複"))).toBe(true)
 })
 
-test("screen-flow: 不正な kind はエラー", () => {
+test("screen-flow: 未知 kind はエラーにしない", () => {
   const spec = validScreenFlow()
   spec.screens[1].kind = "middle"
-  expect(validateSpec(spec).some((e) => e.includes("kind") && e.includes("middle"))).toBe(true)
+  expect(validateSpec(spec)).toEqual([])
 })
 
 test("screen-flow: 存在しない画面への遷移はエラー", () => {

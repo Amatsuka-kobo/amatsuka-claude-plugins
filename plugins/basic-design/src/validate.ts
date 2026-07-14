@@ -112,9 +112,6 @@ function validateScreenFlow(spec: Record<string, unknown>): string[] {
       errors.push(`${where}.id: "${s.id}" が重複しています`)
     }
     ids.add(s.id)
-    if (s.kind !== undefined && !["start", "end"].includes(s.kind as string)) {
-      errors.push(`${where}(${s.id}).kind: "${s.kind}" は不正です(対応: start, end、または省略)`)
-    }
   })
   const transitions = spec.transitions ?? []
   if (!Array.isArray(transitions)) {
