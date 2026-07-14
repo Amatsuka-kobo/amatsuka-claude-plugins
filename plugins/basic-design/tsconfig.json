@@ -1,1 +1,0 @@
-{"compilerOptions":{"target":"esnext","module":"esnext","moduleResolution":"bundler","outDir":"scripts/","rootDir":"src/","strict":true,"resolveJsonModule":true,"types":["node"],"esModuleInterop":true,"skipLibCheck":true,"forceConsistentCasingInFileNames":true,"isolatedModules":true},"include":["src/**/*"],"exclude":["node_modules","scripts"]}

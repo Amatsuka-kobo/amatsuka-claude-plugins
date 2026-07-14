@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "vitest.config.ts",
+    "plugins/*/src/**/*.ts",
+    "plugins/*/build.ts",
+    "plugins/codiel/raguel-mcp/src/**/*.ts",
+    "plugins/codiel/raguel-mcp/build.ts"
+  ],
+  "exclude": ["**/node_modules", "plugins/*/scripts", "plugins/codiel/raguel-mcp/dist"]
+}
