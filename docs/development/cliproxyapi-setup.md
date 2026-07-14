@@ -162,9 +162,9 @@ GPT Agents は `codex` フォルダに置いてあるので、そこからのシ
 
 ```bash
 mkdir .claude/agents
-ln -s ../codex/gpt-sol.md .claude/agents/gpt-sol.md
-ln -s ../codex/gpt-terra.md .claude/agents/gpt-terra.md
-ln -s ../codex/gpt-luna.md .claude/agents/gpt-luna.md
+ln -s ../../codex/gpt-sol.md .claude/agents/gpt-sol.md
+ln -s ../../codex/gpt-terra.md .claude/agents/gpt-terra.md
+ln -s ../../codex/gpt-luna.md .claude/agents/gpt-luna.md
 ```
 
 ## トラブルシューティング
