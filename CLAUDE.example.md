@@ -5,24 +5,29 @@
 
 ## プラグイン構成
 
-| プラグイン     | 役割                                                                                          | 主要ディレクトリ                                                                                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `codiel`       | GitHub issue を取得・分析し、設計→開発→PR 起票→レビューまでを一気通貫で行うオーケストレーター | `skills/`(工程別スキル群)、`raguel-mcp/`(ゲーティング用 MCP サーバー / TypeScript)、`agents/`・`commands/`・`hooks/`・`scripts/`、`docs/DESIGN.md` |
-| `revelation`   | 上位モデル(Fable 5)の仕事の進め方を、より小さいモデルが再現できるスキルとして提供             | `skills/`(fable-method / fable-restraint / fable-subagents)、`hooks/`(該当スキルの invoke を促す)                                                  |
-| `task-utility` | タスクの進め方を支援するユーティリティ群                                                      | `skills/`(chat / issue-craft / issue-split)、`agents/`・`hooks/`・`scripts/`                                                                       |
+| プラグイン     | 役割                                                                                                                                                            | 主要ディレクトリ                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codiel`       | GitHub issue を取得・分析し、設計→開発→PR 起票→レビューまでを一気通貫で行うオーケストレーター                                                                   | `skills/`(工程別スキル群)、`raguel-mcp/`(ゲーティング用 MCP サーバー / TypeScript)、`agents/`・`commands/`・`hooks/`・`scripts/`、`docs/DESIGN.md` |
+| `revelation`   | 上位モデル(Fable 5)の仕事の進め方を、より小さいモデルが再現できるスキルとして提供                                                                               | `skills/`(fable-method / fable-restraint / fable-subagents)、`hooks/`(該当スキルの invoke を促す)                                                  |
+| `task-utility` | タスクの進め方を支援するユーティリティ群                                                                                                                        | `skills/`(chat / issue-craft / issue-split)、`agents/`・`hooks/`・`scripts/`                                                                       |
+| `basic-design` | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群。図は spec JSON 経由で .drawio / HTML を生成 | `skills/`(入口 basic-design +図種別+Markdown系)、`scripts/`(esbuild バンドル済み CLI)                                                              |
 
-## Codiel/Raguel の制約(重要)
+## プラグイン開発の制約（重要）
 
-Codiel と raguel-mcp は **Anthropic API を使用できないユーザーも使える**ことが必須要件。API クライアントの追加・`ANTHROPIC_API_KEY` 前提の実装・ユーザーへの CLI 直接操作の要求は、どれだけ便利に見えても採用しない。LLM が必要な処理は Claude Code の機構(メインセッション/サブエージェント)か `claude` CLI のヘッドレス実行(ユーザーの既存サブスク認証)に閉じる。詳細は `plugins/codiel/docs/DESIGN.md` §0。
+このリポジトリのプラグインは **Anthropic API を使用できないユーザーも使える**ことが必須要件。API クライアントの追加・`ANTHROPIC_API_KEY` 前提の実装・ユーザーへの CLI 直接操作の要求は、どれだけ便利に見えても採用しない。LLM が必要な処理は Claude Code の機構(メインセッション/サブエージェント)か `claude` CLI のヘッドレス実行(ユーザーの既存サブスク認証)に閉じる。
 
 ## 開発コマンド
 
-ルートに統一 package.json は無く、ツールチェーンはディレクトリごとに分散している。
+ツールチェーンは root の pnpm workspace に集約されている(packages: basic-design / codiel / codiel/raguel-mcp / task-utility / revelation)。すべて root で実行する。
 
-| 対象                         | コマンド                                                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| raguel-mcp(ビルド/テスト/型) | `cd plugins/codiel/raguel-mcp && pnpm build` / `pnpm test`(vitest) / `pnpm typecheck`                                               |
-| スクリプト系テスト           | `node --test plugins/codiel/scripts/*.test.mjs plugins/task-utility/scripts/*.test.mjs plugins/revelation/hooks/scripts/*.test.mjs` |
+| コマンド         | 内容                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `pnpm build`     | 全パッケージの esbuild バンドル生成(`plugins/*/scripts/*.mjs`、`raguel-mcp/dist/server.mjs`) |
+| `pnpm test`      | vitest で全テスト実行(`plugins/**/__test__/**/*.test.ts`)                                    |
+| `pnpm typecheck` | tsc --noEmit(root tsconfig で全パッケージ)                                                   |
+| `pnpm lint`      | biome check                                                                                  |
+
+バンドル出力は git 管理(プラグイン利用者はビルド不要)。ソース(`plugins/*/src/`)を変更したら `pnpm build` を実行し、生成物の差分もコミットすること。
 
 ## プラグインのアップデート
 
@@ -36,12 +41,12 @@ chat-recorderエージェント / chat-readerエージェント以外は、明�
 ## エージェント運用方針
 
 <!-- 記入ガイド
-エージェント運用方針が記述された2つのファイルを、利用状況によって <agents.md> の部分を変更してください。
+エージェント運用方針が記述された2つのファイルを、利用状況によってこのセクションに以下のファイルの内容をコピペしてください。
 Claude Code only -> agents-claude-only.md
 Codex 併用時 -> agents-with-codex.md
 -->
 
-必ず `<agents.md>` を読み、これに従ってください。
+必ず `agents-with-codex.md` を読み、これに従ってください。
 この設定は恒久的なものなので、Claude の設定を更新してください。
 
 ## MCPサーバー運用方針
