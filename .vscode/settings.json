@@ -1,4 +1,10 @@
 {
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/tmp/**": true,
+    "**/.git/objects/**": true,
+    "**/.superpowers/**": true,
+  },
   "[javascript]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
