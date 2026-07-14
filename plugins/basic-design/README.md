@@ -22,3 +22,9 @@
 ## 開発
 
 テスト: `node --test plugins/basic-design/scripts/*.test.mjs`(リポジトリルートから)
+
+## 図生成スクリプトの開発
+
+`cd plugins/basic-design && pnpm install && pnpm test && pnpm typecheck && pnpm build`
+
+`src/` が正で `scripts/*.mjs` は生成物。elkjs 更新は exact version 更新 → install → test/typecheck/build → samples 再生成 → HTML/drawio 目視 → lock/bundle/samples 同時 commit。

@@ -27,6 +27,9 @@
 | `id` | string | ✓ | ノード ID。全ノードで一意 |
 | `label` | string | - | ノード名。省略時は `id` を表示 |
 | `icon` | string | - | 種別のメモ(例: `server`, `db`)。詳細パネル表示用 |
+| `kind` | string | - | 色・アイコンの種別。API サーバーなら `api` を推奨 |
+
+- `kind` (任意文字列): 色・アイコンの種別。推奨値は `generic` / `user` / `api` / `data` / `messaging` / `external` / `screen` / `entity`。未知値は生成エラーにせず `generic` 表示になる。
 
 ## Edge
 
@@ -47,7 +50,7 @@
   ],
   "nodes": [
     { "id": "client", "label": "Web ブラウザ", "icon": "client" },
-    { "id": "api", "label": "API サーバー", "icon": "server" },
+    { "id": "api", "label": "API サーバー", "icon": "server", "kind": "api" },
     { "id": "db", "label": "データベース", "icon": "db" }
   ],
   "edges": [

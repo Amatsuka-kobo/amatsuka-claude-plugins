@@ -17,7 +17,9 @@
 | --- | --- | --- | --- |
 | `id` | string | ✓ | アクター ID。全アクターで一意 |
 | `label` | string | - | アクター名。省略時は `id` を表示 |
-| `kind` | string | - | `"actor"`(人)。省略時はシステム扱い。詳細パネル表示用 |
+| `kind` | string | - | 色・アイコンの種別。人は `user`、内部システムは `generic`、外部サービスは `external` を推奨 |
+
+- `kind` (任意文字列): 色・アイコンの種別。推奨値は `generic` / `user` / `api` / `data` / `messaging` / `external` / `screen` / `entity`。未知値は生成エラーにせず `generic` 表示になる。
 
 ## Message
 
@@ -37,9 +39,9 @@
   "type": "sequence",
   "title": "ログイン処理シーケンス図(サンプル)",
   "actors": [
-    { "id": "user", "label": "利用者", "kind": "actor" },
-    { "id": "web", "label": "Web アプリ" },
-    { "id": "api", "label": "認証 API" }
+    { "id": "user", "label": "利用者", "kind": "user" },
+    { "id": "web", "label": "Web アプリ", "kind": "generic" },
+    { "id": "api", "label": "認証 API", "kind": "external" }
   ],
   "messages": [
     { "from": "user", "to": "web", "label": "ログイン情報入力" },

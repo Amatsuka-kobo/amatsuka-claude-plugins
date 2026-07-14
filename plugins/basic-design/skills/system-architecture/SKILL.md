@@ -52,6 +52,8 @@ AskUserQuestion で次を確認する:
 
 ### 4. spec JSON の書き出しと生成
 
+- 各ノードの視覚種別 `kind` を確認する。ユーザーが判断しない場合はラベル・icon・ゾーンから推定候補を提示して確認し、確定値を spec に明示する。推奨値は `generic` / `user` / `api` / `data` / `messaging` / `external` / `screen` / `entity`(API サーバーは `api`)。
+
 承認された内容を `references/spec-schema.md` のスキーマに従って spec JSON にまとめ、保存先に `<図の名前>.spec.json` として書き出す。ファイル名はケバブケース(例: `order-system.spec.json`)。
 
 ```bash

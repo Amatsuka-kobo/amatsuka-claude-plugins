@@ -17,7 +17,10 @@
 | --- | --- | --- | --- |
 | `name` | string | ✓ | 物理名。全エンティティで一意 |
 | `label` | string | - | 論理名(日本語名など)。図では「label(name)」と表示 |
+| `kind` | string | - | 色・アイコンの種別。エンティティは `entity` を推奨 |
 | `columns` | Column[] | ✓ | 1 件以上 |
+
+- `kind` (任意文字列): 色・アイコンの種別。推奨値は `generic` / `user` / `api` / `data` / `messaging` / `external` / `screen` / `entity`。未知値は生成エラーにせず `generic` 表示になる。
 
 ## Column
 
@@ -48,6 +51,7 @@
     {
       "name": "users",
       "label": "ユーザー",
+      "kind": "entity",
       "columns": [
         { "name": "id", "type": "BIGINT", "pk": true },
         { "name": "email", "type": "VARCHAR(255)", "unique": true }

@@ -18,7 +18,9 @@
 | `id` | string | ✓ | 画面 ID。全画面で一意 |
 | `label` | string | - | 画面名。省略時は `id` を表示 |
 | `group` | string | - | 画面のまとまり(例: 認証、商品、決済) |
-| `kind` | string | - | `"start"`(開始画面)/ `"end"`(終了画面)。省略時は通常画面。図では楕円表示 |
+| `kind` | string | - | 通常画面は `"screen"` を推奨。開始画面は `"start"`、終了画面は `"end"` とし、開始・終了の楕円形状を維持 |
+
+- `kind` (任意文字列): 色・アイコンの種別。推奨値は `generic` / `user` / `api` / `data` / `messaging` / `external` / `screen` / `entity`。未知値は生成エラーにせず `generic` 表示になる。
 
 ## Transition
 
@@ -36,7 +38,7 @@
   "title": "EC サイト画面遷移図(サンプル)",
   "screens": [
     { "id": "login", "label": "ログイン", "group": "認証", "kind": "start" },
-    { "id": "home", "label": "ホーム" },
+    { "id": "home", "label": "ホーム", "kind": "screen" },
     { "id": "product-list", "label": "商品一覧" }
   ],
   "transitions": [
