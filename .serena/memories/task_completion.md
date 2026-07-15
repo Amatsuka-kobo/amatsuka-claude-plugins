@@ -1,8 +1,18 @@
-For any change under `plugins/codiel/raguel-mcp/`, before considering the task done, run (from
-that dir): `pnpm test`, `pnpm run typecheck`. Biome lint is enforced via editor integration
-(no separate `pnpm lint` script defined as of onboarding) — check `biome.json` if a lint script
-is added later.
+Before considering any change under `plugins/*/src/` (incl. `raguel-mcp/src/`) done, from the
+repo root:
 
-For changes elsewhere in the repo (skills/agents/commands/hooks markdown or JSON, marketplace.json),
-there is no automated test/build step — sanity-check JSON validity and consider running the
-`plugin-dev:plugin-validator` agent.
+1. `pnpm test` — vitest (root only; new tests must sit in a `__test__/` dir or they don't run)
+2. `pnpm typecheck` — tsc --noEmit
+3. `pnpm lint` — biome check .
+4. `pnpm build` — regenerate `plugins/*/scripts/*.mjs` / `raguel-mcp/dist/server.mjs` and **commit
+   the bundle diff together with the source change** (`mem:conventions`)
+5. Bump the touched plugin's `.claude-plugin/plugin.json` version (major bump ⇒ ask the human)
+
+For markdown/JSON-only changes (skills/agents/commands/hooks/marketplace.json) there is no build or
+test step: sanity-check JSON validity, consider `plugin-dev:plugin-validator`, and still apply the
+version bump rule.
+
+Editing `CLAUDE.md` requires human confirmation, and mirror any shared content into
+`CLAUDE.example.md`.
+
+No CI runs these — nothing catches a skipped step for you.

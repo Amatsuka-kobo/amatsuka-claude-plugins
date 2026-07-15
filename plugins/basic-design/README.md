@@ -21,6 +21,6 @@
 
 ## 図生成スクリプトの開発
 
-`cd plugins/basic-design && pnpm install && pnpm test && pnpm typecheck && pnpm build`
+`pnpm install` / `pnpm test` / `pnpm typecheck` / `pnpm build` はいずれもリポジトリルートで実行する(ルート `package.json` のスクリプト)。basic-design だけをビルドしたい場合は `pnpm --filter basic-design-generator build`。
 
 `src/` が正で `scripts/*.mjs` は生成物。elkjs 更新は exact version 更新 → install → test/typecheck/build → samples 再生成 → HTML/drawio 目視 → lock/bundle/samples 同時 commit。

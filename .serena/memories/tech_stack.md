@@ -1,14 +1,21 @@
-Root of the repo has **no build system** — it's a plugin marketplace of markdown/JSON files
-(skills, agents, commands, hooks configs). No root `package.json`.
+Repo root **is** the build system — a pnpm workspace covering every plugin (this changed; there is
+no longer a per-plugin toolchain).
 
-The one exception is `plugins/codiel/raguel-mcp/` — a standalone TypeScript/Node ESM package:
-- Runtime: Node (Volta-pinned: node 26.3.1, pnpm 11.8.0 — see `raguel-mcp/package.json` `volta`/`devEngines`)
-- Package manager: **pnpm** (has its own `pnpm-workspace.yaml`, separate from repo root)
-- Language: TypeScript (strict, `tsc --noEmit` for typecheck)
-- Build: `tsx scripts/build.ts` → bundles to `dist/server.mjs` via esbuild (entry point wired into
-  `plugins/codiel/.mcp.json` as the `raguel` MCP server)
-- Test: Vitest (`*.test.ts` colocated with source, no separate `test/` tree)
-- Lint/format: Biome (`biome.json`)
-- Key deps: `@modelcontextprotocol/sdk` (MCP server), `zod` v4, `picomatch`, `yaml`
+- Runtime: Node >= 26 (Volta-pinned: node 26.3.1, pnpm 11.8.0 — root `package.json`)
+- Package manager: **pnpm** only. Workspace members (`pnpm-workspace.yaml`):
+  `plugins/basic-design`, `plugins/codiel`, `plugins/codiel/raguel-mcp`, `plugins/task-utility`,
+  `plugins/revelation`. `allowBuilds: esbuild`.
+- Language: TypeScript strict, ESM, `noEmit` (root `tsconfig.json`; includes `plugins/*/src/**`,
+  `plugins/*/build.ts`, raguel-mcp's src/build; excludes generated `plugins/*/scripts` and
+  `raguel-mcp/dist`).
+- Build: each package has its own `build.ts` running esbuild directly; root `pnpm build` =
+  `pnpm -r build`. See `mem:conventions` for the src→scripts bundle rule.
+- Test: **Vitest, run from root only** (`vitest.config.ts`, pool `forks`, 20s timeout).
+  Include glob is `plugins/**/__test__/**/*.test.ts` — tests live in `__test__/` dirs next to the
+  code, NOT colocated as `foo.test.ts` siblings. A test placed outside `__test__/` never runs.
+- Lint/format: Biome (`biome.json`) — 2-space, lineWidth 80, double quotes, semicolons `asNeeded`,
+  no trailing commas, organizeImports on. Ignores `dist`/`scripts`/`docs`/`node_modules`.
+- Only non-dev runtime deps: raguel-mcp (`@modelcontextprotocol/sdk`, `zod` v4, `picomatch`, `yaml`)
+  and basic-design (`elkjs`, pinned exact).
 
-Details on raguel-mcp's internal architecture: `mem:codiel/raguel_mcp`.
+Commands: `mem:suggested_commands`. Definition-of-done: `mem:task_completion`.
