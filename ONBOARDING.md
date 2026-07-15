@@ -9,6 +9,7 @@
 次の状態になればセットアップ完了です。
 
 - Volta で管理された Node.js LTS、npm、npx が利用できる
+- pnpm が利用でき、リポジトリのルートで `pnpm install` が完了している
 - `uv` と `uvx` が利用でき、Claude Code から Serena MCP に接続できる
 - Claude Code から Context7 MCP を利用できる
 - 担当するファイルに必要な LSP が利用できる
@@ -19,7 +20,7 @@ Codex／CLIProxyAPI は任意設定です。Codex のアカウント(ChatGPT/Ope
 
 ### Volta と Node.js
 
-このプロジェクトでは、Node.js のバージョン管理に Volta を推奨しています。Node.js は、各プラグインの `.mjs` スクリプト、`node --test`、LSP のインストール、Context7 のセットアップに必要です。
+このプロジェクトでは、Node.js のバージョン管理に Volta を推奨しています。Node.js は、各プラグインの `.mjs` スクリプト、テストの実行(vitest)、LSP のインストール、Context7 のセットアップに必要です。
 
 WSL2/Linux では、Volta の公式インストーラーを実行します。
 
@@ -46,6 +47,39 @@ node --version
 npm --version
 npx --version
 ```
+
+### pnpm と依存関係
+
+このリポジトリは pnpm workspace として構成されており、パッケージマネージャーには pnpm のみを使用します(npm/yarn は使いません)。pnpm も Volta で導入します。
+
+```bash
+volta install pnpm
+```
+
+インストールできたことを確認します。
+
+```bash
+pnpm --version
+```
+
+ルート `package.json` の `volta` フィールドには node 26.3.1 / pnpm 11.8.0 がピン留めされており、このリポジトリ内で作業するときは Volta が自動でそのバージョンに切り替えます。上で最新の LTS 版を導入していても問題ありません。
+
+続けて、リポジトリのルートで依存関係をインストールします。
+
+```bash
+pnpm install
+```
+
+開発コマンドはすべてリポジトリのルートから実行します。
+
+```bash
+pnpm test        # vitest によるテスト実行
+pnpm typecheck   # tsc --noEmit
+pnpm lint        # biome check .
+pnpm build       # 各プラグインの src/ から scripts/*.mjs を再生成
+```
+
+`plugins/*/scripts/*.mjs` はビルド生成物ですが git 管理の対象です。`plugins/*/src/` を変更した場合は `pnpm build` を実行し、生成された差分もあわせてコミットしてください。
 
 ## Claude Code の共通ツール
 
@@ -191,6 +225,7 @@ volta --version
 node --version
 npm --version
 npx --version
+pnpm --version
 uv --version
 uvx --version
 claude --version
@@ -210,7 +245,7 @@ Codex または Claude Code を CLIProxyAPI 経由で利用する場合は、[CL
 ## トラブル時の確認
 
 1. コマンドを実行したディレクトリが手順と一致しているか確認する
-2. `volta --version`、`node --version`、`npm --version`、`npx --version` が成功するか確認する
+2. `volta --version`、`node --version`、`npm --version`、`npx --version`、`pnpm --version` が成功するか確認する
 3. `uv --version` と `uvx --version` が成功するか確認する
 4. `claude mcp list` で `plugin:serena:serena` と `context7` の接続状態を確認する
 5. グローバルにインストールしたコマンドの保存先が `PATH` に含まれているか確認する
