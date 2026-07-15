@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5[1m]"
+  },
   "permissions": {
     "allow": [
       "Bash(node *)",
@@ -9,22 +12,21 @@
       "Bash(git branch *)",
       "Bash(git checkout *)"
     ],
-    "ask": [
-      "Bash(git push *)",
-      "Bash(git * main)",
-      "Bash(rm *)"
-    ],
     "deny": [
       "Bash(rm -rf ./)",
       "Bash(rm -rf /)",
       "Bash(git push --force *)",
       "Bash(sudo *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git * main)",
+      "Bash(rm *)"
     ]
   },
-  "defaultModel": "fable",
   "enabledPlugins": {
     "task-utility@amatsuka-claude-plugins": true,
-    "revelation@amatsuka-claude-plugins": true,
+    "revelation@amatsuka-claude-plugins": false,
     "claude-code-setup@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
@@ -59,7 +61,5 @@
       }
     }
   },
-  "env": {
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5[1m]"
-  }
+  "defaultModel": "fable"
 }
