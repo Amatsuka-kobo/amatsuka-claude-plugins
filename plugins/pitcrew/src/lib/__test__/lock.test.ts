@@ -57,6 +57,28 @@ test("stale なロック(mtime が staleMs より古い)は回収して取得す
   }
 })
 
+test("stale ロックの回収に失敗しても待機予算内にロックなしで実行する", () => {
+  const dir = makeProject()
+  try {
+    fs.mkdirSync(lockPath(dir), { recursive: true })
+    const past = new Date(Date.now() - 60_000)
+    fs.utimesSync(lockPath(dir), past, past)
+
+    const startedAt = Date.now()
+    const result = withRunLock(dir, () => "ran", {
+      waitBudgetMs: 200,
+      retryIntervalMs: 20,
+      staleMs: 10
+    })
+
+    expect(result).toBe("ran")
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+    expect(fs.statSync(lockPath(dir)).isDirectory()).toBe(true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("取得できないまま待機予算を使い切ったらロックなしで実行する(フェイルオープン)", () => {
   const dir = makeProject()
   try {

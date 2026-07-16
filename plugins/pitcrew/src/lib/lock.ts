@@ -32,21 +32,36 @@ function tryAcquire(lockFile: string): boolean {
   }
 }
 
+function isEnoent(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  )
+}
+
 function acquire(lockFile: string, opts: Required<LockOptions>): boolean {
   const deadline = Date.now() + opts.waitBudgetMs
   for (;;) {
+    if (Date.now() >= deadline) return false
     if (tryAcquire(lockFile)) return true
     // 保持プロセスが hook timeout 等で異常終了した stale ロックは回収する
     try {
       const st = fs.statSync(lockFile)
       if (Date.now() - st.mtimeMs > opts.staleMs) {
-        fs.rmSync(lockFile, { force: true })
-        continue
+        try {
+          fs.rmSync(lockFile, { force: true })
+          continue
+        } catch (error) {
+          // 直前に解放された ENOENT の場合だけ即再試行する
+          if (isEnoent(error)) continue
+        }
       }
-    } catch {
-      continue // 直前に解放された: 即再試行
+    } catch (error) {
+      // 直前に解放された ENOENT の場合だけ即再試行する
+      if (isEnoent(error)) continue
     }
-    if (Date.now() >= deadline) return false
     sleepSync(opts.retryIntervalMs)
   }
 }
