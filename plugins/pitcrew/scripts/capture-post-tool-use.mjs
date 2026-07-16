@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // src/hooks/capture-post-tool-use.ts
-import fs5 from "node:fs";
-import path6 from "node:path";
+import fs6 from "node:fs";
+import path7 from "node:path";
 
 // src/lib/atomic.ts
 import crypto from "node:crypto";
@@ -239,8 +239,78 @@ function logError(projectDir2, context, err) {
   }
 }
 
-// src/lib/review.ts
+// src/lib/lock.ts
+import fs5 from "node:fs";
 import path5 from "node:path";
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function tryAcquire(lockFile) {
+  try {
+    const fd = fs5.openSync(lockFile, "wx");
+    fs5.writeSync(
+      fd,
+      JSON.stringify({ pid: process.pid, acquiredAt: (/* @__PURE__ */ new Date()).toISOString() })
+    );
+    fs5.closeSync(fd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isEnoent(error) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+function acquire(lockFile, opts) {
+  const deadline = Date.now() + opts.waitBudgetMs;
+  for (; ; ) {
+    if (Date.now() >= deadline) return false;
+    if (tryAcquire(lockFile)) return true;
+    try {
+      const st = fs5.statSync(lockFile);
+      if (Date.now() - st.mtimeMs > opts.staleMs) {
+        try {
+          fs5.rmSync(lockFile, { force: true });
+          continue;
+        } catch (error) {
+          if (isEnoent(error)) continue;
+        }
+      }
+    } catch (error) {
+      if (isEnoent(error)) continue;
+    }
+    sleepSync(opts.retryIntervalMs);
+  }
+}
+function withRunLock(projectDir2, fn, opts = {}) {
+  const resolved = {
+    waitBudgetMs: opts.waitBudgetMs ?? 3e3,
+    staleMs: opts.staleMs ?? 1e4,
+    retryIntervalMs: opts.retryIntervalMs ?? 50
+  };
+  const lockFile = path5.join(pitcrewDir(projectDir2), "run.lock");
+  let acquired = false;
+  try {
+    fs5.mkdirSync(path5.dirname(lockFile), { recursive: true });
+    acquired = acquire(lockFile, resolved);
+  } catch {
+    acquired = false;
+  }
+  if (!acquired)
+    logError(
+      projectDir2,
+      "with-run-lock",
+      new Error("run.lock \u3092\u53D6\u5F97\u3067\u304D\u306A\u3044\u305F\u3081\u30ED\u30C3\u30AF\u306A\u3057\u3067\u7D9A\u884C")
+    );
+  try {
+    return fn();
+  } finally {
+    if (acquired) fs5.rmSync(lockFile, { force: true });
+  }
+}
+
+// src/lib/review.ts
+import path6 from "node:path";
 var MAX_BODY_LINES = 600;
 function slugify(text) {
   const s = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -297,8 +367,8 @@ function renderReviewItem(id, item, now) {
 }
 function writeReviewItem(projectDir2, run, item) {
   const id = String(run.nextReviewId).padStart(3, "0");
-  const slugSource = item.paths[0] ? path5.basename(item.paths[0]) : item.title;
-  const file = path5.join(
+  const slugSource = item.paths[0] ? path6.basename(item.paths[0]) : item.title;
+  const file = path6.join(
     pitcrewDir(projectDir2),
     "review",
     `${id}-${item.type}-${slugify(slugSource)}.md`
@@ -311,12 +381,12 @@ function writeReviewItem(projectDir2, run, item) {
 function captureArtifact(projectDir2, input2) {
   const filePath = input2.tool_input?.file_path;
   if (typeof filePath !== "string") return;
-  const rel = path6.relative(projectDir2, filePath).replaceAll("\\", "/");
-  if (rel.startsWith("..") || path6.isAbsolute(rel)) return;
+  const rel = path7.relative(projectDir2, filePath).replaceAll("\\", "/");
+  if (rel.startsWith("..") || path7.isAbsolute(rel)) return;
   if (!isArtifactPath(rel)) return;
   let content;
   try {
-    content = fs5.readFileSync(filePath, "utf8");
+    content = fs6.readFileSync(filePath, "utf8");
   } catch {
     return;
   }
@@ -358,9 +428,11 @@ ${newStr}
     );
     return;
   }
-  const run = loadRun(projectDir2);
-  const res = writeReviewItem(projectDir2, run, item);
-  saveRun(projectDir2, res.run);
+  withRunLock(projectDir2, () => {
+    const run = loadRun(projectDir2);
+    const res = writeReviewItem(projectDir2, run, item);
+    saveRun(projectDir2, res.run);
+  });
 }
 function captureTestResult(projectDir2, input2) {
   const command = input2.tool_input?.command;
@@ -394,9 +466,11 @@ ${summarizeOutput(output).trimEnd()}
     head: headCommit(projectDir2),
     body
   };
-  const run = loadRun(projectDir2);
-  const res = writeReviewItem(projectDir2, run, item);
-  saveRun(projectDir2, res.run);
+  withRunLock(projectDir2, () => {
+    const run = loadRun(projectDir2);
+    const res = writeReviewItem(projectDir2, run, item);
+    saveRun(projectDir2, res.run);
+  });
 }
 var input = readStdinSync();
 if (!input) process.exit(0);

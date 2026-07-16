@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // src/hooks/capture-subagent-stop.ts
-import path6 from "node:path";
+import path7 from "node:path";
 
 // src/lib/git.ts
 import { execFileSync } from "node:child_process";
@@ -158,8 +158,78 @@ function logError(projectDir2, context, err) {
   }
 }
 
-// src/lib/review.ts
+// src/lib/lock.ts
+import fs5 from "node:fs";
 import path5 from "node:path";
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function tryAcquire(lockFile) {
+  try {
+    const fd = fs5.openSync(lockFile, "wx");
+    fs5.writeSync(
+      fd,
+      JSON.stringify({ pid: process.pid, acquiredAt: (/* @__PURE__ */ new Date()).toISOString() })
+    );
+    fs5.closeSync(fd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isEnoent(error) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+function acquire(lockFile, opts) {
+  const deadline = Date.now() + opts.waitBudgetMs;
+  for (; ; ) {
+    if (Date.now() >= deadline) return false;
+    if (tryAcquire(lockFile)) return true;
+    try {
+      const st = fs5.statSync(lockFile);
+      if (Date.now() - st.mtimeMs > opts.staleMs) {
+        try {
+          fs5.rmSync(lockFile, { force: true });
+          continue;
+        } catch (error) {
+          if (isEnoent(error)) continue;
+        }
+      }
+    } catch (error) {
+      if (isEnoent(error)) continue;
+    }
+    sleepSync(opts.retryIntervalMs);
+  }
+}
+function withRunLock(projectDir2, fn, opts = {}) {
+  const resolved = {
+    waitBudgetMs: opts.waitBudgetMs ?? 3e3,
+    staleMs: opts.staleMs ?? 1e4,
+    retryIntervalMs: opts.retryIntervalMs ?? 50
+  };
+  const lockFile = path5.join(pitcrewDir(projectDir2), "run.lock");
+  let acquired = false;
+  try {
+    fs5.mkdirSync(path5.dirname(lockFile), { recursive: true });
+    acquired = acquire(lockFile, resolved);
+  } catch {
+    acquired = false;
+  }
+  if (!acquired)
+    logError(
+      projectDir2,
+      "with-run-lock",
+      new Error("run.lock \u3092\u53D6\u5F97\u3067\u304D\u306A\u3044\u305F\u3081\u30ED\u30C3\u30AF\u306A\u3057\u3067\u7D9A\u884C")
+    );
+  try {
+    return fn();
+  } finally {
+    if (acquired) fs5.rmSync(lockFile, { force: true });
+  }
+}
+
+// src/lib/review.ts
+import path6 from "node:path";
 
 // src/lib/frontmatter.ts
 function quote(v) {
@@ -235,8 +305,8 @@ function renderReviewItem(id, item, now) {
 }
 function writeReviewItem(projectDir2, run, item) {
   const id = String(run.nextReviewId).padStart(3, "0");
-  const slugSource = item.paths[0] ? path5.basename(item.paths[0]) : item.title;
-  const file = path5.join(
+  const slugSource = item.paths[0] ? path6.basename(item.paths[0]) : item.title;
+  const file = path6.join(
     pitcrewDir(projectDir2),
     "review",
     `${id}-${item.type}-${slugify(slugSource)}.md`
@@ -252,37 +322,47 @@ var projectDir = resolveProjectDir(input);
 try {
   const head = snapshotWorktree(projectDir);
   if (!head) process.exit(0);
-  const run = loadRun(projectDir);
-  const base = run.lastCaptureCommit ?? baselineTree(projectDir);
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  if (!base || base === head) {
-    saveRun(projectDir, { ...run, lastCaptureCommit: head, lastCaptureAt: now });
-    process.exit(0);
-  }
-  const { diff, paths } = diffBetween(projectDir, base, head);
-  if (paths.length === 0) {
-    saveRun(projectDir, { ...run, lastCaptureCommit: head, lastCaptureAt: now });
-    process.exit(0);
-  }
-  const first = path6.basename(paths[0]);
-  const title = paths.length === 1 ? `${first} \u306E diff` : `${first} \u307B\u304B ${paths.length - 1} \u30D5\u30A1\u30A4\u30EB\u306E diff`;
-  const item = {
-    type: "diff",
-    title,
-    agent: input.agent_type ?? input.agent_id ?? "subagent",
-    paths,
-    base: base.slice(0, 7),
-    head: head.slice(0, 7),
-    body: `\`\`\`diff
+  withRunLock(projectDir, () => {
+    const run = loadRun(projectDir);
+    const base = run.lastCaptureCommit ?? baselineTree(projectDir);
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    if (!base || base === head) {
+      saveRun(projectDir, {
+        ...run,
+        lastCaptureCommit: head,
+        lastCaptureAt: now
+      });
+      return;
+    }
+    const { diff, paths } = diffBetween(projectDir, base, head);
+    if (paths.length === 0) {
+      saveRun(projectDir, {
+        ...run,
+        lastCaptureCommit: head,
+        lastCaptureAt: now
+      });
+      return;
+    }
+    const first = path7.basename(paths[0]);
+    const title = paths.length === 1 ? `${first} \u306E diff` : `${first} \u307B\u304B ${paths.length - 1} \u30D5\u30A1\u30A4\u30EB\u306E diff`;
+    const item = {
+      type: "diff",
+      title,
+      agent: input.agent_type ?? input.agent_id ?? "subagent",
+      paths,
+      base: base.slice(0, 7),
+      head: head.slice(0, 7),
+      body: `\`\`\`diff
 ${diff.trimEnd()}
 \`\`\`
 `
-  };
-  const res = writeReviewItem(projectDir, run, item);
-  saveRun(projectDir, {
-    ...res.run,
-    lastCaptureCommit: head,
-    lastCaptureAt: now
+    };
+    const res = writeReviewItem(projectDir, run, item);
+    saveRun(projectDir, {
+      ...res.run,
+      lastCaptureCommit: head,
+      lastCaptureAt: now
+    });
   });
 } catch (err) {
   logError(projectDir, "capture-subagent-stop", err);

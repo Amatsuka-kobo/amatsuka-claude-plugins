@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// PostToolUse フック(設計書 §4): Write/Edit による成果物ファイル
-// (docs/**/*.md)の作成・更新を review/ に捕捉する。Bash(テスト・ビルド結果)は
-// Task 8 で追加。全経路フェイルオープン。
+// PostToolUse / PostToolUseFailure フック(設計書 §4): Write/Edit による成果物
+// ファイル(docs/**/*.md)と Bash のテスト・ビルド結果を review/ に捕捉する。
+// 全経路フェイルオープン。run.json の read-modify-write は run.lock で直列化する(設計書 §6)。
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "../lib/atomic.js"
@@ -19,6 +19,7 @@ import {
   readStdinSync,
   resolveProjectDir
 } from "../lib/hook-io.js"
+import { withRunLock } from "../lib/lock.js"
 import {
   type ReviewItem,
   renderReviewItem,
@@ -75,9 +76,11 @@ function captureArtifact(projectDir: string, input: HookInput): void {
     )
     return
   }
-  const run = loadRun(projectDir)
-  const res = writeReviewItem(projectDir, run, item)
-  saveRun(projectDir, res.run)
+  withRunLock(projectDir, () => {
+    const run = loadRun(projectDir)
+    const res = writeReviewItem(projectDir, run, item)
+    saveRun(projectDir, res.run)
+  })
 }
 
 function captureTestResult(projectDir: string, input: HookInput): void {
@@ -116,9 +119,11 @@ function captureTestResult(projectDir: string, input: HookInput): void {
     head: headCommit(projectDir),
     body
   }
-  const run = loadRun(projectDir)
-  const res = writeReviewItem(projectDir, run, item)
-  saveRun(projectDir, res.run)
+  withRunLock(projectDir, () => {
+    const run = loadRun(projectDir)
+    const res = writeReviewItem(projectDir, run, item)
+    saveRun(projectDir, res.run)
+  })
 }
 
 const input = readStdinSync()
