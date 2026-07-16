@@ -96,7 +96,7 @@ Pitcrew は実行中に完成した成果物(diff・設計書・テスト結果)
 | --- | --- | --- |
 | コード diff | SubagentStop(サブエージェント完了時) | 直前の捕捉時点からの `git diff` を機械的に生成 |
 | 設計書・計画書等の成果物ファイル | SubagentStop + PostToolUse(Write/Edit) | docs/ 等への Markdown 新規作成・更新を検知しコピー+変更概要 |
-| テスト・ビルド結果 | PostToolUse(Bash) | test/build 系コマンドの実行を検知し、終了コードと出力サマリを抽出 |
+| テスト・ビルド結果 | PostToolUse(Bash) + PostToolUseFailure(Bash) | test/build 系コマンドの実行を検知し、結果と出力サマリを抽出 |
 
 - どの種別を有効にするかは config で選択可能(既定: 3 種すべて有効)
 - 全処理は Node スクリプト(TypeScript ソース → バンドル)で、LLM を使わない
@@ -104,9 +104,13 @@ Pitcrew は実行中に完成した成果物(diff・設計書・テスト結果)
   (`git stash create` 相当で得る一時 commit、または HEAD)を `run.json.lastCaptureCommit` に記録し、
   次の捕捉はそこからの差分を取る。サブエージェント A → B と連続捕捉した場合、
   B の diff の base は「A 捕捉直後の状態」であり、各 diff は重複しない
-- **テスト・ビルド結果の判定**: PostToolUse(Bash) の command 文字列を既知パターン
+- **テスト・ビルド結果の判定**: Bash の command 文字列を既知パターン
   (`pnpm test`、`npm run build` 等の既定リスト+config で追加したコマンド)と前方一致で照合する
-  ホワイトリスト方式。全 Bash 出力を無差別に取り込まない
+  ホワイトリスト方式。全 Bash 出力を無差別に取り込まない。
+  **成功したコマンドは PostToolUse(Bash)、失敗したコマンドは PostToolUseFailure(Bash) で捕捉する**
+  (Claude Code の PostToolUse はツール成功時のみ発火するため、両イベントの登録が必須。
+  Bash の tool_response に終了コードは含まれず、失敗イベントの `error` 文字列と出力の
+  失敗マーカー照合で成否を判定する)
 - **成果物ファイルの対象範囲**: 既定は `docs/**/*.md`。config で glob を追加・変更できる。
   捕捉時はファイル全文を review 項目にコピーし、更新の場合は変更前後の diff も併記する
 
