@@ -140,6 +140,61 @@ function findReviewItemForPath(projectDir2, type, relPath) {
   }
   return null;
 }
+var TEST_COMMAND_PREFIXES = [
+  "pnpm test",
+  "pnpm build",
+  "pnpm typecheck",
+  "pnpm lint",
+  "pnpm vitest",
+  "npm test",
+  "npm run test",
+  "npm run build",
+  "yarn test",
+  "yarn build",
+  "npx vitest",
+  "vitest",
+  "pytest",
+  "go test",
+  "cargo test",
+  "make test",
+  "make build"
+];
+function matchTestCommand(command) {
+  const trimmed = command.trimStart();
+  for (const prefix of TEST_COMMAND_PREFIXES) {
+    if (trimmed === prefix || trimmed.startsWith(`${prefix} `)) return prefix;
+  }
+  return null;
+}
+function extractBashResult(toolResponse) {
+  let output = "";
+  let exitCode = null;
+  if (typeof toolResponse === "string") {
+    output = toolResponse;
+  } else if (toolResponse && typeof toolResponse === "object") {
+    const r = toolResponse;
+    const parts = [];
+    if (typeof r.stdout === "string" && r.stdout !== "") parts.push(r.stdout);
+    if (typeof r.stderr === "string" && r.stderr !== "") parts.push(r.stderr);
+    output = parts.join("\n");
+    for (const key of ["exit_code", "exitCode", "code"]) {
+      if (typeof r[key] === "number") {
+        exitCode = r[key];
+        break;
+      }
+    }
+  }
+  const failed = exitCode !== null && exitCode !== 0 || /\b(FAIL|failed|Error)\b/.test(output.slice(-2e3));
+  return { output, failed };
+}
+function summarizeOutput(output, maxLines = 120) {
+  const lines = output.split("\n");
+  if (lines.length <= maxLines) return output;
+  return [
+    `> (\u5148\u982D ${lines.length - maxLines} \u884C\u3092\u7701\u7565)`,
+    ...lines.slice(-maxLines)
+  ].join("\n");
+}
 
 // src/lib/git.ts
 import { execFileSync } from "node:child_process";
@@ -309,12 +364,44 @@ ${newStr}
   const res = writeReviewItem(projectDir2, run, item);
   saveRun(projectDir2, res.run);
 }
+function captureTestResult(projectDir2, input2) {
+  const command = input2.tool_input?.command;
+  if (typeof command !== "string") return;
+  const matched = matchTestCommand(command);
+  if (!matched) return;
+  const { output, failed } = extractBashResult(input2.tool_response);
+  const status = failed ? "\u5931\u6557\u306E\u7591\u3044" : "\u6210\u529F";
+  const body = [
+    `- \u30B3\u30DE\u30F3\u30C9: \`${command}\``,
+    `- \u7D50\u679C: ${status}(\u51FA\u529B\u304B\u3089\u306E\u6A5F\u68B0\u7684\u63A8\u5B9A)`,
+    "",
+    "## \u51FA\u529B(\u672B\u5C3E)",
+    "",
+    `\`\`\`
+${summarizeOutput(output).trimEnd()}
+\`\`\``
+  ].join("\n");
+  const item = {
+    type: "test",
+    title: `${matched} \u306E\u5B9F\u884C\u7D50\u679C: ${status}`,
+    agent: input2.agent_type ?? "session",
+    paths: [],
+    base: null,
+    head: headCommit(projectDir2),
+    body
+  };
+  const run = loadRun(projectDir2);
+  const res = writeReviewItem(projectDir2, run, item);
+  saveRun(projectDir2, res.run);
+}
 var input = readStdinSync();
 if (!input) process.exit(0);
 var projectDir = resolveProjectDir(input);
 try {
   if (input.tool_name === "Write" || input.tool_name === "Edit") {
     captureArtifact(projectDir, input);
+  } else if (input.tool_name === "Bash") {
+    captureTestResult(projectDir, input);
   }
 } catch (err) {
   logError(projectDir, "capture-post-tool-use", err);

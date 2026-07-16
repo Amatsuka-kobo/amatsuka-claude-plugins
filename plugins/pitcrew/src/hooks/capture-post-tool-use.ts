@@ -5,7 +5,13 @@
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "../lib/atomic.js"
-import { findReviewItemForPath, isArtifactPath } from "../lib/capture-rules.js"
+import {
+  extractBashResult,
+  findReviewItemForPath,
+  isArtifactPath,
+  matchTestCommand,
+  summarizeOutput
+} from "../lib/capture-rules.js"
 import { headCommit } from "../lib/git.js"
 import {
   type HookInput,
@@ -74,6 +80,37 @@ function captureArtifact(projectDir: string, input: HookInput): void {
   saveRun(projectDir, res.run)
 }
 
+function captureTestResult(projectDir: string, input: HookInput): void {
+  const command = input.tool_input?.command
+  if (typeof command !== "string") return
+  const matched = matchTestCommand(command)
+  if (!matched) return
+
+  const { output, failed } = extractBashResult(input.tool_response)
+  const status = failed ? "失敗の疑い" : "成功"
+  const body = [
+    `- コマンド: \`${command}\``,
+    `- 結果: ${status}(出力からの機械的推定)`,
+    "",
+    "## 出力(末尾)",
+    "",
+    `\`\`\`\n${summarizeOutput(output).trimEnd()}\n\`\`\``
+  ].join("\n")
+
+  const item: ReviewItem = {
+    type: "test",
+    title: `${matched} の実行結果: ${status}`,
+    agent: input.agent_type ?? "session",
+    paths: [],
+    base: null,
+    head: headCommit(projectDir),
+    body
+  }
+  const run = loadRun(projectDir)
+  const res = writeReviewItem(projectDir, run, item)
+  saveRun(projectDir, res.run)
+}
+
 const input = readStdinSync()
 if (!input) process.exit(0)
 const projectDir = resolveProjectDir(input)
@@ -81,8 +118,9 @@ const projectDir = resolveProjectDir(input)
 try {
   if (input.tool_name === "Write" || input.tool_name === "Edit") {
     captureArtifact(projectDir, input)
+  } else if (input.tool_name === "Bash") {
+    captureTestResult(projectDir, input)
   }
-  // Bash(テスト・ビルド結果)の捕捉は Task 8 で追加
 } catch (err) {
   logError(projectDir, "capture-post-tool-use", err)
 }
