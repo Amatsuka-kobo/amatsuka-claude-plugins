@@ -86,11 +86,21 @@ function captureTestResult(projectDir: string, input: HookInput): void {
   const matched = matchTestCommand(command)
   if (!matched) return
 
-  const { output, failed } = extractBashResult(input.tool_response)
-  const status = failed ? "失敗の疑い" : "成功"
+  const result = extractBashResult(input.tool_response)
+  const failureEvent = input.hook_event_name === "PostToolUseFailure"
+  const output = [
+    result.output,
+    typeof input.error === "string" ? input.error : ""
+  ]
+    .filter((part) => part !== "")
+    .join("\n")
+  const status = failureEvent ? "失敗" : result.failed ? "失敗の疑い" : "成功"
+  const reason = failureEvent
+    ? "PostToolUseFailure イベント"
+    : "出力からの機械的推定"
   const body = [
     `- コマンド: \`${command}\``,
-    `- 結果: ${status}(出力からの機械的推定)`,
+    `- 結果: ${status}(${reason})`,
     "",
     "## 出力(末尾)",
     "",

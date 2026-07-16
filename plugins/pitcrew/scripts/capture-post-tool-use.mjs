@@ -168,7 +168,6 @@ function matchTestCommand(command) {
 }
 function extractBashResult(toolResponse) {
   let output = "";
-  let exitCode = null;
   if (typeof toolResponse === "string") {
     output = toolResponse;
   } else if (toolResponse && typeof toolResponse === "object") {
@@ -177,14 +176,8 @@ function extractBashResult(toolResponse) {
     if (typeof r.stdout === "string" && r.stdout !== "") parts.push(r.stdout);
     if (typeof r.stderr === "string" && r.stderr !== "") parts.push(r.stderr);
     output = parts.join("\n");
-    for (const key of ["exit_code", "exitCode", "code"]) {
-      if (typeof r[key] === "number") {
-        exitCode = r[key];
-        break;
-      }
-    }
   }
-  const failed = exitCode !== null && exitCode !== 0 || /\b(FAIL|failed|Error)\b/.test(output.slice(-2e3));
+  const failed = /\b(fail(?:ed)?|errors?)\b/i.test(output.slice(-2e3));
   return { output, failed };
 }
 function summarizeOutput(output, maxLines = 120) {
@@ -369,11 +362,17 @@ function captureTestResult(projectDir2, input2) {
   if (typeof command !== "string") return;
   const matched = matchTestCommand(command);
   if (!matched) return;
-  const { output, failed } = extractBashResult(input2.tool_response);
-  const status = failed ? "\u5931\u6557\u306E\u7591\u3044" : "\u6210\u529F";
+  const result = extractBashResult(input2.tool_response);
+  const failureEvent = input2.hook_event_name === "PostToolUseFailure";
+  const output = [
+    result.output,
+    typeof input2.error === "string" ? input2.error : ""
+  ].filter((part) => part !== "").join("\n");
+  const status = failureEvent ? "\u5931\u6557" : result.failed ? "\u5931\u6557\u306E\u7591\u3044" : "\u6210\u529F";
+  const reason = failureEvent ? "PostToolUseFailure \u30A4\u30D9\u30F3\u30C8" : "\u51FA\u529B\u304B\u3089\u306E\u6A5F\u68B0\u7684\u63A8\u5B9A";
   const body = [
     `- \u30B3\u30DE\u30F3\u30C9: \`${command}\``,
-    `- \u7D50\u679C: ${status}(\u51FA\u529B\u304B\u3089\u306E\u6A5F\u68B0\u7684\u63A8\u5B9A)`,
+    `- \u7D50\u679C: ${status}(${reason})`,
     "",
     "## \u51FA\u529B(\u672B\u5C3E)",
     "",

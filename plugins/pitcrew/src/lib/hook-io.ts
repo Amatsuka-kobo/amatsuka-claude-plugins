@@ -5,6 +5,7 @@ import { pitcrewDir } from "./run.js"
 // Claude Code hooks の stdin JSON(既存プラグインの hook 実装で確認済みのスキーマ)。
 // SubagentStop: session_id / transcript_path / cwd / stop_hook_active / agent_id / agent_type
 // PostToolUse: 上記 + tool_name / tool_input / tool_response
+// PostToolUseFailure: 上記 + tool_name / tool_input / error / tool_response
 export interface HookInput {
   session_id?: string
   transcript_path?: string
@@ -13,6 +14,7 @@ export interface HookInput {
   tool_name?: string
   tool_input?: { command?: string; file_path?: string; [k: string]: unknown }
   tool_response?: unknown
+  error?: string
   agent_id?: string
   agent_type?: string
   stop_hook_active?: boolean

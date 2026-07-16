@@ -82,13 +82,12 @@ export function matchTestCommand(command: string): string | null {
 }
 
 // PostToolUse の tool_response から出力と成否の機械的推定を取り出す。
-// 終了コードが渡されないバージョンもあるため、出力の失敗マーカーで補完する。
+// Bash の終了コードは tool_response に含まれないため、失敗マーカーで補完する。
 export function extractBashResult(toolResponse: unknown): {
   output: string
   failed: boolean
 } {
   let output = ""
-  let exitCode: number | null = null
   if (typeof toolResponse === "string") {
     output = toolResponse
   } else if (toolResponse && typeof toolResponse === "object") {
@@ -97,16 +96,8 @@ export function extractBashResult(toolResponse: unknown): {
     if (typeof r.stdout === "string" && r.stdout !== "") parts.push(r.stdout)
     if (typeof r.stderr === "string" && r.stderr !== "") parts.push(r.stderr)
     output = parts.join("\n")
-    for (const key of ["exit_code", "exitCode", "code"]) {
-      if (typeof r[key] === "number") {
-        exitCode = r[key] as number
-        break
-      }
-    }
   }
-  const failed =
-    (exitCode !== null && exitCode !== 0) ||
-    /\b(FAIL|failed|Error)\b/.test(output.slice(-2000))
+  const failed = /\b(fail(?:ed)?|errors?)\b/i.test(output.slice(-2000))
   return { output, failed }
 }
 
