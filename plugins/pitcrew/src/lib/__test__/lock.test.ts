@@ -1,8 +1,14 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { runTsAsync } from "../../testing/run-ts.js"
 import { withRunLock } from "../lock.js"
+
+const CONTENDER = fileURLToPath(
+  new URL("./helpers/lock-contender.ts", import.meta.url)
+)
 
 function makeProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pitcrew-lock-"))
@@ -102,3 +108,32 @@ test("取得できないまま待機予算を使い切ったらロックなし�
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test("並行プロセスの run.json 更新が直列化され lost update が起きない", async () => {
+  const dir = makeProject()
+  try {
+    fs.mkdirSync(path.join(dir, ".pitcrew"), { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, ".pitcrew", "run.json"),
+      JSON.stringify({
+        startedAt: "2026-07-16T00:00:00.000Z",
+        lastCaptureCommit: null,
+        lastCaptureAt: null,
+        nextReviewId: 1
+      })
+    )
+    const procs = 4
+    const per = 5
+    await Promise.all(
+      Array.from({ length: procs }, () =>
+        runTsAsync(CONTENDER, [dir, String(per)])
+      )
+    )
+    const run = JSON.parse(
+      fs.readFileSync(path.join(dir, ".pitcrew", "run.json"), "utf8")
+    ) as { nextReviewId: number }
+    expect(run.nextReviewId).toBe(1 + procs * per)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}, 20_000)
