@@ -255,6 +255,15 @@ plugins/pitcrew/
 - hook 入出力(stdin JSON → stdout/exit code)は fixture ベースの統合テスト
 - ビューアはサーバーの API/SSE をテストし、UI は手動確認(モック承認済みのレイアウトを基準)
 
+## 10.5 既知の制限(Stage 1 時点)
+
+- **捕捉 hook の並行起動競合**: 複数サブエージェントがほぼ同時に終了すると SubagentStop hook が
+  並行起動し、`run.json` の read-modify-write が競合し得る(レビュー ID の衝突、
+  `lastCaptureCommit` の lost update による diff の重複/欠落)。§9 の「ロック機構は導入しない」
+  方針と §4 の「各 diff は重複しない」保証は並行実行時には両立しない。
+  **Stage 2(注入層)設計時に、注入側の競合と合わせて解決策(O_EXCL ロックファイル等)を設計する。**
+  それまでは既知の制限とし、重複 diff は人間のレビューで無害に吸収される前提で運用する。
+
 ## 11. スコープ外(YAGNI)
 
 - 複数 run の同時並走管理(単一 run 前提で開始。「run」の区切りは緩く、`run.json` が無ければ
