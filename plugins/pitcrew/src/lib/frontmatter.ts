@@ -43,12 +43,14 @@ export function parseFrontmatter(text: string): {
     const kv = line.match(/^([A-Za-z][\w-]*):\s*(.*)$/)
     if (!kv) continue
     const [, key, raw] = kv
-    if (raw.startsWith("[") && raw.endsWith("]")) {
-      const inner = raw.slice(1, -1).trim()
+    // 手書きコメント(設計書 §5 の C 方式)の末尾空白に耐える
+    const value = raw.trimEnd()
+    if (value.startsWith("[") && value.endsWith("]")) {
+      const inner = value.slice(1, -1).trim()
       data[key] =
         inner === "" ? [] : inner.split(",").map((s) => unquote(s.trim()))
     } else {
-      data[key] = unquote(raw)
+      data[key] = unquote(value)
     }
   }
   return { data, body: text.slice(m[0].length) }
