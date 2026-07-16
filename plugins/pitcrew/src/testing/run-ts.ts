@@ -1,7 +1,7 @@
 import {
   type ExecFileOptions,
-  execFile,
   type ExecFileSyncOptions,
+  execFile,
   execFileSync
 } from "node:child_process"
 import { createRequire } from "node:module"
