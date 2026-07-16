@@ -50,3 +50,71 @@ export function findReviewItemForPath(
   }
   return null
 }
+
+// テスト・ビルド系コマンドの既定ホワイトリスト(設計書 §4 の前方一致方式)。
+// config による追加は Stage 3。
+const TEST_COMMAND_PREFIXES = [
+  "pnpm test",
+  "pnpm build",
+  "pnpm typecheck",
+  "pnpm lint",
+  "pnpm vitest",
+  "npm test",
+  "npm run test",
+  "npm run build",
+  "yarn test",
+  "yarn build",
+  "npx vitest",
+  "vitest",
+  "pytest",
+  "go test",
+  "cargo test",
+  "make test",
+  "make build"
+]
+
+export function matchTestCommand(command: string): string | null {
+  const trimmed = command.trimStart()
+  for (const prefix of TEST_COMMAND_PREFIXES) {
+    if (trimmed === prefix || trimmed.startsWith(`${prefix} `)) return prefix
+  }
+  return null
+}
+
+// PostToolUse の tool_response から出力と成否の機械的推定を取り出す。
+// 終了コードが渡されないバージョンもあるため、出力の失敗マーカーで補完する。
+export function extractBashResult(toolResponse: unknown): {
+  output: string
+  failed: boolean
+} {
+  let output = ""
+  let exitCode: number | null = null
+  if (typeof toolResponse === "string") {
+    output = toolResponse
+  } else if (toolResponse && typeof toolResponse === "object") {
+    const r = toolResponse as Record<string, unknown>
+    const parts: string[] = []
+    if (typeof r.stdout === "string" && r.stdout !== "") parts.push(r.stdout)
+    if (typeof r.stderr === "string" && r.stderr !== "") parts.push(r.stderr)
+    output = parts.join("\n")
+    for (const key of ["exit_code", "exitCode", "code"]) {
+      if (typeof r[key] === "number") {
+        exitCode = r[key] as number
+        break
+      }
+    }
+  }
+  const failed =
+    (exitCode !== null && exitCode !== 0) ||
+    /\b(FAIL|failed|Error)\b/.test(output.slice(-2000))
+  return { output, failed }
+}
+
+export function summarizeOutput(output: string, maxLines = 120): string {
+  const lines = output.split("\n")
+  if (lines.length <= maxLines) return output
+  return [
+    `> (先頭 ${lines.length - maxLines} 行を省略)`,
+    ...lines.slice(-maxLines)
+  ].join("\n")
+}

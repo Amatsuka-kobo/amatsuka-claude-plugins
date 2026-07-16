@@ -1,5 +1,5 @@
 {
-  "description": "pitcrew 捕捉層: サブエージェント完了時の diff と、成果物ファイル(docs/**/*.md)の作成・更新を .pitcrew/review/ へ書き出す",
+  "description": "pitcrew 捕捉層: サブエージェント完了時の diff・成果物ファイル(docs/**/*.md)・テスト/ビルド結果を .pitcrew/review/ へ書き出す",
   "hooks": {
     "SubagentStop": [
       {
@@ -15,6 +15,16 @@
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/capture-post-tool-use.mjs\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",

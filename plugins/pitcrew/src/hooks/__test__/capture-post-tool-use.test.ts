@@ -135,3 +135,60 @@ test("プロジェクト外の file_path は無視する", () => {
 test("壊れた stdin でも exit 0 で素通しする", () => {
   expect(runTs(HOOK, [], { input: "not json" }).trim()).toBe("")
 })
+
+test("ホワイトリストの Bash コマンドで test 項目が作られる", () => {
+  const dir = makeProject()
+  try {
+    runHook(dir, {
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+      tool_response: { stdout: "Tests  12 passed (12)", stderr: "" }
+    })
+    const files = reviewFiles(dir)
+    expect(files).toHaveLength(1)
+    expect(files[0]).toMatch(/^001-test-/)
+    const raw = fs.readFileSync(
+      path.join(dir, ".pitcrew", "review", files[0]),
+      "utf8"
+    )
+    const { data, body } = parseFrontmatter(raw)
+    expect(data.type).toBe("test")
+    expect(body).toContain("pnpm test")
+    expect(body).toContain("12 passed")
+    expect(body).toContain("成功")
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("失敗出力は「失敗の疑い」として記録される", () => {
+  const dir = makeProject()
+  try {
+    runHook(dir, {
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+      tool_response: { stdout: "Tests  1 failed | 11 passed", stderr: "" }
+    })
+    const raw = fs.readFileSync(
+      path.join(dir, ".pitcrew", "review", reviewFiles(dir)[0]),
+      "utf8"
+    )
+    expect(raw).toContain("失敗の疑い")
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("ホワイトリスト外の Bash コマンドは何もしない", () => {
+  const dir = makeProject()
+  try {
+    runHook(dir, {
+      tool_name: "Bash",
+      tool_input: { command: "git status" },
+      tool_response: { stdout: "clean", stderr: "" }
+    })
+    expect(reviewFiles(dir)).toEqual([])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
