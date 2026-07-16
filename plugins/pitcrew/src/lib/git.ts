@@ -71,3 +71,17 @@ export function headCommit(projectDir: string): string | null {
     return null
   }
 }
+
+// 初回捕捉時の diff base(設計書 §4 の「または HEAD」)。HEAD の tree を返し、
+// unborn HEAD(コミットゼロ)のときは空 tree にフォールバックする。
+export function baselineTree(projectDir: string): string | null {
+  try {
+    return git(projectDir, ["rev-parse", "HEAD^{tree}"]).trim()
+  } catch {
+    try {
+      return git(projectDir, ["hash-object", "-t", "tree", "/dev/null"]).trim()
+    } catch {
+      return null
+    }
+  }
+}
