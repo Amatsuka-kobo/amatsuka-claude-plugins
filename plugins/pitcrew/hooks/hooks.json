@@ -1,0 +1,16 @@
+{
+  "description": "pitcrew 捕捉層: サブエージェント完了時に diff を .pitcrew/review/ へ書き出す",
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/capture-subagent-stop.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

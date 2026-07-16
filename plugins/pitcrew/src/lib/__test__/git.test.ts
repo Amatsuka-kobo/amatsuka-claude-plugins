@@ -3,7 +3,12 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { expect, test } from "vitest"
-import { diffBetween, headCommit, snapshotWorktree } from "../git.js"
+import {
+  baselineTree,
+  diffBetween,
+  headCommit,
+  snapshotWorktree
+} from "../git.js"
 
 function git(dir: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: dir, encoding: "utf8" })
@@ -79,4 +84,17 @@ test("git リポジトリでないディレクトリでは null を返す", () =
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test("baselineTree は HEAD の tree を返し、コミットゼロなら空 tree を返す", () => {
+  withRepo((dir) => {
+    const empty = baselineTree(dir)
+    expect(empty).toBeTruthy() // 空 tree hash
+    fs.writeFileSync(path.join(dir, "a.ts"), "x\n")
+    git(dir, "add", "-A")
+    git(dir, "commit", "-qm", "init")
+    const headTree = baselineTree(dir)
+    expect(headTree).toBeTruthy()
+    expect(headTree).not.toBe(empty)
+  })
 })
