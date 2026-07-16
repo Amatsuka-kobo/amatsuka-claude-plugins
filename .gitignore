@@ -1,6 +1,7 @@
 # 一時ファイル等
 node_modules
 .superpowers/
+.pitcrew/
 
 # CLI Proxy APIの設定ファイル
 static/management.html
