@@ -192,3 +192,39 @@ test("ホワイトリスト外の Bash コマンドは何もしない", () => {
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test("PostToolUseFailure の Bash は failed 項目として記録される", () => {
+  const dir = makeProject()
+  try {
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm build" },
+      tool_response: { stdout: "Building...", stderr: "" },
+      error: "Command exited with non-zero status code 1"
+    })
+    const raw = fs.readFileSync(
+      path.join(dir, ".pitcrew", "review", reviewFiles(dir)[0]),
+      "utf8"
+    )
+    expect(raw).toContain("失敗")
+    expect(raw).toContain("Command exited with non-zero status code 1")
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("PostToolUseFailure のホワイトリスト外 Bash は無視される", () => {
+  const dir = makeProject()
+  try {
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_input: { command: "git status" },
+      error: "Command exited with non-zero status code 1"
+    })
+    expect(reviewFiles(dir)).toEqual([])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

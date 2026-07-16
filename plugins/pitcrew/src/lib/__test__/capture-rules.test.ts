@@ -45,7 +45,9 @@ test("extractBashResult は stdout/stderr を連結し失敗を推定する", ()
   expect(
     extractBashResult({ stdout: "Tests: 1 failed", stderr: "" }).failed
   ).toBe(true)
-  expect(extractBashResult({ stdout: "ok", exit_code: 1 }).failed).toBe(true)
+  expect(
+    extractBashResult({ stdout: "Found 1 error.", stderr: "" }).failed
+  ).toBe(true)
   expect(extractBashResult("plain output").output).toBe("plain output")
   expect(extractBashResult(null)).toEqual({ output: "", failed: false })
 })
