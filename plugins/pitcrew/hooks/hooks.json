@@ -1,5 +1,5 @@
 {
-  "description": "pitcrew 捕捉層: サブエージェント完了時の diff・成果物ファイル(docs/**/*.md)・テスト/ビルド結果を .pitcrew/review/ へ書き出す",
+  "description": "pitcrew 捕捉層+注入層: 成果物を .pitcrew/review/ へ書き出し、.pitcrew/comments/ の人間コメントをセッションへ注入する",
   "hooks": {
     "SubagentStop": [
       {
@@ -42,6 +42,29 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/capture-post-tool-use.mjs\"",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/inject-pre-tool-use.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/inject-stop.mjs\"",
+            "timeout": 10
           }
         ]
       }
