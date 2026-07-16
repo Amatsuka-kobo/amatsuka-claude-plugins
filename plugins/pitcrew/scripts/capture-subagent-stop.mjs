@@ -81,8 +81,13 @@ function writeFileAtomic(filePath, content) {
     dir,
     `.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
   );
-  fs2.writeFileSync(tmp, content);
-  fs2.renameSync(tmp, filePath);
+  try {
+    fs2.writeFileSync(tmp, content);
+    fs2.renameSync(tmp, filePath);
+  } catch (err) {
+    fs2.rmSync(tmp, { force: true });
+    throw err;
+  }
 }
 
 // src/lib/run.ts

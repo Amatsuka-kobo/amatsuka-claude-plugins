@@ -15,8 +15,13 @@ function writeFileAtomic(filePath, content) {
     dir,
     `.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
   );
-  fs.writeFileSync(tmp, content);
-  fs.renameSync(tmp, filePath);
+  try {
+    fs.writeFileSync(tmp, content);
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
 }
 
 // src/lib/capture-rules.ts

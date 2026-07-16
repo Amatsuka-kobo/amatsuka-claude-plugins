@@ -30,3 +30,19 @@ test("既存ファイルを上書きし、一時ファイルを残さない", ()
     expect(fs.readdirSync(dir)).toEqual(["x.md"])
   })
 })
+
+test("rename が失敗しても一時ファイルを残さない", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pitcrew-atomic-"))
+  try {
+    // 書き込み先がディレクトリだと renameSync が失敗する
+    const target = path.join(dir, "sub")
+    fs.mkdirSync(target)
+    expect(() => writeFileAtomic(target, "x")).toThrow()
+    const leftovers = fs
+      .readdirSync(dir)
+      .filter((name) => name.startsWith(".tmp-"))
+    expect(leftovers).toEqual([])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
