@@ -56,3 +56,15 @@ test("Stage 2 のコメント frontmatter を解析できる", () => {
   expect(data.base).toBe("a3f2c01")
   expect(body).toBe("この方針はやめてください")
 })
+
+test("unquoted 値の末尾空白を trim する(手書きコメント対策)", () => {
+  const { data } = parseFrontmatter("---\nurgency: urgent  \n---\n本文\n")
+  expect(data.urgency).toBe("urgent")
+})
+
+test("末尾に空白のあるインライン配列も解釈できる", () => {
+  const { data } = parseFrontmatter(
+    "---\npaths: [src/a.ts, src/b.ts] \n---\nx\n"
+  )
+  expect(data.paths).toEqual(["src/a.ts", "src/b.ts"])
+})
