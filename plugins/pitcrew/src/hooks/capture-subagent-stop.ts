@@ -3,6 +3,7 @@
 // git diff を機械的に生成して .pitcrew/review/ に書き出す。全経路フェイルオープン。
 // run.json の read-modify-write は run.lock で直列化する(設計書 §6)。
 import path from "node:path"
+import { loadConfig } from "../lib/config.js"
 import { baselineTree, diffBetween, snapshotWorktree } from "../lib/git.js"
 import { logError, readStdinSync, resolveProjectDir } from "../lib/hook-io.js"
 import { withRunLock } from "../lib/lock.js"
@@ -14,6 +15,9 @@ if (!input) process.exit(0)
 const projectDir = resolveProjectDir(input)
 
 try {
+  // config で diff 捕捉が無効なら何もしない(設計書 §7。snapshot も作らない)
+  if (!loadConfig(projectDir).captureTargets.diff) process.exit(0)
+
   const head = snapshotWorktree(projectDir)
   if (!head) process.exit(0) // git リポジトリでない等 — 何もしない
 

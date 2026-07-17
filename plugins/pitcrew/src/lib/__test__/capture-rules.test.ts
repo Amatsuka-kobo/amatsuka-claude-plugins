@@ -61,3 +61,25 @@ test("summarizeOutput は末尾 N 行に切り詰めて注記する", () => {
   expect(out).toContain("省略")
   expect(summarizeOutput("short", 100)).toBe("short")
 })
+
+test("isArtifactPath は glob 指定で対象を置き換えられる", () => {
+  expect(isArtifactPath("notes/memo.md", ["notes/**/*.md"])).toBe(true)
+  expect(isArtifactPath("docs/design.md", ["notes/**/*.md"])).toBe(false)
+  expect(isArtifactPath("docs/specs/x.md", ["docs/specs/*.md"])).toBe(true)
+  expect(isArtifactPath("docs/other/x.md", ["docs/specs/*.md"])).toBe(false)
+})
+
+test("glob 指定でも docs/chat/ の除外は常に効く", () => {
+  expect(isArtifactPath("docs/chat/2026/x.md", ["docs/**/*.md"])).toBe(false)
+  expect(isArtifactPath("docs/chat/2026/x.md", ["**/*.md"])).toBe(false)
+})
+
+test("matchTestCommand は追加接頭辞にもマッチする", () => {
+  expect(matchTestCommand("deno test", ["deno test"])).toBe("deno test")
+  expect(matchTestCommand("deno test --allow-read x.ts", ["deno test"])).toBe(
+    "deno test"
+  )
+  expect(matchTestCommand("deno test", [])).toBeNull()
+  // 既定ホワイトリストは追加指定があっても生きている
+  expect(matchTestCommand("pnpm test", ["deno test"])).toBe("pnpm test")
+})

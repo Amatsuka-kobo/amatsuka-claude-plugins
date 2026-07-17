@@ -1,18 +1,21 @@
 import fs from "node:fs"
 import path from "node:path"
+import { DEFAULT_ARTIFACT_GLOBS } from "./config.js"
 import { parseFrontmatter } from "./frontmatter.js"
 import { pitcrewDir } from "./run.js"
 
-// 捕捉対象の判定ルール(設計書 §4)。Stage 1 は既定値ハードコード
-// (config による glob / コマンド追加は Stage 3)。
+// 捕捉対象の判定ルール(設計書 §4)。glob / コマンド追加は config
+// (.claude/pitcrew.local.md)から hooks が渡す。未指定なら既定値。
 
-// 成果物ファイルの既定対象: docs/**/*.md。ただし docs/chat/ は
-// このリポジトリの chat 記録(閲覧制限あり・レビュー対象外)なので除外する。
-export function isArtifactPath(relPath: string): boolean {
+// 成果物ファイルの既定対象: docs/**/*.md(config で置き換え可能)。
+// docs/chat/ は chat 記録(閲覧制限あり・レビュー対象外)なので設定によらず除外する。
+export function isArtifactPath(
+  relPath: string,
+  globs: string[] = DEFAULT_ARTIFACT_GLOBS
+): boolean {
   const p = relPath.replaceAll("\\", "/")
-  return (
-    p.startsWith("docs/") && p.endsWith(".md") && !p.startsWith("docs/chat/")
-  )
+  if (p.startsWith("docs/chat/")) return false
+  return globs.some((g) => path.matchesGlob(p, g))
 }
 
 // 同一 type・同一パスの未レビュー項目を探す(連続 Write/Edit のコアレス用)。
@@ -52,7 +55,7 @@ export function findReviewItemForPath(
 }
 
 // テスト・ビルド系コマンドの既定ホワイトリスト(設計書 §4 の前方一致方式)。
-// config による追加は Stage 3。
+// config の `test_commands` が追加分として渡される。
 const TEST_COMMAND_PREFIXES = [
   "pnpm test",
   "pnpm build",
@@ -73,9 +76,12 @@ const TEST_COMMAND_PREFIXES = [
   "make build"
 ]
 
-export function matchTestCommand(command: string): string | null {
+export function matchTestCommand(
+  command: string,
+  extraPrefixes: string[] = []
+): string | null {
   const trimmed = command.trimStart()
-  for (const prefix of TEST_COMMAND_PREFIXES) {
+  for (const prefix of [...TEST_COMMAND_PREFIXES, ...extraPrefixes]) {
     if (trimmed === prefix || trimmed.startsWith(`${prefix} `)) return prefix
   }
   return null

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // src/hooks/capture-post-tool-use.ts
-import fs6 from "node:fs";
-import path7 from "node:path";
+import fs7 from "node:fs";
+import path8 from "node:path";
 
 // src/lib/atomic.ts
 import crypto from "node:crypto";
@@ -25,8 +25,12 @@ function writeFileAtomic(filePath, content) {
 }
 
 // src/lib/capture-rules.ts
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs4 from "node:fs";
+import path4 from "node:path";
+
+// src/lib/config.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
 
 // src/lib/frontmatter.ts
 function quote(v) {
@@ -73,11 +77,71 @@ function parseFrontmatter(text) {
   return { data, body: text.slice(m[0].length) };
 }
 
+// src/lib/config.ts
+var DEFAULT_ARTIFACT_GLOBS = ["docs/**/*.md"];
+var DEFAULT_PORT = 7373;
+function defaults() {
+  return {
+    viewer: "files",
+    captureTargets: { diff: true, artifact: true, test: true },
+    artifactGlobs: [...DEFAULT_ARTIFACT_GLOBS],
+    testCommands: [],
+    injectionTiming: "hybrid",
+    theme: "device",
+    port: DEFAULT_PORT
+  };
+}
+function configPath(projectDir2) {
+  return path2.join(projectDir2, ".claude", "pitcrew.local.md");
+}
+function oneOf(value, allowed) {
+  return typeof value === "string" && allowed.includes(value) ? value : null;
+}
+function asArray(value) {
+  return Array.isArray(value) ? value.filter((v) => v !== "") : null;
+}
+function loadConfig(projectDir2) {
+  const cfg = defaults();
+  let raw;
+  try {
+    raw = fs2.readFileSync(configPath(projectDir2), "utf8");
+  } catch {
+    return cfg;
+  }
+  const { data } = parseFrontmatter(raw);
+  const viewer = oneOf(data.viewer, ["browser", "tui", "files"]);
+  if (viewer) cfg.viewer = viewer;
+  const targets = asArray(data.capture_targets);
+  if (targets)
+    cfg.captureTargets = {
+      diff: targets.includes("diff"),
+      artifact: targets.includes("artifact"),
+      test: targets.includes("test")
+    };
+  const globs = asArray(data.artifact_globs);
+  if (globs && globs.length > 0) cfg.artifactGlobs = globs;
+  const commands = asArray(data.test_commands);
+  if (commands) cfg.testCommands = commands;
+  const timing = oneOf(data.injection_timing, [
+    "hybrid",
+    "turn-boundary",
+    "immediate"
+  ]);
+  if (timing) cfg.injectionTiming = timing;
+  const theme = oneOf(data.theme, ["device", "light", "dark"]);
+  if (theme) cfg.theme = theme;
+  if (typeof data.port === "string" && /^\d+$/.test(data.port)) {
+    const port = Number(data.port);
+    if (port >= 1 && port <= 65535) cfg.port = port;
+  }
+  return cfg;
+}
+
 // src/lib/run.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 function pitcrewDir(projectDir2) {
-  return path2.join(projectDir2, ".pitcrew");
+  return path3.join(projectDir2, ".pitcrew");
 }
 function initialRun() {
   return {
@@ -88,10 +152,10 @@ function initialRun() {
   };
 }
 function loadRun(projectDir2) {
-  const file = path2.join(pitcrewDir(projectDir2), "run.json");
+  const file = path3.join(pitcrewDir(projectDir2), "run.json");
   let raw;
   try {
-    raw = fs2.readFileSync(file, "utf8");
+    raw = fs3.readFileSync(file, "utf8");
   } catch {
     return initialRun();
   }
@@ -112,31 +176,32 @@ function loadRun(projectDir2) {
 }
 function saveRun(projectDir2, run) {
   writeFileAtomic(
-    path2.join(pitcrewDir(projectDir2), "run.json"),
+    path3.join(pitcrewDir(projectDir2), "run.json"),
     `${JSON.stringify(run, null, 2)}
 `
   );
 }
 
 // src/lib/capture-rules.ts
-function isArtifactPath(relPath) {
+function isArtifactPath(relPath, globs = DEFAULT_ARTIFACT_GLOBS) {
   const p = relPath.replaceAll("\\", "/");
-  return p.startsWith("docs/") && p.endsWith(".md") && !p.startsWith("docs/chat/");
+  if (p.startsWith("docs/chat/")) return false;
+  return globs.some((g) => path4.matchesGlob(p, g));
 }
 function findReviewItemForPath(projectDir2, type, relPath) {
-  const reviewDir = path3.join(pitcrewDir(projectDir2), "review");
+  const reviewDir = path4.join(pitcrewDir(projectDir2), "review");
   let names;
   try {
-    names = fs3.readdirSync(reviewDir);
+    names = fs4.readdirSync(reviewDir);
   } catch {
     return null;
   }
   for (const name of names.sort()) {
     if (!name.endsWith(".md")) continue;
-    const file = path3.join(reviewDir, name);
+    const file = path4.join(reviewDir, name);
     let data;
     try {
-      data = parseFrontmatter(fs3.readFileSync(file, "utf8")).data;
+      data = parseFrontmatter(fs4.readFileSync(file, "utf8")).data;
     } catch {
       continue;
     }
@@ -165,9 +230,9 @@ var TEST_COMMAND_PREFIXES = [
   "make test",
   "make build"
 ];
-function matchTestCommand(command) {
+function matchTestCommand(command, extraPrefixes = []) {
   const trimmed = command.trimStart();
-  for (const prefix of TEST_COMMAND_PREFIXES) {
+  for (const prefix of [...TEST_COMMAND_PREFIXES, ...extraPrefixes]) {
     if (trimmed === prefix || trimmed.startsWith(`${prefix} `)) return prefix;
   }
   return null;
@@ -214,11 +279,11 @@ function headCommit(projectDir2) {
 }
 
 // src/lib/hook-io.ts
-import fs4 from "node:fs";
-import path4 from "node:path";
+import fs5 from "node:fs";
+import path5 from "node:path";
 function readStdinSync() {
   try {
-    return JSON.parse(fs4.readFileSync(0, "utf8"));
+    return JSON.parse(fs5.readFileSync(0, "utf8"));
   } catch {
     return null;
   }
@@ -228,11 +293,11 @@ function resolveProjectDir(input2) {
 }
 function logError(projectDir2, context, err) {
   try {
-    const logDir = path4.join(pitcrewDir(projectDir2), "log");
-    fs4.mkdirSync(logDir, { recursive: true });
+    const logDir = path5.join(pitcrewDir(projectDir2), "log");
+    fs5.mkdirSync(logDir, { recursive: true });
     const message = err instanceof Error ? err.stack ?? err.message : String(err);
-    fs4.appendFileSync(
-      path4.join(logDir, "errors.log"),
+    fs5.appendFileSync(
+      path5.join(logDir, "errors.log"),
       `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
 `
     );
@@ -241,19 +306,19 @@ function logError(projectDir2, context, err) {
 }
 
 // src/lib/lock.ts
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 function tryAcquire(lockFile) {
   try {
-    const fd = fs5.openSync(lockFile, "wx");
-    fs5.writeSync(
+    const fd = fs6.openSync(lockFile, "wx");
+    fs6.writeSync(
       fd,
       JSON.stringify({ pid: process.pid, acquiredAt: (/* @__PURE__ */ new Date()).toISOString() })
     );
-    fs5.closeSync(fd);
+    fs6.closeSync(fd);
     return true;
   } catch {
     return false;
@@ -268,10 +333,10 @@ function acquire(lockFile, opts) {
     if (Date.now() >= deadline) return false;
     if (tryAcquire(lockFile)) return true;
     try {
-      const st = fs5.statSync(lockFile);
+      const st = fs6.statSync(lockFile);
       if (Date.now() - st.mtimeMs > opts.staleMs) {
         try {
-          fs5.rmSync(lockFile, { force: true });
+          fs6.rmSync(lockFile, { force: true });
           continue;
         } catch (error) {
           if (isEnoent(error)) continue;
@@ -289,10 +354,10 @@ function withRunLock(projectDir2, fn, opts = {}) {
     staleMs: opts.staleMs ?? 1e4,
     retryIntervalMs: opts.retryIntervalMs ?? 50
   };
-  const lockFile = path5.join(pitcrewDir(projectDir2), "run.lock");
+  const lockFile = path6.join(pitcrewDir(projectDir2), "run.lock");
   let acquired = false;
   try {
-    fs5.mkdirSync(path5.dirname(lockFile), { recursive: true });
+    fs6.mkdirSync(path6.dirname(lockFile), { recursive: true });
     acquired = acquire(lockFile, resolved);
   } catch {
     acquired = false;
@@ -306,12 +371,12 @@ function withRunLock(projectDir2, fn, opts = {}) {
   try {
     return fn();
   } finally {
-    if (acquired) fs5.rmSync(lockFile, { force: true });
+    if (acquired) fs6.rmSync(lockFile, { force: true });
   }
 }
 
 // src/lib/review.ts
-import path6 from "node:path";
+import path7 from "node:path";
 var MAX_BODY_LINES = 600;
 function slugify(text) {
   const s = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -368,8 +433,8 @@ function renderReviewItem(id, item, now) {
 }
 function writeReviewItem(projectDir2, run, item) {
   const id = String(run.nextReviewId).padStart(3, "0");
-  const slugSource = item.paths[0] ? path6.basename(item.paths[0]) : item.title;
-  const file = path6.join(
+  const slugSource = item.paths[0] ? path7.basename(item.paths[0]) : item.title;
+  const file = path7.join(
     pitcrewDir(projectDir2),
     "review",
     `${id}-${item.type}-${slugify(slugSource)}.md`
@@ -379,15 +444,15 @@ function writeReviewItem(projectDir2, run, item) {
 }
 
 // src/hooks/capture-post-tool-use.ts
-function captureArtifact(projectDir2, input2) {
+function captureArtifact(projectDir2, input2, config) {
   const filePath = input2.tool_input?.file_path;
   if (typeof filePath !== "string") return;
-  const rel = path7.relative(projectDir2, filePath).replaceAll("\\", "/");
-  if (rel.startsWith("..") || path7.isAbsolute(rel)) return;
-  if (!isArtifactPath(rel)) return;
+  const rel = path8.relative(projectDir2, filePath).replaceAll("\\", "/");
+  if (rel.startsWith("..") || path8.isAbsolute(rel)) return;
+  if (!isArtifactPath(rel, config.artifactGlobs)) return;
   let content;
   try {
-    content = fs6.readFileSync(filePath, "utf8");
+    content = fs7.readFileSync(filePath, "utf8");
   } catch {
     return;
   }
@@ -435,10 +500,10 @@ ${newStr}
     saveRun(projectDir2, res.run);
   });
 }
-function captureTestResult(projectDir2, input2) {
+function captureTestResult(projectDir2, input2, config) {
   const command = input2.tool_input?.command;
   if (typeof command !== "string") return;
-  const matched = matchTestCommand(command);
+  const matched = matchTestCommand(command, config.testCommands);
   if (!matched) return;
   const result = extractBashResult(input2.tool_response);
   const failureEvent = input2.hook_event_name === "PostToolUseFailure";
@@ -477,10 +542,12 @@ var input = readStdinSync();
 if (!input) process.exit(0);
 var projectDir = resolveProjectDir(input);
 try {
+  const config = loadConfig(projectDir);
   if (input.tool_name === "Write" || input.tool_name === "Edit") {
-    captureArtifact(projectDir, input);
+    if (config.captureTargets.artifact)
+      captureArtifact(projectDir, input, config);
   } else if (input.tool_name === "Bash") {
-    captureTestResult(projectDir, input);
+    if (config.captureTargets.test) captureTestResult(projectDir, input, config);
   }
 } catch (err) {
   logError(projectDir, "capture-post-tool-use", err);

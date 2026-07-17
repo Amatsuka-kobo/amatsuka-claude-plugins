@@ -1,13 +1,122 @@
 #!/usr/bin/env node
 
 // src/hooks/capture-subagent-stop.ts
-import path7 from "node:path";
+import path8 from "node:path";
+
+// src/lib/config.ts
+import fs from "node:fs";
+import path from "node:path";
+
+// src/lib/frontmatter.ts
+function quote(v) {
+  return /[:#"[\],]|^[\s\d]|\s$|^$/.test(v) ? JSON.stringify(v) : v;
+}
+function unquote(v) {
+  if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v.slice(1, -1);
+    }
+  }
+  return v;
+}
+function serializeFrontmatter(data) {
+  const lines = ["---"];
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value)) {
+      lines.push(`${key}: [${value.map(quote).join(", ")}]`);
+    } else {
+      lines.push(`${key}: ${quote(String(value))}`);
+    }
+  }
+  lines.push("---");
+  return lines.join("\n");
+}
+function parseFrontmatter(text) {
+  const m = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!m) return { data: {}, body: text };
+  const data = {};
+  for (const line of m[1].split("\n")) {
+    const kv = line.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+    if (!kv) continue;
+    const [, key, raw] = kv;
+    const value = raw.trimEnd();
+    if (value.startsWith("[") && value.endsWith("]")) {
+      const inner = value.slice(1, -1).trim();
+      data[key] = inner === "" ? [] : inner.split(",").map((s) => unquote(s.trim()));
+    } else {
+      data[key] = unquote(value);
+    }
+  }
+  return { data, body: text.slice(m[0].length) };
+}
+
+// src/lib/config.ts
+var DEFAULT_ARTIFACT_GLOBS = ["docs/**/*.md"];
+var DEFAULT_PORT = 7373;
+function defaults() {
+  return {
+    viewer: "files",
+    captureTargets: { diff: true, artifact: true, test: true },
+    artifactGlobs: [...DEFAULT_ARTIFACT_GLOBS],
+    testCommands: [],
+    injectionTiming: "hybrid",
+    theme: "device",
+    port: DEFAULT_PORT
+  };
+}
+function configPath(projectDir2) {
+  return path.join(projectDir2, ".claude", "pitcrew.local.md");
+}
+function oneOf(value, allowed) {
+  return typeof value === "string" && allowed.includes(value) ? value : null;
+}
+function asArray(value) {
+  return Array.isArray(value) ? value.filter((v) => v !== "") : null;
+}
+function loadConfig(projectDir2) {
+  const cfg = defaults();
+  let raw;
+  try {
+    raw = fs.readFileSync(configPath(projectDir2), "utf8");
+  } catch {
+    return cfg;
+  }
+  const { data } = parseFrontmatter(raw);
+  const viewer = oneOf(data.viewer, ["browser", "tui", "files"]);
+  if (viewer) cfg.viewer = viewer;
+  const targets = asArray(data.capture_targets);
+  if (targets)
+    cfg.captureTargets = {
+      diff: targets.includes("diff"),
+      artifact: targets.includes("artifact"),
+      test: targets.includes("test")
+    };
+  const globs = asArray(data.artifact_globs);
+  if (globs && globs.length > 0) cfg.artifactGlobs = globs;
+  const commands = asArray(data.test_commands);
+  if (commands) cfg.testCommands = commands;
+  const timing = oneOf(data.injection_timing, [
+    "hybrid",
+    "turn-boundary",
+    "immediate"
+  ]);
+  if (timing) cfg.injectionTiming = timing;
+  const theme = oneOf(data.theme, ["device", "light", "dark"]);
+  if (theme) cfg.theme = theme;
+  if (typeof data.port === "string" && /^\d+$/.test(data.port)) {
+    const port = Number(data.port);
+    if (port >= 1 && port <= 65535) cfg.port = port;
+  }
+  return cfg;
+}
 
 // src/lib/git.ts
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
+import fs2 from "node:fs";
 import os from "node:os";
-import path from "node:path";
+import path2 from "node:path";
 function git(projectDir2, args, env) {
   return execFileSync("git", args, {
     cwd: projectDir2,
@@ -17,7 +126,7 @@ function git(projectDir2, args, env) {
   });
 }
 function snapshotWorktree(projectDir2) {
-  const tmpIndex = path.join(
+  const tmpIndex = path2.join(
     os.tmpdir(),
     `pitcrew-index-${process.pid}-${Date.now()}`
   );
@@ -33,7 +142,7 @@ function snapshotWorktree(projectDir2) {
   } catch {
     return null;
   } finally {
-    fs.rmSync(tmpIndex, { force: true });
+    fs2.rmSync(tmpIndex, { force: true });
   }
 }
 function diffBetween(projectDir2, baseTree, headTree) {
@@ -63,36 +172,36 @@ function baselineTree(projectDir2) {
 }
 
 // src/lib/hook-io.ts
+import fs5 from "node:fs";
+import path5 from "node:path";
+
+// src/lib/run.ts
 import fs4 from "node:fs";
 import path4 from "node:path";
 
-// src/lib/run.ts
-import fs3 from "node:fs";
-import path3 from "node:path";
-
 // src/lib/atomic.ts
 import crypto from "node:crypto";
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 function writeFileAtomic(filePath, content) {
-  const dir = path2.dirname(filePath);
-  fs2.mkdirSync(dir, { recursive: true });
-  const tmp = path2.join(
+  const dir = path3.dirname(filePath);
+  fs3.mkdirSync(dir, { recursive: true });
+  const tmp = path3.join(
     dir,
     `.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
   );
   try {
-    fs2.writeFileSync(tmp, content);
-    fs2.renameSync(tmp, filePath);
+    fs3.writeFileSync(tmp, content);
+    fs3.renameSync(tmp, filePath);
   } catch (err) {
-    fs2.rmSync(tmp, { force: true });
+    fs3.rmSync(tmp, { force: true });
     throw err;
   }
 }
 
 // src/lib/run.ts
 function pitcrewDir(projectDir2) {
-  return path3.join(projectDir2, ".pitcrew");
+  return path4.join(projectDir2, ".pitcrew");
 }
 function initialRun() {
   return {
@@ -103,10 +212,10 @@ function initialRun() {
   };
 }
 function loadRun(projectDir2) {
-  const file = path3.join(pitcrewDir(projectDir2), "run.json");
+  const file = path4.join(pitcrewDir(projectDir2), "run.json");
   let raw;
   try {
-    raw = fs3.readFileSync(file, "utf8");
+    raw = fs4.readFileSync(file, "utf8");
   } catch {
     return initialRun();
   }
@@ -127,7 +236,7 @@ function loadRun(projectDir2) {
 }
 function saveRun(projectDir2, run) {
   writeFileAtomic(
-    path3.join(pitcrewDir(projectDir2), "run.json"),
+    path4.join(pitcrewDir(projectDir2), "run.json"),
     `${JSON.stringify(run, null, 2)}
 `
   );
@@ -136,7 +245,7 @@ function saveRun(projectDir2, run) {
 // src/lib/hook-io.ts
 function readStdinSync() {
   try {
-    return JSON.parse(fs4.readFileSync(0, "utf8"));
+    return JSON.parse(fs5.readFileSync(0, "utf8"));
   } catch {
     return null;
   }
@@ -146,11 +255,11 @@ function resolveProjectDir(input2) {
 }
 function logError(projectDir2, context, err) {
   try {
-    const logDir = path4.join(pitcrewDir(projectDir2), "log");
-    fs4.mkdirSync(logDir, { recursive: true });
+    const logDir = path5.join(pitcrewDir(projectDir2), "log");
+    fs5.mkdirSync(logDir, { recursive: true });
     const message = err instanceof Error ? err.stack ?? err.message : String(err);
-    fs4.appendFileSync(
-      path4.join(logDir, "errors.log"),
+    fs5.appendFileSync(
+      path5.join(logDir, "errors.log"),
       `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
 `
     );
@@ -159,19 +268,19 @@ function logError(projectDir2, context, err) {
 }
 
 // src/lib/lock.ts
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 function tryAcquire(lockFile) {
   try {
-    const fd = fs5.openSync(lockFile, "wx");
-    fs5.writeSync(
+    const fd = fs6.openSync(lockFile, "wx");
+    fs6.writeSync(
       fd,
       JSON.stringify({ pid: process.pid, acquiredAt: (/* @__PURE__ */ new Date()).toISOString() })
     );
-    fs5.closeSync(fd);
+    fs6.closeSync(fd);
     return true;
   } catch {
     return false;
@@ -186,10 +295,10 @@ function acquire(lockFile, opts) {
     if (Date.now() >= deadline) return false;
     if (tryAcquire(lockFile)) return true;
     try {
-      const st = fs5.statSync(lockFile);
+      const st = fs6.statSync(lockFile);
       if (Date.now() - st.mtimeMs > opts.staleMs) {
         try {
-          fs5.rmSync(lockFile, { force: true });
+          fs6.rmSync(lockFile, { force: true });
           continue;
         } catch (error) {
           if (isEnoent(error)) continue;
@@ -207,10 +316,10 @@ function withRunLock(projectDir2, fn, opts = {}) {
     staleMs: opts.staleMs ?? 1e4,
     retryIntervalMs: opts.retryIntervalMs ?? 50
   };
-  const lockFile = path5.join(pitcrewDir(projectDir2), "run.lock");
+  const lockFile = path6.join(pitcrewDir(projectDir2), "run.lock");
   let acquired = false;
   try {
-    fs5.mkdirSync(path5.dirname(lockFile), { recursive: true });
+    fs6.mkdirSync(path6.dirname(lockFile), { recursive: true });
     acquired = acquire(lockFile, resolved);
   } catch {
     acquired = false;
@@ -224,31 +333,12 @@ function withRunLock(projectDir2, fn, opts = {}) {
   try {
     return fn();
   } finally {
-    if (acquired) fs5.rmSync(lockFile, { force: true });
+    if (acquired) fs6.rmSync(lockFile, { force: true });
   }
 }
 
 // src/lib/review.ts
-import path6 from "node:path";
-
-// src/lib/frontmatter.ts
-function quote(v) {
-  return /[:#"[\],]|^[\s\d]|\s$|^$/.test(v) ? JSON.stringify(v) : v;
-}
-function serializeFrontmatter(data) {
-  const lines = ["---"];
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      lines.push(`${key}: [${value.map(quote).join(", ")}]`);
-    } else {
-      lines.push(`${key}: ${quote(String(value))}`);
-    }
-  }
-  lines.push("---");
-  return lines.join("\n");
-}
-
-// src/lib/review.ts
+import path7 from "node:path";
 var MAX_BODY_LINES = 600;
 function slugify(text) {
   const s = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -305,8 +395,8 @@ function renderReviewItem(id, item, now) {
 }
 function writeReviewItem(projectDir2, run, item) {
   const id = String(run.nextReviewId).padStart(3, "0");
-  const slugSource = item.paths[0] ? path6.basename(item.paths[0]) : item.title;
-  const file = path6.join(
+  const slugSource = item.paths[0] ? path7.basename(item.paths[0]) : item.title;
+  const file = path7.join(
     pitcrewDir(projectDir2),
     "review",
     `${id}-${item.type}-${slugify(slugSource)}.md`
@@ -320,6 +410,7 @@ var input = readStdinSync();
 if (!input) process.exit(0);
 var projectDir = resolveProjectDir(input);
 try {
+  if (!loadConfig(projectDir).captureTargets.diff) process.exit(0);
   const head = snapshotWorktree(projectDir);
   if (!head) process.exit(0);
   withRunLock(projectDir, () => {
@@ -343,7 +434,7 @@ try {
       });
       return;
     }
-    const first = path7.basename(paths[0]);
+    const first = path8.basename(paths[0]);
     const title = paths.length === 1 ? `${first} \u306E diff` : `${first} \u307B\u304B ${paths.length - 1} \u30D5\u30A1\u30A4\u30EB\u306E diff`;
     const item = {
       type: "diff",
