@@ -106,3 +106,21 @@ test("git リポジトリでなくても exit 0 で何も書かない", () => {
 test("壊れた stdin でも exit 0 で素通しする", () => {
   expect(runTs(HOOK, [], { input: "not json" }).trim()).toBe("")
 })
+
+test("config で diff を外すと捕捉せず run.json も作らない", () => {
+  const dir = makeRepo()
+  try {
+    const claudeDir = path.join(dir, ".claude")
+    fs.mkdirSync(claudeDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(claudeDir, "pitcrew.local.md"),
+      "---\ncapture_targets: [artifact, test]\n---\n"
+    )
+    fs.writeFileSync(path.join(dir, "feat.ts"), "export const f = 1\n")
+    expect(runHook(dir).trim()).toBe("")
+    expect(reviewFiles(dir)).toEqual([])
+    expect(fs.existsSync(path.join(dir, ".pitcrew", "run.json"))).toBe(false)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

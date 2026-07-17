@@ -228,3 +228,70 @@ test("PostToolUseFailure のホワイトリスト外 Bash は無視される", (
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+function writeConfig(dir: string, frontmatter: string): void {
+  const claudeDir = path.join(dir, ".claude")
+  fs.mkdirSync(claudeDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(claudeDir, "pitcrew.local.md"),
+    `---\n${frontmatter}\n---\n`
+  )
+}
+
+test("config で artifact を外すと docs/ への Write を捕捉しない", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, "capture_targets: [diff, test]")
+    const abs = writeArtifact(dir, "docs/design.md", "# 設計\n")
+    runHook(dir, { tool_name: "Write", tool_input: { file_path: abs } })
+    expect(reviewFiles(dir)).toEqual([])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("config の artifact_globs で捕捉対象を置き換えられる", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, 'artifact_globs: ["notes/**/*.md"]')
+    const notes = writeArtifact(dir, "notes/memo.md", "メモ\n")
+    const docs = writeArtifact(dir, "docs/design.md", "# 設計\n")
+    runHook(dir, { tool_name: "Write", tool_input: { file_path: notes } })
+    runHook(dir, { tool_name: "Write", tool_input: { file_path: docs } })
+    const files = reviewFiles(dir)
+    expect(files).toHaveLength(1)
+    expect(files[0]).toContain("memo")
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("config で test を外すとホワイトリストコマンドも捕捉しない", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, "capture_targets: [diff, artifact]")
+    runHook(dir, {
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+      tool_response: { stdout: "1 passed", stderr: "" }
+    })
+    expect(reviewFiles(dir)).toEqual([])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("config の test_commands で追加したコマンドを捕捉する", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, 'test_commands: ["deno test"]')
+    runHook(dir, {
+      tool_name: "Bash",
+      tool_input: { command: "deno test --allow-read" },
+      tool_response: { stdout: "ok", stderr: "" }
+    })
+    expect(reviewFiles(dir)).toHaveLength(1)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

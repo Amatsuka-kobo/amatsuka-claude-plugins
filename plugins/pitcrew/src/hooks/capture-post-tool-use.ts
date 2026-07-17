@@ -2,6 +2,7 @@
 // PostToolUse / PostToolUseFailure フック(設計書 §4): Write/Edit による成果物
 // ファイル(docs/**/*.md)と Bash のテスト・ビルド結果を review/ に捕捉する。
 // 全経路フェイルオープン。run.json の read-modify-write は run.lock で直列化する(設計書 §6)。
+// 捕捉対象・glob・コマンド追加は config(設計書 §7)で変わる。
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "../lib/atomic.js"
@@ -12,6 +13,7 @@ import {
   matchTestCommand,
   summarizeOutput
 } from "../lib/capture-rules.js"
+import { loadConfig, type PitcrewConfig } from "../lib/config.js"
 import { headCommit } from "../lib/git.js"
 import {
   type HookInput,
@@ -27,12 +29,16 @@ import {
 } from "../lib/review.js"
 import { loadRun, saveRun } from "../lib/run.js"
 
-function captureArtifact(projectDir: string, input: HookInput): void {
+function captureArtifact(
+  projectDir: string,
+  input: HookInput,
+  config: PitcrewConfig
+): void {
   const filePath = input.tool_input?.file_path
   if (typeof filePath !== "string") return
   const rel = path.relative(projectDir, filePath).replaceAll("\\", "/")
   if (rel.startsWith("..") || path.isAbsolute(rel)) return // プロジェクト外
-  if (!isArtifactPath(rel)) return
+  if (!isArtifactPath(rel, config.artifactGlobs)) return
 
   let content: string
   try {
@@ -83,10 +89,14 @@ function captureArtifact(projectDir: string, input: HookInput): void {
   })
 }
 
-function captureTestResult(projectDir: string, input: HookInput): void {
+function captureTestResult(
+  projectDir: string,
+  input: HookInput,
+  config: PitcrewConfig
+): void {
   const command = input.tool_input?.command
   if (typeof command !== "string") return
-  const matched = matchTestCommand(command)
+  const matched = matchTestCommand(command, config.testCommands)
   if (!matched) return
 
   const result = extractBashResult(input.tool_response)
@@ -131,10 +141,12 @@ if (!input) process.exit(0)
 const projectDir = resolveProjectDir(input)
 
 try {
+  const config = loadConfig(projectDir)
   if (input.tool_name === "Write" || input.tool_name === "Edit") {
-    captureArtifact(projectDir, input)
+    if (config.captureTargets.artifact)
+      captureArtifact(projectDir, input, config)
   } else if (input.tool_name === "Bash") {
-    captureTestResult(projectDir, input)
+    if (config.captureTargets.test) captureTestResult(projectDir, input, config)
   }
 } catch (err) {
   logError(projectDir, "capture-post-tool-use", err)
