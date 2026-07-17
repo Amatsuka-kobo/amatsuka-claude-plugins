@@ -9,4 +9,5 @@ cliproxyapi.config.yaml
 
 # claude関連
 .claude/agents
+.claude/pitcrew.local.md
 CLAUDE.md
