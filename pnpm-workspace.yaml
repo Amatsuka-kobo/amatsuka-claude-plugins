@@ -4,5 +4,6 @@ packages:
   - plugins/codiel/raguel-mcp
   - plugins/task-utility
   - plugins/revelation
+  - plugins/pitcrew
 allowBuilds:
   esbuild: true
