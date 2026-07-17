@@ -77,7 +77,7 @@ port: "7373"
 
 ### 4. .gitignore の提案
 
-保存後、プロジェクトの `.gitignore` に `.pitcrew/` が無ければ「`.pitcrew/` はローカル状態なので .gitignore への追記を推奨します。追記しますか?」と確認し、同意されたら追記する。既にあれば何もしない。
+保存後、プロジェクトの `.gitignore` を確認し、`.pitcrew/` と `.claude/pitcrew.local.md` のうち無いものがあれば「`.pitcrew/`(ローカル状態)と `.claude/pitcrew.local.md`(個人設定)は .gitignore への追記を推奨します。追記しますか?」と確認し、同意されたら無いものだけを追記する。両方とも既にあれば何もしない。
 
 ### 5. リセットの案内(最後に 1 回だけ確認)
 
