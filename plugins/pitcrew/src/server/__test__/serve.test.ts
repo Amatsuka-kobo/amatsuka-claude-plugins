@@ -100,3 +100,18 @@ test("theme 設定が HTML に埋め込まれる", async () => {
   const html = await (await fetch(info.url)).text()
   expect(html).toContain('data-config-theme="dark"')
 })
+
+test("UI には 2 ペインとコメント欄の要素 ID が含まれる", async () => {
+  const info = await startServe()
+  const html = await (await fetch(info.url)).text()
+  for (const id of [
+    "status-bar",
+    "queue-pane",
+    "detail-pane",
+    "comment-body",
+    "comment-send",
+    "theme-toggle"
+  ]) {
+    expect(html).toContain(`id="${id}"`)
+  }
+})
