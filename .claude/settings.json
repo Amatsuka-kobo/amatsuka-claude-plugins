@@ -39,7 +39,8 @@
     "mdbase-lsp@claude-code-lsps": true,
     "vtsls@claude-code-lsps": true,
     "bash-language-server@claude-code-lsps": true,
-    "codex@openai-codex": true
+    "codex@openai-codex": true,
+    "pitcrew@amatsuka-claude-plugins": true
   },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {

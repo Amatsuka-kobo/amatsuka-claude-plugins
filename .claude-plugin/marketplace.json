@@ -24,6 +24,11 @@
       "name": "basic-design",
       "source": "./plugins/basic-design",
       "description": "基本設計フェーズの成果物(ER図・画面遷移図・システム構成図など)をブレインストーミングで作成するツール群"
+    },
+    {
+      "name": "pitcrew",
+      "source": "./plugins/pitcrew",
+      "description": "オーケストレーション実行中の成果物(diff・設計書・テスト結果)を .pitcrew/ のレビューキューへ逐次書き出し、人間の並走レビューを可能にするプラグイン"
     }
   ]
 }
