@@ -19,6 +19,15 @@ function writeComment(dir: string, name: string, content: string): void {
   fs.writeFileSync(path.join(commentsDir, name), content)
 }
 
+function writeConfig(dir: string, frontmatter: string): void {
+  const claudeDir = path.join(dir, ".claude")
+  fs.mkdirSync(claudeDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(claudeDir, "pitcrew.local.md"),
+    `---\n${frontmatter}\n---\n`
+  )
+}
+
 function runHook(dir: string, input: Record<string, unknown>): string {
   return runTs(HOOK, [], {
     input: JSON.stringify({ cwd: dir, ...input }),
@@ -59,6 +68,58 @@ test("パス一致した urgent は additionalContext で注入され processed/
         path.join(dir, ".pitcrew", "comments", "processed", "c-001.md")
       )
     ).toBe(true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("turn-boundary 設定ではパス一致した urgent も注入しない", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, "injection_timing: turn-boundary")
+    writeComment(dir, "c-001.md", URGENT_AUTH)
+    const out = runHook(dir, editInput(dir, "src/auth.ts"))
+    expect(out.trim()).toBe("")
+    expect(
+      fs.existsSync(path.join(dir, ".pitcrew", "comments", "c-001.md"))
+    ).toBe(true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("immediate 設定では normal コメントもパス一致で注入される", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, "injection_timing: immediate")
+    writeComment(
+      dir,
+      "c-001.md",
+      "---\nurgency: normal\npaths: [src/auth.ts]\n---\nすぐ見て。\n"
+    )
+    const out = runHook(dir, editInput(dir, "src/auth.ts"))
+    expect(out).toContain("すぐ見て")
+    expect(
+      fs.existsSync(
+        path.join(dir, ".pitcrew", "comments", "processed", "c-001.md")
+      )
+    ).toBe(true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("hybrid 設定(明示)は既定と同じく urgent のみ照合する", () => {
+  const dir = makeProject()
+  try {
+    writeConfig(dir, "injection_timing: hybrid")
+    writeComment(
+      dir,
+      "c-001.md",
+      "---\nurgency: normal\npaths: [src/auth.ts]\n---\n後で見て。\n"
+    )
+    const out = runHook(dir, editInput(dir, "src/auth.ts"))
+    expect(out.trim()).toBe("")
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }

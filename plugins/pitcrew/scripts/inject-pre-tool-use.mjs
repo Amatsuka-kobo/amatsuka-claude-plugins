@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // src/hooks/inject-pre-tool-use.ts
-import path4 from "node:path";
+import path5 from "node:path";
 
 // src/lib/comments.ts
 import fs from "node:fs";
@@ -132,12 +132,74 @@ ${c.body}`;
   );
 }
 
-// src/lib/hook-io.ts
+// src/lib/config.ts
 import fs2 from "node:fs";
 import path3 from "node:path";
+var DEFAULT_ARTIFACT_GLOBS = ["docs/**/*.md"];
+var DEFAULT_PORT = 7373;
+function defaults() {
+  return {
+    viewer: "files",
+    captureTargets: { diff: true, artifact: true, test: true },
+    artifactGlobs: [...DEFAULT_ARTIFACT_GLOBS],
+    testCommands: [],
+    injectionTiming: "hybrid",
+    theme: "device",
+    port: DEFAULT_PORT
+  };
+}
+function configPath(projectDir2) {
+  return path3.join(projectDir2, ".claude", "pitcrew.local.md");
+}
+function oneOf(value, allowed) {
+  return typeof value === "string" && allowed.includes(value) ? value : null;
+}
+function asArray(value) {
+  return Array.isArray(value) ? value.filter((v) => v !== "") : null;
+}
+function loadConfig(projectDir2) {
+  const cfg = defaults();
+  let raw;
+  try {
+    raw = fs2.readFileSync(configPath(projectDir2), "utf8");
+  } catch {
+    return cfg;
+  }
+  const { data } = parseFrontmatter(raw);
+  const viewer = oneOf(data.viewer, ["browser", "tui", "files"]);
+  if (viewer) cfg.viewer = viewer;
+  const targets = asArray(data.capture_targets);
+  if (targets)
+    cfg.captureTargets = {
+      diff: targets.includes("diff"),
+      artifact: targets.includes("artifact"),
+      test: targets.includes("test")
+    };
+  const globs = asArray(data.artifact_globs);
+  if (globs && globs.length > 0) cfg.artifactGlobs = globs;
+  const commands = asArray(data.test_commands);
+  if (commands) cfg.testCommands = commands;
+  const timing = oneOf(data.injection_timing, [
+    "hybrid",
+    "turn-boundary",
+    "immediate"
+  ]);
+  if (timing) cfg.injectionTiming = timing;
+  const theme = oneOf(data.theme, ["device", "light", "dark"]);
+  if (theme) cfg.theme = theme;
+  if (typeof data.port === "string" && /^\d+$/.test(data.port)) {
+    const port = Number(data.port);
+    if (port >= 1 && port <= 65535) cfg.port = port;
+  }
+  return cfg;
+}
+
+// src/lib/hook-io.ts
+import fs3 from "node:fs";
+import path4 from "node:path";
 function readStdinSync() {
   try {
-    return JSON.parse(fs2.readFileSync(0, "utf8"));
+    return JSON.parse(fs3.readFileSync(0, "utf8"));
   } catch {
     return null;
   }
@@ -147,11 +209,11 @@ function resolveProjectDir(input2) {
 }
 function logError(projectDir2, context, err) {
   try {
-    const logDir = path3.join(pitcrewDir(projectDir2), "log");
-    fs2.mkdirSync(logDir, { recursive: true });
+    const logDir = path4.join(pitcrewDir(projectDir2), "log");
+    fs3.mkdirSync(logDir, { recursive: true });
     const message = err instanceof Error ? err.stack ?? err.message : String(err);
-    fs2.appendFileSync(
-      path3.join(logDir, "errors.log"),
+    fs3.appendFileSync(
+      path4.join(logDir, "errors.log"),
       `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
 `
     );
@@ -165,12 +227,13 @@ var input = readStdinSync();
 if (!input) process.exit(0);
 var projectDir = resolveProjectDir(input);
 try {
+  const timing = loadConfig(projectDir).injectionTiming;
   const filePath = input.tool_name === "Write" || input.tool_name === "Edit" ? input.tool_input?.file_path : void 0;
-  if (typeof filePath === "string") {
-    const rel = path4.relative(projectDir, filePath).replaceAll("\\", "/");
-    if (!rel.startsWith("..") && !path4.isAbsolute(rel)) {
+  if (timing !== "turn-boundary" && typeof filePath === "string") {
+    const rel = path5.relative(projectDir, filePath).replaceAll("\\", "/");
+    if (!rel.startsWith("..") && !path5.isAbsolute(rel)) {
       const matched = listComments(projectDir).filter(
-        (c) => c.urgency === "urgent" && c.paths.some((p) => pathMatchesComment(p, rel))
+        (c) => (timing === "immediate" || c.urgency === "urgent") && c.paths.some((p) => pathMatchesComment(p, rel))
       );
       const claimed = matched.filter((c) => claimComment(projectDir, c.name));
       if (claimed.length > 0) {
