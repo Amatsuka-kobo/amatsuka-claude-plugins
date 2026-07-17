@@ -13,7 +13,9 @@
   - コミット `78d3923`：feat: pitcrew /pitcrew:config の .gitignore 提案に設定ファイル自体を追加
   - コミット `65ed974`：chore: chat記録
   - コミット `6ca09f7`：Merge branch 'feature/pitcrew-stage3' into main
-  - ブランチ：`feature/pitcrew-stage3`（main @ c4649cb から分岐）
+  - コミット `5f8ce92`：chore: chat記録
+  - コミット `1f247b0`：chore: pitcrew 0.8.0(Stage 3 正式版)
+  - ブランチ：`feature/pitcrew-stage3`（削除済み。main @ c4649cb から分岐）
 - 前提:
   - `docs/chat/2026/0716/phyllis998/pitcrew-plugin-design-session.md`（Stage 2 設計・動作確認）
   - `docs/superpowers/specs/2026-07-16-pitcrew-design.md`（§7 Stage 3 スコープ）
@@ -224,4 +226,36 @@ CLAUDE.md エージェント運用方針（重いレビューはオーケスト�
 
 ---
 
-注意事項: ローカル main での main ブランチへのマージ完了。origin への push・feature/pitcrew-stage3 ブランチの削除・バージョン正式化は、ユーザーの判断と指示待ち。pitcrew プラグイン全体（Stage 1〜3）が main に統合されました。
+## セッション6: origin への push・ブランチ削除・バージョン正式化完了
+
+# phyllis998
+
+> 3点承認します。よろしくお願いします
+
+### AI
+
+ユーザーの 3 点承認（origin への push、feature/pitcrew-stage3 ブランチの削除、バージョン正式化）を受けて順に実行。
+
+**Step 1**: 未コミットの chat 記録をコミット。マージ後に追記されていた `docs/chat/**` ファイルを git add & commit。コミット `5f8ce92`「chore: chat記録」。
+
+**Step 2**: バージョン正式化。GPT Luna に委譲してプラグインバージョンを `0.8.0-dev` → `0.8.0` に更新。plugin.json を修正し、`0.8.0-dev` の残存箇所を grep で確認（なし）。コミット `1f247b0`「chore: pitcrew 0.8.0(Stage 3 正式版)」。
+
+**Step 3**: origin への push。`git push origin main` を実行。初回は SSH 鍵認証エラーで失敗（既定の SSH 鍵が `github.com` ホスト向けで ARI-hiroto-sudo アカウント、このリポジトリへの push 権限なし）。`~/.ssh/config` にある `github-pv` ホスト（phyllis998 として認証）経由で push を再実行。成功・`5e08310..1f247b0` の範囲で 2 コミットが origin/main に到達。
+
+失敗・やり直し: 初回 push が権限エラー(`fatal: Could not read from remote repository`)で失敗。原因は SSH 鍵選択で、既定の `~/.ssh/config` の `Host github.com` が個人以外のアカウントの鍵を指していたこと。`git remote set-url origin git@github-pv:...` で URL を変更するか、今回のように ssh -i で鍵を指定するか、または ssh-agent でキーチェーン登録するなどの対応で解決。本セッションでは github-pv 経由で成功。
+
+**Step 4**: ローカル feature/pitcrew-stage3 ブランチを削除。`git branch -D feature/pitcrew-stage3` で強制削除（リモート追跡ブランチより進んでいたため `-D` 必須。ただし main へのマージは完了済みで安全）。
+
+**Step 5**: リモートの feature/pitcrew-stage3 ブランチも削除。この古いブランチは中断時点（`8ae3361`）の状態で、実装・マージ済みの内容を含んでいないため。`git push origin --delete feature/pitcrew-stage3` で削除後、`git remote prune origin` で追跡参照を消去。
+
+**最終状態報告**：
+- ローカル main：`1f247b0`（pitcrew 0.8.0）
+- origin/main：`1f247b0`（pushで同期完了）
+- pitcrew プラグイン：**Stage 1〜3 全 71 ファイル、0.8.0 正式リリース済み**
+- feature/pitcrew-stage3 ブランチ：削除済み（ローカル・リモート両方）
+
+**補足事項**: 今後の push 権限の円滑化のため、remote URL を `git@github-pv:Amatsuka-kobo/amatsuka-claude-plugins.git` に変更しておくと、github-pv 鍵が常に使われるため毎回の認証トラブルが避けられます。`git remote set-url origin git@github-pv:Amatsuka-kobo/amatsuka-claude-plugins.git` で設定可能。
+
+---
+
+注意事項: Pitcrew Stage 3 実装完了、main へのマージ完了、origin への push 完了、バージョン 0.8.0 正式リリース完了。次は Stage 4（ブラウザビューア — `viewer` コマンド実装、`theme`/`port` 設定の消費側）が控えていますが、別途ご指示ください。
