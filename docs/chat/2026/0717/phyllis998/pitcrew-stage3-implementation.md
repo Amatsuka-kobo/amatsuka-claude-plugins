@@ -10,6 +10,9 @@
   - コミット `4081ce3`：feat: pitcrew 注入層に config(injection_timing)を反映
   - コミット `dfe9e61`：feat: pitcrew /pitcrew:config コマンド(対話式セットアップ)
   - コミット `78194ca`：docs: pitcrew Stage 3 の README 更新とバージョン 0.8.0-dev
+  - コミット `78d3923`：feat: pitcrew /pitcrew:config の .gitignore 提案に設定ファイル自体を追加
+  - コミット `65ed974`：chore: chat記録
+  - コミット `6ca09f7`：Merge branch 'feature/pitcrew-stage3' into main
   - ブランチ：`feature/pitcrew-stage3`（main @ c4649cb から分岐）
 - 前提:
   - `docs/chat/2026/0716/phyllis998/pitcrew-plugin-design-session.md`（Stage 2 設計・動作確認）
@@ -193,17 +196,32 @@ CLAUDE.md エージェント運用方針（重いレビューはオーケスト�
 
 ---
 
-## 残りのユーザー判断事項
+## セッション5: 実機確認・.gitignore 修正・main へマージ完了
 
-1. **実機確認**（計画書 `docs/superpowers/plans/2026-07-17-pitcrew-stage3.md` 末尾の「実機確認手順」参照）
-   - `/pitcrew:config` を実行して対話式セットアップ確認
-   - `.claude/pitcrew.local.md` ファイル生成確認
-   - capture_targets から test を外して捕捉停止確認
-   - injection_timing を turn-boundary に変更して即時注入停止確認
-   - 既定値に戻す
+# phyllis998
 
-2. **ブランチ統合方法**
-   - feature/pitcrew-stage3 を main に直接マージするか
-   - PR を作成するか
-   - 実機確認後に統合するか
-   - ユーザーの判断と指示が必要
+> 1. /pitcrew:configの確認完了しました。1点だけ、生成される.claude/pitcrew.local.mdをconifgコマンド実行時に.gitignoreに入れる対応を行いたいです。
+> 2. mainにマージしてよいです
+
+### AI
+
+**Step 1**: 作業ツリーの状態確認（実機確認で生成されたファイル、未コミット変更の有無）と既存マージスタイルの確認。
+
+**Step 2**: `.gitignore` 修正（GPT Luna に委譲）。`/pitcrew:config` の Step 4 を「`.pitcrew/` と `.claude/pitcrew.local.md` のうち無いものを 1 回の確認でまとめて追記提案する」内容へ変更。加えてリポジトリ自体の `.gitignore` に `.claude/pitcrew.local.md` を追加。実装完了・コミット `78d3923`「feat: pitcrew /pitcrew:config の .gitignore 提案に設定ファイル自体を追加」。
+
+実機確認で生成されたファイルが untracked 一覧から消えたことを確認。
+
+**Step 3**: chat 記録のコミット。マージ前に未コミットだった `docs/chat/**` ファイル 3 点をブランチ上でコミット。コミット `65ed974`「chore: chat記録」。
+
+**Step 4**: main へマージ。既存の流儀（`--no-ff` のマージコミット）に合わせて実行。コンフリクトなし。ローカル main の merge-base が `5e08310`（Stage 1-2 を含まない時点）だったため、今回のマージで **pitcrew プラグイン全体(Stage 1〜3、71 ファイル)** が main に入った。マージコミット `6ca09f7`「Merge branch 'feature/pitcrew-stage3' into main」。
+
+マージ結果の内容はレビュー済みのブランチ先端と完全に同一。テスト 673/673 合格・lint/typecheck クリーンの検証はそのまま有効。
+
+**Step 5**: 現在の状態報告。
+- ローカル main は `6ca09f7`。**origin への push は実施していません**（ご指示待ち）
+- `feature/pitcrew-stage3` ブランチは残っています。不要なら `git branch -d` で安全に削除可能
+- pitcrew は `0.8.0-dev`。実機確認も完了したので、正式リリース版（プレリリース接尾辞なし）に上げるかはご判断ください
+
+---
+
+注意事項: ローカル main での main ブランチへのマージ完了。origin への push・feature/pitcrew-stage3 ブランチの削除・バージョン正式化は、ユーザーの判断と指示待ち。pitcrew プラグイン全体（Stage 1〜3）が main に統合されました。
