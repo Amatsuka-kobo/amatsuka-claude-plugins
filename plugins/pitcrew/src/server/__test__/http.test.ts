@@ -231,7 +231,9 @@ test("POST /api/approve-batch は複数項目を移動し moved/failed を返す
   const res = await fetch(`${base}/api/approve-batch`, {
     method: "POST",
     headers: { ...auth(), "content-type": "application/json" },
-    body: JSON.stringify({ names: ["001-diff-a.md", "002-diff-b.md", "nope.md"] })
+    body: JSON.stringify({
+      names: ["001-diff-a.md", "002-diff-b.md", "nope.md"]
+    })
   })
   expect(res.status).toBe(200)
   expect(await res.json()).toEqual({
@@ -240,7 +242,9 @@ test("POST /api/approve-batch は複数項目を移動し moved/failed を返す
     failed: ["nope.md"]
   })
   expect(
-    fs.existsSync(path.join(projectDir, ".pitcrew", "reviewed", "001-diff-a.md"))
+    fs.existsSync(
+      path.join(projectDir, ".pitcrew", "reviewed", "001-diff-a.md")
+    )
   ).toBe(true)
 })
 
