@@ -5,6 +5,12 @@
 - 成果物: 
   - 設計書: `docs/superpowers/specs/2026-07-18-pitcrew-stage4.1-design.md` (コミット `bbd12bb`)
   - 実装計画書: `docs/superpowers/plans/2026-07-18-pitcrew-stage4.1.md` (コミット `ca1cb4b`)
+  - 実装ブランチ: `feature/pitcrew-stage4.1` (6 コミット、main @ `7a0ed19` から作成)
+    - Task 1: `0d4ae2c`
+    - Task 2: `32eada4`
+    - Task 3: `5fd98d0`
+    - Task 4: `114b4c7` (初版) + `0a380c3` (混入修正)
+    - Task 5: `7e45841`
 - 前提: 
   - `docs/chat/2026/0717/phyllis998/pitcrew-stage4-implementation.md` (Stage 4 完成・v0.9.2 正式リリース)
   - プロジェクトメモリ `pitcrew-viewer-backlog.md` (ビューア層の要望 2 件の出典)
@@ -58,7 +64,7 @@ Haiku レビューで以下の指摘を反映：
 
 # phyllis998
 
-> 実装計画に進んでください
+> 実装計画に進めてください
 
 # AI
 
@@ -86,4 +92,65 @@ Haiku レビューで以下の軽微な指摘 3 点を反映：
 
 ---
 
-注意事項: 実装計画書が確定し、実行方法の選択待ち。Subagent-Driven 方式(タスクごとに新規サブエージェント起動、GPT Terra へ委譲)と Inline Execution 方式(このセッション内でバッチ実行)の 2 案をユーザーに提示して終了。
+## セッション3: Subagent-Driven 実装・全タスク完了・最終レビュー
+
+# phyllis998
+
+> 1で進めてください
+
+# AI
+
+Subagent-Driven 方式(タスクごとにサブエージェント起動、実装者は GPT Terra / GPT Luna、レビューは Sonnet)で進行開始。subagent-driven-development スキルに従い、フィーチャーブランチを `feature/pitcrew-stage4.1` として main @ `7a0ed19` から作成し、進捗台帳(.superpowers/sdd/progress.md)を初期化した。
+
+**Task 1 — readItems 降順ソート** (`0d4ae2c`)
+
+テスト先行で既存 704 テストのベースラインを確認後、`readItems()` の `review` / `reviewed` 両セクションで `names.sort().reverse()` へ修正。実装者は既存テストパターンに従い新規テストを追加。Sonnet レビューで spec・quality を検証し承認。
+
+**Task 2 — approveItems メソッド追加** (`32eada4`)
+
+`viewer-ops.ts` に `approveItems(projectDir, names)` を追加。フェイルオープン設計に従い、各 `isSafeName` 検証 → `rename` → 結果を `moved` / `failed` に分類。1 件の失敗も全体を止めず、結果は配列で完全に返却。Sonnet レビューで実装と仕様の整合、エラーハンドリングを検証し承認。
+
+**Task 3 — POST /api/approve-batch エンドポイント追加** (`5fd98d0`)
+
+`http.ts` に新エンドポイントを実装。body の `names` 配列を検証(400 系 3 種: 欠落・型エラー・1000 件超過)し、Task 2 の `approveItems()` に委譲。結果を `{moved: string[], failed: string[]}` で返却。Sonnet レビューで API 仕様・バリデーション・既存ヘッダー変数との整合を検証し承認。
+
+**Task 4 — UI 層チェックボックス・全選択・一括既読ボタン** (`114b4c7` + `0a380c3`)
+
+`ui.html` にチェックボックス UI を追加。「レビュー待ち」セクション各項目に checkbox 追加(クリック時の `stopPropagation` で項目選択と干渉しない)。セクション見出しに「全選択」トグルと「選択を既読 (N)」ボタン実装。実行前に `confirm()` で誤操作防止。実行後は toast で件数報告 → `refresh()`。選択状態は Set `checkedNames` で管理し、SSE 再描画後も復元される設計。
+
+**実装中の逸脱 2 件:**
+
+1. **Task 4 実装者が plugin.json を計画外に 0.10.0 に変更** — `git show --stat` で即検出。本来は Task 5 で 0.9.3 へ統一する計画のため、0.9.2 へ復元して 114b4c7 にコミット。この逸脱が最終的に修正の必要がなくなる伏線
+2. **Task 3 実装者の biome 整形漏れで lint 失敗** — 初版 5fd98d0 の直後にレビューが回り、修正されず Task 4 に進んだため。Task 4 完了後に lint をクリアする追加コミット 0a380c3 を実装者に回し、修正完了
+
+両事案ともタスク間ゲートで検出でき、本体実装には影響を与えず。
+
+**Task 5 — ドキュメント・バージョン・バンドル再生成** (`7e45841`)
+
+README に新機能(新しい順ソート・チェックボックス・一括既読)を追記。`plugin.json` を 0.9.3 へ。`pnpm build` 実行し、バンドル(`bundle/` 配下の .mjs / .html)を再生成してコミット。スクリーンショット等の補助ドキュメント追加なし(通常の小版バージョンアップ範囲)。Sonnet レビューで設計書との整合・バンドル整合・版番号の正確性を検証し承認。指摘なし。
+
+**最終レビュー(オーケストレーター実施)**
+
+全ブランチ diff (main @ 7a0ed19 から feature/pitcrew-stage4.1、6 コミット、11 ファイル +445 -14)を精査。以下の項目を検証：
+
+- **バンドル / ソース整合**: 手書き改変・混入なし。biome 整形・git 圧縮に収まる。バンドル差分と src/ 差分が正確に対応
+- **XSS 方針**: チェックボックス state 管理に `checkedNames` Set を使用し、DOM 再構築時に一貫性を保持。既存の `textContent` 設定方針に準拠
+- **API 契約**: 既存の single `/api/approve` API は変更なし。新 `/api/approve-batch` は 1000 件上限・部分成功セマンティクス・400 系バリデーション 3 種で明確に独立
+- **認証**: 既存 pitcrew の認証フロー(HTTP ベース、Token ヘッダー検証)に変更なし
+
+**Deferred Minor 5 件の triage 完了**:
+- Task 1: UI 型定義の補足ヒント → 既存スタイルと整合(修正不要)
+- Task 2: `moved` 配列の順序保証なし → 計画で明記済み(修正不要)
+- Task 3: 429(rate limit) エラーの将来拡張性 → 計画の 400 系 3 種に限定が確定仕様(修正不要)
+- Task 4: 選択状態の localStorage 永続化 → 計画で「Set クロージャで済む」と明記(修正不要)
+- Task 5: `plugin.json` のフィールド順序 → git diff では無視される無風(修正不要)
+
+**テスト結果**: 711 テスト中 711 PASS。既存 704 テストはすべて通過、新規テスト 7 件も通過。lint、typecheck も PASS。
+
+**状態**: Ready to merge = **Yes**。ユーザーへの確認待ち：
+1. main への `--no-ff` マージの承認
+2. 実機確認 4 項目(新しい順表示・複数選択一括既読・全選択一掃・チェック時に詳細ペイン非切替)
+
+---
+
+注意事項: 実装完了、最終レビュー合格。マージと実機確認はユーザー確認待ち。
