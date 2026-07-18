@@ -114,9 +114,20 @@ main { display: flex; flex: 1; min-height: 0; }
   border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px;
 }
 #config-panel {
-  border-bottom: 1px solid var(--border); padding: 12px 16px;
-  background: var(--pane); display: flex; flex-direction: column; gap: 10px;
-  font-size: 13px; max-height: 45vh; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 10px; padding: 0;
+  background: var(--pane); color: var(--fg);
+  width: min(560px, 92vw);
+}
+#config-panel::backdrop { background: rgba(0, 0, 0, 0.4); }
+#config-panel .cfg-body {
+  display: flex; flex-direction: column; gap: 10px; font-size: 13px;
+  padding: 16px; max-height: 80vh; overflow-y: auto;
+}
+#config-panel .cfg-head { display: flex; align-items: center; gap: 8px; }
+#config-panel .cfg-title { font-weight: 600; flex: 1; }
+#cfg-close {
+  border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+  border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 13px;
 }
 #config-panel .cfg-row { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 #config-panel .cfg-name { width: 140px; color: var(--muted); flex-shrink: 0; padding-top: 4px; }
@@ -154,54 +165,60 @@ main { display: flex; flex: 1; min-height: 0; }
   <button id="config-toggle" type="button" title="設定">⚙ 設定</button>
   <button id="theme-toggle" type="button">テーマ: device</button>
 </div>
-<div id="config-panel" hidden>
-  <div class="cfg-row">
-    <label class="cfg-name" for="cfg-viewer">ビューア</label>
-    <select id="cfg-viewer">
-      <option value="files">files(エディタ直接)</option>
-      <option value="browser">browser</option>
-      <option value="tui">tui(後続ステージで実装予定)</option>
-    </select>
+<dialog id="config-panel">
+  <div class="cfg-body">
+    <div class="cfg-head">
+      <span class="cfg-title">⚙ 設定</span>
+      <button id="cfg-close" type="button" title="閉じる">✕</button>
+    </div>
+    <div class="cfg-row">
+      <label class="cfg-name" for="cfg-viewer">ビューア</label>
+      <select id="cfg-viewer">
+        <option value="files">files(エディタ直接)</option>
+        <option value="browser">browser</option>
+        <option value="tui">tui(後続ステージで実装予定)</option>
+      </select>
+    </div>
+    <div class="cfg-row">
+      <span class="cfg-name">捕捉対象</span>
+      <label><input type="checkbox" id="cfg-target-diff" /> コード diff</label>
+      <label><input type="checkbox" id="cfg-target-artifact" /> 成果物</label>
+      <label><input type="checkbox" id="cfg-target-test" /> テスト・ビルド</label>
+    </div>
+    <div class="cfg-row">
+      <label class="cfg-name" for="cfg-globs">成果物 glob</label>
+      <textarea id="cfg-globs" placeholder="1 行 1 glob(例: docs/**/*.md)"></textarea>
+    </div>
+    <div class="cfg-row">
+      <label class="cfg-name" for="cfg-commands">テストコマンド追加</label>
+      <textarea id="cfg-commands" placeholder="1 行 1 コマンド接頭辞(例: deno test)"></textarea>
+    </div>
+    <div class="cfg-row">
+      <label class="cfg-name" for="cfg-timing">注入タイミング</label>
+      <select id="cfg-timing">
+        <option value="hybrid">hybrid(推奨)</option>
+        <option value="turn-boundary">turn-boundary</option>
+        <option value="immediate">immediate</option>
+      </select>
+    </div>
+    <div class="cfg-row">
+      <label class="cfg-name" for="cfg-theme">テーマ初期値</label>
+      <select id="cfg-theme">
+        <option value="device">device</option>
+        <option value="light">light</option>
+        <option value="dark">dark</option>
+      </select>
+    </div>
+    <div class="cfg-row">
+      <label class="cfg-name" for="cfg-port">ポート</label>
+      <input type="number" id="cfg-port" min="1" max="65535" />
+    </div>
+    <div class="cfg-row">
+      <button id="cfg-save" type="button">保存</button>
+      <span id="cfg-msg"></span>
+    </div>
   </div>
-  <div class="cfg-row">
-    <span class="cfg-name">捕捉対象</span>
-    <label><input type="checkbox" id="cfg-target-diff" /> コード diff</label>
-    <label><input type="checkbox" id="cfg-target-artifact" /> 成果物</label>
-    <label><input type="checkbox" id="cfg-target-test" /> テスト・ビルド</label>
-  </div>
-  <div class="cfg-row">
-    <label class="cfg-name" for="cfg-globs">成果物 glob</label>
-    <textarea id="cfg-globs" placeholder="1 行 1 glob(例: docs/**/*.md)"></textarea>
-  </div>
-  <div class="cfg-row">
-    <label class="cfg-name" for="cfg-commands">テストコマンド追加</label>
-    <textarea id="cfg-commands" placeholder="1 行 1 コマンド接頭辞(例: deno test)"></textarea>
-  </div>
-  <div class="cfg-row">
-    <label class="cfg-name" for="cfg-timing">注入タイミング</label>
-    <select id="cfg-timing">
-      <option value="hybrid">hybrid(推奨)</option>
-      <option value="turn-boundary">turn-boundary</option>
-      <option value="immediate">immediate</option>
-    </select>
-  </div>
-  <div class="cfg-row">
-    <label class="cfg-name" for="cfg-theme">テーマ初期値</label>
-    <select id="cfg-theme">
-      <option value="device">device</option>
-      <option value="light">light</option>
-      <option value="dark">dark</option>
-    </select>
-  </div>
-  <div class="cfg-row">
-    <label class="cfg-name" for="cfg-port">ポート</label>
-    <input type="number" id="cfg-port" min="1" max="65535" />
-  </div>
-  <div class="cfg-row">
-    <button id="cfg-save" type="button">保存</button>
-    <span id="cfg-msg"></span>
-  </div>
-</div>
+</dialog>
 <main>
   <div id="queue-pane"></div>
   <div id="detail-pane">
@@ -518,8 +535,8 @@ main { display: flex; flex: 1; min-height: 0; }
   // サーバー側反映のみ再起動(/pitcrew:serve restart)が必要。
   $("config-toggle").addEventListener("click", async () => {
     const panel = $("config-panel");
-    if (!panel.hidden) {
-      panel.hidden = true;
+    if (panel.open) {
+      panel.close();
       return;
     }
     try {
@@ -527,10 +544,16 @@ main { display: flex; flex: 1; min-height: 0; }
       if (!res.ok) throw new Error(String(res.status));
       fillConfigForm(await res.json());
       $("cfg-msg").textContent = "";
-      panel.hidden = false;
+      panel.showModal();
     } catch {
       toast("設定の読み込みに失敗しました");
     }
+  });
+
+  // ✕ ボタンとバックドロップクリックで閉じる(Esc は dialog の標準動作)
+  $("cfg-close").addEventListener("click", () => $("config-panel").close());
+  $("config-panel").addEventListener("click", (e) => {
+    if (e.target === $("config-panel")) $("config-panel").close();
   });
 
   function fillConfigForm(cfg) {
