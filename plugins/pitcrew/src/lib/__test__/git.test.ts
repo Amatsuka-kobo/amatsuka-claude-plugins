@@ -68,6 +68,23 @@ test(".pitcrew/ 配下はスナップショットに含めない", () => {
   })
 })
 
+test(".pitcrew/ が gitignore されていてもスナップショットを取得できる", () => {
+  withRepo((dir) => {
+    fs.writeFileSync(path.join(dir, ".gitignore"), ".pitcrew/\n")
+    fs.mkdirSync(path.join(dir, ".pitcrew"), { recursive: true })
+    fs.writeFileSync(path.join(dir, ".pitcrew", "run.json"), "{}\n")
+    fs.writeFileSync(path.join(dir, "a.ts"), "const a = 1\n")
+
+    const tree = snapshotWorktree(dir)
+
+    expect(tree).toBeTruthy()
+    if (!tree) throw new Error("unreachable")
+    const names = git(dir, "ls-tree", "--name-only", tree).split("\n")
+    expect(names).toContain("a.ts")
+    expect(names).not.toContain(".pitcrew")
+  })
+})
+
 test("コミットゼロのリポジトリでもスナップショットが取れ、headCommit は null", () => {
   withRepo((dir) => {
     fs.writeFileSync(path.join(dir, "a.ts"), "x\n")
