@@ -138,12 +138,53 @@ test("POST /api/comment はコメントを書き、空 body は 400", async () =
   expect(empty.status).toBe(400)
 })
 
+test("POST /api/comment は改行を含む reviewId を拒否してファイルを作らない", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/comment`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify({ body: "コメント本文", reviewId: "abc\ndef" })
+  })
+  expect(res.status).toBe(400)
+  expect(await res.json()).toEqual({ error: "bad field" })
+  expect(fs.existsSync(path.join(projectDir, ".pitcrew", "comments"))).toBe(
+    false
+  )
+})
+
+test("POST /api/comment は改行を含む paths 要素を拒否する", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/comment`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify({ body: "コメント本文", paths: ["src/a.ts\nx"] })
+  })
+  expect(res.status).toBe(400)
+  expect(await res.json()).toEqual({ error: "bad field" })
+})
+
 test("認証なしの API は 401、未知パスは 404", async () => {
   const base = await start()
   expect((await fetch(`${base}/api/state`)).status).toBe(401)
   expect((await fetch(`${base}/api/nope`, { headers: auth() })).status).toBe(
     404
   )
+})
+
+test("SSE クライアント切断後の変更でもサーバーが応答する", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/events?token=${TOKEN}`)
+  expect(res.status).toBe(200)
+  await res.body?.cancel()
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
+  const review = path.join(projectDir, ".pitcrew", "review")
+  fs.mkdirSync(review, { recursive: true })
+  fs.writeFileSync(path.join(review, "001-diff-x.md"), "x")
+  await new Promise((resolve) => setTimeout(resolve, 2500))
+
+  const state = await fetch(`${base}/api/state`, { headers: auth() })
+  expect(state.status).toBe(200)
 })
 
 test("SSE は接続直後に changed を送り、変更でも送る", async () => {
