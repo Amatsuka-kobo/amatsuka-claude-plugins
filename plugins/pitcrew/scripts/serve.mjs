@@ -1,7 +1,7 @@
 // src/server/serve.ts
 import crypto3 from "node:crypto";
-import fs6 from "node:fs";
-import path7 from "node:path";
+import fs7 from "node:fs";
+import path8 from "node:path";
 
 // src/lib/atomic.ts
 import crypto from "node:crypto";
@@ -131,6 +131,91 @@ function loadConfig(projectDir2) {
   }
   return cfg;
 }
+function validStringArray(value) {
+  if (!Array.isArray(value)) return null;
+  const out = [];
+  for (const v of value) {
+    if (typeof v !== "string" || v === "" || /[,\n\r]/.test(v)) return null;
+    out.push(v);
+  }
+  return out;
+}
+function validateConfig(input) {
+  if (typeof input !== "object" || input === null || Array.isArray(input))
+    return { error: "config" };
+  const obj = input;
+  const viewer = obj.viewer;
+  if (viewer !== "browser" && viewer !== "tui" && viewer !== "files")
+    return { error: "viewer" };
+  const ct = obj.captureTargets;
+  if (typeof ct !== "object" || ct === null || Array.isArray(ct))
+    return { error: "captureTargets" };
+  const targets = ct;
+  if (typeof targets.diff !== "boolean" || typeof targets.artifact !== "boolean" || typeof targets.test !== "boolean")
+    return { error: "captureTargets" };
+  const globs = validStringArray(obj.artifactGlobs);
+  if (globs === null || globs.length === 0) return { error: "artifactGlobs" };
+  const commands = validStringArray(obj.testCommands);
+  if (commands === null) return { error: "testCommands" };
+  const timing = obj.injectionTiming;
+  if (timing !== "hybrid" && timing !== "turn-boundary" && timing !== "immediate")
+    return { error: "injectionTiming" };
+  const theme = obj.theme;
+  if (theme !== "device" && theme !== "light" && theme !== "dark")
+    return { error: "theme" };
+  const port2 = obj.port;
+  if (typeof port2 !== "number" || !Number.isInteger(port2) || port2 < 1 || port2 > 65535)
+    return { error: "port" };
+  return {
+    config: {
+      viewer,
+      captureTargets: {
+        diff: targets.diff,
+        artifact: targets.artifact,
+        test: targets.test
+      },
+      artifactGlobs: globs,
+      testCommands: commands,
+      injectionTiming: timing,
+      theme,
+      port: port2
+    }
+  };
+}
+var CONFIG_BODY = `
+# pitcrew \u8A2D\u5B9A
+
+\`/pitcrew:config\` \u3067\u751F\u6210\u3002\u624B\u3067\u7DE8\u96C6\u3057\u3066\u3082\u6709\u52B9(\u6B21\u306E hook \u8D77\u52D5\u304B\u3089\u53CD\u6620\u3055\u308C\u308B)\u3002
+
+- viewer: browser | tui | files
+- capture_targets: diff / artifact / test \u306E\u7D44\u307F\u5408\u308F\u305B(\u5916\u3057\u305F\u7A2E\u5225\u306F\u6355\u6349\u3057\u306A\u3044)
+- artifact_globs: \u6210\u679C\u7269\u3068\u3057\u3066\u6355\u6349\u3059\u308B glob(\u8A2D\u5B9A\u6642\u306F\u65E2\u5B9A docs/**/*.md \u3092\u7F6E\u304D\u63DB\u3048\u3002\u7A7A\u914D\u5217\u306F\u65E2\u5B9A\u306E\u307E\u307E\u3002docs/chat/ \u306F\u5E38\u306B\u9664\u5916)
+- test_commands: \u30C6\u30B9\u30C8\u30FB\u30D3\u30EB\u30C9\u5224\u5B9A\u306E\u8FFD\u52A0\u30B3\u30DE\u30F3\u30C9\u63A5\u982D\u8F9E(\u65E2\u5B9A\u30EA\u30B9\u30C8\u306B\u8FFD\u52A0)
+- injection_timing: hybrid | turn-boundary | immediate
+- theme: \u30D6\u30E9\u30A6\u30B6\u30D3\u30E5\u30FC\u30A2\u306E\u521D\u671F\u30C6\u30FC\u30DE(device | light | dark)
+- port: \u30D6\u30E9\u30A6\u30B6\u30D3\u30E5\u30FC\u30A2\u306E\u5F85\u53D7\u30DD\u30FC\u30C8
+`;
+function saveConfig(projectDir2, config2) {
+  const targets = [];
+  if (config2.captureTargets.diff) targets.push("diff");
+  if (config2.captureTargets.artifact) targets.push("artifact");
+  if (config2.captureTargets.test) targets.push("test");
+  const lines = [
+    "---",
+    `viewer: ${config2.viewer}`,
+    `capture_targets: [${targets.join(", ")}]`,
+    `artifact_globs: [${config2.artifactGlobs.map((g) => JSON.stringify(g)).join(", ")}]`,
+    `test_commands: [${config2.testCommands.map((c) => JSON.stringify(c)).join(", ")}]`,
+    `injection_timing: ${config2.injectionTiming}`,
+    `theme: ${config2.theme}`,
+    `port: "${config2.port}"`,
+    "---"
+  ];
+  const file = configPath(projectDir2);
+  fs2.mkdirSync(path2.dirname(file), { recursive: true });
+  writeFileAtomic(file, `${lines.join("\n")}
+${CONFIG_BODY}`);
+}
 
 // src/lib/run.ts
 import path3 from "node:path";
@@ -140,7 +225,9 @@ function pitcrewDir(projectDir2) {
 
 // src/server/http.ts
 import crypto2 from "node:crypto";
+import fs6 from "node:fs";
 import http from "node:http";
+import path7 from "node:path";
 
 // src/server/state.ts
 import fs3 from "node:fs";
@@ -408,6 +495,21 @@ function readBody(req) {
 function hasLineBreak(value) {
   return value.includes("\n") || value.includes("\r");
 }
+var GITIGNORE_RECOMMENDED = [".pitcrew/", ".claude/pitcrew.local.md"];
+function gitignoreMissing(projectDir2) {
+  let lines;
+  try {
+    lines = fs6.readFileSync(path7.join(projectDir2, ".gitignore"), "utf8").split("\n");
+  } catch {
+    return [...GITIGNORE_RECOMMENDED];
+  }
+  const entries = new Set(
+    lines.map((line) => line.trim()).filter((line) => line !== "" && !line.startsWith("#")).map((line) => line.replace(/\/+$/, ""))
+  );
+  return GITIGNORE_RECOMMENDED.filter(
+    (rec) => !entries.has(rec.replace(/\/+$/, ""))
+  );
+}
 function createPitcrewServer(opts) {
   const { projectDir: projectDir2, token: token2, html: html2 } = opts;
   const sseClients = /* @__PURE__ */ new Set();
@@ -439,6 +541,30 @@ function createPitcrewServer(opts) {
     }
     if (req.method === "GET" && url.pathname === "/api/state") {
       sendJson(res, 200, listState(projectDir2));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/config") {
+      sendJson(res, 200, loadConfig(projectDir2));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/config") {
+      let parsed;
+      try {
+        parsed = JSON.parse(await readBody(req));
+      } catch {
+        sendJson(res, 400, { error: "bad json" });
+        return;
+      }
+      const result = validateConfig(parsed);
+      if ("error" in result) {
+        sendJson(res, 400, { error: result.error });
+        return;
+      }
+      saveConfig(projectDir2, result.config);
+      sendJson(res, 200, {
+        ok: true,
+        gitignoreMissing: gitignoreMissing(projectDir2)
+      });
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/item") {
@@ -558,7 +684,7 @@ function parseArgs(argv) {
       if (Number.isInteger(n) && n >= 0 && n <= 65535) port2 = n;
       i++;
     } else if (argv[i] === "--dir" && argv[i + 1] !== void 0) {
-      dir = path7.resolve(argv[i + 1]);
+      dir = path8.resolve(argv[i + 1]);
       i++;
     }
   }
@@ -568,9 +694,9 @@ var { port: portArg, dir: projectDir } = parseArgs(process.argv.slice(2));
 var config = loadConfig(projectDir);
 var port = portArg ?? config.port;
 var token = crypto3.randomBytes(24).toString("hex");
-var html = fs6.readFileSync(new URL("./ui.html", import.meta.url), "utf8").replaceAll("%PITCREW_THEME%", config.theme);
+var html = fs7.readFileSync(new URL("./ui.html", import.meta.url), "utf8").replaceAll("%PITCREW_THEME%", config.theme);
 var server = createPitcrewServer({ projectDir, token, html });
-var serveJsonPath = path7.join(pitcrewDir(projectDir), "serve.json");
+var serveJsonPath = path8.join(pitcrewDir(projectDir), "serve.json");
 server.listen(port, "127.0.0.1", () => {
   const addr = server.address();
   const actualPort = typeof addr === "object" && addr !== null ? addr.port : port;
@@ -598,7 +724,7 @@ server.on("error", (err) => {
 });
 function shutdown() {
   try {
-    fs6.rmSync(serveJsonPath, { force: true });
+    fs7.rmSync(serveJsonPath, { force: true });
   } catch {
   }
   server.close(() => process.exit(0));
