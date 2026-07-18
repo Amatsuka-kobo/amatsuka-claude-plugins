@@ -109,6 +109,31 @@ main { display: flex; flex: 1; min-height: 0; }
   border: none; background: var(--accent); color: var(--accent-fg);
   border-radius: 6px; padding: 6px 16px; cursor: pointer; font-size: 13px;
 }
+#config-toggle {
+  border: 1px solid var(--border); background: var(--pane); color: var(--fg);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+#config-panel {
+  border-bottom: 1px solid var(--border); padding: 12px 16px;
+  background: var(--pane); display: flex; flex-direction: column; gap: 10px;
+  font-size: 13px; max-height: 45vh; overflow-y: auto;
+}
+#config-panel .cfg-row { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+#config-panel .cfg-name { width: 140px; color: var(--muted); flex-shrink: 0; padding-top: 4px; }
+#config-panel select, #config-panel input[type="number"] {
+  border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+  border-radius: 6px; padding: 4px 8px; font-size: 13px;
+}
+#config-panel textarea {
+  border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+  border-radius: 6px; padding: 6px 8px; font-size: 13px; width: 320px;
+  min-height: 48px; resize: vertical; font-family: ui-monospace, monospace;
+}
+#cfg-save {
+  border: none; background: var(--accent); color: var(--accent-fg);
+  border-radius: 6px; padding: 6px 16px; cursor: pointer; font-size: 13px;
+}
+#cfg-msg { color: var(--muted); }
 #toast {
   position: fixed; bottom: 16px; right: 16px; background: var(--fg);
   color: var(--bg); border-radius: 8px; padding: 10px 16px; font-size: 13px;
@@ -126,7 +151,56 @@ main { display: flex; flex: 1; min-height: 0; }
   <span class="stat">未回収コメント: <b id="stat-comments">0</b></span>
   <span class="stat">最終捕捉: <b id="stat-capture">-</b></span>
   <span class="spacer"></span>
+  <button id="config-toggle" type="button" title="設定">⚙ 設定</button>
   <button id="theme-toggle" type="button">テーマ: device</button>
+</div>
+<div id="config-panel" hidden>
+  <div class="cfg-row">
+    <label class="cfg-name" for="cfg-viewer">ビューア</label>
+    <select id="cfg-viewer">
+      <option value="files">files(エディタ直接)</option>
+      <option value="browser">browser</option>
+      <option value="tui">tui(後続ステージで実装予定)</option>
+    </select>
+  </div>
+  <div class="cfg-row">
+    <span class="cfg-name">捕捉対象</span>
+    <label><input type="checkbox" id="cfg-target-diff" /> コード diff</label>
+    <label><input type="checkbox" id="cfg-target-artifact" /> 成果物</label>
+    <label><input type="checkbox" id="cfg-target-test" /> テスト・ビルド</label>
+  </div>
+  <div class="cfg-row">
+    <label class="cfg-name" for="cfg-globs">成果物 glob</label>
+    <textarea id="cfg-globs" placeholder="1 行 1 glob(例: docs/**/*.md)"></textarea>
+  </div>
+  <div class="cfg-row">
+    <label class="cfg-name" for="cfg-commands">テストコマンド追加</label>
+    <textarea id="cfg-commands" placeholder="1 行 1 コマンド接頭辞(例: deno test)"></textarea>
+  </div>
+  <div class="cfg-row">
+    <label class="cfg-name" for="cfg-timing">注入タイミング</label>
+    <select id="cfg-timing">
+      <option value="hybrid">hybrid(推奨)</option>
+      <option value="turn-boundary">turn-boundary</option>
+      <option value="immediate">immediate</option>
+    </select>
+  </div>
+  <div class="cfg-row">
+    <label class="cfg-name" for="cfg-theme">テーマ初期値</label>
+    <select id="cfg-theme">
+      <option value="device">device</option>
+      <option value="light">light</option>
+      <option value="dark">dark</option>
+    </select>
+  </div>
+  <div class="cfg-row">
+    <label class="cfg-name" for="cfg-port">ポート</label>
+    <input type="number" id="cfg-port" min="1" max="65535" />
+  </div>
+  <div class="cfg-row">
+    <button id="cfg-save" type="button">保存</button>
+    <span id="cfg-msg"></span>
+  </div>
 </div>
 <main>
   <div id="queue-pane"></div>
@@ -427,6 +501,93 @@ main { display: flex; flex: 1; min-height: 0; }
       toast((urgency === "urgent" ? "🚨" : "📮") + " 送信しました: " + data.name);
       await refresh();
     } else toast("送信に失敗しました");
+  });
+
+  // ---- 設定パネル(Stage 4.2)----
+  // 保存はサーバー側で検証してからアトミックに書かれる。hooks は短命
+  // プロセスで毎回読み直すため次の hook 起動から反映。port / theme の
+  // サーバー側反映のみ再起動(/pitcrew:serve restart)が必要。
+  $("config-toggle").addEventListener("click", async () => {
+    const panel = $("config-panel");
+    if (!panel.hidden) {
+      panel.hidden = true;
+      return;
+    }
+    try {
+      const res = await fetch("/api/config", { headers });
+      if (!res.ok) throw new Error(String(res.status));
+      fillConfigForm(await res.json());
+      $("cfg-msg").textContent = "";
+      panel.hidden = false;
+    } catch {
+      toast("設定の読み込みに失敗しました");
+    }
+  });
+
+  function fillConfigForm(cfg) {
+    $("cfg-viewer").value = cfg.viewer;
+    $("cfg-target-diff").checked = cfg.captureTargets.diff;
+    $("cfg-target-artifact").checked = cfg.captureTargets.artifact;
+    $("cfg-target-test").checked = cfg.captureTargets.test;
+    $("cfg-globs").value = cfg.artifactGlobs.join("\n");
+    $("cfg-commands").value = cfg.testCommands.join("\n");
+    $("cfg-timing").value = cfg.injectionTiming;
+    $("cfg-theme").value = cfg.theme;
+    $("cfg-port").value = String(cfg.port);
+  }
+
+  function splitLines(value) {
+    return value.split("\n").map((s) => s.trim()).filter((s) => s !== "");
+  }
+
+  $("cfg-save").addEventListener("click", async () => {
+    const payload = {
+      viewer: $("cfg-viewer").value,
+      captureTargets: {
+        diff: $("cfg-target-diff").checked,
+        artifact: $("cfg-target-artifact").checked,
+        test: $("cfg-target-test").checked
+      },
+      artifactGlobs: splitLines($("cfg-globs").value),
+      testCommands: splitLines($("cfg-commands").value),
+      injectionTiming: $("cfg-timing").value,
+      theme: $("cfg-theme").value,
+      port: Number($("cfg-port").value)
+    };
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // config テーマの即時反映(localStorage の明示選択が優先される
+        // 既存の優先順位は applyTheme() 側で維持される)
+        document.documentElement.dataset.configTheme = payload.theme;
+        applyTheme();
+        let msg =
+          "保存しました。捕捉・注入の設定は次の hook 起動から、" +
+          "port / theme は次回のビューア起動(/pitcrew:serve restart)から反映されます。";
+        if (data.gitignoreMissing.length > 0) {
+          msg +=
+            " " + data.gitignoreMissing.join(" と ") +
+            " は .gitignore への追記を推奨します(/pitcrew:config で追記できます)。";
+        }
+        $("cfg-msg").textContent = msg;
+        toast("設定を保存しました");
+      } else {
+        let field = "";
+        try {
+          field = ((await res.json()) || {}).error || "";
+        } catch {}
+        $("cfg-msg").textContent =
+          "保存に失敗しました" + (field ? ": " + field + " が不正です" : "");
+        toast("設定の保存に失敗しました");
+      }
+    } catch {
+      toast("設定の保存に失敗しました");
+    }
   });
 
   // ---- 同期(SSE + 再取得) ----
