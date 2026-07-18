@@ -4,6 +4,7 @@
 - 参加者: phyllis998, AI (Claude Sonnet 5, Haiku)
 - 成果物: 
   - 設計書: `docs/superpowers/specs/2026-07-18-pitcrew-stage4.1-design.md` (コミット `bbd12bb`)
+  - 実装計画書: `docs/superpowers/plans/2026-07-18-pitcrew-stage4.1.md` (コミット `ca1cb4b`)
 - 前提: 
   - `docs/chat/2026/0717/phyllis998/pitcrew-stage4-implementation.md` (Stage 4 完成・v0.9.2 正式リリース)
   - プロジェクトメモリ `pitcrew-viewer-backlog.md` (ビューア層の要望 2 件の出典)
@@ -53,4 +54,36 @@ Haiku レビューで以下の指摘を反映：
 
 ---
 
-注意事項: 設計書の Haiku レビューが完了し、指摘を全て反映済み。次は writing-plans で実装計画を作成予定(実装は CLAUDE.md 方針に従い GPT Terra へ委譲予定)。
+## セッション2: 実装計画書の作成・Haiku レビュー・実行方法の選択
+
+# phyllis998
+
+> 実装計画に進んでください
+
+# AI
+
+設計書が承認されたので、writing-plans スキルで実装計画書を作成。まず既存テストのパターンを確認し、実装方針を組み立てた。
+
+既存テストスイート(state.test.ts / viewer-ops.test.ts / http.test.ts)を実際に読み、ソート順に依存する既存テストが各セクション 1 件配置のみであること、新しい Task 1 の実装(降順ソート)によっても影響がないことを裏取りした。
+
+`docs/superpowers/plans/2026-07-18-pitcrew-stage4.1.md` に実装計画書を作成。CLAUDE.md の方針に従い、Haiku にレビューさせた。
+
+Haiku レビューで以下の軽微な指摘 3 点を反映：
+
+- **置き換え行数の誤記**: 「`state.ts` 内の 3 行を置き換え」→「4 行に変更」(降順ソートで `reverse()` が 1 行増加)と正確化
+- **選択解除ロジックの挿入位置**: セクションのクリアリスナーに選択状態クリアロジックを挿入する際、早期リターン後を指定地点と明記
+- **`headers` 変数の由来**: `POST /api/approve-batch` の実装で用いる `headers` 変数が既存コードの `http.ts` 内で定義されていることを Task 3 に追記
+
+計画は TDD 方式で 5 タスク構成：
+
+1. **Task 1**: `readItems` の降順ソート(テスト先行、`names.sort().reverse()` の実装)
+2. **Task 2**: `viewer-ops.ts` に `approveItems(projectDir, names)` メソッド追加(フェイルオープン、`moved`/`failed` 配列返却)
+3. **Task 3**: `http.ts` に `POST /api/approve-batch` エンドポイント追加(400 系バリデーション、1000 件上限)
+4. **Task 4**: `ui.html` にチェックボックス・全選択トグル・「選択を既読 (N)」ボタン追加(自動テスト対象外、完了後に実機確認)
+5. **Task 5**: README 追記・`plugin.json` のバージョン 0.9.3・`pnpm build` でバンドル再生成
+
+コミット ca1cb4b で実装計画書を確定。重大な問題はなく、軽微な指摘はすべて反映済み。
+
+---
+
+注意事項: 実装計画書が確定し、実行方法の選択待ち。Subagent-Driven 方式(タスクごとに新規サブエージェント起動、GPT Terra へ委譲)と Inline Execution 方式(このセッション内でバッチ実行)の 2 案をユーザーに提示して終了。
