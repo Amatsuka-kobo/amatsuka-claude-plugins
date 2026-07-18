@@ -272,3 +272,114 @@ test("POST /api/approve-batch は認証なしで 401", async () => {
   })
   expect(res.status).toBe(401)
 })
+
+// ---- /api/config(Stage 4.2)----
+
+function validConfigPayload(): Record<string, unknown> {
+  return {
+    viewer: "browser",
+    captureTargets: { diff: true, artifact: true, test: false },
+    artifactGlobs: ["docs/**/*.md"],
+    testCommands: ["deno test"],
+    injectionTiming: "hybrid",
+    theme: "dark",
+    port: 8080
+  }
+}
+
+test("GET /api/config はトークン必須・ファイル無しでも既定値を返す", async () => {
+  const base = await start()
+  expect((await fetch(`${base}/api/config`)).status).toBe(401)
+  const res = await fetch(`${base}/api/config`, { headers: auth() })
+  expect(res.status).toBe(200)
+  const cfg = (await res.json()) as { viewer: string; port: number }
+  expect(cfg.viewer).toBe("files")
+  expect(cfg.port).toBe(7373)
+})
+
+test("POST /api/config は保存してファイルを生成し、GET に反映される", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/config`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify(validConfigPayload())
+  })
+  expect(res.status).toBe(200)
+  const body = (await res.json()) as { ok: boolean; gitignoreMissing: string[] }
+  expect(body.ok).toBe(true)
+  expect(
+    fs.existsSync(path.join(projectDir, ".claude", "pitcrew.local.md"))
+  ).toBe(true)
+  const after = await fetch(`${base}/api/config`, { headers: auth() })
+  const cfg = (await after.json()) as { theme: string; port: number }
+  expect(cfg.theme).toBe("dark")
+  expect(cfg.port).toBe(8080)
+})
+
+test("POST /api/config: バリデーション違反は 400 + フィールド名", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/config`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify({ ...validConfigPayload(), port: 0 })
+  })
+  expect(res.status).toBe(400)
+  expect(await res.json()).toEqual({ error: "port" })
+})
+
+test("POST /api/config: 不正 JSON は 400", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/config`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: "{oops"
+  })
+  expect(res.status).toBe(400)
+  expect(await res.json()).toEqual({ error: "bad json" })
+})
+
+test("POST /api/config: gitignoreMissing は .gitignore 無しで両方返す", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/config`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify(validConfigPayload())
+  })
+  const body = (await res.json()) as { gitignoreMissing: string[] }
+  expect(body.gitignoreMissing).toEqual([
+    ".pitcrew/",
+    ".claude/pitcrew.local.md"
+  ])
+})
+
+test("POST /api/config: gitignoreMissing は登録済み分を除く(空白・末尾スラッシュ許容)", async () => {
+  const base = await start()
+  // 前後空白付き・末尾スラッシュ無しでも登録済み扱いになること。
+  // コメント行・空行は登録エントリとして扱われないこと
+  fs.writeFileSync(
+    path.join(projectDir, ".gitignore"),
+    "# deps\nnode_modules/\n\n  .pitcrew  \n# .claude/pitcrew.local.md\n"
+  )
+  const res = await fetch(`${base}/api/config`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify(validConfigPayload())
+  })
+  const body = (await res.json()) as { gitignoreMissing: string[] }
+  expect(body.gitignoreMissing).toEqual([".claude/pitcrew.local.md"])
+})
+
+test("POST /api/config: 両方登録済みなら gitignoreMissing は空", async () => {
+  const base = await start()
+  fs.writeFileSync(
+    path.join(projectDir, ".gitignore"),
+    ".pitcrew/\n.claude/pitcrew.local.md\n"
+  )
+  const res = await fetch(`${base}/api/config`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify(validConfigPayload())
+  })
+  const body = (await res.json()) as { gitignoreMissing: string[] }
+  expect(body.gitignoreMissing).toEqual([])
+})

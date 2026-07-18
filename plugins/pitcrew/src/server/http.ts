@@ -1,5 +1,8 @@
 import crypto from "node:crypto"
+import fs from "node:fs"
 import http from "node:http"
+import path from "node:path"
+import { loadConfig, saveConfig, validateConfig } from "../lib/config.js"
 import { listState, readItemBody } from "./state.js"
 import {
   approveItem,
@@ -67,6 +70,33 @@ function hasLineBreak(value: string): boolean {
   return value.includes("\n") || value.includes("\r")
 }
 
+// .gitignore に推奨エントリが登録済みかを返す(設計書 Stage 4.2 §3.3.1)。
+// 判定は前後空白を無視した行一致+末尾スラッシュの有無を同一視。
+// gitignore パターンの完全解釈はしない(案内が 1 回余計に出るだけで実害
+// がないため)。このサーバーは .gitignore を編集しない。
+const GITIGNORE_RECOMMENDED = [".pitcrew/", ".claude/pitcrew.local.md"]
+
+function gitignoreMissing(projectDir: string): string[] {
+  let lines: string[]
+  try {
+    lines = fs
+      .readFileSync(path.join(projectDir, ".gitignore"), "utf8")
+      .split("\n")
+  } catch {
+    return [...GITIGNORE_RECOMMENDED]
+  }
+  // 空行・コメント行は登録エントリとして扱わない
+  const entries = new Set(
+    lines
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("#"))
+      .map((line) => line.replace(/\/+$/, ""))
+  )
+  return GITIGNORE_RECOMMENDED.filter(
+    (rec) => !entries.has(rec.replace(/\/+$/, ""))
+  )
+}
+
 export function createPitcrewServer(opts: ServerOptions): http.Server {
   const { projectDir, token, html } = opts
   const sseClients = new Set<http.ServerResponse>()
@@ -105,6 +135,32 @@ export function createPitcrewServer(opts: ServerOptions): http.Server {
 
     if (req.method === "GET" && url.pathname === "/api/state") {
       sendJson(res, 200, listState(projectDir))
+      return
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/config") {
+      sendJson(res, 200, loadConfig(projectDir))
+      return
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/config") {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(await readBody(req))
+      } catch {
+        sendJson(res, 400, { error: "bad json" })
+        return
+      }
+      const result = validateConfig(parsed)
+      if ("error" in result) {
+        sendJson(res, 400, { error: result.error })
+        return
+      }
+      saveConfig(projectDir, result.config)
+      sendJson(res, 200, {
+        ok: true,
+        gitignoreMissing: gitignoreMissing(projectDir)
+      })
       return
     }
 

@@ -52,12 +52,14 @@
 - 「レビュー待ち」の各項目はチェックボックスで選択でき、「全選択」トグルと「選択を既読 (N)」ボタンで確認後に一括既読
 - diff は行単位で色分け表示。「承認して既読」で `reviewed/` へ移動
 - コメントは 📮 通常 / 🚨 緊急 を選んで送信すると `.pitcrew/comments/` に保存され、
-  Stage 2 の注入層がセッションへ届ける(選択中項目の paths / reviewId / base が自動で付く)
+  Stage 2 の注入層がセッションへ届ける(選択中項目の paths / reviewId / base が自動で付く)。
+  `Ctrl+Enter` / `Cmd+Enter` でも送信できる
+- ⚙ 設定パネルからすべての設定をブラウザで変更できる。`port` / `theme` の変更はビューアの再起動で反映される
 - テーマはライト / ダーク / デバイス追従。優先順位は
   「画面での手動切替(localStorage)> config の `theme` > デバイス設定」
 - サーバーは `127.0.0.1` のみで待ち受け、URL のトークンが無いと 401 を返す。
   起動情報は `.pitcrew/serve.json`(停止時に削除)
-- 停止は `/pitcrew:serve stop`
+- 停止は `/pitcrew:serve stop`。再起動は `/pitcrew:serve restart`
 
 ## 設定(Stage 3: /pitcrew:config)
 
