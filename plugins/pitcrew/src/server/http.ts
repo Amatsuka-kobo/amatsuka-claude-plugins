@@ -1,7 +1,12 @@
 import crypto from "node:crypto"
 import http from "node:http"
 import { listState, readItemBody } from "./state.js"
-import { approveItem, type NewComment, writeComment } from "./viewer-ops.js"
+import {
+  approveItem,
+  approveItems,
+  type NewComment,
+  writeComment
+} from "./viewer-ops.js"
 import { watchPitcrew } from "./watch.js"
 
 // ブラウザビューアの HTTP 層(設計書 §5)。listen は serve.ts が行う。
@@ -127,6 +132,37 @@ export function createPitcrewServer(opts: ServerOptions): http.Server {
       }
       if (approveItem(projectDir, name)) sendJson(res, 200, { ok: true })
       else sendJson(res, 404, { error: "not found" })
+      return
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/approve-batch") {
+      let names: string[]
+      try {
+        const parsed = JSON.parse(await readBody(req)) as { names?: unknown }
+        if (!Array.isArray(parsed.names)) {
+          sendJson(res, 400, { error: "bad names" })
+          return
+        }
+        names = parsed.names.filter((x): x is string => typeof x === "string")
+      } catch {
+        sendJson(res, 400, { error: "bad json" })
+        return
+      }
+      if (names.length === 0) {
+        sendJson(res, 400, { error: "empty names" })
+        return
+      }
+      // 上限は暴走リクエストの抑止(通常運用で達しない)
+      if (names.length > 1000) {
+        sendJson(res, 400, { error: "too many names" })
+        return
+      }
+      const result = approveItems(projectDir, names)
+      sendJson(res, 200, {
+        ok: true,
+        moved: result.moved,
+        failed: result.failed
+      })
       return
     }
 

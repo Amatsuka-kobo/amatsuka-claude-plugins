@@ -35,6 +35,43 @@ export function approveItem(projectDir: string, name: string): boolean {
   }
 }
 
+export interface BatchApproveResult {
+  moved: string[]
+  failed: string[]
+}
+
+// 一括既読(設計書 Stage 4.1)。1 件の失敗で全体を止めない(フェイルオープン)。
+// 移動済み項目はロールバックしない。結果は moved / failed に完全に反映される
+export function approveItems(
+  projectDir: string,
+  names: string[]
+): BatchApproveResult {
+  const base = pitcrewDir(projectDir)
+  const moved: string[] = []
+  const failed: string[] = []
+  try {
+    fs.mkdirSync(path.join(base, "reviewed"), { recursive: true })
+  } catch {
+    // 作成失敗時は各 rename が失敗して failed に計上される
+  }
+  for (const name of names) {
+    if (!isSafeName(name)) {
+      failed.push(name)
+      continue
+    }
+    try {
+      fs.renameSync(
+        path.join(base, "review", name),
+        path.join(base, "reviewed", name)
+      )
+      moved.push(name)
+    } catch {
+      failed.push(name)
+    }
+  }
+  return { moved, failed }
+}
+
 // 採番は comments/ と processed/ の両方を見る(注入で processed/ に移った
 // 番号を再利用すると人間の再投稿と衝突するため)。ビューアは単一プロセス前提
 // なので読み取り→書き込みの競合対策はしない(手書き併用時は稀に衝突し得るが、

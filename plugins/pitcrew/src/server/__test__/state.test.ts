@@ -143,3 +143,26 @@ test("isSafeName はパストラバーサルを拒否する", () => {
   expect(isSafeName("x.txt")).toBe(false)
   expect(isSafeName("..md")).toBe(false)
 })
+
+test("review/ と reviewed/ はファイル名降順(新しい順)で返す", () => {
+  const dir = makeProject()
+  try {
+    writeItem(dir, "review", "001-diff-a-ts.md", ITEM)
+    writeItem(dir, "review", "003-test-vitest.md", ITEM)
+    writeItem(dir, "review", "002-diff-b-ts.md", ITEM)
+    writeItem(dir, "reviewed", "004-artifact-x-md.md", ITEM)
+    writeItem(dir, "reviewed", "005-diff-c-ts.md", ITEM)
+    const s = listState(dir)
+    expect(s.review.map((i) => i.name)).toEqual([
+      "003-test-vitest.md",
+      "002-diff-b-ts.md",
+      "001-diff-a-ts.md"
+    ])
+    expect(s.reviewed.map((i) => i.name)).toEqual([
+      "005-diff-c-ts.md",
+      "004-artifact-x-md.md"
+    ])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

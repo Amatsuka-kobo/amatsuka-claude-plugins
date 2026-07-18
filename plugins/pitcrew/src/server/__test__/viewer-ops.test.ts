@@ -2,7 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { expect, test } from "vitest"
-import { approveItem, writeComment } from "../viewer-ops.js"
+import { approveItem, approveItems, writeComment } from "../viewer-ops.js"
 
 function makeProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pitcrew-ops-"))
@@ -118,6 +118,55 @@ test("paths が空なら frontmatter に paths を出さない", () => {
     )
     expect(raw).not.toContain("paths:")
     expect(raw).toContain("urgency: normal")
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("approveItems は複数項目を reviewed/ へ移動する", () => {
+  const dir = makeProject()
+  try {
+    const review = path.join(dir, ".pitcrew", "review")
+    fs.mkdirSync(review, { recursive: true })
+    fs.writeFileSync(path.join(review, "001-diff-a.md"), "a")
+    fs.writeFileSync(path.join(review, "002-diff-b.md"), "b")
+    const result = approveItems(dir, ["001-diff-a.md", "002-diff-b.md"])
+    expect(result.moved).toEqual(["001-diff-a.md", "002-diff-b.md"])
+    expect(result.failed).toEqual([])
+    expect(fs.existsSync(path.join(review, "001-diff-a.md"))).toBe(false)
+    expect(
+      fs.existsSync(path.join(dir, ".pitcrew", "reviewed", "002-diff-b.md"))
+    ).toBe(true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("approveItems は失敗を failed に積み残りを続行する(フェイルオープン)", () => {
+  const dir = makeProject()
+  try {
+    const review = path.join(dir, ".pitcrew", "review")
+    fs.mkdirSync(review, { recursive: true })
+    fs.writeFileSync(path.join(review, "002-diff-ok.md"), "ok")
+    const result = approveItems(dir, [
+      "../run.json", // 不正な名前
+      "001-diff-nope.md", // 存在しない
+      "002-diff-ok.md" // 正常
+    ])
+    expect(result.moved).toEqual(["002-diff-ok.md"])
+    expect(result.failed).toEqual(["../run.json", "001-diff-nope.md"])
+    expect(
+      fs.existsSync(path.join(dir, ".pitcrew", "reviewed", "002-diff-ok.md"))
+    ).toBe(true)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("approveItems は空配列で moved も failed も空", () => {
+  const dir = makeProject()
+  try {
+    expect(approveItems(dir, [])).toEqual({ moved: [], failed: [] })
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
