@@ -11,6 +11,10 @@
     - Task 3: `5fd98d0`
     - Task 4: `114b4c7` (初版) + `0a380c3` (混入修正)
     - Task 5: `7e45841`
+  - マージコミット: `a6462bb` (main へ --no-ff マージ、13 ファイル +515 -17)
+  - リリース: **pitcrew v0.9.3**(正式版)
+  - プロジェクトメモリ: `pitcrew-viewer-backlog.md` 更新(対応済み 2 件 → 対応済みセクション移動、新規要望 3 件記録)
+  - 進捗台帳: `.superpowers/sdd/progress.md` にクローズ記録
 - 前提: 
   - `docs/chat/2026/0717/phyllis998/pitcrew-stage4-implementation.md` (Stage 4 完成・v0.9.2 正式リリース)
   - プロジェクトメモリ `pitcrew-viewer-backlog.md` (ビューア層の要望 2 件の出典)
@@ -153,4 +157,29 @@ README に新機能(新しい順ソート・チェックボックス・一括既
 
 ---
 
-注意事項: 実装完了、最終レビュー合格。マージと実機確認はユーザー確認待ち。
+## セッション4: マージ・リリース完了・追加要望収集・Stage 4.1 クローズ
+
+# phyllis998
+
+> 動作確認ができました。追加の要望があります。今すぐでなくてよいので、どこかのStageで対応したいです。
+> 1. /pitcrew:serve に restart 引数を追加したい
+> 2. ビューワーに config を変える方法がほしい
+> 3. コメントの入力時、ctl+enterで送信できるようにしたい
+
+# AI
+
+ユーザーが実機確認 4 項目の完了を報告。feature/pitcrew-stage4.1 を main へ **--no-ff マージ**実施。マージコミット `a6462bb` で 13 ファイル +515 -17 の変更を統合。マージ直後に全テスト実行し 711/711 PASS を確認。フィーチャーブランチ `feature/pitcrew-stage4.1` を削除。pitcrew を正式版 **v0.9.3** へ release。
+
+**Stage 4.1 完全クローズ。** 追加要望 3 件をプロジェクトメモリの `pitcrew-viewer-backlog.md` に保存した：
+
+1. **`/pitcrew:serve` に restart 引数** — 現状は start / stop のみ。serve.ts に restart 機能を追加
+2. **ビューアから config を変更** — 現状は `/pitcrew:config` の対話式のみ。UI からの設定変更手段を追加
+3. **コメント入力の Ctrl+Enter 送信** — ui.html の textarea に keydown ハンドラ追加(小規模な変更)
+
+メモリには実装の起点となるファイル(serve.ts・pitcrew.local.md・ui.html の該当箇所)を注記。対応済みの 2 件(新しい順ソート・一括既読)は対応済みセクションに移動。
+
+**次回の提案**: 3 件は独立性が高く、特に③は小規模であることから、次回まとめて 1 つの Stage(Stage 4.2 相当)として設計・実装するのが効率的と考えられる。着手時は従来どおり brainstorming → 設計書 → 実装計画の流れで進める。進捗台帳にも Stage 4.1 クローズを記録済み。
+
+---
+
+注意事項: Stage 4.1 完全クローズ。追加要望 3 件はバックログに保存済み、次回セッション着手可能。マージコミット a6462bb で pitcrew は v0.9.3 正式リリース。

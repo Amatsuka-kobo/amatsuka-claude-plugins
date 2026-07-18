@@ -1,6 +1,6 @@
 # Pitcrew Stage 4 実装 — ブラウザビューア
 
-- 日付: 2026-07-17 (セッション開始 23:14、セッション2-3: 翌未明、セッション4-5: 2026-07-18)
+- 日付: 2026-07-17 (セッション開始 23:14、セッション2-3: 翌未明、セッション4-5: 2026-07-18、セッション6: 2026-07-18)
 - 参加者: phyllis998, AI (Claude Sonnet 5, Haiku, GPT Sol/Terra/Luna agents)
 - 成果物: 
   - 実装計画書: `docs/superpowers/plans/2026-07-17-pitcrew-stage4.md` (cc78dfd)
@@ -14,6 +14,9 @@
   - Task 8 README・config.md・バージョン: 001fd61
   - レビュー指摘修正: c2b0486 (703/703 テスト PASS・v0.9.1-dev)
   - diff 捕捉層 git pathspec バグ修正: 13cb42c (704/704 テスト PASS・v0.9.2-dev)
+  - main へのマージ: de35d25 (--no-ff、22 ファイル +4,860 行)
+  - バージョン正式化: 738a7e5 (chore: pitcrew 0.9.2(Stage 4 正式版))
+  - chat 記録コミット: f099271、61b031f (INDEX.md 要旨更新)
 - 前提: 
   - `docs/chat/2026/0717/phyllis998/pitcrew-stage3-implementation.md` (Stage 3 完成・v0.8.0 正式リリース)
   - `docs/superpowers/specs/2026-07-16-pitcrew-design.md` (§5 ビューア層の仕様)
@@ -180,7 +183,32 @@ Task 6 エージェントに再開指示を SendMessage で送信した。git lo
 
 ---
 
+## セッション6: Main マージ・バージョン正式化・Stage 4 正式リリース完了
+
+# phyllis998
+
+> よろしくお願いします
+
+# AI
+
+**main へのマージと正式リリース**:
+
+- `feature/pitcrew-stage4` を `main` へ **--no-ff マージ** (de35d25、22 ファイル +4,860 行)。計画書〜バグ修正まで全 12 コミットを統合。
+- マージ直後に全テスト実行: **704/704 PASS**。
+- バージョンを **0.9.2-dev → 0.9.2**(正式版) へ正式化 (738a7e5「chore: pitcrew 0.9.2(Stage 4 正式版)」)。
+- chat 記録をコミット (f099271: pitcrew-stage4-implementation.md、61b031f: INDEX.md 要旨更新)。
+- origin/main へ push 完了 (61b031f まで)。
+- ローカルフィーチャーブランチ `feature/pitcrew-stage4` 削除(リモートには未 push だったため削除作業なし)。
+
+**Stage 4 完成**：pitcrew は Stage 1〜4(ファイルバス・捕捉層・注入層・config・ブラウザビューア)が main に統合された状態で正式リリース。
+
+**付随事項**:
+- 作業ツリーに `.gitignore` の `private/` 行追記が未コミットで残っている(ユーザー側の変更)。
+- ユーザー要望 2 件(左ペイン新しい順ソート・一括既読機能)はプロジェクトメモリに保存済み。次回「Stage 4.1 やって」等で着手できます。
+- 次の大きな仕事は Stage 5(TUI ビューア)。
+
+---
+
 注意事項(持ち越し項目): 
-- **main マージ・バージョン正式化**: 修正検証完了後に v0.9.0(正式版) へ変更・origin push(ユーザー指示待ち)
-- **docs/chat/ 記録コミット**: chore: chat記録 として別コミット予定(ユーザー指示待ち)
-- **ビューア要望**: pitcrew-viewer-backlog.md に Stage 5 以降での実装候補として保存
+- **.gitignore の private/ 行**: 作業ツリーに未コミット状態で残っています(ユーザー側の変更であるため手は付けていません)。意図したものであれば別途コミットしてください。
+- **ビューア要望**: pitcrew-viewer-backlog.md に Stage 5 以降での実装候補として保存済み。
