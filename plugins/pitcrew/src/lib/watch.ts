@@ -1,6 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
-import { pitcrewDir } from "../lib/run.js"
+import { pitcrewDir } from "./run.js"
 
 // .pitcrew/ の監視(設計書 §5: fs.watch / ポーリングのフォールバック)。
 // fs.watch は recursive が使えないプラットフォームがあるため、監視対象の

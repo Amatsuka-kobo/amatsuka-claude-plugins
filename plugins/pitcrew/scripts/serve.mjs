@@ -229,7 +229,7 @@ import fs6 from "node:fs";
 import http from "node:http";
 import path7 from "node:path";
 
-// src/server/state.ts
+// src/lib/state.ts
 import fs3 from "node:fs";
 import path4 from "node:path";
 function isSafeName(name) {
@@ -325,7 +325,7 @@ function readItemBody(projectDir2, status, name) {
   }
 }
 
-// src/server/viewer-ops.ts
+// src/lib/viewer-ops.ts
 import fs4 from "node:fs";
 import path5 from "node:path";
 function approveItem(projectDir2, name) {
@@ -406,7 +406,7 @@ ${body}
   return name;
 }
 
-// src/server/watch.ts
+// src/lib/watch.ts
 import fs5 from "node:fs";
 import path6 from "node:path";
 var SUBDIRS = ["", "review", "reviewed", "comments", "comments/processed"];

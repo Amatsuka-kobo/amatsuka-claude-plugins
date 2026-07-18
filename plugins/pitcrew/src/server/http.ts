@@ -3,14 +3,14 @@ import fs from "node:fs"
 import http from "node:http"
 import path from "node:path"
 import { loadConfig, saveConfig, validateConfig } from "../lib/config.js"
-import { listState, readItemBody } from "./state.js"
+import { listState, readItemBody } from "../lib/state.js"
 import {
   approveItem,
   approveItems,
   type NewComment,
   writeComment
-} from "./viewer-ops.js"
-import { watchPitcrew } from "./watch.js"
+} from "../lib/viewer-ops.js"
+import { watchPitcrew } from "../lib/watch.js"
 
 // ブラウザビューアの HTTP 層(設計書 §5)。listen は serve.ts が行う。
 // 全ルートはトークン必須(localhost バインドでも同一マシンの他プロセス・
