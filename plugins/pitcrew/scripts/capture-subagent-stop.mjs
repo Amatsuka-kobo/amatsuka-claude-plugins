@@ -4,8 +4,28 @@
 import path8 from "node:path";
 
 // src/lib/config.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+
+// src/lib/atomic.ts
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+function writeFileAtomic(filePath, content) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(
+    dir,
+    `.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
+  );
+  try {
+    fs.writeFileSync(tmp, content);
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+}
 
 // src/lib/frontmatter.ts
 function quote(v) {
@@ -67,7 +87,7 @@ function defaults() {
   };
 }
 function configPath(projectDir2) {
-  return path.join(projectDir2, ".claude", "pitcrew.local.md");
+  return path2.join(projectDir2, ".claude", "pitcrew.local.md");
 }
 function oneOf(value, allowed) {
   return typeof value === "string" && allowed.includes(value) ? value : null;
@@ -79,7 +99,7 @@ function loadConfig(projectDir2) {
   const cfg = defaults();
   let raw;
   try {
-    raw = fs.readFileSync(configPath(projectDir2), "utf8");
+    raw = fs2.readFileSync(configPath(projectDir2), "utf8");
   } catch {
     return cfg;
   }
@@ -114,9 +134,9 @@ function loadConfig(projectDir2) {
 
 // src/lib/git.ts
 import { execFileSync } from "node:child_process";
-import fs2 from "node:fs";
+import fs3 from "node:fs";
 import os from "node:os";
-import path2 from "node:path";
+import path3 from "node:path";
 function git(projectDir2, args, env) {
   return execFileSync("git", args, {
     cwd: projectDir2,
@@ -126,7 +146,7 @@ function git(projectDir2, args, env) {
   });
 }
 function snapshotWorktree(projectDir2) {
-  const tmpIndex = path2.join(
+  const tmpIndex = path3.join(
     os.tmpdir(),
     `pitcrew-index-${process.pid}-${Date.now()}`
   );
@@ -147,7 +167,7 @@ function snapshotWorktree(projectDir2) {
   } catch {
     return null;
   } finally {
-    fs2.rmSync(tmpIndex, { force: true });
+    fs3.rmSync(tmpIndex, { force: true });
   }
 }
 function diffBetween(projectDir2, baseTree, headTree) {
@@ -183,28 +203,6 @@ import path5 from "node:path";
 // src/lib/run.ts
 import fs4 from "node:fs";
 import path4 from "node:path";
-
-// src/lib/atomic.ts
-import crypto from "node:crypto";
-import fs3 from "node:fs";
-import path3 from "node:path";
-function writeFileAtomic(filePath, content) {
-  const dir = path3.dirname(filePath);
-  fs3.mkdirSync(dir, { recursive: true });
-  const tmp = path3.join(
-    dir,
-    `.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
-  );
-  try {
-    fs3.writeFileSync(tmp, content);
-    fs3.renameSync(tmp, filePath);
-  } catch (err) {
-    fs3.rmSync(tmp, { force: true });
-    throw err;
-  }
-}
-
-// src/lib/run.ts
 function pitcrewDir(projectDir2) {
   return path4.join(projectDir2, ".pitcrew");
 }
