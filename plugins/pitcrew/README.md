@@ -4,7 +4,7 @@
 
 サブエージェントが完了するたびの diff、設計書等の成果物ファイル(`docs/**/*.md`、
 `docs/chat/` は除外)、テスト・ビルド結果を `.pitcrew/review/` に逐次書き出します。人間はエディタでそれを
-開いてその場でレビューできます(ブラウザビューアあり。TUI は後続ステージで追加予定)。
+開いてその場でレビューできます(ブラウザビューアと TUI ビューアを利用できます)。
 
 テスト・ビルドの成功したコマンドは `PostToolUse`、失敗したコマンドは
 `PostToolUseFailure` で捕捉します。
@@ -61,6 +61,29 @@
   起動情報は `.pitcrew/serve.json`(停止時に削除)
 - 停止は `/pitcrew:serve stop`。再起動は `/pitcrew:serve restart`
 
+## TUI ビューア(pitcrew watch)
+
+ブラウザの代わりにターミナル上でレビューするビューアです。
+**ユーザー自身のターミナルで直接実行します**(Claude には起動させない):
+
+```bash
+node "<プラグインの絶対パス>/scripts/watch.mjs" --dir "<プロジェクトルート>"
+```
+
+`/pitcrew:watch` で、自分の環境に合わせた起動コマンドを Claude に案内させられます。
+
+| キー | 動作 |
+|---|---|
+| `j` / `k` | 選択の移動(下 / 上) |
+| `c` | 選択項目へのコメント作成(`$EDITOR` / `$VISUAL` で編集) |
+| `a` | 承認して既読(`reviewed/` へ移動) |
+| `q` | 終了 |
+
+- 一覧は `.pitcrew/review/`(未レビュー)のみを新しい順に表示します
+- `.pitcrew/` の変更は自動で反映されます(ライブリロード)
+- コメントの緊急度を上げたい場合は、エディタで開いたテンプレートの
+  `urgency: normal` を `urgency: urgent` に書き換えてください
+
 ## 設定(Stage 3: /pitcrew:config)
 
 `/pitcrew:config` の対話で `.claude/pitcrew.local.md` に保存する(手で編集してもよい。
@@ -68,7 +91,7 @@
 
 | キー | 既定値 | 意味 |
 | --- | --- | --- |
-| `viewer` | `files` | ビューア。`browser` / `tui` は後続ステージで実装予定 |
+| `viewer` | `files` | ビューア。`browser` / `tui` はいずれも実装済み(`viewer` の値は捕捉・注入の既定挙動の選択であり、どのビューアも常に起動できる) |
 | `capture_targets` | `[diff, artifact, test]` | 捕捉対象。外した種別は捕捉しない |
 | `artifact_globs` | `["docs/**/*.md"]` | 成果物 glob(設定時は既定を置き換え。空配列は既定のまま。`docs/chat/` は常に除外。成果物の捕捉自体を止めたい場合は `capture_targets` から `artifact` を外す) |
 | `test_commands` | `[]` | テスト・ビルド判定の追加コマンド接頭辞(既定リストに追加) |
