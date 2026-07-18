@@ -43,20 +43,36 @@ function sendJson(
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = ""
+    let tooLarge = false
     req.on("data", (chunk: Buffer) => {
+      if (tooLarge) return
       data += chunk.toString("utf8")
-      if (data.length > 1_000_000) reject(new Error("body too large"))
+      if (data.length > 1_000_000) {
+        tooLarge = true
+        req.destroy()
+        reject(new Error("body too large"))
+      }
     })
     req.on("end", () => resolve(data))
     req.on("error", reject)
   })
 }
 
+function hasLineBreak(value: string): boolean {
+  return value.includes("\n") || value.includes("\r")
+}
+
 export function createPitcrewServer(opts: ServerOptions): http.Server {
   const { projectDir, token, html } = opts
   const sseClients = new Set<http.ServerResponse>()
   const stopWatch = watchPitcrew(projectDir, () => {
-    for (const client of sseClients) client.write("data: changed\n\n")
+    for (const client of sseClients) {
+      try {
+        client.write("data: changed\n\n")
+      } catch {
+        sseClients.delete(client)
+      }
+    }
   })
 
   const server = http.createServer((req, res) => {
@@ -131,6 +147,14 @@ export function createPitcrewServer(opts: ServerOptions): http.Server {
         sendJson(res, 400, { error: "bad json" })
         return
       }
+      if (
+        (comment.reviewId !== null && hasLineBreak(comment.reviewId)) ||
+        (comment.base !== null && hasLineBreak(comment.base)) ||
+        comment.paths.some(hasLineBreak)
+      ) {
+        sendJson(res, 400, { error: "bad field" })
+        return
+      }
       const name = writeComment(projectDir, comment)
       if (name === null) sendJson(res, 400, { error: "empty body" })
       else sendJson(res, 200, { ok: true, name })
@@ -156,7 +180,13 @@ export function createPitcrewServer(opts: ServerOptions): http.Server {
 
   server.on("close", () => {
     stopWatch()
-    for (const client of sseClients) client.end()
+    for (const client of sseClients) {
+      try {
+        client.end()
+      } catch {
+        sseClients.delete(client)
+      }
+    }
     sseClients.clear()
   })
   return server

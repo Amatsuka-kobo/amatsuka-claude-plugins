@@ -366,19 +366,34 @@ function sendJson(res, status, body) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = "";
+    let tooLarge = false;
     req.on("data", (chunk) => {
+      if (tooLarge) return;
       data += chunk.toString("utf8");
-      if (data.length > 1e6) reject(new Error("body too large"));
+      if (data.length > 1e6) {
+        tooLarge = true;
+        req.destroy();
+        reject(new Error("body too large"));
+      }
     });
     req.on("end", () => resolve(data));
     req.on("error", reject);
   });
 }
+function hasLineBreak(value) {
+  return value.includes("\n") || value.includes("\r");
+}
 function createPitcrewServer(opts) {
   const { projectDir: projectDir2, token: token2, html: html2 } = opts;
   const sseClients = /* @__PURE__ */ new Set();
   const stopWatch = watchPitcrew(projectDir2, () => {
-    for (const client of sseClients) client.write("data: changed\n\n");
+    for (const client of sseClients) {
+      try {
+        client.write("data: changed\n\n");
+      } catch {
+        sseClients.delete(client);
+      }
+    }
   });
   const server2 = http.createServer((req, res) => {
     void handle(req, res).catch(() => {
@@ -441,6 +456,10 @@ function createPitcrewServer(opts) {
         sendJson(res, 400, { error: "bad json" });
         return;
       }
+      if (comment.reviewId !== null && hasLineBreak(comment.reviewId) || comment.base !== null && hasLineBreak(comment.base) || comment.paths.some(hasLineBreak)) {
+        sendJson(res, 400, { error: "bad field" });
+        return;
+      }
       const name = writeComment(projectDir2, comment);
       if (name === null) sendJson(res, 400, { error: "empty body" });
       else sendJson(res, 200, { ok: true, name });
@@ -463,7 +482,13 @@ function createPitcrewServer(opts) {
   }
   server2.on("close", () => {
     stopWatch();
-    for (const client of sseClients) client.end();
+    for (const client of sseClients) {
+      try {
+        client.end();
+      } catch {
+        sseClients.delete(client);
+      }
+    }
     sseClients.clear();
   });
   return server2;
