@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ja" data-config-theme="%PITCREW_THEME%">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pitcrew</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --border: #e5e7eb;
+  --pane: #f9fafb; --accent: #2563eb; --accent-fg: #ffffff;
+  --badge-diff: #dbeafe; --badge-diff-fg: #1d4ed8;
+  --badge-artifact: #dcfce7; --badge-artifact-fg: #15803d;
+  --badge-test: #ffedd5; --badge-test-fg: #c2410c;
+  --add: #16a34a; --add-bg: #f0fdf4; --del: #dc2626; --del-bg: #fef2f2;
+  --hunk: #7c3aed; --hunk-bg: #f5f3ff;
+}
+html[data-theme="dark"] {
+  --bg: #111827; --fg: #f3f4f6; --muted: #9ca3af; --border: #374151;
+  --pane: #1f2937; --accent: #3b82f6; --accent-fg: #ffffff;
+  --badge-diff: #1e3a5f; --badge-diff-fg: #93c5fd;
+  --badge-artifact: #14432a; --badge-artifact-fg: #86efac;
+  --badge-test: #4a2c17; --badge-test-fg: #fdba74;
+  --add: #4ade80; --add-bg: #132a1a; --del: #f87171; --del-bg: #2f1516;
+  --hunk: #a78bfa; --hunk-bg: #241b3a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: system-ui, sans-serif; background: var(--bg);
+  color: var(--fg); height: 100vh; display: flex; flex-direction: column;
+}
+#status-bar {
+  display: flex; align-items: center; gap: 16px; padding: 8px 16px;
+  border-bottom: 1px solid var(--border); font-size: 13px; flex-wrap: wrap;
+}
+#status-bar .stat b { font-variant-numeric: tabular-nums; }
+#status-bar .spacer { flex: 1; }
+#theme-toggle {
+  border: 1px solid var(--border); background: var(--pane); color: var(--fg);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+main { display: flex; flex: 1; min-height: 0; }
+#queue-pane {
+  width: 340px; min-width: 240px; border-right: 1px solid var(--border);
+  overflow-y: auto; background: var(--pane);
+}
+#queue-pane .section {
+  padding: 6px 12px; font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.queue-item {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.queue-item:hover { background: var(--bg); }
+.queue-item.selected { background: var(--bg); box-shadow: inset 3px 0 var(--accent); }
+.queue-item.reviewed { opacity: 0.5; }
+.queue-item .row { display: flex; align-items: center; gap: 8px; }
+.queue-item .title {
+  font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.queue-item .meta { font-size: 11px; color: var(--muted); }
+.badge {
+  font-size: 10px; padding: 1px 7px; border-radius: 9999px; flex-shrink: 0;
+}
+.badge.diff { background: var(--badge-diff); color: var(--badge-diff-fg); }
+.badge.artifact { background: var(--badge-artifact); color: var(--badge-artifact-fg); }
+.badge.test { background: var(--badge-test); color: var(--badge-test-fg); }
+#detail-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#detail-header {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+#detail-title { font-size: 14px; font-weight: 600; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#approve-btn {
+  border: none; background: var(--accent); color: var(--accent-fg);
+  border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px;
+}
+#approve-btn:disabled { opacity: 0.4; cursor: default; }
+#detail-body {
+  flex: 1; overflow: auto; margin: 0; padding: 16px; font-size: 12.5px;
+  font-family: ui-monospace, monospace; white-space: pre-wrap;
+  word-break: break-word;
+}
+#detail-body .add { color: var(--add); background: var(--add-bg); display: block; }
+#detail-body .del { color: var(--del); background: var(--del-bg); display: block; }
+#detail-body .hunk { color: var(--hunk); background: var(--hunk-bg); display: block; }
+#comment-box {
+  border-top: 1px solid var(--border); padding: 10px 16px; display: flex;
+  flex-direction: column; gap: 8px; background: var(--pane);
+}
+#comment-body {
+  width: 100%; min-height: 60px; resize: vertical; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+  padding: 8px; font-family: inherit; font-size: 13px;
+}
+#comment-box .row { display: flex; align-items: center; gap: 12px; }
+#comment-send {
+  border: none; background: var(--accent); color: var(--accent-fg);
+  border-radius: 6px; padding: 6px 16px; cursor: pointer; font-size: 13px;
+}
+#toast {
+  position: fixed; bottom: 16px; right: 16px; background: var(--fg);
+  color: var(--bg); border-radius: 8px; padding: 10px 16px; font-size: 13px;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+#toast.show { opacity: 1; }
+.empty { padding: 24px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="status-bar">
+  <span class="stat">実行: <b id="stat-run">-</b></span>
+  <span class="stat" id="stat-phase-wrap" hidden>フェーズ: <b id="stat-phase">-</b></span>
+  <span class="stat">未レビュー: <b id="stat-review">0</b></span>
+  <span class="stat">未回収コメント: <b id="stat-comments">0</b></span>
+  <span class="stat">最終捕捉: <b id="stat-capture">-</b></span>
+  <span class="spacer"></span>
+  <button id="theme-toggle" type="button">テーマ: device</button>
+</div>
+<main>
+  <div id="queue-pane"></div>
+  <div id="detail-pane">
+    <div id="detail-header">
+      <span id="detail-title">項目を選択してください</span>
+      <button id="approve-btn" type="button" disabled>承認して既読</button>
+    </div>
+    <pre id="detail-body"></pre>
+    <div id="comment-box">
+      <textarea id="comment-body" placeholder="コメント(選択中の項目の paths / reviewId / base が自動で付きます)"></textarea>
+      <div class="row">
+        <label><input type="radio" name="urgency" value="normal" checked /> 📮 通常</label>
+        <label><input type="radio" name="urgency" value="urgent" /> 🚨 緊急</label>
+        <span class="spacer" style="flex:1"></span>
+        <button id="comment-send" type="button">送信</button>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+<script>
+"use strict";
+(() => {
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const headers = { authorization: "Bearer " + token };
+  const $ = (id) => document.getElementById(id);
+
+  // ---- テーマ(設計書 §5: localStorage > config > prefers-color-scheme) ----
+  const THEMES = ["light", "dark", "device"];
+  const media = matchMedia("(prefers-color-scheme: dark)");
+  function themeChoice() {
+    const saved = localStorage.getItem("pitcrew-theme");
+    if (THEMES.includes(saved)) return saved;
+    const config = document.documentElement.dataset.configTheme;
+    return THEMES.includes(config) ? config : "device";
+  }
+  function applyTheme() {
+    const choice = themeChoice();
+    const effective = choice === "device" ? (media.matches ? "dark" : "light") : choice;
+    document.documentElement.dataset.theme = effective;
+    $("theme-toggle").textContent = "テーマ: " + choice;
+  }
+  $("theme-toggle").addEventListener("click", () => {
+    const next = THEMES[(THEMES.indexOf(themeChoice()) + 1) % THEMES.length];
+    localStorage.setItem("pitcrew-theme", next);
+    applyTheme();
+  });
+  media.addEventListener("change", applyTheme);
+  applyTheme();
+
+  // ---- 状態 ----
+  let state = null;
+  let selected = null; // { status, name, id, paths, base, type }
+
+  function toast(message) {
+    const el = $("toast");
+    el.textContent = message;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 2500);
+  }
+
+  function ago(iso) {
+    if (!iso) return "";
+    const sec = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 1000));
+    if (sec < 60) return sec + "秒前";
+    if (sec < 3600) return Math.floor(sec / 60) + "分前";
+    return Math.floor(sec / 3600) + "時間前";
+  }
+
+  // ---- 一覧描画(textContent のみ使用。innerHTML 禁止) ----
+  function renderItem(item) {
+    const div = document.createElement("div");
+    div.className = "queue-item " + item.status +
+      (selected && selected.name === item.name && selected.status === item.status
+        ? " selected" : "");
+    const row = document.createElement("div");
+    row.className = "row";
+    const badge = document.createElement("span");
+    const type = ["diff", "artifact", "test"].includes(item.type) ? item.type : "diff";
+    badge.className = "badge " + type;
+    badge.textContent = item.type || "?";
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = item.title;
+    row.append(badge, title);
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = [item.agent, ago(item.created)].filter(Boolean).join(" · ");
+    div.append(row, meta);
+    div.addEventListener("click", () => select(item));
+    return div;
+  }
+
+  function renderQueue() {
+    const pane = $("queue-pane");
+    pane.textContent = "";
+    if (!state || (state.review.length === 0 && state.reviewed.length === 0)) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "レビュー項目はまだありません。";
+      pane.append(empty);
+      return;
+    }
+    if (state.review.length > 0) {
+      const label = document.createElement("div");
+      label.className = "section";
+      label.textContent = "レビュー待ち";
+      pane.append(label);
+      for (const item of state.review) pane.append(renderItem(item));
+    }
+    if (state.reviewed.length > 0) {
+      const label = document.createElement("div");
+      label.className = "section";
+      label.textContent = "レビュー済み";
+      pane.append(label);
+      for (const item of state.reviewed) pane.append(renderItem(item));
+    }
+  }
+
+  function renderStatus() {
+    if (!state) return;
+    $("stat-run").textContent = state.hasRun
+      ? "実行中(" + (state.startedAt || "") + " 開始)" : "記録なし";
+    $("stat-phase-wrap").hidden = !state.phase;
+    $("stat-phase").textContent = state.phase || "-";
+    $("stat-review").textContent = String(state.review.length);
+    $("stat-comments").textContent = String(state.openComments);
+    $("stat-capture").textContent = state.lastCaptureAt
+      ? ago(state.lastCaptureAt) : "-";
+  }
+
+  // ---- 詳細(diff は行頭記号で色分け。行は textContent で追加) ----
+  function renderBody(text, isDiff) {
+    const pre = $("detail-body");
+    pre.textContent = "";
+    if (!isDiff) {
+      pre.textContent = text;
+      return;
+    }
+    for (const line of text.split("\n")) {
+      const span = document.createElement("span");
+      if (line.startsWith("+") && !line.startsWith("+++")) span.className = "add";
+      else if (line.startsWith("-") && !line.startsWith("---")) span.className = "del";
+      else if (line.startsWith("@@")) span.className = "hunk";
+      span.textContent = line + "\n";
+      if (span.className) {
+        // 行コメントの入口(設計書 §5): クリックで該当行を引用として挿入
+        span.style.cursor = "pointer";
+        span.title = "クリックでこの行を引用コメント";
+        span.addEventListener("click", () => {
+          const area = $("comment-body");
+          area.value = (area.value === "" ? "" : area.value + "\n") +
+            "> " + line + "\n";
+          area.focus();
+        });
+      }
+      pre.append(span);
+    }
+  }
+
+  async function select(item) {
+    selected = item;
+    $("detail-title").textContent = item.title;
+    $("approve-btn").disabled = item.status !== "review";
+    renderQueue();
+    try {
+      const res = await fetch(
+        "/api/item?status=" + encodeURIComponent(item.status) +
+          "&name=" + encodeURIComponent(item.name),
+        { headers }
+      );
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      renderBody(data.body, item.type === "diff");
+    } catch {
+      renderBody("(読み込みに失敗しました)", false);
+    }
+  }
+
+  // ---- 操作 ----
+  $("approve-btn").addEventListener("click", async () => {
+    if (!selected || selected.status !== "review") return;
+    const res = await fetch("/api/approve", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ name: selected.name })
+    });
+    if (res.ok) {
+      toast("承認しました: " + selected.name);
+      selected = { ...selected, status: "reviewed" };
+      $("approve-btn").disabled = true;
+      await refresh();
+    } else toast("承認に失敗しました");
+  });
+
+  $("comment-send").addEventListener("click", async () => {
+    const body = $("comment-body").value;
+    if (body.trim() === "") {
+      toast("コメント本文が空です");
+      return;
+    }
+    const urgency = document.querySelector('input[name="urgency"]:checked').value;
+    const payload = { body, urgency };
+    if (selected) {
+      payload.paths = selected.paths || [];
+      if (selected.id) payload.reviewId = selected.id;
+      if (selected.base) payload.base = selected.base;
+    }
+    const res = await fetch("/api/comment", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      $("comment-body").value = "";
+      toast((urgency === "urgent" ? "🚨" : "📮") + " 送信しました: " + data.name);
+      await refresh();
+    } else toast("送信に失敗しました");
+  });
+
+  // ---- 同期(SSE + 再取得) ----
+  async function refresh() {
+    try {
+      const res = await fetch("/api/state", { headers });
+      if (!res.ok) return;
+      state = await res.json();
+      renderStatus();
+      renderQueue();
+    } catch {
+      // サーバー停止中は次の SSE 再接続まで待つ
+    }
+  }
+
+  function subscribe() {
+    const es = new EventSource("/api/events?token=" + encodeURIComponent(token));
+    es.onmessage = () => refresh();
+    es.onerror = () => {
+      es.close();
+      setTimeout(subscribe, 5000);
+    };
+  }
+
+  refresh();
+  subscribe();
+  setInterval(() => {
+    renderStatus();
+  }, 30000); // 経過時間表示の定期更新
+})();
+</script>
+</body>
+</html>
