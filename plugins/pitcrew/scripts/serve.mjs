@@ -165,7 +165,7 @@ function readItems(projectDir2, status) {
     return [];
   }
   const items = [];
-  for (const name of names.sort()) {
+  for (const name of names.sort().reverse()) {
     if (!name.endsWith(".md")) continue;
     let raw;
     try {
@@ -254,6 +254,31 @@ function approveItem(projectDir2, name) {
   } catch {
     return false;
   }
+}
+function approveItems(projectDir2, names) {
+  const base = pitcrewDir(projectDir2);
+  const moved = [];
+  const failed = [];
+  try {
+    fs4.mkdirSync(path5.join(base, "reviewed"), { recursive: true });
+  } catch {
+  }
+  for (const name of names) {
+    if (!isSafeName(name)) {
+      failed.push(name);
+      continue;
+    }
+    try {
+      fs4.renameSync(
+        path5.join(base, "review", name),
+        path5.join(base, "reviewed", name)
+      );
+      moved.push(name);
+    } catch {
+      failed.push(name);
+    }
+  }
+  return { moved, failed };
 }
 function nextCommentNumber(projectDir2) {
   const dirs = [
@@ -439,6 +464,35 @@ function createPitcrewServer(opts) {
       }
       if (approveItem(projectDir2, name)) sendJson(res, 200, { ok: true });
       else sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/approve-batch") {
+      let names;
+      try {
+        const parsed = JSON.parse(await readBody(req));
+        if (!Array.isArray(parsed.names)) {
+          sendJson(res, 400, { error: "bad names" });
+          return;
+        }
+        names = parsed.names.filter((x) => typeof x === "string");
+      } catch {
+        sendJson(res, 400, { error: "bad json" });
+        return;
+      }
+      if (names.length === 0) {
+        sendJson(res, 400, { error: "empty names" });
+        return;
+      }
+      if (names.length > 1e3) {
+        sendJson(res, 400, { error: "too many names" });
+        return;
+      }
+      const result = approveItems(projectDir2, names);
+      sendJson(res, 200, {
+        ok: true,
+        moved: result.moved,
+        failed: result.failed
+      });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/comment") {
