@@ -482,10 +482,11 @@ test("POST /api/config: gitignoreMissing は .gitignore 無しで両方返す", 
 
 test("POST /api/config: gitignoreMissing は登録済み分を除く(空白・末尾スラッシュ許容)", async () => {
   const base = await start()
-  // 前後空白付き・末尾スラッシュ無しでも登録済み扱いになること
+  // 前後空白付き・末尾スラッシュ無しでも登録済み扱いになること。
+  // コメント行・空行は登録エントリとして扱われないこと
   fs.writeFileSync(
     path.join(projectDir, ".gitignore"),
-    "node_modules/\n  .pitcrew  \n"
+    "# deps\nnode_modules/\n\n  .pitcrew  \n# .claude/pitcrew.local.md\n"
   )
   const res = await fetch(`${base}/api/config`, {
     method: "POST",
@@ -548,8 +549,12 @@ function gitignoreMissing(projectDir: string): string[] {
   } catch {
     return [...GITIGNORE_RECOMMENDED]
   }
+  // 空行・コメント行は登録エントリとして扱わない
   const entries = new Set(
-    lines.map((line) => line.trim().replace(/\/+$/, ""))
+    lines
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("#"))
+      .map((line) => line.replace(/\/+$/, ""))
   )
   return GITIGNORE_RECOMMENDED.filter(
     (rec) => !entries.has(rec.replace(/\/+$/, ""))
@@ -892,7 +897,8 @@ git commit -m "feat: pitcrew コメント入力に Ctrl+Enter 送信を追加(St
    まで 1 秒間隔で最大 10 秒待つ(Bash の `until` ループ)。旧プロセスがポートを
    掴んだまま起動すると EADDRINUSE で失敗するため、この確認は省略しない
 4. 10 秒待っても終了しない場合は起動へ進まず、「旧プロセス(pid: <pid>)が終了
-   しません。プロセスの状態を確認してください」と伝えて中断する
+   しません。プロセスの状態を確認してください」と伝えて終了する(以降の手順は
+   実行しない。`kill -9` は案内しない)
 5. 終了を確認できたら、手順 2(起動)と手順 3(URL の提示)を実行する
    - それでも起動がポート使用中(TIME_WAIT 等)で失敗した場合は、手順 3 の
      既存のエラーハンドリング(エラー内容の提示・`/pitcrew:config` でのポート
