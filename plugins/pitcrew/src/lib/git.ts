@@ -36,7 +36,13 @@ export function snapshotWorktree(projectDir: string): string | null {
       // unborn HEAD(コミットゼロ): 空 index から始める
       git(projectDir, ["read-tree", "--empty"], env)
     }
-    git(projectDir, ["add", "-A", "--", ".", ":!.pitcrew"], env)
+    git(projectDir, ["add", "-A", "--", "."], env)
+    // ignored なら add 時点で除外済み。追跡済みの場合も一時 index から外す。
+    git(
+      projectDir,
+      ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".pitcrew"],
+      env
+    )
     return git(projectDir, ["write-tree"], env).trim()
   } catch {
     return null

@@ -137,7 +137,12 @@ function snapshotWorktree(projectDir2) {
     } catch {
       git(projectDir2, ["read-tree", "--empty"], env);
     }
-    git(projectDir2, ["add", "-A", "--", ".", ":!.pitcrew"], env);
+    git(projectDir2, ["add", "-A", "--", "."], env);
+    git(
+      projectDir2,
+      ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".pitcrew"],
+      env
+    );
     return git(projectDir2, ["write-tree"], env).trim();
   } catch {
     return null;
