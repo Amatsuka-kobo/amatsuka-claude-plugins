@@ -19,7 +19,7 @@ Stage 4.1 実機確認で出た要望 3 件に対応する:
 |---|---|
 | UI から編集できる config の範囲 | 全 7 項目(viewer / capture_targets / artifact_globs / test_commands / injection_timing / theme / port) |
 | port / theme などサーバー側設定の反映 | 保存のみ行い、再起動が必要な旨を UI で案内(自動ホット適用はしない) |
-| restart の実装方式 | コマンド手順(serve.md)のみ拡張。serve.ts のコード変更なし。UI に再起動ボタンは付けない |
+| restart の実装方式 | コマンド手順(serve.md)のみ拡張。serve.ts のコード変更なし。UI に再起動ボタンは付けない(サーバーの自己再起動はプロセス spawn・トークン再発行・URL 変更のハンドリングが必要で複雑化するため。実装者は UI ボタンを追加しないこと) |
 | config 変更 API の方式 | 案A: 構造化 config API(`GET/POST /api/config`)+ `saveConfig()` 新設 |
 | ビューア保存時の .gitignore の扱い | サーバーは .gitignore を編集しない。レスポンスの `gitignoreMissing` で UI が追記推奨を一言案内 |
 
@@ -33,12 +33,13 @@ Stage 4.1 実機確認で出た要望 3 件に対応する:
   3. 既存の起動手順を実行し、URL を提示する
 - 起動していない状態(serve.json 無し・pid 死亡)で restart された場合は、エラーにせずそのまま起動だけ行う
 - 10 秒待っても旧プロセスが終了しない場合は、その旨と手動確認(`kill -9` は案内しない。プロセス確認を促す)をユーザーに伝えて中断する
+- プロセス終了確認後でも起動が失敗する可能性(TIME_WAIT 等によるポート未解放)は残るが、その場合は serve.md 既存の手順 3 のエラーハンドリング(バックグラウンド出力の確認・ポート使用中なら `/pitcrew:config` でのポート変更案内)がそのまま適用される。restart 用の追加ハンドリングは設けない
 - `serve.ts` は変更しない
 
 ### 3.2 要望③ コメントの Ctrl+Enter 送信(`src/server/ui.html` のみ)
 
 - `#comment-body`(textarea)に `keydown` ハンドラを追加: `(e.ctrlKey || e.metaKey) && e.key === "Enter"` で送信処理を発火(macOS の Cmd+Enter にも対応)
-- 発火方法は既存の click ハンドラ(ui.html 内 `$("comment-send").addEventListener("click", ...)`)の処理を共有する。関数への切り出し or `$("comment-send").click()` のどちらにするかは実装計画で確定(挙動は同一)
+- 発火方法は `$("comment-send").click()` を呼ぶ最小実装とする(既存の click ハンドラの処理・ガード・エラーハンドリングをそのまま通るため、送信経路が 1 本に保たれる)
 - 空本文のガードは既存の送信処理側がそのまま効く(新規バリデーション不要)
 - placeholder 文言に「Ctrl+Enter で送信」を追記して発見可能性を確保
 
@@ -69,10 +70,10 @@ Stage 4.1 実機確認で出た要望 3 件に対応する:
 }
 ```
 
-- バリデーションは `validateConfig()`(後述)に委譲。違反時は `400 { "error": "<フィールド名>" }`
+- バリデーションは `validateConfig()`(後述)に委譲。違反時は `400 { "error": "<フィールド名>" }`。複数フィールドが違反している場合は**最初に検出した 1 件だけ**を返す(検出順はフィールド定義順: viewer → captureTargets → artifactGlobs → testCommands → injectionTiming → theme → port。UI はエラーを 1 件ずつ直せばよい)
 - JSON パース失敗は `400 { "error": "bad json" }`
 - 成功時: `saveConfig()` で保存し `200 { "ok": true, "gitignoreMissing": [...] }`
-- `gitignoreMissing`: プロジェクトの `.gitignore` を読み、`.pitcrew/` と `.claude/pitcrew.local.md` のうち未登録のものを列挙(`.gitignore` が無ければ両方)。判定は**前後空白を無視した行の完全一致**で十分とし、gitignore パターンの完全解釈はしない。サーバーは `.gitignore` を**編集しない**
+- `gitignoreMissing`: プロジェクトの `.gitignore` を読み、`.pitcrew/` と `.claude/pitcrew.local.md` のうち未登録のものを列挙(`.gitignore` が無ければ両方)。判定は**前後空白を無視した行の完全一致**とし、末尾スラッシュの有無は同一視する(`.pitcrew` と `.pitcrew/` はどちらも登録済み扱い)。それ以外の gitignore パターン(ワイルドカード等)の解釈はしない — 案内が 1 回余計に出るだけで実害がないため。サーバーは `.gitignore` を**編集しない**
 
 #### 3.3.2 `src/lib/config.ts`: `saveConfig()` / `validateConfig()` を追加
 
@@ -82,13 +83,13 @@ export function saveConfig(projectDir: string, config: PitcrewConfig): void
 ```
 
 - **`validateConfig()`**: 検証規則は `loadConfig()` と同一(列挙値・port は整数 1〜65535・配列要素は string)に加え、**書式制約由来の規則**を追加:
-  - `artifactGlobs` / `testCommands` の要素にカンマ・改行を含めない(フラット YAML のインライン配列を壊すため)。空文字列要素も不可
+  - `artifactGlobs` / `testCommands` の**各要素をループで検査**し、カンマ・改行を含む要素があれば違反(フラット YAML のインライン配列を壊すため)。空文字列要素も違反(UI が空行除去してから送る建前だが、API 単体でも防御する)
   - `artifactGlobs` は空配列不可(`loadConfig` が「指定なし」として既定に落とす値を UI から保存させない)
   - `testCommands` は空配列可
-  - フィールド欠落・型違いはそのフィールド名を `error` に入れて返す
+  - フィールド欠落・型違いはそのフィールド名を `error` に入れて返す(部分更新は許可しない — 1 つでも欠けたら 400)
 - **`saveConfig()`**: `.claude/pitcrew.local.md` を書き出す
   - frontmatter は `/pitcrew:config`(config.md §3)と同一形式: フラットな key-value+インライン配列、glob 等 `*` / `/` を含む値は `"` で囲む、`port` は `"7373"` の引用文字列、配列要素にカンマなし(validateConfig が保証)
-  - 本文(設定の説明文)は config.md 記載のテンプレートと同内容の固定文字列で出力する。**既存ファイルの本文は保持しない**(本文は説明書きであり設定値ではないため、単純さを優先して frontmatter+テンプレ本文で上書き)
+  - 本文(設定の説明文)は config.md 記載のテンプレートと同内容の固定文字列で出力する。**既存ファイルの本文は保持しない**(本文は説明書きであり設定値ではないため、単純さを優先して frontmatter+テンプレ本文で上書き。ユーザーが本文に手書きしたメモは失われるが、このファイルは `/pitcrew:config` 生成の設定ファイルでありメモ置き場ではないため許容する)
   - 書き込みは既存 `writeFileAtomic` を使用。`.claude/` が無ければ作成(`mkdirSync recursive`)
 - 読み(`loadConfig`)・検証(`validateConfig`)・書き(`saveConfig`)を config.ts の 1 モジュールに集約し、http.ts には HTTP の関心事だけを残す
 
@@ -102,9 +103,9 @@ export function saveConfig(projectDir: string, config: PitcrewConfig): void
   - `artifactGlobs` / `testCommands`: 1 行 1 要素の textarea(送信時に行分割し空行を除去)
   - `port`: number input
 - 「保存」ボタンで `POST /api/config`:
-  - 成功時: 「保存しました。port / theme の変更は次回のビューア起動から反映されます(`/pitcrew:serve restart`)」と表示。`gitignoreMissing` が非空なら「`.pitcrew/` と `.claude/pitcrew.local.md` は .gitignore への追記を推奨します(`/pitcrew:config` で追記できます)」を併記
+  - 成功時: 「保存しました。捕捉・注入の設定は次の hook 起動から、port / theme は次回のビューア起動(`/pitcrew:serve restart`)から反映されます」と表示。`gitignoreMissing` が非空なら「`.pitcrew/` と `.claude/pitcrew.local.md` は .gitignore への追記を推奨します(`/pitcrew:config` で追記できます)」を併記
   - 400 時: エラーのフィールド名を添えて表示
-- theme は保存成功時に UI 側のテーマ切替を即時実行する(既存の theme 適用処理を再利用できる場合のみ。再利用できなければ即時適用はせず再起動案内に含める — 実装計画で確定)
+- theme は保存成功時に UI 側のテーマ切替を即時実行する: 既存の theme 適用処理(ui.html の `applyTheme()`。`data-config-theme` 属性と localStorage の `pitcrew-theme` から実効テーマを決める)を再利用し、保存成功時に `document.documentElement.dataset.configTheme` を新値へ更新して `applyTheme()` を呼ぶ。localStorage 側の選択(ヘッダーの「テーマ」トグルで明示切替済みの場合)が優先される既存の優先順位は変えない
 - XSS 方針の維持: 既存方針どおり DOM 生成は `createElement` + `textContent` のみ。`innerHTML` は使わない
 
 #### 3.3.4 反映のセマンティクス
@@ -137,13 +138,13 @@ export function saveConfig(projectDir: string, config: PitcrewConfig): void
 ### 5.1 `src/lib/__test__/config.test.ts`(追加)
 
 - `saveConfig()`: 保存 → `loadConfig()` で読み戻して全項目一致(ラウンドトリップ)。glob の引用・port の引用文字列・インライン配列が config.md の書式どおりであること。`.claude/` が無い場合の作成
-- `validateConfig()`: 正常系(全項目)/ 異常系 — 列挙値違反・port 範囲外・非整数、glob / testCommands のカンマ・改行・空文字列混入、artifactGlobs 空配列、フィールド欠落、型違い。それぞれ `error` に該当フィールド名が入ること
+- `validateConfig()`: 正常系(全項目)/ 異常系はケースを個別に検証 — 列挙値違反、port 範囲外・非整数、glob 要素のカンマ混入、glob 要素の改行混入、testCommands 要素の空文字列混入、artifactGlobs 空配列、フィールド欠落(任意の 1 フィールド)、型違い。それぞれ `error` に該当フィールド名が入ること。複数フィールド同時違反時は定義順で最初の 1 件が返ること
 
 ### 5.2 `src/server/__test__/http.test.ts`(追加)
 
 - `GET /api/config`: 401(トークン無し)/ 200 で現在値 JSON / config ファイル無しでも既定値
 - `POST /api/config`: 200 で保存+ファイル生成 / 400(バリデーション違反・不正 JSON)/ 401
-- `gitignoreMissing`: `.gitignore` 無し → 両方 / 片方のみ登録済み → 残りのみ / 両方登録済み(前後空白付き行でも一致)→ 空配列
+- `gitignoreMissing`: `.gitignore` 無し → 両方 / 片方のみ登録済み → 残りのみ / 両方登録済み(前後空白付き行でも一致)→ 空配列 / 末尾スラッシュ違い(`.pitcrew` と書かれていても `.pitcrew/` 登録済み扱い)→ 空配列
 
 ### 5.3 実機確認(自動テスト対象外)
 
@@ -161,7 +162,7 @@ export function saveConfig(projectDir: string, config: PitcrewConfig): void
 - 全テスト PASS(既存+追加)
 - `pnpm build` でバンドル再生成し、生成物の差分もコミット(バンドルは git 管理)
 - `plugins/pitcrew/.claude-plugin/plugin.json` のバージョンを 0.9.3 → 0.9.4 に上げる(計画外のバージョン変更をしない — Stage 4.1 で計画外の 0.10.0 変更が混入した前例あり)
-- README のビューア節に設定パネルと Ctrl+Enter 送信、serve 節に restart の記述を追記
+- README のビューア節に「⚙ 設定パネルから全設定をブラウザで変更できる(port / theme は再起動で反映)」と「コメントは Ctrl+Enter / Cmd+Enter で送信できる」、serve 節に「`/pitcrew:serve restart` で再起動できる」の要点を追記(スクリーンショット更新は不要 — 追加 UI は ⚙ ボタンとパネルのみでレイアウトの大きな変化がないため)
 
 ## 7. 制約(リポジトリ方針の再確認)
 
