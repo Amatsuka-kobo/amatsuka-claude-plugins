@@ -158,7 +158,11 @@ export function createPitcrewServer(opts: ServerOptions): http.Server {
         return
       }
       const result = approveItems(projectDir, names)
-      sendJson(res, 200, { ok: true, moved: result.moved, failed: result.failed })
+      sendJson(res, 200, {
+        ok: true,
+        moved: result.moved,
+        failed: result.failed
+      })
       return
     }
 
