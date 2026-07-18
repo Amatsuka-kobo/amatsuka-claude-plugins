@@ -221,3 +221,54 @@ test("SSE は接続直後に changed を送り、変更でも送る", async () =
   expect(received).toContain("data: changed")
   await reader.cancel()
 })
+
+test("POST /api/approve-batch は複数項目を移動し moved/failed を返す", async () => {
+  const base = await start()
+  const review = path.join(projectDir, ".pitcrew", "review")
+  fs.mkdirSync(review, { recursive: true })
+  fs.writeFileSync(path.join(review, "001-diff-a.md"), "a")
+  fs.writeFileSync(path.join(review, "002-diff-b.md"), "b")
+  const res = await fetch(`${base}/api/approve-batch`, {
+    method: "POST",
+    headers: { ...auth(), "content-type": "application/json" },
+    body: JSON.stringify({
+      names: ["001-diff-a.md", "002-diff-b.md", "nope.md"]
+    })
+  })
+  expect(res.status).toBe(200)
+  expect(await res.json()).toEqual({
+    ok: true,
+    moved: ["001-diff-a.md", "002-diff-b.md"],
+    failed: ["nope.md"]
+  })
+  expect(
+    fs.existsSync(
+      path.join(projectDir, ".pitcrew", "reviewed", "001-diff-a.md")
+    )
+  ).toBe(true)
+})
+
+test("POST /api/approve-batch は不正リクエストを 400 で拒否する", async () => {
+  const base = await start()
+  const post = (body: string) =>
+    fetch(`${base}/api/approve-batch`, {
+      method: "POST",
+      headers: { ...auth(), "content-type": "application/json" },
+      body
+    })
+  expect((await post("{壊れたJSON")).status).toBe(400)
+  expect((await post(JSON.stringify({ names: "not-array" }))).status).toBe(400)
+  expect((await post(JSON.stringify({ names: [] }))).status).toBe(400)
+  const tooMany = Array.from({ length: 1001 }, (_, i) => `${i}.md`)
+  expect((await post(JSON.stringify({ names: tooMany }))).status).toBe(400)
+})
+
+test("POST /api/approve-batch は認証なしで 401", async () => {
+  const base = await start()
+  const res = await fetch(`${base}/api/approve-batch`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ names: ["001-diff-a.md"] })
+  })
+  expect(res.status).toBe(401)
+})
