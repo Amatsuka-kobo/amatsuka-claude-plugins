@@ -63,7 +63,7 @@ function readItems(
     return []
   }
   const items: QueueItem[] = []
-  for (const name of names.sort()) {
+  for (const name of names.sort().reverse()) {
     if (!name.endsWith(".md")) continue
     let raw: string
     try {
