@@ -27,22 +27,23 @@
 
 ```
 src/tui/
-├── render.ts   # 純粋関数: QueueItem[] + 選択位置 + 端末サイズ → 描画用文字列配列
+├── main.ts      # エントリポイント: 引数解析(--dir。serve.ts の parseArgs と同型) → TTY チェック → loop 起動
+├── render.ts    # 純粋関数: QueueItem[] + 選択位置 + 端末サイズ → 描画用文字列配列
 ├── keymap.ts    # 純粋関数: キー入力 + 現在状態 → アクション(Move/Comment/Approve/Quit/Resize)
-├── editor.ts     # $EDITOR を子プロセスとして起動し、編集結果を読み戻す
-└── loop.ts       # 上記を束ねるイベントループ(raw mode・alt screen・fs watch)
+├── editor.ts    # $EDITOR を子プロセスとして起動し、編集結果を読み戻す
+└── loop.ts      # 上記を束ねるイベントループ(raw mode・alt screen・fs watch)
 scripts/watch.mjs  # src/tui/main.ts のバンドル出力(build.ts にエントリを追加)
 ```
 
-**既存資産の再利用**:
+**既存資産の再利用**(いずれも公開関数のみを使う。非公開関数の export 追加はしない):
 
-- `src/server/state.ts` の `listState`/`readItems` → キュー一覧・本文の取得
-- `src/server/watch.ts` の `watchPitcrew` → ライブリロードの検知
-- `viewer-ops.ts` の `approveItem`・`writeComment`・`nextCommentNumber` → 承認・コメント保存
+- `state.ts` の `listState` → キュー一覧の取得(`PitcrewState.review` を使う)、`readItemBody` → 詳細プレビューの本文取得
+- `watch.ts` の `watchPitcrew` → ライブリロードの検知
+- `viewer-ops.ts` の `approveItem`・`writeComment` → 承認・コメント保存(コメント番号の採番は `writeComment` 内部で行われるため TUI 側では扱わない)
 
-**既存構造への手直し**: `viewer-ops.ts` は HTTP に依存しない純粋な操作関数群だが、現在 `src/server/` 配下にあり TUI からの import が層をまたぐ。`src/lib/viewer-ops.ts` へ移動し、`src/server/http.ts` と `src/tui/` の両方がそこから import する(ロジック変更なし、置き場所と import パスのみの変更)。
+**既存構造への手直し**: `state.ts`・`watch.ts`・`viewer-ops.ts` の 3 ファイルはいずれも HTTP に依存しないファイルバス操作であり、現在 `src/server/` 配下にあるため TUI からの import が層をまたぐ。また `viewer-ops.ts` だけを移すと `isSafeName`(現在 `state.ts` で定義)への lib → server の逆依存が生じる。そこで 3 ファイルとも `src/lib/` へ移動し、`src/server/http.ts` と `src/tui/` の両方がそこから import する(ロジック変更なし、置き場所と import パスのみの変更。`src/server/serve.ts` はこの 3 ファイルを直接 import していないため変更不要)。
 
-`build.ts` に `scripts/watch.mjs` のバンドルエントリ(`src/tui/main.ts` を入口)を追加する。
+`build.ts` の `entryPoints` にキー `watch`(値 `./src/tui/main.ts`)を追加する(出力は既存規約どおり `scripts/watch.mjs` になる)。
 
 ### 3.2 画面レイアウトと操作
 
@@ -64,8 +65,11 @@ scripts/watch.mjs  # src/tui/main.ts のバンドル出力(build.ts にエント
 ```
 
 - キュー一覧は `review/` のみを対象に、ID 降順(新しい順)で表示する(ブラウザビューアと同じ並び順)
+- **行数配分**: ステータスバー(1行)+キーヘルプ(1行)の固定行を除いた残りのうち、キュー一覧は「表示件数分。ただし残り行の半分(切り上げ)を上限」、プレビューがその残り全行。0 以下になった領域は描画しない(後述)
+- **色付け**: `render.ts` が ANSI エスケープを含む行文字列を返す(`+`/`-` で始まる行の全体を緑/赤にする)。`loop.ts` 側で色を後付けしない
+- **空一覧**: 一覧が空のときは選択なし・プレビュー空とし、`j`/`k`/`c`/`a` は no-op(`q` と resize のみ有効)
 - `j`/`k`: 選択移動(先頭・末尾で止まる。ラップしない)
-- `a`: `approveItem(projectDir, name)` を呼び `reviewed/` へ移動。一覧から即座に消える(選択は次の項目、無ければ直前の項目へ移動)
+- `a`: `approveItem(projectDir, name)` を**同期的に**呼び `reviewed/` へ移動。成功したらその場で `listState` を再取得して再描画する(`watchPitcrew` の検知を待たない。選択は次の項目、無ければ直前の項目へ移動)。失敗時は §4 の通り
 - `c`: 3.3 節のフロー
 - `q`: 3.5 節の後始末をして終了(exit code 0)
 - 端末の `resize` イベントで一覧・プレビューの行数配分を再計算し全画面再描画する
@@ -75,25 +79,31 @@ scripts/watch.mjs  # src/tui/main.ts のバンドル出力(build.ts にエント
 ### 3.3 コメント作成フロー(`c` キー)
 
 1. `$EDITOR`/`$VISUAL` のどちらも未設定なら、エディタを起動せずステータス行に「$EDITOR または $VISUAL を設定してください」を表示して終了(以降の手順を行わない)
-2. raw mode を一時解除し、選択項目に対する `commentTemplate()` 相当の内容(`urgency: normal`・`paths`・`reviewId`・`base` を埋め込み済み)をスクラッチ一時ファイル(OS の一時ディレクトリ配下。`.pitcrew/` の外)に書き出す
-3. `$EDITOR` (`$VISUAL` があればそちらを優先) を `stdio: "inherit"` で子プロセスとして起動し、終了を待つ
+2. raw mode を一時解除し、TUI 用スクラッチ雛形をスクラッチ一時ファイル(OS の一時ディレクトリ配下。`.pitcrew/` の外)に書き出す。雛形は `.pitcrew/comments/` のコメントファイルと同じ形式(`src/lib/frontmatter.ts` の `serializeFrontmatter` による `---` 区切り frontmatter+本文)で、frontmatter に `urgency: normal`・選択項目の `paths`/`reviewId`/`base` を埋め込み、本文はプレースホルダ `(ここにコメント本文)` のみとする。読み戻しも既存の `parseFrontmatter` を使う(パース失敗・キー欠落時は既定値で埋める既存挙動に任せる)
+3. `$EDITOR` (`$VISUAL` があればそちらを優先) を `stdio: "inherit"` で子プロセスとして起動し、終了を待つ。環境変数の値は空白で分割し、先頭をコマンド・残りを引数として `spawn` に渡す(shell は介さない。`vim -u NONE` のような引数付き設定に対応するため)
 4. 終了後、raw mode を復帰。alt screen は維持したまま全画面再描画する(エディタの描画残りを消す)
 5. スクラッチファイルの frontmatter(`urgency` 等)と本文を読む。本文を前後の空白・改行を除去(trim)した上で、以下のいずれかに該当する場合は**何もせず**スクラッチファイルを削除する(送信しない):
    - trim 後の本文が空文字列
    - trim 後の本文が、スクラッチファイル生成時に埋め込んだプレースホルダ文字列 `(ここにコメント本文)` と完全一致する
 
-   (注: この判定に使うスクラッチファイルの雛形は、`src/lib/review.ts` の `commentTemplate()` とは別物。`commentTemplate()` は Stage 1 の「レビュー項目内に手書き用の例を埋め込む」ための文字列で、コードフェンス・案内文を含む。TUI のスクラッチファイルはエディタで直接編集して `writeComment()` に渡すだけなので、frontmatter と本文プレースホルダのみのシンプルな雛形を新たに生成する)
-6. それ以外の場合、内容を `writeComment(projectDir, { urgency, paths, reviewId, base, body })` に渡す。番号採番・原子的書き込みは既存ロジックにすべて任せる。成功後スクラッチファイルを削除する
+   (注: このスクラッチ雛形は TUI で新たに定義するもので、`src/lib/review.ts` の `commentTemplate()`(Stage 1 の「レビュー項目内に手書き用の例を埋め込む」文字列。コードフェンス・案内文を含む)は流用しない)
+6. それ以外の場合、内容を `writeComment(projectDir, { urgency, paths, reviewId, base, body })` に渡す。番号採番・原子的書き込みは既存ロジックにすべて任せる。成功後スクラッチファイルを削除する(削除失敗や強制終了でスクラッチが残っても、OS 一時ディレクトリ内なので実害はない。掃除機構は作らない)
 7. 緊急度を上げたい場合はテンプレート内の `urgency: normal` を `urgency: urgent` に書き換えるのみ(TUI 独自の緊急フラグ入力 UI は作らない。マスター設計書 §5 B と同じ方針)
 
 ### 3.4 ライブリロード
 
-`watchPitcrew` のコールバックで `.pitcrew/` の変更を検知するたびに `listState`/`readItems` を再取得し、**選択中アイテムの `id` を追跡**して選択位置を維持する。該当 id が新しい一覧に存在すれば、そのアイテムを選択状態のまま維持する(一覧内の並び順が変わっても id で追跡する)。該当 id が一覧から消えていれば(承認・削除等)、**旧一覧における配列インデックスと同じ位置**を新しい一覧に適用し、新しい一覧の件数を超える場合は末尾にクランプする(例: `[003, 002, 001]` の 3 件表示中に `002`(インデックス 1)を承認 → `a` キー操作自身がこの承認を起こした場合は 3.2 節の規定(次の項目、無ければ直前の項目)を優先し、それ以外の要因(他プロセスによる移動等)でインデックス 1 の項目が消えた場合は新しい一覧のインデックス 1(無ければ末尾)を選択する)。キー入力(`readline.emitKeypressEvents` + raw mode)は別イベントソースとして共存させ、どちらのイベントが来ても同じ描画関数(`render.ts`)を呼ぶ。
+`watchPitcrew` のコールバックで `.pitcrew/` の変更を検知するたびに `listState` を再取得し、選択位置を次の規則で決める:
+
+1. 選択中アイテムの `id` が新しい一覧にも存在する → そのアイテムを選択したまま維持する(並び順が変わっても id で追跡する)
+2. `a` キー操作自身による承認で消えた → 3.2 節の規定(次の項目、無ければ直前の項目)に従う
+3. それ以外の要因(他プロセスによる移動等)で消えた → 旧一覧における配列インデックスと同じ位置を新しい一覧に適用し、件数を超える場合は末尾にクランプする(例: インデックス 1 の項目が消えたら新しい一覧のインデックス 1、無ければ末尾を選択)
+
+キー入力(`readline.emitKeypressEvents` + raw mode)は別イベントソースとして共存させ、どちらのイベントが来ても同じ描画関数(`render.ts`)を呼ぶ。Node.js のシングルスレッドイベントループ上で各ハンドラは順番に完走するため、排他制御は不要(`a` の承認+再取得も 3.2 節の通り同期的に完結する)。なお規則 2(`a` キー自身による削除)は、`a` ハンドラが同期的に選択位置を確定させることで実現する — 後から来る `watchPitcrew` の検知時点では新しい選択 id が既に一覧に存在するため、規則 1 で自然に維持される。
 
 ### 3.5 起動・終了・エラーハンドリング
 
-- 起動時に `process.stdout.isTTY` が `false` の場合、「pitcrew watch は対話端末(TTY)が必要です」を stderr に出して `exit(1)`(alt screen 等には一切入らない)
-- 正常終了(`q`)・異常終了(`SIGINT`/`SIGTERM`/uncaughtException)のいずれの経路でも、必ず次を実行してから終了する: raw mode 解除 → カーソル表示(`\x1b[?25h`)→ alt screen 復帰(`\x1b[?1049l`)。`process.on` のハンドラを一本化し、経路によって後始末が漏れないようにする
+- 起動時に `process.stdin.isTTY` と `process.stdout.isTTY` のいずれかが `false` の場合、「pitcrew watch は対話端末(TTY)が必要です」を stderr に出して `exit(1)`(alt screen 等には一切入らない。stdin は raw mode に、stdout は描画に必要なため両方を確認する)
+- 正常終了(`q`)・異常終了(`SIGINT`/`SIGTERM`/uncaughtException)のいずれの経路でも、必ず次を実行してから終了する: raw mode 解除 → カーソル表示(`\x1b[?25h`)→ alt screen 復帰(`\x1b[?1049l`)。後始末は一度だけ実行されるようフラグでガードした単一関数(cleanup)にまとめ、各 `process.on` ハンドラは「cleanup を呼んでから終了する」だけにする(uncaughtException のみ、終了前にスタックトレースを stderr に出す)
 - `.pitcrew/` の読み取り失敗(ディレクトリ未作成・壊れたファイル等)は既存の fail-open 方針を踏襲し、空一覧として起動・継続する(hooks 側の fail-open と同じ考え方をビューア側にも適用)
 
 ### 3.6 `/pitcrew:watch` コマンド(`commands/watch.md`)
@@ -108,7 +118,7 @@ node "<CLAUDE_PLUGIN_ROOT を解決した絶対パス>/scripts/watch.mjs" --dir 
 
 ### 3.7 変更しないもの
 
-- `src/server/http.ts` の既存 API・`ui.html`: 変更不要(`viewer-ops.ts` の import パス変更のみ影響)
+- `src/server/http.ts` の既存 API・`src/server/serve.ts`・`ui.html`: ロジック変更不要(http.ts のみ §3.1 の 3 ファイル移動に伴う import パス変更がある)
 - `src/lib/config.ts`: `PitcrewConfig.viewer` に既に `"tui"` が定義済みのため型変更は不要。ただし `viewer: "tui"` は現状「値として保存できるが hooks の挙動を変えない」フラグのままとし、本ステージでは `pitcrew watch` の起動要否をこの値で分岐させる実装は行わない(config で選ぶのはあくまで捕捉・注入の既定挙動であり、ビューアは常にどれでも起動できる。既存の `browser`/`files` も同様)
 - `commands/config.md`・`commands/serve.md`: 変更不要
 
@@ -117,7 +127,8 @@ node "<CLAUDE_PLUGIN_ROOT を解決した絶対パス>/scripts/watch.mjs" --dir 
 | ケース | 挙動 |
 |---|---|
 | 非 TTY で起動 | stderr にメッセージ、`exit(1)` |
-| `$EDITOR`/`$VISUAL` 未設定で `c` | ステータス行にエラー表示のみ、以降の手順を行わない |
+| `$EDITOR`/`$VISUAL` 未設定で `c` | ステータス行にエラー表示のみ、以降の手順を行わない(表示は次の再描画イベントまで残る。タイマー消去はしない) |
+| エディタが 0 以外の exit code で終了 | コメントを送信せずスクラッチファイルを削除し、ステータス行に一言表示 |
 | エディタ終了後、本文が空 or 未変更 | コメントを送信せずスクラッチファイルを削除 |
 | `.pitcrew/` 読み取り失敗 | 空一覧として起動・継続(fail-open) |
 | `a` 実行時に対象ファイルが既に無い(他プロセスが移動済み等) | `approveItem` が `false` を返すのでステータス行に一言表示し、次の `watchPitcrew` 検知で一覧を再取得する |
@@ -129,7 +140,7 @@ node "<CLAUDE_PLUGIN_ROOT を解決した絶対パス>/scripts/watch.mjs" --dir 
 
 - 空一覧・複数件・選択位置の境界(先頭/末尾)での出力
 - diff 本文の `+`/`-` 行色付け(該当行にのみ ANSI コードが付くこと)
-- 端末幅・高さに応じた一覧/プレビューの行数配分
+- 端末幅・高さに応じた一覧/プレビューの行数配分(§3.2 の配分規則。0 以下になる極小サイズで該当領域が描画されないことを含む)
 
 ### 5.2 `src/tui/__test__/keymap.test.ts`(新規)
 
@@ -142,10 +153,11 @@ node "<CLAUDE_PLUGIN_ROOT を解決した絶対パス>/scripts/watch.mjs" --dir 
 - `$EDITOR`/`$VISUAL` の優先順位(`$VISUAL` が設定されていればそちらを使う)
 - どちらも未設定時にエラー扱いとなること(子プロセスを起動しない)
 - spawn に渡す引数(スクラッチファイルパス・`stdio: "inherit"`)の検証
+- 引数付き環境変数(例 `vim -u NONE`)の空白分割(先頭がコマンド・残りが引数になること)
 
-### 5.4 `src/lib/__test__/viewer-ops.test.ts`(移動)
+### 5.4 既存テストの移動
 
-- `src/server/__test__/viewer-ops.test.ts` を移動元の内容のまま `src/lib/__test__/` へ移す(ロジック変更なし)
+- `src/server/__test__/` の `state.test.ts`・`watch.test.ts`・`viewer-ops.test.ts` を、§3.1 のソース移動に合わせて内容そのまま `src/lib/__test__/` へ移す(ロジック変更なし。import パスのみ修正)
 
 ### 5.5 実機確認(自動テスト対象外)
 
@@ -171,4 +183,4 @@ node "<CLAUDE_PLUGIN_ROOT を解決した絶対パス>/scripts/watch.mjs" --dir 
 
 - Anthropic API・`ANTHROPIC_API_KEY` 前提の実装は不可(本件は該当なし: ローカルの Node CLI プロセスのみ)
 - 依存は Node 標準ライブラリのみ(既存方針を継続。TUI フレームワーク・キー入力ライブラリの追加は行わない)
-- 実装は CLAUDE.md のエージェント運用方針に従い GPT エージェントへ委譲する。`src/tui/` 配下(`render.ts`/`keymap.ts`/`editor.ts`/`loop.ts`)・`viewer-ops.ts` の移動・`build.ts`/README 更新はいずれも非自明な設計判断を含まない通常実装であり `GPT Terra` 想定(担当の割り振り自体は後続の実装計画で確定する)。オーケストレーターは設計・レビュー・最終確認を担う
+- 実装は CLAUDE.md のエージェント運用方針に従い GPT エージェントへ委譲する。`src/tui/` 配下(`main.ts`/`render.ts`/`keymap.ts`/`editor.ts`/`loop.ts`)・3 ファイル(`state.ts`/`watch.ts`/`viewer-ops.ts`)の `src/lib/` への移動・`build.ts`/README 更新はいずれも非自明な設計判断を含まない通常実装であり `GPT Terra` 想定(担当の割り振り自体は後続の実装計画で確定する)。オーケストレーターは設計・レビュー・最終確認を担う

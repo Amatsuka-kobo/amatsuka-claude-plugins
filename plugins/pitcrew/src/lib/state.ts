@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
-import { parseFrontmatter } from "../lib/frontmatter.js"
-import { pitcrewDir } from "../lib/run.js"
+import { parseFrontmatter } from "./frontmatter.js"
+import { pitcrewDir } from "./run.js"
 
 // ブラウザビューアの読み取り側(設計書 §5)。.pitcrew/ のファイルを読むだけで、
 // 書き込みは viewer-ops.ts に分離する。壊れたファイルは既定値で埋めて一覧に残す

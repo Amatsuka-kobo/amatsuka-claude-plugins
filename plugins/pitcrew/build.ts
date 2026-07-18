@@ -8,7 +8,8 @@ await esbuild.build({
     "capture-post-tool-use": "./src/hooks/capture-post-tool-use.ts",
     "inject-pre-tool-use": "./src/hooks/inject-pre-tool-use.ts",
     "inject-stop": "./src/hooks/inject-stop.ts",
-    serve: "./src/server/serve.ts"
+    serve: "./src/server/serve.ts",
+    watch: "./src/tui/main.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
