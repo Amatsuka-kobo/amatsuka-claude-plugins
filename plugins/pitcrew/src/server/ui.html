@@ -211,7 +211,7 @@ main { display: flex; flex: 1; min-height: 0; }
     </div>
     <pre id="detail-body"></pre>
     <div id="comment-box">
-      <textarea id="comment-body" placeholder="コメント(選択中の項目の paths / reviewId / base が自動で付きます)"></textarea>
+      <textarea id="comment-body" placeholder="コメント(選択中の項目の paths / reviewId / base が自動で付きます。Ctrl+Enter で送信)"></textarea>
       <div class="row">
         <label><input type="radio" name="urgency" value="normal" checked /> 📮 通常</label>
         <label><input type="radio" name="urgency" value="urgent" /> 🚨 緊急</label>
@@ -501,6 +501,15 @@ main { display: flex; flex: 1; min-height: 0; }
       toast((urgency === "urgent" ? "🚨" : "📮") + " 送信しました: " + data.name);
       await refresh();
     } else toast("送信に失敗しました");
+  });
+
+  // Ctrl+Enter / Cmd+Enter で送信(送信経路を 1 本に保つため click() を呼ぶ。
+  // 空本文ガードは click ハンドラ側がそのまま効く)
+  $("comment-body").addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      $("comment-send").click();
+    }
   });
 
   // ---- 設定パネル(Stage 4.2)----
