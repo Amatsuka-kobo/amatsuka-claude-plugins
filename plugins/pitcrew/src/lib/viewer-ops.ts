@@ -1,11 +1,8 @@
 import fs from "node:fs"
 import path from "node:path"
-import { writeFileAtomic } from "../lib/atomic.js"
-import {
-  type FrontmatterData,
-  serializeFrontmatter
-} from "../lib/frontmatter.js"
-import { pitcrewDir } from "../lib/run.js"
+import { writeFileAtomic } from "./atomic.js"
+import { type FrontmatterData, serializeFrontmatter } from "./frontmatter.js"
+import { pitcrewDir } from "./run.js"
 import { isSafeName } from "./state.js"
 
 // ブラウザビューアの書き込み側(設計書 §5)。書けるのは
