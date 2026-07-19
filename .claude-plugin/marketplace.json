@@ -29,6 +29,11 @@
       "name": "pitcrew",
       "source": "./plugins/pitcrew",
       "description": "オーケストレーション実行中の成果物(diff・設計書・テスト結果)を .pitcrew/ のレビューキューへ逐次書き出し、人間の並走レビューを可能にするプラグイン"
+    },
+    {
+      "name": "agent-policy",
+      "source": "./plugins/agent-policy",
+      "description": "あまつか工房のエージェント運用方針(モデル別役割分担・設計/実装フロー・アドバイザー運用・並列原則・context-map)を、Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供するスキル群"
     }
   ]
 }
