@@ -17,7 +17,7 @@ sources that build each plugin's bundled scripts.
 - `TERMS.md` — Japanese ToS; notably forbids using this service to generate
   illustration/Live2D/3D-model assets.
 
-## Distributed plugins (4, see `.claude-plugin/marketplace.json`)
+## Distributed plugins (5, see `.claude-plugin/marketplace.json`)
 
 - **codiel** (0.2.0-dev) — GitHub-issue-driven orchestrator: analyze → design → implement → test →
   PR → review, gated by the bundled `raguel` MCP server. Largest/most complex.
@@ -29,6 +29,9 @@ sources that build each plugin's bundled scripts.
   craft/split/triage) + chat-recorder/chat-reader agents.
 - **revelation** (0.2.0-dev) — skills teaching smaller models to replicate Fable5's working style
   (task decomposition / self-verification). Disabled by default in `.claude/settings.json`.
+- **pitcrew** (0.10.0 — only **released** plugin, rest are `-dev`) — hooks-only parallel-review
+  layer: captures orchestration artifacts (diff/artifact/test) to `.pitcrew/review/` and injects
+  human comments back into the running session; browser + TUI viewers. Details: `mem:pitcrew/core`.
 
 ## Project-wide invariant — no Anthropic API usage
 

@@ -9,7 +9,8 @@ pnpm lint            # biome check .
 pnpm build           # pnpm -r build -> each plugin's src/ -> scripts/*.mjs (+ raguel dist/server.mjs)
 pnpm --filter basic-design-generator build   # single package (workspace pkg names differ from
                                              # plugin names: codiel-scripts, revelation-scripts,
-                                             # task-utility-scripts, basic-design-generator, raguel-mcp)
+                                             # task-utility-scripts, basic-design-generator,
+                                             # pitcrew-scripts, raguel-mcp)
 ```
 
 Note: some plugin READMEs still say `cd plugins/<x> && pnpm test && pnpm typecheck` — stale; those

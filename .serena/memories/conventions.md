@@ -23,9 +23,10 @@ include glob only picks those up. Fixtures under `src/fixtures/`, fakes under `s
 
 Each plugin versions independently: bump the changed plugin's
 `plugins/<plugin>/.claude-plugin/plugin.json` proportionally to the change. Format `n1.n2.n3`, with
-`-alpha.n4` / `-dev` for prereleases (all four plugins are currently `-dev`). Bump minor/patch/pre
-autonomously; **a major (n1) bump always requires asking the human**. Keep the sibling
-`package.json` version in sync (they currently match).
+`-alpha.n4` / `-dev` for prereleases (all `-dev` except pitcrew, the one released plugin at
+`0.10.0`). Bump minor/patch/pre autonomously; **a major (n1) bump always requires asking the
+human**. Keep the sibling `package.json` version in sync — matching plugin.json is a standing
+policy for every plugin (they all currently match).
 
 ## Skill conventions
 
