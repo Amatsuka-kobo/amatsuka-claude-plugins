@@ -4,7 +4,7 @@ no longer a per-plugin toolchain).
 - Runtime: Node >= 26 (Volta-pinned: node 26.3.1, pnpm 11.8.0 — root `package.json`)
 - Package manager: **pnpm** only. Workspace members (`pnpm-workspace.yaml`):
   `plugins/basic-design`, `plugins/codiel`, `plugins/codiel/raguel-mcp`, `plugins/task-utility`,
-  `plugins/revelation`. `allowBuilds: esbuild`.
+  `plugins/revelation`, `plugins/pitcrew`. `allowBuilds: esbuild`.
 - Language: TypeScript strict, ESM, `noEmit` (root `tsconfig.json`; includes `plugins/*/src/**`,
   `plugins/*/build.ts`, raguel-mcp's src/build; excludes generated `plugins/*/scripts` and
   `raguel-mcp/dist`).

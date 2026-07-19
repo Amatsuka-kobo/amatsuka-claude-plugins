@@ -22,3 +22,4 @@
 - `2026/0718/phyllis998/pitcrew-stage4.2-design.md` | 2026-07-18〜2026-07-19 | phyllis998 | Pitcrew Stage 4.2 完成（設計→6タスク実装(733/733テスト)→CSS詳細度バグ修正・dialog モーダル化(ee9147e)→実機確認完了・restart 動作確認・コメント送信テスト正常・注入経路正常確認・main マージ待機）
 - `2026/0718/phyllis998/story-file-creation.md` | 2026-07-18 | phyllis998 | pitcrew serve リスタート・500字短編「海の食堂」作成完了・1000字拡張進行中（セッション1-3）
 - `2026/0719/phyllis998/pitcrew-stage5-tui-design.md` | 2026-07-19 | phyllis998 | Pitcrew Stage 5: TUI ビューア実装・マージ完了（設計セッション 1-6→設計検査＆3項目修正・Haiku レビュー（設計書・計画書）→実装計画書作成→6タスク Subagent-Driven 実装(Terra/Luna/Sol)→Sonnet 最終レビュー→main へ --no-ff マージ d4ee5d7・757/757テスト・v0.10.0）
+- `2026/0719/phyllis998/serena-memory-maintenance.md` | 2026-07-19 | phyllis998 | Serena メモリ最新化・auto-memory 更新完了（2 セッション：pitcrew 0.10.0 未記載→新規 pitcrew/core・既存 4 件更新→package.json version 統一でメモリ修正→pitcrew-viewer-backlog.md・MEMORY.md v0.10.0 対応済み状態に）
