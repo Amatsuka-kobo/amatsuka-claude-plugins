@@ -1,19 +1,29 @@
 {
   "files.watcherExclude": {
-    "**/node_modules/**": true,
-    "**/tmp/**": true,
     "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
     "**/.superpowers/**": true,
+    "**/.pitcrew/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/scripts/*.mjs": true,
+  },
+  "search.exclude": {
+    "**/.superpowers/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/scripts/*.mjs": true,
+  },
+  "terminal.integrated.scrollback": 1000,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
   },
   "[javascript]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome"
-  },
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "quickfix.biome": "explicit",
-    "source.organizeImports.biome": "explicit"
   }
 }
