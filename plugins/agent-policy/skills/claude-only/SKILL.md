@@ -43,7 +43,7 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 
 - ファイル探索・コードベース理解が必要な場合は、**Opus** にオーケストレーションを任せる。
 - Opus は必要に応じて Sonnet または Haiku の探索サブエージェントを活用して context-map を作成する。
-- context-map の作成契機・出力先・記入手順は `references/context-map-guide.md` に従う。この方針での context-map の作成者は **Opus** である。
+- context-map の作成契機・出力先・記入手順は `../../references/context-map-guide.md` に従う。この方針での context-map の作成者は **Opus** である。
 - 作成した context-map は Fable / Opus に必ず共有する。
 
 ## レビュー運用
@@ -54,7 +54,7 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 
 ## アドバイザー運用・並列実行
 
-詳細は `references/advisor-rules.md` に従う。要点: サブエージェントはアドバイザー相談のためだけに Agent tool を使い(相談相手は **Fable のみ**)、自身が起動したサブエージェントには Agent tool を許可しない。独立したタスクが複数あれば可能な限り Sonnet のサブエージェントを並列起動する。
+詳細は `../../references/advisor-rules.md` に従う。要点: サブエージェントはアドバイザー相談のためだけに Agent tool を使い(相談相手は **Fable のみ**)、自身が起動したサブエージェントには Agent tool を許可しない。独立したタスクが複数あれば可能な限り Sonnet のサブエージェントを並列起動する。
 
 ## 役割 Agents を持つプラグインとの併用
 
