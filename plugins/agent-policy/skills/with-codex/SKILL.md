@@ -50,6 +50,14 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 - context-map の作成契機・出力先・記入手順は `../../references/context-map-guide.md` に従う。この方針での context-map の作成者は **GPT Sol** である。
 - 作成した context-map の所在(パス)を、次の dispatch または上流報告で通知する。所在通知は必須とし、読む深さは `../../references/context-map-guide.md` の共有モデルに従う。
 
+## コスト規律
+
+- ブリーフに使用してよいスキルを明示し、指定がない場合はサブエージェントにスキルをロードさせない。スキル側のトリガーはブリーフの明示指定に劣後する。
+- 10k トークン級以上の巨大スキルは委譲先にロードさせず、必要な節・手順・制約だけを参照断片としてブリーフへ転記する。
+- 転記級の作業はオーケストレーターが直接 Write し、探索・反復作業は N 件を 1 dispatch に束ねてバッチ委譲する。独立した dispatch は同一ターンに並列で束ねる。
+
+詳細は `../../references/cost-discipline.md` に従う。
+
 ## レビュー運用
 
 - 通常のコードレビュー → **Sonnet**
@@ -58,7 +66,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 ## アドバイザー運用・並列実行
 
-詳細は `../../references/advisor-rules.md` に従う。要点: サブエージェントはアドバイザー相談のためだけに Agent tool を使い(相談相手は **Fable のみ**)、自身が起動したサブエージェントには Agent tool を許可しない。独立したタスクが複数あれば可能な限り並列で起動する。
+詳細は `../../references/advisor-rules.md` に従う。要点: サブエージェントはアドバイザー相談のためだけに Agent tool を使い(相談相手は **Fable のみ**)、自身が起動したサブエージェントには Agent tool を許可しない。軽量ワーカー(GPT Luna)は Agent tool を持たず、迷いは差し戻しで解決する。独立したタスクが複数あれば可能な限り並列で起動する。
 
 ## `.claude/agents/gpt-*.md` 不在時のフォールバック
 

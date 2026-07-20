@@ -46,6 +46,15 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 - context-map の作成契機・出力先・記入手順は `../../references/context-map-guide.md` に従う。この方針での context-map の作成者は **Opus** である。
 - 作成した context-map の所在(パス)を、次の dispatch または上流報告で通知する。所在通知は必須とし、読む深さは `../../references/context-map-guide.md` の共有モデルに従う。
 
+## コスト規律
+
+- ブリーフに使用してよいスキルを明示し、指定がない場合はサブエージェントにスキルをロードさせない。スキル側のトリガーはブリーフの明示指定に劣後する。
+- 10k トークン級以上の巨大スキルは委譲先にロードさせず、必要な節・手順・制約だけを参照断片としてブリーフへ転記する。
+- 転記級の作業はオーケストレーターが直接 Write し、探索・反復作業は N 件を 1 dispatch に束ねてバッチ委譲する。独立した dispatch は同一ターンに並列で束ねる。
+- Claude 系経路はプロンプトキャッシュが効くため損益分岐は with-codex より緩い。ただし直接 Write・バッチ委譲・スキルロード規律は同様に適用する。
+
+詳細は `../../references/cost-discipline.md` に従う。
+
 ## レビュー運用
 
 - 通常のコードレビュー → **Sonnet**
