@@ -94,10 +94,10 @@ pnpm build       # 各プラグインの src/ から scripts/*.mjs を再生成
 cp CLAUDE.example.md CLAUDE.md
 ```
 
-また、 Codex 利用者と Claude Code のみの利用者でエージェントの運用方針を変えるため、以下のファイルに分割しています。利用状況によって設定を変えてください。
+また、 Codex 利用者と Claude Code のみの利用者でエージェントの運用方針を変えるため、agent-policy プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.example.md に記述してあります。
 
-- Codex 併用 -> `agents-with-codex.md`
-- Claude Code のみ -> `agents-claude-only.md`
+- Codex 併用 -> `agent-policy:claude-only`
+- Claude Code のみ -> `agent-policy:with-codex`
 
 ### uv と Serena
 

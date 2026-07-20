@@ -25,8 +25,9 @@
     ]
   },
   "enabledPlugins": {
+    "agent-policy@amatsuka-claude-plugins": true,
+    "pitcrew@amatsuka-claude-plugins": true,
     "task-utility@amatsuka-claude-plugins": true,
-    "revelation@amatsuka-claude-plugins": false,
     "claude-code-setup@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
@@ -39,8 +40,7 @@
     "mdbase-lsp@claude-code-lsps": true,
     "vtsls@claude-code-lsps": true,
     "bash-language-server@claude-code-lsps": true,
-    "codex@openai-codex": true,
-    "pitcrew@amatsuka-claude-plugins": true
+    "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {
