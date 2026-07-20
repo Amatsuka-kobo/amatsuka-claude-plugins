@@ -49,7 +49,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 - ファイル探索・コードベース理解が必要な場合は、**GPT Sol** にオーケストレーションを任せる。
 - GPT Sol は GPT Luna または GPT Terra の探索専用サブエージェントを活用して context-map を作成する。
-- context-map の作成契機・出力先・記入手順は `references/context-map-guide.md` に従う。この方針での context-map の作成者は **GPT Sol** である。
+- context-map の作成契機・出力先・記入手順は `../../references/context-map-guide.md` に従う。この方針での context-map の作成者は **GPT Sol** である。
 - 作成した context-map は Fable / Opus に必ず共有する。
 
 ## レビュー運用
@@ -60,7 +60,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 ## アドバイザー運用・並列実行
 
-詳細は `references/advisor-rules.md` に従う。要点: サブエージェントはアドバイザー相談のためだけに Agent tool を使い(相談相手は **Fable のみ**)、自身が起動したサブエージェントには Agent tool を許可しない。独立したタスクが複数あれば可能な限り並列で起動する。
+詳細は `../../references/advisor-rules.md` に従う。要点: サブエージェントはアドバイザー相談のためだけに Agent tool を使い(相談相手は **Fable のみ**)、自身が起動したサブエージェントには Agent tool を許可しない。独立したタスクが複数あれば可能な限り並列で起動する。
 
 ## `.claude/agents/gpt-*.md` 不在時のフォールバック
 
