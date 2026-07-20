@@ -197,7 +197,7 @@ context-map は、オーケストレーターが生探索を避けるための�
 
 ## 強制語の扱い
 
-「必ず共有する」ではなく、次を規律とする。
+map の共有を無条件の義務(must)とはせず、次を規律とする。
 
 > map の**所在(パス)の通知は必須**。**読む深さは役割・チェックポイントに応じる**。ただし **map を小さく(蒸留された状態に)保つことが最優先の規律**である。
 
@@ -376,7 +376,7 @@ test "$(grep -c '^- \*\*規則: .*の事前条件\*\* —' "$FILE")" -eq 4
 test "$(grep -cF '../../references/context-map-guide.md' "$FILE")" -ge 2
 grep -F 'Claude+Codex 構成でも GPT Luna に置き換えない' "$FILE" >/dev/null
 grep -F '所在通知は必須' "$FILE" >/dev/null
-! grep -nE '設計・実装計画のフロー|^[1-6]\. \*\*(Fable|GPT Sol|Opus|Haiku)\*\*:|逆流|橋渡し|必ず共有' "$FILE"
+if grep -nE '設計・実装計画のフロー|^[1-6]\. \*\*(Fable|GPT Sol|Opus|Haiku)\*\*:|逆流|橋渡し|必ず共有' "$FILE"; then echo "forbidden pattern found"; exit 1; fi
 git diff --check -- "$FILE"
 ```
 
@@ -465,7 +465,7 @@ FILE=plugins/agent-policy/skills/claude-only/SKILL.md
 test "$(grep -c '^- \*\*規則: .*の事前条件\*\* —' "$FILE")" -eq 4
 test "$(grep -cF '../../references/context-map-guide.md' "$FILE")" -ge 2
 grep -F '所在通知は必須' "$FILE" >/dev/null
-! grep -nE '設計・実装計画のフロー|^[1-6]\. \*\*(Fable|Opus|Haiku)\*\*:|逆流|橋渡し|必ず共有' "$FILE"
+if grep -nE '設計・実装計画のフロー|^[1-6]\. \*\*(Fable|Opus|Haiku)\*\*:|逆流|橋渡し|必ず共有' "$FILE"; then echo "forbidden pattern found"; exit 1; fi
 git diff --check -- "$FILE"
 ```
 
@@ -551,7 +551,7 @@ grep -F '戦術オーケストレーター' "$FILE" >/dev/null
 grep -F 'references/context-map-guide.md' "$FILE" >/dev/null
 grep -F '所在(パス)を通知する' "$FILE" >/dev/null
 grep -F '小さく蒸留された状態に保つ' "$FILE" >/dev/null
-! grep -nE 'Fable / Opus|GPT Sol / Opus|必ず共有|逆流|橋渡し|共有モデルの用語|3チェックポイント' "$FILE"
+if grep -nE 'Fable / Opus|GPT Sol / Opus|必ず共有|逆流|橋渡し|共有モデルの用語|3チェックポイント' "$FILE"; then echo "forbidden pattern found"; exit 1; fi
 git diff --check -- "$FILE"
 ```
 
@@ -636,7 +636,7 @@ grep -F '共有モデルの唯一の定義元(source of truth)はこの guide' "
 test "$(grep -cF '../../references/context-map-guide.md' "$WITH")" -ge 2
 test "$(grep -cF '../../references/context-map-guide.md' "$CLAUDE")" -ge 2
 grep -F 'references/context-map-guide.md' "$TEMPLATE" >/dev/null
-! grep -nE '共有モデルの用語|生産側の規律|消費側の読む深さ|オーケストレーターの3チェックポイント' "$WITH" "$CLAUDE" "$TEMPLATE"
+if grep -nE '共有モデルの用語|生産側の規律|消費側の読む深さ|オーケストレーターの3チェックポイント' "$WITH" "$CLAUDE" "$TEMPLATE"; then echo "forbidden pattern found"; exit 1; fi
 ```
 
 Expected: 終了コード0。詳細定義見出しは guide だけにあり、SKILL 2件とテンプレートは guide を参照する。
@@ -651,7 +651,7 @@ TARGETS=(
   plugins/agent-policy/skills/claude-only/SKILL.md
   plugins/agent-policy/assets/context-map-template.md
 )
-! grep -nE '必ず共有|Fable / Opusに共有|Fable / Opus に必ず共有' "${TARGETS[@]}"
+if grep -nE '必ず共有|Fable / Opusに共有|Fable / Opus に必ず共有' "${TARGETS[@]}"; then echo "forbidden pattern found"; exit 1; fi
 grep -F '所在(パス)の通知は必須' plugins/agent-policy/references/context-map-guide.md >/dev/null
 grep -F '読む深さは役割・チェックポイントに応じる' plugins/agent-policy/references/context-map-guide.md >/dev/null
 grep -F 'map を小さく(蒸留された状態に)保つことが最優先の規律' plugins/agent-policy/references/context-map-guide.md >/dev/null
@@ -746,7 +746,7 @@ GUIDE=plugins/agent-policy/references/context-map-guide.md
 grep -F 'Blueprint(高レベル要件)は暫定として出発してよい' "$GUIDE" >/dev/null
 grep -F '§未解決事項の要約(上流報告)を受けて要件を確定する' "$GUIDE" >/dev/null
 grep -F 'context-map の作成後に着手する' "$GUIDE" >/dev/null
-! grep -RniE '逆流|橋渡し' plugins/agent-policy --exclude-dir=.git
+if grep -RniE '逆流|橋渡し' plugins/agent-policy --exclude-dir=.git; then echo "forbidden pattern found"; exit 1; fi
 ```
 
 Expected: 終了コード0。Blueprint暫定→§未解決事項要約→要件確定と、map作成後の着手が guide に存在する。`逆流` / `橋渡し` は plugin 配下に出力なし。
@@ -855,3 +855,4 @@ Expected: `git status --short` は出力なし。Haiku 修正が不要だった�
 ## レビュー記録
 
 - **Haiku レビュー済み・補足修正済み(2026-07-20)。** 反映内容: 各 Task Step 1 の変更前確認が一致しない場合は中断して人間へ報告(Task 1・4・5 も同扱い)、Task 1 Step 2 直後に guide の構造検証(135行・`##`17見出し)を追加、Task 5 Step 6 の base コミットを `HEAD~4` 固定参照から git log 特定へ変更、Step 9 の Haiku 修正は amend せず新規コミットとして積み Step 10/11 の期待コミット数を更新。baseline 数値(旧 guide=51行・8見出し等)は現物と一致することを確認済み。
+- **Task 1 レビュー後の修正(2026-07-20)。** guide の強制語引用を字面を含まない表現へ言い換え、計画の `! grep` 検証6箇所を `if grep … exit 1` 形式へ修正(set -e 下で検知漏れしない形に)。
