@@ -1,7 +1,7 @@
 # agent-policy context-map 共有先の設計課題メモ
 
 - 作成日: 2026-07-20
-- ステータス: **論点整理まで。設計・決定は後日**（ユーザー依頼により別途検討する）
+- ステータス: **設計済み（確定設計書に集約）**（`docs/design/2026-07-20-agent-policy-context-map-sharing-design.md` v4）
 - 関連: `plugins/agent-policy/`（2026-07-20 main マージ済み）, `docs/design/2026-07-19-agent-policy-design.md`, `docs/design/2026-07-20-agent-policy-token-cost-analysis.md`
 - 発端: skill-reviewer(実装時の Task 15)の任意 Minor 指摘 —「claude-only の共有先『Fable / Opus』は Opus の自己共有を含み冗長」。ユーザーが「検討事項あり」として保留。加えて「**Sol に共有するか否か**の観点も含めて」検討したいとの要望。
 
