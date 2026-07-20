@@ -1,6 +1,6 @@
 ---
 name: with-codex
-description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna、ローカルプロキシ経由)を併用する構成でのエージェント運用方針。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に読む。GPT/Codex プロキシが使えない環境では代わりに agent-policy:claude-only を用いる。雑談・単発質問・軽微な修正だけのときは読まなくてよい。
+description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna、ローカルプロキシ経由)を併用する構成でのエージェント運用方針。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に読む。GPT/Codex プロキシが使えない環境では代わりに agent-policy:claude-only を用いる。CLAUDE.md 等で agent-policy:claude-only が明示されている場合は本スキルを読まない。雑談・単発質問・軽微な修正だけのときは読まなくてよい。
 ---
 
 # エージェント運用方針(Claude + Codex 併用)

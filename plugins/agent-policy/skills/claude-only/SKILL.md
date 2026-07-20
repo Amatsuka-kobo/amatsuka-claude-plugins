@@ -1,6 +1,6 @@
 ---
 name: claude-only
-description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構成でのエージェント運用方針。ローカルプロキシや GPT/Codex を必要としない。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に読む。GPT/Codex を併用する構成では代わりに agent-policy:with-codex を用いる。雑談・単発質問・軽微な修正だけのときは読まなくてよい。
+description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構成でのエージェント運用方針。ローカルプロキシや GPT/Codex を必要としない。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に読む。GPT/Codex を併用する構成では代わりに agent-policy:with-codex を用いる。CLAUDE.md 等で agent-policy:with-codex が明示されている場合は本スキルを読まない。雑談・単発質問・軽微な修正だけのときは読まなくてよい。
 ---
 
 # エージェント運用方針(Claude オンリー)
