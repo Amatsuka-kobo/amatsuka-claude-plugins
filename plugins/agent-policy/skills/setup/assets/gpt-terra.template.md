@@ -39,6 +39,7 @@ tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent
 ## 制約
 
 - `Agent` tool はアドバイザー相談専用である。作業委譲(再オーケストレーション)目的では使用せず、自身が起動したサブエージェントに `Agent` tool を許可しない。
+- ブリーフで明示的に指定されたスキル以外を Skill ツールでロードしない。スキル側のトリガー定義はブリーフの明示指定に劣後する。必要に気づいた場合もロードせず、その旨を報告して差し戻す。
 - Anthropic API クライアントや `ANTHROPIC_API_KEY` 前提の実装を提案・採用しない。
 
 ## Output Format
