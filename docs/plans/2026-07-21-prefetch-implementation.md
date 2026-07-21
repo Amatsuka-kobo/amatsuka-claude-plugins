@@ -241,7 +241,7 @@ prefetch のために本作業を不必要に停止しない。成果が間に�
 - Create: `plugins/prefetch/hooks/hooks.json`
 - Create: `plugins/prefetch/scripts/check-prefetch-manifest.mjs`
 
-**Interfaces:** Task 2 の manifest 5 列テーブルを入力契約とする。Claude Code の UserPromptSubmit hook から stdin JSON の `cwd`、または `CLAUDE_PROJECT_DIR` を受け取り、プロジェクトルートの `.prefetch/manifest.md` を読む。未回収状態 `running` / `done` の実タスク行が 1 件以上ある場合だけ raw text を stdout に出力し、additionalContext として注入させる。すべての分岐で exit 0 とし、フック障害でユーザープロンプトを妨げない。
+**Interfaces:** Task 2 の manifest 5 列テーブルを入力契約とする。Claude Code の UserPromptSubmit hook から stdin JSON の `cwd`、または `CLAUDE_PROJECT_DIR` を受け取り、プロジェクトルートの `.prefetch/manifest.md` を読む。未回収状態 `running` / `done` の実タスク行が 1 件以上ある場合だけ `hookSpecificOutput.additionalContext` 形式の JSON を stdout に出力し、不可視のコンテキストとして注入させる(既存プラグイン revelation/pitcrew と同形式)。すべての分岐で exit 0 とし、フック障害でユーザープロンプトを妨げない。
 
 ### `hooks/hooks.json` 完成形の全文
 
@@ -296,15 +296,23 @@ const hasUnharvestedEntry = manifest.split(/\r?\n/).some((line) => {
   const cells = line.split("|").map((cell) => cell.trim());
   if (cells.length < 7) return false;
 
+  // 予測内容・有効条件の自由記述列に | が混入しても位置がずれないよう、
+  // 固定フォーマットの task-id(先頭列)と状態(末尾から3番目 = 成果パス列の直前)で判定する
   const taskId = cells[1];
-  const state = cells[4];
+  const state = cells[cells.length - 3];
   return /^fr-\d+$/.test(taskId) && (state === "running" || state === "done");
 });
 
 if (!hasUnharvestedEntry) process.exit(0);
 
 process.stdout.write(
-  "未回収の prefetch 成果があります。ターン冒頭で .prefetch/manifest.md を確認し、今回のユーザー入力と有効条件を照合してください。合致する done の result.md だけを読み harvested に更新し、不合致は成果を読まず discarded、失敗は failed に更新してください。合致する running は、完了を待つか通常作業を進めて後から合流させてください。",
+  `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext:
+        "未回収の prefetch 成果があります。ターン冒頭で .prefetch/manifest.md を確認し、今回のユーザー入力と有効条件を照合してください。合致する done の result.md だけを読み harvested に更新し、不合致は成果を読まず discarded、失敗は failed に更新してください。合致する running は、完了を待つか通常作業を進めて後から合流させてください。",
+    },
+  })}\n`,
 );
 ````
 
@@ -314,7 +322,7 @@ process.stdout.write(
 - [ ] 上記全文を `plugins/prefetch/hooks/hooks.json` と `plugins/prefetch/scripts/check-prefetch-manifest.mjs` にそれぞれ書き出す。
 - [ ] `node -e 'const h=require("./plugins/prefetch/hooks/hooks.json"); const c=h.hooks.UserPromptSubmit?.[0]?.hooks?.[0]; if(c?.type!=="command"||!c.command.includes("${CLAUDE_PLUGIN_ROOT}/scripts/check-prefetch-manifest.mjs")||c.timeout!==15) process.exit(1); console.log("OK")'` を実行し、期待出力 `OK` を確認する。
 - [ ] `node --check plugins/prefetch/scripts/check-prefetch-manifest.mjs` を実行し、出力なし・exit 0 を確認する。
-- [ ] manifest あり・未回収ありのケースを直接実行する。次のコマンドの stdout が `未回収の prefetch 成果があります。` から始まり、末尾に改行以外の余分な出力がないことを確認する。
+- [ ] manifest あり・未回収ありのケースを直接実行する。次のコマンドの stdout が `hookSpecificOutput` / `additionalContext` を含む 1 行の JSON で、`additionalContext` の値が `未回収の prefetch 成果があります。` から始まることを確認する。
 
 ```bash
 tmp="$(mktemp -d)"
@@ -331,10 +339,10 @@ printf '{"cwd":"%s"}\n' "$tmp" | node plugins/prefetch/scripts/check-prefetch-ma
 rm -rf "$tmp"
 ```
 
-期待出力:
+期待出力(1 行の JSON):
 
 ```text
-未回収の prefetch 成果があります。ターン冒頭で .prefetch/manifest.md を確認し、今回のユーザー入力と有効条件を照合してください。合致する done の result.md だけを読み harvested に更新し、不合致は成果を読まず discarded、失敗は failed に更新してください。合致する running は、完了を待つか通常作業を進めて後から合流させてください。
+{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"未回収の prefetch 成果があります。ターン冒頭で .prefetch/manifest.md を確認し、今回のユーザー入力と有効条件を照合してください。合致する done の result.md だけを読み harvested に更新し、不合致は成果を読まず discarded、失敗は failed に更新してください。合致する running は、完了を待つか通常作業を進めて後から合流させてください。"}}
 ```
 
 - [ ] manifest 不在のケースを直接実行する。次のコマンドの stdout バイト数が `0` であることを確認する。
