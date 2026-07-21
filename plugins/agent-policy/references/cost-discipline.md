@@ -2,7 +2,7 @@
 
 `agent-policy` の各方針が共有する、サブエージェント運用における入力トークンとオーケストレーターターンを抑制する共通規律である。各方針 Skill と GPT Agent テンプレートはこの文書に従う。
 
-設計根拠の詳細は `docs/design/2026-07-21-agent-policy-cost-discipline-design.md` を参照する。実測では、巨大スキルのロードにより GPT Luna の input が 11.80M、cache_read が 0.73M となり、スキル未ロード時の見込み約 2.5M に対して約 5 倍に増幅した。また、個別 dispatch により Fable の約 26 ターン(約 $52)が発生した。以下の規律はこの実測に基づく。
+設計根拠の詳細は `docs/design/2026-07-21-agent-policy-cost-discipline-design.md`(開発リポジトリ amatsuka-claude-plugins 内の文書。プラグイン配布物には含まれないため、インストール先では参照できない)を参照する。本文書の規律は設計書を読まなくても自己完結する。実測では、巨大スキルのロードにより GPT Luna の input が 11.80M、cache_read が 0.73M となり、スキル未ロード時の見込み約 2.5M に対して約 5 倍に増幅した。また、個別 dispatch により Fable の約 26 ターン(約 $52)が発生した。以下の規律はこの実測に基づく。
 
 ## スキルロード規律
 
