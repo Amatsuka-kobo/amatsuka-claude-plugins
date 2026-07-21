@@ -2,8 +2,8 @@
 
 - 日付: 2026-07-21
 - 参加者: phyllis998, AI (Claude)
-- 成果物: `docs/design/2026-07-21-forerunner-design.md`、コミット `6315116`
-- 前提: CLAUDE.md、agent-policy:with-codex スキル、superpowers:brainstorming スキル
+- 成果物: `docs/design/2026-07-21-prefetch-design.md`、`docs/plans/2026-07-21-prefetch-implementation.md`、`plugins/prefetch/`、コミット `e9e2ce6`（名前変更）、`f6a048c`（実装計画）、`e2a75c7`〜`e4beee7`（実装5コミット）、`93e0af4`（レビュー修正）、`16bd88b`（README更新）
+- 前提: CLAUDE.md、agent-policy:with-codex スキル、superpowers:brainstorming スキル、writing-plans スキル
 
 ---
 
@@ -72,6 +72,56 @@ agent-policy:with-codex と superpowers:brainstorming スキルを読み込み�
 
 ---
 
-## 次の作業
+## セッション2: プラグイン名変更、実装計画・実装・レビュー完了
 
-- 設計書が確定したため、次は writing-plans スキルで実装計画の作成に進む予定
+# phyllis998
+
+> 進んでください
+
+# AI
+
+設計書承認を受けて、writing-plans スキルで実装計画作成へ進行。
+
+### プラグイン名変更（forerunner → prefetch）
+
+ユーザー指示後、設計書とすべての関連ファイルでプラグイン名を `forerunner` から `prefetch` に変更。`docs/design/2026-07-21-forerunner-design.md` を `docs/design/2026-07-21-prefetch-design.md` にリネームし、本文中のプラグイン参照 16 箇所（プラグインパス、`.forerunner/` 作業ディレクトリ → `.prefetch/` 等）をすべて置換。コミット `e9e2ce6`。
+
+### 実装計画書の作成と Haiku レビュー
+
+GPT Sol が実装計画書 `docs/plans/2026-07-21-prefetch-implementation.md` を作成。全ファイルの完成形全文を含む 5 タスク構成。Haiku レビューで以下 2 点の指摘を反映：
+
+- テストプロジェクト準備手順の欠落
+- `git status` の除外構文
+
+修正完了後コミット `f6a048c`。
+
+### 実装フェーズ（GPT Terra）
+
+計画に沿って `plugins/prefetch/` 配下に 5 ファイルを実装し、5 コミットに分割：
+
+1. `skills/prefetch/SKILL.md` — 予測基準（no-regret 優先）、dispatch ブリーフ雛形、manifest 状態遷移、回収手順
+2. `hooks/hooks.json` + `scripts/check-prefetch-manifest.mjs` — UserPromptSubmit フック実装（未回収成果があるときだけリマインダーを注入）
+3. `README.md` — プラグイン説明書
+4. `plugin.json`（v0.1.0-dev）— プラグイン設定
+5. marketplace.json へのエントリ追加
+
+コミット: `e2a75c7`〜`e4beee7`。
+
+### Sonnet レビューと修正
+
+Sonnet が最終レビューを実施。blocker/major ゼロで、minor 2 件を指摘し、両方修正：
+
+1. **additionalContext 形式への変更** — リマインダー出力を生テキストから `hookSpecificOutput.additionalContext` JSON 形式に変更。これにより revelation/pitcrew と同形式になり、ユーザーに毎回見える出力ではなく不可視のコンテキスト注入となる。
+2. **セル内パイプ耐性** — manifest の状態列判定を末尾基準に変更。自由記述列（予測内容・有効条件）に `|` が混入しても誤判定しない。
+
+修正後、フックの 4 テストケース（未回収あり / manifest 不在 / 全回収済み / 本文に状態語のみ）を再実行してすべて期待どおり動作確認。コミット `93e0af4`。
+
+### ルート README の配布プラグイン一覧更新
+
+計画書に含まれていなかったが、他プラグインが掲載されていることを確認し、ルート README の配布プラグイン一覧に prefetch を追記。コミット `16bd88b`。
+
+---
+
+## 注意事項
+
+- 計画書 Task 5 の**手動シナリオ 1（正常系）・2（予測ミス系）は実 Claude Code セッションが必要**なため未実施。別プロジェクトで `/plugin marketplace add` → `/plugin prefetch` で導入し、設計承認フローを 1 回回して受け入れ検証を実施予定。検証で問題なければ `-dev` 除去を判断する。
