@@ -34,6 +34,11 @@
       "name": "agent-policy",
       "source": "./plugins/agent-policy",
       "description": "あまつか工房のエージェント運用方針(モデル別役割分担・設計/実装フロー・アドバイザー運用・並列原則・context-map)を、Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供するスキル群"
+    },
+    {
+      "name": "prefetch",
+      "source": "./plugins/prefetch",
+      "description": "ユーザー入力待ちの直前に、次に必要となる読み取り主体の作業をバックグラウンドで先行実行し、回答後の待ち時間を短縮する"
     }
   ]
 }
