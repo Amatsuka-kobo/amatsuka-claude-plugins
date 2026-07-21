@@ -1,0 +1,16 @@
+{
+  "description": "prefetch の未回収成果がある場合だけ、次のユーザー入力時に回収プロトコルの実行を促す",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/check-prefetch-manifest.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
