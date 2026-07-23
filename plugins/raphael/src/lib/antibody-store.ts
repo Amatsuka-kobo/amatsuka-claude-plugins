@@ -234,6 +234,17 @@ export function setAntibodyStatus(
   return updated
 }
 
+export function extendAntibodyExpires(
+  projectDir: string,
+  id: string,
+  expires: string
+): Antibody {
+  const current = readAntibody(projectDir, id)
+  const updated = validateAntibody({ ...current, expires })
+  writeAntibodyReplace(projectDir, updated)
+  return updated
+}
+
 export function recordAntibodyFire(
   projectDir: string,
   id: string,
