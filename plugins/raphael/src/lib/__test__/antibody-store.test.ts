@@ -7,6 +7,7 @@ import {
   AntibodyNotFoundError,
   antibodyFilePath,
   createAntibody,
+  extendAntibodyExpires,
   listAntibodies,
   patchAntibody,
   recordAntibodyFire,
@@ -201,6 +202,26 @@ test("confirmed status 更新でも expires の byte-level 値を保持する", 
     const raw = fs.readFileSync(antibodyFilePath(dir, value().id), "utf8")
     expect(raw).toContain("status: confirmed\n")
     expect(raw).toContain("expires: 2026-08-23\n")
+  })
+})
+
+test("extend expires は expires だけを atomic 更新し、不正値は書かない", () => {
+  withProject((dir) => {
+    writeAntibodyCreate(dir, value())
+    const updated = extendAntibodyExpires(dir, value().id, "2026-09-01")
+    expect(updated).toMatchObject({
+      expires: "2026-09-01",
+      status: "active",
+      stats: { fired: 0, last_fired: null }
+    })
+
+    const before = fs.readFileSync(antibodyFilePath(dir, value().id), "utf8")
+    expect(() => extendAntibodyExpires(dir, value().id, "not-a-date")).toThrow(
+      AntibodyValidationError
+    )
+    expect(fs.readFileSync(antibodyFilePath(dir, value().id), "utf8")).toBe(
+      before
+    )
   })
 })
 
