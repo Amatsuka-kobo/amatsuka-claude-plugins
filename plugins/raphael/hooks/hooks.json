@@ -1,6 +1,18 @@
 {
   "description": "Raphael の感染検知、未蒸留 infection cleanup と antibody synthesizer 起動通知",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/inoculate.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash|Edit|Write",
