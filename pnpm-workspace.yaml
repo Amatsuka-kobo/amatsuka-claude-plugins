@@ -6,5 +6,6 @@ packages:
   - plugins/revelation
   - plugins/pitcrew
   - plugins/raphael
+  - plugins/prefetch
 allowBuilds:
   esbuild: true
