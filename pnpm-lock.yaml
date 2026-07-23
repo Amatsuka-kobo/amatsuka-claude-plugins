@@ -255,6 +255,8 @@ importers:
 
   plugins/pitcrew: {}
 
+  plugins/raphael: {}
+
   plugins/revelation: {}
 
   plugins/task-utility: {}
