@@ -1,6 +1,10 @@
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "./atomic.js"
+import {
+  type EditFootprint,
+  findUniqueEditFootprint
+} from "./detect-edit-churn.js"
 import { redactSecrets } from "./redact.js"
 import type { RaphaelStateV1, RaphaelToolName } from "./types.js"
 
@@ -13,11 +17,7 @@ export interface EditStateInput {
   inputDigest: string
 }
 
-export interface EditFootprint {
-  file_path: string
-  line_start: number
-  line_end: number
-}
+export type { EditFootprint } from "./detect-edit-churn.js"
 
 export interface EditStateResult {
   state: RaphaelStateV1
@@ -136,17 +136,11 @@ export function restoreEditFootprint(
     return null
   }
 
-  const firstIndex = content.indexOf(newString)
-  if (firstIndex < 0 || content.indexOf(newString, firstIndex + 1) >= 0)
-    return null
-
-  const lineStart = countLines(content.slice(0, firstIndex))
-  const lineEnd = lineStart + countNewlines(newString)
-  return {
-    file_path: relative.split(path.sep).join("/"),
-    line_start: lineStart,
-    line_end: lineEnd
-  }
+  return findUniqueEditFootprint(
+    relative.split(path.sep).join("/"),
+    content,
+    newString
+  )
 }
 
 function normalizeState(state: RaphaelStateV1): RaphaelStateV1 {
@@ -269,14 +263,6 @@ function isIsoDate(value: unknown): value is string {
     !Number.isNaN(Date.parse(value)) &&
     new Date(value).toISOString() === value
   )
-}
-
-function countLines(prefix: string): number {
-  return 1 + countNewlines(prefix)
-}
-
-function countNewlines(value: string): number {
-  return (value.match(/\n/g) ?? []).length
 }
 
 function truncate(value: string, maximum: number): string {
