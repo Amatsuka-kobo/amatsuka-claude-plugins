@@ -29,3 +29,4 @@
 - `2026/0720/phyllis998/repository-overview.md` | 2026-07-20 | phyllis998 | リポジトリ概要の確認（セッション1：README 先頭行・ls plugins でディレクトリ確認、セッション2：gpt-luna dispatch で README 先頭行・plugins/ ファイル数 6,180 を Glob で確認）
 - `2026/0721/phyllis998/agent-policy-dependency-check.md` | 2026-07-21 | phyllis998 | agent-policy プラグインの依存性検査・docs/design参照注記対応完了（セッション1：特定プラグイン依存なし・指摘2点→セッション2：注記追加対応 cost-discipline.md/plugin.json v0.3.2-dev）
 - `2026/0721/phyllis998/forerunner-brainstorming-and-design.md` | 2026-07-21 | phyllis998 | 新プラグイン prefetch 設計確定〜実装完了（名前変更・計画書・実装 5 コミット・Sonnet レビュー修正 2 件・README 更新・手動シナリオ検証待機中）
+- `2026/0721/phyllis998/new-plugin-brainstorming.md` | 2026-07-21〜24 | phyllis998 | 新プラグイン raphael 失敗免疫系実装フェーズ進行中（セッション1-10：設計→スペック・Haiku レビュー・実装計画作成、セッション11-12：計画修正完了（974bb8c）・実装フェーズ開始・Task 1-3 完了（c9e63dc・d895b33、787テスト通過）・Task 4,6 並列実行中）
