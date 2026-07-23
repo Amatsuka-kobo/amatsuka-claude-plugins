@@ -39,6 +39,11 @@
       "name": "prefetch",
       "source": "./plugins/prefetch",
       "description": "ユーザー入力待ちの直前に、次に必要となる読み取り主体の作業をバックグラウンドで先行実行し、回答後の待ち時間を短縮する"
+    },
+    {
+      "name": "raphael",
+      "source": "./plugins/raphael",
+      "description": "失敗を感染記録→抗体→発火時だけ注入へ変換し、決定的な hook で再発を防止する"
     }
   ]
 }
