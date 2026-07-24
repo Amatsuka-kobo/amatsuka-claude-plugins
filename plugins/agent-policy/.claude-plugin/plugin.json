@@ -1,5 +1,5 @@
 {
   "name": "agent-policy",
   "description": "あまつか工房のエージェント運用方針(モデル別役割分担・設計/実装フロー・アドバイザー運用・並列原則・context-map)を、Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供するスキル群",
-  "version": "0.3.4-dev"
+  "version": "0.3.5-dev"
 }
