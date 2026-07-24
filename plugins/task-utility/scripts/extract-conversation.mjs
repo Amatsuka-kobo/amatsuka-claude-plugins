@@ -2,11 +2,16 @@
 
 // src/extract-conversation.ts
 import fs from "node:fs";
-var file = process.argv[2];
-if (!file || !fs.existsSync(file)) {
-  console.error("usage: node extract-conversation.mjs <transcript.jsonl>");
+var args = process.argv.slice(2);
+var file = args[0];
+if (!file || file.startsWith("--") || !fs.existsSync(file)) {
+  console.error(
+    "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]"
+  );
   process.exit(1);
 }
+var sinceIdx = args.indexOf("--since-line");
+var sinceLine = sinceIdx === -1 ? 0 : Math.max(0, Number(args[sinceIdx + 1]) || 0);
 var MAX_TOOL_HINT = 120;
 var sections = [];
 var push = (role, part) => {
@@ -14,7 +19,12 @@ var push = (role, part) => {
   if (last && last.role === role) last.parts.push(part);
   else sections.push({ role, parts: [part] });
 };
+var quote = (text) => text.split("\n").map((l) => l === "" ? ">" : `> ${l}`).join("\n");
+var lineNo = 0;
+var seenUser = sinceLine <= 0;
 for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+  lineNo++;
+  if (lineNo <= sinceLine) continue;
   if (!line.trim()) continue;
   let e;
   try {
@@ -27,8 +37,10 @@ for (const line of fs.readFileSync(file, "utf8").split("\n")) {
   if (e.type === "user" && typeof msg.content === "string") {
     const text = msg.content.trim();
     if (!text || text.startsWith("<") || e.isMeta) continue;
-    push("USER", text);
+    seenUser = true;
+    push("USER", quote(text));
   } else if (e.type === "assistant" && Array.isArray(msg.content)) {
+    if (!seenUser) continue;
     for (const c of msg.content) {
       if (c.type === "text" && c.text?.trim()) {
         push("ASSISTANT", c.text.trim());
