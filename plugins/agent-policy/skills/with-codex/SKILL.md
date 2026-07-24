@@ -72,10 +72,17 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 1. 実務タスク着手前に `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` の存在を確認する。
 2. いずれかが無い場合は、`codex@openapi-codex` プラグインが有効になっているかを確認する。
-3. 上記のいずれもない場合は、ユーザーへ `agent-policy:setup` の実行を案内する。
+3. 上記のいずれも満たさない場合は、ユーザーへ `agent-policy:setup` の実行を案内する。
 4. 生成が完了する(またはユーザーが setup をスキップする)までは、そのセッションは claude-only 方針の担当表(Opus=詳細設計・実装計画 / Sonnet=実装 / Haiku=軽量)で代行する。GPT Sol/Terra/Luna へは委譲しない。
 
 これは GPT が使えない一時的状態でも実務を止めないためのフォールバックであり、恒久的に claude-only へ切り替えるものではない。
+
+## `codex@openapi-codex` へのフォールバック
+
+- `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在しない、またはローカルプロキシ経由で GPT エージェントを呼び出すことができない場合は、OpenAPI 製の codex プラグインを使用すること。
+- GPT Sol の呼び出し方：`/codex:rescue --model gpt-5.6-sol`
+- GPT Terra の呼び出し方：`/codex:rescue --model gpt-5.6-terra`
+- GPT Luna の呼び出し方：`/codex:rescue --model gpt-5.6-luna`
 
 ## 役割 Agents を持つプラグインとの併用
 
@@ -87,6 +94,6 @@ Codiel 等のワークフロープラグインは、役割プロンプトを持�
 
 1. 役割 Agents を持つプラグイン(例: Codiel)が駆動するフェーズでは、その作業種別を本方針の担当表に照らす(実装 → GPT 帯)。
 2. 担当が GPT 帯で `.claude/agents/gpt-*.md` が利用可能なら(基本動作): 該当する役割 Agent 定義ファイルの本文を読み取り、担当 GPT エージェントへの依頼文に役割定義として同梱して dispatch する。同梱時は frontmatter を除き役割本文のみを渡す。役割 Agent の tools 制限は構造的に引き継がれないため、依頼文に「この tools のみ使用」と明記する。
-3. GPT が利用不可(未生成・プロキシ停止)なら(フォールバック): プラグインの役割 Agents をそのまま起動する。codex プラグインを使用する場合もこれに該当する。
+3. GPT が利用不可(未生成・プロキシ停止・codex プラグイン使用不可)なら(フォールバック): プラグインの役割 Agents をそのまま起動する。
 
 役割定義ファイルは常にインストール済みプラグインの生ファイルから読む(複製・改変版を作らない = drift 防止)。
