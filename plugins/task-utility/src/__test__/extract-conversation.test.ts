@@ -9,13 +9,13 @@ const SCRIPT = fileURLToPath(
   new URL("../extract-conversation.ts", import.meta.url)
 )
 
-function run(lines: string[]): string {
+function run(lines: string[], extraArgs: string[] = []): string {
   const file = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), "chat-ext-")),
     "t.jsonl"
   )
   fs.writeFileSync(file, `${lines.join("\n")}\n`)
-  const stdout = runTs(SCRIPT, [file])
+  const stdout = runTs(SCRIPT, [file, ...extraArgs])
   fs.rmSync(path.dirname(file), { recursive: true, force: true })
   return stdout
 }
@@ -82,4 +82,49 @@ test("サブエージェントの往復(isSidechain)は含めない", () => {
   ])
   expect(out).toMatch(/本編の発言/)
   expect(out).not.toMatch(/サブ/)
+})
+
+test("--since-line で指定行以前が除外される", () => {
+  const out = run(
+    [user("古い質問です"), user("新しい質問です")],
+    ["--since-line", "1"]
+  )
+  expect(out).toMatch(/新しい質問です/)
+  expect(out).not.toMatch(/古い質問です/)
+})
+
+test("--since-line 直後の孤立 ASSISTANT 断片は切り捨てられる", () => {
+  const out = run(
+    [
+      user("古い質問です"),
+      assistant([{ type: "text", text: "前ターンの締めの報告。" }]),
+      user("新しい質問です"),
+      assistant([{ type: "text", text: "新しい応答。" }])
+    ],
+    ["--since-line", "1"]
+  )
+  expect(out).not.toMatch(/前ターンの締めの報告/)
+  expect(out).toMatch(/新しい質問です/)
+  expect(out).toMatch(/新しい応答。/)
+})
+
+test("行カウントは空行・パース不能行も 1 行と数える(check-chat-recorded と同じ)", () => {
+  // 1:user 2:(空行) 3:(壊れた JSON) 4:user — 4 行目だけが対象になるよう --since-line 3 を指定
+  const out = run(
+    [user("質問1です"), "", "not json {", user("質問2です")],
+    ["--since-line", "3"]
+  )
+  expect(out).toMatch(/質問2です/)
+  expect(out).not.toMatch(/質問1です/)
+})
+
+test("--since-line 0 は全量抽出と同等", () => {
+  const out = run([user("質問1です"), user("質問2です")], ["--since-line", "0"])
+  expect(out).toMatch(/質問1です/)
+  expect(out).toMatch(/質問2です/)
+})
+
+test("--since-line が最終行以降なら出力は空", () => {
+  const out = run([user("質問です")], ["--since-line", "99"])
+  expect(out.trim()).toBe("")
 })
