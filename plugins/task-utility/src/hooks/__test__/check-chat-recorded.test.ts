@@ -169,3 +169,72 @@ test("stop_hook_active のときは再差し戻ししない", () => {
 test("壊れた stdin でも落ちず素通しする", () => {
   expect(runTs(HOOK, [], { input: "not json" }).trim()).toBe("")
 })
+
+test("記録イベント後の再 block では --since-line に記録行番号が入る", () => {
+  const out = JSON.parse(
+    run({
+      lines: [
+        user("質問1です"),
+        toolUse("Write", "/p/docs/chat/2026/0708/x.md"),
+        user("質問2です")
+      ]
+    })
+  )
+  expect(out.reason).toMatch(
+    /extract-conversation\.mjs" "[^"]+" --since-line 2/
+  )
+})
+
+test("記録イベントがないときは --since-line を付けない", () => {
+  const out = JSON.parse(run({ lines: [user("質問です")] }))
+  expect(out.reason).not.toMatch(/--since-line/)
+})
+
+test("reason に tail 確認と末尾追記の指示が含まれる", () => {
+  const out = JSON.parse(run({ lines: [user("質問です")] }))
+  expect(out.reason).toMatch(/tail/)
+  expect(out.reason).toMatch(/末尾追記/)
+})
+
+test("フックの行番号を --since-line に渡すと未記録分だけが抽出される", () => {
+  // 空行・壊れた JSON を挟んでも両スクリプトの行カウントが一致することの統合検証
+  const EXTRACT = fileURLToPath(
+    new URL("../../extract-conversation.ts", import.meta.url)
+  )
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chat-int-"))
+  fs.mkdirSync(path.join(dir, "docs", "chat"), { recursive: true })
+  const transcript = path.join(dir, "t.jsonl")
+  fs.writeFileSync(
+    transcript,
+    `${[
+      user("質問1です"),
+      "",
+      "not json {",
+      toolUse("Write", "/p/docs/chat/2026/0708/x.md"),
+      user("質問2です")
+    ].join("\n")}\n`
+  )
+  try {
+    const hookOut = JSON.parse(
+      runTs(HOOK, [], {
+        input: JSON.stringify({ transcript_path: transcript, cwd: dir }),
+        env: {
+          ...process.env,
+          CLAUDE_PROJECT_DIR: dir,
+          CLAUDE_PLUGIN_ROOT: "/plugin/root"
+        }
+      })
+    )
+    const m = hookOut.reason.match(/--since-line (\d+)/)
+    expect(m).not.toBeNull()
+    const extracted = runTs(EXTRACT, [
+      transcript,
+      "--since-line",
+      (m as RegExpMatchArray)[1]
+    ])
+    expect(extracted).toMatch(/質問2です/)
+    expect(extracted).not.toMatch(/質問1です/)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

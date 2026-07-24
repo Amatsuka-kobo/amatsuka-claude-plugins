@@ -83,16 +83,19 @@ if (lastNag > lastUserTurn) process.exit(0)
 
 const pluginRoot =
   process.env.CLAUDE_PLUGIN_ROOT || "<task-utility plugin root>"
+const sinceArg = lastRecord > -1 ? ` --since-line ${lastRecord}` : ""
 const reason = [
   NAG_MARKER,
   "この会話には docs/chat/ にまだ記録されていないターンがあります(task-utility chat スキルの対象です)。",
   "記録はメインコンテキストで行わず、記録専用サブエージェントに委譲してください:",
   'Agent ツールで subagent_type "task-utility:chat-recorder" を起動し、プロンプトに次の情報を含めること。',
   `- トランスクリプト: ${transcriptPath}`,
-  `- 抽出コマンド: node "${pluginRoot}/scripts/extract-conversation.mjs" "${transcriptPath}"`,
+  `- 抽出コマンド: node "${pluginRoot}/scripts/extract-conversation.mjs" "${transcriptPath}"${sinceArg}`,
   `- スキル定義: ${pluginRoot}/skills/chat/SKILL.md`,
   "- ユーザーの GitHub ユーザー名と git のユーザー名(`git config user.name`。記録ディレクトリ名に使う)、日付、この会話の成果物(ファイルパス・コミット)、前提となる資料",
   "- 既存の記録ファイルがあれば新規作成せず、未記録のターンだけをそのファイルに追記するよう指示すること。",
+  "- 既存ファイルの確認は全文 Read でなく末尾確認(tail)で行うよう指示すること。",
+  "- 追記は全文上書きでなく末尾追記で行うよう指示すること。",
   "トランスクリプトが読めない等、技術的に記録できない場合のみ、その理由をユーザーに一言伝えてから終了して構いません。"
 ].join("\n")
 
