@@ -4,11 +4,20 @@
 // 使い方: node extract-conversation.mjs <transcript.jsonl>
 import fs from "node:fs"
 
-const file = process.argv[2]
-if (!file || !fs.existsSync(file)) {
-  console.error("usage: node extract-conversation.mjs <transcript.jsonl>")
+const args = process.argv.slice(2)
+const file = args[0]
+if (!file || file.startsWith("--") || !fs.existsSync(file)) {
+  console.error(
+    "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]"
+  )
   process.exit(1)
 }
+
+// 行番号 N 以前を読み飛ばす。数え方は check-chat-recorded.ts と同一
+// (split("\n") 直後・スキップ判定より前に加算。空行・パース不能行も 1 行)。
+const sinceIdx = args.indexOf("--since-line")
+const sinceLine =
+  sinceIdx === -1 ? 0 : Math.max(0, Number(args[sinceIdx + 1]) || 0)
 
 const MAX_TOOL_HINT = 120
 
@@ -43,7 +52,13 @@ const push = (role: Section["role"], part: string): void => {
   else sections.push({ role, parts: [part] })
 }
 
+let lineNo = 0
+// 差分抽出時は、最初の USER 実発言が現れるまで ASSISTANT 断片を捨てる
+// (前回記録済みターンの末尾断片を差分に混ぜない)
+let seenUser = sinceLine <= 0
 for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+  lineNo++
+  if (lineNo <= sinceLine) continue
   if (!line.trim()) continue
   let e: TranscriptEntry
   try {
@@ -58,8 +73,10 @@ for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     const text = msg.content.trim()
     // スラッシュコマンド記録やハーネス注入(<command-name> 等)は発言ではない
     if (!text || text.startsWith("<") || e.isMeta) continue
+    seenUser = true
     push("USER", text)
   } else if (e.type === "assistant" && Array.isArray(msg.content)) {
+    if (!seenUser) continue
     for (const c of msg.content) {
       if (c.type === "text" && c.text?.trim()) {
         push("ASSISTANT", c.text.trim())
