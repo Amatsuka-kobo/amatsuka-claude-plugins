@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Claude Code のトランスクリプト JSONL から発言のみを抽出し、Markdown を stdout に出力する。
 // chat-recorder エージェントがユーザー発言の原文を機械的に得るための前処理。
-// 使い方: node extract-conversation.mjs <transcript.jsonl>
+// 使い方: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]
 import fs from "node:fs"
 
 const args = process.argv.slice(2)
@@ -52,6 +52,14 @@ const push = (role: Section["role"], part: string): void => {
   else sections.push({ role, parts: [part] })
 }
 
+// USER 発言を引用ブロックへ機械的に整形する。引用記号の付加はフォーマットであり
+// 本文の改変ではない(「一字も変えない」契約の対象は本文)。
+const quote = (text: string): string =>
+  text
+    .split("\n")
+    .map((l) => (l === "" ? ">" : `> ${l}`))
+    .join("\n")
+
 let lineNo = 0
 // 差分抽出時は、最初の USER 実発言が現れるまで ASSISTANT 断片を捨てる
 // (前回記録済みターンの末尾断片を差分に混ぜない)
@@ -74,7 +82,7 @@ for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     // スラッシュコマンド記録やハーネス注入(<command-name> 等)は発言ではない
     if (!text || text.startsWith("<") || e.isMeta) continue
     seenUser = true
-    push("USER", text)
+    push("USER", quote(text))
   } else if (e.type === "assistant" && Array.isArray(msg.content)) {
     if (!seenUser) continue
     for (const c of msg.content) {

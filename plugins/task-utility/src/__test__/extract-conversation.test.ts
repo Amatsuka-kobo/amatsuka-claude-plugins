@@ -40,7 +40,7 @@ test("ユーザー発言は原文のまま、ハーネス注入は除外され�
     user("メタ発言", { isMeta: true })
   ])
   expect(out).toMatch(
-    /## USER\n\nこれは 原文の {2}発言です。改変されないこと。/
+    /## USER\n\n> これは 原文の {2}発言です。改変されないこと。/
   )
   expect(out).not.toMatch(/command-name|メタ発言/)
 })
@@ -127,4 +127,9 @@ test("--since-line 0 は全量抽出と同等", () => {
 test("--since-line が最終行以降なら出力は空", () => {
   const out = run([user("質問です")], ["--since-line", "99"])
   expect(out.trim()).toBe("")
+})
+
+test("USER 発言は各行 > 前置の引用ブロックで出力される(空行は > のみ)", () => {
+  const out = run([user("1行目\n\n2行目")])
+  expect(out).toMatch(/## USER\n\n> 1行目\n>\n> 2行目/)
 })
