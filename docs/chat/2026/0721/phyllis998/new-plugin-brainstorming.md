@@ -1,8 +1,8 @@
 # 新プラグイン提案のブレインストーミング
 
-- 日付: 2026-07-21 (セッション9: 2026-07-22、セッション10以降: 2026-07-24)
+- 日付: 2026-07-21 (セッション9: 2026-07-22、セッション10以降: 2026-07-24、セッション19: 2026-07-24)
 - 参加者: phyllis998, AI (Claude)
-- 成果物: `docs/superpowers/specs/2026-07-22-raphael-plugin-design.md` (コミット e339685, Haiku 反映 1f7ed94)、`docs/superpowers/plans/2026-07-24-raphael-plugin-plan.md` (コミット 974bb8c)、`plugins/raphael/` 実装完了(Task 1-16、コミット c9e63dc/d895b33/621ce98/e73ca82/6727118/db539f3/ca41724)、Task 17 全自動検証(グリーン 8/8)、Task 18 手動 E2E 検証(完了)、最終コミット 625fb67
+- 成果物: `docs/superpowers/specs/2026-07-22-raphael-plugin-design.md` (コミット e339685, Haiku 反映 1f7ed94)、`docs/superpowers/plans/2026-07-24-raphael-plugin-plan.md` (コミット 974bb8c)、`plugins/raphael/` 実装完了(Task 1-16、コミット c9e63dc/d895b33/621ce98/e73ca82/6727118/db539f3/ca41724)、Task 17 全自動検証(グリーン 8/8)、Task 18 手動 E2E 検証(完了)、最終コミット 625fb67、会話記録コミット 71fb2b3、`plugins/prefetch/` TypeScript 化完了(コミット ca4a4d7、version 0.1.0-dev → 0.2.0-dev)
 - 前提: CLAUDE.md、agent-policy:with-codex スキル、superpowers:brainstorming スキル、.claude-plugin/marketplace.json、plugins/codiel/skills/recording-gotchas/SKILL.md、plugins/prefetch/ ディレクトリ構成、plugins/agent-policy/references/context-map-guide.md
 
 ---
@@ -523,8 +523,33 @@ esbuild パイプラインを整備し、`scripts/*.mjs` 5 本を生成。2 回�
 
 **raphael v0.1.0-dev の全フェーズ完了**：設計・実装・検証・登録・記録のすべてが完了。18 タスク・6 フェーズ・全 909 テスト・全 8 検証項目グリーン。
 
+これで **raphael v0.1.0-dev のすべての作業が完了**しました:
+- 設計(スペック + Haiku レビュー)→ 実装計画(18 タスク WBS + Haiku レビュー)→ 実装(全タスク、909 テスト通過)→ E2E 検証(感知・蒸留・予防接種・review の全シナリオ成功)→ Marketplace 登録 → 会話記録
+
+次に何かあればお知らせください。たとえば、実運用で抗体が蓄積し始めたら `-dev` サフィックスを外して 0.1.0 に上げるタイミングのご相談や、バックログの prefetch TypeScript 化にも着手できます。
+
+---
+
+## セッション19: prefetch の TypeScript 化実装完了
+
+# phyllis998
+
+> prefetchのTS化もついでにお願いします
+
+# AI
+
+prefetch の TypeScript 化に着手。raphael で確立した src(TS)→ scripts(.mjs)構成への機械的な移行なので、現状を確認してから GPT Luna に委譲。
+
+**実装内容**：prefetch の既存 `scripts/check-prefetch-manifest.mjs`（47 行）をロジック不変のまま `src/check-prefetch-manifest.ts` に TypeScript 化。raphael と同じ esbuild 構成（`package.json` + `build.ts`）で TS ソースを `scripts/check-prefetch-manifest.mjs` に再生成し、git 管理出力化。pnpm workspace に prefetch を追加。
+
+**検証**：移行前の .mjs を退避し、4 ケース（stdin なし / 空 stdin / マニフェストなし / 未回収エントリあり）で新旧の stdout・exit code が一致することを確認。ルートの `pnpm test`（909 件）・lint・typecheck すべて通過。hooks.json は参照パスが変わらないため無変更。
+
+**バージョン更新**：構成変更のため version を **0.1.0-dev → 0.2.0-dev** にマイナーアップ（新しい TS ビルド構成の導入）。
+
+**成果物**：コミット ca4a4d7。バンドル出力の差分（`let` → `var` 等）は esbuild の正常な変換によるもの。これでリポジトリ内の全プラグインのスクリプトが「TypeScript ソース + git 管理のビルド出力」で統一されました。
+
 ---
 
 ## 注意事項
 
-セッション6での src フォルダ廃止理由の説明・TypeScript 構成への変更可能性提示を受け、セッション7でユーザーから「このリポジトリの JS はすべて TypeScript で書く想定」という方針が明示された。これに基づき、セクション3 を修正し、src/ + build.ts でビルドして scripts/ に出力する構成を確定。セッション8では、設計の最終セクション4「スコープ境界とテスト方針」を提示し、設計全体（セクション1〜4）の承認待機状態になった。セッション9で設計全体が承認され、スペック文書化 → Haiku レビュー（指摘15項目・矛盾7項目）→ 補足修正が完了。セッション10で GPT Sol へ context-map・実装計画書作成を委譲。重要な発見：失敗検知は PostToolUseFailure イベント（スペック想定の PostToolUse ではなく）が正経路。Haiku レビューで 14 項目の修正指摘。GPT Sol 修正完了（コミット 974bb8c）。セッション11で計画承認を受けて実装フェーズ開始。セッション12で Task 1-3 完了（c9e63dc、d895b33）、Task 4-6 は並列実行中。全体テスト 787 件通過。セッション13で Task 4/6 完了（621ce98）、Task 5/7/9/10 並列実行中だったが Task 10 がブロッカーを報告。extend の永続化経路と mark-distilled の session 供給についてオーケストレーターが判断・承認し再開。Task 5/7/9/10 すべて完了（e73ca82）。セッション14で Task 8（inoculate フック、6727118）と Task 11（esbuild パイプライン、db539f3）が完了。Task 11 のエージェントにセキュリティ警告が出たが、テスト検証での一時ディレクトリ掃除のため影響なし。セッション15で Phase 5-6（Task 12-16）が並列完了（ca41724）：antibody-synthesizer・/raphael:review・SKILL.md・README/DESIGN・Marketplace 登録。セッション16で Task 17（全自動検証）が 8 項目グリーン（909 テスト・lint・typecheck・dist 0 件・hooks 5 イベント・bundle smoke）で完了、raphael v0.1.0-dev 実装完了。セッション17で Task 18（手動 E2E）の 4 フェーズ（感知・蒸留・予防接種・管理）すべて成功確認。セッション18でユーザーがテスト成果物削除し、最終コミット 625fb67 で、raphael v0.1.0-dev の全フェーズが完了。
+セッション6での src フォルダ廃止理由の説明・TypeScript 構成への変更可能性提示を受け、セッション7でユーザーから「このリポジトリの JS はすべて TypeScript で書く想定」という方針が明示された。これに基づき、セクション3 を修正し、src/ + build.ts でビルドして scripts/ に出力する構成を確定。セッション8では、設計の最終セクション4「スコープ境界とテスト方針」を提示し、設計全体（セクション1〜4）の承認待機状態になった。セッション9で設計全体が承認され、スペック文書化 → Haiku レビュー（指摘15項目・矛盾7項目）→ 補足修正が完了。セッション10で GPT Sol へ context-map・実装計画書作成を委譲。重要な発見：失敗検知は PostToolUseFailure イベント（スペック想定の PostToolUse ではなく）が正経路。Haiku レビューで 14 項目の修正指摘。GPT Sol 修正完了（コミット 974bb8c）。セッション11で計画承認を受けて実装フェーズ開始。セッション12で Task 1-3 完了（c9e63dc、d895b33）、Task 4-6 は並列実行中。全体テスト 787 件通過。セッション13で Task 4/6 完了（621ce98）、Task 5/7/9/10 並列実行中だったが Task 10 がブロッカーを報告。extend の永続化経路と mark-distilled の session 供給についてオーケストレーターが判断・承認し再開。Task 5/7/9/10 すべて完了（e73ca82）。セッション14で Task 8（inoculate フック、6727118）と Task 11（esbuild パイプライン、db539f3）が完了。Task 11 のエージェントにセキュリティ警告が出たが、テスト検証での一時ディレクトリ掃除のため影響なし。セッション15で Phase 5-6（Task 12-16）が並列完了（ca41724）：antibody-synthesizer・/raphael:review・SKILL.md・README/DESIGN・Marketplace 登録。セッション16で Task 17（全自動検証）が 8 項目グリーン（909 テスト・lint・typecheck・dist 0 件・hooks 5 イベント・bundle smoke）で完了、raphael v0.1.0-dev 実装完了。セッション17で Task 18（手動 E2E）の 4 フェーズ（感知・蒸留・予防接種・管理）すべて成功確認。セッション18でユーザーがテスト成果物削除し、最終コミット 625fb67 で、raphael v0.1.0-dev の全フェーズが完了。会話記録追記コミット 71fb2b3 で raphael の全セッション記録化。セッション19で prefetch の TypeScript 化（コミット ca4a4d7、version 0.2.0-dev）が完了し、全プラグインのスクリプトが「TypeScript ソース + git 管理ビルド出力」で統一された。
