@@ -1,5 +1,5 @@
 {
-  "description": "chat スキルの自動適用: docs/chat/ を持つプロジェクトで、未記録のユーザー発言が残ったままターンが終わるとき chat-recorder への記録・追記委譲を促す",
+  "description": "chat スキルの自動適用: 未記録ターンをバックグラウンド recorder で記録し、起動不能時のみ chat-recorder への委譲を促す",
   "hooks": {
     "Stop": [
       {

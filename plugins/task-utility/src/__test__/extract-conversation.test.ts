@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { extractConversation } from "../extract-conversation.js"
 import { runTs } from "../testing/run-ts.js"
 
 const SCRIPT = fileURLToPath(
@@ -132,4 +133,17 @@ test("--since-line が最終行以降なら出力は空", () => {
 test("USER 発言は各行 > 前置の引用ブロックで出力される(空行は > のみ)", () => {
   const out = run([user("1行目\n\n2行目")])
   expect(out).toMatch(/## USER\n\n> 1行目\n>\n> 2行目/)
+})
+
+test("純粋関数と CLI の出力が一致する", () => {
+  const lines = [user("質問"), assistant([{ type: "text", text: "回答" }])]
+  expect(run(lines).trim()).toBe(extractConversation(`${lines.join("\n")}\n`))
+})
+
+test("抽出区間は (recordedLine, targetLine] で targetLine より後を含めない", () => {
+  const lines = [user("古い"), user("対象"), user("対象外")]
+  const out = extractConversation(lines.join("\n"), 1, 2)
+  expect(out).toContain("対象")
+  expect(out).not.toContain("古い")
+  expect(out).not.toContain("対象外")
 })
