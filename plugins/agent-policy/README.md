@@ -16,6 +16,7 @@ with-codex を使う場合、CLAUDE.md に次のように書く:
 
 ```markdown
 ## エージェント運用方針
+
 - エージェント運用は `agent-policy:with-codex` に従う。
 - GPT エージェント(gpt-sol / gpt-terra / gpt-luna)が未生成の場合は `agent-policy:setup` を実行して `.claude/agents/` に生成する。
 ```
@@ -24,14 +25,15 @@ claude-only を使う場合:
 
 ```markdown
 ## エージェント運用方針
+
 - エージェント運用は `agent-policy:claude-only` に従う。
 ```
 
 ## 前提条件
 
 - `claude-only`: 追加の前提なし。プロキシ・GPT・外部 API は不要。
+- `with-codex` + `codex@openai-codex`: Claude Code から Codex CLI にタスクを委譲できる codex プラグインがインストールされ、使用可能であること。
 - `with-codex` + `setup`: Codex 系モデルを配信するローカルプロキシ(任意の ProxyAPI サーバー)経由で Claude Code を起動していること、`/v1/models` に使用するエイリアスが含まれること。構築手順は本 README では扱わず、要件のみ記載する。プロキシ・OAuth・秘密値はこのプラグインが管理しない。
-- 既存の `gpt-*.md`(旧運用方針版。本文で「設計・分析は役割外」と定義しているもの)が `.claude/agents/` に残っている場合は、新方針と矛盾するため `setup` での上書きを推奨する。
 
 ## モデルエイリアスについて
 
