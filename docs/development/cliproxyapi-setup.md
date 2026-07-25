@@ -23,12 +23,11 @@
 
 ## 1. CLIProxyAPI を導入する
 
-CLIProxyAPI は公式の GitHub Releases から取得します。Releases ページで、WSL2/Linux と自分の CPU アーキテクチャに対応するファイルを選んでください。
+インストール用のスクリプトを用意しています。
 
-1. [CLIProxyAPI の公式 Releases](https://github.com/router-for-me/CLIProxyAPI/releases) を開く
-2. Linux 用の配布ファイルをダウンロードして展開する
-3. 展開した実行ファイルを、自分の `PATH` に含まれるディレクトリへ `cli-proxy-api` として配置する
-4. 実行権限を設定する
+```bash
+scripts/install-proxy.sh
+```
 
 導入後、次のコマンドで確認します。
 
