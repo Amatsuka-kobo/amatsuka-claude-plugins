@@ -261,7 +261,21 @@ async function main(): Promise<void> {
 
   const sessionKey = getSessionKey(input.session_id, transcriptPath)
   const paths = getStatePaths(projectDir, sessionKey)
-  ensureStateDirs(paths)
+  try {
+    ensureStateDirs(paths)
+  } catch (error) {
+    // ここを握りつぶすと記録も通知もされず完全に無音で終わる。
+    // 一時領域が使えない場合はサブエージェントへ委譲しても同じ理由で失敗するため、
+    // block ではなく通知だけを出す。
+    console.log(
+      JSON.stringify({
+        systemMessage: `chat-recorder の作業ディレクトリを準備できませんでした: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      })
+    )
+    return
+  }
   const fullScan = scanTranscript(transcriptPath)
   if (fullScan.lastNag > fullScan.lastUserTurn) return
   let state =
@@ -286,8 +300,16 @@ async function main(): Promise<void> {
         `[hook] recovered stale lock: ${fs.readFileSync(paths.lockPath, "utf8").trim()}`
       )
       fs.rmSync(paths.lockPath, { force: true })
+      // 加算するのは「実際に spawn した recorder が完走しなかった」場合だけ。
+      // pid が null のロックは block / フォールバックが残したものでヘッドレスの
+      // 失敗ではなく、数えると block が自分自身を再生産して解除されなくなる。
+      // 同じ試行の失敗を commit 側が既に記録済みなら二重加算になるため除く。
+      const spawnedAndFailed =
+        lock?.pid != null && state.lastError?.attemptId !== lock.attemptId
       state = {
         ...state,
+        consecutiveFailures:
+          (state.consecutiveFailures ?? 0) + (spawnedAndFailed ? 1 : 0),
         lastError: {
           attemptId: lock?.attemptId ?? state.attemptId ?? "unknown",
           at: new Date().toISOString(),
@@ -370,7 +392,14 @@ async function main(): Promise<void> {
     bodyPath,
     indexPath
   }
-  if (!command) {
+  if (decision.action === "block" || !command) {
+    // ヘッドレスを諦めてサブエージェント委譲へ退避する。block の reason が
+    // 失敗の存在を伝えるため、同じ失敗を systemMessage で二重通知しない。
+    if (decision.action === "block" && state.lastError)
+      atomicWriteJson(paths.statePath, {
+        ...stagedState,
+        lastNotifiedAttemptId: state.lastError.attemptId
+      } satisfies RecordingState)
     console.log(
       JSON.stringify({ decision: "block", reason: fallbackReason(common) })
     )

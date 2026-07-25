@@ -7,6 +7,9 @@ export const NAG_MARKER = "<!--chat-recorder-nag-->"
 export const STATE_VERSION = 1
 export const MAX_TOOL_HINTS = 20
 export const MAX_TOOL_HINT_LENGTH = 120
+// ヘッドレス recorder の失敗がこの回数連続したら、記録を失わないために
+// サブエージェント委譲(decision: block)へ退避する。1 回の失敗は一過性でありうる。
+export const FALLBACK_THRESHOLD = 2
 
 export interface RecordingError {
   attemptId: string
@@ -38,6 +41,8 @@ export interface RecordingState {
   recordPath?: string
   lastError: RecordingError | null
   lastNotifiedAttemptId: string | null
+  // 未定義は 0 とみなす。既存の状態ファイルを移行なしで読めるようにするため。
+  consecutiveFailures?: number
   previousGeneration?: {
     recordedLine: number
     attemptedLine: number
@@ -79,6 +84,7 @@ export type RecordingDecision =
   | { action: "noop"; reason: string }
   | { action: "notify"; reason: string }
   | { action: "spawn"; targetLine: number; notify: boolean }
+  | { action: "block"; targetLine: number; reason: string }
 
 interface TranscriptContent {
   type?: string
@@ -360,7 +366,8 @@ export function reconcileGeneration(
       recordedLine: 0,
       attemptedLine: 0,
       attemptId: undefined,
-      attemptStartedAt: undefined
+      attemptStartedAt: undefined,
+      consecutiveFailures: 0
     }
   }
 }
@@ -405,6 +412,14 @@ export function decideRecordingAction(
   if (scan.lastUserTurn <= state.recordedLine)
     return { action: "noop", reason: "already-recorded" }
   if (hasActiveLock) return { action: "noop", reason: "active-lock" }
+  // attemptedLine の判定より手前に置く。失敗した試行では attemptedLine が
+  // 既に lastUserTurn まで進んでいるため、後ろに置くと block へ到達できない。
+  if ((state.consecutiveFailures ?? 0) >= FALLBACK_THRESHOLD)
+    return {
+      action: "block",
+      targetLine: scan.lastUserTurn,
+      reason: "repeated-failures"
+    }
   if (state.attemptedLine >= scan.lastUserTurn)
     return state.lastError &&
       state.lastNotifiedAttemptId !== state.lastError.attemptId

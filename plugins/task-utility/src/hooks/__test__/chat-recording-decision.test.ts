@@ -5,6 +5,7 @@ import { expect, test } from "vitest"
 import {
   createInitialState,
   decideRecordingAction,
+  FALLBACK_THRESHOLD,
   isStaleLock,
   type RecordingLock,
   reconcileGeneration,
@@ -55,6 +56,55 @@ test("失敗済みの同一発言は notify になり再試行しない", () => 
       false
     ).action
   ).toBe("noop")
+})
+
+test("連続失敗が閾値に達したらサブエージェント委譲へ block する", () => {
+  const base = {
+    ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
+    recordedLine: 5,
+    // 失敗済み試行では attemptedLine が既に lastUserTurn まで進んでいる。
+    // block 判定がこの条件より手前に無いと到達できない。
+    attemptedLine: 6
+  }
+  expect(
+    decideRecordingAction(
+      scan(6),
+      { ...base, consecutiveFailures: FALLBACK_THRESHOLD - 1 },
+      false
+    ).action
+  ).toBe("noop")
+  const decision = decideRecordingAction(
+    scan(6),
+    { ...base, consecutiveFailures: FALLBACK_THRESHOLD },
+    false
+  )
+  expect(decision.action).toBe("block")
+  expect(decision.action === "block" && decision.targetLine).toBe(6)
+})
+
+test("block より記録済み・実行中ロックの判定が優先される", () => {
+  const state = {
+    ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
+    recordedLine: 6,
+    attemptedLine: 6,
+    consecutiveFailures: FALLBACK_THRESHOLD + 5
+  }
+  expect(decideRecordingAction(scan(6), state, false).action).toBe("noop")
+  expect(
+    decideRecordingAction(scan(7), { ...state, recordedLine: 5 }, true).action
+  ).toBe("noop")
+})
+
+test("世代交代で連続失敗カウンタを 0 に戻す", () => {
+  const state = {
+    ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
+    recordedLine: 5,
+    attemptedLine: 8,
+    consecutiveFailures: 3
+  }
+  const result = reconcileGeneration(state, scan(4, 20))
+  expect(result.changed).toBe(true)
+  expect(result.state.consecutiveFailures).toBe(0)
 })
 
 test("tool_use ヒントは recordedLine より後だけから最大20件を集める", () => {

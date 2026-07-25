@@ -190,6 +190,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     const message = error instanceof Error ? error.message : String(error)
     atomicWriteJson(paths.statePath, {
       ...state,
+      consecutiveFailures: (state.consecutiveFailures ?? 0) + 1,
       lastError: {
         attemptId: args.attemptId,
         at: new Date().toISOString(),
@@ -242,7 +243,8 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
       attemptedLine: Math.max(state.attemptedLine, args.targetLine),
       lastSuccessAt: new Date().toISOString(),
       recordPath: input.relativePath,
-      lastError: null
+      lastError: null,
+      consecutiveFailures: 0
     }
     atomicWriteJson(paths.statePath, nextState)
     appendLog(
@@ -277,6 +279,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     const message = error instanceof Error ? error.message : String(error)
     atomicWriteJson(paths.statePath, {
       ...state,
+      consecutiveFailures: (state.consecutiveFailures ?? 0) + 1,
       lastError: {
         attemptId: args.attemptId,
         at: new Date().toISOString(),

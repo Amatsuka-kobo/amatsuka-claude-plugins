@@ -202,6 +202,67 @@ test("stop_hook_active と壊れた stdin は素通しする", () => {
   }
 })
 
+test("連続失敗が閾値に達したらサブエージェント委譲へ block する", () => {
+  const value = fixture([user("質問です")])
+  try {
+    run(value) // 1回目: spawn
+    run(value) // 2回目: stale lock 回収で失敗1、attemptedLine 到達済みのため notify
+    expect(stateOf(value)?.consecutiveFailures).toBe(1)
+    fs.appendFileSync(value.transcript, `${user("2つ目の質問")}\n`)
+    run(value) // 3回目: 新しい実発言で再 spawn
+    const out = JSON.parse(run(value)) // 4回目: 失敗2で block
+    expect(stateOf(value)?.consecutiveFailures).toBe(2)
+    expect(out.decision).toBe("block")
+    expect(out.reason).toContain("<!--chat-recorder-nag-->")
+    expect(out.reason).toContain("task-utility:chat-recorder")
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true })
+  }
+})
+
+test("spawn していない pid:null ロックの回収では失敗を数えない", () => {
+  const value = fixture([user("質問です")])
+  try {
+    // claude 不在のフォールバックは spawn せずに pid:null のロックだけを残す。
+    // これを失敗として数えると block が自分自身を再生産して解除されなくなる。
+    const missing = path.join(value.root, "missing-claude")
+    run(value, { command: missing })
+    const key = getSessionKey(value.sessionId, value.transcript)
+    const paths = getStatePaths(value.project, key, {
+      TASK_UTILITY_CHAT_STATE_DIR: value.stateRoot
+    })
+    const lock = readJson<{ pid: number | null }>(paths.lockPath)
+    expect(lock?.pid).toBeNull()
+    fs.writeFileSync(
+      paths.lockPath,
+      JSON.stringify({
+        ...lock,
+        heartbeatAt: new Date(Date.now() - 120_000).toISOString()
+      })
+    )
+    run(value, { command: missing })
+    expect(stateOf(value)?.consecutiveFailures ?? 0).toBe(0)
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true })
+  }
+})
+
+test("状態ディレクトリを準備できないときは無音で終わらず通知する", () => {
+  const value = fixture([user("質問です")])
+  try {
+    const key = getSessionKey(value.sessionId, value.transcript)
+    const paths = getStatePaths(value.project, key, {
+      TASK_UTILITY_CHAT_STATE_DIR: value.stateRoot
+    })
+    fs.mkdirSync(path.dirname(paths.tempDir), { recursive: true })
+    fs.symlinkSync(value.root, paths.tempDir)
+    const out = JSON.parse(run(value))
+    expect(out.systemMessage).toContain(paths.tempDir)
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true })
+  }
+})
+
 test("spawn 引数は hook/MCPを止め、状態基底と一時領域だけを add-dir する", () => {
   const args = buildClaudeArgs("prompt", [
     "/state/project-key",
