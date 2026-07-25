@@ -15,6 +15,7 @@ var NAG_MARKER = "<!--chat-recorder-nag-->";
 var STATE_VERSION = 1;
 var MAX_TOOL_HINTS = 20;
 var MAX_TOOL_HINT_LENGTH = 120;
+var FALLBACK_THRESHOLD = 2;
 var normalizePath = (value) => {
   const resolved = path.resolve(value);
   return process.platform === "win32" ? resolved.replaceAll("\\", "/").replace(/^[A-Z]:/, (drive) => drive.toLowerCase()) : resolved;
@@ -190,7 +191,8 @@ function reconcileGeneration(state, scan) {
       recordedLine: 0,
       attemptedLine: 0,
       attemptId: void 0,
-      attemptStartedAt: void 0
+      attemptStartedAt: void 0,
+      consecutiveFailures: 0
     }
   };
 }
@@ -218,6 +220,12 @@ function decideRecordingAction(scan, state, hasActiveLock) {
   if (scan.lastUserTurn <= state.recordedLine)
     return { action: "noop", reason: "already-recorded" };
   if (hasActiveLock) return { action: "noop", reason: "active-lock" };
+  if ((state.consecutiveFailures ?? 0) >= FALLBACK_THRESHOLD)
+    return {
+      action: "block",
+      targetLine: scan.lastUserTurn,
+      reason: "repeated-failures"
+    };
   if (state.attemptedLine >= scan.lastUserTurn)
     return state.lastError && state.lastNotifiedAttemptId !== state.lastError.attemptId ? { action: "notify", reason: "failed-attempt" } : { action: "noop", reason: "already-attempted" };
   return {
@@ -442,7 +450,16 @@ async function main() {
   if (!transcriptPath || !fs2.existsSync(transcriptPath)) return;
   const sessionKey = getSessionKey(input.session_id, transcriptPath);
   const paths = getStatePaths(projectDir, sessionKey);
-  ensureStateDirs(paths);
+  try {
+    ensureStateDirs(paths);
+  } catch (error) {
+    console.log(
+      JSON.stringify({
+        systemMessage: `chat-recorder \u306E\u4F5C\u696D\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u6E96\u5099\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F: ${error instanceof Error ? error.message : String(error)}`
+      })
+    );
+    return;
+  }
   const fullScan = scanTranscript(transcriptPath);
   if (fullScan.lastNag > fullScan.lastUserTurn) return;
   let state = readJson(paths.statePath) ?? createInitialState(
@@ -464,8 +481,10 @@ async function main() {
         `[hook] recovered stale lock: ${fs2.readFileSync(paths.lockPath, "utf8").trim()}`
       );
       fs2.rmSync(paths.lockPath, { force: true });
+      const spawnedAndFailed = lock2?.pid != null && state.lastError?.attemptId !== lock2.attemptId;
       state = {
         ...state,
+        consecutiveFailures: (state.consecutiveFailures ?? 0) + (spawnedAndFailed ? 1 : 0),
         lastError: {
           attemptId: lock2?.attemptId ?? state.attemptId ?? "unknown",
           at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -543,7 +562,12 @@ async function main() {
     bodyPath,
     indexPath
   };
-  if (!command) {
+  if (decision.action === "block" || !command) {
+    if (decision.action === "block" && state.lastError)
+      atomicWriteJson(paths.statePath, {
+        ...stagedState,
+        lastNotifiedAttemptId: state.lastError.attemptId
+      });
     console.log(
       JSON.stringify({ decision: "block", reason: fallbackReason(common) })
     );

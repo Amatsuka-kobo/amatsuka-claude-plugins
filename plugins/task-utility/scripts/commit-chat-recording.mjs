@@ -213,6 +213,7 @@ function commitChatRecording(args) {
     const message = error instanceof Error ? error.message : String(error);
     atomicWriteJson(paths.statePath, {
       ...state,
+      consecutiveFailures: (state.consecutiveFailures ?? 0) + 1,
       lastError: {
         attemptId: args.attemptId,
         at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -261,7 +262,8 @@ function commitChatRecording(args) {
       attemptedLine: Math.max(state.attemptedLine, args.targetLine),
       lastSuccessAt: (/* @__PURE__ */ new Date()).toISOString(),
       recordPath: input.relativePath,
-      lastError: null
+      lastError: null,
+      consecutiveFailures: 0
     };
     atomicWriteJson(paths.statePath, nextState);
     appendLog(
@@ -296,6 +298,7 @@ function commitChatRecording(args) {
     const message = error instanceof Error ? error.message : String(error);
     atomicWriteJson(paths.statePath, {
       ...state,
+      consecutiveFailures: (state.consecutiveFailures ?? 0) + 1,
       lastError: {
         attemptId: args.attemptId,
         at: (/* @__PURE__ */ new Date()).toISOString(),
