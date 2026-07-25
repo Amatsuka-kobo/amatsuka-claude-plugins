@@ -53,7 +53,7 @@ else
   # mdbase-lsp をインストール
   cd "$HOME/third-party"
   git clone https://github.com/callumalpass/mdbase-lsp.git
+  git clone https://github.com/callumalpass/mdbase-rs.git
   cd mdbase-lsp
   cargo build --release
-  ln -s "$HOME/third-party/mdbase-lsp/target/release/mdbase-lsp" "$HOME/.local/bin/mdbase-lsp"
 fi
