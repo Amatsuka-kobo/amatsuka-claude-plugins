@@ -81,6 +81,10 @@ pnpm build       # 各プラグインの src/ から scripts/*.mjs を再生成
 
 `plugins/*/scripts/*.mjs` はビルド生成物ですが git 管理の対象です。`plugins/*/src/` を変更した場合は `pnpm build` を実行し、生成された差分もあわせてコミットしてください。
 
+### VSCode での Biome 拡張機能
+
+VSCode を使用する場合、コード保守の観点から Biome 拡張機能をインストールしてください。
+
 ## Claude Code の共通ツール
 
 ### CLAUDE.md
