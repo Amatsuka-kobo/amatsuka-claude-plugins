@@ -53,4 +53,6 @@ claude-only を使う場合:
 
 ## アップデート時の注意
 
+0.4.0 でエージェントテンプレートを改訂しました(コードベース探索の統括が GPT Sol から Opus に移り、GPT 三体は探索実働の担当になりました)。既存プロジェクトの `.claude/agents/gpt-*.md` は `agent-policy:setup` の再実行で更新してください。
+
 0.3.0 でエージェントテンプレートを改訂しました(gpt-luna のツール構成変更・スキルロード規律の追加)。既存プロジェクトの `.claude/agents/gpt-*.md` は `agent-policy:setup` の再実行で更新してください。
