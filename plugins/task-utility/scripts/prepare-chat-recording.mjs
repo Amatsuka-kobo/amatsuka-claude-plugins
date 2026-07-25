@@ -235,7 +235,10 @@ function prepareChatRecording(args) {
     safeWorker(workerName)
   );
   const candidates = markdownFiles(recordDir);
-  const selected = candidates.length === 1 ? candidates[0] : null;
+  const chatRoot = path3.join(args.project, "docs", "chat");
+  const previous = state.recordPath ? path3.resolve(args.project, state.recordPath) : null;
+  const resumable = previous && isInside(chatRoot, previous) && fs3.existsSync(previous) ? previous : null;
+  const selected = resumable ?? (candidates.length === 1 ? candidates[0] : null);
   const relativeCandidates = candidates.map(
     (file) => path3.relative(args.project, file).replaceAll("\\", "/")
   );

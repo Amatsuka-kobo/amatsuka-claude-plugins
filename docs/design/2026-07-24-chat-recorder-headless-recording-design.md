@@ -324,7 +324,9 @@ node prepare-chat-recording.mjs
 - `recordedLine` から `targetLine` までを `extract-conversation` と同一規則で差分抽出する
 - 抽出区間は `(recordedLine, targetLine]` とし、`recordedLine` 行を含めず `targetLine` 行を含める。新世代は `recordedLine = 0`、すなわち `--since-line 0` 相当で先頭から最初の実 USER 発言を起点にする
 - `git config user.name` を取得する
-- 日付と作業者名から `docs/chat/YYYY/MMDD/<作業者名>/` を探索し、既存記録の追記候補を決める
+- 追記先は状態の `recordPath`(同一セッションが既に記録したファイル)を最優先で採用する。無い場合だけ、日付と作業者名から `docs/chat/YYYY/MMDD/<作業者名>/` を探索して候補を決める
+
+> **改訂 2026-07-25**: 当初は日付ディレクトリの候補が1件のときだけ追記する設計だったが、1日に複数セッションがあると候補が常に2件以上になり、進行中のセッションでも記録のたびに新規ファイルが作られて断片化した。状態の `recordPath` を優先し、`docs/chat/` 配下かつ実在する場合のみ採用する。`reconcileGeneration` の世代交代では `recordedLine` と併せて `recordPath` も手放す(引き継ぐと会話全体を同じファイルへ再記録するため)。
 - 候補の末尾60行、最後の `## セッション N`、`docs/chat/INDEX.md` の該当行だけを読む
 - `skills/chat/SKILL.md` 本文を読む
 - フックが得た tool_use ヒントと prepare 自身が確認できたパスを統合する

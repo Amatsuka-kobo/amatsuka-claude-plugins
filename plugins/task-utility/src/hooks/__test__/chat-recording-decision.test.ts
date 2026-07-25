@@ -107,6 +107,22 @@ test("世代交代で連続失敗カウンタを 0 に戻す", () => {
   expect(result.state.consecutiveFailures).toBe(0)
 })
 
+// 世代が変わると recordedLine が 0 に戻るため、前世代の記録先を引き継ぐと
+// 同じファイルへ会話全体を再記録してしまう。記録先も一緒に手放す。
+test("世代交代で記録先を手放し、通常追記では保持する", () => {
+  const state = {
+    ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
+    recordedLine: 5,
+    recordPath: "docs/chat/2026/0725/user/topic.md"
+  }
+  expect(
+    reconcileGeneration(state, scan(4, 20)).state.recordPath
+  ).toBeUndefined()
+  expect(reconcileGeneration(state, scan(6, 20)).state.recordPath).toBe(
+    "docs/chat/2026/0725/user/topic.md"
+  )
+})
+
 test("tool_use ヒントは recordedLine より後だけから最大20件を集める", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chat-scan-"))
   const transcript = path.join(root, "transcript.jsonl")

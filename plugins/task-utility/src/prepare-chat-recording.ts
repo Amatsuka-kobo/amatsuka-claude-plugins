@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 import {
   atomicWriteJson,
   getStatePaths,
+  isInside,
   type RecordingLock,
   type RecordingState,
   readJson,
@@ -131,7 +132,19 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     safeWorker(workerName)
   )
   const candidates = markdownFiles(recordDir)
-  const selected = candidates.length === 1 ? candidates[0] : null
+  // 同一セッションが既に記録したファイルを最優先で選ぶ。日付ディレクトリの
+  // 候補数だけで判定すると、1日に複数セッションある日は候補が2件以上になり、
+  // 毎回新規ファイルが作られてセッションの記録が断片化する。
+  const chatRoot = path.join(args.project, "docs", "chat")
+  const previous = state.recordPath
+    ? path.resolve(args.project, state.recordPath)
+    : null
+  const resumable =
+    previous && isInside(chatRoot, previous) && fs.existsSync(previous)
+      ? previous
+      : null
+  const selected =
+    resumable ?? (candidates.length === 1 ? (candidates[0] as string) : null)
   const relativeCandidates = candidates.map((file) =>
     path.relative(args.project, file).replaceAll("\\", "/")
   )

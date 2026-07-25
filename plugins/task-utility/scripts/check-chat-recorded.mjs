@@ -192,7 +192,10 @@ function reconcileGeneration(state, scan) {
       attemptedLine: 0,
       attemptId: void 0,
       attemptStartedAt: void 0,
-      consecutiveFailures: 0
+      consecutiveFailures: 0,
+      // recordedLine が 0 に戻るため、前世代の記録先を引き継ぐと同じファイルへ
+      // 会話全体を再記録してしまう。記録先も一緒に手放す。
+      recordPath: void 0
     }
   };
 }

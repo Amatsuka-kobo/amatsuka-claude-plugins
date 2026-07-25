@@ -367,7 +367,10 @@ export function reconcileGeneration(
       attemptedLine: 0,
       attemptId: undefined,
       attemptStartedAt: undefined,
-      consecutiveFailures: 0
+      consecutiveFailures: 0,
+      // recordedLine が 0 に戻るため、前世代の記録先を引き継ぐと同じファイルへ
+      // 会話全体を再記録してしまう。記録先も一緒に手放す。
+      recordPath: undefined
     }
   }
 }
