@@ -2,18 +2,19 @@
 node_modules
 .superpowers/
 .pitcrew/
+.prefetch/
 
 # CLI Proxy APIの設定ファイル
 static/management.html
 cliproxyapi.config.yaml
 
-# claude関連
+# claude
 .claude/agents
 .claude/context-maps
 .claude/pitcrew.local.md
 CLAUDE.md
 
-# raphael のローカル状態(antibodies/ はコミット推奨のため ignore しない)
+# Raphael
 .raphael/infections/
 .raphael/state.json
 .raphael/log/
