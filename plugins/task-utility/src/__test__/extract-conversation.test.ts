@@ -94,7 +94,10 @@ test("--since-line で指定行以前が除外される", () => {
   expect(out).not.toMatch(/古い質問です/)
 })
 
-test("--since-line 直後の孤立 ASSISTANT 断片は切り捨てられる", () => {
+// 記録の window は (recordedLine, targetLine] で、両端とも「ユーザー発言の行」。
+// recordedLine の直後に並ぶ ASSISTANT こそがそのターンで AI が行った作業の本体であり、
+// まだ一度も記録されていない。ここを捨てると記録は USER 発言だけの抜け殻になる。
+test("--since-line 直後の ASSISTANT はそのターンの作業本体として保持される", () => {
   const out = run(
     [
       user("古い質問です"),
@@ -104,9 +107,30 @@ test("--since-line 直後の孤立 ASSISTANT 断片は切り捨てられる", ()
     ],
     ["--since-line", "1"]
   )
-  expect(out).not.toMatch(/前ターンの締めの報告/)
+  expect(out).toMatch(/前ターンの締めの報告/)
   expect(out).toMatch(/新しい質問です/)
   expect(out).toMatch(/新しい応答。/)
+})
+
+// 実際の window 形状の回帰テスト: 先頭が ASSISTANT・末尾が USER。
+// targetLine は常に「今回のユーザー発言」なので、AI の作業は必ず window の前方に来る。
+test("先頭が ASSISTANT・末尾が USER の window で AI の作業が失われない", () => {
+  const out = extractConversation(
+    [
+      user("前回の指示"),
+      assistant([{ type: "text", text: "実装しました。" }]),
+      assistant([
+        { type: "tool_use", name: "Bash", input: { description: "テスト実行" } }
+      ]),
+      user("次の指示")
+    ].join("\n"),
+    1,
+    4
+  )
+  expect(out).toMatch(/実装しました。/)
+  expect(out).toMatch(/\(tool: Bash — テスト実行\)/)
+  expect(out).toMatch(/次の指示/)
+  expect(out).not.toMatch(/前回の指示/)
 })
 
 test("行カウントは空行・パース不能行も 1 行と数える(check-chat-recorded と同じ)", () => {

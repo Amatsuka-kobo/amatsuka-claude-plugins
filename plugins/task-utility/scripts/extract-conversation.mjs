@@ -14,7 +14,6 @@ function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIV
     else sections.push({ role, parts: [part] });
   };
   let lineNo = 0;
-  let seenUser = sinceLine <= 0;
   for (const line of content.split("\n")) {
     lineNo++;
     if (lineNo <= sinceLine) continue;
@@ -31,9 +30,8 @@ function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIV
     if (entry.type === "user" && typeof message.content === "string") {
       const text = message.content.trim();
       if (!text || text.startsWith("<") || entry.isMeta) continue;
-      seenUser = true;
       push("USER", quote(text));
-    } else if (entry.type === "assistant" && Array.isArray(message.content) && seenUser) {
+    } else if (entry.type === "assistant" && Array.isArray(message.content)) {
       for (const part of message.content) {
         if (part.type === "text" && part.text?.trim()) {
           push("ASSISTANT", part.text.trim());

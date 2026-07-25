@@ -50,7 +50,6 @@ export function extractConversation(
   }
 
   let lineNo = 0
-  let seenUser = sinceLine <= 0
   for (const line of content.split("\n")) {
     lineNo++
     if (lineNo <= sinceLine) continue
@@ -68,13 +67,13 @@ export function extractConversation(
     if (entry.type === "user" && typeof message.content === "string") {
       const text = message.content.trim()
       if (!text || text.startsWith("<") || entry.isMeta) continue
-      seenUser = true
       push("USER", quote(text))
-    } else if (
-      entry.type === "assistant" &&
-      Array.isArray(message.content) &&
-      seenUser
-    ) {
+      // 抽出区間 (sinceLine, targetLine] の両端はどちらも「ユーザー発言の行」であり、
+      // AI の作業本体は必ず区間の前方(最初の USER 発言より手前)に来る。
+      // かつて「前回ターンの断片が混ざる」ことを恐れて最初の USER までの ASSISTANT を
+      // 捨てていたが、sinceLine は記録済みユーザー発言の行そのものなので、それより後は
+      // すべて未記録である。捨てると記録が USER 発言だけの抜け殻になる。
+    } else if (entry.type === "assistant" && Array.isArray(message.content)) {
       for (const part of message.content) {
         if (part.type === "text" && part.text?.trim()) {
           push("ASSISTANT", part.text.trim())
