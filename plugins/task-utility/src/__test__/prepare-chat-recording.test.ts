@@ -117,6 +117,61 @@ test("recordedLine 行を含めず targetLine 行を含める", () => {
   expect(result.conversation).not.toContain("古い")
 })
 
+function argsOf(value: ReturnType<typeof setup>) {
+  return {
+    project: value.project,
+    transcript: value.transcript,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 1
+  }
+}
+
+function setRecordPath(value: ReturnType<typeof setup>, recordPath: string) {
+  const state = JSON.parse(fs.readFileSync(value.paths.statePath, "utf8"))
+  atomicWriteJson(value.paths.statePath, { ...state, recordPath })
+}
+
+// 同じ日に複数セッションがあると候補が2件以上になり、単一候補判定だけでは
+// 毎回新規ファイルが作られてセッションの記録が断片化する。
+test("記録先は同一セッションが既に書いた state.recordPath を優先する", () => {
+  const value = setup([user("質問")])
+  const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
+  const absoluteDir = path.join(value.project, dir)
+  fs.mkdirSync(absoluteDir, { recursive: true })
+  fs.writeFileSync(path.join(absoluteDir, "other-session.md"), "# other\n")
+  const mine = `${dir}/my-session.md`
+  fs.writeFileSync(path.join(value.project, mine), "# mine\n")
+  setRecordPath(value, mine)
+  expect(prepareChatRecording(argsOf(value)).recordTarget).toEqual({
+    relativePath: mine,
+    appendMode: true
+  })
+})
+
+test("state.recordPath のファイルが無ければ単一候補判定に戻る", () => {
+  const value = setup([user("質問")])
+  const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
+  const absoluteDir = path.join(value.project, dir)
+  fs.mkdirSync(absoluteDir, { recursive: true })
+  fs.writeFileSync(path.join(absoluteDir, "only.md"), "# only\n")
+  setRecordPath(value, `${dir}/deleted.md`)
+  expect(prepareChatRecording(argsOf(value)).recordTarget).toEqual({
+    relativePath: `${dir}/only.md`,
+    appendMode: true
+  })
+})
+
+test("docs/chat の外を指す state.recordPath は採用しない", () => {
+  const value = setup([user("質問")])
+  fs.writeFileSync(path.join(value.project, "escape.md"), "# escape\n")
+  setRecordPath(value, "escape.md")
+  expect(prepareChatRecording(argsOf(value)).recordTarget).toEqual({
+    relativePath: null,
+    appendMode: false
+  })
+})
+
 test("既存 INDEX は docs/chat 相対キーで探索し例も同じ表記にする", () => {
   const value = setup([user("質問")])
   const args = {
