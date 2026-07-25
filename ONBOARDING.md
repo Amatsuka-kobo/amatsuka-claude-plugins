@@ -128,12 +128,12 @@ claude mcp list
 
 Context7 は、Claude Code がライブラリやフレームワークの最新ドキュメントを取得するための MCP サーバーです。LSP のような補完ツールではなく、技術調査で古い情報を使わないために利用します。
 
-この手順には Node.js と `npx` が必要です。先に必須ツールのセットアップを完了してください。
+この手順には Node.js と `pnpm` が必要です。先に必須ツールのセットアップを完了してください。
 
 次のコマンドは、Context7 を Claude Code のグローバル設定へ登録します。リポジトリの外で作業するときも同じ設定を利用できます。
 
 ```bash
-npx ctx7 setup --claude --mcp --yes
+pnpm dlx ctx7 setup --claude --mcp --yes
 ```
 
 オプションの意味は次のとおりです。
