@@ -207,7 +207,9 @@ node "{{PLUGIN_ROOT}}/scripts/commit-chat-recording.mjs" --project "{{PROJECT_DI
 commit の JSON が ok=true なら終了してください。ok=false またはコマンド失敗時は、記録先を直接編集せず、エラーを最終応答に短く出して終了してください。commit スクリプトが追記、INDEX 更新、検証、状態更新、成功時のロック解除を一括して行います。
 ```
 
-一時ファイルは状態基底ディレクトリ内の `<sessionKey>-<attemptId>.body.md` と `.index-line.md` とし、フックが絶対パスを決める。プロジェクト配下や共有 `/tmp` の予測可能な名前を使わない。
+一時ファイルは `<sessionKey>-<attemptId>.body.md` と `.index-line.md` とし、フックが絶対パスを決める。プロジェクト配下の予測可能な名前を使わない。
+
+> **改訂 2026-07-25**: 一時ディレクトリを状態基底ディレクトリ内に置く当初案は実運用で破綻した。Claude Code は Claude 設定ディレクトリ(`CLAUDE_CONFIG_DIR`、既定 `~/.claude`)配下を sensitive file として保護し、この保護は `--add-dir` でも `--permission-mode acceptEdits` でも解除されない。ヘッドレスには承認者がいないため recorder が Write 段階で必ず停止する。したがって一時ディレクトリだけは Claude 設定ディレクトリの外(既定で `<os.tmpdir()>/task-utility-chat-recorder-<uid>/<projectKey>/temp`)へ退避させ、状態・ロック・ログ・plan は従来どおり状態基底ディレクトリに置く。共有 `/tmp` を使うことになるため、uid でディレクトリを分け、`ensureStateDirs` が使用前にシンボリックリンクでないこと・自分の所有であることを検証し、`0700` を強制する。
 
 ### 4.2 spawn コマンド全文案
 
@@ -236,6 +238,7 @@ const child = spawn(claudeCommand, [
   "--allowedTools", "Bash,Write",
   "--permission-mode", "acceptEdits",
   "--add-dir", stateBaseDir,
+  "--add-dir", tempDir,
   "--append-system-prompt", recorderSystemPrompt
 ], {
   cwd: projectDir,
@@ -254,7 +257,9 @@ child.once("error", fallback)
 
 `shell: false` と引数配列により空白・引用符・Windows パスをシェル依存のエスケープから切り離す。Windows 互換性は個別の `start` / PowerShell / `nohup` 分岐を作らず、Node `child_process.spawn({ detached: true, windowsHide: true })` と `unref()` で吸収する。stdin は `ignore`、stdout/stderr は同一 append ログ FD に接続し、親から独立させる。`stdio: "ignore"` にはせず、失敗診断を残す。
 
-一時ファイルと状態領域は project cwd 外にあるため、`--add-dir stateBaseDir` で recorder セッションから明示的にアクセス可能にする。`stateBaseDir` は正規化済みの当該プロジェクト用状態基底ディレクトリだけとし、ユーザーホームや `.claude` 全体は渡さない。`Write` と prepare/commit の `Bash` がこのディレクトリへ書き込めることを、実装時に実サブスクリプション環境で検証する。
+一時ファイルと状態領域は project cwd 外にあるため、`--add-dir stateBaseDir --add-dir tempDir` で recorder セッションから明示的にアクセス可能にする。渡すのは正規化済みの当該プロジェクト用状態基底ディレクトリと一時ディレクトリだけとし、ユーザーホームや `.claude` 全体、`os.tmpdir()` 全体は渡さない。`Write` と prepare/commit の `Bash` がこのディレクトリへ書き込めることを、実装時に実サブスクリプション環境で検証する。
+
+> **改訂 2026-07-25**: この検証条項は当初の実装時に消化されず、`~/.claude` 配下の sensitive file 保護によって記録が全く行われない障害になった(詳細は §4.1 の改訂注記)。修正後に実環境で対照検証済み — 新パス(`/tmp/task-utility-chat-recorder-<uid>/...`)への Write は成功、旧パス(`~/.claude/...`)は `--add-dir` を付けても許可要求で停止する。
 
 `claudeCommand` は本番既定値を `claude` とし、テスト時だけ `TASK_UTILITY_CLAUDE_COMMAND` で fixture コマンドへ差し替え可能にする。この環境変数はテスト専用の内部契約であり、README 等の利用者向け文書には記載せず、プロンプトや recorder へも転送しない。値が設定されている場合、hook は「正規化した絶対パスの実行可能ファイル」または「パス区切りを含まず PATH 上で解決できる実行可能ファイル」のいずれかであることだけを検証する。任意の引数列や shell 断片は許可しない。
 
@@ -432,7 +437,7 @@ stdout:
 - tool_use から最大件数・最大長・重複排除済みヒントを作る
 - tool_use ヒント内の改行、ANSI escape、NUL 等が除去・置換され、`JSON.stringify` 後も prompt の構造を変更しない
 - prompt 全文が disable hook、prepare/commit、契約、パスを含む
-- spawn 引数が `--add-dir <stateBaseDir>` と固定 `--append-system-prompt` を含み、状態基底より広いディレクトリを公開しない
+- spawn 引数が `--add-dir <stateBaseDir> --add-dir <tempDir>` と固定 `--append-system-prompt` を含み、状態基底と一時領域より広いディレクトリを公開しない
 - コマンド差し替え fixture で spawn 成立時は stdout 無出力、即時終了し、状態/ロック/PIDが保存される
 - `TASK_UTILITY_CLAUDE_COMMAND` は絶対実行可能パスまたは PATH 上の単一コマンド名だけを受理し、相対パス、引数付き文字列、shell 断片を拒否する
 - 存在しないコマンドで `ENOENT` を発生させ、現行 `NAG_MARKER` と chat-recorder dispatch 文面を含む block へフォールバックする

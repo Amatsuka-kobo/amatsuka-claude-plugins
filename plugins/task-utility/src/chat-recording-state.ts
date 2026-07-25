@@ -120,6 +120,39 @@ export function getSessionKey(
     : hashKey(`transcript:${normalizePath(transcriptPath)}`)
 }
 
+export function claudeConfigRoot(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.CLAUDE_CONFIG_DIR
+  return configured && path.isAbsolute(configured)
+    ? path.resolve(configured)
+    : path.join(os.homedir(), ".claude")
+}
+
+const currentUid = (): number | null =>
+  typeof process.getuid === "function" ? process.getuid() : null
+
+// ヘッドレス recorder の Write は Claude 設定ディレクトリ配下を sensitive file として
+// 拒否されるため(--add-dir でも --permission-mode acceptEdits でも解除されない)、
+// 一時ファイルだけは必ずその外側へ退避させる。
+function resolveTempDir(
+  projectStateDir: string,
+  projectKey: string,
+  env: NodeJS.ProcessEnv
+): string {
+  const candidate = path.join(projectStateDir, "temp")
+  const configRoot = claudeConfigRoot(env)
+  if (
+    normalizePath(candidate) !== normalizePath(configRoot) &&
+    !isInside(configRoot, candidate)
+  )
+    return candidate
+  const uid = currentUid()
+  const scope =
+    uid === null
+      ? "task-utility-chat-recorder"
+      : `task-utility-chat-recorder-${uid}`
+  return path.join(os.tmpdir(), scope, projectKey, "temp")
+}
+
 export function getStatePaths(
   projectDir: string,
   sessionKey: string,
@@ -141,12 +174,24 @@ export function getStatePaths(
     stateDir: path.join(projectStateDir, "state"),
     lockDir: path.join(projectStateDir, "locks"),
     logDir: path.join(projectStateDir, "logs"),
-    tempDir: path.join(projectStateDir, "temp"),
+    tempDir: resolveTempDir(projectStateDir, projectKey, env),
     planDir: path.join(projectStateDir, "plans"),
     statePath: path.join(projectStateDir, "state", `${sessionKey}.json`),
     lockPath: path.join(projectStateDir, "locks", `${sessionKey}.lock`),
     logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`)
   }
+}
+
+// 一時ディレクトリは os.tmpdir() 配下に出る場合があるため、
+// 他者による事前作成やシンボリックリンク差し替えを検出してから使う。
+function assertPrivateTempDir(dir: string): void {
+  const stat = fs.lstatSync(dir)
+  if (stat.isSymbolicLink() || !stat.isDirectory())
+    throw new Error(`chat-recorder temp dir is not a real directory: ${dir}`)
+  const uid = currentUid()
+  if (uid !== null && stat.uid !== uid)
+    throw new Error(`chat-recorder temp dir is not owned by this user: ${dir}`)
+  if (process.platform !== "win32") fs.chmodSync(dir, 0o700)
 }
 
 export function ensureStateDirs(paths: StatePaths): void {
@@ -158,6 +203,7 @@ export function ensureStateDirs(paths: StatePaths): void {
     paths.planDir
   ])
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+  assertPrivateTempDir(paths.tempDir)
 }
 
 export function atomicWriteJson(file: string, value: unknown): void {
