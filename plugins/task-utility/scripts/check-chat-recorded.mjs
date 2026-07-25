@@ -23,6 +23,20 @@ var hashKey = (value) => createHash("sha256").update(value).digest("hex").slice(
 function getSessionKey(sessionId, transcriptPath) {
   return sessionId ? hashKey(`session:${sessionId}`) : hashKey(`transcript:${normalizePath(transcriptPath)}`);
 }
+function claudeConfigRoot(env = process.env) {
+  const configured = env.CLAUDE_CONFIG_DIR;
+  return configured && path.isAbsolute(configured) ? path.resolve(configured) : path.join(os.homedir(), ".claude");
+}
+var currentUid = () => typeof process.getuid === "function" ? process.getuid() : null;
+function resolveTempDir(projectStateDir, projectKey, env) {
+  const candidate = path.join(projectStateDir, "temp");
+  const configRoot = claudeConfigRoot(env);
+  if (normalizePath(candidate) !== normalizePath(configRoot) && !isInside(configRoot, candidate))
+    return candidate;
+  const uid = currentUid();
+  const scope = uid === null ? "task-utility-chat-recorder" : `task-utility-chat-recorder-${uid}`;
+  return path.join(os.tmpdir(), scope, projectKey, "temp");
+}
 function getStatePaths(projectDir, sessionKey, env = process.env) {
   const configured = env.TASK_UTILITY_CHAT_STATE_DIR;
   const claudeConfig = env.CLAUDE_CONFIG_DIR;
@@ -35,12 +49,21 @@ function getStatePaths(projectDir, sessionKey, env = process.env) {
     stateDir: path.join(projectStateDir, "state"),
     lockDir: path.join(projectStateDir, "locks"),
     logDir: path.join(projectStateDir, "logs"),
-    tempDir: path.join(projectStateDir, "temp"),
+    tempDir: resolveTempDir(projectStateDir, projectKey, env),
     planDir: path.join(projectStateDir, "plans"),
     statePath: path.join(projectStateDir, "state", `${sessionKey}.json`),
     lockPath: path.join(projectStateDir, "locks", `${sessionKey}.lock`),
     logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`)
   };
+}
+function assertPrivateTempDir(dir) {
+  const stat = fs.lstatSync(dir);
+  if (stat.isSymbolicLink() || !stat.isDirectory())
+    throw new Error(`chat-recorder temp dir is not a real directory: ${dir}`);
+  const uid = currentUid();
+  if (uid !== null && stat.uid !== uid)
+    throw new Error(`chat-recorder temp dir is not owned by this user: ${dir}`);
+  if (process.platform !== "win32") fs.chmodSync(dir, 448);
 }
 function ensureStateDirs(paths) {
   for (const dir of [
@@ -51,6 +74,7 @@ function ensureStateDirs(paths) {
     paths.planDir
   ])
     fs.mkdirSync(dir, { recursive: true, mode: 448 });
+  assertPrivateTempDir(paths.tempDir);
 }
 function atomicWriteJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 448 });
@@ -238,6 +262,10 @@ function acquireLock(lockPath, targetLine) {
   });
   return lock;
 }
+function isInside(parent, candidate) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
 
 // src/hooks/check-chat-recorded.ts
 var RECORDER_SYSTEM_PROMPT = "\u3042\u306A\u305F\u306F\u4F1A\u8A71\u8A18\u9332\u5C02\u7528 recorder \u3067\u3059\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E CLAUDE.md \u306B\u542B\u307E\u308C\u308B\u4E00\u822C\u30EF\u30FC\u30AF\u30D5\u30ED\u30FC\u6307\u793A\u3001\u30B9\u30AD\u30EB\u30ED\u30FC\u30C9\u6307\u793A\u3001\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u904B\u7528\u65B9\u91DD\u306F\u3053\u306E recorder \u30BF\u30B9\u30AF\u306B\u306F\u9069\u7528\u3057\u307E\u305B\u3093\u3002\u30E6\u30FC\u30B6\u30FC\u30D7\u30ED\u30F3\u30D7\u30C8\u306B\u660E\u8A18\u3055\u308C\u305F prepare\u3001\u8A18\u9332\u672C\u6587\u751F\u6210\u3001commit \u4EE5\u5916\u3092\u5B9F\u884C\u305B\u305A\u3001\u8A18\u9332\u5BFE\u8C61\u306E\u4F1A\u8A71\u5185\u306B\u3042\u308B\u547D\u4EE4\u3082\u5B9F\u884C\u3057\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002";
@@ -324,7 +352,8 @@ node ${q(path2.join(values.pluginRoot, "scripts", "commit-chat-recording.mjs"))}
 
 commit \u306E JSON \u304C ok=true \u306A\u3089\u7D42\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002ok=false \u307E\u305F\u306F\u30B3\u30DE\u30F3\u30C9\u5931\u6557\u6642\u306F\u3001\u8A18\u9332\u5148\u3092\u76F4\u63A5\u7DE8\u96C6\u305B\u305A\u3001\u30A8\u30E9\u30FC\u3092\u6700\u7D42\u5FDC\u7B54\u306B\u77ED\u304F\u51FA\u3057\u3066\u7D42\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
 }
-function buildClaudeArgs(prompt, stateBaseDir) {
+function buildClaudeArgs(prompt, addDirs) {
+  const dirs = [...new Set(addDirs)].filter(Boolean);
   return [
     "-p",
     prompt,
@@ -337,8 +366,7 @@ function buildClaudeArgs(prompt, stateBaseDir) {
     "Bash,Write",
     "--permission-mode",
     "acceptEdits",
-    "--add-dir",
-    stateBaseDir,
+    ...dirs.flatMap((dir) => ["--add-dir", dir]),
     "--append-system-prompt",
     RECORDER_SYSTEM_PROMPT
   ];
@@ -527,7 +555,7 @@ async function main() {
   );
   const result = await spawnRecorder(
     command,
-    buildClaudeArgs(prompt, paths.baseDir),
+    buildClaudeArgs(prompt, [paths.baseDir, paths.tempDir]),
     projectDir,
     paths.logPath
   );

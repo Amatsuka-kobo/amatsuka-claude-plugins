@@ -15,6 +15,20 @@ var normalizePath = (value) => {
   return process.platform === "win32" ? resolved.replaceAll("\\", "/").replace(/^[A-Z]:/, (drive) => drive.toLowerCase()) : resolved;
 };
 var hashKey = (value) => createHash("sha256").update(value).digest("hex").slice(0, 24);
+function claudeConfigRoot(env = process.env) {
+  const configured = env.CLAUDE_CONFIG_DIR;
+  return configured && path.isAbsolute(configured) ? path.resolve(configured) : path.join(os.homedir(), ".claude");
+}
+var currentUid = () => typeof process.getuid === "function" ? process.getuid() : null;
+function resolveTempDir(projectStateDir, projectKey, env) {
+  const candidate = path.join(projectStateDir, "temp");
+  const configRoot = claudeConfigRoot(env);
+  if (normalizePath(candidate) !== normalizePath(configRoot) && !isInside(configRoot, candidate))
+    return candidate;
+  const uid = currentUid();
+  const scope = uid === null ? "task-utility-chat-recorder" : `task-utility-chat-recorder-${uid}`;
+  return path.join(os.tmpdir(), scope, projectKey, "temp");
+}
 function getStatePaths(projectDir, sessionKey, env = process.env) {
   const configured = env.TASK_UTILITY_CHAT_STATE_DIR;
   const claudeConfig = env.CLAUDE_CONFIG_DIR;
@@ -27,7 +41,7 @@ function getStatePaths(projectDir, sessionKey, env = process.env) {
     stateDir: path.join(projectStateDir, "state"),
     lockDir: path.join(projectStateDir, "locks"),
     logDir: path.join(projectStateDir, "logs"),
-    tempDir: path.join(projectStateDir, "temp"),
+    tempDir: resolveTempDir(projectStateDir, projectKey, env),
     planDir: path.join(projectStateDir, "plans"),
     statePath: path.join(projectStateDir, "state", `${sessionKey}.json`),
     lockPath: path.join(projectStateDir, "locks", `${sessionKey}.lock`),

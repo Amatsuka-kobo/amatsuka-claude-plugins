@@ -202,13 +202,18 @@ test("stop_hook_active と壊れた stdin は素通しする", () => {
   }
 })
 
-test("spawn 引数は hook/MCPを止め、状態基底だけを add-dir する", () => {
-  const args = buildClaudeArgs("prompt", "/state/project-key")
+test("spawn 引数は hook/MCPを止め、状態基底と一時領域だけを add-dir する", () => {
+  const args = buildClaudeArgs("prompt", [
+    "/state/project-key",
+    "/tmp/task-utility-chat-recorder-1000/project-key/temp",
+    "/state/project-key"
+  ])
   expect(args).toContain('{"disableAllHooks":true}')
   expect(args).toContain("--strict-mcp-config")
-  expect(
-    args.slice(args.indexOf("--add-dir"), args.indexOf("--add-dir") + 2)
-  ).toEqual(["--add-dir", "/state/project-key"])
+  expect(args.filter((_, index) => args[index - 1] === "--add-dir")).toEqual([
+    "/state/project-key",
+    "/tmp/task-utility-chat-recorder-1000/project-key/temp"
+  ])
   expect(args[args.indexOf("--append-system-prompt") + 1]).toContain(
     "CLAUDE.md"
   )

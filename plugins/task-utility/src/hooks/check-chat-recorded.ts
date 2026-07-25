@@ -152,10 +152,8 @@ node ${q(path.join(values.pluginRoot, "scripts", "commit-chat-recording.mjs"))} 
 commit の JSON が ok=true なら終了してください。ok=false またはコマンド失敗時は、記録先を直接編集せず、エラーを最終応答に短く出して終了してください。`
 }
 
-export function buildClaudeArgs(
-  prompt: string,
-  stateBaseDir: string
-): string[] {
+export function buildClaudeArgs(prompt: string, addDirs: string[]): string[] {
+  const dirs = [...new Set(addDirs)].filter(Boolean)
   return [
     "-p",
     prompt,
@@ -168,8 +166,7 @@ export function buildClaudeArgs(
     "Bash,Write",
     "--permission-mode",
     "acceptEdits",
-    "--add-dir",
-    stateBaseDir,
+    ...dirs.flatMap((dir) => ["--add-dir", dir]),
     "--append-system-prompt",
     RECORDER_SYSTEM_PROMPT
   ]
@@ -386,7 +383,7 @@ async function main(): Promise<void> {
   )
   const result = await spawnRecorder(
     command,
-    buildClaudeArgs(prompt, paths.baseDir),
+    buildClaudeArgs(prompt, [paths.baseDir, paths.tempDir]),
     projectDir,
     paths.logPath
   )
