@@ -30,8 +30,12 @@
 <!-- 記入ガイド
 エージェント運用方針が記述された2つのファイルを、利用状況によってこのセクションに以下の内容をコピペしてください。
 この記入ガイドは使用時には削除してください。
-Claude Code only -> 最初に agent-policy:claude-only スキルを使用し、これに従ってください。
-Codex 併用時 -> 最初に agent-policy:with-codex スキルを使用し、これに従ってください。
+
+Claude Code only ->
+- 最初に必ず agent-policy:claude-only スキルを使用し、この規律に従うこと
+
+With Codex ->
+- 最初に必ず agent-policy:with-codex スキルを使用し、この規律に従うこと
 -->
 
 ## MCPサーバー運用方針
