@@ -9,7 +9,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 ## モデル別役割
 
-- **Fable**: オーケストレーション / 要件定義 / 不可逆な決定の承認ゲート(計画確定 Approve) / 設計・計画・実装のアドバイザー。
+- **Fable**: オーケストレーション / 要件定義 / 計画承認(不可逆な決定の承認ゲート) / 設計・計画・実装のアドバイザー。
 - **Opus**: オーケストレーション / 要件定義 / 最終レビュー / 重要な設計判断 / 設計書・実装計画書(WBS)の作成 / コードベース探索の統括 / Haiku レビュー後の補足修正。
 - **GPT Sol**: 複雑・重要な実装。
 - **GPT Terra**: 通常の実装 / ドキュメント作成 / 設定編集 / ビルド・テスト実行と結果整理 / 定型メンテナンス / 探索実働。
@@ -35,7 +35,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 詳細は `../../references/cost-discipline.md` に従うこと。
 
-- ブリーフに使用してよいスキルを明示し、指定がない場合はサブエージェントにスキルをロードさせないこと。スキル側のトリガーはブリーフの明示指定に劣後する。
+- ブリーフに使用してよいスキルを明示し、指定がない場合はサブエージェントにスキルをロードさせないこと。
 - 10k トークン級以上の巨大スキルは委譲先にロードさせず、必要な節・手順・制約だけを参照断片としてブリーフへ転記すること。
 - 転記級の作業はオーケストレーターが直接 Write し、探索・反復作業は N 件を 1 dispatch に束ねてバッチ委譲すること。独立した dispatch は同一ターンに並列で束ねる。
 
@@ -60,7 +60,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 実務タスク着手前に確認し、上から順に適用すること。
 
 1. `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。
-2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`(Sol)/ `--model gpt-5.6-terra`(Terra)/ `--model gpt-5.6-luna`(Luna)。
+2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`/ `--model gpt-5.6-terra`/ `--model gpt-5.6-luna`。
 3. どちらも不可なら、ユーザーへ `agent-policy:setup` の実行を案内し、生成完了(またはスキップ)までは claude-only 方針の担当表(Opus=詳細設計・実装計画 / Sonnet=実装 / Haiku=軽量)で一時的に代行する。
 
 ## 役割 Agents を持つプラグインとの併用
