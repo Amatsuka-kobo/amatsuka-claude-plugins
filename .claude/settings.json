@@ -65,5 +65,5 @@
       }
     }
   },
-  "defaultModel": "fable"
+  "model": "opus"
 }
