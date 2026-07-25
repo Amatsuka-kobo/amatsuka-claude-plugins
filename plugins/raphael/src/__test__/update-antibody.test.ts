@@ -82,6 +82,17 @@ function json(result: { stdout: string }): Record<string, unknown> {
   return JSON.parse(result.stdout) as Record<string, unknown>
 }
 
+// extend の期待値は実行日に依存する(record-fire が last_fired に当日を書くため)。
+// 日付を固定値で書くと日付が変わった瞬間に落ちるので、実装と同じ式で導出する。
+function addDays(date: string, days: number): string {
+  const value = new Date(`${date}T00:00:00.000Z`)
+  value.setUTCDate(value.getUTCDate() + days)
+  return value.toISOString().slice(0, 10)
+}
+
+const DEFAULT_EXPIRY_DAYS = 30
+const MAX_LIFETIME_DAYS = 90
+
 test("create/patch dry-run/patch/status transition/extend/fire が exit 0 で store 経由更新する", async () => {
   const dir = project()
   try {
@@ -116,11 +127,17 @@ test("create/patch dry-run/patch/status transition/extend/fire が exit 0 で st
     expect((await invoke(dir, ["set-status", id, "expired"])).code).toBe(0)
     expect(readAntibody(dir, id).status).toBe("expired")
 
+    const fired = readAntibody(dir, id)
     const extended = await invoke(dir, ["extend", id])
     expect(extended.code).toBe(0)
-    expect(readAntibody(dir, id)).toMatchObject({
+    const after = readAntibody(dir, id)
+    const lastFired = fired.stats.last_fired as string
+    expect(after).toMatchObject({
       status: "active",
-      expires: "2026-08-23"
+      expires: [
+        addDays(lastFired, DEFAULT_EXPIRY_DAYS),
+        addDays(after.created, MAX_LIFETIME_DAYS)
+      ].sort()[0]
     })
     expect((await invoke(dir, ["record-fire", id])).code).toBe(0)
     expect(readAntibody(dir, id).stats.fired).toBe(2)
