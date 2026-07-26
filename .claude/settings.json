@@ -66,17 +66,5 @@
         "repo": "openai/codex-plugin-cc"
       }
     }
-  },
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "ツール実行より先に、この発話への返答(回答、または受け止めと進め方)を本文で書くこと。"
-          }
-        ]
-      }
-    ]
   }
 }
