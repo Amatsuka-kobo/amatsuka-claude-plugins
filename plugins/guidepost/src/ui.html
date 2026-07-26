@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>guidepost</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #172033;
+  --muted: #667085;
+  --border: #dfe3ea;
+  --pane: #f7f8fa;
+  --surface: #ffffff;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8f0ff;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --warning: #9a6700;
+  --warning-bg: #fff8c5;
+  --add: #16794b;
+  --add-bg: #eaf8f0;
+  --del: #c9362b;
+  --del-bg: #fff0ee;
+  --hunk: #6f42c1;
+  --hunk-bg: #f3edff;
+  --diff-meta: #52606d;
+  --code-string: #0b7285;
+  --code-comment: #758195;
+  --code-number: #b15c00;
+  --code-keyword: #7c3aed;
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+html[data-theme="dark"] {
+  --bg: #101522;
+  --fg: #edf1f7;
+  --muted: #9da8ba;
+  --border: #30394a;
+  --pane: #171e2d;
+  --surface: #111827;
+  --accent: #6ea8fe;
+  --accent-fg: #08111f;
+  --accent-soft: #1d355d;
+  --danger: #ff9b94;
+  --danger-bg: #3a1b1d;
+  --warning: #f4d35e;
+  --warning-bg: #372f13;
+  --add: #70d6a2;
+  --add-bg: #142a22;
+  --del: #ff9b94;
+  --del-bg: #351a1b;
+  --hunk: #c4a7ff;
+  --hunk-bg: #28203d;
+  --diff-meta: #aab4c3;
+  --code-string: #79d4df;
+  --code-comment: #8e9bad;
+  --code-number: #ffbd73;
+  --code-keyword: #c4a7ff;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+button, select, textarea { font: inherit; }
+button, select {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--fg);
+}
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.45; }
+button:focus-visible, select:focus-visible, textarea:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#app { height: 100%; display: flex; flex-direction: column; }
+#topbar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+#brand { font-weight: 700; letter-spacing: 0.02em; }
+#topbar-note { color: var(--muted); font-size: 12px; }
+.spacer { flex: 1; }
+#theme-toggle { padding: 5px 10px; font-size: 12px; }
+#error-banner {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 13px;
+}
+#workspace { flex: 1; min-height: 0; display: flex; }
+#tour-pane {
+  width: 320px;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--pane);
+}
+#tour-picker-wrap { padding: 14px; border-bottom: 1px solid var(--border); }
+#tour-picker-wrap label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#tour-picker { width: 100%; padding: 8px 9px; }
+#tour-picker.tour-error, #tour-picker option.tour-error { color: var(--muted); }
+#tour-meta { min-height: 18px; margin-top: 7px; color: var(--muted); font-size: 12px; }
+#stop-list-label {
+  padding: 11px 14px 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#stop-list { flex: 1; min-height: 0; overflow-y: auto; }
+.stop-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+}
+.stop-item:hover { background: var(--surface); }
+.stop-item.selected {
+  background: var(--surface);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.stop-item.read .stop-title { color: var(--muted); }
+.stop-check { margin: 3px 0 0; accent-color: var(--accent); cursor: pointer; }
+.stop-copy { min-width: 0; }
+.stop-number { color: var(--muted); font-size: 11px; }
+.stop-title {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stop-file {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.empty-list { padding: 18px 14px; color: var(--muted); font-size: 13px; }
+#detail-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#detail-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+#empty-state {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 30px;
+  color: var(--muted);
+  text-align: center;
+}
+#stop-content { padding: 22px clamp(16px, 3vw, 38px) 30px; }
+#stop-header { margin-bottom: 18px; }
+#stop-position { color: var(--muted); font-size: 12px; }
+#stop-title { margin: 5px 0 7px; font-size: clamp(22px, 2.5vw, 30px); line-height: 1.25; }
+#stop-file {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+.section-title { margin: 24px 0 9px; font-size: 15px; }
+#diff-view {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.diff-line { display: flex; min-width: max-content; white-space: pre; }
+.diff-line.add { background: var(--add-bg); }
+.diff-line.del { background: var(--del-bg); }
+.diff-line.hunk { background: var(--hunk-bg); color: var(--hunk); }
+.diff-line.meta { color: var(--diff-meta); }
+.diff-prefix {
+  flex: 0 0 24px;
+  padding-left: 8px;
+  color: var(--muted);
+  user-select: none;
+}
+.diff-line.add .diff-prefix { color: var(--add); }
+.diff-line.del .diff-prefix { color: var(--del); }
+.diff-code { flex: 1; padding-right: 12px; }
+.tok-string { color: var(--code-string); }
+.tok-comment { color: var(--code-comment); font-style: italic; }
+.tok-number { color: var(--code-number); }
+.tok-keyword { color: var(--code-keyword); font-weight: 600; }
+#no-diff { padding: 14px; color: var(--muted); }
+#explanations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.explanation {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.explanation h3 { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.explanation p { margin: 0; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+#answers { display: flex; flex-direction: column; gap: 9px; }
+.answer {
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  background: var(--accent-soft);
+}
+.answer-time { margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+.answer-body { margin: 0; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+#answers-empty { color: var(--muted); font-size: 13px; }
+#navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.nav-button { min-width: 92px; padding: 7px 12px; }
+#nav-hint { color: var(--muted); font-size: 11px; text-align: center; }
+#question-box {
+  padding: 11px 14px 13px;
+  border-top: 1px solid var(--border);
+  background: var(--pane);
+}
+#question-body {
+  display: block;
+  width: 100%;
+  min-height: 68px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--fg);
+  line-height: 1.45;
+}
+#question-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+#question-status { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; }
+#question-status.error { color: var(--danger); }
+#question-send {
+  padding: 7px 15px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+@media (max-width: 820px) {
+  body { overflow: auto; }
+  #app { min-height: 100%; height: auto; }
+  #workspace { flex-direction: column; }
+  #tour-pane {
+    width: 100%;
+    min-width: 0;
+    max-height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  #detail-pane { min-height: 58vh; }
+  #explanations { grid-template-columns: 1fr; }
+  #nav-hint { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <span id="brand">guidepost</span>
+    <span id="topbar-note">コードツアー</span>
+    <span class="spacer"></span>
+    <button id="theme-toggle" type="button">テーマ: device</button>
+  </header>
+  <div id="error-banner" role="alert" hidden></div>
+  <main id="workspace">
+    <aside id="tour-pane" aria-label="ツアーとストップ">
+      <div id="tour-picker-wrap">
+        <label for="tour-picker">ツアー</label>
+        <select id="tour-picker" disabled>
+          <option value="">読み込み中...</option>
+        </select>
+        <div id="tour-meta"></div>
+      </div>
+      <div id="stop-list-label">ストップ</div>
+      <div id="stop-list"></div>
+    </aside>
+    <section id="detail-pane" aria-label="ストップ詳細">
+      <div id="detail-scroll">
+        <div id="empty-state">ツアーを読み込んでいます。</div>
+        <article id="stop-content" hidden>
+          <header id="stop-header">
+            <div id="stop-position"></div>
+            <h1 id="stop-title"></h1>
+            <div id="stop-file"></div>
+          </header>
+          <h2 class="section-title">変更</h2>
+          <div id="diff-view"></div>
+          <h2 class="section-title">解説</h2>
+          <div id="explanations">
+            <section class="explanation">
+              <h3>何をしているか</h3>
+              <p id="stop-what"></p>
+            </section>
+            <section class="explanation">
+              <h3>なぜこの設計か</h3>
+              <p id="stop-why"></p>
+            </section>
+            <section class="explanation">
+              <h3>壊すと何が起きるか</h3>
+              <p id="stop-if-broken"></p>
+            </section>
+          </div>
+          <h2 class="section-title">回答</h2>
+          <div id="answers"></div>
+          <div id="answers-empty">このストップへの回答はまだありません。</div>
+        </article>
+      </div>
+      <nav id="navigation" aria-label="ストップ移動">
+        <button id="previous-stop" class="nav-button" type="button" disabled>前へ</button>
+        <div class="spacer"></div>
+        <span id="nav-hint">k / ↑ / ← ・ j / ↓ / →</span>
+        <div class="spacer"></div>
+        <button id="next-stop" class="nav-button" type="button" disabled>次へ</button>
+      </nav>
+      <div id="question-box">
+        <textarea id="question-body" placeholder="このストップについて質問する (Ctrl+Enter / Cmd+Enter で送信)" disabled></textarea>
+        <div id="question-actions">
+          <span id="question-status" role="status"></span>
+          <button id="question-send" type="button" disabled>質問を送る</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+"use strict";
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const THEMES = ["light", "dark", "device"];
+  const media = matchMedia("(prefers-color-scheme: dark)");
+  const keywordSets = {
+    script: new Set([
+      "as", "async", "await", "break", "case", "catch", "class", "const",
+      "continue", "debugger", "declare", "default", "delete", "do", "else",
+      "enum", "export", "extends", "false", "finally", "for", "from",
+      "function", "get", "if", "implements", "import", "in", "infer",
+      "instanceof", "interface", "keyof", "let", "module", "namespace",
+      "never", "new", "null", "of", "private", "protected", "public",
+      "readonly", "return", "satisfies", "set", "static", "super", "switch",
+      "this", "throw", "true", "try", "type", "typeof", "undefined",
+      "unknown", "using", "var", "void", "while", "with", "yield"
+    ]),
+    json: new Set(["false", "null", "true"])
+  };
+
+  let tourEntries = [];
+  let currentTour = null;
+  let selectedTourId = "";
+  let selectedStopIndex = -1;
+  let readStops = new Set();
+  let loadSequence = 0;
+  let pollInFlight = false;
+  let listWarning = "";
+  const answersByStop = new Map();
+  const answerNodes = new Map();
+
+  function themeChoice() {
+    try {
+      const saved = localStorage.getItem("guidepost:theme");
+      return THEMES.includes(saved) ? saved : "device";
+    } catch {
+      return "device";
+    }
+  }
+
+  function applyTheme() {
+    const choice = themeChoice();
+    const effective = choice === "device"
+      ? (media.matches ? "dark" : "light")
+      : choice;
+    document.documentElement.dataset.theme = effective;
+    $("theme-toggle").textContent = "テーマ: " + choice;
+  }
+
+  $("theme-toggle").addEventListener("click", () => {
+    const current = themeChoice();
+    const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+    try {
+      localStorage.setItem("guidepost:theme", next);
+    } catch {}
+    applyTheme();
+  });
+  media.addEventListener("change", applyTheme);
+  applyTheme();
+
+  function setBanner(message) {
+    const banner = $("error-banner");
+    banner.textContent = message || "";
+    banner.hidden = !message;
+  }
+
+  function restoreListWarning() {
+    setBanner(listWarning);
+  }
+
+  function setQuestionStatus(message, isError = false) {
+    const status = $("question-status");
+    status.textContent = message;
+    status.classList.toggle("error", isError);
+  }
+
+  async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {}
+    if (!response.ok) {
+      const reason = data && typeof data.error === "string"
+        ? data.error
+        : "HTTP " + response.status;
+      throw new Error(reason);
+    }
+    return data;
+  }
+
+  function readStorageKey(tourId) {
+    return "guidepost:" + tourId + ":read";
+  }
+
+  function loadReadStops(tourId) {
+    try {
+      const value = JSON.parse(localStorage.getItem(readStorageKey(tourId)) || "[]");
+      return new Set(Array.isArray(value)
+        ? value.filter((item) => typeof item === "string")
+        : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function saveReadStops() {
+    if (!selectedTourId) return;
+    try {
+      localStorage.setItem(
+        readStorageKey(selectedTourId),
+        JSON.stringify([...readStops])
+      );
+    } catch {
+      setBanner("既読状態をブラウザに保存できませんでした。");
+    }
+  }
+
+  function currentEntry() {
+    return tourEntries.find((entry) => entry.tourId === selectedTourId) || null;
+  }
+
+  function formatCreatedAt(value) {
+    if (!value) return "作成日時不明";
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("ja-JP");
+  }
+
+  function renderTourPicker() {
+    const picker = $("tour-picker");
+    picker.textContent = "";
+    for (const entry of tourEntries) {
+      const option = document.createElement("option");
+      option.value = entry.tourId;
+      option.textContent = entry.error
+        ? "読込エラー: " + entry.title
+        : entry.title;
+      option.classList.toggle("tour-error", Boolean(entry.error));
+      picker.append(option);
+    }
+    picker.disabled = tourEntries.length === 0;
+    picker.value = selectedTourId;
+    picker.classList.toggle("tour-error", Boolean(currentEntry()?.error));
+  }
+
+  function renderTourMeta() {
+    const entry = currentEntry();
+    if (!entry) {
+      $("tour-meta").textContent = "";
+      return;
+    }
+    $("tour-meta").textContent = entry.error
+      ? "このツアーは読み込めません"
+      : entry.stopCount + " ストップ ・ " + formatCreatedAt(entry.createdAt);
+  }
+
+  function showEmpty(message) {
+    $("empty-state").textContent = message;
+    $("empty-state").hidden = false;
+    $("stop-content").hidden = true;
+    setDetailEnabled(false);
+  }
+
+  function setDetailEnabled(enabled) {
+    const hasPrevious = enabled && selectedStopIndex > 0;
+    const hasNext = enabled && currentTour
+      && selectedStopIndex < currentTour.stops.length - 1;
+    $("previous-stop").disabled = !hasPrevious;
+    $("next-stop").disabled = !hasNext;
+    $("question-body").disabled = !enabled;
+    $("question-send").disabled = !enabled;
+  }
+
+  function renderStopList() {
+    const list = $("stop-list");
+    list.textContent = "";
+    if (!currentTour) {
+      const empty = document.createElement("div");
+      empty.className = "empty-list";
+      empty.textContent = currentEntry()?.error
+        ? "エラーのためストップを表示できません。"
+        : "ストップはありません。";
+      list.append(empty);
+      return;
+    }
+
+    currentTour.stops.forEach((stop, index) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "stop-item";
+      item.classList.toggle("selected", index === selectedStopIndex);
+      item.classList.toggle("read", readStops.has(stop.id));
+
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "stop-check";
+      check.checked = readStops.has(stop.id);
+      check.setAttribute("aria-label", stop.title + "を既読にする");
+      check.addEventListener("click", (event) => event.stopPropagation());
+      check.addEventListener("change", () => {
+        if (check.checked) readStops.add(stop.id);
+        else readStops.delete(stop.id);
+        item.classList.toggle("read", check.checked);
+        saveReadStops();
+      });
+
+      const copy = document.createElement("span");
+      copy.className = "stop-copy";
+      const number = document.createElement("span");
+      number.className = "stop-number";
+      number.textContent = "STOP " + String(index + 1).padStart(2, "0");
+      const title = document.createElement("span");
+      title.className = "stop-title";
+      title.textContent = stop.title;
+      const file = document.createElement("span");
+      file.className = "stop-file";
+      file.textContent = stop.file;
+      copy.append(number, title, file);
+      item.append(check, copy);
+      item.addEventListener("click", () => selectStop(index));
+      list.append(item);
+    });
+  }
+
+  function languageForFile(file) {
+    const clean = String(file || "").split(/[?#]/, 1)[0].toLowerCase();
+    if (/\.(?:ts|tsx|js|jsx|mts|mjs)$/.test(clean)) return "script";
+    if (/\.json$/.test(clean)) return "json";
+    if (/\.(?:md|markdown)$/.test(clean)) return "markdown";
+    return "plain";
+  }
+
+  function appendToken(parent, className, text) {
+    if (!text) return;
+    if (!className) {
+      parent.append(document.createTextNode(text));
+      return;
+    }
+    const span = document.createElement("span");
+    span.className = className;
+    span.textContent = text;
+    parent.append(span);
+  }
+
+  function matchNumber(text) {
+    return /^(?:0[xX][\da-fA-F]+|0[bB][01]+|0[oO][0-7]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?n?)/.exec(text)?.[0] || "";
+  }
+
+  function tokenizeCode(parent, text, language) {
+    if (language === "plain") {
+      appendToken(parent, "", text);
+      return;
+    }
+    if (language === "markdown") {
+      tokenizeMarkdown(parent, text);
+      return;
+    }
+
+    const keywords = keywordSets[language] || new Set();
+    let index = 0;
+    while (index < text.length) {
+      if (text.startsWith("//", index)) {
+        appendToken(parent, "tok-comment", text.slice(index));
+        break;
+      }
+
+      const character = text[index];
+      if (character === "\"" || character === "'" || character === "`") {
+        let end = index + 1;
+        while (end < text.length) {
+          if (text[end] === "\\") {
+            end += 2;
+            continue;
+          }
+          if (text[end] === character) {
+            end++;
+            break;
+          }
+          end++;
+        }
+        appendToken(parent, "tok-string", text.slice(index, end));
+        index = end;
+        continue;
+      }
+
+      const number = matchNumber(text.slice(index));
+      if (number && (index === 0 || !/[\w$]/.test(text[index - 1]))) {
+        appendToken(parent, "tok-number", number);
+        index += number.length;
+        continue;
+      }
+
+      if (/[A-Za-z_$]/.test(character)) {
+        const word = /^[A-Za-z_$][\w$]*/.exec(text.slice(index))[0];
+        appendToken(parent, keywords.has(word) ? "tok-keyword" : "", word);
+        index += word.length;
+        continue;
+      }
+
+      let end = index + 1;
+      while (
+        end < text.length
+        && !/[A-Za-z_$'"`\d]/.test(text[end])
+        && !text.startsWith("//", end)
+      ) {
+        end++;
+      }
+      appendToken(parent, "", text.slice(index, end));
+      index = end;
+    }
+  }
+
+  function tokenizeMarkdown(parent, text) {
+    let index = 0;
+    const marker = /^(\s*)(#{1,6}|>|[-*+]|\d+\.)(\s+)/.exec(text);
+    if (marker) {
+      appendToken(parent, "", marker[1]);
+      appendToken(parent, "tok-keyword", marker[2]);
+      appendToken(parent, "", marker[3]);
+      index = marker[0].length;
+    }
+
+    while (index < text.length) {
+      if (text.startsWith("<!--", index)) {
+        const close = text.indexOf("-->", index + 4);
+        const end = close === -1 ? text.length : close + 3;
+        appendToken(parent, "tok-comment", text.slice(index, end));
+        index = end;
+        continue;
+      }
+      if (text[index] === "`") {
+        const close = text.indexOf("`", index + 1);
+        const end = close === -1 ? text.length : close + 1;
+        appendToken(parent, "tok-string", text.slice(index, end));
+        index = end;
+        continue;
+      }
+      const number = matchNumber(text.slice(index));
+      if (number && (index === 0 || !/\w/.test(text[index - 1]))) {
+        appendToken(parent, "tok-number", number);
+        index += number.length;
+        continue;
+      }
+      appendToken(parent, "", text[index]);
+      index++;
+    }
+  }
+
+  function renderDiff(stop) {
+    const view = $("diff-view");
+    view.textContent = "";
+    if (!stop.diffText) {
+      const empty = document.createElement("div");
+      empty.id = "no-diff";
+      empty.textContent = "このストップに diff はありません。";
+      view.append(empty);
+      return;
+    }
+
+    const language = languageForFile(stop.file);
+    for (const line of stop.diffText.split("\n")) {
+      const row = document.createElement("div");
+      row.className = "diff-line";
+      const prefix = document.createElement("span");
+      prefix.className = "diff-prefix";
+      const code = document.createElement("span");
+      code.className = "diff-code";
+
+      if (line.startsWith("@@")) {
+        row.classList.add("hunk");
+        prefix.textContent = "";
+        code.textContent = line;
+      } else if (
+        line.startsWith("diff --git")
+        || line.startsWith("index ")
+        || line.startsWith("---")
+        || line.startsWith("+++")
+      ) {
+        row.classList.add("meta");
+        prefix.textContent = "";
+        code.textContent = line;
+      } else if (line.startsWith("+")) {
+        row.classList.add("add");
+        prefix.textContent = "+";
+        tokenizeCode(code, line.slice(1), language);
+      } else if (line.startsWith("-")) {
+        row.classList.add("del");
+        prefix.textContent = "-";
+        tokenizeCode(code, line.slice(1), language);
+      } else if (line.startsWith(" ")) {
+        prefix.textContent = " ";
+        tokenizeCode(code, line.slice(1), language);
+      } else {
+        prefix.textContent = "";
+        tokenizeCode(code, line, language);
+      }
+      row.append(prefix, code);
+      view.append(row);
+    }
+  }
+
+  function answerKey(answer) {
+    return answer.stopId + "\u0000" + answer.ts;
+  }
+
+  function replaceAnswers(answers) {
+    answersByStop.clear();
+    for (const answer of answers || []) {
+      if (!answersByStop.has(answer.stopId)) answersByStop.set(answer.stopId, new Map());
+      answersByStop.get(answer.stopId).set(answerKey(answer), answer);
+    }
+  }
+
+  function createAnswerNode(answer) {
+    const article = document.createElement("article");
+    article.className = "answer";
+    const time = document.createElement("div");
+    time.className = "answer-time";
+    time.textContent = answer.ts;
+    const body = document.createElement("p");
+    body.className = "answer-body";
+    body.textContent = answer.body;
+    article.append(time, body);
+    return article;
+  }
+
+  function insertAnswerNode(answer) {
+    const key = answerKey(answer);
+    const existing = answerNodes.get(key);
+    if (existing) {
+      existing.querySelector(".answer-body").textContent = answer.body;
+      return;
+    }
+    const node = createAnswerNode(answer);
+    answerNodes.set(key, node);
+    const answers = $("answers");
+    const ordered = [...answers.children];
+    const before = ordered.find((item) => item.dataset.ts > answer.ts);
+    node.dataset.ts = answer.ts;
+    answers.insertBefore(node, before || null);
+    $("answers-empty").hidden = answers.children.length > 0;
+  }
+
+  function renderAnswers(stopId) {
+    $("answers").textContent = "";
+    answerNodes.clear();
+    const answers = answersByStop.get(stopId);
+    for (const answer of answers?.values() || []) insertAnswerNode(answer);
+    $("answers-empty").hidden = Boolean(answers?.size);
+  }
+
+  function renderSelectedStop() {
+    if (!currentTour || selectedStopIndex < 0) {
+      showEmpty("ストップを選択してください。");
+      return;
+    }
+    const stop = currentTour.stops[selectedStopIndex];
+    $("empty-state").hidden = true;
+    $("stop-content").hidden = false;
+    $("stop-position").textContent =
+      "ストップ " + (selectedStopIndex + 1) + " / " + currentTour.stops.length;
+    $("stop-title").textContent = stop.title;
+    $("stop-file").textContent = stop.file;
+    $("stop-what").textContent = stop.what;
+    $("stop-why").textContent = stop.why;
+    $("stop-if-broken").textContent = stop.ifBroken;
+    renderDiff(stop);
+    renderAnswers(stop.id);
+    setDetailEnabled(true);
+    setQuestionStatus("");
+  }
+
+  function selectStop(index) {
+    if (!currentTour || index < 0 || index >= currentTour.stops.length) return;
+    selectedStopIndex = index;
+    renderStopList();
+    renderSelectedStop();
+    $("detail-scroll").scrollTop = 0;
+  }
+
+  async function loadTour(tourId) {
+    const sequence = ++loadSequence;
+    selectedTourId = tourId;
+    currentTour = null;
+    selectedStopIndex = -1;
+    readStops = loadReadStops(tourId);
+    answersByStop.clear();
+    answerNodes.clear();
+    renderTourPicker();
+    renderTourMeta();
+    renderStopList();
+    setQuestionStatus("");
+
+    const entry = currentEntry();
+    if (!entry) {
+      showEmpty("ツアーを選択してください。");
+      restoreListWarning();
+      return;
+    }
+    if (entry.error) {
+      showEmpty("ツアーを読み込めません。\n" + entry.error);
+      setBanner("ツアー「" + entry.title + "」: " + entry.error);
+      return;
+    }
+
+    showEmpty("ツアーを読み込んでいます。");
+    restoreListWarning();
+    try {
+      const data = await fetchJson("/api/tours/" + encodeURIComponent(tourId));
+      if (sequence !== loadSequence || selectedTourId !== tourId) return;
+      currentTour = data.tour;
+      replaceAnswers(data.answers);
+      selectedStopIndex = 0;
+      renderTourMeta();
+      renderStopList();
+      renderSelectedStop();
+      restoreListWarning();
+    } catch (error) {
+      if (sequence !== loadSequence || selectedTourId !== tourId) return;
+      const reason = error instanceof Error ? error.message : String(error);
+      showEmpty("ツアーの読み込みに失敗しました。\n" + reason);
+      setBanner("ツアーの読み込みに失敗しました: " + reason);
+    }
+  }
+
+  async function loadTours() {
+    try {
+      const data = await fetchJson("/api/tours");
+      tourEntries = Array.isArray(data) ? data : [];
+      const failures = tourEntries.filter((entry) => entry.error);
+      listWarning = failures.length > 0
+        ? "読み込めないツアーが " + failures.length + " 件あります。"
+        : "";
+      if (tourEntries.length === 0) {
+        selectedTourId = "";
+        renderTourPicker();
+        renderTourMeta();
+        renderStopList();
+        showEmpty("ツアーはまだありません。");
+        restoreListWarning();
+        return;
+      }
+      const firstValid = tourEntries.find((entry) => !entry.error);
+      selectedTourId = (firstValid || tourEntries[0]).tourId;
+      renderTourPicker();
+      await loadTour(selectedTourId);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      tourEntries = [];
+      selectedTourId = "";
+      renderTourPicker();
+      renderTourMeta();
+      renderStopList();
+      showEmpty("ツアー一覧の読み込みに失敗しました。");
+      setBanner("ツアー一覧の読み込みに失敗しました: " + reason);
+    }
+  }
+
+  async function pollAnswers() {
+    if (pollInFlight || !currentTour || !selectedTourId) return;
+    pollInFlight = true;
+    const pollTourId = selectedTourId;
+    try {
+      const data = await fetchJson(
+        "/api/tours/" + encodeURIComponent(pollTourId)
+      );
+      if (selectedTourId !== pollTourId || !currentTour) return;
+      for (const answer of data.answers || []) {
+        if (!answersByStop.has(answer.stopId)) {
+          answersByStop.set(answer.stopId, new Map());
+        }
+        const stopAnswers = answersByStop.get(answer.stopId);
+        const key = answerKey(answer);
+        const previous = stopAnswers.get(key);
+        if (!previous || previous.body !== answer.body) {
+          stopAnswers.set(key, answer);
+          const selectedStop = currentTour.stops[selectedStopIndex];
+          if (selectedStop && selectedStop.id === answer.stopId) {
+            insertAnswerNode(answer);
+          }
+        }
+      }
+      restoreListWarning();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setBanner("回答の更新に失敗しました: " + reason);
+    } finally {
+      pollInFlight = false;
+    }
+  }
+
+  function moveStop(offset) {
+    if (!currentTour) return;
+    const next = selectedStopIndex + offset;
+    if (next >= 0 && next < currentTour.stops.length) selectStop(next);
+  }
+
+  async function sendQuestion() {
+    if (!currentTour || selectedStopIndex < 0) return;
+    const area = $("question-body");
+    const question = area.value.trim();
+    if (!question) {
+      setQuestionStatus("質問を入力してください。", true);
+      return;
+    }
+
+    const stop = currentTour.stops[selectedStopIndex];
+    const button = $("question-send");
+    button.disabled = true;
+    area.disabled = true;
+    setQuestionStatus("送信しています...");
+    try {
+      await fetchJson("/api/questions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          tourId: currentTour.tourId,
+          stopId: stop.id,
+          question
+        })
+      });
+      area.value = "";
+      setQuestionStatus(
+        "質問を送りました。回答が届くとここに表示されます"
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setQuestionStatus("質問の送信に失敗しました: " + reason, true);
+      setBanner("質問の送信に失敗しました: " + reason);
+    } finally {
+      setDetailEnabled(Boolean(currentTour && selectedStopIndex >= 0));
+    }
+  }
+
+  $("tour-picker").addEventListener("change", (event) => {
+    void loadTour(event.target.value);
+  });
+  $("previous-stop").addEventListener("click", () => moveStop(-1));
+  $("next-stop").addEventListener("click", () => moveStop(1));
+  $("question-send").addEventListener("click", () => void sendQuestion());
+  $("question-body").addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void sendQuestion();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement
+      || target instanceof HTMLButtonElement
+      || target?.isContentEditable
+    ) {
+      return;
+    }
+    if (event.key === "j" || event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      moveStop(1);
+    } else if (event.key === "k" || event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveStop(-1);
+    }
+  });
+
+  void loadTours();
+  setInterval(() => void pollAnswers(), 2000);
+})();
+</script>
+</body>
+</html>
