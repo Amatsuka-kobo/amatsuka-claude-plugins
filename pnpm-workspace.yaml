@@ -7,5 +7,6 @@ packages:
   - plugins/pitcrew
   - plugins/raphael
   - plugins/prefetch
+  - plugins/guidepost
 allowBuilds:
   esbuild: true
