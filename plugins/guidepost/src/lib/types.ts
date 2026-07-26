@@ -33,9 +33,9 @@ export interface Tour {
 
 export interface Question {
   name: string
-  tourId: string
-  stopId: string
-  createdAt: string
+  tourId: string | null
+  stopId: string | null
+  createdAt: string | null
   body: string
 }
 

@@ -5,7 +5,7 @@ export type FrontmatterData = Record<string, string | number | string[]>
 // 値に YAML 的に危険な文字が含まれる場合、および数字始まり(YAML で数値に
 // 化ける "002"・"7be90d4" 等)の場合は JSON 文字列として引用する
 function quote(v: string): string {
-  return /[:#"[\],]|^[\s\d]|\s$|^$/.test(v) ? JSON.stringify(v) : v
+  return /[:#"[\],]|[\r\n]|^[\s\d]|\s$|^$/.test(v) ? JSON.stringify(v) : v
 }
 
 function unquote(v: string): string {
