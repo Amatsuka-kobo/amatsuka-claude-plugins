@@ -3,7 +3,7 @@
 - プラグイン: `guidepost`
 - manifest version: `0.1.0-dev`
 - 実装同期先: `plugins/guidepost/`
-- ステータス: 設計レビュー中(未実装)
+- ステータス: 実装済み(v0.1.0-dev)
 
 ## 1. コンセプト
 
@@ -35,21 +35,32 @@ plugins/guidepost/
 ├── DESIGN.md
 ├── package.json
 ├── build.ts
-├── hooks/hooks.json
+├── hooks/
+│   └── hooks.json
 ├── skills/
 │   └── guidepost/SKILL.md        # ツアー生成の入口
 ├── src/
-│   ├── serve.ts                  # ローカルサーバ(静的配信+質問POST受付)
+│   ├── serve.ts                  # listen 専用の薄いローカルサーバー入口
+│   ├── ui.html                   # 自己完結のブラウザビューア
 │   ├── hooks/
 │   │   ├── inject-stop.ts        # Stop 時に未処理質問を注入
-│   │   └── inject-pre-tool-use.ts# ターン中の注入(pitcrew と同型)
+│   │   └── inject-pre-tool-use.ts# ターン中の注入
 │   ├── lib/
-│   │   ├── tour-store.ts         # tour.json / answers/ の読み書き・スキーマ検証
-│   │   ├── queue.ts              # questions キューの読み書き
-│   │   ├── atomic.ts             # アトミック書き込み(pitcrew と同型)
-│   │   ├── hook-io.ts            # hook 入出力(pitcrew と同型)
+│   │   ├── atomic.ts             # 一時ファイル + rename のアトミック書き込み
+│   │   ├── frontmatter.ts        # 質問用 YAML frontmatter の読み書き
+│   │   ├── hook-io.ts            # hook stdin/stdout とエラーログ
+│   │   ├── http-handler.ts       # HTTP リスナーから分離したルーティング
+│   │   ├── injection.ts          # hook 共用の注入文生成
+│   │   ├── paths.ts              # .guidepost 配下のパス解決
+│   │   ├── queue.ts              # questions キューの読み書きと claim
+│   │   ├── tour-store.ts         # tour.json / answers の読み書き・検証
 │   │   └── types.ts
-│   └── __test__/
+│   ├── testing/
+│   │   └── run-ts.ts             # ビルド前の hook 子プロセステスト補助
+│   └── __test__/                 # serve のテスト
+│       └── serve.test.ts
+│   ├── hooks/__test__/           # hook のテスト
+│   └── lib/__test__/             # lib のユニットテスト
 ├── scripts/                      # バンドル出力(git 管理)
 │   ├── serve.mjs
 │   ├── inject-stop.mjs
@@ -58,8 +69,9 @@ plugins/guidepost/
 └── dist/ は使わない
 ```
 
-- ソースは TypeScript(`src/`)、バンドル出力は `scripts/`(利用者はビルド不要)。`pnpm build` で同期。
-- ビューア UI は `ui.html` 1 枚(依存 CDN なしの自己完結。シンタックスハイライトは軽量な自前実装または同梱ライブラリ)。
+- ソースは TypeScript(`src/`)、バンドル出力は `scripts/`(利用者はビルド不要)。`pnpm build` で同期する。
+- `src/serve.ts` は引数解析、listen、ポート再試行、URL 出力、終了処理だけを持つ。ルーティングは `src/lib/http-handler.ts` に分離する。
+- ビューア UI は `ui.html` 1 枚で、依存 CDN なしの自己完結とする。シンタックスハイライトは軽量な自前実装である。
 
 ### 2.2 データレイアウト(対象プロジェクト側)
 
@@ -72,10 +84,10 @@ plugins/guidepost/
     └── questions/<ts>.md         # 未処理質問(処理後は processed/ へ移動)
 ```
 
-`<tour-id>` は `YYYYMMDD-HHmmss-<短縮SHA(7文字)>`。`.guidepost/` ディレクトリはスキルがツアー生成時に作成する。`.gitignore` 推奨(README に記載)。
+`<tour-id>` は `YYYYMMDD-HHmmss-<短縮SHA(7文字)>`。`.guidepost/` ディレクトリはスキルがツアー生成時に作成する。`.gitignore` への追加を推奨する。
 
 - 質問キューは全ツアー共有の 1 箇所とし、各質問ファイルの frontmatter(YAML)に `tourId` / `stopId` を持たせてスコープする。
-- 質問・回答の書き込みはすべて「一時ファイルに書いて rename」のアトミック書き込み(`lib/atomic.ts`)で行い、hook・serve・セッションの並行アクセスによる読みかけ・書きかけを防ぐ。`processed/` への移動主体は hook(注入に成功したターンで移動)。
+- 質問・回答の書き込みはすべて「一時ファイルに書いて rename」のアトミック書き込みで行い、hook・serve・セッションの並行アクセスによる読みかけ・書きかけを防ぐ。`processed/` への移動主体は hook(注入に成功したターンで移動)である。
 
 ## 3. ツアー生成(`/guidepost` スキル)
 
@@ -103,7 +115,7 @@ plugins/guidepost/
       "id": "stop-01",
       "file": "src/auth/session.ts",
       "hunk": { "oldStart": 10, "oldLines": 5, "newStart": 10, "newLines": 22 },
-      "diffText": "@@ ... @@\n-...\n+...",   // 該当 hunk 単体の unified diff を自己完結で保持(ファイル全体ではない)
+      "diffText": "@@ ... @@\n-...\n+...",
       "title": "セッション型の再定義",
       "what": "...",
       "why": "...",
@@ -117,10 +129,10 @@ plugins/guidepost/
 
 ## 4. ビューア(serve + ui.html)
 
-- `node <plugin-root>/scripts/serve.mjs [--port N] [--open]` で起動(スキルが `${CLAUDE_PLUGIN_ROOT}` を解決した起動コマンドを提示する)。カレントディレクトリの `.guidepost/` を読む。デフォルトポートは 4870(pitcrew と衝突しない値)。ポート使用中なら +1 ずつ最大 10 回まで自動リトライし、確定したポートを標準出力に表示する。
+- `node <plugin-root>/scripts/serve.mjs [--port N] [--open]` で起動する。カレントディレクトリの `.guidepost/` を読む。デフォルトポートは 4870。ポート使用中なら +1 ずつ最大 10 回まで自動リトライし、確定したポートを標準出力に表示する。
 - ルーティング: `GET /` → ui.html、`GET /api/tours` → ツアー一覧、`GET /api/tours/<id>` → tour.json + answers、`POST /api/questions` → キューへ書き込み。
-- UI: 左ペインにストップ一覧(既読チェック付き)、右ペインに diffText のハイライト表示と解説 3 要素、下部に質問ボックス。「次へ/前へ」で巡回。
-- シンタックスハイライトは外部 CDN に依存せず、diff の +/- 行色分け+主要言語の軽量トークナイザを ui.html に同梱する(highlight.js 等を使う場合もバンドルに同梱し、オフラインで動作すること)。
+- UI: 左ペインにストップ一覧(既読チェック付き)、右ペインに diffText のハイライト表示と解説 3 要素、下部に質問ボックス。「次へ/前へ」で巡回する。
+- シンタックスハイライトは外部 CDN に依存せず、diff の +/- 行色分け+主要言語の軽量トークナイザを ui.html に同梱する。
 - polling(2 秒間隔)で answers/ の変化を検知し、回答を該当ストップへ自動反映する。
 - localhost バインドのみ。外部公開しない。
 
@@ -129,7 +141,7 @@ plugins/guidepost/
 - `POST /api/questions` は `{tourId, stopId, question}` を `queue/questions/<ts>.md` として書き込む。形式は YAML frontmatter(`tourId` / `stopId` / `createdAt`)+ 本文が質問文。
 - 回答は 1 質問 = 1 ファイル(`answers/<stop-id>-<ts>.md`、`<ts>` は質問ファイルのタイムスタンプを引き継ぐ)。同一ストップへの複数質問はファイルが並ぶだけで、ビューアは作成順に並べて表示する。追記(append)はしない。
 - **Stop hook**: セッションの停止時に未処理質問があれば差し戻し、「該当ストップの文脈(tour.json の該当エントリ)を読み、回答を `answers/<stop-id>-<ts>.md` へ書け」と指示する。処理済み質問は `processed/` へ移動する。
-- **PreToolUse hook**: ターン進行中にも軽量チェックで未処理質問を `additionalContext` として注入する(pitcrew の inject-pre-tool-use と同型)。
+- **PreToolUse hook**: ターン進行中にも軽量チェックで未処理質問を `additionalContext` として注入する。
 - セッションが閉じていた場合、質問はキューに残り、次回セッションの hook が拾う(遅延配送)。
 - hook の判定はすべて決定的(ファイル存在チェックのみ)。hook 内で LLM・外部プロセスを呼ばない。
 
@@ -138,27 +150,28 @@ plugins/guidepost/
 - 巨大 diff: ストップ上限 20 で畳む(§3)。diff 取得自体が巨大(10k 行超)な場合はスキルが警告し、範囲の分割を提案して中断する。
 - `gh` 未インストール・PR 取得失敗: コミット範囲モードの使い方を案内して中断する。部分的成功を装わない。
 - tour.json スキーマ不一致(手編集・版差): ビューアはエラーバナーを表示し、壊れたツアーをスキップする。
-- ベース SHA 不一致(rebase 等): diffText 自己完結のため表示は維持し、ヘッダに「現在のブランチと一致しない」警告のみ出す。
+- ベース SHA 不一致(rebase 等): diffText 自己完結のため表示は維持する。現在のブランチとの一致警告は**初版未実装(README の制限事項参照)**である。
 
 ## 7. テスト
 
-- `src/__test__/` にユニットテスト: tour-store のスキーマ検証、queue の入出力と processed 移動、hook の注入判定(未処理質問あり/なし/壊れたファイル)、serve のルーティング。
-- serve のテストは、リクエスト処理関数を HTTP リスナーから分離して純関数として実装し、`(method, path, body)` を渡してレスポンスを検証する形とする(実ポートを開かずにルーティング・エラー応答・書き込み副作用を検証できる)。ブラウザ上の polling・表示は手動確認の範囲。
-- ビューア UI(ui.html)は手動確認。テスト手順を README に記載する。
+- `src/**/__test__/` にユニットテストを置く: tour-store のスキーマ検証、queue の入出力と processed 移動、hook の注入判定(未処理質問あり/なし/壊れたファイル)、serve のルーティング。
+- serve のテストは、リクエスト処理関数を HTTP リスナーから分離して、`(method, path, body)` を渡してレスポンスを検証する形とする。実ポートを開かずにルーティング・エラー応答・書き込み副作用を検証できる。
+- ビューア UI(ui.html)は手動確認とし、手順を README に記載する。
 
-## 8. pitcrew からの流用方針
+## 8. 参照実装からの流用方針
 
-pitcrew(v0.10.0)の実装を**設計パターンとして参照**するが、コード共有・パッケージ依存はしない(各プラグインは自己完結が原則)。流用するのは以下のパターン:
+同リポジトリ内の既存プラグイン実装を**設計パターンとして参照**するが、コード共有・パッケージ依存はしない(各プラグインは自己完結が原則)。流用するのは以下のパターンである。
 
-- `lib/atomic.ts` のアトミック書き込み(tmp + rename)
-- `lib/hook-io.ts` の hook stdin/stdout 入出力の型と読み書き
+- アトミック書き込み(tmp + rename)
+- hook stdin/stdout 入出力の型と読み書き
 - Stop / PreToolUse hook による注入の 2 段構え(Stop で差し戻し、PreToolUse で `additionalContext` 注入)
 - serve.mjs + ui.html 単体構成(依存なしの Node http サーバ + 自己完結 HTML)
 
-必要箇所は guidepost の `src/` にコピーして持ち、pitcrew 側の変更に追従しない。
+必要箇所は guidepost の `src/` にコピーして持ち、参照元の変更に追従しない。
 
 ## 9. 初版で見送るもの(YAGNI)
 
 - 理解度の記録・カバレッジ蓄積(案C 相当)— ツアー履歴が欲しくなってから拡張する。
 - セッション会話文脈を使ったツアー生成(セッション単位モード)— コミット/PR 単位で価値検証してから。
 - 複数ツアーの同時巡回・共有機能。
+- 現在のブランチと tour.json の `baseSha` の一致警告。diffText は自己完結のため表示を維持するが、警告 UI は初版では実装しない。

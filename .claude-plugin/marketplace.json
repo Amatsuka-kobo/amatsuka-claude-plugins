@@ -44,6 +44,11 @@
       "name": "raphael",
       "source": "./plugins/raphael",
       "description": "失敗を感染記録→抗体→発火時だけ注入へ変換し、決定的な hook で再発を防止する"
+    },
+    {
+      "name": "guidepost",
+      "source": "./plugins/guidepost",
+      "description": "コミット範囲や PR の diff を、依存順に並べた AI 同行のコードリーディングツアーに変換し、読中の疑問をその場でセッションへ届ける"
     }
   ]
 }
