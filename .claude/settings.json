@@ -65,5 +65,5 @@
       }
     }
   },
-  "model": "opus"
+  "model": "claude-opus-5[1m]"
 }
