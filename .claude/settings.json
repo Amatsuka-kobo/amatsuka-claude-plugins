@@ -24,6 +24,8 @@
       "Bash(rm *)"
     ]
   },
+  "model": "claude-opus-5[1m]",
+  "outputStyle": "EnhancedClaude5",
   "enabledPlugins": {
     "agent-policy@amatsuka-claude-plugins": true,
     "pitcrew@amatsuka-claude-plugins": true,
@@ -65,5 +67,16 @@
       }
     }
   },
-  "model": "claude-opus-5[1m]"
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "ツール実行より先に、この発話への返答(回答、または受け止めと進め方)を本文で書くこと。"
+          }
+        ]
+      }
+    ]
+  }
 }
