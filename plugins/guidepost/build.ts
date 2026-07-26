@@ -1,3 +1,19 @@
-// T10 で esbuild による実体に差し替えるまでの no-op スタブ。
-// ルートの pnpm build(pnpm -r build)を T02〜T09 の間も通すために置く。
-console.log("guidepost: build stub")
+import fs from "node:fs"
+import esbuild from "esbuild"
+
+await esbuild.build({
+  bundle: true,
+  entryPoints: {
+    serve: "./src/serve.ts",
+    "inject-stop": "./src/hooks/inject-stop.ts",
+    "inject-pre-tool-use": "./src/hooks/inject-pre-tool-use.ts"
+  },
+  outdir: "./scripts",
+  outExtension: { ".js": ".mjs" },
+  platform: "node",
+  format: "esm",
+  sourcemap: false,
+  target: "node26"
+})
+
+fs.copyFileSync("./src/ui.html", "./scripts/ui.html")
