@@ -56,3 +56,4 @@
 - `2026/0725/phyllis998/chat-recorder-tempdir-finalization.md` | 2026-07-25 | phyllis998 | チャット記録の一時ファイル管理修正と INDEX 補完
 - `2026/0725/phyllis998/chat-recorder-tempdir-phase2.md` | 2026-07-25 | phyllis998 | Chat-Recorder 修正 フェーズ2
 - `2026/0726/phyllis98/claude-code-diagnostic-sweep.md` | 2026-07-26 | phyllis98 | Claude Code 診断スイープと agent-policy 改訂・コミット
+- `2026/0726/phyllis998/plugin-development-planning.md` | 2026-07-27 | phyllis998 | 新プラグイン「guidepost」の設計・計画書完成、Haiku レビュー実施、実装承認
