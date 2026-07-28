@@ -43,13 +43,13 @@ claude-only を使う場合:
 
 - 本プラグイン(`agent-policy`)=「誰に任せるか」(モデル別役割分担・委譲先の決定)。
 - `revelation`=「どう進めるか」(タスク分解・自己検証・次の一手の選び方)。両者は併用可能で、同じ局面で両方が発動しても矛盾しない(役割分担 vs 進め方で関心が異なる)。
-- 役割 Agents を持つワークフロープラグイン(例: Codiel)との併用: Codiel 等は関心ごとの役割 Agents(`model: inherit`)で各フェーズを駆動する。agent-policy はその「役割」を尊重しつつ「誰が実行するか」を重ねる。`with-codex` では、実装フェーズの役割 Agent 定義本文を GPT エージェントへの依頼文に注入して実行する合成方式(役割プロンプト × GPT 実行)をとる。`claude-only` では役割 Agents をそのまま起動する(必要なら dispatch 時に標準 model 値へ上書き)。詳細な判断フローは各 Skill 本文に記載。
+- 他プラグイン・自作 Agents との併用: Claude Code の Agents は `model` を省略すると `inherit`(委譲元と同じモデル)になる。agent-policy はこれを検出して担当表どおりの実行帯へ寄せる規律を持つ。対象は `model` 未指定 / `inherit` の Agents 定義全般で、プラグイン由来(例: Codiel の `codiel-implementer-*`)・プロジェクトやユーザーの自作・ビルトイン(`Explore` / `Plan` / `general-purpose`)を問わない。逆に `model` が具体的なモデルに指定された Agents は定義者の意図表明として尊重し、対象外とする。`with-codex` では、実行帯が GPT に相当するフェーズで役割定義本文を GPT エージェントへの依頼文に注入する合成方式(役割プロンプト × GPT 実行)をとる。詳細な判断フローは各 Skill 本文の §委譲先の実行モデルの確定 に記載。
 
 ## 設計上の確定事実(dispatch 時の model 上書き制限)
 
 **確定事実(2026-07-20 実測検証済み):** Agent tool の dispatch 時 `model` 上書きパラメータは enum(`sonnet` / `opus` / `haiku` / `fable`)に制限され、カスタムエイリアス(`claude-gpt-5-6-*`)は実行前にバリデーションエラーで拒否される。カスタムエイリアスが有効なのは Agents 定義 frontmatter の `model` フィールドのみである。将来 enum が緩和されたら dispatch 上書き方式を再検討する。
 
-これが `with-codex` の役割 Agents 併用ルールで「dispatch 時の `model` 上書きは使わず、役割定義本文を依頼文に同梱する」方式を採る理由である。
+これが `with-codex` の §委譲先の実行モデルの確定 で「実行帯が GPT の場合は dispatch 時の `model` 上書きを使わず、役割定義本文を依頼文に同梱する」方式を採る理由である。
 
 ## アップデート時の注意
 
