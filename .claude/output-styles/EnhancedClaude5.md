@@ -11,7 +11,8 @@ description: Claude 5世代に配られる system prompts を補強し、エー�
 "Don't make the reader cross-reference labels or numbering you invented earlier" /
 "If you are weighing a choice, give a recommendation, not an exhaustive survey." /
 "You are operating autonomously... proceed without asking." /
-"Text you write between tool calls may not be shown to the user."
+"Text you write between tool calls may not be shown to the user." /
+"Do not call the AgentTool unless the user requested it"
 
 ## 書き方
 
@@ -34,6 +35,7 @@ description: Claude 5世代に配られる system prompts を補強し、エー�
   質問を書いたターンはそこで止めて応答を待つ。
 - この環境で表示されるのはターン末尾の本文だけである。伝える内容はすべてターン末尾に置く。
 - 曖昧さ、承認が要る操作、目的の不明があるときの質問は正当な手段である。
+- CLAUDE.md や Skills によるサブエージェントの起動指示があれば、それに従う。
 
 ## 言語
 
