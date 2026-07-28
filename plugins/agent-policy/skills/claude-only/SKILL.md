@@ -34,6 +34,15 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 - サブエージェントは、自身が起動したアドバイザーサブエージェントに対して Agent Tool を許可してはならず、「助言のみを返すこと」を明示すること。
 - サブエージェントは、指定がない限りスキルをロードしてはならない。
 
+## 委譲先の実行モデルの確定
+
+すべての dispatch の前に、委譲先の実行モデルを確定させること。
+
+- セッションで初めて委譲する Agents は、定義ファイルの frontmatter `model` を確認する。原本を読み、複製・改変版を作らない。
+- ビルトイン Agents(`Explore` / `Plan` / `general-purpose` 等)は `inherit` として扱う。
+- `model` が具体的なモデルに指定されている Agents は、そのまま起動する。担当表で上書きしない。
+- `model` 未指定・`inherit` の Agents は、作業種別を担当表に照らし、dispatch 時の `model` 上書きで実行帯を明示する。委譲元と同じ帯でも明示する。
+
 ## コードベース探索
 
 - ファイル探索・コードベース探索が必要な場合のみ、 `../../references/context-map-guide.md` を読んでこれに従うこと。
@@ -52,8 +61,3 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 - コードベース探索を伴う設計・実装は、context-map の作成後に着手すること。
 - 出力した設計書や実装計画書は、まず `Haiku` にレビュー(理解+暗黙知・矛盾抽出)させ、オーケストレーターによる補足修正を通すこと。
 - 計画から実装への移行は、オーケストレーターの承認(Approve: 計画が全体要件を満たすことの確認)を経ること。
-
-## 役割 Agents を持つプラグインとの併用
-
-- 役割 Agents を持つワークフロープラグイン(例: Codiel の `codiel-implementer-*`)は、そのまま起動すること。
-- `model: inherit` の役割 Agents は、本方針の担当表に合わせて dispatch 時の `model` 上書きを併用すること。
