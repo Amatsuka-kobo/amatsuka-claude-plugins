@@ -34,6 +34,25 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 - サブエージェントは、自身が起動したアドバイザーサブエージェントに対して Agent Tool を許可してはならず、「助言のみを返すこと」を明示すること。
 - サブエージェントは、指定がない限りスキルをロードしてはならない。
 
+## 委譲先の実行モデルの確定
+
+すべての dispatch の前に、委譲先の実行モデルを確定させること。
+
+- セッションで初めて委譲する Agents は、定義ファイルの frontmatter `model` を確認する。原本を読み、複製・改変版を作らない。
+- ビルトイン Agents(`Explore` / `Plan` / `general-purpose` 等)は `inherit` として扱う。
+- `model` が具体的なモデルに指定されている Agents は、そのまま起動する。担当表で上書きしない。
+- `model` 未指定・`inherit` の Agents は、作業種別を担当表に照らして実行帯を決め、以下に従う。
+
+### 実行帯が Claude モデルの場合
+
+dispatch 時の `model` 上書きで実行帯を明示する。委譲元と同じ帯でも明示する。
+
+### 実行帯が GPT モデルの場合
+
+- 定義ファイルを持つ Agents: 定義本文(frontmatter を除く)を担当 GPT エージェントへの依頼文に役割定義として同梱して dispatch する。`model` 上書きは使わない。依頼文に「この tools のみ使用」と明記する。
+- ビルトイン Agents: 使わず、担当 GPT エージェントへ直接委譲する。
+- GPT が利用不可なら、§GPT が使えない場合のフォールバック で決まる代替帯を担当表として用い、dispatch 時の `model` 上書きで実行帯を明示する。
+
 ## コードベース探索
 
 - ファイル探索・コードベース探索が必要な場合のみ、 `../../references/context-map-guide.md` を読んでこれに従うこと。
@@ -60,18 +79,3 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 1. `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。
 2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`/ `--model gpt-5.6-terra`/ `--model gpt-5.6-luna`。
 3. どちらも不可なら、ユーザーへ `agent-policy:setup` の実行を案内し、生成完了(またはスキップ)までは claude-only 方針の担当表(Opus=詳細設計・実装計画 / Sonnet=実装 / Haiku=軽量)で一時的に代行する。
-
-## 役割 Agents を持つプラグインとの併用
-
-役割プロンプトを持つ Agents(`model: inherit`、例 Codiel の `codiel-implementer-*`)でフェーズを駆動するプラグインとの合成ルール。
-各フェーズの作業種別を本方針の担当表に照らす(例: 実装 → GPT 帯)。
-役割定義ファイルは常にインストール済みプラグインの生ファイルから読む(複製・改変版を作らない)。
-
-### フェーズの担当が GPT モデルに相当する場合
-
-- GPT が利用可能なら: 該当する役割 Agent 定義ファイルの本文(frontmatter を除く)を、担当 GPT エージェントへの依頼文に役割定義として同梱して dispatch する。dispatch 時の `model` 上書きは使わない。依頼文に「この tools のみ使用」と明記すること。
-- GPT が利用不可(未生成・プロキシ停止・codex プラグイン使用不可)なら(フォールバック): プラグインの役割 Agents をそのまま起動すること。
-
-### フェーズの担当が Claude モデルに相当する場合
-
-- `model: inherit` の役割 Agents は、本方針の担当表に合わせて dispatch 時の `model` 上書きを併用すること。
