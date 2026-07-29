@@ -1,0 +1,14 @@
+spec_version: "0.3.0"
+name: "amatsuka-claude-plugins"
+description: "あまつか工房産 Claude Code プラグインの Marketplace"
+
+settings:
+  types_folder: "_types"
+  # 型に一致しないファイル(docs/ 配下の散文など)は検証対象外。
+  # ここでは走査コストの削減と誤検知の予防のため、明らかに対象外の領域を除外する。
+  exclude:
+    - ".git"
+    - ".mdbase"
+    - "node_modules"
+    - "docs"
+    - ".serena"
