@@ -1,5 +1,7 @@
 # chat-recorder パフォーマンス改善 設計書
 
+本書の headless 前提は 2026-07-31 に反転した(`docs/design/2026-07-31-chat-recorder-primary-design.md` 参照)。
+
 - 日付: 2026-07-24
 - 対象: task-utility プラグイン(chat-recorder エージェント / Stop フック / 抽出スクリプト)
 - ステータス: Haiku レビュー済み・補足修正反映済み(ユーザーレビュー待ち)

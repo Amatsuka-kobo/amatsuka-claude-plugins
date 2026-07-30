@@ -23,7 +23,7 @@ function tempRoot(prefix: string): string {
   return root
 }
 
-// ヘッドレス recorder の Write は Claude Code の sensitive file 保護に阻まれるため、
+// chat-recorder の Write は Claude Code の sensitive file 保護に阻まれるため、
 // 一時ファイルだけは Claude 設定ディレクトリの外に置かなければならない。
 test("既定の状態ディレクトリでも一時ファイルは Claude 設定ディレクトリの外に置く", () => {
   const configDir = path.join(tempRoot("chat-state-default-"), ".claude")

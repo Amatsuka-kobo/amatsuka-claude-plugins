@@ -52,10 +52,9 @@ function setup(lines: string[]) {
   }
   atomicWriteJson(paths.statePath, state)
   atomicWriteJson(paths.lockPath, {
-    version: 1,
+    version: 2,
     attemptId,
     targetLine: lines.length,
-    pid: process.pid,
     createdAt: new Date().toISOString(),
     heartbeatAt: new Date().toISOString()
   } satisfies RecordingLock)
@@ -90,6 +89,20 @@ test("1コマンド相当で契約・差分・探索情報を JSON 化できる"
   expect(result.newRecordPathExample).toBe(
     `${result.allowedNewRecordDir}/conversation-topic.md`
   )
+  expect(result.bodyFile).toBe(
+    path.join(
+      value.paths.tempDir,
+      `${value.sessionKey}-${value.attemptId}.body.md`
+    )
+  )
+  expect(result.indexLineFile).toBe(
+    path.join(
+      value.paths.tempDir,
+      `${value.sessionKey}-${value.attemptId}.index-line.md`
+    )
+  )
+  expect(path.isAbsolute(result.bodyFile as string)).toBe(true)
+  expect(path.isAbsolute(result.indexLineFile as string)).toBe(true)
   expect(result.indexEntryPath).toBeNull()
   expect(result.indexLineExample).toContain(
     "`YYYY/MMDD/<worker>/<kebab-case>.md`"

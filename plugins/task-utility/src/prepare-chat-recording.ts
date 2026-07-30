@@ -181,6 +181,14 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     .relative(args.project, recordDir)
     .replaceAll("\\", "/")
   const newRecordPathExample = `${allowedNewRecordDir}/conversation-topic.md`
+  const bodyFile = path.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.body.md`
+  )
+  const indexLineFile = path.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.index-line.md`
+  )
   atomicWriteJson(planPath, {
     ...plan,
     recordTarget,
@@ -205,6 +213,8 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     recordCandidates: relativeCandidates,
     allowedNewRecordDir,
     newRecordPathExample,
+    bodyFile,
+    indexLineFile,
     indexEntryPath: docsRelativePath,
     indexLineExample: docsRelativePath
       ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <要旨>`

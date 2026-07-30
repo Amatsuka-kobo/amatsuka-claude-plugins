@@ -4,12 +4,12 @@ import os from "node:os"
 import path from "node:path"
 
 export const NAG_MARKER = "<!--chat-recorder-nag-->"
-export const STATE_VERSION = 1
+export const STATE_VERSION = 2
 export const MAX_TOOL_HINTS = 20
 export const MAX_TOOL_HINT_LENGTH = 120
-// ヘッドレス recorder の失敗がこの回数連続したら、記録を失わないために
-// サブエージェント委譲(decision: block)へ退避する。1 回の失敗は一過性でありうる。
-export const FALLBACK_THRESHOLD = 2
+export const LOCK_GRACE_MS = 120_000
+export const LOCK_STALE_MS = 600_000
+export const RECORDER_AGENT_NAME = "chat-recorder"
 
 export interface RecordingError {
   attemptId: string
@@ -28,7 +28,7 @@ export interface TranscriptIdentity {
 }
 
 export interface RecordingState {
-  version: 1
+  version: typeof STATE_VERSION
   projectDir: string
   sessionId?: string
   transcriptPath: string
@@ -41,8 +41,6 @@ export interface RecordingState {
   recordPath?: string
   lastError: RecordingError | null
   lastNotifiedAttemptId: string | null
-  // 未定義は 0 とみなす。既存の状態ファイルを移行なしで読めるようにするため。
-  consecutiveFailures?: number
   previousGeneration?: {
     recordedLine: number
     attemptedLine: number
@@ -51,12 +49,19 @@ export interface RecordingState {
 }
 
 export interface RecordingLock {
-  version: 1
+  version: typeof STATE_VERSION
   attemptId: string
   targetLine: number
-  pid: number | null
   createdAt: string
   heartbeatAt: string
+}
+
+export interface BackgroundTaskInput {
+  id?: string
+  type?: string
+  status?: string
+  description?: string
+  agent_type?: string
 }
 
 export interface ScanResult {
@@ -83,8 +88,13 @@ export interface StatePaths {
 export type RecordingDecision =
   | { action: "noop"; reason: string }
   | { action: "notify"; reason: string }
-  | { action: "spawn"; targetLine: number; notify: boolean }
-  | { action: "block"; targetLine: number; reason: string }
+  | { action: "dispatch"; targetLine: number; notify: boolean }
+
+export interface DecisionContext {
+  hasActiveLock: boolean
+  /** background_tasks から判定。undefined = 判定不能(古い Claude Code) */
+  recorderRunning?: boolean
+}
 
 interface TranscriptContent {
   type?: string
@@ -136,9 +146,8 @@ export function claudeConfigRoot(env: NodeJS.ProcessEnv = process.env): string {
 const currentUid = (): number | null =>
   typeof process.getuid === "function" ? process.getuid() : null
 
-// ヘッドレス recorder の Write は Claude 設定ディレクトリ配下を sensitive file として
-// 拒否されるため(--add-dir でも --permission-mode acceptEdits でも解除されない)、
-// 一時ファイルだけは必ずその外側へ退避させる。
+// chat-recorder の Write は Claude 設定ディレクトリ配下を sensitive file として
+// 拒否されるため、一時ファイルだけは必ずその外側へ退避させる。
 function resolveTempDir(
   projectStateDir: string,
   projectKey: string,
@@ -251,6 +260,15 @@ export function sanitizeHint(value: unknown): string {
     .slice(0, MAX_TOOL_HINT_LENGTH)
 }
 
+export function isRecorderDispatch(
+  name: unknown,
+  subagentType: unknown
+): boolean {
+  if (name !== "Agent") return false
+  const normalized = String(subagentType).split(":").at(-1)?.toLowerCase()
+  return normalized === RECORDER_AGENT_NAME
+}
+
 function toolHint(content: TranscriptContent): string {
   const input = content.input
   const detail =
@@ -294,7 +312,11 @@ export function scanTranscript(file: string, sinceLine = 0): ScanResult {
     )
       continue
     for (const content of entry.message.content) {
-      if (content.type !== "tool_use") continue
+      if (
+        content.type !== "tool_use" ||
+        isRecorderDispatch(content.name, content.input?.subagent_type)
+      )
+        continue
       const hint = toolHint(content)
       if (hint && !seenHints.has(hint) && hints.length < MAX_TOOL_HINTS) {
         hints.push(hint)
@@ -325,6 +347,60 @@ export function createInitialState(
     transcriptIdentity: identity,
     recordedLine: 0,
     attemptedLine: 0,
+    lastError: null,
+    lastNotifiedAttemptId: null
+  }
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const isString = (value: unknown): value is string => typeof value === "string"
+
+const isNonNegativeInteger = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Number(value) >= 0
+
+function validIdentity(value: unknown): TranscriptIdentity | null {
+  if (!isObject(value)) return null
+  const dev = value.dev
+  const ino = value.ino
+  if (
+    (dev !== undefined && !Number.isSafeInteger(dev)) ||
+    (ino !== undefined && !Number.isSafeInteger(ino))
+  )
+    return null
+  return {
+    dev: dev === undefined ? undefined : Number(dev),
+    ino: ino === undefined ? undefined : Number(ino)
+  }
+}
+
+export function migrateState(
+  raw: unknown,
+  fallback: RecordingState
+): RecordingState {
+  if (!isObject(raw)) return fallback
+  if (raw.version === STATE_VERSION) return raw as unknown as RecordingState
+
+  const identity = validIdentity(raw.transcriptIdentity)
+  const recordedLine = isNonNegativeInteger(raw.recordedLine)
+    ? raw.recordedLine
+    : fallback.recordedLine
+  return {
+    ...fallback,
+    version: STATE_VERSION,
+    projectDir: isString(raw.projectDir) ? raw.projectDir : fallback.projectDir,
+    sessionId: isString(raw.sessionId) ? raw.sessionId : fallback.sessionId,
+    transcriptPath: isString(raw.transcriptPath)
+      ? raw.transcriptPath
+      : fallback.transcriptPath,
+    transcriptIdentity: identity ?? fallback.transcriptIdentity,
+    recordedLine,
+    attemptedLine: recordedLine,
+    lastSuccessAt: isString(raw.lastSuccessAt)
+      ? raw.lastSuccessAt
+      : fallback.lastSuccessAt,
+    recordPath: isString(raw.recordPath) ? raw.recordPath : fallback.recordPath,
     lastError: null,
     lastNotifiedAttemptId: null
   }
@@ -367,7 +443,6 @@ export function reconcileGeneration(
       attemptedLine: 0,
       attemptId: undefined,
       attemptStartedAt: undefined,
-      consecutiveFailures: 0,
       // recordedLine が 0 に戻るため、前世代の記録先を引き継ぐと同じファイルへ
       // 会話全体を再記録してしまう。記録先も一緒に手放す。
       recordPath: undefined
@@ -375,20 +450,33 @@ export function reconcileGeneration(
   }
 }
 
-export function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM"
-  }
+const FINISHED_TASK_STATUSES = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+  "canceled",
+  "stopped",
+  "error",
+  "done"
+])
+
+export function hasRunningRecorder(
+  tasks: BackgroundTaskInput[] | undefined
+): boolean | undefined {
+  if (!Array.isArray(tasks)) return undefined
+  return tasks.some((task) => {
+    if (typeof task !== "object" || task === null) return false
+    if (task.type !== "subagent") return false
+    const agentName = String(task.agent_type).split(":").at(-1)?.toLowerCase()
+    if (agentName !== RECORDER_AGENT_NAME) return false
+    return !FINISHED_TASK_STATUSES.has(String(task.status).toLowerCase())
+  })
 }
 
 export function isStaleLock(
   lock: RecordingLock | null,
   state: RecordingState,
-  now = Date.now(),
-  processAlive: (pid: number) => boolean = isProcessAlive
+  options: { now?: number; recorderRunning?: boolean } = {}
 ): boolean {
   if (
     !lock ||
@@ -400,36 +488,31 @@ export function isStaleLock(
   const created = Date.parse(lock.createdAt)
   const heartbeat = Date.parse(lock.heartbeatAt)
   if (!Number.isFinite(created) || !Number.isFinite(heartbeat)) return true
-  if (lock.pid === null) return now - heartbeat > 30_000
-  if (!processAlive(lock.pid)) return true
-  return now - heartbeat > 30 * 60_000
+  if (options.recorderRunning === true) return false
+  const maxAge =
+    options.recorderRunning === false ? LOCK_GRACE_MS : LOCK_STALE_MS
+  return (options.now ?? Date.now()) - heartbeat > maxAge
 }
 
 export function decideRecordingAction(
   scan: ScanResult,
   state: RecordingState,
-  hasActiveLock: boolean
+  context: DecisionContext
 ): RecordingDecision {
   if (scan.lastUserTurn === -1)
     return { action: "noop", reason: "no-user-turn" }
   if (scan.lastUserTurn <= state.recordedLine)
     return { action: "noop", reason: "already-recorded" }
-  if (hasActiveLock) return { action: "noop", reason: "active-lock" }
-  // attemptedLine の判定より手前に置く。失敗した試行では attemptedLine が
-  // 既に lastUserTurn まで進んでいるため、後ろに置くと block へ到達できない。
-  if ((state.consecutiveFailures ?? 0) >= FALLBACK_THRESHOLD)
-    return {
-      action: "block",
-      targetLine: scan.lastUserTurn,
-      reason: "repeated-failures"
-    }
+  if (context.recorderRunning === true)
+    return { action: "noop", reason: "recorder-running" }
+  if (context.hasActiveLock) return { action: "noop", reason: "active-lock" }
   if (state.attemptedLine >= scan.lastUserTurn)
     return state.lastError &&
       state.lastNotifiedAttemptId !== state.lastError.attemptId
       ? { action: "notify", reason: "failed-attempt" }
       : { action: "noop", reason: "already-attempted" }
   return {
-    action: "spawn",
+    action: "dispatch",
     targetLine: scan.lastUserTurn,
     notify:
       state.lastError !== null &&
@@ -463,7 +546,6 @@ export function acquireLock(
     version: STATE_VERSION,
     attemptId: randomUUID(),
     targetLine,
-    pid: null,
     createdAt: now,
     heartbeatAt: now
   }

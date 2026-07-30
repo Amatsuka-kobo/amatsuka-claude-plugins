@@ -156,7 +156,7 @@ plugins/raphael/
 | `PostToolUse` (Bash/Edit/Write) | `detect-infection.mjs` | 失敗兆候を検知して感染記録へ追記。リトライループ検出のため直近履歴を `.raphael/state.json` に保持 | 不使用 |
 | `UserPromptSubmit` | `detect-infection.mjs` | 差し戻し語パターン検知。直前ターンのツール履歴と紐づけて記録 | 不使用 |
 | `PreToolUse` (Bash/Edit/Write) | `inoculate.mjs` | active/confirmed な抗体の trigger を評価し、マッチ時のみ `additionalContext` で本文注入 + `stats.fired` 更新 | 不使用 |
-| `Stop` | `check-distill-needed.mjs` | 未蒸留の感染記録が閾値(既定 3 件)以上あれば、メインエージェントに antibody-synthesizer の起動を差し戻しで促す(task-utility chat-recorder と同じ方式)。あわせて古い蒸留済み記録を掃除 | 判定は不使用 |
+| `Stop` | `check-distill-needed.mjs` | 未蒸留の感染記録が閾値(既定 3 件)以上あれば、メインエージェントに antibody-synthesizer の起動を差し戻しで促す(Stop フックでの差し戻し方式)。あわせて古い蒸留済み記録を掃除 | 判定は不使用 |
 
 失敗のないセッションでは LLM コストが完全にゼロになる。
 

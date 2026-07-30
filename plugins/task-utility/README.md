@@ -26,16 +26,16 @@ docs/chat/ の会話記録から決定の経緯・失敗の記録をキーワー
 
 open Issue を棚卸しし、ラベル提案・古い Issue の生死確認(既定 90 日)・重複候補の検出を行い、全提案の一括承認後に適用する(明示発動型)。Issue の取得・stale 判定は `scripts/list-issues.mjs` が JSON で返し、クローズ提案は「自分が作者・アサインなし・コメントなし」の Issue に限る決定的ルールで安全側に倒す。環境チェックは issue-craft と共通の `scripts/check-issue-env.mjs`。詳細は `skills/issue-triage/SKILL.md` を参照。
 
-## 会話の自動記録(Stop フック + バックグラウンド recorder)
+## 会話の自動記録(Stop フック + バックグラウンド chat-recorder)
 
-実質的な会話が記録されないままターンが終わると、Stop フックがヘッドレスの記録セッション(`claude -p`、haiku、ユーザーの既存サブスク認証)を detached で起動して即座に終了する。ターン終了はブロックされず、記録は裏で進む。生ログ(トランスクリプト JSONL)から発言を機械抽出するため、ユーザー発言の逐語性が構造的に保証される。
+実質的な会話が記録されないままターンが終わると、Stop フックは最小限の `additionalContext` を注入する。メインエージェントは通知を受けて `chat-recorder` サブエージェントをバックグラウンド起動し、完了を待たずにターンを終える。生ログ(トランスクリプト JSONL)から発言を機械抽出するため、ユーザー発言の逐語性が構造的に保証される。
 
 - **オプトイン**: 対象プロジェクトに `docs/chat/` ディレクトリが存在する場合のみ働く。無効化したければディレクトリを作らないだけでよい
 - **発火条件**: 最後の実質的なユーザー発言が記録済み行(ユーザーローカルの状態ファイルで管理)より新しいとき。1ターン目から働き、記録後も新しい発言があれば追記する。1 実発言につき記録試行は最大 1 回(ロックと試行済み行番号で多重起動・無限ループを防止)
-- **記録セッションの構成**: `--settings '{"disableAllHooks":true}'`(フック再帰防止)+ `--strict-mcp-config`(MCP 不読込)+ 最小ツール許可。記録手順は `prepare-chat-recording.mjs`(入力収集)と `commit-chat-recording.mjs`(追記・INDEX 更新・検証・状態確定)の 2 コマンドに機械化されている
-- **フォールバック**: `claude` CLI を起動できない環境では、従来どおり差し戻して `chat-recorder` サブエージェント(同じ prepare/commit 手順)へ委譲する
-- **失敗時**: バックグラウンドの記録失敗はユーザーローカルのログに残り、次のターン終了時に通知される。同じ発言への自動再試行はせず、次の実発言でまとめて回収する
-- **制限**: フック設定の変更はセッション再起動後に反映される。記録の状態・ロック・ログは `~/.claude/task-utility/chat-recorder/` 配下(git 非追跡)に置かれる
+- **注入の最小性**: `additionalContext` には記録に必要な値だけを載せ、手順やコマンド行は chat-recorder のエージェント定義に集約する。注入文は最大 1200 字で、メインのコンテキストへの影響を抑える
+- **記録処理**: chat-recorder は `prepare-chat-recording.mjs` による入力収集、一時ファイルへの Write、`commit-chat-recording.mjs` による追記・INDEX 更新・検証・状態確定を行う
+- **バックグラウンド実行時の permission**: `Bash` と `Write` の permission プロンプトが記録を止める環境では、必要に応じて `~/.claude/settings.json` の `permissions` に許可設定を追加する。プラグイン側から permission を強制することはない
+- **制限**: フック設定の変更はセッション再起動後に反映される。記録の状態とロックは `~/.claude/task-utility/chat-recorder/` 配下(git 非追跡)に置かれる
 
 ## 会話記録の索引(INDEX.md)
 
