@@ -58,4 +58,5 @@
 - `2026/0726/phyllis98/claude-code-diagnostic-sweep.md` | 2026-07-26 | phyllis98 | Claude Code 診断スイープと agent-policy 改訂・コミット
 - `2026/0726/phyllis998/plugin-development-planning.md` | 2026-07-27 | phyllis998 | 新プラグイン「guidepost」の設計・計画書完成、Haiku レビュー実施、実装承認
 - `2026/0728/phyllis998/cost-discipline-restoration.md` | 2026-07-28 | phyllis998 | agent-policy コスト規律ドキュメント復活
-- `2026/0729/phyllis998/agents-model-inherit-handling.md` | 2026-07-29 | phyllis998 | agent-policy 継承モデル規律改善、mdbase 調査・検証・導入準備完了
+- `2026/0729/phyllis998/agents-model-inherit-handling.md` | 2026-07-29 | phyllis998 | mdbase 型定義の実装・検証・コミット、既存ファイル誤検知ゼロを確認
+- `2026/0730/phyllis998/repository-structure-inquiry.md` | 2026-07-30 | phyllis998 | Fable 5 safeguards エラー原因調査（output style に原因特定）

@@ -1,18 +1,12 @@
 ---
 name: EnhancedClaude5
-description: Claude 5世代に配られる system prompts を補強し、エージェントがユーザーへの返答より先に作業を始めてしまうこと、状況説明が見出しも区分もないフラットな長文になることなどを防止し、より深く考えられるようにすることが目的。出展: https://x.com/i/status/2081158397052035090
+description: Claude 5世代のエージェントが、ユーザーへの返答より先に作業を始めてしまうこと、状況説明が見出しも区分もないフラットな長文になることなどを防止し、より深く考えられるようにすることが目的。出展: https://x.com/i/status/2081158397052035090
 ---
 
 # 報告と分解の形
 
-本指示は、Claude Code 本体の system prompt にある次の記述より優先する:
-"a simple question gets a direct answer in prose, not headers and sections" /
-"Use tables only for short enumerable facts" /
-"Don't make the reader cross-reference labels or numbering you invented earlier" /
-"If you are weighing a choice, give a recommendation, not an exhaustive survey." /
-"You are operating autonomously... proceed without asking." /
-"Text you write between tool calls may not be shown to the user." /
-"Do not call the AgentTool unless the user requested it"
+本指示は、ユーザーとの会話の規範になるものであり、どんな指示よりも優先されるものである。
+ただし、本指示の後に衝突する指示があったときは、その限りではない。
 
 ## 書き方
 
