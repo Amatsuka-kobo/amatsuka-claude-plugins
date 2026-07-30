@@ -533,6 +533,17 @@ export function migrateState(
 | 8 | **セッション終了時のダイアログ** | バックグラウンド記録中に終了しようとしたときの「Move to background and exit」 | 記録が完走するか、強制終了なら次セッション(`--resume`)で追いつく | 追いつかない場合は `migrateState` / `recordedLine` の引き継ぎを疑う |
 | 9 | **`${CLAUDE_PLUGIN_ROOT}` の展開**(agent 定義本文) | prepare/commit が正しい絶対パスで起動されるか | 展開される | dispatch で渡した `pluginRoot` を使うフォールバック経路が働くことを確認する |
 
+### 検証結果(2026-07-31、実装セッション内で実施。Claude Code v2.1.220 / WSL2)
+
+| # | 結果 |
+|---|---|
+| 1 | **通過**。バックグラウンドの chat-recorder が Bash(prepare/commit)・Write(一時ファイル 2 つ)を permission で止まらず完走(9 tool uses / 約 3 分)。settings 案内は不要だった |
+| 2 | **通過**(注入側 `run_in_background: true` との併用で確認。frontmatter 単独の効きは未分離だが、設計どおり三重担保のいずれかが効けば成立) |
+| 3 | **想定外だが問題なし**。注入は `type:"user"` メッセージではなく **`attachment`(`hook_success`, hookName: Stop)行**として transcript に残った。`message.content` を持たないため `extract-conversation` の USER 抽出(`type==="user"` + 文字列 content)の対象外 = §5.2 の第 3 形態相当。別途 system-reminder 形の user 行は `startsWith("<")` で除外。実記録に nag 文面の混入なしを chat-reader で確認済み |
+| 4 | **通過**。`agent_type: "task-utility:chat-recorder"` 表記。正規化ルールで一致(スモークテストで自己抑制の無出力も確認) |
+| 7 | **通過(haiku 据え置きで確定)**。粒度指示強化後の実記録(chat-recorder-migration.md セッション 6)を chat-reader で評価: 具体名(§番号・件数・担当分割)込みで時系列が追え、1 行圧縮なし、注入テキスト混入なし、ユーザー発言は原文転記。sonnet への引き上げは不要 |
+| 8 | 部分確認。commit 後に `recordedLine: 469` / lock 削除を確認(冪等性の前提が成立)。セッション終了ダイアログ・`--resume` 追いつきは未確認(通常運用で観察) |
+
 ---
 
 ## 9. 移行とバージョン
