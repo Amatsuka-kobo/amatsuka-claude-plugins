@@ -49,10 +49,9 @@ function setup(appendMode: boolean) {
     attemptedLine: 2
   })
   atomicWriteJson(paths.lockPath, {
-    version: 1,
+    version: 2,
     attemptId,
     targetLine: 2,
-    pid: process.pid,
     createdAt: new Date().toISOString(),
     heartbeatAt: new Date().toISOString()
   } satisfies RecordingLock)
@@ -127,43 +126,6 @@ test.each([
       recordPath: appendMode ? undefined : value.relativePath
     })
   ).toEqual(result)
-})
-
-test("commit 成功で連続失敗カウンタを 0 に戻す", () => {
-  const value = setup(true)
-  const state = readJson<RecordingState>(value.paths.statePath)
-  atomicWriteJson(value.paths.statePath, {
-    ...(state as RecordingState),
-    consecutiveFailures: 3
-  })
-  commitChatRecording({
-    project: value.project,
-    sessionKey: value.sessionKey,
-    attemptId: value.attemptId,
-    targetLine: 2,
-    bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile
-  })
-  expect(
-    readJson<RecordingState>(value.paths.statePath)?.consecutiveFailures
-  ).toBe(0)
-})
-
-test("commit 失敗で連続失敗カウンタを増やす", () => {
-  const value = setup(true)
-  expect(() =>
-    commitChatRecording({
-      project: value.project,
-      sessionKey: value.sessionKey,
-      attemptId: value.attemptId,
-      targetLine: 2,
-      bodyFile: path.join(value.paths.tempDir, "missing.md"),
-      indexLineFile: value.indexLineFile
-    })
-  ).toThrow()
-  expect(
-    readJson<RecordingState>(value.paths.statePath)?.consecutiveFailures
-  ).toBe(1)
 })
 
 test("新規 INDEX はヘッダーと空行を付けて作成する", () => {

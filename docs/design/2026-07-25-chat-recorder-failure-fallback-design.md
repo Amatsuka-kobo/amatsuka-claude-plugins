@@ -1,5 +1,7 @@
 # chat-recorder ヘッドレス失敗時のフォールバック設計
 
+本書の headless 前提は 2026-07-31 に反転した(`docs/design/2026-07-31-chat-recorder-primary-design.md` 参照)。
+
 - 日付: 2026-07-25
 - 対象: `plugins/task-utility`（`chat-recording-state.ts` / `hooks/check-chat-recorded.ts` / `commit-chat-recording.ts`）
 - 前提: `829ae01`（一時ファイルを Claude 設定ディレクトリ外へ退避）適用済み

@@ -1,5 +1,5 @@
 {
-  "description": "chat スキルの自動適用: 未記録ターンをバックグラウンド recorder で記録し、起動不能時のみ chat-recorder への委譲を促す",
+  "description": "chat スキルの自動適用: 未記録ターンを検出し、chat-recorder のバックグラウンド記録を促す(ターンはブロックしない)",
   "hooks": {
     "Stop": [
       {

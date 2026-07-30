@@ -261,6 +261,14 @@ function prepareChatRecording(args) {
   };
   const allowedNewRecordDir = path3.relative(args.project, recordDir).replaceAll("\\", "/");
   const newRecordPathExample = `${allowedNewRecordDir}/conversation-topic.md`;
+  const bodyFile = path3.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.body.md`
+  );
+  const indexLineFile = path3.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.index-line.md`
+  );
   atomicWriteJson(planPath, {
     ...plan,
     recordTarget,
@@ -285,6 +293,8 @@ function prepareChatRecording(args) {
     recordCandidates: relativeCandidates,
     allowedNewRecordDir,
     newRecordPathExample,
+    bodyFile,
+    indexLineFile,
     indexEntryPath: docsRelativePath,
     indexLineExample: docsRelativePath ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <\u8981\u65E8>` : `- \`YYYY/MMDD/<worker>/<kebab-case>.md\` | YYYY-MM-DD | <worker> | <\u8981\u65E8>`,
     lastSessionNumber: lastSessionNumber(tailContext),
