@@ -1,0 +1,53 @@
+# task-utility の eval
+
+スキルの発火精度(trigger eval)と、chat スキルの出力契約(output eval)を測る。
+
+## trigger eval
+
+`scripts/run-trigger-eval.mjs` が測定する。3 種のセットは測るものが違うので、合否も別に見る。
+
+| ディレクトリ | 内容 | 合格条件 |
+| --- | --- | --- |
+| `trigger/` | 文脈・固有名を含む依頼(各 8 問) | 発火する |
+| `short/` | 実運用に多い短い依頼(各 8 問) | 発火する |
+| `fp/` | 隣接スキルが正解の近接依頼(各 12 問) | **発火しない** |
+
+実行:
+
+```bash
+node scripts/run-trigger-eval.mjs \
+  --skill plugins/task-utility/skills/resume/SKILL.md \
+  --eval-set plugins/task-utility/evals/fp/resume.json \
+  --runs 2 --workers 6
+```
+
+`claude -p` をサブプロセスで起動し、`Skill` ツールが呼ばれたかで発火を判定する。実処理には入らず、最初のツール呼び出しで打ち切る。
+
+### skill-creator の run_eval.py を使わない理由
+
+`run_eval.py` は測定対象を `.claude/commands/` にスラッシュコマンドとして登録する。Claude Code の現行版ではコマンドと skills が別系統で、コマンドは `/名前` で明示呼び出しするものであり自然文の依頼からは選ばれない。検出側は `Skill` ツール呼び出しを見ているため、結果が常に「発火せず」になる。
+
+2026-08-01 の実測では、skill-creator 公式の description をその想定用途どおりの英語クエリで測っても発火率 0 だった。同じ description・同じクエリで登録先を `.claude/skills/` に変えると発火するため、原因は登録方法にある。
+
+## output eval
+
+`check-chat-output.mjs` が chat スキルの記録フォーマット契約を機械検証する。
+
+```bash
+node plugins/task-utility/evals/check-chat-output.mjs <出力ディレクトリ> <eval-id>
+```
+
+`output-evals.json` にテストケースと assertion を置く。eval-id 0 は新規記録、1 は既存ファイルへの追記を検証する。
+
+測定は with_skill / without_skill の 2 構成で行い、差を見る。with_skill 側だけを見ても、assertion が緩いのかスキルが効いているのかを区別できない。
+
+### 2026-08-01 の実測
+
+| ケース | with_skill | without_skill |
+| --- | --- | --- |
+| eval-0(新規記録) | 9/9 | 4/9 |
+| eval-1(既存への追記) | 6/6 | 6/6 |
+
+eval-0 はスキルなしだと、引用ブロックによる原文保持・パス規約・INDEX 追加・ヘッダー 4 項目のすべてが守られない。
+
+eval-1 は両構成とも通るため、この assertion 群にはスキルの有無を識別する力がない。既存ファイルと INDEX が正しい状態から始まるので、何もしなくても「既存を壊さない」条件は満たされる。追記の正しさを測るには、INDEX の要旨が更新されるかなど、追記でしか変化しない点を assertion に足す必要がある。

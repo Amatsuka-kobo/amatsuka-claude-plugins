@@ -1,0 +1,34 @@
+[
+  {
+    "query": "この不具合、GitHub の Issue に起票しておいてもらえますか。再現手順は今話した通りで",
+    "should_trigger": true
+  },
+  {
+    "query": "機能要望として Issue を立てたい。ダークモード対応の件",
+    "should_trigger": true
+  },
+  {
+    "query": "さっきの改善案、issue にしといて",
+    "should_trigger": true
+  },
+  {
+    "query": "バグ報告の Issue 作りたいんだけど、内容一緒に詰めてもらえる? まだぼんやりしてて",
+    "should_trigger": true
+  },
+  {
+    "query": "TODO が3つたまってるので、それぞれ Issue として起票してほしい",
+    "should_trigger": true
+  },
+  {
+    "query": "この件、チケット切っておいて。リポジトリは origin のやつで",
+    "should_trigger": true
+  },
+  {
+    "query": "Issue の下書きを作って。テンプレートがあるならそれに沿って",
+    "should_trigger": true
+  },
+  {
+    "query": "今の議論を GitHub に残したい。課題として登録する形で",
+    "should_trigger": true
+  }
+]

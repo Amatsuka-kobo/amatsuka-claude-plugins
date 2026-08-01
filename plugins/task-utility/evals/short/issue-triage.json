@@ -1,0 +1,34 @@
+[
+  {
+    "query": "Issue を整理してほしい。だいぶ溜まってきたので",
+    "should_trigger": true
+  },
+  {
+    "query": "古い Issue がまだ生きてるか確認したい。半年くらい放置されてるやつ",
+    "should_trigger": true
+  },
+  {
+    "query": "重複した Issue がないか見てもらえますか",
+    "should_trigger": true
+  },
+  {
+    "query": "open Issue の棚卸しをして、ラベルが付いてないものにラベルを提案して",
+    "should_trigger": true
+  },
+  {
+    "query": "Issue が30件くらい溜まってて把握できてない。整理を手伝って",
+    "should_trigger": true
+  },
+  {
+    "query": "しばらく動きのない Issue を洗い出して、閉じていいか判断したい",
+    "should_trigger": true
+  },
+  {
+    "query": "リポジトリの課題一覧を見直して、似たような内容のものをまとめたい",
+    "should_trigger": true
+  },
+  {
+    "query": "Issue のラベル体系がバラバラなので現状を確認して整理案を出して",
+    "should_trigger": true
+  }
+]
