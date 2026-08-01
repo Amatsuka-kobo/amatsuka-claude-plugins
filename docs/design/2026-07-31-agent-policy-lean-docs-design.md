@@ -2,6 +2,7 @@
 
 - 作成日: 2026-07-31
 - ステータス: 実装済み(2026-07-31 ユーザー承認・同日実装)
+- 後継: 2026-08-01 に評価モードを追加し、スキル名を `prompt-smith` へ改めた(`2026-08-01-agent-policy-prompt-smith-design.md`)。本書は改名前の設計として保存する。
 - 対象プラグイン: `plugins/agent-policy/`(0.5.0-dev → 0.6.0-dev)
 - 前提資料:
   - `.claude/output-styles/EnhancedClaude5.md`(記述スタイルの見本)
