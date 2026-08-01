@@ -1651,3 +1651,91 @@ prompt-smith の対象範囲変更は完了しています（コミット `37e0e
 ---
 
 注意事項: 外部プラグイン依存を完全に解消し、optimize-agents 単体で自己完結。ただし、description 基準の詳細文書（機序を含む）については `references/description-guide.md` に集約しており、スキル本文自体は削る基準に従っています。
+
+
+## セッション 2: バージョン更新と push
+
+# AI
+
+(tool: Bash — Check if commit is pushed)
+
+未 push なので、`c509879` を修正して 0.10.1-dev を含める形にします。
+
+**決定と理由:**
+`--amend` を選ぶ理由は、未 push であれば履歴の書き換えは安全で、「バージョンだけを上げる」空コミットを増やさずに済むため。push 済みなら別コミットにすべきところです。n3（パッチ）を上げる判断はご指示どおりですが、実質は 0.10.0-dev の内容を完成させる修正です。プレリリース中なので、どちらの解釈でも運用上の差は出ません。
+
+(tool: Edit — `/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins/plugins/optimize-agents/.claude-plugin/plugin.json`)
+
+(tool: Bash — Amend commit with version bump)
+
+optimize-agents を **0.10.1-dev** に上げました。
+
+**何をしたか:**
+未 push だったため `--amend` で既存コミット `c509879` に version 変更を含め、バージョン変更だけの空コミットを増やさない形で反映。コミットハッシュは `c509879` → `56fd907` に変わりました。
+
+**完了した作業:**
+
+| ハッシュ | プラグイン | バージョン | 内容 |
+| --- | --- | --- | --- |
+| `26c9496` | task-utility | 0.8.0-dev | 指摘 27 件適用、共通規律を references へ集約 |
+| `3395af2` | task-utility | 0.9.0-dev | eval 整備、測定系の修復、description 修正 |
+| `37e0ea6` | optimize-agents | 0.10.0-dev | prompt-smith の対象を本文に限定 |
+| `56fd907` | optimize-agents | 0.10.1-dev | description の基準を内製化 |
+
+いずれも未 push（計 6 件）です。push のタイミングはご判断ください。`.raphael/` の抗体ファイル 7 件も引き続き未コミットです。
+
+# USER
+
+> コミット&プッシュお願いします
+
+
+## セッション 3: 今後の評価運用 ─ skill-creator 自前ランナーの継続保証
+
+# USER
+
+> 今後もskill-creatorを使った評価を行っていきますが、別のセッションが自前のrunnerを使ってくれるかがわかりません。どのように対策しましょうか。
+
+# AI
+
+**何をしたか:**
+skill-creator の `run_eval.py` が現行 Claude Code で機能しないという今日の発見に対し、自前ランナーの継続保証について 3 つの施策を提案。
+
+**決定と理由:**
+実装上の重要性から以下の順序で対策：
+
+1. **optimize-agents に自前ランナーをスキルとして内製化する** ─ 将来のセッションは skill-creator に依存せず、optimize-agents 配下の規律から自前評価器を参照・実行できる仕組み。description 基準と同様に `references/` に評価ロジックを格納
+2. **README と skill 本文に「evaluation は optimize-agents 内の runner を使用する」を明記** ─ 外部プラグイン依存の破棄と、実装側の意図の統一
+3. **chat 記録に「なぜ自前ランナーが必須か」と「runner の位置」を記載** ─ 数ヶ月後に別セッションが「あれ、skill-creator 使えるのでは？」と再発見するリスク軽減
+
+**失敗経路と発見:**
+今日の気づきは「skill-creator が壊れている」ではなく「測定結果が信じられない場合、計測側を検査する」という根本的なプロセス。これがあったから初めて run_eval.py 実行段階での不具合を確定できた。同じプロセスを次のセッションにも残すことが重要。
+
+**不明な部分:**
+次セッションが optimize-agents 設計書を読むかどうかの確実性は保証できない。README への明記は必須としても、根本的には「評価を再実装する度に発見される」という宿命から逃げられない。今日の修復プロセス自体が資産になる形で chat 記録に残す戦略。
+
+
+
+## セッション 4: 対策の確定と判断
+
+# USER
+
+> A. 作成してよいです。
+> B. "skill-creatorでスキルの発火制度を測る時は `scripts/run-trigger-eval.mjs` を使うこと。"とし、それ以降の根拠文は省いてください。
+> C. skill-creatorの資産を使うスクリプトなので、検討が必要です。Anthropic公式の機能と呼ぶべきものを蒸留するような形で取り入れてよいものか判断が必要です。
+
+# AI
+
+**何をしたか:**
+判断をいただいた 3 点（抗体作成、CLAUDE.md 記載、optimize-agents 拡張）に対し、判断を反映した実装方針を確認した。
+
+**決定と理由:**
+
+1. **A（抗体作成）: 手動作成する** ─ 今日のセッションで実際に踏んだ失敗を根拠に筋が通るため。90 日の失効期限内に修復されることを期待
+2. **B（CLAUDE.md 文面）: 指定の 1 行のみ** ─ 提示した 3 行から根拠を削り、実行方法だけに絞る
+3. **C（optimize-agents 拡張）: 見送り** ─ skill-creator の資産（`run_eval.py` などの評価ロジック）を蒸留して再配布することが、Anthropic 公式機能との関係で妥当性を欠くため。このリポジトリの自前ランナーに留める
+
+**次の実装予定:**
+
+- `CLAUDE.md` と `CLAUDE.example.md` に「skill-creatorでスキルの発火精度を測る時は `scripts/run-trigger-eval.mjs` を使うこと。」を記載
+- `.raphael/` に Raphael 抗体を手動作成（PreToolUse で `run_eval.py` / `run_loop.py` を検知して警告を注入）
+- optimize-agents 側への拡張は見送り（ユーザーが別途検討することになった旨を記録に残す）
