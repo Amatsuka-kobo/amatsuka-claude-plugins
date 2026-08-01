@@ -61,4 +61,4 @@
 - `2026/0729/phyllis998/agents-model-inherit-handling.md` | 2026-07-29 | phyllis998 | mdbase 型定義の実装・検証・コミット、既存ファイル誤検知ゼロを確認
 - `2026/0730/phyllis998/repository-structure-inquiry.md` | 2026-07-30 | phyllis998 | Fable 5 safeguards エラー原因調査（output style に原因特定）
 - `2026/0731/phyllis998/chat-recorder-migration.md` | 2026-07-31 | phyllis998 | chat-recorder の正系統化と agent-policy lean-docs スキル設計・実装・コミット
-- `2026/0801/phyllis998/evaluate-agent-policy-skills.md` | 2026-08-01 | phyllis998 | agent-policy:prompt-smith評価検証完成; プラグイン改名・最適化コンセプト検討開始
+- `2026/0801/phyllis998/evaluate-agent-policy-skills.md` | 2026-08-01 | phyllis998 | agent-policy→optimize-agents 改名・スキル再命名(with-codex-policy/claude-model-policy)完成
