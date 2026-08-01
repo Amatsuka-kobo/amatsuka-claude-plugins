@@ -7,7 +7,7 @@
 - `optimize-agents:with-codex-policy` — Claude + Codex(GPT)併用構成での最適化方針。
 - `optimize-agents:claude-model-policy` — Claude のみで完結する最適化方針(プロキシ不要)。
 - `optimize-agents:setup` — with-codex-policy で使う GPT Agent 定義を `.claude/agents/` に生成するウィザード。
-- `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。
+- `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)の**本文**の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。frontmatter の description は対象外(発火の確実性が簡潔さより優先されるため。根拠と実測は `docs/description-out-of-scope.md`)。
 
 ## 使い方(CLAUDE.md への記載)
 
