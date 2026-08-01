@@ -25,7 +25,6 @@
     ]
   },
   "model": "claude-opus-5[1m]",
-  "outputStyle": "EnhancedClaude5",
   "enabledPlugins": {
     "agent-policy@amatsuka-claude-plugins": true,
     "pitcrew@amatsuka-claude-plugins": true,
@@ -45,7 +44,9 @@
     "mdbase-lsp@claude-code-lsps": true,
     "vtsls@claude-code-lsps": true,
     "bash-language-server@claude-code-lsps": true,
-    "codex@openai-codex": true
+    "codex@openai-codex": true,
+    "frontend-design@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {
@@ -66,5 +67,6 @@
         "repo": "openai/codex-plugin-cc"
       }
     }
-  }
+  },
+  "outputStyle": "EnhancedClaude5"
 }
