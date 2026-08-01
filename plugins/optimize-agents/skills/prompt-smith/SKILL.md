@@ -1,13 +1,13 @@
 ---
 name: prompt-smith
-description: CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書の本文を新規に書くとき・改稿するとき、既存の指示書を評価して直すときに読む。README・設計書・チュートリアルなど人間が読み手の文書には適用しない。frontmatter の description は対象外で、そちらは skill-creator の基準で書く。
+description: CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書の本文を新規に書くとき・改稿するとき、既存の指示書を評価して直すときに読む。README・設計書・チュートリアルなど人間が読み手の文書には適用しない。frontmatter の description は対象外で、そちらは別の基準に従う(このスキルが参照先を示す)。
 ---
 
 # AI 向け指示書の鍛錬
 
 対象は CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書の本文である。
 README・設計書・チュートリアルなど、人間が読み手の文書には適用しない。
-frontmatter の description には適用しない。description は `skill-creator` の基準で書く。
+frontmatter の description には適用しない。description を書くときは `../../references/description-guide.md` に従う。
 
 ## 削る基準
 
