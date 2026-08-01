@@ -11,7 +11,7 @@
 - プラグインが実行するスクリプトはTypeScriptで書くこと。ソースは `plugins/*/src/` に、バンドル出力先は `plugins/*/scripts` に、特殊な場合(server起動など) は `plugins/*/dist` にそれぞれ配置すること。
 - リポジトリ運用のためのスクリプト(ルートの `scripts/`)は言語を問わない。
 - バンドル出力は git 管理(プラグイン利用者はビルド不要)。ソース(`plugins/*/src/`)を変更したら `pnpm build` を実行し、生成物の差分もコミットすること。
-- SKILL.md の description は `skill-creator` スキルの基準で書くこと。狙った依頼で確実に発火することを、簡潔さより優先する。
+- SKILL.md・Agents 定義の description は `optimize-agents` の `references/description-guide.md` の基準で書くこと。狙った依頼で確実に発火することを、簡潔さより優先する。
 - SKILL.md の本文・その他の AI 向け指示書は `optimize-agents:prompt-smith` の基準で書くこと。
 
 ## プラグインのアップデート
