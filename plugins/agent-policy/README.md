@@ -7,7 +7,7 @@
 - `agent-policy:with-codex` — Claude + Codex(GPT)併用構成の運用方針。
 - `agent-policy:claude-only` — Claude のみで完結する運用方針(プロキシ不要)。
 - `agent-policy:setup` — with-codex で使う GPT Agent 定義を `.claude/agents/` に生成するウィザード。
-- `agent-policy:lean-docs` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)を簡潔に保つための基準と工程。作成時・レビュー時の両方で使う。
+- `agent-policy:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。
 
 ## 使い方(CLAUDE.md への記載)
 
