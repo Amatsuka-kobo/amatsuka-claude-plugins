@@ -26,7 +26,7 @@
   },
   "model": "claude-opus-5[1m]",
   "enabledPlugins": {
-    "agent-policy@amatsuka-claude-plugins": true,
+    "optimize-agents@amatsuka-claude-plugins": true,
     "pitcrew@amatsuka-claude-plugins": true,
     "prefetch@amatsuka-claude-plugins": true,
     "raphael@amatsuka-claude-plugins": true,

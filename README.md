@@ -44,7 +44,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | Pitcrew      | オーケストレーション実行中の成果物(diff・設計書・テスト結果)を .pitcrew/ のレビューキューへ逐次書き出し、人間の並走レビューを可能にするプラグイン           | リリース   |
 | task-utility | タスクの進め方を支援するユーティリティ群                                                                                                                    | 開発中     |
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                          | 開発中     |
-| agent-policy | あまつか工房のエージェント運用方針(モデル別役割分担・設計/実装フロー・context-map)を Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供するスキル群 | 開発中     |
+| optimize-agents | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群を Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供する | 開発中     |
 | prefetch     | ユーザー入力待ちの直前に、次に必要となる読み取り主体の作業をバックグラウンドで先行実行し、回答後の待ち時間を短縮するプラグイン                              | 開発中     |
 | raphael      | 失敗を感染記録→抗体→発火時だけ注入へ変換し、決定的な hook で再発を防止するプラグイン                                                                        | 開発中     |
 
@@ -78,8 +78,8 @@ Claude の最上位モデルである Fable5 の振る舞いや、サブエー�
 
 あまつか工房で Claude Code を使うときの便利ツールなどをまとめたものです。
 
-### agent-policy
+### optimize-agents
 
-あまつか工房で Claude Code を使う時のエージェント運用方針をプラグイン化したものです。<br>
+あまつか工房で Claude Code を使う時のエージェント運用を最適化するプラグインです。<br>
 モデル別役割分担・大まかな設計/実装フロー・アドバイザー運用・並列原則・コードベース探索のコスト効率化施策として context-map の作成指針をスキルとして配布します。<br>
-CLAUDE.md に `agent-policy:claude-only` または `agent-policy:with-codex` へ従う旨を書くだけで、任意のプロジェクトに同じ運用規律を持ち込めます。<br>
+CLAUDE.md に `optimize-agents:claude-model-policy` または `optimize-agents:with-codex-policy` へ従う旨を書くだけで、任意のプロジェクトに同じ最適化施策を持ち込めます。<br>

@@ -1,11 +1,11 @@
 ---
 name: setup
-description: with-codex 運用方針で使う GPT エージェント定義(gpt-sol / gpt-terra / gpt-luna)を、対話ヒアリングのうえプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「GPT エージェントをセットアップして」「agent-policy の setup」等と明示的に依頼したときに必ず使用する。Codex 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
+description: with-codex-policy 運用方針で使う GPT エージェント定義(gpt-sol / gpt-terra / gpt-luna)を、対話ヒアリングのうえプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「GPT エージェントをセットアップして」「optimize-agents の setup」等と明示的に依頼したときに必ず使用する。Codex 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
 ---
 
 # GPT エージェント セットアップウィザード
 
-この Skill は、`agent-policy:with-codex` 方針で使う 3 つの GPT Agent 定義(`gpt-sol` / `gpt-terra` / `gpt-luna`)を、対話ヒアリングのうえプロジェクトの `.claude/agents/` に生成する。生成するのは Markdown の Agent 定義ファイルのみであり、この Skill はプロキシや秘密値を一切管理しない。Anthropic API も使用しない。
+この Skill は、`optimize-agents:with-codex-policy` 方針で使う 3 つの GPT Agent 定義(`gpt-sol` / `gpt-terra` / `gpt-luna`)を、対話ヒアリングのうえプロジェクトの `.claude/agents/` に生成する。生成するのは Markdown の Agent 定義ファイルのみであり、この Skill はプロキシや秘密値を一切管理しない。Anthropic API も使用しない。
 
 以下の 4 ステップを順に実施する。
 
@@ -18,7 +18,7 @@ description: with-codex 運用方針で使う GPT エージェント定義(gpt-s
 
 確認方法の案内例(提示のみ): 「Claude Code の `/model` コマンドでモデル一覧を開き、使用予定のエイリアス(例 `claude-gpt-5-6-sol`)が候補に出るか確認してください。またはプロキシの `/v1/models` 応答に該当 id が含まれるか確認してください。」
 
-前提が満たせない場合は「GPT Agent は起動できないため、`agent-policy:claude-only` 方針の利用を検討してください」と案内して終了できる。
+前提が満たせない場合は「GPT Agent は起動できないため、`optimize-agents:claude-model-policy` 方針の利用を検討してください」と案内して終了できる。
 
 ## ステップ 2: エイリアス確認
 
@@ -41,6 +41,6 @@ description: with-codex 運用方針で使う GPT エージェント定義(gpt-s
 - `.claude/agents/` を git 追跡対象にするか gitignore するかはプロジェクト判断であることを案内する。
 - CLAUDE.md への追記文例を提示のみする(自動で書き込まない):
 
-  > エージェント運用は `agent-policy:with-codex` に従う。GPT エージェント定義は `.claude/agents/gpt-{sol,terra,luna}.md` に配置済み。
+  > エージェント運用は `optimize-agents:with-codex-policy` に従う。GPT エージェント定義は `.claude/agents/gpt-{sol,terra,luna}.md` に配置済み。
 
 - 生成した 3 ファイルのパスと、Claude Code の再読み込みで Agent が認識される旨を報告する。

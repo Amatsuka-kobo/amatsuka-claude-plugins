@@ -1,6 +1,6 @@
 ---
 name: gpt-terra
-description: Use this agent when 通常のコーディング(複雑でない実装)、ドキュメント作成、設定編集、ビルド/テスト実行など、レビュー・設計を除く一般作業を委譲するとき。agent-policy の with-codex 運用方針における `GPT Terra` に対応する。詳細は本文の「When to invoke」を参照。
+description: Use this agent when 通常のコーディング(複雑でない実装)、ドキュメント作成、設定編集、ビルド/テスト実行など、レビュー・設計を除く一般作業を委譲するとき。optimize-agents の with-codex-policy 運用方針における `GPT Terra` に対応する。詳細は本文の「When to invoke」を参照。
 model: {{MODEL_ALIAS}}
 color: green
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent

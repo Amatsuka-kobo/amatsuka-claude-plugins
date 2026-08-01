@@ -98,10 +98,10 @@ VSCode を使用する場合、コード保守の観点から Biome 拡張機能
 cp CLAUDE.example.md CLAUDE.md
 ```
 
-また、 Codex 利用者と Claude Code のみの利用者でエージェントの運用方針を変えるため、agent-policy プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.example.md に記述してあります。
+また、 Codex 利用者と Claude Code のみの利用者でエージェントの運用方針を変えるため、optimize-agents プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.example.md に記述してあります。
 
-- Codex 併用 -> `agent-policy:with-codex`
-- Claude Code のみ -> `agent-policy:claude-only`
+- Codex 併用 -> `optimize-agents:with-codex-policy`
+- Claude Code のみ -> `optimize-agents:claude-model-policy`
 
 ### uv と Serena
 
