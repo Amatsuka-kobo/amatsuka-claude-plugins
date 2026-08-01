@@ -8,8 +8,11 @@
 - このリポジトリのプラグインは **Anthropic API を使用できないユーザーも使える**ことが必須要件。
 - API クライアントの追加・`ANTHROPIC_API_KEY` 前提の実装・ユーザーへの CLI 直接操作の要求は、どれだけ便利に見えても採用しないこと。
 - LLM が必要な処理は Claude Code の機構(メインセッション/サブエージェント)か `claude` CLI のヘッドレス実行(ユーザーの既存サブスク認証)に閉じること。
-- スクリプト類はTypeScriptで書くこと。ソースは `plugins/*/src/` に、バンドル出力先は `plugins/*/scripts` に、特殊な場合(server起動など) は `plugins/*/dist` にそれぞれ配置すること。
+- プラグインが実行するスクリプトはTypeScriptで書くこと。ソースは `plugins/*/src/` に、バンドル出力先は `plugins/*/scripts` に、特殊な場合(server起動など) は `plugins/*/dist` にそれぞれ配置すること。
+- リポジトリ運用のためのスクリプト(ルートの `scripts/`)は言語を問わない。
 - バンドル出力は git 管理(プラグイン利用者はビルド不要)。ソース(`plugins/*/src/`)を変更したら `pnpm build` を実行し、生成物の差分もコミットすること。
+- SKILL.md の description は `skill-creator` スキルの基準で書くこと。狙った依頼で確実に発火することを、簡潔さより優先する。
+- SKILL.md の本文・その他の AI 向け指示書は `optimize-agents:prompt-smith` の基準で書くこと。
 
 ## プラグインのアップデート
 

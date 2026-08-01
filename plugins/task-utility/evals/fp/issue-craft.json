@@ -1,0 +1,50 @@
+[
+  {
+    "query": "Issue #42 をタスク分解して子 Issue を作ってほしい",
+    "should_trigger": false
+  },
+  {
+    "query": "open な Issue を棚卸しして、重複がないか確認して",
+    "should_trigger": false
+  },
+  {
+    "query": "この会話を docs/chat に記録して",
+    "should_trigger": false
+  },
+  {
+    "query": "Issue #17 の内容を読んで実装方針を考えて",
+    "should_trigger": false
+  },
+  {
+    "query": "PR を作成してレビュー依頼を出して",
+    "should_trigger": false
+  },
+  {
+    "query": "Issue のテンプレートファイルを .github/ に追加したい",
+    "should_trigger": false
+  },
+  {
+    "query": "この Issue にコメントを追加して状況を報告して",
+    "should_trigger": false
+  },
+  {
+    "query": "課題管理を Jira から GitHub Issues に移行したいんだけど方針を相談したい",
+    "should_trigger": false
+  },
+  {
+    "query": "既存の Issue にラベルを付けて整理してほしい",
+    "should_trigger": false
+  },
+  {
+    "query": "バグの原因を調査して修正して",
+    "should_trigger": false
+  },
+  {
+    "query": "Issue #55 をクローズして",
+    "should_trigger": false
+  },
+  {
+    "query": "gh コマンドで Issue 一覧を取得する方法を教えて",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "query": "今日の会話を記録に残しておいて",
+    "should_trigger": false
+  },
+  {
+    "query": "ストリーミング方式を採用した理由を過去の記録から調べて",
+    "should_trigger": false
+  },
+  {
+    "query": "git status を見て未コミットの変更を教えて",
+    "should_trigger": false
+  },
+  {
+    "query": "この PR のレビューを再開したい。差分を見せて",
+    "should_trigger": false
+  },
+  {
+    "query": "止まってるビルドを再実行して",
+    "should_trigger": false
+  },
+  {
+    "query": "前に決めた命名規約って何だったか記録から探してきて",
+    "should_trigger": false
+  },
+  {
+    "query": "TODO コメントが残ってる箇所を全部リストアップして",
+    "should_trigger": false
+  },
+  {
+    "query": "docs/chat の記録を全部読んで、このプロジェクトの経緯をまとめて",
+    "should_trigger": false
+  },
+  {
+    "query": "中断してたテストの実行を続きからやって",
+    "should_trigger": false
+  },
+  {
+    "query": "open Issue のうち進行中のものを一覧にして",
+    "should_trigger": false
+  },
+  {
+    "query": "さっきの続きだけど、あの関数のリファクタ続けて",
+    "should_trigger": false
+  },
+  {
+    "query": "前回のコミットの内容を見せて",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,34 @@
+[
+  {
+    "query": "CSVエクスポートをストリーミングにした経緯、過去の記録から調べてきて",
+    "should_trigger": true
+  },
+  {
+    "query": "認証まわりで前にハマった話ってどこかに残ってなかったっけ。docs/chat 見てほしい",
+    "should_trigger": true
+  },
+  {
+    "query": "chat-recorder を headless から反転させた判断、いつ誰がどういう理由で決めたか知りたい",
+    "should_trigger": true
+  },
+  {
+    "query": "過去の会話記録で pitcrew のビューアについて議論した回を探して、出典つきで要約して",
+    "should_trigger": true
+  },
+  {
+    "query": "前に却下した設計案があったはずなんだけど、何を却下してなぜ却下したか記録から拾ってきてもらえる?",
+    "should_trigger": true
+  },
+  {
+    "query": "先月あたりの記録で、テスト戦略について話した部分ある?",
+    "should_trigger": true
+  },
+  {
+    "query": "この実装、以前も似たことやって失敗した記憶があるんだけど記録に残ってないか調べて",
+    "should_trigger": true
+  },
+  {
+    "query": "docs/chat から issue-craft の設計を決めたときのやり取りを探してほしい",
+    "should_trigger": true
+  }
+]
