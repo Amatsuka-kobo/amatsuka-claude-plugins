@@ -545,3 +545,9 @@ commit と push の実行は、ユーザーの明示的な指示「コミット&
 **失敗・やり直し・誤った前提**
 
 なし。commit と push は予定どおり完了しました。
+
+## セッション 1: プラグイン改名と最適化コンセプト
+
+# phyllis998
+
+> agent-policyプラグインを、"エージェントの規律を定める"ものから、"エージェントを最適化する"というコンセプトに方針転換したため、"optimize-agents"と改名し、with-codexをwith-codex-policy、claude-onlyをclaude-agents-policyとしてください。
