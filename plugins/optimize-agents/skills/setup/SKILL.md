@@ -5,7 +5,7 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 
 # GPT エージェント セットアップウィザード
 
-この Skill は、`optimize-agents:with-codex-policy` 方針で使う 3 つの GPT Agent 定義(`gpt-sol` / `gpt-terra` / `gpt-luna`)を、対話ヒアリングのうえプロジェクトの `.claude/agents/` に生成する。生成するのは Markdown の Agent 定義ファイルのみであり、この Skill はプロキシや秘密値を一切管理しない。Anthropic API も使用しない。
+生成するのは Markdown の Agent 定義ファイルのみであり、プロキシや秘密値は一切管理しない。
 
 以下の 4 ステップを順に実施する。
 
@@ -16,9 +16,7 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 - Claude Code を、Codex 系モデルを配信するプロキシ(例: CLIProxyAPI などの ProxyAPI サーバー)経由で起動しているか。
 - そのプロキシの `/v1/models` 応答に、使用予定のモデルエイリアスが含まれているか。
 
-確認方法の案内例(提示のみ): 「Claude Code の `/model` コマンドでモデル一覧を開き、使用予定のエイリアス(例 `claude-gpt-5-6-sol`)が候補に出るか確認してください。またはプロキシの `/v1/models` 応答に該当 id が含まれるか確認してください。」
-
-前提が満たせない場合は「GPT Agent は起動できないため、`optimize-agents:claude-model-policy` 方針の利用を検討してください」と案内して終了できる。
+前提が満たせない場合は「GPT Agent は起動できないため、`optimize-agents:claude-model-policy` 方針の利用を検討してください」と案内し、ユーザーが続行を求めない限りステップ 2 へ進まず終了する。
 
 ## ステップ 2: エイリアス確認
 
@@ -33,8 +31,8 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 ## ステップ 3: 生成
 
 - この Skill のベースディレクトリ配下の `assets/gpt-sol.template.md` / `assets/gpt-terra.template.md` / `assets/gpt-luna.template.md` を読み込み、本文中の `{{MODEL_ALIAS}}` を各エージェントの確定エイリアスへ置換する。
-- 出力先はプロジェクトの `.claude/agents/gpt-{sol,terra,luna}.md`。`.claude/agents/` が無ければ作成する。
-- 既存ファイルがある場合は、`AskUserQuestion` 等でユーザーに上書き可否を確認し、承認なしに上書きしない。ファイルごとに(または一括で)上書き / スキップを選べるようにする。既存の `gpt-*.md` が現行テンプレートと役割定義が食い違う場合(例: 本文で「設計・分析・計画は役割外」と定義しているもの、gpt-luna に「アドバイザーへの相談」節があるもの)は、上書きを推奨すると確認時に添える。
+- 出力先は git リポジトリのルート直下の `.claude/agents/gpt-{sol,terra,luna}.md`。git 管理外のディレクトリでは cwd 直下に置く。`.claude/agents/` が無ければ作成する。
+- 既存ファイルがある場合は、`AskUserQuestion` 等でユーザーに上書き可否を確認し、承認なしに上書きしない。ファイルごとに(または一括で)上書き / スキップを選べるようにする。既存の `gpt-*.md` が現行テンプレートと役割定義が食い違う場合(例: 本文で「設計・分析・計画は役割外」と定義しているもの)は、上書きを推奨すると確認時に添える。
 
 ## ステップ 4: 後処理案内(自動書き込みはしない)
 
