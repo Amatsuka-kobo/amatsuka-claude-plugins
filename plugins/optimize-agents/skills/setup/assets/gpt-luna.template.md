@@ -1,6 +1,6 @@
 ---
 name: gpt-luna
-description: Use this agent when 軽量なタスク(一括適用・一括チェック・反復変換・軽微なコーディング)や探索実働を委譲するとき。agent-policy の with-codex 運用方針における `GPT Luna` に対応する。詳細は本文の「When to invoke」を参照。
+description: Use this agent when 軽量なタスク(一括適用・一括チェック・反復変換・軽微なコーディング)や探索実働を委譲するとき。optimize-agents の with-codex-policy 運用方針における `GPT Luna` に対応する。詳細は本文の「When to invoke」を参照。
 model: {{MODEL_ALIAS}}
 color: cyan
 tools: Read, Grep, Glob, Write, Edit, Bash, LSP

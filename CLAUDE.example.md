@@ -33,10 +33,10 @@
 この記入ガイドは使用時には削除してください。
 
 Claude Code only ->
-- 最初に必ず `agent-policy:claude-only` スキルを使用し、この規律に従うこと。
+- 最初に必ず `optimize-agents:claude-model-policy` スキルを使用し、この規律に従うこと。
 
 With Codex ->
-- 最初に必ず `agent-policy:with-codex` スキルを使用し、この規律に従うこと。
+- 最初に必ず `optimize-agents:with-codex-policy` スキルを使用し、この規律に従うこと。
 -->
 
 - この方針は恒久的なものなので、Claude の設定を更新すること。

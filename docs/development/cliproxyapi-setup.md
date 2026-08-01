@@ -153,16 +153,16 @@ CLIProxyAPI が停止している状態でこの起動をすると、Claude Code
 ## 6. Claude Code から GPT サブエージェントを使う（任意）
 
 Claude Code では、通常 `/model` コマンドで選択した場合以外で GPT モデルのエージェントを使用することはできません。
-それを解消するために汎用エージェント運用方針として、`agent-policy` プラグインに `GPT Sol` / `GPT Terra` / `GPT Luna` をモデルに指定する Agents 定義を用意しています。
+それを解消するために汎用エージェント運用方針として、`optimize-agents` プラグインに `GPT Sol` / `GPT Terra` / `GPT Luna` をモデルに指定する Agents 定義を用意しています。
 または、Codex CLI を使用する OpenAI 製の codex プラグインを使用します。
 
-`agent-policy` が提供する Agents 定義を使用するには、`agent-policy:setup` を使用し、`.claude/agents` に設置してください。
+`optimize-agents` が提供する Agents 定義を使用するには、`optimize-agents:setup` を使用し、`.claude/agents` に設置してください。
 `.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
 
 ProxyAPI に繋いだ Claude Code 上で以下のように実行してください。
 
 ```bash
-/agent-policy:setup
+/optimize-agents:setup
 ```
 
 ## トラブルシューティング
