@@ -1,12 +1,13 @@
 ---
 name: prompt-smith
-description: CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書を新規に書くとき・改稿するとき、既存の指示書を評価して直すときに読む。README・設計書・チュートリアルなど人間が読み手の文書には適用しない。
+description: CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書の本文を新規に書くとき・改稿するとき、既存の指示書を評価して直すときに読む。README・設計書・チュートリアルなど人間が読み手の文書には適用しない。frontmatter の description は対象外で、そちらは skill-creator の基準で書く。
 ---
 
 # AI 向け指示書の鍛錬
 
-対象は CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書である。
+対象は CLAUDE.md・SKILL.md・output style・Agents 定義・メモリなど、AI が読み手となる指示書の本文である。
 README・設計書・チュートリアルなど、人間が読み手の文書には適用しない。
+frontmatter の description には適用しない。description は `skill-creator` の基準で書く。
 
 ## 削る基準
 
@@ -61,7 +62,7 @@ README・設計書・チュートリアルなど、人間が読み手の文書�
 
 評点は、その軸の指摘件数を文の総数で割った比率から決める。箇条書きの 1 項目と散文の 1 文を
 それぞれ 1 と数える。充足度の欠落は、書かれていない項目の種類ごとに 1 と数える。frontmatter は
-文の総数に数えず、description の評価は本文と分けて記す。
+文の総数に数えず、指摘の対象にもしない。
 
 | 比率 | 評点 |
 | --- | --- |
