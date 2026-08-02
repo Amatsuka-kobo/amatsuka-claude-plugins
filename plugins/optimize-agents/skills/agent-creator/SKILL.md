@@ -1,6 +1,6 @@
 ---
 name: agent-creator
-description: Agent 定義(subagent)を新しく作るとき、既存の Agent 定義を検証・修正するときに必ず使用する。「エージェントを作って」「subagent を追加したい」「agent 定義を見てほしい」「.claude/agents/ に〜するエージェントを置きたい」「agent の frontmatter を検証して」「この agent 定義に不備がないか見て」「tools を必要なものだけに絞りたい」「model を inherit にすべきか判断して」のような依頼で使う。frontmatter と本文の両方を扱い、既存定義の点検も担当する。GPT Sol/Terra/Luna の定型セットアップは setup-gptが担当する。subagent や Claude Code の仕組み・委譲の判断基準を説明するだけの質問には使わない。実際に定義ファイルを作るか点検するときだけ使う。
+description: Agent 定義(subagent)を新しく作るとき、既存の Agent 定義を検証・修正するときに必ず使用する。「エージェントを作って」「subagent を追加したい」「agent 定義を見てほしい」「.claude/agents/ に〜するエージェントを置きたい」「agent の frontmatter を検証して」「この agent 定義に不備がないか見て」「tools を必要なものだけに絞りたい」「model を inherit にすべきか判断して」のような依頼で使う。frontmatter と本文の両方を扱い、既存定義の点検も担当する。GPT Sol/Terra/Luna の定型セットアップは setup-gpt が担当する。subagent や Claude Code の仕組み・委譲の判断基準を説明するだけの質問には使わない。実際に定義ファイルを作るか点検するときだけ使う。
 ---
 
 # Agent 定義の作成
@@ -12,7 +12,8 @@ description: Agent 定義(subagent)を新しく作るとき、既存の Agent �
 
 ### 1. 用途を聞く
 
-何をする agent かを聞く。1 つの責務に収まらないときは分割を提案する。
+- 何をする agent かを聞く。
+- 1 つの責務に収まらないときは分割を提案する。
 
 ### 2. 配置を決める
 
@@ -31,9 +32,15 @@ description: Agent 定義(subagent)を新しく作るとき、既存の Agent �
 
 ### 4. description を書く
 
-- `../../references/description-guide.md` に従う。
+`../../references/description-guide.md` に従う。
 
 ### 5. 本文を書く
 
 - `optimize-agents:prompt-smith` の基準に従う。
-- 本文は system prompt になる。何をする agent か、どう進めるか、何を返すかを書く。
+- 何をする agent か、どう進めるか、何を返すかを書く。
+
+### 6. 既存定義を点検する
+
+- 手順 3・4・5 の基準を既存の記述に当て、逸脱箇所を挙げる。
+- `tools` に、本文が使わないツールが含まれていないかを照合する。
+- `../../references/agent-definition-spec.md` §配置による制約 に照らし、その配置で使えないフィールドが書かれていないかを確認する。

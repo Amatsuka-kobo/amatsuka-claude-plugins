@@ -11,7 +11,7 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 
 ## ステップ 1: 前提確認
 
-ユーザーに次を確認する(検証コマンドの実行は強制しない。確認方法の提示に留める)。
+ユーザーに次を確認する。検証コマンドは実行させず、確認方法の提示に留める。
 
 - Claude Code を、Codex 系モデルを配信するプロキシ(例: CLIProxyAPI などの ProxyAPI サーバー)経由で起動しているか。
 - そのプロキシの `/v1/models` 応答に、使用予定のモデルエイリアスが含まれているか。
@@ -33,14 +33,13 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 - この Skill のベースディレクトリ配下の `assets/gpt-sol.template.md` / `assets/gpt-terra.template.md` / `assets/gpt-luna.template.md` を読み込み、本文中の `{{MODEL_ALIAS}}` を各エージェントの確定エイリアスへ置換する。
 - 出力先は git リポジトリのルート直下の `.claude/agents/gpt-{sol,terra,luna}.md`。git 管理外のディレクトリでは cwd 直下に置く。`.claude/agents/` が無ければ作成する。
 - 既存ファイルがある場合は、`AskUserQuestion` でユーザーに上書き可否を確認する。
-- 承認なしに上書きしない。
 - 上書き / スキップは、ファイルごとと一括の双方を選べるようにする。
 - 既存の `gpt-*.md` の役割定義が現行テンプレートと食い違う場合(例: 本文で「設計・分析・計画は役割外」と定義しているもの)は、上書きを推奨すると確認時に添える。
 
-## ステップ 4: 後処理案内(自動書き込みはしない)
+## ステップ 4: 後処理案内
 
 - `.claude/agents/` を git 追跡対象にするか gitignore するかはプロジェクト判断であることを案内する。
-- CLAUDE.md への追記文例を提示のみする(自動で書き込まない):
+- CLAUDE.md への追記文例を提示する。自動では書き込まない。
 
   > エージェント運用は `optimize-agents:with-codex-policy` に従う。GPT エージェント定義は `.claude/agents/gpt-{sol,terra,luna}.md` に配置済み。
 

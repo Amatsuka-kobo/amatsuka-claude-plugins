@@ -10,22 +10,9 @@
 - `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md・コマンド定義等)の**本文**と、`references/` に置かれた文書の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。`references/` 配下でも、外部仕様の写しやスキーマ定義のように**引くために置かれた記述**には重複・例・出典の基準を当てない(設計は `docs/prompt-smith-references-scope.md`)。
 - `optimize-agents:agent-creator` — **Agent 定義**(subagent)の作成と検証。frontmatter の仕様は `references/agent-definition-spec.md`、本文は `prompt-smith`、description は `references/description-guide.md` に従う。
 
-## 提供スクリプト
+SKILL.md・コマンド定義の description も `references/description-guide.md` に従って書く。
 
-`scripts/` にバンドル済みで配布する。利用者のビルドは不要。
-
-| スクリプト                   | 用途                                                                                                                                     |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `run-trigger-eval.mjs`       | スキルの発火精度を測る。一時ディレクトリにスキルを登録し、`claude -p` の最初のツール呼び出しで判定する                                   |
-| `run-output-eval.mjs`        | スキルの出力契約を測る。`with_skill` / `without_skill` の 2 構成でサンドボックスを作って実行し、採点はプロジェクト側のチェッカーに委ねる |
-| `aggregate-benchmark.mjs`    | 上記の結果を構成ごとに集計し、平均 ± 標準偏差と差分を出す                                                                                |
-| `check-agent-definition.mjs` | Agent 定義の frontmatter と配置制約を静的検査する。プラグイン配下と project 配下の双方に対応                                             |
-| `check-skill-definition.mjs` | SKILL.md とコマンド定義(`commands/*.md`)の frontmatter を静的検査する。解決後のコマンド名も出す                                          |
-| `check-agent-output.mjs`     | `agent-creator` の出力 eval のチェッカー。生成された Agent 定義を採点する                                                                |
-
-`check-skill-definition.mjs` は **Claude Code の仕様**を検査する。Claude API / claude.ai へアップロードするスキルには別の制約(`name` 必須・64 字上限・予約語禁止・`description` 単体 1024 字)があり、こちらは検査しない。許容する frontmatter キーの一覧は Claude Code のバージョンに追従が要る(2026-08-02 時点で 17 種)。
-
-`claude plugin validate` は plugin.json だけを検査する(2026-08-02 実測)。SKILL.md の frontmatter は対象外なので、両方を併せて使う。
+このプラグインはスクリプトを同梱しない。Skill と `references/` の文書だけで構成する。
 
 ## 使い方(CLAUDE.md への記載)
 
@@ -69,7 +56,7 @@ claude-model-policy を使う場合:
 | description の様式 | `references/description-guide.md` の基準。`<example>` は使わない | `<example>` ブロックを含む独自様式      |
 | 本文の基準         | `prompt-smith` へ委譲                                            | スキル内に自前の指針                    |
 | frontmatter の仕様 | 公式 16 フィールドを reference に記録                            | name/description/model/color を必須扱い |
-| 検証               | `check-agent-definition`(project 配下も対象)                     | `validate-agent.sh`                     |
+| 検証               | `agent-creator` の §既存定義を点検する(project 配下も対象)       | `validate-agent.sh`                     |
 | 想定文脈           | 任意の Agent 定義                                                | プラグイン開発                          |
 
 `<example>` を使わない判断の根拠は `docs/agent-creator-rationale.md` に記載する。公式ドキュメントに記述がないためであり、効果が無いと測ったわけではない。
@@ -83,6 +70,13 @@ claude-model-policy を使う場合:
 これが `with-codex-policy` の §実行帯が GPT モデルの場合の dispatch で「実行帯が GPT の場合は dispatch 時の `model` 上書きを使わず、役割定義本文を依頼文に同梱する」方式を採る理由である。
 
 ## アップデート時の注意
+
+0.14.0 で全 5 スキルと 4 つの `references/` 文書を `prompt-smith` の基準で再点検し、40 件を是正しました。CLAUDE.md 側の記載変更は不要です。
+
+- **SKILL.md の description の担当を `references/description-guide.md` に移しました。**0.13.0 で削除した `skill-eval` を指したままの記述を差し替えたものです。
+- **削除済みスクリプトへの参照を落としました。**`scripts/` は 0.13.0 で削除済みで、このプラグインはスクリプトを同梱しません。Agent 定義の点検は `agent-creator` の §既存定義を点検する が担います。
+- `with-codex-policy` の §GPT が使えない場合のフォールバック を §実行帯の解決順 へ改称しました。1 番目の項は通常経路でありフォールバックではないためです。
+- `agent-creator` に §既存定義を点検する を追加しました。description が既存定義の点検を担当と書いていた一方、手順が新規作成しか扱っていませんでした。
 
 0.13.0 で skill-eval と description の測定機構を削除しました。
 (実測に基づいた規律だけで十分であると判断したため)

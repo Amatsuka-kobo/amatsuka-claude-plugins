@@ -1,10 +1,8 @@
 # Agent 定義の仕様
 
-2026-08-02 時点の Anthropic 公式ドキュメントに基づく。
+出典: https://code.claude.com/docs/en/sub-agents / https://code.claude.com/docs/en/plugins-reference (2026-08-02 時点)
 
-出典: https://code.claude.com/docs/en/sub-agents / https://code.claude.com/docs/en/plugins-reference
-
-仕様は変わる。この文書と実際の挙動が食い違うときは公式ドキュメントを正とする。
+この文書と実際の挙動が食い違うときは公式ドキュメントを正とする。
 
 ## frontmatter のフィールド
 
@@ -36,7 +34,7 @@
 
 ## 配置による制約
 
-プラグインが提供する agents は 3 つのフィールドを使えない。公式がセキュリティ上の理由として明記している。
+プラグインが提供する agents は 3 つのフィールドを使えない。
 
 | 配置 | 使えないフィールド |
 | --- | --- |
@@ -68,7 +66,7 @@
 
 ## 公式ドキュメントに記述がない事項
 
-次は公式に記述がない。慣習や独自様式であり、公式推奨として扱わない。
+次の 4 つは公式に記述がなく、公式推奨として扱わない。
 
 - description に `<example>` ブロックを埋め込む形式
 - 本文(system prompt)の構成
@@ -77,9 +75,9 @@
 
 ## 公式が示す設計原則
 
-- "Design focused subagents: each subagent should excel at one specific task"
-- "Limit tool access: grant only necessary permissions for security and focus"
-- 非 fork の subagent は会話履歴・ロード済みスキル・既読ファイルを引き継がない
+- subagent は 1 つのタスクに専念する形で設計する。
+- tools は必要なものだけを許可する。
+- 非 fork の subagent は会話履歴・ロード済みスキル・既読ファイルを引き継がない。
 
 ## 検証手段
 
@@ -87,4 +85,3 @@
 | --- | --- |
 | `claude plugin validate <path>` | プラグイン配下。`--strict` で警告もエラー扱い |
 | `/doctor` | 同一ディレクトリ内の name 重複 |
-| `optimize-agents` の `scripts/check-agent-definition.mjs` | プラグイン配下と project 配下の双方 |
