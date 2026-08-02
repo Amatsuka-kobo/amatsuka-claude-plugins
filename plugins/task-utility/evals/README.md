@@ -4,7 +4,7 @@
 
 ## trigger eval
 
-`scripts/run-trigger-eval.mjs` が測定する。3 種のセットは測るものが違うので、合否も別に見る。
+`plugins/optimize-agents/scripts/run-trigger-eval.mjs` が測定する。3 種のセットは測るものが違うので、合否も別に見る。
 
 | ディレクトリ | 内容 | 合格条件 |
 | --- | --- | --- |
@@ -15,13 +15,19 @@
 実行:
 
 ```bash
-node scripts/run-trigger-eval.mjs \
+node plugins/optimize-agents/scripts/run-trigger-eval.mjs \
   --skill plugins/task-utility/skills/resume/SKILL.md \
   --eval-set plugins/task-utility/evals/fp/resume.json \
   --runs 2 --workers 6
 ```
 
 `claude -p` をサブプロセスで起動し、`Skill` ツールが呼ばれたかで発火を判定する。実処理には入らず、最初のツール呼び出しで打ち切る。
+
+### 測定値のばらつき
+
+同じ実装・同じ条件でも結果は動く。2026-08-02 の実測では、`fp/chat` の同一クエリを 10 回ずつ 2 度測って 3/10 と 0/10 になった。連続測定では先に走った方が高く出る傾向がある。
+
+1〜2 問の差で description や実装を疑わない。差が気になるときは、そのクエリだけを `--runs 10` 以上で測り直す。
 
 ### skill-creator の run_eval.py を使わない理由
 

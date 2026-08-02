@@ -8,5 +8,6 @@ packages:
   - plugins/raphael
   - plugins/prefetch
   - plugins/guidepost
+  - plugins/optimize-agents
 allowBuilds:
   esbuild: true

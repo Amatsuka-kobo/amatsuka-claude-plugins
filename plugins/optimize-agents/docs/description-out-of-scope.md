@@ -29,4 +29,4 @@ description における「重複」や「言い換え」は、本文とは働�
 
 ## 測定手順
 
-発火精度の測定には `scripts/run-trigger-eval.mjs`(開発リポジトリ amatsuka-claude-plugins のルート)を使う。skill-creator の `run_eval.py` は測定対象を `.claude/commands/` に登録するため現行の Claude Code では発火を検出できない。詳細は `plugins/task-utility/evals/README.md` に記録がある。
+発火精度の測定には `plugins/optimize-agents/scripts/run-trigger-eval.mjs` を使う。skill-creator の `run_eval.py` は測定対象を `.claude/commands/` に登録するため現行の Claude Code では発火を検出できない。詳細は `plugins/task-utility/evals/README.md` に記録がある。
