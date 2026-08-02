@@ -156,13 +156,13 @@ Claude Code では、通常 `/model` コマンドで選択した場合以外で 
 それを解消するために汎用エージェント運用方針として、`optimize-agents` プラグインに `GPT Sol` / `GPT Terra` / `GPT Luna` をモデルに指定する Agents 定義を用意しています。
 または、Codex CLI を使用する OpenAI 製の codex プラグインを使用します。
 
-`optimize-agents` が提供する Agents 定義を使用するには、`optimize-agents:setup` を使用し、`.claude/agents` に設置してください。
+`optimize-agents` が提供する Agents 定義を使用するには、`optimize-agents:setup-gpt` を使用し、`.claude/agents` に設置してください。
 `.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
 
 ProxyAPI に繋いだ Claude Code 上で以下のように実行してください。
 
 ```bash
-/optimize-agents:setup
+/optimize-agents:setup-gpt
 ```
 
 ## トラブルシューティング

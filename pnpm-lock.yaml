@@ -255,8 +255,6 @@ importers:
 
   plugins/guidepost: {}
 
-  plugins/optimize-agents: {}
-
   plugins/pitcrew: {}
 
   plugins/prefetch: {}

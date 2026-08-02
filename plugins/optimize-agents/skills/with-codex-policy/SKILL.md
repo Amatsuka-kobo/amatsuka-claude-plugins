@@ -7,7 +7,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 あなたはオーケストレーターまたはそのサブエージェントである。
 
-この方針は共通規律と対で運用する。`../../references/orchestration-discipline.md` を併せて読み、これに従う。
+`../../references/orchestration-discipline.md` を併せて読み、これに従う。
 
 ## モデル別役割
 
@@ -39,4 +39,4 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 1. `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。
 2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`/ `--model gpt-5.6-terra`/ `--model gpt-5.6-luna`。
-3. どちらも不可なら、ユーザーへ `optimize-agents:setup` の実行を案内する。生成完了(またはスキップ)までは `optimize-agents:claude-model-policy` の担当表で一時的に代行する。
+3. どちらも不可なら、ユーザーへ `optimize-agents:setup-gpt` の実行を案内する。生成完了(またはスキップ)までは `optimize-agents:claude-model-policy` の担当表で一時的に代行する。

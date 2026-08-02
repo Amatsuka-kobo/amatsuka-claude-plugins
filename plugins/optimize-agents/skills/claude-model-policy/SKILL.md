@@ -7,7 +7,7 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 
 あなたはオーケストレーターまたはそのサブエージェントである。
 
-この方針は共通規律と対で運用する。`../../references/orchestration-discipline.md` を併せて読み、これに従う。
+`../../references/orchestration-discipline.md` を併せて読み、これに従う。
 
 ## モデル別役割
 
@@ -25,6 +25,4 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 | 設計書・実装計画書のレビュー(理解したこと+暗黙知抽出) | `Haiku`            |
 | その他のタスク                                        | `Sonnet`           |
 
-この担当表で「軽量な実装」の帯にあたるのは `Haiku` である。
-
-すべての実行帯が Claude モデルであるため、`model` 未指定・`inherit` の Agents は dispatch 時の `model` 上書きで実行帯を明示する。
+`model` 未指定・`inherit` の Agents は、dispatch 時の `model` 上書きで実行帯を明示する。

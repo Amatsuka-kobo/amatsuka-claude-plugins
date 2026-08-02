@@ -62,7 +62,9 @@ skill-creator の `quick_validate.py` は前者を検査する。`package_skill.
 
 ### `name` とディレクトリ名の不一致は仕様
 
-プラグインスキルでは frontmatter `name` がコマンド名の最終セグメントを決める。`skills/setup-gpt/` の `name: setup` は `/optimize-agents:setup` を生む。不一致は不正ではない。
+プラグインスキルでは frontmatter `name` がコマンド名の最終セグメントを決める。ディレクトリ名と `name` の不一致は不正ではない。
+
+ただし `skills/setup-gpt/` は 0.12.0 で `name: setup` → `setup-gpt` に揃えた。仕様上は許されるが、README・他スキルの description・外部文書の 4 箇所で `setup` と `setup-gpt` の表記が混在し、どちらが正かを追えなくなっていたため。仕様として許されることと、参照する側が迷わないことは別である。
 
 ### commands は skills と同一仕様
 
