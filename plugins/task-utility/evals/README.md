@@ -2,9 +2,11 @@
 
 スキルの発火精度(trigger eval)と、chat スキルの出力契約(output eval)を測る。
 
+> **注意:** trigger eval の測定スクリプト(`optimize-agents` の `scripts/run-trigger-eval.mjs`)は optimize-agents 0.13.0 で削除された。`trigger/` `short/` `fp/` のクエリセットと、以下に記録した実測・知見は残してあるが、現在このリポジトリに測定を実行する手段はない。再測定するには測定器を再実装する必要がある。
+
 ## trigger eval
 
-`plugins/optimize-agents/scripts/run-trigger-eval.mjs` が測定する。3 種のセットは測るものが違うので、合否も別に見る。
+3 種のセットは測るものが違うので、合否も別に見る。
 
 | ディレクトリ | 内容 | 合格条件 |
 | --- | --- | --- |
@@ -12,18 +14,7 @@
 | `short/` | 実運用に多い短い依頼(各 8 問) | 発火する |
 | `fp/` | 隣接スキルが正解の近接依頼(各 12 問) | **発火しない** |
 
-実行:
-
-```bash
-node plugins/optimize-agents/scripts/run-trigger-eval.mjs \
-  --skill plugins/task-utility/skills/resume/SKILL.md \
-  --eval-set plugins/task-utility/evals/fp/resume.json \
-  --runs 2 --workers 6
-```
-
-`claude -p` をサブプロセスで起動し、`Skill` ツールが呼ばれたかで発火を判定する。実処理には入らず、最初のツール呼び出しで打ち切る。
-
-測定の手順と規律は `optimize-agents:skill-eval` が持つ。
+測定器は、`claude -p` をサブプロセスで起動し、`Skill` ツールが呼ばれたかで発火を判定していた。実処理には入らず、最初のツール呼び出しで打ち切る方式である。
 
 ### 測定値のばらつき
 

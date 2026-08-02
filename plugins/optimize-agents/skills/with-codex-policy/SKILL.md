@@ -25,17 +25,19 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 | 設計書・実装計画書のレビュー(理解したこと+暗黙知抽出) | `Haiku`                  |
 | その他のタスク                                        | `GPT Terra`              |
 
-この担当表で「軽量な実装」の帯にあたるのは `GPT Luna` と `Haiku` である。
+`orchestration-discipline` の「軽量な実装」の帯として扱うのは `GPT Luna` と `Haiku` である。この 2 つには Agent Tool を許可しない。
 
 ## 実行帯が GPT モデルの場合の dispatch
 
-- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を担当 GPT エージェントへの依頼文に役割定義として同梱して dispatch する。`model` 上書きは使わない。依頼文に「この tools のみ使用」と明記する。
+- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、担当 GPT エージェントへ dispatch する。
+- このとき `model` 上書きは使わない。
+- 依頼文に「この tools のみ使用」と明記する。
 - ビルトイン Agents は使わず、担当 GPT エージェントへ直接委譲する。
-- GPT が利用不可なら、§GPT が使えない場合のフォールバック で決まる代替帯を担当表として用い、dispatch 時の `model` 上書きで実行帯を明示する。
+- GPT が利用不可なら、§実行帯の解決順 で決まる代替帯を担当表として用い、dispatch 時の `model` 上書きで実行帯を明示する。
 
-## GPT が使えない場合のフォールバック
+## 実行帯の解決順
 
-実務タスク着手前に確認し、上から順に適用する。
+実務タスク着手前に確認し、上から順に適用する。1 で解決したときはフォールバックではない。
 
 1. `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。
 2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`/ `--model gpt-5.6-terra`/ `--model gpt-5.6-luna`。

@@ -24,5 +24,3 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 | 設計・計画・実装のアドバイザー                        | `Fable` / `Opus`   |
 | 設計書・実装計画書のレビュー(理解したこと+暗黙知抽出) | `Haiku`            |
 | その他のタスク                                        | `Sonnet`           |
-
-`model` 未指定・`inherit` の Agents は、dispatch 時の `model` 上書きで実行帯を明示する。
