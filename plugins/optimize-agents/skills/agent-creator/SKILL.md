@@ -31,8 +31,7 @@ description: Agent 定義(subagent)を新しく作るとき、既存の Agent �
 
 ### 4. description を書く
 
-- 作業種別と、隣接する Agent との境界を書く
-- `<example>` ブロックは使わない。
+- `../../references/description-guide.md` に従う。
 
 ### 5. 本文を書く
 
