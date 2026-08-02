@@ -8,7 +8,7 @@ await esbuild.build({
     ".js": ".mjs"
   },
   platform: "node",
-  target: "node26",
+  target: "node22",
   format: "esm",
   banner: {
     // NOTE: banner の識別子はバンドル本体のトップレベルと同一スコープになるため、

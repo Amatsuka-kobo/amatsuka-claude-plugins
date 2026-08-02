@@ -4,6 +4,12 @@
 
 CPU の投機実行と同様に、「次に必要になりそうで、外れても副作用がない作業」だけを先に進めます。予測が外れた場合や先行探索が失敗した場合は成果を破棄し、通常フローへ戻ります。
 
+## 動作要件
+
+フックとスクリプトは Node.js で動作します。`node` が PATH 上にあり、バージョンが 22 以上である必要があります。
+
+Claude Code 本体はネイティブバイナリで配布され Node.js を同梱しないため、未導入の場合は別途インストールしてください。
+
 ## 導入
 
 Claude Code で Marketplace を追加します。
@@ -109,12 +115,21 @@ plugins/prefetch/
 │   └── plugin.json
 ├── hooks/
 │   └── hooks.json
+├── src/
+│   └── check-prefetch-manifest.ts
 ├── scripts/
 │   └── check-prefetch-manifest.mjs
 ├── skills/
 │   └── prefetch/
 │       └── SKILL.md
+├── build.ts
+├── package.json
 └── README.md
 ```
 
-このプラグインは Markdown、JSON、Node.js の `.mjs` だけで構成され、ビルドは不要です。
+このプラグインは Markdown、JSON、Node 標準ライブラリのみで構成され、外部パッケージに依存しません。利用者はインストールしたそのまま使えます(ビルド不要)。
+
+## 開発
+
+- ソース: `src/`(TypeScript)。`pnpm build` で `scripts/*.mjs` にバンドル(git 管理)
+- テスト、型検査、lint はリポジトリルートで `pnpm test`、`pnpm typecheck`、`pnpm lint`
