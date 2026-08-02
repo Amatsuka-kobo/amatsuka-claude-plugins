@@ -16,7 +16,7 @@ await esbuild.build({
   platform: "node",
   format: "esm",
   sourcemap: false,
-  target: "node26"
+  target: "node22"
 })
 
 // ブラウザビューアの UI はバンドルせず、serve.mjs の隣に置いて実行時に読む
