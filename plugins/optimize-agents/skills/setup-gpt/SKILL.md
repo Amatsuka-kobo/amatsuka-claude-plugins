@@ -1,5 +1,5 @@
 ---
-name: setup
+name: setup-gpt
 description: with-codex-policy 運用方針で使う GPT エージェント定義(gpt-sol / gpt-terra / gpt-luna)を、対話ヒアリングのうえプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「GPT エージェントをセットアップして」「optimize-agents の setup」等と明示的に依頼したときに必ず使用する。Codex 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
 ---
 
@@ -32,7 +32,10 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 
 - この Skill のベースディレクトリ配下の `assets/gpt-sol.template.md` / `assets/gpt-terra.template.md` / `assets/gpt-luna.template.md` を読み込み、本文中の `{{MODEL_ALIAS}}` を各エージェントの確定エイリアスへ置換する。
 - 出力先は git リポジトリのルート直下の `.claude/agents/gpt-{sol,terra,luna}.md`。git 管理外のディレクトリでは cwd 直下に置く。`.claude/agents/` が無ければ作成する。
-- 既存ファイルがある場合は、`AskUserQuestion` 等でユーザーに上書き可否を確認し、承認なしに上書きしない。ファイルごとに(または一括で)上書き / スキップを選べるようにする。既存の `gpt-*.md` が現行テンプレートと役割定義が食い違う場合(例: 本文で「設計・分析・計画は役割外」と定義しているもの)は、上書きを推奨すると確認時に添える。
+- 既存ファイルがある場合は、`AskUserQuestion` でユーザーに上書き可否を確認する。
+- 承認なしに上書きしない。
+- 上書き / スキップは、ファイルごとと一括の双方を選べるようにする。
+- 既存の `gpt-*.md` の役割定義が現行テンプレートと食い違う場合(例: 本文で「設計・分析・計画は役割外」と定義しているもの)は、上書きを推奨すると確認時に添える。
 
 ## ステップ 4: 後処理案内(自動書き込みはしない)
 
