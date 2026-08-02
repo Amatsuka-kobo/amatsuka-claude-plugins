@@ -99,7 +99,7 @@ plugins/optimize-agents/
 | スキル | 担当 | 担当しない | 内部で参照 |
 | --- | --- | --- | --- |
 | `prompt-smith` | AI 向け指示書の**本文** | description、測定 | — |
-| `skill-eval` | **skill の**発火精度・出力契約の測定と改善ループ | Agents の測定、本文の書き方 | `description-guide` |
+| `skill-eval` | **skill の** description の改稿と、発火精度・出力契約の測定 | Agents の測定、本文の書き方 | `description-guide` |
 | `agent-creator` | **Agent 定義**の作成・検証 | skill の作成、eval 測定 | `prompt-smith`、`description-guide`、`agent-definition-spec` |
 
 `agent-creator` は書き方の基準を自前で持たない。本文は `prompt-smith`、description は `description-guide` に委ねる。固有に持つのは frontmatter の仕様知識と検証手順である。
@@ -497,8 +497,30 @@ optimize-agents は採点しない。測定対象スキル側が持つチェッ�
 
 `description-guide` の基準で書く。近接スキルとの境界を明記する。
 
-- 発火する: 「スキルの発火精度を測って」「description を直したので測り直したい」「eval を回して」
+- 発火する: 「スキルの発火精度を測って」「description を直したので測り直したい」「eval を回して」「この SKILL.md の description を直して」
 - 発火しない: `prompt-smith`(本文の改稿)、`agent-creator`(Agent 定義)
+
+### 7.4 description の改稿も担当する
+
+`skill-eval` は測定だけでなく、**skill の description を書く・直す**ことも担当する。
+
+この担当を持たせる理由は、CLAUDE.md から description の基準への参照を外すためである。reference は自律発火しないので、誰かが読ませなければ効かない。担当スキルが無いと、CLAUDE.md に参照を常駐させ続けることになる。
+
+| 依頼 | 担当 |
+| --- | --- |
+| skill の description を書く・直す | `skill-eval` |
+| skill の発火精度を測る | `skill-eval` |
+| Agent 定義の description を書く | `agent-creator` |
+| 指示書の本文を書く・直す | `prompt-smith` |
+
+改稿と測定は一体の作業である。直したら測る、という手順が `skill-eval` の本文にある(§7.1)。
+
+これに伴い `CLAUDE.md` から次の 2 行を削除する。
+
+- description の基準を示す行(14 行目) → `skill-eval` が担当を持つ
+- 測定ツールのパスを示す行(15 行目) → 同上
+
+本文の基準を示す行(16 行目)は `optimize-agents:prompt-smith` をスキル名で参照しており、残す。
 
 ## 8. agent-creator スキル
 

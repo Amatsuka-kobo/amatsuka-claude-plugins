@@ -1322,19 +1322,31 @@ README は `setup` と書いているが、ディレクトリは `skills/setup-g
 
 「Agent 定義を新しく作るときは `agent-creator` を使う」を追記する。**本文は変えない。**
 
-- [ ] **Step 4b: `CLAUDE.md:15` と `CLAUDE.example.md:15` の測定ツールの行を削除する**
+- [ ] **Step 4b: `CLAUDE.md` と `CLAUDE.example.md` から 2 行を削除する**
 
-`skill-eval` が測定の担当を持つようになったので、この行は不要になる。残すとスキルの発火経路を迂回する指示になる。
+`skill-eval` が description の改稿と測定の担当を持つようになったので、次の 2 行は不要になる。残すとスキルの発火経路を迂回する指示になる。
 
-削除対象(現在は暫定的に新パスへ更新済み):
+削除対象:
 
 ```
+- SKILL.md・Agents 定義の description は `optimize-agents` の `references/description-guide.md` の基準で書くこと。狙った依頼で確実に発火することを、簡潔さより優先する。
 - スキルの発火精度を測る時は `plugins/optimize-agents/scripts/run-trigger-eval.mjs` を使うこと。
 ```
 
-14 行目(description の基準)と 16 行目(本文の基準)は残す。前者は reference への参照、後者はスキル名での参照であり、どちらも担当が CLAUDE.md 側にある。
+| 行 | 削除後の担当 |
+| --- | --- |
+| description の基準 | `skill-eval`(skill)、`agent-creator`(Agent 定義) |
+| 測定ツール | `skill-eval` |
+
+本文の基準を示す行は**残す**。`optimize-agents:prompt-smith` をスキル名で参照しており、正しい形である。
+
+```
+- SKILL.md の本文・その他の AI 向け指示書は `optimize-agents:prompt-smith` の基準で書くこと。
+```
 
 **この変更は人間への確認が要る**(CLAUDE.md の運用方針)。ユーザーは 2026-08-02 に削除方針を承認済みだが、適用時にもう一度提示する。
+
+削除の前に、`skill-eval` と `agent-creator` の description が「description を直して」で発火することを確認する(Step 6 の測定に含める)。発火しなければ削除しない。
 
 - [ ] **Step 5: `plugin.json` を `0.11.0-dev` にする**
 
