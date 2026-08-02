@@ -62,3 +62,4 @@
 - `2026/0730/phyllis998/repository-structure-inquiry.md` | 2026-07-30 | phyllis998 | Fable 5 safeguards エラー原因調査（output style に原因特定）
 - `2026/0731/phyllis998/chat-recorder-migration.md` | 2026-07-31 | phyllis998 | chat-recorder の正系統化と agent-policy lean-docs スキル設計・実装・コミット
 - `2026/0801/phyllis998/evaluate-agent-policy-skills.md` | 2026-08-02 | phyllis998 | eval 測定から description 規律へ内製化、skill-creator ランナー継続保証、0.10.1-dev リリース
+- `2026/0802/phyllis998/plugin-script-language-choice.md` | 2026-08-02 | phyllis998 | スクリプト言語選択方針の確認と設計改善、チェッカー言語非依存化実装。Node.js 最小バージョン要件を node22 に統一し README と build.ts を整備。flaky test 発見（既存、変更無関）。
