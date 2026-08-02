@@ -62,4 +62,4 @@
 - `2026/0730/phyllis998/repository-structure-inquiry.md` | 2026-07-30 | phyllis998 | Fable 5 safeguards エラー原因調査（output style に原因特定）
 - `2026/0731/phyllis998/chat-recorder-migration.md` | 2026-07-31 | phyllis998 | chat-recorder の正系統化と agent-policy lean-docs スキル設計・実装・コミット
 - `2026/0801/phyllis998/evaluate-agent-policy-skills.md` | 2026-08-02 | phyllis998 | eval 測定から description 規律へ内製化、skill-creator ランナー継続保証、0.10.1-dev リリース
-- `2026/0802/phyllis998/plugin-script-language-choice.md` | 2026-08-02 | phyllis998 | skill-eval の規律追加(発火語の区別)、既存違反修正、A+B 判定実装、全 80 問測定中
+- `2026/0802/phyllis998/plugin-script-language-choice.md` | 2026-08-02 | phyllis998 | optimize-agents 0.12.0-dev 完了(eval 71/80、検査器 50 本 errors 0)、全量コミット実行
