@@ -7,8 +7,8 @@
 - `optimize-agents:with-codex-policy` — Claude + Codex(GPT)併用構成での最適化方針。
 - `optimize-agents:claude-model-policy` — Claude のみで完結する最適化方針(プロキシ不要)。
 - `optimize-agents:setup-gpt` — with-codex-policy で使う GPT Agent 定義を `.claude/agents/` に生成するウィザード。
-- `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)の**本文**と、`references/` に置かれた文書の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。frontmatter の description は対象外で、そちらは `skill-eval` と `agent-creator` が担当する(発火の確実性が簡潔さより優先されるため。根拠と実測は `docs/description-out-of-scope.md`)。`references/` 配下でも、外部仕様の写しやスキーマ定義のように**引くために置かれた記述**には重複・例・出典の基準を当てない(設計は `docs/prompt-smith-references-scope.md`)。
-- `optimize-agents:skill-eval` — SKILL.md の **description** を書く・直す規律と、発火精度・出力契約の測定。3 種のクエリセット(substantive / short / fp)を同時に測って判断する。測定対象は skill に限る。
+- `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md・コマンド定義等)の**本文**と、`references/` に置かれた文書の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。frontmatter の description は対象外で、そちらは `skill-eval` と `agent-creator` が担当する(発火の確実性が簡潔さより優先されるため。根拠と実測は `docs/description-out-of-scope.md`)。`references/` 配下でも、外部仕様の写しやスキーマ定義のように**引くために置かれた記述**には重複・例・出典の基準を当てない(設計は `docs/prompt-smith-references-scope.md`)。
+- `optimize-agents:skill-eval` — SKILL.md とコマンド定義の **description** を書く・直す規律と、発火精度・出力契約の測定。3 種のクエリセット(substantive / short / fp)を同時に測って判断する。測定対象は skill に限り、コマンド定義と Agent 定義の発火は測らない。
 - `optimize-agents:agent-creator` — **Agent 定義**(subagent)の作成と検証。frontmatter の仕様は `references/agent-definition-spec.md`、本文は `prompt-smith`、description は `references/description-guide.md` に従う。
 
 ## 提供スクリプト
@@ -21,6 +21,11 @@
 | `run-output-eval.mjs` | スキルの出力契約を測る。`with_skill` / `without_skill` の 2 構成でサンドボックスを作って実行し、採点はプロジェクト側のチェッカーに委ねる |
 | `aggregate-benchmark.mjs` | 上記の結果を構成ごとに集計し、平均 ± 標準偏差と差分を出す |
 | `check-agent-definition.mjs` | Agent 定義の frontmatter と配置制約を静的検査する。プラグイン配下と project 配下の双方に対応 |
+| `check-skill-definition.mjs` | SKILL.md とコマンド定義(`commands/*.md`)の frontmatter を静的検査する。解決後のコマンド名も出す |
+
+`check-skill-definition.mjs` は **Claude Code の仕様**を検査する。Claude API / claude.ai へアップロードするスキルには別の制約(`name` 必須・64 字上限・予約語禁止・`description` 単体 1024 字)があり、こちらは検査しない。許容する frontmatter キーの一覧は Claude Code のバージョンに追従が要る(2026-08-02 時点で 17 種)。
+
+`claude plugin validate` は plugin.json だけを検査する(2026-08-02 実測)。SKILL.md の frontmatter は対象外なので、両方を併せて使う。
 
 ## 使い方(CLAUDE.md への記載)
 
@@ -77,6 +82,14 @@ claude-model-policy を使う場合:
 これが `with-codex-policy` の §実行帯が GPT モデルの場合の dispatch で「実行帯が GPT の場合は dispatch 時の `model` 上書きを使わず、役割定義本文を依頼文に同梱する」方式を採る理由である。
 
 ## アップデート時の注意
+
+0.12.0 で次を変更しました。CLAUDE.md 側の記載変更は不要です。
+
+- **`commands/` 配下のコマンド定義を対象に加えました。**本文は `prompt-smith`、description は `skill-eval` が担当します。コマンド定義の発火は測れないため、測定対象は skill のままです。
+- **`scripts/check-skill-definition.mjs` を追加しました。**SKILL.md とコマンド定義の frontmatter を静的検査します。
+- `skill-eval` に規律を足しました(新規スキルを作るときの baseline 測定・assertion の書き方・見て直す問と測る問の分離・発火を担う語の見極め・配布するスキルの eval の書き方)。
+- **同梱の eval セット 80 問を汎用化しました。**このリポジトリ固有のファイル名・プラグイン名を架空の名前へ置き換え、配布先でも成立する形にしました。経緯と実測は `docs/eval-set-genericity.md` にあります。
+- `references/description-guide.md` に §長さの上限(1536 字)と §対象を広げるとき を足しました。後者は、別種の対象を指す例示を足すと既存の正例の発火が落ちるという実測に基づきます(`docs/skill-creator-intake.md`)。
 
 0.11.1 で `prompt-smith` の対象を `references/` 配下の文書へ広げました。対象は置き場所(`references/` というディレクトリ名)で決まり、プラグインを問いません。指示書が参照していても `docs/` や README は対象外のままです。あわせて、外部仕様の写し・スキーマ定義・網羅を要する列挙のような**引くために置かれた記述**には重複・例・出典の基準を当てない例外を設けました。CLAUDE.md 側の記載変更は不要です。
 

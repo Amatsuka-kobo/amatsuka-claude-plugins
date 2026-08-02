@@ -2,7 +2,7 @@
   { "query": "発火精度を測って", "should_trigger": true },
   { "query": "description 直して", "should_trigger": true },
   { "query": "eval 回して", "should_trigger": true },
-  { "query": "resume スキルが狙った依頼で発動しないんだけど", "should_trigger": true },
+  { "query": "migration-plan スキルが狙った依頼で発動しないんだけど", "should_trigger": true },
   { "query": "誤発火するので抑えたい", "should_trigger": true },
   { "query": "description の測定お願い", "should_trigger": true },
   { "query": "スキルの発火チェックしといて", "should_trigger": true },
