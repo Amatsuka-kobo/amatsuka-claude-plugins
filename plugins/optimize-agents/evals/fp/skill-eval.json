@@ -1,0 +1,14 @@
+[
+  { "query": "この SKILL.md の本文が冗長なので、根拠を削って規律だけ残す形に直してほしい", "should_trigger": false },
+  { "query": "CLAUDE.md を prompt-smith の基準で評価して、指摘リストを出して", "should_trigger": false },
+  { "query": "コードレビューをする agent を .claude/agents/ に作りたい", "should_trigger": false },
+  { "query": "gpt-sol.md の frontmatter に model が正しく書けているか検証して", "should_trigger": false },
+  { "query": "GPT エージェントをセットアップして", "should_trigger": false },
+  { "query": "このプロジェクトのエージェント運用方針を教えて", "should_trigger": false },
+  { "query": "output style の本文を書き直したい", "should_trigger": false },
+  { "query": "subagent を追加して", "should_trigger": false },
+  { "query": "Claude Code のスキルの仕組みについて教えて", "should_trigger": false },
+  { "query": "この関数のテストを書いて", "should_trigger": false },
+  { "query": "docs/chat の記録から過去の決定の経緯を探して", "should_trigger": false },
+  { "query": "メモリファイルの書き方の基準を教えて", "should_trigger": false }
+]
