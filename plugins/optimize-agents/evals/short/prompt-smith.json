@@ -1,0 +1,10 @@
+[
+  { "query": "orchestration-discipline.md を評価して", "should_trigger": true },
+  { "query": "CLAUDE.md が冗長なので削って", "should_trigger": true },
+  { "query": "github-issue-common.md の本文を整えて", "should_trigger": true },
+  { "query": "この指示書、無駄が多いので整えて", "should_trigger": true },
+  { "query": "references の規律文書をレビューして", "should_trigger": true },
+  { "query": "AI 向けの指示書を書いて", "should_trigger": true },
+  { "query": "SKILL.md の本文を直して", "should_trigger": true },
+  { "query": "agent-definition-spec.md 見て削れるとこ教えて", "should_trigger": true }
+]
