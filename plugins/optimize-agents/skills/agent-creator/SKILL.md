@@ -51,7 +51,9 @@ node plugins/optimize-agents/scripts/check-agent-definition.mjs <定義ファイ
 
 errors が 0 件になるまで直す。warnings は内容を見て判断する。
 
-プラグイン配下なら `claude plugin validate <プラグインのパス>` も併せて使う。
+プラグイン配下なら `claude plugin validate <プラグインのパス>` も併せて使う。これは plugin.json だけを検査する。
+
+SKILL.md とコマンド定義には `check-skill-definition.mjs` を使う。
 
 ## 発火を測りたいと言われたとき
 
