@@ -1,10 +1,10 @@
 [
-  { "query": "chat スキルの SKILL.md の description を直して、口語の依頼でも発火するようにしてほしい", "should_trigger": false },
-  { "query": "resume スキルの発火精度を trigger と short と fp の 3 セットで測ってほしい", "should_trigger": false },
+  { "query": "onboarding スキルの SKILL.md の description を直して、口語の依頼でも発火するようにしてほしい", "should_trigger": false },
+  { "query": "migration-plan スキルの発火精度を trigger と short と fp の 3 セットで測ってほしい", "should_trigger": false },
   { "query": "コードレビューを担当する subagent の定義を .claude/agents/ に新しく作ってほしい", "should_trigger": false },
-  { "query": "gpt-terra.md の frontmatter の tools が広すぎないか検証してほしい", "should_trigger": false },
-  { "query": "plugins/optimize-agents/README.md を読みやすく書き直してほしい", "should_trigger": false },
-  { "query": "docs/prompt-smith-references-scope.md の設計書に不採用案の節を足してほしい", "should_trigger": false },
-  { "query": "references/description-guide.md が定めている description の基準そのものを見直したい", "should_trigger": false },
+  { "query": "spec-writer.md の frontmatter の tools が広すぎないか検証してほしい", "should_trigger": false },
+  { "query": "plugins/deploy-kit/README.md を読みやすく書き直してほしい", "should_trigger": false },
+  { "query": "docs/deploy-runbook.md の設計書に不採用案の節を足してほしい", "should_trigger": false },
+  { "query": "references/coding-standards.md が定めている description の基準そのものを見直したい", "should_trigger": false },
   { "query": "この機能の実装計画書を書いてほしい", "should_trigger": false }
 ]

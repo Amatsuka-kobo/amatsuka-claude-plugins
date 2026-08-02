@@ -33,6 +33,36 @@ description における「重複」や「言い換え」は、本文とは働�
 
 skill-creator の `run_eval.py` は測定対象を `.claude/commands/` に登録するため現行の Claude Code では発火を検出できない。詳細は `plugins/task-utility/evals/README.md` に記録がある。
 
+## 追記(2026-08-02): 圧縮と一般化は正例だけを落とす
+
+skill-creator の description 生成基準(個別クエリを列挙せずカテゴリへ一般化、100-200 words へ圧縮)を、optimize-agents 3 スキル 80 問で現行方針と比較測定した。
+
+| 種別 | 現行方針 | skill-creator 流 | 差 |
+| --- | ---: | ---: | ---: |
+| trigger | 21/24 | 17/24 | -4 |
+| short | 22/24 | 14/24 | -8 |
+| fp | 30/32 | 30/32 | ±0 |
+| 計 | 73/80 | 61/80 | -12 |
+
+fp は 32 問すべてで発火回数まで一致した。**圧縮は誤発火の抑制に寄与せず、正例だけを失う。**
+
+この文書が主張する「description の削減基準は本文と別」という判断が、外部の対抗案との比較でも支持された。詳細は `skill-creator-intake.md`。
+
+## 追記(2026-08-02): 別種の対象を指す例示は正例の発火を落とす
+
+commands を対象範囲へ加える改稿で、`prompt-smith` の description に「対象列挙への追記」と「依頼文の例示 3 種」を同時に足したところ、`evals/trigger/prompt-smith.json` の発火が落ちた。
+
+| 構成 | 結果 |
+| --- | --- |
+| 改稿前 | 3/3 |
+| 改稿前の description + 改稿後の本文 | 3/3 |
+| 改稿後の description(例示 3 種を含む) | 1/3 |
+| 対象列挙のみ追記(例示なし) | 8/8 |
+
+本文の改稿は発火に影響しない。原因は description に足した別ドメインの例示である。
+
+この文書が記録している「description の例示は一致の幅を広げる」という性質は、**同じ対象を指す言い換え**について成り立つ。対象そのものを広げる例示には成り立たない。区別は `references/description-guide.md` の §対象を広げるとき に規律として書いた。
+
 ## description の担当(2026-08-02 以降)
 
 `prompt-smith` が description を対象外としたことで生じる空白は、次の 2 スキルが埋める。
