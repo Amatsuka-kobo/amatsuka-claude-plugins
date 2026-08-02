@@ -627,10 +627,15 @@ project 配下と plugin 配下を 1 本のコマンドで走査する。
 ```bash
 find .claude/agents plugins -path '*agents/*.md' -type f -print0 2>/dev/null \
   | while IFS= read -r -d '' f; do
-      node plugins/optimize-agents/scripts/check-agent-definition.mjs "$f" \
-        | jq -c '{path, scope, err: (.errors | length)}'
+      case "$f" in
+        .claude/agents/*.md|plugins/*/agents/*.md)
+          node plugins/optimize-agents/scripts/check-agent-definition.mjs "$f" \
+            | jq -c '{path, scope, err: (.errors | length)}' ;;
+      esac
     done
 ```
+
+**`case` による絞り込みが要る。** `-path '*agents/*.md'` はパス全体にマッチするため、`plugins/optimize-agents/README.md` のように「ディレクトリ名に `agents` を含む」ファイルまで拾う。
 
 対象は設計書 §15.2 の表(project 3 本 + plugin 16 本 = 19 本)。
 
@@ -1422,10 +1427,14 @@ grep -n '前セッション\|実測\|168 問\|なぜなら\|理由は' \
 - [ ] **Step 5: 全 Agent 定義を検査**
 
 ```bash
-find .claude/agents plugins -path '*agents/*.md' -print0 2>/dev/null | while IFS= read -r -d '' f; do
-  node plugins/optimize-agents/scripts/check-agent-definition.mjs "$f" \
-    | jq -c 'select(.errors | length > 0) | {path, errors}'
-done
+find .claude/agents plugins -path '*agents/*.md' -type f -print0 2>/dev/null \
+  | while IFS= read -r -d '' f; do
+      case "$f" in
+        .claude/agents/*.md|plugins/*/agents/*.md)
+          node plugins/optimize-agents/scripts/check-agent-definition.mjs "$f" \
+            | jq -c 'select(.errors | length > 0) | {path, errors}' ;;
+      esac
+    done
 ```
 
 出力が空であること(errors のある定義が 1 本もない)。
@@ -1449,6 +1458,50 @@ git status --short
 **完了条件:** Step 1〜7 のすべてが期待どおり。
 
 ---
+
+## 実装の記録(2026-08-02)
+
+全 14 Task を実行した。設計との差分と、実装中に判明した事実を記す。
+
+### 設計との差分
+
+| 事項 | 設計 | 実装 | 理由 |
+| --- | --- | --- | --- |
+| `${CLAUDE_PLUGIN_ROOT}` | 3 段階で確認 | 該当なし | chat スキルは SKILL.md 1 枚で同梱物も参照も無い。設計書の記述が誤りだった |
+| `skill_root` の値 | `"../.."`(プラグインルート) | `"../skills/chat"` | 同梱物が無いのでスキルディレクトリで足りる |
+| esbuild の `target` | `node26` | `node22` | 既存プラグインに合わせた |
+| `skill-eval` の担当 | 測定のみ | 測定 + description の改稿 | CLAUDE.md から description の基準を外すため |
+| `CLAUDE.md` | 15 行目のみ削除 | 14・15 行目を削除 | 上記に伴う |
+
+### 実装中に判明した事実
+
+**eval セットに指示語を入れない。** trigger eval は 1 発のクエリだけを投げるので「この」「さっきの」は参照先を持たない。対象不明と判断され発火が抑えられる。
+
+| クエリ | 発火 |
+| --- | --- |
+| 「この SKILL.md の description を直して」 | 1/4 |
+| 「chat スキルの SKILL.md の description を直して」 | 4/4 |
+
+`should_trigger: true` のクエリに指示語があると偽の発火漏れになる。既存 eval セットのうち `true` 側 3 件を具体名に直した。`false` 側は測定が甘くなるだけなので据え置いた。
+
+**除外文は抽象化すると悪化する。** `agent-creator` の fp 1 件で 3 通り試した。
+
+| 書き方 | 誤発火 |
+| --- | --- |
+| A: 具体語で名指し(採用) | 3/10 |
+| B: クエリ文言を列挙 | 5/10 |
+| C: 短く抽象的に | 9/10 |
+
+**測定のばらつきが大きい。** 同一クエリ 10 回でも結果が動く。連続測定では先に走った方が高く出る。168 問の fp が 66/72 と基準を下回ったが、旧実装も同条件で 3/10 → 0/10 と動いたため分散として扱った。
+
+### 新スキルの発火精度
+
+| スキル | substantive | short | fp |
+| --- | --- | --- | --- |
+| `skill-eval` | 6/8 | 8/8 | 12/12 |
+| `agent-creator` | 7/8 | 7/8 | 11/12 |
+
+`agent-creator` の fp 1 件は据え置き(ユーザー判断)。
 
 ## 完了条件
 

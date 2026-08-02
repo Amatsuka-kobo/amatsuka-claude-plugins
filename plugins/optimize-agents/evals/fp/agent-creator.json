@@ -1,0 +1,14 @@
+[
+  { "query": "GPT エージェントをセットアップして", "should_trigger": false },
+  { "query": "gpt-sol と gpt-terra と gpt-luna を .claude/agents/ に生成して", "should_trigger": false },
+  { "query": "optimize-agents の setup を実行したい", "should_trigger": false },
+  { "query": "この SKILL.md の本文を prompt-smith の基準で評価して", "should_trigger": false },
+  { "query": "CLAUDE.md の冗長な記述を削って規律だけ残したい", "should_trigger": false },
+  { "query": "スキルの発火精度を測って", "should_trigger": false },
+  { "query": "description を直したので測り直して", "should_trigger": false },
+  { "query": "新しいスキルを作りたい", "should_trigger": false },
+  { "query": "このプロジェクトのエージェント運用方針を教えて", "should_trigger": false },
+  { "query": "サブエージェントに何を委譲すべきか判断基準を教えて", "should_trigger": false },
+  { "query": "Claude Code の subagent の仕組みについて説明して", "should_trigger": false },
+  { "query": "この関数をリファクタして", "should_trigger": false }
+]
