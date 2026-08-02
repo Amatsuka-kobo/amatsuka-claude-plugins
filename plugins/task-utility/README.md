@@ -13,7 +13,6 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 - `README.md`(このファイル): 利用者が読まなければこのプラグインを使えない情報
 - `docs/rationale.md`: スキルの指示から退避した設計根拠(なぜその指示なのか)
 - `references/github-issue-common.md`: issue 系 3 スキルが実行時に共有する規律(AI が読む)
-- `evals/`: スキルの発火精度と出力契約を測る eval セット。実行方法は `evals/README.md` を参照
 
 ## issue-craft スキル
 
