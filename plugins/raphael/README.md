@@ -4,6 +4,12 @@ raphael は、セッション中の失敗兆候を infection record として蓄
 
 通常時に常駐する指示ファイルを増やさず、`PreToolUse` フックで抗体の正規表現が一致したときだけ予防指示を `additionalContext` として注入します。検知と注入は Node.js の決定的処理であり、Anthropic API や API キーは使用しません。
 
+## 動作要件
+
+フックとスクリプトは Node.js で動作します。`node` が PATH 上にあり、バージョンが 22 以上である必要があります。
+
+Claude Code 本体はネイティブバイナリで配布され Node.js を同梱しないため、未導入の場合は別途インストールしてください。
+
 ## 導入
 
 Claude Code で Marketplace を追加します。
