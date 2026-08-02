@@ -7,7 +7,7 @@
 - `optimize-agents:with-codex-policy` — Claude + Codex(GPT)併用構成での最適化方針。
 - `optimize-agents:claude-model-policy` — Claude のみで完結する最適化方針(プロキシ不要)。
 - `optimize-agents:setup-gpt` — with-codex-policy で使う GPT Agent 定義を `.claude/agents/` に生成するウィザード。
-- `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)の**本文**の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。frontmatter の description は対象外で、そちらは `skill-eval` と `agent-creator` が担当する(発火の確実性が簡潔さより優先されるため。根拠と実測は `docs/description-out-of-scope.md`)。
+- `optimize-agents:prompt-smith` — AI が読み手となる指示書(CLAUDE.md・SKILL.md 等)の**本文**と、`references/` に置かれた文書の基準と工程。新規作成時の規律と、既存文書の評価・是正の両方で使う。frontmatter の description は対象外で、そちらは `skill-eval` と `agent-creator` が担当する(発火の確実性が簡潔さより優先されるため。根拠と実測は `docs/description-out-of-scope.md`)。`references/` 配下でも、外部仕様の写しやスキーマ定義のように**引くために置かれた記述**には重複・例・出典の基準を当てない(設計は `docs/prompt-smith-references-scope.md`)。
 - `optimize-agents:skill-eval` — SKILL.md の **description** を書く・直す規律と、発火精度・出力契約の測定。3 種のクエリセット(substantive / short / fp)を同時に測って判断する。測定対象は skill に限る。
 - `optimize-agents:agent-creator` — **Agent 定義**(subagent)の作成と検証。frontmatter の仕様は `references/agent-definition-spec.md`、本文は `prompt-smith`、description は `references/description-guide.md` に従う。
 
@@ -77,6 +77,8 @@ claude-model-policy を使う場合:
 これが `with-codex-policy` の §実行帯が GPT モデルの場合の dispatch で「実行帯が GPT の場合は dispatch 時の `model` 上書きを使わず、役割定義本文を依頼文に同梱する」方式を採る理由である。
 
 ## アップデート時の注意
+
+0.11.1 で `prompt-smith` の対象を `references/` 配下の文書へ広げました。対象は置き場所(`references/` というディレクトリ名)で決まり、プラグインを問いません。指示書が参照していても `docs/` や README は対象外のままです。あわせて、外部仕様の写し・スキーマ定義・網羅を要する列挙のような**引くために置かれた記述**には重複・例・出典の基準を当てない例外を設けました。CLAUDE.md 側の記載変更は不要です。
 
 0.11.0 で `skill-eval` と `agent-creator` を追加し、`scripts/` に 4 本の測定・検証スクリプトを同梱しました。あわせて description の基準と発火精度の測定を `skill-eval` の担当としたため、CLAUDE.md にこれらを記載する必要がなくなりました。次の 2 行を書いている場合は削除できます。
 

@@ -1,5 +1,5 @@
 {
   "name": "optimize-agents",
   "description": "あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・アドバイザー運用・並列原則・context-map によるコスト最適化)スキル群。Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供する",
-  "version": "0.11.0-dev"
+  "version": "0.11.1-dev"
 }
