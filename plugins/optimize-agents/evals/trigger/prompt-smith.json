@@ -1,0 +1,10 @@
+[
+  { "query": "plugins/optimize-agents/references/orchestration-discipline.md を prompt-smith の基準で評価して、冗長な箇所を指摘してほしい", "should_trigger": true },
+  { "query": "task-utility の references/github-issue-common.md が長くなってきたので、削れる文がないか見てほしい", "should_trigger": true },
+  { "query": "CLAUDE.md のエージェント運用方針の節に根拠の説明が混ざっている。指示だけ残す形に整えてほしい", "should_trigger": true },
+  { "query": "新しく書いた SKILL.md の本文が冗長な気がする。基準を当てて削れるところを教えてほしい", "should_trigger": true },
+  { "query": "plugins/optimize-agents/references/agent-definition-spec.md をレビューして、仕様表は残したまま無駄な記述だけ削りたい", "should_trigger": true },
+  { "query": "chat-recorder エージェント定義の本文を、AI 向け指示書の基準で書き直してほしい", "should_trigger": true },
+  { "query": "basic-design の nfr-checklist の references/catalog.md を評価して、評点と指摘リストを出してほしい", "should_trigger": true },
+  { "query": "output style の本文に「適宜」「必要に応じて」が多い。判断基準に置き換えられるか見てほしい", "should_trigger": true }
+]
