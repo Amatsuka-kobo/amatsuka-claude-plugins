@@ -36,13 +36,53 @@ function resolveTempDir(projectStateDir, projectKey, env) {
   if (normalizePath(candidate) !== normalizePath(configRoot) && !isInside(configRoot, candidate))
     return candidate;
   const uid = currentUid();
-  const scope = uid === null ? "task-utility-chat-recorder" : `task-utility-chat-recorder-${uid}`;
+  const scope = uid === null ? "chat-history-recorder" : `chat-history-recorder-${uid}`;
   return path.join(os.tmpdir(), scope, projectKey, "temp");
 }
-function getStatePaths(projectDir, sessionKey, env = process.env) {
+var STATE_DIR_SEGMENTS = ["chat-history", "chat-recorder"];
+var LEGACY_STATE_DIR_SEGMENTS = ["task-utility", "chat-recorder"];
+function stateRootIn(base, legacy) {
+  return path.join(
+    base,
+    ...legacy ? LEGACY_STATE_DIR_SEGMENTS : STATE_DIR_SEGMENTS
+  );
+}
+function resolveStateRoot(env = process.env) {
   const configured = env.TASK_UTILITY_CHAT_STATE_DIR;
+  if (configured && path.isAbsolute(configured)) return { root: configured };
   const claudeConfig = env.CLAUDE_CONFIG_DIR;
-  const root = configured && path.isAbsolute(configured) ? configured : claudeConfig && path.isAbsolute(claudeConfig) ? path.join(claudeConfig, "task-utility", "chat-recorder") : path.join(os.homedir(), ".claude", "task-utility", "chat-recorder");
+  const base = claudeConfig && path.isAbsolute(claudeConfig) ? claudeConfig : path.join(os.homedir(), ".claude");
+  const root = stateRootIn(base, false);
+  const legacyRoot = stateRootIn(base, true);
+  if (fs.existsSync(root) || !fs.existsSync(legacyRoot)) return { root };
+  return { root: legacyRoot, legacyRoot };
+}
+function migrateLegacyStateDir(env = process.env) {
+  const configured = env.TASK_UTILITY_CHAT_STATE_DIR;
+  if (configured && path.isAbsolute(configured)) return { migrated: false };
+  const claudeConfig = env.CLAUDE_CONFIG_DIR;
+  const base = claudeConfig && path.isAbsolute(claudeConfig) ? claudeConfig : path.join(os.homedir(), ".claude");
+  const root = stateRootIn(base, false);
+  const legacyRoot = stateRootIn(base, true);
+  if (fs.existsSync(root) || !fs.existsSync(legacyRoot))
+    return { migrated: false };
+  try {
+    fs.mkdirSync(path.dirname(root), { recursive: true, mode: 448 });
+    fs.renameSync(legacyRoot, root);
+    try {
+      fs.rmdirSync(path.dirname(legacyRoot));
+    } catch {
+    }
+    return { migrated: true };
+  } catch (error) {
+    return {
+      migrated: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+function getStatePaths(projectDir, sessionKey, env = process.env) {
+  const { root, legacyRoot } = resolveStateRoot(env);
   const projectKey = hashKey(normalizePath(projectDir));
   const projectStateDir = path.join(root, projectKey);
   return {
@@ -55,7 +95,8 @@ function getStatePaths(projectDir, sessionKey, env = process.env) {
     planDir: path.join(projectStateDir, "plans"),
     statePath: path.join(projectStateDir, "state", `${sessionKey}.json`),
     lockPath: path.join(projectStateDir, "locks", `${sessionKey}.lock`),
-    logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`)
+    logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`),
+    legacyRoot
   };
 }
 function assertPrivateTempDir(dir) {
@@ -336,7 +377,7 @@ function readInput() {
 function renderInjection(values, maxChars = MAX_INJECT_CHARS) {
   const required = [
     NAG_MARKER,
-    "[task-utility] \u3053\u306E\u4F1A\u8A71\u306B\u306F docs/chat/ \u306B\u672A\u8A18\u9332\u306E\u30BF\u30FC\u30F3\u304C\u3042\u308B\u3002",
+    "[chat-history] \u3053\u306E\u4F1A\u8A71\u306B\u306F docs/chat/ \u306B\u672A\u8A18\u9332\u306E\u30BF\u30FC\u30F3\u304C\u3042\u308B\u3002",
     `- projectDir: ${values.projectDir}`,
     `- transcriptPath: ${values.transcriptPath}`,
     `- sessionKey: ${values.sessionKey}`,
@@ -345,7 +386,7 @@ function renderInjection(values, maxChars = MAX_INJECT_CHARS) {
     `- pluginRoot: ${values.pluginRoot}`
   ];
   const supplemental = [
-    '\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8A18\u9332\u904B\u7528\u3067\u306F\u3001\u30E1\u30A4\u30F3\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306F\u3053\u306E\u901A\u77E5\u3092\u53D7\u3051\u53D6\u3063\u305F\u6642\u70B9\u3067\u3001\u4E0A\u8A18\u306E\u5024\u3092\u305D\u306E\u307E\u307E\u6E21\u3057\u3066 Agent \u30C4\u30FC\u30EB\u306E subagent_type "task-utility:chat-recorder" \u3092 run_in_background: true \u3067\u8D77\u52D5\u3057\u3001\u305D\u306E\u5B8C\u4E86\u3092\u5F85\u305F\u305A\u306B\u73FE\u5728\u306E\u30BF\u30FC\u30F3\u3092\u7D42\u3048\u308B\u3002\u8A18\u9332\u306E\u624B\u9806\u3068\u30D5\u30A9\u30FC\u30DE\u30C3\u30C8\u5951\u7D04\u306F chat-recorder \u5074\u306E\u5B9A\u7FA9\u306B\u542B\u307E\u308C\u3066\u304A\u308A\u3001\u30E1\u30A4\u30F3\u5074\u3067\u4F1A\u8A71\u672C\u6587\u3092\u8AAD\u3093\u3060\u308A docs/chat/ \u3092\u7DE8\u96C6\u3057\u305F\u308A\u3059\u308B\u3053\u3068\u306F\u624B\u9806\u306B\u542B\u307E\u308C\u306A\u3044\u3002',
+    '\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8A18\u9332\u904B\u7528\u3067\u306F\u3001\u30E1\u30A4\u30F3\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306F\u3053\u306E\u901A\u77E5\u3092\u53D7\u3051\u53D6\u3063\u305F\u6642\u70B9\u3067\u3001\u4E0A\u8A18\u306E\u5024\u3092\u305D\u306E\u307E\u307E\u6E21\u3057\u3066 Agent \u30C4\u30FC\u30EB\u306E subagent_type "chat-history:chat-recorder" \u3092 run_in_background: true \u3067\u8D77\u52D5\u3057\u3001\u305D\u306E\u5B8C\u4E86\u3092\u5F85\u305F\u305A\u306B\u73FE\u5728\u306E\u30BF\u30FC\u30F3\u3092\u7D42\u3048\u308B\u3002\u8A18\u9332\u306E\u624B\u9806\u3068\u30D5\u30A9\u30FC\u30DE\u30C3\u30C8\u5951\u7D04\u306F chat-recorder \u5074\u306E\u5B9A\u7FA9\u306B\u542B\u307E\u308C\u3066\u304A\u308A\u3001\u30E1\u30A4\u30F3\u5074\u3067\u4F1A\u8A71\u672C\u6587\u3092\u8AAD\u3093\u3060\u308A docs/chat/ \u3092\u7DE8\u96C6\u3057\u305F\u308A\u3059\u308B\u3053\u3068\u306F\u624B\u9806\u306B\u542B\u307E\u308C\u306A\u3044\u3002',
     "\u8A18\u9332\u306E\u7D50\u679C\u306F docs/chat/ \u914D\u4E0B\u306E\u30D5\u30A1\u30A4\u30EB\u3068 INDEX.md \u306B\u306E\u307F\u53CD\u6620\u3055\u308C\u3001\u30E6\u30FC\u30B6\u30FC\u3078\u306E\u5FDC\u7B54\u6587\u306B\u306F\u73FE\u308C\u306A\u3044\u3002\u8A18\u9332\u306B\u95A2\u3059\u308B\u8A00\u53CA\u30FB\u5B8C\u4E86\u5831\u544A\u306F\u5FDC\u7B54\u306E\u69CB\u6210\u8981\u7D20\u3067\u306F\u306A\u3044\u3002",
     "attemptId \u304C\u73FE\u5728\u306E\u8A18\u9332\u8A66\u884C\u3068\u4E00\u81F4\u3057\u306A\u3044\u901A\u77E5(\u904E\u53BB\u306E\u30BB\u30C3\u30B7\u30E7\u30F3\u306E\u518D\u751F\u3092\u542B\u3080)\u306F\u65E2\u306B\u5931\u52B9\u3057\u3066\u304A\u308A\u3001\u5BFE\u8C61\u3067\u306F\u306A\u3044\u3002"
   ];
@@ -374,6 +415,7 @@ async function main() {
   const transcriptPath = input.transcript_path;
   if (!transcriptPath || !fs2.existsSync(transcriptPath)) return;
   const sessionKey = getSessionKey(input.session_id, transcriptPath);
+  migrateLegacyStateDir();
   const paths = getStatePaths(projectDir, sessionKey);
   try {
     ensureStateDirs(paths);

@@ -5,7 +5,9 @@ import { afterEach, expect, test } from "vitest"
 import {
   ensureStateDirs,
   getStatePaths,
-  isInside
+  isInside,
+  migrateLegacyStateDir,
+  resolveStateRoot
 } from "../chat-recording-state.js"
 
 const PROJECT = "/home/example/project"
@@ -78,4 +80,90 @@ test("ensureStateDirs は一時ディレクトリを 0700 で作る", () => {
   })
   ensureStateDirs(paths)
   expect(fs.statSync(paths.tempDir).mode & 0o777).toBe(0o700)
+})
+
+// --- 旧プラグイン名(task-utility)の状態ディレクトリからの移行 ---
+
+const legacyDir = (configDir: string): string =>
+  path.join(configDir, "task-utility", "chat-recorder")
+const currentDir = (configDir: string): string =>
+  path.join(configDir, "chat-history", "chat-recorder")
+
+function seedLegacy(configDir: string, body = "{}"): string {
+  const marker = path.join(
+    legacyDir(configDir),
+    "projectkey",
+    "state",
+    "s.json"
+  )
+  fs.mkdirSync(path.dirname(marker), { recursive: true, mode: 0o700 })
+  fs.writeFileSync(marker, body)
+  return marker
+}
+
+test("旧 root だけがあるときは移行前でも旧 root を読む", () => {
+  const configDir = path.join(tempRoot("chat-state-legacy-read-"), ".claude")
+  seedLegacy(configDir)
+  const resolved = resolveStateRoot({ CLAUDE_CONFIG_DIR: configDir })
+  expect(resolved.root).toBe(legacyDir(configDir))
+  expect(resolved.legacyRoot).toBe(legacyDir(configDir))
+  expect(
+    getStatePaths(PROJECT, SESSION_KEY, { CLAUDE_CONFIG_DIR: configDir })
+      .statePath
+  ).toContain(legacyDir(configDir))
+})
+
+test("migrateLegacyStateDir は旧 root を新 root へ中身ごと移す", () => {
+  const configDir = path.join(tempRoot("chat-state-migrate-"), ".claude")
+  seedLegacy(configDir, '{"recordedLine":42}')
+  expect(migrateLegacyStateDir({ CLAUDE_CONFIG_DIR: configDir })).toEqual({
+    migrated: true
+  })
+  expect(fs.existsSync(legacyDir(configDir))).toBe(false)
+  expect(
+    fs.readFileSync(
+      path.join(currentDir(configDir), "projectkey", "state", "s.json"),
+      "utf8"
+    )
+  ).toBe('{"recordedLine":42}')
+  // 移行後は新 root を指し、legacyRoot は落ちる
+  const resolved = resolveStateRoot({ CLAUDE_CONFIG_DIR: configDir })
+  expect(resolved.root).toBe(currentDir(configDir))
+  expect(resolved.legacyRoot).toBeUndefined()
+})
+
+test("新 root が既にあれば移行せず旧 root にも触れない", () => {
+  const configDir = path.join(tempRoot("chat-state-both-"), ".claude")
+  const marker = seedLegacy(configDir)
+  fs.mkdirSync(currentDir(configDir), { recursive: true, mode: 0o700 })
+  expect(migrateLegacyStateDir({ CLAUDE_CONFIG_DIR: configDir })).toEqual({
+    migrated: false
+  })
+  expect(fs.existsSync(marker)).toBe(true)
+  expect(resolveStateRoot({ CLAUDE_CONFIG_DIR: configDir }).root).toBe(
+    currentDir(configDir)
+  )
+})
+
+test("移行対象が無ければ何もしない", () => {
+  const configDir = path.join(tempRoot("chat-state-none-"), ".claude")
+  expect(migrateLegacyStateDir({ CLAUDE_CONFIG_DIR: configDir })).toEqual({
+    migrated: false
+  })
+  expect(resolveStateRoot({ CLAUDE_CONFIG_DIR: configDir })).toEqual({
+    root: currentDir(configDir)
+  })
+})
+
+test("状態ディレクトリの明示指定があるときは移行の対象外", () => {
+  const configDir = path.join(tempRoot("chat-state-explicit-mig-"), ".claude")
+  const marker = seedLegacy(configDir)
+  const stateRoot = tempRoot("chat-state-explicit-root-")
+  const env = {
+    CLAUDE_CONFIG_DIR: configDir,
+    TASK_UTILITY_CHAT_STATE_DIR: stateRoot
+  }
+  expect(migrateLegacyStateDir(env)).toEqual({ migrated: false })
+  expect(fs.existsSync(marker)).toBe(true)
+  expect(resolveStateRoot(env)).toEqual({ root: stateRoot })
 })

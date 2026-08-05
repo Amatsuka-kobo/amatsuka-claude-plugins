@@ -28,7 +28,12 @@ const TOOL_TO_SKILL = new Map([
 
 // プロンプトが完全にスクリプト化された自前エージェント。行動の自由度が無く
 // 規律を注入しても差し戻しの往復コストに見合わないため、素通しにする。
-const SKIP_AGENT_TYPES = new Set(["task-utility:chat-recorder"])
+// task-utility: は chat-history へ分割される前の旧 id。旧版を入れたままの
+// プロジェクトでも素通しを維持するため両方を残す。
+const SKIP_AGENT_TYPES = new Set([
+  "chat-history:chat-recorder",
+  "task-utility:chat-recorder"
+])
 
 const PLUGIN_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

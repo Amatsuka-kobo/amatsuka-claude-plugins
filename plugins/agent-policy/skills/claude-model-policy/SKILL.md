@@ -1,6 +1,6 @@
 ---
 name: claude-model-policy
-description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md が存在しないプロジェクトではこちらを使い、存在するプロジェクトでは代わりに optimize-agents:with-codex-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md が存在しないプロジェクトではこちらを使い、存在するプロジェクトでは代わりに agent-policy:with-codex-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 ---
 
 # エージェント運用方針(Claude のみ)

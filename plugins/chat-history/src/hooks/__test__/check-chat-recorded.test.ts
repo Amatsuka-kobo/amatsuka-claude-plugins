@@ -111,7 +111,7 @@ test("未記録実発言では additionalContext を出力し attemptedLine を�
     expect(out).not.toHaveProperty("decision")
     expect(out.hookSpecificOutput).toMatchObject({ hookEventName: "Stop" })
     expect(out.hookSpecificOutput.additionalContext).toContain(
-      "task-utility:chat-recorder"
+      "chat-history:chat-recorder"
     )
     const state = stateOf(value)
     expect(state?.attemptedLine).toBe(1)

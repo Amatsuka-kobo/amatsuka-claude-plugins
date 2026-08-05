@@ -1,6 +1,6 @@
 ---
 name: with-codex-policy
-description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna、ローカルプロキシ経由)を併用する構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md が存在するプロジェクトではこちらを使い、存在しないプロジェクトでは代わりに optimize-agents:claude-model-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna、ローカルプロキシ経由)を併用する構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md が存在するプロジェクトではこちらを使い、存在しないプロジェクトでは代わりに agent-policy:claude-model-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 ---
 
 # エージェント運用方針(Claude + Codex 併用)
@@ -41,4 +41,4 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 1. `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。
 2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`/ `--model gpt-5.6-terra`/ `--model gpt-5.6-luna`。
-3. どちらも不可なら、ユーザーへ `optimize-agents:setup-gpt` の実行を案内する。生成完了(またはスキップ)までは `optimize-agents:claude-model-policy` の担当表で一時的に代行する。
+3. どちらも不可なら、ユーザーへ `agent-policy:setup-gpt` の実行を案内する。生成完了(またはスキップ)までは `agent-policy:claude-model-policy` の担当表で一時的に代行する。

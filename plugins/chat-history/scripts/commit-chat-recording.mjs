@@ -26,13 +26,29 @@ function resolveTempDir(projectStateDir, projectKey, env) {
   if (normalizePath(candidate) !== normalizePath(configRoot) && !isInside(configRoot, candidate))
     return candidate;
   const uid = currentUid();
-  const scope = uid === null ? "task-utility-chat-recorder" : `task-utility-chat-recorder-${uid}`;
+  const scope = uid === null ? "chat-history-recorder" : `chat-history-recorder-${uid}`;
   return path.join(os.tmpdir(), scope, projectKey, "temp");
 }
-function getStatePaths(projectDir, sessionKey, env = process.env) {
+var STATE_DIR_SEGMENTS = ["chat-history", "chat-recorder"];
+var LEGACY_STATE_DIR_SEGMENTS = ["task-utility", "chat-recorder"];
+function stateRootIn(base, legacy) {
+  return path.join(
+    base,
+    ...legacy ? LEGACY_STATE_DIR_SEGMENTS : STATE_DIR_SEGMENTS
+  );
+}
+function resolveStateRoot(env = process.env) {
   const configured = env.TASK_UTILITY_CHAT_STATE_DIR;
+  if (configured && path.isAbsolute(configured)) return { root: configured };
   const claudeConfig = env.CLAUDE_CONFIG_DIR;
-  const root = configured && path.isAbsolute(configured) ? configured : claudeConfig && path.isAbsolute(claudeConfig) ? path.join(claudeConfig, "task-utility", "chat-recorder") : path.join(os.homedir(), ".claude", "task-utility", "chat-recorder");
+  const base = claudeConfig && path.isAbsolute(claudeConfig) ? claudeConfig : path.join(os.homedir(), ".claude");
+  const root = stateRootIn(base, false);
+  const legacyRoot = stateRootIn(base, true);
+  if (fs.existsSync(root) || !fs.existsSync(legacyRoot)) return { root };
+  return { root: legacyRoot, legacyRoot };
+}
+function getStatePaths(projectDir, sessionKey, env = process.env) {
+  const { root, legacyRoot } = resolveStateRoot(env);
   const projectKey = hashKey(normalizePath(projectDir));
   const projectStateDir = path.join(root, projectKey);
   return {
@@ -45,7 +61,8 @@ function getStatePaths(projectDir, sessionKey, env = process.env) {
     planDir: path.join(projectStateDir, "plans"),
     statePath: path.join(projectStateDir, "state", `${sessionKey}.json`),
     lockPath: path.join(projectStateDir, "locks", `${sessionKey}.lock`),
-    logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`)
+    logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`),
+    legacyRoot
   };
 }
 function atomicWriteJson(file, value) {

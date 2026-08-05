@@ -83,6 +83,8 @@ export interface StatePaths {
   statePath: string
   lockPath: string
   logPath: string
+  /** 移行元。未移行のときだけ値が入る */
+  legacyRoot?: string
 }
 
 export type RecordingDecision =
@@ -162,10 +164,79 @@ function resolveTempDir(
     return candidate
   const uid = currentUid()
   const scope =
-    uid === null
-      ? "task-utility-chat-recorder"
-      : `task-utility-chat-recorder-${uid}`
+    uid === null ? "chat-history-recorder" : `chat-history-recorder-${uid}`
   return path.join(os.tmpdir(), scope, projectKey, "temp")
+}
+
+const STATE_DIR_SEGMENTS = ["chat-history", "chat-recorder"]
+const LEGACY_STATE_DIR_SEGMENTS = ["task-utility", "chat-recorder"]
+
+function stateRootIn(base: string, legacy: boolean): string {
+  return path.join(
+    base,
+    ...(legacy ? LEGACY_STATE_DIR_SEGMENTS : STATE_DIR_SEGMENTS)
+  )
+}
+
+/**
+ * 状態ディレクトリの root と、未移行の旧 root を返す。
+ * 明示指定(TASK_UTILITY_CHAT_STATE_DIR)があるときは移行の対象外とする。
+ * 新 root が未作成で旧 root だけがある間は **旧 root をそのまま使う**。
+ * 移行に失敗しても記録状態を見失わない(空状態と誤認して全文を再記録しない)ため。
+ */
+export function resolveStateRoot(env: NodeJS.ProcessEnv = process.env): {
+  root: string
+  legacyRoot?: string
+} {
+  const configured = env.TASK_UTILITY_CHAT_STATE_DIR
+  if (configured && path.isAbsolute(configured)) return { root: configured }
+  const claudeConfig = env.CLAUDE_CONFIG_DIR
+  const base =
+    claudeConfig && path.isAbsolute(claudeConfig)
+      ? claudeConfig
+      : path.join(os.homedir(), ".claude")
+  const root = stateRootIn(base, false)
+  const legacyRoot = stateRootIn(base, true)
+  if (fs.existsSync(root) || !fs.existsSync(legacyRoot)) return { root }
+  return { root: legacyRoot, legacyRoot }
+}
+
+/**
+ * 旧 root(`<config>/task-utility/chat-recorder`)を新 root へ 1 回だけ移す。
+ * 失敗しても投げない。呼び出し側は resolveStateRoot の結果に従い、
+ * 移行できていなければ旧 root を読み書きし続ける。
+ */
+export function migrateLegacyStateDir(env: NodeJS.ProcessEnv = process.env): {
+  migrated: boolean
+  error?: string
+} {
+  const configured = env.TASK_UTILITY_CHAT_STATE_DIR
+  if (configured && path.isAbsolute(configured)) return { migrated: false }
+  const claudeConfig = env.CLAUDE_CONFIG_DIR
+  const base =
+    claudeConfig && path.isAbsolute(claudeConfig)
+      ? claudeConfig
+      : path.join(os.homedir(), ".claude")
+  const root = stateRootIn(base, false)
+  const legacyRoot = stateRootIn(base, true)
+  if (fs.existsSync(root) || !fs.existsSync(legacyRoot))
+    return { migrated: false }
+  try {
+    fs.mkdirSync(path.dirname(root), { recursive: true, mode: 0o700 })
+    fs.renameSync(legacyRoot, root)
+    // 空になった `<config>/task-utility` は畳む。他に何かあれば残す。
+    try {
+      fs.rmdirSync(path.dirname(legacyRoot))
+    } catch {
+      // 空でなければ残す。移行の成否には影響しない
+    }
+    return { migrated: true }
+  } catch (error) {
+    return {
+      migrated: false,
+      error: error instanceof Error ? error.message : String(error)
+    }
+  }
 }
 
 export function getStatePaths(
@@ -173,14 +244,7 @@ export function getStatePaths(
   sessionKey: string,
   env: NodeJS.ProcessEnv = process.env
 ): StatePaths {
-  const configured = env.TASK_UTILITY_CHAT_STATE_DIR
-  const claudeConfig = env.CLAUDE_CONFIG_DIR
-  const root =
-    configured && path.isAbsolute(configured)
-      ? configured
-      : claudeConfig && path.isAbsolute(claudeConfig)
-        ? path.join(claudeConfig, "task-utility", "chat-recorder")
-        : path.join(os.homedir(), ".claude", "task-utility", "chat-recorder")
+  const { root, legacyRoot } = resolveStateRoot(env)
   const projectKey = hashKey(normalizePath(projectDir))
   const projectStateDir = path.join(root, projectKey)
   return {
@@ -193,7 +257,8 @@ export function getStatePaths(
     planDir: path.join(projectStateDir, "plans"),
     statePath: path.join(projectStateDir, "state", `${sessionKey}.json`),
     lockPath: path.join(projectStateDir, "locks", `${sessionKey}.lock`),
-    logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`)
+    logPath: path.join(projectStateDir, "logs", `${sessionKey}.log`),
+    legacyRoot
   }
 }
 
