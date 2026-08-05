@@ -2,7 +2,8 @@
 行いを監視する天使 Raguel」). Inspects AI-produced artifacts (decisions, designs, plans, code diffs)
 and returns a machine PROCEED / ASK / STOP verdict; the only human touchpoint is ASK/STOP.
 
-Own workspace package (`raguel-mcp`, 0.0.1-dev), but built/tested via the **root** toolchain
+Own workspace package (`raguel-mcp`, 0.0.1-dev; parent plugin `codiel` is 0.2.1-dev), but
+built/tested via the **root** toolchain
 (`mem:suggested_commands`). `build.ts` → `dist/server.mjs`, committed and wired as the `raguel`
 server in `plugins/codiel/.mcp.json`. Own design doc: `raguel-mcp/docs/DESIGN.md`.
 
