@@ -1,8 +1,7 @@
-`plugins/pitcrew` (0.10.0 — the only **released**, non-`-dev` plugin here). Turns orchestration
-wait-time into human parallel-review time. Design spec:
-`docs/superpowers/specs/2026-07-16-pitcrew-design.md`. Workspace pkg `pitcrew-scripts`. Deps: Node
-stdlib + git CLI only. Built via the **root** toolchain (`mem:tech_stack`); `build.ts` bundles
-`src/**` → committed `scripts/*.mjs` (`mem:conventions` src→scripts rule).
+`plugins/pitcrew` (0.10.1 — released, non-`-dev`). Turns orchestration wait-time into human
+parallel-review time. Design spec: `docs/superpowers/specs/2026-07-16-pitcrew-design.md`.
+Workspace pkg `pitcrew-scripts`. Deps: Node stdlib + git CLI only. `build.ts` bundles `src/**` →
+committed `scripts/*.mjs` (`mem:conventions` src→scripts rule).
 
 ## Model — hooks-only, no MCP, no agents
 
@@ -45,3 +44,6 @@ main/loop/render/editor/keymap), `src/testing/`. Tests in `__test__/` beside eac
 
 - `.pitcrew/` is runtime state, gitignore-recommended; reset = delete the whole dir. Agents/skills
   must not edit under it.
+- pitcrew, raphael and guidepost all inject via `PreToolUse` + `Stop` and all keep an at-most-once
+  processed/ queue — when debugging "my comment/question/antibody arrived twice or never", check
+  which plugin owns the queue before touching shared assumptions.

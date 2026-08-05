@@ -1,4 +1,4 @@
-`plugins/basic-design` (0.6.0-dev) — brainstorm-driven basic-design deliverables. Design spec:
+`plugins/basic-design` (0.6.1-dev) — brainstorm-driven basic-design deliverables. Design spec:
 `docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`.
 
 ## Model
@@ -35,3 +35,5 @@ Google Drive upload is opt-in: `drive_folder_id` in `.claude/basic-design.local.
   material — layout changes must refresh them.
 - README says `cd plugins/basic-design && pnpm test && pnpm typecheck`; stale — those scripts are
   root-only (`mem:suggested_commands`).
+- Deliverables land in `docs/design/<kind>/` of the **target** project. In this repo `docs/design/`
+  is instead the plugin-design-doc directory — unrelated to basic-design output.
