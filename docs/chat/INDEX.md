@@ -63,4 +63,4 @@
 - `2026/0731/phyllis998/chat-recorder-migration.md` | 2026-07-31 | phyllis998 | chat-recorder の正系統化と agent-policy lean-docs スキル設計・実装・コミット
 - `2026/0801/phyllis998/evaluate-agent-policy-skills.md` | 2026-08-02 | phyllis998 | eval 測定から description 規律へ内製化、skill-creator ランナー継続保証、0.10.1-dev リリース
 - `2026/0802/phyllis998/plugin-script-language-choice.md` | 2026-08-02 | phyllis998 | optimize-agents 0.12.0-dev 完了(eval 71/80、検査器 50 本 errors 0)、全量コミット実行
-- `2026/0803/phyllis998/optimize-agents-inspection.md` | 2026-08-03 | phyllis998 | 指摘 37 件全適用・eval セット測定・policy 2 種の測定限界を特定、optimize-agents プラグインの再検査
+- `2026/0803/phyllis998/optimize-agents-inspection.md` | 2026-08-03 | phyllis998 | 指摘 37 件全適用・eval セット測定・policy 2 種の測定限界を特定、README の壊れた参照を修正、optimize-agents 0.14.0-dev にてコミット
