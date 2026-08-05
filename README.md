@@ -54,8 +54,8 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | chat-history | チャットの履歴を保存・検索するためのプラグイン                                                                                                                      | リリース   |
 | gh-utility   | GitHub関連のユーティリティスキル群                                                                                                                                  | 開発中     |
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                  | 開発中     |
-| prompt-smith | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群を Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供する | 開発中     |
-| prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン。  | 開発中     |
+| agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群を Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供する | 開発中     |
+| prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
 
 各プラグインの詳しい説明は、それぞれのフォルダ内（`plugins/<plugin-name>/`）にあるREADMEを参照してください。
 
@@ -101,4 +101,9 @@ ER 図、シーケンス図、システム構成図、画面遷移図、API 一�
 
 Claude Code を使う時のエージェント運用を最適化するプラグインです。<br>
 モデル別役割分担・大まかな設計/実装フロー・アドバイザー運用・並列原則・コードベース探索のコスト効率化施策として context-map の作成指針をスキルとして配布します。<br>
-CLAUDE.md に `optimize-agents:claude-model-policy` または `optimize-agents:with-codex-policy` へ従う旨を書くだけで、任意のプロジェクトに同じ最適化施策を持ち込めます。<br>
+CLAUDE.md に `agent-policy:claude-model-policy` または `agent-policy:with-codex-policy` へ従う旨を書くだけで、任意のプロジェクトに同じ最適化施策を持ち込めます。<br>
+
+### prompt-smith
+
+AI が読み手となる指示書(CLAUDE.md・SKILL.md・コマンド定義・Agents 定義・`references/` 配下の文書)を、無駄なく理解しやすい形に設計・改善するプラグインです。<br>
+新規に書くときの基準と、既存の指示書を評価して直すモードの両方を提供します。Agent 定義の作成・検証は `agent-creator` スキルが担当します。

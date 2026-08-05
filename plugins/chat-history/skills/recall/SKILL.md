@@ -38,7 +38,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/find-chat-records.mjs" [--since YYYY-MM-DD] 
 
 ### 4. 読解の委譲
 
-Agent ツールで `task-utility:chat-reader` を起動し、プロンプトに次を含める:
+Agent ツールで `chat-history:chat-reader` を起動し、プロンプトに次を含める:
 
 - 対象ファイルの絶対パス一覧(`hits[].path` を `<プロジェクトルート>/docs/chat/` に連結して組み立てる)
 - ユーザーの質問(原文)

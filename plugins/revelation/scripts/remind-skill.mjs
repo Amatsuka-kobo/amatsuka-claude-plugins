@@ -101,7 +101,10 @@ var TOOL_TO_SKILL = /* @__PURE__ */ new Map([
   ["Task", "revelation:fable-subagents"],
   ["Agent", "revelation:fable-subagents"]
 ]);
-var SKIP_AGENT_TYPES = /* @__PURE__ */ new Set(["task-utility:chat-recorder"]);
+var SKIP_AGENT_TYPES = /* @__PURE__ */ new Set([
+  "chat-history:chat-recorder",
+  "task-utility:chat-recorder"
+]);
 var PLUGIN_ROOT = path2.resolve(
   path2.dirname(fileURLToPath(import.meta.url)),
   ".."

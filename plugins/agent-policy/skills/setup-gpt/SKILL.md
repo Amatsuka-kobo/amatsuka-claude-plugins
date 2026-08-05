@@ -16,7 +16,7 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 - Claude Code を、Codex 系モデルを配信するプロキシ(例: CLIProxyAPI などの ProxyAPI サーバー)経由で起動しているか。
 - そのプロキシの `/v1/models` 応答に、使用予定のモデルエイリアスが含まれているか。
 
-前提が満たせない場合は「GPT Agent は起動できないため、`optimize-agents:claude-model-policy` 方針の利用を検討してください」と案内し、ユーザーが続行を求めない限りステップ 2 へ進まず終了する。
+前提が満たせない場合は「GPT Agent は起動できないため、`agent-policy:claude-model-policy` 方針の利用を検討してください」と案内し、ユーザーが続行を求めない限りステップ 2 へ進まず終了する。
 
 ## ステップ 2: エイリアス確認
 
@@ -41,6 +41,6 @@ description: with-codex-policy 運用方針で使う GPT エージェント定�
 - `.claude/agents/` を git 追跡対象にするか gitignore するかはプロジェクト判断であることを案内する。
 - CLAUDE.md への追記文例を提示する。自動では書き込まない。
 
-  > エージェント運用は `optimize-agents:with-codex-policy` に従う。GPT エージェント定義は `.claude/agents/gpt-{sol,terra,luna}.md` に配置済み。
+  > エージェント運用は `agent-policy:with-codex-policy` に従う。GPT エージェント定義は `.claude/agents/gpt-{sol,terra,luna}.md` に配置済み。
 
 - 生成した 3 ファイルのパスと、Claude Code の再読み込みで Agent が認識される旨を報告する。

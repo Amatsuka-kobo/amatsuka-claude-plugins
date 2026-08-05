@@ -35,7 +35,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/find-chat-records.mjs" --latest 3 --user "$(
 
 ### 3. 読解の委譲
 
-Agent ツールで `task-utility:chat-reader` を起動し、対象ファイルの絶対パスと次の抽出スロットを渡す:
+Agent ツールで `chat-history:chat-reader` を起動し、対象ファイルの絶対パスと次の抽出スロットを渡す:
 
 - **前回の要旨**: 何の作業で、どこまで進んだか
 - **持ち越し事項**: ファイル末尾の「注意事項と次の作業」セクションの内容を原文ベースで(セクションが空・欠落ならその旨)。本文から未完了そうなものを推測して集めないこと

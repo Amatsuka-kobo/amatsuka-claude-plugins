@@ -36,7 +36,7 @@ description: Agent 定義(subagent)を新しく作るとき、既存の Agent �
 
 ### 5. 本文を書く
 
-- `optimize-agents:prompt-smith` の基準に従う。
+- `prompt-smith:prompt-smith` の基準に従う。
 - 何をする agent か、どう進めるか、何を返すかを書く。
 
 ### 6. 既存定義を点検する

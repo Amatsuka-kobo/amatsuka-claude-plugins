@@ -277,7 +277,22 @@ test("マーカーはエージェント単位: サブエージェントの deny 
   expect(hook(ctx, "Edit")).toBeNull()
 })
 
-test("スクリプト化された自前エージェント(task-utility:chat-recorder)は素通し(マーカーも作られない)", () => {
+test("スクリプト化された自前エージェント(chat-history:chat-recorder)は素通し(マーカーも作られない)", () => {
+  const ctx = setup()
+  fs.writeFileSync(ctx.transcript, "\n")
+  writeSubTranscript(ctx, "rec1", [
+    assistantModelLine("claude-haiku-4-5-20251001")
+  ])
+  expect(
+    hook(ctx, "Write", null, {
+      agent_id: "rec1",
+      agent_type: "chat-history:chat-recorder"
+    })
+  ).toBeNull()
+  expect(fs.existsSync(ctx.stateDir)).toBe(false)
+})
+
+test("旧 id(task-utility:chat-recorder)も素通しを維持する", () => {
   const ctx = setup()
   fs.writeFileSync(ctx.transcript, "\n")
   writeSubTranscript(ctx, "rec1", [
