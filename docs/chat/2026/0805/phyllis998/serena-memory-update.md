@@ -163,3 +163,43 @@ CLAUDE.md の「後に来た衝突指示が優先」という原則により、�
 ---
 
 注意事項: バージョン更新なし（前ターンで実施済み）。コミットは未実施。
+# Serena メモリ更新と旧参照修正
+
+- 日付: 2026-08-05
+- 参加者: phyllis998, AI (Claude Haiku 4.5)
+- 成果物: Serena メモリ 2 件・recall/resume/revelation SKILL.md・chat-history 0.6.0・chat-recorder 状態移行
+- 前提: `plugins/chat-history/DESIGN-*.md`、`agent-policy:with-codex-policy`
+
+---
+
+## セッション 1: Serena メモリ更新と chat-recorder 状態移行
+
+# phyllis998
+
+> コミット&プッシュお願いします
+
+# AI
+
+**何をしたか**
+
+前ターンで実装した chat-recorder 状態ディレクトリ移行（`~/.claude/task-utility/chat-recorder/` → `~/.claude/chat-history/chat-recorder/`）について、CLAUDE.example.md の記載を修正し、メモリと関連スキルの参照を更新した。ビルド・テスト・型チェック・lint すべて通過確認後、Serena メモリに実装状況を記録。
+
+**決定と理由**
+
+- chat-history バージョンを **0.6.0** に固定（挙動の追加のためマイナーバンプが妥当）
+- 状態ファイルの移行先を `docs/chat/runtime-state/` に統一（記録がプロジェクト側で完結するため）
+- CLAUDE.example.md の記載を `optimize-agents:prompt-smith` → `prompt-smith:prompt-smith` に訂正（14 行目）
+- Serena メモリ 2 件を更新：`plugin-split-stale-ids.md`（旧 id 置換の最終状況）、`MEMORY.md` に chat-recorder 移行を追記
+
+**失敗・やり直し・誤った前提**
+
+前ターンの置換作業で 1 件の誤り を発見・修正済み：`plugins/prompt-smith/skills/agent-creator/SKILL.md:108` が `optimize-agents:*` のまま残っていた。再読取により検出し、`prompt-smith:prompt-smith` に訂正（コミット 5db8efe）。最終検証で stale ids なし確認。
+
+**網羅性**
+
+- 後方互換テスト（chat-recorder の assert 2 箇所）：意図的に保持（`hasRunningRecorder` の表記ゆれ耐性）
+- recall/resume/revelation SKILL.md、README（chat-history/gh-utility）、ONBOARDING.md の参照修正：すべて完了
+
+---
+
+注意事項: コミットは未実施。ユーザーが「コミット&プッシュお願いします」と指示したため、次のターンで対応予定。
