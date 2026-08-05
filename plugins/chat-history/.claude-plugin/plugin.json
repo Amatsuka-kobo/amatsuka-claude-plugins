@@ -1,0 +1,5 @@
+{
+  "name": "chat-history",
+  "description": "チャットの履歴を保存・検索するためのプラグイン",
+  "version": "0.5.0"
+}

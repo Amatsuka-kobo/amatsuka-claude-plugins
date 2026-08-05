@@ -2,7 +2,8 @@ packages:
   - plugins/basic-design
   - plugins/codiel
   - plugins/codiel/raguel-mcp
-  - plugins/task-utility
+  - plugins/chat-history
+  - plugins/gh-utility
   - plugins/revelation
   - plugins/pitcrew
   - plugins/raphael
