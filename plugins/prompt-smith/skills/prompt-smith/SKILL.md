@@ -1,6 +1,6 @@
 ---
 name: prompt-smith
-description: AI が読む指示書を書く・削る・整える・評価するときに必ず使用する。対象は CLAUDE.md・SKILL.md・コマンド定義(commands/ 配下の .md)・output style・Agents 定義(subagent)・メモリと、references/ に置かれた文書(共有する規律・参照断片・仕様の写し・カタログ)である。「～ プラグインを検査して」「～ スキルを監査して」「この SKILL.md を直して」「CLAUDE.md が冗長なので削って」「この指示書、無駄が多いので整えて」「AI 向けの指示を書いて」「orchestration-discipline.md を評価して」「github-issue-common.md の本文を整えて」「agent-definition-spec.md 見て削れるとこ教えて」「catalog.md を評価して評点と指摘を出して」「references の規律文書をレビューして」「エージェント定義の本文を書き直して」「output style に『適宜』『必要に応じて』が多いので判断基準に置き換えて」のような依頼で使う。ファイル名だけを挙げて評価・整形・削減を頼まれたときも、それが references/ 配下または上記の指示書なら使う。references/ の文書は人間も読む内容であっても対象とする。README・設計書・チュートリアル・docs/ の文書には適用せず、指示書がそれらを参照していても対象は広がらない。frontmatter の description は本文の評価対象外で、SKILL.md の description は references/description-guide.md に従って書き、Agent 定義の description と定義ファイルの新規作成・frontmatter の検証は agent-creator が担当する。
+description: AI が読む指示書を書く・削る・整える・評価するスキル。対象は CLAUDE.md・SKILL.md・コマンド定義(commands/ 配下の .md)・output style・Agents 定義(subagent)・メモリと、references/ に置かれた文書(共有する規律・参照断片・仕様の写し・カタログ)である。「～ プラグインを検査して」「～ スキルを監査して」「～ するプロンプトを考えて」「このプロンプトを修正して」「プロンプトに ～ する動きを追加して」「この SKILL.md を直して」「CLAUDE.md が冗長なので削って」「この指示書、無駄が多いので整えて」「AI 向けの指示を書いて」「この指示書を評価して」「エージェント定義の本文を書き直して」「output style に『適宜』『必要に応じて』が多いので判断基準に置き換えて」のような依頼で必ず使用する。ファイル名だけを挙げて評価・整形・削減を頼まれたときも、それが references/ 配下または上記の指示書なら使う。references/ の文書は人間も読む内容であっても対象とする。README・設計書・チュートリアル・docs/ の文書には適用せず、指示書がそれらを参照していても対象は広がらない。Agent 定義の description と定義ファイルの新規作成・frontmatter の検証は agent-creator が担当する。
 ---
 
 # AI 向け指示書の鍛錬
