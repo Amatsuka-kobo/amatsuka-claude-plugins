@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { runTs } from "../testing/run-ts.js"
+import { runTs } from "../../src/testing/run-ts.js"
 
 const SCRIPT = fileURLToPath(
   new URL("../find-chat-records.ts", import.meta.url)

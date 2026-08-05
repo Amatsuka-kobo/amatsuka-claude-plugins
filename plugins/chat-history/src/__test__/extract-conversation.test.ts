@@ -3,8 +3,8 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { runTs } from "../../src/testing/run-ts.js"
 import { extractConversation } from "../extract-conversation.js"
-import { runTs } from "../testing/run-ts.js"
 
 const SCRIPT = fileURLToPath(
   new URL("../extract-conversation.ts", import.meta.url)

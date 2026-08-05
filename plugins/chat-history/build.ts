@@ -3,12 +3,9 @@ import esbuild from "esbuild"
 await esbuild.build({
   bundle: true,
   entryPoints: {
-    "check-issue-env": "./src/check-issue-env.ts",
     "commit-chat-recording": "./src/commit-chat-recording.ts",
     "extract-conversation": "./src/extract-conversation.ts",
     "find-chat-records": "./src/find-chat-records.ts",
-    "link-sub-issue": "./src/link-sub-issue.ts",
-    "list-issues": "./src/list-issues.ts",
     "check-chat-recorded": "./src/hooks/check-chat-recorded.ts",
     "prepare-chat-recording": "./src/prepare-chat-recording.ts"
   },
