@@ -1,6 +1,6 @@
 ---
 name: gpt-sol
-description: Use this agent when 複雑なコーディング(アーキテクチャ判断・非自明な設計トレードオフ・複数コンポーネントの協調を伴う実装)を委譲するとき。optimize-agents の with-codex-policy 運用方針における `GPT Sol` に対応する。詳細は本文の「When to invoke」を参照。
+description: Use this agent when 複雑なコーディング(アーキテクチャ判断・非自明な設計トレードオフ・複数コンポーネントの協調を伴う実装)を委譲するとき。agent-policy の with-codex-policy 運用方針における `GPT Sol` に対応する。詳細は本文の「When to invoke」を参照。
 model: {{MODEL_ALIAS}}
 color: yellow
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent
