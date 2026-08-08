@@ -1,5 +1,5 @@
 {
   "name": "agent-policy",
-  "description": "エージェント型タスクにおけるモデル別役割分担・設計/実装フロー・アドバイザー運用・並列原則・context-map によるコスト最適化を定め、費用対効果を高めるためのエージェント運用方針。Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供する",
-  "version": "0.1.1-dev"
+  "description": "エージェント型タスクにおけるモデル別役割分担・設計/実装フロー・アドバイザー運用・並列原則・context-map によるコスト最適化を定め、費用対効果を高めるためのエージェント運用方針。Claude+Codex+Grok 併用 / Claude+Codex 併用 / Claude オンリーの 3 プロファイルで提供する",
+  "version": "0.2.0-dev"
 }
