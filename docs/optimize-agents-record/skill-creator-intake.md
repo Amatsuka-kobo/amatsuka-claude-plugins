@@ -149,6 +149,50 @@ skill-creator の懸念文は "there might be **a lot of skills**" と書いて�
 | 隣接スキルと並べて 1 読で選べる語にする | 同上 |
 | 改稿が失敗し続けるときは文構造・語の選び方を変える | 同上 §直したときの確かめ方 |
 
+## 方針転換: description を skill-creator へ委譲(2026-08-08)
+
+ユーザー判断により、SKILL.md・コマンド定義の description の担当を `skill-creator` へ移した。上記「実測: description の圧縮・一般化は正例だけを落とす」で不採用としたB 案の基準が、`skill-creator` を使う経路では有効になる。
+
+### 何が変わったか
+
+| 対象 | 2026-08-02 まで | 2026-08-08 以降 |
+| --- | --- | --- |
+| SKILL.md / コマンド定義の description | `description-guide.md`(A 案) | `skill-creator` を invoke。使えない環境でのみ `description-guide.md` |
+| SKILL.md / コマンド定義の本文 | `prompt-smith` | `prompt-smith`(変更なし。`skill-creator` の対象外) |
+| Agents 定義 / output style / メモリの description | `description-guide.md` | `description-guide.md`(変更なし) |
+
+`prompt-smith/SKILL.md` に §description の担当 を新設し、`skill-creator` の可否で分岐させた。委ねる範囲は frontmatter の description のみで、本文は渡さない。eval ループ中に本文へ及ぶ提案が出たときは、その提案だけを外す。
+
+### `description-guide.md` の改稿
+
+`skill-creator` の基準へ全面的に寄せた。
+
+| 項目 | 改稿前 | 改稿後 |
+| --- | --- | --- |
+| 長さ | `description` + `when_to_use` 1536 字。「長さを理由に削らない」 | `description` 1024 字。100〜200 words 相当 |
+| 例示 | 個別の依頼文を列挙。「例示は 2 つ目以降も残す」 | 個別依頼文を列挙せず意図のまとまりで書く |
+| 語法 | 記述なし | 「〜するスキルである」でなく「〜のときに使う」 |
+| 検証 | 記述なし | trigger eval 20 問(正例 8-10 / 負例 8-10)、3 回実行、6:4 分割、5 反復まで |
+
+削除した節は §削らない と §対象を広げるとき。どちらも例示の保持・追加を制御する規律であり、「個別クエリを列挙しない」と正面衝突するため。
+
+### 上記の実測記録との関係
+
+「実測: description の圧縮・一般化は正例だけを落とす」の結論(A 案 73/80 / B 案 61/80、short で -8)は取り消さない。測定自体は有効である。両者が両立する理由は次のとおり。
+
+- 当時の B 案は**実測なしに圧縮した description** を測った。`skill-creator` 経由の B 案は trigger eval で発火率を測りながら 5 反復するため、圧縮によって落ちた問はループ内で検出され、description が修正される。実測の有無が両者の差である。
+- ただし `skill-creator` を使えない環境では、実測なしに B 案基準だけが当たる。この場合は 2026-08-02 の実測どおり発火が落ちる可能性がある。**ユーザー判断によりこれを許容する**(2026-08-08)。
+- 「不採用の理由」表の「description 自動最適化ループ」の行は、当リポジトリへの**移植**を不採用としたものである。`skill-creator` を外部プラグインとしてそのまま invoke する経路は別であり、この行は取り消さない。
+
+### 残る不整合
+
+`description-guide.md` は `skill-creator` 不在時のフォールバックになったが、そこに書かれた基準は 2026-08-02 の実測で劣位が確認された B 案である。フォールバック経路の精度を戻すには、次のいずれかが要る。
+
+- フォールバック時のみ A 案(個別依頼文の列挙・長さ無制限)を当てる分岐を `description-guide.md` へ戻す
+- `evals/trigger` を `skill-creator` 不在環境で回し、B 案基準で書いた description の実測値を取り直す
+
+どちらも未着手。
+
 ## 採用した項目の反映先
 
 | # | 項目 | 反映先 |
