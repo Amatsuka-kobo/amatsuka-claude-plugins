@@ -8,14 +8,12 @@
 
 // src/run-loop.ts
 import { mkdir as mkdir3, readFile as readFile3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join4 } from "node:path";
-import { pathToFileURL as pathToFileURL3 } from "node:url";
+import { basename as basename3, extname as extname3, join as join4 } from "node:path";
 import { parseArgs as parseArgs3 } from "node:util";
 
 // src/improve-description.ts
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, extname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 // src/lib/claude-cli.ts
@@ -348,7 +346,12 @@ async function main() {
   process.stdout.write(`${JSON.stringify(output, null, 2)}
 `);
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isDirectRun(expected) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return basename(entry, extname(entry)) === expected;
+}
+if (isDirectRun("improve-description")) {
   main().catch((error) => {
     process.stderr.write(`${error.message}
 `);
@@ -402,8 +405,7 @@ function splitEvalSet(evalSet, holdout, seed = 42) {
 // src/run-trigger-eval.ts
 import { spawn as spawn2 } from "node:child_process";
 import { readFile as readFile2, writeFile as writeFile3 } from "node:fs/promises";
-import { join as join3 } from "node:path";
-import { pathToFileURL as pathToFileURL2 } from "node:url";
+import { basename as basename2, extname as extname2, join as join3 } from "node:path";
 import { parseArgs as parseArgs2 } from "node:util";
 
 // src/lib/pool.ts
@@ -800,7 +802,12 @@ async function main2() {
     process.stdout.write(json);
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL2(process.argv[1]).href) {
+function isDirectRun2(expected) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return basename2(entry, extname2(entry)) === expected;
+}
+if (isDirectRun2("run-trigger-eval")) {
   main2().catch((error) => {
     process.stderr.write(`${error.message}
 `);
@@ -1131,7 +1138,12 @@ async function main3() {
 `);
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL3(process.argv[1]).href) {
+function isDirectRun3(expected) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return basename3(entry, extname3(entry)) === expected;
+}
+if (isDirectRun3("run-loop")) {
   main3().catch((error) => {
     process.stderr.write(`${error.message}
 `);
