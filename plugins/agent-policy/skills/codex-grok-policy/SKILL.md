@@ -1,6 +1,6 @@
 ---
 name: codex-grok-policy
-description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna)に加え、Grok(ローカルプロキシ経由)を独立レビュー・リアルタイム情報調査に用いる三社構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md と grok.md がすべて存在するプロジェクトではこちらを使い、grok.md が無ければ代わりに agent-policy:with-codex-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna)に加え、Grok(ローカルプロキシ経由)を独立レビュー・リアルタイム情報調査に用いる三社構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md と grok-researcher.md がすべて存在するプロジェクトではこちらを使い、grok-researcher.md が無ければ代わりに agent-policy:with-codex-policy を、gpt-* が無ければ agent-policy:with-grok-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 ---
 
 # エージェント運用方針(Claude + Codex + Grok 併用)
@@ -14,7 +14,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 | 役割                                                  | モデル                   |
 | ----------------------------------------------------- | ------------------------ |
 | 調査・分析                                            | `Opus`                   |
-| リアルタイム情報調査(最新動向・外部エコシステム)      | `Grok`                   |
+| リアルタイム情報調査(最新動向・外部エコシステム)      | `Grok Researcher`        |
 | 設計書・実装計画書(WBS)の作成                         | `Opus`                   |
 | コードベース探索統括                                  | `Opus`                   |
 | コードベース探索実働                                  | `GPT Terra` / `GPT Luna` |
@@ -24,12 +24,12 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 | コードレビュー                                        | `Sonnet`                 |
 | 設計・計画・実装のアドバイザー                        | `Fable` / `Opus`         |
 | 設計書・実装計画書のレビュー(理解したこと+暗黙知抽出) | `Haiku`                  |
-| 設計書・実装計画書の独立レビュー(前提検証・反証提示)  | `Grok`                   |
+| 設計書・実装計画書の独立レビュー(前提検証・反証提示)  | `Grok Researcher`        |
 | その他のタスク                                        | `GPT Terra`              |
 
 - `orchestration-discipline` の「軽量な実装」の帯として扱うのは `GPT Luna` と `Haiku` である。この 2 つには Agent Tool を許可しない。
-- `Grok` にも Agent Tool を許可しない。
-- 「調査・分析」と「リアルタイム情報調査」は、外部の最新情報へのアクセスが主目的なら `Grok`、思考の深さが主目的なら `Opus` へ振り分ける。
+- `Grok Researcher` にも Agent Tool を許可しない。
+- 「調査・分析」と「リアルタイム情報調査」は、外部の最新情報へのアクセスが主目的なら `Grok Researcher`、思考の深さが主目的なら `Opus` へ振り分ける。
 
 ## 実行帯が GPT モデルの場合の dispatch
 
@@ -41,7 +41,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 ## 実行帯が Grok の場合の dispatch
 
-- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、`grok` エージェントへ dispatch する。
+- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、`grok-researcher` エージェントへ dispatch する。
 - このとき `model` 上書きは使わない。
 - 依頼文の冒頭で「独立レビュー」「リアルタイム情報調査」のどちらの役割かを明示し、その役割の Output Format を指定する。
 
@@ -50,7 +50,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 設計書・実装計画書をユーザーへ提示する前に、次の順で実施する。
 
 1. 「設計書・実装計画書のレビュー」帯(`Haiku`)のレビューを共通規律のとおり実施する。
-2. `Grok` へ独立レビューを dispatch する。設計書・実装計画書の原本のみを読ませ、Haiku の指摘は渡さない。
+2. `Grok Researcher` へ独立レビューを dispatch する。設計書・実装計画書の原本のみを読ませ、Haiku の指摘は渡さない。
 3. 依頼文に「反証の提示までを担い、採否はオーケストレーターが判断する」と明記する。
 4. オーケストレーターが両レビューの指摘の採否を判断し、補足修正を加えてからユーザーへ提示する。
 
@@ -71,5 +71,5 @@ GPT の帯は、上から順に適用する。1 で解決したときはフォ�
 
 Grok の帯は、次のとおり解決する。
 
-1. `.claude/agents/grok.md` が存在すればそれを使う。
+1. `.claude/agents/grok-researcher.md` が存在すればそれを使う。
 2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、ユーザーへ `agent-policy:setup-grok` の実行を案内する。生成完了(またはスキップ)までは §Grok が利用不可のときのフォールバック で運用する。
