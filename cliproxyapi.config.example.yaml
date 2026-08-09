@@ -14,6 +14,9 @@ oauth-model-alias:
       alias: "claude-gpt-5-6-terra"
     - name: "gpt-5.6-luna"
       alias: "claude-gpt-5-6-luna"
+  xai:
+    - name: "grok-4.5"
+      alias: "claude-grok-4-5"
 
 oauth-excluded-models:
   claude:
@@ -35,3 +38,17 @@ oauth-excluded-models:
     - "gpt-image-1.5"
     - "gpt-image-2"
     - "gpt-5.3-codex-spark"
+    - "codex-auto-review"
+  xai:
+    - "grok-3-mini"
+    - "grok-3-mini-fast"
+    - "grok-4.20-0309-non-reasoning"
+    - "grok-4.20-0309-reasoning"
+    - "grok-4.20-multi-agent-0309"
+    - "grok-4.3"
+    - "grok-build-0.1"
+    - "grok-imagine-image"
+    - "grok-imagine-image-quality"
+    - "grok-imagine-video"
+    - "grok-imagine-video-1.5-preview"
+    - "composer-2.5-fast"
