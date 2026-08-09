@@ -10,7 +10,7 @@ const banner = `/**
 await esbuild.build({
   bundle: true,
   entryPoints: {
-    "run-trigger-eval": "./src/run-trigger-eval.ts",
+    "run-trigger-eval": "./src/run-trigger-eval.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
@@ -18,5 +18,5 @@ await esbuild.build({
   format: "esm",
   sourcemap: false,
   target: "node26",
-  banner: { js: banner },
+  banner: { js: banner }
 })

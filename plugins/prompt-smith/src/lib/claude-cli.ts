@@ -21,7 +21,9 @@ export interface Environment {
 
 const AUTH_VARS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] as const
 
-export function buildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export function buildEnv(
+  env: NodeJS.ProcessEnv = process.env
+): NodeJS.ProcessEnv {
   const copy: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(env)) {
     if (key === "CLAUDECODE") continue
@@ -32,13 +34,13 @@ export function buildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEn
 
 export function describeEnvironment(
   model: string | undefined,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): Environment {
   const authSource = AUTH_VARS.find((name) => env[name]) ?? "(claude.ai login)"
   return {
     base_url: env.ANTHROPIC_BASE_URL ?? "(default)",
     auth_source: authSource,
-    model: model ?? null,
+    model: model ?? null
   }
 }
 
@@ -46,7 +48,7 @@ export function describeEnvironment(
 export async function callClaudeText(
   prompt: string,
   model: string | undefined,
-  timeoutSeconds = 300,
+  timeoutSeconds = 300
 ): Promise<string> {
   const args = ["-p", "--output-format", "text"]
   if (model) args.push("--model", model)

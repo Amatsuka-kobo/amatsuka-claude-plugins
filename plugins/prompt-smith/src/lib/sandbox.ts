@@ -15,7 +15,7 @@
  */
 
 import { randomBytes } from "node:crypto"
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -58,7 +58,10 @@ function joinFrontmatter(frontmatter: string[], body: string[]): string {
   return ["---", ...frontmatter, "---", ...body].join("\n")
 }
 
-export function buildSandboxSkillMd(original: string, cleanName: string): string {
+export function buildSandboxSkillMd(
+  original: string,
+  cleanName: string
+): string {
   const { frontmatter, body } = splitFrontmatter(original)
   let sawInvocationKey = false
 
@@ -82,7 +85,10 @@ export function buildSandboxSkillMd(original: string, cleanName: string): string
  */
 const BLOCK_SCALARS = new Set([">", "|", ">-", "|-"])
 
-export function replaceDescription(original: string, description: string): string {
+export function replaceDescription(
+  original: string,
+  description: string
+): string {
   const { frontmatter, body } = splitFrontmatter(original)
   const rewritten: string[] = []
   let i = 0
@@ -123,7 +129,10 @@ export function replaceDescription(original: string, description: string): strin
   return joinFrontmatter(rewritten, body)
 }
 
-export async function createSandbox(skillMd: string, cleanName: string): Promise<Sandbox> {
+export async function createSandbox(
+  skillMd: string,
+  cleanName: string
+): Promise<Sandbox> {
   const dir = await mkdtemp(join(tmpdir(), "prompt-smith-eval-"))
   const skillDir = join(dir, ".claude", "skills", cleanName)
   await mkdir(skillDir, { recursive: true })
@@ -132,6 +141,6 @@ export async function createSandbox(skillMd: string, cleanName: string): Promise
     dir,
     cleanup: async () => {
       await rm(dir, { recursive: true, force: true })
-    },
+    }
   }
 }

@@ -24,10 +24,15 @@ import {
   buildSandboxSkillMd,
   createSandbox,
   makeCleanName,
-  replaceDescription,
+  replaceDescription
 } from "./lib/sandbox.js"
 import { judge, TriggerDetector } from "./lib/stream-parse.js"
-import type { EvalItem, EvalResult, EvalResultItem, RunEvalOptions } from "./lib/types.js"
+import type {
+  EvalItem,
+  EvalResult,
+  EvalResultItem,
+  RunEvalOptions
+} from "./lib/types.js"
 
 /** 1 クエリを 1 回だけ測る。発火したら true。 */
 async function runSingleQuery(
@@ -36,22 +41,32 @@ async function runSingleQuery(
   skillContent: string,
   description: string,
   timeout: number,
-  model: string | undefined,
+  model: string | undefined
 ): Promise<boolean> {
   const cleanName = makeCleanName(skillName)
   // 改善ループが渡す description を frontmatter へ反映してから測る。
   // これを飛ばすと、反復しても初回の description を測り続ける。
-  const measured = buildSandboxSkillMd(replaceDescription(skillContent, description), cleanName)
+  const measured = buildSandboxSkillMd(
+    replaceDescription(skillContent, description),
+    cleanName
+  )
   const sandbox = await createSandbox(measured, cleanName)
 
   try {
-    const args = ["-p", query, "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+    const args = [
+      "-p",
+      query,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--include-partial-messages"
+    ]
     if (model) args.push("--model", model)
 
     const child = spawn("claude", args, {
       cwd: sandbox.dir,
       env: buildEnv(),
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "ignore"]
     })
 
     return await new Promise<boolean>((resolve) => {
@@ -106,7 +121,7 @@ async function runSingleQuery(
 
 export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
   const jobs = options.evalSet.flatMap((item) =>
-    Array.from({ length: options.runsPerQuery }, () => item),
+    Array.from({ length: options.runsPerQuery }, () => item)
   )
 
   // 1 件の失敗で eval 全体を落とさない。移植元も future の例外を False として
@@ -119,10 +134,12 @@ export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
         options.skillContent,
         options.description,
         options.timeout,
-        options.model,
+        options.model
       )
     } catch (error) {
-      process.stderr.write(`Warning: query failed: ${(error as Error).message}\n`)
+      process.stderr.write(
+        `Warning: query failed: ${(error as Error).message}\n`
+      )
       return false
     }
   })
@@ -139,10 +156,14 @@ export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
     const triggers = outcomesForQuery.reduce((sum, value) => sum + value, 0)
     const runs = outcomesForQuery.length
     const triggerRate = runs === 0 ? 0 : triggers / runs
-    const passed = judge(triggerRate, item.should_trigger, options.triggerThreshold)
+    const passed = judge(
+      triggerRate,
+      item.should_trigger,
+      options.triggerThreshold
+    )
     if (options.verbose) {
       process.stderr.write(
-        `  [${passed ? "PASS" : "FAIL"}] rate=${triggers}/${runs} expected=${item.should_trigger}: ${item.query.slice(0, 60)}\n`,
+        `  [${passed ? "PASS" : "FAIL"}] rate=${triggers}/${runs} expected=${item.should_trigger}: ${item.query.slice(0, 60)}\n`
       )
     }
     return {
@@ -151,7 +172,7 @@ export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
       trigger_rate: triggerRate,
       triggers,
       runs,
-      pass: passed,
+      pass: passed
     }
   })
 
@@ -161,11 +182,15 @@ export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
     description: options.description,
     environment: describeEnvironment(options.model),
     results,
-    summary: { total: results.length, passed, failed: results.length - passed },
+    summary: { total: results.length, passed, failed: results.length - passed }
   }
 }
 
-function parseNumericOption(name: string, value: string, integer = false): number {
+function parseNumericOption(
+  name: string,
+  value: string,
+  integer = false
+): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || (integer && !Number.isInteger(parsed))) {
     throw new Error(`--${name} must be ${integer ? "an integer" : "a number"}`)
@@ -175,7 +200,8 @@ function parseNumericOption(name: string, value: string, integer = false): numbe
 
 function parseEvalSet(content: string): EvalItem[] {
   const value: unknown = JSON.parse(content)
-  if (!Array.isArray(value)) throw new Error("--eval-set must contain a JSON array")
+  if (!Array.isArray(value))
+    throw new Error("--eval-set must contain a JSON array")
 
   const evalSet = value.map((item, index) => {
     if (
@@ -191,7 +217,8 @@ function parseEvalSet(content: string): EvalItem[] {
 
   const seen = new Set<string>()
   for (const item of evalSet) {
-    if (seen.has(item.query)) throw new Error(`duplicate query in eval set: ${item.query}`)
+    if (seen.has(item.query))
+      throw new Error(`duplicate query in eval set: ${item.query}`)
     seen.add(item.query)
   }
   return evalSet
@@ -209,16 +236,19 @@ async function main(): Promise<void> {
       timeout: { type: "string", default: "30" },
       "trigger-threshold": { type: "string", default: "0.5" },
       model: { type: "string" },
-      verbose: { type: "boolean", default: false },
+      verbose: { type: "boolean", default: false }
     },
     strict: true,
-    allowPositionals: false,
+    allowPositionals: false
   })
 
   if (!values["skill-path"]) throw new Error("--skill-path is required")
   if (!values["eval-set"]) throw new Error("--eval-set is required")
 
-  const originalContent = await readFile(join(values["skill-path"], "SKILL.md"), "utf8")
+  const originalContent = await readFile(
+    join(values["skill-path"], "SKILL.md"),
+    "utf8"
+  )
   const parsed = parseSkillMd(originalContent)
   const description = values.description ?? parsed.description
   const skillContent = values.description
@@ -231,12 +261,19 @@ async function main(): Promise<void> {
     skillName: parsed.name,
     skillContent,
     description,
-    runsPerQuery: parseNumericOption("runs-per-query", values["runs-per-query"], true),
+    runsPerQuery: parseNumericOption(
+      "runs-per-query",
+      values["runs-per-query"],
+      true
+    ),
     numWorkers: parseNumericOption("num-workers", values["num-workers"], true),
     timeout: parseNumericOption("timeout", values.timeout),
-    triggerThreshold: parseNumericOption("trigger-threshold", values["trigger-threshold"]),
+    triggerThreshold: parseNumericOption(
+      "trigger-threshold",
+      values["trigger-threshold"]
+    ),
     model: values.model,
-    verbose: values.verbose,
+    verbose: values.verbose
   })
 
   const json = `${JSON.stringify(result, null, 2)}\n`
@@ -247,7 +284,10 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main().catch((error) => {
     process.stderr.write(`${(error as Error).message}\n`)
     process.exitCode = 1
