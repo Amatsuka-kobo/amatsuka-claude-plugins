@@ -34,6 +34,8 @@ description: Agent 定義(subagent)を新しく作るとき、既存の Agent �
 
 `../../references/description-guide.md` に従う。
 
+- 使用する場面を具体的に書き、「積極的に使用する」と書く。
+
 ### 5. 本文を書く
 
 - `prompt-smith:prompt-smith` の基準に従う。
