@@ -310,22 +310,26 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 **「できないことは暴走もできない」**が原則。ドメインの境界(どのパスが frontend/backend/data か)は
 ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き込み制御に使う。
 
+### MCP ツールの付与方針
+
+Context7 は全員に付与する。GitHub は読み取り系ツールだけを列挙して付与する。guard-bash hooks の matcher は Bash のみであり、GitHub MCP の書き込みツールは state ゲートを迂回するため、サーバー単位では許可しない。Playwright は codiel-implementer-frontend、codiel-tester、codiel-reviewer-frontend にだけ付与する。未接続の MCP エントリは他に解決するツールがあるため無視されるだけで、未接続環境でも動作に支障はない。
+
 ### 文書系・分析系
 
 | エージェント | 担当フェーズ | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
-| `codiel-analyst` | init | Read, Grep, Glob, Write, Bash | Issue 取得(gh issue view)と issue.md 執筆のみ |
-| `codiel-architect` | discuss(アジェンダ作成)/ design | Read, Grep, Glob, Write | **Edit なし・Bash なし** — コードを触れない |
-| `codiel-test-designer` | test-spec | Read, Grep, Glob, Write, Edit | spec.md / cases.md の新規作成と**更新**。書き込み先は hooks で `.codiel/specs/**` に制限 |
-| `codiel-planner` | dev-plan | Read, Grep, Glob, Write | **Edit なし・Bash なし** |
+| `codiel-analyst` | init | Read, Grep, Glob, Write, Bash, Context7, GitHub Issue 読み取りツール | Issue 取得(gh issue view)と issue.md 執筆のみ |
+| `codiel-architect` | discuss(アジェンダ作成)/ design | Read, Grep, Glob, Write, Context7 | **Edit なし・Bash なし** — コードを触れない |
+| `codiel-test-designer` | test-spec | Read, Grep, Glob, Write, Edit, Context7 | spec.md / cases.md の新規作成と**更新**。書き込み先は hooks で `.codiel/specs/**` に制限 |
+| `codiel-planner` | dev-plan | Read, Grep, Glob, Write, Context7 | **Edit なし・Bash なし** |
 
 ### 実装系(ドメイン別 3 体)
 
 | エージェント | 担当 | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
-| `codiel-implementer-frontend` | UI・画面・クライアントロジック | Read, Grep, Glob, Edit, Write, Bash | 書き込みはドメインマップの frontend パスに hooks で制限 |
-| `codiel-implementer-backend` | API・サーバーロジック | 同上 | 同 backend パスに制限 |
-| `codiel-implementer-data` | スキーマ・マイグレーション・シード | 同上 | 同 data パスに制限。不可逆操作が多い領域なので Raguel の `plan/irreversible-ops`・保護パスと整合させる |
+| `codiel-implementer-frontend` | UI・画面・クライアントロジック | Read, Grep, Glob, Edit, Write, Bash, Context7, Playwright | 書き込みはドメインマップの frontend パスに hooks で制限 |
+| `codiel-implementer-backend` | API・サーバーロジック | Read, Grep, Glob, Edit, Write, Bash, Context7 | 同 backend パスに制限 |
+| `codiel-implementer-data` | スキーマ・マイグレーション・シード | Read, Grep, Glob, Edit, Write, Bash, Context7 | 同 data パスに制限。不可逆操作が多い領域なので Raguel の `plan/irreversible-ops`・保護パスと整合させる |
 
 - 共通制約: **テストスクリプト(`.codiel/specs/**`)への書き込み禁止**(hooks)。
   git push / gh pr create は hooks が state ゲートで制御。
@@ -335,19 +339,19 @@ ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き�
 
 | エージェント | 担当 | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
-| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash | **プロダクトコードと cases.md(期待値)は書かない** — スクリプトは直せるが期待値と実装は直せない。cases.md への書き込みは hooks が ask で機械的に検知、それ以外の境界はエージェント定義の職務規律で担保 |
+| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash, Context7, Playwright | **プロダクトコードと cases.md(期待値)は書かない** — スクリプトは直せるが期待値と実装は直せない。cases.md への書き込みは hooks が ask で機械的に検知、それ以外の境界はエージェント定義の職務規律で担保 |
 
 ### レビュー系(観点別 5 体・全員読み取り専用)
 
-| エージェント | 観点 | 職務の焦点 |
-|---|---|---|
-| `codiel-reviewer-frontend` | frontend | UI 実装・状態管理・アクセシビリティ・既存画面との一貫性 |
-| `codiel-reviewer-backend` | backend | API 設計・エラーハンドリング・パフォーマンス・互換性 |
-| `codiel-reviewer-data` | data | スキーマ変更の妥当性・マイグレーションの可逆性・データ整合性 |
-| `codiel-reviewer-doc` | doc | 設計書/テスト仕様書/実装の相互整合・ARCHITECTURE.md との乖離・ドキュメント更新漏れ |
-| `codiel-reviewer-security` | security | 認可・入力検証・シークレット・依存脆弱性・インジェクション |
+| エージェント | 観点 | 職務の焦点 | ツール権限 |
+|---|---|---|---|
+| `codiel-reviewer-frontend` | frontend | UI 実装・状態管理・アクセシビリティ・既存画面との一貫性 | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール, Playwright |
+| `codiel-reviewer-backend` | backend | API 設計・エラーハンドリング・パフォーマンス・互換性 | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
+| `codiel-reviewer-data` | data | スキーマ変更の妥当性・マイグレーションの可逆性・データ整合性 | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
+| `codiel-reviewer-doc` | doc | 設計書/テスト仕様書/実装の相互整合・ARCHITECTURE.md との乖離・ドキュメント更新漏れ | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
+| `codiel-reviewer-security` | security | 認可・入力検証・シークレット・依存脆弱性・インジェクション | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
 
-- ツール権限は全員 Read, Grep, Glob, Bash(gh pr diff / gh pr view の**読み取り専用**)。**Edit・Write なし**。
+- ツール権限は全員 Read、Grep、Glob、Bash、Context7、GitHub PR 読み取りツールである。frontend には Playwright も付与する。**Edit・Write なし**。
   所見はテキストで返し、PR への投稿(`gh pr review --comment` / 行コメント)は**オーケストレーターの職務**。
 - diff のドメインに応じて frontend/backend/data を選択参加、**doc / security は常時参加**。並列ディスパッチ。
 - 所見はオーケストレーターが統合して severity 順に review-<n>.md へ記録し、PR コメントに投稿。
