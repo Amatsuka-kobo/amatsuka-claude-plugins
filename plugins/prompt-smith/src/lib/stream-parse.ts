@@ -15,7 +15,11 @@
  * Read), and matching uses a name prefix instead of the full unique name.
  */
 
-export function judge(triggerRate: number, shouldTrigger: boolean, threshold: number): boolean {
+export function judge(
+  triggerRate: number,
+  shouldTrigger: boolean,
+  threshold: number
+): boolean {
   return shouldTrigger ? triggerRate >= threshold : triggerRate < threshold
 }
 
@@ -38,7 +42,9 @@ export class TriggerDetector {
     }
 
     if (event.type === "stream_event") {
-      return this.pushStreamEvent((event.event ?? {}) as Record<string, unknown>)
+      return this.pushStreamEvent(
+        (event.event ?? {}) as Record<string, unknown>
+      )
     }
     if (event.type === "assistant") {
       return this.pushAssistant(event)

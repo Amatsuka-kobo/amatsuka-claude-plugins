@@ -64,7 +64,10 @@ export function parseSkillMd(content: string): ParsedSkill {
       if (BLOCK_SCALARS.has(value)) {
         const continuation: string[] = []
         i++
-        while (i < frontmatter.length && (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("\t"))) {
+        while (
+          i < frontmatter.length &&
+          (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("\t"))
+        ) {
           continuation.push(frontmatter[i].trim())
           i++
         }

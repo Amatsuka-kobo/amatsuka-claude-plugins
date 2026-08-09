@@ -103,7 +103,7 @@ async function pool(items, workers, fn) {
 
 // src/lib/sandbox.ts
 import { randomBytes } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 function makeCleanName(skillName) {
@@ -213,7 +213,9 @@ var TriggerDetector = class {
       return null;
     }
     if (event.type === "stream_event") {
-      return this.pushStreamEvent(event.event ?? {});
+      return this.pushStreamEvent(
+        event.event ?? {}
+      );
     }
     if (event.type === "assistant") {
       return this.pushAssistant(event);
@@ -266,10 +268,20 @@ var TriggerDetector = class {
 // src/run-trigger-eval.ts
 async function runSingleQuery(query, skillName, skillContent, description, timeout, model) {
   const cleanName = makeCleanName(skillName);
-  const measured = buildSandboxSkillMd(replaceDescription(skillContent, description), cleanName);
+  const measured = buildSandboxSkillMd(
+    replaceDescription(skillContent, description),
+    cleanName
+  );
   const sandbox = await createSandbox(measured, cleanName);
   try {
-    const args = ["-p", query, "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
+    const args = [
+      "-p",
+      query,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--include-partial-messages"
+    ];
     if (model) args.push("--model", model);
     const child = spawn("claude", args, {
       cwd: sandbox.dir,
@@ -333,8 +345,10 @@ async function runEval(options) {
         options.model
       );
     } catch (error) {
-      process.stderr.write(`Warning: query failed: ${error.message}
-`);
+      process.stderr.write(
+        `Warning: query failed: ${error.message}
+`
+      );
       return false;
     }
   });
@@ -349,7 +363,11 @@ async function runEval(options) {
     const triggers = outcomesForQuery.reduce((sum, value) => sum + value, 0);
     const runs = outcomesForQuery.length;
     const triggerRate = runs === 0 ? 0 : triggers / runs;
-    const passed2 = judge(triggerRate, item.should_trigger, options.triggerThreshold);
+    const passed2 = judge(
+      triggerRate,
+      item.should_trigger,
+      options.triggerThreshold
+    );
     if (options.verbose) {
       process.stderr.write(
         `  [${passed2 ? "PASS" : "FAIL"}] rate=${triggers}/${runs} expected=${item.should_trigger}: ${item.query.slice(0, 60)}
@@ -383,7 +401,8 @@ function parseNumericOption(name, value, integer = false) {
 }
 function parseEvalSet(content) {
   const value = JSON.parse(content);
-  if (!Array.isArray(value)) throw new Error("--eval-set must contain a JSON array");
+  if (!Array.isArray(value))
+    throw new Error("--eval-set must contain a JSON array");
   const evalSet = value.map((item, index) => {
     if (typeof item !== "object" || item === null || typeof item.query !== "string" || typeof item.should_trigger !== "boolean") {
       throw new Error(`invalid eval item at index ${index}`);
@@ -392,7 +411,8 @@ function parseEvalSet(content) {
   });
   const seen = /* @__PURE__ */ new Set();
   for (const item of evalSet) {
-    if (seen.has(item.query)) throw new Error(`duplicate query in eval set: ${item.query}`);
+    if (seen.has(item.query))
+      throw new Error(`duplicate query in eval set: ${item.query}`);
     seen.add(item.query);
   }
   return evalSet;
@@ -416,7 +436,10 @@ async function main() {
   });
   if (!values["skill-path"]) throw new Error("--skill-path is required");
   if (!values["eval-set"]) throw new Error("--eval-set is required");
-  const originalContent = await readFile(join2(values["skill-path"], "SKILL.md"), "utf8");
+  const originalContent = await readFile(
+    join2(values["skill-path"], "SKILL.md"),
+    "utf8"
+  );
   const parsed = parseSkillMd(originalContent);
   const description = values.description ?? parsed.description;
   const skillContent = values.description ? replaceDescription(parsed.content, description) : parsed.content;
@@ -426,10 +449,17 @@ async function main() {
     skillName: parsed.name,
     skillContent,
     description,
-    runsPerQuery: parseNumericOption("runs-per-query", values["runs-per-query"], true),
+    runsPerQuery: parseNumericOption(
+      "runs-per-query",
+      values["runs-per-query"],
+      true
+    ),
     numWorkers: parseNumericOption("num-workers", values["num-workers"], true),
     timeout: parseNumericOption("timeout", values.timeout),
-    triggerThreshold: parseNumericOption("trigger-threshold", values["trigger-threshold"]),
+    triggerThreshold: parseNumericOption(
+      "trigger-threshold",
+      values["trigger-threshold"]
+    ),
     model: values.model,
     verbose: values.verbose
   });

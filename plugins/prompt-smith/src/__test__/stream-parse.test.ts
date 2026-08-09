@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest"
 import { judge, TriggerDetector } from "../lib/stream-parse.js"
 
-const streamEvent = (event: unknown) => JSON.stringify({ type: "stream_event", event })
+const streamEvent = (event: unknown) =>
+  JSON.stringify({ type: "stream_event", event })
 
 const blockStart = (toolName: string) =>
-  streamEvent({ type: "content_block_start", content_block: { type: "tool_use", name: toolName } })
+  streamEvent({
+    type: "content_block_start",
+    content_block: { type: "tool_use", name: toolName }
+  })
 
 const delta = (partial: string) =>
-  streamEvent({ type: "content_block_delta", delta: { type: "input_json_delta", partial_json: partial } })
+  streamEvent({
+    type: "content_block_delta",
+    delta: { type: "input_json_delta", partial_json: partial }
+  })
 
 const blockStop = () => streamEvent({ type: "content_block_stop" })
 const messageStop = () => streamEvent({ type: "message_stop" })
@@ -54,7 +61,15 @@ describe("TriggerDetector", () => {
     const d = new TriggerDetector("my-skill-skill-")
     const line = JSON.stringify({
       type: "assistant",
-      message: { content: [{ type: "tool_use", name: "Skill", input: { skill: "my-skill-skill-0011" } }] },
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            name: "Skill",
+            input: { skill: "my-skill-skill-0011" }
+          }
+        ]
+      }
     })
     expect(d.push(line)).toBe(true)
   })
@@ -64,8 +79,14 @@ describe("TriggerDetector", () => {
     const line = JSON.stringify({
       type: "assistant",
       message: {
-        content: [{ type: "tool_use", name: "Read", input: { file_path: "/x/my-skill-skill-0011/SKILL.md" } }],
-      },
+        content: [
+          {
+            type: "tool_use",
+            name: "Read",
+            input: { file_path: "/x/my-skill-skill-0011/SKILL.md" }
+          }
+        ]
+      }
     })
     expect(d.push(line)).toBe(false)
   })
@@ -84,7 +105,7 @@ describe("judge", () => {
     [0.0, false, 0.5, true],
     [0.34, false, 0.5, true],
     [0.5, false, 0.5, false],
-    [1.0, false, 0.5, false],
+    [1.0, false, 0.5, false]
   ])("rate=%s should=%s threshold=%s -> %s", (rate, should, threshold, expected) => {
     expect(judge(rate, should, threshold)).toBe(expected)
   })

@@ -6,7 +6,7 @@
 export async function pool<T, R>(
   items: T[],
   workers: number,
-  fn: (item: T, index: number) => Promise<R>,
+  fn: (item: T, index: number) => Promise<R>
 ): Promise<R[]> {
   const results = new Array<R>(items.length)
   let next = 0
