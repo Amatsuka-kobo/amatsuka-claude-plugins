@@ -11,7 +11,6 @@ description: Codiel の test-loop フェーズ(スクリプト安定化ループ
 `docs/DESIGN.md` §5 が定める二段ループ ── (A) スクリプト安定化ループ(`scripting-tests` が
 詳細を定める)と (B) TDD 修正ループ(`fixing-failures` が詳細を定める)── の**運転規約**
 (回帰範囲の決定・試行回数の記録・レポート書式・(A)→(B) の切り替えタイミング)を定める。
-個別の作業手順は `scripting-tests` / `fixing-failures` に委譲し、二重記述はしない。
 
 ## プラグインルート参照規約
 
@@ -36,8 +35,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 ## 回帰範囲の決定
 
 回帰テストの対象は次の 3 つの合算(単独実行で unit-id 指定があればその unit のみに絞る)。
-「今回変更した unit だけで十分」という自己判断での絞り込みは行わない
-(既存資産は run を重ねるたびに厚くなる。`docs/DESIGN.md` §4)。
+「今回変更した unit だけで十分」という自己判断での絞り込みは行わない。
 
 1. design.md が列挙した**影響 unit**の E2E ケース全件(`.codiel/specs/<unit-id>/cases.md`)。
 2. `.codiel/specs/` 配下に既に存在する**既存全 unit**の E2E ケース全件。
@@ -46,17 +44,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 ## チェックリスト
 
 1. 起動モード(run 経由 / 単独実行)を確認し、対象 unit(影響 unit + 既存全 unit、単独実行で
-   引数指定があればその unit のみ)を確定する。
+   引数指定があればその unit のみ)を確定する。対象 unit が 1 件も無いときは判定を出さず、
+   `.codiel/specs/` が空であることを報告して終了する。
 2. `docs/ARCHITECTURE.md` の「コマンド定義」節を読み、ユニットテスト等の実行コマンドを確認する。
 3. **(A) スクリプト安定化ループ**: `scripting-tests` の手順に従い、対象 unit すべてのスクリプトを
    実行する。異常終了(判定が出ないケース)があればスクリプトを修正して再実行する。
-   **試行回数の記録(`record-attempt`)は state を扱うオーケストレーターの専権であり、
-   tester / implementer は呼ばない**。run 経由の場合、オーケストレーターが
-   tester / implementer を**1 回ディスパッチするたび(1 往復 = 1 attempt)**に
-   `node <plugin-root>/scripts/codiel-state.mjs record-attempt test-loop --issue N` を呼ぶ
-   (`orchestrating-runs` §5 のループ運転)。`exit code 3`(`capExceeded: true`)なら
-   それ以上ディスパッチせず raguel-gating の ASK ハンドリングに合流する(「あと 1 回だけ」と
-   自己判断で続行しない)。単独実行モードでは `record-attempt` は発生しない。
+   `record-attempt` は呼ばない(オーケストレーターの専権)。試行上限超過(`exit code 3`)を伝えられたら、
+   それ以上の再実行をせず報告する。
 4. 対象 unit の全ケースが OK/NG いずれかの判定を出すまで 3 を繰り返す。
 5. 全ケースが判定を出したら NG の有無を確認する。NG がなければ手順 7 へ。
    **NG があれば (B) TDD 修正ループへ**: NG ケースごとに「ケース ID・再現手順・期待結果
@@ -124,61 +118,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 | 思考 | 現実 |
 |---|---|
-| 「今回変更した unit だけ実行すれば十分、既存 unit は多分壊れていない」 | 「多分」は回帰テストが排除したい推測そのもの。既存 unit のスクリプトが資産として残っているのは、まさにこの手の劣化を検出するためであり、範囲を自己判断で狭めてはならない。 |
 | 「flaky なので 2 回目で通ったら OK 扱いにしよう」 | 2 回目にたまたま通った結果を採用するのはフレークの隠蔽。`scripting-tests` の安定化とは毎回同じ判定が出る状態を作ることであり、都合の良い 1 回の採用ではない。 |
 | 「ユニットテストは implement フェーズで通したから回帰では省略していい」 | 回帰範囲は「影響 unit + 既存全 unit の E2E + ARCHITECTURE.md の test コマンド」の合算であり、直近で通したことは省略の理由にならない。デグレは今回の変更が既存機能に及ぼした副作用を検出するためにこそ存在する。 |
 | 「NG は 1 件だけだしレポートの 4 項目のうち再現手順は省略していいだろう」 | 4 項目は implementer への入力契約(`scripting-tests`)であり、1 つでも欠けると再現できず修正がディスパッチできない。件数の多寡は簡略化の理由にならない。 |
-| 「record-attempt は面倒だから修正をまとめてから 1 回だけ呼ぼう」 | 試行上限は暴走的な無限修正ループを止めるための仕組み。まとめて呼ぶと実際の試行回数と記録がずれ、上限超過の検知が機能しなくなる。修正のたびに呼ぶ。 |
 | 「broken か NG か迷うが、たぶん NG だろうから implementer に投げよう」 | 判断がつかないものを NG として投げると implementer は再現できないバグ修正を強いられ、逆にスクリプトの欠陥を implementer が誤ってコード側で「回避」してしまう危険がある。迷ったら ASK として報告する。 |
-
-## プロセスフローチャート
-
-```dot
-digraph running_regression_tests {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  mode [label="起動モードは?", shape=diamond];
-  scope [label="回帰範囲を決定\n(影響unit+既存全unit+ARCHITECTUREのtestコマンド)", shape=box];
-  loop_a [label="(A) scripting-tests の手順で\nスクリプト実行", shape=box];
-  broken [label="異常終了があるか?", shape=diamond];
-  fix_script [label="スクリプトを修正", shape=box];
-  record_a [label="record-attempt test-loop\n(オーケストレーターが\nディスパッチ毎に・run経由のみ)", shape=box];
-  cap_a [label="exit 3\n(capExceeded)?", shape=diamond];
-  ask_stop [label="ASK相当で停止\nオーケストレーターへ報告", shape=box, style=filled, fillcolor="#fff2cc"];
-  all_judged [label="全ケースが\nOK/NGの判定を出したか?", shape=diamond];
-  ng_found [label="NGがあるか?", shape=diamond];
-  report_ng [label="NGを4項目でレポート\n(ケースID/再現手順/期待結果/実際の結果)", shape=box];
-  standalone_end [label="単独実行: ディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  handoff [label="オーケストレーター経由で\n該当implementerへ差し戻し(B)", shape=box];
-  loop_b [label="(B) fixing-failures の手順で\nimplementerが修正", shape=box];
-  record_b [label="record-attempt test-loop\n(オーケストレーターが\n修正ディスパッチ毎に)", shape=box];
-  cap_b [label="exit 3\n(capExceeded)?", shape=diamond];
-  rerun_all [label="回帰範囲全体を再実行", shape=box];
-  unit_test [label="ARCHITECTURE.mdのtestコマンドを実行", shape=box];
-  verdict [label="判定を決める\n(green/red/broken)", shape=box];
-  report [label="レポート作成\n(実行出力の抜粋を含む)", shape=box];
-  commit [label="scripts・レポートを\n自分でコミット", shape=box];
-  done [label="tester報告\n(判定/レポートパス/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-
-  mode -> scope [label="run経由 / 単独"];
-  scope -> loop_a -> broken;
-  broken -> fix_script [label="Yes"];
-  fix_script -> record_a;
-  record_a -> cap_a;
-  cap_a -> ask_stop [label="Yes"];
-  cap_a -> loop_a [label="No"];
-  broken -> all_judged [label="No"];
-  all_judged -> loop_a [label="No(判定漏れ)"];
-  all_judged -> ng_found [label="Yes"];
-  ng_found -> unit_test [label="No"];
-  ng_found -> report_ng [label="Yes"];
-  report_ng -> standalone_end [label="単独実行"];
-  report_ng -> handoff [label="run経由"];
-  handoff -> loop_b -> record_b -> cap_b;
-  cap_b -> ask_stop [label="Yes"];
-  cap_b -> rerun_all [label="No"];
-  rerun_all -> loop_a [label="全体再実行として合流"];
-  unit_test -> verdict -> report -> commit -> done;
-}
-```

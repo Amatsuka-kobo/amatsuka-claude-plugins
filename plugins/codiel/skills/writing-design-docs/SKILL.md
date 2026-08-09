@@ -14,8 +14,7 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
 
 `design.md` は test-spec / dev-plan の両フェーズが**並列で読む唯一の設計スナップショット**であり、
 とりわけ「## 影響を受ける機能単位」は test-spec フェーズがこのリストを読んで
-`.codiel/specs/<unit-id>/` を新規作成・更新する際の入力になる。ここで設計を誤ったり影響 unit を
-漏らすと、その誤りはテスト仕様書の漏れ・実装漏れとしてそのまま後続フェーズに伝播する。
+`.codiel/specs/<unit-id>/` を新規作成・更新する際の入力になる。
 
 本スキルの責務は「issue.md の要件を過不足なく設計に反映すること」と「既存コードのパターンを
 踏襲すること」にある。コードを書くことではない。
@@ -32,7 +31,8 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
    対応付ける。満たされない基準が残っていないか確認する。
 6. `## 方針` には代替案を**最低 2 つ**書き、採用理由・却下理由を明記する。単一案の正当化ではなく
    比較によって採用根拠を示す。採用案が `discussion.md` の決定に対応する場合は「discussion.md
-   論点 N の決定に基づく」と出所を明記する。
+   論点 N の決定に基づく」と出所を明記する。代替案が 1 つしか立たないときは、検討して却下した方向性とその理由を
+   `## 方針` に書く。
 7. `## 影響を受ける機能単位` に unit-id を列挙する。命名規則(`screen-*`/`api-*`/`model-*`/`feat-*`)
    の正式な定義は `writing-test-specs` スキルにある(本スキルはそれを前提に一覧を作るのみ)。
    この一覧は test-spec フェーズが `.codiel/specs/<unit-id>/` を作成・更新する入力になるため、
@@ -81,32 +81,16 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
 
 ## 既存パターン踏襲
 
-`## 変更対象` に挙げるファイルは、変更前の状態を Read で確認してから設計する。既存の命名規則・
-レイヤー分け・エラーハンドリング方式を無視した設計は、implementer に「設計書どおりに実装したら
-既存コードと様式が食い違う」という板挟みを生む。既存パターンと衝突する設計を出す場合は、
-なぜ既存パターンから逸脱するのかを `## 方針` に明記する。
-
-## unit-id と test-spec フェーズへの接続
-
-`## 影響を受ける機能単位` は一覧を作って終わりではない。test-spec フェーズはこのリストを
-そのまま走査し、各 unit-id について `.codiel/specs/<unit-id>/spec.md` を新規作成または更新する。
-ここで unit を一つでも漏らすと、その機能単位は spec.md が更新されないまま実装が進み、
-回帰テストの対象からも漏れる。既存の `.codiel/specs/` にある unit と重複しないか、
-新規 unit なら命名規則(正式な定義は `writing-test-specs` スキル)に沿っているかを
-列挙時に確認する。
+既存パターンと衝突する設計を出す場合は、なぜ既存パターンから逸脱するのかを
+`## 方針` に明記する。
 
 ## コミット責務
 
-`codiel-architect` は Bash を持たないため `design.md` を自らコミットする手段がない。
-`orchestrating-runs` の成果物コミット規約により、design フェーズの成果物は Raguel の
-`evaluate_design` ゲート通過直後にオーケストレーター自身がコミットする。architect は
-`design.md` を書いて報告するところまでが職務。
+`design.md` は `evaluate_design` ゲート通過直後にオーケストレーターがコミットする。architect は
+`design.md` を書いて報告するところまでを担う。
 
 <HARD-GATE>
-コードを書かない・変更しない。`design.md` のみが成果物である。`codiel-architect` には Edit も
-Bash も与えられておらず、これは権限設計上の裏付けであって偶然の制約ではない
-(`docs/DESIGN.md` §7 参照)。ツールに Edit や Bash が見えたとしても、それは他フェーズ用の
-定義を誤って読んでいる可能性が高く、design フェーズで使ってはならない。
+コードを書かない・変更しない。`design.md` のみが成果物である。
 `discussion.md` の「状態: 決定」の論点を黙って覆さない。合意から逸脱する必要があると
 判断した場合は、逸脱した設計を書かず、`## 方針` に「discussion.md 論点 N の決定と衝突する
 事実と理由」を再協議事項として明記し、報告時にその旨を伝える(ウォークスルーで
@@ -120,46 +104,5 @@ Bash も与えられておらず、これは権限設計上の裏付けであっ
 | 「変更対象のファイルは名前から中身が想像つくので Read しなくてよい」 | 想像は既存の命名規則・実装パターンを裏切ることが多い。Read せずに設計すると、implementer が設計書どおりに書いた結果、既存コードと様式が食い違う手戻りが発生する。 |
 | 「代替案は 1 つで十分、これが明らかに正解」 | 「明らかに正解」は architect 個人の判断であり、比較の記録がなければ Raguel の `evaluate_design` も人間のレビューも採用根拠を検証できない。案が 1 つしかないなら、なぜ他の選択肢を検討しなかったかを書く。 |
 | 「影響 unit は多めに書いておけば安全」 | 過剰な unit 列挙は test-spec フェーズに無関係な spec.md 更新を強い、issue.md にない範囲まで検証対象を広げてしまう。YAGNI は unit の列挙にも適用される。 |
-| 「小さい修正くらいコード側も直しておいた方が早い」 | architect には Edit も Bash もない。コードに触れられる権限がないことは制約ではなく設計であり、design フェーズでコードを直せば implementer との責務分離(§7)が崩れ、レビュー・Raguel ゲートの前提が狂う。 |
 | 「不明点があるが issue.md に書かれていないので推測で埋めて設計を進める」 | 推測は analyst が禁じたのと同じ理由で architect にも禁じられる。issue.md の `## 不明点` に残っている論点は、init ゲートで人間が裁定済みか、まだ裁定中かのいずれかであり、architect が代理で解消してはならない。 |
 | 「合意は古い、コードを見たら別の設計が正しいと分かった」 | その発見はユーザーに返す情報であって architect が代理決定してよい理由ではない。`## 方針` に再協議事項として明記すれば、ウォークスルーが必ずユーザーに届ける。黙って覆すと discussion.md が監査記録として機能しなくなる。 |
-
-## プロセスフローチャート
-
-```dot
-digraph writing_design_docs {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  read_issue [label="issue.md を読む\n(要件/受け入れ基準/スコープ)", shape=box];
-  read_discussion [label="discussion.md を読む\n(合意の決定/未決を確認)", shape=box];
-  read_docs [label="ARCHITECTURE.md / GOTCHAS.md を読む", shape=box];
-  read_existing [label="変更対象の既存ファイルを Read", shape=box];
-  map_criteria [label="受け入れ基準を\n方針/変更対象に対応付け", shape=box];
-  check_criteria [label="満たされない基準が\n残っていないか?", shape=diamond];
-  alternatives [label="## 方針 に代替案 2 つ以上と\n採用理由を書く", shape=box];
-  targets [label="## 変更対象 を列挙\n(既存パターン踏襲)", shape=box];
-  units [label="## 影響を受ける機能単位 を\nunit-id で列挙\n(screen-*/api-*/model-*/feat-*)", shape=box];
-  yagni [label="issue.mdにない機能を\n足していないか?", shape=diamond];
-  trim [label="要件にない項目を削る", shape=box];
-  risk [label="## データ・API の変更 /\n## リスクと可逆性 を書く", shape=box];
-  write [label="design.md を出力書式で作成", shape=box];
-  selfcheck [label="各変更対象の根拠を\nissue.md上で即答できるか?", shape=diamond];
-  demote [label="根拠不明な行を削るか\n要件との対応を書き直す", shape=box];
-  done [label="architect 報告\n(design.md パス + 影響 unit 数)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  gate [label="raguel-gating:\ndesign ゲート(evaluate_design)\nへ引き継ぎ", shape=ellipse];
-
-  read_issue -> read_discussion -> read_docs -> read_existing -> map_criteria -> check_criteria;
-  check_criteria -> map_criteria [label="No: 未対応の基準あり"];
-  check_criteria -> alternatives [label="Yes"];
-  alternatives -> targets -> units -> yagni;
-  yagni -> trim [label="Yes: 過剰な項目あり"];
-  trim -> yagni;
-  yagni -> risk [label="No"];
-  risk -> write -> selfcheck;
-  selfcheck -> demote [label="根拠不明な行がある"];
-  demote -> write;
-  selfcheck -> done [label="全行 OK"];
-  done -> gate;
-}
-```

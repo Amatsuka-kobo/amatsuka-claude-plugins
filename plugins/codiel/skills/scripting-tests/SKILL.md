@@ -13,9 +13,8 @@ E2E フレームワーク(Playwright 等)で実行可能なテストスクリプ
 `.codiel/specs/<unit-id>/scripts/` に配置・実行する。
 
 三層構造(`spec.md` → `cases.md` → `scripts/`、`docs/DESIGN.md` §4)のうち本スキルが
-担当するのは `scripts/` のみ。`spec.md` と `cases.md` は test-designer の職掌であり、
-tester がここに手を出すと「期待結果を書く者・スクリプトを書く者・コードを直す者を
-全員別人にする」改竄防止の役割分担(`docs/DESIGN.md` §4)が崩れる。
+担当するのは `scripts/` のみ。`spec.md` と `cases.md` は test-designer の職掌であり、tester は
+触らない。
 
 ### 2 種類の失敗を区別する(最重要)
 
@@ -26,9 +25,6 @@ tester がここに手を出すと「期待結果を書く者・スクリプト�
 |---|---|---|
 | **スクリプトの異常終了** | ランタイムエラー、セレクタ不在、タイムアウトの誤設定、環境未起動などの環境問題 | **スクリプトの欠陥**。tester が修正する対象。ケースの OK/NG 判定そのものが出ていない状態 |
 | **ケースの NG** | スクリプトは正常に完走し、`cases.md` の期待結果と実際の挙動が一致しなかった | **プロダクトのバグ**。tester は**触ってはならない**。NG のままレポートし、TDD 修正ループ (B) の implementer へ差し戻す |
-
-この区別がスキルの前提である。以降のチェックリスト・HARD-GATE はすべてこの区別を
-守るための手段にすぎない。
 
 ## スクリプト規約
 
@@ -91,8 +87,7 @@ git commit -m "codiel(test-loop): <内容> (issue-N try-M)"
 `.codiel/specs/<unit-id>/scripts/` 配下のスクリプトと、レポート出力のみである。
 NG を OK にするための期待値の緩和(アサーションの書き換え・条件の弱体化)や、
 待機時間を伸ばす・リトライ回数を増やすなどの誤魔化しでケースの NG を消してはならない。
-NG は実際にプロダクトのバグである可能性が高く、隠蔽すればテストが「偽装グリーン」になり、
-バグがユーザーに届く。スクリプトの欠陥かケースの NG か判断がつかない場合は、
+スクリプトの欠陥かケースの NG か判断がつかない場合は、
 自己判断で書き換えず ASK に上げる。
 </HARD-GATE>
 
@@ -103,47 +98,3 @@ NG は実際にプロダクトのバグである可能性が高く、隠蔽す�
 | 「この NG はテストが厳しすぎるだけ」 | 期待結果は test-designer が issue.md の受け入れ基準から導出したものであり、tester が「厳しすぎる」と判断する権限はない。厳しすぎると思うなら NG のまま報告し、implementer または orchestrator の判断に委ねる。 |
 | 「アサーションを緩めれば安定する」 | 「安定」は判定が機械的に出ることを指すのであって、判定結果を都合よく変えることではない。緩めた結果 OK になったケースは、バグを見逃した偽陽性にすぎない。 |
 | 「sleep を増やせばフレーキーさが直る」 | 固定時間の sleep は環境差でまた壊れる場当たり策であり、根本原因(待機対象の状態が何かを特定していない)を放置する。決定論的な待機条件に置き換えるのが唯一の恒久対策。 |
-| 「NG のついでに実装を直せば早い」 | 実装を直せるのは implementer のみ。tester が直すと「期待値を書く者・スクリプトを書く者・直す者を分離する」改竄防止(`docs/DESIGN.md` §4)が一人で崩れる。 |
-| 「cases.md の期待結果が実装と食い違うので cases.md 側を直しておく」 | cases.md は test-designer の専管であり、tester が期待結果を書き換えられると「テストに合わせて期待値を変えて合格させる」経路が生まれる。食い違いは NG として報告するに留める。 |
-| 「今回だけ手動でリトライして偶然通ったログを採用する」 | 手動リトライで偶然通った結果はフレークの隠蔽であり、次回の実行で再び失敗する。安定化とは毎回同じ判定が出る状態にすることであり、都合の良い 1 回を選ぶことではない。 |
-
-## プロセスフローチャート
-
-```dot
-digraph scripting_tests {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  read_arch [label="ARCHITECTURE.md の\nテスト方針を読む", shape=box];
-  read_cases [label="cases.md を Read\n(全ケース ID・期待結果)", shape=box];
-  exists [label="scripts/ が既存か?", shape=diamond];
-  create [label="スクリプトを新規作成\n(1 ケース ID = 1 テスト)", shape=box];
-  update [label="既存スクリプトを Read してから\nEdit で追随", shape=box];
-  map_expect [label="期待結果を cases.md から\n一字も改変せず写像", shape=box];
-  run [label="スクリプトを実行", shape=box];
-  broken [label="判定が出ないケースが\nあるか?(異常終了)", shape=diamond];
-  fix_script [label="原因を切り分けて\nスクリプトを修正\n(待機条件を決定論的に)", shape=box];
-  all_judged [label="全ケースが\nOK/NG いずれかの判定を出したか?", shape=diamond];
-  ng_found [label="NG があるか?", shape=diamond];
-  report_ng [label="NG をバグとして\nレポート(修正はしない)", shape=box];
-  commit [label="自分の変更\n(scripts・レポート)を\n自分でコミット", shape=box];
-  done [label="tester 報告\n(OK/NG/broken 内訳・\nレポートパス・コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  handoff [label="NG は (B) TDD 修正ループの\nimplementer へ差し戻し", shape=ellipse];
-
-  read_arch -> read_cases -> exists;
-  exists -> create [label="なし"];
-  exists -> update [label="あり"];
-  create -> map_expect;
-  update -> map_expect;
-  map_expect -> run -> broken;
-  broken -> fix_script [label="Yes"];
-  fix_script -> run;
-  broken -> all_judged [label="No"];
-  all_judged -> run [label="No\n(判定漏れを修正)"];
-  all_judged -> ng_found [label="Yes"];
-  ng_found -> report_ng [label="Yes"];
-  ng_found -> commit [label="No(全 OK)"];
-  report_ng -> commit;
-  commit -> done -> handoff;
-}
-```
