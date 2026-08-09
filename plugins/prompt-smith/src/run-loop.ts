@@ -10,14 +10,19 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * This file is a TypeScript port of scripts/run_loop.py from the skill-creator
- * Claude Code plugin. Change: train/test shuffling uses the seeded PRNG in
- * split-eval-set.ts instead of Python's random module; no other loop behavior
- * is changed.
+ * Claude Code plugin. Changes: train/test shuffling uses the seeded PRNG in
+ * split-eval-set.ts instead of Python's random module; report generation is
+ * delegated to generate-report.ts.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { spawn } from "node:child_process"
+import { writeFileSync } from "node:fs"
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { basename, extname, join } from "node:path"
+import { pathToFileURL } from "node:url"
 import { parseArgs } from "node:util"
+import { generateHtml } from "./generate-report.js"
 import {
   improveDescription as defaultImproveDescription,
   type ImproveOptions
@@ -340,6 +345,32 @@ function timestamp(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
+function openInBrowser(reportPath: string): void {
+  const reportUrl = pathToFileURL(reportPath).href
+  let command: string
+  let args: string[]
+  if (process.platform === "darwin") {
+    command = "open"
+    args = [reportUrl]
+  } else if (process.platform === "win32") {
+    command = "cmd.exe"
+    args = ["/c", "start", "", reportUrl]
+  } else if (process.platform === "linux") {
+    command = "xdg-open"
+    args = [reportUrl]
+  } else {
+    return
+  }
+
+  try {
+    const browser = spawn(command, args, { detached: true, stdio: "ignore" })
+    browser.once("error", () => {})
+    browser.unref()
+  } catch {
+    // A browser is optional; the report path is printed for manual opening.
+  }
+}
+
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
@@ -382,8 +413,35 @@ async function main(): Promise<void> {
     : undefined
   if (resultsDir) await mkdir(resultsDir, { recursive: true })
 
-  // --report is accepted for CLI compatibility. Task 9 wires report output.
-  void values.report
+  const reportOption = values.report ?? "auto"
+  const autoReport = reportOption === "auto"
+  const reportPath =
+    reportOption === "none"
+      ? undefined
+      : autoReport
+        ? join(
+            await mkdtemp(join(tmpdir(), "prompt-smith-report-")),
+            "report.html"
+          )
+        : reportOption
+  let reportAnnounced = false
+  let browserOpened = false
+  const writeReport = (output: LoopResult, autoRefresh: boolean): void => {
+    if (!reportPath) return
+    writeFileSync(
+      reportPath,
+      generateHtml(output, autoRefresh, parsed.name),
+      "utf8"
+    )
+    if (!reportAnnounced) {
+      reportAnnounced = true
+      process.stderr.write(`Report written to: ${reportPath}\n`)
+    }
+    if (autoReport && !browserOpened) {
+      browserOpened = true
+      openInBrowser(reportPath)
+    }
+  }
 
   const result = await runLoop({
     evalSet,
@@ -418,8 +476,12 @@ async function main(): Promise<void> {
     holdout: parseNumericOption("holdout", values.holdout, 0.4),
     model: values.model,
     verbose: values.verbose,
-    logDir: resultsDir ? join(resultsDir, "logs") : undefined
+    logDir: resultsDir ? join(resultsDir, "logs") : undefined,
+    onIteration: reportPath
+      ? (partial) => writeReport(partial, true)
+      : undefined
   })
+  writeReport(result, false)
 
   const json = `${JSON.stringify(result, null, 2)}\n`
   process.stdout.write(json)
