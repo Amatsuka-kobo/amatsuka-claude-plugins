@@ -25,19 +25,22 @@ $EXPORT_ANTHROPIC_AUTH_TOKEN$1
   source "$2"
 }
 
-# インストール済みか確認
-if [ -e "$HOME/.local/bin/cli-proxy-api" ]; then
-  echo "CLIProxyAPI is already installed."
-else
-  # インストール処理
+# third-party ディレクトリが存在しない場合は作成
+if [ ! -d "$HOME/third-party" ]; then
+  mkdir -p "$HOME/third-party"
+fi
 
-  # third-party ディレクトリが存在しない場合は作成
-  if [ ! -d "$HOME/third-party" ]; then
-    mkdir -p "$HOME/third-party"
-  fi
+# 既存のものを削除
+if [ -d "$HOME/third-party/cliproxyapi" ]; then
+  rm -rf "$HOME/third-party/cliproxyapi"
+fi
 
-  # CLIProxyAPI のインストール
-  curl -fsSL https://raw.githubusercontent.com/router-for-me/cliproxyapi-installer/refs/heads/master/cliproxyapi-installer | bash
+# CLIProxyAPI のインストール
+curl -fsSL https://raw.githubusercontent.com/router-for-me/cliproxyapi-installer/refs/heads/master/cliproxyapi-installer | bash
+
+# パスが通っているかを確認
+if [ ! -e "$HOME/.local/bin/cli-proxy-api" ]; then
+  # パスを通す
   mv "$HOME/cliproxyapi" "$HOME/third-party/cliproxyapi"
   ln -s "$HOME/third-party/cliproxyapi/cli-proxy-api" "$HOME/.local/bin/cli-proxy-api"
 fi
