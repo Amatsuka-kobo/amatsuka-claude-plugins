@@ -392,7 +392,8 @@ async function runEval(options) {
     summary: { total: results.length, passed, failed: results.length - passed }
   };
 }
-function parseNumericOption(name, value, integer = false) {
+function parseNumericOption(name, value, defaultValue, integer = false) {
+  if (value === void 0) return defaultValue;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || integer && !Number.isInteger(parsed)) {
     throw new Error(`--${name} must be ${integer ? "an integer" : "a number"}`);
@@ -424,10 +425,10 @@ async function main() {
       "eval-set": { type: "string" },
       description: { type: "string" },
       out: { type: "string" },
-      "runs-per-query": { type: "string", default: "3" },
-      "num-workers": { type: "string", default: "10" },
-      timeout: { type: "string", default: "30" },
-      "trigger-threshold": { type: "string", default: "0.5" },
+      "runs-per-query": { type: "string" },
+      "num-workers": { type: "string" },
+      timeout: { type: "string" },
+      "trigger-threshold": { type: "string" },
       model: { type: "string" },
       verbose: { type: "boolean", default: false }
     },
@@ -452,13 +453,20 @@ async function main() {
     runsPerQuery: parseNumericOption(
       "runs-per-query",
       values["runs-per-query"],
+      3,
       true
     ),
-    numWorkers: parseNumericOption("num-workers", values["num-workers"], true),
-    timeout: parseNumericOption("timeout", values.timeout),
+    numWorkers: parseNumericOption(
+      "num-workers",
+      values["num-workers"],
+      10,
+      true
+    ),
+    timeout: parseNumericOption("timeout", values.timeout, 30),
     triggerThreshold: parseNumericOption(
       "trigger-threshold",
-      values["trigger-threshold"]
+      values["trigger-threshold"],
+      0.5
     ),
     model: values.model,
     verbose: values.verbose
@@ -479,5 +487,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   });
 }
 export {
+  parseEvalSet,
+  parseNumericOption,
   runEval
 };
