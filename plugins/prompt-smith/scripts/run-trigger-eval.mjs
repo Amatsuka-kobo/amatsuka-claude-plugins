@@ -8,8 +8,7 @@
 // src/run-trigger-eval.ts
 import { spawn } from "node:child_process";
 import { readFile, writeFile as writeFile2 } from "node:fs/promises";
-import { join as join2 } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, extname, join as join2 } from "node:path";
 import { parseArgs } from "node:util";
 
 // src/lib/claude-cli.ts
@@ -479,7 +478,12 @@ async function main() {
     process.stdout.write(json);
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isDirectRun(expected) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return basename(entry, extname(entry)) === expected;
+}
+if (isDirectRun("run-trigger-eval")) {
   main().catch((error) => {
     process.stderr.write(`${error.message}
 `);

@@ -14,8 +14,7 @@
 
 import { spawn } from "node:child_process"
 import { readFile, writeFile } from "node:fs/promises"
-import { join } from "node:path"
-import { pathToFileURL } from "node:url"
+import { basename, extname, join } from "node:path"
 import { parseArgs } from "node:util"
 import { buildEnv, describeEnvironment } from "./lib/claude-cli.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
@@ -293,10 +292,14 @@ async function main(): Promise<void> {
   }
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+function isDirectRun(expected: string): boolean {
+  const entry = process.argv[1]
+  if (!entry) return false
+  // Bundled modules share import.meta.url, so dispatch by the configured output filename.
+  return basename(entry, extname(entry)) === expected
+}
+
+if (isDirectRun("run-trigger-eval")) {
   main().catch((error) => {
     process.stderr.write(`${(error as Error).message}\n`)
     process.exitCode = 1
