@@ -186,11 +186,13 @@ export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
   }
 }
 
-function parseNumericOption(
+export function parseNumericOption(
   name: string,
-  value: string,
+  value: string | undefined,
+  defaultValue: number,
   integer = false
 ): number {
+  if (value === undefined) return defaultValue
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || (integer && !Number.isInteger(parsed))) {
     throw new Error(`--${name} must be ${integer ? "an integer" : "a number"}`)
@@ -198,7 +200,7 @@ function parseNumericOption(
   return parsed
 }
 
-function parseEvalSet(content: string): EvalItem[] {
+export function parseEvalSet(content: string): EvalItem[] {
   const value: unknown = JSON.parse(content)
   if (!Array.isArray(value))
     throw new Error("--eval-set must contain a JSON array")
@@ -231,10 +233,10 @@ async function main(): Promise<void> {
       "eval-set": { type: "string" },
       description: { type: "string" },
       out: { type: "string" },
-      "runs-per-query": { type: "string", default: "3" },
-      "num-workers": { type: "string", default: "10" },
-      timeout: { type: "string", default: "30" },
-      "trigger-threshold": { type: "string", default: "0.5" },
+      "runs-per-query": { type: "string" },
+      "num-workers": { type: "string" },
+      timeout: { type: "string" },
+      "trigger-threshold": { type: "string" },
       model: { type: "string" },
       verbose: { type: "boolean", default: false }
     },
@@ -264,13 +266,20 @@ async function main(): Promise<void> {
     runsPerQuery: parseNumericOption(
       "runs-per-query",
       values["runs-per-query"],
+      3,
       true
     ),
-    numWorkers: parseNumericOption("num-workers", values["num-workers"], true),
-    timeout: parseNumericOption("timeout", values.timeout),
+    numWorkers: parseNumericOption(
+      "num-workers",
+      values["num-workers"],
+      10,
+      true
+    ),
+    timeout: parseNumericOption("timeout", values.timeout, 30),
     triggerThreshold: parseNumericOption(
       "trigger-threshold",
-      values["trigger-threshold"]
+      values["trigger-threshold"],
+      0.5
     ),
     model: values.model,
     verbose: values.verbose
