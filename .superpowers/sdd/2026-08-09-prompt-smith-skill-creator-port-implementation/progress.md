@@ -1,0 +1,48 @@
+# SDD ledger — plan: docs/plans/2026-08-09-prompt-smith-skill-creator-port-implementation.md
+
+Task 1: complete (commits 7b09b0d..87d862b, review clean)
+Task 2: minor (deferred): stripChar の「同じ引用符が連続する場合」を検証するテストが無い(ブリーフ由来)
+Task 2: complete (commits 87d862b..aca1097, review clean)
+Task 3: minor (deferred): 判定確定後に TriggerDetector を再利用する経路が未テスト(契約外の使い方)
+Task 3: complete (commits aca1097..0ca02c8, review clean)
+Task 4: BLOCKED を解消 — 計画のテスト 2 件が JSON.stringify と矛盾していたため計画側を修正
+Task 4: fix round 1/5 開始 — plan-mandated 2 件(ブロックスカラー内の空行 / frontmatter 解析の重複)をユーザー判断で「2 件とも直す」
+Task 4: fix round 1/5 (2 addressed, 0 open; commits df5ddd9..eccd3ed)
+Task 4: minor (deferred): replaceDescription の JSDoc が BLOCK_SCALARS 定数にぶら下がって見える(見た目のみ)
+Task 4: complete (commits 0ca02c8..eccd3ed, review clean)
+Task 5: minor (deferred): main() が移植元の親切なエラー文言と --verbose の要約行を落としている(UX の後退)
+Task 5: minor (deferred): replaceDescription が main と runSingleQuery で二重適用される旨のコメントが無い
+Task 5: 対照実験の結果 skills 10/24 / commands 10/24。登録先は判別要因でないと判明し、設計書 §1・§4.1#1・§8.1・§11.1・§13 とプラン Task 14 を実測に合わせて訂正
+Task 5: fix round 1/5 (1 addressed, 0 open; commits 8ae2505..32a6571)
+Task 5: complete (commits eccd3ed..32a6571, review clean)
+Task 6: minor (deferred): Math.floor と Python int() の等価性が非負入力に依存する旨のコメントが無い
+Task 6: complete (commits 32a6571..23f1f03, review clean)
+Task 7: minor (deferred): main() に --log-dir / --iteration があるがブリーフの列挙に無い
+Task 7: minor (deferred): stripQuotes が parse-skill-md.ts の stripChar と同一アルゴリズムの再実装(6 行)
+Task 7: minor (deferred): --log-dir の書き込みと main() 自体のテストが無い(ブリーフ由来)
+Task 7: complete (commits 23f1f03..57853b5, review clean)
+Task 8: fix round 1/5 (1 addressed, 0 open; commits a749721..3b21194)
+Task 8: minor (deferred): onIteration が前の反復の exit_reason を渡す(1 反復ずれる)。Task 9 の消費側で注意
+Task 8: minor (deferred): blindHistory の戻り値の型境界が弱い(description だけ as string)
+Task 8: minor (deferred): runLoop のテストが runEval の description 引数の変化を検証していない(ブリーフ由来)
+Task 8: minor (deferred): run-trigger-eval.mjs だけシバンが無い
+Task 8: complete (commits 57853b5..3b21194, review clean)
+Task 9: 実地確認で異常を 1 件観測 — improve-description の claude -p が eval と全く無関係な日本語テキスト(このセッションの抗体蒸留の話)を返し、<new_description> タグも無かったため全文が新 description として採用された。ループ自体は正しく動き、スコアが下がったので best は初回のまま維持された。ローカルプロキシの多重化が疑われる。Task 13 の本番実行前に要確認
+Task 9: fix round 1/5 (1 addressed, 0 open; commits 7c9738b..a1f828e)
+Task 9: minor (deferred): escape のテストが < > だけで & と " を検証していない。query と skillName の escape もテストが無い
+Task 9: minor (deferred): in progress / Current best のライブマスキングにテストが無い
+Task 9: minor (deferred): run-loop.ts が 506 行で src 内最大。--report の配線は抽出できる
+Task 9: minor (deferred): --report "" (空文字) が none と同じ扱いになる
+Task 9: complete (commits 3b21194..a1f828e, review clean)
+Task 10: complete (commits a1f828e..4f7f6a6, review clean)
+Task 11: parked (要ユーザー判断) — 公式 Writing Style の核心「explain the why」が prompt-smith の「根拠は削り指示だけ残す」と方向が逆で、本文にも委譲先にも残っていない。設計書 §8.6 のマッピングに内在する緊張。実行品質の問題ではない
+Task 11: minor (deferred): SKILL.md:9 が 1 文に 2 動作(姉妹スキルとの表記統一を優先した判断)
+Task 11: minor (deferred): rationale に「移植元が更新されたときの同期」への言及が無い
+Task 11: complete (commits 4f7f6a6..1d7ff71, review clean, 1 parked)
+Task 12: minor (deferred): agent-creator/SKILL.md:37 が 1 文に 2 指示(ブリーフ指定の文言をそのまま移植したもの)
+Task 12: complete (commits 1d7ff71..4ead088, review clean)
+Task 13: eval セット 3 本をユーザーが承認。commit fbba09d
+Task 13: 改善ループの実行は時間の都合で別セッションへ持ち越し
+決定 (2026-08-10): 「explain the why」は放置。prompt-smith の基準を優先する
+決定 (2026-08-10): タグ無し応答のフォールバックは移植元どおりのままとする
+引き継ぎ書: docs/handover/2026-08-10-prompt-smith-skill-creator-port.md

@@ -673,10 +673,12 @@ describe("buildSandboxSkillMd", () => {
 })
 
 describe("replaceDescription", () => {
+  // 値は JSON の文字列書式で書く。YAML のダブルクォート文字列は JSON と互換なので、
+  // コロン・引用符・改行を含む description をそのまま安全に置ける。
   it("単一行の description を差し替える", () => {
     const md = ["---", "name: s", "description: old text", "---", "", "body"].join("\n")
     const out = replaceDescription(md, "new text")
-    expect(out).toContain("description: new text")
+    expect(out).toContain('description: "new text"')
     expect(out).not.toContain("old text")
     expect(out).toContain("name: s")
     expect(out).toContain("body")
@@ -685,18 +687,41 @@ describe("replaceDescription", () => {
   it("ブロックスカラーの description を単一行へ畳んで差し替える", () => {
     const md = ["---", "name: s", "description: |", "  line one", "  line two", "---", "", "body"].join("\n")
     const out = replaceDescription(md, "new text")
-    expect(out).toContain("description: new text")
+    expect(out).toContain('description: "new text"')
     expect(out).not.toContain("line one")
     expect(out).not.toContain("line two")
     expect(out).toContain("body")
   })
 
+  it("ブロックスカラー内の空行を越えて継続行を読み飛ばす", () => {
+    const md = [
+      "---",
+      "name: s",
+      "description: |",
+      "  para one",
+      "",
+      "  para two",
+      "other: kept",
+      "---",
+      "",
+      "body",
+    ].join("\n")
+    const out = replaceDescription(md, "new text")
+    expect(out).toContain('description: "new text"')
+    expect(out).not.toContain("para one")
+    expect(out).not.toContain("para two")
+    expect(out).toContain("other: kept")
+    expect(out).toContain("body")
+  })
+
   it("コロンや引用符を含む description を壊さずに書く", () => {
     const md = ["---", "name: s", "description: old", "---", "", "body"].join("\n")
-    const out = replaceDescription(md, 'Use this: "always", even when unclear')
-    const parsed = out.split("\n").find((line) => line.startsWith("description:"))
-    expect(parsed).toBeDefined()
-    expect(out).toContain("always")
+    const original = 'Use this: "always", even when unclear'
+    const out = replaceDescription(md, original)
+    const line = out.split("\n").find((l) => l.startsWith("description:"))
+    expect(line).toBe(`description: ${JSON.stringify(original)}`)
+    // 内側の引用符が escape され、YAML の 1 行として閉じている。
+    expect(line).toBe('description: "Use this: \\"always\\", even when unclear"')
   })
 
   it("本文の description という語には触らない", () => {
@@ -782,7 +807,13 @@ export function makeCleanName(skillName: string): string {
   return `${skillName}-skill-${randomBytes(4).toString("hex")}`
 }
 
-export function buildSandboxSkillMd(original: string, cleanName: string): string {
+interface FrontmatterSplit {
+  frontmatter: string[]
+  body: string[]
+}
+
+/** frontmatter の境界を 1 箇所で解く。書き換え関数はどちらもこれを使う。 */
+function splitFrontmatter(original: string): FrontmatterSplit {
   const lines = original.split("\n")
   if (lines[0]?.trim() !== "---") {
     throw new Error("SKILL.md missing frontmatter (no opening ---)")
@@ -799,7 +830,15 @@ export function buildSandboxSkillMd(original: string, cleanName: string): string
     throw new Error("SKILL.md missing frontmatter (no closing ---)")
   }
 
-  const frontmatter = lines.slice(1, endIdx)
+  return { frontmatter: lines.slice(1, endIdx), body: lines.slice(endIdx + 1) }
+}
+
+function joinFrontmatter(frontmatter: string[], body: string[]): string {
+  return ["---", ...frontmatter, "---", ...body].join("\n")
+}
+
+export function buildSandboxSkillMd(original: string, cleanName: string): string {
+  const { frontmatter, body } = splitFrontmatter(original)
   let sawInvocationKey = false
 
   const rewritten = frontmatter.map((line) => {
@@ -813,31 +852,17 @@ export function buildSandboxSkillMd(original: string, cleanName: string): string
 
   if (!sawInvocationKey) rewritten.push("disable-model-invocation: false")
 
-  return ["---", ...rewritten, "---", ...lines.slice(endIdx + 1)].join("\n")
+  return joinFrontmatter(rewritten, body)
 }
 
 /**
  * frontmatter の description を差し替える。ブロックスカラーは単一行へ畳む。
  * 改善ループが反復ごとに新しい description で測るために要る。
  */
+const BLOCK_SCALARS = new Set([">", "|", ">-", "|-"])
+
 export function replaceDescription(original: string, description: string): string {
-  const lines = original.split("\n")
-  if (lines[0]?.trim() !== "---") {
-    throw new Error("SKILL.md missing frontmatter (no opening ---)")
-  }
-
-  let endIdx = -1
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") {
-      endIdx = i
-      break
-    }
-  }
-  if (endIdx === -1) {
-    throw new Error("SKILL.md missing frontmatter (no closing ---)")
-  }
-
-  const frontmatter = lines.slice(1, endIdx)
+  const { frontmatter, body } = splitFrontmatter(original)
   const rewritten: string[] = []
   let i = 0
   let replaced = false
@@ -852,9 +877,20 @@ export function replaceDescription(original: string, description: string): strin
 
     const value = line.slice("description:".length).trim()
     i++
-    if (value === ">" || value === "|" || value === ">-" || value === "|-") {
-      while (i < frontmatter.length && (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("\t"))) {
-        i++
+    if (BLOCK_SCALARS.has(value)) {
+      // 継続行は字下げされた行である。段落を分ける空行も同じブロックの一部なので飛ばす。
+      // 終わりは、字下げのない非空行(次のキー)か frontmatter の末尾とする。
+      while (i < frontmatter.length) {
+        const next = frontmatter[i]
+        if (next.trim() === "") {
+          i++
+          continue
+        }
+        if (next.startsWith("  ") || next.startsWith("\t")) {
+          i++
+          continue
+        }
+        break
       }
     }
     rewritten.push(`description: ${JSON.stringify(description)}`)
@@ -863,7 +899,7 @@ export function replaceDescription(original: string, description: string): strin
 
   if (!replaced) rewritten.push(`description: ${JSON.stringify(description)}`)
 
-  return ["---", ...rewritten, "---", ...lines.slice(endIdx + 1)].join("\n")
+  return joinFrontmatter(rewritten, body)
 }
 
 export async function createSandbox(skillMd: string, cleanName: string): Promise<Sandbox> {
@@ -2406,6 +2442,7 @@ EOF
 - Modify: `plugins/prompt-smith/skills/prompt-smith/SKILL.md:3`(description)
 - Modify: `plugins/prompt-smith/skills/prompt-smith/SKILL.md:16-29`(§description の担当)
 - Modify: `plugins/prompt-smith/references/description-guide.md`
+- Modify: `plugins/prompt-smith/skills/agent-creator/SKILL.md`(§4 に Agents 固有の規律を足す)
 
 **Interfaces:**
 - Consumes: スキル `prompt-smith:skill-creator`(Task 11)
@@ -2436,11 +2473,17 @@ frontmatter の `description` の末尾へ次を加える。
 | 対象 | 変更 |
 | --- | --- |
 | 3-8 行 | `skill-creator` の可否による分岐を削る。対象の列挙は残す |
-| 27-28 行 | 削る(Task 11 の本文へ移した) |
-| 25 行 | 削る(27-28 行が消え、指す対象を失う) |
+| 23-28 行 §発火率を上げるための施策 | **節ごと削る。** 27-28 行は Task 11 で `skill-creator` の本文へ移済み。26 行(Agents 専用)は下記のとおり `agent-creator` の本文へ移す。25 行の但し書きは指す対象を失う |
 | 30-35 行 §長さの上限 | 節ごと削る(33-35 行は Task 11 の本文へ移した。32 行は指す対象を失う) |
-| 26 行 | Agents 節として置き直す |
 | 43-56 行 §直したときの確かめ方 | 節ごと削る |
+
+改稿後の `description-guide.md` は**共通の基準だけ**を持つ。skill 固有の記述も Agents 固有の記述も残らない。`skill-creator` と `agent-creator` の両方がこれを読み、それぞれの固有の規律は自分の本文に持つ。
+
+**あわせて `plugins/prompt-smith/skills/agent-creator/SKILL.md` を変更する。** §4 description を書く に、guide から移す Agents 固有の規律を足す。
+
+> - 使用する場面を具体的に書き、「積極的に使用する」と書く。
+
+`../../references/description-guide.md` への参照(35 行目)はそのまま残す。共通の基準はそちらで読む。
 
 - [ ] **Step 4: 逆向きの経路が残っていないことを確かめる**
 
@@ -2455,7 +2498,13 @@ Expected: 0 件
 Run: `grep -n "description-guide" plugins/prompt-smith/skills/agent-creator/SKILL.md`
 Expected: 35 行目が残っている
 
-改稿後の `description-guide.md` を読み、Agent 定義の description を書くのに足りるかを確かめる。§書く内容・Agents 節・§配布するスキル・Agents 定義の書き方 が残っていればよい。
+改稿後の `description-guide.md` を読み、共通の基準(§書く内容・§配布するスキル・Agents 定義の書き方)だけが残っていることを確かめる。skill 固有の記述も Agents 固有の記述も残っていないこと。
+
+Run: `grep -n "積極的に使用する" plugins/prompt-smith/skills/agent-creator/SKILL.md`
+Expected: 1 件(guide から移した規律)
+
+Run: `grep -n "積極的に使用する\|1024\|100〜200" plugins/prompt-smith/references/description-guide.md`
+Expected: 0 件
 
 - [ ] **Step 6: Commit**
 
@@ -2575,11 +2624,14 @@ EOF
 node plugins/raphael/scripts/update-antibody.mjs patch ab-2026-0802-001
 ```
 
-本文を次の内容へ差し替える。
+本文を次の内容へ差し替える。**現行の本文は「登録先が `.claude/commands/` だから発火を検出できない」と主張しているが、2026-08-09 の対照実験でこれは否定された**(設計書 §1)。誤った規律が毎セッション注入され続けている状態なので、主張の中核を差し替える。
 
-- `run_eval.py` / `run_loop.py` は `.claude/commands/` へ登録するため、自動ロードの対象にならない
+- `run_eval.py` / `run_loop.py` は、`find_project_root()` が実リポジトリのルートを cwd にするため、そのリポジトリの全スキルが同席した状態で測ることになる。得られるスコアは description の質ではなく手元のカタログとの競争結果である
+- 加えて、本文を捨てた description だけの薄いファイルを測定対象にする。本番の SKILL.md とは別物を測っている
 - 代わりに `plugins/prompt-smith/scripts/run-trigger-eval.mjs` または `run-loop.mjs` を使う
 - 詳細は `plugins/prompt-smith/docs/skill-creator-port-rationale.md`
+
+2026-08-01 の実測(登録先を変えると発火が 1/8 から 8/8 になった)は、登録先と cwd の 2 変数が同時に変わった交絡した比較である(設計書 §1)。本文から削り、交絡の分析込みで `plugins/prompt-smith/docs/skill-creator-port-rationale.md` へ移す。
 
 削除済みの `plugins/optimize-agents/scripts/run-trigger-eval.mjs` への参照を残さない。
 
