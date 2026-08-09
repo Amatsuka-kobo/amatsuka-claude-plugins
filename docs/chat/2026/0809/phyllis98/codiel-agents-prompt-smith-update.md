@@ -1651,3 +1651,49 @@ Deferred minor 2 件(移植元の親切なエラー文言と `--verbose` 要約�
 # AI
 
 了解。Task 5 修正ラウンド 1 を投げた。完了通知を待つ。それまでの間、計画に従い次の準備を進める。
+
+## セッション 2: Task 実行と SDD 実装開始、eval セット起草まで完了
+
+# AI
+
+- Task 5 の修正対応から Task 12 まで自動実行し、Task 13 の eval セット起草を完了。各タスク後にレビューを実施し、Critical 1 件(Task 8 の esbuild bundling)と Needs fixes 1 件(Task 9)を検出・修正。
+- Task 8 では esbuild が複数の CLI モジュールを 1 ファイルにまとめるときに自己起動ガード条件が全て同時に真になり、成功時も終了コードが 1 になる問題を発見。エントリファイル名による判定に変更し、smoke test を追加。Task 9 では description-guide 参照に関する設計解釈の齟齬を検出。
+- Task 11 の description-guide 参照について、既出の指示「skill 専用の規律だけを移す」を「skill-creator は guide を読まない」に再解釈し、ユーザー確認を取得。設計書・実装計画を修正。
+- Task 9 で `improve-description` が関係ない応答を返した事象を観測したが、後の sanity check で `claude -p` の正常性を確認。一過性と判定。
+- eval セット 3 本(各 20 問、true/false 各 10)を起草。ユーザー承認を取得。
+- ユーザー決定: eval 承認、「explain the why」は放置、タグ無し応答は現状のまま進める。改善ループは別セッションに引き継ぎ。
+- 承認された eval セットをコミット、引き継ぎ書を作成、台帳を git 管理内に移行予定。
+
+## 起きたときにお渡しするもの
+
+- 各 Task の結果とコミット(Task 1-12: 12 コミット、合計テスト 88 件)
+- eval セット起草完了、承認待ち → 承認取得済み
+- 台帳 `.superpowers/sdd/2026-08-09-.../progress.md` の内容を引き継ぎ書に転記
+- 判断済み項目: eval セット承認、「explain the why」扱い、タグ無し応答のフォールバック
+
+## USER
+
+> 1. 承認します。
+> 2. 放置
+> 3. このまま進める
+>
+> 改善ループについてですが、あまり時間がないので、引き継ぎ書を作成&コミットし、現在のブランチをpushしてください。
+> 後ほど別のセッションで対応します。
+
+## ASSISTANT
+
+承認ありがとうございます。決定 2・3 を記録し、eval セットをコミットして、引き継ぎ書を作成・push します。
+
+(tool: Bash — Check status and verify eval sets)
+
+(tool: Edit — /home/hiro0209/amatsuka-claude-plugins/docs/design/2026-08-09-prompt-smith-skill-creator-port-design.md)
+
+(tool: Bash — Commit approved eval sets)
+
+(tool: Bash — Read ledger minors and check ignore status)
+
+台帳は git 管理外なので、必要な内容を引き継ぎ書に転記します。
+
+## USER
+
+> 例外的に台帳をgit管理内にしてください(gitignoreの編集)
