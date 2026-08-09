@@ -11,7 +11,8 @@ await esbuild.build({
   bundle: true,
   entryPoints: {
     "run-trigger-eval": "./src/run-trigger-eval.ts",
-    "improve-description": "./src/improve-description.ts"
+    "improve-description": "./src/improve-description.ts",
+    "run-loop": "./src/run-loop.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
