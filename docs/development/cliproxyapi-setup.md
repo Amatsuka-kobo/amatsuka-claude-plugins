@@ -1,19 +1,20 @@
 # CLIProxyAPI のセットアップ
 
-この手順は、CLIProxyAPI をローカルで起動し、必要に応じて Codex または Claude の OAuth を使うための**任意設定**です。通常の Claude Code 利用には必要ありません。
+この手順は、CLIProxyAPI をローカルで起動し、必要に応じて Codex ・xAI ・ Claude の OAuth を使うための**任意設定**です。通常の Claude Code 利用には必要ありません。
 
 対象環境は WSL2/Linux です。`ONBOARDING.md` の必須セットアップを完了してから進めてください。
 
 ## この手順でできること
 
 - CLIProxyAPI をローカルに導入する
-- Codex OAuth または Claude OAuth を必要なものだけ認証する
+- Codex OAuth ・ xAI OAuth ・ Claude OAuth を必要なものだけ認証する
 - `127.0.0.1:8317` のローカル API を確認する
 - Claude Code を CLIProxyAPI 経由で一時的に起動する
 
 ## 先に確認すること
 
 - Codex OAuth を使う場合は、Codex を利用できる OpenAI アカウントが必要です。
+- xAI OAuth を使う場合は、Grok アカウントまたは X アカウントが必要です。
 - Claude OAuth を使う場合は、Claude を利用できるアカウントが必要です。
 - OAuth の認証情報とローカル API キーは個人の認証情報です。チャット、Issue、コミット、Pull Request に貼り付けないでください。
 - この手順ではプロキシを `127.0.0.1` だけで待ち受けます。`0.0.0.0` などへ変更してネットワークに公開しないでください。
@@ -55,14 +56,16 @@ cp cliproxyapi.config.example.yaml cliproxyapi.config.yaml
 
 次に、`cliproxyapi.config.yaml` をエディターで開き、`api-keys` の `replace-with-a-random-local-key` を自分だけが使う十分にランダムな文字列へ置き換えます。置き換えた値は、次の API 確認と Claude Code の起動で使います。
 
-| 設定                           | 役割                                                 | 扱い                                     |
-| ------------------------------ | ---------------------------------------------------- | ---------------------------------------- |
-| `host: "127.0.0.1"`            | このマシンからだけ接続を受け付ける                   | 変更しない                               |
-| `port: 8317`                   | プロキシの待受ポート                                 | 他のプロセスと競合するときだけ変更する   |
-| `auth-dir: "~/.cli-proxy-api"` | OAuth 認証情報の保存先                               | 内容を共有・コミットしない               |
-| `api-keys`                     | ローカル API の認証キー                              | プレースホルダーを必ず置換し、共有しない |
-| `oauth-model-alias`            | Codex モデルをクライアント側の別名として公開する設定 | 既定値を保持する                         |
-| `oauth-excluded-models`        | この構成で公開しないモデルの設定                     | 既定値を保持する                         |
+
+| 設定                             | 役割                            | 扱い                   |
+| ------------------------------ | ----------------------------- | -------------------- |
+| `host: "127.0.0.1"`            | このマシンからだけ接続を受け付ける             | 変更しない                |
+| `port: 8317`                   | プロキシの待受ポート                    | 他のプロセスと競合するときだけ変更する  |
+| `auth-dir: "~/.cli-proxy-api"` | OAuth 認証情報の保存先                | 内容を共有・コミットしない        |
+| `api-keys`                     | ローカル API の認証キー                | プレースホルダーを必ず置換し、共有しない |
+| `oauth-model-alias`            | Codex モデルをクライアント側の別名として公開する設定 | 既定値を保持する             |
+| `oauth-excluded-models`        | この構成で公開しないモデルの設定              | 既定値を保持する             |
+
 
 `claude-gpt-5-6-sol`、`claude-gpt-5-6-terra`、`claude-gpt-5-6-luna` は、`oauth-model-alias` が Codex の上流モデル（`gpt-5.6-sol` など）に付けるクライアント側の別名です。上流モデル ID そのものではありません。
 
@@ -76,6 +79,14 @@ Codex を使う場合は、リポジトリルートで次を実行します。
 
 ```bash
 cli-proxy-api --config "cliproxyapi.config.yaml" --codex-login
+```
+
+### xAI OAtuh
+
+Grok を使う場合は、リポジトリルートで次を実行します。
+
+```bash
+cli-proxy-api --config "cliproxyapi.config.yaml" --xai-login
 ```
 
 ### Claude OAuth
@@ -123,7 +134,7 @@ JSON の応答が表示されれば、プロキシは起動しています。
 - 接続が拒否される場合は、`./scripts/start-proxy.sh` を実行したターミナルでプロキシが起動しているか、設定の `host` と `port` が想定どおりか確認してください。
 - 期待するモデルが応答に含まれない場合は、必要な OAuth（Codex/Claude）を実施したか、`oauth-model-alias` と `oauth-excluded-models` の設定を確認してください。
 
-## 5. Claude Code からプロキシを使う（任意）
+## 5. Claude Code からプロキシを使う
 
 CLIProxyAPI が起動している別ターミナルを残したまま、このターミナルでローカル API キーを読み取ります。
 
@@ -137,6 +148,7 @@ echo
 ```bash
 ANTHROPIC_BASE_URL="http://127.0.0.1:8317" \
 ANTHROPIC_AUTH_TOKEN="$CLI_PROXY_API_KEY" \
+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
 claude
 ```
 
@@ -152,30 +164,44 @@ CLIProxyAPI が停止している状態でこの起動をすると、Claude Code
 
 ## 6. Claude Code から GPT サブエージェントを使う（任意）
 
-Claude Code では、通常 `/model` コマンドで選択した場合以外で GPT モデルのエージェントを使用することはできません。
-それを解消するために汎用エージェント運用方針として、`optimize-agents` プラグインに `GPT Sol` / `GPT Terra` / `GPT Luna` をモデルに指定する Agents 定義を用意しています。
+Claude Code では、通常 `/model` コマンドで選択した場合以外で GPT モデルのエージェントを使用することはできません。  
+それを解消するために汎用エージェント運用方針として、`agent-policy`プラグインに `GPT Sol` / `GPT Terra` / `GPT Luna` をモデルに指定する Agents 定義を用意しています。
 または、Codex CLI を使用する OpenAI 製の codex プラグインを使用します。
 
-`optimize-agents` が提供する Agents 定義を使用するには、`optimize-agents:setup-gpt` を使用し、`.claude/agents` に設置してください。
+`agent-policy` が提供する Agents 定義を使用するには、`agent-policy:setup-gpt` を使用し、`.claude/agents` に設置してください。
 `.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
 
 ProxyAPI に繋いだ Claude Code 上で以下のように実行してください。
 
 ```bash
-/optimize-agents:setup-gpt
+/agent-policy:setup-gpt
+```
+
+## 7. Claude Code から Grok サブエージェントを使う（任意）
+
+Claude Code では、通常 `/model` コマンドで選択した場合以外で Grok モデルのエージェントを使用することはできません。それを解消するために汎用エージェント運用方針として、`agent-policy` プラグインに `Grok` をモデルに指定する Agents 定義を用意しています。
+
+`agent-policy` が提供する Grok Agents 定義を使用するには`agent-policy:setup-grok` を使用し、`.claude/agents` に設置してください。`.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
+
+ProxyAPI に繋いだ Claude Code 上で以下のように実行してください。
+
+```bash
+/agent-polocy:setup-grok
 ```
 
 ## トラブルシューティング
 
-| 症状                               | 最初の確認                                    | 主な対応                                             |
-| ---------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `cli-proxy-api: command not found` | `command -v cli-proxy-api`                    | 実行ファイルの配置、実行権限、`PATH` を確認する      |
-| プロキシに接続できない             | 起動ターミナルのログ、設定の `host` と `port` | プロキシを起動し、ポート競合を解消する               |
-| `401` / `403`                      | `api-keys` とリクエストの認証値               | ローカル API キーと `Authorization` ヘッダーを見直す |
-| OAuth が完了しない                 | ブラウザ、`--no-browser`、コールバックポート  | 対象アカウントで認証し直し、ポート競合を確認する     |
-| モデルが表示されない               | OAuth 実施状況、別名・除外リスト              | 必要なプロバイダーを認証し、設定を見直して再起動する |
-| Claude Code が接続できない         | `ANTHROPIC_BASE_URL`、プロキシ起動、認証変数  | URL、ポート、トークンを見直し、通常起動と比較する    |
-| 通常の Claude Code の機能が減った  | Claude Code 起動時の認証環境変数              | プロキシを使わない起動では環境変数を付けない         |
+
+| 症状                                 | 最初の確認                            | 主な対応                                  |
+| ---------------------------------- | -------------------------------- | ------------------------------------- |
+| `cli-proxy-api: command not found` | `command -v cli-proxy-api`       | 実行ファイルの配置、実行権限、`PATH` を確認する           |
+| プロキシに接続できない                        | 起動ターミナルのログ、設定の `host` と `port`   | プロキシを起動し、ポート競合を解消する                   |
+| `401` / `403`                      | `api-keys` とリクエストの認証値            | ローカル API キーと `Authorization` ヘッダーを見直す |
+| OAuth が完了しない                       | ブラウザ、`--no-browser`、コールバックポート    | 対象アカウントで認証し直し、ポート競合を確認する              |
+| モデルが表示されない                         | OAuth 実施状況、別名・除外リスト              | 必要なプロバイダーを認証し、設定を見直して再起動する            |
+| Claude Code が接続できない                | `ANTHROPIC_BASE_URL`、プロキシ起動、認証変数 | URL、ポート、トークンを見直し、通常起動と比較する            |
+| 通常の Claude Code の機能が減った            | Claude Code 起動時の認証環境変数           | プロキシを使わない起動では環境変数を付けない                |
+
 
 ## 完了チェック
 
@@ -185,3 +211,4 @@ ProxyAPI に繋いだ Claude Code 上で以下のように実行してくださ�
 - [ ] `curl` で `http://127.0.0.1:8317/v1/models` の応答を確認できる
 - [ ] 必要な OAuth だけを認証した
 - [ ] Claude Code を使う場合、環境変数付き起動でプロキシ経由にできる
+

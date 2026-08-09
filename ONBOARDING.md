@@ -100,8 +100,8 @@ cp CLAUDE.example.md CLAUDE.md
 
 また、 Codex 利用者と Claude Code のみの利用者でエージェントの運用方針を変えるため、agent-policy プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.example.md に記述してあります。
 
-- Codex 併用 -> `agent-policy:with-codex-policy`
-- Claude Code のみ -> `agent-policy:claude-model-policy`
+- Codex 併用 -&gt; `agent-policy:with-codex-policy`
+- Claude Code のみ -&gt; `agent-policy:claude-model-policy`
 
 ### uv と Serena
 
@@ -244,7 +244,7 @@ mdbase-lsp --help
 
 ## 任意設定
 
-Codex または Claude Code を CLIProxyAPI 経由で利用する場合は、[CLIProxyAPI のセットアップ](docs/development/cliproxyapi-setup.md)を参照してください。Codex のアカウントを持っていない場合は、この設定は不要です。
+Claude Code を CLIProxyAPI 経由で利用する場合は、[CLIProxyAPI のセットアップ](docs/development/cliproxyapi-setup.md)を参照してください。Codex や Grok のアカウントを持っていない場合は、この設定は不要です。
 
 ## トラブル時の確認
 
@@ -255,3 +255,4 @@ Codex または Claude Code を CLIProxyAPI 経由で利用する場合は、[CL
 5. グローバルにインストールしたコマンドの保存先が `PATH` に含まれているか確認する
 6. Context7 は `claude mcp logs context7` でログを確認する
 7. `mdbase-lsp` は `$HOME/.local/bin/mdbase-lsp` が存在するか確認する
+
