@@ -11,10 +11,7 @@ description: Codiel の discuss フェーズでオーケストレーターが ag
 ウォークスルーで使うスキル。設計の思考(論点抽出・案の比較)は architect(agenda.md)が、
 決定はユーザーが、進行と記録はオーケストレーターが担う三権分立を守る。
 
-`discussion.md` は**ユーザーの決定の記録**であり、`review-<n>.md` と同じ「進行管理としての記録」に
-分類される。これを書くことは orchestrating-runs の HARD-GATE(オーケストレーターは自分で
-設計しない)に抵触しない。逆に、記録の名を借りてオーケストレーター自身の設計判断を
-書き込むことは HARD-GATE 違反である。
+`discussion.md` への記録は進行管理であり、HARD-GATE の対象外とする。
 
 ## チェックリスト(discuss フェーズ)
 
@@ -24,6 +21,7 @@ description: Codiel の discuss フェーズでオーケストレーターが ag
 3. 論点を一つずつ提示する。選択肢・トレードオフ・推奨案を agenda.md の記載のまま添える。
    AskUserQuestion を基本とし、選択肢に収まらない議論をユーザーが求めたら通常の対話に切り替える。
    各論点の提示には「残りの論点をすべて推奨案で進める」選択肢も含める。
+   agenda.md に無い論点をユーザーが持ち出したときは、その場で決定せず architect へアジェンダ追記を再ディスパッチする。
 4. 論点ごとに、決定・理由・却下案を `discussion.md` に記録する(書式は下記)。
    ユーザーが保留した論点は「状態: 未決」のまま残す。
 5. 「すべて推奨案で進める」が選ばれた場合は、残りの全論点に推奨案を採用として記録する
@@ -64,9 +62,8 @@ architect が design.md を書き終えて報告したら、raguel-gating の de
    discussion.md の各決定がどこに反映されたかの対応を添える。architect が「合意との衝突・
    再協議事項」を報告している場合は、それを最初に提示する。
 2. 修正要望があれば、要望を**解釈を加えずそのまま**ディスパッチプロンプトに含めて architect を
-   再ディスパッチし、完了後に再度ウォークスルーする。往復に試行上限は設けない(人間がループ内に
-   いるため暴走リスクがない。record-attempt も不要)。要望が discussion.md の決定の変更を含む
-   場合は、該当論点の記録を更新してから再ディスパッチする。
+   再ディスパッチし、完了後に再度ウォークスルーする。往復に試行上限は設けない(`record-attempt` は呼ばない)。
+   要望が discussion.md の決定の変更を含む場合は、該当論点の記録を更新してから再ディスパッチする。
 3. ユーザーの承認が得られたら、raguel-gating の design ゲートへ進む。
 
 ## 中断再開(discuss フェーズ)
@@ -96,35 +93,4 @@ architect が design.md を書き終えて報告したら、raguel-gating の de
 |---|---|
 | 「ユーザーの回答は明らかなので聞かずに進める」 | discuss フェーズの存在意義は決定をユーザーに返すこと。「明らか」は Raguel が排除している自己承認の入口と同じ思考。 |
 | 「未決が残ると格好悪いので仮決定で埋める」 | 仮決定は捏造。未決は正当な状態であり、design は未決を前提に進み、ウォークスルーで再提示される。 |
-| 「ウォークスルーは evaluate_design が通れば省略していい」 | Raguel は discussion.md との整合は検査できるが、ユーザーの新たな気づきは拾えない。ウォークスルーは design フェーズの必須手順であり、順序は「ウォークスルー → ゲート」。 |
 | 「議論が長引いたので勝手に要約して打ち切る」 | 打ち切り(残りを推奨案で)の判断もユーザーのもの。ショートカットを提示して選んでもらう。 |
-
-## プロセスフローチャート
-
-```dot
-digraph facilitating_design_discussions {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  read [label="agenda.md を読む", shape=box];
-  overview [label="論点一覧+推奨案要約を提示\n進め方を確認(個別 or 一括推奨)", shape=box];
-  mode [label="進め方?", shape=diamond];
-  present [label="論点を一つ提示\n(選択肢/トレードオフ/推奨)", shape=box];
-  record [label="決定/理由/却下案を\ndiscussion.md に記録", shape=box];
-  more [label="未提示の論点が残る?", shape=diamond];
-  bulk [label="残り全論点に推奨案を\n採用として記録", shape=box];
-  confirm [label="決定一覧+未決の有無を提示\n最終確認", shape=diamond];
-  commit [label="agenda.md/discussion.md をコミット\ncomplete-phase discuss", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-
-  read -> overview -> mode;
-  mode -> present [label="個別に議論"];
-  mode -> bulk [label="一括推奨"];
-  present -> record -> more;
-  more -> present [label="Yes"];
-  more -> confirm [label="No"];
-  present -> bulk [label="途中で一括推奨を選択", style=dashed];
-  bulk -> confirm;
-  confirm -> present [label="修正あり(該当論点へ)"];
-  confirm -> commit [label="承認"];
-}
-```

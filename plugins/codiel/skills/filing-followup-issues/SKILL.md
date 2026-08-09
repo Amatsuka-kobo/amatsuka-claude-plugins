@@ -11,16 +11,10 @@ description: Codiel の triage フェーズでオーケストレーター本体�
 `fixing-review-findings` と同様にオーケストレーターの進行規約であり、サブエージェントへの
 ディスパッチは発生しない(起票作業そのものをオーケストレーターが行う)。
 
-triage は `init / design / … / fix-loop` と異なり **非 GATED フェーズ**であり、Raguel の
-`evaluate_*` を経ない。その代わりに `codiel-state complete-phase triage` の前提として
-**人間の明示的な指示**を必須とする(DESIGN.md §1「人間の承認ゲート」の唯一の例外)。
+triage は非 GATED フェーズであり、Raguel の `evaluate_*` は経ない。`complete-phase triage` の
+前提として人間の明示的な指示を必須とする。
 
-入力は `reports/review-<n>.md` の所見のうち **medium / low のみ**。critical/high は本スキルの
-対象外であり、`fixing-review-findings` が fix-loop で必ず処理し終えているはずである
-(`reviewing-diffs` の severity 定義表のとおり下流の扱いが分かれる)。`fixing-review-findings`
-が記録する「反論済み一覧」は critical/high 専用の記録であり、medium/low を扱う本スキルとは
-**対象が別物**である。反論済み所見を triage で拾い直す必要はない(scope が重ならない)。
-
+入力は `reports/review-<n>.md` の所見のうち **medium / low のみ**。
 ## プラグインルート参照規約
 
 このスキル起動時に通知される「Base directory for this skill」は
@@ -44,6 +38,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    **回答が来るまで次の手順に進まない**(triage は非 GATED のため `mark-ask` は使わないが、
    「ユーザーの回答を待つ」という運転自体がこのフェーズの唯一のゲートである)。
 4. ユーザーが起票対象を指示したら、対象ごとに以下を行う。
+   `gh` が使えないときは起票せず、所見一覧をユーザーへ提示して triage を保留する。
 5. **ISSUE_TEMPLATE の探索**: Glob で次を探す。
    - `.github/ISSUE_TEMPLATE/*.yml` と `*.yaml`(GitHub フォーム形式)
    - `.github/ISSUE_TEMPLATE/*.md`(Markdown 形式、frontmatter 付き)
@@ -73,8 +68,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 本文組み立て時、**各フィールドを `### <label>` の見出し + 回答の markdown に展開**する。例えば
 フィールドが `label: "現象"` なら本文に `### 現象\n<所見の内容>` を差し込む。`required: true` の
-フィールドは空にせず、所見から埋められる情報(症状・根拠・対象ファイル・severity・元 PR リンク)を
-可能な限り割り当てる。埋められない項目があれば「(triage 起票のため情報なし)」等と明記し、
+フィールドには、症状・根拠・対象ファイル・severity・元 PR リンクを割り当てる。
+埋められない項目があれば「(triage 起票のため情報なし)」等と明記し、
 無言で空欄にしない。
 
 ### Markdown 形式(`.github/ISSUE_TEMPLATE/*.md` / `.github/ISSUE_TEMPLATE.md`)
@@ -118,53 +113,14 @@ medium|low
   への越境であり行わない。
 - **`gh issue create` の実行はこのフェーズでのみ許される**。`guard-bash`(hooks)は
   アクティブ run の現在フェーズが triage でなければ `gh issue create` を機械的に deny する
-  (`docs/DESIGN.md` §8 / §2 [9])。本 HARD-GATE(手続き上の縛り)と hooks の deny は
-  **二層防御**であり、片方が漏れても他方が起票を止める設計になっている。
+  (`docs/DESIGN.md` §8 / §2 [9])。
 </HARD-GATE>
 
 ## Red Flags(合理化への反論)
 
 | 思考 | 現実 |
 |---|---|
-| 「medium/low は軽微だからまとめて勝手に起票してよい」 | 起票対象・まとめ方はユーザーの裁量であり、オーケストレーターの「軽微そう」という自己評価で代行してはならない。必ず一覧提示→回答待ちを経る。 |
 | 「テンプレートを読むのが面倒なので自由書式で起票する」 | ISSUE_TEMPLATE はリポジトリのラベル運用・Definition of Done と紐づく。自由書式は起票後にラベル漏れ・トリアージ漏れを招く。手順 5 のとおり探索・選択を必ず行う。 |
 | 「重複確認は面倒だから省略して起票する」 | 重複起票は Issue トラッカーを汚し、後続の対応を分散させる。`gh issue list --search` での確認を省略しない。 |
 | 「ユーザーの返信を待たずに一部だけ先に起票しておこう」 | 「回答が来るまで起票しない」がこのフェーズ唯一のゲート。一部でも先行起票すれば、ユーザーが後から「その所見は見送りたかった」と言っても取り消せない。 |
 | 「起票さえすれば review-<n>.md への追記や PR コメントは後回しでいい」 | 追記・コメントを怠ると Issue 番号と所見の対応が追跡不能になり、triage が行われたこと自体が記録に残らない。起票の都度、手順 8 を即時に行う。 |
-| 「critical/high も一緒に起票してしまえば fix-loop を省略できる」 | critical/high の起票による先送りは fix-loop の職掌(必ず修正)を無効化する構造的な迂回であり禁止。 |
-
-## プロセスフローチャート
-
-```dot
-digraph filing_followup_issues {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  read_report [label="reports/review-<n>.md の\nmedium/low 所見を抽出", shape=box];
-  list [label="番号付き一覧を提示\n(番号・severity・要約・対象)", shape=box];
-  ask_user [label="起票対象・まとめ方・見送りを\nユーザーに確認", shape=box, style=filled, fillcolor="#fff2cc"];
-  wait [label="ユーザーの回答が\n来たか?", shape=diamond];
-  for_each [label="起票対象ごとに処理", shape=box];
-  find_template [label="Glob で ISSUE_TEMPLATE を探索\n(yml form / md / レガシー)", shape=box];
-  select_template [label="所見の種類に最も合う\nテンプレートを選択\n(なければ既定書式)", shape=box];
-  dup_check [label="gh issue list --search で\n重複確認", shape=box];
-  dup_found [label="重複あり?", shape=diamond];
-  ask_dup [label="重複 Issue を提示し\nユーザーに判断を仰ぐ", shape=box, style=filled, fillcolor="#fff2cc"];
-  create [label="gh issue create\n(テンプレート項目を最大限埋める)", shape=box];
-  record [label="review-<n>.md に Issue 番号追記\n+ gh pr comment でフォローアップ投稿", shape=box];
-  more [label="未処理の起票対象が\n残っているか?", shape=diamond];
-  complete [label="codiel-state complete-phase triage", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-
-  read_report -> list -> ask_user -> wait;
-  wait -> ask_user [label="未回答\n(先に進まない)"];
-  wait -> for_each [label="回答あり"];
-  for_each -> find_template -> select_template -> dup_check -> dup_found;
-  dup_found -> ask_dup [label="あり"];
-  dup_found -> create [label="なし"];
-  ask_dup -> create [label="新規起票を選択"];
-  ask_dup -> more [label="見送り/既存に集約"];
-  create -> record -> more;
-  more -> for_each [label="残りあり"];
-  more -> complete [label="なし"];
-}
-```

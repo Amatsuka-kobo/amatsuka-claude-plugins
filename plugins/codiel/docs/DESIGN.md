@@ -274,9 +274,10 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 
 - frontmatter(`name` / `description`(発動条件を含む))
 - **チェックリスト**(実行者はタスク化して順に消化)
-- **プロセスフローチャート**(dot 形式)
 - **Red Flags 表**(「これは省略していい」という合理化への反論)
 - **HARD-GATE**(絶対に越えてはならない一線)
+
+プロセスフローチャート(dot 形式)は SKILL.md 本文には置かず、`docs/skill-flowcharts.md` に集約する。
 
 ### オーケストレーター用(メインセッションが読む)
 
@@ -303,6 +304,16 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
 | `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方、Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認。**ISSUE_TEMPLATE の活用**: `.github/ISSUE_TEMPLATE/`(form 形式 .yml / markdown 形式 .md)や `.github/ISSUE_TEMPLATE.md` を探索し、指摘の種類(バグ / 改善 / タスク等)に最も合うテンプレートを選択、その項目・ラベル・タイトル接頭辞を最大限活かして本文を構成する。テンプレートがない場合のみ既定書式で起票。HARD-GATE:「ユーザーの指示なしに起票しない」 |
 | `recording-gotchas` | (独自・成長機構) | 失敗(STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)から「プロジェクト固有で再発しうる教訓」を抽出し GOTCHAS.md に追記する基準と書式 |
+
+### スキル本文に置かない根拠(退避)
+
+各スキルが「なぜその規律が必要か」を述べていた記述を、指示から分離してここに残す。
+
+- `preparing-design-agendas`: agenda に挙げた論点がそのままディスカッションの議題になり、合意結果(discussion.md)は design フェーズの設計を拘束する。論点を漏らすと、その分岐はユーザーに諮られないまま architect の独断で設計されることになる。
+- `analyzing-issues`: issue.md で要件を取り違えたり曖昧さを握り潰したりすると、その誤りは後続フェーズすべてに伝播し、design 以降で作り直しになる。
+- `recording-gotchas`: Codiel は 2 つの記憶で「プロジェクト毎に賢くなる」。Raguel の判例ストアは判定側の記憶(次の evaluate をどう判定するか)を、`docs/GOTCHAS.md` は生成側の記憶(次の実装・設計をどう書くか)を賢くする。GOTCHAS.md は全フェーズのサブエージェントが作業前に必読する共有資産であり、記録を怠れば同じプロジェクト固有の罠に次の run が再度落ちる。逆に何でも書けば台帳が肥大化しシグナルが埋もれるため、記録基準を 1 問に絞っている。
+- `writing-design-docs`: design.md で設計を誤ったり影響 unit を漏らすと、その誤りはテスト仕様書の漏れ・実装漏れとしてそのまま後続フェーズに伝播する。
+- `writing-dev-plans`: `[domain: ...]` タグはディスパッチ先の決定と implementer のドメイン規律の 2 箇所から機械的に参照される。タグを誤るか複数ドメインを 1 ステップに混ぜると、誤った implementer が呼ばれるか、hooks が正当な書き込みを ask で止める誤爆を招く。両者ともタグを機械的にしか読まないため、曖昧・複合のタグは下流のどこかで必ず事故になる。
 
 ## 7. Agents(ツール制限 = 構造的ハーネス)
 
