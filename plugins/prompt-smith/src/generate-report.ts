@@ -10,7 +10,9 @@
  *
  * This file is a TypeScript port of scripts/generate_report.py from the
  * skill-creator Claude Code plugin. Changes: Google Fonts links are replaced
- * with a system font stack so reports render without network access.
+ * with a system font stack so reports render without network access; separate
+ * best train and test score rows are shown; live reports mask unfinalized
+ * scores as "in progress" and label the displayed description "Current best".
  */
 
 import type {

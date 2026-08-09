@@ -46,6 +46,10 @@ improve_description.py -> src/improve-description.ts
 generate_report.py -> src/generate-report.ts
   10. The Google Fonts <link> tags are dropped and replaced with a system
       font stack, so the report renders without network access.
+  11. Separate Best Train Score and Best Test Score rows are added to the
+      report summary.
+  12. Live reports mask unfinalized scores as "in progress" and label the
+      displayed best description "Current best".
 
 utils.py -> src/lib/parse-skill-md.ts
   No behavioural changes.
