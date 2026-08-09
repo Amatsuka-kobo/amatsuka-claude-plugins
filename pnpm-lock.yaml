@@ -263,6 +263,8 @@ importers:
 
   plugins/prefetch: {}
 
+  plugins/prompt-smith: {}
+
   plugins/raphael: {}
 
   plugins/revelation: {}

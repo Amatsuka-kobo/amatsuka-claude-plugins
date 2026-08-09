@@ -1,0 +1,82 @@
+[
+  {
+    "query": "`plugins/willow-ledger/skills/month-end/SKILL.md` の本文を、月末締めで実際に判断できる指示に直してください。`close_date` が休日なら翌営業日にする、未照合の `invoice_ref` は一覧に残す、という規則を入れ、背景説明と同じ意味の例は削りたいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "青嶺モビリティの `CLAUDE.md` は『適切に確認する』ばかりでCI失敗時の動きが不明です。`apps/fleet/`、`contract_status=paused`、検証コマンドの順序を使って判断基準へ置き換え、古い移行経緯は本文から落としてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/oak-signal/commands/escalate.md` の本文を整えたいです。`ticket_url`、障害等級、顧客影響がそろわない場合の質問順と、P1だけに要求する報告先を矛盾なく書き、似た出力例は一つに絞ってください。descriptionの変更は不要です。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/copper-orbit/references/payment-exceptions.md` にカード会社別の上限表と、担当者へ連絡する指示が混在しています。`issuer_code` と金額の表は引くための情報として残し、AIの行動を変える曖昧な文だけを削って読みやすくしてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "古い `plugins/lumen-supply/memories/intake-notes.md` を棚卸ししたい。仕入先の連絡先一覧は参照情報として残す一方、既に失効した承認ルート、理由だけの注記、重複した確認手順を除き、`supplier_tier` ごとの判断を迷わない本文に直してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/river-loom/agents/translation-checker.md` はagentの新規作成ではなく、既存本文の作業規律だけを改稿したいです。固有名詞を訳さない条件、機密語が来た場合の停止、提出形式を短く明文化し、frontmatterはそのままにしてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "pls review `plugins/stone-archive/output-styles/incident-note.md`: replace vague wording such as ‘summarize when appropriate’ with rules based on sev and customer impact, then remove duplicate timestamp rules and explanatory prose. keep the output usable during an incident.",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/mist-garden/skills/catalog-repair/SKILL.md` の手順に、商品URLの再試行回数と `sku_state=retired` の除外条件を加えたいです。現場担当が参照するエラーコード一覧は壊さず、本文の順序・例・禁止事項を見直して出力の一貫性を評価してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/frost-line/references/support-language.md` を、北浜通信の問い合わせ対応で使えるように整備してください。謝罪文のカタログは保持し、エージェントが勝手に返金を約束しない規則と、`case_priority` 別の返答判断を本文として整理したいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/dawn-works/commands/reconcile.md` は会計担当の追加ルールが継ぎ足され、海外通貨の丸めと`ledger_date`の扱いが食い違っています。実行時の指示本文を再構成し、参照用の勘定科目表は残して、矛盾・冗長・判定不能な表現を評価してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "ノヴァ整備の現場用に、写真URLと `asset_tag,inspection_due` を確認して整備予定を作る `yard-inspector` スキルを新設したいです。配置、同梱スクリプト、発火する依頼のdescription、近接ケースのevalまで一式を設計してほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/sable-wave/skills/policy-search/SKILL.md` のdescriptionが一般的すぎます。規程PDFのURL、地域コード、改定日を入力にする用途を反映し、発火しない近似依頼も含めて測定セットを作り、候補の精度を確認したいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`.claude/agents/settlement-auditor.md` を追加してください。決済データの `transfer_id,amount,currency` を突合するだけのsubagentにして、読み取り専用tools、親に返すJSON形式、実行を断る条件をfrontmatterと本文に定義したい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/pearl-meter/agents/capacity-reader.md` を監査中です。実際はダッシュボードを見るだけなのにBashとWriteが与えられています。agent定義として責務、model指定の要否、tools、description、親子の受け渡しが正しいか検証して直してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "小麦倉庫の `README.md` を改訂したい。入庫CSVの `lot_no,moisture,received_on` の説明、初回設定、よくある失敗、問い合わせ先を章立てして、導入担当が迷わないチュートリアルにしてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/amber-pier/docs/retention-policy.md` は法務向けの設計資料です。90日保持にした理由、承認会議の記録、比較した案を残したまま、表記ゆれと見出し階層を編集して読みやすくしたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`.claude/agents/market-scan.md` は競合URLを調べるsubagentですが、instructionsに書いた出典形式とfrontmatterのtools制限がずれています。定義ファイル全体を点検して、ネットワーク不可時の振る舞い、許可権限、委譲条件を検証してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/cloud-reed/commands/publish-summary.md` を新しい定型コマンドにしたいです。MR URL、対象環境、`release_train` を聞いてから告知文を作る流れにし、必要な参照素材と出力サンプルを決めてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/violet-hub/skills/refund-queue/SKILL.md` の発火が鈍いらしいので、descriptionを刷新して測定したい。払い戻し番号、注文URL、返金理由を含む実務会話でtrue/falseを20件作り、誤選択を見ながら文言を改善する計画を立ててください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/silver-heath/agents/patch-reader.md` に、差分を読むだけのエージェントを置く予定です。配置先を選び、Read以外を許さないfrontmatter、モデル設定、報告テンプレート、対象外の依頼を安全に返す本文を作成してほしい。",
+    "should_trigger": false
+  }
+]
