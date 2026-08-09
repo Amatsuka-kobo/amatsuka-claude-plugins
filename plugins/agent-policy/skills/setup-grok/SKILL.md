@@ -2,7 +2,6 @@
 name: setup-grok
 description: codex-grok-policy / with-grok-policy 運用方針で使う Grok エージェント定義(grok-researcher / grok-implementer)を、対話ヒアリングのうえプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「Grok エージェントをセットアップして」「setup-grok を実行して」等と明示的に依頼したとき、または各方針が定義ファイル不在時に案内したときに必ず使用する。Grok 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
 ---
-
 # Grok エージェント セットアップウィザード
 
 生成するのは Markdown の Agent 定義ファイルのみであり、プロキシや秘密値は一切管理しない。
@@ -39,10 +38,14 @@ Grok モデルのクライアント側エイリアスをヒアリングする。
 ## ステップ 4: 後処理案内
 
 - `.claude/agents/` を git 追跡対象にするか gitignore するかはプロジェクト判断であることを案内する。
-- CLAUDE.md への追記文例を提示する。自動では書き込まない。
 
-  > エージェント運用は `agent-policy:codex-grok-policy` に従う。GPT エージェント定義は `.claude/agents/gpt-{sol,terra,luna}.md`、Grok エージェント定義は `.claude/agents/grok-{researcher,implementer}.md` に配置済み。
+CLAUDE.md への追記文例を提示する。自動では書き込まない
+
+> - 最初に必ず `agent-policy:with-grok-policy`スキルを使用し、この規律に従う。
+>
+> - この方針は恒久的なものなので、Cluade の設定を更新する。 
 
 - GPT エージェント定義がある場合は `agent-policy:codex-grok-policy`、無い場合は `agent-policy:with-grok-policy` を文例の方針名に用いる。
 - GPT エージェント定義が未生成で、Codex 系モデルも使える環境の場合は、`agent-policy:setup-gpt` の実行も案内する。
 - 生成した 2 ファイルのパスと、Claude Code の再読み込みで Agent が認識される旨を報告する。
+
