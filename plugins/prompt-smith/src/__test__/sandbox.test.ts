@@ -56,6 +56,27 @@ describe("replaceDescription", () => {
     expect(out).toContain("body")
   })
 
+  it("ブロックスカラー内の空行を越えて継続行を読み飛ばす", () => {
+    const md = [
+      "---",
+      "name: s",
+      "description: |",
+      "  para one",
+      "",
+      "  para two",
+      "other: kept",
+      "---",
+      "",
+      "body",
+    ].join("\n")
+    const out = replaceDescription(md, "new text")
+    expect(out).toContain('description: "new text"')
+    expect(out).not.toContain("para one")
+    expect(out).not.toContain("para two")
+    expect(out).toContain("other: kept")
+    expect(out).toContain("body")
+  })
+
   it("コロンや引用符を含む description を壊さずに書く", () => {
     const md = ["---", "name: s", "description: old", "---", "", "body"].join("\n")
     const original = 'Use this: "always", even when unclear'

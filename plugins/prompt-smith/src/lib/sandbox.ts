@@ -28,7 +28,13 @@ export function makeCleanName(skillName: string): string {
   return `${skillName}-skill-${randomBytes(4).toString("hex")}`
 }
 
-export function buildSandboxSkillMd(original: string, cleanName: string): string {
+interface FrontmatterSplit {
+  frontmatter: string[]
+  body: string[]
+}
+
+/** frontmatter の境界を 1 箇所で解く。書き換え関数はどちらもこれを使う。 */
+function splitFrontmatter(original: string): FrontmatterSplit {
   const lines = original.split("\n")
   if (lines[0]?.trim() !== "---") {
     throw new Error("SKILL.md missing frontmatter (no opening ---)")
@@ -45,7 +51,15 @@ export function buildSandboxSkillMd(original: string, cleanName: string): string
     throw new Error("SKILL.md missing frontmatter (no closing ---)")
   }
 
-  const frontmatter = lines.slice(1, endIdx)
+  return { frontmatter: lines.slice(1, endIdx), body: lines.slice(endIdx + 1) }
+}
+
+function joinFrontmatter(frontmatter: string[], body: string[]): string {
+  return ["---", ...frontmatter, "---", ...body].join("\n")
+}
+
+export function buildSandboxSkillMd(original: string, cleanName: string): string {
+  const { frontmatter, body } = splitFrontmatter(original)
   let sawInvocationKey = false
 
   const rewritten = frontmatter.map((line) => {
@@ -59,31 +73,17 @@ export function buildSandboxSkillMd(original: string, cleanName: string): string
 
   if (!sawInvocationKey) rewritten.push("disable-model-invocation: false")
 
-  return ["---", ...rewritten, "---", ...lines.slice(endIdx + 1)].join("\n")
+  return joinFrontmatter(rewritten, body)
 }
 
 /**
  * frontmatter の description を差し替える。ブロックスカラーは単一行へ畳む。
  * 改善ループが反復ごとに新しい description で測るために要る。
  */
+const BLOCK_SCALARS = new Set([">", "|", ">-", "|-"])
+
 export function replaceDescription(original: string, description: string): string {
-  const lines = original.split("\n")
-  if (lines[0]?.trim() !== "---") {
-    throw new Error("SKILL.md missing frontmatter (no opening ---)")
-  }
-
-  let endIdx = -1
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") {
-      endIdx = i
-      break
-    }
-  }
-  if (endIdx === -1) {
-    throw new Error("SKILL.md missing frontmatter (no closing ---)")
-  }
-
-  const frontmatter = lines.slice(1, endIdx)
+  const { frontmatter, body } = splitFrontmatter(original)
   const rewritten: string[] = []
   let i = 0
   let replaced = false
@@ -98,9 +98,20 @@ export function replaceDescription(original: string, description: string): strin
 
     const value = line.slice("description:".length).trim()
     i++
-    if (value === ">" || value === "|" || value === ">-" || value === "|-") {
-      while (i < frontmatter.length && (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("\t"))) {
-        i++
+    if (BLOCK_SCALARS.has(value)) {
+      // 継続行は字下げされた行である。段落を分ける空行も同じブロックの一部なので飛ばす。
+      // 終わりは、字下げのない非空行(次のキー)か frontmatter の末尾とする。
+      while (i < frontmatter.length) {
+        const next = frontmatter[i]
+        if (next.trim() === "") {
+          i++
+          continue
+        }
+        if (next.startsWith("  ") || next.startsWith("\t")) {
+          i++
+          continue
+        }
+        break
       }
     }
     rewritten.push(`description: ${JSON.stringify(description)}`)
@@ -109,7 +120,7 @@ export function replaceDescription(original: string, description: string): strin
 
   if (!replaced) rewritten.push(`description: ${JSON.stringify(description)}`)
 
-  return ["---", ...rewritten, "---", ...lines.slice(endIdx + 1)].join("\n")
+  return joinFrontmatter(rewritten, body)
 }
 
 export async function createSandbox(skillMd: string, cleanName: string): Promise<Sandbox> {
