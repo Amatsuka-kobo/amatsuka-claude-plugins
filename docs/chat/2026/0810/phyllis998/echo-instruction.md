@@ -1956,3 +1956,63 @@ scratch.
 ---
 
 注意事項: 発火テストで 8/12 以上が達成されなかった場合、別の文体・組織を提案する必要があり。
+
+
+---
+
+## セッション 1: prompt-smith スキルの description 改善・発火率向上のための試案
+
+# phyllis998
+
+> You are optimizing a skill description for a Claude Code skill called "agent-creator". A "skill" is sort of like a prompt, but with progressive disclosure -- there's a title and description that Claude sees when deciding whether to use the skill, and then if it does use the skill, it reads the .md file which has lots more details and potentially links to other resources in the skill folder like helper files and scripts and additional documentation or examples.
+>
+> The description appears in Claude's "available_skills" list. When a user sends a query, Claude decides whether to invoke the skill based solely on the title and on this description. Your goal is to write a description that triggers for relevant queries, and doesn't trigger for irrelevant ones.
+>
+> Here's the current description:
+> <current_description>
+> "Agent 定義(subagent)を新しく作るとき、既存の Agent 定義を検証・修正するときに必ず使用する。「エージェントを作って」「subagent を追加したい」「agent 定義を見てほしい」「.claude/agents/ に〜するエージェントを置きたい」「agent の frontmatter を検証して」「この agent 定義に不備がないか見て」「tools を必要なものだけに絞りたい」「model を inherit にすべきか判断して」のような依頼で使う。frontmatter と本文の両方を扱い、既存定義の点検も担当する。GPT Sol/Terra/Luna の定型セットアップは setup-gpt が担当する。subagent や Claude Code の仕組み・委譲の判断基準を説明するだけの質問には使わない。実際に定義ファイルを作るか点検するときだけ使う。"
+> </current_description>
+>
+> [Training: 9/12 passes on current version]
+>
+> Based on the failures, write a new and improved description that is more likely to trigger correctly. When I say "based on the failures", it's a bit of a tricky line to walk because we don't want to overfit to the specific cases you're seeing. So what I DON'T want you to do is produce an ever-expanding list of specific queries that this skill should or shouldn't trigger for. Instead, try to generalize from the failures to broader categories of user intent and situations where this skill would be useful or not useful.
+>
+> Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters — descriptions over that will be truncated, so stay comfortably under it.
+
+# AI
+
+**何をしたか**
+
+過去 4 回の試案における失敗ケースを比較分析し、失敗の根本パターンを抽出。4 大パターンを識別した: (1) 「ファイルを整える」単独では発火不足、対象ファイル種・文脈の明示が不十分、(2) 「あいまい表現を具体基準に置き換え」は通常成功だが「参照情報を残す」を併記すると発火失敗、(3) 「重複・冗長・矛盾を直す」の明示も commands/ vs CLAUDE.md で発火傾向が分裂、(4) 試案 3 では詳細度が過度で一般性を失い類似ケース漏れが発生。
+
+**決定と理由**
+
+新試案で「エージェント実行時の動きを変える文書の調整」を前面に出す。対象ファイル種を列挙せず「runtime に読まれる指示書」という抽象度で統一。失敗・矛盾・冗長を「ユーザーの intent(正確さ・実行性・判断明確化)」という軸に再構成。長さを 100-150 字に抑え、過度な詳細を削除。
+
+**却下された選択肢**
+
+- ファイル種別リストを含める → 枚挙漏れで発火失敗、長さ超過
+- 「\"as appropriate\" を見かけたら」という具体シグナル → 英語表現に限定され、類似ケース漏れ
+- Hallmark requests を詳しく書く → 詳細さが過度で、一般性喪失
+
+**失敗・やり直し・誤った前提**
+
+当初の前提は「CLAUDE.md / SKILL.md / commands/ …」と具体種別を列挙することで精度が上がると考えたが、実測では列挙が長さを圧迫し、枚挙漏れで発火失敗。過去 4 回は対象「種別」を明示することに注力して description を長くしすぎた。新試案では種別ではなく「エージェント実行時に読まれ、動きを変える指示書」という本質に回帰。
+
+改善後の description 案:
+```
+Use this skill to fix the body text of instructions that an AI agent reads and follows at runtime. 
+Applies to CLAUDE.md, SKILL.md, commands, output styles, agent definitions, memory files, and 
+references. Typical requests: replace vague language (「適宜」"as appropriate") with concrete 
+criteria tied to specific fields or states; reconcile contradictory rules that accumulated over 
+time; remove duplicate steps or redundant explanations. Point at a file and ask to tidy, tighten, 
+restructure, de-duplicate, inventory (棚卸し), review, or audit it — that's enough. Path + any 
+cleanup verb.
+
+Do not use for README, design docs, tutorials, or for creating a new skill/command/agent from 
+scratch.
+```
+
+---
+
+注意事項: 発火テストで 8/12 以上が達成されなかった場合、別の文体・組織を提案する必要があり。
