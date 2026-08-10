@@ -1,0 +1,87 @@
+prompt-smith
+Copyright 2026 amatsuka-koubou
+
+This product includes software developed by Anthropic, PBC.
+
+Portions of plugins/prompt-smith/src/ are a TypeScript port of the
+"skill-creator" Claude Code plugin (Apache License, Version 2.0),
+Copyright Anthropic, PBC. The original is available at:
+https://github.com/anthropics/claude-code (plugins/skill-creator)
+
+Ported on 2026-08-09. The upstream source carries no NOTICE file;
+this file is provided as an attribution convenience, not to satisfy
+Section 4(d) of the License.
+
+run_eval.py is split across several files in this port. Besides
+src/run-trigger-eval.ts, these carry ported logic:
+
+  src/lib/sandbox.ts       staging the measured skill into a temporary
+                           .claude/skills tree, and rewriting the
+                           frontmatter description
+  src/lib/stream-parse.ts  reading the claude -p JSON stream and deciding
+                           whether the Skill tool fired
+  src/lib/claude-cli.ts    spawning claude -p and collecting its output
+
+src/lib/pool.ts replaces the ProcessPoolExecutor usage of run_eval.py with
+an original implementation. It contains no code from Anthropic, PBC and so
+carries no copyright notice of theirs. src/lib/types.ts declares the shapes
+of the JSON that upstream reads and writes.
+
+Changes made to the ported code
+-------------------------------
+run_eval.py -> src/run-trigger-eval.ts (with src/lib/ as listed above)
+  1. The measured skill is registered as <tmp>/.claude/skills/<name>/SKILL.md
+     instead of <project>/.claude/commands/<name>.md, with
+     disable-model-invocation set to false.
+  2. Trigger matching uses a "<skill-name>-skill-" prefix instead of the
+     full unique name.
+  3. The working directory is a per-run temporary directory instead of the
+     repository root returned by find_project_root(). find_project_root()
+     is not ported.
+  4. Only the Skill tool counts as a trigger. The Read tool does not.
+  5. Added: the result JSON records an "environment" object (base URL,
+     the NAME of the auth environment variable, and model). No secret
+     values are recorded.
+  6. Added: an optional --out flag. Without it the JSON goes to stdout,
+     as upstream does.
+  7. The results array is ordered by the eval set, not by completion order.
+     The keys and values are unchanged.
+  8. The measured description is applied to the SKILL.md frontmatter before
+     staging, because this port copies the whole SKILL.md rather than
+     building a file from the description alone.
+
+run_loop.py -> src/run-loop.ts
+  9. split_eval_set uses a seeded PRNG implemented in this project instead
+     of Python's random module. The shuffle is deterministic across runs
+     but does not reproduce Python's sequence.
+  13. Any failure of the description improvement step -- a timeout, a CLI
+      error, or two consecutive responses without <new_description> tags --
+      stops the loop and returns the best result so far. Upstream propagates
+      the error and loses the whole run. The timeout for that step is
+      configurable with --improve-timeout.
+
+improve_description.py -> src/improve-description.ts
+  14. Responses without <new_description> tags are not used as descriptions:
+      they are retried once, then produce an error if the retry also lacks
+      the required tags. Upstream adopts the whole response instead. The
+      timeout is configurable with --timeout.
+
+generate_report.py -> src/generate-report.ts
+  10. The Google Fonts <link> tags are dropped and replaced with a system
+      font stack, so the report renders without network access.
+  11. Separate Best Train Score and Best Test Score rows are added to the
+      report summary.
+  12. Live reports mask unfinalized scores as "in progress" and label the
+      displayed best description "Current best".
+
+utils.py -> src/lib/parse-skill-md.ts
+  No behavioural changes.
+
+assets/eval_review.html -> skills/skill-creator/assets/eval-review.html
+  No behavioural changes.
+
+Not ported: aggregate_benchmark.py, package_skill.py, quick_validate.py,
+eval-viewer/generate_review.py, agents/*.md.
+
+An earlier design document for this repository (2026-08-02) decided to
+reimplement rather than port. That decision was reversed on 2026-08-09.

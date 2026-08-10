@@ -11,7 +11,6 @@ cliproxyapi.config.yaml
 # claude
 .claude/agents
 .claude/context-maps
-CLAUDE.md
 
 # Raphael
 .raphael/infections/
@@ -22,3 +21,4 @@ CLAUDE.md
 # ローカルファイル
 private/
 *.local.*
+!CLAUDE.local.example.md

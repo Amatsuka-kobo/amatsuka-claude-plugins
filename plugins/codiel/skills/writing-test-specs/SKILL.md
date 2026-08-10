@@ -12,12 +12,9 @@ description: Codiel の test-spec フェーズで design.md の「影響を受�
 振る舞い仕様 `spec.md` と ID 付きテストケース表 `cases.md` を `.codiel/specs/<unit-id>/` に
 作成・更新する。
 
-テスト仕様書は run の使い捨て成果物ではなく、機能単位で分割された永続資産として蓄積する
-(`docs/DESIGN.md` §4)。三層構造(`spec.md` → `cases.md` → `scripts/`)のうち本フェーズが
+三層構造(`spec.md` → `cases.md` → `scripts/`)のうち本フェーズが
 担当するのは spec.md と cases.md まで。**`scripts/` はこのフェーズでは作らない**。ケースを
-実行する自動テストスクリプトは test-loop フェーズで `codiel-tester` が書く。ここで scripts/
-に手を出すと、「期待結果を書く者・スクリプトを書く者・コードを直す者を全員別人にする」
-改竄防止の役割分担(`docs/DESIGN.md` §4)が崩れる。
+実行する自動テストスクリプトは test-loop フェーズで `codiel-tester` が書く。
 
 本スキルは unit 命名規則の**唯一の正式な定義元**である。`writing-design-docs` など他スキルに
 同種の記述があっても、それは概要としての参照であり、正はここに置く。
@@ -38,6 +35,7 @@ design.md がすでに unit-id を列挙しているため、本フェーズで�
 ## チェックリスト
 
 1. `design.md` の「## 影響を受ける機能単位」を読み、対象 unit-id の一覧を確定する。
+   unit-id が 1 件も列挙されていないときは自分で命名せず、オーケストレーターへ差し戻す。
 2. `issue.md` の「## 受け入れ基準」を読み、各 unit がどの基準に対応するかを対応付ける。
 3. 各 unit について `.codiel/specs/<unit-id>/` が既存かを Glob で確認する。
 4. **新規 unit**: `spec.md` を作成し、続けて `cases.md` を新規に生成する。
@@ -95,9 +93,7 @@ cases.md を書いて報告するところまでが職務。
 期待結果を実装に合わせて書かない。仕様が先、実装が後である。まだ実装されていない・
 これから変わる振る舞いであっても、issue.md の受け入れ基準に基づいて「あるべき」期待結果を
 書く。既存コードの現在の挙動を Read して「今こう動いているから」を期待結果の根拠にしては
-ならない。また `scripts/` には一切触れない(作成・変更・削除のいずれも禁止)。これは
-test-loop フェーズの `codiel-tester` の専管であり、この境界が崩れると期待結果を書く者と
-スクリプトを書く者を分離した改竄防止の設計(`docs/DESIGN.md` §4)が成立しなくなる。
+ならない。また `scripts/` には一切触れない(作成・変更・削除のいずれも禁止)。
 </HARD-GATE>
 
 ## Red Flags(合理化への反論)
@@ -105,47 +101,6 @@ test-loop フェーズの `codiel-tester` の専管であり、この境界が�
 | 思考 | 現実 |
 |---|---|
 | 「今の実装はこう動いているから、それを期待結果にすればいい」 | 実装が先にあるとテストは実装のバグごと追認するだけになる。期待結果の根拠は issue.md の受け入れ基準であって、既存コードの現在の挙動ではない。 |
-| 「cases.md だけでなく scripts/ の雛形も作っておけば tester が楽になる」 | 役割分担は「期待結果を書く者とスクリプトを書く者を分離する」ための改竄防止策であり、親切のつもりの越境は防止策そのものを無効化する。 |
 | 「既存ケース ID は面倒だから全部作り直せばいい」 | 挙動が変わらないケースの ID を振り直すと、過去 run のテスト結果・回帰履歴との対応が失われる。維持できるものは維持する。 |
 | 「期待結果に内部関数名や実装方式を書いた方が tester にとって親切」 | cases.md は E2E でユーザー視点の振る舞いを検証する仕様であり、実装詳細を書くと実装が変わるたびに仕様側まで書き直しが発生し、仕様と実装の分離が崩れる。 |
 | 「受け入れ基準にない機能もついでにケース化しておく」 | YAGNI は unit 列挙だけでなくケース単位にも適用される。受け入れ基準にないケースは検証範囲を無根拠に広げ、Raguel のゲート審査でも根拠を示せない。 |
-
-## プロセスフローチャート
-
-```dot
-digraph writing_test_specs {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  read_design [label="design.md の\n影響を受ける機能単位を読む", shape=box];
-  read_criteria [label="issue.md の受け入れ基準を読む", shape=box];
-  for_each_unit [label="unit ごとに処理", shape=box];
-  exists [label=".codiel/specs/<unit-id>/\nが既存か?", shape=diamond];
-  create_spec [label="spec.md を新規作成", shape=box];
-  read_spec [label="既存 spec.md を Read", shape=box];
-  update_spec [label="spec.md を Edit で更新\n(変更履歴に記録)", shape=box];
-  gen_cases [label="cases.md を(再)生成\nID: <unit-id>-NNN", shape=box];
-  keep_id [label="挙動不変のケース ID は維持", shape=box];
-  removed [label="消える機能のケースは\n変更履歴に削除理由を記録して除去", shape=box];
-  no_scripts [label="scripts/ には触れない", shape=box];
-  selfcheck [label="各期待結果の根拠を\n受け入れ基準上で即答できるか?", shape=diamond];
-  fix [label="実装詳細混入のケースを\n振る舞い記述に書き直す", shape=box];
-  more_units [label="未処理の unit が残っているか?", shape=diamond];
-  done [label="test-designer 報告\n(作成/更新した unit 一覧)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  gate [label="raguel-gating:\ntest-spec ゲートへ引き継ぎ", shape=ellipse];
-
-  read_design -> read_criteria -> for_each_unit -> exists;
-  exists -> create_spec [label="新規"];
-  exists -> read_spec [label="既存"];
-  read_spec -> update_spec;
-  create_spec -> gen_cases;
-  update_spec -> gen_cases;
-  gen_cases -> keep_id -> removed -> no_scripts -> selfcheck;
-  selfcheck -> fix [label="根拠不明あり"];
-  fix -> selfcheck;
-  selfcheck -> more_units [label="OK"];
-  more_units -> for_each_unit [label="Yes"];
-  more_units -> done [label="No"];
-  done -> gate;
-}
-```

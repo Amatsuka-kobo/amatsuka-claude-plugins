@@ -12,8 +12,7 @@ description: Codiel の init フェーズで GitHub Issue を取得・分析し 
 
 `issue.md` は design / test-spec / dev-plan / implement / review など**後続フェーズの全サブエージェントが
 入力として読む唯一の Issue スナップショット**であり、`raguel-gating` の init ゲート(`evaluate_decision`)
-が「この解釈・スコープで進む」という判断の根拠にする文書でもある。ここで要件を取り違えたり曖昧さを
-握り潰したりすると、その誤りは後続フェーズすべてに伝播し、design 以降で作り直しになる。
+が「この解釈・スコープで進む」という判断の根拠にする文書でもある。
 本スキルの責務は「Issue に書かれていること」と「書かれていないこと」を正確に切り分け、
 後者を一切推測で埋めずに不明点として可視化することにある。
 
@@ -22,6 +21,7 @@ description: Codiel の init フェーズで GitHub Issue を取得・分析し 
 1. `gh issue view N --json title,body,labels,comments` で本文とコメントを取得する。
    **コメントは必ず読む**。本文より新しい仕様変更・合意はコメントに書かれていることが多く、
    本文だけを見ると古い要求のまま分析してしまう。
+   取得に失敗したら `issue.md` を作らず、失敗内容をオーケストレーターへ報告して終了する。
 2. 本文全文を加工せずに「## 原文」へ書き写す(要約しない。後で人間が原文と要件抽出結果を
    突き合わせられる状態を保つ)。
 3. 本文・コメントの要求を一つずつ「## 要件」の箇条書きに写像する。写像できない要求を
@@ -82,19 +82,9 @@ description: Codiel の init フェーズで GitHub Issue を取得・分析し 
 Issue の記述だけでは良い例まで具体化できない場合、具体化を推測で行わず「## 不明点」に
 「受け入れ基準を確定するには〜の情報が必要」という形で列挙する。
 
-## 不明点は列挙して埋めない
-
-不明点は analyst が解決するものではない。`raguel-gating` の init ゲート
-(`mcp__raguel__evaluate_decision`)に判断材料として渡り、必要なら `ASK` verdict を通じて
-人間の裁定を仰ぐための入力になる。不明点をここで勝手に解消してしまうと、人間が裁定すべき
-判断を analyst が代理で下したことになり、ゲートの意味が失われる。
-
 ## コミット責務
 
-`codiel-analyst` は `gh issue view` / `gh api` の読み取りのために Bash を持つが、**`issue.md` 自体を
-コミットしない**。`orchestrating-runs` の成果物コミット規約により、文書系フェーズ(init を含む)の
-成果物はゲート通過直後にオーケストレーター自身がコミットする。Bash を持っていることと
-コミット責務を持つことは別であり、analyst は `issue.md` を書いて報告するところまでが職務。
+`issue.md` はゲート通過直後にオーケストレーターがコミットする。analyst は `issue.md` を書いて報告するところまでを担う。
 
 <HARD-GATE>
 - Issue に書かれていない要件を発明しない。本文・コメントに根拠のない要求を「要件」「受け入れ基準」
@@ -110,41 +100,3 @@ Issue の記述だけでは良い例まで具体化できない場合、具体�
 | 「不明点ゼロで出したほうが優秀に見える」 | 不明点は analyst の力不足の証拠ではなく、Issue 自体の情報不足の可視化である。ゼロにするには推測で埋めるしかなく、それは「発明」そのもの。ASK の判断材料が消えるだけで手戻りリスクは減らない。 |
 | 「コメントは Issue 本文より古いから読まなくていい」 | コメントは時系列で後から付く。仕様変更・スコープ調整の合意は本文ではなくコメントに書かれることが多く、読み飛ばすと古い要求のまま進めてしまう。 |
 | 「受け入れ基準は感覚的な表現でも後工程が汲み取ってくれる」 | test-spec フェーズはこの受け入れ基準からテストケースの期待結果を導出する。曖昧な文のままでは「何を OK/NG とするか」を test-designer が独自解釈することになり、Issue の意図とずれた基準でテストが作られる。 |
-| 「Bash を持っているのだから issue.md も自分でコミットしてよい」 | 権限とフェーズ規約は別。init は文書系フェーズであり、`orchestrating-runs` の成果物コミット規約でオーケストレーターの担当と定められている。analyst が先回りしてコミットすると進行管理の一元性が崩れる。 |
-
-## プロセスフローチャート
-
-```dot
-digraph analyzing_issues {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  fetch [label="gh issue view N\n--json title,body,labels,comments", shape=box];
-  read_comments [label="コメントを読む\n(本文より新しい合意がないか)", shape=box];
-  raw [label="## 原文 に本文全文を転記", shape=box];
-  extract [label="## 要件 に要求を写像", shape=box];
-  check_map [label="原文の全要求を\n写像できたか?", shape=diamond];
-  criteria [label="## 受け入れ基準 を\n機械的判定可能な文に変換", shape=box];
-  scope [label="## スコープ / 非スコープ を書く", shape=box];
-  ambiguous [label="解釈が割れる/\n情報不足の箇所がある?", shape=diamond];
-  unknown [label="## 不明点 に列挙\n(推測で埋めない)", shape=box, style=filled, fillcolor="#fff2cc"];
-  write [label="issue.md を出力書式で作成", shape=box];
-  selfcheck [label="各行の根拠を\nIssue上で即答できるか?", shape=diamond];
-  demote [label="根拠を辿れない行を\n不明点へ格下げ", shape=box];
-  done [label="analyst 報告\n(issue.md パス + 不明点件数)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  gate [label="raguel-gating:\ninit ゲート(evaluate_decision)\nへ引き継ぎ", shape=ellipse];
-
-  fetch -> read_comments -> raw -> extract -> check_map;
-  check_map -> extract [label="No: 取りこぼしあり"];
-  check_map -> criteria [label="Yes"];
-  criteria -> scope -> ambiguous;
-  ambiguous -> unknown [label="Yes"];
-  ambiguous -> write [label="No"];
-  unknown -> write;
-  write -> selfcheck;
-  selfcheck -> demote [label="根拠不明な行がある"];
-  demote -> unknown;
-  selfcheck -> done [label="全行 OK"];
-  done -> gate;
-}
-```

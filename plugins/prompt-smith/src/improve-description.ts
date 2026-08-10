@@ -1,0 +1,449 @@
+#!/usr/bin/env node
+/**
+ * Copyright 2026 amatsuka-koubou
+ * Copyright Anthropic, PBC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * This file is a TypeScript port of scripts/improve_description.py from the
+ * skill-creator Claude Code plugin. Changes: responses without the required
+ * <new_description> tag are retried once and then rejected; the timeout of
+ * the claude -p call is configurable.
+ */
+
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { basename, extname, join } from "node:path"
+import { parseArgs } from "node:util"
+import { callClaudeText } from "./lib/claude-cli.js"
+import { parseSkillMd } from "./lib/parse-skill-md.js"
+import type { EvalResultItem, EvalSummary } from "./lib/types.js"
+import { parseNumericOption } from "./run-trigger-eval.js"
+
+export interface EvalScores {
+  results: EvalResultItem[]
+  summary: EvalSummary
+}
+
+export interface PreviousAttempt {
+  description: string
+  train_passed?: number
+  train_total?: number
+  test_passed?: number | null
+  test_total?: number | null
+  passed?: number
+  total?: number
+  results?: EvalResultItem[]
+  note?: string
+}
+
+export interface ImprovePromptInput {
+  skillName: string
+  skillContent: string
+  currentDescription: string
+  evalResults: EvalScores
+  history: PreviousAttempt[]
+  testResults: EvalScores | null
+}
+
+type CallClaude = (
+  prompt: string,
+  model: string | undefined,
+  timeoutSeconds?: number
+) => Promise<string>
+
+export interface ImproveOptions extends ImprovePromptInput {
+  model: string | undefined
+  callClaude?: CallClaude
+  timeoutSeconds?: number
+  logDir?: string
+  iteration?: number
+}
+
+export class MissingDescriptionTagError extends Error {
+  constructor() {
+    super("Neither of the two responses included <new_description> tags.")
+    this.name = "MissingDescriptionTagError"
+  }
+}
+
+/** Build the improvement request exactly as the upstream implementation does. */
+export function buildImprovePrompt(input: ImprovePromptInput): string {
+  const {
+    skillName,
+    skillContent,
+    currentDescription,
+    evalResults,
+    history,
+    testResults
+  } = input
+  const failedTriggers = evalResults.results.filter(
+    (result) => result.should_trigger && !result.pass
+  )
+  const falseTriggers = evalResults.results.filter(
+    (result) => !result.should_trigger && !result.pass
+  )
+  const trainScore = `${evalResults.summary.passed}/${evalResults.summary.total}`
+  const scoresSummary = testResults
+    ? `Train: ${trainScore}, Test: ${testResults.summary.passed}/${testResults.summary.total}`
+    : `Train: ${trainScore}`
+
+  let prompt = `You are optimizing a skill description for a Claude Code skill called "${skillName}". A "skill" is sort of like a prompt, but with progressive disclosure -- there's a title and description that Claude sees when deciding whether to use the skill, and then if it does use the skill, it reads the .md file which has lots more details and potentially links to other resources in the skill folder like helper files and scripts and additional documentation or examples.
+
+The description appears in Claude's "available_skills" list. When a user sends a query, Claude decides whether to invoke the skill based solely on the title and on this description. Your goal is to write a description that triggers for relevant queries, and doesn't trigger for irrelevant ones.
+
+Here's the current description:
+<current_description>
+"${currentDescription}"
+</current_description>
+
+Current scores (${scoresSummary}):
+<scores_summary>
+`
+
+  if (failedTriggers.length > 0) {
+    prompt += "FAILED TO TRIGGER (should have triggered but didn't):\n"
+    for (const result of failedTriggers) {
+      prompt += `  - "${result.query}" (triggered ${result.triggers}/${result.runs} times)\n`
+    }
+    prompt += "\n"
+  }
+
+  if (falseTriggers.length > 0) {
+    prompt += "FALSE TRIGGERS (triggered but shouldn't have):\n"
+    for (const result of falseTriggers) {
+      prompt += `  - "${result.query}" (triggered ${result.triggers}/${result.runs} times)\n`
+    }
+    prompt += "\n"
+  }
+
+  if (history.length > 0) {
+    prompt +=
+      "PREVIOUS ATTEMPTS (do NOT repeat these — try something structurally different):\n\n"
+    for (const attempt of history) {
+      const trainScore = `${attempt.train_passed ?? attempt.passed ?? 0}/${attempt.train_total ?? attempt.total ?? 0}`
+      const testScore =
+        attempt.test_passed !== null && attempt.test_passed !== undefined
+          ? `${attempt.test_passed}/${attempt.test_total ?? "?"}`
+          : null
+      const scoreString = `train=${trainScore}${testScore ? `, test=${testScore}` : ""}`
+      prompt += `<attempt ${scoreString}>\n`
+      prompt += `Description: "${attempt.description}"\n`
+      if (Object.hasOwn(attempt, "results")) {
+        prompt += "Train results:\n"
+        for (const result of attempt.results ?? []) {
+          const status = result.pass ? "PASS" : "FAIL"
+          prompt += `  [${status}] "${result.query.slice(0, 80)}" (triggered ${result.triggers}/${result.runs})\n`
+        }
+      }
+      if (attempt.note) prompt += `Note: ${attempt.note}\n`
+      prompt += "</attempt>\n\n"
+    }
+  }
+
+  prompt += `</scores_summary>
+
+Skill content (for context on what the skill does):
+<skill_content>
+${skillContent}
+</skill_content>
+
+Based on the failures, write a new and improved description that is more likely to trigger correctly. When I say "based on the failures", it's a bit of a tricky line to walk because we don't want to overfit to the specific cases you're seeing. So what I DON'T want you to do is produce an ever-expanding list of specific queries that this skill should or shouldn't trigger for. Instead, try to generalize from the failures to broader categories of user intent and situations where this skill would be useful or not useful. The reason for this is twofold:
+
+1. Avoid overfitting
+2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
+
+Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters — descriptions over that will be truncated, so stay comfortably under it.
+
+Here are some tips that we've found to work well in writing these descriptions:
+- The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
+- The skill description should focus on the user's intent, what they are trying to achieve, vs. the implementation details of how the skill works.
+- The description competes with other skills for Claude's attention — make it distinctive and immediately recognizable.
+- If you're getting lots of failures after repeated attempts, change things up. Try different sentence structures or wordings.
+
+I'd encourage you to be creative and mix up the style in different iterations since you'll have multiple opportunities to try different approaches and we'll just grab the highest-scoring one at the end.${" "}
+
+Please respond with only the new description text in <new_description> tags, nothing else.`
+
+  return prompt
+}
+
+function stripQuotes(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && value[start] === '"') start++
+  while (end > start && value[end - 1] === '"') end--
+  return value.slice(start, end)
+}
+
+export function extractDescription(text: string): string | null {
+  const match = /<new_description>([\s\S]*?)<\/new_description>/.exec(text)
+  return match ? stripQuotes(match[1].trim()) : null
+}
+
+function buildShortenPrompt(prompt: string, description: string): string {
+  return `${prompt}
+
+---
+
+A previous attempt produced this description, which at ${description.length} characters is over the 1024-character hard limit:
+
+"${description}"
+
+Rewrite it to be under 1024 characters while keeping the most important trigger words and intent coverage. Respond with only the new description in <new_description> tags.`
+}
+
+function buildTagRetryPrompt(prompt: string): string {
+  return `${prompt}
+
+---
+
+The previous response did not include <new_description> tags. Return only the new description enclosed in <new_description> tags.`
+}
+
+interface TaggedDescriptionResponse {
+  response: string
+  description: string | null
+  retryPrompt?: string
+  retryResponse?: string
+}
+
+async function requestDescriptionWithRequiredTag(
+  prompt: string,
+  model: string | undefined,
+  timeoutSeconds: number | undefined,
+  callClaude: CallClaude
+): Promise<TaggedDescriptionResponse> {
+  const response = await callClaude(prompt, model, timeoutSeconds)
+  const description = extractDescription(response)
+  if (description !== null) return { response, description }
+
+  const retryPrompt = buildTagRetryPrompt(prompt)
+  const retryResponse = await callClaude(retryPrompt, model, timeoutSeconds)
+  return {
+    response,
+    description: extractDescription(retryResponse),
+    retryPrompt,
+    retryResponse
+  }
+}
+
+function addRetryTranscript(
+  transcript: Record<string, unknown>,
+  prefix: string,
+  attempt: TaggedDescriptionResponse
+): void {
+  transcript[`${prefix}retry_attempted`] = attempt.retryPrompt !== undefined
+  if (attempt.retryPrompt !== undefined) {
+    transcript[`${prefix}retry_prompt`] = attempt.retryPrompt
+    transcript[`${prefix}retry_response`] = attempt.retryResponse
+  }
+}
+
+function addFailureTranscript(
+  transcript: Record<string, unknown>,
+  stage: string,
+  error: unknown
+): void {
+  transcript.failure_stage = stage
+  try {
+    transcript.failure_message =
+      error instanceof Error ? error.message : String(error)
+  } catch {
+    transcript.failure_message = "Unknown non-Error thrown value"
+  }
+}
+
+/**
+ * これから投げる例外の直前に呼ぶ。書き込みに失敗しても握りつぶす。
+ * ここで throw すると、記録したかった本来の失敗理由が書き込みエラーへ
+ * すり替わる。ログを残せないことより、理由を失うことの方が痛い。
+ */
+async function writeTranscriptBeforeThrow(
+  logDir: string | undefined,
+  iteration: number | undefined,
+  transcript: Record<string, unknown>
+): Promise<void> {
+  try {
+    await writeTranscript(logDir, iteration, transcript)
+  } catch {
+    // 呼び出し元が本来の例外を投げる。
+  }
+}
+
+async function writeTranscript(
+  logDir: string | undefined,
+  iteration: number | undefined,
+  transcript: Record<string, unknown>
+): Promise<void> {
+  if (!logDir) return
+  await mkdir(logDir, { recursive: true })
+  await writeFile(
+    join(logDir, `improve_iter_${iteration ?? "unknown"}.json`),
+    JSON.stringify(transcript, null, 2),
+    "utf8"
+  )
+}
+
+export async function improveDescription(
+  options: ImproveOptions
+): Promise<string> {
+  const {
+    callClaude = callClaudeText,
+    model,
+    timeoutSeconds,
+    logDir,
+    iteration,
+    ...input
+  } = options
+  const prompt = buildImprovePrompt(input)
+  const transcript: Record<string, unknown> = { iteration, prompt }
+  let initial: TaggedDescriptionResponse
+  try {
+    initial = await requestDescriptionWithRequiredTag(
+      prompt,
+      model,
+      timeoutSeconds,
+      callClaude
+    )
+  } catch (error) {
+    addFailureTranscript(transcript, "initial_request", error)
+    await writeTranscriptBeforeThrow(logDir, iteration, transcript)
+    throw error
+  }
+
+  let description = initial.description
+  transcript.response = initial.response
+  transcript.parsed_description = description
+  transcript.char_count = description?.length ?? null
+  transcript.over_limit = description !== null && description.length > 1024
+  addRetryTranscript(transcript, "", initial)
+
+  if (description === null) {
+    await writeTranscriptBeforeThrow(logDir, iteration, transcript)
+    throw new MissingDescriptionTagError()
+  }
+
+  if (description.length > 1024) {
+    const shortenPrompt = buildShortenPrompt(prompt, description)
+    transcript.rewrite_prompt = shortenPrompt
+    let shortenedAttempt: TaggedDescriptionResponse
+    try {
+      shortenedAttempt = await requestDescriptionWithRequiredTag(
+        shortenPrompt,
+        model,
+        timeoutSeconds,
+        callClaude
+      )
+    } catch (error) {
+      addFailureTranscript(transcript, "rewrite_request", error)
+      await writeTranscriptBeforeThrow(logDir, iteration, transcript)
+      throw error
+    }
+
+    const shortened = shortenedAttempt.description
+    transcript.rewrite_response = shortenedAttempt.response
+    transcript.rewrite_description = shortened
+    transcript.rewrite_char_count = shortened?.length ?? null
+    addRetryTranscript(transcript, "rewrite_", shortenedAttempt)
+
+    if (shortened === null) {
+      await writeTranscriptBeforeThrow(logDir, iteration, transcript)
+      throw new MissingDescriptionTagError()
+    }
+    description = shortened
+  }
+
+  transcript.final_description = description
+  await writeTranscript(logDir, iteration, transcript)
+  return description
+}
+
+async function main(): Promise<void> {
+  const { values } = parseArgs({
+    options: {
+      "eval-results": { type: "string" },
+      "skill-path": { type: "string" },
+      history: { type: "string" },
+      model: { type: "string" },
+      verbose: { type: "boolean", default: false },
+      "log-dir": { type: "string" },
+      iteration: { type: "string" },
+      timeout: { type: "string" }
+    },
+    strict: true,
+    allowPositionals: false
+  })
+  if (!values["eval-results"]) throw new Error("--eval-results is required")
+  if (!values["skill-path"]) throw new Error("--skill-path is required")
+  if (!values.model) throw new Error("--model is required")
+
+  const skillPath = values["skill-path"]
+  let skillContent: string
+  try {
+    skillContent = await readFile(join(skillPath, "SKILL.md"), "utf8")
+  } catch {
+    throw new Error(`No SKILL.md found at ${skillPath}`)
+  }
+
+  const evalResults = JSON.parse(
+    await readFile(values["eval-results"], "utf8")
+  ) as EvalScores & { description: string }
+  const history = values.history
+    ? (JSON.parse(await readFile(values.history, "utf8")) as PreviousAttempt[])
+    : []
+  const parsed = parseSkillMd(skillContent)
+
+  if (values.verbose) {
+    process.stderr.write(`Current: ${evalResults.description}\n`)
+    process.stderr.write(
+      `Score: ${evalResults.summary.passed}/${evalResults.summary.total}\n`
+    )
+  }
+
+  const description = await improveDescription({
+    skillName: parsed.name,
+    skillContent: parsed.content,
+    currentDescription: evalResults.description,
+    evalResults,
+    history,
+    testResults: null,
+    model: values.model,
+    timeoutSeconds: parseNumericOption("timeout", values.timeout, 300),
+    logDir: values["log-dir"],
+    iteration: values.iteration ? Number(values.iteration) : undefined
+  })
+
+  if (values.verbose) process.stderr.write(`Improved: ${description}\n`)
+  const output = {
+    description,
+    history: [
+      ...history,
+      {
+        description: evalResults.description,
+        passed: evalResults.summary.passed,
+        failed: evalResults.summary.failed,
+        total: evalResults.summary.total,
+        results: evalResults.results
+      }
+    ]
+  }
+  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`)
+}
+
+function isDirectRun(expected: string): boolean {
+  const entry = process.argv[1]
+  if (!entry) return false
+  // Bundled modules share import.meta.url, so dispatch by the configured output filename.
+  return basename(entry, extname(entry)) === expected
+}
+
+if (isDirectRun("improve-description")) {
+  main().catch((error) => {
+    process.stderr.write(`${(error as Error).message}\n`)
+    process.exitCode = 1
+  })
+}

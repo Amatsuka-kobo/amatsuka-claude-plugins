@@ -66,4 +66,6 @@
 - `2026/0803/phyllis998/optimize-agents-inspection.md` | 2026-08-03 | phyllis998 | 指摘 37 件全適用・eval セット測定・policy 2 種の測定限界を特定、README の壊れた参照を修正、optimize-agents 0.14.0-dev にてコミット
 - `2026/0805/phyllis998/serena-memory-update.md` | 2026-08-05 | phyllis998 | Serena メモリ更新と旧参照修正（recall/resume/revelation/README ほか 10 箇所）、chat-recorder 状態移行
 - `2026/0808/phyllis98/gpt-agents-template-updates.md` | 2026-08-09 | phyllis98 | Grok ポリシー設計確定、実装フェーズ開始
-- `2026/0809/phyllis98/codiel-agents-prompt-smith-update.md` | 2026-08-09 | phyllis98 | Codiel Agents の prompt-smith 基準への改善と MCP ツール許可の追加
+- `2026/0809/phyllis98/codiel-agents-prompt-smith-update.md` | 2026-08-10 | phyllis98 | prompt-smith skill-creator のポート実装: 計画から Task 実行と SDD 実装開始
+- `2026/0810/phyllis98/tiny-report-check-skill-optimization.md` | 2026-08-10 | phyllis98 | tiny-report-check スキルの説明文最適化
+- `2026/0810/phyllis998/echo-instruction.md` | 2026-08-10 | phyllis998 | prompt-smith スキルの description 改善・発火率向上のための試案

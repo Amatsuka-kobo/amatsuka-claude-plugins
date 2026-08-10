@@ -1,6 +1,6 @@
 ---
 name: prompt-smith
-description: AI が読む指示書を書く・削る・整える・評価するスキル。対象は CLAUDE.md・SKILL.md・コマンド定義(commands/ 配下の .md)・output style・Agents 定義(subagent)・メモリと、references/ に置かれた文書(共有する規律・参照断片・仕様の写し・カタログ)である。「～ プラグインを検査して」「～ スキルを監査して」「～ するプロンプトを考えて」「このプロンプトを修正して」「プロンプトに ～ する動きを追加して」「～ するスキルを作成して」「この SKILL.md を直して」「CLAUDE.md が冗長なので削って」「この指示書、無駄が多いので整えて」「AI 向けの指示を書いて」「この指示書を評価して」「エージェント定義の本文を書き直して」「output style に『適宜』『必要に応じて』が多いので判断基準に置き換えて」のような依頼で必ず使用する。ファイル名だけを挙げて評価・整形・削減を頼まれたときも、それが references/ 配下または上記の指示書なら使う。references/ の文書は人間も読む内容であっても対象とする。README・設計書・チュートリアル・docs/ の文書には適用せず、指示書がそれらを参照していても対象は広がらない。Agent 定義の description と定義ファイルの新規作成・frontmatter の検証は agent-creator が担当する。
+description: AI が読む指示書を書く・削る・整える・評価するスキル。対象は CLAUDE.md・SKILL.md・コマンド定義(commands/ 配下の .md)・output style・Agents 定義(subagent)・メモリと、references/ に置かれた文書(共有する規律・参照断片・仕様の写し・カタログ)である。「～ プラグインを検査して」「～ スキルを監査して」「～ するプロンプトを考えて」「このプロンプトを修正して」「プロンプトに ～ する動きを追加して」「～ するスキルを作成して」「この SKILL.md を直して」「CLAUDE.md が冗長なので削って」「この指示書、無駄が多いので整えて」「AI 向けの指示を書いて」「この指示書を評価して」「エージェント定義の本文を書き直して」「output style に『適宜』『必要に応じて』が多いので判断基準に置き換えて」のような依頼で必ず使用する。ファイル名だけを挙げて評価・整形・削減を頼まれたときも、それが references/ 配下または上記の指示書なら使う。references/ の文書は人間も読む内容であっても対象とする。README・設計書・チュートリアル・docs/ の文書には適用せず、指示書がそれらを参照していても対象は広がらない。Agent 定義の description と定義ファイルの新規作成・frontmatter の検証は agent-creator が担当する。スキル・コマンド定義の description の作成・改善と発火測定は `skill-creator` が担当する。
 ---
 
 # AI 向け指示書の鍛錬
@@ -15,18 +15,9 @@ README・設計書・チュートリアル・`docs/` の文書には適用しな
 
 ## description の担当
 
-SKILL.md・コマンド定義の description は `skill-creator` へ委ねる。それ以外の description はこのスキルで書く。
-
-- スキルまたはコマンド定義を作る依頼・変える依頼を受けたときは、`skill-creator` が使えるかを最初に確かめる。
-- 使えるときは `skill-creator` を invoke する。
-- 委ねる範囲は frontmatter の description だけとする。
-- 本文はこのスキルの基準で書き、`skill-creator` へ渡さない。
-- `skill-creator` へ依頼するときは、本文が対象外であることを明記する。
-- `skill-creator` を invoke したときは `../../references/description-guide.md` を読まない。
-- `skill-creator` が発火を測る反復を提案したときは、そのまま従う。
-- 反復の途中で本文へ及ぶ提案が出たときは、その提案だけを外してこのスキルの基準で判断する。
-- 使えないときは `../../references/description-guide.md` に従って description を書く。
-- Agents 定義・output style・メモリの description は、`skill-creator` の可否によらず `../../references/description-guide.md` に従う。
+- output style・メモリの description は `../../references/description-guide.md` に従って書く。
+- SKILL.md・コマンド定義の description は `prompt-smith:skill-creator` が担当する。
+- Agents 定義の description は `agent-creator` が担当する。
 
 ## 削る基準
 
