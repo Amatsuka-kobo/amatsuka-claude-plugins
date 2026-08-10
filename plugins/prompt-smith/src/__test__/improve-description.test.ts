@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import {
   buildImprovePrompt,
@@ -210,6 +213,136 @@ describe("improveDescription", () => {
     expect(callClaude).toHaveBeenCalledTimes(2)
     expect(callClaude.mock.calls[0]?.[2]).toBe(480)
     expect(callClaude.mock.calls[1]?.[2]).toBe(480)
+  })
+
+  it("最初の Claude 呼び出しが失敗しても transcript を残して例外を再送出する", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "prompt-smith-test-"))
+    const failure = new Error("Claude timed out")
+    const callClaude = vi.fn().mockRejectedValue(failure)
+
+    try {
+      await expect(
+        improveDescription({
+          skillName: "s",
+          skillContent: "body",
+          currentDescription: "current",
+          evalResults,
+          history: [],
+          testResults: null,
+          model: "claude-opus-5",
+          callClaude,
+          logDir,
+          iteration: 1
+        })
+      ).rejects.toBe(failure)
+
+      const transcript = JSON.parse(
+        await readFile(join(logDir, "improve_iter_1.json"), "utf8")
+      ) as Record<string, unknown>
+      expect(transcript.prompt).toContain("<current_description>")
+      expect(transcript.failure_stage).toBe("initial_request")
+      expect(transcript.failure_message).toBe("Claude timed out")
+    } finally {
+      await rm(logDir, { recursive: true, force: true })
+    }
+  })
+
+  it("Error 以外の値が投げられても transcript を残して再送出する", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "prompt-smith-test-"))
+    const failure = Object.create(null)
+    const callClaude = vi.fn().mockRejectedValue(failure)
+
+    try {
+      await expect(
+        improveDescription({
+          skillName: "s",
+          skillContent: "body",
+          currentDescription: "current",
+          evalResults,
+          history: [],
+          testResults: null,
+          model: "claude-opus-5",
+          callClaude,
+          logDir,
+          iteration: 2
+        })
+      ).rejects.toBe(failure)
+
+      const transcript = JSON.parse(
+        await readFile(join(logDir, "improve_iter_2.json"), "utf8")
+      ) as Record<string, unknown>
+      expect(transcript.failure_message).toBe("Unknown non-Error thrown value")
+    } finally {
+      await rm(logDir, { recursive: true, force: true })
+    }
+  })
+
+  it("transcript を書けなくても本来の失敗理由を送出する", async () => {
+    // logDir にファイルを渡すと mkdir が失敗する。書き込みエラーで
+    // 本来の理由がすり替わらないことを確かめる。
+    const dir = await mkdtemp(join(tmpdir(), "prompt-smith-test-"))
+    const logDir = join(dir, "not-a-directory")
+    await writeFile(logDir, "", "utf8")
+    const failure = new Error("Claude timed out")
+    const callClaude = vi.fn().mockRejectedValue(failure)
+
+    try {
+      await expect(
+        improveDescription({
+          skillName: "s",
+          skillContent: "body",
+          currentDescription: "current",
+          evalResults,
+          history: [],
+          testResults: null,
+          model: "claude-opus-5",
+          callClaude,
+          logDir,
+          iteration: 1
+        })
+      ).rejects.toBe(failure)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("短縮時の Claude 呼び出しが失敗しても transcript を残して例外を再送出する", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "prompt-smith-test-"))
+    const tooLong = "x".repeat(1100)
+    const failure = new Error("Claude CLI failed")
+    const callClaude = vi
+      .fn()
+      .mockResolvedValueOnce(`<new_description>${tooLong}</new_description>`)
+      .mockRejectedValueOnce(failure)
+
+    try {
+      await expect(
+        improveDescription({
+          skillName: "s",
+          skillContent: "body",
+          currentDescription: "current",
+          evalResults,
+          history: [],
+          testResults: null,
+          model: "claude-opus-5",
+          callClaude,
+          logDir,
+          iteration: 2
+        })
+      ).rejects.toBe(failure)
+
+      const transcript = JSON.parse(
+        await readFile(join(logDir, "improve_iter_2.json"), "utf8")
+      ) as Record<string, unknown>
+      expect(transcript.prompt).toContain("<current_description>")
+      expect(transcript.rewrite_prompt).toContain(
+        "over the 1024-character hard limit"
+      )
+      expect(transcript.failure_stage).toBe("rewrite_request")
+      expect(transcript.failure_message).toBe("Claude CLI failed")
+    } finally {
+      await rm(logDir, { recursive: true, force: true })
+    }
   })
 
   it("1024 文字を超えたら 1 回だけ再依頼する", async () => {

@@ -77,7 +77,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 - 反復せず発火だけを測るときは `${CLAUDE_PLUGIN_ROOT}/scripts/run-trigger-eval.mjs` を使う。
 - 改善案を 1 回だけ得るときは `${CLAUDE_PLUGIN_ROOT}/scripts/improve-description.mjs` を使う。
 - 並列数は `--num-workers` で変える。
-- タイムアウトは `--timeout` で変える。
+- 発火測定のタイムアウトは `--timeout` で変える。
+- 改善案を作るタイムアウトは `--improve-timeout` で変える(既定 300 秒)。
 - 発火判定の閾値は `--trigger-threshold` で変える。
 - 詳細ログは `--verbose` で出す。
 - レポートの出力方法は `--report` で変える。

@@ -12,9 +12,24 @@ Ported on 2026-08-09. The upstream source carries no NOTICE file;
 this file is provided as an attribution convenience, not to satisfy
 Section 4(d) of the License.
 
+run_eval.py is split across several files in this port. Besides
+src/run-trigger-eval.ts, these carry ported logic:
+
+  src/lib/sandbox.ts       staging the measured skill into a temporary
+                           .claude/skills tree, and rewriting the
+                           frontmatter description
+  src/lib/stream-parse.ts  reading the claude -p JSON stream and deciding
+                           whether the Skill tool fired
+  src/lib/claude-cli.ts    spawning claude -p and collecting its output
+
+src/lib/pool.ts replaces the ProcessPoolExecutor usage of run_eval.py with
+an original implementation. It contains no code from Anthropic, PBC and so
+carries no copyright notice of theirs. src/lib/types.ts declares the shapes
+of the JSON that upstream reads and writes.
+
 Changes made to the ported code
 -------------------------------
-run_eval.py -> src/run-trigger-eval.ts
+run_eval.py -> src/run-trigger-eval.ts (with src/lib/ as listed above)
   1. The measured skill is registered as <tmp>/.claude/skills/<name>/SKILL.md
      instead of <project>/.claude/commands/<name>.md, with
      disable-model-invocation set to false.

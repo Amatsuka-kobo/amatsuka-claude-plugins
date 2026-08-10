@@ -252,6 +252,7 @@ async function main(): Promise<void> {
   )
   const parsed = parseSkillMd(originalContent)
   const description = values.description ?? parsed.description
+  // --description 指定時は、この description が runSingleQuery でも再適用される。
   const skillContent = values.description
     ? replaceDescription(parsed.content, description)
     : parsed.content
