@@ -106,4 +106,4 @@ CLAUDE.md に `agent-policy:claude-model-policy` または `agent-policy:with-co
 ### prompt-smith
 
 AI が読み手となる指示書(CLAUDE.md・SKILL.md・コマンド定義・Agents 定義・`references/` 配下の文書)を、無駄なく理解しやすい形に設計・改善するプラグインです。<br>
-新規に書くときの基準と、既存の指示書を評価して直すモードの両方を提供します。Agent 定義の作成・検証は `agent-creator` スキルが担当します。
+AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマンド定義の作成・description の評価・改善は `skill-creator`、Agent 定義の作成・検証は `agent-creator` が担当します。
