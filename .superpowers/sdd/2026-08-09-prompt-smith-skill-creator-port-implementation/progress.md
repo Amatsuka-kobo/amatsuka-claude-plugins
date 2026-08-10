@@ -54,3 +54,9 @@ Task 13: 失敗の相関 — improve の成否がメインセッションの応�
 Task 13/14 外の修正: commit 37e2bd4(改善ループの全損対策、テスト 96 件 PASS)
 Task 14: README 新設・ルート README 反映・抗体 ab-2026-0802-001 の書き換え完了。commit daf9e8e
 Task 14: Step 4 の grep は docs/ の日付入り履歴に 28 件残る。生きた指示書側は 0 件。履歴の改変は行わない判断
+Task 13: 改善ループ 2 回目 3 本とも完走(exit 0)。--improve-timeout 600、開始前 300s の待ち、実行中はメインセッションを止めた
+Task 13: skill-creator best=反復 1(現行) train 9/12 test 7/8。反復 3/4 は train 10/12 だが test 据え置きで holdout が過学習を棄却。exit_reason=improve_failed(iteration 4) で打ち切り、測定は保全された
+Task 13: agent-creator best=反復 4 train 12/12 test 7/8(現行 9/12・5/8)。適用。commit 6ad8d41。YAML はブロックスカラー |- で書き、測定文字列とバイト一致を確認
+Task 13: prompt-smith best=反復 2 train 6/12 test 5/8(現行 5/12・4/8)。差が holdout 8 問中 1 問でばらつきの範囲、かつ英語になるためユーザー判断で現行据え置き
+Task 13: 3 スキルとも偽陽性ゼロ。失敗はすべて expected=true の取りこぼし。prompt-smith は 5 反復とも test 4〜5/8 で頭打ち
+Task 13: complete (commits fbba09d..6ad8d41)
