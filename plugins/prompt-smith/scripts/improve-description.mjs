@@ -681,6 +681,20 @@ function addRetryTranscript(transcript, prefix, attempt) {
     transcript[`${prefix}retry_response`] = attempt.retryResponse;
   }
 }
+function addFailureTranscript(transcript, stage, error) {
+  transcript.failure_stage = stage;
+  try {
+    transcript.failure_message = error instanceof Error ? error.message : String(error);
+  } catch {
+    transcript.failure_message = "Unknown non-Error thrown value";
+  }
+}
+async function writeTranscriptBeforeThrow(logDir, iteration, transcript) {
+  try {
+    await writeTranscript(logDir, iteration, transcript);
+  } catch {
+  }
+}
 async function writeTranscript(logDir, iteration, transcript) {
   if (!logDir) return;
   await mkdir2(logDir, { recursive: true });
@@ -700,42 +714,53 @@ async function improveDescription(options) {
     ...input
   } = options;
   const prompt = buildImprovePrompt(input);
-  const initial = await requestDescriptionWithRequiredTag(
-    prompt,
-    model,
-    timeoutSeconds,
-    callClaude
-  );
-  let description = initial.description;
-  const transcript = {
-    iteration,
-    prompt,
-    response: initial.response,
-    parsed_description: description,
-    char_count: description?.length ?? null,
-    over_limit: description !== null && description.length > 1024
-  };
-  addRetryTranscript(transcript, "", initial);
-  if (description === null) {
-    await writeTranscript(logDir, iteration, transcript);
-    throw new MissingDescriptionTagError();
-  }
-  if (description.length > 1024) {
-    const shortenPrompt = buildShortenPrompt(prompt, description);
-    const shortenedAttempt = await requestDescriptionWithRequiredTag(
-      shortenPrompt,
+  const transcript = { iteration, prompt };
+  let initial;
+  try {
+    initial = await requestDescriptionWithRequiredTag(
+      prompt,
       model,
       timeoutSeconds,
       callClaude
     );
-    const shortened = shortenedAttempt.description;
+  } catch (error) {
+    addFailureTranscript(transcript, "initial_request", error);
+    await writeTranscriptBeforeThrow(logDir, iteration, transcript);
+    throw error;
+  }
+  let description = initial.description;
+  transcript.response = initial.response;
+  transcript.parsed_description = description;
+  transcript.char_count = description?.length ?? null;
+  transcript.over_limit = description !== null && description.length > 1024;
+  addRetryTranscript(transcript, "", initial);
+  if (description === null) {
+    await writeTranscriptBeforeThrow(logDir, iteration, transcript);
+    throw new MissingDescriptionTagError();
+  }
+  if (description.length > 1024) {
+    const shortenPrompt = buildShortenPrompt(prompt, description);
     transcript.rewrite_prompt = shortenPrompt;
+    let shortenedAttempt;
+    try {
+      shortenedAttempt = await requestDescriptionWithRequiredTag(
+        shortenPrompt,
+        model,
+        timeoutSeconds,
+        callClaude
+      );
+    } catch (error) {
+      addFailureTranscript(transcript, "rewrite_request", error);
+      await writeTranscriptBeforeThrow(logDir, iteration, transcript);
+      throw error;
+    }
+    const shortened = shortenedAttempt.description;
     transcript.rewrite_response = shortenedAttempt.response;
     transcript.rewrite_description = shortened;
     transcript.rewrite_char_count = shortened?.length ?? null;
     addRetryTranscript(transcript, "rewrite_", shortenedAttempt);
     if (shortened === null) {
-      await writeTranscript(logDir, iteration, transcript);
+      await writeTranscriptBeforeThrow(logDir, iteration, transcript);
       throw new MissingDescriptionTagError();
     }
     description = shortened;

@@ -12,7 +12,7 @@ Anthropic 公式プラグイン `skill-creator` の description 改善ループ�
 
 ## 2. 現在地
 
-Task 14 のうち 12 タスクが完了している。全タスクにレビューを通し、指摘は解消済みか台帳に記録済みである。
+**14 タスクすべて完了している**(2026-08-10)。全タスクにレビューを通し、指摘は解消済みか台帳に記録済みである。
 
 | Task | 状態 | コミット |
 | --- | --- | --- |
@@ -28,50 +28,29 @@ Task 14 のうち 12 タスクが完了している。全タスクにレビュ�
 | 10. eval レビュー UI | 完了 | `4f7f6a6` |
 | 11. skill-creator スキル本文 | 完了 | `1d7ff71` |
 | 12. 経路の付け替え | 完了 | `4ead088` |
-| 13. eval セットと自己適用 | **eval セットの作成と承認まで完了** | `fbba09d` |
-| 14. 文書と抗体の更新 | **未着手** | — |
+| 13. eval セットと自己適用 | 完了 | `fbba09d`, `6ad8d41` |
+| 14. 文書と抗体の更新 | 完了 | `daf9e8e` |
+| 番外: 改善ループの全損対策 | 完了 | `37e2bd4` |
 
-検証の状態: `pnpm exec vitest run plugins/prompt-smith` が 88 件 PASS。`pnpm build` / `pnpm typecheck` / `pnpm lint` すべて成功。
+検証の状態: `pnpm test` がリポジトリ全体で 1119 件 PASS(`plugins/prompt-smith` は 96 件)。`pnpm build` / `pnpm typecheck` / `pnpm lint` すべて成功。バンドル出力に未コミットの差分なし。
 
-## 3. 残っている作業
+## 3. 測定の結果
 
-### 3.1 Task 13 の続き — 改善ループの実行
+3 本の改善ループを回した結果である(2026-08-10、`--max-iterations 5`、`--holdout 0.4`、`--runs-per-query 3`)。
 
-eval セットは 3 本ともユーザーの承認済みで、`plugins/prompt-smith/evals/` にコミット済みである。各 20 問(true 10 / false 10)。
+| スキル | 現行(反復 1) | best | 適用 |
+| --- | --- | --- | --- |
+| `skill-creator` | train 9/12・test 7/8 | 反復 1(現行) | しない。4 案とも現行を超えず |
+| `agent-creator` | train 9/12・test 5/8 | 反復 4 train 12/12・test 7/8 | **した**(`6ad8d41`) |
+| `prompt-smith` | train 5/12・test 4/8 | 反復 2 train 6/12・test 5/8 | しない。差が holdout 8 問中 1 問でばらつきの範囲、かつ英語になる |
 
-残るのは、3 本の改善ループを回して `best_description` を各 SKILL.md へ適用することである。
+読み取れたことが 2 つある。
 
-```
-node plugins/prompt-smith/scripts/run-loop.mjs \
-  --eval-set plugins/prompt-smith/evals/skill-creator.json \
-  --skill-path plugins/prompt-smith/skills/skill-creator \
-  --model claude-opus-5 \
-  --max-iterations 5 --verbose
-```
+**3 スキルとも偽陽性がゼロで、失敗はすべて `expected=true` の取りこぼしである。** description が過剰に発火する問題は無い。改善の余地は除外規則を足す側ではなく、対象の言い方を増やす側にある。
 
-`prompt-smith` と `agent-creator` についても同様に回す。**1 本あたり数十分かかる。**
+**`prompt-smith` は 5 反復とも test 4〜5/8 で頭打ちだった。** 落ちるのは「`commands/escalate.md` の本文を整えて」「`memories/intake-notes.md` を棚卸ししたい」のような、ファイルを指して直接 Edit すれば済む依頼である。サンドボックスには他のスキルが 1 つも居ないので競合負けではない。description の文言ではなく、この種の依頼で Skill ツールを経由させること自体の難しさに見える。**description の調整だけでは動かない可能性が高い。**
 
-回した後に確かめること。
-
-- ループが完走し、`best_description` と `best_score` が返る
-- 3 本とも `environment` の `base_url` と `auth_source` が一致している
-- 全問が発火 0 で返ったときは description ではなくタイムアウトを疑い、`--timeout 120` で測り直す
-
-`best_score` が現行の description を下回ったときは、適用するかどうかをユーザーに諮る。
-
-### 3.2 Task 14 — 文書と抗体の更新
-
-実装計画の Task 14 に手順がある。**特に急ぐのは抗体である**(§5 を参照)。
-
-- `plugins/prompt-smith/README.md` の新設
-- ルート `README.md` への反映
-- 抗体 `ab-2026-0802-001` の本文の書き換え
-- `grep -rn "optimize-agents/scripts"` が 0 件になることの確認
-- `pnpm build && pnpm test && pnpm typecheck && pnpm lint` の通し実行
-
-### 3.3 最終レビュー
-
-SDD の手順では、全タスク完了後にブランチ全体のレビューを 1 回行う。台帳の deferred minor 22 件をレビュアーに渡し、マージ前に直すべきものを選別させる。
+`skill-creator` は反復 3・4 で train が 10/12 に上がったが test は 7/8 のままで、holdout が過学習を棄却した。分割が効いた実例である。
 
 ## 4. これを知らないと同じ失敗をする
 
@@ -88,11 +67,13 @@ SDD の手順では、全タスク完了後にブランチ全体のレビュー�
 
 抗体 `ab-2026-0802-001` が記録する 2026-08-01 の実測(登録先を変えると 1/8 → 8/8)は、**登録先と cwd の 2 変数が同時に変わった交絡した比較**である。旧測定器は一時ディレクトリを cwd にしていた(`git show 239f2a3^:plugins/optimize-agents/scripts/run-trigger-eval.mjs` の 93 行と 117 行)。効いていたのは cwd の方だったと読むのが自然である。
 
-### 4.2 抗体 `ab-2026-0802-001` が誤った規律を注入し続けている
+### 4.2 抗体 `ab-2026-0802-001` は書き換え済み(2026-08-10)
 
-現在この抗体は、毎セッション「`run_eval.py` は登録先が `.claude/commands/` なので発火を検出できない」と注入する。**この主張は上記のとおり否定されている。**
+この抗体は 2026-08-10 まで、毎セッション「`run_eval.py` は登録先が `.claude/commands/` なので発火を検出できない」と注入していた。**この主張は上記のとおり否定されている。**
 
-Task 14 で本文を書き換える。ユーザーの承認は取得済みである。書き換える内容は実装計画の Task 14 Step 3 にある。手で `.raphael/antibodies/*.md` を編集せず、`node plugins/raphael/scripts/update-antibody.mjs patch ab-2026-0802-001` を使う。
+`daf9e8e` で本文を実測に合わせて差し替えた。現在は cwd 汚染と薄い測定対象の 2 点を理由として書いている。**古い主張を見かけても復活させないこと。**
+
+本文を直すときは手で `.raphael/antibodies/*.md` を編集せず、`node plugins/raphael/scripts/update-antibody.mjs patch ab-2026-0802-001` を使う。`--dry-run` で差分キーを確認できる。
 
 ### 4.3 バンドル CLI の自己起動は出力ファイル名に依存する
 
@@ -122,15 +103,31 @@ Task 14 で本文を書き換える。ユーザーの承認は取得済みであ
 | 抗体 | 本文を実測に合わせて書き換える | 2026-08-10 |
 | eval セット | 起草した 3 本をそのまま承認 | 2026-08-10 |
 | 「explain the why」 | **放置する。** 公式 `skill-creator` の Writing Style と `prompt-smith` の「根拠は削り指示だけ残す」は方向が逆で、後者を優先する | 2026-08-10 |
-| タグ無し応答のフォールバック | **移植元どおりのままとする。** `<new_description>` が無い応答は全文を採用する | 2026-08-10 |
+| タグ無し応答のフォールバック | ~~移植元どおりのままとする~~ → **同日中に反転。** タグを必須にし、無ければ 1 回再依頼、2 回目も無ければエラーにする。据え置きの決定は「異常は一過性」という前提の上に立っていたが、その前提が §6 のとおり崩れた | 2026-08-10 |
+| improve 失敗時の扱い | 例外の種類を問わずループを打ち切り、best-so-far を返す。タイムアウトを `--improve-timeout` / `--timeout` で変えられるようにする | 2026-08-10 |
+| 測定の実行方法 | 改善ループ中はメインセッションを止める。応答生成と `claude -p` が同時に走ると落ちる | 2026-08-10 |
+| 測定結果の適用 | `agent-creator` のみ差し替え。`skill-creator` は現行が best、`prompt-smith` は差がばらつきの範囲で据え置き | 2026-08-10 |
 
-## 6. 観測した異常(未解決だが判断済み)
+## 6. `claude -p` はメインセッションと同時に走らせられない
 
-Task 9 の実地確認で、`improve-description` の `claude -p` が eval と無関係な日本語テキストを返し、`<new_description>` タグも無かったため全文が新 description として採用された。多数のサブエージェントが並行していた時間帯である。
+Task 9 で観測した異常(`improve-description` の `claude -p` が eval と無関係なテキストを返し、タグが無いため全文が description になる)は、**2026-08-10 に再現した。一過性ではない。**
 
-翌日の健全性確認では `claude -p` は正常に応答した(`PONG`)。一過性と判断し、フォールバックは移植元どおりのままとする決定をユーザーから得ている。
+同日の改善ループ 1 回目では、3 本とも `claude -p` が 300 秒でタイムアウトして異常終了し、6〜11 分の測定が全損した。成否はメインセッションが応答を生成中かどうかと一致している。
 
-ループの最良選択は正しく機能し、スコアの下がった反復は棄却された。**改善ループが機能する限り、この種の異常は結果に残らない。**
+| improve 呼び出し | 結果 | そのときのメインセッション |
+| --- | --- | --- |
+| agent-creator 反復 1 | 127.7s 成功 | idle(ユーザー回答待ち) |
+| agent-creator 反復 2 | 132.9s 成功 | idle |
+| skill-creator 反復 1 | 252.6s だが汚染応答 | 応答生成中 |
+| skill-creator 反復 2 | 300s タイムアウト | 応答生成中 |
+| prompt-smith 反復 1 | 300s タイムアウト | 応答生成中 |
+| agent-creator 反復 3 | 300s タイムアウト | 応答生成中 |
+
+反復番号の若いものも落ちているので、プロンプトが膨らんだせいではない。ローカルプロキシが同時実行の Claude リクエストを直列化するか取り違えていると読むのが自然である。正常時でも 130 秒前後かかるので、上限までの余裕はもともと薄い。
+
+**回すときはメインセッションを止める。** 2 回目は `--improve-timeout 600` と開始前 300 秒の待ちを置き、起動後は完走通知まで応答を生成しないことで 3 本とも完走した。
+
+対策としてコード側も変えた(§5 の 2 行)。タグ無し応答は採用せず、improve の失敗はループを打ち切って best-so-far を残す。**修正前は 1 回のタイムアウトで測定が丸ごと消えていた。**
 
 ## 7. 作業の再開手順
 
@@ -141,4 +138,4 @@ cat .superpowers/sdd/2026-08-09-prompt-smith-skill-creator-port-implementation/p
 
 台帳の末尾が現在地である。`Task N: complete` の行があるタスクは完了している。
 
-実装計画の Task 13 の Step 3 から再開する。
+14 タスクはすべて完了しているので、残るのは最終レビューの指摘への対応と、マージ可否の判断である。

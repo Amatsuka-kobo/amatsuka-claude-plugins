@@ -243,6 +243,37 @@ function addRetryTranscript(
   }
 }
 
+function addFailureTranscript(
+  transcript: Record<string, unknown>,
+  stage: string,
+  error: unknown
+): void {
+  transcript.failure_stage = stage
+  try {
+    transcript.failure_message =
+      error instanceof Error ? error.message : String(error)
+  } catch {
+    transcript.failure_message = "Unknown non-Error thrown value"
+  }
+}
+
+/**
+ * これから投げる例外の直前に呼ぶ。書き込みに失敗しても握りつぶす。
+ * ここで throw すると、記録したかった本来の失敗理由が書き込みエラーへ
+ * すり替わる。ログを残せないことより、理由を失うことの方が痛い。
+ */
+async function writeTranscriptBeforeThrow(
+  logDir: string | undefined,
+  iteration: number | undefined,
+  transcript: Record<string, unknown>
+): Promise<void> {
+  try {
+    await writeTranscript(logDir, iteration, transcript)
+  } catch {
+    // 呼び出し元が本来の例外を投げる。
+  }
+}
+
 async function writeTranscript(
   logDir: string | undefined,
   iteration: number | undefined,
@@ -269,45 +300,58 @@ export async function improveDescription(
     ...input
   } = options
   const prompt = buildImprovePrompt(input)
-  const initial = await requestDescriptionWithRequiredTag(
-    prompt,
-    model,
-    timeoutSeconds,
-    callClaude
-  )
-  let description = initial.description
-  const transcript: Record<string, unknown> = {
-    iteration,
-    prompt,
-    response: initial.response,
-    parsed_description: description,
-    char_count: description?.length ?? null,
-    over_limit: description !== null && description.length > 1024
+  const transcript: Record<string, unknown> = { iteration, prompt }
+  let initial: TaggedDescriptionResponse
+  try {
+    initial = await requestDescriptionWithRequiredTag(
+      prompt,
+      model,
+      timeoutSeconds,
+      callClaude
+    )
+  } catch (error) {
+    addFailureTranscript(transcript, "initial_request", error)
+    await writeTranscriptBeforeThrow(logDir, iteration, transcript)
+    throw error
   }
+
+  let description = initial.description
+  transcript.response = initial.response
+  transcript.parsed_description = description
+  transcript.char_count = description?.length ?? null
+  transcript.over_limit = description !== null && description.length > 1024
   addRetryTranscript(transcript, "", initial)
 
   if (description === null) {
-    await writeTranscript(logDir, iteration, transcript)
+    await writeTranscriptBeforeThrow(logDir, iteration, transcript)
     throw new MissingDescriptionTagError()
   }
 
   if (description.length > 1024) {
     const shortenPrompt = buildShortenPrompt(prompt, description)
-    const shortenedAttempt = await requestDescriptionWithRequiredTag(
-      shortenPrompt,
-      model,
-      timeoutSeconds,
-      callClaude
-    )
-    const shortened = shortenedAttempt.description
     transcript.rewrite_prompt = shortenPrompt
+    let shortenedAttempt: TaggedDescriptionResponse
+    try {
+      shortenedAttempt = await requestDescriptionWithRequiredTag(
+        shortenPrompt,
+        model,
+        timeoutSeconds,
+        callClaude
+      )
+    } catch (error) {
+      addFailureTranscript(transcript, "rewrite_request", error)
+      await writeTranscriptBeforeThrow(logDir, iteration, transcript)
+      throw error
+    }
+
+    const shortened = shortenedAttempt.description
     transcript.rewrite_response = shortenedAttempt.response
     transcript.rewrite_description = shortened
     transcript.rewrite_char_count = shortened?.length ?? null
     addRetryTranscript(transcript, "rewrite_", shortenedAttempt)
 
     if (shortened === null) {
-      await writeTranscript(logDir, iteration, transcript)
+      await writeTranscriptBeforeThrow(logDir, iteration, transcript)
       throw new MissingDescriptionTagError()
     }
     description = shortened

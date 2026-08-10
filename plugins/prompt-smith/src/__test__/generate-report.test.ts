@@ -60,13 +60,44 @@ describe("generateHtml", () => {
     )
   })
 
-  it("description の山かっこを escape する", () => {
-    const withTag = {
+  it("description、query、skillName の HTML 特殊文字を escape する", () => {
+    const withSpecialCharacters = {
       ...output,
-      best_description: "use <script>alert(1)</script>"
+      best_description: 'use & "quotes" <script>alert(1)</script>',
+      history: [
+        {
+          ...output.history[0],
+          train_results: [
+            {
+              ...output.history[0].train_results[0],
+              query: 'query & "quotes" <tag>'
+            }
+          ]
+        }
+      ]
     }
-    const html = generateHtml(withTag, false, "s")
+    const html = generateHtml(withSpecialCharacters, false, 'my & "skill"')
     expect(html).not.toContain("<script>alert(1)</script>")
-    expect(html).toContain("&lt;script&gt;")
+    expect(html).toContain(
+      "use &amp; &quot;quotes&quot; &lt;script&gt;alert(1)&lt;/script&gt;"
+    )
+    expect(html).toContain("query &amp; &quot;quotes&quot; &lt;tag&gt;")
+    expect(html).toContain("my &amp; &quot;skill&quot;")
+  })
+
+  it("autoRefresh 中は未確定のスコアと最良 description の見出しをマスクする", () => {
+    const html = generateHtml(output, true, "my-skill")
+    expect(html).toContain("<strong>Current best:</strong>")
+    expect(html).toContain("<strong>Best Score:</strong> in progress")
+    expect(html).toContain("<strong>Best Train Score:</strong> in progress")
+    expect(html).toContain("<strong>Best Test Score:</strong> in progress")
+  })
+
+  it("autoRefresh でなければ確定したスコアと通常の見出しを出す", () => {
+    const html = generateHtml(output, false, "my-skill")
+    expect(html).toContain("<strong>Best:</strong>")
+    expect(html).toContain("<strong>Best Score:</strong> 7/8 (test)")
+    expect(html).toContain("<strong>Best Train Score:</strong> 11/12")
+    expect(html).toContain("<strong>Best Test Score:</strong> 7/8")
   })
 })
