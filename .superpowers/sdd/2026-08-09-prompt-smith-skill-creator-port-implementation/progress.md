@@ -60,3 +60,9 @@ Task 13: agent-creator best=反復 4 train 12/12 test 7/8(現行 9/12・5/8)。�
 Task 13: prompt-smith best=反復 2 train 6/12 test 5/8(現行 5/12・4/8)。差が holdout 8 問中 1 問でばらつきの範囲、かつ英語になるためユーザー判断で現行据え置き
 Task 13: 3 スキルとも偽陽性ゼロ。失敗はすべて expected=true の取りこぼし。prompt-smith は 5 反復とも test 4〜5/8 で頭打ち
 Task 13: complete (commits fbba09d..6ad8d41)
+Task 14: complete (commits 4ead088..daf9e8e)
+最終レビュー: マージブロッカーなし。採用 4 件 + 追加 1 件を commit d19ae34 で対応
+最終レビュー: pool.ts への Copyright Anthropic, PBC 追加は不採用。置き換えているのは Python 標準ライブラリの ProcessPoolExecutor であって Anthropic のコードではない。代わりに NOTICE のファイル対応表で帰属と、pool.ts だけ表記が違う理由を明示
+最終レビュー: 未処理 minor 20 件のうち 14 件は残す判断。残り 6 件のうち 5 件を d19ae34 で解消、Task 8 の onIteration ずれは generateHtml が exit_reason を描画しないため無症状として残す
+最終レビュー: 追加で見つけた穴 — 失敗経路の writeTranscript が自分で例外を投げると本来の失敗理由がすり替わる。writeTranscriptBeforeThrow で塞ぎ、ガード無しで落ちることをテストで確認
+検証: pnpm build / pnpm test (1125 件 PASS) / pnpm typecheck / pnpm lint すべて成功
