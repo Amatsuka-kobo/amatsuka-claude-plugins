@@ -1,0 +1,82 @@
+[
+  {
+    "query": "北極星物流の運用チーム向けに、`plugins/aurora-dock/skills/triage-ledger/` へ障害票を正規化するスキルを追加したいです。入力は `incident_id,service,sev,opened_at` のCSVで、重複票の扱いと出力テンプレートも決め、使いどころが伝わるdescriptionまで作ってください。",
+    "should_trigger": true
+  },
+  {
+    "query": "リリース当番が毎週使う `/handoff-window` コマンドを `plugins/cinder-ops/commands/` に設計してください。Jira URL、担当者、凍結開始時刻を受け取り、未入力項目を質問してから引き継ぎ表を出す流れにしたい。コマンド定義、必要なら参照ファイル、検証用ケースまでまとめてほしいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/atlas-forms/skills/vendor-intake/SKILL.md` は作ったものの、descriptionが『取引先を処理する』だけで発火が曖昧です。購買部の月次登録フロー、添付PDF、`vendor_code` の検査を前提に候補を複数出し、20件程度の発話で誤発火を測れるセットも起草してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "小規模チーム用の `retro-pulse` スキルを新設したい。Zoom文字起こし、投票CSVの `theme,count,owner`、前回アクションを突き合わせてふりかえり案を出す役目です。SKILL.mdだけで足りるか、scripts/ や references/ を分けるべきか判断し、失敗例を含む評価ケースまで設計してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/marble-station/commands/import-members.md` を改修中です。人事CSVの列名変更（`dept_name`→`division`）に加えてdry-run、差分件数、欠損時の質問を扱えるようにしたい。コマンドの本文だけでなく、利用場面が誤解されないdescriptionと出力評価の観点も整えてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "we need a `lab-replay` skill for a university pilot: it should turn notebook urls, experiment dates, lab names, and `sample_batch` into reproducible steps. decide whether it belongs in `.claude/skills/` or a distributable plugin, then design the package and realistic test conversations.",
+    "should_trigger": true
+  },
+  {
+    "query": "社内の移行窓口で使う `/schema-diff` を作りたい。旧新のPostgres接続情報ではなく、エクスポート済みDDL URLと対象テーブル一覧から、破壊的変更・ロールバック手順・確認質問を返すコマンドにする。配置、frontmatter、参照資料の切り分け、期待出力を一緒に詰めたいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/rainbar/skills/quote-audit/` のスキルが長文化していて、請求書番号、通貨、税率の照合ルールが埋もれています。単に要約するのでなく、同梱するチェック表・例外一覧・実行手順をどう分離するか再設計し、代表入力で出力品質を判定できるようにしてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "通知疲れを減らすため、Pager URLと`alert_key,priority,repeat_count` を基にエスカレーション案を出す `signal-sifter` を作成予定です。オンコール、SRE、経理通知を区別できる設計にして、発火しやすい依頼と似ているが対象外の依頼を含むevalを用意したい。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/ember-rail/commands/close-sprint.md` はチームによって完了条件が違うため、担当者・未消化issue URL・carryover理由を聞き取って締め処理を案内するものに直します。既存コマンドのdescription、入力不足時の分岐、出力例をレビュー可能な形に組み直してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/harbor-watch/skills/review-gates/SKILL.md` の本文から『なるべく』『状況に応じて』をなくし、レビュー停止条件をMRの `risk_level` と承認数で明文化してください。frontmatterは変更せず、矛盾した指示と重複例を整理したいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "プロジェクト直下の `CLAUDE.md` を、梅雨商会のモノレポ向けに書き直したい。pnpmの検証順、`apps/ledger/` の編集禁止領域、障害時の報告形式を本文へ反映し、背景説明は削って判断可能な規則にしてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/ivory-circuit/agents/csv-investigator.md` というsubagentを新設します。加盟店CSVの `merchant_id,status,settled_at` を調査する一責務に絞り、読み取り専用tools、適切なmodel、実行条件をfrontmatterと本文に定義してほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`.claude/agents/log-scout.md` の点検を頼みます。夜間バッチのログを読むだけなのにWriteが許可され、descriptionには対象外の対応まで書かれています。権限、配置、frontmatter必須項目、本文の委譲条件を検証して直してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/fir-catalog/references/fulfillment-rules.md` は倉庫移管後の参照断片ですが、同じ禁則が三度書かれています。`warehouse_id` ごとの例外表は残しつつ、AIが迷わない本文に削り、参照用の値と行動指示を分けて評価してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "ヘリオス出版の `README.md` に、原稿入稿のCSV列 `author_ref,edition,deadline` と確認手順を追記したいです。初学者向けの導入、画面キャプチャの置き方、公開前チェックリストまで構成を相談したい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/solace-map/agents/route-planner.md` を、配送不可地域を調べるagentとして見直してください。APIを呼べない環境を前提に、許可toolsを最小化し、入力の郵便番号形式・失敗時の返却・親への報告責務が整合するか確認したいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/quartz-bay/output-styles/brief-status.md` の指示が散漫です。障害報告では時刻をISO形式にし、確信がない原因を断定しない、といった規則を本文へ統合し、重複した口調指定を落としてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "新しい受注照合スキルの案はあるのですが、まず `docs/order-reconciliation.md` に業務フロー、関係者、承認経路をまとめたいです。顧客向け手順書として読みやすくし、図にする箇所も提案してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`.claude/agents/release-observer.md` が依頼を受けずに本番操作へ進むことがあります。subagentの責務をリリース記録の収集に限定し、実行不可の操作、tools、親へ返す項目を含めて定義ファイルを再設計してほしい。",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "query": "`.claude/agents/invoice-sampler.md` を新設したいです。月次の請求CSVから `invoice_no,customer_ref,total` を読むだけで、異常候補と根拠を親へ返すsubagentにします。責務の境界、配置、最小tools、model設定、frontmatterと本文をまとめて設計してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/iron-grove/agents/contract-reader.md` をレビューしてください。契約PDFの期限と自動更新を抽出するはずなのに、descriptionが交渉まで含み、BashとWriteも許可されています。読み取り専用の一責務に戻し、frontmatter・本文・返却形式の不整合を検証して直したい。",
+    "should_trigger": true
+  },
+  {
+    "query": "県央水産の受注窓口用に `order-clarifier` subagent を作ります。注文メールの `ship_date,temperature_zone,store_code` が欠ける時だけ質問案を作り、顧客への送信やDB更新はしない役目です。プラグイン配布向けのagent定義として、必要なtoolsと禁止操作を決めてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`.claude/agents/build-witness.md` はCIログを要約するagentですが、親の修正指示まで実行してしまいます。実行帯を観測・報告に限定し、toolsの過剰許可、modelを固定する根拠、入力と返答の契約を確認して定義ファイルを再構成してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/tide-plain/agents/warehouse-locator.md` を追加予定です。配送先CSVの `postal_code,zone,fragile` を調べ、候補倉庫と不確実性だけを返すsubagentにしたい。ネットワークなしでも動く前提で、配置ごとの使えるフィールドを踏まえたfrontmatterと本文を書いてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "pls inspect `plugins/opal-field/agents/oncall-reader.md`: it only reads incident timelines but has edit and bash, and its description is vague. fix the frontmater and body so it returns `incident_key,first_seen,impact` to its parent and states what must not be escalated.",
+    "should_trigger": true
+  },
+  {
+    "query": "`.claude/agents/dataset-steward.md` を、調査と更新を一人で担わせる案から分割したいです。まずはデータ辞書を検索して矛盾を報告するread-only agentを定義し、更新担当との責務境界、tools、受け渡すJSON、model継承の扱いを決めてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/brass-lantern/agents/link-checker.md` の変更相談です。外部URLの死活を調べる責務ですが、認証情報を要求する本文になっています。秘密情報を扱わない範囲に絞り、失敗時の報告、許可tools、description、frontmatterの正当性を検証してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "舟影不動産の物件審査で使うsubagentを `listing-evidence.md` として置きます。物件URLと `listing_id,ward,updated_at` を基に、記載漏れの証拠箇所を列挙するだけにしたい。ユーザーへ連絡しない制約、適切なmodel、出力形式を含むAgent定義を作ってください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/glass-cedar/agents/cost-observer.md` は月次コストを報告する既存agentです。許可されたtoolsが本当に最小か、frontmatterのnameとdescriptionが実行条件を表すか、本文が予算変更を依頼していないかを監査し、必要なら修正案を適用してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`plugins/sun-jet/skills/claim-sorter/SKILL.md` の本文から説明過多な段落を消したいです。`claim_id` が空なら確認する、添付画像が壊れていれば停止する、といった実行規則だけを残し、由来や二重の例を削って評価してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/mint-bridge/references/deployment-codes.md` に、環境コード表と手順の注意書きがあります。`stage_code=marigold` のような値は参照用として保持し、AIへの指示の重複や根拠説明だけを取り除いて、判断できる文章に整えたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "カナリー印刷の校正支援として、PDF URL、ページ番号、`proof_round` を受け取り差分をまとめる `proof-compass` スキルを作りたい。プラグインへの配置、同梱する参照表、発火条件を伝えるdescription、出力の評価ケースを一緒に設計してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/pine-terrace/commands/archive-cycle.md` を新設します。保存対象URL、保持年数、`legal_hold` の値を聞き、確認漏れがあれば質問を返すコマンドにしたい。コマンド定義、用途説明、必要なassets、似た依頼を含むevalセットを用意してほしいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/coal-bloom/output-styles/vendor-update.md` は、仕入先向け報告で結論を先に出す規則と、未確定情報の書き方が衝突しています。本文だけを編集し、`supplier_ref` と納期の確度に沿って判断できるようにして、frontmatterには触れないでください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/aqua-verge/skills/access-review/SKILL.md` のdescriptionを改善したい。権限申請URL、`role_code`、部署異動日を含む依頼だけで発火させ、監査報告そのものには反応しないよう、候補文と20件の測定用会話を作ってください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`CLAUDE.md` に、月曜のETL失敗時は `job_run_id` を確認してから担当表へ報告する規則を加えたいです。既存の『早めに共有』を測定可能な条件に置換し、理由を述べる段落と重複した例は省いてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/linen-spark/commands/verify-import.md` のdefinitionが長くなりました。`batch_ref` と件数の検証、dry-runの使い分け、失敗した時の返却を設計し、使用すべき依頼が伝わるdescriptionと出力品質を確認するevalを作りたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/moss-ferry/skills/expense-hints/SKILL.md` の入力例が古いので、経費CSVの `receipt_ref,category,amount` に合わせてスキルの構成を更新したいです。スクリプト化が必要かも判断し、配置、description、回帰用のテスト会話まで計画してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/coral-slate/references/partner-messages.md` を整理中です。取引先別の敬称一覧は保ち、緊急連絡の閾値、禁止する約束、返信の順序というAI向け規則を、重なりなく短く評価・改稿したい。",
+    "should_trigger": false
+  }
+]

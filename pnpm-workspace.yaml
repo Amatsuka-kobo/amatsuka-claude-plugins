@@ -9,5 +9,6 @@ packages:
   - plugins/raphael
   - plugins/prefetch
   - plugins/guidepost
+  - plugins/prompt-smith
 allowBuilds:
   esbuild: true
