@@ -68,3 +68,4 @@
 - `2026/0808/phyllis98/gpt-agents-template-updates.md` | 2026-08-09 | phyllis98 | Grok ポリシー設計確定、実装フェーズ開始
 - `2026/0809/phyllis98/codiel-agents-prompt-smith-update.md` | 2026-08-10 | phyllis98 | prompt-smith skill-creator のポート実装: 計画から Task 実行と SDD 実装開始
 - `2026/0810/phyllis98/tiny-report-check-skill-optimization.md` | 2026-08-10 | phyllis98 | tiny-report-check スキルの説明文最適化
+- `2026/0810/phyllis998/echo-instruction.md` | 2026-08-10 | phyllis998 | prompt-smith スキルの description 改善・発火率向上のための試案
