@@ -181,9 +181,9 @@ ${history.map((record) => reportRow(record, trainQueries, testQueries, bestItera
 }
 
 // src/improve-description.ts
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
-import { parseArgs } from "node:util";
+import { mkdir as mkdir2, readFile as readFile2, writeFile as writeFile3 } from "node:fs/promises";
+import { basename as basename2, extname as extname2, join as join3 } from "node:path";
+import { parseArgs as parseArgs2 } from "node:util";
 
 // src/lib/claude-cli.ts
 import { spawn } from "node:child_process";
@@ -293,289 +293,11 @@ function parseSkillMd(content) {
   return { name, description, content };
 }
 
-// src/improve-description.ts
-function buildImprovePrompt(input) {
-  const {
-    skillName,
-    skillContent,
-    currentDescription,
-    evalResults,
-    history,
-    testResults
-  } = input;
-  const failedTriggers = evalResults.results.filter(
-    (result) => result.should_trigger && !result.pass
-  );
-  const falseTriggers = evalResults.results.filter(
-    (result) => !result.should_trigger && !result.pass
-  );
-  const trainScore = `${evalResults.summary.passed}/${evalResults.summary.total}`;
-  const scoresSummary = testResults ? `Train: ${trainScore}, Test: ${testResults.summary.passed}/${testResults.summary.total}` : `Train: ${trainScore}`;
-  let prompt = `You are optimizing a skill description for a Claude Code skill called "${skillName}". A "skill" is sort of like a prompt, but with progressive disclosure -- there's a title and description that Claude sees when deciding whether to use the skill, and then if it does use the skill, it reads the .md file which has lots more details and potentially links to other resources in the skill folder like helper files and scripts and additional documentation or examples.
-
-The description appears in Claude's "available_skills" list. When a user sends a query, Claude decides whether to invoke the skill based solely on the title and on this description. Your goal is to write a description that triggers for relevant queries, and doesn't trigger for irrelevant ones.
-
-Here's the current description:
-<current_description>
-"${currentDescription}"
-</current_description>
-
-Current scores (${scoresSummary}):
-<scores_summary>
-`;
-  if (failedTriggers.length > 0) {
-    prompt += "FAILED TO TRIGGER (should have triggered but didn't):\n";
-    for (const result of failedTriggers) {
-      prompt += `  - "${result.query}" (triggered ${result.triggers}/${result.runs} times)
-`;
-    }
-    prompt += "\n";
-  }
-  if (falseTriggers.length > 0) {
-    prompt += "FALSE TRIGGERS (triggered but shouldn't have):\n";
-    for (const result of falseTriggers) {
-      prompt += `  - "${result.query}" (triggered ${result.triggers}/${result.runs} times)
-`;
-    }
-    prompt += "\n";
-  }
-  if (history.length > 0) {
-    prompt += "PREVIOUS ATTEMPTS (do NOT repeat these \u2014 try something structurally different):\n\n";
-    for (const attempt of history) {
-      const trainScore2 = `${attempt.train_passed ?? attempt.passed ?? 0}/${attempt.train_total ?? attempt.total ?? 0}`;
-      const testScore = attempt.test_passed !== null && attempt.test_passed !== void 0 ? `${attempt.test_passed}/${attempt.test_total ?? "?"}` : null;
-      const scoreString = `train=${trainScore2}${testScore ? `, test=${testScore}` : ""}`;
-      prompt += `<attempt ${scoreString}>
-`;
-      prompt += `Description: "${attempt.description}"
-`;
-      if (Object.hasOwn(attempt, "results")) {
-        prompt += "Train results:\n";
-        for (const result of attempt.results ?? []) {
-          const status = result.pass ? "PASS" : "FAIL";
-          prompt += `  [${status}] "${result.query.slice(0, 80)}" (triggered ${result.triggers}/${result.runs})
-`;
-        }
-      }
-      if (attempt.note) prompt += `Note: ${attempt.note}
-`;
-      prompt += "</attempt>\n\n";
-    }
-  }
-  prompt += `</scores_summary>
-
-Skill content (for context on what the skill does):
-<skill_content>
-${skillContent}
-</skill_content>
-
-Based on the failures, write a new and improved description that is more likely to trigger correctly. When I say "based on the failures", it's a bit of a tricky line to walk because we don't want to overfit to the specific cases you're seeing. So what I DON'T want you to do is produce an ever-expanding list of specific queries that this skill should or shouldn't trigger for. Instead, try to generalize from the failures to broader categories of user intent and situations where this skill would be useful or not useful. The reason for this is twofold:
-
-1. Avoid overfitting
-2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
-
-Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters \u2014 descriptions over that will be truncated, so stay comfortably under it.
-
-Here are some tips that we've found to work well in writing these descriptions:
-- The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
-- The skill description should focus on the user's intent, what they are trying to achieve, vs. the implementation details of how the skill works.
-- The description competes with other skills for Claude's attention \u2014 make it distinctive and immediately recognizable.
-- If you're getting lots of failures after repeated attempts, change things up. Try different sentence structures or wordings.
-
-I'd encourage you to be creative and mix up the style in different iterations since you'll have multiple opportunities to try different approaches and we'll just grab the highest-scoring one at the end.${" "}
-
-Please respond with only the new description text in <new_description> tags, nothing else.`;
-  return prompt;
-}
-function stripQuotes(value) {
-  let start = 0;
-  let end = value.length;
-  while (start < end && value[start] === '"') start++;
-  while (end > start && value[end - 1] === '"') end--;
-  return value.slice(start, end);
-}
-function extractDescription(text) {
-  const match = /<new_description>([\s\S]*?)<\/new_description>/.exec(text);
-  return stripQuotes((match?.[1] ?? text).trim());
-}
-function buildShortenPrompt(prompt, description) {
-  return `${prompt}
-
----
-
-A previous attempt produced this description, which at ${description.length} characters is over the 1024-character hard limit:
-
-"${description}"
-
-Rewrite it to be under 1024 characters while keeping the most important trigger words and intent coverage. Respond with only the new description in <new_description> tags.`;
-}
-async function improveDescription(options) {
-  const {
-    callClaude = callClaudeText,
-    model,
-    logDir,
-    iteration,
-    ...input
-  } = options;
-  const prompt = buildImprovePrompt(input);
-  const text = await callClaude(prompt, model);
-  let description = extractDescription(text);
-  const transcript = {
-    iteration,
-    prompt,
-    response: text,
-    parsed_description: description,
-    char_count: description.length,
-    over_limit: description.length > 1024
-  };
-  if (description.length > 1024) {
-    const shortenPrompt = buildShortenPrompt(prompt, description);
-    const shortenText = await callClaude(shortenPrompt, model);
-    const shortened = extractDescription(shortenText);
-    transcript.rewrite_prompt = shortenPrompt;
-    transcript.rewrite_response = shortenText;
-    transcript.rewrite_description = shortened;
-    transcript.rewrite_char_count = shortened.length;
-    description = shortened;
-  }
-  transcript.final_description = description;
-  if (logDir) {
-    await mkdir(logDir, { recursive: true });
-    await writeFile(
-      join(logDir, `improve_iter_${iteration ?? "unknown"}.json`),
-      JSON.stringify(transcript, null, 2),
-      "utf8"
-    );
-  }
-  return description;
-}
-async function main() {
-  const { values } = parseArgs({
-    options: {
-      "eval-results": { type: "string" },
-      "skill-path": { type: "string" },
-      history: { type: "string" },
-      model: { type: "string" },
-      verbose: { type: "boolean", default: false },
-      "log-dir": { type: "string" },
-      iteration: { type: "string" }
-    },
-    strict: true,
-    allowPositionals: false
-  });
-  if (!values["eval-results"]) throw new Error("--eval-results is required");
-  if (!values["skill-path"]) throw new Error("--skill-path is required");
-  if (!values.model) throw new Error("--model is required");
-  const skillPath = values["skill-path"];
-  let skillContent;
-  try {
-    skillContent = await readFile(join(skillPath, "SKILL.md"), "utf8");
-  } catch {
-    throw new Error(`No SKILL.md found at ${skillPath}`);
-  }
-  const evalResults = JSON.parse(
-    await readFile(values["eval-results"], "utf8")
-  );
-  const history = values.history ? JSON.parse(await readFile(values.history, "utf8")) : [];
-  const parsed = parseSkillMd(skillContent);
-  if (values.verbose) {
-    process.stderr.write(`Current: ${evalResults.description}
-`);
-    process.stderr.write(
-      `Score: ${evalResults.summary.passed}/${evalResults.summary.total}
-`
-    );
-  }
-  const description = await improveDescription({
-    skillName: parsed.name,
-    skillContent: parsed.content,
-    currentDescription: evalResults.description,
-    evalResults,
-    history,
-    testResults: null,
-    model: values.model,
-    logDir: values["log-dir"],
-    iteration: values.iteration ? Number(values.iteration) : void 0
-  });
-  if (values.verbose) process.stderr.write(`Improved: ${description}
-`);
-  const output = {
-    description,
-    history: [
-      ...history,
-      {
-        description: evalResults.description,
-        passed: evalResults.summary.passed,
-        failed: evalResults.summary.failed,
-        total: evalResults.summary.total,
-        results: evalResults.results
-      }
-    ]
-  };
-  process.stdout.write(`${JSON.stringify(output, null, 2)}
-`);
-}
-function isDirectRun(expected) {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  return basename(entry, extname(entry)) === expected;
-}
-if (isDirectRun("improve-description")) {
-  main().catch((error) => {
-    process.stderr.write(`${error.message}
-`);
-    process.exitCode = 1;
-  });
-}
-
-// src/lib/split-eval-set.ts
-function mulberry32(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = state + 1831565813 >>> 0;
-    let t = state;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function shuffled(items, rand) {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-function splitEvalSet(evalSet, holdout, seed = 42) {
-  const rand = mulberry32(seed);
-  const positives = shuffled(
-    evalSet.filter((e) => e.should_trigger),
-    rand
-  );
-  const negatives = shuffled(
-    evalSet.filter((e) => !e.should_trigger),
-    rand
-  );
-  const nPositiveTest = Math.max(1, Math.floor(positives.length * holdout));
-  const nNegativeTest = Math.max(1, Math.floor(negatives.length * holdout));
-  return {
-    test: [
-      ...positives.slice(0, nPositiveTest),
-      ...negatives.slice(0, nNegativeTest)
-    ],
-    train: [
-      ...positives.slice(nPositiveTest),
-      ...negatives.slice(nNegativeTest)
-    ]
-  };
-}
-
 // src/run-trigger-eval.ts
 import { spawn as spawn2 } from "node:child_process";
-import { readFile as readFile2, writeFile as writeFile3 } from "node:fs/promises";
-import { basename as basename2, extname as extname2, join as join3 } from "node:path";
-import { parseArgs as parseArgs2 } from "node:util";
+import { readFile, writeFile as writeFile2 } from "node:fs/promises";
+import { basename, extname, join as join2 } from "node:path";
+import { parseArgs } from "node:util";
 
 // src/lib/pool.ts
 async function pool(items, workers, fn) {
@@ -595,9 +317,9 @@ async function pool(items, workers, fn) {
 
 // src/lib/sandbox.ts
 import { randomBytes } from "node:crypto";
-import { mkdir as mkdir2, mkdtemp, rm, writeFile as writeFile2 } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join2 } from "node:path";
+import { join } from "node:path";
 function makeCleanName(skillName) {
   return `${skillName}-skill-${randomBytes(4).toString("hex")}`;
 }
@@ -671,10 +393,10 @@ function replaceDescription(original, description) {
   return joinFrontmatter(rewritten, body);
 }
 async function createSandbox(skillMd, cleanName) {
-  const dir = await mkdtemp(join2(tmpdir(), "prompt-smith-eval-"));
-  const skillDir = join2(dir, ".claude", "skills", cleanName);
-  await mkdir2(skillDir, { recursive: true });
-  await writeFile2(join2(skillDir, "SKILL.md"), skillMd, "utf8");
+  const dir = await mkdtemp(join(tmpdir(), "prompt-smith-eval-"));
+  const skillDir = join(dir, ".claude", "skills", cleanName);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(join(skillDir, "SKILL.md"), skillMd, "utf8");
   return {
     dir,
     cleanup: async () => {
@@ -910,8 +632,8 @@ function parseEvalSet(content) {
   }
   return evalSet;
 }
-async function main2() {
-  const { values } = parseArgs2({
+async function main() {
+  const { values } = parseArgs({
     options: {
       "skill-path": { type: "string" },
       "eval-set": { type: "string" },
@@ -929,14 +651,14 @@ async function main2() {
   });
   if (!values["skill-path"]) throw new Error("--skill-path is required");
   if (!values["eval-set"]) throw new Error("--eval-set is required");
-  const originalContent = await readFile2(
-    join3(values["skill-path"], "SKILL.md"),
+  const originalContent = await readFile(
+    join2(values["skill-path"], "SKILL.md"),
     "utf8"
   );
   const parsed = parseSkillMd(originalContent);
   const description = values.description ?? parsed.description;
   const skillContent = values.description ? replaceDescription(parsed.content, description) : parsed.content;
-  const evalSet = parseEvalSet(await readFile2(values["eval-set"], "utf8"));
+  const evalSet = parseEvalSet(await readFile(values["eval-set"], "utf8"));
   const result = await runEval({
     evalSet,
     skillName: parsed.name,
@@ -966,17 +688,310 @@ async function main2() {
   const json = `${JSON.stringify(result, null, 2)}
 `;
   if (values.out) {
-    await writeFile3(values.out, json, "utf8");
+    await writeFile2(values.out, json, "utf8");
   } else {
     process.stdout.write(json);
   }
+}
+function isDirectRun(expected) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return basename(entry, extname(entry)) === expected;
+}
+if (isDirectRun("run-trigger-eval")) {
+  main().catch((error) => {
+    process.stderr.write(`${error.message}
+`);
+    process.exitCode = 1;
+  });
+}
+
+// src/improve-description.ts
+var MissingDescriptionTagError = class extends Error {
+  constructor() {
+    super("Neither of the two responses included <new_description> tags.");
+    this.name = "MissingDescriptionTagError";
+  }
+};
+function buildImprovePrompt(input) {
+  const {
+    skillName,
+    skillContent,
+    currentDescription,
+    evalResults,
+    history,
+    testResults
+  } = input;
+  const failedTriggers = evalResults.results.filter(
+    (result) => result.should_trigger && !result.pass
+  );
+  const falseTriggers = evalResults.results.filter(
+    (result) => !result.should_trigger && !result.pass
+  );
+  const trainScore = `${evalResults.summary.passed}/${evalResults.summary.total}`;
+  const scoresSummary = testResults ? `Train: ${trainScore}, Test: ${testResults.summary.passed}/${testResults.summary.total}` : `Train: ${trainScore}`;
+  let prompt = `You are optimizing a skill description for a Claude Code skill called "${skillName}". A "skill" is sort of like a prompt, but with progressive disclosure -- there's a title and description that Claude sees when deciding whether to use the skill, and then if it does use the skill, it reads the .md file which has lots more details and potentially links to other resources in the skill folder like helper files and scripts and additional documentation or examples.
+
+The description appears in Claude's "available_skills" list. When a user sends a query, Claude decides whether to invoke the skill based solely on the title and on this description. Your goal is to write a description that triggers for relevant queries, and doesn't trigger for irrelevant ones.
+
+Here's the current description:
+<current_description>
+"${currentDescription}"
+</current_description>
+
+Current scores (${scoresSummary}):
+<scores_summary>
+`;
+  if (failedTriggers.length > 0) {
+    prompt += "FAILED TO TRIGGER (should have triggered but didn't):\n";
+    for (const result of failedTriggers) {
+      prompt += `  - "${result.query}" (triggered ${result.triggers}/${result.runs} times)
+`;
+    }
+    prompt += "\n";
+  }
+  if (falseTriggers.length > 0) {
+    prompt += "FALSE TRIGGERS (triggered but shouldn't have):\n";
+    for (const result of falseTriggers) {
+      prompt += `  - "${result.query}" (triggered ${result.triggers}/${result.runs} times)
+`;
+    }
+    prompt += "\n";
+  }
+  if (history.length > 0) {
+    prompt += "PREVIOUS ATTEMPTS (do NOT repeat these \u2014 try something structurally different):\n\n";
+    for (const attempt of history) {
+      const trainScore2 = `${attempt.train_passed ?? attempt.passed ?? 0}/${attempt.train_total ?? attempt.total ?? 0}`;
+      const testScore = attempt.test_passed !== null && attempt.test_passed !== void 0 ? `${attempt.test_passed}/${attempt.test_total ?? "?"}` : null;
+      const scoreString = `train=${trainScore2}${testScore ? `, test=${testScore}` : ""}`;
+      prompt += `<attempt ${scoreString}>
+`;
+      prompt += `Description: "${attempt.description}"
+`;
+      if (Object.hasOwn(attempt, "results")) {
+        prompt += "Train results:\n";
+        for (const result of attempt.results ?? []) {
+          const status = result.pass ? "PASS" : "FAIL";
+          prompt += `  [${status}] "${result.query.slice(0, 80)}" (triggered ${result.triggers}/${result.runs})
+`;
+        }
+      }
+      if (attempt.note) prompt += `Note: ${attempt.note}
+`;
+      prompt += "</attempt>\n\n";
+    }
+  }
+  prompt += `</scores_summary>
+
+Skill content (for context on what the skill does):
+<skill_content>
+${skillContent}
+</skill_content>
+
+Based on the failures, write a new and improved description that is more likely to trigger correctly. When I say "based on the failures", it's a bit of a tricky line to walk because we don't want to overfit to the specific cases you're seeing. So what I DON'T want you to do is produce an ever-expanding list of specific queries that this skill should or shouldn't trigger for. Instead, try to generalize from the failures to broader categories of user intent and situations where this skill would be useful or not useful. The reason for this is twofold:
+
+1. Avoid overfitting
+2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
+
+Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters \u2014 descriptions over that will be truncated, so stay comfortably under it.
+
+Here are some tips that we've found to work well in writing these descriptions:
+- The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
+- The skill description should focus on the user's intent, what they are trying to achieve, vs. the implementation details of how the skill works.
+- The description competes with other skills for Claude's attention \u2014 make it distinctive and immediately recognizable.
+- If you're getting lots of failures after repeated attempts, change things up. Try different sentence structures or wordings.
+
+I'd encourage you to be creative and mix up the style in different iterations since you'll have multiple opportunities to try different approaches and we'll just grab the highest-scoring one at the end.${" "}
+
+Please respond with only the new description text in <new_description> tags, nothing else.`;
+  return prompt;
+}
+function stripQuotes(value) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '"') start++;
+  while (end > start && value[end - 1] === '"') end--;
+  return value.slice(start, end);
+}
+function extractDescription(text) {
+  const match = /<new_description>([\s\S]*?)<\/new_description>/.exec(text);
+  return match ? stripQuotes(match[1].trim()) : null;
+}
+function buildShortenPrompt(prompt, description) {
+  return `${prompt}
+
+---
+
+A previous attempt produced this description, which at ${description.length} characters is over the 1024-character hard limit:
+
+"${description}"
+
+Rewrite it to be under 1024 characters while keeping the most important trigger words and intent coverage. Respond with only the new description in <new_description> tags.`;
+}
+function buildTagRetryPrompt(prompt) {
+  return `${prompt}
+
+---
+
+The previous response did not include <new_description> tags. Return only the new description enclosed in <new_description> tags.`;
+}
+async function requestDescriptionWithRequiredTag(prompt, model, timeoutSeconds, callClaude) {
+  const response = await callClaude(prompt, model, timeoutSeconds);
+  const description = extractDescription(response);
+  if (description !== null) return { response, description };
+  const retryPrompt = buildTagRetryPrompt(prompt);
+  const retryResponse = await callClaude(retryPrompt, model, timeoutSeconds);
+  return {
+    response,
+    description: extractDescription(retryResponse),
+    retryPrompt,
+    retryResponse
+  };
+}
+function addRetryTranscript(transcript, prefix, attempt) {
+  transcript[`${prefix}retry_attempted`] = attempt.retryPrompt !== void 0;
+  if (attempt.retryPrompt !== void 0) {
+    transcript[`${prefix}retry_prompt`] = attempt.retryPrompt;
+    transcript[`${prefix}retry_response`] = attempt.retryResponse;
+  }
+}
+async function writeTranscript(logDir, iteration, transcript) {
+  if (!logDir) return;
+  await mkdir2(logDir, { recursive: true });
+  await writeFile3(
+    join3(logDir, `improve_iter_${iteration ?? "unknown"}.json`),
+    JSON.stringify(transcript, null, 2),
+    "utf8"
+  );
+}
+async function improveDescription(options) {
+  const {
+    callClaude = callClaudeText,
+    model,
+    timeoutSeconds,
+    logDir,
+    iteration,
+    ...input
+  } = options;
+  const prompt = buildImprovePrompt(input);
+  const initial = await requestDescriptionWithRequiredTag(
+    prompt,
+    model,
+    timeoutSeconds,
+    callClaude
+  );
+  let description = initial.description;
+  const transcript = {
+    iteration,
+    prompt,
+    response: initial.response,
+    parsed_description: description,
+    char_count: description?.length ?? null,
+    over_limit: description !== null && description.length > 1024
+  };
+  addRetryTranscript(transcript, "", initial);
+  if (description === null) {
+    await writeTranscript(logDir, iteration, transcript);
+    throw new MissingDescriptionTagError();
+  }
+  if (description.length > 1024) {
+    const shortenPrompt = buildShortenPrompt(prompt, description);
+    const shortenedAttempt = await requestDescriptionWithRequiredTag(
+      shortenPrompt,
+      model,
+      timeoutSeconds,
+      callClaude
+    );
+    const shortened = shortenedAttempt.description;
+    transcript.rewrite_prompt = shortenPrompt;
+    transcript.rewrite_response = shortenedAttempt.response;
+    transcript.rewrite_description = shortened;
+    transcript.rewrite_char_count = shortened?.length ?? null;
+    addRetryTranscript(transcript, "rewrite_", shortenedAttempt);
+    if (shortened === null) {
+      await writeTranscript(logDir, iteration, transcript);
+      throw new MissingDescriptionTagError();
+    }
+    description = shortened;
+  }
+  transcript.final_description = description;
+  await writeTranscript(logDir, iteration, transcript);
+  return description;
+}
+async function main2() {
+  const { values } = parseArgs2({
+    options: {
+      "eval-results": { type: "string" },
+      "skill-path": { type: "string" },
+      history: { type: "string" },
+      model: { type: "string" },
+      verbose: { type: "boolean", default: false },
+      "log-dir": { type: "string" },
+      iteration: { type: "string" },
+      timeout: { type: "string" }
+    },
+    strict: true,
+    allowPositionals: false
+  });
+  if (!values["eval-results"]) throw new Error("--eval-results is required");
+  if (!values["skill-path"]) throw new Error("--skill-path is required");
+  if (!values.model) throw new Error("--model is required");
+  const skillPath = values["skill-path"];
+  let skillContent;
+  try {
+    skillContent = await readFile2(join3(skillPath, "SKILL.md"), "utf8");
+  } catch {
+    throw new Error(`No SKILL.md found at ${skillPath}`);
+  }
+  const evalResults = JSON.parse(
+    await readFile2(values["eval-results"], "utf8")
+  );
+  const history = values.history ? JSON.parse(await readFile2(values.history, "utf8")) : [];
+  const parsed = parseSkillMd(skillContent);
+  if (values.verbose) {
+    process.stderr.write(`Current: ${evalResults.description}
+`);
+    process.stderr.write(
+      `Score: ${evalResults.summary.passed}/${evalResults.summary.total}
+`
+    );
+  }
+  const description = await improveDescription({
+    skillName: parsed.name,
+    skillContent: parsed.content,
+    currentDescription: evalResults.description,
+    evalResults,
+    history,
+    testResults: null,
+    model: values.model,
+    timeoutSeconds: parseNumericOption("timeout", values.timeout, 300),
+    logDir: values["log-dir"],
+    iteration: values.iteration ? Number(values.iteration) : void 0
+  });
+  if (values.verbose) process.stderr.write(`Improved: ${description}
+`);
+  const output = {
+    description,
+    history: [
+      ...history,
+      {
+        description: evalResults.description,
+        passed: evalResults.summary.passed,
+        failed: evalResults.summary.failed,
+        total: evalResults.summary.total,
+        results: evalResults.results
+      }
+    ]
+  };
+  process.stdout.write(`${JSON.stringify(output, null, 2)}
+`);
 }
 function isDirectRun2(expected) {
   const entry = process.argv[1];
   if (!entry) return false;
   return basename2(entry, extname2(entry)) === expected;
 }
-if (isDirectRun2("run-trigger-eval")) {
+if (isDirectRun2("improve-description")) {
   main2().catch((error) => {
     process.stderr.write(`${error.message}
 `);
@@ -984,7 +999,53 @@ if (isDirectRun2("run-trigger-eval")) {
   });
 }
 
+// src/lib/split-eval-set.ts
+function mulberry32(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = state + 1831565813 >>> 0;
+    let t = state;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shuffled(items, rand) {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+function splitEvalSet(evalSet, holdout, seed = 42) {
+  const rand = mulberry32(seed);
+  const positives = shuffled(
+    evalSet.filter((e) => e.should_trigger),
+    rand
+  );
+  const negatives = shuffled(
+    evalSet.filter((e) => !e.should_trigger),
+    rand
+  );
+  const nPositiveTest = Math.max(1, Math.floor(positives.length * holdout));
+  const nNegativeTest = Math.max(1, Math.floor(negatives.length * holdout));
+  return {
+    test: [
+      ...positives.slice(0, nPositiveTest),
+      ...negatives.slice(0, nNegativeTest)
+    ],
+    train: [
+      ...positives.slice(nPositiveTest),
+      ...negatives.slice(nNegativeTest)
+    ]
+  };
+}
+
 // src/run-loop.ts
+function parseImproveTimeout(value) {
+  return parseNumericOption("improve-timeout", value, 300);
+}
 function score(record, hasTestSet) {
   return hasTestSet ? record.test_passed ?? 0 : record.train_passed;
 }
@@ -1057,6 +1118,7 @@ async function runLoop(options) {
     descriptionOverride,
     numWorkers = 10,
     timeout = 30,
+    improveTimeout = 300,
     maxIterations = 5,
     runsPerQuery = 3,
     triggerThreshold = 0.5,
@@ -1169,27 +1231,41 @@ Max iterations reached (${maxIterations}).
     }
     if (verbose) process.stderr.write("\nImproving description...\n");
     const improveStarted = performance.now();
-    const newDescription = await improveDescription2({
-      skillName,
-      skillContent,
-      currentDescription,
-      evalResults: {
-        results: trainResultList,
-        summary: {
-          passed: trainPassed,
-          failed: trainResultList.length - trainPassed,
-          total: trainResultList.length
-        }
-      },
-      history: blindHistory(history).map((attempt) => ({
-        ...attempt,
-        description: attempt.description
-      })),
-      testResults: null,
-      model,
-      logDir,
-      iteration
-    });
+    let newDescription;
+    try {
+      newDescription = await improveDescription2({
+        skillName,
+        skillContent,
+        currentDescription,
+        evalResults: {
+          results: trainResultList,
+          summary: {
+            passed: trainPassed,
+            failed: trainResultList.length - trainPassed,
+            total: trainResultList.length
+          }
+        },
+        history: blindHistory(history).map((attempt) => ({
+          ...attempt,
+          description: attempt.description
+        })),
+        testResults: null,
+        model,
+        timeoutSeconds: improveTimeout,
+        logDir,
+        iteration
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      exitReason = `improve_failed (iteration ${iteration}): ${message}`;
+      if (verbose) {
+        process.stderr.write(
+          `Description improvement failed: ${message}; stopping after iteration ${iteration}.
+`
+        );
+      }
+      break;
+    }
     const improveElapsed = (performance.now() - improveStarted) / 1e3;
     if (verbose) {
       process.stderr.write(
@@ -1258,6 +1334,7 @@ async function main3() {
       description: { type: "string" },
       "num-workers": { type: "string" },
       timeout: { type: "string" },
+      "improve-timeout": { type: "string" },
       "max-iterations": { type: "string" },
       "runs-per-query": { type: "string" },
       "trigger-threshold": { type: "string" },
@@ -1324,6 +1401,7 @@ async function main3() {
       true
     ),
     timeout: parseNumericOption("timeout", values.timeout, 30),
+    improveTimeout: parseImproveTimeout(values["improve-timeout"]),
     maxIterations: parseNumericOption(
       "max-iterations",
       values["max-iterations"],
@@ -1371,6 +1449,7 @@ if (isDirectRun3("run-loop")) {
 }
 export {
   blindHistory,
+  parseImproveTimeout,
   runLoop,
   selectBest
 };

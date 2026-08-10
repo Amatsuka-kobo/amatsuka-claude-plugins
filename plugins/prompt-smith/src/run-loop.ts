@@ -12,7 +12,8 @@
  * This file is a TypeScript port of scripts/run_loop.py from the skill-creator
  * Claude Code plugin. Changes: train/test shuffling uses the seeded PRNG in
  * split-eval-set.ts instead of Python's random module; report generation is
- * delegated to generate-report.ts.
+ * delegated to generate-report.ts; a failed description improvement stops the
+ * loop and returns the best result so far instead of propagating the error.
  */
 
 import { spawn } from "node:child_process"
@@ -46,6 +47,10 @@ import {
 type RunEval = (options: RunEvalOptions) => Promise<EvalResult>
 type ImproveDescription = (options: ImproveOptions) => Promise<string>
 
+export function parseImproveTimeout(value: string | undefined): number {
+  return parseNumericOption("improve-timeout", value, 300)
+}
+
 export interface RunLoopOptions {
   evalSet: EvalItem[]
   skillName: string
@@ -54,6 +59,7 @@ export interface RunLoopOptions {
   descriptionOverride?: string
   numWorkers?: number
   timeout?: number
+  improveTimeout?: number
   maxIterations?: number
   runsPerQuery?: number
   triggerThreshold?: number
@@ -171,6 +177,7 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
     descriptionOverride,
     numWorkers = 10,
     timeout = 30,
+    improveTimeout = 300,
     maxIterations = 5,
     runsPerQuery = 3,
     triggerThreshold = 0.5,
@@ -286,27 +293,40 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
 
     if (verbose) process.stderr.write("\nImproving description...\n")
     const improveStarted = performance.now()
-    const newDescription = await improveDescription({
-      skillName,
-      skillContent,
-      currentDescription,
-      evalResults: {
-        results: trainResultList,
-        summary: {
-          passed: trainPassed,
-          failed: trainResultList.length - trainPassed,
-          total: trainResultList.length
-        }
-      },
-      history: blindHistory(history).map((attempt) => ({
-        ...attempt,
-        description: attempt.description as string
-      })),
-      testResults: null,
-      model,
-      logDir,
-      iteration
-    })
+    let newDescription: string
+    try {
+      newDescription = await improveDescription({
+        skillName,
+        skillContent,
+        currentDescription,
+        evalResults: {
+          results: trainResultList,
+          summary: {
+            passed: trainPassed,
+            failed: trainResultList.length - trainPassed,
+            total: trainResultList.length
+          }
+        },
+        history: blindHistory(history).map((attempt) => ({
+          ...attempt,
+          description: attempt.description as string
+        })),
+        testResults: null,
+        model,
+        timeoutSeconds: improveTimeout,
+        logDir,
+        iteration
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      exitReason = `improve_failed (iteration ${iteration}): ${message}`
+      if (verbose) {
+        process.stderr.write(
+          `Description improvement failed: ${message}; stopping after iteration ${iteration}.\n`
+        )
+      }
+      break
+    }
     const improveElapsed = (performance.now() - improveStarted) / 1000
 
     if (verbose) {
@@ -379,6 +399,7 @@ async function main(): Promise<void> {
       description: { type: "string" },
       "num-workers": { type: "string" },
       timeout: { type: "string" },
+      "improve-timeout": { type: "string" },
       "max-iterations": { type: "string" },
       "runs-per-query": { type: "string" },
       "trigger-threshold": { type: "string" },
@@ -456,6 +477,7 @@ async function main(): Promise<void> {
       true
     ),
     timeout: parseNumericOption("timeout", values.timeout, 30),
+    improveTimeout: parseImproveTimeout(values["improve-timeout"]),
     maxIterations: parseNumericOption(
       "max-iterations",
       values["max-iterations"],

@@ -39,9 +39,17 @@ run_loop.py -> src/run-loop.ts
   9. split_eval_set uses a seeded PRNG implemented in this project instead
      of Python's random module. The shuffle is deterministic across runs
      but does not reproduce Python's sequence.
+  13. Any failure of the description improvement step -- a timeout, a CLI
+      error, or two consecutive responses without <new_description> tags --
+      stops the loop and returns the best result so far. Upstream propagates
+      the error and loses the whole run. The timeout for that step is
+      configurable with --improve-timeout.
 
 improve_description.py -> src/improve-description.ts
-  No behavioural changes. The English prompt is carried over verbatim.
+  14. Responses without <new_description> tags are not used as descriptions:
+      they are retried once, then produce an error if the retry also lacks
+      the required tags. Upstream adopts the whole response instead. The
+      timeout is configurable with --timeout.
 
 generate_report.py -> src/generate-report.ts
   10. The Google Fonts <link> tags are dropped and replaced with a system

@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
-import type { ImproveOptions } from "../improve-description.js"
-import { blindHistory, runLoop, selectBest } from "../run-loop.js"
+import {
+  type ImproveOptions,
+  MissingDescriptionTagError
+} from "../improve-description.js"
+import {
+  blindHistory,
+  parseImproveTimeout,
+  runLoop,
+  selectBest
+} from "../run-loop.js"
 
 const record = (iteration: number, train: number, test: number) => ({
   iteration,
@@ -43,6 +51,13 @@ describe("blindHistory", () => {
     expect(blinded).not.toHaveProperty("test_results")
     expect(blinded).toHaveProperty("train_passed")
     expect(blinded).toHaveProperty("description")
+  })
+})
+
+describe("parseImproveTimeout", () => {
+  it("CLI の --improve-timeout を秒数へ変換し、未指定時は 300 を返す", () => {
+    expect(parseImproveTimeout("480")).toBe(480)
+    expect(parseImproveTimeout(undefined)).toBe(300)
   })
 })
 
@@ -125,6 +140,108 @@ describe("runLoop", () => {
     expect(result.iterations_run).toBe(3)
     expect(result.exit_reason).toContain("max_iterations")
     expect(improve).toHaveBeenCalledTimes(2)
+  })
+
+  it("description タグの欠落時は最良結果を返して打ち切る", async () => {
+    const failing = (
+      queries: { query: string; should_trigger: boolean }[]
+    ) => ({
+      ...allPass(queries),
+      results: queries.map((q) => ({
+        ...q,
+        trigger_rate: 0,
+        triggers: 0,
+        runs: 3,
+        pass: false
+      })),
+      summary: { total: queries.length, passed: 0, failed: queries.length }
+    })
+    const runEval = vi.fn(async ({ evalSet: queries }) => failing(queries))
+    const improve = vi.fn(async () => {
+      throw new MissingDescriptionTagError()
+    })
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0,
+      maxIterations: 3,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+    expect(result.exit_reason).toMatch(
+      /^improve_failed \(iteration 1\): Neither of the two responses/
+    )
+    expect(result.best_description).toBe("start")
+    expect(result.iterations_run).toBe(1)
+  })
+
+  it("description 改善の通常エラー時は最良結果を返して打ち切る", async () => {
+    const failing = (
+      queries: { query: string; should_trigger: boolean }[]
+    ) => ({
+      ...allPass(queries),
+      results: queries.map((q) => ({
+        ...q,
+        trigger_rate: 0,
+        triggers: 0,
+        runs: 3,
+        pass: false
+      })),
+      summary: { total: queries.length, passed: 0, failed: queries.length }
+    })
+    const runEval = vi.fn(async ({ evalSet: queries }) => failing(queries))
+    const improve = vi.fn(async () => {
+      throw new Error("claude -p timed out after 300s")
+    })
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0,
+      maxIterations: 3,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+    expect(result.exit_reason).toMatch(/^improve_failed \(iteration 1\):/)
+    expect(result.exit_reason).toContain("claude -p timed out after 300s")
+    expect(result.best_description).toBe("start")
+    expect(result.iterations_run).toBe(1)
+  })
+
+  it("improveTimeout を改善呼び出しへ渡す", async () => {
+    const failing = (
+      queries: { query: string; should_trigger: boolean }[]
+    ) => ({
+      ...allPass(queries),
+      results: queries.map((q) => ({
+        ...q,
+        trigger_rate: 0,
+        triggers: 0,
+        runs: 3,
+        pass: false
+      })),
+      summary: { total: queries.length, passed: 0, failed: queries.length }
+    })
+    const runEval = vi.fn(async ({ evalSet: queries }) => failing(queries))
+    const improve = vi.fn(async (_options: ImproveOptions) => "next")
+    await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0,
+      maxIterations: 2,
+      improveTimeout: 480,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+    expect(improve.mock.calls[0]?.[0].timeoutSeconds).toBe(480)
   })
 
   it("改善モデルに test スコアを渡さない", async () => {
