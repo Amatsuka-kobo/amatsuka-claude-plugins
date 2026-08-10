@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest"
 import {
   buildImprovePrompt,
   extractDescription,
-  improveDescription
+  improveDescription,
+  MissingDescriptionTagError
 } from "../improve-description.js"
 
 const evalResults = {
@@ -118,8 +119,8 @@ describe("extractDescription", () => {
     ).toBe("line one\nline two")
   })
 
-  it("タグが無ければ全文を使う", () => {
-    expect(extractDescription("  plain text  ")).toBe("plain text")
+  it("タグが無ければ null を返す", () => {
+    expect(extractDescription("  plain text  ")).toBeNull()
   })
 
   it("引用符を剥がす", () => {
@@ -148,6 +149,69 @@ describe("improveDescription", () => {
     expect(callClaude).toHaveBeenCalledTimes(1)
   })
 
+  it("タグ無しの応答には 1 回だけ再依頼する", async () => {
+    const callClaude = vi
+      .fn()
+      .mockResolvedValueOnce("response without a tag")
+      .mockResolvedValueOnce("<new_description>retried</new_description>")
+    const out = await improveDescription({
+      skillName: "s",
+      skillContent: "body",
+      currentDescription: "current",
+      evalResults,
+      history: [],
+      testResults: null,
+      model: "claude-opus-5",
+      callClaude
+    })
+    expect(out).toBe("retried")
+    expect(callClaude).toHaveBeenCalledTimes(2)
+    expect(callClaude.mock.calls[1]?.[0]).toContain(
+      "The previous response did not include <new_description> tags."
+    )
+  })
+
+  it("タグ無しの応答が 2 回続いたら MissingDescriptionTagError を送出する", async () => {
+    const callClaude = vi
+      .fn()
+      .mockResolvedValueOnce("first response without a tag")
+      .mockResolvedValueOnce("second response without a tag")
+    await expect(
+      improveDescription({
+        skillName: "s",
+        skillContent: "body",
+        currentDescription: "current",
+        evalResults,
+        history: [],
+        testResults: null,
+        model: "claude-opus-5",
+        callClaude
+      })
+    ).rejects.toBeInstanceOf(MissingDescriptionTagError)
+    expect(callClaude).toHaveBeenCalledTimes(2)
+  })
+
+  it("タグ再依頼にも timeoutSeconds を渡す", async () => {
+    const callClaude = vi
+      .fn()
+      .mockResolvedValueOnce("response without a tag")
+      .mockResolvedValueOnce("<new_description>retried</new_description>")
+    await improveDescription({
+      skillName: "s",
+      skillContent: "body",
+      currentDescription: "current",
+      evalResults,
+      history: [],
+      testResults: null,
+      model: "claude-opus-5",
+      timeoutSeconds: 480,
+      callClaude
+    })
+    expect(callClaude).toHaveBeenCalledTimes(2)
+    expect(callClaude.mock.calls[0]?.[2]).toBe(480)
+    expect(callClaude.mock.calls[1]?.[2]).toBe(480)
+  })
+
   it("1024 文字を超えたら 1 回だけ再依頼する", async () => {
     const tooLong = "x".repeat(1100)
     const callClaude = vi
@@ -168,6 +232,30 @@ describe("improveDescription", () => {
     expect(callClaude).toHaveBeenCalledTimes(2)
     expect(callClaude.mock.calls[1]?.[0]).toContain(
       "over the 1024-character hard limit"
+    )
+  })
+
+  it("短縮応答にタグが無ければ 1 回だけ再依頼する", async () => {
+    const tooLong = "x".repeat(1100)
+    const callClaude = vi
+      .fn()
+      .mockResolvedValueOnce(`<new_description>${tooLong}</new_description>`)
+      .mockResolvedValueOnce("shorten response without a tag")
+      .mockResolvedValueOnce("<new_description>shortened</new_description>")
+    const out = await improveDescription({
+      skillName: "s",
+      skillContent: "body",
+      currentDescription: "current",
+      evalResults,
+      history: [],
+      testResults: null,
+      model: "claude-opus-5",
+      callClaude
+    })
+    expect(out).toBe("shortened")
+    expect(callClaude).toHaveBeenCalledTimes(3)
+    expect(callClaude.mock.calls[2]?.[0]).toContain(
+      "The previous response did not include <new_description> tags."
     )
   })
 

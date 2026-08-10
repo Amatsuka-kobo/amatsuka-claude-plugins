@@ -10,7 +10,9 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * This file is a TypeScript port of scripts/improve_description.py from the
- * skill-creator Claude Code plugin. Changes: none.
+ * skill-creator Claude Code plugin. Changes: responses without the required
+ * <new_description> tag are retried once and then rejected; the timeout of
+ * the claude -p call is configurable.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -19,6 +21,7 @@ import { parseArgs } from "node:util"
 import { callClaudeText } from "./lib/claude-cli.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import type { EvalResultItem, EvalSummary } from "./lib/types.js"
+import { parseNumericOption } from "./run-trigger-eval.js"
 
 export interface EvalScores {
   results: EvalResultItem[]
@@ -55,8 +58,16 @@ type CallClaude = (
 export interface ImproveOptions extends ImprovePromptInput {
   model: string | undefined
   callClaude?: CallClaude
+  timeoutSeconds?: number
   logDir?: string
   iteration?: number
+}
+
+export class MissingDescriptionTagError extends Error {
+  constructor() {
+    super("Neither of the two responses included <new_description> tags.")
+    this.name = "MissingDescriptionTagError"
+  }
 }
 
 /** Build the improvement request exactly as the upstream implementation does. */
@@ -168,9 +179,9 @@ function stripQuotes(value: string): string {
   return value.slice(start, end)
 }
 
-export function extractDescription(text: string): string {
+export function extractDescription(text: string): string | null {
   const match = /<new_description>([\s\S]*?)<\/new_description>/.exec(text)
-  return stripQuotes((match?.[1] ?? text).trim())
+  return match ? stripQuotes(match[1].trim()) : null
 }
 
 function buildShortenPrompt(prompt: string, description: string): string {
@@ -185,49 +196,125 @@ A previous attempt produced this description, which at ${description.length} cha
 Rewrite it to be under 1024 characters while keeping the most important trigger words and intent coverage. Respond with only the new description in <new_description> tags.`
 }
 
+function buildTagRetryPrompt(prompt: string): string {
+  return `${prompt}
+
+---
+
+The previous response did not include <new_description> tags. Return only the new description enclosed in <new_description> tags.`
+}
+
+interface TaggedDescriptionResponse {
+  response: string
+  description: string | null
+  retryPrompt?: string
+  retryResponse?: string
+}
+
+async function requestDescriptionWithRequiredTag(
+  prompt: string,
+  model: string | undefined,
+  timeoutSeconds: number | undefined,
+  callClaude: CallClaude
+): Promise<TaggedDescriptionResponse> {
+  const response = await callClaude(prompt, model, timeoutSeconds)
+  const description = extractDescription(response)
+  if (description !== null) return { response, description }
+
+  const retryPrompt = buildTagRetryPrompt(prompt)
+  const retryResponse = await callClaude(retryPrompt, model, timeoutSeconds)
+  return {
+    response,
+    description: extractDescription(retryResponse),
+    retryPrompt,
+    retryResponse
+  }
+}
+
+function addRetryTranscript(
+  transcript: Record<string, unknown>,
+  prefix: string,
+  attempt: TaggedDescriptionResponse
+): void {
+  transcript[`${prefix}retry_attempted`] = attempt.retryPrompt !== undefined
+  if (attempt.retryPrompt !== undefined) {
+    transcript[`${prefix}retry_prompt`] = attempt.retryPrompt
+    transcript[`${prefix}retry_response`] = attempt.retryResponse
+  }
+}
+
+async function writeTranscript(
+  logDir: string | undefined,
+  iteration: number | undefined,
+  transcript: Record<string, unknown>
+): Promise<void> {
+  if (!logDir) return
+  await mkdir(logDir, { recursive: true })
+  await writeFile(
+    join(logDir, `improve_iter_${iteration ?? "unknown"}.json`),
+    JSON.stringify(transcript, null, 2),
+    "utf8"
+  )
+}
+
 export async function improveDescription(
   options: ImproveOptions
 ): Promise<string> {
   const {
     callClaude = callClaudeText,
     model,
+    timeoutSeconds,
     logDir,
     iteration,
     ...input
   } = options
   const prompt = buildImprovePrompt(input)
-  const text = await callClaude(prompt, model)
-  let description = extractDescription(text)
+  const initial = await requestDescriptionWithRequiredTag(
+    prompt,
+    model,
+    timeoutSeconds,
+    callClaude
+  )
+  let description = initial.description
   const transcript: Record<string, unknown> = {
     iteration,
     prompt,
-    response: text,
+    response: initial.response,
     parsed_description: description,
-    char_count: description.length,
-    over_limit: description.length > 1024
+    char_count: description?.length ?? null,
+    over_limit: description !== null && description.length > 1024
+  }
+  addRetryTranscript(transcript, "", initial)
+
+  if (description === null) {
+    await writeTranscript(logDir, iteration, transcript)
+    throw new MissingDescriptionTagError()
   }
 
   if (description.length > 1024) {
     const shortenPrompt = buildShortenPrompt(prompt, description)
-    const shortenText = await callClaude(shortenPrompt, model)
-    const shortened = extractDescription(shortenText)
+    const shortenedAttempt = await requestDescriptionWithRequiredTag(
+      shortenPrompt,
+      model,
+      timeoutSeconds,
+      callClaude
+    )
+    const shortened = shortenedAttempt.description
     transcript.rewrite_prompt = shortenPrompt
-    transcript.rewrite_response = shortenText
+    transcript.rewrite_response = shortenedAttempt.response
     transcript.rewrite_description = shortened
-    transcript.rewrite_char_count = shortened.length
+    transcript.rewrite_char_count = shortened?.length ?? null
+    addRetryTranscript(transcript, "rewrite_", shortenedAttempt)
+
+    if (shortened === null) {
+      await writeTranscript(logDir, iteration, transcript)
+      throw new MissingDescriptionTagError()
+    }
     description = shortened
   }
 
   transcript.final_description = description
-  if (logDir) {
-    await mkdir(logDir, { recursive: true })
-    await writeFile(
-      join(logDir, `improve_iter_${iteration ?? "unknown"}.json`),
-      JSON.stringify(transcript, null, 2),
-      "utf8"
-    )
-  }
-
+  await writeTranscript(logDir, iteration, transcript)
   return description
 }
 
@@ -240,7 +327,8 @@ async function main(): Promise<void> {
       model: { type: "string" },
       verbose: { type: "boolean", default: false },
       "log-dir": { type: "string" },
-      iteration: { type: "string" }
+      iteration: { type: "string" },
+      timeout: { type: "string" }
     },
     strict: true,
     allowPositionals: false
@@ -280,6 +368,7 @@ async function main(): Promise<void> {
     history,
     testResults: null,
     model: values.model,
+    timeoutSeconds: parseNumericOption("timeout", values.timeout, 300),
     logDir: values["log-dir"],
     iteration: values.iteration ? Number(values.iteration) : undefined
   })
