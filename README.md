@@ -102,6 +102,7 @@ ER 図、シーケンス図、システム構成図、画面遷移図、API 一�
 Claude Code を使う時のエージェント運用を最適化するプラグインです。<br>
 モデル別役割分担・大まかな設計/実装フロー・アドバイザー運用・並列原則・コードベース探索のコスト効率化施策として context-map の作成指針をスキルとして配布します。<br>
 CLAUDE.md に `agent-policy:claude-model-policy` または `agent-policy:with-codex-policy` へ従う旨を書くだけで、任意のプロジェクトに同じ最適化施策を持ち込めます。<br>
+`setup-gpt` / `setup-grok` が生成する Agents 定義は、Serena MCP のシンボル探索ツールと編集ツールを許可します。サブエージェントは既定でバックグラウンド実行され、その際に組み込みの LSP ツールが失われるため、シンボル単位の探索と編集を MCP 経由で確保しています。<br>
 
 ### prompt-smith
 
