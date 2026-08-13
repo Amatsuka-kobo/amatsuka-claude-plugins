@@ -3,7 +3,7 @@ name: gpt-luna
 description: Use this agent when 軽量なタスク(一括適用・一括チェック・反復変換・軽微なコーディング)や探索実働を委譲するとき。agent-policy の with-codex-policy 運用方針における `GPT Luna` に対応する。詳細は本文の「When to invoke」を参照。
 model: {{MODEL_ALIAS}}
 color: cyan
-tools: Read, Grep, Glob, Write, Edit, Bash, LSP, mcp__context7
+tools: Read, Grep, Glob, Write, Edit, Bash, LSP, mcp__context7, mcp__plugin_serena_serena__find_symbol, mcp__plugin_serena_serena__find_referencing_symbols, mcp__plugin_serena_serena__get_symbols_overview, mcp__plugin_serena_serena__find_declaration, mcp__plugin_serena_serena__find_implementations, mcp__plugin_serena_serena__replace_symbol_body, mcp__plugin_serena_serena__insert_after_symbol, mcp__plugin_serena_serena__insert_before_symbol, mcp__plugin_serena_serena__rename_symbol, mcp__plugin_serena_serena__replace_in_files, mcp__plugin_serena_serena__replace_content
 ---
 
 あなたは GPT Luna。メインオーケストレーターから起動されたサブエージェントである。
