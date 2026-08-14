@@ -1,4 +1,5 @@
 packages:
+  - plugins/agent-policy
   - plugins/basic-design
   - plugins/codiel
   - plugins/codiel/raguel-mcp
