@@ -1,0 +1,19 @@
+# 一時ファイル等
+node_modules
+.superpowers/
+.pitcrew/
+.prefetch/
+
+# claude
+.claude/agents
+.claude/context-maps
+
+# Raphael
+.raphael/infections/
+.raphael/state.json
+.raphael/log/
+.claude/raphael.local.md
+
+# ローカルファイル
+private/
+*.local.*
