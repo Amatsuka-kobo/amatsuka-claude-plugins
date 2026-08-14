@@ -54,7 +54,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | chat-history | チャットの履歴を保存・検索するためのプラグイン                                                                                                                      | リリース   |
 | gh-utility   | GitHub関連のユーティリティスキル群                                                                                                                                  | 開発中     |
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                  | 開発中     |
-| agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群を Claude+Codex 併用 / Claude オンリーの 2 プロファイルで提供する | 開発中     |
+| agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群を Claude+Codex+Grok 併用 / Claude+Codex 併用 / Claude+Grok 併用 / Claude オンリーの 4 プロファイルで提供する | 開発中     |
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
 
 各プラグインの詳しい説明は、それぞれのフォルダ内（`plugins/<plugin-name>/`）にあるREADMEを参照してください。
@@ -103,6 +103,7 @@ Claude Code を使う時のエージェント運用を最適化するプラグ�
 モデル別役割分担・大まかな設計/実装フロー・アドバイザー運用・並列原則・コードベース探索のコスト効率化施策として context-map の作成指針をスキルとして配布します。<br>
 CLAUDE.md に `agent-policy:claude-model-policy` または `agent-policy:with-codex-policy` へ従う旨を書くだけで、任意のプロジェクトに同じ最適化施策を持ち込めます。<br>
 `setup-gpt` / `setup-grok` が生成する Agents 定義は、Serena MCP のシンボル探索ツールと編集ツールを許可します。サブエージェントは既定でバックグラウンド実行され、その際に組み込みの LSP ツールが失われるため、シンボル単位の探索と編集を MCP 経由で確保しています。<br>
+`setup-gpt` / `setup-grok` は `--yes` を付けると非対話で動作し、`claude -p "/agent-policy:setup-gpt --yes"` で確認なしに既定エイリアスで生成できます。<br>
 
 ### prompt-smith
 
