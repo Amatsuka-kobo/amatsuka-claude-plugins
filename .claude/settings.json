@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5[1m]"
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-fable-5[1m]",
+    "GENSHIJIN_DEFAULT_MODE": "extreme"
   },
   "permissions": {
     "allow": [
@@ -10,7 +11,7 @@
       "Bash(git commit *)",
       "Bash(git pull *)",
       "Bash(git branch *)",
-      "Bash(git checkout *)"
+      "Bash(git push *)"
     ],
     "deny": [
       "Bash(rm -rf ./)",
@@ -19,8 +20,7 @@
       "Bash(sudo *)"
     ],
     "ask": [
-      "Bash(git push *)",
-      "Bash(git * main)",
+      "Bash(git checkout *)",
       "Bash(rm *)"
     ]
   },
@@ -28,20 +28,15 @@
   "enabledPlugins": {
     "agent-policy@amatsuka-claude-plugins": true,
     "chat-history@amatsuka-claude-plugins": true,
-    "prefetch@amatsuka-claude-plugins": true,
     "prompt-smith@amatsuka-claude-plugins": true,
     "raphael@amatsuka-claude-plugins": true,
-    "claude-md-management@claude-plugins-official": true,
+    "context7@context7-marketplace": true,
     "claude-security@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
-    "serena@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "bash-language-server@claude-code-lsps": true,
     "mdbase-lsp@claude-code-lsps": true,
-    "pyright@claude-code-lsps": true,
-    "vtsls@claude-code-lsps": true,
+    "genshijin@genshijin": true,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
@@ -53,8 +48,20 @@
     },
     "claude-code-lsps": {
       "source": {
-        "source": "git",
-        "url": "https://github.com/Piebald-AI/claude-code-lsps.git"
+        "source": "github",
+        "repo": "Piebald-AI/claude-code-lsps"
+      }
+    },
+    "context7-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "upstash/context7"
+      }
+    },
+    "genshijin": {
+      "source": {
+        "source": "github",
+        "repo": "InterfaceX-co-jp/genshijin"
       }
     },
     "openai-codex": {
