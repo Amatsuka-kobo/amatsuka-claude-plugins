@@ -69,4 +69,5 @@
 - `2026/0809/phyllis98/codiel-agents-prompt-smith-update.md` | 2026-08-10 | phyllis98 | prompt-smith skill-creator のポート実装: 計画から Task 実行と SDD 実装開始
 - `2026/0810/phyllis98/tiny-report-check-skill-optimization.md` | 2026-08-10 | phyllis98 | tiny-report-check スキルの説明文最適化
 - `2026/0810/phyllis998/echo-instruction.md` | 2026-08-10 | phyllis998 | CLAUDE.md 文言修正とプラグインバージョン管理方針の決定
-- `2026/0812/phyllis998/test-simple-reply.md` | 2026-08-13 | phyllis998 | Serena 再起動確認・検証 2 再実施
+- `2026/0812/phyllis998/test-simple-reply.md` | 2026-08-13 | phyllis998 | Serena tool 付与・検証完了・コミット
+- `2026/0814/phyllis998/agent-policy-headless-setup.md` | 2026-08-14 | phyllis998 | agent-policy headless 実装：設計確定・配置移設・setup スクリプト実装
