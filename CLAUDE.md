@@ -117,11 +117,13 @@ plugins/<plugin>/
 - それ以外の人間向け文書(設計・背景・根拠・経緯・不採用案)は `plugins/<plugin>/docs/` に置く。
 - AI が必要なときにだけ読む文書(複数のスキル・エージェントで共有する規律、参照断片)は `plugins/<plugin>/references/` に置く。
 
-## chat ファイルの運用方針
+## ドキュメント運用方針
 
+- `docs/` は読まない。
 - `docs/chat/**/*.md` は chat-recorder エージェント / chat-reader エージェントだけが読む。
 - 過去の記録が必要なときは `chat-history:recall` を使う。
 - 前回セッションの再開には `chat-history:resume` を使う。
+- 設計書・実装計画書は `harness-docs/` へ出力する。
 
 ## git の運用
 
