@@ -89,19 +89,23 @@ VSCode を使用する場合、コード保守の観点から Biome 拡張機能
 
 ### CLAUDE.md
 
-`CLAUDE.md` は、セッションを起動したときに毎回注入されるプロンプトです。
+`CLAUDE.md` と `CLAUDE.local.md` は、セッションを起動したときに毎回注入されるプロンプトです。
 主にこのプロジェクト内の概要や、運用方針などを記載しています。
 
-利用者それぞれに設定したい項目等があると仮定して、推奨される共通設定 `CLAUDE.example.md` をコピーする運用を採用しています。
+`CLAUDE.local.example.md` には、エージェント運用方針が記載されています。
+コピーして、自分の環境に合った記述に書き換えてください。
+共通設定ではない、独自の指示などはこちらに記載してください。
 
 ```bash
-cp CLAUDE.example.md CLAUDE.md
+cp CLAUDE.local.example.md CLAUDE.local.md
 ```
 
-また、 Codex 利用者と Claude Code のみの利用者でエージェントの運用方針を変えるため、agent-policy プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.example.md に記述してあります。
+Codex との併用、Grok との併用、Codex & Grok との併用、Claude のみの利用者でエージェントの運用方針を変えるため、agent-policy プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.local.example.md に記述してあります。
 
 - Codex 併用 -&gt; `agent-policy:with-codex-policy`
-- Claude Code のみ -&gt; `agent-policy:claude-model-policy`
+- Grok 併用 -&gt; `agent-policy:with-grok-policy`
+- Codex & Grok 併用 -&gt; `agent-policy:codex-grok-policy`
+- Claude のみ -&gt; `agent-policy:claude-model-policy`
 
 ### uv と Serena
 
