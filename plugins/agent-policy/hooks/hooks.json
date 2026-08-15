@@ -1,0 +1,16 @@
+{
+  "description": "agent-policy の運用補助: SessionStart で方針スキルの使用指示とエージェント定義の状態を注入する",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
