@@ -48,4 +48,6 @@ built-in vocabulary), `benign_exit1_commands` (adds to built-ins `grep`/`rg`/`gi
 Every hook **fails open**: any error means no injection / no detection / no block — never a broken
 turn. Malformed antibody records are skipped individually, not en masse.
 
-This repo dogfoods raphael: `.raphael/antibodies/` is tracked and currently holds ~18 antibodies.
+This repo dogfoods raphael: `.raphael/antibodies/` is tracked and holds 33 antibodies as of
+2026-08-15 (grew from ~18 in late July). Detector ids are `command-failure`, `retry-loop`,
+`user-rejection`, `edit-churn` (`src/lib/infection-store.ts`).

@@ -1,4 +1,4 @@
-`plugins/chat-history` (0.5.0 — released). Persists conversations to `docs/chat/` so future agents
+`plugins/chat-history` (0.6.0 — released, non-`-dev`). Persists conversations to `docs/chat/` so future agents
 and humans can audit what was decided and why. Split out of `task-utility` in commit 849d3c7;
 `gh-utility` took the issue skills. Workspace pkg `chat-history-scripts`. Node stdlib + `git` only.
 Rationale: `plugins/chat-history/docs/rationale.md`.
@@ -20,6 +20,10 @@ lives in the agent definition) telling the main agent to dispatch `chat-recorder
   load no skills — this is both a prompt-injection guard and a cost guard.
 - User utterances are extracted verbatim from the raw transcript JSONL, so verbatimness is
   structural rather than a promise the model keeps.
+
+Bundles: `check-chat-recorded.mjs` (the Stop hook), `prepare-chat-recording.mjs`,
+`commit-chat-recording.mjs`, `extract-conversation.mjs`, `find-chat-records.mjs`. State resolution
+and the legacy-dir migration live in `src/chat-recording-state.ts`.
 
 ## Records and index
 

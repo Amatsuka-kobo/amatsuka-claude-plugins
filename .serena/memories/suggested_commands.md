@@ -11,17 +11,27 @@ pnpm --filter basic-design-generator build   # single package
 ```
 
 Workspace package names differ from plugin names — `<plugin>-scripts` for most
-(`chat-history-scripts`, `gh-utility-scripts`, `codiel-scripts`, `revelation-scripts`,
-`pitcrew-scripts`, `raphael-scripts`, `prefetch-scripts`, `guidepost-scripts`), plus
-`basic-design-generator` and `raguel-mcp`. `agent-policy` / `prompt-smith` have no package at all.
+(`agent-policy-scripts`, `prompt-smith-scripts`, `chat-history-scripts`, `gh-utility-scripts`,
+`codiel-scripts`, `revelation-scripts`, `pitcrew-scripts`, `raphael-scripts`, `prefetch-scripts`,
+`guidepost-scripts`), plus `basic-design-generator` and `raguel-mcp`.
 
-Note: some plugin READMEs still say `cd plugins/<x> && pnpm test && pnpm typecheck` — stale; those
-scripts are root-only.
+## Repo-level shell scripts (`scripts/`)
 
-No CI. A markdown/JSON-only plugin change (skills/agents/commands/hooks/marketplace.json) has no
-automated check beyond `plugin-dev:plugin-validator` and the editor-side `mdbase-lsp` frontmatter
-schema check (`mdbase.yaml` + `_types/`) — neither runs in `pnpm test`.
+- `setup-workspace.sh` — one-shot new-workspace setup: `pnpm install`, `pnpm build`, then headless
+  generation of the GPT/Grok agent definitions into `.claude/agents/`.
+- `install-mdbase.sh` — fetches/builds `mdbase-lsp` + `mdbase-rs` and installs the LSP.
+- `install-proxy.sh` / `start-proxy.sh` — CLIProxyAPI install (writes `cliproxyapi.config.yaml`
+  from `cliproxyapi.config.example.yaml`, sets the local auth key) and launch. This proxy is what
+  makes the GPT/Grok model aliases (`claude-gpt-5-6-*`, `claude-grok-4-5`) resolvable.
 
-Linux/WSL2 dev machine. Env setup (Volta, uv/Serena, Context7, LSPs incl. mdbase-lsp via
-`scripts/install-mdbase.sh`, optional CLIProxyAPI via `scripts/{install,start}-proxy.sh`):
-`ONBOARDING.md`.
+## Verification gaps
+
+No CI. A markdown/JSON-only plugin change (skills/agents/commands/hooks/marketplace.json) has **no
+automated check at all** beyond the editor-side `mdbase-lsp` frontmatter schema check
+(`mdbase.yaml` + `_types/`). The `plugin-dev` plugin — and with it
+`plugin-dev:plugin-validator` — was removed from this workspace in 2026-08 (commit ea72cbc), so do
+not cite it as a validation step any more.
+
+Linux/WSL2 dev machine. Env setup (Volta, uv/Serena, Context7, LSPs incl. mdbase-lsp, optional
+CLIProxyAPI): `docs/ONBOARDING.md` (moved down from the repo root in the 2026-08-14 docs split;
+its `CLAUDE.example.md` copy step is stale — see `mem:core`).
