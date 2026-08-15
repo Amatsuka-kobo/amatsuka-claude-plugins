@@ -1,5 +1,8 @@
-`plugins/pitcrew` (0.10.1 — released, non-`-dev`). Turns orchestration wait-time into human
-parallel-review time. Design spec: `docs/superpowers/specs/2026-07-16-pitcrew-design.md`.
+`plugins/pitcrew` (0.10.2 — released, non-`-dev`). Turns orchestration wait-time into human
+parallel-review time. Design spec: `harness-docs/superpowers/specs/2026-07-16-pitcrew-design.md`.
+Note `src/lib/__test__/capture-rules.test.ts:10` asserts that `docs/superpowers/specs/x.md` matches
+the default artifact glob `docs/**/*.md` — that string is a glob fixture, not a doc reference, and
+must not be rewritten to `harness-docs/`.
 Workspace pkg `pitcrew-scripts`. Deps: Node stdlib + git CLI only. `build.ts` bundles `src/**` →
 committed `scripts/*.mjs` (`mem:conventions` src→scripts rule).
 
@@ -16,6 +19,8 @@ Two layers, both driven by `hooks/hooks.json` (no `.mcp.json`, no agents):
   - `PreToolUse` Write|Edit → `urgent` comments matching the target path, to the agent about to
     touch it (first-come, one agent).
   - `Stop` → `normal` comments (+ leftover unmatched `urgent`) to the main session at turn boundary.
+  - The split above is the default `injection_timing: hybrid`; `immediate` / `turn-boundary` move
+    both classes to one channel. `Stop` also sweeps up any urgent comment no `PreToolUse` matched.
   - at-most-once; injected comments move to `comments/processed/`. `run.json` updates serialized via
     `.pitcrew/run.lock` (stale >10s auto-reclaimed; lock failure → proceed unlocked).
 

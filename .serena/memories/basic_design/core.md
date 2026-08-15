@@ -1,5 +1,5 @@
-`plugins/basic-design` (0.6.1-dev) — brainstorm-driven basic-design deliverables. Design spec:
-`docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`.
+`plugins/basic-design` (0.6.2-dev) — brainstorm-driven basic-design deliverables. Design spec:
+`harness-docs/superpowers/specs/2026-07-12-basic-design-plugin-design.md`.
 
 ## Model
 
@@ -33,7 +33,7 @@ Google Drive upload is opt-in: `drive_folder_id` in `.claude/basic-design.local.
   and samples together.
 - `samples/*.{spec.json,drawio,html}` and `src/fixtures/complex-*.spec.json` are layout regression
   material — layout changes must refresh them.
-- README says `cd plugins/basic-design && pnpm test && pnpm typecheck`; stale — those scripts are
-  root-only (`mem:suggested_commands`).
-- Deliverables land in `docs/design/<kind>/` of the **target** project. In this repo `docs/design/`
-  is instead the plugin-design-doc directory — unrelated to basic-design output.
+- `elkjs` is pinned at exactly `0.11.1` (no `^`/`~`).
+- Deliverables land in `docs/design/<kind>/` of the **target** project. In this repo there is no
+  `docs/design/` any more — plugin design docs live in `harness-docs/design/` — so nothing here
+  collides with basic-design output.
