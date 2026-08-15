@@ -46,7 +46,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 | runId / 再挑戦 | runId は `issue-123` 形式。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 Issue の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
 | 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
-| 設計ディスカッション | 常に実施・アジェンダ駆動型(論点抽出=architect、進行と記録=オーケストレーター、決定=ユーザー)。discuss は非 GATED、ウォークスルーは design フェーズ内。詳細は `docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md` |
+| 設計ディスカッション | 常に実施・アジェンダ駆動型(論点抽出=architect、進行と記録=オーケストレーター、決定=ユーザー)。discuss は非 GATED、ウォークスルーは design フェーズ内。詳細は `harness-docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md` |
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
 

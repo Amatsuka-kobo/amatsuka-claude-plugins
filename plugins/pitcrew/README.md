@@ -9,7 +9,7 @@
 テスト・ビルドの成功したコマンドは `PostToolUse`、失敗したコマンドは
 `PostToolUseFailure` で捕捉します。
 
-設計書: `docs/superpowers/specs/2026-07-16-pitcrew-design.md`
+設計書: `harness-docs/superpowers/specs/2026-07-16-pitcrew-design.md`
 
 ## 動作要件
 
