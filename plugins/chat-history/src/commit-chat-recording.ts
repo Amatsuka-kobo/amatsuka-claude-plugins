@@ -20,6 +20,8 @@ interface Args {
   targetLine: number
   bodyFile: string
   indexLineFile: string
+  sessionTitleFile: string
+  headerFile?: string
   recordPath?: string
 }
 
@@ -29,11 +31,17 @@ interface AttemptPlan {
   targetLine: number
   recordTarget: { relativePath: string | null; appendMode: boolean }
   allowedNewRecordDir: string
+  sessionNumber: number
 }
 
-const fail = (message: string): never => {
+function fail(message: string): never {
   throw new Error(message)
 }
+
+const MAX_BODY_BYTES = 8 * 1024 * 1024
+const MAX_SESSION_TITLE_BYTES = 512
+const MAX_HEADER_BYTES = 64 * 1024
+const MAX_INDEX_LINE_BYTES = 8192
 
 function parseArgs(argv: string[]): Args {
   const value = (name: string, optional = false): string | undefined => {
@@ -54,6 +62,11 @@ function parseArgs(argv: string[]): Args {
     targetLine,
     bodyFile: path.resolve(value("--body-file") as string),
     indexLineFile: path.resolve(value("--index-line-file") as string),
+    sessionTitleFile: path.resolve(value("--session-title-file") as string),
+    headerFile: (() => {
+      const raw = value("--header-file", true)
+      return raw ? path.resolve(raw) : undefined
+    })(),
     recordPath: value("--record-path", true)
   }
 }
@@ -76,24 +89,57 @@ function validateInputs(
   body: string
   indexLine: string
 } {
-  if (
-    !isInside(paths.tempDir, args.bodyFile) ||
-    !isInside(paths.tempDir, args.indexLineFile)
-  )
-    fail("temporary files must be inside the recording state temp directory")
-  const body = fs.readFileSync(args.bodyFile, "utf8")
+  const temporaryFiles = [
+    args.bodyFile,
+    args.indexLineFile,
+    args.sessionTitleFile,
+    ...(args.headerFile ? [args.headerFile] : [])
+  ]
+  for (const file of temporaryFiles)
+    if (!isInside(paths.tempDir, file))
+      fail("temporary files must be inside the recording state temp directory")
+
+  const rawBody = fs.readFileSync(args.bodyFile, "utf8")
   const indexLine = fs.readFileSync(args.indexLineFile, "utf8").trim()
-  if (!body || Buffer.byteLength(body) > 1024 * 1024)
-    fail("record body is empty or too large")
+  const sessionTitle = fs.readFileSync(args.sessionTitleFile, "utf8").trim()
+  if (!rawBody) fail("record body is empty")
+  if (!rawBody.includes("> "))
+    fail("record body must contain a USER quote block")
+  if (
+    !sessionTitle ||
+    sessionTitle.includes("\n") ||
+    Buffer.byteLength(sessionTitle) > MAX_SESSION_TITLE_BYTES
+  )
+    fail("session title must be exactly one bounded line")
   if (
     !indexLine ||
     indexLine.includes("\n") ||
-    Buffer.byteLength(indexLine) > 8192
+    Buffer.byteLength(indexLine) > MAX_INDEX_LINE_BYTES
   )
     fail("INDEX entry must be exactly one bounded line")
-  if (!body.includes("## セッション") && plan.recordTarget.appendMode)
-    fail("append body must contain a session heading")
-  if (!body.includes("> ")) fail("record body must contain a USER quote block")
+
+  let header = ""
+  if (plan.recordTarget.appendMode) {
+    if (args.headerFile)
+      fail("--header-file is forbidden when appending to an existing record")
+  } else {
+    const headerFile = args.headerFile
+    if (!headerFile) fail("--header-file is required for a new record")
+    header = fs.readFileSync(headerFile, "utf8")
+    if (
+      !header.startsWith("# ") ||
+      Buffer.byteLength(header) > MAX_HEADER_BYTES
+    )
+      fail("record header must start with a title line and stay bounded")
+  }
+
+  const heading = `## セッション ${plan.sessionNumber}: ${sessionTitle}`
+  const body = plan.recordTarget.appendMode
+    ? `\n${heading}\n\n${rawBody}`
+    : `${header.trimEnd()}\n\n---\n\n${heading}\n\n${rawBody}`
+  if (Buffer.byteLength(body) > MAX_BODY_BYTES) fail("record body is too large")
+  if (!body.includes("## セッション"))
+    fail("composed record must contain a session heading")
 
   let relativePath: string
   if (plan.recordTarget.relativePath !== null) {
@@ -252,6 +298,8 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     for (const file of [
       args.bodyFile,
       args.indexLineFile,
+      args.sessionTitleFile,
+      ...(args.headerFile ? [args.headerFile] : []),
       planPath,
       paths.lockPath
     ])
