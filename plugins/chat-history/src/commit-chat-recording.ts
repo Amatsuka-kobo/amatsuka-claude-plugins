@@ -133,6 +133,9 @@ function validateInputs(
       fail("record header must start with a title line and stay bounded")
   }
 
+  // 旧版 prepare が書いた plan と組み合わされると `## セッション undefined` が記録に残る。
+  if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)
+    fail("plan.sessionNumber must be a positive integer")
   const heading = `## セッション ${plan.sessionNumber}: ${sessionTitle}`
   const body = plan.recordTarget.appendMode
     ? `\n${heading}\n\n${rawBody}`

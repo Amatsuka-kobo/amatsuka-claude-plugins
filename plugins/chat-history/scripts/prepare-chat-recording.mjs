@@ -215,12 +215,9 @@ function markdownFiles(dir) {
   if (!fs3.existsSync(dir)) return [];
   return fs3.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md")).map((entry) => path3.join(dir, entry.name)).sort();
 }
-function tailLines(file, count) {
-  return fs3.readFileSync(file, "utf8").split("\n").slice(-count).join("\n");
-}
 function lastSessionNumber(text) {
   let result = 0;
-  for (const match of text.matchAll(/^## セッション\s+(\d+)/gm))
+  for (const match of text.matchAll(/^##\s*セッション\s*(\d+)/gm))
     result = Math.max(result, Number(match[1]));
   return result;
 }
@@ -278,7 +275,8 @@ function prepareChatRecording(args) {
   );
   const relativePath = selected ? path3.relative(args.project, selected).replaceAll("\\", "/") : null;
   const docsRelativePath = relativePath?.replace(/^docs\/chat\//, "") ?? null;
-  const tailContext = selected ? tailLines(selected, 60) : "";
+  const recordText = selected ? fs3.readFileSync(selected, "utf8") : "";
+  const tailContext = selected ? recordText.split("\n").slice(-60).join("\n") : "";
   const indexPath = path3.join(args.project, "docs", "chat", "INDEX.md");
   const indexLines = fs3.existsSync(indexPath) ? fs3.readFileSync(indexPath, "utf8").split("\n") : [];
   const indexLine = relativePath ? indexLines.find((line) => line.includes(docsRelativePath)) ?? "" : "";
@@ -319,7 +317,8 @@ function prepareChatRecording(args) {
     args.targetLine,
     safeWorker(workerName)
   );
-  const sessionNumber = lastSessionNumber(tailContext) + 1;
+  const previousSessionNumber = lastSessionNumber(recordText);
+  const sessionNumber = previousSessionNumber + 1;
   fs3.mkdirSync(paths.tempDir, { recursive: true, mode: 448 });
   fs3.writeFileSync(
     bodyFile,
@@ -355,7 +354,7 @@ function prepareChatRecording(args) {
     sessionNumber,
     indexEntryPath: docsRelativePath,
     indexLineExample: docsRelativePath ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <\u8981\u65E8>` : `- \`YYYY/MMDD/<worker>/<kebab-case>.md\` | YYYY-MM-DD | <worker> | <\u8981\u65E8>`,
-    lastSessionNumber: lastSessionNumber(tailContext),
+    lastSessionNumber: previousSessionNumber,
     tailContext,
     indexLine,
     metadataHints: plan.metadataHints

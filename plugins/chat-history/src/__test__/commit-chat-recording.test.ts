@@ -389,6 +389,28 @@ test("セッション要旨が空または複数行なら拒否する", () => {
   ).toThrow(/session title/)
 })
 
+// 旧版 prepare が書いた plan には sessionNumber が無い。検証しないと
+// `## セッション undefined` が記録に残る。
+test("plan の sessionNumber が欠けていれば拒否する", () => {
+  const value = setup(true)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = JSON.parse(fs.readFileSync(planPath, "utf8"))
+  delete plan.sessionNumber
+  atomicWriteJson(planPath, plan)
+  expect(() =>
+    commitChatRecording({
+      project: value.project,
+      sessionKey: value.sessionKey,
+      attemptId: value.attemptId,
+      targetLine: 2,
+      bodyFile: value.bodyFile,
+      indexLineFile: value.indexLineFile,
+      sessionTitleFile: value.sessionTitleFile
+    })
+  ).toThrow(/sessionNumber/)
+  expect(fs.readFileSync(value.recordPath, "utf8")).toBe("# Existing\n")
+})
+
 test("成功時に一時ファイル 4 本をすべて削除する", () => {
   const value = setup(false)
   commitChatRecording({

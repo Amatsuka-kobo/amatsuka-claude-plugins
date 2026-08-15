@@ -275,6 +275,42 @@ test("sessionNumber は既存記録の最大セッション番号 + 1 になる"
   expect(plan.sessionNumber).toBe(3)
 })
 
+// 原文記録では 1 セッションの本文が容易に 60 行を超える。末尾数十行の窓で番号を
+// 数えると見出しを見失い、番号が 1 に戻ってセッション見出しが重複する。
+test("セッション本文が 60 行を超えても sessionNumber は全文から算出する", () => {
+  const value = setup([user("質問")])
+  const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
+  const relativePath = `${dir}/long.md`
+  fs.mkdirSync(path.join(value.project, dir), { recursive: true })
+  const longBody = Array.from({ length: 120 }, (_, i) => `> 行 ${i}`).join("\n")
+  fs.writeFileSync(
+    path.join(value.project, relativePath),
+    `# Existing\n\n## セッション 3: 要旨\n\n${longBody}\n`
+  )
+  setRecordPath(value, relativePath)
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.tailContext as string).not.toContain("## セッション")
+  expect(result.lastSessionNumber).toBe(3)
+  expect(result.sessionNumber).toBe(4)
+})
+
+// 旧テンプレートは `## セッション1` とスペース無しで書いていた。既存記録が大半なので
+// この形式を数え落とすと、追記のたびに番号が 1 に戻る。
+test("旧形式のスペース無し見出しからも sessionNumber を継承する", () => {
+  const value = setup([user("質問")])
+  const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
+  const relativePath = `${dir}/legacy.md`
+  fs.mkdirSync(path.join(value.project, dir), { recursive: true })
+  fs.writeFileSync(
+    path.join(value.project, relativePath),
+    "# Existing\n\n## セッション1: 要旨\n\n> 質問\n"
+  )
+  setRecordPath(value, relativePath)
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.lastSessionNumber).toBe(1)
+  expect(result.sessionNumber).toBe(2)
+})
+
 test("同一セッションの古い attempt の一時ファイルだけを掃除する", () => {
   const value = setup([user("質問")])
   // attemptId("attempt") を名前に含めない。含めると掃除の除外条件に当たって残ってしまう

@@ -185,6 +185,8 @@ function validateInputs(args, paths, plan) {
     if (!header.startsWith("# ") || Buffer.byteLength(header) > MAX_HEADER_BYTES)
       fail("record header must start with a title line and stay bounded");
   }
+  if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)
+    fail("plan.sessionNumber must be a positive integer");
   const heading = `## \u30BB\u30C3\u30B7\u30E7\u30F3 ${plan.sessionNumber}: ${sessionTitle}`;
   const body = plan.recordTarget.appendMode ? `
 ${heading}
