@@ -15,7 +15,7 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 ## chat スキル
 
-会話を `docs/chat/YYYY/MMDD/<作業者名>/*.md`(作業者名は git のユーザー名)に永続記録する。粒度契約(ユーザー発言=原文引用、AI発言=構造化要約、失敗は道筋ごと記録、網羅性の明記)は `skills/chat/SKILL.md` を参照。
+会話を `docs/chat/YYYY/MMDD/<作業者名>/*.md`(作業者名は git のユーザー名)に永続記録する。2026-08-16 以降の記録はユーザー発言・AI発言ともに transcript の原文をそのまま残し、要約を挟まない(Tool の使用記録と思考ブロックは含まれない)。それより前の記録は AI発言が構造化要約になっている。粒度契約の正本は `skills/chat/SKILL.md` を参照。
 
 ## recall スキル
 
@@ -23,7 +23,7 @@ docs/chat/ の会話記録から決定の経緯・失敗の記録をキーワー
 
 ## resume スキル
 
-新しいセッションの冒頭で、本人(git のユーザー名)の直近の chat 記録から前回の進捗と持ち越し事項(記録末尾の「注意事項と次の作業」)を読み取り、再開点を合意する(明示発動型)。対象の特定は `find-chat-records.mjs --latest`、読解は recall と同じ `chat-reader` に委譲する。詳細は `skills/resume/SKILL.md` を参照。
+新しいセッションの冒頭で、本人(git のユーザー名)の直近の chat 記録から前回の進捗と持ち越し事項(2026-08-16 より前の記録は末尾の「注意事項と次の作業」節。それ以降の記録はこの節を持たず、欠落として扱う)を読み取り、再開点を合意する(明示発動型)。対象の特定は `find-chat-records.mjs --latest`、読解は recall と同じ `chat-reader` に委譲する。詳細は `skills/resume/SKILL.md` を参照。
 
 ## 会話の自動記録(Stop フック + バックグラウンド chat-recorder)
 
