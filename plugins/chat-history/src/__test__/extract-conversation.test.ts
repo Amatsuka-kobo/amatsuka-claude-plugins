@@ -41,12 +41,12 @@ test("ユーザー発言は原文のまま、ハーネス注入は除外され�
     user("メタ発言", { isMeta: true })
   ])
   expect(out).toMatch(
-    /## USER\n\n> これは 原文の {2}発言です。改変されないこと。/
+    /# unknown\n\n> これは 原文の {2}発言です。改変されないこと。/
   )
   expect(out).not.toMatch(/command-name|メタ発言/)
 })
 
-test("AI の text と tool_use ヒントが出力され、thinking は出ない", () => {
+test("AI の text だけが出力され、thinking と tool_use は出ない", () => {
   const out = run([
     assistant([
       { type: "thinking", thinking: "内心" },
@@ -59,9 +59,9 @@ test("AI の text と tool_use ヒントが出力され、thinking は出ない"
       { type: "tool_use", name: "Write", input: { file_path: "/x/y.md" } }
     ])
   ])
-  expect(out).toMatch(/## ASSISTANT\n\n結論を報告します。/)
-  expect(out).toMatch(/\(tool: Bash — テストを実行\)/)
-  expect(out).toMatch(/\(tool: Write — \/x\/y\.md\)/)
+  expect(out).toMatch(/# AI\n\n結論を報告します。/)
+  expect(out).not.toMatch(/\(tool:/)
+  expect(out).not.toMatch(/Bash|テストを実行|\/x\/y\.md/)
   expect(out).not.toMatch(/内心/)
 })
 
@@ -71,7 +71,7 @@ test("連続する ASSISTANT エントリは1セクションに結合される",
     assistant([{ type: "text", text: "前半。" }]),
     assistant([{ type: "text", text: "後半。" }])
   ])
-  expect(out.match(/## ASSISTANT/g)?.length).toBe(1)
+  expect(out.match(/# AI/g)?.length).toBe(1)
   expect(out).toMatch(/前半。\n\n後半。/)
 })
 
@@ -112,23 +112,19 @@ test("--since-line 直後の ASSISTANT はそのターンの作業本体とし�
   expect(out).toMatch(/新しい応答。/)
 })
 
-// 実際の window 形状の回帰テスト: 先頭が ASSISTANT・末尾が USER。
-// targetLine は常に「今回のユーザー発言」なので、AI の作業は必ず window の前方に来る。
 test("先頭が ASSISTANT・末尾が USER の window で AI の作業が失われない", () => {
   const out = extractConversation(
     [
       user("前回の指示"),
       assistant([{ type: "text", text: "実装しました。" }]),
-      assistant([
-        { type: "tool_use", name: "Bash", input: { description: "テスト実行" } }
-      ]),
+      assistant([{ type: "text", text: "テストも通しました。" }]),
       user("次の指示")
     ].join("\n"),
     1,
     4
   )
   expect(out).toMatch(/実装しました。/)
-  expect(out).toMatch(/\(tool: Bash — テスト実行\)/)
+  expect(out).toMatch(/テストも通しました。/)
   expect(out).toMatch(/次の指示/)
   expect(out).not.toMatch(/前回の指示/)
 })
@@ -156,7 +152,7 @@ test("--since-line が最終行以降なら出力は空", () => {
 
 test("USER 発言は各行 > 前置の引用ブロックで出力される(空行は > のみ)", () => {
   const out = run([user("1行目\n\n2行目")])
-  expect(out).toMatch(/## USER\n\n> 1行目\n>\n> 2行目/)
+  expect(out).toMatch(/# unknown\n\n> 1行目\n>\n> 2行目/)
 })
 
 test("純粋関数と CLI の出力が一致する", () => {
@@ -170,4 +166,15 @@ test("抽出区間は (recordedLine, targetLine] で targetLine より後を含�
   expect(out).toContain("対象")
   expect(out).not.toContain("古い")
   expect(out).not.toContain("対象外")
+})
+
+test("--worker で指定した名前がユーザー側の見出しになる", () => {
+  const out = run([user("質問")], ["--worker", "phyllis998"])
+  expect(out).toMatch(/# phyllis998\n\n> 質問/)
+})
+
+test("セクションの間に --- の区切りを入れない", () => {
+  const out = run([user("質問"), assistant([{ type: "text", text: "回答" }])])
+  expect(out).not.toMatch(/^---$/m)
+  expect(out).toMatch(/# unknown\n\n> 質問\n\n# AI\n\n回答/)
 })
