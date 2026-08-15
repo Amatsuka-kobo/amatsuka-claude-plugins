@@ -30,6 +30,7 @@ interface AttemptPlan {
   recordTarget?: { relativePath: string | null; appendMode: boolean }
   recordCandidates?: string[]
   allowedNewRecordDir?: string
+  sessionNumber?: number
   preparedAt?: string
 }
 
@@ -93,6 +94,29 @@ function lastSessionNumber(text: string): number {
   return result
 }
 
+// 失敗した attempt の一時ファイルは commit の削除処理を通らずに残る。
+// 同じセッションの過去 attempt 分だけをここで掃除する(他セッションには触れない)。
+function cleanStaleTemp(
+  tempDir: string,
+  sessionKey: string,
+  attemptId: string
+): void {
+  let entries: string[]
+  try {
+    entries = fs.readdirSync(tempDir)
+  } catch {
+    return
+  }
+  for (const name of entries) {
+    if (!name.startsWith(`${sessionKey}-`) || name.includes(attemptId)) continue
+    try {
+      fs.rmSync(path.join(tempDir, name), { force: true })
+    } catch {
+      // 掃除の失敗は記録本体の成否に影響させない
+    }
+  }
+}
+
 export function prepareChatRecording(args: Args): Record<string, unknown> {
   if (!fs.existsSync(args.project) || !fs.statSync(args.project).isDirectory())
     fail("project directory does not exist")
@@ -119,6 +143,7 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     fail("target line is already recorded")
 
   updateHeartbeat(paths.lockPath, args.attemptId)
+  cleanStaleTemp(paths.tempDir, args.sessionKey, args.attemptId)
   const workerName = gitUser(args.project)
   const now = new Date()
   const year = String(now.getFullYear())
@@ -189,11 +214,34 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     paths.tempDir,
     `${args.sessionKey}-${args.attemptId}.index-line.md`
   )
+  const sessionTitleFile = path.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.session-title.md`
+  )
+  const headerFile = path.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.header.md`
+  )
+  const conversation = extractConversationFile(
+    args.transcript,
+    state.recordedLine,
+    args.targetLine,
+    safeWorker(workerName)
+  )
+  const sessionNumber = lastSessionNumber(tailContext) + 1
+  // 本文は prepare が書き切る。chat-recorder は bodyFile を読み書きしない。
+  fs.mkdirSync(paths.tempDir, { recursive: true, mode: 0o700 })
+  fs.writeFileSync(
+    bodyFile,
+    conversation.endsWith("\n") ? conversation : `${conversation}\n`,
+    { encoding: "utf8", mode: 0o600 }
+  )
   atomicWriteJson(planPath, {
     ...plan,
     recordTarget,
     recordCandidates: relativeCandidates,
     allowedNewRecordDir,
+    sessionNumber,
     preparedAt: new Date().toISOString()
   })
   return {
@@ -203,11 +251,7 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     targetLine: args.targetLine,
     workerName,
     date: `${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)}`,
-    conversation: extractConversationFile(
-      args.transcript,
-      state.recordedLine,
-      args.targetLine
-    ),
+    conversation,
     skillContract: fs.readFileSync(pluginSkillPath, "utf8"),
     recordTarget,
     recordCandidates: relativeCandidates,
@@ -215,6 +259,9 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     newRecordPathExample,
     bodyFile,
     indexLineFile,
+    sessionTitleFile,
+    headerFile,
+    sessionNumber,
     indexEntryPath: docsRelativePath,
     indexLineExample: docsRelativePath
       ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <要旨>`
