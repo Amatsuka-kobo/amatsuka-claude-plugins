@@ -83,13 +83,12 @@ function markdownFiles(dir: string): string[] {
     .sort()
 }
 
-function tailLines(file: string, count: number): string {
-  return fs.readFileSync(file, "utf8").split("\n").slice(-count).join("\n")
-}
-
+// セッション番号は記録ファイル全文から拾う。末尾数十行に窓を切ると、原文記録で
+// 1 セッションが窓を超えたときに見出しを見失い、番号が 1 に戻って重複する。
+// 旧テンプレートの `## セッションN`(スペース無し)にも一致させる。
 function lastSessionNumber(text: string): number {
   let result = 0
-  for (const match of text.matchAll(/^## セッション\s+(\d+)/gm))
+  for (const match of text.matchAll(/^##\s*セッション\s*(\d+)/gm))
     result = Math.max(result, Number(match[1]))
   return result
 }
@@ -177,7 +176,11 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     ? path.relative(args.project, selected).replaceAll("\\", "/")
     : null
   const docsRelativePath = relativePath?.replace(/^docs\/chat\//, "") ?? null
-  const tailContext = selected ? tailLines(selected, 60) : ""
+  const recordText = selected ? fs.readFileSync(selected, "utf8") : ""
+  // chat-recorder へ渡す文脈は末尾 60 行のまま。番号の算出だけ全文を見る。
+  const tailContext = selected
+    ? recordText.split("\n").slice(-60).join("\n")
+    : ""
   const indexPath = path.join(args.project, "docs", "chat", "INDEX.md")
   const indexLines = fs.existsSync(indexPath)
     ? fs.readFileSync(indexPath, "utf8").split("\n")
@@ -228,7 +231,8 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     args.targetLine,
     safeWorker(workerName)
   )
-  const sessionNumber = lastSessionNumber(tailContext) + 1
+  const previousSessionNumber = lastSessionNumber(recordText)
+  const sessionNumber = previousSessionNumber + 1
   // 本文は prepare が書き切る。chat-recorder は bodyFile を読み書きしない。
   fs.mkdirSync(paths.tempDir, { recursive: true, mode: 0o700 })
   fs.writeFileSync(
@@ -266,7 +270,7 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     indexLineExample: docsRelativePath
       ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <要旨>`
       : `- \`YYYY/MMDD/<worker>/<kebab-case>.md\` | YYYY-MM-DD | <worker> | <要旨>`,
-    lastSessionNumber: lastSessionNumber(tailContext),
+    lastSessionNumber: previousSessionNumber,
     tailContext,
     indexLine,
     metadataHints: plan.metadataHints

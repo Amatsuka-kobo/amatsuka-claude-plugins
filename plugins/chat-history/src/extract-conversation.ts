@@ -64,7 +64,9 @@ export function extractConversation(
       push("USER", quote(text))
       // 抽出区間 (sinceLine, targetLine] の両端はどちらも「ユーザー発言の行」であり、
       // AI の作業本体は必ず区間の前方(最初の USER 発言より手前)に来る。
-      // sinceLine は記録済みユーザー発言の行そのものなので、それより後はすべて未記録である。
+      // かつて「前回ターンの断片が混ざる」ことを恐れて最初の USER までの ASSISTANT を
+      // 捨てていたが、sinceLine は記録済みユーザー発言の行そのものなので、それより後は
+      // すべて未記録である。捨てると記録が USER 発言だけの抜け殻になる。
     } else if (entry.type === "assistant" && Array.isArray(message.content)) {
       // tool_use は記録しない。記録は AI の発言(text)だけを原文で残す。
       for (const part of message.content)
