@@ -114,9 +114,13 @@ function isInside(parent, candidate) {
 }
 
 // src/commit-chat-recording.ts
-var fail = (message) => {
+function fail(message) {
   throw new Error(message);
-};
+}
+var MAX_BODY_BYTES = 8 * 1024 * 1024;
+var MAX_SESSION_TITLE_BYTES = 512;
+var MAX_HEADER_BYTES = 64 * 1024;
+var MAX_INDEX_LINE_BYTES = 8192;
 function parseArgs(argv) {
   const value = (name, optional = false) => {
     const index = argv.indexOf(name);
@@ -136,6 +140,11 @@ function parseArgs(argv) {
     targetLine,
     bodyFile: path2.resolve(value("--body-file")),
     indexLineFile: path2.resolve(value("--index-line-file")),
+    sessionTitleFile: path2.resolve(value("--session-title-file")),
+    headerFile: (() => {
+      const raw = value("--header-file", true);
+      return raw ? path2.resolve(raw) : void 0;
+    })(),
     recordPath: value("--record-path", true)
   };
 }
@@ -146,17 +155,50 @@ function docsRelativePath(relativePath) {
   return relativePath.replaceAll("\\", "/").replace(/^docs\/chat\//, "");
 }
 function validateInputs(args, paths, plan) {
-  if (!isInside(paths.tempDir, args.bodyFile) || !isInside(paths.tempDir, args.indexLineFile))
-    fail("temporary files must be inside the recording state temp directory");
-  const body = fs2.readFileSync(args.bodyFile, "utf8");
+  const temporaryFiles = [
+    args.bodyFile,
+    args.indexLineFile,
+    args.sessionTitleFile,
+    ...args.headerFile ? [args.headerFile] : []
+  ];
+  for (const file of temporaryFiles)
+    if (!isInside(paths.tempDir, file))
+      fail("temporary files must be inside the recording state temp directory");
+  const rawBody = fs2.readFileSync(args.bodyFile, "utf8");
   const indexLine = fs2.readFileSync(args.indexLineFile, "utf8").trim();
-  if (!body || Buffer.byteLength(body) > 1024 * 1024)
-    fail("record body is empty or too large");
-  if (!indexLine || indexLine.includes("\n") || Buffer.byteLength(indexLine) > 8192)
+  const sessionTitle = fs2.readFileSync(args.sessionTitleFile, "utf8").trim();
+  if (!rawBody) fail("record body is empty");
+  if (!rawBody.includes("> "))
+    fail("record body must contain a USER quote block");
+  if (!sessionTitle || sessionTitle.includes("\n") || Buffer.byteLength(sessionTitle) > MAX_SESSION_TITLE_BYTES)
+    fail("session title must be exactly one bounded line");
+  if (!indexLine || indexLine.includes("\n") || Buffer.byteLength(indexLine) > MAX_INDEX_LINE_BYTES)
     fail("INDEX entry must be exactly one bounded line");
-  if (!body.includes("## \u30BB\u30C3\u30B7\u30E7\u30F3") && plan.recordTarget.appendMode)
-    fail("append body must contain a session heading");
-  if (!body.includes("> ")) fail("record body must contain a USER quote block");
+  let header = "";
+  if (plan.recordTarget.appendMode) {
+    if (args.headerFile)
+      fail("--header-file is forbidden when appending to an existing record");
+  } else {
+    const headerFile = args.headerFile;
+    if (!headerFile) fail("--header-file is required for a new record");
+    header = fs2.readFileSync(headerFile, "utf8");
+    if (!header.startsWith("# ") || Buffer.byteLength(header) > MAX_HEADER_BYTES)
+      fail("record header must start with a title line and stay bounded");
+  }
+  const heading = `## \u30BB\u30C3\u30B7\u30E7\u30F3 ${plan.sessionNumber}: ${sessionTitle}`;
+  const body = plan.recordTarget.appendMode ? `
+${heading}
+
+${rawBody}` : `${header.trimEnd()}
+
+---
+
+${heading}
+
+${rawBody}`;
+  if (Buffer.byteLength(body) > MAX_BODY_BYTES) fail("record body is too large");
+  if (!body.includes("## \u30BB\u30C3\u30B7\u30E7\u30F3"))
+    fail("composed record must contain a session heading");
   let relativePath;
   if (plan.recordTarget.relativePath !== null) {
     if (args.recordPath)
@@ -288,6 +330,8 @@ function commitChatRecording(args) {
     for (const file of [
       args.bodyFile,
       args.indexLineFile,
+      args.sessionTitleFile,
+      ...args.headerFile ? [args.headerFile] : [],
       planPath,
       paths.lockPath
     ])
