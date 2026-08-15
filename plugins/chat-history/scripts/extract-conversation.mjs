@@ -4,9 +4,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-var MAX_TOOL_HINT = 120;
 var quote = (text) => text.split("\n").map((line) => line === "" ? ">" : `> ${line}`).join("\n");
-function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY) {
+function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY, workerName = "unknown") {
   const sections = [];
   const push = (role, part) => {
     const last = sections.at(-1);
@@ -32,28 +31,23 @@ function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIV
       if (!text || text.startsWith("<") || entry.isMeta) continue;
       push("USER", quote(text));
     } else if (entry.type === "assistant" && Array.isArray(message.content)) {
-      for (const part of message.content) {
-        if (part.type === "text" && part.text?.trim()) {
+      for (const part of message.content)
+        if (part.type === "text" && part.text?.trim())
           push("ASSISTANT", part.text.trim());
-        } else if (part.type === "tool_use") {
-          const hint = part.input?.description ?? part.input?.file_path ?? "";
-          push(
-            "ASSISTANT",
-            `(tool: ${part.name}${hint ? ` \u2014 ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`
-          );
-        }
-      }
     }
   }
-  return sections.map((section) => `## ${section.role}
+  return sections.map(
+    (section) => `# ${section.role === "USER" ? workerName : "AI"}
 
-${section.parts.join("\n\n")}`).join("\n\n---\n\n");
+${section.parts.join("\n\n")}`
+  ).join("\n\n");
 }
-function extractConversationFile(file, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY) {
+function extractConversationFile(file, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY, workerName = "unknown") {
   return extractConversation(
     fs.readFileSync(file, "utf8"),
     sinceLine,
-    targetLine
+    targetLine,
+    workerName
   );
 }
 function main() {
@@ -61,14 +55,23 @@ function main() {
   const file = args[0];
   if (!file || file.startsWith("--") || !fs.existsSync(file)) {
     console.error(
-      "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]"
+      "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>] [--worker <name>]"
     );
     process.exitCode = 1;
     return;
   }
   const sinceIndex = args.indexOf("--since-line");
   const sinceLine = sinceIndex === -1 ? 0 : Math.max(0, Number(args[sinceIndex + 1]) || 0);
-  console.log(extractConversationFile(file, sinceLine));
+  const workerIndex = args.indexOf("--worker");
+  const workerName = workerIndex === -1 ? "unknown" : args[workerIndex + 1] ?? "unknown";
+  console.log(
+    extractConversationFile(
+      file,
+      sinceLine,
+      Number.POSITIVE_INFINITY,
+      workerName
+    )
+  );
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === pathResolve(process.argv[1]) && path.basename(process.argv[1]).startsWith("extract-conversation."))
   main();

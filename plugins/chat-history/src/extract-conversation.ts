@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 // Claude Code のトランスクリプト JSONL から発言のみを抽出し、Markdown を stdout に出力する。
-// 使い方: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]
+// 使い方: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>] [--worker <name>]
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-
-const MAX_TOOL_HINT = 120
 
 interface Section {
   role: "USER" | "ASSISTANT"
@@ -24,11 +22,6 @@ interface TranscriptEntry {
 interface TranscriptContent {
   type?: string
   text?: string
-  name?: string
-  input?: {
-    description?: unknown
-    file_path?: unknown
-  }
 }
 
 const quote = (text: string): string =>
@@ -40,7 +33,8 @@ const quote = (text: string): string =>
 export function extractConversation(
   content: string,
   sinceLine = 0,
-  targetLine = Number.POSITIVE_INFINITY
+  targetLine = Number.POSITIVE_INFINITY,
+  workerName = "unknown"
 ): string {
   const sections: Section[] = []
   const push = (role: Section["role"], part: string): void => {
@@ -70,38 +64,34 @@ export function extractConversation(
       push("USER", quote(text))
       // 抽出区間 (sinceLine, targetLine] の両端はどちらも「ユーザー発言の行」であり、
       // AI の作業本体は必ず区間の前方(最初の USER 発言より手前)に来る。
-      // かつて「前回ターンの断片が混ざる」ことを恐れて最初の USER までの ASSISTANT を
-      // 捨てていたが、sinceLine は記録済みユーザー発言の行そのものなので、それより後は
-      // すべて未記録である。捨てると記録が USER 発言だけの抜け殻になる。
+      // sinceLine は記録済みユーザー発言の行そのものなので、それより後はすべて未記録である。
     } else if (entry.type === "assistant" && Array.isArray(message.content)) {
-      for (const part of message.content) {
-        if (part.type === "text" && part.text?.trim()) {
+      // tool_use は記録しない。記録は AI の発言(text)だけを原文で残す。
+      for (const part of message.content)
+        if (part.type === "text" && part.text?.trim())
           push("ASSISTANT", part.text.trim())
-        } else if (part.type === "tool_use") {
-          const hint = part.input?.description ?? part.input?.file_path ?? ""
-          push(
-            "ASSISTANT",
-            `(tool: ${part.name}${hint ? ` — ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`
-          )
-        }
-      }
     }
   }
 
   return sections
-    .map((section) => `## ${section.role}\n\n${section.parts.join("\n\n")}`)
-    .join("\n\n---\n\n")
+    .map(
+      (section) =>
+        `# ${section.role === "USER" ? workerName : "AI"}\n\n${section.parts.join("\n\n")}`
+    )
+    .join("\n\n")
 }
 
 export function extractConversationFile(
   file: string,
   sinceLine = 0,
-  targetLine = Number.POSITIVE_INFINITY
+  targetLine = Number.POSITIVE_INFINITY,
+  workerName = "unknown"
 ): string {
   return extractConversation(
     fs.readFileSync(file, "utf8"),
     sinceLine,
-    targetLine
+    targetLine,
+    workerName
   )
 }
 
@@ -110,7 +100,7 @@ function main(): void {
   const file = args[0]
   if (!file || file.startsWith("--") || !fs.existsSync(file)) {
     console.error(
-      "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]"
+      "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>] [--worker <name>]"
     )
     process.exitCode = 1
     return
@@ -118,7 +108,17 @@ function main(): void {
   const sinceIndex = args.indexOf("--since-line")
   const sinceLine =
     sinceIndex === -1 ? 0 : Math.max(0, Number(args[sinceIndex + 1]) || 0)
-  console.log(extractConversationFile(file, sinceLine))
+  const workerIndex = args.indexOf("--worker")
+  const workerName =
+    workerIndex === -1 ? "unknown" : (args[workerIndex + 1] ?? "unknown")
+  console.log(
+    extractConversationFile(
+      file,
+      sinceLine,
+      Number.POSITIVE_INFINITY,
+      workerName
+    )
+  )
 }
 
 if (
