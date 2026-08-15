@@ -43,7 +43,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 - 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、`grok-researcher` エージェントへ dispatch する。
 - このとき `model` 上書きは使わない。
-- 依頼文の冒頭で「独立レビュー」「リアルタイム情報調査」のどちらの役割かを明示し、その役割の Output Format を指定する。
+- 依頼文の冒頭で「独立レビュー」「リアルタイム情報調査」「探索実働」のどれかを明示し、その役割の Output Format を指定する。
 
 ## 独立レビューの手順
 
@@ -66,8 +66,8 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 GPT の帯は、次のとおり解決する。
 
-1. プロジェクトの `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` / `gpt-researcher.md` が存在すればそれを使う。環境変数で既定と異なるエイリアスを指定したときは、SessionStart フックがここへ定義を生成する。
-2. 存在しなければ、プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` / `agent-policy:gpt-researcher` を使う。
+1. プロジェクトの `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。環境変数で既定と異なるエイリアスを指定したときは、SessionStart フックがここへ定義を生成する。
+2. 存在しなければ、プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` を使う。
 3. ローカルプロキシ経由で呼び出せないときは、`codex@openapi-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
 
 Grok の帯は、次のとおり解決する。
