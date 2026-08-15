@@ -230,3 +230,70 @@ test("hook が承認したものと異なる transcript を拒否する", () => 
     })
   ).toThrow(/hook-approved/)
 })
+
+test("bodyFile に原文本文を書き出し、パスとセッション番号を返す", () => {
+  const value = setup([user("質問")])
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.sessionTitleFile).toBe(
+    path.join(
+      value.paths.tempDir,
+      `${value.sessionKey}-${value.attemptId}.session-title.md`
+    )
+  )
+  expect(result.headerFile).toBe(
+    path.join(
+      value.paths.tempDir,
+      `${value.sessionKey}-${value.attemptId}.header.md`
+    )
+  )
+  expect(result.sessionNumber).toBe(1)
+  const body = fs.readFileSync(result.bodyFile as string, "utf8")
+  expect(body).toContain("> 質問")
+  expect(body.endsWith("\n")).toBe(true)
+  expect(body).toBe(`${result.conversation as string}\n`)
+})
+
+test("sessionNumber は既存記録の最大セッション番号 + 1 になる", () => {
+  const value = setup([user("質問")])
+  const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
+  const relativePath = `${dir}/topic.md`
+  fs.mkdirSync(path.join(value.project, dir), { recursive: true })
+  fs.writeFileSync(
+    path.join(value.project, relativePath),
+    "# Existing\n\n## セッション 1\n\n## セッション 2\n"
+  )
+  setRecordPath(value, relativePath)
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.lastSessionNumber).toBe(2)
+  expect(result.sessionNumber).toBe(3)
+  const plan = JSON.parse(
+    fs.readFileSync(
+      path.join(value.paths.planDir, `${value.sessionKey}.json`),
+      "utf8"
+    )
+  )
+  expect(plan.sessionNumber).toBe(3)
+})
+
+test("同一セッションの古い attempt の一時ファイルだけを掃除する", () => {
+  const value = setup([user("質問")])
+  // attemptId("attempt") を名前に含めない。含めると掃除の除外条件に当たって残ってしまう
+  const stale = path.join(
+    value.paths.tempDir,
+    `${value.sessionKey}-previous.body.md`
+  )
+  const otherSession = path.join(value.paths.tempDir, "other-session-x.body.md")
+  fs.writeFileSync(stale, "stale\n")
+  fs.writeFileSync(otherSession, "keep\n")
+  prepareChatRecording(argsOf(value))
+  expect(fs.existsSync(stale)).toBe(false)
+  expect(fs.existsSync(otherSession)).toBe(true)
+})
+
+test("ユーザー側の見出しに作業者名を使う", () => {
+  const value = setup([user("質問")])
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.conversation).toMatch(
+    new RegExp(`^# ${safeWorker(result.workerName as string)}\\n\\n> 質問`)
+  )
+})

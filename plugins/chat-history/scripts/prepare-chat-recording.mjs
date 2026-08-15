@@ -101,9 +101,8 @@ function isInside(parent, candidate) {
 import fs2 from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
-var MAX_TOOL_HINT = 120;
 var quote = (text) => text.split("\n").map((line) => line === "" ? ">" : `> ${line}`).join("\n");
-function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY) {
+function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY, workerName = "unknown") {
   const sections = [];
   const push = (role, part) => {
     const last = sections.at(-1);
@@ -129,28 +128,23 @@ function extractConversation(content, sinceLine = 0, targetLine = Number.POSITIV
       if (!text || text.startsWith("<") || entry.isMeta) continue;
       push("USER", quote(text));
     } else if (entry.type === "assistant" && Array.isArray(message.content)) {
-      for (const part of message.content) {
-        if (part.type === "text" && part.text?.trim()) {
+      for (const part of message.content)
+        if (part.type === "text" && part.text?.trim())
           push("ASSISTANT", part.text.trim());
-        } else if (part.type === "tool_use") {
-          const hint = part.input?.description ?? part.input?.file_path ?? "";
-          push(
-            "ASSISTANT",
-            `(tool: ${part.name}${hint ? ` \u2014 ${String(hint).slice(0, MAX_TOOL_HINT)}` : ""})`
-          );
-        }
-      }
     }
   }
-  return sections.map((section) => `## ${section.role}
+  return sections.map(
+    (section) => `# ${section.role === "USER" ? workerName : "AI"}
 
-${section.parts.join("\n\n")}`).join("\n\n---\n\n");
+${section.parts.join("\n\n")}`
+  ).join("\n\n");
 }
-function extractConversationFile(file, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY) {
+function extractConversationFile(file, sinceLine = 0, targetLine = Number.POSITIVE_INFINITY, workerName = "unknown") {
   return extractConversation(
     fs2.readFileSync(file, "utf8"),
     sinceLine,
-    targetLine
+    targetLine,
+    workerName
   );
 }
 function main() {
@@ -158,14 +152,23 @@ function main() {
   const file = args[0];
   if (!file || file.startsWith("--") || !fs2.existsSync(file)) {
     console.error(
-      "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>]"
+      "usage: node extract-conversation.mjs <transcript.jsonl> [--since-line <N>] [--worker <name>]"
     );
     process.exitCode = 1;
     return;
   }
   const sinceIndex = args.indexOf("--since-line");
   const sinceLine = sinceIndex === -1 ? 0 : Math.max(0, Number(args[sinceIndex + 1]) || 0);
-  console.log(extractConversationFile(file, sinceLine));
+  const workerIndex = args.indexOf("--worker");
+  const workerName = workerIndex === -1 ? "unknown" : args[workerIndex + 1] ?? "unknown";
+  console.log(
+    extractConversationFile(
+      file,
+      sinceLine,
+      Number.POSITIVE_INFINITY,
+      workerName
+    )
+  );
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === pathResolve(process.argv[1]) && path2.basename(process.argv[1]).startsWith("extract-conversation."))
   main();
@@ -221,6 +224,21 @@ function lastSessionNumber(text) {
     result = Math.max(result, Number(match[1]));
   return result;
 }
+function cleanStaleTemp(tempDir, sessionKey, attemptId) {
+  let entries;
+  try {
+    entries = fs3.readdirSync(tempDir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!name.startsWith(`${sessionKey}-`) || name.includes(attemptId)) continue;
+    try {
+      fs3.rmSync(path3.join(tempDir, name), { force: true });
+    } catch {
+    }
+  }
+}
 function prepareChatRecording(args) {
   if (!fs3.existsSync(args.project) || !fs3.statSync(args.project).isDirectory())
     fail("project directory does not exist");
@@ -237,6 +255,7 @@ function prepareChatRecording(args) {
   if (args.targetLine <= state.recordedLine)
     fail("target line is already recorded");
   updateHeartbeat(paths.lockPath, args.attemptId);
+  cleanStaleTemp(paths.tempDir, args.sessionKey, args.attemptId);
   const workerName = gitUser(args.project);
   const now = /* @__PURE__ */ new Date();
   const year = String(now.getFullYear());
@@ -286,11 +305,34 @@ function prepareChatRecording(args) {
     paths.tempDir,
     `${args.sessionKey}-${args.attemptId}.index-line.md`
   );
+  const sessionTitleFile = path3.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.session-title.md`
+  );
+  const headerFile = path3.join(
+    paths.tempDir,
+    `${args.sessionKey}-${args.attemptId}.header.md`
+  );
+  const conversation = extractConversationFile(
+    args.transcript,
+    state.recordedLine,
+    args.targetLine,
+    safeWorker(workerName)
+  );
+  const sessionNumber = lastSessionNumber(tailContext) + 1;
+  fs3.mkdirSync(paths.tempDir, { recursive: true, mode: 448 });
+  fs3.writeFileSync(
+    bodyFile,
+    conversation.endsWith("\n") ? conversation : `${conversation}
+`,
+    { encoding: "utf8", mode: 384 }
+  );
   atomicWriteJson(planPath, {
     ...plan,
     recordTarget,
     recordCandidates: relativeCandidates,
     allowedNewRecordDir,
+    sessionNumber,
     preparedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
   return {
@@ -300,11 +342,7 @@ function prepareChatRecording(args) {
     targetLine: args.targetLine,
     workerName,
     date: `${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)}`,
-    conversation: extractConversationFile(
-      args.transcript,
-      state.recordedLine,
-      args.targetLine
-    ),
+    conversation,
     skillContract: fs3.readFileSync(pluginSkillPath, "utf8"),
     recordTarget,
     recordCandidates: relativeCandidates,
@@ -312,6 +350,9 @@ function prepareChatRecording(args) {
     newRecordPathExample,
     bodyFile,
     indexLineFile,
+    sessionTitleFile,
+    headerFile,
+    sessionNumber,
     indexEntryPath: docsRelativePath,
     indexLineExample: docsRelativePath ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <\u8981\u65E8>` : `- \`YYYY/MMDD/<worker>/<kebab-case>.md\` | YYYY-MM-DD | <worker> | <\u8981\u65E8>`,
     lastSessionNumber: lastSessionNumber(tailContext),
