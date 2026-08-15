@@ -176,3 +176,59 @@
 ---
 
 注意事項: scripts/setup-workspace.sh の作成完了。次のステップはユーザーのレビューと実行確認。
+
+## セッション 6: context7 MCP とスキルのアンインストール
+
+# phyllis998
+
+> user scope にある context7 mcp と skill をアンインストールしてください。
+
+## セッション 7: Serena markdown オプション・mdbase-lsp の必要性
+
+# phyllis998
+
+> serenaのオプションにmarkdownがある状態で、mdbase-lspは必要ですか？
+
+## セッション 7: 削除ファイルの確認
+
+# AI
+
+Context7 MCP とスキルの削除は完了。削除前に `~/.claude.json.bak-context7-uninstall` としてバックアップを作成済み。
+
+# phyllis998
+
+> .claude.json.bak-context7-uninstallは不要です。
+
+## セッション 8: mdbase-lsp 読み込み不具合の調査
+
+# phyllis998
+
+> mdbase-lspが読み込まれていないようです。原因を探ってください。
+
+# AI
+
+- **何をしたか**: mdbase-lsp の読み込み不具合の原因を調査。以下を確認：
+  - mdbase-lsp バイナリの存在確認と PATH 上での可用性
+  - Claude Code プラグインキャッシュ内の claude-code-lsps マーケットプレイス登録状況
+  - mdbase-lsp バイナリの動作確認とプラグインマニフェスト
+  - グローバルプラグイン設定とマーケットプレイスメタデータ
+  - (tool: Bash — Check whether mdbase-lsp binary exists and is on PATH)
+  - (tool: Bash — Check Claude Code plugin cache for claude-code-lsps marketplace)
+  - (tool: Bash — Verify mdbase-lsp binary works and inspect plugin manifest)
+  - (tool: Bash — Check global plugin config and marketplace metadata for claude-code-lsps)
+
+- **決定と理由**: メタデータヒントに挙げられた4つのバイナリ・キャッシュ・設定・マーケットプレイス確認を順序立てて実施し、システムのどのレイヤー（パス解決、キャッシュ, 設定, マーケットプレイス登録）で読み込み失敗が発生しているかを特定することを目指した。
+
+- **却下された選択肢**: なし。ユーザーの依頼は調査要求であり、設定や実装の判断が必要になるまでは段階的な情報収集が唯一のアプローチ。
+
+- **失敗・やり直し・誤った前提**: 調査は実行段階（後続ターンで Bash コマンド実行）に移行。この時点で原因特定には至らず。
+
+---
+
+注意事項: mdbase-lsp 読み込み不具合の具体的原因はまだ特定されていない。Bash コマンド実行による情報収集が必須。
+
+## セッション 9: context7 MCP 認識不具合の調査
+
+# phyllis998
+
+> .mcpにcontext7があるのに認識されません。原因を探ってください

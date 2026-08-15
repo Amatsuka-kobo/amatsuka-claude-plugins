@@ -70,4 +70,5 @@
 - `2026/0810/phyllis98/tiny-report-check-skill-optimization.md` | 2026-08-10 | phyllis98 | tiny-report-check スキルの説明文最適化
 - `2026/0810/phyllis998/echo-instruction.md` | 2026-08-10 | phyllis998 | CLAUDE.md 文言修正とプラグインバージョン管理方針の決定
 - `2026/0812/phyllis998/test-simple-reply.md` | 2026-08-13 | phyllis998 | Serena tool 付与・検証完了・コミット
-- `2026/0814/phyllis998/agent-policy-headless-setup.md` | 2026-08-14 | phyllis998 | agent-policy headless 実装：設計確定・配置移設・setup スクリプト実装
+- `2026/0814/phyllis998/agent-policy-headless-setup.md` | 2026-08-14 | phyllis998 | agent-policy headless 実装・context7/mdbase-lsp MCP 設定・認識不具合調査
+- `2026/0815/phyllis998/context7-github-serena-mcp-investigation.md` | 2026-08-15 | phyllis998 | Context7・GitHub・Serena の MCP 構成、リポジトリ分析、github cli PAT 出力方法
