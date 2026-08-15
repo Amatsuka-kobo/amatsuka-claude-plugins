@@ -35,7 +35,6 @@
     "explanatory-output-style@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "mdbase-lsp@claude-code-lsps": true,
     "genshijin@genshijin": true,
     "codex@openai-codex": true
   },
@@ -44,12 +43,6 @@
       "source": {
         "source": "directory",
         "path": "./"
-      }
-    },
-    "claude-code-lsps": {
-      "source": {
-        "source": "github",
-        "repo": "Piebald-AI/claude-code-lsps"
       }
     },
     "context7-marketplace": {
