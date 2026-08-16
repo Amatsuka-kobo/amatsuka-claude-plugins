@@ -554,11 +554,12 @@ gh-utility の `check-issue-env.ts` と同じ契約に揃える。
 | `docRoot` | string | **ファイル契約のルート**。`metatron.config.json` を持つ最も近い祖先 → git ルート → cwd の順で決まる(§7-3) |
 | `projectDocs` | object | `{ architecture, gotchas, domainsReadable, domainCount }`。パスは `metatron.config.json` 経由で解決する(§7-3) |
 | `codielReady` | boolean | `codielHarness.dirExists && projectDocs.domainsReadable`(§7-3) |
-| `codielHarness` | object | `{ dirExists, runDirs }`。**Codiel 固有資産のみ**(`.codiel/` の存在と `.codiel/runs/` 直下のディレクトリ名。昇順、無ければ `[]`) |
+| `codielHarness` | object | `{ dirExists, codielRoot, runDirs }`。**Codiel 固有資産のみ**。`.codiel/` は**開始ディレクトリから上方向に探索**する(codiel の `findProjectRoot` と同じ基準。§7-3)。`runDirs` は見つかった `.codiel/runs/` 直下のディレクトリ名(昇順、無ければ `[]`) |
 | `intentsDir` | string \| null | `repoRoot/docs/intents` の存在(無ければ null。作成はしない) |
 | `existingIntents` | object[] | `intentsDir` 配下の `*.md` を列挙し、frontmatter から `slug` / `status` / `issue` と `# intent: ` 行のタイトルを抽出 |
 | `contextDocs` | string[] | 既存文書のうち存在するもののパス。ARCHITECTURE / GOTCHAS は **`projectDocs` の解決結果**を使い、固定パスを前提にしない。`CLAUDE.md` / `README.md` は `docRoot` 直下を見る |
 | `testRunner` | object | テスト基盤の推定(§7-4) |
+| `configWarnings` | string[] | `metatron.config.json` の解決で既定値へ落とした理由。空配列が正常。設定ファイルが無いことは警告にしない(ファイル契約 §2)。スキルは空でないときだけ 1 行報告に使う |
 
 `existingIntents` の frontmatter 解析と `templates` の解析は、どちらも YAML パーサを導入せず
 check-issue-env.ts と同じ「トップレベルのキーだけを行単位で抽出する」簡易方式にする。
@@ -617,7 +618,8 @@ Codiel 専属の資産ではなく、metatron が管理し、Codiel 単体環境
 | `projectDocs.gotchas` | 解決した GOTCHAS のパス(無ければ null) |
 | `projectDocs.domainsReadable` | ARCHITECTURE 内に **`metatron:domains`** を伴う JSON コードフェンスがあり、中身が JSON として parse でき、ドメインが 1 件以上ある |
 | `projectDocs.domainCount` | parse できたドメイン数(parse 不能なら 0) |
-| `codielHarness.dirExists` | `docRoot/.codiel/` がディレクトリとして存在する |
+| `codielHarness.dirExists` | **開始ディレクトリから上方向に探索して `.codiel/` ディレクトリが見つかる**(codiel 自身の `findProjectRoot` と同じ基準)。`docRoot` 直下だけを見ない — `docRoot` と `repoRoot` が分かれる構成で `repoRoot/.codiel` を見落とし、codiel が実際には動くのに委譲を畳んでしまうため |
+| `codielHarness.codielRoot` | 上の探索で見つかった `.codiel` を持つディレクトリの絶対パス(見つからなければ null)。`runDirs` はこのルート基準で読む |
 | `codielHarness.runDirs` | `.codiel/runs/` 直下のディレクトリ名(昇順。無ければ `[]`) |
 
 **`codielReady = codielHarness.dirExists && projectDocs.domainsReadable`** とし、
@@ -705,6 +707,7 @@ metatron の有無の判定は、プラグイン導入検出ではなく
   "codielReady": false,
   "codielHarness": {
     "dirExists": true,
+    "codielRoot": "/home/user/proj",
     "runDirs": ["2026-08-14-0031"]
   },
   "intentsDir": "/home/user/proj/docs/intents",
@@ -712,7 +715,8 @@ metatron の有無の判定は、プラグイン導入検出ではなく
     { "file": "2026-08-10-add-cache.md", "title": "レスポンスキャッシュを入れる", "slug": "add-cache", "status": "done", "issue": "42" }
   ],
   "contextDocs": ["/home/user/proj/README.md", "/home/user/proj/CLAUDE.md"],
-  "testRunner": { "detected": true, "evidence": ["package.json:scripts.test"], "command": "pnpm test" }
+  "testRunner": { "detected": true, "evidence": ["package.json:scripts.test"], "command": "pnpm test" },
+  "configWarnings": []
 }
 ```
 
@@ -1065,29 +1069,51 @@ gh-utility の `check-issue-env.test.ts` と同じ手法を採る。`src/testing
 | 5 | GitHub 以外の remote(GitLab、`notgithub.com`) | `repoSlug: null` |
 | 6 | `gh` が PATH に無い | `ghInstalled: false` / `ghAuthenticated: false`、例外を投げず exit 0 |
 | 7 | `gh` スタブが exit 0 を返す | `ghInstalled: true` / `ghAuthenticated: true` |
+| 7 補 | `gh` はあるが `auth status` が非 0 | `ghInstalled: true` / `ghAuthenticated: false` |
 | 8 | Issue テンプレート 2 件 + `config.yml` あり | `templates` に `name` / `about` / `labels` が入り、`config.yml` 自体は含まれない / `blankIssuesEnabled: false` |
 | 9 | `.github/ISSUE_TEMPLATE/` なし | `templates: []` / `blankIssuesEnabled: true` |
-| 10 | `.codiel/` あり + `metatron:domains` が読める ARCHITECTURE | `codielReady: true` / `projectDocs.domainsReadable: true` / `domainCount` が定義数と一致 |
-| 11 | `.codiel/` あり + ARCHITECTURE なし | `codielReady: false` / `dirExists: true` / `projectDocs.architecture: null` / `domainCount: 0` |
+| 10 | `.codiel/` あり + `metatron:domains` が読める ARCHITECTURE | `codielReady: true` / `dirExists: true` / **`codielRoot` が `.codiel` を持つディレクトリ** / `projectDocs.domainsReadable: true` / `domainCount` が定義数と一致 |
+| 11 | `.codiel/` あり + ARCHITECTURE なし | `codielReady: false` / `dirExists: true` / `projectDocs.architecture: null` / `gotchas: null` / `domainCount: 0` |
 | 12 | `.codiel/` あり + ドメイン定義ブロックが壊れた JSON | `codielReady: false` / `domainsReadable: false`、例外を投げず exit 0 |
-| 13 | `.codiel/` あり + ドメイン定義が空配列 | `codielReady: false`(1 件以上を要求する) |
-| 14 | `.codiel/` なし + ドメイン定義は読める | `codielReady: false`(複合条件の両方を要求する) |
-| 15 | `.codiel` が**ファイル**として存在 | `dirExists: false` / `codielReady: false`(ディレクトリのみを認める) |
-| 16 | `.codiel/runs/` に 2 件 / ディレクトリ自体が無い | `codielHarness.runDirs` が昇順の 2 件 / `[]` |
+| 13 | `.codiel/` あり + ドメイン定義が空オブジェクト `{}` / glob が空配列 | いずれも `codielReady: false` / `domainsReadable: false`(1 件以上かつ glob 1 件以上を要求する) |
+| 14 | `.codiel/` なし + ドメイン定義は読める | `codielReady: false` / `dirExists: false` / **`codielRoot: null`**(複合条件の両方を要求する) |
+| 15 | `.codiel` が**ファイル**として存在 | `dirExists: false` / **`codielRoot: null`** / `runDirs: []` / `codielReady: false`(上方向探索でもディレクトリだけを認める) |
+| 15 補 | **サブディレクトリの `.codiel` がファイル**で、祖先に `.codiel/` ディレクトリがある | `dirExists: true` / **`codielRoot` が祖先** / `runDirs` が祖先側の run(ファイルは通過して探索を続ける) |
+| 16 | `.codiel/runs/` に 2 件(+ ファイル 1 件) / ディレクトリ自体が無い | `codielHarness.runDirs` が昇順のディレクトリ 2 件のみ / `[]` |
 | 16a | **旧マーカー `codiel:domains` の ARCHITECTURE** | `domainsReadable: false`(互換読みが無いことの確認) |
 | 16b | **`metatron.config.json` でパスを変更** | `projectDocs.architecture` / `gotchas` と `contextDocs` が新パスを指す |
 | 16c | **`metatron.config.json` 無し** | 既定値 `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` で解決する(設定不在はエラーではない) |
 | 16d | **サブディレクトリに `metatron.config.json`** があり、そこから実行 | `docRoot` がその祖先になり、`repoRoot`(git ルート)とは別値になる(§7-6) |
 | 16e | **設定の `paths` が絶対パス / ルート脱出** | 拒否して既定値に落ち、理由を返す |
-| 16f | **ルート解決の突き合わせ** | 同一入力に対し metatron の `config.ts` / Codiel の `resolveDocPaths` と**同じ `docRoot` と同じ解決パス**を返す(3 者比較。§12) |
+| 16f | **ルート解決の突き合わせ(3 者比較)** | 同一入力に対し metatron の `config.ts` / Codiel の `resolveDocPaths` と**同じ `docRoot` と同じ解決パス**を返す。ファイル契約 §13 が列挙する全構成(設定なし + git / 設定なし + git 管理外 / 祖先の設定 / 開始ディレクトリ自身の設定 / `.codiel` と設定の併存 / 絶対パス・ルート脱出 / シンボリックリンク / git バイナリ無し / ネストした git / Windows 区切り / 壊れた設定・未知の version・型不整合)を網羅する。**3 実装の一致を機械的に担保しているのはこのケース群だけである**(§12 M0) |
 | 17 | `docs/intents/` なし | `intentsDir: null` / `existingIntents: []`、**ディレクトリを作成しない** |
 | 18 | intent 文書 2 件あり | `existingIntents` に slug / status / issue / title が入り、ファイル名昇順 |
 | 19 | frontmatter が壊れた intent 文書 | 例外を投げず exit 0。解釈できないファイルは `existingIntents` に含めない(§7-6) |
 | 20 | 実行前後で対象ディレクトリの内容が変化しない | **読み取り専用の検証**。ファイル・ディレクトリが作成も更新もされていない(§7-1) |
 | 21 | `contextDocs` の検出 | 存在するものだけが列挙される |
 | 22 | `package.json` に `scripts.test` あり | `testRunner.detected: true` / `command` が lockfile に応じて `pnpm test` |
+| 22 補 | 設定ファイル(`vitest.config.*` 等)とテストファイルのみ | `detected: true` / `evidence` に設定ファイル名とテストファイルのパスが入る |
 | 23 | テスト関連の痕跡が一切無い | `testRunner.detected: false` / `evidence: []` |
 | 24 | 読み取り権限の無いディレクトリを含む | 例外を投げず exit 0(該当エントリはスキップ) |
+
+#### ルート解決の単体検証(ファイル契約 §13)
+
+3 者比較(16f)とは別に、sandalphon 単体でルート解決の各構成を検証する。
+`docRoot`(契約 §3 規則 1)と `codielRoot`(`.codiel` の上方向探索)は**別々に決まる**ため、
+両方が同時に正しいことをここで確かめる。
+
+| # | ケース | 期待 |
+| --- | --- | --- |
+| C1 | 設定なし + git リポジトリのサブディレクトリから実行 | `docRoot` = `repoRoot` = git ルート(段 2) |
+| C2 | 開始ディレクトリ自身に `metatron.config.json` | `docRoot` が開始ディレクトリ(inclusive 探索) |
+| C3 | `repo/metatron.config.json` と `repo/sub/.codiel/` が併存し `repo/sub` から実行 | `docRoot: repo` / `repoRoot: repo` / `dirExists: true` / **`codielRoot: repo/sub`**。**上方向探索へ変える前は `dirExists: false` だった** —— 3 基準が別ディレクトリを指すのは正常な状態である(§7-3) |
+| C4 | `repo/.codiel/` と `repo/sub/metatron.config.json` が併存し `repo/sub` から実行 | `docRoot: repo/sub` / **`codielRoot: repo`** / `docRoot ≠ codielRoot` / `runDirs` は **`codielRoot` 基準**で読む / `codielReady: true`。**上方向探索へ変える前は `dirExists: false` になり、codiel が実際には動くのに委譲経路を塞いでいた** |
+| C5 | `.codiel` が祖先を辿ってもどこにも無い | `dirExists: false` / `codielRoot: null` / `runDirs: []` / `codielReady: false` |
+| C6 | シンボリックリンク経由で開始ディレクトリを与える | 実体パスへ解決してから探索し、`docRoot` が実体側になる |
+| C7 | `git` バイナリが無い | 例外を投げず段 3 へ落ちる。`isGitRepo: false` / `repoRoot: null` / `docRoot` = 開始ディレクトリ |
+| C8 | ネストした git リポジトリ(`repo/inner/.git`)の `repo/inner/sub` から実行 | `repoRoot` = `docRoot` = `inner` |
+| C9 | `paths` に Windows 形式の区切り(`arch\MAIN.md`) | POSIX 上でも同じ位置へ解決し、`configWarnings: []` |
+| C10 | 壊れた JSON / 未知の `version` / トップレベルが配列 | いずれも全項目を既定値に落とし、`configWarnings` が 1 件 |
 
 ### 11-2. スキルの手動検証シナリオ
 
@@ -1146,11 +1172,13 @@ gh-utility の `check-issue-env.test.ts` と同じ手法を採る。`src/testing
 - ARCHITECTURE / GOTCHAS の既定パス
 
 sandalphon 側はこの契約の**独立実装**である(metatron のソースは参照しない)。
-そのため実装完了時に、metatron 設計書 §13-2 の **R4「解決結果の突き合わせテスト」を
-3 者比較へ拡張する**作業に参加する —— 同一の一時ディレクトリ構成に対して
-metatron の `config.ts` / Codiel の `resolveDocPaths` / sandalphon の `check-intent-env` を
-走らせ、`docRoot` と解決パスが一致することを検証する(テストケース 16f)。
-これが 3 実装が写しを持つ設計における唯一の機械的担保である。
+そのため実装完了時に、**3 者の解決結果の突き合わせテストを sandalphon 側へ置く**
+—— 同一の一時ディレクトリ構成に対して metatron の `config.ts` / Codiel の `resolveDocPaths` /
+sandalphon の `check-intent-env` を走らせ、`docRoot` と解決パスが一致することを検証する
+(テストケース 16f。§11-1)。metatron 設計書 §13-2 の R4 は metatron と Codiel の
+**2 者比較**として codiel 側に残り、3 者比較はここへ集約する。
+これが 3 実装が写しを持つ設計における唯一の機械的担保であり、
+**`plugins/sandalphon/src/__test__/check-intent-env.test.ts` の 1 ファイルに集中している**。
 
 ### M1. sandalphon 本体
 
