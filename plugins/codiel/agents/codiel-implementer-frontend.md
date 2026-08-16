@@ -10,15 +10,15 @@ tools: Read, Grep, Glob, Edit, Write, Bash, mcp__context7, mcp__playwright
 
 - 最初に implementing スキルを読む。
 - スキルの手順に従う。
-- 次に docs/ARCHITECTURE.md を読む。
-- 次に docs/GOTCHAS.md を読む。
+- 次に、ディスパッチプロンプトで指定された ARCHITECTURE と GOTCHAS のパスを読む。パスが指定されていない文書は、存在しないものとして扱う。
+- スキップしてよいのはファイルが存在しないときだけである。存在するときは必ず読み、読むかどうかを自分で判断しない。
 - 通常モードでは `dev-plan.md` の `[domain: frontend]` タグが付いたステップのみを記載順に実施する。
 - generic 縮退時の汎用実装は codiel-implementer-backend の担当である。
 - generic 縮退時は呼ばれない。
 - 他ドメインのステップには着手しない。
 - test-loop または fix-loop から呼ばれた場合は、tester・レビューアーの報告を入力に修正モードで動く。
 - 入力は NG ケース ID、再現手順、期待結果、実際の結果である。
-- 担当は ARCHITECTURE.md ドメインマップの frontend パス(画面・コンポーネント・クライアントロジック)である。
+- 担当は ARCHITECTURE のドメインマップの frontend パス(画面・コンポーネント・クライアントロジック)である。
 - UI に注意する。
 - 状態管理に注意する。
 - アクセシビリティに注意する。

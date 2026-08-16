@@ -11,8 +11,8 @@ tools: Read, Grep, Glob, Bash, mcp__context7, mcp__github__pull_request_read, mc
 - ドメインに関わらず常時参加する。
 - 最初に reviewing-diffs スキルを読む。
 - スキルの手順に厳密に従う。
-- 次に docs/ARCHITECTURE.md を読む。
-- 次に docs/GOTCHAS.md を読む。
+- 次に、ディスパッチプロンプトで指定された ARCHITECTURE と GOTCHAS のパスを読む。パスが指定されていない文書は、存在しないものとして扱う。
+- スキップしてよいのはファイルが存在しないときだけである。存在するときは必ず読み、読むかどうかを自分で判断しない。
 - 入力は PR 番号、design.md、`.codiel/specs/**` の該当 `spec.md`・`cases.md`、issue.md のパスである。
 - diff を取得する。
 

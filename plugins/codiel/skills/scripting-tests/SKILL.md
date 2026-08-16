@@ -8,7 +8,7 @@ description: Codiel の test-loop フェーズ (A) スクリプト安定化ル�
 ## 概要
 
 `codiel-tester` が test-loop フェーズの (A) スクリプト安定化ループで使うスキル。
-`.codiel/specs/<unit-id>/cases.md` の各ケースを、`docs/ARCHITECTURE.md` が宣言する
+`.codiel/specs/<unit-id>/cases.md` の各ケースを、ARCHITECTURE が宣言する
 E2E フレームワーク(Playwright 等)で実行可能なテストスクリプトに変換し、
 `.codiel/specs/<unit-id>/scripts/` に配置・実行する。
 
@@ -29,7 +29,7 @@ E2E フレームワーク(Playwright 等)で実行可能なテストスクリプ
 ## スクリプト規約
 
 - 配置先: `.codiel/specs/<unit-id>/scripts/`。unit ごとにディレクトリを分ける。
-- 使用フレームワーク: `docs/ARCHITECTURE.md` の「テスト方針」節が宣言する E2E フレームワーク
+- 使用フレームワーク: ARCHITECTURE の「テスト方針」節が宣言する E2E フレームワーク
   (例: Playwright)。フレームワークを自己判断で変えない。宣言がない場合は着手せず報告する。
 - **1 ケース ID = 1 テスト**。テスト名にケース ID を含める。
   ```ts
@@ -47,7 +47,10 @@ E2E フレームワーク(Playwright 等)で実行可能なテストスクリプ
 
 ## チェックリスト
 
-1. `docs/ARCHITECTURE.md` の「テスト方針」節を読み、E2E フレームワークと実行コマンドを確認する。
+1. ディスパッチプロンプトで指定された ARCHITECTURE(指定が無ければ `docs/ARCHITECTURE.md`)の
+   「テスト方針」節を読み、E2E フレームワークと実行コマンドを確認する。
+   **ファイルがあれば必ず読む**(前提が注入で渡っていると仮定して省略しない)。
+   ファイルまたは節が無ければ着手せず、その旨を報告して終了する。
 2. 対象 unit の `.codiel/specs/<unit-id>/cases.md` を Read し、全ケース ID と前提・操作・
    期待結果を確認する。
 3. `.codiel/specs/<unit-id>/scripts/` が既存かを Glob で確認する。既存なら Read してから

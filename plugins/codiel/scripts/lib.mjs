@@ -1,4 +1,5 @@
 // src/hooks/lib.ts
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 async function readStdin() {
@@ -37,13 +38,200 @@ function globToRegExp(glob) {
   }
   return new RegExp(`^${re}$`);
 }
-function readDomains(root) {
-  const p = path.join(root, "docs", "ARCHITECTURE.md");
-  if (!fs.existsSync(p)) return null;
-  const m = fs.readFileSync(p, "utf8").match(/```json codiel:domains\n([\s\S]*?)```/);
-  if (!m) return null;
+var DOC_CONFIG_FILENAME = "metatron.config.json";
+var DOC_CONFIG_SUPPORTED_VERSION = 1;
+var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
+var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function realpathOrSelf(dir) {
   try {
-    return JSON.parse(m[1]);
+    return fs.realpathSync(dir);
+  } catch {
+    return dir;
+  }
+}
+function existsSafe(target) {
+  try {
+    return fs.existsSync(target);
+  } catch {
+    return false;
+  }
+}
+function gitToplevel(cwd) {
+  try {
+    const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+      timeout: 5e3,
+      windowsHide: true
+    });
+    if (res.status !== 0) return null;
+    const out = res.stdout?.trim();
+    if (!out) return null;
+    return path.resolve(out);
+  } catch {
+    return null;
+  }
+}
+function findDocRoot(startDir) {
+  const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  let dir = start;
+  while (true) {
+    if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const top = gitToplevel(start);
+  if (top) return top;
+  return start;
+}
+function normalizeSeparators(value) {
+  return value.replace(/\\/g, "/");
+}
+function looksAbsolute(value) {
+  return path.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+}
+function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
+  const useFallback = () => path.resolve(docRoot, fallback);
+  if (raw === void 0) return useFallback();
+  if (typeof raw !== "string" || raw.trim() === "") {
+    warnings.push(
+      `paths.${label} \u304C\u7A7A\u3067\u306A\u3044\u6587\u5B57\u5217\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+    return useFallback();
+  }
+  const value = normalizeSeparators(raw);
+  if (looksAbsolute(value)) {
+    warnings.push(
+      `paths.${label} \u304C\u7D76\u5BFE\u30D1\u30B9(${raw})\u306E\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+    return useFallback();
+  }
+  const absolute = path.resolve(docRoot, value);
+  const relative = path.relative(docRoot, absolute);
+  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  if (escapes) {
+    warnings.push(
+      `paths.${label} \u304C\u30EB\u30FC\u30C8\u5916(${raw})\u3092\u6307\u3059\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+    return useFallback();
+  }
+  return absolute;
+}
+function fallbackDocRoot(startDir) {
+  try {
+    return path.resolve(startDir ?? process.cwd());
+  } catch {
+    return startDir ?? ".";
+  }
+}
+function resolveDocPaths(startDir) {
+  const warnings = [];
+  let docRoot;
+  try {
+    docRoot = findDocRoot(startDir);
+  } catch {
+    docRoot = fallbackDocRoot(startDir);
+  }
+  const configPath = path.join(docRoot, DOC_CONFIG_FILENAME);
+  let parsed;
+  let parseOk = false;
+  try {
+    if (existsSafe(configPath)) {
+      parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      parseOk = true;
+    }
+  } catch {
+    warnings.push("\u8A2D\u5B9A\u3092\u8AAD\u3081\u306A\u304B\u3063\u305F\u305F\u3081\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002");
+  }
+  let source;
+  if (parseOk) {
+    if (isPlainObject(parsed)) {
+      source = parsed;
+    } else {
+      warnings.push(
+        "\u8A2D\u5B9A\u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
+      );
+    }
+  }
+  if (source !== void 0) {
+    const version = source.version;
+    if (version !== void 0 && version !== DOC_CONFIG_SUPPORTED_VERSION) {
+      warnings.push(
+        `\u8A2D\u5B9A\u306E version(${JSON.stringify(version)})\u304C\u672A\u77E5\u306E\u305F\u3081\u3001\u5168\u9805\u76EE\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+      );
+      source = void 0;
+    }
+  }
+  const pathsRaw = source?.paths;
+  const paths = isPlainObject(pathsRaw) ? pathsRaw : void 0;
+  if (pathsRaw !== void 0 && paths === void 0) {
+    warnings.push(
+      "paths \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u6587\u66F8\u30D1\u30B9\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
+    );
+  }
+  return {
+    docRoot,
+    architecture: resolveConfiguredPath(
+      docRoot,
+      paths?.architecture,
+      DEFAULT_ARCHITECTURE_PATH,
+      "architecture",
+      warnings
+    ),
+    gotchas: resolveConfiguredPath(
+      docRoot,
+      paths?.gotchas,
+      DEFAULT_GOTCHAS_PATH,
+      "gotchas",
+      warnings
+    ),
+    warnings
+  };
+}
+var DOMAINS_MARKER = "metatron:domains";
+var FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+var FENCE_CLOSE_RE = /^ {0,3}(`+|~+)[ \t]*$/;
+function isDomainsInfo(info) {
+  const tokens = info.trim().split(/[ \t]+/).filter(Boolean);
+  return tokens.length === 2 && tokens[0] === "json" && tokens[1] === DOMAINS_MARKER;
+}
+function findDomainsContent(text) {
+  const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  let fence = null;
+  let isTarget = false;
+  let openIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i];
+    if (fence) {
+      const m = FENCE_CLOSE_RE.exec(t);
+      if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
+        if (isTarget) return lines.slice(openIndex + 1, i).join("\n");
+        fence = null;
+        isTarget = false;
+      }
+      continue;
+    }
+    const open = FENCE_OPEN_RE.exec(t);
+    if (open) {
+      fence = { char: open[1][0], count: open[1].length };
+      isTarget = isDomainsInfo(open[2]);
+      openIndex = i;
+    }
+  }
+  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n");
+  return null;
+}
+function readDomains(startDir) {
+  try {
+    const { architecture } = resolveDocPaths(startDir);
+    if (!fs.existsSync(architecture)) return null;
+    const content = findDomainsContent(fs.readFileSync(architecture, "utf8"));
+    if (content === null) return null;
+    return JSON.parse(content);
   } catch {
     return null;
   }
@@ -58,10 +246,17 @@ function findProjectRoot(startDir) {
   }
 }
 export {
+  DEFAULT_ARCHITECTURE_PATH,
+  DEFAULT_GOTCHAS_PATH,
+  DOC_CONFIG_FILENAME,
+  DOC_CONFIG_SUPPORTED_VERSION,
+  DOMAINS_MARKER,
   emit,
+  findDocRoot,
   findProjectRoot,
   globToRegExp,
   pass,
   readDomains,
-  readStdin
+  readStdin,
+  resolveDocPaths
 };

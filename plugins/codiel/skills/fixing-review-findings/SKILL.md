@@ -49,7 +49,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    フェーズ→ツール対応表のとおり)。`STOP`/`ASK` が返れば `raguel-gating` の該当ハンドリングに
    従う(自己判断で握り潰さない)。
 7. 修正が反映されたら `running-regression-tests` の手順で回帰全体(影響 unit + 既存全 unit +
-   ARCHITECTURE.md のテストコマンド)を再実行する(修正対象のケースだけの再実行にしない)。
+   ARCHITECTURE のテストコマンド)を再実行する(修正対象のケースだけの再実行にしない)。
 8. 回帰が green になったら、**オーケストレーターが `git push` して PR ブランチ(`state.branch`)を
    リモートへ最新化する**(reviewer は `gh pr diff` で PR の diff を読むため、push を怠ると
    reviewer は修正前の stale な diff を見ることになり、既に対応済みの所見を再度報告してしまう。
