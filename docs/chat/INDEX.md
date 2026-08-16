@@ -73,5 +73,7 @@
 - `2026/0814/phyllis998/agent-policy-headless-setup.md` | 2026-08-14 | phyllis998 | agent-policy headless 実装・context7/mdbase-lsp MCP 設定・認識不具合調査
 - `2026/0815/phyllis998/context7-github-serena-mcp-investigation.md` | 2026-08-15 | phyllis998 | Context7・GitHub・Serena の MCP 構成、リポジトリ分析、github cli PAT 出力方法
 - `2026/0816/phyllis998/intent-plugin-ideation.md` | 2026-08-16 | phyllis998 | intent駆動開発プラグイン企画・設計方針の策定、実装連携確認、ネーミング決定、設計書執筆開始、分離スコープ確定、domains配置方針検討、domains汎用化方針確定、Codiel後方互換廃止確定、MCPとしての価値検証開始、メタトロン設計書統合と依存関係設計確定、レビュー実施・確定、Codiel単体運用の参照管理検討
+- `docs/chat/2026/0816/phyllis998/metatron-sandalphon-implementation-planning.md` | 2026-08-16 | phyllis998 | metatron/sandalphon実装のワークフロー編成
+- `2026/0816/phyllis998/metatron-sandalphon-implementation-request.md` | 2026-08-16 | phyllis998 | metatron+sandalphon 実装依頼と設計確認
 - `2026/0816/phyllis998/no-operation-confirmation.md` | 2026-08-16 | phyllis998 | agent-policy bundled agents設計・検証・Haiku反映・researcher割り当て・実装計画・Subagent実行開始
-- `2026/0816/phyllis998/repository-analysis-serena-update.md` | 2026-08-16 | phyllis998 | リポジトリ分析と Serena 更新
+- `2026/0816/phyllis998/repository-analysis-serena-update.md` | 2026-08-16 | phyllis998 | リポジトリドリフト分析と Serena メモリ更新
