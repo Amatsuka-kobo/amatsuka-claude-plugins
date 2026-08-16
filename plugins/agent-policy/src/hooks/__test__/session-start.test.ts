@@ -159,6 +159,54 @@ test("CLAUDE_PROJECT_DIR が無いときは生成せず注入だけ行う", () =
   )
 })
 
+test("エイリアスの前後の空白は無視する", () => {
+  const dir = project()
+  const injected = context({
+    CLAUDE_PROJECT_DIR: dir,
+    AMATSUKA_AGENT_GPT_SOL_ALIAS: " claude-gpt-5-6-sol ",
+    AMATSUKA_AGENT_GPT_LUNA_ALIAS: " my-luna "
+  })
+  expect(listing(dir)).toEqual(["gpt-luna.md"])
+  expect(generated(dir, "gpt-luna")).toContain("model: my-luna\n")
+  expect(injected).not.toContain("gpt-sol")
+})
+
+test("エイリアス 4 変数を全て変えても生成対象は 6 定義に限られる", () => {
+  const dir = project()
+  context({
+    CLAUDE_PROJECT_DIR: dir,
+    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol",
+    AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra",
+    AMATSUKA_AGENT_GPT_LUNA_ALIAS: "my-luna",
+    AMATSUKA_AGENT_GROK_ALIAS: "my-grok"
+  })
+  expect(listing(dir)).toEqual([
+    "gpt-luna.md",
+    "gpt-researcher.md",
+    "gpt-sol.md",
+    "gpt-terra.md",
+    "grok-implementer.md",
+    "grok-researcher.md"
+  ])
+  expect(listing(dir)).not.toContain("claude-researcher.md")
+})
+
+test("生成に失敗しても方針注入は失われない", () => {
+  const dir = project()
+  const injected = context({
+    CLAUDE_PROJECT_DIR: dir,
+    CLAUDE_PLUGIN_ROOT: path.join(dir, "missing"),
+    AMATSUKA_AGENT_AUTO_INJECTION: "claude",
+    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol"
+  })
+  expect(injected).toContain(
+    "最初に必ず agent-policy:claude-model-policy スキルを使用し、この規律に従う"
+  )
+  expect(injected).toContain("生成に失敗")
+  expect(injected).toContain("gpt-sol")
+  expect(listing(dir)).toEqual([])
+})
+
 test("同梱定義が読めないときは stdout へ何も出さない", () => {
   const dir = project()
   const stdout = runTs(HOOK, [], {

@@ -6,5 +6,5 @@ set -euo pipefail
 pnpm install
 pnpm build
 
-claude -p "/agent-policy:setup-gpt --yes"
-claude -p "/agent-policy:setup-grok --yes"
+# agent-policy の Agent 定義はプラグイン同梱のため、セットアップ工程は不要。
+# モデルエイリアスの変更手順は plugins/agent-policy/README.md を参照。

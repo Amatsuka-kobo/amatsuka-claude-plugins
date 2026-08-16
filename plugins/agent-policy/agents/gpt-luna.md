@@ -1,6 +1,6 @@
 ---
 name: gpt-luna
-description: Use this agent when 軽量なタスク(一括適用・一括チェック・反復変換・軽微なコーディング)や探索実働を委譲するとき。agent-policy の with-codex-policy 運用方針における `GPT Luna` に対応する。詳細は本文の「When to invoke」を参照。
+description: Use this agent when 軽量なタスク(一括適用・一括チェック・反復変換・軽微なコーディング)を委譲するとき。agent-policy の with-codex-policy 運用方針における `GPT Luna` に対応する。詳細は本文の「When to invoke」を参照。
 model: claude-gpt-5-6-luna
 color: cyan
 tools: Read, Grep, Glob, Write, Edit, Bash, LSP, mcp__context7, mcp__plugin_serena_serena__find_symbol, mcp__plugin_serena_serena__find_referencing_symbols, mcp__plugin_serena_serena__get_symbols_overview, mcp__plugin_serena_serena__find_declaration, mcp__plugin_serena_serena__find_implementations, mcp__plugin_serena_serena__replace_symbol_body, mcp__plugin_serena_serena__insert_after_symbol, mcp__plugin_serena_serena__insert_before_symbol, mcp__plugin_serena_serena__rename_symbol, mcp__plugin_serena_serena__replace_in_files, mcp__plugin_serena_serena__replace_content
@@ -14,7 +14,7 @@ tools: Read, Grep, Glob, Write, Edit, Bash, LSP, mcp__context7, mcp__plugin_sere
 - **一括チェック。** 大量のファイルを走査して、特定パターンの有無や規約違反をリスト化するとき。
 - **反復変換。** フォーマット変換・整形・抽出など、判断を要さない処理を多数の対象に繰り返すとき。
 - **軽微なコーディング。** 定型的で判断をほとんど伴わない小さなコード変更を行うとき。
-- **探索実働。** Opus が統括するコードベース探索の一部を、探索専用サブエージェントとして担うとき。
+- **探索実働のフォールバック。** `Grok Researcher` が利用不可で、コードベース探索の実働を代替として振られたとき。通常の探索実働は researcher の帯(`GPT Researcher` / `Grok Researcher`)が担う。
 
 複雑な実装は `GPT Sol`、判断を要する通常の実装は `GPT Terra` に委ねる。
 

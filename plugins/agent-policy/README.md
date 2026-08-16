@@ -63,23 +63,38 @@ Marketplace から `agent-policy` をインストールします。
 
 エイリアスはモデル本体の ID ではなく、ローカルプロキシ(CLIProxyAPI などの ProxyAPI サーバー)が配信するクライアント側の別名です。Codex 系 / Grok 系のモデルをこの ProxyAPI サーバー経由で使える環境が前提です。`claude-researcher` は Anthropic のモデルをそのまま使うため、対応するエイリアス変数はありません。
 
+### 設定場所
+
+これらの変数は、OS の環境変数として与えても、Claude Code の `settings.json` / `settings.local.json` の `env` に書いても構いません。プロジェクト単位で効かせる場合は、そのプロジェクトの `.claude/settings.json` に書きます。
+
+```json
+{
+  "env": {
+    "AMATSUKA_AGENT_AUTO_INJECTION": "with-codex",
+    "AMATSUKA_AGENT_GPT_SOL_ALIAS": "my-sol"
+  }
+}
+```
+
+`AMATSUKA_AGENT_AUTO_INJECTION` に上の表にない値を設定した場合、方針スキルは注入されず、値が未知である旨の警告だけが注入されます。
+
 ## 同梱エージェント
 
 `plugins/agent-policy/agents/` に 7 定義を同梱しています。呼び出し名は `agent-policy:<name>`(例: `agent-policy:gpt-sol`)です。
 
 | 名前 | 既定モデル | 役割 |
 | --- | --- | --- |
-| `claude-researcher` | sonnet | 独立レビュー・外部一次情報調査・コードベース探索実働(claude-model-policy) |
+| `claude-researcher` | `sonnet` | 独立レビュー・リアルタイム情報調査・コードベース探索実働 |
 | `gpt-sol` | `claude-gpt-5-6-sol` | 複雑なコーディング(アーキテクチャ判断・設計トレードオフ) |
 | `gpt-terra` | `claude-gpt-5-6-terra` | 通常のコーディング・ドキュメント作成・設定編集・ビルド/テスト実行 |
-| `gpt-researcher` | `claude-gpt-5-6-terra` | 独立レビュー・外部一次情報調査・コードベース探索実働 |
-| `gpt-luna` | `claude-gpt-5-6-luna` | 軽量タスク(一括適用・反復変換・軽微なコーディング)・探索実働 |
+| `gpt-researcher` | `claude-gpt-5-6-terra` | 独立レビュー・リアルタイム情報調査・コードベース探索実働 |
+| `gpt-luna` | `claude-gpt-5-6-luna` | 軽量タスク(一括適用・反復変換・軽微なコーディング) |
 | `grok-researcher` | `claude-grok-4-5` | 独立レビュー・リアルタイム情報調査・コードベース探索実働 |
 | `grok-implementer` | `claude-grok-4-5` | 通常のコーディング・一括適用・反復変換・ドキュメント作成 |
 
 ## エイリアスを変更する
 
-環境変数(例 `AMATSUKA_AGENT_GPT_SOL_ALIAS`)を既定値と異なる値に設定すると、SessionStart フックがそのエージェントの定義を `.claude/agents/` へ生成します。
+環境変数(例 `AMATSUKA_AGENT_GPT_SOL_ALIAS`)を既定値と異なる値に設定すると、SessionStart フックがそのエージェントの定義を `.claude/agents/` へ生成します。設定場所は「[環境変数](#環境変数)」の「設定場所」を参照してください。
 
 生成は今のセッションには反映されません。次回セッションから効くため、エイリアスに依存する委譲を行う前に Claude Code を再起動してください。
 

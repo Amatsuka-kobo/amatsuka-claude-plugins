@@ -66,6 +66,11 @@ interface SyncResult {
   overridden: string[]
   written: string[]
   stale: string[]
+  failed: string[]
+}
+
+function reason(error: unknown): string {
+  return error instanceof Error ? error.message : "Unexpected error"
 }
 
 function pluginRoot(env: NodeJS.ProcessEnv): string {
@@ -77,7 +82,17 @@ function pluginRoot(env: NodeJS.ProcessEnv): string {
 
 function replaceModel(content: string, alias: string): string {
   const lines = content.split("\n")
-  const index = lines.findIndex((line) => line.startsWith("model: "))
+  const open = lines.findIndex((line) => line.trim() === "---")
+  const close = lines.findIndex(
+    (line, at) => at > open && line.trim() === "---"
+  )
+  if (open === -1 || close === -1) {
+    throw new Error("Bundled agent has no frontmatter")
+  }
+
+  const index = lines.findIndex(
+    (line, at) => at > open && at < close && line.startsWith("model: ")
+  )
   if (index === -1) {
     throw new Error("Bundled agent has no model line")
   }
@@ -86,14 +101,20 @@ function replaceModel(content: string, alias: string): string {
 }
 
 function sync(env: NodeJS.ProcessEnv): SyncResult {
-  const result: SyncResult = { overridden: [], written: [], stale: [] }
+  const result: SyncResult = {
+    overridden: [],
+    written: [],
+    stale: [],
+    failed: []
+  }
   const projectDir = env.CLAUDE_PROJECT_DIR
   if (projectDir === undefined || projectDir === "") return result
+  if (!fs.existsSync(projectDir)) return result
 
   const outDir = path.join(projectDir, ".claude", "agents")
 
   for (const spec of AGENTS) {
-    const alias = env[spec.variable]
+    const alias = env[spec.variable]?.trim()
     const target = path.join(outDir, `${spec.name}.md`)
 
     if (alias === undefined || alias === "" || alias === spec.fallback) {
@@ -101,34 +122,60 @@ function sync(env: NodeJS.ProcessEnv): SyncResult {
       continue
     }
 
-    const source = fs.readFileSync(
-      path.join(pluginRoot(env), "agents", `${spec.name}.md`),
-      "utf8"
-    )
-    const content = replaceModel(source, alias)
-    result.overridden.push(spec.name)
+    try {
+      const source = fs.readFileSync(
+        path.join(pluginRoot(env), "agents", `${spec.name}.md`),
+        "utf8"
+      )
+      const content = replaceModel(source, alias)
 
-    if (fs.existsSync(target) && fs.readFileSync(target, "utf8") === content) {
-      continue
+      if (
+        fs.existsSync(target) &&
+        fs.readFileSync(target, "utf8") === content
+      ) {
+        result.overridden.push(spec.name)
+        continue
+      }
+      fs.mkdirSync(outDir, { recursive: true })
+      fs.writeFileSync(target, content)
+      result.overridden.push(spec.name)
+      result.written.push(spec.name)
+    } catch (error) {
+      result.failed.push(`${spec.name}: ${reason(error)}`)
     }
-    fs.mkdirSync(outDir, { recursive: true })
-    fs.writeFileSync(target, content)
-    result.written.push(spec.name)
   }
 
   return result
 }
 
 function build(env: NodeJS.ProcessEnv): string | undefined {
-  const result = sync(env)
+  const policy = policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION)
+
+  let result: SyncResult
+  try {
+    result = sync(env)
+  } catch (error) {
+    result = { overridden: [], written: [], stale: [], failed: [reason(error)] }
+  }
+
+  for (const failure of result.failed) {
+    process.stderr.write(`agent-policy session-start: ${failure}\n`)
+  }
+
   const blocks = [
-    policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
+    policy,
     overrideBlock(result.overridden),
     restartBlock(result.written),
     staleBlock(result.stale)
   ].filter((block): block is string => block !== undefined)
 
-  return blocks.length === 0 ? undefined : blocks.join("\n\n")
+  // 生成の失敗だけしか伝えることが無いときは、設計どおりフェイルオープンして stdout へ何も出さない。
+  if (blocks.length === 0) return undefined
+
+  const failure = failureBlock(result.failed)
+  if (failure !== undefined) blocks.push(failure)
+
+  return blocks.join("\n\n")
 }
 
 function overrideBlock(names: string[]): string | undefined {
@@ -146,6 +193,11 @@ function staleBlock(names: string[]): string | undefined {
   return `次の Agent 定義が .claude/agents/ に残っている。プロジェクト定義は同梱定義より優先されるため、旧セットアップの生成物であれば削除する: ${names.join(", ")}`
 }
 
+function failureBlock(failures: string[]): string | undefined {
+  if (failures.length === 0) return undefined
+  return `次の Agent 定義は .claude/agents/ への生成に失敗したため、同梱定義のまま(既定エイリアス)である。エイリアスに依存する委譲を行う前に、生成先の書き込み権限を確認する: ${failures.join(" / ")}`
+}
+
 function respond(context: string): void {
   process.stdout.write(
     `${JSON.stringify({
@@ -161,6 +213,5 @@ try {
   const context = build(process.env)
   if (context !== undefined) respond(context)
 } catch (error) {
-  const message = error instanceof Error ? error.message : "Unexpected error"
-  process.stderr.write(`agent-policy session-start: ${message}\n`)
+  process.stderr.write(`agent-policy session-start: ${reason(error)}\n`)
 }
