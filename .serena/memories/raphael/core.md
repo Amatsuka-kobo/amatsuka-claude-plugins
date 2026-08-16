@@ -27,8 +27,9 @@ antibody from expiry decay.
 ## Data & CLI
 
 `.raphael/antibodies/<id>.md` — Markdown + YAML frontmatter (`id` = `ab-YYYY-MMDD-NNN`, `trigger`
-{event, tool, pattern, scope}, `status`, `stats`, `expires`). Schema-validated by
-`_types/antibody.md` (mdbase). `trigger.scope` applies to Edit/Write POSIX paths only, ignored for
+{event, tool, pattern, scope}, `status`, `stats`, `expires`). Validated at runtime by
+`plugins/raphael/src/lib/frontmatter.ts` (id/date/tool/status checks) — the former mdbase
+`_types/antibody.md` schema was retired in 2026-08 (`mem:core`). `trigger.scope` applies to Edit/Write POSIX paths only, ignored for
 Bash. **Antibodies are meant to be committed** (shared prevention asset); `infections/`, `state.json`,
 `log/` and `.claude/raphael.local.md` must be gitignored — infections contain raw failed commands
 and prompt excerpts, and redaction is best-effort only.

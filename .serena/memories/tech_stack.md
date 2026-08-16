@@ -17,7 +17,7 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
   `pnpm build` = `pnpm -r build`. See `mem:conventions` for the src→scripts bundle rule.
 - Test: **Vitest, run from root only** (`vitest.config.ts`, pool `forks`, 20s timeout).
   Include glob is `plugins/**/__test__/**/*.test.ts` — tests live in `__test__/` dirs next to the
-  code, NOT colocated as `foo.test.ts` siblings. Verified 2026-08-15: all 127 `*.test.ts` files sit
+  code, NOT colocated as `foo.test.ts` siblings. Verified 2026-08-16: all 127 `*.test.ts` files sit
   under `__test__/`; a test placed outside never runs.
 - Lint/format: Biome (`biome.json`, schema 2.5.3) — 2-space, lineWidth 80, double quotes,
   semicolons `asNeeded`, no trailing commas, `recommended` lint preset, assist/organizeImports on.
@@ -25,10 +25,9 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
   (irrelevant, since only `**/*.ts` and `**/*.js` are in scope).
 - `.vscode/settings.json`: format-on-save with `biomejs.biome` as the TS/JS formatter; watcher and
   search exclude `.superpowers`, `.pitcrew`, `dist`, `node_modules` and generated `scripts/*.mjs`.
-- Frontmatter schema check: mdbase (`mdbase.yaml` spec_version 0.3.0 + `_types/{agent,command,
-  skill,antibody}.md`), surfaced through the `mdbase-lsp` LSP in-editor. Excludes `.git`,
-  `.mdbase`, `node_modules`, `docs`, `harness-docs`, `.serena`. Not wired into `pnpm test` —
-  nothing fails CI-style on a schema break.
+- Frontmatter schema check: **none**. mdbase (`mdbase.yaml` + `_types/`) and the `mdbase-lsp` LSP
+  were retired in 2026-08 (commit 9ed55dd) and archived to `docs/old/mdbase-record/`; nothing
+  validates `agents/`, `commands/`, `skills/` or antibody frontmatter any more.
 - Only non-dev runtime deps: raguel-mcp (`@modelcontextprotocol/sdk`, `zod` v4, `picomatch`, `yaml`)
   and basic-design (`elkjs`, pinned exact at 0.11.1). Every other plugin is Node stdlib
   (+ `git`/`gh`/`claude` CLI).
