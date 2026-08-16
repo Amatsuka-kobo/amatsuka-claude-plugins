@@ -1,0 +1,82 @@
+[
+  {
+    "query": "霜月ロジのモノレポ、`docs/ARCHITECTURE.md` がまだ一枚も無いです。apps/ と packages/ を解析して技術スタック・レイヤー構造・ディレクトリ責務まで一通り起こしてほしい。ドメインの切り方は勝手に決めずに節ごとに見せてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`/codiel:init` が作った ARCHITECTURE が `## ドメインマップ` の 1 節しかありません。テスト方針・コマンド定義・保護パス・規約を足して普通のアーキ文書にしたい。既存のドメインマップは触らないでほしいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "来月から入る業務委託の方向けに、このリポジトリのアーキテクチャ文書を初期化してください。システム概要は Mermaid の図も入れて、粒度は相談させてほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "we just open-sourced `orbit-ledger` and there is no architecture doc at all. read the tree, the package.json scripts and CLAUDE.md, then draft it section by section so i can correct the domain map before anything gets written to disk.",
+    "should_trigger": true
+  },
+  {
+    "query": "アーキ文書つくって。まだ一個もないので最初から。pnpm workspace で apps が 3 つ、prisma とー postgres 使ってる",
+    "should_trigger": true
+  },
+  {
+    "query": "`docs/ARCHITECTURE.md` を新規に作りたいのですが、うちはドメイン分割が馴染まない小さいツールです。全部を generic 一本に縮退させる案も含めて相談しながら初版を確定させたい。",
+    "should_trigger": true
+  },
+  {
+    "query": "四条プロダクツの受注システム、設計資料が Confluence と Slack に散らばってて全体像の文書がありません。コードベースを解析してアーキテクチャ文書に起こし、レイヤー構造とコマンド定義を確定させてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "metatron を入れたので初期化したい。ARCHITECTURE の解決先が `docs/` でいいかも含めて確認しながら、対象セクションを埋めていってほしい。書き込む前に diff を見せて。",
+    "should_trigger": true
+  },
+  {
+    "query": "初回生成をお願いします。ただし `## 規約` と `## 保護パス` はコードから読み取れる材料が無さそうなので、推測で埋めずに質問に切り替えてください。埋まらなければ未記入のままで構いません。",
+    "should_trigger": true
+  },
+  {
+    "query": "この構成をドキュメントに起こしてほしい。Next.js のフロント、Hono の API、Postgres、テストは vitest。ARCHITECTURE.md が無い状態からなので全部です。",
+    "should_trigger": true
+  },
+  {
+    "query": "`docs/ARCHITECTURE.md` の技術スタックに Redis が載っていません。先週キャッシュ層で入れたので、実装に合わせて記載を追随させてください。他にもズレてる箇所があれば洗い出してほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "ドメインマップの glob が 2 個死んでます。あと `src/billing/` がどのドメインにも入っていない。ARCHITECTURE を更新してこの穴を埋めてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "ADR を 1 件足したいです。GraphQL をやめて REST に戻した判断を残して、その前提だった ADR-0004 は廃止の状態にしてほしい。理由も添えます。",
+    "should_trigger": false
+  },
+  {
+    "query": "さっき `--input` に JSON を直接埋め込んで CLI に 3 回弾かれました。同じことを次のエージェントもやると思うので、この罠を台帳に残しておいてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "codiel の run で Raguel STOP が出ました。原因になった設計漏れを GOTCHAS へ追記してから run を再開したい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`README.md` にセットアップ手順とローカル起動のコマンドを書き足してください。初学者向けに丁寧に、スクショの置き場所も相談したいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`harness-docs/design/2026-08-20-notification-redesign.md` に通知基盤の設計書を書きたい。代替案と不採用理由、移行手順まで含めて構成から相談させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "やりたいことがまだぼんやりしてます。通知の既読管理を入れたいんだけど、現状どうなってるかも踏まえて受け入れ基準まで詰めて文書に固めたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "うちのレイヤーの分け方、そもそも妥当かレビューしてほしいです。文書を書き換えたいわけではなく、`apps/api` が DB に直接触っている設計判断の是非を聞きたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`docs/api/orders.yaml` の OpenAPI 定義を更新してください。返品受付のエンドポイントを 2 本足して、`order_status` の enum に `returned` を追加します。",
+    "should_trigger": false
+  }
+]

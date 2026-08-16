@@ -1,0 +1,82 @@
+[
+  {
+    "query": "さっき CLI の絶対パスを推測で組み立てて 3 回失敗しました。次にこのリポジトリを触るエージェントも同じことをやると思うので、台帳に残しておいてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`vitest.config.ts` に `environment: node` を書き忘れると、うちのテストだけ無言で 0 件パスになります。今日それで 1 時間溶かしたので記録しておきたい。",
+    "should_trigger": true
+  },
+  {
+    "query": "GT-0007 は先週の修正でもう起きなくなりました。エントリは残したまま解決済みの扱いにしてください。理由は「lock の取得を再試行するようにしたため」です。",
+    "should_trigger": true
+  },
+  {
+    "query": "同じ種類のハマりどころが 6 件たまってきました。スキルか Hook に昇格させるべきか検討したいので、候補を絞り込んで提案してほしい。勝手に昇格はしないでください。",
+    "should_trigger": true
+  },
+  {
+    "query": "GT-0003 に書いた前提が間違っていたことが分かりました。新しい事実で別エントリを足したうえで、古い方には対象外のタグを理由付きで付けてほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "レビューで設計漏れが発覚して手戻りしました。原因は `docs/ARCHITECTURE.md` の保護パスを読まずに `infra/` を書き換えたことです。台帳に追記してから次に進みたい。",
+    "should_trigger": true
+  },
+  {
+    "query": "we keep hitting the same trap: `pnpm build` must run before `pnpm test` in this repo or the bundled scripts are stale. log it in the gotchas ledger with a concrete countermeasure, not a \"be careful\" line.",
+    "should_trigger": true
+  },
+  {
+    "query": "さっきの罠、記録しといて。npx 使うと devEngines で落ちるやつ。pnpm exec じゃないとダメってのを毎回忘れる",
+    "should_trigger": true
+  },
+  {
+    "query": "実行を途中で止めた判断の理由を残しておきたいです。`docs/GOTCHAS.md` にあるかどうか先に確認して、重複してなければ追記してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "この失敗、正直しょうもないので記録したくないんですが、たぶんまた踏みます。記録すべきか判断したうえで、必要なら台帳へ追記してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "codiel のオーケストレーター側の規約を確認したいです。run で Raguel STOP が出たときの手順が codiel 側のスキルに書かれているはずなので、そちらの規約の中身を見せてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "codiel の run で出た incident を `.codiel/runs/2026-08-16-142/state.json` の方へ記録したい。台帳ではなく run の状態ファイルの整合を取りたいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`.raphael/antibodies/` に抗体を synthesize したいです。今回の Stop reason から蒸留して、接種の是非まで相談させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "今日の会話を `docs/chat/` に記録しておいてください。決定に至った経緯と、採らなかった案の理由も残したいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`docs/ARCHITECTURE.md` の技術スタックが古いです。Redis を先週入れたので実装に合わせて追随させて、他のズレも洗い出してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "このリポジトリにはアーキテクチャ文書がありません。コードベースを解析して初版を起こしたい。節ごとに確認させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "テストが 3 件落ちています。原因を切り分けて直してほしい。`src/domain/pricing/discount.ts` の丸め処理あたりが怪しいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "この不具合を issue にしといて。再現手順とログの抜粋を本文に入れて、ラベルは `bug` でお願いします。",
+    "should_trigger": false
+  },
+  {
+    "query": "チーム向けのコーディング規約を書きたいです。命名、例外の扱い、ログの粒度あたりを、どのプロジェクトでも通用する一般則としてまとめてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`CLAUDE.md` の検証コマンドの節が冗長です。判断基準だけを残して削り、重複した禁止事項を統合してほしい。",
+    "should_trigger": false
+  }
+]

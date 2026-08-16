@@ -1,0 +1,445 @@
+// stage → commit の 2 段階書き込みで使う staging の保存・照合・期限・単回消費。
+//
+// 規則の正本はファイル契約
+// `harness-docs/design/2026-08-16-file-contract-freeze.md` の §11「staging の保証」。
+// 設計上の根拠は metatron 設計書 §7-3。
+//
+// 保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json`。
+// CLI はサブコマンドごとに別プロセスとして起動するため、staging はプロセス外へ置く。
+// プロジェクト内に置かないのは、staging がセッション限りの一時状態であって
+// プロジェクト資産ではないためである(全利用プロジェクトへの .gitignore 追加や
+// 書きかけドラフトの誤コミットを避ける)。
+//
+// この層は第 1 層(内容の検証)であり、フェイルクローズドする。
+// ただし失敗は例外ではなく判別可能な値(`ok: false` と `error`)で返す。
+
+import crypto from "node:crypto"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+
+export const STAGING_DIR_NAME = "metatron-staging"
+export const STAGING_RECORD_VERSION = 1
+
+/** 契約 §11: staging は単回使用かつ有効期限つき(既定 30 分)。 */
+export const DEFAULT_STAGING_TTL_MS = 30 * 60 * 1000
+
+/** stage の対象。いずれも ARCHITECTURE ファイルを書き換える経路である。 */
+export type StagingKind = "architecture" | "adr"
+
+export interface StagingRecord {
+  version: number
+  stagingId: string
+  kind: StagingKind
+  /** 書き込み対象の絶対パス。 */
+  targetPath: string
+  /** stage 時点の対象ファイルの内容ハッシュ。存在しなかった場合は null。 */
+  baseHash: string | null
+  /** commit 時に書き込む全文。 */
+  nextContent: string
+  createdAt: number
+  expiresAt: number
+  /** 消費済みなら消費時刻。未消費は null。 */
+  usedAt: number | null
+  /** 呼び出し元が持たせる付随情報(ADR の assignedId など)。 */
+  meta: Record<string, unknown>
+}
+
+export type CreateStagingError = "invalid" | "staging_unavailable"
+
+export type CommitStagingError =
+  | "unknown_id"
+  | "already_used"
+  | "expired"
+  | "file_changed"
+  | "write_failed"
+
+export interface CreateStagingInput {
+  /** 契約 §3 の docRoot。保存先ディレクトリを分ける鍵になる。 */
+  projectRoot: string
+  kind: StagingKind
+  /** 書き込み対象。相対パスは projectRoot 基準で解決する。 */
+  targetPath: string
+  /** commit 時に書き込む全文。 */
+  nextContent: string
+  /**
+   * 呼び出し元の検証結果。1 件でもあれば stagingId を発行しない。
+   * 「壊れたブロックは stage すらできない」保証を、分岐忘れでも破れない位置に置く。
+   */
+  validationErrors?: string[]
+  /**
+   * stage 時点の内容ハッシュ。`null` は「対象ファイルが存在しなかった」を表す。
+   * 省略時はここでファイルを読んで算出する。diff を計算した時点のバイト列を
+   * そのまま照合させたい呼び出し元は、`hashContent` の値を明示的に渡す。
+   */
+  baseHash?: string | null
+  meta?: Record<string, unknown>
+  /** 有効期限。既定は DEFAULT_STAGING_TTL_MS(30 分)。 */
+  ttlMs?: number
+  /** 現在時刻。テストと再現のために注入できる。 */
+  now?: number
+}
+
+export type CreateStagingResult =
+  | {
+      ok: true
+      stagingId: string
+      /** staging レコードの絶対パス(プロジェクト外)。 */
+      recordPath: string
+      targetPath: string
+      baseHash: string | null
+      createdAt: number
+      expiresAt: number
+    }
+  | { ok: false; error: CreateStagingError; reasons: string[] }
+
+export interface CommitStagingInput {
+  projectRoot: string
+  stagingId: string
+  now?: number
+}
+
+export type CommitStagingResult =
+  | {
+      ok: true
+      stagingId: string
+      kind: StagingKind
+      /** 書き込んだファイルの絶対パス。 */
+      path: string
+      bytesWritten: number
+      meta: Record<string, unknown>
+      /** 書き込みは成功したが後始末で問題が出た場合の 1 行説明。 */
+      warnings: string[]
+    }
+  | { ok: false; error: CommitStagingError; reason: string }
+
+export type ReadStagingResult =
+  | { ok: true; record: StagingRecord }
+  | { ok: false; error: "unknown_id"; reason: string }
+
+function hashBuffer(buf: Buffer): string {
+  return crypto.createHash("sha256").update(buf).digest("hex")
+}
+
+/** 内容ハッシュ。文字列は UTF-8 のバイト列として扱う。 */
+export function hashContent(content: string | Buffer): string {
+  const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8")
+  return hashBuffer(buf)
+}
+
+/**
+ * ファイルの内容ハッシュ。読めない場合は null を返す。
+ *
+ * 「存在しない」と「読めない」を区別しない。stage 時と commit 時で同じ判定を通すため、
+ * 権限で読めないファイルは両方 null になり `file_changed` にはならず、
+ * 実際の書き込みで `write_failed` として現れる。
+ */
+export function hashFileOrNull(filePath: string): string | null {
+  try {
+    return hashBuffer(fs.readFileSync(filePath))
+  } catch {
+    return null
+  }
+}
+
+// プロジェクトパスの分離キー。sha256 の先頭 16 文字(契約 §11)。
+export function projectKey(projectRoot: string): string {
+  let resolved: string
+  try {
+    resolved = path.resolve(projectRoot)
+  } catch {
+    resolved = projectRoot
+  }
+  let real = resolved
+  try {
+    real = fs.realpathSync(resolved)
+  } catch {
+    // 実体が無ければ解決前のパスをそのまま使う(config.ts と同じ扱い)。
+  }
+  return hashContent(real.split(path.sep).join("/")).slice(0, 16)
+}
+
+/** `<tmpdir>/metatron-staging`。 */
+export function stagingRootDir(): string {
+  return path.join(os.tmpdir(), STAGING_DIR_NAME)
+}
+
+/** `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>`。 */
+export function stagingDirFor(projectRoot: string): string {
+  return path.join(stagingRootDir(), projectKey(projectRoot))
+}
+
+// stagingId をファイル名として使うため、パス区切りや `..` を含む値を拒む。
+// 拒んだ値は「そんな staging は無い」として扱う(unknown_id)。
+const STAGING_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+
+function isSafeStagingId(stagingId: unknown): stagingId is string {
+  return typeof stagingId === "string" && STAGING_ID_PATTERN.test(stagingId)
+}
+
+/** staging レコードの絶対パス。不正な id には null を返す。 */
+export function stagingRecordPath(
+  projectRoot: string,
+  stagingId: string
+): string | null {
+  if (!isSafeStagingId(stagingId)) return null
+  return path.join(stagingDirFor(projectRoot), `${stagingId}.json`)
+}
+
+// config.ts の規則 3 と同じ「ルート外への脱出」判定。
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target)
+  if (rel === "" || rel === "..") return false
+  return !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isStagingKind(value: unknown): value is StagingKind {
+  return value === "architecture" || value === "adr"
+}
+
+function parseRecord(raw: unknown, stagingId: string): StagingRecord | null {
+  if (!isPlainObject(raw)) return null
+  if (raw.stagingId !== stagingId) return null
+  if (typeof raw.version !== "number") return null
+  if (!isStagingKind(raw.kind)) return null
+  if (typeof raw.targetPath !== "string" || raw.targetPath === "") return null
+  if (typeof raw.nextContent !== "string") return null
+  if (raw.baseHash !== null && typeof raw.baseHash !== "string") return null
+  if (typeof raw.createdAt !== "number") return null
+  if (typeof raw.expiresAt !== "number") return null
+  if (raw.usedAt !== null && typeof raw.usedAt !== "number") return null
+  return {
+    version: raw.version,
+    stagingId,
+    kind: raw.kind,
+    targetPath: raw.targetPath,
+    baseHash: raw.baseHash,
+    nextContent: raw.nextContent,
+    createdAt: raw.createdAt,
+    expiresAt: raw.expiresAt,
+    usedAt: raw.usedAt,
+    meta: isPlainObject(raw.meta) ? raw.meta : {}
+  }
+}
+
+// 破損・欠落・ディレクトリごとの消失は、いずれも「未知の ID」に落とす(契約 §11)。
+function loadRecord(
+  projectRoot: string,
+  stagingId: string
+): StagingRecord | null {
+  const recordPath = stagingRecordPath(projectRoot, stagingId)
+  if (recordPath === null) return null
+  try {
+    const text = fs.readFileSync(recordPath, "utf8")
+    return parseRecord(JSON.parse(text), stagingId)
+  } catch {
+    return null
+  }
+}
+
+// 途中で切れたレコードを残さないよう、一時ファイルへ書いてから rename する。
+function writeRecord(recordPath: string, record: StagingRecord): void {
+  const dir = path.dirname(recordPath)
+  fs.mkdirSync(dir, { recursive: true })
+  const tmpPath = `${recordPath}.tmp-${crypto.randomUUID()}`
+  const body = `${JSON.stringify(record, null, 2)}\n`
+  // 共有の一時ディレクトリに置くため、他ユーザーから読めないようにする。
+  fs.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 0o600 })
+  try {
+    fs.renameSync(tmpPath, recordPath)
+  } catch (err) {
+    try {
+      fs.rmSync(tmpPath, { force: true })
+    } catch {
+      // 後始末の失敗は握りつぶす
+    }
+    throw err
+  }
+}
+
+/**
+ * staging を発行する。契約 §11 の保証 1・2 を成立させる入口。
+ *
+ * `validationErrors` が空でない場合は stagingId を発行しない
+ * (壊れた内容は stage すらできない。設計書 §7-4)。
+ */
+export function createStaging(input: CreateStagingInput): CreateStagingResult {
+  const errors = input.validationErrors ?? []
+  if (errors.length > 0) {
+    return { ok: false, error: "invalid", reasons: [...errors] }
+  }
+
+  const projectRoot = path.resolve(input.projectRoot)
+  const targetPath = path.resolve(projectRoot, input.targetPath)
+  if (!isInside(projectRoot, targetPath)) {
+    // commit は staging に書かれたパスへ書き込むため、ここで外を弾いておく。
+    return {
+      ok: false,
+      error: "invalid",
+      reasons: [
+        `書き込み対象 ${targetPath} がプロジェクトルート ${projectRoot} の外を指しています。`
+      ]
+    }
+  }
+
+  const now = input.now ?? Date.now()
+  const ttlMs =
+    typeof input.ttlMs === "number" &&
+    Number.isFinite(input.ttlMs) &&
+    input.ttlMs > 0
+      ? input.ttlMs
+      : DEFAULT_STAGING_TTL_MS
+
+  const baseHash =
+    input.baseHash === undefined ? hashFileOrNull(targetPath) : input.baseHash
+
+  const stagingId = crypto.randomUUID()
+  const record: StagingRecord = {
+    version: STAGING_RECORD_VERSION,
+    stagingId,
+    kind: input.kind,
+    targetPath,
+    baseHash,
+    nextContent: input.nextContent,
+    createdAt: now,
+    expiresAt: now + ttlMs,
+    usedAt: null,
+    meta: input.meta ?? {}
+  }
+
+  const recordPath = path.join(stagingDirFor(projectRoot), `${stagingId}.json`)
+  try {
+    writeRecord(recordPath, record)
+  } catch (err) {
+    return {
+      ok: false,
+      error: "staging_unavailable",
+      reasons: [`staging を保存できませんでした(${recordPath}): ${String(err)}`]
+    }
+  }
+
+  return {
+    ok: true,
+    stagingId,
+    recordPath,
+    targetPath,
+    baseHash,
+    createdAt: record.createdAt,
+    expiresAt: record.expiresAt
+  }
+}
+
+/** staging を消費せずに読む(diff の再提示や状態の照会に使う)。 */
+export function readStaging(
+  projectRoot: string,
+  stagingId: string
+): ReadStagingResult {
+  const record = loadRecord(projectRoot, stagingId)
+  if (record === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${stagingId} が見つかりません。stage からやり直してください。`
+    }
+  }
+  return { ok: true, record }
+}
+
+/**
+ * staging を消費して書き込む。契約 §11 の保証 1〜3 の照合点。
+ *
+ * 判定の順序は unknown_id → already_used → expired → file_changed。
+ * 消費済みの印は書き込みの**後**に付ける。印を先に付けると書き込み失敗で
+ * staging を無駄に焼いてしまう一方、印が付かないまま落ちても、
+ * 書き込み済みのファイルはハッシュが変わっているため再 commit は
+ * `file_changed` で弾かれ、単回使用の保証は保たれる。
+ *
+ * ロック(契約 §11「採番と挿入の原子性」)はこの関数の外側で取る。
+ */
+export function commitStaging(input: CommitStagingInput): CommitStagingResult {
+  const projectRoot = path.resolve(input.projectRoot)
+  const now = input.now ?? Date.now()
+
+  const record = loadRecord(projectRoot, input.stagingId)
+  if (record === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${input.stagingId} が見つかりません。stage からやり直してください。`
+    }
+  }
+
+  if (record.usedAt !== null) {
+    return {
+      ok: false,
+      error: "already_used",
+      reason: `staging ${record.stagingId} は既に使用済みです(${new Date(record.usedAt).toISOString()})。stage からやり直してください。`
+    }
+  }
+
+  if (now >= record.expiresAt) {
+    return {
+      ok: false,
+      error: "expired",
+      reason: `staging ${record.stagingId} は有効期限(${new Date(record.expiresAt).toISOString()})を過ぎています。stage からやり直してください。`
+    }
+  }
+
+  // 共有の一時ディレクトリに置いたレコードが差し替えられていても、
+  // プロジェクト外への書き込みには使わせない。
+  if (!isInside(projectRoot, record.targetPath)) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${record.stagingId} の書き込み先がプロジェクトルートの外を指しています。stage からやり直してください。`
+    }
+  }
+
+  const currentHash = hashFileOrNull(record.targetPath)
+  if (currentHash !== record.baseHash) {
+    const before = record.baseHash === null ? "未作成" : record.baseHash
+    const after = currentHash === null ? "未作成" : currentHash
+    return {
+      ok: false,
+      error: "file_changed",
+      reason: `${record.targetPath} が stage 後に変化しています(${before} → ${after})。stage からやり直してください。`
+    }
+  }
+
+  const buf = Buffer.from(record.nextContent, "utf8")
+  try {
+    fs.mkdirSync(path.dirname(record.targetPath), { recursive: true })
+    fs.writeFileSync(record.targetPath, buf)
+  } catch (err) {
+    return {
+      ok: false,
+      error: "write_failed",
+      reason: `${record.targetPath} へ書き込めませんでした: ${String(err)}`
+    }
+  }
+
+  const warnings: string[] = []
+  const recordPath = stagingRecordPath(projectRoot, record.stagingId)
+  try {
+    if (recordPath === null) throw new Error("invalid staging id")
+    writeRecord(recordPath, { ...record, usedAt: now })
+  } catch {
+    warnings.push(
+      `staging ${record.stagingId} を使用済みにできませんでした。書き込みは完了しています。`
+    )
+  }
+
+  return {
+    ok: true,
+    stagingId: record.stagingId,
+    kind: record.kind,
+    path: record.targetPath,
+    bytesWritten: buf.byteLength,
+    meta: record.meta,
+    warnings
+  }
+}
