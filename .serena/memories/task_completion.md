@@ -11,9 +11,10 @@ repo root:
 6. Reflect the change in the root `README.md` plugin table if it added/changed a plugin
 
 For markdown/JSON-only changes (skills/agents/commands/hooks/marketplace.json) there is no build or
-test step: sanity-check JSON validity, check frontmatter against `_types/` (the `mdbase-lsp` LSP
-does this in-editor), and still apply steps 5–6. There is no validator command any more —
-`plugin-dev` was removed from this workspace in 2026-08.
+test step and **no automated check of any kind**: sanity-check JSON validity by eye, copy
+frontmatter shape from a sibling file, and still apply steps 5–6. Neither `plugin-dev`'s validator
+(removed 2026-08, commit ea72cbc) nor the mdbase/`_types` schema check (retired 2026-08, commit
+9ed55dd) exists any more.
 
 New design docs and implementation plans go to `harness-docs/`, not `docs/` (`mem:core`).
 Editing `CLAUDE.md` requires human confirmation.

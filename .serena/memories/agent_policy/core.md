@@ -1,103 +1,115 @@
-`plugins/agent-policy` (0.6.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
-(0.3.0-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
-commit 849d3c7 (2026-08). **Both are now script-bearing pnpm workspace members**; the older note
-that they ship markdown only is obsolete. **This repo runs under agent-policy itself** — the
-per-user `CLAUDE.local.md` names the policy skill to load first (currently
-`agent-policy:codex-grok-policy`).
+`plugins/agent-policy` (0.7.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+(0.3.1-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
+commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
+agent-policy itself**, now selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not
+by CLAUDE.local.md prose.
 
-Design docs live in `harness-docs/design/` (moved out of `docs/design/` on 2026-08-14):
+Design docs live in `harness-docs/design/`:
 `2026-07-19-agent-policy-design.md`, `2026-08-01-agent-policy-prompt-smith-design.md`,
 `2026-08-09-agent-policy-{codex-grok,with-grok}-policy-design.md`,
-`2026-08-14-agent-policy-headless-setup-design.md`, plus
+`2026-08-14-agent-policy-headless-setup-design.md` (**describes the now-removed setup CLI**),
+`2026-08-16-agent-policy-bundled-agents-design.md` + matching plan, plus
 `2026-08-09-prompt-smith-skill-creator-port-design.md`.
 Accumulated rationale (out-of-scope decisions, cost analysis, prompt-smith scope, why `<example>`
-blocks are not used): `docs/optimize-agents-record/` — still under the old name, still the place to
-look before re-litigating a decision.
+blocks are not used): `docs/old/optimize-agents-record/` (moved under `docs/old/` in 2026-08).
 
-## agent-policy — who does the work
+## 2026-08-16 rewrite — bundled agents + env-var injection
 
-Four mutually exclusive profile skills selected by which agent definitions exist in
-`.claude/agents/` (gpt-{sol,terra,luna}.md and/or grok-{researcher,implementer}.md), plus two
-generator skills:
+Commits 59f8b86, 84000f8, ada0848, 2299cc9, fa004dd, 35bf3c5, ba3f8cc, 7a0df17, c9d709d.
+The whole "each user generates their own agent definitions" model is **gone**:
 
-| `.claude/agents/` has | policy skill |
-| --- | --- |
-| gpt-* and grok-* | `codex-grok-policy` |
-| gpt-* only | `with-codex-policy` |
-| grok-* only | `with-grok-policy` |
-| neither | `claude-model-policy` |
+- `setup-gpt` / `setup-grok` skills, `src/setup-agents.ts`, `scripts/setup-agents.mjs` and the five
+  `*.template.md` agent templates **no longer exist**. `scripts/setup-workspace.sh` lost its two
+  `claude -p "/agent-policy:setup-*"` lines. Do not cite any of them.
+- **7 agent definitions ship inside the plugin** (`plugins/agent-policy/agents/`), each with a
+  pinned frontmatter `model`:
 
-An explicit policy name in CLAUDE.md / CLAUDE.local.md beats the file-presence heuristic.
+  | agent | `model` | Agent tool | Write/Edit + Serena edit |
+  | --- | --- | --- | --- |
+  | `claude-researcher` | `sonnet` | no | no |
+  | `gpt-researcher` | `claude-gpt-5-6-terra` | no | no |
+  | `gpt-sol` | `claude-gpt-5-6-sol` | yes | yes |
+  | `gpt-terra` | `claude-gpt-5-6-terra` | yes | yes |
+  | `gpt-luna` | `claude-gpt-5-6-luna` | no | yes |
+  | `grok-researcher` | `claude-grok-4-5` | no | no |
+  | `grok-implementer` | `claude-grok-4-5` | yes | yes |
 
-- `codex-grok-policy` — Claude + Codex + Grok. Adds two policy-local role rows on top of
-  with-codex-policy: independent design-doc review (premise-challenge/red-team) and
-  realtime-info research. Uses `grok-researcher` only — GPT holds the impl tiers.
-- `with-grok-policy` — Claude + Grok, no Codex. Opus takes "complex/important impl";
-  `Grok Implementer` takes normal + light impl + misc; `Grok Researcher` takes exploration legwork
-  plus the two Grok-specific rows.
-- `with-codex-policy` — Claude + Codex GPT tiers (Sol / Terra / Luna via a local proxy).
-- `claude-model-policy` — Opus / Sonnet / Haiku only.
+  All three `*-researcher` agents are report-only (Read/Grep/Glob/Bash/WebSearch/WebFetch + Serena
+  find-tools + GitHub read tools). `gpt-researcher` deliberately reuses the **terra** alias.
+- Sole hook: `SessionStart` → `scripts/session-start.mjs` (`src/hooks/session-start.ts`, timeout 10).
+  It (1) maps `AMATSUKA_AGENT_AUTO_INJECTION` to a policy skill name and injects "load this skill
+  first" as additionalContext; (2) writes `.claude/agents/<name>.md` **only when an alias env var
+  differs from the default**, by rewriting the bundled definition's `model:` line; (3) reports
+  generated/stale/failed files. Fail-open: always exits 0.
+- Env vars (all read in `session-start.ts`):
+  `AMATSUKA_AGENT_AUTO_INJECTION` = `claude` | `with-codex` | `with-grok` | `with-codex-grok` |
+  `none`/unset (unknown value ⇒ warning only, no injection);
+  `AMATSUKA_AGENT_GPT_SOL_ALIAS` (`claude-gpt-5-6-sol`),
+  `AMATSUKA_AGENT_GPT_TERRA_ALIAS` (`claude-gpt-5-6-terra`, applies to gpt-terra **and**
+  gpt-researcher), `AMATSUKA_AGENT_GPT_LUNA_ALIAS` (`claude-gpt-5-6-luna`),
+  `AMATSUKA_AGENT_GROK_ALIAS` (`claude-grok-4-5`, both grok agents). `claude-researcher` has no
+  alias var.
+- `src/` is now just `hooks/session-start.ts` (+ its `__test__`) and `testing/run-ts.ts`;
+  `scripts/` holds only `session-start.mjs`.
+- **Skill selection is env-var driven, not the old `.claude/agents/` file-presence heuristic.**
+  An empty `.claude/agents/` is the normal state — never "fix" it.
 
-Role tiers (with-codex → claude-only): analysis/design/planning/exploration-lead → `Opus`;
-exploration legwork → `GPT Terra`/`Luna` → `Sonnet`/`Haiku`; complex impl → `GPT Sol` → `Opus`;
-normal impl & misc → `GPT Terra` → `Sonnet`; light impl → `GPT Luna` → `Haiku`; code review →
-`Sonnet`; advisor → `Fable`/`Opus`; design-doc review (understanding + tacit-knowledge extraction)
-→ `Haiku`, and this review is **mandatory before showing a design doc or plan to the user**.
-The "light impl" tier (`GPT Luna` / `Haiku`) must not be granted the Agent tool.
+## The four policy skills — role tables
 
-Grok-specific rules that bite:
+Each holds only its role table + profile-specific dispatch rules; the shared discipline is
+`references/orchestration-discipline.md` (4.9KB) and, for exploration only,
+`references/context-map-guide.md` (6.0KB). `assets/context-map-template.md` (3.9KB) is the template.
 
-- **Grok's value is cross-vendor independence + low cost, NOT superior reasoning.** That is why
-  the unavailable-Grok fallback for independent review is SKIP, not delegate-to-Opus — a
-  same-vendor reviewer shares the designer's blind spots and defeats the purpose. Realtime
-  research falls back to Opus + WebSearch; impl/exploration tiers fall back to claude-model-policy.
+Rows common to all four: analysis + design-doc/plan authoring + exploration lead → `Opus`;
+code review → `Sonnet`; advisor → `Fable`/`Opus`; design-doc review (understanding + tacit
+knowledge) → `Haiku`, **mandatory before showing any design doc or plan to the user**.
+
+Rows that differ (note: **exploration legwork, realtime research and independent review are now
+dedicated `*-researcher` rows in every profile** — they used to be impl-tier work):
+
+| row | claude-model | with-codex | with-grok | codex-grok |
+| --- | --- | --- | --- | --- |
+| realtime research | `Claude Researcher` | `GPT Researcher` | `Grok Researcher` | `Grok Researcher` |
+| exploration legwork | `Claude Researcher` | `GPT Researcher` | `Grok Researcher` | `Grok Researcher` |
+| independent review | `Claude Researcher` | `GPT Researcher` | `Grok Researcher` | `Grok Researcher` |
+| complex impl | `Opus` | `GPT Sol` | `Opus` | `GPT Sol` |
+| normal impl / misc | `Sonnet` | `GPT Terra` | `Grok Implementer` | `GPT Terra` |
+| light impl | `Haiku` | `GPT Luna` | `Grok Implementer` | `GPT Luna` |
+
+Rules that bite:
+
+- The light-impl tier and every `*-researcher` are denied the Agent tool.
+  **with-grok-policy is the documented exception**: `Grok Implementer` covers normal *and* light
+  impl and always keeps the Agent tool.
 - Independent review runs AFTER the Haiku review but reads **only the original document** — never
-  Haiku's findings, or its viewpoint gets anchored. Haiku surfaces what is unwritten; Grok attacks
-  what is written. Orthogonal, never merged.
-- The definition is split in two so tools enforce the boundary: `grok-researcher`
-  (Read/Grep/Glob/Bash/WebSearch/WebFetch + Serena read-only — report-only, no Agent) vs
-  `grok-implementer` (adds Write/Edit/Skill/LSP/Agent + Serena editing). Route by "does this
-  change files".
-- **with-grok-policy does not split normal vs light impl.** Both are `Grok Implementer` with the
-  Agent tool always allowed — an explicit documented exception to the shared discipline's
-  "no Agent tool for the light-impl tier". The table keeps both row names because the shared
-  discipline references tiers *by row name*.
+  Haiku's findings, or its viewpoint gets anchored. Haiku surfaces what is unwritten; the
+  researcher attacks what is written. The orchestrator decides adoption; the reviewer only supplies
+  counter-arguments.
+- `claude-model-policy`'s independent review is same-vendor and its definition says so outright
+  (「独立性は限定的である」). In with-grok/codex-grok the Grok-unavailable fallback for independent
+  review is **SKIP, not delegate to Opus** — a same-vendor reviewer shares the designer's blind
+  spots. Realtime research falls back to Opus + WebSearch; impl/exploration tiers fall back to the
+  claude-model table (codex-grok reads exploration back onto `GPT Terra`/`Luna`).
+- Dispatching to a `*-researcher` requires naming the role — 独立レビュー / リアルタイム情報調査 /
+  探索実働 — in the **first line** of the request, plus that role's Output Format.
+- Execution-tier resolution (checked once per session, not per task): project
+  `.claude/agents/<name>.md` → bundled `agent-policy:<name>` → for GPT, the `codex@openai-codex`
+  plugin (`/codex:rescue --model gpt-5.6-{sol,terra,luna}`) → claude-model table. For Grok, step 3
+  is the SKIP/fallback section.
 
-## agent-policy — the generator CLI (added 2026-08-14, commit d55c187)
-
-`src/setup-agents.ts` → bundled `scripts/setup-agents.mjs` is the single implementation behind both
-wizard skills; they declare `allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" *)`.
-
-- Flags: `--profile gpt|grok`, `--check`, `--overwrite`, `--agents`, `--alias`, `--dir`.
-  One JSON line on stdout. Interactive mode uses `--check` then `--agents … --overwrite`.
-- `setup-gpt --yes` = `--profile gpt --overwrite`; `setup-grok --yes` = `--profile grok --overwrite`
-  — no prompts, default aliases, all templates overwritten. Also usable directly from CI/scripts
-  (`scripts/setup-workspace.sh` calls it headlessly).
-- Templates: `skills/setup-gpt/assets/gpt-{sol,terra,luna}.template.md`,
-  `skills/setup-grok/assets/grok-{researcher,implementer}.template.md`; `{{MODEL_ALIAS}}` is
-  substituted. Default aliases `claude-gpt-5-6-{sol,terra,luna}` and `claude-grok-4-5`.
-- Commit 74f86e2 added **Serena tools to all five templates** — symbol search (5 tools) for every
-  agent, plus the 6 editing tools for Sol/Terra/Luna/Implementer but not Researcher. The matching
-  rule ("use Serena to trace definitions/references/implementations") was added to
-  `context-map-guide.md`.
-
-## agent-policy — the shared discipline
-
-Each profile skill holds **only** its role table plus profile-specific dispatch rules. The shared
-discipline lives in `references/orchestration-discipline.md` (4.9KB) and, for exploration,
-`references/context-map-guide.md` (6.0KB, read only when the task needs codebase exploration);
-`assets/context-map-template.md` is the map template. Load-bearing rules:
+## The shared discipline (`references/orchestration-discipline.md`)
 
 - **`model` override at dispatch is enum-only** (`sonnet`/`opus`/`haiku`/`fable`). Custom aliases
-  like `claude-gpt-5-6-sol` are rejected before execution and are valid **only** in an agent
-  definition's frontmatter `model`. Verified 2026-07-20. This is why the GPT path dispatches by
-  injecting the agent definition's body into the request text instead of overriding `model`.
-- An agent whose frontmatter pins a concrete `model` is honoured as-is; only `inherit`/unset agents
-  (including built-ins `Explore`/`Plan`/`general-purpose`) get retiered by the role table.
+  like `claude-gpt-5-6-sol` are valid **only** in an agent definition's frontmatter. This is why the
+  GPT/Grok path dispatches by injecting the definition body into the request text and forbids
+  `model` override.
+- An agent whose frontmatter pins a concrete `model` is honoured as-is (all 7 bundled ones do);
+  only `inherit`/unset agents (incl. built-ins `Explore`/`Plan`/`general-purpose`) get retiered.
 - Cost discipline: never load a skill whose body+references exceed 30KB into a subagent — transcribe
-  the needed clauses into the request instead; batch ≥3-turn exploration into one dispatch; do
-  2-turn transcription work yourself; no per-task commits or repo-wide grep verification in subs.
-- context-map: `.claude/context-maps/YYYY-MM-DD-<slug>.md`, gitignored here. Only its §未解決事項
+  the needed clauses instead; batch ≥3-turn exploration into one dispatch; no per-task commits or
+  repo-wide grep verification in subagents.
+- Subagents load **only** the skills named in their request; if none are named, they load none.
+- context-map: `.claude/context-maps/YYYY-MM-DD-<slug>.md`, gitignored here. Only §未解決事項
   propagates upward; the full map is shared by **path**, and implementers receive transcribed
   fragments, never the whole map.
 
