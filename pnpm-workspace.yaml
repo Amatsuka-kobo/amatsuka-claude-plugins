@@ -11,5 +11,7 @@ packages:
   - plugins/prefetch
   - plugins/guidepost
   - plugins/prompt-smith
+  - plugins/metatron
+  - plugins/sandalphon
 allowBuilds:
   esbuild: true

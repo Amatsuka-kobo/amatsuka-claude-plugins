@@ -59,6 +59,16 @@
       "name": "guidepost",
       "source": "./plugins/guidepost",
       "description": "コミット範囲や PR の diff を、依存順に並べた AI 同行のコードリーディングツアーに変換し、読中の疑問をその場でセッションへ届ける"
+    },
+    {
+      "name": "metatron",
+      "source": "./plugins/metatron",
+      "description": "プロジェクトの技術的前提(ARCHITECTURE)と失敗知識(GOTCHAS)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入する。正本への直接編集は hook が拒否し、書式検証と採番を機械で保証する CLI へ誘導する"
+    },
+    {
+      "name": "sandalphon",
+      "source": "./plugins/sandalphon",
+      "description": "ユーザーの願いを聞き取ってソフトウェアの現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡す。Issue が生まれる前の上流区間を担当するオーケストレーター"
     }
   ]
 }
