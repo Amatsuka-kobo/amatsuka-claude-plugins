@@ -498,6 +498,136 @@ test("design は discuss が passed になるまで start できない", () => {
   expect(r.err).toMatch(/discuss/)
 })
 
+test("set-domain は domain を書き、clear-domain で null に戻る", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  const r = run(root, ["set-domain", "--issue", "1", "--domain", "frontend"])
+  expect(r.code).toBe(0)
+  expect(r.out.state.domain).toBe("frontend")
+  expect(run(root, ["get", "--issue", "1"]).out.state.domain).toBe("frontend")
+  const r2 = run(root, ["clear-domain", "--issue", "1"])
+  expect(r2.code).toBe(0)
+  expect(r2.out.state.domain).toBe(null)
+  expect(run(root, ["get", "--issue", "1"]).out.state.domain).toBe(null)
+})
+
+test("set-domain は既存の domain を上書きする", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  run(root, ["set-domain", "--issue", "1", "--domain", "frontend"])
+  const r = run(root, ["set-domain", "--issue", "1", "--domain", "backend"])
+  expect(r.code).toBe(0)
+  expect(r.out.state.domain).toBe("backend")
+})
+
+test("set-domain はドメインマップに無い名前でも受理する(検証は読む側の責務)", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  const r = run(root, ["set-domain", "--issue", "1", "--domain", "存在しない"])
+  expect(r.code).toBe(0)
+  expect(r.out.state.domain).toBe("存在しない")
+})
+
+test("set-domain は空文字列・空白のみ・--domain 省略を拒否する", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  const empty = run(root, ["set-domain", "--issue", "1", "--domain", ""])
+  expect(empty.code).toBe(1)
+  expect(empty.err).toMatch(/空文字列/)
+  const blank = run(root, ["set-domain", "--issue", "1", "--domain", "   "])
+  expect(blank.code).toBe(1)
+  expect(blank.err).toMatch(/空文字列/)
+  const missing = run(root, ["set-domain", "--issue", "1"])
+  expect(missing.code).toBe(1)
+  expect(missing.err).toMatch(/--domain が必要です/)
+  // 拒否されたときは state に domain が書かれない
+  expect(run(root, ["get", "--issue", "1"]).out.state.domain).toBeUndefined()
+})
+
+test("set-domain / clear-domain は run が無ければ失敗する", () => {
+  const root = tmpProject()
+  const noRun = run(root, ["set-domain", "--issue", "99", "--domain", "web"])
+  expect(noRun.code).toBe(1)
+  expect(noRun.err).toMatch(/run が存在しません: issue-99/)
+  const noRunClear = run(root, ["clear-domain", "--issue", "99"])
+  expect(noRunClear.code).toBe(1)
+  expect(noRunClear.err).toMatch(/run が存在しません: issue-99/)
+  const noIssue = run(root, ["set-domain", "--domain", "web"])
+  expect(noIssue.code).toBe(1)
+  expect(noIssue.err).toMatch(/--issue が必要です/)
+  const noIssueClear = run(root, ["clear-domain"])
+  expect(noIssueClear.code).toBe(1)
+  expect(noIssueClear.err).toMatch(/--issue が必要です/)
+})
+
+test("set-domain は終端状態の run を拒否し、clear-domain は終端状態でも解除できる", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  run(root, ["set-domain", "--issue", "1", "--domain", "frontend"])
+  run(root, ["stop", "--issue", "1", "--reason", "test"])
+  const r = run(root, ["set-domain", "--issue", "1", "--domain", "backend"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/すでに終端状態です/)
+  // 委譲中に run が落ちても解除できる(古い domain を残さない)
+  const r2 = run(root, ["clear-domain", "--issue", "1"])
+  expect(r2.code).toBe(0)
+  expect(r2.out.state.domain).toBe(null)
+})
+
+test("domain を持たない既存 state を読んでも壊れない(後方互換)", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  const statePath = path.join(root, ".codiel/runs/issue-1/try-1/state.json")
+  const raw = JSON.parse(fs.readFileSync(statePath, "utf8"))
+  expect("domain" in raw).toBe(false)
+  expect(raw.version).toBe(1)
+  // domain キーが無い state でも既存サブコマンドは通常どおり動く
+  expect(run(root, ["get", "--issue", "1"]).code).toBe(0)
+  expect(run(root, ["start-phase", "init", "--issue", "1"]).code).toBe(0)
+  // 後付けの clear-domain も通り、version は据え置かれる
+  const r = run(root, ["clear-domain", "--issue", "1"])
+  expect(r.code).toBe(0)
+  expect(r.out.state.version).toBe(1)
+  expect(r.out.state.phases.init.status).toBe("in_progress")
+})
+
+test("set-domain 後も既存サブコマンドが正常に動き、他フィールドを壊さない", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1", "--base-branch", "develop"])
+  const before = run(root, ["get", "--issue", "1"]).out.state
+  run(root, ["set-domain", "--issue", "1", "--domain", "backend"])
+  const after = run(root, ["get", "--issue", "1"]).out.state
+  for (const key of [
+    "version",
+    "runId",
+    "try",
+    "issue",
+    "branch",
+    "raguelRunId",
+    "status",
+    "phase",
+    "phases",
+    "pr",
+    "limits",
+    "stopReason",
+    "incidents",
+    "createdAt",
+    "baseBranch"
+  ])
+    expect(after[key]).toStrictEqual(before[key])
+  // set-domain を挟んでも通常のフェーズ遷移が最後まで通る
+  fullRun(root, "1")
+  const done = run(root, ["get", "--issue", "1"])
+  expect(done.out.state.status).toBe("awaiting_outcome")
+  expect(done.out.state.domain).toBe("backend")
+  expect(done.out.state.baseBranch).toBe("develop")
+  expect(done.out.state.pr.url).toBe("u")
+  expect(
+    run(root, ["record-outcome", "--issue", "1", "--outcome", "approved"]).out
+      .state.status
+  ).toBe("completed")
+})
+
 // テストヘルパー
 function passThrough(root: string, phases: string[]): void {
   for (const ph of phases) {

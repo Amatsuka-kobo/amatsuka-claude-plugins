@@ -382,21 +382,30 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | PreToolUse | Bash(`gh issue create`) | アクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止。§2 [9]) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
-| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(init/discuss/design/test-spec/dev-plan)中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位(implementer-frontend が backend パスへ書く等)の機械的制御は行わない** — hooks はツール呼び出しの発行元エージェントを識別できないため、ドメイン規律は各エージェント定義の職務規律(+レビューアーの検査)で担保する |
+| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(init/discuss/design/test-spec/dev-plan)中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位の制御は、state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が設定されているとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない |
 | SubagentStop | 各フェーズ完了時 | 期待される成果物ファイルが存在し空でないかを検証。欠けていればフィードバックを返して差し戻す |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止) |
 
 ## 9. docs(プロジェクト毎に成長するハーネス資産)
 
 対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
-対話インタビューで初期化する: GOTCHAS.md と `.codiel/` 配下は同スキルが呼ぶ
-`scripts/install-harness.sh` が機械的に配置し、ARCHITECTURE.md / CLAUDE.md /
-raguel.config.yaml はインタビューの回答から生成する(既存ファイルは不足分のみ追記)。
+初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
+機械的に配置し、ARCHITECTURE(ドメインマップだけの最小構成)/ CLAUDE.md / raguel.config.yaml は
+聞き取り(ドメイン分割と保護パス)の回答から生成する(既存ファイルは不足分のみ追記)。
+GOTCHAS は `/codiel:init` の対象ではなく、失敗を記録する時点で `recording-gotchas` が台帳ごと作成する。
 `/codiel:run` は資産配置を行わず、未初期化を検出したら `/codiel:init` を案内して終了する。
 
-### docs/ARCHITECTURE.md(← ARCHITECTURE.example.md)
+以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
+本節が記す ARCHITECTURE の節構成と GOTCHAS のエントリ書式は執筆当時の設計であり、
+現行の正本はファイル契約(`harness-docs/design/2026-08-16-file-contract-freeze.md` §4・§6)である。
+**以下の列挙は当時の決定の記録として残す。現在の仕様として参照しない** ——
+節構成は契約 §4-1 の 10 節に、GOTCHAS のエントリ書式は契約 §6 の新書式に置き換わっている。
+
+### ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)
 
 プロジェクトの技術的前提を宣言する。**Codiel はこれがないと run を開始しない**(フェイルクローズド)。
+
+執筆当時は次の 8 項目を置くと決めた(**現行の節構成は契約 §4-1 が正本**)。
 
 - 技術スタック(言語・フレームワーク・主要ライブラリとバージョン方針)
 - ディレクトリ構成と各領域の責務
@@ -411,11 +420,17 @@ raguel.config.yaml はインタビューの回答から生成する(既存ファ
 - 保護パス(raguel.config.yaml の `code/protected-paths` と整合させる)
 - コーディング規約・ブランチ/PR 規約(命名・ベースブランチ)・Definition of Done
 
-### docs/GOTCHAS.md(← GOTCHAS.example.md)
+このうち**ドメインマップの役割**(implementer / reviewer の選択と hooks の書き込み制御の基準、
+`generic` への縮退)は現在も生きている判断である。ブロックの記法(マーカー名を含む)は
+契約 §1 が正本であり、`codiel:domains` から `metatron:domains` へ変わっている。
+
+### GOTCHAS(既定 `docs/GOTCHAS.md`)
 
 プロジェクト固有の落とし穴台帳。**失敗を記録してプラグインをプロジェクト毎に成長させる仕組み**の生成側。
 
-- エントリ書式: 日付 / 発生フェーズ / 症状 / 根本原因 / 予防策 / 関連ファイル
+- エントリ書式: 執筆当時は 日付 / 発生フェーズ / 症状 / 根本原因 / 予防策 / 関連ファイル と決めた。
+  **この旧書式は廃止され、互換読みも設けない**(契約 §6)。現行の書式・挿入位置・採番・タグは
+  契約 §6-1〜§6-4 が正本である
 - 記録の契機: Raguel STOP、ループ上限超過、record_outcome(incident)、レビューで発覚した設計漏れ
 - 全フェーズのサブエージェントが作業前に必読(ディスパッチプロンプトで強制)
 - Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成する
@@ -473,10 +488,9 @@ plugins/codiel/
     scripts/                  # フックスクリプト(node)
   scripts/
     codiel-state.mjs          # state 遷移の検証つき CLI(§3)
-    install-harness.sh        # GOTCHAS 雛形と .codiel/ を機械的に配置(initializing-harness から呼ばれる)
+    install-harness.sh        # .codiel/ 配下のディレクトリを機械的に配置(initializing-harness から呼ばれる)
   docs/
     DESIGN.md                 # 本書
-    ARCHITECTURE.example.md / GOTCHAS.example.md
   CLAUDE.example.md
   raguel-mcp/                 # 実装済み
 ```

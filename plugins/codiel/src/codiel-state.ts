@@ -40,6 +40,11 @@ export interface RunState {
   createdAt: string
   updatedAt: string
   baseBranch?: string
+  // 実装・レビューを委譲中のドメイン名(ARCHITECTURE のドメインマップのキー)。
+  // 委譲していない間は null / 未定義。optional なので domain を持たない
+  // 既存 state はそのまま読める(version 据え置き)。
+  // 値がドメインマップに存在するかは検証しない — 判断は読む側(guard-write)の責務。
+  domain?: string | null
 }
 
 export interface LatestTry {
@@ -381,6 +386,29 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     latest.state.status = "active"
     for (const ph of Object.values(latest.state.phases))
       if (ph.status === "awaiting_human") ph.status = "in_progress"
+    writeState(latest.statePath, latest.state)
+    return ok({ statePath: latest.statePath, state: latest.state })
+  }
+
+  if (cmd === "set-domain") {
+    const raw: string | undefined = flags.domain
+    if (raw === undefined) fail("--domain が必要です")
+    const domain = (raw ?? "").trim()
+    if (domain === "")
+      fail("--domain に空文字列は指定できません(解除は clear-domain を使用)")
+    const latest = loadRun(root, flags)
+    if (TERMINAL.has(latest.state.status))
+      fail(`すでに終端状態です: ${latest.state.status}`)
+    latest.state.domain = domain
+    writeState(latest.statePath, latest.state)
+    return ok({ statePath: latest.statePath, state: latest.state })
+  }
+
+  // clear-domain は状態を問わず通す。委譲中に run が awaiting_human へ落ちても
+  // 解除できないと、古い domain が残ったまま書き込み境界が効き続けるため。
+  if (cmd === "clear-domain") {
+    const latest = loadRun(root, flags)
+    latest.state.domain = null
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
   }
