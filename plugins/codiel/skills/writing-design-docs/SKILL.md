@@ -9,7 +9,7 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
 
 `codiel-architect` が design フェーズで使うスキル。`issue.md`(要件・受け入れ基準・スコープ)と
 `discussion.md`(discuss フェーズでユーザーと合意した決定の記録)、
-`docs/ARCHITECTURE.md`・`docs/GOTCHAS.md` を入力に、変更方針・変更対象・影響を受ける機能単位を
+ARCHITECTURE・GOTCHAS を入力に、変更方針・変更対象・影響を受ける機能単位を
 `design.md` として構造化する。
 
 `design.md` は test-spec / dev-plan の両フェーズが**並列で読む唯一の設計スナップショット**であり、
@@ -24,7 +24,10 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
 1. `issue.md` の `## 要件` `## 受け入れ基準` `## スコープ` `## 非スコープ` を読む。
 2. `discussion.md` の各論点(状態・決定・理由)を読む。**「状態: 決定」の論点は設計を拘束する**。
    「状態: 未決」の論点は、どの選択肢でも破綻しにくい設計を選び、その旨を `## 方針` に明記する。
-3. `docs/ARCHITECTURE.md`(ドメインマップ・技術スタック)と `docs/GOTCHAS.md`(既知の落とし穴)を読む。
+3. ディスパッチプロンプトで指定された ARCHITECTURE(ドメインマップ・技術スタック)と
+   GOTCHAS(既知の落とし穴)を読む。指定が無ければ `docs/ARCHITECTURE.md` /
+   `docs/GOTCHAS.md` を使う。ファイルが無ければスキップする。
+   **存在するファイルは必ず読む**(前提が注入で渡っていると仮定して省略しない)。
 4. `## 変更対象` に挙げる既存ファイルは、設計を書く前に **Read で中身を確認する**(既存パターン踏襲)。
    読まずに「たぶんこう実装されているはず」で設計しない。
 5. 受け入れ基準を一つずつ辿り、それぞれが `## 方針` `## 変更対象` のどの記述で満たされるかを

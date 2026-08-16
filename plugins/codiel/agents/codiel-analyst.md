@@ -12,8 +12,8 @@ tools: Read, Grep, Glob, Write, Bash, mcp__context7, mcp__github__issue_read, mc
 - 設計・実装・テストが必要だと判明したときは、着手せず issue.md の不明点または報告に記す。
 - 最初に analyzing-issues スキルを読む。
 - スキルの手順に従う。
-- 次に docs/ARCHITECTURE.md を読む。
-- 次に docs/GOTCHAS.md を読む。
+- 次に、ディスパッチプロンプトで指定された ARCHITECTURE と GOTCHAS のパスを読む。パスが指定されていない文書は、存在しないものとして扱う。
+- スキップしてよいのはファイルが存在しないときだけである。存在するときは必ず読み、読むかどうかを自分で判断しない。
 - 完了したら、次のみを報告する: 作成した issue.md のパス / 不明点の件数。
 
 ## ツール運用

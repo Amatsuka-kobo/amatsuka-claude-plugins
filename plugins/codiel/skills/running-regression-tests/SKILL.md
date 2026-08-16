@@ -39,14 +39,17 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 1. design.md が列挙した**影響 unit**の E2E ケース全件(`.codiel/specs/<unit-id>/cases.md`)。
 2. `.codiel/specs/` 配下に既に存在する**既存全 unit**の E2E ケース全件。
-3. `docs/ARCHITECTURE.md` の「コマンド定義」節に列挙された test コマンド(ユニットテスト等)。
+3. ARCHITECTURE の「コマンド定義」節に列挙された test コマンド(ユニットテスト等)。
+   ファイルまたは節が無ければ、この 3 は対象から外す。
 
 ## チェックリスト
 
 1. 起動モード(run 経由 / 単独実行)を確認し、対象 unit(影響 unit + 既存全 unit、単独実行で
    引数指定があればその unit のみ)を確定する。対象 unit が 1 件も無いときは判定を出さず、
    `.codiel/specs/` が空であることを報告して終了する。
-2. `docs/ARCHITECTURE.md` の「コマンド定義」節を読み、ユニットテスト等の実行コマンドを確認する。
+2. ディスパッチプロンプトで指定された ARCHITECTURE(指定が無ければ `docs/ARCHITECTURE.md`)の
+   「コマンド定義」節を読み、ユニットテスト等の実行コマンドを確認する。ファイルまたは節が
+   無ければスキップする。**ファイルがあれば必ず読む**(前提が注入で渡っていると仮定して省略しない)。
 3. **(A) スクリプト安定化ループ**: `scripting-tests` の手順に従い、対象 unit すべてのスクリプトを
    実行する。異常終了(判定が出ないケース)があればスクリプトを修正して再実行する。
    `record-attempt` は呼ばない(オーケストレーターの専権)。試行上限超過(`exit code 3`)を伝えられたら、
@@ -61,8 +64,9 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    (手順 1 の対象 unit すべて)を再実行する**(修正対象の unit だけを再実行しない)。
    この修正ディスパッチもオーケストレーターが 1 往復ごとに `record-attempt test-loop --issue N` を
    呼んで数える(`exit 3` なら手順 3 と同様に ASK)。全ケース OK になるまで手順 3〜6 を繰り返す。
-7. `docs/ARCHITECTURE.md` の「コマンド定義」節のユニットテストコマンドを実行し、結果(pass/fail の
-   件数、失敗があれば出力抜粋)を控える。
+7. ARCHITECTURE の「コマンド定義」節のユニットテストコマンドを実行し、結果(pass/fail の
+   件数、失敗があれば出力抜粋)を控える。コマンドが無ければ実行を省き、レポートに
+   「コマンド定義なし」と書く。
 8. 判定(`green` / `red` / `broken`)を決める(下記「判定基準」)。
 9. レポート(下記書式)を作成し実際の実行出力の抜粋を転記する。run 経由なら
    `runs/<runId>/reports/test-run-<n>.md`、単独実行なら `.codiel/reports/test-run-<ISO日時>.md`。
@@ -70,7 +74,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 ## 判定基準
 
-- **green**: 全ケース OK かつ、ARCHITECTURE.md のユニットテストコマンドも全て成功。
+- **green**: 全ケース OK かつ、ARCHITECTURE のユニットテストコマンドも全て成功
+  (コマンドが無ければ全ケース OK のみで判定する)。
 - **red**: 全ケースが OK/NG いずれかの判定を出しており(= (A) は完了している)、1 件以上 NG が残っている、
   またはユニットテストに失敗がある。
 - **broken**: 判定が出ないケース(異常終了)が 1 件でも残っている状態。green/red のいずれとも判定できない。
@@ -96,7 +101,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 ## ユニットテスト結果
 
-<ARCHITECTURE.md のコマンド定義に列挙された test コマンドの実行結果。失敗があれば出力抜粋>
+<ARCHITECTURE のコマンド定義に列挙された test コマンドの実行結果。失敗があれば出力抜粋。
+コマンドが無ければ「コマンド定義なし」>
 
 ## 判定
 
@@ -119,6 +125,6 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 | 思考 | 現実 |
 |---|---|
 | 「flaky なので 2 回目で通ったら OK 扱いにしよう」 | 2 回目にたまたま通った結果を採用するのはフレークの隠蔽。`scripting-tests` の安定化とは毎回同じ判定が出る状態を作ることであり、都合の良い 1 回の採用ではない。 |
-| 「ユニットテストは implement フェーズで通したから回帰では省略していい」 | 回帰範囲は「影響 unit + 既存全 unit の E2E + ARCHITECTURE.md の test コマンド」の合算であり、直近で通したことは省略の理由にならない。デグレは今回の変更が既存機能に及ぼした副作用を検出するためにこそ存在する。 |
+| 「ユニットテストは implement フェーズで通したから回帰では省略していい」 | 回帰範囲は「影響 unit + 既存全 unit の E2E + ARCHITECTURE の test コマンド」の合算であり、直近で通したことは省略の理由にならない。デグレは今回の変更が既存機能に及ぼした副作用を検出するためにこそ存在する。 |
 | 「NG は 1 件だけだしレポートの 4 項目のうち再現手順は省略していいだろう」 | 4 項目は implementer への入力契約(`scripting-tests`)であり、1 つでも欠けると再現できず修正がディスパッチできない。件数の多寡は簡略化の理由にならない。 |
 | 「broken か NG か迷うが、たぶん NG だろうから implementer に投げよう」 | 判断がつかないものを NG として投げると implementer は再現できないバグ修正を強いられ、逆にスクリプトの欠陥を implementer が誤ってコード側で「回避」してしまう危険がある。迷ったら ASK として報告する。 |

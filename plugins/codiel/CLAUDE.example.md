@@ -1,8 +1,10 @@
 # CLAUDE.md
 
 <!-- 記入ガイド
-このファイルは Codiel ハーネス(docs/ARCHITECTURE.md・docs/GOTCHAS.md・.codiel/ 配下)を
+このファイルは Codiel ハーネス(ARCHITECTURE・GOTCHAS・`.codiel/` 配下)を
 正しく運用するための決まりを、対象プロジェクトの CLAUDE.md に常駐させるための雛形です。
+ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で解決されるため、
+本文では固定パスを断定せず既定値として示しています。
 `/codiel:init`(initializing-harness スキル)がこのファイルの「## Codiel ハーネス運用ルール」
 セクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md がなければ新規作成し、
 既にある場合は同セクションがなければ末尾に追記、あれば変更しません)。
@@ -12,14 +14,28 @@
 
 ## Codiel ハーネス運用ルール
 
-1. **作業前に ARCHITECTURE.md を読む。GOTCHAS.md の該当エントリを確認する**
-   すべてのフェーズ(init〜finalize)の作業開始前に `docs/ARCHITECTURE.md` の技術スタック・
-   ドメインマップ・コマンド定義・テスト方針を確認し、これから触るファイル・フェーズに関連する
-   `docs/GOTCHAS.md` のエントリを確認してから着手する。
-2. **失敗したら recording-gotchas の基準に従い GOTCHAS.md に追記する**
+### 文書の扱い
+
+- ARCHITECTURE / GOTCHAS のパスは固定ではない。指定されたパスを使い、指定が無ければ既定値
+  (`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md`)を使う。
+- 文書またはその節が存在しない場合は、その読み取りだけをスキップする。存在するものは読む。
+- サブエージェントは、存在する文書を必ず自分で読む。前提を自動注入する仕組みはメインセッション
+  にしか届かないため、注入されている前提で読み飛ばさない。
+- メインセッションは、注入で既にコンテキストにある内容を再読しなくてよい。判断に必要なら読む。
+- ARCHITECTURE / GOTCHAS を更新するときは、コンテキストに更新用 CLI の案内があればその CLI を
+  経由する。案内が無ければ直接編集する。
+- 直接編集が hook に拒否されたときは、拒否メッセージに示された CLI で実行し直す。
+
+### 7 つの規則
+
+1. **作業前に ARCHITECTURE を読む。GOTCHAS の該当エントリを確認する**
+   すべてのフェーズ(init〜finalize)の作業開始前に、ARCHITECTURE の技術スタック・
+   ドメインマップ・コマンド定義・テスト方針のうち存在する節を確認し、これから触るファイル・
+   フェーズに関連する GOTCHAS のエントリを確認してから着手する。
+2. **失敗したら recording-gotchas の基準に従い GOTCHAS に追記する**
    Raguel の STOP、test-loop/fix-loop のループ上限超過、`record_outcome(incident)`、
    レビューで発覚した設計漏れのいずれかが起きたら、`recording-gotchas` スキルの書式・基準に
-   従って `docs/GOTCHAS.md` に新規エントリを追記する。既存エントリの削除・改変はしない。
+   従って GOTCHAS に新規エントリを追記する。既存エントリの削除・改変はしない。
 3. **`.codiel/runs/**/state.json` を直接編集しない(codiel-state 経由のみ)**
    フェーズ遷移・試行カウンタの更新は同梱スクリプト `codiel-state` のみが行う。Edit / Write
    ツールによる state.json への直接変更は hooks が拒否する対象であり、それを回避する目的での
@@ -28,11 +44,10 @@
    各フェーズで定められた Raguel の evaluate ツール呼び出しを、確実に PROCEED しそうだから・
    前回 PROCEED だったから等の理由で省略しない。ASK が出たら人間の裁定を待ち、STOP が出たら
    run を停止して原因を記録する(2. を参照)。
-5. **ARCHITECTURE.md が現実と乖離したら更新する(乖離の放置は GOTCHAS 行き)**
-   実装の過程でディレクトリ構成・ドメインマップ・コマンド定義・テスト方針が
-   `docs/ARCHITECTURE.md` の記述と食い違っていることに気づいたら、その場で ARCHITECTURE.md を
-   更新する。更新せず気づかないふりをして進めた場合、後で発覚した際に GOTCHAS.md へ記録される
-   対象になる。
+5. **ARCHITECTURE が現実と乖離したら更新する(乖離の放置は GOTCHAS 行き)**
+   実装の過程でディレクトリ構成・ドメインマップ・コマンド定義・テスト方針が ARCHITECTURE の
+   記述と食い違っていることに気づいたら、その場で ARCHITECTURE を更新する。更新せず気づかない
+   ふりをして進めた場合、後で発覚した際に GOTCHAS へ記録される対象になる。
 6. **テスト仕様書(`.codiel/specs/`)は機能の一部。機能を変えたら仕様書とケースも更新する**
    `.codiel/specs/<unit-id>/spec.md` と `cases.md` は使い捨て成果物ではなく、プロダクトコードと
    同格の永続資産である。振る舞いを変える変更を行ったら、対応する unit の spec.md を更新し、

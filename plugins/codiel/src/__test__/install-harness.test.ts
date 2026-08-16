@@ -16,17 +16,15 @@ function run(target: string): string {
   return execFileSync("bash", [SCRIPT, target], { encoding: "utf8" })
 }
 
-test(".codiel 配下のディレクトリと GOTCHAS.md 雛形を作成する", () => {
+test(".codiel 配下のディレクトリを作成する", () => {
   const root = tmpProject()
   run(root)
   for (const d of [".codiel/specs", ".codiel/runs", ".codiel/reports"]) {
     expect(fs.existsSync(path.join(root, d)), `${d} がない`).toBeTruthy()
   }
-  const gotchas = fs.readFileSync(path.join(root, "docs/GOTCHAS.md"), "utf8")
-  expect(gotchas).toMatch(/^# GOTCHAS/)
 })
 
-test("ARCHITECTURE.md / CLAUDE.md / raguel.config.yaml は作成しない(initializing-harness スキルが生成する)", () => {
+test("ARCHITECTURE / CLAUDE.md / raguel.config.yaml は作成しない(initializing-harness スキルが生成する)", () => {
   const root = tmpProject()
   run(root)
   expect(
@@ -43,13 +41,21 @@ test("ARCHITECTURE.md / CLAUDE.md / raguel.config.yaml は作成しない(initia
   ).toBeFalsy()
 })
 
-test("既存の GOTCHAS.md は上書きしない(copy-if-absent)", () => {
+test("GOTCHAS.md は作成しない(記録時に recording-gotchas が台帳ごと作る)", () => {
+  const root = tmpProject()
+  run(root)
+  expect(
+    fs.existsSync(path.join(root, "docs/GOTCHAS.md")),
+    "GOTCHAS.md を作ってはいけない"
+  ).toBeFalsy()
+})
+
+test("既存の GOTCHAS.md を変更しない", () => {
   const root = tmpProject()
   fs.mkdirSync(path.join(root, "docs"), { recursive: true })
   fs.writeFileSync(path.join(root, "docs/GOTCHAS.md"), "既存の内容")
-  const out = run(root)
+  run(root)
   expect(fs.readFileSync(path.join(root, "docs/GOTCHAS.md"), "utf8")).toBe(
     "既存の内容"
   )
-  expect(out).toMatch(/skip\(既存\)/)
 })

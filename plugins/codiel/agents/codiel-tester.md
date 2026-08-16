@@ -11,7 +11,8 @@ tools: Read, Grep, Glob, Edit, Write, Bash, mcp__context7, mcp__playwright
 - 最初に scripting-tests スキルを読む。
 - スキルの手順に従う。
 - 回帰実行では、running-regression-tests スキルが存在するときに読む。
-- 次に docs/ARCHITECTURE.md の「テスト方針」節を読む。
+- 次に、ディスパッチプロンプトで指定された ARCHITECTURE のパスから「テスト方針」節を読む。パスが指定されていなければ、存在しないものとして扱う。
+- スキップしてよいのはファイルが存在しないときだけである。存在するときは必ず読み、読むかどうかを自分で判断しない。
 - `.codiel/specs/<unit-id>/cases.md` の各ケースを E2E スクリプトとして `.codiel/specs/<unit-id>/scripts/` に作成または修正する。
 - 1 ケース ID を 1 テストとする。
 - スクリプトを実行する。
