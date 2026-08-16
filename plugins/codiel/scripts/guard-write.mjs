@@ -59,6 +59,7 @@ function findActiveRun(root) {
 }
 
 // src/hooks/lib.ts
+import { spawnSync } from "node:child_process";
 import fs2 from "node:fs";
 import path2 from "node:path";
 async function readStdin() {
@@ -81,6 +82,219 @@ function emit(decision, reason) {
 }
 function pass() {
   process.exit(0);
+}
+function globToRegExp(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        re += ".*";
+        i++;
+        if (glob[i + 1] === "/") i++;
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`);
+}
+var DOC_CONFIG_FILENAME = "metatron.config.json";
+var DOC_CONFIG_SUPPORTED_VERSION = 1;
+var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
+var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function realpathOrSelf(dir) {
+  try {
+    return fs2.realpathSync(dir);
+  } catch {
+    return dir;
+  }
+}
+function existsSafe(target) {
+  try {
+    return fs2.existsSync(target);
+  } catch {
+    return false;
+  }
+}
+function gitToplevel(cwd) {
+  try {
+    const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+      timeout: 5e3,
+      windowsHide: true
+    });
+    if (res.status !== 0) return null;
+    const out = res.stdout?.trim();
+    if (!out) return null;
+    return path2.resolve(out);
+  } catch {
+    return null;
+  }
+}
+function findDocRoot(startDir) {
+  const start = realpathOrSelf(path2.resolve(startDir ?? process.cwd()));
+  let dir = start;
+  while (true) {
+    if (existsSafe(path2.join(dir, DOC_CONFIG_FILENAME))) return dir;
+    const parent = path2.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const top = gitToplevel(start);
+  if (top) return top;
+  return start;
+}
+function normalizeSeparators(value) {
+  return value.replace(/\\/g, "/");
+}
+function looksAbsolute(value) {
+  return path2.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+}
+function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
+  const useFallback = () => path2.resolve(docRoot, fallback);
+  if (raw === void 0) return useFallback();
+  if (typeof raw !== "string" || raw.trim() === "") {
+    warnings.push(
+      `paths.${label} \u304C\u7A7A\u3067\u306A\u3044\u6587\u5B57\u5217\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+    return useFallback();
+  }
+  const value = normalizeSeparators(raw);
+  if (looksAbsolute(value)) {
+    warnings.push(
+      `paths.${label} \u304C\u7D76\u5BFE\u30D1\u30B9(${raw})\u306E\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+    return useFallback();
+  }
+  const absolute = path2.resolve(docRoot, value);
+  const relative = path2.relative(docRoot, absolute);
+  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative);
+  if (escapes) {
+    warnings.push(
+      `paths.${label} \u304C\u30EB\u30FC\u30C8\u5916(${raw})\u3092\u6307\u3059\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+    return useFallback();
+  }
+  return absolute;
+}
+function fallbackDocRoot(startDir) {
+  try {
+    return path2.resolve(startDir ?? process.cwd());
+  } catch {
+    return startDir ?? ".";
+  }
+}
+function resolveDocPaths(startDir) {
+  const warnings = [];
+  let docRoot;
+  try {
+    docRoot = findDocRoot(startDir);
+  } catch {
+    docRoot = fallbackDocRoot(startDir);
+  }
+  const configPath = path2.join(docRoot, DOC_CONFIG_FILENAME);
+  let parsed;
+  let parseOk = false;
+  try {
+    if (existsSafe(configPath)) {
+      parsed = JSON.parse(fs2.readFileSync(configPath, "utf8"));
+      parseOk = true;
+    }
+  } catch {
+    warnings.push("\u8A2D\u5B9A\u3092\u8AAD\u3081\u306A\u304B\u3063\u305F\u305F\u3081\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002");
+  }
+  let source;
+  if (parseOk) {
+    if (isPlainObject(parsed)) {
+      source = parsed;
+    } else {
+      warnings.push(
+        "\u8A2D\u5B9A\u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
+      );
+    }
+  }
+  if (source !== void 0) {
+    const version = source.version;
+    if (version !== void 0 && version !== DOC_CONFIG_SUPPORTED_VERSION) {
+      warnings.push(
+        `\u8A2D\u5B9A\u306E version(${JSON.stringify(version)})\u304C\u672A\u77E5\u306E\u305F\u3081\u3001\u5168\u9805\u76EE\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+      );
+      source = void 0;
+    }
+  }
+  const pathsRaw = source?.paths;
+  const paths = isPlainObject(pathsRaw) ? pathsRaw : void 0;
+  if (pathsRaw !== void 0 && paths === void 0) {
+    warnings.push(
+      "paths \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u6587\u66F8\u30D1\u30B9\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
+    );
+  }
+  return {
+    docRoot,
+    architecture: resolveConfiguredPath(
+      docRoot,
+      paths?.architecture,
+      DEFAULT_ARCHITECTURE_PATH,
+      "architecture",
+      warnings
+    ),
+    gotchas: resolveConfiguredPath(
+      docRoot,
+      paths?.gotchas,
+      DEFAULT_GOTCHAS_PATH,
+      "gotchas",
+      warnings
+    ),
+    warnings
+  };
+}
+var DOMAINS_MARKER = "metatron:domains";
+var FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+var FENCE_CLOSE_RE = /^ {0,3}(`+|~+)[ \t]*$/;
+function isDomainsInfo(info) {
+  const tokens = info.trim().split(/[ \t]+/).filter(Boolean);
+  return tokens.length === 2 && tokens[0] === "json" && tokens[1] === DOMAINS_MARKER;
+}
+function findDomainsContent(text) {
+  const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  let fence = null;
+  let isTarget = false;
+  let openIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i];
+    if (fence) {
+      const m = FENCE_CLOSE_RE.exec(t);
+      if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
+        if (isTarget) return lines.slice(openIndex + 1, i).join("\n");
+        fence = null;
+        isTarget = false;
+      }
+      continue;
+    }
+    const open = FENCE_OPEN_RE.exec(t);
+    if (open) {
+      fence = { char: open[1][0], count: open[1].length };
+      isTarget = isDomainsInfo(open[2]);
+      openIndex = i;
+    }
+  }
+  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n");
+  return null;
+}
+function readDomains(startDir) {
+  try {
+    const { architecture } = resolveDocPaths(startDir);
+    if (!fs2.existsSync(architecture)) return null;
+    const content = findDomainsContent(fs2.readFileSync(architecture, "utf8"));
+    if (content === null) return null;
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
 }
 function findProjectRoot(startDir) {
   let dir = startDir;
@@ -105,17 +319,31 @@ var CODE_PHASES = /* @__PURE__ */ new Set([
   "test-loop",
   "fix-loop"
 ]);
+function toDomainMap(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return null;
+  const entries = Object.entries(value);
+  if (entries.length === 0) return null;
+  const map = /* @__PURE__ */ Object.create(null);
+  for (const [name, globs] of entries) {
+    if (!Array.isArray(globs) || globs.length === 0) return null;
+    if (globs.some((g) => typeof g !== "string")) return null;
+    map[name] = globs;
+  }
+  return map;
+}
 try {
   const input = await readStdin();
+  const cwd = input.cwd ?? process.cwd();
   const filePath = input.tool_input?.file_path;
   if (!filePath) pass();
-  const abs = path3.resolve(input.cwd ?? process.cwd(), filePath);
+  const abs = path3.resolve(cwd, filePath);
   if (/[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i.test(abs))
     emit(
       "deny",
       "state.json \u306F codiel-state \u30B9\u30AF\u30EA\u30D7\u30C8\u7D4C\u7531\u3067\u306E\u307F\u5909\u66F4\u3067\u304D\u307E\u3059(\u30D5\u30A7\u30FC\u30BA\u98DB\u3070\u3057\u30FB\u30B2\u30FC\u30C8\u507D\u88C5\u306E\u9632\u6B62)"
     );
-  const root = findProjectRoot(input.cwd ?? process.cwd());
+  const root = findProjectRoot(cwd);
   const rel = path3.relative(root, abs).replaceAll("\\", "/");
   const run = findActiveRun(root);
   if (run?.state.status !== "active") pass();
@@ -133,6 +361,23 @@ try {
         "ask",
         `\u30C6\u30B9\u30C8\u4ED5\u69D8\u30FB\u671F\u5F85\u5024(${rel})\u306E\u5909\u66F4\u306F test-designer \u306E\u62C5\u5F53\u3067\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u6539\u7AC4\u306E\u7591\u3044)`
       );
+    const domain = run.state.domain;
+    if (domain && !rel.startsWith(".codiel/")) {
+      const domains = toDomainMap(readDomains(cwd));
+      if (domains) {
+        const globs = domains[domain];
+        if (!globs)
+          emit(
+            "ask",
+            `\u30C9\u30E1\u30A4\u30F3 ${domain} \u304C ARCHITECTURE \u306E\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306B\u7121\u3044\u305F\u3081\u3001${rel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u304C\u62C5\u5F53\u7BC4\u56F2\u5185\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(\u30C9\u30E1\u30A4\u30F3\u540D\u306E\u8AA4\u308A\u3001\u307E\u305F\u306F\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8A18\u8FF0\u6F0F\u308C)`
+          );
+        if (!globs.some((g) => globToRegExp(g).test(rel)))
+          emit(
+            "ask",
+            `${rel} \u306F\u30C9\u30E1\u30A4\u30F3 ${domain} \u306E\u62C5\u5F53\u7BC4\u56F2\u5916\u3067\u3059(${domain} \u306E\u7BC4\u56F2: ${globs.join(", ")})`
+          );
+      }
+    }
     pass();
   }
   if (rel.startsWith(".codiel/")) pass();

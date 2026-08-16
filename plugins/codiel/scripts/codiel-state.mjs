@@ -274,6 +274,25 @@ function main(argv, root = process.cwd()) {
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
   }
+  if (cmd === "set-domain") {
+    const raw = flags.domain;
+    if (raw === void 0) fail("--domain \u304C\u5FC5\u8981\u3067\u3059");
+    const domain = (raw ?? "").trim();
+    if (domain === "")
+      fail("--domain \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093(\u89E3\u9664\u306F clear-domain \u3092\u4F7F\u7528)");
+    const latest = loadRun(root, flags);
+    if (TERMINAL.has(latest.state.status))
+      fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
+    latest.state.domain = domain;
+    writeState(latest.statePath, latest.state);
+    return ok({ statePath: latest.statePath, state: latest.state });
+  }
+  if (cmd === "clear-domain") {
+    const latest = loadRun(root, flags);
+    latest.state.domain = null;
+    writeState(latest.statePath, latest.state);
+    return ok({ statePath: latest.statePath, state: latest.state });
+  }
   if (cmd === "record-attempt") {
     const phase = pos[1];
     if (!PHASES.includes(phase)) fail(`\u4E0D\u6B63\u306A\u30D5\u30A7\u30FC\u30BA: ${phase}`);
