@@ -18,7 +18,7 @@ Issue の操作には GitHub CLI(`gh`)のインストールと認証が必要で
 
 ## issue-craft スキル
 
-ユーザーとのブレインストーミングで GitHub Issue を練り上げ、リモートリポジトリに起票する(明示発動型)。単一/複数の一括起票に対応。環境の事実(git リポジトリ・リモート・gh・Issue テンプレート)は `scripts/check-issue-env.mjs` が JSON で返し、STOP 判断や対話はスキル側が行う。詳細は `skills/issue-craft/SKILL.md` を参照。
+ユーザーとのブレインストーミングで GitHub Issue を練り上げ、リモートリポジトリに起票する(明示発動型)。単一/複数の一括起票に対応。環境の事実(git リポジトリ・リモート・gh・Issue テンプレート)は `scripts/check-issue-env.mjs` が JSON で返し、STOP 判断や対話はスキル側が行う。他のスキル・エージェントが固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動したときは持ち込みモードに入り、ブレインストーミングを飛ばして渡された本文をそのまま起票する(承認ゲートは実行する)。詳細は `skills/issue-craft/SKILL.md` を参照。
 
 ## issue-split スキル
 
