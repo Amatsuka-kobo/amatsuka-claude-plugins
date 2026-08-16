@@ -2,13 +2,13 @@
 
 Claude Code を使うときのエージェント運用方針を、スキルとして配布する Claude Code プラグインです。
 
-モデル別の役割分担、設計/実装フロー、アドバイザー運用、並列原則、コードベース探索のコスト効率化施策(context-map)を定めます。CLAUDE.md に方針スキルへ従う旨を書くだけで、任意のプロジェクトへ同じ運用を持ち込めます。
+モデル別の役割分担、設計/実装フロー、アドバイザー運用、並列原則、コードベース探索のコスト効率化施策(context-map)を定めます。方針スキルに従う 7 種のサブエージェント定義を同梱し、`AMATSUKA_AGENT_AUTO_INJECTION` を設定するだけで、任意のプロジェクトへ同じ運用を持ち込めます。
 
 ## 動作要件
 
 方針スキル自体に依存はありません。
 
-`setup-gpt` / `setup-grok` が使う生成スクリプトは Node.js で動作します。`node` が PATH 上にあり、バージョンが 22 以上である必要があります。
+SessionStart フックは Node.js で動作します。`node` が PATH 上にあり、バージョンが 22 以上である必要があります。
 
 Claude Code 本体はネイティブバイナリで配布され Node.js を同梱しないため、未導入の場合は別途インストールしてください。
 
@@ -35,91 +35,73 @@ Marketplace から `agent-policy` をインストールします。
 
 ## プロファイル
 
-`.claude/agents/` に置かれた Agent 定義に応じて、使う方針スキルを選びます。
+環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` の値に応じて、SessionStart フックが使う方針スキルを選び、セッション開始時の指示として自動で注入します。
 
-| 方針スキル | 使う条件 |
+| `AMATSUKA_AGENT_AUTO_INJECTION` | 使う方針スキル |
 | --- | --- |
-| `agent-policy:codex-grok-policy` | `gpt-sol` / `gpt-terra` / `gpt-luna` と `grok-researcher` がすべて存在する |
-| `agent-policy:with-codex-policy` | `gpt-*` が存在し、`grok-*` が存在しない |
-| `agent-policy:with-grok-policy` | `grok-*` が存在し、`gpt-*` が存在しない |
-| `agent-policy:claude-model-policy` | どちらも存在しない |
+| `claude` | `agent-policy:claude-model-policy` |
+| `with-codex` | `agent-policy:with-codex-policy` |
+| `with-grok` | `agent-policy:with-grok-policy` |
+| `with-codex-grok` | `agent-policy:codex-grok-policy` |
+| `none`(または未設定) | 注入しない |
 
-CLAUDE.md には、選んだ方針スキルへ従う旨を書きます。
+自動注入を使わず、CLAUDE.md に選んだ方針スキルへ従う旨を直接書くこともできます。
 
 ```markdown
 - 最初に必ず `agent-policy:codex-grok-policy` スキルを使用し、この規律に従う。
 ```
 
-## Agent 定義のセットアップ
+## 環境変数
 
-`setup-gpt` と `setup-grok` が、方針で使う Agent 定義を `.claude/agents/` へ生成します。生成するのは Markdown の Agent 定義ファイルのみで、プロキシや秘密値は扱いません。
-
-Codex 系 / Grok 系のモデルをローカルプロキシ(CLIProxyAPI などの ProxyAPI サーバー)経由で使える環境が前提です。
-
-### 対話で生成する
-
-```text
-/agent-policy:setup-gpt
-/agent-policy:setup-grok
-```
-
-モデルエイリアスを確認し、既存ファイルがあれば上書き可否を尋ねます。
-
-### 非対話で生成する
-
-`--yes` を付けると、確認を一切行わず、既定のエイリアスで全ファイルを上書きします。
-
-```bash
-claude -p "/agent-policy:setup-gpt --yes"
-claude -p "/agent-policy:setup-grok --yes"
-```
-
-`--allowedTools` の指定は不要です。スキルが必要な Bash 実行だけを事前承認します。
-
-`--yes` を付けずに `-p` で起動すると対話パスへ入り、応答待ちで止まります。
-
-### CI で生成する
-
-`claude -p` は生成スクリプトが失敗しても終了コード 0 を返しうるため、終了コードで成否を判定したい場合は `claude` を介さず直接実行します。
-
-```bash
-node <plugin-root>/scripts/setup-agents.mjs --profile gpt --overwrite
-node <plugin-root>/scripts/setup-agents.mjs --profile grok --overwrite
-```
-
-`<plugin-root>` は Marketplace 経由でインストールした場合 `~/.claude/plugins/cache/` 配下にあります。
-
-`--bare` は skills と plugins の自動発見をスキップします。将来 `-p` の既定になる予定のため、その環境では `--plugin-dir` を明示するか、上の直接実行を使います。
-
-### 生成されるエージェント
-
-| プロファイル | エージェント | 既定のエイリアス |
+| 変数名 | 用途 | 既定値 |
 | --- | --- | --- |
-| gpt | `gpt-sol` | `claude-gpt-5-6-sol` |
-| gpt | `gpt-terra` | `claude-gpt-5-6-terra` |
-| gpt | `gpt-luna` | `claude-gpt-5-6-luna` |
-| grok | `grok-researcher` | `claude-grok-4-5` |
-| grok | `grok-implementer` | `claude-grok-4-5` |
+| `AMATSUKA_AGENT_AUTO_INJECTION` | 使う方針スキルの選択(`claude` / `with-codex` / `with-grok` / `with-codex-grok` / `none`) | 未設定(注入しない) |
+| `AMATSUKA_AGENT_GPT_SOL_ALIAS` | `gpt-sol` のモデルエイリアス | `claude-gpt-5-6-sol` |
+| `AMATSUKA_AGENT_GPT_TERRA_ALIAS` | `gpt-terra` と `gpt-researcher` のモデルエイリアス | `claude-gpt-5-6-terra` |
+| `AMATSUKA_AGENT_GPT_LUNA_ALIAS` | `gpt-luna` のモデルエイリアス | `claude-gpt-5-6-luna` |
+| `AMATSUKA_AGENT_GROK_ALIAS` | `grok-researcher` と `grok-implementer` のモデルエイリアス | `claude-grok-4-5` |
 
-エイリアスはモデル本体の ID ではなく、ProxyAPI サーバーが配信するクライアント側の別名です。対話モードではプロキシ設定に合わせて変更できます。
+エイリアスはモデル本体の ID ではなく、ローカルプロキシ(CLIProxyAPI などの ProxyAPI サーバー)が配信するクライアント側の別名です。Codex 系 / Grok 系のモデルをこの ProxyAPI サーバー経由で使える環境が前提です。`claude-researcher` は Anthropic のモデルをそのまま使うため、対応するエイリアス変数はありません。
 
-生成後は Claude Code を再読み込みすると Agent が認識されます。
+### 設定場所
 
-`.claude/agents/` を git 追跡対象にするか gitignore するかは、プロジェクトごとの判断です。
+これらの変数は、OS の環境変数として与えても、Claude Code の `settings.json` / `settings.local.json` の `env` に書いても構いません。プロジェクト単位で効かせる場合は、そのプロジェクトの `.claude/settings.json` に書きます。
 
-## 生成スクリプトのオプション
+```json
+{
+  "env": {
+    "AMATSUKA_AGENT_AUTO_INJECTION": "with-codex",
+    "AMATSUKA_AGENT_GPT_SOL_ALIAS": "my-sol"
+  }
+}
+```
 
-`scripts/setup-agents.mjs` は stdout へ JSON を 1 行出力します。
+`AMATSUKA_AGENT_AUTO_INJECTION` に上の表にない値を設定した場合、方針スキルは注入されず、値が未知である旨の警告だけが注入されます。
 
-| オプション | 意味 |
-| --- | --- |
-| `--profile gpt\|grok` | 必須。生成するプロファイル |
-| `--check` | 書き込まず現状のみ報告する |
-| `--overwrite` | 既存ファイルを上書きする。無指定時は既存を `skipped` にする |
-| `--agents <csv>` | 対象を絞る。既定は全件 |
-| `--alias <name>=<alias>` | エイリアスを個別に上書きする。繰り返し指定可 |
-| `--dir <path>` | 出力先ルートを明示する。既定は git root、git 管理外なら cwd |
+## 同梱エージェント
 
-出力先は `<ルート>/.claude/agents/` です。ディレクトリが無ければ作成します。
+`plugins/agent-policy/agents/` に 7 定義を同梱しています。呼び出し名は `agent-policy:<name>`(例: `agent-policy:gpt-sol`)です。
 
-失敗時は `{"ok": false, "error": "..."}` を出力し、終了コード 1 で終わります。
+| 名前 | 既定モデル | 役割 |
+| --- | --- | --- |
+| `claude-researcher` | `sonnet` | 独立レビュー・リアルタイム情報調査・コードベース探索実働 |
+| `gpt-sol` | `claude-gpt-5-6-sol` | 複雑なコーディング(アーキテクチャ判断・設計トレードオフ) |
+| `gpt-terra` | `claude-gpt-5-6-terra` | 通常のコーディング・ドキュメント作成・設定編集・ビルド/テスト実行 |
+| `gpt-researcher` | `claude-gpt-5-6-terra` | 独立レビュー・リアルタイム情報調査・コードベース探索実働 |
+| `gpt-luna` | `claude-gpt-5-6-luna` | 軽量タスク(一括適用・反復変換・軽微なコーディング) |
+| `grok-researcher` | `claude-grok-4-5` | 独立レビュー・リアルタイム情報調査・コードベース探索実働 |
+| `grok-implementer` | `claude-grok-4-5` | 通常のコーディング・一括適用・反復変換・ドキュメント作成 |
+
+## エイリアスを変更する
+
+環境変数(例 `AMATSUKA_AGENT_GPT_SOL_ALIAS`)を既定値と異なる値に設定すると、SessionStart フックがそのエージェントの定義を `.claude/agents/` へ生成します。設定場所は「[環境変数](#環境変数)」の「設定場所」を参照してください。
+
+生成は今のセッションには反映されません。次回セッションから効くため、エイリアスに依存する委譲を行う前に Claude Code を再起動してください。
+
+生成された `.claude/agents/` の定義は、同梱定義(`agent-policy:<name>`)より優先されます。
+
+## 旧バージョンからの移行
+
+`setup-gpt` / `setup-grok` スキルは廃止されました。Agent 定義は同梱で提供されるため、生成の手間なく使えます。
+
+旧セットアップが `.claude/agents/` へ生成した `gpt-*.md` / `grok-*.md` は、同梱定義より優先されるファイルとして残り続けます。削除しないと、同梱定義を更新しても古い定義が使われ続けます。SessionStart フックはこれらの残骸を検知すると、セッション開始時に削除を促す通知を出します。

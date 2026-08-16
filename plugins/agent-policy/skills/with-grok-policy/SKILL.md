@@ -1,6 +1,6 @@
 ---
 name: with-grok-policy
-description: Claude(Fable/Opus/Sonnet/Haiku)と Grok(ローカルプロキシ経由)を併用する構成でのエージェント運用方針。`.claude/agents/` に grok-researcher.md / grok-implementer.md が存在し、gpt-sol.md / gpt-terra.md / gpt-luna.md が存在しないプロジェクトではこちらを使う。gpt-* も揃うプロジェクトでは agent-policy:codex-grok-policy を、grok-* が無いプロジェクトでは agent-policy:with-codex-policy または agent-policy:claude-model-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: Claude(Fable/Opus/Sonnet/Haiku)と Grok(ローカルプロキシ経由)を併用する構成でのエージェント運用方針。`AMATSUKA_AGENT_AUTO_INJECTION` が `with-grok` のときに使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 ---
 
 # エージェント運用方針(Claude + Grok 併用)
@@ -59,5 +59,6 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Grok(ローカルプロキシ経
 
 実務タスク着手前に確認し、以後はタスクごとに再判定しない。
 
-1. `.claude/agents/grok-researcher.md` / `grok-implementer.md` が存在すればそれを使う。
-2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、ユーザーへ `agent-policy:setup-grok` の実行を案内する。生成完了(またはスキップ)までは §Grok が利用不可のときのフォールバック で運用する。
+1. プロジェクトの `.claude/agents/grok-researcher.md` / `grok-implementer.md` が存在すればそれを使う。環境変数で既定と異なるエイリアスを指定したときは、SessionStart フックがここへ定義を生成する。
+2. 存在しなければ、プラグイン同梱の `agent-policy:grok-researcher` / `agent-policy:grok-implementer` を使う。
+3. ローカルプロキシ経由で呼び出せないときは、§Grok が利用不可のときのフォールバック に従う。

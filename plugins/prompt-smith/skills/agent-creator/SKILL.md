@@ -12,7 +12,7 @@ description: |-
 
   依頼の動詞ではなく、触る対象で判断する。パスが `agents/` 配下、または「この agent 定義」を指しているなら、たとえ話題が「契約PDFの抽出精度」「コスト報告の中身」のような業務内容でも、作業の実体は agent 定義の編集なのでこの skill を使う。
 
-  skill / command / output-style / references のファイルは対象外。GPT Sol/Terra/Luna の定型セットアップは setup-gpt。subagent の概念説明だけの質問には使わない。
+  skill / command / output-style / references のファイルは対象外。subagent の概念説明だけの質問には使わない。
 ---
 
 # Agent 定義の作成

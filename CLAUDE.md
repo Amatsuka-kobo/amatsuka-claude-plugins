@@ -22,7 +22,7 @@
 ```
 
 - リポジトリルートの `.claude/agents/` は gitignore している。
-- GPT / Grok のエージェント定義は各自が `agent-policy:setup-gpt` / `agent-policy:setup-grok` で生成する。
+- GPT / Grok を含むエージェント定義は `agent-policy` プラグインに同梱済みで、各自のセットアップは不要。エイリアスを既定値から変える場合だけ、環境変数(`AMATSUKA_AGENT_GPT_SOL_ALIAS` など)を設定すると SessionStart フックがこのディレクトリへ生成する。
 - 共通スクリプトの言語は何でもよい。
 
 ## 環境とコマンド
