@@ -1,6 +1,6 @@
 ---
 name: codex-grok-policy
-description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna)に加え、Grok(ローカルプロキシ経由)を独立レビュー・リアルタイム情報調査に用いる三社構成でのエージェント運用方針。`.claude/agents/` に gpt-sol.md / gpt-terra.md / gpt-luna.md と grok-researcher.md がすべて存在するプロジェクトではこちらを使い、grok-researcher.md が無ければ代わりに agent-policy:with-codex-policy を、gpt-* が無ければ agent-policy:with-grok-policy を使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terra/Luna)に加え、Grok(ローカルプロキシ経由)を独立レビュー・リアルタイム情報調査に用いる三社構成でのエージェント運用方針。`AMATSUKA_AGENT_AUTO_INJECTION` が `with-codex-grok` のときに使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 ---
 
 # エージェント運用方針(Claude + Codex + Grok 併用)
@@ -17,7 +17,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 | リアルタイム情報調査(最新動向・外部エコシステム)      | `Grok Researcher`        |
 | 設計書・実装計画書(WBS)の作成                         | `Opus`                   |
 | コードベース探索統括                                  | `Opus`                   |
-| コードベース探索実働                                  | `GPT Terra` / `GPT Luna` |
+| コードベース探索実働                                  | `Grok Researcher`        |
 | 複雑または重要な実装                                  | `GPT Sol`                |
 | 通常の実装                                            | `GPT Terra`              |
 | 軽量な実装                                            | `GPT Luna`               |
@@ -43,7 +43,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 - 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、`grok-researcher` エージェントへ dispatch する。
 - このとき `model` 上書きは使わない。
-- 依頼文の冒頭で「独立レビュー」「リアルタイム情報調査」のどちらの役割かを明示し、その役割の Output Format を指定する。
+- 依頼文の冒頭で「独立レビュー」「リアルタイム情報調査」「探索実働」のどれかを明示し、その役割の Output Format を指定する。
 
 ## 独立レビューの手順
 
@@ -58,18 +58,20 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 - 独立レビュー: 省略し、Haiku レビュー+オーケストレーター補足の既存フローで進める。`Opus` では代行しない。
 - リアルタイム情報調査: 「調査・分析」帯(`Opus`)+ WebSearch で代行する。
+- 探索実働: `GPT Terra` / `GPT Luna` へ読み替える。
 
 ## 実行帯の解決順
 
 実務タスク着手前に確認し、以後はタスクごとに再判定しない。
 
-GPT の帯は、上から順に適用する。1 で解決したときはフォールバックではない。
+GPT の帯は、次のとおり解決する。
 
-1. `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。
-2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、`codex@openapi-codex` プラグインを使う: `/codex:rescue --model gpt-5.6-sol`/ `--model gpt-5.6-terra`/ `--model gpt-5.6-luna`。
-3. どちらも不可なら、ユーザーへ `agent-policy:setup-gpt` の実行を案内する。生成完了(またはスキップ)までは `agent-policy:claude-model-policy` の担当表で一時的に代行する。
+1. プロジェクトの `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。環境変数で既定と異なるエイリアスを指定したときは、SessionStart フックがここへ定義を生成する。
+2. 存在しなければ、プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` を使う。
+3. ローカルプロキシ経由で呼び出せないときは、`codex@openai-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
 
 Grok の帯は、次のとおり解決する。
 
-1. `.claude/agents/grok-researcher.md` が存在すればそれを使う。
-2. 存在しない、またはローカルプロキシ経由で呼び出せない場合は、ユーザーへ `agent-policy:setup-grok` の実行を案内する。生成完了(またはスキップ)までは §Grok が利用不可のときのフォールバック で運用する。
+1. プロジェクトの `.claude/agents/grok-researcher.md` が存在すればそれを使う。環境変数で既定と異なるエイリアスを指定したときは、SessionStart フックがここへ定義を生成する。
+2. 存在しなければ、プラグイン同梱の `agent-policy:grok-researcher` を使う。
+3. ローカルプロキシ経由で呼び出せないときは、§Grok が利用不可のときのフォールバック に従う。
