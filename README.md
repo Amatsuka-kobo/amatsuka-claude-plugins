@@ -56,6 +56,8 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                  | 開発中     |
 | agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群と 7 種のサブエージェント定義を同梱し、Claude+Codex+Grok 併用 / Claude+Codex 併用 / Claude+Grok 併用 / Claude オンリーの 4 プロファイルで提供する | 開発中     |
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
+| Metatron     | プロジェクトの技術的前提(ARCHITECTURE)と失敗知識(GOTCHAS)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入するプラグイン                                | 開発中     |
+| Sandalphon   | ユーザーの願いを聞き取って現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡すオーケストレーター                                          | 開発中     |
 
 各プラグインの詳しい説明は、それぞれのフォルダ内（`plugins/<plugin-name>/`）にあるREADMEを参照してください。
 
@@ -64,6 +66,8 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 ### Codiel 👀🌿
 
 GitHub issue の内容を取得し、設計・開発・PR起票・レビューを一気通貫で行うことができるプラグインです。<br>
+`/codiel:init` はドメイン分割と保護パスの聞き取りだけを行い、ARCHITECTURE の散文や GOTCHAS は生成しません。Metatron が無くても最小の ARCHITECTURE を自前で作って動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
+Sandalphon が起票した intent issue を分析するときは、issue のセクションを要約せずそのまま転記し、合意済みの分岐を設計フェーズで再質問しません。<br>
 詳しくはプラグイン本体の [README.md](plugins/codiel/README.md) や、設計思想などをまとめた [DESIGN.md](plugins/codiel/docs/DESIGN.md) を見てください。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。
 
@@ -91,7 +95,8 @@ Claude の最上位モデルである Fable5 の振る舞いや、サブエー�
 
 ### gh-utility
 
-GitHub への起票・Issue 分解・Issue 整理など、GitHubでの開発業務を包括的に支援するためのプラグインです。
+GitHub への起票・Issue 分解・Issue 整理など、GitHubでの開発業務を包括的に支援するためのプラグインです。<br>
+`issue-craft` は持ち込みモードを持ち、Sandalphon などが組み立て済みの本文を渡してきた場合は、それを一切書き換えずに全文提示と承認だけを経て起票します。
 
 ### basic-design
 
@@ -110,3 +115,23 @@ Codex 系 / Grok 系のモデルエイリアスをローカルプロキシ(Proxy
 
 AI が読み手となる指示書(CLAUDE.md・SKILL.md・コマンド定義・Agents 定義・`references/` 配下の文書)を、無駄なく理解しやすい形に設計・改善するプラグインです。<br>
 AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマンド定義の作成・description の評価・改善は `skill-creator`、Agent 定義の作成・検証は `agent-creator` が担当します。
+
+### Metatron 📜
+
+プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)と失敗知識(`docs/GOTCHAS.md`)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入するプラグインです。<br>
+2 文書への書き込み口を決定的な CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械で保証します。正本への直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい窓口へ案内します。<br>
+`/metatron:init` がコードベース解析から ARCHITECTURE を初回生成し、`/metatron:update` が現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。<br>
+※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
+
+### Sandalphon
+
+ユーザーの「やりたいこと」を聞き取り、ソフトウェアの現状(ASIS)と突き合わせて intent 文書に固定し、GitHub issue という形で実行系へ届けるオーケストレーターです。<br>
+Codiel が「Issue #N がある」ところから始まるのに対し、Sandalphon は**その Issue が生まれる前の上流区間**を担当します。成果物は `docs/intents/YYYY-MM-DD-<slug>.md` に残る intent 文書(ASIS / TOBE / 受け入れ基準 / 実装方針 / 合意済み事項 / 非スコープ / 未確定事項)であり、issue はその派生物です。<br>
+`/sandalphon:run` で聞き取りから引き渡しまでを進めます。承認ゲートは「取り消しコストが跳ね上がる直前」の 2 点だけに置き、issue の起票は外部公開行為としてゲートとは別に必ず全文提示と承認を経ます。<br>
+※ Sandalphon とは、人間の祈り・願いを束ねて天へ届ける天使の名前です。
+
+### Metatron / Sandalphon / Codiel の関係
+
+3 つは願い → intent → issue → 実装という一続きの流れを分担しますが、**互いに独立して動きます。**<br>
+Codiel は Metatron が無くても単体で完結し(最小の ARCHITECTURE を自前で作ります)、Sandalphon は Codiel が無くても intent 文書を残して自前実行まで行えます。Metatron も他の 2 つが無いところで、ARCHITECTURE と GOTCHAS の記録・注入として単体で価値があります。<br>
+連携手段は**ファイル契約**(ARCHITECTURE / GOTCHAS / intent 文書の書式)と**モデルコンテキスト**の 2 つだけで、プラグイン間の依存宣言もインストール位置の参照もありません。片方だけを入れても壊れず、両方を入れると噛み合います。

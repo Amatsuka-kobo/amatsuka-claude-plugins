@@ -261,6 +261,8 @@ importers:
 
   plugins/guidepost: {}
 
+  plugins/metatron: {}
+
   plugins/pitcrew: {}
 
   plugins/prefetch: {}
@@ -270,6 +272,8 @@ importers:
   plugins/raphael: {}
 
   plugins/revelation: {}
+
+  plugins/sandalphon: {}
 
 packages:
 
