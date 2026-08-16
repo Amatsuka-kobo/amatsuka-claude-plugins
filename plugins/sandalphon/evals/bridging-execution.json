@@ -1,0 +1,82 @@
+[
+  {
+    "query": "`docs/intents/2026-08-16-add-oauth-login.md` が status: approved で保存済みです。ここから issue にして、実装を codiel に渡すか自分でやるかまで決めたい。",
+    "should_trigger": true
+  },
+  {
+    "query": "intent の承認が取れました。次は外部化のフェーズだと思うので、起票の可否と実行経路をまとめて判断して選択肢を出してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "確定した intent 文書があります。issue にする前に本文を全部見せてほしい。転記は要約せず機械的にやってください。",
+    "should_trigger": true
+  },
+  {
+    "query": "the intent doc is approved and saved. i want it turned into a github issue with the `intent:v1` marker and the source path comment, then decide whether `/codiel:run` takes it from here or we implement it inline.",
+    "should_trigger": true
+  },
+  {
+    "query": "intent 固まったので次いって。issue 立てるかどうかと、誰が実装するかを一緒に決めたい",
+    "should_trigger": true
+  },
+  {
+    "query": "承認済みの intent を issue にしたあと、frontmatter の status と issue 番号を書き換えるところまでやってほしいです。本文は触らないで。",
+    "should_trigger": true
+  },
+  {
+    "query": "intent は確定しました。ただ gh が未認証かもしれません。起票できるかを先に判定して、無理なら畳んだ理由込みで経路を選ばせてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "保存済みの intent 文書から先に進めたい。重い経路と軽い経路の品質差も分かるように選択肢を並べてほしいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "ゲート 1 を通した intent があります。`/codiel:run` に渡す前提で issue 番号が要るので、起票して引き渡しのコマンドまで提示してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "通知の既読管理を入れたいんですが、受け入れ基準もスコープもまだ決まっていません。現状を読んだうえで詰めて、文書に固めてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "intent のドラフトを今まさに書いているところです。ASIS の探索が終わっていないので、`src/auth/` の現状をまず読んでほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "経路は「起票せずこの場で実装」に決まりました。テスト仕様を承認させてから TDD で実装まで運んでください。",
+    "should_trigger": false
+  },
+  {
+    "query": "この改善案を issue にしといて。ラベルは `enhancement` で、本文には背景と提案をブレストしながらまとめてほしいです。intent 文書とかは無いです。",
+    "should_trigger": false
+  },
+  {
+    "query": "親 issue #120 を子 issue に分解して、GitHub 公式の Sub-issues として親に紐付けてください。分解の粒度から相談させて。",
+    "should_trigger": false
+  },
+  {
+    "query": "open な issue が 80 件たまってます。ラベルの提案と、古いものの生死確認と、重複候補の検出をして一括で承認させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "issue #57 を取ってきて、要件・受け入れ基準・スコープ・不明点に構造化してほしい。推測で埋めないでください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`/codiel:run 57` を回したいのですが、ハーネスが未初期化だと言われます。`.codiel/` と raguel.config.yaml を整備してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`docs/ARCHITECTURE.md` のドメインマップに穴があるので、`/metatron:update` 相当の更新をかけて実装との乖離を潰してほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "gh CLI で issue を作るときの `--body-file` の使い方を教えてください。ヒアドキュメントだと崩れるのはなぜですか。",
+    "should_trigger": false
+  },
+  {
+    "query": "intent 文書は承認して保存済みです。今回は起票だけして実装は後日にしたい。issue を立てたあと、再開の仕方も含めて締めてください。",
+    "should_trigger": true
+  }
+]

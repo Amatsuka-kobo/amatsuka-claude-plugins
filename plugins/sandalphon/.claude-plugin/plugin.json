@@ -1,0 +1,5 @@
+{
+  "name": "sandalphon",
+  "description": "ユーザーの願いを intent 文書として固定し、issue に起票して実行系へ引き渡す上流フローのプラグイン",
+  "version": "0.1.0-dev"
+}
