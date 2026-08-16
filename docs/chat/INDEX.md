@@ -72,3 +72,4 @@
 - `2026/0812/phyllis998/test-simple-reply.md` | 2026-08-13 | phyllis998 | Serena tool 付与・検証完了・コミット
 - `2026/0814/phyllis998/agent-policy-headless-setup.md` | 2026-08-14 | phyllis998 | agent-policy headless 実装・context7/mdbase-lsp MCP 設定・認識不具合調査
 - `2026/0815/phyllis998/context7-github-serena-mcp-investigation.md` | 2026-08-15 | phyllis998 | Context7・GitHub・Serena の MCP 構成、リポジトリ分析、github cli PAT 出力方法
+- `2026/0816/phyllis998/no-operation-confirmation.md` | 2026-08-16 | phyllis998 | agent-policy bundled agents設計・検証・Haiku反映・researcher割り当て・実装計画・Subagent実行開始
