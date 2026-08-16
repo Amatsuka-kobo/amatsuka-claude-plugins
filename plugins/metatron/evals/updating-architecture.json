@@ -1,0 +1,82 @@
+[
+  {
+    "query": "先週 Redis と BullMQ を入れたのに `docs/ARCHITECTURE.md` の技術スタックが古いままです。他にも追随してない箇所があるはずなので、洗い出して更新してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "ドメインマップの glob が 2 本死んでます。`src/legacy/**` はもう無いし、逆に `src/billing/` がどのドメインにも入っていない。穴と死んだ glob を両方直したいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "ADR を追加したい。GraphQL をやめて REST に戻した判断を残して、その前提になっていた ADR-0004 を廃止の状態に変えてください。理由は「クライアントが 1 つに減ったため」です。",
+    "should_trigger": true
+  },
+  {
+    "query": "アーキ文書が古い気がします。どこがズレてるか自分でも把握できていないので、実装と突き合わせて洗い出してから直してほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "今の diff で `apps/worker` を丸ごと `services/worker` に移しました。ディレクトリ構成と責務の記述、保護パスの設定が実態とズレたはずなので反映してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "うちの ARCHITECTURE、`## テスト方針` の節が丸ごと抜けてます。vitest と playwright を使っているので、そこだけ足したい。埋まらない部分は推測で書かないでください。",
+    "should_trigger": true
+  },
+  {
+    "query": "the architecture doc at `docs/ARCHITECTURE.md` still lists `npm run dev` but we moved to pnpm and renamed half the scripts last sprint. please diff it against the repo and fix whatever drifted, one finding at a time.",
+    "should_trigger": true
+  },
+  {
+    "query": "ドキュメントを実装に合わせて直して。あと `## システム概要` の散文が「単一の Rails アプリ」って書いてあるけど、もう API が分離してるので直したい",
+    "should_trigger": true
+  },
+  {
+    "query": "保護パスに `infra/terraform/**` が入っていないのに、実際は触ってはいけない領域です。ARCHITECTURE 側の記載を整合させて、ついでに他の不整合も見てほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "`pnpm test:e2e` と `pnpm db:migrate` を新しく足したので、コマンド定義の節に反映してください。書き込む前に diff を全部見せてほしいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "このリポジトリにはまだアーキテクチャ文書が 1 枚もありません。コードベースを解析して `docs/ARCHITECTURE.md` を初めて作りたい。節ごとに確認させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`/codiel:init` が生成した ARCHITECTURE がドメインマップ 1 節だけの最小構成です。ここから技術スタック・レイヤー構造・規約まで一気に起こして、まともなアーキ文書に育てたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "さっき CLI の絶対パスを推測で組み立てて 3 回失敗しました。次に触るエージェントも踏むので、この罠を台帳に残しておいてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`docs/GOTCHAS.md` に同じ種類の失敗が 6 件たまっています。スキルか Hook に昇格させるべきか検討して、候補を絞り込んでほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "通知の既読管理を入れたいんですが、受け入れ基準もスコープもまだ決まっていません。現状を見たうえで詰めて、intent 文書に落としてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`README.md` の構成が読みにくいです。インストール、起動、トラブルシュートの順に並べ直して、スクリーンショットの置き場所も相談させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`harness-docs/design/` に決済リトライの設計書を新規で書きたい。採用しなかった案とその理由まで含めて、章立てから相談したいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`src/domain/pricing/` の割引計算が読みづらいのでリファクタしてほしい。振る舞いは変えずに、テストを先に足してから手を入れてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "この改善案、issue にしといて。ラベルは `enhancement` で、本文にはリポジトリの現状と提案の背景をまとめてほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "`.raphael/antibodies/` に抗体を synthesize したいです。今回の Stop reason から蒸留して、再発防止の接種まで相談させてください。",
+    "should_trigger": false
+  }
+]
