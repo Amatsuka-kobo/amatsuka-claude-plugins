@@ -11,7 +11,6 @@ tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7, mc
 ## When to invoke
 
 - **複雑な実装。** アーキテクチャ判断・非自明な設計トレードオフ・複数コンポーネントの協調を伴う、難度の高い実装を行うとき。
-- **探索実働。** Opus が統括するコードベース探索の一部を、探索専用サブエージェントとして担うとき。
 
 通常の実装は `GPT Terra`、軽量なタスクは `GPT Luna` に委ねる。
 

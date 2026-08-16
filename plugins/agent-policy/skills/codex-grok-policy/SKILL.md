@@ -68,7 +68,7 @@ GPT の帯は、次のとおり解決する。
 
 1. プロジェクトの `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。環境変数で既定と異なるエイリアスを指定したときは、SessionStart フックがここへ定義を生成する。
 2. 存在しなければ、プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` を使う。
-3. ローカルプロキシ経由で呼び出せないときは、`codex@openapi-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
+3. ローカルプロキシ経由で呼び出せないときは、`codex@openai-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
 
 Grok の帯は、次のとおり解決する。
 
