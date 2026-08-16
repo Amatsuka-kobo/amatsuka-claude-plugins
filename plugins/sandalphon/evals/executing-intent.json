@@ -1,0 +1,82 @@
+[
+  {
+    "query": "intent は確定済みで、issue は起票しない経路を選びました。テスト仕様を承認させてから TDD で実装まで運んでください。ブランチは切ってほしいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "`docs/intents/2026-08-16-add-oauth-login.md` を入力に、この場で実装まで完遂してほしい。受け入れ基準 1 件ごとにテストを対応させて、期待結果は基準の文言をそのまま使ってください。",
+    "should_trigger": true
+  },
+  {
+    "query": "起票は済みました。codiel には渡さず sandalphon 側で実装する経路です。テストケース一覧と実行コマンドと作業ブランチをまとめて出してから始めてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "the intent is locked. run it yourself instead of handing it to the heavy harness: write the failing tests first, get my sign-off on the case list, then implement until every acceptance criterion is green. do not commit.",
+    "should_trigger": true
+  },
+  {
+    "query": "確定した intent があるんだけど、このリポジトリ自動テストが無いんだよね。基盤は入れないで手動検証手順に落として実装まで進めて",
+    "should_trigger": true
+  },
+  {
+    "query": "軽量経路でお願いします。intent 文書の受け入れ基準を全部満たすまで Red → Green を回して、終わったら status を done にして報告してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "承認済みの intent を自前で実装したいです。ドキュメントは今回の変更で事実とズレたものだけ直して、無関係な文書は触らないでほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "intent 確定済み。実装に入る前に `.codiel/` に未完了の run が残ってないかだけ確認してから進めてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "この intent、テスト仕様を作って一括承認したら最後まで走ってほしい。途中で設計の相談を挟まないでいいです。ただし依存を足すときは止めて確認して。",
+    "should_trigger": true
+  },
+  {
+    "query": "通知の既読管理を入れたいんですが、受け入れ基準もスコープもまだ決まっていません。現状を読んだうえで詰めて、文書に固めてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`docs/intents/2026-08-16-add-oauth-login.md` が approved になりました。issue にして実行経路を決めるところからお願いします。",
+    "should_trigger": false
+  },
+  {
+    "query": "`src/features/search/` の N+1 を直してほしい。まず計測して、遅いクエリを特定してから手を入れてください。intent 文書とかは無いです。",
+    "should_trigger": false
+  },
+  {
+    "query": "codiel の implement フェーズで `dev-plan.md` の自ドメインのステップを実行したい。RED→GREEN→REFACTOR の手順を確認させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`design.md` の影響を受ける機能単位から `spec.md` と `cases.md` を起こしてほしい。ID 付きのケース表にして `.codiel/specs/` へ置いてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "このプロジェクトに vitest を導入したいです。設定、ディレクトリ構成、CI の組み込みまで一通り整えてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "テストが 5 件落ちています。原因を切り分けて直してほしい。`tests/pricing.test.ts` の丸め処理あたりが怪しいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "issue #57 を取ってきて、要件・受け入れ基準・スコープ・不明点に構造化してほしい。推測で埋めないでください。",
+    "should_trigger": false
+  },
+  {
+    "query": "レビュー指摘が 8 件返ってきました。妥当性を検証してから、直すものと直さないものを分けて対応してほしいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "承認済みの intent があります。codiel へは渡さない方針で決着したので、テスト仕様の承認を 1 回だけ挟んで実装まで完走してください。コミットはしないで作業ツリーに残して。",
+    "should_trigger": true
+  },
+  {
+    "query": "今の作業ツリーの変更をコミットして PR まで出してほしい。コミットメッセージは Conventional Commits で、本文は差分から起こしてください。",
+    "should_trigger": false
+  }
+]

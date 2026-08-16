@@ -1,0 +1,82 @@
+[
+  {
+    "query": "通知の既読管理を入れたいんですが、受け入れ基準もスコープもまだ決まっていません。今どう実装されているかも踏まえて詰めて、文書に固めるところまでやってほしい。",
+    "should_trigger": true
+  },
+  {
+    "query": "`docs/intents/2026-08-02-csv-export.md` を前に作ったんですが、途中で要件が変わりました。この文書を起点にやり直して、受け入れ基準から作り直したいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "sandalphon で新しい機能の着手をしたい。やりたいのは「請求書 PDF をまとめてダウンロードできるようにする」だけで、そこから先は一緒に決めてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "i want to add rate limiting to the public api of `orbit-ledger`, but i have no idea what \"done\" should look like. figure out what already exists, ask me only what you cannot read from the code, and write it up as an intent with acceptance criteria.",
+    "should_trigger": true
+  },
+  {
+    "query": "ログイン周りを改善したいんだけど、何をどこまでやるかが自分でも整理できてない。今回やらないことも含めて一緒に線を引いて、文書にしてほしい",
+    "should_trigger": true
+  },
+  {
+    "query": "紫雲ホールディングスの管理画面に監査ログの一覧を足したいです。分岐が出そうな論点は選択肢を出して合意を取りながら進めて、最後に全文を見せてから保存してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "やりたいことはあるけど、まず現状の実装を読んでから受け入れ基準を詰めたい。ASIS は聞かれても答えられないので、そっちで調べてほしいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "検索が遅いという苦情が来ています。何を直せば「解決した」と言えるのかを含めて整理して、着手できる形の文書にしてください。実装はまだしないで。",
+    "should_trigger": true
+  },
+  {
+    "query": "要望メモが Slack に散らばってます。「エクスポートを CSV だけでなく Excel でも」「権限のない人には出さない」あたりを、スコープと非スコープに分けて確定させたい。",
+    "should_trigger": true
+  },
+  {
+    "query": "新機能に着手する前の整理をお願いします。TOBE と ASIS を突き合わせて、決着しなかった論点は未確定事項として残しておいてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`docs/intents/2026-08-16-add-oauth-login.md` が status: approved で保存済みです。ここから issue にして、実行を codiel に渡すか自分でやるかを決めたい。",
+    "should_trigger": false
+  },
+  {
+    "query": "intent は確定済みで issue も起票しない方針にしました。テスト仕様を承認させてから TDD で実装まで運んでください。ブランチは切ってほしいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "この改善案を issue にしといて。ラベルは `enhancement`、本文には背景と提案をまとめて。GitHub に起票まで頼みます。",
+    "should_trigger": false
+  },
+  {
+    "query": "issue #57 を取ってきて、要件・受け入れ基準・スコープ・不明点に構造化してください。不明点は握りつぶさず全部挙げて。",
+    "should_trigger": false
+  },
+  {
+    "query": "`harness-docs/design/2026-08-20-search-rework.md` に検索基盤の設計書を書きたい。方式の比較と不採用理由まで含めて、章立てから相談させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "このリポジトリにアーキテクチャ文書がありません。コードベースを解析して `docs/ARCHITECTURE.md` の初版を起こしたい。節ごとに確認させてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "設計の論点が 3 つ残ってます。agenda に沿ってディスカッションを進行して、合意した内容を記録に残してほしい。",
+    "should_trigger": false
+  },
+  {
+    "query": "親 issue #120 を子 issue に分解して、GitHub の Sub-issues として紐付けてください。分解の粒度は相談させてほしいです。",
+    "should_trigger": false
+  },
+  {
+    "query": "`src/features/search/` のパフォーマンスを改善して。N+1 が出てるはずなので、まず計測してから直してほしい。要件は自明なので相談は不要です。",
+    "should_trigger": false
+  },
+  {
+    "query": "プロダクトの要件定義書のテンプレートってどう書くのが一般的ですか。ユーザーストーリーと受け入れ基準の書き分けの考え方を教えてほしいです。",
+    "should_trigger": false
+  }
+]
