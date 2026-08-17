@@ -74,7 +74,8 @@ function resolveSafe(value) {
     return value;
   }
 }
-var startDir = realpathOrSelf(resolveSafe(process.argv[2] ?? cwdSafe()));
+var logicalStartDir = resolveSafe(process.argv[2] ?? cwdSafe());
+var startDir = realpathOrSelf(logicalStartDir);
 function git(...args) {
   try {
     const res = spawnSync("git", args, {
@@ -274,6 +275,8 @@ function isDomainsInfo(info) {
 }
 function findDomainsContent(text) {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  const blocks = [];
+  const warnings = [];
   let fence = null;
   let isTarget = false;
   let openIndex = -1;
@@ -282,7 +285,12 @@ function findDomainsContent(text) {
     if (fence) {
       const m = FENCE_CLOSE_RE.exec(t);
       if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
-        if (isTarget) return lines.slice(openIndex + 1, i).join("\n");
+        if (isTarget) {
+          blocks.push({
+            content: lines.slice(openIndex + 1, i).join("\n"),
+            closed: true
+          });
+        }
         fence = null;
         isTarget = false;
       }
@@ -295,15 +303,35 @@ function findDomainsContent(text) {
       openIndex = i;
     }
   }
-  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n");
-  return null;
+  if (fence && isTarget) {
+    blocks.push({
+      content: lines.slice(openIndex + 1).join("\n"),
+      closed: false
+    });
+  }
+  if (blocks.length > 1) {
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C ${blocks.length} \u500B\u3042\u308A\u307E\u3059\u3002\u6700\u521D\u306E\u3082\u306E\u3060\u3051\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+  }
+  if (blocks.length > 0 && !blocks[0].closed) {
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u9589\u3058\u3066\u3044\u307E\u305B\u3093\u3002\u30D5\u30A1\u30A4\u30EB\u7D42\u7AEF\u307E\u3067\u3092\u5185\u5BB9\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002`
+    );
+  } else if (fence !== null) {
+    warnings.push(
+      "ARCHITECTURE \u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002\u672A\u9589\u30D5\u30A7\u30F3\u30B9\u4EE5\u964D\u3092 1 \u30BB\u30AF\u30B7\u30E7\u30F3\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002"
+    );
+  }
+  return { content: blocks[0]?.content ?? null, warnings };
 }
 function readDomains(file) {
-  const unreadable = { domainsReadable: false, domainCount: 0 };
-  if (!file) return unreadable;
+  const noFile = { domainsReadable: false, domainCount: 0, warnings: [] };
+  if (!file) return noFile;
   const text = readFileSafe(file);
-  if (text === null) return unreadable;
-  const content = findDomainsContent(text);
+  if (text === null) return noFile;
+  const { content, warnings } = findDomainsContent(text);
+  const unreadable = { domainsReadable: false, domainCount: 0, warnings };
   if (content === null) return unreadable;
   let parsed;
   try {
@@ -318,11 +346,12 @@ function readDomains(file) {
     if (!Array.isArray(globs) || globs.length === 0) return unreadable;
     if (globs.some((g) => typeof g !== "string")) return unreadable;
   }
-  return { domainsReadable: true, domainCount: entries.length };
+  return { domainsReadable: true, domainCount: entries.length, warnings };
 }
 var domains = readDomains(architecturePath);
+configWarnings.push(...domains.warnings);
 function findCodielRoot() {
-  let dir = startDir;
+  let dir = logicalStartDir;
   while (true) {
     if (isDir(path.join(dir, ".codiel"))) return dir;
     const parent = path.dirname(dir);
