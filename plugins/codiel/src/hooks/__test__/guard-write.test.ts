@@ -383,3 +383,106 @@ test("文書フェーズでは domain の判定が働かない(既存の文書�
     hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/issue.md"))
   ).toBe(null)
 })
+
+// ---------------------------------------------------------------------------
+// 座標系(契約 §3): ドメイン境界の glob 照合は docRoot 基準、.codiel/ の判定は
+// codielRoot 基準。契約は両者が異なる構成を正常と定めるため、同じ相対パスで
+// 両方を判定してはならない。
+// ---------------------------------------------------------------------------
+
+// repo/.codiel/ と repo/sub/metatron.config.json が併存する構成を作る。
+// codielRoot = repo、docRoot = repo/sub になる。ARCHITECTURE は repo/sub/docs/ だけに置く。
+function setupSplitRoots(): { codielRoot: string; docRoot: string } {
+  const codielRoot = setupRun()
+  advanceToImplement(codielRoot)
+  const docRoot = path.join(codielRoot, "sub")
+  fs.mkdirSync(docRoot, { recursive: true })
+  fs.writeFileSync(
+    path.join(docRoot, "metatron.config.json"),
+    `${JSON.stringify({ version: 1 }, null, 2)}\n`
+  )
+  writeArchitecture(docRoot, DOMAINS)
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+    cwd: codielRoot
+  })
+  return { codielRoot, docRoot }
+}
+
+test("docRoot ≠ codielRoot: 担当範囲内の書き込みは docRoot 基準で素通し", () => {
+  const { docRoot } = setupSplitRoots()
+  // docRoot 基準では src/server/db.ts。codielRoot 基準の sub/src/server/db.ts で
+  // 照合すると、正当な書き込みが範囲外の ask になる。
+  expect(hook(docRoot, "Edit", path.join(docRoot, "src/server/db.ts"))).toBe(
+    null
+  )
+  expect(
+    hook(docRoot, "Write", path.join(docRoot, "src/api/users/route.ts"))
+  ).toBe(null)
+})
+
+test("docRoot ≠ codielRoot: 担当範囲外は ask、理由の相対パスも docRoot 基準", () => {
+  const { docRoot } = setupSplitRoots()
+  const r = hook(docRoot, "Edit", path.join(docRoot, "src/app/page.tsx"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("担当範囲外")
+  expect(r?.permissionDecisionReason).toContain("src/app/page.tsx")
+  // codielRoot 基準の sub/src/app/page.tsx が出ていたら座標系が混ざっている
+  expect(r?.permissionDecisionReason).not.toContain("sub/src/app/page.tsx")
+})
+
+test("docRoot ≠ codielRoot: 未知の domain 名の ask も docRoot 基準のパスを示す", () => {
+  const { codielRoot, docRoot } = setupSplitRoots()
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backends"], {
+    cwd: codielRoot
+  })
+  const r = hook(docRoot, "Edit", path.join(docRoot, "src/server/db.ts"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toMatch(/ドメインマップ/)
+  expect(r?.permissionDecisionReason).toContain("src/server/db.ts")
+  expect(r?.permissionDecisionReason).not.toContain("sub/src/server/db.ts")
+})
+
+test("docRoot ≠ codielRoot でも .codiel/ 配下は codielRoot 基準で素通し", () => {
+  const { codielRoot, docRoot } = setupSplitRoots()
+  // docRel は ../.codiel/... になるため、この判定まで docRoot 基準にすると
+  // ハーネス運用資産への正当な書き込みが ask に落ちる(過剰修正のガード)。
+  expect(
+    hook(
+      docRoot,
+      "Write",
+      path.join(codielRoot, ".codiel/reports/test-run-1.md")
+    )
+  ).toBe(null)
+  expect(
+    hook(
+      docRoot,
+      "Write",
+      path.join(codielRoot, ".codiel/specs/unit-1/scripts/a.spec.ts")
+    )
+  ).toBe(null)
+  // spec.md / cases.md の ask は codielRoot 基準のまま維持される
+  expect(
+    hook(docRoot, "Edit", path.join(codielRoot, ".codiel/specs/unit-1/spec.md"))
+      ?.permissionDecision
+  ).toBe("ask")
+})
+
+test("docRoot = codielRoot の通常構成では既存の挙動が変わらない(回帰ガード)", () => {
+  const root = setupRun()
+  advanceToImplement(root)
+  fs.writeFileSync(
+    path.join(root, "metatron.config.json"),
+    `${JSON.stringify({ version: 1 }, null, 2)}\n`
+  )
+  writeArchitecture(root, DOMAINS)
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+    cwd: root
+  })
+  expect(hook(root, "Edit", path.join(root, "src/server/db.ts"))).toBe(null)
+  const r = hook(root, "Edit", path.join(root, "src/app/page.tsx"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("src/app/page.tsx")
+  expect(
+    hook(root, "Write", path.join(root, ".codiel/reports/test-run-1.md"))
+  ).toBe(null)
+})

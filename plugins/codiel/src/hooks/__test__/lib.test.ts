@@ -5,12 +5,14 @@ import path from "node:path"
 import { afterAll, expect, test } from "vitest"
 // 契約 §13 の実装間一致検証(R4)のためだけの相対 import。
 // codiel の実行時に metatron を参照することはない(テストコード限定)。
+import { extractDomains } from "../../../../metatron/src/lib/architecture.js"
 import { loadConfig } from "../../../../metatron/src/lib/config.js"
 import {
   findDocRoot,
   findProjectRoot,
   globToRegExp,
   readDomains,
+  readDomainsResult,
   resolveDocPaths
 } from "../lib.js"
 
@@ -249,13 +251,13 @@ test("R9: インデント 2 のフェンス(リスト項目の中のブロック
     "  ```json metatron:domains",
     "  {",
     '    "frontend": ["src/app/**"],',
-    '    "_note": "コードブロックは ``` で囲む"',
+    '    "_note": ["コードブロックは ``` で囲む"]',
     "  }",
     "  ```"
   ])
   expect(readDomains(root)).toStrictEqual({
     frontend: ["src/app/**"],
-    _note: "コードブロックは ``` で囲む"
+    _note: ["コードブロックは ``` で囲む"]
   })
 })
 
@@ -323,6 +325,201 @@ test("R9: 最初のブロックがチルダでもそれを採る", () => {
     "```"
   ])
   expect(readDomains(root)).toStrictEqual({ first: ["a/**"] })
+})
+
+// ---------------------------------------------------------------------------
+// R11: 契約 §1 の検証 4 項目を読み取り時にも適用する
+//
+// JSON として parse できただけの値を「読めた」として返すと、metatron
+// (`extractDomains`)と sandalphon(`readDomains`)が「読めない」とする同じ入力を
+// codiel だけが受け入れ、3 実装の契約が割れる。各ケースで metatron の判定とも
+// 突き合わせ、割れていないことを機械的に確かめる。
+// ---------------------------------------------------------------------------
+
+// ブロックの中身だけを差し替えた ARCHITECTURE を書き、codiel と metatron の
+// 「読めたか」が一致することを確かめる。
+function expectUnreadable(prefix: string, content: string): void {
+  const root = mkTmp(prefix)
+  const lines = [
+    "# ARCHITECTURE",
+    "",
+    "```json metatron:domains",
+    content,
+    "```"
+  ]
+  writeArchitecture(root, lines)
+  expect(readDomains(root), `codiel: ${content}`).toBe(null)
+  expect(
+    extractDomains(`${lines.join("\n")}\n`).ok,
+    `metatron: ${content}`
+  ).toBe(false)
+}
+
+test("R11-1: ブロックが有効な JSON でなければ読めない", () => {
+  expectUnreadable("lib-domains-v1-", '{ "frontend": ')
+})
+
+test("R11-2: トップレベルが配列・null・数値・文字列なら読めない", () => {
+  expectUnreadable("lib-domains-v2-array-", "[]")
+  expectUnreadable("lib-domains-v2-array2-", '["src/**"]')
+  expectUnreadable("lib-domains-v2-null-", "null")
+  expectUnreadable("lib-domains-v2-num-", "42")
+  expectUnreadable("lib-domains-v2-str-", '"frontend"')
+})
+
+test("R11-3: 値が 1 要素以上の文字列配列でなければ読めない", () => {
+  expectUnreadable("lib-domains-v3-empty-", '{ "x": [] }')
+  expectUnreadable("lib-domains-v3-num-", '{ "x": [1] }')
+  expectUnreadable("lib-domains-v3-mixed-", '{ "x": ["src/**", 1] }')
+  expectUnreadable("lib-domains-v3-str-", '{ "x": "src/**" }')
+  expectUnreadable("lib-domains-v3-obj-", '{ "x": { "glob": "src/**" } }')
+  expectUnreadable("lib-domains-v3-null-", '{ "x": null }')
+  // 1 つでも反すれば全体を「読めない」とする(部分採用をしない)。
+  expectUnreadable("lib-domains-v3-partial-", '{ "ok": ["src/**"], "ng": [] }')
+})
+
+test("R11-4: キーが 1 個も無ければ読めない", () => {
+  expectUnreadable("lib-domains-v4-", "{}")
+})
+
+test("R11: 4 項目を満たす値はそのまま返す(検証で弾きすぎない)", () => {
+  const root = mkTmp("lib-domains-valid-")
+  writeArchitecture(root, [
+    "```json metatron:domains",
+    '{ "frontend": ["src/app/**", "src/components/**"], "data": ["db/**"] }',
+    "```"
+  ])
+  expect(readDomains(root)).toStrictEqual({
+    frontend: ["src/app/**", "src/components/**"],
+    data: ["db/**"]
+  })
+})
+
+// ---------------------------------------------------------------------------
+// R11: 重複ブロックの警告(契約 §1「警告は経路を問わず返す」)
+//
+// 最初のブロックを採るだけで黙ると、重複という異常な状態に誰も気づけない。
+// metatron は `findDomainsBlock` で同じ警告を返す。警告の口が無いことが割れであった。
+// ---------------------------------------------------------------------------
+
+test("R11: ブロックが 2 個以上あれば警告を返す(採るのは最初のもの)", () => {
+  const root = mkTmp("lib-domains-dup-warn-")
+  writeArchitecture(root, [
+    "```json metatron:domains",
+    '{ "first": ["a/**"] }',
+    "```",
+    "",
+    "```json metatron:domains",
+    '{ "second": ["b/**"] }',
+    "```"
+  ])
+  const result = readDomainsResult(root)
+  expect(result.domains).toStrictEqual({ first: ["a/**"] })
+  expect(result.warnings.length).toBe(1)
+  expect(result.warnings[0]).toContain("metatron:domains")
+  // 警告の有無と件数を metatron と揃える(文言の一致までは求めない)。
+  const text = fs.readFileSync(
+    path.join(root, "docs", "ARCHITECTURE.md"),
+    "utf8"
+  )
+  expect(result.warnings.length).toBe(extractDomains(text).warnings.length)
+})
+
+test("R11: ブロックが 1 個だけなら警告は出ない", () => {
+  const root = mkTmp("lib-domains-single-warn-")
+  writeArchitecture(root, [
+    "```json metatron:domains",
+    '{ "only": ["a/**"] }',
+    "```"
+  ])
+  expect(readDomainsResult(root).warnings).toStrictEqual([])
+})
+
+test("R11: 未閉フェンスは終端までを内容として扱い警告を返す", () => {
+  const root = mkTmp("lib-domains-unclosed-warn-")
+  writeArchitecture(root, [
+    "# ARCHITECTURE",
+    "",
+    "```json metatron:domains",
+    '{ "frontend": ["src/app/**"] }'
+  ])
+  const result = readDomainsResult(root)
+  expect(result.domains).toStrictEqual({ frontend: ["src/app/**"] })
+  expect(result.warnings.length).toBe(1)
+})
+
+// 契約 §1「開始マーカーが他のフェンスに取り込まれ、ブロックとして認識されない
+// ときは警告を返す」。`null` を返す点は「ブロックが無い」と同じだが原因が違う。
+// 区別せずに黙ると、書き手は自分の置いたブロックが読まれていないことに気づけない。
+test("R11: 無関係な未閉フェンスにマーカーが呑まれたら警告を 1 件返す", () => {
+  const root = mkTmp("lib-domains-swallowed-")
+  writeArchitecture(root, [
+    "# ARCHITECTURE",
+    "",
+    "```ts",
+    "const x = 1",
+    "",
+    "## ドメインマップ",
+    "",
+    "```json metatron:domains",
+    '{ "frontend": ["src/app/**"] }',
+    ""
+  ])
+  const result = readDomainsResult(root)
+  expect(result.domains).toBe(null)
+  expect(result.warnings.length).toBe(1)
+  // 警告の有無と件数を metatron と揃える(文言の一致までは求めない)。
+  const text = fs.readFileSync(
+    path.join(root, "docs", "ARCHITECTURE.md"),
+    "utf8"
+  )
+  expect(result.warnings.length).toBe(extractDomains(text).warnings.length)
+})
+
+test("R11: マーカーが無い最小 ARCHITECTURE は警告 0 件(正当な状態と区別する)", () => {
+  const root = mkTmp("lib-domains-no-marker-")
+  writeArchitecture(root, ["# ARCHITECTURE", "", "## ドメインマップ", ""])
+  const result = readDomainsResult(root)
+  expect(result.domains).toBe(null)
+  expect(result.warnings).toStrictEqual([])
+})
+
+test("R11: 内容が読めなくても重複の警告は返す", () => {
+  const root = mkTmp("lib-domains-dup-broken-")
+  writeArchitecture(root, [
+    "```json metatron:domains",
+    "{}",
+    "```",
+    "",
+    "```json metatron:domains",
+    '{ "second": ["b/**"] }',
+    "```"
+  ])
+  const result = readDomainsResult(root)
+  expect(result.domains).toBe(null)
+  expect(result.warnings.length).toBe(1)
+})
+
+test("R11: readDomains は従来どおり値だけを返す(警告は無視できる)", () => {
+  const root = mkTmp("lib-domains-wrapper-")
+  writeArchitecture(root, [
+    "```json metatron:domains",
+    '{ "first": ["a/**"] }',
+    "```",
+    "",
+    "```json metatron:domains",
+    '{ "second": ["b/**"] }',
+    "```"
+  ])
+  expect(readDomains(root)).toStrictEqual({ first: ["a/**"] })
+})
+
+test("R11: ARCHITECTURE が無ければ警告も出ない(正常な状態)", () => {
+  const root = mkTmp("lib-domains-absent-warn-")
+  expect(readDomainsResult(root)).toStrictEqual({
+    domains: null,
+    warnings: []
+  })
 })
 
 // ---------------------------------------------------------------------------
