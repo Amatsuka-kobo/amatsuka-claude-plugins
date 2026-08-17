@@ -24,6 +24,27 @@ export interface UnifiedDiffOptions {
   toLabel?: string
 }
 
+/**
+ * unified diff の計算結果。
+ *
+ * 上限を超えると `unified` は案内文だけになる。案内文を差分と読み違えたまま承認を
+ * 求める経路を塞ぐため、省略したことは文字列ではなく `truncated` で返す。
+ */
+export interface UnifiedDiffResult {
+  /** unified 形式の差分。差分が無ければ空文字列。省略時は案内文だけが入る。 */
+  unified: string
+  /** 上限を超えて差分の計算を諦めたか。 */
+  truncated: boolean
+  /** 省略した理由。省略していなければ null。 */
+  truncatedReason: string | null
+  /** 変更前の行数。 */
+  beforeLines: number
+  /** 変更後の行数。 */
+  afterLines: number
+  /** 省略の判定に使った上限行数。 */
+  maxLines: number
+}
+
 function splitLines(text: string): string[] {
   if (text === "") return []
   const unified = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
@@ -84,28 +105,41 @@ function diffOps(a: string[], b: string[]): Entry[] {
 }
 
 /**
- * unified 形式の差分文字列。差分が無ければ空文字列を返す。
+ * unified 形式の差分を計算する。
  * 例外を投げない(差分の表示に失敗しても stage の判断を変えないため)。
  */
 export function unifiedDiff(
   beforeText: string,
   afterText: string,
   options: UnifiedDiffOptions = {}
-): string {
+): UnifiedDiffResult {
   const context = options.context ?? DEFAULT_CONTEXT
   const fromLabel = options.fromLabel ?? "a"
   const toLabel = options.toLabel ?? "b"
 
   const a = splitLines(beforeText)
   const b = splitLines(afterText)
-  if (a.length === 0 && b.length === 0) return ""
+  const base = {
+    truncated: false as boolean,
+    truncatedReason: null as string | null,
+    beforeLines: a.length,
+    afterLines: b.length,
+    maxLines: MAX_DIFF_LINES
+  }
+  if (a.length === 0 && b.length === 0) return { ...base, unified: "" }
   if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) {
-    return `(差分が大きすぎるため省略しました: ${a.length} 行 → ${b.length} 行。sections の before / after を参照してください)`
+    const reason = `行数が上限 ${MAX_DIFF_LINES} を超えたため unified diff を省略した(${a.length} 行 → ${b.length} 行)。sections の before / after から提示すること。`
+    return {
+      ...base,
+      unified: `(差分を省略しました: ${reason})`,
+      truncated: true,
+      truncatedReason: reason
+    }
   }
 
   const entries = diffOps(a, b)
   const changed = entries.map((e) => e.kind !== "eq")
-  if (!changed.includes(true)) return ""
+  if (!changed.includes(true)) return { ...base, unified: "" }
 
   const hunks: { start: number; end: number }[] = []
   let idx = 0
@@ -161,5 +195,5 @@ export function unifiedDiff(
       out.push(`${prefix}${entry.line}`)
     }
   }
-  return out.join("\n")
+  return { ...base, unified: out.join("\n") }
 }

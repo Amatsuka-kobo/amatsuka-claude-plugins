@@ -40,6 +40,7 @@ function toSlash(value: string): string {
 
 // シンボリックリンク経由のすり抜けを塞ぐ。未作成のファイルは realpath できないため、
 // 親ディレクトリを実体へ解決してファイル名を付け直す(Write による新規作成でも効かせる)。
+// **末端がそれ自身 symlink の場合はここでは辿れない。** その分は followDanglingLink が担う。
 function realpathOrParent(abs: string): string {
   try {
     return fs.realpathSync(abs)
@@ -50,6 +51,35 @@ function realpathOrParent(abs: string): string {
       return abs
     }
   }
+}
+
+// 辿る symlink の段数の上限。循環(a -> b -> a)は realpath でも ELOOP になるだけで
+// リンク先が得られないため、自前で辿る側にも打ち切りが要る。
+const MAX_SYMLINK_HOPS = 40
+
+// realpathOrParent だけでは **dangling symlink**(リンク先がまだ存在しない symlink)を
+// 解決できない。realpathSync は ENOENT で失敗し、親ディレクトリだけを実体化した結果は
+// リンク自身のパスに留まるため、リンク先への直接 Write が別パスに見えて素通りする。
+// lstat と readlink はリンク先が存在しなくても辿れるので、ここで自前で辿り切る
+// (設計書 §7-5 の「シンボリックリンク経由は realpath で実体パスに解決する」の実装)。
+//
+// 例外は投げない。辿れない・循環している場合は入力をそのまま返し、
+// 従来どおりの比較(= 素通しへ倒れる側)にフォールバックする(冒頭のフェイルオープン方針)。
+function followDanglingLink(abs: string): string {
+  let current = abs
+  for (let hop = 0; hop < MAX_SYMLINK_HOPS; hop++) {
+    let target: string
+    try {
+      if (!fs.lstatSync(current).isSymbolicLink()) return current
+      target = fs.readlinkSync(current)
+    } catch {
+      return current
+    }
+    // 相対リンクはリンク自身のディレクトリ基準で解決する。
+    // リンク先の親ディレクトリ側にも symlink がありうるので、都度実体化し直す。
+    current = realpathOrParent(path.resolve(path.dirname(current), target))
+  }
+  return abs
 }
 
 function flipCase(value: string): string {
@@ -104,7 +134,8 @@ function isCaseInsensitiveFs(probe: string): boolean {
 // 生文字列同士の比較になる。NFC と NFD は視覚的に同一でも byte 列が異なるため、
 // 正規化しないとすり抜ける(設計書 §7-5 の「正規化のうえ一致」の範囲内の措置)。
 function comparisonKey(abs: string, caseInsensitive: boolean): string {
-  const key = toSlash(realpathOrParent(abs)).normalize("NFC")
+  const resolved = followDanglingLink(realpathOrParent(abs))
+  const key = toSlash(resolved).normalize("NFC")
   return caseInsensitive ? key.toLowerCase() : key
 }
 

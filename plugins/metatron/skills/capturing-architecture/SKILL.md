@@ -107,7 +107,10 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 
 ## 6. diff の全文提示と承認
 
-- 返った `diff.unified` を**全文**提示する。要約・抜粋・変更行数の報告に置き換えない。
+- 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
+- `diff.truncated` が `false` のときは `diff.unified` を**全文**提示する。要約・抜粋・変更行数の報告に置き換えない。
+- `diff.truncated` が `true` のときは `diff.unified` を提示に使わない。`diff.sections` の `before` / `after` をセクション単位で全文提示する。
+- セクション単位でも一度に提示しきれないときは、`diff.sections` の `heading` を一覧で示し、どのセクションから見るかをユーザーに尋ねる。
 - `warnings` があれば併せて提示する。
 - 提示したうえで、書き込んでよいかの明示的な承認を得る。
 - 否認されたら該当セクションのウォークスルーへ戻る。`stagingId` は使い回さない。stage からやり直す。
@@ -129,6 +132,7 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 <HARD-GATE>
 - **承認なしに `commit-architecture` を実行しない。** stage が成功したこと・CLI が拒否しなかったことは承認ではない。承認はユーザーの明示的な返答だけである。
 - **diff を全文提示せずに承認を求めない。**
+- **`diff.truncated` が `true` のまま承認を求めない。** `diff.sections` の `before` / `after` から全文を提示してから承認を得る。
 - **生成物のファイルを直読させて承認に代えない。** 確認はセクションごとの問いで行う。
 - **既存セクションを勝手に上書きしない。**
 - **材料が無いセクションを推測で埋めない。**

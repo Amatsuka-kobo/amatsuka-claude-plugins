@@ -479,6 +479,15 @@ export function findDomainsBlock(text: string): DomainsBlockLookup {
     warnings.push(
       `\`${DOMAINS_MARKER}\` ブロックが閉じていません。ファイル終端までを内容として扱いました。`
     )
+  } else if (fence !== null) {
+    // 契約 §1: 開始マーカーが他のフェンスに取り込まれ、ブロックとして認識されない
+    // ときは警告を返す。返す値は「ブロックが無い」ときと同じ null だが、原因が違う。
+    // 前者は書き手が意図して置いたブロックが読めていない状態であり、後者は最小
+    // ARCHITECTURE のような正当な状態である。黙って null を返すと、書き手は自分の
+    // ブロックが読まれていないことに気づけない。経路を問わず返す(拒否はしない)。
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` の走査中に閉じていないコードフェンスを検出しました。マーカーがフェンス内に取り込まれていないか確認してください。`
+    )
   }
 
   return { block: blocks[0] ?? null, warnings }

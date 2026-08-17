@@ -8,10 +8,12 @@ import path from "node:path"
 import { afterAll, expect, test } from "vitest"
 import {
   commitStaging,
+  computeRecordHash,
   createStaging,
   DEFAULT_STAGING_TTL_MS,
   hashContent,
   readStaging,
+  type StagingRecord,
   stagingDirFor,
   stagingRecordPath,
   stagingRootDir
@@ -188,7 +190,9 @@ test("T3: 期限切れ後の commit → expired(TTL を注入して検証)", () 
   expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
 })
 
-test("T3b: 保存された expiresAt を過去に書き換えても expired になる", () => {
+// 保存済みレコードの時刻を書き換える経路は、期限判定より先に recordHash 照合で落ちる。
+// 期限そのものの判定は T3 が now の注入で確かめている。
+test("T3b: 保存された expiresAt を過去に書き換えて commit → tampered", () => {
   const root = mkProject()
   writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
 
@@ -213,7 +217,7 @@ test("T3b: 保存された expiresAt を過去に書き換えても expired に�
   })
   expect(result.ok).toBe(false)
   if (result.ok) return
-  expect(result.error).toBe("expired")
+  expect(result.error).toBe("tampered")
   expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
 })
 
@@ -409,6 +413,27 @@ test("T5d: レコードを改竄してルート外を指させても書き込ま
   record.targetPath = outside
   writeRecordJson(root, staged.stagingId, record)
 
+  // 素朴な差し替えは recordHash 照合で落ちる
+  const naive = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(naive.ok).toBe(false)
+  if (naive.ok) return
+  expect(naive.error).toBe("tampered")
+  expect(fs.existsSync(outside)).toBe(false)
+
+  // recordHash まで整合的に打ち直した改変は検知できない(同一ユーザー権限では防げない)。
+  // それでもルート外への書き込みは isInside の判定で止まる。
+  const read = readStaging(root, staged.stagingId)
+  expect(read.ok).toBe(false)
+  const coherent = { ...record }
+  delete coherent.recordHash
+  coherent.recordHash = computeRecordHash(
+    coherent as unknown as Omit<StagingRecord, "recordHash">
+  )
+  writeRecordJson(root, staged.stagingId, coherent)
+
   const result = commitStaging({
     projectRoot: root,
     stagingId: staged.stagingId
@@ -568,4 +593,180 @@ test("readStaging は staging を消費しない", () => {
   expect(missing.ok).toBe(false)
   if (missing.ok) return
   expect(missing.error).toBe("unknown_id")
+})
+
+// --- レコード改竄の検知(設計書 §7-3 の「承認した diff と適用される diff の一致」) ---
+//
+// ここで守るのは「CLI を経由しないレコード書き換えの検知」までである。
+// recordHash まで整合的に打ち直す改変は同一ユーザー権限では防げない。
+
+test("T7: staging の nextContent だけを書き換えて commit → tampered、対象ファイルは不変", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "ユーザーが承認した新\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const record = readRecordJson(root, staged.stagingId)
+  record.nextContent = "承認されていない差し替え\n"
+  writeRecordJson(root, staged.stagingId, record)
+
+  const result = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("tampered")
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
+
+  // 読み取り経路も同じ判定を通す(改竄された案を diff として再提示しない)
+  const after = readStaging(root, staged.stagingId)
+  expect(after.ok).toBe(false)
+  if (after.ok) return
+  expect(after.error).toBe("tampered")
+})
+
+test("T7b: targetPath をプロジェクト内の別ファイルへ書き換えて commit → tampered", () => {
+  const root = mkProject()
+  const hijacked = path.join(root, "src", "index.ts")
+
+  // 未作成のまま stage すると baseHash は null になるため、
+  // 同じく未作成の別パスへ差し替えても file_changed では捕まらない。
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "乗っ取り\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+  expect(staged.baseHash).toBeNull()
+
+  const record = readRecordJson(root, staged.stagingId)
+  record.targetPath = hijacked
+  writeRecordJson(root, staged.stagingId, record)
+
+  const result = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("tampered")
+  expect(fs.existsSync(hijacked)).toBe(false)
+  expect(fs.existsSync(docPath(root))).toBe(false)
+})
+
+test("T7c: expiresAt を先へ延ばして commit → tampered、期限切れを迂回できない", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
+  const base = 1_700_000_000_000
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "新\n",
+    ttlMs: 30 * 60 * 1000,
+    now: base
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const record = readRecordJson(root, staged.stagingId)
+  record.expiresAt = base + 365 * 24 * 60 * 60 * 1000
+  writeRecordJson(root, staged.stagingId, record)
+
+  const result = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId,
+    now: base + 60 * 60 * 1000
+  })
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("tampered")
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
+})
+
+test("T7d: 改変していない staging は従来どおり commit でき、消費の印も残る", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "adr",
+    targetPath: docPath(root),
+    nextContent: "新\n",
+    meta: { assignedId: "ADR-004", nested: { b: 1, a: [1, 2, { z: true }] } }
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const committed = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(committed.ok).toBe(true)
+  if (!committed.ok) return
+  expect(committed.warnings).toStrictEqual([])
+  expect(committed.meta).toStrictEqual({
+    assignedId: "ADR-004",
+    nested: { b: 1, a: [1, 2, { z: true }] }
+  })
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("新\n")
+
+  // 消費の印を付け直したレコードも整合していること(改竄扱いにしない)
+  const after = readStaging(root, staged.stagingId)
+  expect(after.ok).toBe(true)
+  if (!after.ok) return
+  expect(after.record.usedAt).not.toBeNull()
+
+  const second = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(second.ok).toBe(false)
+  if (second.ok) return
+  expect(second.error).toBe("already_used")
+})
+
+test("T7e: 保存されたレコードは recordHash を持ち、再計算した値と一致する", () => {
+  const root = mkProject()
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "本文\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const stored = readRecordJson(root, staged.stagingId)
+  expect(typeof stored.recordHash).toBe("string")
+  expect(stored.recordHash).toMatch(/^[0-9a-f]{64}$/)
+
+  const read = readStaging(root, staged.stagingId)
+  expect(read.ok).toBe(true)
+  if (!read.ok) return
+  expect(read.record.recordHash).toBe(stored.recordHash)
+  expect(computeRecordHash(read.record)).toBe(stored.recordHash)
+
+  // recordHash 欄そのものを消しても、素通りはしない
+  const withoutHash = { ...stored }
+  delete withoutHash.recordHash
+  writeRecordJson(root, staged.stagingId, withoutHash)
+  const result = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("tampered")
 })

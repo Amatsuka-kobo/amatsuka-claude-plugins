@@ -5,11 +5,16 @@
 // `harness-docs/design/2026-08-16-file-contract-freeze.md` §12(hook 出力の形式)。
 //
 // この層は第 2 層(機構自身の動作)であり、**フェイルオープン**する。
-// 読めない・壊れている・例外が出た、のいずれでも何も出力せず exit 0 で終える。
+// 読めない・壊れている・例外が出た、のいずれでも**文書の内容**は出力せず exit 0 で終える。
 // 注入の失敗が「セッションを開始できない」という不釣り合いに大きな損害へ化けるためである。
 //
-// 不変条件が 3 つある。実装を変えるときはこれを壊さないこと。
+// 不変条件が 4 つある。実装を変えるときはこれを壊さないこと。
 //
+// 0. **文書が 1 つも無くても CLI 案内だけは出す(§8-7 の限定)。**
+//    `/metatron:init` はまさにその状態で使うコマンドであり、案内を落とすと
+//    AI は CLI の絶対パスを知る手段を持たず、init を開始できない。
+//    例外は 2 つだけ。`injection.enabled: false`(利用者が明示的に切っている)と、
+//    設定の解決が例外で失敗した場合(壊れた機構が誤った CLI パスを広告しないため)。
 // 1. **CLI 案内は常に出力の先頭にあり、どの縮退段階でも完全な形で残る。**
 //    プラットフォームが 10,000 文字で退避に倒したとき、モデルへ渡るのは先頭のプレビューである。
 //    先頭に無ければ、最も短くて最も代替の効かない要素が最初に見えなくなる(設計書 §8-3)。
@@ -66,12 +71,12 @@ function metatronCliPath(env: NodeJS.ProcessEnv): string {
 // CLI 案内(優先 1・不可欠。縮退で決して手を付けない)
 // ---------------------------------------------------------------------------
 
+const GUIDE_TITLE = "# metatron: プロジェクトの前提と落とし穴"
+
 // 呼び出し規約は契約 §11。長い入力は一時ファイルへ書き `--input <path>` で渡す形に統一する。
-function buildGuide(cli: string): string {
+// 2 つの文面が同じ呼び出し規約を広告するよう、この部分だけは共有する。
+function cliLines(cli: string): string[] {
   return [
-    "# metatron: プロジェクトの前提と落とし穴",
-    "",
-    "これらの文書は metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
     `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${cli}):`,
     "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
     "  記録:     node M append-gotcha --input <一時ファイル>",
@@ -80,6 +85,29 @@ function buildGuide(cli: string): string {
     "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
     "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
     "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
+  ]
+}
+
+// 文書が 1 つ以上あるときの案内。
+function buildGuide(cli: string): string {
+  return [
+    GUIDE_TITLE,
+    "",
+    "これらの文書は metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
+    ...cliLines(cli)
+  ].join("\n")
+}
+
+// 文書がまだ 1 つも無いときの案内(設計書 §8-7 の限定)。
+// 「metatron の管理下にある」という前提の文は事実に合わないので、
+// **まだ文書が無く `/metatron:init` で作れる**ことが分かる文面に差し替える。
+function buildInitGuide(cli: string): string {
+  return [
+    GUIDE_TITLE,
+    "",
+    "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**",
+    "作成後はこれらの文書が metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
+    ...cliLines(cli)
   ].join("\n")
 }
 
@@ -411,13 +439,18 @@ function render(input: RenderInput, plan: Plan): string {
   return `${blocks.join("\n\n")}\n`
 }
 
-function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string | null {
+function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
   const arch = readArchitecture(config)
   const gotchas = readGotchas(config)
-  // どちらも無ければ注入しない(設計書 §13-1 の I3)。
-  if (arch === null && gotchas === null) return null
+  const cli = metatronCliPath(env)
 
-  const guide = buildGuide(metatronCliPath(env))
+  // どちらも無くても CLI 案内だけは出す(設計書 §8-7・契約 §12・§13-1 の I3)。
+  // §8-7 の「何も出力しない」は「**文書の内容を**出力しない」の意味に限定する。
+  // `/metatron:init` はまさにこの状態で使うコマンドであり、案内まで落とすと
+  // AI は CLI の絶対パスを知る手段を持たず、init を開始できない(§3-3・§8-3)。
+  if (arch === null && gotchas === null) return `${buildInitGuide(cli)}\n`
+
+  const guide = buildGuide(cli)
   const warnings = [
     ...config.warnings,
     ...(arch?.warnings ?? []),
@@ -493,10 +526,12 @@ try {
       ? hookInput.cwd
       : process.cwd()
   const config = loadConfig(startDir)
+  // 利用者が明示的に切っているときは案内も含めて何も出さない。
   if (config.injection.enabled) {
-    const content = build(config, process.env)
-    if (content !== null) injectContext(content)
+    injectContext(build(config, process.env))
   }
 } catch {
   // フェイルオープン(契約 §12)。何も出力せず正常終了する。
+  // **CLI 案内もここでは出さない。** 設定の解決が例外で壊れている状態で案内を出すと、
+  // 誤った CLI パスを広告しかねないためである(設計書 §8-7 の限定)。
 }

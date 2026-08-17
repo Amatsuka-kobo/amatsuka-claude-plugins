@@ -240,6 +240,10 @@ function findDomainsBlock(text) {
     warnings.push(
       `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u9589\u3058\u3066\u3044\u307E\u305B\u3093\u3002\u30D5\u30A1\u30A4\u30EB\u7D42\u7AEF\u307E\u3067\u3092\u5185\u5BB9\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002`
     );
+  } else if (fence !== null) {
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u306E\u8D70\u67FB\u4E2D\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u691C\u51FA\u3057\u307E\u3057\u305F\u3002\u30DE\u30FC\u30AB\u30FC\u304C\u30D5\u30A7\u30F3\u30B9\u5185\u306B\u53D6\u308A\u8FBC\u307E\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
   }
   return { block: blocks[0] ?? null, warnings };
 }
@@ -1848,7 +1852,7 @@ import fs3 from "node:fs";
 import os from "node:os";
 import path3 from "node:path";
 var STAGING_DIR_NAME = "metatron-staging";
-var STAGING_RECORD_VERSION = 1;
+var STAGING_RECORD_VERSION = 2;
 var DEFAULT_STAGING_TTL_MS = 30 * 60 * 1e3;
 function hashBuffer(buf) {
   return crypto.createHash("sha256").update(buf).digest("hex");
@@ -1903,6 +1907,29 @@ function isPlainObject3(value) {
 function isStagingKind(value) {
   return value === "architecture" || value === "adr";
 }
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (isPlainObject3(value)) {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      const canonical = canonicalize(value[key]);
+      if (canonical !== void 0) out[key] = canonical;
+    }
+    return out;
+  }
+  return value;
+}
+function computeRecordHash(record) {
+  const { recordHash: _ignored, ...rest } = record;
+  const roundTripped = JSON.parse(JSON.stringify(rest));
+  return hashContent(JSON.stringify(canonicalize(roundTripped)));
+}
+function verifyRecordHash(record) {
+  return record.recordHash === computeRecordHash(record);
+}
+function tamperedReason(stagingId) {
+  return `staging ${stagingId} \u306E\u5185\u5BB9\u304C stage \u6642\u304B\u3089\u5909\u5316\u3057\u3066\u3044\u307E\u3059(recordHash \u4E0D\u4E00\u81F4)\u3002\u627F\u8A8D\u3055\u308C\u305F diff \u3068\u4E00\u81F4\u3057\u306A\u3044\u305F\u3081\u66F8\u304D\u8FBC\u307F\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
+}
 function parseRecord(raw, stagingId) {
   if (!isPlainObject3(raw)) return null;
   if (raw.stagingId !== stagingId) return null;
@@ -1924,7 +1951,10 @@ function parseRecord(raw, stagingId) {
     createdAt: raw.createdAt,
     expiresAt: raw.expiresAt,
     usedAt: raw.usedAt,
-    meta: isPlainObject3(raw.meta) ? raw.meta : {}
+    meta: isPlainObject3(raw.meta) ? raw.meta : {},
+    // 欄ごと消された場合は空文字にする。sha256 の hex とは決して一致しないため、
+    // 「レコードとしては読めたが整合していない」= tampered に落ちる。
+    recordHash: typeof raw.recordHash === "string" ? raw.recordHash : ""
   };
 }
 function loadRecord(projectRoot, stagingId) {
@@ -1974,7 +2004,7 @@ function createStaging(input) {
   const ttlMs = typeof input.ttlMs === "number" && Number.isFinite(input.ttlMs) && input.ttlMs > 0 ? input.ttlMs : DEFAULT_STAGING_TTL_MS;
   const baseHash = input.baseHash === void 0 ? hashFileOrNull(targetPath) : input.baseHash;
   const stagingId = crypto.randomUUID();
-  const record = {
+  const draft = {
     version: STAGING_RECORD_VERSION,
     stagingId,
     kind: input.kind,
@@ -1988,7 +2018,7 @@ function createStaging(input) {
   };
   const recordPath = path3.join(stagingDirFor(projectRoot), `${stagingId}.json`);
   try {
-    writeRecord(recordPath, record);
+    writeRecord(recordPath, { ...draft, recordHash: computeRecordHash(draft) });
   } catch (err) {
     return {
       ok: false,
@@ -2002,8 +2032,8 @@ function createStaging(input) {
     recordPath,
     targetPath,
     baseHash,
-    createdAt: record.createdAt,
-    expiresAt: record.expiresAt
+    createdAt: draft.createdAt,
+    expiresAt: draft.expiresAt
   };
 }
 function readStaging(projectRoot, stagingId) {
@@ -2013,6 +2043,13 @@ function readStaging(projectRoot, stagingId) {
       ok: false,
       error: "unknown_id",
       reason: `staging ${stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  if (!verifyRecordHash(record)) {
+    return {
+      ok: false,
+      error: "tampered",
+      reason: tamperedReason(record.stagingId)
     };
   }
   return { ok: true, record };
@@ -2026,6 +2063,13 @@ function commitStaging(input) {
       ok: false,
       error: "unknown_id",
       reason: `staging ${input.stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  if (!verifyRecordHash(record)) {
+    return {
+      ok: false,
+      error: "tampered",
+      reason: tamperedReason(record.stagingId)
     };
   }
   if (record.usedAt !== null) {
@@ -2074,7 +2118,8 @@ function commitStaging(input) {
   const recordPath = stagingRecordPath(projectRoot, record.stagingId);
   try {
     if (recordPath === null) throw new Error("invalid staging id");
-    writeRecord(recordPath, { ...record, usedAt: now });
+    const used = { ...record, usedAt: now };
+    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) });
   } catch {
     warnings.push(
       `staging ${record.stagingId} \u3092\u4F7F\u7528\u6E08\u307F\u306B\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u66F8\u304D\u8FBC\u307F\u306F\u5B8C\u4E86\u3057\u3066\u3044\u307E\u3059\u3002`
@@ -4029,13 +4074,26 @@ function unifiedDiff(beforeText, afterText, options = {}) {
   const toLabel = options.toLabel ?? "b";
   const a = splitLines2(beforeText);
   const b = splitLines2(afterText);
-  if (a.length === 0 && b.length === 0) return "";
+  const base = {
+    truncated: false,
+    truncatedReason: null,
+    beforeLines: a.length,
+    afterLines: b.length,
+    maxLines: MAX_DIFF_LINES
+  };
+  if (a.length === 0 && b.length === 0) return { ...base, unified: "" };
   if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) {
-    return `(\u5DEE\u5206\u304C\u5927\u304D\u3059\u304E\u308B\u305F\u3081\u7701\u7565\u3057\u307E\u3057\u305F: ${a.length} \u884C \u2192 ${b.length} \u884C\u3002sections \u306E before / after \u3092\u53C2\u7167\u3057\u3066\u304F\u3060\u3055\u3044)`;
+    const reason = `\u884C\u6570\u304C\u4E0A\u9650 ${MAX_DIFF_LINES} \u3092\u8D85\u3048\u305F\u305F\u3081 unified diff \u3092\u7701\u7565\u3057\u305F(${a.length} \u884C \u2192 ${b.length} \u884C)\u3002sections \u306E before / after \u304B\u3089\u63D0\u793A\u3059\u308B\u3053\u3068\u3002`;
+    return {
+      ...base,
+      unified: `(\u5DEE\u5206\u3092\u7701\u7565\u3057\u307E\u3057\u305F: ${reason})`,
+      truncated: true,
+      truncatedReason: reason
+    };
   }
   const entries = diffOps(a, b);
   const changed = entries.map((e) => e.kind !== "eq");
-  if (!changed.includes(true)) return "";
+  if (!changed.includes(true)) return { ...base, unified: "" };
   const hunks = [];
   let idx = 0;
   while (idx < entries.length) {
@@ -4087,7 +4145,7 @@ function unifiedDiff(beforeText, afterText, options = {}) {
       out.push(`${prefix}${entry.line}`);
     }
   }
-  return out.join("\n");
+  return { ...base, unified: out.join("\n") };
 }
 
 // src/cli/stage.ts
@@ -4100,6 +4158,21 @@ function sectionDiffs(beforeText, afterText, headings) {
     before: findSection(before, entry.heading)?.body ?? null,
     after: findSection(after, entry.heading)?.body ?? null
   }));
+}
+function diffPayload(diff, sections) {
+  return {
+    unified: diff.unified,
+    truncated: diff.truncated,
+    truncatedReason: diff.truncatedReason,
+    beforeLines: diff.beforeLines,
+    afterLines: diff.afterLines,
+    maxLines: diff.maxLines,
+    sections
+  };
+}
+function withTruncationNote(diff, reminder) {
+  if (!diff.truncated) return reminder;
+  return `${reminder} \u306A\u304A unified diff \u306F\u7701\u7565\u3055\u308C\u3066\u3044\u308B(diff.truncated)\u3002diff.sections \u306E before / after \u304B\u3089\u30BB\u30AF\u30B7\u30E7\u30F3\u5358\u4F4D\u3067\u5168\u6587\u3092\u63D0\u793A\u3059\u308B\u3053\u3068\u3002\u7701\u7565\u3055\u308C\u305F\u307E\u307E\u627F\u8A8D\u3092\u6C42\u3081\u306A\u3044\u3002`;
 }
 function runStageArchitecture(ctx) {
   const command = "stage-architecture";
@@ -4161,6 +4234,10 @@ function runStageArchitecture(ctx) {
     });
     return;
   }
+  const diff = unifiedDiff(file.text, update.text, {
+    fromLabel: `${config.architectureRelative} (\u73FE\u884C)`,
+    toLabel: `${config.architectureRelative} (stage)`
+  });
   emitResult(command, {
     ok: true,
     valid: true,
@@ -4169,17 +4246,17 @@ function runStageArchitecture(ctx) {
     baseExists: file.exists,
     created: update.created,
     applied: update.applied,
-    diff: {
-      unified: unifiedDiff(file.text, update.text, {
-        fromLabel: `${config.architectureRelative} (\u73FE\u884C)`,
-        toLabel: `${config.architectureRelative} (stage)`
-      }),
-      sections: sectionDiffs(file.text, update.text, update.applied)
-    },
+    diff: diffPayload(
+      diff,
+      sectionDiffs(file.text, update.text, update.applied)
+    ),
     expiresAt: new Date(staged.expiresAt).toISOString(),
     warnings,
     next: commandLine(`commit-architecture --staging-id ${staged.stagingId}`),
-    reminder: "diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-architecture \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002CLI \u306F\u627F\u8A8D\u306E\u6709\u7121\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002"
+    reminder: withTruncationNote(
+      diff,
+      "diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-architecture \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002CLI \u306F\u627F\u8A8D\u306E\u6709\u7121\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002"
+    )
   });
 }
 function runStageAdr(ctx) {
@@ -4256,6 +4333,10 @@ function runStageAdr(ctx) {
     });
     return;
   }
+  const diff = unifiedDiff(result.baseText, result.nextText, {
+    fromLabel: `${config.architectureRelative} (\u73FE\u884C)`,
+    toLabel: `${config.architectureRelative} (stage)`
+  });
   emitResult(command, {
     ok: true,
     valid: true,
@@ -4271,22 +4352,22 @@ function runStageAdr(ctx) {
     date: result.date,
     created: result.created,
     sectionCreated: result.sectionCreated,
-    diff: {
-      unified: unifiedDiff(result.baseText, result.nextText, {
-        fromLabel: `${config.architectureRelative} (\u73FE\u884C)`,
-        toLabel: `${config.architectureRelative} (stage)`
-      }),
-      sections: sectionDiffs(result.baseText, result.nextText, [
+    diff: diffPayload(
+      diff,
+      sectionDiffs(result.baseText, result.nextText, [
         {
           heading: ADR_HEADING,
           mode: result.sectionCreated ? "added" : "replaced"
         }
       ])
-    },
+    ),
     expiresAt: new Date(staged.expiresAt).toISOString(),
     warnings,
     next: commandLine(`commit-architecture --staging-id ${staged.stagingId}`),
-    reminder: "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F\u8A2D\u8A08\u5224\u65AD\u306E\u5BA3\u8A00\u3067\u3042\u308B\u3002diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-architecture \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002"
+    reminder: withTruncationNote(
+      diff,
+      "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F\u8A2D\u8A08\u5224\u65AD\u306E\u5BA3\u8A00\u3067\u3042\u308B\u3002diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-architecture \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002"
+    )
   });
 }
 

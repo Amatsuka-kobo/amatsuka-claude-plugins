@@ -9,7 +9,7 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 
 - CLI の絶対パスは、セッションに注入された案内、または直接編集の拒否メッセージに現れたものを使う。
 - 案内が無いときはユーザーに絶対パスを尋ねる。インストール先を推測して組み立てない。
-- 入力の渡し方・出力の読み方・失敗時の扱いは `references/cli-usage.md` を読む。
+- 入力の渡し方・出力の読み方・失敗時の扱いは `../../references/cli-usage.md` を読む。
 - 長い入力は Write ツールで一時ファイルへ書き、`--input <path>` で渡す。
 - ARCHITECTURE を Edit / Write で直接書き換えない。更新は CLI だけで行う。
 
@@ -39,8 +39,8 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 
 ## 起草
 
-- 更新する文面は `references/writing-discipline.md` の執筆規律に従う。
-- セクションごとに書く内容は `references/architecture-format.md` に合わせる。
+- 更新する文面は `../../references/writing-discipline.md` の執筆規律に従う。
+- セクションごとに書く内容は `../../references/architecture-format.md` に合わせる。
 - 欠けているセクションを足すときは、`scan` の事実で埋まる範囲だけを草案にする。埋まらない箇所は推測せずユーザーに聞く。
 - 1 セクションにつき、草案と確認してほしい点 1〜3 個を 1 メッセージで示す。
 - 残す部分と差し替える部分を、提示の時点で分けて示す。
@@ -51,13 +51,17 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 - 追加と状態変更はどちらも承認を要する。状態変更は過去の判断を覆す行為であり、承認を省かない。
 - 状態を変えるときは理由を必須とする。理由が定まらないまま `stage-adr` を呼ばない。
 - エントリを削除しない。覆した判断は `廃止` の状態で残す。
-- ADR にするかどうかは `references/writing-discipline.md` の 3 条件で判断する。満たさないものは該当セクションの本文へ書く。
+- ADR にするかどうかは `../../references/writing-discipline.md` の 3 条件で判断する。満たさないものは該当セクションの本文へ書く。
 
 ## 承認
 
 - **HARD-GATE: ユーザーの承認を得ずに `commit-architecture` を実行しない。**
+- **HARD-GATE: `diff.truncated` が `true` のまま承認を求めない。** `diff.sections` の `before` / `after` から全文を提示してから承認を得る。
 - `stage-architecture` / `stage-adr` が exit 0 で返ったことを承認と読み替えない。
-- diff は要約せず全文を提示する。長いときは分割して提示する。
+- 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
+- `diff.truncated` が `false` のときは `diff.unified` を要約せず全文提示する。長いときは分割して提示する。
+- `diff.truncated` が `true` のときは `diff.unified` を提示に使わない。`diff.sections` の `before` / `after` をセクション単位で全文提示する。
+- セクション単位でも一度に提示しきれないときは、`diff.sections` の `heading` を一覧で示し、どのセクションから見るかをユーザーに尋ねる。
 - 承認の後に文面を足さない。足すときは stage からやり直して承認を取り直す。
 - staging の期限切れや `file_changed` で commit が失敗したときは、現行を読み直して stage からやり直す。
 

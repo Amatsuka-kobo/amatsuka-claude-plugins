@@ -14,7 +14,7 @@ import {
 } from "../lib/architecture.js"
 import { loadConfig } from "../lib/config.js"
 import { createStaging, hashContent } from "../lib/staging.js"
-import { unifiedDiff } from "./diff.js"
+import { type UnifiedDiffResult, unifiedDiff } from "./diff.js"
 import { isPlainObject, loadInputJson, readDocument } from "./input.js"
 import {
   EXIT_USAGE,
@@ -50,6 +50,28 @@ function sectionDiffs(
     before: findSection(before, entry.heading)?.body ?? null,
     after: findSection(after, entry.heading)?.body ?? null
   }))
+}
+
+// 省略の有無は文字列ではなくフィールドで返す。呼び出し元が「提示できる差分が返って
+// いない」ことを機械的に判別できないと、省略されたまま承認を求めてしまうため。
+function diffPayload(
+  diff: UnifiedDiffResult,
+  sections: SectionDiff[]
+): Record<string, unknown> {
+  return {
+    unified: diff.unified,
+    truncated: diff.truncated,
+    truncatedReason: diff.truncatedReason,
+    beforeLines: diff.beforeLines,
+    afterLines: diff.afterLines,
+    maxLines: diff.maxLines,
+    sections
+  }
+}
+
+function withTruncationNote(diff: UnifiedDiffResult, reminder: string): string {
+  if (!diff.truncated) return reminder
+  return `${reminder} なお unified diff は省略されている(diff.truncated)。diff.sections の before / after からセクション単位で全文を提示すること。省略されたまま承認を求めない。`
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +145,11 @@ export function runStageArchitecture(ctx: StageContext): void {
     return
   }
 
+  const diff = unifiedDiff(file.text, update.text, {
+    fromLabel: `${config.architectureRelative} (現行)`,
+    toLabel: `${config.architectureRelative} (stage)`
+  })
+
   emitResult(command, {
     ok: true,
     valid: true,
@@ -131,18 +158,17 @@ export function runStageArchitecture(ctx: StageContext): void {
     baseExists: file.exists,
     created: update.created,
     applied: update.applied,
-    diff: {
-      unified: unifiedDiff(file.text, update.text, {
-        fromLabel: `${config.architectureRelative} (現行)`,
-        toLabel: `${config.architectureRelative} (stage)`
-      }),
-      sections: sectionDiffs(file.text, update.text, update.applied)
-    },
+    diff: diffPayload(
+      diff,
+      sectionDiffs(file.text, update.text, update.applied)
+    ),
     expiresAt: new Date(staged.expiresAt).toISOString(),
     warnings,
     next: commandLine(`commit-architecture --staging-id ${staged.stagingId}`),
-    reminder:
+    reminder: withTruncationNote(
+      diff,
       "diff を全文提示してユーザーの承認を得るまで commit-architecture を実行しないこと。CLI は承認の有無を判定できない。"
+    )
   })
 }
 
@@ -231,6 +257,11 @@ export function runStageAdr(ctx: StageContext): void {
     return
   }
 
+  const diff = unifiedDiff(result.baseText, result.nextText, {
+    fromLabel: `${config.architectureRelative} (現行)`,
+    toLabel: `${config.architectureRelative} (stage)`
+  })
+
   emitResult(command, {
     ok: true,
     valid: true,
@@ -246,22 +277,21 @@ export function runStageAdr(ctx: StageContext): void {
     date: result.date,
     created: result.created,
     sectionCreated: result.sectionCreated,
-    diff: {
-      unified: unifiedDiff(result.baseText, result.nextText, {
-        fromLabel: `${config.architectureRelative} (現行)`,
-        toLabel: `${config.architectureRelative} (stage)`
-      }),
-      sections: sectionDiffs(result.baseText, result.nextText, [
+    diff: diffPayload(
+      diff,
+      sectionDiffs(result.baseText, result.nextText, [
         {
           heading: ADR_HEADING,
           mode: result.sectionCreated ? "added" : "replaced"
         }
       ])
-    },
+    ),
     expiresAt: new Date(staged.expiresAt).toISOString(),
     warnings,
     next: commandLine(`commit-architecture --staging-id ${staged.stagingId}`),
-    reminder:
+    reminder: withTruncationNote(
+      diff,
       "ADR の追加・状態変更は設計判断の宣言である。diff を全文提示して承認を得るまで commit-architecture を実行しないこと。"
+    )
   })
 }
