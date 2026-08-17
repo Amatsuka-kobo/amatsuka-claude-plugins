@@ -209,6 +209,73 @@ test("D7: シンボリックリンク経由の書き込みは realpath 解決後
   expect(write(root, alias2)).toBe(null)
 })
 
+// dangling symlink(リンク先がまだ存在しない symlink)は realpath で解決できない。
+// 親ディレクトリだけを実体化する経路では正本がリンク自身のパスに留まり、
+// リンク先への直接 Write が別パスに見えて素通りしていた。
+// lstat + readlink はリンク先が未作成でも辿れるので、そこまで解決して比較する。
+test("D7b: 正本が dangling symlink のとき、リンク先の絶対パスへの Write が deny される", () => {
+  const root = project()
+  fs.mkdirSync(path.join(root, "real"), { recursive: true })
+  // (a) 相対リンク。リンク自身のディレクトリ基準で解決される。
+  fs.symlinkSync("../real/GOTCHAS.md", path.join(root, "docs/GOTCHAS.md"))
+  // (b) 絶対リンク。
+  fs.symlinkSync(
+    path.join(root, "real/ARCH.md"),
+    path.join(root, "docs/ARCHITECTURE.md")
+  )
+  // 前提: リンク先はどちらも未作成(存在すると realpath が効いてしまい検証にならない)。
+  expect(fs.existsSync(path.join(root, "real/GOTCHAS.md"))).toBe(false)
+  expect(fs.existsSync(path.join(root, "real/ARCH.md"))).toBe(false)
+
+  expect(
+    write(root, path.join(root, "real/GOTCHAS.md"))?.permissionDecision
+  ).toBe("deny")
+  expect(write(root, path.join(root, "real/ARCH.md"))?.permissionDecision).toBe(
+    "deny"
+  )
+  // 正本パスそのものへの Write は引き続き deny。
+  expect(
+    write(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecision
+  ).toBe("deny")
+  // リンク先と同じディレクトリの別ファイルは素通し(部分一致・前方一致はしない)。
+  expect(write(root, path.join(root, "real/OTHER.md"))).toBe(null)
+  expect(write(root, path.join(root, "real/GOTCHAS.md.bak"))).toBe(null)
+})
+
+test("D7c: 正本が 2 段の dangling symlink でも最終的なリンク先が deny される", () => {
+  const root = project()
+  fs.mkdirSync(path.join(root, "real"), { recursive: true })
+  // docs/GOTCHAS.md -> hop.md -> real/GOTCHAS.md(実体は未作成)
+  fs.symlinkSync("../hop.md", path.join(root, "docs/GOTCHAS.md"))
+  fs.symlinkSync("real/GOTCHAS.md", path.join(root, "hop.md"))
+  expect(fs.existsSync(path.join(root, "real/GOTCHAS.md"))).toBe(false)
+
+  expect(
+    write(root, path.join(root, "real/GOTCHAS.md"))?.permissionDecision
+  ).toBe("deny")
+  // 中間の hop も同じ実体を指すので deny。
+  expect(write(root, path.join(root, "hop.md"))?.permissionDecision).toBe(
+    "deny"
+  )
+  // 無関係な兄弟は素通し。
+  expect(write(root, path.join(root, "real/other.md"))).toBe(null)
+})
+
+test("D7d: symlink が循環していても例外を投げず素通しする(フェイルオープン)", () => {
+  const root = project()
+  fs.symlinkSync(path.join(root, "loop-b.md"), path.join(root, "loop-a.md"))
+  fs.symlinkSync(path.join(root, "loop-a.md"), path.join(root, "loop-b.md"))
+  fs.symlinkSync("../loop-a.md", path.join(root, "docs/GOTCHAS.md"))
+
+  // 辿り切れないので実体を確定できない。停止も例外も起こさず素通しへ倒す。
+  expect(write(root, path.join(root, "loop-a.md"))).toBe(null)
+  expect(write(root, path.join(root, "loop-b.md"))).toBe(null)
+  // 循環していない側の判定は壊れない。
+  expect(
+    write(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision
+  ).toBe("deny")
+})
+
 test("D8: 大文字小文字が異なるパスは非区別 FS で deny、区別 FS では別ファイルとして素通し", () => {
   const root = project()
   const r = write(root, path.join(root, "docs/architecture.md"))

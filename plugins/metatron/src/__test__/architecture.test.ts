@@ -818,4 +818,33 @@ describe("追加: metatron:domains の位置と多重定義", () => {
       extractDomains(MINIMAL_DOMAINS_ONLY.replace("metatron", "x")).reason
     ).toBe("block_not_found")
   })
+
+  // 契約 §1「開始マーカーが他のフェンスに取り込まれ、ブロックとして認識されない
+  // ときは警告を返す」。結果はどちらも null だが原因が違う。黙って落とすと、
+  // 書き手は自分の置いたブロックが読まれていないことに気づけない。
+  test("無関係な未閉フェンスにマーカーが呑まれたら警告を 1 件返す", () => {
+    const swallowed = doc(
+      "# ARCHITECTURE",
+      "",
+      "```ts",
+      "const x = 1",
+      "",
+      "## ドメインマップ",
+      "",
+      "```json metatron:domains",
+      '{ "frontend": ["src/app/**"] }',
+      ""
+    )
+    const result = extractDomains(swallowed)
+    expect(result.ok).toBe(false)
+    expect(result.domains).toBe(null)
+    expect(result.reason).toBe("block_not_found")
+    expect(result.warnings.length).toBe(1)
+  })
+
+  test("マーカーが無い最小文書は警告 0 件(正当な状態と区別する)", () => {
+    const result = extractDomains(MINIMAL_DOMAINS_ONLY.replace("metatron", "x"))
+    expect(result.domains).toBe(null)
+    expect(result.warnings).toStrictEqual([])
+  })
 })

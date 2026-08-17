@@ -770,11 +770,9 @@ function pluginRoot(env) {
 function metatronCliPath(env) {
   return path2.join(pluginRoot(env), "scripts", "metatron.mjs");
 }
-function buildGuide(cli) {
+var GUIDE_TITLE = "# metatron: \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u524D\u63D0\u3068\u843D\u3068\u3057\u7A74";
+function cliLines(cli) {
   return [
-    "# metatron: \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u524D\u63D0\u3068\u843D\u3068\u3057\u7A74",
-    "",
-    "\u3053\u308C\u3089\u306E\u6587\u66F8\u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308B\u3002**\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002**",
     `\u8A18\u9332\u30FB\u66F4\u65B0\u30FB\u5168\u6587\u53D6\u5F97\u306F\u6B21\u306E CLI \u3092\u4F7F\u3046(\u7D76\u5BFE\u30D1\u30B9\u3002M = ${cli}):`,
     "  \u8AAD\u3080:     node M get gotchas --query <\u8A9E> / node M get adr / node M get architecture",
     "  \u8A18\u9332:     node M append-gotcha --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB>",
@@ -783,6 +781,23 @@ function buildGuide(cli) {
     "  ADR:     node M stage-adr --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>",
     "\u203B\u9577\u3044\u5165\u529B\u306F\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u3078\u66F8\u304D\u3001--input <path> \u3067\u6E21\u3059(CLI \u306E\u547C\u3073\u51FA\u3057\u898F\u7D04)\u3002",
     "\u203B\u3053\u306E\u6848\u5185\u306F\u30E1\u30A4\u30F3\u30BB\u30C3\u30B7\u30E7\u30F3\u5411\u3051\u3002\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306B\u306F\u5225\u9014\u30D1\u30B9\u304C\u6E21\u3055\u308C\u308B\u3002"
+  ];
+}
+function buildGuide(cli) {
+  return [
+    GUIDE_TITLE,
+    "",
+    "\u3053\u308C\u3089\u306E\u6587\u66F8\u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308B\u3002**\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002**",
+    ...cliLines(cli)
+  ].join("\n");
+}
+function buildInitGuide(cli) {
+  return [
+    GUIDE_TITLE,
+    "",
+    "\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u306F\u307E\u3060 ARCHITECTURE \u3082 GOTCHAS \u3082\u7121\u3044\u3002**`/metatron:init` \u3067\u4F5C\u6210\u3059\u308B\u3002**",
+    "\u4F5C\u6210\u5F8C\u306F\u3053\u308C\u3089\u306E\u6587\u66F8\u304C metatron \u306E\u7BA1\u7406\u4E0B\u306B\u5165\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002",
+    ...cliLines(cli)
   ].join("\n");
 }
 function toLf(text) {
@@ -1005,8 +1020,10 @@ function render(input, plan) {
 function build(config, env) {
   const arch = readArchitecture(config);
   const gotchas = readGotchas(config);
-  if (arch === null && gotchas === null) return null;
-  const guide = buildGuide(metatronCliPath(env));
+  const cli = metatronCliPath(env);
+  if (arch === null && gotchas === null) return `${buildInitGuide(cli)}
+`;
+  const guide = buildGuide(cli);
   const warnings = [
     ...config.warnings,
     ...arch?.warnings ?? [],
@@ -1061,8 +1078,7 @@ try {
   const startDir = typeof hookInput.cwd === "string" && hookInput.cwd !== "" ? hookInput.cwd : process.cwd();
   const config = loadConfig(startDir);
   if (config.injection.enabled) {
-    const content = build(config, process.env);
-    if (content !== null) injectContext(content);
+    injectContext(build(config, process.env));
   }
 } catch {
 }

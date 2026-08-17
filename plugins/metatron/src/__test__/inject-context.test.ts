@@ -8,7 +8,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { afterAll, expect, test } from "vitest"
 import {
   findSection,
@@ -38,6 +38,28 @@ const GUIDE = [
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
   "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
 ].join("\n")
+
+// 文書がまだ 1 つも無いときの案内(設計書 §8-7 の限定)。
+// `/metatron:init` はまさにこの状態で使うコマンドなので、案内を落とすと init を始められない。
+const INIT_GUIDE = [
+  "# metatron: プロジェクトの前提と落とし穴",
+  "",
+  "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**",
+  "作成後はこれらの文書が metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
+  `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
+  "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
+  "  記録:     node M append-gotcha --input <一時ファイル>",
+  '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
+  "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+  "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+  "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
+  "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
+].join("\n")
+
+/** 設定の読み取りを必ず例外にする故障注入モジュール(I3c 用)。 */
+const FAULT_CONFIG = fileURLToPath(
+  new URL("../testing/fault-config.mjs", import.meta.url)
+)
 
 const tmpDirs: string[] = []
 
@@ -79,10 +101,10 @@ function childEnv(): NodeJS.ProcessEnv {
 }
 
 /** 注入結果の additionalContext。何も出力しなかった場合は null。 */
-function inject(cwd: string): string | null {
+function inject(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string | null {
   const out = runTs(HOOK, [], {
     cwd,
-    env: childEnv(),
+    env: { ...childEnv(), ...extraEnv },
     input: JSON.stringify({
       session_id: "s1",
       transcript_path: path.join(cwd, "t.jsonl"),
@@ -315,9 +337,40 @@ test("I2: GOTCHAS 無し — ARCHITECTURE のみ、例外なし", () => {
   expect(content).not.toContain("既知の落とし穴")
 })
 
-test("I3: 両方無し — 何も出力せず exit 0", () => {
+// 設計書 §8-7 の「何も出力しない」は「**文書の内容を**出力しない」の意味に限定する。
+// CLI 案内まで落とすと、AI は CLI の絶対パスを知る手段が無く `/metatron:init` を開始できない
+// (§3-3・§8-3 の「CLI の発見性はモデルコンテキストで担保する」と両立しない)。
+test("I3: 両方無し — CLI 案内だけを出力する(/metatron:init への言及つき)", () => {
   const root = project({})
+  const content = inject(root)
+  if (content === null) throw new Error("CLI 案内が注入されなかった")
+  expect(content).toBe(`${INIT_GUIDE}\n`)
+  expect(content).toContain("/metatron:init")
+  expect(content).toContain(`M = ${CLI}`)
+  // 文書が無いのだから、文書の内容に由来する見出しは 1 つも出ない。
+  expect(content).not.toContain("## 技術的前提")
+  expect(content).not.toContain("## 既知の落とし穴")
+})
+
+test("I3b: injection.enabled: false かつ両方無し — 何も出力しない", () => {
+  const root = project({
+    config: { version: 1, injection: { enabled: false } }
+  })
   expect(inject(root)).toBe(null)
+})
+
+// 設定の読み取り自体が例外で失敗したときは案内も出さない。
+// 機構が壊れている状態で出すと、誤った CLI パスを広告しかねないためである。
+// loadConfig は例外を投げない契約なので、モジュール解決の層で故障を注入する。
+test("I3c: 設定の読み取りが例外 — 案内も含め何も出力しない", () => {
+  // 文書が揃っていて本来なら必ず注入される状態でも、出力が止まることを確かめる。
+  const root = project({ arch: architecture(), gotchas: gotchas(3) })
+  expect(inject(root)).not.toBe(null) // 故障注入なしなら出る
+  expect(
+    inject(root, {
+      NODE_OPTIONS: `--import ${pathToFileURL(FAULT_CONFIG).href}`
+    })
+  ).toBe(null)
 })
 
 test("I4: 壊れた設定 — 既定値で注入し、警告を 1 行添える", () => {
@@ -583,14 +636,24 @@ test("I12: 極端な超過(両方巨大)— 段階 5 まで進み、それでも
 
 // --- I14 〜 I21 -------------------------------------------------------------
 
-test("I14: 読み取り権限なし — 例外を投げず exit 0", () => {
+// 読めないファイルは「無い」として扱う(§8-7)。例外を投げないこと、そして
+// 文書の内容が 1 行も漏れないことを見る。CLI 案内は I3 と同じ理由で残る。
+test("I14: 読み取り権限なし — 例外を投げず、CLI 案内だけを出力する", () => {
   const root = project({ arch: architecture(), gotchas: gotchas(3) })
   if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
   fs.chmodSync(path.join(root, "docs/ARCHITECTURE.md"), 0o000)
   fs.chmodSync(path.join(root, "docs/GOTCHAS.md"), 0o000)
-  expect(inject(root)).toBe(null)
-  fs.chmodSync(path.join(root, "docs/ARCHITECTURE.md"), 0o644)
-  fs.chmodSync(path.join(root, "docs/GOTCHAS.md"), 0o644)
+  try {
+    const content = inject(root)
+    if (content === null) throw new Error("CLI 案内が注入されなかった")
+    expect(content).toBe(`${INIT_GUIDE}\n`)
+    expect(content).not.toContain("## システム概要")
+    // 案内の例示にも GOTCHA-003 は出るので、GOTCHAS の中身に固有の文字列で見る。
+    expect(content).not.toContain("失敗 3 のタイトル")
+  } finally {
+    fs.chmodSync(path.join(root, "docs/ARCHITECTURE.md"), 0o644)
+    fs.chmodSync(path.join(root, "docs/GOTCHAS.md"), 0o644)
+  }
 })
 
 test("I15: 注入文中の CLI パスは絶対パスで、metatron.mjs を指す", () => {

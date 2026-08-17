@@ -11,6 +11,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
+import { MAX_DIFF_LINES } from "../cli/diff.js"
 import { findSection, parseArchitecture } from "../lib/architecture.js"
 import { stagingDirFor } from "../lib/staging.js"
 import { runTs } from "../testing/run-ts.js"
@@ -523,6 +524,8 @@ test("stage-adr → commit-architecture で ADR が採番されて末尾に追�
   const stagedJson = staged.json as Record<string, unknown>
   expect(stagedJson.ok).toBe(true)
   expect(stagedJson.assignedId).toBe("ADR-001")
+  // stage-adr の diff も省略の有無を機械的に返す。
+  expect((stagedJson.diff as Record<string, unknown>).truncated).toBe(false)
   expect(fs.readFileSync(architecture).equals(beforeBuf)).toBe(true)
 
   const committed = runCli(
@@ -550,4 +553,119 @@ test("stage-adr → commit-architecture で ADR が採番されて末尾に追�
       `${heading} が変化している`
     ).toBe(findSection(beforeDoc, heading)?.raw)
   }
+})
+
+// ---------------------------------------------------------------------------
+// 巨大な文書での diff の省略
+//
+// 上限を超えると `diff.unified` は案内文だけになる。呼び出し元が「提示できる差分が
+// 返っていない」ことを機械的に判別できなければ、省略されたまま承認を求めてしまう。
+// ---------------------------------------------------------------------------
+
+function stackLines(count: number): string[] {
+  return Array.from(
+    { length: count },
+    (_, index) => `- dep-${String(index).padStart(4, "0")}`
+  )
+}
+
+function architectureWithStack(stack: readonly string[]): string {
+  return [
+    "# ARCHITECTURE",
+    "",
+    "## システム概要",
+    "",
+    "概要です。",
+    "",
+    "## 技術スタック",
+    "",
+    ...stack,
+    "",
+    "## 規約",
+    "",
+    "規約です。",
+    ""
+  ].join("\n")
+}
+
+// CLI の行数え(末尾の改行 1 個は行として数えない)に合わせる。
+function lineCount(text: string): number {
+  return text.replace(/\n$/, "").split("\n").length
+}
+
+function stageDiff(root: string, input: unknown): Record<string, unknown> {
+  const inputPath = writeFile(root, "stage.json", JSON.stringify(input))
+  const staged = runCli(["stage-architecture", "--input", inputPath], root)
+  expect(staged.status, staged.stdout).toBe(0)
+  const json = staged.json as Record<string, unknown>
+  expect(json.ok).toBe(true)
+  return json.diff as Record<string, unknown>
+}
+
+test("MAX_DIFF_LINES を超える文書では diff の省略が機械的に判別できる", () => {
+  const root = mkTmp()
+  writeFile(root, "metatron.config.json", "{}")
+  const stack = stackLines(MAX_DIFF_LINES + 100)
+  const before = architectureWithStack(stack)
+  expect(lineCount(before)).toBeGreaterThan(MAX_DIFF_LINES)
+  writeFile(root, "docs/ARCHITECTURE.md", before)
+
+  const diff = stageDiff(root, {
+    sections: [{ heading: "技術スタック", body: "- TypeScript\n- Node.js" }],
+    reason: "依存の整理"
+  })
+
+  expect(diff.truncated, "省略されたことが出力から判別できない").toBe(true)
+  expect(typeof diff.truncatedReason, "省略の理由が返っていない").toBe("string")
+  expect(diff.beforeLines).toBe(lineCount(before))
+  expect(diff.afterLines).toBeGreaterThan(0)
+  expect(diff.maxLines).toBe(MAX_DIFF_LINES)
+})
+
+test("diff が省略されても sections には完全な before / after が残る", () => {
+  const root = mkTmp()
+  writeFile(root, "metatron.config.json", "{}")
+  const stack = stackLines(MAX_DIFF_LINES + 100)
+  writeFile(root, "docs/ARCHITECTURE.md", architectureWithStack(stack))
+
+  const diff = stageDiff(root, {
+    sections: [{ heading: "技術スタック", body: "- TypeScript\n- Node.js" }]
+  })
+
+  expect(diff.truncated).toBe(true)
+  const sections = diff.sections as {
+    heading: string
+    before: string | null
+    after: string | null
+  }[]
+  const section = sections.find((entry) => entry.heading === "技術スタック")
+  expect(section, "対象セクションが sections に無い").toBeDefined()
+  const body = section?.before ?? ""
+  // 代替提示の材料になるのは全文だけ。先頭と末尾の両方が欠けていないことを見る。
+  expect(body).toContain(stack[0])
+  expect(body).toContain(stack[stack.length - 1])
+  expect(lineCount(body)).toBeGreaterThanOrEqual(stack.length)
+  expect(section?.after ?? "").toContain("- Node.js")
+})
+
+test("MAX_DIFF_LINES 以下なら省略されず unified がそのまま返る", () => {
+  const root = mkTmp()
+  writeFile(root, "metatron.config.json", "{}")
+  const stack = stackLines(MAX_DIFF_LINES - 200)
+  const before = architectureWithStack(stack)
+  expect(lineCount(before)).toBeLessThanOrEqual(MAX_DIFF_LINES)
+  writeFile(root, "docs/ARCHITECTURE.md", before)
+
+  const diff = stageDiff(root, {
+    sections: [
+      { heading: "技術スタック", body: [...stack, "- dep-added"].join("\n") }
+    ]
+  })
+
+  expect(diff.truncated, "省略していないのに truncated が立っている").toBe(
+    false
+  )
+  expect(diff.truncatedReason).toBeNull()
+  expect(diff.beforeLines).toBe(lineCount(before))
+  expect(diff.unified as string).toContain("+- dep-added")
 })

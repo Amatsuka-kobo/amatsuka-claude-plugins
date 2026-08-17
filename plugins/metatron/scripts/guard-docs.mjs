@@ -290,6 +290,21 @@ function realpathOrParent(abs) {
     }
   }
 }
+var MAX_SYMLINK_HOPS = 40;
+function followDanglingLink(abs) {
+  let current = abs;
+  for (let hop = 0; hop < MAX_SYMLINK_HOPS; hop++) {
+    let target;
+    try {
+      if (!fs2.lstatSync(current).isSymbolicLink()) return current;
+      target = fs2.readlinkSync(current);
+    } catch {
+      return current;
+    }
+    current = realpathOrParent(path2.resolve(path2.dirname(current), target));
+  }
+  return abs;
+}
 function flipCase(value) {
   return value.replace(
     /[A-Za-z]/g,
@@ -326,7 +341,8 @@ function isCaseInsensitiveFs(probe) {
   return false;
 }
 function comparisonKey(abs, caseInsensitive) {
-  const key = toSlash(realpathOrParent(abs)).normalize("NFC");
+  const resolved = followDanglingLink(realpathOrParent(abs));
+  const key = toSlash(resolved).normalize("NFC");
   return caseInsensitive ? key.toLowerCase() : key;
 }
 function architectureReason(relative, cli) {

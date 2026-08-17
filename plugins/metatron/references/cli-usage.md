@@ -98,12 +98,37 @@ ARCHITECTURE と ADR の書き込みは 2 段階で行う。
 2. diff を全文提示してユーザーの承認を得る。
 3. `commit-architecture --staging-id <id>` を実行して書き込む。
 
-機械的に保証されるのは次の 3 点だけである。
+### stage が返す diff
+
+| フィールド | 内容 |
+| --- | --- |
+| `diff.unified` | unified 形式の差分。差分が無いときは空文字列。省略されたときは案内文だけが入る |
+| `diff.truncated` | 行数が上限を超えて `diff.unified` を省略したかどうか |
+| `diff.truncatedReason` | 省略の理由。省略していなければ `null` |
+| `diff.beforeLines` / `diff.afterLines` | 変更前・変更後の行数 |
+| `diff.maxLines` | 省略の判定に使った上限行数 |
+| `diff.sections` | 変更対象セクションごとの `heading` / `mode` / `before` / `after`。`before` / `after` は省略が起きたときも完全な本文が入る |
+
+- 省略の有無は `diff.truncated` で判定する。`diff.unified` の文面から判定しない。
+- `diff.truncated` が `false` のときは `diff.unified` を全文提示する。
+- `diff.truncated` が `true` のときは `diff.unified` を提示に使わない。`diff.sections` の `before` / `after` をセクション単位で全文提示する。
+- セクション単位でも一度に提示しきれないときは、`diff.sections` の `heading` を一覧で示し、どのセクションから見るかをユーザーに尋ねる。
+- 省略されたまま承認を求めない。
+
+### 保証されるもの
+
+機械的に保証されるのは次の 4 点だけである。
 
 1. diff を計算せずに書き込むことはできない。`commit-architecture` は `stagingId` 無しでは失敗する。
 2. staging は単回使用かつ有効期限つき(既定 30 分)である。使い回しと古い案の遅延適用ができない。
 3. stage 後に対象ファイルが変化していたら、commit は `file_changed` で失敗する。
+4. staging レコードを書き換えて commit すると `tampered` で失敗する。レコードは自身の内容ハッシュ(`recordHash`)を持ち、commit の前に再計算して照合する。`nextContent` だけ・`targetPath` だけ・`expiresAt` だけの差し替えは、いずれも書き込みに至らない。
 
-保証されないのは「人間が実際に diff を見て承認したか」である。CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` を実行しない。
+### 保証されないもの
+
+保証されないのは次の 2 点である。どちらも CLI では埋められない。
+
+1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` を実行しない。
+2. **`recordHash` まで整合的に打ち直した改変。** 同じユーザー権限で動くプロセスは正しい `recordHash` を計算できるため、検知できない。`recordHash` の照合が捕まえるのは、偶発的な破損と CLI を経由しない書き換えまでである。staging の内容を変えるときは、保存されたレコードを直接編集せず `stage-*` からやり直す。
 
 staging の保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json` であり、プロジェクト内には置かれない。

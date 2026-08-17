@@ -19,7 +19,8 @@ import os from "node:os"
 import path from "node:path"
 
 export const STAGING_DIR_NAME = "metatron-staging"
-export const STAGING_RECORD_VERSION = 1
+// 2: レコードへ recordHash を追加した(改竄検知。computeRecordHash のコメントを見よ)。
+export const STAGING_RECORD_VERSION = 2
 
 /** 契約 §11: staging は単回使用かつ有効期限つき(既定 30 分)。 */
 export const DEFAULT_STAGING_TTL_MS = 30 * 60 * 1000
@@ -43,16 +44,24 @@ export interface StagingRecord {
   usedAt: number | null
   /** 呼び出し元が持たせる付随情報(ADR の assignedId など)。 */
   meta: Record<string, unknown>
+  /**
+   * recordHash 以外の全フィールドから算出した、このレコード自身の内容ハッシュ。
+   * 保証範囲は `computeRecordHash` のコメントに書いてある。
+   */
+  recordHash: string
 }
 
 export type CreateStagingError = "invalid" | "staging_unavailable"
 
 export type CommitStagingError =
   | "unknown_id"
+  | "tampered"
   | "already_used"
   | "expired"
   | "file_changed"
   | "write_failed"
+
+export type ReadStagingError = "unknown_id" | "tampered"
 
 export interface CreateStagingInput {
   /** 契約 §3 の docRoot。保存先ディレクトリを分ける鍵になる。 */
@@ -115,7 +124,7 @@ export type CommitStagingResult =
 
 export type ReadStagingResult =
   | { ok: true; record: StagingRecord }
-  | { ok: false; error: "unknown_id"; reason: string }
+  | { ok: false; error: ReadStagingError; reason: string }
 
 function hashBuffer(buf: Buffer): string {
   return crypto.createHash("sha256").update(buf).digest("hex")
@@ -201,6 +210,59 @@ function isStagingKind(value: unknown): value is StagingKind {
   return value === "architecture" || value === "adr"
 }
 
+// キー順に依存しない表現へ落とす。オブジェクトのキーを再帰的に並べ替える。
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (isPlainObject(value)) {
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(value).sort()) {
+      const canonical = canonicalize(value[key])
+      if (canonical !== undefined) out[key] = canonical
+    }
+    return out
+  }
+  return value
+}
+
+/**
+ * レコード本体(recordHash 以外の全フィールド)の内容ハッシュ。
+ *
+ * **何のためにあるか。** stage が返した diff をユーザーへ提示したあと、保存済みの
+ * staging JSON を書き換えて `commit` すると、承認された内容とは別の内容が書き込まれる。
+ * 設計書 §7-3 は「承認した diff と実際に適用される diff の一致」を保証すると書いているが、
+ * ハッシュ無しではその一致を照合する手段がない。commit 時にこの値を再計算して照合する。
+ *
+ * **守れるもの。** 偶発的な破損(書きかけ・別ツールによる上書き・部分的な文字化け)と、
+ * CLI を経由しないレコード書き換えの**検知**。nextContent だけ、targetPath だけ、
+ * expiresAt だけ、といった単独の差し替えはすべて不一致として弾かれる。
+ *
+ * **守れないもの。** recordHash も整合的に打ち直す改変は検知できない。この関数は公開されており、
+ * 鍵を持たないため、同一ユーザー権限で動くプロセスは正しい recordHash を計算できる。
+ * これは HMAC を導入しても本質的には変わらない —— 鍵は同じユーザーが読める場所にしか置けず、
+ * 鍵の配置と失効という別の問題を持ち込むだけである。したがって metatron は
+ * 「同一ユーザー権限からの意図的な改変を防ぐ」ことは目標にしない。防げるのは
+ * 「CLI の 2 段階を素通りする経路」であって、「ユーザー自身が自分のマシンで行う書き換え」ではない。
+ *
+ * 正規化は JSON の往復を挟んでから行う。stage 時のメモリ上の値(meta に Date などが
+ * 入りうる)と、commit 時に読み直した値を、必ず同じ形に揃えるためである。
+ */
+export function computeRecordHash(
+  record: Omit<StagingRecord, "recordHash"> & { recordHash?: unknown }
+): string {
+  const { recordHash: _ignored, ...rest } = record
+  const roundTripped: unknown = JSON.parse(JSON.stringify(rest))
+  return hashContent(JSON.stringify(canonicalize(roundTripped)))
+}
+
+/** レコードが stage 時のまま(または CLI が打ち直したまま)かを照合する。 */
+export function verifyRecordHash(record: StagingRecord): boolean {
+  return record.recordHash === computeRecordHash(record)
+}
+
+function tamperedReason(stagingId: string): string {
+  return `staging ${stagingId} の内容が stage 時から変化しています(recordHash 不一致)。承認された diff と一致しないため書き込みません。stage からやり直してください。`
+}
+
 function parseRecord(raw: unknown, stagingId: string): StagingRecord | null {
   if (!isPlainObject(raw)) return null
   if (raw.stagingId !== stagingId) return null
@@ -222,7 +284,10 @@ function parseRecord(raw: unknown, stagingId: string): StagingRecord | null {
     createdAt: raw.createdAt,
     expiresAt: raw.expiresAt,
     usedAt: raw.usedAt,
-    meta: isPlainObject(raw.meta) ? raw.meta : {}
+    meta: isPlainObject(raw.meta) ? raw.meta : {},
+    // 欄ごと消された場合は空文字にする。sha256 の hex とは決して一致しないため、
+    // 「レコードとしては読めたが整合していない」= tampered に落ちる。
+    recordHash: typeof raw.recordHash === "string" ? raw.recordHash : ""
   }
 }
 
@@ -298,7 +363,7 @@ export function createStaging(input: CreateStagingInput): CreateStagingResult {
     input.baseHash === undefined ? hashFileOrNull(targetPath) : input.baseHash
 
   const stagingId = crypto.randomUUID()
-  const record: StagingRecord = {
+  const draft: Omit<StagingRecord, "recordHash"> = {
     version: STAGING_RECORD_VERSION,
     stagingId,
     kind: input.kind,
@@ -313,7 +378,9 @@ export function createStaging(input: CreateStagingInput): CreateStagingResult {
 
   const recordPath = path.join(stagingDirFor(projectRoot), `${stagingId}.json`)
   try {
-    writeRecord(recordPath, record)
+    // recordHash の算出は書き込みと同じ try の中で行う。meta が JSON 化できない
+    // 場合(循環参照など)はここで落ち、staging_unavailable として返る。
+    writeRecord(recordPath, { ...draft, recordHash: computeRecordHash(draft) })
   } catch (err) {
     return {
       ok: false,
@@ -328,8 +395,8 @@ export function createStaging(input: CreateStagingInput): CreateStagingResult {
     recordPath,
     targetPath,
     baseHash,
-    createdAt: record.createdAt,
-    expiresAt: record.expiresAt
+    createdAt: draft.createdAt,
+    expiresAt: draft.expiresAt
   }
 }
 
@@ -346,13 +413,21 @@ export function readStaging(
       reason: `staging ${stagingId} が見つかりません。stage からやり直してください。`
     }
   }
+  // 改竄されたレコードを diff として再提示させない。判定は commit と同じ。
+  if (!verifyRecordHash(record)) {
+    return {
+      ok: false,
+      error: "tampered",
+      reason: tamperedReason(record.stagingId)
+    }
+  }
   return { ok: true, record }
 }
 
 /**
  * staging を消費して書き込む。契約 §11 の保証 1〜3 の照合点。
  *
- * 判定の順序は unknown_id → already_used → expired → file_changed。
+ * 判定の順序は unknown_id → tampered → already_used → expired → file_changed。
  * 消費済みの印は書き込みの**後**に付ける。印を先に付けると書き込み失敗で
  * staging を無駄に焼いてしまう一方、印が付かないまま落ちても、
  * 書き込み済みのファイルはハッシュが変わっているため再 commit は
@@ -370,6 +445,16 @@ export function commitStaging(input: CommitStagingInput): CommitStagingResult {
       ok: false,
       error: "unknown_id",
       reason: `staging ${input.stagingId} が見つかりません。stage からやり直してください。`
+    }
+  }
+
+  // usedAt / expiresAt / targetPath / nextContent のどれを書き換えても、
+  // 後続の判定に入る前にここで落ちる。順序を先頭に置くのはそのためである。
+  if (!verifyRecordHash(record)) {
+    return {
+      ok: false,
+      error: "tampered",
+      reason: tamperedReason(record.stagingId)
     }
   }
 
@@ -426,7 +511,10 @@ export function commitStaging(input: CommitStagingInput): CommitStagingResult {
   const recordPath = stagingRecordPath(projectRoot, record.stagingId)
   try {
     if (recordPath === null) throw new Error("invalid staging id")
-    writeRecord(recordPath, { ...record, usedAt: now })
+    // 消費の印を付けたレコードも recordHash を打ち直す。打ち直さないと、
+    // 正当な CLI が書いたレコードを次回の読み取りが tampered と誤判定する。
+    const used: Omit<StagingRecord, "recordHash"> = { ...record, usedAt: now }
+    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) })
   } catch {
     warnings.push(
       `staging ${record.stagingId} を使用済みにできませんでした。書き込みは完了しています。`
