@@ -293,10 +293,17 @@ function realpathOrParent(abs) {
 var MAX_SYMLINK_HOPS = 40;
 function followDanglingLink(abs) {
   let current = abs;
-  for (let hop = 0; hop < MAX_SYMLINK_HOPS; hop++) {
+  for (let hop = 0; hop <= MAX_SYMLINK_HOPS; hop++) {
+    let isLink;
+    try {
+      isLink = fs2.lstatSync(current).isSymbolicLink();
+    } catch {
+      return current;
+    }
+    if (!isLink) return current;
+    if (hop === MAX_SYMLINK_HOPS) return abs;
     let target;
     try {
-      if (!fs2.lstatSync(current).isSymbolicLink()) return current;
       target = fs2.readlinkSync(current);
     } catch {
       return current;

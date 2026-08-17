@@ -2103,6 +2103,24 @@ function commitStaging(input) {
       reason: `${record.targetPath} \u304C stage \u5F8C\u306B\u5909\u5316\u3057\u3066\u3044\u307E\u3059(${before} \u2192 ${after})\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
     };
   }
+  const recordPath = stagingRecordPath(projectRoot, record.stagingId);
+  if (recordPath === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${record.stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  try {
+    const used = { ...record, usedAt: now };
+    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: "staging_unavailable",
+      reason: `staging ${record.stagingId} \u3092\u4F7F\u7528\u6E08\u307F\u306B\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F(${recordPath}): ${String(err)}\u3002\u5358\u56DE\u4F7F\u7528\u3092\u4FDD\u8A3C\u3067\u304D\u306A\u3044\u305F\u3081\u66F8\u304D\u8FBC\u307F\u307E\u305B\u3093\u3002${record.targetPath} \u306F\u5909\u66F4\u3057\u3066\u3044\u307E\u305B\u3093\u3002`
+    };
+  }
   const buf = Buffer.from(record.nextContent, "utf8");
   try {
     fs3.mkdirSync(path3.dirname(record.targetPath), { recursive: true });
@@ -2111,19 +2129,8 @@ function commitStaging(input) {
     return {
       ok: false,
       error: "write_failed",
-      reason: `${record.targetPath} \u3078\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${String(err)}`
+      reason: `${record.targetPath} \u3078\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${String(err)}\u3002\u3053\u306E staging \u306F\u6D88\u8CBB\u6E08\u307F\u306B\u306A\u3063\u305F\u305F\u3081\u3001stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
     };
-  }
-  const warnings = [];
-  const recordPath = stagingRecordPath(projectRoot, record.stagingId);
-  try {
-    if (recordPath === null) throw new Error("invalid staging id");
-    const used = { ...record, usedAt: now };
-    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) });
-  } catch {
-    warnings.push(
-      `staging ${record.stagingId} \u3092\u4F7F\u7528\u6E08\u307F\u306B\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u66F8\u304D\u8FBC\u307F\u306F\u5B8C\u4E86\u3057\u3066\u3044\u307E\u3059\u3002`
-    );
   }
   return {
     ok: true,
@@ -2132,7 +2139,7 @@ function commitStaging(input) {
     path: record.targetPath,
     bytesWritten: buf.byteLength,
     meta: record.meta,
-    warnings
+    warnings: []
   };
 }
 

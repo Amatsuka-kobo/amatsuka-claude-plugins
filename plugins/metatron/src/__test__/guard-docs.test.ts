@@ -276,6 +276,48 @@ test("D7d: symlink が循環していても例外を投げず素通しする(フ
   ).toBe("deny")
 })
 
+// 段数の境界。docs/GOTCHAS.md -> chain/n1.md -> ... -> chain/n<hops-1>.md -> real/GOTCHAS.md
+// と張り、symlink がちょうど hops 本になるチェーンを作る。最終リンク先は未作成のまま
+// (存在すると realpath が効いてしまい dangling の検証にならない)。
+// 張れなかった場合は lstat / expect でテストを失敗させる(黙って飛ばさない)。
+function buildDanglingChain(root: string, hops: number): string {
+  fs.mkdirSync(path.join(root, "chain"), { recursive: true })
+  fs.mkdirSync(path.join(root, "real"), { recursive: true })
+  const node = (i: number): string => {
+    if (i === 0) return path.join(root, "docs/GOTCHAS.md")
+    if (i === hops) return path.join(root, "real/GOTCHAS.md")
+    return path.join(root, "chain", `n${i}.md`)
+  }
+  for (let i = 0; i < hops; i++) fs.symlinkSync(node(i + 1), node(i))
+  for (let i = 0; i < hops; i++) {
+    expect(fs.lstatSync(node(i)).isSymbolicLink()).toBe(true)
+  }
+  expect(fs.existsSync(node(hops))).toBe(false)
+  return node(hops)
+}
+
+// 上限ちょうどの段数では最終段で symlink でなくなり、最終パスが確定する。
+// ループ回数だけで打ち切る実装は 40 本目を辿った直後に抜けて入力(リンク自身のパス)を
+// 返すため、ちょうど 40 段のときだけ最終リンク先への Write が素通りしていた。
+test("D7e: 正本がちょうど 40 段(上限)の dangling symlink でも最終リンク先が deny される", () => {
+  const root = project()
+  const final = buildDanglingChain(root, 40)
+  expect(write(root, final)?.permissionDecision).toBe("deny")
+  // 同じディレクトリの別ファイルは素通し(前方一致・部分一致はしない)。
+  expect(write(root, path.join(root, "real/OTHER.md"))).toBe(null)
+})
+
+// 41 段は上限超え。最終パスを確定させずに入力へフォールバックする(設計どおりの素通し)。
+test("D7f: 41 段(上限超え)は入力へフォールバックして素通しする", () => {
+  const root = project()
+  const final = buildDanglingChain(root, 41)
+  expect(write(root, final)).toBe(null)
+  // フォールバック先は正本パスそのものなので、そこへの Write は引き続き deny。
+  expect(
+    write(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecision
+  ).toBe("deny")
+})
+
 test("D8: 大文字小文字が異なるパスは非区別 FS で deny、区別 FS では別ファイルとして素通し", () => {
   const root = project()
   const r = write(root, path.join(root, "docs/architecture.md"))

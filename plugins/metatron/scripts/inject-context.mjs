@@ -1003,10 +1003,13 @@ function renderGotchas(config, gotchas, plan) {
   }
   return parts.join("\n\n");
 }
+function renderWarnings(warnings) {
+  return warnings.map((w) => `\u203B\u6CE8\u610F: ${w}`).join("\n");
+}
 function render(input, plan) {
   const blocks = [input.guide];
   if (input.warnings.length > 0) {
-    blocks.push(input.warnings.map((w) => `\u203B\u6CE8\u610F: ${w}`).join("\n"));
+    blocks.push(renderWarnings(input.warnings));
   }
   if (input.arch !== null) {
     blocks.push(renderArchitecture(input.config, input.arch, plan));
@@ -1021,8 +1024,13 @@ function build(config, env) {
   const arch = readArchitecture(config);
   const gotchas = readGotchas(config);
   const cli = metatronCliPath(env);
-  if (arch === null && gotchas === null) return `${buildInitGuide(cli)}
+  if (arch === null && gotchas === null) {
+    const configWarnings = config.warnings.slice(0, MAX_WARNING_LINES);
+    const blocks = [buildInitGuide(cli)];
+    if (configWarnings.length > 0) blocks.push(renderWarnings(configWarnings));
+    return `${blocks.join("\n\n")}
 `;
+  }
   const guide = buildGuide(cli);
   const warnings = [
     ...config.warnings,
