@@ -1,19 +1,67 @@
-`plugins/codiel` (0.4.1-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
+`plugins/codiel` (0.5.1-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
 through analysis, design discussion, planning, implementation, testing, PR and review, gated by the
 bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
 `docs/skill-flowcharts.md` (commit 86b9483). MCP internals: `mem:codiel/raguel_mcp`.
 
+## 2026-08-16 の再編 — ARCHITECTURE / GOTCHAS は metatron の管轄になった
+
+- **`docs/ARCHITECTURE.example.md` / `docs/GOTCHAS.example.md` は codiel から削除され metatron へ移った**
+  (`plugins/codiel/docs/` に残るのは `DESIGN.md` と `skill-flowcharts.md` の 2 本だけ)。
+- **ドメインマップのマーカーは ` ```json metatron:domains ` に変わった。旧 `codiel:domains` は読まない**
+  (互換読みを一切設けない)。書式・ルート解決の正本は `mem:file_contract`。
+- **GOTCHAS は新書式**: 本文は `タスク / 失敗内容 / 原因 (推測) / 対策 / 昇格候補` の 5 フィールドのみ。
+  関連ファイル欄・関連エントリ欄・Codiel フェーズ名欄は**持たない**(必要ならすべて `対策` の本文へ)。
+  タグは `[解決済み]` / `[対象外]` の 2 種だけを `GOTCHA-NNN:` の直後に置く。
+- `install-harness.sh` は **`.codiel/{specs,runs,reports}` を作るだけ**になった。GOTCHAS の雛形も
+  配置しない(失敗を記録する時点で `recording-gotchas` が台帳ごと作る)。
+- `recording-gotchas` は **metatron のインストール有無を検出しない**。使ってよい CLI パスは
+  「コンテキストに現れた注入の案内」と「hook の拒否メッセージに載っていた絶対パス」だけ。
+  案内が無ければ直接追記し、拒否されたら拒否メッセージの CLI で実行し直す。
+
+## `/codiel:init` — 散文インタビューを廃止、単体で完結する
+
+**「8 テーマの対話インタビューから ARCHITECTURE を生成する」は過去の姿。** 現在は 4 点
+(ARCHITECTURE / `CLAUDE.md` の `## Codiel ハーネス運用ルール` 節 / `raguel.config.yaml` /
+`.codiel/` 3 ディレクトリ)の不足分だけを埋める。GOTCHAS は確認対象に含めない。
+
+- ARCHITECTURE のパスは固定値にせず `scripts/lib.mjs` の `resolveDocPaths` で解決する。
+- **metatron のインストール検出をしない。** 見るのは「解決したパスのファイルが契約を満たすか」と
+  「`/metatron:init` が自分の利用可能コマンドにあるか」の 2 点だけ。
+- `/metatron:init` が使えるなら 2 択で提示し、選ばれたら完了後の `/codiel:init` 再実行を案内して終了。
+- 使えない/選ばれなかったときは**ドメイン分割だけ**を聞いて、`# ARCHITECTURE` +
+  `## ドメインマップ` だけの最小 ARCHITECTURE を生成する。技術スタック・ディレクトリ構成・
+  コマンド定義・テスト方針・規約は聞かない。散文セクションを足さない。
+- **移行作業はゼロ。** 最小ファイルは正当な ARCHITECTURE で、後から `/metatron:init` が
+  既存の `## ドメインマップ` をそのまま活かして残りの節を足す。変換もマーカー書き換えもしない。
+
+## 2 つのルート概念(混同しない)
+
+| 関数 (`src/hooks/lib.ts`) | 基準 | 用途 |
+| --- | --- | --- |
+| `findDocRoot(startDir)` | 契約 §3 規則 1(`metatron.config.json` を持つ祖先 → git ルート → 開始ディレクトリ) | **文書**(ARCHITECTURE / GOTCHAS)の解決 |
+| `findProjectRoot(startDir)` | `.codiel` を持つ祖先 | **codiel 固有資産**(`.codiel/runs` 等)の解決 |
+
+どちらを使うかは「探しているものが文書か codiel 資産か」で決まる。`guard-write` の
+`.codiel/runs/**/state.json` 保護など既存用途は `findProjectRoot` のまま。
+`lib.ts` は他に `resolveDocPaths` / `readDomains` / `DOMAINS_MARKER` / `globToRegExp` を持つ。
+
 ## Flow — 11 stages / 12 named phases
 
 `init → discuss → design → (test-spec ∥ dev-plan) → implement → test-loop → pr → review →
-fix-loop → triage → finalize`. `test-spec` and `dev-plan` are one parallel stage.
+fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ。
 Raguel gates `init`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`, `fix-loop`.
 
-**Human touchpoints are not limited to Raguel ASK/STOP.** `discuss` is a standing human-in-the-loop
-phase requiring agreement with the user; `design` has a walkthrough + user approval before the
-Raguel evaluation; `triage` (filing followup issues) is always user-directed. The older note that
-codiel has "no fixed human-approval checkpoints" is wrong.
+**Human touchpoints are not limited to Raguel ASK/STOP.** `discuss` は常時 human-in-the-loop、
+`design` は walkthrough + ユーザー承認を Raguel 評価の前に置く、`triage` は常にユーザー主導。
+「codiel には固定の人間承認チェックポイントが無い」という旧記述は誤り。
+
+### sandalphon の intent issue を起点にした場合
+
+本文のどこかに `<!-- intent:v1 -->` があれば intent issue。`analyzing-issues` は要件抽出を
+一からやり直さず、契約 §9-3 の写像表どおり `issue.md` へ**そのまま転記する**(要約を伴う抽出をしない)。
+`discuss` は起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙する。
+マーカーが完全一致しない (`intent:v2`、`<!--intent:v1-->`) ものは通常どおり本文から抽出する。
 
 ## Agents (13) and domain split
 
@@ -21,42 +69,52 @@ codiel has "no fixed human-approval checkpoints" is wrong.
 `codiel-tester`, implementers `-frontend/-backend/-data`, reviewers
 `-frontend/-backend/-data/-doc/-security`.
 
-A target project that doesn't fit the 3-domain split declares `generic` in its
-`docs/ARCHITECTURE.md`. There is **no dedicated generic agent** — `codiel-implementer-backend` and
-`codiel-reviewer-backend` are reused as the general-purpose pair, with doc/security reviewers still
-participating.
+3 ドメイン分割が馴染まないプロジェクトは ARCHITECTURE で `generic` を宣言する。
+**専用の generic agent は無い** — `codiel-implementer-backend` と `codiel-reviewer-backend` を
+汎用ペアとして再利用し、doc/security reviewer は引き続き参加する。
 
-## Skills (18) and commands (3)
+## Skills (17) and commands (3)
 
 Commands: `/codiel:init`, `/codiel:run`, `/codiel:test`.
-Skills cover one responsibility each: `analyzing-issues`, `preparing-design-agendas`,
-`facilitating-design-discussions`, `writing-design-docs`, `writing-test-specs`, `writing-dev-plans`,
-`implementing`, `scripting-tests`, `running-regression-tests`, `fixing-failures`, `reviewing-diffs`,
-`fixing-review-findings`, `filing-followup-issues`, `recording-gotchas`, `orchestrating-runs`,
-`raguel-gating`, `initializing-harness` (+ its `raguel.config.example.yaml`).
-All 18 were rewritten to the prompt-smith standard in commit 86b9483.
+Skills: `analyzing-issues`, `preparing-design-agendas`, `facilitating-design-discussions`,
+`writing-design-docs`, `writing-test-specs`, `writing-dev-plans`, `implementing`, `scripting-tests`,
+`running-regression-tests`, `fixing-failures`, `reviewing-diffs`, `fixing-review-findings`,
+`filing-followup-issues`, `recording-gotchas`, `orchestrating-runs`, `raguel-gating`,
+`initializing-harness` (+ その `raguel.config.example.yaml`)。
+全スキルは commit 86b9483 で prompt-smith 標準に書き直され、2026-08-16 に契約追随の改訂が入った。
 
 ## Hooks — phase-scoped, ask-by-default with hard denies
 
 `hooks/hooks.json`: `PreToolUse(Bash)` → `guard-bash.mjs`; `PreToolUse(Edit|Write)` →
 `guard-write.mjs`; `SubagentStop` → `subagent-stop.mjs`; `Stop` → `stop-guard.mjs`.
+codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。metatron 側と方針が逆なので混同しない。
 
-- Restrictions are **phase-level, not agent-level**, and a phase mismatch yields `ask` (tolerating
-  false positives) — but a set of actions is unconditionally `deny`: `rm -rf`, `curl | sh`, force
-  push, push to main/master, shell writes to `state.json`, and out-of-condition PR/issue creation.
-- `guard-write` treats `init`/`discuss`/`design`/`test-spec`/`dev-plan` as the document phases.
-- Phase state: `src/codiel-state.ts`, with `src/codiel-state-cli.ts` split off so the CLI entry
-  doesn't self-execute when esbuild inlines the library into the hooks. `src/hooks/lib.ts` holds
-  the shared stdin/ask/deny/project-root/domain-config helpers.
+- 制限は**フェーズ単位でエージェント単位ではない**。フェーズ不一致は `ask`(偽陽性を許容)。
+  無条件 `deny` は `rm -rf`、`curl | sh`、force push、main/master への push、
+  shell からの `state.json` 書き込み、条件外の PR/issue 作成。
+- `guard-write` は `init`/`discuss`/`design`/`test-spec`/`dev-plan` を文書フェーズとして扱う。
+- Phase state: `src/codiel-state.ts`(CLI エントリは `src/codiel-state-cli.ts` に分離。esbuild が
+  ライブラリを hook へインライン化しても自己実行しないようにするため)。共有ヘルパは `src/hooks/lib.ts`。
+
+### ドメイン境界の配線(2026-08-16、設計書 §16-5)
+
+`RunState` に **optional な `domain?: string | null`** を追加した(version 据え置き。既存 state は
+そのまま読める)。値がドメインマップに存在するかは**検証しない** — 判断は読む側 `guard-write` の責務。
+
+- `codiel-state set-domain --domain <名前>` / `clear-domain` で操作する。**`clear-domain` は状態を
+  問わず通る**(委譲中に run が `awaiting_human` へ落ちても解除できないと古い domain が残るため)。
+- `guard-write` は CODE_PHASES(`implement`/`test-loop`/`fix-loop`)で `domain` が入っているときだけ
+  境界を課す。判定は `readDomains(cwd)` → 契約 §1 の 4 項目を `toDomainMap` で検証
+  (プロトタイプなしの `Object.create(null)` で組む)→ `globToRegExp` で `rel` を照合。
+- 判定は **`deny` ではなく `ask`**(境界の誤りは人間が通せる余地があり、ドメインマップの記述漏れで
+  正当な書き込みを止めたくないため)。ドメイン定義が無い・読めない環境では**新たに止めない**。
+  ドメイン名がマップに無いときだけは材料が無いので `ask` で止める。
+- **`.codiel/` 配下はドメイン境界の対象外。** ハーネス自身の運用資産でありどのドメインにも属さない。
+  免除が無いと、test-loop で domain 非紐付けと紐付けを往復するとき `clear-domain` の呼び忘れで
+  tester の `.codiel/specs/**/scripts/` への正当な書き込みが黙って `ask` になる。
 
 ## Assets copied into target projects
 
-`docs/{ARCHITECTURE,GOTCHAS}.example.md` are templates; `CLAUDE.example.md` and `settings.json` sit
-at the plugin root; `scripts/install-harness.sh` does the mechanical placement (hand-written, not
-esbuild output). `/codiel:init` drives all of it.
-
-## Change history note
-
-Between 0.2.1-dev and 0.4.0-dev only three commits touched this plugin (aff7cc1, 86b9483, 8e6e3e0)
-and **none of them changed TypeScript or the bundles** — it was an agents/skills rewrite plus a
-`package.json` version sync.
+`CLAUDE.example.md` と `settings.json` がプラグインルートに、`scripts/install-harness.sh` が
+`.codiel/` 3 ディレクトリの機械的配置を担う(hand-written、esbuild 出力ではない)。
+ARCHITECTURE / GOTCHAS のテンプレートは**もうここには無い**(metatron へ移設)。

@@ -4,9 +4,9 @@
 sources that build each plugin's bundled scripts.
 
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
-  listed here (name/source/description). 11 entries, matching the root `README.md` table 1:1
-  (verified 2026-08-16).
-- `plugins/<name>/` — one dir per plugin. All 11 are pnpm workspace packages. Layout + bundle
+  listed here (name/source/description). 13 entries, matching the root `README.md` table 1:1
+  (verified 2026-08-17; metatron + sandalphon added 2026-08-16).
+- `plugins/<name>/` — one dir per plugin. All 13 are pnpm workspace packages. Layout + bundle
   conventions: `mem:conventions`. Toolchain: `mem:tech_stack`.
 - **mdbase / typed-markdown frontmatter checking is gone** (commit 9ed55dd, 2026-08): `mdbase.yaml`,
   `_types/{agent,command,skill,antibody}.md` and `scripts/install-mdbase.sh` were deleted from their
@@ -37,9 +37,11 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 - `docs/` now holds only: `chat/` (session archive), `development/cliproxyapi-setup.md`,
   `agents-{claude-only,with-codex}-old.md`, `ONBOARDING.md` (**moved down from the repo root**), and
   `old/` — the retirement shelf, currently `old/mdbase-record/` and `old/optimize-agents-record/`.
-- `harness-docs/` holds `design/` (24 files), `plans/` (14), `handover/`, `superpowers/{specs,plans}`
+- `harness-docs/` holds `design/` (25 files), `plans/` (14), `handover/`, `superpowers/{specs,plans}`
   — every design spec and implementation plan. Repo `CLAUDE.md` says **do not read `docs/`** and
-  **write new design/plan docs into `harness-docs/`**.
+  **write new design/plan docs into `harness-docs/`**. `design/2026-08-16-file-contract-freeze.md` は
+  設計書ではなく metatron / codiel / sandalphon / gh-utility が実装中に直接読む**凍結された契約**である
+  (`mem:file_contract`)。
 - Consequence: any doc citing `docs/design/…`, `docs/plans/…`, `docs/superpowers/…` for a *repo*
   design spec is stale. Two look-alikes that must NOT be rewritten: basic-design's skills write
   their deliverables to `docs/design/<kind>/` of the **target** project, and
@@ -51,19 +53,36 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 - `TERMS.md` — Japanese ToS; notably forbids using this service to generate illustration/Live2D/
   3D-model assets.
 
-## Distributed plugins (11, see `.claude-plugin/marketplace.json`)
+## Distributed plugins (13, see `.claude-plugin/marketplace.json`)
 
 Only **pitcrew (0.10.2)** and **chat-history (0.7.0)** are released; every other plugin is `-dev`.
-Manifest and sibling `package.json` versions were all in sync as of 2026-08-16.
+Manifest and sibling `package.json` versions were all in sync as of 2026-08-17.
 
-- **codiel** (0.4.1-dev) — GitHub-issue-driven orchestrator gated by the bundled `raguel` MCP
-  server. Largest/most complex. Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
+**metatron / sandalphon / codiel の連携** — 願い → intent → issue → 実装という一続きの流れを
+分担するが、**互いに独立して動く。**
+codiel は metatron が無くても最小 ARCHITECTURE を自前生成して完結し、sandalphon は codiel が
+無くても intent 文書と自前実行まで行き、metatron は単体で記録・注入として価値がある。
+
+**連携手段はファイル契約(ARCHITECTURE / GOTCHAS / intent 文書の書式)とモデルコンテキストの
+2 つだけ。** プラグイン間の依存宣言も、互いのインストール位置の参照も一切無い。したがって同じ規則が
+3 実装に独立に写されており、一致の担保はテスト 1 本しかない — 詳細は `mem:file_contract`。
+
+- **codiel** (0.5.1-dev) — GitHub-issue-driven orchestrator gated by the bundled `raguel` MCP
+  server. Largest/most complex. 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
+  `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
+  Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
+- **metatron** (0.1.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
+  共有ライブラリ + CLI + 2 hook の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
+  Details: `mem:metatron/core`.
+- **sandalphon** (0.1.0-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
+  実行系への引き渡し)を担うオーケストレーター。codiel の前段。状態永続機構を持たない。
+  Details: `mem:sandalphon/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
   .drawio + HTML. Details: `mem:basic_design/core`.
 - **pitcrew** (0.10.2) — hooks-driven parallel-review layer: captures orchestration artifacts to
   `.pitcrew/review/` and injects human comments back into the session. Details: `mem:pitcrew/core`.
 - **raphael** (0.1.1-dev) — failure-immunity: detects failure signals into `.raphael/infections/`,
-  distills them into antibodies (36 committed under `.raphael/antibodies/` as of 2026-08-16), and
+  distills them into antibodies (38 committed under `.raphael/antibodies/` as of 2026-08-17), and
   re-injects only on deterministic `PreToolUse` match. Details: `mem:raphael/core`.
 - **guidepost** (0.1.1-dev) — turns a commit range / PR diff into an AI-guided code-reading tour in
   a browser viewer, with reader questions injected back into the session.
@@ -71,9 +90,13 @@ Manifest and sibling `package.json` versions were all in sync as of 2026-08-16.
 - **chat-history** (0.7.0) — chat logging / recall / resume skills + chat-recorder & chat-reader
   agents. The record format flipped from summary to **verbatim** on 2026-08-16, so records are
   bimodal and readers must branch on the date. Details: `mem:chat_history/core`.
-- **gh-utility** (0.5.1-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
+- **gh-utility** (0.5.2-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
   sharing `references/github-issue-common.md`; scripts (`check-issue-env`, `list-issues`,
-  `link-sub-issue`) wrap `gh`/REST, skills own the judgement.
+  `link-sub-issue`) wrap `gh`/REST, skills own the judgement. `issue-craft` は 2026-08-16 に
+  **持ち込みモード**を得た: 固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動されたときだけ
+  入り、渡された `title` / `body` を一切書き換えず(誤字修正・整形・要約・見出し並べ替えもしない)
+  ブレインストーミングを飛ばして起票する。全文提示 → 明示承認のゲートは省略しない。判定は固定句の
+  一致だけで行い推測で入らない。仕様の正本は `mem:file_contract` §10。
 - **agent-policy** (0.7.0-dev) — the model-tiering / orchestration discipline this repo itself runs
   under. Since 2026-08-16 it **ships 7 agent definitions and injects the policy skill from a
   `SessionStart` hook keyed on an env var**; the old `setup-gpt` / `setup-grok` generator skills are
