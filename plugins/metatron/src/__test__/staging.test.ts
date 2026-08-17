@@ -5,8 +5,9 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { afterAll, expect, test } from "vitest"
+import { afterAll, expect, test, vi } from "vitest"
 import {
+  type CommitStagingResult,
   commitStaging,
   computeRecordHash,
   createStaging,
@@ -69,6 +70,49 @@ function writeRecordJson(
   const recordPath = stagingRecordPath(root, stagingId)
   if (recordPath === null) throw new Error("stagingId が不正です")
   fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`)
+}
+
+type WriteFileArgs = Parameters<typeof fs.writeFileSync>
+
+const realWriteFileSync = fs.writeFileSync
+
+/**
+ * 故障注入: `dir` 配下へのファイル書き込みだけを失敗させ、通った書き込み先を記録する。
+ *
+ * ディレクトリのパーミッション剥奪では root 実行で止まらないため、
+ * `src/testing/fault-config.mjs` と同じ「差し替えて壊す」方式を取る。
+ * ここは同一プロセス内なので `fs` の当該関数だけを差し替える。
+ */
+function installWriteFaults(dir: string): {
+  restore: () => void
+  written: string[]
+} {
+  const prefix = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`
+  const written: string[] = []
+  const spy = vi.spyOn(fs, "writeFileSync")
+  spy.mockImplementation(
+    (
+      target: WriteFileArgs[0],
+      data: WriteFileArgs[1],
+      options?: WriteFileArgs[2]
+    ): void => {
+      if (typeof target === "string" && target.startsWith(prefix)) {
+        const err: NodeJS.ErrnoException = new Error(
+          `EACCES: permission denied, open '${target}'`
+        )
+        err.code = "EACCES"
+        throw err
+      }
+      realWriteFileSync(target, data, options)
+      if (typeof target === "string") written.push(target)
+    }
+  )
+  return {
+    restore: () => {
+      spy.mockRestore()
+    },
+    written
+  }
 }
 
 test("T1: stage → commit の正常系 → 書き込まれ、staging が消費される", () => {
@@ -769,4 +813,135 @@ test("T7e: 保存されたレコードは recordHash を持ち、再計算した
   expect(result.ok).toBe(false)
   if (result.ok) return
   expect(result.error).toBe("tampered")
+})
+
+test("T8a: 消費の印を保存できない → commit は成功せず、対象ファイルも書き換わらない", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "新\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  // staging レコードの保存だけを失敗させる(対象ファイルは書ける)
+  const faults = installWriteFaults(stagingDirFor(root))
+  let result: CommitStagingResult
+  try {
+    result = commitStaging({ projectRoot: root, stagingId: staged.stagingId })
+  } finally {
+    faults.restore()
+  }
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("staging_unavailable")
+  // 消費の印を付けられないなら書き込みへ進まない(フェイルクローズド)
+  expect(faults.written).not.toContain(docPath(root))
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
+})
+
+test("T8b: 変更の無い staging でも、消費の印を保存できなければ何度でも書けはしない", () => {
+  const root = mkProject()
+  // 変更前後が同一の no-op。書き込んでも対象ファイルのハッシュは変わらないため、
+  // 「書き込み後に印を付ける」順序では file_changed による歯止めが効かない。
+  writeDoc(root, "docs/ARCHITECTURE.md", "同じ\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "同じ\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const faults = installWriteFaults(stagingDirFor(root))
+  let first: CommitStagingResult
+  let second: CommitStagingResult
+  try {
+    first = commitStaging({ projectRoot: root, stagingId: staged.stagingId })
+    second = commitStaging({ projectRoot: root, stagingId: staged.stagingId })
+  } finally {
+    faults.restore()
+  }
+
+  expect(first.ok).toBe(false)
+  expect(second.ok).toBe(false)
+  // 同じ stagingId で 2 度とも書き込みに至っていない
+  expect(faults.written.filter((p) => p === docPath(root))).toStrictEqual([])
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("同じ\n")
+})
+
+test("T8c: 対象ファイルへ書けなかった → write_failed。staging は消費済みとして焼く", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "新\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  // 対象ファイルへの書き込みだけを失敗させる(staging レコードは書ける)
+  const faults = installWriteFaults(root)
+  let first: CommitStagingResult
+  try {
+    first = commitStaging({ projectRoot: root, stagingId: staged.stagingId })
+  } finally {
+    faults.restore()
+  }
+
+  expect(first.ok).toBe(false)
+  if (first.ok) return
+  expect(first.error).toBe("write_failed")
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
+
+  // 印を先に付ける方式の代償: 書けなくても staging は消費される。再実行は stage からやり直す。
+  const second = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(second.ok).toBe(false)
+  if (second.ok) return
+  expect(second.error).toBe("already_used")
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
+})
+
+test("T8d: 回帰ガード — 障害の無い no-op の stage → commit は 1 回だけ通る", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "同じ\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "同じ\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const first = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(first.ok).toBe(true)
+  if (!first.ok) return
+  expect(first.warnings).toStrictEqual([])
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe("同じ\n")
+
+  const second = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(second.ok).toBe(false)
+  if (second.ok) return
+  expect(second.error).toBe("already_used")
 })

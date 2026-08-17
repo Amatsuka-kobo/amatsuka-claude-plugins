@@ -424,11 +424,17 @@ interface RenderInput {
   gotchas: GotchasSource | null
 }
 
+// 警告の書式は 1 か所に持つ。文書ありの経路と文書なしの経路で形が割れると、
+// 読み手は同じ理由を 2 通りの見た目で受け取ることになる。
+function renderWarnings(warnings: string[]): string {
+  return warnings.map((w) => `※注意: ${w}`).join("\n")
+}
+
 function render(input: RenderInput, plan: Plan): string {
   // CLI 案内は必ず先頭。退避に倒れてもプレビューへ残す(§8-3)。
   const blocks: string[] = [input.guide]
   if (input.warnings.length > 0) {
-    blocks.push(input.warnings.map((w) => `※注意: ${w}`).join("\n"))
+    blocks.push(renderWarnings(input.warnings))
   }
   if (input.arch !== null) {
     blocks.push(renderArchitecture(input.config, input.arch, plan))
@@ -448,7 +454,17 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
   // §8-7 の「何も出力しない」は「**文書の内容を**出力しない」の意味に限定する。
   // `/metatron:init` はまさにこの状態で使うコマンドであり、案内まで落とすと
   // AI は CLI の絶対パスを知る手段を持たず、init を開始できない(§3-3・§8-3)。
-  if (arch === null && gotchas === null) return `${buildInitGuide(cli)}\n`
+  if (arch === null && gotchas === null) {
+    // 文書が無い分岐でも、設定由来の理由(壊れた設定・未知 version・パス不正)は
+    // 呼び出し元へ返す(契約 §2、設計書 §13-1 の I4)。理由を伏せたまま
+    // 「文書が無い」とだけ案内すると、独自パスへ文書を置いた利用者は
+    // 見失った原因が分からず、既定パスへ重複して文書を作りかねない。
+    // 設定ファイルが無いのは正常な状態なので、警告が無いときは何も足さない。
+    const configWarnings = config.warnings.slice(0, MAX_WARNING_LINES)
+    const blocks = [buildInitGuide(cli)]
+    if (configWarnings.length > 0) blocks.push(renderWarnings(configWarnings))
+    return `${blocks.join("\n\n")}\n`
+  }
 
   const guide = buildGuide(cli)
   const warnings = [

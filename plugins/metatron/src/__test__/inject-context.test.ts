@@ -387,6 +387,51 @@ test("I4: 壊れた設定 — 既定値で注入し、警告を 1 行添える",
   expect(content).toContain("## 技術的前提(docs/ARCHITECTURE.md)")
 })
 
+// 文書が 1 つも無い分岐でも、設定由来の理由(壊れた設定・未知 version・パス不正)は
+// 呼び出し元へ返す(契約 §2)。理由を伏せたまま「文書が無い」とだけ案内すると、
+// 独自パスへ文書を置いた利用者は見失った原因が分からず、既定パスへ重複して作りかねない。
+test("I4b: 壊れた設定 + 両方無し — CLI 案内に続けて設定の警告が出る", () => {
+  const root = project({ config: '{ "version": 1, "paths": ' })
+  const content = inject(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content).toBe(
+    `${INIT_GUIDE}\n\n※注意: 設定を読めなかったため既定値を使用します。\n`
+  )
+})
+
+test("I4c: 未知 version + 両方無し — CLI 案内に続けて設定の警告が出る", () => {
+  const root = project({ config: { version: 2 } })
+  const content = inject(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content).toBe(
+    `${INIT_GUIDE}\n\n※注意: 設定の version(2)が未知のため、全項目に既定値を使用します。\n`
+  )
+})
+
+test("I4d: paths が絶対パス + 既定パスにも文書なし — 拒否の理由が出る", () => {
+  const root = project({
+    config: { version: 1, paths: { architecture: "/tmp/metatron-abs/arch.md" } }
+  })
+  const content = inject(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content).toBe(
+    `${INIT_GUIDE}\n\n※注意: paths.architecture が絶対パス(/tmp/metatron-abs/arch.md)のため、` +
+      "既定値 docs/ARCHITECTURE.md を使用します。" +
+      "マシン固有の絶対パスはリポジトリの可搬性を失わせるため受け付けません。\n"
+  )
+})
+
+// 設定ファイルが無いのも、正しい設定があるのも正常な状態であり、警告にしない(契約 §2)。
+test("I4e: 正常な設定 + 両方無し — CLI 案内のみで警告は出ない", () => {
+  const root = project({
+    config: { version: 1, injection: { maxChars: 9000 } }
+  })
+  const content = inject(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content).toBe(`${INIT_GUIDE}\n`)
+  expect(content).not.toContain("※注意:")
+})
+
 test("I5: injection.enabled: false — 何も出力しない", () => {
   const root = project({
     arch: architecture(),

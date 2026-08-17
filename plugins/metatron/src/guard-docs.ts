@@ -65,12 +65,31 @@ const MAX_SYMLINK_HOPS = 40
 //
 // 例外は投げない。辿れない・循環している場合は入力をそのまま返し、
 // 従来どおりの比較(= 素通しへ倒れる側)にフォールバックする(冒頭のフェイルオープン方針)。
+//
+// 打ち切りの判定は **辿った段数ではなく「上限まで辿ってなお symlink が残っているか」** で行う。
+// ちょうど MAX_SYMLINK_HOPS 段のチェーンは最終段で symlink でなくなる(または dangling で
+// lstat が ENOENT になる)ので、その時点の current が最終パスとして確定する。返すべきは
+// これであって入力ではない。ループ回数だけで抜けて入力へ落とすと、ちょうど上限段のチェーンで
+// 正本の実体パスを取り逃がし、そこへの Write が素通りする(= 強制点の迂回)。
+// 一方 **循環は上限に達しても current が symlink のまま**であり最終パスが確定しないので、
+// 従来どおり入力へフォールバックする。この 2 つはここで区別される。
 function followDanglingLink(abs: string): string {
   let current = abs
-  for (let hop = 0; hop < MAX_SYMLINK_HOPS; hop++) {
+  for (let hop = 0; hop <= MAX_SYMLINK_HOPS; hop++) {
+    let isLink: boolean
+    try {
+      isLink = fs.lstatSync(current).isSymbolicLink()
+    } catch {
+      // リンク先が未作成(dangling の終端)。辿り切ったものとして扱う。
+      return current
+    }
+    // 辿り切った。段数がちょうど上限でも確定した最終パスを返す。
+    if (!isLink) return current
+    // 上限段まで辿ってなお symlink が残る(循環、または上限超えの長さ)。
+    // 最終パスを確定できないので入力へフォールバックする。
+    if (hop === MAX_SYMLINK_HOPS) return abs
     let target: string
     try {
-      if (!fs.lstatSync(current).isSymbolicLink()) return current
       target = fs.readlinkSync(current)
     } catch {
       return current

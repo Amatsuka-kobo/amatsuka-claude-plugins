@@ -117,18 +117,20 @@ ARCHITECTURE と ADR の書き込みは 2 段階で行う。
 
 ### 保証されるもの
 
-機械的に保証されるのは次の 4 点だけである。
+機械的に保証されるのは次の 5 点だけである。
 
 1. diff を計算せずに書き込むことはできない。`commit-architecture` は `stagingId` 無しでは失敗する。
 2. staging は単回使用かつ有効期限つき(既定 30 分)である。使い回しと古い案の遅延適用ができない。
 3. stage 後に対象ファイルが変化していたら、commit は `file_changed` で失敗する。
 4. staging レコードを書き換えて commit すると `tampered` で失敗する。レコードは自身の内容ハッシュ(`recordHash`)を持ち、commit の前に再計算して照合する。`nextContent` だけ・`targetPath` だけ・`expiresAt` だけの差し替えは、いずれも書き込みに至らない。
+5. 消費の印は書き込みの**前**に付く。印を保存できなかった commit は `staging_unavailable` で失敗し、対象ファイルは 1 バイトも変わらない。変更前後が同一の stage(no-op)でも、同じ `stagingId` が 2 度書き込みに至ることはない。
 
 ### 保証されないもの
 
-保証されないのは次の 2 点である。どちらも CLI では埋められない。
+保証されないのは次の 3 点である。
 
 1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` を実行しない。
 2. **`recordHash` まで整合的に打ち直した改変。** 同じユーザー権限で動くプロセスは正しい `recordHash` を計算できるため、検知できない。`recordHash` の照合が捕まえるのは、偶発的な破損と CLI を経由しない書き換えまでである。staging の内容を変えるときは、保存されたレコードを直接編集せず `stage-*` からやり直す。
+3. **commit が失敗した staging を再実行できること。** 消費の印を付けた後に書き込みが失敗すると、その staging は消費済みのまま残る。`write_failed` で失敗した `stagingId` を再実行しない。`stage-*` からやり直す。
 
 staging の保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json` であり、プロジェクト内には置かれない。

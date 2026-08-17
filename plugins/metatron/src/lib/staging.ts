@@ -60,6 +60,8 @@ export type CommitStagingError =
   | "expired"
   | "file_changed"
   | "write_failed"
+  /** 消費の印を保存できなかった。書き込みには進んでいない(commitStaging のコメント)。 */
+  | "staging_unavailable"
 
 export type ReadStagingError = "unknown_id" | "tampered"
 
@@ -117,7 +119,11 @@ export type CommitStagingResult =
       path: string
       bytesWritten: number
       meta: Record<string, unknown>
-      /** 書き込みは成功したが後始末で問題が出た場合の 1 行説明。 */
+      /**
+       * 書き込みは成功したが後始末で問題が出た場合の 1 行説明。
+       * 消費の印は書き込みの前に付け終えるため、現在この配列は常に空である
+       * (成功後に残る後始末が無い)。呼び出し元の形は変えずに残してある。
+       */
       warnings: string[]
     }
   | { ok: false; error: CommitStagingError; reason: string }
@@ -428,10 +434,19 @@ export function readStaging(
  * staging を消費して書き込む。契約 §11 の保証 1〜3 の照合点。
  *
  * 判定の順序は unknown_id → tampered → already_used → expired → file_changed。
- * 消費済みの印は書き込みの**後**に付ける。印を先に付けると書き込み失敗で
- * staging を無駄に焼いてしまう一方、印が付かないまま落ちても、
- * 書き込み済みのファイルはハッシュが変わっているため再 commit は
- * `file_changed` で弾かれ、単回使用の保証は保たれる。
+ *
+ * **消費済みの印は書き込みの前に付ける。** 印の保存に失敗したら書き込みへ進まず
+ * `staging_unavailable` を返す。以前は書き込みの後に印を付け、失敗しても警告付きで
+ * 成功を返していたが、これは契約 §11 の保証 2(単回使用)を破る。印が付かないまま
+ * 落ちた staging は未使用のまま残り、**変更前後が同一の stage(no-op)では対象ファイルの
+ * ハッシュも変わらない**ため、`file_changed` の歯止めが効かず何度でも commit できてしまう。
+ *
+ * 代償として「書き込みに失敗したのに staging は消費済み」という状態が生まれる
+ * (`write_failed` を返した後の再 commit は `already_used` になる)。これを選ぶ理由は、
+ * 失うものが可用性(stage をやり直す手間)だけであり、逆の順序が失うもの
+ * ——単回使用という契約上の保証——より軽いためである。この層はフェイルクローズドする。
+ * 消費の印を書き戻す巻き戻しは行わない。巻き戻し自体が同じ理由で失敗しうるうえ、
+ * 「印が付いていない staging が存在しうる」状態を残すと保証が条件付きに戻る。
  *
  * ロック(契約 §11「採番と挿入の原子性」)はこの関数の外側で取る。
  */
@@ -495,6 +510,28 @@ export function commitStaging(input: CommitStagingInput): CommitStagingResult {
     }
   }
 
+  // ここから先は staging を消費する。印を付けられない限り 1 バイトも書かない。
+  const recordPath = stagingRecordPath(projectRoot, record.stagingId)
+  if (recordPath === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${record.stagingId} が見つかりません。stage からやり直してください。`
+    }
+  }
+  try {
+    // 消費の印を付けたレコードも recordHash を打ち直す。打ち直さないと、
+    // 正当な CLI が書いたレコードを次回の読み取りが tampered と誤判定する。
+    const used: Omit<StagingRecord, "recordHash"> = { ...record, usedAt: now }
+    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) })
+  } catch (err) {
+    return {
+      ok: false,
+      error: "staging_unavailable",
+      reason: `staging ${record.stagingId} を使用済みにできませんでした(${recordPath}): ${String(err)}。単回使用を保証できないため書き込みません。${record.targetPath} は変更していません。`
+    }
+  }
+
   const buf = Buffer.from(record.nextContent, "utf8")
   try {
     fs.mkdirSync(path.dirname(record.targetPath), { recursive: true })
@@ -503,22 +540,8 @@ export function commitStaging(input: CommitStagingInput): CommitStagingResult {
     return {
       ok: false,
       error: "write_failed",
-      reason: `${record.targetPath} へ書き込めませんでした: ${String(err)}`
+      reason: `${record.targetPath} へ書き込めませんでした: ${String(err)}。この staging は消費済みになったため、stage からやり直してください。`
     }
-  }
-
-  const warnings: string[] = []
-  const recordPath = stagingRecordPath(projectRoot, record.stagingId)
-  try {
-    if (recordPath === null) throw new Error("invalid staging id")
-    // 消費の印を付けたレコードも recordHash を打ち直す。打ち直さないと、
-    // 正当な CLI が書いたレコードを次回の読み取りが tampered と誤判定する。
-    const used: Omit<StagingRecord, "recordHash"> = { ...record, usedAt: now }
-    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) })
-  } catch {
-    warnings.push(
-      `staging ${record.stagingId} を使用済みにできませんでした。書き込みは完了しています。`
-    )
   }
 
   return {
@@ -528,6 +551,6 @@ export function commitStaging(input: CommitStagingInput): CommitStagingResult {
     path: record.targetPath,
     bytesWritten: buf.byteLength,
     meta: record.meta,
-    warnings
+    warnings: []
   }
 }
