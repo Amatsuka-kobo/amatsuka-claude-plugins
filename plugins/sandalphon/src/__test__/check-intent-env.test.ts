@@ -6,7 +6,12 @@ import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
 // 契約 §13 / ケース 16f の 3 者比較のためだけの相対 import(テストコード限定)。
 // sandalphon の実行時に metatron / codiel を参照することはない。
-import { readDomains, resolveDocPaths } from "../../../codiel/src/hooks/lib.js"
+import {
+  findProjectRoot,
+  readDomains,
+  readDomainsResult,
+  resolveDocPaths
+} from "../../../codiel/src/hooks/lib.js"
 import { extractDomains } from "../../../metatron/src/lib/architecture.js"
 import { loadConfig } from "../../../metatron/src/lib/config.js"
 import { runTs } from "../../src/testing/run-ts.js"
@@ -669,7 +674,8 @@ test("ケース 24: 読み取り権限の無いエントリがあっても exit 
 })
 
 // ---------------------------------------------------------------------------
-// 契約 §13 の検証構成(ケース 16f の 3 者比較は codiel 側の実装後に行う)
+// 契約 §13 の検証構成(sandalphon 単体の性質。3 者で揃うべき規則は
+// ケース 16f の expectThreeWayMatch 側で突き合わせる)
 // ---------------------------------------------------------------------------
 
 test("契約 §13: 設定なし + git では docRoot が git ルートになる", () => {
@@ -715,6 +721,11 @@ test("契約 §13: docRoot が sub でも祖先の .codiel を見つける(上�
   const out = runScript(sub)
   expect(out.codielHarness.dirExists).toBe(true)
   expect(out.codielHarness.codielRoot).toBe(dir)
+  // metatron は `.codiel` を知らないため 3 者比較にはならないが、codiel の findProjectRoot は
+  // 直接呼べる。契約 §3 は「`.codiel` の基準は codiel 自身の findProjectRoot と同じ」と定めており、
+  // 両者がずれれば sandalphon が「委譲できる」と案内した先で codiel が run 資産を見つけられない。
+  expect(findProjectRoot(sub)).toBe(dir)
+  expect(out.codielHarness.codielRoot).toBe(findProjectRoot(sub))
   expect(out.docRoot).toBe(sub)
   expect(out.docRoot).not.toBe(out.codielHarness.codielRoot)
   // runDirs は codielRoot 基準で読む(docRoot 基準ではない)。
@@ -833,8 +844,13 @@ function insideGitRepo(dir: string): boolean {
 
 function ensureFile(file: string): void {
   if (fs.existsSync(file)) return
+  writeAt(file, DOMAINS_ARCHITECTURE)
+}
+
+// 絶対パスへ書く(write は「ルート + 相対パス」で、解決済みのパスには使えない)。
+function writeAt(file: string, content: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, DOMAINS_ARCHITECTURE)
+  fs.writeFileSync(file, content)
 }
 
 // PATH を空にして関数を呼ぶ(子プロセス側は fakeBin({ git: false }) で同じ状態を作る)。
@@ -870,7 +886,7 @@ function withoutGitBinary<T>(fn: () => T): T {
 function expectThreeWayMatch(
   startDir: string,
   label: string,
-  opts: { withoutGit?: boolean } = {}
+  opts: { withoutGit?: boolean; architecture?: string } = {}
 ): void {
   const call = <T>(fn: () => T): T =>
     opts.withoutGit ? withoutGitBinary(fn) : fn()
@@ -897,8 +913,34 @@ function expectThreeWayMatch(
     `${label}: metatron と codiel の警告の件数`
   ).toBe(metatron.warnings.length)
 
-  ensureFile(metatron.architecturePath)
+  // opts.architecture を渡した構成では、解決先へその中身を必ず置く(既存を上書きする)。
+  // ドメインマップの形を指定して 3 実装の判定を突き合わせるための口である。
+  if (opts.architecture !== undefined)
+    writeAt(metatron.architecturePath, opts.architecture)
+  else ensureFile(metatron.architecturePath)
   ensureFile(metatron.gotchasPath)
+
+  // 3 実装が同じ ARCHITECTURE から同じドメイン定義を読むか(契約 §1・§4-2)。
+  // **「読めたか」の真偽だけでは足りない。** 検証 4 項目のどれかを 1 実装だけが
+  // 見ていなければ、同じ `{}` や `{"x":[]}` を片方だけが受け入れる割れになる。
+  const architectureText = fs.readFileSync(metatron.architecturePath, "utf8")
+  const metatronDomains = extractDomains(architectureText)
+  const codielDomains = call(() => readDomainsResult(startDir))
+
+  expect(
+    codielDomains.domains,
+    `${label}: metatron と codiel のドメイン定義`
+  ).toStrictEqual(metatronDomains.ok ? metatronDomains.domains : null)
+  expect(
+    call(() => readDomains(startDir)) !== null,
+    `${label}: codiel のドメインマップ可読性`
+  ).toBe(metatronDomains.ok)
+  // 重複ブロック・未閉フェンスの警告も揃える(契約 §1「警告は経路を問わず返す」)。
+  // 文言までは求めず、有無と件数を突き合わせる(3 実装の同期コストを上げない)。
+  expect(
+    codielDomains.warnings.length,
+    `${label}: metatron と codiel のドメイン警告の件数`
+  ).toBe(metatronDomains.warnings.length)
 
   const sandalphon = runScript(
     startDir,
@@ -915,26 +957,30 @@ function expectThreeWayMatch(
     sandalphon.projectDocs.gotchas,
     `${label}: sandalphon の gotchas`
   ).toBe(metatron.gotchasPath)
+  // sandalphon は設定の警告と文書構造の警告を configWarnings の 1 本で返すため、
+  // 比較相手も metatron の両方(loadConfig + extractDomains)の合計にする。
+  const expectedWarnings =
+    metatron.warnings.length + metatronDomains.warnings.length
   expect(
     sandalphon.configWarnings.length > 0,
     `${label}: sandalphon の警告の有無`
-  ).toBe(metatron.warnings.length > 0)
+  ).toBe(expectedWarnings > 0)
   expect(
     sandalphon.configWarnings.length,
     `${label}: sandalphon の警告の件数`
-  ).toBe(metatron.warnings.length)
+  ).toBe(expectedWarnings)
 
-  // 3 実装が同じ ARCHITECTURE からドメインマップを読めるか(契約 §1・§4-2)。
-  const architectureText = fs.readFileSync(metatron.architecturePath, "utf8")
-  const metatronDomains = extractDomains(architectureText)
-  expect(
-    call(() => readDomains(startDir)) !== null,
-    `${label}: codiel のドメインマップ可読性`
-  ).toBe(metatronDomains.ok)
   expect(
     sandalphon.projectDocs.domainsReadable,
     `${label}: sandalphon のドメインマップ可読性`
   ).toBe(metatronDomains.ok)
+  // sandalphon は定義そのものを返さない(設計書 §7-2)。突き合わせられるのは件数まで。
+  expect(
+    sandalphon.projectDocs.domainCount,
+    `${label}: sandalphon のドメイン件数`
+  ).toBe(
+    metatronDomains.ok ? Object.keys(metatronDomains.domains ?? {}).length : 0
+  )
 }
 
 test("ケース 16f: 設定ファイル無し + git リポジトリ", () => {
@@ -1101,6 +1147,36 @@ test("ケース 16f: Windows 形式のパス区切り", () => {
   expectThreeWayMatch(dir, "Windows 形式の区切り")
 })
 
+test("ケース 16f: 正当な Windows 形式のパス区切り(ルート脱出を含まない)", () => {
+  // 直前のケースは gotchas が `..\outside.md`(ルート脱出)なので、「正当な区切りでは
+  // 警告が出ない」ことを 3 者で突き合わせていない。1 実装だけが正当な相対パスへ
+  // 余計な警告を出しても担保をすり抜ける(契約 §13)。
+  const dir = gitRepo()
+  write(
+    dir,
+    "metatron.config.json",
+    JSON.stringify({
+      version: 1,
+      paths: {
+        architecture: "docs\\arch\\MAIN.md",
+        gotchas: "docs\\arch\\TRAPS.md"
+      }
+    })
+  )
+  expectThreeWayMatch(dir, "正当な Windows 形式の区切り")
+
+  // 件数の一致だけでは「3 者が揃って誤警告する」を見逃す。0 件で揃うことまで求める。
+  expect(loadConfig(dir).warnings, "metatron の警告").toEqual([])
+  expect(resolveDocPaths(dir).warnings, "codiel の警告").toEqual([])
+  expect(runScript(dir).configWarnings, "sandalphon の警告").toEqual([])
+
+  // 区切りを "/" に寄せた同じパスへ解決すること(契約 §3 規則 2)。
+  expect(loadConfig(dir).architecturePath).toBe(
+    path.join(dir, "docs/arch/MAIN.md")
+  )
+  expect(loadConfig(dir).gotchasPath).toBe(path.join(dir, "docs/arch/TRAPS.md"))
+})
+
 test("ケース 16f: 壊れた設定・未知の version・型不整合", () => {
   const broken = gitRepo()
   write(broken, "metatron.config.json", "{ not json")
@@ -1125,4 +1201,250 @@ test("ケース 16f: 壊れた設定・未知の version・型不整合", () => 
     JSON.stringify({ version: 1, paths: { architecture: 42, gotchas: "" } })
   )
   expectThreeWayMatch(typed, "paths の型不整合")
+})
+
+// ---------------------------------------------------------------------------
+// 契約 §3 / §1 / §4-3: 独立レビューが挙げた欠陥の回帰テスト
+// ---------------------------------------------------------------------------
+
+// symlink を作れない環境ではテスト本体を飛ばす。
+function trySymlink(target: string, linkPath: string): boolean {
+  try {
+    fs.symlinkSync(target, linkPath, "dir")
+    return true
+  } catch {
+    return false
+  }
+}
+
+test("契約 §3: .codiel の探索は codiel の findProjectRoot と同じ結果になる(symlink 経由)", () => {
+  // A: link が `.codiel` を持つディレクトリ自身を指す。
+  const baseA = tmpdir()
+  const repoA = mkdir(baseA, "repo")
+  mkdir(baseA, "repo/.codiel/runs/2026-08-17-0001")
+  const linkA = path.join(baseA, "link")
+  if (!trySymlink(repoA, linkA)) return
+
+  const outA = runScript(linkA)
+  // codiel は与えられた論理パスをそのまま辿るので、実体パス(repo)ではなく link を返す。
+  expect(findProjectRoot(linkA)).toBe(linkA)
+  expect(outA.codielHarness.codielRoot).toBe(findProjectRoot(linkA))
+  expect(outA.codielHarness.dirExists).toBe(true)
+  expect(outA.codielHarness.runDirs).toEqual(["2026-08-17-0001"])
+
+  // B: link が `.codiel` を持つディレクトリの**子**を指す(祖先は実体側にしかない)。
+  const baseB = tmpdir()
+  const subB = mkdir(baseB, "repo/sub")
+  mkdir(baseB, "repo/.codiel/runs/2026-08-17-0001")
+  write(baseB, "repo/sub/docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
+  const linkB = path.join(baseB, "link")
+  if (!trySymlink(subB, linkB)) return
+
+  const outB = runScript(linkB)
+  // codiel は link → baseB → … と論理パスを辿るため repo/.codiel に届かず、
+  // startDir へフォールバックする(= 見つからない)。sandalphon も同じ答えでなければ、
+  // 「委譲できる」と案内した先で codiel が run 資産を発見できない。
+  expect(findProjectRoot(linkB)).toBe(linkB)
+  expect(outB.codielHarness.codielRoot).toBe(null)
+  expect(outB.codielHarness.dirExists).toBe(false)
+  expect(outB.codielHarness.runDirs).toEqual([])
+  expect(outB.codielReady).toBe(false)
+})
+
+test("契約 §3: docRoot は実体パス、.codiel は論理パスのまま探す(同一ファイル内の 2 つの前処理)", () => {
+  const base = tmpdir()
+  const repo = mkdir(base, "repo")
+  write(base, "repo/metatron.config.json", JSON.stringify({ version: 1 }))
+  write(base, "repo/docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
+  mkdir(base, "repo/.codiel")
+  const link = path.join(base, "link")
+  if (!trySymlink(repo, link)) return
+
+  const out = runScript(link)
+  // 文書のルートは実体パスへ解決する(契約 §3 規則 1 の細目。従来どおり)。
+  expect(out.docRoot).toBe(repo)
+  expect(out.projectDocs.architecture).toBe(
+    path.join(repo, "docs/ARCHITECTURE.md")
+  )
+  // `.codiel` の基準は codiel の findProjectRoot(論理パスのまま)。
+  expect(out.codielHarness.codielRoot).toBe(link)
+  expect(out.codielHarness.codielRoot).toBe(findProjectRoot(link))
+  expect(out.codielReady).toBe(true)
+})
+
+const DUPLICATE_DOMAINS_ARCHITECTURE = [
+  DOMAINS_ARCHITECTURE,
+  "## ドメインマップ(重複)",
+  "",
+  "```json metatron:domains",
+  '{ "data": ["db/**"] }',
+  "```",
+  ""
+].join("\n")
+
+test("契約 §1: metatron:domains が重複していれば警告を返し、最初のブロックを採る", () => {
+  const dir = gitRepo()
+  write(dir, "docs/ARCHITECTURE.md", DUPLICATE_DOMAINS_ARCHITECTURE)
+
+  const out = runScript(dir)
+  // 最初のブロック(frontend / backend)の 2 件。後ろの data は採らない。
+  expect(out.projectDocs.domainsReadable).toBe(true)
+  expect(out.projectDocs.domainCount).toBe(2)
+  // 警告は経路を問わず返す(契約 §1)。文言は正本(metatron)と一致させる。
+  expect(out.configWarnings).toEqual(
+    extractDomains(DUPLICATE_DOMAINS_ARCHITECTURE).warnings
+  )
+  expect(out.configWarnings.length).toBe(1)
+})
+
+const UNCLOSED_DOMAINS_ARCHITECTURE = [
+  "# ARCHITECTURE",
+  "",
+  "## ドメインマップ",
+  "",
+  "```json metatron:domains",
+  '{ "frontend": ["src/app/**"] }',
+  ""
+].join("\n")
+
+test("契約 §4-3: 未閉のドメインブロックは警告を添えて読み取りを続け、exit 0 を保つ", () => {
+  const dir = gitRepo()
+  write(dir, "docs/ARCHITECTURE.md", UNCLOSED_DOMAINS_ARCHITECTURE)
+
+  // 読み取り経路はフェイルオープン。例外を投げず(runTs は非 0 終了で throw する)続行する。
+  expect(() => runScript(dir)).not.toThrow()
+  const out = runScript(dir)
+  expect(out.projectDocs.domainsReadable).toBe(true)
+  expect(out.projectDocs.domainCount).toBe(1)
+  expect(out.configWarnings).toEqual(
+    extractDomains(UNCLOSED_DOMAINS_ARCHITECTURE).warnings
+  )
+  expect(out.configWarnings.length).toBe(1)
+})
+
+// 手前の未閉フェンスがドメインブロックの開始行を呑み込む構成。ドメインブロック自体は
+// 「見つからなかった」扱いになるため、`blocks[0]` 起点の警告では検出できない。
+const SWALLOWED_DOMAINS_ARCHITECTURE = [
+  "# ARCHITECTURE",
+  "",
+  "```ts",
+  "const x = 1",
+  "",
+  "## ドメインマップ",
+  "",
+  "```json metatron:domains",
+  '{ "frontend": ["src/app/**"] }',
+  ""
+].join("\n")
+
+test("契約 §4-3: ドメインブロックを呑み込む未閉フェンスも黙って落とさない", () => {
+  const dir = gitRepo()
+  // **3 者比較を必ず通す(契約 §13)。** ここを sandalphon 単体で検証すると、
+  // 「1 実装だけが警告を出す」という、まさにこのテストが守るべき割れが素通しになる。
+  expectThreeWayMatch(dir, "呑み込む未閉フェンス", {
+    architecture: SWALLOWED_DOMAINS_ARCHITECTURE
+  })
+
+  // 手前のフェンスが閉じていないため、ドメインブロックの開始行はフェンス内に呑まれて読めない。
+  // 警告が無ければ「ドメインが未定義」と区別できない(委譲判断を誤らせる)。
+  const text = fs.readFileSync(path.join(dir, "docs/ARCHITECTURE.md"), "utf8")
+  expect(extractDomains(text).ok).toBe(false)
+  expect(extractDomains(text).warnings.length).toBe(1)
+  expect(readDomains(dir)).toBe(null)
+  expect(readDomainsResult(dir).warnings.length).toBe(1)
+
+  const out = runScript(dir)
+  expect(out.projectDocs.domainsReadable).toBe(false)
+  expect(out.configWarnings.length).toBe(1)
+  expect(out.configWarnings[0]).toContain("閉じていないコードフェンス")
+})
+
+// ---------------------------------------------------------------------------
+// ケース 16f の強化: ドメインマップの中身・無効な形状・重複警告を 3 者で突き合わせる
+//
+// 「読めたかどうか」の真偽だけを比べる比較は、検証 4 項目のどれかを 1 実装だけが
+// 見ていない割れ(同じ `{}` を片方だけが受け入れる)を素通しする。
+// ---------------------------------------------------------------------------
+
+// ドメインマップブロックだけを持つ最小 ARCHITECTURE(契約 §4-1「すべてのセクションは任意」)。
+function architectureWith(body: string): string {
+  return [
+    "# ARCHITECTURE",
+    "",
+    "## ドメインマップ",
+    "",
+    "```json metatron:domains",
+    body,
+    "```",
+    ""
+  ].join("\n")
+}
+
+test("ケース 16f: 3 実装が同じドメイン定義を返す(値まで突き合わせる)", () => {
+  const dir = gitRepo()
+  const sub = mkdir(dir, "a/b")
+  expectThreeWayMatch(sub, "ドメイン定義の一致", {
+    architecture: architectureWith(
+      '{ "frontend": ["src/app/**", "src/components/**"], "data": ["db/**"] }'
+    )
+  })
+  expect(readDomains(sub)).toStrictEqual({
+    frontend: ["src/app/**", "src/components/**"],
+    data: ["db/**"]
+  })
+  expect(runScript(sub).projectDocs.domainCount).toBe(2)
+})
+
+test("ケース 16f: 無効な形状は 3 実装が揃って「読めない」と判定する", () => {
+  // 契約 §1 の検証 4 項目に反する形。1 実装だけが受け入れれば割れである。
+  const invalid = [
+    ["キーが 0 個", "{}"],
+    ["トップレベルが配列", "[]"],
+    ["トップレベルが配列(非空)", '["src/**"]'],
+    ["値が空配列", '{ "x": [] }'],
+    ["値の要素が文字列でない", '{ "x": [1] }'],
+    ["値が配列でない", '{ "x": "src/**" }'],
+    ["有効な JSON でない", '{ "x": ']
+  ]
+  for (const [name, body] of invalid) {
+    const dir = gitRepo()
+    expectThreeWayMatch(dir, `無効な形状(${name})`, {
+      architecture: architectureWith(body)
+    })
+    expect(readDomains(dir), `codiel: ${name}`).toBe(null)
+    const out = runScript(dir)
+    expect(out.projectDocs.domainsReadable, `sandalphon: ${name}`).toBe(false)
+    expect(out.projectDocs.domainCount, `sandalphon: ${name}`).toBe(0)
+    expect(out.codielReady, `codielReady: ${name}`).toBe(false)
+  }
+})
+
+test("ケース 16f: 重複ブロックで 3 実装が揃って警告を返し、最初のものを採る", () => {
+  const dir = gitRepo()
+  expectThreeWayMatch(dir, "重複ブロック", {
+    architecture: DUPLICATE_DOMAINS_ARCHITECTURE
+  })
+
+  // 3 実装とも警告 1 件。読み取り経路なので拒否はしない(契約 §1)。
+  const architecturePath = path.join(dir, "docs/ARCHITECTURE.md")
+  const text = fs.readFileSync(architecturePath, "utf8")
+  expect(extractDomains(text).warnings.length).toBe(1)
+  expect(readDomainsResult(dir).warnings.length).toBe(1)
+  expect(runScript(dir).configWarnings.length).toBe(1)
+
+  // 採るのは最初のブロック。3 実装でずれない。
+  expect(readDomains(dir)).toStrictEqual({
+    frontend: ["src/app/**"],
+    backend: ["src/server/**"]
+  })
+  expect(runScript(dir).projectDocs.domainCount).toBe(2)
+})
+
+test("ケース 16f: 未閉フェンスでも 3 実装が揃って警告を返し、読み取りは続く", () => {
+  const dir = gitRepo()
+  expectThreeWayMatch(dir, "未閉フェンス", {
+    architecture: UNCLOSED_DOMAINS_ARCHITECTURE
+  })
+  expect(readDomainsResult(dir).warnings.length).toBe(1)
+  expect(readDomains(dir)).toStrictEqual({ frontend: ["src/app/**"] })
 })

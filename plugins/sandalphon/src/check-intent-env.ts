@@ -17,7 +17,7 @@
 // 基準は 3 つあり、どれか 1 つに寄せない(契約 §3「codiel における 2 つのルート概念」)。
 //   - intent 文書(docs/intents/)  : repoRoot(git ルート)
 //   - ARCHITECTURE / GOTCHAS       : docRoot(契約 §3 規則 1)
-//   - .codiel の有無と runDirs     : codielRoot(開始ディレクトリからの上方向探索)
+//   - .codiel の有無と runDirs     : codielRoot(開始ディレクトリ**の論理パス**からの上方向探索)
 // 3 者が別ディレクトリを指すのは正常な状態であり、フィールド名で区別する。
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -118,10 +118,22 @@ function resolveSafe(value: string): string {
 // 開始ディレクトリと git
 // ---------------------------------------------------------------------------
 
-// 契約 §3 規則 1 の細目: 探索を始める前に開始ディレクトリを実体パスへ解決する。
-// 段 2 の `git rev-parse --show-toplevel` が実体パスを返すため、段 1 を文字列操作だけで
-// 辿るとシンボリックリンク越しの起動で両者が別のディレクトリ木を辿る。
-const startDir = realpathOrSelf(resolveSafe(process.argv[2] ?? cwdSafe()))
+// 開始ディレクトリは 2 つの形で持つ。**同じファイル内で前処理が違うのは意図的**であり、
+// それぞれ合わせる相手が違うためである(契約 §3)。
+//
+// `logicalStartDir`: 引数(無ければ `process.cwd()`)を絶対パス化しただけの**論理パス**。
+//   `.codiel` の探索はこちらを使う。契約 §3 は「`.codiel` は codiel 自身の `findProjectRoot`
+//   と同じ基準」と定めており、その `findProjectRoot` は渡された論理パスをそのまま上方向へ
+//   辿る。ここで実体パスへ寄せると、`/tmp/link` が `/repo/sub` を指し `/repo/.codiel` がある
+//   構成で sandalphon だけが `.codiel` を見つけ、「委譲できる」と案内した先で codiel が
+//   run 資産を発見できない。合わせる先は codiel であって実体パスではない。
+const logicalStartDir = resolveSafe(process.argv[2] ?? cwdSafe())
+
+// `startDir`: 実体パスへ解決した開始ディレクトリ。**文書ルート(docRoot)と git の探索**に使う。
+//   契約 §3 規則 1 の細目が明示的に realpath を要求している。段 2 の
+//   `git rev-parse --show-toplevel` が実体パスを返すため、段 1 を文字列操作だけで辿ると
+//   シンボリックリンク越しの起動で両者が別のディレクトリ木を辿り、3 実装の docRoot が割れる。
+const startDir = realpathOrSelf(logicalStartDir)
 
 // git 未インストール(ENOENT で status が null)・git 管理外(exit 128)・タイムアウト・
 // その他の非 0 終了は、原因を区別せず「無かった」として扱う(契約 §3 規則 1 の細目)。
@@ -425,9 +437,21 @@ function isDomainsInfo(info: string): boolean {
 }
 
 // 同一ファイル内にブロックが 2 個以上あるときは最初のものを採る(契約 §1)。
-// 読み取り経路なので警告を出さずに続行する。
-function findDomainsContent(text: string): string | null {
+// 未閉フェンスでも読み取り経路は続行する(契約 §4-3。ファイル終端までを内容として扱う)。
+//
+// **どちらも続行はするが黙らない。** 契約 §1 は「警告は経路を問わず返す」と定めており、
+// 読み取り専用のこのスクリプトも例外ではない。最初のブロックを見つけた時点で返してしまうと
+// 重複も未閉フェンスも検出できず、「ドメインが未定義」と「ドメインを読み落とした」を
+// 呼び出し側が区別できなくなる。走査は必ず最後まで行い、理由を呼び出し元へ返す。
+//
+// 警告の文言は正本(metatron の `findDomainsBlock`)と一致させる。
+function findDomainsContent(text: string): {
+  content: string | null
+  warnings: string[]
+} {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""))
+  const blocks: { content: string; closed: boolean }[] = []
+  const warnings: string[] = []
   let fence: { char: string; count: number } | null = null
   let isTarget = false
   let openIndex = -1
@@ -437,7 +461,12 @@ function findDomainsContent(text: string): string | null {
     if (fence) {
       const m = FENCE_CLOSE_RE.exec(t)
       if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
-        if (isTarget) return lines.slice(openIndex + 1, i).join("\n")
+        if (isTarget) {
+          blocks.push({
+            content: lines.slice(openIndex + 1, i).join("\n"),
+            closed: true
+          })
+        }
         fence = null
         isTarget = false
       }
@@ -452,20 +481,48 @@ function findDomainsContent(text: string): string | null {
   }
 
   // 未閉フェンスでも読み取り経路は続行する(ファイル終端までを内容として扱う)。
-  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n")
-  return null
+  if (fence && isTarget) {
+    blocks.push({
+      content: lines.slice(openIndex + 1).join("\n"),
+      closed: false
+    })
+  }
+
+  if (blocks.length > 1) {
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` ブロックが ${blocks.length} 個あります。最初のものだけを使用します。`
+    )
+  }
+  if (blocks.length > 0 && !blocks[0].closed) {
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` ブロックが閉じていません。ファイル終端までを内容として扱いました。`
+    )
+  } else if (fence !== null) {
+    // ドメインブロックとは無関係な未閉フェンスでも警告する。手前のフェンスが閉じていないと
+    // ドメインブロックの開始行がフェンス内に呑まれて読めなくなるため、黙って落とすと
+    // 「ドメインが未定義」と見分けがつかない(契約 §4-3 の読み取り経路)。
+    warnings.push(
+      "ARCHITECTURE に閉じていないコードフェンスがあります。未閉フェンス以降を 1 セクションとして扱いました。"
+    )
+  }
+
+  return { content: blocks[0]?.content ?? null, warnings }
 }
 
 // 契約 §1 の検証 4 項目。読めない場合は例外を投げず「読めない」として扱う。
+// 構造上の指摘(重複・未閉フェンス)は、ドメインを読めたかどうかに関わらず返す(契約 §1)。
 function readDomains(file: string | null): {
   domainsReadable: boolean
   domainCount: number
+  warnings: string[]
 } {
-  const unreadable = { domainsReadable: false, domainCount: 0 }
-  if (!file) return unreadable
+  const noFile = { domainsReadable: false, domainCount: 0, warnings: [] }
+  if (!file) return noFile
   const text = readFileSafe(file)
-  if (text === null) return unreadable
-  const content = findDomainsContent(text)
+  if (text === null) return noFile
+
+  const { content, warnings } = findDomainsContent(text)
+  const unreadable = { domainsReadable: false, domainCount: 0, warnings }
   if (content === null) return unreadable
 
   let parsed: unknown
@@ -482,10 +539,13 @@ function readDomains(file: string | null): {
     if (!Array.isArray(globs) || globs.length === 0) return unreadable
     if (globs.some((g) => typeof g !== "string")) return unreadable
   }
-  return { domainsReadable: true, domainCount: entries.length }
+  return { domainsReadable: true, domainCount: entries.length, warnings }
 }
 
 const domains = readDomains(architecturePath)
+// 契約 §1: 警告は経路を問わず返す。読み取り専用のこのスクリプトも黙って落とさない。
+// configWarnings は「既定値へ落とした理由」を返す唯一の口であり、文書構造の指摘もここへ積む。
+configWarnings.push(...domains.warnings)
 
 // ---------------------------------------------------------------------------
 // Codiel 固有資産(文書の可読性は projectDocs 側に置く。設計書 §7-3)
@@ -505,9 +565,13 @@ const domains = readDomains(architecturePath)
  *
  * 見つからなければ `null` を返す(codiel の `findProjectRoot` が開始ディレクトリを返すのとは
  * 異なる。sandalphon が答えるのは「あるか無いか」であり、無いことを表す値が要る)。
+ *
+ * 探索の起点は `startDir` ではなく `logicalStartDir`(realpath 化しない)である。
+ * codiel の `findProjectRoot` が論理パスをそのまま辿るため、ここで実体パスへ寄せると
+ * 2 つの実装が別のディレクトリ木を辿る。docRoot 側が realpath 化するのとは理由が異なる。
  */
 function findCodielRoot(): string | null {
-  let dir = startDir
+  let dir = logicalStartDir
   while (true) {
     if (isDir(path.join(dir, ".codiel"))) return dir
     const parent = path.dirname(dir)
