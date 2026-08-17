@@ -1,6 +1,6 @@
 {
   "name": "codiel-scripts",
-  "version": "0.5.2-dev",
+  "version": "0.5.3-dev",
   "private": true,
   "type": "module",
   "scripts": { "build": "tsx build.ts" }

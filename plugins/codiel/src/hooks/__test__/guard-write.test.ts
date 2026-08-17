@@ -486,3 +486,156 @@ test("docRoot = codielRoot の通常構成では既存の挙動が変わらな�
     hook(root, "Write", path.join(root, ".codiel/reports/test-run-1.md"))
   ).toBe(null)
 })
+
+// ---------------------------------------------------------------------------
+// 警告の到達(契約 §1「警告は経路を問わず返す」の、PreToolUse hook における限界)
+//
+// PreToolUse hook が出せるのは deny / ask / 無出力の 3 つだけで、「素通しするが警告は
+// ある」を表現する口が無い。そのため素通し時の警告は届かない(契約 §1 に明記した限界)。
+// 届く経路は CLI・検証コマンド・**ask の理由**である。境界判定が誤っているかもしれない
+// 文脈でこそ警告が要るので、ask の理由に添える。
+// ---------------------------------------------------------------------------
+
+// ドメインマップブロックを 2 つ持つ ARCHITECTURE。採られるのは最初のものだけ
+// (契約 §1)。2 つ目は「もし後勝ちなら素通しになる」形にして、取り違えを検出する。
+function writeDuplicateArchitecture(root: string) {
+  fs.mkdirSync(path.join(root, "docs"), { recursive: true })
+  fs.writeFileSync(
+    path.join(root, "docs/ARCHITECTURE.md"),
+    [
+      "# ARCHITECTURE",
+      "",
+      "```json metatron:domains",
+      JSON.stringify(DOMAINS, null, 2),
+      "```",
+      "",
+      "```json metatron:domains",
+      JSON.stringify({ backend: ["**"] }, null, 2),
+      "```",
+      ""
+    ].join("\n")
+  )
+}
+
+test("重複ブロックがある状態で担当範囲外へ書き込むと ask の理由に警告が添う", () => {
+  const root = setupRun()
+  advanceToImplement(root)
+  writeDuplicateArchitecture(root)
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+    cwd: root
+  })
+  const r = hook(root, "Edit", path.join(root, "src/app/page.tsx"))
+  // 2 つ目のブロック({ backend: ["**"] })が採られていたら素通しになる
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("担当範囲外")
+  expect(r?.permissionDecisionReason).toContain("metatron:domains")
+  expect(r?.permissionDecisionReason).toContain("2 個")
+})
+
+test("重複ブロックがある状態では未知の domain 名の ask にも警告が添う", () => {
+  const root = setupRun()
+  advanceToImplement(root)
+  writeDuplicateArchitecture(root)
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backends"], {
+    cwd: root
+  })
+  const r = hook(root, "Edit", path.join(root, "src/server/db.ts"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toMatch(/ドメインマップ/)
+  expect(r?.permissionDecisionReason).toContain("metatron:domains")
+})
+
+test("警告が無ければ ask の理由に警告欄は出ない(定型文を足さない)", () => {
+  const root = setupRun()
+  advanceToImplement(root)
+  writeArchitecture(root, DOMAINS)
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+    cwd: root
+  })
+  const r = hook(root, "Edit", path.join(root, "src/app/page.tsx"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).not.toContain("警告")
+})
+
+// ---------------------------------------------------------------------------
+// symlink 経由の cwd(契約 §3 規則 1 の細目)
+//
+// findDocRoot は開始ディレクトリを実体パス化する。docRel を論理パスのまま取ると
+// 座標系が割れ、/tmp/link -> /repo のとき docRel が `../tmp/link/src/...` になって
+// **担当範囲内の書き込みが範囲外として ask される**。
+// 一方 codielRel は findProjectRoot が論理パスを辿るため論理パス基準のままにする。
+// ---------------------------------------------------------------------------
+
+function setupSymlinkedRepo(): { real: string; link: string } {
+  const real = fs.realpathSync(setupRun())
+  advanceToImplement(real)
+  writeArchitecture(real, DOMAINS)
+  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+    cwd: real
+  })
+  // 実体化は「親ディレクトリまでは実在する」場合に効く(metatron の realpathOrParent と
+  // 同じ手法)。実運用の新規ファイル作成に合わせ、書き込み先の親を作っておく。
+  fs.mkdirSync(path.join(real, "src/server"), { recursive: true })
+  fs.mkdirSync(path.join(real, "src/app"), { recursive: true })
+  // **`.codiel/` 側の親も作る。** ここを省くと realpathOrParent が入力をそのまま返す
+  // 無害な恒等関数に落ち、codielRel を論理パス基準にしても実体パス基準にしても同じ値になる。
+  // つまり「codielRel は論理パス基準のまま」という不変条件を張ったつもりのテストが、
+  // 実体パス基準へ揃える改変を通してしまう(変異が生き残る)。実運用でも 2 本目以降の
+  // レポートやスペックは既存ディレクトリへ書かれるので、親が在る側が既定の状況である。
+  fs.mkdirSync(path.join(real, ".codiel/reports"), { recursive: true })
+  fs.mkdirSync(path.join(real, ".codiel/specs/unit-1/scripts"), {
+    recursive: true
+  })
+  const linkParent = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "gw-link-"))
+  )
+  const link = path.join(linkParent, "repo-link")
+  // symlink を作れない環境でも黙って飛ばさない。作成に失敗すればテストが落ちる。
+  fs.symlinkSync(real, link, "dir")
+  return { real, link }
+}
+
+test("symlink 経由の cwd: 担当範囲内の書き込みは素通し", () => {
+  const { link } = setupSymlinkedRepo()
+  expect(hook(link, "Edit", path.join(link, "src/server/db.ts"))).toBe(null)
+  expect(hook(link, "Write", path.join(link, "src/server/new-file.ts"))).toBe(
+    null
+  )
+})
+
+test("symlink 経由の cwd: 担当範囲外は ask、理由も docRoot 基準の相対パス", () => {
+  const { link } = setupSymlinkedRepo()
+  const r = hook(link, "Edit", path.join(link, "src/app/page.tsx"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("担当範囲外")
+  expect(r?.permissionDecisionReason).toContain("src/app/page.tsx")
+  // `../` 付きの相対パスが出ていたら座標系が割れている
+  expect(r?.permissionDecisionReason).not.toContain("../")
+})
+
+test("symlink 経由の cwd でも .codiel/ 配下は codielRoot 基準で素通し", () => {
+  const { link } = setupSymlinkedRepo()
+  // codielRel まで実体パス基準に「揃える」と、codielRoot(論理パス)との相対が
+  // `../` に落ちて .codiel/ 免除が外れ、運用資産への正当な書き込みが ask になる。
+  expect(
+    hook(link, "Write", path.join(link, ".codiel/reports/test-run-1.md"))
+  ).toBe(null)
+  expect(
+    hook(
+      link,
+      "Write",
+      path.join(link, ".codiel/specs/unit-1/scripts/a.spec.ts")
+    )
+  ).toBe(null)
+})
+
+test("symlink を使わない通常構成では既存の挙動が変わらない(回帰ガード)", () => {
+  const { real } = setupSymlinkedRepo()
+  expect(hook(real, "Edit", path.join(real, "src/server/db.ts"))).toBe(null)
+  const r = hook(real, "Edit", path.join(real, "src/app/page.tsx"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("src/app/page.tsx")
+  expect(
+    hook(real, "Write", path.join(real, ".codiel/reports/test-run-1.md"))
+  ).toBe(null)
+})
