@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from "node:fs"
 import path from "node:path"
 import { findActiveRun } from "../codiel-state.js"
 import {
@@ -7,7 +8,7 @@ import {
   findProjectRoot,
   globToRegExp,
   pass,
-  readDomains,
+  readDomainsResult,
   readStdin
 } from "./lib.js"
 
@@ -37,6 +38,34 @@ function toDomainMap(
   return map
 }
 
+// 実体パスへ解決する。**書き込み先はまだ存在しないことがある**(新規作成)ため、
+// 本体が解決できなければ親ディレクトリで解決してファイル名を付け直す。
+// どちらも解決できなければ入力をそのまま返す(例外は投げない)。
+// metatron の `src/guard-docs.ts` の `realpathOrParent` と同じ手法。3 プラグインは
+// 互いのインストールパスを解決できないため、import せず同じ手法を独立に持つ。
+function realpathOrParent(abs: string): string {
+  try {
+    return fs.realpathSync(abs)
+  } catch {
+    try {
+      return path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs))
+    } catch {
+      return abs
+    }
+  }
+}
+
+// 契約 §1「警告は経路を問わず返す」。ただし **PreToolUse hook は警告を返す口を持たない**。
+// 出せるのは deny / ask / 無出力の 3 つだけで、「素通しするが警告はある」を表現できない。
+// そこで ask を返すときだけ理由へ添える。境界判定が誤っているかもしれない文脈でこそ
+// 警告が要るので、届け先としては理に適っている。素通し時は届かない(契約 §1 に明記した
+// 限界)。届く経路は CLI・skills の検証コマンド・この ask の理由である。
+// 警告が無いときに定型文を足さないのは、理由を読む人間のノイズを増やさないため。
+function withDomainWarnings(reason: string, warnings: string[]): string {
+  if (warnings.length === 0) return reason
+  return `${reason}\n[ドメインマップの警告] ${warnings.join(" / ")}`
+}
+
 try {
   const input = await readStdin()
   const cwd = input.cwd ?? process.cwd()
@@ -61,6 +90,14 @@ try {
   //
   // 契約 §3 は docRoot と codielRoot が異なる構成(例: repo/.codiel と
   // repo/sub/metatron.config.json)を正常と定めるため、この 2 つは一致するとは限らない。
+  //
+  // **2 つの相対パスは前処理も異なる。** 揃える相手が違うためである。
+  // codielRel は **論理パス基準**(abs をそのまま使う)。基準の findProjectRoot は
+  // 論理パスを `path.dirname` で辿るだけで実体化しないので、こちらだけ実体パス化すると
+  // symlink 越しの cwd で相対が `../` に落ち、`.codiel/` 免除が外れる。
+  // docRel は **実体パス基準**(下の realpathOrParent を通す)。基準の findDocRoot は
+  // 契約 §3 規則 1 の細目に従って開始ディレクトリを実体パス化する。
+  // 「一貫性のため」どちらか片方に揃えると、揃えた側の基準関数と食い違って壊れる。
   const codielRoot = findProjectRoot(cwd)
   const codielRel = path.relative(codielRoot, abs).replaceAll("\\", "/")
 
@@ -105,8 +142,16 @@ try {
       // 解釈することになり、担当範囲内の書き込みが ask に落ち、docRoot 外のパスが
       // 範囲内として通りうる。
       const docRoot = findDocRoot(cwd)
-      const docRel = path.relative(docRoot, abs).replaceAll("\\", "/")
-      const domains = toDomainMap(readDomains(cwd))
+      // findDocRoot が開始ディレクトリを実体パス化する以上、相対を取る相手も
+      // 実体パスでなければ座標系が割れる。/tmp/link -> /repo のとき論理パスのまま
+      // 相対を取ると docRel が `../tmp/link/src/server/a.ts` になり、
+      // **担当範囲内の書き込みが範囲外として ask される**。
+      const docRel = path
+        .relative(docRoot, realpathOrParent(abs))
+        .replaceAll("\\", "/")
+      // 契約 §1「警告は経路を問わず返す」。警告を捨てる readDomains を使わない。
+      const { domains: rawDomains, warnings } = readDomainsResult(cwd)
+      const domains = toDomainMap(rawDomains)
       // ドメイン定義が無い・読めない環境で新たに書き込みを止めるのは配線の目的ではない。
       if (domains) {
         const globs: string[] | undefined = domains[domain]
@@ -114,12 +159,18 @@ try {
         if (!globs)
           emit(
             "ask",
-            `ドメイン ${domain} が ARCHITECTURE のドメインマップに無いため、${docRel} への書き込みが担当範囲内か判定できません(ドメイン名の誤り、またはドメインマップの記述漏れ)`
+            withDomainWarnings(
+              `ドメイン ${domain} が ARCHITECTURE のドメインマップに無いため、${docRel} への書き込みが担当範囲内か判定できません(ドメイン名の誤り、またはドメインマップの記述漏れ)`,
+              warnings
+            )
           )
         if (!globs.some((g) => globToRegExp(g).test(docRel)))
           emit(
             "ask",
-            `${docRel} はドメイン ${domain} の担当範囲外です(${domain} の範囲: ${globs.join(", ")})`
+            withDomainWarnings(
+              `${docRel} はドメイン ${domain} の担当範囲外です(${domain} の範囲: ${globs.join(", ")})`,
+              warnings
+            )
           )
       }
     }

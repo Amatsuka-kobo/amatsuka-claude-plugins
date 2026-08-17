@@ -131,11 +131,12 @@ bash <plugin-root>/scripts/install-harness.sh
 ## 5. 検証
 
 対象プロジェクトのルートで次を実行し、hooks・オーケストレーターと**同一の解析系**
-(`lib.mjs` の `readDomains`)で読めることを確認する。
+(`lib.mjs` の `readDomainsResult`)で読めることを確認する。
 
 ```
-node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomains }) => {
-  const d = readDomains(process.cwd());
+node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomainsResult }) => {
+  const { domains: d, warnings } = readDomainsResult(process.cwd());
+  for (const w of warnings) console.error("WARN:", w);
   const ok = d && typeof d === "object" && !Array.isArray(d) && Object.keys(d).length > 0 &&
     Object.values(d).every(v => Array.isArray(v) && v.length > 0 && v.every(g => typeof g === "string"));
   if (!ok) { console.error("NG: metatron:domains ブロックが読めない/形式不正"); process.exit(1); }
@@ -145,6 +146,7 @@ node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomains }) => {
 
 (`<plugin-root>` は絶対パスに展開して実行する)
 
+- `WARN:` 行が出たら、`OK:` が返っていても内容を手順 6 の完了報告に出す。
 - ARCHITECTURE に `## 保護パス` 節がある場合は、その節と `raguel.config.yaml` の
   `rules."code/protected-paths".globs` を両方 Read し、glob の集合が一致していることを確認する。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
@@ -154,6 +156,7 @@ node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomains }) => {
 次を報告して終了する。
 
 - 配置・生成・追記したファイルの一覧(skip したものは skip と明記)
+- 手順 5 の検証コマンドが出した `WARN:` 行(あれば全文)
 - ユーザーが不明と答えて未記入のまま残した項目
 - 最小 ARCHITECTURE を生成した場合は「これは Codiel が run を開始するための最小構成である。
   技術スタック・規約などの記述を加えるには metatron の導入を検討するとよい」を 1 行添える

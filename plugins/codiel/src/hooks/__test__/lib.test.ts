@@ -500,7 +500,17 @@ test("R11: 内容が読めなくても重複の警告は返す", () => {
   expect(result.warnings.length).toBe(1)
 })
 
-test("R11: readDomains は従来どおり値だけを返す(警告は無視できる)", () => {
+// 契約 §1「警告は経路を問わず返す」に対する **到達経路の固定**。
+// `readDomains` は警告を落とす。落とすこと自体は仕様だが、**警告を出す口を持つ経路が
+// この薄いラッパを使ってはならない**。前回の欠陥はまさにそれで、`readDomainsResult` を
+// 足しながら実運用の呼び出し元が `readDomains` のまま残り、警告が断線していた。
+//
+// 到達の可否は経路ごとに次で固定する。ここを「警告は捨ててよい」と読める形に緩めない。
+// - lib の読み取り(この test)   : `readDomainsResult` は返す / `readDomains` は落とす
+// - guard-write(PreToolUse hook): ask の理由に添う。素通し時は出す口が無く届かない
+//   (`__test__/guard-write.test.ts` の「重複ブロック…ask の理由に警告が添う」で固定)
+// - skills の検証コマンド        : `readDomainsResult` を呼び、完了報告へ出す
+test("R11: 警告は readDomainsResult で届き、readDomains では落ちる(経路の固定)", () => {
   const root = mkTmp("lib-domains-wrapper-")
   writeArchitecture(root, [
     "```json metatron:domains",
@@ -511,6 +521,10 @@ test("R11: readDomains は従来どおり値だけを返す(警告は無視で�
     '{ "second": ["b/**"] }',
     "```"
   ])
+  // 同じ入力・同じ値。違うのは警告が届くかどうかだけである。
+  const result = readDomainsResult(root)
+  expect(result.domains).toStrictEqual({ first: ["a/**"] })
+  expect(result.warnings.length).toBe(1)
   expect(readDomains(root)).toStrictEqual({ first: ["a/**"] })
 })
 

@@ -57,9 +57,10 @@ run を開始する前に、必ず次を確認する。ひとつでも欠けて�
    **解決はこの 1 回だけ行い、以降は解決した値を各所へ渡す**(サブエージェントに解決させない)。
 
    ```
-   node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ resolveDocPaths, readDomains }) => {
+   node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ resolveDocPaths, readDomainsResult }) => {
      const p = resolveDocPaths(process.cwd());
-     console.log(JSON.stringify({ architecture: p.architecture, gotchas: p.gotchas, domains: readDomains(process.cwd()) }));
+     const d = readDomainsResult(process.cwd());
+     console.log(JSON.stringify({ architecture: p.architecture, gotchas: p.gotchas, domains: d.domains, warnings: [...p.warnings, ...d.warnings] }));
    })'
    ```
 
@@ -69,9 +70,11 @@ run を開始する前に、必ず次を確認する。ひとつでも欠けて�
 3. **`domains` が `null` または形式不正の場合**: ハーネスが未初期化である。`install-harness.sh` を
    実行したり雛形を自分で作ったりせず、ユーザーに「`/codiel:init` を実行して初期化してください」と
    案内して、**この run はここで終了する**(未初期化のまま先へ進まない)。
-4. 出力の `architecture` / `gotchas` は、ベースブランチ解決(§1)とディスパッチプロンプト(§3)で
+4. 出力の `warnings` が空でなければ、その全文をユーザーへ提示してから次へ進む。
+   警告だけを理由に run を止めない。
+5. 出力の `architecture` / `gotchas` は、ベースブランチ解決(§1)とディスパッチプロンプト(§3)で
    そのまま使う。GOTCHAS はファイルが無くてもここでは終了せず、各所でスキップする。
-5. `mcp__raguel__*` ツール群(`evaluate_decision` 等)が利用可能であることを確認する。
+6. `mcp__raguel__*` ツール群(`evaluate_decision` 等)が利用可能であることを確認する。
    利用できなければ run を開始しない。
 
 ## 1. run の解決

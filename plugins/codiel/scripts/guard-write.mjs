@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 // src/hooks/guard-write.ts
+import fs3 from "node:fs";
 import path3 from "node:path";
 
 // src/codiel-state.ts
@@ -336,9 +337,6 @@ function readDomainsResult(startDir) {
     return { domains: null, warnings: [] };
   }
 }
-function readDomains(startDir) {
-  return readDomainsResult(startDir).domains;
-}
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (true) {
@@ -367,6 +365,22 @@ function toDomainMap(value) {
   const map = /* @__PURE__ */ Object.create(null);
   for (const [name, globs] of Object.entries(value)) map[name] = globs;
   return map;
+}
+function realpathOrParent(abs) {
+  try {
+    return fs3.realpathSync(abs);
+  } catch {
+    try {
+      return path3.join(fs3.realpathSync(path3.dirname(abs)), path3.basename(abs));
+    } catch {
+      return abs;
+    }
+  }
+}
+function withDomainWarnings(reason, warnings) {
+  if (warnings.length === 0) return reason;
+  return `${reason}
+[\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8B66\u544A] ${warnings.join(" / ")}`;
 }
 try {
   const input = await readStdin();
@@ -401,19 +415,26 @@ try {
     const domain = run.state.domain;
     if (domain && !codielRel.startsWith(".codiel/")) {
       const docRoot = findDocRoot(cwd);
-      const docRel = path3.relative(docRoot, abs).replaceAll("\\", "/");
-      const domains = toDomainMap(readDomains(cwd));
+      const docRel = path3.relative(docRoot, realpathOrParent(abs)).replaceAll("\\", "/");
+      const { domains: rawDomains, warnings } = readDomainsResult(cwd);
+      const domains = toDomainMap(rawDomains);
       if (domains) {
         const globs = domains[domain];
         if (!globs)
           emit(
             "ask",
-            `\u30C9\u30E1\u30A4\u30F3 ${domain} \u304C ARCHITECTURE \u306E\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306B\u7121\u3044\u305F\u3081\u3001${docRel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u304C\u62C5\u5F53\u7BC4\u56F2\u5185\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(\u30C9\u30E1\u30A4\u30F3\u540D\u306E\u8AA4\u308A\u3001\u307E\u305F\u306F\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8A18\u8FF0\u6F0F\u308C)`
+            withDomainWarnings(
+              `\u30C9\u30E1\u30A4\u30F3 ${domain} \u304C ARCHITECTURE \u306E\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306B\u7121\u3044\u305F\u3081\u3001${docRel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u304C\u62C5\u5F53\u7BC4\u56F2\u5185\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(\u30C9\u30E1\u30A4\u30F3\u540D\u306E\u8AA4\u308A\u3001\u307E\u305F\u306F\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8A18\u8FF0\u6F0F\u308C)`,
+              warnings
+            )
           );
         if (!globs.some((g) => globToRegExp(g).test(docRel)))
           emit(
             "ask",
-            `${docRel} \u306F\u30C9\u30E1\u30A4\u30F3 ${domain} \u306E\u62C5\u5F53\u7BC4\u56F2\u5916\u3067\u3059(${domain} \u306E\u7BC4\u56F2: ${globs.join(", ")})`
+            withDomainWarnings(
+              `${docRel} \u306F\u30C9\u30E1\u30A4\u30F3 ${domain} \u306E\u62C5\u5F53\u7BC4\u56F2\u5916\u3067\u3059(${domain} \u306E\u7BC4\u56F2: ${globs.join(", ")})`,
+              warnings
+            )
           );
       }
     }
