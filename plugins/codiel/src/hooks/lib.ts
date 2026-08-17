@@ -327,6 +327,12 @@ export function resolveDocPaths(startDir?: string): DocPaths {
 // ---------------------------------------------------------------------------
 // ドメインマップの抽出(契約 §1・§4-2 の独立実装)
 //
+// 契約 §1 の**検証 4 項目**(有効な JSON / トップレベルがオブジェクトで配列でない /
+// 各値が 1 要素以上の文字列配列 / キーが 1 個以上)を読み取り時にも適用する。
+// JSON として parse できただけの値を「読めた」として返してはならない。metatron の
+// `validateDomainsValue` と sandalphon の `readDomains` が同じ判定を持っており、
+// ここだけ緩いと同じ ARCHITECTURE に対する 3 実装の答えが割れる。
+//
 // 終了フェンスの判定は契約 §4-2 の規則 2 と同一とし、開始行・終了行の認識も
 // §4-2 の正規化(インデント許容・改行コード・末尾空白の扱い)に従う。
 // **独自のフェンス判定を書かない**(契約 §1)。metatron の `src/lib/architecture.ts` と
@@ -359,13 +365,29 @@ function isDomainsInfo(info: string): boolean {
   )
 }
 
-// 契約 §4-2 の状態機械でドメインマップブロックの中身を取り出す。
-// 同一ファイル内にブロックが 2 個以上あるときは最初のものを採る(契約 §1)。
-// 読み取り経路なので警告は出さず、例外も投げない。
-function findDomainsContent(text: string): string | null {
+interface DomainsBlock {
+  /** 開始行と終了フェンスの間の文字列。原文のまま。 */
+  content: string
+  /** 終了フェンスが見つかったか。 */
+  closed: boolean
+}
+
+interface DomainsBlockLookup {
+  block: DomainsBlock | null
+  warnings: string[]
+}
+
+// 契約 §4-2 の状態機械でドメインマップブロックを探す。
+// 同一ファイル内にブロックが 2 個以上あるときは最初のものを採り、**そのことを警告する**
+// (契約 §1「警告は経路を問わず返す」。読み取り経路でも拒否はしないが黙らない)。
+// 未閉フェンスは終端までを内容として扱い、警告を 1 行添える(契約 §4-3 の読み取り経路)。
+// 警告の出る条件と件数は metatron の `findDomainsBlock` と揃える。例外は投げない。
+function findDomainsBlocks(text: string): DomainsBlockLookup {
   // 契約 §4-2: 判定の前に各行の末尾の `\r` を除去する(CRLF 改行の文書で
   // フェンス判定が実装ごとに割れるのを防ぐ)。
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""))
+  const blocks: DomainsBlock[] = []
+  const warnings: string[] = []
   let fence: { char: string; count: number } | null = null
   let isTarget = false
   let openIndex = -1
@@ -376,7 +398,11 @@ function findDomainsContent(text: string): string | null {
       const m = FENCE_CLOSE_RE.exec(t)
       // 開始と同じ文字を開始と同数以上連続させた行だけが終了フェンス。
       if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
-        if (isTarget) return lines.slice(openIndex + 1, i).join("\n")
+        if (isTarget)
+          blocks.push({
+            content: lines.slice(openIndex + 1, i).join("\n"),
+            closed: true
+          })
         fence = null
         isTarget = false
       }
@@ -391,23 +417,97 @@ function findDomainsContent(text: string): string | null {
   }
 
   // 未閉フェンスでも読み取り経路は続行する(契約 §4-3。終端までを内容として扱う)。
-  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n")
-  return null
+  if (fence && isTarget)
+    blocks.push({
+      content: lines.slice(openIndex + 1).join("\n"),
+      closed: false
+    })
+
+  if (blocks.length > 1)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` ブロックが ${blocks.length} 個あります。最初のものだけを使用します。`
+    )
+  if (blocks.length > 0 && !blocks[0].closed)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` ブロックが閉じていません。ファイル終端までを内容として扱いました。`
+    )
+  // 契約 §1: 開始マーカーが他のフェンスに取り込まれ、ブロックとして認識されない
+  // ときも警告を返す。返す値は「ブロックが無い」ときと同じ null だが、原因が違う。
+  // 前者は書き手が意図して置いたブロックが読めていない状態、後者は最小 ARCHITECTURE の
+  // ような正当な状態である。黙って null を返すと書き手は読まれていないことに気づけない。
+  else if (fence !== null)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` の走査中に閉じていないコードフェンスを検出しました。マーカーがフェンス内に取り込まれていないか確認してください。`
+    )
+
+  return { block: blocks[0] ?? null, warnings }
 }
 
-// ARCHITECTURE のドメインマップを読む。
-// 引数は**文書ルートではなく開始ディレクトリ**である。ルートの決定を関数の内側に
-// 閉じることで、呼び出し側が基準(文書ルートか codiel 資産ルートか)を間違えようがなくなる。
-export function readDomains(startDir: string): unknown {
+/**
+ * 契約 §1 の検証 4 項目のうち 2〜4(値の形)。1(有効な JSON)は呼び出し元が担う。
+ * metatron の `validateDomainsValue`、sandalphon の `readDomains` と**同じ判定**にする。
+ * ここを緩めると、同じ ARCHITECTURE を codiel だけが「読めた」と扱う契約の割れになる。
+ */
+function validateDomainsValue(value: unknown): Record<string, string[]> | null {
+  // 2. トップレベルがオブジェクトで、配列でない。
+  if (!isPlainObject(value)) return null
+  const entries = Object.entries(value)
+  // 4. キーが 1 個以上ある。
+  if (entries.length === 0) return null
+  // 3. 各値が 1 要素以上の文字列配列である。
+  for (const [, globs] of entries) {
+    if (!Array.isArray(globs) || globs.length === 0) return null
+    if (globs.some((g) => typeof g !== "string")) return null
+  }
+  return value as Record<string, string[]>
+}
+
+export interface DomainsRead {
+  /** 契約 §1 の検証 4 項目をすべて満たしたドメインマップ。満たさなければ null。 */
+  domains: Record<string, string[]> | null
+  /**
+   * 重複ブロック(契約 §1)・未閉フェンス(契約 §4-3)の警告。空配列が正常。
+   * 読み取り経路は警告があっても処理を止めない。
+   */
+  warnings: string[]
+}
+
+/**
+ * ARCHITECTURE のドメインマップを読み、警告と併せて返す。
+ *
+ * 引数は**文書ルートではなく開始ディレクトリ**である。ルートの決定を関数の内側に
+ * 閉じることで、呼び出し側が基準(文書ルートか codiel 資産ルートか)を間違えようがなくなる。
+ *
+ * 契約 §1 の検証 4 項目を満たさない値は `domains: null`(=「読めない」)にする。
+ * 例外は投げない。警告が要らない呼び出し元は `readDomains` を使う。
+ */
+export function readDomainsResult(startDir: string): DomainsRead {
   try {
     const { architecture } = resolveDocPaths(startDir)
-    if (!fs.existsSync(architecture)) return null
-    const content = findDomainsContent(fs.readFileSync(architecture, "utf8"))
-    if (content === null) return null
-    return JSON.parse(content)
+    if (!fs.existsSync(architecture)) return { domains: null, warnings: [] }
+    const { block, warnings } = findDomainsBlocks(
+      fs.readFileSync(architecture, "utf8")
+    )
+    if (block === null) return { domains: null, warnings }
+    // 1. ブロック内が有効な JSON である。
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(block.content)
+    } catch {
+      return { domains: null, warnings }
+    }
+    return { domains: validateDomainsValue(parsed), warnings }
   } catch {
-    return null
+    return { domains: null, warnings: [] }
   }
+}
+
+/**
+ * ARCHITECTURE のドメインマップだけを読む(警告は捨てる)。
+ * 警告も要るときは `readDomainsResult` を使う。
+ */
+export function readDomains(startDir: string): Record<string, string[]> | null {
+  return readDomainsResult(startDir).domains
 }
 
 // startDir から上方向に `.codiel` ディレクトリを持つ祖先を探す。

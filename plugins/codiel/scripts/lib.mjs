@@ -199,8 +199,10 @@ function isDomainsInfo(info) {
   const tokens = info.trim().split(/[ \t]+/).filter(Boolean);
   return tokens.length === 2 && tokens[0] === "json" && tokens[1] === DOMAINS_MARKER;
 }
-function findDomainsContent(text) {
+function findDomainsBlocks(text) {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  const blocks = [];
+  const warnings = [];
   let fence = null;
   let isTarget = false;
   let openIndex = -1;
@@ -209,7 +211,11 @@ function findDomainsContent(text) {
     if (fence) {
       const m = FENCE_CLOSE_RE.exec(t);
       if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
-        if (isTarget) return lines.slice(openIndex + 1, i).join("\n");
+        if (isTarget)
+          blocks.push({
+            content: lines.slice(openIndex + 1, i).join("\n"),
+            closed: true
+          });
         fence = null;
         isTarget = false;
       }
@@ -222,19 +228,56 @@ function findDomainsContent(text) {
       openIndex = i;
     }
   }
-  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n");
-  return null;
+  if (fence && isTarget)
+    blocks.push({
+      content: lines.slice(openIndex + 1).join("\n"),
+      closed: false
+    });
+  if (blocks.length > 1)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C ${blocks.length} \u500B\u3042\u308A\u307E\u3059\u3002\u6700\u521D\u306E\u3082\u306E\u3060\u3051\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+  if (blocks.length > 0 && !blocks[0].closed)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u9589\u3058\u3066\u3044\u307E\u305B\u3093\u3002\u30D5\u30A1\u30A4\u30EB\u7D42\u7AEF\u307E\u3067\u3092\u5185\u5BB9\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002`
+    );
+  else if (fence !== null)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u306E\u8D70\u67FB\u4E2D\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u691C\u51FA\u3057\u307E\u3057\u305F\u3002\u30DE\u30FC\u30AB\u30FC\u304C\u30D5\u30A7\u30F3\u30B9\u5185\u306B\u53D6\u308A\u8FBC\u307E\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+  return { block: blocks[0] ?? null, warnings };
 }
-function readDomains(startDir) {
+function validateDomainsValue(value) {
+  if (!isPlainObject(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length === 0) return null;
+  for (const [, globs] of entries) {
+    if (!Array.isArray(globs) || globs.length === 0) return null;
+    if (globs.some((g) => typeof g !== "string")) return null;
+  }
+  return value;
+}
+function readDomainsResult(startDir) {
   try {
     const { architecture } = resolveDocPaths(startDir);
-    if (!fs.existsSync(architecture)) return null;
-    const content = findDomainsContent(fs.readFileSync(architecture, "utf8"));
-    if (content === null) return null;
-    return JSON.parse(content);
+    if (!fs.existsSync(architecture)) return { domains: null, warnings: [] };
+    const { block, warnings } = findDomainsBlocks(
+      fs.readFileSync(architecture, "utf8")
+    );
+    if (block === null) return { domains: null, warnings };
+    let parsed;
+    try {
+      parsed = JSON.parse(block.content);
+    } catch {
+      return { domains: null, warnings };
+    }
+    return { domains: validateDomainsValue(parsed), warnings };
   } catch {
-    return null;
+    return { domains: null, warnings: [] };
   }
+}
+function readDomains(startDir) {
+  return readDomainsResult(startDir).domains;
 }
 function findProjectRoot(startDir) {
   let dir = startDir;
@@ -257,6 +300,7 @@ export {
   globToRegExp,
   pass,
   readDomains,
+  readDomainsResult,
   readStdin,
   resolveDocPaths
 };

@@ -3,6 +3,7 @@ import path from "node:path"
 import { findActiveRun } from "../codiel-state.js"
 import {
   emit,
+  findDocRoot,
   findProjectRoot,
   globToRegExp,
   pass,
@@ -23,23 +24,16 @@ const CODE_PHASES = new Set<string | null>([
   "fix-loop"
 ])
 
-// 契約 §1 の検証 4 項目(有効な JSON / トップレベルがオブジェクト / 各値が 1 要素以上の
-// 文字列配列 / キーが 1 個以上)。readDomains は JSON として読めた値をそのまま返すため、
-// 形の検証はここで行う。1 つでも反すれば「読めない」として扱い、例外を投げない。
-function toDomainMap(value: unknown): Record<string, string[]> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return null
-  const entries = Object.entries(value as Record<string, unknown>)
-  if (entries.length === 0) return null
-  // プロトタイプなしで組む。`toString` のようなドメイン名を引いたときに継承プロパティが
-  // 返る(= 存在しないのに存在するとみなす)のと、`__proto__` キーの代入がプロトタイプ
-  // 差し替えになるのを防ぐ。
+// 契約 §1 の検証 4 項目は `readDomains` 側で行う(3 実装で同じ判定にするため)。
+// ここが担うのは**プロトタイプなしのマップへの詰め替え**だけである。`toString` のような
+// ドメイン名を引いたときに継承プロパティが返る(= 存在しないのに存在するとみなす)のと、
+// `__proto__` キーの代入がプロトタイプ差し替えになるのを防ぐ。例外は投げない。
+function toDomainMap(
+  value: Record<string, string[]> | null
+): Record<string, string[]> | null {
+  if (value === null) return null
   const map: Record<string, string[]> = Object.create(null)
-  for (const [name, globs] of entries) {
-    if (!Array.isArray(globs) || globs.length === 0) return null
-    if (globs.some((g) => typeof g !== "string")) return null
-    map[name] = globs as string[]
-  }
+  for (const [name, globs] of Object.entries(value)) map[name] = globs
   return map
 }
 
@@ -59,25 +53,34 @@ try {
       "state.json は codiel-state スクリプト経由でのみ変更できます(フェーズ飛ばし・ゲート偽装の防止)"
     )
 
-  const root = findProjectRoot(cwd)
-  const rel = path.relative(root, abs).replaceAll("\\", "/")
+  // 基準の異なる 2 つの相対パスを持つ。同じ「rel」で両方を指すと取り違えが起きる。
+  //
+  // codielRel = codielRoot(`.codiel` を持つ最も近い祖先)基準。判定対象は
+  // **ハーネス自身の運用資産の位置**(`.codiel/` 配下か、specs の spec/cases か)。
+  // docRel  = docRoot(契約 §3 規則 1)基準。判定対象は **ドメイン境界の glob**。
+  //
+  // 契約 §3 は docRoot と codielRoot が異なる構成(例: repo/.codiel と
+  // repo/sub/metatron.config.json)を正常と定めるため、この 2 つは一致するとは限らない。
+  const codielRoot = findProjectRoot(cwd)
+  const codielRel = path.relative(codielRoot, abs).replaceAll("\\", "/")
 
-  const run = findActiveRun(root)
+  const run = findActiveRun(codielRoot)
   if (run?.state.status !== "active") pass()
 
   const phase = run.state.phase
   if (DOC_PHASES.has(phase)) {
-    if (rel.startsWith(".codiel/") || rel.startsWith("docs/")) pass()
+    if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
+      pass()
     emit(
       "ask",
-      `文書フェーズ(${phase})中にコード領域 ${rel} へ書き込もうとしています`
+      `文書フェーズ(${phase})中にコード領域 ${codielRel} へ書き込もうとしています`
     )
   }
   if (CODE_PHASES.has(phase)) {
-    if (/^\.codiel\/specs\/.+\/(spec|cases)\.md$/.test(rel))
+    if (/^\.codiel\/specs\/.+\/(spec|cases)\.md$/.test(codielRel))
       emit(
         "ask",
-        `テスト仕様・期待値(${rel})の変更は test-designer の担当です(${phase} 中の変更は改竄の疑い)`
+        `テスト仕様・期待値(${codielRel})の変更は test-designer の担当です(${phase} 中の変更は改竄の疑い)`
       )
     // ドメイン境界(設計書 §16-5 の配線)。ドメイン別 implementer / reviewer へ委譲中だけ
     // state.json の domain が入る。値が無ければ(未定義・null)境界を課さない。
@@ -92,9 +95,17 @@ try {
     // 紐付け)を往復する際に clear-domain を呼び忘れると、tester の
     // .codiel/specs/**/scripts/ への正当な書き込みが黙って ask になる。
     const domain = run.state.domain
-    if (domain && !rel.startsWith(".codiel/")) {
-      // 判定対象は rel(プロジェクトルート基準の相対パス)。ドメインマップの解決は
-      // 文書ルート基準なので readDomains に開始ディレクトリを渡して内側で解決させる。
+    // `.codiel/` 配下かどうかは codielRel で判定する(基準は運用資産の位置)。
+    if (domain && !codielRel.startsWith(".codiel/")) {
+      // ドメイン境界の照合は **docRoot 基準の docRel** で行う。ドメインマップは
+      // ARCHITECTURE に書かれており、ARCHITECTURE の位置は契約 §3 規則 1 の docRoot で
+      // 決まるので、そこに書かれた glob も docRoot 基準の相対パスと解釈するのが唯一
+      // 整合する読み方である(metatron の scan も docRoot 相対で同じ glob を解釈する)。
+      // codielRel で照合すると、docRoot ≠ codielRoot の構成で同じ glob を 2 つの基準で
+      // 解釈することになり、担当範囲内の書き込みが ask に落ち、docRoot 外のパスが
+      // 範囲内として通りうる。
+      const docRoot = findDocRoot(cwd)
+      const docRel = path.relative(docRoot, abs).replaceAll("\\", "/")
       const domains = toDomainMap(readDomains(cwd))
       // ドメイン定義が無い・読めない環境で新たに書き込みを止めるのは配線の目的ではない。
       if (domains) {
@@ -103,20 +114,20 @@ try {
         if (!globs)
           emit(
             "ask",
-            `ドメイン ${domain} が ARCHITECTURE のドメインマップに無いため、${rel} への書き込みが担当範囲内か判定できません(ドメイン名の誤り、またはドメインマップの記述漏れ)`
+            `ドメイン ${domain} が ARCHITECTURE のドメインマップに無いため、${docRel} への書き込みが担当範囲内か判定できません(ドメイン名の誤り、またはドメインマップの記述漏れ)`
           )
-        if (!globs.some((g) => globToRegExp(g).test(rel)))
+        if (!globs.some((g) => globToRegExp(g).test(docRel)))
           emit(
             "ask",
-            `${rel} はドメイン ${domain} の担当範囲外です(${domain} の範囲: ${globs.join(", ")})`
+            `${docRel} はドメイン ${domain} の担当範囲外です(${domain} の範囲: ${globs.join(", ")})`
           )
       }
     }
     pass()
   }
   // pr / review / triage / finalize
-  if (rel.startsWith(".codiel/")) pass()
-  emit("ask", `フェーズ ${phase} 中の ${rel} への書き込みは想定外です`)
+  if (codielRel.startsWith(".codiel/")) pass()
+  emit("ask", `フェーズ ${phase} 中の ${codielRel} への書き込みは想定外です`)
 } catch (e) {
   emit(
     "ask",

@@ -259,8 +259,10 @@ function isDomainsInfo(info) {
   const tokens = info.trim().split(/[ \t]+/).filter(Boolean);
   return tokens.length === 2 && tokens[0] === "json" && tokens[1] === DOMAINS_MARKER;
 }
-function findDomainsContent(text) {
+function findDomainsBlocks(text) {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
+  const blocks = [];
+  const warnings = [];
   let fence = null;
   let isTarget = false;
   let openIndex = -1;
@@ -269,7 +271,11 @@ function findDomainsContent(text) {
     if (fence) {
       const m = FENCE_CLOSE_RE.exec(t);
       if (m && m[1][0] === fence.char && m[1].length >= fence.count) {
-        if (isTarget) return lines.slice(openIndex + 1, i).join("\n");
+        if (isTarget)
+          blocks.push({
+            content: lines.slice(openIndex + 1, i).join("\n"),
+            closed: true
+          });
         fence = null;
         isTarget = false;
       }
@@ -282,19 +288,56 @@ function findDomainsContent(text) {
       openIndex = i;
     }
   }
-  if (fence && isTarget) return lines.slice(openIndex + 1).join("\n");
-  return null;
+  if (fence && isTarget)
+    blocks.push({
+      content: lines.slice(openIndex + 1).join("\n"),
+      closed: false
+    });
+  if (blocks.length > 1)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C ${blocks.length} \u500B\u3042\u308A\u307E\u3059\u3002\u6700\u521D\u306E\u3082\u306E\u3060\u3051\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+    );
+  if (blocks.length > 0 && !blocks[0].closed)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u9589\u3058\u3066\u3044\u307E\u305B\u3093\u3002\u30D5\u30A1\u30A4\u30EB\u7D42\u7AEF\u307E\u3067\u3092\u5185\u5BB9\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002`
+    );
+  else if (fence !== null)
+    warnings.push(
+      `\`${DOMAINS_MARKER}\` \u306E\u8D70\u67FB\u4E2D\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u691C\u51FA\u3057\u307E\u3057\u305F\u3002\u30DE\u30FC\u30AB\u30FC\u304C\u30D5\u30A7\u30F3\u30B9\u5185\u306B\u53D6\u308A\u8FBC\u307E\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+  return { block: blocks[0] ?? null, warnings };
 }
-function readDomains(startDir) {
+function validateDomainsValue(value) {
+  if (!isPlainObject(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length === 0) return null;
+  for (const [, globs] of entries) {
+    if (!Array.isArray(globs) || globs.length === 0) return null;
+    if (globs.some((g) => typeof g !== "string")) return null;
+  }
+  return value;
+}
+function readDomainsResult(startDir) {
   try {
     const { architecture } = resolveDocPaths(startDir);
-    if (!fs2.existsSync(architecture)) return null;
-    const content = findDomainsContent(fs2.readFileSync(architecture, "utf8"));
-    if (content === null) return null;
-    return JSON.parse(content);
+    if (!fs2.existsSync(architecture)) return { domains: null, warnings: [] };
+    const { block, warnings } = findDomainsBlocks(
+      fs2.readFileSync(architecture, "utf8")
+    );
+    if (block === null) return { domains: null, warnings };
+    let parsed;
+    try {
+      parsed = JSON.parse(block.content);
+    } catch {
+      return { domains: null, warnings };
+    }
+    return { domains: validateDomainsValue(parsed), warnings };
   } catch {
-    return null;
+    return { domains: null, warnings: [] };
   }
+}
+function readDomains(startDir) {
+  return readDomainsResult(startDir).domains;
 }
 function findProjectRoot(startDir) {
   let dir = startDir;
@@ -320,16 +363,9 @@ var CODE_PHASES = /* @__PURE__ */ new Set([
   "fix-loop"
 ]);
 function toDomainMap(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return null;
-  const entries = Object.entries(value);
-  if (entries.length === 0) return null;
+  if (value === null) return null;
   const map = /* @__PURE__ */ Object.create(null);
-  for (const [name, globs] of entries) {
-    if (!Array.isArray(globs) || globs.length === 0) return null;
-    if (globs.some((g) => typeof g !== "string")) return null;
-    map[name] = globs;
-  }
+  for (const [name, globs] of Object.entries(value)) map[name] = globs;
   return map;
 }
 try {
@@ -343,45 +379,48 @@ try {
       "deny",
       "state.json \u306F codiel-state \u30B9\u30AF\u30EA\u30D7\u30C8\u7D4C\u7531\u3067\u306E\u307F\u5909\u66F4\u3067\u304D\u307E\u3059(\u30D5\u30A7\u30FC\u30BA\u98DB\u3070\u3057\u30FB\u30B2\u30FC\u30C8\u507D\u88C5\u306E\u9632\u6B62)"
     );
-  const root = findProjectRoot(cwd);
-  const rel = path3.relative(root, abs).replaceAll("\\", "/");
-  const run = findActiveRun(root);
+  const codielRoot = findProjectRoot(cwd);
+  const codielRel = path3.relative(codielRoot, abs).replaceAll("\\", "/");
+  const run = findActiveRun(codielRoot);
   if (run?.state.status !== "active") pass();
   const phase = run.state.phase;
   if (DOC_PHASES.has(phase)) {
-    if (rel.startsWith(".codiel/") || rel.startsWith("docs/")) pass();
+    if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
+      pass();
     emit(
       "ask",
-      `\u6587\u66F8\u30D5\u30A7\u30FC\u30BA(${phase})\u4E2D\u306B\u30B3\u30FC\u30C9\u9818\u57DF ${rel} \u3078\u66F8\u304D\u8FBC\u3082\u3046\u3068\u3057\u3066\u3044\u307E\u3059`
+      `\u6587\u66F8\u30D5\u30A7\u30FC\u30BA(${phase})\u4E2D\u306B\u30B3\u30FC\u30C9\u9818\u57DF ${codielRel} \u3078\u66F8\u304D\u8FBC\u3082\u3046\u3068\u3057\u3066\u3044\u307E\u3059`
     );
   }
   if (CODE_PHASES.has(phase)) {
-    if (/^\.codiel\/specs\/.+\/(spec|cases)\.md$/.test(rel))
+    if (/^\.codiel\/specs\/.+\/(spec|cases)\.md$/.test(codielRel))
       emit(
         "ask",
-        `\u30C6\u30B9\u30C8\u4ED5\u69D8\u30FB\u671F\u5F85\u5024(${rel})\u306E\u5909\u66F4\u306F test-designer \u306E\u62C5\u5F53\u3067\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u6539\u7AC4\u306E\u7591\u3044)`
+        `\u30C6\u30B9\u30C8\u4ED5\u69D8\u30FB\u671F\u5F85\u5024(${codielRel})\u306E\u5909\u66F4\u306F test-designer \u306E\u62C5\u5F53\u3067\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u6539\u7AC4\u306E\u7591\u3044)`
       );
     const domain = run.state.domain;
-    if (domain && !rel.startsWith(".codiel/")) {
+    if (domain && !codielRel.startsWith(".codiel/")) {
+      const docRoot = findDocRoot(cwd);
+      const docRel = path3.relative(docRoot, abs).replaceAll("\\", "/");
       const domains = toDomainMap(readDomains(cwd));
       if (domains) {
         const globs = domains[domain];
         if (!globs)
           emit(
             "ask",
-            `\u30C9\u30E1\u30A4\u30F3 ${domain} \u304C ARCHITECTURE \u306E\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306B\u7121\u3044\u305F\u3081\u3001${rel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u304C\u62C5\u5F53\u7BC4\u56F2\u5185\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(\u30C9\u30E1\u30A4\u30F3\u540D\u306E\u8AA4\u308A\u3001\u307E\u305F\u306F\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8A18\u8FF0\u6F0F\u308C)`
+            `\u30C9\u30E1\u30A4\u30F3 ${domain} \u304C ARCHITECTURE \u306E\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306B\u7121\u3044\u305F\u3081\u3001${docRel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u304C\u62C5\u5F53\u7BC4\u56F2\u5185\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(\u30C9\u30E1\u30A4\u30F3\u540D\u306E\u8AA4\u308A\u3001\u307E\u305F\u306F\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8A18\u8FF0\u6F0F\u308C)`
           );
-        if (!globs.some((g) => globToRegExp(g).test(rel)))
+        if (!globs.some((g) => globToRegExp(g).test(docRel)))
           emit(
             "ask",
-            `${rel} \u306F\u30C9\u30E1\u30A4\u30F3 ${domain} \u306E\u62C5\u5F53\u7BC4\u56F2\u5916\u3067\u3059(${domain} \u306E\u7BC4\u56F2: ${globs.join(", ")})`
+            `${docRel} \u306F\u30C9\u30E1\u30A4\u30F3 ${domain} \u306E\u62C5\u5F53\u7BC4\u56F2\u5916\u3067\u3059(${domain} \u306E\u7BC4\u56F2: ${globs.join(", ")})`
           );
       }
     }
     pass();
   }
-  if (rel.startsWith(".codiel/")) pass();
-  emit("ask", `\u30D5\u30A7\u30FC\u30BA ${phase} \u4E2D\u306E ${rel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F\u60F3\u5B9A\u5916\u3067\u3059`);
+  if (codielRel.startsWith(".codiel/")) pass();
+  emit("ask", `\u30D5\u30A7\u30FC\u30BA ${phase} \u4E2D\u306E ${codielRel} \u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F\u60F3\u5B9A\u5916\u3067\u3059`);
 } catch (e) {
   emit(
     "ask",
