@@ -1,4 +1,4 @@
-`plugins/codiel` (0.5.1-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
+`plugins/codiel` (0.5.2-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
 through analysis, design discussion, planning, implementation, testing, PR and review, gated by the
 bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
@@ -42,9 +42,30 @@ bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel
 | `findDocRoot(startDir)` | 契約 §3 規則 1(`metatron.config.json` を持つ祖先 → git ルート → 開始ディレクトリ) | **文書**(ARCHITECTURE / GOTCHAS)の解決 |
 | `findProjectRoot(startDir)` | `.codiel` を持つ祖先 | **codiel 固有資産**(`.codiel/runs` 等)の解決 |
 
-どちらを使うかは「探しているものが文書か codiel 資産か」で決まる。`guard-write` の
-`.codiel/runs/**/state.json` 保護など既存用途は `findProjectRoot` のまま。
-`lib.ts` は他に `resolveDocPaths` / `readDomains` / `DOMAINS_MARKER` / `globToRegExp` を持つ。
+どちらを使うかは「探しているものが文書か codiel 資産か」で決まる。
+`lib.ts` は他に `resolveDocPaths` / `readDomainsResult` / `readDomains` / `DOMAINS_MARKER` /
+`globToRegExp` を持つ。
+
+**`guard-write` は 2 つの相対パスを持つ(2026-08-17。同じ `rel` で兼ねない)。**
+
+| 変数 | 基準 | 判定対象 |
+| --- | --- | --- |
+| `codielRel` | `findProjectRoot(cwd)` = `codielRoot` | `.codiel/` 配下か、`specs/**/(spec\|cases).md` か、文書フェーズの `docs/` 判定、フェーズ外の書き込み |
+| `docRel` | `findDocRoot(cwd)` = `docRoot` | **ドメイン境界の glob 照合のみ** |
+
+ドメインマップは ARCHITECTURE に書かれ、ARCHITECTURE の位置は契約 §3 規則 1 の `docRoot` で
+決まる。したがってそこに書かれた glob は `docRoot` 相対と読むのが唯一整合する
+(metatron の `scan` も同じ)。`codielRel` で照合すると、`docRoot ≠ codielRoot` の構成
+(`repo/.codiel` + `repo/sub/metatron.config.json`)で担当範囲内の書き込みが `ask` に落ち、
+`docRoot` 外のパスが範囲内として通りうる。
+
+**`readDomains` は契約 §1 の検証 4 項目を行う。** 以前は JSON として parse できただけの値を
+返し、形の検証は `guard-write` の `toDomainMap` 側にあった。現在は `lib.ts` の
+`validateDomainsValue` が担い、`guard-write` の `toDomainMap` は**プロトタイプなしのマップへの
+詰め替えだけ**を行う(`Object.create(null)`。`toString` 等の継承プロパティと `__proto__` 対策)。
+`readDomainsResult(startDir)` は `{ domains, warnings }` を返し、`readDomains` はその
+`domains` だけを返す薄い包み。警告は重複ブロック・未閉フェンス・マーカーを呑み込む未閉フェンスの
+3 種で、metatron の `findDomainsBlock` と**出る条件と件数を揃える**(文言も現状は一致)。
 
 ## Flow — 11 stages / 12 named phases
 
@@ -104,12 +125,13 @@ codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。meta
 - `codiel-state set-domain --domain <名前>` / `clear-domain` で操作する。**`clear-domain` は状態を
   問わず通る**(委譲中に run が `awaiting_human` へ落ちても解除できないと古い domain が残るため)。
 - `guard-write` は CODE_PHASES(`implement`/`test-loop`/`fix-loop`)で `domain` が入っているときだけ
-  境界を課す。判定は `readDomains(cwd)` → 契約 §1 の 4 項目を `toDomainMap` で検証
-  (プロトタイプなしの `Object.create(null)` で組む)→ `globToRegExp` で `rel` を照合。
+  境界を課す。判定は `readDomains(cwd)`(契約 §1 の 4 項目はこの中で検証済み)→ `toDomainMap` で
+  プロトタイプなしへ詰め替え → `globToRegExp` で **`docRel`(docRoot 基準)** を照合。
 - 判定は **`deny` ではなく `ask`**(境界の誤りは人間が通せる余地があり、ドメインマップの記述漏れで
   正当な書き込みを止めたくないため)。ドメイン定義が無い・読めない環境では**新たに止めない**。
   ドメイン名がマップに無いときだけは材料が無いので `ask` で止める。
-- **`.codiel/` 配下はドメイン境界の対象外。** ハーネス自身の運用資産でありどのドメインにも属さない。
+- **`.codiel/` 配下はドメイン境界の対象外。** 判定は **`codielRel`** で行う(運用資産の位置が
+  基準であり、`docRel` ではない)。ハーネス自身の運用資産でありどのドメインにも属さない。
   免除が無いと、test-loop で domain 非紐付けと紐付けを往復するとき `clear-domain` の呼び忘れで
   tester の `.codiel/specs/**/scripts/` への正当な書き込みが黙って `ask` になる。
 

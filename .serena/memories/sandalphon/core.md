@@ -1,4 +1,4 @@
-`plugins/sandalphon` (0.1.0-dev) — **Issue が生まれる前の上流区間**(願い → intent 文書 →
+`plugins/sandalphon` (0.1.1-dev) — **Issue が生まれる前の上流区間**(願い → intent 文書 →
 起票 → 実行系への引き渡し)を担うオーケストレーター。2026-08-16 新規追加(commit 9a121c6)。
 codiel の**前段**であり置き換えではない。書式の正本は `mem:file_contract`。
 設計根拠は `plugins/sandalphon/docs/rationale.md`。
@@ -40,17 +40,31 @@ secrets への接触・DB マイグレーション・破壊的操作・依存パ
 - **読み取り専用。** ファイル・ディレクトリの作成も更新もしない。`docs/intents/` の作成も
   intent 文書の `status` 更新もスキルの責務(検出のたびに副作用が出るのを避けるため)。
 - 最初のフェーズで 1 回だけ実行し、得た JSON を後続フェーズで使い回す。
+- `configWarnings` は**設定由来と文書構造由来の両方**を返す唯一の口である(既定値へ落とした理由に
+  加え、`metatron:domains` の重複ブロック・未閉フェンス・マーカーを呑み込む未閉フェンスの警告)。
+  3 者比較では metatron の `loadConfig().warnings` + `extractDomains().warnings` の合計と照合する。
 - **3 つのルート基準を使い分ける。どれか 1 つに寄せない。**
 
-| 対象 | 基準 | フィールド |
-| --- | --- | --- |
-| intent 文書 (`docs/intents/`) | git ルート | `repoRoot` |
-| ARCHITECTURE / GOTCHAS | 契約 §3 の `docRoot` | `docRoot` / `projectDocs` |
-| `.codiel/` の有無と `runDirs` | 開始ディレクトリからの上方向探索 | `codielHarness.codielRoot` |
+| 対象 | 基準 | 起点 | フィールド |
+| --- | --- | --- | --- |
+| intent 文書 (`docs/intents/`) | git ルート | `startDir`(realpath 化) | `repoRoot` |
+| ARCHITECTURE / GOTCHAS | 契約 §3 の `docRoot` | `startDir`(realpath 化) | `docRoot` / `projectDocs` |
+| `.codiel/` の有無と `runDirs` | 上方向探索 | **`logicalStartDir`(realpath 化しない)** | `codielHarness.codielRoot` |
 
 3 者が別ディレクトリを指すのは**正常な状態**。`.codiel` の探索を `docRoot` 直下に限定すると、
 `repo/.codiel` + `repo/sub/metatron.config.json` の構成で codiel は動くのに sandalphon が
 「無い」と判定し、正当な委譲経路を塞ぐ。
+
+**`.codiel` だけ realpath 化しない理由(知らずに揃えると壊す)。** 同一ファイル内で 2 つの
+前処理を持つのは意図的で、それぞれ**合わせる相手が違う**。
+`docRoot` / git は契約 §3 規則 1 の細目が realpath を要求する — 段 2 の
+`git rev-parse --show-toplevel` が実体パスを返すため、揃えないと 3 実装の docRoot が割れる。
+`.codiel` が合わせる相手は codiel の `findProjectRoot` であり、**それは渡された論理パスを
+そのまま上方向へ辿る**。ここで実体パスへ寄せると、`/tmp/link → /repo/sub` で `/repo/.codiel`
+がある構成で sandalphon だけが `.codiel` を見つけ、「委譲できる」と案内した先で codiel が
+run 資産を発見できない。合わせる先は codiel であって実体パスではない。
+(回帰テストは `src/__test__/check-intent-env.test.ts` の「契約 §3」群。link が `.codiel` 保有
+ディレクトリ自身を指す場合と、その子を指す場合の両方で `findProjectRoot` と一致を要求する。)
 
 ## 状態永続機構を持たない(意図的な決定)
 

@@ -66,15 +66,17 @@ codiel は metatron が無くても最小 ARCHITECTURE を自前生成して完�
 **連携手段はファイル契約(ARCHITECTURE / GOTCHAS / intent 文書の書式)とモデルコンテキストの
 2 つだけ。** プラグイン間の依存宣言も、互いのインストール位置の参照も一切無い。したがって同じ規則が
 3 実装に独立に写されており、一致の担保はテスト 1 本しかない — 詳細は `mem:file_contract`。
+2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
+パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (0.5.1-dev) — GitHub-issue-driven orchestrator gated by the bundled `raguel` MCP
+- **codiel** (0.5.2-dev) — GitHub-issue-driven orchestrator gated by the bundled `raguel` MCP
   server. Largest/most complex. 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.1.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
+- **metatron** (0.1.1-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
   共有ライブラリ + CLI + 2 hook の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
-- **sandalphon** (0.1.0-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
+- **sandalphon** (0.1.1-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
   実行系への引き渡し)を担うオーケストレーター。codiel の前段。状態永続機構を持たない。
   Details: `mem:sandalphon/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →

@@ -12,11 +12,39 @@
   metatron の `loadConfig` と codiel の `resolveDocPaths` はテストから直接呼び、sandalphon の
   `check-intent-env` はトップレベル副作用を持つため子プロセスで起動して出力 JSON を突き合わせる。
   **このテストを消すと 3 実装のずれを検出する手段がゼロになる。**「重複テストだから」と削らない。
-- 比較対象は `docRoot` / ARCHITECTURE・GOTCHAS の解決パス / 警告の有無と件数 / ドメインマップの
-  可読性。警告の**文言**までは一致を求めない(同期コストが釣り合わないため、意図的)。
 - 契約を変更したら §14 のチェックリスト 9 項目(3 実装 + metatron references 3 本 +
   codiel `recording-gotchas` / `analyzing-issues` / `preparing-design-agendas` の写し +
   sandalphon references 2 本 + gh-utility `issue-craft` の写し + 16f テスト)を同じコミットで更新する。
+
+### 3 者比較テストが実際に比較している項目(2026-08-17 拡張後)
+
+`expectThreeWayMatch(startDir, label, { withoutGit?, architecture? })` が突き合わせるのは以下。
+**ここに無いものは担保されていない。**
+
+| 項目 | metatron 側の出所 | codiel 側 | sandalphon 側 |
+| --- | --- | --- | --- |
+| `docRoot` | `loadConfig().docRoot` | `resolveDocPaths().docRoot` | `out.docRoot` |
+| ARCHITECTURE / GOTCHAS の解決パス | `architecturePath` / `gotchasPath` | `architecture` / `gotchas` | `projectDocs.*` |
+| 設定警告の有無と**件数** | `warnings` | `warnings` | `configWarnings`(下記の合算) |
+| ドメインマップの**値の deep equality** | `extractDomains().domains` | `readDomainsResult().domains` | (返さない) |
+| ドメインマップの可読性(真偽) | `extractDomains().ok` | `readDomains() !== null` | `projectDocs.domainsReadable` |
+| ドメイン**件数** | キー数 | — | `projectDocs.domainCount` |
+| 重複ブロック / 未閉フェンス警告の件数 | `extractDomains().warnings` | `readDomainsResult().warnings` | `configWarnings` に合算 |
+
+- **警告の文言までは一致を求めない**(同期コストが釣り合わないため、意図的)。
+- sandalphon は設定警告と文書構造警告を `configWarnings` の 1 本で返すため、比較相手は
+  metatron の `loadConfig().warnings` + `extractDomains().warnings` の**合計**である。
+- 個別ケースは 16f 群のほか、`.codiel` の探索結果(`codielRoot` が codiel の `findProjectRoot`
+  と一致するか)、正当な Windows 区切りで**警告 0 件で揃う**こと、CRLF、絶対パス / ルート脱出、
+  ネスト git、git バイナリ無し、symlink 経由、ドメインブロックを呑み込む未閉フェンスを含む。
+
+### 構造上の限界(これを誤解するとテストを過信する)
+
+3 者比較は**実装間の差**しか見ない。**同じ誤実装が 3 者すべてに入れば全項目が一致して通る。**
+契約文書に対する正しさは検証していない。したがって契約を変えるときは、テストが通ったことを
+根拠にせず §14 のチェックリストで写しを 1 つずつ突き合わせる。
+また sandalphon はドメイン定義の**値を返さない**ため、値の一致は metatron ↔ codiel の 2 者比較で、
+sandalphon は件数までしか照合できない。
 
 ## 条項の要点
 
@@ -24,6 +52,11 @@
   (互換読み・移行スクリプト・二重マーカーを一切設けない)。同一ファイル内に複数あれば最初を採り警告。
   検証 4 項目: 有効な JSON / トップレベルがオブジェクト(配列不可) / 各値が 1 要素以上の文字列配列 /
   キーが 1 個以上。読み取りで満たさないときは「読めない」扱いで例外を投げない。
+  **検証は書き込み経路だけでなく読み取り経路にも適用する**(3 実装とも 2026-08-17 に統一)。
+  警告は**経路を問わず返す**(読み取り・注入経路も含む。拒否はしない): 重複ブロック /
+  未閉フェンス / **開始マーカーが手前の未閉フェンスに呑まれてブロックとして認識されない場合**。
+  3 つ目は返り値が「ブロック無し」と同じ null になるため、警告が無いと書き手は
+  自分のブロックが読まれていないことに気づけない(2026-08-17 に §1 へ追加)。
 - §2 共有設定 `metatron.config.json` は**任意**。無いことはエラーでも報告対象でもない。
   壊れた JSON(トップレベルが非オブジェクトを含む)と未知 `version` は全項目を既定値へ落として警告 1 行。
   個々のキーの型不整合はその項目だけ既定値へ。
@@ -40,6 +73,9 @@
 - §11 metatron CLI 入出力規約と staging・ロックの保証。
 - §12 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の両 hook はフェイルオープン、
   codiel の PreToolUse はフェイルクローズド(`ask`)。混同しない。
+  SessionStart 注入の「何も出力しない」は 2026-08-17 に**「文書の内容を出力しない」へ限定**された。
+  文書が 1 つも無くても CLI 案内は出す。案内まで落とすのは `injection.enabled: false` と
+  設定読み取り自体が例外で失敗したときの 2 つだけ。
 - §13 実装間の一致検証(上記 16f)。
 
 ## 各実装の場所
@@ -47,5 +83,5 @@
 | 実装 | 場所 | 位置づけ |
 | --- | --- | --- |
 | metatron | `plugins/metatron/src/lib/config.ts` | **正本の実装** |
-| codiel | `plugins/codiel/src/hooks/lib.ts` の `findDocRoot` / `resolveDocPaths` / `readDomains` | 独立実装 |
+| codiel | `plugins/codiel/src/hooks/lib.ts` の `findDocRoot` / `resolveDocPaths` / `readDomainsResult`(薄い包み `readDomains`) | 独立実装 |
 | sandalphon | `plugins/sandalphon/src/check-intent-env.ts` | 独立実装 |
