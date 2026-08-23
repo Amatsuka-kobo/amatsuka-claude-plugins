@@ -35,7 +35,11 @@
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "genshijin@genshijin": true,
-    "codex@openai-codex": true
+    "codex@openai-codex": true,
+    "codiel@amatsuka-claude-plugins": true,
+    "gh-utility@amatsuka-claude-plugins": true,
+    "metatron@amatsuka-claude-plugins": true,
+    "sandalphon@amatsuka-claude-plugins": true
   },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {
