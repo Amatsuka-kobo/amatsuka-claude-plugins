@@ -19,7 +19,7 @@ import {
   parseAdrDocument,
   parseAdrId,
   stageAdr
-} from "../lib/adr.js"
+} from "../adr.js"
 
 // 行の配列から文書を組み立てる。末尾の "" が最終改行になる。
 function doc(...lines: string[]): string {

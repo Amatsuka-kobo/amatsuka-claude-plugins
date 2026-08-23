@@ -15,7 +15,7 @@ import {
   prepareArchitectureUpdate,
   UNCLOSED_FENCE_WARNING,
   validateHeadingKey
-} from "../lib/architecture.js"
+} from "../architecture.js"
 
 // 行の配列から文書を組み立てる。末尾の "" が最終改行になる。
 function doc(...lines: string[]): string {

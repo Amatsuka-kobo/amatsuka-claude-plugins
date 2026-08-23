@@ -12,7 +12,7 @@ import {
   DEFAULT_GOTCHAS_PATH,
   findDocRoot,
   loadConfig
-} from "../lib/config.js"
+} from "../config.js"
 
 const tmpDirs: string[] = []
 

@@ -11,12 +11,12 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
-import { MAX_DIFF_LINES } from "../cli/diff.js"
-import { findSection, parseArchitecture } from "../lib/architecture.js"
-import { stagingDirFor } from "../lib/staging.js"
-import { runTs } from "../testing/run-ts.js"
+import { findSection, parseArchitecture } from "../../lib/architecture.js"
+import { stagingDirFor } from "../../lib/staging.js"
+import { runTs } from "../../testing/run-ts.js"
+import { MAX_DIFF_LINES } from "../diff.js"
 
-const CLI = fileURLToPath(new URL("../metatron-cli.ts", import.meta.url))
+const CLI = fileURLToPath(new URL("../../metatron-cli.ts", import.meta.url))
 
 const tmpDirs: string[] = []
 

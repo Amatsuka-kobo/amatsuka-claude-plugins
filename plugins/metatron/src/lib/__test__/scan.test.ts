@@ -14,7 +14,7 @@ import {
   diffArchitecture,
   type ScanResult,
   scan
-} from "../lib/scan.js"
+} from "../scan.js"
 
 const tmpDirs: string[] = []
 

@@ -57,7 +57,7 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 
 | セクション | ドラフトの主な材料 |
 | --- | --- |
-| `## システム概要` | `documents` と `tree` と `dependencies`。散文 1 段落と Mermaid 図 |
+| `## システム概要` | `documents` と `tree` と `dependencies`。散文 1 段落と、必要な場合は Mermaid 図 |
 | `## 技術スタック` | `languages` / `packageManager` / `dependencies` |
 | `## レイヤー構造` | `tree` / `domainCandidates` |
 | `## ディレクトリ構成と責務` | `tree` / `fileCount` |
@@ -68,7 +68,7 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 | `## 規約` | 既存の CLAUDE.md と文書。材料が無ければ質問へ切り替える |
 
 - `## ADR 一覧` は初回生成で扱わない。ドラフトも空の節も作らない。最初の ADR を追加するときに `stage-adr` が節ごと作る。
-- `## システム概要` の Mermaid 図は解析結果から起草する。粒度はウォークスルーで問う。
+- `## システム概要` に Mermaid 図を置くかどうかを含めてウォークスルーで問う。置く場合は解析結果から起草し、粒度も問う。
 - 各セクションの起草は `../../references/architecture-format.md` の該当節の要件を満たす形で行う。
 - 情報が足りずドラフトを書けないセクションは推測で埋めない。そのセクションだけ質問形式に切り替える。
 - 質問しても材料が得られないときは、そのセクションを生成対象から外し、未記入であることを完了報告に載せる。
