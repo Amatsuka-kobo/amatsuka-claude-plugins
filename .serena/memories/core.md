@@ -3,6 +3,11 @@
 `amatsuka-claude-plugins` — a Claude Code plugin **marketplace** (not an app), plus the TypeScript
 sources that build each plugin's bundled scripts.
 
+Technical preconditions and operating conventions are canonical in
+`harness-docs/ARCHITECTURE.md`, which was added in 2026-08. metatron's SessionStart hook injects
+its full text at the start of each session in this repository; the root `CLAUDE.md` now contains
+only the repository overview and that pointer.
+
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
   listed here (name/source/description). 13 entries, matching the root `README.md` table 1:1
   (verified 2026-08-17; metatron + sandalphon added 2026-08-16).
@@ -16,8 +21,9 @@ sources that build each plugin's bundled scripts.
   validates only Raphael antibodies and is unrelated.)
 - Root `.mcp.json` — two servers: `github` (http, `https://api.githubcopilot.com/mcp/`, bearer from
   env `GITHUB_PERSONAL_ACCESS_TOKEN`) and `serena` (stdio, `uvx --from git+…/serena
-  start-mcp-server`, context `claude-code`, dashboard off). Repo `CLAUDE.md` mandates Context7 for
-  library docs and Serena for all codebase exploration + TS/MD editing.
+  start-mcp-server`, context `claude-code`, dashboard off). `harness-docs/ARCHITECTURE.md` records
+  the Context7 requirement for library documentation and Serena for codebase exploration + TS/MD
+  editing.
 - `.claude/settings.json` (tracked) — model `claude-opus-5[1m]`, `outputStyle: EnhancedClaude5`,
   `env.ANTHROPIC_DEFAULT_FABLE_MODEL = claude-fable-5[1m]`, permissions lists, **no `hooks` key**,
   and 11 `enabledPlugins`: the four local ones (agent-policy, chat-history, prompt-smith, raphael)
@@ -37,26 +43,27 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 - `docs/` now holds only: `chat/` (session archive), `development/cliproxyapi-setup.md`,
   `agents-{claude-only,with-codex}-old.md`, `ONBOARDING.md` (**moved down from the repo root**), and
   `old/` — the retirement shelf, currently `old/mdbase-record/` and `old/optimize-agents-record/`.
-- `harness-docs/` holds `design/` (25 files), `plans/` (14), `handover/`, `superpowers/{specs,plans}`
-  — every design spec and implementation plan. Repo `CLAUDE.md` says **do not read `docs/`** and
-  **write new design/plan docs into `harness-docs/`**. `design/2026-08-16-file-contract-freeze.md` は
-  設計書ではなく metatron / codiel / sandalphon / gh-utility が実装中に直接読む**凍結された契約**である
+- `harness-docs/ARCHITECTURE.md` is the repository's technical source of truth. The directory also
+  holds `design/` (25 files), `plans/` (14), `handover/`, and `superpowers/{specs,plans}` — every
+  design specification and implementation plan. Its documentation-operation facts supersede the
+  former root `CLAUDE.md` text. `design/2026-08-16-file-contract-freeze.md` は設計書ではなく
+  metatron / codiel / sandalphon / gh-utility が実装中に直接読む**凍結された契約**である
   (`mem:file_contract`)。
 - Consequence: any doc citing `docs/design/…`, `docs/plans/…`, `docs/superpowers/…` for a *repo*
   design spec is stale. Two look-alikes that must NOT be rewritten: basic-design's skills write
   their deliverables to `docs/design/<kind>/` of the **target** project, and
   `plugins/pitcrew/src/lib/__test__/capture-rules.test.ts:10` asserts `docs/superpowers/specs/x.md`
   matches the default artifact glob `docs/**/*.md`.
-- `docs/chat/<year>/<mmdd>/<author>/*.md` + `docs/chat/INDEX.md` — **repo `CLAUDE.md` forbids
-  reading these** unless you are the chat-recorder / chat-reader agent or the user explicitly asks;
-  use `chat-history:recall`.
+- `docs/chat/<year>/<mmdd>/<author>/*.md` + `docs/chat/INDEX.md` —
+  `harness-docs/ARCHITECTURE.md` restricts reading these to the chat-recorder / chat-reader agent or
+  an explicit user request; use `chat-history:recall`.
 - `TERMS.md` — Japanese ToS; notably forbids using this service to generate illustration/Live2D/
   3D-model assets.
 
 ## Distributed plugins (13, see `.claude-plugin/marketplace.json`)
 
 Only **pitcrew (0.10.2)** and **chat-history (0.7.0)** are released; every other plugin is `-dev`.
-Manifest and sibling `package.json` versions were all in sync as of 2026-08-17.
+Manifest and sibling `package.json` versions were all in sync as of 2026-08-24.
 
 **metatron / sandalphon / codiel の連携** — 願い → intent → issue → 実装という一続きの流れを
 分担するが、**互いに独立して動く。**
@@ -73,10 +80,10 @@ codiel は metatron が無くても最小 ARCHITECTURE を自前生成して完�
   server. Largest/most complex. 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.1.1-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
+- **metatron** (0.1.6-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
   共有ライブラリ + CLI + 2 hook の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
-- **sandalphon** (0.1.1-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
+- **sandalphon** (0.1.2-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
   実行系への引き渡し)を担うオーケストレーター。codiel の前段。状態永続機構を持たない。
   Details: `mem:sandalphon/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
@@ -103,7 +110,7 @@ codiel は metatron が無くても最小 ARCHITECTURE を自前生成して完�
   under. Since 2026-08-16 it **ships 7 agent definitions and injects the policy skill from a
   `SessionStart` hook keyed on an env var**; the old `setup-gpt` / `setup-grok` generator skills are
   deleted. Details: `mem:agent_policy/core`.
-- **prompt-smith** (0.3.1-dev) — standards for AI-facing instruction docs (`prompt-smith`), agent
+- **prompt-smith** (0.3.2-dev) — standards for AI-facing instruction docs (`prompt-smith`), agent
   definitions (`agent-creator`) and skill authoring + description eval loop (`skill-creator`, a
   TypeScript port of Anthropic's official skill-creator). Details: `mem:agent_policy/core`.
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
@@ -135,7 +142,8 @@ Everything LLM-related must work **without `ANTHROPIC_API_KEY`**: it goes throug
 itself (main session / subagents) or a headless `claude` CLI subprocess (subscription auth).
 Never add an Anthropic API client, and never design a flow that requires the user to run a bundled
 CLI/script by hand — the user-facing surface is Claude Code skills/commands only. Documented as
-「最重要」 in `plugins/codiel/docs/DESIGN.md` §0 and in repo `CLAUDE.md`; it binds every plugin here.
+「最重要」 in `plugins/codiel/docs/DESIGN.md` §0 and `harness-docs/ARCHITECTURE.md`; it binds every
+plugin here.
 (raguel-mcp's panel and prompt-smith's eval loop both shell out to `claude -p` for this reason.)
 
 ## Per-user files and gitignore (not misconfiguration)
@@ -155,6 +163,6 @@ the negation, to carry per-user state into `git worktree` checkouts.
   the agent-policy plugin; a file appears there only when an `AMATSUKA_AGENT_*_ALIAS` env var
   differs from the default and the SessionStart hook writes an override. Do not "fix" an empty
   `.claude/agents`, and treat leftover files there as stale generator output.
-- Editing `CLAUDE.md` requires human confirmation.
+- The protected-path treatment of `CLAUDE.md` is defined in `harness-docs/ARCHITECTURE.md`.
 - `private/` holds the user's own scratch (`context-map/`, story drafts); `.superpowers/sdd/` holds
   hundreds of historical task briefs/reports/review diffs. Both are noise for code work.

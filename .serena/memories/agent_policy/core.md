@@ -1,5 +1,5 @@
 `plugins/agent-policy` (0.7.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
-(0.3.1-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
+(0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, now selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not
 by CLAUDE.local.md prose.
@@ -131,7 +131,7 @@ Three skills:
   authoring, eval-set creation and the description improvement loop. The official plugin was
   removed from this workspace precisely because the names collide.
 
-The port's four bundles (`src/*.ts` → `scripts/*.mjs`, node26 target):
+The port's four bundles (`src/*.ts` → `scripts/*.mjs`, node22 target):
 
 | bundle | role |
 | --- | --- |

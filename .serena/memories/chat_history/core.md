@@ -86,7 +86,7 @@ clean), `resume` (latest own record → previous progress + carry-over, via
   normal location sits under `CLAUDE_CONFIG_DIR` — Write there is refused as a sensitive path.
 - Tests in `src/hooks/__test__/` still assert `task-utility:chat-recorder`; intentional — they guard
   `hasRunningRecorder`'s last-`:`-segment normalization, which is what survives the id change.
-- Repo `CLAUDE.md` forbids every agent except chat-recorder / chat-reader from reading
+- `harness-docs/ARCHITECTURE.md` forbids every agent except chat-recorder / chat-reader from reading
   `docs/chat/**` (INDEX.md included) unless the user explicitly asks.
 - Background dispatch can stall if `Bash`/`Write` permission prompts are on; the fix is the user's
   `~/.claude/settings.json` `permissions`, never a plugin-side override.

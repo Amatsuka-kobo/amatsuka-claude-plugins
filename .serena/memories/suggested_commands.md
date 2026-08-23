@@ -6,6 +6,7 @@ pnpm install         # first-time setup (pnpm only, never npm/yarn)
 pnpm test            # vitest run  (root config; globs plugins/**/__test__/**/*.test.ts)
 pnpm typecheck       # tsc --noEmit
 pnpm lint            # biome check .
+pnpm lint:fix        # biome check --write .
 pnpm build           # pnpm -r build -> each plugin's src/ -> scripts/*.mjs (+ raguel dist/server.mjs)
 pnpm --filter basic-design-generator build   # single package
 ```
