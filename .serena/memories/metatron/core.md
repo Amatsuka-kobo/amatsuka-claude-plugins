@@ -1,7 +1,10 @@
-`plugins/metatron` (0.1.1-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.1.6-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
+
+This repository's architecture asset is `harness-docs/ARCHITECTURE.md` (added 2026-08); the
+SessionStart hook injects its full text rather than a summary.
 
 ## C1 構成 — 常駐プロセスなし
 
@@ -60,6 +63,10 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
   `scan`系 `analysis.ts` / `diff.ts` / `stage.ts` / `commit.ts` / `gotcha.ts`)。
 - エントリは `src/metatron-cli.ts` → `scripts/metatron.mjs`。hook 本体は `src/guard-docs.ts` /
   `src/inject-context.ts`。
+- Test placement follows `harness-docs/ARCHITECTURE.md` §テスト方針: the six `src/lib` target tests
+  (`adr`, `architecture`, `config`, `gotchas`, `scan`, `staging`) are in `src/lib/__test__/`; the CLI
+  test is `src/cli/__test__/cli.test.ts`; `guard-docs` and `inject-context` tests remain in
+  `src/__test__/` because their targets are directly under `src/`.
 
 ## CLI 12 サブコマンド
 
@@ -112,6 +119,8 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
   `## ADR 一覧` は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示)。
 - `references/` 5 本(AI が実行時に読む正本): `architecture-format.md` / `gotchas-format.md` /
   `config-schema.md` / `cli-usage.md` / `writing-discipline.md`。
+- `docs/format-change-checklist.md` is the developer checklist for format changes. It was moved out
+  of `references/` because it names repository-root-specific paths.
 - `docs/ARCHITECTURE.example.md` / `docs/GOTCHAS.example.md` はここへ移設された(codiel から削除)。
 
 ## 他プラグインとの関係

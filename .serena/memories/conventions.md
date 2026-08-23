@@ -5,8 +5,8 @@
   Claude Code component dirs, present only if needed.
 - `references/*.md` — AI-read shared discipline / reference fragments (agent-policy, prompt-smith,
   gh-utility). `docs/` — human-read design & rationale. `README.md` — only what a **user** must read
-  to use the plugin. This three-way split is mandated by repo `CLAUDE.md`. Plugin-level design docs
-  are inconsistent by design: some live at the plugin root (`raphael/DESIGN.md`,
+  to use the plugin. This three-way split is defined in `harness-docs/ARCHITECTURE.md`.
+  Plugin-level design docs are inconsistent by design: some live at the plugin root (`raphael/DESIGN.md`,
   `guidepost/DESIGN.md`), some under `docs/` (`codiel/docs/DESIGN.md`,
   `revelation/docs/DESIGN.md`), and the older ones only in `harness-docs/superpowers/specs/`.
 - `package.json` (`build` script only, `private: true`, `type: module`) + `build.ts` (esbuild) +
@@ -32,12 +32,15 @@ in the same commit. Never hand-edit `scripts/*.mjs`. Hooks/skills invoke the bun
 (`codiel/scripts/install-harness.sh` and `guidepost/scripts/ui.html` are copied/hand-written
 assets, not esbuild output.)
 
-Tests go in `__test__/` dirs beside the code (`src/hooks/__test__/lib.test.ts`) — the root vitest
-include glob only picks those up. Fixtures under `src/fixtures/`, fakes under `src/testing/`
-(`src/testing/run-ts.ts` is the shared helper for spawning a CLI/hook as a child process pre-build;
-copies of it exist in agent-policy, codiel, chat-history, gh-utility, revelation).
+Test placement is canonical in `harness-docs/ARCHITECTURE.md` §テスト方針. The current layout puts
+each target's `<source-file-name>.test.ts` in that source directory's `__test__/` (for example,
+`src/hooks/__test__/lib.test.ts`); the root Vitest include glob only picks up these paths. Test-only
+helpers are non-test modules in `__test__/helpers/`; child-process entry points and fault injection
+are in `src/testing/` (use `.mjs` when excluded from lint/typecheck); fixed test data is in
+`src/fixtures/`. `src/testing/run-ts.ts` is the shared pre-build CLI/hook child-process helper;
+copies exist in agent-policy, codiel, chat-history, gh-utility, and revelation.
 
-## Versioning (repo `CLAUDE.md`)
+## Versioning (`harness-docs/ARCHITECTURE.md`)
 
 Each plugin versions independently: bump the changed plugin's
 `plugins/<plugin>/.claude-plugin/plugin.json` proportionally to the change. Format `n1.n2.n3`, with
