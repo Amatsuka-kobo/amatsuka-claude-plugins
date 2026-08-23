@@ -18,7 +18,7 @@ import {
   stagingDirFor,
   stagingRecordPath,
   stagingRootDir
-} from "../lib/staging.js"
+} from "../staging.js"
 
 const projectRoots: string[] = []
 

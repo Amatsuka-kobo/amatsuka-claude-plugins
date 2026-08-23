@@ -20,6 +20,6 @@ await esbuild.build({
   platform: "node",
   format: "esm",
   sourcemap: false,
-  target: "node26",
+  target: "node22",
   banner: { js: banner }
 })

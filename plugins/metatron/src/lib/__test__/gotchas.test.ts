@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
+import { runTsAsync } from "../../testing/run-ts.js"
 import {
   appendGotcha,
   filterGotchas,
@@ -16,11 +17,10 @@ import {
   parseGotchas,
   tagGotcha,
   withFileLock
-} from "../lib/gotchas.js"
-import { runTsAsync } from "../testing/run-ts.js"
+} from "../gotchas.js"
 
 const APPEND_ENTRY_SCRIPT = fileURLToPath(
-  new URL("../testing/append-gotcha-entry.ts", import.meta.url)
+  new URL("../../testing/append-gotcha-entry.ts", import.meta.url)
 )
 
 const tmpDirs: string[] = []

@@ -1,14 +1,5 @@
 # intent 文書と intent-issue の書式
 
-この仕様を変更したら、同じコミットで次も更新する。
-
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §8・§9
-- [ ] codiel: `skills/analyzing-issues/SKILL.md` の `## intent issue の写像`
-- [ ] codiel: `skills/preparing-design-agendas/SKILL.md` の `## 合意済み事項の継承`
-- [ ] gh-utility: `skills/issue-craft/SKILL.md` の `## 持ち込みモード`
-
-写しにはマーカーと見出し名の認識に要る最小限だけを持たせる。書き方の規律・理由・例はこの文書にだけ置く。
-
 ## 保存先と命名
 
 - `docs/intents/YYYY-MM-DD-<slug>.md` に保存する。基準は対象リポジトリのルートで固定し、設定による変更を持たない。

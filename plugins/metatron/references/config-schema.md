@@ -1,16 +1,5 @@
 # metatron.config.json のスキーマとパス解決規則
 
-## 変更時のチェックリスト
-
-この規則を変更したら、次をすべて更新して 3 者比較テストを通す。
-
-- [ ] `plugins/metatron/src/lib/config.ts`(正本の実装)
-- [ ] `plugins/codiel/src/hooks/lib.ts` の `findDocRoot` / `resolveDocPaths`
-- [ ] `plugins/sandalphon/src/check-intent-env.ts`
-- [ ] 3 者比較テスト(metatron のテスト R4 / sandalphon のケース 16f)
-
-3 つのプラグインはこの規則を独立に実装している。写しが割れると、同じカレントディレクトリから別のファイルへ辿り着く。
-
 ## 設定ファイル
 
 | 項目 | 値 |

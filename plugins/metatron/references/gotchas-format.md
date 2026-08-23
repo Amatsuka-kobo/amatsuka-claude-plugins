@@ -1,10 +1,5 @@
 # GOTCHAS の書式
 
-この書式を変更したら、同じコミットで次も更新する。
-
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §6
-- [ ] codiel: `skills/recording-gotchas/SKILL.md` の書式の写し
-
 ## ファイル構成
 
 節の見出し名と順序を次に固定する。
