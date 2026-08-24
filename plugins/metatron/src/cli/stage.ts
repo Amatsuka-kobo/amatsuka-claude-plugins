@@ -102,7 +102,7 @@ export function runStageArchitecture(ctx: StageContext): void {
     emitWriteFailure(
       command,
       "invalid_input",
-      `${input.source} のトップレベルは { sections: [{ heading, body }] } のオブジェクトである必要があります。`,
+      `${input.source} のトップレベルは { sections: [{ heading, body } | { heading, remove: true }] } のオブジェクトである必要があります。`,
       { valid: false },
       EXIT_USAGE
     )

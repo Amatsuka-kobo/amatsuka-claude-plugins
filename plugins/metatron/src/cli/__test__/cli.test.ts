@@ -325,6 +325,20 @@ const REJECTIONS: Rejection[] = [
     unclosed: true
   },
   {
+    name: "stage-architecture に存在しない節の remove を渡す",
+    args: ["stage-architecture"],
+    input: { sections: [{ heading: "テスト方針", remove: true }] },
+    error: "section_not_found"
+  },
+  {
+    name: "stage-architecture に body と remove を同時に渡す",
+    args: ["stage-architecture"],
+    input: {
+      sections: [{ heading: "システム概要", body: "本文", remove: true }]
+    },
+    error: "invalid_input"
+  },
+  {
     name: "stage-adr の状態変更で reason を省略",
     args: ["stage-adr"],
     input: { mode: "status", id: "ADR-001", status: "廃止" },

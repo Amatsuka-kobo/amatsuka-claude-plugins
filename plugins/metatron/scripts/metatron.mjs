@@ -160,7 +160,7 @@ function isArchitectureHeading(value) {
 function canonicalIndex(heading) {
   return ARCHITECTURE_HEADINGS.indexOf(heading);
 }
-function validateHeadingKey(heading) {
+function validateHeadingKey(heading, options = {}) {
   if (typeof heading !== "string" || heading.trim() === "") {
     return {
       ok: false,
@@ -183,6 +183,7 @@ function validateHeadingKey(heading) {
       message: "`overview` \u7591\u4F3C\u30AD\u30FC\u306F\u5EC3\u6B62\u3057\u307E\u3057\u305F\u3002\u5192\u982D\u306E\u6982\u8981\u306F `\u30B7\u30B9\u30C6\u30E0\u6982\u8981` \u30BB\u30AF\u30B7\u30E7\u30F3\u306B\u66F8\u3044\u3066\u304F\u3060\u3055\u3044\u3002"
     };
   }
+  if (options.allowUnlisted === true) return { ok: true, heading: value };
   const movedTo = MOVED_HEADINGS[value];
   if (movedTo !== void 0) {
     return {
@@ -362,7 +363,7 @@ function createArchitecture(changes, eol) {
   );
   let out = `${ARCHITECTURE_TITLE}${eol}${eol}`;
   for (const change of ordered) {
-    out += buildSectionText(change.heading, change.body, eol, true);
+    out += buildSectionText(change.heading, change.body ?? "", eol, true);
   }
   return out.replace(/(\r?\n)+$/, eol);
 }
@@ -373,12 +374,12 @@ function applySectionChanges(current, changes) {
   if (text.trim() === "") {
     return {
       ok: true,
-      text: createArchitecture(changes, eol),
+      text: createArchitecture(
+        changes.filter((c) => c.remove !== true),
+        eol
+      ),
       created: true,
-      applied: changes.map((c) => ({
-        heading: c.heading,
-        mode: "added"
-      })),
+      applied: changes.filter((c) => c.remove !== true).map((c) => ({ heading: c.heading, mode: "added" })),
       warnings
     };
   }
@@ -400,8 +401,19 @@ function applySectionChanges(current, changes) {
   for (const change of changes) {
     const order = canonicalIndex(change.heading);
     const section = findSection(doc, change.heading);
+    if (change.remove === true) {
+      if (!section) continue;
+      ops.push({
+        start: section.startLine,
+        end: section.endLine,
+        text: "",
+        order
+      });
+      applied.push({ heading: change.heading, mode: "removed" });
+      continue;
+    }
     if (section) {
-      const body = normalizeBody(change.body, eol);
+      const body = normalizeBody(change.body ?? "", eol);
       ops.push({
         start: section.startLine + 1,
         end: section.contentEndLine,
@@ -416,7 +428,7 @@ function applySectionChanges(current, changes) {
       ops.push({
         start: anchor,
         end: anchor,
-        text: buildSectionText(change.heading, change.body, eol, true),
+        text: buildSectionText(change.heading, change.body ?? "", eol, true),
         order
       });
     } else {
@@ -427,7 +439,7 @@ function applySectionChanges(current, changes) {
       ops.push({
         start: lines.length,
         end: lines.length,
-        text: prefix + buildSectionText(change.heading, change.body, eol, false),
+        text: prefix + buildSectionText(change.heading, change.body ?? "", eol, false),
         order
       });
     }
@@ -450,7 +462,19 @@ function prepareArchitectureUpdate(current, changes) {
   const normalizedChanges = [];
   const seen = /* @__PURE__ */ new Set();
   for (const change of changes) {
-    const validated = validateHeadingKey(change?.heading);
+    const remove = change?.remove;
+    if (remove !== void 0 && remove !== true) {
+      return {
+        ok: false,
+        error: "invalid_input",
+        message: "remove \u306F true \u306E\u3068\u304D\u3060\u3051\u6307\u5B9A\u3067\u304D\u307E\u3059\u3002false \u3084 true \u4EE5\u5916\u306E\u5024\u306F\u53D7\u3051\u4ED8\u3051\u307E\u305B\u3093\u3002",
+        warnings
+      };
+    }
+    const isRemove = remove === true;
+    const validated = validateHeadingKey(change?.heading, {
+      allowUnlisted: isRemove
+    });
     if (!validated.ok) {
       return {
         ok: false,
@@ -468,6 +492,18 @@ function prepareArchitectureUpdate(current, changes) {
       };
     }
     seen.add(validated.heading);
+    if (isRemove) {
+      if (change?.body !== void 0) {
+        return {
+          ok: false,
+          error: "invalid_input",
+          message: `\u300C${validated.heading}\u300D\u306B remove \u3068 body \u3092\u540C\u6642\u306B\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u524A\u9664\u306A\u3089 body \u3092\u66F8\u304B\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002`,
+          warnings
+        };
+      }
+      normalizedChanges.push({ heading: validated.heading, remove: true });
+      continue;
+    }
     if (typeof change?.body !== "string") {
       return {
         ok: false,
@@ -478,11 +514,33 @@ function prepareArchitectureUpdate(current, changes) {
     }
     normalizedChanges.push({ heading: validated.heading, body: change.body });
   }
+  const removals = normalizedChanges.filter((c) => c.remove === true);
+  if (removals.length > 0) {
+    const parsed = parseArchitectureForWrite(current ?? "");
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        error: parsed.error,
+        message: parsed.message,
+        warnings: [...warnings, ...parsed.warnings]
+      };
+    }
+    for (const removal of removals) {
+      if (findSection(parsed.doc, removal.heading) === void 0) {
+        return {
+          ok: false,
+          error: "section_not_found",
+          message: `\u300C${removal.heading}\u300D\u306F ARCHITECTURE \u306B\u5B58\u5728\u3057\u307E\u305B\u3093\u3002\u524A\u9664\u3067\u304D\u308B\u306E\u306F\u5B58\u5728\u3059\u308B\u7BC0\u3060\u3051\u3067\u3059\u3002`,
+          warnings
+        };
+      }
+    }
+  }
   const domainsChange = normalizedChanges.find(
-    (c) => c.heading === DOMAINS_HEADING
+    (c) => c.heading === DOMAINS_HEADING && c.remove !== true
   );
   if (domainsChange) {
-    const lookup = findDomainsBlock(domainsChange.body);
+    const lookup = findDomainsBlock(domainsChange.body ?? "");
     if (!lookup.block) {
       warnings.push(
         `\`## ${DOMAINS_HEADING}\` \u306B \`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u6A5F\u68B0\u53EF\u8AAD\u306A\u5199\u50CF\u304C\u5931\u308F\u308C\u307E\u3059\u3002`
@@ -3711,9 +3769,9 @@ function commandLine(args) {
 }
 var INPUT_SCHEMAS = {
   "stage-architecture": {
-    input: "{ sections: [{ heading, body }], reason? }",
+    input: "{ sections: [{ heading, body } | { heading, remove: true }], reason? }",
     headings: [...ARCHITECTURE_HEADINGS],
-    note: "`ADR \u4E00\u89A7` \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002"
+    note: "`ADR \u4E00\u89A7` \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002remove: true \u306E\u524A\u9664\u306F\u898B\u51FA\u3057\u8A31\u53EF\u30EA\u30B9\u30C8\u306E\u5236\u9650\u3092\u53D7\u3051\u307E\u305B\u3093(body \u3068\u306E\u540C\u6642\u6307\u5B9A\u306F\u62D2\u5426)\u3002"
   },
   "stage-adr": {
     add: '{ mode: "add", title, status?, decidedOn?, decidedBy, background, options: [...], conclusion, rationale, impact }',
@@ -4419,7 +4477,7 @@ function runStageArchitecture(ctx) {
     emitWriteFailure(
       command,
       "invalid_input",
-      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { sections: [{ heading, body }] } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`,
+      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { sections: [{ heading, body } | { heading, remove: true }] } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`,
       { valid: false },
       EXIT_USAGE
     );
