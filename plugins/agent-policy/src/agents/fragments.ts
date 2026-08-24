@@ -136,11 +136,16 @@ export function loadFragments(
 }
 
 export function loadCommon(dirs: string[]): Map<string, string[]> {
-  let sections = new Map<string, string[]>()
+  const sections = new Map<string, string[]>()
   for (const dir of dirs) {
     const file = path.join(dir, "_common.md")
     if (!fs.existsSync(file)) continue
-    sections = parse(fs.readFileSync(file, "utf8")).sections
+    // 節単位で上書きする。後の dir が定義した節だけを差し替え、
+    // 定義しなかった節は前の dir のものを残す。
+    for (const [heading, body] of parse(fs.readFileSync(file, "utf8"))
+      .sections) {
+      sections.set(heading, body)
+    }
   }
   if (sections.size === 0) throw new Error("_common.md not found")
   return sections
