@@ -233,3 +233,169 @@ function seed(options: {
 
   fs.writeFileSync(target(), content)
 }
+
+describe("--write", () => {
+  it("既存が無いときテンプレートどおりに書く", () => {
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write"
+    ])
+    expect(result.ok).toBe(true)
+    expect(fs.existsSync(target())).toBe(true)
+    expect(fs.readFileSync(target(), "utf8")).toContain("name: gpt-sol")
+  })
+
+  it("--keep なしでは完全上書きになる", () => {
+    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write"
+    ])
+    expect(fs.readFileSync(target(), "utf8")).not.toContain("## ツール運用")
+  })
+
+  it("--keep section で既存にしかない節を残す", () => {
+    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "section:## ツール運用"
+    ])
+    const content = fs.readFileSync(target(), "utf8")
+    expect(content).toContain("## ツール運用")
+    expect(content).toContain("Context7 を使う")
+  })
+
+  it("--keep tools で既存にしかない tools を残す", () => {
+    seed({
+      tools:
+        "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
+    })
+    run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "tools:mcp__context7"
+    ])
+    expect(fs.readFileSync(target(), "utf8")).toMatch(/^tools:.*mcp__context7/m)
+  })
+
+  it("--keep key で既存にしかないキーを残す", () => {
+    seed({ extraKeys: { permissionMode: "plan" } })
+    run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "key:permissionMode"
+    ])
+    expect(fs.readFileSync(target(), "utf8")).toContain("permissionMode: plan")
+  })
+
+  it("--keep key で値の違う共通キーを残す", () => {
+    seed({ model: "my-own-alias" })
+    run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "key:model"
+    ])
+    expect(fs.readFileSync(target(), "utf8")).toContain("model: my-own-alias")
+  })
+
+  it("--keep preamble で冒頭宣言を残す", () => {
+    seed({ preamble: "あなたは私が書き換えた冒頭である。" })
+    run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "preamble"
+    ])
+    expect(fs.readFileSync(target(), "utf8")).toContain(
+      "あなたは私が書き換えた冒頭である。"
+    )
+  })
+
+  it("不正な --keep セレクタでエラーを返す", () => {
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "bogus:value"
+    ])
+    expect(result.ok).toBe(false)
+    expect(String(result.error)).toContain("keep")
+  })
+})
