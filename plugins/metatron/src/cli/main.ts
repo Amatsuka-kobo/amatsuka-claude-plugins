@@ -5,14 +5,15 @@
 // - 読み取り・注入経路(第 2 層・フェイルオープン): get / scan / diff-architecture。
 //   **常に exit 0**。読めなかったことも事実として JSON で返す。
 // - 書き込み経路(第 1 層・フェイルクローズド): stage-architecture / stage-adr /
-//   commit-architecture / append-gotcha / tag-gotcha。拒否・失敗は非 0 終了。
+//   stage-rules / commit-architecture / commit-rules / append-gotcha / tag-gotcha。
+//   拒否・失敗は非 0 終了。
 //
 // この分岐を 1 箇所に集めているのは、サブコマンドを足したときに層の判断が
 // 各ファイルへ散らばらないようにするためである。
 
 import { runDiffArchitecture, runScan } from "./analysis.js"
 import { parseArgs } from "./args.js"
-import { runCommitArchitecture } from "./commit.js"
+import { runCommitArchitecture, runCommitRules } from "./commit.js"
 import { runGet } from "./get.js"
 import { runAppendGotcha, runTagGotcha } from "./gotcha.js"
 import {
@@ -24,7 +25,7 @@ import {
   note
 } from "./output.js"
 import { USAGE_LINES } from "./paths.js"
-import { runStageAdr, runStageArchitecture } from "./stage.js"
+import { runStageAdr, runStageArchitecture, runStageRules } from "./stage.js"
 
 /** 常に exit 0 で返すサブコマンド(契約 §11 の「読」)。 */
 const READ_SUBCOMMANDS = new Set(["get", "scan", "diff-architecture"])
@@ -32,7 +33,9 @@ const READ_SUBCOMMANDS = new Set(["get", "scan", "diff-architecture"])
 const WRITE_SUBCOMMANDS = new Set([
   "stage-architecture",
   "stage-adr",
+  "stage-rules",
   "commit-architecture",
+  "commit-rules",
   "append-gotcha",
   "tag-gotcha"
 ])
@@ -97,8 +100,14 @@ export function main(
       case "stage-adr":
         runStageAdr(ctx)
         return
+      case "stage-rules":
+        runStageRules(ctx)
+        return
       case "commit-architecture":
         runCommitArchitecture(ctx)
+        return
+      case "commit-rules":
+        runCommitRules(ctx)
         return
       case "append-gotcha":
         runAppendGotcha(ctx)
