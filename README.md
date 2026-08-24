@@ -109,6 +109,7 @@ Claude Code を使う時のエージェント運用を最適化するプラグ�
 役割断片からビルド生成した GPT Sol・Terra・Luna・Grok の 4 種のプリセット定義を同梱しており、セットアップなしに `agent-policy:<name>` として呼び出せます。`agent-policy:setup-gpt` / `agent-policy:setup-grok` では役割を選び、プロジェクト固有の Agent 定義を合成できます。<br>
 環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` を設定すると、SessionStart フックがセッション開始時に対応する方針スキル(`agent-policy:claude-model-policy` / `agent-policy:with-codex-policy` / `agent-policy:with-grok-policy` / `agent-policy:codex-grok-policy`)へ従う旨を自動で注入します。プロジェクトの定義にある役割マーカーも走査し、役割と Agent 名の対応を注入します。任意のプロジェクトへ CLAUDE.md の追記なしで同じ最適化施策を持ち込めます。<br>
 Codex 系 / Grok 系のモデルエイリアスをローカルプロキシ(ProxyAPI サーバー)の別名に合わせたいときは、`AMATSUKA_AGENT_GPT_SOL_ALIAS` などのエイリアス変数を設定し、`agent-policy:setup-gpt` または `agent-policy:setup-grok` で定義を生成します。SessionStart フックはファイルを生成せず、既定値と異なるエイリアスとプロジェクト定義の不一致を検知して setup を促すだけです。<br>
+定義の名前は自由に決められます。不一致の検知はプリセット名ではなく役割マーカーを見るため、`gpt-sol` 以外の名前を付けても正しく追随していると判定されます。既存定義がある状態で setup を実行すると、差分を確認したうえで利用者が加えた tools・frontmatter キー・独自の節を保持できます。<br>
 
 ### prompt-smith
 
