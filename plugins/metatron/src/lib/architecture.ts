@@ -20,7 +20,14 @@ import fs from "node:fs"
 /** 契約 §4-1。ファイルタイトルの行。 */
 export const ARCHITECTURE_TITLE = "# ARCHITECTURE"
 
-/** 契約 §4-1 の 10 セクション。見出し名と順序を固定する。 */
+/**
+ * 契約 §4-1 の 7 セクション。見出し名と順序を固定する。
+ *
+ * `テスト方針` / `保護パス` / `規約` は `.claude/rules/metatron/` へ移した
+ * (設計書 §9-1)。この許可リストは**書き込みの検証にしか使わない**ため、
+ * 3 節を外しても既存 ARCHITECTURE の 3 節は引き続きセクションとして読める
+ * (セクション分割はフェンス状態機械であり許可リストと独立している。§9-3)。
+ */
 export const ARCHITECTURE_HEADINGS = [
   "システム概要",
   "技術スタック",
@@ -28,13 +35,22 @@ export const ARCHITECTURE_HEADINGS = [
   "ディレクトリ構成と責務",
   "ドメインマップ",
   "コマンド定義",
-  "テスト方針",
-  "保護パス",
-  "規約",
   "ADR 一覧"
 ] as const
 
 export type ArchitectureHeading = (typeof ARCHITECTURE_HEADINGS)[number]
+
+/**
+ * 旧セクション名 → 移行先の rules ファイル名。
+ *
+ * **検証には使わない。**エラーメッセージを分かりやすくするためだけに使う
+ * (設計書 §9-1)。`remove: true` の削除はこの表も許可リストも参照しない。
+ */
+export const MOVED_HEADINGS = {
+  テスト方針: "testing-policy",
+  保護パス: "protected-paths",
+  規約: "conventions"
+} as const
 
 export const ADR_HEADING = "ADR 一覧"
 export const DOMAINS_HEADING = "ドメインマップ"
@@ -381,6 +397,14 @@ export function validateHeadingKey(heading: unknown): HeadingKeyValidation {
       error: "retired_overview_key",
       message:
         "`overview` 疑似キーは廃止しました。冒頭の概要は `システム概要` セクションに書いてください。"
+    }
+  }
+  const movedTo = MOVED_HEADINGS[value as keyof typeof MOVED_HEADINGS]
+  if (movedTo !== undefined) {
+    return {
+      ok: false,
+      error: "unknown_heading",
+      message: `\`${value}\` は ARCHITECTURE から .claude/rules/metatron/${movedTo}.md へ移しました。stage-rules --input <path> で更新してください。`
     }
   }
   if (!isArchitectureHeading(value)) {

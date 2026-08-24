@@ -21,7 +21,13 @@ import { findDocRoot } from "./config.js"
 // 定数
 // ---------------------------------------------------------------------------
 
-/** 契約 §4-1 の 10 セクション。見出し名と順序を固定する。 */
+/**
+ * 契約 §4-1 の 7 セクション。見出し名と順序を固定する。
+ *
+ * `architecture.ts` の `ARCHITECTURE_HEADINGS` の独立複製である。片方だけを
+ * 変えると「stage-architecture は通るが diff-architecture が見落とす」非対称と、
+ * 移行済みプロジェクトでの `section_missing` の偽陽性が同時に起きる(設計書 §9-2・§9-4)。
+ */
 export const ARCHITECTURE_SECTIONS = [
   "システム概要",
   "技術スタック",
@@ -29,9 +35,6 @@ export const ARCHITECTURE_SECTIONS = [
   "ディレクトリ構成と責務",
   "ドメインマップ",
   "コマンド定義",
-  "テスト方針",
-  "保護パス",
-  "規約",
   "ADR 一覧"
 ] as const
 

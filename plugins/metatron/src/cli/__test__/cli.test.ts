@@ -320,7 +320,7 @@ const REJECTIONS: Rejection[] = [
   {
     name: "未閉フェンスの ARCHITECTURE への stage-architecture",
     args: ["stage-architecture"],
-    input: { sections: [{ heading: "規約", body: "新しい規約" }] },
+    input: { sections: [{ heading: "技術スタック", body: "- 新しい依存" }] },
     error: "unclosed_fence",
     unclosed: true
   },
@@ -841,4 +841,27 @@ test("S10: docRoot と起動ディレクトリがずれていると get config �
     .warnings as string[]
   expect(warnings.some((w) => w.includes("起動ディレクトリ"))).toBe(true)
   expect(warnings.some((w) => w.includes(".claude/rules/"))).toBe(true)
+})
+
+test("S11: 移行後の ARCHITECTURE(3 節なし)で diff-architecture が section_missing を出さない", () => {
+  // 移行後の姿。テスト方針 / 保護パス / 規約 を持たない ARCHITECTURE。
+  const root = project()
+  writeFile(
+    root,
+    "docs/ARCHITECTURE.md",
+    "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## コマンド定義\n\n| 種別 | コマンド |\n| --- | --- |\n| test | `pnpm test` |\n"
+  )
+
+  const r = runCli(["diff-architecture"], root)
+  expect(r.status).toBe(0)
+  const findings = (r.json as Record<string, unknown>).findings as {
+    kind: string
+    section?: string
+  }[]
+  const missing = findings
+    .filter((f) => f.kind === "section_missing")
+    .map((f) => f.section)
+  for (const moved of ["テスト方針", "保護パス", "規約"]) {
+    expect(missing, moved).not.toContain(moved)
+  }
 })
