@@ -464,3 +464,67 @@ test("フェイルオープンの exit code は常に 0(拒否時も含む)", ()
   ).not.toThrow()
   expect(() => runTs(HOOK, [], { input: "壊れた入力" })).not.toThrow()
 })
+
+test("D15: rules 3 ファイルへの Write は deny。理由に stage-rules と commit-rules を含む", () => {
+  const root = project()
+  for (const name of ["conventions", "protected-paths", "testing-policy"]) {
+    const target = path.join(root, ".claude/rules/metatron", `${name}.md`)
+    const r = write(root, target)
+    expect(r?.permissionDecision, name).toBe("deny")
+    expect(r?.permissionDecisionReason, name).toContain("stage-rules --input")
+    expect(r?.permissionDecisionReason, name).toContain(
+      "commit-rules --staging-id"
+    )
+    expect(r?.permissionDecisionReason, name).toContain(
+      `.claude/rules/metatron/${name}.md`
+    )
+  }
+})
+
+test("D16: .claude/rules/ 直下のユーザーの手書きファイルは素通しする", () => {
+  const root = project()
+  expect(write(root, path.join(root, ".claude/rules/my-own.md"))).toBe(null)
+  expect(edit(root, path.join(root, ".claude/rules/frontend/style.md"))).toBe(
+    null
+  )
+})
+
+test("D17: .claude/rules/metatron-extra/foo.md は前方一致で誤検出せず素通しする", () => {
+  const root = project()
+  expect(
+    write(root, path.join(root, ".claude/rules/metatron-extra/foo.md"))
+  ).toBe(null)
+})
+
+test("D18: rulesDir 配下でも 3 ファイル以外の .md と .md 以外は素通しする", () => {
+  const root = project()
+  for (const rel of ["notes.md", "conventions.txt", "conventions.md.bak"]) {
+    expect(
+      write(root, path.join(root, ".claude/rules/metatron", rel)),
+      rel
+    ).toBe(null)
+  }
+})
+
+test("D19: 設定で rulesDir を変更すると、変更後のパスが deny され既定パスは素通しする", () => {
+  const root = project(
+    '{"version":1,"paths":{"rulesDir":".claude/rules/mine"}}'
+  )
+  expect(
+    write(root, path.join(root, ".claude/rules/mine/conventions.md"))
+      ?.permissionDecision
+  ).toBe("deny")
+  expect(
+    write(root, path.join(root, ".claude/rules/metatron/conventions.md"))
+  ).toBe(null)
+})
+
+test("D20: NotebookEdit の notebook_path に rules を渡しても deny する", () => {
+  const root = project()
+  const r = notebookEdit(
+    root,
+    path.join(root, ".claude/rules/metatron/testing-policy.md")
+  )
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("stage-rules --input")
+})
