@@ -1887,6 +1887,15 @@ describe("--check", () => {
     expect(result.ok).toBe(false)
     expect(String(result.error)).toContain("no-such-role")
   })
+
+  it("model の欠落でエラーを返す", () => {
+    const result = run([
+      "--vendor", "gpt", "--name", "gpt-sol",
+      "--roles", "complex-impl", "--dir", project, "--check"
+    ])
+    expect(result.ok).toBe(false)
+    expect(String(result.error)).toContain("model")
+  })
 })
 
 // テンプレートを生成してから指定箇所を書き換え、既存ファイルとして置く。
@@ -2189,6 +2198,7 @@ function parseArgs(argv: string[]): Options {
   }
 
   if (options.name === "") throw new Error("name: is required")
+  if (options.model === "") throw new Error("model: is required")
   if (options.roles.length === 0) throw new Error("roles: is required")
   return options
 }
