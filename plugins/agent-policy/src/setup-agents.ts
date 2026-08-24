@@ -262,6 +262,7 @@ function parseArgs(argv: string[]): Options {
   }
 
   if (options.name === "") throw new Error("name: is required")
+  if (options.model === "") throw new Error("model: is required")
   if (options.roles.length === 0) throw new Error("roles: is required")
   return options
 }
