@@ -2,36 +2,33 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { expect, test } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { runTs } from "../../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../session-start.ts", import.meta.url))
-
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 
-function project(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "agent-policy-hook-"))
+let project: string
+
+beforeEach(() => {
+  project = fs.mkdtempSync(path.join(os.tmpdir(), "agent-policy-"))
+})
+
+afterEach(() => {
+  fs.rmSync(project, { recursive: true, force: true })
+})
+
+function agentsDir(): string {
+  const dir = path.join(project, ".claude", "agents")
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
 }
 
-function generated(dir: string, name: string): string {
-  return fs.readFileSync(
-    path.join(dir, ".claude", "agents", `${name}.md`),
-    "utf8"
+function place(name: string, frontmatter: string[]): void {
+  fs.writeFileSync(
+    path.join(agentsDir(), `${name}.md`),
+    ["---", `name: ${name}`, ...frontmatter, "---", "", "本文", ""].join("\n")
   )
-}
-
-function place(dir: string, name: string, content: string): void {
-  const target = path.join(dir, ".claude", "agents")
-  fs.mkdirSync(target, { recursive: true })
-  fs.writeFileSync(path.join(target, `${name}.md`), content)
-}
-
-function listing(dir: string): string[] {
-  try {
-    return fs.readdirSync(path.join(dir, ".claude", "agents")).sort()
-  } catch {
-    return []
-  }
 }
 
 function environment(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -43,178 +40,288 @@ function environment(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return { ...base, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, ...overrides }
 }
 
-function context(overrides: NodeJS.ProcessEnv): string | undefined {
-  const stdout = runTs(HOOK, [], { env: environment(overrides) })
-  if (stdout === "") return undefined
-  expect(stdout.endsWith("\n")).toBe(true)
-  const payload = JSON.parse(stdout) as {
-    hookSpecificOutput: { hookEventName: string; additionalContext: string }
-  }
-  expect(payload.hookSpecificOutput.hookEventName).toBe("SessionStart")
-  return payload.hookSpecificOutput.additionalContext
+function context(env: Record<string, string> = {}): string {
+  const output = runTs(HOOK, [], {
+    env: environment({ CLAUDE_PROJECT_DIR: project, ...env })
+  }).trim()
+  if (output === "") return ""
+  const parsed = JSON.parse(output.split("\n").at(-1) ?? "{}")
+  return parsed.hookSpecificOutput?.additionalContext ?? ""
 }
 
-test("環境変数が無いときは何も出力しない", () => {
-  expect(context({})).toBeUndefined()
-})
+function listFiles(): string[] {
+  const dir = path.join(project, ".claude", "agents")
+  return fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []
+}
 
-test("AUTO_INJECTION が none のときは何も出力しない", () => {
-  expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "none" })).toBeUndefined()
-})
-
-test.each([
-  ["claude", "claude-model-policy"],
-  ["with-codex", "with-codex-policy"],
-  ["with-grok", "with-grok-policy"],
-  ["with-codex-grok", "codex-grok-policy"]
-])("AUTO_INJECTION が %s のとき %s を注入する", (value, policy) => {
-  expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: value })).toBe(
-    `最初に必ず agent-policy:${policy} スキルを使用し、この規律に従う`
-  )
-})
-
-test("AUTO_INJECTION が未知の値のときは方針を注入せず警告だけ出す", () => {
-  const injected = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-gemini" })
-  expect(injected).toContain("with-gemini")
-  expect(injected).not.toContain("スキルを使用し")
-})
-
-test("エイリアスが既定と同じときは何も生成しない", () => {
-  const dir = project()
-  const injected = context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: "claude-gpt-5-6-sol"
+describe("方針の注入", () => {
+  it("値が未設定なら何も出さない", () => {
+    expect(context()).toBe("")
   })
-  expect(injected).toBeUndefined()
-  expect(listing(dir)).toEqual([])
-})
 
-test("エイリアスが既定と違うときは該当定義だけを生成する", () => {
-  const dir = project()
-  const injected = context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol"
+  it("既知の値で方針スキルを指す", () => {
+    expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })).toContain(
+      "agent-policy:with-codex-policy"
+    )
+    expect(
+      context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex-grok" })
+    ).toContain("agent-policy:codex-grok-policy")
   })
-  expect(listing(dir)).toEqual(["gpt-sol.md"])
-  expect(generated(dir, "gpt-sol")).toContain("model: my-sol")
-  expect(generated(dir, "gpt-sol")).not.toContain("claude-gpt-5-6-sol")
-  expect(injected).toContain("gpt-sol")
-  expect(injected).toContain("再起動")
-})
 
-test("TERRA のエイリアス変更は gpt-terra と gpt-researcher の両方を生成する", () => {
-  const dir = project()
-  context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra"
+  it("未知の値では方針を指さず、未知である旨だけを出す", () => {
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "bogus" })
+    expect(output).toContain("bogus")
+    expect(output).not.toContain("スキルを使用し")
   })
-  expect(listing(dir)).toEqual(["gpt-researcher.md", "gpt-terra.md"])
-  expect(generated(dir, "gpt-researcher")).toContain("model: my-terra")
 })
 
-test("GROK のエイリアス変更は grok の 2 定義を生成する", () => {
-  const dir = project()
-  context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GROK_ALIAS: "my-grok"
+describe("ファイルを書かない", () => {
+  it("エイリアス差分があっても定義を生成しない", () => {
+    expect(context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })).not.toBe(
+      undefined
+    )
+    expect(listFiles()).toEqual([])
   })
-  expect(listing(dir)).toEqual(["grok-implementer.md", "grok-researcher.md"])
-})
 
-test("同一内容が既にあるときは書き込まず再起動も促さない", () => {
-  const dir = project()
-  context({ CLAUDE_PROJECT_DIR: dir, AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-  const first = fs.statSync(
-    path.join(dir, ".claude", "agents", "gpt-sol.md")
-  ).mtimeMs
-
-  const injected = context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol"
+  it("役割マーカーを読んでもファイルを増やさない", () => {
+    place("my-agent", ["agent-policy-role: complex-impl"])
+    context()
+    expect(listFiles()).toEqual(["my-agent.md"])
   })
-  const second = fs.statSync(
-    path.join(dir, ".claude", "agents", "gpt-sol.md")
-  ).mtimeMs
-
-  expect(second).toBe(first)
-  expect(injected).toContain("gpt-sol")
-  expect(injected).not.toContain("再起動")
 })
 
-test("差分が無いのに定義が置かれているときは残骸として通知する", () => {
-  const dir = project()
-  place(dir, "grok-researcher", "---\nname: grok-researcher\n---\n")
-  const injected = context({ CLAUDE_PROJECT_DIR: dir })
-  expect(injected).toContain("grok-researcher")
-  expect(injected).toContain("旧セットアップ")
-})
-
-test("CLAUDE_PROJECT_DIR が無いときは生成せず注入だけ行う", () => {
-  const injected = context({
-    AMATSUKA_AGENT_AUTO_INJECTION: "claude",
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol"
+describe("役割マーカーの走査", () => {
+  it("帯 → 名前の対応を注入する", () => {
+    place("my-heavy", ["agent-policy-role: complex-impl, explore"])
+    const output = context()
+    expect(output).toContain("my-heavy")
+    expect(output).toContain("複雑または重要な実装")
+    expect(output).toContain("コードベース探索実働")
   })
-  expect(injected).toBe(
-    "最初に必ず agent-policy:claude-model-policy スキルを使用し、この規律に従う"
-  )
-})
 
-test("エイリアスの前後の空白は無視する", () => {
-  const dir = project()
-  const injected = context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: " claude-gpt-5-6-sol ",
-    AMATSUKA_AGENT_GPT_LUNA_ALIAS: " my-luna "
+  it("同じ役割を複数定義が宣言したとき全て列挙する", () => {
+    place("first", ["agent-policy-role: normal-impl"])
+    place("second", ["agent-policy-role: normal-impl"])
+    const output = context()
+    expect(output).toContain("first")
+    expect(output).toContain("second")
   })
-  expect(listing(dir)).toEqual(["gpt-luna.md"])
-  expect(generated(dir, "gpt-luna")).toContain("model: my-luna\n")
-  expect(injected).not.toContain("gpt-sol")
-})
 
-test("エイリアス 4 変数を全て変えても生成対象は 6 定義に限られる", () => {
-  const dir = project()
-  context({
-    CLAUDE_PROJECT_DIR: dir,
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol",
-    AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra",
-    AMATSUKA_AGENT_GPT_LUNA_ALIAS: "my-luna",
-    AMATSUKA_AGENT_GROK_ALIAS: "my-grok"
+  it("マーカーの行を ROLES 順に並べる", () => {
+    place("out-of-order", [
+      "agent-policy-role: realtime-research, general, complex-impl"
+    ])
+    const output = context()
+    const complex = output.indexOf("- 複雑または重要な実装:")
+    const general = output.indexOf("- その他のタスク:")
+    const research = output.indexOf("- リアルタイム情報調査:")
+    expect(complex).toBeLessThan(general)
+    expect(general).toBeLessThan(research)
   })
-  expect(listing(dir)).toEqual([
-    "gpt-luna.md",
-    "gpt-researcher.md",
-    "gpt-sol.md",
-    "gpt-terra.md",
-    "grok-implementer.md",
-    "grok-researcher.md"
-  ])
-  expect(listing(dir)).not.toContain("claude-researcher.md")
-})
 
-test("生成に失敗しても方針注入は失われない", () => {
-  const dir = project()
-  const injected = context({
-    CLAUDE_PROJECT_DIR: dir,
-    CLAUDE_PLUGIN_ROOT: path.join(dir, "missing"),
-    AMATSUKA_AGENT_AUTO_INJECTION: "claude",
-    AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol"
+  it("未知の役割 ID を無視し、その旨を出す", () => {
+    place("odd", ["agent-policy-role: no-such-role"])
+    const output = context()
+    expect(output).toContain("no-such-role")
+    expect(output).toContain("odd")
   })
-  expect(injected).toContain(
-    "最初に必ず agent-policy:claude-model-policy スキルを使用し、この規律に従う"
-  )
-  expect(injected).toContain("生成に失敗")
-  expect(injected).toContain("gpt-sol")
-  expect(listing(dir)).toEqual([])
+
+  it("プロジェクト側断片の役割 ID を label で解決する", () => {
+    const roles = path.join(project, ".claude", "agent-policy", "roles")
+    fs.mkdirSync(roles, { recursive: true })
+    fs.writeFileSync(
+      path.join(roles, "triage.md"),
+      [
+        "---",
+        "id: triage",
+        "label: 障害の切り分け",
+        "description: 障害の切り分け",
+        "tools: Read, Grep, Glob, Bash",
+        "kind: readonly",
+        "---",
+        "",
+        "## When to invoke",
+        "",
+        "- **切り分け。** 障害の原因を切り分けるとき。",
+        ""
+      ].join("\n")
+    )
+    place("triager", ["agent-policy-role: triage"])
+    const output = context()
+    expect(output).toContain("障害の切り分け")
+    expect(output).toContain("triager")
+    expect(output).not.toContain("未知の役割 ID")
+  })
+
+  it("読めないプロジェクト側役割断片があっても方針を注入する", () => {
+    const roles = path.join(project, ".claude", "agent-policy", "roles")
+    fs.mkdirSync(path.join(roles, "custom.md"), { recursive: true })
+    place("custom-role-agent", ["agent-policy-role: custom"])
+
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })
+
+    expect(output).toContain("agent-policy:with-codex-policy")
+  })
+
+  it("マーカーの無い定義は対応表に出さない", () => {
+    place("plain", ["model: sonnet"])
+    expect(context()).not.toContain("plain")
+  })
+
+  it("同梱プリセットを走査しない", () => {
+    // 走査を発火させるため、プロジェクト側に 1 件置く。
+    place("dummy", ["agent-policy-role: explore"])
+    const output = context()
+    expect(output).toContain("コードベース探索実働")
+    // 同梱 gpt-sol は complex-impl を宣言しているが、走査対象外なので出ない。
+    expect(output).not.toContain("複雑または重要な実装")
+  })
 })
 
-test("同梱定義が読めないときは stdout へ何も出さない", () => {
-  const dir = project()
-  const stdout = runTs(HOOK, [], {
-    env: environment({
-      CLAUDE_PROJECT_DIR: dir,
-      CLAUDE_PLUGIN_ROOT: path.join(dir, "missing"),
-      AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol"
+describe("setup の促し", () => {
+  it("エイリアスを model に持つ定義が無いとき促す", () => {
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+    expect(output).toContain("setup-gpt")
+    expect(output).toContain("gpt-sol")
+    expect(output).toContain("model に持つ定義が無い")
+  })
+
+  it("名前一致の定義の model が食い違うとき食い違いを報告する", () => {
+    place("gpt-sol", ["model: claude-gpt-5-6-sol"])
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+    expect(output).toContain("setup-gpt")
+    expect(output).toContain("claude-gpt-5-6-sol")
+    expect(output).toContain("食い違う")
+  })
+
+  it("同名定義に model が無いとき未設定として報告する", () => {
+    place("gpt-sol", ["agent-policy-role: complex-impl"])
+
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+
+    expect(output).toContain("未設定")
+    expect(output).not.toContain("undefined")
+  })
+
+  it("別名の定義が必要な役割を覆うとき促さない", () => {
+    place("my-heavy-coder", [
+      "model: my-sol",
+      "agent-policy-role: complex-impl"
+    ])
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+    expect(output).not.toContain("setup-gpt")
+  })
+
+  it("複数定義の役割の和集合がプリセットを覆うとき促さない", () => {
+    place("my-explorer", [
+      "model: my-terra",
+      "agent-policy-role: explore, realtime-research, independent-review"
+    ])
+    place("my-coder", [
+      "model: my-terra",
+      "agent-policy-role: normal-impl, general"
+    ])
+    const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
+    expect(output).not.toContain("setup-gpt")
+  })
+
+  it("役割が不足するとき不足役割 ID を示して促す", () => {
+    place("my-explorer", ["model: my-terra", "agent-policy-role: explore"])
+    const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
+    expect(output).toContain("setup-gpt")
+    expect(output).toContain("normal-impl")
+    expect(output).toContain("general")
+    expect(output).toContain("my-explorer")
+  })
+
+  it("model キーを持たない定義はエイリアス充足に数えない", () => {
+    place("my-heavy-coder", ["agent-policy-role: complex-impl"])
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+    expect(output).toContain("setup-gpt")
+    expect(output).toContain("model に持つ定義が無い")
+  })
+
+  it("エイリアスが既定と同じなら促さない", () => {
+    const output = context({ AMATSUKA_AGENT_GROK_ALIAS: "claude-grok-4-6" })
+    expect(output).not.toContain("setup-grok")
+  })
+})
+
+describe("旧定義の残骸通知", () => {
+  it("廃止した 4 種を検出する", () => {
+    for (const name of [
+      "claude-researcher",
+      "gpt-researcher",
+      "grok-researcher",
+      "grok-implementer"
+    ]) {
+      place(name, ["model: sonnet"])
+    }
+    const output = context()
+    expect(output).toContain("claude-researcher")
+    expect(output).toContain("grok-implementer")
+    expect(output).toContain("廃止")
+  })
+
+  it("Grok の残骸と未設定の別名に 4.6 移行を周知する", () => {
+    place("grok-researcher", ["model: sonnet"])
+    const output = context()
+    expect(output).toContain(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
+    )
+  })
+
+  it("Grok の残骸があっても別名設定済みなら 4.6 移行を周知しない", () => {
+    place("grok-researcher", ["model: sonnet"])
+    const output = context({
+      AMATSUKA_AGENT_GROK_ALIAS: "claude-grok-4-5"
     })
+    expect(output).not.toContain(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
+    )
   })
-  expect(stdout).toBe("")
+
+  it("GPT の残骸だけなら 4.6 移行を周知しない", () => {
+    place("gpt-researcher", ["model: sonnet"])
+    const output = context()
+    expect(output).not.toContain(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
+    )
+  })
+
+  it("現行のプリセット名は残骸として扱わない", () => {
+    place("gpt-sol", ["model: claude-gpt-5-6-sol"])
+    expect(context()).not.toContain("廃止")
+  })
+})
+
+describe("フェイルオープン", () => {
+  it("CLAUDE_PROJECT_DIR が無いとき走査せず方針だけ出す", () => {
+    const output = runTs(HOOK, [], {
+      env: environment({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+    }).trim()
+    expect(output).toContain("claude-model-policy")
+  })
+
+  it("壊れた symlink があっても方針を注入する", () => {
+    fs.symlinkSync(
+      "/nonexistent/agent-policy-target.md",
+      path.join(agentsDir(), "broken.md")
+    )
+
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })
+    expect(output).toContain("agent-policy:with-codex-policy")
+  })
+
+  it("壊れた symlink があっても正常な定義の役割マーカーを拾う", () => {
+    fs.symlinkSync(
+      "/nonexistent/agent-policy-target.md",
+      path.join(agentsDir(), "broken.md")
+    )
+    place("healthy", ["agent-policy-role: explore"])
+
+    const output = context()
+    expect(output).toContain("healthy")
+    expect(output).toContain("コードベース探索実働")
+  })
 })
