@@ -13,6 +13,7 @@ var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
+var DEFAULT_RULES_DIR = ".claude/rules/metatron";
 var DEFAULT_INJECTION_ENABLED = true;
 var DEFAULT_GOTCHAS_RECENT_COUNT = 5;
 var DEFAULT_MAX_CHARS = 9e3;
@@ -130,6 +131,8 @@ function defaultsFor(docRoot, warnings) {
     gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
+    rulesDirPath: path.resolve(docRoot, DEFAULT_RULES_DIR),
+    rulesDirRelative: DEFAULT_RULES_DIR,
     injection: {
       enabled: DEFAULT_INJECTION_ENABLED,
       gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
@@ -194,6 +197,13 @@ function loadConfigInner(startDir) {
     "gotchas",
     warnings
   );
+  const rulesDir = resolveConfiguredPath(
+    docRoot,
+    paths?.rulesDir,
+    DEFAULT_RULES_DIR,
+    "rulesDir",
+    warnings
+  );
   const injectionRaw = source?.injection;
   const injection = isPlainObject(injectionRaw) ? injectionRaw : void 0;
   if (injectionRaw !== void 0 && injection === void 0) {
@@ -207,6 +217,8 @@ function loadConfigInner(startDir) {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
+    rulesDirPath: rulesDir.absolute,
+    rulesDirRelative: rulesDir.relative,
     injection: {
       enabled: resolveBoolean(
         injection?.enabled,
