@@ -1,4 +1,7 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import esbuild from "esbuild"
+import { buildPresets } from "./src/agents/build-presets"
 
 await esbuild.build({
   bundle: true,
@@ -12,3 +15,5 @@ await esbuild.build({
   sourcemap: false,
   target: "node22"
 })
+
+buildPresets(path.dirname(fileURLToPath(import.meta.url)))
