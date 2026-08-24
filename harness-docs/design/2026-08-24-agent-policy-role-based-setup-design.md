@@ -2,7 +2,7 @@
 
 作成日: 2026-08-24
 対象プラグイン: `plugins/agent-policy`
-現行バージョン: 0.7.0-dev → 0.8.0-dev
+現行バージョン: 0.8.0-dev → 0.9.0-dev
 
 ## 1. 背景と目的
 
@@ -116,7 +116,7 @@
 
 ### 5.3 読み取り専用性の警告
 
-読み取り役割と実装役割を同時に選ぶと、`Write` / `Edit` が付くため tools による読み取り専用の担保が消える。setup はこの組み合わせを禁止せず、生成前に警告を出す。
+読み取り役割と実装役割を同時に選ぶと、`Write` / `Edit` が付くため tools による読み取り専用の担保が消える。読み取り/実装の分類は SKILL.md に役割 ID を手書きせず、`--list-roles` が返す各役割の `kind` と、`--check` が返す `roles.mixedKinds` に基づく。setup は `mixedKinds` が `true` になる組み合わせを禁止せず、生成前に警告を出す。
 
 > 選んだ役割に読み取り専用の役割(independent-review など)と実装役割が混在しています。生成される定義には Write / Edit が付くため、読み取り専用の担保は依頼文の制約に委ねられます。
 
@@ -188,7 +188,7 @@ kind: impl
 | `name` | 利用者が決めた名前。プリセットは `presets.ts` の名前 |
 | `description` | `Use this agent when ` + 選ばれた役割の `description` を「、」で連結 + `を委譲するとき。詳細は本文の「When to invoke」を参照。` |
 | `model` | ヒアリングしたエイリアス。プリセットは既定エイリアス |
-| `color` | ベンダー固定値(`gpt` は yellow、`grok` は red、`claude` は blue) |
+| `color` | 同梱プリセットは `presets.ts` の `color` を優先する(値は §8.1)。指定がない定義はベンダー既定(`gpt` は yellow、`grok` は red、`claude` は blue)を使う |
 | `tools` | §5 の導出規則 |
 | `agent-policy-role` | 選ばれた役割 ID を §4 の表順に並べた CSV。区切りは `, `(カンマ + 半角スペース) |
 
@@ -264,12 +264,12 @@ kind: impl
 
 プリセットの役割は §11.1 の担当表と一致させる。担当表がある帯を振っているのに、プリセットにその役割が無いと、必要なツールが `tools` から欠落する(例: `realtime-research` を持たない定義には `WebSearch` / `WebFetch` が付かない)。
 
-| 定義 | ベンダー | 既定エイリアス | 役割 |
-| --- | --- | --- | --- |
-| `gpt-sol` | gpt | `claude-gpt-5-6-sol` | `complex-impl` |
-| `gpt-terra` | gpt | `claude-gpt-5-6-terra` | `normal-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
-| `gpt-luna` | gpt | `claude-gpt-5-6-luna` | `light-impl` |
-| `grok` | grok | `claude-grok-4-6` | `normal-impl`, `light-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
+| 定義 | ベンダー | 既定エイリアス | color | 役割 |
+| --- | --- | --- | --- | --- |
+| `gpt-sol` | gpt | `claude-gpt-5-6-sol` | yellow | `complex-impl` |
+| `gpt-terra` | gpt | `claude-gpt-5-6-terra` | green | `normal-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
+| `gpt-luna` | gpt | `claude-gpt-5-6-luna` | cyan | `light-impl` |
+| `grok` | grok | `claude-grok-4-6` | red | `normal-impl`, `light-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
 
 `code-review` / `doc-review` / `advisor` は担当表で Claude 帯(`Sonnet` / `Haiku` / `Fable`)が担うため、プリセットに含めない。役割 ID としては存在し、利用者が setup で選べる。
 
@@ -287,6 +287,7 @@ kind: impl
 - `build.ts` に生成処理を追加し、`pnpm build` で `plugins/agent-policy/agents/*.md` を生成する。
 - 生成物は git 管理下に置く。`plugins/*/scripts/` と同じ運用である。
 - `build.ts` はプラグイン同梱の断片だけを読む。プロジェクト側の断片(§6.1)は読まない。
+- 生成後に `PRESETS` に対応しない `agents/*.md` を削除する。`.md` 以外のファイルは触らない。
 
 生成された同梱プリセットにも役割マーカーを入れる。これは setup の差分確認で「テンプレート由来の情報」だと判別するためである。**SessionStart フックは同梱プリセットを走査しない**(§9.2)。担当表が既にプリセット名を書いているため、同じ対応を注入しても冗長になる。
 
@@ -336,12 +337,14 @@ SessionStart フックからファイル生成を廃止する。フックは読�
 
 1. **方針指示の注入** — `AMATSUKA_AGENT_AUTO_INJECTION` に従う(現行どおり)。
 2. **役割マーカーの走査と注入** — 走査対象の frontmatter を読み、`agent-policy-role` を持つ定義を集める。役割 ID ごとに「担当表の『<帯名>』は `<name>` を使う」を注入する。同じ役割を複数定義が宣言したときは全て列挙し、選択はオーケストレーターに委ねる旨を添える。未知の役割 ID は無視し、その ID と定義名を注入文へ 1 行で添える(誤記に気づけるようにする)。
-3. **setup 未実行・エイリアス不一致の促し** — エイリアス変数が既定と異なるとき、次のいずれかに該当すれば setup スキルの実行を促す。生成も修正もしない。
-   - 対応する定義が `.claude/agents/` に無い
-   - 定義はあるが、その `model:` がエイリアス変数の値と食い違う
+3. **setup 未実行・エイリアス不一致の促し** — エイリアス変数が既定と異なるとき、対応する定義名があり、その `model:` がエイリアス変数の値と一致すれば従来どおり充足とする。それ以外では、**そのエイリアスを `model` に持つ定義群の役割の和集合が、プリセットの `roleIds` を覆わない**ときに setup スキルの実行を促す。生成も修正もしない。
 
-   後者は現行フックが毎セッション自動修正していた状態にあたる(`session-start.ts` の `sync()`)。生成を廃止すると、環境変数だけ更新して既存ファイルを残した利用者が、誤ったエイリアスのまま気づかず動き続ける。検知と通知だけは残す。
-4. **旧定義の残骸通知** — `.claude/agents/` に `claude-researcher.md` / `gpt-researcher.md` / `grok-researcher.md` / `grok-implementer.md` があれば、廃止済みである旨と削除を促す。フックは削除しない。
+   `model:` が一致する定義が 1 つも無ければ、対応する定義名の有無と `model:` の食い違いに応じて従来どおり理由を示す。1 つ以上あっても役割が不足するときは、その定義名と不足している役割 ID を示す。`model:` を持たない定義は、どのエイリアスの充足にも数えない。`PRESETS` とエイリアス定義がずれて対応するプリセットを見つけられない場合だけは、役割を評価せず、対応する定義名と `model:` による従来の判定へ戻す。
+
+   役割の和集合を使うため、利用者は 1 つのエイリアスを持つ複数の定義へ役割を分担でき、定義名にも依存しない。一方で、役割が 1 つでも交差すれば充足とする判定は採らない。たとえば `explore` 専用の定義だけがエイリアスを持つ場合に `normal-impl` の不足を見逃すためである。
+4. **旧定義の残骸通知** — `.claude/agents/` に `claude-researcher.md` / `gpt-researcher.md` / `grok-researcher.md` / `grok-implementer.md` があれば、廃止済みである旨と削除を促す。フックは削除しない。残骸に `grok-` で始まる名前が含まれ、かつ `AMATSUKA_AGENT_GROK_ALIAS` が未設定(空文字を含む)のときだけ、次の 1 行も添える。
+
+   > Grok の既定エイリアスは `claude-grok-4-6` へ変わった。プロキシ設定にこの別名が無い場合、委譲時に `unknown provider for model` で失敗する。4.5 を使い続けるなら `AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を設定する。
 
 例外を握りつぶしてフェイルオープンする挙動は現行どおり維持する。
 
@@ -370,7 +373,7 @@ SessionStart フックからファイル生成を廃止する。フックは読�
    - 読み取り専用の作業(独立レビュー・探索実働)を tools レベルで担保したい場合は、読み取り役割だけを選んだ定義を別に作れること
    - CLAUDE.md への追記文例(自動では書き込まない)
 
-`--yes` を渡されたときは、確認を挟まず既定プリセット(setup-gpt なら `gpt-sol` / `gpt-terra` / `gpt-luna`、setup-grok なら `grok`)を既定エイリアスで生成する。
+`--yes` を渡されたときは、確認を挟まず既定プリセット(setup-gpt なら `gpt-sol` / `gpt-terra` / `gpt-luna`、setup-grok なら `grok`)を既定エイリアスで `--write --merge` により生成する。テンプレートに存在し得ない情報は保持し、テンプレート側で上書きした内容は報告する。
 
 ### 10.2 差分確認
 
@@ -384,6 +387,13 @@ SessionStart フックからファイル生成を廃止する。フックは読�
   "target": ".claude/agents/gpt-sol.md",
   "exists": true,
   "identical": false,
+  "roles": {
+    "ids": ["complex-impl"],
+    "implRoles": ["complex-impl"],
+    "readonlyRoles": [],
+    "mixedKinds": false,
+    "agentTool": true
+  },
   "frontmatter": {
     "changed": [{ "key": "model", "existing": "my-sol", "template": "claude-gpt-5-6-sol" }],
     "toolsOnlyInExisting": ["mcp__context7"],
@@ -399,18 +409,24 @@ SessionStart フックからファイル生成を廃止する。フックは読�
 }
 ```
 
+`roles` は、その場で合成した定義の役割要約である。`ids` は役割の表順、`implRoles` と `readonlyRoles` は断片の `kind` による分類、`mixedKinds` は両種別が混在するか、`agentTool` はその役割構成で `Agent` が付くかを示す。setup は `mixedKinds` を §5.3 の読み取り専用性の確認に使う。
+
 **テンプレートに存在し得ない情報**とは `toolsOnlyInExisting` / `keysOnlyInExisting` / `sectionsOnlyInExisting` の 3 つを指す。利用者が足したものであり、テンプレートからは再生成できない。
 
 `changed` と `preambleChanged` はこの 3 つに含まれない。テンプレート側にも同じ要素が存在し、値だけが違う状態である。ただし利用者が意図的に変えた可能性がある(典型は `model` と `description`、冒頭宣言の書き換え)。保持マージの既定はテンプレート側を採るため、**残したい場合は個別に選ぶ必要がある**。差分提示でその旨を明示する。
 
 スキルは差分を提示し、`AskUserQuestion` で方針を選ばせる。
 
-- **保持マージ(推奨)** — テンプレートに存在し得ない情報を残し、それ以外はテンプレート側で更新する。
-- **項目を選んで保持** — 上に加えて、`changed` / `preambleChanged` のうち残すものを個別に選ぶ。
-- **完全上書き** — 既存を捨ててテンプレートどおりに書く。
+- **保持マージ(推奨)** — `--write --merge` を使う。テンプレートに存在し得ない情報を自動で残し、それ以外はテンプレート側で更新する。
+- **項目を選んで保持** — `--write --merge` に加え、`changed` / `preambleChanged` のうち残すものを `--keep key:<name>` / `--keep section:<heading>` / `--keep preamble` で指定する。
+- **完全上書き** — `--write` を使い、既存を捨ててテンプレートどおりに書く。
 - **スキップ** — 書き込まない。
 
-選択は `--write --keep tools:<name> --keep key:<name> --keep section:"<heading>" --keep preamble` としてスクリプトへ渡し、合成と書き込みはスクリプトが行う。書き込みをスクリプトへ閉じることで再現性を確保する。
+`--merge` は `--write` と併用する。既存ファイルがあるとき、`toolsOnlyInExisting` / `keysOnlyInExisting` / `sectionsOnlyInExisting` にあるテンプレートに存在し得ない情報を自動で `--keep` 相当として保持する。明示した `--keep` は、この自動保持に追加される。保持マージと `--yes` はともにこのフラグを経由する。
+
+書き込み結果は `action`、`kept`、`discarded` を返す。`action` は新規作成なら `written`、`--merge` による既存ファイルの更新なら `merged`、`--merge` なしの既存ファイル更新なら `overwritten` である。`discarded` はテンプレート側で上書きした項目を示す。保持した `mcp__*` tools と `## ツール運用` 節は、旧版の同梱定義由来である可能性を `keptNeedsReview` として別に示す。
+
+合成と書き込みはスクリプトが行う。書き込みをスクリプトへ閉じることで再現性を確保する。
 
 **検出できないもの**を差分提示に明示する。
 
@@ -420,9 +436,49 @@ SessionStart フックからファイル生成を廃止する。フックは読�
 
 完全な 3-way マージは実装しない。上記を許容した上で、利用者が最も足しがちな箇所(tools・独自 frontmatter キー・独自節)を保護することを目的とする。
 
-### 10.3 allowed-tools
+### 10.3 `allowed-tools` と書き込みの規律
 
-旧 SKILL.md は `allowed-tools` を Bash 1 行に絞っていた。役割選択と差分確認のため `AskUserQuestion` を加える。ファイル書き込みはスクリプトが行うため `Write` / `Edit` は与えない。
+当初は、`allowed-tools` に `Write` / `Edit` を書かなければ書き込みを禁止できると定めていた。しかし `allowed-tools` は利用可能なツールを絞るフィールドではない。書き込みを直接行わせない設計は、次の 3 層で担保する。
+
+| 層 | 手段 | 意味 |
+| --- | --- | --- |
+| 事前承認 | `allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" *), AskUserQuestion` | 起動ターンで、列挙したツールを確認なしで使えるようにする |
+| 起動ターン限りの除去 | `disallowed-tools: Write, Edit` | スキルが起動したターンだけ `Write` / `Edit` を利用可能なツールのプールから除く |
+| 本文の恒久指示 | SKILL.md の standing instruction | `.claude/agents/` を `Write` / `Edit` で直接編集せず、必ず `setup-agents.mjs` で書き込むよう指示する |
+
+公式ドキュメントの Frontmatter reference は、それぞれ次のように定義する。
+
+| フィールド | 原文 |
+| --- | --- |
+| `allowed-tools` | "Tools Claude can use without asking permission during the turn that invokes this skill." |
+| `disallowed-tools` | "Tools removed from Claude's available pool while this skill is active." |
+
+同じドキュメントは `allowed-tools` について "It does not restrict which tools are available: every tool remains callable" とし、`disallowed-tools` について "The restriction clears when you send your next message." とする。したがって、`allowed-tools` に列挙しないことは禁止を意味しない。また `disallowed-tools` は起動ターンの保護であり、`AskUserQuestion` を挟むウィザード全行程で `Write` / `Edit` を禁止するものではない。
+
+SKILL.md の本文はセッションに残る。公式ドキュメントが "This persistence applies to the skill's instructions, not its permissions" と明記するため、本文の standing instruction は権限の付与・除去が次のユーザーメッセージで切れた後も効く。書き込みを行えるのを `setup-agents.mjs` に閉じる構造(§10.2)と、この恒久指示を組み合わせる。
+
+出典: [Claude Code Skills](https://code.claude.com/docs/en/skills) の Frontmatter reference / "Pre-approve tools for a skill" / "Skill content lifecycle"、2026-08-24 取得。
+
+### 10.4 `--list-roles`
+
+`--list-roles` は、`--name` / `--model` / `--roles` を要求せず、`--dir` と `--vendor` を受け付ける一覧モードである。次の形式で JSON を返す。
+
+```json
+{
+  "ok": true,
+  "roles": [
+    {
+      "id": "complex-impl",
+      "label": "複雑または重要な実装",
+      "kind": "impl",
+      "tools": ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"],
+      "source": "plugin"
+    }
+  ]
+}
+```
+
+並びは §4 の表順、同順のものは `id` の `localeCompare` 順とする。プロジェクト固有の役割は末尾に並ぶ。プロジェクト側の断片が組み込みと同じ `id` を置き換えたときは、その要素の `source` は `project` になる。
 
 ## 11. 方針スキルの改訂
 
@@ -592,7 +648,10 @@ researcher 廃止により、読み取り専用の作業を `Write` / `Edit` を
 | 役割断片の粒度が細かく、断片間で文言が重複する | 重複は断片の統合で解消する。合成器は重複除去をしない |
 | 旧定義 4 種が `.claude/agents/` に残る | フックの残骸通知と README の移行手順で気づけるようにする。フックは削除しない |
 | Grok 既定エイリアスの 4.6 化で、プロキシ側に別名が無い利用者が沈黙して失敗する | フックはプロキシへ問い合わせないため事前検知できない(§8.3)。エイリアス変数が未設定だと促しも出ない。README の移行手順で、プロキシ設定への別名追加か `AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` の明示指定を促す |
+| `disallowed-tools` は claude.ai へのアップロードと Skills API のパッケージ仕様で許される 6 フィールドに含まれない | 本プラグインは Claude Code 用スキルのため影響しない。将来アップロード経路へ載せる場合はハードエラーになるため、当該 frontmatter を除くか経路を分ける。公式ページには最小バージョンの記載がない |
+| `--merge` は保持対象が利用者の追加か旧版の同梱定義由来かを区別できない | `mcp__*` tools と `## ツール運用` 節を自動除外すると利用者の意図的な追加を壊すため、保持した上で `keptNeedsReview` に可視化するに留める。採否は利用者が判断する |
+| `sortRoleIds` の変更でプロジェクト固有役割を含む定義に 1 度だけ並び差分が出る | 未知 ID は担当表の既知 ID の後ろへ並ぶ。役割マーカー CSV、本文節の連結順、カスタム断片由来の tools 順が変わり得て `identical: false` になるが、中身は同じであり、保持マージで通過できる |
 
 ## 15. バージョン
 
-`0.7.0-dev` → `0.8.0-dev`。スキル 2 つの復活、エージェント定義 3 種の廃止と 1 種の改名、フックの責務変更を含むため、マイナーを上げる。`plugins/agent-policy/package.json` の `version` も同じ値に揃える。
+`0.8.0-dev` → `0.9.0-dev`。`--list-roles` と `--merge` の機能追加を含むため、マイナーを上げる。`plugins/agent-policy/package.json` の `version` も同じ値に揃える。
