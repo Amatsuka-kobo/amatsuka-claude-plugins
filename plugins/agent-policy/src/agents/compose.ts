@@ -4,12 +4,7 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import {
-  allowsAgentTool,
-  type RoleId,
-  resolveTools,
-  sortRoleIds
-} from "./roles"
+import { allowsAgentTool, type RoleId, sortRoleIds } from "./roles"
 
 export interface ComposeInput {
   name: string
@@ -43,7 +38,7 @@ export function compose(input: ComposeInput): string {
   })
 
   const withAgent = allowsAgentTool(input.roleIds)
-  const tools = resolveToolsFor(input.roleIds, selected, withAgent)
+  const tools = resolveToolsFor(selected, withAgent)
 
   const head = [
     "---",
@@ -75,6 +70,7 @@ export function compose(input: ComposeInput): string {
   }
 
   const constraints = [
+    ...(withAgent ? (common.get("## Agent tool の制約") ?? []) : []),
     ...(common.get("## 制約") ?? []),
     ...selected.flatMap((fragment) => fragment.sections.get("## 制約") ?? [])
   ]
@@ -97,17 +93,13 @@ export function compose(input: ComposeInput): string {
     .trimEnd()}\n`
 }
 
-// プロジェクト側の断片が持ち込んだ未知の役割 ID でも tools を解決できるよう、
-// ROLES に無い役割は断片の tools をそのまま足す。
-function resolveToolsFor(
-  ids: RoleId[],
-  selected: Fragment[],
-  withAgent: boolean
-): string[] {
-  const tools = resolveTools(ids).filter((tool) => tool !== "Agent")
+// プロジェクト側の置き換えを tools にも反映するため、解決後の断片から組み立てる。
+// Agent は断片の申告を採らず、許可対象の役割を含むときだけ末尾へ置く。
+function resolveToolsFor(selected: Fragment[], withAgent: boolean): string[] {
+  const tools: string[] = []
   for (const fragment of selected) {
     for (const tool of fragment.tools) {
-      if (!tools.includes(tool)) tools.push(tool)
+      if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool)
     }
   }
   if (withAgent) tools.push("Agent")

@@ -147,8 +147,12 @@ describe("役割マーカーの走査", () => {
   })
 
   it("同梱プリセットを走査しない", () => {
-    // プラグイン同梱の gpt-sol はマーカーを持つが、注入対象にしない。
-    expect(context()).not.toContain("agent-policy:gpt-sol")
+    // 走査を発火させるため、プロジェクト側に 1 件置く。
+    place("dummy", ["agent-policy-role: explore"])
+    const output = context()
+    expect(output).toContain("コードベース探索実働")
+    // 同梱 gpt-sol は complex-impl を宣言しているが、走査対象外なので出ない。
+    expect(output).not.toContain("複雑または重要な実装")
   })
 })
 
@@ -205,5 +209,27 @@ describe("フェイルオープン", () => {
       env: environment({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
     }).trim()
     expect(output).toContain("claude-model-policy")
+  })
+
+  it("壊れた symlink があっても方針を注入する", () => {
+    fs.symlinkSync(
+      "/nonexistent/agent-policy-target.md",
+      path.join(agentsDir(), "broken.md")
+    )
+
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })
+    expect(output).toContain("agent-policy:with-codex-policy")
+  })
+
+  it("壊れた symlink があっても正常な定義の役割マーカーを拾う", () => {
+    fs.symlinkSync(
+      "/nonexistent/agent-policy-target.md",
+      path.join(agentsDir(), "broken.md")
+    )
+    place("healthy", ["agent-policy-role: explore"])
+
+    const output = context()
+    expect(output).toContain("healthy")
+    expect(output).toContain("コードベース探索実働")
   })
 })

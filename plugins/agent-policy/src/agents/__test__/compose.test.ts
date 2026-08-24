@@ -4,6 +4,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { compose } from "../compose"
+import { ROLES } from "../roles"
 
 const PLUGIN_ROLES = fileURLToPath(
   new URL("../../../assets/roles/", import.meta.url)
@@ -114,6 +115,25 @@ describe("本文", () => {
     expect(build(["explore"])).not.toContain("## アドバイザーへの相談")
   })
 
+  it("general だけでも Agent と Agent tool の制約を出す", () => {
+    const body = build(["general"])
+    expect(frontmatter(body).tools.split(", ")).toContain("Agent")
+    expect(body).toContain("`Agent` tool はアドバイザー相談専用")
+  })
+
+  it("読み取り役割だけなら Agent も Agent tool の制約も出さない", () => {
+    const body = build(["explore"])
+    expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
+    expect(body).not.toContain("`Agent` tool はアドバイザー相談専用")
+  })
+
+  it("複数の Agent 対応役割を合成しても Agent tool の制約は重複しない", () => {
+    const body = build(["complex-impl", "general"])
+    expect(
+      body.match(/`Agent` tool はアドバイザー相談専用/g) ?? []
+    ).toHaveLength(1)
+  })
+
   it("ツール運用節を作らない", () => {
     expect(build(["complex-impl", "explore"])).not.toContain("## ツール運用")
   })
@@ -153,6 +173,65 @@ describe("本文", () => {
       "Grok Researcher"
     ]) {
       expect(body).not.toContain(name)
+    }
+  })
+})
+
+describe("同梱役割断片と ROLES の整合性", () => {
+  function bundledRoleFiles(): string[] {
+    return fs
+      .readdirSync(PLUGIN_ROLES)
+      .filter(
+        (name) =>
+          name.endsWith(".md") &&
+          !name.startsWith("_") &&
+          name.split(".").length === 2
+      )
+      .sort()
+  }
+
+  it("ファイル名・frontmatter の id・ROLES の id が一致する", () => {
+    const files = bundledRoleFiles()
+    const fileIds = files.map((file) => file.replace(/\.md$/, ""))
+    const fragmentIds = files.map(
+      (file) =>
+        frontmatter(fs.readFileSync(path.join(PLUGIN_ROLES, file), "utf8")).id
+    )
+    const roleIds = ROLES.map((role) => role.id).sort()
+
+    expect(fragmentIds).toEqual(fileIds)
+    expect(fileIds).toEqual(roleIds)
+  })
+
+  it("各断片の label・tools・kind が ROLES と一致する", () => {
+    for (const role of ROLES) {
+      const meta = frontmatter(
+        fs.readFileSync(path.join(PLUGIN_ROLES, `${role.id}.md`), "utf8")
+      )
+      expect(meta.label).toBe(role.label)
+      expect(meta.tools?.split(", ")).toEqual(role.tools)
+      expect(meta.kind).toBe(role.kind)
+    }
+  })
+
+  it("全断片の本文に他定義の固有名を含まない", () => {
+    const names = [
+      "GPT Sol",
+      "GPT Terra",
+      "GPT Luna",
+      "Grok Implementer",
+      "Grok Researcher",
+      "Claude Researcher"
+    ]
+    const files = fs
+      .readdirSync(PLUGIN_ROLES)
+      .filter((name) => name.endsWith(".md"))
+
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(PLUGIN_ROLES, file), "utf8")
+      const lines = content.split("\n")
+      const body = lines.slice(lines.indexOf("---", 1) + 1).join("\n")
+      for (const name of names) expect(body).not.toContain(name)
     }
   })
 })
@@ -209,6 +288,38 @@ describe("断片の解決", () => {
     })
     expect(body).toContain("独自探索")
     expect(body).not.toContain("依頼された探索範囲だけを走査する")
+    expect(frontmatter(body).tools).toBe("Read, Grep, Glob")
+  })
+
+  it("プロジェクト側断片の Agent は許可対象の役割にだけ付ける", () => {
+    const projectRoles = path.join(temporary, "roles")
+    fs.mkdirSync(projectRoles, { recursive: true })
+    fs.writeFileSync(
+      path.join(projectRoles, "explore.md"),
+      [
+        "---",
+        "id: explore",
+        "label: コードベース探索実働",
+        "description: プロジェクト独自の探索規律",
+        "tools: Read, Grep, Glob, Agent",
+        "kind: readonly",
+        "---",
+        "",
+        "## When to invoke",
+        "",
+        "- **独自探索。** プロジェクト固有の探索規律に従うとき。",
+        ""
+      ].join("\n")
+    )
+
+    const body = compose({
+      name: "x",
+      model: "m",
+      vendor: "gpt",
+      roleIds: ["explore"] as never,
+      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+    })
+    expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
   })
 
   it("プロジェクト側にしかない役割 ID を解決できる", () => {

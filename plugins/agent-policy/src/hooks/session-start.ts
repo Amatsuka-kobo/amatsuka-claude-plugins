@@ -97,7 +97,13 @@ function scan(dir: string | undefined): Marked[] {
 
   for (const file of fs.readdirSync(dir).sort()) {
     if (!file.endsWith(".md")) continue
-    const meta = frontmatter(path.join(dir, file))
+    // 1 ファイルが読めなくても、他の定義と方針注入は生かす。
+    let meta: Map<string, string>
+    try {
+      meta = frontmatter(path.join(dir, file))
+    } catch {
+      continue
+    }
     const marker = meta.get("agent-policy-role")
     found.push({
       name: meta.get("name") ?? file.replace(/\.md$/, ""),
@@ -219,7 +225,12 @@ function retiredBlock(marked: Marked[]): string | undefined {
 }
 
 function build(env: NodeJS.ProcessEnv): string | undefined {
-  const marked = scan(agentsDir(env))
+  let marked: Marked[] = []
+  try {
+    marked = scan(agentsDir(env))
+  } catch {
+    // ディレクトリ走査自体が失敗しても、主機能の方針注入は続ける。
+  }
 
   const blocks = [
     policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
