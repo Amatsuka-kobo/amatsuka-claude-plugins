@@ -12,6 +12,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
 import { findSection, parseArchitecture } from "../../lib/architecture.js"
+import { RULES_ADMIN_NOTICE } from "../../lib/rules.js"
 import { stagingDirFor } from "../../lib/staging.js"
 import { runTs } from "../../testing/run-ts.js"
 import { MAX_DIFF_LINES } from "../diff.js"
@@ -173,6 +174,14 @@ const GOTCHAS = [
   "**昇格候補**: No",
   ""
 ].join("\n")
+
+/** 設定と ARCHITECTURE を持つ一時プロジェクト。docRoot はこのディレクトリに固定される。 */
+function project(): string {
+  const root = mkTmp()
+  writeFile(root, "metatron.config.json", "{}")
+  writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
+  return root
+}
 
 function docs(root: string): { architecture: string; gotchas: string } {
   return {
@@ -668,4 +677,168 @@ test("MAX_DIFF_LINES 以下なら省略されず unified がそのまま返る",
   expect(diff.truncatedReason).toBeNull()
   expect(diff.beforeLines).toBe(lineCount(before))
   expect(diff.unified as string).toContain("+- dep-added")
+})
+
+// ---------------------------------------------------------------------------
+// rules(設計書 §6)
+// ---------------------------------------------------------------------------
+
+const RULES_BODY = `# 規約\n\n${RULES_ADMIN_NOTICE}\n\n- ブランチを切らない。\n`
+
+test("S7: get rules は未作成でも exit 0。--name で 1 件に絞れる。値域外は unknown_rules_name", () => {
+  const root = project()
+
+  const all = runCli(["get", "rules"], root)
+  expect(all.status).toBe(0)
+  expect(
+    ((all.json as Record<string, unknown>).rules as unknown[]).length
+  ).toBe(3)
+  expect(
+    (
+      (all.json as Record<string, unknown>).rules as {
+        exists: boolean
+        error: string | null
+      }[]
+    )[0].error
+  ).toBe("not_created")
+
+  const one = runCli(["get", "rules", "--name", "conventions"], root)
+  expect(one.status).toBe(0)
+  expect(
+    ((one.json as Record<string, unknown>).rules as unknown[]).length
+  ).toBe(1)
+
+  const bad = runCli(["get", "rules", "--name", "nope"], root)
+  expect(bad.status).toBe(0)
+  expect((bad.json as Record<string, unknown>).error).toBe("unknown_rules_name")
+})
+
+test("S8: stage-rules → commit-rules で rules ファイルが作られ、再 commit は already_used", () => {
+  const root = project()
+  const input = writeFile(
+    root,
+    "in.json",
+    JSON.stringify({ name: "conventions", body: RULES_BODY })
+  )
+  const target = path.join(
+    root,
+    ".claude",
+    "rules",
+    "metatron",
+    "conventions.md"
+  )
+
+  const staged = runCli(["stage-rules", "--input", input], root)
+  expect(staged.status).toBe(0)
+  const id = (staged.json as Record<string, unknown>).stagingId as string
+  expect(typeof id).toBe("string")
+  // stage は書き込まない。
+  expect(fs.existsSync(target)).toBe(false)
+
+  const committed = runCli(["commit-rules", "--staging-id", id], root)
+  expect(committed.status).toBe(0)
+  expect(fs.readFileSync(target, "utf8")).toBe(RULES_BODY)
+
+  const again = runCli(["commit-rules", "--staging-id", id], root)
+  expect(again.status).not.toBe(0)
+  expect((again.json as Record<string, unknown>).error).toBe("already_used")
+
+  const read = runCli(["get", "rules", "--name", "conventions"], root)
+  expect(
+    ((read.json as Record<string, unknown>).rules as { exists: boolean }[])[0]
+      .exists
+  ).toBe(true)
+})
+
+test("S9: kind 不一致の commit は staging_kind_mismatch で拒否され、対象ファイルは不変", () => {
+  const root = project()
+  const archPath = path.join(root, "docs", "ARCHITECTURE.md")
+  const before = fs.readFileSync(archPath, "utf8")
+  const rulesTarget = path.join(
+    root,
+    ".claude",
+    "rules",
+    "metatron",
+    "conventions.md"
+  )
+
+  // rules の stagingId を commit-architecture へ渡す。
+  const rulesInput = writeFile(
+    root,
+    "r.json",
+    JSON.stringify({ name: "conventions", body: RULES_BODY })
+  )
+  const rulesStaged = runCli(["stage-rules", "--input", rulesInput], root)
+  const wrong1 = runCli(
+    [
+      "commit-architecture",
+      "--staging-id",
+      (rulesStaged.json as Record<string, unknown>).stagingId as string
+    ],
+    root
+  )
+  expect(wrong1.status).not.toBe(0)
+  expect((wrong1.json as Record<string, unknown>).error).toBe(
+    "staging_kind_mismatch"
+  )
+  expect(fs.existsSync(rulesTarget)).toBe(false)
+
+  // architecture の stagingId を commit-rules へ渡す。
+  const archInput = writeFile(
+    root,
+    "a.json",
+    JSON.stringify({
+      sections: [{ heading: "システム概要", body: "新しい概要。" }]
+    })
+  )
+  const archStaged = runCli(["stage-architecture", "--input", archInput], root)
+  const wrong2 = runCli(
+    [
+      "commit-rules",
+      "--staging-id",
+      (archStaged.json as Record<string, unknown>).stagingId as string
+    ],
+    root
+  )
+  expect(wrong2.status).not.toBe(0)
+  expect((wrong2.json as Record<string, unknown>).error).toBe(
+    "staging_kind_mismatch"
+  )
+  expect(fs.readFileSync(archPath, "utf8")).toBe(before)
+
+  // 拒否された staging は消費されていない。正しいコマンドなら通る。
+  const ok = runCli(
+    [
+      "commit-architecture",
+      "--staging-id",
+      (archStaged.json as Record<string, unknown>).stagingId as string
+    ],
+    root
+  )
+  expect(ok.status).toBe(0)
+})
+
+test("S10: docRoot と起動ディレクトリがずれていると get config が warnings で知らせる", () => {
+  const root = project()
+  const sub = path.join(root, "packages", "web")
+  fs.mkdirSync(sub, { recursive: true })
+
+  const same = runCli(["get", "config"], root)
+  expect(same.status).toBe(0)
+  expect(
+    ((same.json as Record<string, unknown>).warnings as string[]).some((w) =>
+      w.includes("起動ディレクトリ")
+    )
+  ).toBe(false)
+  const rules = (same.json as Record<string, unknown>).rules as {
+    relative: string
+  }
+  expect(rules.relative).toBe(".claude/rules/metatron")
+
+  const differs = runCli(["get", "config"], sub)
+  expect(differs.status).toBe(0)
+  const warnings = (differs.json as Record<string, unknown>)
+    .warnings as string[]
+  expect(warnings.some((w) => w.includes("起動ディレクトリ"))).toBe(true)
+  expect(warnings.some((w) => w.includes(".claude/rules/"))).toBe(true)
 })

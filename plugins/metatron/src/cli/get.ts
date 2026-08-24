@@ -3,6 +3,7 @@
 // この経路は第 2 層(フェイルオープン)である。どんな異常環境でも例外を外へ出さず、
 // **常に exit 0** で「読めなかった」という事実を JSON で返す。
 
+import fs from "node:fs"
 import {
   type AdrEntry,
   filterAdrEntries,
@@ -19,6 +20,12 @@ import {
   type GotchaEntry,
   parseGotchas
 } from "../lib/gotchas.js"
+import {
+  isRulesName,
+  RULES_FILES,
+  readRulesFile,
+  readRulesFiles
+} from "../lib/rules.js"
 import { boolFlag, intFlag, stringFlag } from "./args.js"
 import { readDocument } from "./input.js"
 import {
@@ -42,15 +49,41 @@ function configOf(cwd: string): ResolvedConfig {
 // get config
 // ---------------------------------------------------------------------------
 
+/**
+ * docRoot と起動ディレクトリの実体パスがずれているか(設計書 §4-5)。
+ *
+ * `.claude/rules/` は Claude Code の起動ディレクトリを基準に読まれる。docRoot と
+ * ずれていると、metatron が書いた rules が読み込まれない。
+ *
+ * この判定は `get config` の実行時にだけ行う。`loadConfig` へ入れると、
+ * サブディレクトリから CLI を叩く既存の経路すべてに警告が出る。
+ */
+function realpathOrSelf(dir: string): string {
+  try {
+    return fs.realpathSync(dir)
+  } catch {
+    return dir
+  }
+}
+
 export function runGetConfig(ctx: GetContext): void {
   const command = "get config"
   const config = configOf(ctx.cwd)
   const architecture = readDocument(config.architecturePath)
   const gotchas = readDocument(config.gotchasPath)
+  const rules = readRulesFiles(config)
+  const cwd = realpathOrSelf(ctx.cwd)
+  const startDirWarnings =
+    realpathOrSelf(config.docRoot) === cwd
+      ? []
+      : [
+          `docRoot(${config.docRoot})と起動ディレクトリ(${cwd})が異なります。.claude/rules/ は起動ディレクトリを基準に読まれるため、metatron が書いた rules が読み込まれない可能性があります。`
+        ]
   const warnings = [
     ...config.warnings,
     ...architecture.warnings,
-    ...gotchas.warnings
+    ...gotchas.warnings,
+    ...startDirWarnings
   ]
   noteWarnings(warnings)
   emitResult(command, {
@@ -68,12 +101,24 @@ export function runGetConfig(ctx: GetContext): void {
       relative: config.gotchasRelative,
       exists: gotchas.exists
     },
+    rules: {
+      dir: config.rulesDirPath,
+      relative: config.rulesDirRelative,
+      files: rules.map((file) => ({
+        name: file.name,
+        path: file.path,
+        relative: file.relative,
+        exists: file.exists
+      }))
+    },
     injection: config.injection,
     cli: {
       path: metatronCliPath(),
       stageArchitecture: commandLine("stage-architecture --input <path>"),
       stageAdr: commandLine("stage-adr --input <path>"),
+      stageRules: commandLine("stage-rules --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
+      commitRules: commandLine("commit-rules --staging-id <id>"),
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
         "tag-gotcha --id <GOTCHA-NNN> --tag <解決済み|対象外> --reason <理由>"
@@ -347,10 +392,60 @@ export function runGetAdr(ctx: GetContext): void {
 }
 
 // ---------------------------------------------------------------------------
+// get rules
+// ---------------------------------------------------------------------------
+
+export function runGetRules(ctx: GetContext): void {
+  const command = "get rules"
+  const config = configOf(ctx.cwd)
+  const warnings = [...config.warnings]
+  noteWarnings(warnings)
+
+  const name = stringFlag(ctx.flags, "name")
+  if (name !== undefined && !isRulesName(name)) {
+    // 読み取り経路なので exit は 0 のまま返す(契約 §11)。
+    emitReadFailure(
+      command,
+      "unknown_rules_name",
+      `--name は ${RULES_FILES.join(" / ")} のいずれかです(受領: ${JSON.stringify(name)})。`,
+      { names: [...RULES_FILES], warnings }
+    )
+    return
+  }
+
+  const files =
+    name === undefined ? readRulesFiles(config) : [readRulesFile(config, name)]
+
+  emitResult(command, {
+    ok: true,
+    dir: config.rulesDirPath,
+    relative: config.rulesDirRelative,
+    names: [...RULES_FILES],
+    rules: files.map((file) => ({
+      name: file.name,
+      path: file.path,
+      relative: file.relative,
+      exists: file.exists,
+      text: file.text,
+      // 未作成は異常ではない。読み取り系の規約に従い error として返すだけにする。
+      error: file.exists ? null : "not_created"
+    })),
+    warnings
+  })
+}
+
+// ---------------------------------------------------------------------------
 // ディスパッチ
 // ---------------------------------------------------------------------------
 
-const GET_TARGETS = ["config", "architecture", "domains", "gotchas", "adr"]
+const GET_TARGETS = [
+  "config",
+  "architecture",
+  "domains",
+  "gotchas",
+  "adr",
+  "rules"
+]
 
 export function runGet(target: string | undefined, ctx: GetContext): void {
   const command = target === undefined ? "get" : `get ${target}`
@@ -370,6 +465,9 @@ export function runGet(target: string | undefined, ctx: GetContext): void {
         return
       case "adr":
         runGetAdr(ctx)
+        return
+      case "rules":
+        runGetRules(ctx)
         return
       default:
         emitReadFailure(

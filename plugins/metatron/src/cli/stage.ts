@@ -1,4 +1,4 @@
-// `stage-architecture` / `stage-adr`(設計書 §7-3・§7-4)。
+// `stage-architecture` / `stage-adr` / `stage-rules`(設計書 §7-3・§7-4・§6-1)。
 //
 // どちらも**書き込みを行わない**。diff と stagingId を返すだけで、確定は
 // `commit-architecture --staging-id <id>` が行う。契約 §4-3 の分類では
@@ -13,6 +13,12 @@ import {
   type SectionChange
 } from "../lib/architecture.js"
 import { loadConfig } from "../lib/config.js"
+import {
+  prepareRulesUpdate,
+  RULES_FILES,
+  rulesFilePath,
+  rulesFileRelative
+} from "../lib/rules.js"
 import { createStaging, hashContent } from "../lib/staging.js"
 import { type UnifiedDiffResult, unifiedDiff } from "./diff.js"
 import { isPlainObject, loadInputJson, readDocument } from "./input.js"
@@ -292,6 +298,122 @@ export function runStageAdr(ctx: StageContext): void {
     reminder: withTruncationNote(
       diff,
       "ADR の追加・状態変更は設計判断の宣言である。diff を全文提示して承認を得るまで commit-architecture を実行しないこと。"
+    )
+  })
+}
+
+// ---------------------------------------------------------------------------
+// stage-rules
+// ---------------------------------------------------------------------------
+
+export function runStageRules(ctx: StageContext): void {
+  const command = "stage-rules"
+
+  const input = loadInputJson(ctx.flags)
+  if (!input.ok) {
+    emitWriteFailure(
+      command,
+      input.error,
+      input.message,
+      { valid: false },
+      EXIT_USAGE
+    )
+    return
+  }
+  if (!isPlainObject(input.value)) {
+    emitWriteFailure(
+      command,
+      "invalid_input",
+      `${input.source} のトップレベルは { name, body, reason? } のオブジェクトである必要があります。name は ${RULES_FILES.join(" / ")} のいずれかです。`,
+      { valid: false },
+      EXIT_USAGE
+    )
+    return
+  }
+
+  const config = loadConfig(ctx.cwd)
+  const rawName = (input.value as { name?: unknown }).name
+  const rawBody = (input.value as { body?: unknown }).body
+  const reason = (input.value as { reason?: unknown }).reason
+
+  // 検証の前にファイルを読むのは mode(created / replaced)の判定に要るためである。
+  // name が値域外なら readDocument は呼ばず、prepareRulesUpdate が拒否する。
+  const targetPath =
+    typeof rawName === "string" &&
+    (RULES_FILES as readonly string[]).includes(rawName)
+      ? rulesFilePath(config, rawName as (typeof RULES_FILES)[number])
+      : null
+  const file = targetPath === null ? null : readDocument(targetPath)
+
+  const update = prepareRulesUpdate(file?.exists === true ? file.text : null, {
+    name: rawName,
+    body: rawBody
+  })
+  const warnings = [
+    ...config.warnings,
+    ...(file?.warnings ?? []),
+    ...(update.ok ? update.warnings : [])
+  ]
+  noteWarnings(warnings)
+
+  if (!update.ok) {
+    // 契約 §4-3・設計書 §7-4: 検証に失敗したら stagingId を発行しない。
+    emitWriteFailure(command, update.error, update.message, {
+      valid: false,
+      stagingId: null,
+      path: targetPath,
+      warnings
+    })
+    return
+  }
+
+  const filePath = targetPath as string
+  const relative = rulesFileRelative(config, update.name)
+  const current = file as ReturnType<typeof readDocument>
+
+  const staged = createStaging({
+    projectRoot: config.docRoot,
+    kind: "rules",
+    targetPath: filePath,
+    nextContent: update.text,
+    baseHash: current.hash,
+    meta: {
+      name: update.name,
+      mode: update.mode,
+      reason: typeof reason === "string" ? reason : null
+    }
+  })
+  if (!staged.ok) {
+    emitWriteFailure(command, staged.error, staged.reasons.join(" / "), {
+      valid: false,
+      stagingId: null,
+      path: filePath,
+      warnings
+    })
+    return
+  }
+
+  const diff = unifiedDiff(current.text, update.text, {
+    fromLabel: `${relative} (現行)`,
+    toLabel: `${relative} (stage)`
+  })
+
+  emitResult(command, {
+    ok: true,
+    valid: true,
+    stagingId: staged.stagingId,
+    name: update.name,
+    path: filePath,
+    relative,
+    baseExists: current.exists,
+    mode: update.mode,
+    diff: diffPayload(diff, []),
+    expiresAt: new Date(staged.expiresAt).toISOString(),
+    warnings,
+    next: commandLine(`commit-rules --staging-id ${staged.stagingId}`),
+    reminder: withTruncationNote(
+      diff,
+      "diff を全文提示してユーザーの承認を得るまで commit-rules を実行しないこと。CLI は承認の有無を判定できない。"
     )
   })
 }
