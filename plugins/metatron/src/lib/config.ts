@@ -20,6 +20,7 @@ export const SUPPORTED_VERSION = 1
 
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
 export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
+export const DEFAULT_RULES_DIR = ".claude/rules/metatron"
 export const DEFAULT_INJECTION_ENABLED = true
 export const DEFAULT_GOTCHAS_RECENT_COUNT = 5
 export const DEFAULT_MAX_CHARS = 9000
@@ -45,6 +46,10 @@ export interface ResolvedConfig {
   architectureRelative: string
   /** GOTCHAS の docRoot からの相対パス(区切りは常に "/")。 */
   gotchasRelative: string
+  /** metatron が管理する rules の置き場(絶対パス)。 */
+  rulesDirPath: string
+  /** rules の置き場の docRoot からの相対パス(区切りは常に "/")。 */
+  rulesDirRelative: string
   injection: InjectionConfig
   /** 既定値へ落とした理由・設定を読めなかった理由。空配列が正常。 */
   warnings: string[]
@@ -248,6 +253,8 @@ function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
     gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
+    rulesDirPath: path.resolve(docRoot, DEFAULT_RULES_DIR),
+    rulesDirRelative: DEFAULT_RULES_DIR,
     injection: {
       enabled: DEFAULT_INJECTION_ENABLED,
       gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
@@ -322,6 +329,13 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     "gotchas",
     warnings
   )
+  const rulesDir = resolveConfiguredPath(
+    docRoot,
+    paths?.rulesDir,
+    DEFAULT_RULES_DIR,
+    "rulesDir",
+    warnings
+  )
 
   const injectionRaw = source?.injection
   const injection = isPlainObject(injectionRaw) ? injectionRaw : undefined
@@ -338,6 +352,8 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
+    rulesDirPath: rulesDir.absolute,
+    rulesDirRelative: rulesDir.relative,
     injection: {
       enabled: resolveBoolean(
         injection?.enabled,

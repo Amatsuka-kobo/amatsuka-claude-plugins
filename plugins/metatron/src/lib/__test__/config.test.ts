@@ -10,6 +10,7 @@ import { afterAll, expect, test } from "vitest"
 import {
   DEFAULT_ARCHITECTURE_PATH,
   DEFAULT_GOTCHAS_PATH,
+  DEFAULT_RULES_DIR,
   findDocRoot,
   loadConfig
 } from "../config.js"
@@ -238,6 +239,37 @@ test("C12: maxChars を明示指定 → 既定 9000 を上書きする", () => {
 })
 
 // --- 契約 §13「検証する構成」由来の追加ケース ---
+
+test("C13: rulesDir 未指定 → 既定値が docRoot 基準で解決される", () => {
+  const dir = mkTmp()
+  writeConfig(dir, { version: 1, paths: { architecture: "docs/A.md" } })
+  const cfg = loadConfig(dir)
+
+  expect(cfg.rulesDirRelative).toBe(DEFAULT_RULES_DIR)
+  expect(cfg.rulesDirPath).toBe(path.join(dir, ".claude", "rules", "metatron"))
+  expect(cfg.warnings).toStrictEqual([])
+})
+
+test("C14: rulesDir が絶対パス / ルート外 / 空文字列 / 非文字列 → 既定値 + 理由", () => {
+  for (const bad of ["/etc/rules", "../outside/rules", "", 42]) {
+    const dir = mkTmp()
+    writeConfig(dir, { version: 1, paths: { rulesDir: bad } })
+    const cfg = loadConfig(dir)
+
+    expect(cfg.rulesDirRelative).toBe(DEFAULT_RULES_DIR)
+    expect(cfg.warnings.some((w) => w.includes("paths.rulesDir"))).toBe(true)
+  }
+})
+
+test("C15: rulesDir を明示指定 → その値が docRoot 基準で解決される", () => {
+  const dir = mkTmp()
+  writeConfig(dir, { version: 1, paths: { rulesDir: ".claude/rules/mine" } })
+  const cfg = loadConfig(dir)
+
+  expect(cfg.rulesDirRelative).toBe(".claude/rules/mine")
+  expect(cfg.rulesDirPath).toBe(path.join(dir, ".claude", "rules", "mine"))
+  expect(cfg.warnings).toStrictEqual([])
+})
 
 test("R4-a: 開始ディレクトリ自身に設定ファイルがある(inclusive 探索)", () => {
   const root = mkTmp()
