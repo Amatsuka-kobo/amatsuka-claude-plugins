@@ -242,6 +242,37 @@ describe("断片の解決", () => {
     expect(body).toContain("切り分け")
   })
 
+  it("プロジェクト側の _common.md は節単位で上書きする", () => {
+    const projectRoles = path.join(temporary, "roles")
+    fs.mkdirSync(projectRoles, { recursive: true })
+    fs.writeFileSync(
+      path.join(projectRoles, "_common.md"),
+      [
+        "---",
+        "id: _common",
+        "---",
+        "",
+        "## 制約",
+        "",
+        "- プロジェクト固有の共通制約。",
+        ""
+      ].join("\n")
+    )
+
+    const body = compose({
+      name: "x",
+      model: "m",
+      vendor: "gpt",
+      roleIds: ["complex-impl"] as never,
+      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+    })
+    // 差し替えた節は反映される
+    expect(body).toContain("プロジェクト固有の共通制約")
+    // 差し替えなかった節は残る
+    expect(body).toContain("あなたは x")
+    expect(body).toContain("## アドバイザーへの相談")
+  })
+
   it("未知の役割 ID ではエラーを投げる", () => {
     expect(() => build(["no-such-role"])).toThrow(/no-such-role/)
   })
