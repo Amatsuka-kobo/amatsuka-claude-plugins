@@ -5,7 +5,7 @@ sandalphon が定める書式を変更したときに、同じコミットで追
 
 ## intent 文書と intent-issue の書式(`references/intent-format.md`)
 
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §8・§9
+- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §9・§10
 - [ ] codiel: `skills/analyzing-issues/SKILL.md` の `## intent issue の写像`
 - [ ] codiel: `skills/preparing-design-agendas/SKILL.md` の `## 合意済み事項の継承`
 - [ ] gh-utility: `skills/issue-craft/SKILL.md` の `## 持ち込みモード`

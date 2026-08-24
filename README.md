@@ -58,7 +58,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                  | 開発中     |
 | agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群。4 種のプリセット定義を同梱し、役割ベースの setup でプロジェクト側の Agent 定義を合成できる。Claude+Codex+Grok 併用 / Claude+Codex 併用 / Claude+Grok 併用 / Claude オンリーの 4 プロファイルで提供する | 開発中     |
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
-| Metatron     | プロジェクトの技術的前提(ARCHITECTURE)と失敗知識(GOTCHAS)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入するプラグイン                                | 開発中     |
+| Metatron     | プロジェクトの技術的前提(ARCHITECTURE)・失敗知識(GOTCHAS)・規律(rules 3 ファイル)を管理するプラグイン。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入する | 開発中     |
 | Sandalphon   | ユーザーの願いを聞き取って現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡すオーケストレーター                                          | 開発中     |
 
 各プラグインの詳しい説明は、それぞれのフォルダ内（`plugins/<plugin-name>/`）にあるREADMEを参照してください。
@@ -120,9 +120,9 @@ AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマン�
 
 ### Metatron 📜
 
-プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)と失敗知識(`docs/GOTCHAS.md`)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入するプラグインです。<br>
-2 文書への書き込み口を決定的な CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械で保証します。正本への直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい窓口へ案内します。<br>
-`/metatron:init` がコードベース解析から ARCHITECTURE を初回生成し、`/metatron:update` が現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。<br>
+プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)・失敗知識(`docs/GOTCHAS.md`)・規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入し、rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。<br>
+3 種への書き込み口を決定的な CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械で保証します。正本への直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい窓口へ案内します。<br>
+`/metatron:init` がコードベース解析から ARCHITECTURE を初回生成し、`/metatron:update` が現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。既定の `paths.architecture` と `paths.gotchas` はそれぞれ `docs/ARCHITECTURE.md` と `docs/GOTCHAS.md`、`paths.rulesDir` は `.claude/rules/metatron` です。<br>
 ※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
 
 ### Sandalphon
@@ -135,5 +135,5 @@ Codiel が「Issue #N がある」ところから始まるのに対し、Sandalp
 ### Metatron / Sandalphon / Codiel の関係
 
 3 つは願い → intent → issue → 実装という一続きの流れを分担しますが、**互いに独立して動きます。**<br>
-Codiel は Metatron が無くても単体で完結し(最小の ARCHITECTURE を自前で作ります)、Sandalphon は Codiel が無くても intent 文書を残して自前実行まで行えます。Metatron も他の 2 つが無いところで、ARCHITECTURE と GOTCHAS の記録・注入として単体で価値があります。<br>
-連携手段は**ファイル契約**(ARCHITECTURE / GOTCHAS / intent 文書の書式)と**モデルコンテキスト**の 2 つだけで、プラグイン間の依存宣言もインストール位置の参照もありません。片方だけを入れても壊れず、両方を入れると噛み合います。
+Codiel は Metatron が無くても単体で完結し(最小の ARCHITECTURE を自前で作ります)、Sandalphon は Codiel が無くても intent 文書を残して自前実行まで行えます。Metatron も他の 2 つが無いところで、ARCHITECTURE・GOTCHAS・rules 3 ファイルの管理として単体で価値があります。<br>
+連携手段は**ファイル契約**(ARCHITECTURE / GOTCHAS / rules 3 ファイル / intent 文書の書式)と**モデルコンテキスト**の 2 つだけで、プラグイン間の依存宣言もインストール位置の参照もありません。片方だけを入れても壊れず、両方を入れると噛み合います。

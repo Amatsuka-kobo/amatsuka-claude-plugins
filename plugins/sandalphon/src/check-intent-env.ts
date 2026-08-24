@@ -12,7 +12,7 @@
 // `harness-docs/design/2026-08-16-file-contract-freeze.md` §3 の**独立実装**である。
 // 正本は plugins/metatron/src/lib/config.ts。プラグインは独立して配布され互いの
 // インストールパスを解決できないため、ソースは共有せず同じ規則を実装する。
-// 契約を変えたら metatron / codiel / sandalphon の 3 実装を追随させる(契約 §14)。
+// 契約を変えたら metatron / codiel / sandalphon の 3 実装を追随させる(契約 §15)。
 //
 // 基準は 3 つあり、どれか 1 つに寄せない(契約 §3「codiel における 2 つのルート概念」)。
 //   - intent 文書(docs/intents/)  : repoRoot(git ルート)

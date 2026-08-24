@@ -1,14 +1,14 @@
 # Metatron 📜
 
-プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)と失敗知識(`docs/GOTCHAS.md`)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入するプラグインです。
+プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)、失敗知識(`docs/GOTCHAS.md`)、規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入し、rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。
 
 名前は天の書記天使 Metatron に由来します。神の記録を司り、人の行いを書き留める役です。プロジェクトの前提と、そこで犯された失敗を書き留め続けるという、このプラグインの役割そのものを表しています。
 
 ## 何をするか
 
-- **記録**: 2 文書の更新は決定的な CLI を通します。書式の検証・連番の採番・GOTCHAS が追記のみであることを機械で保証します。
+- **記録**: 3 種の管理対象の更新は決定的な CLI を通します。書式の検証・連番の採番・GOTCHAS が追記のみであることを機械で保証します。
 - **更新**: `/metatron:init` と `/metatron:update` が、コードベース解析から起こしたドラフトをセクション単位で確認しながら文書を育てます。
-- **注入**: SessionStart hook が ARCHITECTURE の内容と GOTCHAS の要約を毎セッション渡します。「作業前に必ず読む」という指示に頼りません。
+- **注入と規律**: SessionStart hook が ARCHITECTURE の内容と GOTCHAS の要約を毎セッション渡します。rules は metatron が注入せず、Claude Code が起動時に読み込むためサブエージェントにも届きます。
 
 ## 動作要件
 
@@ -40,20 +40,23 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | --- | --- | --- |
 | `get config` | 読 | 解決済みの絶対パス、既定値が適用された項目、拒否された設定値 |
 | `get architecture [--section <見出し>]` | 読 | 全文またはセクション単位の取得 |
+| `get rules [--name <名前>]` | 読 | 3 ファイルの内容と存在状況、または指定ファイルの本文 |
 | `get domains` | 読 | ドメインマップの構造化取得(パースの成否と理由も返す) |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 | 台帳の取得・検索 |
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR の取得・状態での絞り込み |
 | `scan` | 読 | コードベース解析の事実を返す(書き込みなし) |
 | `diff-architecture` | 読 | 現行 ARCHITECTURE との乖離候補を返す |
 | `stage-architecture --input <path>` | 段階 | セクション更新案を受け取り、書かずに差分と `stagingId` を返す |
+| `stage-rules --input <path>` | 段階 | rules 1 ファイルの更新案を受け取り、書かずに差分と `stagingId` を返す |
 | `stage-adr --input <path>` | 段階 | ADR の追加・状態変更を段階化する(採番は CLI が行う) |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して書き込む |
+| `commit-rules --staging-id <id>` | 書 | `stagingId` を消費して rules 1 ファイルを書き込む |
 | `append-gotcha --input <path>` | 書 | エントリを先頭に挿入する(採番は CLI が行う) |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 既存エントリにタグを付与する(本文は不変) |
 
 ### なぜ CLI を通すのか
 
-書式検証・採番・追記のみという規律を、AI への指示ではなく機械で保証するためです。指示は合理化して破られますが、CLI しか書き込み口が無ければ、壊れたドメインマップは書けず、連番は衝突せず、GOTCHAS の既存エントリは消えません。ARCHITECTURE の更新に `stage-architecture` → `commit-architecture` の 2 段階を課しているのも同じ理由で、差分を計算せずに書き込む経路がコマンド体系上存在しません(`stagingId` は単回使用、既定 30 分で失効し、その間にファイルが変化していれば commit は失敗します)。
+書式検証・採番・追記のみという規律を、AI への指示ではなく機械で保証するためです。指示は合理化して破られますが、CLI しか書き込み口が無ければ、壊れたドメインマップは書けず、連番は衝突せず、GOTCHAS の既存エントリは消えません。ARCHITECTURE と rules の更新にそれぞれ `stage-*` → `commit-*` の 2 段階を課しているのも同じ理由で、差分を計算せずに書き込む経路がコマンド体系上存在しません(`stagingId` は単回使用、既定 30 分で失効し、その間にファイルが変化していれば commit は失敗します)。
 
 ### 長い入力は `--input <path>` で渡す
 
@@ -64,7 +67,7 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | hook | 役割 |
 | --- | --- |
 | **SessionStart**(`scripts/inject-context.mjs`) | ARCHITECTURE の内容、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内をセッション開始時に注入します。予算を超える場合は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、CLI 案内だけは削りません |
-| **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS への直接編集を拒否し、対象に応じた CLI の呼び出し方を絶対パス付きで案内します |
+| **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS / rules 3 ファイルへの直接編集を拒否し、対象に応じた CLI の呼び出し方を絶対パス付きで案内します |
 
 ### 拒否の範囲(正直な限界)
 
@@ -85,7 +88,8 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
   "version": 1,
   "paths": {
     "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md"
+    "gotchas": "docs/GOTCHAS.md",
+    "rulesDir": ".claude/rules/metatron"
   },
   "injection": {
     "enabled": true,
@@ -95,7 +99,7 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
 }
 ```
 
-上の内容は既定値そのものです。`paths.*` が 2 文書の位置、`injection.enabled` が注入の有効・無効、`injection.gotchasRecentCount` が全文で注入する直近エントリ数、`injection.maxChars` が注入全体の文字数上限です。
+上の内容は既定値そのものです。`paths.architecture` と `paths.gotchas` が 2 文書の位置、`paths.rulesDir` が rules 3 ファイルの置き場、`injection.enabled` が注入の有効・無効、`injection.gotchasRecentCount` が全文で注入する直近エントリ数、`injection.maxChars` が注入全体の文字数上限です。
 
 - パスは設定ファイルのある位置(git リポジトリルートにフォールバック)からの**相対パス**です。絶対パスとルート外へ出るパスは拒否され、その項目だけ既定値に戻ります。
 - 環境変数によるパス指定はありません。共有資産の位置は、リポジトリにコミットされる場所で宣言します。
@@ -115,4 +119,4 @@ sandalphon の ASIS 探索が ARCHITECTURE と GOTCHAS を材料に使います�
 
 - `README.md`(このファイル): 利用者が読まなければこのプラグインを使えない情報
 - `docs/rationale.md`: 設計根拠(MCP サーバー化を撤回した経緯を含む)
-- `references/`: AI が実行時に読む正本(ARCHITECTURE / GOTCHAS の書式、設定スキーマ、CLI の使い方、執筆規律)
+- `references/`: AI が実行時に読む正本(ARCHITECTURE / GOTCHAS / rules の書式、設定スキーマ、CLI の使い方、執筆規律)
