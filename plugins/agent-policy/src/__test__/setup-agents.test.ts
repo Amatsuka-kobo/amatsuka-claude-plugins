@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { ROLES } from "../agents/roles"
 import { runTs } from "../testing/run-ts.js"
 
 const CLI = fileURLToPath(new URL("../setup-agents.ts", import.meta.url))
@@ -21,6 +22,20 @@ afterEach(() => {
 
 // CLI が stdout へ書く JSON。実行時にはエラー系で一部フィールドが欠けるが、
 // 各テストは自分が検証するフィールドしか触らないため非 optional で受ける。
+interface RolesSummary {
+  ids: string[]
+  implRoles: string[]
+  readonlyRoles: string[]
+  mixedKinds: boolean
+  agentTool: boolean
+}
+
+interface Discarded {
+  frontmatterKeys: string[]
+  preamble: boolean
+  sections: string[]
+}
+
 interface CheckResult {
   ok: boolean
   error: string
@@ -39,11 +54,27 @@ interface CheckResult {
     sectionsOnlyInTemplate: string[]
     sectionsChanged: string[]
   }
+  roles: RolesSummary
   action: string
   kept: string[]
+  keptNeedsReview: string[]
+  discarded: Discarded
 }
 
-function run(args: string[]): CheckResult {
+interface ListedRole {
+  id: string
+  label: string
+  kind: "impl" | "readonly"
+  tools: string[]
+  source: "plugin" | "project"
+}
+
+interface ListRolesResult {
+  ok: boolean
+  roles: ListedRole[]
+}
+
+function run<T = CheckResult>(args: string[]): T {
   let output: string
   try {
     output = runTs(CLI, args, {
@@ -56,7 +87,7 @@ function run(args: string[]): CheckResult {
     if (stdout === undefined || stdout === "") throw error
     output = stdout
   }
-  return JSON.parse(output.trim().split("\n").at(-1) ?? "{}") as CheckResult
+  return JSON.parse(output.trim().split("\n").at(-1) ?? "{}") as T
 }
 
 function check(extra: string[] = []): CheckResult {
@@ -79,6 +110,78 @@ function check(extra: string[] = []): CheckResult {
 function target(): string {
   return path.join(project, ".claude", "agents", "gpt-sol.md")
 }
+
+function writeProjectRole(options: {
+  id: string
+  label?: string
+  kind?: "impl" | "readonly"
+  tools?: string
+}): void {
+  const roles = path.join(project, ".claude", "agent-policy", "roles")
+  fs.mkdirSync(roles, { recursive: true })
+  fs.writeFileSync(
+    path.join(roles, `${options.id}.md`),
+    [
+      "---",
+      `id: ${options.id}`,
+      `label: ${options.label ?? options.id}`,
+      `description: ${options.id} の作業`,
+      `tools: ${options.tools ?? "Read, Grep, Glob"}`,
+      `kind: ${options.kind ?? "readonly"}`,
+      "---",
+      "",
+      "## When to invoke",
+      "",
+      `- **${options.id}。** ${options.id} の作業をするとき。`,
+      ""
+    ].join("\n")
+  )
+}
+
+describe("--list-roles", () => {
+  it("name / model / roles 無しで組み込み 10 種を ROLES 順に返す", () => {
+    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
+
+    expect(result.ok).toBe(true)
+    expect(result.roles.map((role) => role.id)).toEqual(
+      ROLES.map((role) => role.id)
+    )
+    expect(result.roles).toHaveLength(10)
+    expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
+  })
+
+  it("プロジェクト固有 ID を組み込み役割の末尾へ並べる", () => {
+    writeProjectRole({ id: "triage" })
+
+    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
+
+    expect(result.roles.at(-1)).toMatchObject({
+      id: "triage",
+      kind: "readonly",
+      source: "project"
+    })
+  })
+
+  it("同じ ID のプロジェクト断片で source と内容を置き換える", () => {
+    writeProjectRole({
+      id: "explore",
+      label: "独自探索",
+      kind: "impl",
+      tools: "Read, Write"
+    })
+
+    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
+    const explore = result.roles.find((role) => role.id === "explore")
+
+    expect(explore).toEqual({
+      id: "explore",
+      label: "独自探索",
+      kind: "impl",
+      tools: ["Read", "Write"],
+      source: "project"
+    })
+  })
+})
 
 describe("--check", () => {
   it("既存が無いとき exists: false を返す", () => {
@@ -148,6 +251,52 @@ describe("--check", () => {
     expect(result.body.sectionsChanged).toContain("## 制約")
   })
 
+  it("実装役割だけなら roles.mixedKinds が false になる", () => {
+    expect(check().roles).toEqual({
+      ids: ["complex-impl"],
+      implRoles: ["complex-impl"],
+      readonlyRoles: [],
+      mixedKinds: false,
+      agentTool: true
+    })
+  })
+
+  it("実装役割と読み取り役割を分類して混在を示す", () => {
+    const result = check(["--roles", "explore,normal-impl,independent-review"])
+
+    expect(result.roles).toEqual({
+      ids: ["normal-impl", "explore", "independent-review"],
+      implRoles: ["normal-impl"],
+      readonlyRoles: ["explore", "independent-review"],
+      mixedKinds: true,
+      agentTool: true
+    })
+  })
+
+  it("Agent tool の可否を役割から返す", () => {
+    expect(check(["--roles", "light-impl"]).roles.agentTool).toBe(false)
+    expect(check(["--roles", "complex-impl"]).roles.agentTool).toBe(true)
+  })
+
+  it("frontmatter が無い既存ファイルを全体が本文の文書として扱う", () => {
+    fs.writeFileSync(target(), "独自の冒頭。\n\n## 独自節\n\n- 独自の内容。\n")
+
+    const result = check()
+
+    expect(result.frontmatter.keysOnlyInExisting).toEqual([])
+    expect(result.preambleChanged).toBe(true)
+    expect(result.body.sectionsOnlyInExisting).toEqual(["## 独自節"])
+  })
+
+  it("閉じていない frontmatter も全体を本文として扱う", () => {
+    fs.writeFileSync(target(), "---\nname: broken\n\n## 独自節\n\n- 内容。\n")
+
+    const result = check()
+
+    expect(result.frontmatter.keysOnlyInExisting).toEqual([])
+    expect(result.body.sectionsOnlyInExisting).toEqual(["## 独自節"])
+  })
+
   it("不正な役割 ID でエラーを返す", () => {
     const result = run([
       "--vendor",
@@ -180,6 +329,36 @@ describe("--check", () => {
     ])
     expect(result.ok).toBe(false)
     expect(String(result.error)).toContain("model")
+  })
+})
+
+describe("parseArgs", () => {
+  it.each([
+    "../../pwned",
+    "GPT_Sol",
+    "-a"
+  ])("不正な name %s を拒否する", (name) => {
+    const result = run([
+      "--name",
+      name,
+      "--model",
+      "m",
+      "--roles",
+      "explore",
+      "--dir",
+      project,
+      "--check"
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe(
+      "name: must be lowercase letters, digits and hyphens"
+    )
+  })
+
+  it("roles の重複を除去する", () => {
+    const result = check(["--roles", "explore,explore"])
+    expect(result.roles.ids).toEqual(["explore"])
   })
 })
 
@@ -252,6 +431,33 @@ describe("--write", () => {
     expect(result.ok).toBe(true)
     expect(fs.existsSync(target())).toBe(true)
     expect(fs.readFileSync(target(), "utf8")).toContain("name: gpt-sol")
+    expect(fs.readFileSync(target(), "utf8")).toContain("color: yellow")
+  })
+
+  it("--merge で新規作成すると空の保持・破棄情報を返す", () => {
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--merge"
+    ])
+
+    expect(result.action).toBe("written")
+    expect(result.kept).toEqual([])
+    expect(result.keptNeedsReview).toEqual([])
+    expect(result.discarded).toEqual({
+      frontmatterKeys: [],
+      preamble: false,
+      sections: []
+    })
   })
 
   it("--keep なしでは完全上書きになる", () => {
@@ -270,6 +476,35 @@ describe("--write", () => {
       "--write"
     ])
     expect(fs.readFileSync(target(), "utf8")).not.toContain("## ツール運用")
+  })
+
+  it("--merge なしでは overwritten と破棄した変更を返す", () => {
+    seed({
+      model: "my-own-alias",
+      preamble: "あなたは私が書き換えた冒頭である。",
+      replaceConstraints: "- 私が書き換えた制約。\n"
+    })
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write"
+    ])
+
+    expect(result.action).toBe("overwritten")
+    expect(result.discarded).toEqual({
+      frontmatterKeys: ["model"],
+      preamble: true,
+      sections: ["## 制約"]
+    })
   })
 
   it("--keep section で既存にしかない節を残す", () => {
@@ -377,6 +612,135 @@ describe("--write", () => {
     expect(fs.readFileSync(target(), "utf8")).toContain(
       "あなたは私が書き換えた冒頭である。"
     )
+  })
+
+  it("--merge で既存にしかない tools・キー・節を自動保持する", () => {
+    seed({
+      tools:
+        "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, CustomTool",
+      model: "my-own-alias",
+      extraKeys: { permissionMode: "plan" },
+      extraSection: "## 独自運用\n\n- 独自の運用。\n",
+      preamble: "あなたは私が書き換えた冒頭である。",
+      replaceConstraints: "- 私が書き換えた制約。\n"
+    })
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--merge"
+    ])
+    const content = fs.readFileSync(target(), "utf8")
+
+    expect(result.action).toBe("merged")
+    expect(result.kept).toEqual([
+      "tools:CustomTool",
+      "key:permissionMode",
+      "section:## 独自運用"
+    ])
+    expect(result.discarded).toEqual({
+      frontmatterKeys: ["model"],
+      preamble: true,
+      sections: ["## 制約"]
+    })
+    expect(content).toMatch(/^tools:.*CustomTool/m)
+    expect(content).toContain("permissionMode: plan")
+    expect(content).toContain("## 独自運用")
+    expect(content).toContain("model: claude-gpt-5-6-sol")
+    expect(content).not.toContain("あなたは私が書き換えた冒頭である。")
+    expect(content).not.toContain("私が書き換えた制約")
+  })
+
+  it("--merge と明示 --keep を併用して変更済み項目も保持する", () => {
+    seed({
+      model: "my-own-alias",
+      preamble: "あなたは私が書き換えた冒頭である。",
+      replaceConstraints: "- 私が書き換えた制約。\n"
+    })
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--merge",
+      "--keep",
+      "key:model",
+      "--keep",
+      "preamble",
+      "--keep",
+      "section:## 制約"
+    ])
+    const content = fs.readFileSync(target(), "utf8")
+
+    expect(result.kept).toEqual(["key:model", "preamble", "section:## 制約"])
+    expect(result.discarded).toEqual({
+      frontmatterKeys: [],
+      preamble: false,
+      sections: []
+    })
+    expect(content).toContain("model: my-own-alias")
+    expect(content).toContain("あなたは私が書き換えた冒頭である。")
+    expect(content).toContain("私が書き換えた制約")
+  })
+
+  it("旧同梱候補だけを keptNeedsReview に分ける", () => {
+    seed({
+      tools:
+        "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7, CustomTool",
+      extraSection: [
+        "## ツール運用",
+        "",
+        "- Context7 を使う。",
+        "",
+        "## 独自運用",
+        "",
+        "- 独自の運用。",
+        ""
+      ].join("\n")
+    })
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--merge"
+    ])
+
+    expect(result.kept).toEqual([
+      "tools:mcp__context7",
+      "tools:CustomTool",
+      "section:## ツール運用",
+      "section:## 独自運用"
+    ])
+    expect(result.keptNeedsReview).toEqual([
+      "tools:mcp__context7",
+      "section:## ツール運用"
+    ])
   })
 
   it("存在しない --keep section でエラーになり既存ファイルを変えない", () => {

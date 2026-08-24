@@ -82,12 +82,14 @@ Marketplace から `agent-policy` をインストールします。
 
 プラグインの `agents/` には、役割断片からビルド生成した 4 種のプリセット定義を同梱しています。呼び出し名は `agent-policy:<name>`(例: `agent-policy:gpt-sol`)です。
 
-| 名前 | 既定モデル | 役割 ID |
-| --- | --- | --- |
-| `gpt-sol` | `claude-gpt-5-6-sol` | `complex-impl` |
-| `gpt-terra` | `claude-gpt-5-6-terra` | `normal-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
-| `gpt-luna` | `claude-gpt-5-6-luna` | `light-impl` |
-| `grok` | `claude-grok-4-6` | `normal-impl`, `light-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
+| 名前 | 既定モデル | color | 役割 ID |
+| --- | --- | --- | --- |
+| `gpt-sol` | `claude-gpt-5-6-sol` | yellow | `complex-impl` |
+| `gpt-terra` | `claude-gpt-5-6-terra` | green | `normal-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
+| `gpt-luna` | `claude-gpt-5-6-luna` | cyan | `light-impl` |
+| `grok` | `claude-grok-4-6` | red | `normal-impl`, `light-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
+
+利用者が setup で作った定義の color はベンダーで決まります(gpt=yellow / grok=red / claude=blue)。
 
 ## エイリアスを変更する
 
@@ -128,6 +130,12 @@ SessionStart フックはプロジェクトの `.claude/agents/` を走査し、
 
 ## 旧バージョンからの移行
 
-1. `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止しました。`.claude/agents/` に残っていれば削除してください。プロジェクト定義は同梱定義より優先されるため、放置すると古い定義が使われ続けます。
-2. Grok の既定エイリアスは `claude-grok-4-5` から `claude-grok-4-6` へ変わりました。プロキシ設定に `claude-grok-4-6` の別名が無い場合、通知を一切受けないまま委譲時に `unknown provider for model` で失敗します。`AMATSUKA_AGENT_GROK_ALIAS` が未設定なら、フックが既定値と一致するとみなし、setup を促さないためです。推奨する対処は、プロキシ設定に `claude-grok-4-6` の別名を追加することです。CLIProxyAPI では `oauth-model-alias` の `xai` に `grok-4.6` → `claude-grok-4-6` を追加します。Grok 4.5 を使い続ける場合は、`AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を明示的に設定してください。
+1. `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止しました。`.claude/agents/` に残っていれば削除してください。プロジェクト定義は同梱定義より優先されるため、放置すると古い定義が使われ続けます。SessionStart フックは残骸を検知すると削除を促す通知を出します。
+2. Grok の既定エイリアスは `claude-grok-4-5` から `claude-grok-4-6` へ変わりました。
+   - プロキシ設定に `claude-grok-4-6` の別名が無い場合、委譲時に `unknown provider for model` で失敗します。
+   - `AMATSUKA_AGENT_GROK_ALIAS` が未設定なら、フックが既定値と一致するとみなすため、エイリアス不一致としては検知されません。
+   - ただし手順 1 の廃止済み定義(`grok-researcher.md` など)が `.claude/agents/` に残っていて、かつ `AMATSUKA_AGENT_GROK_ALIAS` が未設定の場合は、残骸通知にこのエイリアス変更が併記されます。
+   - 推奨する対処は、プロキシ設定に `claude-grok-4-6` の別名を追加することです。
+   - CLIProxyAPI では `oauth-model-alias` の `xai` に `grok-4.6` → `claude-grok-4-6` を追加します。
+   - Grok 4.5 を使い続ける場合は、`AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を明示的に設定してください。
 3. MCP ツールは同梱定義から外れました。必要なら setup で生成した定義へ自分で追加してください。再 setup 時は差分確認で追加した情報を保持できます。

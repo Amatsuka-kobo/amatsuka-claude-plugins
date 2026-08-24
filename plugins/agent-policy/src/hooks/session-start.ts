@@ -5,8 +5,8 @@
 
 import fs from "node:fs"
 import path from "node:path"
-import { DEFAULT_ALIASES } from "../agents/presets"
-import { roleById } from "../agents/roles"
+import { DEFAULT_ALIASES, PRESETS } from "../agents/presets"
+import { roleById, sortRoleIds } from "../agents/roles"
 
 const POLICIES: Record<string, string> = {
   claude: "claude-model-policy",
@@ -22,6 +22,8 @@ const RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ]
+
+const LABELS = new Map<string, string | undefined>()
 
 interface AliasSpec {
   preset: string
@@ -126,11 +128,20 @@ function scan(dir: string | undefined): Marked[] {
 // setup はプロジェクト側断片の役割 ID もマーカーへ書き込むため、ここで拾えないと
 // 「未知の役割」として誤って報告してしまう。
 function labelOf(env: NodeJS.ProcessEnv, id: string): string | undefined {
+  const cached = LABELS.get(id)
+  if (cached !== undefined || LABELS.has(id)) return cached
+
   const known = roleById(id)
-  if (known !== undefined) return known.label
+  if (known !== undefined) {
+    LABELS.set(id, known.label)
+    return known.label
+  }
 
   const projectDir = env.CLAUDE_PROJECT_DIR
-  if (projectDir === undefined || projectDir === "") return undefined
+  if (projectDir === undefined || projectDir === "") {
+    LABELS.set(id, undefined)
+    return undefined
+  }
 
   const file = path.join(
     projectDir,
@@ -139,9 +150,19 @@ function labelOf(env: NodeJS.ProcessEnv, id: string): string | undefined {
     "roles",
     `${id}.md`
   )
-  if (!fs.existsSync(file)) return undefined
-  const label = frontmatter(file).get("label")
-  return label === "" ? undefined : label
+  try {
+    if (fs.existsSync(file)) {
+      const label = frontmatter(file).get("label")
+      const resolved = label === "" ? undefined : label
+      LABELS.set(id, resolved)
+      return resolved
+    }
+  } catch {
+    // プロジェクト側の役割断片が読めなくても、方針注入は続ける。
+  }
+
+  LABELS.set(id, undefined)
+  return undefined
 }
 
 function markerBlock(
@@ -160,8 +181,11 @@ function markerBlock(
   const lines = [
     "次の Agent は役割マーカーを宣言している。担当表の該当する帯は、これらを優先して使う。同じ帯に複数あるときは依頼内容に近いものを選ぶ。"
   ]
-  for (const [role, names] of byRole) {
-    lines.push(`- ${labelOf(env, role)}: ${names.join(" / ")}`)
+  for (const role of sortRoleIds([...byRole.keys()])) {
+    const names = byRole.get(role)
+    if (names !== undefined) {
+      lines.push(`- ${labelOf(env, role)}: ${names.join(" / ")}`)
+    }
   }
   return lines.join("\n")
 }
@@ -197,14 +221,42 @@ function setupBlock(
     if (alias === undefined || alias === "") continue
     if (alias === DEFAULT_ALIASES[spec.preset]) continue
 
-    const existing = byName.get(spec.preset)
-    if (existing === undefined) {
-      lines.push(`- ${spec.preset}: 定義が無い。${spec.skill} を実行する`)
+    const preset = PRESETS.find((entry) => entry.name === spec.preset)
+    const named = byName.get(spec.preset)
+
+    // 名前一致の定義が正しい model を持てば従来どおり充足。
+    if (named?.model === alias) continue
+
+    // PRESETS と ALIASES がずれた場合は、名前一致だけの旧判定へ落とす。
+    if (preset === undefined) {
+      if (named === undefined) {
+        lines.push(`- ${spec.preset}: 定義が無い。${spec.skill} を実行する`)
+      } else {
+        lines.push(
+          `- ${spec.preset}: 定義の model が "${named.model ?? "未設定"}" で、${spec.variable} の "${alias}" と食い違う。${spec.skill} を実行する`
+        )
+      }
       continue
     }
-    if (existing.model !== alias) {
+
+    const withAlias = marked.filter((entry) => entry.model === alias)
+    const covered = new Set(withAlias.flatMap((entry) => entry.roles))
+    const missing = preset.roleIds.filter((role) => !covered.has(role))
+    if (missing.length === 0) continue
+
+    if (withAlias.length === 0) {
+      if (named === undefined) {
+        lines.push(
+          `- ${spec.preset}: ${spec.variable} の "${alias}" を model に持つ定義が無い。${spec.skill} を実行する`
+        )
+      } else {
+        lines.push(
+          `- ${spec.preset}: 定義の model が "${named.model ?? "未設定"}" で、${spec.variable} の "${alias}" と食い違う。${spec.skill} を実行する`
+        )
+      }
+    } else {
       lines.push(
-        `- ${spec.preset}: 定義の model が "${existing.model}" で、${spec.variable} の "${alias}" と食い違う。${spec.skill} を実行する`
+        `- ${spec.preset}: ${withAlias.map((entry) => entry.name).join(" / ")} が "${alias}" を使っているが、${missing.join(", ")} を宣言する定義が無い。${spec.skill} を実行する`
       )
     }
   }
@@ -216,12 +268,28 @@ function setupBlock(
   ].join("\n")
 }
 
-function retiredBlock(marked: Marked[]): string | undefined {
+function retiredBlock(
+  env: NodeJS.ProcessEnv,
+  marked: Marked[]
+): string | undefined {
   const found = marked
     .map((entry) => entry.name)
     .filter((name) => RETIRED.includes(name))
   if (found.length === 0) return undefined
-  return `次の Agent 定義は廃止済みである。プロジェクト定義は同梱定義より優先されるため削除する: ${found.join(", ")}`
+
+  const lines = [
+    `次の Agent 定義は廃止済みである。プロジェクト定義は同梱定義より優先されるため削除する: ${found.join(", ")}`
+  ]
+  const grokAlias = env.AMATSUKA_AGENT_GROK_ALIAS?.trim()
+  if (
+    found.some((name) => name.startsWith("grok-")) &&
+    (grokAlias === undefined || grokAlias === "")
+  ) {
+    lines.push(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった。プロキシ設定にこの別名が無い場合、委譲時に `unknown provider for model` で失敗する。4.5 を使い続けるなら `AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を設定する。"
+    )
+  }
+  return lines.join("\n")
 }
 
 function build(env: NodeJS.ProcessEnv): string | undefined {
@@ -237,7 +305,7 @@ function build(env: NodeJS.ProcessEnv): string | undefined {
     markerBlock(env, marked),
     unknownRoleBlock(env, marked),
     setupBlock(env, marked),
-    retiredBlock(marked)
+    retiredBlock(env, marked)
   ].filter((block): block is string => block !== undefined)
 
   if (blocks.length === 0) return undefined

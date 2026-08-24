@@ -2,7 +2,7 @@
 name: gpt-luna
 description: Use this agent when 一括適用・一括チェック・反復変換・軽微なコーディングを委譲するとき。詳細は本文の「When to invoke」を参照。
 model: claude-gpt-5-6-luna
-color: yellow
+color: cyan
 tools: Read, Grep, Glob, Write, Edit, Bash, LSP
 agent-policy-role: light-impl
 ---

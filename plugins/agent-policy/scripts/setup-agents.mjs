@@ -40,25 +40,26 @@ function trim(lines) {
   while (end > start && lines[end - 1]?.trim() === "") end -= 1;
   return lines.slice(start, end);
 }
-function require2(meta, key, file) {
+function requireMeta(meta, key, file) {
   const value = meta[key];
   if (value === void 0 || value === "") {
     throw new Error(`Fragment is missing "${key}": ${file}`);
   }
   return value;
 }
-function readFragment(file) {
+function readFragment(file, source) {
   const { meta, sections } = parse(fs.readFileSync(file, "utf8"));
-  const kind = require2(meta, "kind", file);
+  const kind = requireMeta(meta, "kind", file);
   if (kind !== "impl" && kind !== "readonly") {
     throw new Error(`Fragment "kind" must be impl or readonly: ${file}`);
   }
   return {
-    id: require2(meta, "id", file),
-    label: require2(meta, "label", file),
-    description: require2(meta, "description", file),
-    tools: require2(meta, "tools", file).split(",").map((tool) => tool.trim()),
+    id: requireMeta(meta, "id", file),
+    label: requireMeta(meta, "label", file),
+    description: requireMeta(meta, "description", file),
+    tools: requireMeta(meta, "tools", file).split(",").map((tool) => tool.trim()),
     kind,
+    source,
     sections
   };
 }
@@ -73,18 +74,19 @@ function appendSections(base, extra) {
 }
 function loadFragments(dirs, vendor) {
   const fragments = /* @__PURE__ */ new Map();
-  for (const dir of dirs) {
+  for (const [index, dir] of dirs.entries()) {
+    const source = index === 0 ? "plugin" : "project";
     if (!fs.existsSync(dir)) continue;
     const files = fs.readdirSync(dir).filter((name) => name.endsWith(".md") && !name.startsWith("_")).sort((left, right) => left.localeCompare(right));
     for (const name of files) {
       if (name.split(".").length > 2) continue;
-      const fragment = readFragment(path.join(dir, name));
+      const fragment = readFragment(path.join(dir, name), source);
       fragments.set(fragment.id, fragment);
     }
   }
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;
-    for (const name of fs.readdirSync(dir).sort()) {
+    for (const name of fs.readdirSync(dir).sort((left, right) => left.localeCompare(right))) {
       if (!name.endsWith(`.${vendor}.md`)) continue;
       const { meta, sections } = parse(
         fs.readFileSync(path.join(dir, name), "utf8")
@@ -176,14 +178,21 @@ var AGENT_CAPABLE = [
   "normal-impl",
   "general"
 ];
+function roleOrder(id) {
+  const index = ROLES.findIndex((role) => role.id === id);
+  return index === -1 ? ROLES.length : index;
+}
 function sortRoleIds(ids) {
-  const order = new Map(ROLES.map((role, index) => [role.id, index]));
   return [...ids].sort(
-    (left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0)
+    (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
   );
 }
 function allowsAgentTool(ids) {
   return ids.some((id) => AGENT_CAPABLE.includes(id));
+}
+function hasMixedKinds(kinds) {
+  const unique2 = new Set(kinds);
+  return unique2.has("impl") && unique2.has("readonly");
 }
 
 // src/agents/compose.ts
@@ -198,14 +207,8 @@ var BODY_ORDER = [
   "## \u4F5C\u696D\u624B\u9806"
 ];
 function compose(input) {
-  const fragments = loadFragments(input.fragmentDirs, input.vendor);
   const common = loadCommon(input.fragmentDirs);
-  const ordered = sortRoleIds(input.roleIds);
-  const selected = ordered.map((id) => {
-    const fragment = fragments.get(id);
-    if (fragment === void 0) throw new Error(`Unknown role id: ${id}`);
-    return fragment;
-  });
+  const { ids: ordered, selected } = selectFragments(input);
   const withAgent = allowsAgentTool(input.roleIds);
   const tools = resolveToolsFor(selected, withAgent);
   const head = [
@@ -213,7 +216,7 @@ function compose(input) {
     `name: ${input.name}`,
     `description: ${describe(selected)}`,
     `model: ${input.model}`,
-    `color: ${COLORS[input.vendor]}`,
+    `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     `agent-policy-role: ${ordered.join(", ")}`,
     "---",
@@ -252,6 +255,28 @@ function compose(input) {
   return `${[...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
 `;
 }
+function describeRoles(input) {
+  const { ids, selected } = selectFragments(input);
+  const implRoles = selected.filter((fragment) => fragment.kind === "impl").map((fragment) => fragment.id);
+  const readonlyRoles = selected.filter((fragment) => fragment.kind === "readonly").map((fragment) => fragment.id);
+  return {
+    ids,
+    implRoles,
+    readonlyRoles,
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
+    agentTool: allowsAgentTool(input.roleIds)
+  };
+}
+function selectFragments(input) {
+  const fragments = loadFragments(input.fragmentDirs, input.vendor);
+  const ids = sortRoleIds(input.roleIds);
+  const selected = ids.map((id) => {
+    const fragment = fragments.get(id);
+    if (fragment === void 0) throw new Error(`Unknown role id: ${id}`);
+    return fragment;
+  });
+  return { ids, selected };
+}
 function resolveToolsFor(selected, withAgent) {
   const tools = [];
   for (const fragment of selected) {
@@ -276,21 +301,25 @@ function preamble(common, name, selected) {
 // src/setup-agents.ts
 function parseDocument(content) {
   const lines = content.split("\n");
-  const close = lines.indexOf("---", 1);
+  const startsWithFrontmatter = lines[0]?.trim() === "---";
+  const close = startsWithFrontmatter ? lines.indexOf("---", 1) : -1;
+  const hasFrontmatter = startsWithFrontmatter && close !== -1;
   const meta = /* @__PURE__ */ new Map();
   const order = [];
-  for (const line of lines.slice(1, close)) {
-    const at = line.indexOf(": ");
-    if (at <= 0) continue;
-    const key = line.slice(0, at);
-    meta.set(key, line.slice(at + 2));
-    order.push(key);
+  if (hasFrontmatter) {
+    for (const line of lines.slice(1, close)) {
+      const at = line.indexOf(": ");
+      if (at <= 0) continue;
+      const key = line.slice(0, at);
+      meta.set(key, line.slice(at + 2));
+      order.push(key);
+    }
   }
   const preamble2 = [];
   const sections = /* @__PURE__ */ new Map();
   let heading;
   let buffer = [];
-  for (const line of lines.slice(close + 1)) {
+  for (const line of lines.slice(hasFrontmatter ? close + 1 : 0)) {
     if (line.startsWith("## ")) {
       if (heading !== void 0) sections.set(heading, buffer.join("\n").trim());
       heading = line.trim();
@@ -319,23 +348,26 @@ function fragmentDirs(projectDir) {
     path2.join(projectDir, ".claude", "agent-policy", "roles")
   ];
 }
-function template(options) {
-  return compose({
+function composeInput(options) {
+  return {
     name: options.name,
     model: options.model,
     vendor: options.vendor,
     roleIds: options.roles,
     fragmentDirs: fragmentDirs(options.dir)
-  });
+  };
+}
+function template(options) {
+  return compose(composeInput(options));
 }
 function targetPath(options) {
   return path2.join(options.dir, ".claude", "agents", `${options.name}.md`);
 }
-function diff(options) {
-  const rendered = template(options);
+function compare(options, rendered, existingRaw) {
   const file = targetPath(options);
   const relative = path2.relative(options.dir, file).split(path2.sep).join("/");
-  if (!fs2.existsSync(file)) {
+  const roles = describeRoles(composeInput(options));
+  if (existingRaw === void 0) {
     return {
       ok: true,
       target: relative,
@@ -352,10 +384,10 @@ function diff(options) {
         sectionsOnlyInExisting: [],
         sectionsOnlyInTemplate: [],
         sectionsChanged: []
-      }
+      },
+      roles
     };
   }
-  const existingRaw = fs2.readFileSync(file, "utf8");
   const existing = parseDocument(existingRaw);
   const expected = parseDocument(rendered);
   const existingTools = splitTools(existing.meta.get("tools"));
@@ -398,8 +430,15 @@ function diff(options) {
         [...existing.sections.keys()]
       ),
       sectionsChanged
-    }
+    },
+    roles
   };
+}
+function diff(options) {
+  const rendered = template(options);
+  const file = targetPath(options);
+  const existingRaw = fs2.existsSync(file) ? fs2.readFileSync(file, "utf8") : void 0;
+  return compare(options, rendered, existingRaw);
 }
 function parseKeep(selectors) {
   const keep = {
@@ -487,20 +526,75 @@ function merge(existingRaw, renderedRaw, keep) {
   }
   return render(merged);
 }
+function automaticKeep(difference) {
+  return [
+    ...difference.frontmatter.toolsOnlyInExisting.map(
+      (tool) => `tools:${tool}`
+    ),
+    ...difference.frontmatter.keysOnlyInExisting.map((key) => `key:${key}`),
+    ...difference.body.sectionsOnlyInExisting.map(
+      (heading) => `section:${heading}`
+    )
+  ];
+}
+function unique(selectors) {
+  return [...new Set(selectors)];
+}
+function discarded(difference, keep) {
+  if (!difference.exists) {
+    return { frontmatterKeys: [], preamble: false, sections: [] };
+  }
+  return {
+    frontmatterKeys: difference.frontmatter.changed.map((entry) => entry.key).filter((key) => !keep.keys.has(key)),
+    preamble: difference.preambleChanged && !keep.preamble,
+    sections: difference.body.sectionsChanged.filter(
+      (heading) => !keep.sections.has(heading)
+    )
+  };
+}
+function needsReview(selectors) {
+  return selectors.filter(
+    (selector) => selector.startsWith("tools:mcp__") || selector === "section:## \u30C4\u30FC\u30EB\u904B\u7528"
+  );
+}
 function write(options) {
   const file = targetPath(options);
   const rendered = template(options);
-  const keep = parseKeep(options.keep);
   const exists = fs2.existsSync(file);
-  const content = exists && options.keep.length > 0 ? merge(fs2.readFileSync(file, "utf8"), rendered, keep) : rendered;
+  const existingRaw = exists ? fs2.readFileSync(file, "utf8") : void 0;
+  const difference = compare(options, rendered, existingRaw);
+  const selectors = unique([
+    ...exists && options.merge ? automaticKeep(difference) : [],
+    ...options.keep
+  ]);
+  const keep = parseKeep(selectors);
+  const shouldMerge = existingRaw !== void 0 && (options.merge || options.keep.length > 0);
+  const content = shouldMerge ? merge(existingRaw, rendered, keep) : rendered;
+  const kept = shouldMerge ? selectors : [];
   fs2.mkdirSync(path2.dirname(file), { recursive: true });
   fs2.writeFileSync(file, content);
   return {
     ok: true,
     target: path2.relative(options.dir, file).split(path2.sep).join("/"),
-    action: exists ? "overwritten" : "written",
-    kept: options.keep
+    action: exists ? options.merge ? "merged" : "overwritten" : "written",
+    kept,
+    keptNeedsReview: needsReview(kept),
+    discarded: discarded(difference, shouldMerge ? keep : parseKeep([]))
   };
+}
+function listAvailableRoles(options) {
+  const roles = [
+    ...loadFragments(fragmentDirs(options.dir), options.vendor).values()
+  ].sort(
+    (left, right) => roleOrder(left.id) - roleOrder(right.id) || left.id.localeCompare(right.id)
+  ).map(({ id, label, kind, tools, source }) => ({
+    id,
+    label,
+    kind,
+    tools,
+    source
+  }));
+  return { ok: true, roles };
 }
 function parseArgs(argv) {
   const options = {
@@ -511,6 +605,8 @@ function parseArgs(argv) {
     dir: process.cwd(),
     check: false,
     write: false,
+    merge: false,
+    listRoles: false,
     keep: []
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -533,7 +629,11 @@ function parseArgs(argv) {
         index += 1;
         break;
       case "--roles":
-        options.roles = requireValue(value, "roles").split(",").map((role) => role.trim()).filter((role) => role !== "");
+        options.roles = [
+          ...new Set(
+            requireValue(value, "roles").split(",").map((role) => role.trim()).filter((role) => role !== "")
+          )
+        ];
         index += 1;
         break;
       case "--dir":
@@ -546,6 +646,12 @@ function parseArgs(argv) {
       case "--write":
         options.write = true;
         break;
+      case "--merge":
+        options.merge = true;
+        break;
+      case "--list-roles":
+        options.listRoles = true;
+        break;
       case "--keep":
         options.keep.push(requireValue(value, "keep"));
         index += 1;
@@ -554,9 +660,15 @@ function parseArgs(argv) {
         throw new Error(`Unsupported option: ${arg}`);
     }
   }
+  if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
+    throw new Error("name: must be lowercase letters, digits and hyphens");
+  }
+  if (options.listRoles) return options;
   if (options.name === "") throw new Error("name: is required");
   if (options.model === "") throw new Error("model: is required");
   if (options.roles.length === 0) throw new Error("roles: is required");
+  if (options.merge && !options.write)
+    throw new Error("merge: requires --write");
   return options;
 }
 function requireValue(value, field) {
@@ -571,7 +683,9 @@ function respond(value) {
 }
 try {
   const options = parseArgs(process.argv.slice(2));
-  if (options.write) {
+  if (options.listRoles) {
+    respond(listAvailableRoles(options));
+  } else if (options.write) {
     respond(write(options));
   } else {
     respond(diff(options));

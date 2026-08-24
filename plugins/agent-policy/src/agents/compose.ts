@@ -4,7 +4,12 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import { allowsAgentTool, type RoleId, sortRoleIds } from "./roles"
+import {
+  allowsAgentTool,
+  hasMixedKinds,
+  type RoleId,
+  sortRoleIds
+} from "./roles"
 
 export interface ComposeInput {
   name: string
@@ -12,6 +17,15 @@ export interface ComposeInput {
   vendor: Vendor
   roleIds: RoleId[]
   fragmentDirs: string[]
+  color?: string
+}
+
+export interface RolesSummary {
+  ids: string[]
+  implRoles: string[]
+  readonlyRoles: string[]
+  mixedKinds: boolean
+  agentTool: boolean
 }
 
 const COLORS: Record<Vendor, string> = {
@@ -27,16 +41,8 @@ const BODY_ORDER = [
 ] as const
 
 export function compose(input: ComposeInput): string {
-  const fragments = loadFragments(input.fragmentDirs, input.vendor)
   const common = loadCommon(input.fragmentDirs)
-  const ordered = sortRoleIds(input.roleIds)
-
-  const selected: Fragment[] = ordered.map((id) => {
-    const fragment = fragments.get(id)
-    if (fragment === undefined) throw new Error(`Unknown role id: ${id}`)
-    return fragment
-  })
-
+  const { ids: ordered, selected } = selectFragments(input)
   const withAgent = allowsAgentTool(input.roleIds)
   const tools = resolveToolsFor(selected, withAgent)
 
@@ -45,7 +51,7 @@ export function compose(input: ComposeInput): string {
     `name: ${input.name}`,
     `description: ${describe(selected)}`,
     `model: ${input.model}`,
-    `color: ${COLORS[input.vendor]}`,
+    `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     `agent-policy-role: ${ordered.join(", ")}`,
     "---",
@@ -91,6 +97,38 @@ export function compose(input: ComposeInput): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd()}\n`
+}
+
+export function describeRoles(input: ComposeInput): RolesSummary {
+  const { ids, selected } = selectFragments(input)
+  const implRoles = selected
+    .filter((fragment) => fragment.kind === "impl")
+    .map((fragment) => fragment.id)
+  const readonlyRoles = selected
+    .filter((fragment) => fragment.kind === "readonly")
+    .map((fragment) => fragment.id)
+
+  return {
+    ids,
+    implRoles,
+    readonlyRoles,
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
+    agentTool: allowsAgentTool(input.roleIds)
+  }
+}
+
+function selectFragments(input: ComposeInput): {
+  ids: RoleId[]
+  selected: Fragment[]
+} {
+  const fragments = loadFragments(input.fragmentDirs, input.vendor)
+  const ids = sortRoleIds(input.roleIds)
+  const selected = ids.map((id) => {
+    const fragment = fragments.get(id)
+    if (fragment === undefined) throw new Error(`Unknown role id: ${id}`)
+    return fragment
+  })
+  return { ids, selected }
 }
 
 // プロジェクト側の置き換えを tools にも反映するため、解決後の断片から組み立てる。

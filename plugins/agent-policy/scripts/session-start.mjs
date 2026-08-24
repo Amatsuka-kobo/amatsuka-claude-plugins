@@ -10,12 +10,14 @@ var PRESETS = [
     name: "gpt-sol",
     vendor: "gpt",
     defaultAlias: "claude-gpt-5-6-sol",
+    color: "yellow",
     roleIds: ["complex-impl"]
   },
   {
     name: "gpt-terra",
     vendor: "gpt",
     defaultAlias: "claude-gpt-5-6-terra",
+    color: "green",
     roleIds: [
       "normal-impl",
       "general",
@@ -28,12 +30,14 @@ var PRESETS = [
     name: "gpt-luna",
     vendor: "gpt",
     defaultAlias: "claude-gpt-5-6-luna",
+    color: "cyan",
     roleIds: ["light-impl"]
   },
   {
     name: "grok",
     vendor: "grok",
     defaultAlias: "claude-grok-4-6",
+    color: "red",
     roleIds: [
       "normal-impl",
       "light-impl",
@@ -114,6 +118,15 @@ var ROLES = [
 function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
+function roleOrder(id) {
+  const index = ROLES.findIndex((role) => role.id === id);
+  return index === -1 ? ROLES.length : index;
+}
+function sortRoleIds(ids) {
+  return [...ids].sort(
+    (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
+  );
+}
 
 // src/hooks/session-start.ts
 var POLICIES = {
@@ -128,6 +141,7 @@ var RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ];
+var LABELS = /* @__PURE__ */ new Map();
 var ALIASES = [
   {
     preset: "gpt-sol",
@@ -198,10 +212,18 @@ function scan(dir) {
   return found;
 }
 function labelOf(env, id) {
+  const cached = LABELS.get(id);
+  if (cached !== void 0 || LABELS.has(id)) return cached;
   const known = roleById(id);
-  if (known !== void 0) return known.label;
+  if (known !== void 0) {
+    LABELS.set(id, known.label);
+    return known.label;
+  }
   const projectDir = env.CLAUDE_PROJECT_DIR;
-  if (projectDir === void 0 || projectDir === "") return void 0;
+  if (projectDir === void 0 || projectDir === "") {
+    LABELS.set(id, void 0);
+    return void 0;
+  }
   const file = path.join(
     projectDir,
     ".claude",
@@ -209,9 +231,17 @@ function labelOf(env, id) {
     "roles",
     `${id}.md`
   );
-  if (!fs.existsSync(file)) return void 0;
-  const label = frontmatter(file).get("label");
-  return label === "" ? void 0 : label;
+  try {
+    if (fs.existsSync(file)) {
+      const label = frontmatter(file).get("label");
+      const resolved = label === "" ? void 0 : label;
+      LABELS.set(id, resolved);
+      return resolved;
+    }
+  } catch {
+  }
+  LABELS.set(id, void 0);
+  return void 0;
 }
 function markerBlock(env, marked) {
   const byRole = /* @__PURE__ */ new Map();
@@ -225,8 +255,11 @@ function markerBlock(env, marked) {
   const lines = [
     "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5E2F\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5E2F\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002"
   ];
-  for (const [role, names] of byRole) {
-    lines.push(`- ${labelOf(env, role)}: ${names.join(" / ")}`);
+  for (const role of sortRoleIds([...byRole.keys()])) {
+    const names = byRole.get(role);
+    if (names !== void 0) {
+      lines.push(`- ${labelOf(env, role)}: ${names.join(" / ")}`);
+    }
   }
   return lines.join("\n");
 }
@@ -252,14 +285,36 @@ function setupBlock(env, marked) {
     const alias = env[spec.variable]?.trim();
     if (alias === void 0 || alias === "") continue;
     if (alias === DEFAULT_ALIASES[spec.preset]) continue;
-    const existing = byName.get(spec.preset);
-    if (existing === void 0) {
-      lines.push(`- ${spec.preset}: \u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`);
+    const preset = PRESETS.find((entry) => entry.name === spec.preset);
+    const named = byName.get(spec.preset);
+    if (named?.model === alias) continue;
+    if (preset === void 0) {
+      if (named === void 0) {
+        lines.push(`- ${spec.preset}: \u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`);
+      } else {
+        lines.push(
+          `- ${spec.preset}: \u5B9A\u7FA9\u306E model \u304C "${named.model ?? "\u672A\u8A2D\u5B9A"}" \u3067\u3001${spec.variable} \u306E "${alias}" \u3068\u98DF\u3044\u9055\u3046\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
+        );
+      }
       continue;
     }
-    if (existing.model !== alias) {
+    const withAlias = marked.filter((entry) => entry.model === alias);
+    const covered = new Set(withAlias.flatMap((entry) => entry.roles));
+    const missing = preset.roleIds.filter((role) => !covered.has(role));
+    if (missing.length === 0) continue;
+    if (withAlias.length === 0) {
+      if (named === void 0) {
+        lines.push(
+          `- ${spec.preset}: ${spec.variable} \u306E "${alias}" \u3092 model \u306B\u6301\u3064\u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
+        );
+      } else {
+        lines.push(
+          `- ${spec.preset}: \u5B9A\u7FA9\u306E model \u304C "${named.model ?? "\u672A\u8A2D\u5B9A"}" \u3067\u3001${spec.variable} \u306E "${alias}" \u3068\u98DF\u3044\u9055\u3046\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
+        );
+      }
+    } else {
       lines.push(
-        `- ${spec.preset}: \u5B9A\u7FA9\u306E model \u304C "${existing.model}" \u3067\u3001${spec.variable} \u306E "${alias}" \u3068\u98DF\u3044\u9055\u3046\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
+        `- ${spec.preset}: ${withAlias.map((entry) => entry.name).join(" / ")} \u304C "${alias}" \u3092\u4F7F\u3063\u3066\u3044\u308B\u304C\u3001${missing.join(", ")} \u3092\u5BA3\u8A00\u3059\u308B\u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
       );
     }
   }
@@ -269,10 +324,19 @@ function setupBlock(env, marked) {
     ...lines
   ].join("\n");
 }
-function retiredBlock(marked) {
+function retiredBlock(env, marked) {
   const found = marked.map((entry) => entry.name).filter((name) => RETIRED.includes(name));
   if (found.length === 0) return void 0;
-  return `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`;
+  const lines = [
+    `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`
+  ];
+  const grokAlias = env.AMATSUKA_AGENT_GROK_ALIAS?.trim();
+  if (found.some((name) => name.startsWith("grok-")) && (grokAlias === void 0 || grokAlias === "")) {
+    lines.push(
+      "Grok \u306E\u65E2\u5B9A\u30A8\u30A4\u30EA\u30A2\u30B9\u306F `claude-grok-4-6` \u3078\u5909\u308F\u3063\u305F\u3002\u30D7\u30ED\u30AD\u30B7\u8A2D\u5B9A\u306B\u3053\u306E\u5225\u540D\u304C\u7121\u3044\u5834\u5408\u3001\u59D4\u8B72\u6642\u306B `unknown provider for model` \u3067\u5931\u6557\u3059\u308B\u30024.5 \u3092\u4F7F\u3044\u7D9A\u3051\u308B\u306A\u3089 `AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` \u3092\u8A2D\u5B9A\u3059\u308B\u3002"
+    );
+  }
+  return lines.join("\n");
 }
 function build(env) {
   let marked = [];
@@ -285,7 +349,7 @@ function build(env) {
     markerBlock(env, marked),
     unknownRoleBlock(env, marked),
     setupBlock(env, marked),
-    retiredBlock(marked)
+    retiredBlock(env, marked)
   ].filter((block) => block !== void 0);
   if (blocks.length === 0) return void 0;
   return blocks.join("\n\n");

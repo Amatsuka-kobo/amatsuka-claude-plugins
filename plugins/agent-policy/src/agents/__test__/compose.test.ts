@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { compose } from "../compose"
+import { compose, describeRoles } from "../compose"
 import { ROLES } from "../roles"
 
 const PLUGIN_ROLES = fileURLToPath(
@@ -72,6 +72,12 @@ describe("frontmatter", () => {
     ).toBe("blue")
   })
 
+  it("指定された color をベンダー既定より優先する", () => {
+    expect(frontmatter(build(["normal-impl"], { color: "green" })).color).toBe(
+      "green"
+    )
+  })
+
   it("役割マーカーを ROLES の定義順で並べる", () => {
     const meta = frontmatter(build(["explore", "complex-impl"]))
     expect(meta["agent-policy-role"]).toBe("complex-impl, explore")
@@ -89,6 +95,46 @@ describe("frontmatter", () => {
     expect(frontmatter(build(["light-impl", "complex-impl"])).tools).toContain(
       "Agent"
     )
+  })
+})
+
+describe("describeRoles", () => {
+  it("断片の kind でプロジェクト固有役割も分類する", () => {
+    const projectRoles = path.join(temporary, "roles")
+    fs.mkdirSync(projectRoles, { recursive: true })
+    fs.writeFileSync(
+      path.join(projectRoles, "triage.md"),
+      [
+        "---",
+        "id: triage",
+        "label: 障害の切り分け",
+        "description: 障害の切り分け",
+        "tools: Read, Grep, Glob, Bash",
+        "kind: readonly",
+        "---",
+        "",
+        "## When to invoke",
+        "",
+        "- **切り分け。** 障害の原因を切り分けるとき。",
+        ""
+      ].join("\n")
+    )
+
+    const summary = describeRoles({
+      name: "x",
+      model: "m",
+      vendor: "gpt",
+      roleIds: ["triage", "normal-impl"] as never,
+      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+    })
+
+    expect(summary).toEqual({
+      ids: ["normal-impl", "triage"],
+      implRoles: ["normal-impl"],
+      readonlyRoles: ["triage"],
+      mixedKinds: true,
+      agentTool: true
+    })
   })
 })
 

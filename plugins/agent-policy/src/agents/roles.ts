@@ -95,10 +95,15 @@ export function roleById(id: string): Role | undefined {
   return ROLES.find((role) => role.id === id)
 }
 
-export function sortRoleIds(ids: RoleId[]): RoleId[] {
-  const order = new Map(ROLES.map((role, index) => [role.id, index]))
+export function roleOrder(id: string): number {
+  const index = ROLES.findIndex((role) => role.id === id)
+  return index === -1 ? ROLES.length : index
+}
+
+export function sortRoleIds<T extends string>(ids: T[]): T[] {
   return [...ids].sort(
-    (left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0)
+    (left, right) =>
+      roleOrder(left) - roleOrder(right) || left.localeCompare(right)
   )
 }
 
@@ -106,9 +111,9 @@ export function allowsAgentTool(ids: RoleId[]): boolean {
   return ids.some((id) => AGENT_CAPABLE.includes(id))
 }
 
-export function hasMixedKinds(ids: RoleId[]): boolean {
-  const kinds = new Set(ids.map((id) => roleById(id)?.kind))
-  return kinds.has("impl") && kinds.has("readonly")
+export function hasMixedKinds(kinds: RoleKind[]): boolean {
+  const unique = new Set(kinds)
+  return unique.has("impl") && unique.has("readonly")
 }
 
 // tools の並びは ROLES の定義順に現れた順とし、Agent を末尾へ置く。
