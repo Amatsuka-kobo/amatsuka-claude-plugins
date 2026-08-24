@@ -1,10 +1,10 @@
 ---
 name: setup-grok
-description: codex-grok-policy / with-grok-policy 運用方針で使う GPT エージェント定義を、役割を選んでプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「GPT エージェントをセットアップして」「agent-policy の setup」等と明示的に依頼したとき、または SessionStart フックがエイリアス不一致を通知したときに必ず使用する。既存定義がある場合は差分を提示し、テンプレートに存在し得ない情報を残すかどうかを確認する。Codex 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
+description: codex-grok-policy / with-grok-policy 運用方針で使う Grok エージェント定義を、役割を選んでプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「Grok エージェントをセットアップして」「setup-grok を実行して」等と明示的に依頼したとき、または SessionStart フックがエイリアス不一致を通知したときに必ず使用する。既存定義がある場合は差分を提示し、テンプレートに存在し得ない情報を残すかどうかを確認する。Grok 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" *), AskUserQuestion
 ---
 
-# GPT エージェント セットアップウィザード
+# Grok エージェント セットアップウィザード
 
 生成するのは Markdown の Agent 定義ファイルのみであり、プロキシや秘密値は一切管理しない。
 
@@ -70,6 +70,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name grok 
 
 - `claude-grok-4-6`
 
+「これはモデル本体の ID ではなく、任意の ProxyAPI サーバーが配信するクライアント側の別名です。お使いのプロキシ設定に合わせて変更できます」と補足する。加えて次を必ず添える。
+
 > 既定エイリアスは Grok 4.6 に合わせた `claude-grok-4-6` です。プロキシ設定にこの別名がまだ無い場合は、プロキシ側へ追加するか、4.5 を使い続けるなら `claude-grok-4-5` を指定してください。
 
 ### ステップ 6: 既存確認と差分提示
@@ -131,3 +133,4 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name <name
 - 読み取り専用の作業(独立レビュー・探索実働)を tools レベルで担保したい場合は、読み取り役割だけを選んだ定義を別に作れることを案内する。
 - CLAUDE.md への追記文例を提示する。自動では書き込まない。
   > - GPT 定義があれば最初に必ず `agent-policy:codex-grok-policy` スキルを使用し、無ければ `agent-policy:with-grok-policy` スキルを使用して、この規律に従う。
+- GPT も併用するなら `agent-policy:setup-gpt` の実行を案内し、その場合の方針名は `agent-policy:codex-grok-policy` になることを添える。
