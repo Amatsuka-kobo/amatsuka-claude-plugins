@@ -29,9 +29,8 @@ ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で
 ### 7 つの規則
 
 1. **作業前に ARCHITECTURE を読む。GOTCHAS の該当エントリを確認する**
-   すべてのフェーズ(init〜finalize)の作業開始前に、ARCHITECTURE の技術スタック・
-   ドメインマップ・コマンド定義・テスト方針のうち存在する節を確認し、これから触るファイル・
-   フェーズに関連する GOTCHAS のエントリを確認してから着手する。
+   すべてのフェーズ(init〜finalize)の作業開始前に、ARCHITECTURE のドメインマップを確認し、
+   これから触るファイル・フェーズに関連する GOTCHAS のエントリを確認してから着手する。
 2. **失敗したら recording-gotchas の基準に従い GOTCHAS に追記する**
    Raguel の STOP、test-loop/fix-loop のループ上限超過、`record_outcome(incident)`、
    レビューで発覚した設計漏れのいずれかが起きたら、`recording-gotchas` スキルの書式・基準に
@@ -45,9 +44,9 @@ ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で
    前回 PROCEED だったから等の理由で省略しない。ASK が出たら人間の裁定を待ち、STOP が出たら
    run を停止して原因を記録する(2. を参照)。
 5. **ARCHITECTURE が現実と乖離したら更新する(乖離の放置は GOTCHAS 行き)**
-   実装の過程でディレクトリ構成・ドメインマップ・コマンド定義・テスト方針が ARCHITECTURE の
-   記述と食い違っていることに気づいたら、その場で ARCHITECTURE を更新する。更新せず気づかない
-   ふりをして進めた場合、後で発覚した際に GOTCHAS へ記録される対象になる。
+   実装の過程でドメインマップが ARCHITECTURE の記述と食い違っていることに気づいたら、その場で
+   ARCHITECTURE を更新する。更新せず気づかないふりをして進めた場合、後で発覚した際に GOTCHAS へ
+   記録される対象になる。
 6. **テスト仕様書(`.codiel/specs/`)は機能の一部。機能を変えたら仕様書とケースも更新する**
    `.codiel/specs/<unit-id>/spec.md` と `cases.md` は使い捨て成果物ではなく、プロダクトコードと
    同格の永続資産である。振る舞いを変える変更を行ったら、対応する unit の spec.md を更新し、
