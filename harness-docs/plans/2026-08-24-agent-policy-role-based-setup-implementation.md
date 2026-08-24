@@ -3436,7 +3436,10 @@ Run:
 ```bash
 grep -rn "claude-grok-4-5" plugins/agent-policy/ .claude-plugin/ README.md
 ```
-Expected: `plugins/agent-policy/README.md` の移行手順にある「4.5 を使い続けるなら」の記述だけが出る
+Expected: 次の 2 箇所だけが出る。どちらも意図した記述であり、削除しない。
+
+- `plugins/agent-policy/README.md` の移行手順にある「4.5 を使い続けるなら」
+- `plugins/agent-policy/skills/setup-grok/SKILL.md` のステップ 5 にある同趣旨の案内(setup を実行した利用者へその場で伝える必要がある)
 
 - [ ] **Step 8: コミット**
 
