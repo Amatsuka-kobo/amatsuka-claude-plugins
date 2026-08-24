@@ -83,6 +83,8 @@ function cliLines(cli: string): string[] {
     '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
     "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
     "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+    "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
+    "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
     "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
     "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
   ]
@@ -93,7 +95,7 @@ function buildGuide(cli: string): string {
   return [
     GUIDE_TITLE,
     "",
-    "これらの文書は metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
+    "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
     ...cliLines(cli)
   ].join("\n")
 }
@@ -106,7 +108,8 @@ function buildInitGuide(cli: string): string {
     GUIDE_TITLE,
     "",
     "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**",
-    "作成後はこれらの文書が metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
+    "init は `.claude/rules/metatron/` の 3 ファイル(規約・保護パス・テスト方針)も併せて作る。",
+    "作成後はこれらが metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
     ...cliLines(cli)
   ].join("\n")
 }
