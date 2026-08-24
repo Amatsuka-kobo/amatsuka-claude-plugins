@@ -114,6 +114,11 @@ function untouchedBytes(text: string, heading: string): string {
   )
 }
 
+/** 指定した見出しのセクション全文(見出し行を含む原文)。節の削除の検証に使う。 */
+function sectionRaw(text: string, heading: string): string | undefined {
+  return findSection(parseArchitecture(text), heading)?.raw
+}
+
 function headings(text: string): string[] {
   return parseArchitecture(text).sections.map((s) => s.heading)
 }
@@ -859,5 +864,141 @@ test("A24: 移行した 3 節へ body を書こうとすると unknown_heading�
     expect(result.error, heading).toBe("unknown_heading")
     expect(result.message, heading).toContain(file)
     expect(result.message, heading).toContain("stage-rules")
+  }
+})
+
+// ---------------------------------------------------------------------------
+// 節の削除(設計書 §6-2)
+// ---------------------------------------------------------------------------
+
+// SEVEN_SECTIONS の末尾へ、移行対象の 3 節を組み直したフィクスチャ。
+const WITH_MOVED = doc(
+  SEVEN_SECTIONS.replace(/\n$/, ""),
+  "",
+  "## テスト方針",
+  "",
+  "- ユニットテストは vitest で書く。",
+  "",
+  "## 保護パス",
+  "",
+  "- `dist/` を手で編集しない。",
+  "",
+  "## 規約",
+  "",
+  "- ブランチを切らない。",
+  ""
+)
+
+test("A20: remove: true で既存セクションが消え、他のセクションはバイト単位で不変", () => {
+  const result = prepareArchitectureUpdate(WITH_MOVED, [
+    { heading: "規約", remove: true }
+  ])
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.applied).toStrictEqual([{ heading: "規約", mode: "removed" }])
+  expect(headings(result.text)).not.toContain("規約")
+  // 残ったセクションはそれぞれバイト単位で不変。
+  for (const heading of headings(result.text)) {
+    expect(sectionRaw(result.text, heading), heading).toBe(
+      sectionRaw(WITH_MOVED, heading)
+    )
+  }
+})
+
+test("A21: 存在しないセクションの remove は section_not_found で拒否する", () => {
+  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+    { heading: "規約", remove: true }
+  ])
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("section_not_found")
+})
+
+test("A22: body と remove の同時指定は invalid_input で拒否する", () => {
+  const result = prepareArchitectureUpdate(WITH_MOVED, [
+    { heading: "規約", body: "本文", remove: true }
+  ])
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("invalid_input")
+})
+
+test("A23: 許可リストに無い見出しでも remove できる(移行の要)", () => {
+  expect([...ARCHITECTURE_HEADINGS]).not.toContain("規約")
+  expect(
+    prepareArchitectureUpdate(WITH_MOVED, [{ heading: "規約", remove: true }])
+      .ok
+  ).toBe(true)
+})
+
+test("A26: remove: true でも ADR 一覧 は adr_heading で拒否する", () => {
+  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+    { heading: "ADR 一覧", remove: true }
+  ])
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("adr_heading")
+})
+
+test("A27: 3 節をまとめて 1 回の remove で消せる(移行の実形)", () => {
+  const result = prepareArchitectureUpdate(WITH_MOVED, [
+    { heading: "テスト方針", remove: true },
+    { heading: "保護パス", remove: true },
+    { heading: "規約", remove: true }
+  ])
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.applied.map((a) => a.mode)).toStrictEqual([
+    "removed",
+    "removed",
+    "removed"
+  ])
+  expect(headings(result.text)).toStrictEqual(headings(SEVEN_SECTIONS))
+  // 残った 7 節の中身はバイト単位で不変。
+  // (末尾の 3 節を消したため、節を隔てていた区切りの空行 1 行だけが直前の節の
+  //  末尾に残る。節の追加が境界へ空行を 1 行入れるのと対称の挙動である。)
+  const trimTrailingBlank = (text: string | undefined): string =>
+    (text ?? "").replace(/(\r?\n)+$/, "\n")
+  for (const heading of headings(result.text)) {
+    expect(trimTrailingBlank(sectionRaw(result.text, heading)), heading).toBe(
+      trimTrailingBlank(sectionRaw(SEVEN_SECTIONS, heading))
+    )
+  }
+})
+
+test("A28: 末尾のセクションを remove しても末尾の改行が壊れない", () => {
+  const result = prepareArchitectureUpdate(WITH_MOVED, [
+    { heading: "規約", remove: true }
+  ])
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.text.endsWith("\n")).toBe(true)
+  expect(result.text.endsWith("\n\n\n")).toBe(false)
+})
+
+test("A29: フェンス内に ## を持つ節の隣を remove しても巻き込まない", () => {
+  const result = prepareArchitectureUpdate(WITH_MOVED, [
+    { heading: "技術スタック", remove: true }
+  ])
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(headings(result.text)).toContain("システム概要")
+  expect(result.text).toContain("A[## これは見出しではない] --> B")
+  expect(sectionRaw(result.text, "システム概要")).toBe(
+    sectionRaw(WITH_MOVED, "システム概要")
+  )
+})
+
+test("A30: remove に true 以外の値を渡すと invalid_input で拒否する", () => {
+  for (const bad of [false, "true", 1]) {
+    const result = prepareArchitectureUpdate(WITH_MOVED, [
+      { heading: "規約", remove: bad } as unknown as {
+        heading: string
+        remove?: boolean
+      }
+    ])
+    expect(result.ok, String(bad)).toBe(false)
+    if (result.ok) continue
+    expect(result.error, String(bad)).toBe("invalid_input")
   }
 })

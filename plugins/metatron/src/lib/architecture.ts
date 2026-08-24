@@ -363,17 +363,21 @@ export type HeadingKeyError =
   | "unknown_heading"
 
 export type HeadingKeyValidation =
-  | { ok: true; heading: ArchitectureHeading }
+  // `allowUnlisted`(削除)のときは許可リストに無い見出しも通るため string とする。
+  | { ok: true; heading: string }
   | { ok: false; error: HeadingKeyError; message: string }
 
 /**
- * `heading` キーの検証。契約 §4-1 の 10 キー以外はエラー。
+ * `heading` キーの検証。契約 §4-1 の 7 キー以外はエラー。
  *
  * - `ADR 一覧` は専用のエラーにし、`stage-adr` へ誘導する。
  *   丸ごと差し替えを許すと採番・状態の値域・状態変更履歴の追記を迂回できるため。
  * - `overview` 疑似キーは廃止済み。
  */
-export function validateHeadingKey(heading: unknown): HeadingKeyValidation {
+export function validateHeadingKey(
+  heading: unknown,
+  options: { allowUnlisted?: boolean } = {}
+): HeadingKeyValidation {
   if (typeof heading !== "string" || heading.trim() === "") {
     return {
       ok: false,
@@ -399,6 +403,9 @@ export function validateHeadingKey(heading: unknown): HeadingKeyValidation {
         "`overview` 疑似キーは廃止しました。冒頭の概要は `システム概要` セクションに書いてください。"
     }
   }
+  // 削除は許可リストを参照しない(設計書 §6-2・§9-1)。内容を書くわけではないので、
+  // 許可リストに載っている必要がない。移行時に 3 節を消せるのはこのためである。
+  if (options.allowUnlisted === true) return { ok: true, heading: value }
   const movedTo = MOVED_HEADINGS[value as keyof typeof MOVED_HEADINGS]
   if (movedTo !== undefined) {
     return {
@@ -633,12 +640,15 @@ export function extractDomains(text: string): DomainsResult {
 
 export interface SectionChange {
   heading: string
-  body: string
+  /** 差し替える本文。`remove: true` のときは指定しない。 */
+  body?: string
+  /** 節ごと削除する。`body` との同時指定は拒否する(設計書 §6-2)。 */
+  remove?: boolean
 }
 
 export interface AppliedChange {
   heading: string
-  mode: "replaced" | "added"
+  mode: "replaced" | "added" | "removed"
 }
 
 export type ArchitectureUpdateError =
@@ -648,6 +658,8 @@ export type ArchitectureUpdateError =
   | "duplicate_heading"
   | "invalid_body"
   | "invalid_domains"
+  | "invalid_input"
+  | "section_not_found"
 
 export type ArchitectureUpdate =
   | {
@@ -715,7 +727,7 @@ function createArchitecture(changes: SectionChange[], eol: string): string {
   )
   let out = `${ARCHITECTURE_TITLE}${eol}${eol}`
   for (const change of ordered) {
-    out += buildSectionText(change.heading, change.body, eol, true)
+    out += buildSectionText(change.heading, change.body ?? "", eol, true)
   }
   return out.replace(/(\r?\n)+$/, eol)
 }
@@ -746,12 +758,14 @@ export function applySectionChanges(
   if (text.trim() === "") {
     return {
       ok: true,
-      text: createArchitecture(changes, eol),
+      text: createArchitecture(
+        changes.filter((c) => c.remove !== true),
+        eol
+      ),
       created: true,
-      applied: changes.map((c) => ({
-        heading: c.heading,
-        mode: "added" as const
-      })),
+      applied: changes
+        .filter((c) => c.remove !== true)
+        .map((c) => ({ heading: c.heading, mode: "added" as const })),
       warnings
     }
   }
@@ -776,8 +790,22 @@ export function applySectionChanges(
   for (const change of changes) {
     const order = canonicalIndex(change.heading)
     const section = findSection(doc, change.heading)
+    if (change.remove === true) {
+      // 存在しない節は prepareArchitectureUpdate 側で section_not_found として弾く。
+      if (!section) continue
+      // endLine(contentEndLine ではない)まで消す。contentEndLine で切ると
+      // 節の間の空行が残り、空行が二重になる。
+      ops.push({
+        start: section.startLine,
+        end: section.endLine,
+        text: "",
+        order
+      })
+      applied.push({ heading: change.heading, mode: "removed" })
+      continue
+    }
     if (section) {
-      const body = normalizeBody(change.body, eol)
+      const body = normalizeBody(change.body ?? "", eol)
       ops.push({
         start: section.startLine + 1,
         end: section.contentEndLine,
@@ -792,7 +820,7 @@ export function applySectionChanges(
       ops.push({
         start: anchor,
         end: anchor,
-        text: buildSectionText(change.heading, change.body, eol, true),
+        text: buildSectionText(change.heading, change.body ?? "", eol, true),
         order
       })
     } else {
@@ -804,7 +832,8 @@ export function applySectionChanges(
         start: lines.length,
         end: lines.length,
         text:
-          prefix + buildSectionText(change.heading, change.body, eol, false),
+          prefix +
+          buildSectionText(change.heading, change.body ?? "", eol, false),
         order
       })
     }
@@ -844,7 +873,20 @@ export function prepareArchitectureUpdate(
   const normalizedChanges: SectionChange[] = []
   const seen = new Set<string>()
   for (const change of changes) {
-    const validated = validateHeadingKey(change?.heading)
+    const remove = change?.remove
+    if (remove !== undefined && remove !== true) {
+      return {
+        ok: false,
+        error: "invalid_input",
+        message:
+          "remove は true のときだけ指定できます。false や true 以外の値は受け付けません。",
+        warnings
+      }
+    }
+    const isRemove = remove === true
+    const validated = validateHeadingKey(change?.heading, {
+      allowUnlisted: isRemove
+    })
     if (!validated.ok) {
       return {
         ok: false,
@@ -862,6 +904,18 @@ export function prepareArchitectureUpdate(
       }
     }
     seen.add(validated.heading)
+    if (isRemove) {
+      if (change?.body !== undefined) {
+        return {
+          ok: false,
+          error: "invalid_input",
+          message: `「${validated.heading}」に remove と body を同時に指定できません。削除なら body を書かないでください。`,
+          warnings
+        }
+      }
+      normalizedChanges.push({ heading: validated.heading, remove: true })
+      continue
+    }
     if (typeof change?.body !== "string") {
       return {
         ok: false,
@@ -873,12 +927,37 @@ export function prepareArchitectureUpdate(
     normalizedChanges.push({ heading: validated.heading, body: change.body })
   }
 
+  // 削除は「対象ファイルに当該セクションが存在するか」で検証する(設計書 §6-2)。
+  // 何も起きなかったことを成功として返さない。
+  const removals = normalizedChanges.filter((c) => c.remove === true)
+  if (removals.length > 0) {
+    const parsed = parseArchitectureForWrite(current ?? "")
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        error: parsed.error,
+        message: parsed.message,
+        warnings: [...warnings, ...parsed.warnings]
+      }
+    }
+    for (const removal of removals) {
+      if (findSection(parsed.doc, removal.heading) === undefined) {
+        return {
+          ok: false,
+          error: "section_not_found",
+          message: `「${removal.heading}」は ARCHITECTURE に存在しません。削除できるのは存在する節だけです。`,
+          warnings
+        }
+      }
+    }
+  }
+
   // 契約 §1: ドメインマップを含む場合は 4 項目を検証し、失敗なら書き込まない。
   const domainsChange = normalizedChanges.find(
-    (c) => c.heading === DOMAINS_HEADING
+    (c) => c.heading === DOMAINS_HEADING && c.remove !== true
   )
   if (domainsChange) {
-    const lookup = findDomainsBlock(domainsChange.body)
+    const lookup = findDomainsBlock(domainsChange.body ?? "")
     if (!lookup.block) {
       // 「ブロックが無い」は契約 §1 の 4 項目に含まれないため拒否しない。
       warnings.push(

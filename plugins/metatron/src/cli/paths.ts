@@ -35,9 +35,10 @@ export function commandLine(args: string): string {
  */
 export const INPUT_SCHEMAS = {
   "stage-architecture": {
-    input: "{ sections: [{ heading, body }], reason? }",
+    input:
+      "{ sections: [{ heading, body } | { heading, remove: true }], reason? }",
     headings: [...ARCHITECTURE_HEADINGS],
-    note: "`ADR 一覧` は指定できません。ADR の追加・状態変更は stage-adr を使ってください。"
+    note: "`ADR 一覧` は指定できません。ADR の追加・状態変更は stage-adr を使ってください。remove: true の削除は見出し許可リストの制限を受けません(body との同時指定は拒否)。"
   },
   "stage-adr": {
     add: '{ mode: "add", title, status?, decidedOn?, decidedBy, background, options: [...], conclusion, rationale, impact }',
