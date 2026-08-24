@@ -35,7 +35,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 - [ ] 0. **前提チェック**(下記)。満たさなければここで終了する
 - [ ] 1. **outcome 自動同期**を行う(`raguel-gating` の「outcome の自動同期」節。起動時に 1 回のみ)
 - [ ] 2. **run を解決する**: `codiel-state get --issue N` → 未完了 try があれば `state.phase` から再開。
-      なければベースブランチを解決(ARCHITECTURE の「規約」節 → なければ main)→
+      なければベースブランチを解決(コンテキストに宣言があればそれ → なければ main)→
       `git switch <ベース> && git pull --ff-only` → `codiel-state init --issue N --base-branch <ベース>` →
       `git switch -c <state.branch>`(詳細は「1. run の解決」参照)
 - [ ] 3. 現在フェーズから、フェーズ進行表の定型(start-phase → ディスパッチ → 成果物検証 → raguel-gating
@@ -93,8 +93,8 @@ node <plugin-root>/scripts/codiel-state.mjs get --issue N
   ここで停止しない。
 - run が存在しない、または既存 run が終端状態なら、**init の前に**次の手順でベースブランチを
   解決してから新しい try を作る:
-  1. §0 で解決した ARCHITECTURE の「規約」節(ブランチ/PR 規約)からベースブランチ名を読む。
-     ファイルが無い・節が無い・記載がない場合は `main` を既定値とする。
+  1. ベースブランチ名は、コンテキストにブランチ規約の宣言があればそれに従う。
+     宣言が無ければ `main` を既定値とする。
   2. `git switch <ベースブランチ>` した上で `git pull --ff-only` を実行し、ベースブランチを
      最新化する。`pull --ff-only` が失敗した場合(ネットワーク不通・fast-forward 不可な競合など)は、
      **その旨を人間に確認してから続行する**(黙って force する・スキップするなどの自己判断は禁止)。

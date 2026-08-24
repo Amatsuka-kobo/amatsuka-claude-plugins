@@ -70,7 +70,7 @@ node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ resolveDocPaths }) => c
 ### 最小 ARCHITECTURE の生成
 
 1. AskUserQuestion で**ドメイン分割だけ**を聞く。書き込みを許すパスの glob をドメインごとに尋ねる。
-   技術スタック・ディレクトリ構成・コマンド定義・テスト方針・規約は聞かない。
+   ドメイン分割以外は聞かない。
 2. 回答から下の形の**全文**を組み立てる。
 3. 全文を提示して**改めて承認を得てから**書き込む。回答したこと自体を承認とみなさない。
 
@@ -108,11 +108,9 @@ bash <plugin-root>/scripts/install-harness.sh
 
 ## 3. `raguel.config.yaml` の生成
 
-保護パスの入力は 1 回にする。
+保護パスの正本は `raguel.config.yaml` である。他のファイルの記述と突き合わせない。
 
-- ARCHITECTURE に `## 保護パス` 節が**ある**場合 → その glob を読み取り、内容を提示して
-  承認を得たうえで生成する。インタビューで聞き直さない。
-- **無い**場合 → AskUserQuestion で「触ってはいけない/特に慎重を要するパスの glob」を聞く。
+- AskUserQuestion で「触ってはいけない/特に慎重を要するパスの glob」を 1 回だけ聞く。
 - 形式は同梱の `raguel.config.example.yaml` に準拠する(生成前に必ず Read する)。
 - Raguel の設定は内蔵デフォルトへの**差分オーバーレイ**(deep merge)なので、
   `rules."code/protected-paths".globs` だけを書いた最小ファイルを生成する。
@@ -147,8 +145,8 @@ node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomainsResult }) =>
 (`<plugin-root>` は絶対パスに展開して実行する)
 
 - `WARN:` 行が出たら、`OK:` が返っていても内容を手順 6 の完了報告に出す。
-- ARCHITECTURE に `## 保護パス` 節がある場合は、その節と `raguel.config.yaml` の
-  `rules."code/protected-paths".globs` を両方 Read し、glob の集合が一致していることを確認する。
+- `raguel.config.yaml` の `rules."code/protected-paths".globs` を Read し、手順 3 で承認された
+  glob がそのまま入っていることを確認する。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 
 ## 6. 完了報告
@@ -165,8 +163,8 @@ node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ readDomainsResult }) =>
 ## 修復の例外
 
 既存 ARCHITECTURE の ` ```json metatron:domains ` ブロックが読めない(JSON 不正等で
-`readDomains` が読めない)場合、および既存 `raguel.config.yaml` が YAML として読めない・
-保護パスが ARCHITECTURE と不整合な場合に限り、問題箇所と修正案を提示して
+`readDomains` が読めない)場合、および既存 `raguel.config.yaml` が YAML として
+読めない場合に限り、問題箇所と修正案を提示して
 **ユーザーの明示承認を得た上で**、該当ブロック・該当キーのみを置換する。
 それ以外の既存記述は不改変のまま維持する。
 

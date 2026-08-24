@@ -22,7 +22,7 @@ tools: Read, Grep, Glob, Bash, mcp__context7, mcp__github__pull_request_read, mc
 - design.md が定めた設計と実装が一致することを確認する。
 - 未達(design.md にある方針・機能単位が実装に反映されていない)と逸脱(design.md にない設計判断が実装に混入している)を、reviewing-diffs の両方向チェックで確認する。
 - spec.md / cases.md の記述と実装の振る舞いが食い違わないことを確認する。
-- ARCHITECTURE のドメインマップ、規約、コマンド定義と実装が乖離していないことを確認する。
+- ARCHITECTURE のドメインマップと実装が乖離していないことを確認する。
 - README、API ドキュメント、ARCHITECTURE など、今回の変更で更新すべきドキュメントの更新漏れを確認する。
 - design.md が discussion.md の「状態: 決定」の論点と整合することを確認する。
 - 合意が黙って覆されているときは severity: high で指摘する。
