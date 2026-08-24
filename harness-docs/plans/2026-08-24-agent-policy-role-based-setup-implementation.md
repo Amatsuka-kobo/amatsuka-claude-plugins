@@ -1766,7 +1766,31 @@ afterEach(() => {
   fs.rmSync(project, { recursive: true, force: true })
 })
 
-function run(args: string[]): Record<string, never> {
+// CLI が stdout へ書く JSON。実行時にはエラー系で一部フィールドが欠けるが、
+// 各テストは自分が検証するフィールドしか触らないため非 optional で受ける。
+interface CheckResult {
+  ok: boolean
+  error: string
+  target: string
+  exists: boolean
+  identical: boolean
+  preambleChanged: boolean
+  frontmatter: {
+    changed: { key: string; existing: string; template: string }[]
+    toolsOnlyInExisting: string[]
+    toolsOnlyInTemplate: string[]
+    keysOnlyInExisting: string[]
+  }
+  body: {
+    sectionsOnlyInExisting: string[]
+    sectionsOnlyInTemplate: string[]
+    sectionsChanged: string[]
+  }
+  action: string
+  kept: string[]
+}
+
+function run(args: string[]): CheckResult {
   let output: string
   try {
     output = runTs(CLI, args, {
@@ -1779,10 +1803,10 @@ function run(args: string[]): Record<string, never> {
     if (stdout === undefined || stdout === "") throw error
     output = stdout
   }
-  return JSON.parse(output.trim().split("\n").at(-1) ?? "{}")
+  return JSON.parse(output.trim().split("\n").at(-1) ?? "{}") as CheckResult
 }
 
-function check(extra: string[] = []): Record<string, never> {
+function check(extra: string[] = []): CheckResult {
   return run([
     "--vendor", "gpt",
     "--name", "gpt-sol",
@@ -1830,13 +1854,9 @@ describe("--check", () => {
 
   it("値の違う共通キーを changed に出す", () => {
     seed({ model: "my-own-alias" })
-    const result = check()
-    const changed = result.frontmatter.changed as unknown as {
-      key: string
-      existing: string
-      template: string
-    }[]
-    const entry = changed.find((item) => item.key === "model")
+    const entry = check().frontmatter.changed.find(
+      (item) => item.key === "model"
+    )
     expect(entry?.existing).toBe("my-own-alias")
     expect(entry?.template).toBe("claude-gpt-5-6-sol")
   })
