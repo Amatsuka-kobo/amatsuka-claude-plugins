@@ -1,9 +1,14 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { compose } from "./agents/compose"
-import type { Vendor } from "./agents/fragments"
-import type { RoleId } from "./agents/roles"
+import {
+  type ComposeInput,
+  compose,
+  describeRoles,
+  type RolesSummary
+} from "./agents/compose"
+import { loadFragments, type Vendor } from "./agents/fragments"
+import { type RoleId, roleOrder } from "./agents/roles"
 
 interface Options {
   vendor: Vendor
@@ -13,6 +18,8 @@ interface Options {
   dir: string
   check: boolean
   write: boolean
+  merge: boolean
+  listRoles: boolean
   keep: string[]
 }
 
@@ -33,6 +40,7 @@ interface Diff {
     sectionsOnlyInTemplate: string[]
     sectionsChanged: string[]
   }
+  roles: RolesSummary
 }
 
 interface Document {
@@ -42,18 +50,28 @@ interface Document {
   sections: Map<string, string>
 }
 
+interface Discarded {
+  frontmatterKeys: string[]
+  preamble: boolean
+  sections: string[]
+}
+
 function parseDocument(content: string): Document {
   const lines = content.split("\n")
-  const close = lines.indexOf("---", 1)
+  const startsWithFrontmatter = lines[0]?.trim() === "---"
+  const close = startsWithFrontmatter ? lines.indexOf("---", 1) : -1
+  const hasFrontmatter = startsWithFrontmatter && close !== -1
   const meta = new Map<string, string>()
   const order: string[] = []
 
-  for (const line of lines.slice(1, close)) {
-    const at = line.indexOf(": ")
-    if (at <= 0) continue
-    const key = line.slice(0, at)
-    meta.set(key, line.slice(at + 2))
-    order.push(key)
+  if (hasFrontmatter) {
+    for (const line of lines.slice(1, close)) {
+      const at = line.indexOf(": ")
+      if (at <= 0) continue
+      const key = line.slice(0, at)
+      meta.set(key, line.slice(at + 2))
+      order.push(key)
+    }
   }
 
   const preamble: string[] = []
@@ -61,7 +79,7 @@ function parseDocument(content: string): Document {
   let heading: string | undefined
   let buffer: string[] = []
 
-  for (const line of lines.slice(close + 1)) {
+  for (const line of lines.slice(hasFrontmatter ? close + 1 : 0)) {
     if (line.startsWith("## ")) {
       if (heading !== undefined) sections.set(heading, buffer.join("\n").trim())
       heading = line.trim()
@@ -102,26 +120,34 @@ function fragmentDirs(projectDir: string): string[] {
   ]
 }
 
-function template(options: Options): string {
-  return compose({
+function composeInput(options: Options): ComposeInput {
+  return {
     name: options.name,
     model: options.model,
     vendor: options.vendor,
     roleIds: options.roles,
     fragmentDirs: fragmentDirs(options.dir)
-  })
+  }
+}
+
+function template(options: Options): string {
+  return compose(composeInput(options))
 }
 
 function targetPath(options: Options): string {
   return path.join(options.dir, ".claude", "agents", `${options.name}.md`)
 }
 
-function diff(options: Options): Diff {
-  const rendered = template(options)
+function compare(
+  options: Options,
+  rendered: string,
+  existingRaw: string | undefined
+): Diff {
   const file = targetPath(options)
   const relative = path.relative(options.dir, file).split(path.sep).join("/")
+  const roles = describeRoles(composeInput(options))
 
-  if (!fs.existsSync(file)) {
+  if (existingRaw === undefined) {
     return {
       ok: true,
       target: relative,
@@ -138,11 +164,11 @@ function diff(options: Options): Diff {
         sectionsOnlyInExisting: [],
         sectionsOnlyInTemplate: [],
         sectionsChanged: []
-      }
+      },
+      roles
     }
   }
 
-  const existingRaw = fs.readFileSync(file, "utf8")
   const existing = parseDocument(existingRaw)
   const expected = parseDocument(rendered)
 
@@ -189,8 +215,18 @@ function diff(options: Options): Diff {
         [...existing.sections.keys()]
       ),
       sectionsChanged
-    }
+    },
+    roles
   }
+}
+
+function diff(options: Options): Diff {
+  const rendered = template(options)
+  const file = targetPath(options)
+  const existingRaw = fs.existsSync(file)
+    ? fs.readFileSync(file, "utf8")
+    : undefined
+  return compare(options, rendered, existingRaw)
 }
 
 interface Keep {
@@ -302,16 +338,61 @@ function merge(existingRaw: string, renderedRaw: string, keep: Keep): string {
   return render(merged)
 }
 
+function automaticKeep(difference: Diff): string[] {
+  return [
+    ...difference.frontmatter.toolsOnlyInExisting.map(
+      (tool) => `tools:${tool}`
+    ),
+    ...difference.frontmatter.keysOnlyInExisting.map((key) => `key:${key}`),
+    ...difference.body.sectionsOnlyInExisting.map(
+      (heading) => `section:${heading}`
+    )
+  ]
+}
+
+function unique(selectors: string[]): string[] {
+  return [...new Set(selectors)]
+}
+
+function discarded(difference: Diff, keep: Keep): Discarded {
+  if (!difference.exists) {
+    return { frontmatterKeys: [], preamble: false, sections: [] }
+  }
+
+  return {
+    frontmatterKeys: difference.frontmatter.changed
+      .map((entry) => entry.key)
+      .filter((key) => !keep.keys.has(key)),
+    preamble: difference.preambleChanged && !keep.preamble,
+    sections: difference.body.sectionsChanged.filter(
+      (heading) => !keep.sections.has(heading)
+    )
+  }
+}
+
+function needsReview(selectors: string[]): string[] {
+  return selectors.filter(
+    (selector) =>
+      selector.startsWith("tools:mcp__") || selector === "section:## ツール運用"
+  )
+}
+
 function write(options: Options): unknown {
   const file = targetPath(options)
   const rendered = template(options)
-  const keep = parseKeep(options.keep)
   const exists = fs.existsSync(file)
-
-  const content =
-    exists && options.keep.length > 0
-      ? merge(fs.readFileSync(file, "utf8"), rendered, keep)
-      : rendered
+  // 既存内容はここで一度だけ読み、自動 keep の抽出と merge の双方へ渡す。
+  const existingRaw = exists ? fs.readFileSync(file, "utf8") : undefined
+  const difference = compare(options, rendered, existingRaw)
+  const selectors = unique([
+    ...(exists && options.merge ? automaticKeep(difference) : []),
+    ...options.keep
+  ])
+  const keep = parseKeep(selectors)
+  const shouldMerge =
+    existingRaw !== undefined && (options.merge || options.keep.length > 0)
+  const content = shouldMerge ? merge(existingRaw, rendered, keep) : rendered
+  const kept = shouldMerge ? selectors : []
 
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, content)
@@ -319,9 +400,31 @@ function write(options: Options): unknown {
   return {
     ok: true,
     target: path.relative(options.dir, file).split(path.sep).join("/"),
-    action: exists ? "overwritten" : "written",
-    kept: options.keep
+    action: exists ? (options.merge ? "merged" : "overwritten") : "written",
+    kept,
+    keptNeedsReview: needsReview(kept),
+    discarded: discarded(difference, shouldMerge ? keep : parseKeep([]))
   }
+}
+
+function listAvailableRoles(options: Options): unknown {
+  const roles = [
+    ...loadFragments(fragmentDirs(options.dir), options.vendor).values()
+  ]
+    .sort(
+      (left, right) =>
+        roleOrder(left.id) - roleOrder(right.id) ||
+        left.id.localeCompare(right.id)
+    )
+    .map(({ id, label, kind, tools, source }) => ({
+      id,
+      label,
+      kind,
+      tools,
+      source
+    }))
+
+  return { ok: true, roles }
 }
 
 function parseArgs(argv: string[]): Options {
@@ -333,6 +436,8 @@ function parseArgs(argv: string[]): Options {
     dir: process.cwd(),
     check: false,
     write: false,
+    merge: false,
+    listRoles: false,
     keep: []
   }
 
@@ -356,10 +461,14 @@ function parseArgs(argv: string[]): Options {
         index += 1
         break
       case "--roles":
-        options.roles = requireValue(value, "roles")
-          .split(",")
-          .map((role) => role.trim())
-          .filter((role) => role !== "") as RoleId[]
+        options.roles = [
+          ...new Set(
+            requireValue(value, "roles")
+              .split(",")
+              .map((role) => role.trim())
+              .filter((role) => role !== "")
+          )
+        ] as RoleId[]
         index += 1
         break
       case "--dir":
@@ -372,6 +481,12 @@ function parseArgs(argv: string[]): Options {
       case "--write":
         options.write = true
         break
+      case "--merge":
+        options.merge = true
+        break
+      case "--list-roles":
+        options.listRoles = true
+        break
       case "--keep":
         options.keep.push(requireValue(value, "keep"))
         index += 1
@@ -381,9 +496,15 @@ function parseArgs(argv: string[]): Options {
     }
   }
 
+  if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
+    throw new Error("name: must be lowercase letters, digits and hyphens")
+  }
+  if (options.listRoles) return options
   if (options.name === "") throw new Error("name: is required")
   if (options.model === "") throw new Error("model: is required")
   if (options.roles.length === 0) throw new Error("roles: is required")
+  if (options.merge && !options.write)
+    throw new Error("merge: requires --write")
   return options
 }
 
@@ -400,7 +521,9 @@ function respond(value: unknown): void {
 
 try {
   const options = parseArgs(process.argv.slice(2))
-  if (options.write) {
+  if (options.listRoles) {
+    respond(listAvailableRoles(options))
+  } else if (options.write) {
     respond(write(options))
   } else {
     respond(diff(options))

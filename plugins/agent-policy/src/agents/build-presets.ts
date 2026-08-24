@@ -16,8 +16,17 @@ export function buildPresets(pluginRoot: string): void {
       model: preset.defaultAlias,
       vendor: preset.vendor,
       roleIds: preset.roleIds,
-      fragmentDirs: [roles]
+      fragmentDirs: [roles],
+      color: preset.color
     })
     fs.writeFileSync(path.join(outDir, `${preset.name}.md`), document)
+  }
+
+  const generated = new Set(PRESETS.map((preset) => `${preset.name}.md`))
+  for (const name of fs.readdirSync(outDir)) {
+    if (name.endsWith(".md") && !generated.has(name)) {
+      const file = path.join(outDir, name)
+      if (fs.statSync(file).isFile()) fs.unlinkSync(file)
+    }
   }
 }

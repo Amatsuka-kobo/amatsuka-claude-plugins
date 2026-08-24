@@ -10,6 +10,7 @@ export interface Fragment {
   description: string
   tools: string[]
   kind: RoleKind
+  source: "plugin" | "project"
   sections: Map<string, string[]>
 }
 
@@ -57,7 +58,7 @@ function trim(lines: string[]): string[] {
   return lines.slice(start, end)
 }
 
-function require(
+function requireMeta(
   meta: Record<string, string>,
   key: string,
   file: string
@@ -69,20 +70,21 @@ function require(
   return value
 }
 
-function readFragment(file: string): Fragment {
+function readFragment(file: string, source: Fragment["source"]): Fragment {
   const { meta, sections } = parse(fs.readFileSync(file, "utf8"))
-  const kind = require(meta, "kind", file)
+  const kind = requireMeta(meta, "kind", file)
   if (kind !== "impl" && kind !== "readonly") {
     throw new Error(`Fragment "kind" must be impl or readonly: ${file}`)
   }
   return {
-    id: require(meta, "id", file),
-    label: require(meta, "label", file),
-    description: require(meta, "description", file),
-    tools: require(meta, "tools", file)
+    id: requireMeta(meta, "id", file),
+    label: requireMeta(meta, "label", file),
+    description: requireMeta(meta, "description", file),
+    tools: requireMeta(meta, "tools", file)
       .split(",")
       .map((tool) => tool.trim()),
     kind,
+    source,
     sections
   }
 }
@@ -98,13 +100,15 @@ function appendSections(base: Fragment, extra: Map<string, string[]>): void {
 }
 
 // dirs は探索順。後の要素が同じ役割 ID を持つとき、その断片で置き換える。
+// 先頭はプラグイン同梱、それ以外はプロジェクト側の断片ディレクトリとして扱う。
 export function loadFragments(
   dirs: string[],
   vendor: Vendor
 ): Map<string, Fragment> {
   const fragments = new Map<string, Fragment>()
 
-  for (const dir of dirs) {
+  for (const [index, dir] of dirs.entries()) {
+    const source: Fragment["source"] = index === 0 ? "plugin" : "project"
     if (!fs.existsSync(dir)) continue
     const files = fs
       .readdirSync(dir)
@@ -114,7 +118,7 @@ export function loadFragments(
     for (const name of files) {
       // <id>.<vendor>.md はベンダー別断片。ここでは読み飛ばす。
       if (name.split(".").length > 2) continue
-      const fragment = readFragment(path.join(dir, name))
+      const fragment = readFragment(path.join(dir, name), source)
       fragments.set(fragment.id, fragment)
     }
   }
@@ -122,7 +126,9 @@ export function loadFragments(
   // ベンダー別断片は、置き換え後の断片へ追記する。
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue
-    for (const name of fs.readdirSync(dir).sort()) {
+    for (const name of fs
+      .readdirSync(dir)
+      .sort((left, right) => left.localeCompare(right))) {
       if (!name.endsWith(`.${vendor}.md`)) continue
       const { meta, sections } = parse(
         fs.readFileSync(path.join(dir, name), "utf8")

@@ -30,6 +30,17 @@ describe("PRESETS", () => {
       expect(preset.defaultAlias).toBe(DEFAULT_ALIASES[preset.name])
     }
   })
+
+  it("プリセットごとの color を定義する", () => {
+    expect(
+      Object.fromEntries(PRESETS.map((preset) => [preset.name, preset.color]))
+    ).toEqual({
+      "gpt-sol": "yellow",
+      "gpt-terra": "green",
+      "gpt-luna": "cyan",
+      grok: "red"
+    })
+  })
 })
 
 describe("担当表との一致", () => {
@@ -62,10 +73,12 @@ describe("合成結果", () => {
         model: preset.defaultAlias,
         vendor: preset.vendor,
         roleIds: preset.roleIds,
-        fragmentDirs: [PLUGIN_ROLES]
+        fragmentDirs: [PLUGIN_ROLES],
+        color: preset.color
       })
       expect(document).toContain(`name: ${preset.name}`)
       expect(document).toContain(`model: ${preset.defaultAlias}`)
+      expect(document).toContain(`color: ${preset.color}`)
       expect(document).not.toContain("mcp__")
       expect(document).not.toContain("## ツール運用")
     }

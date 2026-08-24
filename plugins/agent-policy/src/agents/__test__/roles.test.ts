@@ -5,6 +5,7 @@ import {
   ROLES,
   resolveTools,
   roleById,
+  roleOrder,
   sortRoleIds
 } from "../roles"
 
@@ -48,6 +49,17 @@ describe("roleById", () => {
   })
 })
 
+describe("roleOrder", () => {
+  it("組み込み役割には ROLES の添字を返す", () => {
+    expect(roleOrder("complex-impl")).toBe(0)
+    expect(roleOrder("advisor")).toBe(ROLES.length - 1)
+  })
+
+  it("未知の ID には ROLES.length を返す", () => {
+    expect(roleOrder("project-role")).toBe(ROLES.length)
+  })
+})
+
 describe("sortRoleIds", () => {
   it("ROLES の定義順に並べ替える", () => {
     expect(sortRoleIds(["explore", "complex-impl", "light-impl"])).toEqual([
@@ -55,6 +67,12 @@ describe("sortRoleIds", () => {
       "light-impl",
       "explore"
     ])
+  })
+
+  it("未知の ID を末尾へ ID 順で並べる", () => {
+    expect(
+      sortRoleIds(["z-project", "explore", "a-project", "complex-impl"])
+    ).toEqual(["complex-impl", "explore", "a-project", "z-project"])
   })
 })
 
@@ -111,12 +129,12 @@ describe("allowsAgentTool", () => {
 })
 
 describe("hasMixedKinds", () => {
-  it("実装役割と読み取り役割の混在を検出する", () => {
-    expect(hasMixedKinds(["normal-impl", "independent-review"])).toBe(true)
+  it("実装種別と読み取り種別の混在を検出する", () => {
+    expect(hasMixedKinds(["impl", "readonly"])).toBe(true)
   })
 
   it("同じ種別だけなら false", () => {
-    expect(hasMixedKinds(["normal-impl", "light-impl"])).toBe(false)
-    expect(hasMixedKinds(["explore", "doc-review"])).toBe(false)
+    expect(hasMixedKinds(["impl", "impl"])).toBe(false)
+    expect(hasMixedKinds(["readonly", "readonly"])).toBe(false)
   })
 })

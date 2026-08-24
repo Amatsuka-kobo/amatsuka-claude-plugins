@@ -2,11 +2,14 @@
 name: setup-grok
 description: codex-grok-policy / with-grok-policy 運用方針で使う Grok エージェント定義を、役割を選んでプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「Grok エージェントをセットアップして」「setup-grok を実行して」等と明示的に依頼したとき、または SessionStart フックがエイリアス不一致を通知したときに必ず使用する。既存定義がある場合は差分を提示し、テンプレートに存在し得ない情報を残すかどうかを確認する。Grok 系モデルをローカルプロキシ経由で使える環境が前提。明示的な依頼があったときのみ使い、自律的には発動しない。
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" *), AskUserQuestion
+disallowed-tools: Write, Edit
 ---
 
 # Grok エージェント セットアップウィザード
 
 生成するのは Markdown の Agent 定義ファイルのみであり、プロキシや秘密値は一切管理しない。
+
+`.claude/agents/` のファイルは `Write` / `Edit` で直接編集せず、必ず下記のスクリプトで書き込む。差分の確認も生成も、このスクリプトが行う。
 
 ## 非対話モード
 
@@ -15,10 +18,13 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" *), As
 既定プリセットを既定エイリアスで生成する。次を 1 回実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name grok --model claude-grok-4-6 --roles normal-impl,light-impl,general,explore,realtime-research,independent-review --write
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name grok --model claude-grok-4-6 --roles normal-impl,light-impl,general,explore,realtime-research,independent-review --write --merge
 ```
 
-`ok: true` のときは `target` と `action` を報告して終了する。`ok: false` のときは `error` をそのまま報告して終了する。
+- `ok: true` のときは `target`、`action`、`kept` を報告して終了する。
+- `discarded` が空でなければ、上書きした項目を列挙して報告する。
+- `keptNeedsReview` が空でなければ列挙し、「旧版の同梱定義に含まれていた項目である。意図して足したものでなければ削除を検討する」と添えて報告する。
+- `ok: false` のときは `error` をそのまま報告して終了する。
 
 ## 対話モードの手順
 
@@ -35,26 +41,25 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name grok 
 
 ### ステップ 2: 役割の選択
 
-`AskUserQuestion` の複数選択で、作る定義が担う役割を選ばせる。選択肢は次の順で提示する。
+次を実行して、選べる役割の一覧を得る。
 
-- `complex-impl` — 複雑または重要な実装
-- `normal-impl` — 通常の実装
-- `light-impl` — 軽量な実装
-- `general` — その他のタスク
-- `explore` — コードベース探索実働
-- `realtime-research` — リアルタイム情報調査
-- `independent-review` — 設計書・実装計画書の独立レビュー
-- `doc-review` — 設計書・実装計画書のレビュー
-- `code-review` — コードレビュー
-- `advisor` — 設計・計画・実装のアドバイザー
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-roles
+```
 
-プロジェクトに `.claude/agent-policy/roles/*.md` があるときは、その `id` と `label` も選択肢へ加える。
+返った `roles` を `AskUserQuestion` の複数選択の選択肢にし、作る定義が担う役割を選ばせる。
 
-選択数の上限は設けない。1 回のウィザードで作るのは 1 定義である。複数の定義が要るときは、ユーザーに繰り返し実行するか尋ねる。
+- 選択肢は `roles` の配列順のまま並べる。
+- 各選択肢のラベルは `id` にする。
+- 各選択肢の説明は `label` にする。
+- `source` が `project` のものには、プロジェクト固有の役割である旨を添える。
+- 選択数の上限は設けない。
+- 1 回のウィザードで作るのは 1 定義である。
+- 複数の定義が要るときは、ユーザーに繰り返し実行するか尋ねる。
 
 ### ステップ 3: 読み取り専用性の確認
 
-読み取り役割(`explore` / `realtime-research` / `independent-review` / `doc-review` / `code-review` / `advisor`)と実装役割(`complex-impl` / `normal-impl` / `light-impl` / `general`)の両方が選ばれたときは、次を伝えて続行するか確認する。既定は「続行しない」とする。
+ステップ 2 で得た `kind` を見る。選ばれた役割に `readonly` と `impl` の両方が含まれるときは、次を伝えて続行するか確認する。既定は「続行しない」とする。
 
 > 選んだ役割に読み取り専用の役割と実装役割が混在しています。生成される定義には Write / Edit が付くため、読み取り専用の担保は依頼文の制約に委ねられます。読み取り専用の定義が必要なら、読み取り役割だけを選んだ定義を別に作れます。
 
@@ -109,23 +114,26 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name <name
 
 > 節の中身の一部改変は節単位でしか検出できません。既存の節へ 1 行足しただけの変更は、その節の保持を選ばない限り消えます。見出しに属さないテキストの追記と本文中の HTML コメントも検出できません。
 
+`--check` の `roles.mixedKinds` が `true` で、ステップ 3 の確認を経ていないときは、書き込む前にステップ 3 へ戻る。
+
 ### ステップ 7: 生成
 
-選択を `--keep` へ変換して実行する。
+選んだ方針に応じて、次のコマンド指定を使う。
 
-- 既存にしかない tools → `--keep tools:<name>`
-- 既存にしかないキー → `--keep key:<name>`
-- 既存にしかない節・保持する節 → `--keep section:<heading>`
-- 冒頭宣言 → `--keep preamble`
-- 値の違う共通キーを残す → `--keep key:<name>`
-
-`--keep section:` の値は、`--check` が返した `sectionsOnlyInExisting` / `sectionsChanged` の文字列をそのまま渡す(`## ` を含む)。一致しない値を渡すとエラーになり、ファイルは書き換えられない。
+| 選択 | コマンド |
+| --- | --- |
+| 保持マージ(推奨) | `--write --merge` |
+| 項目を選んで保持 | `--write --merge` に、残す項目ごとの `--keep key:<name>` / `--keep section:<heading>` / `--keep preamble` を足す |
+| 完全上書き | `--write` |
+| スキップ | 実行しない |
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name <name> --model <alias> --roles <roles> --write [--keep ...]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name <name> --model <alias> --roles <roles> --write [--merge] [--keep ...]
 ```
 
-「完全上書き」を選ばれたときは `--keep` を 1 つも渡さない。
+- `action` と `kept` を報告する。
+- `discarded` が空でなければ、「テンプレート側で上書きした項目」として列挙して報告する。
+- `keptNeedsReview` が空でなければ列挙し、「旧版の同梱定義に含まれていた項目である。意図して足したものでなければ削除を検討する」と添えて報告する。
 
 ### ステップ 8: 後処理案内
 

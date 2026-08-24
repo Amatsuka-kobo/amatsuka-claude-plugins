@@ -2,7 +2,7 @@
 name: gpt-terra
 description: Use this agent when 通常のコーディング(複雑でない実装)、設定編集、ビルド/テスト実行、ドキュメント作成、定型メンテナンスなど、レビュー・設計を除く一般作業、オーケストレーターが統括するコードベース探索の実働、最新動向・リリース情報・外部エコシステムなど、外部の最新情報を要する調査、設計書・実装計画書の前提検証と反証提示を委譲するとき。詳細は本文の「When to invoke」を参照。
 model: claude-gpt-5-6-terra
-color: yellow
+color: green
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, WebSearch, WebFetch, Agent
 agent-policy-role: normal-impl, general, explore, realtime-research, independent-review
 ---
@@ -65,7 +65,7 @@ agent-policy-role: normal-impl, general, explore, realtime-research, independent
 - **その他のタスクとして依頼されたときは**、作業範囲を指示の範囲に留め、スコープ外の変更を行わない。
 - **探索実働として依頼されたときは**、成果物(ファイル)を作らず、報告のみを返す。
 - **リアルタイム情報調査として依頼されたときは**、成果物(ファイル)を作らず、報告のみを返す。
-- 調査結果の採否を自分で判断しない。判断材料を揃えて返す。
+- **リアルタイム情報調査として依頼されたときは**、調査結果の採否を自分で判断せず、判断材料を揃えて返す。
 - **独立レビューとして依頼されたときは**、成果物(ファイル)を作らず、報告のみを返す。
 - **独立レビューとして依頼されたときは**、指摘の採否を自分で判断しない。判断材料を揃えて返す。
 

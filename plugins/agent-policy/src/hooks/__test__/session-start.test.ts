@@ -107,6 +107,18 @@ describe("役割マーカーの走査", () => {
     expect(output).toContain("second")
   })
 
+  it("マーカーの行を ROLES 順に並べる", () => {
+    place("out-of-order", [
+      "agent-policy-role: realtime-research, general, complex-impl"
+    ])
+    const output = context()
+    const complex = output.indexOf("- 複雑または重要な実装:")
+    const general = output.indexOf("- その他のタスク:")
+    const research = output.indexOf("- リアルタイム情報調査:")
+    expect(complex).toBeLessThan(general)
+    expect(general).toBeLessThan(research)
+  })
+
   it("未知の役割 ID を無視し、その旨を出す", () => {
     place("odd", ["agent-policy-role: no-such-role"])
     const output = context()
@@ -141,6 +153,16 @@ describe("役割マーカーの走査", () => {
     expect(output).not.toContain("未知の役割 ID")
   })
 
+  it("読めないプロジェクト側役割断片があっても方針を注入する", () => {
+    const roles = path.join(project, ".claude", "agent-policy", "roles")
+    fs.mkdirSync(path.join(roles, "custom.md"), { recursive: true })
+    place("custom-role-agent", ["agent-policy-role: custom"])
+
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })
+
+    expect(output).toContain("agent-policy:with-codex-policy")
+  })
+
   it("マーカーの無い定義は対応表に出さない", () => {
     place("plain", ["model: sonnet"])
     expect(context()).not.toContain("plain")
@@ -157,22 +179,66 @@ describe("役割マーカーの走査", () => {
 })
 
 describe("setup の促し", () => {
-  it("エイリアス差分があり定義が無いとき促す", () => {
+  it("エイリアスを model に持つ定義が無いとき促す", () => {
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
     expect(output).toContain("setup-gpt")
     expect(output).toContain("gpt-sol")
+    expect(output).toContain("model に持つ定義が無い")
   })
 
-  it("エイリアス差分があり model が食い違うとき促す", () => {
+  it("名前一致の定義の model が食い違うとき食い違いを報告する", () => {
     place("gpt-sol", ["model: claude-gpt-5-6-sol"])
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
     expect(output).toContain("setup-gpt")
+    expect(output).toContain("claude-gpt-5-6-sol")
+    expect(output).toContain("食い違う")
   })
 
-  it("エイリアス差分があり model も一致するとき促さない", () => {
-    place("gpt-sol", ["model: my-sol"])
+  it("同名定義に model が無いとき未設定として報告する", () => {
+    place("gpt-sol", ["agent-policy-role: complex-impl"])
+
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+
+    expect(output).toContain("未設定")
+    expect(output).not.toContain("undefined")
+  })
+
+  it("別名の定義が必要な役割を覆うとき促さない", () => {
+    place("my-heavy-coder", [
+      "model: my-sol",
+      "agent-policy-role: complex-impl"
+    ])
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
     expect(output).not.toContain("setup-gpt")
+  })
+
+  it("複数定義の役割の和集合がプリセットを覆うとき促さない", () => {
+    place("my-explorer", [
+      "model: my-terra",
+      "agent-policy-role: explore, realtime-research, independent-review"
+    ])
+    place("my-coder", [
+      "model: my-terra",
+      "agent-policy-role: normal-impl, general"
+    ])
+    const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
+    expect(output).not.toContain("setup-gpt")
+  })
+
+  it("役割が不足するとき不足役割 ID を示して促す", () => {
+    place("my-explorer", ["model: my-terra", "agent-policy-role: explore"])
+    const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
+    expect(output).toContain("setup-gpt")
+    expect(output).toContain("normal-impl")
+    expect(output).toContain("general")
+    expect(output).toContain("my-explorer")
+  })
+
+  it("model キーを持たない定義はエイリアス充足に数えない", () => {
+    place("my-heavy-coder", ["agent-policy-role: complex-impl"])
+    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
+    expect(output).toContain("setup-gpt")
+    expect(output).toContain("model に持つ定義が無い")
   })
 
   it("エイリアスが既定と同じなら促さない", () => {
@@ -195,6 +261,32 @@ describe("旧定義の残骸通知", () => {
     expect(output).toContain("claude-researcher")
     expect(output).toContain("grok-implementer")
     expect(output).toContain("廃止")
+  })
+
+  it("Grok の残骸と未設定の別名に 4.6 移行を周知する", () => {
+    place("grok-researcher", ["model: sonnet"])
+    const output = context()
+    expect(output).toContain(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
+    )
+  })
+
+  it("Grok の残骸があっても別名設定済みなら 4.6 移行を周知しない", () => {
+    place("grok-researcher", ["model: sonnet"])
+    const output = context({
+      AMATSUKA_AGENT_GROK_ALIAS: "claude-grok-4-5"
+    })
+    expect(output).not.toContain(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
+    )
+  })
+
+  it("GPT の残骸だけなら 4.6 移行を周知しない", () => {
+    place("gpt-researcher", ["model: sonnet"])
+    const output = context()
+    expect(output).not.toContain(
+      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
+    )
   })
 
   it("現行のプリセット名は残骸として扱わない", () => {
