@@ -929,12 +929,12 @@ git commit -m "feat(agent-policy): 役割断片を追加する"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { compose } from "../compose"
 
-const PLUGIN_ROLES = path.resolve(
-  import.meta.dirname,
-  "../../../assets/roles"
+const PLUGIN_ROLES = fileURLToPath(
+  new URL("../../../assets/roles/", import.meta.url)
 )
 
 let temporary: string
@@ -1475,13 +1475,15 @@ git commit -m "feat(agent-policy): 役割断片の読み込みと定義合成を
 `plugins/agent-policy/src/agents/__test__/presets.test.ts` を作る。
 
 ```typescript
-import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { compose } from "../compose"
 import { DEFAULT_ALIASES, PRESETS } from "../presets"
 import { PRESET_ASSIGNMENTS } from "../roles"
 
-const PLUGIN_ROLES = path.resolve(import.meta.dirname, "../../../assets/roles")
+const PLUGIN_ROLES = fileURLToPath(
+  new URL("../../../assets/roles/", import.meta.url)
+)
 
 describe("PRESETS", () => {
   it("4 種を定義する", () => {
@@ -1746,11 +1748,12 @@ git commit -m "feat(agent-policy): プリセットをビルド生成に切り替
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { runTs } from "../testing/run-ts"
+import { runTs } from "../testing/run-ts.js"
 
-const CLI = path.resolve(import.meta.dirname, "../setup-agents.ts")
-const PLUGIN_ROOT = path.resolve(import.meta.dirname, "../..")
+const CLI = fileURLToPath(new URL("../setup-agents.ts", import.meta.url))
+const PLUGIN_ROOT = fileURLToPath(new URL("../../", import.meta.url))
 
 let project: string
 
@@ -2512,11 +2515,12 @@ git commit -m "feat(agent-policy): setup の保持マージと書き込みを実
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { runTs } from "../../testing/run-ts"
+import { runTs } from "../../testing/run-ts.js"
 
-const HOOK = path.resolve(import.meta.dirname, "../session-start.ts")
-const PLUGIN_ROOT = path.resolve(import.meta.dirname, "../../..")
+const HOOK = fileURLToPath(new URL("../session-start.ts", import.meta.url))
+const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 
 let project: string
 
