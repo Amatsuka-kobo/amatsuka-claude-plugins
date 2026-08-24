@@ -24,6 +24,7 @@
     ]
   },
   "model": "claude-opus-5[1m]",
+  "effortLevel": "xhigh",
   "enabledPlugins": {
     "agent-policy@amatsuka-claude-plugins": true,
     "chat-history@amatsuka-claude-plugins": true,
