@@ -46,7 +46,7 @@ flowchart TD
 - Next.js のメジャー更新は手動でのみ行う。
 - Prisma のスキーマ変更は `prisma migrate` で行い、SQL を直接当てない。
 - 依存の追加は pnpm で行う。npm / yarn を併用しない。
-- ライブラリを追加するときは `## 規約` の依存追加の条件を満たす。
+- ライブラリを追加するときは `.claude/rules/metatron/conventions.md` の依存追加の条件を満たす。
 
 ## レイヤー構造
 
@@ -104,7 +104,7 @@ tests/
 分割が馴染まないプロジェクトは `{ "generic": ["**"] }` に縮退させる。
 このブロックを機械的に読むのは、metatron の CLI と hook、codiel の `initializing-harness` と
 `orchestrating-runs`、sandalphon の `check-intent-env` である。codiel の `guard-write` hook は読まない。
-書き込みの禁止をこのブロックに期待せず、触ってほしくないパスは `## 保護パス` に書く。
+書き込みの禁止をこのブロックに期待せず、触ってほしくないパスは `.claude/rules/metatron/protected-paths.md` に書く。
 -->
 
 ```json metatron:domains
@@ -131,51 +131,6 @@ tests/
 | lint | `pnpm lint` | なし |
 | typecheck | `pnpm typecheck` | なし |
 | build | `pnpm build` | `.env` に `DATABASE_URL` があること |
-
-## テスト方針
-
-<!-- 記入ガイド
-ユニットテストと E2E の役割分担、テストファイルの配置規約と命名規約を書く。
-新規テストをどこへ足すかが、読んだだけで決まる粒度にする。
--->
-
-- **ユニットテスト**: Vitest を使う。テスト対象と同じディレクトリに `<対象>.test.ts` として置く
-  (`src/server/task-service.ts` なら `src/server/task-service.test.ts`)。
-  分岐を持つ関数には異常系のケースを 1 件以上書く。
-- **E2E**: Playwright を使う。`tests/e2e/<画面名>.spec.ts` に置く。対象ブラウザは Chromium だけとする。
-- カバレッジの数値目標は設けない。
-
-## 保護パス
-
-<!-- 記入ガイド
-触らないパスと、変更に慎重を要するパスを分けて書く。
-触らないパスには、変更が必要になったときに取る手順を併記する。
-慎重を要するパスには、変更してよい条件(何を確認し、どのテストを通すか)を書く。
--->
-
-**触らない**
-
-- `prisma/migrations/**`: 適用済みのマイグレーションを書き換えない。変更が要るときは新しいマイグレーションを追加する。
-- `.github/workflows/**`: CI 定義は変更しない。変更が要るときは人間に確認する。
-
-**慎重を要する**
-
-- `src/server/auth/**`: 認証・認可の実装。変更したら `pnpm test src/server/auth` を通し、権限の境界のケースが増えていることを確認する。
-- `src/lib/**`: 全ドメインから参照される。変更したら `pnpm test` を全件実行する。
-
-## 規約
-
-<!-- 記入ガイド
-コーディング規約・ブランチ運用・完了条件を書く。
-言語やフォーマッタの既定と同じ内容は書かない。
-禁止事項には代わりに取る手段を併記する。
--->
-
-- **コーディング**: Biome のフォーマットに従う。`any` を使わない。型が定まらないときは `unknown` で受け、絞り込んでから使う。
-- **依存追加**: 追加するライブラリは `## 技術スタック` に行を足してから使う。
-- **ブランチ**: `main` を基底とする。作業ブランチは `feat/<要約>` または `fix/<要約>`。
-- **PR**: タイトルは `[#<issue 番号>] <要約>`。本文に実行した検証コマンドとその結果を書く。
-- **完了条件**: 対象 issue の受け入れ基準を満たす / `pnpm test`・`pnpm lint`・`pnpm typecheck`・`pnpm build` が通る / 変更した層の E2E が通る。
 
 ## ADR 一覧
 

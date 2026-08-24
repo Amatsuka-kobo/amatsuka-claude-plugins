@@ -51,4 +51,4 @@
 **対策**: スキーマを変更するときは `prisma/schema.prisma` を編集してから `pnpm exec prisma migrate dev --name <変更内容>` を実行する。`prisma/migrations/` に手でファイルを作らない。
 **昇格候補**: Yes
 
-**[解決済み] (2026-08-05)**: `prisma/migrations/**` を ARCHITECTURE の `## 保護パス` に追加し、直接編集を人間への確認事項にしたため。
+**[解決済み] (2026-08-05)**: `prisma/migrations/**` を `.claude/rules/metatron/protected-paths.md` に追加し、直接編集を人間への確認事項にしたため。

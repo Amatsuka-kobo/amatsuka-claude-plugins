@@ -15,11 +15,14 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `get domains` | 読 | `metatron:domains` を構造化したもの。読めないときは理由 |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 | GOTCHAS のエントリ配列・総数・昇格候補数 |
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR のエントリ配列と次の採番 |
+| `get rules [--name <名前>]` | 読 | rules 3 ファイルの本文と存在状況、または指定した 1 ファイル |
 | `scan` | 読 | コードベース解析の事実 |
 | `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補 |
 | `stage-architecture --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `stage-adr --input <path>` | 段階 | diff と `stagingId`、追加時は `assignedId`。書き込みはしない |
+| `stage-rules --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
+| `commit-rules --staging-id <id>` | 書 | `stagingId` を消費して rules の 1 ファイルへ書き込む |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
 
@@ -55,6 +58,16 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - `body` は見出し行を含まない本文。同じ `heading` を 2 回書くと拒否される。
 - `reason` は任意。
 
+節を消すときは `body` の代わりに `remove: true` を書く。
+
+```json
+{ "sections": [{ "heading": "規約", "remove": true }], "reason": "rules へ移した" }
+```
+
+- `remove: true` と `body` を同時に指定すると拒否される。削除では `body` を書かない。
+- 削除は見出し許可リストの制限を受けない。許可リストから外した見出しの節も消せる。
+- 対象ファイルに当該セクションが無いときは `section_not_found` で拒否される。何も起きなかったことを成功として返さない。
+
 ### stage-adr(追加)
 
 ```json
@@ -76,6 +89,19 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - `reason` は必須。省略した状態変更は拒否される。
 - `changedOn` は省略時に当日日付。
 
+### stage-rules
+
+```json
+{ "name": "conventions", "body": "...", "reason": "更新の理由" }
+```
+
+- `name` は `conventions` / `protected-paths` / `testing-policy` のいずれか。一覧は `get config` の `inputSchemas["stage-rules"].names` から取る。未知の名前は拒否される。
+- `body` は `# 見出し` から始まる完全なファイル内容。ARCHITECTURE と違い見出し行を含む。
+- `body` の先頭 5 行に管理者表示行が無いと `missing_admin_notice` で拒否される。書式は `references/rules-format.md` にある。
+- frontmatter を書くと `frontmatter_not_allowed` で拒否される。
+- 1 回で扱えるのは 1 ファイルだけである。3 ファイルを更新するときは 3 回に分ける。
+- `reason` は任意。
+
 ### append-gotcha
 
 ```json
@@ -92,11 +118,13 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 
 ## stage から commit の 2 段階
 
-ARCHITECTURE と ADR の書き込みは 2 段階で行う。
+ARCHITECTURE と ADR と rules の書き込みは 2 段階で行う。
 
-1. `stage-architecture` または `stage-adr` を実行し、`stagingId` と diff を得る。
+1. `stage-architecture` / `stage-adr` / `stage-rules` のいずれかを実行し、`stagingId` と diff を得る。
 2. diff を全文提示してユーザーの承認を得る。
-3. `commit-architecture --staging-id <id>` を実行して書き込む。
+3. `commit-architecture --staging-id <id>`(rules なら `commit-rules --staging-id <id>`)を実行して書き込む。
+
+`commit-architecture` が受けるのは `stage-architecture` / `stage-adr` の staging、`commit-rules` が受けるのは `stage-rules` の staging である。取り違えると `staging_kind_mismatch` で拒否され、その staging は消費されないまま残る。
 
 ### stage が返す diff
 
@@ -119,7 +147,7 @@ ARCHITECTURE と ADR の書き込みは 2 段階で行う。
 
 機械的に保証されるのは次の 5 点だけである。
 
-1. diff を計算せずに書き込むことはできない。`commit-architecture` は `stagingId` 無しでは失敗する。
+1. diff を計算せずに書き込むことはできない。`commit-architecture` と `commit-rules` は `stagingId` 無しでは失敗する。
 2. staging は単回使用かつ有効期限つき(既定 30 分)である。使い回しと古い案の遅延適用ができない。
 3. stage 後に対象ファイルが変化していたら、commit は `file_changed` で失敗する。
 4. staging レコードを書き換えて commit すると `tampered` で失敗する。レコードは自身の内容ハッシュ(`recordHash`)を持ち、commit の前に再計算して照合する。`nextContent` だけ・`targetPath` だけ・`expiresAt` だけの差し替えは、いずれも書き込みに至らない。
@@ -129,7 +157,7 @@ ARCHITECTURE と ADR の書き込みは 2 段階で行う。
 
 保証されないのは次の 3 点である。
 
-1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` を実行しない。
+1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` と `commit-rules` を実行しない。
 2. **`recordHash` まで整合的に打ち直した改変。** 同じユーザー権限で動くプロセスは正しい `recordHash` を計算できるため、検知できない。`recordHash` の照合が捕まえるのは、偶発的な破損と CLI を経由しない書き換えまでである。staging の内容を変えるときは、保存されたレコードを直接編集せず `stage-*` からやり直す。
 3. **commit が失敗した staging を再実行できること。** 消費の印を付けた後に書き込みが失敗すると、その staging は消費済みのまま残る。`write_failed` で失敗した `stagingId` を再実行しない。`stage-*` からやり直す。
 
