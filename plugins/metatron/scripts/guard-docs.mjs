@@ -2,7 +2,7 @@
 
 // src/guard-docs.ts
 import fs2 from "node:fs";
-import path2 from "node:path";
+import path3 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/lib/config.ts
@@ -283,10 +283,24 @@ function pass() {
   process.exit(0);
 }
 
+// src/lib/rules.ts
+import path2 from "node:path";
+var RULES_FILES = [
+  "conventions",
+  "protected-paths",
+  "testing-policy"
+];
+function rulesFilePath(config, name) {
+  return path2.join(config.rulesDirPath, `${name}.md`);
+}
+function rulesFileRelative(config, name) {
+  return `${config.rulesDirRelative}/${name}.md`;
+}
+
 // src/guard-docs.ts
 function metatronCliPath() {
   const self = fileURLToPath(import.meta.url);
-  return path2.join(path2.dirname(path2.dirname(self)), "scripts", "metatron.mjs");
+  return path3.join(path3.dirname(path3.dirname(self)), "scripts", "metatron.mjs");
 }
 function toSlash(value) {
   return value.replace(/\\/g, "/");
@@ -296,7 +310,7 @@ function realpathOrParent(abs) {
     return fs2.realpathSync(abs);
   } catch {
     try {
-      return path2.join(fs2.realpathSync(path2.dirname(abs)), path2.basename(abs));
+      return path3.join(fs2.realpathSync(path3.dirname(abs)), path3.basename(abs));
     } catch {
       return abs;
     }
@@ -320,7 +334,7 @@ function followDanglingLink(abs) {
     } catch {
       return current;
     }
-    current = realpathOrParent(path2.resolve(path2.dirname(current), target));
+    current = realpathOrParent(path3.resolve(path3.dirname(current), target));
   }
   return abs;
 }
@@ -334,7 +348,7 @@ function deepestExisting(abs) {
   let dir = abs;
   for (; ; ) {
     if (fs2.existsSync(dir)) return dir;
-    const parent = path2.dirname(dir);
+    const parent = path3.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -343,18 +357,18 @@ function isCaseInsensitiveFs(probe) {
   if (process.platform === "win32") return true;
   let dir = deepestExisting(probe);
   while (dir !== null) {
-    const base = path2.basename(dir);
+    const base = path3.basename(dir);
     const flipped = flipCase(base);
     if (flipped !== base) {
       try {
         const a = fs2.statSync(dir);
-        const b = fs2.statSync(path2.join(path2.dirname(dir), flipped));
+        const b = fs2.statSync(path3.join(path3.dirname(dir), flipped));
         return a.ino === b.ino && a.dev === b.dev;
       } catch {
         return false;
       }
     }
-    const parent = path2.dirname(dir);
+    const parent = path3.dirname(dir);
     dir = parent === dir ? null : parent;
   }
   return false;
@@ -385,6 +399,17 @@ function gotchasReason(relative, cli) {
     `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
   ].join("\n");
 }
+function rulesReason(relative, cli) {
+  return [
+    `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u66F8\u5F0F\u691C\u8A3C\u3068\u5DEE\u5206\u78BA\u8A8D\u306E\u305F\u3081)\u3002`,
+    "\u30D5\u30A1\u30A4\u30EB\u5168\u6587\u306E JSON \u3092\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u6B21\u306E 2 \u6BB5\u968E\u3067\u53CD\u6620\u3057\u3066\u304F\u3060\u3055\u3044:",
+    `  node ${cli} stage-rules --input /tmp/metatron-rules.json`,
+    `  node ${cli} commit-rules --staging-id <stage-rules \u304C\u767A\u884C\u3057\u305F id>`,
+    "\u73FE\u5728\u306E\u5185\u5BB9\u306E\u78BA\u8A8D:",
+    `  node ${cli} get rules`,
+    `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
+  ].join("\n");
+}
 try {
   const input = await readStdin();
   const candidates = [
@@ -402,17 +427,24 @@ try {
     caseInsensitive
   );
   const gotchasKey = comparisonKey(config.gotchasPath, caseInsensitive);
+  const rulesTargets = RULES_FILES.map((name) => ({
+    key: comparisonKey(rulesFilePath(config, name), caseInsensitive),
+    relative: rulesFileRelative(config, name)
+  }));
   const cli = metatronCliPath();
   let hitArchitecture = false;
   let hitGotchas = false;
+  let hitRules;
   for (const raw of candidates) {
-    const key = comparisonKey(path2.resolve(cwd, toSlash(raw)), caseInsensitive);
+    const key = comparisonKey(path3.resolve(cwd, toSlash(raw)), caseInsensitive);
     if (key === architectureKey) hitArchitecture = true;
     if (key === gotchasKey) hitGotchas = true;
+    hitRules ??= rulesTargets.find((target) => target.key === key);
   }
   if (hitArchitecture)
     emit("deny", architectureReason(config.architectureRelative, cli));
   if (hitGotchas) emit("deny", gotchasReason(config.gotchasRelative, cli));
+  if (hitRules !== void 0) emit("deny", rulesReason(hitRules.relative, cli));
   pass();
 } catch {
   pass();
