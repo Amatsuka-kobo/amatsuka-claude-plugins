@@ -589,7 +589,7 @@ test("ドメインマップ: ファイル走査が打ち切られたら死んだ
   expect(diff.skipped.some((s) => s.includes("死んだ glob"))).toBe(true)
 })
 
-test("セクションの欠落: 10 セクションのうち存在しないものを返す", () => {
+test("セクションの欠落: 7 セクションのうち存在しないものを返す", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({
@@ -605,7 +605,7 @@ test("セクションの欠落: 10 セクションのうち存在しないもの
   expect(missing).toContain("システム概要")
 })
 
-test("セクションの欠落: ARCHITECTURE が無ければ 10 セクションすべて", () => {
+test("セクションの欠落: ARCHITECTURE が無ければ 7 セクションすべて", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({

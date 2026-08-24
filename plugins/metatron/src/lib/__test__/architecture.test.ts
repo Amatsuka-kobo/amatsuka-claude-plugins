@@ -8,6 +8,7 @@ import {
   applySectionChanges,
   extractDomains,
   findSection,
+  MOVED_HEADINGS,
   parseArchitecture,
   parseArchitectureForRead,
   parseArchitectureForWrite,
@@ -22,7 +23,7 @@ function doc(...lines: string[]): string {
   return lines.join("\n")
 }
 
-const TEN_SECTIONS = doc(
+const SEVEN_SECTIONS = doc(
   "# ARCHITECTURE",
   "",
   "## システム概要",
@@ -63,18 +64,6 @@ const TEN_SECTIONS = doc(
   "| 用途 | コマンド |",
   "| --- | --- |",
   "| test | pnpm test |",
-  "",
-  "## テスト方針",
-  "",
-  "- vitest を使う。",
-  "",
-  "## 保護パス",
-  "",
-  "- `.env`",
-  "",
-  "## 規約",
-  "",
-  "- biome に従う。",
   "",
   "## ADR 一覧",
   "",
@@ -136,8 +125,8 @@ function expectOk(
   return result
 }
 
-test("A1: 10 セクションの分解 — 見出し単位に正しく分割される", () => {
-  const parsed = parseArchitecture(TEN_SECTIONS)
+test("A1: 7 セクションの分解 — 見出し単位に正しく分割される", () => {
+  const parsed = parseArchitecture(SEVEN_SECTIONS)
 
   expect(parsed.error).toBeNull()
   expect(parsed.warnings).toEqual([])
@@ -146,24 +135,24 @@ test("A1: 10 セクションの分解 — 見出し単位に正しく分割さ�
   ])
   // 分解は可逆であること(前置き + 全セクションの原文 = 元テキスト)。
   expect(parsed.preamble + parsed.sections.map((s) => s.raw).join("")).toBe(
-    TEN_SECTIONS
+    SEVEN_SECTIONS
   )
   expect(parsed.preamble).toBe("# ARCHITECTURE\n\n")
-  expect(findSection(parsed, "テスト方針")?.body).toBe(
-    "\n- vitest を使う。\n\n"
+  expect(findSection(parsed, "ディレクトリ構成と責務")?.body).toBe(
+    "\n- `src/` 実装\n\n"
   )
 })
 
 describe("A2: セクション置換 — 対象セクション以外がバイト単位で不変", () => {
   test("既存セクションの差し替え", () => {
     const result = expectOk(
-      prepareArchitectureUpdate(TEN_SECTIONS, [
+      prepareArchitectureUpdate(SEVEN_SECTIONS, [
         { heading: "技術スタック", body: "- 言語: Rust\n- ランタイム: なし" }
       ])
     )
 
     expect(untouchedBytes(result.text, "技術スタック")).toBe(
-      untouchedBytes(TEN_SECTIONS, "技術スタック")
+      untouchedBytes(SEVEN_SECTIONS, "技術スタック")
     )
     expect(headings(result.text)).toEqual([...ARCHITECTURE_HEADINGS])
     expect(
@@ -175,27 +164,27 @@ describe("A2: セクション置換 — 対象セクション以外がバイト�
   })
 
   test("先頭セクションと末尾セクションでも成り立つ", () => {
-    for (const heading of ["システム概要", "規約"]) {
+    for (const heading of ["システム概要", "コマンド定義"]) {
       const result = expectOk(
-        prepareArchitectureUpdate(TEN_SECTIONS, [
+        prepareArchitectureUpdate(SEVEN_SECTIONS, [
           { heading, body: `差し替え後の ${heading}` }
         ])
       )
       expect(untouchedBytes(result.text, heading)).toBe(
-        untouchedBytes(TEN_SECTIONS, heading)
+        untouchedBytes(SEVEN_SECTIONS, heading)
       )
     }
   })
 
   test("複数セクションの同時差し替えでも他は不変", () => {
     const result = expectOk(
-      prepareArchitectureUpdate(TEN_SECTIONS, [
-        { heading: "テスト方針", body: "- 変更後" },
+      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+        { heading: "ディレクトリ構成と責務", body: "- 変更後" },
         { heading: "技術スタック", body: "- 変更後" }
       ])
     )
-    const skip = new Set(["テスト方針", "技術スタック"])
-    const before = parseArchitecture(TEN_SECTIONS)
+    const skip = new Set(["ディレクトリ構成と責務", "技術スタック"])
+    const before = parseArchitecture(SEVEN_SECTIONS)
     const after = parseArchitecture(result.text)
     expect(after.preamble).toBe(before.preamble)
     for (const section of before.sections) {
@@ -206,7 +195,7 @@ describe("A2: セクション置換 — 対象セクション以外がバイト�
 })
 
 test("A3: metatron:domains の抽出 — 正しい JSON を返す", () => {
-  const result = extractDomains(TEN_SECTIONS)
+  const result = extractDomains(SEVEN_SECTIONS)
 
   expect(result.ok).toBe(true)
   expect(result.domains).toEqual({
@@ -256,7 +245,7 @@ describe("A5: ドメインマップの検証 4 項目", () => {
 
       // stage も拒否する(壊れたブロックは stage すらできない)。
       const body = doc("```json metatron:domains", content, "```", "")
-      const result = prepareArchitectureUpdate(TEN_SECTIONS, [
+      const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
         { heading: "ドメインマップ", body }
       ])
       expect(result.ok).toBe(false)
@@ -275,19 +264,19 @@ describe("A5: ドメインマップの検証 4 項目", () => {
       ""
     )
     const result = expectOk(
-      prepareArchitectureUpdate(TEN_SECTIONS, [
+      prepareArchitectureUpdate(SEVEN_SECTIONS, [
         { heading: "ドメインマップ", body }
       ])
     )
     expect(extractDomains(result.text).domains).toEqual({ generic: ["**"] })
     expect(untouchedBytes(result.text, "ドメインマップ")).toBe(
-      untouchedBytes(TEN_SECTIONS, "ドメインマップ")
+      untouchedBytes(SEVEN_SECTIONS, "ドメインマップ")
     )
   })
 })
 
 test("A6: 未知の見出しを stage → エラー", () => {
-  const result = prepareArchitectureUpdate(TEN_SECTIONS, [
+  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
     { heading: "パフォーマンス方針", body: "本文" }
   ])
 
@@ -320,7 +309,9 @@ test("A7: ファイル未作成での stage → 全文追加(新規作成)を返
   // 空白のみのファイルも新規作成として扱う。
   expect(
     expectOk(
-      prepareArchitectureUpdate("\n \n", [{ heading: "規約", body: "- biome" }])
+      prepareArchitectureUpdate("\n \n", [
+        { heading: "コマンド定義", body: "- biome" }
+      ])
     ).created
   ).toBe(true)
 })
@@ -334,14 +325,14 @@ test("A8: ドメインマップのみの最小ファイル → 正当。他セ�
   const result = expectOk(
     prepareArchitectureUpdate(MINIMAL_DOMAINS_ONLY, [
       { heading: "システム概要", body: "後から足した概要。" },
-      { heading: "規約", body: "- biome に従う。" }
+      { heading: "コマンド定義", body: "- biome に従う。" }
     ])
   )
 
   expect(headings(result.text)).toEqual([
     "システム概要",
     "ドメインマップ",
-    "規約"
+    "コマンド定義"
   ])
   // 既存セクションの中身はバイト単位で不変。
   // (末尾へ節を足したため、区切りの空行 1 行だけが直前の節の末尾に増える。)
@@ -367,12 +358,14 @@ test("A9: システム概要の更新 — Mermaid を含んでも分割が壊れ
   )
 
   const result = expectOk(
-    prepareArchitectureUpdate(TEN_SECTIONS, [{ heading: "システム概要", body }])
+    prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      { heading: "システム概要", body }
+    ])
   )
 
   expect(headings(result.text)).toEqual([...ARCHITECTURE_HEADINGS])
   expect(untouchedBytes(result.text, "システム概要")).toBe(
-    untouchedBytes(TEN_SECTIONS, "システム概要")
+    untouchedBytes(SEVEN_SECTIONS, "システム概要")
   )
   expect(result.text).toContain("  CLI[## CLI] --> Hook")
   expect(parseArchitecture(result.text).error).toBeNull()
@@ -380,7 +373,7 @@ test("A9: システム概要の更新 — Mermaid を含んでも分割が壊れ
 
 test("A10: overview 疑似キーを指定 → エラー(廃止済み)", () => {
   for (const key of ["overview", "Overview", " overview "]) {
-    const result = prepareArchitectureUpdate(TEN_SECTIONS, [
+    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
       { heading: key, body: "本文" }
     ])
     expect(result.ok).toBe(false)
@@ -418,7 +411,7 @@ test("A11: タイトルと最初の ## の間に本文 → stage は成功し警
 
 describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧)", () => {
   test("他と同じ規則で分割される", () => {
-    const parsed = parseArchitecture(TEN_SECTIONS)
+    const parsed = parseArchitecture(SEVEN_SECTIONS)
     expect(findSection(parsed, "レイヤー構造")?.body).toContain(
       "ドメイン層は UI 層を参照しない。"
     )
@@ -426,22 +419,22 @@ describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧
       "### ADR-001: 最初の判断"
     )
     // `###` は節内の小見出しであり、セクション見出しにしない。
-    expect(headings(TEN_SECTIONS)).not.toContain("ADR-001: 最初の判断")
+    expect(headings(SEVEN_SECTIONS)).not.toContain("ADR-001: 最初の判断")
   })
 
   test("レイヤー構造は stage-architecture で置換できる", () => {
     const result = expectOk(
-      prepareArchitectureUpdate(TEN_SECTIONS, [
+      prepareArchitectureUpdate(SEVEN_SECTIONS, [
         { heading: "レイヤー構造", body: "- 1 層のみ" }
       ])
     )
     expect(untouchedBytes(result.text, "レイヤー構造")).toBe(
-      untouchedBytes(TEN_SECTIONS, "レイヤー構造")
+      untouchedBytes(SEVEN_SECTIONS, "レイヤー構造")
     )
   })
 
   test("ADR 一覧は低位 API(adr.ts 用)で置換できる", () => {
-    const result = applySectionChanges(TEN_SECTIONS, [
+    const result = applySectionChanges(SEVEN_SECTIONS, [
       {
         heading: "ADR 一覧",
         body: doc(
@@ -460,7 +453,7 @@ describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(untouchedBytes(result.text, "ADR 一覧")).toBe(
-      untouchedBytes(TEN_SECTIONS, "ADR 一覧")
+      untouchedBytes(SEVEN_SECTIONS, "ADR 一覧")
     )
     expect(result.text).toContain("### ADR-002: 次の判断")
   })
@@ -489,7 +482,7 @@ test("A13: Mermaid ブロック内の ## を見出しにしない", () => {
 })
 
 test("A14: heading に ADR 一覧 → エラー。stage-adr へ誘導する", () => {
-  const result = prepareArchitectureUpdate(TEN_SECTIONS, [
+  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
     { heading: "ADR 一覧", body: "### ADR-999: 差し替え" }
   ])
 
@@ -606,7 +599,7 @@ test("A17: 未閉フェンス → 書き込み経路は unclosed_fence で拒否
   expect(parsed.error).toBe("unclosed_fence")
 
   const staged = prepareArchitectureUpdate(UNCLOSED, [
-    { heading: "規約", body: "- biome" }
+    { heading: "技術スタック", body: "- biome" }
   ])
   expect(staged.ok).toBe(false)
   if (staged.ok) return
@@ -670,7 +663,7 @@ test("A19: 同名の ## 見出しが 2 つ → 最初を採り、stage は警告
 
 describe("追加: 契約 §4-2 の行の正規化", () => {
   test("CRLF の文書でも判定が割れず、改行コードが保たれる", () => {
-    const crlf = TEN_SECTIONS.replace(/\n/g, "\r\n")
+    const crlf = SEVEN_SECTIONS.replace(/\n/g, "\r\n")
     const parsed = parseArchitecture(crlf)
 
     expect(parsed.error).toBeNull()
@@ -681,13 +674,13 @@ describe("追加: 契約 §4-2 の行の正規化", () => {
 
     const result = expectOk(
       prepareArchitectureUpdate(crlf, [
-        { heading: "テスト方針", body: "- 変更後" }
+        { heading: "ディレクトリ構成と責務", body: "- 変更後" }
       ])
     )
     expect(result.text).toContain("\r\n- 変更後\r\n")
     expect(result.text).not.toMatch(/[^\r]\n/)
-    expect(untouchedBytes(result.text, "テスト方針")).toBe(
-      untouchedBytes(crlf, "テスト方針")
+    expect(untouchedBytes(result.text, "ディレクトリ構成と責務")).toBe(
+      untouchedBytes(crlf, "ディレクトリ構成と責務")
     )
   })
 
@@ -847,4 +840,24 @@ describe("追加: metatron:domains の位置と多重定義", () => {
     expect(result.domains).toBe(null)
     expect(result.warnings).toStrictEqual([])
   })
+})
+
+test("A25: ARCHITECTURE_HEADINGS は 7 要素で、移行した 3 節を含まない", () => {
+  expect(ARCHITECTURE_HEADINGS).toHaveLength(7)
+  for (const moved of ["テスト方針", "保護パス", "規約"]) {
+    expect([...ARCHITECTURE_HEADINGS]).not.toContain(moved)
+  }
+})
+
+test("A24: 移行した 3 節へ body を書こうとすると unknown_heading。メッセージが移行先を示す", () => {
+  for (const [heading, file] of Object.entries(MOVED_HEADINGS)) {
+    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      { heading, body: "本文" }
+    ])
+    expect(result.ok, heading).toBe(false)
+    if (result.ok) continue
+    expect(result.error, heading).toBe("unknown_heading")
+    expect(result.message, heading).toContain(file)
+    expect(result.message, heading).toContain("stage-rules")
+  }
 })
