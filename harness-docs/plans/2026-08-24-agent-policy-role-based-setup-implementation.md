@@ -1767,9 +1767,18 @@ afterEach(() => {
 })
 
 function run(args: string[]): Record<string, never> {
-  const output = runTs(CLI, args, {
-    env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
-  })
+  let output: string
+  try {
+    output = runTs(CLI, args, {
+      env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
+    })
+  } catch (error) {
+    // CLI はエラー時も JSON を stdout へ書いてから終了コード 1 で終わる。
+    // runTs(execFileSync)は非ゼロ終了で例外を投げるため、stdout を取り出す。
+    const stdout = (error as { stdout?: string }).stdout
+    if (stdout === undefined || stdout === "") throw error
+    output = stdout
+  }
   return JSON.parse(output.trim().split("\n").at(-1) ?? "{}")
 }
 
