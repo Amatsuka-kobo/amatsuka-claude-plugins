@@ -1917,7 +1917,7 @@ function isPlainObject3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isStagingKind(value) {
-  return value === "architecture" || value === "adr";
+  return value === "architecture" || value === "adr" || value === "rules";
 }
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
