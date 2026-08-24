@@ -28,13 +28,15 @@ const CLI = path.join(PLUGIN_ROOT, "scripts", "metatron.mjs")
 const GUIDE = [
   "# metatron: プロジェクトの前提と落とし穴",
   "",
-  "これらの文書は metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
+  "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
   `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
   "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
   "  記録:     node M append-gotcha --input <一時ファイル>",
   '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
   "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
   "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+  "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
+  "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
   "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
 ].join("\n")
@@ -45,13 +47,16 @@ const INIT_GUIDE = [
   "# metatron: プロジェクトの前提と落とし穴",
   "",
   "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**",
-  "作成後はこれらの文書が metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
+  "init は `.claude/rules/metatron/` の 3 ファイル(規約・保護パス・テスト方針)も併せて作る。",
+  "作成後はこれらが metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
   `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
   "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
   "  記録:     node M append-gotcha --input <一時ファイル>",
   '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
   "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
   "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+  "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
+  "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
   "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
 ].join("\n")
@@ -832,4 +837,29 @@ test("I21: CLI 案内は get adr / stage-adr / tag-gotcha / commit-architecture 
   ]) {
     expect(content).toContain(fragment)
   }
+})
+
+test("I22: CLI 案内は get rules / stage-rules / commit-rules を含む", () => {
+  const root = mkTmp()
+  write(root, "docs/ARCHITECTURE.md", architecture())
+
+  const out = inject(root)
+  expect(out).not.toBeNull()
+  expect(out).toContain("get rules")
+  expect(out).toContain("stage-rules --input")
+  expect(out).toContain("commit-rules --staging-id")
+})
+
+test("I23: rules 本文は注入されない(metatron は rules を読まない)", () => {
+  const root = mkTmp()
+  write(root, "docs/ARCHITECTURE.md", architecture())
+  write(
+    root,
+    ".claude/rules/metatron/conventions.md",
+    "# 規約\n\nRULES-BODY-TOKEN\n"
+  )
+
+  const out = inject(root)
+  expect(out).not.toBeNull()
+  expect(out).not.toContain("RULES-BODY-TOKEN")
 })
