@@ -1,6 +1,6 @@
 // SessionStart 注入 hook の検証。
 // ケース ID は metatron 設計書 §13-1 の inject-context.ts の表(I1〜I21・I10b)に対応する。
-// 形式の正本はファイル契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §12。
+// 形式の正本はファイル契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §13。
 //
 // 実行は tsx 経由の子プロセス(stdin に SessionStart の JSON を流し stdout を読む)。
 // plugins/codiel/src/hooks/__test__/guard-write.test.ts と同型。

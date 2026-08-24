@@ -1,6 +1,6 @@
 // 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §2・§3 の検証。
 // ケース ID は metatron 設計書 §13-1 の config.ts の表(C1〜C12)に対応する。
-// 末尾の追加ケースは契約 §13 の「検証する構成」に対応する。
+// 末尾の追加ケースは契約 §14 の「検証する構成」に対応する。
 
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"

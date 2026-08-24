@@ -61,7 +61,7 @@ export function globToRegExp(glob: string): RegExp {
 // 規則の正本は `harness-docs/design/2026-08-16-file-contract-freeze.md` の
 // §2(設定スキーマ)と §3(ルート解決とパス解決の規則)。metatron と sandalphon が
 // 同じ規則の写しを独立に持つ。3 プラグインは互いのインストールパスを解決できないため、
-// ソースを共有せず同じ規則を独立に実装する。ここを変えたら契約 §13 の実装間一致テストを通す。
+// ソースを共有せず同じ規則を独立に実装する。ここを変えたら契約 §14 の実装間一致テストを通す。
 //
 // codiel は基準の異なる 2 つのルート概念を持つ。関数名で区別し、混同しない。
 // 文書(ARCHITECTURE / GOTCHAS)の解決には findDocRoot を、codiel 固有資産

@@ -12,7 +12,7 @@
   metatron の `loadConfig` と codiel の `resolveDocPaths` はテストから直接呼び、sandalphon の
   `check-intent-env` はトップレベル副作用を持つため子プロセスで起動して出力 JSON を突き合わせる。
   **このテストを消すと 3 実装のずれを検出する手段がゼロになる。**「重複テストだから」と削らない。
-- 契約を変更したら §14 のチェックリスト 9 項目(3 実装 + metatron references 3 本 +
+- 契約を変更したら §15 のチェックリスト 9 項目(3 実装 + metatron references 3 本 +
   codiel `recording-gotchas` / `analyzing-issues` / `preparing-design-agendas` の写し +
   sandalphon references 2 本 + gh-utility `issue-craft` の写し + 16f テスト)を同じコミットで更新する。
 
@@ -42,7 +42,7 @@
 
 3 者比較は**実装間の差**しか見ない。**同じ誤実装が 3 者すべてに入れば全項目が一致して通る。**
 契約文書に対する正しさは検証していない。したがって契約を変えるときは、テストが通ったことを
-根拠にせず §14 のチェックリストで写しを 1 つずつ突き合わせる。
+根拠にせず §15 のチェックリストで写しを 1 つずつ突き合わせる。
 また sandalphon はドメイン定義の**値を返さない**ため、値の一致は metatron ↔ codiel の 2 者比較で、
 sandalphon は件数までしか照合できない。
 
@@ -64,19 +64,25 @@ sandalphon は件数までしか照合できない。
   → (2) `git rev-parse --show-toplevel` → (3) 開始ディレクトリ。**開始ディレクトリ自身を含む
   (inclusive)**、探索前に `fs.realpathSync` で実体化、git の失敗は原因を区別せず段 3 へ。
   `.git` の手作業探索で代替しない。解決結果はキャッシュしない。絶対パスと `..` 脱出は拒否。
-- §4-§7 ARCHITECTURE(10 節・セクション分割の規範アルゴリズム・`unclosed_fence` の 2 層扱い)、
-  ADR、GOTCHAS、文書パス既定値(`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md`)。
-- §8-§9 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
-  完全一致のみ)。§9-3 に codiel `analyzing-issues` 用の issue.md 写像表。**要約を伴う抽出をしない。**
-- §10 gh-utility `issue-craft` 持ち込みモードの固定開始句
+- §4-§8 ARCHITECTURE(7 節・セクション分割の規範アルゴリズム・`unclosed_fence` の 2 層扱い)、
+  rules、ADR、GOTCHAS、文書パス既定値(`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` /
+  `.claude/rules/metatron`)。**旧 `## テスト方針` / `## 保護パス` / `## 規約` は 2026-08-24 に
+  rules(§5)へ移った。** rules は 3 ファイル固定、frontmatter を書かない、冒頭に管理者表示行。
+  `unclosed_fence` の判定は rules に適用しない。
+- §9-§10 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
+  完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表。**要約を伴う抽出をしない。**
+- §11 gh-utility `issue-craft` 持ち込みモードの固定開始句
   `持ち込みモード: 以下の完成済み本文で起票`。判定は固定句の一致のみ、推測で入らない。
-- §11 metatron CLI 入出力規約と staging・ロックの保証。
-- §12 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の両 hook はフェイルオープン、
+- §12 metatron CLI 入出力規約と staging・ロックの保証。staging は単一ターゲットのままで、
+  rules も 1 回 1 ファイルである。
+- §13 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の両 hook はフェイルオープン、
   codiel の PreToolUse はフェイルクローズド(`ask`)。混同しない。
   SessionStart 注入の「何も出力しない」は 2026-08-17 に**「文書の内容を出力しない」へ限定**された。
   文書が 1 つも無くても CLI 案内は出す。案内まで落とすのは `injection.enabled: false` と
-  設定読み取り自体が例外で失敗したときの 2 つだけ。
-- §13 実装間の一致検証(上記 16f)。
+  設定読み取り自体が例外で失敗したときの 2 つだけ。**rules 本文は注入しない**(Claude Code が
+  起動時に読み、サブエージェントにも渡る)。
+- §14 実装間の一致検証(上記 16f)。**`paths.rulesDir` は 3 者比較に含めない**(codiel と
+  sandalphon は未知キーとして無視する)。
 
 ## 各実装の場所
 

@@ -2,7 +2,7 @@
 // SessionStart 注入 hook。
 //
 // 仕様の正本は metatron 設計書 §8(注入)と、ファイル契約
-// `harness-docs/design/2026-08-16-file-contract-freeze.md` §12(hook 出力の形式)。
+// `harness-docs/design/2026-08-16-file-contract-freeze.md` §13(hook 出力の形式)。
 //
 // この層は第 2 層(機構自身の動作)であり、**フェイルオープン**する。
 // 読めない・壊れている・例外が出た、のいずれでも**文書の内容**は出力せず exit 0 で終える。

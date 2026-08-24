@@ -397,9 +397,9 @@ GOTCHAS は `/codiel:init` の対象ではなく、失敗を記録する時点�
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
 本節が記す ARCHITECTURE の節構成と GOTCHAS のエントリ書式は執筆当時の設計であり、
-現行の正本はファイル契約(`harness-docs/design/2026-08-16-file-contract-freeze.md` §4・§6)である。
+現行の正本はファイル契約(`harness-docs/design/2026-08-16-file-contract-freeze.md` §4・§7)である。
 **以下の列挙は当時の決定の記録として残す。現在の仕様として参照しない** ——
-節構成は契約 §4-1 の 10 節に、GOTCHAS のエントリ書式は契約 §6 の新書式に置き換わっている。
+節構成は契約 §4-1 の 7 節に、GOTCHAS のエントリ書式は契約 §7 の新書式に置き換わっている。
 
 ### ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)
 

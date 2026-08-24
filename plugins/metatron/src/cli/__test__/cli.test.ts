@@ -1,4 +1,4 @@
-// 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §11(CLI の入出力規約)の検証。
+// 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §12(CLI の入出力規約)の検証。
 // ケース ID は metatron 設計書 §13-1 の `scan.ts` / CLI 統合の表(S5・S6)に対応する。
 //
 // - S5: 全読み取り系サブコマンドが、どんな異常環境でも exit 0 かつ妥当な JSON を出力する。

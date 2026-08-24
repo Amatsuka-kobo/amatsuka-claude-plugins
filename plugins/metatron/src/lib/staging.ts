@@ -1,7 +1,7 @@
 // stage → commit の 2 段階書き込みで使う staging の保存・照合・期限・単回消費。
 //
 // 規則の正本はファイル契約
-// `harness-docs/design/2026-08-16-file-contract-freeze.md` の §11「staging の保証」。
+// `harness-docs/design/2026-08-16-file-contract-freeze.md` の §12「staging の保証」。
 // 設計上の根拠は metatron 設計書 §7-3。
 //
 // 保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json`。

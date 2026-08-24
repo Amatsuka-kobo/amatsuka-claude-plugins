@@ -1,7 +1,7 @@
-// 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §5(ADR の書式)・
-// §4(セクション分割)・§11(ロック)の検証。
+// 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §6(ADR の書式)・
+// §4(セクション分割)・§12(ロック)の検証。
 // ケース ID は metatron 設計書 §13-1 の adr.ts の表(R-A1〜R-A9)に対応する。
-// 末尾の「追加」ケースは、契約 §5-1 の採番規則と §4-2 のフェンス規則に対応する。
+// 末尾の「追加」ケースは、契約 §6-1 の採番規則と §4-2 のフェンス規則に対応する。
 
 import fs from "node:fs"
 import os from "node:os"

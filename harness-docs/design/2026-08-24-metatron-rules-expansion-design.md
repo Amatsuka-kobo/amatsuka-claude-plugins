@@ -1,7 +1,7 @@
 # metatron: 管理対象文書を `.claude/rules/` へ拡大する(設計書)
 
 - 作成日: 2026-08-24
-- 状態: レビュー待ち
+- 状態: 承認済み(2026-08-24)
 - 入力: `harness-docs/design/2026-08-24-metatron-rules-expansion.md`(引き継ぎ書)
 - 適用範囲: `plugins/metatron/`、`harness-docs/ARCHITECTURE.md`、`CLAUDE.md`、契約凍結文書
 
@@ -453,7 +453,7 @@ rules の本文にも執筆規律を適用する。適用の強さは、移行�
 
 ### 14-2. metatron の外
 
-- [ ] `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4-1(10 節 → 7 節)・**§4-3(書き込み経路の列挙に `stage-rules` / `commit-rules` を追加)**・§7(文書パスの既定値に `rulesDir`)・新設する rules の節。§11 の保証は変えない
+- [ ] `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4-1(10 節 → 7 節)・**§4-3(書き込み経路の列挙に `stage-rules` / `commit-rules` を追加)**・§8(文書パスの既定値に `rulesDir`)・新設する rules の節。§12 の保証は変えない
 - [ ] `harness-docs/ARCHITECTURE.md`(3 節の削除。§8 の手順)
 - [ ] `CLAUDE.md`(規約と保護パスとテスト方針の在り処)
 - [ ] ルートの `README.md`

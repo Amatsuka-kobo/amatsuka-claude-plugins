@@ -13,6 +13,7 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 ## rules の書式(`references/rules-format.md`)
 
 - [ ] `plugins/metatron/src/lib/rules.ts` の `RULES_FILES` / `RULES_ADMIN_NOTICE` / `prepareRulesUpdate` の検証
+- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §5
 - [ ] `plugins/metatron/references/rules-format.md`
 - [ ] `plugins/metatron/docs/RULES.example.md`
 - [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` のドラフト単位
@@ -20,7 +21,7 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 
 ## GOTCHAS の書式(`references/gotchas-format.md`)
 
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §6
+- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §7
 - [ ] codiel: `skills/recording-gotchas/SKILL.md` の書式の写し
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)

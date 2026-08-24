@@ -1,4 +1,4 @@
-// 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §11
+// 契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §12
 // 「staging の保証と保存先」の検証。
 // ケース ID は metatron 設計書 §13-1 の staging.ts の表(T1〜T6)に対応する。
 

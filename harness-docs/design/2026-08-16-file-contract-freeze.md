@@ -40,7 +40,7 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
   注入経路では他の警告と合わせて上限行数に収まるため、予算を圧迫しない。
   §4-2 の同名見出しの扱いと同型にする。ブロックだけを別扱いにすると、
   同じ「重複」という事象に 2 通りの規則が並ぶ。
-  読み取りをエラーにしないのは、注入がフェイルオープンでなければならないためである(§12)。
+  読み取りをエラーにしないのは、注入がフェイルオープンでなければならないためである(§13)。
 
 ```json metatron:domains
 {
@@ -103,7 +103,8 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
   "version": 1,
   "paths": {
     "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md"
+    "gotchas": "docs/GOTCHAS.md",
+    "rulesDir": ".claude/rules/metatron"
   },
   "injection": {
     "enabled": true,
@@ -118,6 +119,7 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
 | `version` | number | `1` | スキーマバージョン。未知の値なら**全項目を既定値として扱い**、警告を 1 行添える(読み手を止めない) |
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
 | `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
+| `paths.rulesDir` | string | `.claude/rules/metatron` | metatron が管理する rules の置き場 |
 | `injection.enabled` | boolean | `true` | SessionStart 注入の有効/無効 |
 | `injection.gotchasRecentCount` | number | `5` | 全文で注入する直近エントリ数 |
 | `injection.maxChars` | number | `9000` | 注入全体の文字数上限 |
@@ -170,12 +172,14 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
 
 ### 規則 2: パスの解決
 
-`paths.architecture` / `paths.gotchas` を `docRoot` からの**相対パス**として解決する。
+`paths.architecture` / `paths.gotchas` / `paths.rulesDir` を `docRoot` からの**相対パス**として解決する。
 
 ### 規則 3: 拒否
 
 **絶対パスと、ルートの外へ出るパス(`..` による脱出)は拒否する。**
-拒否した場合はその項目だけ既定値に落とし、理由を呼び出し元へ返す。
+拒否した場合はその項目だけ既定値に落とし、理由を `warnings` へ積んで呼び出し元へ返す。
+
+`paths.architecture` / `paths.gotchas` / `paths.rulesDir` は空文字列または文字列でない値も、同じ扱いで拒否する。
 
 ### 規則 4: キャッシュしない
 
@@ -219,16 +223,16 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 
 ### 一致の機械的担保
 
-3 実装が写しを持つため、一致はテストで検証する(§12)。
+3 実装が写しを持つため、一致はテストで検証する(§14)。
 これが唯一の機械的担保である。
 
 ---
 
 ## 4. ARCHITECTURE の書式
 
-### 4-1. セクション構成(10 節)
+### 4-1. セクション構成(7 節)
 
-見出し名と順序を固定する。CLI はこのキー列以外の見出しを受け付けない。
+見出し名と順序を固定する。CLI はこのキー列以外の見出しに `body` を伴う変更を受け付けない。
 
 | # | 見出し | CLI の `heading` キー | 機械可読 |
 | --- | --- | --- | --- |
@@ -238,10 +242,7 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 | 4 | `## ディレクトリ構成と責務` | `ディレクトリ構成と責務` | — |
 | 5 | `## ドメインマップ` | `ドメインマップ` | **○**(§1) |
 | 6 | `## コマンド定義` | `コマンド定義` | △ |
-| 7 | `## テスト方針` | `テスト方針` | — |
-| 8 | `## 保護パス` | `保護パス` | △ |
-| 9 | `## 規約` | `規約` | — |
-| 10 | `## ADR 一覧` | `ADR 一覧` | △(採番) |
+| 7 | `## ADR 一覧` | `ADR 一覧` | △(採番) |
 
 - **すべてのセクションは任意である。** 存在しないセクションがあってもエラーにしない。
   `## ドメインマップ` だけを持つ最小ファイルも正当な ARCHITECTURE として扱う。
@@ -249,6 +250,7 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 - `# ARCHITECTURE` と最初の `##` の間に本文を置かない。既存ファイルにそこへ本文がある場合、
   書き込み経路は**警告を返す**(拒否しない)。
 - `heading` に `ADR 一覧` を指定した場合は**エラー**にし、`stage-adr` を使うようメッセージで誘導する。
+- `## テスト方針` / `## 保護パス` / `## 規約` は、それぞれ `.claude/rules/metatron/testing-policy.md` / `protected-paths.md` / `conventions.md` へ移した。ARCHITECTURE に残る移行前の 3 節は、`stage-architecture` の `{ heading, remove: true }` で削除できる。`remove: true` は見出し許可リストではなく、対象ファイルに当該節が存在するかで検証する。ただし `## ADR 一覧` は `remove: true` でも `adr_heading` で拒否する。これらを `body` 付きで渡すと `unknown_heading` で拒否し、メッセージで移行先の rules ファイル名を示す。
 
 ### 4-2. セクション分割の規範アルゴリズム
 
@@ -285,15 +287,16 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 | 経路 | 挙動 |
 | --- | --- |
-| **書き込み経路**(`stage-architecture` / `stage-adr`) | **拒否**し `stagingId` を発行しない |
+| **ARCHITECTURE の書き込み経路**(`stage-architecture` / `stage-adr`) | **拒否**し `stagingId` を発行しない |
+| **rules の書き込み経路**(`stage-rules` / `commit-rules`) | `unclosed_fence` の判定を適用しない。rules の本文は Markdown だがセクション分割の対象ではなく、`prepareRulesUpdate` はフェンスの状態機械を持たない |
 | **読み取り・注入経路** | 処理を続け、未閉フェンス以降を 1 セクション扱いにしたうえで警告を 1 行添える |
 
-**「書き込み経路」「読み取り・注入経路」の定義**(§11 のサブコマンド一覧と 1 対 1 に対応する。
+**「書き込み経路」「読み取り・注入経路」の定義**(§12 のサブコマンド一覧と 1 対 1 に対応する。
 以後この文書ではこの定義で用いる)
 
 | 経路 | 該当するもの |
 | --- | --- |
-| 書き込み経路(第 1 層・フェイルクローズド) | `stage-architecture` / `stage-adr` / `commit-architecture` / `append-gotcha` / `tag-gotcha` |
+| 書き込み経路(第 1 層・フェイルクローズド) | `stage-architecture` / `stage-adr` / `commit-architecture` / `stage-rules` / `commit-rules` / `append-gotcha` / `tag-gotcha` |
 | 読み取り・注入経路(第 2 層・フェイルオープン) | `get config` / `get architecture` / `get domains` / `get gotchas` / `get adr` / `scan` / `diff-architecture` / SessionStart 注入 hook / PreToolUse deny hook |
 
 ### 4-4. `## システム概要` と `## レイヤー構造` の要件
@@ -313,9 +316,40 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 ---
 
-## 5. ADR の書式
+## 5. rules の書式
 
-### 5-1. エントリ書式
+### 5-1. ファイル構成
+
+metatron が管理する rules は次の 3 ファイルに固定する。ファイル名は config で変えられず、変えられるのは置き場(`paths.rulesDir`、既定 `.claude/rules/metatron`)だけである。
+
+| ファイル | 内容 |
+| --- | --- |
+| `conventions.md` | コーディング規約・ブランチ運用・DoD |
+| `protected-paths.md` | 触らないパスと、変更に慎重を要するパス |
+| `testing-policy.md` | ユニットテストと E2E の役割分担、テストの配置と命名 |
+
+### 5-2. ファイルの構造
+
+- 1 行目を `# 見出し` とし、その直後に管理者表示行を置く。`stage-rules` の `body` は見出し行を含む完全なファイル内容である。
+- frontmatter を書かない。unscoped にするには frontmatter 自体が不要であり、公式に定義された frontmatter キーは `paths` だけである。移行した 3 節はいずれも `paths` を付けた条件付き読み込みでは成立しない。frontmatter を持つファイルは起動時に読み込まれず、サブエージェントにも渡らない。
+- 管理者表示行は見出しの直後に次の 1 行をそのまま置く。本文の先頭 5 行にこの行が無いと、`stage-rules` は `missing_admin_notice` で拒否する。
+
+```
+> この文書は metatron の管理下にある。直接編集は PreToolUse hook が拒否する。更新は metatron の CLI(`stage-rules` → `commit-rules`)で行う。CLI の絶対パスは、セッション冒頭の注入文または hook の拒否メッセージに載っている。
+```
+
+### 5-3. 更新
+
+- 1 回の `stage-rules` で扱うのは 1 ファイルだけである。複数ファイルを 1 つの staging にまとめない。
+- staging は単一ターゲットのままである。書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていないという保証は rules にもそのまま成り立つ。
+- 更新は `stage-rules` → `commit-rules` で行う。直接編集は PreToolUse hook が拒否する。
+- 内容・書式の詳細は `plugins/metatron/references/rules-format.md` に定める。
+
+---
+
+## 6. ADR の書式
+
+### 6-1. エントリ書式
 
 ````markdown
 ### ADR-001: [判断のタイトル]
@@ -338,7 +372,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 - 追加位置は `## ADR 一覧` 節の**末尾**(GOTCHAS と逆向き)。
 - **エントリは削除しない。** 覆した判断は `廃止` の状態で残す。
 
-### 5-2. 状態変更の履歴
+### 6-2. 状態変更の履歴
 
 `状態` 行を書き換えるだけでなく、**エントリ末尾に 1 行を追記する**。
 
@@ -350,7 +384,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 - 変更のたびに追記し、**過去の行は消さない**。
 - `状態` 行そのものは最新の値に書き換える。
 
-### 5-3. 何を ADR にするか
+### 6-3. 何を ADR にするか
 
 **3 つすべてを満たすものだけ**を ADR にする。
 
@@ -362,12 +396,12 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 ---
 
-## 6. GOTCHAS の書式
+## 7. GOTCHAS の書式
 
 **旧書式(発生フェーズ / 症状 / 根本原因 / 予防策 / 関連ファイル)は廃止し、新書式へ全面置換する。**
 互換読みは設けない。
 
-### 6-1. ファイル構成
+### 7-1. ファイル構成
 
 ````markdown
 # GOTCHAS
@@ -403,7 +437,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 ...
 ````
 
-### 6-2. 解析の規約
+### 7-2. 解析の規約
 
 - **エントリとして解析するのは `## 失敗パターン一覧` 配下の `###` ブロックだけ**とする。
   `## 記入テンプレート` 配下の同形の見出しをエントリとして数えない。
@@ -411,7 +445,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 - フィールドは `**名前**: 値` の 5 行。`タスク` / `失敗内容` / `原因 (推測)` / `対策` / `昇格候補`。
 - `昇格候補` は `Yes` または `No` のみを受け付ける。他の値は拒否する。
 
-### 6-3. 挿入位置と採番
+### 7-3. 挿入位置と採番
 
 - 新エントリは **`## 失敗パターン一覧` の直下(先頭)** に挿入する。ファイル末尾に追記しない。
 - **採番は `## 失敗パターン一覧` 配下の全エントリを走査して最大値 + 1** とする。
@@ -419,7 +453,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 - 台帳または `## 失敗パターン一覧` 節が無ければ、雛形ごと作成する
   (冒頭説明・運用ルール・記入テンプレート・空の一覧節を含む)。
 
-### 6-4. タグの検出規則(規範)
+### 7-4. タグの検出規則(規範)
 
 タグを置ける位置を**1 箇所に固定する**。検出は次の規則だけで行い、他の位置は認識しない。
 
@@ -447,7 +481,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 **「CLI を使わなかった場合の自己責任」として受け入れる**。検出側を緩めない。
 緩めると「タイトルの一部なのかタグなのか」の判定が文字列の意味に依存し、決定的でなくなる。
 
-### 6-5. タグ付与の方法
+### 7-5. タグ付与の方法
 
 次の 2 箇所への追記とする。**エントリ本文は書き換えない。**
 
@@ -457,7 +491,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 既にタグが付いているエントリへの再付与は、見出しのタグを差し替え、理由行を**追記**する
 (前の理由行も残す)。
 
-### 6-6. 記録の判断
+### 7-6. 記録の判断
 
 - **記録判断フローは 1 問。**「次にこのプロジェクトを触るエージェントがこれを知らないと
   同じ失敗をするか?」が Yes のときだけ記録する。
@@ -467,29 +501,30 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 ---
 
-## 7. 文書パスの既定値
+## 8. 文書パスの既定値
 
 | 文書 | 既定パス |
 | --- | --- |
 | ARCHITECTURE | `docs/ARCHITECTURE.md` |
 | GOTCHAS | `docs/GOTCHAS.md` |
+| `rulesDir` | `.claude/rules/metatron`(**`docRoot` 基準、設定変更可**) |
 | intent 文書 | `docs/intents/YYYY-MM-DD-<slug>.md`(**`repoRoot` 基準**) |
 
-- ARCHITECTURE / GOTCHAS は `docRoot` 基準で、設定により変更されうる。**固定パスを前提にしない。**
+- ARCHITECTURE / GOTCHAS / `rulesDir` は `docRoot` 基準で、設定により変更されうる。**固定パスを前提にしない。**
 - intent 文書は `repoRoot` 基準で固定。設定による変更を持たない。
 
 ---
 
-## 8. intent 文書の書式
+## 9. intent 文書の書式
 
-### 8-1. 保存先と命名
+### 9-1. 保存先と命名
 
 - `docs/intents/YYYY-MM-DD-<slug>.md`。
 - `<slug>` は英小文字ケバブケース。日本語プロジェクトでも slug は英字。
 - 同日に同一 slug が存在する場合は `-2` を付す。上書きしない。
 - git リポジトリでない場合はカレントディレクトリ基準を提案し、**保存前に絶対パスを提示して確認を取る**。
 
-### 8-2. セクション構成
+### 9-2. セクション構成
 
 ```markdown
 ---
@@ -521,7 +556,7 @@ issue:
   ネスト・複数行文字列・リストは解釈しない。
 - `status` の値域は `approved` / `issued` / `done`。`draft` はファイルに現れない概念上の状態。
 - frontmatter は**issue 本文へ転記しない**。
-- 見出しは `##` レベル。名称と順序は §9 の intent-issue と**完全に一致させる**。
+- 見出しは `##` レベル。名称と順序は §10 の intent-issue と**完全に一致させる**。
 
 **frontmatter の 5 キー**
 
@@ -565,9 +600,9 @@ issue:
 
 ---
 
-## 9. intent-issue の書式(v1)
+## 10. intent-issue の書式(v1)
 
-### 9-1. 本文の構造
+### 10-1. 本文の構造
 
 ```markdown
 <!-- intent:v1 -->
@@ -596,12 +631,12 @@ issue:
 - 末尾に `<!-- intent-source: <リポジトリルートからの相対パス> -->`。
 - タイトルは intent 文書の `# intent: <...>` の内容(`intent:` の接頭辞を外したもの)。
 
-### 9-2. バージョニング
+### 10-2. バージョニング
 
 `v1` はフォーマットのバージョンである。見出しの追加・削除・改名を行う場合は `v2` に上げる。
 検知側は**自分が知らないバージョンを見たら機械的写像をせず**、本文全文を原文として扱う既定動作に落とす。
 
-### 9-3. issue.md への写像表(codiel `analyzing-issues` 用)
+### 10-3. issue.md への写像表(codiel `analyzing-issues` 用)
 
 | issue 本文のセクション | issue.md の写像先 | 扱い |
 | --- | --- | --- |
@@ -617,7 +652,7 @@ issue:
 
 ---
 
-## 10. 持ち込みモードの呼び出し契約(gh-utility `issue-craft`)
+## 11. 持ち込みモードの呼び出し契約(gh-utility `issue-craft`)
 
 固定開始句を次に凍結する。
 
@@ -638,7 +673,7 @@ issue:
 
 ---
 
-## 11. CLI の入出力規約(metatron)
+## 12. CLI の入出力規約(metatron)
 
 ```
 node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
@@ -651,11 +686,14 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 | `get domains` | 読 |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 |
 | `get adr [--id <ID> \| --status <状態>]` | 読 |
+| `get rules [--name <名前>]` | 読 |
 | `scan` | 読 |
 | `diff-architecture` | 読 |
 | `stage-architecture --input <path>` | 段階 |
 | `stage-adr --input <path>` | 段階 |
+| `stage-rules --input <path>` | 段階 |
 | `commit-architecture --staging-id <id>` | 書 |
+| `commit-rules --staging-id <id>` | 書 |
 | `append-gotcha --input <path>` | 書 |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由> [--date <YYYY-MM-DD>]` | 書 |
 
@@ -670,9 +708,10 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 
 ### staging の保証
 
-1. **diff を計算せずに書き込むことはできない。** `commit-architecture` は `stagingId` 無しでは失敗する。
+1. **diff を計算せずに書き込むことはできない。** `commit-architecture` / `commit-rules` は `stagingId` 無しでは失敗する。
 2. **staging は単回使用かつ有効期限つき**(既定 30 分)。
 3. **stage 後に対象ファイルが変化していたら commit は失敗する**(ハッシュ照合、`file_changed`)。
+4. `commit-architecture` は `architecture` / `adr`、`commit-rules` は `rules` の staging だけを受ける。不一致は `staging_kind_mismatch` で拒否する。
 
 保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json`。
 プロジェクト内には置かない。
@@ -713,7 +752,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 
 ---
 
-## 12. hook 出力の形式
+## 13. hook 出力の形式
 
 リポジトリ内の既存実装(codiel / revelation / agent-policy)と完全に同一の形に揃える。
 
@@ -786,7 +825,7 @@ metatron がフェイルオープンなのは、metatron の不具合でセッ�
 
 ---
 
-## 13. 実装間の一致検証
+## 14. 実装間の一致検証
 
 3 実装が写しを持つ設計における唯一の機械的担保。
 
@@ -816,7 +855,7 @@ metatron がフェイルオープンなのは、metatron の不具合でセッ�
 
 ---
 
-## 14. 契約を変更したときのチェックリスト
+## 15. 契約を変更したときのチェックリスト
 
 本書の内容を変更したときは、次をすべて更新する。
 
