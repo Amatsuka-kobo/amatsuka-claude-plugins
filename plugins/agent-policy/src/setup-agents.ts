@@ -193,14 +193,119 @@ function diff(options: Options): Diff {
   }
 }
 
+interface Keep {
+  tools: Set<string>
+  keys: Set<string>
+  sections: Set<string>
+  preamble: boolean
+}
+
+function parseKeep(selectors: string[]): Keep {
+  const keep: Keep = {
+    tools: new Set(),
+    keys: new Set(),
+    sections: new Set(),
+    preamble: false
+  }
+
+  for (const selector of selectors) {
+    if (selector === "preamble") {
+      keep.preamble = true
+      continue
+    }
+    const at = selector.indexOf(":")
+    const kind = at === -1 ? selector : selector.slice(0, at)
+    const value = at === -1 ? "" : selector.slice(at + 1)
+    if (value === "")
+      throw new Error(`keep: must be <kind>:<value>: ${selector}`)
+
+    switch (kind) {
+      case "tools":
+        keep.tools.add(value)
+        break
+      case "key":
+        keep.keys.add(value)
+        break
+      case "section":
+        keep.sections.add(value)
+        break
+      default:
+        throw new Error(`keep: unknown selector kind: ${selector}`)
+    }
+  }
+
+  return keep
+}
+
+function render(document: Document): string {
+  const head = ["---"]
+  for (const key of document.order) {
+    head.push(`${key}: ${document.meta.get(key) ?? ""}`)
+  }
+  head.push("---", "")
+
+  const body: string[] = []
+  if (document.preamble !== "") body.push(document.preamble, "")
+  for (const [heading, content] of document.sections) {
+    body.push(heading, "")
+    if (content !== "") body.push(content, "")
+  }
+
+  return `${[...head, ...body].join("\n").trimEnd()}\n`
+}
+
+function merge(existingRaw: string, renderedRaw: string, keep: Keep): string {
+  const existing = parseDocument(existingRaw)
+  const merged = parseDocument(renderedRaw)
+
+  // tools: テンプレートの並びを保ち、保持指定されたものを末尾へ足す。
+  const tools = splitTools(merged.meta.get("tools"))
+  for (const tool of splitTools(existing.meta.get("tools"))) {
+    if (keep.tools.has(tool) && !tools.includes(tool)) tools.push(tool)
+  }
+  merged.meta.set("tools", tools.join(", "))
+
+  // frontmatter キー: 保持指定されたものは既存の値を採る。
+  for (const key of keep.keys) {
+    const value = existing.meta.get(key)
+    if (value === undefined) continue
+    if (!merged.order.includes(key)) merged.order.push(key)
+    merged.meta.set(key, value)
+  }
+
+  if (keep.preamble && existing.preamble !== "") {
+    merged.preamble = existing.preamble
+  }
+
+  // 節: 保持指定されたものは既存の内容を採る。テンプレートに無い節は末尾へ。
+  for (const heading of keep.sections) {
+    const content = existing.sections.get(heading)
+    if (content === undefined) continue
+    merged.sections.set(heading, content)
+  }
+
+  return render(merged)
+}
+
 function write(options: Options): unknown {
   const file = targetPath(options)
+  const rendered = template(options)
+  const keep = parseKeep(options.keep)
+  const exists = fs.existsSync(file)
+
+  const content =
+    exists && options.keep.length > 0
+      ? merge(fs.readFileSync(file, "utf8"), rendered, keep)
+      : rendered
+
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, template(options))
+  fs.writeFileSync(file, content)
+
   return {
     ok: true,
     target: path.relative(options.dir, file).split(path.sep).join("/"),
-    action: "written"
+    action: exists ? "overwritten" : "written",
+    kept: options.keep
   }
 }
 

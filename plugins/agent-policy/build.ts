@@ -6,7 +6,8 @@ import { buildPresets } from "./src/agents/build-presets"
 await esbuild.build({
   bundle: true,
   entryPoints: {
-    "session-start": "./src/hooks/session-start.ts"
+    "session-start": "./src/hooks/session-start.ts",
+    "setup-agents": "./src/setup-agents.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
