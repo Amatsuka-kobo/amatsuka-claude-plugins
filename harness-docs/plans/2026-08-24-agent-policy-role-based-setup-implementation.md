@@ -3210,7 +3210,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor gpt --name <name>
 
 `setup-gpt` と同じ構成で、次を差し替える。
 
-- `name` は `setup-grok`、`description` の方針名は `codex-grok-policy` / `with-grok-policy`
+- `name` は `setup-grok`
+- **`description` は全文を Grok 向けに書き直す。** 方針名を `codex-grok-policy` / `with-grok-policy` へ、「GPT エージェント定義」を「Grok エージェント定義」へ、トリガー例を「Grok エージェントをセットアップして」「setup-grok を実行して」へ、前提を「Grok 系モデルをローカルプロキシ経由で使える環境が前提」へ変える。方針名だけを差し替えると、`setup-gpt` と発火条件が区別できない description になる
+- **H1 見出しを `# Grok エージェント セットアップウィザード` にする**
 - `--vendor grok`
 - 非対話モードは 1 定義だけ:
   ```bash
@@ -3218,9 +3220,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor gpt --name <name>
   ```
 - ステップ 1 の前提確認は Grok 系モデルのプロキシ。満たせないときは「Grok 帯はフォールバック運用(独立レビュー省略・リアルタイム調査は Opus 代行)になります」と案内する
 - ステップ 4 の名前の第一候補は `grok`
-- ステップ 5 のエイリアスは `claude-grok-4-6` の 1 つだけを推奨として提示する。次を必ず添える:
+- ステップ 5 のエイリアスは `claude-grok-4-6` の 1 つだけを推奨として提示する。**`setup-gpt` にある一般注記(「これはモデル本体の ID ではなく、任意の ProxyAPI サーバーが配信するクライアント側の別名です。お使いのプロキシ設定に合わせて変更できます」)はそのまま残し、**次を続けて添える:
   > 既定エイリアスは Grok 4.6 に合わせた `claude-grok-4-6` です。プロキシ設定にこの別名がまだ無い場合は、プロキシ側へ追加するか、4.5 を使い続けるなら `claude-grok-4-5` を指定してください。
 - ステップ 8 の CLAUDE.md 文例は、GPT 定義があれば `agent-policy:codex-grok-policy`、無ければ `agent-policy:with-grok-policy` を使う
+- ステップ 8 の末尾に、GPT も併用するなら `agent-policy:setup-gpt` の実行を案内する行を置く(`setup-gpt` 側の `setup-grok` 案内と対称にする)
+
+**この差し替えリストに無い箇所は `setup-gpt` と同じ内容を保つ。** 一般的な説明や注意書きを勝手に削らないこと。
 
 - [ ] **Step 3: スキルが読み込まれることを確認する**
 
