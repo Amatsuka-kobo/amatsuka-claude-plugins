@@ -53,9 +53,11 @@
 ```
 .
 ├── .claude-plugin/marketplace.json  配布するプラグインの一覧を宣言する
+├── .claude/rules/metatron/          metatron が管理する規律を置く
 ├── harness-docs/                    設計書・実装計画書と ARCHITECTURE・GOTCHAS を置く
 ├── scripts/                         開発環境のセットアップとローカルプロキシの起動スクリプトを置く(言語不問)
 ├── docs/                            人間向けの文書と会話記録を置く
+│   └── prompts/                     別セッションの起動プロンプトを置く
 ├── .raphael/                        raphael の抗体を置く
 ├── .serena/                         Serena のプロジェクト設定とメモリを置く
 └── plugins/<plugin>/
@@ -76,8 +78,9 @@
 ```
 
 - `plugins/codiel/raguel-mcp/` は codiel 内の独立した pnpm workspace であり、MCP サーバーとして `dist/` へ出力する。
-- `docs/` は読まない。
+- `docs/` は読まない。`docs/chat/` と `docs/prompts/` だけが例外である。
 - `docs/chat/**/*.md` は chat-recorder エージェントと chat-reader エージェントだけが読む。
+- `docs/prompts/**/*.md` は、依頼文で名指しされたときだけ読む。
 - 過去の記録が必要なときは `chat-history:recall` を使う。
 - 前回セッションの再開には `chat-history:resume` を使う。
 
