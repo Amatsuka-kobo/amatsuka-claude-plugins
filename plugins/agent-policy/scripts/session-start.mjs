@@ -182,7 +182,12 @@ function scan(dir) {
   const found = [];
   for (const file of fs.readdirSync(dir).sort()) {
     if (!file.endsWith(".md")) continue;
-    const meta = frontmatter(path.join(dir, file));
+    let meta;
+    try {
+      meta = frontmatter(path.join(dir, file));
+    } catch {
+      continue;
+    }
     const marker = meta.get("agent-policy-role");
     found.push({
       name: meta.get("name") ?? file.replace(/\.md$/, ""),
@@ -270,7 +275,11 @@ function retiredBlock(marked) {
   return `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`;
 }
 function build(env) {
-  const marked = scan(agentsDir(env));
+  let marked = [];
+  try {
+    marked = scan(agentsDir(env));
+  } catch {
+  }
   const blocks = [
     policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
     markerBlock(env, marked),

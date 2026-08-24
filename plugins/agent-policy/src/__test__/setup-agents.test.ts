@@ -379,6 +379,84 @@ describe("--write", () => {
     )
   })
 
+  it("存在しない --keep section でエラーになり既存ファイルを変えない", () => {
+    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    const before = fs.readFileSync(target(), "utf8")
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "section:ツール運用"
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(String(result.error)).toContain("keep")
+    expect(String(result.error)).toContain("not found")
+    expect(fs.readFileSync(target(), "utf8")).toBe(before)
+  })
+
+  it("存在しない --keep tools でエラーになり既存ファイルを変えない", () => {
+    seed({})
+    const before = fs.readFileSync(target(), "utf8")
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "tools:NoSuchTool"
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(String(result.error)).toContain("keep")
+    expect(String(result.error)).toContain("not found")
+    expect(fs.readFileSync(target(), "utf8")).toBe(before)
+  })
+
+  it("存在しない --keep key でエラーになり既存ファイルを変えない", () => {
+    seed({})
+    const before = fs.readFileSync(target(), "utf8")
+
+    const result = run([
+      "--vendor",
+      "gpt",
+      "--name",
+      "gpt-sol",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project,
+      "--write",
+      "--keep",
+      "key:noSuchKey"
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(String(result.error)).toContain("keep")
+    expect(String(result.error)).toContain("not found")
+    expect(fs.readFileSync(target(), "utf8")).toBe(before)
+  })
+
   it("不正な --keep セレクタでエラーを返す", () => {
     const result = run([
       "--vendor",

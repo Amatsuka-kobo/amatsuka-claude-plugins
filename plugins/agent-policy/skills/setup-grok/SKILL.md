@@ -119,6 +119,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name <name
 - 冒頭宣言 → `--keep preamble`
 - 値の違う共通キーを残す → `--keep key:<name>`
 
+`--keep section:` の値は、`--check` が返した `sectionsOnlyInExisting` / `sectionsChanged` の文字列をそのまま渡す(`## ` を含む)。一致しない値を渡すとエラーになり、ファイルは書き換えられない。
+
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --vendor grok --name <name> --model <alias> --roles <roles> --write [--keep ...]
 ```

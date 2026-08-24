@@ -258,9 +258,24 @@ function merge(existingRaw: string, renderedRaw: string, keep: Keep): string {
   const existing = parseDocument(existingRaw)
   const merged = parseDocument(renderedRaw)
 
+  const missing: string[] = []
+  for (const heading of keep.sections) {
+    if (!existing.sections.has(heading)) missing.push(`section:${heading}`)
+  }
+  const existingTools = splitTools(existing.meta.get("tools"))
+  for (const tool of keep.tools) {
+    if (!existingTools.includes(tool)) missing.push(`tools:${tool}`)
+  }
+  for (const key of keep.keys) {
+    if (!existing.meta.has(key)) missing.push(`key:${key}`)
+  }
+  if (missing.length > 0) {
+    throw new Error(`keep: not found in existing file: ${missing.join(", ")}`)
+  }
+
   // tools: テンプレートの並びを保ち、保持指定されたものを末尾へ足す。
   const tools = splitTools(merged.meta.get("tools"))
-  for (const tool of splitTools(existing.meta.get("tools"))) {
+  for (const tool of existingTools) {
     if (keep.tools.has(tool) && !tools.includes(tool)) tools.push(tool)
   }
   merged.meta.set("tools", tools.join(", "))

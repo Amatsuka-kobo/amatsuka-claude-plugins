@@ -176,9 +176,6 @@ var AGENT_CAPABLE = [
   "normal-impl",
   "general"
 ];
-function roleById(id) {
-  return ROLES.find((role) => role.id === id);
-}
 function sortRoleIds(ids) {
   const order = new Map(ROLES.map((role, index) => [role.id, index]));
   return [...ids].sort(
@@ -187,16 +184,6 @@ function sortRoleIds(ids) {
 }
 function allowsAgentTool(ids) {
   return ids.some((id) => AGENT_CAPABLE.includes(id));
-}
-function resolveTools(ids) {
-  const tools = [];
-  for (const id of sortRoleIds(ids)) {
-    for (const tool of roleById(id)?.tools ?? []) {
-      if (!tools.includes(tool)) tools.push(tool);
-    }
-  }
-  if (allowsAgentTool(ids)) tools.push("Agent");
-  return tools;
 }
 
 // src/agents/compose.ts
@@ -220,7 +207,7 @@ function compose(input) {
     return fragment;
   });
   const withAgent = allowsAgentTool(input.roleIds);
-  const tools = resolveToolsFor(input.roleIds, selected, withAgent);
+  const tools = resolveToolsFor(selected, withAgent);
   const head = [
     "---",
     `name: ${input.name}`,
@@ -247,6 +234,7 @@ function compose(input) {
       body.push("## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7", "", ...advisor, "");
   }
   const constraints = [
+    ...withAgent ? common.get("## Agent tool \u306E\u5236\u7D04") ?? [] : [],
     ...common.get("## \u5236\u7D04") ?? [],
     ...selected.flatMap((fragment) => fragment.sections.get("## \u5236\u7D04") ?? [])
   ];
@@ -264,11 +252,11 @@ function compose(input) {
   return `${[...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
 `;
 }
-function resolveToolsFor(ids, selected, withAgent) {
-  const tools = resolveTools(ids).filter((tool) => tool !== "Agent");
+function resolveToolsFor(selected, withAgent) {
+  const tools = [];
   for (const fragment of selected) {
     for (const tool of fragment.tools) {
-      if (!tools.includes(tool)) tools.push(tool);
+      if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool);
     }
   }
   if (withAgent) tools.push("Agent");
@@ -464,8 +452,22 @@ function render(document) {
 function merge(existingRaw, renderedRaw, keep) {
   const existing = parseDocument(existingRaw);
   const merged = parseDocument(renderedRaw);
+  const missing = [];
+  for (const heading of keep.sections) {
+    if (!existing.sections.has(heading)) missing.push(`section:${heading}`);
+  }
+  const existingTools = splitTools(existing.meta.get("tools"));
+  for (const tool of keep.tools) {
+    if (!existingTools.includes(tool)) missing.push(`tools:${tool}`);
+  }
+  for (const key of keep.keys) {
+    if (!existing.meta.has(key)) missing.push(`key:${key}`);
+  }
+  if (missing.length > 0) {
+    throw new Error(`keep: not found in existing file: ${missing.join(", ")}`);
+  }
   const tools = splitTools(merged.meta.get("tools"));
-  for (const tool of splitTools(existing.meta.get("tools"))) {
+  for (const tool of existingTools) {
     if (keep.tools.has(tool) && !tools.includes(tool)) tools.push(tool);
   }
   merged.meta.set("tools", tools.join(", "));
