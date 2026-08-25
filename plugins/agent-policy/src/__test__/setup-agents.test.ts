@@ -414,6 +414,51 @@ describe("--list-coverage", () => {
     expect(result.ok).toBe(false)
     expect(result.error).toContain("policy: must be one of")
   })
+
+  // default-name を持たない世代の翻訳断片は bodyHash が frontmatter を
+  // 除外するため stale にならず、再 scaffold も促されない。同梱英語断片から
+  // 補わないと、既定名が <model-id>-undefined になってしまう。
+  it("翻訳断片に default-name が無くても同梱英語断片から補う", () => {
+    run<FragmentStatusResult>([
+      "--scaffold-fragments",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+    const roles = path.join(project, ".claude", "agent-policy", "roles", "de")
+    for (const file of fs.readdirSync(roles)) {
+      const target = path.join(roles, file)
+      fs.writeFileSync(
+        target,
+        fs
+          .readFileSync(target, "utf8")
+          .split("\n")
+          .filter((line) => !line.startsWith("default-name:"))
+          .join("\n")
+      )
+    }
+
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--policy",
+      "codex-grok-policy",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+
+    expect(
+      result.roles.find((role) => role.id === "advisor")?.defaultName
+    ).toBe("adviser")
+    expect(
+      result.roles.every(
+        (role) =>
+          typeof role.defaultName === "string" && role.defaultName !== ""
+      )
+    ).toBe(true)
+  })
 })
 
 describe("--list-roles", () => {

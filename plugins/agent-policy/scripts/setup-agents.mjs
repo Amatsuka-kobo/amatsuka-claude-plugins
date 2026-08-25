@@ -1140,6 +1140,21 @@ function coveredDefinitions(projectDir, roleIds) {
   }
   return covered;
 }
+function bundledDefaultNames(projectDir) {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), projectDir, "en").filter(
+      (dir) => dir.source === "plugin"
+    ),
+    "claude"
+  );
+  const names = /* @__PURE__ */ new Map();
+  for (const [id, fragment] of fragments) {
+    if (fragment.defaultName !== void 0) {
+      names.set(id, fragment.defaultName);
+    }
+  }
+  return names;
+}
 function listCoverage(options) {
   const policy = requirePolicy(options);
   const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]));
@@ -1148,6 +1163,7 @@ function listCoverage(options) {
     "claude"
   );
   const covered = coveredDefinitions(options.dir, roleIds);
+  const fallbackNames = options.lang === "en" ? void 0 : roleIds.some((id) => fragments.get(id)?.defaultName === void 0) ? bundledDefaultNames(options.dir) : void 0;
   const roles = roleIds.map((id) => {
     const fragment = fragments.get(id);
     if (fragment === void 0) {
@@ -1156,7 +1172,7 @@ function listCoverage(options) {
     return {
       id,
       label: fragment.label,
-      defaultName: fragment.defaultName,
+      defaultName: fragment.defaultName ?? fallbackNames?.get(id),
       models: ASSIGNMENTS[policy][id],
       coveredBy: covered.get(id) ?? []
     };
