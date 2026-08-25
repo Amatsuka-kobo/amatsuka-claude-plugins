@@ -2,7 +2,7 @@
 id: normal-impl
 label: 通常の実装
 description: 通常のコーディング(複雑でない実装)、設定編集、ビルド/テスト実行
-tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP
+tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
 ---
 

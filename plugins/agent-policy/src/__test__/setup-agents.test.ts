@@ -643,6 +643,7 @@ describe("--write", () => {
 
     expect(result.action).toBe("merged")
     expect(result.kept).toEqual([
+      "tools:LSP",
       "tools:CustomTool",
       "key:permissionMode",
       "section:## 独自運用"
@@ -732,6 +733,7 @@ describe("--write", () => {
     ])
 
     expect(result.kept).toEqual([
+      "tools:LSP",
       "tools:mcp__context7",
       "tools:CustomTool",
       "section:## ツール運用",

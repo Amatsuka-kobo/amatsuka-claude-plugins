@@ -58,25 +58,25 @@ var ROLES = [
     id: "complex-impl",
     label: "\u8907\u96D1\u307E\u305F\u306F\u91CD\u8981\u306A\u5B9F\u88C5",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "normal-impl",
     label: "\u901A\u5E38\u306E\u5B9F\u88C5",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "light-impl",
     label: "\u8EFD\u91CF\u306A\u5B9F\u88C5",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
   },
   {
     id: "general",
     label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "explore",

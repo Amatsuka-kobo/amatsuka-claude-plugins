@@ -31,6 +31,12 @@ describe("ROLES", () => {
     }
   })
 
+  it("どの役割も LSP を持たない(背景サブエージェントで除去されるため)", () => {
+    for (const role of ROLES) {
+      expect(role.tools, role.id).not.toContain("LSP")
+    }
+  })
+
   it("読み取り役割に Write / Edit を含まない", () => {
     for (const role of ROLES.filter((entry) => entry.kind === "readonly")) {
       expect(role.tools).not.toContain("Write")
