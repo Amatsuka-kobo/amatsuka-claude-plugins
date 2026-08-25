@@ -74,33 +74,38 @@ function appendSections(base, extra) {
 }
 function loadFragments(dirs, vendor) {
   const fragments = /* @__PURE__ */ new Map();
-  for (const [index, dir] of dirs.entries()) {
-    const source = index === 0 ? "plugin" : "project";
-    if (!fs.existsSync(dir)) continue;
-    const files = fs.readdirSync(dir).filter((name) => name.endsWith(".md") && !name.startsWith("_")).sort((left, right) => left.localeCompare(right));
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir.path)) continue;
+    const files = fs.readdirSync(dir.path).filter((name) => name.endsWith(".md") && !name.startsWith("_")).sort((left, right) => left.localeCompare(right));
     for (const name of files) {
       if (name.split(".").length > 2) continue;
-      const fragment = readFragment(path.join(dir, name), source);
+      const fragment = readFragment(path.join(dir.path, name), dir.source);
       fragments.set(fragment.id, fragment);
     }
   }
+  const overlays = /* @__PURE__ */ new Map();
   for (const dir of dirs) {
-    if (!fs.existsSync(dir)) continue;
-    for (const name of fs.readdirSync(dir).sort((left, right) => left.localeCompare(right))) {
+    if (!fs.existsSync(dir.path)) continue;
+    for (const name of fs.readdirSync(dir.path).sort((left, right) => left.localeCompare(right))) {
       if (!name.endsWith(`.${vendor}.md`)) continue;
       const { meta, sections } = parse(
-        fs.readFileSync(path.join(dir, name), "utf8")
+        fs.readFileSync(path.join(dir.path, name), "utf8")
       );
-      const target = fragments.get(meta.id ?? "");
-      if (target !== void 0) appendSections(target, sections);
+      const id = meta.id;
+      if (id === void 0 || id === "") continue;
+      overlays.set(id, sections);
     }
+  }
+  for (const [id, sections] of overlays) {
+    const target = fragments.get(id);
+    if (target !== void 0) appendSections(target, sections);
   }
   return fragments;
 }
 function loadCommon(dirs) {
   const sections = /* @__PURE__ */ new Map();
   for (const dir of dirs) {
-    const file = path.join(dir, "_common.md");
+    const file = path.join(dir.path, "_common.md");
     if (!fs.existsSync(file)) continue;
     for (const [heading, body] of parse(fs.readFileSync(file, "utf8")).sections) {
       sections.set(heading, body);
@@ -108,6 +113,21 @@ function loadCommon(dirs) {
   }
   if (sections.size === 0) throw new Error("_common.md not found");
   return sections;
+}
+function fragmentDirsFor(pluginRoot2, projectDir, lang) {
+  const bundled = lang === "ja" || lang === "en" ? lang : "en";
+  const dirs = [
+    {
+      path: path.join(pluginRoot2, "assets", "roles", bundled),
+      source: "plugin"
+    }
+  ];
+  const projectRoles = path.join(projectDir, ".claude", "agent-policy", "roles");
+  if (bundled !== lang) {
+    dirs.push({ path: path.join(projectRoles, lang), source: "project" });
+  }
+  dirs.push({ path: projectRoles, source: "project" });
+  return dirs;
 }
 
 // src/agents/roles.ts
@@ -342,19 +362,13 @@ function only(left, right) {
 function pluginRoot() {
   return process.env.CLAUDE_PLUGIN_ROOT ?? path2.resolve(path2.dirname(fileURLToPath(import.meta.url)), "..");
 }
-function fragmentDirs(projectDir) {
-  return [
-    path2.join(pluginRoot(), "assets", "roles"),
-    path2.join(projectDir, ".claude", "agent-policy", "roles")
-  ];
-}
 function composeInput(options) {
   return {
     name: options.name,
     model: options.model,
     vendor: options.vendor,
     roleIds: options.roles,
-    fragmentDirs: fragmentDirs(options.dir)
+    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   };
 }
 function template(options) {
@@ -584,7 +598,10 @@ function write(options) {
 }
 function listAvailableRoles(options) {
   const roles = [
-    ...loadFragments(fragmentDirs(options.dir), options.vendor).values()
+    ...loadFragments(
+      fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+      options.vendor
+    ).values()
   ].sort(
     (left, right) => roleOrder(left.id) - roleOrder(right.id) || left.id.localeCompare(right.id)
   ).map(({ id, label, kind, tools, source }) => ({
@@ -603,6 +620,7 @@ function parseArgs(argv) {
     model: "",
     roles: [],
     dir: process.cwd(),
+    lang: "ja",
     check: false,
     write: false,
     merge: false,
@@ -638,6 +656,10 @@ function parseArgs(argv) {
         break;
       case "--dir":
         options.dir = path2.resolve(requireValue(value, "dir"));
+        index += 1;
+        break;
+      case "--lang":
+        options.lang = requireValue(value, "lang");
         index += 1;
         break;
       case "--check":
