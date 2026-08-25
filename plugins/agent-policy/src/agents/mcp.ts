@@ -108,9 +108,9 @@ export function mcpCurrentOf(content: string): McpCurrent {
           .filter((entry) => entry !== "")
 
   return {
-    servers: split(meta.get("tools")).filter((tool) =>
-      tool.startsWith("mcp__")
-    ),
+    servers: split(meta.get("tools"))
+      .filter((tool) => tool.startsWith("mcp__"))
+      .map((tool) => tool.slice("mcp__".length)),
     denyTools: split(meta.get("disallowedTools"))
   }
 }

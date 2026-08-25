@@ -492,6 +492,54 @@ describe("英語断片での合成", () => {
     expect(document).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
   })
 
+  it("日本語見出しのプロジェクト断片は英語合成で該当節を出さない", () => {
+    const projectRoles = path.join(temporary, "roles")
+    fs.mkdirSync(projectRoles, { recursive: true })
+    fs.writeFileSync(
+      path.join(projectRoles, "explore.md"),
+      [
+        "---",
+        "id: explore",
+        "label: Project explorer",
+        "description: project-specific exploration",
+        "tools: Read, Grep, Glob",
+        "kind: readonly",
+        "---",
+        "",
+        "## When to invoke",
+        "",
+        "- Keep this matching section.",
+        "",
+        "## 作業手順",
+        "",
+        "- This procedure must be omitted.",
+        "",
+        "## 制約",
+        "",
+        "- This constraint must be omitted.",
+        "",
+        "## Output Format",
+        "",
+        "- Keep this output format."
+      ].join("\n")
+    )
+
+    const document = compose({
+      name: "test-agent",
+      model: "sonnet",
+      vendor: "claude",
+      roleIds: ["explore"],
+      fragmentDirs: [EN, { path: projectRoles, source: "project" }],
+      lang: "en"
+    })
+    expect(document).toContain("Keep this matching section.")
+    expect(document).toContain("Keep this output format.")
+    expect(document).not.toContain("This procedure must be omitted.")
+    expect(document).not.toContain("This constraint must be omitted.")
+    expect(document).not.toContain("## 作業手順")
+    expect(document).not.toContain("## 制約")
+  })
+
   it("英語で合成した定義の見出しが英語になっている", () => {
     const document = compose({
       name: "test-agent",

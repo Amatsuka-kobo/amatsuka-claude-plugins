@@ -99,8 +99,8 @@ describe("mcpCurrentOf", () => {
     "本文"
   ].join("\n")
 
-  it("tools から MCP のプレフィックスを拾う", () => {
-    expect(mcpCurrentOf(definition).servers).toEqual(["mcp__serena"])
+  it("tools から MCP のプレフィックスを外して返す", () => {
+    expect(mcpCurrentOf(definition).servers).toEqual(["serena"])
   })
 
   it("disallowedTools をそのまま返す", () => {

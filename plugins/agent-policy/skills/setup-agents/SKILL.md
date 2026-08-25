@@ -129,7 +129,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --policy <policy-i
 - 既定名 (`defaultName`) と `model` 値
 - 役割
 - 既存状態 (`exists` / `identical`) と差分
-- `mcpCurrent` の既存の「役割 → サーバー」対応
+- `mcpCurrent` から読んだ、各定義の既存のサーバー付与状況
 
 次の 3 択を提示する。
 
@@ -157,7 +157,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --policy <policy-i
    | `en` | `id` |
    | その他 | 翻訳断片の `label` |
 
-   `source` が `project` の候補にはプロジェクト固有である旨を添える。`languageMismatch: true` の候補には、プロジェクト独自断片が言語別断片より優先されるため、その役割は元の言語のまま合成される旨を添える。候補数の共通規則を適用する。
+   `source` が `project` の候補にはプロジェクト固有である旨を添える。`languageMismatch: true` の候補には、プロジェクト断片は選択した言語の見出し集合(`--lang ja` なら `## 作業手順` / `## 制約`、それ以外なら `## Procedure` / `## Constraints`)を使う必要があり、一致しない見出しの節は合成結果に現れない旨を添える。候補数の共通規則を適用する。
 
 2. 定義名、`model` 値、選んだ役割を確認する。最初の候補は `defaultName` とステップ 4 が返した `model` 値である。
 3. 選択した `kind` に `readonly` と `impl` の両方が含まれるとき、次を警告して続行確認を取る。既定は続行しない。
@@ -177,6 +177,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --policy <policy-i
    | --- | --- |
    | 保持マージ（推奨） | `--write --merge` |
    | 項目を選んで保持 | `--write --merge` と、選んだ `--keep key:<name>` / `--keep section:<heading>` / `--keep preamble` |
+   | 既存定義だけにある tool を名指しで保持 | `--write --merge --keep tools:<name>`。`mcp__` で始まる tool は `keptNeedsReview` で報告されるため、保持してよいか再確認する |
    | 完全上書き | `--write` |
    | スキップ | 生成しない |
 
@@ -194,7 +195,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 1. ステップ 5 の `mcpCurrent` を、既存定義から読み戻した既定値として提示する。既存定義がなければ空である。
 2. `usable: true` のサーバーだけを名前と status とともに提示する。プラグイン側の既定は「付けない」だが、`mcpCurrent` があればそれを既定にする。サーバーの選択には候補数の共通規則を適用する。1 つも選ばなければ直ちに次へ進む。
-3. 選んだサーバーごとに付与先の役割を決める。既定は実装役割 4 種、`complex-impl` / `normal-impl` / `light-impl` / `general` である。読み取り役割にはユーザーが明示して選んだときだけ付ける。生成コマンドには、その定義へ付与するサーバーを `--mcp-servers` で渡す。
+3. 選んだサーバーごとに付与先の定義を決める。MCP の付与単位は役割ではなく定義である。既定では、`complex-impl` / `normal-impl` / `light-impl` / `general` のいずれかを持つ定義へ付け、読み取り役割だけの定義にはユーザーが明示して選んだときだけ付ける。実装役割と読み取り役割を同じモデルの定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できない。生成コマンドには、その定義へ付与するサーバーを `--mcp-servers` で渡す。
 4. 各サーバーについて、実際に適用される `_common.md` の制約と矛盾しないことを確認する。プロジェクト側の `_common.md` がある場合はそちらを優先して確認し、同梱版だけを根拠にしない。
 5. 読み取り役割へ付与するサーバーがあるときだけ、実行中の Agent 自身のツール一覧から、そのサーバーの編集・書き込み・削除など外部状態を変えるツールを列挙する。読み取り・検索・解析だけのツールは除外する。`disallowedTools` に入れる案を提示して確認を取り、追加・削除を受け付ける。
 
@@ -202,16 +203,23 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 ### ステップ 6: 生成
 
-ステップ 5 で「このまま全部作る」を選んだモデルと、個別調整しなかったモデルは、1 回の一括生成で保持マージする。
+1 回のコマンドに渡した `--mcp-servers` / `--mcp-deny` は、そのコマンドが生成する全定義へ同じ内容で適用される。MCP を選ばなかったときは、ステップ 5 で「このまま全部作る」を選んだモデルと、個別調整しなかったモデルを、従来どおり 1 回の一括生成で保持マージする。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --policy <policy-id> --lang <lang> --models <model-id,...> --mcp-servers <server,...> --mcp-deny <tool,...> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --policy <policy-id> --lang <lang> --models <model-id,...> --dir "$PWD"
 ```
 
-MCP を選ばなかったときは `--mcp-servers` と `--mcp-deny` を省く。個別調整したモデルは、モデルごとに選んだ差分方針を使って生成する。
+MCP を選んだときは、付与するサーバーと denylist が同じモデルをグループに分け、グループごとに `--write` を発行する。付与内容が異なるモデルを同じ `--models` に含めてはならない。MCP を付けないモデルのグループでは `--mcp-servers` と `--mcp-deny` を省く。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write [--merge] --policy <policy-id> --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <role-id,...> [--keep <selector> ...] --mcp-servers <server,...> --mcp-deny <tool,...> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --policy <policy-id> --lang <lang> --models <same-mcp-model-id,...> --mcp-servers <server,...> --mcp-deny <tool,...> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --policy <policy-id> --lang <lang> --models <model-id-without-mcp,...> --dir "$PWD"
+```
+
+個別調整したモデルは、モデルごとに選んだ差分方針と、その定義に決めた MCP の付与内容を使って生成する。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write [--merge] --policy <policy-id> --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <role-id,...> [--keep <selector> ...] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --dir "$PWD"
 ```
 
 `--keep` は `--models` と併用できない。`--keep` を選んだ場合は必ず個別コマンドで実行する。各書き込みの `results` を保存し、次の報告に使う。

@@ -119,11 +119,24 @@ interface FragmentStatusResult {
   written?: string[]
 }
 
-function run<T = CheckResult>(args: string[]): T {
+const ALIAS_ENV_VARS = [
+  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
+  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
+  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
+  "AMATSUKA_AGENT_GROK_ALIAS"
+]
+
+function inheritedTestEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  for (const variable of ALIAS_ENV_VARS) delete env[variable]
+  return env
+}
+
+function run<T = CheckResult>(args: string[], env: NodeJS.ProcessEnv = {}): T {
   let output: string
   try {
     output = runTs(CLI, args, {
-      env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
+      env: { ...inheritedTestEnv(), ...env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
     })
   } catch (error) {
     // CLI はエラー時も JSON を stdout へ書いてから終了コード 1 で終わる。
@@ -136,18 +149,10 @@ function run<T = CheckResult>(args: string[]): T {
 }
 
 function runWithMcp<T>(args: string[], listOutput: string): T {
-  const previous = {
-    bin: process.env.AGENT_POLICY_CLAUDE_BIN,
-    fake: process.env.AGENT_POLICY_FAKE_MCP
-  }
-  process.env.AGENT_POLICY_CLAUDE_BIN = FAKE_CLAUDE
-  process.env.AGENT_POLICY_FAKE_MCP = listOutput
-  try {
-    return run<T>(args)
-  } finally {
-    process.env.AGENT_POLICY_CLAUDE_BIN = previous.bin
-    process.env.AGENT_POLICY_FAKE_MCP = previous.fake
-  }
+  return run<T>(args, {
+    AGENT_POLICY_CLAUDE_BIN: FAKE_CLAUDE,
+    AGENT_POLICY_FAKE_MCP: listOutput
+  })
 }
 
 function singleResult<T>(args: string[]): T {
@@ -253,6 +258,16 @@ describe("--list-models", () => {
     expect(sonnet?.model).toBe("sonnet")
     expect(sonnet?.color).toBe("purple")
     expect(sonnet?.roles).toContain("code-review")
+  })
+
+  it("呼び出し側が明示したモデルエイリアスは反映する", () => {
+    const result = run<ModelListResult>(
+      ["--list-models", "--policy", "with-codex-policy"],
+      { AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" }
+    )
+    expect(result.models.find((model) => model.id === "gpt-sol")?.model).toBe(
+      "my-sol"
+    )
   })
 
   it("未知のポリシーを拒否する", () => {
@@ -646,6 +661,26 @@ describe("--check", () => {
     ])
     expect(result.ok).toBe(false)
     expect(String(result.error)).toContain("model")
+  })
+
+  it("方針と言語が不正なら方針のエラーを先に返す", () => {
+    const result = run([
+      "--policy",
+      "bogus-policy",
+      "--model-id",
+      "gpt-sol",
+      "--name",
+      "gpt-sol",
+      "--roles",
+      "complex-impl",
+      "--lang",
+      "de",
+      "--dir",
+      project,
+      "--check"
+    ])
+    expect(result.ok).toBe(false)
+    expect(String(result.error)).toMatch(/^policy: must be one of /)
   })
 })
 
@@ -1454,10 +1489,48 @@ describe("MCP の付与", () => {
       "--dir",
       project
     ])
-    expect(result.results[0]?.mcpCurrent.servers).toEqual(["mcp__serena"])
+    expect(result.results[0]?.mcpCurrent.servers).toEqual(["serena"])
     expect(result.results[0]?.mcpCurrent.denyTools).toEqual([
       "mcp__serena__write_memory"
     ])
+  })
+
+  it("mcpCurrent を次の書き込みへ渡しても MCP 選択を保持する", () => {
+    const connected =
+      "plugin:context7:context7: https://mcp.context7.com/mcp (HTTP) - ✔ Connected"
+    const base = [
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-explorer",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ]
+
+    runWithMcp<WriteResults>(
+      ["--write", ...base, "--mcp-servers", "plugin:context7:context7"],
+      connected
+    )
+    const checked = run<WriteResults>(["--check", ...base])
+    const current = checked.results[0]?.mcpCurrent.servers ?? []
+    expect(current).toEqual(["plugin_context7_context7"])
+
+    const rewritten = runWithMcp<WriteResults>(
+      ["--write", ...base, "--mcp-servers", current.join(",")],
+      connected
+    )
+    expect(rewritten.results[0]?.mcpDropped).toEqual([])
+    const written = fs.readFileSync(
+      path.join(project, ".claude", "agents", "claude-explorer.md"),
+      "utf8"
+    )
+    expect(written).toMatch(/^tools:.*mcp__plugin_context7_context7$/m)
   })
 })
 

@@ -5,15 +5,9 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { policyForInjection } from "../agents/policies"
 import { DEFAULT_ALIASES, PRESETS } from "../agents/presets"
 import { roleById, sortRoleIds } from "../agents/roles"
-
-const POLICIES: Record<string, string> = {
-  claude: "claude-model-policy",
-  "with-codex": "with-codex-policy",
-  "with-grok": "with-grok-policy",
-  "with-codex-grok": "codex-grok-policy"
-}
 
 // 廃止した定義。プロジェクト側に残っていると同梱プリセットより優先されるため通知する。
 const RETIRED = [
@@ -63,7 +57,7 @@ interface Marked {
 function policyBlock(value: string | undefined): string | undefined {
   if (value === undefined || value === "" || value === "none") return undefined
 
-  const policy = POLICIES[value]
+  const policy = policyForInjection(value)
   if (policy === undefined) {
     return `AMATSUKA_AGENT_AUTO_INJECTION の値 "${value}" は未知のため、agent-policy の方針注入をスキップした。`
   }
