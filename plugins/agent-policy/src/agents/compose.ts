@@ -1,5 +1,6 @@
 import {
   type Fragment,
+  type FragmentDir,
   loadCommon,
   loadFragments,
   type Vendor
@@ -16,7 +17,7 @@ export interface ComposeInput {
   model: string
   vendor: Vendor
   roleIds: RoleId[]
-  fragmentDirs: string[]
+  fragmentDirs: FragmentDir[]
   color?: string
 }
 

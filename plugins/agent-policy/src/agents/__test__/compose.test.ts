@@ -4,11 +4,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { compose, describeRoles } from "../compose"
+import type { FragmentDir } from "../fragments"
 import { ROLES } from "../roles"
 
-const PLUGIN_ROLES = fileURLToPath(
-  new URL("../../../assets/roles/", import.meta.url)
-)
+const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
+const PLUGIN_ROLES: FragmentDir = {
+  path: path.join(PLUGIN_ROOT, "assets", "roles", "ja"),
+  source: "plugin"
+}
 
 let temporary: string
 
@@ -28,7 +31,7 @@ function build(roleIds: string[], overrides: Record<string, unknown> = {}) {
     roleIds: roleIds as never,
     fragmentDirs: [PLUGIN_ROLES],
     ...overrides
-  } as never)
+  })
 }
 
 function frontmatter(document: string): Record<string, string> {
@@ -125,7 +128,7 @@ describe("describeRoles", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["triage", "normal-impl"] as never,
-      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
     })
 
     expect(summary).toEqual({
@@ -226,7 +229,7 @@ describe("本文", () => {
 describe("同梱役割断片と ROLES の整合性", () => {
   function bundledRoleFiles(): string[] {
     return fs
-      .readdirSync(PLUGIN_ROLES)
+      .readdirSync(PLUGIN_ROLES.path)
       .filter(
         (name) =>
           name.endsWith(".md") &&
@@ -241,7 +244,8 @@ describe("同梱役割断片と ROLES の整合性", () => {
     const fileIds = files.map((file) => file.replace(/\.md$/, ""))
     const fragmentIds = files.map(
       (file) =>
-        frontmatter(fs.readFileSync(path.join(PLUGIN_ROLES, file), "utf8")).id
+        frontmatter(fs.readFileSync(path.join(PLUGIN_ROLES.path, file), "utf8"))
+          .id
     )
     const roleIds = ROLES.map((role) => role.id).sort()
 
@@ -252,7 +256,7 @@ describe("同梱役割断片と ROLES の整合性", () => {
   it("各断片の label・tools・kind が ROLES と一致する", () => {
     for (const role of ROLES) {
       const meta = frontmatter(
-        fs.readFileSync(path.join(PLUGIN_ROLES, `${role.id}.md`), "utf8")
+        fs.readFileSync(path.join(PLUGIN_ROLES.path, `${role.id}.md`), "utf8")
       )
       expect(meta.label).toBe(role.label)
       expect(meta.tools?.split(", ")).toEqual(role.tools)
@@ -270,11 +274,14 @@ describe("同梱役割断片と ROLES の整合性", () => {
       "Claude Researcher"
     ]
     const files = fs
-      .readdirSync(PLUGIN_ROLES)
+      .readdirSync(PLUGIN_ROLES.path)
       .filter((name) => name.endsWith(".md"))
 
     for (const file of files) {
-      const content = fs.readFileSync(path.join(PLUGIN_ROLES, file), "utf8")
+      const content = fs.readFileSync(
+        path.join(PLUGIN_ROLES.path, file),
+        "utf8"
+      )
       const lines = content.split("\n")
       const body = lines.slice(lines.indexOf("---", 1) + 1).join("\n")
       for (const name of names) expect(body).not.toContain(name)
@@ -330,7 +337,7 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["explore"] as never,
-      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
     })
     expect(body).toContain("独自探索")
     expect(body).not.toContain("依頼された探索範囲だけを走査する")
@@ -363,7 +370,7 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["explore"] as never,
-      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
     })
     expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
   })
@@ -394,7 +401,7 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["triage"] as never,
-      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
     })
     expect(body).toContain("切り分け")
   })
@@ -421,7 +428,7 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["complex-impl"] as never,
-      fragmentDirs: [PLUGIN_ROLES, projectRoles]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
     })
     // 差し替えた節は反映される
     expect(body).toContain("プロジェクト固有の共通制約")

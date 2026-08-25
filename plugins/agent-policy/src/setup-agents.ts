@@ -7,7 +7,7 @@ import {
   describeRoles,
   type RolesSummary
 } from "./agents/compose"
-import { loadFragments, type Vendor } from "./agents/fragments"
+import { fragmentDirsFor, loadFragments, type Vendor } from "./agents/fragments"
 import { type RoleId, roleOrder } from "./agents/roles"
 
 interface Options {
@@ -16,6 +16,7 @@ interface Options {
   model: string
   roles: RoleId[]
   dir: string
+  lang: string
   check: boolean
   write: boolean
   merge: boolean
@@ -113,20 +114,13 @@ function pluginRoot(): string {
   )
 }
 
-function fragmentDirs(projectDir: string): string[] {
-  return [
-    path.join(pluginRoot(), "assets", "roles"),
-    path.join(projectDir, ".claude", "agent-policy", "roles")
-  ]
-}
-
 function composeInput(options: Options): ComposeInput {
   return {
     name: options.name,
     model: options.model,
     vendor: options.vendor,
     roleIds: options.roles,
-    fragmentDirs: fragmentDirs(options.dir)
+    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   }
 }
 
@@ -409,7 +403,10 @@ function write(options: Options): unknown {
 
 function listAvailableRoles(options: Options): unknown {
   const roles = [
-    ...loadFragments(fragmentDirs(options.dir), options.vendor).values()
+    ...loadFragments(
+      fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+      options.vendor
+    ).values()
   ]
     .sort(
       (left, right) =>
@@ -434,6 +431,7 @@ function parseArgs(argv: string[]): Options {
     model: "",
     roles: [],
     dir: process.cwd(),
+    lang: "ja",
     check: false,
     write: false,
     merge: false,
@@ -473,6 +471,10 @@ function parseArgs(argv: string[]): Options {
         break
       case "--dir":
         options.dir = path.resolve(requireValue(value, "dir"))
+        index += 1
+        break
+      case "--lang":
+        options.lang = requireValue(value, "lang")
         index += 1
         break
       case "--check":

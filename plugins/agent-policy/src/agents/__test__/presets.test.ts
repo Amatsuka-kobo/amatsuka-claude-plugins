@@ -1,12 +1,16 @@
+import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { compose } from "../compose"
+import type { FragmentDir } from "../fragments"
 import { MODELS, rolesAcrossPolicies } from "../policies"
 import { DEFAULT_ALIASES, PRESETS } from "../presets"
 
-const PLUGIN_ROLES = fileURLToPath(
-  new URL("../../../assets/roles/", import.meta.url)
-)
+const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
+const PLUGIN_ROLES: FragmentDir = {
+  path: path.join(PLUGIN_ROOT, "assets", "roles", "ja"),
+  source: "plugin"
+}
 
 describe("PRESETS", () => {
   it("4 種を定義する", () => {
