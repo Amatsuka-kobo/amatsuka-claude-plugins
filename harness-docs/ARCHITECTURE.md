@@ -55,7 +55,8 @@
 ├── .claude-plugin/marketplace.json  配布するプラグインの一覧を宣言する
 ├── .claude/rules/metatron/          metatron が管理する規律を置く
 ├── harness-docs/                    設計書・実装計画書と ARCHITECTURE・GOTCHAS を置く
-├── scripts/                         開発環境のセットアップとローカルプロキシの起動スクリプトを置く(言語不問)
+├── scripts/                         ターミナルで手動実行するための ShellScript を置く
+├── tools/                           AI が使用する Python スクリプトツールを置く
 ├── docs/                            人間向けの文書と会話記録を置く
 │   └── prompts/                     別セッションの起動プロンプトを置く
 ├── .raphael/                        raphael の抗体を置く
@@ -93,7 +94,7 @@
   "impl": ["plugins/*/src/**", "plugins/*/build.ts", "plugins/codiel/raguel-mcp/src/**", "plugins/codiel/raguel-mcp/build.ts"],
   "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**"],
   "bundle": ["plugins/*/scripts/**", "plugins/*/dist/**", "plugins/codiel/raguel-mcp/dist/**"],
-  "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**"],
+  "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**"],
   "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".raphael/**", ".serena/**"]
 }
 ```
