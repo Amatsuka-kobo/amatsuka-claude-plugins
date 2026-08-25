@@ -705,6 +705,26 @@ function coveredDefinitions(
   return covered
 }
 
+// default-name は言語に依存しない契約だが、この版より前に scaffold した
+// 翻訳断片は持っていない。bodyHash は frontmatter を除外するため stale にも
+// ならず、再 scaffold も促されない。同梱英語断片の値へ落として補う。
+// 組み込みに無い独自役割は補えないため undefined のまま返す。
+function bundledDefaultNames(projectDir: string): Map<string, string> {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), projectDir, "en").filter(
+      (dir) => dir.source === "plugin"
+    ),
+    "claude"
+  )
+  const names = new Map<string, string>()
+  for (const [id, fragment] of fragments) {
+    if (fragment.defaultName !== undefined) {
+      names.set(id, fragment.defaultName)
+    }
+  }
+  return names
+}
+
 function listCoverage(options: Options): unknown {
   const policy = requirePolicy(options)
   const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]) as RoleId[])
@@ -713,6 +733,12 @@ function listCoverage(options: Options): unknown {
     "claude"
   )
   const covered = coveredDefinitions(options.dir, roleIds)
+  const fallbackNames =
+    options.lang === "en"
+      ? undefined
+      : roleIds.some((id) => fragments.get(id)?.defaultName === undefined)
+        ? bundledDefaultNames(options.dir)
+        : undefined
   const roles = roleIds.map((id) => {
     const fragment = fragments.get(id)
     if (fragment === undefined) {
@@ -721,7 +747,7 @@ function listCoverage(options: Options): unknown {
     return {
       id,
       label: fragment.label,
-      defaultName: fragment.defaultName,
+      defaultName: fragment.defaultName ?? fallbackNames?.get(id),
       models: ASSIGNMENTS[policy][id],
       coveredBy: covered.get(id) ?? []
     }
