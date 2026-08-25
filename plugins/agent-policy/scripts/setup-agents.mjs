@@ -503,9 +503,7 @@ function mcpCurrentOf(content) {
   }
   const split = (value) => value === void 0 ? [] : value.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
   return {
-    servers: split(meta.get("tools")).filter(
-      (tool) => tool.startsWith("mcp__")
-    ),
+    servers: split(meta.get("tools")).filter((tool) => tool.startsWith("mcp__")).map((tool) => tool.slice("mcp__".length)),
     denyTools: split(meta.get("disallowedTools"))
   };
 }
@@ -1027,12 +1025,13 @@ function write(options, target, mcpServers) {
 function resolveMcp(options) {
   if (options.mcpServers.length === 0) return { servers: [], dropped: [] };
   const usable = new Set(
-    listMcpServers(process.env).filter((server) => server.usable).map((server) => server.name)
+    listMcpServers(process.env).filter((server) => server.usable).map((server) => toolPrefix(server.name))
   );
   const servers = [];
   const dropped = [];
   for (const name of options.mcpServers) {
-    if (usable.has(name)) servers.push(toolPrefix(name));
+    const prefixed = toolPrefix(name);
+    if (usable.has(prefixed)) servers.push(prefixed);
     else dropped.push(name);
   }
   return { servers, dropped };
@@ -1042,8 +1041,8 @@ function mcpCurrentFor(file) {
   return mcpCurrentOf(fs2.readFileSync(file, "utf8"));
 }
 function setup(options) {
-  validateFragments(options);
   const policy = requirePolicy(options);
+  validateFragments(options);
   const targets = targetsFor(options, policy);
   const mcp = resolveMcp(options);
   const results = targets.map((target) => {

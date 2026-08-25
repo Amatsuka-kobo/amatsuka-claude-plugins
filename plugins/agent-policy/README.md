@@ -92,7 +92,18 @@ Marketplace から `agent-policy` をインストールします。
 | `gpt-luna` | `claude-gpt-5-6-luna` | cyan | `light-impl` |
 | `grok` | `claude-grok-4-6` | red | `normal-impl`, `light-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
 
-利用者が setup で作った定義の color はベンダーで決まります(gpt=yellow / grok=red / claude=blue)。
+利用者が setup で作る定義の color は、`--list-models` が返すモデル別の値を使います。
+
+| モデル ID | color |
+| --- | --- |
+| `opus` | blue |
+| `sonnet` | purple |
+| `haiku` | pink |
+| `fable` | orange |
+| `gpt-sol` | yellow |
+| `gpt-terra` | green |
+| `gpt-luna` | cyan |
+| `grok` | red |
 
 ## エイリアスを変更する
 
@@ -147,6 +158,8 @@ SessionStart フックはプロジェクトの `.claude/agents/` を走査し、
 
 プロジェクト固有の役割断片は `.claude/agent-policy/roles/` に Markdown ファイルとして置けます。断片の frontmatter には `id`、`label`、`description`、`tools`、`kind` を指定します。`kind` は `impl` または `readonly` です。独自の `id` は setup の選択肢に追加され、既存の役割と同じ `id` を指定すると組み込み断片を置き換えます。
 
+断片の節見出しは、生成時に選んだ言語の見出し集合と一致させてください。`--lang ja` では `## 作業手順` / `## 制約`、それ以外では `## Procedure` / `## Constraints` を使います。一致しない見出しの節は合成結果に現れません。`ja` / `en` 以外の翻訳断片でも見出しは英語のままにし、翻訳するのは本文と frontmatter の `label` / `description` です。
+
 SessionStart フックは独自役割の表示名を解決するとき、`.claude/agent-policy/roles/<id>.md` に加えて `.claude/agent-policy/roles/*/<id>.md` も走査します。同じ役割 ID が複数の言語ディレクトリにある場合、フックは会話言語を知らないため、どの表示名が使われるかは決まりません。
 
 ## 旧バージョンからの移行
@@ -163,5 +176,7 @@ SessionStart フックは独自役割の表示名を解決するとき、`.claud
 4. `setup-gpt` と `setup-grok` は `setup-agents` へ統合しました。ポリシーとモデルと役割を選んで複数の定義を一度に作れます。
 5. 役割定義から `LSP` を外しました。背景で起動するサブエージェントでは Claude Code が `LSP` を除去するため、定義に書いても機能しません。
 6. MCP ツールを付けられるようになりました。`claude mcp list` で接続済みのサーバーを検出し、許可するものを選ぶと `tools` へ入ります。既定では付きません。前回の選択は生成された定義から読み戻します。
-7. `_common.md` の制約から GitHub の名指しを外し、「外部システムへの不可逆な副作用」という一般則へ書き換えました。この規律を外したい場合は `.claude/agent-policy/roles/_common.md` に `## 制約` 節を書いて差し替えてください。
+7. `_common.md` の共通規律を変更しました。
+   - 制約から GitHub の名指しを外し、「外部システムへの不可逆な副作用」という一般則へ書き換えました。この規律を外したい場合は `.claude/agent-policy/roles/_common.md` に `## 制約` 節を書いて差し替えてください。
+   - アドバイザーの相談先は、`Fable`(起動できなければ `Opus`)を直接指定する方式から、担当表の「設計・計画・実装のアドバイザー」帯の定義を使う方式へ変わりました。プロジェクトに該当する定義がなければ、`model` 上書きで `Fable`、起動できなければ `Opus` を指定します。
 8. 方針スキルの「実行帯の解決順」から、定義名による探索を外しました。プロジェクト定義は `agent-policy-role` マーカーで解決されます。マーカーを持たない手書きの定義は、マーカーを 1 行足してください。

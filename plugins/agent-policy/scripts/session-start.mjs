@@ -219,6 +219,10 @@ var ASSIGNMENTS = {
     advisor: ["fable", "opus"]
   }
 };
+function policyForInjection(value) {
+  if (value === void 0) return void 0;
+  return POLICIES.find((policy) => policy.injection === value.trim())?.id;
+}
 function rolesFor(policy, model) {
   const assignments = ASSIGNMENTS[policy];
   const roles = Object.keys(assignments).filter(
@@ -249,12 +253,6 @@ var DEFAULT_ALIASES = Object.fromEntries(
 );
 
 // src/hooks/session-start.ts
-var POLICIES2 = {
-  claude: "claude-model-policy",
-  "with-codex": "with-codex-policy",
-  "with-grok": "with-grok-policy",
-  "with-codex-grok": "codex-grok-policy"
-};
 var RETIRED = [
   "claude-researcher",
   "gpt-researcher",
@@ -286,7 +284,7 @@ var ALIASES = [
 ];
 function policyBlock(value) {
   if (value === void 0 || value === "" || value === "none") return void 0;
-  const policy = POLICIES2[value];
+  const policy = policyForInjection(value);
   if (policy === void 0) {
     return `AMATSUKA_AGENT_AUTO_INJECTION \u306E\u5024 "${value}" \u306F\u672A\u77E5\u306E\u305F\u3081\u3001agent-policy \u306E\u65B9\u91DD\u6CE8\u5165\u3092\u30B9\u30AD\u30C3\u30D7\u3057\u305F\u3002`;
   }

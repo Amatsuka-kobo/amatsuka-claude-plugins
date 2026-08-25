@@ -558,12 +558,13 @@ function resolveMcp(options: Options): {
   const usable = new Set(
     listMcpServers(process.env)
       .filter((server) => server.usable)
-      .map((server) => server.name)
+      .map((server) => toolPrefix(server.name))
   )
   const servers: string[] = []
   const dropped: string[] = []
   for (const name of options.mcpServers) {
-    if (usable.has(name)) servers.push(toolPrefix(name))
+    const prefixed = toolPrefix(name)
+    if (usable.has(prefixed)) servers.push(prefixed)
     else dropped.push(name)
   }
   return { servers, dropped }
@@ -576,8 +577,8 @@ function mcpCurrentFor(file: string): McpCurrent {
 }
 
 function setup(options: Options): unknown {
-  validateFragments(options)
   const policy = requirePolicy(options)
+  validateFragments(options)
   const targets = targetsFor(options, policy)
   const mcp = resolveMcp(options)
   const results = targets.map((target) => {
