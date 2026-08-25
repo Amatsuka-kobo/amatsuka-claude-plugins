@@ -2,6 +2,7 @@
 id: advisor
 label: Design, Planning, and Implementation Advisor
 description: advice on design, planning, and implementation decisions
+default-name: adviser
 tools: Read, Grep, Glob
 kind: readonly
 ---

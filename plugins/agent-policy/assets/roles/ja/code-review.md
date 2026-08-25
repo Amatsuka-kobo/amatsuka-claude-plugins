@@ -2,6 +2,7 @@
 id: code-review
 label: コードレビュー
 description: 変更差分のレビュー
+default-name: code-reviewer
 tools: Read, Grep, Glob, Bash
 kind: readonly
 ---

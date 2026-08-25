@@ -2,6 +2,7 @@
 id: light-impl
 label: Lightweight Implementation
 description: bulk application, bulk checking, repetitive transformation, or minor coding
+default-name: light-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash
 kind: impl
 ---

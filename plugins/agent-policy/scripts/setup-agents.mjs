@@ -71,6 +71,7 @@ function readFragment(file, source) {
     id: requireMeta(meta, "id", file),
     label: requireMeta(meta, "label", file),
     description: requireMeta(meta, "description", file),
+    defaultName: meta["default-name"],
     tools: requireMeta(meta, "tools", file).split(",").map((tool) => tool.trim()),
     kind,
     source,
@@ -1116,6 +1117,57 @@ function listAvailableRoles(options) {
   }));
   return { ok: true, policy, modelId: model.id, lang: options.lang, roles };
 }
+function coveredDefinitions(projectDir, roleIds) {
+  const covered = new Map(
+    roleIds.map((roleId) => [roleId, []])
+  );
+  const agentsDir = path2.join(projectDir, ".claude", "agents");
+  if (!fs2.existsSync(agentsDir)) return covered;
+  for (const file of fs2.readdirSync(agentsDir).sort()) {
+    if (!file.endsWith(".md")) continue;
+    try {
+      const document = parseDocument(
+        fs2.readFileSync(path2.join(agentsDir, file), "utf8")
+      );
+      const marker = document.meta.get("agent-policy-role");
+      if (marker === void 0) continue;
+      const name = document.meta.get("name") ?? file.replace(/\.md$/, "");
+      for (const roleId of splitList(marker)) {
+        covered.get(roleId)?.push(name);
+      }
+    } catch {
+    }
+  }
+  return covered;
+}
+function listCoverage(options) {
+  const policy = requirePolicy(options);
+  const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]));
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    "claude"
+  );
+  const covered = coveredDefinitions(options.dir, roleIds);
+  const roles = roleIds.map((id) => {
+    const fragment = fragments.get(id);
+    if (fragment === void 0) {
+      throw new Error(`Role fragment not found: ${id}`);
+    }
+    return {
+      id,
+      label: fragment.label,
+      defaultName: fragment.defaultName,
+      models: ASSIGNMENTS[policy][id],
+      coveredBy: covered.get(id) ?? []
+    };
+  });
+  return {
+    ok: true,
+    policy,
+    roles,
+    uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id)
+  };
+}
 function parseArgs(argv) {
   const options = {
     policy: "",
@@ -1134,6 +1186,7 @@ function parseArgs(argv) {
     listPolicies: false,
     listModels: false,
     listRoles: false,
+    listCoverage: false,
     listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
@@ -1201,6 +1254,9 @@ function parseArgs(argv) {
       case "--list-roles":
         options.listRoles = true;
         break;
+      case "--list-coverage":
+        options.listCoverage = true;
+        break;
       case "--list-mcp":
         options.listMcp = true;
         break;
@@ -1221,7 +1277,7 @@ function parseArgs(argv) {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
-  if (options.listPolicies || options.listModels || options.listRoles || options.listMcp || options.checkFragments || options.scaffoldFragments) {
+  if (options.listPolicies || options.listModels || options.listRoles || options.listCoverage || options.listMcp || options.checkFragments || options.scaffoldFragments) {
     return options;
   }
   if (options.merge && !options.write)
@@ -1261,6 +1317,8 @@ try {
     respond(listPolicies(process.env));
   } else if (options.listModels) {
     respond(listModels(options));
+  } else if (options.listCoverage) {
+    respond(listCoverage(options));
   } else if (options.listMcp) {
     respond(listMcp());
   } else if (options.checkFragments) {

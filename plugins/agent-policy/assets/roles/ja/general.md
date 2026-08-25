@@ -2,6 +2,7 @@
 id: general
 label: その他のタスク
 description: ドキュメント作成、定型メンテナンスなど、レビュー・設計を除く一般作業
+default-name: generalist
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
 ---

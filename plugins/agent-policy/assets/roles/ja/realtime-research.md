@@ -2,6 +2,7 @@
 id: realtime-research
 label: リアルタイム情報調査
 description: 最新動向・リリース情報・外部エコシステムなど、外部の最新情報を要する調査
+default-name: researcher
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
 kind: readonly
 ---

@@ -2,6 +2,7 @@
 id: complex-impl
 label: 複雑または重要な実装
 description: 複雑なコーディング(アーキテクチャ判断・非自明な設計トレードオフ・複数コンポーネントの協調を伴う実装)
+default-name: lead-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
 ---

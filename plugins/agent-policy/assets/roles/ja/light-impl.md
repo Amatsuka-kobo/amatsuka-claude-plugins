@@ -2,6 +2,7 @@
 id: light-impl
 label: 軽量な実装
 description: 一括適用・一括チェック・反復変換・軽微なコーディング
+default-name: light-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash
 kind: impl
 ---

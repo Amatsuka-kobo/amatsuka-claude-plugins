@@ -2,6 +2,7 @@
 id: independent-review
 label: 設計書・実装計画書の独立レビュー
 description: 設計書・実装計画書の前提検証と反証提示
+default-name: docs-reviewer
 tools: Read, Grep, Glob, Bash
 kind: readonly
 ---

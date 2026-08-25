@@ -2,6 +2,7 @@
 id: explore
 label: Codebase Exploration
 description: hands-on codebase exploration directed by the orchestrator
+default-name: explorer
 tools: Read, Grep, Glob, Bash
 kind: readonly
 ---

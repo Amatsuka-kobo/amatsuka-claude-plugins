@@ -2,6 +2,7 @@
 id: realtime-research
 label: Real-Time Research
 description: research requiring access to current external information, such as developments, releases, and external ecosystems
+default-name: researcher
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
 kind: readonly
 ---

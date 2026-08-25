@@ -2,6 +2,7 @@
 id: advisor
 label: 設計・計画・実装のアドバイザー
 description: 設計・計画・実装の判断に対する助言
+default-name: adviser
 tools: Read, Grep, Glob
 kind: readonly
 ---

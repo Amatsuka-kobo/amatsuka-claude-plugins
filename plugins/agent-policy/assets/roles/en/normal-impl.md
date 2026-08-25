@@ -2,6 +2,7 @@
 id: normal-impl
 label: Routine Implementation
 description: routine coding with non-complex implementations, configuration updates, and build or test execution
+default-name: implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
 ---

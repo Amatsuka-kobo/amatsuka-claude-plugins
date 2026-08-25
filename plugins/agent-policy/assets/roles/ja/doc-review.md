@@ -2,6 +2,7 @@
 id: doc-review
 label: 設計書・実装計画書のレビュー
 description: 設計書・実装計画書の理解の言語化と暗黙知・矛盾の抽出
+default-name: reviewer
 tools: Read, Grep, Glob
 kind: readonly
 ---

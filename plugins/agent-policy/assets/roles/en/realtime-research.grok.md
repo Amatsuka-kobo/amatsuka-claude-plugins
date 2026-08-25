@@ -1,6 +1,7 @@
 ---
 id: realtime-research
 vendor: grok
+default-name: researcher
 ---
 
 ## Procedure

@@ -92,6 +92,20 @@ interface ListRolesResult {
   roles: ListedRole[]
 }
 
+interface CoverageResult {
+  ok: boolean
+  error?: string
+  policy: string
+  roles: {
+    id: string
+    label: string
+    defaultName: string
+    models: string[]
+    coveredBy: string[]
+  }[]
+  uncovered: string[]
+}
+
 interface PolicyListResult {
   ok: boolean
   injected: string | null
@@ -307,6 +321,98 @@ describe("--list-models", () => {
     const result = run<ModelListResult>(["--list-models", "--policy", "nope"])
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/policy/)
+  })
+})
+
+describe("--list-coverage", () => {
+  it(".claude/agents が無いとき全役割を uncovered にする", () => {
+    fs.rmSync(path.join(project, ".claude", "agents"), {
+      recursive: true,
+      force: true
+    })
+
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--policy",
+      "codex-grok-policy",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(result.roles).toHaveLength(10)
+    expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
+    expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
+  })
+
+  it("複数の役割マーカーを定義名で coveredBy に反映する", () => {
+    fs.writeFileSync(
+      path.join(project, ".claude", "agents", "custom-agent.md"),
+      [
+        "---",
+        "name: shared-researcher",
+        "agent-policy-role: explore, realtime-research",
+        "---",
+        ""
+      ].join("\n")
+    )
+
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--policy",
+      "codex-grok-policy",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+
+    expect(
+      result.roles.find((role) => role.id === "explore")?.coveredBy
+    ).toEqual(["shared-researcher"])
+    expect(
+      result.roles.find((role) => role.id === "realtime-research")?.coveredBy
+    ).toEqual(["shared-researcher"])
+    expect(result.uncovered).not.toContain("explore")
+    expect(result.uncovered).not.toContain("realtime-research")
+  })
+
+  it("複数モデルの役割と各役割の defaultName を返す", () => {
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--policy",
+      "codex-grok-policy",
+      "--lang",
+      "en",
+      "--dir",
+      project
+    ])
+
+    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
+      "fable",
+      "opus"
+    ])
+    expect(
+      result.roles.every(
+        (role) =>
+          typeof role.defaultName === "string" && role.defaultName !== ""
+      )
+    ).toBe(true)
+  })
+
+  it("不正な policy を拒否する", () => {
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--policy",
+      "unknown-policy",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("policy: must be one of")
   })
 })
 

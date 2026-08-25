@@ -23,6 +23,7 @@ import {
   toolPrefix
 } from "./agents/mcp"
 import {
+  ASSIGNMENTS,
   type ModelId,
   type ModelSpec,
   modelById,
@@ -34,7 +35,7 @@ import {
   resolveModelValue,
   rolesFor
 } from "./agents/policies"
-import { type RoleId, roleById, roleOrder } from "./agents/roles"
+import { type RoleId, roleById, roleOrder, sortRoleIds } from "./agents/roles"
 
 interface Options {
   policy: string
@@ -53,6 +54,7 @@ interface Options {
   listPolicies: boolean
   listModels: boolean
   listRoles: boolean
+  listCoverage: boolean
   listMcp: boolean
   checkFragments: boolean
   scaffoldFragments: boolean
@@ -674,6 +676,67 @@ function listAvailableRoles(options: Options): unknown {
   return { ok: true, policy, modelId: model.id, lang: options.lang, roles }
 }
 
+function coveredDefinitions(
+  projectDir: string,
+  roleIds: RoleId[]
+): Map<RoleId, string[]> {
+  const covered = new Map<RoleId, string[]>(
+    roleIds.map((roleId) => [roleId, []])
+  )
+  const agentsDir = path.join(projectDir, ".claude", "agents")
+  if (!fs.existsSync(agentsDir)) return covered
+
+  for (const file of fs.readdirSync(agentsDir).sort()) {
+    if (!file.endsWith(".md")) continue
+    // 1 ファイルが読めなくても、他の定義と全体の応答は生かす。
+    try {
+      const document = parseDocument(
+        fs.readFileSync(path.join(agentsDir, file), "utf8")
+      )
+      const marker = document.meta.get("agent-policy-role")
+      if (marker === undefined) continue
+      const name = document.meta.get("name") ?? file.replace(/\.md$/, "")
+      for (const roleId of splitList(marker)) {
+        covered.get(roleId as RoleId)?.push(name)
+      }
+    } catch {}
+  }
+
+  return covered
+}
+
+function listCoverage(options: Options): unknown {
+  const policy = requirePolicy(options)
+  const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]) as RoleId[])
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    "claude"
+  )
+  const covered = coveredDefinitions(options.dir, roleIds)
+  const roles = roleIds.map((id) => {
+    const fragment = fragments.get(id)
+    if (fragment === undefined) {
+      throw new Error(`Role fragment not found: ${id}`)
+    }
+    return {
+      id,
+      label: fragment.label,
+      defaultName: fragment.defaultName,
+      models: ASSIGNMENTS[policy][id],
+      coveredBy: covered.get(id) ?? []
+    }
+  })
+
+  return {
+    ok: true,
+    policy,
+    roles,
+    uncovered: roles
+      .filter((role) => role.coveredBy.length === 0)
+      .map((role) => role.id)
+  }
+}
+
 function parseArgs(argv: string[]): Options {
   const options: Options = {
     policy: "",
@@ -692,6 +755,7 @@ function parseArgs(argv: string[]): Options {
     listPolicies: false,
     listModels: false,
     listRoles: false,
+    listCoverage: false,
     listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
@@ -760,6 +824,9 @@ function parseArgs(argv: string[]): Options {
       case "--list-roles":
         options.listRoles = true
         break
+      case "--list-coverage":
+        options.listCoverage = true
+        break
       case "--list-mcp":
         options.listMcp = true
         break
@@ -785,6 +852,7 @@ function parseArgs(argv: string[]): Options {
     options.listPolicies ||
     options.listModels ||
     options.listRoles ||
+    options.listCoverage ||
     options.listMcp ||
     options.checkFragments ||
     options.scaffoldFragments
@@ -834,6 +902,8 @@ try {
     respond(listPolicies(process.env))
   } else if (options.listModels) {
     respond(listModels(options))
+  } else if (options.listCoverage) {
+    respond(listCoverage(options))
   } else if (options.listMcp) {
     respond(listMcp())
   } else if (options.checkFragments) {
