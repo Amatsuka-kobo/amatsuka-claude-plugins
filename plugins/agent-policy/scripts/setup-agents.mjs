@@ -282,6 +282,9 @@ var AGENT_CAPABLE = [
   "normal-impl",
   "general"
 ];
+function roleById(id) {
+  return ROLES.find((role) => role.id === id);
+}
 function roleOrder(id) {
   const index = ROLES.findIndex((role) => role.id === id);
   return index === -1 ? ROLES.length : index;
@@ -434,6 +437,222 @@ function preamble(common, name, selected, vocabulary) {
   );
 }
 
+// src/agents/mcp.ts
+import { execFileSync } from "node:child_process";
+var USABLE = ["\u2714 Connected", "cached"];
+var STATUSES = [
+  "\u2714 Connected",
+  "\u2718 Failed to connect",
+  "! Needs authentication",
+  "\u23F8 Pending approval",
+  "\u2718 Rejected",
+  "cached"
+];
+function parseMcpList(output) {
+  const servers = [];
+  for (const raw of output.split("\n")) {
+    const line = raw.trim();
+    if (line === "") continue;
+    if (line.startsWith("\u26A0") || line.startsWith("Checking")) continue;
+    const at = line.lastIndexOf(" - ");
+    if (at === -1) continue;
+    const status = line.slice(at + 3).trim();
+    if (!STATUSES.some((known) => status.startsWith(known))) continue;
+    const head = line.slice(0, at);
+    const space = head.indexOf(" ");
+    const name = (space === -1 ? head : head.slice(0, space)).replace(/:$/, "");
+    if (name === "") continue;
+    servers.push({
+      name,
+      status,
+      usable: USABLE.some((known) => status.startsWith(known))
+    });
+  }
+  return servers;
+}
+function listMcpServers(env) {
+  const bin = env.AGENT_POLICY_CLAUDE_BIN;
+  const options = {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 3e4,
+    maxBuffer: 8 * 1024 * 1024,
+    // options.env は process.env と自動マージされないため、PATH を保つ。
+    env: { ...process.env, ...env }
+  };
+  try {
+    const output = bin === void 0 || bin === "" ? execFileSync("claude", ["mcp", "list"], options) : execFileSync(process.execPath, [bin], options);
+    return parseMcpList(output);
+  } catch {
+    return [];
+  }
+}
+
+// src/agents/policies.ts
+var POLICIES = [
+  { id: "claude-model-policy", label: "Claude \u306E\u307F", injection: "claude" },
+  {
+    id: "with-codex-policy",
+    label: "Claude + Codex \u4F75\u7528",
+    injection: "with-codex"
+  },
+  {
+    id: "with-grok-policy",
+    label: "Claude + Grok \u4F75\u7528",
+    injection: "with-grok"
+  },
+  {
+    id: "codex-grok-policy",
+    label: "Claude + Codex + Grok \u4F75\u7528",
+    injection: "with-codex-grok"
+  }
+];
+var MODELS = [
+  {
+    id: "opus",
+    vendor: "claude",
+    label: "Opus",
+    defaultName: "claude-opus",
+    model: "opus",
+    color: "blue"
+  },
+  {
+    id: "sonnet",
+    vendor: "claude",
+    label: "Sonnet",
+    defaultName: "claude-sonnet",
+    model: "sonnet",
+    color: "purple"
+  },
+  {
+    id: "haiku",
+    vendor: "claude",
+    label: "Haiku",
+    defaultName: "claude-haiku",
+    model: "haiku",
+    color: "pink"
+  },
+  {
+    id: "fable",
+    vendor: "claude",
+    label: "Fable",
+    defaultName: "claude-fable",
+    model: "fable",
+    color: "orange"
+  },
+  {
+    id: "gpt-sol",
+    vendor: "gpt",
+    label: "GPT Sol",
+    defaultName: "gpt-sol",
+    model: "claude-gpt-5-6-sol",
+    aliasEnv: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
+    color: "yellow"
+  },
+  {
+    id: "gpt-terra",
+    vendor: "gpt",
+    label: "GPT Terra",
+    defaultName: "gpt-terra",
+    model: "claude-gpt-5-6-terra",
+    aliasEnv: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
+    color: "green"
+  },
+  {
+    id: "gpt-luna",
+    vendor: "gpt",
+    label: "GPT Luna",
+    defaultName: "gpt-luna",
+    model: "claude-gpt-5-6-luna",
+    aliasEnv: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
+    color: "cyan"
+  },
+  {
+    id: "grok",
+    vendor: "grok",
+    label: "Grok",
+    defaultName: "grok",
+    model: "claude-grok-4-6",
+    aliasEnv: "AMATSUKA_AGENT_GROK_ALIAS",
+    color: "red"
+  }
+];
+var ASSIGNMENTS = {
+  "claude-model-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["sonnet"],
+    "light-impl": ["haiku"],
+    general: ["sonnet"],
+    explore: ["sonnet"],
+    "realtime-research": ["sonnet"],
+    "independent-review": ["sonnet"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  },
+  "with-codex-policy": {
+    "complex-impl": ["gpt-sol"],
+    "normal-impl": ["gpt-terra"],
+    "light-impl": ["gpt-luna"],
+    general: ["gpt-terra"],
+    explore: ["gpt-terra"],
+    "realtime-research": ["gpt-terra"],
+    "independent-review": ["gpt-terra"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  },
+  "with-grok-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["grok"],
+    "light-impl": ["grok"],
+    general: ["grok"],
+    explore: ["grok"],
+    "realtime-research": ["grok"],
+    "independent-review": ["grok"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  },
+  "codex-grok-policy": {
+    "complex-impl": ["gpt-sol"],
+    "normal-impl": ["gpt-terra"],
+    "light-impl": ["gpt-luna"],
+    general: ["gpt-terra"],
+    explore: ["grok"],
+    "realtime-research": ["grok"],
+    "independent-review": ["grok"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  }
+};
+function modelById(id) {
+  return MODELS.find((model) => model.id === id);
+}
+function policyById(id) {
+  return POLICIES.find((policy) => policy.id === id);
+}
+function modelsFor(policy) {
+  const used = /* @__PURE__ */ new Set();
+  for (const models of Object.values(ASSIGNMENTS[policy])) {
+    for (const id of models) used.add(id);
+  }
+  return MODELS.filter((model) => used.has(model.id));
+}
+function rolesFor(policy, model) {
+  const assignments = ASSIGNMENTS[policy];
+  const roles = Object.keys(assignments).filter(
+    (role) => assignments[role].includes(model)
+  );
+  return sortRoleIds(roles);
+}
+function resolveModelValue(spec, env) {
+  if (spec.aliasEnv === void 0) return spec.model;
+  const value = env[spec.aliasEnv]?.trim();
+  return value === void 0 || value === "" ? spec.model : value;
+}
+
 // src/setup-agents.ts
 function parseDocument(content) {
   const lines = content.split("\n");
@@ -478,14 +697,34 @@ function only(left, right) {
 function pluginRoot() {
   return process.env.CLAUDE_PLUGIN_ROOT ?? path2.resolve(path2.dirname(fileURLToPath(import.meta.url)), "..");
 }
+function requirePolicy(options) {
+  const policy = policyById(options.policy);
+  if (policy === void 0) {
+    throw new Error(
+      `policy: must be one of ${POLICIES.map((entry) => entry.id).join(", ")}`
+    );
+  }
+  return policy.id;
+}
+function requireModel(options, policy) {
+  const spec = modelById(options.modelId);
+  if (spec === void 0) throw new Error("model-id: is unknown");
+  if (!modelsFor(policy).some((entry) => entry.id === spec.id)) {
+    throw new Error(`model-id: ${spec.id} is not used in ${policy}`);
+  }
+  return spec;
+}
 function composeInput(options) {
+  const policy = requirePolicy(options);
+  const spec = requireModel(options, policy);
   return {
     name: options.name,
-    model: options.model,
-    vendor: options.vendor,
+    model: options.model === "" ? resolveModelValue(spec, process.env) : options.model,
+    vendor: spec.vendor,
     roleIds: options.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-    lang: options.lang
+    lang: options.lang,
+    color: spec.color
   };
 }
 function template(options) {
@@ -713,26 +952,64 @@ function write(options) {
     discarded: discarded(difference, shouldMerge ? keep : parseKeep([]))
   };
 }
+function listPolicies() {
+  return {
+    ok: true,
+    policies: POLICIES.map(({ id, label, injection }) => ({
+      id,
+      label,
+      injection
+    }))
+  };
+}
+function listModels(options) {
+  const policy = requirePolicy(options);
+  return {
+    ok: true,
+    policy,
+    models: modelsFor(policy).map((spec) => ({
+      id: spec.id,
+      label: spec.label,
+      defaultName: spec.defaultName,
+      model: resolveModelValue(spec, process.env),
+      vendor: spec.vendor,
+      color: spec.color,
+      roles: rolesFor(policy, spec.id)
+    }))
+  };
+}
+function listMcp() {
+  return { ok: true, servers: listMcpServers(process.env) };
+}
 function listAvailableRoles(options) {
-  const roles = [
-    ...loadFragments(
-      fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-      options.vendor
-    ).values()
-  ].sort(
+  const policy = requirePolicy(options);
+  const model = requireModel(options, policy);
+  const allowed = new Set(rolesFor(policy, model.id));
+  const dirs = fragmentDirsFor(
+    pluginRoot(),
+    options.dir,
+    options.lang
+  );
+  const fragments = loadFragments(dirs, model.vendor);
+  const ownDir = dirs.at(-1)?.path;
+  const roles = [...fragments.values()].filter(
+    (fragment) => allowed.has(fragment.id) || roleById(fragment.id) === void 0
+  ).sort(
     (left, right) => roleOrder(left.id) - roleOrder(right.id) || left.id.localeCompare(right.id)
-  ).map(({ id, label, kind, tools, source }) => ({
-    id,
-    label,
-    kind,
-    tools,
-    source
+  ).map((fragment) => ({
+    id: fragment.id,
+    label: fragment.label,
+    kind: fragment.kind,
+    tools: fragment.tools,
+    source: fragment.source,
+    languageMismatch: options.lang !== "ja" && fragment.source === "project" && ownDir !== void 0 && fs2.existsSync(path2.join(ownDir, `${fragment.id}.md`))
   }));
-  return { ok: true, roles };
+  return { ok: true, policy, modelId: model.id, lang: options.lang, roles };
 }
 function parseArgs(argv) {
   const options = {
-    vendor: "gpt",
+    policy: "",
+    modelId: "",
     name: "",
     model: "",
     roles: [],
@@ -741,7 +1018,10 @@ function parseArgs(argv) {
     check: false,
     write: false,
     merge: false,
+    listPolicies: false,
+    listModels: false,
     listRoles: false,
+    listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
     keep: []
@@ -750,11 +1030,12 @@ function parseArgs(argv) {
     const arg = argv[index];
     const value = argv[index + 1];
     switch (arg) {
-      case "--vendor":
-        if (value !== "gpt" && value !== "grok" && value !== "claude") {
-          throw new Error("vendor: must be gpt, grok or claude");
-        }
-        options.vendor = value;
+      case "--policy":
+        options.policy = requireValue(value, "policy");
+        index += 1;
+        break;
+      case "--model-id":
+        options.modelId = requireValue(value, "model-id");
         index += 1;
         break;
       case "--name":
@@ -790,8 +1071,17 @@ function parseArgs(argv) {
       case "--merge":
         options.merge = true;
         break;
+      case "--list-policies":
+        options.listPolicies = true;
+        break;
+      case "--list-models":
+        options.listModels = true;
+        break;
       case "--list-roles":
         options.listRoles = true;
+        break;
+      case "--list-mcp":
+        options.listMcp = true;
         break;
       case "--check-fragments":
         options.checkFragments = true;
@@ -810,11 +1100,10 @@ function parseArgs(argv) {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
-  if (options.listRoles || options.checkFragments || options.scaffoldFragments) {
+  if (options.listPolicies || options.listModels || options.listRoles || options.listMcp || options.checkFragments || options.scaffoldFragments) {
     return options;
   }
   if (options.name === "") throw new Error("name: is required");
-  if (options.model === "") throw new Error("model: is required");
   if (options.roles.length === 0) throw new Error("roles: is required");
   if (options.merge && !options.write)
     throw new Error("merge: requires --write");
@@ -832,7 +1121,13 @@ function respond(value) {
 }
 try {
   const options = parseArgs(process.argv.slice(2));
-  if (options.checkFragments) {
+  if (options.listPolicies) {
+    respond(listPolicies());
+  } else if (options.listModels) {
+    respond(listModels(options));
+  } else if (options.listMcp) {
+    respond(listMcp());
+  } else if (options.checkFragments) {
     respond({
       ok: true,
       ...checkFragments(pluginRoot(), options.dir, options.lang)

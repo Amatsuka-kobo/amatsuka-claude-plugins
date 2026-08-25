@@ -3,7 +3,6 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { ROLES } from "../agents/roles"
 import { runTs } from "../testing/run-ts.js"
 
 const CLI = fileURLToPath(new URL("../setup-agents.ts", import.meta.url))
@@ -67,11 +66,32 @@ interface ListedRole {
   kind: "impl" | "readonly"
   tools: string[]
   source: "plugin" | "project"
+  languageMismatch?: boolean
 }
 
 interface ListRolesResult {
   ok: boolean
+  error?: string
   roles: ListedRole[]
+}
+
+interface PolicyListResult {
+  ok: boolean
+  policies: { id: string; label: string; injection: string }[]
+}
+
+interface ModelListResult {
+  ok: boolean
+  error?: string
+  models: {
+    id: string
+    label: string
+    defaultName: string
+    model: string
+    vendor: string
+    color: string
+    roles: string[]
+  }[]
 }
 
 interface FragmentStatusResult {
@@ -100,14 +120,16 @@ function run<T = CheckResult>(args: string[]): T {
 
 function check(extra: string[] = []): CheckResult {
   return run([
-    "--vendor",
-    "gpt",
+    "--policy",
+    "with-codex-policy",
+    "--model-id",
+    "gpt-sol",
     "--name",
     "gpt-sol",
-    "--model",
-    "claude-gpt-5-6-sol",
     "--roles",
     "complex-impl",
+    "--lang",
+    "ja",
     "--dir",
     project,
     "--check",
@@ -146,22 +168,88 @@ function writeProjectRole(options: {
   )
 }
 
+describe("--list-policies", () => {
+  it("4 方針を返す", () => {
+    const result = run<PolicyListResult>(["--list-policies"])
+    expect(result.policies.map((policy) => policy.id)).toEqual([
+      "claude-model-policy",
+      "with-codex-policy",
+      "with-grok-policy",
+      "codex-grok-policy"
+    ])
+  })
+
+  it("AMATSUKA_AGENT_AUTO_INJECTION の値を添える", () => {
+    const result = run<PolicyListResult>(["--list-policies"])
+    expect(result.policies[0]?.injection).toBe("claude")
+    expect(result.policies[3]?.injection).toBe("with-codex-grok")
+  })
+})
+
+describe("--list-models", () => {
+  it("claude-model-policy は Claude 4 種を返す", () => {
+    const result = run<ModelListResult>([
+      "--list-models",
+      "--policy",
+      "claude-model-policy"
+    ])
+    expect(result.models.map((model) => model.id)).toEqual([
+      "opus",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+
+  it("各モデルに既定名と担える役割と色を添える", () => {
+    const result = run<ModelListResult>([
+      "--list-models",
+      "--policy",
+      "claude-model-policy"
+    ])
+    const sonnet = result.models.find((model) => model.id === "sonnet")
+    expect(sonnet?.defaultName).toBe("claude-sonnet")
+    expect(sonnet?.model).toBe("sonnet")
+    expect(sonnet?.color).toBe("purple")
+    expect(sonnet?.roles).toContain("code-review")
+  })
+
+  it("未知のポリシーを拒否する", () => {
+    const result = run<ModelListResult>(["--list-models", "--policy", "nope"])
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/policy/)
+  })
+})
+
 describe("--list-roles", () => {
-  it("name / model / roles 無しで組み込み 10 種を ROLES 順に返す", () => {
-    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
+  it("name / roles 無しで担当表の組み込み役割を返す", () => {
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
+      "--dir",
+      project
+    ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles.map((role) => role.id)).toEqual(
-      ROLES.map((role) => role.id)
-    )
-    expect(result.roles).toHaveLength(10)
+    expect(result.roles.map((role) => role.id)).toEqual(["complex-impl"])
     expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
   })
 
   it("プロジェクト固有 ID を組み込み役割の末尾へ並べる", () => {
     writeProjectRole({ id: "triage" })
 
-    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
+      "--dir",
+      project
+    ])
 
     expect(result.roles.at(-1)).toMatchObject({
       id: "triage",
@@ -178,7 +266,15 @@ describe("--list-roles", () => {
       tools: "Read, Write"
     })
 
-    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-terra",
+      "--dir",
+      project
+    ])
     const explore = result.roles.find((role) => role.id === "explore")
 
     expect(explore).toEqual({
@@ -186,8 +282,110 @@ describe("--list-roles", () => {
       label: "独自探索",
       kind: "impl",
       tools: ["Read", "Write"],
-      source: "project"
+      source: "project",
+      languageMismatch: false
     })
+  })
+
+  it("担当表で担える役割だけを返す", () => {
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "codex-grok-policy",
+      "--model-id",
+      "gpt-terra",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+    expect(result.roles.map((role) => role.id)).toEqual([
+      "normal-impl",
+      "general"
+    ])
+  })
+
+  it("id と label の両方を返す", () => {
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "haiku",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+    const light = result.roles.find((role) => role.id === "light-impl")
+    expect(light?.label).toBe("軽量な実装")
+    expect(light?.kind).toBe("impl")
+  })
+
+  it("プロジェクト独自役割は担当表に無くても含める", () => {
+    const dir = path.join(project, ".claude", "agent-policy", "roles")
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, "triage.md"),
+      [
+        "---",
+        "id: triage",
+        "label: 障害の一次切り分け",
+        "description: 障害の一次切り分け",
+        "tools: Read, Grep, Glob",
+        "kind: readonly",
+        "---",
+        "",
+        "## When to invoke",
+        "",
+        "- 障害の一次切り分け"
+      ].join("\n")
+    )
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "haiku",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+    expect(result.roles.map((role) => role.id)).toContain("triage")
+  })
+
+  it("ポリシーに登場しないモデルを拒否する", () => {
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "with-grok-policy",
+      "--model-id",
+      "gpt-sol",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("not used")
+  })
+
+  it("プロジェクト独自役割の言語不一致を示す", () => {
+    writeProjectRole({ id: "triage" })
+
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "haiku",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+    const triage = result.roles.find((role) => role.id === "triage")
+
+    expect(triage?.languageMismatch).toBe(true)
   })
 })
 
@@ -241,12 +439,12 @@ describe("--check", () => {
 
   it("既存がテンプレートと同一のとき identical: true を返す", () => {
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -348,12 +546,12 @@ describe("--check", () => {
 
   it("不正な役割 ID でエラーを返す", () => {
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "x",
-      "--model",
-      "m",
       "--roles",
       "no-such-role",
       "--dir",
@@ -364,10 +562,10 @@ describe("--check", () => {
     expect(String(result.error)).toContain("no-such-role")
   })
 
-  it("model の欠落でエラーを返す", () => {
+  it("model-id の欠落でエラーを返す", () => {
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
       "--name",
       "gpt-sol",
       "--roles",
@@ -390,8 +588,6 @@ describe("parseArgs", () => {
     const result = run([
       "--name",
       name,
-      "--model",
-      "m",
       "--roles",
       "explore",
       "--dir",
@@ -421,12 +617,12 @@ function seed(options: {
   replaceConstraints?: string
 }): void {
   run([
-    "--vendor",
-    "gpt",
+    "--policy",
+    "with-codex-policy",
+    "--model-id",
+    "gpt-sol",
     "--name",
     "gpt-sol",
-    "--model",
-    "claude-gpt-5-6-sol",
     "--roles",
     "complex-impl",
     "--dir",
@@ -465,12 +661,12 @@ function seed(options: {
 describe("--write", () => {
   it("既存が無いときテンプレートどおりに書く", () => {
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -485,12 +681,12 @@ describe("--write", () => {
 
   it("--merge で新規作成すると空の保持・破棄情報を返す", () => {
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -512,12 +708,12 @@ describe("--write", () => {
   it("--keep なしでは完全上書きになる", () => {
     seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -535,12 +731,12 @@ describe("--write", () => {
     })
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -559,12 +755,12 @@ describe("--write", () => {
   it("--keep section で既存にしかない節を残す", () => {
     seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -584,12 +780,12 @@ describe("--write", () => {
         "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
     })
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -604,12 +800,12 @@ describe("--write", () => {
   it("--keep key で既存にしかないキーを残す", () => {
     seed({ extraKeys: { permissionMode: "plan" } })
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -624,12 +820,12 @@ describe("--write", () => {
   it("--keep key で値の違う共通キーを残す", () => {
     seed({ model: "my-own-alias" })
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -644,12 +840,12 @@ describe("--write", () => {
   it("--keep preamble で冒頭宣言を残す", () => {
     seed({ preamble: "あなたは私が書き換えた冒頭である。" })
     run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -675,12 +871,12 @@ describe("--write", () => {
     })
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -718,12 +914,12 @@ describe("--write", () => {
     })
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -767,12 +963,12 @@ describe("--write", () => {
     })
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -799,12 +995,12 @@ describe("--write", () => {
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -825,12 +1021,12 @@ describe("--write", () => {
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -851,12 +1047,12 @@ describe("--write", () => {
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
@@ -874,12 +1070,12 @@ describe("--write", () => {
 
   it("不正な --keep セレクタでエラーを返す", () => {
     const result = run([
-      "--vendor",
-      "gpt",
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-sol",
       "--name",
       "gpt-sol",
-      "--model",
-      "claude-gpt-5-6-sol",
       "--roles",
       "complex-impl",
       "--dir",
