@@ -115,5 +115,3 @@ export function hasMixedKinds(kinds: RoleKind[]): boolean {
   const unique = new Set(kinds)
   return unique.has("impl") && unique.has("readonly")
 }
-
-// tools の並びは ROLES の定義順に現れた順とし、Agent を末尾へ置く。
