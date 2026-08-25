@@ -178,10 +178,33 @@ describe("役割マーカーの走査", () => {
   })
 })
 
+describe("labelOf の言語別ディレクトリ", () => {
+  it("roles/<lang>/ に置いた独自役割の label を読む", () => {
+    const dir = path.join(project, ".claude", "agent-policy", "roles", "de")
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, "triage.md"),
+      "---\nid: triage\nlabel: Ersteinschatzung\nkind: readonly\n---\n"
+    )
+    place("de-triage", ["model: sonnet", "agent-policy-role: triage"])
+    const injected = context()
+    expect(injected).toContain("Ersteinschatzung")
+    expect(injected).not.toContain("未知の役割 ID")
+  })
+})
+
+describe("setup の案内先", () => {
+  it("エイリアス不一致で setup-agents を案内する", () => {
+    const injected = context({ AMATSUKA_AGENT_GROK_ALIAS: "custom-grok" })
+    expect(injected).toContain("agent-policy:setup-agents")
+    expect(injected).not.toContain("agent-policy:setup-grok")
+  })
+})
+
 describe("setup の促し", () => {
   it("エイリアスを model に持つ定義が無いとき促す", () => {
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).toContain("setup-gpt")
+    expect(output).toContain("setup-agents")
     expect(output).toContain("gpt-sol")
     expect(output).toContain("model に持つ定義が無い")
   })
@@ -189,7 +212,7 @@ describe("setup の促し", () => {
   it("名前一致の定義の model が食い違うとき食い違いを報告する", () => {
     place("gpt-sol", ["model: claude-gpt-5-6-sol"])
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).toContain("setup-gpt")
+    expect(output).toContain("setup-agents")
     expect(output).toContain("claude-gpt-5-6-sol")
     expect(output).toContain("食い違う")
   })
@@ -209,7 +232,7 @@ describe("setup の促し", () => {
       "agent-policy-role: complex-impl"
     ])
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).not.toContain("setup-gpt")
+    expect(output).not.toContain("setup-agents")
   })
 
   it("複数定義の役割の和集合がプリセットを覆うとき促さない", () => {
@@ -222,13 +245,13 @@ describe("setup の促し", () => {
       "agent-policy-role: normal-impl, general"
     ])
     const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
-    expect(output).not.toContain("setup-gpt")
+    expect(output).not.toContain("setup-agents")
   })
 
   it("役割が不足するとき不足役割 ID を示して促す", () => {
     place("my-explorer", ["model: my-terra", "agent-policy-role: explore"])
     const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
-    expect(output).toContain("setup-gpt")
+    expect(output).toContain("setup-agents")
     expect(output).toContain("normal-impl")
     expect(output).toContain("general")
     expect(output).toContain("my-explorer")
@@ -237,13 +260,13 @@ describe("setup の促し", () => {
   it("model キーを持たない定義はエイリアス充足に数えない", () => {
     place("my-heavy-coder", ["agent-policy-role: complex-impl"])
     const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).toContain("setup-gpt")
+    expect(output).toContain("setup-agents")
     expect(output).toContain("model に持つ定義が無い")
   })
 
   it("エイリアスが既定と同じなら促さない", () => {
     const output = context({ AMATSUKA_AGENT_GROK_ALIAS: "claude-grok-4-6" })
-    expect(output).not.toContain("setup-grok")
+    expect(output).not.toContain("setup-agents")
   })
 })
 

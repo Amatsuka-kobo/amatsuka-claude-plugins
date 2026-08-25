@@ -60,8 +60,11 @@ Marketplace から `agent-policy` をインストールします。
 | `AMATSUKA_AGENT_GPT_TERRA_ALIAS` | `gpt-terra` のモデルエイリアス | `claude-gpt-5-6-terra` |
 | `AMATSUKA_AGENT_GPT_LUNA_ALIAS` | `gpt-luna` のモデルエイリアス | `claude-gpt-5-6-luna` |
 | `AMATSUKA_AGENT_GROK_ALIAS` | `grok` のモデルエイリアス | `claude-grok-4-6` |
+| `CLAUDE_CODE_SUBAGENT_MODEL` | Claude Code が全サブエージェントへ適用するモデル | 未設定 |
 
 エイリアスはモデル本体の ID ではなく、ローカルプロキシ(CLIProxyAPI などの ProxyAPI サーバー)が配信するクライアント側の別名です。Codex 系 / Grok 系のモデルをこの ProxyAPI サーバー経由で使える環境が前提です。
+
+`CLAUDE_CODE_SUBAGENT_MODEL` を設定すると、Agent 定義の frontmatter にある `model` より優先されます。定義ごとに選んだモデルを使う場合は設定しないでください。
 
 ### 設定場所
 
@@ -93,7 +96,7 @@ Marketplace から `agent-policy` をインストールします。
 
 ## エイリアスを変更する
 
-同梱プリセットは上の表の既定エイリアスを使います。別名を使う場合は、対応する `AMATSUKA_AGENT_*_ALIAS` を設定したうえで、`agent-policy:setup-gpt` または `agent-policy:setup-grok` を実行してプロジェクトの `.claude/agents/` に定義を生成してください。
+同梱プリセットは上の表の既定エイリアスを使います。別名を使う場合は、対応する `AMATSUKA_AGENT_*_ALIAS` を設定したうえで、`agent-policy:setup-agents` を実行してプロジェクトの `.claude/agents/` に定義を生成してください。
 
 SessionStart フックは Agent 定義を生成せず、ファイルも書き込みません。既定値と異なるエイリアスが環境変数に設定されているときだけ、プロジェクト側の対応する定義が無い、または `model` が一致しないことを検知して setup の実行を促します。環境変数が未設定、または既定値と同じ場合は不一致を検知しません。
 
@@ -101,7 +104,23 @@ SessionStart フックは Agent 定義を生成せず、ファイルも書き込
 
 ## 役割を選んで自分の定義を作る
 
-`agent-policy:setup-gpt` と `agent-policy:setup-grok` は、役割を選んで Agent 定義を作る対話ウィザードです。対話モードでは 1 回の実行で 1 つの定義を作ります。役割を複数選び、定義名とモデルエイリアスを指定すると、選んだ役割断片を合成した `.claude/agents/<name>.md` を生成します。`--yes` を渡す非対話モードでは、それぞれの既定プリセットをまとめて生成します。
+`agent-policy:setup-agents` は、選んだ運用方針に沿って複数の Agent 定義をまとめて作る対話ウィザードです。
+
+```text
+/agent-policy:setup-agents
+```
+
+対話モードでは次の順に選びます。
+
+1. 使用言語を確認します。日本語と英語の役割断片は同梱されています。それ以外の言語では `.claude/agent-policy/roles/<lang>/` に英語の雛形を作り、翻訳してから生成します。
+2. `claude-model-policy` / `with-codex-policy` / `with-grok-policy` / `codex-grok-policy` から運用方針を選びます。`AMATSUKA_AGENT_AUTO_INJECTION` と一致する方針があれば第一候補になります。
+3. 方針の担当表に登場するモデルから、生成するものを複数選びます。担当表にないモデルと役割の組み合わせは選べません。
+4. 必要なモデルだけ、定義名・`model`・役割・既存定義の保持方法を個別に調整します。調整しないモデルは既定名と既定役割で一括生成します。
+5. 接続済みの MCP サーバーを検出し、許可するサーバーと付与先の役割を選びます。既定では MCP ツールを付けません。既存定義があれば前回の選択を読み戻します。
+
+MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
+
+`--yes` を渡す非対話モードでは、`--policy <id>` または `AMATSUKA_AGENT_AUTO_INJECTION` から方針を決め、その方針の全モデルを既定名・既定役割でまとめて生成します。明示的な選択がないため MCP ツールは付きません。
 
 組み込みの役割 ID は次の 10 種です。
 
@@ -124,9 +143,11 @@ SessionStart フックは Agent 定義を生成せず、ファイルも書き込
 agent-policy-role: normal-impl, explore
 ```
 
-SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。方針スキルの担当表に該当する役割があるときは、この対応を優先して使います。
+SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。方針スキルの担当表に該当する役割があるときは、この対応を優先して使います。注入される役割マーカー表の役割名は日本語表記です。
 
 プロジェクト固有の役割断片は `.claude/agent-policy/roles/` に Markdown ファイルとして置けます。断片の frontmatter には `id`、`label`、`description`、`tools`、`kind` を指定します。`kind` は `impl` または `readonly` です。独自の `id` は setup の選択肢に追加され、既存の役割と同じ `id` を指定すると組み込み断片を置き換えます。
+
+SessionStart フックは独自役割の表示名を解決するとき、`.claude/agent-policy/roles/<id>.md` に加えて `.claude/agent-policy/roles/*/<id>.md` も走査します。同じ役割 ID が複数の言語ディレクトリにある場合、フックは会話言語を知らないため、どの表示名が使われるかは決まりません。
 
 ## 旧バージョンからの移行
 
@@ -138,4 +159,9 @@ SessionStart フックはプロジェクトの `.claude/agents/` を走査し、
    - 推奨する対処は、プロキシ設定に `claude-grok-4-6` の別名を追加することです。
    - CLIProxyAPI では `oauth-model-alias` の `xai` に `grok-4.6` → `claude-grok-4-6` を追加します。
    - Grok 4.5 を使い続ける場合は、`AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を明示的に設定してください。
-3. MCP ツールは同梱定義から外れました。必要なら setup で生成した定義へ自分で追加してください。再 setup 時は差分確認で追加した情報を保持できます。
+3. MCP ツールは同梱定義から外れました。同梱定義には引き続き付かず、必要な定義へは手順 6 の setup で付与できます。
+4. `setup-gpt` と `setup-grok` は `setup-agents` へ統合しました。ポリシーとモデルと役割を選んで複数の定義を一度に作れます。
+5. 役割定義から `LSP` を外しました。背景で起動するサブエージェントでは Claude Code が `LSP` を除去するため、定義に書いても機能しません。
+6. MCP ツールを付けられるようになりました。`claude mcp list` で接続済みのサーバーを検出し、許可するものを選ぶと `tools` へ入ります。既定では付きません。前回の選択は生成された定義から読み戻します。
+7. `_common.md` の制約から GitHub の名指しを外し、「外部システムへの不可逆な副作用」という一般則へ書き換えました。この規律を外したい場合は `.claude/agent-policy/roles/_common.md` に `## 制約` 節を書いて差し替えてください。
+8. 方針スキルの「実行帯の解決順」から、定義名による探索を外しました。プロジェクト定義は `agent-policy-role` マーカーで解決されます。マーカーを持たない手書きの定義は、マーカーを 1 行足してください。

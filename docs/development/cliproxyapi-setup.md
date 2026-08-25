@@ -168,25 +168,25 @@ Claude Code では、通常 `/model` コマンドで選択した場合以外で 
 それを解消するために汎用エージェント運用方針として、`agent-policy`プラグインに `GPT Sol` / `GPT Terra` / `GPT Luna` をモデルに指定する Agents 定義を用意しています。
 または、Codex CLI を使用する OpenAI 製の codex プラグインを使用します。
 
-`agent-policy` が提供する Agents 定義を使用するには、`agent-policy:setup-gpt` を使用し、`.claude/agents` に設置してください。
+`agent-policy` が提供する Agents 定義を使用するには、`agent-policy:setup-agents` を使用し、`.claude/agents` に設置してください。
 `.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
 
 ProxyAPI に繋いだ Claude Code 上で以下のように実行してください。
 
 ```bash
-/agent-policy:setup-gpt
+/agent-policy:setup-agents
 ```
 
 ## 7. Claude Code から Grok サブエージェントを使う（任意）
 
 Claude Code では、通常 `/model` コマンドで選択した場合以外で Grok モデルのエージェントを使用することはできません。それを解消するために汎用エージェント運用方針として、`agent-policy` プラグインに `Grok` をモデルに指定する Agents 定義を用意しています。
 
-`agent-policy` が提供する Grok Agents 定義を使用するには`agent-policy:setup-grok` を使用し、`.claude/agents` に設置してください。`.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
+`agent-policy` が提供する Grok Agents 定義を使用するには`agent-policy:setup-agents` を使用し、`.claude/agents` に設置してください。`.claude/agents` フォルダは `.gitignore` で Git の追跡対象から外しています。
 
 ProxyAPI に繋いだ Claude Code 上で以下のように実行してください。
 
 ```bash
-/agent-polocy:setup-grok
+/agent-policy:setup-agents
 ```
 
 ## トラブルシューティング

@@ -266,22 +266,22 @@ var ALIASES = [
   {
     preset: "gpt-sol",
     variable: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-    skill: "agent-policy:setup-gpt"
+    skill: "agent-policy:setup-agents"
   },
   {
     preset: "gpt-terra",
     variable: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-    skill: "agent-policy:setup-gpt"
+    skill: "agent-policy:setup-agents"
   },
   {
     preset: "gpt-luna",
     variable: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-    skill: "agent-policy:setup-gpt"
+    skill: "agent-policy:setup-agents"
   },
   {
     preset: "grok",
     variable: "AMATSUKA_AGENT_GROK_ALIAS",
-    skill: "agent-policy:setup-grok"
+    skill: "agent-policy:setup-agents"
   }
 ];
 function policyBlock(value) {
@@ -344,21 +344,27 @@ function labelOf(env, id) {
     LABELS.set(id, void 0);
     return void 0;
   }
-  const file = path.join(
-    projectDir,
-    ".claude",
-    "agent-policy",
-    "roles",
-    `${id}.md`
-  );
+  const base = path.join(projectDir, ".claude", "agent-policy", "roles");
+  const candidates = [path.join(base, `${id}.md`)];
   try {
-    if (fs.existsSync(file)) {
+    if (fs.existsSync(base)) {
+      for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          candidates.push(path.join(base, entry.name, `${id}.md`));
+        }
+      }
+    }
+  } catch {
+  }
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue;
       const label = frontmatter(file).get("label");
       const resolved = label === "" ? void 0 : label;
       LABELS.set(id, resolved);
       return resolved;
+    } catch {
     }
-  } catch {
   }
   LABELS.set(id, void 0);
   return void 0;
