@@ -4,54 +4,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// src/agents/presets.ts
-var PRESETS = [
-  {
-    name: "gpt-sol",
-    vendor: "gpt",
-    defaultAlias: "claude-gpt-5-6-sol",
-    color: "yellow",
-    roleIds: ["complex-impl"]
-  },
-  {
-    name: "gpt-terra",
-    vendor: "gpt",
-    defaultAlias: "claude-gpt-5-6-terra",
-    color: "green",
-    roleIds: [
-      "normal-impl",
-      "general",
-      "explore",
-      "realtime-research",
-      "independent-review"
-    ]
-  },
-  {
-    name: "gpt-luna",
-    vendor: "gpt",
-    defaultAlias: "claude-gpt-5-6-luna",
-    color: "cyan",
-    roleIds: ["light-impl"]
-  },
-  {
-    name: "grok",
-    vendor: "grok",
-    defaultAlias: "claude-grok-4-6",
-    color: "red",
-    roleIds: [
-      "normal-impl",
-      "light-impl",
-      "general",
-      "explore",
-      "realtime-research",
-      "independent-review"
-    ]
-  }
-];
-var DEFAULT_ALIASES = Object.fromEntries(
-  PRESETS.map((preset) => [preset.name, preset.defaultAlias])
-);
-
 // src/agents/roles.ts
 var ROLES = [
   {
@@ -128,8 +80,176 @@ function sortRoleIds(ids) {
   );
 }
 
+// src/agents/policies.ts
+var POLICIES = [
+  { id: "claude-model-policy", label: "Claude \u306E\u307F", injection: "claude" },
+  {
+    id: "with-codex-policy",
+    label: "Claude + Codex \u4F75\u7528",
+    injection: "with-codex"
+  },
+  {
+    id: "with-grok-policy",
+    label: "Claude + Grok \u4F75\u7528",
+    injection: "with-grok"
+  },
+  {
+    id: "codex-grok-policy",
+    label: "Claude + Codex + Grok \u4F75\u7528",
+    injection: "with-codex-grok"
+  }
+];
+var MODELS = [
+  {
+    id: "opus",
+    vendor: "claude",
+    label: "Opus",
+    defaultName: "claude-opus",
+    model: "opus",
+    color: "blue"
+  },
+  {
+    id: "sonnet",
+    vendor: "claude",
+    label: "Sonnet",
+    defaultName: "claude-sonnet",
+    model: "sonnet",
+    color: "purple"
+  },
+  {
+    id: "haiku",
+    vendor: "claude",
+    label: "Haiku",
+    defaultName: "claude-haiku",
+    model: "haiku",
+    color: "pink"
+  },
+  {
+    id: "fable",
+    vendor: "claude",
+    label: "Fable",
+    defaultName: "claude-fable",
+    model: "fable",
+    color: "orange"
+  },
+  {
+    id: "gpt-sol",
+    vendor: "gpt",
+    label: "GPT Sol",
+    defaultName: "gpt-sol",
+    model: "claude-gpt-5-6-sol",
+    aliasEnv: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
+    color: "yellow"
+  },
+  {
+    id: "gpt-terra",
+    vendor: "gpt",
+    label: "GPT Terra",
+    defaultName: "gpt-terra",
+    model: "claude-gpt-5-6-terra",
+    aliasEnv: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
+    color: "green"
+  },
+  {
+    id: "gpt-luna",
+    vendor: "gpt",
+    label: "GPT Luna",
+    defaultName: "gpt-luna",
+    model: "claude-gpt-5-6-luna",
+    aliasEnv: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
+    color: "cyan"
+  },
+  {
+    id: "grok",
+    vendor: "grok",
+    label: "Grok",
+    defaultName: "grok",
+    model: "claude-grok-4-6",
+    aliasEnv: "AMATSUKA_AGENT_GROK_ALIAS",
+    color: "red"
+  }
+];
+var ASSIGNMENTS = {
+  "claude-model-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["sonnet"],
+    "light-impl": ["haiku"],
+    general: ["sonnet"],
+    explore: ["sonnet"],
+    "realtime-research": ["sonnet"],
+    "independent-review": ["sonnet"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  },
+  "with-codex-policy": {
+    "complex-impl": ["gpt-sol"],
+    "normal-impl": ["gpt-terra"],
+    "light-impl": ["gpt-luna"],
+    general: ["gpt-terra"],
+    explore: ["gpt-terra"],
+    "realtime-research": ["gpt-terra"],
+    "independent-review": ["gpt-terra"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  },
+  "with-grok-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["grok"],
+    "light-impl": ["grok"],
+    general: ["grok"],
+    explore: ["grok"],
+    "realtime-research": ["grok"],
+    "independent-review": ["grok"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  },
+  "codex-grok-policy": {
+    "complex-impl": ["gpt-sol"],
+    "normal-impl": ["gpt-terra"],
+    "light-impl": ["gpt-luna"],
+    general: ["gpt-terra"],
+    explore: ["grok"],
+    "realtime-research": ["grok"],
+    "independent-review": ["grok"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    advisor: ["fable", "opus"]
+  }
+};
+function rolesFor(policy, model) {
+  const assignments = ASSIGNMENTS[policy];
+  const roles = Object.keys(assignments).filter(
+    (role) => assignments[role].includes(model)
+  );
+  return sortRoleIds(roles);
+}
+function rolesAcrossPolicies(model) {
+  const roles = /* @__PURE__ */ new Set();
+  for (const policy of POLICIES) {
+    for (const role of rolesFor(policy.id, model)) roles.add(role);
+  }
+  return sortRoleIds([...roles]);
+}
+
+// src/agents/presets.ts
+var PRESETS = MODELS.filter(
+  (model) => model.vendor !== "claude"
+).map((model) => ({
+  name: model.defaultName,
+  vendor: model.vendor,
+  defaultAlias: model.model,
+  color: model.color,
+  roleIds: rolesAcrossPolicies(model.id)
+}));
+var DEFAULT_ALIASES = Object.fromEntries(
+  PRESETS.map((preset) => [preset.name, preset.defaultAlias])
+);
+
 // src/hooks/session-start.ts
-var POLICIES = {
+var POLICIES2 = {
   claude: "claude-model-policy",
   "with-codex": "with-codex-policy",
   "with-grok": "with-grok-policy",
@@ -166,7 +286,7 @@ var ALIASES = [
 ];
 function policyBlock(value) {
   if (value === void 0 || value === "" || value === "none") return void 0;
-  const policy = POLICIES[value];
+  const policy = POLICIES2[value];
   if (policy === void 0) {
     return `AMATSUKA_AGENT_AUTO_INJECTION \u306E\u5024 "${value}" \u306F\u672A\u77E5\u306E\u305F\u3081\u3001agent-policy \u306E\u65B9\u91DD\u6CE8\u5165\u3092\u30B9\u30AD\u30C3\u30D7\u3057\u305F\u3002`;
   }
