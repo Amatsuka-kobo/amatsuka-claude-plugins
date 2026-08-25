@@ -10,6 +10,9 @@ cliproxyapi.config.yaml
 
 # claude
 .claude/context-maps
+.claude/agents
+
+# 共有エージェント (.claude/agents/ 内でリポジトリ共有するものを ! 装飾子で除外設定する)
 
 # Raphael
 .raphael/infections/
