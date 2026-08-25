@@ -6,6 +6,20 @@ import { fileURLToPath } from "node:url";
 // src/agents/fragments.ts
 import fs from "node:fs";
 import path from "node:path";
+
+// src/agents/hash.ts
+import crypto from "node:crypto";
+function bodyHash(content) {
+  const lines = content.split("\n");
+  let body = lines;
+  if (lines[0]?.trim() === "---") {
+    const close = lines.indexOf("---", 1);
+    if (close !== -1) body = lines.slice(close + 1);
+  }
+  return crypto.createHash("sha256").update(body.join("\n").trim()).digest("hex").slice(0, 16);
+}
+
+// src/agents/fragments.ts
 function parse(content) {
   const lines = content.split("\n");
   if (lines[0]?.trim() !== "---") throw new Error("Fragment has no frontmatter");
@@ -128,6 +142,76 @@ function fragmentDirsFor(pluginRoot2, projectDir, lang) {
   }
   dirs.push({ path: projectRoles, source: "project" });
   return dirs;
+}
+function bundledDir(pluginRoot2, lang) {
+  const bundled = lang === "ja" || lang === "en" ? lang : "en";
+  return path.join(pluginRoot2, "assets", "roles", bundled);
+}
+function translationDir(projectDir, lang) {
+  return path.join(projectDir, ".claude", "agent-policy", "roles", lang);
+}
+function bundledFiles(dir) {
+  return fs.readdirSync(dir).filter((name) => name.endsWith(".md")).sort((left, right) => left.localeCompare(right));
+}
+function checkFragments(pluginRoot2, projectDir, lang) {
+  const sourceDir = bundledDir(pluginRoot2, lang);
+  if (lang === "ja" || lang === "en") {
+    return {
+      lang,
+      sourceDir,
+      targetDir: null,
+      missing: [],
+      stale: [],
+      ready: []
+    };
+  }
+  const targetDir = translationDir(projectDir, lang);
+  const missing = [];
+  const stale = [];
+  const ready = [];
+  for (const name of bundledFiles(sourceDir)) {
+    const id = name.replace(/\.md$/, "");
+    const target = path.join(targetDir, name);
+    if (!fs.existsSync(target)) {
+      missing.push(id);
+      continue;
+    }
+    const expected = bodyHash(
+      fs.readFileSync(path.join(sourceDir, name), "utf8")
+    );
+    const actual = parse(fs.readFileSync(target, "utf8")).meta["source-hash"];
+    if (actual !== expected) {
+      stale.push({ id, expected, actual: actual ?? "" });
+      continue;
+    }
+    ready.push(id);
+  }
+  return { lang, sourceDir, targetDir, missing, stale, ready };
+}
+function scaffoldFragments(pluginRoot2, projectDir, lang) {
+  if (lang === "ja" || lang === "en") return [];
+  const sourceDir = bundledDir(pluginRoot2, lang);
+  const targetDir = translationDir(projectDir, lang);
+  fs.mkdirSync(targetDir, { recursive: true });
+  const written = [];
+  for (const name of bundledFiles(sourceDir)) {
+    const target = path.join(targetDir, name);
+    const source = fs.readFileSync(path.join(sourceDir, name), "utf8");
+    const hash = bodyHash(source);
+    const current = fs.existsSync(target) ? parse(fs.readFileSync(target, "utf8")).meta["source-hash"] : void 0;
+    if (current === hash) continue;
+    const lines = source.split("\n");
+    const close = lines.indexOf("---", 1);
+    const injected = [
+      ...lines.slice(0, close),
+      "source-lang: en",
+      `source-hash: ${hash}`,
+      ...lines.slice(close)
+    ];
+    fs.writeFileSync(target, injected.join("\n"));
+    written.push(target);
+  }
+  return written;
 }
 
 // src/agents/roles.ts
@@ -658,6 +742,8 @@ function parseArgs(argv) {
     write: false,
     merge: false,
     listRoles: false,
+    checkFragments: false,
+    scaffoldFragments: false,
     keep: []
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -707,6 +793,12 @@ function parseArgs(argv) {
       case "--list-roles":
         options.listRoles = true;
         break;
+      case "--check-fragments":
+        options.checkFragments = true;
+        break;
+      case "--scaffold-fragments":
+        options.scaffoldFragments = true;
+        break;
       case "--keep":
         options.keep.push(requireValue(value, "keep"));
         index += 1;
@@ -718,7 +810,9 @@ function parseArgs(argv) {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
-  if (options.listRoles) return options;
+  if (options.listRoles || options.checkFragments || options.scaffoldFragments) {
+    return options;
+  }
   if (options.name === "") throw new Error("name: is required");
   if (options.model === "") throw new Error("model: is required");
   if (options.roles.length === 0) throw new Error("roles: is required");
@@ -738,7 +832,21 @@ function respond(value) {
 }
 try {
   const options = parseArgs(process.argv.slice(2));
-  if (options.listRoles) {
+  if (options.checkFragments) {
+    respond({
+      ok: true,
+      ...checkFragments(pluginRoot(), options.dir, options.lang)
+    });
+  } else if (options.scaffoldFragments) {
+    const written = scaffoldFragments(pluginRoot(), options.dir, options.lang);
+    respond({
+      ok: true,
+      lang: options.lang,
+      written: written.map(
+        (file) => path2.relative(options.dir, file).split(path2.sep).join("/")
+      )
+    });
+  } else if (options.listRoles) {
     respond(listAvailableRoles(options));
   } else if (options.write) {
     respond(write(options));
