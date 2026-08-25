@@ -470,6 +470,9 @@ function parseMcpList(output) {
   }
   return servers;
 }
+function toolPrefix(name) {
+  return `mcp__${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
 function listMcpServers(env) {
   const bin = env.AGENT_POLICY_CLAUDE_BIN;
   const options = {
@@ -486,6 +489,25 @@ function listMcpServers(env) {
   } catch {
     return [];
   }
+}
+function mcpCurrentOf(content) {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() !== "---") return { servers: [], denyTools: [] };
+  const close = lines.indexOf("---", 1);
+  if (close === -1) return { servers: [], denyTools: [] };
+  const meta = /* @__PURE__ */ new Map();
+  for (const line of lines.slice(1, close)) {
+    const at = line.indexOf(": ");
+    if (at <= 0) continue;
+    meta.set(line.slice(0, at).trim(), line.slice(at + 2).trim());
+  }
+  const split = (value) => value === void 0 ? [] : value.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  return {
+    servers: split(meta.get("tools")).filter(
+      (tool) => tool.startsWith("mcp__")
+    ),
+    denyTools: split(meta.get("disallowedTools"))
+  };
 }
 
 // src/agents/policies.ts
@@ -714,29 +736,78 @@ function requireModel(options, policy) {
   }
   return spec;
 }
-function composeInput(options) {
-  const policy = requirePolicy(options);
+function validateRoles(options, policy, model) {
+  const allowed = new Set(rolesFor(policy, model.id));
+  const invalid = options.roles.filter(
+    (role) => roleById(role) !== void 0 && !allowed.has(role)
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `roles: ${invalid.join(", ")} is not assigned to ${model.id} in ${policy}`
+    );
+  }
+}
+function validateFragments(options) {
+  const status = checkFragments(pluginRoot(), options.dir, options.lang);
+  if (status.missing.length === 0 && status.stale.length === 0) return;
+  throw new Error(
+    `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.map((entry) => entry.id).join(", ")}. Run --scaffold-fragments and translate them first`
+  );
+}
+function targetsFor(options, policy) {
+  if (options.models.length > 0) {
+    return options.models.map((id) => {
+      const spec2 = modelById(id);
+      if (spec2 === void 0) throw new Error(`models: ${id} is unknown`);
+      if (!modelsFor(policy).some((entry) => entry.id === spec2.id)) {
+        throw new Error(`models: ${id} is not used in ${policy}`);
+      }
+      return {
+        modelId: spec2.id,
+        name: spec2.defaultName,
+        model: resolveModelValue(spec2, process.env),
+        roles: rolesFor(policy, spec2.id),
+        color: spec2.color,
+        vendor: spec2.vendor
+      };
+    });
+  }
   const spec = requireModel(options, policy);
+  validateRoles(options, policy, spec);
+  return [
+    {
+      modelId: spec.id,
+      name: options.name,
+      model: options.model === "" ? resolveModelValue(spec, process.env) : options.model,
+      roles: options.roles,
+      color: spec.color,
+      vendor: spec.vendor
+    }
+  ];
+}
+function composeInputFor(options, target, mcpServers) {
   return {
-    name: options.name,
-    model: options.model === "" ? resolveModelValue(spec, process.env) : options.model,
-    vendor: spec.vendor,
-    roleIds: options.roles,
+    name: target.name,
+    model: target.model,
+    vendor: target.vendor,
+    roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
     lang: options.lang,
-    color: spec.color
+    color: target.color,
+    mcpServers,
+    denyTools: options.mcpDeny
   };
 }
-function template(options) {
-  return compose(composeInput(options));
+function templateFor(input) {
+  return compose(input);
 }
-function targetPath(options) {
-  return path2.join(options.dir, ".claude", "agents", `${options.name}.md`);
+function targetPath(options, target) {
+  return path2.join(options.dir, ".claude", "agents", `${target.name}.md`);
 }
-function compare(options, rendered, existingRaw) {
-  const file = targetPath(options);
+function compare(options, target, input, rendered, existingRaw) {
+  const file = targetPath(options, target);
   const relative = path2.relative(options.dir, file).split(path2.sep).join("/");
-  const roles = describeRoles(composeInput(options));
+  const roles = describeRoles(input);
   if (existingRaw === void 0) {
     return {
       ok: true,
@@ -804,11 +875,12 @@ function compare(options, rendered, existingRaw) {
     roles
   };
 }
-function diff(options) {
-  const rendered = template(options);
-  const file = targetPath(options);
+function diff(options, target, mcpServers) {
+  const input = composeInputFor(options, target, mcpServers);
+  const rendered = templateFor(input);
+  const file = targetPath(options, target);
   const existingRaw = fs2.existsSync(file) ? fs2.readFileSync(file, "utf8") : void 0;
-  return compare(options, rendered, existingRaw);
+  return compare(options, target, input, rendered, existingRaw);
 }
 function parseKeep(selectors) {
   const keep = {
@@ -898,10 +970,8 @@ function merge(existingRaw, renderedRaw, keep) {
 }
 function automaticKeep(difference) {
   return [
-    ...difference.frontmatter.toolsOnlyInExisting.map(
-      (tool) => `tools:${tool}`
-    ),
-    ...difference.frontmatter.keysOnlyInExisting.map((key) => `key:${key}`),
+    ...difference.frontmatter.toolsOnlyInExisting.filter((tool) => !tool.startsWith("mcp__")).map((tool) => `tools:${tool}`),
+    ...difference.frontmatter.keysOnlyInExisting.filter((key) => key !== "disallowedTools").map((key) => `key:${key}`),
     ...difference.body.sectionsOnlyInExisting.map(
       (heading) => `section:${heading}`
     )
@@ -927,12 +997,13 @@ function needsReview(selectors) {
     (selector) => selector.startsWith("tools:mcp__") || selector === "section:## \u30C4\u30FC\u30EB\u904B\u7528"
   );
 }
-function write(options) {
-  const file = targetPath(options);
-  const rendered = template(options);
+function write(options, target, mcpServers) {
+  const file = targetPath(options, target);
+  const input = composeInputFor(options, target, mcpServers);
+  const rendered = templateFor(input);
   const exists = fs2.existsSync(file);
   const existingRaw = exists ? fs2.readFileSync(file, "utf8") : void 0;
-  const difference = compare(options, rendered, existingRaw);
+  const difference = compare(options, target, input, rendered, existingRaw);
   const selectors = unique([
     ...exists && options.merge ? automaticKeep(difference) : [],
     ...options.keep
@@ -949,8 +1020,43 @@ function write(options) {
     action: exists ? options.merge ? "merged" : "overwritten" : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(difference, shouldMerge ? keep : parseKeep([]))
+    discarded: discarded(difference, shouldMerge ? keep : parseKeep([])),
+    roles: difference.roles
   };
+}
+function resolveMcp(options) {
+  if (options.mcpServers.length === 0) return { servers: [], dropped: [] };
+  const usable = new Set(
+    listMcpServers(process.env).filter((server) => server.usable).map((server) => server.name)
+  );
+  const servers = [];
+  const dropped = [];
+  for (const name of options.mcpServers) {
+    if (usable.has(name)) servers.push(toolPrefix(name));
+    else dropped.push(name);
+  }
+  return { servers, dropped };
+}
+function mcpCurrentFor(file) {
+  if (!fs2.existsSync(file)) return { servers: [], denyTools: [] };
+  return mcpCurrentOf(fs2.readFileSync(file, "utf8"));
+}
+function setup(options) {
+  validateFragments(options);
+  const policy = requirePolicy(options);
+  const targets = targetsFor(options, policy);
+  const mcp = resolveMcp(options);
+  const results = targets.map((target) => {
+    const current = mcpCurrentFor(targetPath(options, target));
+    const result = options.write ? write(options, target, mcp.servers) : diff(options, target, mcp.servers);
+    return {
+      ...result,
+      modelId: target.modelId,
+      mcpCurrent: current,
+      mcpDropped: mcp.dropped
+    };
+  });
+  return { ok: true, results };
 }
 function listPolicies() {
   return {
@@ -1010,11 +1116,14 @@ function parseArgs(argv) {
   const options = {
     policy: "",
     modelId: "",
+    models: [],
     name: "",
     model: "",
     roles: [],
     dir: process.cwd(),
     lang: "ja",
+    mcpServers: [],
+    mcpDeny: [],
     check: false,
     write: false,
     merge: false,
@@ -1038,6 +1147,10 @@ function parseArgs(argv) {
         options.modelId = requireValue(value, "model-id");
         index += 1;
         break;
+      case "--models":
+        options.models = splitList(requireValue(value, "models"));
+        index += 1;
+        break;
       case "--name":
         options.name = requireValue(value, "name");
         index += 1;
@@ -1047,11 +1160,7 @@ function parseArgs(argv) {
         index += 1;
         break;
       case "--roles":
-        options.roles = [
-          ...new Set(
-            requireValue(value, "roles").split(",").map((role) => role.trim()).filter((role) => role !== "")
-          )
-        ];
+        options.roles = splitList(requireValue(value, "roles"));
         index += 1;
         break;
       case "--dir":
@@ -1060,6 +1169,14 @@ function parseArgs(argv) {
         break;
       case "--lang":
         options.lang = requireValue(value, "lang");
+        index += 1;
+        break;
+      case "--mcp-servers":
+        options.mcpServers = splitList(requireValue(value, "mcp-servers"));
+        index += 1;
+        break;
+      case "--mcp-deny":
+        options.mcpDeny = splitList(requireValue(value, "mcp-deny"));
         index += 1;
         break;
       case "--check":
@@ -1103,11 +1220,26 @@ function parseArgs(argv) {
   if (options.listPolicies || options.listModels || options.listRoles || options.listMcp || options.checkFragments || options.scaffoldFragments) {
     return options;
   }
-  if (options.name === "") throw new Error("name: is required");
-  if (options.roles.length === 0) throw new Error("roles: is required");
   if (options.merge && !options.write)
     throw new Error("merge: requires --write");
+  if (options.models.length > 0) {
+    if (options.policy === "") throw new Error("policy: is required");
+    if (options.keep.length > 0) {
+      throw new Error("keep: cannot be used with --models");
+    }
+    return options;
+  }
+  if (options.name === "") throw new Error("name: is required");
+  if (options.modelId === "") throw new Error("model-id: is required");
+  if (options.roles.length === 0) throw new Error("roles: is required");
   return options;
+}
+function splitList(value) {
+  return [
+    ...new Set(
+      value.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "")
+    )
+  ];
 }
 function requireValue(value, field) {
   if (value === void 0 || value.startsWith("--")) {
@@ -1143,15 +1275,14 @@ try {
     });
   } else if (options.listRoles) {
     respond(listAvailableRoles(options));
-  } else if (options.write) {
-    respond(write(options));
   } else {
-    respond(diff(options));
+    respond(setup(options));
   }
 } catch (error) {
   respond({
     ok: false,
-    error: error instanceof Error ? error.message : "Unexpected error"
+    error: error instanceof Error ? error.message : "Unexpected error",
+    results: []
   });
   process.exitCode = 1;
 }

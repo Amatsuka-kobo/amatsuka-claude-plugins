@@ -7,6 +7,9 @@ import { runTs } from "../testing/run-ts.js"
 
 const CLI = fileURLToPath(new URL("../setup-agents.ts", import.meta.url))
 const PLUGIN_ROOT = fileURLToPath(new URL("../../", import.meta.url))
+const FAKE_CLAUDE = fileURLToPath(
+  new URL("../testing/fake-claude.mjs", import.meta.url)
+)
 
 let project: string
 
@@ -58,6 +61,20 @@ interface CheckResult {
   kept: string[]
   keptNeedsReview: string[]
   discarded: Discarded
+}
+
+interface WriteResults {
+  ok: boolean
+  error?: string
+  results: {
+    modelId: string
+    target: string
+    action?: string
+    kept?: string[]
+    roles: RolesSummary
+    mcpCurrent: { servers: string[]; denyTools: string[] }
+    mcpDropped: string[]
+  }[]
 }
 
 interface ListedRole {
@@ -118,8 +135,32 @@ function run<T = CheckResult>(args: string[]): T {
   return JSON.parse(output.trim().split("\n").at(-1) ?? "{}") as T
 }
 
+function runWithMcp<T>(args: string[], listOutput: string): T {
+  const previous = {
+    bin: process.env.AGENT_POLICY_CLAUDE_BIN,
+    fake: process.env.AGENT_POLICY_FAKE_MCP
+  }
+  process.env.AGENT_POLICY_CLAUDE_BIN = FAKE_CLAUDE
+  process.env.AGENT_POLICY_FAKE_MCP = listOutput
+  try {
+    return run<T>(args)
+  } finally {
+    process.env.AGENT_POLICY_CLAUDE_BIN = previous.bin
+    process.env.AGENT_POLICY_FAKE_MCP = previous.fake
+  }
+}
+
+function singleResult<T>(args: string[]): T {
+  const response = run<{ ok: boolean; error?: string; results: T[] }>(args)
+  const result = response.results[0]
+  if (result === undefined) {
+    throw new Error(response.error ?? "setup returned no result")
+  }
+  return result
+}
+
 function check(extra: string[] = []): CheckResult {
-  return run([
+  return singleResult([
     "--policy",
     "with-codex-policy",
     "--model-id",
@@ -509,7 +550,21 @@ describe("--check", () => {
   })
 
   it("実装役割と読み取り役割を分類して混在を示す", () => {
-    const result = check(["--roles", "explore,normal-impl,independent-review"])
+    const result = singleResult<CheckResult>([
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-terra",
+      "--name",
+      "gpt-terra",
+      "--roles",
+      "explore,normal-impl,independent-review",
+      "--lang",
+      "ja",
+      "--dir",
+      project,
+      "--check"
+    ])
 
     expect(result.roles).toEqual({
       ids: ["normal-impl", "explore", "independent-review"],
@@ -521,7 +576,22 @@ describe("--check", () => {
   })
 
   it("Agent tool の可否を役割から返す", () => {
-    expect(check(["--roles", "light-impl"]).roles.agentTool).toBe(false)
+    const light = singleResult<CheckResult>([
+      "--policy",
+      "with-codex-policy",
+      "--model-id",
+      "gpt-luna",
+      "--name",
+      "gpt-luna",
+      "--roles",
+      "light-impl",
+      "--lang",
+      "ja",
+      "--dir",
+      project,
+      "--check"
+    ])
+    expect(light.roles.agentTool).toBe(false)
     expect(check(["--roles", "complex-impl"]).roles.agentTool).toBe(true)
   })
 
@@ -602,8 +672,8 @@ describe("parseArgs", () => {
   })
 
   it("roles の重複を除去する", () => {
-    const result = check(["--roles", "explore,explore"])
-    expect(result.roles.ids).toEqual(["explore"])
+    const result = check(["--roles", "complex-impl,complex-impl"])
+    expect(result.roles.ids).toEqual(["complex-impl"])
   })
 })
 
@@ -680,7 +750,7 @@ describe("--write", () => {
   })
 
   it("--merge で新規作成すると空の保持・破棄情報を返す", () => {
-    const result = run([
+    const result = singleResult<CheckResult>([
       "--policy",
       "with-codex-policy",
       "--model-id",
@@ -730,7 +800,7 @@ describe("--write", () => {
       replaceConstraints: "- 私が書き換えた制約。\n"
     })
 
-    const result = run([
+    const result = singleResult<CheckResult>([
       "--policy",
       "with-codex-policy",
       "--model-id",
@@ -870,7 +940,7 @@ describe("--write", () => {
       replaceConstraints: "- 私が書き換えた制約。\n"
     })
 
-    const result = run([
+    const result = singleResult<CheckResult>([
       "--policy",
       "with-codex-policy",
       "--model-id",
@@ -913,7 +983,7 @@ describe("--write", () => {
       replaceConstraints: "- 私が書き換えた制約。\n"
     })
 
-    const result = run([
+    const result = singleResult<CheckResult>([
       "--policy",
       "with-codex-policy",
       "--model-id",
@@ -962,7 +1032,7 @@ describe("--write", () => {
       ].join("\n")
     })
 
-    const result = run([
+    const result = singleResult<CheckResult>([
       "--policy",
       "with-codex-policy",
       "--model-id",
@@ -979,15 +1049,11 @@ describe("--write", () => {
 
     expect(result.kept).toEqual([
       "tools:LSP",
-      "tools:mcp__context7",
       "tools:CustomTool",
       "section:## ツール運用",
       "section:## 独自運用"
     ])
-    expect(result.keptNeedsReview).toEqual([
-      "tools:mcp__context7",
-      "section:## ツール運用"
-    ])
+    expect(result.keptNeedsReview).toEqual(["section:## ツール運用"])
   })
 
   it("存在しない --keep section でエラーになり既存ファイルを変えない", () => {
@@ -1086,5 +1152,383 @@ describe("--write", () => {
     ])
     expect(result.ok).toBe(false)
     expect(String(result.error)).toContain("keep")
+  })
+})
+
+describe("担当表の検証", () => {
+  it("担当表にある役割は通る", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-sonnet",
+      "--roles",
+      "normal-impl,code-review",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+  })
+
+  it("担当表に無い組み込み役割を拒否する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-sonnet",
+      "--roles",
+      "normal-impl,light-impl",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("light-impl")
+  })
+
+  it("そのポリシーに登場しないモデルを拒否する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "grok",
+      "--lang",
+      "ja",
+      "--name",
+      "grok",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/model-id/)
+  })
+
+  it("プロジェクト独自役割は担当表の検証を免除する", () => {
+    const dir = path.join(project, ".claude", "agent-policy", "roles")
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, "triage.md"),
+      [
+        "---",
+        "id: triage",
+        "label: 障害の一次切り分け",
+        "description: 障害の一次切り分け",
+        "tools: Read, Grep, Glob",
+        "kind: readonly",
+        "---",
+        "",
+        "## When to invoke",
+        "",
+        "- 一次切り分け"
+      ].join("\n")
+    )
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-sonnet",
+      "--roles",
+      "explore,triage",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+  })
+
+  it("翻訳断片が欠けている言語を拒否する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "de",
+      "--name",
+      "claude-sonnet",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/fragment/i)
+  })
+})
+
+describe("--models による一括", () => {
+  it("複数モデルの差分を配列で返す", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--lang",
+      "ja",
+      "--models",
+      "sonnet,haiku",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    expect(result.results.length).toBe(2)
+    expect(result.results[0]?.modelId).toBe("sonnet")
+    expect(result.results[0]?.roles.ids).toEqual([
+      "normal-impl",
+      "general",
+      "explore",
+      "realtime-research",
+      "independent-review",
+      "code-review"
+    ])
+  })
+
+  it("単一指定でも要素 1 の配列を返す", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "haiku",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-haiku",
+      "--roles",
+      "light-impl",
+      "--dir",
+      project
+    ])
+    expect(result.results.length).toBe(1)
+  })
+
+  it("--models と --merge を併用できる", () => {
+    const result = run<WriteResults>([
+      "--write",
+      "--merge",
+      "--policy",
+      "claude-model-policy",
+      "--lang",
+      "ja",
+      "--models",
+      "haiku",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    expect(result.results[0]?.action).toBe("written")
+  })
+
+  it("--models と --keep は併用できない", () => {
+    const result = run<WriteResults>([
+      "--write",
+      "--policy",
+      "claude-model-policy",
+      "--lang",
+      "ja",
+      "--models",
+      "haiku",
+      "--keep",
+      "preamble",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/keep/)
+  })
+})
+
+describe("MCP の付与", () => {
+  const CONNECTED = "serena: uvx serena - ✔ Connected"
+
+  it("--mcp-servers で渡したサーバーを tools へ足す", () => {
+    const result = runWithMcp<WriteResults>(
+      [
+        "--write",
+        "--policy",
+        "claude-model-policy",
+        "--model-id",
+        "sonnet",
+        "--lang",
+        "ja",
+        "--name",
+        "claude-explorer",
+        "--roles",
+        "explore",
+        "--dir",
+        project,
+        "--mcp-servers",
+        "serena",
+        "--mcp-deny",
+        "mcp__serena__write_memory"
+      ],
+      CONNECTED
+    )
+    expect(result.ok).toBe(true)
+    const written = fs.readFileSync(
+      path.join(project, ".claude", "agents", "claude-explorer.md"),
+      "utf8"
+    )
+    expect(written).toMatch(/^tools:.*mcp__serena$/m)
+    expect(written).toMatch(/^disallowedTools: mcp__serena__write_memory$/m)
+  })
+
+  it("usable でないサーバーは落として報告する", () => {
+    const result = runWithMcp<WriteResults>(
+      [
+        "--write",
+        "--policy",
+        "claude-model-policy",
+        "--model-id",
+        "sonnet",
+        "--lang",
+        "ja",
+        "--name",
+        "claude-explorer",
+        "--roles",
+        "explore",
+        "--dir",
+        project,
+        "--mcp-servers",
+        "gone"
+      ],
+      CONNECTED
+    )
+    expect(result.results[0]?.mcpDropped).toEqual(["gone"])
+    const written = fs.readFileSync(
+      path.join(project, ".claude", "agents", "claude-explorer.md"),
+      "utf8"
+    )
+    expect(written).not.toContain("mcp__")
+  })
+
+  it("既存定義から mcpCurrent を逆算して返す", () => {
+    const file = path.join(project, ".claude", "agents", "claude-explorer.md")
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      [
+        "---",
+        "name: claude-explorer",
+        "description: old",
+        "model: sonnet",
+        "color: purple",
+        "tools: Read, Grep, Glob, Bash, mcp__serena",
+        "disallowedTools: mcp__serena__write_memory",
+        "agent-policy-role: explore",
+        "---",
+        "",
+        "## Output Format",
+        "",
+        "- old"
+      ].join("\n")
+    )
+    const result = run<WriteResults>([
+      "--check",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-explorer",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+    expect(result.results[0]?.mcpCurrent.servers).toEqual(["mcp__serena"])
+    expect(result.results[0]?.mcpCurrent.denyTools).toEqual([
+      "mcp__serena__write_memory"
+    ])
+  })
+})
+
+describe("automaticKeep", () => {
+  it("既存の mcp__ ツールと disallowedTools を保持しない", () => {
+    const file = path.join(project, ".claude", "agents", "claude-explorer.md")
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      [
+        "---",
+        "name: claude-explorer",
+        "description: old",
+        "model: sonnet",
+        "color: purple",
+        "tools: Read, Grep, Glob, Bash, mcp__legacy",
+        "disallowedTools: mcp__legacy__write",
+        "agent-policy-role: explore",
+        "---",
+        "",
+        "## Output Format",
+        "",
+        "- old"
+      ].join("\n")
+    )
+    const result = run<WriteResults>([
+      "--write",
+      "--merge",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-explorer",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+    expect(result.results[0]?.kept).not.toContain("tools:mcp__legacy")
+    expect(result.results[0]?.kept).not.toContain("key:disallowedTools")
+    const written = fs.readFileSync(file, "utf8")
+    expect(written).not.toContain("mcp__legacy")
+    expect(written).not.toContain("disallowedTools")
+  })
+})
+
+describe("モデル単位 color の配線", () => {
+  it("Claude Sonnet の purple を生成定義へ渡す", () => {
+    const result = run<WriteResults>([
+      "--write",
+      "--policy",
+      "claude-model-policy",
+      "--model-id",
+      "sonnet",
+      "--lang",
+      "ja",
+      "--name",
+      "claude-sonnet",
+      "--roles",
+      "normal-impl",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    const written = fs.readFileSync(
+      path.join(project, ".claude", "agents", "claude-sonnet.md"),
+      "utf8"
+    )
+    expect(written).toMatch(/^color: purple$/m)
   })
 })

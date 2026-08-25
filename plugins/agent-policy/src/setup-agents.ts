@@ -13,10 +13,17 @@ import {
   type FragmentDir,
   fragmentDirsFor,
   loadFragments,
-  scaffoldFragments
+  scaffoldFragments,
+  type Vendor
 } from "./agents/fragments"
-import { listMcpServers } from "./agents/mcp"
 import {
+  listMcpServers,
+  type McpCurrent,
+  mcpCurrentOf,
+  toolPrefix
+} from "./agents/mcp"
+import {
+  type ModelId,
   type ModelSpec,
   modelById,
   modelsFor,
@@ -31,11 +38,14 @@ import { type RoleId, roleById, roleOrder } from "./agents/roles"
 interface Options {
   policy: string
   modelId: string
+  models: ModelId[]
   name: string
   model: string
   roles: RoleId[]
   dir: string
   lang: string
+  mcpServers: string[]
+  mcpDeny: string[]
   check: boolean
   write: boolean
   merge: boolean
@@ -46,6 +56,15 @@ interface Options {
   checkFragments: boolean
   scaffoldFragments: boolean
   keep: string[]
+}
+
+interface Target {
+  modelId: ModelId
+  name: string
+  model: string
+  roles: RoleId[]
+  color: string
+  vendor: Vendor
 }
 
 interface Diff {
@@ -157,39 +176,109 @@ function requireModel(options: Options, policy: PolicyName): ModelSpec {
   return spec
 }
 
-function composeInput(options: Options): ComposeInput {
-  const policy = requirePolicy(options)
-  const spec = requireModel(options, policy)
-  return {
-    name: options.name,
-    model:
-      options.model === ""
-        ? resolveModelValue(spec, process.env)
-        : options.model,
-    vendor: spec.vendor,
-    roleIds: options.roles,
-    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-    lang: options.lang,
-    color: spec.color
+function validateRoles(
+  options: Options,
+  policy: PolicyName,
+  model: ModelSpec
+): void {
+  const allowed = new Set<string>(rolesFor(policy, model.id))
+  // 組み込み役割だけを担当表で検証する。プロジェクト独自役割は担当表に
+  // 現れないため、ここで弾くと既存利用者が setup を実行できなくなる。
+  const invalid = options.roles.filter(
+    (role) => roleById(role) !== undefined && !allowed.has(role)
+  )
+  if (invalid.length > 0) {
+    throw new Error(
+      `roles: ${invalid.join(", ")} is not assigned to ${model.id} in ${policy}`
+    )
   }
 }
 
-function template(options: Options): string {
-  return compose(composeInput(options))
+// lang が ja / en 以外のときは翻訳断片が揃っていなければ止める。
+// 揃っていないまま進むと、英語見出しの定義がその言語の指定で書かれる。
+function validateFragments(options: Options): void {
+  const status = checkFragments(pluginRoot(), options.dir, options.lang)
+  if (status.missing.length === 0 && status.stale.length === 0) return
+  throw new Error(
+    `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.map((entry) => entry.id).join(", ")}. Run --scaffold-fragments and translate them first`
+  )
 }
 
-function targetPath(options: Options): string {
-  return path.join(options.dir, ".claude", "agents", `${options.name}.md`)
+// --models は既定名・既定役割で複数を、--model-id は明示指定で 1 件を作る。
+function targetsFor(options: Options, policy: PolicyName): Target[] {
+  if (options.models.length > 0) {
+    return options.models.map((id) => {
+      const spec = modelById(id)
+      if (spec === undefined) throw new Error(`models: ${id} is unknown`)
+      if (!modelsFor(policy).some((entry) => entry.id === spec.id)) {
+        throw new Error(`models: ${id} is not used in ${policy}`)
+      }
+      return {
+        modelId: spec.id,
+        name: spec.defaultName,
+        model: resolveModelValue(spec, process.env),
+        roles: rolesFor(policy, spec.id),
+        color: spec.color,
+        vendor: spec.vendor
+      }
+    })
+  }
+
+  const spec = requireModel(options, policy)
+  validateRoles(options, policy, spec)
+  return [
+    {
+      modelId: spec.id,
+      name: options.name,
+      model:
+        options.model === ""
+          ? resolveModelValue(spec, process.env)
+          : options.model,
+      roles: options.roles,
+      color: spec.color,
+      vendor: spec.vendor
+    }
+  ]
+}
+
+// color を必ず渡す。渡さないと COLORS[vendor] にフォールバックし、
+// Claude 帯の 4 定義がすべて blue になる。
+function composeInputFor(
+  options: Options,
+  target: Target,
+  mcpServers: string[]
+): ComposeInput {
+  return {
+    name: target.name,
+    model: target.model,
+    vendor: target.vendor,
+    roleIds: target.roles,
+    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    lang: options.lang,
+    color: target.color,
+    mcpServers,
+    denyTools: options.mcpDeny
+  }
+}
+
+function templateFor(input: ComposeInput): string {
+  return compose(input)
+}
+
+function targetPath(options: Options, target: Target): string {
+  return path.join(options.dir, ".claude", "agents", `${target.name}.md`)
 }
 
 function compare(
   options: Options,
+  target: Target,
+  input: ComposeInput,
   rendered: string,
   existingRaw: string | undefined
 ): Diff {
-  const file = targetPath(options)
+  const file = targetPath(options, target)
   const relative = path.relative(options.dir, file).split(path.sep).join("/")
-  const roles = describeRoles(composeInput(options))
+  const roles = describeRoles(input)
 
   if (existingRaw === undefined) {
     return {
@@ -264,13 +353,14 @@ function compare(
   }
 }
 
-function diff(options: Options): Diff {
-  const rendered = template(options)
-  const file = targetPath(options)
+function diff(options: Options, target: Target, mcpServers: string[]): Diff {
+  const input = composeInputFor(options, target, mcpServers)
+  const rendered = templateFor(input)
+  const file = targetPath(options, target)
   const existingRaw = fs.existsSync(file)
     ? fs.readFileSync(file, "utf8")
     : undefined
-  return compare(options, rendered, existingRaw)
+  return compare(options, target, input, rendered, existingRaw)
 }
 
 interface Keep {
@@ -384,10 +474,15 @@ function merge(existingRaw: string, renderedRaw: string, keep: Keep): string {
 
 function automaticKeep(difference: Diff): string[] {
   return [
-    ...difference.frontmatter.toolsOnlyInExisting.map(
-      (tool) => `tools:${tool}`
-    ),
-    ...difference.frontmatter.keysOnlyInExisting.map((key) => `key:${key}`),
+    ...difference.frontmatter.toolsOnlyInExisting
+      // MCP の付与は --mcp-servers と再検証が決める。既存ファイルの内容を
+      // 根拠に残すと、切断済みサーバーのツール名が生き残り続ける。
+      .filter((tool) => !tool.startsWith("mcp__"))
+      .map((tool) => `tools:${tool}`),
+    ...difference.frontmatter.keysOnlyInExisting
+      // disallowedTools も同じ理由で保持しない。
+      .filter((key) => key !== "disallowedTools")
+      .map((key) => `key:${key}`),
     ...difference.body.sectionsOnlyInExisting.map(
       (heading) => `section:${heading}`
     )
@@ -421,13 +516,14 @@ function needsReview(selectors: string[]): string[] {
   )
 }
 
-function write(options: Options): unknown {
-  const file = targetPath(options)
-  const rendered = template(options)
+function write(options: Options, target: Target, mcpServers: string[]) {
+  const file = targetPath(options, target)
+  const input = composeInputFor(options, target, mcpServers)
+  const rendered = templateFor(input)
   const exists = fs.existsSync(file)
   // 既存内容はここで一度だけ読み、自動 keep の抽出と merge の双方へ渡す。
   const existingRaw = exists ? fs.readFileSync(file, "utf8") : undefined
-  const difference = compare(options, rendered, existingRaw)
+  const difference = compare(options, target, input, rendered, existingRaw)
   const selectors = unique([
     ...(exists && options.merge ? automaticKeep(difference) : []),
     ...options.keep
@@ -447,8 +543,56 @@ function write(options: Options): unknown {
     action: exists ? (options.merge ? "merged" : "overwritten") : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(difference, shouldMerge ? keep : parseKeep([]))
+    discarded: discarded(difference, shouldMerge ? keep : parseKeep([])),
+    roles: difference.roles
   }
+}
+
+// --mcp-servers で渡された名前のうち、claude mcp list で usable なものだけを
+// tools へ書く。落としたものは mcpDropped として報告する。
+function resolveMcp(options: Options): {
+  servers: string[]
+  dropped: string[]
+} {
+  if (options.mcpServers.length === 0) return { servers: [], dropped: [] }
+  const usable = new Set(
+    listMcpServers(process.env)
+      .filter((server) => server.usable)
+      .map((server) => server.name)
+  )
+  const servers: string[] = []
+  const dropped: string[] = []
+  for (const name of options.mcpServers) {
+    if (usable.has(name)) servers.push(toolPrefix(name))
+    else dropped.push(name)
+  }
+  return { servers, dropped }
+}
+
+// 前回の選択は既存定義から逆算する。専用の設定ファイルは持たない。
+function mcpCurrentFor(file: string): McpCurrent {
+  if (!fs.existsSync(file)) return { servers: [], denyTools: [] }
+  return mcpCurrentOf(fs.readFileSync(file, "utf8"))
+}
+
+function setup(options: Options): unknown {
+  validateFragments(options)
+  const policy = requirePolicy(options)
+  const targets = targetsFor(options, policy)
+  const mcp = resolveMcp(options)
+  const results = targets.map((target) => {
+    const current = mcpCurrentFor(targetPath(options, target))
+    const result = options.write
+      ? write(options, target, mcp.servers)
+      : diff(options, target, mcp.servers)
+    return {
+      ...result,
+      modelId: target.modelId,
+      mcpCurrent: current,
+      mcpDropped: mcp.dropped
+    }
+  })
+  return { ok: true, results }
 }
 
 function listPolicies(): unknown {
@@ -527,11 +671,14 @@ function parseArgs(argv: string[]): Options {
   const options: Options = {
     policy: "",
     modelId: "",
+    models: [],
     name: "",
     model: "",
     roles: [],
     dir: process.cwd(),
     lang: "ja",
+    mcpServers: [],
+    mcpDeny: [],
     check: false,
     write: false,
     merge: false,
@@ -556,6 +703,10 @@ function parseArgs(argv: string[]): Options {
         options.modelId = requireValue(value, "model-id")
         index += 1
         break
+      case "--models":
+        options.models = splitList(requireValue(value, "models")) as ModelId[]
+        index += 1
+        break
       case "--name":
         options.name = requireValue(value, "name")
         index += 1
@@ -565,14 +716,7 @@ function parseArgs(argv: string[]): Options {
         index += 1
         break
       case "--roles":
-        options.roles = [
-          ...new Set(
-            requireValue(value, "roles")
-              .split(",")
-              .map((role) => role.trim())
-              .filter((role) => role !== "")
-          )
-        ] as RoleId[]
+        options.roles = splitList(requireValue(value, "roles")) as RoleId[]
         index += 1
         break
       case "--dir":
@@ -581,6 +725,14 @@ function parseArgs(argv: string[]): Options {
         break
       case "--lang":
         options.lang = requireValue(value, "lang")
+        index += 1
+        break
+      case "--mcp-servers":
+        options.mcpServers = splitList(requireValue(value, "mcp-servers"))
+        index += 1
+        break
+      case "--mcp-deny":
+        options.mcpDeny = splitList(requireValue(value, "mcp-deny"))
         index += 1
         break
       case "--check":
@@ -632,11 +784,30 @@ function parseArgs(argv: string[]): Options {
   ) {
     return options
   }
-  if (options.name === "") throw new Error("name: is required")
-  if (options.roles.length === 0) throw new Error("roles: is required")
   if (options.merge && !options.write)
     throw new Error("merge: requires --write")
+  if (options.models.length > 0) {
+    if (options.policy === "") throw new Error("policy: is required")
+    if (options.keep.length > 0) {
+      throw new Error("keep: cannot be used with --models")
+    }
+    return options
+  }
+  if (options.name === "") throw new Error("name: is required")
+  if (options.modelId === "") throw new Error("model-id: is required")
+  if (options.roles.length === 0) throw new Error("roles: is required")
   return options
+}
+
+function splitList(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== "")
+    )
+  ]
 }
 
 function requireValue(value: string | undefined, field: string): string {
@@ -674,15 +845,14 @@ try {
     })
   } else if (options.listRoles) {
     respond(listAvailableRoles(options))
-  } else if (options.write) {
-    respond(write(options))
   } else {
-    respond(diff(options))
+    respond(setup(options))
   }
 } catch (error) {
   respond({
     ok: false,
-    error: error instanceof Error ? error.message : "Unexpected error"
+    error: error instanceof Error ? error.message : "Unexpected error",
+    results: []
   })
   process.exitCode = 1
 }
