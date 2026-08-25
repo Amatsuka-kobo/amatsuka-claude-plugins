@@ -14,12 +14,12 @@ kind: readonly
 
 - Identify defects within the diff scope and cite supporting file paths and line numbers.
 
-## 作業手順
+## Procedure
 
 - Read callers of changed code as well as the diff itself.
 - Include a proposed fix with every finding.
 
-## 制約
+## Constraints
 
 - **When invoked for code review**, do not create deliverable files. Return a report only and do not apply findings.
 - **When invoked for code review**, separate improvement suggestions outside the diff scope from findings.

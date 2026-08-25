@@ -34,6 +34,7 @@ function build(roleIds: string[], overrides: Record<string, unknown> = {}) {
     vendor: "gpt",
     roleIds: roleIds as never,
     fragmentDirs: [PLUGIN_ROLES],
+    lang: "ja",
     ...overrides
   })
 }
@@ -132,7 +133,8 @@ describe("describeRoles", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["triage", "normal-impl"] as never,
-      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
+      lang: "ja"
     })
 
     expect(summary).toEqual({
@@ -300,14 +302,16 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "grok",
       roleIds: ["realtime-research"] as never,
-      fragmentDirs: [PLUGIN_ROLES]
+      fragmentDirs: [PLUGIN_ROLES],
+      lang: "ja"
     })
     const withGpt = compose({
       name: "g",
       model: "m",
       vendor: "gpt",
       roleIds: ["realtime-research"] as never,
-      fragmentDirs: [PLUGIN_ROLES]
+      fragmentDirs: [PLUGIN_ROLES],
+      lang: "ja"
     })
     expect(withGrok).toContain("ソーシャル由来")
     expect(withGpt).not.toContain("ソーシャル由来")
@@ -341,7 +345,8 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["explore"] as never,
-      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
+      lang: "ja"
     })
     expect(body).toContain("独自探索")
     expect(body).not.toContain("依頼された探索範囲だけを走査する")
@@ -374,7 +379,8 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["explore"] as never,
-      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
+      lang: "ja"
     })
     expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
   })
@@ -405,7 +411,8 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["triage"] as never,
-      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
+      lang: "ja"
     })
     expect(body).toContain("切り分け")
   })
@@ -432,7 +439,8 @@ describe("断片の解決", () => {
       model: "m",
       vendor: "gpt",
       roleIds: ["complex-impl"] as never,
-      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }]
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
+      lang: "ja"
     })
     // 差し替えた節は反映される
     expect(body).toContain("プロジェクト固有の共通制約")
@@ -454,7 +462,8 @@ describe("英語断片での合成", () => {
         model: "sonnet",
         vendor: "claude",
         roleIds: [role.id],
-        fragmentDirs: [EN]
+        fragmentDirs: [EN],
+        lang: "en"
       })
       expect(document, role.id).toContain("name: test-agent")
       expect(document, role.id).toContain("## Output Format")
@@ -471,23 +480,29 @@ describe("英語断片での合成", () => {
     }
   })
 
-  it("英語断片の本文に日本語が混入しない(見出しと preamble の約物は Task 6 で対応)", () => {
+  it("英語で合成した定義に日本語と日本語約物が混入しない", () => {
     const document = compose({
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
       roleIds: ["complex-impl", "explore"],
-      fragmentDirs: [EN]
+      fragmentDirs: [EN],
+      lang: "en"
     })
-    const body = document
-      .split("\n")
-      .filter(
-        (line) =>
-          !line.startsWith("#") &&
-          !line.startsWith("description:") &&
-          !line.includes("Your roles are")
-      )
-      .join("\n")
-    expect(body).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
+    expect(document).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
+  })
+
+  it("英語で合成した定義の見出しが英語になっている", () => {
+    const document = compose({
+      name: "test-agent",
+      model: "sonnet",
+      vendor: "claude",
+      roleIds: ["complex-impl"],
+      fragmentDirs: [EN],
+      lang: "en"
+    })
+    expect(document).toContain("## Procedure")
+    expect(document).toContain("## Constraints")
+    expect(document).not.toContain("## 作業手順")
   })
 })

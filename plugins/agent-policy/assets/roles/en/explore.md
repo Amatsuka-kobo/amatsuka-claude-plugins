@@ -14,13 +14,13 @@ kind: readonly
 
 - Scan the specified scope without omissions and report findings with supporting file paths and line numbers.
 
-## 作業手順
+## Procedure
 
 - Scan only the requested exploration scope.
 - Report observations outside the scope without investigating them further.
 - Do not treat zero search results as a conclusion. Verify with different terms or methods.
 
-## 制約
+## Constraints
 
 - **When invoked for exploration work**, do not create deliverable files. Return a report only.
 

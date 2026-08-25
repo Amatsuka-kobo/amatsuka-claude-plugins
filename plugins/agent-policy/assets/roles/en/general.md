@@ -15,12 +15,12 @@ kind: impl
 
 - Perform documentation work and routine maintenance according to existing repository conventions for file placement, naming, and writing style.
 
-## 作業手順
+## Procedure
 
 - Record progress in the report during long-running work.
 - If an advisor consultation does not resolve a decision, report the options and a recommendation.
 
-## 制約
+## Constraints
 
 - **When invoked for general tasks**, keep work within the stated scope. Do not make out-of-scope changes.
 

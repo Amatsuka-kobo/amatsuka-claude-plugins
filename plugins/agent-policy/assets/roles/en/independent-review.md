@@ -15,13 +15,13 @@ kind: readonly
 - Challenge premises stated in the document and present evidence-backed counterarguments.
 - Do not decide whether findings should be accepted. Leave that decision to the orchestrator.
 
-## 作業手順
+## Procedure
 
 - Read only the original target document.
 - Do not read findings from other reviews. Report that they were provided.
 - Before raising a finding, use Read, Grep, or Glob to verify that code and files mentioned by the document exist and that the description matches them.
 
-## 制約
+## Constraints
 
 - **When invoked for independent review**, do not create deliverable files. Return a report only.
 - **When invoked for independent review**, do not decide whether findings should be accepted. Return the information needed to decide.

@@ -91,6 +91,7 @@ describe("合成結果", () => {
         vendor: preset.vendor,
         roleIds: preset.roleIds,
         fragmentDirs: [PLUGIN_ROLES],
+        lang: "ja",
         color: preset.color
       })
       expect(document).toContain(`name: ${preset.name}`)
@@ -108,7 +109,8 @@ describe("合成結果", () => {
       model: "m",
       vendor: "grok",
       roleIds: grok?.roleIds ?? [],
-      fragmentDirs: [PLUGIN_ROLES]
+      fragmentDirs: [PLUGIN_ROLES],
+      lang: "ja"
     })
     expect(document).toMatch(/^tools:.*\bAgent\b/m)
   })
@@ -120,7 +122,8 @@ describe("合成結果", () => {
       model: "m",
       vendor: "gpt",
       roleIds: luna?.roleIds ?? [],
-      fragmentDirs: [PLUGIN_ROLES]
+      fragmentDirs: [PLUGIN_ROLES],
+      lang: "ja"
     })
     expect(document).not.toMatch(/^tools:.*\bAgent\b/m)
   })

@@ -17,6 +17,7 @@ export function buildPresets(pluginRoot: string): void {
       vendor: preset.vendor,
       roleIds: preset.roleIds,
       fragmentDirs: [{ path: roles, source: "plugin" }],
+      lang: "ja",
       color: preset.color
     })
     fs.writeFileSync(path.join(outDir, `${preset.name}.md`), document)
