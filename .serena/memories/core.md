@@ -106,10 +106,11 @@ codiel は metatron が無くても最小 ARCHITECTURE を自前生成して完�
   入り、渡された `title` / `body` を一切書き換えず(誤字修正・整形・要約・見出し並べ替えもしない)
   ブレインストーミングを飛ばして起票する。全文提示 → 明示承認のゲートは省略しない。判定は固定句の
   一致だけで行い推測で入らない。仕様の正本は `mem:file_contract` §10。
-- **agent-policy** (0.7.0-dev) — the model-tiering / orchestration discipline this repo itself runs
-  under. Since 2026-08-16 it **ships 7 agent definitions and injects the policy skill from a
-  `SessionStart` hook keyed on an env var**; the old `setup-gpt` / `setup-grok` generator skills are
-  deleted. Details: `mem:agent_policy/core`.
+- **agent-policy** (0.10.0-dev) — the model-tiering / orchestration discipline this repo itself runs
+  under. Since 2026-08-25 it **ships 4 agent definitions built from role fragments, injects the
+  policy skill and a 役割 → Agent 名 table from a `SessionStart` hook, and offers one `setup-agents`
+  wizard** (the old `setup-gpt` / `setup-grok` pair was merged into it; the 2026-08-16 "7 definitions,
+  hook writes files" model is gone). Details: `mem:agent_policy/core`.
 - **prompt-smith** (0.3.2-dev) — standards for AI-facing instruction docs (`prompt-smith`), agent
   definitions (`agent-creator`) and skill authoring + description eval loop (`skill-creator`, a
   TypeScript port of Anthropic's official skill-creator). Details: `mem:agent_policy/core`.
