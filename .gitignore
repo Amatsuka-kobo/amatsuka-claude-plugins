@@ -9,7 +9,6 @@ static/management.html
 cliproxyapi.config.yaml
 
 # claude
-.claude/agents
 .claude/context-maps
 
 # Raphael
