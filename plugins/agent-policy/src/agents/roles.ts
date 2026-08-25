@@ -25,25 +25,25 @@ export const ROLES: readonly Role[] = [
     id: "complex-impl",
     label: "複雑または重要な実装",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "normal-impl",
     label: "通常の実装",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "light-impl",
     label: "軽量な実装",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
   },
   {
     id: "general",
     label: "その他のタスク",
     kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill", "LSP"]
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "explore",

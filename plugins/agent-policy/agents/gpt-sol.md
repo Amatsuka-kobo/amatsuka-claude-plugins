@@ -3,7 +3,7 @@ name: gpt-sol
 description: Use this agent when 複雑なコーディング(アーキテクチャ判断・非自明な設計トレードオフ・複数コンポーネントの協調を伴う実装)を委譲するとき。詳細は本文の「When to invoke」を参照。
 model: claude-gpt-5-6-sol
 color: yellow
-tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent
+tools: Read, Grep, Glob, Write, Edit, Bash, Skill, Agent
 agent-policy-role: complex-impl
 ---
 

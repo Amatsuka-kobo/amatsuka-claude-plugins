@@ -3,7 +3,7 @@ name: gpt-terra
 description: Use this agent when 通常のコーディング(複雑でない実装)、設定編集、ビルド/テスト実行、ドキュメント作成、定型メンテナンスなど、レビュー・設計を除く一般作業、オーケストレーターが統括するコードベース探索の実働、最新動向・リリース情報・外部エコシステムなど、外部の最新情報を要する調査、設計書・実装計画書の前提検証と反証提示を委譲するとき。詳細は本文の「When to invoke」を参照。
 model: claude-gpt-5-6-terra
 color: green
-tools: Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, WebSearch, WebFetch, Agent
+tools: Read, Grep, Glob, Write, Edit, Bash, Skill, WebSearch, WebFetch, Agent
 agent-policy-role: normal-impl, general, explore, realtime-research, independent-review
 ---
 
