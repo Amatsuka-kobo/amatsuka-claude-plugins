@@ -69,4 +69,4 @@ GPT をローカルプロキシ経由で呼び出せないときは、`codex@ope
 2. 注入が無い帯は、担当表のモデルで分岐する。
    - Claude 帯: dispatch 時の `model` 上書きで実行帯を指定して起動する。読み取り役割はビルトイン `Explore`、実装帯は `general-purpose` へ委譲する。
    - GPT 帯: プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` を使う。
-3. GPT / Grok をローカルプロキシ経由で呼び出せないときは、§フォールバック に従う。
+3. GPT をローカルプロキシ経由で呼び出せないときは、§フォールバック に従う。
