@@ -3,7 +3,6 @@ import {
   allowsAgentTool,
   hasMixedKinds,
   ROLES,
-  resolveTools,
   roleById,
   roleOrder,
   sortRoleIds
@@ -79,38 +78,6 @@ describe("sortRoleIds", () => {
     expect(
       sortRoleIds(["z-project", "explore", "a-project", "complex-impl"])
     ).toEqual(["complex-impl", "explore", "a-project", "z-project"])
-  })
-})
-
-describe("resolveTools", () => {
-  it("単一の読み取り役割では Write / Edit / Agent が付かない", () => {
-    const tools = resolveTools(["independent-review"])
-    expect(tools).toContain("Read")
-    expect(tools).not.toContain("Write")
-    expect(tools).not.toContain("Edit")
-    expect(tools).not.toContain("Agent")
-  })
-
-  it("realtime-research だけが WebSearch / WebFetch を持ち込む", () => {
-    expect(resolveTools(["realtime-research"])).toContain("WebSearch")
-    expect(resolveTools(["explore"])).not.toContain("WebSearch")
-  })
-
-  it("複数役割で和集合になる", () => {
-    const tools = resolveTools(["normal-impl", "realtime-research"])
-    expect(tools).toContain("Write")
-    expect(tools).toContain("WebSearch")
-  })
-
-  it("MCP ツールを 1 つも含まない", () => {
-    const tools = resolveTools(["complex-impl", "explore", "realtime-research"])
-    expect(tools.some((tool) => tool.startsWith("mcp__"))).toBe(false)
-  })
-
-  it("同じ役割集合なら順序が安定する", () => {
-    expect(resolveTools(["explore", "normal-impl"])).toEqual(
-      resolveTools(["normal-impl", "explore"])
-    )
   })
 })
 

@@ -48,7 +48,6 @@ interface Options {
   lang: string
   mcpServers: string[]
   mcpDeny: string[]
-  check: boolean
   write: boolean
   merge: boolean
   listPolicies: boolean
@@ -536,10 +535,7 @@ function discarded(difference: Diff, keep: Keep): Discarded {
 }
 
 function needsReview(selectors: string[]): string[] {
-  return selectors.filter(
-    (selector) =>
-      selector.startsWith("tools:mcp__") || selector === "section:## ツール運用"
-  )
+  return selectors.filter((selector) => selector.startsWith("tools:mcp__"))
 }
 
 function write(options: Options, target: Target, mcpServers: string[]) {
@@ -736,8 +732,7 @@ function bundledDefaultNames(projectDir: string): Map<string, string> {
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), projectDir, "en").filter(
       (dir) => dir.source === "plugin"
-    ),
-    "claude"
+    )
   )
   const names = new Map<string, string>()
   for (const [id, fragment] of fragments) {
@@ -752,8 +747,7 @@ function listCoverage(options: Options): unknown {
   const policy = requirePolicy(options)
   const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]) as RoleId[])
   const fragments = loadFragments(
-    fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-    "claude"
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   )
   const covered = coveredDefinitions(options.dir, roleIds)
   const fallbackNames =
@@ -798,7 +792,6 @@ function parseArgs(argv: string[]): Options {
     lang: "ja",
     mcpServers: [],
     mcpDeny: [],
-    check: false,
     write: false,
     merge: false,
     listPolicies: false,
@@ -856,7 +849,7 @@ function parseArgs(argv: string[]): Options {
         index += 1
         break
       case "--check":
-        options.check = true
+        // 差分表示は既定動作。後方互換のため引数だけ受け付ける。
         break
       case "--write":
         options.write = true

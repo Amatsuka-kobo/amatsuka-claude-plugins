@@ -1295,20 +1295,10 @@ describe("--write", () => {
     expect(content).toContain("私が書き換えた制約")
   })
 
-  it("旧同梱候補だけを keptNeedsReview に分ける", () => {
+  it("明示保持した mcp__ tool を keptNeedsReview に分ける", () => {
     seed({
       tools:
-        "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7, CustomTool",
-      extraSection: [
-        "## ツール運用",
-        "",
-        "- Context7 を使う。",
-        "",
-        "## 独自運用",
-        "",
-        "- 独自の運用。",
-        ""
-      ].join("\n")
+        "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
     })
 
     const result = singleResult<CheckResult>([
@@ -1323,16 +1313,12 @@ describe("--write", () => {
       "--dir",
       project,
       "--write",
-      "--merge"
+      "--keep",
+      "tools:mcp__context7"
     ])
 
-    expect(result.kept).toEqual([
-      "tools:LSP",
-      "tools:CustomTool",
-      "section:## ツール運用",
-      "section:## 独自運用"
-    ])
-    expect(result.keptNeedsReview).toEqual(["section:## ツール運用"])
+    expect(result.kept).toEqual(["tools:mcp__context7"])
+    expect(result.keptNeedsReview).toEqual(["tools:mcp__context7"])
   })
 
   it("存在しない --keep section でエラーになり既存ファイルを変えない", () => {
