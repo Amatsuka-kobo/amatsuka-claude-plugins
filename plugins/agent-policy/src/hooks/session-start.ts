@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SessionStart フック: 方針スキルの使用指示と、役割マーカーの対応表を注入する。
-// ファイルは書かない。定義の生成は setup-gpt / setup-grok が担う。
+// ファイルは書かない。定義の生成は setup-agents が担う。
 // 失敗しても Claude Code の起動を妨げないよう、例外は握りつぶして終了コード 0 で終わる。
 
 import fs from "node:fs"
@@ -35,22 +35,22 @@ const ALIASES: AliasSpec[] = [
   {
     preset: "gpt-sol",
     variable: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-    skill: "agent-policy:setup-gpt"
+    skill: "agent-policy:setup-agents"
   },
   {
     preset: "gpt-terra",
     variable: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-    skill: "agent-policy:setup-gpt"
+    skill: "agent-policy:setup-agents"
   },
   {
     preset: "gpt-luna",
     variable: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-    skill: "agent-policy:setup-gpt"
+    skill: "agent-policy:setup-agents"
   },
   {
     preset: "grok",
     variable: "AMATSUKA_AGENT_GROK_ALIAS",
-    skill: "agent-policy:setup-grok"
+    skill: "agent-policy:setup-agents"
   }
 ]
 
@@ -124,7 +124,8 @@ function scan(dir: string | undefined): Marked[] {
 }
 
 // 役割 ID の表示名を解決する。プラグイン既知の ROLES に無いときは、
-// プロジェクト側の役割断片(.claude/agent-policy/roles/<id>.md)の label を読む。
+// プロジェクト側の役割断片(.claude/agent-policy/roles/<id>.md または
+// .claude/agent-policy/roles/<lang>/<id>.md)の label を読む。
 // setup はプロジェクト側断片の役割 ID もマーカーへ書き込むため、ここで拾えないと
 // 「未知の役割」として誤って報告してしまう。
 function labelOf(env: NodeJS.ProcessEnv, id: string): string | undefined {
@@ -143,22 +144,30 @@ function labelOf(env: NodeJS.ProcessEnv, id: string): string | undefined {
     return undefined
   }
 
-  const file = path.join(
-    projectDir,
-    ".claude",
-    "agent-policy",
-    "roles",
-    `${id}.md`
-  )
+  const base = path.join(projectDir, ".claude", "agent-policy", "roles")
+  const candidates = [path.join(base, `${id}.md`)]
   try {
-    if (fs.existsSync(file)) {
+    if (fs.existsSync(base)) {
+      for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          candidates.push(path.join(base, entry.name, `${id}.md`))
+        }
+      }
+    }
+  } catch {
+    // 走査に失敗しても、直下の候補だけで解決を試みる。
+  }
+
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue
       const label = frontmatter(file).get("label")
       const resolved = label === "" ? undefined : label
       LABELS.set(id, resolved)
       return resolved
+    } catch {
+      // 1 ファイルが読めなくても、他の候補と方針注入は生かす。
     }
-  } catch {
-    // プロジェクト側の役割断片が読めなくても、方針注入は続ける。
   }
 
   LABELS.set(id, undefined)

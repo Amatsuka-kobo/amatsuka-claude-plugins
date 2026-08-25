@@ -42,7 +42,7 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 - このとき `model` 上書きは使わない。
 - 依頼文に「この tools のみ使用」と明記する。
 - ビルトイン Agents は使わず、担当 GPT エージェントへ直接委譲する。
-- GPT が利用不可なら、§実行帯の解決順 で決まる代替帯を担当表として用い、dispatch 時の `model` 上書きで実行帯を明示する。
+- GPT が利用不可なら、§フォールバック に従う。
 - 独立レビュー・リアルタイム情報調査・探索実働を委譲するときは、依頼文の冒頭でどの役割かを明示し、その役割の Output Format を指定する。
 - 独立レビュー・探索実働・リアルタイム情報調査を、実装エージェント(`Write` / `Edit` を持つ帯)へ委譲するときは、依頼文に次を明記する。
   - 使用してよい tools を読み取り系に限定すること(`Read` / `Grep` / `Glob`、読み取りに限った `Bash`、必要なら `WebSearch` / `WebFetch`)
@@ -57,11 +57,16 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 3. 依頼文に「反証の提示までを担い、採否はオーケストレーターが判断する」と明記する。
 4. オーケストレーターが両レビューの指摘の採否を判断し、補足修正を加えてからユーザーへ提示する。
 
+## フォールバック
+
+GPT をローカルプロキシ経由で呼び出せないときは、`codex@openai-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
+
 ## 実行帯の解決順
 
 実務タスク着手前に確認し、以後はタスクごとに再判定しない。
 
 1. SessionStart フックが役割マーカーで注入した定義があれば、その帯はそれを使う。
-2. プロジェクトの `.claude/agents/gpt-sol.md` / `gpt-terra.md` / `gpt-luna.md` が存在すればそれを使う。既定と異なるエイリアスを使うときは `agent-policy:setup-gpt` で生成する。
-3. 存在しなければ、プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` を使う。
-4. ローカルプロキシ経由で呼び出せないときは、`codex@openai-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
+2. 注入が無い帯は、担当表のモデルで分岐する。
+   - Claude 帯: dispatch 時の `model` 上書きで実行帯を指定して起動する。読み取り役割はビルトイン `Explore`、実装帯は `general-purpose` へ委譲する。
+   - GPT 帯: プラグイン同梱の `agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` を使う。
+3. GPT / Grok をローカルプロキシ経由で呼び出せないときは、§フォールバック に従う。
