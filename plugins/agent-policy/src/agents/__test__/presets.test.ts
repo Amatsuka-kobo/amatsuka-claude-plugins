@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { compose } from "../compose"
+import { MODELS, rolesAcrossPolicies } from "../policies"
 import { DEFAULT_ALIASES, PRESETS } from "../presets"
-import { PRESET_ASSIGNMENTS } from "../roles"
 
 const PLUGIN_ROLES = fileURLToPath(
   new URL("../../../assets/roles/", import.meta.url)
@@ -43,25 +43,38 @@ describe("PRESETS", () => {
   })
 })
 
-describe("担当表との一致", () => {
-  it("各方針が割り当てた役割を、担当プリセットが漏れなく持つ", () => {
-    const byName = new Map(PRESETS.map((preset) => [preset.name, preset]))
-    const missing: string[] = []
-
-    for (const [policy, assignments] of Object.entries(PRESET_ASSIGNMENTS)) {
-      for (const [roleId, presetName] of Object.entries(assignments)) {
-        const preset = byName.get(presetName)
-        if (preset === undefined) {
-          missing.push(`${policy}: unknown preset ${presetName}`)
-          continue
-        }
-        if (!preset.roleIds.includes(roleId as never)) {
-          missing.push(`${policy}: ${presetName} lacks ${roleId}`)
-        }
-      }
+describe("担当表からの導出", () => {
+  it("各プリセットの役割が全方針の和集合と一致する", () => {
+    for (const preset of PRESETS) {
+      expect(preset.roleIds, preset.name).toEqual(
+        rolesAcrossPolicies(preset.name as never)
+      )
     }
+  })
 
-    expect(missing).toEqual([])
+  it("PRESETS が MODELS の非 Claude 帯から導かれている", () => {
+    const derived = MODELS.filter((model) => model.vendor !== "claude").map(
+      (model) => ({
+        name: model.defaultName,
+        vendor: model.vendor,
+        defaultAlias: model.model,
+        color: model.color
+      })
+    )
+    expect(
+      PRESETS.map(({ name, vendor, defaultAlias, color }) => ({
+        name,
+        vendor,
+        defaultAlias,
+        color
+      }))
+    ).toEqual(derived)
+  })
+
+  it("Claude 帯は同梱プリセットに含まれない", () => {
+    for (const preset of PRESETS) {
+      expect(preset.vendor, preset.name).not.toBe("claude")
+    }
   })
 })
 
