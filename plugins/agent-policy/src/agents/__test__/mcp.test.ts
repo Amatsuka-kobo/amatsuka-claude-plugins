@@ -1,5 +1,6 @@
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { mcpCurrentOf, parseMcpList, toolPrefix } from "../mcp"
+import { listMcpServers, mcpCurrentOf, parseMcpList, toolPrefix } from "../mcp"
 
 const SAMPLE = [
   "⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY is set",
@@ -12,6 +13,13 @@ const SAMPLE = [
   "pending: node /tmp/pending.mjs - ⏸ Pending approval",
   "lazy: node /tmp/lazy.mjs - cached, connects on first use"
 ].join("\n")
+
+const FAKE_CLAUDE = fileURLToPath(
+  new URL("../../testing/fake-claude.mjs", import.meta.url)
+)
+const MISSING_CLAUDE = fileURLToPath(
+  new URL("../../testing/missing-claude.mjs", import.meta.url)
+)
 
 describe("parseMcpList", () => {
   it("警告行とヘルスチェック行を無視する", () => {
@@ -55,6 +63,24 @@ describe("toolPrefix", () => {
 
   it("ハイフンを保つ", () => {
     expect(toolPrefix("my-server")).toBe("mcp__my-server")
+  })
+})
+
+describe("listMcpServers", () => {
+  it("偽 CLI が返した出力をパースする", () => {
+    const env = {
+      AGENT_POLICY_CLAUDE_BIN: FAKE_CLAUDE,
+      AGENT_POLICY_FAKE_MCP: SAMPLE
+    }
+
+    expect(listMcpServers(env)).toEqual(parseMcpList(SAMPLE))
+  })
+
+  it("実行に失敗しても例外を投げず空配列を返す", () => {
+    const env = { AGENT_POLICY_CLAUDE_BIN: MISSING_CLAUDE }
+
+    expect(() => listMcpServers(env)).not.toThrow()
+    expect(listMcpServers(env)).toEqual([])
   })
 })
 
