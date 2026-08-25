@@ -1421,3 +1421,1212 @@ context-map の追跡についての判断を待っている。
 # phyllis998
 
 > であれば、一旦そもそもの存在意義を見直していきたいので、.gitignoreから削除しないし、ARCHITECTUREのツリーにも載せないようにしたいです
+
+## セッション 11: rules拡張設計確定・実装プロンプト作成完了
+
+# AI
+
+判断を反映する。`.claude/context-maps/` をツリーから外し、`.claude/rules/metatron/` は 1 行に畳む。数値を測り直す。
+
+判断を反映した。
+
+## 変更点
+
+**`.claude/context-maps/` をツリーから外した。** `.gitignore` も現状のまま維持する。設計書には理由を明記した。
+
+> `.claude/context-maps/` はツリーへ載せない。context-map の存在意義そのものを見直す判断が別途進んでおり、その結論が出るまで ARCHITECTURE に位置づけを固定しない。
+
+**`.claude/rules/metatron/` を 1 行に畳んだ。** 子が 1 つだけになったので `.claude/` を親として立てる必要がなくなった。
+
+追記後のツリーは 2 行の追加になる。
+
+```
+├── .claude/rules/metatron/       metatron が管理する規律を置く
+├── docs/                         人間向けの文書と会話記録を置く
+│   └── prompts/                  別セッションの起動プロンプトを置く
+```
+
+## 数値を測り直した
+
+| 段階 | ARCHITECTURE | 注入 | 残り予算 |
+| --- | --- | --- | --- |
+| 現在 | 8,204 | 8,918 | 82 |
+| 3 節を移行した後 | 4,471 | 5,185 | 3,815 |
+| ツリー追記(+206)後 | 4,677 | **5,391** | **3,609** |
+
+前回の +286 から +206 へ減った。縮退なし。
+
+`★ Insight ─────────────────────────────────────`
+ARCHITECTURE に載せないという判断には、単なる先送り以上の意味がある。
+
+**ARCHITECTURE に位置づけを書くことは、その存在を前提として固定することである。** 「セッションの探索成果物を置く」と書いた瞬間、次に触るエージェントはそれを既定の作法として扱う。存在意義を問い直している最中に、問い直しの対象を正典に書き込むと、見直しの結論より先に既成事実ができる。
+
+metatron の書式契約が `## ディレクトリ構成と責務` について「実装エージェントが置き場を迷うディレクトリに絞る」と定めているのも同じ性質のものである。載せる基準は「実在するか」ではなく「載せることで迷いが減るか」であって、まだ役割が定まっていないものは後者を満たさない。
+`─────────────────────────────────────────────────`
+
+## このセッションの成果物
+
+- `harness-docs/design/2026-08-24-metatron-rules-expansion-design.md` — 設計書(承認済み、18 節)
+- `docs/prompts/2026-08-24-metatron-rules-expansion-implementation.md` — 実装セッションの起動プロンプト(3 区間)
+
+どちらもまだコミットしていない。コミットするかはそちらの判断に委ねる。
+
+次の指示を待っている。
+
+次の指示を待っている。
+
+# phyllis998
+
+> コミットお願いします
+
+## セッション 12: 設計書・実装プロンプト・WBS 作成完了
+
+# phyllis998
+
+> harness-docs/design/2026-08-24-metatron-rules-expansion-design.md を全文読み、docs/prompts/2026-08-24-metatron-rules-expansion-implementation.md の「運用指示」節を読んだうえで、実装計画書(WBS)を harness-docs/plans/ に書いてください。
+>
+> 設計書 §16 の 14 ステップを分解し、各ステップに次を定めます。
+>
+> - 変更するファイル
+> - 完了条件(通すテスト、既存挙動をどう保証するか)
+> - 先行するステップ
+>
+> 設計書 §16 の依存関係を崩さないこと。特にステップ 10(codiel から節名参照を削除)をステップ 12(このリポジトリの移行)より前に置くこと。
+>
+> 書き上げたら全文を提示してください。承認するまで実装に入らないでください。
+
+## セッション 13: 実装計画書の作成と承認
+
+# AI
+
+`★ Insight ─────────────────────────────────────`
+- 設計書 §16 の 14 ステップは「実装(1〜11)/移行(12〜13)/追随(14)」の 3 層に分かれ、依存グラフは線形ではなく **1→2→{3,5}→{4,6}** の菱形になる。WBS の粒度はこの分岐点で切る。
+- 探索の勘所は「テスト ID」。設計書 §15 が落ちるテストを ID で名指ししているため、WBS の完了条件を「D1/D2/D5 が更新後に通る」のように既存 ID へ紐づけられる。ID を持たない新規テストだけ命名規則を決めればよい。
+- `.claude/agents/` が空 → 実行帯はプラグイン同梱の `agent-policy:*` に解決。cliproxy は :8317 で応答(401 = 認証待ちの正常応答)、Grok/GPT とも利用可。
+`─────────────────────────────────────────────────`
+
+設計書を全文読了。探索実働を並列 dispatch する。
+
+`★ Insight ─────────────────────────────────────`
+7 体の探索が完了。WBS の骨格に効く発見が 4 つある。
+
+- **`commit-architecture` は `kind` を照合していない**(`cli/commit.ts:29-100`)。`architecture` と `adr` を無差別に消費する。設計書 §15 が要求する「`commit-rules` に architecture の stagingId を渡したら拒否」は、**既存にない照合を新設する**という意味になる。
+- **codiel の節名参照は設計書の 13 件表を超える**。`fixing-review-findings/SKILL.md:52` ほかが表外にある。設計書 §14-4 の「分類 A はゼロ」を満たすには表を出発点にしつつ機械検出で確定させる必要がある。
+- **`harness-docs/ARCHITECTURE.md` に `## ADR 一覧` が無い**(9 節)。3 節を抜くと 6 節になる。実測 8,204 字 / 注入 8,918 字 / 縮退マーカー無し。
+- **`.claude/rules/` は未作成**。`.gitignore:13` は `.claude/context-maps` を除外済み。
+`─────────────────────────────────────────────────`
+
+grok が「推論」と断った 2 点を自分で裏取りする。
+
+裏取り完了。grok の報告どおり `commit-architecture` は `kind` を照合していない。context-map を書く。
+
+`★ Insight ─────────────────────────────────────`
+- `references/architecture-format.md` は 10 節それぞれに規範を持つ(`:27-101`)。3 節分(`:83-96`)を `rules-format.md` へ**移設**するので、書式契約の総量は増えない。
+- codiel の版は `0.5.3-dev`。指示層 14 ファイルの書き換え + フォールバック新設は ARCHITECTURE 規約の「変更が多いとき」に当たるため、マイナーを上げて `0.6.0-dev` とする。
+- `raguel.config.example.yaml:4` は `.yaml` なのでインベントリテスト(`.md` のみ走査)では捕まらない。Task 10 で手で直し、その旨を計画に明記する必要がある。
+`─────────────────────────────────────────────────`
+
+実装計画書を書く。ファイル本文は通常の日本語で書く(原始人口調は会話のみ)。
+
+計画書を書き上げた。承認前に規律どおり 2 系統のレビューを並列で回す。
+
+レビュー待ちの間に、自分で placeholder スキャンをかける(writing-plans の Self-Review 手順)。
+
+Haiku レビューが返った。ただし**計画書後半(Task 7〜14)を読めていない**と自己申告しており、そこに関する「未対応」指摘は読めていないことの反映で、実体は網羅済み。読めた範囲の指摘は 2 件が有効。裏取りする。
+
+Haiku の「ヘルパー名が曖昧」は当たり。実際に確認したところ、**共有ヘルパーは存在せず、各テストファイルが別名のローカル関数を持っている**。計画書のテストコードが実在しない `makeProject` を呼んでいる。正確な署名を取る。
+
+計画書のテストコードに実在しない API を書いていた。全テストが `test(` を使い `it(` は 0 件、ヘルパーはファイルごとに別名、guard の素通しは `null` 返却。修正対象を確定。grok の独立レビューを待つ。
+
+grok の独立レビューは質が高い。とくに **#2(Task 9 の CLI 案内追加で注入が崖に落ちた状態のまま Task 10〜11 を実行する)** は設計書が見落としている実害。裏を取る。
+
+裏取り完了。**grok #2 は確定的**: CLI 案内の追加は +199 文字、残り予算は 82 文字。設計書 §12-2 は +155 で 8,918→1,326 の崩落を実測済み。Task 9 を先に置くと、**ARCHITECTURE 全文が消えた状態で codiel の指示層 15 ファイルを書き換えることになる**。計画書を修正する。
+
+計画書の修正を反映して context-map の未解決事項を更新する。
+
+実装計画書を書き上げた。レビュー 2 系統を通し、指摘を反映済み。
+
+**パス**: `harness-docs/plans/2026-08-24-metatron-rules-expansion-implementation.md`(2,572 行 / 158KB)
+**副産物**: `.claude/context-maps/2026-08-24-metatron-rules-expansion.md`(探索の蒸留)
+
+文書本文は通常の日本語で書いた(原始人口調は会話のみ。以後この判断を維持する)。
+
+---
+
+## 全文提示について
+
+158KB をターミナルへ流すと逆に読めなくなる。**決定に効く部分は下に全文載せる**。それ以外(Task 本文 14 個・テストコード・検証コマンド)はファイルにある。任意の節を verbatim で出すよう言ってくれれば出す。
+
+---
+
+## 承認を要する読み替え(8 件)
+
+設計書に記述が無いか、設計書内で記述同士が衝突する点。**この計画の承認でこれらを確定させる**。実装中に再判断させない。
+
+| # | 論点 | 設計書 | 採る読み替え |
+|---|---|---|---|
+| 1 | `commit-rules` の kind 照合 | §15 が「kind 不一致の拒否」をテストに挙げる | **kind 照合を新設**。現状 `src/cli/commit.ts:29-100` は kind を読まず architecture と adr を無差別に消費。`commit-architecture`=`{architecture,adr}`、`commit-rules`=`{rules}`。エラーは `staging_kind_mismatch` |
+| 2 | codiel の節名参照の件数 | §14-2 が 13 行の表 | **表を出発点とし、インベントリテストで分類 A ゼロを機械確定**。表外に分類 A が実在(`fixing-review-findings/SKILL.md:52` ほか) |
+| 3 | インベントリの検出の形 | §14-4 は語だけ定め形を定めない | **4 形 + `ARCHITECTURE` 全言及を登録対象**。3 形では `codiel-reviewer-doc.md:25`「ARCHITECTURE のドメインマップ、規約、コマンド定義」を取りこぼす |
+| 4 | 到達プローブの実行条件 | §15「テストとして残す」 | **既定スキップ、`METATRON_RULES_PROBE=1` で実行**。`claude` CLI とネットワーク依存、vitest の 20 秒を超える |
+| 5 | `remove: true` で ADR 節を消せるか | 記述なし | **従来どおり `adr_heading` で拒否**。本設計の対象外 |
+| 6 | `ResolvedConfig` のフィールド名 | §5「`rulesDir` フィールド」 | **`rulesDirPath` / `rulesDirRelative`**。既存 `architecturePath`/`architectureRelative` と揃える |
+| 7 | 追随のコミット粒度 | §14「すべて同じコミット」vs §16 のステップ分割 | **§16 を優先**。§9-2 の 2 箇所だけ 1 コミット必須 |
+| **8** | **区間 2 の実行順** | §16 はステップ 9 を 10・11 より前に列挙 | **Task 9 を最後へ**。実行順 `1→…→8→10→11→9→ゲート` |
+
+### #8 が最重要 — 注入の崖
+
+これは grok の独立レビューが見つけ、実測で確定した**設計書の見落とし**。
+
+- 着手前の注入 **8,918 文字**、`injection.maxChars` **9,000**、残り予算 **82 文字**
+- Task 9 が足す CLI 案内の実測増分 **+199 文字**(設計書の見積もりは「約 +150」)
+- 設計書 §12-2 の実測: **+155 文字で 8,918 → 1,326 へ崩落**。`archMode: "outline"` まで一気に到達、**警告もエラーも出ない**
+
+§16 の列挙順どおりだと、**`## 保護パス` と `## 規約` がコンテキストから消えた状態で codiel の指示層 15 ファイルを書き換える**ことになる。本設計が解こうとしている問題を、実装中に自分で作り出す。
+
+Task 9 の依存は Task 3 だけ。最後へ回しても §16 の依存(2←1 / 6←2,5 / **10 は 12 より前** / 11 は 10 の直後 / 12 は 1〜11 の後 / 13 は 12 の後)を 1 つも崩さない。
+
+`injection.maxChars` の一時引き上げは採らない。戻し忘れると崖の位置が分からなくなる。
+
+---
+
+## Task 一覧(§16 の 14 ステップと 1 対 1)
+
+| Task | 変更するファイル(主) | 完了条件 | 先行 |
+|---|---|---|---|
+| 1 | `lib/config.ts` | `C13`〜`C15` 追加。`C2`/`C5`/`C11`/`R4-e`/`R4-f` と codiel・sandalphon の 3 者比較テストが通る | — |
+| 2 | `lib/staging.ts` | `T9` 追加。**`T1`〜`T8d` が落ちないことを確認**(単一ターゲット構造不変の証拠) | 1 |
+| 3 | `lib/rules.ts`(新)/ `cli/*` 6 本 | `RL1`〜`RL10` / `S7`〜`S9`。`stage-adr → commit-architecture` の回帰を `commit.ts` 変更直後に確認(Step 7b) | 1,2 |
+| 4 | `guard-docs.ts` | `D15`〜`D19`。`D1`〜`D14`、とくに `D11`(`.bak` 素通し)が通る=前方一致混入なしの証拠 | 1,3 |
+| 5 | `lib/architecture.ts` + `lib/scan.ts` | `A24`/`A25`。**2 箇所を同一コミット**(§9-2)。10 節の既存 ARCHITECTURE がまだ読めることを実機確認 | 1 |
+| 6 | `lib/architecture.ts` / `cli/stage.ts` | `A20`〜`A23`・`A26`〜`A29`。`A2`(バイト単位不変)が通る | 2,5 |
+| 7 | `references/` 5 本 + `docs/` 3 本 | 3 節の規範を `rules-format.md` へ移設。`ARCHITECTURE.example.md` に残存なし | 3,5,6 |
+| 8 | `skills/` 2 本 | 対話単位 6+3=9。eval は description 不変につき更新不要 | 3,7 |
+| 9 | `inject-context.ts` | `I22`/`I23`。`I1`/`I3`/`I13`/`I21` が通る(テスト側 `GUIDE` 定数も同時更新) | 3 |
+| **10** | codiel 15 ファイル + version | 分類 A ゼロ。**2 コミットに分ける**(削除 / フォールバック新設)が**間を空けない** | — |
+| 11 | `fixtures/` + `__test__/` 2 本 | `V1`〜`V3`。プローブ `P1`/`P2` を 1 度手で回す | 10, 1〜8 |
+| 12 | rules 3 ファイル + ARCHITECTURE + `CLAUDE.md` | 承認ゲート 4 回。`DEGRADED=false` へ復帰、`diff-architecture` が `section_missing` を出さない | 1〜11 |
+| 13 | rules 推敲 + ARCHITECTURE 追記 | 12 とは別コミット。注入を再実測 | 12 |
+| 14 | 契約凍結文書 + README 2 本 | 最終通し検証 + プローブ | 13 |
+
+**ステップ 10 はステップ 12 より前**(指示どおり)。11 は 10 の直後。
+
+---
+
+## レビューで直した点
+
+**Haiku(理解 + 暗黙知抽出)**から: テストコードが実在しない API を呼んでいた。実測で判明 —
+
+- metatron の 8 テストは全て `test(`、`it(` は **0 件**
+- 共有ヘルパーディレクトリは**存在しない**。ファイルごとに別名(`mkTmp`/`project`/`mkProject`)
+- `runCli(args, cwd)` は位置引数。`{ cwd }` ではない
+- guard の素通しは **`null` 返却**。`permissionDecision === undefined` ではない
+
+→ 全テストコードを実名へ修正。`§既存テストのヘルパー(実名)` を新設。Task 10 にファイル別の書き換え指示表を追加。
+
+**grok(独立レビュー)**から: #8 の他に —
+
+- `remove` の削除範囲を「次の `## ` を探す」と書いていた → フェンス内の `##` を誤認する。`ArchitectureSection` の `startLine`/`endLine`(`scanFences` 済み)と既存の後ろから `splice` する `ops` 機構を使う形へ具体化
+- Task 5〜12 の間、規約の更新経路が両方閉じる → その事実と「止まって報告する」を明記
+- Task 10 のコミット 1 の HEAD は codiel の run を回せない → push しない旨を明記
+
+---
+
+## 質問
+
+**この計画で実装に入ってよいか。**とくに **読み替え #8(Task 9 を区間 2 の最後へ回す)** は、設計書 §16 の列挙順から外れる唯一の変更なので、明示的な可否がほしい。
+
+- **承認する** → 区間 2 を `/goal` で起動
+- **#8 を却下し §16 の列挙順どおりにする** → 縮退状態で Task 10・11 を実行する。計画書の Task 9 と Task 11 の該当節を戻す
+- **他の読み替えに異論がある** → 番号を指定
+
+承認まで実装に入らない。
+
+Raphael の蒸留をサブエージェントへ委譲した(バックグラウンド実行中)。
+
+実装計画書の件は変わらず**承認待ち**。前のターンの質問をそのまま残す。
+
+- **承認する** → 区間 2 を `/goal` で起動
+- **読み替え #8(Task 9 を区間 2 の最後へ回す)を却下** → §16 の列挙順どおりに戻す。注入が縮退した状態で Task 10・11 を実行することになる
+- **他の読み替えに異論** → 番号を指定
+
+計画書: `harness-docs/plans/2026-08-24-metatron-rules-expansion-implementation.md`
+
+実装計画書は承認待ちのまま。Raphael の蒸留はまだ実行中。
+
+Raphael の蒸留完了。infection 3 件、いずれも新規抗体なしで mark-distilled 処理。
+
+- version フィールドへの連続編集 2 件 → churn は既に追跡済み、新規抗体不要
+- helpers ディレクトリの存在確認失敗 1 件 → 構造の観察であって preventable な失敗ではない
+
+抗体の作成・patch・extend はゼロ。`.raphael/antibodies/` に変更なし。
+
+---
+
+実装計画書は**承認待ち**のまま。`harness-docs/plans/2026-08-24-metatron-rules-expansion-implementation.md`
+
+- **承認する** → 区間 2 を `/goal` で起動
+- **読み替え #8(Task 9 を区間 2 の最後へ回す)を却下** → §16 の列挙順に戻す
+- **他の読み替えに異論** → 番号を指定
+
+# phyllis998
+
+> 承認します
+
+## セッション 14: 実装計画書の承認
+
+# AI
+
+承認を受け取った。計画書に承認の記録を入れ、区間 2 の引き渡しを整える。
+
+Approve の前に、設計書 §15 の新規テスト要求を計画書と機械的に突き合わせる。
+
+Approve の突き合わせで **設計書 §15 の新規テスト要求のうち 2 件が計画書に落ちていた**。埋める。
+
+承認を反映し、Approve の突き合わせで見つかった漏れを埋めた。区間 1 完了。
+
+## 承認後に直した点
+
+Approve(計画が設計書の全要件を満たすかの確認)で、**設計書 §15 が新規テストとして明示要求している 2 件が計画書に落ちていた**。埋めた。
+
+| テスト | 何を固定するか | 追加先 |
+|---|---|---|
+| `S10` | `docRoot` と起動ディレクトリのずれを `get config` の `warnings` が知らせる(設計書 §4-5)。実装だけ書いてテストが無かった | Task 3 |
+| `S11` | 移行後の `diff-architecture` が 3 節を `section_missing` として報告しない(設計書 §9-4 の偽陽性)。手動実行だけで自動テストが無かった | Task 5 |
+
+計画書冒頭に承認の記録を入れた。**読み替え 8 件は確定、実装中に再検討しない**旨を明記。
+
+最終形: 2,616 行 / 160KB。新規テスト `C13`〜`C15` / `T9` / `RL1`〜`RL10` / `A20`〜`A29` / `D15`〜`D19` / `I22`・`I23` / `S7`〜`S11` / `V1`〜`V3` / `P1`・`P2`。
+
+---
+
+## 区間 2 の起動
+
+**このセッションでは実装に入らない。**起動プロンプト集(`docs/prompts/2026-08-24-metatron-rules-expansion-implementation.md`)が定めるとおり、区間 2 は `/goal` で新しいセッションを立てる。
+
+`/goal` に次を貼る(プロンプト集 §区間2 の原文。1,145 文字):
+
+```
+承認済みの実装計画書(harness-docs/plans/ の最新)と設計書 harness-docs/design/2026-08-24-metatron-rules-expansion-design.md に従い、設計書 §16 のステップ 1 から 11 までを実装する。ステップ 12 以降には進まない。着手前に docs/prompts/2026-08-24-metatron-rules-expansion-implementation.md の「運用指示」節を読む。
+
+次のすべてが満たされたら完了とする。
+
+1. `pnpm run lint` と `pnpm run typecheck` と `pnpm run test` がいずれも exit 0 で終わる。
+2. `pnpm run build` の実行後、`git status --porcelain plugins/` の出力に未コミットの差分が無い。
+3. `node plugins/metatron/scripts/metatron.mjs get config` の出力に rulesDir の解決結果が含まれる。
+4. `stage-rules` `commit-rules` `get rules` の 3 サブコマンドが動作し、`stage-architecture` が remove 指定を受け付ける。いずれもテストで検証されている。
+5. plugins/*/skills/ と agents/ と commands/ に ARCHITECTURE の節名を名指しする記述が残っておらず、設計書 §14-4 の節名参照インベントリのテストが通る。
+6. plugins/metatron/.claude-plugin/plugin.json と plugins/metatron/package.json の version が一致し、着手前よりマイナーが上がっている。
+7. 作業ツリーに一時スクリプトと hook の無効化が残っていない。
+
+途中で次を変えない。
+
+- metatron の PreToolUse hook を無効化しない。迂回スクリプトを作らない。
+- harness-docs/ARCHITECTURE.md と harness-docs/GOTCHAS.md と .claude/rules/ を変更しない。この区間の対象外である。
+- 設計書の設計判断を蒸し返さない。設計書に無い判断が要るときは作業を止めて質問する。
+- ブランチを切らない。git push に --force 系を付けない。
+
+30 turn を超えたら停止し、残っている作業を報告する。
+```
+
+このプロンプトは読み替え #8 と矛盾しない。ステップ 9 は 1〜11 の内側にあり、順序が変わるだけである。
+
+---
+
+## 引き渡し前に 1 点
+
+設計書 `harness-docs/design/2026-08-24-metatron-rules-expansion-design.md:4` の**状態が「レビュー待ち」のまま**。プロンプト集は「2026-08-24 にユーザー承認済み」と書いており、食い違っている。区間 2 の実装者が設計書を開くと未承認に見える。
+
+依頼範囲外なので触っていない。直すなら言ってほしい(`harness-docs/design/` は hook の対象外、通常の編集で足りる)。
+
+計画書と context-map はコミットしていない。git 操作の指示が無いため。
+
+区間 1 は完了。実装計画書は承認済みで、`harness-docs/plans/2026-08-24-metatron-rules-expansion-implementation.md` にある。
+
+次の一手は、新しいセッションで `/goal` に前のメッセージのブロックを貼ること。このセッションでは実装に入らない。
+
+未処理として残しているのは 1 点だけ — 設計書 `harness-docs/design/2026-08-24-metatron-rules-expansion-design.md:4` の状態が「レビュー待ち」のまま。承認済みへ直すかどうかの指示待ち。
+
+区間 1 完了のまま、待機中。
+
+次の一手: 新しいセッションで `/goal` に区間 2 のブロックを貼る。
+
+未処理 1 点: 設計書 `harness-docs/design/2026-08-24-metatron-rules-expansion-design.md:4` の状態が「レビュー待ち」のまま。承認済みへ直すかの指示待ち。
+
+# phyllis998
+
+> 承認済みにしてくだしあ
+
+> 承認済みにしてください
+
+## セッション 15: 実装計画書の承認
+
+# phyllis998
+
+> 設計書 harness-docs/design/2026-08-24-metatron-rules-expansion-design.md の §16 ステップ 12 から 14 を実施してください。docs/prompts/2026-08-24-metatron-rules-expansion-implementation.md の「運用指示」節に従います。
+>
+> ステップ 12 の移行は設計書 §8 の 4 段階です。rules 3 ファイルを先に書き、ARCHITECTURE から後で消します。各段階で stage の diff を全文提示し、承認を得てから commit してください。承認前に commit しないでください。
+>
+> 移行の完了後、設計書 §12-3 の実測を行い、結果を報告してください。縮退は §12-2 のとおり崖であり、警告も出ません。
+
+## セッション 16: 移行前実測と conventions.md の承認ゲート
+
+# AI
+
+区間 2 は commit 済み(`96138dd` まで)。区間 3 に入る。まず移行前の状態を記録する(Task 12 Step 1)。
+
+移行前の状態を記録した。**注入は既に縮退している**(`LEN=1563` / `DEGRADED=true`)。Task 9(注入の CLI 案内 +199 文字)のコミットで §12-2 の崖に落ちた状態であり、実装計画書の読み替え #8 が予告した窓の中にいる。移行で解消する。
+
+`★ Insight ─────────────────────────────────────`
+- 縮退は `additionalContext` が `injection.maxChars` を超えたときに段階的に内容を落とす仕組みだが、このリポジトリは GOTCHAS 未作成・ADR 節なしのため第 1 段と第 3 段が空振りし、第 4 段(ARCHITECTURE を目次+要約 1 行へ)まで一気に落ちる。8,918 → 1,563 の落差はこれ。
+- 落ちても hook は exit 0 で返り、警告文字列も出ない。検出手段は「`を Read すること` が出力に含まれるか」の 1 つだけ。だから §12-3 が完了条件に実測を置いている。
+`─────────────────────────────────────────────────`
+
+移設元の 3 節を読む。
+
+書式契約と実装(`prepareRulesUpdate`)を確認した。移設元の本文を機械的に抽出して `stage-rules` へ渡す。
+
+`★ Insight ─────────────────────────────────────`
+- `prepareRulesUpdate` は 4 つの拒否を持つ: 未知の name / 空 body / 1 行目が `---`(frontmatter) / 先頭 5 行に管理者表示なし。frontmatter を持つファイルは起動時に読まれずサブエージェントにも渡らないため、書式検証の段階で塞いでいる。
+- 本文は手で書き写さず、ARCHITECTURE から機械抽出して見出しレベルだけを 1 段上げる(`### 探索と編集` → `## 探索と編集`)。手打ちを挟むと「機械的な写し」であることを diff で証明できなくなる。
+`─────────────────────────────────────────────────`
+
+本文を機械抽出できた。`conventions` を stage する(**書き込みはしない**)。
+
+承認ゲート 1 / 4 — `.claude/rules/metatron/conventions.md`(新規作成、39 行)
+
+移行前の実測(記録用):
+
+- 注入: `LEN=1563` / `DEGRADED=true` — Task 9 のコミットで崖に落ちた状態。移行で解消する
+- ARCHITECTURE 合計 8,204 文字。テスト方針 531 / 保護パス 1,720 / 規約 1,481(計 3,732)
+- `get rules`: 3 ファイルとも `exists: false`
+
+本文は `## 規約` からの機械抽出で、文言は 1 文字も変えていない。加えた変換は 2 つだけ:
+
+1. `# 規約` の見出しと管理者表示行を冒頭に付けた(書式契約の要求)
+2. 小見出しを 1 段上げた(`### 探索と編集` → `## 探索と編集`)。`# 規約` の直下に `###` が来るとレベルが 1 つ飛ぶため
+
+```diff
+--- .claude/rules/metatron/conventions.md (現行)
++++ .claude/rules/metatron/conventions.md (stage)
+@@ -0,0 +1,39 @@
++# 規約
++
++> この文書は metatron の管理下にある。直接編集は PreToolUse hook が拒否する。更新は metatron の CLI(`stage-rules` → `commit-rules`)で行う。CLI の絶対パスは、セッション冒頭の注入文または hook の拒否メッセージに載っている。
++
++## 探索と編集
++
++- コードベースの探索は Serena のシンボルツールで行う。0 件でも結論にせず Grep で裏を取る。
++- TypeScript / JavaScript / Markdown の作成と編集は Serena の編集ツールで行う。
++- ライブラリ・フレームワーク・CLI・API の仕様、セットアップ手順、コード生成の方法が要るときは Context7 で取る。Web 検索より優先する。
++
++## プラグイン開発
++
++- Anthropic API のクライアントを追加しない。`ANTHROPIC_API_KEY` を前提にした実装をしない。ユーザーに CLI の直接操作を要求しない。LLM が必要な処理は Claude Code の機構か `claude` CLI のヘッドレス実行で行う。
++- プラグインが実行するスクリプトは TypeScript で書く。
++- Agents 定義は `prompt-smith:agent-creator` で作る。
++- Skills は `prompt-smith:skill-creator` で作る。
++- その他の AI 向け指示書は `prompt-smith:prompt-smith` で作る。
++- プラグインを追加するときは `.claude-plugin/marketplace.json` に登録し、`plugins/<plugin>/.claude-plugin/plugin.json` を作る。スクリプトを持つプラグインは `pnpm-workspace.yaml` の `packages` に追記する。
++
++## 文書配置
++
++- 利用者が読まないと使えない情報は `plugins/<plugin>/README.md` に置く。
++- 設計・背景・根拠・経緯・不採用案が必要な時は `plugins/<plugin>/docs/` に置く。
++- 複数のスキルとエージェントで共有する規律と参照断片は `plugins/<plugin>/references/` に置く。
++- 設計書と実装計画書は `harness-docs/` に置く。
++
++## git
++
++- ブランチを切らない。切る必要があると判断したときは git worktree を使う。
++- `git push` に `--force` / `-f` / `--force-with-lease` / `--force-if-includes` を付けない。hook が拒否する。履歴を書き換えずに済む方法を取る。
++
++## Done の条件
++
++- `pnpm run lint` と `pnpm run typecheck` と `pnpm run test` が通る。
++- `plugins/*/src/` を変更したなら `pnpm run build` を実行し、`plugins/*/scripts/` の差分が同じコミットにある。
++- 改修したプラグインの `plugin.json` と `package.json` のバージョンが揃って上がっている。
++- プラグインを追加または改修したなら、ルートの `README.md` に反映されている。
++- ARCHITECTURE に影響する変更をしたなら、`/metatron:update` で追随させている。
++- 改修した内容が `.serena/memories/` の記述と食い違うなら、該当メモリを更新している。
+```
+
+`stagingId: a3fc8020-1e77-4e01-bccc-30554a079557`(有効期限 12:46:37Z)。警告なし、truncated なし。
+
+承認をもらえれば `commit-rules` を実行し、続けて `protected-paths` を stage する。
+
+承認ゲート 1(`conventions.md` の新規作成、`stagingId: a3fc8020-1e77-4e01-bccc-30554a079557`)の返答を待っている。承認をもらえば `commit-rules` を実行し、`protected-paths` の stage へ進む。
+
+承認待ちのまま。`commit-rules` は実行していない。
+
+`stagingId: a3fc8020-1e77-4e01-bccc-30554a079557` の有効期限は 12:46:37Z。切れていれば同じ入力で stage し直す(入力 JSON は `/tmp/rules-conventions.json` に保存済みで、ARCHITECTURE からの機械抽出なので何度でも同一の diff が再現する)。
+
+前ターンの `conventions.md` の diff について、承認するか否かを返してほしい。
+
+# phyllis998
+
+> 進めてください
+
+## セッション 17: conventions 承認と protected-paths ステージング、Raphael 蒸留の進行
+
+# AI
+
+承認を受けた。`conventions` を commit し、続けて `protected-paths` を stage する。
+
+staging が期限切れ(15 分)。同じ入力で stage し直し、**承認済みの内容と 1 バイトも違わないことを機械で確認してから** commit する。
+
+分類器の一時エラー。3 つに分けて実行する。
+
+再 stage の内容は承認済みの diff と完全一致(39 行、`created`、警告なし)。commit する。
+
+`conventions.md` を書き込んだ(2,924 bytes)。次に `protected-paths` を stage する。
+
+承認ゲート 2 / 4 — `.claude/rules/metatron/protected-paths.md`(新規作成、21 行)
+
+`conventions.md` は commit 済み(2,924 bytes)。
+
+本文は `## 保護パス` からの機械抽出。変換は conventions と同じ 2 つ(見出し+管理者表示行の付加、`### 触らないパス` → `## 触らないパス` のレベル上げ)のみ。設計書 §16 ステップ 13 のとおり、**rules 3 ファイル自身はまだ「触らないパス」に載せていない**。追記は Task 13 で別コミットにする。
+
+```diff
+--- .claude/rules/metatron/protected-paths.md (現行)
++++ .claude/rules/metatron/protected-paths.md (stage)
+@@ -0,0 +1,21 @@
++# 保護パス
++
++> この文書は metatron の管理下にある。直接編集は PreToolUse hook が拒否する。更新は metatron の CLI(`stage-rules` → `commit-rules`)で行う。CLI の絶対パスは、セッション冒頭の注入文または hook の拒否メッセージに載っている。
++
++## 触らないパス
++
++- `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。ARCHITECTURE の更新は `stage-architecture` → `commit-architecture`、ADR は `stage-adr` → `commit-architecture`、GOTCHAS の追記は `append-gotcha`、タグ付けは `tag-gotcha` を使う。
++- `plugins/*/scripts/` と `plugins/*/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。
++- `.raphael/antibodies/` — 抗体の更新は `plugins/raphael/scripts/update-antibody.mjs` で行う。一覧と詳細の取得は `plugins/raphael/scripts/list-antibodies.mjs` を使う。適用の前に `patch --dry-run` で変更後を確認する。
++- `.serena/memories/` — Serena の `write_memory` / `edit_memory` で変更する。
++
++## 変更に慎重を要するパス
++
++- `.claude-plugin/marketplace.json` — プラグインを追加または削除するときだけ変更する。変更後、対応する `plugins/<plugin>/.claude-plugin/plugin.json` があることを確認する。
++- `plugins/*/.claude-plugin/plugin.json` — プラグインを改修したらバージョンを上げる。`package.json` を持つプラグインは `version` を同じ値に揃える。バージョンは `n1.n2.n3` の形式とし、プレリリースは `-dev` を付ける。通常はパッチ(n3)を上げ、変更が多いときはマイナー(n2)を上げる。自動で上げるのはマイナーまでとし、メジャー(n1)を上げるときは人間に確認する。
++- `plugins/*/hooks/hooks.json` — 全セッションの挙動が変わる。変更後、新しいセッションで発火することを確認する。
++- `pnpm-workspace.yaml` — スクリプトを持つプラグインを追加したときに追記する。
++- `tsconfig.json` と `biome.json` と `vitest.config.ts` — 全プラグインに影響する。変更後 `pnpm run typecheck` と `pnpm run lint` と `pnpm run test` をすべて通す。
++- `CLAUDE.md` — 全セッションに注入される。ARCHITECTURE と内容が重ならないことを確認する。
++- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当節の項目をすべて追随させる。`config-schema.md` を変更したときは 3 プラグインの独立実装を追随させ、3 者比較テストを通す。
++- `plugins/sandalphon/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/sandalphon/docs/format-change-checklist.md` の項目をすべて追随させる。
+```
+
+`stagingId: 1a8ee489-ee6a-44a3-8423-f27a34284c51`(期限 14:03:55Z)。警告なし、truncated なし。
+
+承認をもらえば commit し、`testing-policy` の stage へ進む。
+
+Raphael の蒸留をバックグラウンドで走らせた(結果は届き次第、件数だけ報告する)。
+
+承認ゲート 2(`protected-paths.md`、`stagingId: 1a8ee489-ee6a-44a3-8423-f27a34284c51`、期限 14:03:55Z)の返答を待っている。承認をもらえば commit し、`testing-policy` の stage へ進む。
+
+承認ゲート 2 の返答を待っている。`protected-paths.md` の diff(21 行、`stagingId: 1a8ee489-ee6a-44a3-8423-f27a34284c51`、期限 14:03:55Z)への承認をもらえば commit し、`testing-policy` へ進む。期限切れなら同じ入力で stage し直し、承認済みと同一であることを確認してから commit する。
+
+Raphael の蒸留が完了した。3 件を処理 — 新規抗体 1 件(`ab-2026-0824-006`、staging の期限切れに関するもの)、重複 2 件。作業ツリーに抗体ファイルが 1 件増えている。
+
+承認ゲート 2 の返答を待っている。`protected-paths.md` の diff(21 行、`stagingId: 1a8ee489-ee6a-44a3-8423-f27a34284c51`、期限 14:03:55Z)への承認をもらえば commit し、`testing-policy` へ進む。
+
+# phyllis998
+
+> 進めてください
+
+## セッション 18: testing-policy を stage、ユーザー承認を得る
+
+# AI
+
+承認を受けた。`protected-paths` を commit する。
+
+`protected-paths.md` を書き込んだ(3,043 bytes)。`testing-policy` を stage する。
+
+承認ゲート 3 / 4 — `.claude/rules/metatron/testing-policy.md`(新規作成、12 行)
+
+`protected-paths.md` は commit 済み(3,043 bytes)。この節は小見出しを持たないため、変換は見出し+管理者表示行の付加だけ。
+
+```diff
+--- .claude/rules/metatron/testing-policy.md (現行)
++++ .claude/rules/metatron/testing-policy.md (stage)
+@@ -0,0 +1,12 @@
++# テスト方針
++
++> この文書は metatron の管理下にある。直接編集は PreToolUse hook が拒否する。更新は metatron の CLI(`stage-rules` → `commit-rules`)で行う。CLI の絶対パスは、セッション冒頭の注入文または hook の拒否メッセージに載っている。
++
++- ユニットテストは vitest で書く。E2E テストは持たない。
++- テストは対象ソースと同じディレクトリの `__test__/` に置く。`src/lib/adr.ts` のテストは `src/lib/__test__/adr.test.ts` とする。
++- テストファイル名は `<対象ファイル名>.test.ts` とする。複数のモジュールにまたがる統合テストは、入口のあるディレクトリの `__test__/` に置く。
++- 複数のテストから使うヘルパーは `__test__/helpers/` に置き、`.test.ts` を付けない。
++- 子プロセスとして起動するエントリポイントと故障注入は `src/testing/` に置く。lint と型検査の対象外にするものは拡張子を `.mjs` にする。
++- テストが読み込む固定データは `src/fixtures/` に置く。
++- vitest が拾うのは `plugins/**/__test__/**/*.test.ts` だけである。この外に置いたテストは実行されない。
++- 実行環境は node、プロセス分離は forks、タイムアウトは 20 秒とする。
+```
+
+`stagingId: c72b47f3-3b7a-47b3-a5be-9abb265ccfeb`(期限 14:14:42Z)。警告なし、truncated なし。
+
+---
+
+先ほど蒸留された抗体 `ab-2026-0824-006` について 1 点。「stage と commit-rules の間に時間をかけずに連続実行する」という対策を挙げているが、**この作業では成立しない**。`stage-rules` の応答自身が「diff を全文提示してユーザーの承認を得るまで commit-rules を実行しないこと」と返しており、承認ゲートを挟む以上、期限切れは避けられない。採れるのは抗体の対策 3(stage からやり直す)だけで、実際そうしている。抗体をこのまま残すと、後のセッションが「承認を省いて連続実行する」方向に読む恐れがある。移行が終わったら文面の見直しを提案したい。
+
+承認をもらえば commit し、ARCHITECTURE から 3 節を消す最後のゲートへ進む。
+
+承認ゲート 3(`testing-policy.md`、12 行、`stagingId: c72b47f3-3b7a-47b3-a5be-9abb265ccfeb`、期限 14:14:42Z)の返答を待っている。承認をもらえば commit し、ARCHITECTURE から 3 節を削除する最後のゲートへ進む。
+
+承認ゲート 3(`testing-policy.md`、12 行、`stagingId: c72b47f3-3b7a-47b3-a5be-9abb265ccfeb`、期限 14:14:42Z)の返答を待っている。
+
+# phyllis998
+
+> 進めてください
+
+## セッション 19: guard hook のMCP名前不一致を環境問題として特定、最終ゲートへ
+
+# AI
+
+承認を受けた。`testing-policy` を commit する。
+
+3 ファイルすべて書き込んだ。状態を確認し、guard が実際に拒否することを確かめる(Task 12 Step 5・6)。
+
+`★ Insight ─────────────────────────────────────`
+- guard のプローブは、意図的に**存在しない `old_string`** を指定して Edit を試みる。hook が拒否すれば拒否メッセージが返り、万一 hook をすり抜けても「文字列が見つからない」で失敗するのでファイルは 1 バイトも変わらない。二重に安全な確かめ方。
+`─────────────────────────────────────────────────`
+
+**guard が拒否しなかった。** Edit がツール本体まで到達し、「文字列が見つからない」で失敗している(ファイルは無変更)。期待は hook による拒否。原因を切り分ける。
+
+guard-docs.mjs 自体は rules・ARCHITECTURE の両方を正しく `deny` している。hooks.json の matcher も `Edit|Write|NotebookEdit` で正しい。切り分けのため、**移行前から保護実績のある ARCHITECTURE** に同じプローブをかける。
+
+ARCHITECTURE でも同じく通った。**このセッションでは guard hook が Edit ツールに発火していない。** metatron の実装ではなく、セッション環境の問題である。
+
+`★ Insight ─────────────────────────────────────`
+- 切り分けの結果: (1) `guard-docs.mjs` を直接叩くと rules・ARCHITECTURE の両方で `permissionDecision: deny` を返す、(2) `hooks.json` の matcher は `Edit|Write|NotebookEdit` で正しい、(3) それでも実 Edit が素通りし、しかも**移行前から保護実績のある ARCHITECTURE も同様に素通りする**。
+- したがって「Task 4 の guard 拡張が rules を取りこぼした」のではない。この環境の Edit ツールは MCP 経由でラップされた名前(`mcp__…__current_Edit`)を持ち、matcher の `Edit` と一致していないと見られる。metatron 側の変更で壊れたものではない。
+- 実務上の含意: **このセッションでは正本を hook が守っていない。** 規律を守っているのは自分の判断だけである。以後も正本への書き込みは CLI 経由のみで行う。
+`─────────────────────────────────────────────────`
+
+Task 12 Step 6 の期待(hook が実際に拒否する)は、この環境では実 Edit 経由で確認できない。代わりに hook スクリプトの判定が正しいことを直接実行で確認した。移行は続行できる。最後のゲートへ進む。
+
+承認ゲート 4 / 4 — `harness-docs/ARCHITECTURE.md` から 3 節を削除(183 行 → 115 行)
+
+rules 3 ファイルは書き込み済み。この commit で重複が解消する。
+
+- `applied`: テスト方針 `removed` / 保護パス `removed` / 規約 `removed`
+- 削除は 3 節だけで、`## コマンド定義` の末尾以前には一切触れていない(diff の文脈行 3 行が変更なしで残っている)
+- `stagingId: 29a210af-a69e-4855-b85e-86a8f7b4685c`(期限 14:19:12Z)、警告なし、truncated なし
+
+削除される内容は上の diff 全文のとおりで、いずれも rules 側へ移設済みの本文と一致する。
+
+```diff
+--- harness-docs/ARCHITECTURE.md (現行)
++++ harness-docs/ARCHITECTURE.md (stage)
+@@ -113,71 +113,3 @@
+ - 初回のセットアップは `bash scripts/setup-workspace.sh` で行う。`pnpm install` と `pnpm run build` をまとめて実行する。
+ - 単一のプラグインだけをビルドするときは `pnpm --filter <plugin>-scripts build` を使う。
+ 
+-## テスト方針
+-
+-- ユニットテストは vitest で書く。E2E テストは持たない。
+-- テストは対象ソースと同じディレクトリの `__test__/` に置く。`src/lib/adr.ts` のテストは `src/lib/__test__/adr.test.ts` とする。
+-- テストファイル名は `<対象ファイル名>.test.ts` とする。複数のモジュールにまたがる統合テストは、入口のあるディレクトリの `__test__/` に置く。
+-- 複数のテストから使うヘルパーは `__test__/helpers/` に置き、`.test.ts` を付けない。
+-- 子プロセスとして起動するエントリポイントと故障注入は `src/testing/` に置く。lint と型検査の対象外にするものは拡張子を `.mjs` にする。
+-- テストが読み込む固定データは `src/fixtures/` に置く。
+-- vitest が拾うのは `plugins/**/__test__/**/*.test.ts` だけである。この外に置いたテストは実行されない。
+-- 実行環境は node、プロセス分離は forks、タイムアウトは 20 秒とする。
+-
+-## 保護パス
+-
+-### 触らないパス
+-
+-- `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。ARCHITECTURE の更新は `stage-architecture` → `commit-architecture`、ADR は `stage-adr` → `commit-architecture`、GOTCHAS の追記は `append-gotcha`、タグ付けは `tag-gotcha` を使う。
+-- `plugins/*/scripts/` と `plugins/*/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。
+-- `.raphael/antibodies/` — 抗体の更新は `plugins/raphael/scripts/update-antibody.mjs` で行う。一覧と詳細の取得は `plugins/raphael/scripts/list-antibodies.mjs` を使う。適用の前に `patch --dry-run` で変更後を確認する。
+-- `.serena/memories/` — Serena の `write_memory` / `edit_memory` で変更する。
+-
+-### 変更に慎重を要するパス
+-
+-- `.claude-plugin/marketplace.json` — プラグインを追加または削除するときだけ変更する。変更後、対応する `plugins/<plugin>/.claude-plugin/plugin.json` があることを確認する。
+-- `plugins/*/.claude-plugin/plugin.json` — プラグインを改修したらバージョンを上げる。`package.json` を持つプラグインは `version` を同じ値に揃える。バージョンは `n1.n2.n3` の形式とし、プレリリースは `-dev` を付ける。通常はパッチ(n3)を上げ、変更が多いときはマイナー(n2)を上げる。自動で上げるのはマイナーまでとし、メジャー(n1)を上げるときは人間に確認する。
+-- `plugins/*/hooks/hooks.json` — 全セッションの挙動が変わる。変更後、新しいセッションで発火することを確認する。
+-- `pnpm-workspace.yaml` — スクリプトを持つプラグインを追加したときに追記する。
+-- `tsconfig.json` と `biome.json` と `vitest.config.ts` — 全プラグインに影響する。変更後 `pnpm run typecheck` と `pnpm run lint` と `pnpm run test` をすべて通す。
+-- `CLAUDE.md` — 全セッションに注入される。ARCHITECTURE と内容が重ならないことを確認する。
+-- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当節の項目をすべて追随させる。`config-schema.md` を変更したときは 3 プラグインの独立実装を追随させ、3 者比較テストを通す。
+-- `plugins/sandalphon/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/sandalphon/docs/format-change-checklist.md` の項目をすべて追随させる。
+-
+-## 規約
+-
+-### 探索と編集
+-
+-- コードベースの探索は Serena のシンボルツールで行う。0 件でも結論にせず Grep で裏を取る。
+-- TypeScript / JavaScript / Markdown の作成と編集は Serena の編集ツールで行う。
+-- ライブラリ・フレームワーク・CLI・API の仕様、セットアップ手順、コード生成の方法が要るときは Context7 で取る。Web 検索より優先する。
+-
+-### プラグイン開発
+-
+-- Anthropic API のクライアントを追加しない。`ANTHROPIC_API_KEY` を前提にした実装をしない。ユーザーに CLI の直接操作を要求しない。LLM が必要な処理は Claude Code の機構か `claude` CLI のヘッドレス実行で行う。
+-- プラグインが実行するスクリプトは TypeScript で書く。
+-- Agents 定義は `prompt-smith:agent-creator` で作る。
+-- Skills は `prompt-smith:skill-creator` で作る。
+-- その他の AI 向け指示書は `prompt-smith:prompt-smith` で作る。
+-- プラグインを追加するときは `.claude-plugin/marketplace.json` に登録し、`plugins/<plugin>/.claude-plugin/plugin.json` を作る。スクリプトを持つプラグインは `pnpm-workspace.yaml` の `packages` に追記する。
+-
+-### 文書配置
+-
+-- 利用者が読まないと使えない情報は `plugins/<plugin>/README.md` に置く。
+-- 設計・背景・根拠・経緯・不採用案が必要な時は `plugins/<plugin>/docs/` に置く。
+-- 複数のスキルとエージェントで共有する規律と参照断片は `plugins/<plugin>/references/` に置く。
+-- 設計書と実装計画書は `harness-docs/` に置く。
+-
+-### git
+-
+-- ブランチを切らない。切る必要があると判断したときは git worktree を使う。
+-- `git push` に `--force` / `-f` / `--force-with-lease` / `--force-if-includes` を付けない。hook が拒否する。履歴を書き換えずに済む方法を取る。
+-
+-### Done の条件
+-
+-- `pnpm run lint` と `pnpm run typecheck` と `pnpm run test` が通る。
+-- `plugins/*/src/` を変更したなら `pnpm run build` を実行し、`plugins/*/scripts/` の差分が同じコミットにある。
+-- 改修したプラグインの `plugin.json` と `package.json` のバージョンが揃って上がっている。
+-- プラグインを追加または改修したなら、ルートの `README.md` に反映されている。
+-- ARCHITECTURE に影響する変更をしたなら、`/metatron:update` で追随させている。
+-- 改修した内容が `.serena/memories/` の記述と食い違うなら、該当メモリを更新している。
+```
+
+承認をもらえば `commit-architecture` を実行し、`CLAUDE.md` の更新・通しの検証・§12-3 の実測へ進む。
+
+承認ゲート 4(ARCHITECTURE から 3 節を削除、183 行 → 115 行、`stagingId: 29a210af-a69e-4855-b85e-86a8f7b4685c`、期限 14:19:12Z)の返答を待っている。承認をもらえば `commit-architecture` を実行する。
+
+期限切れの場合は同じ入力(`/tmp/arch-remove.json`)で stage し直し、`applied` の 3 件と行数(183 → 115)が一致することを確認してから commit する。
+
+# phyllis998
+
+> 進めてください
+
+## セッション 20: Task 12 完了・guard 環境問題・Task 13 着手
+
+# AI
+
+承認を受けた。ARCHITECTURE から 3 節を削除する。
+
+移行の 4 段階が完了した。移行後の状態を実測する(Task 12 Step 8 / 設計書 §12-3)。
+
+移行後の実測が出た。**縮退は解消した。**
+
+| 項目 | 移行前 | 移行後 | 設計の見積もり |
+| --- | --- | --- | --- |
+| 注入 `LEN` | 1,563(縮退中) | **5,384** | 約 5,335 |
+| `DEGRADED` | `true` | **`false`** | `false` |
+| ARCHITECTURE | 8,204 | **4,472** | 4,471 |
+| `maxChars` までの残り | — | **3,616** | 約 3,665 |
+
+`diff-architecture` は移行した 3 節を `section_missing` として報告していない(Task 5 で `ARCHITECTURE_SECTIONS` を 7 節へ縮めた効果)。報告されたのは `## ADR 一覧` の欠落と、移行前から存在する既存の乖離(技術スタックの記載ゆれ・未記載ディレクトリ・ドメインマップの穴)だけで、いずれも本移行とは無関係。
+
+次に `CLAUDE.md` を更新する。AI 向け指示書なので規律どおりスキルを使う。
+
+`CLAUDE.md` を更新した。通しの検証へ進む(Task 12 Step 10)。
+
+lint / typecheck / test(1,730 passed)/ build がすべて通った。節名参照の再確認とビルド成果物の差分を見る。
+
+検証がすべて通った。
+
+- インベントリテスト `V1`〜`V3`: 3 passed
+- `plugins/` に未コミット差分なし(build 後も差分ゼロ)
+- `hooks.json` / `guard-docs.mjs` に差分なし — **迂回の証跡なし**
+- grep の残存ヒットはすべて `## ドメインマップ` への参照(分類 B、Task 10 Step 3 で意図的に残したもの)。移行した 3 節への参照はゼロ
+
+コミットする。既存の規約を確認してから。
+
+移行(Task 12 / 設計書 §16 ステップ 12)が完了した。`fd7913d` としてコミットした。
+
+## 設計書 §12-3 の実測結果
+
+| 項目 | 移行前 | 移行後 | 設計の見積もり |
+| --- | --- | --- | --- |
+| 注入 `LEN` | 1,563 | **5,384** | 約 5,335 |
+| `DEGRADED` | **`true`** | **`false`** | `false` |
+| ARCHITECTURE | 8,204 | 4,472 | 4,471 |
+| `maxChars`(9,000)までの残り | — | **3,616** | 約 3,665 |
+
+**縮退は解消した。** 移行前の測定で `DEGRADED=true` を検出している点が重要で、これは Task 9(注入の CLI 案内 +199 文字)のコミット時点で §12-2 の崖に落ちていたことを意味する。実装計画書の読み替え #8 がこの窓を予告しており、想定どおりの経過だった。警告は一切出ていない。
+
+見積もりとの差は注入で +49 文字、ARCHITECTURE で +1 文字。CLI 案内の実測値が見積もりを上回った分がそのまま出ている。
+
+## 実施した内容
+
+移行は設計書 §8 の 4 段階を順序どおり(rules を先に書き、ARCHITECTURE から後で消す)に実行し、各段階で diff 全文の承認を得た。
+
+| 段階 | 対象 | 結果 |
+| --- | --- | --- |
+| 1 | `conventions.md` | 新規作成 2,924 bytes |
+| 2 | `protected-paths.md` | 新規作成 3,043 bytes |
+| 3 | `testing-policy.md` | 新規作成 1,350 bytes |
+| 4 | ARCHITECTURE から 3 節削除 | 183 行 → 115 行 |
+
+加えて `CLAUDE.md` を更新した(在り処の記述から 3 節を外し、直接編集禁止の対象へ `.claude/rules/metatron/*.md` を追加)。
+
+検証はすべて通った — lint / typecheck / test(1,730 passed)/ build、インベントリテスト `V1`〜`V3`、`plugins/` の差分ゼロ、`hooks.json` と `guard-docs.mjs` の差分なし(迂回の証跡なし)。`diff-architecture` は移行した 3 節を `section_missing` として報告しない。
+
+## 報告すべき異常が 1 件
+
+**このセッションでは guard hook が Edit ツールに発火していない。** Task 12 Step 6 の確認で判明した。
+
+- `guard-docs.mjs` を直接叩くと rules・ARCHITECTURE の両方で `permissionDecision: deny` を返す — スクリプトの判定は正しい
+- `hooks.json` の matcher は `Edit|Write|NotebookEdit` で正しい
+- それでも実 Edit が素通りし、**移行前から保護実績のある ARCHITECTURE も同様に素通りする**
+
+したがって metatron 側の変更で壊れたものではない。この環境の Edit ツールが MCP 経由でラップされた名前(`mcp__…__current_Edit`)を持ち、matcher の `Edit` と一致していないと見られる。プローブは存在しない `old_string` で行ったため、ファイルは 1 バイトも変わっていない。
+
+実務上の含意として、**このセッションでは正本を hook が守っていない**。以後も正本への書き込みは CLI 経由のみで行う。
+
+## 次
+
+残りは Task 13(rules 3 ファイルの推敲と ARCHITECTURE の `## ディレクトリ構成と責務` への追記、承認ゲート 4 回)と Task 14(契約凍結文書と README の追随)。Task 13 は設計書 §13-3 の定めにより `/metatron:update` から通す。着手してよいか。
+
+Task 12 は `fd7913d` で完了した。§12-3 の実測結果は前ターンに記載したとおりで、注入は `LEN=5384` / `DEGRADED=false` に戻り、縮退は解消している。
+
+Task 13(rules 3 ファイルの推敲 + ARCHITECTURE の `## ディレクトリ構成と責務` への追記、承認ゲート 4 回)への着手可否の返答を待っている。
+
+Task 13 への着手可否の返答を待っている。
+
+# phyllis998
+
+> 進めてください
+
+## セッション 21: Task 13 候補 7 件・全件承認
+
+# AI
+
+Task 13 に着手する。設計書 §13-3 の定めにより `/metatron:update` から通す。
+
+スキルの手順に従う。手順 1・2 は実施済み(`diff-architecture` の findings、`get rules` で 3 ファイルとも `exists: true`)。候補を組み立てるため現行の該当セクションを読む。
+
+手順 1・2 の結果と、設計書 §16 ステップ 13 のスコープを突き合わせて候補を組み立てた。**7 件すべての更新を推奨する。** うち 2 件は設計書が名指ししたもの、2 件は移行に伴う追随漏れ(移行前は正しかったが、いま実態と食い違っている)、1 件は移行で顕在化した重複、2 件は §13-3 の判定結果の報告である。
+
+## 候補一覧
+
+| # | 対象 | 現行の記述 | 実態 / 変更内容 | 出所 |
+| --- | --- | --- | --- | --- |
+| 1 | `protected-paths.md` 触らないパス | rules 3 ファイルが載っていない | 自分自身を「触らないパス」として追記する | 設計書 §16 ステップ 13 |
+| 2 | `protected-paths.md` `CLAUDE.md` の項目 | 「ARCHITECTURE と内容が重ならないことを確認する」 | 規約は rules へ移った。確認対象は ARCHITECTURE と rules の両方 | 移行に伴う追随漏れ |
+| 3 | `protected-paths.md` 書式契約の項目 | `architecture-format.md` / `gotchas-format.md` / `config-schema.md` の 3 つ | Task 7 で `rules-format.md` が新設された。同じ追随義務を持つ | 移行に伴う追随漏れ |
+| 4 | `protected-paths.md` × `conventions.md` | `pnpm-workspace.yaml` への追記指示が両方にある | 分割で顕在化した重複。`conventions.md`(手順)に寄せ、`protected-paths.md` 側は変更してよい条件の形にする | §13-3 の重複判定 |
+| 5 | ARCHITECTURE `## ディレクトリ構成と責務` | `.claude/rules/metatron/` と `docs/prompts/` がツリーに無い | 2 行を足し、「`docs/` は読まない」を `docs/prompts/` が読める形へ | 設計書 §16 ステップ 13 |
+| 6 | `conventions.md` の推敲 | — | **削る箇所が見つからなかった**(下記) | §13-3 の判定 |
+| 7 | `testing-policy.md` の推敲 | — | **削る箇所が見つからなかった**(下記) | §13-3 の判定 |
+
+## #6・#7 について
+
+§13-3 の判定(「読んだ後にエージェントの振る舞いが変わる文だけを残す」)を全文へ通したが、削除に当たる文が出なかった。理由は構造的なもので、この 3 節は ARCHITECTURE にあった時点で既に `writing-discipline.md` の「削る基準を強く適用」の区分に置かれていた。rules へ移しても同じ区分のままであり(Task 7 で表を更新済み)、適用の強さは変わっていない。
+
+`testing-policy.md` で 1 箇所だけ迷った — 「vitest が拾うのは〜だけである。この外に置いたテストは実行されない。」は 2 文目が 1 文目の言い換えに見える。ただし「実行されない」は誤読を防ぐ制約であり、残す基準が優先される。残した。
+
+判定を通した結果が「変更なし」であることを、明示的に報告として残す。判定を省いたのではない。
+
+## スコープ外(参考)
+
+`diff-architecture` は他にも findings を返している — `## ADR 一覧` の欠落、技術スタックの記載ゆれ(`typescript` の未記載、`package.json` / `strict` / `target` の誤検出)、未記載ディレクトリ 4 件(`.superpowers` / `.vscode` / `private` / `static`)、ドメインマップの穴。いずれも移行前から存在し、本タスクの対象外である。
+
+---
+
+進め方の確認 — 全件(#1〜#5 を反映、#6・#7 は変更なしとして確定)で進めてよいか。番号指定でも受ける。承認後、`stage-rules` × 2(`protected-paths` / `conventions`)と `stage-architecture` × 1 に分けて起草し、それぞれ diff 全文で承認を取る。
+
+Task 13 の候補一覧(#1〜#7)への返答を待っている。全件で進めるか、番号指定か。
+
+Task 13 の候補一覧(#1〜#7)への返答を待っている。全件で進めるか、番号指定か。
+
+# phyllis998
+
+> 全件で進めてください
+
+## セッション 22: Task 13 候補 7 件・全件承認
+
+# AI
+
+全件承認を受けた。#4 は「`conventions.md`(手順)に寄せる」判断なので、`conventions.md` 自体は変更なしになる。結果として stage は 2 回(`protected-paths` と ARCHITECTURE)、承認も 2 回になる。
+
+`protected-paths.md` の新本文を起草する。
+
+Task 13 承認ゲート 1 / 2 — `.claude/rules/metatron/protected-paths.md`(21 行 → 22 行)
+
+候補 #1〜#4 を反映した。置換はすべてアンカー文字列の完全一致で機械適用し、4 件すべてが適用されたことを確認している。
+
+```diff
+--- .claude/rules/metatron/protected-paths.md (現行)
++++ .claude/rules/metatron/protected-paths.md (stage)
+@@ -5,6 +5,7 @@
+ ## 触らないパス
+ 
+ - `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。ARCHITECTURE の更新は `stage-architecture` → `commit-architecture`、ADR は `stage-adr` → `commit-architecture`、GOTCHAS の追記は `append-gotcha`、タグ付けは `tag-gotcha` を使う。
++- `.claude/rules/metatron/conventions.md` と `protected-paths.md` と `testing-policy.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。更新は `stage-rules` → `commit-rules` を使う。
+ - `plugins/*/scripts/` と `plugins/*/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。
+ - `.raphael/antibodies/` — 抗体の更新は `plugins/raphael/scripts/update-antibody.mjs` で行う。一覧と詳細の取得は `plugins/raphael/scripts/list-antibodies.mjs` を使う。適用の前に `patch --dry-run` で変更後を確認する。
+ - `.serena/memories/` — Serena の `write_memory` / `edit_memory` で変更する。
+@@ -14,8 +15,8 @@
+ - `.claude-plugin/marketplace.json` — プラグインを追加または削除するときだけ変更する。変更後、対応する `plugins/<plugin>/.claude-plugin/plugin.json` があることを確認する。
+ - `plugins/*/.claude-plugin/plugin.json` — プラグインを改修したらバージョンを上げる。`package.json` を持つプラグインは `version` を同じ値に揃える。バージョンは `n1.n2.n3` の形式とし、プレリリースは `-dev` を付ける。通常はパッチ(n3)を上げ、変更が多いときはマイナー(n2)を上げる。自動で上げるのはマイナーまでとし、メジャー(n1)を上げるときは人間に確認する。
+ - `plugins/*/hooks/hooks.json` — 全セッションの挙動が変わる。変更後、新しいセッションで発火することを確認する。
+-- `pnpm-workspace.yaml` — スクリプトを持つプラグインを追加したときに追記する。
++- `pnpm-workspace.yaml` — 変更するのはスクリプトを持つプラグインを追加または削除するときだけである。変更後 `pnpm install` を実行し、`pnpm run build` を通す。
+ - `tsconfig.json` と `biome.json` と `vitest.config.ts` — 全プラグインに影響する。変更後 `pnpm run typecheck` と `pnpm run lint` と `pnpm run test` をすべて通す。
+-- `CLAUDE.md` — 全セッションに注入される。ARCHITECTURE と内容が重ならないことを確認する。
+-- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当節の項目をすべて追随させる。`config-schema.md` を変更したときは 3 プラグインの独立実装を追随させ、3 者比較テストを通す。
++- `CLAUDE.md` — 全セッションに注入される。ARCHITECTURE および `.claude/rules/metatron/` と内容が重ならないことを確認する。
++- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `rules-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当節の項目をすべて追随させる。`config-schema.md` を変更したときは 3 プラグインの独立実装を追随させ、3 者比較テストを通す。
+ - `plugins/sandalphon/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/sandalphon/docs/format-change-checklist.md` の項目をすべて追随させる。
+```
+
+判断を 1 つ添えておく。#4 で `pnpm-workspace.yaml` を「変更後 `pnpm install` を実行し、`pnpm run build` を通す」としたのは、この節の他の項目(`tsconfig.json` 等)が持つ「変更してよい条件 = 何を確認するか」の形に揃えたためで、`conventions.md` 側は手順(`packages` への追記)をそのまま残す。役割が重ならなくなる。
+
+`stagingId: 497793ab-cdc4-4368-8c0e-34f66950e97e`(期限 21:53:19Z)、警告なし、truncated なし。`mode: replaced`。
+
+承認をもらえば commit し、ARCHITECTURE の `## ディレクトリ構成と責務`(候補 #5)を stage する。
+
+Task 13 承認ゲート 1(`protected-paths.md` の推敲、21 行 → 22 行、`stagingId: 497793ab-cdc4-4368-8c0e-34f66950e97e`、期限 21:53:19Z)の返答を待っている。
+
+Task 13 承認ゲート 1(`protected-paths.md` の推敲)の返答を待っている。
+
+# phyllis998
+
+> 承認します
+
+## セッション 23: Task 13 承認ゲート 2 / 2 — ARCHITECTURE を承認する
+
+# AI
+
+`protected-paths.md` を更新した(3,422 bytes)。ARCHITECTURE の `## ディレクトリ構成と責務`(候補 #5)を stage する。ツリーの整列は既存行から桁位置を検出して機械的に合わせる。
+
+整列が揃った(+197 文字、設計書の見積もり 206 とほぼ一致)。stage する。
+
+Task 13 承認ゲート 2 / 2 — ARCHITECTURE の `## ディレクトリ構成と責務`(115 行 → 118 行)
+
+```diff
+--- harness-docs/ARCHITECTURE.md (現行)
++++ harness-docs/ARCHITECTURE.md (stage)
+@@ -53,9 +53,11 @@
+ ```
+ .
+ ├── .claude-plugin/marketplace.json  配布するプラグインの一覧を宣言する
++├── .claude/rules/metatron/          metatron が管理する規律を置く
+ ├── harness-docs/                    設計書・実装計画書と ARCHITECTURE・GOTCHAS を置く
+ ├── scripts/                         開発環境のセットアップとローカルプロキシの起動スクリプトを置く(言語不問)
+ ├── docs/                            人間向けの文書と会話記録を置く
++│   └── prompts/                     別セッションの起動プロンプトを置く
+ ├── .raphael/                        raphael の抗体を置く
+ ├── .serena/                         Serena のプロジェクト設定とメモリを置く
+ └── plugins/<plugin>/
+@@ -76,8 +78,9 @@
+ ```
+ 
+ - `plugins/codiel/raguel-mcp/` は codiel 内の独立した pnpm workspace であり、MCP サーバーとして `dist/` へ出力する。
+-- `docs/` は読まない。
++- `docs/` は読まない。`docs/chat/` と `docs/prompts/` だけが例外である。
+ - `docs/chat/**/*.md` は chat-recorder エージェントと chat-reader エージェントだけが読む。
++- `docs/prompts/**/*.md` は、依頼文で名指しされたときだけ読む。
+ - 過去の記録が必要なときは `chat-history:recall` を使う。
+ - 前回セッションの再開には `chat-history:resume` を使う。
+```
+
+設計書の指示どおり、ツリーへ挙げたのは `.claude/rules/metatron/` と `docs/prompts/` の 2 つに限った。`.claude/context-maps/` は載せていない(context-map の位置づけの見直しが別途進んでいるため)。`.claude/settings.json` / `output-styles/` / `worktrees/` / `agents/` も載せていない(置き場に迷いが生じないため)。
+
+`docs/prompts/` の読み方を `docs/chat/` と対にして書いた — 「依頼文で名指しされたときだけ読む」。`docs/` 全体を読まない規律は維持したまま、名指しされた起動プロンプトは読める形になる。
+
+追加は 197 文字。設計書の見積もり 206 とほぼ一致し、注入予算(残り 3,616)に対して十分収まる。commit 後に再実測する。
+
+`stagingId: 2d0628e7-6b4d-4598-bbd5-36b0af4665f9`(期限 21:56:18Z)、`applied`: `ディレクトリ構成と責務` = `replaced`、警告なし、truncated なし。
+
+承認をもらえば `commit-architecture` を実行し、注入の再実測 → 通しの検証 → Task 13 のコミットへ進む。
+
+Task 13 承認ゲート 2(ARCHITECTURE の `## ディレクトリ構成と責務`、115 行 → 118 行、`stagingId: 2d0628e7-6b4d-4598-bbd5-36b0af4665f9`、期限 21:56:18Z)の返答を待っている。
+
+# phyllis998
+
+> 承認します
+
+## セッション 24: metatron 区間 2 完了：実装移行、rules 推敲、参照修正、検証
+
+# AI
+
+すべて通った。注入は `LEN=5581` / `DEGRADED=false`(残り 3,419)。Task 13 をコミットする。
+
+Task 13 を `df164f8` でコミットした。Task 14(契約凍結文書と README の追随)へ進む。承認ゲートを持たない領域なので、規律どおり実装帯へ委譲する。委譲先の実行モデルを先に確定する。
+
+委譲先を確定した — `agent-policy:gpt-terra` は frontmatter に `model: claude-gpt-5-6-terra` を持つため、`model` 上書きなしで起動する。契約凍結文書と README の 2 系統に分けて並列 dispatch する。
+
+`★ Insight ─────────────────────────────────────`
+- 分割の根拠は依存関係。契約凍結文書は「書式の正本」、README は「利用者向けの説明」で、参照方向が一方向(README → 契約)しかない。同じファイルを触らないので並列で競合しない。
+- 検証とコミットは委譲先にさせない。オーケストレーション規律が「サブエージェントに毎タスクの git commit・広域 grep 検証はさせない。バッチの最後にオーケストレーター側で行う」と定めているため。
+`─────────────────────────────────────────────────`
+
+Task 13 を `df164f8` でコミットし、Task 14 を 2 系統に分けて委譲した(契約凍結文書 / README 2 つ)。両方バックグラウンドで走っている。
+
+完了を待つ間の状況:
+
+| Task | 状態 |
+| --- | --- |
+| 12 移行 | 完了 `fd7913d` |
+| 13 推敲と追随 | 完了 `df164f8` |
+| 14 契約凍結文書・README | 委譲中(2 エージェント並列) |
+
+Task 13 後の注入は `LEN=5581` / `DEGRADED=false`、`maxChars`(9,000)まで 3,419 文字残る。設計書 §12 の見積もり(5,391 / 残り 3,609)に対して +190 文字だが、崖からは十分離れている。lint / typecheck / test(1,730 passed)/ build も通り、`plugins/` に差分はない。
+
+両エージェントの報告が届いたら、追随漏れの grep、`METATRON_RULES_PROBE=1` のサブエージェント到達プローブ、最終の通し検証を行ってコミットする。
+
+Task 14 の 2 エージェント(契約凍結文書 / README)の完了待ち。届き次第、追随漏れの grep、サブエージェント到達プローブ、最終検証を行ってコミットする。
+
+Task 14 の 2 エージェント(契約凍結文書 / README)は実行中。完了通知を待っている。
+
+README 側が完了した。報告に HTML エンティティ(`&lt;名前&gt;`)が見えるので、実ファイルに混入していないか確認する。
+
+metatron README は妥当。HTML エンティティの混入もない。ルート README を確認する。
+
+両 README とも設計に沿っている。触らないと指示した箇所(既定パスの `docs/` 表記、ADR 空節の食い違い)にも手が入っていない。契約凍結文書のエージェントは実行中。
+
+`★ Insight ─────────────────────────────────────`
+- README の変更で本質的なのは、注入の説明が二分されたこと。ARCHITECTURE / GOTCHAS は「metatron が SessionStart で注入する」、rules は「metatron は注入せず、Claude Code が起動時に読む」。metatron が rules 本文を注入しない設計判断(設計書 §12)が、利用者向けの文面にも正しく反映されている。
+- 逆に言えば、rules がサブエージェントへ届くのは metatron の機能ではなく Claude Code の公式機構の性質である。metatron が保証しているのは書き込み経路と編集拒否だけ。README がそこを混同していないのは重要で、混同すると「metatron を入れれば規律が届く」と誤読される。
+`─────────────────────────────────────────────────`
+
+契約凍結文書の完了を待っている。届き次第、Task 14 Step 7〜9(追随漏れの grep、`get config` の確認、サブエージェント到達プローブ、最終の通し検証)を行ってコミットする。
+
+契約凍結文書も完了した。ただし報告に**指示を超えた変更**がある — 「旧 §5 以降を繰り上げ、ADR を §6、GOTCHAS を §7、文書パスを §8、CLI を §12、契約変更チェックリストを §15」。節番号の全面的なずれである。設計書と実装計画書はこの文書の節を番号で名指ししているので、影響を測る。
+
+契約凍結文書の節番号は、コードのコメント・テストの先頭行・チェックリストから参照されている事実上の API になっている。番号のずれで何が壊れたかを正確に測る。
+
+`★ Insight ─────────────────────────────────────`
+- この文書は「3 実装が参照する単一の点」として作られており、`staging.ts` や `gotchas.ts` の冒頭コメントが `§11`「staging の保証」のように**節番号で正本を指している**。番号は実装から見ると外部インターフェースに近い。
+- 一方、実装計画書の「§4/§5/§6 の並びへ rules の節を足す」という指示は、どこへ挿入しても後続の番号がずれることを織り込んでいない。指示を素直に実行すると参照が壊れる — 計画の見落としである。
+`─────────────────────────────────────────────────`
+
+契約凍結文書の節番号のずれで、**14 ファイルの参照が壊れた**。実装計画書がこの波及を織り込んでいないため、設計書に無い判断が要る。状況を整理する。
+
+節番号を参照している箇所のうち、ずれたのは次のもの:
+
+| 参照元 | 現在の記述 | 実際の位置 |
+| --- | --- | --- |
+| `metatron/src/lib/staging.ts:4`、`staging.test.ts`、`cli.test.ts` | §11 staging の保証 | §12 |
+| `metatron/src/lib/gotchas.ts:4`、`gotchas.test.ts` | §6 GOTCHAS の書式 | §7 |
+| `metatron/src/lib/adr.ts:4`、`adr.test.ts` | §5 ADR の書式 | §6 |
+| `metatron/src/inject-context.ts:5`、`inject-context.test.ts` | §12 hook 出力の形式 | §13 |
+| `metatron/src/lib/__test__/config.test.ts:1` | §13 実装間の一致検証 | §14 |
+| `metatron/docs/format-change-checklist.md:23` | §6 | §7 |
+| `sandalphon/docs/format-change-checklist.md:8` | §8・§9 intent | §9・§10 |
+| `codiel/docs/DESIGN.md:400` | §6 | §7 |
+| `.serena/memories/file_contract.md` | §4-§7 / §8-§9 / §10〜§14 | すべて +1 |
+| 設計書 `:456`、実装計画書 `:199` | §7・§11 | §8・§12 |
+
+`§1`〜`§4` を指す参照(`architecture.ts`、`scan.ts`、`config.ts`、`codiel/src/hooks/lib.ts` 等)は無傷。
+
+「参照を追随させる」を採用。まず契約凍結文書の変更内容を確認し、次に参照元を 1 つずつ精査する。**契約文書への `§` 参照と、別の設計書への `§` 参照が同じ行に混在している**ので、一括置換はしない。
+
+契約凍結文書の変更は妥当で、文書内部の相互参照(§12→§13、§12→§14)も追随している。参照元の修正対象が確定した。**「ファイル契約 … の §N」だけを直し、「設計書は §N」(別文書への参照)には触らない。** 残りの参照元を読む。
+
+修正対象が確定した。**契約文書への参照だけを直し、`metatron 設計書 §13-1` のような別文書への参照には触らない。** 各置換が 1 回だけ当たることを検証しながら適用する。
+
+18 件を追随させた。残りは format-change-checklist への項目追加、設計書・実装計画書の参照、Serena メモリ。対象箇所を特定する。
+
+設計書と実装計画書は履歴文書だが、ユーザーの選択(参照を追随させる)にこの 2 箇所も含めて提示していたので追随させる。番号のみを直し、行番号のような細部は履歴として残す。
+
+Serena メモリを追随させる。規約どおり Serena のツールで扱う。
+
+メモリを追随させた。追随漏れの確認と最終の通し検証を行う。src を変更したので build を先に回す。
+
+検証はすべて通った(lint / typecheck / build / test 1,730 passed)。追随漏れの候補が 2 つ残っている — 他プラグインの実装が持つ `§13` と `§14` の参照。確認する。
+
+2 件とも追随が必要だった。`codiel` は実装間一致テスト(旧 §13 → §14)、`sandalphon` は契約変更チェックリスト(旧 §14 → §15)を指している。
+
+バンドル出力に差分は出ない(esbuild がコメントを削除するため)。最終確認へ進む。
+
+`get config` の `rulesDir` が私の読み取りスクリプトで `undefined` になった。出力構造を確認する。
+
+`get config` は期待どおり(`rules` はトップレベルのキーで、3 ファイルとも `exists: true`。`cli.stageRules` / `cli.commitRules` も載っている。`inputSchemas` の `headings` は 7 節に縮んでいる)。私の読み取りスクリプトが `paths.rulesDir` を見ていたのが誤りだった。
+
+最後にサブエージェント到達プローブを回す。
+
+プローブが 2 passed。**rules がサブエージェントへ届くことを実環境で確認できた。** コミットする。区間 1 の成果物である実装計画書が未コミットのまま残っているので、先に分けて入れる。
+
+ステップ 12〜14 が完了した。完了の定義を最終確認する。
+
+すべて完了した。メモリを現状へ更新する。
+
+設計書 §16 のステップ 12 から 14 がすべて完了した。
+
+## コミット
+
+| コミット | 内容 |
+| --- | --- |
+| `fd7913d` | 規約・保護パス・テスト方針を `.claude/rules/metatron/` へ移す(ステップ 12) |
+| `df164f8` | rules 3 節を推敲し ARCHITECTURE のディレクトリ構成を追随(ステップ 13) |
+| `5bdf20a` | 実装計画書を追加(区間 1 の成果物が未コミットだったため) |
+| `a38e16c` | 契約凍結文書と README を rules へ追随(ステップ 14) |
+
+## 設計書 §12-3 の実測
+
+| 時点 | 注入 `LEN` | `DEGRADED` | ARCHITECTURE | 残り予算 |
+| --- | --- | --- | --- | --- |
+| 移行前 | **1,563** | **`true`** | 8,204 | — |
+| 移行後(ステップ 12) | 5,384 | `false` | 4,472 | 3,616 |
+| 追記後(ステップ 13) | **5,581** | **`false`** | 4,669 | **3,419** |
+
+**縮退は解消した。** 移行前の測定で `DEGRADED=true` を検出した点が重要で、これは区間 2 の Task 9(注入の CLI 案内 +199 文字)のコミット時点で §12-2 の崖に落ちていたことを意味する。実装計画書の読み替え #8 が予告していた窓の中にいた。設計の見積もり(5,391 / 残り 3,609)に対して実測は +190 文字の差に収まった。
+
+## 移行の実施
+
+設計書 §8 の 4 段階を順序どおり(rules を先に書き、ARCHITECTURE から後で消す)に実行し、各段階で diff 全文の承認を得た。書き込みはすべて CLI 経由で、**hook の迂回・一時無効化・迂回スクリプトは一切していない**(`hooks.json` と `guard-docs.mjs` に差分なし)。
+
+ステップ 13 の推敲では、`conventions.md` と `testing-policy.md` に §13-3 の判定を全文へ通したが削除に当たる文が出なかった。この 3 節は ARCHITECTURE にあった時点で既に `writing-discipline.md` の「削る基準を強く適用」の区分にあり、rules へ移しても区分が変わらないためで、判定を省いたのではない。代わりに移行で顕在化した追随漏れ 3 件(`CLAUDE.md` の確認対象、`rules-format.md` の追加、`pnpm-workspace.yaml` の重複)を拾った。
+
+## 判断を仰いだ 1 件
+
+ステップ 14 で契約凍結文書に §5「rules の書式」を新設した結果、**以降の節番号が +1 され 14 ファイルの参照が壊れた**。この文書は「3 実装が参照する単一の点」で、`staging.ts` などの冒頭コメントが節番号で正本を指しているため、番号は事実上の外部インターフェースになっている。実装計画書はこの波及を織り込んでいなかった。承認をもらって参照 16 箇所を追随させ、`metatron 設計書 §N` のような別文書への参照には触れていない。
+
+## 検証
+
+lint / typecheck / test(1,730 passed / 2 skipped)/ build がすべて exit 0。`plugins/` に未コミット差分なし。節名参照インベントリ `V1`〜`V3` が通り分類 A はゼロ。`diff-architecture` は移行した 3 節を `section_missing` として報告しない。`METATRON_RULES_PROBE=1` のサブエージェント到達プローブが 2 passed で、**rules がサブエージェントへ届くことを実環境で確認した**。metatron `0.2.0-dev` / codiel `0.6.0-dev` で `plugin.json` と `package.json` が揃っている。
+
+## 報告すべき異常が 1 件
+
+**このセッションでは guard hook が Edit ツールに発火していない。** ステップ 12 の Step 6 で判明した。
+
+- `guard-docs.mjs` を直接叩くと rules・ARCHITECTURE の両方で `permissionDecision: deny` を返す — 判定は正しい
+- `hooks.json` の matcher は `Edit|Write|NotebookEdit` で正しい
+- それでも実 Edit が素通りし、**移行前から保護実績のある ARCHITECTURE も同様に素通りする**
+
+metatron の変更で壊れたものではなく、この環境の Edit ツールが MCP 経由でラップされた名前を持ち matcher と一致していないと見られる。プローブは存在しない `old_string` で行ったのでファイルは無変更。ただし実務上の含意として、**この環境では正本を hook が守っていない**。
+
+もう 1 点、蒸留された抗体 `ab-2026-0824-006` は「stage と commit-rules を連続実行せよ」を対策に挙げているが、`stage-rules` 自身が「承認を得るまで commit-rules を実行しないこと」と返す以上この作業では成立しない。後のセッションが「承認を省いて連続実行する」方向に読む恐れがあるので、文面の見直しを勧める。
+
+# phyllis998
+
+> 抗体 ab-2026-0824-006 の文面を直してください
+
+## セッション 25: 抗体 ab-2026-0824-006 の文面修正と trigger 拡張
+
+# AI
+
+抗体を直す。規約どおり `.raphael/antibodies/` は直接編集せず CLI で更新する。まず現物と CLI の使い方を確認する。
+
+`patch <id>` に stdin で JSON を渡し、`--dry-run` で事前確認できる。入力の形を確認する。
+
+`patch <id>` に stdin で `{body: ...}` を渡す形。新しい本文を書く前に、有効期限の実際の値を確認する(現在の本文の「数分から十数分」が正しいか)。
+
+有効期限は既定 **30 分**(`DEFAULT_STAGING_TTL_MS`)。現在の本文の「数分から十数分程度」も誤っている。本文を書き直して `--dry-run` で確認する。
+
+`★ Insight ─────────────────────────────────────`
+- この抗体の問題は事実誤認(30 分を「数分から十数分」)だけではない。核心は**因果の取り違え**で、期限切れを「間に処理を挟んだから起きた失敗」と読み、承認ゲートを排除すべきノイズとして扱っている。実際には `stage-*` の応答自身が承認を待てと指示しており、期限切れは正常な運用の帰結。
+- 抗体は将来のセッションへ自動注入される。「対策」の書き方を誤ると、規律を破る方向へ後続を誘導する。
+`─────────────────────────────────────────────────`
+
+抗体ファイルは既存の文体(断定調の通常日本語)に合わせて書く。
+
+dry-run が通り、変更は `body` のみ。適用する。
+
+抗体 `ab-2026-0824-006` の本文を更新した。`--dry-run` で `diff: ["body"]` を確認してから適用し、`status` / `expires` / `trigger` は変えていない。
+
+## 直した点
+
+| 元の記述 | 問題 | 直した内容 |
+| --- | --- | --- |
+| 「stage と commit-rules を同じセッション / スクリプトで連続実行」 | 承認ゲートのある経路では成立しない。規律を破る方向へ後続を誘導する | 「承認を省いて連続実行することで回避しない」と明記。連続実行してよいのは承認ゲートを持たない経路(テスト・自動化バッチ)だけと限定 |
+| 「stage 実行直後に即座に commit-rules を実行(間に他の処理を挟まない)」 | 承認を「挟むべきでない他の処理」として扱っている。因果の取り違え | 期限切れは異常ではなく、`stage-*` 自身が承認を待てと返す以上、承認を待つ運用では起こりうると説明 |
+| 「有効期限はデフォルトで数分から十数分程度」 | 事実誤認。`DEFAULT_STAGING_TTL_MS` は 30 分 | 「既定 30 分」に訂正 |
+| — | 再 stage 後にどうすべきかが無い | 同じ入力ファイルで stage し直し、承認済みの diff と一致することを機械で確認してから commit する、を追加 |
+| — | 失敗時の安全性が書かれていない | staging は単一ターゲットで、期限切れで失敗しても対象ファイルは 1 バイトも変わらないことを追加 |
+
+文体は既存の抗体に合わせた断定調の通常日本語にした(原始人口調は適用していない)。
+
+## 残る改善点(未着手)
+
+`trigger.pattern` が `metatron\.mjs.*commit-rules` で、**`commit-architecture` を捕捉しない**。staging の期限切れは `commit-architecture` でも同じ機構で起きる(今回の移行では偶然発生しなかっただけ)。`metatron\.mjs.*commit-(rules|architecture)` へ広げる余地がある。依頼が文面の修正だったので触っていない。広げるなら同じ `patch` で `trigger` も渡せる。
+
+ファイルは未追跡のまま(`?? .raphael/antibodies/ab-2026-0824-006.md`)。この抗体は今回のセッションで新規生成されたもので、コミットするかは他の未コミットの抗体変更(`.raphael/antibodies/` に 11 件の変更あり)とまとめて判断してほしい。
+
+抗体 `ab-2026-0824-006` の本文修正は完了している。設計書 §16 のステップ 12〜14 も全て完了し、4 コミット(`fd7913d` / `df164f8` / `5bdf20a` / `a38e16c`)として入っている。
+
+次の判断が必要なものが 2 つ残っている。
+
+1. **`trigger.pattern` の拡張** — `commit-architecture` を捕捉していない。広げるかどうか
+2. **`.raphael/antibodies/` のコミット** — 今回の抗体(`ab-2026-0824-006`)を含め 11 件の変更が未コミット。今回の作業とは別系統なので手を付けていない
+
+どちらも指示があれば対応する。
+
+抗体の本文修正は完了済み。残っている判断待ちは 2 つ。
+
+1. **`trigger.pattern` の拡張** — 現在 `metatron\.mjs.*commit-rules` で `commit-architecture` を捕捉しない。同じ機構で期限切れが起きるため広げる余地がある
+2. **`.raphael/antibodies/` のコミット** — 今回の抗体を含む 11 件が未コミット。今回の作業とは別系統なので手を付けていない
+
+どちらも指示があれば対応する。
+
+# phyllis998
+
+> どちらも対応してください
+
+## セッション 26: trigger 拡張と抗体処理（ab-2026-0814-002 ID 再生成）
+
+# AI
+
+2 つとも対応する。まず `trigger.pattern` を拡張し、同時に未コミットの抗体変更の中身を確認する。
+
+dry-run が通った。適用し、同時に他の抗体の変更内容を確認する(17 件は `stats` のみだが、`ab-2026-0814-002` は 24 行動いている)。
+
+`trigger.pattern` を `commit-(rules|architecture)` へ拡張した。
+
+コミット前に**確認が要る異常**を 1 件見つけた。`ab-2026-0814-002` は `stats` の更新ではなく、**中身が別の抗体に置き換わっている**。
+
+| 項目 | 変更前 | 変更後 |
+| --- | --- | --- |
+| `source` | `linting / biome-code-formatting` | `linting / code-formatting` |
+| `trigger.pattern` | `pnpm\s+(exec\s+)?biome\s+(check\|lint)` | `extend.*ab-[0-9]{4}-...` |
+| 本文 | Biome のインデント規則 | `extend` コマンドの前提条件(`stats.last_fired` が null だと失敗する) |
+
+ID を保ったまま主題が入れ替わっている。この変更はセッション開始時の `git status` に無く、途中で発生した。ID の再利用が raphael の設計として許容されているかを確認する。
+
+設計を確認した。`generalize` の判断で expired 抗体を `patch` すること自体は許容されているが、**「同型の知識だが対象だけが異なる」場合の必要最小限の汎化**という条件が付いている。Biome のインデント → `extend` コマンドの前提条件は同型ではなく、枠の乗っ取りにあたる。
+
+`ab-2026-0814-002` を除いて先にコミットする。
+
+両方とも対応した。
+
+## 1. `trigger.pattern` の拡張
+
+`metatron\.mjs.*commit-rules` → `metatron\.mjs.*commit-(rules|architecture)`。`--dry-run` で `diff: ["trigger"]` を確認してから適用した。今回の移行では `commit-architecture` でたまたま期限切れが起きなかっただけで、同じ staging 機構を使う以上ここも捕捉すべきだった。
+
+## 2. 抗体のコミット
+
+`f1537a9` として 23 ファイルを入れた — 新規 6 件と、`stats`(fired / last_fired)の更新 17 件。
+
+## 保留にした 1 件と、その理由
+
+`ab-2026-0814-002` はコミットに含めていない。**`stats` の更新ではなく、抗体の主題そのものが入れ替わっている。**
+
+| 項目 | 変更前 | 変更後 |
+| --- | --- | --- |
+| `source` | `linting / biome-code-formatting` | `linting / code-formatting` |
+| `trigger.pattern` | `pnpm\s+(exec\s+)?biome\s+(check\|lint)` | `extend.*ab-[0-9]{4}-...` |
+| 本文 | Biome のインデント規則と改行例 | `extend` は `stats.last_fired` が null だと失敗する |
+
+raphael の設計を確認したところ、`generalize` の判断で expired 抗体を `patch` すること自体は許容されている。ただし条件は「**同型の知識だが対象だけが異なる**場合に、trigger/body/source を**必要最小限に**汎化する」。Biome のインデント規則と `extend` コマンドの前提条件は同型ではなく、これは汎化ではなく空き枠の乗っ取りにあたる。
+
+この変更はセッション開始時の `git status` に無く、途中で発生している。今回の蒸留エージェントの報告は `create` 1 件と `mark-distilled` 3 件だけで `patch` を含んでいないので、別経路の可能性がある。
+
+元の抗体は `status: expired` / `fired: 0` なので実害は小さい。取れる手は 3 つ。
+
+1. **元に戻し、新内容は別 ID で作る**(推奨)— ID の同一性を保ちつつ、`extend` の知識も残る。ただし `create` の preflight 手順を踏む必要がある
+2. そのままコミットする — 記録としては不正確だが最小コスト
+3. 元に戻すだけ — `extend` の知識は失われる
+
+どれで進めるか指示してほしい。
+
+なお `ab-2026-0817-001` が再び未コミットになっているのは、この直後の git コマンドで発火して `fired` が増えたためで、内容の変更ではない。
+
+依頼された 2 件は完了している(`trigger.pattern` の拡張、抗体 23 件のコミット `f1537a9`)。
+
+`ab-2026-0814-002` の扱いについての返答を待っている。主題が入れ替わっているため保留にした 1 件で、選択肢は次の 3 つ。
+
+1. 元に戻し、`extend` の知識は別 ID で作る(推奨)
+2. そのままコミットする
+3. 元に戻すだけ
+
+`ab-2026-0814-002` の扱いについての返答を待っている。3 案(1: 元に戻して別 ID で作り直す〈推奨〉/ 2: そのままコミット / 3: 元に戻すだけ)。
+
+# phyllis998
+
+> 1でお願いします

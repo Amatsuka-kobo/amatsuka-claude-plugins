@@ -78,4 +78,7 @@
 - `2026/0816/phyllis998/no-operation-confirmation.md` | 2026-08-16 | phyllis998 | agent-policy bundled agents設計・検証・Haiku反映・researcher割り当て・実装計画・Subagent実行開始
 - `2026/0816/phyllis998/repository-analysis-serena-update.md` | 2026-08-16 | phyllis998 | リポジトリドリフト分析と Serena メモリ更新
 - `2026/0823/phyllis998/architecture-overview-design.md` | 2026-08-24 | phyllis998 | ARCHITECTURE デザイン確定、規約統合と 4 タスク完了
-- `2026/0824/phyllis998/metatron-rules-expansion.md` | 2026-08-24 | phyllis998 | rules拡張設計確定・実装プロンプト作成完了
+- `2026/0824/phyllis998/agent-policy-policy-change.md` | 2026-08-24 | phyllis998 | role-based setup 実装完了・残課題を引き継ぎ書へ
+- `2026/0824/phyllis998/metatron-rules-expansion.md` | 2026-08-25 | phyllis998 | metatron 区間 2 完了：実装移行、rules 推敲、参照修正、検証
+- `2026/0825/phyllis998/agent-policy-claude-model-setup.md` | 2026-08-26 | phyllis998 | SDD scope終了、workspace削除と知見記録
+- `2026/0826/phyllis998/agent-policy-codex-model-setup.md` | 2026-08-26 | phyllis998 | Codex モデル定義名の確認（Terra/Grok）
