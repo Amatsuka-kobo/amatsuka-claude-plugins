@@ -3,7 +3,12 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { type FragmentDir, loadCommon, loadFragments } from "../fragments"
+import {
+  type FragmentDir,
+  fragmentDirsFor,
+  loadCommon,
+  loadFragments
+} from "../fragments"
 import { bodyHash } from "../hash"
 
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
@@ -103,6 +108,7 @@ describe("loadFragments の 3 段探索", () => {
       ?.sections.get("## 作業手順")
     expect(steps?.filter((line) => line.includes("grok step")).length).toBe(1)
     expect(steps?.join("\n")).toContain("translated grok step")
+    expect(steps?.join("\n")).not.toContain("X 由来")
   })
 
   it("vendor が一致しないベンダー別断片は読まない", () => {
@@ -111,6 +117,51 @@ describe("loadFragments の 3 段探索", () => {
       .get("realtime-research")
       ?.sections.get("## 作業手順")
     expect(steps?.join("\n")).not.toContain("X 由来")
+  })
+})
+
+describe("fragmentDirsFor", () => {
+  it("ja は同梱 ja からプロジェクト独自の順で返す", () => {
+    expect(fragmentDirsFor(PLUGIN_ROOT, project, "ja")).toEqual([
+      {
+        path: path.join(PLUGIN_ROOT, "assets", "roles", "ja"),
+        source: "plugin"
+      },
+      {
+        path: path.join(project, ".claude", "agent-policy", "roles"),
+        source: "project"
+      }
+    ])
+  })
+
+  it("en は同梱 en からプロジェクト独自の順で返す", () => {
+    expect(fragmentDirsFor(PLUGIN_ROOT, project, "en")).toEqual([
+      {
+        path: path.join(PLUGIN_ROOT, "assets", "roles", "en"),
+        source: "plugin"
+      },
+      {
+        path: path.join(project, ".claude", "agent-policy", "roles"),
+        source: "project"
+      }
+    ])
+  })
+
+  it("ja と en 以外は同梱 en、プロジェクト翻訳、プロジェクト独自の順で返す", () => {
+    expect(fragmentDirsFor(PLUGIN_ROOT, project, "de")).toEqual([
+      {
+        path: path.join(PLUGIN_ROOT, "assets", "roles", "en"),
+        source: "plugin"
+      },
+      {
+        path: path.join(project, ".claude", "agent-policy", "roles", "de"),
+        source: "project"
+      },
+      {
+        path: path.join(project, ".claude", "agent-policy", "roles"),
+        source: "project"
+      }
+    ])
   })
 })
 
