@@ -9,15 +9,28 @@ import {
 } from "./agents/compose"
 import {
   checkFragments,
+  type Fragment,
+  type FragmentDir,
   fragmentDirsFor,
   loadFragments,
-  scaffoldFragments,
-  type Vendor
+  scaffoldFragments
 } from "./agents/fragments"
-import { type RoleId, roleOrder } from "./agents/roles"
+import { listMcpServers } from "./agents/mcp"
+import {
+  type ModelSpec,
+  modelById,
+  modelsFor,
+  POLICIES,
+  type PolicyName,
+  policyById,
+  resolveModelValue,
+  rolesFor
+} from "./agents/policies"
+import { type RoleId, roleById, roleOrder } from "./agents/roles"
 
 interface Options {
-  vendor: Vendor
+  policy: string
+  modelId: string
   name: string
   model: string
   roles: RoleId[]
@@ -26,7 +39,10 @@ interface Options {
   check: boolean
   write: boolean
   merge: boolean
+  listPolicies: boolean
+  listModels: boolean
   listRoles: boolean
+  listMcp: boolean
   checkFragments: boolean
   scaffoldFragments: boolean
   keep: string[]
@@ -122,14 +138,39 @@ function pluginRoot(): string {
   )
 }
 
+function requirePolicy(options: Options): PolicyName {
+  const policy = policyById(options.policy)
+  if (policy === undefined) {
+    throw new Error(
+      `policy: must be one of ${POLICIES.map((entry) => entry.id).join(", ")}`
+    )
+  }
+  return policy.id
+}
+
+function requireModel(options: Options, policy: PolicyName): ModelSpec {
+  const spec = modelById(options.modelId)
+  if (spec === undefined) throw new Error("model-id: is unknown")
+  if (!modelsFor(policy).some((entry) => entry.id === spec.id)) {
+    throw new Error(`model-id: ${spec.id} is not used in ${policy}`)
+  }
+  return spec
+}
+
 function composeInput(options: Options): ComposeInput {
+  const policy = requirePolicy(options)
+  const spec = requireModel(options, policy)
   return {
     name: options.name,
-    model: options.model,
-    vendor: options.vendor,
+    model:
+      options.model === ""
+        ? resolveModelValue(spec, process.env)
+        : options.model,
+    vendor: spec.vendor,
     roleIds: options.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-    lang: options.lang
+    lang: options.lang,
+    color: spec.color
   }
 }
 
@@ -410,32 +451,82 @@ function write(options: Options): unknown {
   }
 }
 
+function listPolicies(): unknown {
+  return {
+    ok: true,
+    policies: POLICIES.map(({ id, label, injection }) => ({
+      id,
+      label,
+      injection
+    }))
+  }
+}
+
+function listModels(options: Options): unknown {
+  const policy = requirePolicy(options)
+  return {
+    ok: true,
+    policy,
+    models: modelsFor(policy).map((spec) => ({
+      id: spec.id,
+      label: spec.label,
+      defaultName: spec.defaultName,
+      model: resolveModelValue(spec, process.env),
+      vendor: spec.vendor,
+      color: spec.color,
+      roles: rolesFor(policy, spec.id)
+    }))
+  }
+}
+
+function listMcp(): unknown {
+  return { ok: true, servers: listMcpServers(process.env) }
+}
+
 function listAvailableRoles(options: Options): unknown {
-  const roles = [
-    ...loadFragments(
-      fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-      options.vendor
-    ).values()
-  ]
+  const policy = requirePolicy(options)
+  const model = requireModel(options, policy)
+  const allowed = new Set<string>(rolesFor(policy, model.id))
+  const dirs: FragmentDir[] = fragmentDirsFor(
+    pluginRoot(),
+    options.dir,
+    options.lang
+  )
+  const fragments: Map<string, Fragment> = loadFragments(dirs, model.vendor)
+  // 第 3 段(プロジェクト独自)は言語別ディレクトリより優先されるため、
+  // lang が ja 以外でもここ由来の断片は元の言語のまま合成へ入る。
+  const ownDir = dirs.at(-1)?.path
+
+  const roles = [...fragments.values()]
+    .filter(
+      (fragment) =>
+        allowed.has(fragment.id) || roleById(fragment.id) === undefined
+    )
     .sort(
       (left, right) =>
         roleOrder(left.id) - roleOrder(right.id) ||
         left.id.localeCompare(right.id)
     )
-    .map(({ id, label, kind, tools, source }) => ({
-      id,
-      label,
-      kind,
-      tools,
-      source
+    .map((fragment) => ({
+      id: fragment.id,
+      label: fragment.label,
+      kind: fragment.kind,
+      tools: fragment.tools,
+      source: fragment.source,
+      languageMismatch:
+        options.lang !== "ja" &&
+        fragment.source === "project" &&
+        ownDir !== undefined &&
+        fs.existsSync(path.join(ownDir, `${fragment.id}.md`))
     }))
 
-  return { ok: true, roles }
+  return { ok: true, policy, modelId: model.id, lang: options.lang, roles }
 }
 
 function parseArgs(argv: string[]): Options {
   const options: Options = {
-    vendor: "gpt",
+    policy: "",
+    modelId: "",
     name: "",
     model: "",
     roles: [],
@@ -444,7 +535,10 @@ function parseArgs(argv: string[]): Options {
     check: false,
     write: false,
     merge: false,
+    listPolicies: false,
+    listModels: false,
     listRoles: false,
+    listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
     keep: []
@@ -454,11 +548,12 @@ function parseArgs(argv: string[]): Options {
     const arg = argv[index]
     const value = argv[index + 1]
     switch (arg) {
-      case "--vendor":
-        if (value !== "gpt" && value !== "grok" && value !== "claude") {
-          throw new Error("vendor: must be gpt, grok or claude")
-        }
-        options.vendor = value
+      case "--policy":
+        options.policy = requireValue(value, "policy")
+        index += 1
+        break
+      case "--model-id":
+        options.modelId = requireValue(value, "model-id")
         index += 1
         break
       case "--name":
@@ -497,8 +592,17 @@ function parseArgs(argv: string[]): Options {
       case "--merge":
         options.merge = true
         break
+      case "--list-policies":
+        options.listPolicies = true
+        break
+      case "--list-models":
+        options.listModels = true
+        break
       case "--list-roles":
         options.listRoles = true
+        break
+      case "--list-mcp":
+        options.listMcp = true
         break
       case "--check-fragments":
         options.checkFragments = true
@@ -519,14 +623,16 @@ function parseArgs(argv: string[]): Options {
     throw new Error("name: must be lowercase letters, digits and hyphens")
   }
   if (
+    options.listPolicies ||
+    options.listModels ||
     options.listRoles ||
+    options.listMcp ||
     options.checkFragments ||
     options.scaffoldFragments
   ) {
     return options
   }
   if (options.name === "") throw new Error("name: is required")
-  if (options.model === "") throw new Error("model: is required")
   if (options.roles.length === 0) throw new Error("roles: is required")
   if (options.merge && !options.write)
     throw new Error("merge: requires --write")
@@ -546,7 +652,13 @@ function respond(value: unknown): void {
 
 try {
   const options = parseArgs(process.argv.slice(2))
-  if (options.checkFragments) {
+  if (options.listPolicies) {
+    respond(listPolicies())
+  } else if (options.listModels) {
+    respond(listModels(options))
+  } else if (options.listMcp) {
+    respond(listMcp())
+  } else if (options.checkFragments) {
     respond({
       ok: true,
       ...checkFragments(pluginRoot(), options.dir, options.lang)
