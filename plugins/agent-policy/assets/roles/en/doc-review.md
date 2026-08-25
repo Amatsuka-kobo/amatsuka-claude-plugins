@@ -2,6 +2,7 @@
 id: doc-review
 label: Design and Implementation Plan Review
 description: articulating understanding of design documents and implementation plans and identifying implicit knowledge and inconsistencies
+default-name: reviewer
 tools: Read, Grep, Glob
 kind: readonly
 ---

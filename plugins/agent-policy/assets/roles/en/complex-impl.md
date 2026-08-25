@@ -2,6 +2,7 @@
 id: complex-impl
 label: Complex or Critical Implementation
 description: complex coding that involves architectural decisions, non-trivial design trade-offs, or coordination among multiple components
+default-name: lead-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
 ---

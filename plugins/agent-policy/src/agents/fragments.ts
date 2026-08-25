@@ -14,6 +14,7 @@ export interface Fragment {
   id: string
   label: string
   description: string
+  defaultName: string | undefined
   tools: string[]
   kind: RoleKind
   source: "plugin" | "project"
@@ -86,6 +87,7 @@ function readFragment(file: string, source: Fragment["source"]): Fragment {
     id: requireMeta(meta, "id", file),
     label: requireMeta(meta, "label", file),
     description: requireMeta(meta, "description", file),
+    defaultName: meta["default-name"],
     tools: requireMeta(meta, "tools", file)
       .split(",")
       .map((tool) => tool.trim()),

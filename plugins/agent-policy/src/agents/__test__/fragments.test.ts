@@ -57,6 +57,21 @@ describe("loadFragments の 3 段探索", () => {
     expect(fragments.get("explore")?.source).toBe("plugin")
   })
 
+  it("同梱断片から defaultName を読み込む", () => {
+    const fragments = loadFragments([JA], "claude")
+    expect(fragments.get("explore")?.defaultName).toBe("explorer")
+  })
+
+  it("default-name が無い断片の defaultName は undefined になる", () => {
+    const own = path.join(project, "roles")
+    writeFragment(own, "triage", "triage label")
+    const fragments = loadFragments(
+      [JA, { path: own, source: "project" }],
+      "claude"
+    )
+    expect(fragments.get("triage")?.defaultName).toBeUndefined()
+  })
+
   it("プロジェクト翻訳が同梱を置き換える", () => {
     const translated = path.join(project, "roles", "de")
     writeFragment(translated, "explore", "translated label")

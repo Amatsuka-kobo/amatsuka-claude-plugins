@@ -2,6 +2,7 @@
 id: general
 label: General Tasks
 description: general work excluding review and design, including documentation and routine maintenance
+default-name: generalist
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
 ---

@@ -2,6 +2,7 @@
 id: independent-review
 label: Independent Design and Implementation Plan Review
 description: testing assumptions in design documents and implementation plans and presenting counterevidence
+default-name: docs-reviewer
 tools: Read, Grep, Glob, Bash
 kind: readonly
 ---

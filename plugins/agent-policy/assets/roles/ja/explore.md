@@ -2,6 +2,7 @@
 id: explore
 label: コードベース探索実働
 description: オーケストレーターが統括するコードベース探索の実働
+default-name: explorer
 tools: Read, Grep, Glob, Bash
 kind: readonly
 ---

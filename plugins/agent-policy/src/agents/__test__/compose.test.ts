@@ -477,6 +477,7 @@ describe("英語断片での合成", () => {
     for (const [id, fragment] of en) {
       expect(fragment.kind, id).toBe(ja.get(id)?.kind)
       expect(fragment.tools, id).toEqual(ja.get(id)?.tools)
+      expect(fragment.defaultName, id).toBe(ja.get(id)?.defaultName)
     }
   })
 

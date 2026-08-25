@@ -2,6 +2,7 @@
 id: code-review
 label: Code Review
 description: review of change diffs
+default-name: code-reviewer
 tools: Read, Grep, Glob, Bash
 kind: readonly
 ---
