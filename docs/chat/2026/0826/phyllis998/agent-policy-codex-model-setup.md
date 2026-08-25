@@ -175,3 +175,19 @@ conventions.md の変更、`commit-rules` 実行の承認待ちのままです�
 # phyllis998
 
 > 承認します
+
+## セッション 6: 必須ツール導入スクリプト作成
+
+# phyllis998
+
+> このプロジェクトの必須ツールをインストールするためのスクリプトを作成してください
+
+## セッション 7: スクリプト実装を GPT Terra に委譲
+
+# AI
+
+GPT Terra へ `scripts/install-toolchain.sh` の実装を委譲した。完了通知が届き次第、レビューして報告する。
+
+# phyllis998
+
+> gh cliは、auth login真でお願いします
