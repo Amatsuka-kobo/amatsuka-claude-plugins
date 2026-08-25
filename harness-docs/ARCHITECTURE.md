@@ -70,6 +70,7 @@
     ├── skills/                      AI が読む手順を置く
     ├── commands/                    スラッシュコマンドの定義を置く
     ├── agents/                      サブエージェントの定義を置く
+    ├── assets/                      指示層が読み込んで合成する素材を置く
     ├── hooks/hooks.json             Claude Code のイベントと実行スクリプトの対応を置く
     ├── references/                  複数の指示から共有する規律を置く
     ├── docs/                        設計・背景・経緯・不採用案と、開発時のチェックリストを置く
@@ -78,6 +79,7 @@
 ```
 
 - `plugins/codiel/raguel-mcp/` は codiel 内の独立した pnpm workspace であり、MCP サーバーとして `dist/` へ出力する。
+- `assets/` に置くのは、指示層が実行時に読み込む素材と、実装層が Agent 定義へ合成する断片である。言語別に分けるときは `assets/<種別>/<言語>/` とする。
 - `docs/` は読まない。`docs/chat/` と `docs/prompts/` だけが例外である。
 - `docs/chat/**/*.md` は chat-recorder エージェントと chat-reader エージェントだけが読む。
 - `docs/prompts/**/*.md` は、依頼文で名指しされたときだけ読む。
@@ -89,7 +91,7 @@
 ```json metatron:domains
 {
   "impl": ["plugins/*/src/**", "plugins/*/build.ts", "plugins/codiel/raguel-mcp/src/**", "plugins/codiel/raguel-mcp/build.ts"],
-  "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**"],
+  "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**"],
   "bundle": ["plugins/*/scripts/**", "plugins/*/dist/**", "plugins/codiel/raguel-mcp/dist/**"],
   "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**"],
   "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".raphael/**", ".serena/**"]
@@ -97,7 +99,7 @@
 ```
 
 - `impl` は TypeScript の実装を指す。
-- `prompt` は AI が読む指示書を指す。
+- `prompt` は AI が読む指示書と、そこへ合成される素材を指す。
 - `bundle` は手で編集しない。
 - `manifest` は配布宣言・ワークスペース設定・環境構築スクリプトを指す。
 - `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリ、raphael の抗体を含む。
@@ -116,3 +118,32 @@
 - 初回のセットアップは `bash scripts/setup-workspace.sh` で行う。`pnpm install` と `pnpm run build` をまとめて実行する。
 - 単一のプラグインだけをビルドするときは `pnpm --filter <plugin>-scripts build` を使う。
 
+## ADR 一覧
+
+### ADR-001: [agent-policy] MCP ツールの許可はサーバー単位、禁止はツール単位とする
+
+- 状態: 採用
+- 決定日: 2026-08-25
+- 決定者: phyllis998
+
+#### 背景
+
+サブエージェントに MCP ツールを与えたいが、プラグインは利用者がどの MCP サーバーを接続しているか事前に知り得ない。加えて、`tools` に存在しないツール名を書くと他の許可済みツールまで落ちることが実測で分かっている。
+
+#### 検討した選択肢
+
+1. 許可も禁止もサーバー単位にする
+2. 許可も禁止もツール単位にする
+3. プラグインが主要 MCP サーバーの編集系ツール一覧を同梱し、それを使って禁止リストを組む
+
+#### 採用した結論
+
+許可は `claude mcp list` が返したサーバー名だけを受け取り、`mcp__<server>` の形で `tools` へ書く。禁止は `disallowedTools` へツール名で書き、利用者が指定した文字列をそのまま通す。
+
+#### 理由
+
+許可リストへ実在しないツール名が入ると他の許可が落ちるため、許可側は実在が保証された値だけを扱う。`claude mcp list` の出力はその保証を与える。禁止リストは誤った名前が入っても無害であり、ツール単位の粒度を取れる。ツール単位の許可は実在保証を失う。編集系ツール一覧の同梱は、サーバー側の更新に追随できず、利用者が使うサーバーを列挙し切れない。
+
+#### 影響範囲
+
+`--mcp-servers` はサーバー名、`--mcp-deny` はツール名を受ける。MCP の付与単位は役割ではなく定義になる。
