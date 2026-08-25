@@ -70,7 +70,8 @@ export function listMcpServers(env: NodeJS.ProcessEnv): McpServer[] {
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
     timeout: 30_000,
     maxBuffer: 8 * 1024 * 1024,
-    env
+    // options.env は process.env と自動マージされないため、PATH を保つ。
+    env: { ...process.env, ...env }
   }
   try {
     const output =
