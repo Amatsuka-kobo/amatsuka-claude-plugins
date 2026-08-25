@@ -215,36 +215,59 @@ function hasMixedKinds(kinds) {
   return unique2.has("impl") && unique2.has("readonly");
 }
 
+// src/agents/vocabulary.ts
+var JA = {
+  bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
+  advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
+  agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
+  constraintHeading: "## \u5236\u7D04",
+  outputFormatHeading: "## Output Format",
+  listSeparator: "\u3001",
+  quote: (value) => `\u300C${value}\u300D`,
+  describe: (roles) => `Use this agent when ${roles}\u3092\u59D4\u8B72\u3059\u308B\u3068\u304D\u3002\u8A73\u7D30\u306F\u672C\u6587\u306E\u300CWhen to invoke\u300D\u3092\u53C2\u7167\u3002`
+};
+var EN = {
+  bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
+  advisorHeading: "## Consulting an advisor",
+  agentConstraintHeading: "## Agent tool limits",
+  constraintHeading: "## Constraints",
+  outputFormatHeading: "## Output Format",
+  listSeparator: ", ",
+  quote: (value) => `"${value}"`,
+  describe: (roles) => `Use this agent when delegating ${roles}. See "When to invoke" below for details.`
+};
+function vocabularyFor(lang) {
+  return lang === "ja" ? JA : EN;
+}
+
 // src/agents/compose.ts
 var COLORS = {
   gpt: "yellow",
   grok: "red",
   claude: "blue"
 };
-var BODY_ORDER = [
-  "## When to invoke",
-  "## Core Responsibilities",
-  "## \u4F5C\u696D\u624B\u9806"
-];
 function compose(input) {
+  const vocabulary = vocabularyFor(input.lang);
   const common = loadCommon(input.fragmentDirs);
   const { ids: ordered, selected } = selectFragments(input);
   const withAgent = allowsAgentTool(input.roleIds);
-  const tools = resolveToolsFor(selected, withAgent);
+  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? []);
+  const denyTools = input.denyTools ?? [];
   const head = [
     "---",
     `name: ${input.name}`,
-    `description: ${describe(selected)}`,
+    `description: ${describe(selected, vocabulary)}`,
     `model: ${input.model}`,
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
+    ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
     `agent-policy-role: ${ordered.join(", ")}`,
     "---",
     ""
   ];
   const body = [];
-  body.push(...preamble(common, input.name, selected), "");
-  for (const heading of BODY_ORDER) {
+  body.push(...preamble(common, input.name, selected, vocabulary), "");
+  for (const heading of vocabulary.bodyOrder) {
     const items = selected.flatMap(
       (fragment) => fragment.sections.get(heading) ?? []
     );
@@ -252,22 +275,28 @@ function compose(input) {
     body.push(heading, "", ...items, "");
   }
   if (withAgent) {
-    const advisor = common.get("## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7");
+    const advisor = common.get(vocabulary.advisorHeading);
     if (advisor !== void 0)
-      body.push("## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7", "", ...advisor, "");
+      body.push(vocabulary.advisorHeading, "", ...advisor, "");
   }
   const constraints = [
-    ...withAgent ? common.get("## Agent tool \u306E\u5236\u7D04") ?? [] : [],
-    ...common.get("## \u5236\u7D04") ?? [],
-    ...selected.flatMap((fragment) => fragment.sections.get("## \u5236\u7D04") ?? [])
+    ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
+    ...common.get(vocabulary.constraintHeading) ?? [],
+    ...selected.flatMap(
+      (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
+    )
   ];
-  if (constraints.length > 0) body.push("## \u5236\u7D04", "", ...constraints, "");
-  body.push("## Output Format", "");
+  if (constraints.length > 0)
+    body.push(vocabulary.constraintHeading, "", ...constraints, "");
+  body.push(vocabulary.outputFormatHeading, "");
   if (selected.length === 1) {
-    body.push(...selected[0]?.sections.get("## Output Format") ?? [], "");
+    body.push(
+      ...selected[0]?.sections.get(vocabulary.outputFormatHeading) ?? [],
+      ""
+    );
   } else {
     for (const fragment of selected) {
-      const items = fragment.sections.get("## Output Format");
+      const items = fragment.sections.get(vocabulary.outputFormatHeading);
       if (items === void 0 || items.length === 0) continue;
       body.push(`### ${fragment.label}`, "", ...items, "");
     }
@@ -297,7 +326,7 @@ function selectFragments(input) {
   });
   return { ids, selected };
 }
-function resolveToolsFor(selected, withAgent) {
+function resolveToolsFor(selected, withAgent, mcpServers) {
   const tools = [];
   for (const fragment of selected) {
     for (const tool of fragment.tools) {
@@ -305,14 +334,17 @@ function resolveToolsFor(selected, withAgent) {
     }
   }
   if (withAgent) tools.push("Agent");
+  for (const server of mcpServers) {
+    if (!tools.includes(server)) tools.push(server);
+  }
   return tools;
 }
-function describe(selected) {
-  const list = selected.map((fragment) => fragment.description).join("\u3001");
-  return `Use this agent when ${list}\u3092\u59D4\u8B72\u3059\u308B\u3068\u304D\u3002\u8A73\u7D30\u306F\u672C\u6587\u306E\u300CWhen to invoke\u300D\u3092\u53C2\u7167\u3002`;
+function describe(selected, vocabulary) {
+  const list = selected.map((fragment) => fragment.description).join(vocabulary.listSeparator);
+  return vocabulary.describe(list);
 }
-function preamble(common, name, selected) {
-  const labels = selected.map((fragment) => `\u300C${fragment.label}\u300D`).join("\u3001");
+function preamble(common, name, selected, vocabulary) {
+  const labels = selected.map((fragment) => vocabulary.quote(fragment.label)).join(vocabulary.listSeparator);
   return (common.get("## Preamble") ?? []).map(
     (line) => line.replace("{{NAME}}", name).replace("{{ROLE_LABELS}}", labels)
   );
@@ -368,7 +400,8 @@ function composeInput(options) {
     model: options.model,
     vendor: options.vendor,
     roleIds: options.roles,
-    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    lang: options.lang
   };
 }
 function template(options) {

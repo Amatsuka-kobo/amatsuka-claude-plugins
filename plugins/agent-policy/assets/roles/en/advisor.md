@@ -15,11 +15,11 @@ kind: readonly
 - Organize the options and their trade-offs.
 - State a recommendation and its rationale.
 
-## 作業手順
+## Procedure
 
 - If the request lacks a premise needed for a decision, do not fill it in by assumption. Return what information is missing.
 
-## 制約
+## Constraints
 
 - **When invoked as an advisor**, return advice only. Do not perform work or modify files.
 - **When invoked as an advisor**, do not start subagents.

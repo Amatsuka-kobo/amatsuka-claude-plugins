@@ -14,13 +14,13 @@ kind: readonly
 
 - Report with primary-source URLs and the freshness of each item of information.
 
-## 作業手順
+## Procedure
 
 - Research current developments and releases with WebSearch and WebFetch.
 - Consult primary sources.
 - Explicitly identify items for which only secondary sources were available.
 
-## 制約
+## Constraints
 
 - **When invoked for real-time research**, do not create deliverable files. Return a report only.
 - **When invoked for real-time research**, do not decide whether to adopt the findings. Return the information needed for the orchestrator to decide.

@@ -16,7 +16,7 @@ kind: impl
 
 - Perform the requested work according to existing repository conventions for file placement, naming, and writing style.
 
-## 作業手順
+## Procedure
 
 - Inspect the current state of the target files and directories before changing them.
 - Keep changes minimal.
@@ -24,7 +24,7 @@ kind: impl
 - Run available validation, including tests, linting, and builds.
 - Confirm the results of validation.
 
-## 制約
+## Constraints
 
 - **When invoked for routine implementation**, keep work within the stated scope. Do not make out-of-scope changes.
 

@@ -14,7 +14,7 @@ kind: impl
 
 - Carry out complex or critical implementation work yourself and cite supporting evidence with file paths and line numbers.
 
-## 作業手順
+## Procedure
 
 - Before starting, read the target code and its callers.
 - Follow established repository conventions.
@@ -22,7 +22,7 @@ kind: impl
 - Validate changed behavior with tests, type checking, or other applicable checks.
 - Do not report unverified behavior as working. Report it as working only after validation observes it.
 
-## 制約
+## Constraints
 
 - **When invoked for complex or critical implementation**, stay within the scope boundary.
 - Leave top-level approval decisions to the orchestrator. Do not seek them yourself.

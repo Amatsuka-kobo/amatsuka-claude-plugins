@@ -120,7 +120,8 @@ function composeInput(options: Options): ComposeInput {
     model: options.model,
     vendor: options.vendor,
     roleIds: options.roles,
-    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+    fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    lang: options.lang
   }
 }
 

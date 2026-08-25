@@ -15,12 +15,12 @@ kind: readonly
 - State the document's content in your own words.
 - List decisions not written in the document that implementation will require.
 
-## 作業手順
+## Procedure
 
 - Read the entire document before looking for inconsistencies across sections.
 - Identify ambiguity concretely when a statement can reasonably be read in more than one way.
 
-## 制約
+## Constraints
 
 - **When invoked for document review**, do not create deliverable files. Return a report only.
 - **When invoked for document review**, do not decide whether findings should be accepted.
