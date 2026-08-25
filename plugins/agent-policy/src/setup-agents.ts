@@ -207,6 +207,29 @@ function validateFragments(options: Options): void {
   )
 }
 
+// 方針における役割数で一括生成時の既定名を決める。単一役割なら、その役割断片の
+// default-name をモデル ID に付ける。翻訳断片が旧世代で default-name を持たない
+// ときは同梱英語断片へ落とし、解決できなければモデル ID 単体を使う。
+function defaultAgentName(
+  options: Options,
+  policy: PolicyName,
+  spec: ModelSpec
+): string {
+  const roles = rolesFor(policy, spec.id)
+  if (roles.length !== 1) return spec.id
+
+  const role = roles[0]
+  if (role === undefined) return spec.id
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    spec.vendor
+  )
+  const defaultName =
+    fragments.get(role)?.defaultName ??
+    bundledDefaultNames(options.dir).get(role)
+  return defaultName === undefined ? spec.id : `${spec.id}-${defaultName}`
+}
+
 // --models は既定名・既定役割で複数を、--model-id は明示指定で 1 件を作る。
 function targetsFor(options: Options, policy: PolicyName): Target[] {
   if (options.models.length > 0) {
@@ -218,7 +241,7 @@ function targetsFor(options: Options, policy: PolicyName): Target[] {
       }
       return {
         modelId: spec.id,
-        name: spec.defaultName,
+        name: defaultAgentName(options, policy, spec),
         model: resolveModelValue(spec, process.env),
         roles: rolesFor(policy, spec.id),
         color: spec.color,
@@ -623,7 +646,7 @@ function listModels(options: Options): unknown {
     models: modelsFor(policy).map((spec) => ({
       id: spec.id,
       label: spec.label,
-      defaultName: spec.defaultName,
+      defaultName: defaultAgentName(options, policy, spec),
       model: resolveModelValue(spec, process.env),
       vendor: spec.vendor,
       color: spec.color,
