@@ -74,6 +74,14 @@ interface ListRolesResult {
   roles: ListedRole[]
 }
 
+interface FragmentStatusResult {
+  ok: boolean
+  missing: string[]
+  stale: { id: string }[]
+  targetDir: string | null
+  written?: string[]
+}
+
 function run<T = CheckResult>(args: string[]): T {
   let output: string
   try {
@@ -180,6 +188,47 @@ describe("--list-roles", () => {
       tools: ["Read", "Write"],
       source: "project"
     })
+  })
+})
+
+describe("--check-fragments", () => {
+  it("ja では missing が空で targetDir が null", () => {
+    const result = run<FragmentStatusResult>([
+      "--check-fragments",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    expect(result.missing).toEqual([])
+    expect(result.targetDir).toBeNull()
+  })
+
+  it("未翻訳の言語では missing が返る", () => {
+    const result = run<FragmentStatusResult>([
+      "--check-fragments",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+    expect(result.missing).toContain("explore")
+  })
+})
+
+describe("--scaffold-fragments", () => {
+  it("翻訳先へひな形を書き、書いたパスを返す", () => {
+    const result = run<FragmentStatusResult>([
+      "--scaffold-fragments",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    expect(result.written?.length).toBeGreaterThan(0)
+    expect(result.written?.[0]).toMatch(/^\.claude\/agent-policy\/roles\/de\//)
   })
 })
 
