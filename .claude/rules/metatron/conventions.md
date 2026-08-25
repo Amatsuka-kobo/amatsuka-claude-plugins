@@ -5,7 +5,7 @@
 ## 探索と編集
 
 - コードベースの探索は Serena のシンボルツールで行う。0 件でも結論にせず Grep で裏を取る。
-- TypeScript / JavaScript / Markdown の作成と編集は Serena の編集ツールで行う。
+- TypeScript / JavaScript / Markdown / Python の作成と編集は Serena の編集ツールで行う。
 - ライブラリ・フレームワーク・CLI・API の仕様、セットアップ手順、コード生成の方法が要るときは Context7 で取る。Web 検索より優先する。
 
 ## プラグイン開発

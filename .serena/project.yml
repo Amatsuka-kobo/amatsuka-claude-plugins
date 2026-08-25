@@ -166,3 +166,4 @@ ignored_memory_patterns: []
 language_servers:
 - typescript
 - markdown
+- python
