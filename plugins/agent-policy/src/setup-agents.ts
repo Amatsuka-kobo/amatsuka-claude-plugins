@@ -30,6 +30,7 @@ import {
   POLICIES,
   type PolicyName,
   policyById,
+  policyForInjection,
   resolveModelValue,
   rolesFor
 } from "./agents/policies"
@@ -596,9 +597,14 @@ function setup(options: Options): unknown {
   return { ok: true, results }
 }
 
-function listPolicies(): unknown {
+// injected は AMATSUKA_AGENT_AUTO_INJECTION が解決するポリシー ID である。
+// 未設定・none・未知の値はいずれも SessionStart フックが方針を注入しない
+// ケースであり、まとめて null を返す。スキルはこれを見て、ポリシーの
+// 第一候補と CLAUDE.md への追記案内の要否を決める。
+function listPolicies(env: NodeJS.ProcessEnv): unknown {
   return {
     ok: true,
+    injected: policyForInjection(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? null,
     policies: POLICIES.map(({ id, label, injection }) => ({
       id,
       label,
@@ -825,7 +831,7 @@ function respond(value: unknown): void {
 try {
   const options = parseArgs(process.argv.slice(2))
   if (options.listPolicies) {
-    respond(listPolicies())
+    respond(listPolicies(process.env))
   } else if (options.listModels) {
     respond(listModels(options))
   } else if (options.listMcp) {

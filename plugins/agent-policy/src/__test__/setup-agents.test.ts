@@ -94,6 +94,7 @@ interface ListRolesResult {
 
 interface PolicyListResult {
   ok: boolean
+  injected: string | null
   policies: { id: string; label: string; injection: string }[]
 }
 
@@ -119,7 +120,11 @@ interface FragmentStatusResult {
   written?: string[]
 }
 
-const ALIAS_ENV_VARS = [
+// このプラグイン自身が利用者へ案内する設定。開発者の環境に入っていると
+// 既定値を前提としたアサーションが落ちるため、子プロセスへは渡さない。
+// 値を要るテストは run() の第 2 引数で明示する。
+const AMBIENT_ENV_VARS = [
+  "AMATSUKA_AGENT_AUTO_INJECTION",
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
   "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
   "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
@@ -128,7 +133,7 @@ const ALIAS_ENV_VARS = [
 
 function inheritedTestEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
-  for (const variable of ALIAS_ENV_VARS) delete env[variable]
+  for (const variable of AMBIENT_ENV_VARS) delete env[variable]
   return env
 }
 
@@ -229,6 +234,34 @@ describe("--list-policies", () => {
     const result = run<PolicyListResult>(["--list-policies"])
     expect(result.policies[0]?.injection).toBe("claude")
     expect(result.policies[3]?.injection).toBe("with-codex-grok")
+  })
+
+  it("AMATSUKA_AGENT_AUTO_INJECTION が未設定なら injected は null", () => {
+    const result = run<PolicyListResult>(["--list-policies"])
+    expect(result.injected).toBeNull()
+  })
+
+  it("AMATSUKA_AGENT_AUTO_INJECTION が解決するポリシー ID を injected に返す", () => {
+    const result = run<PolicyListResult>(["--list-policies"], {
+      AMATSUKA_AGENT_AUTO_INJECTION: "with-codex-grok"
+    })
+    expect(result.injected).toBe("codex-grok-policy")
+  })
+
+  // 未知値と none はどちらもフックが方針を注入しないケースであり、
+  // CLAUDE.md への追記案内が要る側に倒す必要がある。
+  it("AMATSUKA_AGENT_AUTO_INJECTION が未知の値なら injected は null", () => {
+    const result = run<PolicyListResult>(["--list-policies"], {
+      AMATSUKA_AGENT_AUTO_INJECTION: "bogus"
+    })
+    expect(result.injected).toBeNull()
+  })
+
+  it("AMATSUKA_AGENT_AUTO_INJECTION が none なら injected は null", () => {
+    const result = run<PolicyListResult>(["--list-policies"], {
+      AMATSUKA_AGENT_AUTO_INJECTION: "none"
+    })
+    expect(result.injected).toBeNull()
   })
 })
 

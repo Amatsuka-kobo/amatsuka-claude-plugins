@@ -653,6 +653,10 @@ function modelById(id) {
 function policyById(id) {
   return POLICIES.find((policy) => policy.id === id);
 }
+function policyForInjection(value) {
+  if (value === void 0) return void 0;
+  return POLICIES.find((policy) => policy.injection === value.trim())?.id;
+}
 function modelsFor(policy) {
   const used = /* @__PURE__ */ new Set();
   for (const models of Object.values(ASSIGNMENTS[policy])) {
@@ -1057,9 +1061,10 @@ function setup(options) {
   });
   return { ok: true, results };
 }
-function listPolicies() {
+function listPolicies(env) {
   return {
     ok: true,
+    injected: policyForInjection(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? null,
     policies: POLICIES.map(({ id, label, injection }) => ({
       id,
       label,
@@ -1253,7 +1258,7 @@ function respond(value) {
 try {
   const options = parseArgs(process.argv.slice(2));
   if (options.listPolicies) {
-    respond(listPolicies());
+    respond(listPolicies(process.env));
   } else if (options.listModels) {
     respond(listModels(options));
   } else if (options.listMcp) {
