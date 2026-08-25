@@ -4,10 +4,12 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
+  checkFragments,
   type FragmentDir,
   fragmentDirsFor,
   loadCommon,
-  loadFragments
+  loadFragments,
+  scaffoldFragments
 } from "../fragments"
 import { bodyHash } from "../hash"
 
@@ -182,5 +184,85 @@ describe("bodyHash", () => {
     const a = "---\nid: x\n---\n\n## H\n\n- body\n"
     const b = "---\nid: x\n---\n\n## H\n\n- other\n"
     expect(bodyHash(a)).not.toBe(bodyHash(b))
+  })
+})
+
+describe("checkFragments", () => {
+  it("ja では missing も stale も空で targetDir が null", () => {
+    const status = checkFragments(PLUGIN_ROOT, project, "ja")
+    expect(status.missing).toEqual([])
+    expect(status.stale).toEqual([])
+    expect(status.targetDir).toBeNull()
+  })
+
+  it("翻訳先が空なら全断片が missing になる", () => {
+    const status = checkFragments(PLUGIN_ROOT, project, "de")
+    expect(status.missing).toContain("_common")
+    expect(status.missing).toContain("explore")
+    expect(status.ready).toEqual([])
+  })
+
+  it("scaffold 後は missing が空になる", () => {
+    scaffoldFragments(PLUGIN_ROOT, project, "de")
+    const status = checkFragments(PLUGIN_ROOT, project, "de")
+    expect(status.missing).toEqual([])
+    expect(status.stale).toEqual([])
+    expect(status.ready.length).toBeGreaterThan(0)
+  })
+
+  it("source-hash がずれると stale になる", () => {
+    scaffoldFragments(PLUGIN_ROOT, project, "de")
+    const file = path.join(
+      project,
+      ".claude",
+      "agent-policy",
+      "roles",
+      "de",
+      "explore.md"
+    )
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, "utf8")
+        .replace(/^source-hash: .*$/m, "source-hash: stale")
+    )
+    const status = checkFragments(PLUGIN_ROOT, project, "de")
+    expect(status.stale.map((entry) => entry.id)).toContain("explore")
+  })
+
+  it("scaffold は source-lang と source-hash を書き込む", () => {
+    scaffoldFragments(PLUGIN_ROOT, project, "de")
+    const content = fs.readFileSync(
+      path.join(
+        project,
+        ".claude",
+        "agent-policy",
+        "roles",
+        "de",
+        "explore.md"
+      ),
+      "utf8"
+    )
+    expect(content).toContain("source-lang: en")
+    expect(content).toMatch(/^source-hash: [0-9a-f]{16}$/m)
+  })
+
+  it("scaffold は最新の翻訳を上書きしない", () => {
+    scaffoldFragments(PLUGIN_ROOT, project, "de")
+    const file = path.join(
+      project,
+      ".claude",
+      "agent-policy",
+      "roles",
+      "de",
+      "explore.md"
+    )
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace("## When to invoke", "## Wann")
+    )
+    const written = scaffoldFragments(PLUGIN_ROOT, project, "de")
+    expect(written).toEqual([])
+    expect(fs.readFileSync(file, "utf8")).toContain("## Wann")
   })
 })

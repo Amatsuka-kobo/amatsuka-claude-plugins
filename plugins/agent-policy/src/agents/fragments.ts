@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { bodyHash } from "./hash"
 import type { RoleKind } from "./roles"
 
 export type Vendor = "gpt" | "grok" | "claude"
@@ -184,4 +185,119 @@ export function fragmentDirsFor(
   }
   dirs.push({ path: projectRoles, source: "project" })
   return dirs
+}
+
+export interface StaleFragment {
+  id: string
+  expected: string
+  actual: string
+}
+
+export interface FragmentStatus {
+  lang: string
+  sourceDir: string
+  targetDir: string | null
+  missing: string[]
+  stale: StaleFragment[]
+  ready: string[]
+}
+
+function bundledDir(pluginRoot: string, lang: string): string {
+  const bundled = lang === "ja" || lang === "en" ? lang : "en"
+  return path.join(pluginRoot, "assets", "roles", bundled)
+}
+
+function translationDir(projectDir: string, lang: string): string {
+  return path.join(projectDir, ".claude", "agent-policy", "roles", lang)
+}
+
+// 同梱断片のファイル名一覧。_common.md とベンダー別断片も対象に含める。
+function bundledFiles(dir: string): string[] {
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith(".md"))
+    .sort((left, right) => left.localeCompare(right))
+}
+
+export function checkFragments(
+  pluginRoot: string,
+  projectDir: string,
+  lang: string
+): FragmentStatus {
+  const sourceDir = bundledDir(pluginRoot, lang)
+  if (lang === "ja" || lang === "en") {
+    return {
+      lang,
+      sourceDir,
+      targetDir: null,
+      missing: [],
+      stale: [],
+      ready: []
+    }
+  }
+
+  const targetDir = translationDir(projectDir, lang)
+  const missing: string[] = []
+  const stale: StaleFragment[] = []
+  const ready: string[] = []
+
+  for (const name of bundledFiles(sourceDir)) {
+    const id = name.replace(/\.md$/, "")
+    const target = path.join(targetDir, name)
+    if (!fs.existsSync(target)) {
+      missing.push(id)
+      continue
+    }
+    const expected = bodyHash(
+      fs.readFileSync(path.join(sourceDir, name), "utf8")
+    )
+    const actual = parse(fs.readFileSync(target, "utf8")).meta["source-hash"]
+    if (actual !== expected) {
+      stale.push({ id, expected, actual: actual ?? "" })
+      continue
+    }
+    ready.push(id)
+  }
+
+  return { lang, sourceDir, targetDir, missing, stale, ready }
+}
+
+// 同梱英語断片を翻訳先へコピーし、source-lang と source-hash を書き込む。
+// 中身の翻訳はスキルが Edit で行う。source-hash が一致するファイルは
+// 最新の翻訳とみなして上書きしない。ずれているファイルは英語ソースで
+// 上書きするため、既存の訳が失われる。スキル側で確認させる。
+export function scaffoldFragments(
+  pluginRoot: string,
+  projectDir: string,
+  lang: string
+): string[] {
+  if (lang === "ja" || lang === "en") return []
+
+  const sourceDir = bundledDir(pluginRoot, lang)
+  const targetDir = translationDir(projectDir, lang)
+  fs.mkdirSync(targetDir, { recursive: true })
+  const written: string[] = []
+
+  for (const name of bundledFiles(sourceDir)) {
+    const target = path.join(targetDir, name)
+    const source = fs.readFileSync(path.join(sourceDir, name), "utf8")
+    const hash = bodyHash(source)
+    const current = fs.existsSync(target)
+      ? parse(fs.readFileSync(target, "utf8")).meta["source-hash"]
+      : undefined
+    if (current === hash) continue
+
+    const lines = source.split("\n")
+    const close = lines.indexOf("---", 1)
+    const injected = [
+      ...lines.slice(0, close),
+      "source-lang: en",
+      `source-hash: ${hash}`,
+      ...lines.slice(close)
+    ]
+    fs.writeFileSync(target, injected.join("\n"))
+    written.push(target)
+  }
+
+  return written
 }

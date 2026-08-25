@@ -7,7 +7,13 @@ import {
   describeRoles,
   type RolesSummary
 } from "./agents/compose"
-import { fragmentDirsFor, loadFragments, type Vendor } from "./agents/fragments"
+import {
+  checkFragments,
+  fragmentDirsFor,
+  loadFragments,
+  scaffoldFragments,
+  type Vendor
+} from "./agents/fragments"
 import { type RoleId, roleOrder } from "./agents/roles"
 
 interface Options {
@@ -21,6 +27,8 @@ interface Options {
   write: boolean
   merge: boolean
   listRoles: boolean
+  checkFragments: boolean
+  scaffoldFragments: boolean
   keep: string[]
 }
 
@@ -437,6 +445,8 @@ function parseArgs(argv: string[]): Options {
     write: false,
     merge: false,
     listRoles: false,
+    checkFragments: false,
+    scaffoldFragments: false,
     keep: []
   }
 
@@ -490,6 +500,12 @@ function parseArgs(argv: string[]): Options {
       case "--list-roles":
         options.listRoles = true
         break
+      case "--check-fragments":
+        options.checkFragments = true
+        break
+      case "--scaffold-fragments":
+        options.scaffoldFragments = true
+        break
       case "--keep":
         options.keep.push(requireValue(value, "keep"))
         index += 1
@@ -502,7 +518,13 @@ function parseArgs(argv: string[]): Options {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens")
   }
-  if (options.listRoles) return options
+  if (
+    options.listRoles ||
+    options.checkFragments ||
+    options.scaffoldFragments
+  ) {
+    return options
+  }
   if (options.name === "") throw new Error("name: is required")
   if (options.model === "") throw new Error("model: is required")
   if (options.roles.length === 0) throw new Error("roles: is required")
@@ -524,7 +546,21 @@ function respond(value: unknown): void {
 
 try {
   const options = parseArgs(process.argv.slice(2))
-  if (options.listRoles) {
+  if (options.checkFragments) {
+    respond({
+      ok: true,
+      ...checkFragments(pluginRoot(), options.dir, options.lang)
+    })
+  } else if (options.scaffoldFragments) {
+    const written = scaffoldFragments(pluginRoot(), options.dir, options.lang)
+    respond({
+      ok: true,
+      lang: options.lang,
+      written: written.map((file) =>
+        path.relative(options.dir, file).split(path.sep).join("/")
+      )
+    })
+  } else if (options.listRoles) {
     respond(listAvailableRoles(options))
   } else if (options.write) {
     respond(write(options))
