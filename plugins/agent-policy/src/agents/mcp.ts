@@ -69,7 +69,8 @@ export function listMcpServers(env: NodeJS.ProcessEnv): McpServer[] {
     encoding: "utf8" as const,
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
     timeout: 30_000,
-    maxBuffer: 8 * 1024 * 1024
+    maxBuffer: 8 * 1024 * 1024,
+    env
   }
   try {
     const output =
