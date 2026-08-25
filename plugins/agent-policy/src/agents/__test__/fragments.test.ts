@@ -135,6 +135,21 @@ describe("loadFragments の 3 段探索", () => {
       ?.sections.get("## 作業手順")
     expect(steps?.join("\n")).not.toContain("X 由来")
   })
+
+  it("vendor を省略するとベンダー別断片を適用しない", () => {
+    const withoutVendor = loadFragments([JA])
+    const withGrok = loadFragments([JA], "grok")
+    const withoutVendorSteps = withoutVendor
+      .get("realtime-research")
+      ?.sections.get("## 作業手順")
+    const withGrokSteps = withGrok
+      .get("realtime-research")
+      ?.sections.get("## 作業手順")
+
+    expect(withoutVendorSteps).not.toEqual(withGrokSteps)
+    expect(withoutVendorSteps?.join("\n")).not.toContain("X 由来")
+    expect(withGrokSteps?.join("\n")).toContain("X 由来")
+  })
 })
 
 describe("fragmentDirsFor", () => {

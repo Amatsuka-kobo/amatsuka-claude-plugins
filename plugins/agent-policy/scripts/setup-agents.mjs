@@ -98,22 +98,24 @@ function loadFragments(dirs, vendor) {
       fragments.set(fragment.id, fragment);
     }
   }
-  const overlays = /* @__PURE__ */ new Map();
-  for (const dir of dirs) {
-    if (!fs.existsSync(dir.path)) continue;
-    for (const name of fs.readdirSync(dir.path).sort((left, right) => left.localeCompare(right))) {
-      if (!name.endsWith(`.${vendor}.md`)) continue;
-      const { meta, sections } = parse(
-        fs.readFileSync(path.join(dir.path, name), "utf8")
-      );
-      const id = meta.id;
-      if (id === void 0 || id === "") continue;
-      overlays.set(id, sections);
+  if (vendor !== void 0) {
+    const overlays = /* @__PURE__ */ new Map();
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir.path)) continue;
+      for (const name of fs.readdirSync(dir.path).sort((left, right) => left.localeCompare(right))) {
+        if (!name.endsWith(`.${vendor}.md`)) continue;
+        const { meta, sections } = parse(
+          fs.readFileSync(path.join(dir.path, name), "utf8")
+        );
+        const id = meta.id;
+        if (id === void 0 || id === "") continue;
+        overlays.set(id, sections);
+      }
     }
-  }
-  for (const [id, sections] of overlays) {
-    const target = fragments.get(id);
-    if (target !== void 0) appendSections(target, sections);
+    for (const [id, sections] of overlays) {
+      const target = fragments.get(id);
+      if (target !== void 0) appendSections(target, sections);
+    }
   }
   return fragments;
 }
@@ -1008,9 +1010,7 @@ function discarded(difference, keep) {
   };
 }
 function needsReview(selectors) {
-  return selectors.filter(
-    (selector) => selector.startsWith("tools:mcp__") || selector === "section:## \u30C4\u30FC\u30EB\u904B\u7528"
-  );
+  return selectors.filter((selector) => selector.startsWith("tools:mcp__"));
 }
 function write(options, target, mcpServers) {
   const file = targetPath(options, target);
@@ -1156,8 +1156,7 @@ function bundledDefaultNames(projectDir) {
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), projectDir, "en").filter(
       (dir) => dir.source === "plugin"
-    ),
-    "claude"
+    )
   );
   const names = /* @__PURE__ */ new Map();
   for (const [id, fragment] of fragments) {
@@ -1171,8 +1170,7 @@ function listCoverage(options) {
   const policy = requirePolicy(options);
   const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]));
   const fragments = loadFragments(
-    fragmentDirsFor(pluginRoot(), options.dir, options.lang),
-    "claude"
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   );
   const covered = coveredDefinitions(options.dir, roleIds);
   const fallbackNames = options.lang === "en" ? void 0 : roleIds.some((id) => fragments.get(id)?.defaultName === void 0) ? bundledDefaultNames(options.dir) : void 0;
@@ -1208,7 +1206,6 @@ function parseArgs(argv) {
     lang: "ja",
     mcpServers: [],
     mcpDeny: [],
-    check: false,
     write: false,
     merge: false,
     listPolicies: false,
@@ -1265,7 +1262,6 @@ function parseArgs(argv) {
         index += 1;
         break;
       case "--check":
-        options.check = true;
         break;
       case "--write":
         options.write = true;

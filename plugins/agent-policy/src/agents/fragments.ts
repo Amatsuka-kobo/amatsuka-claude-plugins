@@ -109,7 +109,7 @@ function appendSections(base: Fragment, extra: Map<string, string[]>): void {
 
 export function loadFragments(
   dirs: FragmentDir[],
-  vendor: Vendor
+  vendor?: Vendor
 ): Map<string, Fragment> {
   const fragments = new Map<string, Fragment>()
 
@@ -128,26 +128,28 @@ export function loadFragments(
     }
   }
 
-  // ベンダー別断片は探索順で後勝ちにする。追記方式のままだと、言語別に
-  // 用意した同じ役割の断片が複数ディレクトリから重ねて積まれる。
-  const overlays = new Map<string, Map<string, string[]>>()
-  for (const dir of dirs) {
-    if (!fs.existsSync(dir.path)) continue
-    for (const name of fs
-      .readdirSync(dir.path)
-      .sort((left, right) => left.localeCompare(right))) {
-      if (!name.endsWith(`.${vendor}.md`)) continue
-      const { meta, sections } = parse(
-        fs.readFileSync(path.join(dir.path, name), "utf8")
-      )
-      const id = meta.id
-      if (id === undefined || id === "") continue
-      overlays.set(id, sections)
+  if (vendor !== undefined) {
+    // ベンダー別断片は探索順で後勝ちにする。追記方式のままだと、言語別に
+    // 用意した同じ役割の断片が複数ディレクトリから重ねて積まれる。
+    const overlays = new Map<string, Map<string, string[]>>()
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir.path)) continue
+      for (const name of fs
+        .readdirSync(dir.path)
+        .sort((left, right) => left.localeCompare(right))) {
+        if (!name.endsWith(`.${vendor}.md`)) continue
+        const { meta, sections } = parse(
+          fs.readFileSync(path.join(dir.path, name), "utf8")
+        )
+        const id = meta.id
+        if (id === undefined || id === "") continue
+        overlays.set(id, sections)
+      }
     }
-  }
-  for (const [id, sections] of overlays) {
-    const target = fragments.get(id)
-    if (target !== undefined) appendSections(target, sections)
+    for (const [id, sections] of overlays) {
+      const target = fragments.get(id)
+      if (target !== undefined) appendSections(target, sections)
+    }
   }
 
   return fragments

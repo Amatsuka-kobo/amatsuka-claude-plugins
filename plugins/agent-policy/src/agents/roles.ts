@@ -117,13 +117,3 @@ export function hasMixedKinds(kinds: RoleKind[]): boolean {
 }
 
 // tools の並びは ROLES の定義順に現れた順とし、Agent を末尾へ置く。
-export function resolveTools(ids: RoleId[]): string[] {
-  const tools: string[] = []
-  for (const id of sortRoleIds(ids)) {
-    for (const tool of roleById(id)?.tools ?? []) {
-      if (!tools.includes(tool)) tools.push(tool)
-    }
-  }
-  if (allowsAgentTool(ids)) tools.push("Agent")
-  return tools
-}
