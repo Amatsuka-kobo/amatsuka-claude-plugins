@@ -301,10 +301,70 @@ describe("--list-models", () => {
       "claude-model-policy"
     ])
     const sonnet = result.models.find((model) => model.id === "sonnet")
-    expect(sonnet?.defaultName).toBe("claude-sonnet")
+    expect(sonnet?.defaultName).toBe("sonnet")
     expect(sonnet?.model).toBe("sonnet")
     expect(sonnet?.color).toBe("purple")
     expect(sonnet?.roles).toContain("code-review")
+  })
+
+  it("codex-grok-policy の単一役割モデルには役割ベースの既定名を返す", () => {
+    const result = run<ModelListResult>([
+      "--list-models",
+      "--policy",
+      "codex-grok-policy"
+    ])
+
+    expect(
+      result.models.find((model) => model.id === "sonnet")?.defaultName
+    ).toBe("sonnet-code-reviewer")
+  })
+
+  it("複数役割のモデルにはモデル ID を既定名として返す", () => {
+    const result = run<ModelListResult>([
+      "--list-models",
+      "--policy",
+      "codex-grok-policy"
+    ])
+
+    expect(
+      result.models.find((model) => model.id === "grok")?.defaultName
+    ).toBe("grok")
+  })
+
+  it("旧世代の翻訳断片に default-name が無くても英語断片へ落とす", () => {
+    run<FragmentStatusResult>([
+      "--scaffold-fragments",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+    const roles = path.join(project, ".claude", "agent-policy", "roles", "de")
+    for (const file of fs.readdirSync(roles)) {
+      const target = path.join(roles, file)
+      fs.writeFileSync(
+        target,
+        fs
+          .readFileSync(target, "utf8")
+          .split("\n")
+          .filter((line) => !line.startsWith("default-name:"))
+          .join("\n")
+      )
+    }
+
+    const result = run<ModelListResult>([
+      "--list-models",
+      "--policy",
+      "codex-grok-policy",
+      "--lang",
+      "de",
+      "--dir",
+      project
+    ])
+
+    expect(
+      result.models.find((model) => model.id === "sonnet")?.defaultName
+    ).toBe("sonnet-code-reviewer")
   })
 
   it("呼び出し側が明示したモデルエイリアスは反映する", () => {
@@ -1535,6 +1595,30 @@ describe("--models による一括", () => {
       project
     ])
     expect(result.results.length).toBe(1)
+  })
+
+  it("単一役割モデルを役割ベースの既定ファイル名へ書く", () => {
+    const result = run<WriteResults>([
+      "--write",
+      "--policy",
+      "codex-grok-policy",
+      "--lang",
+      "ja",
+      "--models",
+      "sonnet",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(result.results[0]?.target).toBe(
+      ".claude/agents/sonnet-code-reviewer.md"
+    )
+    expect(
+      fs.existsSync(
+        path.join(project, ".claude", "agents", "sonnet-code-reviewer.md")
+      )
+    ).toBe(true)
   })
 
   it("--models と --merge を併用できる", () => {

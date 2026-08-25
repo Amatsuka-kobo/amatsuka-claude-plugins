@@ -1,6 +1,6 @@
 {
   "name": "agent-policy-scripts",
-  "version": "0.11.1-dev",
+  "version": "0.12.0-dev",
   "private": true,
   "type": "module",
   "scripts": { "build": "tsx build.ts" }

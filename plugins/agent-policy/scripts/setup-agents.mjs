@@ -757,6 +757,18 @@ function validateFragments(options) {
     `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.map((entry) => entry.id).join(", ")}. Run --scaffold-fragments and translate them first`
   );
 }
+function defaultAgentName(options, policy, spec) {
+  const roles = rolesFor(policy, spec.id);
+  if (roles.length !== 1) return spec.id;
+  const role = roles[0];
+  if (role === void 0) return spec.id;
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang),
+    spec.vendor
+  );
+  const defaultName = fragments.get(role)?.defaultName ?? bundledDefaultNames(options.dir).get(role);
+  return defaultName === void 0 ? spec.id : `${spec.id}-${defaultName}`;
+}
 function targetsFor(options, policy) {
   if (options.models.length > 0) {
     return options.models.map((id) => {
@@ -767,7 +779,7 @@ function targetsFor(options, policy) {
       }
       return {
         modelId: spec2.id,
-        name: spec2.defaultName,
+        name: defaultAgentName(options, policy, spec2),
         model: resolveModelValue(spec2, process.env),
         roles: rolesFor(policy, spec2.id),
         color: spec2.color,
@@ -1081,7 +1093,7 @@ function listModels(options) {
     models: modelsFor(policy).map((spec) => ({
       id: spec.id,
       label: spec.label,
-      defaultName: spec.defaultName,
+      defaultName: defaultAgentName(options, policy, spec),
       model: resolveModelValue(spec, process.env),
       vendor: spec.vendor,
       color: spec.color,
