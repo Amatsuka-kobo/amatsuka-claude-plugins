@@ -4,12 +4,16 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { compose, describeRoles } from "../compose"
-import type { FragmentDir } from "../fragments"
+import { type FragmentDir, loadFragments } from "../fragments"
 import { ROLES } from "../roles"
 
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const PLUGIN_ROLES: FragmentDir = {
   path: path.join(PLUGIN_ROOT, "assets", "roles", "ja"),
+  source: "plugin"
+}
+const EN: FragmentDir = {
+  path: path.join(PLUGIN_ROOT, "assets", "roles", "en"),
   source: "plugin"
 }
 
@@ -439,5 +443,51 @@ describe("断片の解決", () => {
 
   it("未知の役割 ID ではエラーを投げる", () => {
     expect(() => build(["no-such-role"])).toThrow(/no-such-role/)
+  })
+})
+
+describe("英語断片での合成", () => {
+  it("すべての役割が英語断片で合成できる", () => {
+    for (const role of ROLES) {
+      const document = compose({
+        name: "test-agent",
+        model: "sonnet",
+        vendor: "claude",
+        roleIds: [role.id],
+        fragmentDirs: [EN]
+      })
+      expect(document, role.id).toContain("name: test-agent")
+      expect(document, role.id).toContain("## Output Format")
+    }
+  })
+
+  it("英語断片の id と kind と tools は日本語断片と一致する", () => {
+    const ja = loadFragments([PLUGIN_ROLES], "claude")
+    const en = loadFragments([EN], "claude")
+    expect([...en.keys()].sort()).toEqual([...ja.keys()].sort())
+    for (const [id, fragment] of en) {
+      expect(fragment.kind, id).toBe(ja.get(id)?.kind)
+      expect(fragment.tools, id).toEqual(ja.get(id)?.tools)
+    }
+  })
+
+  it("英語断片の本文に日本語が混入しない(見出しと preamble の約物は Task 6 で対応)", () => {
+    const document = compose({
+      name: "test-agent",
+      model: "sonnet",
+      vendor: "claude",
+      roleIds: ["complex-impl", "explore"],
+      fragmentDirs: [EN]
+    })
+    const body = document
+      .split("\n")
+      .filter(
+        (line) =>
+          !line.startsWith("#") &&
+          !line.startsWith("description:") &&
+          !line.includes("Your roles are")
+      )
+      .join("\n")
+    expect(body).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
   })
 })
