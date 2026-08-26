@@ -170,23 +170,23 @@ test("index モード: 同日は mtime の新しい順で返る", () => {
       ""
     ].join("\n")
   )
-  // a-first を新しく見せる(パス昇順とは逆順になる)
+  // b-second を新しく見せる(パス昇順とは逆順になる)
   const older = new Date("2026-08-26T01:00:00Z")
   const newer = new Date("2026-08-26T02:00:00Z")
   fs.utimesSync(
-    path.join(dir, "docs", "chat", "2026/0826/unknown/b-second.md"),
+    path.join(dir, "docs", "chat", "2026/0826/unknown/a-first.md"),
     older,
     older
   )
   fs.utimesSync(
-    path.join(dir, "docs", "chat", "2026/0826/unknown/a-first.md"),
+    path.join(dir, "docs", "chat", "2026/0826/unknown/b-second.md"),
     newer,
     newer
   )
   const out = runScript(["--dir", dir, "キーワード"])
   expect(out.hits.map((h: { path: string }) => h.path)).toEqual([
-    "2026/0826/unknown/a-first.md",
-    "2026/0826/unknown/b-second.md"
+    "2026/0826/unknown/b-second.md",
+    "2026/0826/unknown/a-first.md"
   ])
 })
 
