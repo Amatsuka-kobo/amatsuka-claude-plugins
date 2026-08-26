@@ -58,7 +58,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                  | 開発中     |
 | agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群。4 種のプリセット定義を同梱し、役割ベースの setup でプロジェクト側の Agent 定義を合成できる。Claude+Codex+Grok 併用 / Claude+Codex 併用 / Claude+Grok 併用 / Claude オンリーの 4 プロファイルで提供する | 開発中     |
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
-| Metatron     | プロジェクトの技術的前提(ARCHITECTURE)・失敗知識(GOTCHAS)・規律(rules 3 ファイル)を管理するプラグイン。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入する | 開発中     |
+| Metatron     | プロジェクトの技術的前提(ARCHITECTURE)・失敗知識(GOTCHAS)・規律(rules 3 ファイル)を管理し、毎セッション AI のコンテキストへ注入するプラグイン | 開発中     |
 | Sandalphon   | ユーザーの願いを聞き取って現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡すオーケストレーター                                          | 開発中     |
 
 各プラグインの詳しい説明は、それぞれのフォルダ内（`plugins/<plugin-name>/`）にあるREADMEを参照してください。
