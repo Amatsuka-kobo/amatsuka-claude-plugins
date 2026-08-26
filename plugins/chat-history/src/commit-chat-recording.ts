@@ -19,18 +19,22 @@ interface Args {
   attemptId: string
   targetLine: number
   bodyFile: string
-  indexLineFile: string
+  indexSummaryFile: string
   sessionTitleFile: string
   headerFile?: string
-  recordPath?: string
+  recordSlug?: string
 }
 
 interface AttemptPlan {
-  version: 1
+  version: 2
   attemptId: string
   targetLine: number
   recordTarget: { relativePath: string | null; appendMode: boolean }
   allowedNewRecordDir: string
+  recordFilePrefix: string
+  recordDate: string
+  workerName: string
+  sessionId?: string
   sessionNumber: number
 }
 
@@ -41,7 +45,8 @@ function fail(message: string): never {
 const MAX_BODY_BYTES = 8 * 1024 * 1024
 const MAX_SESSION_TITLE_BYTES = 512
 const MAX_HEADER_BYTES = 64 * 1024
-const MAX_INDEX_LINE_BYTES = 8192
+const MAX_INDEX_SUMMARY_BYTES = 8192
+const MAX_SLUG_LENGTH = 80
 
 function parseArgs(argv: string[]): Args {
   const value = (name: string, optional = false): string | undefined => {
@@ -61,22 +66,37 @@ function parseArgs(argv: string[]): Args {
     attemptId: value("--attempt-id") as string,
     targetLine,
     bodyFile: path.resolve(value("--body-file") as string),
-    indexLineFile: path.resolve(value("--index-line-file") as string),
+    indexSummaryFile: path.resolve(value("--index-summary-file") as string),
     sessionTitleFile: path.resolve(value("--session-title-file") as string),
     headerFile: (() => {
       const raw = value("--header-file", true)
       return raw ? path.resolve(raw) : undefined
     })(),
-    recordPath: value("--record-path", true)
+    recordSlug: value("--record-slug", true)
   }
 }
 
-function validKebabMarkdown(name: string): boolean {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*\.md$/.test(name)
+// 先頭 4 桁数字を弾くのは二重プレフィックス対策。SKILL.md の全文が skillContract
+// として chat-recorder へ渡るため、パス例を見た LLM がスラッグ自体へ "0712-" を
+// 入れると 0712-0712-topic.md が検証を素通りしてしまう。
+// ハイフンを伴わない "0712" 単体も弾く(0712-0712.md になる)。
+function validSlug(value: string): boolean {
+  if (!value || value.length > MAX_SLUG_LENGTH) return false
+  if (/^\d{4}($|-)/.test(value)) return false
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)
 }
 
 function docsRelativePath(relativePath: string): string {
   return relativePath.replaceAll("\\", "/").replace(/^docs\/chat\//, "")
+}
+
+function composeIndexLine(
+  relativePath: string,
+  date: string,
+  worker: string,
+  summary: string
+): string {
+  return `- \`${docsRelativePath(relativePath)}\` | ${date} | ${worker} | ${summary}`
 }
 
 function validateInputs(
@@ -84,14 +104,14 @@ function validateInputs(
   paths: ReturnType<typeof getStatePaths>,
   plan: AttemptPlan
 ): {
-  recordPath: string
-  relativePath: string
+  /** 追記時は確定パス 1 件、新規時は EEXIST のときに順に試す候補 */
+  candidates: string[]
   body: string
-  indexLine: string
+  summary: string
 } {
   const temporaryFiles = [
     args.bodyFile,
-    args.indexLineFile,
+    args.indexSummaryFile,
     args.sessionTitleFile,
     ...(args.headerFile ? [args.headerFile] : [])
   ]
@@ -100,7 +120,7 @@ function validateInputs(
       fail("temporary files must be inside the recording state temp directory")
 
   const rawBody = fs.readFileSync(args.bodyFile, "utf8")
-  const indexLine = fs.readFileSync(args.indexLineFile, "utf8").trim()
+  const summary = fs.readFileSync(args.indexSummaryFile, "utf8").trim()
   const sessionTitle = fs.readFileSync(args.sessionTitleFile, "utf8").trim()
   if (!rawBody) fail("record body is empty")
   if (!rawBody.includes("> "))
@@ -112,11 +132,14 @@ function validateInputs(
   )
     fail("session title must be exactly one bounded line")
   if (
-    !indexLine ||
-    indexLine.includes("\n") ||
-    Buffer.byteLength(indexLine) > MAX_INDEX_LINE_BYTES
+    !summary ||
+    summary.includes("\n") ||
+    // find-chat-records は INDEX 行を " | " で分解して要旨を取り出す。
+    // 要旨に区切り文字が混ざると検索結果の表示が壊れる。
+    summary.includes("|") ||
+    Buffer.byteLength(summary) > MAX_INDEX_SUMMARY_BYTES
   )
-    fail("INDEX entry must be exactly one bounded line")
+    fail("INDEX summary must be exactly one bounded line without '|'")
 
   let header = ""
   if (plan.recordTarget.appendMode) {
@@ -133,6 +156,19 @@ function validateInputs(
       fail("record header must start with a title line and stay bounded")
   }
 
+  if (plan.version !== 2)
+    fail(
+      `plan schema version mismatch: expected 2, got ${String(plan.version)}`
+    )
+  for (const field of [
+    "allowedNewRecordDir",
+    "recordFilePrefix",
+    "recordDate",
+    "workerName"
+  ] as const)
+    if (typeof plan[field] !== "string" || !plan[field])
+      fail(`plan.${field} is missing`)
+
   // 旧版 prepare が書いた plan と組み合わされると `## セッション undefined` が記録に残る。
   if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)
     fail("plan.sessionNumber must be a positive integer")
@@ -144,32 +180,27 @@ function validateInputs(
   if (!body.includes("## セッション"))
     fail("composed record must contain a session heading")
 
-  let relativePath: string
+  // 追記時はパスが plan で確定している。--record-slug が付いていても無視する。
+  // 拒否にすると、chat-recorder が習慣的にスラッグを付けただけで追記が落ちる。
+  let candidates: string[]
   if (plan.recordTarget.relativePath !== null) {
-    if (args.recordPath)
-      fail("--record-path is forbidden for an existing target")
-    relativePath = plan.recordTarget.relativePath
+    candidates = [plan.recordTarget.relativePath]
   } else {
-    const requestedPath = args.recordPath
-    if (!requestedPath)
-      throw new Error("--record-path is required for a new target")
-    relativePath = requestedPath.replaceAll("\\", "/")
-    if (
-      path.posix.dirname(relativePath) !== plan.allowedNewRecordDir ||
-      !validKebabMarkdown(path.posix.basename(relativePath))
-    )
+    const slug = args.recordSlug
+    if (!slug) throw new Error("--record-slug is required for a new target")
+    if (!validSlug(slug))
       fail(
-        `new record path violates the naming or directory contract: expected ${plan.allowedNewRecordDir}/<kebab-case>.md, got ${relativePath}`
+        `record slug violates the naming contract: expected at most ${MAX_SLUG_LENGTH} chars of [a-z0-9-] not starting with 4 digits, got ${slug}`
       )
+    const base = `${plan.allowedNewRecordDir}/${plan.recordFilePrefix}-${slug}`
+    candidates = [`${base}.md`]
+    for (let suffix = 2; suffix <= 9; suffix++)
+      candidates.push(`${base}-${suffix}.md`)
   }
-  const recordPath = path.resolve(args.project, relativePath)
-  if (!isInside(args.project, recordPath)) fail("record path escapes project")
-  const docsRelative = docsRelativePath(relativePath)
-  if (!indexLine.includes(docsRelative))
-    fail(
-      `INDEX entry does not reference the target record: expected docs/chat-relative path ${docsRelative}`
-    )
-  return { recordPath, relativePath, body, indexLine }
+  for (const candidate of candidates)
+    if (!isInside(args.project, path.resolve(args.project, candidate)))
+      fail("record path escapes project")
+  return { candidates, body, summary }
 }
 
 function indexMatches(lines: string[], relativePath: string): number[] {
@@ -253,36 +284,68 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
   const indexPath = path.join(args.project, "docs", "chat", "INDEX.md")
   const indexExisted = fs.existsSync(indexPath)
   const oldIndex = indexExisted ? fs.readFileSync(indexPath, "utf8") : ""
-  const oldRecordExisted = fs.existsSync(input.recordPath)
-  const oldSize = oldRecordExisted ? fs.statSync(input.recordPath).size : 0
+  let relativePath = ""
+  let recordPath = ""
+  let oldRecordExisted = false
+  let oldSize = 0
   let bodyUpdated = false
   try {
-    fs.mkdirSync(path.dirname(input.recordPath), { recursive: true })
     if (plan.recordTarget.appendMode) {
-      if (!oldRecordExisted) fail("append target disappeared")
-      fs.appendFileSync(input.recordPath, input.body)
+      relativePath = input.candidates[0] as string
+      recordPath = path.resolve(args.project, relativePath)
+      if (!fs.existsSync(recordPath)) fail("append target disappeared")
+      oldRecordExisted = true
+      oldSize = fs.statSync(recordPath).size
+      fs.appendFileSync(recordPath, input.body)
     } else {
-      fs.writeFileSync(input.recordPath, input.body, {
-        encoding: "utf8",
-        flag: "wx"
-      })
+      // 同じ分に始まった別セッションが同じスラッグを選んだときだけ衝突する。
+      // 連番は 2 から始める(サフィックス無しが実質の 1 番目)。
+      // ここで作ったファイルは oldRecordExisted=false のままなので、
+      // ロールバックでは truncate ではなく削除になる。
+      let written = false
+      for (const candidate of input.candidates) {
+        const absolute = path.resolve(args.project, candidate)
+        fs.mkdirSync(path.dirname(absolute), { recursive: true })
+        try {
+          fs.writeFileSync(absolute, input.body, {
+            encoding: "utf8",
+            flag: "wx"
+          })
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") continue
+          // EEXIST 以外(ENOSPC 等)では部分作成が残りうるので消してから投げる
+          fs.rmSync(absolute, { force: true })
+          throw error
+        }
+        relativePath = candidate
+        recordPath = absolute
+        written = true
+        break
+      }
+      if (!written) fail("every candidate record path is already taken")
     }
     bodyUpdated = true
 
+    const indexLine = composeIndexLine(
+      relativePath,
+      plan.recordDate,
+      plan.workerName,
+      input.summary
+    )
     const lines = indexExisted
       ? (oldIndex.endsWith("\n") ? oldIndex.slice(0, -1) : oldIndex).split("\n")
       : ["# Chat Records Index", ""]
-    const matches = indexMatches(lines, input.relativePath)
+    const matches = indexMatches(lines, relativePath)
     if (matches.length > 1) fail("INDEX contains duplicate target entries")
-    if (matches.length === 1) lines[matches[0]] = input.indexLine
-    else insertIndexLine(lines, input.indexLine, input.relativePath)
+    if (matches.length === 1) lines[matches[0] as number] = indexLine
+    else insertIndexLine(lines, indexLine, relativePath)
     fs.mkdirSync(path.dirname(indexPath), { recursive: true })
     fs.writeFileSync(indexPath, `${lines.join("\n")}\n`, "utf8")
 
-    const updatedRecord = fs.readFileSync(input.recordPath, "utf8")
+    const updatedRecord = fs.readFileSync(recordPath, "utf8")
     const updatedIndex = fs.readFileSync(indexPath, "utf8").split("\n")
     if (!updatedRecord.endsWith(input.body)) fail("record verification failed")
-    if (indexMatches(updatedIndex, input.relativePath).length !== 1)
+    if (indexMatches(updatedIndex, relativePath).length !== 1)
       fail("INDEX uniqueness verification failed")
 
     const nextState: RecordingState = {
@@ -290,7 +353,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
       recordedLine: args.targetLine,
       attemptedLine: Math.max(state.attemptedLine, args.targetLine),
       lastSuccessAt: new Date().toISOString(),
-      recordPath: input.relativePath,
+      recordPath: relativePath,
       lastError: null
     }
     atomicWriteJson(paths.statePath, nextState)
@@ -300,7 +363,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     )
     for (const file of [
       args.bodyFile,
-      args.indexLineFile,
+      args.indexSummaryFile,
       args.sessionTitleFile,
       ...(args.headerFile ? [args.headerFile] : []),
       planPath,
@@ -310,15 +373,15 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     return {
       ok: true,
       recordedLine: args.targetLine,
-      recordPath: input.relativePath,
+      recordPath: relativePath,
       indexUpdated: true
     }
   } catch (error) {
     let manualRepairRequired = false
-    if (bodyUpdated) {
+    if (bodyUpdated && recordPath) {
       try {
-        if (oldRecordExisted) fs.truncateSync(input.recordPath, oldSize)
-        else fs.rmSync(input.recordPath)
+        if (oldRecordExisted) fs.truncateSync(recordPath, oldSize)
+        else fs.rmSync(recordPath, { force: true })
         if (indexExisted) fs.writeFileSync(indexPath, oldIndex, "utf8")
         else fs.rmSync(indexPath, { force: true })
       } catch {
@@ -335,7 +398,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
         message,
         logPath: paths.logPath,
         manualRepairRequired,
-        recordPath: input.relativePath,
+        recordPath: relativePath,
         originalSize: oldSize
       }
     } satisfies RecordingState)
