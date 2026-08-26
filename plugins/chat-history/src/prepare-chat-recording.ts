@@ -105,13 +105,13 @@ export function firstTranscriptTimestamp(file: string): Date | null {
   }
   for (const line of text.split("\n")) {
     if (!line.trim()) continue
-    let entry: { timestamp?: unknown }
+    let entry: { timestamp?: unknown } | null
     try {
-      entry = JSON.parse(line) as { timestamp?: unknown }
+      entry = JSON.parse(line) as { timestamp?: unknown } | null
     } catch {
       continue
     }
-    if (typeof entry.timestamp !== "string") continue
+    if (!entry || typeof entry.timestamp !== "string") continue
     const at = new Date(entry.timestamp)
     if (!Number.isNaN(at.getTime())) return at
   }

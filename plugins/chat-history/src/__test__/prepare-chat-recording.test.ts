@@ -401,6 +401,16 @@ test("firstTranscriptTimestamp は壊れた行と不正な timestamp を読み�
   )
 })
 
+test("firstTranscriptTimestamp は null の行を読み飛ばす", () => {
+  const file = writeTranscript([
+    "null",
+    JSON.stringify({ type: "user", timestamp: "2026-03-01T00:00:00.000Z" })
+  ])
+  expect(firstTranscriptTimestamp(file)?.toISOString()).toBe(
+    "2026-03-01T00:00:00.000Z"
+  )
+})
+
 // 最初のユーザー発言に大きな貼り付けがあると、1 行が数百 KiB になる。
 // 先頭を一定バイトだけ読む実装だと、この行の timestamp を取りこぼす。
 test("firstTranscriptTimestamp は 1 行が非常に長くても timestamp を拾う", () => {
@@ -432,6 +442,7 @@ test("firstTranscriptTimestamp は読めないファイルで null を返す", (
 test("resolveSessionStartedAt は timestamp が無ければファイルの時刻へ落ちる", () => {
   const file = writeTranscript([JSON.stringify({ type: "mode" })])
   const stat = fs.statSync(file)
+  // birthtimeMs は小数を持ちうる一方、Date.getTime() は整数ミリ秒を返す。
   const expected =
     stat.birthtimeMs > 0
       ? Math.trunc(stat.birthtimeMs)
