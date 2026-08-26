@@ -9,7 +9,13 @@ import {
   getStatePaths,
   type RecordingLock
 } from "../chat-recording-state.js"
-import { prepareChatRecording, safeWorker } from "../prepare-chat-recording.js"
+import {
+  firstTranscriptTimestamp,
+  localRecordParts,
+  prepareChatRecording,
+  resolveSessionStartedAt,
+  safeWorker
+} from "../prepare-chat-recording.js"
 
 const roots: string[] = []
 const previousStateRoot = process.env.TASK_UTILITY_CHAT_STATE_DIR
@@ -65,6 +71,14 @@ function setup(lines: string[]) {
     metadataHints: ["Write — result.md"]
   })
   return { root, project, transcript, sessionKey, attemptId, paths }
+}
+
+function writeTranscript(lines: string[]): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "session-start-"))
+  roots.push(root)
+  const file = path.join(root, "transcript.jsonl")
+  fs.writeFileSync(file, `${lines.join("\n")}\n`)
+  return file
 }
 
 const user = (text: string) =>
@@ -332,4 +346,95 @@ test("ユーザー側の見出しに作業者名を使う", () => {
   expect(result.conversation).toMatch(
     new RegExp(`^# ${safeWorker(result.workerName as string)}\\n\\n> 質問`)
   )
+})
+
+test("テストは Asia/Tokyo 固定で走る", () => {
+  expect(process.env.TZ).toBe("Asia/Tokyo")
+  // UTC 21:59 は JST では翌日 06:59
+  expect(new Date("2026-08-25T21:59:00Z").getHours()).toBe(6)
+})
+
+test("localRecordParts は与えた Date のローカル年月日と時分を返す", () => {
+  // 2026-08-25T21:59:21Z は Asia/Tokyo では 2026-08-26 06:59
+  const parts = localRecordParts(new Date("2026-08-25T21:59:21.651Z"))
+  expect(parts).toEqual({
+    year: "2026",
+    monthDay: "0826",
+    hhmm: "0659",
+    date: "2026-08-26"
+  })
+})
+
+test("localRecordParts は 1 桁の月日時分をゼロ埋めする", () => {
+  const parts = localRecordParts(new Date("2026-01-04T00:05:00+09:00"))
+  expect(parts).toEqual({
+    year: "2026",
+    monthDay: "0104",
+    hhmm: "0005",
+    date: "2026-01-04"
+  })
+})
+
+test("firstTranscriptTimestamp は timestamp を持たない先頭行を読み飛ばす", () => {
+  const file = writeTranscript([
+    JSON.stringify({ type: "last-prompt", leafUuid: "x" }),
+    JSON.stringify({ type: "mode" }),
+    JSON.stringify({ type: "permission-mode" }),
+    JSON.stringify({ type: "atis-latch" }),
+    JSON.stringify({ type: "user", timestamp: "2026-08-25T21:59:21.651Z" }),
+    JSON.stringify({ type: "assistant", timestamp: "2026-08-25T22:10:00.000Z" })
+  ])
+  expect(firstTranscriptTimestamp(file)?.toISOString()).toBe(
+    "2026-08-25T21:59:21.651Z"
+  )
+})
+
+test("firstTranscriptTimestamp は壊れた行と不正な timestamp を読み飛ばす", () => {
+  const file = writeTranscript([
+    "{ not json",
+    JSON.stringify({ type: "mode", timestamp: 12345 }),
+    JSON.stringify({ type: "mode", timestamp: "not-a-date" }),
+    JSON.stringify({ type: "user", timestamp: "2026-03-01T00:00:00.000Z" })
+  ])
+  expect(firstTranscriptTimestamp(file)?.toISOString()).toBe(
+    "2026-03-01T00:00:00.000Z"
+  )
+})
+
+// 最初のユーザー発言に大きな貼り付けがあると、1 行が数百 KiB になる。
+// 先頭を一定バイトだけ読む実装だと、この行の timestamp を取りこぼす。
+test("firstTranscriptTimestamp は 1 行が非常に長くても timestamp を拾う", () => {
+  const file = writeTranscript([
+    JSON.stringify({ type: "mode" }),
+    JSON.stringify({
+      type: "user",
+      timestamp: "2026-05-05T00:00:00.000Z",
+      message: { content: "x".repeat(300_000) }
+    })
+  ])
+  expect(firstTranscriptTimestamp(file)?.toISOString()).toBe(
+    "2026-05-05T00:00:00.000Z"
+  )
+})
+
+test("firstTranscriptTimestamp は timestamp が無ければ null を返す", () => {
+  const file = writeTranscript([
+    JSON.stringify({ type: "last-prompt" }),
+    JSON.stringify({ type: "mode" })
+  ])
+  expect(firstTranscriptTimestamp(file)).toBeNull()
+})
+
+test("firstTranscriptTimestamp は読めないファイルで null を返す", () => {
+  expect(firstTranscriptTimestamp("/nonexistent/transcript.jsonl")).toBeNull()
+})
+
+test("resolveSessionStartedAt は timestamp が無ければファイルの時刻へ落ちる", () => {
+  const file = writeTranscript([JSON.stringify({ type: "mode" })])
+  const stat = fs.statSync(file)
+  const expected =
+    stat.birthtimeMs > 0
+      ? Math.trunc(stat.birthtimeMs)
+      : Math.trunc(stat.mtimeMs)
+  expect(resolveSessionStartedAt(file).getTime()).toBe(expected)
 })

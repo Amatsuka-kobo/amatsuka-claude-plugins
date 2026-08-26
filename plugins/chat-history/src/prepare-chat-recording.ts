@@ -74,6 +74,65 @@ export const safeWorker = (name: string): string => {
   return normalized && normalized !== "." ? normalized : "unknown"
 }
 
+// 日付ディレクトリとファイル名プレフィックスは同じ Date から導く。
+// 別々に算出すると、日をまたぐセッションでディレクトリと時刻が食い違う。
+export function localRecordParts(at: Date): {
+  year: string
+  monthDay: string
+  hhmm: string
+  date: string
+} {
+  const pad = (value: number): string => String(value).padStart(2, "0")
+  const year = String(at.getFullYear())
+  const month = pad(at.getMonth() + 1)
+  const day = pad(at.getDate())
+  return {
+    year,
+    monthDay: `${month}${day}`,
+    hhmm: `${pad(at.getHours())}${pad(at.getMinutes())}`,
+    date: `${year}-${month}-${day}`
+  }
+}
+
+// 先頭の数行(last-prompt / mode / permission-mode / atis-latch など)は timestamp を
+// 持たない。行の type では判定できないため「最初に有効な timestamp を持つ行」を採る。
+export function firstTranscriptTimestamp(file: string): Date | null {
+  let text: string
+  try {
+    text = fs.readFileSync(file, "utf8")
+  } catch {
+    return null
+  }
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue
+    let entry: { timestamp?: unknown }
+    try {
+      entry = JSON.parse(line) as { timestamp?: unknown }
+    } catch {
+      continue
+    }
+    if (typeof entry.timestamp !== "string") continue
+    const at = new Date(entry.timestamp)
+    if (!Number.isNaN(at.getTime())) return at
+  }
+  return null
+}
+
+// セッション開始時刻。transcript から採れないときはファイルの作成時刻へ落ちる。
+// この値でファイル名が決まるだけなので、最後は現在時刻でも記録は成立する。
+export function resolveSessionStartedAt(transcript: string): Date {
+  const fromTranscript = firstTranscriptTimestamp(transcript)
+  if (fromTranscript) return fromTranscript
+  try {
+    const stat = fs.statSync(transcript)
+    if (stat.birthtimeMs > 0) return stat.birthtime
+    if (stat.mtimeMs > 0) return stat.mtime
+  } catch {
+    // 取得できなければ現在時刻へ落とす
+  }
+  return new Date()
+}
+
 function markdownFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return []
   return fs
