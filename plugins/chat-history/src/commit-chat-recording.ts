@@ -47,6 +47,7 @@ const MAX_SESSION_TITLE_BYTES = 512
 const MAX_HEADER_BYTES = 64 * 1024
 const MAX_INDEX_SUMMARY_BYTES = 8192
 const MAX_SLUG_LENGTH = 80
+const MAX_SESSION_ID_LENGTH = 128
 
 function parseArgs(argv: string[]): Args {
   const value = (name: string, optional = false): string | undefined => {
@@ -173,9 +174,24 @@ function validateInputs(
   if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)
     fail("plan.sessionNumber must be a positive integer")
   const heading = `## セッション ${plan.sessionNumber}: ${sessionTitle}`
+  // state を失ったセッションや --fork-session で分岐したセッションを後から
+  // 突き合わせられるよう、記録ファイル自身に session_id を残す。
+  // 改行を含む値をそのまま埋めるとヘッダーの箇条書き構造が壊れるため、
+  // 妥当でない値のときは行を足さない。
+  const sessionId = plan.sessionId
+  const usableSessionId =
+    typeof sessionId === "string" &&
+    sessionId.trim() !== "" &&
+    !/[\r\n]/.test(sessionId) &&
+    sessionId.length <= MAX_SESSION_ID_LENGTH
+      ? sessionId
+      : null
+  const headerWithSession = usableSessionId
+    ? `${header.trimEnd()}\n- セッション ID: ${usableSessionId}`
+    : header.trimEnd()
   const body = plan.recordTarget.appendMode
     ? `\n${heading}\n\n${rawBody}`
-    : `${header.trimEnd()}\n\n---\n\n${heading}\n\n${rawBody}`
+    : `${headerWithSession}\n\n---\n\n${heading}\n\n${rawBody}`
   if (Buffer.byteLength(body) > MAX_BODY_BYTES) fail("record body is too large")
   if (!body.includes("## セッション"))
     fail("composed record must contain a session heading")

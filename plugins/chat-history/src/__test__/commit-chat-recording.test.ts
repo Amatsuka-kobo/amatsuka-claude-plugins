@@ -162,6 +162,74 @@ test("新規 INDEX はヘッダーと空行を付けて作成する", () => {
   )
 })
 
+test("新規記録のヘッダー末尾にセッション ID を刻む", () => {
+  const value = setup(false)
+  commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile,
+    headerFile: value.headerFile,
+    recordSlug: "topic"
+  })
+  const record = fs.readFileSync(
+    path.join(value.project, "docs/chat/2026/0724/unknown/0712-topic.md"),
+    "utf8"
+  )
+  expect(record).toContain(
+    "- セッション ID: cfa925f8-d36b-4dad-8b79-47bdddf1a653"
+  )
+  // 区切り行より前(ヘッダー内)にあること
+  expect(record.indexOf("- セッション ID:")).toBeLessThan(record.indexOf("---"))
+})
+
+// 追記対象のファイルは、新規作成時に既にセッション ID を持っている。
+// 追記のたびに足すと同じ行が積み上がる。
+test("追記時はセッション ID を書かない", () => {
+  const value = setup(true)
+  commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile
+  })
+  expect(fs.readFileSync(value.recordPath, "utf8")).not.toContain(
+    "- セッション ID:"
+  )
+})
+
+test.each([
+  ["改行を含む", "abc\ndef"],
+  ["長すぎる", "x".repeat(200)]
+])("不正なセッション ID(%s)なら行を足さない", (_label, sessionId) => {
+  const value = setup(false)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath)
+  atomicWriteJson(planPath, { ...plan, sessionId })
+  commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile,
+    headerFile: value.headerFile,
+    recordSlug: "topic"
+  })
+  const record = fs.readFileSync(
+    path.join(value.project, "docs/chat/2026/0724/unknown/0712-topic.md"),
+    "utf8"
+  )
+  expect(record).not.toContain("- セッション ID:")
+})
+
 test.each([
   ["docs/chat 相対", (value: ReturnType<typeof setup>) => value.docsRelative],
   ["プロジェクト相対", (value: ReturnType<typeof setup>) => value.relativePath]
@@ -529,7 +597,7 @@ test("新規時はヘッダー・区切り・セッション見出し・本文�
     recordSlug: "topic"
   })
   expect(fs.readFileSync(value.recordPath, "utf8")).toBe(
-    "# New\n\n- 日付: 2026-07-24\n\n---\n\n## セッション 1: 話題の要旨\n\n# unknown\n\n> 質問\n\n# AI\n\n回答\n"
+    "# New\n\n- 日付: 2026-07-24\n- セッション ID: cfa925f8-d36b-4dad-8b79-47bdddf1a653\n\n---\n\n## セッション 1: 話題の要旨\n\n# unknown\n\n> 質問\n\n# AI\n\n回答\n"
   )
 })
 
