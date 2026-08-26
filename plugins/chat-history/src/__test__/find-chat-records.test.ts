@@ -133,6 +133,63 @@ test("キーワードは大文字小文字を区別せず、複数キーワー�
   expect(out.hits.length).toBe(2)
 })
 
+test("index モード: hits は日付の新しい順で返る", () => {
+  const dir = fixture(
+    {
+      "2026/0724/unknown/old.md": "# 古い記録\n",
+      "2026/0826/unknown/new.md": "# 新しい記録\n"
+    },
+    [
+      "# Chat Records Index",
+      "",
+      "- `2026/0724/unknown/old.md` | 2026-07-24 | unknown | キーワードの古い記録",
+      "- `2026/0826/unknown/new.md` | 2026-08-26 | unknown | キーワードの新しい記録",
+      ""
+    ].join("\n")
+  )
+  const out = runScript(["--dir", dir, "キーワード"])
+  expect(out.ok).toBe(true)
+  expect(out.mode).toBe("index")
+  expect(out.hits.map((h: { path: string }) => h.path)).toEqual([
+    "2026/0826/unknown/new.md",
+    "2026/0724/unknown/old.md"
+  ])
+})
+
+test("index モード: 同日は mtime の新しい順で返る", () => {
+  const dir = fixture(
+    {
+      "2026/0826/unknown/a-first.md": "# 先\n",
+      "2026/0826/unknown/b-second.md": "# 後\n"
+    },
+    [
+      "# Chat Records Index",
+      "",
+      "- `2026/0826/unknown/a-first.md` | 2026-08-26 | unknown | キーワード先",
+      "- `2026/0826/unknown/b-second.md` | 2026-08-26 | unknown | キーワード後",
+      ""
+    ].join("\n")
+  )
+  // a-first を新しく見せる(パス昇順とは逆順になる)
+  const older = new Date("2026-08-26T01:00:00Z")
+  const newer = new Date("2026-08-26T02:00:00Z")
+  fs.utimesSync(
+    path.join(dir, "docs", "chat", "2026/0826/unknown/b-second.md"),
+    older,
+    older
+  )
+  fs.utimesSync(
+    path.join(dir, "docs", "chat", "2026/0826/unknown/a-first.md"),
+    newer,
+    newer
+  )
+  const out = runScript(["--dir", dir, "キーワード"])
+  expect(out.hits.map((h: { path: string }) => h.path)).toEqual([
+    "2026/0826/unknown/a-first.md",
+    "2026/0826/unknown/b-second.md"
+  ])
+})
+
 test("INDEX.md があれば index モード: 索引行から検索し、要旨を title に載せ、索引に無いファイルを unindexed で返す", () => {
   const dir = fixture(
     {
