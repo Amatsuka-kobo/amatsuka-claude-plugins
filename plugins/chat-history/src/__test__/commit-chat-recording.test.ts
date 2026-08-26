@@ -32,8 +32,12 @@ function setup(appendMode: boolean) {
   process.env.TASK_UTILITY_CHAT_STATE_DIR = path.join(root, "state")
   const sessionKey = "session"
   const attemptId = "attempt"
-  const relativePath = "docs/chat/2026/0724/unknown/topic.md"
-  const docsRelative = "2026/0724/unknown/topic.md"
+  const relativePath = appendMode
+    ? "docs/chat/2026/0724/unknown/topic.md"
+    : "docs/chat/2026/0724/unknown/0712-topic.md"
+  const docsRelative = appendMode
+    ? "2026/0724/unknown/topic.md"
+    : "2026/0724/unknown/0712-topic.md"
   const recordPath = path.join(project, relativePath)
   if (appendMode) {
     fs.mkdirSync(path.dirname(recordPath), { recursive: true })
@@ -56,7 +60,7 @@ function setup(appendMode: boolean) {
     heartbeatAt: new Date().toISOString()
   } satisfies RecordingLock)
   atomicWriteJson(path.join(paths.planDir, `${sessionKey}.json`), {
-    version: 1,
+    version: 2,
     attemptId,
     targetLine: 2,
     recordTarget: {
@@ -64,19 +68,20 @@ function setup(appendMode: boolean) {
       appendMode
     },
     allowedNewRecordDir: "docs/chat/2026/0724/unknown",
+    recordFilePrefix: "0712",
+    recordDate: "2026-07-24",
+    workerName: "unknown",
+    sessionId: "cfa925f8-d36b-4dad-8b79-47bdddf1a653",
     sessionNumber: appendMode ? 2 : 1
   })
   const bodyFile = path.join(paths.tempDir, "body.md")
-  const indexLineFile = path.join(paths.tempDir, "index.md")
+  const indexSummaryFile = path.join(paths.tempDir, "index-summary.md")
   const sessionTitleFile = path.join(paths.tempDir, "session-title.md")
   const headerFile = path.join(paths.tempDir, "header.md")
   fs.writeFileSync(bodyFile, "# unknown\n\n> 質問\n\n# AI\n\n回答\n")
+  fs.writeFileSync(indexSummaryFile, "会話の要旨\n")
   fs.writeFileSync(sessionTitleFile, "話題の要旨\n")
   fs.writeFileSync(headerFile, "# New\n\n- 日付: 2026-07-24\n")
-  fs.writeFileSync(
-    indexLineFile,
-    `- \`${docsRelative}\` | 2026-07-24 | unknown | summary\n`
-  )
   return {
     root,
     project,
@@ -87,7 +92,7 @@ function setup(appendMode: boolean) {
     recordPath,
     paths,
     bodyFile,
-    indexLineFile,
+    indexSummaryFile,
     sessionTitleFile,
     headerFile
   }
@@ -104,10 +109,10 @@ test.each([
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile,
     headerFile: appendMode ? undefined : value.headerFile,
-    recordPath: appendMode ? undefined : value.relativePath
+    recordSlug: appendMode ? undefined : "topic"
   })
   expect(result.ok).toBe(true)
   expect(fs.readFileSync(value.recordPath, "utf8")).toContain("> 質問")
@@ -126,10 +131,10 @@ test.each([
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile,
       headerFile: appendMode ? undefined : value.headerFile,
-      recordPath: appendMode ? undefined : value.relativePath
+      recordSlug: appendMode ? undefined : "topic"
     })
   ).toEqual(result)
 })
@@ -142,10 +147,10 @@ test("新規 INDEX はヘッダーと空行を付けて作成する", () => {
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile,
     headerFile: value.headerFile,
-    recordPath: value.relativePath
+    recordSlug: "topic"
   })
   expect(
     fs.readFileSync(
@@ -153,7 +158,7 @@ test("新規 INDEX はヘッダーと空行を付けて作成する", () => {
       "utf8"
     )
   ).toBe(
-    `# Chat Records Index\n\n- \`${value.docsRelative}\` | 2026-07-24 | unknown | summary\n`
+    `# Chat Records Index\n\n- \`${value.docsRelative}\` | 2026-07-24 | unknown | 会話の要旨\n`
   )
 })
 
@@ -173,13 +178,13 @@ test.each([
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile
   })
   const updated = fs.readFileSync(indexPath, "utf8")
   expect(updated.match(new RegExp(value.docsRelative, "g"))).toHaveLength(1)
   expect(updated).toContain(
-    `- \`${value.docsRelative}\` | 2026-07-24 | unknown | summary`
+    `- \`${value.docsRelative}\` | 2026-07-24 | unknown | 会話の要旨`
   )
 })
 
@@ -205,10 +210,10 @@ test("新規行をエントリのパス昇順位置へ挿入し非エントリ�
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile,
     headerFile: value.headerFile,
-    recordPath: value.relativePath
+    recordSlug: "topic"
   })
   expect(fs.readFileSync(indexPath, "utf8").split("\n")).toEqual([
     "# Chat Records Index",
@@ -216,17 +221,23 @@ test("新規行をエントリのパス昇順位置へ挿入し非エントリ�
     "<!-- keep-before -->",
     "- `2025/0101/user/alpha.md` | old",
     "<!-- keep-middle -->",
-    `- \`${value.docsRelative}\` | 2026-07-24 | unknown | summary`,
+    `- \`${value.docsRelative}\` | 2026-07-24 | unknown | 会話の要旨`,
     "- `2027/0101/user/zulu.md` | future",
     "<!-- keep-after -->",
     ""
   ])
 })
 
-test("既存新規パスとの衝突を排他的作成で拒否する", () => {
+test.each([
+  ["大文字を含む", "Topic"],
+  ["スラッシュを含む", "dir/topic"],
+  ["拡張子付き", "topic.md"],
+  ["先頭が 4 桁数字", "0712-topic"],
+  ["4 桁数字のみ", "0712"],
+  ["連続ハイフン", "topic--name"],
+  ["長さ超過", "a".repeat(81)]
+])("不正なスラッグ(%s)を拒否する", (_label, slug) => {
   const value = setup(false)
-  fs.mkdirSync(path.dirname(value.recordPath), { recursive: true })
-  fs.writeFileSync(value.recordPath, "do not replace")
   expect(() =>
     commitChatRecording({
       project: value.project,
@@ -234,19 +245,16 @@ test("既存新規パスとの衝突を排他的作成で拒否する", () => {
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile,
       headerFile: value.headerFile,
-      recordPath: value.relativePath
+      recordSlug: slug
     })
-  ).toThrow()
-  expect(fs.readFileSync(value.recordPath, "utf8")).toBe("do not replace")
-  expect(fs.existsSync(value.paths.lockPath)).toBe(true)
+  ).toThrow(/record slug/)
 })
 
-test("新規パス検証エラーは prepare と同じ期待形式と実値を示す", () => {
+test("新規記録でスラッグが無ければ失敗する", () => {
   const value = setup(false)
-  const invalid = "docs/chat/2026/0724/unknown/Not_Kebab.md"
   expect(() =>
     commitChatRecording({
       project: value.project,
@@ -254,19 +262,118 @@ test("新規パス検証エラーは prepare と同じ期待形式と実値を�
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
+      sessionTitleFile: value.sessionTitleFile,
+      headerFile: value.headerFile
+    })
+  ).toThrow(/--record-slug is required/)
+})
+
+test("スラッグからプレフィックス付きのパスを合成する", () => {
+  const value = setup(false)
+  const result = commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile,
+    headerFile: value.headerFile,
+    recordSlug: "topic"
+  })
+  expect(result.recordPath).toBe("docs/chat/2026/0724/unknown/0712-topic.md")
+})
+
+test("追記時は recordSlug を無視して plan のパスへ書く", () => {
+  const value = setup(true)
+  const result = commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile,
+    recordSlug: "ignored-slug"
+  })
+  expect(result.recordPath).toBe("docs/chat/2026/0724/unknown/topic.md")
+})
+
+test("plan の version が 2 でなければ拒否する", () => {
+  const value = setup(false)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath)
+  atomicWriteJson(planPath, { ...plan, version: 1 })
+  expect(() =>
+    commitChatRecording({
+      project: value.project,
+      sessionKey: value.sessionKey,
+      attemptId: value.attemptId,
+      targetLine: 2,
+      bodyFile: value.bodyFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile,
       headerFile: value.headerFile,
-      recordPath: invalid
+      recordSlug: "topic"
     })
-  ).toThrow(
-    `expected docs/chat/2026/0724/unknown/<kebab-case>.md, got ${invalid}`
+  ).toThrow(/plan schema version/)
+})
+
+test.each([
+  "allowedNewRecordDir",
+  "recordFilePrefix",
+  "recordDate",
+  "workerName"
+])("plan の確定値 %s が欠けていれば拒否する", (field) => {
+  const value = setup(false)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath) ?? {}
+  delete plan[field]
+  atomicWriteJson(planPath, plan)
+  expect(() =>
+    commitChatRecording({
+      project: value.project,
+      sessionKey: value.sessionKey,
+      attemptId: value.attemptId,
+      targetLine: 2,
+      bodyFile: value.bodyFile,
+      indexSummaryFile: value.indexSummaryFile,
+      sessionTitleFile: value.sessionTitleFile,
+      headerFile: value.headerFile,
+      recordSlug: "topic"
+    })
+  ).toThrow()
+})
+
+test("INDEX 行を plan の確定値と要旨から合成する", () => {
+  const value = setup(false)
+  commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile,
+    headerFile: value.headerFile,
+    recordSlug: "topic"
+  })
+  const index = fs.readFileSync(
+    path.join(value.project, "docs/chat/INDEX.md"),
+    "utf8"
+  )
+  expect(index).toContain(
+    "- `2026/0724/unknown/0712-topic.md` | 2026-07-24 | unknown | 会話の要旨"
   )
 })
 
-test("INDEX 参照エラーは期待する docs/chat 相対パスを示す", () => {
+test.each([
+  ["区切り文字を含む", "要旨 | 追加"],
+  ["空", ""]
+])("不正な要旨(%s)を拒否する", (_label, summary) => {
   const value = setup(false)
-  fs.writeFileSync(value.indexLineFile, "| unrelated | summary |\n")
+  fs.writeFileSync(value.indexSummaryFile, `${summary}\n`)
   expect(() =>
     commitChatRecording({
       project: value.project,
@@ -274,12 +381,97 @@ test("INDEX 参照エラーは期待する docs/chat 相対パスを示す", () 
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile,
       headerFile: value.headerFile,
-      recordPath: value.relativePath
+      recordSlug: "topic"
     })
-  ).toThrow(`docs/chat-relative path ${value.docsRelative}`)
+  ).toThrow(/INDEX summary/)
+})
+
+test("追記時は既存の INDEX 行を再合成して置き換える", () => {
+  const value = setup(true)
+  const indexPath = path.join(value.project, "docs/chat/INDEX.md")
+  fs.writeFileSync(
+    indexPath,
+    `# Chat Records Index\n\n- \`${value.docsRelative}\` | 2026-07-24 | unknown | 古い要旨\n`
+  )
+  fs.writeFileSync(value.indexSummaryFile, "新しい要旨\n")
+  commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile
+  })
+  const index = fs.readFileSync(indexPath, "utf8")
+  expect(index).toContain("新しい要旨")
+  expect(index).not.toContain("古い要旨")
+  expect(
+    index.split("\n").filter((line) => line.includes(value.docsRelative))
+  ).toHaveLength(1)
+})
+
+test("同名のファイルがあれば連番を付けて新規作成する", () => {
+  const value = setup(false)
+  const taken = path.join(
+    value.project,
+    "docs/chat/2026/0724/unknown/0712-topic.md"
+  )
+  fs.mkdirSync(path.dirname(taken), { recursive: true })
+  fs.writeFileSync(taken, "do not replace")
+  const result = commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile,
+    headerFile: value.headerFile,
+    recordSlug: "topic"
+  })
+  expect(result.recordPath).toBe("docs/chat/2026/0724/unknown/0712-topic-2.md")
+  expect(fs.readFileSync(taken, "utf8")).toBe("do not replace")
+})
+
+// 連番へ逃げたあと INDEX 検証で落ちたとき、消すのは自分が作った連番ファイルであり、
+// 衝突していた既存ファイル(別セッションの記録)を触ってはならない。
+test("連番で作成したあと失敗したら、連番ファイルだけを消す", () => {
+  const value = setup(false)
+  const taken = path.join(
+    value.project,
+    "docs/chat/2026/0724/unknown/0712-topic.md"
+  )
+  fs.mkdirSync(path.dirname(taken), { recursive: true })
+  fs.writeFileSync(taken, "do not replace")
+  // INDEX に重複行を仕込んで検証を失敗させる
+  const docsRelative = "2026/0724/unknown/0712-topic-2.md"
+  fs.writeFileSync(
+    path.join(value.project, "docs/chat/INDEX.md"),
+    `# Chat Records Index\n\n- \`${docsRelative}\` | 2026-07-24 | unknown | 1\n- \`${docsRelative}\` | 2026-07-24 | unknown | 2\n`
+  )
+  expect(() =>
+    commitChatRecording({
+      project: value.project,
+      sessionKey: value.sessionKey,
+      attemptId: value.attemptId,
+      targetLine: 2,
+      bodyFile: value.bodyFile,
+      indexSummaryFile: value.indexSummaryFile,
+      sessionTitleFile: value.sessionTitleFile,
+      headerFile: value.headerFile,
+      recordSlug: "topic"
+    })
+  ).toThrow()
+  expect(fs.readFileSync(taken, "utf8")).toBe("do not replace")
+  expect(
+    fs.existsSync(
+      path.join(value.project, "docs/chat/2026/0724/unknown/0712-topic-2.md")
+    )
+  ).toBe(false)
 })
 
 test("INDEX 重複失敗時は本文を元サイズへ truncate しロックを保持する", () => {
@@ -296,7 +488,7 @@ test("INDEX 重複失敗時は本文を元サイズへ truncate しロックを�
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile
     })
   ).toThrow(/duplicate/)
@@ -315,7 +507,7 @@ test("追記時はセッション見出しを生成して本文の前に置く",
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile
   })
   expect(fs.readFileSync(value.recordPath, "utf8")).toBe(
@@ -331,10 +523,10 @@ test("新規時はヘッダー・区切り・セッション見出し・本文�
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile,
     headerFile: value.headerFile,
-    recordPath: value.relativePath
+    recordSlug: "topic"
   })
   expect(fs.readFileSync(value.recordPath, "utf8")).toBe(
     "# New\n\n- 日付: 2026-07-24\n\n---\n\n## セッション 1: 話題の要旨\n\n# unknown\n\n> 質問\n\n# AI\n\n回答\n"
@@ -350,7 +542,7 @@ test("追記時に --header-file を渡すと拒否する", () => {
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile,
       headerFile: value.headerFile
     })
@@ -366,9 +558,9 @@ test("新規時に --header-file が無ければ拒否する", () => {
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile,
-      recordPath: value.relativePath
+      recordSlug: "topic"
     })
   ).toThrow(/header/)
 })
@@ -383,7 +575,7 @@ test("セッション要旨が空または複数行なら拒否する", () => {
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile
     })
   ).toThrow(/session title/)
@@ -404,7 +596,7 @@ test("plan の sessionNumber が欠けていれば拒否する", () => {
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile
     })
   ).toThrow(/sessionNumber/)
@@ -419,13 +611,13 @@ test("成功時に一時ファイル 4 本をすべて削除する", () => {
     attemptId: value.attemptId,
     targetLine: 2,
     bodyFile: value.bodyFile,
-    indexLineFile: value.indexLineFile,
+    indexSummaryFile: value.indexSummaryFile,
     sessionTitleFile: value.sessionTitleFile,
     headerFile: value.headerFile,
-    recordPath: value.relativePath
+    recordSlug: "topic"
   })
   expect(fs.existsSync(value.bodyFile)).toBe(false)
-  expect(fs.existsSync(value.indexLineFile)).toBe(false)
+  expect(fs.existsSync(value.indexSummaryFile)).toBe(false)
   expect(fs.existsSync(value.sessionTitleFile)).toBe(false)
   expect(fs.existsSync(value.headerFile)).toBe(false)
 })
@@ -440,7 +632,7 @@ test("本文が 8MB を超えると拒否する", () => {
       attemptId: value.attemptId,
       targetLine: 2,
       bodyFile: value.bodyFile,
-      indexLineFile: value.indexLineFile,
+      indexSummaryFile: value.indexSummaryFile,
       sessionTitleFile: value.sessionTitleFile
     })
   ).toThrow(/too large/)
