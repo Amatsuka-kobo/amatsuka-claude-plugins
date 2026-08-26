@@ -23,13 +23,16 @@ interface Args {
 }
 
 interface AttemptPlan {
-  version: 1
+  version: 1 | 2
   attemptId: string
   targetLine: number
   metadataHints: string[]
   recordTarget?: { relativePath: string | null; appendMode: boolean }
-  recordCandidates?: string[]
   allowedNewRecordDir?: string
+  recordFilePrefix?: string
+  recordDate?: string
+  workerName?: string
+  sessionId?: string
   sessionNumber?: number
   preparedAt?: string
 }
@@ -133,15 +136,6 @@ export function resolveSessionStartedAt(transcript: string): Date {
   return new Date()
 }
 
-function markdownFiles(dir: string): string[] {
-  if (!fs.existsSync(dir)) return []
-  return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => path.join(dir, entry.name))
-    .sort()
-}
-
 // セッション番号は記録ファイル全文から拾う。末尾数十行に窓を切ると、原文記録で
 // 1 セッションが窓を超えたときに見出しを見失い、番号が 1 に戻って重複する。
 // 旧テンプレートの `## セッションN`(スペース無し)にも一致させる。
@@ -203,21 +197,18 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
   updateHeartbeat(paths.lockPath, args.attemptId)
   cleanStaleTemp(paths.tempDir, args.sessionKey, args.attemptId)
   const workerName = gitUser(args.project)
-  const now = new Date()
-  const year = String(now.getFullYear())
-  const monthDay = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+  // プレフィックスが使われるのは新規作成の 1 回だけで、2 回目以降は
+  // state.recordPath が記録先を決める。毎回計算しても実害は無く、
+  // state への書き込みを増やすとフックの書き込みと後勝ちで競合する。
+  const parts = localRecordParts(resolveSessionStartedAt(args.transcript))
   const recordDir = path.join(
     args.project,
     "docs",
     "chat",
-    year,
-    monthDay,
+    parts.year,
+    parts.monthDay,
     safeWorker(workerName)
   )
-  const candidates = markdownFiles(recordDir)
-  // 同一セッションが既に記録したファイルを最優先で選ぶ。日付ディレクトリの
-  // 候補数だけで判定すると、1日に複数セッションある日は候補が2件以上になり、
-  // 毎回新規ファイルが作られてセッションの記録が断片化する。
   const chatRoot = path.join(args.project, "docs", "chat")
   const previous = state.recordPath
     ? path.resolve(args.project, state.recordPath)
@@ -226,11 +217,9 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     previous && isInside(chatRoot, previous) && fs.existsSync(previous)
       ? previous
       : null
-  const selected =
-    resumable ?? (candidates.length === 1 ? (candidates[0] as string) : null)
-  const relativeCandidates = candidates.map((file) =>
-    path.relative(args.project, file).replaceAll("\\", "/")
-  )
+  // 記録先は同一セッションが既に書いたファイルだけで決める。日付ディレクトリの
+  // 候補数で決めると、別セッションの記録が同じファイルへ同居する。
+  const selected = resumable
   const relativePath = selected
     ? path.relative(args.project, selected).replaceAll("\\", "/")
     : null
@@ -239,14 +228,6 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
   // chat-recorder へ渡す文脈は末尾 60 行のまま。番号の算出だけ全文を見る。
   const tailContext = selected
     ? recordText.split("\n").slice(-60).join("\n")
-    : ""
-  const indexPath = path.join(args.project, "docs", "chat", "INDEX.md")
-  const indexLines = fs.existsSync(indexPath)
-    ? fs.readFileSync(indexPath, "utf8").split("\n")
-    : []
-  const indexLine = relativePath
-    ? (indexLines.find((line) => line.includes(docsRelativePath as string)) ??
-      "")
     : ""
   const skillPath = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -267,14 +248,13 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
   const allowedNewRecordDir = path
     .relative(args.project, recordDir)
     .replaceAll("\\", "/")
-  const newRecordPathExample = `${allowedNewRecordDir}/conversation-topic.md`
   const bodyFile = path.join(
     paths.tempDir,
     `${args.sessionKey}-${args.attemptId}.body.md`
   )
-  const indexLineFile = path.join(
+  const indexSummaryFile = path.join(
     paths.tempDir,
-    `${args.sessionKey}-${args.attemptId}.index-line.md`
+    `${args.sessionKey}-${args.attemptId}.index-summary.md`
   )
   const sessionTitleFile = path.join(
     paths.tempDir,
@@ -301,9 +281,14 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
   )
   atomicWriteJson(planPath, {
     ...plan,
+    // フックが書く初期値は version 1。ここで明示的に上げないと commit が全件を拒否する
+    version: 2,
     recordTarget,
-    recordCandidates: relativeCandidates,
     allowedNewRecordDir,
+    recordFilePrefix: parts.hhmm,
+    recordDate: parts.date,
+    workerName,
+    sessionId: state.sessionId,
     sessionNumber,
     preparedAt: new Date().toISOString()
   })
@@ -313,25 +298,22 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     recordedLine: state.recordedLine,
     targetLine: args.targetLine,
     workerName,
-    date: `${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)}`,
+    date: parts.date,
     conversation,
     skillContract: fs.readFileSync(pluginSkillPath, "utf8"),
     recordTarget,
-    recordCandidates: relativeCandidates,
     allowedNewRecordDir,
-    newRecordPathExample,
+    recordFilePrefix: parts.hhmm,
+    recordSlugExample: "conversation-topic",
+    sessionId: state.sessionId,
     bodyFile,
-    indexLineFile,
+    indexSummaryFile,
     sessionTitleFile,
     headerFile,
     sessionNumber,
     indexEntryPath: docsRelativePath,
-    indexLineExample: docsRelativePath
-      ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <要旨>`
-      : `- \`YYYY/MMDD/<worker>/<kebab-case>.md\` | YYYY-MM-DD | <worker> | <要旨>`,
     lastSessionNumber: previousSessionNumber,
     tailContext,
-    indexLine,
     metadataHints: plan.metadataHints
   }
 }
