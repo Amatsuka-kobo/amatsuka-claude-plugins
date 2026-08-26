@@ -16,6 +16,7 @@
 - Skills は `prompt-smith:skill-creator` で作る。
 - その他の AI 向け指示書は `prompt-smith:prompt-smith` で作る。
 - プラグインを追加するときは `.claude-plugin/marketplace.json` に登録し、`plugins/<plugin>/.claude-plugin/plugin.json` を作る。スクリプトを持つプラグインは `pnpm-workspace.yaml` の `packages` に追記する。
+- プラグインは他プラグインの存在を前提とせず、単体で使えるようにする。skills / agents / commands / references に他プラグインの名前を書かない。
 
 ## 文書配置
 
