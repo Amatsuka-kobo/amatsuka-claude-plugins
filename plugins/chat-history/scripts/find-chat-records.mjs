@@ -115,20 +115,32 @@ var hasKw = (text) => kw.some((k) => text.toLowerCase().includes(k));
 if (indexLines) {
   const byPath = new Map(records.map((r) => [r.path, r]));
   const hits2 = [];
+  const indexHits = [];
   for (const line of indexLines) {
     const p = line.match(/^- `([^`]+)`/)?.[1];
     const r = p ? byPath.get(p) : null;
     if (!r || !inScope(r) || !hasKw(line)) continue;
     const summary = line.split(" | ")[3]?.trim() ?? null;
-    hits2.push({
-      path: r.path,
-      date: r.date,
-      user: r.user,
-      title: summary,
-      matches: [line]
+    indexHits.push({
+      abs: r.abs,
+      hit: {
+        path: r.path,
+        date: r.date,
+        user: r.user,
+        title: summary,
+        matches: [line]
+      }
     });
   }
-  output({ ok: true, mode: "index", hits: hits2, unindexed });
+  indexHits.sort(
+    (a, b) => b.hit.date.localeCompare(a.hit.date) || mtimeOf(b.abs) - mtimeOf(a.abs)
+  );
+  output({
+    ok: true,
+    mode: "index",
+    hits: indexHits.map((entry) => entry.hit),
+    unindexed
+  });
 }
 var hits = [];
 for (const r of records.filter(inScope)) {
