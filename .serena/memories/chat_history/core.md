@@ -1,4 +1,4 @@
-`plugins/chat-history` (0.7.0 — released, non-`-dev`). Persists conversations to `docs/chat/` so future
+`plugins/chat-history` (0.8.0 — released, non-`-dev`). Persists conversations to `docs/chat/` so future
 agents and humans can audit what was decided and why. Split out of `task-utility` in commit 849d3c7;
 `gh-utility` took the issue skills. Workspace pkg `chat-history-scripts`. Node stdlib + `git` only.
 Rationale: `plugins/chat-history/docs/rationale.md`.
@@ -29,13 +29,14 @@ most load-bearing fact about this plugin:
 
 - **The script writes the body; the model no longer does.** `prepare-chat-recording.ts` extracts the
   turns from the transcript JSONL and writes the whole body to a temp file. `chat-recorder` authors
-  exactly three artefacts — the session gist, the INDEX line, and (new files only) the header —
-  and never reads or writes the body.
+  exactly four artefacts: the one-line session gist (`sessionTitleFile`), the one-line INDEX gist
+  (`indexSummaryFile`), the header on new records only (`headerFile`), and the topic slug on new
+  records only (`--record-slug`). It never reads or writes the body.
 - User turns: heading `# <作業者名>`, verbatim inside a `>` quote block. AI turns: heading `# AI`,
   verbatim **as plain prose, not quoted**. Only message `text` is kept — **tool-use records and
   thinking blocks are excluded** (1913b71).
-- File shape: header (`# <題名>` + 日付/参加者/成果物/前提) → `---` → body split by
-  `## セッション N: <要旨>`.
+- File shape: header (`# <題名>` + 日付/参加者/成果物/前提 + script-added
+  `- セッション ID: <session_id>`) → `---` → body split by `## セッション N: <要旨>`.
 - **Records are now bimodal and readers must branch on the date.** Pre-2026-08-16 records hold
   *summarized* AI turns inside quote blocks and carry a 「注意事項と次の作業」 section;
   2026-08-16-and-later records hold verbatim prose and have no such section. `agents/chat-reader.md`
@@ -51,21 +52,34 @@ most load-bearing fact about this plugin:
 
 ## Records and index
 
-Path: `docs/chat/YYYY/MMDD/<git user.name>/<kebab-slug>.md`. Same deliverable + same purpose →
-append a new session heading to the existing file rather than creating a new one.
+Path: `docs/chat/YYYY/MMDD/<git user.name>/<HHMM>-<kebab-slug>.md`; `YYYY/MMDD` and `HHMM` come
+from the session start time in local time, and the script obtains the worker name. **One Claude Code
+session equals one record file**: only a continuing/reopened same session appends to its existing
+state-selected file; a different session creates a new file even for the same topic. New-file
+collisions receive a numeric suffix.
+
 `docs/chat/INDEX.md` holds **one line per record file** (path | date | author | one-line gist),
-path-ascending; appending to an existing record updates that line rather than adding one.
+path-ascending. `chat-recorder` writes only the final gist to `indexSummaryFile`;
+`commit-chat-recording.ts` composes the path, `recordDate`, `workerName`, and gist into the INDEX
+line. Appending to an existing record re-composes and replaces that line rather than adding one.
 The canonical format spec is `skills/chat/SKILL.md` — its body is handed to chat-recorder verbatim
 at runtime as `skillContract`, so renaming or dropping a section directly changes recorder output.
 
 ## Responsibility split
 
-- `prepare-chat-recording.ts` — picks the target file (continue vs new), fixes `sessionNumber`,
-  writes the full body to `bodyFile`, reads the current INDEX line, returns `skillContract`.
-  Writes nothing but the plan and temp files.
-- `commit-chat-recording.ts` — validates the recorder's `sessionTitleFile` / `indexLineFile` /
-  `headerFile`, assembles `## セッション {n}: {要旨}` + body, writes the record (`wx` for new,
-  append for existing) and INDEX.md, verifies, rolls back on failure, commits state.
+- `prepare-chat-recording.ts` — picks the target file strictly from the current session's saved
+  `state.recordPath`, fixes `sessionNumber`, writes the full body to `bodyFile`, returns
+  `skillContract`, and upgrades the hook's v1 plan to v2. The v2 plan supplies script-owned
+  `recordTarget`, `allowedNewRecordDir`, `recordFilePrefix`, `recordDate`, `workerName`, and
+  `sessionId`. Writes nothing but the plan and temp files.
+- `commit-chat-recording.ts` — validates plan schema v2 and its definitive values before using
+  `recordTarget`; validates the recorder's `sessionTitleFile` / `indexSummaryFile` / `headerFile`;
+  assembles the header (including the session ID), `## セッション {n}: {要旨}`, and body; writes the
+  record (`wx` for new, append for existing) and re-composed INDEX.md, verifies, rolls back on
+  failure, commits state.
+- `find-chat-records.mjs` — `--latest` and INDEX-mode hits are sorted newest-first by record date,
+  breaking same-day ties by mtime descending. This keeps path-ascending INDEX order from dropping
+  newer records when recall caps results.
 
 ## Skills
 

@@ -36,7 +36,7 @@ background: true
    node "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-chat-recording.mjs" --project "<projectDir>" --transcript "<transcriptPath>" --session-key "<sessionKey>" --attempt-id "<attemptId>" --target-line <targetLine>
    ```
 
-2. JSON の `skillContract`、`conversation`、`recordTarget`、`sessionNumber`、`tailContext`、`indexEntryPath`、`recordSlugExample`、`metadataHints` に厳密に従い、次を作る
+2. JSON の `skillContract`、`conversation`、`recordTarget`、`sessionNumber`、`tailContext`、`recordSlugExample`、`metadataHints` に厳密に従い、次を作る
    - セッション要旨 1 行
    - INDEX の要旨 1 行。パス・日付・作業者名は書かない(スクリプトが付ける)。`|` と改行を含めない
    - `recordTarget.appendMode=false` のときだけ、ヘッダー(`# <題名>` とメタ情報の箇条書き)。`- セッション ID:` の行は書かない(スクリプトが付ける)

@@ -171,6 +171,18 @@ function validateInputs(args, paths, plan) {
   for (const file of temporaryFiles)
     if (!isInside(paths.tempDir, file))
       fail("temporary files must be inside the recording state temp directory");
+  if (plan.version !== 2)
+    fail(
+      `plan schema version mismatch: expected 2, got ${String(plan.version)}`
+    );
+  for (const field of [
+    "allowedNewRecordDir",
+    "recordFilePrefix",
+    "recordDate",
+    "workerName"
+  ])
+    if (typeof plan[field] !== "string" || !plan[field])
+      fail(`plan.${field} is missing`);
   const rawBody = fs2.readFileSync(args.bodyFile, "utf8");
   const summary = fs2.readFileSync(args.indexSummaryFile, "utf8").trim();
   const sessionTitle = fs2.readFileSync(args.sessionTitleFile, "utf8").trim();
@@ -194,18 +206,6 @@ function validateInputs(args, paths, plan) {
     if (!header.startsWith("# ") || Buffer.byteLength(header) > MAX_HEADER_BYTES)
       fail("record header must start with a title line and stay bounded");
   }
-  if (plan.version !== 2)
-    fail(
-      `plan schema version mismatch: expected 2, got ${String(plan.version)}`
-    );
-  for (const field of [
-    "allowedNewRecordDir",
-    "recordFilePrefix",
-    "recordDate",
-    "workerName"
-  ])
-    if (typeof plan[field] !== "string" || !plan[field])
-      fail(`plan.${field} is missing`);
   if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)
     fail("plan.sessionNumber must be a positive integer");
   const heading = `## \u30BB\u30C3\u30B7\u30E7\u30F3 ${plan.sessionNumber}: ${sessionTitle}`;
