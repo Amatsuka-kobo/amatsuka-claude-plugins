@@ -7,7 +7,8 @@ import {
   createInitialState,
   ensureStateDirs,
   getStatePaths,
-  type RecordingLock
+  type RecordingLock,
+  readJson
 } from "../chat-recording-state.js"
 import {
   firstTranscriptTimestamp,
@@ -20,6 +21,7 @@ import {
 const roots: string[] = []
 const previousStateRoot = process.env.TASK_UTILITY_CHAT_STATE_DIR
 const previousPluginRoot = process.env.CLAUDE_PLUGIN_ROOT
+const previousGitConfigGlobal = process.env.GIT_CONFIG_GLOBAL
 
 afterEach(() => {
   for (const root of roots.splice(0))
@@ -29,6 +31,9 @@ afterEach(() => {
   else process.env.TASK_UTILITY_CHAT_STATE_DIR = previousStateRoot
   if (previousPluginRoot === undefined) delete process.env.CLAUDE_PLUGIN_ROOT
   else process.env.CLAUDE_PLUGIN_ROOT = previousPluginRoot
+  if (previousGitConfigGlobal === undefined)
+    delete process.env.GIT_CONFIG_GLOBAL
+  else process.env.GIT_CONFIG_GLOBAL = previousGitConfigGlobal
 })
 
 function setup(lines: string[]) {
@@ -45,6 +50,9 @@ function setup(lines: string[]) {
   const transcript = path.join(project, "transcript.jsonl")
   fs.writeFileSync(transcript, `${lines.join("\n")}\n`)
   const stateRoot = path.join(root, "state")
+  const gitConfig = path.join(root, "gitconfig")
+  fs.writeFileSync(gitConfig, "")
+  process.env.GIT_CONFIG_GLOBAL = gitConfig
   process.env.TASK_UTILITY_CHAT_STATE_DIR = stateRoot
   process.env.CLAUDE_PLUGIN_ROOT = plugin
   const sessionKey = "session"
@@ -84,6 +92,9 @@ function writeTranscript(lines: string[]): string {
 const user = (text: string) =>
   JSON.stringify({ type: "user", message: { content: text } })
 
+const userAt = (text: string, timestamp: string) =>
+  JSON.stringify({ type: "user", timestamp, message: { content: text } })
+
 test("1コマンド相当で契約・差分・探索情報を JSON 化できる", () => {
   const value = setup([user("質問")])
   const result = prepareChatRecording({
@@ -100,28 +111,23 @@ test("1コマンド相当で契約・差分・探索情報を JSON 化できる"
   expect(result.allowedNewRecordDir).toMatch(
     /^docs\/chat\/\d{4}\/\d{4}\/[^/]+$/
   )
-  expect(result.newRecordPathExample).toBe(
-    `${result.allowedNewRecordDir}/conversation-topic.md`
-  )
+  expect(result.recordFilePrefix).toMatch(/^\d{4}$/)
+  expect(result.recordSlugExample).toBe("conversation-topic")
   expect(result.bodyFile).toBe(
     path.join(
       value.paths.tempDir,
       `${value.sessionKey}-${value.attemptId}.body.md`
     )
   )
-  expect(result.indexLineFile).toBe(
+  expect(result.indexSummaryFile).toBe(
     path.join(
       value.paths.tempDir,
-      `${value.sessionKey}-${value.attemptId}.index-line.md`
+      `${value.sessionKey}-${value.attemptId}.index-summary.md`
     )
   )
   expect(path.isAbsolute(result.bodyFile as string)).toBe(true)
-  expect(path.isAbsolute(result.indexLineFile as string)).toBe(true)
+  expect(path.isAbsolute(result.indexSummaryFile as string)).toBe(true)
   expect(result.indexEntryPath).toBeNull()
-  expect(result.indexLineExample).toContain(
-    "`YYYY/MMDD/<worker>/<kebab-case>.md`"
-  )
-  expect(result.indexLineExample).not.toContain("`docs/chat/")
 })
 
 test("作業者名がパス成分として空またはドットなら unknown にする", () => {
@@ -176,17 +182,49 @@ test("記録先は同一セッションが既に書いた state.recordPath を�
   })
 })
 
-test("state.recordPath のファイルが無ければ単一候補判定に戻る", () => {
+test("新しいセッションは候補が 1 件でも既存ファイルへ追記しない", () => {
   const value = setup([user("質問")])
   const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
-  const absoluteDir = path.join(value.project, dir)
-  fs.mkdirSync(absoluteDir, { recursive: true })
-  fs.writeFileSync(path.join(absoluteDir, "only.md"), "# only\n")
-  setRecordPath(value, `${dir}/deleted.md`)
+  fs.mkdirSync(path.join(value.project, dir), { recursive: true })
+  fs.writeFileSync(path.join(value.project, dir, "only.md"), "# Only\n")
   expect(prepareChatRecording(argsOf(value)).recordTarget).toEqual({
-    relativePath: `${dir}/only.md`,
-    appendMode: true
+    relativePath: null,
+    appendMode: false
   })
+})
+
+test("日付ディレクトリとプレフィックスはセッション開始時刻から決まる", () => {
+  // 2026-08-25T21:59Z は Asia/Tokyo で 2026-08-26 06:59
+  const value = setup([userAt("質問", "2026-08-25T21:59:21.651Z")])
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.allowedNewRecordDir).toBe("docs/chat/2026/0826/unknown")
+  expect(result.recordFilePrefix).toBe("0659")
+  expect(result.date).toBe("2026-08-26")
+})
+
+test("plan には version 2 と確定値が書かれる", () => {
+  const value = setup([userAt("質問", "2026-08-25T21:59:21.651Z")])
+  prepareChatRecording(argsOf(value))
+  const plan = readJson<Record<string, unknown>>(
+    path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  )
+  expect(plan?.version).toBe(2)
+  expect(plan?.recordFilePrefix).toBe("0659")
+  expect(plan?.recordDate).toBe("2026-08-26")
+  expect(plan?.workerName).toBe("unknown")
+  expect(plan).not.toHaveProperty("recordCandidates")
+})
+
+test("返り値から旧契約のフィールドが消えている", () => {
+  const value = setup([user("質問")])
+  const result = prepareChatRecording(argsOf(value))
+  expect(result).not.toHaveProperty("recordCandidates")
+  expect(result).not.toHaveProperty("newRecordPathExample")
+  expect(result).not.toHaveProperty("indexLine")
+  expect(result).not.toHaveProperty("indexLineExample")
+  expect(result).not.toHaveProperty("indexLineFile")
+  expect(result.indexSummaryFile).toEqual(expect.any(String))
+  expect(result.recordSlugExample).toBe("conversation-topic")
 })
 
 test("docs/chat の外を指す state.recordPath は採用しない", () => {
@@ -199,35 +237,19 @@ test("docs/chat の外を指す state.recordPath は採用しない", () => {
   })
 })
 
-test("既存 INDEX は docs/chat 相対キーで探索し例も同じ表記にする", () => {
+test("同一セッションが書いたファイルは追記対象になる", () => {
   const value = setup([user("質問")])
-  const args = {
-    project: value.project,
-    transcript: value.transcript,
-    sessionKey: value.sessionKey,
-    attemptId: value.attemptId,
-    targetLine: 1
-  }
-  const first = prepareChatRecording(args)
-  const allowedDir = first.allowedNewRecordDir as string
-  const relativePath = `${allowedDir}/topic.md`
-  const docsRelative = relativePath.replace(/^docs\/chat\//, "")
-  fs.mkdirSync(path.join(value.project, allowedDir), { recursive: true })
+  const dir = prepareChatRecording(argsOf(value)).allowedNewRecordDir as string
+  const relativePath = `${dir}/topic.md`
+  fs.mkdirSync(path.join(value.project, dir), { recursive: true })
   fs.writeFileSync(
     path.join(value.project, relativePath),
     "# Existing\n\n## セッション 1\n"
   )
-  const expectedLine = `- \`${docsRelative}\` | 2026-07-24 | unknown | summary`
-  fs.writeFileSync(
-    path.join(value.project, "docs", "chat", "INDEX.md"),
-    `# Chat Records Index\n\n${expectedLine}\n`
-  )
-
-  const result = prepareChatRecording(args)
-  expect(result.indexLine).toBe(expectedLine)
-  expect(result.indexEntryPath).toBe(docsRelative)
-  expect(result.indexLineExample).toContain(`\`${docsRelative}\``)
-  expect(result.indexLineExample).not.toContain("`docs/chat/")
+  setRecordPath(value, relativePath)
+  const result = prepareChatRecording(argsOf(value))
+  expect(result.recordTarget).toEqual({ relativePath, appendMode: true })
+  expect(result.indexEntryPath).toBe(relativePath.replace(/^docs\/chat\//, ""))
 })
 
 test("hook が承認したものと異なる transcript を拒否する", () => {
@@ -442,10 +464,7 @@ test("firstTranscriptTimestamp は読めないファイルで null を返す", (
 test("resolveSessionStartedAt は timestamp が無ければファイルの時刻へ落ちる", () => {
   const file = writeTranscript([JSON.stringify({ type: "mode" })])
   const stat = fs.statSync(file)
-  // birthtimeMs は小数を持ちうる一方、Date.getTime() は整数ミリ秒を返す。
   const expected =
-    stat.birthtimeMs > 0
-      ? Math.trunc(stat.birthtimeMs)
-      : Math.trunc(stat.mtimeMs)
+    stat.birthtimeMs > 0 ? stat.birthtime.getTime() : stat.mtime.getTime()
   expect(resolveSessionStartedAt(file).getTime()).toBe(expected)
 })

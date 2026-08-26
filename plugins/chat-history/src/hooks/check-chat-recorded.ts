@@ -33,7 +33,7 @@ interface HookInput {
 }
 
 interface AttemptPlan {
-  version: 1
+  version: 1 | 2
   attemptId: string
   targetLine: number
   metadataHints: string[]
