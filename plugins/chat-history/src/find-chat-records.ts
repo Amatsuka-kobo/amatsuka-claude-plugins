@@ -171,20 +171,35 @@ if (indexLines) {
     title: string | null
     matches: string[]
   }[] = []
+  const indexHits: { abs: string; hit: (typeof hits)[number] }[] = []
   for (const line of indexLines) {
     const p = line.match(/^- `([^`]+)`/)?.[1]
     const r = p ? byPath.get(p) : null
     if (!r || !inScope(r) || !hasKw(line)) continue
     const summary = line.split(" | ")[3]?.trim() ?? null
-    hits.push({
-      path: r.path,
-      date: r.date,
-      user: r.user,
-      title: summary,
-      matches: [line]
+    indexHits.push({
+      abs: r.abs,
+      hit: {
+        path: r.path,
+        date: r.date,
+        user: r.user,
+        title: summary,
+        matches: [line]
+      }
     })
   }
-  output({ ok: true, mode: "index", hits, unindexed })
+  // INDEX はパス昇順(=古い順)に並ぶ。recall は上位 15 件を新しい順で使う契約なので、
+  // ここで並べ替えないと、キャップに掛かったとき新しい記録から落ちる。
+  indexHits.sort(
+    (a, b) =>
+      b.hit.date.localeCompare(a.hit.date) || mtimeOf(b.abs) - mtimeOf(a.abs)
+  )
+  output({
+    ok: true,
+    mode: "index",
+    hits: indexHits.map((entry) => entry.hit),
+    unindexed
+  })
 }
 
 // grep モード: 各ファイルのキーワード一致行を前後 1 行の文脈付きで返す(1 ファイル最大 5 箇所)
