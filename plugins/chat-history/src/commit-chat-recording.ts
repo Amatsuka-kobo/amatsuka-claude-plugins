@@ -120,6 +120,19 @@ function validateInputs(
     if (!isInside(paths.tempDir, file))
       fail("temporary files must be inside the recording state temp directory")
 
+  if (plan.version !== 2)
+    fail(
+      `plan schema version mismatch: expected 2, got ${String(plan.version)}`
+    )
+  for (const field of [
+    "allowedNewRecordDir",
+    "recordFilePrefix",
+    "recordDate",
+    "workerName"
+  ] as const)
+    if (typeof plan[field] !== "string" || !plan[field])
+      fail(`plan.${field} is missing`)
+
   const rawBody = fs.readFileSync(args.bodyFile, "utf8")
   const summary = fs.readFileSync(args.indexSummaryFile, "utf8").trim()
   const sessionTitle = fs.readFileSync(args.sessionTitleFile, "utf8").trim()
@@ -156,19 +169,6 @@ function validateInputs(
     )
       fail("record header must start with a title line and stay bounded")
   }
-
-  if (plan.version !== 2)
-    fail(
-      `plan schema version mismatch: expected 2, got ${String(plan.version)}`
-    )
-  for (const field of [
-    "allowedNewRecordDir",
-    "recordFilePrefix",
-    "recordDate",
-    "workerName"
-  ] as const)
-    if (typeof plan[field] !== "string" || !plan[field])
-      fail(`plan.${field} is missing`)
 
   // 旧版 prepare が書いた plan と組み合わされると `## セッション undefined` が記録に残る。
   if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)

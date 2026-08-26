@@ -223,7 +223,6 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
   const relativePath = selected
     ? path.relative(args.project, selected).replaceAll("\\", "/")
     : null
-  const docsRelativePath = relativePath?.replace(/^docs\/chat\//, "") ?? null
   const recordText = selected ? fs.readFileSync(selected, "utf8") : ""
   // chat-recorder へ渡す文脈は末尾 60 行のまま。番号の算出だけ全文を見る。
   const tailContext = selected
@@ -311,7 +310,6 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     sessionTitleFile,
     headerFile,
     sessionNumber,
-    indexEntryPath: docsRelativePath,
     lastSessionNumber: previousSessionNumber,
     tailContext,
     metadataHints: plan.metadataHints

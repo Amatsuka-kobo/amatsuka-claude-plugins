@@ -308,7 +308,6 @@ function prepareChatRecording(args) {
   const resumable = previous && isInside(chatRoot, previous) && fs3.existsSync(previous) ? previous : null;
   const selected = resumable;
   const relativePath = selected ? path3.relative(args.project, selected).replaceAll("\\", "/") : null;
-  const docsRelativePath = relativePath?.replace(/^docs\/chat\//, "") ?? null;
   const recordText = selected ? fs3.readFileSync(selected, "utf8") : "";
   const tailContext = selected ? recordText.split("\n").slice(-60).join("\n") : "";
   const skillPath = path3.join(
@@ -388,7 +387,6 @@ function prepareChatRecording(args) {
     sessionTitleFile,
     headerFile,
     sessionNumber,
-    indexEntryPath: docsRelativePath,
     lastSessionNumber: previousSessionNumber,
     tailContext,
     metadataHints: plan.metadataHints

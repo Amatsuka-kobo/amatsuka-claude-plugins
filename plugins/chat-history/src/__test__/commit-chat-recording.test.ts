@@ -372,6 +372,8 @@ test("plan の version が 2 でなければ拒否する", () => {
   const value = setup(false)
   const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
   const plan = readJson<Record<string, unknown>>(planPath)
+  if (!plan) throw new Error("plan is missing")
+  delete plan.recordTarget
   atomicWriteJson(planPath, { ...plan, version: 1 })
   expect(() =>
     commitChatRecording({

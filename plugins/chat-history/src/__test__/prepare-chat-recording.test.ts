@@ -127,7 +127,6 @@ test("1コマンド相当で契約・差分・探索情報を JSON 化できる"
   )
   expect(path.isAbsolute(result.bodyFile as string)).toBe(true)
   expect(path.isAbsolute(result.indexSummaryFile as string)).toBe(true)
-  expect(result.indexEntryPath).toBeNull()
 })
 
 test("作業者名がパス成分として空またはドットなら unknown にする", () => {
@@ -223,6 +222,7 @@ test("返り値から旧契約のフィールドが消えている", () => {
   expect(result).not.toHaveProperty("indexLine")
   expect(result).not.toHaveProperty("indexLineExample")
   expect(result).not.toHaveProperty("indexLineFile")
+  expect(result).not.toHaveProperty("indexEntryPath")
   expect(result.indexSummaryFile).toEqual(expect.any(String))
   expect(result.recordSlugExample).toBe("conversation-topic")
 })
@@ -249,7 +249,6 @@ test("同一セッションが書いたファイルは追記対象になる", ()
   setRecordPath(value, relativePath)
   const result = prepareChatRecording(argsOf(value))
   expect(result.recordTarget).toEqual({ relativePath, appendMode: true })
-  expect(result.indexEntryPath).toBe(relativePath.replace(/^docs\/chat\//, ""))
 })
 
 test("hook が承認したものと異なる transcript を拒否する", () => {
