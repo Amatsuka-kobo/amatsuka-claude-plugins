@@ -120,7 +120,9 @@ function fail(message) {
 var MAX_BODY_BYTES = 8 * 1024 * 1024;
 var MAX_SESSION_TITLE_BYTES = 512;
 var MAX_HEADER_BYTES = 64 * 1024;
-var MAX_INDEX_LINE_BYTES = 8192;
+var MAX_INDEX_SUMMARY_BYTES = 8192;
+var MAX_SLUG_LENGTH = 80;
+var MAX_SESSION_ID_LENGTH = 128;
 function parseArgs(argv) {
   const value = (name, optional = false) => {
     const index = argv.indexOf(name);
@@ -139,25 +141,30 @@ function parseArgs(argv) {
     attemptId: value("--attempt-id"),
     targetLine,
     bodyFile: path2.resolve(value("--body-file")),
-    indexLineFile: path2.resolve(value("--index-line-file")),
+    indexSummaryFile: path2.resolve(value("--index-summary-file")),
     sessionTitleFile: path2.resolve(value("--session-title-file")),
     headerFile: (() => {
       const raw = value("--header-file", true);
       return raw ? path2.resolve(raw) : void 0;
     })(),
-    recordPath: value("--record-path", true)
+    recordSlug: value("--record-slug", true)
   };
 }
-function validKebabMarkdown(name) {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*\.md$/.test(name);
+function validSlug(value) {
+  if (!value || value.length > MAX_SLUG_LENGTH) return false;
+  if (/^\d{4}($|-)/.test(value)) return false;
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
 function docsRelativePath(relativePath) {
   return relativePath.replaceAll("\\", "/").replace(/^docs\/chat\//, "");
 }
+function composeIndexLine(relativePath, date, worker, summary) {
+  return `- \`${docsRelativePath(relativePath)}\` | ${date} | ${worker} | ${summary}`;
+}
 function validateInputs(args, paths, plan) {
   const temporaryFiles = [
     args.bodyFile,
-    args.indexLineFile,
+    args.indexSummaryFile,
     args.sessionTitleFile,
     ...args.headerFile ? [args.headerFile] : []
   ];
@@ -165,15 +172,17 @@ function validateInputs(args, paths, plan) {
     if (!isInside(paths.tempDir, file))
       fail("temporary files must be inside the recording state temp directory");
   const rawBody = fs2.readFileSync(args.bodyFile, "utf8");
-  const indexLine = fs2.readFileSync(args.indexLineFile, "utf8").trim();
+  const summary = fs2.readFileSync(args.indexSummaryFile, "utf8").trim();
   const sessionTitle = fs2.readFileSync(args.sessionTitleFile, "utf8").trim();
   if (!rawBody) fail("record body is empty");
   if (!rawBody.includes("> "))
     fail("record body must contain a USER quote block");
   if (!sessionTitle || sessionTitle.includes("\n") || Buffer.byteLength(sessionTitle) > MAX_SESSION_TITLE_BYTES)
     fail("session title must be exactly one bounded line");
-  if (!indexLine || indexLine.includes("\n") || Buffer.byteLength(indexLine) > MAX_INDEX_LINE_BYTES)
-    fail("INDEX entry must be exactly one bounded line");
+  if (!summary || summary.includes("\n") || // find-chat-records は INDEX 行を " | " で分解して要旨を取り出す。
+  // 要旨に区切り文字が混ざると検索結果の表示が壊れる。
+  summary.includes("|") || Buffer.byteLength(summary) > MAX_INDEX_SUMMARY_BYTES)
+    fail("INDEX summary must be exactly one bounded line without '|'");
   let header = "";
   if (plan.recordTarget.appendMode) {
     if (args.headerFile)
@@ -185,13 +194,29 @@ function validateInputs(args, paths, plan) {
     if (!header.startsWith("# ") || Buffer.byteLength(header) > MAX_HEADER_BYTES)
       fail("record header must start with a title line and stay bounded");
   }
+  if (plan.version !== 2)
+    fail(
+      `plan schema version mismatch: expected 2, got ${String(plan.version)}`
+    );
+  for (const field of [
+    "allowedNewRecordDir",
+    "recordFilePrefix",
+    "recordDate",
+    "workerName"
+  ])
+    if (typeof plan[field] !== "string" || !plan[field])
+      fail(`plan.${field} is missing`);
   if (!Number.isSafeInteger(plan.sessionNumber) || plan.sessionNumber <= 0)
     fail("plan.sessionNumber must be a positive integer");
   const heading = `## \u30BB\u30C3\u30B7\u30E7\u30F3 ${plan.sessionNumber}: ${sessionTitle}`;
+  const sessionId = plan.sessionId;
+  const usableSessionId = typeof sessionId === "string" && sessionId.trim() !== "" && !/[\r\n]/.test(sessionId) && sessionId.length <= MAX_SESSION_ID_LENGTH ? sessionId : null;
+  const headerWithSession = usableSessionId ? `${header.trimEnd()}
+- \u30BB\u30C3\u30B7\u30E7\u30F3 ID: ${usableSessionId}` : header.trimEnd();
   const body = plan.recordTarget.appendMode ? `
 ${heading}
 
-${rawBody}` : `${header.trimEnd()}
+${rawBody}` : `${headerWithSession}
 
 ---
 
@@ -201,29 +226,25 @@ ${rawBody}`;
   if (Buffer.byteLength(body) > MAX_BODY_BYTES) fail("record body is too large");
   if (!body.includes("## \u30BB\u30C3\u30B7\u30E7\u30F3"))
     fail("composed record must contain a session heading");
-  let relativePath;
+  let candidates;
   if (plan.recordTarget.relativePath !== null) {
-    if (args.recordPath)
-      fail("--record-path is forbidden for an existing target");
-    relativePath = plan.recordTarget.relativePath;
+    candidates = [plan.recordTarget.relativePath];
   } else {
-    const requestedPath = args.recordPath;
-    if (!requestedPath)
-      throw new Error("--record-path is required for a new target");
-    relativePath = requestedPath.replaceAll("\\", "/");
-    if (path2.posix.dirname(relativePath) !== plan.allowedNewRecordDir || !validKebabMarkdown(path2.posix.basename(relativePath)))
+    const slug = args.recordSlug;
+    if (!slug) throw new Error("--record-slug is required for a new target");
+    if (!validSlug(slug))
       fail(
-        `new record path violates the naming or directory contract: expected ${plan.allowedNewRecordDir}/<kebab-case>.md, got ${relativePath}`
+        `record slug violates the naming contract: expected at most ${MAX_SLUG_LENGTH} chars of [a-z0-9-] not starting with 4 digits, got ${slug}`
       );
+    const base = `${plan.allowedNewRecordDir}/${plan.recordFilePrefix}-${slug}`;
+    candidates = [`${base}.md`];
+    for (let suffix = 2; suffix <= 9; suffix++)
+      candidates.push(`${base}-${suffix}.md`);
   }
-  const recordPath = path2.resolve(args.project, relativePath);
-  if (!isInside(args.project, recordPath)) fail("record path escapes project");
-  const docsRelative = docsRelativePath(relativePath);
-  if (!indexLine.includes(docsRelative))
-    fail(
-      `INDEX entry does not reference the target record: expected docs/chat-relative path ${docsRelative}`
-    );
-  return { recordPath, relativePath, body, indexLine };
+  for (const candidate of candidates)
+    if (!isInside(args.project, path2.resolve(args.project, candidate)))
+      fail("record path escapes project");
+  return { candidates, body, summary };
 }
 function indexMatches(lines, relativePath) {
   const docsRelative = docsRelativePath(relativePath);
@@ -288,40 +309,67 @@ function commitChatRecording(args) {
   const indexPath = path2.join(args.project, "docs", "chat", "INDEX.md");
   const indexExisted = fs2.existsSync(indexPath);
   const oldIndex = indexExisted ? fs2.readFileSync(indexPath, "utf8") : "";
-  const oldRecordExisted = fs2.existsSync(input.recordPath);
-  const oldSize = oldRecordExisted ? fs2.statSync(input.recordPath).size : 0;
+  let relativePath = "";
+  let recordPath = "";
+  let oldRecordExisted = false;
+  let oldSize = 0;
   let bodyUpdated = false;
   try {
-    fs2.mkdirSync(path2.dirname(input.recordPath), { recursive: true });
     if (plan.recordTarget.appendMode) {
-      if (!oldRecordExisted) fail("append target disappeared");
-      fs2.appendFileSync(input.recordPath, input.body);
+      relativePath = input.candidates[0];
+      recordPath = path2.resolve(args.project, relativePath);
+      if (!fs2.existsSync(recordPath)) fail("append target disappeared");
+      oldRecordExisted = true;
+      oldSize = fs2.statSync(recordPath).size;
+      fs2.appendFileSync(recordPath, input.body);
     } else {
-      fs2.writeFileSync(input.recordPath, input.body, {
-        encoding: "utf8",
-        flag: "wx"
-      });
+      let written = false;
+      for (const candidate of input.candidates) {
+        const absolute = path2.resolve(args.project, candidate);
+        fs2.mkdirSync(path2.dirname(absolute), { recursive: true });
+        try {
+          fs2.writeFileSync(absolute, input.body, {
+            encoding: "utf8",
+            flag: "wx"
+          });
+        } catch (error) {
+          if (error.code === "EEXIST") continue;
+          fs2.rmSync(absolute, { force: true });
+          throw error;
+        }
+        relativePath = candidate;
+        recordPath = absolute;
+        written = true;
+        break;
+      }
+      if (!written) fail("every candidate record path is already taken");
     }
     bodyUpdated = true;
+    const indexLine = composeIndexLine(
+      relativePath,
+      plan.recordDate,
+      plan.workerName,
+      input.summary
+    );
     const lines = indexExisted ? (oldIndex.endsWith("\n") ? oldIndex.slice(0, -1) : oldIndex).split("\n") : ["# Chat Records Index", ""];
-    const matches = indexMatches(lines, input.relativePath);
+    const matches = indexMatches(lines, relativePath);
     if (matches.length > 1) fail("INDEX contains duplicate target entries");
-    if (matches.length === 1) lines[matches[0]] = input.indexLine;
-    else insertIndexLine(lines, input.indexLine, input.relativePath);
+    if (matches.length === 1) lines[matches[0]] = indexLine;
+    else insertIndexLine(lines, indexLine, relativePath);
     fs2.mkdirSync(path2.dirname(indexPath), { recursive: true });
     fs2.writeFileSync(indexPath, `${lines.join("\n")}
 `, "utf8");
-    const updatedRecord = fs2.readFileSync(input.recordPath, "utf8");
+    const updatedRecord = fs2.readFileSync(recordPath, "utf8");
     const updatedIndex = fs2.readFileSync(indexPath, "utf8").split("\n");
     if (!updatedRecord.endsWith(input.body)) fail("record verification failed");
-    if (indexMatches(updatedIndex, input.relativePath).length !== 1)
+    if (indexMatches(updatedIndex, relativePath).length !== 1)
       fail("INDEX uniqueness verification failed");
     const nextState = {
       ...state,
       recordedLine: args.targetLine,
       attemptedLine: Math.max(state.attemptedLine, args.targetLine),
       lastSuccessAt: (/* @__PURE__ */ new Date()).toISOString(),
-      recordPath: input.relativePath,
+      recordPath: relativePath,
       lastError: null
     };
     atomicWriteJson(paths.statePath, nextState);
@@ -331,7 +379,7 @@ function commitChatRecording(args) {
     );
     for (const file of [
       args.bodyFile,
-      args.indexLineFile,
+      args.indexSummaryFile,
       args.sessionTitleFile,
       ...args.headerFile ? [args.headerFile] : [],
       planPath,
@@ -341,15 +389,15 @@ function commitChatRecording(args) {
     return {
       ok: true,
       recordedLine: args.targetLine,
-      recordPath: input.relativePath,
+      recordPath: relativePath,
       indexUpdated: true
     };
   } catch (error) {
     let manualRepairRequired = false;
-    if (bodyUpdated) {
+    if (bodyUpdated && recordPath) {
       try {
-        if (oldRecordExisted) fs2.truncateSync(input.recordPath, oldSize);
-        else fs2.rmSync(input.recordPath);
+        if (oldRecordExisted) fs2.truncateSync(recordPath, oldSize);
+        else fs2.rmSync(recordPath, { force: true });
         if (indexExisted) fs2.writeFileSync(indexPath, oldIndex, "utf8");
         else fs2.rmSync(indexPath, { force: true });
       } catch {
@@ -366,7 +414,7 @@ function commitChatRecording(args) {
         message,
         logPath: paths.logPath,
         manualRepairRequired,
-        recordPath: input.relativePath,
+        recordPath: relativePath,
         originalSize: oldSize
       }
     });

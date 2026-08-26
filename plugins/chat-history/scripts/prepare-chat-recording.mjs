@@ -211,9 +211,49 @@ var safeWorker = (name) => {
   const normalized = name.replaceAll(/[\\/]/g, "-").replaceAll("..", "-").trim();
   return normalized && normalized !== "." ? normalized : "unknown";
 };
-function markdownFiles(dir) {
-  if (!fs3.existsSync(dir)) return [];
-  return fs3.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md")).map((entry) => path3.join(dir, entry.name)).sort();
+function localRecordParts(at) {
+  const pad = (value) => String(value).padStart(2, "0");
+  const year = String(at.getFullYear());
+  const month = pad(at.getMonth() + 1);
+  const day = pad(at.getDate());
+  return {
+    year,
+    monthDay: `${month}${day}`,
+    hhmm: `${pad(at.getHours())}${pad(at.getMinutes())}`,
+    date: `${year}-${month}-${day}`
+  };
+}
+function firstTranscriptTimestamp(file) {
+  let text;
+  try {
+    text = fs3.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!entry || typeof entry.timestamp !== "string") continue;
+    const at = new Date(entry.timestamp);
+    if (!Number.isNaN(at.getTime())) return at;
+  }
+  return null;
+}
+function resolveSessionStartedAt(transcript) {
+  const fromTranscript = firstTranscriptTimestamp(transcript);
+  if (fromTranscript) return fromTranscript;
+  try {
+    const stat = fs3.statSync(transcript);
+    if (stat.birthtimeMs > 0) return stat.birthtime;
+    if (stat.mtimeMs > 0) return stat.mtime;
+  } catch {
+  }
+  return /* @__PURE__ */ new Date();
 }
 function lastSessionNumber(text) {
   let result = 0;
@@ -254,32 +294,23 @@ function prepareChatRecording(args) {
   updateHeartbeat(paths.lockPath, args.attemptId);
   cleanStaleTemp(paths.tempDir, args.sessionKey, args.attemptId);
   const workerName = gitUser(args.project);
-  const now = /* @__PURE__ */ new Date();
-  const year = String(now.getFullYear());
-  const monthDay = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const parts = localRecordParts(resolveSessionStartedAt(args.transcript));
   const recordDir = path3.join(
     args.project,
     "docs",
     "chat",
-    year,
-    monthDay,
+    parts.year,
+    parts.monthDay,
     safeWorker(workerName)
   );
-  const candidates = markdownFiles(recordDir);
   const chatRoot = path3.join(args.project, "docs", "chat");
   const previous = state.recordPath ? path3.resolve(args.project, state.recordPath) : null;
   const resumable = previous && isInside(chatRoot, previous) && fs3.existsSync(previous) ? previous : null;
-  const selected = resumable ?? (candidates.length === 1 ? candidates[0] : null);
-  const relativeCandidates = candidates.map(
-    (file) => path3.relative(args.project, file).replaceAll("\\", "/")
-  );
+  const selected = resumable;
   const relativePath = selected ? path3.relative(args.project, selected).replaceAll("\\", "/") : null;
   const docsRelativePath = relativePath?.replace(/^docs\/chat\//, "") ?? null;
   const recordText = selected ? fs3.readFileSync(selected, "utf8") : "";
   const tailContext = selected ? recordText.split("\n").slice(-60).join("\n") : "";
-  const indexPath = path3.join(args.project, "docs", "chat", "INDEX.md");
-  const indexLines = fs3.existsSync(indexPath) ? fs3.readFileSync(indexPath, "utf8").split("\n") : [];
-  const indexLine = relativePath ? indexLines.find((line) => line.includes(docsRelativePath)) ?? "" : "";
   const skillPath = path3.join(
     path3.dirname(fileURLToPath2(import.meta.url)),
     "..",
@@ -294,14 +325,13 @@ function prepareChatRecording(args) {
     appendMode: relativePath !== null
   };
   const allowedNewRecordDir = path3.relative(args.project, recordDir).replaceAll("\\", "/");
-  const newRecordPathExample = `${allowedNewRecordDir}/conversation-topic.md`;
   const bodyFile = path3.join(
     paths.tempDir,
     `${args.sessionKey}-${args.attemptId}.body.md`
   );
-  const indexLineFile = path3.join(
+  const indexSummaryFile = path3.join(
     paths.tempDir,
-    `${args.sessionKey}-${args.attemptId}.index-line.md`
+    `${args.sessionKey}-${args.attemptId}.index-summary.md`
   );
   const sessionTitleFile = path3.join(
     paths.tempDir,
@@ -328,9 +358,14 @@ function prepareChatRecording(args) {
   );
   atomicWriteJson(planPath, {
     ...plan,
+    // フックが書く初期値は version 1。ここで明示的に上げないと commit が全件を拒否する
+    version: 2,
     recordTarget,
-    recordCandidates: relativeCandidates,
     allowedNewRecordDir,
+    recordFilePrefix: parts.hhmm,
+    recordDate: parts.date,
+    workerName,
+    sessionId: state.sessionId,
     sessionNumber,
     preparedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
@@ -340,23 +375,22 @@ function prepareChatRecording(args) {
     recordedLine: state.recordedLine,
     targetLine: args.targetLine,
     workerName,
-    date: `${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)}`,
+    date: parts.date,
     conversation,
     skillContract: fs3.readFileSync(pluginSkillPath, "utf8"),
     recordTarget,
-    recordCandidates: relativeCandidates,
     allowedNewRecordDir,
-    newRecordPathExample,
+    recordFilePrefix: parts.hhmm,
+    recordSlugExample: "conversation-topic",
+    sessionId: state.sessionId,
     bodyFile,
-    indexLineFile,
+    indexSummaryFile,
     sessionTitleFile,
     headerFile,
     sessionNumber,
     indexEntryPath: docsRelativePath,
-    indexLineExample: docsRelativePath ? `- \`${docsRelativePath}\` | ${year}-${monthDay.slice(0, 2)}-${monthDay.slice(2)} | ${workerName} | <\u8981\u65E8>` : `- \`YYYY/MMDD/<worker>/<kebab-case>.md\` | YYYY-MM-DD | <worker> | <\u8981\u65E8>`,
     lastSessionNumber: previousSessionNumber,
     tailContext,
-    indexLine,
     metadataHints: plan.metadataHints
   };
 }
@@ -373,6 +407,9 @@ function main2() {
 if (process.argv[1] && fs3.realpathSync(process.argv[1]) === fileURLToPath2(import.meta.url))
   main2();
 export {
+  firstTranscriptTimestamp,
+  localRecordParts,
   prepareChatRecording,
+  resolveSessionStartedAt,
   safeWorker
 };
