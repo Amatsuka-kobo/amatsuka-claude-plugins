@@ -81,4 +81,6 @@
 - `2026/0824/phyllis998/agent-policy-policy-change.md` | 2026-08-24 | phyllis998 | role-based setup 実装完了・残課題を引き継ぎ書へ
 - `2026/0824/phyllis998/metatron-rules-expansion.md` | 2026-08-25 | phyllis998 | metatron 区間 2 完了：実装移行、rules 推敲、参照修正、検証
 - `2026/0825/phyllis998/agent-policy-claude-model-setup.md` | 2026-08-26 | phyllis998 | ガード検証・全変更コミット準備
-- `2026/0826/phyllis998/agent-policy-codex-model-setup.md` | 2026-08-26 | phyllis998 | Python 対応・ツール導入スクリプト実装
+- `2026/0826/phyllis998/1752-agent-policy-external-agent-compatibility.md` | 2026-08-26 | phyllis998 | agent-policy互換性監査と結論
+- `2026/0826/phyllis998/2050-agent-policy-external-agent-compatibility.md` | 2026-08-26 | phyllis998 | 実装計画書第2版・引き継ぎ書・起動プロンプト完成
+- `2026/0826/phyllis998/agent-policy-codex-model-setup.md` | 2026-08-26 | phyllis998 | delegation gate 実装・全検証完了
