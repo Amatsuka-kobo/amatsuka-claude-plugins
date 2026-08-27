@@ -5,7 +5,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 # エージェント運用方針(Claude + Codex 併用)
 
-あなたはオーケストレーターまたはそのサブエージェントである。
+あなたはオーケストレーターである。
 
 `../../references/orchestration-discipline.md` を併せて読み、これに従う。
 
@@ -38,8 +38,8 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 
 ## 実行帯が GPT モデルの場合の dispatch
 
-- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、担当 GPT エージェントへ dispatch する。
-- このとき `model` 上書きは使わない。
+- 名指しで dispatch する Agents の起動形態は、共通規律の §委譲先の実行モデルの確定 に従う。合成する場合の手順もその節に従う。
+- 外部 Agent の enum 宣言を適用する場合を除き、`model` 上書きは使わない。
 - 依頼文に「この tools のみ使用」と明記する。
 - ビルトイン Agents は使わず、担当 GPT エージェントへ直接委譲する。
 - GPT が利用不可なら、§フォールバック に従う。
@@ -62,6 +62,8 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 GPT をローカルプロキシ経由で呼び出せないときは、`codex@openai-codex` プラグイン(`/codex:rescue --model gpt-5.6-sol` / `--model gpt-5.6-terra` / `--model gpt-5.6-luna`)を使う。それも不可なら `agent-policy:claude-model-policy` の担当表へ読み替える。
 
 ## 実行帯の解決順
+
+この節は役割ベース dispatch の解決順である。名指しの dispatch は共通規律の §委譲先の実行モデルの確定 の判定フローに従う。
 
 実務タスク着手前に確認し、以後はタスクごとに再判定しない。
 

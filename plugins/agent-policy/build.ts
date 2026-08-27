@@ -7,7 +7,8 @@ await esbuild.build({
   bundle: true,
   entryPoints: {
     "session-start": "./src/hooks/session-start.ts",
-    "setup-agents": "./src/setup-agents.ts"
+    "setup-agents": "./src/setup-agents.ts",
+    "subagent-start": "./src/hooks/subagent-start.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },

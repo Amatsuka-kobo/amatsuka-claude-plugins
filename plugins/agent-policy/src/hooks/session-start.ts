@@ -3,11 +3,15 @@
 // ファイルは書かない。定義の生成は setup-agents が担う。
 // 失敗しても Claude Code の起動を妨げないよう、例外は握りつぶして終了コード 0 で終わる。
 
-import fs from "node:fs"
-import path from "node:path"
 import { policyForInjection } from "../agents/policies"
 import { DEFAULT_ALIASES, PRESETS } from "../agents/presets"
-import { roleById, sortRoleIds } from "../agents/roles"
+import {
+  type MarkedAgent,
+  markerTable,
+  projectAgentsDir,
+  roleLabels,
+  scanAgents
+} from "./marker-scan"
 
 // 廃止した定義。プロジェクト側に残っていると同梱プリセットより優先されるため通知する。
 const RETIRED = [
@@ -16,8 +20,6 @@ const RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ]
-
-const LABELS = new Map<string, string | undefined>()
 
 interface AliasSpec {
   preset: string
@@ -48,12 +50,6 @@ const ALIASES: AliasSpec[] = [
   }
 ]
 
-interface Marked {
-  name: string
-  model: string | undefined
-  roles: string[]
-}
-
 function policyBlock(value: string | undefined): string | undefined {
   if (value === undefined || value === "" || value === "none") return undefined
 
@@ -64,143 +60,15 @@ function policyBlock(value: string | undefined): string | undefined {
   return `最初に必ず agent-policy:${policy} スキルを使用し、この規律に従う`
 }
 
-function agentsDir(env: NodeJS.ProcessEnv): string | undefined {
-  const projectDir = env.CLAUDE_PROJECT_DIR
-  if (projectDir === undefined || projectDir === "") return undefined
-  const dir = path.join(projectDir, ".claude", "agents")
-  return fs.existsSync(dir) ? dir : undefined
-}
-
-function frontmatter(file: string): Map<string, string> {
-  const lines = fs.readFileSync(file, "utf8").split("\n")
-  const meta = new Map<string, string>()
-  if (lines[0]?.trim() !== "---") return meta
-  const close = lines.indexOf("---", 1)
-  if (close === -1) return meta
-
-  for (const line of lines.slice(1, close)) {
-    const at = line.indexOf(":")
-    if (at <= 0) continue
-    meta.set(line.slice(0, at).trim(), line.slice(at + 1).trim())
-  }
-  return meta
-}
-
-// 走査対象はプロジェクトの .claude/agents/ のみ。同梱プリセットは読まない。
-function scan(dir: string | undefined): Marked[] {
-  if (dir === undefined) return []
-  const found: Marked[] = []
-
-  for (const file of fs.readdirSync(dir).sort()) {
-    if (!file.endsWith(".md")) continue
-    // 1 ファイルが読めなくても、他の定義と方針注入は生かす。
-    let meta: Map<string, string>
-    try {
-      meta = frontmatter(path.join(dir, file))
-    } catch {
-      continue
-    }
-    const marker = meta.get("agent-policy-role")
-    found.push({
-      name: meta.get("name") ?? file.replace(/\.md$/, ""),
-      model: meta.get("model"),
-      roles:
-        marker === undefined
-          ? []
-          : marker
-              .split(",")
-              .map((role) => role.trim())
-              .filter((role) => role !== "")
-    })
-  }
-
-  return found
-}
-
-// 役割 ID の表示名を解決する。プラグイン既知の ROLES に無いときは、
-// プロジェクト側の役割断片(.claude/agent-policy/roles/<id>.md または
-// .claude/agent-policy/roles/<lang>/<id>.md)の label を読む。
-// setup はプロジェクト側断片の役割 ID もマーカーへ書き込むため、ここで拾えないと
-// 「未知の役割」として誤って報告してしまう。
-function labelOf(env: NodeJS.ProcessEnv, id: string): string | undefined {
-  const cached = LABELS.get(id)
-  if (cached !== undefined || LABELS.has(id)) return cached
-
-  const known = roleById(id)
-  if (known !== undefined) {
-    LABELS.set(id, known.label)
-    return known.label
-  }
-
-  const projectDir = env.CLAUDE_PROJECT_DIR
-  if (projectDir === undefined || projectDir === "") {
-    LABELS.set(id, undefined)
-    return undefined
-  }
-
-  const base = path.join(projectDir, ".claude", "agent-policy", "roles")
-  const candidates = [path.join(base, `${id}.md`)]
-  try {
-    if (fs.existsSync(base)) {
-      for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-        if (entry.isDirectory()) {
-          candidates.push(path.join(base, entry.name, `${id}.md`))
-        }
-      }
-    }
-  } catch {
-    // 走査に失敗しても、直下の候補だけで解決を試みる。
-  }
-
-  for (const file of candidates) {
-    try {
-      if (!fs.existsSync(file)) continue
-      const label = frontmatter(file).get("label")
-      const resolved = label === "" ? undefined : label
-      LABELS.set(id, resolved)
-      return resolved
-    } catch {
-      // 1 ファイルが読めなくても、他の候補と方針注入は生かす。
-    }
-  }
-
-  LABELS.set(id, undefined)
-  return undefined
-}
-
-function markerBlock(
-  env: NodeJS.ProcessEnv,
-  marked: Marked[]
-): string | undefined {
-  const byRole = new Map<string, string[]>()
-  for (const entry of marked) {
-    for (const role of entry.roles) {
-      if (labelOf(env, role) === undefined) continue
-      byRole.set(role, [...(byRole.get(role) ?? []), entry.name])
-    }
-  }
-  if (byRole.size === 0) return undefined
-
-  const lines = [
-    "次の Agent は役割マーカーを宣言している。担当表の該当する帯は、これらを優先して使う。同じ帯に複数あるときは依頼内容に近いものを選ぶ。"
-  ]
-  for (const role of sortRoleIds([...byRole.keys()])) {
-    const names = byRole.get(role)
-    if (names !== undefined) {
-      lines.push(`- ${labelOf(env, role)}: ${names.join(" / ")}`)
-    }
-  }
-  return lines.join("\n")
-}
-
 function unknownRoleBlock(
   env: NodeJS.ProcessEnv,
-  marked: Marked[]
+  marked: MarkedAgent[]
 ): string | undefined {
+  const labelOf = roleLabels(env)
   const lines: string[] = []
   for (const entry of marked) {
     for (const role of entry.roles) {
-      if (labelOf(env, role) === undefined) {
+      if (labelOf(role) === undefined) {
         lines.push(`- ${entry.name}: ${role}`)
       }
     }
@@ -214,7 +82,7 @@ function unknownRoleBlock(
 
 function setupBlock(
   env: NodeJS.ProcessEnv,
-  marked: Marked[]
+  marked: MarkedAgent[]
 ): string | undefined {
   const byName = new Map(marked.map((entry) => [entry.name, entry]))
   const lines: string[] = []
@@ -273,7 +141,7 @@ function setupBlock(
 
 function retiredBlock(
   env: NodeJS.ProcessEnv,
-  marked: Marked[]
+  marked: MarkedAgent[]
 ): string | undefined {
   const found = marked
     .map((entry) => entry.name)
@@ -296,16 +164,16 @@ function retiredBlock(
 }
 
 function build(env: NodeJS.ProcessEnv): string | undefined {
-  let marked: Marked[] = []
+  let marked: MarkedAgent[] = []
   try {
-    marked = scan(agentsDir(env))
+    marked = scanAgents(projectAgentsDir(env))
   } catch {
     // ディレクトリ走査自体が失敗しても、主機能の方針注入は続ける。
   }
 
   const blocks = [
     policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
-    markerBlock(env, marked),
+    markerTable(env, marked),
     unknownRoleBlock(env, marked),
     setupBlock(env, marked),
     retiredBlock(env, marked)

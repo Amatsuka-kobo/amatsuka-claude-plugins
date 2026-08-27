@@ -5,7 +5,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Codex 系 GPT モデル(Sol/Terr
 
 # エージェント運用方針(Claude + Codex + Grok 併用)
 
-あなたはオーケストレーターまたはそのサブエージェントである。
+あなたはオーケストレーターである。
 
 `../../references/orchestration-discipline.md` を併せて読み、これに従う。
 
@@ -38,8 +38,8 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 
 ## 実行帯が GPT モデルの場合の dispatch
 
-- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、担当 GPT エージェントへ dispatch する。
-- このとき `model` 上書きは使わない。
+- 名指しで dispatch する Agents の起動形態は、共通規律の §委譲先の実行モデルの確定 に従う。合成する場合の手順もその節に従う。
+- 外部 Agent の enum 宣言を適用する場合を除き、`model` 上書きは使わない。
 - 依頼文に「この tools のみ使用」と明記する。
 - ビルトイン Agents は使わず、担当 GPT エージェントへ直接委譲する。
 - GPT が利用不可なら、§フォールバック に従う。
@@ -49,8 +49,8 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 
 ## 実行帯が Grok の場合の dispatch
 
-- 定義ファイルを持つ Agents は、定義本文(frontmatter を除く)を役割定義として依頼文に同梱し、担当 Grok エージェントへ dispatch する。
-- このとき `model` 上書きは使わない。
+- 名指しで dispatch する Agents の起動形態は、共通規律の §委譲先の実行モデルの確定 に従う。合成する場合の手順もその節に従う。
+- 外部 Agent の enum 宣言を適用する場合を除き、`model` 上書きは使わない。
 - 独立レビュー・リアルタイム情報調査・探索実働を委譲するときは、依頼文の冒頭でどの役割かを明示し、その役割の Output Format を指定する。
 - 独立レビュー・探索実働・リアルタイム情報調査を、実装エージェント(`Write` / `Edit` を持つ帯)へ委譲するときは、依頼文に次を明記する。
   - 使用してよい tools を読み取り系に限定すること(`Read` / `Grep` / `Glob`、読み取りに限った `Bash`、必要なら `WebSearch` / `WebFetch`)
@@ -73,6 +73,8 @@ SessionStart フックが「担当表の該当する帯は次を優先して使�
 - Grok の探索実働帯が利用不可なら `GPT Terra` / `GPT Luna` へ読み替える。
 
 ## 実行帯の解決順
+
+この節は役割ベース dispatch の解決順である。名指しの dispatch は共通規律の §委譲先の実行モデルの確定 の判定フローに従う。
 
 実務タスク着手前に確認し、以後はタスクごとに再判定しない。
 
