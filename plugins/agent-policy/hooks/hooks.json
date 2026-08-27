@@ -1,5 +1,5 @@
 {
-  "description": "agent-policy の運用補助: SessionStart で方針スキルの使用指示とエージェント定義の状態を注入する",
+  "description": "agent-policy の運用補助: SessionStart で方針スキルの使用指示とエージェント定義の状態を注入し、SubagentStart でサブエージェントへ役割マーカーの対応表と規律を配布する",
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +7,17 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/subagent-start.mjs\"",
             "timeout": 10
           }
         ]

@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-// src/hooks/session-start.ts
-import fs from "node:fs";
-import path from "node:path";
-
 // src/agents/roles.ts
 var ROLES = [
   {
@@ -252,6 +248,158 @@ var DEFAULT_ALIASES = Object.fromEntries(
   PRESETS.map((preset) => [preset.name, preset.defaultAlias])
 );
 
+// src/hooks/marker-scan.ts
+import fs from "node:fs";
+import path from "node:path";
+function frontmatter(file) {
+  const lines = fs.readFileSync(file, "utf8").split("\n");
+  const meta = /* @__PURE__ */ new Map();
+  if (lines[0]?.trim() !== "---") return meta;
+  const close = lines.indexOf("---", 1);
+  if (close === -1) return meta;
+  const metadataLines = lines.slice(1, close);
+  for (const [index, line] of metadataLines.entries()) {
+    const at = line.indexOf(":");
+    if (at <= 0) continue;
+    const key = line.slice(0, at).trim();
+    const value = line.slice(at + 1).trim();
+    if (key === "tools" && value === "") {
+      const items = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        const item = candidate.match(/^\s*-\s+(.+)$/)?.[1];
+        if (item === void 0) break;
+        items.push(item);
+      }
+      meta.set(key, items.length === 0 ? value : items);
+      continue;
+    }
+    meta.set(key, value);
+  }
+  return meta;
+}
+function unquote(value) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if (trimmed.length >= 2 && (quote === '"' || quote === "'") && trimmed.at(-1) === quote) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+function parseToolItems(items) {
+  return items.map(unquote).filter((item) => item !== "");
+}
+function parseToolsField(raw) {
+  if (raw === void 0) return void 0;
+  if (Array.isArray(raw)) {
+    const parsed2 = parseToolItems(raw);
+    return parsed2.length === 0 ? void 0 : parsed2;
+  }
+  const value = raw.trim();
+  if (value === "") return void 0;
+  if (value.startsWith("[")) {
+    if (!value.endsWith("]")) return void 0;
+    const inner = value.slice(1, -1).trim();
+    if (inner === "") return [];
+    return parseToolItems(inner.split(","));
+  }
+  if (value.startsWith("{") || value.startsWith("|") || value.startsWith(">")) {
+    return void 0;
+  }
+  const parsed = parseToolItems(value.split(","));
+  return parsed.length === 0 ? void 0 : parsed;
+}
+function projectAgentsDir(env) {
+  const projectDir = env.CLAUDE_PROJECT_DIR;
+  if (projectDir === void 0 || projectDir === "") return void 0;
+  return path.join(projectDir, ".claude", "agents");
+}
+function scanAgents(dir) {
+  if (dir === void 0) return [];
+  let files;
+  try {
+    files = fs.readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+  const found = [];
+  for (const file of files) {
+    if (!file.endsWith(".md")) continue;
+    let meta;
+    try {
+      meta = frontmatter(path.join(dir, file));
+    } catch {
+      continue;
+    }
+    const name = meta.get("name");
+    const model = meta.get("model");
+    const marker = meta.get("agent-policy-role");
+    found.push({
+      name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
+      model: typeof model === "string" ? model : void 0,
+      roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
+      tools: parseToolsField(meta.get("tools"))
+    });
+  }
+  return found;
+}
+function roleLabel(env, role) {
+  const known = roleById(role);
+  if (known !== void 0) return known.label;
+  const projectDir = env.CLAUDE_PROJECT_DIR;
+  if (projectDir === void 0 || projectDir === "") return void 0;
+  const base = path.join(projectDir, ".claude", "agent-policy", "roles");
+  const candidates = [path.join(base, `${role}.md`)];
+  try {
+    if (fs.existsSync(base)) {
+      for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          candidates.push(path.join(base, entry.name, `${role}.md`));
+        }
+      }
+    }
+  } catch {
+  }
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const value = frontmatter(file).get("label");
+      return typeof value === "string" && value !== "" ? value : void 0;
+    } catch {
+    }
+  }
+  return void 0;
+}
+function roleLabels(env) {
+  const labels = /* @__PURE__ */ new Map();
+  return (role) => {
+    if (labels.has(role)) return labels.get(role);
+    const label = roleLabel(env, role);
+    labels.set(role, label);
+    return label;
+  };
+}
+function markerTable(env, marked) {
+  const labelOf = roleLabels(env);
+  const byRole = /* @__PURE__ */ new Map();
+  for (const entry of marked) {
+    for (const role of entry.roles) {
+      if (labelOf(role) === void 0) continue;
+      byRole.set(role, [...byRole.get(role) ?? [], entry.name]);
+    }
+  }
+  if (byRole.size === 0) return void 0;
+  const lines = [
+    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5E2F\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5E2F\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002"
+  ];
+  for (const role of sortRoleIds([...byRole.keys()])) {
+    const names = byRole.get(role);
+    if (names !== void 0) {
+      lines.push(`- ${labelOf(role)}: ${names.join(" / ")}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 // src/hooks/session-start.ts
 var RETIRED = [
   "claude-researcher",
@@ -259,7 +407,6 @@ var RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ];
-var LABELS = /* @__PURE__ */ new Map();
 var ALIASES = [
   {
     preset: "gpt-sol",
@@ -290,108 +437,12 @@ function policyBlock(value) {
   }
   return `\u6700\u521D\u306B\u5FC5\u305A agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3057\u3001\u3053\u306E\u898F\u5F8B\u306B\u5F93\u3046`;
 }
-function agentsDir(env) {
-  const projectDir = env.CLAUDE_PROJECT_DIR;
-  if (projectDir === void 0 || projectDir === "") return void 0;
-  const dir = path.join(projectDir, ".claude", "agents");
-  return fs.existsSync(dir) ? dir : void 0;
-}
-function frontmatter(file) {
-  const lines = fs.readFileSync(file, "utf8").split("\n");
-  const meta = /* @__PURE__ */ new Map();
-  if (lines[0]?.trim() !== "---") return meta;
-  const close = lines.indexOf("---", 1);
-  if (close === -1) return meta;
-  for (const line of lines.slice(1, close)) {
-    const at = line.indexOf(":");
-    if (at <= 0) continue;
-    meta.set(line.slice(0, at).trim(), line.slice(at + 1).trim());
-  }
-  return meta;
-}
-function scan(dir) {
-  if (dir === void 0) return [];
-  const found = [];
-  for (const file of fs.readdirSync(dir).sort()) {
-    if (!file.endsWith(".md")) continue;
-    let meta;
-    try {
-      meta = frontmatter(path.join(dir, file));
-    } catch {
-      continue;
-    }
-    const marker = meta.get("agent-policy-role");
-    found.push({
-      name: meta.get("name") ?? file.replace(/\.md$/, ""),
-      model: meta.get("model"),
-      roles: marker === void 0 ? [] : marker.split(",").map((role) => role.trim()).filter((role) => role !== "")
-    });
-  }
-  return found;
-}
-function labelOf(env, id) {
-  const cached = LABELS.get(id);
-  if (cached !== void 0 || LABELS.has(id)) return cached;
-  const known = roleById(id);
-  if (known !== void 0) {
-    LABELS.set(id, known.label);
-    return known.label;
-  }
-  const projectDir = env.CLAUDE_PROJECT_DIR;
-  if (projectDir === void 0 || projectDir === "") {
-    LABELS.set(id, void 0);
-    return void 0;
-  }
-  const base = path.join(projectDir, ".claude", "agent-policy", "roles");
-  const candidates = [path.join(base, `${id}.md`)];
-  try {
-    if (fs.existsSync(base)) {
-      for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-        if (entry.isDirectory()) {
-          candidates.push(path.join(base, entry.name, `${id}.md`));
-        }
-      }
-    }
-  } catch {
-  }
-  for (const file of candidates) {
-    try {
-      if (!fs.existsSync(file)) continue;
-      const label = frontmatter(file).get("label");
-      const resolved = label === "" ? void 0 : label;
-      LABELS.set(id, resolved);
-      return resolved;
-    } catch {
-    }
-  }
-  LABELS.set(id, void 0);
-  return void 0;
-}
-function markerBlock(env, marked) {
-  const byRole = /* @__PURE__ */ new Map();
-  for (const entry of marked) {
-    for (const role of entry.roles) {
-      if (labelOf(env, role) === void 0) continue;
-      byRole.set(role, [...byRole.get(role) ?? [], entry.name]);
-    }
-  }
-  if (byRole.size === 0) return void 0;
-  const lines = [
-    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5E2F\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5E2F\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002"
-  ];
-  for (const role of sortRoleIds([...byRole.keys()])) {
-    const names = byRole.get(role);
-    if (names !== void 0) {
-      lines.push(`- ${labelOf(env, role)}: ${names.join(" / ")}`);
-    }
-  }
-  return lines.join("\n");
-}
 function unknownRoleBlock(env, marked) {
+  const labelOf = roleLabels(env);
   const lines = [];
   for (const entry of marked) {
     for (const role of entry.roles) {
-      if (labelOf(env, role) === void 0) {
+      if (labelOf(role) === void 0) {
         lines.push(`- ${entry.name}: ${role}`);
       }
     }
@@ -465,12 +516,12 @@ function retiredBlock(env, marked) {
 function build(env) {
   let marked = [];
   try {
-    marked = scan(agentsDir(env));
+    marked = scanAgents(projectAgentsDir(env));
   } catch {
   }
   const blocks = [
     policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
-    markerBlock(env, marked),
+    markerTable(env, marked),
     unknownRoleBlock(env, marked),
     setupBlock(env, marked),
     retiredBlock(env, marked)
