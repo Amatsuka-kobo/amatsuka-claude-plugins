@@ -1,16 +1,70 @@
 import { describe, expect, it } from "vitest"
 import {
   ASSIGNMENTS,
+  allowsAgentTool,
   MODELS,
   modelById,
   modelsFor,
   POLICIES,
+  type PolicyName,
   policyForInjection,
   resolveModelValue,
   rolesAcrossPolicies,
   rolesFor
 } from "../policies"
-import { ROLES } from "../roles"
+import { ROLES, type RoleId } from "../roles"
+
+// 各方針スキルの Agent tool 規定を写したもの。SKILL.md を変えたらここも変える。
+const EXPECTED: Record<PolicyName, Record<RoleId, boolean>> = {
+  "claude-model-policy": {
+    "complex-impl": true,
+    "normal-impl": true,
+    "light-impl": false,
+    general: true,
+    explore: true,
+    "realtime-research": true,
+    "independent-review": true,
+    "doc-review": false,
+    "code-review": true,
+    advisor: false
+  },
+  "with-codex-policy": {
+    "complex-impl": true,
+    "normal-impl": true,
+    "light-impl": false,
+    general: true,
+    explore: true,
+    "realtime-research": true,
+    "independent-review": true,
+    "doc-review": false,
+    "code-review": true,
+    advisor: false
+  },
+  "with-grok-policy": {
+    "complex-impl": true,
+    "normal-impl": true,
+    "light-impl": false,
+    general: true,
+    explore: true,
+    "realtime-research": true,
+    "independent-review": true,
+    "doc-review": false,
+    "code-review": true,
+    advisor: false
+  },
+  "codex-grok-policy": {
+    "complex-impl": true,
+    "normal-impl": true,
+    "light-impl": false,
+    general: true,
+    explore: true,
+    "realtime-research": true,
+    "independent-review": true,
+    "doc-review": false,
+    "code-review": true,
+    advisor: false
+  }
+}
 
 describe("ASSIGNMENTS", () => {
   it("4 方針それぞれが役割 10 種すべてに担当モデルを持つ", () => {
@@ -149,6 +203,43 @@ describe("rolesAcrossPolicies", () => {
       "realtime-research",
       "independent-review"
     ])
+  })
+})
+
+describe("allowsAgentTool", () => {
+  it("4 方針 × 10 役割の Agent tool 規定と一致する", () => {
+    for (const policy of POLICIES) {
+      for (const role of ROLES) {
+        for (const model of ASSIGNMENTS[policy.id][role.id]) {
+          expect(
+            allowsAgentTool([role.id], model),
+            `${policy.id}/${role.id}/${model}`
+          ).toBe(EXPECTED[policy.id][role.id])
+        }
+      }
+    }
+  })
+
+  it("rolesFor が返す読み取り役割だけの混成を許可する", () => {
+    const roles = rolesFor("codex-grok-policy", "grok")
+    expect(roles).toEqual([
+      "explore",
+      "realtime-research",
+      "independent-review"
+    ])
+    expect(allowsAgentTool(roles, "grok")).toBe(true)
+  })
+
+  it("単独の除外役割だけを拒否し、他役割との混成を許可する", () => {
+    expect(allowsAgentTool(["light-impl"], "grok")).toBe(false)
+    expect(allowsAgentTool(["light-impl", "complex-impl"], "grok")).toBe(true)
+    expect(allowsAgentTool(["advisor"], "opus")).toBe(false)
+    expect(allowsAgentTool(["complex-impl", "advisor"], "opus")).toBe(true)
+  })
+
+  it("モデル側の除外を適用する", () => {
+    expect(allowsAgentTool(["explore"], "grok")).toBe(true)
+    expect(allowsAgentTool(["explore"], "haiku")).toBe(false)
   })
 })
 

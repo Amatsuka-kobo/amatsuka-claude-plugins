@@ -280,11 +280,6 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob"]
   }
 ];
-var AGENT_CAPABLE = [
-  "complex-impl",
-  "normal-impl",
-  "general"
-];
 function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
@@ -297,218 +292,9 @@ function sortRoleIds(ids) {
     (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
   );
 }
-function allowsAgentTool(ids) {
-  return ids.some((id) => AGENT_CAPABLE.includes(id));
-}
 function hasMixedKinds(kinds) {
   const unique2 = new Set(kinds);
   return unique2.has("impl") && unique2.has("readonly");
-}
-
-// src/agents/vocabulary.ts
-var JA = {
-  bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
-  advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
-  agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
-  constraintHeading: "## \u5236\u7D04",
-  outputFormatHeading: "## Output Format",
-  listSeparator: "\u3001",
-  quote: (value) => `\u300C${value}\u300D`,
-  describe: (roles) => `Use this agent when ${roles}\u3092\u59D4\u8B72\u3059\u308B\u3068\u304D\u3002\u8A73\u7D30\u306F\u672C\u6587\u306E\u300CWhen to invoke\u300D\u3092\u53C2\u7167\u3002`
-};
-var EN = {
-  bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
-  advisorHeading: "## Consulting an advisor",
-  agentConstraintHeading: "## Agent tool limits",
-  constraintHeading: "## Constraints",
-  outputFormatHeading: "## Output Format",
-  listSeparator: ", ",
-  quote: (value) => `"${value}"`,
-  describe: (roles) => `Use this agent when delegating ${roles}. See "When to invoke" below for details.`
-};
-function vocabularyFor(lang) {
-  return lang === "ja" ? JA : EN;
-}
-
-// src/agents/compose.ts
-var COLORS = {
-  gpt: "yellow",
-  grok: "red",
-  claude: "blue"
-};
-function compose(input) {
-  const vocabulary = vocabularyFor(input.lang);
-  const common = loadCommon(input.fragmentDirs);
-  const { ids: ordered, selected } = selectFragments(input);
-  const withAgent = allowsAgentTool(input.roleIds);
-  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? []);
-  const denyTools = input.denyTools ?? [];
-  const head = [
-    "---",
-    `name: ${input.name}`,
-    `description: ${describe(selected, vocabulary)}`,
-    `model: ${input.model}`,
-    `color: ${input.color ?? COLORS[input.vendor]}`,
-    `tools: ${tools.join(", ")}`,
-    ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
-    `agent-policy-role: ${ordered.join(", ")}`,
-    "---",
-    ""
-  ];
-  const body = [];
-  body.push(...preamble(common, input.name, selected, vocabulary), "");
-  for (const heading of vocabulary.bodyOrder) {
-    const items = selected.flatMap(
-      (fragment) => fragment.sections.get(heading) ?? []
-    );
-    if (items.length === 0) continue;
-    body.push(heading, "", ...items, "");
-  }
-  if (withAgent) {
-    const advisor = common.get(vocabulary.advisorHeading);
-    if (advisor !== void 0)
-      body.push(vocabulary.advisorHeading, "", ...advisor, "");
-  }
-  const constraints = [
-    ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
-    ...common.get(vocabulary.constraintHeading) ?? [],
-    ...selected.flatMap(
-      (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
-    )
-  ];
-  if (constraints.length > 0)
-    body.push(vocabulary.constraintHeading, "", ...constraints, "");
-  body.push(vocabulary.outputFormatHeading, "");
-  if (selected.length === 1) {
-    body.push(
-      ...selected[0]?.sections.get(vocabulary.outputFormatHeading) ?? [],
-      ""
-    );
-  } else {
-    for (const fragment of selected) {
-      const items = fragment.sections.get(vocabulary.outputFormatHeading);
-      if (items === void 0 || items.length === 0) continue;
-      body.push(`### ${fragment.label}`, "", ...items, "");
-    }
-  }
-  return `${[...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
-`;
-}
-function describeRoles(input) {
-  const { ids, selected } = selectFragments(input);
-  const implRoles = selected.filter((fragment) => fragment.kind === "impl").map((fragment) => fragment.id);
-  const readonlyRoles = selected.filter((fragment) => fragment.kind === "readonly").map((fragment) => fragment.id);
-  return {
-    ids,
-    implRoles,
-    readonlyRoles,
-    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds)
-  };
-}
-function selectFragments(input) {
-  const fragments = loadFragments(input.fragmentDirs, input.vendor);
-  const ids = sortRoleIds(input.roleIds);
-  const selected = ids.map((id) => {
-    const fragment = fragments.get(id);
-    if (fragment === void 0) throw new Error(`Unknown role id: ${id}`);
-    return fragment;
-  });
-  return { ids, selected };
-}
-function resolveToolsFor(selected, withAgent, mcpServers) {
-  const tools = [];
-  for (const fragment of selected) {
-    for (const tool of fragment.tools) {
-      if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool);
-    }
-  }
-  if (withAgent) tools.push("Agent");
-  for (const server of mcpServers) {
-    if (!tools.includes(server)) tools.push(server);
-  }
-  return tools;
-}
-function describe(selected, vocabulary) {
-  const list = selected.map((fragment) => fragment.description).join(vocabulary.listSeparator);
-  return vocabulary.describe(list);
-}
-function preamble(common, name, selected, vocabulary) {
-  const labels = selected.map((fragment) => vocabulary.quote(fragment.label)).join(vocabulary.listSeparator);
-  return (common.get("## Preamble") ?? []).map(
-    (line) => line.replace("{{NAME}}", name).replace("{{ROLE_LABELS}}", labels)
-  );
-}
-
-// src/agents/mcp.ts
-import { execFileSync } from "node:child_process";
-var USABLE = ["\u2714 Connected", "cached"];
-var STATUSES = [
-  "\u2714 Connected",
-  "\u2718 Failed to connect",
-  "! Needs authentication",
-  "\u23F8 Pending approval",
-  "\u2718 Rejected",
-  "cached"
-];
-function parseMcpList(output) {
-  const servers = [];
-  for (const raw of output.split("\n")) {
-    const line = raw.trim();
-    if (line === "") continue;
-    if (line.startsWith("\u26A0") || line.startsWith("Checking")) continue;
-    const at = line.lastIndexOf(" - ");
-    if (at === -1) continue;
-    const status = line.slice(at + 3).trim();
-    if (!STATUSES.some((known) => status.startsWith(known))) continue;
-    const head = line.slice(0, at);
-    const space = head.indexOf(" ");
-    const name = (space === -1 ? head : head.slice(0, space)).replace(/:$/, "");
-    if (name === "") continue;
-    servers.push({
-      name,
-      status,
-      usable: USABLE.some((known) => status.startsWith(known))
-    });
-  }
-  return servers;
-}
-function toolPrefix(name) {
-  return `mcp__${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
-}
-function listMcpServers(env) {
-  const bin = env.AGENT_POLICY_CLAUDE_BIN;
-  const options = {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 3e4,
-    maxBuffer: 8 * 1024 * 1024,
-    // options.env は process.env と自動マージされないため、PATH を保つ。
-    env: { ...process.env, ...env }
-  };
-  try {
-    const output = bin === void 0 || bin === "" ? execFileSync("claude", ["mcp", "list"], options) : execFileSync(process.execPath, [bin], options);
-    return parseMcpList(output);
-  } catch {
-    return [];
-  }
-}
-function mcpCurrentOf(content) {
-  const lines = content.split("\n");
-  if (lines[0]?.trim() !== "---") return { servers: [], denyTools: [] };
-  const close = lines.indexOf("---", 1);
-  if (close === -1) return { servers: [], denyTools: [] };
-  const meta = /* @__PURE__ */ new Map();
-  for (const line of lines.slice(1, close)) {
-    const at = line.indexOf(": ");
-    if (at <= 0) continue;
-    meta.set(line.slice(0, at).trim(), line.slice(at + 2).trim());
-  }
-  const split = (value) => value === void 0 ? [] : value.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
-  return {
-    servers: split(meta.get("tools")).filter((tool) => tool.startsWith("mcp__")).map((tool) => tool.slice("mcp__".length)),
-    denyTools: split(meta.get("disallowedTools"))
-  };
 }
 
 // src/agents/policies.ts
@@ -650,6 +436,12 @@ var ASSIGNMENTS = {
     advisor: ["fable", "opus"]
   }
 };
+var AGENT_DENIED_MODELS = ["haiku", "gpt-luna"];
+var SOLO_DENIED_ROLES = ["light-impl", "advisor"];
+function allowsAgentTool(ids, model) {
+  if (AGENT_DENIED_MODELS.includes(model)) return false;
+  return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));
+}
 function modelById(id) {
   return MODELS.find((model) => model.id === id);
 }
@@ -678,6 +470,212 @@ function resolveModelValue(spec, env) {
   if (spec.aliasEnv === void 0) return spec.model;
   const value = env[spec.aliasEnv]?.trim();
   return value === void 0 || value === "" ? spec.model : value;
+}
+
+// src/agents/vocabulary.ts
+var JA = {
+  bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
+  advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
+  agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
+  constraintHeading: "## \u5236\u7D04",
+  outputFormatHeading: "## Output Format",
+  listSeparator: "\u3001",
+  quote: (value) => `\u300C${value}\u300D`,
+  describe: (roles) => `Use this agent when ${roles}\u3092\u59D4\u8B72\u3059\u308B\u3068\u304D\u3002\u8A73\u7D30\u306F\u672C\u6587\u306E\u300CWhen to invoke\u300D\u3092\u53C2\u7167\u3002`
+};
+var EN = {
+  bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
+  advisorHeading: "## Consulting an advisor",
+  agentConstraintHeading: "## Agent tool limits",
+  constraintHeading: "## Constraints",
+  outputFormatHeading: "## Output Format",
+  listSeparator: ", ",
+  quote: (value) => `"${value}"`,
+  describe: (roles) => `Use this agent when delegating ${roles}. See "When to invoke" below for details.`
+};
+function vocabularyFor(lang) {
+  return lang === "ja" ? JA : EN;
+}
+
+// src/agents/compose.ts
+var COLORS = {
+  gpt: "yellow",
+  grok: "red",
+  claude: "blue"
+};
+function compose(input) {
+  const vocabulary = vocabularyFor(input.lang);
+  const common = loadCommon(input.fragmentDirs);
+  const { ids: ordered, selected } = selectFragments(input);
+  const withAgent = allowsAgentTool(input.roleIds, input.modelId);
+  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? []);
+  const denyTools = input.denyTools ?? [];
+  const head = [
+    "---",
+    `name: ${input.name}`,
+    `description: ${describe(selected, vocabulary)}`,
+    `model: ${input.model}`,
+    `color: ${input.color ?? COLORS[input.vendor]}`,
+    `tools: ${tools.join(", ")}`,
+    ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
+    `agent-policy-role: ${ordered.join(", ")}`,
+    "---",
+    ""
+  ];
+  const body = [];
+  body.push(...preamble(common, input.name, selected, vocabulary), "");
+  for (const heading of vocabulary.bodyOrder) {
+    const items = selected.flatMap(
+      (fragment) => fragment.sections.get(heading) ?? []
+    );
+    if (items.length === 0) continue;
+    body.push(heading, "", ...items, "");
+  }
+  if (withAgent) {
+    const advisor = common.get(vocabulary.advisorHeading);
+    if (advisor !== void 0)
+      body.push(vocabulary.advisorHeading, "", ...advisor, "");
+  }
+  const constraints = [
+    ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
+    ...common.get(vocabulary.constraintHeading) ?? [],
+    ...selected.flatMap(
+      (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
+    )
+  ];
+  if (constraints.length > 0)
+    body.push(vocabulary.constraintHeading, "", ...constraints, "");
+  body.push(vocabulary.outputFormatHeading, "");
+  if (selected.length === 1) {
+    body.push(
+      ...selected[0]?.sections.get(vocabulary.outputFormatHeading) ?? [],
+      ""
+    );
+  } else {
+    for (const fragment of selected) {
+      const items = fragment.sections.get(vocabulary.outputFormatHeading);
+      if (items === void 0 || items.length === 0) continue;
+      body.push(`### ${fragment.label}`, "", ...items, "");
+    }
+  }
+  return `${[...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
+`;
+}
+function describeRoles(input) {
+  const { ids, selected } = selectFragments(input);
+  const implRoles = selected.filter((fragment) => fragment.kind === "impl").map((fragment) => fragment.id);
+  const readonlyRoles = selected.filter((fragment) => fragment.kind === "readonly").map((fragment) => fragment.id);
+  return {
+    ids,
+    implRoles,
+    readonlyRoles,
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
+    agentTool: allowsAgentTool(input.roleIds, input.modelId)
+  };
+}
+function selectFragments(input) {
+  const fragments = loadFragments(input.fragmentDirs, input.vendor);
+  const ids = sortRoleIds(input.roleIds);
+  const selected = ids.map((id) => {
+    const fragment = fragments.get(id);
+    if (fragment === void 0) throw new Error(`Unknown role id: ${id}`);
+    return fragment;
+  });
+  return { ids, selected };
+}
+function resolveToolsFor(selected, withAgent, mcpServers) {
+  const tools = [];
+  for (const fragment of selected) {
+    for (const tool of fragment.tools) {
+      if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool);
+    }
+  }
+  if (withAgent) tools.push("Agent");
+  for (const server of mcpServers) {
+    if (!tools.includes(server)) tools.push(server);
+  }
+  return tools;
+}
+function describe(selected, vocabulary) {
+  const list = selected.map((fragment) => fragment.description).join(vocabulary.listSeparator);
+  return vocabulary.describe(list);
+}
+function preamble(common, name, selected, vocabulary) {
+  const labels = selected.map((fragment) => vocabulary.quote(fragment.label)).join(vocabulary.listSeparator);
+  return (common.get("## Preamble") ?? []).map(
+    (line) => line.replace("{{NAME}}", name).replace("{{ROLE_LABELS}}", labels)
+  );
+}
+
+// src/agents/mcp.ts
+import { execFileSync } from "node:child_process";
+var USABLE = ["\u2714 Connected", "cached"];
+var STATUSES = [
+  "\u2714 Connected",
+  "\u2718 Failed to connect",
+  "! Needs authentication",
+  "\u23F8 Pending approval",
+  "\u2718 Rejected",
+  "cached"
+];
+function parseMcpList(output) {
+  const servers = [];
+  for (const raw of output.split("\n")) {
+    const line = raw.trim();
+    if (line === "") continue;
+    if (line.startsWith("\u26A0") || line.startsWith("Checking")) continue;
+    const at = line.lastIndexOf(" - ");
+    if (at === -1) continue;
+    const status = line.slice(at + 3).trim();
+    if (!STATUSES.some((known) => status.startsWith(known))) continue;
+    const head = line.slice(0, at);
+    const space = head.indexOf(" ");
+    const name = (space === -1 ? head : head.slice(0, space)).replace(/:$/, "");
+    if (name === "") continue;
+    servers.push({
+      name,
+      status,
+      usable: USABLE.some((known) => status.startsWith(known))
+    });
+  }
+  return servers;
+}
+function toolPrefix(name) {
+  return `mcp__${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+function listMcpServers(env) {
+  const bin = env.AGENT_POLICY_CLAUDE_BIN;
+  const options = {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 3e4,
+    maxBuffer: 8 * 1024 * 1024,
+    // options.env は process.env と自動マージされないため、PATH を保つ。
+    env: { ...process.env, ...env }
+  };
+  try {
+    const output = bin === void 0 || bin === "" ? execFileSync("claude", ["mcp", "list"], options) : execFileSync(process.execPath, [bin], options);
+    return parseMcpList(output);
+  } catch {
+    return [];
+  }
+}
+function mcpCurrentOf(content) {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() !== "---") return { servers: [], denyTools: [] };
+  const close = lines.indexOf("---", 1);
+  if (close === -1) return { servers: [], denyTools: [] };
+  const meta = /* @__PURE__ */ new Map();
+  for (const line of lines.slice(1, close)) {
+    const at = line.indexOf(": ");
+    if (at <= 0) continue;
+    meta.set(line.slice(0, at).trim(), line.slice(at + 2).trim());
+  }
+  const split = (value) => value === void 0 ? [] : value.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  return {
+    servers: split(meta.get("tools")).filter((tool) => tool.startsWith("mcp__")).map((tool) => tool.slice("mcp__".length)),
+    denyTools: split(meta.get("disallowedTools"))
+  };
 }
 
 // src/setup-agents.ts
@@ -806,6 +804,7 @@ function composeInputFor(options, target, mcpServers) {
   return {
     name: target.name,
     model: target.model,
+    modelId: target.modelId,
     vendor: target.vendor,
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),

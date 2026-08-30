@@ -5,18 +5,14 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import type { Lang } from "./policies"
-import {
-  allowsAgentTool,
-  hasMixedKinds,
-  type RoleId,
-  sortRoleIds
-} from "./roles"
+import { allowsAgentTool, type Lang, type ModelId } from "./policies"
+import { hasMixedKinds, type RoleId, sortRoleIds } from "./roles"
 import { type Vocabulary, vocabularyFor } from "./vocabulary"
 
 export interface ComposeInput {
   name: string
   model: string
+  modelId: ModelId
   vendor: Vendor
   roleIds: RoleId[]
   fragmentDirs: FragmentDir[]
@@ -44,7 +40,7 @@ export function compose(input: ComposeInput): string {
   const vocabulary = vocabularyFor(input.lang)
   const common = loadCommon(input.fragmentDirs)
   const { ids: ordered, selected } = selectFragments(input)
-  const withAgent = allowsAgentTool(input.roleIds)
+  const withAgent = allowsAgentTool(input.roleIds, input.modelId)
   const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? [])
   const denyTools = input.denyTools ?? []
 
@@ -124,7 +120,7 @@ export function describeRoles(input: ComposeInput): RolesSummary {
     implRoles,
     readonlyRoles,
     mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds)
+    agentTool: allowsAgentTool(input.roleIds, input.modelId)
   }
 }
 

@@ -27,7 +27,7 @@ description: Claude(Fable/Opus/Sonnet/Haiku)と Grok(ローカルプロキシ経
 | 設計書・実装計画書の独立レビュー(前提検証・反証提示)  | `Grok`           |
 | その他のタスク                                        | `Grok`           |
 
-- 通常の実装と軽量な実装はどちらも `Grok` が担い、Agent Tool の可否を分けない。`orchestration-discipline` の「軽量な実装の帯に Agent Tool を許可しない」規定は、この方針では `Grok` に適用しない。
+- 通常の実装と軽量な実装を同一の `Grok` 定義が担うときは、Agent Tool の可否を帯で分けない。この例外は両方の役割を担う定義に限る。軽量な実装だけを担う `Grok` 定義は軽量な実装の帯に属するため、`orchestration-discipline` の「軽量な実装の帯に Agent Tool を許可しない」規定を適用する。
 - `Haiku` には Agent Tool を許可しない。
 - 「調査・分析」と「リアルタイム情報調査」は、外部の最新情報へのアクセスが主目的なら `Grok`、思考の深さが主目的なら `Opus` へ振り分ける。
 

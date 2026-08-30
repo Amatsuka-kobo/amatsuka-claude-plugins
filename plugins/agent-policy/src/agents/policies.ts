@@ -181,6 +181,20 @@ export const ASSIGNMENTS: Record<PolicyName, Record<RoleId, ModelId[]>> = {
   }
 }
 
+// 4 方針スキルの「Haiku には Agent Tool を許可しない」「軽量な実装の帯として
+// 扱うのは GPT Luna と Haiku」に対応する。with-grok-policy が軽量帯の規定を
+// Grok に適用しないことは、grok をここに入れないことで満たす。
+const AGENT_DENIED_MODELS: readonly ModelId[] = ["haiku", "gpt-luna"]
+
+// 単一役割の定義はその帯そのものなので、共通規律の除外がそのまま効く。
+// 複数役割を兼ねる定義は帯そのものではないため効かない（設計 §5.2）。
+const SOLO_DENIED_ROLES: readonly RoleId[] = ["light-impl", "advisor"]
+
+export function allowsAgentTool(ids: RoleId[], model: ModelId): boolean {
+  if (AGENT_DENIED_MODELS.includes(model)) return false
+  return ids.some((id) => !SOLO_DENIED_ROLES.includes(id))
+}
+
 export function modelById(id: string): ModelSpec | undefined {
   return MODELS.find((model) => model.id === id)
 }

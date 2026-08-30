@@ -32,6 +32,7 @@ function build(roleIds: string[], overrides: Record<string, unknown> = {}) {
     name: "test-agent",
     model: "test-alias",
     vendor: "gpt",
+    modelId: "gpt-terra",
     roleIds: roleIds as never,
     fragmentDirs: [PLUGIN_ROLES],
     lang: "ja",
@@ -96,13 +97,16 @@ describe("frontmatter", () => {
     expect(meta.tools).not.toContain("mcp__")
   })
 
-  it("Agent の付与が役割で決まる", () => {
+  it("Agent の付与が役割とモデルで決まる", () => {
     expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
     expect(frontmatter(build(["light-impl"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["explore"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["explore"])).tools).toContain("Agent")
     expect(frontmatter(build(["light-impl", "complex-impl"])).tools).toContain(
       "Agent"
     )
+    expect(
+      frontmatter(build(["explore"], { modelId: "haiku" })).tools
+    ).not.toContain("Agent")
   })
 })
 
@@ -132,6 +136,7 @@ describe("describeRoles", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
+      modelId: "gpt-terra",
       roleIds: ["triage", "normal-impl"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -167,7 +172,7 @@ describe("本文", () => {
   })
 
   it("Agent が付かないとき「アドバイザーへの相談」節を出さない", () => {
-    expect(build(["explore"])).not.toContain("## アドバイザーへの相談")
+    expect(build(["light-impl"])).not.toContain("## アドバイザーへの相談")
   })
 
   it("general だけでも Agent と Agent tool の制約を出す", () => {
@@ -176,10 +181,10 @@ describe("本文", () => {
     expect(body).toContain("`Agent` tool はアドバイザー相談専用")
   })
 
-  it("読み取り役割だけなら Agent も Agent tool の制約も出さない", () => {
+  it("読み取り役割だけでも Agent と Agent tool の制約を出す", () => {
     const body = build(["explore"])
-    expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
-    expect(body).not.toContain("`Agent` tool はアドバイザー相談専用")
+    expect(frontmatter(body).tools.split(", ")).toContain("Agent")
+    expect(body).toContain("`Agent` tool はアドバイザー相談専用")
   })
 
   it("複数の Agent 対応役割を合成しても Agent tool の制約は重複しない", () => {
@@ -301,6 +306,7 @@ describe("断片の解決", () => {
       name: "g",
       model: "m",
       vendor: "grok",
+      modelId: "grok",
       roleIds: ["realtime-research"] as never,
       fragmentDirs: [PLUGIN_ROLES],
       lang: "ja"
@@ -309,6 +315,7 @@ describe("断片の解決", () => {
       name: "g",
       model: "m",
       vendor: "gpt",
+      modelId: "gpt-terra",
       roleIds: ["realtime-research"] as never,
       fragmentDirs: [PLUGIN_ROLES],
       lang: "ja"
@@ -344,16 +351,17 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
+      modelId: "gpt-terra",
       roleIds: ["explore"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
     })
     expect(body).toContain("独自探索")
     expect(body).not.toContain("依頼された探索範囲だけを走査する")
-    expect(frontmatter(body).tools).toBe("Read, Grep, Glob")
+    expect(frontmatter(body).tools).toBe("Read, Grep, Glob, Agent")
   })
 
-  it("プロジェクト側断片の Agent は許可対象の役割にだけ付ける", () => {
+  it("プロジェクト側断片の Agent はモデルと役割の判定に従って付ける", () => {
     const projectRoles = path.join(temporary, "roles")
     fs.mkdirSync(projectRoles, { recursive: true })
     fs.writeFileSync(
@@ -378,11 +386,12 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
+      modelId: "gpt-terra",
       roleIds: ["explore"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
     })
-    expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
+    expect(frontmatter(body).tools.split(", ")).toContain("Agent")
   })
 
   it("プロジェクト側にしかない役割 ID を解決できる", () => {
@@ -410,6 +419,7 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
+      modelId: "gpt-terra",
       roleIds: ["triage"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -438,6 +448,7 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
+      modelId: "gpt-terra",
       roleIds: ["complex-impl"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -461,6 +472,7 @@ describe("英語断片での合成", () => {
         name: "test-agent",
         model: "sonnet",
         vendor: "claude",
+        modelId: "sonnet",
         roleIds: [role.id],
         fragmentDirs: [EN],
         lang: "en"
@@ -486,6 +498,7 @@ describe("英語断片での合成", () => {
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
+      modelId: "sonnet",
       roleIds: ["complex-impl", "explore"],
       fragmentDirs: [EN],
       lang: "en"
@@ -529,6 +542,7 @@ describe("英語断片での合成", () => {
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
+      modelId: "sonnet",
       roleIds: ["explore"],
       fragmentDirs: [EN, { path: projectRoles, source: "project" }],
       lang: "en"
@@ -546,6 +560,7 @@ describe("英語断片での合成", () => {
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
+      modelId: "sonnet",
       roleIds: ["complex-impl"],
       fragmentDirs: [EN],
       lang: "en"

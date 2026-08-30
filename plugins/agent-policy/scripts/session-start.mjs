@@ -238,6 +238,7 @@ function rolesAcrossPolicies(model) {
 var PRESETS = MODELS.filter(
   (model) => model.vendor !== "claude"
 ).map((model) => ({
+  modelId: model.id,
   name: model.defaultName,
   vendor: model.vendor,
   defaultAlias: model.model,
