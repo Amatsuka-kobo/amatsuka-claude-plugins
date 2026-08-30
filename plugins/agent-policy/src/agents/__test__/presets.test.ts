@@ -59,6 +59,7 @@ describe("担当表からの導出", () => {
   it("PRESETS が MODELS の非 Claude 帯から導かれている", () => {
     const derived = MODELS.filter((model) => model.vendor !== "claude").map(
       (model) => ({
+        modelId: model.id,
         name: model.defaultName,
         vendor: model.vendor,
         defaultAlias: model.model,
@@ -66,7 +67,8 @@ describe("担当表からの導出", () => {
       })
     )
     expect(
-      PRESETS.map(({ name, vendor, defaultAlias, color }) => ({
+      PRESETS.map(({ modelId, name, vendor, defaultAlias, color }) => ({
+        modelId,
         name,
         vendor,
         defaultAlias,
@@ -89,6 +91,7 @@ describe("合成結果", () => {
         name: preset.name,
         model: preset.defaultAlias,
         vendor: preset.vendor,
+        modelId: preset.modelId,
         roleIds: preset.roleIds,
         fragmentDirs: [PLUGIN_ROLES],
         lang: "ja",
@@ -108,6 +111,7 @@ describe("合成結果", () => {
       name: "grok",
       model: "m",
       vendor: "grok",
+      modelId: grok?.modelId ?? "grok",
       roleIds: grok?.roleIds ?? [],
       fragmentDirs: [PLUGIN_ROLES],
       lang: "ja"
@@ -121,10 +125,37 @@ describe("合成結果", () => {
       name: "gpt-luna",
       model: "m",
       vendor: "gpt",
+      modelId: luna?.modelId ?? "gpt-luna",
       roleIds: luna?.roleIds ?? [],
       fragmentDirs: [PLUGIN_ROLES],
       lang: "ja"
     })
     expect(document).not.toMatch(/^tools:.*\bAgent\b/m)
+  })
+
+  it("同梱プリセット 4 つの Agent 有無が不変である", () => {
+    const expected = {
+      "gpt-sol": true,
+      "gpt-terra": true,
+      "gpt-luna": false,
+      grok: true
+    } as const
+
+    for (const preset of PRESETS) {
+      const document = compose({
+        name: preset.name,
+        model: preset.defaultAlias,
+        vendor: preset.vendor,
+        modelId: preset.modelId,
+        roleIds: preset.roleIds,
+        fragmentDirs: [PLUGIN_ROLES],
+        lang: "ja",
+        color: preset.color
+      })
+      const tools = document.match(/^tools: (.*)$/m)?.[1]?.split(", ") ?? []
+      expect(tools.includes("Agent"), preset.name).toBe(
+        expected[preset.name as keyof typeof expected]
+      )
+    }
   })
 })

@@ -1,7 +1,13 @@
-import { MODELS, type ModelSpec, rolesAcrossPolicies } from "./policies"
+import {
+  MODELS,
+  type ModelId,
+  type ModelSpec,
+  rolesAcrossPolicies
+} from "./policies"
 import type { RoleId } from "./roles"
 
 export interface Preset {
+  modelId: ModelId
   name: string
   vendor: ModelSpec["vendor"]
   defaultAlias: string
@@ -15,6 +21,7 @@ export interface Preset {
 export const PRESETS: readonly Preset[] = MODELS.filter(
   (model) => model.vendor !== "claude"
 ).map((model) => ({
+  modelId: model.id,
   name: model.defaultName,
   vendor: model.vendor,
   defaultAlias: model.model,

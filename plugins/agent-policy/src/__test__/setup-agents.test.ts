@@ -854,6 +854,41 @@ describe("--check", () => {
     expect(check(["--roles", "complex-impl"]).roles.agentTool).toBe(true)
   })
 
+  it("Agent tool の可否へ model-id を反映する", () => {
+    const agentToolFor = (
+      policy: string,
+      modelId: string,
+      roles: string
+    ): boolean =>
+      singleResult<CheckResult>([
+        "--policy",
+        policy,
+        "--model-id",
+        modelId,
+        "--name",
+        `${modelId}-agent-tool-check`,
+        "--roles",
+        roles,
+        "--lang",
+        "ja",
+        "--dir",
+        project,
+        "--check"
+      ]).roles.agentTool
+
+    expect(agentToolFor("with-codex-policy", "sonnet", "code-review")).toBe(
+      true
+    )
+    expect(
+      agentToolFor(
+        "codex-grok-policy",
+        "grok",
+        "explore,realtime-research,independent-review"
+      )
+    ).toBe(true)
+    expect(agentToolFor("with-grok-policy", "grok", "light-impl")).toBe(false)
+  })
+
   it("frontmatter が無い既存ファイルを全体が本文の文書として扱う", () => {
     fs.writeFileSync(target(), "独自の冒頭。\n\n## 独自節\n\n- 独自の内容。\n")
 

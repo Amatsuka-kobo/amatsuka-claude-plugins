@@ -14,6 +14,7 @@ export function buildPresets(pluginRoot: string): void {
     const document = compose({
       name: preset.name,
       model: preset.defaultAlias,
+      modelId: preset.modelId,
       vendor: preset.vendor,
       roleIds: preset.roleIds,
       fragmentDirs: [{ path: roles, source: "plugin" }],

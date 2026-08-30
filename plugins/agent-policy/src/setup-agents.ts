@@ -276,6 +276,7 @@ function composeInputFor(
   return {
     name: target.name,
     model: target.model,
+    modelId: target.modelId,
     vendor: target.vendor,
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),

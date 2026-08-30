@@ -83,14 +83,6 @@ export const ROLES: readonly Role[] = [
   }
 ]
 
-// Agent tool を許可する実装役割。orchestration-discipline の
-// 「軽量な実装の帯に Agent Tool を許可しない」に従い light-impl を除く。
-const AGENT_CAPABLE: readonly RoleId[] = [
-  "complex-impl",
-  "normal-impl",
-  "general"
-]
-
 export function roleById(id: string): Role | undefined {
   return ROLES.find((role) => role.id === id)
 }
@@ -105,10 +97,6 @@ export function sortRoleIds<T extends string>(ids: T[]): T[] {
     (left, right) =>
       roleOrder(left) - roleOrder(right) || left.localeCompare(right)
   )
-}
-
-export function allowsAgentTool(ids: RoleId[]): boolean {
-  return ids.some((id) => AGENT_CAPABLE.includes(id))
 }
 
 export function hasMixedKinds(kinds: RoleKind[]): boolean {

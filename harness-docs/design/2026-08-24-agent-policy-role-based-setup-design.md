@@ -114,6 +114,22 @@
 
 `orchestration-discipline.md` の規定は「軽量な実装の**帯**に Agent Tool を許可しない」である。複数役割を兼ねる定義はその帯そのものではないため、`light-impl` を含んでいても重い実装役割を併せ持つなら付与してよい。「不可が 1 つでもあれば不可」という規則にすると、`complex-impl` + `explore` の組み合わせで現行 `gpt-sol` を再現できなくなる。
 
+> **訂正（2026-08-30）** — 本節の規則は誤りである。共通規律 `orchestration-discipline.md` は「軽量な実装とアドバイザーの帯**以外**に許可する」という除外リストだが、本節はこれを許可リストへ反転させる際に集合を取り違え、readonly 系 6 役割を落としていた。その結果、`explore` / `realtime-research` / `independent-review` / `code-review` だけを持つ定義に `Agent` が付かなかった。同梱プリセットは `rolesAcrossPolicies` で役割の和集合を持ち偶然 impl 役割を含むため、この穴は露見しなかった。
+>
+> 正しい規則は次のとおりである。
+>
+> ```
+> Agent 不可 ⟺ modelId ∈ {haiku, gpt-luna}
+>           または  light-impl / advisor 以外の役割を 1 つも持たない
+> ```
+>
+> モデル側の除外は 4 方針スキルの「`Haiku` には Agent Tool を許可しない」「軽量な実装の帯として扱うのは `GPT Luna` と `Haiku`」に対応する。本節の「複数役割を兼ねる定義はその帯そのものではない」という考え方は維持しており、単一役割の定義はその帯そのものなので除外が効き、`light-impl` + `complex-impl` のような混成には効かない。
+>
+> 次の 2 点は規律から一意に導けない判断であり、この訂正で新たに定めたものである。
+>
+> - **`advisor` 単独は不可、`advisor` + 他役割は可** — 本節の考え方を advisor へ延長した。担当表上 advisor と他役割を同一モデルが持つのは `opus`（`complex-impl` + `advisor`）だけで、旧規則でも `Agent` が付いていたため、現状の追認でもある。
+> - **`light-impl` 単独の Grok 定義は不可** — `with-grok-policy` の「軽量帯の規定を `Grok` に適用しない」は、同一エージェントが両帯を担うときに可否を分割しない意味であり、軽量帯単独の定義には及ばないと解釈した。この解釈を採らないと、`light-impl` 断片の「判断に迷った場合もアドバイザーへ相談せず、その旨を報告して差し戻す」と、`Agent` 付与時に本文へ入る「アドバイザーへの相談」節が同一定義の中で矛盾する。
+
 ### 5.3 読み取り専用性の警告
 
 読み取り役割と実装役割を同時に選ぶと、`Write` / `Edit` が付くため tools による読み取り専用の担保が消える。読み取り/実装の分類は SKILL.md に役割 ID を手書きせず、`--list-roles` が返す各役割の `kind` と、`--check` が返す `roles.mixedKinds` に基づく。setup は `mixedKinds` が `true` になる組み合わせを禁止せず、生成前に警告を出す。
@@ -276,6 +292,8 @@ kind: impl
 `gpt-terra` と `grok` は読み取り役割と実装役割を併せ持ち、§5.3 の警告に該当する構成になる。担当表がこれらの帯を同じエージェントへ振っている以上これは必然であり、プリセットでは警告を出さない。本文の制約衝突は §6.5 の役割スコープ付き制約で解消する。tools レベルの読み取り専用担保が無いことは §2.1 のとおり受け入れる。
 
 `with-grok-policy` は「通常の実装と軽量な実装はどちらも Grok が担い、Agent Tool の可否を分けない」という例外を持つ(`with-grok-policy/SKILL.md`)。`grok` プリセットは `normal-impl` を含むため §5.2 により `Agent` が付き、この例外を満たす。
+
+> **訂正（2026-08-30）** — §5.2 の訂正により、`grok` プリセットに `Agent` が付く根拠が変わった。`normal-impl` を含むからではなく、`grok` が Agent 不許可モデル（`haiku` / `gpt-luna`）ではないためである。付与の結果は変わらない。ただし `light-impl` **単独**の Grok 定義には付かない。
 
 `gpt-sol` に `explore` を割り当てない。現行 `agents/gpt-sol.md` の「When to invoke」は複雑な実装だけであり、探索実働は担当表で `GPT Terra` / `Grok` が担うためである。
 
@@ -578,6 +596,8 @@ researcher 廃止により、読み取り専用の作業を `Write` / `Edit` を
 - 複数役割の `tools` が和集合になる。MCP ツールが 1 つも含まれない。
 - `complex-impl` / `normal-impl` / `general` を含むとき `Agent` が付き、`light-impl` のみ・読み取り役割のみのとき付かない。
 - `light-impl` + `complex-impl` で `Agent` が付く(§5.2)。
+
+> **訂正（2026-08-30）** — §5.2 の訂正により、上記 1 点目の後半が変わった。読み取り役割のみの定義でも、Agent 不許可モデル（`haiku` / `gpt-luna`）でなければ `Agent` が付く。付かないのは、Agent 不許可モデルの場合と、`light-impl` 単独・`advisor` 単独の場合である。`light-impl` + `complex-impl` で付く点（2 点目）は変わらない。
 
 **frontmatter**
 

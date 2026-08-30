@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-  allowsAgentTool,
   hasMixedKinds,
   ROLES,
   roleById,
@@ -78,26 +77,6 @@ describe("sortRoleIds", () => {
     expect(
       sortRoleIds(["z-project", "explore", "a-project", "complex-impl"])
     ).toEqual(["complex-impl", "explore", "a-project", "z-project"])
-  })
-})
-
-describe("allowsAgentTool", () => {
-  it("complex-impl / normal-impl / general のいずれかを含むと許可する", () => {
-    expect(allowsAgentTool(["complex-impl"])).toBe(true)
-    expect(allowsAgentTool(["normal-impl"])).toBe(true)
-    expect(allowsAgentTool(["general"])).toBe(true)
-  })
-
-  it("light-impl のみでは許可しない", () => {
-    expect(allowsAgentTool(["light-impl"])).toBe(false)
-  })
-
-  it("読み取り役割のみでは許可しない", () => {
-    expect(allowsAgentTool(["explore", "independent-review"])).toBe(false)
-  })
-
-  it("light-impl と complex-impl の併用では許可する", () => {
-    expect(allowsAgentTool(["light-impl", "complex-impl"])).toBe(true)
   })
 })
 
