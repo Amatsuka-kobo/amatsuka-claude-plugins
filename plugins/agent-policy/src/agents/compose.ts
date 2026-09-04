@@ -12,7 +12,7 @@ import { type Vocabulary, vocabularyFor } from "./vocabulary"
 export interface ComposeInput {
   name: string
   model: string
-  modelId: ModelId
+  modelId?: ModelId
   vendor: Vendor
   roleIds: RoleId[]
   fragmentDirs: FragmentDir[]
@@ -33,7 +33,8 @@ export interface RolesSummary {
 const COLORS: Record<Vendor, string> = {
   gpt: "yellow",
   grok: "red",
-  claude: "blue"
+  claude: "blue",
+  none: "blue"
 }
 
 export function compose(input: ComposeInput): string {
@@ -55,6 +56,9 @@ export function compose(input: ComposeInput): string {
       ? [`disallowedTools: ${denyTools.join(", ")}`]
       : []),
     `agent-policy-role: ${ordered.join(", ")}`,
+    ...(input.vendor === "none"
+      ? []
+      : [`agent-policy-vendor: ${input.vendor}`]),
     "---",
     ""
   ]
@@ -128,7 +132,8 @@ function selectFragments(input: ComposeInput): {
   ids: RoleId[]
   selected: Fragment[]
 } {
-  const fragments = loadFragments(input.fragmentDirs, input.vendor)
+  const vendor = input.vendor === "none" ? undefined : input.vendor
+  const fragments = loadFragments(input.fragmentDirs, vendor)
   const ids = sortRoleIds(input.roleIds)
   const selected = ids.map((id) => {
     const fragment = fragments.get(id)

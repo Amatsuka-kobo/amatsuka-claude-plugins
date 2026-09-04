@@ -1,8 +1,16 @@
+import { execFile } from "node:child_process"
 import fs from "node:fs"
+import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import {
+  type FakeModelsResponse,
+  type FakeModelsServer,
+  startFakeModelsServer
+} from "../testing/fake-models-server"
 import { runTs } from "../testing/run-ts.js"
 
 const CLI = fileURLToPath(new URL("../setup-agents.ts", import.meta.url))
@@ -10,15 +18,20 @@ const PLUGIN_ROOT = fileURLToPath(new URL("../../", import.meta.url))
 const FAKE_CLAUDE = fileURLToPath(
   new URL("../testing/fake-claude.mjs", import.meta.url)
 )
+const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
+const execFileAsync = promisify(execFile)
 
 let project: string
+let modelsServer: FakeModelsServer | undefined
 
 beforeEach(() => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), "agent-policy-"))
   fs.mkdirSync(path.join(project, ".claude", "agents"), { recursive: true })
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await modelsServer?.close()
+  modelsServer = undefined
   fs.rmSync(project, { recursive: true, force: true })
 })
 
@@ -66,6 +79,8 @@ interface CheckResult {
 interface WriteResults {
   ok: boolean
   error?: string
+  warnings: string[]
+  modelsDropped: string[]
   results: {
     modelId: string
     target: string
@@ -95,7 +110,6 @@ interface ListRolesResult {
 interface CoverageResult {
   ok: boolean
   error?: string
-  policy: string
   roles: {
     id: string
     label: string
@@ -106,24 +120,15 @@ interface CoverageResult {
   uncovered: string[]
 }
 
-interface PolicyListResult {
+interface LiveModelsResult {
   ok: boolean
-  injected: string | null
-  policies: { id: string; label: string; injection: string }[]
-}
-
-interface ModelListResult {
-  ok: boolean
-  error?: string
+  reason?: string
   models: {
     id: string
-    label: string
-    defaultName: string
-    model: string
-    vendor: string
-    color: string
-    roles: string[]
+    vendor: "gpt" | "grok" | "claude" | "unknown"
+    recommendedFor: string[]
   }[]
+  claudeEnums: string[]
 }
 
 interface FragmentStatusResult {
@@ -142,7 +147,10 @@ const AMBIENT_ENV_VARS = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
   "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
   "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-  "AMATSUKA_AGENT_GROK_ALIAS"
+  "AMATSUKA_AGENT_GROK_ALIAS",
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY"
 ]
 
 function inheritedTestEnv(): NodeJS.ProcessEnv {
@@ -167,6 +175,36 @@ function run<T = CheckResult>(args: string[], env: NodeJS.ProcessEnv = {}): T {
   return JSON.parse(output.trim().split("\n").at(-1) ?? "{}") as T
 }
 
+async function runAsync<T = CheckResult>(
+  args: string[],
+  env: NodeJS.ProcessEnv = {}
+): Promise<T> {
+  let output: string
+  try {
+    const result = await execFileAsync(
+      process.execPath,
+      [TSX_CLI, CLI, ...args],
+      {
+        encoding: "utf8",
+        env: { ...inheritedTestEnv(), ...env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
+      }
+    )
+    output = result.stdout
+  } catch (error) {
+    const stdout = (error as { stdout?: string }).stdout
+    if (stdout === undefined || stdout === "") throw error
+    output = stdout
+  }
+  return JSON.parse(output.trim().split("\n").at(-1) ?? "{}") as T
+}
+
+async function startModelsServer(
+  response: FakeModelsResponse = {}
+): Promise<FakeModelsServer> {
+  modelsServer = await startFakeModelsServer(response)
+  return modelsServer
+}
+
 function runWithMcp<T>(args: string[], listOutput: string): T {
   return run<T>(args, {
     AGENT_POLICY_CLAUDE_BIN: FAKE_CLAUDE,
@@ -185,8 +223,6 @@ function singleResult<T>(args: string[]): T {
 
 function check(extra: string[] = []): CheckResult {
   return singleResult([
-    "--policy",
-    "with-codex-policy",
     "--model-id",
     "gpt-sol",
     "--name",
@@ -233,154 +269,62 @@ function writeProjectRole(options: {
   )
 }
 
-describe("--list-policies", () => {
-  it("4 方針を返す", () => {
-    const result = run<PolicyListResult>(["--list-policies"])
-    expect(result.policies.map((policy) => policy.id)).toEqual([
-      "claude-model-policy",
-      "with-codex-policy",
-      "with-grok-policy",
-      "codex-grok-policy"
-    ])
-  })
+describe("廃止フラグ", () => {
+  it.each([
+    [["--policy", "custom-policy"], "--policy"],
+    [["--list-policies"], "--list-policies"],
+    [["--list-models"], "--list-models"]
+  ])("%s を廃止済みとして拒否する", (args, flag) => {
+    const result = run<{ ok: boolean; error: string }>(args)
 
-  it("AMATSUKA_AGENT_AUTO_INJECTION の値を添える", () => {
-    const result = run<PolicyListResult>(["--list-policies"])
-    expect(result.policies[0]?.injection).toBe("claude")
-    expect(result.policies[3]?.injection).toBe("with-codex-grok")
-  })
-
-  it("AMATSUKA_AGENT_AUTO_INJECTION が未設定なら injected は null", () => {
-    const result = run<PolicyListResult>(["--list-policies"])
-    expect(result.injected).toBeNull()
-  })
-
-  it("AMATSUKA_AGENT_AUTO_INJECTION が解決するポリシー ID を injected に返す", () => {
-    const result = run<PolicyListResult>(["--list-policies"], {
-      AMATSUKA_AGENT_AUTO_INJECTION: "with-codex-grok"
-    })
-    expect(result.injected).toBe("codex-grok-policy")
-  })
-
-  // 未知値と none はどちらもフックが方針を注入しないケースであり、
-  // CLAUDE.md への追記案内が要る側に倒す必要がある。
-  it("AMATSUKA_AGENT_AUTO_INJECTION が未知の値なら injected は null", () => {
-    const result = run<PolicyListResult>(["--list-policies"], {
-      AMATSUKA_AGENT_AUTO_INJECTION: "bogus"
-    })
-    expect(result.injected).toBeNull()
-  })
-
-  it("AMATSUKA_AGENT_AUTO_INJECTION が none なら injected は null", () => {
-    const result = run<PolicyListResult>(["--list-policies"], {
-      AMATSUKA_AGENT_AUTO_INJECTION: "none"
-    })
-    expect(result.injected).toBeNull()
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain(flag)
+    expect(result.error).toMatch(/removed|廃止/i)
   })
 })
 
-describe("--list-models", () => {
-  it("claude-model-policy は Claude 4 種を返す", () => {
-    const result = run<ModelListResult>([
-      "--list-models",
-      "--policy",
-      "claude-model-policy"
-    ])
-    expect(result.models.map((model) => model.id)).toEqual([
-      "opus",
-      "sonnet",
-      "haiku",
-      "fable"
-    ])
+describe("--list-live-models", () => {
+  it("live models と Claude enum を推奨役割付きで返す", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [
+          { id: "claude-gpt-5-6-sol", owned_by: "openai" },
+          { id: "custom-unknown", owned_by: "other" }
+        ]
+      })
+    })
+
+    const result = await runAsync<LiveModelsResult>(["--list-live-models"], {
+      ANTHROPIC_BASE_URL: proxy.baseUrl
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      models: [
+        {
+          id: "claude-gpt-5-6-sol",
+          vendor: "gpt",
+          recommendedFor: ["complex-impl"]
+        },
+        { id: "custom-unknown", vendor: "unknown", recommendedFor: [] }
+      ],
+      claudeEnums: ["sonnet", "opus", "haiku", "fable"]
+    })
   })
 
-  it("各モデルに既定名と担える役割と色を添える", () => {
-    const result = run<ModelListResult>([
-      "--list-models",
-      "--policy",
-      "claude-model-policy"
-    ])
-    const sonnet = result.models.find((model) => model.id === "sonnet")
-    expect(sonnet?.defaultName).toBe("sonnet")
-    expect(sonnet?.model).toBe("sonnet")
-    expect(sonnet?.color).toBe("purple")
-    expect(sonnet?.roles).toContain("code-review")
-  })
+  it("照会失敗時も reason と Claude enum を返す", async () => {
+    const proxy = await startModelsServer({ status: 503 })
 
-  it("codex-grok-policy の単一役割モデルには役割ベースの既定名を返す", () => {
-    const result = run<ModelListResult>([
-      "--list-models",
-      "--policy",
-      "codex-grok-policy"
-    ])
+    const result = await runAsync<LiveModelsResult>(["--list-live-models"], {
+      ANTHROPIC_BASE_URL: proxy.baseUrl
+    })
 
-    expect(
-      result.models.find((model) => model.id === "sonnet")?.defaultName
-    ).toBe("sonnet-code-reviewer")
-  })
-
-  it("複数役割のモデルにはモデル ID を既定名として返す", () => {
-    const result = run<ModelListResult>([
-      "--list-models",
-      "--policy",
-      "codex-grok-policy"
-    ])
-
-    expect(
-      result.models.find((model) => model.id === "grok")?.defaultName
-    ).toBe("grok")
-  })
-
-  it("旧世代の翻訳断片に default-name が無くても英語断片へ落とす", () => {
-    run<FragmentStatusResult>([
-      "--scaffold-fragments",
-      "--lang",
-      "de",
-      "--dir",
-      project
-    ])
-    const roles = path.join(project, ".claude", "agent-policy", "roles", "de")
-    for (const file of fs.readdirSync(roles)) {
-      const target = path.join(roles, file)
-      fs.writeFileSync(
-        target,
-        fs
-          .readFileSync(target, "utf8")
-          .split("\n")
-          .filter((line) => !line.startsWith("default-name:"))
-          .join("\n")
-      )
-    }
-
-    const result = run<ModelListResult>([
-      "--list-models",
-      "--policy",
-      "codex-grok-policy",
-      "--lang",
-      "de",
-      "--dir",
-      project
-    ])
-
-    expect(
-      result.models.find((model) => model.id === "sonnet")?.defaultName
-    ).toBe("sonnet-code-reviewer")
-  })
-
-  it("呼び出し側が明示したモデルエイリアスは反映する", () => {
-    const result = run<ModelListResult>(
-      ["--list-models", "--policy", "with-codex-policy"],
-      { AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" }
-    )
-    expect(result.models.find((model) => model.id === "gpt-sol")?.model).toBe(
-      "my-sol"
-    )
-  })
-
-  it("未知のポリシーを拒否する", () => {
-    const result = run<ModelListResult>(["--list-models", "--policy", "nope"])
-    expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/policy/)
+    expect(result).toEqual({
+      ok: false,
+      reason: "http-503",
+      models: [],
+      claudeEnums: ["sonnet", "opus", "haiku", "fable"]
+    })
   })
 })
 
@@ -393,8 +337,6 @@ describe("--list-coverage", () => {
 
     const result = run<CoverageResult>([
       "--list-coverage",
-      "--policy",
-      "codex-grok-policy",
       "--lang",
       "ja",
       "--dir",
@@ -421,8 +363,6 @@ describe("--list-coverage", () => {
 
     const result = run<CoverageResult>([
       "--list-coverage",
-      "--policy",
-      "codex-grok-policy",
       "--lang",
       "ja",
       "--dir",
@@ -442,8 +382,6 @@ describe("--list-coverage", () => {
   it("複数モデルの役割と各役割の defaultName を返す", () => {
     const result = run<CoverageResult>([
       "--list-coverage",
-      "--policy",
-      "codex-grok-policy",
       "--lang",
       "en",
       "--dir",
@@ -462,17 +400,17 @@ describe("--list-coverage", () => {
     ).toBe(true)
   })
 
-  it("不正な policy を拒否する", () => {
-    const result = run<CoverageResult>([
-      "--list-coverage",
-      "--policy",
-      "unknown-policy",
-      "--dir",
-      project
-    ])
+  it("RECOMMENDED の帯集合とモデル割当を返す", () => {
+    const result = run<CoverageResult>(["--list-coverage", "--dir", project])
 
-    expect(result.ok).toBe(false)
-    expect(result.error).toContain("policy: must be one of")
+    expect(result.roles).toHaveLength(10)
+    expect(
+      result.roles.find((role) => role.id === "complex-impl")?.models
+    ).toEqual(["gpt-sol"])
+    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
+      "fable",
+      "opus"
+    ])
   })
 
   // default-name を持たない世代の翻訳断片は bodyHash が frontmatter を
@@ -501,8 +439,6 @@ describe("--list-coverage", () => {
 
     const result = run<CoverageResult>([
       "--list-coverage",
-      "--policy",
-      "codex-grok-policy",
       "--lang",
       "de",
       "--dir",
@@ -522,34 +458,35 @@ describe("--list-coverage", () => {
 })
 
 describe("--list-roles", () => {
-  it("name / roles 無しで担当表の組み込み役割を返す", () => {
+  it("組み込み役割を担当表で絞らずすべて返す", () => {
     const result = run<ListRolesResult>([
       "--list-roles",
-      "--policy",
-      "with-codex-policy",
-      "--model-id",
-      "gpt-sol",
+      "--lang",
+      "ja",
       "--dir",
       project
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles.map((role) => role.id)).toEqual(["complex-impl"])
+    expect(result.roles.map((role) => role.id)).toEqual([
+      "complex-impl",
+      "normal-impl",
+      "light-impl",
+      "general",
+      "explore",
+      "realtime-research",
+      "independent-review",
+      "doc-review",
+      "code-review",
+      "advisor"
+    ])
     expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
   })
 
   it("プロジェクト固有 ID を組み込み役割の末尾へ並べる", () => {
     writeProjectRole({ id: "triage" })
 
-    const result = run<ListRolesResult>([
-      "--list-roles",
-      "--policy",
-      "with-codex-policy",
-      "--model-id",
-      "gpt-sol",
-      "--dir",
-      project
-    ])
+    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
 
     expect(result.roles.at(-1)).toMatchObject({
       id: "triage",
@@ -566,15 +503,7 @@ describe("--list-roles", () => {
       tools: "Read, Write"
     })
 
-    const result = run<ListRolesResult>([
-      "--list-roles",
-      "--policy",
-      "with-codex-policy",
-      "--model-id",
-      "gpt-terra",
-      "--dir",
-      project
-    ])
+    const result = run<ListRolesResult>(["--list-roles", "--dir", project])
     const explore = result.roles.find((role) => role.id === "explore")
 
     expect(explore).toEqual({
@@ -587,86 +516,18 @@ describe("--list-roles", () => {
     })
   })
 
-  it("担当表で担える役割だけを返す", () => {
-    const result = run<ListRolesResult>([
-      "--list-roles",
-      "--policy",
-      "codex-grok-policy",
-      "--model-id",
-      "gpt-terra",
-      "--lang",
-      "ja",
-      "--dir",
-      project
-    ])
-    expect(result.roles.map((role) => role.id)).toEqual([
-      "normal-impl",
-      "general"
-    ])
-  })
-
   it("id と label の両方を返す", () => {
     const result = run<ListRolesResult>([
       "--list-roles",
-      "--policy",
-      "claude-model-policy",
-      "--model-id",
-      "haiku",
       "--lang",
       "ja",
       "--dir",
       project
     ])
     const light = result.roles.find((role) => role.id === "light-impl")
+
     expect(light?.label).toBe("軽量な実装")
     expect(light?.kind).toBe("impl")
-  })
-
-  it("プロジェクト独自役割は担当表に無くても含める", () => {
-    const dir = path.join(project, ".claude", "agent-policy", "roles")
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(
-      path.join(dir, "triage.md"),
-      [
-        "---",
-        "id: triage",
-        "label: 障害の一次切り分け",
-        "description: 障害の一次切り分け",
-        "tools: Read, Grep, Glob",
-        "kind: readonly",
-        "---",
-        "",
-        "## When to invoke",
-        "",
-        "- 障害の一次切り分け"
-      ].join("\n")
-    )
-    const result = run<ListRolesResult>([
-      "--list-roles",
-      "--policy",
-      "claude-model-policy",
-      "--model-id",
-      "haiku",
-      "--lang",
-      "ja",
-      "--dir",
-      project
-    ])
-    expect(result.roles.map((role) => role.id)).toContain("triage")
-  })
-
-  it("ポリシーに登場しないモデルを拒否する", () => {
-    const result = run<ListRolesResult>([
-      "--list-roles",
-      "--policy",
-      "with-grok-policy",
-      "--model-id",
-      "gpt-sol",
-      "--dir",
-      project
-    ])
-    expect(result.ok).toBe(false)
-    expect(result.error).toContain("not used")
   })
 
   it("プロジェクト独自役割の言語不一致を示す", () => {
@@ -674,10 +535,6 @@ describe("--list-roles", () => {
 
     const result = run<ListRolesResult>([
       "--list-roles",
-      "--policy",
-      "claude-model-policy",
-      "--model-id",
-      "haiku",
       "--lang",
       "de",
       "--dir",
@@ -739,8 +596,6 @@ describe("--check", () => {
 
   it("既存がテンプレートと同一のとき identical: true を返す", () => {
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -810,8 +665,6 @@ describe("--check", () => {
 
   it("実装役割と読み取り役割を分類して混在を示す", () => {
     const result = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-terra",
       "--name",
@@ -836,8 +689,6 @@ describe("--check", () => {
 
   it("Agent tool の可否を役割から返す", () => {
     const light = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-luna",
       "--name",
@@ -855,14 +706,8 @@ describe("--check", () => {
   })
 
   it("Agent tool の可否へ model-id を反映する", () => {
-    const agentToolFor = (
-      policy: string,
-      modelId: string,
-      roles: string
-    ): boolean =>
+    const agentToolFor = (modelId: string, roles: string): boolean =>
       singleResult<CheckResult>([
-        "--policy",
-        policy,
         "--model-id",
         modelId,
         "--name",
@@ -876,17 +721,33 @@ describe("--check", () => {
         "--check"
       ]).roles.agentTool
 
-    expect(agentToolFor("with-codex-policy", "sonnet", "code-review")).toBe(
-      true
-    )
+    expect(agentToolFor("sonnet", "code-review")).toBe(true)
     expect(
-      agentToolFor(
-        "codex-grok-policy",
-        "grok",
-        "explore,realtime-research,independent-review"
-      )
+      agentToolFor("grok", "explore,realtime-research,independent-review")
     ).toBe(true)
-    expect(agentToolFor("with-grok-policy", "grok", "light-impl")).toBe(false)
+    expect(agentToolFor("grok", "light-impl")).toBe(false)
+  })
+
+  it("自由モデル値ではモデル制約を外して役割制約だけを使う", () => {
+    const result = singleResult<CheckResult>([
+      "--model-id",
+      "gpt-luna",
+      "--model",
+      "custom-live-model",
+      "--vendor",
+      "gpt",
+      "--name",
+      "custom-model",
+      "--roles",
+      "complex-impl",
+      "--lang",
+      "ja",
+      "--dir",
+      project,
+      "--check"
+    ])
+
+    expect(result.roles.agentTool).toBe(true)
   })
 
   it("frontmatter が無い既存ファイルを全体が本文の文書として扱う", () => {
@@ -910,8 +771,6 @@ describe("--check", () => {
 
   it("不正な役割 ID でエラーを返す", () => {
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -928,8 +787,6 @@ describe("--check", () => {
 
   it("model-id の欠落でエラーを返す", () => {
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--name",
       "gpt-sol",
       "--roles",
@@ -942,10 +799,8 @@ describe("--check", () => {
     expect(String(result.error)).toContain("model")
   })
 
-  it("方針と言語が不正なら方針のエラーを先に返す", () => {
+  it("翻訳断片が不完全な言語を拒否する", () => {
     const result = run([
-      "--policy",
-      "bogus-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -959,7 +814,7 @@ describe("--check", () => {
       "--check"
     ])
     expect(result.ok).toBe(false)
-    expect(String(result.error)).toMatch(/^policy: must be one of /)
+    expect(String(result.error)).toMatch(/^fragments:/)
   })
 })
 
@@ -1001,8 +856,6 @@ function seed(options: {
   replaceConstraints?: string
 }): void {
   run([
-    "--policy",
-    "with-codex-policy",
     "--model-id",
     "gpt-sol",
     "--name",
@@ -1045,8 +898,6 @@ function seed(options: {
 describe("--write", () => {
   it("既存が無いときテンプレートどおりに書く", () => {
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1065,8 +916,6 @@ describe("--write", () => {
 
   it("--merge で新規作成すると空の保持・破棄情報を返す", () => {
     const result = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1092,8 +941,6 @@ describe("--write", () => {
   it("--keep なしでは完全上書きになる", () => {
     seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1115,8 +962,6 @@ describe("--write", () => {
     })
 
     const result = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1139,8 +984,6 @@ describe("--write", () => {
   it("--keep section で既存にしかない節を残す", () => {
     seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1164,8 +1007,6 @@ describe("--write", () => {
         "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
     })
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1184,8 +1025,6 @@ describe("--write", () => {
   it("--keep key で既存にしかないキーを残す", () => {
     seed({ extraKeys: { permissionMode: "plan" } })
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1204,8 +1043,6 @@ describe("--write", () => {
   it("--keep key で値の違う共通キーを残す", () => {
     seed({ model: "my-own-alias" })
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1224,8 +1061,6 @@ describe("--write", () => {
   it("--keep preamble で冒頭宣言を残す", () => {
     seed({ preamble: "あなたは私が書き換えた冒頭である。" })
     run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1255,8 +1090,6 @@ describe("--write", () => {
     })
 
     const result = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1298,8 +1131,6 @@ describe("--write", () => {
     })
 
     const result = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1337,8 +1168,6 @@ describe("--write", () => {
     })
 
     const result = singleResult<CheckResult>([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1361,8 +1190,6 @@ describe("--write", () => {
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1387,8 +1214,6 @@ describe("--write", () => {
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1413,8 +1238,6 @@ describe("--write", () => {
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1436,8 +1259,6 @@ describe("--write", () => {
 
   it("不正な --keep セレクタでエラーを返す", () => {
     const result = run([
-      "--policy",
-      "with-codex-policy",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1455,31 +1276,10 @@ describe("--write", () => {
   })
 })
 
-describe("担当表の検証", () => {
-  it("担当表にある役割は通る", () => {
+describe("custom の役割検証", () => {
+  it("推奨から外れる組み込み役割も警告付きで通す", () => {
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
-      "--model-id",
-      "sonnet",
-      "--lang",
-      "ja",
-      "--name",
-      "claude-sonnet",
-      "--roles",
-      "normal-impl,code-review",
-      "--dir",
-      project
-    ])
-    expect(result.ok).toBe(true)
-  })
-
-  it("担当表に無い組み込み役割を拒否する", () => {
-    const result = run<WriteResults>([
-      "--check",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1491,15 +1291,16 @@ describe("担当表の検証", () => {
       "--dir",
       project
     ])
-    expect(result.ok).toBe(false)
-    expect(result.error).toContain("light-impl")
+
+    expect(result.ok).toBe(true)
+    expect(result.warnings).toContain(
+      "roles: light-impl is not recommended for sonnet"
+    )
   })
 
-  it("そのポリシーに登場しないモデルを拒否する", () => {
+  it("custom では全 ModelId を明示指定できる", () => {
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "grok",
       "--lang",
@@ -1511,33 +1312,33 @@ describe("担当表の検証", () => {
       "--dir",
       project
     ])
+
+    expect(result.ok).toBe(true)
+  })
+
+  it("未知の model-id を拒否する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--model-id",
+      "unknown-model",
+      "--lang",
+      "ja",
+      "--name",
+      "unknown",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/model-id/)
   })
 
-  it("プロジェクト独自役割は担当表の検証を免除する", () => {
-    const dir = path.join(project, ".claude", "agent-policy", "roles")
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(
-      path.join(dir, "triage.md"),
-      [
-        "---",
-        "id: triage",
-        "label: 障害の一次切り分け",
-        "description: 障害の一次切り分け",
-        "tools: Read, Grep, Glob",
-        "kind: readonly",
-        "---",
-        "",
-        "## When to invoke",
-        "",
-        "- 一次切り分け"
-      ].join("\n")
-    )
+  it("プロジェクト独自役割を通す", () => {
+    writeProjectRole({ id: "triage" })
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1549,14 +1350,13 @@ describe("担当表の検証", () => {
       "--dir",
       project
     ])
+
     expect(result.ok).toBe(true)
   })
 
   it("翻訳断片が欠けている言語を拒否する", () => {
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1573,56 +1373,218 @@ describe("担当表の検証", () => {
   })
 })
 
-describe("--models による一括", () => {
-  it("複数モデルの差分を配列で返す", () => {
+describe("live model 検証と vendor", () => {
+  const writeArgs = (name: string): string[] => [
+    "--write",
+    "--model-id",
+    "gpt-sol",
+    "--name",
+    name,
+    "--roles",
+    "complex-impl",
+    "--lang",
+    "ja",
+    "--dir",
+    project
+  ]
+
+  it("live に存在する --model を通し、省略 vendor を推定する", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "live-sol", owned_by: "openai" }]
+      })
+    })
+
+    const result = await runAsync<WriteResults>(
+      [...writeArgs("live-sol-agent"), "--model", "live-sol"],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "live-sol-agent.md"),
+      "utf8"
+    )
+    expect(content).toMatch(/^agent-policy-vendor: gpt$/m)
+    expect(content).toMatch(/^color: yellow$/m)
+  })
+
+  it("live に存在しない --model を拒否する", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({ data: [] })
+    })
+
+    const result = await runAsync<WriteResults>(
+      [
+        ...writeArgs("missing-model"),
+        "--model",
+        "missing-model",
+        "--vendor",
+        "gpt"
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("missing-model")
+  })
+
+  it("照会失敗時は --model を検証せず警告付きで通す", () => {
+    const result = run<WriteResults>([
+      ...writeArgs("offline-model"),
+      "--model",
+      "offline-alias"
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(result.warnings).toContain(
+      "live models unavailable (no-base-url); model existence was not validated"
+    )
+  })
+
+  it.each([
+    ["gpt", "yellow", "gpt"],
+    ["grok", "red", "grok"],
+    ["claude", "blue", "claude"],
+    ["none", "blue", undefined]
+  ] as const)("--vendor %s が overlay 用 marker と色を選ぶ", (vendor, color, marker) => {
+    const name = `vendor-${vendor}`
+    const result = run<WriteResults>([...writeArgs(name), "--vendor", vendor])
+
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", `${name}.md`),
+      "utf8"
+    )
+    expect(content).toMatch(new RegExp(`^color: ${color}$`, "m"))
+    if (marker === undefined) {
+      expect(content).not.toContain("agent-policy-vendor:")
+    } else {
+      expect(content).toMatch(
+        new RegExp(`^agent-policy-vendor: ${marker}$`, "m")
+      )
+    }
+  })
+
+  it("推定 vendor が unknown で省略されたとき拒否する", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "unknown-vendor-model", owned_by: "other" }]
+      })
+    })
+
+    const result = await runAsync<WriteResults>(
+      [...writeArgs("unknown-vendor"), "--model", "unknown-vendor-model"],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("--vendor")
+  })
+})
+
+describe("--models による推奨一括", () => {
+  it("RECOMMENDED から既定役割を決める", () => {
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
       "--lang",
       "ja",
       "--models",
-      "sonnet,haiku",
+      "gpt-sol,gpt-terra",
       "--dir",
       project
     ])
+
     expect(result.ok).toBe(true)
-    expect(result.results.length).toBe(2)
-    expect(result.results[0]?.modelId).toBe("sonnet")
-    expect(result.results[0]?.roles.ids).toEqual([
-      "normal-impl",
-      "general",
-      "explore",
-      "realtime-research",
-      "independent-review",
-      "code-review"
+    expect(result.results.map((entry) => entry.modelId)).toEqual([
+      "gpt-sol",
+      "gpt-terra"
     ])
+    expect(result.results[0]?.roles.ids).toEqual(["complex-impl"])
+    expect(result.results[1]?.roles.ids).toEqual(["normal-impl", "general"])
   })
 
-  it("単一指定でも要素 1 の配列を返す", () => {
+  it("照会成功時は不在モデルを間引いて報告する", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "claude-gpt-5-6-sol", owned_by: "openai" }]
+      })
+    })
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--check",
+        "--lang",
+        "ja",
+        "--models",
+        "gpt-sol,gpt-terra,sonnet",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.results.map((entry) => entry.modelId)).toEqual([
+      "gpt-sol",
+      "sonnet"
+    ])
+    expect(result.modelsDropped).toEqual(["gpt-terra"])
+  })
+
+  it("一部の vendor 推定に失敗したとき --models 全体を拒否する", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [
+          { id: "claude-gpt-5-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-5-6-terra", owned_by: "unknown" }
+        ]
+      })
+    })
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--check",
+        "--lang",
+        "ja",
+        "--models",
+        "gpt-sol,gpt-terra",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe(
+      'vendor: could not infer vendor for model "claude-gpt-5-6-terra"; pass --vendor gpt|grok|claude|none'
+    )
+  })
+
+  it("照会失敗時は全モデルを警告付きで生成対象に残す", () => {
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
-      "--model-id",
-      "haiku",
       "--lang",
       "ja",
-      "--name",
-      "claude-haiku",
-      "--roles",
-      "light-impl",
+      "--models",
+      "gpt-sol,gpt-terra",
       "--dir",
       project
     ])
-    expect(result.results.length).toBe(1)
+
+    expect(result.results.map((entry) => entry.modelId)).toEqual([
+      "gpt-sol",
+      "gpt-terra"
+    ])
+    expect(result.modelsDropped).toEqual([])
+    expect(result.warnings).toContain(
+      "live models unavailable (no-base-url); model existence was not validated"
+    )
   })
 
   it("単一役割モデルを役割ベースの既定ファイル名へ書く", () => {
     const result = run<WriteResults>([
       "--write",
-      "--policy",
-      "codex-grok-policy",
       "--lang",
       "ja",
       "--models",
@@ -1646,8 +1608,6 @@ describe("--models による一括", () => {
     const result = run<WriteResults>([
       "--write",
       "--merge",
-      "--policy",
-      "claude-model-policy",
       "--lang",
       "ja",
       "--models",
@@ -1662,8 +1622,6 @@ describe("--models による一括", () => {
   it("--models と --keep は併用できない", () => {
     const result = run<WriteResults>([
       "--write",
-      "--policy",
-      "claude-model-policy",
       "--lang",
       "ja",
       "--models",
@@ -1685,8 +1643,6 @@ describe("MCP の付与", () => {
     const result = runWithMcp<WriteResults>(
       [
         "--write",
-        "--policy",
-        "claude-model-policy",
         "--model-id",
         "sonnet",
         "--lang",
@@ -1717,8 +1673,6 @@ describe("MCP の付与", () => {
     const result = runWithMcp<WriteResults>(
       [
         "--write",
-        "--policy",
-        "claude-model-policy",
         "--model-id",
         "sonnet",
         "--lang",
@@ -1765,8 +1719,6 @@ describe("MCP の付与", () => {
     )
     const result = run<WriteResults>([
       "--check",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1788,8 +1740,6 @@ describe("MCP の付与", () => {
     const connected =
       "plugin:context7:context7: https://mcp.context7.com/mcp (HTTP) - ✔ Connected"
     const base = [
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1848,8 +1798,6 @@ describe("automaticKeep", () => {
     const result = run<WriteResults>([
       "--write",
       "--merge",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1869,12 +1817,10 @@ describe("automaticKeep", () => {
   })
 })
 
-describe("モデル単位 color の配線", () => {
-  it("Claude Sonnet の purple を生成定義へ渡す", () => {
+describe("vendor color の配線", () => {
+  it("Claude vendor の blue を生成定義へ渡す", () => {
     const result = run<WriteResults>([
       "--write",
-      "--policy",
-      "claude-model-policy",
       "--model-id",
       "sonnet",
       "--lang",
@@ -1891,6 +1837,6 @@ describe("モデル単位 color の配線", () => {
       path.join(project, ".claude", "agents", "claude-sonnet.md"),
       "utf8"
     )
-    expect(written).toMatch(/^color: purple$/m)
+    expect(written).toMatch(/^color: blue$/m)
   })
 })

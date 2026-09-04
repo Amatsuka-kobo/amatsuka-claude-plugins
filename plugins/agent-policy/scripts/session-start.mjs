@@ -1,5 +1,89 @@
 #!/usr/bin/env node
 
+// src/agents/live-models.ts
+var TIMEOUT_MS = 3e3;
+function failure(baseUrl, reason) {
+  return { ok: false, baseUrl, ids: [], vendors: {}, reason };
+}
+function vendorFor(ownedBy) {
+  if (typeof ownedBy !== "string") {
+    return "unknown";
+  }
+  switch (ownedBy.toLowerCase()) {
+    case "openai":
+      return "gpt";
+    case "xai":
+      return "grok";
+    case "anthropic":
+      return "claude";
+    default:
+      return "unknown";
+  }
+}
+async function fetchLiveModels(env) {
+  const baseUrl = env.ANTHROPIC_BASE_URL?.trim();
+  if (!baseUrl) {
+    return { ok: false, ids: [], vendors: {}, reason: "no-base-url" };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const headers = {};
+  const authToken = env.ANTHROPIC_AUTH_TOKEN;
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else {
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      headers["x-api-key"] = apiKey;
+    }
+  }
+  try {
+    const response = await fetch(`${baseUrl}/v1/models`, {
+      method: "GET",
+      headers,
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      return failure(baseUrl, `http-${response.status}`);
+    }
+    let body;
+    try {
+      body = await response.json();
+    } catch {
+      return failure(
+        baseUrl,
+        controller.signal.aborted ? "timeout" : "parse-error"
+      );
+    }
+    const data = typeof body === "object" && body !== null ? body.data : void 0;
+    if (!Array.isArray(data)) {
+      return failure(baseUrl, "parse-error");
+    }
+    const ids = [];
+    const vendors = {};
+    for (const item of data) {
+      if (typeof item !== "object" || item === null) {
+        continue;
+      }
+      const entry = item;
+      const id = entry.id;
+      if (typeof id !== "string") {
+        continue;
+      }
+      ids.push(id);
+      vendors[id] = vendorFor(entry.owned_by);
+    }
+    return { ok: true, baseUrl, ids, vendors };
+  } catch {
+    return failure(
+      baseUrl,
+      controller.signal.aborted ? "timeout" : "fetch-failed"
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // src/agents/roles.ts
 var ROLES = [
   {
@@ -77,177 +161,16 @@ function sortRoleIds(ids) {
 }
 
 // src/agents/policies.ts
-var POLICIES = [
-  { id: "claude-model-policy", label: "Claude \u306E\u307F", injection: "claude" },
-  {
-    id: "with-codex-policy",
-    label: "Claude + Codex \u4F75\u7528",
-    injection: "with-codex"
-  },
-  {
-    id: "with-grok-policy",
-    label: "Claude + Grok \u4F75\u7528",
-    injection: "with-grok"
-  },
-  {
-    id: "codex-grok-policy",
-    label: "Claude + Codex + Grok \u4F75\u7528",
-    injection: "with-codex-grok"
-  }
+var CUSTOM_INJECTION_VALUES = [
+  "custom",
+  "with-codex",
+  "with-grok",
+  "with-codex-grok"
 ];
-var MODELS = [
-  {
-    id: "opus",
-    vendor: "claude",
-    label: "Opus",
-    defaultName: "claude-opus",
-    model: "opus",
-    color: "blue"
-  },
-  {
-    id: "sonnet",
-    vendor: "claude",
-    label: "Sonnet",
-    defaultName: "claude-sonnet",
-    model: "sonnet",
-    color: "purple"
-  },
-  {
-    id: "haiku",
-    vendor: "claude",
-    label: "Haiku",
-    defaultName: "claude-haiku",
-    model: "haiku",
-    color: "pink"
-  },
-  {
-    id: "fable",
-    vendor: "claude",
-    label: "Fable",
-    defaultName: "claude-fable",
-    model: "fable",
-    color: "orange"
-  },
-  {
-    id: "gpt-sol",
-    vendor: "gpt",
-    label: "GPT Sol",
-    defaultName: "gpt-sol",
-    model: "claude-gpt-5-6-sol",
-    aliasEnv: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-    color: "yellow"
-  },
-  {
-    id: "gpt-terra",
-    vendor: "gpt",
-    label: "GPT Terra",
-    defaultName: "gpt-terra",
-    model: "claude-gpt-5-6-terra",
-    aliasEnv: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-    color: "green"
-  },
-  {
-    id: "gpt-luna",
-    vendor: "gpt",
-    label: "GPT Luna",
-    defaultName: "gpt-luna",
-    model: "claude-gpt-5-6-luna",
-    aliasEnv: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-    color: "cyan"
-  },
-  {
-    id: "grok",
-    vendor: "grok",
-    label: "Grok",
-    defaultName: "grok",
-    model: "claude-grok-4-6",
-    aliasEnv: "AMATSUKA_AGENT_GROK_ALIAS",
-    color: "red"
-  }
-];
-var ASSIGNMENTS = {
-  "claude-model-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["sonnet"],
-    "light-impl": ["haiku"],
-    general: ["sonnet"],
-    explore: ["sonnet"],
-    "realtime-research": ["sonnet"],
-    "independent-review": ["sonnet"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "with-codex-policy": {
-    "complex-impl": ["gpt-sol"],
-    "normal-impl": ["gpt-terra"],
-    "light-impl": ["gpt-luna"],
-    general: ["gpt-terra"],
-    explore: ["gpt-terra"],
-    "realtime-research": ["gpt-terra"],
-    "independent-review": ["gpt-terra"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "with-grok-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["grok"],
-    "light-impl": ["grok"],
-    general: ["grok"],
-    explore: ["grok"],
-    "realtime-research": ["grok"],
-    "independent-review": ["grok"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "codex-grok-policy": {
-    "complex-impl": ["gpt-sol"],
-    "normal-impl": ["gpt-terra"],
-    "light-impl": ["gpt-luna"],
-    general: ["gpt-terra"],
-    explore: ["grok"],
-    "realtime-research": ["grok"],
-    "independent-review": ["grok"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  }
-};
-function policyForInjection(value) {
-  if (value === void 0) return void 0;
-  return POLICIES.find((policy) => policy.injection === value.trim())?.id;
+function isCustomInjection(value) {
+  if (value === void 0) return false;
+  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
 }
-function rolesFor(policy, model) {
-  const assignments = ASSIGNMENTS[policy];
-  const roles = Object.keys(assignments).filter(
-    (role) => assignments[role].includes(model)
-  );
-  return sortRoleIds(roles);
-}
-function rolesAcrossPolicies(model) {
-  const roles = /* @__PURE__ */ new Set();
-  for (const policy of POLICIES) {
-    for (const role of rolesFor(policy.id, model)) roles.add(role);
-  }
-  return sortRoleIds([...roles]);
-}
-
-// src/agents/presets.ts
-var PRESETS = MODELS.filter(
-  (model) => model.vendor !== "claude"
-).map((model) => ({
-  modelId: model.id,
-  name: model.defaultName,
-  vendor: model.vendor,
-  defaultAlias: model.model,
-  color: model.color,
-  roleIds: rolesAcrossPolicies(model.id)
-}));
-var DEFAULT_ALIASES = Object.fromEntries(
-  PRESETS.map((preset) => [preset.name, preset.defaultAlias])
-);
 
 // src/hooks/marker-scan.ts
 import fs from "node:fs";
@@ -334,11 +257,13 @@ function scanAgents(dir) {
     const name = meta.get("name");
     const model = meta.get("model");
     const marker = meta.get("agent-policy-role");
+    const vendor = meta.get("agent-policy-vendor");
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : void 0,
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
-      tools: parseToolsField(meta.get("tools"))
+      tools: parseToolsField(meta.get("tools")),
+      vendor: typeof vendor === "string" ? vendor : void 0
     });
   }
   return found;
@@ -385,7 +310,8 @@ function markerTable(env, marked) {
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === void 0) continue;
-      byRole.set(role, [...byRole.get(role) ?? [], entry.name]);
+      const name = entry.vendor === void 0 ? entry.name : `${entry.name} (${entry.vendor})`;
+      byRole.set(role, [...byRole.get(role) ?? [], name]);
     }
   }
   if (byRole.size === 0) return void 0;
@@ -408,35 +334,28 @@ var RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ];
-var ALIASES = [
-  {
-    preset: "gpt-sol",
-    variable: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-    skill: "agent-policy:setup-agents"
-  },
-  {
-    preset: "gpt-terra",
-    variable: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-    skill: "agent-policy:setup-agents"
-  },
-  {
-    preset: "gpt-luna",
-    variable: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-    skill: "agent-policy:setup-agents"
-  },
-  {
-    preset: "grok",
-    variable: "AMATSUKA_AGENT_GROK_ALIAS",
-    skill: "agent-policy:setup-agents"
-  }
+var CLAUDE_RESOLVED_MODELS = /* @__PURE__ */ new Set([
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable",
+  "inherit"
+]);
+var DEPRECATED_ALIAS_VARIABLES = [
+  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
+  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
+  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
+  "AMATSUKA_AGENT_GROK_ALIAS"
 ];
-function policyBlock(value) {
-  if (value === void 0 || value === "" || value === "none") return void 0;
-  const policy = policyForInjection(value);
-  if (policy === void 0) {
-    return `AMATSUKA_AGENT_AUTO_INJECTION \u306E\u5024 "${value}" \u306F\u672A\u77E5\u306E\u305F\u3081\u3001agent-policy \u306E\u65B9\u91DD\u6CE8\u5165\u3092\u30B9\u30AD\u30C3\u30D7\u3057\u305F\u3002`;
-  }
-  return `\u6700\u521D\u306B\u5FC5\u305A agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3057\u3001\u3053\u306E\u898F\u5F8B\u306B\u5F93\u3046`;
+var REPAIR_BLOCK = "\u4FEE\u5FA9\u3059\u308B\u306B\u306F\u3001agent-policy:setup-agents \u3092\u518D\u5B9F\u884C\u3059\u308B\u304B\u3001\u5B9A\u7FA9\u306E `model` \u3092\u4FEE\u6B63\u3059\u308B\u304B\u3001\u30D7\u30ED\u30AD\u30B7\u3092\u8D77\u52D5\u3057\u3066\u304B\u3089\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B\u3002";
+function policyBlock(policy, legacyValue) {
+  const instruction = `\u6700\u521D\u306B\u5FC5\u305A agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3057\u3001\u3053\u306E\u898F\u5F8B\u306B\u5F93\u3046`;
+  if (legacyValue === void 0) return instruction;
+  return `${instruction}
+\u65E7\u4E92\u63DB\u5024 \`${legacyValue}\` \u3092\u4F7F\u7528\u3057\u3066\u3044\u308B\u3002\`AMATSUKA_AGENT_AUTO_INJECTION\` \u3092 \`custom\` \u3078\u5909\u66F4\u3059\u308B\u3002`;
+}
+function unknownInjectionBlock(value) {
+  return `AMATSUKA_AGENT_AUTO_INJECTION \u306E\u5024 "${value}" \u306F\u672A\u77E5\u306E\u305F\u3081\u3001agent-policy \u306E\u65B9\u91DD\u6CE8\u5165\u3092\u30B9\u30AD\u30C3\u30D7\u3057\u305F\u3002`;
 }
 function unknownRoleBlock(env, marked) {
   const labelOf = roleLabels(env);
@@ -454,79 +373,105 @@ function unknownRoleBlock(env, marked) {
     ...lines
   ].join("\n");
 }
-function setupBlock(env, marked) {
-  const byName = new Map(marked.map((entry) => [entry.name, entry]));
-  const lines = [];
-  for (const spec of ALIASES) {
-    const alias = env[spec.variable]?.trim();
-    if (alias === void 0 || alias === "") continue;
-    if (alias === DEFAULT_ALIASES[spec.preset]) continue;
-    const preset = PRESETS.find((entry) => entry.name === spec.preset);
-    const named = byName.get(spec.preset);
-    if (named?.model === alias) continue;
-    if (preset === void 0) {
-      if (named === void 0) {
-        lines.push(`- ${spec.preset}: \u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`);
-      } else {
-        lines.push(
-          `- ${spec.preset}: \u5B9A\u7FA9\u306E model \u304C "${named.model ?? "\u672A\u8A2D\u5B9A"}" \u3067\u3001${spec.variable} \u306E "${alias}" \u3068\u98DF\u3044\u9055\u3046\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
-        );
-      }
-      continue;
-    }
-    const withAlias = marked.filter((entry) => entry.model === alias);
-    const covered = new Set(withAlias.flatMap((entry) => entry.roles));
-    const missing = preset.roleIds.filter((role) => !covered.has(role));
-    if (missing.length === 0) continue;
-    if (withAlias.length === 0) {
-      if (named === void 0) {
-        lines.push(
-          `- ${spec.preset}: ${spec.variable} \u306E "${alias}" \u3092 model \u306B\u6301\u3064\u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
-        );
-      } else {
-        lines.push(
-          `- ${spec.preset}: \u5B9A\u7FA9\u306E model \u304C "${named.model ?? "\u672A\u8A2D\u5B9A"}" \u3067\u3001${spec.variable} \u306E "${alias}" \u3068\u98DF\u3044\u9055\u3046\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
-        );
-      }
-    } else {
-      lines.push(
-        `- ${spec.preset}: ${withAlias.map((entry) => entry.name).join(" / ")} \u304C "${alias}" \u3092\u4F7F\u3063\u3066\u3044\u308B\u304C\u3001${missing.join(", ")} \u3092\u5BA3\u8A00\u3059\u308B\u5B9A\u7FA9\u304C\u7121\u3044\u3002${spec.skill} \u3092\u5B9F\u884C\u3059\u308B`
-      );
-    }
+function retiredBlock(marked) {
+  const found = marked.map((entry) => entry.name).filter((name) => RETIRED.includes(name));
+  if (found.length === 0) return void 0;
+  return `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`;
+}
+function deprecatedAliasesBlock(env) {
+  if (!DEPRECATED_ALIAS_VARIABLES.some((variable) => env[variable] !== void 0)) {
+    return void 0;
   }
-  if (lines.length === 0) return void 0;
+  return "AMATSUKA_AGENT_GPT_SOL_ALIAS / AMATSUKA_AGENT_GPT_TERRA_ALIAS / AMATSUKA_AGENT_GPT_LUNA_ALIAS / AMATSUKA_AGENT_GROK_ALIAS \u306E\u30A8\u30A4\u30EA\u30A2\u30B9\u5909\u6570\u306F\u53C2\u7167\u3055\u308C\u306A\u304F\u306A\u3063\u305F\u3002\u30E2\u30C7\u30EB\u306F agent-policy:setup-agents \u304C /v1/models \u304B\u3089\u9078\u3076\u3002\u5B9A\u7FA9\u306E `model` \u5024\u3092\u5909\u3048\u305F\u3044\u3068\u304D\u306F setup \u3092\u518D\u5B9F\u884C\u3059\u308B\u3002";
+}
+function markerlessFallbackBlock() {
+  return "\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u5B9A\u7FA9\u304C\u898B\u3064\u304B\u3089\u306A\u3044(\u672A\u4F5C\u6210\u3001\u307E\u305F\u306F\u8AAD\u307F\u53D6\u308C\u306A\u3044)\u305F\u3081\u3001claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3067\u52D5\u4F5C\u3059\u308B\u3002agent-policy:setup-agents \u3067\u69CB\u6210\u3092\u4F5C\u308B\u3002";
+}
+function missingModelsBlock(missing) {
+  const limit = 10;
+  const lines = missing.slice(0, limit).map(
+    (entry) => `- \u5B9A\u7FA9 \`${entry.name}\` \u306E model \`${entry.model}\` \u304C\u30D7\u30ED\u30AD\u30B7\u306E /v1/models \u306B\u5B58\u5728\u3057\u306A\u3044`
+  );
+  const remaining = missing.length - limit;
+  if (remaining > 0) lines.push(`- \u4ED6 ${remaining} \u4EF6`);
   return [
-    "\u6B21\u306E Agent \u306F\u65E2\u5B9A\u3068\u7570\u306A\u308B\u30A8\u30A4\u30EA\u30A2\u30B9\u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u308B\u304C\u3001\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u304C\u8FFD\u968F\u3057\u3066\u3044\u306A\u3044\u3002\u30A8\u30A4\u30EA\u30A2\u30B9\u306B\u4F9D\u5B58\u3059\u308B\u59D4\u8B72\u3092\u884C\u3046\u524D\u306B\u5BFE\u51E6\u3059\u308B:",
+    "\u5B9A\u7FA9\u3055\u308C\u305F model \u304C\u30D7\u30ED\u30AD\u30B7\u306E /v1/models \u306B 1 \u4EF6\u4EE5\u4E0A\u5B58\u5728\u3057\u306A\u3044\u305F\u3081\u3001\u30BB\u30C3\u30B7\u30E7\u30F3\u5168\u4F53\u3092 claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3078\u30D5\u30A9\u30FC\u30EB\u30D0\u30C3\u30AF\u3057\u305F\u3002",
     ...lines
   ].join("\n");
 }
-function retiredBlock(env, marked) {
-  const found = marked.map((entry) => entry.name).filter((name) => RETIRED.includes(name));
-  if (found.length === 0) return void 0;
-  const lines = [
-    `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`
-  ];
-  const grokAlias = env.AMATSUKA_AGENT_GROK_ALIAS?.trim();
-  if (found.some((name) => name.startsWith("grok-")) && (grokAlias === void 0 || grokAlias === "")) {
-    lines.push(
-      "Grok \u306E\u65E2\u5B9A\u30A8\u30A4\u30EA\u30A2\u30B9\u306F `claude-grok-4-6` \u3078\u5909\u308F\u3063\u305F\u3002\u30D7\u30ED\u30AD\u30B7\u8A2D\u5B9A\u306B\u3053\u306E\u5225\u540D\u304C\u7121\u3044\u5834\u5408\u3001\u59D4\u8B72\u6642\u306B `unknown provider for model` \u3067\u5931\u6557\u3059\u308B\u30024.5 \u3092\u4F7F\u3044\u7D9A\u3051\u308B\u306A\u3089 `AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` \u3092\u8A2D\u5B9A\u3059\u308B\u3002"
-    );
-  }
-  return lines.join("\n");
+function queryFailureBlock(reason) {
+  const actualReason = reason ?? "fetch-failed";
+  const detail = actualReason === "no-base-url" ? `ANTHROPIC_BASE_URL \u304C\u672A\u8A2D\u5B9A(${actualReason})` : actualReason === "timeout" ? `\u30D7\u30ED\u30AD\u30B7\u3078\u63A5\u7D9A\u3067\u304D\u306A\u3044(${actualReason})` : `\u30D7\u30ED\u30AD\u30B7\u306E /v1/models \u3092\u7167\u4F1A\u3067\u304D\u306A\u3044(${actualReason})`;
+  return `${detail}\u306E\u305F\u3081 custom \u69CB\u6210\u306E\u30E2\u30C7\u30EB\u5B9F\u5728\u3092\u78BA\u8A8D\u3067\u304D\u305A\u3001\u30BB\u30C3\u30B7\u30E7\u30F3\u5168\u4F53\u3092 claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3078\u30D5\u30A9\u30FC\u30EB\u30D0\u30C3\u30AF\u3057\u305F\u3002`;
 }
-function build(env) {
+function successBlocks(env, marked, legacyValue) {
+  return [
+    policyBlock("custom-policy", legacyValue),
+    markerTable(env, marked),
+    unknownRoleBlock(env, marked)
+  ];
+}
+async function customBlocks(env, marked, injection) {
+  const legacyValue = injection === "custom" ? void 0 : injection;
+  const targets = marked.filter((entry) => entry.roles.length > 0);
+  if (targets.length === 0) {
+    return [
+      policyBlock("claude-model-policy", legacyValue),
+      markerlessFallbackBlock(),
+      REPAIR_BLOCK
+    ];
+  }
+  const external = targets.filter(
+    (entry) => entry.model !== void 0 && !CLAUDE_RESOLVED_MODELS.has(entry.model)
+  );
+  const externalModels = new Set(external.map((entry) => entry.model));
+  if (externalModels.size === 0) {
+    return successBlocks(env, targets, legacyValue);
+  }
+  const live = await fetchLiveModels(env);
+  if (!live.ok) {
+    return [
+      policyBlock("claude-model-policy", legacyValue),
+      queryFailureBlock(live.reason),
+      REPAIR_BLOCK
+    ];
+  }
+  const liveIds = new Set(live.ids);
+  const missing = external.filter((entry) => !liveIds.has(entry.model));
+  if (missing.length > 0) {
+    return [
+      policyBlock("claude-model-policy", legacyValue),
+      missingModelsBlock(missing),
+      REPAIR_BLOCK
+    ];
+  }
+  return successBlocks(env, targets, legacyValue);
+}
+function compact(blocks) {
+  return blocks.filter((block) => block !== void 0);
+}
+async function build(env) {
   let marked = [];
   try {
     marked = scanAgents(projectAgentsDir(env));
   } catch {
   }
-  const blocks = [
-    policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
-    markerTable(env, marked),
-    unknownRoleBlock(env, marked),
-    setupBlock(env, marked),
-    retiredBlock(env, marked)
-  ].filter((block) => block !== void 0);
+  const injection = env.AMATSUKA_AGENT_AUTO_INJECTION?.trim().toLowerCase() ?? "";
+  let profileBlocks;
+  if (injection === "" || injection === "none") {
+    profileBlocks = [];
+  } else if (injection === "claude") {
+    profileBlocks = [policyBlock("claude-model-policy")];
+  } else if (isCustomInjection(injection)) {
+    profileBlocks = await customBlocks(env, marked, injection);
+  } else {
+    profileBlocks = [unknownInjectionBlock(injection)];
+  }
+  const blocks = compact([
+    ...profileBlocks,
+    retiredBlock(marked),
+    deprecatedAliasesBlock(env)
+  ]);
   if (blocks.length === 0) return void 0;
   return blocks.join("\n\n");
 }
@@ -542,7 +487,7 @@ function respond(context) {
   );
 }
 try {
-  const context = build(process.env);
+  const context = await build(process.env);
   if (context !== void 0) respond(context);
 } catch (error) {
   process.stderr.write(

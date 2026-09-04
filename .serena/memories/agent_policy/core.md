@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.10.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.14.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -9,132 +9,181 @@ Design docs live in `harness-docs/design/`:
 `2026-08-09-agent-policy-{codex-grok,with-grok}-policy-design.md`,
 `2026-08-14-agent-policy-headless-setup-design.md` (**superseded**),
 `2026-08-16-agent-policy-bundled-agents-design.md` (**superseded**),
-`2026-08-25-agent-policy-setup-agents-design.md` (**current**) + matching plan in
-`harness-docs/plans/`, plus `2026-08-09-prompt-smith-skill-creator-port-design.md`.
+`2026-08-25-agent-policy-setup-agents-design.md` (**superseded**),
+`2026-08-27-agent-policy-external-agent-model-assignment-design.md` (composition; still in force),
+`2026-08-31-agent-policy-two-profile-design.md` (**current**) + its plan
+`harness-docs/plans/2026-09-04-agent-policy-two-profile-implementation.md`,
+plus `2026-08-09-prompt-smith-skill-creator-port-design.md`.
 Accumulated rationale: `docs/old/optimize-agents-record/`.
 
-## Current shape (2026-08-25, the `setup-agents` consolidation)
+## Current shape (2026-09-04, the two-profile reorganisation)
 
-Two earlier generations are recorded in git but **must not be cited as current**: the 2026-08-16
-"7 bundled agents, hook writes files" model, and the 2026-08 4-preset model with separate
-`setup-gpt` / `setup-grok` skills. Both are gone.
+Three earlier generations are recorded in git but **must not be cited as current**: the 2026-08-16
+"7 bundled agents, hook writes files" model, the 2026-08 4-preset model with separate `setup-gpt` /
+`setup-grok` skills, and the 2026-08-25 four-policy model (claude-model / with-codex / with-grok /
+codex-grok). All are gone.
 
-- **4 agent definitions ship** in `agents/`: `gpt-sol` (`claude-gpt-5-6-sol`), `gpt-terra`
-  (`claude-gpt-5-6-terra`), `gpt-luna` (`claude-gpt-5-6-luna`), `grok` (`claude-grok-4-6`).
-  They are **build artifacts**: `src/agents/build-presets.ts` composes them from role fragments,
-  so never hand-edit `agents/*.md`.
-- **Retired definitions** (`claude-researcher`, `gpt-researcher`, `grok-researcher`,
-  `grok-implementer`) are listed in `session-start.ts` `RETIRED`; the hook nags to delete them if
-  they linger in a project's `.claude/agents/`.
-- **5 skills**: the 4 policy skills plus `setup-agents` (`setup-gpt` / `setup-grok` were merged
-  into it — do not cite those names).
-- `src/`: `setup-agents.ts` (the CLI), `agents/{policies,presets,roles,fragments,compose,
-  vocabulary,mcp,hash,build-presets}.ts`, `hooks/session-start.ts`, `testing/`.
-  `scripts/` holds `setup-agents.mjs` and `session-start.mjs`.
+The plugin now ships **two profiles**, selected by `AMATSUKA_AGENT_AUTO_INJECTION`
+(`none` / `claude` / `custom`; the three legacy values `with-codex` / `with-grok` /
+`with-codex-grok` are treated as `custom` and draw a migration notice):
+
+- **claude** — `claude-model-policy`. Claude model names pin each role band. Zero setup. Every
+  reference to the role-marker mechanism was removed from this skill; the resolution order is now
+  just "dispatch with a `model` override, read-only bands to built-in `Explore`, impl bands to
+  `general-purpose`".
+- **custom** — `custom-policy`. The 担当表 holds **role bands only**, plus a *recommended* model
+  column that binds nothing. The actual delegate comes from the role-marker table SessionStart
+  injects. Models and roles are not constrained against each other.
+
+- **No agent definitions ship.** `agents/`, `src/agents/presets.ts` and `build-presets.ts` were
+  deleted. Naming `agent-policy:gpt-sol` etc. no longer resolves; the replacement is `setup-agents`
+  generating a recommended set.
+- **3 skills**: `claude-model-policy`, `custom-policy`, `setup-agents`.
+- `src/`: `setup-agents.ts` (the CLI), `agents/{policies,live-models,roles,fragments,compose,
+  vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate,parallel-nudge}.ts`,
+  `testing/{run-ts.ts,fake-models-server.ts,fake-claude.mjs}`.
 
 ### Role fragments and the 10 role IDs
 
-`assets/roles/{ja,en}/` each hold 12 files: the 10 role fragments plus `_common.md` and the
-vendor overlay `realtime-research.grok.md`. Role IDs: `complex-impl`, `normal-impl`, `light-impl`,
-`general`, `explore`, `realtime-research`, `independent-review`, `doc-review`, `code-review`,
-`advisor`.
+Unchanged from the previous generation (3-stage resolution, vendor overlays last-wins via a map,
+`vocabulary.ts` per-language headings, `languageMismatch` warning). One addition: `Vendor` now
+includes `"none"`, which means *no overlay, colour `blue`*. `"none"` is folded to `undefined`
+before reaching `loadFragments` — there is no `.none.md` fragment.
 
-`fragments.ts` resolves fragments in 3 stages (plugin `<lang>/` → project
-`.claude/agent-policy/roles/` → project `<lang>/`), with vendor overlays applied **last-wins via a
-map**, not by appending. `vocabulary.ts` supplies per-language headings, list separators and quote
-marks; `ja` gets JA, **everything else gets EN** (translated languages keep English headings —
-only body text and `label`/`description` are translated, because the composer matches sections by
-heading).
+### `policies.ts` — what is canonical now
 
-**A project fragment must use the selected language's heading set.** A `## 作業手順` / `## 制約`
-fragment composed under `--lang en` loses those sections entirely; `languageMismatch` warns.
+- `ASSIGNMENTS: Record<"claude-model-policy", Record<RoleId, ModelId[]>>` — the claude profile's
+  table. Doubles as the fallback target and as the read-across target when retiering a non-Claude
+  band to an enum.
+- `RECOMMENDED: Record<RoleId, ModelId[]>` — the custom profile's *recommendation*. Values are
+  inherited verbatim from the old `codex-grok-policy` row and pinned by a test.
+- `isCustomInjection(value)` — trims + lowercases, then matches `custom` plus the three legacy
+  values. Both SessionStart and SubagentStart route through it, so the two cannot drift.
+- **Gone**: `aliasEnv` on `ModelSpec`, `resolveModelValue`, `rolesAcrossPolicies`. The four
+  `AMATSUKA_AGENT_*_ALIAS` env vars are **no longer read**; SessionStart only warns that they are
+  ignored. Model existence is grounded in the proxy's `/v1/models`, so alias substitution has no
+  problem left to solve.
+- `modelsFor()` / `rolesFor(model)` lost their policy argument — they are claude-only.
+- `allowsAgentTool(ids, model?)` takes the model optionally; omitted, only the role-based exclusion
+  applies (the free-alias path cannot know the ModelId).
 
-### `policies.ts` is the canonical 担当表
+### `live-models.ts` — grounding in the proxy
 
-`ASSIGNMENTS: Record<PolicyName, Record<RoleId, ModelId[]>>` is the single source of truth for
-"which model may take which role under which policy". The prose tables in the 4 policy skills
-mirror it (40 cells, verified identical 2026-08-25) but **nothing binds them** — a mismatch is
-possible and would not be caught by tests.
+`fetchLiveModels(env)` GETs `<ANTHROPIC_BASE_URL>/v1/models` once, 3 s timeout, and **never
+throws** — every failure folds into `{ok: false, reason}` (`no-base-url` / `http-<status>` /
+`timeout` / `parse-error` / `fetch-failed`). Auth is one shot: `ANTHROPIC_AUTH_TOKEN` as Bearer →
+`ANTHROPIC_API_KEY` as `x-api-key` → unauthenticated. **No variable is assumed to exist.** Vendor
+is inferred from lowercased `owned_by` (`openai`→gpt, `xai`→grok, `anthropic`→claude, else
+unknown). Claude enums are never put in `ids`; callers add them separately.
 
-`MODELS` assigns a distinct `color` per model — opus=blue, sonnet=purple, haiku=pink, fable=orange,
-gpt-sol=yellow, gpt-terra=green, gpt-luna=cyan, grok=red. Vendor-level colors are dead from the CLI
-path (Claude-band definitions would otherwise all be blue).
+Measured against CLIProxyAPI: client-side aliases appear verbatim in `data[].id`, `owned_by` came
+back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
 
-### SessionStart hook — it never writes files
+### The four hooks
 
-`scripts/session-start.mjs` (`src/hooks/session-start.ts`, timeout 10, always exits 0):
+| hook | matcher | what it does |
+| --- | --- | --- |
+| SessionStart | — | injects the policy skill; under custom, validates model existence first |
+| SubagentStart | — | always distributes the discipline fragment; the marker table **only under custom-family injection** |
+| PreToolUse | `Edit\|Write\|NotebookEdit\|mcp__.*` | delegation gate (opt-in; denies edits to protected globs) |
+| PreToolUse | `Task\|Agent` | parallel nudge (on by default; one fixed additionalContext line) |
 
-1. Maps `AMATSUKA_AGENT_AUTO_INJECTION` to a policy skill via `policyForInjection` (in
-   `policies.ts` — the hook no longer keeps its own copy) and injects "load this skill first".
-2. Scans the project's `.claude/agents/` for the frontmatter marker `agent-policy-role` and injects
-   a 役割 → Agent 名 table. Unknown role IDs are resolved against project fragments at
-   `.claude/agent-policy/roles/<id>.md` **and** `roles/<lang>/<id>.md`.
-3. Reports alias mismatches (env var differs from default and no project definition covers it) and
-   retired definitions.
+**Matcher semantics, measured**: a value containing only alphanumerics / `_` / `-` / space / `,` /
+`|` is an **exact enumeration**; anything else makes it a **JavaScript regex**. So `Task|Agent`
+matches those two names and `mcp__.*` matches every MCP tool. The dispatch tool is named
+**`Agent`**, not `Task`, in CLI 2.1.260 — the enumeration covers both.
 
-**It generates nothing.** Definition generation is `setup-agents`'s job only.
+Also measured: a subagent's own tool calls carry `agent_id` + `agent_type`; the main session's do
+not. That one difference is what lets the gate wave subagents through.
 
-### `setup-agents`
+### SessionStart's custom validation — it still never writes files
 
-Interactive wizard: language → policy → models → per-model name/model/roles/keep → MCP servers.
-Non-interactive with `--yes`. Subcommands: `--list-policies` / `--list-models` / `--list-roles` /
-`--list-mcp` / `--check-fragments` / `--scaffold-fragments`, plus `--check` (diff) and `--write`.
+1. Scan `.claude/agents/` and keep **only definitions carrying a non-empty `agent-policy-role`**.
+   Zero of them → fall back to claude and say "not created, or unreadable" (`scanAgents` folds read
+   failures into an empty array, so the two cases are indistinguishable).
+2. From those definitions' `model` values, drop the Claude enums, `inherit`, and a missing `model`
+   key. Empty remainder → hold without querying.
+3. Otherwise query live models. All present → inject `custom-policy` + the marker table (each row
+   annotated with its vendor) + the unknown-role notice. **Any absent, or the query failed → fall
+   back to claude for the whole session**, list the offending definitions (max 10 + "他 N 件"), name
+   the reason, and add a one-line repair hint. The marker table is **not** injected on fallback.
 
-- The skill's frontmatter is `disallowed-tools: Write` with `Edit` limited to
-  `**/.claude/agent-policy/roles/**`, because Claude Code matches `Edit(path)` against permissions
-  but **not** `Write(path)`. Rationale is in design §6.5 / §10.2, deliberately not in the SKILL body.
-- **MCP**: allowlist is server-level (from `claude mcp list`, so the names are guaranteed to exist);
-  denylist is tool-level (a wrong entry is harmless). Writing a nonexistent tool name into `tools`
-  can silently drop other allowed tools — hence the asymmetry.
-- The previous MCP choice is **reverse-engineered from the generated definitions**
-  (`agent-policy-role` + `tools`'s `mcp__*`); there is no config file. `mcpCurrentOf` returns names
-  **without** the `mcp__` prefix; `resolveMcp` compares on `toolPrefix(name)`. This round-trip only
-  closes because `toolPrefix` is idempotent on its own output (it preserves exactly the
-  `A-Za-z0-9_-` it emits).
-- **MCP is granted per definition, not per role.** One `--write` applies the same servers to every
-  target, so a model holding both impl and readonly roles gets it on the whole definition.
-- `automaticKeep` excludes `mcp__*` and `disallowedTools` — a disconnected server's stale entry must
-  not survive `--merge`.
-- `LSP` was removed from every role's `tools`: Claude Code strips it from background subagents, and
-  agent-policy's agents are parallel-by-design, so parallel ≈ background.
+The judgement freezes at SessionStart; a proxy recovering mid-session goes unnoticed. `build()` is
+async now, but the outer try/catch still guarantees stderr + exit 0 and no file writes.
 
-## The four policy skills — role tables
+### `delegation-gate.ts` — opt-in, measured to work
 
-Each holds only its role table + profile-specific dispatch rules; the shared discipline is
-`references/orchestration-discipline.md` (5.1KB) and, for exploration only,
-`references/context-map-guide.md` (6.0KB). `assets/context-map-template.md` (3.9KB) is the template.
+Eight early returns; deny is reachable only at the last. Opt-in needs **both**
+`AMATSUKA_AGENT_DELEGATION_GATE` ∈ {`1`,`true`,`on`} **and** a project config at
+`.claude/agent-policy/delegation-gate.json` (`denyGlobs` required; `mcpTools` and `ttlSeconds`
+optional). Built-in `Edit`/`Write` (`file_path`) and `NotebookEdit` (`notebook_path`) are always in
+scope. Glob matching uses `node:path`'s `matchesGlob` — no hand-rolled implementation. The deny
+reason embeds the marker table, so the model is told *who* to delegate to.
 
-Rows common to all four: 調査・分析 + 設計書/実装計画書の作成 + コードベース探索統括 → `Opus`;
-コードレビュー → `Sonnet`; アドバイザー → `Fable`/`Opus`; 設計書・実装計画書のレビュー → `Haiku`,
-**mandatory before showing any design doc or plan to the user**.
+`--direct on|off|status` touches a TTL flag file. **That is the only write path**; the hook path
+writes nothing. Known holes, accepted: Bash writes cannot be stopped, and the AI could run
+`--direct on` itself — the wording forbids both and compliance is all there is.
 
-| row | claude-model | with-codex | with-grok | codex-grok |
-| --- | --- | --- | --- | --- |
-| リアルタイム情報調査 | `Sonnet` | `GPT Terra` | `Grok` | `Grok` |
-| コードベース探索実働 | `Sonnet` | `GPT Terra` | `Grok` | `Grok` |
-| 独立レビュー | `Sonnet` | `GPT Terra` | `Grok` | `Grok` |
-| 複雑または重要な実装 | `Opus` | `GPT Sol` | `Opus` | `GPT Sol` |
-| 通常の実装 / その他 | `Sonnet` | `GPT Terra` | `Grok` | `GPT Terra` |
-| 軽量な実装 | `Haiku` | `GPT Luna` | `Grok` | `GPT Luna` |
+Verified 2026-09-04 in a sandbox (`claude -p --plugin-dir <plugin>`): the deny fired, the model
+quoted the reason verbatim, did not route around it, and noticed on its own that the suggested
+delegate lacked `Write`.
+
+### `setup-agents` — custom-only now
+
+Wizard: language → live models → per-model name/model/roles/vendor/keep → MCP servers.
+Non-interactive `--yes` means "generate the recommended set".
+
+- **Gone**: `--policy`, `--list-policies`, `--list-models`. Passing them returns `ok: false`.
+- **New**: `--list-live-models` (`{ok, reason?, models:[{id, vendor, recommendedFor}], claudeEnums}`)
+  and `--vendor gpt|grok|claude|none`.
+- `--model <alias>` is checked against live `ids` + Claude enums **on `--write`**; a failed query
+  skips the check and passes with a warning.
+- `--models <csv>` still means recommended ModelIds. On a successful query, IDs whose default alias
+  is absent are dropped and reported in `modelsDropped`; on a failed query nothing is dropped and a
+  warning is emitted instead. Warnings ride in the response JSON's `warnings` array — stdout JSON is
+  the only channel back to the skill.
+- The 担当表 constraint is **gone**: any role may go to any model. Off-recommendation pairings
+  warn rather than reject. The impl/readonly kind-mixing warning stays.
+- `agent-policy-vendor` is written into generated frontmatter (omitted when `none`) and read back by
+  `marker-scan.ts`. **It had to be added to the composition allow-list in
+  `orchestration-discipline.md`** — without that, every generated definition becomes
+  composition-ineligible and the 2026-08-27 composition mechanism dies.
+- Diff protection (`--check` / `--write` / `--merge` / `--keep`), fragment translation and MCP grant
+  are **unchanged**. The test helper lost its fixed `--policy`, but all 16 merge/keep test names
+  survived the rewrite.
+
+### A known design inconsistency (reported, unresolved)
+
+Design §7.2 says the non-interactive mode asks nothing; §7.1 says `--vendor` is required when the
+inference is `unknown`. Both cannot hold. The implementation stops with `ok: false` and the skill
+directs the user to finish interactively. Harmless in practice (all 8 measured entries inferred
+cleanly), but do not treat either clause as absolute.
+
+## The two policy skills — role tables
+
+Each holds its own table plus profile-specific dispatch rules; the shared discipline is
+`references/orchestration-discipline.md` and, for exploration only, `references/context-map-guide.md`.
+`assets/context-map-template.md` is the template.
+
+`claude-model-policy` keeps a model column (`ASSIGNMENTS`). `custom-policy`'s column is a
+*recommendation* (`RECOMMENDED`) whose values match the old codex-grok row: complex-impl→GPT Sol,
+normal-impl/general→GPT Terra, light-impl→GPT Luna, explore/realtime-research/independent-review→
+Grok, doc-review→Haiku, code-review→Sonnet, advisor→Fable/Opus. `policy-skill-assignments.test.ts`
+pins both tables against their canonical source; the parser matches a row by `startsWith(label)`,
+which is why rows may carry parenthetical annotations.
 
 Rules that bite:
 
-- The light-impl tier is denied the Agent tool (`GPT Luna` / `Haiku`). `AGENT_CAPABLE` in
-  `roles.ts` is `complex-impl` / `normal-impl` / `general` only.
-- **Execution-tier resolution is role-marker based, not name based.** Order: (1) a definition the
-  SessionStart hook injected via `agent-policy-role`; (2) otherwise the 担当表 model — Claude bands
-  dispatch with a `model` override to built-in `Explore`/`general-purpose`, GPT/Grok bands use the
-  bundled `agent-policy:<name>`; (3) if the local proxy is unreachable, the skill's own
-  §フォールバック. Do not assume project definitions are named `gpt-sol`/`grok` — they are not fixed.
-- Independent review runs AFTER the Haiku review but reads **only the original document** — never
-  Haiku's findings, or its viewpoint gets anchored. The orchestrator decides adoption; the reviewer
-  only supplies counter-arguments.
-- `claude-model-policy`'s independent review is same-vendor and says so outright
-  (「独立性は限定的である」). In with-grok / codex-grok the Grok-unavailable fallback for independent
-  review is **SKIP, not delegate to Opus** — a same-vendor reviewer shares the designer's blind
-  spots. Realtime research falls back to Opus + WebSearch.
-- Each policy's §フォールバック names **only the vendors that policy actually has**. `with-codex`
-  must not mention Grok, `with-grok` must not mention GPT.
+- The light-impl tier is denied the Agent tool.
+- **Custom's execution-tier resolution**: (1) a band present in the marker table uses that
+  definition; (2) a band absent from it is read across to `claude-model-policy`'s model for the same
+  band — **except independent-review, which is skipped rather than read across**, because a
+  same-vendor reviewer shares the designer's blind spots. Step 2 is the *configuration default* for
+  partial setups, not the failure fallback (that one is whole-session and lives in SessionStart).
+- Mid-session unavailability of a delegate follows the same rule: read across, except
+  independent-review which is skipped.
+- Independent review runs AFTER the doc-review band but reads **only the original document** — never
+  the other reviewer's findings, or its viewpoint gets anchored. The orchestrator decides adoption.
 - Dispatching a read-only role to an implementation-tier agent (one holding `Write`/`Edit`) requires
   spelling out in the request: restrict tools to read-only, change no files, return a report only.
 

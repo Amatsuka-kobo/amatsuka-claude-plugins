@@ -8,6 +8,7 @@ export interface MarkedAgent {
   roles: string[]
   /** undefined = tools 欄なし・解釈不能(全ツール継承として扱う) / 値あり = 明示リスト */
   tools: string[] | undefined
+  vendor: string | undefined
 }
 
 /** frontmatter の解析結果。tools が block 配列で書かれていたときだけ値が string[] になる。 */
@@ -114,6 +115,7 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
     const name = meta.get("name")
     const model = meta.get("model")
     const marker = meta.get("agent-policy-role")
+    const vendor = meta.get("agent-policy-vendor")
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : undefined,
@@ -124,7 +126,8 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
               .map((role) => role.trim())
               .filter((role) => role !== "")
           : [],
-      tools: parseToolsField(meta.get("tools"))
+      tools: parseToolsField(meta.get("tools")),
+      vendor: typeof vendor === "string" ? vendor : undefined
     })
   }
 
@@ -192,7 +195,11 @@ export function markerTable(
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === undefined) continue
-      byRole.set(role, [...(byRole.get(role) ?? []), entry.name])
+      const name =
+        entry.vendor === undefined
+          ? entry.name
+          : `${entry.name} (${entry.vendor})`
+      byRole.set(role, [...(byRole.get(role) ?? []), name])
     }
   }
   if (byRole.size === 0) return undefined

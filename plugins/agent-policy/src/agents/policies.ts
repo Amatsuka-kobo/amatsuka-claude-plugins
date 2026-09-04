@@ -14,11 +14,7 @@ export type ModelId =
 // ja / en は同梱断片を持つ。それ以外は翻訳断片を要する任意のコード。
 export type Lang = string
 
-export type PolicyName =
-  | "claude-model-policy"
-  | "with-codex-policy"
-  | "with-grok-policy"
-  | "codex-grok-policy"
+export type PolicyName = "claude-model-policy" | "custom-policy"
 
 export interface Policy {
   id: PolicyName
@@ -33,27 +29,16 @@ export interface ModelSpec {
   label: string
   defaultName: string
   model: string
-  aliasEnv?: string
   color: string
 }
 
 export const POLICIES: readonly Policy[] = [
-  { id: "claude-model-policy", label: "Claude のみ", injection: "claude" },
   {
-    id: "with-codex-policy",
-    label: "Claude + Codex 併用",
-    injection: "with-codex"
+    id: "claude-model-policy",
+    label: "Claude のみ(レガシー)",
+    injection: "claude"
   },
-  {
-    id: "with-grok-policy",
-    label: "Claude + Grok 併用",
-    injection: "with-grok"
-  },
-  {
-    id: "codex-grok-policy",
-    label: "Claude + Codex + Grok 併用",
-    injection: "with-codex-grok"
-  }
+  { id: "custom-policy", label: "カスタム(role-id)", injection: "custom" }
 ]
 
 // color は公式が受け付ける 8 色。ちょうど 8 モデルなので重複させない。
@@ -96,7 +81,6 @@ export const MODELS: readonly ModelSpec[] = [
     label: "GPT Sol",
     defaultName: "gpt-sol",
     model: "claude-gpt-5-6-sol",
-    aliasEnv: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
     color: "yellow"
   },
   {
@@ -105,7 +89,6 @@ export const MODELS: readonly ModelSpec[] = [
     label: "GPT Terra",
     defaultName: "gpt-terra",
     model: "claude-gpt-5-6-terra",
-    aliasEnv: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
     color: "green"
   },
   {
@@ -114,7 +97,6 @@ export const MODELS: readonly ModelSpec[] = [
     label: "GPT Luna",
     defaultName: "gpt-luna",
     model: "claude-gpt-5-6-luna",
-    aliasEnv: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
     color: "cyan"
   },
   {
@@ -123,14 +105,16 @@ export const MODELS: readonly ModelSpec[] = [
     label: "Grok",
     defaultName: "grok",
     model: "claude-grok-4-6",
-    aliasEnv: "AMATSUKA_AGENT_GROK_ALIAS",
     color: "red"
   }
 ]
 
-// 方針スキルの担当表(モデル別役割)をそのまま写したもの。
+// claude-model-policy 専用の担当表。フォールバック先と外部モデルの読み替え先を兼ねる。
 // advisor だけが 2 モデルを持つ。担当表が変わったらここも変える。
-export const ASSIGNMENTS: Record<PolicyName, Record<RoleId, ModelId[]>> = {
+export const ASSIGNMENTS: Record<
+  "claude-model-policy",
+  Record<RoleId, ModelId[]>
+> = {
   "claude-model-policy": {
     "complex-impl": ["opus"],
     "normal-impl": ["sonnet"],
@@ -142,43 +126,21 @@ export const ASSIGNMENTS: Record<PolicyName, Record<RoleId, ModelId[]>> = {
     "doc-review": ["haiku"],
     "code-review": ["sonnet"],
     advisor: ["fable", "opus"]
-  },
-  "with-codex-policy": {
-    "complex-impl": ["gpt-sol"],
-    "normal-impl": ["gpt-terra"],
-    "light-impl": ["gpt-luna"],
-    general: ["gpt-terra"],
-    explore: ["gpt-terra"],
-    "realtime-research": ["gpt-terra"],
-    "independent-review": ["gpt-terra"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "with-grok-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["grok"],
-    "light-impl": ["grok"],
-    general: ["grok"],
-    explore: ["grok"],
-    "realtime-research": ["grok"],
-    "independent-review": ["grok"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "codex-grok-policy": {
-    "complex-impl": ["gpt-sol"],
-    "normal-impl": ["gpt-terra"],
-    "light-impl": ["gpt-luna"],
-    general: ["gpt-terra"],
-    explore: ["grok"],
-    "realtime-research": ["grok"],
-    "independent-review": ["grok"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
   }
+}
+
+// custom プロファイルの推奨。現行 codex-grok-policy の値を継承する。
+export const RECOMMENDED: Record<RoleId, ModelId[]> = {
+  "complex-impl": ["gpt-sol"],
+  "normal-impl": ["gpt-terra"],
+  "light-impl": ["gpt-luna"],
+  general: ["gpt-terra"],
+  explore: ["grok"],
+  "realtime-research": ["grok"],
+  "independent-review": ["grok"],
+  "doc-review": ["haiku"],
+  "code-review": ["sonnet"],
+  advisor: ["fable", "opus"]
 }
 
 // 4 方針スキルの「Haiku には Agent Tool を許可しない」「軽量な実装の帯として
@@ -190,8 +152,8 @@ const AGENT_DENIED_MODELS: readonly ModelId[] = ["haiku", "gpt-luna"]
 // 複数役割を兼ねる定義は帯そのものではないため効かない（設計 §5.2）。
 const SOLO_DENIED_ROLES: readonly RoleId[] = ["light-impl", "advisor"]
 
-export function allowsAgentTool(ids: RoleId[], model: ModelId): boolean {
-  if (AGENT_DENIED_MODELS.includes(model)) return false
+export function allowsAgentTool(ids: RoleId[], model?: ModelId): boolean {
+  if (model !== undefined && AGENT_DENIED_MODELS.includes(model)) return false
   return ids.some((id) => !SOLO_DENIED_ROLES.includes(id))
 }
 
@@ -212,38 +174,34 @@ export function policyForInjection(
   return POLICIES.find((policy) => policy.injection === value.trim())?.id
 }
 
-// 並びは MODELS の定義順。担当表に一度でも現れるモデルだけを返す。
-export function modelsFor(policy: PolicyName): ModelSpec[] {
+// with-* は旧世代の AMATSUKA_AGENT_AUTO_INJECTION 互換値。
+// 移行期間中は custom プロファイルとして扱う。
+const CUSTOM_INJECTION_VALUES: readonly string[] = [
+  "custom",
+  "with-codex",
+  "with-grok",
+  "with-codex-grok"
+]
+
+export function isCustomInjection(value: string | undefined): boolean {
+  if (value === undefined) return false
+  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase())
+}
+
+// claude-model-policy 専用。並びは MODELS の定義順。担当表に現れるモデルだけを返す。
+export function modelsFor(): ModelSpec[] {
   const used = new Set<ModelId>()
-  for (const models of Object.values(ASSIGNMENTS[policy])) {
+  for (const models of Object.values(ASSIGNMENTS["claude-model-policy"])) {
     for (const id of models) used.add(id)
   }
   return MODELS.filter((model) => used.has(model.id))
 }
 
-// 並びは ROLES の定義順。ウィザードの選択肢と CLI の検証の双方で使う。
-export function rolesFor(policy: PolicyName, model: ModelId): RoleId[] {
-  const assignments = ASSIGNMENTS[policy]
+// claude-model-policy 専用。並びは ROLES の定義順。
+export function rolesFor(model: ModelId): RoleId[] {
+  const assignments = ASSIGNMENTS["claude-model-policy"]
   const roles = (Object.keys(assignments) as RoleId[]).filter((role) =>
     assignments[role].includes(model)
   )
   return sortRoleIds(roles)
-}
-
-// 全方針でそのモデルが担う役割の和集合。同梱プリセットの役割集合に使う。
-export function rolesAcrossPolicies(model: ModelId): RoleId[] {
-  const roles = new Set<RoleId>()
-  for (const policy of POLICIES) {
-    for (const role of rolesFor(policy.id, model)) roles.add(role)
-  }
-  return sortRoleIds([...roles])
-}
-
-export function resolveModelValue(
-  spec: ModelSpec,
-  env: NodeJS.ProcessEnv
-): string {
-  if (spec.aliasEnv === undefined) return spec.model
-  const value = env[spec.aliasEnv]?.trim()
-  return value === undefined || value === "" ? spec.model : value
 }

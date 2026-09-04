@@ -298,24 +298,6 @@ function hasMixedKinds(kinds) {
 }
 
 // src/agents/policies.ts
-var POLICIES = [
-  { id: "claude-model-policy", label: "Claude \u306E\u307F", injection: "claude" },
-  {
-    id: "with-codex-policy",
-    label: "Claude + Codex \u4F75\u7528",
-    injection: "with-codex"
-  },
-  {
-    id: "with-grok-policy",
-    label: "Claude + Grok \u4F75\u7528",
-    injection: "with-grok"
-  },
-  {
-    id: "codex-grok-policy",
-    label: "Claude + Codex + Grok \u4F75\u7528",
-    injection: "with-codex-grok"
-  }
-];
 var MODELS = [
   {
     id: "opus",
@@ -355,7 +337,6 @@ var MODELS = [
     label: "GPT Sol",
     defaultName: "gpt-sol",
     model: "claude-gpt-5-6-sol",
-    aliasEnv: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
     color: "yellow"
   },
   {
@@ -364,7 +345,6 @@ var MODELS = [
     label: "GPT Terra",
     defaultName: "gpt-terra",
     model: "claude-gpt-5-6-terra",
-    aliasEnv: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
     color: "green"
   },
   {
@@ -373,7 +353,6 @@ var MODELS = [
     label: "GPT Luna",
     defaultName: "gpt-luna",
     model: "claude-gpt-5-6-luna",
-    aliasEnv: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
     color: "cyan"
   },
   {
@@ -382,94 +361,29 @@ var MODELS = [
     label: "Grok",
     defaultName: "grok",
     model: "claude-grok-4-6",
-    aliasEnv: "AMATSUKA_AGENT_GROK_ALIAS",
     color: "red"
   }
 ];
-var ASSIGNMENTS = {
-  "claude-model-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["sonnet"],
-    "light-impl": ["haiku"],
-    general: ["sonnet"],
-    explore: ["sonnet"],
-    "realtime-research": ["sonnet"],
-    "independent-review": ["sonnet"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "with-codex-policy": {
-    "complex-impl": ["gpt-sol"],
-    "normal-impl": ["gpt-terra"],
-    "light-impl": ["gpt-luna"],
-    general: ["gpt-terra"],
-    explore: ["gpt-terra"],
-    "realtime-research": ["gpt-terra"],
-    "independent-review": ["gpt-terra"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "with-grok-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["grok"],
-    "light-impl": ["grok"],
-    general: ["grok"],
-    explore: ["grok"],
-    "realtime-research": ["grok"],
-    "independent-review": ["grok"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  },
-  "codex-grok-policy": {
-    "complex-impl": ["gpt-sol"],
-    "normal-impl": ["gpt-terra"],
-    "light-impl": ["gpt-luna"],
-    general: ["gpt-terra"],
-    explore: ["grok"],
-    "realtime-research": ["grok"],
-    "independent-review": ["grok"],
-    "doc-review": ["haiku"],
-    "code-review": ["sonnet"],
-    advisor: ["fable", "opus"]
-  }
+var RECOMMENDED = {
+  "complex-impl": ["gpt-sol"],
+  "normal-impl": ["gpt-terra"],
+  "light-impl": ["gpt-luna"],
+  general: ["gpt-terra"],
+  explore: ["grok"],
+  "realtime-research": ["grok"],
+  "independent-review": ["grok"],
+  "doc-review": ["haiku"],
+  "code-review": ["sonnet"],
+  advisor: ["fable", "opus"]
 };
 var AGENT_DENIED_MODELS = ["haiku", "gpt-luna"];
 var SOLO_DENIED_ROLES = ["light-impl", "advisor"];
 function allowsAgentTool(ids, model) {
-  if (AGENT_DENIED_MODELS.includes(model)) return false;
+  if (model !== void 0 && AGENT_DENIED_MODELS.includes(model)) return false;
   return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));
 }
 function modelById(id) {
   return MODELS.find((model) => model.id === id);
-}
-function policyById(id) {
-  return POLICIES.find((policy) => policy.id === id);
-}
-function policyForInjection(value) {
-  if (value === void 0) return void 0;
-  return POLICIES.find((policy) => policy.injection === value.trim())?.id;
-}
-function modelsFor(policy) {
-  const used = /* @__PURE__ */ new Set();
-  for (const models of Object.values(ASSIGNMENTS[policy])) {
-    for (const id of models) used.add(id);
-  }
-  return MODELS.filter((model) => used.has(model.id));
-}
-function rolesFor(policy, model) {
-  const assignments = ASSIGNMENTS[policy];
-  const roles = Object.keys(assignments).filter(
-    (role) => assignments[role].includes(model)
-  );
-  return sortRoleIds(roles);
-}
-function resolveModelValue(spec, env) {
-  if (spec.aliasEnv === void 0) return spec.model;
-  const value = env[spec.aliasEnv]?.trim();
-  return value === void 0 || value === "" ? spec.model : value;
 }
 
 // src/agents/vocabulary.ts
@@ -501,7 +415,8 @@ function vocabularyFor(lang) {
 var COLORS = {
   gpt: "yellow",
   grok: "red",
-  claude: "blue"
+  claude: "blue",
+  none: "blue"
 };
 function compose(input) {
   const vocabulary = vocabularyFor(input.lang);
@@ -519,6 +434,7 @@ function compose(input) {
     `tools: ${tools.join(", ")}`,
     ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
     `agent-policy-role: ${ordered.join(", ")}`,
+    ...input.vendor === "none" ? [] : [`agent-policy-vendor: ${input.vendor}`],
     "---",
     ""
   ];
@@ -574,7 +490,8 @@ function describeRoles(input) {
   };
 }
 function selectFragments(input) {
-  const fragments = loadFragments(input.fragmentDirs, input.vendor);
+  const vendor = input.vendor === "none" ? void 0 : input.vendor;
+  const fragments = loadFragments(input.fragmentDirs, vendor);
   const ids = sortRoleIds(input.roleIds);
   const selected = ids.map((id) => {
     const fragment = fragments.get(id);
@@ -605,6 +522,90 @@ function preamble(common, name, selected, vocabulary) {
   return (common.get("## Preamble") ?? []).map(
     (line) => line.replace("{{NAME}}", name).replace("{{ROLE_LABELS}}", labels)
   );
+}
+
+// src/agents/live-models.ts
+var TIMEOUT_MS = 3e3;
+function failure(baseUrl, reason) {
+  return { ok: false, baseUrl, ids: [], vendors: {}, reason };
+}
+function vendorFor(ownedBy) {
+  if (typeof ownedBy !== "string") {
+    return "unknown";
+  }
+  switch (ownedBy.toLowerCase()) {
+    case "openai":
+      return "gpt";
+    case "xai":
+      return "grok";
+    case "anthropic":
+      return "claude";
+    default:
+      return "unknown";
+  }
+}
+async function fetchLiveModels(env) {
+  const baseUrl = env.ANTHROPIC_BASE_URL?.trim();
+  if (!baseUrl) {
+    return { ok: false, ids: [], vendors: {}, reason: "no-base-url" };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const headers = {};
+  const authToken = env.ANTHROPIC_AUTH_TOKEN;
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else {
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      headers["x-api-key"] = apiKey;
+    }
+  }
+  try {
+    const response = await fetch(`${baseUrl}/v1/models`, {
+      method: "GET",
+      headers,
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      return failure(baseUrl, `http-${response.status}`);
+    }
+    let body;
+    try {
+      body = await response.json();
+    } catch {
+      return failure(
+        baseUrl,
+        controller.signal.aborted ? "timeout" : "parse-error"
+      );
+    }
+    const data = typeof body === "object" && body !== null ? body.data : void 0;
+    if (!Array.isArray(data)) {
+      return failure(baseUrl, "parse-error");
+    }
+    const ids = [];
+    const vendors = {};
+    for (const item of data) {
+      if (typeof item !== "object" || item === null) {
+        continue;
+      }
+      const entry = item;
+      const id = entry.id;
+      if (typeof id !== "string") {
+        continue;
+      }
+      ids.push(id);
+      vendors[id] = vendorFor(entry.owned_by);
+    }
+    return { ok: true, baseUrl, ids, vendors };
+  } catch {
+    return failure(
+      baseUrl,
+      controller.signal.aborted ? "timeout" : "fetch-failed"
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // src/agents/mcp.ts
@@ -679,6 +680,13 @@ function mcpCurrentOf(content) {
 }
 
 // src/setup-agents.ts
+var CLAUDE_ENUMS = ["sonnet", "opus", "haiku", "fable"];
+var VENDOR_COLORS = {
+  gpt: "yellow",
+  grok: "red",
+  claude: "blue",
+  none: "blue"
+};
 function parseDocument(content) {
   const lines = content.split("\n");
   const startsWithFrontmatter = lines[0]?.trim() === "---";
@@ -722,33 +730,40 @@ function only(left, right) {
 function pluginRoot() {
   return process.env.CLAUDE_PLUGIN_ROOT ?? path2.resolve(path2.dirname(fileURLToPath(import.meta.url)), "..");
 }
-function requirePolicy(options) {
-  const policy = policyById(options.policy);
-  if (policy === void 0) {
-    throw new Error(
-      `policy: must be one of ${POLICIES.map((entry) => entry.id).join(", ")}`
-    );
-  }
-  return policy.id;
-}
-function requireModel(options, policy) {
+function requireModel(options) {
   const spec = modelById(options.modelId);
   if (spec === void 0) throw new Error("model-id: is unknown");
-  if (!modelsFor(policy).some((entry) => entry.id === spec.id)) {
-    throw new Error(`model-id: ${spec.id} is not used in ${policy}`);
-  }
   return spec;
 }
-function validateRoles(options, policy, model) {
-  const allowed = new Set(rolesFor(policy, model.id));
-  const invalid = options.roles.filter(
-    (role) => roleById(role) !== void 0 && !allowed.has(role)
+function recommendedRolesFor(modelId) {
+  return sortRoleIds(
+    Object.entries(RECOMMENDED).filter(([, models]) => models.includes(modelId)).map(([role]) => role)
   );
+}
+function recommendedForAlias(model) {
+  const modelIds = MODELS.filter((spec) => spec.model === model).map(
+    (spec) => spec.id
+  );
+  return sortRoleIds(
+    Object.entries(RECOMMENDED).filter(
+      ([, recommended]) => recommended.some((modelId) => modelIds.includes(modelId))
+    ).map(([role]) => role)
+  );
+}
+function validateRoles(options, model) {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+  );
+  const invalid = options.roles.filter((role) => !fragments.has(role));
   if (invalid.length > 0) {
-    throw new Error(
-      `roles: ${invalid.join(", ")} is not assigned to ${model.id} in ${policy}`
-    );
+    throw new Error(`roles: ${invalid.join(", ")} is unknown`);
   }
+  return options.roles.flatMap((role) => {
+    if (roleById(role) === void 0 || RECOMMENDED[role].includes(model.id)) {
+      return [];
+    }
+    return [`roles: ${role} is not recommended for ${model.id}`];
+  });
 }
 function validateFragments(options) {
   const status = checkFragments(pluginRoot(), options.dir, options.lang);
@@ -757,8 +772,8 @@ function validateFragments(options) {
     `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.map((entry) => entry.id).join(", ")}. Run --scaffold-fragments and translate them first`
   );
 }
-function defaultAgentName(options, policy, spec) {
-  const roles = rolesFor(policy, spec.id);
+function defaultAgentName(options, spec) {
+  const roles = recommendedRolesFor(spec.id);
   if (roles.length !== 1) return spec.id;
   const role = roles[0];
   if (role === void 0) return spec.id;
@@ -769,42 +784,84 @@ function defaultAgentName(options, policy, spec) {
   const defaultName = fragments.get(role)?.defaultName ?? bundledDefaultNames(options.dir).get(role);
   return defaultName === void 0 ? spec.id : `${spec.id}-${defaultName}`;
 }
-function targetsFor(options, policy) {
+function isClaudeEnum(model) {
+  return CLAUDE_ENUMS.includes(model);
+}
+function unavailableWarning(live) {
+  return `live models unavailable (${live.reason ?? "unknown"}); model existence was not validated`;
+}
+function resolveVendor(options, model, spec, live) {
+  if (options.vendor !== "") return options.vendor;
+  if (isClaudeEnum(model)) return "claude";
+  if (!live.ok) return spec.vendor;
+  const vendor = live.vendors[model] ?? "unknown";
+  if (vendor === "unknown") {
+    throw new Error(
+      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
+    );
+  }
+  return vendor;
+}
+function modelIsAvailable(model, live) {
+  return isClaudeEnum(model) || live.ids.includes(model);
+}
+function targetsFor(options, live) {
+  const warnings = live.ok ? [] : [unavailableWarning(live)];
   if (options.models.length > 0) {
-    return options.models.map((id) => {
+    const specs = options.models.map((id) => {
       const spec2 = modelById(id);
       if (spec2 === void 0) throw new Error(`models: ${id} is unknown`);
-      if (!modelsFor(policy).some((entry) => entry.id === spec2.id)) {
-        throw new Error(`models: ${id} is not used in ${policy}`);
-      }
-      return {
-        modelId: spec2.id,
-        name: defaultAgentName(options, policy, spec2),
-        model: resolveModelValue(spec2, process.env),
-        roles: rolesFor(policy, spec2.id),
-        color: spec2.color,
-        vendor: spec2.vendor
-      };
+      return spec2;
     });
+    const included = live.ok ? specs.filter((spec2) => modelIsAvailable(spec2.model, live)) : specs;
+    const modelsDropped = live.ok ? specs.filter((spec2) => !modelIsAvailable(spec2.model, live)).map((spec2) => spec2.id) : [];
+    return {
+      warnings,
+      modelsDropped,
+      targets: included.map((spec2) => {
+        const vendor2 = resolveVendor(options, spec2.model, spec2, live);
+        return {
+          modelId: spec2.id,
+          composeModelId: spec2.id,
+          name: defaultAgentName(options, spec2),
+          model: spec2.model,
+          roles: recommendedRolesFor(spec2.id),
+          color: VENDOR_COLORS[vendor2],
+          vendor: vendor2
+        };
+      })
+    };
   }
-  const spec = requireModel(options, policy);
-  validateRoles(options, policy, spec);
-  return [
-    {
-      modelId: spec.id,
-      name: options.name,
-      model: options.model === "" ? resolveModelValue(spec, process.env) : options.model,
-      roles: options.roles,
-      color: spec.color,
-      vendor: spec.vendor
-    }
-  ];
+  const spec = requireModel(options);
+  const model = options.model === "" ? spec.model : options.model;
+  if (options.write && live.ok && !modelIsAvailable(model, live)) {
+    throw new Error(
+      `model: ${model} is not a Claude enum and was not found in live models`
+    );
+  }
+  warnings.push(...validateRoles(options, spec));
+  const vendor = resolveVendor(options, model, spec, live);
+  return {
+    warnings: [...new Set(warnings)],
+    modelsDropped: [],
+    targets: [
+      {
+        modelId: spec.id,
+        composeModelId: options.model === "" ? spec.id : void 0,
+        name: options.name,
+        model,
+        roles: options.roles,
+        color: VENDOR_COLORS[vendor],
+        vendor
+      }
+    ]
+  };
 }
 function composeInputFor(options, target, mcpServers) {
   return {
     name: target.name,
     model: target.model,
-    modelId: target.modelId,
+    modelId: target.composeModelId,
     vendor: target.vendor,
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
@@ -1056,12 +1113,11 @@ function mcpCurrentFor(file) {
   if (!fs2.existsSync(file)) return { servers: [], denyTools: [] };
   return mcpCurrentOf(fs2.readFileSync(file, "utf8"));
 }
-function setup(options) {
-  const policy = requirePolicy(options);
+function setup(options, live) {
   validateFragments(options);
-  const targets = targetsFor(options, policy);
+  const resolution = targetsFor(options, live);
   const mcp = resolveMcp(options);
-  const results = targets.map((target) => {
+  const results = resolution.targets.map((target) => {
     const current = mcpCurrentFor(targetPath(options, target));
     const result = options.write ? write(options, target, mcp.servers) : diff(options, target, mcp.servers);
     return {
@@ -1071,52 +1127,45 @@ function setup(options) {
       mcpDropped: mcp.dropped
     };
   });
-  return { ok: true, results };
-}
-function listPolicies(env) {
   return {
     ok: true,
-    injected: policyForInjection(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? null,
-    policies: POLICIES.map(({ id, label, injection }) => ({
-      id,
-      label,
-      injection
-    }))
+    results,
+    warnings: resolution.warnings,
+    modelsDropped: resolution.modelsDropped
   };
 }
-function listModels(options) {
-  const policy = requirePolicy(options);
+function listLiveModels(live) {
+  const claudeEnums = [...CLAUDE_ENUMS];
+  if (!live.ok) {
+    return {
+      ok: false,
+      reason: live.reason,
+      models: [],
+      claudeEnums
+    };
+  }
   return {
     ok: true,
-    policy,
-    models: modelsFor(policy).map((spec) => ({
-      id: spec.id,
-      label: spec.label,
-      defaultName: defaultAgentName(options, policy, spec),
-      model: resolveModelValue(spec, process.env),
-      vendor: spec.vendor,
-      color: spec.color,
-      roles: rolesFor(policy, spec.id)
-    }))
+    models: live.ids.map((id) => ({
+      id,
+      vendor: live.vendors[id] ?? "unknown",
+      recommendedFor: recommendedForAlias(id)
+    })),
+    claudeEnums
   };
 }
 function listMcp() {
   return { ok: true, servers: listMcpServers(process.env) };
 }
 function listAvailableRoles(options) {
-  const policy = requirePolicy(options);
-  const model = requireModel(options, policy);
-  const allowed = new Set(rolesFor(policy, model.id));
   const dirs = fragmentDirsFor(
     pluginRoot(),
     options.dir,
     options.lang
   );
-  const fragments = loadFragments(dirs, model.vendor);
+  const fragments = loadFragments(dirs);
   const ownDir = dirs.at(-1)?.path;
-  const roles = [...fragments.values()].filter(
-    (fragment) => allowed.has(fragment.id) || roleById(fragment.id) === void 0
-  ).sort(
+  const roles = [...fragments.values()].sort(
     (left, right) => roleOrder(left.id) - roleOrder(right.id) || left.id.localeCompare(right.id)
   ).map((fragment) => ({
     id: fragment.id,
@@ -1126,7 +1175,7 @@ function listAvailableRoles(options) {
     source: fragment.source,
     languageMismatch: options.lang !== "ja" && fragment.source === "project" && ownDir !== void 0 && fs2.existsSync(path2.join(ownDir, `${fragment.id}.md`))
   }));
-  return { ok: true, policy, modelId: model.id, lang: options.lang, roles };
+  return { ok: true, lang: options.lang, roles };
 }
 function coveredDefinitions(projectDir, roleIds) {
   const covered = new Map(
@@ -1166,8 +1215,7 @@ function bundledDefaultNames(projectDir) {
   return names;
 }
 function listCoverage(options) {
-  const policy = requirePolicy(options);
-  const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]));
+  const roleIds = sortRoleIds(Object.keys(RECOMMENDED));
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   );
@@ -1182,24 +1230,23 @@ function listCoverage(options) {
       id,
       label: fragment.label,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
-      models: ASSIGNMENTS[policy][id],
+      models: RECOMMENDED[id],
       coveredBy: covered.get(id) ?? []
     };
   });
   return {
     ok: true,
-    policy,
     roles,
     uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id)
   };
 }
 function parseArgs(argv) {
   const options = {
-    policy: "",
     modelId: "",
     models: [],
     name: "",
     model: "",
+    vendor: "",
     roles: [],
     dir: process.cwd(),
     lang: "ja",
@@ -1207,8 +1254,7 @@ function parseArgs(argv) {
     mcpDeny: [],
     write: false,
     merge: false,
-    listPolicies: false,
-    listModels: false,
+    listLiveModels: false,
     listRoles: false,
     listCoverage: false,
     listMcp: false,
@@ -1221,9 +1267,11 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     switch (arg) {
       case "--policy":
-        options.policy = requireValue(value, "policy");
-        index += 1;
-        break;
+      case "--list-policies":
+      case "--list-models":
+        throw new Error(
+          `Unsupported option: ${arg} was removed; setup-agents is custom-profile only`
+        );
       case "--model-id":
         options.modelId = requireValue(value, "model-id");
         index += 1;
@@ -1238,6 +1286,13 @@ function parseArgs(argv) {
         break;
       case "--model":
         options.model = requireValue(value, "model");
+        index += 1;
+        break;
+      case "--vendor":
+        if (value !== "gpt" && value !== "grok" && value !== "claude" && value !== "none") {
+          throw new Error("vendor: must be gpt, grok, claude or none");
+        }
+        options.vendor = value;
         index += 1;
         break;
       case "--roles":
@@ -1268,11 +1323,8 @@ function parseArgs(argv) {
       case "--merge":
         options.merge = true;
         break;
-      case "--list-policies":
-        options.listPolicies = true;
-        break;
-      case "--list-models":
-        options.listModels = true;
+      case "--list-live-models":
+        options.listLiveModels = true;
         break;
       case "--list-roles":
         options.listRoles = true;
@@ -1300,13 +1352,12 @@ function parseArgs(argv) {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
-  if (options.listPolicies || options.listModels || options.listRoles || options.listCoverage || options.listMcp || options.checkFragments || options.scaffoldFragments) {
+  if (options.listLiveModels || options.listRoles || options.listCoverage || options.listMcp || options.checkFragments || options.scaffoldFragments) {
     return options;
   }
   if (options.merge && !options.write)
     throw new Error("merge: requires --write");
   if (options.models.length > 0) {
-    if (options.policy === "") throw new Error("policy: is required");
     if (options.keep.length > 0) {
       throw new Error("keep: cannot be used with --models");
     }
@@ -1334,40 +1385,41 @@ function respond(value) {
   process.stdout.write(`${JSON.stringify(value)}
 `);
 }
-try {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.listPolicies) {
-    respond(listPolicies(process.env));
-  } else if (options.listModels) {
-    respond(listModels(options));
-  } else if (options.listCoverage) {
-    respond(listCoverage(options));
-  } else if (options.listMcp) {
-    respond(listMcp());
-  } else if (options.checkFragments) {
+async function main() {
+  try {
+    const options = parseArgs(process.argv.slice(2));
+    if (options.listLiveModels) {
+      respond(listLiveModels(await fetchLiveModels(process.env)));
+    } else if (options.listCoverage) {
+      respond(listCoverage(options));
+    } else if (options.listMcp) {
+      respond(listMcp());
+    } else if (options.checkFragments) {
+      respond({
+        ok: true,
+        ...checkFragments(pluginRoot(), options.dir, options.lang)
+      });
+    } else if (options.scaffoldFragments) {
+      const written = scaffoldFragments(pluginRoot(), options.dir, options.lang);
+      respond({
+        ok: true,
+        lang: options.lang,
+        written: written.map(
+          (file) => path2.relative(options.dir, file).split(path2.sep).join("/")
+        )
+      });
+    } else if (options.listRoles) {
+      respond(listAvailableRoles(options));
+    } else {
+      respond(setup(options, await fetchLiveModels(process.env)));
+    }
+  } catch (error) {
     respond({
-      ok: true,
-      ...checkFragments(pluginRoot(), options.dir, options.lang)
+      ok: false,
+      error: error instanceof Error ? error.message : "Unexpected error",
+      results: []
     });
-  } else if (options.scaffoldFragments) {
-    const written = scaffoldFragments(pluginRoot(), options.dir, options.lang);
-    respond({
-      ok: true,
-      lang: options.lang,
-      written: written.map(
-        (file) => path2.relative(options.dir, file).split(path2.sep).join("/")
-      )
-    });
-  } else if (options.listRoles) {
-    respond(listAvailableRoles(options));
-  } else {
-    respond(setup(options));
+    process.exitCode = 1;
   }
-} catch (error) {
-  respond({
-    ok: false,
-    error: error instanceof Error ? error.message : "Unexpected error",
-    results: []
-  });
-  process.exitCode = 1;
 }
+await main();

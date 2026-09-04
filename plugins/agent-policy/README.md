@@ -2,7 +2,7 @@
 
 Claude Code を使うときのエージェント運用方針を、スキルとして配布する Claude Code プラグインです。
 
-モデル別の役割分担、設計/実装フロー、アドバイザー運用、並列原則、コードベース探索のコスト効率化施策(context-map)を定めます。方針スキルに従う 4 種のプリセット定義を同梱し、役割を選んでプロジェクト固有の Agent 定義も作れます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
+モデル別または役割別の担当表、設計/実装フロー、アドバイザー運用、並列原則、コードベース探索のコスト効率化施策(context-map)を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
 
 ## 動作要件
 
@@ -37,111 +37,74 @@ Marketplace から `agent-policy` をインストールします。
 
 ## プロファイル
 
-環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` の値に応じて、SessionStart フックが使う方針スキルを選び、セッション開始時の指示として自動で注入します。
+環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` の値を trim・小文字化して判定し、SessionStart フックがセッション開始時の方針を注入します。通常使う値は `none`、`claude`、`custom` の 3 つです。
 
-| `AMATSUKA_AGENT_AUTO_INJECTION` | 使う方針スキル |
+| 値 | プロファイルと注入内容 |
 | --- | --- |
-| `claude` | `agent-policy:claude-model-policy` |
-| `with-codex` | `agent-policy:with-codex-policy` |
-| `with-grok` | `agent-policy:with-grok-policy` |
-| `with-codex-grok` | `agent-policy:codex-grok-policy` |
-| `none`(または未設定) | 注入しない |
+| `none` または未設定 | 方針スキルと役割マーカーの対応表を注入しません。 |
+| `claude` | `agent-policy:claude-model-policy` を注入します。Claude のモデル名で帯を固定する担当表であり、Agent 定義のセットアップは不要です。 |
+| `custom` | プロジェクトの役割マーカー付き Agent 定義を検査します。構成が成立すれば、`agent-policy:custom-policy` と役割マーカーの対応表を注入します。 |
 
-自動注入を使わず、CLAUDE.md に選んだ方針スキルへ従う旨を直接書くこともできます。
+`custom` では、役割マーカー付き定義の外部モデルがプロキシの `/v1/models` に実在することを検証します。すべて存在すると確認できた場合は `custom-policy` と対応表を注入します。役割マーカー付き定義が無い、モデルが見つからない、または照会に失敗した場合は、セッション全体を `claude` プロファイルへフォールバックし、その理由を起動時に通知します。
+
+自動注入を使わない場合は、CLAUDE.md に方針スキルへ従う旨を直接書けます。たとえば custom 構成では、次のように書きます。
 
 ```markdown
-- 最初に必ず `agent-policy:codex-grok-policy` スキルを使用し、この規律に従う。
+- 最初に必ず `agent-policy:custom-policy` スキルを使用し、この規律に従う。
 ```
 
 ## 環境変数
 
 | 変数名 | 用途 | 既定値 |
 | --- | --- | --- |
-| `AMATSUKA_AGENT_AUTO_INJECTION` | 使う方針スキルの選択(`claude` / `with-codex` / `with-grok` / `with-codex-grok` / `none`) | 未設定(注入しない) |
-| `AMATSUKA_AGENT_GPT_SOL_ALIAS` | `gpt-sol` のモデルエイリアス | `claude-gpt-5-6-sol` |
-| `AMATSUKA_AGENT_GPT_TERRA_ALIAS` | `gpt-terra` のモデルエイリアス | `claude-gpt-5-6-terra` |
-| `AMATSUKA_AGENT_GPT_LUNA_ALIAS` | `gpt-luna` のモデルエイリアス | `claude-gpt-5-6-luna` |
-| `AMATSUKA_AGENT_GROK_ALIAS` | `grok` のモデルエイリアス | `claude-grok-4-6` |
+| `AMATSUKA_AGENT_AUTO_INJECTION` | 注入プロファイルの選択(`none` / `claude` / `custom`) | 未設定(`none` と同じ) |
+| `ANTHROPIC_BASE_URL` | custom 構成の外部モデルを照会するプロキシのベース URL | 未設定 |
+| `ANTHROPIC_AUTH_TOKEN` | `/v1/models` 照会の Bearer 認証トークン | 未設定 |
+| `ANTHROPIC_API_KEY` | Bearer トークンが無い場合の `/v1/models` 照会用 API キー | 未設定 |
+| `AMATSUKA_AGENT_DELEGATION_GATE` | delegation gate の有効化 | 未設定(無効) |
+| `AMATSUKA_AGENT_PARALLEL_NUDGE` | 並列促しフックの無効化 | 未設定(有効) |
 | `CLAUDE_CODE_SUBAGENT_MODEL` | Claude Code が全サブエージェントへ適用するモデル | 未設定 |
-
-エイリアスはモデル本体の ID ではなく、ローカルプロキシ(CLIProxyAPI などの ProxyAPI サーバー)が配信するクライアント側の別名です。Codex 系 / Grok 系のモデルをこの ProxyAPI サーバー経由で使える環境が前提です。
 
 `CLAUDE_CODE_SUBAGENT_MODEL` を設定すると、Agent 定義の frontmatter にある `model` より優先されます。定義ごとに選んだモデルを使う場合は設定しないでください。
 
-### 設定場所
+### プロキシを使う custom 構成
 
-これらの変数は、OS の環境変数として与えても、Claude Code の `settings.json` / `settings.local.json` の `env` に書いても構いません。プロジェクト単位で効かせる場合は、そのプロジェクトの `.claude/settings.json` に書きます。
+外部モデルの実在を検証する custom 構成では、`ANTHROPIC_BASE_URL` がフックの実行環境から見える必要があります。シェル環境に設定した値がフックへ継承されることは実測で確認しています。プロジェクトごとに固定したい場合などは、Claude Code の `settings.json` / `settings.local.json` の `env` に置くこともできます。プロジェクト単位では、そのプロジェクトの `.claude/settings.json` に書きます。
 
 ```json
 {
   "env": {
-    "AMATSUKA_AGENT_AUTO_INJECTION": "with-codex",
-    "AMATSUKA_AGENT_GPT_SOL_ALIAS": "my-sol"
+    "AMATSUKA_AGENT_AUTO_INJECTION": "custom",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317"
   }
 }
 ```
 
-`AMATSUKA_AGENT_AUTO_INJECTION` に上の表にない値を設定した場合、方針スキルは注入されず、値が未知である旨の警告だけが注入されます。
+`/v1/models` の照会では、`ANTHROPIC_AUTH_TOKEN` を `Authorization: Bearer` として最初に使います。これが無い場合は `ANTHROPIC_API_KEY` を `x-api-key` として使い、どちらも無い場合は無認証で 1 回試行します。これらの認証変数はいずれも必須ではありません。
 
-## 同梱エージェント
-
-プラグインの `agents/` には、役割断片からビルド生成した 4 種のプリセット定義を同梱しています。呼び出し名は `agent-policy:<name>`(例: `agent-policy:gpt-sol`)です。
-
-| 名前 | 既定モデル | color | 役割 ID |
-| --- | --- | --- | --- |
-| `gpt-sol` | `claude-gpt-5-6-sol` | yellow | `complex-impl` |
-| `gpt-terra` | `claude-gpt-5-6-terra` | green | `normal-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
-| `gpt-luna` | `claude-gpt-5-6-luna` | cyan | `light-impl` |
-| `grok` | `claude-grok-4-6` | red | `normal-impl`, `light-impl`, `general`, `explore`, `realtime-research`, `independent-review` |
-
-利用者が setup で作る定義の color は、`--list-models` が返すモデル別の値を使います。
-
-| モデル ID | color |
-| --- | --- |
-| `opus` | blue |
-| `sonnet` | purple |
-| `haiku` | pink |
-| `fable` | orange |
-| `gpt-sol` | yellow |
-| `gpt-terra` | green |
-| `gpt-luna` | cyan |
-| `grok` | red |
-
-## エイリアスを変更する
-
-同梱プリセットは上の表の既定エイリアスを使います。別名を使う場合は、対応する `AMATSUKA_AGENT_*_ALIAS` を設定したうえで、`agent-policy:setup-agents` を実行してプロジェクトの `.claude/agents/` に定義を生成してください。
-
-SessionStart フックは Agent 定義を生成せず、ファイルも書き込みません。既定値と異なるエイリアスが環境変数に設定されているときだけ、プロジェクト側の対応する定義が無い、または `model` が一致しないことを検知して setup の実行を促します。環境変数が未設定、または既定値と同じ場合は不一致を検知しません。
-
-プロジェクトの `.claude/agents/` に生成した定義は同梱プリセットより優先されます。既存定義がある状態で setup を実行した場合は、差分を確認して、利用者が加えた tools・frontmatter・節を保持するか選べます。
+外部モデルの検証が必要な custom 構成で `ANTHROPIC_BASE_URL` が無い場合、照会は行われず、セッションは claude プロファイルへフォールバックします。この理由は起動時に通知されます。`AMATSUKA_AGENT_AUTO_INJECTION` に未知の値を設定した場合も、方針は注入されず、値が未知である旨を通知します。
 
 ## 役割を選んで自分の定義を作る
 
-`agent-policy:setup-agents` は、選んだ運用方針に沿って複数の Agent 定義をまとめて作る対話ウィザードです。
+`agent-policy:setup-agents` は、custom プロファイルで使う Agent 定義を、実在するモデルと役割からまとめて作る対話ウィザードです。claude プロファイルはセットアップ不要です。custom プロファイルを使う場合は、プロジェクトの `.claude/agents/` に定義を生成してください。
 
 ```text
 /agent-policy:setup-agents
 ```
 
-対話モードでは次の順に選びます。
+対話モードでは、会話の使用言語を確認した後、`/v1/models` を照会して実在する外部モデルと Claude enum を候補にします。既存定義の役割被覆を確認し、作るモデル・役割・定義名・ベンダーを選んで差分を確認してから生成します。モデルと役割の組合せは拘束しません。推奨から外れる組合せは警告として表示されます。
 
-1. 使用言語を確認します。日本語と英語の役割断片は同梱されています。それ以外の言語では `.claude/agent-policy/roles/<lang>/` に英語の雛形を作り、翻訳してから生成します。
-2. `claude-model-policy` / `with-codex-policy` / `with-grok-policy` / `codex-grok-policy` から運用方針を選びます。`AMATSUKA_AGENT_AUTO_INJECTION` と一致する方針があれば第一候補になります。
-3. 既存の `.claude/agents/` が担当表の役割をどこまでカバーしているか確認します。既存定義がある場合は、未カバーの役割だけを作るか、すべてのモデルを選び直すかを選べます。
-4. 方針の担当表に登場するモデルから、生成するものを複数選びます。担当表にないモデルと役割の組み合わせは選べません。
-5. 必要なモデルだけ、定義名・`model`・役割・既存定義の保持方法を個別に調整します。調整しないモデルは既定名と既定役割で一括生成します。
-6. 接続済みの MCP サーバーを検出し、許可するサーバーを選びます。既定では MCP ツールを付けません。既存定義があれば前回の選択を読み戻します。サーバーを選ぶと既定の配分が表で示され、そのまま進むか定義ごとに調整するかを選べます。
-7. 生成後に未カバーの役割を 1 つずつ確認し、追加で定義を作るか作らないかを決めます。
+プロキシを照会できない場合も、Claude enum と推奨モデルの既定エイリアスから定義を生成できますが、外部モデルの実在は保証されません。次の SessionStart で検証できるようになったときに、不在のモデルは検出されます。
 
-未カバーの役割について「作らない」と決めた結果は、そのウィザード実行中だけ記憶され、ファイルには保存されません。次に setup-agents を実行したときは改めて確認されます。
+日本語と英語の役割断片は同梱されています。それ以外の言語では `.claude/agent-policy/roles/<lang>/` に英語の雛形を作り、翻訳してから生成します。
 
 MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
 
 MCP の付与単位は役割ではなく定義です。既定では実装役割(`complex-impl` / `normal-impl` / `light-impl` / `general`)を持つ定義にだけ付き、読み取り役割だけの定義には付きません。定義ごとの調整を選ぶと、この既定を定義単位で上書きできます。実装役割と読み取り役割を同じ定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できません。
 
-生成の最後に案内される CLAUDE.md への追記は、`AMATSUKA_AGENT_AUTO_INJECTION` が方針スキルを注入している場合には不要です。ウィザードはこれを判定し、注入が成立していれば追記を案内しません。注入される方針と生成した定義の方針が食い違う場合は警告します。値が未設定・`none`・未知のときは注入が起きないため、追記が案内されます。
+`AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
-`--yes` を渡す非対話モードでは、`--policy <id>` または `AMATSUKA_AGENT_AUTO_INJECTION` から方針を決め、その方針の全モデルを既定名・既定役割でまとめて生成します。明示的な選択がないため MCP ツールは付きません。
+`--yes` を渡す非対話モードでは、推奨構成を一括で保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に成功した場合は実在しない推奨モデルを生成対象から外し、照会に失敗した場合は実在確認を行わなかった警告とともに生成します。
 
 組み込みの役割 ID は次の 10 種です。
 
@@ -164,7 +127,7 @@ MCP の付与単位は役割ではなく定義です。既定では実装役割(
 agent-policy-role: normal-impl, explore
 ```
 
-SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。方針スキルの担当表に該当する役割があるときは、この対応を優先して使います。注入される役割マーカー表の役割名は日本語表記です。SubagentStart フックは、サブエージェントの起動時に同じ対応表を注入します。
+custom プロファイルの検証が成立した場合、SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。custom-policy は、この対応表にある役割を優先して使います。注入される役割マーカー表の役割名は日本語表記です。`custom` と旧互換値の設定では、SubagentStart フックもサブエージェントの起動時に対応表を注入します。
 
 このマーカーは、その帯の委譲先候補になることに加えて、外部 Agent を名指しで dispatch するときにプロジェクト最適化(MCP tools と適応本文)を届ける合成ホストの候補になることも表します。合成ホストにしたくない定義からは、マーカーを外してください。
 
@@ -174,25 +137,65 @@ SessionStart フックはプロジェクトの `.claude/agents/` を走査し、
 
 SessionStart フックは独自役割の表示名を解決するとき、`.claude/agent-policy/roles/<id>.md` に加えて `.claude/agent-policy/roles/*/<id>.md` も走査します。同じ役割 ID が複数の言語ディレクトリにある場合、フックは会話言語を知らないため、どの表示名が使われるかは決まりません。
 
+## delegation gate
+
+Delegation gate は、メインセッションから保護対象を直接編集しようとしたときに deny し、担当表に従った委譲を促す PreToolUse フックです。既定では無効です。有効にするには、次の 2 つを必ず揃えます。
+
+1. `AMATSUKA_AGENT_DELEGATION_GATE` を `1`、`true`、`on` のいずれかに設定する。
+2. 対象プロジェクトに `.claude/agent-policy/delegation-gate.json` を置く。
+
+設定ファイルは次をひな形にしてください。`denyGlobs` は必須で、空ではない文字列配列にします。`mcpTools` と `ttlSeconds` は任意です。
+
+```json
+{
+  "denyGlobs": ["plugins/*/src/**", "plugins/*/skills/**"],
+  "mcpTools": {
+    "mcp__example__edit": {
+      "pathParam": "relative_path",
+      "absolute": false
+    }
+  },
+  "ttlSeconds": 7200
+}
+```
+
+`denyGlobs` には、プロジェクトで直接編集から保護したいパスをプロジェクトルート相対の glob で指定します。`mcpTools` には gate の対象に加える MCP ツール名と、パス引数の名前(`pathParam`)・絶対パスかどうか(`absolute`)を指定します。`mcpTools` を省略した場合、MCP ツールは対象になりません。
+
+組み込みの `Edit`、`Write`、`NotebookEdit` は宣言不要で、常に対象です。それぞれ `file_path`、`file_path`、`notebook_path` の絶対パスを検査します。`ttlSeconds` を省略したときの一時解除 TTL は 7,200 秒です。
+
+### 一時解除
+
+対象プロジェクトのルートで、agent-policy のインストール先を指定して次の CLI を実行します。Claude Code が設定する `CLAUDE_PLUGIN_ROOT` を利用できる環境では、そのまま使えます。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct on
+node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct status
+node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
+```
+
+`--direct on` は一時解除を始め、`--direct status` は状態と残り時間を表示し、`--direct off` は解除を終了します。一時解除は `ttlSeconds` の経過で自動的に失効します。この解除は**ユーザー自身が実行するもの**です。Agent や AI に実行させないでください。
+
+このフックには既知の限界があります。Bash 経由の書き込みは技術的に止められません。また、AI 自身が `--direct on` を実行して回避することも技術的には可能であり、「ユーザー自身が実行する」という文言を守る運用に依存します。
+
+## 並列促しフック
+
+サブエージェントを起動しようとするたびに、まだ着手していない独立タスクがあれば同じメッセージで並列 dispatch するよう促す短い文言を注入します。前の出力に依存する場合だけは逐次にします。
+
+このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
+
 ## 旧バージョンからの移行
 
-1. `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止しました。`.claude/agents/` に残っていれば削除してください。プロジェクト定義は同梱定義より優先されるため、放置すると古い定義が使われ続けます。SessionStart フックは残骸を検知すると削除を促す通知を出します。
-2. Grok の既定エイリアスは `claude-grok-4-5` から `claude-grok-4-6` へ変わりました。
-   - プロキシ設定に `claude-grok-4-6` の別名が無い場合、委譲時に `unknown provider for model` で失敗します。
-   - `AMATSUKA_AGENT_GROK_ALIAS` が未設定なら、フックが既定値と一致するとみなすため、エイリアス不一致としては検知されません。
-   - ただし手順 1 の廃止済み定義(`grok-researcher.md` など)が `.claude/agents/` に残っていて、かつ `AMATSUKA_AGENT_GROK_ALIAS` が未設定の場合は、残骸通知にこのエイリアス変更が併記されます。
-   - 推奨する対処は、プロキシ設定に `claude-grok-4-6` の別名を追加することです。
-   - CLIProxyAPI では `oauth-model-alias` の `xai` に `grok-4.6` → `claude-grok-4-6` を追加します。
-   - Grok 4.5 を使い続ける場合は、`AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を明示的に設定してください。
-3. MCP ツールは同梱定義から外れました。同梱定義には引き続き付かず、必要な定義へは手順 6 の setup で付与できます。
-4. `setup-gpt` と `setup-grok` は `setup-agents` へ統合しました。ポリシーとモデルと役割を選んで複数の定義を一度に作れます。
-5. 役割定義から `LSP` を外しました。背景で起動するサブエージェントでは Claude Code が `LSP` を除去するため、定義に書いても機能しません。
-6. MCP ツールを付けられるようになりました。`claude mcp list` で接続済みのサーバーを検出し、許可するものを選ぶと `tools` へ入ります。既定では付きません。前回の選択は生成された定義から読み戻します。
-7. `_common.md` の共通規律を変更しました。
-   - 制約から GitHub の名指しを外し、「外部システムへの不可逆な副作用」という一般則へ書き換えました。この規律を外したい場合は `.claude/agent-policy/roles/_common.md` に `## 制約` 節を書いて差し替えてください。
-   - アドバイザーの相談先は、`Fable`(起動できなければ `Opus`)を直接指定する方式から、担当表の「設計・計画・実装のアドバイザー」帯の定義を使う方式へ変わりました。プロジェクトに該当する定義がなければ、`model` 上書きで `Fable`、起動できなければ `Opus` を指定します。
-8. 方針スキルの「実行帯の解決順」から、定義名による探索を外しました。プロジェクト定義は `agent-policy-role` マーカーで解決されます。マーカーを持たない手書きの定義は、マーカーを 1 行足してください。
-9. setup が提案する既定の定義名を役割ベースへ変更しました。旧版で生成した定義(`claude-sonnet.md` など)がある状態で「すべてのモデルを選び直す」を選ぶと、新しい名前の別ファイルが作られ、役割が重複します。
-   - 重複を避けるには、ウィザードのステップ 1b で「未カバーの役割だけ作る」を選ぶか、旧名の定義を先に削除してください。
-10. 役割マーカー(`agent-policy-role`)の意味を拡張しました。帯の委譲先候補であることに加えて、外部 Agent を名指しで dispatch するときの合成ホスト候補であることも表します。既存のマーカー付き定義に必要な作業はありません。合成ホストにしたくない定義があれば、その定義からマーカーを外してください。
-11. SubagentStart フックを追加しました。サブエージェントの起動時に役割マーカーの対応表とサブエージェント向けの規律を注入し、再委譲の階層でも役割の解決が揃います。Claude Code 2.0.43 以降で動作します。
+0.13 系から 0.14 系へ移行する場合は、次を確認してください。
+
+1. 同梱プリセット 4 定義(`agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` / `agent-policy:grok`)を廃止しました。これらを名指しで呼び出していた場合は動かなくなります。代わりに `agent-policy:setup-agents` を実行し、推奨構成を生成してください。非対話で推奨構成をまとめて作る場合は `/agent-policy:setup-agents --yes` を使えます。
+2. 方針スキル `with-codex-policy` / `with-grok-policy` / `codex-grok-policy` を廃止しました。custom 構成の方針は `custom-policy` に統合されています。
+3. `AMATSUKA_AGENT_AUTO_INJECTION` の旧値 `with-codex` / `with-grok` / `with-codex-grok` は custom として扱われるため、動作は継続します。ただし SessionStart は `custom` へ変更するよう通知します。環境変数を `custom` に更新してください。
+4. エイリアス変数 `AMATSUKA_AGENT_GPT_SOL_ALIAS`、`AMATSUKA_AGENT_GPT_TERRA_ALIAS`、`AMATSUKA_AGENT_GPT_LUNA_ALIAS`、`AMATSUKA_AGENT_GROK_ALIAS` は参照されなくなりました。設定されている場合、SessionStart が非推奨を通知します。モデルは setup-agents が `/v1/models` の実応答から選ぶため、定義の `model` を変えたいときは setup-agents を再実行してください。
+5. 以前の `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止済みです。プロジェクトの `.claude/agents/` に残っていれば削除してください。SessionStart は残骸を検知すると通知します。
+6. `setup-gpt` と `setup-grok` は `setup-agents` へ統合されています。0.14 系の setup-agents は custom プロファイル専用です。
+7. MCP ツールは setup-agents で定義ごとに付与します。既定では付きません。`claude mcp list` で接続済みのサーバーを検出し、許可するものを選べます。
+8. 役割定義から `LSP` を外しました。背景で起動するサブエージェントでは Claude Code が `LSP` を除去するため、定義に書いても機能しません。
+9. `_common.md` の共通規律では、GitHub の名指しを「外部システムへの不可逆な副作用」という一般則へ変更しました。プロジェクト独自の制約が必要な場合は `.claude/agent-policy/roles/_common.md` の `## 制約` 節で差し替えられます。アドバイザーの相談先は担当表の「設計・計画・実装のアドバイザー」帯の定義を優先し、無い場合は `model` 上書きで `Fable`、起動できなければ `Opus` を使います。
+10. 役割マーカー(`agent-policy-role`)は、帯の委譲先候補に加え、外部 Agent を名指しで dispatch するときの合成ホスト候補も表します。合成ホストにしたくない定義からはマーカーを外してください。
+11. setup が提案する既定の定義名は役割ベースです。旧版で生成した定義がある状態で、すべてのモデルを選び直すと役割が重複する場合があります。未カバーの役割だけを作るか、旧名の定義を先に整理してください。
+12. SubagentStart フックは、サブエージェント起動時に役割マーカーの対応表とサブエージェント向けの規律を注入します。Claude Code 2.0.43 以降で動作します。

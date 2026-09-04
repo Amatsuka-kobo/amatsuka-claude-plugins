@@ -40,6 +40,17 @@ function build(roleIds: string[], overrides: Record<string, unknown> = {}) {
   })
 }
 
+function buildWithoutModelId(roleIds: string[]) {
+  return compose({
+    name: "test-agent",
+    model: "test-alias",
+    vendor: "gpt",
+    roleIds: roleIds as never,
+    fragmentDirs: [PLUGIN_ROLES],
+    lang: "ja"
+  })
+}
+
 function frontmatter(document: string): Record<string, string> {
   const lines = document.split("\n")
   const close = lines.indexOf("---", 1)
@@ -81,6 +92,26 @@ describe("frontmatter", () => {
     ).toBe("blue")
   })
 
+  it("none の既定色を blue にし、vendor marker を出力しない", () => {
+    const document = build(["complex-impl"], { vendor: "none" })
+    const meta = frontmatter(document)
+    const lines = document.split("\n")
+    const roleAt = lines.indexOf("agent-policy-role: complex-impl")
+
+    expect(meta.color).toBe("blue")
+    expect(meta["agent-policy-vendor"]).toBeUndefined()
+    expect(lines[roleAt + 1]).toBe("---")
+  })
+
+  it("vendor marker を role marker の直後へ出力する", () => {
+    for (const vendor of ["gpt", "grok", "claude"] as const) {
+      const lines = build(["complex-impl"], { vendor }).split("\n")
+      const roleAt = lines.indexOf("agent-policy-role: complex-impl")
+
+      expect(lines[roleAt + 1]).toBe(`agent-policy-vendor: ${vendor}`)
+    }
+  })
+
   it("指定された color をベンダー既定より優先する", () => {
     expect(frontmatter(build(["normal-impl"], { color: "green" })).color).toBe(
       "green"
@@ -107,6 +138,26 @@ describe("frontmatter", () => {
     expect(
       frontmatter(build(["explore"], { modelId: "haiku" })).tools
     ).not.toContain("Agent")
+  })
+
+  it("model ID が無いときは役割だけで Agent の有無を決める", () => {
+    expect(
+      frontmatter(buildWithoutModelId(["light-impl"])).tools
+    ).not.toContain("Agent")
+    expect(frontmatter(buildWithoutModelId(["advisor"])).tools).not.toContain(
+      "Agent"
+    )
+    expect(frontmatter(buildWithoutModelId(["complex-impl"])).tools).toContain(
+      "Agent"
+    )
+  })
+
+  it("model ID があるときはモデルによる Agent の除外を維持する", () => {
+    for (const modelId of ["haiku", "gpt-luna"] as const) {
+      expect(
+        frontmatter(build(["complex-impl"], { modelId })).tools
+      ).not.toContain("Agent")
+    }
   })
 })
 
@@ -324,6 +375,39 @@ describe("断片の解決", () => {
     expect(withGpt).not.toContain("ソーシャル由来")
     // 追記であって置き換えではないため、共通側の記述も残る
     expect(withGrok).toContain("一次情報源")
+  })
+
+  it("none はベンダー別断片の overlay を適用しない", () => {
+    const projectRoles = path.join(temporary, "roles")
+    fs.mkdirSync(projectRoles, { recursive: true })
+    fs.writeFileSync(
+      path.join(projectRoles, "realtime-research.none.md"),
+      [
+        "---",
+        "id: realtime-research",
+        "vendor: none",
+        "---",
+        "",
+        "## 作業手順",
+        "",
+        "- none vendor overlay",
+        ""
+      ].join("\n")
+    )
+
+    const document = compose({
+      name: "none",
+      model: "m",
+      vendor: "none",
+      modelId: "gpt-terra",
+      roleIds: ["realtime-research"] as never,
+      fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
+      lang: "ja"
+    })
+
+    expect(document).not.toContain("ソーシャル由来")
+    expect(document).not.toContain("none vendor overlay")
+    expect(document).toContain("一次情報源")
   })
 
   it("プロジェクト側の断片が共通断片を置き換える", () => {
