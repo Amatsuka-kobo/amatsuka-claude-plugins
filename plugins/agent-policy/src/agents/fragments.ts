@@ -3,7 +3,7 @@ import path from "node:path"
 import { bodyHash } from "./hash"
 import type { RoleKind } from "./roles"
 
-export type Vendor = "gpt" | "grok" | "claude"
+export type Vendor = "gpt" | "grok" | "claude" | "none"
 
 export interface FragmentDir {
   path: string

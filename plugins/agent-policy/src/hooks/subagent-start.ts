@@ -4,6 +4,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { isCustomInjection } from "../agents/policies"
 import {
   type MarkedAgent,
   markerTable,
@@ -294,7 +295,9 @@ function buildContext(
     return undefined
   }
 
-  const table = markerTable(env, projectAgents) ?? NO_MARKERS
+  const table = isCustomInjection(env.AMATSUKA_AGENT_AUTO_INJECTION)
+    ? (markerTable(env, projectAgents) ?? NO_MARKERS)
+    : NO_MARKERS
   const fragment = readFragment(env)
   const result = truncateContext(composeSections(fragment, table))
   if (result.truncated) report("truncated")

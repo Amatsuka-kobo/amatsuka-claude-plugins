@@ -2,103 +2,95 @@ import { describe, expect, it } from "vitest"
 import {
   ASSIGNMENTS,
   allowsAgentTool,
+  isCustomInjection,
   MODELS,
-  modelById,
+  type ModelId,
   modelsFor,
   POLICIES,
-  type PolicyName,
   policyForInjection,
-  resolveModelValue,
-  rolesAcrossPolicies,
+  RECOMMENDED,
   rolesFor
 } from "../policies"
 import { ROLES, type RoleId } from "../roles"
 
-// 各方針スキルの Agent tool 規定を写したもの。SKILL.md を変えたらここも変える。
-const EXPECTED: Record<PolicyName, Record<RoleId, boolean>> = {
-  "claude-model-policy": {
-    "complex-impl": true,
-    "normal-impl": true,
-    "light-impl": false,
-    general: true,
-    explore: true,
-    "realtime-research": true,
-    "independent-review": true,
-    "doc-review": false,
-    "code-review": true,
-    advisor: false
-  },
-  "with-codex-policy": {
-    "complex-impl": true,
-    "normal-impl": true,
-    "light-impl": false,
-    general: true,
-    explore: true,
-    "realtime-research": true,
-    "independent-review": true,
-    "doc-review": false,
-    "code-review": true,
-    advisor: false
-  },
-  "with-grok-policy": {
-    "complex-impl": true,
-    "normal-impl": true,
-    "light-impl": false,
-    general: true,
-    explore: true,
-    "realtime-research": true,
-    "independent-review": true,
-    "doc-review": false,
-    "code-review": true,
-    advisor: false
-  },
-  "codex-grok-policy": {
-    "complex-impl": true,
-    "normal-impl": true,
-    "light-impl": false,
-    general: true,
-    explore: true,
-    "realtime-research": true,
-    "independent-review": true,
-    "doc-review": false,
-    "code-review": true,
-    advisor: false
-  }
+const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
+  "complex-impl": ["opus"],
+  "normal-impl": ["sonnet"],
+  "light-impl": ["haiku"],
+  general: ["sonnet"],
+  explore: ["sonnet"],
+  "realtime-research": ["sonnet"],
+  "independent-review": ["sonnet"],
+  "doc-review": ["haiku"],
+  "code-review": ["sonnet"],
+  advisor: ["fable", "opus"]
 }
 
+const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
+  "complex-impl": ["gpt-sol"],
+  "normal-impl": ["gpt-terra"],
+  "light-impl": ["gpt-luna"],
+  general: ["gpt-terra"],
+  explore: ["grok"],
+  "realtime-research": ["grok"],
+  "independent-review": ["grok"],
+  "doc-review": ["haiku"],
+  "code-review": ["sonnet"],
+  advisor: ["fable", "opus"]
+}
+
+const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
+  "complex-impl": true,
+  "normal-impl": true,
+  "light-impl": false,
+  general: true,
+  explore: true,
+  "realtime-research": true,
+  "independent-review": true,
+  "doc-review": false,
+  "code-review": true,
+  advisor: false
+}
+
+function sortedRoleIds(value: Record<RoleId, ModelId[]>): RoleId[] {
+  return (Object.keys(value) as RoleId[]).sort()
+}
+
+const ALL_ROLE_IDS = ROLES.map((role) => role.id).sort()
+
+describe("POLICIES", () => {
+  it("claude と custom の 2 プロファイルだけを公開する", () => {
+    expect(POLICIES).toEqual([
+      {
+        id: "claude-model-policy",
+        label: "Claude のみ(レガシー)",
+        injection: "claude"
+      },
+      {
+        id: "custom-policy",
+        label: "カスタム(role-id)",
+        injection: "custom"
+      }
+    ])
+  })
+})
+
 describe("ASSIGNMENTS", () => {
-  it("4 方針それぞれが役割 10 種すべてに担当モデルを持つ", () => {
-    for (const policy of POLICIES) {
-      for (const role of ROLES) {
-        const models = ASSIGNMENTS[policy.id][role.id]
-        expect(models, `${policy.id}/${role.id}`).toBeDefined()
-        expect(models.length, `${policy.id}/${role.id}`).toBeGreaterThan(0)
-      }
-    }
+  it("claude-model-policy だけに現行の全 10 役割を保持する", () => {
+    expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
+    expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
+      ALL_ROLE_IDS
+    )
+    expect(ASSIGNMENTS["claude-model-policy"]).toEqual(
+      EXPECTED_CLAUDE_ASSIGNMENTS
+    )
   })
+})
 
-  it("担当モデルはすべて MODELS に存在する", () => {
-    const known = new Set(MODELS.map((model) => model.id))
-    for (const assignments of Object.values(ASSIGNMENTS)) {
-      for (const models of Object.values(assignments)) {
-        for (const id of models) expect(known).toContain(id)
-      }
-    }
-  })
-
-  it("advisor は 4 方針すべてで fable と opus の 2 モデルを持つ", () => {
-    for (const policy of POLICIES) {
-      expect(ASSIGNMENTS[policy.id].advisor).toEqual(["fable", "opus"])
-    }
-  })
-
-  it("advisor 以外はすべて単一モデルである", () => {
-    for (const assignments of Object.values(ASSIGNMENTS)) {
-      for (const [role, models] of Object.entries(assignments)) {
-        if (role === "advisor") continue
-        expect(models.length, role).toBe(1)
-      }
-    }
+describe("RECOMMENDED", () => {
+  it("custom プロファイル向け推奨が全 10 役割と固定値を持つ", () => {
+    expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
+    expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
   })
 })
 
@@ -124,40 +116,27 @@ describe("MODELS", () => {
     expect(new Set(colors).size).toBe(colors.length)
   })
 
-  it("Claude 帯は aliasEnv を持たない", () => {
-    for (const model of MODELS.filter((m) => m.vendor === "claude")) {
-      expect(model.aliasEnv, model.id).toBeUndefined()
+  it("どのモデルも aliasEnv を持たない", () => {
+    for (const model of MODELS) {
+      expect("aliasEnv" in model, model.id).toBe(false)
     }
   })
 })
 
 describe("modelsFor", () => {
-  it("claude-model-policy は Claude 4 種のみを返す", () => {
-    expect(modelsFor("claude-model-policy").map((m) => m.id)).toEqual([
+  it("claude-model-policy の担当モデルだけを MODELS の定義順で返す", () => {
+    expect(modelsFor().map((model) => model.id)).toEqual([
       "opus",
       "sonnet",
       "haiku",
       "fable"
     ])
   })
-
-  it("codex-grok-policy は 8 種すべてを返す", () => {
-    expect(modelsFor("codex-grok-policy").map((m) => m.id)).toEqual([
-      "opus",
-      "sonnet",
-      "haiku",
-      "fable",
-      "gpt-sol",
-      "gpt-terra",
-      "gpt-luna",
-      "grok"
-    ])
-  })
 })
 
 describe("rolesFor", () => {
-  it("claude-model-policy の sonnet は 6 役割を担う", () => {
-    expect(rolesFor("claude-model-policy", "sonnet")).toEqual([
+  it("sonnet が claude-model-policy で担う 6 役割を返す", () => {
+    expect(rolesFor("sonnet")).toEqual([
       "normal-impl",
       "general",
       "explore",
@@ -167,67 +146,24 @@ describe("rolesFor", () => {
     ])
   })
 
-  it("codex-grok-policy の gpt-terra は normal-impl と general だけを担う", () => {
-    expect(rolesFor("codex-grok-policy", "gpt-terra")).toEqual([
-      "normal-impl",
-      "general"
-    ])
+  it("fable は advisor だけを返す", () => {
+    expect(rolesFor("fable")).toEqual(["advisor"])
   })
 
-  it("fable は advisor だけを担う", () => {
-    expect(rolesFor("with-codex-policy", "fable")).toEqual(["advisor"])
-  })
-
-  it("そのポリシーに登場しないモデルには空配列を返す", () => {
-    expect(rolesFor("claude-model-policy", "grok")).toEqual([])
-  })
-})
-
-describe("rolesAcrossPolicies", () => {
-  it("gpt-terra は 5 役割の和集合になる", () => {
-    expect(rolesAcrossPolicies("gpt-terra")).toEqual([
-      "normal-impl",
-      "general",
-      "explore",
-      "realtime-research",
-      "independent-review"
-    ])
-  })
-
-  it("grok は 6 役割の和集合になる", () => {
-    expect(rolesAcrossPolicies("grok")).toEqual([
-      "normal-impl",
-      "light-impl",
-      "general",
-      "explore",
-      "realtime-research",
-      "independent-review"
-    ])
+  it("claude-model-policy に登場しないモデルには空配列を返す", () => {
+    expect(rolesFor("grok")).toEqual([])
   })
 })
 
 describe("allowsAgentTool", () => {
-  it("4 方針 × 10 役割の Agent tool 規定と一致する", () => {
-    for (const policy of POLICIES) {
-      for (const role of ROLES) {
-        for (const model of ASSIGNMENTS[policy.id][role.id]) {
-          expect(
-            allowsAgentTool([role.id], model),
-            `${policy.id}/${role.id}/${model}`
-          ).toBe(EXPECTED[policy.id][role.id])
-        }
+  it("claude-model-policy の全 10 役割で現行規定を保つ", () => {
+    for (const role of ROLES) {
+      for (const model of ASSIGNMENTS["claude-model-policy"][role.id]) {
+        expect(allowsAgentTool([role.id], model), `${role.id}/${model}`).toBe(
+          EXPECTED_AGENT_TOOL[role.id]
+        )
       }
     }
-  })
-
-  it("rolesFor が返す読み取り役割だけの混成を許可する", () => {
-    const roles = rolesFor("codex-grok-policy", "grok")
-    expect(roles).toEqual([
-      "explore",
-      "realtime-research",
-      "independent-review"
-    ])
-    expect(allowsAgentTool(roles, "grok")).toBe(true)
   })
 
   it("単独の除外役割だけを拒否し、他役割との混成を許可する", () => {
@@ -240,40 +176,54 @@ describe("allowsAgentTool", () => {
   it("モデル側の除外を適用する", () => {
     expect(allowsAgentTool(["explore"], "grok")).toBe(true)
     expect(allowsAgentTool(["explore"], "haiku")).toBe(false)
+    expect(allowsAgentTool(["explore"], "gpt-luna")).toBe(false)
+  })
+
+  it("モデル未指定時は役割側の規定だけを適用する", () => {
+    expect(allowsAgentTool(["explore"])).toBe(true)
+    expect(allowsAgentTool(["light-impl"])).toBe(false)
   })
 })
 
 describe("policyForInjection", () => {
-  it("AMATSUKA_AGENT_AUTO_INJECTION の値をポリシー ID へ写す", () => {
+  it("新しい 2 つの injection 値をポリシー ID へ写す", () => {
     expect(policyForInjection("claude")).toBe("claude-model-policy")
-    expect(policyForInjection("with-codex")).toBe("with-codex-policy")
-    expect(policyForInjection("with-grok")).toBe("with-grok-policy")
-    expect(policyForInjection("with-codex-grok")).toBe("codex-grok-policy")
+    expect(policyForInjection("custom")).toBe("custom-policy")
   })
 
-  it("none と未知の値と未設定には undefined を返す", () => {
+  it("旧 3 値と none と未知値と未設定には undefined を返す", () => {
+    expect(policyForInjection("with-codex")).toBeUndefined()
+    expect(policyForInjection("with-grok")).toBeUndefined()
+    expect(policyForInjection("with-codex-grok")).toBeUndefined()
     expect(policyForInjection("none")).toBeUndefined()
     expect(policyForInjection("nope")).toBeUndefined()
     expect(policyForInjection(undefined)).toBeUndefined()
   })
 })
 
-describe("resolveModelValue", () => {
-  it("環境変数があればそれを使う", () => {
-    const spec = modelById("gpt-sol")
-    expect(spec).toBeDefined()
-    expect(
-      resolveModelValue(spec as never, { AMATSUKA_AGENT_GPT_SOL_ALIAS: "mine" })
-    ).toBe("mine")
+describe("isCustomInjection", () => {
+  it.each([
+    "custom",
+    "with-codex",
+    "with-grok",
+    "with-codex-grok"
+  ])("%s を custom 系として扱う", (value) => {
+    expect(isCustomInjection(value)).toBe(true)
   })
 
-  it("環境変数が無ければ既定値を使う", () => {
-    expect(resolveModelValue(modelById("gpt-sol") as never, {})).toBe(
-      "claude-gpt-5-6-sol"
-    )
+  it("前後の空白と大文字小文字を正規化する", () => {
+    expect(isCustomInjection("  CuStOm  ")).toBe(true)
+    expect(isCustomInjection("  WITH-CODEX-GROK  ")).toBe(true)
   })
 
-  it("Claude 帯は既定値を返す", () => {
-    expect(resolveModelValue(modelById("sonnet") as never, {})).toBe("sonnet")
+  it.each([
+    undefined,
+    "",
+    "   ",
+    "none",
+    "claude",
+    "unknown"
+  ])("%s は custom 系として扱わない", (value) => {
+    expect(isCustomInjection(value)).toBe(false)
   })
 })

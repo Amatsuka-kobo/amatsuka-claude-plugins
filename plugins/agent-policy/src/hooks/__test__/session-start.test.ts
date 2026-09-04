@@ -1,20 +1,41 @@
+import type { ExecFileSyncOptions } from "node:child_process"
 import fs from "node:fs"
+import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { Worker } from "node:worker_threads"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import {
+  type FakeModelsServer,
+  startFakeModelsServer
+} from "../../testing/fake-models-server.js"
 import { runTs } from "../../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../session-start.ts", import.meta.url))
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
+const RUN_TS = fileURLToPath(
+  new URL("../../testing/run-ts.ts", import.meta.url)
+)
+const TSX_IMPORT = createRequire(import.meta.url).resolve("tsx")
+const LEGACY_INJECTIONS = ["with-codex", "with-grok", "with-codex-grok"]
+const ALIAS_VARIABLES = [
+  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
+  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
+  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
+  "AMATSUKA_AGENT_GROK_ALIAS"
+]
 
 let project: string
+let servers: FakeModelsServer[]
 
 beforeEach(() => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), "agent-policy-"))
+  servers = []
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(servers.map((server) => server.close()))
   fs.rmSync(project, { recursive: true, force: true })
 })
 
@@ -36,64 +57,463 @@ function environment(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   for (const key of Object.keys(base)) {
     if (key.startsWith("AMATSUKA_AGENT_")) delete base[key]
   }
+  delete base.ANTHROPIC_BASE_URL
+  delete base.ANTHROPIC_AUTH_TOKEN
+  delete base.ANTHROPIC_API_KEY
   delete base.CLAUDE_PROJECT_DIR
   return { ...base, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT, ...overrides }
 }
 
-function context(env: Record<string, string> = {}): string {
-  const output = runTs(HOOK, [], {
-    env: environment({ CLAUDE_PROJECT_DIR: project, ...env })
-  }).trim()
-  if (output === "") return ""
-  const parsed = JSON.parse(output.split("\n").at(-1) ?? "{}")
+function injectionEnvironment(
+  value: string | undefined
+): Record<string, string> {
+  return value === undefined ? {} : { AMATSUKA_AGENT_AUTO_INJECTION: value }
+}
+
+function parseContext(output: string): string {
+  const trimmed = output.trim()
+  if (trimmed === "") return ""
+  const parsed = JSON.parse(trimmed.split("\n").at(-1) ?? "{}")
   return parsed.hookSpecificOutput?.additionalContext ?? ""
 }
 
-function listFiles(): string[] {
-  const dir = path.join(project, ".claude", "agents")
-  return fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []
+function context(env: Record<string, string> = {}): string {
+  return parseContext(
+    runTs(HOOK, [], {
+      env: environment({ CLAUDE_PROJECT_DIR: project, ...env })
+    })
+  )
+}
+
+interface WorkerResult {
+  output?: string
+  error?: string
+}
+
+function runTsAsync(
+  script: string,
+  args: string[],
+  opts: ExecFileSyncOptions
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const worker = new Worker(
+      `
+        const { parentPort, workerData } = require("node:worker_threads")
+        void import(workerData.runTsUrl)
+          .then(({ runTs }) => {
+            try {
+              parentPort.postMessage({
+                output: runTs(workerData.script, workerData.args, workerData.opts)
+              })
+            } catch (error) {
+              parentPort.postMessage({
+                error: error instanceof Error
+                  ? error.stack ?? error.message
+                  : String(error)
+              })
+            }
+          })
+          .catch((error) => {
+            parentPort.postMessage({
+              error: error instanceof Error
+                ? error.stack ?? error.message
+                : String(error)
+            })
+          })
+      `,
+      {
+        eval: true,
+        execArgv: ["--import", TSX_IMPORT],
+        workerData: {
+          runTsUrl: pathToFileURL(RUN_TS).href,
+          script,
+          args,
+          opts
+        }
+      }
+    )
+
+    worker.once("message", (result: WorkerResult) => {
+      settled = true
+      if (result.error !== undefined) {
+        reject(new Error(result.error))
+        return
+      }
+      resolve(result.output ?? "")
+    })
+    worker.once("error", (error) => {
+      if (!settled) reject(error)
+    })
+    worker.once("exit", (code) => {
+      if (!settled && code !== 0) {
+        reject(new Error(`runTs worker exited with code ${code}`))
+      }
+    })
+  })
+}
+
+async function contextAsync(env: Record<string, string>): Promise<string> {
+  return parseContext(
+    await runTsAsync(HOOK, [], {
+      env: environment({ CLAUDE_PROJECT_DIR: project, ...env })
+    })
+  )
+}
+
+async function startServer(
+  ids: string[],
+  options: { delayMs?: number } = {}
+): Promise<FakeModelsServer> {
+  const server = await startFakeModelsServer({
+    body: JSON.stringify({ data: ids.map((id) => ({ id })) }),
+    delayMs: options.delayMs
+  })
+  servers.push(server)
+  return server
+}
+
+function projectSnapshot(root = project): string[] {
+  if (!fs.existsSync(root)) return []
+  const entries: string[] = []
+
+  const visit = (dir: string): void => {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      const absolute = path.join(dir, item.name)
+      const relative = path.relative(root, absolute)
+      if (item.isDirectory()) {
+        entries.push(`directory:${relative}`)
+        visit(absolute)
+      } else if (item.isSymbolicLink()) {
+        entries.push(`symlink:${relative}:${fs.readlinkSync(absolute)}`)
+      } else {
+        entries.push(`file:${relative}:${fs.readFileSync(absolute, "base64")}`)
+      }
+    }
+  }
+
+  visit(root)
+  return entries.sort()
 }
 
 describe("方針の注入", () => {
-  it("値が未設定なら何も出さない", () => {
-    expect(context()).toBe("")
+  it.each([
+    ["未設定", undefined],
+    ["空文字", ""],
+    ["none", "none"]
+  ])("%s なら方針・対応表・未知役割通知を出さない", (_label, value) => {
+    place("hidden", ["agent-policy-role: complex-impl"])
+    const output = context(injectionEnvironment(value))
+
+    expect(output).toBe("")
+    expect(output).not.toContain("hidden")
+    expect(output).not.toContain("未知の役割 ID")
   })
 
-  it("既知の値で方針スキルを指す", () => {
-    expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })).toContain(
-      "agent-policy:with-codex-policy"
+  it("claude なら claude 方針だけを出し、対応表・未知役割通知を出さない", () => {
+    place("hidden", ["agent-policy-role: no-such-role"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).not.toContain("hidden")
+    expect(output).not.toContain("未知の役割 ID")
+  })
+
+  it("custom なら検証成立後に custom 方針と対応表を出す", () => {
+    place("custom-agent", ["model: sonnet", "agent-policy-role: complex-impl"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("agent-policy:custom-policy")
+    expect(output).toContain("custom-agent")
+    expect(output).toContain("複雑または重要な実装")
+  })
+
+  it.each(
+    LEGACY_INJECTIONS
+  )("%s は custom 扱いで移行通知を出す", (injection) => {
+    place("legacy-agent", ["model: sonnet", "agent-policy-role: normal-impl"])
+    const output = context({
+      AMATSUKA_AGENT_AUTO_INJECTION: injection
+    })
+
+    expect(output).toContain("agent-policy:custom-policy")
+    expect(output).toContain("legacy-agent")
+    expect(output).toContain(
+      "AMATSUKA_AGENT_AUTO_INJECTION` を `custom` へ変更する"
     )
-    expect(
-      context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex-grok" })
-    ).toContain("agent-policy:codex-grok-policy")
+    const lines = output.split("\n")
+    const policyLine = lines.findIndex((line) =>
+      line.includes("agent-policy:custom-policy")
+    )
+    expect(lines[policyLine + 1]).toContain(
+      "AMATSUKA_AGENT_AUTO_INJECTION` を `custom` へ変更する"
+    )
+    expect(output).not.toContain("未知のため")
+  })
+
+  it("custom では移行通知を出さない", () => {
+    place("custom-agent", ["agent-policy-role: general"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).not.toContain(
+      "AMATSUKA_AGENT_AUTO_INJECTION` を `custom` へ変更する"
+    )
   })
 
   it("未知の値では方針を指さず、未知である旨だけを出す", () => {
+    place("hidden", ["agent-policy-role: complex-impl"])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "bogus" })
+
     expect(output).toContain("bogus")
+    expect(output).toContain("未知")
     expect(output).not.toContain("スキルを使用し")
+    expect(output).not.toContain("hidden")
+  })
+
+  it("大文字と前後空白を正規化して判定する", () => {
+    place("normalized", ["model: sonnet", "agent-policy-role: explore"])
+
+    expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "  ClAuDe  " })).toContain(
+      "agent-policy:claude-model-policy"
+    )
+    expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "  CuStOm  " })).toContain(
+      "agent-policy:custom-policy"
+    )
+    expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "  NoNe  " })).toBe("")
+  })
+})
+
+describe("custom 構成の検証", () => {
+  it("役割マーカー付き定義が 0 件なら claude へフォールバックする", () => {
+    place("plain", ["model: missing-external-model"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("役割マーカー付き定義が見つからない")
+    expect(output).toContain("未作成、または読み取れない")
+    expect(output).toContain("agent-policy:setup-agents")
+    expect(output).not.toContain("missing-external-model")
+  })
+
+  it("全 Claude enum 構成なら /v1/models を照会せず成立する", async () => {
+    const server = await startServer([])
+    for (const model of ["sonnet", "opus", "haiku", "fable"]) {
+      place(model, [`model: ${model}`, "agent-policy-role: general"])
+    }
+
+    const output = context({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:custom-policy")
+    expect(server.requests).toEqual([])
+  })
+
+  it("live models に全モデル値があれば custom が成立する", async () => {
+    const server = await startServer(["live-sol", "live-grok"])
+    place("sol", ["model: live-sol", "agent-policy-role: complex-impl"])
+    place("grok", ["model: live-grok", "agent-policy-role: explore"])
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:custom-policy")
+    expect(output).toContain("sol")
+    expect(output).toContain("grok")
+    expect(server.requests).toHaveLength(1)
+    expect(server.requests[0]?.url).toBe("/v1/models")
+  })
+
+  it("マーカーの無い定義と inherit と model 欠落を検証対象から除外する", async () => {
+    const server = await startServer([])
+    place("inherited", ["model: inherit", "agent-policy-role: normal-impl"])
+    place("implicit", ["agent-policy-role: general"])
+    place("unmarked", ["model: missing-external-model"])
+
+    const output = context({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:custom-policy")
+    expect(output).toContain("inherited")
+    expect(output).toContain("implicit")
+    expect(output).not.toContain("unmarked")
+    expect(server.requests).toEqual([])
+  })
+
+  it("1 件でもモデルが不在ならセッション全体を claude へフォールバックする", async () => {
+    const server = await startServer(["present-model"])
+    place("present", ["model: present-model", "agent-policy-role: normal-impl"])
+    place("missing", [
+      "model: missing-model",
+      "agent-policy-role: complex-impl"
+    ])
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("定義 `missing` の model `missing-model`")
+    expect(output).toContain("/v1/models に存在しない")
+    expect(output).toContain(
+      "セッション全体を claude プロファイルへフォールバック"
+    )
+    expect(output).toContain("agent-policy:setup-agents")
+    expect(output).toContain("model` を修正")
+    expect(output).toContain("プロキシを起動")
+    expect(output).not.toContain("次の Agent は役割マーカーを宣言している")
+  })
+
+  it("不在定義を最大 10 件まで列挙して残りをまとめる", async () => {
+    const server = await startServer([])
+    for (let index = 1; index <= 12; index += 1) {
+      const suffix = String(index).padStart(2, "0")
+      place(`missing-${suffix}`, [
+        `model: absent-${suffix}`,
+        "agent-policy-role: general"
+      ])
+    }
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("定義 `missing-10` の model `absent-10`")
+    expect(output).not.toContain("定義 `missing-11` の model `absent-11`")
+    expect(output).toContain("他 2 件")
+  })
+
+  it("BASE_URL 未設定なら reason を示して claude へフォールバックする", () => {
+    place("external", [
+      "model: external-model",
+      "agent-policy-role: complex-impl"
+    ])
+
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("ANTHROPIC_BASE_URL")
+    expect(output).toContain("no-base-url")
+    expect(output).not.toContain("次の Agent は役割マーカーを宣言している")
+  })
+
+  it("照会タイムアウトなら reason を示して claude へフォールバックする", async () => {
+    const server = await startServer(["external-model"], { delayMs: 3_500 })
+    place("external", [
+      "model: external-model",
+      "agent-policy-role: complex-impl"
+    ])
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("プロキシへ接続できない")
+    expect(output).toContain("timeout")
+    expect(output).not.toContain("次の Agent は役割マーカーを宣言している")
+  })
+})
+
+describe("非推奨エイリアス変数の通知", () => {
+  it.each(ALIAS_VARIABLES)("%s が設定されていると 1 回だけ通知する", (name) => {
+    const output = context({ [name]: "configured" })
+
+    expect(output).toContain("エイリアス変数は参照されなくなった")
+    expect(output).toContain("setup-agents が /v1/models から選ぶ")
+    expect(output).toContain("定義の `model` 値")
+    expect(output.match(/エイリアス変数は参照されなくなった/g)).toHaveLength(1)
+  })
+
+  it("複数の非推奨変数が設定されても通知は 1 回だけ出す", () => {
+    const output = context(
+      Object.fromEntries(ALIAS_VARIABLES.map((name) => [name, "configured"]))
+    )
+
+    expect(output.match(/エイリアス変数は参照されなくなった/g)).toHaveLength(1)
+  })
+
+  it.each([
+    undefined,
+    "none",
+    "claude",
+    "custom",
+    "with-codex",
+    "bogus"
+  ])("injection が %s の分岐でも通知する", (injection) => {
+    const output = context({
+      ...injectionEnvironment(injection),
+      AMATSUKA_AGENT_GPT_SOL_ALIAS: "configured"
+    })
+
+    expect(output).toContain("エイリアス変数は参照されなくなった")
   })
 })
 
 describe("ファイルを書かない", () => {
-  it("エイリアス差分があっても定義を生成しない", () => {
-    expect(context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })).not.toBe(
-      undefined
-    )
-    expect(listFiles()).toEqual([])
+  it.each([
+    ["未設定", undefined],
+    ["空", ""],
+    ["none", "none"],
+    ["claude", "claude"],
+    ["custom", "custom"],
+    ["with-codex", "with-codex"],
+    ["with-grok", "with-grok"],
+    ["with-codex-grok", "with-codex-grok"],
+    ["未知値", "bogus"]
+  ])("%s 分岐でプロジェクトの内容を変えない", (_label, injection) => {
+    place("safe-agent", ["model: sonnet", "agent-policy-role: general"])
+    const before = projectSnapshot()
+    context(injectionEnvironment(injection))
+
+    expect(projectSnapshot()).toEqual(before)
   })
 
-  it("役割マーカーを読んでもファイルを増やさない", () => {
-    place("my-agent", ["agent-policy-role: complex-impl"])
-    context()
-    expect(listFiles()).toEqual(["my-agent.md"])
+  it("live models 成立分岐でもプロジェクトの内容を変えない", async () => {
+    const server = await startServer(["external-model"])
+    place("external", [
+      "model: external-model",
+      "agent-policy-role: complex-impl"
+    ])
+    const before = projectSnapshot()
+
+    await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(projectSnapshot()).toEqual(before)
+  })
+
+  it("フォールバック分岐でもプロジェクトの内容を変えない", async () => {
+    const server = await startServer([])
+    place("external", [
+      "model: external-model",
+      "agent-policy-role: complex-impl"
+    ])
+    const before = projectSnapshot()
+
+    await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(projectSnapshot()).toEqual(before)
   })
 })
 
 describe("役割マーカーの走査", () => {
   it("帯 → 名前の対応を注入する", () => {
     place("my-heavy", ["agent-policy-role: complex-impl, explore"])
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("my-heavy")
     expect(output).toContain("複雑または重要な実装")
     expect(output).toContain("コードベース探索実働")
@@ -102,7 +522,7 @@ describe("役割マーカーの走査", () => {
   it("同じ役割を複数定義が宣言したとき全て列挙する", () => {
     place("first", ["agent-policy-role: normal-impl"])
     place("second", ["agent-policy-role: normal-impl"])
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("first")
     expect(output).toContain("second")
   })
@@ -111,7 +531,7 @@ describe("役割マーカーの走査", () => {
     place("out-of-order", [
       "agent-policy-role: realtime-research, general, complex-impl"
     ])
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     const complex = output.indexOf("- 複雑または重要な実装:")
     const general = output.indexOf("- その他のタスク:")
     const research = output.indexOf("- リアルタイム情報調査:")
@@ -121,7 +541,7 @@ describe("役割マーカーの走査", () => {
 
   it("未知の役割 ID を無視し、その旨を出す", () => {
     place("odd", ["agent-policy-role: no-such-role"])
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("no-such-role")
     expect(output).toContain("odd")
   })
@@ -147,7 +567,7 @@ describe("役割マーカーの走査", () => {
       ].join("\n")
     )
     place("triager", ["agent-policy-role: triage"])
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("障害の切り分け")
     expect(output).toContain("triager")
     expect(output).not.toContain("未知の役割 ID")
@@ -158,22 +578,23 @@ describe("役割マーカーの走査", () => {
     fs.mkdirSync(path.join(roles, "custom.md"), { recursive: true })
     place("custom-role-agent", ["agent-policy-role: custom"])
 
-    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
 
-    expect(output).toContain("agent-policy:with-codex-policy")
+    expect(output).toContain("agent-policy:custom-policy")
   })
 
   it("マーカーの無い定義は対応表に出さない", () => {
+    place("marked", ["agent-policy-role: general"])
     place("plain", ["model: sonnet"])
-    expect(context()).not.toContain("plain")
+    expect(context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })).not.toContain(
+      "plain"
+    )
   })
 
   it("同梱プリセットを走査しない", () => {
-    // 走査を発火させるため、プロジェクト側に 1 件置く。
     place("dummy", ["agent-policy-role: explore"])
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("コードベース探索実働")
-    // 同梱 gpt-sol は complex-impl を宣言しているが、走査対象外なので出ない。
     expect(output).not.toContain("複雑または重要な実装")
   })
 })
@@ -187,86 +608,9 @@ describe("labelOf の言語別ディレクトリ", () => {
       "---\nid: triage\nlabel: Ersteinschatzung\nkind: readonly\n---\n"
     )
     place("de-triage", ["model: sonnet", "agent-policy-role: triage"])
-    const injected = context()
+    const injected = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(injected).toContain("Ersteinschatzung")
     expect(injected).not.toContain("未知の役割 ID")
-  })
-})
-
-describe("setup の案内先", () => {
-  it("エイリアス不一致で setup-agents を案内する", () => {
-    const injected = context({ AMATSUKA_AGENT_GROK_ALIAS: "custom-grok" })
-    expect(injected).toContain("agent-policy:setup-agents")
-    expect(injected).not.toContain("agent-policy:setup-grok")
-  })
-})
-
-describe("setup の促し", () => {
-  it("エイリアスを model に持つ定義が無いとき促す", () => {
-    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).toContain("setup-agents")
-    expect(output).toContain("gpt-sol")
-    expect(output).toContain("model に持つ定義が無い")
-  })
-
-  it("名前一致の定義の model が食い違うとき食い違いを報告する", () => {
-    place("gpt-sol", ["model: claude-gpt-5-6-sol"])
-    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).toContain("setup-agents")
-    expect(output).toContain("claude-gpt-5-6-sol")
-    expect(output).toContain("食い違う")
-  })
-
-  it("同名定義に model が無いとき未設定として報告する", () => {
-    place("gpt-sol", ["agent-policy-role: complex-impl"])
-
-    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-
-    expect(output).toContain("未設定")
-    expect(output).not.toContain("undefined")
-  })
-
-  it("別名の定義が必要な役割を覆うとき促さない", () => {
-    place("my-heavy-coder", [
-      "model: my-sol",
-      "agent-policy-role: complex-impl"
-    ])
-    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).not.toContain("setup-agents")
-  })
-
-  it("複数定義の役割の和集合がプリセットを覆うとき促さない", () => {
-    place("my-explorer", [
-      "model: my-terra",
-      "agent-policy-role: explore, realtime-research, independent-review"
-    ])
-    place("my-coder", [
-      "model: my-terra",
-      "agent-policy-role: normal-impl, general"
-    ])
-    const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
-    expect(output).not.toContain("setup-agents")
-  })
-
-  it("役割が不足するとき不足役割 ID を示して促す", () => {
-    place("my-explorer", ["model: my-terra", "agent-policy-role: explore"])
-    const output = context({ AMATSUKA_AGENT_GPT_TERRA_ALIAS: "my-terra" })
-    expect(output).toContain("setup-agents")
-    expect(output).toContain("normal-impl")
-    expect(output).toContain("general")
-    expect(output).toContain("my-explorer")
-  })
-
-  it("model キーを持たない定義はエイリアス充足に数えない", () => {
-    place("my-heavy-coder", ["agent-policy-role: complex-impl"])
-    const output = context({ AMATSUKA_AGENT_GPT_SOL_ALIAS: "my-sol" })
-    expect(output).toContain("setup-agents")
-    expect(output).toContain("model に持つ定義が無い")
-  })
-
-  it("エイリアスが既定と同じなら促さない", () => {
-    const output = context({ AMATSUKA_AGENT_GROK_ALIAS: "claude-grok-4-6" })
-    expect(output).not.toContain("setup-agents")
   })
 })
 
@@ -284,32 +628,6 @@ describe("旧定義の残骸通知", () => {
     expect(output).toContain("claude-researcher")
     expect(output).toContain("grok-implementer")
     expect(output).toContain("廃止")
-  })
-
-  it("Grok の残骸と未設定の別名に 4.6 移行を周知する", () => {
-    place("grok-researcher", ["model: sonnet"])
-    const output = context()
-    expect(output).toContain(
-      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
-    )
-  })
-
-  it("Grok の残骸があっても別名設定済みなら 4.6 移行を周知しない", () => {
-    place("grok-researcher", ["model: sonnet"])
-    const output = context({
-      AMATSUKA_AGENT_GROK_ALIAS: "claude-grok-4-5"
-    })
-    expect(output).not.toContain(
-      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
-    )
-  })
-
-  it("GPT の残骸だけなら 4.6 移行を周知しない", () => {
-    place("gpt-researcher", ["model: sonnet"])
-    const output = context()
-    expect(output).not.toContain(
-      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった"
-    )
   })
 
   it("現行のプリセット名は残骸として扱わない", () => {
@@ -332,8 +650,9 @@ describe("フェイルオープン", () => {
       path.join(agentsDir(), "broken.md")
     )
 
-    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "with-codex" })
-    expect(output).toContain("agent-policy:with-codex-policy")
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("役割マーカー付き定義が見つからない")
   })
 
   it("壊れた symlink があっても正常な定義の役割マーカーを拾う", () => {
@@ -343,7 +662,7 @@ describe("フェイルオープン", () => {
     )
     place("healthy", ["agent-policy-role: explore"])
 
-    const output = context()
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("healthy")
     expect(output).toContain("コードベース探索実働")
   })

@@ -13,7 +13,6 @@ const SESSION_HOOK = fileURLToPath(
   new URL("../session-start.ts", import.meta.url)
 )
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
-const BUNDLED_AGENTS_DIR = path.join(PLUGIN_ROOT, "agents")
 const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
 const TABLE_INTRO =
   "次の Agent は役割マーカーを宣言している。担当表の該当する帯は、これらを優先して使う。同じ帯に複数あるときは依頼内容に近いものを選ぶ。"
@@ -162,28 +161,6 @@ describe("定義照合と deny-list", () => {
     )
   })
 
-  it("同梱定義の実走査結果に従い bare 名と agent-policy: 名を同じように判定する", () => {
-    const bundled = scanAgents(BUNDLED_AGENTS_DIR)
-    const denied = bundled.find(
-      (entry) => entry.tools !== undefined && !entry.tools.includes("Agent")
-    )
-    const allowed = bundled.find(
-      (entry) => entry.tools === undefined || entry.tools.includes("Agent")
-    )
-    if (denied === undefined || allowed === undefined) {
-      throw new Error("bundled fixtures must contain denied and allowed agents")
-    }
-
-    for (const type of [denied.name, `agent-policy:${denied.name}`]) {
-      expect(invoke(type)).toBe("")
-    }
-    for (const type of [allowed.name, `agent-policy:${allowed.name}`]) {
-      expect(additionalContext(invoke(type))).toContain(
-        "あなたはサブエージェントである"
-      )
-    }
-  })
-
   it.each(["Explore", "Plan"])("ビルトイン %s には注入しない", (type) => {
     expect(invoke(type)).toBe("")
   })
@@ -204,21 +181,6 @@ describe("定義照合と deny-list", () => {
     )
   })
 
-  it("完全形一致が project と同梱定義に複数ヒットするときは注入する", () => {
-    const bundled = scanAgents(BUNDLED_AGENTS_DIR)
-    const denied = bundled.find(
-      (entry) => entry.tools !== undefined && !entry.tools.includes("Agent")
-    )
-    if (denied === undefined) {
-      throw new Error("bundled fixtures must contain a denied agent")
-    }
-    place(denied.name, ["tools: Read"], "project-exact-duplicate")
-
-    expect(additionalContext(invoke(denied.name))).toContain(
-      "あなたはサブエージェントである"
-    )
-  })
-
   it("block 配列の tools に Agent が無い project 定義には注入しない", () => {
     place("block-tools", ["tools:", "  - Read", "  - Bash"])
 
@@ -230,7 +192,9 @@ describe("断片の合成", () => {
   it("サブエージェント宣言と対応表を含み policy スキル名を含まない", () => {
     place("marked", ["tools: Read, Agent", "agent-policy-role: complex-impl"])
 
-    const context = additionalContext(invoke("marked"))
+    const context = additionalContext(
+      invoke("marked", { AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+    )
     expect(context).toContain("あなたはサブエージェントである")
     expect(context).toContain(TABLE_INTRO)
     expect(context).not.toContain("agent-policy:")
@@ -245,8 +209,10 @@ describe("断片の合成", () => {
     )
   })
 
-  it("marker が 0 件なら対応表なしの固定文を含める", () => {
-    const context = additionalContext(invoke("unknown-agent"))
+  it("custom 系で marker が 0 件なら対応表なしの固定文を含める", () => {
+    const context = additionalContext(
+      invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+    )
 
     expect(context).toContain(
       "対応表なし(このプロジェクトに役割マーカー付き定義は無い)"
@@ -272,12 +238,18 @@ describe("断片の合成", () => {
   it("断片ファイルが読めないときは対応表だけを注入する", () => {
     place("marked", ["tools: Read, Agent", "agent-policy-role: complex-impl"])
     const missingRoot = path.join(project, "fragmentless-plugin")
-    const env = environment({ CLAUDE_PLUGIN_ROOT: missingRoot })
+    const env = environment({
+      CLAUDE_PLUGIN_ROOT: missingRoot,
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom"
+    })
     const expected = markerTable(env, scanAgents(agentsDir()))
     if (expected === undefined) throw new Error("marker table fixture is empty")
 
     const context = additionalContext(
-      invoke("unknown-agent", { CLAUDE_PLUGIN_ROOT: missingRoot })
+      invoke("unknown-agent", {
+        CLAUDE_PLUGIN_ROOT: missingRoot,
+        AMATSUKA_AGENT_AUTO_INJECTION: "custom"
+      })
     )
     expect(context).toBe(expected)
   })
@@ -297,14 +269,14 @@ describe("断片の合成", () => {
     expect(context).toContain("対応表なし")
   })
 
-  it("両 policy env で SessionStart と同一の対応表を注入する", () => {
+  it("custom 系 policy env で SessionStart と同一の対応表を注入する", () => {
     place("implementer", [
       "tools: Read, Agent",
       "agent-policy-role: complex-impl"
     ])
     place("advisor", ["tools: Read, Agent", "agent-policy-role: advisor"])
 
-    for (const policy of ["claude", "with-codex-grok"]) {
+    for (const policy of ["custom", "with-codex-grok"]) {
       const env = { AMATSUKA_AGENT_AUTO_INJECTION: policy }
       const sessionTable = tableBlock(sessionContext(policy))
       const subagentTable = tableBlock(
@@ -314,6 +286,62 @@ describe("断片の合成", () => {
       expect(sessionTable).not.toBe("")
       expect(subagentTable).toBe(sessionTable)
     }
+  })
+})
+
+describe("対応表の injection 判定", () => {
+  it.each([
+    "custom",
+    "with-codex",
+    "with-grok",
+    "with-codex-grok"
+  ])("custom 系の %s では対応表を合成する", (policy) => {
+    place("marked", ["tools: Read, Agent", "agent-policy-role: complex-impl"])
+
+    expect(
+      additionalContext(
+        invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: policy })
+      )
+    ).toContain(TABLE_INTRO)
+  })
+
+  it.each([
+    ["none", { AMATSUKA_AGENT_AUTO_INJECTION: "none" }],
+    ["claude", { AMATSUKA_AGENT_AUTO_INJECTION: "claude" }],
+    ["未設定", {}],
+    ["空文字", { AMATSUKA_AGENT_AUTO_INJECTION: "" }],
+    ["未知の値", { AMATSUKA_AGENT_AUTO_INJECTION: "unexpected" }]
+  ])("%s では対応表なしの固定文を合成する", (_label, env) => {
+    place("marked", ["tools: Read, Agent", "agent-policy-role: complex-impl"])
+
+    const context = additionalContext(invoke("unknown-agent", env))
+    expect(context).toContain(
+      "対応表なし(このプロジェクトに役割マーカー付き定義は無い)"
+    )
+    expect(context).not.toContain(TABLE_INTRO)
+  })
+
+  it.each([
+    "Custom",
+    " with-codex-grok "
+  ])("%s を正規化して対応表を合成する", (policy) => {
+    place("marked", ["tools: Read, Agent", "agent-policy-role: complex-impl"])
+
+    expect(
+      additionalContext(
+        invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: policy })
+      )
+    ).toContain(TABLE_INTRO)
+  })
+
+  it.each(["custom", "none"])("%s の分岐でも規律断片を配布する", (policy) => {
+    place("marked", ["tools: Read, Agent", "agent-policy-role: complex-impl"])
+
+    expect(
+      additionalContext(
+        invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: policy })
+      )
+    ).toContain("あなたはサブエージェントである")
   })
 })
 
@@ -397,7 +425,7 @@ describe("入力と出力", () => {
 describe("切り詰め", () => {
   it("複数役割の対応表を後方の役割行から削り先頭 2 行を完全に残す", () => {
     placeBulkyRoleTable()
-    const env = environment()
+    const env = environment({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     const fullTable = markerTable(env, scanAgents(agentsDir()))
     if (fullTable === undefined)
       throw new Error("marker table fixture is empty")
@@ -405,7 +433,10 @@ describe("切り詰め", () => {
 
     const missingRoot = path.join(project, "fragmentless-plugin")
     const context = additionalContext(
-      invoke("unknown-agent", { CLAUDE_PLUGIN_ROOT: missingRoot })
+      invoke("unknown-agent", {
+        CLAUDE_PLUGIN_ROOT: missingRoot,
+        AMATSUKA_AGENT_AUTO_INJECTION: "custom"
+      })
     )
     const fullLines = fullTable.split("\n")
     const fullRoleLines = fullLines.slice(1)
@@ -429,13 +460,15 @@ describe("切り詰め", () => {
 
   it("実断片では対応表を優先して after 側の規律行を削る", () => {
     placeBulkyRoleTable()
-    const env = environment()
+    const env = environment({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     const fullTable = markerTable(env, scanAgents(agentsDir()))
     if (fullTable === undefined)
       throw new Error("marker table fixture is empty")
     expect(fullTable.length).toBeGreaterThan(9500)
 
-    const context = additionalContext(invoke("unknown-agent"))
+    const context = additionalContext(
+      invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+    )
     const firstRoleLine = fullTable.split("\n")[1]
     if (firstRoleLine === undefined)
       throw new Error("marker table fixture has no role rows")

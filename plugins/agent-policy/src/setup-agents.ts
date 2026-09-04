@@ -16,6 +16,7 @@ import {
   scaffoldFragments,
   type Vendor
 } from "./agents/fragments"
+import { fetchLiveModels, type LiveModels } from "./agents/live-models"
 import {
   listMcpServers,
   type McpCurrent,
@@ -23,26 +24,20 @@ import {
   toolPrefix
 } from "./agents/mcp"
 import {
-  ASSIGNMENTS,
+  MODELS,
   type ModelId,
   type ModelSpec,
   modelById,
-  modelsFor,
-  POLICIES,
-  type PolicyName,
-  policyById,
-  policyForInjection,
-  resolveModelValue,
-  rolesFor
+  RECOMMENDED
 } from "./agents/policies"
 import { type RoleId, roleById, roleOrder, sortRoleIds } from "./agents/roles"
 
 interface Options {
-  policy: string
   modelId: string
   models: ModelId[]
   name: string
   model: string
+  vendor: Vendor | ""
   roles: RoleId[]
   dir: string
   lang: string
@@ -50,8 +45,7 @@ interface Options {
   mcpDeny: string[]
   write: boolean
   merge: boolean
-  listPolicies: boolean
-  listModels: boolean
+  listLiveModels: boolean
   listRoles: boolean
   listCoverage: boolean
   listMcp: boolean
@@ -62,11 +56,26 @@ interface Options {
 
 interface Target {
   modelId: ModelId
+  composeModelId?: ModelId
   name: string
   model: string
   roles: RoleId[]
   color: string
   vendor: Vendor
+}
+
+interface TargetResolution {
+  targets: Target[]
+  warnings: string[]
+  modelsDropped: ModelId[]
+}
+
+const CLAUDE_ENUMS = ["sonnet", "opus", "haiku", "fable"] as const
+const VENDOR_COLORS: Record<Vendor, string> = {
+  gpt: "yellow",
+  grok: "red",
+  claude: "blue",
+  none: "blue"
 }
 
 interface Diff {
@@ -159,41 +168,48 @@ function pluginRoot(): string {
   )
 }
 
-function requirePolicy(options: Options): PolicyName {
-  const policy = policyById(options.policy)
-  if (policy === undefined) {
-    throw new Error(
-      `policy: must be one of ${POLICIES.map((entry) => entry.id).join(", ")}`
-    )
-  }
-  return policy.id
-}
-
-function requireModel(options: Options, policy: PolicyName): ModelSpec {
+function requireModel(options: Options): ModelSpec {
   const spec = modelById(options.modelId)
   if (spec === undefined) throw new Error("model-id: is unknown")
-  if (!modelsFor(policy).some((entry) => entry.id === spec.id)) {
-    throw new Error(`model-id: ${spec.id} is not used in ${policy}`)
-  }
   return spec
 }
 
-function validateRoles(
-  options: Options,
-  policy: PolicyName,
-  model: ModelSpec
-): void {
-  const allowed = new Set<string>(rolesFor(policy, model.id))
-  // 組み込み役割だけを担当表で検証する。プロジェクト独自役割は担当表に
-  // 現れないため、ここで弾くと既存利用者が setup を実行できなくなる。
-  const invalid = options.roles.filter(
-    (role) => roleById(role) !== undefined && !allowed.has(role)
+function recommendedRolesFor(modelId: ModelId): RoleId[] {
+  return sortRoleIds(
+    (Object.entries(RECOMMENDED) as [RoleId, ModelId[]][])
+      .filter(([, models]) => models.includes(modelId))
+      .map(([role]) => role)
   )
+}
+
+function recommendedForAlias(model: string): RoleId[] {
+  const modelIds = MODELS.filter((spec) => spec.model === model).map(
+    (spec) => spec.id
+  )
+  return sortRoleIds(
+    (Object.entries(RECOMMENDED) as [RoleId, ModelId[]][])
+      .filter(([, recommended]) =>
+        recommended.some((modelId) => modelIds.includes(modelId))
+      )
+      .map(([role]) => role)
+  )
+}
+
+function validateRoles(options: Options, model: ModelSpec): string[] {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+  )
+  const invalid = options.roles.filter((role) => !fragments.has(role))
   if (invalid.length > 0) {
-    throw new Error(
-      `roles: ${invalid.join(", ")} is not assigned to ${model.id} in ${policy}`
-    )
+    throw new Error(`roles: ${invalid.join(", ")} is unknown`)
   }
+
+  return options.roles.flatMap((role) => {
+    if (roleById(role) === undefined || RECOMMENDED[role].includes(model.id)) {
+      return []
+    }
+    return [`roles: ${role} is not recommended for ${model.id}`]
+  })
 }
 
 // lang が ja / en 以外のときは翻訳断片が揃っていなければ止める。
@@ -206,15 +222,8 @@ function validateFragments(options: Options): void {
   )
 }
 
-// 方針における役割数で一括生成時の既定名を決める。単一役割なら、その役割断片の
-// default-name をモデル ID に付ける。翻訳断片が旧世代で default-name を持たない
-// ときは同梱英語断片へ落とし、解決できなければモデル ID 単体を使う。
-function defaultAgentName(
-  options: Options,
-  policy: PolicyName,
-  spec: ModelSpec
-): string {
-  const roles = rolesFor(policy, spec.id)
+function defaultAgentName(options: Options, spec: ModelSpec): string {
+  const roles = recommendedRolesFor(spec.id)
   if (roles.length !== 1) return spec.id
 
   const role = roles[0]
@@ -229,45 +238,101 @@ function defaultAgentName(
   return defaultName === undefined ? spec.id : `${spec.id}-${defaultName}`
 }
 
-// --models は既定名・既定役割で複数を、--model-id は明示指定で 1 件を作る。
-function targetsFor(options: Options, policy: PolicyName): Target[] {
-  if (options.models.length > 0) {
-    return options.models.map((id) => {
-      const spec = modelById(id)
-      if (spec === undefined) throw new Error(`models: ${id} is unknown`)
-      if (!modelsFor(policy).some((entry) => entry.id === spec.id)) {
-        throw new Error(`models: ${id} is not used in ${policy}`)
-      }
-      return {
-        modelId: spec.id,
-        name: defaultAgentName(options, policy, spec),
-        model: resolveModelValue(spec, process.env),
-        roles: rolesFor(policy, spec.id),
-        color: spec.color,
-        vendor: spec.vendor
-      }
-    })
-  }
-
-  const spec = requireModel(options, policy)
-  validateRoles(options, policy, spec)
-  return [
-    {
-      modelId: spec.id,
-      name: options.name,
-      model:
-        options.model === ""
-          ? resolveModelValue(spec, process.env)
-          : options.model,
-      roles: options.roles,
-      color: spec.color,
-      vendor: spec.vendor
-    }
-  ]
+function isClaudeEnum(model: string): boolean {
+  return (CLAUDE_ENUMS as readonly string[]).includes(model)
 }
 
-// color を必ず渡す。渡さないと COLORS[vendor] にフォールバックし、
-// Claude 帯の 4 定義がすべて blue になる。
+function unavailableWarning(live: LiveModels): string {
+  return `live models unavailable (${live.reason ?? "unknown"}); model existence was not validated`
+}
+
+function resolveVendor(
+  options: Options,
+  model: string,
+  spec: ModelSpec,
+  live: LiveModels
+): Vendor {
+  if (options.vendor !== "") return options.vendor
+  if (isClaudeEnum(model)) return "claude"
+  if (!live.ok) return spec.vendor
+
+  const vendor = live.vendors[model] ?? "unknown"
+  if (vendor === "unknown") {
+    throw new Error(
+      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
+    )
+  }
+  return vendor
+}
+
+function modelIsAvailable(model: string, live: LiveModels): boolean {
+  return isClaudeEnum(model) || live.ids.includes(model)
+}
+
+// --models は RECOMMENDED から既定名・既定役割を、--model-id は明示指定で
+// 1 件を作る。live models が取れない場合は、推奨 ModelSpec の既定値を使う。
+function targetsFor(options: Options, live: LiveModels): TargetResolution {
+  const warnings = live.ok ? [] : [unavailableWarning(live)]
+  if (options.models.length > 0) {
+    const specs = options.models.map((id) => {
+      const spec = modelById(id)
+      if (spec === undefined) throw new Error(`models: ${id} is unknown`)
+      return spec
+    })
+    const included = live.ok
+      ? specs.filter((spec) => modelIsAvailable(spec.model, live))
+      : specs
+    const modelsDropped = live.ok
+      ? specs
+          .filter((spec) => !modelIsAvailable(spec.model, live))
+          .map((spec) => spec.id)
+      : []
+
+    return {
+      warnings,
+      modelsDropped,
+      targets: included.map((spec) => {
+        const vendor = resolveVendor(options, spec.model, spec, live)
+        return {
+          modelId: spec.id,
+          composeModelId: spec.id,
+          name: defaultAgentName(options, spec),
+          model: spec.model,
+          roles: recommendedRolesFor(spec.id),
+          color: VENDOR_COLORS[vendor],
+          vendor
+        }
+      })
+    }
+  }
+
+  const spec = requireModel(options)
+  const model = options.model === "" ? spec.model : options.model
+  if (options.write && live.ok && !modelIsAvailable(model, live)) {
+    throw new Error(
+      `model: ${model} is not a Claude enum and was not found in live models`
+    )
+  }
+  warnings.push(...validateRoles(options, spec))
+  const vendor = resolveVendor(options, model, spec, live)
+  return {
+    warnings: [...new Set(warnings)],
+    modelsDropped: [],
+    targets: [
+      {
+        modelId: spec.id,
+        composeModelId: options.model === "" ? spec.id : undefined,
+        name: options.name,
+        model,
+        roles: options.roles,
+        color: VENDOR_COLORS[vendor],
+        vendor
+      }
+    ]
+  }
+}
+
+// vendor の選択結果に対応する色を必ず compose へ渡す。
 function composeInputFor(
   options: Options,
   target: Target,
@@ -276,7 +341,7 @@ function composeInputFor(
   return {
     name: target.name,
     model: target.model,
-    modelId: target.modelId,
+    modelId: target.composeModelId,
     vendor: target.vendor,
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
@@ -599,12 +664,11 @@ function mcpCurrentFor(file: string): McpCurrent {
   return mcpCurrentOf(fs.readFileSync(file, "utf8"))
 }
 
-function setup(options: Options): unknown {
-  const policy = requirePolicy(options)
+function setup(options: Options, live: LiveModels): unknown {
   validateFragments(options)
-  const targets = targetsFor(options, policy)
+  const resolution = targetsFor(options, live)
   const mcp = resolveMcp(options)
-  const results = targets.map((target) => {
+  const results = resolution.targets.map((target) => {
     const current = mcpCurrentFor(targetPath(options, target))
     const result = options.write
       ? write(options, target, mcp.servers)
@@ -616,39 +680,34 @@ function setup(options: Options): unknown {
       mcpDropped: mcp.dropped
     }
   })
-  return { ok: true, results }
-}
-
-// injected は AMATSUKA_AGENT_AUTO_INJECTION が解決するポリシー ID である。
-// 未設定・none・未知の値はいずれも SessionStart フックが方針を注入しない
-// ケースであり、まとめて null を返す。スキルはこれを見て、ポリシーの
-// 第一候補と CLAUDE.md への追記案内の要否を決める。
-function listPolicies(env: NodeJS.ProcessEnv): unknown {
   return {
     ok: true,
-    injected: policyForInjection(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? null,
-    policies: POLICIES.map(({ id, label, injection }) => ({
-      id,
-      label,
-      injection
-    }))
+    results,
+    warnings: resolution.warnings,
+    modelsDropped: resolution.modelsDropped
   }
 }
 
-function listModels(options: Options): unknown {
-  const policy = requirePolicy(options)
+// live の実在モデルへ、RECOMMENDED の既定エイリアス一致で役割を添える。
+function listLiveModels(live: LiveModels): unknown {
+  const claudeEnums = [...CLAUDE_ENUMS]
+  if (!live.ok) {
+    return {
+      ok: false,
+      reason: live.reason,
+      models: [],
+      claudeEnums
+    }
+  }
+
   return {
     ok: true,
-    policy,
-    models: modelsFor(policy).map((spec) => ({
-      id: spec.id,
-      label: spec.label,
-      defaultName: defaultAgentName(options, policy, spec),
-      model: resolveModelValue(spec, process.env),
-      vendor: spec.vendor,
-      color: spec.color,
-      roles: rolesFor(policy, spec.id)
-    }))
+    models: live.ids.map((id) => ({
+      id,
+      vendor: live.vendors[id] ?? "unknown",
+      recommendedFor: recommendedForAlias(id)
+    })),
+    claudeEnums
   }
 }
 
@@ -657,24 +716,17 @@ function listMcp(): unknown {
 }
 
 function listAvailableRoles(options: Options): unknown {
-  const policy = requirePolicy(options)
-  const model = requireModel(options, policy)
-  const allowed = new Set<string>(rolesFor(policy, model.id))
   const dirs: FragmentDir[] = fragmentDirsFor(
     pluginRoot(),
     options.dir,
     options.lang
   )
-  const fragments: Map<string, Fragment> = loadFragments(dirs, model.vendor)
+  const fragments: Map<string, Fragment> = loadFragments(dirs)
   // 第 3 段(プロジェクト独自)は言語別ディレクトリより優先されるため、
   // lang が ja 以外でもここ由来の断片は元の言語のまま合成へ入る。
   const ownDir = dirs.at(-1)?.path
 
   const roles = [...fragments.values()]
-    .filter(
-      (fragment) =>
-        allowed.has(fragment.id) || roleById(fragment.id) === undefined
-    )
     .sort(
       (left, right) =>
         roleOrder(left.id) - roleOrder(right.id) ||
@@ -693,7 +745,7 @@ function listAvailableRoles(options: Options): unknown {
         fs.existsSync(path.join(ownDir, `${fragment.id}.md`))
     }))
 
-  return { ok: true, policy, modelId: model.id, lang: options.lang, roles }
+  return { ok: true, lang: options.lang, roles }
 }
 
 function coveredDefinitions(
@@ -745,8 +797,7 @@ function bundledDefaultNames(projectDir: string): Map<string, string> {
 }
 
 function listCoverage(options: Options): unknown {
-  const policy = requirePolicy(options)
-  const roleIds = sortRoleIds(Object.keys(ASSIGNMENTS[policy]) as RoleId[])
+  const roleIds = sortRoleIds(Object.keys(RECOMMENDED) as RoleId[])
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   )
@@ -766,14 +817,13 @@ function listCoverage(options: Options): unknown {
       id,
       label: fragment.label,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
-      models: ASSIGNMENTS[policy][id],
+      models: RECOMMENDED[id],
       coveredBy: covered.get(id) ?? []
     }
   })
 
   return {
     ok: true,
-    policy,
     roles,
     uncovered: roles
       .filter((role) => role.coveredBy.length === 0)
@@ -783,11 +833,11 @@ function listCoverage(options: Options): unknown {
 
 function parseArgs(argv: string[]): Options {
   const options: Options = {
-    policy: "",
     modelId: "",
     models: [],
     name: "",
     model: "",
+    vendor: "",
     roles: [],
     dir: process.cwd(),
     lang: "ja",
@@ -795,8 +845,7 @@ function parseArgs(argv: string[]): Options {
     mcpDeny: [],
     write: false,
     merge: false,
-    listPolicies: false,
-    listModels: false,
+    listLiveModels: false,
     listRoles: false,
     listCoverage: false,
     listMcp: false,
@@ -810,9 +859,11 @@ function parseArgs(argv: string[]): Options {
     const value = argv[index + 1]
     switch (arg) {
       case "--policy":
-        options.policy = requireValue(value, "policy")
-        index += 1
-        break
+      case "--list-policies":
+      case "--list-models":
+        throw new Error(
+          `Unsupported option: ${arg} was removed; setup-agents is custom-profile only`
+        )
       case "--model-id":
         options.modelId = requireValue(value, "model-id")
         index += 1
@@ -827,6 +878,18 @@ function parseArgs(argv: string[]): Options {
         break
       case "--model":
         options.model = requireValue(value, "model")
+        index += 1
+        break
+      case "--vendor":
+        if (
+          value !== "gpt" &&
+          value !== "grok" &&
+          value !== "claude" &&
+          value !== "none"
+        ) {
+          throw new Error("vendor: must be gpt, grok, claude or none")
+        }
+        options.vendor = value
         index += 1
         break
       case "--roles":
@@ -858,11 +921,8 @@ function parseArgs(argv: string[]): Options {
       case "--merge":
         options.merge = true
         break
-      case "--list-policies":
-        options.listPolicies = true
-        break
-      case "--list-models":
-        options.listModels = true
+      case "--list-live-models":
+        options.listLiveModels = true
         break
       case "--list-roles":
         options.listRoles = true
@@ -892,8 +952,7 @@ function parseArgs(argv: string[]): Options {
     throw new Error("name: must be lowercase letters, digits and hyphens")
   }
   if (
-    options.listPolicies ||
-    options.listModels ||
+    options.listLiveModels ||
     options.listRoles ||
     options.listCoverage ||
     options.listMcp ||
@@ -905,7 +964,6 @@ function parseArgs(argv: string[]): Options {
   if (options.merge && !options.write)
     throw new Error("merge: requires --write")
   if (options.models.length > 0) {
-    if (options.policy === "") throw new Error("policy: is required")
     if (options.keep.length > 0) {
       throw new Error("keep: cannot be used with --models")
     }
@@ -939,40 +997,42 @@ function respond(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`)
 }
 
-try {
-  const options = parseArgs(process.argv.slice(2))
-  if (options.listPolicies) {
-    respond(listPolicies(process.env))
-  } else if (options.listModels) {
-    respond(listModels(options))
-  } else if (options.listCoverage) {
-    respond(listCoverage(options))
-  } else if (options.listMcp) {
-    respond(listMcp())
-  } else if (options.checkFragments) {
+async function main(): Promise<void> {
+  try {
+    const options = parseArgs(process.argv.slice(2))
+    if (options.listLiveModels) {
+      respond(listLiveModels(await fetchLiveModels(process.env)))
+    } else if (options.listCoverage) {
+      respond(listCoverage(options))
+    } else if (options.listMcp) {
+      respond(listMcp())
+    } else if (options.checkFragments) {
+      respond({
+        ok: true,
+        ...checkFragments(pluginRoot(), options.dir, options.lang)
+      })
+    } else if (options.scaffoldFragments) {
+      const written = scaffoldFragments(pluginRoot(), options.dir, options.lang)
+      respond({
+        ok: true,
+        lang: options.lang,
+        written: written.map((file) =>
+          path.relative(options.dir, file).split(path.sep).join("/")
+        )
+      })
+    } else if (options.listRoles) {
+      respond(listAvailableRoles(options))
+    } else {
+      respond(setup(options, await fetchLiveModels(process.env)))
+    }
+  } catch (error) {
     respond({
-      ok: true,
-      ...checkFragments(pluginRoot(), options.dir, options.lang)
+      ok: false,
+      error: error instanceof Error ? error.message : "Unexpected error",
+      results: []
     })
-  } else if (options.scaffoldFragments) {
-    const written = scaffoldFragments(pluginRoot(), options.dir, options.lang)
-    respond({
-      ok: true,
-      lang: options.lang,
-      written: written.map((file) =>
-        path.relative(options.dir, file).split(path.sep).join("/")
-      )
-    })
-  } else if (options.listRoles) {
-    respond(listAvailableRoles(options))
-  } else {
-    respond(setup(options))
+    process.exitCode = 1
   }
-} catch (error) {
-  respond({
-    ok: false,
-    error: error instanceof Error ? error.message : "Unexpected error",
-    results: []
-  })
-  process.exitCode = 1
 }
+
+await main()

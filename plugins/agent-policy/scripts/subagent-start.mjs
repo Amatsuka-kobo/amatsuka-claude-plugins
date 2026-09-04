@@ -4,10 +4,6 @@
 import fs2 from "node:fs";
 import path2 from "node:path";
 
-// src/hooks/marker-scan.ts
-import fs from "node:fs";
-import path from "node:path";
-
 // src/agents/roles.ts
 var ROLES = [
   {
@@ -84,7 +80,21 @@ function sortRoleIds(ids) {
   );
 }
 
+// src/agents/policies.ts
+var CUSTOM_INJECTION_VALUES = [
+  "custom",
+  "with-codex",
+  "with-grok",
+  "with-codex-grok"
+];
+function isCustomInjection(value) {
+  if (value === void 0) return false;
+  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
+}
+
 // src/hooks/marker-scan.ts
+import fs from "node:fs";
+import path from "node:path";
 function frontmatter(file) {
   const lines = fs.readFileSync(file, "utf8").split("\n");
   const meta = /* @__PURE__ */ new Map();
@@ -167,11 +177,13 @@ function scanAgents(dir) {
     const name = meta.get("name");
     const model = meta.get("model");
     const marker = meta.get("agent-policy-role");
+    const vendor = meta.get("agent-policy-vendor");
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : void 0,
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
-      tools: parseToolsField(meta.get("tools"))
+      tools: parseToolsField(meta.get("tools")),
+      vendor: typeof vendor === "string" ? vendor : void 0
     });
   }
   return found;
@@ -218,7 +230,8 @@ function markerTable(env, marked) {
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === void 0) continue;
-      byRole.set(role, [...byRole.get(role) ?? [], entry.name]);
+      const name = entry.vendor === void 0 ? entry.name : `${entry.name} (${entry.vendor})`;
+      byRole.set(role, [...byRole.get(role) ?? [], name]);
     }
   }
   if (byRole.size === 0) return void 0;
@@ -435,7 +448,7 @@ function buildContext(env, input) {
     debug(env, "fragment-size=skipped table-size=skipped context-size=0");
     return void 0;
   }
-  const table = markerTable(env, projectAgents) ?? NO_MARKERS;
+  const table = isCustomInjection(env.AMATSUKA_AGENT_AUTO_INJECTION) ? markerTable(env, projectAgents) ?? NO_MARKERS : NO_MARKERS;
   const fragment = readFragment(env);
   const result = truncateContext(composeSections(fragment, table));
   if (result.truncated) report("truncated");

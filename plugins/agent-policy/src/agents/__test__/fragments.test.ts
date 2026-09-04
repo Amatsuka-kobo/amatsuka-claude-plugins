@@ -9,7 +9,8 @@ import {
   fragmentDirsFor,
   loadCommon,
   loadFragments,
-  scaffoldFragments
+  scaffoldFragments,
+  type Vendor
 } from "../fragments"
 import { bodyHash } from "../hash"
 
@@ -149,6 +150,20 @@ describe("loadFragments の 3 段探索", () => {
     expect(withoutVendorSteps).not.toEqual(withGrokSteps)
     expect(withoutVendorSteps?.join("\n")).not.toContain("X 由来")
     expect(withGrokSteps?.join("\n")).toContain("X 由来")
+  })
+
+  it("Vendor に none を追加しても既存ベンダーの overlay を維持する", () => {
+    const noVendor: Vendor = "none"
+    const overlaySteps = (vendor: Exclude<Vendor, "none">) =>
+      loadFragments([JA], vendor)
+        .get("realtime-research")
+        ?.sections.get("## 作業手順")
+        ?.join("\n")
+
+    expect(noVendor).toBe("none")
+    expect(overlaySteps("gpt")).not.toContain("X 由来")
+    expect(overlaySteps("grok")).toContain("X 由来")
+    expect(overlaySteps("claude")).not.toContain("X 由来")
   })
 })
 

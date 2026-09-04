@@ -182,7 +182,8 @@ describe("frontmatter", () => {
         name: "block-role",
         model: "sonnet",
         roles: [],
-        tools: undefined
+        tools: undefined,
+        vendor: undefined
       }
     ])
   })
@@ -205,15 +206,46 @@ describe("scanAgents", () => {
         name: "custom-name",
         model: "claude-custom",
         roles: ["complex-impl", "explore"],
-        tools: undefined
+        tools: undefined,
+        vendor: undefined
       },
       {
         name: "fallback-name",
         model: undefined,
         roles: ["normal-impl"],
-        tools: undefined
+        tools: undefined,
+        vendor: undefined
       }
     ])
+  })
+
+  it("agent-policy-vendor を文字列として抽出する", () => {
+    const project = temporaryProject()
+    writeDefinition(project, "vendor-agent.md", [
+      "name: vendor-agent",
+      "agent-policy-role: normal-impl",
+      "agent-policy-vendor: gpt"
+    ])
+
+    expect(scanAgents(agentsDir(project))).toEqual([
+      {
+        name: "vendor-agent",
+        model: undefined,
+        roles: ["normal-impl"],
+        tools: undefined,
+        vendor: "gpt"
+      }
+    ])
+  })
+
+  it("agent-policy-vendor が無い定義では vendor が undefined になる", () => {
+    const project = temporaryProject()
+    writeDefinition(project, "without-vendor.md", [
+      "name: without-vendor",
+      "agent-policy-role: normal-impl"
+    ])
+
+    expect(scanAgents(agentsDir(project))[0]?.vendor).toBeUndefined()
   })
 
   it("存在しないディレクトリでは throw せず空配列を返す", () => {
@@ -235,7 +267,8 @@ describe("scanAgents", () => {
         name: "healthy",
         model: undefined,
         roles: ["explore"],
-        tools: undefined
+        tools: undefined,
+        vendor: undefined
       }
     ])
   })
@@ -316,8 +349,49 @@ describe("roleLabels", () => {
 })
 
 describe("markerTable", () => {
+  it("ベンダーの有無を保ったまま役割マーカー対応表を出力する", () => {
+    const result = markerTable(environment({}), [
+      {
+        name: "gpt-terra-general-implementer",
+        model: undefined,
+        roles: ["normal-impl"],
+        tools: undefined,
+        vendor: "gpt"
+      },
+      {
+        name: "grok-worker",
+        model: undefined,
+        roles: ["normal-impl"],
+        tools: undefined,
+        vendor: "grok"
+      },
+      {
+        name: "local-implementer",
+        model: undefined,
+        roles: ["normal-impl"],
+        tools: undefined,
+        vendor: undefined
+      },
+      {
+        name: "sonnet-code-reviewer",
+        model: undefined,
+        roles: ["code-review"],
+        tools: undefined,
+        vendor: undefined
+      }
+    ])
+
+    expect(result).toBe(
+      [
+        TABLE_HEADING,
+        "- 通常の実装: gpt-terra-general-implementer (gpt) / grok-worker (grok) / local-implementer",
+        "- コードレビュー: sonnet-code-reviewer"
+      ].join("\n")
+    )
+  })
+
   it.each([
-    "claude",
+    "custom",
     "with-codex-grok"
   ])("%s の SessionStart 注入と同一の対応表を返す", (injection) => {
     const project = temporaryProject()

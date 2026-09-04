@@ -160,10 +160,15 @@ the negation, to carry per-user state into `git worktree` checkouts.
   policy applies is now set by `AMATSUKA_AGENT_AUTO_INJECTION` in `.claude/settings.local.json`,
   not by prose in CLAUDE.local.md. `docs/ONBOARDING.md` still references the removed
   `CLAUDE.example.md` — stale.
-- **`.claude/agents/` is normally empty.** All GPT/Grok/Claude researcher definitions ship inside
-  the agent-policy plugin; a file appears there only when an `AMATSUKA_AGENT_*_ALIAS` env var
-  differs from the default and the SessionStart hook writes an override. Do not "fix" an empty
-  `.claude/agents`, and treat leftover files there as stale generator output.
+- **`.claude/agents/` holds this repo's own custom-profile setup** — 8 definitions, each carrying an
+  `agent-policy-role` marker: `gpt-sol-lead-implementer` (complex-impl), `gpt-terra-general-implementer`
+  (normal-impl + general), `gpt-luna-light-implementer` (light-impl), `grok-researcher`
+  (explore + realtime-research), `grok-docs-reviewer` (independent-review), `haiku-reviewer`
+  (doc-review), `sonnet-code-reviewer` (code-review), `fable-adviser` (advisor). SessionStart reads
+  them into the marker table it injects; **the hook writes nothing** — the files come from
+  `agent-policy:setup-agents` or by hand. `grok-researcher` is on the plugin's RETIRED list, so the
+  hook nags to delete it. The agent-policy plugin itself ships **no** agent definitions since
+  0.14.0-dev, and the `AMATSUKA_AGENT_*_ALIAS` env vars are no longer read.
 - The protected-path treatment of `CLAUDE.md` is defined in `harness-docs/ARCHITECTURE.md`.
 - `private/` holds the user's own scratch (`context-map/`, story drafts); `.superpowers/sdd/` holds
   hundreds of historical task briefs/reports/review diffs. Both are noise for code work.

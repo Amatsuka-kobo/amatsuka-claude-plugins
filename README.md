@@ -56,7 +56,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | chat-history | チャットの履歴を保存・検索するためのプラグイン                                                                                                                      | リリース   |
 | gh-utility   | GitHub関連のユーティリティスキル群                                                                                                                                  | 開発中     |
 | basic-design | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                  | 開発中     |
-| agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群。4 種のプリセット定義を同梱し、役割ベースの setup でプロジェクト側の Agent 定義を合成できる。Claude+Codex+Grok 併用 / Claude+Codex 併用 / Claude+Grok 併用 / Claude オンリーの 4 プロファイルで提供する | 開発中     |
+| agent-policy | あまつか工房のエージェント運用を最適化する(モデル別役割分担・設計/実装フロー・context-map)スキル群。Claude のモデル名で役割の帯を固定する claude と、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決める custom の 2 プロファイルで提供する | 開発中     |
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げることができるものを作るためのプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
 | Metatron     | プロジェクトの技術的前提(ARCHITECTURE)・失敗知識(GOTCHAS)・規律(rules 3 ファイル)を管理し、毎セッション AI のコンテキストへ注入するプラグイン | 開発中     |
 | Sandalphon   | ユーザーの願いを聞き取って現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡すオーケストレーター                                          | 開発中     |
@@ -108,10 +108,10 @@ ER 図、シーケンス図、システム構成図、画面遷移図、API 一�
 
 Claude Code を使う時のエージェント運用を最適化するプラグインです。<br>
 モデル別役割分担・大まかな設計/実装フロー・アドバイザー運用・並列原則・コードベース探索のコスト効率化施策として context-map の作成指針をスキルとして配布します。<br>
-役割断片からビルド生成した GPT Sol・Terra・Luna・Grok の 4 種のプリセット定義を同梱しており、セットアップなしに `agent-policy:<name>` として呼び出せます。`agent-policy:setup-agents` では運用方針・モデル・役割・言語・MCP サーバーを選び、プロジェクト固有の Agent 定義を複数まとめて合成できます。<br>
-環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` を設定すると、SessionStart フックがセッション開始時に対応する方針スキル(`agent-policy:claude-model-policy` / `agent-policy:with-codex-policy` / `agent-policy:with-grok-policy` / `agent-policy:codex-grok-policy`)へ従う旨を自動で注入します。プロジェクトの定義にある役割マーカーも走査し、役割と Agent 名の対応を注入します。サブエージェントの起動時には SubagentStart フックが同じ対応表とサブエージェント向けの規律を配布し、再委譲の階層でも役割の解決が揃います。任意のプロジェクトへ CLAUDE.md の追記なしで同じ最適化施策を持ち込めます。<br>
-Codex 系 / Grok 系のモデルエイリアスをローカルプロキシ(ProxyAPI サーバー)の別名に合わせたいときは、`AMATSUKA_AGENT_GPT_SOL_ALIAS` などのエイリアス変数を設定し、`agent-policy:setup-agents` で定義を生成します。SessionStart フックはファイルを生成せず、既定値と異なるエイリアスとプロジェクト定義の不一致を検知して setup を促すだけです。<br>
-定義の名前は自由に決められます。不一致の検知はプリセット名ではなく役割マーカーを見るため、`gpt-sol` 以外の名前を付けても正しく追随していると判定されます。既存定義がある状態で setup を実行すると、差分を確認したうえで利用者が加えた tools・frontmatter キー・独自の節を保持できます。<br>
+claude プロファイルは Claude のモデル名で役割の帯を固定し、セットアップなしで利用できます。custom プロファイルは役割の帯(role-id)だけを持つ担当表を使い、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決めます。`agent-policy:setup-agents` で推奨構成を一括生成できます。<br>
+環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` の値は `none` / `claude` / `custom` から選べます。SessionStart フックは `claude` のとき `agent-policy:claude-model-policy`、`custom` のとき `agent-policy:custom-policy` に従う旨をセッション開始時に自動で注入します。旧来の `with-codex` / `with-grok` / `with-codex-grok` は `custom` として扱われ、移行を促す通知が出ます。プロジェクトの定義にある役割マーカーも走査し、役割と Agent 名の対応を注入します。サブエージェントの起動時には SubagentStart フックが同じ対応表とサブエージェント向けの規律を配布し、再委譲の階層でも役割の解決が揃います。任意のプロジェクトへ CLAUDE.md の追記なしで同じ最適化施策を持ち込めます。<br>
+`custom` プロファイルで利用するモデルは、`agent-policy:setup-agents` がローカルプロキシ(ProxyAPI サーバー)の `/v1/models` の実応答から選びます。従来のモデルエイリアス変数は参照されず、setup で推奨構成を一括生成できます。<br>
+定義の名前は自由に決められます。不一致の検知は Agent 名ではなく役割マーカーを見るため、任意の名前を付けても正しく追随していると判定されます。既存定義がある状態で setup を実行すると、差分を確認したうえで利用者が加えた tools・frontmatter キー・独自の節を保持できます。<br>
 
 ### prompt-smith
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// SessionStart フック: 方針スキルの使用指示と、役割マーカーの対応表を注入する。
+// SessionStart フック: 2 プロファイルの方針と、成立した custom 構成の役割対応表を注入する。
 // ファイルは書かない。定義の生成は setup-agents が担う。
 // 失敗しても Claude Code の起動を妨げないよう、例外は握りつぶして終了コード 0 で終わる。
 
-import { policyForInjection } from "../agents/policies"
-import { DEFAULT_ALIASES, PRESETS } from "../agents/presets"
+import { fetchLiveModels } from "../agents/live-models"
+import { isCustomInjection, type PolicyName } from "../agents/policies"
 import {
   type MarkedAgent,
   markerTable,
@@ -21,43 +21,32 @@ const RETIRED = [
   "grok-implementer"
 ]
 
-interface AliasSpec {
-  preset: string
-  variable: string
-  skill: string
-}
+const CLAUDE_RESOLVED_MODELS = new Set([
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable",
+  "inherit"
+])
 
-const ALIASES: AliasSpec[] = [
-  {
-    preset: "gpt-sol",
-    variable: "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-    skill: "agent-policy:setup-agents"
-  },
-  {
-    preset: "gpt-terra",
-    variable: "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-    skill: "agent-policy:setup-agents"
-  },
-  {
-    preset: "gpt-luna",
-    variable: "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-    skill: "agent-policy:setup-agents"
-  },
-  {
-    preset: "grok",
-    variable: "AMATSUKA_AGENT_GROK_ALIAS",
-    skill: "agent-policy:setup-agents"
-  }
+const DEPRECATED_ALIAS_VARIABLES = [
+  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
+  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
+  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
+  "AMATSUKA_AGENT_GROK_ALIAS"
 ]
 
-function policyBlock(value: string | undefined): string | undefined {
-  if (value === undefined || value === "" || value === "none") return undefined
+const REPAIR_BLOCK =
+  "修復するには、agent-policy:setup-agents を再実行するか、定義の `model` を修正するか、プロキシを起動してからセッションを再起動する。"
 
-  const policy = policyForInjection(value)
-  if (policy === undefined) {
-    return `AMATSUKA_AGENT_AUTO_INJECTION の値 "${value}" は未知のため、agent-policy の方針注入をスキップした。`
-  }
-  return `最初に必ず agent-policy:${policy} スキルを使用し、この規律に従う`
+function policyBlock(policy: PolicyName, legacyValue?: string): string {
+  const instruction = `最初に必ず agent-policy:${policy} スキルを使用し、この規律に従う`
+  if (legacyValue === undefined) return instruction
+  return `${instruction}\n旧互換値 \`${legacyValue}\` を使用している。\`AMATSUKA_AGENT_AUTO_INJECTION\` を \`custom\` へ変更する。`
+}
+
+function unknownInjectionBlock(value: string): string {
+  return `AMATSUKA_AGENT_AUTO_INJECTION の値 "${value}" は未知のため、agent-policy の方針注入をスキップした。`
 }
 
 function unknownRoleBlock(
@@ -80,90 +69,119 @@ function unknownRoleBlock(
   ].join("\n")
 }
 
-function setupBlock(
-  env: NodeJS.ProcessEnv,
-  marked: MarkedAgent[]
-): string | undefined {
-  const byName = new Map(marked.map((entry) => [entry.name, entry]))
-  const lines: string[] = []
-
-  for (const spec of ALIASES) {
-    const alias = env[spec.variable]?.trim()
-    if (alias === undefined || alias === "") continue
-    if (alias === DEFAULT_ALIASES[spec.preset]) continue
-
-    const preset = PRESETS.find((entry) => entry.name === spec.preset)
-    const named = byName.get(spec.preset)
-
-    // 名前一致の定義が正しい model を持てば従来どおり充足。
-    if (named?.model === alias) continue
-
-    // PRESETS と ALIASES がずれた場合は、名前一致だけの旧判定へ落とす。
-    if (preset === undefined) {
-      if (named === undefined) {
-        lines.push(`- ${spec.preset}: 定義が無い。${spec.skill} を実行する`)
-      } else {
-        lines.push(
-          `- ${spec.preset}: 定義の model が "${named.model ?? "未設定"}" で、${spec.variable} の "${alias}" と食い違う。${spec.skill} を実行する`
-        )
-      }
-      continue
-    }
-
-    const withAlias = marked.filter((entry) => entry.model === alias)
-    const covered = new Set(withAlias.flatMap((entry) => entry.roles))
-    const missing = preset.roleIds.filter((role) => !covered.has(role))
-    if (missing.length === 0) continue
-
-    if (withAlias.length === 0) {
-      if (named === undefined) {
-        lines.push(
-          `- ${spec.preset}: ${spec.variable} の "${alias}" を model に持つ定義が無い。${spec.skill} を実行する`
-        )
-      } else {
-        lines.push(
-          `- ${spec.preset}: 定義の model が "${named.model ?? "未設定"}" で、${spec.variable} の "${alias}" と食い違う。${spec.skill} を実行する`
-        )
-      }
-    } else {
-      lines.push(
-        `- ${spec.preset}: ${withAlias.map((entry) => entry.name).join(" / ")} が "${alias}" を使っているが、${missing.join(", ")} を宣言する定義が無い。${spec.skill} を実行する`
-      )
-    }
-  }
-
-  if (lines.length === 0) return undefined
-  return [
-    "次の Agent は既定と異なるエイリアスが指定されているが、プロジェクト定義が追随していない。エイリアスに依存する委譲を行う前に対処する:",
-    ...lines
-  ].join("\n")
-}
-
-function retiredBlock(
-  env: NodeJS.ProcessEnv,
-  marked: MarkedAgent[]
-): string | undefined {
+function retiredBlock(marked: MarkedAgent[]): string | undefined {
   const found = marked
     .map((entry) => entry.name)
     .filter((name) => RETIRED.includes(name))
   if (found.length === 0) return undefined
-
-  const lines = [
-    `次の Agent 定義は廃止済みである。プロジェクト定義は同梱定義より優先されるため削除する: ${found.join(", ")}`
-  ]
-  const grokAlias = env.AMATSUKA_AGENT_GROK_ALIAS?.trim()
-  if (
-    found.some((name) => name.startsWith("grok-")) &&
-    (grokAlias === undefined || grokAlias === "")
-  ) {
-    lines.push(
-      "Grok の既定エイリアスは `claude-grok-4-6` へ変わった。プロキシ設定にこの別名が無い場合、委譲時に `unknown provider for model` で失敗する。4.5 を使い続けるなら `AMATSUKA_AGENT_GROK_ALIAS=claude-grok-4-5` を設定する。"
-    )
-  }
-  return lines.join("\n")
+  return `次の Agent 定義は廃止済みである。プロジェクト定義は同梱定義より優先されるため削除する: ${found.join(", ")}`
 }
 
-function build(env: NodeJS.ProcessEnv): string | undefined {
+function deprecatedAliasesBlock(env: NodeJS.ProcessEnv): string | undefined {
+  if (
+    !DEPRECATED_ALIAS_VARIABLES.some((variable) => env[variable] !== undefined)
+  ) {
+    return undefined
+  }
+  return "AMATSUKA_AGENT_GPT_SOL_ALIAS / AMATSUKA_AGENT_GPT_TERRA_ALIAS / AMATSUKA_AGENT_GPT_LUNA_ALIAS / AMATSUKA_AGENT_GROK_ALIAS のエイリアス変数は参照されなくなった。モデルは agent-policy:setup-agents が /v1/models から選ぶ。定義の `model` 値を変えたいときは setup を再実行する。"
+}
+
+function markerlessFallbackBlock(): string {
+  return "役割マーカー付き定義が見つからない(未作成、または読み取れない)ため、claude プロファイルで動作する。agent-policy:setup-agents で構成を作る。"
+}
+
+function missingModelsBlock(
+  missing: Array<MarkedAgent & { model: string }>
+): string {
+  const limit = 10
+  const lines = missing
+    .slice(0, limit)
+    .map(
+      (entry) =>
+        `- 定義 \`${entry.name}\` の model \`${entry.model}\` がプロキシの /v1/models に存在しない`
+    )
+  const remaining = missing.length - limit
+  if (remaining > 0) lines.push(`- 他 ${remaining} 件`)
+  return [
+    "定義された model がプロキシの /v1/models に 1 件以上存在しないため、セッション全体を claude プロファイルへフォールバックした。",
+    ...lines
+  ].join("\n")
+}
+
+function queryFailureBlock(reason: string | undefined): string {
+  const actualReason = reason ?? "fetch-failed"
+  const detail =
+    actualReason === "no-base-url"
+      ? `ANTHROPIC_BASE_URL が未設定(${actualReason})`
+      : actualReason === "timeout"
+        ? `プロキシへ接続できない(${actualReason})`
+        : `プロキシの /v1/models を照会できない(${actualReason})`
+  return `${detail}のため custom 構成のモデル実在を確認できず、セッション全体を claude プロファイルへフォールバックした。`
+}
+
+function successBlocks(
+  env: NodeJS.ProcessEnv,
+  marked: MarkedAgent[],
+  legacyValue?: string
+): Array<string | undefined> {
+  return [
+    policyBlock("custom-policy", legacyValue),
+    markerTable(env, marked),
+    unknownRoleBlock(env, marked)
+  ]
+}
+
+async function customBlocks(
+  env: NodeJS.ProcessEnv,
+  marked: MarkedAgent[],
+  injection: string
+): Promise<Array<string | undefined>> {
+  const legacyValue = injection === "custom" ? undefined : injection
+  const targets = marked.filter((entry) => entry.roles.length > 0)
+  if (targets.length === 0) {
+    return [
+      policyBlock("claude-model-policy", legacyValue),
+      markerlessFallbackBlock(),
+      REPAIR_BLOCK
+    ]
+  }
+
+  const external = targets.filter(
+    (entry): entry is MarkedAgent & { model: string } =>
+      entry.model !== undefined && !CLAUDE_RESOLVED_MODELS.has(entry.model)
+  )
+  const externalModels = new Set(external.map((entry) => entry.model))
+  if (externalModels.size === 0) {
+    return successBlocks(env, targets, legacyValue)
+  }
+
+  const live = await fetchLiveModels(env)
+  if (!live.ok) {
+    return [
+      policyBlock("claude-model-policy", legacyValue),
+      queryFailureBlock(live.reason),
+      REPAIR_BLOCK
+    ]
+  }
+
+  const liveIds = new Set(live.ids)
+  const missing = external.filter((entry) => !liveIds.has(entry.model))
+  if (missing.length > 0) {
+    return [
+      policyBlock("claude-model-policy", legacyValue),
+      missingModelsBlock(missing),
+      REPAIR_BLOCK
+    ]
+  }
+
+  return successBlocks(env, targets, legacyValue)
+}
+
+function compact(blocks: Array<string | undefined>): string[] {
+  return blocks.filter((block): block is string => block !== undefined)
+}
+
+async function build(env: NodeJS.ProcessEnv): Promise<string | undefined> {
   let marked: MarkedAgent[] = []
   try {
     marked = scanAgents(projectAgentsDir(env))
@@ -171,14 +189,25 @@ function build(env: NodeJS.ProcessEnv): string | undefined {
     // ディレクトリ走査自体が失敗しても、主機能の方針注入は続ける。
   }
 
-  const blocks = [
-    policyBlock(env.AMATSUKA_AGENT_AUTO_INJECTION),
-    markerTable(env, marked),
-    unknownRoleBlock(env, marked),
-    setupBlock(env, marked),
-    retiredBlock(env, marked)
-  ].filter((block): block is string => block !== undefined)
+  const injection =
+    env.AMATSUKA_AGENT_AUTO_INJECTION?.trim().toLowerCase() ?? ""
+  let profileBlocks: Array<string | undefined>
 
+  if (injection === "" || injection === "none") {
+    profileBlocks = []
+  } else if (injection === "claude") {
+    profileBlocks = [policyBlock("claude-model-policy")]
+  } else if (isCustomInjection(injection)) {
+    profileBlocks = await customBlocks(env, marked, injection)
+  } else {
+    profileBlocks = [unknownInjectionBlock(injection)]
+  }
+
+  const blocks = compact([
+    ...profileBlocks,
+    retiredBlock(marked),
+    deprecatedAliasesBlock(env)
+  ])
   if (blocks.length === 0) return undefined
   return blocks.join("\n\n")
 }
@@ -195,7 +224,7 @@ function respond(context: string): void {
 }
 
 try {
-  const context = build(process.env)
+  const context = await build(process.env)
   if (context !== undefined) respond(context)
 } catch (error) {
   process.stderr.write(
