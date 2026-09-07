@@ -692,6 +692,43 @@ test("成功時に一時ファイル 4 本をすべて削除する", () => {
   expect(fs.existsSync(value.headerFile)).toBe(false)
 })
 
+test("plan.userTurnLine があれば成功後の state に recordedUserTurn として保存する", () => {
+  const value = setup(true)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath)
+  atomicWriteJson(planPath, { ...plan, userTurnLine: 1 })
+  commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile
+  })
+  const state = readJson<RecordingState>(value.paths.statePath)
+  expect(state?.recordedUserTurn).toBe(1)
+  expect(state?.attemptedUserTurn).toBeGreaterThanOrEqual(1)
+})
+
+test("plan.userTurnLine が targetLine を超えていれば拒否する", () => {
+  const value = setup(true)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath)
+  atomicWriteJson(planPath, { ...plan, userTurnLine: 3 })
+  expect(() =>
+    commitChatRecording({
+      project: value.project,
+      sessionKey: value.sessionKey,
+      attemptId: value.attemptId,
+      targetLine: 2,
+      bodyFile: value.bodyFile,
+      indexSummaryFile: value.indexSummaryFile,
+      sessionTitleFile: value.sessionTitleFile
+    })
+  ).toThrow(/userTurnLine/)
+})
+
 test("本文が 8MB を超えると拒否する", () => {
   const value = setup(true)
   fs.writeFileSync(value.bodyFile, `> 質問\n${"a".repeat(8 * 1024 * 1024)}\n`)

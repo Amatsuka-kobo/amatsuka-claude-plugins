@@ -10,9 +10,16 @@ It never blocks the turn; it injects a minimal `additionalContext` (values only 
 lives in the agent definition) telling the main agent to dispatch `chat-recorder` in the background.
 
 - **Opt-in**: only fires when the target project has a `docs/chat/` directory.
-- **Trigger**: last substantive user message is newer than the recorded line (state file is
+- **Trigger**: last substantive user message is newer than `state.recordedUserTurn` (state file is
   user-local, git-untracked). Works from turn 1; at most one attempt per real message, guarded by a
-  lock + attempted-line number.
+  lock + `attemptedUserTurn`.
+- **Range (0.8.1, 2026-09-07)**: `targetLine = max(lastUserTurn, lastAssistantTurn)`, so the AI
+  reply to the last prompt is recorded in the same attempt. Before 0.8.1 the target was
+  `lastUserTurn` and records stopped at the last user prompt. `recordedLine` (extraction start) and
+  `recordedUserTurn` (new-turn / generation detection) are therefore distinct fields;
+  `migrateState` backfills the `*UserTurn` fields from `recordedLine`/`attemptedLine` when missing.
+  The hook writes `plan.userTurnLine`; commit stores it as `recordedUserTurn`. Extra AI replies to
+  the same prompt (e.g. after a background-task notification) land in the next user turn's range.
 - `chat-recorder` (model `haiku`, `background: true`, tools `Bash, Write`) runs
   `prepare-chat-recording.mjs` → Write to temp files → `commit-chat-recording.mjs`. It is
   explicitly told to ignore the project's CLAUDE.md workflow/agent-policy instructions and to load

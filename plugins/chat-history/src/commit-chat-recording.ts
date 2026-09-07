@@ -29,6 +29,7 @@ interface AttemptPlan {
   version: 2
   attemptId: string
   targetLine: number
+  userTurnLine?: number
   recordTarget: { relativePath: string | null; appendMode: boolean }
   allowedNewRecordDir: string
   recordFilePrefix: string
@@ -132,6 +133,16 @@ function validateInputs(
   ] as const)
     if (typeof plan[field] !== "string" || !plan[field])
       fail(`plan.${field} is missing`)
+  if (plan.userTurnLine !== undefined) {
+    if (
+      !Number.isSafeInteger(plan.userTurnLine) ||
+      plan.userTurnLine <= 0 ||
+      plan.userTurnLine > args.targetLine
+    )
+      fail(
+        "plan.userTurnLine must be a positive integer not exceeding targetLine"
+      )
+  }
 
   const rawBody = fs.readFileSync(args.bodyFile, "utf8")
   const summary = fs.readFileSync(args.indexSummaryFile, "utf8").trim()
@@ -364,10 +375,15 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     if (indexMatches(updatedIndex, relativePath).length !== 1)
       fail("INDEX uniqueness verification failed")
 
+    // userTurnLine を持たない plan(このフィールド追加前の hook が書いたもの)では、
+    // 旧仕様どおり targetLine がユーザー発言行そのものなので targetLine で代用する。
+    const recordedUserTurn = plan.userTurnLine ?? args.targetLine
     const nextState: RecordingState = {
       ...state,
       recordedLine: args.targetLine,
       attemptedLine: Math.max(state.attemptedLine, args.targetLine),
+      recordedUserTurn,
+      attemptedUserTurn: Math.max(state.attemptedUserTurn, recordedUserTurn),
       lastSuccessAt: new Date().toISOString(),
       recordPath: relativePath,
       lastError: null

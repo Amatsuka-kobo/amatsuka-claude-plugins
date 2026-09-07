@@ -26,6 +26,7 @@ interface AttemptPlan {
   version: 1 | 2
   attemptId: string
   targetLine: number
+  userTurnLine?: number
   metadataHints: string[]
   recordTarget?: { relativePath: string | null; appendMode: boolean }
   allowedNewRecordDir?: string
