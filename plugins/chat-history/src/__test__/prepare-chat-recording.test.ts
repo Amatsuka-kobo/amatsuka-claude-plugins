@@ -92,6 +92,12 @@ function writeTranscript(lines: string[]): string {
 const user = (text: string) =>
   JSON.stringify({ type: "user", message: { content: text } })
 
+const assistant = (text: string) =>
+  JSON.stringify({
+    type: "assistant",
+    message: { content: [{ type: "text", text }] }
+  })
+
 const userAt = (text: string, timestamp: string) =>
   JSON.stringify({ type: "user", timestamp, message: { content: text } })
 
@@ -147,6 +153,30 @@ test("recordedLine 行を含めず targetLine 行を含める", () => {
   })
   expect(result.conversation).toContain("新しい")
   expect(result.conversation).not.toContain("古い")
+})
+
+test("dispatch 後に transcript が伸びた場合は追記された AI 発言まで本文へ含める", () => {
+  const value = setup([user("質問"), assistant("Stop 時点の応答")])
+  fs.appendFileSync(value.transcript, `${assistant("最後の AI 応答")}\n`)
+
+  const result = prepareChatRecording({
+    project: value.project,
+    transcript: value.transcript,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2
+  })
+
+  expect(result.effectiveTargetLine).toBe(3)
+  expect(result.conversation).toContain("最後の AI 応答")
+  expect(fs.readFileSync(result.bodyFile as string, "utf8")).toContain(
+    "最後の AI 応答"
+  )
+  expect(
+    readJson<{ effectiveTargetLine?: number }>(
+      path.join(value.paths.planDir, `${value.sessionKey}.json`)
+    )?.effectiveTargetLine
+  ).toBe(3)
 })
 
 function argsOf(value: ReturnType<typeof setup>) {

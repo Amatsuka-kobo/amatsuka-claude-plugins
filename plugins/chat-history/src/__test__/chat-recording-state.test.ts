@@ -4,6 +4,7 @@ import path from "node:path"
 import { afterEach, expect, test } from "vitest"
 import {
   ensureStateDirs,
+  findTailTargetLine,
   getStatePaths,
   isInside,
   migrateLegacyStateDir,
@@ -24,6 +25,68 @@ function tempRoot(prefix: string): string {
   roots.push(root)
   return root
 }
+
+function writeTranscript(lines: unknown[]): string {
+  const file = path.join(tempRoot("chat-tail-target-"), "transcript.jsonl")
+  fs.writeFileSync(
+    file,
+    `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`
+  )
+  return file
+}
+
+const userEntry = (text: string) => ({
+  type: "user",
+  message: { content: text }
+})
+
+const assistantEntry = (text: string, isSidechain = false) => ({
+  type: "assistant",
+  isSidechain,
+  message: { content: [{ type: "text", text }] }
+})
+
+test("findTailTargetLine は末尾に追記された assistant text 行まで伸ばす", () => {
+  const transcript = writeTranscript([
+    userEntry("質問"),
+    assistantEntry("Stop 時点の応答"),
+    assistantEntry("後から書き込まれた最終応答")
+  ])
+  expect(findTailTargetLine(transcript, 2)).toBe(3)
+})
+
+test("findTailTargetLine は次のユーザー発言以降を含めない", () => {
+  const transcript = writeTranscript([
+    userEntry("最初の質問"),
+    assistantEntry("Stop 時点の応答"),
+    assistantEntry("最初の質問への最終応答"),
+    userEntry("次の質問"),
+    assistantEntry("次の質問への応答")
+  ])
+  expect(findTailTargetLine(transcript, 2)).toBe(3)
+})
+
+test("findTailTargetLine は sidechain の assistant text 行を無視する", () => {
+  const transcript = writeTranscript([
+    userEntry("質問"),
+    assistantEntry("Stop 時点の応答"),
+    assistantEntry("通常の最終応答"),
+    assistantEntry("サブエージェントの応答", true)
+  ])
+  expect(findTailTargetLine(transcript, 2)).toBe(3)
+})
+
+test("findTailTargetLine は該当する assistant text 行が無ければ fromLine を返す", () => {
+  const transcript = writeTranscript([
+    userEntry("質問"),
+    assistantEntry("Stop 時点の応答"),
+    {
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "Read" }] }
+    }
+  ])
+  expect(findTailTargetLine(transcript, 2)).toBe(2)
+})
 
 // chat-recorder の Write は Claude Code の sensitive file 保護に阻まれるため、
 // 一時ファイルだけは Claude 設定ディレクトリの外に置かなければならない。

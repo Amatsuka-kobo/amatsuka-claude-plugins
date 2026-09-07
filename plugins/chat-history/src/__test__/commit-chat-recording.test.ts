@@ -711,6 +711,43 @@ test("plan.userTurnLine があれば成功後の state に recordedUserTurn と�
   expect(state?.attemptedUserTurn).toBeGreaterThanOrEqual(1)
 })
 
+test.each([
+  { name: "effectiveTargetLine あり", effectiveTargetLine: 5, recordedLine: 5 },
+  {
+    name: "effectiveTargetLine なし",
+    effectiveTargetLine: undefined,
+    recordedLine: 2
+  }
+])("$name の recordedLine を保存する", ({
+  effectiveTargetLine,
+  recordedLine
+}) => {
+  const value = setup(true)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath)
+  atomicWriteJson(planPath, {
+    ...plan,
+    userTurnLine: 1,
+    ...(effectiveTargetLine === undefined ? {} : { effectiveTargetLine })
+  })
+
+  const result = commitChatRecording({
+    project: value.project,
+    sessionKey: value.sessionKey,
+    attemptId: value.attemptId,
+    targetLine: 2,
+    bodyFile: value.bodyFile,
+    indexSummaryFile: value.indexSummaryFile,
+    sessionTitleFile: value.sessionTitleFile
+  })
+
+  const state = readJson<RecordingState>(value.paths.statePath)
+  expect(result.recordedLine).toBe(recordedLine)
+  expect(state?.recordedLine).toBe(recordedLine)
+  expect(state?.attemptedLine).toBe(recordedLine)
+  expect(state?.recordedUserTurn).toBe(1)
+})
+
 test("plan.userTurnLine が targetLine を超えていれば拒否する", () => {
   const value = setup(true)
   const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
@@ -727,6 +764,24 @@ test("plan.userTurnLine が targetLine を超えていれば拒否する", () =>
       sessionTitleFile: value.sessionTitleFile
     })
   ).toThrow(/userTurnLine/)
+})
+
+test("plan.effectiveTargetLine が targetLine を下回っていれば拒否する", () => {
+  const value = setup(true)
+  const planPath = path.join(value.paths.planDir, `${value.sessionKey}.json`)
+  const plan = readJson<Record<string, unknown>>(planPath)
+  atomicWriteJson(planPath, { ...plan, effectiveTargetLine: 1 })
+  expect(() =>
+    commitChatRecording({
+      project: value.project,
+      sessionKey: value.sessionKey,
+      attemptId: value.attemptId,
+      targetLine: 2,
+      bodyFile: value.bodyFile,
+      indexSummaryFile: value.indexSummaryFile,
+      sessionTitleFile: value.sessionTitleFile
+    })
+  ).toThrow(/effectiveTargetLine/)
 })
 
 test("本文が 8MB を超えると拒否する", () => {

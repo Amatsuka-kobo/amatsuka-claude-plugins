@@ -356,6 +356,47 @@ function toolHint(content: TranscriptContent): string {
   )
 }
 
+function isSubstantiveUserTurn(entry: TranscriptEntry): boolean {
+  if (entry.type !== "user" || typeof entry.message?.content !== "string")
+    return false
+  const text = entry.message.content.trim()
+  return (
+    text !== "" &&
+    !text.startsWith("<") &&
+    !entry.isMeta &&
+    !text.includes(NAG_MARKER)
+  )
+}
+
+function hasAssistantText(entry: TranscriptEntry): boolean {
+  return (
+    entry.type === "assistant" &&
+    Array.isArray(entry.message?.content) &&
+    entry.message.content.some(
+      (content) => content.type === "text" && Boolean(content.text?.trim())
+    )
+  )
+}
+
+export function findTailTargetLine(file: string, fromLine: number): number {
+  let lineCount = 0
+  let targetLine = fromLine
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    lineCount++
+    if (lineCount <= fromLine || !line.trim()) continue
+    let entry: TranscriptEntry
+    try {
+      entry = JSON.parse(line) as TranscriptEntry
+    } catch {
+      continue
+    }
+    if (entry.isSidechain) continue
+    if (isSubstantiveUserTurn(entry)) break
+    if (hasAssistantText(entry)) targetLine = lineCount
+  }
+  return targetLine
+}
+
 export function scanTranscript(file: string, sinceLine = 0): ScanResult {
   let lineCount = 0
   let lastUserTurn = -1
@@ -376,20 +417,14 @@ export function scanTranscript(file: string, sinceLine = 0): ScanResult {
     if (entry.type === "user" && typeof entry.message.content === "string") {
       const text = entry.message.content.trim()
       if (text.includes(NAG_MARKER)) lastNag = lineCount
-      else if (text && !text.startsWith("<") && !entry.isMeta)
-        lastUserTurn = lineCount
+      else if (isSubstantiveUserTurn(entry)) lastUserTurn = lineCount
       continue
     }
     if (entry.type !== "assistant" || !Array.isArray(entry.message.content))
       continue
     // lastAssistantTurn は記録範囲の終端に使うため、tool_use ヒントの収集窓
     // (sinceLine) とは独立に、行の対象内かどうかへ関わらず判定する。
-    if (
-      entry.message.content.some(
-        (content) => content.type === "text" && Boolean(content.text?.trim())
-      )
-    )
-      lastAssistantTurn = lineCount
+    if (hasAssistantText(entry)) lastAssistantTurn = lineCount
     if (lineCount <= sinceLine) continue
     for (const content of entry.message.content) {
       if (
