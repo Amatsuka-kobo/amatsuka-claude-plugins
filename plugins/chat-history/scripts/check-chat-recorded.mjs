@@ -165,6 +165,7 @@ function toolHint(content) {
 function scanTranscript(file, sinceLine = 0) {
   let lineCount = 0;
   let lastUserTurn = -1;
+  let lastAssistantTurn = -1;
   let lastNag = -1;
   const hints = [];
   const seenHints = /* @__PURE__ */ new Set();
@@ -185,8 +186,13 @@ function scanTranscript(file, sinceLine = 0) {
         lastUserTurn = lineCount;
       continue;
     }
-    if (entry.type !== "assistant" || !Array.isArray(entry.message.content) || lineCount <= sinceLine)
+    if (entry.type !== "assistant" || !Array.isArray(entry.message.content))
       continue;
+    if (entry.message.content.some(
+      (content) => content.type === "text" && Boolean(content.text?.trim())
+    ))
+      lastAssistantTurn = lineCount;
+    if (lineCount <= sinceLine) continue;
     for (const content of entry.message.content) {
       if (content.type !== "tool_use" || isRecorderDispatch(content.name, content.input?.subagent_type))
         continue;
@@ -200,6 +206,7 @@ function scanTranscript(file, sinceLine = 0) {
   return {
     lineCount,
     lastUserTurn,
+    lastAssistantTurn,
     lastNag,
     toolHints: hints,
     identity: transcriptIdentity(file)
@@ -214,6 +221,8 @@ function createInitialState(projectDir, transcriptPath, identity, sessionId) {
     transcriptIdentity: identity,
     recordedLine: 0,
     attemptedLine: 0,
+    recordedUserTurn: 0,
+    attemptedUserTurn: 0,
     lastError: null,
     lastNotifiedAttemptId: null
   };
@@ -234,7 +243,15 @@ function validIdentity(value) {
 }
 function migrateState(raw, fallback) {
   if (!isObject(raw)) return fallback;
-  if (raw.version === STATE_VERSION) return raw;
+  if (raw.version === STATE_VERSION) {
+    const recordedLine2 = isNonNegativeInteger(raw.recordedLine) ? raw.recordedLine : fallback.recordedLine;
+    const attemptedLine = isNonNegativeInteger(raw.attemptedLine) ? raw.attemptedLine : fallback.attemptedLine;
+    return {
+      ...raw,
+      recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn) ? raw.recordedUserTurn : recordedLine2,
+      attemptedUserTurn: isNonNegativeInteger(raw.attemptedUserTurn) ? raw.attemptedUserTurn : attemptedLine
+    };
+  }
   const identity = validIdentity(raw.transcriptIdentity);
   const recordedLine = isNonNegativeInteger(raw.recordedLine) ? raw.recordedLine : fallback.recordedLine;
   return {
@@ -246,6 +263,8 @@ function migrateState(raw, fallback) {
     transcriptIdentity: identity ?? fallback.transcriptIdentity,
     recordedLine,
     attemptedLine: recordedLine,
+    recordedUserTurn: recordedLine,
+    attemptedUserTurn: recordedLine,
     lastSuccessAt: isString(raw.lastSuccessAt) ? raw.lastSuccessAt : fallback.lastSuccessAt,
     recordPath: isString(raw.recordPath) ? raw.recordPath : fallback.recordPath,
     lastError: null,
@@ -254,7 +273,7 @@ function migrateState(raw, fallback) {
 }
 var identityChanged = (previous, current) => previous.dev !== void 0 && previous.ino !== void 0 && current.dev !== void 0 && current.ino !== void 0 && (previous.dev !== current.dev || previous.ino !== current.ino);
 function reconcileGeneration(state, scan) {
-  const changed = identityChanged(state.transcriptIdentity, scan.identity) || scan.lineCount < state.recordedLine || scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedLine;
+  const changed = identityChanged(state.transcriptIdentity, scan.identity) || scan.lineCount < state.recordedLine || scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedUserTurn;
   if (!changed)
     return {
       state: { ...state, transcriptIdentity: scan.identity },
@@ -267,11 +286,15 @@ function reconcileGeneration(state, scan) {
       previousGeneration: {
         recordedLine: state.recordedLine,
         attemptedLine: state.attemptedLine,
+        recordedUserTurn: state.recordedUserTurn,
+        attemptedUserTurn: state.attemptedUserTurn,
         transcriptIdentity: state.transcriptIdentity
       },
       transcriptIdentity: scan.identity,
       recordedLine: 0,
       attemptedLine: 0,
+      recordedUserTurn: 0,
+      attemptedUserTurn: 0,
       attemptId: void 0,
       attemptStartedAt: void 0,
       // recordedLine が 0 に戻るため、前世代の記録先を引き継ぐと同じファイルへ
@@ -312,16 +335,17 @@ function isStaleLock(lock, state, options = {}) {
 function decideRecordingAction(scan, state, context) {
   if (scan.lastUserTurn === -1)
     return { action: "noop", reason: "no-user-turn" };
-  if (scan.lastUserTurn <= state.recordedLine)
+  if (scan.lastUserTurn <= state.recordedUserTurn)
     return { action: "noop", reason: "already-recorded" };
   if (context.recorderRunning === true)
     return { action: "noop", reason: "recorder-running" };
   if (context.hasActiveLock) return { action: "noop", reason: "active-lock" };
-  if (state.attemptedLine >= scan.lastUserTurn)
+  if (state.attemptedUserTurn >= scan.lastUserTurn)
     return state.lastError && state.lastNotifiedAttemptId !== state.lastError.attemptId ? { action: "notify", reason: "failed-attempt" } : { action: "noop", reason: "already-attempted" };
   return {
     action: "dispatch",
-    targetLine: scan.lastUserTurn,
+    // AI の応答がユーザー発言より後にあれば、そこまでを記録範囲に含める。
+    targetLine: Math.max(scan.lastUserTurn, scan.lastAssistantTurn),
     notify: state.lastError !== null && state.lastNotifiedAttemptId !== state.lastError.attemptId
   };
 }
@@ -487,6 +511,7 @@ async function main() {
     version: 1,
     attemptId: lock.attemptId,
     targetLine: decision.targetLine,
+    userTurnLine: scan.lastUserTurn,
     metadataHints: scan.toolHints
   });
   const stagedState = {
@@ -494,6 +519,7 @@ async function main() {
     attemptId: lock.attemptId,
     attemptStartedAt: lock.createdAt,
     attemptedLine: decision.targetLine,
+    attemptedUserTurn: scan.lastUserTurn,
     lastNotifiedAttemptId: decision.notify && state.lastError ? state.lastError.attemptId : state.lastNotifiedAttemptId
   };
   atomicWriteJson(paths.statePath, stagedState);

@@ -183,6 +183,12 @@ function validateInputs(args, paths, plan) {
   ])
     if (typeof plan[field] !== "string" || !plan[field])
       fail(`plan.${field} is missing`);
+  if (plan.userTurnLine !== void 0) {
+    if (!Number.isSafeInteger(plan.userTurnLine) || plan.userTurnLine <= 0 || plan.userTurnLine > args.targetLine)
+      fail(
+        "plan.userTurnLine must be a positive integer not exceeding targetLine"
+      );
+  }
   const rawBody = fs2.readFileSync(args.bodyFile, "utf8");
   const summary = fs2.readFileSync(args.indexSummaryFile, "utf8").trim();
   const sessionTitle = fs2.readFileSync(args.sessionTitleFile, "utf8").trim();
@@ -364,10 +370,13 @@ function commitChatRecording(args) {
     if (!updatedRecord.endsWith(input.body)) fail("record verification failed");
     if (indexMatches(updatedIndex, relativePath).length !== 1)
       fail("INDEX uniqueness verification failed");
+    const recordedUserTurn = plan.userTurnLine ?? args.targetLine;
     const nextState = {
       ...state,
       recordedLine: args.targetLine,
       attemptedLine: Math.max(state.attemptedLine, args.targetLine),
+      recordedUserTurn,
+      attemptedUserTurn: Math.max(state.attemptedUserTurn, recordedUserTurn),
       lastSuccessAt: (/* @__PURE__ */ new Date()).toISOString(),
       recordPath: relativePath,
       lastError: null

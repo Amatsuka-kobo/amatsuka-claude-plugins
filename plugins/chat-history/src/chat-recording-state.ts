@@ -35,6 +35,10 @@ export interface RecordingState {
   transcriptIdentity: TranscriptIdentity
   recordedLine: number
   attemptedLine: number
+  /** 記録済みの最後のユーザー発言行。世代交代検知はこの値で行う */
+  recordedUserTurn: number
+  /** dispatch 済みの最後のユーザー発言行 */
+  attemptedUserTurn: number
   attemptId?: string
   attemptStartedAt?: string
   lastSuccessAt?: string
@@ -44,6 +48,8 @@ export interface RecordingState {
   previousGeneration?: {
     recordedLine: number
     attemptedLine: number
+    recordedUserTurn: number
+    attemptedUserTurn: number
     transcriptIdentity: TranscriptIdentity
   }
 }
@@ -67,6 +73,8 @@ export interface BackgroundTaskInput {
 export interface ScanResult {
   lineCount: number
   lastUserTurn: number
+  /** AI のテキスト応答(tool_use や thinking のみは含まない)を含む最終行 */
+  lastAssistantTurn: number
   lastNag: number
   toolHints: string[]
   identity: TranscriptIdentity
@@ -101,6 +109,7 @@ export interface DecisionContext {
 interface TranscriptContent {
   type?: string
   name?: string
+  text?: string
   input?: {
     description?: unknown
     file_path?: unknown
@@ -350,6 +359,7 @@ function toolHint(content: TranscriptContent): string {
 export function scanTranscript(file: string, sinceLine = 0): ScanResult {
   let lineCount = 0
   let lastUserTurn = -1
+  let lastAssistantTurn = -1
   let lastNag = -1
   const hints: string[] = []
   const seenHints = new Set<string>()
@@ -370,12 +380,17 @@ export function scanTranscript(file: string, sinceLine = 0): ScanResult {
         lastUserTurn = lineCount
       continue
     }
-    if (
-      entry.type !== "assistant" ||
-      !Array.isArray(entry.message.content) ||
-      lineCount <= sinceLine
-    )
+    if (entry.type !== "assistant" || !Array.isArray(entry.message.content))
       continue
+    // lastAssistantTurn は記録範囲の終端に使うため、tool_use ヒントの収集窓
+    // (sinceLine) とは独立に、行の対象内かどうかへ関わらず判定する。
+    if (
+      entry.message.content.some(
+        (content) => content.type === "text" && Boolean(content.text?.trim())
+      )
+    )
+      lastAssistantTurn = lineCount
+    if (lineCount <= sinceLine) continue
     for (const content of entry.message.content) {
       if (
         content.type !== "tool_use" ||
@@ -392,6 +407,7 @@ export function scanTranscript(file: string, sinceLine = 0): ScanResult {
   return {
     lineCount,
     lastUserTurn,
+    lastAssistantTurn,
     lastNag,
     toolHints: hints,
     identity: transcriptIdentity(file)
@@ -412,6 +428,8 @@ export function createInitialState(
     transcriptIdentity: identity,
     recordedLine: 0,
     attemptedLine: 0,
+    recordedUserTurn: 0,
+    attemptedUserTurn: 0,
     lastError: null,
     lastNotifiedAttemptId: null
   }
@@ -445,7 +463,26 @@ export function migrateState(
   fallback: RecordingState
 ): RecordingState {
   if (!isObject(raw)) return fallback
-  if (raw.version === STATE_VERSION) return raw as unknown as RecordingState
+  if (raw.version === STATE_VERSION) {
+    // 同じ version でも recordedUserTurn / attemptedUserTurn が無い state
+    // (このフィールド追加より前に書かれた state)がありうる。欠落時は
+    // recordedLine / attemptedLine で補う。
+    const recordedLine = isNonNegativeInteger(raw.recordedLine)
+      ? raw.recordedLine
+      : fallback.recordedLine
+    const attemptedLine = isNonNegativeInteger(raw.attemptedLine)
+      ? raw.attemptedLine
+      : fallback.attemptedLine
+    return {
+      ...(raw as unknown as RecordingState),
+      recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn)
+        ? raw.recordedUserTurn
+        : recordedLine,
+      attemptedUserTurn: isNonNegativeInteger(raw.attemptedUserTurn)
+        ? raw.attemptedUserTurn
+        : attemptedLine
+    }
+  }
 
   const identity = validIdentity(raw.transcriptIdentity)
   const recordedLine = isNonNegativeInteger(raw.recordedLine)
@@ -462,6 +499,8 @@ export function migrateState(
     transcriptIdentity: identity ?? fallback.transcriptIdentity,
     recordedLine,
     attemptedLine: recordedLine,
+    recordedUserTurn: recordedLine,
+    attemptedUserTurn: recordedLine,
     lastSuccessAt: isString(raw.lastSuccessAt)
       ? raw.lastSuccessAt
       : fallback.lastSuccessAt,
@@ -488,7 +527,7 @@ export function reconcileGeneration(
   const changed =
     identityChanged(state.transcriptIdentity, scan.identity) ||
     scan.lineCount < state.recordedLine ||
-    (scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedLine)
+    (scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedUserTurn)
   if (!changed)
     return {
       state: { ...state, transcriptIdentity: scan.identity },
@@ -501,11 +540,15 @@ export function reconcileGeneration(
       previousGeneration: {
         recordedLine: state.recordedLine,
         attemptedLine: state.attemptedLine,
+        recordedUserTurn: state.recordedUserTurn,
+        attemptedUserTurn: state.attemptedUserTurn,
         transcriptIdentity: state.transcriptIdentity
       },
       transcriptIdentity: scan.identity,
       recordedLine: 0,
       attemptedLine: 0,
+      recordedUserTurn: 0,
+      attemptedUserTurn: 0,
       attemptId: undefined,
       attemptStartedAt: undefined,
       // recordedLine が 0 に戻るため、前世代の記録先を引き継ぐと同じファイルへ
@@ -566,19 +609,20 @@ export function decideRecordingAction(
 ): RecordingDecision {
   if (scan.lastUserTurn === -1)
     return { action: "noop", reason: "no-user-turn" }
-  if (scan.lastUserTurn <= state.recordedLine)
+  if (scan.lastUserTurn <= state.recordedUserTurn)
     return { action: "noop", reason: "already-recorded" }
   if (context.recorderRunning === true)
     return { action: "noop", reason: "recorder-running" }
   if (context.hasActiveLock) return { action: "noop", reason: "active-lock" }
-  if (state.attemptedLine >= scan.lastUserTurn)
+  if (state.attemptedUserTurn >= scan.lastUserTurn)
     return state.lastError &&
       state.lastNotifiedAttemptId !== state.lastError.attemptId
       ? { action: "notify", reason: "failed-attempt" }
       : { action: "noop", reason: "already-attempted" }
   return {
     action: "dispatch",
-    targetLine: scan.lastUserTurn,
+    // AI の応答がユーザー発言より後にあれば、そこまでを記録範囲に含める。
+    targetLine: Math.max(scan.lastUserTurn, scan.lastAssistantTurn),
     notify:
       state.lastError !== null &&
       state.lastNotifiedAttemptId !== state.lastError.attemptId

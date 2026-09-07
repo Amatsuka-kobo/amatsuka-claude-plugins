@@ -36,6 +36,8 @@ interface AttemptPlan {
   version: 1 | 2
   attemptId: string
   targetLine: number
+  /** dispatch 時点の最後のユーザー発言行。commit 時に recordedUserTurn の元になる */
+  userTurnLine: number
   metadataHints: string[]
 }
 
@@ -189,6 +191,7 @@ async function main(): Promise<void> {
     version: 1,
     attemptId: lock.attemptId,
     targetLine: decision.targetLine,
+    userTurnLine: scan.lastUserTurn,
     metadataHints: scan.toolHints
   } satisfies AttemptPlan)
 
@@ -197,6 +200,7 @@ async function main(): Promise<void> {
     attemptId: lock.attemptId,
     attemptStartedAt: lock.createdAt,
     attemptedLine: decision.targetLine,
+    attemptedUserTurn: scan.lastUserTurn,
     lastNotifiedAttemptId:
       decision.notify && state.lastError
         ? state.lastError.attemptId

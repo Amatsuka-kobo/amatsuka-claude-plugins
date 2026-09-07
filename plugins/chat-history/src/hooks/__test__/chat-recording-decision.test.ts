@@ -18,8 +18,13 @@ import {
   scanTranscript
 } from "../../chat-recording-state.js"
 
-const scan = (lastUserTurn: number, lineCount = 10): ScanResult => ({
+const scan = (
+  lastUserTurn: number,
+  lineCount = 10,
+  lastAssistantTurn = lastUserTurn
+): ScanResult => ({
   lastUserTurn,
+  lastAssistantTurn,
   lineCount,
   lastNag: -1,
   toolHints: [],
@@ -29,7 +34,9 @@ const scan = (lastUserTurn: number, lineCount = 10): ScanResult => ({
 const stateAt = (recordedLine: number, attemptedLine: number) => ({
   ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
   recordedLine,
-  attemptedLine
+  attemptedLine,
+  recordedUserTurn: recordedLine,
+  attemptedUserTurn: attemptedLine
 })
 
 test.each([
@@ -108,6 +115,24 @@ test.each([
   ).toEqual(fixture.expected)
 })
 
+test("assistant の応答行がユーザー発言行より後にあれば targetLine はその行になる", () => {
+  const state = { ...stateAt(5, 5), lastError: null }
+  expect(
+    decideRecordingAction(scan(6, 10, 8), state, { hasActiveLock: false })
+  ).toEqual({ action: "dispatch", targetLine: 8, notify: false })
+})
+
+test("recordedLine が lastUserTurn を上回っていても recordedUserTurn が同じなら再記録しない", () => {
+  const state = {
+    ...stateAt(8, 8),
+    recordedUserTurn: 6,
+    lastError: null
+  }
+  expect(
+    decideRecordingAction(scan(6, 10, 8), state, { hasActiveLock: false })
+  ).toEqual({ action: "noop", reason: "already-recorded" })
+})
+
 test("dispatch と未通知の失敗通知は同時に成立する", () => {
   const state = {
     ...stateAt(5, 5),
@@ -130,6 +155,7 @@ test("世代交代で記録先を手放し、通常追記では保持する", ()
   const state = {
     ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
     recordedLine: 5,
+    recordedUserTurn: 5,
     recordPath: "docs/chat/2026/0725/user/topic.md"
   }
   expect(
@@ -202,6 +228,45 @@ test("chat-recorder 自身の dispatch は tool_use ヒントから除外する"
   }
 })
 
+test("scanTranscript は assistant の text 行だけを lastAssistantTurn として数える", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chat-scan-assistant-"))
+  const transcript = path.join(root, "transcript.jsonl")
+  const textLine = (text: string) =>
+    JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "text", text }] }
+    })
+  const toolOnlyLine = JSON.stringify({
+    type: "assistant",
+    message: {
+      content: [{ type: "tool_use", name: "Bash", input: { description: "x" } }]
+    }
+  })
+  const thinkingOnlyLine = JSON.stringify({
+    type: "assistant",
+    message: { content: [{ type: "thinking", thinking: "考え中" }] }
+  })
+  const sidechainTextLine = JSON.stringify({
+    type: "assistant",
+    isSidechain: true,
+    message: { content: [{ type: "text", text: "サブエージェントの応答" }] }
+  })
+  try {
+    fs.writeFileSync(
+      transcript,
+      [
+        textLine("最初の応答"),
+        toolOnlyLine,
+        thinkingOnlyLine,
+        sidechainTextLine
+      ].join("\n")
+    )
+    expect(scanTranscript(transcript).lastAssistantTurn).toBe(1)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test.each([
   { lineCount: 4, user: 8 },
   { lineCount: 20, user: 4 }
@@ -209,11 +274,22 @@ test.each([
   const state = {
     ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
     recordedLine: 5,
+    recordedUserTurn: 5,
     attemptedLine: 8
   }
   const result = reconcileGeneration(state, scan(user, lineCount))
   expect(result.changed).toBe(true)
   expect(result.state.recordedLine).toBe(0)
+})
+
+test("recordedLine が recordedUserTurn より大きくても lastUserTurn が非減少なら通常追記", () => {
+  const state = {
+    ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
+    recordedLine: 8,
+    recordedUserTurn: 6
+  }
+  const result = reconcileGeneration(state, scan(6, 10, 8))
+  expect(result.changed).toBe(false)
 })
 
 test("行数非減少・lastUserTurn非減少は通常追記", () => {
@@ -338,4 +414,49 @@ test("v1 state は記録済み位置だけを安全に引き継ぐ", () => {
 test("壊れた state は fallback を返す", () => {
   const fallback = createInitialState("/p", "/p/t", { dev: 1, ino: 1 })
   expect(migrateState("broken", fallback)).toBe(fallback)
+})
+
+test("v1 state からは recordedUserTurn / attemptedUserTurn を recordedLine で補完する", () => {
+  const fallback = createInitialState("/new", "/new/t", { dev: 2, ino: 2 })
+  const migrated = migrateState(
+    {
+      version: 1,
+      projectDir: "/old",
+      transcriptPath: "/old/t",
+      transcriptIdentity: { dev: 1, ino: 1 },
+      recordedLine: 42,
+      attemptedLine: 99,
+      lastError: null
+    },
+    fallback
+  )
+  expect(migrated.recordedUserTurn).toBe(42)
+  expect(migrated.attemptedUserTurn).toBe(42)
+})
+
+test("現行バージョンの state でも recordedUserTurn / attemptedUserTurn の欠落を recordedLine / attemptedLine で補完する", () => {
+  const fallback = createInitialState("/p", "/p/t", { dev: 1, ino: 1 })
+  const raw: Record<string, unknown> = {
+    ...fallback,
+    recordedLine: 5,
+    attemptedLine: 7
+  }
+  delete raw.recordedUserTurn
+  delete raw.attemptedUserTurn
+  const migrated = migrateState(raw, fallback)
+  expect(migrated.recordedUserTurn).toBe(5)
+  expect(migrated.attemptedUserTurn).toBe(7)
+})
+
+// Stop hook は nag 注入後、次のユーザー発言まで dispatch を止めるため、AI テキストだけを契機に再 dispatch する設計はループ防止と両立しない。取りこぼした AI テキストは次のユーザー発言の記録範囲に含まれる。
+test("記録済みユーザー発言の後に AI テキストだけが増えても再 dispatch しない(次のユーザー発言時にまとめて追記する)", () => {
+  const state = {
+    ...stateAt(8, 8),
+    recordedUserTurn: 6,
+    attemptedUserTurn: 6,
+    lastError: null
+  }
+  expect(
+    decideRecordingAction(scan(6, 14, 12), state, { hasActiveLock: false })
+  ).toEqual({ action: "noop", reason: "already-recorded" })
 })

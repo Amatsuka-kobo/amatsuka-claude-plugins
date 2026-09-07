@@ -33,6 +33,11 @@ const assistantTool = (name: string, input: Record<string, unknown>) =>
       content: [{ type: "tool_use", name, input }]
     }
   })
+const assistantText = (text: string) =>
+  JSON.stringify({
+    type: "assistant",
+    message: { role: "assistant", content: [{ type: "text", text }] }
+  })
 
 interface Fixture {
   root: string
@@ -186,6 +191,27 @@ test("tool_use ヒントの制御文字を除去して状態planへ保存する"
     expect(plan?.metadataHints[0]).not.toContain("\n")
     expect(plan?.metadataHints[0]).not.toContain(String.fromCharCode(27))
     expect(state?.attemptedLine).toBe(1)
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true })
+  }
+})
+
+test("ユーザー発言より後に assistant のテキスト応答があれば targetLine はその行になる", () => {
+  const value = fixture([user("質問です"), assistantText("回答です")])
+  try {
+    const out = JSON.parse(run(value))
+    expect(out.hookSpecificOutput.additionalContext).toContain(
+      "- targetLine: 2"
+    )
+    const key = getSessionKey(value.sessionId, value.transcript)
+    const paths = pathsOf(value)
+    const plan = readJson<{ userTurnLine: number }>(
+      path.join(paths.planDir, `${key}.json`)
+    )
+    expect(plan?.userTurnLine).toBe(1)
+    const state = stateOf(value)
+    expect(state?.attemptedLine).toBe(2)
+    expect(state?.attemptedUserTurn).toBe(1)
   } finally {
     fs.rmSync(value.root, { recursive: true, force: true })
   }
