@@ -304,6 +304,8 @@ describe("roleLabel", () => {
     expect(roleLabel({}, "e2e-verify")).toBe("E2E 動作検証・ブラウザ/GUI 操作")
     expect(roleLabel({}, "final-review")).toBe("重要な実装の最終レビュー")
     expect(roleLabel({}, "gate-review")).toBe("設計書の最終ゲートレビュー")
+    expect(roleLabel({}, "design-plan")).toBe("設計書・実装計画書(WBS)の作成")
+    expect(roleLabel({}, "explore-lead")).toBe("コードベース探索統括")
   })
 
   it("プロジェクト直下と言語別の役割断片から label を解決する", () => {

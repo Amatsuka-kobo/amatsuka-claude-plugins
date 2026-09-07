@@ -19,6 +19,8 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   "light-impl": ["haiku"],
   escalation: ["fable"],
   general: ["sonnet"],
+  "design-plan": ["opus"],
+  "explore-lead": ["opus"],
   explore: ["sonnet"],
   "realtime-research": ["sonnet"],
   "e2e-verify": ["sonnet"],
@@ -27,7 +29,7 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   "code-review": ["sonnet"],
   "final-review": ["fable"],
   "gate-review": ["fable"],
-  advisor: ["fable", "opus"]
+  advisor: ["fable"]
 }
 
 const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
@@ -36,6 +38,8 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   "light-impl": ["haiku", "gpt-luna", "grok"],
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
+  "design-plan": ["opus"],
+  "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
   "e2e-verify": ["sonnet", "gpt-astra"],
@@ -53,6 +57,8 @@ const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
   "light-impl": false,
   escalation: true,
   general: true,
+  "design-plan": true,
+  "explore-lead": true,
   explore: true,
   "realtime-research": true,
   "e2e-verify": true,
@@ -88,7 +94,7 @@ describe("POLICIES", () => {
 })
 
 describe("ASSIGNMENTS", () => {
-  it("claude-model-policy だけに現行の全 14 役割を保持する", () => {
+  it("claude-model-policy だけに現行の全 16 役割を保持する", () => {
     expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
     expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
       ALL_ROLE_IDS
@@ -100,7 +106,7 @@ describe("ASSIGNMENTS", () => {
 })
 
 describe("RECOMMENDED", () => {
-  it("custom プロファイル向け推奨が全 14 役割と固定値を持つ", () => {
+  it("custom プロファイル向け推奨が全 16 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
   })
@@ -185,7 +191,7 @@ describe("rolesFor", () => {
 })
 
 describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 14 役割で現行規定を保つ", () => {
+  it("claude-model-policy の全 16 役割で現行規定を保つ", () => {
     for (const role of ROLES) {
       for (const model of ASSIGNMENTS["claude-model-policy"][role.id]) {
         expect(allowsAgentTool([role.id], model), `${role.id}/${model}`).toBe(
