@@ -5,6 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   atomicWriteJson,
+  findTailTargetLine,
   getStatePaths,
   isInside,
   type RecordingLock,
@@ -26,6 +27,7 @@ interface AttemptPlan {
   version: 1 | 2
   attemptId: string
   targetLine: number
+  effectiveTargetLine?: number
   userTurnLine?: number
   metadataHints: string[]
   recordTarget?: { relativePath: string | null; appendMode: boolean }
@@ -194,6 +196,10 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     fail("transcript does not match the hook-approved path")
   if (args.targetLine <= state.recordedLine)
     fail("target line is already recorded")
+  const effectiveTargetLine = findTailTargetLine(
+    args.transcript,
+    args.targetLine
+  )
 
   updateHeartbeat(paths.lockPath, args.attemptId)
   cleanStaleTemp(paths.tempDir, args.sessionKey, args.attemptId)
@@ -267,7 +273,7 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
   const conversation = extractConversationFile(
     args.transcript,
     state.recordedLine,
-    args.targetLine,
+    effectiveTargetLine,
     safeWorker(workerName)
   )
   const previousSessionNumber = lastSessionNumber(recordText)
@@ -283,6 +289,7 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     ...plan,
     // フックが書く初期値は version 1。ここで明示的に上げないと commit が全件を拒否する
     version: 2,
+    effectiveTargetLine,
     recordTarget,
     allowedNewRecordDir,
     recordFilePrefix: parts.hhmm,
@@ -297,6 +304,7 @@ export function prepareChatRecording(args: Args): Record<string, unknown> {
     attemptId: args.attemptId,
     recordedLine: state.recordedLine,
     targetLine: args.targetLine,
+    effectiveTargetLine,
     workerName,
     date: parts.date,
     conversation,

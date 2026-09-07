@@ -11,6 +11,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+var NAG_MARKER = "<!--chat-recorder-nag-->";
 var normalizePath = (value) => {
   const resolved = path.resolve(value);
   return process.platform === "win32" ? resolved.replaceAll("\\", "/").replace(/^[A-Z]:/, (drive) => drive.toLowerCase()) : resolved;
@@ -82,6 +83,35 @@ function readJson(file) {
   } catch {
     return null;
   }
+}
+function isSubstantiveUserTurn(entry) {
+  if (entry.type !== "user" || typeof entry.message?.content !== "string")
+    return false;
+  const text = entry.message.content.trim();
+  return text !== "" && !text.startsWith("<") && !entry.isMeta && !text.includes(NAG_MARKER);
+}
+function hasAssistantText(entry) {
+  return entry.type === "assistant" && Array.isArray(entry.message?.content) && entry.message.content.some(
+    (content) => content.type === "text" && Boolean(content.text?.trim())
+  );
+}
+function findTailTargetLine(file, fromLine) {
+  let lineCount = 0;
+  let targetLine = fromLine;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    lineCount++;
+    if (lineCount <= fromLine || !line.trim()) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.isSidechain) continue;
+    if (isSubstantiveUserTurn(entry)) break;
+    if (hasAssistantText(entry)) targetLine = lineCount;
+  }
+  return targetLine;
 }
 function updateHeartbeat(lockPath, attemptId) {
   const lock = readJson(lockPath);
@@ -291,6 +321,10 @@ function prepareChatRecording(args) {
     fail("transcript does not match the hook-approved path");
   if (args.targetLine <= state.recordedLine)
     fail("target line is already recorded");
+  const effectiveTargetLine = findTailTargetLine(
+    args.transcript,
+    args.targetLine
+  );
   updateHeartbeat(paths.lockPath, args.attemptId);
   cleanStaleTemp(paths.tempDir, args.sessionKey, args.attemptId);
   const workerName = gitUser(args.project);
@@ -343,7 +377,7 @@ function prepareChatRecording(args) {
   const conversation = extractConversationFile(
     args.transcript,
     state.recordedLine,
-    args.targetLine,
+    effectiveTargetLine,
     safeWorker(workerName)
   );
   const previousSessionNumber = lastSessionNumber(recordText);
@@ -359,6 +393,7 @@ function prepareChatRecording(args) {
     ...plan,
     // フックが書く初期値は version 1。ここで明示的に上げないと commit が全件を拒否する
     version: 2,
+    effectiveTargetLine,
     recordTarget,
     allowedNewRecordDir,
     recordFilePrefix: parts.hhmm,
@@ -373,6 +408,7 @@ function prepareChatRecording(args) {
     attemptId: args.attemptId,
     recordedLine: state.recordedLine,
     targetLine: args.targetLine,
+    effectiveTargetLine,
     workerName,
     date: parts.date,
     conversation,

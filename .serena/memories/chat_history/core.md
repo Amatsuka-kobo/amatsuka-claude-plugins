@@ -13,13 +13,17 @@ lives in the agent definition) telling the main agent to dispatch `chat-recorder
 - **Trigger**: last substantive user message is newer than `state.recordedUserTurn` (state file is
   user-local, git-untracked). Works from turn 1; at most one attempt per real message, guarded by a
   lock + `attemptedUserTurn`.
-- **Range (0.8.1, 2026-09-07)**: `targetLine = max(lastUserTurn, lastAssistantTurn)`, so the AI
-  reply to the last prompt is recorded in the same attempt. Before 0.8.1 the target was
-  `lastUserTurn` and records stopped at the last user prompt. `recordedLine` (extraction start) and
-  `recordedUserTurn` (new-turn / generation detection) are therefore distinct fields;
-  `migrateState` backfills the `*UserTurn` fields from `recordedLine`/`attemptedLine` when missing.
-  The hook writes `plan.userTurnLine`; commit stores it as `recordedUserTurn`. Extra AI replies to
-  the same prompt (e.g. after a background-task notification) land in the next user turn's range.
+- **Range (0.8.2, 2026-09-07)**: the Stop hook dispatches
+  `targetLine = max(lastUserTurn, lastAssistantTurn)`. Because Claude Code invokes Stop before
+  appending the turn's final assistant message to the transcript, `prepare-chat-recording.ts` scans
+  again at recorder execution time and extends `effectiveTargetLine` through later assistant text
+  rows, stopping before the next substantive non-sidechain user row. It writes that value to the
+  v2 plan and extracts through it; commit stores `effectiveTargetLine ?? targetLine` as
+  `recordedLine` while keeping `recordedUserTurn = plan.userTurnLine ?? targetLine`. The separation
+  prevents the next user prompt from being mistaken for an already-recorded turn. Plans without
+  `effectiveTargetLine` remain compatible. Before 0.8.1 the target was `lastUserTurn` and records
+  stopped at the last user prompt. `migrateState` backfills missing `*UserTurn` fields from
+  `recordedLine`/`attemptedLine`.
 - `chat-recorder` (model `haiku`, `background: true`, tools `Bash, Write`) runs
   `prepare-chat-recording.mjs` → Write to temp files → `commit-chat-recording.mjs`. It is
   explicitly told to ignore the project's CLAUDE.md workflow/agent-policy instructions and to load

@@ -162,6 +162,17 @@ function toolHint(content) {
     `${content.name ?? "unknown"}${detail ? ` \u2014 ${detail}` : ""}`
   );
 }
+function isSubstantiveUserTurn(entry) {
+  if (entry.type !== "user" || typeof entry.message?.content !== "string")
+    return false;
+  const text = entry.message.content.trim();
+  return text !== "" && !text.startsWith("<") && !entry.isMeta && !text.includes(NAG_MARKER);
+}
+function hasAssistantText(entry) {
+  return entry.type === "assistant" && Array.isArray(entry.message?.content) && entry.message.content.some(
+    (content) => content.type === "text" && Boolean(content.text?.trim())
+  );
+}
 function scanTranscript(file, sinceLine = 0) {
   let lineCount = 0;
   let lastUserTurn = -1;
@@ -182,16 +193,12 @@ function scanTranscript(file, sinceLine = 0) {
     if (entry.type === "user" && typeof entry.message.content === "string") {
       const text = entry.message.content.trim();
       if (text.includes(NAG_MARKER)) lastNag = lineCount;
-      else if (text && !text.startsWith("<") && !entry.isMeta)
-        lastUserTurn = lineCount;
+      else if (isSubstantiveUserTurn(entry)) lastUserTurn = lineCount;
       continue;
     }
     if (entry.type !== "assistant" || !Array.isArray(entry.message.content))
       continue;
-    if (entry.message.content.some(
-      (content) => content.type === "text" && Boolean(content.text?.trim())
-    ))
-      lastAssistantTurn = lineCount;
+    if (hasAssistantText(entry)) lastAssistantTurn = lineCount;
     if (lineCount <= sinceLine) continue;
     for (const content of entry.message.content) {
       if (content.type !== "tool_use" || isRecorderDispatch(content.name, content.input?.subagent_type))

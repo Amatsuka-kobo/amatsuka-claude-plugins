@@ -183,6 +183,8 @@ function validateInputs(args, paths, plan) {
   ])
     if (typeof plan[field] !== "string" || !plan[field])
       fail(`plan.${field} is missing`);
+  if (plan.effectiveTargetLine !== void 0 && (!Number.isSafeInteger(plan.effectiveTargetLine) || plan.effectiveTargetLine < args.targetLine))
+    fail("plan.effectiveTargetLine must be an integer not preceding targetLine");
   if (plan.userTurnLine !== void 0) {
     if (!Number.isSafeInteger(plan.userTurnLine) || plan.userTurnLine <= 0 || plan.userTurnLine > args.targetLine)
       fail(
@@ -371,10 +373,11 @@ function commitChatRecording(args) {
     if (indexMatches(updatedIndex, relativePath).length !== 1)
       fail("INDEX uniqueness verification failed");
     const recordedUserTurn = plan.userTurnLine ?? args.targetLine;
+    const recordedLine = plan.effectiveTargetLine ?? args.targetLine;
     const nextState = {
       ...state,
-      recordedLine: args.targetLine,
-      attemptedLine: Math.max(state.attemptedLine, args.targetLine),
+      recordedLine,
+      attemptedLine: Math.max(state.attemptedLine, recordedLine),
       recordedUserTurn,
       attemptedUserTurn: Math.max(state.attemptedUserTurn, recordedUserTurn),
       lastSuccessAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -384,7 +387,7 @@ function commitChatRecording(args) {
     atomicWriteJson(paths.statePath, nextState);
     appendLog(
       paths.logPath,
-      `=== result=success recordedLine=${args.targetLine} ===`
+      `=== result=success recordedLine=${recordedLine} ===`
     );
     for (const file of [
       args.bodyFile,
@@ -397,7 +400,7 @@ function commitChatRecording(args) {
       fs2.rmSync(file, { force: true });
     return {
       ok: true,
-      recordedLine: args.targetLine,
+      recordedLine,
       recordPath: relativePath,
       indexUpdated: true
     };

@@ -29,6 +29,7 @@ interface AttemptPlan {
   version: 2
   attemptId: string
   targetLine: number
+  effectiveTargetLine?: number
   userTurnLine?: number
   recordTarget: { relativePath: string | null; appendMode: boolean }
   allowedNewRecordDir: string
@@ -133,6 +134,12 @@ function validateInputs(
   ] as const)
     if (typeof plan[field] !== "string" || !plan[field])
       fail(`plan.${field} is missing`)
+  if (
+    plan.effectiveTargetLine !== undefined &&
+    (!Number.isSafeInteger(plan.effectiveTargetLine) ||
+      plan.effectiveTargetLine < args.targetLine)
+  )
+    fail("plan.effectiveTargetLine must be an integer not preceding targetLine")
   if (plan.userTurnLine !== undefined) {
     if (
       !Number.isSafeInteger(plan.userTurnLine) ||
@@ -378,10 +385,11 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     // userTurnLine を持たない plan(このフィールド追加前の hook が書いたもの)では、
     // 旧仕様どおり targetLine がユーザー発言行そのものなので targetLine で代用する。
     const recordedUserTurn = plan.userTurnLine ?? args.targetLine
+    const recordedLine = plan.effectiveTargetLine ?? args.targetLine
     const nextState: RecordingState = {
       ...state,
-      recordedLine: args.targetLine,
-      attemptedLine: Math.max(state.attemptedLine, args.targetLine),
+      recordedLine,
+      attemptedLine: Math.max(state.attemptedLine, recordedLine),
       recordedUserTurn,
       attemptedUserTurn: Math.max(state.attemptedUserTurn, recordedUserTurn),
       lastSuccessAt: new Date().toISOString(),
@@ -391,7 +399,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
     atomicWriteJson(paths.statePath, nextState)
     appendLog(
       paths.logPath,
-      `=== result=success recordedLine=${args.targetLine} ===`
+      `=== result=success recordedLine=${recordedLine} ===`
     )
     for (const file of [
       args.bodyFile,
@@ -404,7 +412,7 @@ export function commitChatRecording(args: Args): Record<string, unknown> {
       fs.rmSync(file, { force: true })
     return {
       ok: true,
-      recordedLine: args.targetLine,
+      recordedLine,
       recordPath: relativePath,
       indexUpdated: true
     }
