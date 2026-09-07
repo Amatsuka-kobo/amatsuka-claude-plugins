@@ -131,6 +131,8 @@ export const ASSIGNMENTS: Record<
     "light-impl": ["haiku"],
     escalation: ["fable"],
     general: ["sonnet"],
+    "design-plan": ["opus"],
+    "explore-lead": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
     "e2e-verify": ["sonnet"],
@@ -139,7 +141,7 @@ export const ASSIGNMENTS: Record<
     "code-review": ["sonnet"],
     "final-review": ["fable"],
     "gate-review": ["fable"],
-    advisor: ["fable", "opus"]
+    advisor: ["fable"]
   }
 }
 
@@ -150,6 +152,8 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   "light-impl": ["haiku", "gpt-luna", "grok"],
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
+  "design-plan": ["opus"],
+  "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
   "e2e-verify": ["sonnet", "gpt-astra"],

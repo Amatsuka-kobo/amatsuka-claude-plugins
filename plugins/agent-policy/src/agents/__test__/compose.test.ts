@@ -123,6 +123,15 @@ describe("frontmatter", () => {
     expect(meta["agent-policy-role"]).toBe("complex-impl, explore")
   })
 
+  it("役割マーカーを新規 ID を含めても ROLES の定義順で並べる", () => {
+    const meta = frontmatter(
+      build(["explore", "explore-lead", "general", "design-plan"])
+    )
+    expect(meta["agent-policy-role"]).toBe(
+      "general, design-plan, explore-lead, explore"
+    )
+  })
+
   it("tools に MCP ツールを含まない", () => {
     const meta = frontmatter(build(["complex-impl", "explore"]))
     expect(meta.tools).not.toContain("mcp__")
@@ -292,16 +301,18 @@ describe("本文", () => {
 })
 
 describe("同梱役割断片と ROLES の整合性", () => {
-  function bundledRoleFiles(): string[] {
+  function bundledRoleFiles(dir: string = PLUGIN_ROLES.path): string[] {
     return fs
-      .readdirSync(PLUGIN_ROLES.path)
+      .readdirSync(dir)
       .filter(
         (name) =>
           name.endsWith(".md") &&
           !name.startsWith("_") &&
           name.split(".").length === 2
       )
+      .map((name) => name.replace(/\.md$/, ""))
       .sort()
+      .map((id) => `${id}.md`)
   }
 
   it("ファイル名・frontmatter の id・ROLES の id が一致する", () => {
@@ -326,6 +337,33 @@ describe("同梱役割断片と ROLES の整合性", () => {
       expect(meta.label).toBe(role.label)
       expect(meta.tools?.split(", ")).toEqual(role.tools)
       expect(meta.kind).toBe(role.kind)
+    }
+  })
+
+  it("en 断片のファイル名・frontmatter の id・ROLES の id が一致する", () => {
+    const files = bundledRoleFiles(EN.path)
+    const fileIds = files.map((file) => file.replace(/\.md$/, ""))
+    const fragmentIds = files.map(
+      (file) =>
+        frontmatter(fs.readFileSync(path.join(EN.path, file), "utf8")).id
+    )
+    const roleIds = ROLES.map((role) => role.id).sort()
+
+    expect(fragmentIds).toEqual(fileIds)
+    expect(fileIds).toEqual(roleIds)
+  })
+
+  it("en 断片の default-name・tools・kind が ja 断片と一致する", () => {
+    for (const role of ROLES) {
+      const jaMeta = frontmatter(
+        fs.readFileSync(path.join(PLUGIN_ROLES.path, `${role.id}.md`), "utf8")
+      )
+      const enMeta = frontmatter(
+        fs.readFileSync(path.join(EN.path, `${role.id}.md`), "utf8")
+      )
+      expect(enMeta["default-name"], role.id).toBe(jaMeta["default-name"])
+      expect(enMeta.tools, role.id).toBe(jaMeta.tools)
+      expect(enMeta.kind, role.id).toBe(jaMeta.kind)
     }
   })
 

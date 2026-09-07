@@ -6,6 +6,8 @@ export type RoleId =
   | "light-impl"
   | "escalation"
   | "general"
+  | "design-plan"
+  | "explore-lead"
   | "explore"
   | "realtime-research"
   | "e2e-verify"
@@ -52,6 +54,18 @@ export const ROLES: readonly Role[] = [
   {
     id: "general",
     label: "その他のタスク",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "design-plan",
+    label: "設計書・実装計画書(WBS)の作成",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "explore-lead",
+    label: "コードベース探索統括",
     kind: "impl",
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },

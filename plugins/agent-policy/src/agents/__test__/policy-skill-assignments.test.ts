@@ -148,7 +148,7 @@ describe("方針 SKILL の担当表", () => {
       expectedAssignmentsName
     } = POLICY_SKILLS[policy]
 
-    it(`${policy} が ${expectedAssignmentsName} の全 14 役割と一致する`, () => {
+    it(`${policy} が ${expectedAssignmentsName} の全 16 役割と一致する`, () => {
       const skillAssignments = parseSkillAssignments(
         policy,
         skillPath,

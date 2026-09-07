@@ -250,6 +250,18 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
+    id: "design-plan",
+    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "explore-lead",
+    label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22\u7D71\u62EC",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
     id: "explore",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22\u5B9F\u50CD",
     kind: "readonly",
@@ -402,6 +414,8 @@ var RECOMMENDED = {
   "light-impl": ["haiku", "gpt-luna", "grok"],
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
+  "design-plan": ["opus"],
+  "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
   "e2e-verify": ["sonnet", "gpt-astra"],

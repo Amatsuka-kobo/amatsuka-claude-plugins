@@ -24,7 +24,7 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 | コードレビュー                                        | `Sonnet`         |
 | 重要な実装の最終レビュー                              | `Fable`          |
 | E2E動作検証・ブラウザ/GUI操作を伴う確認               | `Sonnet`         |
-| 設計・計画・実装のアドバイザー                        | `Fable` / `Opus` |
+| 設計・計画・実装のアドバイザー                        | `Fable`          |
 | 設計書・実装計画書のレビュー(理解したこと+暗黙知抽出) | `Haiku`          |
 | 設計書・実装計画書の独立レビュー(前提検証・反証提示)  | `Sonnet`         |
 | 設計書の最終ゲートレビュー(高リスク案件のみ)          | `Fable`          |
@@ -51,5 +51,4 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 
 実務タスク着手前に確認し、以後はタスクごとに再判定しない。
 
-1. 担当表のモデルで分岐する。
-   - Claude 帯: dispatch 時の `model` 上書きで実行帯を指定して起動する。読み取り役割はビルトイン `Explore`、実装帯は `general-purpose` へ委譲する。
+担当表のモデルで分岐する。Claude 帯は dispatch 時の `model` 上書きで実行帯を指定して起動する。読み取り役割はビルトイン `Explore`、実装帯は `general-purpose` へ委譲する。

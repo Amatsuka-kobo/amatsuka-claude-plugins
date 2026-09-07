@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.14.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.16.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -13,6 +13,8 @@ Design docs live in `harness-docs/design/`:
 `2026-08-27-agent-policy-external-agent-model-assignment-design.md` (composition; still in force),
 `2026-08-31-agent-policy-two-profile-design.md` (**current**) + its plan
 `harness-docs/plans/2026-09-04-agent-policy-two-profile-implementation.md`,
+`2026-09-07-agent-policy-orchestrator-analysis-design.md` (**current**, adds the 2 upstream bands)
++ its plan `harness-docs/plans/2026-09-07-agent-policy-orchestrator-analysis-implementation.md`,
 plus `2026-08-09-prompt-smith-skill-creator-port-design.md`.
 Accumulated rationale: `docs/old/optimize-agents-record/`.
 
@@ -43,9 +45,24 @@ The plugin now ships **two profiles**, selected by `AMATSUKA_AGENT_AUTO_INJECTIO
   vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate,parallel-nudge}.ts`,
   `testing/{run-ts.ts,fake-models-server.ts,fake-claude.mjs}`.
 
-### Role fragments and the 10 role IDs
+### Role fragments and the 16 role IDs
 
-Unchanged from the previous generation (3-stage resolution, vendor overlays last-wins via a map,
+**16 role IDs since 2026-09-07 (0.16.0-dev)**: `complex-impl, normal-impl, light-impl, escalation,
+general, design-plan, explore-lead, explore, realtime-research, e2e-verify, independent-review,
+doc-review, code-review, final-review, gate-review, advisor`. The two new ones — `design-plan`
+(設計書・実装計画書(WBS)の作成) and `explore-lead` (コードベース探索統括) — sit between `general`
+and `explore`, are `kind: impl`, carry the complex-impl tool set, are Agent-tool-allowed, and are
+Opus-only in both `ASSIGNMENTS` and `RECOMMENDED`. They used to be labelled "orchestrator's own
+work"; that premise (orchestrator = Opus) was wrong because the orchestrator's model is
+session-dependent. **Every band in the 担当表 is a subagent role.** The orchestrator keeps only
+dispatch / requirement fixing / adoption decisions / approval / analysis (analysis = cross-checking
+reports, requirement analysis, root-cause analysis — legwork may be delegated, conclusions may
+not). That declaration lives in **one place only**: `orchestration-discipline.md` §オーケストレーター
+が自ら担う作業. It is deliberately **not** repeated in either policy SKILL.md (prompt-smith's
+no-duplication rule). `compose.test.ts` also checks `assets/roles/en` (id/default-name/tools/kind
+must match ja; `label` may differ).
+
+Fragment loading is otherwise unchanged from the previous generation (3-stage resolution, vendor overlays last-wins via a map,
 `vocabulary.ts` per-language headings, `languageMismatch` warning). One addition: `Vendor` now
 includes `"none"`, which means *no overlay, colour `blue`*. `"none"` is folded to `undefined`
 before reaching `loadFragments` — there is no `.none.md` fragment.
@@ -166,15 +183,26 @@ Each holds its own table plus profile-specific dispatch rules; the shared discip
 `assets/context-map-template.md` is the template.
 
 `claude-model-policy` keeps a model column (`ASSIGNMENTS`). `custom-policy`'s column is a
-*recommendation* (`RECOMMENDED`) whose values match the old codex-grok row: complex-impl→GPT Sol,
-normal-impl/general→GPT Terra, light-impl→GPT Luna, explore/realtime-research/independent-review→
-Grok, doc-review→Haiku, code-review→Sonnet, advisor→Fable/Opus. `policy-skill-assignments.test.ts`
+*recommendation* (`RECOMMENDED`). Read the values from `policies.ts` rather than from memory — as of
+0.16.0-dev: complex-impl→Opus/GPT Sol, design-plan/explore-lead→Opus only, normal-impl→Sonnet/GPT
+Luna/Grok, light-impl→Haiku/GPT Luna/Grok, general→Sonnet/GPT Luna, explore→Sonnet/Grok/GPT Terra,
+realtime-research/independent-review→Sonnet/Grok, doc-review→Haiku, code-review→Sonnet,
+escalation/final-review/gate-review/advisor→Fable/GPT Astra, e2e-verify→Sonnet/GPT Astra.
+In `ASSIGNMENTS` (claude profile) advisor is **Fable only** since 0.16.0-dev — the old `Opus`
+fallback was removed from the table, `_common.md` (ja/en), `orchestration-discipline.md` and
+`subagent-discipline.md`. When Fable cannot start, subagents hand the question back instead of
+consulting. `policy-skill-assignments.test.ts`
 pins both tables against their canonical source; the parser matches a row by `startsWith(label)`,
 which is why rows may carry parenthetical annotations.
 
 Rules that bite:
 
-- The light-impl tier is denied the Agent tool.
+- The light-impl tier is denied the Agent tool (so are advisor / doc-review / code-review /
+  final-review / gate-review). `design-plan` and `explore-lead` are allowed it: explore-lead
+  re-delegates legwork to `explore`, design-plan consults the advisor.
+- Upstream flow since 0.16: explore-lead writes the context-map → **orchestrator** judges
+  §未解決事項 and fixes requirements → design-plan writes design/WBS → doc-review (Haiku) →
+  independent-review (Sonnet, original only) → orchestrator adopts/rejects → user approval → Approve.
 - **Custom's execution-tier resolution**: (1) a band present in the marker table uses that
   definition; (2) a band absent from it is read across to `claude-model-policy`'s model for the same
   band — **except independent-review, which is skipped rather than read across**, because a

@@ -11,7 +11,7 @@ Your roles are {{ROLE_LABELS}}. The role you are invoked for is stated at the to
 ## Consulting an advisor
 
 - Consult an advisor with the Agent tool only when you are genuinely undecided.
-- Use the definition for the "design, planning, and implementation advisor" band. If the project has one, call it by name; otherwise start a subagent with a `model` override of `Fable`, falling back to `Opus`.
+- Use the definition for the "design, planning, and implementation advisor" band. If the project has one, call it by name; otherwise start a subagent with a `model` override of `Fable`. If `Fable` cannot be started, do not consult; resolve by handing the question back.
 - State explicitly in the request that the advisor returns advice only, and that it must not use the Agent tool.
 - Do not consult an advisor when you are not undecided.
 

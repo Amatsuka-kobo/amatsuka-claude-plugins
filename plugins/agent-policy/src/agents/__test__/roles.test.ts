@@ -8,13 +8,15 @@ import {
 } from "../roles"
 
 describe("ROLES", () => {
-  it("役割 ID が 14 件あり、定義順で重複しない", () => {
+  it("役割 ID が 16 件あり、定義順で重複しない", () => {
     expect(ROLES.map((role) => role.id)).toEqual([
       "complex-impl",
       "normal-impl",
       "light-impl",
       "escalation",
       "general",
+      "design-plan",
+      "explore-lead",
       "explore",
       "realtime-research",
       "e2e-verify",
@@ -25,7 +27,26 @@ describe("ROLES", () => {
       "gate-review",
       "advisor"
     ])
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(14)
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(16)
+  })
+
+  it("追加した 2 役割の label・kind・tools が固定値と一致する", () => {
+    expect(
+      ROLES.filter((role) => ["design-plan", "explore-lead"].includes(role.id))
+    ).toEqual([
+      {
+        id: "design-plan",
+        label: "設計書・実装計画書(WBS)の作成",
+        kind: "impl",
+        tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+      },
+      {
+        id: "explore-lead",
+        label: "コードベース探索統括",
+        kind: "impl",
+        tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+      }
+    ])
   })
 
   it("追加した 4 役割の label・kind・tools が固定値と一致する", () => {
