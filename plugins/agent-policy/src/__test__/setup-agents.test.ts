@@ -289,6 +289,7 @@ describe("--list-live-models", () => {
       body: JSON.stringify({
         data: [
           { id: "claude-gpt-5-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-6-astra", owned_by: "openai" },
           { id: "custom-unknown", owned_by: "other" }
         ]
       })
@@ -305,6 +306,17 @@ describe("--list-live-models", () => {
           id: "claude-gpt-5-6-sol",
           vendor: "gpt",
           recommendedFor: ["complex-impl"]
+        },
+        {
+          id: "claude-gpt-6-astra",
+          vendor: "gpt",
+          recommendedFor: [
+            "escalation",
+            "e2e-verify",
+            "final-review",
+            "gate-review",
+            "advisor"
+          ]
         },
         { id: "custom-unknown", vendor: "unknown", recommendedFor: [] }
       ],
@@ -344,7 +356,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(10)
+    expect(result.roles).toHaveLength(14)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -390,7 +402,7 @@ describe("--list-coverage", () => {
 
     expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
       "fable",
-      "opus"
+      "gpt-astra"
     ])
     expect(
       result.roles.every(
@@ -403,13 +415,16 @@ describe("--list-coverage", () => {
   it("RECOMMENDED の帯集合とモデル割当を返す", () => {
     const result = run<CoverageResult>(["--list-coverage", "--dir", project])
 
-    expect(result.roles).toHaveLength(10)
+    expect(result.roles).toHaveLength(14)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
-    ).toEqual(["gpt-sol"])
+    ).toEqual(["opus", "gpt-sol"])
+    expect(
+      result.roles.find((role) => role.id === "escalation")?.models
+    ).toEqual(["fable", "gpt-astra"])
     expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
       "fable",
-      "opus"
+      "gpt-astra"
     ])
   })
 
@@ -472,12 +487,16 @@ describe("--list-roles", () => {
       "complex-impl",
       "normal-impl",
       "light-impl",
+      "escalation",
       "general",
       "explore",
       "realtime-research",
+      "e2e-verify",
       "independent-review",
       "doc-review",
       "code-review",
+      "final-review",
+      "gate-review",
       "advisor"
     ])
     expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
@@ -721,7 +740,11 @@ describe("--check", () => {
         "--check"
       ]).roles.agentTool
 
-    expect(agentToolFor("sonnet", "code-review")).toBe(true)
+    expect(agentToolFor("sonnet", "code-review")).toBe(false)
+    expect(agentToolFor("fable", "final-review")).toBe(false)
+    expect(agentToolFor("fable", "gate-review")).toBe(false)
+    expect(agentToolFor("fable", "escalation")).toBe(true)
+    expect(agentToolFor("sonnet", "e2e-verify")).toBe(true)
     expect(
       agentToolFor("grok", "explore,realtime-research,independent-review")
     ).toBe(true)
@@ -731,13 +754,13 @@ describe("--check", () => {
   it("自由モデル値ではモデル制約を外して役割制約だけを使う", () => {
     const result = singleResult<CheckResult>([
       "--model-id",
-      "gpt-luna",
+      "haiku",
       "--model",
       "custom-live-model",
       "--vendor",
-      "gpt",
+      "claude",
       "--name",
-      "custom-model",
+      "custom-claude-model",
       "--roles",
       "complex-impl",
       "--lang",
@@ -1298,17 +1321,17 @@ describe("custom の役割検証", () => {
     )
   })
 
-  it("custom では全 ModelId を明示指定できる", () => {
+  it("custom では gpt-astra ModelId を明示指定できる", () => {
     const result = run<WriteResults>([
       "--check",
       "--model-id",
-      "grok",
+      "gpt-astra",
       "--lang",
       "ja",
       "--name",
-      "grok",
+      "gpt-astra",
       "--roles",
-      "explore",
+      "escalation",
       "--dir",
       project
     ])
@@ -1490,7 +1513,7 @@ describe("--models による推奨一括", () => {
       "--lang",
       "ja",
       "--models",
-      "gpt-sol,gpt-terra",
+      "gpt-sol,gpt-terra,gpt-astra",
       "--dir",
       project
     ])
@@ -1498,10 +1521,18 @@ describe("--models による推奨一括", () => {
     expect(result.ok).toBe(true)
     expect(result.results.map((entry) => entry.modelId)).toEqual([
       "gpt-sol",
-      "gpt-terra"
+      "gpt-terra",
+      "gpt-astra"
     ])
     expect(result.results[0]?.roles.ids).toEqual(["complex-impl"])
-    expect(result.results[1]?.roles.ids).toEqual(["normal-impl", "general"])
+    expect(result.results[1]?.roles.ids).toEqual(["explore"])
+    expect(result.results[2]?.roles.ids).toEqual([
+      "escalation",
+      "e2e-verify",
+      "final-review",
+      "gate-review",
+      "advisor"
+    ])
   })
 
   it("照会成功時は不在モデルを間引いて報告する", async () => {
@@ -1588,18 +1619,18 @@ describe("--models による推奨一括", () => {
       "--lang",
       "ja",
       "--models",
-      "sonnet",
+      "gpt-terra",
       "--dir",
       project
     ])
 
     expect(result.ok).toBe(true)
     expect(result.results[0]?.target).toBe(
-      ".claude/agents/sonnet-code-reviewer.md"
+      ".claude/agents/gpt-terra-explorer.md"
     )
     expect(
       fs.existsSync(
-        path.join(project, ".claude", "agents", "sonnet-code-reviewer.md")
+        path.join(project, ".claude", "agents", "gpt-terra-explorer.md")
       )
     ).toBe(true)
   })

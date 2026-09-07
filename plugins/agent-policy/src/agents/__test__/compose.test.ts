@@ -131,6 +131,11 @@ describe("frontmatter", () => {
   it("Agent の付与が役割とモデルで決まる", () => {
     expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
     expect(frontmatter(build(["light-impl"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["escalation"])).tools).toContain("Agent")
+    expect(frontmatter(build(["e2e-verify"])).tools).toContain("Agent")
+    expect(frontmatter(build(["code-review"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["final-review"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["gate-review"])).tools).not.toContain("Agent")
     expect(frontmatter(build(["explore"])).tools).toContain("Agent")
     expect(frontmatter(build(["light-impl", "complex-impl"])).tools).toContain(
       "Agent"
@@ -152,12 +157,10 @@ describe("frontmatter", () => {
     )
   })
 
-  it("model ID があるときはモデルによる Agent の除外を維持する", () => {
-    for (const modelId of ["haiku", "gpt-luna"] as const) {
-      expect(
-        frontmatter(build(["complex-impl"], { modelId })).tools
-      ).not.toContain("Agent")
-    }
+  it("model ID があるときは Haiku の Agent 除外を維持する", () => {
+    expect(
+      frontmatter(build(["complex-impl"], { modelId: "haiku" })).tools
+    ).not.toContain("Agent")
   })
 })
 

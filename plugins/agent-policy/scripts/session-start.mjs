@@ -105,6 +105,12 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
   },
   {
+    id: "escalation",
+    label: "\u884C\u304D\u8A70\u307E\u308A\u6642\u306E\u30A8\u30B9\u30AB\u30EC\u30FC\u30B7\u30E7\u30F3",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
     id: "general",
     label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
     kind: "impl",
@@ -123,6 +129,12 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
   },
   {
+    id: "e2e-verify",
+    label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
     id: "independent-review",
     label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u72EC\u7ACB\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
@@ -139,6 +151,18 @@ var ROLES = [
     label: "\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "final-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "gate-review",
+    label: "\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30B2\u30FC\u30C8\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "advisor",

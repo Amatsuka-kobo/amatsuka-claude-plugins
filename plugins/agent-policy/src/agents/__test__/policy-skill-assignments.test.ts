@@ -44,6 +44,7 @@ const MODEL_IDS = {
   "GPT Sol": "gpt-sol",
   "GPT Terra": "gpt-terra",
   "GPT Luna": "gpt-luna",
+  "GPT Astra": "gpt-astra",
   Grok: "grok"
 } as const satisfies Record<string, ModelId>
 
@@ -63,8 +64,9 @@ function parseTable(
       .map((cell) => cell.trim())
     if (roleCell === undefined || modelCell === undefined) continue
 
+    const normalizedRoleCell = roleCell.replace(/\s/g, "")
     const matchingRoles = ROLES.filter((role) =>
-      roleCell.startsWith(role.label)
+      normalizedRoleCell.startsWith(role.label.replace(/\s/g, ""))
     )
     if (matchingRoles.length === 0) continue
     if (matchingRoles.length > 1) {
@@ -146,7 +148,7 @@ describe("方針 SKILL の担当表", () => {
       expectedAssignmentsName
     } = POLICY_SKILLS[policy]
 
-    it(`${policy} が ${expectedAssignmentsName} の全 10 役割と一致する`, () => {
+    it(`${policy} が ${expectedAssignmentsName} の全 14 役割と一致する`, () => {
       const skillAssignments = parseSkillAssignments(
         policy,
         skillPath,

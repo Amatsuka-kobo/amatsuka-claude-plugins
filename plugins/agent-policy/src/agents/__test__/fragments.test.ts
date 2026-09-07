@@ -54,13 +54,19 @@ function writeFragment(dir: string, id: string, label: string): void {
 describe("loadFragments の 3 段探索", () => {
   it("同梱断片を読み込む", () => {
     const fragments = loadFragments([JA], "claude")
-    expect(fragments.size).toBe(10)
+    expect(fragments.size).toBe(14)
     expect(fragments.get("explore")?.source).toBe("plugin")
   })
 
   it("同梱断片から defaultName を読み込む", () => {
     const fragments = loadFragments([JA], "claude")
     expect(fragments.get("explore")?.defaultName).toBe("explorer")
+    expect(fragments.get("escalation")?.defaultName).toBe(
+      "escalation-implementer"
+    )
+    expect(fragments.get("e2e-verify")?.defaultName).toBe("e2e-verifier")
+    expect(fragments.get("final-review")?.defaultName).toBe("final-reviewer")
+    expect(fragments.get("gate-review")?.defaultName).toBe("gate-reviewer")
   })
 
   it("default-name が無い断片の defaultName は undefined になる", () => {

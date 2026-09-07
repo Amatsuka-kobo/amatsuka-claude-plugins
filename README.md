@@ -108,7 +108,7 @@ ER 図、シーケンス図、システム構成図、画面遷移図、API 一�
 
 Claude Code を使う時のエージェント運用を最適化するプラグインです。<br>
 モデル別役割分担・大まかな設計/実装フロー・アドバイザー運用・並列原則・コードベース探索のコスト効率化施策として context-map の作成指針をスキルとして配布します。<br>
-claude プロファイルは Claude のモデル名で役割の帯を固定し、セットアップなしで利用できます。custom プロファイルは役割の帯(role-id)だけを持つ担当表を使い、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決めます。`agent-policy:setup-agents` で推奨構成を一括生成できます。<br>
+claude プロファイルは Claude のモデル名で役割の帯を固定し、セットアップなしで利用できます。custom プロファイルは役割の帯(role-id)だけを持つ担当表を使い、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決めます。`agent-policy:setup-agents` で 14 の役割帯と GPT Astra を含む 9 つの推奨モデル ID から構成を一括生成できます。<br>
 環境変数 `AMATSUKA_AGENT_AUTO_INJECTION` の値は `none` / `claude` / `custom` から選べます。SessionStart フックは `claude` のとき `agent-policy:claude-model-policy`、`custom` のとき `agent-policy:custom-policy` に従う旨をセッション開始時に自動で注入します。旧来の `with-codex` / `with-grok` / `with-codex-grok` は `custom` として扱われ、移行を促す通知が出ます。プロジェクトの定義にある役割マーカーも走査し、役割と Agent 名の対応を注入します。サブエージェントの起動時には SubagentStart フックが同じ対応表とサブエージェント向けの規律を配布し、再委譲の階層でも役割の解決が揃います。任意のプロジェクトへ CLAUDE.md の追記なしで同じ最適化施策を持ち込めます。<br>
 `custom` プロファイルで利用するモデルは、`agent-policy:setup-agents` がローカルプロキシ(ProxyAPI サーバー)の `/v1/models` の実応答から選びます。従来のモデルエイリアス変数は参照されず、setup で推奨構成を一括生成できます。<br>
 定義の名前は自由に決められます。不一致の検知は Agent 名ではなく役割マーカーを見るため、任意の名前を付けても正しく追随していると判定されます。既存定義がある状態で setup を実行すると、差分を確認したうえで利用者が加えた tools・frontmatter キー・独自の節を保持できます。<br>

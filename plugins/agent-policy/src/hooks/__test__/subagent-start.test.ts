@@ -21,12 +21,16 @@ const ROLE_IDS = [
   "complex-impl",
   "normal-impl",
   "light-impl",
+  "escalation",
   "general",
   "explore",
   "realtime-research",
+  "e2e-verify",
   "independent-review",
   "doc-review",
   "code-review",
+  "final-review",
+  "gate-review",
   "advisor"
 ] as const
 

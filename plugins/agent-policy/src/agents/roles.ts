@@ -4,12 +4,16 @@ export type RoleId =
   | "complex-impl"
   | "normal-impl"
   | "light-impl"
+  | "escalation"
   | "general"
   | "explore"
   | "realtime-research"
+  | "e2e-verify"
   | "independent-review"
   | "doc-review"
   | "code-review"
+  | "final-review"
+  | "gate-review"
   | "advisor"
 
 export interface Role {
@@ -40,6 +44,12 @@ export const ROLES: readonly Role[] = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
   },
   {
+    id: "escalation",
+    label: "行き詰まり時のエスカレーション",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
     id: "general",
     label: "その他のタスク",
     kind: "impl",
@@ -58,6 +68,12 @@ export const ROLES: readonly Role[] = [
     tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
   },
   {
+    id: "e2e-verify",
+    label: "E2E 動作検証・ブラウザ/GUI 操作",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
     id: "independent-review",
     label: "設計書・実装計画書の独立レビュー",
     kind: "readonly",
@@ -74,6 +90,18 @@ export const ROLES: readonly Role[] = [
     label: "コードレビュー",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "final-review",
+    label: "重要な実装の最終レビュー",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "gate-review",
+    label: "設計書の最終ゲートレビュー",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "advisor",
