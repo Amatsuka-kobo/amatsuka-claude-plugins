@@ -9,6 +9,7 @@ export type ModelId =
   | "gpt-sol"
   | "gpt-terra"
   | "gpt-luna"
+  | "gpt-astra"
   | "grok"
 
 // ja / en は同梱断片を持つ。それ以外は翻訳断片を要する任意のコード。
@@ -41,7 +42,8 @@ export const POLICIES: readonly Policy[] = [
   { id: "custom-policy", label: "カスタム(role-id)", injection: "custom" }
 ]
 
-// color は公式が受け付ける 8 色。ちょうど 8 モデルなので重複させない。
+// color は公式が受け付ける 8 色から選ぶ。モデル数が 8 を超えるため重複を許す。
+// setup-agents が生成時に使う色は ModelSpec.color ではなく VENDOR_COLORS である。
 export const MODELS: readonly ModelSpec[] = [
   {
     id: "opus",
@@ -100,6 +102,14 @@ export const MODELS: readonly ModelSpec[] = [
     color: "cyan"
   },
   {
+    id: "gpt-astra",
+    vendor: "gpt",
+    label: "GPT Astra",
+    defaultName: "gpt-astra",
+    model: "claude-gpt-6-astra",
+    color: "yellow"
+  },
+  {
     id: "grok",
     vendor: "grok",
     label: "Grok",
@@ -110,7 +120,7 @@ export const MODELS: readonly ModelSpec[] = [
 ]
 
 // claude-model-policy 専用の担当表。フォールバック先と外部モデルの読み替え先を兼ねる。
-// advisor だけが 2 モデルを持つ。担当表が変わったらここも変える。
+// 複数モデルを持つ帯がある。担当表が変わったらここも変える。
 export const ASSIGNMENTS: Record<
   "claude-model-policy",
   Record<RoleId, ModelId[]>
@@ -119,38 +129,52 @@ export const ASSIGNMENTS: Record<
     "complex-impl": ["opus"],
     "normal-impl": ["sonnet"],
     "light-impl": ["haiku"],
+    escalation: ["fable"],
     general: ["sonnet"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
+    "e2e-verify": ["sonnet"],
     "independent-review": ["sonnet"],
     "doc-review": ["haiku"],
     "code-review": ["sonnet"],
+    "final-review": ["fable"],
+    "gate-review": ["fable"],
     advisor: ["fable", "opus"]
   }
 }
 
-// custom プロファイルの推奨。現行 codex-grok-policy の値を継承する。
+// custom プロファイルの推奨。custom-policy の担当表と一致させる。
 export const RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["gpt-sol"],
-  "normal-impl": ["gpt-terra"],
-  "light-impl": ["gpt-luna"],
-  general: ["gpt-terra"],
-  explore: ["grok"],
-  "realtime-research": ["grok"],
-  "independent-review": ["grok"],
+  "complex-impl": ["opus", "gpt-sol"],
+  "normal-impl": ["sonnet", "gpt-luna", "grok"],
+  "light-impl": ["haiku", "gpt-luna", "grok"],
+  escalation: ["fable", "gpt-astra"],
+  general: ["sonnet", "gpt-luna"],
+  explore: ["sonnet", "grok", "gpt-terra"],
+  "realtime-research": ["sonnet", "grok"],
+  "e2e-verify": ["sonnet", "gpt-astra"],
+  "independent-review": ["sonnet", "grok"],
   "doc-review": ["haiku"],
   "code-review": ["sonnet"],
-  advisor: ["fable", "opus"]
+  "final-review": ["fable", "gpt-astra"],
+  "gate-review": ["fable", "gpt-astra"],
+  advisor: ["fable", "gpt-astra"]
 }
 
-// 4 方針スキルの「Haiku には Agent Tool を許可しない」「軽量な実装の帯として
-// 扱うのは GPT Luna と Haiku」に対応する。with-grok-policy が軽量帯の規定を
-// Grok に適用しないことは、grok をここに入れないことで満たす。
-const AGENT_DENIED_MODELS: readonly ModelId[] = ["haiku", "gpt-luna"]
+// モデル ID を明示する推奨定義では、Haiku に Agent Tool を許可しない。
+// GPT Luna は「通常の実装」「その他のタスク」の帯も担うため、モデル側では除外せず帯の規定だけに従わせる。
+const AGENT_DENIED_MODELS: readonly ModelId[] = ["haiku"]
 
 // 単一役割の定義はその帯そのものなので、共通規律の除外がそのまま効く。
 // 複数役割を兼ねる定義は帯そのものではないため効かない（設計 §5.2）。
-const SOLO_DENIED_ROLES: readonly RoleId[] = ["light-impl", "advisor"]
+const SOLO_DENIED_ROLES: readonly RoleId[] = [
+  "light-impl",
+  "advisor",
+  "doc-review",
+  "code-review",
+  "final-review",
+  "gate-review"
+]
 
 export function allowsAgentTool(ids: RoleId[], model?: ModelId): boolean {
   if (model !== undefined && AGENT_DENIED_MODELS.includes(model)) return false

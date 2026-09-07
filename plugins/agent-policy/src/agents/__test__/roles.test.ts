@@ -8,9 +8,59 @@ import {
 } from "../roles"
 
 describe("ROLES", () => {
-  it("役割 ID が 10 件あり、重複しない", () => {
-    expect(ROLES).toHaveLength(10)
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(10)
+  it("役割 ID が 14 件あり、定義順で重複しない", () => {
+    expect(ROLES.map((role) => role.id)).toEqual([
+      "complex-impl",
+      "normal-impl",
+      "light-impl",
+      "escalation",
+      "general",
+      "explore",
+      "realtime-research",
+      "e2e-verify",
+      "independent-review",
+      "doc-review",
+      "code-review",
+      "final-review",
+      "gate-review",
+      "advisor"
+    ])
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(14)
+  })
+
+  it("追加した 4 役割の label・kind・tools が固定値と一致する", () => {
+    expect(
+      ROLES.filter((role) =>
+        ["escalation", "final-review", "e2e-verify", "gate-review"].includes(
+          role.id
+        )
+      )
+    ).toEqual([
+      {
+        id: "escalation",
+        label: "行き詰まり時のエスカレーション",
+        kind: "impl",
+        tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+      },
+      {
+        id: "e2e-verify",
+        label: "E2E 動作検証・ブラウザ/GUI 操作",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob", "Bash"]
+      },
+      {
+        id: "final-review",
+        label: "重要な実装の最終レビュー",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob", "Bash"]
+      },
+      {
+        id: "gate-review",
+        label: "設計書の最終ゲートレビュー",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob"]
+      }
+    ])
   })
 
   it("すべての役割が label と kind と tools を持つ", () => {

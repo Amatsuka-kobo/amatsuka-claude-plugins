@@ -50,10 +50,10 @@ disallowed-tools: Write
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check-fragments --lang <lang> --dir "$PWD"
    ```
 
-3. 推奨モデル ID の全件 `gpt-sol,gpt-terra,gpt-luna,grok,haiku,sonnet,fable,opus` を `--models` へ渡し、既定名・既定役割で保持マージ生成する。照会成功時に実在しない既定エイリアスは CLI が生成対象から除外し、`modelsDropped` で返す。照会失敗時は全件を生成し、`warnings` に実在検証を行わなかった警告が入る。照会成功後、生成対象に含まれる外部既定エイリアスの `vendor` が `unknown` なら、CLI はベンダーを推定できず `ok: false` を返す。非対話モードでは選択できないため、`error` を報告して終了し、対話モードでベンダーを確定するよう案内する。
+3. 推奨モデル ID の全件 `gpt-sol,gpt-terra,gpt-luna,gpt-astra,grok,haiku,sonnet,fable,opus` を `--models` へ渡し、既定名・既定役割で保持マージ生成する。照会成功時に実在しない既定エイリアスは CLI が生成対象から除外し、`modelsDropped` で返す。照会失敗時は全件を生成し、`warnings` に実在検証を行わなかった警告が入る。照会成功後、生成対象に含まれる外部既定エイリアスの `vendor` が `unknown` なら、CLI はベンダーを推定できず `ok: false` を返す。非対話モードでは選択できないため、`error` を報告して終了し、対話モードでベンダーを確定するよう案内する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models gpt-sol,gpt-terra,gpt-luna,grok,haiku,sonnet,fable,opus --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models gpt-sol,gpt-terra,gpt-luna,gpt-astra,grok,haiku,sonnet,fable,opus --dir "$PWD"
    ```
 
 4. [ステップ 7: 報告](#ステップ-7-報告)の形式で `results`、`warnings`、`modelsDropped` を報告する。MCP は明示的な選択なしに付与しない。
@@ -77,7 +77,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --dir "
 応答の `models` は `id`、`vendor`、`recommendedFor` を持つ。`claudeEnums` はプロキシ照会の成否にかかわらず常に返る Claude enum である。以後のために、この応答と `ok` / `reason` を保持する。
 
 - `ok: true` のときは、`models` にある実在エイリアスと `claudeEnums` の両方をモデル候補にする。各実在エイリアスには `vendor` と `recommendedFor` を添え、`recommendedFor` が空でないものには推奨役割を明示する。
-- `ok: false` のときは、`claudeEnums` と、推奨モデル ID の既定エイリアスを候補にする。推奨モデル ID と既定エイリアスは、`gpt-sol` = `claude-gpt-5-6-sol`、`gpt-terra` = `claude-gpt-5-6-terra`、`gpt-luna` = `claude-gpt-5-6-luna`、`grok` = `claude-grok-4-6`、`haiku` = `haiku`、`sonnet` = `sonnet`、`fable` = `fable`、`opus` = `opus` である。「プロキシ未検出または照会失敗(`<reason>`)のため実在の確認ができない。定義は作れるが実在は保証されない」と明示して続行する。
+- `ok: false` のときは、`claudeEnums` と、推奨モデル ID の既定エイリアスを候補にする。推奨モデル ID と既定エイリアスは、`gpt-sol` = `claude-gpt-5-6-sol`、`gpt-terra` = `claude-gpt-5-6-terra`、`gpt-luna` = `claude-gpt-5-6-luna`、`gpt-astra` = `claude-gpt-6-astra`、`grok` = `claude-grok-4-6`、`haiku` = `haiku`、`sonnet` = `sonnet`、`fable` = `fable`、`opus` = `opus` である。「プロキシ未検出または照会失敗(`<reason>`)のため実在の確認ができない。定義は作れるが実在は保証されない」と明示して続行する。
 
 ### ステップ 1b: 既存定義の被覆確認
 
@@ -136,7 +136,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 ステップ 1 で保持した候補から、作る定義の `model` 値を複数選択で選ばせる。候補数の共通規則に従い、5 件以上なら配列順で 4 件ずつに分割する。`ok: true` のときは実在エイリアスを先に、`claudeEnums` を後に並べる。
 
-照会成功時は、`recommendedFor` を持つ実在エイリアスで構成できる推奨構成を数え、「推奨構成をそのまま作る」を第一候補に出す。推奨の既定エイリアスが live models に無いモデルは、推奨構成から除外したことと、そのモデル ID を明示する。この選択では、実在する推奨エイリアスに対応する推奨モデル ID を `--models` で一括生成する。`--models` は実在エイリアスそのものではなく、`gpt-sol`、`gpt-terra`、`gpt-luna`、`grok`、`haiku`、`sonnet`、`fable`、`opus` の推奨モデル ID を受け取る。
+照会成功時は、`recommendedFor` を持つ実在エイリアスで構成できる推奨構成を数え、「推奨構成をそのまま作る」を第一候補に出す。推奨の既定エイリアスが live models に無いモデルは、推奨構成から除外したことと、そのモデル ID を明示する。この選択では、実在する推奨エイリアスに対応する推奨モデル ID を `--models` で一括生成する。`--models` は実在エイリアスそのものではなく、`gpt-sol`、`gpt-terra`、`gpt-luna`、`gpt-astra`、`grok`、`haiku`、`sonnet`、`fable`、`opus` の推奨モデル ID を受け取る。
 
 推奨構成以外の実在エイリアスまたは Claude enum を選んだときは、選んだ `model` 値ごとに、CLI の `--model-id` に渡す 1 つの推奨モデル ID も決める。`--model-id` は既定名、Agent tool の付与判定、推奨外役割の警告に使われる。`--model` の値と役割は担当表で拘束されない。実在エイリアスが既定エイリアスと一致する場合は対応する ID を既定にし、それ以外は利用者に選ばせる。
 
@@ -233,7 +233,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 1. ステップ 5 の `mcpCurrent` を、既存定義から読み戻した既定値として提示する。既存定義がなければ空である。
 2. `usable: true` のサーバーだけを名前と status とともに提示する。プラグイン側の既定は「付けない」だが、`mcpCurrent` があればそれを既定にする。サーバーの選択には候補数の共通規則を適用し、「どのサーバーも使わない」を先頭の選択肢に置く。それが選ばれたら、以降の MCP の質問をすべて省いてステップ 6 へ進む。
-3. 既定の配分を計算する。MCP の付与単位は役割ではなく定義である。`complex-impl` / `normal-impl` / `light-impl` / `general` のいずれかを持つ定義には、選んだ全サーバーを付ける。読み取り役割だけの定義には付けない。
+3. 既定の配分を計算する。MCP の付与単位は役割ではなく定義である。`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` のいずれかを持つ定義には、選んだ全サーバーを付ける。読み取り役割だけの定義には付けない。
 
    実装役割と読み取り役割を同じモデルの定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できない。
 

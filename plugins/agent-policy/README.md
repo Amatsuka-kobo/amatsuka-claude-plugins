@@ -100,26 +100,44 @@ Marketplace から `agent-policy` をインストールします。
 
 MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
 
-MCP の付与単位は役割ではなく定義です。既定では実装役割(`complex-impl` / `normal-impl` / `light-impl` / `general`)を持つ定義にだけ付き、読み取り役割だけの定義には付きません。定義ごとの調整を選ぶと、この既定を定義単位で上書きできます。実装役割と読み取り役割を同じ定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できません。
+MCP の付与単位は役割ではなく定義です。既定では実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general`)を持つ定義にだけ付き、読み取り役割だけの定義には付きません。定義ごとの調整を選ぶと、この既定を定義単位で上書きできます。実装役割と読み取り役割を同じ定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できません。
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
 `--yes` を渡す非対話モードでは、推奨構成を一括で保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に成功した場合は実在しない推奨モデルを生成対象から外し、照会に失敗した場合は実在確認を行わなかった警告とともに生成します。
 
-組み込みの役割 ID は次の 10 種です。
+組み込みの役割 ID は次の 14 種です。
 
 | 役割 ID | 内容 |
 | --- | --- |
 | `complex-impl` | 複雑または重要な実装 |
 | `normal-impl` | 通常の実装 |
 | `light-impl` | 軽量な実装 |
+| `escalation` | 行き詰まり時のエスカレーション |
 | `general` | その他のタスク |
 | `explore` | コードベース探索実働 |
 | `realtime-research` | リアルタイム情報調査 |
+| `e2e-verify` | E2E 動作検証・ブラウザ/GUI 操作 |
 | `independent-review` | 設計書・実装計画書の独立レビュー |
 | `doc-review` | 設計書・実装計画書のレビュー |
 | `code-review` | コードレビュー |
+| `final-review` | 重要な実装の最終レビュー |
+| `gate-review` | 設計書の最終ゲートレビュー |
 | `advisor` | 設計・計画・実装のアドバイザー |
+
+setup-agents が扱う推奨モデル ID は次の 9 種です。
+
+| モデル ID | 表示名 | 既定の `model` 値 |
+| --- | --- | --- |
+| `opus` | Opus | `opus` |
+| `sonnet` | Sonnet | `sonnet` |
+| `haiku` | Haiku | `haiku` |
+| `fable` | Fable | `fable` |
+| `gpt-sol` | GPT Sol | `claude-gpt-5-6-sol` |
+| `gpt-terra` | GPT Terra | `claude-gpt-5-6-terra` |
+| `gpt-luna` | GPT Luna | `claude-gpt-5-6-luna` |
+| `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
+| `grok` | Grok | `claude-grok-4-6` |
 
 生成した定義の frontmatter には、選んだ役割を記録する `agent-policy-role` マーカーが入ります。
 

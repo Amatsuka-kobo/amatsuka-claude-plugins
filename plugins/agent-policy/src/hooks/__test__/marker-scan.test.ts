@@ -300,6 +300,10 @@ describe("projectAgentsDir", () => {
 describe("roleLabel", () => {
   it("既知の ROLES の label を返す", () => {
     expect(roleLabel({}, "complex-impl")).toBe("複雑または重要な実装")
+    expect(roleLabel({}, "escalation")).toBe("行き詰まり時のエスカレーション")
+    expect(roleLabel({}, "e2e-verify")).toBe("E2E 動作検証・ブラウザ/GUI 操作")
+    expect(roleLabel({}, "final-review")).toBe("重要な実装の最終レビュー")
+    expect(roleLabel({}, "gate-review")).toBe("設計書の最終ゲートレビュー")
   })
 
   it("プロジェクト直下と言語別の役割断片から label を解決する", () => {
