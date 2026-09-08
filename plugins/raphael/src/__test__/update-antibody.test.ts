@@ -726,3 +726,324 @@ test("config の breadth_max_ratio で拒否閾値を変更できる", async () 
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test("audit は対象 status を棚卸しし recommendation・summary・並び順を返す", async () => {
+  const dir = project()
+  try {
+    const commands = [
+      ...Array.from({ length: 30 }, (_, index) => `broad-${index}`),
+      ...Array.from({ length: 5 }, (_, index) => `narrow-${index}`),
+      ...Array.from({ length: 65 }, (_, index) => `other-${index}`)
+    ]
+    seedCommands(dir, commands)
+    const definitions = [
+      {
+        id: "ab-2026-0908-001",
+        status: "active" as const,
+        tool: "Bash" as const,
+        pattern: "^broad-",
+        fired: 10,
+        misses: 5
+      },
+      {
+        id: "ab-2026-0908-002",
+        status: "active" as const,
+        tool: "Bash" as const,
+        pattern: "^narrow-",
+        fired: 10,
+        misses: 5
+      },
+      {
+        id: "ab-2026-0908-003",
+        status: "active" as const,
+        tool: "Bash" as const,
+        pattern: "^broad-",
+        fired: 10,
+        misses: 4
+      },
+      {
+        id: "ab-2026-0908-004",
+        status: "confirmed" as const,
+        tool: "Bash" as const,
+        pattern: "^broad-",
+        fired: 0,
+        misses: 0
+      },
+      {
+        id: "ab-2026-0908-005",
+        status: "active" as const,
+        tool: "Bash" as const,
+        pattern: "^narrow-",
+        fired: 10,
+        misses: 4
+      },
+      {
+        id: "ab-2026-0908-006",
+        status: "active" as const,
+        tool: "Edit" as const,
+        pattern: ".*",
+        fired: 10,
+        misses: 5
+      },
+      {
+        id: "ab-2026-0908-999",
+        status: "expired" as const,
+        tool: "Bash" as const,
+        pattern: ".*",
+        fired: 10,
+        misses: 10
+      }
+    ]
+    const stats = {
+      schema_version: 1 as const,
+      antibodies: Object.fromEntries(
+        definitions.map((definition) => [
+          definition.id,
+          {
+            fired: definition.fired,
+            last_fired: null,
+            misses: definition.misses,
+            last_miss: null
+          }
+        ])
+      ),
+      distill: { last_nag_digest: null }
+    }
+    for (const definition of definitions) {
+      writeAntibodyCreate(
+        dir,
+        antibody({
+          id: definition.id,
+          status: definition.status,
+          trigger: {
+            event: "PreToolUse",
+            tool: definition.tool,
+            pattern: definition.pattern
+          }
+        })
+      )
+    }
+    saveStats(dir, stats)
+
+    const antibodyFiles = definitions.map((definition) => {
+      const file = path.join(
+        dir,
+        ".raphael",
+        "antibodies",
+        `${definition.id}.md`
+      )
+      return [file, fs.readFileSync(file, "utf8")] as const
+    })
+    const statsBefore = fs.readFileSync(statsFilePath(dir), "utf8")
+    const commandsBefore = fs.readFileSync(commandLogPath(dir), "utf8")
+
+    const result = await invoke(dir, ["audit"])
+    expect(result).toMatchObject({ code: 0, stderr: "" })
+    const audit = json(result) as {
+      corpus_size: number
+      thresholds: {
+        breadth_max_ratio: number
+        ineffective_min_fired: number
+        ineffective_miss_ratio: number
+      }
+      results: Array<{
+        id: string
+        breadth: { checked: boolean; ratio?: number; reason?: string }
+        noisy: boolean
+        ineffective: boolean
+        recommendation: string
+      }>
+      summary: { keep: number; narrow: number; expire: number }
+      errors: unknown[]
+    }
+    expect(audit.corpus_size).toBe(100)
+    expect(audit.thresholds).toEqual({
+      breadth_max_ratio: 10,
+      ineffective_min_fired: 10,
+      ineffective_miss_ratio: 50
+    })
+    expect(audit.results.map((entry) => entry.id)).toEqual([
+      "ab-2026-0908-001",
+      "ab-2026-0908-002",
+      "ab-2026-0908-006",
+      "ab-2026-0908-003",
+      "ab-2026-0908-004",
+      "ab-2026-0908-005"
+    ])
+    expect(audit.results.map((entry) => entry.recommendation)).toEqual([
+      "expire",
+      "expire",
+      "expire",
+      "narrow",
+      "narrow",
+      "keep"
+    ])
+    expect(audit.results[0]).toMatchObject({
+      noisy: true,
+      ineffective: true,
+      recommendation: "expire",
+      breadth: { checked: true, matched: 30, ratio: 0.3 }
+    })
+    expect(audit.results[1]).toMatchObject({
+      noisy: false,
+      ineffective: true,
+      recommendation: "expire",
+      breadth: { checked: true, matched: 5, ratio: 0.05 }
+    })
+    expect(audit.results[2]).toMatchObject({
+      noisy: false,
+      ineffective: true,
+      recommendation: "expire",
+      breadth: { checked: false, reason: "tool_not_applicable" }
+    })
+    expect(audit.results[3]).toMatchObject({
+      noisy: true,
+      ineffective: false,
+      recommendation: "narrow",
+      breadth: { checked: true, matched: 30, ratio: 0.3 }
+    })
+    expect(audit.results[4]).toMatchObject({
+      noisy: true,
+      ineffective: false,
+      recommendation: "narrow",
+      breadth: { checked: true, matched: 30, ratio: 0.3 }
+    })
+    expect(audit.results[5]).toMatchObject({
+      noisy: false,
+      ineffective: false,
+      recommendation: "keep",
+      breadth: { checked: true, matched: 5, ratio: 0.05 }
+    })
+    expect(audit.summary).toEqual({ keep: 1, narrow: 2, expire: 3 })
+    expect(audit.errors).toEqual([])
+    expect(fs.readFileSync(statsFilePath(dir), "utf8")).toBe(statsBefore)
+    expect(fs.readFileSync(commandLogPath(dir), "utf8")).toBe(commandsBefore)
+    for (const [file, before] of antibodyFiles) {
+      expect(fs.readFileSync(file, "utf8")).toBe(before)
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("audit は抗体 0 件で空結果を返し dry-run も許可する", async () => {
+  const dir = project()
+  try {
+    const result = await invoke(dir, ["--dry-run", "audit"])
+    expect(result).toMatchObject({ code: 0, stderr: "" })
+    expect(json(result)).toEqual({
+      ok: true,
+      corpus_size: 0,
+      thresholds: {
+        breadth_max_ratio: 10,
+        ineffective_min_fired: 10,
+        ineffective_miss_ratio: 50
+      },
+      results: [],
+      summary: { keep: 0, narrow: 0, expire: 0 },
+      errors: []
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("audit は母集団不足で noisy を付けず全件 corpus_too_small にする", async () => {
+  const dir = project()
+  try {
+    seedCommands(dir, ["broad-1", "other-1"])
+    const first = antibody({
+      id: "ab-2026-0908-010",
+      trigger: { event: "PreToolUse", tool: "Bash", pattern: ".*" }
+    })
+    const second = antibody({
+      id: "ab-2026-0908-011",
+      trigger: { event: "PreToolUse", tool: "*", pattern: "^broad-" }
+    })
+    writeAntibodyCreate(dir, first)
+    writeAntibodyCreate(dir, second)
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        [first.id]: { fired: 0, last_fired: null, misses: 0, last_miss: null },
+        [second.id]: { fired: 10, last_fired: null, misses: 5, last_miss: null }
+      },
+      distill: { last_nag_digest: null }
+    })
+
+    const audit = json(await invoke(dir, ["audit"])) as {
+      results: Array<{
+        breadth: { checked: boolean; reason?: string }
+        noisy: boolean
+      }>
+    }
+    expect(audit.results).toHaveLength(2)
+    for (const entry of audit.results) {
+      expect(entry.breadth).toMatchObject({
+        checked: false,
+        reason: "corpus_too_small"
+      })
+      expect(entry.noisy).toBe(false)
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("audit は ratio が既定 10% ちょうどなら noisy にせず超過なら付ける", async () => {
+  const dir = project()
+  try {
+    seedCommands(dir, [
+      ...Array.from({ length: 10 }, (_, index) => `edge-${index}`),
+      ...Array.from({ length: 11 }, (_, index) => `over-${index}`),
+      ...Array.from({ length: 79 }, (_, index) => `other-${index}`)
+    ])
+    const exact = antibody({
+      id: "ab-2026-0908-020",
+      trigger: { event: "PreToolUse", tool: "Bash", pattern: "^edge-" }
+    })
+    const over = antibody({
+      id: "ab-2026-0908-021",
+      trigger: { event: "PreToolUse", tool: "Bash", pattern: "^over-" }
+    })
+    writeAntibodyCreate(dir, exact)
+    writeAntibodyCreate(dir, over)
+
+    const audit = json(await invoke(dir, ["audit"])) as {
+      results: Array<{
+        id: string
+        breadth: { ratio?: number }
+        noisy: boolean
+      }>
+    }
+    const byId = new Map(audit.results.map((entry) => [entry.id, entry]))
+    expect(byId.get(exact.id)).toMatchObject({
+      breadth: { ratio: 0.1 },
+      noisy: false
+    })
+    expect(byId.get(over.id)).toMatchObject({
+      breadth: { ratio: 0.11 },
+      noisy: true
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("audit は読み取れない抗体ファイルを errors に載せる", async () => {
+  const dir = project()
+  try {
+    const directory = antibodiesDirectory(dir)
+    fs.mkdirSync(directory, { recursive: true })
+    fs.writeFileSync(path.join(directory, "broken.md"), "not antibody")
+    const audit = json(await invoke(dir, ["audit"])) as {
+      results: unknown[]
+      errors: Array<{ file: string; message: string }>
+    }
+    expect(audit.results).toEqual([])
+    expect(audit.errors).toHaveLength(1)
+    expect(audit.errors[0]?.file).toBe("broken.md")
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

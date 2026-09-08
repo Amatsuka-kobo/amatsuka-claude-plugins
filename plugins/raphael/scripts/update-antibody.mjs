@@ -582,7 +582,7 @@ function buildBreadthCorpus(projectDir) {
     )
   ].sort(compareCodePoints).slice(0, MAX_CORPUS_SIZE);
 }
-function evaluateBreadth(projectDir, trigger, maxRatio = DEFAULT_MAX_RATIO, minCorpus = DEFAULT_MIN_CORPUS) {
+function evaluateBreadthCorpus(corpus, trigger, maxRatio = DEFAULT_MAX_RATIO, minCorpus = DEFAULT_MIN_CORPUS) {
   if (trigger.tool !== "Bash" && trigger.tool !== "*") {
     return {
       tooBroad: false,
@@ -590,7 +590,6 @@ function evaluateBreadth(projectDir, trigger, maxRatio = DEFAULT_MAX_RATIO, minC
       samples: []
     };
   }
-  const corpus = buildBreadthCorpus(projectDir);
   if (corpus.length < minCorpus) {
     return {
       tooBroad: false,
@@ -615,6 +614,14 @@ function evaluateBreadth(projectDir, trigger, maxRatio = DEFAULT_MAX_RATIO, minC
     },
     samples: matches.slice(0, 5)
   };
+}
+function evaluateBreadth(projectDir, trigger, maxRatio = DEFAULT_MAX_RATIO, minCorpus = DEFAULT_MIN_CORPUS, suppliedCorpus) {
+  return evaluateBreadthCorpus(
+    suppliedCorpus ?? buildBreadthCorpus(projectDir),
+    trigger,
+    maxRatio,
+    minCorpus
+  );
 }
 function compareCodePoints(left, right) {
   const leftPoints = [...left];
@@ -966,6 +973,9 @@ function statsFor(stats, id) {
   const value = stats.antibodies[id];
   return value === void 0 ? initialAntibodyStats() : { ...value };
 }
+function isIneffective(stats, config) {
+  return stats.fired >= config.ineffectiveMinFired && stats.misses * 100 >= stats.fired * config.ineffectiveMissRatio;
+}
 function recordFire(projectDir, id, now = /* @__PURE__ */ new Date()) {
   const stats = loadStats(projectDir);
   const updated = incrementFire(statsFor(stats, id), localDate2(now));
@@ -1061,6 +1071,10 @@ function main() {
       assertOperandCount(options, 0);
       result = migrateStats(options);
       break;
+    case "audit":
+      assertOperandCount(options, 0);
+      result = audit(options.dir);
+      break;
     case "mark-distilled":
       assertOperandCount(options, 0);
       result = markDistilled(options.dir, body);
@@ -1100,9 +1114,9 @@ function parseArgs(args) {
   if (operation === void 0) {
     throw new AntibodyValidationError("operation: is required", "operation");
   }
-  if (dryRun && operation !== "patch" && operation !== "migrate-stats") {
+  if (dryRun && operation !== "patch" && operation !== "migrate-stats" && operation !== "audit") {
     throw new AntibodyValidationError(
-      "dry-run: is supported only by patch and migrate-stats",
+      "dry-run: is supported only by patch, migrate-stats, and audit",
       "dry-run"
     );
   }
@@ -1292,6 +1306,66 @@ function migrateStats(options) {
     skipped,
     ids: migrations.map(({ antibody }) => antibody.id),
     errors
+  };
+}
+function audit(projectDir) {
+  const config = loadConfig(projectDir);
+  const listed = listAntibodies(projectDir);
+  const corpus = buildBreadthCorpus(projectDir);
+  const stats = loadStats(projectDir);
+  const results = [];
+  for (const antibody of listed.antibodies) {
+    if (antibody.status === "expired") continue;
+    const evaluation = evaluateBreadth(
+      projectDir,
+      antibody.trigger,
+      config.breadthMaxRatio,
+      config.breadthMinCorpus,
+      corpus
+    );
+    const breadth = evaluation.breadth.checked ? { ...evaluation.breadth, samples: evaluation.samples } : evaluation.breadth;
+    const antibodyStats = statsFor(stats, antibody.id);
+    const noisy = breadth.checked && breadth.ratio > config.breadthMaxRatio / 100;
+    const ineffective = isIneffective(antibodyStats, config);
+    const recommendation = noisy ? ineffective ? "expire" : "narrow" : ineffective ? "expire" : "keep";
+    results.push({
+      id: antibody.id,
+      status: antibody.status,
+      trigger: antibody.trigger,
+      fired: antibodyStats.fired,
+      misses: antibodyStats.misses,
+      breadth,
+      noisy,
+      ineffective,
+      recommendation
+    });
+  }
+  const recommendationOrder = {
+    expire: 0,
+    narrow: 1,
+    keep: 2
+  };
+  const ratioOf = (entry) => entry.breadth.checked ? entry.breadth.ratio : -1;
+  results.sort((left, right) => {
+    const recommendationDifference = recommendationOrder[left.recommendation] - recommendationOrder[right.recommendation];
+    if (recommendationDifference !== 0) return recommendationDifference;
+    const ratioDifference = ratioOf(right) - ratioOf(left);
+    if (ratioDifference !== 0) return ratioDifference;
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+  });
+  const summary = { keep: 0, narrow: 0, expire: 0 };
+  for (const result of results) summary[result.recommendation] += 1;
+  return {
+    ok: true,
+    corpus_size: corpus.length,
+    thresholds: {
+      breadth_max_ratio: config.breadthMaxRatio,
+      ineffective_min_fired: config.ineffectiveMinFired,
+      ineffective_miss_ratio: config.ineffectiveMissRatio
+    },
+    results,
+    summary,
+    errors: listed.errors
   };
 }
 function maxDate2(left, right) {

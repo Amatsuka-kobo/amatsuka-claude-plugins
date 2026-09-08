@@ -38,8 +38,8 @@ export function buildBreadthCorpus(projectDir: string): string[] {
     .slice(0, MAX_CORPUS_SIZE)
 }
 
-export function evaluateBreadth(
-  projectDir: string,
+export function evaluateBreadthCorpus(
+  corpus: readonly string[],
   trigger: AntibodyTrigger,
   maxRatio = DEFAULT_MAX_RATIO,
   minCorpus = DEFAULT_MIN_CORPUS
@@ -52,7 +52,6 @@ export function evaluateBreadth(
     }
   }
 
-  const corpus = buildBreadthCorpus(projectDir)
   if (corpus.length < minCorpus) {
     return {
       tooBroad: false,
@@ -78,6 +77,21 @@ export function evaluateBreadth(
     },
     samples: matches.slice(0, 5)
   }
+}
+
+export function evaluateBreadth(
+  projectDir: string,
+  trigger: AntibodyTrigger,
+  maxRatio = DEFAULT_MAX_RATIO,
+  minCorpus = DEFAULT_MIN_CORPUS,
+  suppliedCorpus?: readonly string[]
+): BreadthEvaluation {
+  return evaluateBreadthCorpus(
+    suppliedCorpus ?? buildBreadthCorpus(projectDir),
+    trigger,
+    maxRatio,
+    minCorpus
+  )
 }
 
 function compareCodePoints(left: string, right: string): number {

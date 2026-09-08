@@ -2,7 +2,11 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { expect, test } from "vitest"
-import { buildBreadthCorpus, evaluateBreadth } from "../breadth.js"
+import {
+  buildBreadthCorpus,
+  evaluateBreadth,
+  evaluateBreadthCorpus
+} from "../breadth.js"
 import { commandLogPath } from "../command-log.js"
 import { DEFAULT_CONFIG } from "../config.js"
 import type { AntibodyTrigger } from "../types.js"
@@ -147,4 +151,30 @@ test("一致率を計算し samples は一致集合のコードポイント昇�
       "match-"
     ])
   })
+})
+
+test("指定した母集団で evaluateBreadth は I-O せず同じ判定を返す", () => {
+  const corpus = ["match-a", "other-a", "match-b"]
+  expect(
+    evaluateBreadth(
+      path.join(os.tmpdir(), "raphael-breadth-missing-project"),
+      bashTrigger("^match-"),
+      50,
+      1,
+      corpus
+    )
+  ).toEqual({
+    tooBroad: true,
+    breadth: { checked: true, corpus_size: 3, matched: 2, ratio: 2 / 3 },
+    samples: ["match-a", "match-b"]
+  })
+  expect(evaluateBreadthCorpus(corpus, bashTrigger("^match-"), 50, 1)).toEqual(
+    evaluateBreadth(
+      path.join(os.tmpdir(), "raphael-breadth-missing-project"),
+      bashTrigger("^match-"),
+      50,
+      1,
+      corpus
+    )
+  )
 })
