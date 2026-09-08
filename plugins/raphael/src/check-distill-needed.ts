@@ -4,6 +4,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { listAntibodies, setAntibodyStatus } from "./lib/antibody-store.js"
 import { writeFileAtomic } from "./lib/atomic.js"
+import { truncateCommandLog } from "./lib/command-log.js"
 import { loadConfig } from "./lib/config.js"
 import { logError, readStdinSync, resolveProjectDir } from "./lib/hook-io.js"
 import {
@@ -30,6 +31,11 @@ export function cleanupProject(
     pruneOrphanStats(projectDir, knownIds)
   } catch {
     // Stats cleanup is best-effort and must not stop other cleanup work.
+  }
+  try {
+    truncateCommandLog(projectDir, 2_000)
+  } catch (error) {
+    logError(projectDir, "check-distill-needed", error)
   }
   return { undistilledIds }
 }

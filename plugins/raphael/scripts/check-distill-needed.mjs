@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // src/check-distill-needed.ts
-import fs7 from "node:fs";
-import path7 from "node:path";
+import fs8 from "node:fs";
+import path8 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/lib/antibody-store.ts
@@ -431,9 +431,67 @@ function codePointCompare(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 
-// src/lib/config.ts
+// src/lib/command-log.ts
+import fs4 from "node:fs";
+import path4 from "node:path";
+
+// src/lib/hook-io.ts
 import fs3 from "node:fs";
 import path3 from "node:path";
+function readStdinSync() {
+  try {
+    const value = JSON.parse(fs3.readFileSync(0, "utf8"));
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function resolveProjectDir(input) {
+  return process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+}
+function logError(projectDir, context, error) {
+  try {
+    const logDir = path3.join(projectDir, ".raphael", "log");
+    fs3.mkdirSync(logDir, { recursive: true });
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    fs3.appendFileSync(
+      path3.join(logDir, "errors.log"),
+      `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
+`
+    );
+  } catch {
+  }
+}
+
+// src/lib/command-log.ts
+function commandLogPath(projectDir) {
+  return path4.join(projectDir, ".raphael", "commands.jsonl");
+}
+function truncateCommandLog(projectDir, maxLines) {
+  try {
+    const filePath = commandLogPath(projectDir);
+    const raw = fs4.readFileSync(filePath, "utf8");
+    const lines = raw.split(/\r?\n/);
+    if (lines.at(-1) === "") lines.pop();
+    const limit = Number.isFinite(maxLines) ? Math.max(0, Math.floor(maxLines)) : 0;
+    if (lines.length <= limit) return 0;
+    const removed = lines.length - limit;
+    const retained = lines.slice(removed);
+    fs4.writeFileSync(
+      filePath,
+      retained.length === 0 ? "" : `${retained.join("\n")}
+`
+    );
+    return removed;
+  } catch (error) {
+    logError(projectDir, "command-log", error);
+    return 0;
+  }
+}
+
+// src/lib/config.ts
+import fs5 from "node:fs";
+import path5 from "node:path";
 var DEFAULT_CONFIG = {
   detectCommandFailure: true,
   detectRetryLoop: true,
@@ -449,7 +507,7 @@ var DEFAULT_CONFIG = {
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
-  return path3.join(projectDir, ".claude", "raphael.local.md");
+  return path5.join(projectDir, ".claude", "raphael.local.md");
 }
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
@@ -493,7 +551,7 @@ function loadConfig(projectDir) {
   };
   let raw;
   try {
-    raw = fs3.readFileSync(configPath(projectDir), "utf8");
+    raw = fs5.readFileSync(configPath(projectDir), "utf8");
   } catch {
     return config;
   }
@@ -543,34 +601,6 @@ function loadConfig(projectDir) {
   if (antibodiesGitPolicy !== null)
     config.antibodiesGitPolicy = antibodiesGitPolicy;
   return config;
-}
-
-// src/lib/hook-io.ts
-import fs4 from "node:fs";
-import path4 from "node:path";
-function readStdinSync() {
-  try {
-    const value = JSON.parse(fs4.readFileSync(0, "utf8"));
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-function resolveProjectDir(input) {
-  return process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
-}
-function logError(projectDir, context, error) {
-  try {
-    const logDir = path4.join(projectDir, ".raphael", "log");
-    fs4.mkdirSync(logDir, { recursive: true });
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    fs4.appendFileSync(
-      path4.join(logDir, "errors.log"),
-      `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
-`
-    );
-  } catch {
-  }
 }
 
 // src/lib/infection-store.ts
@@ -695,11 +725,11 @@ function codePointCompare2(left, right) {
 }
 
 // src/lib/state-store.ts
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 var TOOLS3 = ["Bash", "Edit", "Write"];
 function stateFilePath(projectDir) {
-  return path5.join(projectDir, ".raphael", "state.json");
+  return path6.join(projectDir, ".raphael", "state.json");
 }
 function createInitialState(session) {
   return {
@@ -716,7 +746,7 @@ function createInitialState(session) {
 function loadState(projectDir, currentSession) {
   try {
     const parsed = JSON.parse(
-      fs5.readFileSync(stateFilePath(projectDir), "utf8")
+      fs6.readFileSync(stateFilePath(projectDir), "utf8")
     );
     const state = validateState(parsed);
     if (!state || state.session !== currentSession)
@@ -803,18 +833,18 @@ function truncate(value, maximum) {
 }
 
 // src/lib/stats-store.ts
-import fs6 from "node:fs";
-import path6 from "node:path";
+import fs7 from "node:fs";
+import path7 from "node:path";
 var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
 var DATE_PATTERN2 = /^\d{4}-\d{2}-\d{2}$/;
 var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 function statsFilePath(projectDir) {
-  return path6.join(projectDir, ".raphael", "stats.json");
+  return path7.join(projectDir, ".raphael", "stats.json");
 }
 function loadStats(projectDir) {
   try {
     const parsed = JSON.parse(
-      fs6.readFileSync(statsFilePath(projectDir), "utf8")
+      fs7.readFileSync(statsFilePath(projectDir), "utf8")
     );
     if (!isRecord2(parsed) || !isRecord2(parsed.antibodies)) {
       return initialStats();
@@ -891,6 +921,11 @@ function cleanupProject(projectDir, now = /* @__PURE__ */ new Date()) {
     pruneOrphanStats(projectDir, knownIds);
   } catch {
   }
+  try {
+    truncateCommandLog(projectDir, 2e3);
+  } catch (error) {
+    logError(projectDir, "check-distill-needed", error);
+  }
   return { undistilledIds };
 }
 function localDateString(value) {
@@ -900,10 +935,10 @@ function localDateString(value) {
   return `${year}-${month}-${day}`;
 }
 function cleanupInfections(projectDir, now) {
-  const directory = path7.join(projectDir, ".raphael", "infections");
+  const directory = path8.join(projectDir, ".raphael", "infections");
   let entries;
   try {
-    entries = fs7.readdirSync(directory, { withFileTypes: true });
+    entries = fs8.readdirSync(directory, { withFileTypes: true });
   } catch (error) {
     if (isErrorCode2(error, "ENOENT")) return [];
     throw error;
@@ -912,8 +947,8 @@ function cleanupInfections(projectDir, now) {
   const undistilledIds = [];
   const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl")).map((entry) => entry.name).sort(codePointCompare3);
   for (const file of files) {
-    const filePath = path7.join(directory, file);
-    const raw = fs7.readFileSync(filePath, "utf8");
+    const filePath = path8.join(directory, file);
+    const raw = fs8.readFileSync(filePath, "utf8");
     const lines = raw.split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
     const retained = [];
@@ -935,7 +970,7 @@ function cleanupInfections(projectDir, now) {
       }
     }
     if (retained.length === 0) {
-      fs7.rmSync(filePath);
+      fs8.rmSync(filePath);
     } else if (retained.length !== lines.length || retained.some((line, index) => line !== lines[index])) {
       writeFileAtomic(filePath, `${retained.join("\n")}
 `);
@@ -954,8 +989,8 @@ function expireAntibodies(projectDir, now) {
   return antibodies.map(({ id }) => id);
 }
 function buildReason(projectDir, pluginRoot, undistilledCount) {
-  const listScript = path7.join(pluginRoot, "scripts", "list-antibodies.mjs");
-  const updateScript = path7.join(pluginRoot, "scripts", "update-antibody.mjs");
+  const listScript = path8.join(pluginRoot, "scripts", "list-antibodies.mjs");
+  const updateScript = path8.join(pluginRoot, "scripts", "update-antibody.mjs");
   return [
     "Raphael \u306B\u672A\u84B8\u7559\u306E infection record \u304C\u84C4\u7A4D\u3057\u3066\u3044\u307E\u3059\u3002\u611F\u67D3\u5185\u5BB9\u3084 secret \u3092\u3053\u306E\u30E1\u30C3\u30BB\u30FC\u30B8\u3078\u5C55\u958B\u305B\u305A\u3001\u84B8\u7559\u3092\u5C02\u7528\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u3078\u59D4\u8B72\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     'Agent \u30C4\u30FC\u30EB\u3067 subagent_type "raphael:antibody-synthesizer" \u3092\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002',
@@ -972,7 +1007,7 @@ function run() {
   if (!input || input.stop_hook_active) return;
   const session = validSession(input);
   if (session === null) return;
-  const projectDir = path7.resolve(resolveProjectDir(input));
+  const projectDir = path8.resolve(resolveProjectDir(input));
   try {
     const config = loadConfig(projectDir);
     const { undistilledIds } = cleanupProject(projectDir);
@@ -980,7 +1015,7 @@ function run() {
     const digest = computeDistillNagDigest(undistilledIds);
     const state = loadState(projectDir, session);
     if (state.last_distill_nag_digest === digest) return;
-    const pluginRoot = path7.resolve(
+    const pluginRoot = path8.resolve(
       process.env.CLAUDE_PLUGIN_ROOT || "<raphael plugin root>"
     );
     const reason = buildReason(projectDir, pluginRoot, undistilledIds.length);
@@ -1007,7 +1042,7 @@ function codePointCompare3(left, right) {
   }
   return leftPoints.length - rightPoints.length;
 }
-if (path7.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url))
+if (path8.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url))
   run();
 export {
   cleanupProject,

@@ -9,6 +9,7 @@ import {
   readAntibody,
   writeAntibodyCreate
 } from "../lib/antibody-store.js"
+import { appendCommandLog, readCommandLog } from "../lib/command-log.js"
 import {
   appendInfection,
   computeDistillNagDigest,
@@ -346,6 +347,39 @@ test("stats pruning の読み書き失敗でも cleanup 全体を止めない", 
     fs.chmodSync(path.join(dir, ".raphael"), 0o555)
 
     expect(() => cleanupProject(dir, new Date(2026, 6, 24, 12))).not.toThrow()
+    expect(readAntibody(dir, "ab-2026-0724-001").status).toBe("expired")
+  })
+})
+
+test("Stop hook はコマンド履歴を 2,000 行へ切り詰める", () => {
+  withProject((dir) => {
+    for (let index = 0; index < 2_005; index += 1) {
+      appendCommandLog(dir, {
+        ts: `2026-09-08T00:00:${String(index % 60).padStart(2, "0")}.000Z`,
+        session: "session-1",
+        normalized_command: `echo ${index}`,
+        exit_code: 0,
+        failed: false
+      })
+    }
+
+    expect(runHook(dir, { session_id: "session-1" })).toBe("")
+    const commands = readCommandLog(dir)
+    expect(commands).toHaveLength(2_000)
+    expect(commands[0]?.normalized_command).toBe("echo 5")
+  })
+})
+
+test("コマンド履歴の切り詰め失敗でも cleanup 全体を止めない", () => {
+  withProject((dir) => {
+    writeAntibodyCreate(
+      dir,
+      antibody({ id: "ab-2026-0724-001", expires: "2026-07-23" })
+    )
+    fs.mkdirSync(path.join(dir, ".raphael"), { recursive: true })
+    fs.mkdirSync(path.join(dir, ".raphael", "commands.jsonl"))
+
+    expect(runHook(dir, { session_id: "session-1" })).toBe("")
     expect(readAntibody(dir, "ab-2026-0724-001").status).toBe("expired")
   })
 })

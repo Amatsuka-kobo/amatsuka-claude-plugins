@@ -1,8 +1,59 @@
 #!/usr/bin/env node
 
-// src/lib/config.ts
+// src/lib/command-log.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+
+// src/lib/hook-io.ts
 import fs from "node:fs";
 import path from "node:path";
+function readStdinSync() {
+  try {
+    const value = JSON.parse(fs.readFileSync(0, "utf8"));
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function resolveProjectDir(input) {
+  return process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+}
+function logError(projectDir, context, error) {
+  try {
+    const logDir = path.join(projectDir, ".raphael", "log");
+    fs.mkdirSync(logDir, { recursive: true });
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    fs.appendFileSync(
+      path.join(logDir, "errors.log"),
+      `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
+`
+    );
+  } catch {
+  }
+}
+
+// src/lib/command-log.ts
+function commandLogPath(projectDir) {
+  return path2.join(projectDir, ".raphael", "commands.jsonl");
+}
+function appendCommandLog(projectDir, entry) {
+  try {
+    if (!isCommandLogEntry(entry)) return;
+    const filePath = commandLogPath(projectDir);
+    fs2.mkdirSync(path2.dirname(filePath), { recursive: true });
+    fs2.appendFileSync(filePath, `${JSON.stringify(entry)}
+`, "utf8");
+  } catch (error) {
+    logError(projectDir, "command-log", error);
+  }
+}
+function isCommandLogEntry(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && typeof value.ts === "string" && typeof value.session === "string" && typeof value.normalized_command === "string" && (value.exit_code === null || typeof value.exit_code === "number" && Number.isInteger(value.exit_code)) && typeof value.failed === "boolean";
+}
+
+// src/lib/config.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
 var DEFAULT_CONFIG = {
   detectCommandFailure: true,
   detectRetryLoop: true,
@@ -18,7 +69,7 @@ var DEFAULT_CONFIG = {
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
-  return path.join(projectDir, ".claude", "raphael.local.md");
+  return path3.join(projectDir, ".claude", "raphael.local.md");
 }
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
@@ -62,7 +113,7 @@ function loadConfig(projectDir) {
   };
   let raw;
   try {
-    raw = fs.readFileSync(configPath(projectDir), "utf8");
+    raw = fs3.readFileSync(configPath(projectDir), "utf8");
   } catch {
     return config;
   }
@@ -364,55 +415,27 @@ function rejectionDetails(prompt, matchedPattern, previousTool) {
   };
 }
 
-// src/lib/hook-io.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
-function readStdinSync() {
-  try {
-    const value = JSON.parse(fs2.readFileSync(0, "utf8"));
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-function resolveProjectDir(input) {
-  return process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
-}
-function logError(projectDir, context, error) {
-  try {
-    const logDir = path2.join(projectDir, ".raphael", "log");
-    fs2.mkdirSync(logDir, { recursive: true });
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    fs2.appendFileSync(
-      path2.join(logDir, "errors.log"),
-      `${(/* @__PURE__ */ new Date()).toISOString()} [${context}] ${message}
-`
-    );
-  } catch {
-  }
-}
-
 // src/lib/infection-store.ts
 import crypto2 from "node:crypto";
-import fs4 from "node:fs";
-import path4 from "node:path";
+import fs5 from "node:fs";
+import path5 from "node:path";
 
 // src/lib/atomic.ts
 import crypto from "node:crypto";
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs4 from "node:fs";
+import path4 from "node:path";
 function writeFileAtomic(filePath, content) {
-  const dir = path3.dirname(filePath);
-  fs3.mkdirSync(dir, { recursive: true });
-  const tempPath = path3.join(
+  const dir = path4.dirname(filePath);
+  fs4.mkdirSync(dir, { recursive: true });
+  const tempPath = path4.join(
     dir,
     `.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
   );
   try {
-    fs3.writeFileSync(tempPath, content);
-    fs3.renameSync(tempPath, filePath);
+    fs4.writeFileSync(tempPath, content);
+    fs4.renameSync(tempPath, filePath);
   } catch (error) {
-    fs3.rmSync(tempPath, { force: true });
+    fs4.rmSync(tempPath, { force: true });
     throw error;
   }
 }
@@ -452,7 +475,7 @@ function sessionFileName(session) {
   return `session-${sha256Hex(session).slice(0, 16)}.jsonl`;
 }
 function infectionFilePath(projectDir, session) {
-  return path4.join(
+  return path5.join(
     projectDir,
     ".raphael",
     "infections",
@@ -493,7 +516,7 @@ function parseInfectionLine(line) {
 }
 function readRawLines(filePath) {
   try {
-    const raw = fs4.readFileSync(filePath, "utf8");
+    const raw = fs5.readFileSync(filePath, "utf8");
     const lines = raw.split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
     return lines;
@@ -627,11 +650,11 @@ function tailLines(value, maximum) {
 }
 
 // src/lib/state-store.ts
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 var TOOLS2 = ["Bash", "Edit", "Write"];
 function stateFilePath(projectDir) {
-  return path5.join(projectDir, ".raphael", "state.json");
+  return path6.join(projectDir, ".raphael", "state.json");
 }
 function createInitialState(session) {
   return {
@@ -648,7 +671,7 @@ function createInitialState(session) {
 function loadState(projectDir, currentSession) {
   try {
     const parsed = JSON.parse(
-      fs5.readFileSync(stateFilePath(projectDir), "utf8")
+      fs6.readFileSync(stateFilePath(projectDir), "utf8")
     );
     const state = validateState(parsed);
     if (!state || state.session !== currentSession)
@@ -690,20 +713,20 @@ function applyEditToState(projectDir, state, input) {
 }
 function restoreEditFootprint(projectDir, filePath, newString) {
   if (newString === "") return null;
-  const projectRoot = path5.resolve(projectDir);
-  const resolvedFile = path5.resolve(projectRoot, filePath);
-  const relative = path5.relative(projectRoot, resolvedFile);
-  if (relative === "" || relative === ".." || relative.startsWith(`..${path5.sep}`) || path5.isAbsolute(relative)) {
+  const projectRoot = path6.resolve(projectDir);
+  const resolvedFile = path6.resolve(projectRoot, filePath);
+  const relative = path6.relative(projectRoot, resolvedFile);
+  if (relative === "" || relative === ".." || relative.startsWith(`..${path6.sep}`) || path6.isAbsolute(relative)) {
     return null;
   }
   let content;
   try {
-    content = fs5.readFileSync(resolvedFile, "utf8");
+    content = fs6.readFileSync(resolvedFile, "utf8");
   } catch {
     return null;
   }
   return findUniqueEditFootprint(
-    relative.split(path5.sep).join("/"),
+    relative.split(path6.sep).join("/"),
     content,
     newString
   );
@@ -847,6 +870,13 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
   setLastTool(state, "Bash", inputDigest, now);
   const outcome = commandOutcomeFromHookInput(input, config.benignExit1Commands);
   if (!outcome) return;
+  appendCommandLog(projectDir, {
+    ts: now,
+    session,
+    normalized_command: redactSecrets(outcome.normalized_command),
+    exit_code: outcome.exit_code,
+    failed: outcome.failed
+  });
   const commandFailure = config.detectCommandFailure ? detectCommandFailure({
     hookEvent: event,
     command: outcome.command,
