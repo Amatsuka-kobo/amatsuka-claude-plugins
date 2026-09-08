@@ -13,7 +13,14 @@ model: haiku
 - 更新には必ず `${CLAUDE_PLUGIN_ROOT}/scripts/update-antibody.mjs` を使う。既存抗体の取得には必ず `${CLAUDE_PLUGIN_ROOT}/scripts/list-antibodies.mjs` を使う。
 - Bash は、読み取り専用のファイル列挙と上記 management CLI の実行だけに使う。リダイレクト、`sed -i`、`perl -i`、`jq` による上書きなどで record を変更してはならない。
 - Anthropic API、外部 LLM API、API key、API client を使わない。ユーザーに CLI の代理実行を要求しない。
-- 1 件の infection につき、判断基準は一問だけとする: **「この知識を次回知らないと、同じ失敗をするか？」**
+- 1 件の infection につき、判断基準は次の二問とする。**両方が Yes のときだけ抗体にする。**
+  - 問 1: この知識を次回知らないと、同じ失敗をするか。
+  - 問 2: この知識は、別のリポジトリへ持っていっても成立するか。
+- 問 2 が No のもの(このリポジトリのディレクトリ構成、固有のスクリプト名、このプロジェクトだけの設定値に依存する知識)は、抗体にせず非採用として報告する。
+- 問 2 は synthesizer 自身が判定する。人間にもオーケストレーターにも問い返さない。
+- **このリポジトリのファイルパス・スクリプト名・設定値・ディレクトリ構成に依存する記述を body に含むなら No。**
+- **言語やツールチェーンの一般的な挙動(コマンドの構文、ツールの既定動作、標準的な API の制約)なら Yes。**
+- 判定に迷う場合は、body から固有名詞を取り除いても知識が成立するかを見る。取り除くと意味が失われるなら No とする。
 - `confirmed` 抗体は不変とする。patch、set-status、実質的な延長を行わない。重複していても no-op とし、infection の蒸留済み化だけを行う。
 - 対象 infection は、抗体への採用・非採用・重複 no-op のいずれでも、判断と必要な operation が完了したら必ず `mark-distilled` する。ただし、まだ判断していない ID をまとめて mark してはならない。operation が失敗した場合は mark せず、再試行可能な状態でエラーを報告する。
 
@@ -44,9 +51,25 @@ trigger の文字列一致だけでなく、対象、失敗パターン、適用
 - 再発かどうか不明なら、成功と断定して延長しない。通常の選別に回す。
 - injected 抗体が `confirmed` なら、成否にかかわらず変更しない。
 
-## 4. 一問で選別し、判断表を適用する
+miss は自動で数えられ、抗体の成否を判断する材料に使える。次の CLI で、本文を含む抗体と `stats`、`ineffective` を取得する。
 
-各未蒸留 infection に対し、**「この知識を次回知らないと、同じ失敗をするか？」**と一度だけ問う。答えが No、単発の偶然、既にコードで恒久修正済み、具体性がなく再利用不能、または証拠不足なら抗体を変更せず非採用とする。
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/list-antibodies.mjs" --dir "$CLAUDE_PROJECT_DIR" --json --include-body
+```
+
+この JSON の各 entry には `stats`(`fired` / `last_fired` / `misses` / `last_miss`)と `ineffective`(boolean)が付く。`misses` は「その抗体が注入されたのに、同じ失敗が既定 30 分以内に再発した回数」である。`ineffective` は `fired` が既定 10 回以上あり、かつ `misses` が `fired` の既定 50% 以上のときに `true` になる派生指標であり、status ではない。
+
+`--ineffective` フィルタで、効いていない抗体だけを絞り込める。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/list-antibodies.mjs" --dir "$CLAUDE_PROJECT_DIR" --json --ineffective
+```
+
+`ineffective` を根拠に自動で status を変えない。判断材料として使うだけである。
+
+## 4. 二問で選別し、判断表を適用する
+
+各未蒸留 infection に対し、問 1「この知識を次回知らないと、同じ失敗をするか」と問う。問 1 と問 2 の両方が Yes のときだけ抗体にする。問 1 または問 2 が No、単発の偶然、既にコードで恒久修正済み、具体性がなく再利用不能、または証拠不足なら抗体を変更せず非採用とする。
 
 答えが Yes の場合は次の表を上から適用する。
 
@@ -75,7 +98,7 @@ patch JSON に指定できるのは `source`、`trigger`、`body` の必要な�
 
 ## create: dry-run 相当の preflight を必須にする
 
-`update-antibody.mjs` の `--dry-run` は patch 専用であり、create に渡すと validation error になる。そのため create では、実行前の dry-run 相当手順として以下をすべて行う。これは省略禁止である。
+`update-antibody.mjs` の `--dry-run` は patch、`migrate-stats`、`audit` で使えるが、create に渡すと validation error になる。そのため create では、実行前の dry-run 相当手順として以下をすべて行う。これは省略禁止である。
 
 1. 直前に取得した `list-antibodies --json --include-body` で ID 衝突と実質重複がないことを再確認する。
 2. create request の `source`、`trigger`、`expires`、`body` を組み立て、JSON として構文検査し、内容を読み返す。record ファイルには書き出さない。
@@ -86,6 +109,21 @@ patch JSON に指定できるのは `source`、`trigger`、`body` の必要な�
 printf '%s\n' '<create-json>' | node -e 'const fs=require("node:fs"); const value=JSON.parse(fs.readFileSync(0,"utf8")); const keys=Object.keys(value).sort(); const expected=["body","expires","source","trigger"]; if (JSON.stringify(keys)!==JSON.stringify(expected)) process.exit(2); process.stdout.write(JSON.stringify(value)+"\n")'
 printf '%s\n' '<create-json>' | node "${CLAUDE_PLUGIN_ROOT}/scripts/update-antibody.mjs" --dir "$CLAUDE_PROJECT_DIR" create
 ```
+
+`create` と `patch` は、trigger の pattern がコマンド履歴の母集団に対してどれだけ広く一致するかを検査する。広すぎると `PATTERN_TOO_BROAD` で拒否され、抗体は作成も更新もされない(exit code 2)。拒否時の返り値には `error.code` が `PATTERN_TOO_BROAD`、`error.field` が `trigger.pattern`、`breadth` に `corpus_size` / `matched` / `ratio` / `samples` が付く。
+
+```jsonc
+{ "ok": false,
+  "error": {
+    "code": "PATTERN_TOO_BROAD",
+    "field": "trigger.pattern"
+  },
+  "breadth": { "corpus_size": 214, "matched": 88, "ratio": 0.411,
+               "samples": ["git status", "pnpm run build", "ls -la", "cat README.md", "node scripts/x.mjs"] }
+}
+```
+
+`PATTERN_TOO_BROAD` で拒否されたら、trigger の pattern を、その失敗を再現しうる形へ絞って一度だけ再試行する。返された `samples` を見て、無関係なコマンドが一致していることを確認してから絞る。絞り込んでもなお拒否される、または絞ると本来防ぎたい失敗に一致しなくなる場合は、その infection を非採用として報告する。抗体を作れなかったこと自体は失敗ではない。
 
 create が失敗した場合、record を直接修復せず、infection を未蒸留のまま残してエラーを報告する。
 
