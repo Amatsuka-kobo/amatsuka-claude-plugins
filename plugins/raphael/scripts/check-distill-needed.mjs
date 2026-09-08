@@ -660,6 +660,9 @@ function validateRecord(value) {
   if (typeof value.distilled !== "boolean") return null;
   if (!(value.distilled_at === null || isIsoDate(value.distilled_at)))
     return null;
+  if ("resolved" in value && typeof value.resolved !== "boolean") return null;
+  if ("resolved_at" in value && !(value.resolved_at === null || isIsoDate(value.resolved_at)))
+    return null;
   const details = validateDetails(value.details);
   if (!details || details.type !== value.kind) return null;
   return { ...value, details };
@@ -776,7 +779,7 @@ function normalizeState(state) {
   }
   return {
     ...state,
-    recent_commands: state.recent_commands.slice(-20).map((command) => ({
+    recent_commands: state.recent_commands.slice(-50).map((command) => ({
       ...command,
       normalized_command: redactSecrets(command.normalized_command)
     })),
@@ -795,15 +798,21 @@ function validateState(value) {
   if (!isObject2(value) || value.schema_version !== 1) return null;
   if (!isString2(value.session) || !isPositiveInteger2(value.next_event_seq))
     return null;
-  if (!Array.isArray(value.recent_commands) || !value.recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
+  const recent_commands = Array.isArray(value.recent_commands) ? value.recent_commands.map((command) => {
+    if (isObject2(command) && "resolved" in command && typeof command.resolved !== "boolean") {
+      return { ...command, resolved: false };
+    }
+    return command;
+  }) : null;
+  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
     return null;
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
   if (!(value.last_distill_nag_digest === null || isString2(value.last_distill_nag_digest) && /^[0-9a-f]{64}$/.test(value.last_distill_nag_digest)))
     return null;
-  return value;
+  return { ...value, recent_commands };
 }
 function isRecentCommand(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString2(value.infection_id));
+  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString2(value.infection_id)) && (value.resolved === void 0 || typeof value.resolved === "boolean");
 }
 function isRecentEdit(value) {
   return isObject2(value) && isIsoDate2(value.ts) && isString2(value.file_path) && isPositiveInteger2(value.line_start) && isPositiveInteger2(value.line_end) && value.line_end >= value.line_start;
@@ -963,15 +972,13 @@ function cleanupInfections(projectDir, now) {
         retained.push(line);
         continue;
       }
-      if (!record.distilled) {
-        undistilledIds.push(record.id);
-        retained.push(line);
-        continue;
-      }
+      const resolvedAt = record.resolved_at === void 0 || record.resolved_at === null ? Number.NaN : Date.parse(record.resolved_at);
       const distilledAt = record.distilled_at === null ? Number.NaN : Date.parse(record.distilled_at);
-      if (!Number.isFinite(distilledAt) || distilledAt >= cutoff) {
-        retained.push(line);
-      }
+      const resolvedExpired = record.resolved === true && Number.isFinite(resolvedAt) && resolvedAt < cutoff;
+      const distilledExpired = record.distilled === true && Number.isFinite(distilledAt) && distilledAt < cutoff;
+      if (resolvedExpired || distilledExpired) continue;
+      if (!record.distilled) undistilledIds.push(record.id);
+      retained.push(line);
     }
     if (retained.length === 0) {
       fs8.rmSync(filePath);

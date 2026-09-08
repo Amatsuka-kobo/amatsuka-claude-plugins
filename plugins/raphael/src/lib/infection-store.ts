@@ -140,6 +140,35 @@ export function markInfectionsDistilled(
   return updated
 }
 
+export function markInfectionsResolved(
+  projectDir: string,
+  session: string,
+  ids: readonly string[],
+  now = new Date()
+): number {
+  const filePath = infectionFilePath(projectDir, session)
+  const rawLines = readRawLines(filePath)
+  if (rawLines.length === 0) return 0
+
+  const targetIds = new Set(ids)
+  const resolvedAt = now.toISOString()
+  let updated = 0
+  const rewritten = rawLines.map((line) => {
+    const record = parseInfectionLine(line)
+    if (!record || !targetIds.has(record.id) || record.resolved === true)
+      return line
+    updated += 1
+    return JSON.stringify({
+      ...record,
+      resolved: true,
+      resolved_at: resolvedAt
+    } satisfies InfectionRecordV1)
+  })
+
+  if (updated > 0) writeFileAtomic(filePath, `${rewritten.join("\n")}\n`)
+  return updated
+}
+
 export function parseInfectionLine(line: string): InfectionRecordV1 | null {
   if (line.trim() === "") return null
   try {
@@ -223,6 +252,12 @@ function validateRecord(value: unknown): InfectionRecordV1 | null {
   if (!isSha256(value.fingerprint)) return null
   if (typeof value.distilled !== "boolean") return null
   if (!(value.distilled_at === null || isIsoDate(value.distilled_at)))
+    return null
+  if ("resolved" in value && typeof value.resolved !== "boolean") return null
+  if (
+    "resolved_at" in value &&
+    !(value.resolved_at === null || isIsoDate(value.resolved_at))
+  )
     return null
   const details = validateDetails(value.details)
   if (!details || details.type !== value.kind) return null

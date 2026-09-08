@@ -78,18 +78,27 @@ function cleanupInfections(projectDir: string, now: Date): string[] {
         retained.push(line)
         continue
       }
-      if (!record.distilled) {
-        undistilledIds.push(record.id)
-        retained.push(line)
-        continue
-      }
+
+      const resolvedAt =
+        record.resolved_at === undefined || record.resolved_at === null
+          ? Number.NaN
+          : Date.parse(record.resolved_at)
       const distilledAt =
         record.distilled_at === null
           ? Number.NaN
           : Date.parse(record.distilled_at)
-      if (!Number.isFinite(distilledAt) || distilledAt >= cutoff) {
-        retained.push(line)
-      }
+      const resolvedExpired =
+        record.resolved === true &&
+        Number.isFinite(resolvedAt) &&
+        resolvedAt < cutoff
+      const distilledExpired =
+        record.distilled === true &&
+        Number.isFinite(distilledAt) &&
+        distilledAt < cutoff
+      if (resolvedExpired || distilledExpired) continue
+
+      if (!record.distilled) undistilledIds.push(record.id)
+      retained.push(line)
     }
 
     if (retained.length === 0) {

@@ -742,6 +742,9 @@ function validateRecord(value) {
   if (typeof value.distilled !== "boolean") return null;
   if (!(value.distilled_at === null || isIsoDate(value.distilled_at)))
     return null;
+  if ("resolved" in value && typeof value.resolved !== "boolean") return null;
+  if ("resolved_at" in value && !(value.resolved_at === null || isIsoDate(value.resolved_at)))
+    return null;
   const details = validateDetails(value.details);
   if (!details || details.type !== value.kind) return null;
   return { ...value, details };

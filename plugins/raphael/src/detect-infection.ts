@@ -12,6 +12,7 @@ import { logError, readStdinSync, resolveProjectDir } from "./lib/hook-io.js"
 import {
   appendInfection,
   generateInfectionId,
+  markInfectionsResolved,
   readInfections,
   sha256Hex
 } from "./lib/infection-store.js"
@@ -143,11 +144,12 @@ function processBash(
     config.benignExit1Extended
   )
   if (!outcome) return
+  const normalizedCommand = redactSecrets(outcome.normalized_command)
 
   appendCommandLog(projectDir, {
     ts: now,
     session,
-    normalized_command: redactSecrets(outcome.normalized_command),
+    normalized_command: normalizedCommand,
     exit_code: outcome.exit_code,
     failed: outcome.failed
   })
@@ -178,14 +180,39 @@ function processBash(
           eventSeq
         )
 
+  if (outcome.failed === false && outcome.exit_code === 0) {
+    const resolvedCommands = state.recent_commands.filter(
+      (command) =>
+        command.normalized_command === normalizedCommand &&
+        command.failed === true &&
+        command.infection_id !== null &&
+        command.resolved !== true
+    )
+    const resolvedIds = [
+      ...new Set(
+        resolvedCommands.flatMap((command) =>
+          command.infection_id === null ? [] : [command.infection_id]
+        )
+      )
+    ]
+    if (resolvedIds.length > 0) {
+      try {
+        markInfectionsResolved(projectDir, session, resolvedIds, new Date(now))
+      } catch (error) {
+        logError(projectDir, "detect-infection", error)
+      }
+      for (const command of resolvedCommands) command.resolved = true
+    }
+  }
+
   state.recent_commands.push({
     ts: now,
-    normalized_command: outcome.normalized_command,
+    normalized_command: normalizedCommand,
     failed: outcome.failed,
     exit_code: outcome.exit_code,
     infection_id: infectionId
   })
-  state.recent_commands = state.recent_commands.slice(-20)
+  state.recent_commands = state.recent_commands.slice(-50)
 
   const retryLoop = config.detectRetryLoop
     ? detectRetryLoop(

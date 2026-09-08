@@ -16,9 +16,13 @@ function makeProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "raphael-detect-"))
 }
 
-function runHook(dir: string, fixture: Record<string, unknown>): string {
+function runHook(
+  dir: string,
+  fixture: Record<string, unknown>,
+  session = SESSION
+): string {
   return runTs(HOOK, [], {
-    input: JSON.stringify({ cwd: dir, session_id: SESSION, ...fixture }),
+    input: JSON.stringify({ cwd: dir, session_id: session, ...fixture }),
     env: { ...process.env, CLAUDE_PROJECT_DIR: dir }
   })
 }
@@ -250,7 +254,7 @@ test("同じ3 edit window は重複せず、直近3件が変われば再評価�
 
 test("state history の上限と Write の last_tool 更新を維持する", () => {
   withProject((dir) => {
-    for (let index = 0; index < 21; index += 1) {
+    for (let index = 0; index < 55; index += 1) {
       runHook(dir, {
         hook_event_name: "PostToolUse",
         tool_name: "Bash",
@@ -267,7 +271,7 @@ test("state history の上限と Write の last_tool 更新を維持する", () 
     })
 
     const state = loadState(dir, SESSION)
-    expect(state.recent_commands).toHaveLength(20)
+    expect(state.recent_commands).toHaveLength(50)
     expect(state.last_tool).toMatchObject({
       tool: "Write",
       input_digest: expect.not.stringContaining("secret")
@@ -302,4 +306,171 @@ test("hooks.json は detect 対象イベントを scripts の hook entry に結�
       `\${CLAUDE_PLUGIN_ROOT}/scripts/detect-infection.mjs`
     )
   }
+})
+test("失敗後に同じコマンドが exit 0 で成功すると infection を resolved にする", () => {
+  withProject((dir) => {
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "resolve-failure",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "resolve-success",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 0 }
+    })
+
+    expect(readInfections(dir, SESSION)).toEqual([
+      expect.objectContaining({
+        kind: "command-failure",
+        resolved: true,
+        resolved_at: expect.any(String)
+      })
+    ])
+    expect(loadState(dir, SESSION).recent_commands).toEqual([
+      expect.objectContaining({
+        normalized_command: "false",
+        failed: true,
+        resolved: true
+      }),
+      expect.objectContaining({ normalized_command: "false", failed: false })
+    ])
+  })
+})
+
+test.each([
+  ["benign exit 1", "grep missing file", 1],
+  ["benign exit 2", "pnpm run typecheck", 2]
+])("%s は同じコマンドでも resolved にしない", (_name, command, benignExit) => {
+  withProject((dir) => {
+    const initialExit = benignExit === 1 ? 2 : 3
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "real-failure",
+      tool_input: { command },
+      tool_response: { exit_code: initialExit }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "benign-success",
+      tool_input: { command },
+      tool_response: { exit_code: benignExit }
+    })
+
+    expect(readInfections(dir, SESSION)[0]).not.toHaveProperty("resolved")
+    expect(loadState(dir, SESSION).recent_commands[0]).not.toHaveProperty(
+      "resolved"
+    )
+  })
+})
+
+test("exit_code が null の成功判定では resolved にしない", () => {
+  withProject((dir) => {
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "null-failure",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "null-success",
+      tool_input: { command: "false" },
+      tool_response: {}
+    })
+
+    expect(readInfections(dir, SESSION)[0].resolved).toBeUndefined()
+  })
+})
+
+test("二度目の成功、別コマンド、別 session は失敗を解決しない", () => {
+  withProject((dir) => {
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "repeat-failure",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "other-success",
+      tool_input: { command: "true" },
+      tool_response: { exit_code: 0 }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "first-success",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 0 }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "second-success",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 0 }
+    })
+    expect(readInfections(dir, SESSION)).toEqual([
+      expect.objectContaining({
+        resolved: true,
+        resolved_at: expect.any(String)
+      })
+    ])
+    expect(
+      loadState(dir, SESSION).recent_commands.filter((entry) => entry.resolved)
+    ).toHaveLength(1)
+
+    runHook(
+      dir,
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+        tool_use_id: "new-session-success",
+        tool_input: { command: "false" },
+        tool_response: { exit_code: 0 }
+      },
+      "session-2"
+    )
+
+    expect(readInfections(dir, SESSION)).toEqual([
+      expect.objectContaining({ resolved: true })
+    ])
+  })
+})
+
+test("解決処理が失敗しても成功コマンドの state 記録は続く", () => {
+  withProject((dir) => {
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "broken-mark-failure",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+    const file = infectionFilePath(dir, SESSION)
+    fs.rmSync(file)
+    fs.mkdirSync(file)
+
+    expect(() =>
+      runHook(dir, {
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+        tool_use_id: "broken-mark-success",
+        tool_input: { command: "false" },
+        tool_response: { exit_code: 0 }
+      })
+    ).not.toThrow()
+    expect(loadState(dir, SESSION).recent_commands).toHaveLength(2)
+  })
 })

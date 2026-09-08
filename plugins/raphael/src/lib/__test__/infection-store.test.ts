@@ -8,6 +8,7 @@ import {
   generateInfectionId,
   infectionFilePath,
   markInfectionsDistilled,
+  markInfectionsResolved,
   readInfections,
   recurrenceKeyOf,
   sessionFileName,
@@ -239,6 +240,72 @@ test("mark-distilled は対象 ID の有効行だけを read-modify-write する
       distilled_at: null
     })
     expect(fs.readFileSync(file, "utf8")).toContain("{broken\n")
+  })
+})
+
+test("mark-resolved は distilled record も更新し、二度目は数えない", () => {
+  withProject((dir) => {
+    const first = record("command-failure", detailsByKind[0][1], {
+      distilled: true,
+      distilled_at: "2026-07-24T02:00:00.000Z"
+    })
+    const second = record("edit-churn", detailsByKind[3][1])
+    appendInfection(dir, first)
+    appendInfection(dir, second)
+
+    expect(
+      markInfectionsResolved(
+        dir,
+        "session-1",
+        [first.id, second.id],
+        new Date("2026-07-24T03:00:00.000Z")
+      )
+    ).toBe(2)
+    expect(
+      markInfectionsResolved(
+        dir,
+        "session-1",
+        [first.id, second.id],
+        new Date("2026-07-24T04:00:00.000Z")
+      )
+    ).toBe(0)
+    expect(readInfections(dir, "session-1")).toEqual([
+      expect.objectContaining({
+        id: first.id,
+        distilled: true,
+        resolved: true,
+        resolved_at: "2026-07-24T03:00:00.000Z"
+      }),
+      expect.objectContaining({
+        id: second.id,
+        resolved: true,
+        resolved_at: "2026-07-24T03:00:00.000Z"
+      })
+    ])
+  })
+})
+
+test("resolved と resolved_at の型不正な行を読み飛ばす", () => {
+  withProject((dir) => {
+    const valid = record("command-failure", detailsByKind[0][1])
+    const file = infectionFilePath(dir, "session-1")
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      [
+        JSON.stringify({ ...valid, resolved: "yes" }),
+        JSON.stringify({
+          ...valid,
+          id: `${valid.id}-2`,
+          resolved_at: "yesterday"
+        }),
+        JSON.stringify(valid),
+        ""
+      ].join("\n")
+    )
+
+    expect(readInfections(dir, "session-1")).toHaveLength(1)
+    expect(readInfections(dir, "session-1")[0]).toMatchObject({ id: valid.id })
   })
 })
 
