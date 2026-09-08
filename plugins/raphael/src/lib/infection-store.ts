@@ -2,6 +2,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "./atomic.js"
+import { recurrenceKey } from "./recurrence.js"
 import { redactSecrets } from "./redact.js"
 import type {
   InfectionDetails,
@@ -25,6 +26,19 @@ const HOOK_EVENTS = [
 
 export function sha256Hex(value: string | Uint8Array): string {
   return crypto.createHash("sha256").update(value).digest("hex")
+}
+
+export function recurrenceKeyOf(record: InfectionRecordV1): string {
+  const details = record.details
+  switch (details.type) {
+    case "command-failure":
+    case "retry-loop":
+      return recurrenceKey("command-failure", details.normalized_command)
+    case "user-rejection":
+      return recurrenceKey("user-rejection", details.matched_pattern)
+    case "edit-churn":
+      return recurrenceKey("edit-churn", details.file_path)
+  }
 }
 
 export function generateInfectionId(now = new Date()): string {
