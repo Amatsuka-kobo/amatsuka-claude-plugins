@@ -42,6 +42,9 @@ test("全ての許可済み設定 key を読み取る", () => {
         "benign_exit1_extended: false",
         "breadth_max_ratio: 25",
         "breadth_min_corpus: 75",
+        "miss_window_minutes: 60",
+        "ineffective_min_fired: 20",
+        "ineffective_miss_ratio: 75",
         "antibodies_git_policy: ignore"
       ].join("\n")
     )
@@ -61,6 +64,9 @@ test("全ての許可済み設定 key を読み取る", () => {
       benignExit1Extended: false,
       breadthMaxRatio: 25,
       breadthMinCorpus: 75,
+      missWindowMinutes: 60,
+      ineffectiveMinFired: 20,
+      ineffectiveMissRatio: 75,
       antibodiesGitPolicy: "ignore"
     })
   })
@@ -81,6 +87,9 @@ test("不正な frontmatter と field 値は field 単位で既定値へ戻す",
         "benign_exit1_commands: [1]",
         "breadth_max_ratio: 0",
         "breadth_min_corpus: 5001",
+        "miss_window_minutes: 0",
+        "ineffective_min_fired: 1001",
+        "ineffective_miss_ratio: 101",
         "antibodies_git_policy: archive"
       ].join("\n")
     )

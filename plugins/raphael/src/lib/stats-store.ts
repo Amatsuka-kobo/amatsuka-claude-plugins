@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "./atomic.js"
+import type { RaphaelConfig } from "./types.js"
 
 const ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -58,6 +59,16 @@ export function saveStats(projectDir: string, stats: RaphaelStatsV1): void {
 export function statsFor(stats: RaphaelStatsV1, id: string): AntibodyStats {
   const value = stats.antibodies[id]
   return value === undefined ? initialAntibodyStats() : { ...value }
+}
+
+export function isIneffective(
+  stats: AntibodyStats,
+  config: Pick<RaphaelConfig, "ineffectiveMinFired" | "ineffectiveMissRatio">
+): boolean {
+  return (
+    stats.fired >= config.ineffectiveMinFired &&
+    stats.misses * 100 >= stats.fired * config.ineffectiveMissRatio
+  )
 }
 
 export function recordFire(

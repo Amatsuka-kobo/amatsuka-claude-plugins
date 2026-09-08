@@ -84,7 +84,7 @@ export interface RaphaelStateV1 {
     ts: string
     antibody_id: string
     trigger_fingerprint: string
-    recurrence_key?: string | null
+    recurrence_key: string | null
   }>
 }
 
@@ -145,5 +145,8 @@ export interface RaphaelConfig {
   benignExit1Extended: boolean
   breadthMaxRatio: number
   breadthMinCorpus: number
+  missWindowMinutes: number
+  ineffectiveMinFired: number
+  ineffectiveMissRatio: number
   antibodiesGitPolicy: "commit" | "ignore"
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { listAntibodies, setAntibodyStatus } from "./lib/antibody-store.js"
 import { loadConfig } from "./lib/config.js"
+import { normalizeCommand } from "./lib/detect-command.js"
 import { readStdinSync, resolveProjectDir } from "./lib/hook-io.js"
 import { sha256Hex } from "./lib/infection-store.js"
 import {
@@ -8,6 +9,7 @@ import {
   matchAntibodies,
   renderAntibodyContext
 } from "./lib/match-antibody.js"
+import { recurrenceKey } from "./lib/recurrence.js"
 import { loadState, saveState } from "./lib/state-store.js"
 import { loadStats, recordFires } from "./lib/stats-store.js"
 import type { HookInput, RaphaelToolName } from "./lib/types.js"
@@ -91,12 +93,19 @@ function main(): void {
       const state = loadState(projectDir, sessionFor(input))
       const ts = new Date().toISOString()
       const fingerprint = triggerFingerprint(target)
+      const injectedRecurrenceKey =
+        input.tool_name === "Bash"
+          ? recurrenceKey(
+              "command-failure",
+              normalizeCommand(input.tool_input.command ?? "")
+            )
+          : null
       for (const antibody of matched.selected) {
         state.injected.push({
           ts,
           antibody_id: antibody.id,
           trigger_fingerprint: fingerprint,
-          recurrence_key: null
+          recurrence_key: injectedRecurrenceKey
         })
       }
       saveState(projectDir, state)

@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, expect, test, vi } from "vitest"
 import {
+  isIneffective,
   loadStats,
   pruneOrphanStats,
   type RaphaelStatsV1,
@@ -267,6 +268,35 @@ test("recordMiss は加算し last_miss を max merge する", () => {
     misses: 4,
     last_miss: "2026-07-27"
   })
+})
+
+test.each([
+  [{ fired: 9, misses: 9 }, false],
+  [{ fired: 10, misses: 5 }, true],
+  [{ fired: 10, misses: 4 }, false]
+])("isIneffective の境界を整数演算で判定する", (value, expected) => {
+  expect(
+    isIneffective(
+      {
+        ...value,
+        last_fired: null,
+        last_miss: null
+      },
+      {
+        ineffectiveMinFired: 10,
+        ineffectiveMissRatio: 50
+      }
+    )
+  ).toBe(expected)
+})
+
+test("isIneffective は config の閾値を使う", () => {
+  expect(
+    isIneffective(
+      { fired: 4, last_fired: null, misses: 1, last_miss: null },
+      { ineffectiveMinFired: 4, ineffectiveMissRatio: 25 }
+    )
+  ).toBe(true)
 })
 
 test("pruneOrphanStats は既知 ID 以外だけ削除する", () => {

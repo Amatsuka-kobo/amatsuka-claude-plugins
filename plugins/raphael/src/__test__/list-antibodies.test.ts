@@ -136,6 +136,65 @@ test("JSON list は filter、sort、body inclusion が安定し、--dir が環�
   }
 })
 
+test("--ineffective は ineffective フィールドと status filter の AND を適用する", async () => {
+  const dir = project()
+  try {
+    writeAntibody(dir, antibody())
+    writeAntibody(
+      dir,
+      antibody({ id: "ab-2026-0724-002", status: "confirmed" })
+    )
+    writeAntibody(dir, antibody({ id: "ab-2026-0724-003", status: "active" }))
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-001": {
+          fired: 10,
+          last_fired: null,
+          misses: 5,
+          last_miss: "2026-07-24"
+        },
+        "ab-2026-0724-002": {
+          fired: 10,
+          last_fired: null,
+          misses: 5,
+          last_miss: "2026-07-24"
+        },
+        "ab-2026-0724-003": {
+          fired: 10,
+          last_fired: null,
+          misses: 4,
+          last_miss: null
+        }
+      },
+      distill: { last_nag_digest: null }
+    })
+
+    const all = await invoke(dir, ["--json"])
+    expect(JSON.parse(all.stdout).antibodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ab-2026-0724-001", ineffective: true }),
+        expect.objectContaining({ id: "ab-2026-0724-002", ineffective: true }),
+        expect.objectContaining({ id: "ab-2026-0724-003", ineffective: false })
+      ])
+    )
+
+    const filtered = await invoke(dir, [
+      "--json",
+      "--ineffective",
+      "--status",
+      "active"
+    ])
+    expect(
+      JSON.parse(filtered.stdout).antibodies.map(
+        (entry: { id: string }) => entry.id
+      )
+    ).toEqual(["ab-2026-0724-001"])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("既定 human list、引数エラー(2)、I/Oエラー(1) を分類する", async () => {
   const dir = project()
   const notDirectory = path.join(dir, "not-directory")

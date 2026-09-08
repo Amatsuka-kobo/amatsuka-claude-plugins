@@ -507,6 +507,9 @@ var DEFAULT_CONFIG = {
   benignExit1Extended: true,
   breadthMaxRatio: 10,
   breadthMinCorpus: 50,
+  missWindowMinutes: 30,
+  ineffectiveMinFired: 10,
+  ineffectiveMissRatio: 50,
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
@@ -615,6 +618,26 @@ function loadConfig(projectDir) {
     5e3
   );
   if (breadthMinCorpus !== null) config.breadthMinCorpus = breadthMinCorpus;
+  const missWindowMinutes = integerInRange(
+    fields.get("miss_window_minutes"),
+    1,
+    1440
+  );
+  if (missWindowMinutes !== null) config.missWindowMinutes = missWindowMinutes;
+  const ineffectiveMinFired = integerInRange(
+    fields.get("ineffective_min_fired"),
+    1,
+    1e3
+  );
+  if (ineffectiveMinFired !== null)
+    config.ineffectiveMinFired = ineffectiveMinFired;
+  const ineffectiveMissRatio = integerInRange(
+    fields.get("ineffective_miss_ratio"),
+    1,
+    100
+  );
+  if (ineffectiveMissRatio !== null)
+    config.ineffectiveMissRatio = ineffectiveMissRatio;
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"));
   if (antibodiesGitPolicy !== null)
     config.antibodiesGitPolicy = antibodiesGitPolicy;

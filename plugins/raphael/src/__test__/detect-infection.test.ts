@@ -6,7 +6,9 @@ import { expect, test } from "vitest"
 import { readCommandLog } from "../lib/command-log.js"
 import { classifyCommandOutcome } from "../lib/detect-command.js"
 import { infectionFilePath, readInfections } from "../lib/infection-store.js"
-import { loadState } from "../lib/state-store.js"
+import { recurrenceKey } from "../lib/recurrence.js"
+import { createInitialState, loadState, saveState } from "../lib/state-store.js"
+import { loadStats } from "../lib/stats-store.js"
 import { runTs } from "../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../detect-infection.ts", import.meta.url))
@@ -249,6 +251,161 @@ test("同じ3 edit window は重複せず、直近3件が変われば再評価�
     expect(
       readInfections(dir, SESSION).filter(({ kind }) => kind === "edit-churn")
     ).toHaveLength(2)
+  })
+})
+
+test("注入後の窓内の同一 recurrence_key で miss を加算し retry-loop と重複計上しない", () => {
+  withProject((dir) => {
+    const state = createInitialState(SESSION)
+    state.injected = [
+      {
+        ts: new Date(Date.now() - 1_000).toISOString(),
+        antibody_id: "ab-2026-0724-001",
+        trigger_fingerprint: "fingerprint",
+        recurrence_key: recurrenceKey("command-failure", "false")
+      }
+    ]
+    state.recent_commands = [
+      {
+        ts: new Date(Date.now() - 2_000).toISOString(),
+        normalized_command: "false",
+        failed: true,
+        exit_code: 1,
+        infection_id: null
+      },
+      {
+        ts: new Date(Date.now() - 1_500).toISOString(),
+        normalized_command: "false",
+        failed: true,
+        exit_code: 1,
+        infection_id: null
+      }
+    ]
+    saveState(dir, state)
+
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "miss-in-window",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+
+    expect(loadStats(dir).antibodies["ab-2026-0724-001"]).toMatchObject({
+      misses: 1,
+      last_miss: expect.any(String)
+    })
+    expect(readInfections(dir, SESSION)).toHaveLength(2)
+  })
+})
+
+test("miss の窓外または別 recurrence_key では加算しない", () => {
+  withProject((dir) => {
+    const state = createInitialState(SESSION)
+    state.injected = [
+      {
+        ts: new Date(Date.now() - 31 * 60_000).toISOString(),
+        antibody_id: "ab-2026-0724-001",
+        trigger_fingerprint: "old",
+        recurrence_key: recurrenceKey("command-failure", "false")
+      },
+      {
+        ts: new Date(Date.now() - 1_000).toISOString(),
+        antibody_id: "ab-2026-0724-002",
+        trigger_fingerprint: "other",
+        recurrence_key: recurrenceKey("command-failure", "other")
+      }
+    ]
+    saveState(dir, state)
+
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "miss-outside",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+
+    expect(loadStats(dir).antibodies).toEqual({})
+  })
+})
+
+test("recordMiss の失敗でも infection と state の記録を止めない", () => {
+  withProject((dir) => {
+    const state = createInitialState(SESSION)
+    state.injected = [
+      {
+        ts: new Date(Date.now() - 1_000).toISOString(),
+        antibody_id: "ab-2026-0724-001",
+        trigger_fingerprint: "fingerprint",
+        recurrence_key: recurrenceKey("command-failure", "false")
+      }
+    ]
+    saveState(dir, state)
+    fs.mkdirSync(path.join(dir, ".raphael", "stats.json"), { recursive: true })
+
+    expect(() =>
+      runHook(dir, {
+        hook_event_name: "PostToolUseFailure",
+        tool_name: "Bash",
+        tool_use_id: "miss-write-failure",
+        tool_input: { command: "false" },
+        tool_response: { exit_code: 1 }
+      })
+    ).not.toThrow()
+    expect(readInfections(dir, SESSION)).toHaveLength(1)
+    expect(loadState(dir, SESSION).recent_commands).toHaveLength(1)
+  })
+})
+
+test("retry-loop record でも command-failure と同じ recurrence_key で miss を加算する", () => {
+  withProject((dir) => {
+    const state = createInitialState(SESSION)
+    state.injected = [
+      {
+        ts: new Date(Date.now() - 1_000).toISOString(),
+        antibody_id: "ab-2026-0724-001",
+        trigger_fingerprint: "fingerprint",
+        recurrence_key: recurrenceKey("command-failure", "false")
+      }
+    ]
+    state.recent_commands = [
+      {
+        ts: new Date(Date.now() - 2_000).toISOString(),
+        normalized_command: "false",
+        failed: true,
+        exit_code: 1,
+        infection_id: null
+      },
+      {
+        ts: new Date(Date.now() - 1_500).toISOString(),
+        normalized_command: "false",
+        failed: true,
+        exit_code: 1,
+        infection_id: null
+      }
+    ]
+    saveState(dir, state)
+    writeFile(
+      dir,
+      ".claude/raphael.local.md",
+      "---\ndetect_command_failure: false\n---\n"
+    )
+
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "retry-miss",
+      tool_input: { command: "false" },
+      tool_response: { exit_code: 1 }
+    })
+
+    expect(loadStats(dir).antibodies["ab-2026-0724-001"]).toMatchObject({
+      misses: 1
+    })
+    expect(readInfections(dir, SESSION)).toEqual([
+      expect.objectContaining({ kind: "retry-loop" })
+    ])
   })
 })
 

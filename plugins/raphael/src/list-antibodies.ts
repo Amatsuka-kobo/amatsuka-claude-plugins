@@ -1,10 +1,17 @@
 import { AntibodyIoError, listAntibodies } from "./lib/antibody-store.js"
+import { loadConfig } from "./lib/config.js"
 import { AntibodyValidationError } from "./lib/frontmatter.js"
-import { type AntibodyStats, loadStats, statsFor } from "./lib/stats-store.js"
+import {
+  type AntibodyStats,
+  isIneffective,
+  loadStats,
+  statsFor
+} from "./lib/stats-store.js"
 import type { Antibody, AntibodyStatus } from "./lib/types.js"
 
 interface ListedAntibody extends Antibody {
   stats: AntibodyStats
+  ineffective: boolean
 }
 
 interface Failure {
@@ -18,6 +25,7 @@ function main(): void {
     const options = parseArgs(process.argv.slice(2))
     const result = listAntibodies(options.dir)
     const stats = loadStats(options.dir)
+    const config = loadConfig(options.dir)
     const antibodies = result.antibodies
       .filter(
         (antibody) =>
@@ -26,10 +34,16 @@ function main(): void {
       .filter(
         (antibody) => options.id === undefined || antibody.id === options.id
       )
+      .filter(
+        (antibody) =>
+          !options.ineffective ||
+          isIneffective(statsFor(stats, antibody.id), config)
+      )
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((antibody) => ({
         ...antibody,
-        stats: statsFor(stats, antibody.id)
+        stats: statsFor(stats, antibody.id),
+        ineffective: isIneffective(statsFor(stats, antibody.id), config)
       }))
       .map((antibody) => serializeForJson(antibody, options.includeBody))
 
@@ -49,12 +63,14 @@ function parseArgs(args: string[]): {
   includeBody: boolean
   status?: AntibodyStatus
   id?: string
+  ineffective: boolean
 } {
   let dir: string | undefined
   let json = false
   let includeBody = false
   let status: AntibodyStatus | undefined
   let id: string | undefined
+  let ineffective = false
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -86,6 +102,9 @@ function parseArgs(args: string[]): {
       case "--id":
         id = requireValue(args, ++index, "id")
         break
+      case "--ineffective":
+        ineffective = true
+        break
       default:
         throw new AntibodyValidationError(
           `argument: unsupported option: ${arg}`,
@@ -99,7 +118,8 @@ function parseArgs(args: string[]): {
     json,
     includeBody,
     ...(status === undefined ? {} : { status }),
-    ...(id === undefined ? {} : { id })
+    ...(id === undefined ? {} : { id }),
+    ineffective
   }
 }
 
