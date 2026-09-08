@@ -551,7 +551,8 @@ test("nag digest を stats に保存して state の他 field を変更しない
       {
         ts: "2026-07-24T00:00:00.000Z",
         antibody_id: "ab-2026-0724-001",
-        trigger_fingerprint: "fingerprint"
+        trigger_fingerprint: "fingerprint",
+        recurrence_key: null
       }
     ]
     saveState(dir, state)

@@ -16,8 +16,10 @@ import {
   readInfections,
   sha256Hex
 } from "./lib/infection-store.js"
+import { recurrenceKey } from "./lib/recurrence.js"
 import { redactSecrets } from "./lib/redact.js"
 import { applyEditToState, loadState, saveState } from "./lib/state-store.js"
+import { recordMiss } from "./lib/stats-store.js"
 import type {
   HookInput,
   InfectionDetails,
@@ -116,6 +118,36 @@ function appendRecord(
   return appendInfection(projectDir, record) ? record.id : null
 }
 
+function recordMissesForFailure(
+  projectDir: string,
+  state: RaphaelStateV1,
+  normalizedCommand: string,
+  now: Date,
+  windowMinutes: number
+): void {
+  try {
+    const key = recurrenceKey("command-failure", normalizedCommand)
+    const minTimestamp = now.getTime() - windowMinutes * 60_000
+    const antibodyIds = new Set<string>()
+    for (const entry of state.injected) {
+      if (entry.recurrence_key !== key) continue
+      const timestamp = Date.parse(entry.ts)
+      const age = now.getTime() - timestamp
+      if (Number.isFinite(timestamp) && age >= 0 && timestamp >= minTimestamp)
+        antibodyIds.add(entry.antibody_id)
+    }
+    for (const antibodyId of antibodyIds) {
+      try {
+        recordMiss(projectDir, antibodyId, now)
+      } catch (error) {
+        logError(projectDir, "detect-infection", error)
+      }
+    }
+  } catch (error) {
+    logError(projectDir, "detect-infection", error)
+  }
+}
+
 function setLastTool(
   state: RaphaelStateV1,
   tool: RaphaelToolName,
@@ -179,6 +211,17 @@ function processBash(
           outcome.normalized_command,
           eventSeq
         )
+  let missRecorded = false
+  if (infectionId !== null && outcome.failed) {
+    recordMissesForFailure(
+      projectDir,
+      state,
+      outcome.normalized_command,
+      new Date(now),
+      config.missWindowMinutes
+    )
+    missRecorded = true
+  }
 
   if (outcome.failed === false && outcome.exit_code === 0) {
     const resolvedCommands = state.recent_commands.filter(
@@ -234,6 +277,15 @@ function processBash(
       `${retryLoop.normalized_command}\0${retryLoop.exit_codes.join(",")}`,
       eventSeq
     )
+    if (!missRecorded && commandFailure === null && outcome.failed) {
+      recordMissesForFailure(
+        projectDir,
+        state,
+        retryLoop.normalized_command,
+        new Date(now),
+        config.missWindowMinutes
+      )
+    }
   }
 }
 

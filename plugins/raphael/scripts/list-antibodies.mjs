@@ -323,19 +323,174 @@ function codePointCompare(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 
-// src/lib/stats-store.ts
+// src/lib/config.ts
 import fs2 from "node:fs";
 import path2 from "node:path";
+var DEFAULT_CONFIG = {
+  detectCommandFailure: true,
+  detectRetryLoop: true,
+  detectUserRejection: true,
+  detectEditChurn: true,
+  retryThreshold: 3,
+  editChurnThreshold: 3,
+  distillThreshold: 3,
+  defaultExpiryDays: 30,
+  maxInjections: 3,
+  rejectionPatterns: [],
+  benignExit1Commands: [],
+  benignExit1Extended: true,
+  breadthMaxRatio: 10,
+  breadthMinCorpus: 50,
+  missWindowMinutes: 30,
+  ineffectiveMinFired: 10,
+  ineffectiveMissRatio: 50,
+  antibodiesGitPolicy: "commit"
+};
+function configPath(projectDir) {
+  return path2.join(projectDir, ".claude", "raphael.local.md");
+}
+function parseFrontmatter(raw) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!match) return null;
+  const entries = /* @__PURE__ */ new Map();
+  for (const line of match[1].split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const field = line.match(/^([a-z0-9_]+):(?:\s?(.*))$/);
+    if (!field) return null;
+    entries.set(field[1], field[2]);
+  }
+  return entries;
+}
+function booleanValue(value) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+function integerInRange(value, minimum, maximum) {
+  if (!value || !/^-?\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null;
+}
+function stringArray(value) {
+  if (value === void 0) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function gitPolicy(value) {
+  return value === "commit" || value === "ignore" ? value : null;
+}
+function loadConfig(projectDir) {
+  const config = {
+    ...DEFAULT_CONFIG,
+    rejectionPatterns: [...DEFAULT_CONFIG.rejectionPatterns],
+    benignExit1Commands: [...DEFAULT_CONFIG.benignExit1Commands]
+  };
+  let raw;
+  try {
+    raw = fs2.readFileSync(configPath(projectDir), "utf8");
+  } catch {
+    return config;
+  }
+  const fields = parseFrontmatter(raw);
+  if (!fields) return config;
+  const detectCommandFailure = booleanValue(
+    fields.get("detect_command_failure")
+  );
+  if (detectCommandFailure !== null)
+    config.detectCommandFailure = detectCommandFailure;
+  const detectRetryLoop = booleanValue(fields.get("detect_retry_loop"));
+  if (detectRetryLoop !== null) config.detectRetryLoop = detectRetryLoop;
+  const detectUserRejection = booleanValue(fields.get("detect_user_rejection"));
+  if (detectUserRejection !== null)
+    config.detectUserRejection = detectUserRejection;
+  const detectEditChurn = booleanValue(fields.get("detect_edit_churn"));
+  if (detectEditChurn !== null) config.detectEditChurn = detectEditChurn;
+  const retryThreshold = integerInRange(fields.get("retry_threshold"), 2, 10);
+  if (retryThreshold !== null) config.retryThreshold = retryThreshold;
+  const editChurnThreshold = integerInRange(
+    fields.get("edit_churn_threshold"),
+    2,
+    10
+  );
+  if (editChurnThreshold !== null)
+    config.editChurnThreshold = editChurnThreshold;
+  const distillThreshold = integerInRange(
+    fields.get("distill_threshold"),
+    1,
+    100
+  );
+  if (distillThreshold !== null) config.distillThreshold = distillThreshold;
+  const defaultExpiryDays = integerInRange(
+    fields.get("default_expiry_days"),
+    1,
+    365
+  );
+  if (defaultExpiryDays !== null) config.defaultExpiryDays = defaultExpiryDays;
+  const maxInjections = integerInRange(fields.get("max_injections"), 1, 10);
+  if (maxInjections !== null) config.maxInjections = maxInjections;
+  const rejectionPatterns = stringArray(fields.get("rejection_patterns"));
+  if (rejectionPatterns !== null) config.rejectionPatterns = rejectionPatterns;
+  const benignExit1Commands = stringArray(fields.get("benign_exit1_commands"));
+  if (benignExit1Commands !== null)
+    config.benignExit1Commands = benignExit1Commands;
+  const benignExit1Extended = booleanValue(fields.get("benign_exit1_extended"));
+  if (benignExit1Extended !== null)
+    config.benignExit1Extended = benignExit1Extended;
+  const breadthMaxRatio = integerInRange(
+    fields.get("breadth_max_ratio"),
+    1,
+    100
+  );
+  if (breadthMaxRatio !== null) config.breadthMaxRatio = breadthMaxRatio;
+  const breadthMinCorpus = integerInRange(
+    fields.get("breadth_min_corpus"),
+    1,
+    5e3
+  );
+  if (breadthMinCorpus !== null) config.breadthMinCorpus = breadthMinCorpus;
+  const missWindowMinutes = integerInRange(
+    fields.get("miss_window_minutes"),
+    1,
+    1440
+  );
+  if (missWindowMinutes !== null) config.missWindowMinutes = missWindowMinutes;
+  const ineffectiveMinFired = integerInRange(
+    fields.get("ineffective_min_fired"),
+    1,
+    1e3
+  );
+  if (ineffectiveMinFired !== null)
+    config.ineffectiveMinFired = ineffectiveMinFired;
+  const ineffectiveMissRatio = integerInRange(
+    fields.get("ineffective_miss_ratio"),
+    1,
+    100
+  );
+  if (ineffectiveMissRatio !== null)
+    config.ineffectiveMissRatio = ineffectiveMissRatio;
+  const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"));
+  if (antibodiesGitPolicy !== null)
+    config.antibodiesGitPolicy = antibodiesGitPolicy;
+  return config;
+}
+
+// src/lib/stats-store.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
 var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
 var DATE_PATTERN2 = /^\d{4}-\d{2}-\d{2}$/;
 var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 function statsFilePath(projectDir) {
-  return path2.join(projectDir, ".raphael", "stats.json");
+  return path3.join(projectDir, ".raphael", "stats.json");
 }
 function loadStats(projectDir) {
   try {
     const parsed = JSON.parse(
-      fs2.readFileSync(statsFilePath(projectDir), "utf8")
+      fs3.readFileSync(statsFilePath(projectDir), "utf8")
     );
     if (!isRecord2(parsed) || !isRecord2(parsed.antibodies)) {
       return initialStats();
@@ -357,6 +512,9 @@ function loadStats(projectDir) {
 function statsFor(stats, id) {
   const value = stats.antibodies[id];
   return value === void 0 ? initialAntibodyStats() : { ...value };
+}
+function isIneffective(stats, config) {
+  return stats.fired >= config.ineffectiveMinFired && stats.misses * 100 >= stats.fired * config.ineffectiveMissRatio;
 }
 function initialStats() {
   return {
@@ -394,13 +552,17 @@ function main() {
     const options = parseArgs(process.argv.slice(2));
     const result = listAntibodies(options.dir);
     const stats = loadStats(options.dir);
+    const config = loadConfig(options.dir);
     const antibodies = result.antibodies.filter(
       (antibody) => options.status === void 0 || antibody.status === options.status
     ).filter(
       (antibody) => options.id === void 0 || antibody.id === options.id
+    ).filter(
+      (antibody) => !options.ineffective || isIneffective(statsFor(stats, antibody.id), config)
     ).sort((left, right) => left.id.localeCompare(right.id)).map((antibody) => ({
       ...antibody,
-      stats: statsFor(stats, antibody.id)
+      stats: statsFor(stats, antibody.id),
+      ineffective: isIneffective(statsFor(stats, antibody.id), config)
     })).map((antibody) => serializeForJson(antibody, options.includeBody));
     if (options.json) {
       respond({ ok: true, antibodies, errors: result.errors });
@@ -417,6 +579,7 @@ function parseArgs(args) {
   let includeBody = false;
   let status;
   let id;
+  let ineffective = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     switch (arg) {
@@ -443,6 +606,9 @@ function parseArgs(args) {
       case "--id":
         id = requireValue(args, ++index, "id");
         break;
+      case "--ineffective":
+        ineffective = true;
+        break;
       default:
         throw new AntibodyValidationError(
           `argument: unsupported option: ${arg}`,
@@ -455,7 +621,8 @@ function parseArgs(args) {
     json,
     includeBody,
     ...status === void 0 ? {} : { status },
-    ...id === void 0 ? {} : { id }
+    ...id === void 0 ? {} : { id },
+    ineffective
   };
 }
 function requireValue(args, index, field) {

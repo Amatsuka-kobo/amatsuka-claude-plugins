@@ -97,17 +97,20 @@ test("save 時に recent 上限と injected の antibody ID coalesce を適用�
         {
           ts: timestamp(1),
           antibody_id: "a",
-          trigger_fingerprint: "old"
+          trigger_fingerprint: "old",
+          recurrence_key: "a".repeat(64)
         },
         {
           ts: timestamp(2),
           antibody_id: "b",
-          trigger_fingerprint: "b"
+          trigger_fingerprint: "b",
+          recurrence_key: null
         },
         {
           ts: timestamp(3),
           antibody_id: "a",
-          trigger_fingerprint: "new"
+          trigger_fingerprint: "new",
+          recurrence_key: "b".repeat(64)
         }
       ]
     }
@@ -121,8 +124,44 @@ test("save 時に recent 上限と injected の antibody ID coalesce を適用�
     expect(saved.injected).toHaveLength(2)
     expect(
       saved.injected.find(({ antibody_id }) => antibody_id === "a")
-    ).toMatchObject({ ts: timestamp(3), trigger_fingerprint: "new" })
+    ).toMatchObject({
+      ts: timestamp(3),
+      trigger_fingerprint: "new",
+      recurrence_key: "b".repeat(64)
+    })
     expect(saved.last_tool?.input_digest).toBe("API_KEY=<redacted>")
+  })
+})
+
+test("state.injected の recurrence_key 型不正はフィールドだけ null にする", () => {
+  withProject((dir) => {
+    const state = createInitialState("session-1")
+    state.injected = [
+      {
+        ts: timestamp(0),
+        antibody_id: "ab-2026-0724-001",
+        trigger_fingerprint: "fingerprint",
+        recurrence_key: "invalid"
+      } as unknown as (typeof state.injected)[number],
+      {
+        ts: timestamp(1),
+        antibody_id: "ab-2026-0724-002",
+        trigger_fingerprint: "fingerprint",
+        recurrence_key: null
+      }
+    ]
+
+    saveState(dir, state)
+    expect(loadState(dir, "session-1").injected).toEqual([
+      expect.objectContaining({
+        antibody_id: "ab-2026-0724-001",
+        recurrence_key: null
+      }),
+      expect.objectContaining({
+        antibody_id: "ab-2026-0724-002",
+        recurrence_key: null
+      })
+    ])
   })
 })
 

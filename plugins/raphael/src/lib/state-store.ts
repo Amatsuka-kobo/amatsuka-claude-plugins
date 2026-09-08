@@ -188,17 +188,30 @@ function validateState(value: unknown): RaphaelStateV1 | null {
         return command
       })
     : null
+  const injected = Array.isArray(value.injected)
+    ? value.injected.map((entry) => {
+        if (!isObject(entry)) return entry
+        const recurrenceKey = entry.recurrence_key
+        return {
+          ...entry,
+          recurrence_key:
+            recurrenceKey === undefined || !isRecurrenceKey(recurrenceKey)
+              ? null
+              : recurrenceKey
+        }
+      })
+    : null
   if (
     recent_commands === null ||
     !recent_commands.every(isRecentCommand) ||
     !Array.isArray(value.recent_edits) ||
     !value.recent_edits.every(isRecentEdit) ||
-    !Array.isArray(value.injected) ||
-    !value.injected.every(isInjected)
+    injected === null ||
+    !injected.every(isInjected)
   )
     return null
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null
-  return { ...value, recent_commands } as unknown as RaphaelStateV1
+  return { ...value, recent_commands, injected } as unknown as RaphaelStateV1
 }
 
 function isRecentCommand(value: unknown): boolean {
@@ -238,7 +251,8 @@ function isInjected(value: unknown): boolean {
     isObject(value) &&
     isIsoDate(value.ts) &&
     isString(value.antibody_id) &&
-    isString(value.trigger_fingerprint)
+    isString(value.trigger_fingerprint) &&
+    isRecurrenceKey(value.recurrence_key)
   )
 }
 
@@ -248,6 +262,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isString(value: unknown): value is string {
   return typeof value === "string"
+}
+
+function isRecurrenceKey(value: unknown): value is string | null {
+  return (
+    value === null ||
+    (typeof value === "string" && /^[0-9a-f]{64}$/.test(value))
+  )
 }
 
 function isPositiveInteger(value: unknown): value is number {

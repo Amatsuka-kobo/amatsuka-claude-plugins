@@ -444,6 +444,9 @@ var DEFAULT_CONFIG = {
   benignExit1Extended: true,
   breadthMaxRatio: 10,
   breadthMinCorpus: 50,
+  missWindowMinutes: 30,
+  ineffectiveMinFired: 10,
+  ineffectiveMissRatio: 50,
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
@@ -552,10 +555,35 @@ function loadConfig(projectDir) {
     5e3
   );
   if (breadthMinCorpus !== null) config.breadthMinCorpus = breadthMinCorpus;
+  const missWindowMinutes = integerInRange(
+    fields.get("miss_window_minutes"),
+    1,
+    1440
+  );
+  if (missWindowMinutes !== null) config.missWindowMinutes = missWindowMinutes;
+  const ineffectiveMinFired = integerInRange(
+    fields.get("ineffective_min_fired"),
+    1,
+    1e3
+  );
+  if (ineffectiveMinFired !== null)
+    config.ineffectiveMinFired = ineffectiveMinFired;
+  const ineffectiveMissRatio = integerInRange(
+    fields.get("ineffective_miss_ratio"),
+    1,
+    100
+  );
+  if (ineffectiveMissRatio !== null)
+    config.ineffectiveMissRatio = ineffectiveMissRatio;
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"));
   if (antibodiesGitPolicy !== null)
     config.antibodiesGitPolicy = antibodiesGitPolicy;
   return config;
+}
+
+// src/lib/detect-command.ts
+function normalizeCommand(command) {
+  return command.trim().replace(/\s+/g, " ");
 }
 
 // src/lib/hook-io.ts
@@ -574,6 +602,11 @@ function resolveProjectDir(input) {
 
 // src/lib/infection-store.ts
 import crypto2 from "node:crypto";
+
+// src/lib/recurrence.ts
+function recurrenceKey(kind, target) {
+  return sha256Hex(`${kind}\0${target}`);
+}
 
 // src/lib/redact.ts
 var ENV_ASSIGNMENT = /\b([A-Za-z_][A-Za-z0-9_]*)=(?:"[^"]*"|'[^']*'|[^\s;|&]*)/g;
@@ -829,10 +862,18 @@ function validateState(value) {
     }
     return command;
   }) : null;
-  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
+  const injected = Array.isArray(value.injected) ? value.injected.map((entry) => {
+    if (!isObject(entry)) return entry;
+    const recurrenceKey2 = entry.recurrence_key;
+    return {
+      ...entry,
+      recurrence_key: recurrenceKey2 === void 0 || !isRecurrenceKey(recurrenceKey2) ? null : recurrenceKey2
+    };
+  }) : null;
+  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || injected === null || !injected.every(isInjected))
     return null;
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
-  return { ...value, recent_commands };
+  return { ...value, recent_commands, injected };
 }
 function isRecentCommand(value) {
   return isObject(value) && isIsoDate(value.ts) && isString(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString(value.infection_id)) && (value.resolved === void 0 || typeof value.resolved === "boolean");
@@ -844,13 +885,16 @@ function isLastTool(value) {
   return isObject(value) && isIsoDate(value.ts) && isTool(value.tool) && isString(value.input_digest);
 }
 function isInjected(value) {
-  return isObject(value) && isIsoDate(value.ts) && isString(value.antibody_id) && isString(value.trigger_fingerprint);
+  return isObject(value) && isIsoDate(value.ts) && isString(value.antibody_id) && isString(value.trigger_fingerprint) && isRecurrenceKey(value.recurrence_key);
 }
 function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isString(value) {
   return typeof value === "string";
+}
+function isRecurrenceKey(value) {
+  return value === null || typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 function isPositiveInteger(value) {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
@@ -1022,12 +1066,16 @@ function main() {
       const state = loadState(projectDir, sessionFor(input));
       const ts = (/* @__PURE__ */ new Date()).toISOString();
       const fingerprint = triggerFingerprint(target);
+      const injectedRecurrenceKey = input.tool_name === "Bash" ? recurrenceKey(
+        "command-failure",
+        normalizeCommand(input.tool_input.command ?? "")
+      ) : null;
       for (const antibody of matched.selected) {
         state.injected.push({
           ts,
           antibody_id: antibody.id,
           trigger_fingerprint: fingerprint,
-          recurrence_key: null
+          recurrence_key: injectedRecurrenceKey
         });
       }
       saveState(projectDir, state);

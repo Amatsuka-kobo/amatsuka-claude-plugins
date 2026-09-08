@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
 import { readAntibody, writeAntibodyCreate } from "../lib/antibody-store.js"
 import { sha256Hex } from "../lib/infection-store.js"
+import { recurrenceKey } from "../lib/recurrence.js"
 import { loadState, stateFilePath } from "../lib/state-store.js"
 import { loadStats, saveStats, statsFilePath } from "../lib/stats-store.js"
 import type { Antibody } from "../lib/types.js"
@@ -90,8 +91,36 @@ test("stats.json が無くても単一 match を注入し、発火状態を保�
         ts: expect.any(String),
         antibody_id: value.id,
         trigger_fingerprint: sha256Hex("Bash\0\0pnpm test -- --run"),
-        recurrence_key: null
+        recurrence_key: recurrenceKey("command-failure", "pnpm test -- --run")
       }
+    ])
+  })
+})
+
+test("Edit と Write の注入では recurrence_key が null になる", () => {
+  withProject((dir) => {
+    const edit = antibody({
+      trigger: { event: "PreToolUse", tool: "Edit", pattern: "new value" }
+    })
+    const write = antibody({
+      id: "ab-2026-0724-002",
+      trigger: { event: "PreToolUse", tool: "Write", pattern: "new value" }
+    })
+    writeAntibodyCreate(dir, edit)
+    writeAntibodyCreate(dir, write)
+
+    runHook(dir, {
+      tool_name: "Edit",
+      tool_input: { file_path: "src/file.ts", new_string: "new value" }
+    })
+    runHook(dir, {
+      tool_name: "Write",
+      tool_input: { file_path: "src/file.ts", content: "new value" }
+    })
+
+    expect(loadState(dir, SESSION).injected).toEqual([
+      expect.objectContaining({ antibody_id: edit.id, recurrence_key: null }),
+      expect.objectContaining({ antibody_id: write.id, recurrence_key: null })
     ])
   })
 })
@@ -229,7 +258,10 @@ test("recordFires が投げても additionalContext を出し state 保存を試
 
     expect(result.hookSpecificOutput.additionalContext).toContain(value.body)
     expect(loadState(dir, SESSION).injected).toEqual([
-      expect.objectContaining({ antibody_id: value.id, recurrence_key: null })
+      expect.objectContaining({
+        antibody_id: value.id,
+        recurrence_key: expect.stringMatching(/^[0-9a-f]{64}$/)
+      })
     ])
   })
 })

@@ -69,6 +69,9 @@ var DEFAULT_CONFIG = {
   benignExit1Extended: true,
   breadthMaxRatio: 10,
   breadthMinCorpus: 50,
+  missWindowMinutes: 30,
+  ineffectiveMinFired: 10,
+  ineffectiveMissRatio: 50,
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
@@ -177,6 +180,26 @@ function loadConfig(projectDir) {
     5e3
   );
   if (breadthMinCorpus !== null) config.breadthMinCorpus = breadthMinCorpus;
+  const missWindowMinutes = integerInRange(
+    fields.get("miss_window_minutes"),
+    1,
+    1440
+  );
+  if (missWindowMinutes !== null) config.missWindowMinutes = missWindowMinutes;
+  const ineffectiveMinFired = integerInRange(
+    fields.get("ineffective_min_fired"),
+    1,
+    1e3
+  );
+  if (ineffectiveMinFired !== null)
+    config.ineffectiveMinFired = ineffectiveMinFired;
+  const ineffectiveMissRatio = integerInRange(
+    fields.get("ineffective_miss_ratio"),
+    1,
+    100
+  );
+  if (ineffectiveMissRatio !== null)
+    config.ineffectiveMissRatio = ineffectiveMissRatio;
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"));
   if (antibodiesGitPolicy !== null)
     config.antibodiesGitPolicy = antibodiesGitPolicy;
@@ -519,6 +542,11 @@ function writeFileAtomic(filePath, content) {
     fs4.rmSync(tempPath, { force: true });
     throw error;
   }
+}
+
+// src/lib/recurrence.ts
+function recurrenceKey(kind, target) {
+  return sha256Hex(`${kind}\0${target}`);
 }
 
 // src/lib/redact.ts
@@ -870,10 +898,18 @@ function validateState(value) {
     }
     return command;
   }) : null;
-  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
+  const injected = Array.isArray(value.injected) ? value.injected.map((entry) => {
+    if (!isObject2(entry)) return entry;
+    const recurrenceKey2 = entry.recurrence_key;
+    return {
+      ...entry,
+      recurrence_key: recurrenceKey2 === void 0 || !isRecurrenceKey(recurrenceKey2) ? null : recurrenceKey2
+    };
+  }) : null;
+  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || injected === null || !injected.every(isInjected))
     return null;
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
-  return { ...value, recent_commands };
+  return { ...value, recent_commands, injected };
 }
 function isRecentCommand(value) {
   return isObject2(value) && isIsoDate2(value.ts) && isString2(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString2(value.infection_id)) && (value.resolved === void 0 || typeof value.resolved === "boolean");
@@ -885,13 +921,16 @@ function isLastTool(value) {
   return isObject2(value) && isIsoDate2(value.ts) && isTool2(value.tool) && isString2(value.input_digest);
 }
 function isInjected(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.antibody_id) && isString2(value.trigger_fingerprint);
+  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.antibody_id) && isString2(value.trigger_fingerprint) && isRecurrenceKey(value.recurrence_key);
 }
 function isObject2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isString2(value) {
   return typeof value === "string";
+}
+function isRecurrenceKey(value) {
+  return value === null || typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 function isPositiveInteger2(value) {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
@@ -907,6 +946,101 @@ function isIsoDate2(value) {
 }
 function truncate2(value, maximum) {
   return value.slice(0, maximum);
+}
+
+// src/lib/stats-store.ts
+import fs7 from "node:fs";
+import path7 from "node:path";
+var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
+var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+function statsFilePath(projectDir) {
+  return path7.join(projectDir, ".raphael", "stats.json");
+}
+function loadStats(projectDir) {
+  try {
+    const parsed = JSON.parse(
+      fs7.readFileSync(statsFilePath(projectDir), "utf8")
+    );
+    if (!isRecord2(parsed) || !isRecord2(parsed.antibodies)) {
+      return initialStats();
+    }
+    const antibodies = {};
+    for (const [id, value] of Object.entries(parsed.antibodies)) {
+      if (!ANTIBODY_ID_PATTERN.test(id)) continue;
+      antibodies[id] = validStats(value) ? value : initialAntibodyStats();
+    }
+    return {
+      schema_version: 1,
+      antibodies,
+      distill: normalizeDistill(parsed.distill)
+    };
+  } catch {
+    return initialStats();
+  }
+}
+function saveStats(projectDir, stats) {
+  writeFileAtomic(
+    statsFilePath(projectDir),
+    `${JSON.stringify(stats, null, 2)}
+`
+  );
+}
+function statsFor(stats, id) {
+  const value = stats.antibodies[id];
+  return value === void 0 ? initialAntibodyStats() : { ...value };
+}
+function recordMiss(projectDir, id, now = /* @__PURE__ */ new Date()) {
+  const stats = loadStats(projectDir);
+  const current = statsFor(stats, id);
+  const updated = {
+    ...current,
+    misses: current.misses + 1,
+    last_miss: maxDate(current.last_miss, localDate(now))
+  };
+  stats.antibodies[id] = updated;
+  saveStats(projectDir, stats);
+  return { ...updated };
+}
+function initialStats() {
+  return {
+    schema_version: 1,
+    antibodies: {},
+    distill: { last_nag_digest: null }
+  };
+}
+function initialAntibodyStats() {
+  return { fired: 0, last_fired: null, misses: 0, last_miss: null };
+}
+function validStats(value) {
+  if (!isRecord2(value)) return false;
+  return isNonNegativeInteger(value.fired) && isNullableDate(value.last_fired) && isNonNegativeInteger(value.misses) && isNullableDate(value.last_miss);
+}
+function normalizeDistill(value) {
+  if (!isRecord2(value) || !(value.last_nag_digest === null || typeof value.last_nag_digest === "string" && DIGEST_PATTERN.test(value.last_nag_digest))) {
+    return { last_nag_digest: null };
+  }
+  return { last_nag_digest: value.last_nag_digest };
+}
+function maxDate(left, right) {
+  if (left === null) return right;
+  if (right === null) return left;
+  return left >= right ? left : right;
+}
+function localDate(value) {
+  const year = String(value.getFullYear()).padStart(4, "0");
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function isNonNegativeInteger(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+function isNullableDate(value) {
+  return value === null || typeof value === "string" && DATE_PATTERN.test(value);
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/detect-infection.ts
@@ -969,6 +1103,29 @@ function appendRecord(projectDir, session, input, event, tool, kind, details, in
   };
   return appendInfection(projectDir, record) ? record.id : null;
 }
+function recordMissesForFailure(projectDir, state, normalizedCommand, now, windowMinutes) {
+  try {
+    const key = recurrenceKey("command-failure", normalizedCommand);
+    const minTimestamp = now.getTime() - windowMinutes * 6e4;
+    const antibodyIds = /* @__PURE__ */ new Set();
+    for (const entry of state.injected) {
+      if (entry.recurrence_key !== key) continue;
+      const timestamp = Date.parse(entry.ts);
+      const age = now.getTime() - timestamp;
+      if (Number.isFinite(timestamp) && age >= 0 && timestamp >= minTimestamp)
+        antibodyIds.add(entry.antibody_id);
+    }
+    for (const antibodyId of antibodyIds) {
+      try {
+        recordMiss(projectDir, antibodyId, now);
+      } catch (error) {
+        logError(projectDir, "detect-infection", error);
+      }
+    }
+  } catch (error) {
+    logError(projectDir, "detect-infection", error);
+  }
+}
 function setLastTool(state, tool, inputDigest, now) {
   state.last_tool = { ts: now, tool, input_digest: inputDigest };
 }
@@ -1011,6 +1168,17 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
     outcome.normalized_command,
     eventSeq
   );
+  let missRecorded = false;
+  if (infectionId !== null && outcome.failed) {
+    recordMissesForFailure(
+      projectDir,
+      state,
+      outcome.normalized_command,
+      new Date(now),
+      config.missWindowMinutes
+    );
+    missRecorded = true;
+  }
   if (outcome.failed === false && outcome.exit_code === 0) {
     const resolvedCommands = state.recent_commands.filter(
       (command) => command.normalized_command === normalizedCommand && command.failed === true && command.infection_id !== null && command.resolved !== true
@@ -1057,6 +1225,15 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
       `${retryLoop.normalized_command}\0${retryLoop.exit_codes.join(",")}`,
       eventSeq
     );
+    if (!missRecorded && commandFailure === null && outcome.failed) {
+      recordMissesForFailure(
+        projectDir,
+        state,
+        retryLoop.normalized_command,
+        new Date(now),
+        config.missWindowMinutes
+      );
+    }
   }
 }
 function churnWindowTarget(state, filePath, threshold) {
