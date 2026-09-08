@@ -12,7 +12,6 @@ import {
 import { appendCommandLog, readCommandLog } from "../lib/command-log.js"
 import {
   appendInfection,
-  computeDistillNagDigest,
   infectionFilePath,
   sha256Hex
 } from "../lib/infection-store.js"
@@ -128,13 +127,38 @@ test("不正 stdin と stop_hook_active は即時無出力にする", () => {
   })
 })
 
-test("threshold 未満は無出力、到達時だけ全 session の件数と絶対 path を含めて block する", () => {
+test("同一コマンドの 3 回失敗では種類数が閾値に届かず催促しない", () => {
   withProject((dir) => {
-    appendInfection(dir, infection("infection-z", "session-1"))
-    appendInfection(dir, infection("infection-a", "session-2"))
-    expect(runHook(dir, { session_id: "session-1" })).toBe("")
+    for (const id of ["infection-z", "infection-a", "infection-β"]) {
+      appendInfection(dir, infection(id, "session-1"))
+    }
 
-    appendInfection(dir, infection("infection-β", "session-2"))
+    expect(runHook(dir, { session_id: "session-1" })).toBe("")
+    expect(loadStats(dir).distill.last_nag_digest).toBeNull()
+  })
+})
+
+test("異なる 3 コマンドでは種類数と件数を含めて block する", () => {
+  withProject((dir) => {
+    for (const [id, command] of [
+      ["infection-z", "false"],
+      ["infection-a", "node missing-a.mjs"],
+      ["infection-β", "git status --no-such-path"]
+    ] as const) {
+      appendInfection(
+        dir,
+        infection(id, "session-1", {
+          details: {
+            type: "command-failure",
+            command,
+            normalized_command: command,
+            exit_code: 1,
+            output_tail: "private output"
+          }
+        })
+      )
+    }
+
     const output = runHook(dir, { session_id: "session-1" })
     const block = parseBlock(output)
     expect(block.decision).toBe("block")
@@ -142,6 +166,7 @@ test("threshold 未満は無出力、到達時だけ全 session の件数と絶�
       'subagent_type "raphael:antibody-synthesizer"'
     )
     expect(block.reason).toContain(`対象 project: ${dir}`)
+    expect(block.reason).toContain("未解決の失敗の種類数: 3")
     expect(block.reason).toContain("未蒸留 infection 件数: 3")
     expect(block.reason).toContain(
       `node "${PLUGIN_ROOT}/scripts/list-antibodies.mjs" --json --include-body`
@@ -153,66 +178,162 @@ test("threshold 未満は無出力、到達時だけ全 session の件数と絶�
     expect(block.reason).not.toContain("do-not-print")
     expect(block.reason).not.toContain("private output")
 
-    expect(loadState(dir, "session-1").last_distill_nag_digest).toBe(
-      computeDistillNagDigest(["infection-z", "infection-a", "infection-β"])
-    )
+    expect(loadStats(dir).distill.last_nag_digest).toMatch(/^[0-9a-f]{64}$/)
   })
 })
 
-test("同じ SHA-256 digest では再停止せず、新規 infection 追加後は再通知する", () => {
+test("session をまたいで同じ種類集合では再停止せず、集合変更後は再通知する", () => {
   withProject((dir) => {
-    for (const id of ["infection-c", "infection-a", "infection-b"]) {
-      appendInfection(dir, infection(id, "session-1"))
-    }
+    const commands = [
+      "false",
+      "node missing-a.mjs",
+      "git status --no-such-path"
+    ]
+    commands.forEach((command, index) => {
+      appendInfection(
+        dir,
+        infection(`infection-${index}`, "session-1", {
+          details: {
+            type: "command-failure",
+            command,
+            normalized_command: command,
+            exit_code: 1,
+            output_tail: "private output"
+          }
+        })
+      )
+    })
 
     const first = parseBlock(runHook(dir, { session_id: "session-1" }))
-    const firstDigest = loadState(dir, "session-1").last_distill_nag_digest
-    expect(first.reason).toContain("未蒸留 infection 件数: 3")
-    expect(firstDigest).toBe(
-      computeDistillNagDigest(["infection-c", "infection-a", "infection-b"])
-    )
+    const firstDigest = loadStats(dir).distill.last_nag_digest
+    expect(first.reason).toContain("未解決の失敗の種類数: 3")
     expect(firstDigest).toMatch(/^[0-9a-f]{64}$/)
 
-    expect(runHook(dir, { session_id: "session-1" })).toBe("")
-    expect(loadState(dir, "session-1").last_distill_nag_digest).toBe(
-      firstDigest
-    )
+    expect(runHook(dir, { session_id: "session-2" })).toBe("")
+    expect(loadStats(dir).distill.last_nag_digest).toBe(firstDigest)
 
-    appendInfection(dir, infection("infection-d", "session-2"))
-    const second = parseBlock(runHook(dir, { session_id: "session-1" }))
-    expect(second.reason).toContain("未蒸留 infection 件数: 4")
-    expect(loadState(dir, "session-1").last_distill_nag_digest).toBe(
-      computeDistillNagDigest([
-        "infection-c",
-        "infection-a",
-        "infection-b",
-        "infection-d"
-      ])
+    appendInfection(
+      dir,
+      infection("infection-new", "session-2", {
+        details: {
+          type: "command-failure",
+          command: "node missing-new.mjs",
+          normalized_command: "node missing-new.mjs",
+          exit_code: 1,
+          output_tail: "private output"
+        }
+      })
     )
+    const second = parseBlock(runHook(dir, { session_id: "session-2" }))
+    expect(second.reason).toContain("未解決の失敗の種類数: 4")
+    expect(loadStats(dir).distill.last_nag_digest).not.toBe(firstDigest)
   })
 })
 
-test("state atomic 保存失敗時は完全無出力で旧 digest を維持し、次回再試行する", () => {
+test("resolved と distilled の record は未解決集合から除外する", () => {
   withProject((dir) => {
-    for (const id of ["infection-1", "infection-2", "infection-3"]) {
-      appendInfection(dir, infection(id, "session-1"))
-    }
-    expect(parseBlock(runHook(dir, { session_id: "session-1" })).decision).toBe(
-      "block"
+    appendInfection(dir, infection("resolved", "session-1", { resolved: true }))
+    appendInfection(
+      dir,
+      infection("distilled", "session-1", {
+        distilled: true,
+        distilled_at: "2026-09-08T00:00:00.000Z"
+      })
     )
-    const oldDigest = loadState(dir, "session-1").last_distill_nag_digest
+    appendInfection(
+      dir,
+      infection("pending", "session-1", {
+        details: {
+          type: "command-failure",
+          command: "node pending.mjs",
+          normalized_command: "node pending.mjs",
+          exit_code: 1,
+          output_tail: "private output"
+        }
+      })
+    )
 
-    appendInfection(dir, infection("infection-4", "session-1"))
+    expect(runHook(dir, { session_id: "session-1" })).toBe("")
+    appendInfection(
+      dir,
+      infection("pending-2", "session-1", {
+        details: {
+          type: "command-failure",
+          command: "node pending-2.mjs",
+          normalized_command: "node pending-2.mjs",
+          exit_code: 1,
+          output_tail: "private output"
+        }
+      })
+    )
+    appendInfection(
+      dir,
+      infection("pending-3", "session-1", {
+        details: {
+          type: "command-failure",
+          command: "node pending-3.mjs",
+          normalized_command: "node pending-3.mjs",
+          exit_code: 1,
+          output_tail: "private output"
+        }
+      })
+    )
+    const output = parseBlock(runHook(dir, { session_id: "session-1" }))
+    expect(output.reason).toContain("未解決の失敗の種類数: 3")
+    expect(output.reason).toContain("未蒸留 infection 件数: 4")
+  })
+})
+
+test("stats.json の読み込みに失敗したときは通常どおり催促する", () => {
+  withProject((dir) => {
+    for (const [id, command] of [
+      ["a", "false"],
+      ["b", "node missing.mjs"],
+      ["c", "git status --no-such-path"]
+    ] as const) {
+      appendInfection(
+        dir,
+        infection(id, "session-1", {
+          details: {
+            type: "command-failure",
+            command,
+            normalized_command: command,
+            exit_code: 1,
+            output_tail: ""
+          }
+        })
+      )
+    }
+    fs.mkdirSync(path.join(dir, ".raphael"), { recursive: true })
+    fs.writeFileSync(path.join(dir, ".raphael", "stats.json"), "{broken")
+    const output = parseBlock(runHook(dir, { session_id: "session-1" }))
+    expect(output.decision).toBe("block")
+  })
+})
+
+test("stats.json の書き込みに失敗したときは block を出さない", () => {
+  withProject((dir) => {
+    for (const [id, command] of [
+      ["a", "false"],
+      ["b", "node missing.mjs"],
+      ["c", "git status --no-such-path"]
+    ] as const) {
+      appendInfection(
+        dir,
+        infection(id, "session-1", {
+          details: {
+            type: "command-failure",
+            command,
+            normalized_command: command,
+            exit_code: 1,
+            output_tail: ""
+          }
+        })
+      )
+    }
+    fs.mkdirSync(path.join(dir, ".raphael", "stats.json"), { recursive: true })
     fs.chmodSync(path.join(dir, ".raphael"), 0o555)
     expect(runHook(dir, { session_id: "session-1" })).toBe("")
-    expect(loadState(dir, "session-1").last_distill_nag_digest).toBe(oldDigest)
-
-    fs.chmodSync(path.join(dir, ".raphael"), 0o755)
-    const retried = parseBlock(runHook(dir, { session_id: "session-1" }))
-    expect(retried.reason).toContain("未蒸留 infection 件数: 4")
-    expect(loadState(dir, "session-1").last_distill_nag_digest).not.toBe(
-      oldDigest
-    )
   })
 })
 
@@ -422,7 +543,7 @@ test("cleanup I/O failure は hook を止めず stdout を空にする", () => {
   })
 })
 
-test("既存 state の他 field を保ったまま digest だけ更新する", () => {
+test("nag digest を stats に保存して state の他 field を変更しない", () => {
   withProject((dir) => {
     const state = createInitialState("session-1")
     state.next_event_seq = 7
@@ -434,13 +555,29 @@ test("既存 state の他 field を保ったまま digest だけ更新する", (
       }
     ]
     saveState(dir, state)
-    for (const id of ["infection-1", "infection-2", "infection-3"]) {
-      appendInfection(dir, infection(id, "session-1"))
+    for (const [id, command] of [
+      ["a", "false"],
+      ["b", "node missing.mjs"],
+      ["c", "git status --no-such-path"]
+    ] as const) {
+      appendInfection(
+        dir,
+        infection(id, "session-1", {
+          details: {
+            type: "command-failure",
+            command,
+            normalized_command: command,
+            exit_code: 1,
+            output_tail: ""
+          }
+        })
+      )
     }
 
     parseBlock(runHook(dir, { session_id: "session-1" }))
     const saved = loadState(dir, "session-1")
     expect(saved.next_event_seq).toBe(7)
     expect(saved.injected).toEqual(state.injected)
+    expect(loadStats(dir).distill.last_nag_digest).toMatch(/^[0-9a-f]{64}$/)
   })
 })

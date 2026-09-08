@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // src/check-distill-needed.ts
-import fs8 from "node:fs";
-import path8 from "node:path";
+import fs7 from "node:fs";
+import path7 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/lib/antibody-store.ts
@@ -610,15 +610,9 @@ function loadConfig(projectDir) {
 // src/lib/infection-store.ts
 import crypto2 from "node:crypto";
 
-// src/lib/redact.ts
-var ENV_ASSIGNMENT = /\b([A-Za-z_][A-Za-z0-9_]*)=(?:"[^"]*"|'[^']*'|[^\s;|&]*)/g;
-var SECRET_NAME_PART = /TOKEN|KEY|SECRET|PASSWORD|PASSWD/i;
-var BEARER_AUTHORIZATION = /(Authorization\s*:\s*Bearer\s+)([^\s'";,]+)/gi;
-function redactSecrets(value) {
-  return value.replace(
-    ENV_ASSIGNMENT,
-    (match, name) => SECRET_NAME_PART.test(name) ? `${name}=<redacted>` : match
-  ).replace(BEARER_AUTHORIZATION, "$1<redacted>");
+// src/lib/recurrence.ts
+function recurrenceKey(kind, target) {
+  return sha256Hex(`${kind}\0${target}`);
 }
 
 // src/lib/infection-store.ts
@@ -636,6 +630,18 @@ var HOOK_EVENTS = [
 ];
 function sha256Hex(value) {
   return crypto2.createHash("sha256").update(value).digest("hex");
+}
+function recurrenceKeyOf(record) {
+  const details = record.details;
+  switch (details.type) {
+    case "command-failure":
+    case "retry-loop":
+      return recurrenceKey("command-failure", details.normalized_command);
+    case "user-rejection":
+      return recurrenceKey("user-rejection", details.matched_pattern);
+    case "edit-churn":
+      return recurrenceKey("edit-churn", details.file_path);
+  }
 }
 function computeDistillNagDigest(ids) {
   return sha256Hex([...new Set(ids)].sort(codePointCompare2).join("\0"));
@@ -731,133 +737,19 @@ function codePointCompare2(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 
-// src/lib/state-store.ts
+// src/lib/stats-store.ts
 import fs6 from "node:fs";
 import path6 from "node:path";
-var TOOLS3 = ["Bash", "Edit", "Write"];
-function stateFilePath(projectDir) {
-  return path6.join(projectDir, ".raphael", "state.json");
-}
-function createInitialState(session) {
-  return {
-    schema_version: 1,
-    session,
-    next_event_seq: 1,
-    recent_commands: [],
-    recent_edits: [],
-    last_tool: null,
-    injected: [],
-    last_distill_nag_digest: null
-  };
-}
-function loadState(projectDir, currentSession) {
-  try {
-    const parsed = JSON.parse(
-      fs6.readFileSync(stateFilePath(projectDir), "utf8")
-    );
-    const state = validateState(parsed);
-    if (!state || state.session !== currentSession)
-      return createInitialState(currentSession);
-    return normalizeState(state);
-  } catch {
-    return createInitialState(currentSession);
-  }
-}
-function saveState(projectDir, state) {
-  const validated = validateState(state);
-  if (!validated) throw new TypeError("Invalid Raphael state");
-  const normalized = normalizeState(validated);
-  writeFileAtomic(stateFilePath(projectDir), `${JSON.stringify(normalized)}
-`);
-}
-function normalizeState(state) {
-  const injected = /* @__PURE__ */ new Map();
-  for (const entry of state.injected) {
-    const previous = injected.get(entry.antibody_id);
-    if (!previous || entry.ts >= previous.ts)
-      injected.set(entry.antibody_id, entry);
-  }
-  return {
-    ...state,
-    recent_commands: state.recent_commands.slice(-50).map((command) => ({
-      ...command,
-      normalized_command: redactSecrets(command.normalized_command)
-    })),
-    recent_edits: state.recent_edits.slice(-50),
-    last_tool: state.last_tool === null ? null : {
-      ...state.last_tool,
-      input_digest: truncate(
-        redactSecrets(state.last_tool.input_digest),
-        500
-      )
-    },
-    injected: [...injected.values()]
-  };
-}
-function validateState(value) {
-  if (!isObject2(value) || value.schema_version !== 1) return null;
-  if (!isString2(value.session) || !isPositiveInteger2(value.next_event_seq))
-    return null;
-  const recent_commands = Array.isArray(value.recent_commands) ? value.recent_commands.map((command) => {
-    if (isObject2(command) && "resolved" in command && typeof command.resolved !== "boolean") {
-      return { ...command, resolved: false };
-    }
-    return command;
-  }) : null;
-  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
-    return null;
-  if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
-  if (!(value.last_distill_nag_digest === null || isString2(value.last_distill_nag_digest) && /^[0-9a-f]{64}$/.test(value.last_distill_nag_digest)))
-    return null;
-  return { ...value, recent_commands };
-}
-function isRecentCommand(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString2(value.infection_id)) && (value.resolved === void 0 || typeof value.resolved === "boolean");
-}
-function isRecentEdit(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.file_path) && isPositiveInteger2(value.line_start) && isPositiveInteger2(value.line_end) && value.line_end >= value.line_start;
-}
-function isLastTool(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isTool2(value.tool) && isString2(value.input_digest);
-}
-function isInjected(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.antibody_id) && isString2(value.trigger_fingerprint);
-}
-function isObject2(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isString2(value) {
-  return typeof value === "string";
-}
-function isPositiveInteger2(value) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1;
-}
-function isNullableFiniteNumber(value) {
-  return value === null || typeof value === "number" && Number.isFinite(value);
-}
-function isTool2(value) {
-  return typeof value === "string" && TOOLS3.includes(value);
-}
-function isIsoDate2(value) {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value;
-}
-function truncate(value, maximum) {
-  return value.slice(0, maximum);
-}
-
-// src/lib/stats-store.ts
-import fs7 from "node:fs";
-import path7 from "node:path";
 var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
 var DATE_PATTERN2 = /^\d{4}-\d{2}-\d{2}$/;
 var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 function statsFilePath(projectDir) {
-  return path7.join(projectDir, ".raphael", "stats.json");
+  return path6.join(projectDir, ".raphael", "stats.json");
 }
 function loadStats(projectDir) {
   try {
     const parsed = JSON.parse(
-      fs7.readFileSync(statsFilePath(projectDir), "utf8")
+      fs6.readFileSync(statsFilePath(projectDir), "utf8")
     );
     if (!isRecord2(parsed) || !isRecord2(parsed.antibodies)) {
       return initialStats();
@@ -895,6 +787,11 @@ function pruneOrphanStats(projectDir, knownIds) {
   if (removed > 0) saveStats(projectDir, stats);
   return removed;
 }
+function setNagDigest(projectDir, digest) {
+  const stats = loadStats(projectDir);
+  stats.distill.last_nag_digest = digest;
+  saveStats(projectDir, stats);
+}
 function initialStats() {
   return {
     schema_version: 1,
@@ -928,7 +825,7 @@ function isRecord2(value) {
 // src/check-distill-needed.ts
 var DISTILLED_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;
 function cleanupProject(projectDir, now = /* @__PURE__ */ new Date()) {
-  const undistilledIds = cleanupInfections(projectDir, now);
+  const result = cleanupInfections(projectDir, now);
   const knownIds = expireAntibodies(projectDir, now);
   try {
     pruneOrphanStats(projectDir, knownIds);
@@ -939,7 +836,7 @@ function cleanupProject(projectDir, now = /* @__PURE__ */ new Date()) {
   } catch (error) {
     logError(projectDir, "check-distill-needed", error);
   }
-  return { undistilledIds };
+  return result;
 }
 function localDateString(value) {
   const year = String(value.getFullYear()).padStart(4, "0");
@@ -948,20 +845,22 @@ function localDateString(value) {
   return `${year}-${month}-${day}`;
 }
 function cleanupInfections(projectDir, now) {
-  const directory = path8.join(projectDir, ".raphael", "infections");
+  const directory = path7.join(projectDir, ".raphael", "infections");
   let entries;
   try {
-    entries = fs8.readdirSync(directory, { withFileTypes: true });
+    entries = fs7.readdirSync(directory, { withFileTypes: true });
   } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) return [];
+    if (isErrorCode2(error, "ENOENT"))
+      return { undistilledIds: [], unresolvedRecurrenceKeys: [] };
     throw error;
   }
   const cutoff = now.getTime() - DISTILLED_RETENTION_MS;
   const undistilledIds = [];
+  const unresolvedRecurrenceKeys = /* @__PURE__ */ new Set();
   const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl")).map((entry) => entry.name).sort(codePointCompare3);
   for (const file of files) {
-    const filePath = path8.join(directory, file);
-    const raw = fs8.readFileSync(filePath, "utf8");
+    const filePath = path7.join(directory, file);
+    const raw = fs7.readFileSync(filePath, "utf8");
     const lines = raw.split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
     const retained = [];
@@ -977,17 +876,26 @@ function cleanupInfections(projectDir, now) {
       const resolvedExpired = record.resolved === true && Number.isFinite(resolvedAt) && resolvedAt < cutoff;
       const distilledExpired = record.distilled === true && Number.isFinite(distilledAt) && distilledAt < cutoff;
       if (resolvedExpired || distilledExpired) continue;
-      if (!record.distilled) undistilledIds.push(record.id);
+      if (!record.distilled) {
+        undistilledIds.push(record.id);
+        if (record.resolved !== true)
+          unresolvedRecurrenceKeys.add(recurrenceKeyOf(record));
+      }
       retained.push(line);
     }
     if (retained.length === 0) {
-      fs8.rmSync(filePath);
+      fs7.rmSync(filePath);
     } else if (retained.length !== lines.length || retained.some((line, index) => line !== lines[index])) {
       writeFileAtomic(filePath, `${retained.join("\n")}
 `);
     }
   }
-  return undistilledIds;
+  return {
+    undistilledIds,
+    unresolvedRecurrenceKeys: [...unresolvedRecurrenceKeys].sort(
+      codePointCompare3
+    )
+  };
 }
 function expireAntibodies(projectDir, now) {
   const today = localDateString(now);
@@ -999,13 +907,14 @@ function expireAntibodies(projectDir, now) {
   }
   return antibodies.map(({ id }) => id);
 }
-function buildReason(projectDir, pluginRoot, undistilledCount) {
-  const listScript = path8.join(pluginRoot, "scripts", "list-antibodies.mjs");
-  const updateScript = path8.join(pluginRoot, "scripts", "update-antibody.mjs");
+function buildReason(projectDir, pluginRoot, unresolvedRecurrenceCount, undistilledCount) {
+  const listScript = path7.join(pluginRoot, "scripts", "list-antibodies.mjs");
+  const updateScript = path7.join(pluginRoot, "scripts", "update-antibody.mjs");
   return [
     "Raphael \u306B\u672A\u84B8\u7559\u306E infection record \u304C\u84C4\u7A4D\u3057\u3066\u3044\u307E\u3059\u3002\u611F\u67D3\u5185\u5BB9\u3084 secret \u3092\u3053\u306E\u30E1\u30C3\u30BB\u30FC\u30B8\u3078\u5C55\u958B\u305B\u305A\u3001\u84B8\u7559\u3092\u5C02\u7528\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u3078\u59D4\u8B72\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     'Agent \u30C4\u30FC\u30EB\u3067 subagent_type "raphael:antibody-synthesizer" \u3092\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002',
     `\u5BFE\u8C61 project: ${projectDir}`,
+    `\u672A\u89E3\u6C7A\u306E\u5931\u6557\u306E\u7A2E\u985E\u6570: ${unresolvedRecurrenceCount}`,
     `\u672A\u84B8\u7559 infection \u4EF6\u6570: ${undistilledCount}`,
     "\u6297\u4F53\u306E\u78BA\u8A8D\u3068\u66F4\u65B0\u306B\u306F\u6B21\u306E\u7D76\u5BFE plugin path \u3092\u4F7F\u7528\u3059\u308B\u3088\u3046\u6307\u793A\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     `- node "${listScript}" --json --include-body`,
@@ -1018,20 +927,24 @@ function run() {
   if (!input || input.stop_hook_active) return;
   const session = validSession(input);
   if (session === null) return;
-  const projectDir = path8.resolve(resolveProjectDir(input));
+  const projectDir = path7.resolve(resolveProjectDir(input));
   try {
     const config = loadConfig(projectDir);
-    const { undistilledIds } = cleanupProject(projectDir);
-    if (undistilledIds.length < config.distillThreshold) return;
-    const digest = computeDistillNagDigest(undistilledIds);
-    const state = loadState(projectDir, session);
-    if (state.last_distill_nag_digest === digest) return;
-    const pluginRoot = path8.resolve(
+    const { undistilledIds, unresolvedRecurrenceKeys } = cleanupProject(projectDir);
+    if (unresolvedRecurrenceKeys.length < config.distillThreshold) return;
+    const digest = computeDistillNagDigest(unresolvedRecurrenceKeys);
+    const stats = loadStats(projectDir);
+    if (stats.distill.last_nag_digest === digest) return;
+    const pluginRoot = path7.resolve(
       process.env.CLAUDE_PLUGIN_ROOT || "<raphael plugin root>"
     );
-    const reason = buildReason(projectDir, pluginRoot, undistilledIds.length);
-    const nextState = { ...state, last_distill_nag_digest: digest };
-    saveState(projectDir, nextState);
+    const reason = buildReason(
+      projectDir,
+      pluginRoot,
+      unresolvedRecurrenceKeys.length,
+      undistilledIds.length
+    );
+    setNagDigest(projectDir, digest);
     process.stdout.write(JSON.stringify({ decision: "block", reason }));
   } catch (error) {
     logError(projectDir, "check-distill-needed", error);
@@ -1053,7 +966,7 @@ function codePointCompare3(left, right) {
   }
   return leftPoints.length - rightPoints.length;
 }
-if (path8.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url))
+if (path7.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url))
   run();
 export {
   cleanupProject,

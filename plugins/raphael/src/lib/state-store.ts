@@ -36,8 +36,7 @@ export function createInitialState(session: string): RaphaelStateV1 {
     recent_commands: [],
     recent_edits: [],
     last_tool: null,
-    injected: [],
-    last_distill_nag_digest: null
+    injected: []
   }
 }
 
@@ -199,15 +198,6 @@ function validateState(value: unknown): RaphaelStateV1 | null {
   )
     return null
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null
-  if (
-    !(
-      value.last_distill_nag_digest === null ||
-      (isString(value.last_distill_nag_digest) &&
-        /^[0-9a-f]{64}$/.test(value.last_distill_nag_digest))
-    )
-  )
-    return null
-
   return { ...value, recent_commands } as unknown as RaphaelStateV1
 }
 

@@ -26,6 +26,26 @@ function timestamp(index: number): string {
   return new Date(Date.UTC(2026, 6, 24, 0, 0, index)).toISOString()
 }
 
+test("旧 last_distill_nag_digest を持つ state.json も読める", () => {
+  withProject((dir) => {
+    const file = stateFilePath(dir)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        ...createInitialState("session-1"),
+        last_distill_nag_digest: "a".repeat(64)
+      })
+    )
+
+    const loaded = loadState(dir, "session-1")
+    expect(loaded.session).toBe("session-1")
+    expect(
+      (loaded as unknown as Record<string, unknown>).last_distill_nag_digest
+    ).toBe("a".repeat(64))
+  })
+})
+
 test("state が無い、壊れている、session が違う場合は初期値へ戻す", () => {
   withProject((dir) => {
     expect(loadState(dir, "session-1")).toEqual(createInitialState("session-1"))
