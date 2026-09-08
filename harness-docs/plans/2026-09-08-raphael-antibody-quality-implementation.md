@@ -288,6 +288,13 @@ git status --porcelain .raphael/stats.json .raphael/commands.jsonl
 - **判断**: 後から出た、より具体的で排他的な裁定 R11 の 3 条件を正とします。`schema_version` の値だけが 1 でないファイルは全体初期化せず、有効な entry を保持したまま返り値を `schema_version: 1` へ正規化します。現時点で `schema_version` は 1 しか存在せず、仮に将来 2 が来ても entry の型検査が個別に落とすため、この扱いで整合します。
 - **反映**: 実装は 3 条件のみで全体初期化します。設計書 §3.4 の箇条書き 2 番目の「schema 不一致」という語は、3 番目の定義に吸収されるものとして扱います(設計判断の変更ではありません)。
 
+### #2 リビルドした hook スクリプトは即座にライブになる(ステップ 1 完了後に発見)
+
+- **事実**: §6 は「hook は再起動しないと反映されないため、必ずセッションを再起動してから始めてください」と書いていますが、hook の登録内容は `node <plugin>/scripts/<name>.mjs` というコマンド行であり、Node はそのファイルを毎回新しく読み込みます。したがって `pnpm run build` で `scripts/*.mjs` を再生成した時点で、実行中のセッションでも新しいコードが動きます。実際、ステップ 1 のビルド直後から `.raphael/stats.json` が実データ側に生成され、発火が記録され始めました。セッション再起動が要るのは `hooks.json` の登録内容そのもの(イベントとスクリプトの対応)を変えたときだけです。
+- **影響**: ステップ 1 以降、`serializeAntibodyMarkdown` は `stats` ブロックを書きません。よって `migrate-stats` の実行前に抗体へ書き込み operation(`create` / `patch` / `extend` / `set-status`)を通すと、その抗体の frontmatter から発火統計が消えます。消えた統計は `migrate-stats` では回収できません(`legacyStats === null` となり skipped として素通りするため)。
+- **判断**: 実装期間中は抗体への書き込みを行いません。具体的には、Stop hook が要求する抗体蒸留(`raphael:antibody-synthesizer` の起動)を、§6 の検証 0(`migrate-stats`)が完了するまで見送ります。未蒸留 record は蓄積したままで構いません。
+- **自動失効による損失は差し迫っていない**ことを確認済みです。`matchAntibodies` が自動失効させるのは `status === "active"` かつ `expires < today` の抗体だけであり(`match-antibody.ts:66`)、`confirmed` は対象外です。2026-09-08 時点で active な抗体のうち最も早い期限は `ab-2026-0801-002` の 2026-09-14 であり、実装完了までの猶予があります。
+
 ### baseline
 
 着手前に実行した lint / typecheck / test の結果をここへ記録してください。

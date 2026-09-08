@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { appendCommandLog } from "./lib/command-log.js"
 import { loadConfig } from "./lib/config.js"
 import {
   commandOutcomeFromHookInput,
@@ -14,6 +15,7 @@ import {
   readInfections,
   sha256Hex
 } from "./lib/infection-store.js"
+import { redactSecrets } from "./lib/redact.js"
 import { applyEditToState, loadState, saveState } from "./lib/state-store.js"
 import type {
   HookInput,
@@ -137,6 +139,14 @@ function processBash(
 
   const outcome = commandOutcomeFromHookInput(input, config.benignExit1Commands)
   if (!outcome) return
+
+  appendCommandLog(projectDir, {
+    ts: now,
+    session,
+    normalized_command: redactSecrets(outcome.normalized_command),
+    exit_code: outcome.exit_code,
+    failed: outcome.failed
+  })
 
   const commandFailure = config.detectCommandFailure
     ? detectCommandFailure({

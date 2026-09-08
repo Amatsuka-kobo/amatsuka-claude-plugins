@@ -3,6 +3,8 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { readCommandLog } from "../lib/command-log.js"
+import { classifyCommandOutcome } from "../lib/detect-command.js"
 import { infectionFilePath, readInfections } from "../lib/infection-store.js"
 import { loadState } from "../lib/state-store.js"
 import { runTs } from "../testing/run-ts.js"
@@ -105,6 +107,74 @@ test("benign exit-1 は infection file を作らない", () => {
       }).trim()
     ).toBe("")
     expect(fs.existsSync(infectionFilePath(dir, SESSION))).toBe(false)
+  })
+})
+
+test("成功コマンドもコマンド履歴へ 1 行追記する", () => {
+  withProject((dir) => {
+    runHook(dir, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_use_id: "success-1",
+      tool_input: { command: "echo hello" },
+      tool_response: { exit_code: 0 }
+    })
+
+    expect(readCommandLog(dir)).toMatchObject([
+      {
+        session: SESSION,
+        normalized_command: "echo hello",
+        exit_code: 0,
+        failed: false
+      }
+    ])
+  })
+})
+
+test("失敗コマンドも分類結果とともにコマンド履歴へ追記する", () => {
+  withProject((dir) => {
+    const expected = classifyCommandOutcome({
+      hookEvent: "PostToolUseFailure",
+      command: "pnpm run check",
+      toolResponse: { exit_code: 2 }
+    })
+    runHook(dir, {
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_use_id: "failure-log-1",
+      tool_input: { command: "pnpm run check" },
+      tool_response: { exit_code: 2 }
+    })
+
+    expect(readCommandLog(dir)).toMatchObject([
+      {
+        session: SESSION,
+        normalized_command: expected.normalized_command,
+        exit_code: expected.exit_code,
+        failed: expected.failed
+      }
+    ])
+    expect(readInfections(dir, SESSION)).toHaveLength(1)
+  })
+})
+
+test("コマンド履歴への追記失敗後も state 更新と infection 記録を続ける", () => {
+  withProject((dir) => {
+    fs.mkdirSync(path.join(dir, ".raphael"), { recursive: true })
+    fs.mkdirSync(path.join(dir, ".raphael", "commands.jsonl"))
+
+    expect(() =>
+      runHook(dir, {
+        hook_event_name: "PostToolUseFailure",
+        tool_name: "Bash",
+        tool_use_id: "failure-log-2",
+        tool_input: { command: "pnpm run check" },
+        tool_response: { exit_code: 2 }
+      })
+    ).not.toThrow()
+
+    expect(loadState(dir, SESSION).recent_commands).toHaveLength(1)
+    expect(readInfections(dir, SESSION)).toHaveLength(1)
   })
 })
 
