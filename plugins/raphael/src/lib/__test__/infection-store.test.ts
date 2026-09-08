@@ -9,6 +9,7 @@ import {
   infectionFilePath,
   markInfectionsDistilled,
   readInfections,
+  recurrenceKeyOf,
   sessionFileName,
   sha256Hex
 } from "../infection-store.js"
@@ -239,4 +240,35 @@ test("mark-distilled は対象 ID の有効行だけを read-modify-write する
     })
     expect(fs.readFileSync(file, "utf8")).toContain("{broken\n")
   })
+})
+
+test("recurrenceKeyOf は details 以外の record フィールドを読まない", () => {
+  const details = detailsByKind[0][1]
+  const first = record("command-failure", details)
+  const second = record("command-failure", details, {
+    id: "infection-20260908-111213014-a1b2c3d4",
+    ts: "2026-09-08T11:12:13.014Z",
+    session: "another-session",
+    hook_event: "PostToolUse",
+    tool: null,
+    tool_use_id: "tool-use-2",
+    input_digest: "another-input",
+    evidence: "another-evidence",
+    fingerprint: sha256Hex("another-fingerprint"),
+    distilled: true,
+    distilled_at: "2026-09-08T12:00:00.000Z"
+  })
+
+  expect(recurrenceKeyOf(first)).toBe(recurrenceKeyOf(second))
+})
+
+test("保存フィールドを持たない既存形の record から再発キーを得る", () => {
+  const existingRecord = record("user-rejection", detailsByKind[2][1])
+
+  expect("recurrence_key" in existingRecord).toBe(false)
+  expect("resolved" in existingRecord).toBe(false)
+  expect("resolved_at" in existingRecord).toBe(false)
+  expect(recurrenceKeyOf(existingRecord)).toBe(
+    sha256Hex("user-rejection\0ja-wrong")
+  )
 })

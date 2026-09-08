@@ -295,6 +295,12 @@ git status --porcelain .raphael/stats.json .raphael/commands.jsonl
 - **判断**: 実装期間中は抗体への書き込みを行いません。具体的には、Stop hook が要求する抗体蒸留(`raphael:antibody-synthesizer` の起動)を、§6 の検証 0(`migrate-stats`)が完了するまで見送ります。未蒸留 record は蓄積したままで構いません。
 - **自動失効による損失は差し迫っていない**ことを確認済みです。`matchAntibodies` が自動失効させるのは `status === "active"` かつ `expires < today` の抗体だけであり(`match-antibody.ts:66`)、`confirmed` は対象外です。2026-09-08 時点で active な抗体のうち最も早い期限は `ab-2026-0801-002` の 2026-09-14 であり、実装完了までの猶予があります。
 
+### #3 ステップ 4 は `scripts/` の差分を生まない(ステップ 4 で発見)
+
+- **事実**: ステップ 4 が足すのは `recurrenceKey` と `recurrenceKeyOf` の 2 つの純関数だけであり、呼び出し元の追加は本ステップでは禁止されています(呼び出し元はステップ 5・6・8 で入ります)。`plugins/raphael/build.ts` は 5 つの CLI エントリポイントを esbuild で bundle するため、どのエントリポイントからも参照されない関数は tree shaking で落とされます。結果として `pnpm run build` は成功しますが `plugins/raphael/scripts/*.mjs` の差分は生成されません。
+- **判断**: このステップはソースのみの変更としてコミットします。§1 と §5 の「`src/` を変更したすべてのコミットに `scripts/` の差分がある」という規則の目的は「配布物が古いまま残らないこと」であり、build を実行して差分が出ないことは、この時点のソースに対する正しい出力が既にコミット済みであることを意味します。目的は満たされています。
+- **確認**: `pnpm run build` を実行した後に `git status --porcelain -- plugins/raphael/scripts` が空であることを確認済みです。build 設定の変更も、差分を作るための呼び出し元の先取り追加も行いません。
+
 ### baseline
 
 着手前に実行した lint / typecheck / test の結果をここへ記録してください。
