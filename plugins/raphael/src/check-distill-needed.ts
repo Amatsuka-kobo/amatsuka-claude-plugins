@@ -9,23 +9,24 @@ import { loadConfig } from "./lib/config.js"
 import { logError, readStdinSync, resolveProjectDir } from "./lib/hook-io.js"
 import {
   computeDistillNagDigest,
-  parseInfectionLine
+  parseInfectionLine,
+  recurrenceKeyOf
 } from "./lib/infection-store.js"
-import { loadState, saveState } from "./lib/state-store.js"
-import { pruneOrphanStats } from "./lib/stats-store.js"
+import { loadStats, pruneOrphanStats, setNagDigest } from "./lib/stats-store.js"
 import type { HookInput } from "./lib/types.js"
 
 const DISTILLED_RETENTION_MS = 14 * 24 * 60 * 60 * 1_000
 
 export interface CleanupResult {
   undistilledIds: string[]
+  unresolvedRecurrenceKeys: string[]
 }
 
 export function cleanupProject(
   projectDir: string,
   now = new Date()
 ): CleanupResult {
-  const undistilledIds = cleanupInfections(projectDir, now)
+  const result = cleanupInfections(projectDir, now)
   const knownIds = expireAntibodies(projectDir, now)
   try {
     pruneOrphanStats(projectDir, knownIds)
@@ -37,7 +38,7 @@ export function cleanupProject(
   } catch (error) {
     logError(projectDir, "check-distill-needed", error)
   }
-  return { undistilledIds }
+  return result
 }
 
 export function localDateString(value: Date): string {
@@ -47,18 +48,20 @@ export function localDateString(value: Date): string {
   return `${year}-${month}-${day}`
 }
 
-function cleanupInfections(projectDir: string, now: Date): string[] {
+function cleanupInfections(projectDir: string, now: Date): CleanupResult {
   const directory = path.join(projectDir, ".raphael", "infections")
   let entries: fs.Dirent[]
   try {
     entries = fs.readdirSync(directory, { withFileTypes: true })
   } catch (error) {
-    if (isErrorCode(error, "ENOENT")) return []
+    if (isErrorCode(error, "ENOENT"))
+      return { undistilledIds: [], unresolvedRecurrenceKeys: [] }
     throw error
   }
 
   const cutoff = now.getTime() - DISTILLED_RETENTION_MS
   const undistilledIds: string[] = []
+  const unresolvedRecurrenceKeys = new Set<string>()
   const files = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
     .map((entry) => entry.name)
@@ -97,7 +100,11 @@ function cleanupInfections(projectDir: string, now: Date): string[] {
         distilledAt < cutoff
       if (resolvedExpired || distilledExpired) continue
 
-      if (!record.distilled) undistilledIds.push(record.id)
+      if (!record.distilled) {
+        undistilledIds.push(record.id)
+        if (record.resolved !== true)
+          unresolvedRecurrenceKeys.add(recurrenceKeyOf(record))
+      }
       retained.push(line)
     }
 
@@ -111,7 +118,12 @@ function cleanupInfections(projectDir: string, now: Date): string[] {
     }
   }
 
-  return undistilledIds
+  return {
+    undistilledIds,
+    unresolvedRecurrenceKeys: [...unresolvedRecurrenceKeys].sort(
+      codePointCompare
+    )
+  }
 }
 
 function expireAntibodies(projectDir: string, now: Date): string[] {
@@ -128,6 +140,7 @@ function expireAntibodies(projectDir: string, now: Date): string[] {
 function buildReason(
   projectDir: string,
   pluginRoot: string,
+  unresolvedRecurrenceCount: number,
   undistilledCount: number
 ): string {
   const listScript = path.join(pluginRoot, "scripts", "list-antibodies.mjs")
@@ -136,6 +149,7 @@ function buildReason(
     "Raphael に未蒸留の infection record が蓄積しています。感染内容や secret をこのメッセージへ展開せず、蒸留を専用サブエージェントへ委譲してください。",
     'Agent ツールで subagent_type "raphael:antibody-synthesizer" を起動してください。',
     `対象 project: ${projectDir}`,
+    `未解決の失敗の種類数: ${unresolvedRecurrenceCount}`,
     `未蒸留 infection 件数: ${undistilledCount}`,
     "抗体の確認と更新には次の絶対 plugin path を使用するよう指示してください。",
     `- node "${listScript}" --json --include-body`,
@@ -154,19 +168,24 @@ function run(): void {
 
   try {
     const config = loadConfig(projectDir)
-    const { undistilledIds } = cleanupProject(projectDir)
-    if (undistilledIds.length < config.distillThreshold) return
+    const { undistilledIds, unresolvedRecurrenceKeys } =
+      cleanupProject(projectDir)
+    if (unresolvedRecurrenceKeys.length < config.distillThreshold) return
 
-    const digest = computeDistillNagDigest(undistilledIds)
-    const state = loadState(projectDir, session)
-    if (state.last_distill_nag_digest === digest) return
+    const digest = computeDistillNagDigest(unresolvedRecurrenceKeys)
+    const stats = loadStats(projectDir)
+    if (stats.distill.last_nag_digest === digest) return
 
     const pluginRoot = path.resolve(
       process.env.CLAUDE_PLUGIN_ROOT || "<raphael plugin root>"
     )
-    const reason = buildReason(projectDir, pluginRoot, undistilledIds.length)
-    const nextState = { ...state, last_distill_nag_digest: digest }
-    saveState(projectDir, nextState)
+    const reason = buildReason(
+      projectDir,
+      pluginRoot,
+      unresolvedRecurrenceKeys.length,
+      undistilledIds.length
+    )
+    setNagDigest(projectDir, digest)
     process.stdout.write(JSON.stringify({ decision: "block", reason }))
   } catch (error) {
     logError(projectDir, "check-distill-needed", error)

@@ -756,8 +756,7 @@ function createInitialState(session) {
     recent_commands: [],
     recent_edits: [],
     last_tool: null,
-    injected: [],
-    last_distill_nag_digest: null
+    injected: []
   };
 }
 function loadState(projectDir, currentSession) {
@@ -860,8 +859,6 @@ function validateState(value) {
   if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
     return null;
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
-  if (!(value.last_distill_nag_digest === null || isString2(value.last_distill_nag_digest) && /^[0-9a-f]{64}$/.test(value.last_distill_nag_digest)))
-    return null;
   return { ...value, recent_commands };
 }
 function isRecentCommand(value) {

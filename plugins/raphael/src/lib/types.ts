@@ -86,7 +86,6 @@ export interface RaphaelStateV1 {
     trigger_fingerprint: string
     recurrence_key?: string | null
   }>
-  last_distill_nag_digest: string | null
 }
 
 export type AntibodyStatus = "active" | "expired" | "confirmed"
