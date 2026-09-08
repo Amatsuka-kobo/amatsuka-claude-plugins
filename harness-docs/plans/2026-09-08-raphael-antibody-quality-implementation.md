@@ -308,12 +308,52 @@ git status --porcelain .raphael/stats.json .raphael/commands.jsonl
 - **判断**: 実装の欠陥ではありません。広さ検査は設計どおり母集団全体への一致率を計算しており、閾値の比較も正しく働いています(10% 超の 2 件を検出)。食い違っているのは検証 2 に書かれた**期待する抗体の名前**だけであり、その期待値は F7 の母集団を前提としたものです。
 - **検証 2 の読み替え**: 「`ab-2026-0803-002` が `noisy` になること」ではなく、「**母集団に照らして広すぎる抗体が `noisy` として検出され、`recommendation` が `narrow` 以上になること**」を確認します。現時点では `ab-2026-0827-002` と `ab-2026-0907-001` がその対象です。どちらも広さ検査の無い旧 synthesizer が作った抗体であり、本改修が狙う「コマンドの構文的特徴だけに一致する広すぎる pattern」の実例です。
 - **母集団が育てば `ab-2026-0803-002` も再び上がる可能性があります。** `commands.jsonl` はプロジェクト単位で上限 2,000 行まで蓄積されるため、通常の作業を重ねるほど F7 の分布へ近づきます。
+- **実機検証時点(母集団 一意 264 件)の確定値**: `ab-2026-0827-002` が 15.15% で唯一の `noisy`(`recommendation: narrow`)。`ab-2026-0803-002` は **6.44%** で `keep`。`summary` は `keep: 45` / `narrow: 1` / `expire: 0`。母集団が 180 件だった時点では `ab-2026-0907-001` も 11.11% で `narrow` でしたが、264 件では 10% を下回りました。**同じ pattern の一致率は母集団の作業内容によって動きます。** これは裁定 R12 が直近 N 件の窓を設けなかった理由(揺れを避ける)と同じ性質が、母集団の成長方向にも現れたものです。
 
 ### #5 config key の件数(ステップ 11 で発見。オーケストレーターの依頼文の誤り)
 
 - **事実**: ステップ 11 の依頼文で config の総数を「17 件」と書きましたが、`src/lib/config.ts` の `DEFAULT_CONFIG` は **18 件**です(既存 12 件 + 本改修で追加した 6 件)。依頼文に添付した一覧そのものは 18 行あり、合計の数え違いでした。
 - **判断**: 実装の `DEFAULT_CONFIG` を正とし、文書には 18 件すべてを記載します。設計書の記述に誤りはありません(設計書 §6 は「新 key 6 件」とだけ書いており、総数には触れていません)。
 - **確認**: `DESIGN.md` と `README.md` の両方に 18 key すべてが含まれることを機械的に確認済みです。
+
+## 7.1 実機検証の結果(ステップ 13)
+
+実施日: 2026-09-08。本セッション内で hook がライブ動作している状態で実施しました。`scripts/*.mjs` を再生成した時点から新コードが動くため(食い違い #2)、セッション再起動は不要でした。
+
+### 検証 0: 移行 — 成功
+
+- `--dry-run migrate-stats` が `migrated: 56` / `skipped: 0` / `errors: []` を返し、ファイルを書きませんでした。
+- 本実行も `migrated: 56` / `skipped: 0` / `errors: []`。
+- **移行前の frontmatter の `fired` 合計 4827 が、`stats.json` の 56 entry の合計 4827 と完全に一致**しました。
+- 抗体ファイルに残る `stats` ブロックは 0 件。差分は `stats` / `fired` / `last_fired` の削除のみで追加行はありません。
+- 2 回目の実行は `migrated: 0` / `skipped: 56` を返し、冪等でした。
+- コミット `489a8c9`。未追跡だった 4 件も抗体の規約に従って追加しました。
+
+### 検証 1: 意図した失敗では催促せず、意図しない失敗は拾う — 成功
+
+| 観測 | 結果 |
+| --- | --- |
+| `pnpm vitest run <存在しないパス>` を 3 回(いずれも exit 1) | 3 件とも `exit_code: 1` を取得し `failed: false`。**infection は 142 件のまま増えず**、`commands.jsonl` には 3 行増加 |
+| 異なる 3 コマンドの意図しない失敗(`node .../no-such-{alpha,beta,gamma}.mjs`) | infection が 3 件増え、**再発キーは 3 種類** |
+| 同一コマンドの 3 回失敗(`node .../no-such-delta.mjs`) | record は 4 件(`command-failure` 3 + `retry-loop` 1)だが、**再発キーは 1 種類**(全件が同一の鍵)。`retry-loop` に `command-failure` の kind ラベルを使う裁定が実データで機能 |
+| `git -C /tmp rev-parse --show-toplevel`(exit 128) | `failed: true` として記録。**128 は failure のまま**であり、git の `fatal:` を消していない |
+
+補足として、`failed: true` の履歴を時刻で切り分けたところ、`pnpm run lint` / `pnpm vitest` の exit 1 が failure として記録されているのはすべてステップ 3 のビルド(01:48 UTC)より前の記録でした。**ビルド後に failure として記録された benign 対象のコマンドは 1 件もありません。**
+
+### 検証 2: 広さの棚卸し — 成功(期待する抗体名は食い違い #4 のとおり読み替え)
+
+- **`commands.jsonl` の一意コマンド数: 264 件**(設計書 §12 N7 の記録対象)。下限 50 件を大きく超えています。
+- `audit` は読み取り専用でした。実行前後で抗体 56 件・`stats.json`・`commands.jsonl` の sha256 がすべて不変であることを確認済みです。
+- `thresholds` は `{breadth_max_ratio: 10, ineffective_min_fired: 10, ineffective_miss_ratio: 50}`。`results` は 46 件(`expired` 10 件を除く `active` / `confirmed`)。
+- `ab-2026-0827-002`(15.15%)が唯一の `noisy` で `recommendation: narrow`。並び順も `narrow` → `keep`、グループ内は ratio 降順で設計どおりでした。
+- **注入側の再現も確認しました。** `ls -la && cat plugins/raphael/README.md | head -3` という読み取り専用のコマンドに対し、`ab-2026-0803-002`(pattern `&&.*[|;]`)が実際に注入されました。設計書 §1.1 が「設計を書いている最中にも起きた」と記した現象に再現性があります。広さ検査は抗体を**作るとき**にしか働かないため、既存の抗体には遡及しません。対処は `audit` の結果を見て人間が判断する分業になっています。
+- **miss の実測**: `ab-2026-0803-002` と `ab-2026-0826-003` にそれぞれ `misses: 1` が付きました。後者は「pnpm workspace で `npx` を使うと devEngines エラー」の抗体で、注入されたのに実際に同じ失敗を踏んだ事実が記録されています。B2 の突合せ経路が実データで動作しています。
+
+### 検証 3: 移行後に抗体が dirty にならない — 成功
+
+- `git status --porcelain .raphael/antibodies/` の出力が**空**。
+- `git status --porcelain .raphael/stats.json .raphael/commands.jsonl` の出力も**空**。`git check-ignore` で `.gitignore` の 21・22 行目に一致することを確認しました。
+- 移行後に **213 回の発火**(`fired` 合計 4827 → 5040)がありましたが、抗体ファイルは 1 件も書き換わっていません。本改修が解こうとした「発火のたびに git 追跡ファイルが dirty になる」問題が解消しています。
 
 ### baseline
 
