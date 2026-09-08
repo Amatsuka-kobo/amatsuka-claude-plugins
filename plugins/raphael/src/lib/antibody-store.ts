@@ -154,7 +154,6 @@ export function createAntibody(
       source: draft.source,
       trigger: draft.trigger,
       status: "active",
-      stats: { fired: 0, last_fired: null },
       expires: draft.expires,
       body: draft.body
     })
@@ -241,23 +240,6 @@ export function extendAntibodyExpires(
 ): Antibody {
   const current = readAntibody(projectDir, id)
   const updated = validateAntibody({ ...current, expires })
-  writeAntibodyReplace(projectDir, updated)
-  return updated
-}
-
-export function recordAntibodyFire(
-  projectDir: string,
-  id: string,
-  now = new Date()
-): Antibody {
-  const current = readAntibody(projectDir, id)
-  const updated = validateAntibody({
-    ...current,
-    stats: {
-      fired: current.stats.fired + 1,
-      last_fired: localDate(now)
-    }
-  })
   writeAntibodyReplace(projectDir, updated)
   return updated
 }

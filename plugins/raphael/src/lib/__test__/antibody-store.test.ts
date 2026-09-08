@@ -10,7 +10,6 @@ import {
   extendAntibodyExpires,
   listAntibodies,
   patchAntibody,
-  recordAntibodyFire,
   setAntibodyStatus,
   writeAntibodyCreate
 } from "../antibody-store.js"
@@ -36,7 +35,6 @@ function value(overrides: Partial<Antibody> = {}): Antibody {
     source: "manual",
     trigger: { event: "PreToolUse", tool: "Bash", pattern: "pnpm test" },
     status: "active",
-    stats: { fired: 0, last_fired: null },
     expires: "2026-08-23",
     body: "Run the focused test first.",
     ...overrides
@@ -73,7 +71,7 @@ test("ローカル日付の日次 ID を有効最大値+1で採番し、番号�
     )
     expect(created.id).toBe("ab-2026-0724-004")
     expect(created.created).toBe("2026-07-24")
-    expect(created.stats).toEqual({ fired: 0, last_fired: null })
+    expect(created).not.toHaveProperty("stats")
     expect(created.status).toBe("active")
   })
 })
@@ -211,8 +209,7 @@ test("extend expires は expires だけを atomic 更新し、不正値は書か
     const updated = extendAntibodyExpires(dir, value().id, "2026-09-01")
     expect(updated).toMatchObject({
       expires: "2026-09-01",
-      status: "active",
-      stats: { fired: 0, last_fired: null }
+      status: "active"
     })
 
     const before = fs.readFileSync(antibodyFilePath(dir, value().id), "utf8")
@@ -222,18 +219,6 @@ test("extend expires は expires だけを atomic 更新し、不正値は書か
     expect(fs.readFileSync(antibodyFilePath(dir, value().id), "utf8")).toBe(
       before
     )
-  })
-})
-
-test("record-fire は fired とローカル日付を atomic 更新する", () => {
-  withProject((dir) => {
-    writeAntibodyCreate(dir, value())
-    const updated = recordAntibodyFire(
-      dir,
-      value().id,
-      new Date(2026, 6, 25, 1)
-    )
-    expect(updated.stats).toEqual({ fired: 1, last_fired: "2026-07-25" })
   })
 })
 

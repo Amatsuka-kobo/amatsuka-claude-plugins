@@ -25,7 +25,14 @@ export class AntibodyValidationError extends Error {
   }
 }
 
-export function parseAntibodyMarkdown(markdown: string): Antibody {
+export interface ParsedAntibody {
+  antibody: Antibody
+  legacyStats: { fired: number; last_fired: string | null } | null
+}
+
+export function parseAntibodyMarkdownWithLegacy(
+  markdown: string
+): ParsedAntibody {
   const normalized = markdown.replace(/\r\n?/g, "\n")
   if (!normalized.startsWith("---\n")) {
     throw validationError("frontmatter", "must start with ---")
@@ -79,33 +86,49 @@ export function parseAntibodyMarkdown(markdown: string): Antibody {
     scope = parseString(take("  ", "scope"), "trigger.scope")
   }
   const status = parseString(take("", "status"), "status")
-  takeGroup("stats")
-  const fired = parseInteger(take("  ", "fired"), "stats.fired")
-  const lastFired = parseNullableString(
-    take("  ", "last_fired"),
-    "stats.last_fired"
-  )
+  let legacyStats: ParsedAntibody["legacyStats"] = null
+  if (lines[index]?.startsWith("stats:")) {
+    if (stripInlineComment(take("", "stats")).trim() !== "") {
+      throw validationError("stats", "expected stats:")
+    }
+    const fired = parseInteger(take("  ", "fired"), "stats.fired")
+    const lastFired = parseNullableString(
+      take("  ", "last_fired"),
+      "stats.last_fired"
+    )
+    legacyStats = {
+      fired,
+      last_fired:
+        lastFired === null ? null : requireDate(lastFired, "stats.last_fired")
+    }
+  }
   const expires = parseString(take("", "expires"), "expires")
 
   if (index !== lines.length) {
     throw validationError("frontmatter", `unexpected field: ${lines[index]}`)
   }
 
-  return validateAntibody({
-    id,
-    created,
-    source,
-    trigger: {
-      event,
-      tool,
-      pattern,
-      ...(scope === undefined ? {} : { scope })
-    },
-    status,
-    stats: { fired, last_fired: lastFired },
-    expires,
-    body
-  })
+  return {
+    antibody: validateAntibody({
+      id,
+      created,
+      source,
+      trigger: {
+        event,
+        tool,
+        pattern,
+        ...(scope === undefined ? {} : { scope })
+      },
+      status,
+      expires,
+      body
+    }),
+    legacyStats
+  }
+}
+
+export function parseAntibodyMarkdown(markdown: string): Antibody {
+  return parseAntibodyMarkdownWithLegacy(markdown).antibody
 }
 
 export function serializeAntibodyMarkdown(value: unknown): string {
@@ -125,9 +148,6 @@ export function serializeAntibodyMarkdown(value: unknown): string {
   }
   lines.push(
     `status: ${antibody.status}`,
-    "stats:",
-    `  fired: ${antibody.stats.fired}`,
-    `  last_fired: ${antibody.stats.last_fired ?? "null"}`,
     `expires: ${antibody.expires}`,
     "---",
     "",
@@ -144,7 +164,6 @@ export function validateAntibody(value: unknown): Antibody {
     "source",
     "trigger",
     "status",
-    "stats",
     "expires",
     "body"
   ])
@@ -165,21 +184,6 @@ export function validateAntibody(value: unknown): Antibody {
     throw validationError("status", "must be active, expired, or confirmed")
   }
 
-  if (!isRecord(value.stats)) {
-    throw validationError("stats", "must be an object")
-  }
-  assertExactKeys(value.stats, ["fired", "last_fired"], "stats")
-  if (
-    typeof value.stats.fired !== "number" ||
-    !Number.isInteger(value.stats.fired) ||
-    value.stats.fired < 0
-  ) {
-    throw validationError("stats.fired", "must be a non-negative integer")
-  }
-  const lastFired =
-    value.stats.last_fired === null
-      ? null
-      : requireDate(value.stats.last_fired, "stats.last_fired")
   const expires = requireDate(value.expires, "expires")
   const body = requireString(value.body, "body")
   if (body.trim() === "") throw validationError("body", "must not be empty")
@@ -193,7 +197,6 @@ export function validateAntibody(value: unknown): Antibody {
     source,
     trigger,
     status: status as AntibodyStatus,
-    stats: { fired: value.stats.fired, last_fired: lastFired },
     expires,
     body
   }

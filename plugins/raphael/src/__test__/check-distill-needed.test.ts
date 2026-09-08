@@ -21,6 +21,7 @@ import {
   saveState,
   stateFilePath
 } from "../lib/state-store.js"
+import { loadStats, saveStats } from "../lib/stats-store.js"
 import type { Antibody, InfectionRecordV1 } from "../lib/types.js"
 import { runTs } from "../testing/run-ts.js"
 
@@ -79,7 +80,6 @@ function antibody(overrides: Partial<Antibody> = {}): Antibody {
     source: "manual",
     trigger: { event: "PreToolUse", tool: "Bash", pattern: "pnpm test" },
     status: "active",
-    stats: { fired: 0, last_fired: null },
     expires: "2026-08-23",
     body: "Run the focused test first.",
     ...overrides
@@ -291,18 +291,62 @@ test("cleanup は expires を過ぎた active 抗体だけ expired に遷移す�
       antibodyFilePath(dir, "ab-2026-0724-004"),
       "broken antibody"
     )
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-001": {
+          fired: 1,
+          last_fired: null,
+          misses: 0,
+          last_miss: null
+        },
+        "ab-2026-0724-999": {
+          fired: 9,
+          last_fired: null,
+          misses: 0,
+          last_miss: null
+        }
+      },
+      distill: { last_nag_digest: null }
+    })
 
     cleanupProject(dir, new Date(2026, 6, 24, 12))
 
     expect(readAntibody(dir, "ab-2026-0724-001").status).toBe("expired")
     expect(readAntibody(dir, "ab-2026-0724-002").status).toBe("active")
     expect(readAntibody(dir, "ab-2026-0724-003").status).toBe("confirmed")
+    expect(Object.keys(loadStats(dir).antibodies)).toEqual(["ab-2026-0724-001"])
     expect(
       fs.readFileSync(antibodyFilePath(dir, "ab-2026-0724-004"), "utf8")
     ).toBe("broken antibody")
     expect(localDateString(new Date(2026, 6, 24, 23, 59, 59))).toBe(
       "2026-07-24"
     )
+  })
+})
+
+test("stats pruning の読み書き失敗でも cleanup 全体を止めない", () => {
+  withProject((dir) => {
+    writeAntibodyCreate(
+      dir,
+      antibody({ id: "ab-2026-0724-001", expires: "2026-07-23" })
+    )
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-999": {
+          fired: 1,
+          last_fired: null,
+          misses: 0,
+          last_miss: null
+        }
+      },
+      distill: { last_nag_digest: null }
+    })
+    fs.chmodSync(path.join(dir, ".raphael"), 0o555)
+
+    expect(() => cleanupProject(dir, new Date(2026, 6, 24, 12))).not.toThrow()
+    expect(readAntibody(dir, "ab-2026-0724-001").status).toBe("expired")
   })
 })
 

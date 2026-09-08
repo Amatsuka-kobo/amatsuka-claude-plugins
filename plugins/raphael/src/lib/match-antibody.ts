@@ -1,4 +1,5 @@
 import path from "node:path"
+import type { AntibodyStats } from "./stats-store.js"
 import type { Antibody, RaphaelToolName } from "./types.js"
 
 const MAX_PATTERN_TEXT_LENGTH = 20_000
@@ -14,6 +15,7 @@ export interface MatchTarget {
 export interface MatchOptions {
   limit?: number
   now?: Date
+  stats?: Record<string, AntibodyStats>
 }
 
 export interface MatchResult {
@@ -79,7 +81,7 @@ export function matchAntibodies(
     matching.push(antibody)
   }
 
-  matching.sort(compareAntibodies)
+  matching.sort((left, right) => compareAntibodies(left, right, options.stats))
   return {
     selected: matching.slice(0, normalizedLimit(options.limit)),
     expiredActiveIds: expiredActiveIds.sort(codePointCompare)
@@ -198,10 +200,14 @@ function escapeRegExp(value: string): string {
   return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
 }
 
-function compareAntibodies(left: Antibody, right: Antibody): number {
+function compareAntibodies(
+  left: Antibody,
+  right: Antibody,
+  stats: Record<string, AntibodyStats> | undefined
+): number {
   const lastFired = compareNullableDescending(
-    left.stats.last_fired,
-    right.stats.last_fired
+    stats?.[left.id]?.last_fired ?? null,
+    stats?.[right.id]?.last_fired ?? null
   )
   if (lastFired !== 0) return lastFired
 
