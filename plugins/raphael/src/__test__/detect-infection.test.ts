@@ -47,7 +47,7 @@ test("fixture stdin から command failure、retry loop、user rejection、edit 
           hook_event_name: "PostToolUseFailure",
           tool_name: "Bash",
           tool_use_id: toolUseId,
-          tool_input: { command: "pnpm test" },
+          tool_input: { command: "pnpm build" },
           tool_response: { stderr: "test failed", exit_code: 2 }
         }).trim()
       ).toBe("")
@@ -110,6 +110,20 @@ test("benign exit-1 は infection file を作らない", () => {
   })
 })
 
+test("拡張 benign の exit 2 は infection file を作らない", () => {
+  withProject((dir) => {
+    expect(
+      runHook(dir, {
+        hook_event_name: "PostToolUseFailure",
+        tool_name: "Bash",
+        tool_input: { command: "pnpm run typecheck" },
+        tool_response: { exit_code: 2 }
+      }).trim()
+    ).toBe("")
+    expect(fs.existsSync(infectionFilePath(dir, SESSION))).toBe(false)
+  })
+})
+
 test("成功コマンドもコマンド履歴へ 1 行追記する", () => {
   withProject((dir) => {
     runHook(dir, {
@@ -135,14 +149,14 @@ test("失敗コマンドも分類結果とともにコマンド履歴へ追記�
   withProject((dir) => {
     const expected = classifyCommandOutcome({
       hookEvent: "PostToolUseFailure",
-      command: "pnpm run check",
+      command: "pnpm run build",
       toolResponse: { exit_code: 2 }
     })
     runHook(dir, {
       hook_event_name: "PostToolUseFailure",
       tool_name: "Bash",
       tool_use_id: "failure-log-1",
-      tool_input: { command: "pnpm run check" },
+      tool_input: { command: "pnpm run build" },
       tool_response: { exit_code: 2 }
     })
 
@@ -168,7 +182,7 @@ test("コマンド履歴への追記失敗後も state 更新と infection 記�
         hook_event_name: "PostToolUseFailure",
         tool_name: "Bash",
         tool_use_id: "failure-log-2",
-        tool_input: { command: "pnpm run check" },
+        tool_input: { command: "pnpm run build" },
         tool_response: { exit_code: 2 }
       })
     ).not.toThrow()
@@ -184,7 +198,7 @@ test("同じ hook input の再実行は infection を重複作成しない", () 
       hook_event_name: "PostToolUseFailure",
       tool_name: "Bash",
       tool_use_id: "duplicate-1",
-      tool_input: { command: "pnpm lint" },
+      tool_input: { command: "pnpm build" },
       error: "Command failed with exit code 2"
     }
     runHook(dir, fixture)

@@ -78,6 +78,73 @@ test("config benign commands extend rather than replace built-ins", () => {
   expect(isBenignExit1Command("grep value", 1, ["custom check"])).toBe(true)
 })
 
+test.each([
+  ["pnpm vitest", 1],
+  ["pnpm run lint", 1],
+  ["npm test", 1],
+  ["npm test", 2],
+  ["yarn test", 1],
+  ["yarn lint", 1],
+  ["npm run typecheck", 2],
+  ["pnpm run typecheck", 2],
+  ["cd x && pnpm vitest", 1],
+  ["pnpm --dir x vitest", 1],
+  ["TZ=UTC pnpm vitest", 1],
+  ["pnpm -C x run test", 1],
+  ["pnpm exec biome", 2],
+  ["/abs/path/node_modules/.bin/tsc", 2],
+  ["npx jest", 1],
+  ["pnpm dlx pytest", 2]
+] as const)("extended benign commands are benign: %s (exit %s)", (command, exitCode) => {
+  expect(isBenignExit1Command(command, exitCode)).toBe(true)
+})
+
+test.each([
+  "pnpm test:unit",
+  "npm lint:ci",
+  "yarn check:all"
+])("%s does not match an extended script prefix", (command) => {
+  expect(isBenignExit1Command(command, 1)).toBe(false)
+})
+
+test("extended normalization can be disabled without disabling configured commands", () => {
+  expect(isBenignExit1Command("cd x && pnpm vitest", 1, [], false)).toBe(false)
+  expect(isBenignExit1Command("pnpm run typecheck", 2, [], false)).toBe(false)
+  expect(
+    isBenignExit1Command("custom command", 1, ["custom command"], false)
+  ).toBe(true)
+})
+
+test.each([
+  "grep value file",
+  "rg value",
+  "git diff --quiet -- file"
+])("%s remains benign only for exit 1", (command) => {
+  expect(isBenignExit1Command(command, 1)).toBe(true)
+  expect(isBenignExit1Command(command, 2)).toBe(false)
+})
+
+test("signal exits are not failures but neighboring exit codes remain failures", () => {
+  for (const exitCode of [130, 137, 143]) {
+    expect(
+      classifyCommandOutcome({
+        hookEvent: "PostToolUseFailure",
+        command: "git status",
+        toolResponse: { exit_code: exitCode }
+      }).failed
+    ).toBe(false)
+  }
+  for (const exitCode of [128, 129]) {
+    expect(
+      classifyCommandOutcome({
+        hookEvent: "PostToolUseFailure",
+        command: "git status",
+        toolResponse: { exit_code: exitCode }
+      }).failed
+    ).toBe(true)
+  }
+})
+
 test("PostToolUseFailure is a failure even without an exit code", () => {
   expect(
     classifyCommandOutcome({
@@ -99,7 +166,7 @@ test("PostToolUse requires an explicit nonzero exit code", () => {
   expect(
     classifyCommandOutcome({
       hookEvent: "PostToolUse",
-      command: "npm test",
+      command: "node scripts/build.mjs",
       toolResponse: { exit_code: 2 }
     }).failed
   ).toBe(true)
@@ -119,13 +186,13 @@ test("non-benign failures produce typed command-failure details", () => {
   expect(
     detectCommandFailure({
       hookEvent: "PostToolUseFailure",
-      command: "  npm   test  ",
+      command: "  node   scripts/build.mjs  ",
       toolResponse: { stdout: "out", stderr: "boom", exitCode: "2" }
     })
   ).toEqual({
     type: "command-failure",
-    command: "  npm   test  ",
-    normalized_command: "npm test",
+    command: "  node   scripts/build.mjs  ",
+    normalized_command: "node scripts/build.mjs",
     exit_code: 2,
     output_tail: "out\nboom"
   })
