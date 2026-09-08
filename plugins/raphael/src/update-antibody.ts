@@ -11,6 +11,7 @@ import {
   setAntibodyStatus
 } from "./lib/antibody-store.js"
 import { writeFileAtomic } from "./lib/atomic.js"
+import { type BreadthReport, evaluateBreadth } from "./lib/breadth.js"
 import { loadConfig } from "./lib/config.js"
 import {
   AntibodyValidationError,
@@ -43,16 +44,27 @@ interface Options {
   dryRun: boolean
 }
 
+type RejectedBreadth = Extract<BreadthReport, { checked: true }> & {
+  samples: string[]
+}
+
 function main(): void {
   const options = parseArgs(process.argv.slice(2))
   const body = readRequest()
   let result: unknown
 
   switch (options.operation) {
-    case "create":
+    case "create": {
       assertOperandCount(options, 0)
-      result = { ok: true, antibody: createAntibody(options.dir, draft(body)) }
+      const candidate = draft(body)
+      const breadth = breadthPreflight(options.dir, candidate.trigger)
+      result = {
+        ok: true,
+        antibody: createAntibody(options.dir, candidate),
+        breadth
+      }
       break
+    }
     case "patch":
       assertOperandCount(options, 1)
       result = patch(options, body)
@@ -162,11 +174,40 @@ function draft(value: unknown): {
   }
 }
 
+function breadthPreflight(
+  projectDir: string,
+  trigger: Antibody["trigger"]
+): BreadthReport {
+  const config = loadConfig(projectDir)
+  const evaluation = evaluateBreadth(
+    projectDir,
+    trigger,
+    config.breadthMaxRatio,
+    config.breadthMinCorpus
+  )
+  if (evaluation.tooBroad && evaluation.breadth.checked) {
+    const rejectedBreadth: RejectedBreadth = {
+      ...evaluation.breadth,
+      samples: evaluation.samples
+    }
+    throw new RequestError(
+      "PATTERN_TOO_BROAD",
+      `trigger.pattern: matches ${(evaluation.breadth.ratio * 100).toFixed(1)}% of ${evaluation.breadth.corpus_size} known commands (limit ${config.breadthMaxRatio}%)`,
+      "trigger.pattern",
+      rejectedBreadth
+    )
+  }
+  return evaluation.breadth
+}
+
 function patch(options: Options, value: unknown): unknown {
   if (!isRecord(value)) throw validation("patch", "must be an object")
   assertKeys(value, [], ["source", "trigger", "body"])
   const current = readAntibody(options.dir, options.operands[0] ?? "")
   const normalized = validateAntibody({ ...current, ...value })
+  const breadth = Object.hasOwn(value, "trigger")
+    ? breadthPreflight(options.dir, normalized.trigger)
+    : undefined
   if (options.dryRun) {
     return {
       ok: true,
@@ -176,12 +217,14 @@ function patch(options: Options, value: unknown): unknown {
         (key) =>
           JSON.stringify(current[key as keyof Antibody]) !==
           JSON.stringify(normalized[key as keyof Antibody])
-      )
+      ),
+      ...(breadth === undefined ? {} : { breadth })
     }
   }
   return {
     ok: true,
-    antibody: patchAntibody(options.dir, options.operands[0] ?? "", value)
+    antibody: patchAntibody(options.dir, options.operands[0] ?? "", value),
+    ...(breadth === undefined ? {} : { breadth })
   }
 }
 
@@ -469,7 +512,8 @@ class RequestError extends Error {
   constructor(
     readonly code: string,
     message: string,
-    readonly field?: string
+    readonly field?: string,
+    readonly breadth?: RejectedBreadth
   ) {
     super(message)
     this.name = "RequestError"
@@ -510,7 +554,13 @@ try {
   main()
 } catch (error) {
   const result = failure(error)
-  respond({ ok: false, error: result })
+  respond({
+    ok: false,
+    error: result,
+    ...(error instanceof RequestError && error.breadth !== undefined
+      ? { breadth: error.breadth }
+      : {})
+  })
   process.exitCode =
     result.code === "IO_ERROR" || result.code === "RUNTIME_ERROR" ? 1 : 2
 }

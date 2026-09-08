@@ -1,17 +1,21 @@
-import { spawn } from "node:child_process"
 import fs from "node:fs"
-import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { readAntibody, writeAntibodyCreate } from "../lib/antibody-store.js"
+import {
+  antibodiesDirectory,
+  readAntibody,
+  writeAntibodyCreate
+} from "../lib/antibody-store.js"
+import { commandLogPath } from "../lib/command-log.js"
+import { configPath } from "../lib/config.js"
 import { appendInfection, readInfections } from "../lib/infection-store.js"
 import { loadStats, saveStats, statsFilePath } from "../lib/stats-store.js"
 import type { Antibody, InfectionRecordV1 } from "../lib/types.js"
+import { runTs } from "../testing/run-ts.js"
 
 const CLI = fileURLToPath(new URL("../update-antibody.ts", import.meta.url))
-const TSX = createRequire(import.meta.url).resolve("tsx/cli")
 
 function project(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "raphael-update-"))
@@ -22,22 +26,37 @@ function invoke(
   args: string[],
   input: unknown = {}
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [TSX, CLI, "--dir", dir, ...args], {
-      cwd: dir
+  const options = {
+    cwd: dir,
+    env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+    input: typeof input === "string" ? input : JSON.stringify(input)
+  }
+  try {
+    return Promise.resolve({
+      code: 0,
+      stdout: runTs(CLI, args, options),
+      stderr: ""
     })
-    let stdout = ""
-    let stderr = ""
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk
+  } catch (error) {
+    if (typeof error !== "object" || error === null)
+      return Promise.reject(error)
+    const failed = error as {
+      status?: unknown
+      stdout?: unknown
+      stderr?: unknown
+    }
+    return Promise.resolve({
+      code: typeof failed.status === "number" ? failed.status : null,
+      stdout: outputText(failed.stdout),
+      stderr: outputText(failed.stderr)
     })
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk
-    })
-    child.on("error", reject)
-    child.on("close", (code) => resolve({ code, stdout, stderr }))
-    child.stdin.end(typeof input === "string" ? input : JSON.stringify(input))
-  })
+  }
+}
+
+function outputText(value: unknown): string {
+  if (typeof value === "string") return value
+  if (Buffer.isBuffer(value)) return value.toString("utf8")
+  return ""
 }
 
 function antibody(overrides: Partial<Antibody> = {}): Antibody {
@@ -80,6 +99,46 @@ function infection(): InfectionRecordV1 {
 
 function json(result: { stdout: string }): Record<string, unknown> {
   return JSON.parse(result.stdout) as Record<string, unknown>
+}
+
+function seedCommands(dir: string, commands: string[]): void {
+  const file = commandLogPath(dir)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(
+    file,
+    `${commands
+      .map((normalized_command, index) =>
+        JSON.stringify({
+          ts: `2026-09-08T00:00:${String(index % 60).padStart(2, "0")}.000Z`,
+          session: "session-1",
+          normalized_command,
+          exit_code: 0,
+          failed: false
+        })
+      )
+      .join("\n")}\n`
+  )
+}
+
+function createRequest(
+  trigger: Antibody["trigger"] = {
+    event: "PreToolUse",
+    tool: "Bash",
+    pattern: "pnpm test"
+  }
+): Record<string, unknown> {
+  return {
+    source: "infection-1",
+    trigger,
+    expires: "2026-10-20",
+    body: "Run focused tests."
+  }
+}
+
+function writeConfig(dir: string, frontmatter: string): void {
+  const file = configPath(dir)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, `---\n${frontmatter}\n---\n`)
 }
 
 // extend の期待値は実行日に依存する(record-fire が last_fired に当日を書くため)。
@@ -450,6 +509,218 @@ test("validation/not found/duplicate/malformed JSON は exit 2 かつ invalid re
     expect(json(malformed)).toMatchObject({
       ok: false,
       error: { code: "INVALID_JSON" }
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("母集団 49 件では skipped、50 件では検査し成功結果に breadth が付く", async () => {
+  const dir = project()
+  try {
+    seedCommands(
+      dir,
+      Array.from({ length: 49 }, (_, index) => `other-${index}`)
+    )
+    const created = await invoke(
+      dir,
+      ["create"],
+      createRequest({
+        event: "PreToolUse",
+        tool: "Bash",
+        pattern: "^match-"
+      })
+    )
+    expect(created).toMatchObject({ code: 0, stderr: "" })
+    expect(json(created)).toMatchObject({
+      ok: true,
+      breadth: {
+        checked: false,
+        reason: "corpus_too_small",
+        corpus_size: 49
+      }
+    })
+
+    const id = (json(created).antibody as Antibody).id
+    seedCommands(
+      dir,
+      Array.from({ length: 50 }, (_, index) => `other-${index}`)
+    )
+    const patched = await invoke(dir, ["patch", id], {
+      trigger: { event: "PreToolUse", tool: "Bash", pattern: "^match-" }
+    })
+    expect(patched).toMatchObject({ code: 0, stderr: "" })
+    expect(json(patched)).toMatchObject({
+      ok: true,
+      breadth: {
+        checked: true,
+        corpus_size: 50,
+        matched: 0,
+        ratio: 0
+      }
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("広い pattern の create は exit 2 で拒否し抗体ファイルを作らない", async () => {
+  const dir = project()
+  try {
+    seedCommands(
+      dir,
+      Array.from({ length: 50 }, (_, index) => `command-${index}`)
+    )
+    const result = await invoke(
+      dir,
+      ["create"],
+      createRequest({ event: "PreToolUse", tool: "Bash", pattern: ".*" })
+    )
+
+    expect(result).toMatchObject({ code: 2, stderr: "" })
+    expect(json(result)).toMatchObject({
+      ok: false,
+      error: {
+        code: "PATTERN_TOO_BROAD",
+        message:
+          "trigger.pattern: matches 100.0% of 50 known commands (limit 10%)",
+        field: "trigger.pattern"
+      },
+      breadth: {
+        checked: true,
+        corpus_size: 50,
+        matched: 50,
+        ratio: 1,
+        samples: [
+          "command-0",
+          "command-1",
+          "command-10",
+          "command-11",
+          "command-12"
+        ]
+      }
+    })
+    expect(fs.existsSync(antibodiesDirectory(dir))).toBe(false)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("trigger を含む patch は dry-run と本実行の両方で拒否し抗体を更新しない", async () => {
+  const dir = project()
+  try {
+    const original = antibody()
+    writeAntibodyCreate(dir, original)
+    seedCommands(
+      dir,
+      Array.from({ length: 50 }, (_, index) => `command-${index}`)
+    )
+
+    const result = await invoke(dir, ["patch", "--dry-run", original.id], {
+      trigger: { event: "PreToolUse", tool: "*", pattern: ".*" }
+    })
+    expect(result.code).toBe(2)
+    expect(json(result)).toMatchObject({
+      ok: false,
+      error: { code: "PATTERN_TOO_BROAD", field: "trigger.pattern" },
+      breadth: { checked: true, corpus_size: 50, matched: 50, ratio: 1 }
+    })
+    expect(readAntibody(dir, original.id)).toEqual(original)
+
+    const actual = await invoke(dir, ["patch", original.id], {
+      trigger: { event: "PreToolUse", tool: "*", pattern: ".*" }
+    })
+    expect(actual.code).toBe(2)
+    expect(json(actual)).toMatchObject({
+      ok: false,
+      error: { code: "PATTERN_TOO_BROAD", field: "trigger.pattern" }
+    })
+    expect(readAntibody(dir, original.id)).toEqual(original)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("trigger を含まない patch は広さ検査をせず更新する", async () => {
+  const dir = project()
+  try {
+    const original = antibody()
+    writeAntibodyCreate(dir, original)
+    seedCommands(
+      dir,
+      Array.from({ length: 50 }, (_, index) => `pnpm test ${index}`)
+    )
+
+    const result = await invoke(dir, ["patch", original.id], {
+      source: "changed-without-trigger"
+    })
+    expect(result.code).toBe(0)
+    expect(json(result)).not.toHaveProperty("breadth")
+    expect(readAntibody(dir, original.id).source).toBe(
+      "changed-without-trigger"
+    )
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("Edit trigger は tool_not_applicable として通す", async () => {
+  const dir = project()
+  try {
+    seedCommands(
+      dir,
+      Array.from({ length: 50 }, (_, index) => `command-${index}`)
+    )
+    const result = await invoke(
+      dir,
+      ["create"],
+      createRequest({
+        event: "PreToolUse",
+        tool: "Edit",
+        pattern: ".*"
+      })
+    )
+
+    expect(result.code).toBe(0)
+    expect(json(result)).toMatchObject({
+      ok: true,
+      breadth: { checked: false, reason: "tool_not_applicable" }
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("config の breadth_max_ratio で拒否閾値を変更できる", async () => {
+  const dir = project()
+  try {
+    seedCommands(
+      dir,
+      Array.from(
+        { length: 50 },
+        (_, index) => `${index < 6 ? "match" : "other"}-${index}`
+      )
+    )
+    writeConfig(dir, "breadth_max_ratio: 20\nbreadth_min_corpus: 50")
+
+    const result = await invoke(
+      dir,
+      ["create"],
+      createRequest({
+        event: "PreToolUse",
+        tool: "Bash",
+        pattern: "^match-"
+      })
+    )
+    expect(result.code).toBe(0)
+    expect(json(result)).toMatchObject({
+      ok: true,
+      breadth: {
+        checked: true,
+        corpus_size: 50,
+        matched: 6,
+        ratio: 0.12
+      }
     })
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })

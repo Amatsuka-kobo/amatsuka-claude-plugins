@@ -40,6 +40,8 @@ test("全ての許可済み設定 key を読み取る", () => {
         'rejection_patterns: ["foo,bar", "\\\\d+\\\\s+items"]',
         'benign_exit1_commands: ["custom command", "git status --short"]',
         "benign_exit1_extended: false",
+        "breadth_max_ratio: 25",
+        "breadth_min_corpus: 75",
         "antibodies_git_policy: ignore"
       ].join("\n")
     )
@@ -57,6 +59,8 @@ test("全ての許可済み設定 key を読み取る", () => {
       rejectionPatterns: ["foo,bar", "\\d+\\s+items"],
       benignExit1Commands: ["custom command", "git status --short"],
       benignExit1Extended: false,
+      breadthMaxRatio: 25,
+      breadthMinCorpus: 75,
       antibodiesGitPolicy: "ignore"
     })
   })
@@ -75,6 +79,8 @@ test("不正な frontmatter と field 値は field 単位で既定値へ戻す",
         "max_injections: 0",
         "rejection_patterns: [not valid JSON]",
         "benign_exit1_commands: [1]",
+        "breadth_max_ratio: 0",
+        "breadth_min_corpus: 5001",
         "antibodies_git_policy: archive"
       ].join("\n")
     )
@@ -102,5 +108,26 @@ test("benign_exit1_extended は不正値を既定値へ戻す", () => {
   withProject((dir) => {
     writeConfig(dir, "benign_exit1_extended: yes")
     expect(loadConfig(dir).benignExit1Extended).toBe(true)
+  })
+})
+
+test("breadth 設定は境界値を読み不正値を key 単位で既定値へ戻す", () => {
+  withProject((dir) => {
+    expect(DEFAULT_CONFIG).toMatchObject({
+      breadthMaxRatio: 10,
+      breadthMinCorpus: 50
+    })
+
+    writeConfig(dir, "breadth_max_ratio: 1\nbreadth_min_corpus: 5000")
+    expect(loadConfig(dir)).toMatchObject({
+      breadthMaxRatio: 1,
+      breadthMinCorpus: 5000
+    })
+
+    writeConfig(dir, "breadth_max_ratio: 101\nbreadth_min_corpus: invalid")
+    expect(loadConfig(dir)).toMatchObject({
+      breadthMaxRatio: 10,
+      breadthMinCorpus: 50
+    })
   })
 })
