@@ -6,12 +6,17 @@ import {
   antibodiesDirectory,
   createAntibody,
   extendAntibodyExpires,
+  listAntibodies,
   patchAntibody,
   readAntibody,
   setAntibodyStatus
 } from "./lib/antibody-store.js"
 import { writeFileAtomic } from "./lib/atomic.js"
-import { type BreadthReport, evaluateBreadth } from "./lib/breadth.js"
+import {
+  type BreadthReport,
+  buildBreadthCorpus,
+  evaluateBreadth
+} from "./lib/breadth.js"
 import { loadConfig } from "./lib/config.js"
 import {
   AntibodyValidationError,
@@ -24,6 +29,7 @@ import {
   parseInfectionLine
 } from "./lib/infection-store.js"
 import {
+  isIneffective,
   loadStats,
   recordFire,
   saveStats,
@@ -88,6 +94,10 @@ function main(): void {
       assertOperandCount(options, 0)
       result = migrateStats(options)
       break
+    case "audit":
+      assertOperandCount(options, 0)
+      result = audit(options.dir)
+      break
     case "mark-distilled":
       assertOperandCount(options, 0)
       result = markDistilled(options.dir, body)
@@ -130,9 +140,14 @@ function parseArgs(args: string[]): Options {
   if (operation === undefined) {
     throw new AntibodyValidationError("operation: is required", "operation")
   }
-  if (dryRun && operation !== "patch" && operation !== "migrate-stats") {
+  if (
+    dryRun &&
+    operation !== "patch" &&
+    operation !== "migrate-stats" &&
+    operation !== "audit"
+  ) {
     throw new AntibodyValidationError(
-      "dry-run: is supported only by patch and migrate-stats",
+      "dry-run: is supported only by patch, migrate-stats, and audit",
       "dry-run"
     )
   }
@@ -360,6 +375,97 @@ function migrateStats(options: Options): unknown {
     skipped,
     ids: migrations.map(({ antibody }) => antibody.id),
     errors
+  }
+}
+
+type AuditRecommendation = "keep" | "narrow" | "expire"
+
+interface AuditResult {
+  id: string
+  status: AntibodyStatus
+  trigger: Antibody["trigger"]
+  fired: number
+  misses: number
+  breadth: BreadthReport & { samples?: string[] }
+  noisy: boolean
+  ineffective: boolean
+  recommendation: AuditRecommendation
+}
+
+function audit(projectDir: string): unknown {
+  const config = loadConfig(projectDir)
+  const listed = listAntibodies(projectDir)
+  const corpus = buildBreadthCorpus(projectDir)
+  const stats = loadStats(projectDir)
+  const results: AuditResult[] = []
+
+  for (const antibody of listed.antibodies) {
+    if (antibody.status === "expired") continue
+    const evaluation = evaluateBreadth(
+      projectDir,
+      antibody.trigger,
+      config.breadthMaxRatio,
+      config.breadthMinCorpus,
+      corpus
+    )
+    const breadth: AuditResult["breadth"] = evaluation.breadth.checked
+      ? { ...evaluation.breadth, samples: evaluation.samples }
+      : evaluation.breadth
+    const antibodyStats = statsFor(stats, antibody.id)
+    const noisy =
+      breadth.checked && breadth.ratio > config.breadthMaxRatio / 100
+    const ineffective = isIneffective(antibodyStats, config)
+    const recommendation: AuditRecommendation = noisy
+      ? ineffective
+        ? "expire"
+        : "narrow"
+      : ineffective
+        ? "expire"
+        : "keep"
+    results.push({
+      id: antibody.id,
+      status: antibody.status,
+      trigger: antibody.trigger,
+      fired: antibodyStats.fired,
+      misses: antibodyStats.misses,
+      breadth,
+      noisy,
+      ineffective,
+      recommendation
+    })
+  }
+
+  const recommendationOrder: Record<AuditRecommendation, number> = {
+    expire: 0,
+    narrow: 1,
+    keep: 2
+  }
+  const ratioOf = (entry: AuditResult): number =>
+    entry.breadth.checked ? entry.breadth.ratio : -1
+  results.sort((left, right) => {
+    const recommendationDifference =
+      recommendationOrder[left.recommendation] -
+      recommendationOrder[right.recommendation]
+    if (recommendationDifference !== 0) return recommendationDifference
+    const ratioDifference = ratioOf(right) - ratioOf(left)
+    if (ratioDifference !== 0) return ratioDifference
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+  })
+
+  const summary = { keep: 0, narrow: 0, expire: 0 }
+  for (const result of results) summary[result.recommendation] += 1
+
+  return {
+    ok: true,
+    corpus_size: corpus.length,
+    thresholds: {
+      breadth_max_ratio: config.breadthMaxRatio,
+      ineffective_min_fired: config.ineffectiveMinFired,
+      ineffective_miss_ratio: config.ineffectiveMissRatio
+    },
+    results,
+    summary,
+    errors: listed.errors
   }
 }
 
