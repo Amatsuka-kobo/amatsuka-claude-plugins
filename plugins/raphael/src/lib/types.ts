@@ -140,5 +140,6 @@ export interface RaphaelConfig {
   maxInjections: number
   rejectionPatterns: string[]
   benignExit1Commands: string[]
+  benignExit1Extended: boolean
   antibodiesGitPolicy: "commit" | "ignore"
 }

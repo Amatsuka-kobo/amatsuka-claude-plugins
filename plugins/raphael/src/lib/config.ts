@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: RaphaelConfig = {
   maxInjections: 3,
   rejectionPatterns: [],
   benignExit1Commands: [],
+  benignExit1Extended: true,
   antibodiesGitPolicy: "commit"
 }
 
@@ -139,6 +140,10 @@ export function loadConfig(projectDir: string): RaphaelConfig {
   const benignExit1Commands = stringArray(fields.get("benign_exit1_commands"))
   if (benignExit1Commands !== null)
     config.benignExit1Commands = benignExit1Commands
+
+  const benignExit1Extended = booleanValue(fields.get("benign_exit1_extended"))
+  if (benignExit1Extended !== null)
+    config.benignExit1Extended = benignExit1Extended
 
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"))
   if (antibodiesGitPolicy !== null)

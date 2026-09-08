@@ -39,6 +39,7 @@ test("全ての許可済み設定 key を読み取る", () => {
         "max_injections: 4",
         'rejection_patterns: ["foo,bar", "\\\\d+\\\\s+items"]',
         'benign_exit1_commands: ["custom command", "git status --short"]',
+        "benign_exit1_extended: false",
         "antibodies_git_policy: ignore"
       ].join("\n")
     )
@@ -55,6 +56,7 @@ test("全ての許可済み設定 key を読み取る", () => {
       maxInjections: 4,
       rejectionPatterns: ["foo,bar", "\\d+\\s+items"],
       benignExit1Commands: ["custom command", "git status --short"],
+      benignExit1Extended: false,
       antibodiesGitPolicy: "ignore"
     })
   })
@@ -93,5 +95,12 @@ test("frontmatter が存在しない場合は既定値を返す", () => {
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, "not frontmatter\n")
     expect(loadConfig(dir)).toEqual(DEFAULT_CONFIG)
+  })
+})
+
+test("benign_exit1_extended は不正値を既定値へ戻す", () => {
+  withProject((dir) => {
+    writeConfig(dir, "benign_exit1_extended: yes")
+    expect(loadConfig(dir).benignExit1Extended).toBe(true)
   })
 })

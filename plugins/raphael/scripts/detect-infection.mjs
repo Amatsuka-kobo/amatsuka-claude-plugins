@@ -66,6 +66,7 @@ var DEFAULT_CONFIG = {
   maxInjections: 3,
   rejectionPatterns: [],
   benignExit1Commands: [],
+  benignExit1Extended: true,
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
@@ -159,6 +160,9 @@ function loadConfig(projectDir) {
   const benignExit1Commands = stringArray(fields.get("benign_exit1_commands"));
   if (benignExit1Commands !== null)
     config.benignExit1Commands = benignExit1Commands;
+  const benignExit1Extended = booleanValue(fields.get("benign_exit1_extended"));
+  if (benignExit1Extended !== null)
+    config.benignExit1Extended = benignExit1Extended;
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"));
   if (antibodiesGitPolicy !== null)
     config.antibodiesGitPolicy = antibodiesGitPolicy;
@@ -176,6 +180,18 @@ var BUILTIN_BENIGN_EXIT1_COMMANDS = [
   "test",
   "["
 ];
+var EXTENDED_BENIGN_RUNNERS = [
+  "vitest",
+  "jest",
+  "mocha",
+  "pytest",
+  "biome",
+  "eslint",
+  "prettier",
+  "tsc"
+];
+var EXTENDED_BENIGN_SCRIPTS = ["test", "lint", "typecheck", "check"];
+var SIGNAL_EXIT_CODES = /* @__PURE__ */ new Set([130, 137, 143]);
 function normalizeCommand(command) {
   return command.trim().replace(/\s+/g, " ");
 }
@@ -192,11 +208,23 @@ function extractExitCode(toolResponse, error) {
   }
   return null;
 }
-function isBenignExit1Command(command, exitCode, additionalCommands = []) {
-  if (exitCode !== 1) return false;
+function isBenignExit1Command(command, exitCode, additionalCommands = [], extendedEnabled = true) {
   const normalized = normalizeCommand(command);
-  return [...BUILTIN_BENIGN_EXIT1_COMMANDS, ...additionalCommands].some(
+  if (exitCode === 1 && [...BUILTIN_BENIGN_EXIT1_COMMANDS, ...additionalCommands].some(
     (candidate) => commandStartsWith(normalized, normalizeCommand(candidate))
+  )) {
+    return true;
+  }
+  if (!extendedEnabled || exitCode !== 1 && exitCode !== 2) return false;
+  const extended = normalizeExtendedCommand(command);
+  if (extended.command === "") return false;
+  const tokens = extended.command.split(" ");
+  const runner = tokens[0];
+  if (EXTENDED_BENIGN_RUNNERS.some((candidate) => runner === candidate)) {
+    return true;
+  }
+  return extended.scriptsEligible && EXTENDED_BENIGN_SCRIPTS.some(
+    (candidate) => commandStartsWith(extended.command, candidate)
   );
 }
 function classifyCommandOutcome(input) {
@@ -206,13 +234,15 @@ function classifyCommandOutcome(input) {
   const benign = isBenignExit1Command(
     input.command,
     exitCode,
-    input.benignExit1Commands
+    input.benignExit1Commands,
+    input.benignExit1Extended
   );
+  const signalled = exitCode !== null && SIGNAL_EXIT_CODES.has(exitCode);
   return {
     command: input.command,
     normalized_command: normalizeCommand(input.command),
     exit_code: exitCode,
-    failed: (failedByEvent || failedByCode) && !benign,
+    failed: (failedByEvent || failedByCode) && !benign && !signalled,
     output_tail: commandOutput(input.toolResponse, input.error)
   };
 }
@@ -244,7 +274,7 @@ function detectRetryLoop(command, recentCommands, threshold = 3) {
     exit_codes: trailing.map((entry) => entry.exit_code)
   };
 }
-function commandOutcomeFromHookInput(input, benignExit1Commands = []) {
+function commandOutcomeFromHookInput(input, benignExit1Commands = [], benignExit1Extended = true) {
   if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure" || input.tool_name !== "Bash" || typeof input.tool_input?.command !== "string") {
     return null;
   }
@@ -253,8 +283,45 @@ function commandOutcomeFromHookInput(input, benignExit1Commands = []) {
     command: input.tool_input.command,
     toolResponse: input.tool_response,
     error: input.error,
-    benignExit1Commands
+    benignExit1Commands,
+    benignExit1Extended
   });
+}
+function normalizeExtendedCommand(command) {
+  const lastSegment = command.split(/&&|;|\|\|/).at(-1) ?? "";
+  let tokens = normalizeCommand(lastSegment).split(" ").filter(Boolean);
+  while (tokens.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) {
+    tokens = tokens.slice(1);
+  }
+  let scriptsEligible = false;
+  if (tokens[0] === "npx") {
+    tokens = tokens.slice(1);
+  } else if (tokens[0] === "pnpm" && tokens[1] === "dlx") {
+    tokens = tokens.slice(2);
+  }
+  if (tokens[0] === "pnpm" || tokens[0] === "npm" || tokens[0] === "yarn") {
+    let index = 1;
+    let usedExec = false;
+    while (index < tokens.length) {
+      const token = tokens[index];
+      if (token === "--dir" || token === "-C" || token === "--filter") {
+        index += 2;
+      } else if (token === "exec") {
+        usedExec = true;
+        index += 1;
+      } else if (token === "run") {
+        scriptsEligible = true;
+        index += 1;
+      } else {
+        break;
+      }
+    }
+    scriptsEligible = scriptsEligible || !usedExec && ["pnpm", "npm", "yarn"].includes(tokens[0]);
+    tokens = tokens.slice(index);
+  }
+  if (tokens.length === 0) return { command: "", scriptsEligible: false };
+  tokens[0] = tokens[0].replace(/^.*\//, "");
+  return { command: tokens.join(" "), scriptsEligible };
 }
 function parseExitCode(value) {
   if (typeof value === "number")
@@ -868,7 +935,11 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const inputDigest = digest(input.tool_input);
   setLastTool(state, "Bash", inputDigest, now);
-  const outcome = commandOutcomeFromHookInput(input, config.benignExit1Commands);
+  const outcome = commandOutcomeFromHookInput(
+    input,
+    config.benignExit1Commands,
+    config.benignExit1Extended
+  );
   if (!outcome) return;
   appendCommandLog(projectDir, {
     ts: now,
@@ -882,7 +953,8 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
     command: outcome.command,
     toolResponse: input.tool_response,
     error: input.error,
-    benignExit1Commands: config.benignExit1Commands
+    benignExit1Commands: config.benignExit1Commands,
+    benignExit1Extended: config.benignExit1Extended
   }) : null;
   const infectionId = commandFailure === null ? null : appendRecord(
     projectDir,

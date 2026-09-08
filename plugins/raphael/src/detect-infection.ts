@@ -137,7 +137,11 @@ function processBash(
   const inputDigest = digest(input.tool_input)
   setLastTool(state, "Bash", inputDigest, now)
 
-  const outcome = commandOutcomeFromHookInput(input, config.benignExit1Commands)
+  const outcome = commandOutcomeFromHookInput(
+    input,
+    config.benignExit1Commands,
+    config.benignExit1Extended
+  )
   if (!outcome) return
 
   appendCommandLog(projectDir, {
@@ -154,7 +158,8 @@ function processBash(
         command: outcome.command,
         toolResponse: input.tool_response,
         error: input.error,
-        benignExit1Commands: config.benignExit1Commands
+        benignExit1Commands: config.benignExit1Commands,
+        benignExit1Extended: config.benignExit1Extended
       })
     : null
   const infectionId =
