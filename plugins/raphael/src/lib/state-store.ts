@@ -153,7 +153,7 @@ function normalizeState(state: RaphaelStateV1): RaphaelStateV1 {
 
   return {
     ...state,
-    recent_commands: state.recent_commands.slice(-20).map((command) => ({
+    recent_commands: state.recent_commands.slice(-50).map((command) => ({
       ...command,
       normalized_command: redactSecrets(command.normalized_command)
     })),
@@ -176,9 +176,22 @@ function validateState(value: unknown): RaphaelStateV1 | null {
   if (!isObject(value) || value.schema_version !== 1) return null
   if (!isString(value.session) || !isPositiveInteger(value.next_event_seq))
     return null
+
+  const recent_commands = Array.isArray(value.recent_commands)
+    ? value.recent_commands.map((command) => {
+        if (
+          isObject(command) &&
+          "resolved" in command &&
+          typeof command.resolved !== "boolean"
+        ) {
+          return { ...command, resolved: false }
+        }
+        return command
+      })
+    : null
   if (
-    !Array.isArray(value.recent_commands) ||
-    !value.recent_commands.every(isRecentCommand) ||
+    recent_commands === null ||
+    !recent_commands.every(isRecentCommand) ||
     !Array.isArray(value.recent_edits) ||
     !value.recent_edits.every(isRecentEdit) ||
     !Array.isArray(value.injected) ||
@@ -194,7 +207,8 @@ function validateState(value: unknown): RaphaelStateV1 | null {
     )
   )
     return null
-  return value as unknown as RaphaelStateV1
+
+  return { ...value, recent_commands } as unknown as RaphaelStateV1
 }
 
 function isRecentCommand(value: unknown): boolean {
@@ -204,7 +218,8 @@ function isRecentCommand(value: unknown): boolean {
     isString(value.normalized_command) &&
     typeof value.failed === "boolean" &&
     isNullableFiniteNumber(value.exit_code) &&
-    (value.infection_id === null || isString(value.infection_id))
+    (value.infection_id === null || isString(value.infection_id)) &&
+    (value.resolved === undefined || typeof value.resolved === "boolean")
   )
 }
 

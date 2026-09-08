@@ -791,7 +791,7 @@ function normalizeState(state) {
   }
   return {
     ...state,
-    recent_commands: state.recent_commands.slice(-20).map((command) => ({
+    recent_commands: state.recent_commands.slice(-50).map((command) => ({
       ...command,
       normalized_command: redactSecrets(command.normalized_command)
     })),
@@ -810,15 +810,21 @@ function validateState(value) {
   if (!isObject(value) || value.schema_version !== 1) return null;
   if (!isString(value.session) || !isPositiveInteger(value.next_event_seq))
     return null;
-  if (!Array.isArray(value.recent_commands) || !value.recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
+  const recent_commands = Array.isArray(value.recent_commands) ? value.recent_commands.map((command) => {
+    if (isObject(command) && "resolved" in command && typeof command.resolved !== "boolean") {
+      return { ...command, resolved: false };
+    }
+    return command;
+  }) : null;
+  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
     return null;
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
   if (!(value.last_distill_nag_digest === null || isString(value.last_distill_nag_digest) && /^[0-9a-f]{64}$/.test(value.last_distill_nag_digest)))
     return null;
-  return value;
+  return { ...value, recent_commands };
 }
 function isRecentCommand(value) {
-  return isObject(value) && isIsoDate(value.ts) && isString(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString(value.infection_id));
+  return isObject(value) && isIsoDate(value.ts) && isString(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString(value.infection_id)) && (value.resolved === void 0 || typeof value.resolved === "boolean");
 }
 function isRecentEdit(value) {
   return isObject(value) && isIsoDate(value.ts) && isString(value.file_path) && isPositiveInteger(value.line_start) && isPositiveInteger(value.line_end) && value.line_end >= value.line_start;

@@ -53,6 +53,8 @@ export interface InfectionRecordV1 {
   details: InfectionDetails
   distilled: boolean
   distilled_at: string | null
+  resolved?: boolean
+  resolved_at?: string | null
 }
 
 export interface RaphaelStateV1 {
@@ -65,6 +67,7 @@ export interface RaphaelStateV1 {
     failed: boolean
     exit_code: number | null
     infection_id: string | null
+    resolved?: boolean
   }>
   recent_edits: Array<{
     ts: string

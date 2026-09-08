@@ -55,7 +55,7 @@ test("save 時に recent 上限と injected の antibody ID coalesce を適用�
   withProject((dir) => {
     const state: State = {
       ...createInitialState("session-1"),
-      recent_commands: Array.from({ length: 25 }, (_, index) => ({
+      recent_commands: Array.from({ length: 55 }, (_, index) => ({
         ts: timestamp(index),
         normalized_command: `command-${index}`,
         failed: false,
@@ -94,7 +94,7 @@ test("save 時に recent 上限と injected の antibody ID coalesce を適用�
 
     saveState(dir, state)
     const saved = loadState(dir, "session-1")
-    expect(saved.recent_commands).toHaveLength(20)
+    expect(saved.recent_commands).toHaveLength(50)
     expect(saved.recent_commands[0].normalized_command).toBe("command-5")
     expect(saved.recent_edits).toHaveLength(50)
     expect(saved.recent_edits[0].file_path).toBe("src/5.ts")
@@ -103,6 +103,39 @@ test("save 時に recent 上限と injected の antibody ID coalesce を適用�
       saved.injected.find(({ antibody_id }) => antibody_id === "a")
     ).toMatchObject({ ts: timestamp(3), trigger_fingerprint: "new" })
     expect(saved.last_tool?.input_digest).toBe("API_KEY=<redacted>")
+  })
+})
+
+test("recent_commands の resolved が不正でも entry を残して false に縮退する", () => {
+  withProject((dir) => {
+    const state = createInitialState("session-1")
+    state.recent_commands = [
+      {
+        ts: timestamp(0),
+        normalized_command: "failed",
+        failed: true,
+        exit_code: 1,
+        infection_id: "infection-1",
+        resolved: "invalid" as unknown as boolean
+      },
+      {
+        ts: timestamp(1),
+        normalized_command: "valid",
+        failed: false,
+        exit_code: 0,
+        infection_id: null,
+        resolved: true
+      }
+    ]
+
+    saveState(dir, state)
+    expect(loadState(dir, "session-1").recent_commands).toEqual([
+      expect.objectContaining({
+        normalized_command: "failed",
+        resolved: false
+      }),
+      expect.objectContaining({ normalized_command: "valid", resolved: true })
+    ])
   })
 })
 

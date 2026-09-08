@@ -270,6 +270,35 @@ test("cleanup は14日超の distilled record と空 file を削除し、境界�
   })
 })
 
+test("cleanup は14日超の resolved record を削除し、日時不正は保持する", () => {
+  withProject((dir) => {
+    const now = new Date("2026-07-24T12:00:00.000Z")
+    const session = "session-resolved-cleanup"
+    const file = infectionFilePath(dir, session)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    const oldResolved = infection("infection-resolved-old", session, {
+      resolved: true,
+      resolved_at: "2026-07-10T11:59:59.999Z"
+    })
+    const invalidResolved = infection("infection-resolved-invalid", session, {
+      resolved: true,
+      resolved_at: "not-a-date"
+    })
+    fs.writeFileSync(
+      file,
+      [JSON.stringify(oldResolved), JSON.stringify(invalidResolved), ""].join(
+        "\n"
+      )
+    )
+
+    const result = cleanupProject(dir, now)
+    expect(result.undistilledIds).toEqual([])
+    expect(fs.readFileSync(file, "utf8")).toBe(
+      `${JSON.stringify(invalidResolved)}\n`
+    )
+  })
+})
+
 test("cleanup は expires を過ぎた active 抗体だけ expired に遷移する", () => {
   withProject((dir) => {
     writeAntibodyCreate(

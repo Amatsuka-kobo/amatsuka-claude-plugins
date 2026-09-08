@@ -573,6 +573,28 @@ function appendInfection(projectDir, input) {
 `);
   return true;
 }
+function markInfectionsResolved(projectDir, session, ids, now = /* @__PURE__ */ new Date()) {
+  const filePath = infectionFilePath(projectDir, session);
+  const rawLines = readRawLines(filePath);
+  if (rawLines.length === 0) return 0;
+  const targetIds = new Set(ids);
+  const resolvedAt = now.toISOString();
+  let updated = 0;
+  const rewritten = rawLines.map((line) => {
+    const record = parseInfectionLine(line);
+    if (!record || !targetIds.has(record.id) || record.resolved === true)
+      return line;
+    updated += 1;
+    return JSON.stringify({
+      ...record,
+      resolved: true,
+      resolved_at: resolvedAt
+    });
+  });
+  if (updated > 0) writeFileAtomic(filePath, `${rewritten.join("\n")}
+`);
+  return updated;
+}
 function parseInfectionLine(line) {
   if (line.trim() === "") return null;
   try {
@@ -648,6 +670,9 @@ function validateRecord(value) {
   if (!isSha256(value.fingerprint)) return null;
   if (typeof value.distilled !== "boolean") return null;
   if (!(value.distilled_at === null || isIsoDate(value.distilled_at)))
+    return null;
+  if ("resolved" in value && typeof value.resolved !== "boolean") return null;
+  if ("resolved_at" in value && !(value.resolved_at === null || isIsoDate(value.resolved_at)))
     return null;
   const details = validateDetails(value.details);
   if (!details || details.type !== value.kind) return null;
@@ -807,7 +832,7 @@ function normalizeState(state) {
   }
   return {
     ...state,
-    recent_commands: state.recent_commands.slice(-20).map((command) => ({
+    recent_commands: state.recent_commands.slice(-50).map((command) => ({
       ...command,
       normalized_command: redactSecrets(command.normalized_command)
     })),
@@ -826,15 +851,21 @@ function validateState(value) {
   if (!isObject2(value) || value.schema_version !== 1) return null;
   if (!isString2(value.session) || !isPositiveInteger2(value.next_event_seq))
     return null;
-  if (!Array.isArray(value.recent_commands) || !value.recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
+  const recent_commands = Array.isArray(value.recent_commands) ? value.recent_commands.map((command) => {
+    if (isObject2(command) && "resolved" in command && typeof command.resolved !== "boolean") {
+      return { ...command, resolved: false };
+    }
+    return command;
+  }) : null;
+  if (recent_commands === null || !recent_commands.every(isRecentCommand) || !Array.isArray(value.recent_edits) || !value.recent_edits.every(isRecentEdit) || !Array.isArray(value.injected) || !value.injected.every(isInjected))
     return null;
   if (!(value.last_tool === null || isLastTool(value.last_tool))) return null;
   if (!(value.last_distill_nag_digest === null || isString2(value.last_distill_nag_digest) && /^[0-9a-f]{64}$/.test(value.last_distill_nag_digest)))
     return null;
-  return value;
+  return { ...value, recent_commands };
 }
 function isRecentCommand(value) {
-  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString2(value.infection_id));
+  return isObject2(value) && isIsoDate2(value.ts) && isString2(value.normalized_command) && typeof value.failed === "boolean" && isNullableFiniteNumber(value.exit_code) && (value.infection_id === null || isString2(value.infection_id)) && (value.resolved === void 0 || typeof value.resolved === "boolean");
 }
 function isRecentEdit(value) {
   return isObject2(value) && isIsoDate2(value.ts) && isString2(value.file_path) && isPositiveInteger2(value.line_start) && isPositiveInteger2(value.line_end) && value.line_end >= value.line_start;
@@ -941,10 +972,11 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
     config.benignExit1Extended
   );
   if (!outcome) return;
+  const normalizedCommand = redactSecrets(outcome.normalized_command);
   appendCommandLog(projectDir, {
     ts: now,
     session,
-    normalized_command: redactSecrets(outcome.normalized_command),
+    normalized_command: normalizedCommand,
     exit_code: outcome.exit_code,
     failed: outcome.failed
   });
@@ -968,14 +1000,34 @@ function processBash(projectDir, session, input, event, state, eventSeq) {
     outcome.normalized_command,
     eventSeq
   );
+  if (outcome.failed === false && outcome.exit_code === 0) {
+    const resolvedCommands = state.recent_commands.filter(
+      (command) => command.normalized_command === normalizedCommand && command.failed === true && command.infection_id !== null && command.resolved !== true
+    );
+    const resolvedIds = [
+      ...new Set(
+        resolvedCommands.flatMap(
+          (command) => command.infection_id === null ? [] : [command.infection_id]
+        )
+      )
+    ];
+    if (resolvedIds.length > 0) {
+      try {
+        markInfectionsResolved(projectDir, session, resolvedIds, new Date(now));
+      } catch (error) {
+        logError(projectDir, "detect-infection", error);
+      }
+      for (const command of resolvedCommands) command.resolved = true;
+    }
+  }
   state.recent_commands.push({
     ts: now,
-    normalized_command: outcome.normalized_command,
+    normalized_command: normalizedCommand,
     failed: outcome.failed,
     exit_code: outcome.exit_code,
     infection_id: infectionId
   });
-  state.recent_commands = state.recent_commands.slice(-20);
+  state.recent_commands = state.recent_commands.slice(-50);
   const retryLoop = config.detectRetryLoop ? detectRetryLoop(
     outcome.command,
     state.recent_commands,
