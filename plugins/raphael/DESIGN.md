@@ -73,7 +73,7 @@ plugins/raphael/
         └── SKILL.md
 ```
 
-`src/` は TypeScript のソースであり、`build.ts` が esbuild で Node.js ESM bundle を `scripts/*.mjs` として生成する。bundle target は `node26`、source map は生成しない。
+`src/` は TypeScript のソースであり、`build.ts` が esbuild で Node.js ESM bundle を `scripts/*.mjs` として生成する。bundle target は `node22`、source map は生成しない。
 
 `dist/` は使用しない。`scripts/` はビルド生成物だが Git 管理する。利用者はビルド不要であり、保守者が `src/` を変更したときだけ次を実行して、対応する `scripts/*.mjs` の差分もコミットする。
 
@@ -147,9 +147,6 @@ trigger:
   pattern: "pnpm\\s+test"
   scope: "src/**"
 status: active
-stats:
-  fired: 0
-  last_fired: null
 expires: 2026-08-23
 ---
 
@@ -166,12 +163,10 @@ expires: 2026-08-23
 | `trigger.pattern` | 最大 1,000 文字の有効な JavaScript 正規表現 | tool input に対する発火条件 |
 | `trigger.scope` | 任意文字列 | Edit/Write の project-relative POSIX path に対する glob 条件 |
 | `status` | `active`、`expired`、`confirmed` | 抗体の状態 |
-| `stats.fired` | 0 以上の整数 | 発火回数 |
-| `stats.last_fired` | `YYYY-MM-DD` または `null` | 最終発火日 |
 | `expires` | `YYYY-MM-DD` | 有効期限。confirmed でも field は保持する |
 | 本文 | 空白のみ不可、最大 9,000 文字 | 発火時に追加する予防指示 |
 
-frontmatter は機械側の発火条件であり、本文は LLM 向けの指示である。フックは本文を解釈しない。
+frontmatter は機械側の発火条件であり、本文は LLM 向けの指示である。フックは本文を解釈しない。発火統計(`fired` / `last_fired` / `misses` / `last_miss`)は抗体 frontmatter ではなく、プロジェクト単位の `.raphael/stats.json` に保存する。
 
 ### 4.1 マッチングと注入
 
@@ -181,7 +176,7 @@ frontmatter は機械側の発火条件であり、本文は LLM 向けの指示
 - `scope` は Edit/Write の project-relative POSIX path にだけ適用し、Bash では無視する。glob は `*`、`**`、`?` を扱う。
 - 複数マッチは `last_fired` 降順（`null` は末尾）、`created` 降順、`id` 昇順で並べ、`max_injections`（既定 3、1–10）までを選ぶ。
 - 選んだ各本文には `[raphael:<id>]` 見出しを付け、合計 9,000 文字で安全に切り詰める。
-- 発火統計の保存に失敗した抗体は注入しない。保存に成功した発火だけを state の `injected` に記録する。
+- 発火統計の保存に失敗しても注入する。統計は best-effort であり、注入の成否は統計保存に依存しない。`last_fired` は抗体 frontmatter ではなく `.raphael/stats.json` から取得する。state の `injected` も、統計保存の成否にかかわらず注入対象を記録する。
 
 ## 5. Infection record と state
 
@@ -240,8 +235,23 @@ interface InfectionRecordV1 {
   details: InfectionDetails
   distilled: boolean
   distilled_at: string | null
+  resolved?: boolean             // 追加: 自己解決したか
+  resolved_at?: string | null    // 追加: 自己解決を観測した時刻(ISO 8601)
 }
 ```
+
+`resolved` と `resolved_at` は任意フィールドです。`resolved` は boolean、`resolved_at` は `null` または ISO 8601 の日時文字列で、型が不正な record は個別に読み飛ばします。
+
+**再発キーは保存フィールドではない。** `recurrence_key` は `InfectionRecordV1` の JSONL に保存せず、読み取り時に `details` から計算します。計算は `sha256Hex("${kind}\0${target}")` とし、target は kind ごとに次の安定した射影を使います。event sequence と timestamp は含めません。
+
+| kind | target | 備考 |
+|---|---|---|
+| `command-failure` | `details.normalized_command` | `fingerprint` の `normalizedTarget` と一致 |
+| `retry-loop` | `details.normalized_command` | `command-failure` と同じ kind ラベルを使い、同一コマンドを同じ鍵にする |
+| `user-rejection` | `details.matched_pattern` | 可変の prompt 本文ではなく一致した pattern を使う |
+| `edit-churn` | `details.file_path` | timestamp を含む編集 window ではなくファイルパスを使う |
+
+`recurrenceKeyOf(record)` はこの定義に従う純関数です。再発キーは読み取り時にのみ得られ、保存時の schema や `appendRecord` は変更しません。
 
 `command` は redaction 後に最大 1,000 文字、`output_tail` は末尾最大 20 行かつ 2,000 文字、`prompt_excerpt` は最大 1,000 文字、`input_digest` は最大 500 文字、`evidence` は最大 2,000 文字である。
 
@@ -268,6 +278,7 @@ interface RaphaelStateV1 {
     failed: boolean
     exit_code: number | null
     infection_id: string | null
+    resolved?: boolean
   }>
   recent_edits: Array<{
     ts: string
@@ -284,14 +295,57 @@ interface RaphaelStateV1 {
     ts: string
     antibody_id: string
     trigger_fingerprint: string
+    recurrence_key: string | null
   }>
-  last_distill_nag_digest: string | null
 }
 ```
 
-現在の hook input の session が state の `session` と異なる場合は、初期 state に切り替える。`next_event_seq` は 1 から開始し、`tool_use_id` のない受理イベントごとに採番して atomic 保存する。`recent_commands` は最大 20 件、`recent_edits` は最大 50 件とする。`injected` は同一 session・同一 antibody を 1 件にコアレスし、最新 timestamp を保持する。
+現在の hook input の session が state の `session` と異なる場合は、初期 state に切り替える。`next_event_seq` は 1 から開始し、`tool_use_id` のない受理イベントごとに採番して atomic 保存する。`recent_commands` は最大 **50 件**、`recent_edits` は最大 50 件とする。`injected` は同一 session・同一 antibody を 1 件にコアレスし、最新 timestamp を保持する。`last_distill_nag_digest` は state から削除し、nag digest は `.raphael/stats.json` の `distill.last_nag_digest` に保存する。
 
-Stop block 後の `last_distill_nag_digest` は、未蒸留 infection ID をコードポイント昇順に並べ、NUL (`\0`) 区切り UTF-8 bytes の SHA-256 lowercase hex とする。同じ集合では再 block せず、新規 infection により集合が変わったときだけ再通知できる。
+`injected` が抗体 ID ごとに最新 1 件へ畳み込まれるため、同じ抗体が別々のコマンドに連続して注入された場合、古い `recurrence_key` が失われ、その miss は数えられない。この性質により miss は過小計上される方向にしか誤らず、`ineffective` の誤検出は生まれない。
+
+### 5.3 `.raphael/stats.json` schema
+
+`.raphael/stats.json` はプロジェクトごとに 1 つ、セッションを跨いで永続する統計ファイルである。発火・miss 統計と蒸留通知の digest を抗体 Markdown から分離して保持する。
+
+```jsonc
+{
+  "schema_version": 1,
+  "antibodies": {
+    "ab-2026-0724-001": {
+      "fired": 12,
+      "last_fired": "2026-09-07",
+      "misses": 3,
+      "last_miss": "2026-09-05"
+    }
+  },
+  "distill": {
+    "last_nag_digest": null
+  }
+}
+```
+
+- 書き込みは temp file + rename の atomic 置換で行い、読み書きはいずれも例外を外へ投げない。
+- 欠損時は初期値(`{schema_version:1, antibodies:{}, distill:{last_nag_digest:null}}`)とみなす。
+- **破損とみなす条件は次の 3 つだけ**である。JSON parse 失敗、top-level が object でない(`null`・配列・数値・文字列を含む)、`antibodies` が object でない。この場合だけ全体を初期値へ戻す。
+- 個別 entry の型不正は全体破損ではない。その entry だけを初期値(`fired:0, last_fired:null, misses:0, last_miss:null`)に落とし、他の entry と `distill` は保持する。個別 entry の欠損も同じ初期値とみなす。
+- `distill` が object でない、または `last_nag_digest` が 64 桁 lowercase SHA-256 hex と null のいずれでもない場合は、`distill` だけを `{last_nag_digest:null}` に落とす。
+- `last_fired` と `last_miss` を merge するときは max(新しい日付)を採る。片方が null なら他方、双方 null なら null とする。
+- ID 形式に一致しない entry は読み込み時に落とす。Stop hook は抗体ファイルの ID 集合に無い孤児 entry も削除する。
+
+### 5.4 `.raphael/commands.jsonl` schema と母集団
+
+`.raphael/commands.jsonl` はプロジェクトごとに 1 つ、セッションを跨いで永続するコマンド履歴であり、gitignore 対象である。
+
+```jsonc
+{"ts":"2026-09-08T01:02:03.456Z","session":"abc123","normalized_command":"pnpm run lint","exit_code":0,"failed":false}
+```
+
+各行は `ts`(ISO 8601 文字列)、`session`(文字列)、`normalized_command`(state と同じ正規化・redaction 済みの文字列)、`exit_code`(整数または null)、`failed`(boolean)を持つ JSON object である。parse できない行は読み飛ばし、ファイルが無いときは空配列とする。
+
+`detect-infection.ts` の `processBash` は PostToolUse と PostToolUseFailure の両方で、Bash の成功・失敗を問わず 1 行を追記する。追記は失敗しても握り潰し、hook を止めない。Stop hook は 2,000 行を超えた場合に先頭から超過分を削り、これも失敗を握り潰す。PostToolUse 側では切り詰めない。
+
+広さ検査と `audit` は `commands.jsonl` の `normalized_command` を重複排除し、コードポイント昇順に並べ、上限 2,000 件で切り詰めたものを母集団とする。infection JSONL と `state.recent_commands` は母集団に使わない。母集団が 50 件未満なら検査せず `breadth: { checked: false, reason: "corpus_too_small" }` として通す。直近 N 件の窓は設けず、常に履歴全体(上限 2,000 件)を使う。
 
 ## 6. 感知契約
 
@@ -300,8 +354,16 @@ Stop block 後の `last_distill_nag_digest` は、未蒸留 infection ID をコ�
 - command failure の正経路は `PostToolUseFailure` の Bash である。`PostToolUse` の Bash も、明示 exit code が抽出できて非 0 の場合だけ failure とみなす。
 - exit code は `tool_response` object の `exit_code`、`exitCode`、`code` をこの順に調べる。有限整数 number または 10 進整数 string だけを受理する。取得できなければ `error` の `(?:status code|exit code)\s+(-?\d+)` を case-insensitive に評価し、なお不明なら `null` とする。
 - `PostToolUse` で exit code が `null` の場合、出力文言から failure を推定しない。
-- command 正規化は trim と連続空白の 1 空白化だけである。引用符、option、path の意味解析はしない。
-- exit code が 1 のときだけ、組み込み `grep`、`rg`、`git grep`、`diff`、`git diff --quiet`、`cmp`、`test`、`[` と config の追加コマンドを failure から除外する。比較は正規化済みコマンドの接頭辞で行う。
+- 通常の `state.recent_commands` 用の command 正規化は trim と連続空白の 1 空白化だけである。benign 拡張リストの比較では、次の 5 段を順番に適用する。
+  1. `&&` / `;` / `||` で分割し、最後のセグメントを対象にする。
+  2. セグメント先頭の環境変数代入(`NAME=value` の連続)を除去する。
+  3. 先頭の `npx` / `pnpm dlx` を読み飛ばす。
+  4. 先頭が `pnpm` / `npm` / `yarn` のとき、`--dir <path>` / `-C <path>` / `--filter <name>` / `exec` / `run` を読み飛ばす(繰り返し適用)。
+  5. 残った実行ファイルが絶対パス・相対パスなら basename にする。
+- benign の組込み拡張リストは runner(`vitest`、`jest`、`mocha`、`pytest`、`biome`、`eslint`、`prettier`、`tsc`)と script(`test`、`lint`、`typecheck`、`check`)である。正規化後の接頭辞を比較し、exit 1 と exit 2 の両方へ適用する。既存の基本リスト(`grep`、`rg`、`git grep`、`diff`、`git diff --quiet`、`cmp`、`test`、`[`)と config の `benign_exit1_commands` は exit 1 のみに、生のコマンド文字列への接頭辞比較で適用する。
+- `commandStartsWith` は接頭辞の直後が空白または終端であることを要求する。そのため `pnpm test` は `pnpm test:unit` に一致しない。
+- exit code が `130`(SIGINT)、`137`(SIGKILL)、`143`(SIGTERM)のときだけ failure としない。`128` / `129` を含むその他の 128 以上は failure のまま扱う。
+- `detect-infection.ts` の `processBash` は Bash の成功・失敗を問わず、`PostToolUse` と `PostToolUseFailure` の両方で `.raphael/commands.jsonl` に 1 行追記する。追記に失敗しても hook は止めない。
 - retry loop は同じ正規化済みコマンドが既定 3 回以上連続 failure したときに記録する。類似コマンド判定はしない。
 
 ### 6.2 User rejection
@@ -352,6 +414,12 @@ Stop block 後の `last_distill_nag_digest` は、未蒸留 infection ID をコ�
 | `max_injections` | `3` | 整数 1–10 |
 | `rejection_patterns` | `[]` | 文字列の JSON array |
 | `benign_exit1_commands` | `[]` | 文字列の JSON array |
+| `benign_exit1_extended` | `true` | boolean |
+| `breadth_max_ratio` | `10` | 整数 1–100(百分率) |
+| `breadth_min_corpus` | `50` | 整数 1–5000 |
+| `miss_window_minutes` | `30` | 整数 1–1440 |
+| `ineffective_min_fired` | `10` | 整数 1–1000 |
+| `ineffective_miss_ratio` | `50` | 整数 1–100(百分率) |
 | `antibodies_git_policy` | `commit` | `commit` / `ignore` |
 
 `antibodies_git_policy` は設定として読み込むが、現実の Git ignore/commit は利用者の `.gitignore` と運用で決める。推奨は `commit` である。
@@ -360,13 +428,17 @@ Stop block 後の `last_distill_nag_digest` は、未蒸留 infection ID をコ�
 
 `check-distill-needed.mjs` は Stop hook が再入中の場合、または session ID がない場合は何もしない。通常の Stop 時は次を行う。
 
-1. `distilled: true` かつ `distilled_at` から 14 日より古い infection record を削除する。不正 record は保持する。
+1. `distilled: true` かつ `distilled_at` から 14 日より古い infection record、または `resolved: true` かつ `resolved_at` から 14 日より古い record を削除する。不正な日時は削除しない。
 2. `active` かつ `expires < 今日` の抗体を `expired` へ遷移する。
-3. 未蒸留 infection の数が `distill_threshold` 以上であり、集合 digest が前回通知分と異なる場合、`decision: "block"` と蒸留を促す reason を出力する。
+3. `.raphael/stats.json` から抗体ファイルに存在しない孤児 entry を削除する。
+4. `.raphael/commands.jsonl` が 2,000 行を超えていれば、先頭から超過分を削除する。
+5. 未蒸留かつ未解決の infection から再発キーを計算し、重複排除した**未解決の再発キーの種類数**が `distill_threshold` 以上で、集合 digest が前回通知分と異なる場合に `decision: "block"` と蒸留を促す reason を出力する。同じ失敗の反復は 1 種類として数える。
+
+nag digest は state ではなく `.raphael/stats.json` の `distill.last_nag_digest` に保存する。`stats.json` の読み込みに失敗した場合は null とみなして催促し、digest の書き込みに失敗した場合はログに流して block しない。cleanup、孤児 entry の削除、commands の切り詰めなどの失敗も、通常のツール実行やセッション終了を止めない。
 
 蒸留担当は未蒸留 infection と既存抗体を参照し、次回同じ状況で同じ失敗を防ぐ知識だけを抗体にする。実質的に同じ trigger は既存抗体の期限延長、同型で対象が異なるものは pattern の汎化、新規で表現できない場合だけ新規抗体を作る。抗体と infection の更新は下記 management CLI 経由で行い、frontmatter を手書き編集しない。
 
-`commands/review.md` は `/raphael:review` の対話的 UI を定義する。コマンドは抗体の一覧、承認（`confirmed`）、却下（`expired`）、編集を担い、読み取りには `list-antibodies.mjs`、更新には `update-antibody.mjs` だけを使用する。編集は `patch --dry-run` による検証と、同一 JSON patch の明示確認後の適用を必須とする。
+`commands/review.md` は `/raphael:review` の対話的 UI を定義する。コマンドは抗体の一覧、承認(`confirmed`)、却下(`expired`)、格下げ(`confirmed` から `active`)、編集を担い、読み取りには `list-antibodies.mjs`、更新には `update-antibody.mjs` だけを使用する。編集は `patch --dry-run` による検証と、同一 JSON patch の明示確認後の適用を必須とする。
 
 ## 9. Management CLI
 
@@ -388,17 +460,31 @@ node scripts/update-antibody.mjs [--dir <project-dir>] <operation> [operands...]
 | `extend` | `<id>` | 任意の有効 JSON | `last_fired + default_expiry_days` と `created + 90 日` の早い方へ延長。confirmed は no-op |
 | `record-fire` | `<id>` | 任意の有効 JSON | `fired` を +1、`last_fired` を今日へ更新 |
 | `mark-distilled` | なし | `{ "ids": string[] }` | infection JSONL の対象 record を蒸留済みにする |
+| `migrate-stats` | なし | 有効な JSON | 旧 frontmatter の `stats` を `.raphael/stats.json` へ移し、抗体を書き直す。`--dry-run` 対応 |
+| `audit` | なし | 有効な JSON | `commands.jsonl` を母集団に広さと効果を決定的に棚卸しする。読み取り専用。`--dry-run` 対応 |
+
+`create` と `trigger` を含む `patch` は、Bash または `*` の trigger に対して `commands.jsonl` の母集団への一致率を preflight 検査する。母集団 50 件未満、または Edit / Write trigger は検査をスキップする。ratio が `breadth_max_ratio` を厳密に超える場合は抗体を作成・更新せず、exit code 2 と次の error を返す。
+
+```jsonc
+{ "ok": false,
+  "error": { "code": "PATTERN_TOO_BROAD", "field": "trigger.pattern", "message": "trigger.pattern: matches 41.1% of 214 known commands (limit 10%)" },
+  "breadth": { "checked": true, "corpus_size": 214, "matched": 88, "ratio": 0.411,
+               "samples": ["git status", "pnpm run build", "ls -la", "cat README.md", "node scripts/x.mjs"] } }
+```
+
+ちょうど閾値の一致率は通し、超過だけを拒否する。`--dry-run` は `patch`、`migrate-stats`、`audit` で使用でき、`create` では使用できない。
 
 `list-antibodies.mjs` は stdin を使わない。
 
 ```text
-node scripts/list-antibodies.mjs [--dir <project-dir>] [--json] [--include-body] [--status <active|expired|confirmed>] [--id <id>]
+node scripts/list-antibodies.mjs [--json] [--include-body] [--id <id>] [--status <active|expired|confirmed>] [--ineffective] [--dir <dir>]
 ```
 
 - `--json` は `{ "ok": true, "antibodies": [...], "errors": [...] }` を出力する。
 - `--include-body` がない JSON 出力では抗体本文を除外する。
-- `--status` と `--id` は AND 条件で絞り込む。
-- 現在の CLI の並び順は `id` 昇順である。
+- `--status`、`--id`、`--ineffective` は AND 条件で絞り込む。`--ineffective` は ineffective 候補だけを返す。
+- JSON 出力の各 entry は `stats`(`fired` / `last_fired` / `misses` / `last_miss`)と `ineffective` を含む。
+- テーブル出力の列は `ID / STATUS / FIRED / MISSES / LAST_FIRED / EXPIRES / SOURCE` である。並び順は `id` 昇順である。
 - list の終了コードは成功 0、I/O error 1、引数/validation error 2 である。
 
 ## 10. 範囲
@@ -406,6 +492,8 @@ node scripts/list-antibodies.mjs [--dir <project-dir>] [--json] [--include-body]
 v0.1 の対象は command failure、retry loop、user rejection、edit churn の 4 検知、Stop による蒸留通知、PreToolUse 正規表現注入、抗体の状態・期限管理である。
 
 対象外はプロジェクト間共有、Codiel の GOTCHAS との自動変換、多言語の包括的な差し戻し検知、類似抗体のベクトル検索、セッション途中の LLM 抗体生成、類似コマンドの retry 判定、セッション間の同時実行ロックである。Codiel との将来連携のため、抗体の `source` は自由文字列とする。
+
+なお、synthesizer の二問の問 2 はプロジェクト間共有機能ではなく、抗体本文が別のリポジトリでも成立する一般則かを確認する汎用性の品質検査である。
 
 ## 11. 検証方針
 
