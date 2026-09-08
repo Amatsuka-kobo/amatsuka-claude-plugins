@@ -143,5 +143,7 @@ export interface RaphaelConfig {
   rejectionPatterns: string[]
   benignExit1Commands: string[]
   benignExit1Extended: boolean
+  breadthMaxRatio: number
+  breadthMinCorpus: number
   antibodiesGitPolicy: "commit" | "ignore"
 }

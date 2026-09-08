@@ -15,6 +15,8 @@ export const DEFAULT_CONFIG: RaphaelConfig = {
   rejectionPatterns: [],
   benignExit1Commands: [],
   benignExit1Extended: true,
+  breadthMaxRatio: 10,
+  breadthMinCorpus: 50,
   antibodiesGitPolicy: "commit"
 }
 
@@ -144,6 +146,20 @@ export function loadConfig(projectDir: string): RaphaelConfig {
   const benignExit1Extended = booleanValue(fields.get("benign_exit1_extended"))
   if (benignExit1Extended !== null)
     config.benignExit1Extended = benignExit1Extended
+
+  const breadthMaxRatio = integerInRange(
+    fields.get("breadth_max_ratio"),
+    1,
+    100
+  )
+  if (breadthMaxRatio !== null) config.breadthMaxRatio = breadthMaxRatio
+
+  const breadthMinCorpus = integerInRange(
+    fields.get("breadth_min_corpus"),
+    1,
+    5_000
+  )
+  if (breadthMinCorpus !== null) config.breadthMinCorpus = breadthMinCorpus
 
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"))
   if (antibodiesGitPolicy !== null)

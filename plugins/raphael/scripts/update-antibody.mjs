@@ -1,6 +1,6 @@
 // src/update-antibody.ts
-import fs6 from "node:fs";
-import path6 from "node:path";
+import fs7 from "node:fs";
+import path7 from "node:path";
 
 // src/lib/antibody-store.ts
 import fs2 from "node:fs";
@@ -543,9 +543,93 @@ function codePointCompare(left, right) {
   return leftPoints.length - rightPoints.length;
 }
 
-// src/lib/config.ts
+// src/lib/command-log.ts
 import fs3 from "node:fs";
 import path3 from "node:path";
+function commandLogPath(projectDir) {
+  return path3.join(projectDir, ".raphael", "commands.jsonl");
+}
+function readCommandLog(projectDir) {
+  try {
+    const raw = fs3.readFileSync(commandLogPath(projectDir), "utf8");
+    const lines = raw.split(/\r?\n/);
+    if (lines.at(-1) === "") lines.pop();
+    const entries = [];
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (isCommandLogEntry(parsed)) entries.push(parsed);
+      } catch {
+      }
+    }
+    return entries;
+  } catch {
+    return [];
+  }
+}
+function isCommandLogEntry(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && typeof value.ts === "string" && typeof value.session === "string" && typeof value.normalized_command === "string" && (value.exit_code === null || typeof value.exit_code === "number" && Number.isInteger(value.exit_code)) && typeof value.failed === "boolean";
+}
+
+// src/lib/breadth.ts
+var MAX_CORPUS_SIZE = 2e3;
+var DEFAULT_MAX_RATIO = 10;
+var DEFAULT_MIN_CORPUS = 50;
+function buildBreadthCorpus(projectDir) {
+  return [
+    ...new Set(
+      readCommandLog(projectDir).map((entry) => entry.normalized_command)
+    )
+  ].sort(compareCodePoints).slice(0, MAX_CORPUS_SIZE);
+}
+function evaluateBreadth(projectDir, trigger, maxRatio = DEFAULT_MAX_RATIO, minCorpus = DEFAULT_MIN_CORPUS) {
+  if (trigger.tool !== "Bash" && trigger.tool !== "*") {
+    return {
+      tooBroad: false,
+      breadth: { checked: false, reason: "tool_not_applicable" },
+      samples: []
+    };
+  }
+  const corpus = buildBreadthCorpus(projectDir);
+  if (corpus.length < minCorpus) {
+    return {
+      tooBroad: false,
+      breadth: {
+        checked: false,
+        reason: "corpus_too_small",
+        corpus_size: corpus.length
+      },
+      samples: []
+    };
+  }
+  const pattern = new RegExp(trigger.pattern);
+  const matches = corpus.filter((command) => pattern.test(command));
+  const ratio = matches.length / corpus.length;
+  return {
+    tooBroad: ratio > maxRatio / 100,
+    breadth: {
+      checked: true,
+      corpus_size: corpus.length,
+      matched: matches.length,
+      ratio
+    },
+    samples: matches.slice(0, 5)
+  };
+}
+function compareCodePoints(left, right) {
+  const leftPoints = [...left];
+  const rightPoints = [...right];
+  const length = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftPoints[index]?.codePointAt(0) ?? 0) - (rightPoints[index]?.codePointAt(0) ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
+// src/lib/config.ts
+import fs4 from "node:fs";
+import path4 from "node:path";
 var DEFAULT_CONFIG = {
   detectCommandFailure: true,
   detectRetryLoop: true,
@@ -559,10 +643,12 @@ var DEFAULT_CONFIG = {
   rejectionPatterns: [],
   benignExit1Commands: [],
   benignExit1Extended: true,
+  breadthMaxRatio: 10,
+  breadthMinCorpus: 50,
   antibodiesGitPolicy: "commit"
 };
 function configPath(projectDir) {
-  return path3.join(projectDir, ".claude", "raphael.local.md");
+  return path4.join(projectDir, ".claude", "raphael.local.md");
 }
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
@@ -606,7 +692,7 @@ function loadConfig(projectDir) {
   };
   let raw;
   try {
-    raw = fs3.readFileSync(configPath(projectDir), "utf8");
+    raw = fs4.readFileSync(configPath(projectDir), "utf8");
   } catch {
     return config;
   }
@@ -655,6 +741,18 @@ function loadConfig(projectDir) {
   const benignExit1Extended = booleanValue(fields.get("benign_exit1_extended"));
   if (benignExit1Extended !== null)
     config.benignExit1Extended = benignExit1Extended;
+  const breadthMaxRatio = integerInRange(
+    fields.get("breadth_max_ratio"),
+    1,
+    100
+  );
+  if (breadthMaxRatio !== null) config.breadthMaxRatio = breadthMaxRatio;
+  const breadthMinCorpus = integerInRange(
+    fields.get("breadth_min_corpus"),
+    1,
+    5e3
+  );
+  if (breadthMinCorpus !== null) config.breadthMinCorpus = breadthMinCorpus;
   const antibodiesGitPolicy = gitPolicy(fields.get("antibodies_git_policy"));
   if (antibodiesGitPolicy !== null)
     config.antibodiesGitPolicy = antibodiesGitPolicy;
@@ -663,8 +761,8 @@ function loadConfig(projectDir) {
 
 // src/lib/infection-store.ts
 import crypto2 from "node:crypto";
-import fs4 from "node:fs";
-import path4 from "node:path";
+import fs5 from "node:fs";
+import path5 from "node:path";
 var KINDS = [
   "command-failure",
   "retry-loop",
@@ -684,7 +782,7 @@ function sessionFileName(session) {
   return `session-${sha256Hex(session).slice(0, 16)}.jsonl`;
 }
 function infectionFilePath(projectDir, session) {
-  return path4.join(
+  return path5.join(
     projectDir,
     ".raphael",
     "infections",
@@ -722,7 +820,7 @@ function parseInfectionLine(line) {
 }
 function readRawLines(filePath) {
   try {
-    const raw = fs4.readFileSync(filePath, "utf8");
+    const raw = fs5.readFileSync(filePath, "utf8");
     const lines = raw.split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
     return lines;
@@ -804,18 +902,18 @@ function isIntegerAtLeast(value, minimum) {
 }
 
 // src/lib/stats-store.ts
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
 var DATE_PATTERN2 = /^\d{4}-\d{2}-\d{2}$/;
 var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 function statsFilePath(projectDir) {
-  return path5.join(projectDir, ".raphael", "stats.json");
+  return path6.join(projectDir, ".raphael", "stats.json");
 }
 function loadStats(projectDir) {
   try {
     const parsed = JSON.parse(
-      fs5.readFileSync(statsFilePath(projectDir), "utf8")
+      fs6.readFileSync(statsFilePath(projectDir), "utf8")
     );
     if (!isRecord3(parsed) || !isRecord3(parsed.antibodies)) {
       return initialStats();
@@ -906,10 +1004,17 @@ function main() {
   const body = readRequest();
   let result;
   switch (options.operation) {
-    case "create":
+    case "create": {
       assertOperandCount(options, 0);
-      result = { ok: true, antibody: createAntibody(options.dir, draft(body)) };
+      const candidate = draft(body);
+      const breadth = breadthPreflight(options.dir, candidate.trigger);
+      result = {
+        ok: true,
+        antibody: createAntibody(options.dir, candidate),
+        breadth
+      };
       break;
+    }
     case "patch":
       assertOperandCount(options, 1);
       result = patch(options, body);
@@ -988,7 +1093,7 @@ function parseArgs(args) {
 function readRequest() {
   let raw;
   try {
-    raw = fs6.readFileSync(0, "utf8");
+    raw = fs7.readFileSync(0, "utf8");
   } catch (error) {
     throw new AntibodyIoError("Failed to read request", error);
   }
@@ -1008,11 +1113,34 @@ function draft(value) {
     body: stringField(value, "body")
   };
 }
+function breadthPreflight(projectDir, trigger) {
+  const config = loadConfig(projectDir);
+  const evaluation = evaluateBreadth(
+    projectDir,
+    trigger,
+    config.breadthMaxRatio,
+    config.breadthMinCorpus
+  );
+  if (evaluation.tooBroad && evaluation.breadth.checked) {
+    const rejectedBreadth = {
+      ...evaluation.breadth,
+      samples: evaluation.samples
+    };
+    throw new RequestError(
+      "PATTERN_TOO_BROAD",
+      `trigger.pattern: matches ${(evaluation.breadth.ratio * 100).toFixed(1)}% of ${evaluation.breadth.corpus_size} known commands (limit ${config.breadthMaxRatio}%)`,
+      "trigger.pattern",
+      rejectedBreadth
+    );
+  }
+  return evaluation.breadth;
+}
 function patch(options, value) {
   if (!isRecord4(value)) throw validation("patch", "must be an object");
   assertKeys(value, [], ["source", "trigger", "body"]);
   const current = readAntibody(options.dir, options.operands[0] ?? "");
   const normalized = validateAntibody({ ...current, ...value });
+  const breadth = Object.hasOwn(value, "trigger") ? breadthPreflight(options.dir, normalized.trigger) : void 0;
   if (options.dryRun) {
     return {
       ok: true,
@@ -1020,12 +1148,14 @@ function patch(options, value) {
       antibody: normalized,
       diff: Object.keys(value).filter(
         (key) => JSON.stringify(current[key]) !== JSON.stringify(normalized[key])
-      )
+      ),
+      ...breadth === void 0 ? {} : { breadth }
     };
   }
   return {
     ok: true,
-    antibody: patchAntibody(options.dir, options.operands[0] ?? "", value)
+    antibody: patchAntibody(options.dir, options.operands[0] ?? "", value),
+    ...breadth === void 0 ? {} : { breadth }
   };
 }
 function setStatus(options) {
@@ -1060,7 +1190,7 @@ function migrateStats(options) {
   const directory = antibodiesDirectory(options.dir);
   let entries;
   try {
-    entries = fs6.readdirSync(directory, { withFileTypes: true });
+    entries = fs7.readdirSync(directory, { withFileTypes: true });
   } catch (error) {
     if (isErrorCode2(error, "ENOENT")) {
       return {
@@ -1080,10 +1210,10 @@ function migrateStats(options) {
   let skipped = 0;
   const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".md")).map((entry) => entry.name).sort();
   for (const file of files) {
-    const filePath = path6.join(directory, file);
+    const filePath = path7.join(directory, file);
     let raw;
     try {
-      raw = fs6.readFileSync(filePath, "utf8");
+      raw = fs7.readFileSync(filePath, "utf8");
     } catch (error) {
       throw new AntibodyIoError(`Failed to read antibody: ${file}`, error);
     }
@@ -1155,10 +1285,10 @@ function markDistilled(projectDir, value) {
   const ids = [...new Set(value.ids)];
   const found = /* @__PURE__ */ new Set();
   let updated = 0;
-  const directory = path6.join(projectDir, ".raphael", "infections");
+  const directory = path7.join(projectDir, ".raphael", "infections");
   let entries;
   try {
-    entries = fs6.readdirSync(directory, { withFileTypes: true });
+    entries = fs7.readdirSync(directory, { withFileTypes: true });
   } catch (error) {
     if (isErrorCode2(error, "ENOENT")) {
       return { ok: true, updated: 0, not_found: ids };
@@ -1167,10 +1297,10 @@ function markDistilled(projectDir, value) {
   }
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-    const filePath = path6.join(directory, entry.name);
+    const filePath = path7.join(directory, entry.name);
     let raw;
     try {
-      raw = fs6.readFileSync(filePath, "utf8");
+      raw = fs7.readFileSync(filePath, "utf8");
     } catch (error) {
       throw new AntibodyIoError(
         `Failed to read infection file: ${entry.name}`,
@@ -1258,14 +1388,16 @@ function respond(value) {
 `);
 }
 var RequestError = class extends Error {
-  constructor(code, message, field) {
+  constructor(code, message, field, breadth) {
     super(message);
     this.code = code;
     this.field = field;
+    this.breadth = breadth;
     this.name = "RequestError";
   }
   code;
   field;
+  breadth;
 };
 function failure(error) {
   if (error instanceof RequestError) {
@@ -1300,6 +1432,10 @@ try {
   main();
 } catch (error) {
   const result = failure(error);
-  respond({ ok: false, error: result });
+  respond({
+    ok: false,
+    error: result,
+    ...error instanceof RequestError && error.breadth !== void 0 ? { breadth: error.breadth } : {}
+  });
   process.exitCode = result.code === "IO_ERROR" || result.code === "RUNTIME_ERROR" ? 1 : 2;
 }
