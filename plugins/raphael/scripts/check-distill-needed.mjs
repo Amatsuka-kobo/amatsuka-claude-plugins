@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // src/check-distill-needed.ts
-import fs6 from "node:fs";
-import path6 from "node:path";
+import fs7 from "node:fs";
+import path7 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/lib/antibody-store.ts
@@ -47,7 +47,7 @@ var AntibodyValidationError = class extends Error {
     this.field = field;
   }
 };
-function parseAntibodyMarkdown(markdown) {
+function parseAntibodyMarkdownWithLegacy(markdown) {
   const normalized = markdown.replace(/\r\n?/g, "\n");
   if (!normalized.startsWith("---\n")) {
     throw validationError("frontmatter", "must start with ---");
@@ -97,31 +97,45 @@ function parseAntibodyMarkdown(markdown) {
     scope = parseString(take("  ", "scope"), "trigger.scope");
   }
   const status = parseString(take("", "status"), "status");
-  takeGroup("stats");
-  const fired = parseInteger(take("  ", "fired"), "stats.fired");
-  const lastFired = parseNullableString(
-    take("  ", "last_fired"),
-    "stats.last_fired"
-  );
+  let legacyStats = null;
+  if (lines[index]?.startsWith("stats:")) {
+    if (stripInlineComment(take("", "stats")).trim() !== "") {
+      throw validationError("stats", "expected stats:");
+    }
+    const fired = parseInteger(take("  ", "fired"), "stats.fired");
+    const lastFired = parseNullableString(
+      take("  ", "last_fired"),
+      "stats.last_fired"
+    );
+    legacyStats = {
+      fired,
+      last_fired: lastFired === null ? null : requireDate(lastFired, "stats.last_fired")
+    };
+  }
   const expires = parseString(take("", "expires"), "expires");
   if (index !== lines.length) {
     throw validationError("frontmatter", `unexpected field: ${lines[index]}`);
   }
-  return validateAntibody({
-    id,
-    created,
-    source,
-    trigger: {
-      event,
-      tool,
-      pattern,
-      ...scope === void 0 ? {} : { scope }
-    },
-    status,
-    stats: { fired, last_fired: lastFired },
-    expires,
-    body
-  });
+  return {
+    antibody: validateAntibody({
+      id,
+      created,
+      source,
+      trigger: {
+        event,
+        tool,
+        pattern,
+        ...scope === void 0 ? {} : { scope }
+      },
+      status,
+      expires,
+      body
+    }),
+    legacyStats
+  };
+}
+function parseAntibodyMarkdown(markdown) {
+  return parseAntibodyMarkdownWithLegacy(markdown).antibody;
 }
 function serializeAntibodyMarkdown(value) {
   const antibody = validateAntibody(value);
@@ -140,9 +154,6 @@ function serializeAntibodyMarkdown(value) {
   }
   lines.push(
     `status: ${antibody.status}`,
-    "stats:",
-    `  fired: ${antibody.stats.fired}`,
-    `  last_fired: ${antibody.stats.last_fired ?? "null"}`,
     `expires: ${antibody.expires}`,
     "---",
     "",
@@ -159,7 +170,6 @@ function validateAntibody(value) {
     "source",
     "trigger",
     "status",
-    "stats",
     "expires",
     "body"
   ]);
@@ -177,14 +187,6 @@ function validateAntibody(value) {
   if (!STATUSES.includes(status)) {
     throw validationError("status", "must be active, expired, or confirmed");
   }
-  if (!isRecord(value.stats)) {
-    throw validationError("stats", "must be an object");
-  }
-  assertExactKeys(value.stats, ["fired", "last_fired"], "stats");
-  if (typeof value.stats.fired !== "number" || !Number.isInteger(value.stats.fired) || value.stats.fired < 0) {
-    throw validationError("stats.fired", "must be a non-negative integer");
-  }
-  const lastFired = value.stats.last_fired === null ? null : requireDate(value.stats.last_fired, "stats.last_fired");
   const expires = requireDate(value.expires, "expires");
   const body = requireString(value.body, "body");
   if (body.trim() === "") throw validationError("body", "must not be empty");
@@ -197,7 +199,6 @@ function validateAntibody(value) {
     source,
     trigger,
     status,
-    stats: { fired: value.stats.fired, last_fired: lastFired },
     expires,
     body
   };
@@ -801,11 +802,95 @@ function truncate(value, maximum) {
   return value.slice(0, maximum);
 }
 
+// src/lib/stats-store.ts
+import fs6 from "node:fs";
+import path6 from "node:path";
+var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
+var DATE_PATTERN2 = /^\d{4}-\d{2}-\d{2}$/;
+var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+function statsFilePath(projectDir) {
+  return path6.join(projectDir, ".raphael", "stats.json");
+}
+function loadStats(projectDir) {
+  try {
+    const parsed = JSON.parse(
+      fs6.readFileSync(statsFilePath(projectDir), "utf8")
+    );
+    if (!isRecord2(parsed) || !isRecord2(parsed.antibodies)) {
+      return initialStats();
+    }
+    const antibodies = {};
+    for (const [id, value] of Object.entries(parsed.antibodies)) {
+      if (!ANTIBODY_ID_PATTERN.test(id)) continue;
+      antibodies[id] = validStats(value) ? value : initialAntibodyStats();
+    }
+    return {
+      schema_version: 1,
+      antibodies,
+      distill: normalizeDistill(parsed.distill)
+    };
+  } catch {
+    return initialStats();
+  }
+}
+function saveStats(projectDir, stats) {
+  writeFileAtomic(
+    statsFilePath(projectDir),
+    `${JSON.stringify(stats, null, 2)}
+`
+  );
+}
+function pruneOrphanStats(projectDir, knownIds) {
+  const stats = loadStats(projectDir);
+  const known = new Set(knownIds);
+  let removed = 0;
+  for (const id of Object.keys(stats.antibodies)) {
+    if (known.has(id)) continue;
+    delete stats.antibodies[id];
+    removed += 1;
+  }
+  if (removed > 0) saveStats(projectDir, stats);
+  return removed;
+}
+function initialStats() {
+  return {
+    schema_version: 1,
+    antibodies: {},
+    distill: { last_nag_digest: null }
+  };
+}
+function initialAntibodyStats() {
+  return { fired: 0, last_fired: null, misses: 0, last_miss: null };
+}
+function validStats(value) {
+  if (!isRecord2(value)) return false;
+  return isNonNegativeInteger(value.fired) && isNullableDate(value.last_fired) && isNonNegativeInteger(value.misses) && isNullableDate(value.last_miss);
+}
+function normalizeDistill(value) {
+  if (!isRecord2(value) || !(value.last_nag_digest === null || typeof value.last_nag_digest === "string" && DIGEST_PATTERN.test(value.last_nag_digest))) {
+    return { last_nag_digest: null };
+  }
+  return { last_nag_digest: value.last_nag_digest };
+}
+function isNonNegativeInteger(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+function isNullableDate(value) {
+  return value === null || typeof value === "string" && DATE_PATTERN2.test(value);
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/check-distill-needed.ts
 var DISTILLED_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;
 function cleanupProject(projectDir, now = /* @__PURE__ */ new Date()) {
   const undistilledIds = cleanupInfections(projectDir, now);
-  expireAntibodies(projectDir, now);
+  const knownIds = expireAntibodies(projectDir, now);
+  try {
+    pruneOrphanStats(projectDir, knownIds);
+  } catch {
+  }
   return { undistilledIds };
 }
 function localDateString(value) {
@@ -815,10 +900,10 @@ function localDateString(value) {
   return `${year}-${month}-${day}`;
 }
 function cleanupInfections(projectDir, now) {
-  const directory = path6.join(projectDir, ".raphael", "infections");
+  const directory = path7.join(projectDir, ".raphael", "infections");
   let entries;
   try {
-    entries = fs6.readdirSync(directory, { withFileTypes: true });
+    entries = fs7.readdirSync(directory, { withFileTypes: true });
   } catch (error) {
     if (isErrorCode2(error, "ENOENT")) return [];
     throw error;
@@ -827,8 +912,8 @@ function cleanupInfections(projectDir, now) {
   const undistilledIds = [];
   const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl")).map((entry) => entry.name).sort(codePointCompare3);
   for (const file of files) {
-    const filePath = path6.join(directory, file);
-    const raw = fs6.readFileSync(filePath, "utf8");
+    const filePath = path7.join(directory, file);
+    const raw = fs7.readFileSync(filePath, "utf8");
     const lines = raw.split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
     const retained = [];
@@ -850,7 +935,7 @@ function cleanupInfections(projectDir, now) {
       }
     }
     if (retained.length === 0) {
-      fs6.rmSync(filePath);
+      fs7.rmSync(filePath);
     } else if (retained.length !== lines.length || retained.some((line, index) => line !== lines[index])) {
       writeFileAtomic(filePath, `${retained.join("\n")}
 `);
@@ -866,10 +951,11 @@ function expireAntibodies(projectDir, now) {
       setAntibodyStatus(projectDir, antibody.id, "expired");
     }
   }
+  return antibodies.map(({ id }) => id);
 }
 function buildReason(projectDir, pluginRoot, undistilledCount) {
-  const listScript = path6.join(pluginRoot, "scripts", "list-antibodies.mjs");
-  const updateScript = path6.join(pluginRoot, "scripts", "update-antibody.mjs");
+  const listScript = path7.join(pluginRoot, "scripts", "list-antibodies.mjs");
+  const updateScript = path7.join(pluginRoot, "scripts", "update-antibody.mjs");
   return [
     "Raphael \u306B\u672A\u84B8\u7559\u306E infection record \u304C\u84C4\u7A4D\u3057\u3066\u3044\u307E\u3059\u3002\u611F\u67D3\u5185\u5BB9\u3084 secret \u3092\u3053\u306E\u30E1\u30C3\u30BB\u30FC\u30B8\u3078\u5C55\u958B\u305B\u305A\u3001\u84B8\u7559\u3092\u5C02\u7528\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u3078\u59D4\u8B72\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     'Agent \u30C4\u30FC\u30EB\u3067 subagent_type "raphael:antibody-synthesizer" \u3092\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002',
@@ -886,7 +972,7 @@ function run() {
   if (!input || input.stop_hook_active) return;
   const session = validSession(input);
   if (session === null) return;
-  const projectDir = path6.resolve(resolveProjectDir(input));
+  const projectDir = path7.resolve(resolveProjectDir(input));
   try {
     const config = loadConfig(projectDir);
     const { undistilledIds } = cleanupProject(projectDir);
@@ -894,7 +980,7 @@ function run() {
     const digest = computeDistillNagDigest(undistilledIds);
     const state = loadState(projectDir, session);
     if (state.last_distill_nag_digest === digest) return;
-    const pluginRoot = path6.resolve(
+    const pluginRoot = path7.resolve(
       process.env.CLAUDE_PLUGIN_ROOT || "<raphael plugin root>"
     );
     const reason = buildReason(projectDir, pluginRoot, undistilledIds.length);
@@ -921,7 +1007,7 @@ function codePointCompare3(left, right) {
   }
   return leftPoints.length - rightPoints.length;
 }
-if (path6.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url))
+if (path7.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url))
   run();
 export {
   cleanupProject,

@@ -2,12 +2,13 @@ import { expect, test } from "vitest"
 import {
   AntibodyValidationError,
   parseAntibodyMarkdown,
+  parseAntibodyMarkdownWithLegacy,
   serializeAntibodyMarkdown,
   validateAntibody
 } from "../frontmatter.js"
 import type { Antibody } from "../types.js"
 
-const DESIGN_EXAMPLE = `---
+const LEGACY_EXAMPLE = `---
 id: ab-2026-0721-001
 created: 2026-07-21
 source: infection-2026-0721-003        # 由来
@@ -40,21 +41,52 @@ function antibody(overrides: Partial<Antibody> = {}): Antibody {
       scope: ""
     },
     status: "active",
-    stats: { fired: 0, last_fired: null },
     expires: "2026-08-23",
     body: "Do not repeat the failed edit.",
     ...overrides
   }
 }
 
-test("設計書の抗体例を parse→serialize→parse して等価にする", () => {
-  const parsed = parseAntibodyMarkdown(DESIGN_EXAMPLE)
-  expect(parseAntibodyMarkdown(serializeAntibodyMarkdown(parsed))).toEqual(
-    parsed
-  )
+test("旧形式を読み、legacyStats を返し、通常 parser は stats を捨てる", () => {
+  const parsed = parseAntibodyMarkdownWithLegacy(LEGACY_EXAMPLE)
+  expect(parsed.legacyStats).toEqual({
+    fired: 3,
+    last_fired: "2026-07-21"
+  })
+  expect(parsed.antibody).not.toHaveProperty("stats")
+  expect(parseAntibodyMarkdown(LEGACY_EXAMPLE)).toEqual(parsed.antibody)
 })
 
-test("JSON quote した source/pattern/scope と null last_fired を往復する", () => {
+test("legacy stats group は trailing comment を許可する", () => {
+  const parsed = parseAntibodyMarkdownWithLegacy(
+    LEGACY_EXAMPLE.replace("stats:", "stats: # legacy")
+  )
+  expect(parsed.legacyStats).toEqual({
+    fired: 3,
+    last_fired: "2026-07-21"
+  })
+})
+
+test("legacy stats.last_fired は実在する暦日だけ許可する", () => {
+  expect(() =>
+    parseAntibodyMarkdownWithLegacy(
+      LEGACY_EXAMPLE.replace("last_fired: 2026-07-21", "last_fired: 2026-02-30")
+    )
+  ).toThrow("stats.last_fired: must be a valid calendar date")
+})
+
+test("旧形式を serialize すると stats が消え、新形式で round-trip する", () => {
+  const parsed = parseAntibodyMarkdownWithLegacy(LEGACY_EXAMPLE)
+  const serialized = serializeAntibodyMarkdown(parsed.antibody)
+
+  expect(serialized).not.toContain("\nstats:\n")
+  expect(parseAntibodyMarkdownWithLegacy(serialized)).toEqual({
+    antibody: parsed.antibody,
+    legacyStats: null
+  })
+})
+
+test("JSON quote した source/pattern/scope を stats なしで往復する", () => {
   const value = antibody()
   const serialized = serializeAntibodyMarkdown(value)
 
@@ -62,16 +94,25 @@ test("JSON quote した source/pattern/scope と null last_fired を往復する
   expect(serialized).toContain(
     `  pattern: ${JSON.stringify(value.trigger.pattern)}`
   )
-  expect(serialized).toContain(`  scope: ""`)
-  expect(serialized).toContain("  last_fired: null")
+  expect(serialized).toContain('  scope: ""')
+  expect(serialized).not.toContain("stats:")
   expect(parseAntibodyMarkdown(serialized)).toEqual(value)
 })
 
 test("serializer の key 順を固定する", () => {
   const serialized = serializeAntibodyMarkdown(antibody())
   expect(serialized).toMatch(
-    /^---\nid: .*\ncreated: .*\nsource: .*\ntrigger:\n {2}event: .*\n {2}tool: .*\n {2}pattern: .*\n {2}scope: .*\nstatus: .*\nstats:\n {2}fired: .*\n {2}last_fired: .*\nexpires: .*\n---\n\n/
+    /^---\nid: .*\ncreated: .*\nsource: .*\ntrigger:\n {2}event: .*\n {2}tool: .*\n {2}pattern: .*\n {2}scope: .*\nstatus: .*\nexpires: .*\n---\n\n/
   )
+})
+
+test("validateAntibody は stats key を明示的に拒否する", () => {
+  expect(() =>
+    validateAntibody({
+      ...antibody(),
+      stats: { fired: 1, last_fired: "2026-07-24" }
+    })
+  ).toThrow("antibody.stats: is not supported")
 })
 
 test.each([
@@ -100,7 +141,7 @@ test("長さ上限と必須 fixed schema を検証する", () => {
     /body/
   )
   expect(() =>
-    parseAntibodyMarkdown(DESIGN_EXAMPLE.replace("expires:", "unknown:"))
+    parseAntibodyMarkdown(LEGACY_EXAMPLE.replace("expires:", "unknown:"))
   ).toThrow(AntibodyValidationError)
 })
 

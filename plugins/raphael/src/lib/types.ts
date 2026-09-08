@@ -81,6 +81,7 @@ export interface RaphaelStateV1 {
     ts: string
     antibody_id: string
     trigger_fingerprint: string
+    recurrence_key?: string | null
   }>
   last_distill_nag_digest: string | null
 }
@@ -94,18 +95,12 @@ export interface AntibodyTrigger {
   scope?: string
 }
 
-export interface AntibodyStats {
-  fired: number
-  last_fired: string | null
-}
-
 export interface Antibody {
   id: string
   created: string
   source: string
   trigger: AntibodyTrigger
   status: AntibodyStatus
-  stats: AntibodyStats
   expires: string
   body: string
 }

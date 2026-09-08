@@ -1,6 +1,11 @@
 import { AntibodyIoError, listAntibodies } from "./lib/antibody-store.js"
 import { AntibodyValidationError } from "./lib/frontmatter.js"
+import { type AntibodyStats, loadStats, statsFor } from "./lib/stats-store.js"
 import type { Antibody, AntibodyStatus } from "./lib/types.js"
+
+interface ListedAntibody extends Antibody {
+  stats: AntibodyStats
+}
 
 interface Failure {
   code: string
@@ -12,6 +17,7 @@ function main(): void {
   try {
     const options = parseArgs(process.argv.slice(2))
     const result = listAntibodies(options.dir)
+    const stats = loadStats(options.dir)
     const antibodies = result.antibodies
       .filter(
         (antibody) =>
@@ -21,6 +27,10 @@ function main(): void {
         (antibody) => options.id === undefined || antibody.id === options.id
       )
       .sort((left, right) => left.id.localeCompare(right.id))
+      .map((antibody) => ({
+        ...antibody,
+        stats: statsFor(stats, antibody.id)
+      }))
       .map((antibody) => serializeForJson(antibody, options.includeBody))
 
     if (options.json) {
@@ -102,20 +112,31 @@ function requireValue(args: string[], index: number, field: string): string {
 }
 
 function serializeForJson(
-  antibody: Antibody,
+  antibody: ListedAntibody,
   includeBody: boolean
-): Omit<Antibody, "body"> | Antibody {
+): Omit<ListedAntibody, "body"> | ListedAntibody {
   if (includeBody) return antibody
   const { body: _body, ...withoutBody } = antibody
   return withoutBody
 }
 
-function table(antibodies: Array<Omit<Antibody, "body"> | Antibody>): string {
-  const columns = ["ID", "STATUS", "FIRED", "LAST_FIRED", "EXPIRES", "SOURCE"]
+function table(
+  antibodies: Array<Omit<ListedAntibody, "body"> | ListedAntibody>
+): string {
+  const columns = [
+    "ID",
+    "STATUS",
+    "FIRED",
+    "MISSES",
+    "LAST_FIRED",
+    "EXPIRES",
+    "SOURCE"
+  ]
   const rows = antibodies.map((antibody) => [
     antibody.id,
     antibody.status,
     String(antibody.stats.fired),
+    String(antibody.stats.misses),
     antibody.stats.last_fired ?? "-",
     antibody.expires,
     antibody.source

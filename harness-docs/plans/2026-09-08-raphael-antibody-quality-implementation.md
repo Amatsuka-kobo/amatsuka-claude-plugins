@@ -282,15 +282,20 @@ git status --porcelain .raphael/stats.json .raphael/commands.jsonl
 
 実装中に発見した、設計書の記述と実際のコードの食い違いをここへ追記します。実装者は自分で設計を変えず、報告してください。
 
-(着手時点では空)
+### #1 `stats.json` の「schema 不一致」の扱い(ステップ 1 で発見。設計書内の記述の食い違い)
+
+- **事実**: 設計書 §3.4 の箇条書き 2 番目は「欠損・**破損・schema 不一致**のいずれでも、全体を初期値とみなします」と書いています。一方、直後の箇条書き 3 番目(裁定 R11)は「『破損』の定義。次の**いずれかに当てはまるときだけ**、全体を初期値とみなします」として、(1) JSON parse 失敗、(2) top-level が object でない、(3) `antibodies` が object でない、の 3 条件を排他的に列挙しています。この 3 条件に `schema_version` の不一致は含まれません。実装計画書 §4 の共有契約 1 も「破損は 3 条件だけ」と明記しています。
+- **判断**: 後から出た、より具体的で排他的な裁定 R11 の 3 条件を正とします。`schema_version` の値だけが 1 でないファイルは全体初期化せず、有効な entry を保持したまま返り値を `schema_version: 1` へ正規化します。現時点で `schema_version` は 1 しか存在せず、仮に将来 2 が来ても entry の型検査が個別に落とすため、この扱いで整合します。
+- **反映**: 実装は 3 条件のみで全体初期化します。設計書 §3.4 の箇条書き 2 番目の「schema 不一致」という語は、3 番目の定義に吸収されるものとして扱います(設計判断の変更ではありません)。
 
 ### baseline
 
 着手前に実行した lint / typecheck / test の結果をここへ記録してください。
 
-- `pnpm run lint`: (未計測)
-- `pnpm run typecheck`: (未計測)
-- `pnpm run test`: (未計測)
+- 計測日: 2026-09-08 / 計測時の HEAD: `2108a5b`
+- `pnpm run lint`: 成功(exit 0)。373 ファイルを検査、fixes なし、info 4 件。
+- `pnpm run typecheck`: 成功(exit 0)。`tsc --noEmit` がエラー 0。
+- `pnpm run test`: 成功(exit 0)。テストファイル 153 passed / 1 skipped(計 154)、テスト 2046 passed / 2 skipped(計 2048)。
 
 ## 8. 未解決事項
 

@@ -3,13 +3,10 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import {
-  antibodiesDirectory,
-  readAntibody,
-  writeAntibodyCreate
-} from "../lib/antibody-store.js"
+import { readAntibody, writeAntibodyCreate } from "../lib/antibody-store.js"
 import { sha256Hex } from "../lib/infection-store.js"
-import { loadState } from "../lib/state-store.js"
+import { loadState, stateFilePath } from "../lib/state-store.js"
+import { loadStats, saveStats, statsFilePath } from "../lib/stats-store.js"
 import type { Antibody } from "../lib/types.js"
 import { runTs } from "../testing/run-ts.js"
 
@@ -36,7 +33,6 @@ function antibody(overrides: Partial<Antibody> = {}): Antibody {
     source: "manual",
     trigger: { event: "PreToolUse", tool: "Bash", pattern: "pnpm test" },
     status: "active",
-    stats: { fired: 0, last_fired: null },
     expires: "2099-08-23",
     body: "Run the focused test first.",
     ...overrides
@@ -63,7 +59,7 @@ function output(stdout: string): {
   }
 }
 
-test("fixture stdin の単一 match を additionalContext に注入して発火状態を保存する", () => {
+test("stats.json が無くても単一 match を注入し、発火状態を保存する", () => {
   withProject((dir) => {
     const value = antibody()
     writeAntibodyCreate(dir, value)
@@ -82,15 +78,19 @@ test("fixture stdin の単一 match を additionalContext に注入して発火�
           "[raphael:ab-2026-0724-001]\nRun the focused test first."
       }
     })
-    expect(readAntibody(dir, value.id).stats).toEqual({
+    expect(loadStats(dir).antibodies[value.id]).toEqual({
       fired: 1,
-      last_fired: expect.any(String)
+      last_fired: expect.any(String),
+      misses: 0,
+      last_miss: null
     })
+    expect(readAntibody(dir, value.id)).not.toHaveProperty("stats")
     expect(loadState(dir, SESSION).injected).toEqual([
       {
         ts: expect.any(String),
         antibody_id: value.id,
-        trigger_fingerprint: sha256Hex("Bash\0\0pnpm test -- --run")
+        trigger_fingerprint: sha256Hex("Bash\0\0pnpm test -- --run"),
+        recurrence_key: null
       }
     ])
   })
@@ -103,8 +103,7 @@ test("複数 match を matcher 順序で注入し max_injections を守る", () 
       antibody({
         id: "ab-2026-0724-001",
         created: "2026-07-20",
-        body: "old",
-        stats: { fired: 1, last_fired: "2026-07-20" }
+        body: "old"
       })
     )
     writeAntibodyCreate(
@@ -123,6 +122,18 @@ test("複数 match を matcher 順序で注入し max_injections を守る", () 
         body: "limited"
       })
     )
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-001": {
+          fired: 1,
+          last_fired: "2026-07-20",
+          misses: 0,
+          last_miss: null
+        }
+      },
+      distill: { last_nag_digest: null }
+    })
     fs.mkdirSync(path.join(dir, ".claude"), { recursive: true })
     fs.writeFileSync(
       path.join(dir, ".claude", "raphael.local.md"),
@@ -139,9 +150,11 @@ test("複数 match を matcher 順序で注入し max_injections を守る", () 
     expect(result.hookSpecificOutput.additionalContext).toBe(
       "[raphael:ab-2026-0724-001]\nold\n\n[raphael:ab-2026-0724-002]\nnew"
     )
-    expect(readAntibody(dir, "ab-2026-0724-001").stats.fired).toBe(2)
-    expect(readAntibody(dir, "ab-2026-0724-002").stats.fired).toBe(1)
-    expect(readAntibody(dir, "ab-2026-0724-003").stats.fired).toBe(0)
+    expect(loadStats(dir).antibodies).toMatchObject({
+      "ab-2026-0724-001": { fired: 2 },
+      "ab-2026-0724-002": { fired: 1 }
+    })
+    expect(loadStats(dir).antibodies["ab-2026-0724-003"]).toBeUndefined()
   })
 })
 
@@ -201,26 +214,59 @@ test("沈黙の正しさ: non-match、抗体なし、不正 stdin、不正抗体
   expect(runTs(HOOK, [], { input: "not json" })).toBe("")
 })
 
-test("stats 更新に失敗した抗体を注入も state 記録もしない", () => {
+test("recordFires が投げても additionalContext を出し state 保存を試みる", () => {
   withProject((dir) => {
-    writeAntibodyCreate(dir, antibody())
-    const directory = antibodiesDirectory(dir)
-    fs.chmodSync(directory, 0o555)
-    try {
-      expect(
-        runHook(dir, {
-          tool_name: "Bash",
-          tool_input: { command: "pnpm test" }
-        })
-      ).toBe("")
-      expect(loadState(dir, SESSION).injected).toEqual([])
-      expect(readAntibody(dir, "ab-2026-0724-001").stats).toEqual({
-        fired: 0,
-        last_fired: null
+    const value = antibody()
+    writeAntibodyCreate(dir, value)
+    fs.mkdirSync(statsFilePath(dir))
+
+    const result = output(
+      runHook(dir, {
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" }
       })
-    } finally {
-      fs.chmodSync(directory, 0o755)
-    }
+    )
+
+    expect(result.hookSpecificOutput.additionalContext).toContain(value.body)
+    expect(loadState(dir, SESSION).injected).toEqual([
+      expect.objectContaining({ antibody_id: value.id, recurrence_key: null })
+    ])
+  })
+})
+
+test("saveState が投げても additionalContext を出し fire を保存する", () => {
+  withProject((dir) => {
+    const value = antibody()
+    writeAntibodyCreate(dir, value)
+    fs.mkdirSync(stateFilePath(dir))
+
+    const result = output(
+      runHook(dir, {
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" }
+      })
+    )
+
+    expect(result.hookSpecificOutput.additionalContext).toContain(value.body)
+    expect(loadStats(dir).antibodies[value.id]?.fired).toBe(1)
+  })
+})
+
+test("recordFires と saveState の両方が投げても additionalContext を出す", () => {
+  withProject((dir) => {
+    const value = antibody()
+    writeAntibodyCreate(dir, value)
+    fs.mkdirSync(statsFilePath(dir))
+    fs.mkdirSync(stateFilePath(dir))
+
+    const result = output(
+      runHook(dir, {
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" }
+      })
+    )
+
+    expect(result.hookSpecificOutput.additionalContext).toContain(value.body)
   })
 })
 

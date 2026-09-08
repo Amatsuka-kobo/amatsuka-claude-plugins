@@ -17,7 +17,6 @@ function antibody(id: string, overrides: Partial<Antibody> = {}): Antibody {
     source: "test",
     trigger: { event: "PreToolUse", tool: "Bash", pattern: "needle" },
     status: "active",
-    stats: { fired: 0, last_fired: null },
     expires: "2026-08-01",
     body: `Advice for ${id}`,
     ...overrides
@@ -225,34 +224,58 @@ describe("status, expiry, and trigger selection", () => {
     })
   })
 
-  test("sorts by last_fired descending, created descending, then id ascending and limits to three", () => {
+  test("stats option の last_fired 降順、created 降順、id 昇順で 3 件に絞る", () => {
     const values = [
-      antibody("ab-2026-0720-030", {
-        created: "2026-07-20",
-        stats: { fired: 1, last_fired: null }
-      }),
-      antibody("ab-2026-0720-021", {
-        created: "2026-07-20",
-        stats: { fired: 1, last_fired: "2026-07-23" }
-      }),
-      antibody("ab-2026-0720-020", {
-        created: "2026-07-20",
-        stats: { fired: 1, last_fired: "2026-07-23" }
-      }),
-      antibody("ab-2026-0720-040", {
-        created: "2026-07-22",
-        stats: { fired: 1, last_fired: "2026-07-22" }
-      }),
-      antibody("ab-2026-0720-050", {
-        created: "2026-07-21",
-        stats: { fired: 1, last_fired: null }
-      })
+      antibody("ab-2026-0720-030", { created: "2026-07-20" }),
+      antibody("ab-2026-0720-021", { created: "2026-07-20" }),
+      antibody("ab-2026-0720-020", { created: "2026-07-20" }),
+      antibody("ab-2026-0720-040", { created: "2026-07-22" }),
+      antibody("ab-2026-0720-050", { created: "2026-07-21" })
     ]
     const target = buildMatchTarget("Bash", { command: "needle" }, PROJECT_DIR)
 
     expect(
-      matchAntibodies(values, target, { now: NOW }).selected.map(({ id }) => id)
+      matchAntibodies(values, target, {
+        now: NOW,
+        stats: {
+          "ab-2026-0720-021": {
+            fired: 1,
+            last_fired: "2026-07-23",
+            misses: 0,
+            last_miss: null
+          },
+          "ab-2026-0720-020": {
+            fired: 1,
+            last_fired: "2026-07-23",
+            misses: 0,
+            last_miss: null
+          },
+          "ab-2026-0720-040": {
+            fired: 1,
+            last_fired: "2026-07-22",
+            misses: 0,
+            last_miss: null
+          }
+        }
+      }).selected.map(({ id }) => id)
     ).toEqual(["ab-2026-0720-020", "ab-2026-0720-021", "ab-2026-0720-040"])
+  })
+
+  test("stats 未指定なら全件 last_fired:null として created と id で並べる", () => {
+    const older = antibody("ab-2026-0720-100", { created: "2026-07-20" })
+    const sameDateLaterId = antibody("ab-2026-0720-102", {
+      created: "2026-07-22"
+    })
+    const sameDateEarlierId = antibody("ab-2026-0720-101", {
+      created: "2026-07-22"
+    })
+    const target = buildMatchTarget("Bash", { command: "needle" }, PROJECT_DIR)
+
+    expect(
+      matchAntibodies([older, sameDateLaterId, sameDateEarlierId], target, {
+        now: NOW
+      }).selected.map(({ id }) => id)
+    ).toEqual(["ab-2026-0720-101", "ab-2026-0720-102", "ab-2026-0720-100"])
   })
 
   test("skips an invalid pattern while other antibodies continue matching", () => {

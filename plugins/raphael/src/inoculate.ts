@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-import {
-  listAntibodies,
-  recordAntibodyFire,
-  setAntibodyStatus
-} from "./lib/antibody-store.js"
+import { listAntibodies, setAntibodyStatus } from "./lib/antibody-store.js"
 import { loadConfig } from "./lib/config.js"
 import { readStdinSync, resolveProjectDir } from "./lib/hook-io.js"
 import { sha256Hex } from "./lib/infection-store.js"
@@ -13,6 +9,7 @@ import {
   renderAntibodyContext
 } from "./lib/match-antibody.js"
 import { loadState, saveState } from "./lib/state-store.js"
+import { loadStats, recordFires } from "./lib/stats-store.js"
 import type { HookInput, RaphaelToolName } from "./lib/types.js"
 
 const TOOLS: readonly RaphaelToolName[] = ["Bash", "Edit", "Write"]
@@ -75,34 +72,39 @@ function main(): void {
     if (input.tool_name !== "Bash" && target.path === null) return
 
     const matched = matchAntibodies(listed.antibodies, target, {
-      limit: config.maxInjections
+      limit: config.maxInjections,
+      stats: loadStats(projectDir).antibodies
     })
     expireAntibodies(projectDir, matched.expiredActiveIds)
     if (matched.selected.length === 0) return
 
-    const fired = []
-    for (const antibody of matched.selected) {
-      try {
-        fired.push(recordAntibodyFire(projectDir, antibody.id))
-      } catch {
-        // Do not inject an antibody whose fire statistic was not persisted.
+    try {
+      recordFires(
+        projectDir,
+        matched.selected.map((antibody) => antibody.id)
+      )
+    } catch {
+      // Fire statistics are best-effort and must not block injection.
+    }
+
+    try {
+      const state = loadState(projectDir, sessionFor(input))
+      const ts = new Date().toISOString()
+      const fingerprint = triggerFingerprint(target)
+      for (const antibody of matched.selected) {
+        state.injected.push({
+          ts,
+          antibody_id: antibody.id,
+          trigger_fingerprint: fingerprint,
+          recurrence_key: null
+        })
       }
+      saveState(projectDir, state)
+    } catch {
+      // State tracking is best-effort and must not block injection.
     }
-    if (fired.length === 0) return
 
-    const state = loadState(projectDir, sessionFor(input))
-    const ts = new Date().toISOString()
-    const fingerprint = triggerFingerprint(target)
-    for (const antibody of fired) {
-      state.injected.push({
-        ts,
-        antibody_id: antibody.id,
-        trigger_fingerprint: fingerprint
-      })
-    }
-    saveState(projectDir, state)
-
-    const additionalContext = renderAntibodyContext(fired)
+    const additionalContext = renderAntibodyContext(matched.selected)
     if (additionalContext === "") return
     process.stdout.write(
       `${JSON.stringify({

@@ -18,6 +18,8 @@ cliproxyapi.config.yaml
 # Raphael
 .raphael/infections/
 .raphael/state.json
+.raphael/stats.json
+.raphael/commands.jsonl
 .raphael/log/
 .claude/raphael.local.md
 

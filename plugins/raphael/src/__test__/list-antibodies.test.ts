@@ -6,6 +6,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
 import { serializeAntibodyMarkdown } from "../lib/frontmatter.js"
+import { saveStats } from "../lib/stats-store.js"
 import type { Antibody } from "../lib/types.js"
 
 const CLI = fileURLToPath(new URL("../list-antibodies.ts", import.meta.url))
@@ -31,7 +32,6 @@ function antibody(overrides: Partial<Antibody> = {}): Antibody {
     source: "manual",
     trigger: { event: "PreToolUse", tool: "Bash", pattern: "pnpm test" },
     status: "active",
-    stats: { fired: 2, last_fired: "2026-07-24" },
     expires: "2026-08-23",
     body: "Run focused tests.",
     ...overrides
@@ -71,10 +71,22 @@ test("JSON list は filter、sort、body inclusion が安定し、--dir が環�
       antibody({
         id: "ab-2026-0723-001",
         status: "confirmed",
-        stats: { fired: 0, last_fired: null },
         body: "Confirmed guidance."
       })
     )
+
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-001": {
+          fired: 2,
+          last_fired: "2026-07-24",
+          misses: 1,
+          last_miss: "2026-07-23"
+        }
+      },
+      distill: { last_nag_digest: null }
+    })
 
     const filtered = await invoke(
       dir,
@@ -88,7 +100,16 @@ test("JSON list は filter、sort、body inclusion が安定し、--dir が環�
     expect(JSON.parse(filtered.stdout)).toEqual({
       ok: true,
       antibodies: [
-        expect.objectContaining({ id: "ab-2026-0724-001", status: "active" })
+        expect.objectContaining({
+          id: "ab-2026-0724-001",
+          status: "active",
+          stats: {
+            fired: 2,
+            last_fired: "2026-07-24",
+            misses: 1,
+            last_miss: "2026-07-23"
+          }
+        })
       ],
       errors: []
     })
@@ -124,6 +145,7 @@ test("既定 human list、引数エラー(2)、I/Oエラー(1) を分類する",
     const human = await invoke(dir, [])
     expect(human).toMatchObject({ code: 0, stderr: "" })
     expect(human.stdout).toContain("ID")
+    expect(human.stdout).toContain("FIRED  MISSES  LAST_FIRED")
     expect(human.stdout).toContain("ab-2026-0724-001")
 
     const invalid = await invoke(dir, ["--json", "--status", "unknown"])

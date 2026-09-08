@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
 import { readAntibody, writeAntibodyCreate } from "../lib/antibody-store.js"
 import { appendInfection, readInfections } from "../lib/infection-store.js"
+import { loadStats, saveStats, statsFilePath } from "../lib/stats-store.js"
 import type { Antibody, InfectionRecordV1 } from "../lib/types.js"
 
 const CLI = fileURLToPath(new URL("../update-antibody.ts", import.meta.url))
@@ -46,7 +47,6 @@ function antibody(overrides: Partial<Antibody> = {}): Antibody {
     source: "manual",
     trigger: { event: "PreToolUse", tool: "Bash", pattern: "pnpm test" },
     status: "active",
-    stats: { fired: 1, last_fired: "2026-07-24" },
     expires: "2026-08-01",
     body: "Run focused tests.",
     ...overrides
@@ -127,11 +127,11 @@ test("create/patch dry-run/patch/status transition/extend/fire が exit 0 で st
     expect((await invoke(dir, ["set-status", id, "expired"])).code).toBe(0)
     expect(readAntibody(dir, id).status).toBe("expired")
 
-    const fired = readAntibody(dir, id)
+    const firedStats = loadStats(dir).antibodies[id]
     const extended = await invoke(dir, ["extend", id])
     expect(extended.code).toBe(0)
     const after = readAntibody(dir, id)
-    const lastFired = fired.stats.last_fired as string
+    const lastFired = firedStats?.last_fired as string
     expect(after).toMatchObject({
       status: "active",
       expires: [
@@ -139,8 +139,20 @@ test("create/patch dry-run/patch/status transition/extend/fire が exit 0 で st
         addDays(after.created, MAX_LIFETIME_DAYS)
       ].sort()[0]
     })
-    expect((await invoke(dir, ["record-fire", id])).code).toBe(0)
-    expect(readAntibody(dir, id).stats.fired).toBe(2)
+    const recordedAgain = await invoke(dir, ["record-fire", id])
+    expect(recordedAgain.code).toBe(0)
+    expect(json(recordedAgain)).toMatchObject({
+      ok: true,
+      antibody: { id },
+      stats: {
+        fired: 2,
+        last_fired: expect.any(String),
+        misses: 0,
+        last_miss: null
+      }
+    })
+    expect(loadStats(dir).antibodies[id]?.fired).toBe(2)
+    expect(readAntibody(dir, id)).not.toHaveProperty("stats")
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -175,6 +187,227 @@ test("confirmed extend と全 not-found mark-distilled は no-op exit 0、mark �
       updated: 0,
       not_found: ["not-present"]
     })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+function legacyAntibodyMarkdown(
+  id: string,
+  fired: number,
+  lastFired: string | null,
+  body = `Guidance for ${id}`
+): string {
+  return `---
+id: ${id}
+created: 2026-07-24
+source: legacy
+trigger:
+  event: PreToolUse
+  tool: Bash
+  pattern: "pnpm test"
+status: active
+stats:
+  fired: ${fired}
+  last_fired: ${lastFired ?? "null"}
+expires: 2026-08-23
+---
+
+${body}
+`
+}
+
+function writeLegacy(
+  dir: string,
+  id: string,
+  fired: number,
+  lastFired: string | null
+): string {
+  const file = path.join(dir, ".raphael", "antibodies", `${id}.md`)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, legacyAntibodyMarkdown(id, fired, lastFired))
+  return file
+}
+
+test("migrate-stats は旧形式 3 件を stats.json へ移し md から stats を除去して冪等", async () => {
+  const dir = project()
+  try {
+    const files = [
+      writeLegacy(dir, "ab-2026-0724-001", 3, "2026-07-24"),
+      writeLegacy(dir, "ab-2026-0724-002", 0, null),
+      writeLegacy(dir, "ab-2026-0724-003", 8, "2026-07-25")
+    ]
+
+    const first = await invoke(dir, ["migrate-stats"])
+    expect(first).toMatchObject({ code: 0, stderr: "" })
+    expect(json(first)).toEqual({
+      ok: true,
+      dry_run: false,
+      migrated: 3,
+      skipped: 0,
+      ids: ["ab-2026-0724-001", "ab-2026-0724-002", "ab-2026-0724-003"],
+      errors: []
+    })
+    expect(loadStats(dir).antibodies).toEqual({
+      "ab-2026-0724-001": {
+        fired: 3,
+        last_fired: "2026-07-24",
+        misses: 0,
+        last_miss: null
+      },
+      "ab-2026-0724-002": {
+        fired: 0,
+        last_fired: null,
+        misses: 0,
+        last_miss: null
+      },
+      "ab-2026-0724-003": {
+        fired: 8,
+        last_fired: "2026-07-25",
+        misses: 0,
+        last_miss: null
+      }
+    })
+    for (const file of files) {
+      expect(fs.readFileSync(file, "utf8")).not.toContain("\nstats:\n")
+    }
+
+    const statsBefore = fs.readFileSync(statsFilePath(dir), "utf8")
+    const filesBefore = files.map((file) => fs.readFileSync(file, "utf8"))
+    const second = await invoke(dir, ["migrate-stats"])
+    expect(json(second)).toEqual({
+      ok: true,
+      dry_run: false,
+      migrated: 0,
+      skipped: 3,
+      ids: [],
+      errors: []
+    })
+    expect(fs.readFileSync(statsFilePath(dir), "utf8")).toBe(statsBefore)
+    expect(files.map((file) => fs.readFileSync(file, "utf8"))).toEqual(
+      filesBefore
+    )
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("migrate-stats --dry-run はファイルも stats.json も書かない", async () => {
+  const dir = project()
+  try {
+    const file = writeLegacy(dir, "ab-2026-0724-001", 4, "2026-07-24")
+    const before = fs.readFileSync(file, "utf8")
+
+    const result = await invoke(dir, ["--dry-run", "migrate-stats"])
+    expect(result).toMatchObject({ code: 0, stderr: "" })
+    expect(json(result)).toMatchObject({
+      ok: true,
+      dry_run: true,
+      migrated: 1,
+      skipped: 0,
+      ids: ["ab-2026-0724-001"],
+      errors: []
+    })
+    expect(fs.readFileSync(file, "utf8")).toBe(before)
+    expect(fs.existsSync(statsFilePath(dir))).toBe(false)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("migrate-stats は既存 stats と fired/date を max merge し misses を保持する", async () => {
+  const dir = project()
+  try {
+    writeLegacy(dir, "ab-2026-0724-001", 4, "2026-07-24")
+    writeLegacy(dir, "ab-2026-0724-002", 9, "2026-07-26")
+    saveStats(dir, {
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-001": {
+          fired: 7,
+          last_fired: "2026-07-25",
+          misses: 2,
+          last_miss: "2026-07-23"
+        },
+        "ab-2026-0724-002": {
+          fired: 3,
+          last_fired: "2026-07-25",
+          misses: 1,
+          last_miss: null
+        }
+      },
+      distill: { last_nag_digest: "d".repeat(64) }
+    })
+
+    expect((await invoke(dir, ["migrate-stats"])).code).toBe(0)
+    expect(loadStats(dir)).toEqual({
+      schema_version: 1,
+      antibodies: {
+        "ab-2026-0724-001": {
+          fired: 7,
+          last_fired: "2026-07-25",
+          misses: 2,
+          last_miss: "2026-07-23"
+        },
+        "ab-2026-0724-002": {
+          fired: 9,
+          last_fired: "2026-07-26",
+          misses: 1,
+          last_miss: null
+        }
+      },
+      distill: { last_nag_digest: "d".repeat(64) }
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("migrate-stats は壊れた md を errors に載せて触らず、正常分だけ移行する", async () => {
+  const dir = project()
+  try {
+    writeLegacy(dir, "ab-2026-0724-001", 1, null)
+    const broken = path.join(
+      dir,
+      ".raphael",
+      "antibodies",
+      "ab-2026-0724-002.md"
+    )
+    fs.writeFileSync(broken, "broken antibody")
+    const before = fs.readFileSync(broken, "utf8")
+
+    const result = await invoke(dir, ["migrate-stats"])
+    expect(json(result)).toEqual({
+      ok: true,
+      dry_run: false,
+      migrated: 1,
+      skipped: 0,
+      ids: ["ab-2026-0724-001"],
+      errors: [
+        {
+          file: "ab-2026-0724-002.md",
+          message: "frontmatter: must start with ---"
+        }
+      ]
+    })
+    expect(fs.readFileSync(broken, "utf8")).toBe(before)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("migrate-stats は抗体 0 件で migrated:0 を返す", async () => {
+  const dir = project()
+  try {
+    expect(json(await invoke(dir, ["migrate-stats"]))).toEqual({
+      ok: true,
+      dry_run: false,
+      migrated: 0,
+      skipped: 0,
+      ids: [],
+      errors: []
+    })
+    expect(fs.existsSync(statsFilePath(dir))).toBe(false)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }

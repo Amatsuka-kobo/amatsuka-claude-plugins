@@ -11,6 +11,7 @@ import {
   parseInfectionLine
 } from "./lib/infection-store.js"
 import { loadState, saveState } from "./lib/state-store.js"
+import { pruneOrphanStats } from "./lib/stats-store.js"
 import type { HookInput } from "./lib/types.js"
 
 const DISTILLED_RETENTION_MS = 14 * 24 * 60 * 60 * 1_000
@@ -24,7 +25,12 @@ export function cleanupProject(
   now = new Date()
 ): CleanupResult {
   const undistilledIds = cleanupInfections(projectDir, now)
-  expireAntibodies(projectDir, now)
+  const knownIds = expireAntibodies(projectDir, now)
+  try {
+    pruneOrphanStats(projectDir, knownIds)
+  } catch {
+    // Stats cleanup is best-effort and must not stop other cleanup work.
+  }
   return { undistilledIds }
 }
 
@@ -93,7 +99,7 @@ function cleanupInfections(projectDir: string, now: Date): string[] {
   return undistilledIds
 }
 
-function expireAntibodies(projectDir: string, now: Date): void {
+function expireAntibodies(projectDir: string, now: Date): string[] {
   const today = localDateString(now)
   const { antibodies } = listAntibodies(projectDir)
   for (const antibody of antibodies) {
@@ -101,6 +107,7 @@ function expireAntibodies(projectDir: string, now: Date): void {
       setAntibodyStatus(projectDir, antibody.id, "expired")
     }
   }
+  return antibodies.map(({ id }) => id)
 }
 
 function buildReason(

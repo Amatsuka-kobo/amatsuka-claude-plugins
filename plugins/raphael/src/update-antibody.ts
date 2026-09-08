@@ -3,19 +3,31 @@ import path from "node:path"
 import {
   AntibodyIoError,
   AntibodyNotFoundError,
+  antibodiesDirectory,
   createAntibody,
   extendAntibodyExpires,
   patchAntibody,
   readAntibody,
-  recordAntibodyFire,
   setAntibodyStatus
 } from "./lib/antibody-store.js"
+import { writeFileAtomic } from "./lib/atomic.js"
 import { loadConfig } from "./lib/config.js"
-import { AntibodyValidationError, validateAntibody } from "./lib/frontmatter.js"
+import {
+  AntibodyValidationError,
+  parseAntibodyMarkdownWithLegacy,
+  serializeAntibodyMarkdown,
+  validateAntibody
+} from "./lib/frontmatter.js"
 import {
   markInfectionsDistilled,
   parseInfectionLine
 } from "./lib/infection-store.js"
+import {
+  loadStats,
+  recordFire,
+  saveStats,
+  statsFor
+} from "./lib/stats-store.js"
 import type { Antibody, AntibodyStatus } from "./lib/types.js"
 
 interface Failure {
@@ -53,12 +65,16 @@ function main(): void {
       assertOperandCount(options, 1)
       result = extend(options)
       break
-    case "record-fire":
+    case "record-fire": {
       assertOperandCount(options, 1)
-      result = {
-        ok: true,
-        antibody: recordAntibodyFire(options.dir, options.operands[0] ?? "")
-      }
+      const id = options.operands[0] ?? ""
+      const antibody = readAntibody(options.dir, id)
+      result = { ok: true, antibody, stats: recordFire(options.dir, id) }
+      break
+    }
+    case "migrate-stats":
+      assertOperandCount(options, 0)
+      result = migrateStats(options)
       break
     case "mark-distilled":
       assertOperandCount(options, 0)
@@ -102,9 +118,9 @@ function parseArgs(args: string[]): Options {
   if (operation === undefined) {
     throw new AntibodyValidationError("operation: is required", "operation")
   }
-  if (dryRun && operation !== "patch") {
+  if (dryRun && operation !== "patch" && operation !== "migrate-stats") {
     throw new AntibodyValidationError(
-      "dry-run: is supported only by patch",
+      "dry-run: is supported only by patch and migrate-stats",
       "dry-run"
     )
   }
@@ -183,12 +199,13 @@ function extend(options: Options): unknown {
   if (current.status === "confirmed") {
     return { ok: true, no_op: true, antibody: current }
   }
-  if (current.stats.last_fired === null) {
+  const lastFired = statsFor(loadStats(options.dir), id).last_fired
+  if (lastFired === null) {
     throw validation("stats.last_fired", "is required to extend")
   }
   const days = loadConfig(options.dir).defaultExpiryDays
   const expires = minDate(
-    addDays(current.stats.last_fired, days),
+    addDays(lastFired, days),
     addDays(current.created, 90)
   )
   const antibody = extendAntibodyExpires(options.dir, id, expires)
@@ -199,6 +216,114 @@ function extend(options: Options): unknown {
         ? antibody
         : setAntibodyStatus(options.dir, id, "active")
   }
+}
+
+function migrateStats(options: Options): unknown {
+  const directory = antibodiesDirectory(options.dir)
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true })
+  } catch (error) {
+    if (isErrorCode(error, "ENOENT")) {
+      return {
+        ok: true,
+        dry_run: options.dryRun,
+        migrated: 0,
+        skipped: 0,
+        ids: [],
+        errors: []
+      }
+    }
+    throw new AntibodyIoError("Failed to list antibodies", error)
+  }
+
+  const stats = loadStats(options.dir)
+  const migrations: Array<{
+    file: string
+    filePath: string
+    antibody: Antibody
+    fired: number
+    lastFired: string | null
+  }> = []
+  const errors: Array<{ file: string; message: string }> = []
+  let skipped = 0
+
+  const files = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => entry.name)
+    .sort()
+
+  for (const file of files) {
+    const filePath = path.join(directory, file)
+    let raw: string
+    try {
+      raw = fs.readFileSync(filePath, "utf8")
+    } catch (error) {
+      throw new AntibodyIoError(`Failed to read antibody: ${file}`, error)
+    }
+
+    try {
+      const parsed = parseAntibodyMarkdownWithLegacy(raw)
+      if (parsed.legacyStats === null) {
+        skipped += 1
+        continue
+      }
+      migrations.push({
+        file,
+        filePath,
+        antibody: parsed.antibody,
+        fired: parsed.legacyStats.fired,
+        lastFired: parsed.legacyStats.last_fired
+      })
+    } catch (error) {
+      errors.push({
+        file,
+        message: error instanceof Error ? error.message : "Unexpected error"
+      })
+    }
+  }
+
+  for (const migration of migrations) {
+    const current = statsFor(stats, migration.antibody.id)
+    stats.antibodies[migration.antibody.id] = {
+      fired: Math.max(current.fired, migration.fired),
+      last_fired: maxDate(current.last_fired, migration.lastFired),
+      misses: current.misses,
+      last_miss: current.last_miss
+    }
+  }
+
+  if (!options.dryRun && migrations.length > 0) {
+    saveStats(options.dir, stats)
+    for (const migration of migrations) {
+      try {
+        writeFileAtomic(
+          migration.filePath,
+          serializeAntibodyMarkdown(migration.antibody)
+        )
+      } catch (error) {
+        throw new AntibodyIoError(
+          `Failed to update antibody: ${migration.antibody.id}`,
+          error
+        )
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    dry_run: options.dryRun,
+    migrated: migrations.length,
+    skipped,
+    ids: migrations.map(({ antibody }) => antibody.id),
+    errors
+  }
+}
+
+function maxDate(left: string | null, right: string | null): string | null {
+  if (left === null) return right
+  if (right === null) return left
+  return left >= right ? left : right
 }
 
 function markDistilled(projectDir: string, value: unknown): unknown {
@@ -283,7 +408,6 @@ function triggerField(value: unknown): Antibody["trigger"] {
     source: "request",
     trigger: value,
     status: "active",
-    stats: { fired: 0, last_fired: null },
     expires: "2026-08-23",
     body: "validation"
   })

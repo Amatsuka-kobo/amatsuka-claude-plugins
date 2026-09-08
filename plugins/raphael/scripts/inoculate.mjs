@@ -42,7 +42,7 @@ var AntibodyValidationError = class extends Error {
     this.field = field;
   }
 };
-function parseAntibodyMarkdown(markdown) {
+function parseAntibodyMarkdownWithLegacy(markdown) {
   const normalized = markdown.replace(/\r\n?/g, "\n");
   if (!normalized.startsWith("---\n")) {
     throw validationError("frontmatter", "must start with ---");
@@ -92,31 +92,45 @@ function parseAntibodyMarkdown(markdown) {
     scope = parseString(take("  ", "scope"), "trigger.scope");
   }
   const status = parseString(take("", "status"), "status");
-  takeGroup("stats");
-  const fired = parseInteger(take("  ", "fired"), "stats.fired");
-  const lastFired = parseNullableString(
-    take("  ", "last_fired"),
-    "stats.last_fired"
-  );
+  let legacyStats = null;
+  if (lines[index]?.startsWith("stats:")) {
+    if (stripInlineComment(take("", "stats")).trim() !== "") {
+      throw validationError("stats", "expected stats:");
+    }
+    const fired = parseInteger(take("  ", "fired"), "stats.fired");
+    const lastFired = parseNullableString(
+      take("  ", "last_fired"),
+      "stats.last_fired"
+    );
+    legacyStats = {
+      fired,
+      last_fired: lastFired === null ? null : requireDate(lastFired, "stats.last_fired")
+    };
+  }
   const expires = parseString(take("", "expires"), "expires");
   if (index !== lines.length) {
     throw validationError("frontmatter", `unexpected field: ${lines[index]}`);
   }
-  return validateAntibody({
-    id,
-    created,
-    source,
-    trigger: {
-      event,
-      tool,
-      pattern,
-      ...scope === void 0 ? {} : { scope }
-    },
-    status,
-    stats: { fired, last_fired: lastFired },
-    expires,
-    body
-  });
+  return {
+    antibody: validateAntibody({
+      id,
+      created,
+      source,
+      trigger: {
+        event,
+        tool,
+        pattern,
+        ...scope === void 0 ? {} : { scope }
+      },
+      status,
+      expires,
+      body
+    }),
+    legacyStats
+  };
+}
+function parseAntibodyMarkdown(markdown) {
+  return parseAntibodyMarkdownWithLegacy(markdown).antibody;
 }
 function serializeAntibodyMarkdown(value) {
   const antibody = validateAntibody(value);
@@ -135,9 +149,6 @@ function serializeAntibodyMarkdown(value) {
   }
   lines.push(
     `status: ${antibody.status}`,
-    "stats:",
-    `  fired: ${antibody.stats.fired}`,
-    `  last_fired: ${antibody.stats.last_fired ?? "null"}`,
     `expires: ${antibody.expires}`,
     "---",
     "",
@@ -154,7 +165,6 @@ function validateAntibody(value) {
     "source",
     "trigger",
     "status",
-    "stats",
     "expires",
     "body"
   ]);
@@ -172,14 +182,6 @@ function validateAntibody(value) {
   if (!STATUSES.includes(status)) {
     throw validationError("status", "must be active, expired, or confirmed");
   }
-  if (!isRecord(value.stats)) {
-    throw validationError("stats", "must be an object");
-  }
-  assertExactKeys(value.stats, ["fired", "last_fired"], "stats");
-  if (typeof value.stats.fired !== "number" || !Number.isInteger(value.stats.fired) || value.stats.fired < 0) {
-    throw validationError("stats.fired", "must be a non-negative integer");
-  }
-  const lastFired = value.stats.last_fired === null ? null : requireDate(value.stats.last_fired, "stats.last_fired");
   const expires = requireDate(value.expires, "expires");
   const body = requireString(value.body, "body");
   if (body.trim() === "") throw validationError("body", "must not be empty");
@@ -192,7 +194,6 @@ function validateAntibody(value) {
     source,
     trigger,
     status,
-    stats: { fired: value.stats.fired, last_fired: lastFired },
     expires,
     body
   };
@@ -395,18 +396,6 @@ function setAntibodyStatus(projectDir, id, status) {
   writeAntibodyReplace(projectDir, updated);
   return updated;
 }
-function recordAntibodyFire(projectDir, id, now = /* @__PURE__ */ new Date()) {
-  const current = readAntibody(projectDir, id);
-  const updated = validateAntibody({
-    ...current,
-    stats: {
-      fired: current.stats.fired + 1,
-      last_fired: localDate(now)
-    }
-  });
-  writeAntibodyReplace(projectDir, updated);
-  return updated;
-}
 function writeAntibodyReplace(projectDir, antibody) {
   const filePath = antibodyFilePath(projectDir, antibody.id);
   try {
@@ -422,12 +411,6 @@ function assertAntibodyId(id) {
   if (!ID_PATTERN2.test(id)) {
     throw new AntibodyValidationError("id: must match ab-YYYY-MMDD-NNN", "id");
   }
-}
-function localDate(value) {
-  const year = String(value.getFullYear()).padStart(4, "0");
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 function isErrorCode(error, code) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
@@ -622,7 +605,7 @@ function matchAntibodies(antibodies, target, options = {}) {
     if (!patternMatches(antibody.trigger.pattern, target.text)) continue;
     matching.push(antibody);
   }
-  matching.sort(compareAntibodies);
+  matching.sort((left, right) => compareAntibodies(left, right, options.stats));
   return {
     selected: matching.slice(0, normalizedLimit(options.limit)),
     expiredActiveIds: expiredActiveIds.sort(codePointCompare2)
@@ -701,10 +684,10 @@ function globToRegExp(glob) {
 function escapeRegExp(value) {
   return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
-function compareAntibodies(left, right) {
+function compareAntibodies(left, right, stats) {
   const lastFired = compareNullableDescending(
-    left.stats.last_fired,
-    right.stats.last_fired
+    stats?.[left.id]?.last_fired ?? null,
+    stats?.[right.id]?.last_fired ?? null
   );
   if (lastFired !== 0) return lastFired;
   const created = compareDescending(left.created, right.created);
@@ -864,6 +847,105 @@ function truncate(value, maximum) {
   return value.slice(0, maximum);
 }
 
+// src/lib/stats-store.ts
+import fs6 from "node:fs";
+import path6 from "node:path";
+var ANTIBODY_ID_PATTERN = /^ab-\d{4}-\d{4}-\d{3}$/;
+var DATE_PATTERN2 = /^\d{4}-\d{2}-\d{2}$/;
+var DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+function statsFilePath(projectDir) {
+  return path6.join(projectDir, ".raphael", "stats.json");
+}
+function loadStats(projectDir) {
+  try {
+    const parsed = JSON.parse(
+      fs6.readFileSync(statsFilePath(projectDir), "utf8")
+    );
+    if (!isRecord2(parsed) || !isRecord2(parsed.antibodies)) {
+      return initialStats();
+    }
+    const antibodies = {};
+    for (const [id, value] of Object.entries(parsed.antibodies)) {
+      if (!ANTIBODY_ID_PATTERN.test(id)) continue;
+      antibodies[id] = validStats(value) ? value : initialAntibodyStats();
+    }
+    return {
+      schema_version: 1,
+      antibodies,
+      distill: normalizeDistill(parsed.distill)
+    };
+  } catch {
+    return initialStats();
+  }
+}
+function saveStats(projectDir, stats) {
+  writeFileAtomic(
+    statsFilePath(projectDir),
+    `${JSON.stringify(stats, null, 2)}
+`
+  );
+}
+function statsFor(stats, id) {
+  const value = stats.antibodies[id];
+  return value === void 0 ? initialAntibodyStats() : { ...value };
+}
+function recordFires(projectDir, ids, now = /* @__PURE__ */ new Date()) {
+  if (ids.length === 0) return;
+  const stats = loadStats(projectDir);
+  const date = localDate(now);
+  for (const id of ids) {
+    stats.antibodies[id] = incrementFire(statsFor(stats, id), date);
+  }
+  saveStats(projectDir, stats);
+}
+function initialStats() {
+  return {
+    schema_version: 1,
+    antibodies: {},
+    distill: { last_nag_digest: null }
+  };
+}
+function initialAntibodyStats() {
+  return { fired: 0, last_fired: null, misses: 0, last_miss: null };
+}
+function validStats(value) {
+  if (!isRecord2(value)) return false;
+  return isNonNegativeInteger(value.fired) && isNullableDate(value.last_fired) && isNonNegativeInteger(value.misses) && isNullableDate(value.last_miss);
+}
+function normalizeDistill(value) {
+  if (!isRecord2(value) || !(value.last_nag_digest === null || typeof value.last_nag_digest === "string" && DIGEST_PATTERN.test(value.last_nag_digest))) {
+    return { last_nag_digest: null };
+  }
+  return { last_nag_digest: value.last_nag_digest };
+}
+function incrementFire(current, date) {
+  return {
+    ...current,
+    fired: current.fired + 1,
+    last_fired: maxDate(current.last_fired, date)
+  };
+}
+function maxDate(left, right) {
+  if (left === null) return right;
+  if (right === null) return left;
+  return left >= right ? left : right;
+}
+function localDate(value) {
+  const year = String(value.getFullYear()).padStart(4, "0");
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function isNonNegativeInteger(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+function isNullableDate(value) {
+  return value === null || typeof value === "string" && DATE_PATTERN2.test(value);
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/inoculate.ts
 var TOOLS3 = ["Bash", "Edit", "Write"];
 function isTool2(value) {
@@ -903,30 +985,34 @@ function main() {
     );
     if (input.tool_name !== "Bash" && target.path === null) return;
     const matched = matchAntibodies(listed.antibodies, target, {
-      limit: config.maxInjections
+      limit: config.maxInjections,
+      stats: loadStats(projectDir).antibodies
     });
     expireAntibodies(projectDir, matched.expiredActiveIds);
     if (matched.selected.length === 0) return;
-    const fired = [];
-    for (const antibody of matched.selected) {
-      try {
-        fired.push(recordAntibodyFire(projectDir, antibody.id));
-      } catch {
+    try {
+      recordFires(
+        projectDir,
+        matched.selected.map((antibody) => antibody.id)
+      );
+    } catch {
+    }
+    try {
+      const state = loadState(projectDir, sessionFor(input));
+      const ts = (/* @__PURE__ */ new Date()).toISOString();
+      const fingerprint = triggerFingerprint(target);
+      for (const antibody of matched.selected) {
+        state.injected.push({
+          ts,
+          antibody_id: antibody.id,
+          trigger_fingerprint: fingerprint,
+          recurrence_key: null
+        });
       }
+      saveState(projectDir, state);
+    } catch {
     }
-    if (fired.length === 0) return;
-    const state = loadState(projectDir, sessionFor(input));
-    const ts = (/* @__PURE__ */ new Date()).toISOString();
-    const fingerprint = triggerFingerprint(target);
-    for (const antibody of fired) {
-      state.injected.push({
-        ts,
-        antibody_id: antibody.id,
-        trigger_fingerprint: fingerprint
-      });
-    }
-    saveState(projectDir, state);
-    const additionalContext = renderAntibodyContext(fired);
+    const additionalContext = renderAntibodyContext(matched.selected);
     if (additionalContext === "") return;
     process.stdout.write(
       `${JSON.stringify({
