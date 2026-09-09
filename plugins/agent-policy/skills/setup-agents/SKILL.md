@@ -9,7 +9,7 @@ disallowed-tools: Write
 
 生成対象はプロジェクトの `.claude/agents/` に置く Markdown の Agent 定義だけである。プロキシ、秘密値、MCP サーバーの設定そのものは管理しない。
 
-生成した定義の `agent-policy-role` マーカーは、その帯の委譲先候補になることと、外部 Agent を名指しで dispatch するときの合成ホスト候補になることの両方を表す。`agent-policy-vendor` が出力された定義では、ベンダー別の役割断片と色もその値に従う。
+生成した定義の `agent-policy-role` マーカーは、その役割の委譲先候補になることと、外部 Agent を名指しで dispatch するときの合成ホスト候補になることの両方を表す。`agent-policy-vendor` が出力された定義では、ベンダー別の役割断片と色もその値に従う。
 
 ## 書き込みと対話の規律
 
@@ -81,7 +81,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --dir "
 
 ### ステップ 1b: 既存定義の被覆確認
 
-推奨の帯集合が、プロジェクトの既存定義でどこまで埋まっているかを取得する。
+推奨の役割集合が、プロジェクトの既存定義でどこまで埋まっているかを取得する。
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --dir "$PWD"

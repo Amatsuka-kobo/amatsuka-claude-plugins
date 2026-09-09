@@ -412,7 +412,7 @@ describe("--list-coverage", () => {
     ).toBe(true)
   })
 
-  it("RECOMMENDED の帯集合とモデル割当を返す", () => {
+  it("RECOMMENDED の役割集合とモデル割当を返す", () => {
     const result = run<CoverageResult>(["--list-coverage", "--dir", project])
 
     expect(result.roles).toHaveLength(16)

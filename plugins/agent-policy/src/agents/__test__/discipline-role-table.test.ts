@@ -26,7 +26,7 @@ const MODEL_IDS = {
   Grok: "grok"
 } as const satisfies Record<string, ModelId>
 
-const TABLE_HEADER = ["帯名", "RoleId", "種別", "Agent Tool", "Claude モデル"]
+const TABLE_HEADER = ["役割名", "RoleId", "種別", "Agent Tool", "Claude モデル"]
 
 interface ParsedRoleRow {
   label: string
@@ -38,9 +38,9 @@ interface ParsedRoleRow {
 }
 
 function extractRoleBandSection(content: string): string {
-  const heading = /^## 役割の帯$/m.exec(content)
+  const heading = /^## 役割$/m.exec(content)
   if (heading === null) {
-    throw new Error("規律の「役割の帯」節が見つからない")
+    throw new Error("規律の「役割」節が見つからない")
   }
 
   const afterHeading = content.slice(heading.index + heading[0].length)
@@ -54,7 +54,7 @@ function splitTableCells(line: string): string[] {
     .slice(1, -1)
     .map((cell) => cell.trim())
   if (cells.length !== 5) {
-    throw new Error(`役割の帯の表は 5 セルでなければならない: ${line}`)
+    throw new Error(`役割の表は 5 セルでなければならない: ${line}`)
   }
   return cells
 }
@@ -70,17 +70,17 @@ function extractSingleBacktickToken(cell: string, column: string): string {
 function parseRoleBandTable(section: string): ParsedRoleRow[] {
   const tableLines = section.split("\n").filter((line) => line.startsWith("|"))
   if (tableLines.length < 2) {
-    throw new Error("役割の帯の表が見つからない")
+    throw new Error("役割の表が見つからない")
   }
 
   const headerCells = splitTableCells(tableLines[0])
   if (!headerCells.every((cell, index) => cell === TABLE_HEADER[index])) {
-    throw new Error("役割の帯の表ヘッダが不正")
+    throw new Error("役割の表ヘッダが不正")
   }
 
   const separatorCells = splitTableCells(tableLines[1])
   if (!separatorCells.every((cell) => cell === "---")) {
-    throw new Error("役割の帯の表区切り行が不正")
+    throw new Error("役割の表区切り行が不正")
   }
 
   return tableLines.slice(2).map((line) => {
@@ -88,7 +88,7 @@ function parseRoleBandTable(section: string): ParsedRoleRow[] {
     const label = cells[0]
     const role = ROLES.find((candidate) => candidate.label === label)
     if (role === undefined) {
-      throw new Error(`帯名「${label}」を解決できない`)
+      throw new Error(`役割名「${label}」を解決できない`)
     }
 
     const roleId = extractSingleBacktickToken(cells[1], "RoleId") as RoleId
@@ -143,8 +143,8 @@ function readDisciplineRows(): ParsedRoleRow[] {
 const SYNTHETIC_HEADER = `| ${TABLE_HEADER.join(" | ")} |\n| --- | --- | --- | --- | --- |`
 
 // 規律の役割表が、実装側の役割定義と方針割り当てを漏れなく反映することを守る。
-describe("規律の役割の帯", () => {
-  it("役割の帯節が表を 1 つ持つ", () => {
+describe("規律の役割", () => {
+  it("役割節が表を 1 つ持つ", () => {
     const content = fs.readFileSync(DISCIPLINE_PATH, "utf8")
     const section = extractRoleBandSection(content)
     expect(collectTableBlocks(section)).toHaveLength(1)
@@ -160,7 +160,7 @@ describe("規律の役割の帯", () => {
     )
   })
 
-  it("帯名が role.label と一致する", () => {
+  it("役割名が role.label と一致する", () => {
     expect(readDisciplineRows().map((row) => row.label)).toEqual(
       ROLES.map((role) => role.label)
     )
@@ -194,7 +194,7 @@ describe("規律の役割の帯", () => {
 })
 
 // 表の解析が未知の語を見逃さず、正しい 5 列の行だけを受理することを守る。
-describe("役割の帯の表解析", () => {
+describe("役割の表解析", () => {
   it("未知のモデル語で例外を投げる", () => {
     const section = `${SYNTHETIC_HEADER}\n| コードレビュー | \`code-review\` | \`readonly\` | 否 | \`Claude 5\` |`
     expect(() => parseRoleBandTable(section)).toThrow(
@@ -202,14 +202,14 @@ describe("役割の帯の表解析", () => {
     )
   })
 
-  it("未知の帯名で例外を投げる", () => {
-    const section = `${SYNTHETIC_HEADER}\n| 未知の帯 | \`code-review\` | \`readonly\` | 否 | \`Sonnet\` |`
+  it("未知の役割名で例外を投げる", () => {
+    const section = `${SYNTHETIC_HEADER}\n| 未知の役割 | \`code-review\` | \`readonly\` | 否 | \`Sonnet\` |`
     expect(() => parseRoleBandTable(section)).toThrow(
-      /帯名「未知の帯」を解決できない/
+      /役割名「未知の役割」を解決できない/
     )
   })
 
-  it("既知の帯名とモデル語を解析する", () => {
+  it("既知の役割名とモデル語を解析する", () => {
     const section = `${SYNTHETIC_HEADER}\n| コードレビュー | \`code-review\` | \`readonly\` | 否 | \`Sonnet\` |`
     expect(parseRoleBandTable(section)).toEqual([
       {
@@ -225,7 +225,7 @@ describe("役割の帯の表解析", () => {
 })
 
 const FORBIDDEN_ROLE_TABLE_HEADINGS =
-  /^## (?:役割の帯|モデル別役割|役割の帯と推奨モデル)$/m
+  /^## (?:役割|役割の帯|モデル別役割|役割の帯と推奨モデル)$/m
 
 // 方針 SKILL が役割表を再定義せず、規律を唯一の参照先に保つことを守る。
 describe("方針 SKILL の役割表", () => {

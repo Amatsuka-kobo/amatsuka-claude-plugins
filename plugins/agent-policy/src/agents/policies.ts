@@ -119,8 +119,8 @@ export const MODELS: readonly ModelSpec[] = [
   }
 ]
 
-// 共通規律 §役割の帯 の「Claude モデル」列の正本。claude プロファイルの帯モデルであり、
-// custom プロファイルでは委譲先が決まらない帯の読み替え先を兼ねる。値を変えたら規律の表も変える。
+// 共通規律 §役割 の「Claude モデル」列の正本。claude プロファイルの役割モデルであり、
+// custom プロファイルでは委譲先が決まらない役割の読み替え先を兼ねる。値を変えたら規律の表も変える。
 export const ASSIGNMENTS: Record<
   "claude-model-policy",
   Record<RoleId, ModelId[]>
@@ -166,11 +166,11 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
 }
 
 // モデル ID を明示する推奨定義では、Haiku に Agent Tool を許可しない。
-// GPT Luna は「通常の実装」「その他のタスク」の帯も担うため、モデル側では除外せず帯の規定だけに従わせる。
+// GPT Luna は「通常の実装」「その他のタスク」の役割も担うため、モデル側では除外せず役割の規定だけに従わせる。
 const AGENT_DENIED_MODELS: readonly ModelId[] = ["haiku"]
 
-// 単一役割の定義はその帯そのものなので、共通規律の除外がそのまま効く。
-// 複数役割を兼ねる定義は帯そのものではないため効かない（設計 §5.2）。
+// 単一役割の定義には、共通規律の除外がそのまま効く。
+// 複数役割を兼ねる定義は一つの役割に対応しないため効かない（設計 §5.2）。
 const SOLO_DENIED_ROLES: readonly RoleId[] = [
   "light-impl",
   "advisor",
