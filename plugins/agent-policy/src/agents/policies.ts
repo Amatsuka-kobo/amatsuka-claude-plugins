@@ -119,8 +119,8 @@ export const MODELS: readonly ModelSpec[] = [
   }
 ]
 
-// claude-model-policy 専用の担当表。フォールバック先と外部モデルの読み替え先を兼ねる。
-// 複数モデルを持つ帯がある。担当表が変わったらここも変える。
+// 共通規律 §役割の帯 の「Claude モデル」列の正本。claude プロファイルの帯モデルであり、
+// custom プロファイルでは委譲先が決まらない帯の読み替え先を兼ねる。値を変えたら規律の表も変える。
 export const ASSIGNMENTS: Record<
   "claude-model-policy",
   Record<RoleId, ModelId[]>
@@ -145,7 +145,7 @@ export const ASSIGNMENTS: Record<
   }
 }
 
-// custom プロファイルの推奨。custom-policy の担当表と一致させる。
+// custom プロファイル向けの推奨。setup-agents の提示だけに使う。方針スキルは推奨列を持たない。
 export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   "complex-impl": ["opus", "gpt-sol"],
   "normal-impl": ["sonnet", "gpt-luna", "grok"],
