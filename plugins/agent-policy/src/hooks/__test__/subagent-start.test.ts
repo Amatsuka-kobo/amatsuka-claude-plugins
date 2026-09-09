@@ -15,7 +15,7 @@ const SESSION_HOOK = fileURLToPath(
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
 const TABLE_INTRO =
-  "次の Agent は役割マーカーを宣言している。担当表の該当する帯は、これらを優先して使う。同じ帯に複数あるときは依頼内容に近いものを選ぶ。"
+  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
 
 const ROLE_IDS = [
   "complex-impl",
@@ -209,7 +209,7 @@ describe("断片の合成", () => {
     const context = additionalContext(invoke("unknown-agent"))
 
     expect(context).toContain(
-      "対応表の「設計・計画・実装のアドバイザー」の帯の定義を使う"
+      "対応表の「設計・計画・実装のアドバイザー」の役割の定義を使う"
     )
   })
 

@@ -401,7 +401,7 @@ describe("deny 理由の対応表", () => {
     const reason = denialReason(result.stdout)
 
     expect(reason).not.toContain("委譲先候補")
-    expect(reason).toContain("担当表の帯に従い Agent tool で委譲する。Bash")
+    expect(reason).toContain("担当表の役割に従い Agent tool で委譲する。Bash")
   })
 })
 

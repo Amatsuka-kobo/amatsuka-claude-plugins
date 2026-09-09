@@ -221,7 +221,7 @@ describe("allowsAgentTool", () => {
     expect(allowsAgentTool(["explore"], "haiku")).toBe(false)
   })
 
-  it("GPT Luna はモデル側の除外を受けず帯の規定だけに従う", () => {
+  it("GPT Luna はモデル側の除外を受けず役割の規定だけに従う", () => {
     expect(allowsAgentTool(["normal-impl"], "gpt-luna")).toBe(true)
     expect(allowsAgentTool(["general"], "gpt-luna")).toBe(true)
     expect(allowsAgentTool(["light-impl"], "gpt-luna")).toBe(false)

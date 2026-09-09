@@ -511,7 +511,7 @@ describe("ファイルを書かない", () => {
 })
 
 describe("役割マーカーの走査", () => {
-  it("帯 → 名前の対応を注入する", () => {
+  it("役割 → 名前の対応を注入する", () => {
     place("my-heavy", ["agent-policy-role: complex-impl, explore"])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("my-heavy")

@@ -326,7 +326,7 @@ function denialReason(projectRoot: string): string {
   const candidates = table === undefined ? "" : `(委譲先候補 — ${table})。`
   return (
     "delegation-gate: メインセッションでこの層のファイルは編集しない運用方針である。" +
-    `担当表の帯に従い Agent tool で委譲する。${candidates}` +
+    `担当表の役割に従い Agent tool で委譲する。${candidates}` +
     "Bash 経由の書き込みや他ツールへの切替で回避しない。" +
     "直接編集が必要なときは、ユーザー自身が `--direct on` を実行して一時解除する(TTL で自動失効)。"
   )

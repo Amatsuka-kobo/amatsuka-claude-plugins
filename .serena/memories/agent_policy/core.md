@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.17.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.17.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -38,12 +38,20 @@ The plugin now ships **two profiles**, selected by `AMATSUKA_AGENT_AUTO_INJECTIO
   a band absent from it reads across to the 担当表's "Claude モデル" column. Models and roles are
   not constrained against each other.
 
+**Terminology since 0.17.1-dev (2026-09-09): the word 「帯」 is gone.** A role band is just
+「役割」; the discipline section is `## 役割`, the table's first column is 「役割名」, and the
+policy skills' section is 「実行役割の解決順」. Hook-injected strings (`marker-scan.ts`,
+`delegation-gate.ts`) and `assets/roles/ja/{_common,escalation}.md` use 「役割」 too; generated
+`.claude/agents/*.md` keep 「帯」 until regenerated (harmless). The user found 「帯」 unclear
+Japanese; 「役割ラベル」 was rejected because it collides with `ROLES[].label`. Design docs from
+0.17.0 and earlier still say 「帯」 — read them as 「役割」. Do not reintroduce 「帯」.
+
 **The 担当表 lives in exactly one place since 0.17.0-dev (2026-09-09)**: `references/
-orchestration-discipline.md` §役割の帯 — 16 rows × 5 columns (帯名 / RoleId / 種別 / Agent Tool /
+orchestration-discipline.md` §役割 — 16 rows × 5 columns (役割名 / RoleId / 種別 / Agent Tool /
 Claude モデル). Its canonical sources are `ROLES[].label/id/kind`, `allowsAgentTool`, and
 `ASSIGNMENTS["claude-model-policy"]`; `src/agents/__test__/discipline-role-table.test.ts` pins all
 five columns and also asserts that **neither policy SKILL.md contains a Markdown table** (any line
-starting with `|`) nor a `## 役割の帯` / `## モデル別役割` / `## 役割の帯と推奨モデル` heading. The
+starting with `|`) nor a `## 役割` / `## 役割の帯` / `## モデル別役割` / `## 役割の帯と推奨モデル` heading. The
 old `policy-skill-assignments.test.ts` is deleted. Design:
 `harness-docs/design/2026-09-09-agent-policy-band-catalog-consolidation-design.md`.
 
