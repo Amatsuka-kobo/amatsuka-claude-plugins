@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.16.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.17.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -29,13 +29,23 @@ The plugin now ships **two profiles**, selected by `AMATSUKA_AGENT_AUTO_INJECTIO
 (`none` / `claude` / `custom`; the three legacy values `with-codex` / `with-grok` /
 `with-codex-grok` are treated as `custom` and draw a migration notice):
 
-- **claude** — `claude-model-policy`. Claude model names pin each role band. Zero setup. Every
-  reference to the role-marker mechanism was removed from this skill; the resolution order is now
-  just "dispatch with a `model` override, read-only bands to built-in `Explore`, impl bands to
-  `general-purpose`".
-- **custom** — `custom-policy`. The 担当表 holds **role bands only**, plus a *recommended* model
-  column that binds nothing. The actual delegate comes from the role-marker table SessionStart
-  injects. Models and roles are not constrained against each other.
+- **claude** — `claude-model-policy`. Zero setup. Since 0.17.0-dev the skill holds **no table**:
+  it points at the shared 担当表 in `orchestration-discipline.md` §役割の帯 and dispatches with a
+  `model` override taken from that table's "Claude モデル" column (read-only bands to built-in
+  `Explore`, impl bands to `general-purpose`).
+- **custom** — `custom-policy`. Also **no table** since 0.17.0-dev (the recommended-model column
+  is gone from every skill). The delegate comes from the role-marker table SessionStart injects;
+  a band absent from it reads across to the 担当表's "Claude モデル" column. Models and roles are
+  not constrained against each other.
+
+**The 担当表 lives in exactly one place since 0.17.0-dev (2026-09-09)**: `references/
+orchestration-discipline.md` §役割の帯 — 16 rows × 5 columns (帯名 / RoleId / 種別 / Agent Tool /
+Claude モデル). Its canonical sources are `ROLES[].label/id/kind`, `allowsAgentTool`, and
+`ASSIGNMENTS["claude-model-policy"]`; `src/agents/__test__/discipline-role-table.test.ts` pins all
+five columns and also asserts that **neither policy SKILL.md contains a Markdown table** (any line
+starting with `|`) nor a `## 役割の帯` / `## モデル別役割` / `## 役割の帯と推奨モデル` heading. The
+old `policy-skill-assignments.test.ts` is deleted. Design:
+`harness-docs/design/2026-09-09-agent-policy-band-catalog-consolidation-design.md`.
 
 - **No agent definitions ship.** `agents/`, `src/agents/presets.ts` and `build-presets.ts` were
   deleted. Naming `agent-policy:gpt-sol` etc. no longer resolves; the replacement is `setup-agents`
@@ -176,24 +186,29 @@ inference is `unknown`. Both cannot hold. The implementation stops with `ok: fal
 directs the user to finish interactively. Harmless in practice (all 8 measured entries inferred
 cleanly), but do not treat either clause as absolute.
 
-## The two policy skills — role tables
+## The two policy skills and the shared 担当表
 
-Each holds its own table plus profile-specific dispatch rules; the shared discipline is
-`references/orchestration-discipline.md` and, for exploration only, `references/context-map-guide.md`.
-`assets/context-map-template.md` is the template.
+Neither skill holds a table since 0.17.0-dev; both are thin (claude ≈1.4KB, custom ≈3.8KB) and
+carry only their profile's resolution order. The shared discipline is
+`references/orchestration-discipline.md` (≈14.3KB, holds the 担当表) and, for exploration only,
+`references/context-map-guide.md`. `assets/context-map-template.md` is the template.
 
-`claude-model-policy` keeps a model column (`ASSIGNMENTS`). `custom-policy`'s column is a
-*recommendation* (`RECOMMENDED`). Read the values from `policies.ts` rather than from memory — as of
-0.16.0-dev: complex-impl→Opus/GPT Sol, design-plan/explore-lead→Opus only, normal-impl→Sonnet/GPT
+`RECOMMENDED` in `policies.ts` still exists but is now **setup-agents-only** (`--list-live-models`
+`recommendedFor`, `--list-coverage` `models`); no skill shows it. Read values from `policies.ts` —
+as of 0.17.0-dev: complex-impl→Opus/GPT Sol, design-plan/explore-lead→Opus only, normal-impl→Sonnet/GPT
 Luna/Grok, light-impl→Haiku/GPT Luna/Grok, general→Sonnet/GPT Luna, explore→Sonnet/Grok/GPT Terra,
 realtime-research/independent-review→Sonnet/Grok, doc-review→Haiku, code-review→Sonnet,
 escalation/final-review/gate-review/advisor→Fable/GPT Astra, e2e-verify→Sonnet/GPT Astra.
-In `ASSIGNMENTS` (claude profile) advisor is **Fable only** since 0.16.0-dev — the old `Opus`
-fallback was removed from the table, `_common.md` (ja/en), `orchestration-discipline.md` and
-`subagent-discipline.md`. When Fable cannot start, subagents hand the question back instead of
-consulting. `policy-skill-assignments.test.ts`
-pins both tables against their canonical source; the parser matches a row by `startsWith(label)`,
-which is why rows may carry parenthetical annotations.
+In `ASSIGNMENTS` (claude profile, = the 担当表's "Claude モデル" column) advisor is **Fable only**
+since 0.16.0-dev. When Fable cannot start, subagents hand the question back instead of consulting.
+The 担当表 rows use `ROLES[].label` verbatim (no parenthetical annotations any more); the test
+matches by exact equality.
+
+Three rules that used to be duplicated across both SKILLs now live only in the discipline:
+Agent-Tool denial (now the 担当表's "Agent Tool" column), the "name the band + Output Format in the
+request" rule, and the read-only-band-to-Write/Edit-definition wording. The independent-review
+procedure is also discipline-only (§設計・実装計画の規律); custom keeps just its skip-exception.
+`ja/_common.md` L14 says 「対応表」 (was 「担当表」 — subagents never see the 担当表).
 
 Rules that bite:
 
@@ -204,8 +219,9 @@ Rules that bite:
   §未解決事項 and fixes requirements → design-plan writes design/WBS → doc-review (Haiku) →
   independent-review (Sonnet, original only) → orchestrator adopts/rejects → user approval → Approve.
 - **Custom's execution-tier resolution**: (1) a band present in the marker table uses that
-  definition; (2) a band absent from it is read across to `claude-model-policy`'s model for the same
-  band — **except independent-review, which is skipped rather than read across**, because a
+  definition; (2) a band absent from it is read across to the 担当表's "Claude モデル" column (the
+  same values as `ASSIGNMENTS`; `claude-model-policy` is NOT injected in custom sessions, which is
+  why the reference moved) — **except independent-review, which is skipped rather than read across**, because a
   same-vendor reviewer shares the designer's blind spots. Step 2 is the *configuration default* for
   partial setups, not the failure fallback (that one is whole-session and lives in SessionStart).
 - Mid-session unavailability of a delegate follows the same rule: read across, except

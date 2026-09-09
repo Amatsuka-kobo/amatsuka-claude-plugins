@@ -42,7 +42,7 @@ Marketplace から `agent-policy` をインストールします。
 | 値 | プロファイルと注入内容 |
 | --- | --- |
 | `none` または未設定 | 方針スキルと役割マーカーの対応表を注入しません。 |
-| `claude` | `agent-policy:claude-model-policy` を注入します。Claude のモデル名で帯を固定する担当表であり、Agent 定義のセットアップは不要です。 |
+| `claude` | `agent-policy:claude-model-policy` を注入します。役割の帯の一覧は共通規律にあり、その「Claude モデル」列で帯を固定します。Agent 定義のセットアップは不要です。 |
 | `custom` | プロジェクトの役割マーカー付き Agent 定義を検査します。構成が成立すれば、`agent-policy:custom-policy` と役割マーカーの対応表を注入します。 |
 
 `custom` では、役割マーカー付き定義の外部モデルがプロキシの `/v1/models` に実在することを検証します。すべて存在すると確認できた場合は `custom-policy` と対応表を注入します。役割マーカー付き定義が無い、モデルが見つからない、または照会に失敗した場合は、セッション全体を `claude` プロファイルへフォールバックし、その理由を起動時に通知します。
@@ -204,6 +204,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
 
 ## 旧バージョンからの移行
+
+0.16 系から 0.17 系へ移行する場合は、次を確認してください。
+
+1. 役割の帯の一覧(帯名・役割 ID・種別・Agent Tool の可否・Claude モデル)を `references/orchestration-discipline.md` の「役割の帯」節へ集約しました。`claude-model-policy` と `custom-policy` の表は削除しています。両方針スキルは以前から共通規律を必読としているため、動作は変わりません。
+2. `custom-policy` の推奨モデル列を廃止しました。推奨は `agent-policy:setup-agents` の提示(`--list-live-models` の `recommendedFor`、`--list-coverage` の `models`)だけで参照します。セッション中に推奨モデルの一覧が要るときは setup-agents を使ってください。
+3. custom プロファイルで対応表に無い帯を読み替えるとき、読み替え先は共通規律の「役割の帯」表の「Claude モデル」列になりました。以前は `claude-model-policy` の表を参照する記述でしたが、custom が成立したセッションではその方針が注入されないため、参照が解決できませんでした。
+4. 役割 ID・役割断片・フックの動作は変更していません。生成済みの Agent 定義はそのまま使えます。setup-agents の再実行も不要です。ただし共通断片 `_common.md`(日本語)のアドバイザー相談の項で、参照先の呼称を「担当表」から「対応表」へ直しました。サブエージェントへ届くのは役割マーカーの対応表だけであるためです。この変更は次回以降に生成する定義へ反映されます。
 
 0.15 系から 0.16 系へ移行する場合は、次を確認してください。
 
