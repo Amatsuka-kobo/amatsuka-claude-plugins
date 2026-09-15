@@ -38,6 +38,65 @@ test("init は try-1 の state.json を作成する", () => {
   ).toBeTruthy()
 })
 
+test("init --domain-mode はモードを記録し、未指定ならキーを持たせない", () => {
+  const root = tmpProject()
+  const mapped = run(root, ["init", "--issue", "1", "--domain-mode", "mapped"])
+  const unscoped = run(root, [
+    "init",
+    "--issue",
+    "2",
+    "--domain-mode",
+    "unscoped"
+  ])
+  const unspecified = run(root, ["init", "--issue", "3"])
+
+  expect(mapped.code).toBe(0)
+  expect(unscoped.code).toBe(0)
+  expect(unspecified.code).toBe(0)
+  expect(mapped.out.state.domainMode).toBe("mapped")
+  expect(unscoped.out.state.domainMode).toBe("unscoped")
+
+  const mappedState = JSON.parse(
+    fs.readFileSync(
+      path.join(root, ".codiel/runs/issue-1/try-1/state.json"),
+      "utf8"
+    )
+  )
+  const unscopedState = JSON.parse(
+    fs.readFileSync(
+      path.join(root, ".codiel/runs/issue-2/try-1/state.json"),
+      "utf8"
+    )
+  )
+  const unspecifiedState = JSON.parse(
+    fs.readFileSync(
+      path.join(root, ".codiel/runs/issue-3/try-1/state.json"),
+      "utf8"
+    )
+  )
+  expect(mappedState.domainMode).toBe("mapped")
+  expect(unscopedState.domainMode).toBe("unscoped")
+  expect("domainMode" in unspecifiedState).toBe(false)
+  expect([
+    mappedState.version,
+    unscopedState.version,
+    unspecifiedState.version
+  ]).toStrictEqual([1, 1, 1])
+})
+
+test("init --domain-mode は不正値を拒否して state.json を作らない", () => {
+  const root = tmpProject()
+  const r = run(root, ["init", "--issue", "1", "--domain-mode", "invalid"])
+
+  expect(r.code).toBe(1)
+  expect(r.err).toContain("invalid")
+  expect(r.err).toContain("mapped")
+  expect(r.err).toContain("unscoped")
+  expect(
+    fs.existsSync(path.join(root, ".codiel/runs/issue-1/try-1/state.json"))
+  ).toBe(false)
+})
+
 test("未完了 try がある間は init が失敗する", () => {
   const root = tmpProject()
   run(root, ["init", "--issue", "123"])
@@ -589,6 +648,20 @@ test("domain を持たない既存 state を読んでも壊れない(後方互�
   expect(r.code).toBe(0)
   expect(r.out.state.version).toBe(1)
   expect(r.out.state.phases.init.status).toBe("in_progress")
+})
+
+test("domainMode を持たない既存 state をそのまま読める(後方互換)", () => {
+  const root = tmpProject()
+  run(root, ["init", "--issue", "1"])
+  const statePath = path.join(root, ".codiel/runs/issue-1/try-1/state.json")
+  const existingState = JSON.parse(fs.readFileSync(statePath, "utf8"))
+  delete existingState.domainMode
+  fs.writeFileSync(statePath, `${JSON.stringify(existingState, null, 2)}\n`)
+
+  const r = run(root, ["get", "--issue", "1"])
+  expect(r.code).toBe(0)
+  expect("domainMode" in r.out.state).toBe(false)
+  expect(r.out.state.version).toBe(1)
 })
 
 test("set-domain 後も既存サブコマンドが正常に動き、他フィールドを壊さない", () => {

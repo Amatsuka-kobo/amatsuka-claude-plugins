@@ -40,6 +40,11 @@ export interface RunState {
   createdAt: string
   updatedAt: string
   baseBranch?: string
+  // 境界の課し方(設計書 2026-09-15 §5.1)。"mapped" は有効なドメインマップに基づく境界、
+  // "unscoped" は境界を設けないことを run 開始時に明示選択した状態。
+  // optional なので domainMode を持たない既存 state はそのまま読める(version 据え置き)。
+  // 未記録は「モード未決」として扱い、§0 の判定をやり直す。
+  domainMode?: "mapped" | "unscoped"
   // 実装・レビューを委譲中のドメイン名(ARCHITECTURE のドメインマップのキー)。
   // 委譲していない間は null / 未定義。optional なので domain を持たない
   // 既存 state はそのまま読める(version 据え置き)。
@@ -229,6 +234,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
 
   if (cmd === "init") {
     if (!flags.issue) fail("--issue が必要です")
+    const domainMode = flags["domain-mode"]
+    if ("domain-mode" in flags && !["mapped", "unscoped"].includes(domainMode))
+      fail(
+        `不正な --domain-mode: ${domainMode}。許される値は mapped, unscoped です`
+      )
     const latest = latestTry(root, flags.issue)
     if (latest && !TERMINAL.has(latest.state.status))
       fail(
@@ -239,6 +249,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
     const state = newState(flags.issue, tryN)
     if (flags["base-branch"]) state.baseBranch = flags["base-branch"]
+    if (domainMode) state.domainMode = domainMode as "mapped" | "unscoped"
     const p = path.join(dir, "state.json")
     writeState(p, state)
     return ok({ statePath: p, state })

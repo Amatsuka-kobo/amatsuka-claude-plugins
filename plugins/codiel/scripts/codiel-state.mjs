@@ -127,6 +127,11 @@ function main(argv, root = process.cwd()) {
   const cmd = pos[0];
   if (cmd === "init") {
     if (!flags.issue) fail("--issue \u304C\u5FC5\u8981\u3067\u3059");
+    const domainMode = flags["domain-mode"];
+    if ("domain-mode" in flags && !["mapped", "unscoped"].includes(domainMode))
+      fail(
+        `\u4E0D\u6B63\u306A --domain-mode: ${domainMode}\u3002\u8A31\u3055\u308C\u308B\u5024\u306F mapped, unscoped \u3067\u3059`
+      );
     const latest = latestTry(root, flags.issue);
     if (latest && !TERMINAL.has(latest.state.status))
       fail(
@@ -137,6 +142,7 @@ function main(argv, root = process.cwd()) {
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true });
     const state = newState(flags.issue, tryN);
     if (flags["base-branch"]) state.baseBranch = flags["base-branch"];
+    if (domainMode) state.domainMode = domainMode;
     const p = path.join(dir, "state.json");
     writeState(p, state);
     return ok({ statePath: p, state });

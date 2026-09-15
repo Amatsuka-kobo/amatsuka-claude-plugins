@@ -362,7 +362,7 @@ function findCodielRoot() {
 var codielRoot = findCodielRoot();
 var codielDirExists = codielRoot !== null;
 var runDirs = codielRoot ? readdirEntriesSafe(path.join(codielRoot, ".codiel", "runs")).filter((entry) => entry.isDirectory()).map((entry) => entry.name) : [];
-var codielReady = codielDirExists && domains.domainsReadable;
+var codielHandoffCandidate = codielDirExists;
 var intentsDirPath = repoRoot ? path.join(repoRoot, "docs", "intents") : null;
 var intentsDir = intentsDirPath && isDir(intentsDirPath) ? intentsDirPath : null;
 function parseIntentDoc(file, content) {
@@ -501,7 +501,7 @@ console.log(
         domainsReadable: domains.domainsReadable,
         domainCount: domains.domainCount
       },
-      codielReady,
+      codielHandoffCandidate,
       codielHarness: {
         dirExists: codielDirExists,
         codielRoot,

@@ -462,6 +462,14 @@ function validateDomainsValue(value: unknown): Record<string, string[]> | null {
   return value as Record<string, string[]>
 }
 
+/** domains が null になった理由。読めたときは null。 */
+export type DomainsUnreadableReason =
+  | "architecture_missing" // ARCHITECTURE のファイルが無い
+  | "block_missing" // metatron:domains ブロックが無い
+  | "invalid_json" // ブロック内が有効な JSON でない
+  | "invalid_shape" // 検証 4 項目の 2〜4 に違反
+  | "read_error" // 例外
+
 export interface DomainsRead {
   /** 契約 §1 の検証 4 項目をすべて満たしたドメインマップ。満たさなければ null。 */
   domains: Record<string, string[]> | null
@@ -470,6 +478,8 @@ export interface DomainsRead {
    * 読み取り経路は警告があっても処理を止めない。
    */
   warnings: string[]
+  /** domains が null になった理由。読めたときは null。 */
+  unreadable: DomainsUnreadableReason | null
 }
 
 /**
@@ -484,21 +494,32 @@ export interface DomainsRead {
 export function readDomainsResult(startDir: string): DomainsRead {
   try {
     const { architecture } = resolveDocPaths(startDir)
-    if (!fs.existsSync(architecture)) return { domains: null, warnings: [] }
+    if (!fs.existsSync(architecture))
+      return {
+        domains: null,
+        warnings: [],
+        unreadable: "architecture_missing"
+      }
     const { block, warnings } = findDomainsBlocks(
       fs.readFileSync(architecture, "utf8")
     )
-    if (block === null) return { domains: null, warnings }
+    if (block === null)
+      return { domains: null, warnings, unreadable: "block_missing" }
     // 1. ブロック内が有効な JSON である。
     let parsed: unknown
     try {
       parsed = JSON.parse(block.content)
     } catch {
-      return { domains: null, warnings }
+      return { domains: null, warnings, unreadable: "invalid_json" }
     }
-    return { domains: validateDomainsValue(parsed), warnings }
+    const domains = validateDomainsValue(parsed)
+    return {
+      domains,
+      warnings,
+      unreadable: domains === null ? "invalid_shape" : null
+    }
   } catch {
-    return { domains: null, warnings: [] }
+    return { domains: null, warnings: [], unreadable: "read_error" }
   }
 }
 

@@ -321,20 +321,31 @@ function validateDomainsValue(value) {
 function readDomainsResult(startDir) {
   try {
     const { architecture } = resolveDocPaths(startDir);
-    if (!fs2.existsSync(architecture)) return { domains: null, warnings: [] };
+    if (!fs2.existsSync(architecture))
+      return {
+        domains: null,
+        warnings: [],
+        unreadable: "architecture_missing"
+      };
     const { block, warnings } = findDomainsBlocks(
       fs2.readFileSync(architecture, "utf8")
     );
-    if (block === null) return { domains: null, warnings };
+    if (block === null)
+      return { domains: null, warnings, unreadable: "block_missing" };
     let parsed;
     try {
       parsed = JSON.parse(block.content);
     } catch {
-      return { domains: null, warnings };
+      return { domains: null, warnings, unreadable: "invalid_json" };
     }
-    return { domains: validateDomainsValue(parsed), warnings };
+    const domains = validateDomainsValue(parsed);
+    return {
+      domains,
+      warnings,
+      unreadable: domains === null ? "invalid_shape" : null
+    };
   } catch {
-    return { domains: null, warnings: [] };
+    return { domains: null, warnings: [], unreadable: "read_error" };
   }
 }
 function findProjectRoot(startDir) {

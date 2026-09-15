@@ -532,8 +532,143 @@ test("R11: ARCHITECTURE が無ければ警告も出ない(正常な状態)", () 
   const root = mkTmp("lib-domains-absent-warn-")
   expect(readDomainsResult(root)).toStrictEqual({
     domains: null,
-    warnings: []
+    warnings: [],
+    unreadable: "architecture_missing"
   })
+})
+
+test("DomainsRead.unreadable は読めない 5 状態を区別する", () => {
+  const architectureMissingRoot = mkTmp("lib-domains-reason-architecture-")
+  expect(readDomainsResult(architectureMissingRoot).unreadable).toBe(
+    "architecture_missing"
+  )
+
+  const blockMissingRoot = mkTmp("lib-domains-reason-block-")
+  writeArchitecture(blockMissingRoot, ["# ARCHITECTURE"])
+  expect(readDomainsResult(blockMissingRoot).unreadable).toBe("block_missing")
+
+  const invalidJsonRoot = mkTmp("lib-domains-reason-json-")
+  writeArchitecture(invalidJsonRoot, [
+    "```json metatron:domains",
+    '{ "frontend": ',
+    "```"
+  ])
+  expect(readDomainsResult(invalidJsonRoot).unreadable).toBe("invalid_json")
+
+  const invalidShapes = [
+    ["top-level", "[]"],
+    ["value", '{ "frontend": [] }'],
+    ["empty", "{}"]
+  ] as const
+  for (const [name, content] of invalidShapes) {
+    const root = mkTmp(`lib-domains-reason-shape-${name}-`)
+    writeArchitecture(root, ["```json metatron:domains", content, "```"])
+    expect(readDomainsResult(root).unreadable, name).toBe("invalid_shape")
+  }
+
+  const readErrorRoot = mkTmp("lib-domains-reason-read-error-")
+  fs.mkdirSync(path.join(readErrorRoot, "docs", "ARCHITECTURE.md"), {
+    recursive: true
+  })
+  expect(readDomainsResult(readErrorRoot).unreadable).toBe("read_error")
+})
+
+test("DomainsRead.unreadable は読めたとき null になる", () => {
+  const root = mkTmp("lib-domains-reason-readable-")
+  writeArchitecture(root, [
+    "```json metatron:domains",
+    '{ "frontend": ["src/app/**"] }',
+    "```"
+  ])
+  const result = readDomainsResult(root)
+  expect(result.unreadable).toBe(null)
+  expect(result.domains).not.toBe(null)
+})
+
+test("DomainsRead.unreadable の追加前後で R11 の domains と warnings は不変", () => {
+  const duplicateWarning =
+    "`metatron:domains` ブロックが 2 個あります。最初のものだけを使用します。"
+  const unclosedWarning =
+    "`metatron:domains` ブロックが閉じていません。ファイル終端までを内容として扱いました。"
+  const swallowedWarning =
+    "`metatron:domains` の走査中に閉じていないコードフェンスを検出しました。マーカーがフェンス内に取り込まれていないか確認してください。"
+  const cases = [
+    {
+      name: "duplicate-valid",
+      lines: [
+        "```json metatron:domains",
+        '{ "first": ["a/**"] }',
+        "```",
+        "",
+        "```json metatron:domains",
+        '{ "second": ["b/**"] }',
+        "```"
+      ],
+      expected: {
+        domains: { first: ["a/**"] },
+        warnings: [duplicateWarning]
+      }
+    },
+    {
+      name: "single-valid",
+      lines: ["```json metatron:domains", '{ "only": ["a/**"] }', "```"],
+      expected: { domains: { only: ["a/**"] }, warnings: [] }
+    },
+    {
+      name: "unclosed-valid",
+      lines: [
+        "# ARCHITECTURE",
+        "",
+        "```json metatron:domains",
+        '{ "frontend": ["src/app/**"] }'
+      ],
+      expected: {
+        domains: { frontend: ["src/app/**"] },
+        warnings: [unclosedWarning]
+      }
+    },
+    {
+      name: "swallowed-marker",
+      lines: [
+        "# ARCHITECTURE",
+        "",
+        "```ts",
+        "const x = 1",
+        "",
+        "## ドメインマップ",
+        "",
+        "```json metatron:domains",
+        '{ "frontend": ["src/app/**"] }',
+        ""
+      ],
+      expected: { domains: null, warnings: [swallowedWarning] }
+    },
+    {
+      name: "marker-missing",
+      lines: ["# ARCHITECTURE", "", "## ドメインマップ", ""],
+      expected: { domains: null, warnings: [] }
+    },
+    {
+      name: "duplicate-invalid",
+      lines: [
+        "```json metatron:domains",
+        "{}",
+        "```",
+        "",
+        "```json metatron:domains",
+        '{ "second": ["b/**"] }',
+        "```"
+      ],
+      expected: { domains: null, warnings: [duplicateWarning] }
+    }
+  ]
+
+  for (const { name, lines, expected } of cases) {
+    const root = mkTmp(`lib-domains-compat-${name}-`)
+    writeArchitecture(root, lines)
+    const { domains, warnings } = readDomainsResult(root)
+    expect({ domains, warnings }, name).toStrictEqual(expected)
+  }
 })
 
 // ---------------------------------------------------------------------------

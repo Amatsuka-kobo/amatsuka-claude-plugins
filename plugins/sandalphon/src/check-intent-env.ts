@@ -590,8 +590,8 @@ const runDirs = codielRoot
       .map((entry) => entry.name)
   : []
 
-// 「Codiel の器がある」かつ「ドメイン定義が読める」の論理積(設計書 §7-3)。
-const codielReady = codielDirExists && domains.domainsReadable
+// Codiel の器を委譲先の候補として検出した事実だけを返す。実行可否は Codiel 側が決める。
+const codielHandoffCandidate = codielDirExists
 
 // ---------------------------------------------------------------------------
 // intent 文書(repoRoot 基準。ディレクトリの作成は行わない)
@@ -795,7 +795,7 @@ console.log(
         domainsReadable: domains.domainsReadable,
         domainCount: domains.domainCount
       },
-      codielReady,
+      codielHandoffCandidate,
       codielHarness: {
         dirExists: codielDirExists,
         codielRoot,

@@ -239,8 +239,33 @@ test("ケース 9: .github/ISSUE_TEMPLATE/ が無ければ空 + blankIssuesEnabl
 })
 
 // ---------------------------------------------------------------------------
-// ケース 10〜16: codielHarness / projectDocs / codielReady
+// ケース 10〜16: codielHarness / projectDocs / Codiel 委譲候補
 // ---------------------------------------------------------------------------
+
+test("T14 回帰 6: 委譲候補は .codiel の有無だけで決まる", () => {
+  const withoutArchitecture = gitRepo()
+  mkdir(withoutArchitecture, ".codiel")
+  const candidate = runScript(withoutArchitecture)
+  expect(candidate.codielHandoffCandidate).toBe(true)
+  expect(candidate.projectDocs.domainsReadable).toBe(false)
+
+  const withoutCodiel = gitRepo()
+  write(withoutCodiel, "docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
+  expect(runScript(withoutCodiel).codielHandoffCandidate).toBe(false)
+})
+
+test("T14 回帰 7: ドメインマップの読み取り事実は従来どおり返る", () => {
+  const readable = gitRepo()
+  write(readable, "docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
+  const readableOut = runScript(readable)
+  expect(readableOut.projectDocs.domainsReadable).toBe(true)
+  expect(readableOut.projectDocs.domainCount).toBe(2)
+
+  const unreadable = gitRepo()
+  const unreadableOut = runScript(unreadable)
+  expect(unreadableOut.projectDocs.domainsReadable).toBe(false)
+  expect(unreadableOut.projectDocs.domainCount).toBe(0)
+})
 
 test("ケース 10: .codiel あり + ドメイン定義が読める ARCHITECTURE", () => {
   const dir = gitRepo()
@@ -254,7 +279,7 @@ test("ケース 10: .codiel あり + ドメイン定義が読める ARCHITECTURE
   )
   expect(out.projectDocs.domainsReadable).toBe(true)
   expect(out.projectDocs.domainCount).toBe(2)
-  expect(out.codielReady).toBe(true)
+  expect(out.codielHandoffCandidate).toBe(true)
 })
 
 test("ケース 11: .codiel あり + ARCHITECTURE なし", () => {
@@ -265,7 +290,7 @@ test("ケース 11: .codiel あり + ARCHITECTURE なし", () => {
   expect(out.projectDocs.architecture).toBe(null)
   expect(out.projectDocs.gotchas).toBe(null)
   expect(out.projectDocs.domainCount).toBe(0)
-  expect(out.codielReady).toBe(false)
+  expect(out.codielHandoffCandidate).toBe(true)
 })
 
 test("ケース 12: ドメイン定義ブロックが壊れた JSON でも exit 0", () => {
@@ -279,10 +304,10 @@ test("ケース 12: ドメイン定義ブロックが壊れた JSON でも exit 
   const out = runScript(dir)
   expect(out.projectDocs.domainsReadable).toBe(false)
   expect(out.projectDocs.domainCount).toBe(0)
-  expect(out.codielReady).toBe(false)
+  expect(out.codielHandoffCandidate).toBe(true)
 })
 
-test("ケース 13: ドメイン定義が空でも codielReady は false", () => {
+test("ケース 13: ドメイン定義が空でも .codiel があれば委譲候補になる", () => {
   const empty = gitRepo()
   mkdir(empty, ".codiel")
   write(
@@ -290,7 +315,7 @@ test("ケース 13: ドメイン定義が空でも codielReady は false", () =>
     "docs/ARCHITECTURE.md",
     ["```json metatron:domains", "{}", "```", ""].join("\n")
   )
-  expect(runScript(empty).codielReady).toBe(false)
+  expect(runScript(empty).codielHandoffCandidate).toBe(true)
 
   const emptyGlobs = gitRepo()
   mkdir(emptyGlobs, ".codiel")
@@ -301,17 +326,17 @@ test("ケース 13: ドメイン定義が空でも codielReady は false", () =>
   )
   const out = runScript(emptyGlobs)
   expect(out.projectDocs.domainsReadable).toBe(false)
-  expect(out.codielReady).toBe(false)
+  expect(out.codielHandoffCandidate).toBe(true)
 })
 
-test("ケース 14: .codiel が無ければドメイン定義が読めても codielReady は false", () => {
+test("ケース 14: .codiel が無ければドメイン定義が読めても codielHandoffCandidate は false", () => {
   const dir = gitRepo()
   write(dir, "docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
   const out = runScript(dir)
   expect(out.projectDocs.domainsReadable).toBe(true)
   expect(out.codielHarness.dirExists).toBe(false)
   expect(out.codielHarness.codielRoot).toBe(null)
-  expect(out.codielReady).toBe(false)
+  expect(out.codielHandoffCandidate).toBe(false)
 })
 
 test("ケース 15: .codiel がファイルなら dirExists は false", () => {
@@ -323,7 +348,7 @@ test("ケース 15: .codiel がファイルなら dirExists は false", () => {
   expect(out.codielHarness.dirExists).toBe(false)
   expect(out.codielHarness.codielRoot).toBe(null)
   expect(out.codielHarness.runDirs).toEqual([])
-  expect(out.codielReady).toBe(false)
+  expect(out.codielHandoffCandidate).toBe(false)
 })
 
 test("ケース 15 補: サブディレクトリの .codiel がファイルでも祖先のディレクトリを見つける", () => {
@@ -573,7 +598,7 @@ test("ケース 20: 実行前後で対象ディレクトリの内容が変化し
 
   expect(after).toEqual(before)
   // 検出そのものは成立している(空振りで「変化なし」になっていないことの確認)
-  expect(out.codielReady).toBe(true)
+  expect(out.codielHandoffCandidate).toBe(true)
   expect(out.existingIntents.length).toBe(1)
 })
 
@@ -734,7 +759,7 @@ test("契約 §13: docRoot が sub でも祖先の .codiel を見つける(上�
     "2026-08-16-0002"
   ])
   // 委譲経路が塞がれていないこと(この修正の目的)。
-  expect(out.codielReady).toBe(true)
+  expect(out.codielHandoffCandidate).toBe(true)
 })
 
 test("契約 §13: .codiel がどこにも無ければ codielRoot は null", () => {
@@ -744,7 +769,7 @@ test("契約 §13: .codiel がどこにも無ければ codielRoot は null", () 
   expect(out.codielHarness.dirExists).toBe(false)
   expect(out.codielHarness.codielRoot).toBe(null)
   expect(out.codielHarness.runDirs).toEqual([])
-  expect(out.codielReady).toBe(false)
+  expect(out.codielHandoffCandidate).toBe(false)
 })
 
 test("契約 §13: シンボリックリンク経由でも実体パスで docRoot を決める", () => {
@@ -1248,7 +1273,7 @@ test("契約 §3: .codiel の探索は codiel の findProjectRoot と同じ結�
   expect(outB.codielHarness.codielRoot).toBe(null)
   expect(outB.codielHarness.dirExists).toBe(false)
   expect(outB.codielHarness.runDirs).toEqual([])
-  expect(outB.codielReady).toBe(false)
+  expect(outB.codielHandoffCandidate).toBe(false)
 })
 
 test("契約 §3: docRoot は実体パス、.codiel は論理パスのまま探す(同一ファイル内の 2 つの前処理)", () => {
@@ -1269,7 +1294,7 @@ test("契約 §3: docRoot は実体パス、.codiel は論理パスのまま探�
   // `.codiel` の基準は codiel の findProjectRoot(論理パスのまま)。
   expect(out.codielHarness.codielRoot).toBe(link)
   expect(out.codielHarness.codielRoot).toBe(findProjectRoot(link))
-  expect(out.codielReady).toBe(true)
+  expect(out.codielHandoffCandidate).toBe(true)
 })
 
 const DUPLICATE_DOMAINS_ARCHITECTURE = [
@@ -1415,7 +1440,9 @@ test("ケース 16f: 無効な形状は 3 実装が揃って「読めない」�
     const out = runScript(dir)
     expect(out.projectDocs.domainsReadable, `sandalphon: ${name}`).toBe(false)
     expect(out.projectDocs.domainCount, `sandalphon: ${name}`).toBe(0)
-    expect(out.codielReady, `codielReady: ${name}`).toBe(false)
+    expect(out.codielHandoffCandidate, `codielHandoffCandidate: ${name}`).toBe(
+      false
+    )
   }
 })
 
