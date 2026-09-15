@@ -39,7 +39,6 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/check-intent-env.mjs"
 | 利用可能スキルに `issue-craft` が無い | 委譲。自前起票に切り替える | なし |
 | 利用可能コマンドに `/codiel:run` が無い | Codiel 委譲。言及もしない | なし |
 | `codielHarness.dirExists: false` | Codiel 委譲 | `/codiel:init` を実行すると次回から委譲できる |
-| `projectDocs.domainsReadable: false` | Codiel 委譲 | `/metatron:init` が使えるならそれを、使えなければ `/codiel:init` の最小 ARCHITECTURE 生成を案内する |
 | `testRunner.detected: false` | 自動テストによる検証。手動検証手順へ縮退する | なし |
 | `blankIssuesEnabled: false` かつ `templates` が空でない | 何も畳まない | 自前起票で本文がテンプレートと衝突するときは、衝突内容を提示して 3 択でユーザーに選ばせる |
 | metatron が未導入 | 何も畳まない | なし |

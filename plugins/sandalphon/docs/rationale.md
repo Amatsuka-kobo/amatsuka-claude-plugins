@@ -48,16 +48,15 @@ Claude Code のプラグイン導入状態は `~/.claude/plugins/installed_plugi
   指示する。Raguel MCP の可用性(`mcp__raguel__*` の有無)も同じ手法で確かめる。
 - **対象プロジェクトが受け入れ可能か**: これはファイルシステムの事実なので `check-intent-env.mjs` が決定的に返す。
 
-## ハーネス初期化の判定を複合条件にした理由
+## ハーネス検出を単一条件にした理由
 
-`codielReady` を `.codiel/` の存在だけで判定しない。`codielHarness.dirExists` と
-`projectDocs.domainsReadable` の論理積とする。
+`codielHandoffCandidate` は `.codiel/` の存在だけで判定する。環境スクリプトの責務は、Codiel の器を
+委譲先の候補として検出した事実を返すことにあり、実行可否の判定は Codiel の preflight が担う。
 
-`/codiel:run` が実際にフェイルクローズドする条件は、ドメイン別 implementer / reviewer のディスパッチが
-依存する **ARCHITECTURE のドメイン定義が読めること**にある。`.codiel/` の配下ディレクトリは作られているのに
-ドメイン定義だけが欠けている中途半端な初期化状態は現実に起こりうる。`.codiel/` 単独判定ではこれを
-「初期化済み」と誤判定し、ユーザーは委譲を選んだ直後に Codiel 側で止められる。選ばせた選択肢が必ず失敗するのは、
-選択肢を出さないことより体験として悪い。
+Codiel は ARCHITECTURE のドメイン定義を読めないときも、`unscoped` モードで汎用担当へディスパッチできる。
+そのため `projectDocs.domainsReadable: false` は、委譲が必ず失敗することを意味しない。
+ドメイン定義の可読性を委譲候補の条件に含めると、Codiel が受け入れられる正当な委譲経路まで塞ぐ。
+`codielHandoffCandidate` と `codielHarness.dirExists` の同値は、委譲判断用の事実と生の検出事実を分けるために残す。
 
 文書と Codiel 固有資産をフィールドとして分けたのも同じ理由による。ARCHITECTURE / GOTCHAS は Codiel 専属の
 資産ではなく、metatron が管理し Codiel 単体環境でも最小構成が存在しうる**プロジェクトの文書**である。

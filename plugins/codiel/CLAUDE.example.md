@@ -22,16 +22,15 @@ ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で
 - サブエージェントは、存在する文書を必ず自分で読む。前提を自動注入する仕組みはメインセッション
   にしか届かないため、注入されている前提で読み飛ばさない。
 - メインセッションは、注入で既にコンテキストにある内容を再読しなくてよい。判断に必要なら読む。
-- ARCHITECTURE を更新するときは、コンテキストに更新用 CLI の案内があればその CLI を経由する。
-  案内が無ければ直接編集する。直接編集が hook に拒否されたときは、拒否メッセージに示された
-  CLI で実行し直す。
+- ARCHITECTURE は直接編集しない。更新用 CLI の案内があればその CLI を経由する。案内が無いときは
+  乖離の内容を報告に残し、所有者による更新へ引き渡す。
 - GOTCHAS は直接編集しない。更新用 CLI の案内があればその CLI を経由する。案内が無いときは
   記録内容を報告に残し、台帳へ入れる手段を添える。
 
 ### 7 つの規則
 
-1. **作業前に ARCHITECTURE を読む。GOTCHAS の該当エントリを確認する**
-   すべてのフェーズ(init〜finalize)の作業開始前に、ARCHITECTURE のドメインマップを確認し、
+1. **run から渡された前提を使う。GOTCHAS の該当エントリを確認する**
+   すべてのフェーズ(init〜finalize)の作業開始前に、run から渡された前提を使う。
    これから触るファイル・フェーズに関連する GOTCHAS のエントリを確認してから着手する。
 2. **失敗したら recording-gotchas の基準に従い GOTCHAS に追記する**
    Raguel の STOP、test-loop/fix-loop のループ上限超過、`record_outcome(incident)`、
@@ -45,10 +44,10 @@ ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で
    各フェーズで定められた Raguel の evaluate ツール呼び出しを、確実に PROCEED しそうだから・
    前回 PROCEED だったから等の理由で省略しない。ASK が出たら人間の裁定を待ち、STOP が出たら
    run を停止して原因を記録する(2. を参照)。
-5. **ARCHITECTURE が現実と乖離したら更新する(乖離の放置は GOTCHAS 行き)**
-   実装の過程でドメインマップが ARCHITECTURE の記述と食い違っていることに気づいたら、その場で
-   ARCHITECTURE を更新する。更新せず気づかないふりをして進めた場合、後で発覚した際に GOTCHAS へ
-   記録される対象になる。
+5. **ARCHITECTURE が現実と乖離したら報告する(乖離の放置は GOTCHAS 行き)**
+   実装の過程でドメインマップが ARCHITECTURE の記述と食い違っていることに気づいたら、その場で直さず、
+   乖離の内容を報告する。報告を ARCHITECTURE の所有者による更新へ引き渡す。報告せず気づかないふりをして進めた場合、
+   後で発覚した際に GOTCHAS へ記録される対象になる。
 6. **テスト仕様書(`.codiel/specs/`)は機能の一部。機能を変えたら仕様書とケースも更新する**
    `.codiel/specs/<unit-id>/spec.md` と `cases.md` は使い捨て成果物ではなく、プロダクトコードと
    同格の永続資産である。振る舞いを変える変更を行ったら、対応する unit の spec.md を更新し、
