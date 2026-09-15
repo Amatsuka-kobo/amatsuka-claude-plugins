@@ -5,7 +5,7 @@
 ## 前提と規律の在り処
 
 - 技術スタック・レイヤー構造・ディレクトリ構成・ドメインマップ・コマンドは `harness-docs/ARCHITECTURE.md` にあり、SessionStart hook が全文を注入する。
-- 注入が届いていないときは `harness-docs/ARCHITECTURE.md` を Read する。
+- 注入が届いていないときは `harness-docs/ARCHITECTURE.md` を読む。
 - `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` と `.claude/rules/metatron/*.md` は直接編集せず、metatron の CLI で更新する。
 
 ## スクリプトツール
@@ -17,4 +17,15 @@
 
 - ブランチを切らない。切る必要があると判断したときは git worktree を使い、worktree 内で `scripts/setup-workspace.sh` を使用する。
 - `git push` に `--force` / `-f` / `--force-with-lease` / `--force-if-includes` を付けない。履歴を書き換えずに済む方法を取る。
-- 作業完了後はコミットする。
+
+## goal コマンド
+
+- goal コマンドとは、Claude Code の公式スラッシュコマンドである。
+- 引数としてそのセッションにおけるゴールを設定し、それが達成するまで動き続ける。
+- 渡せるプロンプトは4000文字までである。
+
+## セッションの引継ぎ
+
+- ユーザーから引継ぎを行う趣旨の発話があった場合は、引継ぎ資料と goal コマンドによる実装プロンプトを出力する。
+- 引継ぎ資料は `harness-docs/handover/` に、実装プロンプトは `docs/prompts/` に作成する。
+- 2つの文書の形式は既にあるものに合わせる。

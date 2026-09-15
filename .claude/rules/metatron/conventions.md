@@ -14,7 +14,7 @@
 - プラグインが実行するスクリプトは TypeScript で書く。
 - Agents 定義は `prompt-smith:agent-creator` で作る。
 - Skills は `prompt-smith:skill-creator` で作る。
-- その他の AI 向け指示書は `prompt-smith:prompt-smith` で作る。
+- README や DESIGN 以外の文書は `prompt-smith:prompt-smith` で作る。
 - プラグインを追加するときは `.claude-plugin/marketplace.json` に登録し、`plugins/<plugin>/.claude-plugin/plugin.json` を作る。スクリプトを持つプラグインは `pnpm-workspace.yaml` の `packages` に追記する。
 - プラグインは他プラグインの存在を前提とせず、単体で使えるようにする。skills / agents / commands / references に他プラグインの名前を書かない。
 
@@ -26,6 +26,15 @@
 - 設計書と実装計画書は `harness-docs/` に置く。
 - プラグインに関わる ADR は、タイトルを `[<プラグイン名>] <タイトル>` の形にする。
 
+## AI 向けの指示書
+
+以下に挙げる文書は AI 向けの指示書であり、作成・編集するときは必ず `prompt-smith` を使用し、その規律にしたがう。
+
+- `CLAUDE.md`
+- `docs/prompts/`
+- `harness-docs/`
+- `.claude/rules/`
+
 ## Done の条件
 
 - `pnpm run lint` と `pnpm run typecheck` と `pnpm run test` が通る。
@@ -34,3 +43,4 @@
 - プラグインを追加または改修したなら、ルートの `README.md` に反映されている。
 - ARCHITECTURE に影響する変更をしたなら、`/metatron:update` で追随させている。
 - 改修した内容が `.serena/memories/` の記述と食い違うなら、該当メモリを更新している。
+- 編集内容を適切に分けて git にコミットしている。
