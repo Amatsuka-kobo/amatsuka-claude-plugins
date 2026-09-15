@@ -98,5 +98,5 @@
 - `2026/0910/phyllis998/1003-skill-reference-permission-investigation.md` | 2026-09-10 | phyllis998 | Claude Code スキル配置時のリファレンス読込権限要件を外部情報・実装根拠から調査
 - `2026/0910/phyllis998/1033-agent-policy-definition-method.md` | 2026-09-10 | phyllis998 | agent-policy エージェント定義ファイルの命名・分割・MCP配置を決定
 - `2026/0910/phyllis998/1155-codiel-agent-policy-compatibility.md` | 2026-09-10 | phyllis998 | Codiel エージェントの agent-policy 統合で、名指し dispatch が合成されない実態と改修方針(A/B/D推奨)を報告
-- `2026/0915/phyllis998/1041-metatron-gotchas-generation-design.md` | 2026-09-15 | phyllis998 | ADR-002 approval confirmed and implementation validation completed
+- `2026/0915/phyllis998/1041-metatron-gotchas-generation-design.md` | 2026-09-15 | phyllis998 | GOTCHAS 生成実装完了・設計書と記録をコミット
 - `2026/0915/phyllis998/1041-metatron-init-gotchas-spec.md` | 2026-09-15 | phyllis998 | 複数アドバイザー委譲でGOTCHAS・ドメイン依存解消を並列推進
