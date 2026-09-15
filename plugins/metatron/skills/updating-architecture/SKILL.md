@@ -41,7 +41,7 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 
 ## 起草
 
-- 更新する文面は `../../references/writing-discipline.md` の執筆規律に従う。
+- 更新する文面は `../../references/writing-discipline.md` の執筆規律に従い草案を書いたのち、サブエージェントに同じ規律で検査させる。
 - セクションごとに書く内容は `../../references/architecture-format.md` に合わせる。
 - rules の 3 ファイルに書く内容は `../../references/rules-format.md` に合わせる。
 - 欠けているセクションを足すときは、`scan` の事実で埋まる範囲だけを草案にする。埋まらない箇所は推測せずユーザーに聞く。

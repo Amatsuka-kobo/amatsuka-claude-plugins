@@ -16,7 +16,7 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 - CLI の呼び出しは `../../references/cli-usage.md` に従う。
 - ARCHITECTURE のセクション構成と書式は `../../references/architecture-format.md` に従う。
 - rules の 3 ファイルの内容と書式は `../../references/rules-format.md` に従う。
-- ドラフトの文体は `../../references/writing-discipline.md` に従う。起草の段階から根拠・経緯を書かない。
+- ドラフトの文体は `../../references/writing-discipline.md` に従い草案を書いたのち、サブエージェントに同じ規律で検査させる。
 
 ## CLI の呼び出し
 
