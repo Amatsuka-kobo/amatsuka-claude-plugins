@@ -1,4 +1,4 @@
-`plugins/codiel` (0.5.2-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
+`plugins/codiel` (0.7.0-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
 through analysis, design discussion, planning, implementation, testing, PR and review, gated by the
 bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
@@ -13,11 +13,8 @@ bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel
 - **GOTCHAS は新書式**: 本文は `タスク / 失敗内容 / 原因 (推測) / 対策 / 昇格候補` の 5 フィールドのみ。
   関連ファイル欄・関連エントリ欄・Codiel フェーズ名欄は**持たない**(必要ならすべて `対策` の本文へ)。
   タグは `[解決済み]` / `[対象外]` の 2 種だけを `GOTCHA-NNN:` の直後に置く。
-- `install-harness.sh` は **`.codiel/{specs,runs,reports}` を作るだけ**になった。GOTCHAS の雛形も
-  配置しない(失敗を記録する時点で `recording-gotchas` が台帳ごと作る)。
-- `recording-gotchas` は **metatron のインストール有無を検出しない**。使ってよい CLI パスは
-  「コンテキストに現れた注入の案内」と「hook の拒否メッセージに載っていた絶対パス」だけ。
-  案内が無ければ直接追記し、拒否されたら拒否メッセージの CLI で実行し直す。
+- `install-harness.sh` は **`.codiel/{specs,runs,reports}` を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
+- `recording-gotchas` は metatron CLI の案内がコンテキストにあるときだけ `append-gotcha` で追記する。プラグインルート・ソース・CLI パスは推測しない。案内が無いときは直接編集せず、エントリを `.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/` と完了報告へ持ち越す。
 
 ## `/codiel:init` — 散文インタビューを廃止、単体で完結する
 
