@@ -657,6 +657,11 @@ pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.t
 | ツール | `codiel-implementer-backend.md:4` と同じ | `codiel-reviewer-backend.md:4` と同じ |
 | 禁止 | backend / frontend / data の専門観点を名乗らない | 同左 |
 
+**この 2 体は将来 Skills 化の対象である(設計書 §5.5)。** 要件表の制約は、その移行を成立させるためのものでもある。T4 で `prompt-smith:agent-creator` を使うとき、次を満たす。
+
+- 担当範囲と観点の記述を、frontmatter(`tools` / `description`)の内容に依存させない。本文だけを読んで担当が決まる形にする。
+- 「`codiel-implementer-generic` だから」という自己言及で担当を説明しない。ディスパッチプロンプトで指定されたタグが担当の根拠である、と書く。
+
 ---
 
 ## 6. 想定される失敗と対策

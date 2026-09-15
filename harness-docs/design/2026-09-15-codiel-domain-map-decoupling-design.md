@@ -311,6 +311,16 @@ export interface DomainsRead {
 
 **作成は `prompt-smith:agent-creator` で行う**(規約)。description の文面と frontmatter の検証は同スキルが担当する。
 
+**この 2 体は将来 Skills 化の対象である。それでも今 Agent として作る。**
+
+引き継ぎ書 §2.3-4 の将来設計(implementer / planner / reviewer / architect などの Agent 定義を削除し、指示文を Skills へ移す)には、ここで新設する 2 体も含まれる。消える予定のものを作ることになるが、次の 3 つの理由で今 Agent として作る。
+
+1. **兼任の一般化を選んでも、同じ分離作業が後ろへずれるだけである。** `codiel-implementer-backend` に任意ドメインを担当させる形にすると、Skills 化のときその Skill は「backend 担当だが任意ドメインも受ける」という仕様を引き継ぐ。分離はそこで必要になり、その時点では兼任の前提がルーティング規則・reviewer の選択参加・`set-domain` の扱いへ波及している。
+2. **観点の歪みは担当者の実体に依存しない。** §3.6 の問題(専門観点を無関係なドメインへ当てる)は Agent でも Skill でも同じ形で残る。今ドメイン非依存の観点を定義すれば、それがそのまま Skills へ移る。
+3. **汎用担当だけを先に Skill にすると、ディスパッチ経路が 2 系統になる。** 現在の codiel は `subagent_type` を指定した Task ディスパッチで統一されている。一貫性を壊すコストは、将来 2 体を一括変換するコストより大きい。
+
+**Skills 化のときに何が残り、何が消えるか。** 担当範囲と観点の定義は Skill の本文へ移る。消えるのは frontmatter(`tools` / `description`)と `subagent_type` による選択機構である。したがって**指示文の本体を frontmatter へ依存させない形で書く**。上の要件表にある「特定のドメイン名をハードコードしない」「ドメイン固有の観点を持たない」は、この移行を成立させるための制約でもある。
+
 ### 5.6 決定: `codielReady` の条件と名前を変える
 
 **結論。`codielReady` を廃し、`codielHandoffCandidate` を出す。値は `codielDirExists` のみとする。**
