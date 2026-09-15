@@ -38,9 +38,9 @@ interface ParsedRoleRow {
 }
 
 function extractRoleBandSection(content: string): string {
-  const heading = /^## 役割$/m.exec(content)
+  const heading = /^## 担当表$/m.exec(content)
   if (heading === null) {
-    throw new Error("規律の「役割」節が見つからない")
+    throw new Error("規律の「担当表」節が見つからない")
   }
 
   const afterHeading = content.slice(heading.index + heading[0].length)
@@ -54,7 +54,7 @@ function splitTableCells(line: string): string[] {
     .slice(1, -1)
     .map((cell) => cell.trim())
   if (cells.length !== 5) {
-    throw new Error(`役割の表は 5 セルでなければならない: ${line}`)
+    throw new Error(`担当表は 5 セルでなければならない: ${line}`)
   }
   return cells
 }
@@ -70,17 +70,17 @@ function extractSingleBacktickToken(cell: string, column: string): string {
 function parseRoleBandTable(section: string): ParsedRoleRow[] {
   const tableLines = section.split("\n").filter((line) => line.startsWith("|"))
   if (tableLines.length < 2) {
-    throw new Error("役割の表が見つからない")
+    throw new Error("担当表が見つからない")
   }
 
   const headerCells = splitTableCells(tableLines[0])
   if (!headerCells.every((cell, index) => cell === TABLE_HEADER[index])) {
-    throw new Error("役割の表ヘッダが不正")
+    throw new Error("担当表ヘッダが不正")
   }
 
   const separatorCells = splitTableCells(tableLines[1])
-  if (!separatorCells.every((cell) => cell === "---")) {
-    throw new Error("役割の表区切り行が不正")
+  if (!separatorCells.every((cell) => /^-+$/.test(cell))) {
+    throw new Error("担当表の区切り行が不正")
   }
 
   return tableLines.slice(2).map((line) => {
@@ -225,7 +225,7 @@ describe("役割の表解析", () => {
 })
 
 const FORBIDDEN_ROLE_TABLE_HEADINGS =
-  /^## (?:役割|役割の帯|モデル別役割|役割の帯と推奨モデル)$/m
+  /^## (?:担当表|役割|役割の帯|モデル別役割|役割の帯と推奨モデル)$/m
 
 // 方針 SKILL が役割表を再定義せず、規律を唯一の参照先に保つことを守る。
 describe("方針 SKILL の役割表", () => {

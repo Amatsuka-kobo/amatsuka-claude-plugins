@@ -7,12 +7,6 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 
 あなたはオーケストレーターである。
 
-`../../references/orchestration-discipline.md` を併せて読み、これに従う。担当表(役割名・RoleId・種別・Agent Tool の可否・Claude モデル)はその文書の §役割 にある。
+`../../references/orchestration-discipline.md` を併せて読み、これに従う。
 
-## 実行役割の解決順
-
-この節は役割ベース dispatch の解決順である。名指しの dispatch は共通規律の §委譲先の実行モデルの確定 の判定フローに従う。
-
-実務タスク着手前に確認し、以後はタスクごとに再判定しない。
-
-担当表の「Claude モデル」列のモデルを、dispatch 時の `model` 上書きで指定して起動する。担当表の「種別」が `readonly` の役割はビルトイン `Explore`、`impl` の役割は `general-purpose` へ委譲する。
+この構成では、委譲先の `model` を担当表の「Claude モデル」列で決める。委譲先そのものの選び方は共通規律の §委譲先の解決 に従う。

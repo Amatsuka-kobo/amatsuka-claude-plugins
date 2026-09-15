@@ -36,7 +36,7 @@ export interface ModelSpec {
 export const POLICIES: readonly Policy[] = [
   {
     id: "claude-model-policy",
-    label: "Claude のみ(レガシー)",
+    label: "Claude のみ",
     injection: "claude"
   },
   { id: "custom-policy", label: "カスタム(role-id)", injection: "custom" }
@@ -119,7 +119,7 @@ export const MODELS: readonly ModelSpec[] = [
   }
 ]
 
-// 共通規律 §役割 の「Claude モデル」列の正本。claude プロファイルの役割モデルであり、
+// 共通規律 §担当表 の「Claude モデル」列の正本。claude プロファイルの役割モデルであり、
 // custom プロファイルでは委譲先が決まらない役割の読み替え先を兼ねる。値を変えたら規律の表も変える。
 export const ASSIGNMENTS: Record<
   "claude-model-policy",
@@ -214,6 +214,34 @@ const CUSTOM_INJECTION_VALUES: readonly string[] = [
 export function isCustomInjection(value: string | undefined): boolean {
   if (value === undefined) return false
   return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase())
+}
+
+/** 委譲先の候補に含める範囲。claude 構成が基底で、custom 構成は外部ベンダーを足す。 */
+export type CandidateScope = "claude-only" | "with-external"
+
+// Claude の enum モデル。並びは setup-agents のウィザードが候補として提示する順である。
+export const CLAUDE_ENUM_MODELS: readonly string[] = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+]
+
+// enum に加え、親のモデルで解決される宣言。frontmatter に model が無い場合も同じ扱いにする。
+const CLAUDE_RESOLVED = new Set([...CLAUDE_ENUM_MODELS, "inherit"])
+
+/** model 宣言が Claude のモデルで実行されるか。未宣言は継承なので真。 */
+export function runsOnClaude(model: string | undefined): boolean {
+  return model === undefined || CLAUDE_RESOLVED.has(model)
+}
+
+/** 注入プロファイルが決める候補の範囲。対応表を出さない値では undefined を返す。 */
+export function candidateScopeFor(
+  value: string | undefined
+): CandidateScope | undefined {
+  if (isCustomInjection(value)) return "with-external"
+  if (value?.trim().toLowerCase() === "claude") return "claude-only"
+  return undefined
 }
 
 // claude-model-policy 専用。並びは MODELS の定義順。担当表に現れるモデルだけを返す。

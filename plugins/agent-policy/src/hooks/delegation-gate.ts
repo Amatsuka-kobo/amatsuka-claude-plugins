@@ -2,7 +2,8 @@
 
 import fs from "node:fs"
 import path from "node:path"
-import { markerTable, scanAgents } from "./marker-scan"
+import { candidateScopeFor } from "../agents/policies"
+import { candidateAgents, markerTable, scanAgents } from "./marker-scan"
 
 const STDIN_TIMEOUT_MS = 2000
 const DEFAULT_TTL_SECONDS = 7200
@@ -319,9 +320,19 @@ function normalizedTargetPath(
 }
 
 function denialReason(projectRoot: string): string {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_PROJECT_DIR: projectRoot
+  }
+  const scope =
+    candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"
   const table = markerTable(
-    { ...process.env, CLAUDE_PROJECT_DIR: projectRoot },
-    scanAgents(path.join(projectRoot, ".claude", "agents"))
+    env,
+    candidateAgents(
+      scanAgents(path.join(projectRoot, ".claude", "agents")),
+      scope
+    ),
+    scope
   )
   const candidates = table === undefined ? "" : `(委譲先候補 — ${table})。`
   return (

@@ -207,6 +207,16 @@ function isCustomInjection(value) {
   if (value === void 0) return false;
   return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
 }
+var CLAUDE_ENUM_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
+var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
+function runsOnClaude(model) {
+  return model === void 0 || CLAUDE_RESOLVED.has(model);
+}
 
 // src/hooks/marker-scan.ts
 import fs from "node:fs";
@@ -340,7 +350,19 @@ function roleLabels(env) {
     return label;
   };
 }
-function markerTable(env, marked) {
+var CLAUDE_VENDORS = /* @__PURE__ */ new Set(["claude", "none"]);
+function runsOnClaudeAgent(entry) {
+  return runsOnClaude(entry.model) && (entry.vendor === void 0 || CLAUDE_VENDORS.has(entry.vendor));
+}
+function candidateAgents(marked, scope) {
+  if (scope === "with-external") return marked;
+  return marked.filter(runsOnClaudeAgent);
+}
+var SCOPE_LINES = {
+  "claude-only": "\u8868\u306B\u7121\u3044\u5F79\u5272\u306E\u59D4\u8B72\u5148\u3082\u3001`model` \u304C `sonnet` / `opus` / `haiku` / `fable` / `inherit` \u306E\u3044\u305A\u308C\u304B\u307E\u305F\u306F\u672A\u5BA3\u8A00\u3067\u3001\u304B\u3064 `agent-policy-vendor` \u304C `claude` / `none` \u306E\u3044\u305A\u308C\u304B\u307E\u305F\u306F\u672A\u5BA3\u8A00\u3067\u3042\u308B\u5B9A\u7FA9\u304B\u3089\u9078\u3076\u3002\u305D\u308C\u4EE5\u5916\u306E\u5B9A\u7FA9\u306F\u59D4\u8B72\u5148\u306B\u3057\u306A\u3044\u3002",
+  "with-external": "\u8868\u306B\u7121\u3044\u5F79\u5272\u306E\u59D4\u8B72\u5148\u306F\u3001\u5916\u90E8\u30D9\u30F3\u30C0\u30FC\u306E\u30E2\u30C7\u30EB\u3092\u6307\u5B9A\u3057\u305F\u5B9A\u7FA9\u3082\u542B\u3081\u3066\u9078\u3093\u3067\u3088\u3044\u3002"
+};
+function markerTable(env, marked, scope) {
   const labelOf = roleLabels(env);
   const byRole = /* @__PURE__ */ new Map();
   for (const entry of marked) {
@@ -352,7 +374,8 @@ function markerTable(env, marked) {
   }
   if (byRole.size === 0) return void 0;
   const lines = [
-    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002"
+    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002",
+    SCOPE_LINES[scope]
   ];
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role);
@@ -370,13 +393,6 @@ var RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ];
-var CLAUDE_RESOLVED_MODELS = /* @__PURE__ */ new Set([
-  "sonnet",
-  "opus",
-  "haiku",
-  "fable",
-  "inherit"
-]);
 var DEPRECATED_ALIAS_VARIABLES = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
   "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
@@ -440,10 +456,19 @@ function queryFailureBlock(reason) {
   const detail = actualReason === "no-base-url" ? `ANTHROPIC_BASE_URL \u304C\u672A\u8A2D\u5B9A(${actualReason})` : actualReason === "timeout" ? `\u30D7\u30ED\u30AD\u30B7\u3078\u63A5\u7D9A\u3067\u304D\u306A\u3044(${actualReason})` : `\u30D7\u30ED\u30AD\u30B7\u306E /v1/models \u3092\u7167\u4F1A\u3067\u304D\u306A\u3044(${actualReason})`;
   return `${detail}\u306E\u305F\u3081 custom \u69CB\u6210\u306E\u30E2\u30C7\u30EB\u5B9F\u5728\u3092\u78BA\u8A8D\u3067\u304D\u305A\u3001\u30BB\u30C3\u30B7\u30E7\u30F3\u5168\u4F53\u3092 claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3078\u30D5\u30A9\u30FC\u30EB\u30D0\u30C3\u30AF\u3057\u305F\u3002`;
 }
+function claudeBlocks(env, marked, legacyValue, ...extra) {
+  const candidates = candidateAgents(marked, "claude-only");
+  return [
+    policyBlock("claude-model-policy", legacyValue),
+    ...extra,
+    markerTable(env, candidates, "claude-only"),
+    unknownRoleBlock(env, candidates)
+  ];
+}
 function successBlocks(env, marked, legacyValue) {
   return [
     policyBlock("custom-policy", legacyValue),
-    markerTable(env, marked),
+    markerTable(env, candidateAgents(marked, "with-external"), "with-external"),
     unknownRoleBlock(env, marked)
   ];
 }
@@ -451,14 +476,16 @@ async function customBlocks(env, marked, injection) {
   const legacyValue = injection === "custom" ? void 0 : injection;
   const targets = marked.filter((entry) => entry.roles.length > 0);
   if (targets.length === 0) {
-    return [
-      policyBlock("claude-model-policy", legacyValue),
+    return claudeBlocks(
+      env,
+      marked,
+      legacyValue,
       markerlessFallbackBlock(),
       REPAIR_BLOCK
-    ];
+    );
   }
   const external = targets.filter(
-    (entry) => entry.model !== void 0 && !CLAUDE_RESOLVED_MODELS.has(entry.model)
+    (entry) => entry.model !== void 0 && !runsOnClaude(entry.model)
   );
   const externalModels = new Set(external.map((entry) => entry.model));
   if (externalModels.size === 0) {
@@ -466,20 +493,24 @@ async function customBlocks(env, marked, injection) {
   }
   const live = await fetchLiveModels(env);
   if (!live.ok) {
-    return [
-      policyBlock("claude-model-policy", legacyValue),
+    return claudeBlocks(
+      env,
+      marked,
+      legacyValue,
       queryFailureBlock(live.reason),
       REPAIR_BLOCK
-    ];
+    );
   }
   const liveIds = new Set(live.ids);
   const missing = external.filter((entry) => !liveIds.has(entry.model));
   if (missing.length > 0) {
-    return [
-      policyBlock("claude-model-policy", legacyValue),
+    return claudeBlocks(
+      env,
+      marked,
+      legacyValue,
       missingModelsBlock(missing),
       REPAIR_BLOCK
-    ];
+    );
   }
   return successBlocks(env, targets, legacyValue);
 }
@@ -497,7 +528,7 @@ async function build(env) {
   if (injection === "" || injection === "none") {
     profileBlocks = [];
   } else if (injection === "claude") {
-    profileBlocks = [policyBlock("claude-model-policy")];
+    profileBlocks = claudeBlocks(env, marked);
   } else if (isCustomInjection(injection)) {
     profileBlocks = await customBlocks(env, marked, injection);
   } else {

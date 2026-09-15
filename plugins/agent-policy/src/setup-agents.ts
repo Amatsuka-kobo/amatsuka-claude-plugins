@@ -24,15 +24,21 @@ import {
   toolPrefix
 } from "./agents/mcp"
 import {
+  ASSIGNMENTS,
+  type CandidateScope,
+  CLAUDE_ENUM_MODELS,
+  candidateScopeFor,
   MODELS,
   type ModelId,
   type ModelSpec,
   modelById,
-  RECOMMENDED
+  RECOMMENDED,
+  runsOnClaude
 } from "./agents/policies"
 import { type RoleId, roleById, roleOrder, sortRoleIds } from "./agents/roles"
 
 interface Options {
+  scope: CandidateScope
   modelId: string
   models: ModelId[]
   name: string
@@ -70,7 +76,6 @@ interface TargetResolution {
   modelsDropped: ModelId[]
 }
 
-const CLAUDE_ENUMS = ["sonnet", "opus", "haiku", "fable"] as const
 const VENDOR_COLORS: Record<Vendor, string> = {
   gpt: "yellow",
   grok: "red",
@@ -239,7 +244,7 @@ function defaultAgentName(options: Options, spec: ModelSpec): string {
 }
 
 function isClaudeEnum(model: string): boolean {
-  return (CLAUDE_ENUMS as readonly string[]).includes(model)
+  return CLAUDE_ENUM_MODELS.includes(model)
 }
 
 function unavailableWarning(live: LiveModels): string {
@@ -279,18 +284,28 @@ function targetsFor(options: Options, live: LiveModels): TargetResolution {
       if (spec === undefined) throw new Error(`models: ${id} is unknown`)
       return spec
     })
+    const candidates =
+      options.scope === "claude-only"
+        ? specs.filter((spec) => spec.vendor === "claude")
+        : specs
+    const scopeDropped =
+      options.scope === "claude-only"
+        ? specs
+            .filter((spec) => spec.vendor !== "claude")
+            .map((spec) => spec.id)
+        : []
     const included = live.ok
-      ? specs.filter((spec) => modelIsAvailable(spec.model, live))
-      : specs
-    const modelsDropped = live.ok
-      ? specs
+      ? candidates.filter((spec) => modelIsAvailable(spec.model, live))
+      : candidates
+    const unavailableDropped = live.ok
+      ? candidates
           .filter((spec) => !modelIsAvailable(spec.model, live))
           .map((spec) => spec.id)
       : []
 
     return {
       warnings,
-      modelsDropped,
+      modelsDropped: [...scopeDropped, ...unavailableDropped],
       targets: included.map((spec) => {
         const vendor = resolveVendor(options, spec.model, spec, live)
         return {
@@ -307,6 +322,20 @@ function targetsFor(options: Options, live: LiveModels): TargetResolution {
   }
 
   const spec = requireModel(options)
+  if (options.scope === "claude-only" && spec.vendor !== "claude") {
+    throw new Error(
+      `model-id: ${options.modelId} is not available with --scope claude`
+    )
+  }
+  if (
+    options.scope === "claude-only" &&
+    options.model !== "" &&
+    !isClaudeEnum(options.model)
+  ) {
+    throw new Error(
+      `model: ${options.model} is not available with --scope claude`
+    )
+  }
   const model = options.model === "" ? spec.model : options.model
   if (options.write && live.ok && !modelIsAvailable(model, live)) {
     throw new Error(
@@ -689,8 +718,15 @@ function setup(options: Options, live: LiveModels): unknown {
 }
 
 // live の実在モデルへ、RECOMMENDED の既定エイリアス一致で役割を添える。
-function listLiveModels(live: LiveModels): unknown {
-  const claudeEnums = [...CLAUDE_ENUMS]
+function listLiveModels(live: LiveModels, scope: CandidateScope): unknown {
+  const claudeEnums = [...CLAUDE_ENUM_MODELS]
+  if (scope === "claude-only") {
+    return {
+      ok: true,
+      models: [],
+      claudeEnums
+    }
+  }
   if (!live.ok) {
     return {
       ok: false,
@@ -750,7 +786,8 @@ function listAvailableRoles(options: Options): unknown {
 
 function coveredDefinitions(
   projectDir: string,
-  roleIds: RoleId[]
+  roleIds: RoleId[],
+  scope: CandidateScope
 ): Map<RoleId, string[]> {
   const covered = new Map<RoleId, string[]>(
     roleIds.map((roleId) => [roleId, []])
@@ -767,6 +804,15 @@ function coveredDefinitions(
       )
       const marker = document.meta.get("agent-policy-role")
       if (marker === undefined) continue
+      const model = document.meta.get("model")
+      const vendor = document.meta.get("agent-policy-vendor")
+      if (
+        scope === "claude-only" &&
+        (!runsOnClaude(model) ||
+          (vendor !== undefined && vendor !== "claude" && vendor !== "none"))
+      ) {
+        continue
+      }
       const name = document.meta.get("name") ?? file.replace(/\.md$/, "")
       for (const roleId of splitList(marker)) {
         covered.get(roleId as RoleId)?.push(name)
@@ -801,7 +847,7 @@ function listCoverage(options: Options): unknown {
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   )
-  const covered = coveredDefinitions(options.dir, roleIds)
+  const covered = coveredDefinitions(options.dir, roleIds, options.scope)
   const fallbackNames =
     options.lang === "en"
       ? undefined
@@ -817,7 +863,10 @@ function listCoverage(options: Options): unknown {
       id,
       label: fragment.label,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
-      models: RECOMMENDED[id],
+      models:
+        options.scope === "claude-only"
+          ? ASSIGNMENTS["claude-model-policy"][id]
+          : RECOMMENDED[id],
       coveredBy: covered.get(id) ?? []
     }
   })
@@ -833,6 +882,9 @@ function listCoverage(options: Options): unknown {
 
 function parseArgs(argv: string[]): Options {
   const options: Options = {
+    scope:
+      candidateScopeFor(process.env.AMATSUKA_AGENT_AUTO_INJECTION) ??
+      "claude-only",
     modelId: "",
     models: [],
     name: "",
@@ -862,8 +914,15 @@ function parseArgs(argv: string[]): Options {
       case "--list-policies":
       case "--list-models":
         throw new Error(
-          `Unsupported option: ${arg} was removed; setup-agents is custom-profile only`
+          `Unsupported option: ${arg} was removed; use --scope claude|custom to choose the candidate scope`
         )
+      case "--scope":
+        if (value !== "claude" && value !== "custom") {
+          throw new Error("scope: must be claude or custom")
+        }
+        options.scope = value === "claude" ? "claude-only" : "with-external"
+        index += 1
+        break
       case "--model-id":
         options.modelId = requireValue(value, "model-id")
         index += 1
@@ -1001,7 +1060,11 @@ async function main(): Promise<void> {
   try {
     const options = parseArgs(process.argv.slice(2))
     if (options.listLiveModels) {
-      respond(listLiveModels(await fetchLiveModels(process.env)))
+      const live =
+        options.scope === "claude-only"
+          ? { ok: true, ids: [], vendors: {} }
+          : await fetchLiveModels(process.env)
+      respond(listLiveModels(live, options.scope))
     } else if (options.listCoverage) {
       respond(listCoverage(options))
     } else if (options.listMcp) {
@@ -1023,7 +1086,11 @@ async function main(): Promise<void> {
     } else if (options.listRoles) {
       respond(listAvailableRoles(options))
     } else {
-      respond(setup(options, await fetchLiveModels(process.env)))
+      const live =
+        options.scope === "claude-only"
+          ? { ok: true, ids: [], vendors: {} }
+          : await fetchLiveModels(process.env)
+      respond(setup(options, live))
     }
   } catch (error) {
     respond({

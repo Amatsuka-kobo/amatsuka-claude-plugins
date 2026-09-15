@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
 import { runTs } from "../../testing/run-ts.js"
 import {
+  candidateAgents,
   frontmatter,
   markerTable,
   parseToolsField,
@@ -354,46 +355,134 @@ describe("roleLabels", () => {
   })
 })
 
+describe("candidateAgents", () => {
+  const marked = [
+    {
+      name: "sonnet-claude",
+      model: "sonnet",
+      roles: ["normal-impl"],
+      tools: undefined,
+      vendor: "claude"
+    },
+    {
+      name: "sonnet-gpt-vendor",
+      model: "sonnet",
+      roles: ["normal-impl"],
+      tools: undefined,
+      vendor: "gpt"
+    },
+    {
+      name: "implicit",
+      model: undefined,
+      roles: ["normal-impl"],
+      tools: undefined,
+      vendor: undefined
+    },
+    {
+      name: "inherit",
+      model: "inherit",
+      roles: ["normal-impl"],
+      tools: undefined,
+      vendor: undefined
+    },
+    {
+      name: "vendor-none",
+      model: "opus",
+      roles: ["normal-impl"],
+      tools: undefined,
+      vendor: "none"
+    },
+    {
+      name: "external-model",
+      model: "gpt-5.3-codex",
+      roles: ["normal-impl"],
+      tools: undefined,
+      vendor: "claude"
+    }
+  ]
+
+  it("with-external は全定義を候補に含める", () => {
+    expect(candidateAgents(marked, "with-external")).toEqual(marked)
+  })
+
+  it("claude-only は Claude 上で動く定義だけを候補に含める", () => {
+    expect(
+      candidateAgents(marked, "claude-only").map((entry) => entry.name)
+    ).toEqual(["sonnet-claude", "implicit", "inherit", "vendor-none"])
+  })
+})
+
 describe("markerTable", () => {
   it("ベンダーの有無を保ったまま役割マーカー対応表を出力する", () => {
-    const result = markerTable(environment({}), [
-      {
-        name: "gpt-terra-general-implementer",
-        model: undefined,
-        roles: ["normal-impl"],
-        tools: undefined,
-        vendor: "gpt"
-      },
-      {
-        name: "grok-worker",
-        model: undefined,
-        roles: ["normal-impl"],
-        tools: undefined,
-        vendor: "grok"
-      },
-      {
-        name: "local-implementer",
-        model: undefined,
-        roles: ["normal-impl"],
-        tools: undefined,
-        vendor: undefined
-      },
-      {
-        name: "sonnet-code-reviewer",
-        model: undefined,
-        roles: ["code-review"],
-        tools: undefined,
-        vendor: undefined
-      }
-    ])
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "gpt-terra-general-implementer",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: "gpt"
+        },
+        {
+          name: "grok-worker",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: "grok"
+        },
+        {
+          name: "local-implementer",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined
+        },
+        {
+          name: "sonnet-code-reviewer",
+          model: undefined,
+          roles: ["code-review"],
+          tools: undefined,
+          vendor: undefined
+        }
+      ],
+      "with-external"
+    )
 
     expect(result).toBe(
       [
         TABLE_HEADING,
+        "表に無い役割の委譲先は、外部ベンダーのモデルを指定した定義も含めて選んでよい。",
         "- 通常の実装: gpt-terra-general-implementer (gpt) / grok-worker (grok) / local-implementer",
         "- コードレビュー: sonnet-code-reviewer"
       ].join("\n")
     )
+  })
+
+  it.each([
+    ["claude-only", "それ以外の定義は委譲先にしない"],
+    ["with-external", "外部ベンダーのモデルを指定した定義も含めて選んでよい"]
+  ] as const)("%s の候補範囲を冒頭行の直後へ出力する", (scope, scopeText) => {
+    const renderMarkerTable = markerTable
+    const result = renderMarkerTable(
+      environment({}),
+      [
+        {
+          name: "implementer",
+          model: "sonnet",
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined
+        }
+      ],
+      scope
+    )
+    if (result === undefined) throw new Error("marker table fixture is empty")
+
+    const lines = result.split("\n")
+    expect(lines[0]).toBe(TABLE_HEADING)
+    expect(lines[1]).toContain(scopeText)
+    expect(lines[1]?.startsWith("- ")).toBe(false)
   })
 
   it.each([
@@ -414,7 +503,11 @@ describe("markerTable", () => {
       CLAUDE_PROJECT_DIR: project,
       AMATSUKA_AGENT_AUTO_INJECTION: injection
     })
-    const expected = markerTable(env, scanAgents(projectAgentsDir(env)))
+    const expected = markerTable(
+      env,
+      scanAgents(projectAgentsDir(env)),
+      "with-external"
+    )
 
     expect(expected).toBeDefined()
     expect(tableBlock(hookContext(project, injection))).toBe(expected)

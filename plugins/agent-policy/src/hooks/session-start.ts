@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// SessionStart フック: 2 プロファイルの方針と、成立した custom 構成の役割対応表を注入する。
+// SessionStart フック: 2 プロファイルの方針と、その構成の候補集合による役割対応表を注入する。
 // ファイルは書かない。定義の生成は setup-agents が担う。
 // 失敗しても Claude Code の起動を妨げないよう、例外は握りつぶして終了コード 0 で終わる。
 
 import { fetchLiveModels } from "../agents/live-models"
-import { isCustomInjection, type PolicyName } from "../agents/policies"
 import {
+  isCustomInjection,
+  type PolicyName,
+  runsOnClaude
+} from "../agents/policies"
+import {
+  candidateAgents,
   type MarkedAgent,
   markerTable,
   projectAgentsDir,
@@ -20,14 +25,6 @@ const RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ]
-
-const CLAUDE_RESOLVED_MODELS = new Set([
-  "sonnet",
-  "opus",
-  "haiku",
-  "fable",
-  "inherit"
-])
 
 const DEPRECATED_ALIAS_VARIABLES = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
@@ -119,6 +116,21 @@ function queryFailureBlock(reason: string | undefined): string {
   return `${detail}のため custom 構成のモデル実在を確認できず、セッション全体を claude プロファイルへフォールバックした。`
 }
 
+function claudeBlocks(
+  env: NodeJS.ProcessEnv,
+  marked: MarkedAgent[],
+  legacyValue?: string,
+  ...extra: Array<string | undefined>
+): Array<string | undefined> {
+  const candidates = candidateAgents(marked, "claude-only")
+  return [
+    policyBlock("claude-model-policy", legacyValue),
+    ...extra,
+    markerTable(env, candidates, "claude-only"),
+    unknownRoleBlock(env, candidates)
+  ]
+}
+
 function successBlocks(
   env: NodeJS.ProcessEnv,
   marked: MarkedAgent[],
@@ -126,7 +138,7 @@ function successBlocks(
 ): Array<string | undefined> {
   return [
     policyBlock("custom-policy", legacyValue),
-    markerTable(env, marked),
+    markerTable(env, candidateAgents(marked, "with-external"), "with-external"),
     unknownRoleBlock(env, marked)
   ]
 }
@@ -139,16 +151,18 @@ async function customBlocks(
   const legacyValue = injection === "custom" ? undefined : injection
   const targets = marked.filter((entry) => entry.roles.length > 0)
   if (targets.length === 0) {
-    return [
-      policyBlock("claude-model-policy", legacyValue),
+    return claudeBlocks(
+      env,
+      marked,
+      legacyValue,
       markerlessFallbackBlock(),
       REPAIR_BLOCK
-    ]
+    )
   }
 
   const external = targets.filter(
     (entry): entry is MarkedAgent & { model: string } =>
-      entry.model !== undefined && !CLAUDE_RESOLVED_MODELS.has(entry.model)
+      entry.model !== undefined && !runsOnClaude(entry.model)
   )
   const externalModels = new Set(external.map((entry) => entry.model))
   if (externalModels.size === 0) {
@@ -157,21 +171,25 @@ async function customBlocks(
 
   const live = await fetchLiveModels(env)
   if (!live.ok) {
-    return [
-      policyBlock("claude-model-policy", legacyValue),
+    return claudeBlocks(
+      env,
+      marked,
+      legacyValue,
       queryFailureBlock(live.reason),
       REPAIR_BLOCK
-    ]
+    )
   }
 
   const liveIds = new Set(live.ids)
   const missing = external.filter((entry) => !liveIds.has(entry.model))
   if (missing.length > 0) {
-    return [
-      policyBlock("claude-model-policy", legacyValue),
+    return claudeBlocks(
+      env,
+      marked,
+      legacyValue,
       missingModelsBlock(missing),
       REPAIR_BLOCK
-    ]
+    )
   }
 
   return successBlocks(env, targets, legacyValue)
@@ -196,7 +214,7 @@ async function build(env: NodeJS.ProcessEnv): Promise<string | undefined> {
   if (injection === "" || injection === "none") {
     profileBlocks = []
   } else if (injection === "claude") {
-    profileBlocks = [policyBlock("claude-model-policy")]
+    profileBlocks = claudeBlocks(env, marked)
   } else if (isCustomInjection(injection)) {
     profileBlocks = await customBlocks(env, marked, injection)
   } else {

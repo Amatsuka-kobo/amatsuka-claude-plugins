@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { type CandidateScope, runsOnClaude } from "../agents/policies"
 import { roleById, sortRoleIds } from "../agents/roles"
 
 export interface MarkedAgent {
@@ -185,10 +186,36 @@ export function roleLabels(
   }
 }
 
+const CLAUDE_VENDORS = new Set(["claude", "none"])
+
+function runsOnClaudeAgent(entry: MarkedAgent): boolean {
+  return (
+    runsOnClaude(entry.model) &&
+    (entry.vendor === undefined || CLAUDE_VENDORS.has(entry.vendor))
+  )
+}
+
+/** そのスコープで委譲先の候補に含める定義を集める。 */
+export function candidateAgents(
+  marked: MarkedAgent[],
+  scope: CandidateScope
+): MarkedAgent[] {
+  if (scope === "with-external") return marked
+  return marked.filter(runsOnClaudeAgent)
+}
+
+const SCOPE_LINES: Record<CandidateScope, string> = {
+  "claude-only":
+    "表に無い役割の委譲先も、`model` が `sonnet` / `opus` / `haiku` / `fable` / `inherit` のいずれかまたは未宣言で、かつ `agent-policy-vendor` が `claude` / `none` のいずれかまたは未宣言である定義から選ぶ。それ以外の定義は委譲先にしない。",
+  "with-external":
+    "表に無い役割の委譲先は、外部ベンダーのモデルを指定した定義も含めて選んでよい。"
+}
+
 /** 両フックが同一文面で使う役割マーカー対応表。 */
 export function markerTable(
   env: NodeJS.ProcessEnv,
-  marked: MarkedAgent[]
+  marked: MarkedAgent[],
+  scope: CandidateScope
 ): string | undefined {
   const labelOf = roleLabels(env)
   const byRole = new Map<string, string[]>()
@@ -205,7 +232,8 @@ export function markerTable(
   if (byRole.size === 0) return undefined
 
   const lines = [
-    "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
+    "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。",
+    SCOPE_LINES[scope]
   ]
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role)

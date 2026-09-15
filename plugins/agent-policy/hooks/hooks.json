@@ -1,5 +1,5 @@
 {
-  "description": "agent-policy の運用補助: SessionStart で方針スキルの使用指示とエージェント定義の状態を注入し、SubagentStart でサブエージェントへ役割マーカーの対応表と規律を配布し、PreToolUse で保護対象への直接編集を差し止めて委譲を促す(既定は無効。環境変数で有効化する)ことと、サブエージェント起動時に並列 dispatch を促す",
+  "description": "agent-policy の運用補助: SessionStart で方針スキルの使用指示・エージェント定義の状態・役割マーカーの対応表を注入し、SubagentStart でサブエージェントへ対応表を配布し、PreToolUse で保護対象への直接編集を差し止めて委譲を促す(既定は無効。環境変数で有効化する)ことと、サブエージェント起動時に並列 dispatch を促す",
   "hooks": {
     "SessionStart": [
       {
