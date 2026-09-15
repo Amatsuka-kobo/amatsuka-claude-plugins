@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.17.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.18.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -15,7 +15,12 @@ Design docs live in `harness-docs/design/`:
 `harness-docs/plans/2026-09-04-agent-policy-two-profile-implementation.md`,
 `2026-09-07-agent-policy-orchestrator-analysis-design.md` (**current**, adds the 2 upstream bands)
 + its plan `harness-docs/plans/2026-09-07-agent-policy-orchestrator-analysis-implementation.md`,
+`2026-09-09-agent-policy-profile-unification-design.md` (**current, 2nd ed., the 0.18.0-dev
+candidate-set model**) + its plan
+`harness-docs/plans/2026-09-09-agent-policy-profile-unification-implementation.md` (2nd ed.),
 plus `2026-08-09-prompt-smith-skill-creator-port-design.md`.
+Its §11 lists 15 rejected alternatives — read it before re-proposing anything about fragment
+distribution, per-hook scope predicates, or `--policy`.
 Accumulated rationale: `docs/old/optimize-agents-record/`.
 
 ## Current shape (2026-09-04, the two-profile reorganisation)
@@ -29,29 +34,47 @@ The plugin now ships **two profiles**, selected by `AMATSUKA_AGENT_AUTO_INJECTIO
 (`none` / `claude` / `custom`; the three legacy values `with-codex` / `with-grok` /
 `with-codex-grok` are treated as `custom` and draw a migration notice):
 
-- **claude** — `claude-model-policy`. Zero setup. Since 0.17.0-dev the skill holds **no table**:
-  it points at the shared 担当表 in `orchestration-discipline.md` §役割の帯 and dispatches with a
-  `model` override taken from that table's "Claude モデル" column (read-only bands to built-in
-  `Explore`, impl bands to `general-purpose`).
-- **custom** — `custom-policy`. Also **no table** since 0.17.0-dev (the recommended-model column
-  is gone from every skill). The delegate comes from the role-marker table SessionStart injects;
-  a band absent from it reads across to the 担当表's "Claude モデル" column. Models and roles are
-  not constrained against each other.
+- **claude** — `claude-model-policy`. Zero setup. Holds **no table** and, since 0.18.0-dev, **no
+  resolution order either**: one paragraph saying the delegate's `model` comes from the 担当表's
+  "Claude モデル" column, and that *who* to delegate to follows the discipline's §委譲先の解決.
+  **SessionStart now injects a marker table here too**, narrowed to the claude-only candidate set.
+- **custom** — `custom-policy`. Also no table and no resolution order since 0.18.0-dev. Its one
+  paragraph says external-vendor definitions are *also* candidates, and points at §委譲先の解決;
+  the "Claude モデル" column is only the read-across target when a delegate's `model` is undecided.
+  Models and roles are not constrained against each other.
+
+**Delegate resolution lives in ONE place since 0.18.0-dev**: `orchestration-discipline.md`
+§委譲先の解決, with two subsections. *委譲先の候補*: project `.claude/agents/` definitions whose
+`model` runs on Claude (`sonnet`/`opus`/`haiku`/`fable`/`inherit`/absent) **and** whose
+`agent-policy-vendor` is absent/`claude`/`none`; custom adds external-vendor definitions on top.
+The table's **2nd line** tells the reader which scope is in force. The candidate set applies to
+**both** step 1 and step 2. *解決順*: (1) role present in the marker table → that definition;
+(2) absent but a candidate's remit fits → that definition; (3) otherwise built-ins (`readonly` →
+`Explore`, `impl` → `general-purpose`). **Built-ins are the LAST resort, not the first choice** —
+the old "readonly bands go to `Explore`" wording was wrong and is gone from both skills.
+`independent-review` never advances past step 1; it is skipped rather than read across.
 
 **Terminology since 0.17.1-dev (2026-09-09): the word 「帯」 is gone.** A role band is just
-「役割」; the discipline section is `## 役割`, the table's first column is 「役割名」, and the
-policy skills' section is 「実行役割の解決順」. Hook-injected strings (`marker-scan.ts`,
+「役割」; the table's first column is 「役割名」. **The discipline section is `## 担当表`** (renamed
+from `## 役割` in the same 0.17.1-dev working tree) and the policy skills' 「実行役割の解決順」
+section **no longer exists** — 0.18.0-dev folded it into the discipline's 「委譲先の解決」. Hook-injected strings (`marker-scan.ts`,
 `delegation-gate.ts`) and `assets/roles/ja/{_common,escalation}.md` use 「役割」 too; generated
 `.claude/agents/*.md` keep 「帯」 until regenerated (harmless). The user found 「帯」 unclear
 Japanese; 「役割ラベル」 was rejected because it collides with `ROLES[].label`. Design docs from
 0.17.0 and earlier still say 「帯」 — read them as 「役割」. Do not reintroduce 「帯」.
 
 **The 担当表 lives in exactly one place since 0.17.0-dev (2026-09-09)**: `references/
-orchestration-discipline.md` §役割 — 16 rows × 5 columns (役割名 / RoleId / 種別 / Agent Tool /
+orchestration-discipline.md` **§担当表** — 16 rows × 5 columns (役割名 / RoleId / 種別 / Agent Tool /
 Claude モデル). Its canonical sources are `ROLES[].label/id/kind`, `allowsAgentTool`, and
 `ASSIGNMENTS["claude-model-policy"]`; `src/agents/__test__/discipline-role-table.test.ts` pins all
 five columns and also asserts that **neither policy SKILL.md contains a Markdown table** (any line
-starting with `|`) nor a `## 役割` / `## 役割の帯` / `## モデル別役割` / `## 役割の帯と推奨モデル` heading. The
+starting with `|`) nor a `## 担当表` / `## 役割` / `## 役割の帯` / `## モデル別役割` /
+`## 役割の帯と推奨モデル` heading. **Two traps in that test** (both fixed in 0.18.0-dev): its
+heading regex must match `## 担当表`, and its separator-row parser must accept `/^-+$/` — the
+working-tree table uses long dash runs, not exactly `---`, so fixing only the heading leaves the
+same 8 failures with a different message. `## 委譲先の解決` sits **after** the 担当表 section's
+table and its four trailing bullets — putting it right after the heading would make
+`extractRoleBandSection` (which stops at the next `## `) lose the table and re-break those 8. The
 old `policy-skill-assignments.test.ts` is deleted. Design:
 `harness-docs/design/2026-09-09-agent-policy-band-catalog-consolidation-design.md`.
 
@@ -93,7 +116,19 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
 - `RECOMMENDED: Record<RoleId, ModelId[]>` — the custom profile's *recommendation*. Values are
   inherited verbatim from the old `codex-grok-policy` row and pinned by a test.
 - `isCustomInjection(value)` — trims + lowercases, then matches `custom` plus the three legacy
-  values. Both SessionStart and SubagentStart route through it, so the two cannot drift.
+  values.
+- **Candidate-set canon, added 0.18.0-dev.** `type CandidateScope = "claude-only" | "with-external"`;
+  `CLAUDE_ENUM_MODELS = ["sonnet","opus","haiku","fable"]` (**this order** — the wizard's
+  presentation order, NOT `MODELS`' definition order, which starts with opus; the test compares the
+  two as *sets*); non-exported `CLAUDE_RESOLVED = CLAUDE_ENUM_MODELS + "inherit"`;
+  `runsOnClaude(model)` (true for `undefined`); `candidateScopeFor(value)` → `with-external` for
+  custom-family, `claude-only` for `claude`, else `undefined`. **All three hooks call
+  `candidateScopeFor`** — do not add a per-hook predicate; only the undefined fallback differs
+  (SessionStart decides from its validation result, SubagentStart emits `NO_MARKERS`,
+  delegation-gate falls to `claude-only`).
+- **`policyForInjection` must NOT be used to derive the CLI's `--scope` default.** It only `trim()`s
+  (no lowercase) and returns `undefined` for the three legacy values, so `with-codex` and `CuStOm`
+  would make the CLI and the hooks disagree on the same env. Use `candidateScopeFor`.
 - **Gone**: `aliasEnv` on `ModelSpec`, `resolveModelValue`, `rolesAcrossPolicies`. The four
   `AMATSUKA_AGENT_*_ALIAS` env vars are **no longer read**; SessionStart only warns that they are
   ignored. Model existence is grounded in the proxy's `/v1/models`, so alias substitution has no
@@ -119,7 +154,7 @@ back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
 | hook | matcher | what it does |
 | --- | --- | --- |
 | SessionStart | — | injects the policy skill; under custom, validates model existence first |
-| SubagentStart | — | always distributes the discipline fragment; the marker table **only under custom-family injection** |
+| SubagentStart | — | injects **only** the marker table, scoped by `candidateScopeFor` (claude → claude-only, custom-family → with-external, else the `NO_MARKERS` line). The discipline fragment is **gone** since 0.18.0-dev |
 | PreToolUse | `Edit\|Write\|NotebookEdit\|mcp__.*` | delegation gate (opt-in; denies edits to protected globs) |
 | PreToolUse | `Task\|Agent` | parallel nudge (on by default; one fixed additionalContext line) |
 
@@ -139,12 +174,26 @@ not. That one difference is what lets the gate wave subagents through.
 2. From those definitions' `model` values, drop the Claude enums, `inherit`, and a missing `model`
    key. Empty remainder → hold without querying.
 3. Otherwise query live models. All present → inject `custom-policy` + the marker table (each row
-   annotated with its vendor) + the unknown-role notice. **Any absent, or the query failed → fall
-   back to claude for the whole session**, list the offending definitions (max 10 + "他 N 件"), name
-   the reason, and add a one-line repair hint. The marker table is **not** injected on fallback.
+   annotated with its vendor, `with-external` scope) + the unknown-role notice. **Any absent, or the
+   query failed → fall back to claude for the whole session**, list the offending definitions
+   (max 10 + "他 N 件"), name the reason, and add a one-line repair hint. **Since 0.18.0-dev the
+   marker table IS injected on fallback**, narrowed to the `claude-only` candidate set, together with
+   `unknownRoleBlock` over the same narrowed set (`claudeBlocks()`); block order is
+   policy → reason → repair → table. The `claude` branch uses the same helper.
 
 The judgement freezes at SessionStart; a proxy recovering mid-session goes unnoticed. `build()` is
 async now, but the outer try/catch still guarantees stderr + exit 0 and no file writes.
+
+**Known accepted divergence — do NOT "fix" it in code.** On a custom→claude fallback, SessionStart
+narrows to `claude-only` (it knows the validation failed) while SubagentStart and delegation-gate
+still see only the env var and stay `with-external`, so the child's table lists external
+definitions the parent already ruled out. SubagentStart cannot query the proxy (a per-spawn HTTP
+round trip was rejected in `two-profile-design` §13), and recording the fallback in a state file was
+rejected because it is project-scoped: a concurrent *successful* custom session's children would be
+wrongly clamped to `claude-only`, a wider harm than the one being closed. The chosen cover is a
+discipline clause telling the orchestrator to state, in the request text, that external-vendor
+definitions are not delegation targets when a fallback was announced. Forgetting it degrades to
+today's behaviour — no worse.
 
 ### `delegation-gate.ts` — opt-in, measured to work
 
@@ -163,7 +212,27 @@ Verified 2026-09-04 in a sandbox (`claude -p --plugin-dir <plugin>`): the deny f
 quoted the reason verbatim, did not route around it, and noticed on its own that the suggested
 delegate lacked `Write`.
 
-### `setup-agents` — custom-only now
+### `setup-agents` — both scopes since 0.18.0-dev
+
+**`--scope claude|custom`** is the entry point (wizard step 0b asks once, then threads the value
+through *every* CLI call). It maps to `CandidateScope`; **omitted, it defaults to
+`candidateScopeFor(process.env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"`** — the CLI did not
+read that env var before 0.18, so this is a behaviour change (README migration item 6 spells it
+out). `--scope claude` never queries the proxy (`--list-live-models` and the normal `--write` path
+both skip `fetchLiveModels`), drops non-Claude ids from `--models` into `modelsDropped`, **rejects
+`--model-id gpt-sol` and a non-enum `--model`** (the `--model-id` path sits outside the `--models`
+filter, so it needs its own guard), excludes external-vendor definitions from `--list-coverage`
+coverage, and sources uncovered-role recommendations from `ASSIGNMENTS["claude-model-policy"]`
+instead of `RECOMMENDED`. `CLAUDE_ENUMS` is gone; `policies.ts`' `CLAUDE_ENUM_MODELS` is the canon.
+The removed-flag message is now `use --scope claude|custom to choose the candidate scope`.
+
+**Test trap**: `setup-agents.test.ts`' `AMBIENT_ENV_VARS` deliberately strips
+`AMATSUKA_AGENT_AUTO_INJECTION` from child processes, so **every pre-existing case runs as
+"injection unset" → `claude-only`**, which breaks the ~42 cases whose helpers (`check()`,
+`writeArgs()`) hardcode `--model-id gpt-sol`. Callers pass `--scope custom` explicitly; do **not**
+bake it into the helpers, or the new default becomes untestable.
+
+### `setup-agents` — earlier notes
 
 Wizard: language → live models → per-model name/model/roles/vendor/keep → MCP servers.
 Non-interactive `--yes` means "generate the recommended set".
@@ -196,10 +265,16 @@ cleanly), but do not treat either clause as absolute.
 
 ## The two policy skills and the shared 担当表
 
-Neither skill holds a table since 0.17.0-dev; both are thin (claude ≈1.4KB, custom ≈3.8KB) and
-carry only their profile's resolution order. The shared discipline is
-`references/orchestration-discipline.md` (≈14.3KB, holds the 担当表) and, for exploration only,
-`references/context-map-guide.md`. `assets/context-map-template.md` is the template.
+Neither skill holds a table, and since 0.18.0-dev neither holds a resolution order either — both are
+down to one paragraph plus their profile-specific notes. The shared discipline is
+`references/orchestration-discipline.md` (**20,867 B** after 0.18.0-dev, holds both the 担当表 and
+§委譲先の解決) and, for exploration only, `references/context-map-guide.md` (6,169 B); the two
+total **27,036 B**, under the 30,720 B ceiling. `assets/context-map-template.md` is the template.
+**`references/subagent-discipline.md` was deleted in 0.18.0-dev** — SubagentStart no longer ships a
+discipline fragment, so the "サブエージェントは〜" clauses (now **9**, a contiguous block in
+§モデル別役割の運用) reach children only by transcription into the request text, plus the generated
+definitions' own `_common.md` body. Under `none`/unset that leaves `_common.md` as the sole path —
+an **intentional** degradation, not a regression.
 
 `RECOMMENDED` in `policies.ts` still exists but is now **setup-agents-only** (`--list-live-models`
 `recommendedFor`, `--list-coverage` `models`); no skill shows it. Read values from `policies.ts` —
@@ -226,12 +301,12 @@ Rules that bite:
 - Upstream flow since 0.16: explore-lead writes the context-map → **orchestrator** judges
   §未解決事項 and fixes requirements → design-plan writes design/WBS → doc-review (Haiku) →
   independent-review (Sonnet, original only) → orchestrator adopts/rejects → user approval → Approve.
-- **Custom's execution-tier resolution**: (1) a band present in the marker table uses that
-  definition; (2) a band absent from it is read across to the 担当表's "Claude モデル" column (the
-  same values as `ASSIGNMENTS`; `claude-model-policy` is NOT injected in custom sessions, which is
-  why the reference moved) — **except independent-review, which is skipped rather than read across**, because a
-  same-vendor reviewer shares the designer's blind spots. Step 2 is the *configuration default* for
-  partial setups, not the failure fallback (that one is whole-session and lives in SessionStart).
+- **Execution-tier resolution is profile-independent since 0.18.0-dev** and lives in the discipline's
+  §委譲先の解決 (see above). Both profiles use the same three steps; only the *candidate set* differs,
+  and the marker table's 2nd line announces which one is in force. `independent-review` is still
+  skipped rather than advanced past step 1, because a same-vendor reviewer shares the designer's
+  blind spots. Reading a role across to the 担当表's "Claude モデル" column now only decides the
+  delegate's `model`, not *which definition* to use.
 - Mid-session unavailability of a delegate follows the same rule: read across, except
   independent-review which is skipped.
 - Independent review runs AFTER the doc-review band but reads **only the original document** — never
