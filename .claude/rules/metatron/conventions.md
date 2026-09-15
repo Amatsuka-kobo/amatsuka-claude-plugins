@@ -26,11 +26,6 @@
 - 設計書と実装計画書は `harness-docs/` に置く。
 - プラグインに関わる ADR は、タイトルを `[<プラグイン名>] <タイトル>` の形にする。
 
-## git
-
-- ブランチを切らない。切る必要があると判断したときは git worktree を使う。
-- `git push` に `--force` / `-f` / `--force-with-lease` / `--force-if-includes` を付けない。hook が拒否する。履歴を書き換えずに済む方法を取る。
-
 ## Done の条件
 
 - `pnpm run lint` と `pnpm run typecheck` と `pnpm run test` が通る。
