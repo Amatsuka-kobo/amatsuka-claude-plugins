@@ -176,6 +176,8 @@ function gotchasReason(relative: string, cli: string): string {
     `${relative} は metatron の管理下にあり、直接編集できません(追記のみ・採番・書式検証のため)。`,
     "エントリの JSON を一時ファイルに書き、次のコマンドで追記してください:",
     `  node ${cli} append-gotcha --input /tmp/metatron-gotcha.json`,
+    "台帳がまだ無いときは、ユーザーの承認を得てから新規作成してください:",
+    `  node ${cli} init-gotchas`,
     "既存エントリへのタグ付与(解決済み / 対象外):",
     `  node ${cli} tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "<理由>"`,
     `入力の書式: node ${cli} get config`

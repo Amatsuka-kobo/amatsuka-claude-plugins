@@ -1,7 +1,10 @@
-// `append-gotcha` / `tag-gotcha`(契約 §6・§11、設計書 §7-4)。
+// `init-gotchas` / `append-gotcha` / `tag-gotcha`(契約 §6・§11・§12、設計書 §7-4)。
 //
-// どちらも承認を要さない追記操作である(設計書 §7-6)。拒否は非 0 終了で返し、
-// そのとき対象ファイルには 1 バイトも書き込まない。
+// append-gotcha と tag-gotcha は承認を要さない追記操作である(設計書 §7-6)。
+// init-gotchas は台帳そのものを作る操作であり、承認を得てから呼ぶ
+// (設計書 2026-09-15 §6.1。CLI は承認の有無を判定できないため、規律は
+// capturing-architecture/SKILL.md の HARD-GATE が持つ)。
+// いずれも拒否は非 0 終了で返し、そのとき対象ファイルには 1 バイトも書き込まない。
 
 import { loadConfig } from "../lib/config.js"
 import {
@@ -9,6 +12,7 @@ import {
   GOTCHA_TAGS,
   GotchaError,
   type GotchaInput,
+  initGotchasLedger,
   tagGotcha
 } from "../lib/gotchas.js"
 import { stringFlag } from "./args.js"
@@ -44,6 +48,29 @@ function failFromError(
 // ---------------------------------------------------------------------------
 // append-gotcha
 // ---------------------------------------------------------------------------
+
+export function runInitGotchas(ctx: GotchaContext): void {
+  const command = "init-gotchas"
+  const config = loadConfig(ctx.cwd)
+  try {
+    const result = initGotchasLedger(config.gotchasPath)
+    noteWarnings(config.warnings)
+    emitResult(command, {
+      ok: true,
+      written: true,
+      created: result.created,
+      path: result.path,
+      relative: config.gotchasRelative,
+      bytesWritten: result.bytesWritten,
+      warnings: config.warnings
+    })
+  } catch (error) {
+    failFromError(command, error, {
+      written: false,
+      path: config.gotchasPath
+    })
+  }
+}
 
 export function runAppendGotcha(ctx: GotchaContext): void {
   const command = "append-gotcha"

@@ -4,9 +4,9 @@
 
 ## 触らないパス
 
-- `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。ARCHITECTURE の更新は `stage-architecture` → `commit-architecture`、ADR は `stage-adr` → `commit-architecture`、GOTCHAS の追記は `append-gotcha`、タグ付けは `tag-gotcha` を使う。
+- `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。ARCHITECTURE の更新は `stage-architecture` → `commit-architecture`、ADR は `stage-adr` → `commit-architecture`、GOTCHAS の台帳の新規作成は `init-gotchas`、追記は `append-gotcha`、タグ付けは `tag-gotcha` を使う。
 - `.claude/rules/metatron/conventions.md` と `protected-paths.md` と `testing-policy.md` — Edit / Write / NotebookEdit は metatron の hook が拒否する。更新は `stage-rules` → `commit-rules` を使う。
-- `plugins/*/scripts/` と `plugins/*/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。
+- `plugins/*/scripts/` と `plugins/*/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。ShellScriptで書かれた `plugins/codiel/scripts/install-harness.sh` は例外とし、直接編集してよい。
 - `.raphael/antibodies/` — 抗体の更新は `plugins/raphael/scripts/update-antibody.mjs` で行う。一覧と詳細の取得は `plugins/raphael/scripts/list-antibodies.mjs` を使う。適用の前に `patch --dry-run` で変更後を確認する。
 - `.serena/memories/` — Serena の `write_memory` / `edit_memory` で変更する。
 

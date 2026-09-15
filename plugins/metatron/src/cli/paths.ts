@@ -56,6 +56,10 @@ export const INPUT_SCHEMAS = {
       '{ title, date?, task, mistake, cause, countermeasure, promotionCandidate: "Yes" | "No" }',
     note: "採番は CLI が行う。`## 失敗パターン一覧` の直下(先頭)に挿入する。"
   },
+  "init-gotchas": {
+    usage: "init-gotchas",
+    note: "入力を取らない。雛形だけの台帳を新規作成する。内容のある台帳があるときは already_exists で拒否する。実行の前にユーザーの承認を得ること。"
+  },
   "tag-gotcha": {
     usage: "tag-gotcha --id GOTCHA-003 --tag 解決済み|対象外 --reason <理由>",
     note: "見出しへのタグ挿入と末尾の理由行の追記だけを行う。本文は書き換えない。"
@@ -70,6 +74,7 @@ export const USAGE_LINES: readonly string[] = [
   "  get architecture [--section <見出し>]",
   "  get domains",
   "  get gotchas [--recent N | --id <ID> | --query <語>] [--exclude-tagged] [--promotion-candidates]",
+  "  get gotchas-template",
   "  get adr [--id <ID> | --status <状態>]",
   "  get rules [--name conventions|protected-paths|testing-policy]",
   "  scan",
@@ -83,6 +88,7 @@ export const USAGE_LINES: readonly string[] = [
   "書き込み(拒否・失敗は非 0):",
   "  commit-architecture --staging-id <id>",
   "  commit-rules --staging-id <id>",
+  "  init-gotchas",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <解決済み|対象外> --reason <理由>"
 ]

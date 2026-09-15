@@ -14,6 +14,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `get architecture [--section <見出し>]` | 読 | 全文と見出し一覧、または指定セクションの本文 |
 | `get domains` | 読 | `metatron:domains` を構造化したもの。読めないときは理由 |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 | GOTCHAS のエントリ配列・総数・昇格候補数 |
+| `get gotchas-template` | 読 | 雛形の全文・解決先パス・`exists`・`hasContent` |
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR のエントリ配列と次の採番 |
 | `get rules [--name <名前>]` | 読 | rules 3 ファイルの本文と存在状況、または指定した 1 ファイル |
 | `scan` | 読 | コードベース解析の事実 |
@@ -23,6 +24,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `stage-rules --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
 | `commit-rules --staging-id <id>` | 書 | `stagingId` を消費して rules の 1 ファイルへ書き込む |
+| `init-gotchas` | 書 | 承認後に雛形だけの GOTCHAS 台帳を新規作成する |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
 
@@ -102,6 +104,15 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 1 回で扱えるのは 1 ファイルだけである。3 ファイルを更新するときは 3 回に分ける。
 - `reason` は任意。
 
+### init-gotchas
+
+入力 JSON を持たない。オプションも取らない。
+
+- 書き込む内容は雛形で固定されており、変更できない。
+- 内容のある台帳があるときは `already_exists` で拒否され、対象ファイルは変化しない。
+- 空・空白のみのファイルは「内容なし」として扱い、雛形で作り直す。
+- **実行の前にユーザーの承認を得る。** CLI は承認の有無を判定できない。提示する材料は `get gotchas-template` で取る。
+
 ### append-gotcha
 
 ```json
@@ -119,6 +130,8 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 ## stage から commit の 2 段階
 
 ARCHITECTURE と ADR と rules の書き込みは 2 段階で行う。
+
+GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append-gotcha`)は 2 段階を取らない。前者は書き込む内容が雛形に固定されており差分が定数であるため、後者は既存を壊さない追記であるためである。
 
 1. `stage-architecture` / `stage-adr` / `stage-rules` のいずれかを実行し、`stagingId` と diff を得る。
 2. diff を全文提示してユーザーの承認を得る。

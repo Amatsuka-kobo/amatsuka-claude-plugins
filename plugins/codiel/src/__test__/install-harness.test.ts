@@ -41,7 +41,7 @@ test("ARCHITECTURE / CLAUDE.md / raguel.config.yaml は作成しない(initializ
   ).toBeFalsy()
 })
 
-test("GOTCHAS.md は作成しない(記録時に recording-gotchas が台帳ごと作る)", () => {
+test("GOTCHAS.md は作成しない(台帳の生成は metatron が行う)", () => {
   const root = tmpProject()
   run(root)
   expect(

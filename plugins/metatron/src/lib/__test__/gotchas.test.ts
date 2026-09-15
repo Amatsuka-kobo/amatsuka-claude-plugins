@@ -12,9 +12,11 @@ import {
   filterGotchas,
   GotchaError,
   type GotchaErrorCode,
+  initGotchasLedger,
   LOCK_STALE_MS,
   lockPathFor,
   parseGotchas,
+  renderGotchasTemplate,
   tagGotcha,
   withFileLock
 } from "../gotchas.js"
@@ -119,6 +121,68 @@ function expectGotchaError(
   }
   throw new Error(`GotchaError(${code}) が投げられませんでした`)
 }
+
+// ---------------------------------------------------------------------------
+// 台帳の生成
+// ---------------------------------------------------------------------------
+
+test("GI1: 台帳も親ディレクトリも無い状態から雛形を生成する", () => {
+  const dir = mkTmp()
+  const filePath = path.join(dir, "docs", "GOTCHAS.md")
+
+  const result = initGotchasLedger(filePath)
+
+  expect(result.created).toBe(true)
+  expect(result.path).toBe(filePath)
+  expect(fs.existsSync(path.dirname(filePath))).toBe(true)
+  const text = fs.readFileSync(filePath, "utf8")
+  expect(text).toContain("# GOTCHAS")
+  expect(text).toContain("## 運用ルール")
+  expect(text).toContain("## 記入テンプレート")
+  expect(text).toContain("## 失敗パターン一覧")
+  expect(parseGotchas(text).entries).toHaveLength(0)
+  expect(result.bytesWritten).toBe(Buffer.byteLength(text))
+})
+
+test("GI2: 内容のある台帳は拒否し、バイト単位で変更しない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  expectGotchaError(() => initGotchasLedger(filePath), "already_exists")
+
+  expect(fs.readFileSync(filePath)).toStrictEqual(before)
+})
+
+test("GI3: 空白のみの台帳は雛形で作り直す", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, "   \n\n")
+
+  const result = initGotchasLedger(filePath)
+
+  expect(result.created).toBe(true)
+  expect(fs.readFileSync(filePath, "utf8")).toBe(renderGotchasTemplate())
+})
+
+test("GI4: 生成直後の追記は GOTCHA-001 になり、台帳は再生成しない", () => {
+  const dir = mkTmp()
+  const filePath = path.join(dir, "docs", "GOTCHAS.md")
+  initGotchasLedger(filePath)
+
+  const result = appendGotcha(filePath, { ...VALID_INPUT })
+
+  expect(result.created).toBe(false)
+  expect(result.id).toBe("GOTCHA-001")
+})
+
+test("GI5: 生成された内容は renderGotchasTemplate の戻り値と一致する", () => {
+  const dir = mkTmp()
+  const filePath = path.join(dir, "docs", "GOTCHAS.md")
+
+  initGotchasLedger(filePath)
+
+  expect(fs.readFileSync(filePath, "utf8")).toBe(renderGotchasTemplate())
+})
 
 // ---------------------------------------------------------------------------
 // 採番と挿入

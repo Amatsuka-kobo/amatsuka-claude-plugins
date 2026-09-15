@@ -16,6 +16,8 @@ import { RULES_ADMIN_NOTICE } from "../../lib/rules.js"
 import { stagingDirFor } from "../../lib/staging.js"
 import { runTs } from "../../testing/run-ts.js"
 import { MAX_DIFF_LINES } from "../diff.js"
+import { READ_SUBCOMMANDS, WRITE_SUBCOMMANDS } from "../main.js"
+import { USAGE_LINES } from "../paths.js"
 
 const CLI = fileURLToPath(new URL("../../metatron-cli.ts", import.meta.url))
 
@@ -200,6 +202,7 @@ const READ_INVOCATIONS: string[][] = [
   ["get", "architecture", "--section", "システム概要"],
   ["get", "domains"],
   ["get", "gotchas"],
+  ["get", "gotchas-template"],
   [
     "get",
     "gotchas",
@@ -212,6 +215,32 @@ const READ_INVOCATIONS: string[][] = [
   ["scan"],
   ["diff-architecture"]
 ]
+
+test("SC1: 全サブコマンドが usage に掲載されている", () => {
+  const usage = USAGE_LINES.join("\n")
+  for (const subcommand of [...READ_SUBCOMMANDS, ...WRITE_SUBCOMMANDS]) {
+    expect(usage, `${subcommand} が usage に無い`).toContain(subcommand)
+  }
+})
+
+test("SC2: 全書き込み系サブコマンドが cli-usage.md に掲載されている", () => {
+  const reference = fs.readFileSync(
+    path.resolve(
+      import.meta.dirname,
+      "..",
+      "..",
+      "..",
+      "references",
+      "cli-usage.md"
+    ),
+    "utf8"
+  )
+  for (const subcommand of WRITE_SUBCOMMANDS) {
+    expect(reference, `${subcommand} が cli-usage.md に無い`).toContain(
+      subcommand
+    )
+  }
+})
 
 function expectAllReadsSucceed(root: string, label: string): void {
   for (const args of READ_INVOCATIONS) {
@@ -361,6 +390,11 @@ const REJECTIONS: Rejection[] = [
     error: "invalid_status"
   },
   {
+    name: "init-gotchas は内容のある台帳を拒否する",
+    args: ["init-gotchas"],
+    error: "already_exists"
+  },
+  {
     name: "append-gotcha の promotionCandidate が値域外",
     args: ["append-gotcha"],
     input: {
@@ -457,6 +491,69 @@ test("S6: 書き込み系の拒否は非 0 終了・妥当な JSON・ファイ�
     }
     expectUnchanged(before)
   }
+})
+
+// ---------------------------------------------------------------------------
+// GOTCHAS 台帳の初回生成(CLI 経由の通し)
+// ---------------------------------------------------------------------------
+
+test("get gotchas-template → init-gotchas で作成し、再実行は拒否する", () => {
+  const root = project()
+  const gotchasPath = path.join(root, "docs", "GOTCHAS.md")
+
+  const before = runCli(["get", "gotchas-template"], root)
+  expect(before.status).toBe(0)
+  const beforeJson = before.json as Record<string, unknown>
+  expect(beforeJson.ok).toBe(true)
+  expect(beforeJson.exists).toBe(false)
+  expect(beforeJson.hasContent).toBe(false)
+  expect(beforeJson.next).not.toBeNull()
+
+  const initialized = runCli(["init-gotchas"], root)
+  expect(initialized.status).toBe(0)
+  expect((initialized.json as Record<string, unknown>).created).toBe(true)
+
+  const after = runCli(["get", "gotchas-template"], root)
+  expect(after.status).toBe(0)
+  const afterJson = after.json as Record<string, unknown>
+  expect(afterJson.exists).toBe(true)
+  expect(afterJson.hasContent).toBe(true)
+  expect(afterJson.next).toBeNull()
+  expect(fs.readFileSync(gotchasPath, "utf8")).toBe(afterJson.template)
+
+  const snapshotBeforeRetry = snapshot([gotchasPath])
+  const retry = runCli(["init-gotchas"], root)
+  expect(retry.status).not.toBe(0)
+  expect((retry.json as Record<string, unknown>).error).toBe("already_exists")
+  expectUnchanged(snapshotBeforeRetry)
+})
+
+test("台帳が無い状態でも get gotchas-template は ok: true", () => {
+  const root = mkTmp()
+
+  const run = runCli(["get", "gotchas-template"], root)
+
+  expect(run.status).toBe(0)
+  const json = run.json as Record<string, unknown>
+  expect(json.ok).toBe(true)
+  expect(json.exists).toBe(false)
+  expect(json.hasContent).toBe(false)
+})
+
+test("空白のみの台帳は exists: true / hasContent: false となり雛形で作り直す", () => {
+  const root = project()
+  const gotchasPath = writeFile(root, "docs/GOTCHAS.md", "   \n\n")
+
+  const before = runCli(["get", "gotchas-template"], root)
+  expect(before.status).toBe(0)
+  const beforeJson = before.json as Record<string, unknown>
+  expect(beforeJson.exists).toBe(true)
+  expect(beforeJson.hasContent).toBe(false)
+
+  const initialized = runCli(["init-gotchas"], root)
+  expect(initialized.status).toBe(0)
+  expect((initialized.json as Record<string, unknown>).created).toBe(true)
+  expect(fs.readFileSync(gotchasPath, "utf8")).toBe(beforeJson.template)
 })
 
 // ---------------------------------------------------------------------------

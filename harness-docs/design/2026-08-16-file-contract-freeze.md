@@ -452,6 +452,7 @@ metatron が管理する rules は次の 3 ファイルに固定する。ファ�
   手編集で並びが崩れていても番号が衝突しないようにする。
 - 台帳または `## 失敗パターン一覧` 節が無ければ、雛形ごと作成する
   (冒頭説明・運用ルール・記入テンプレート・空の一覧節を含む)。
+- 台帳の新規作成は `/metatron:init`(`init-gotchas`)と、台帳が無い状態での挿入(`append-gotcha`)の 2 経路で起きる。いずれも同じ雛形を書く。内容のある台帳に対する新規作成は拒否する。
 
 ### 7-4. タグの検出規則(規範)
 
@@ -685,6 +686,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 | `get architecture [--section <見出し>]` | 読 |
 | `get domains` | 読 |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 |
+| `get gotchas-template` | 読 |
 | `get adr [--id <ID> \| --status <状態>]` | 読 |
 | `get rules [--name <名前>]` | 読 |
 | `scan` | 読 |
@@ -694,6 +696,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 | `stage-rules --input <path>` | 段階 |
 | `commit-architecture --staging-id <id>` | 書 |
 | `commit-rules --staging-id <id>` | 書 |
+| `init-gotchas` | 書 |
 | `append-gotcha --input <path>` | 書 |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由> [--date <YYYY-MM-DD>]` | 書 |
 
@@ -745,7 +748,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 
 | ロック | 取得するサブコマンド |
 | --- | --- |
-| `<gotchas パス>.lock` | `append-gotcha` / `tag-gotcha` |
+| `<gotchas パス>.lock` | `init-gotchas` / `append-gotcha` / `tag-gotcha` |
 | `<architecture パス>.lock` | `stage-adr`(採番の読み取り) / `commit-architecture`(書き込み) |
 
 2 文書のロックは独立しており、互いをブロックしない。

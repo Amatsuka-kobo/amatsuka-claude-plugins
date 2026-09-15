@@ -392,7 +392,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
 機械的に配置し、ARCHITECTURE(ドメインマップだけの最小構成)/ CLAUDE.md / raguel.config.yaml は
 聞き取り(ドメイン分割と保護パス)の回答から生成する(既存ファイルは不足分のみ追記)。
-GOTCHAS は `/codiel:init` の対象ではなく、失敗を記録する時点で `recording-gotchas` が台帳ごと作成する。
+GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
 `/codiel:run` は資産配置を行わず、未初期化を検出したら `/codiel:init` を案内して終了する。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
@@ -432,6 +432,7 @@ GOTCHAS は `/codiel:init` の対象ではなく、失敗を記録する時点�
   **この旧書式は廃止され、互換読みも設けない**(契約 §6)。現行の書式・挿入位置・採番・タグは
   契約 §6-1〜§6-4 が正本である
 - 記録の契機: Raguel STOP、ループ上限超過、record_outcome(incident)、レビューで発覚した設計漏れ
+- 台帳の生成と書き込みは metatron の CLI が行う。CLI の案内が無い環境では、記録を run のレポートへ持ち越す(設計書 `2026-09-15-metatron-init-gotchas-design.md` §6.4)。
 - 全フェーズのサブエージェントが作業前に必読(ディスパッチプロンプトで強制)
 - Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成する
 

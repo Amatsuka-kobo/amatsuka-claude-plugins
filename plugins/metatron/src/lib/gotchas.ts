@@ -9,7 +9,9 @@
 // - 解析(parseGotchas)は読み取り経路からも使うため例外を投げず、warnings に理由を積む。
 //
 // CLI・hook・テストがこのファイルだけを窓口にする。ファイルへの書き込み経路は
-// appendGotcha / tagGotcha の 2 つしか無く、「削除・改変禁止」が指示ではなく構造として成立する。
+// initGotchasLedger / appendGotcha / tagGotcha の 3 つしか無く、「削除・改変禁止」が
+// 指示ではなく構造として成立する。initGotchasLedger は内容のある台帳を必ず拒否するため、
+// 既存エントリを消しうる経路は 3 つのどれにも無い。
 
 import fs from "node:fs"
 import path from "node:path"
@@ -26,6 +28,7 @@ export type GotchaErrorCode =
   | "invalid_tag"
   | "not_found"
   | "lock_timeout"
+  | "already_exists"
 
 /**
  * 書き込み経路の拒否。CLI はこれを捕捉して `{ error: code }` を stdout へ出し、非 0 終了する。
@@ -884,6 +887,39 @@ export interface AppendGotchaResult {
  * 採番から書き込みまでをロック下で行う。CLI はサブコマンドごとに別プロセスとして
  * 起動するため、プロセス内のロックでは同時実行の採番衝突を防げない。
  */
+export interface InitGotchasResult {
+  path: string
+  created: boolean
+  bytesWritten: number
+}
+
+/**
+ * 雛形だけの台帳を新規作成する(設計書 2026-09-15 §6.2・§6.3)。
+ *
+ * 内容のある台帳があるときは `already_exists` を投げ、1 バイトも書かない。
+ * 固定文字列を書くサブコマンドなので、この拒否がエントリ保護の唯一の担保である。
+ * 空白のみのファイルを「内容なし」と扱うのは buildAppendedText と同じ判定である。
+ */
+export function initGotchasLedger(gotchasPath: string): InitGotchasResult {
+  return withFileLock(gotchasPath, () => {
+    const existing = readTextIfExists(gotchasPath)
+    if (existing !== null && existing.trim() !== "") {
+      throw new GotchaError(
+        "already_exists",
+        `${gotchasPath} は既に存在します。既存の台帳を上書きしません。エントリの追記は append-gotcha を使ってください。`
+      )
+    }
+    const text = renderGotchasTemplate()
+    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true })
+    fs.writeFileSync(gotchasPath, text)
+    return {
+      path: gotchasPath,
+      created: true,
+      bytesWritten: Buffer.byteLength(text)
+    }
+  })
+}
+
 export function appendGotcha(
   gotchasPath: string,
   input: GotchaInput,

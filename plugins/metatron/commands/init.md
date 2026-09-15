@@ -1,5 +1,5 @@
 ---
-description: コードベースの解析ドラフトとセクションごとの対話ウォークスルーで、プロジェクトの ARCHITECTURE を初めて生成する。既存の ARCHITECTURE と実装の乖離を直すときは /metatron:update を使う
+description: コードベースの解析ドラフトとセクションごとの対話ウォークスルーで、プロジェクトの ARCHITECTURE、rules 3 ファイル、GOTCHAS の空の台帳を初めて生成する。既存の ARCHITECTURE と実装の乖離を直すときは /metatron:update を使う
 ---
 
 metatron プラグインの capturing-architecture スキルを Skill ツールで起動し、その手順に厳密に従って

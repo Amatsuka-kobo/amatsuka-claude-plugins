@@ -36,7 +36,7 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 
 - 4 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
-- GOTCHAS は確認対象に含めない。失敗を記録する時点で `recording-gotchas` が台帳ごと作成する。
+- GOTCHAS は確認対象に含めない。台帳の生成は metatron が行う(`/metatron:init`)。codiel は台帳を作らない。
 - git 管理外のプロジェクトでも実行する。警告を 1 行添えるだけにとどめる。
 
 ## 1. ARCHITECTURE の確認
