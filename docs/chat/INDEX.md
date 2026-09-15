@@ -100,4 +100,4 @@
 - `2026/0910/phyllis998/1155-codiel-agent-policy-compatibility.md` | 2026-09-10 | phyllis998 | Codiel エージェントの agent-policy 統合で、名指し dispatch が合成されない実態と改修方針(A/B/D推奨)を報告
 - `2026/0915/phyllis998/1041-metatron-gotchas-generation-design.md` | 2026-09-15 | phyllis998 | GOTCHAS 生成実装完了・設計書と記録をコミット
 - `2026/0915/phyllis998/1041-metatron-init-gotchas-spec.md` | 2026-09-15 | phyllis998 | 複数アドバイザー委譲でGOTCHAS・ドメイン依存解消を並列推進
-- `2026/0915/phyllis998/1915-codiel-domain-decoupling-investigation.md` | 2026-09-15 | phyllis998 | フェーズ 1-2 完了、コードレビュー通過、ドメイン非依存エージェント実装開始
+- `2026/0915/phyllis998/1915-codiel-domain-decoupling-investigation.md` | 2026-09-15 | phyllis998 | ドメインマップ依存の解消 — ADR-003・実装完了
