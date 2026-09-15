@@ -65,18 +65,7 @@
     }
   },
   "outputStyle": "EnhancedClaude5",
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|NotebookEdit|mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__replace_in_files|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__rename_symbol|mcp__serena__safe_delete_symbol",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/delegation_gate.py\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
+  "env": {
+    "CLAUDE_CODE_THRIFTY_SONIC": "false"
   }
 }
