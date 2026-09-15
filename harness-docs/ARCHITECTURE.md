@@ -178,3 +178,40 @@
 #### 影響範囲
 
 codiel は GOTCHAS の直接追記と雛形の写しを失う。CLI の案内が無い環境では、記録を run のレポート(`.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/`)と完了報告へ持ち越す。持ち越しは次のセッションで注入が届けば解消する。`harness-docs/design/2026-08-16-file-contract-freeze.md` のサブコマンド一覧とロック取得の表を更新する。init の承認回数が 4 回から 5 回へ増える。
+
+### ADR-003: [codiel] ドメインマップは metatron の資産とし、codiel は無くても汎用実行する
+
+- 状態: 採用
+- 決定日: 2026-09-15
+- 決定者: phyllis998
+
+#### 背景
+
+`/codiel:init` が ARCHITECTURE を生成・修復し、`orchestrating-runs` §0 が `domains: null` を「未初期化」と断定して run を終了させていた。ドメインマップは metatron の構造記述であり、codiel が作成・修復する立場にない。さらに `readDomainsResult` は ARCHITECTURE 不在・ブロック不在・JSON 不正・形式不正・例外の 5 状態をすべて `domains: null` に落とし、うち 2 つは警告も空だった。このため「マップを使わない」と「使うはずのマップを読めない」を呼び出し側が区別できなかった。
+
+#### 検討した選択肢
+
+1. 正本を `.codiel/config.json` へ新設して移す
+2. 正本を `raguel.config.yaml` の最上位へ置く
+3. 正本を `raguel.config.yaml` の `rules.<ruleId>` 配下へ置く
+4. ドメインマップを metatron へ完全移管し、codiel を metatron 必須にする
+5. 正本を動かさず writer だけ止め、`domains: null` を generic へ自動縮退させる
+6. 正本を動かさず writer を止め、「読めない理由」で正当な不在と異常を分ける(採用)
+
+#### 採用した結論
+
+⑥ を採用する。ドメインマップは ARCHITECTURE に残し、codiel は作成・修復しない。run は開始時に実行モード(`mapped` / `unscoped`)を決め、モードを run state へ記録する。マップを読めないときは、正当な不在と壊れたマップを別の状態として扱い、前者だけを汎用実行の候補にする。任意のドメイン名は、専門担当が無ければ汎用担当へ送り、タグと glob は保つ。
+
+#### 理由
+
+独自のドメイン境界を metatron 不在でも設定できることは必須要件ではない、とユーザーが判断した。このため新しい恒久設定と契約を導入せずに済む。
+
+`domains: null` は 5 状態の混合である。一括縮退は「正当な不在」と「壊れたマップ」を同一視し、書き手が自分のブロックを読まれていないことに気づけなくする。
+
+`unscoped` へ到達する経路を 2 つに限ると、どちらでも `domains` が `null` になる。このため hook 層を据え置いたまま指示層と結論が一致する。
+
+汎用担当を新設したのは、縮退時に足されるのが範囲の指示だけで、観点が差し替わらないためである。任意キーへ一般化すると、backend の観点を無関係なドメインへ当てることになる。
+
+#### 影響範囲
+
+codiel は ARCHITECTURE を書かなくなる。`/codiel:init` の聞き取りは保護パスだけになり、初期化済みの判定は CLAUDE.md の運用ルール節・`raguel.config.yaml`・`.codiel/` の 3 ディレクトリで決まる。専門担当が無いドメイン名は汎用担当が受ける。planner と architect と implementer は、ドメインマップを渡された値として受け取る。sandalphon の委譲判定はドメイン可読性を見なくなる。凍結契約 `harness-docs/design/2026-08-16-file-contract-freeze.md:70` の警告経路から init の名指しが外れる。hook(`guard-write`)の挙動と既存テストは据え置く。将来予定される Agents から Skills への移行は、別の ADR で扱う。

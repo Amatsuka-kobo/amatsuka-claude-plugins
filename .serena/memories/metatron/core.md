@@ -1,4 +1,4 @@
-`plugins/metatron` (0.3.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.3.3-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -124,7 +124,8 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 ## 他プラグインとの関係
 
-- **codiel は metatron 無しで動く。** `/codiel:init` がドメイン分割だけを聞いて最小 ARCHITECTURE を
-  自前生成するフォールバックを持つ。併用時は最小構成をそのまま活かして残りの節を足す(変換なし)。
+- **codiel は metatron 無しで動く。** `/codiel:init` は ARCHITECTURE を生成・修復せず、保護パスだけを確認する。
+  ARCHITECTURE の作成と更新は metatron が担う。codiel は ARCHITECTURE にあるドメインマップを
+  実行時に読み取るが、そこへ書き込まない。
 - sandalphon は ASIS 探索の材料として 2 文書を直読するだけ。
 - **どちらも metatron のインストール位置を参照しない。** 共有するのはファイルの書式だけ。

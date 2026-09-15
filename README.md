@@ -68,7 +68,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 ### Codiel 👀🌿
 
 GitHub issue の内容を取得し、設計・開発・PR起票・レビューを一気通貫で行うことができるプラグインです。<br>
-`/codiel:init` はドメイン分割と保護パスの聞き取りだけを行い、ARCHITECTURE の散文や GOTCHAS は生成しません。Metatron が無くても最小の ARCHITECTURE を自前で作って動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
+`/codiel:init` は保護パスの聞き取りだけを行い、ARCHITECTURE の散文や GOTCHAS は生成しません。ドメインマップが無くても動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。
 
 ### Raphael
@@ -143,6 +143,6 @@ AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマン�
 
 この3つのプラグインは連携することができます。(それぞれ独立して使用することも可)
 TOBE → intent → issue → 実装という一続きの流れを分担します。<br>
-Codiel は Metatronが無くても最小の ARCHITECTURE を自前で作り、Sandalphon が無くても通常の自動開発ワークフローを実行します。<br>
+Codiel は Metatron が無くてもドメインマップなしで動作し、Sandalphon が無くても通常の自動開発ワークフローを実行します。<br>
 Sandalphon は Codiel が無くても intent 文書を残して自前実行まで行えます。Metatron も他の2つが無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体で運用価値があります。<br>
 これらのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / metatronが管理するrules / intent 文書)とコンテキストで相互補完を行います。

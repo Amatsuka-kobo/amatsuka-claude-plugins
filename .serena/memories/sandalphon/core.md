@@ -1,4 +1,4 @@
-`plugins/sandalphon` (0.1.2-dev) — **Issue が生まれる前の上流区間**(願い → intent 文書 →
+`plugins/sandalphon` (0.2.0-dev) — **Issue が生まれる前の上流区間**(願い → intent 文書 →
 起票 → 実行系への引き渡し)を担うオーケストレーター。2026-08-16 新規追加(commit 9a121c6)。
 codiel の**前段**であり置き換えではない。書式の正本は `mem:file_contract`。
 設計根拠は `plugins/sandalphon/docs/rationale.md`。

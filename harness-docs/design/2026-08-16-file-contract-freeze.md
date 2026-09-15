@@ -67,7 +67,7 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
   素通しを ask へ格上げして届けることはしない(警告は拒否の理由ではない)。
   警告が届く経路は次の 3 つである。
   - CLI(`readDomainsResult` を直接呼ぶ経路)
-  - skills の検証コマンド(codiel `initializing-harness` の手順 5、`orchestrating-runs` の §0)
+  - skills の検証コマンド(codiel `orchestrating-runs` の §0)
   - `ask` の理由(境界判定が誤っているかもしれない文脈に添える)
 
   読み取り実装(`readDomainsResult`)は経路に関わらず警告を返す。捨ててよいのは、

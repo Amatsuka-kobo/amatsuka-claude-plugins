@@ -1,4 +1,4 @@
-`plugins/codiel` (0.7.0-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
+`plugins/codiel` (0.8.0-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
 through analysis, design discussion, planning, implementation, testing, PR and review, gated by the
 bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
@@ -16,21 +16,23 @@ bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel
 - `install-harness.sh` は **`.codiel/{specs,runs,reports}` を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
 - `recording-gotchas` は metatron CLI の案内がコンテキストにあるときだけ `append-gotcha` で追記する。プラグインルート・ソース・CLI パスは推測しない。案内が無いときは直接編集せず、エントリを `.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/` と完了報告へ持ち越す。
 
-## `/codiel:init` — 散文インタビューを廃止、単体で完結する
+## `/codiel:init` — 保護パスだけを確認する
 
-**「8 テーマの対話インタビューから ARCHITECTURE を生成する」は過去の姿。** 現在は 4 点
-(ARCHITECTURE / `CLAUDE.md` の `## Codiel ハーネス運用ルール` 節 / `raguel.config.yaml` /
-`.codiel/` 3 ディレクトリ)の不足分だけを埋める。GOTCHAS は確認対象に含めない。
+`/codiel:init` は ARCHITECTURE を生成・修復しない。簡易な ARCHITECTURE の生成と JSON 修復を
+削除し、聞き取るのは保護パスだけとした。ドメイン分割は聞かない。ARCHITECTURE の作成と更新は
+metatron が行う。
 
-- ARCHITECTURE のパスは固定値にせず `scripts/lib.mjs` の `resolveDocPaths` で解決する。
-- **metatron のインストール検出をしない。** 見るのは「解決したパスのファイルが契約を満たすか」と
-  「`/metatron:init` が自分の利用可能コマンドにあるか」の 2 点だけ。
-- `/metatron:init` が使えるなら 2 択で提示し、選ばれたら完了後の `/codiel:init` 再実行を案内して終了。
-- 使えない/選ばれなかったときは**ドメイン分割だけ**を聞いて、`# ARCHITECTURE` +
-  `## ドメインマップ` だけの最小 ARCHITECTURE を生成する。技術スタック・ディレクトリ構成・
-  コマンド定義・テスト方針・規約は聞かない。散文セクションを足さない。
-- **移行作業はゼロ。** 最小ファイルは正当な ARCHITECTURE で、後から `/metatron:init` が
-  既存の `## ドメインマップ` をそのまま活かして残りの節を足す。変換もマーカー書き換えもしない。
+ARCHITECTURE にある ` ```json metatron:domains ` のドメインマップは、codiel が実行時に読み取る。
+マーカー名とドメインマップの存在は事実として扱うが、codiel が ARCHITECTURE に書き込むことはない。
+
+「初期化済み」の判定に ARCHITECTURE は使わない。`CLAUDE.md` の運用ルール節・
+`raguel.config.yaml`・`.codiel/` の 3 ディレクトリで判定する。
+
+## `/codiel:run` のドメインモード
+
+`/codiel:run` はドメインマップが無くても開始できる。実行モードは 2 つある。
+`mapped` は有効なドメインマップに基づいて境界を課すモード、`unscoped` は境界を設けないことを
+run 開始時に明示選択したモードである。選択したモードは run state の `domainMode` に記録する。
 
 ## 2 つのルート概念(混同しない)
 
@@ -81,15 +83,15 @@ Raguel gates `init`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`
 `discuss` は起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙する。
 マーカーが完全一致しない (`intent:v2`、`<!--intent:v1-->`) ものは通常どおり本文から抽出する。
 
-## Agents (13) and domain split
+## Agents (15) and domain split
 
 `codiel-analyst`, `codiel-architect` (2 modes), `codiel-planner`, `codiel-test-designer`,
-`codiel-tester`, implementers `-frontend/-backend/-data`, reviewers
-`-frontend/-backend/-data/-doc/-security`.
+`codiel-tester`, implementers `-frontend/-backend/-data/-generic`, reviewers
+`-frontend/-backend/-data/-generic/-doc/-security`.
 
-3 ドメイン分割が馴染まないプロジェクトは ARCHITECTURE で `generic` を宣言する。
-**専用の generic agent は無い** — `codiel-implementer-backend` と `codiel-reviewer-backend` を
-汎用ペアとして再利用し、doc/security reviewer は引き続き参加する。
+専門担当が存在しないドメイン名は `codiel-implementer-generic` / `codiel-reviewer-generic` へ
+ルーティングする。既存 backend 担当を汎用担当として兼任させない。doc/security reviewer は
+引き続き参加する。
 
 ## Skills (17) and commands (3)
 
