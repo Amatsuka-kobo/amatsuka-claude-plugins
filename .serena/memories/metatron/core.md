@@ -1,4 +1,4 @@
-`plugins/metatron` (0.1.6-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.3.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -115,8 +115,7 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 - skills 3: `capturing-architecture`(初回生成)、`updating-architecture`(乖離検出と更新)、
   `recording-gotchas`。`evals/` に 3 本の JSON。**agents は持たない。**
-- commands 2: `/metatron:init`(scan の事実からセクション単位で確認しながら初回生成。
-  `## ADR 一覧` は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示)。
+- commands 2: `/metatron:init`(scan の事実からセクション単位で確認しながら ARCHITECTURE と rules 3 ファイルを初回生成し、承認後に GOTCHAS の空の台帳を作る。`## ADR 一覧` は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示)。
 - `references/` 5 本(AI が実行時に読む正本): `architecture-format.md` / `gotchas-format.md` /
   `config-schema.md` / `cli-usage.md` / `writing-discipline.md`。
 - `docs/format-change-checklist.md` is the developer checklist for format changes. It was moved out
