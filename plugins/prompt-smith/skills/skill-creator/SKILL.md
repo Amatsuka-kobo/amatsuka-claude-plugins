@@ -110,7 +110,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 - 出力の形式が決まっているときはテンプレートで示す。
 - 例は Input と Output の組で示す。
 - 英語の本文は imperative で書く。
-- 日本語の本文は `prompt-smith:prompt-smith` の文体基準に従う。
+- 日本語の本文は `prompt-smith:prompt-smith` を読み、必ずこの規律に従う。
 
 ### 安全
 
