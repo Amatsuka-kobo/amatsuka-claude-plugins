@@ -8,12 +8,6 @@
     },
     {
       "path": "plugins/codiel/CLAUDE.example.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "フェーズ開始前にドメインマップを確認する指示"
-    },
-    {
-      "path": "plugins/codiel/CLAUDE.example.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",
       "note": "ハーネスの構成要素としての言及"
@@ -110,24 +104,6 @@
     },
     {
       "path": "plugins/codiel/commands/init.md",
-      "reference": "技術スタック",
-      "classification": "D",
-      "note": "description の案内文。節を読まない"
-    },
-    {
-      "path": "plugins/codiel/commands/init.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "ドメインマップだけの最小 ARCHITECTURE を生成する"
-    },
-    {
-      "path": "plugins/codiel/commands/init.md",
-      "reference": "規約",
-      "classification": "D",
-      "note": "description の案内文。節を読まない"
-    },
-    {
-      "path": "plugins/codiel/commands/init.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",
       "note": "description の案内文"
@@ -143,18 +119,6 @@
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
       "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/skills/initializing-harness/SKILL.md",
-      "reference": "技術スタック",
-      "classification": "D",
-      "note": "Red Flag 表の記述。節を読まない"
-    },
-    {
-      "path": "plugins/codiel/skills/initializing-harness/SKILL.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "生成する最小 ARCHITECTURE の雛形の見出し"
     },
     {
       "path": "plugins/codiel/skills/initializing-harness/SKILL.md",
@@ -200,15 +164,69 @@
     },
     {
       "path": "plugins/codiel/skills/writing-dev-plans/SKILL.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "ドメインマップをステップ分割の入力に使う"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-dev-plans/SKILL.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
       "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
+    },
+    {
+      "path": "plugins/codiel/agents/codiel-implementer-generic.md",
+      "reference": "(ARCHITECTURE への言及)",
+      "classification": "C",
+      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
+    },
+    {
+      "path": "plugins/codiel/agents/codiel-reviewer-generic.md",
+      "reference": "(ARCHITECTURE への言及)",
+      "classification": "C",
+      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
+    },
+    {
+      "path": "plugins/codiel/skills/implementing/SKILL.md",
+      "reference": "システム概要",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/implementing/SKILL.md",
+      "reference": "レイヤー構造",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
+      "reference": "システム概要",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
+      "reference": "技術スタック",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
+      "reference": "レイヤー構造",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
+      "reference": "システム概要",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
+      "reference": "技術スタック",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
+    },
+    {
+      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
+      "reference": "レイヤー構造",
+      "classification": "D",
+      "note": "ARCHITECTURE を読み物として参照する案内"
     },
     {
       "path": "plugins/sandalphon/references/intent-format.md",
@@ -221,12 +239,6 @@
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
       "note": "projectDocs の解決結果からパスを取るだけ"
-    },
-    {
-      "path": "plugins/sandalphon/skills/bridging-execution/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "D",
-      "note": "/metatron:init を案内する文"
     },
     {
       "path": "plugins/sandalphon/skills/capturing-intent/SKILL.md",

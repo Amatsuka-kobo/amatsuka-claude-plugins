@@ -12,18 +12,16 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 ### `/codiel:init`
 
-対象プロジェクトに Codiel ハーネスを初期化します。ドメイン分割と保護パスを対話で聞き取り、
+対象プロジェクトに Codiel ハーネスを初期化します。対話で保護パスを聞き取り、
 `raguel.config.yaml` と `CLAUDE.md` の運用ルール節、`.codiel/` 配下のディレクトリを用意します。
-ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)が無い場合は、run の開始に必要な最小構成
-(ドメインマップだけを持つファイル)を生成します。既存ファイルは壊さず不足分だけを追記するため、
-再実行は常に安全です。内部では `initializing-harness` スキルの手順に従います。
+既存ファイルは壊さず不足分だけを追記するため、再実行は常に安全です。内部では
+`initializing-harness` スキルの手順に従います。
 
 Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
 前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
-検討してください。併用時は最小構成の ARCHITECTURE をそのまま活かして残りの節を足せます
-(書き換えや変換の作業はありません)。ARCHITECTURE / GOTCHAS のパスは `metatron.config.json` で
-変更でき、Codiel は解決されたパスを使います。GOTCHAS の台帳は metatron が管理します。metatron が
-無い環境では、失敗の記録は run のレポートと完了報告に残り、台帳へは追記されません。
+検討してください。ARCHITECTURE と GOTCHAS は metatron が管理し、Codiel は解決されたパスから
+読み取るだけです。パスは `metatron.config.json` で変更でき、metatron が無い環境では、失敗の記録は
+run のレポートと完了報告に残り、台帳へは追記されません。
 
 ### `/codiel:run <issue番号>`
 

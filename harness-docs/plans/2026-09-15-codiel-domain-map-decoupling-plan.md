@@ -183,7 +183,7 @@ baseline は `plugins/codiel/` に限定せず**リポジトリ全体**で取る
 - 検証:
   - `grep -rc '兼ね' plugins/codiel/agents/` が**全ファイル 0 件**(変更前は implementer-backend 2 件・reviewer-backend 1 件の計 3 件)。
   - `grep -rn 'codiel-implementer-backend の担当\|generic 縮退時は呼ばれない' plugins/codiel/agents/` が **0 件**(変更前は 4 件)。
-  - `grep -rln 'codiel-implementer-generic' plugins/codiel/agents/` が **2 ファイル**(frontend と data)。
+  - `grep -rln 'codiel-implementer-generic' plugins/codiel/agents/ --exclude='codiel-implementer-generic.md'` が **2 ファイル**(frontend と data)。`--exclude` を外すと、`codiel-implementer-generic.md` 自身の `name:` 行を拾って 3 ファイルになる。
   - `grep -n 'ドメインマップと実装が乖離していないことを確認する' plugins/codiel/agents/codiel-reviewer-doc.md` が **0 件**。
 
 #### T6: `implementing/SKILL.md` の汎用条件
@@ -209,7 +209,7 @@ baseline は `plugins/codiel/` に限定せず**リポジトリ全体**で取る
   4. `:129` の縮退運用の参照を実行モードの語へ揃える。
 - **§0(`:52-78`)と §3(`:156-193`)と §4.1(`:207-239`)は T8 で扱う。このタスクでは触らない。**
 - 検証:
-  - `grep -c '汎用実装者' SKILL.md` が **0 件**(変更前 2 件)。
+  - `grep -c '汎用実装者' SKILL.md` が **1 件**(変更前 2 件。§4 の 1 件が消え、§4.1 の 1 件は T8 の担当なので残る)。T8 完了後に 0 件になることは T8 の検証条件で確かめる。
   - `grep -n 'codiel-implementer-generic\|codiel-reviewer-generic' SKILL.md` が 2 件以上。
   - `grep -n 'ハーネスが未初期化' SKILL.md` が **1 件のまま**(§0 は未着手。T8 で消す)。
 
@@ -234,6 +234,7 @@ baseline は `plugins/codiel/` に限定せず**リポジトリ全体**で取る
   - `grep -n 'domainMode\|--domain-mode' SKILL.md` が 2 件以上。
   - `grep -n 'warnings' SKILL.md` が 1 件以上(**警告の提示が残っている**。契約 `:70` が §0 を名指しし続ける根拠)。
   - `grep -c 'generic 縮退' SKILL.md` が **0 件**(変更前 2 件。T7 と合わせて解消)。
+  - `grep -c '汎用実装者' SKILL.md` が **0 件**(T7 完了時点で残っていた §4.1 の 1 件が、ここで消える)。
   - §0 の分岐表が 7 行あり、`unreadable` の 5 値すべてに行き先がある。
 
 ---
@@ -742,6 +743,17 @@ pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.t
 | # | 箇所 | 誤解しやすい点 | 正しい理解 |
 | --- | --- | --- | --- |
 | 1 | 設計書 §6.10 の登録簿 12 件の表 | 「ドメインマップ」の grep 件数と登録簿のエントリ数が対応すると読める | 対応しない。登録は `termsIn` の 4 パターン(主に (d) の 40 文字条件)で決まる。`codiel-reviewer-backend.md` は grep で 2 件あるが登録簿には B が無い。判定は §5.9 の手順で行う |
+
+### 実装中に判明した検証条件の誤り(2026-09-16)
+
+**設計と実装の食い違いではなく、検証条件の設計ミスである。** 2 件とも実装は正しく、期待値の書き方が誤っていた。T5 の条件 3 と T7 の条件 1 を訂正し、T8 の検証条件へ 1 項目を足した。
+
+| # | 誤り | 落とし穴(一般則) |
+| --- | --- | --- |
+| 1 | T5 の条件 3 は `codiel-implementer-generic` を 2 ファイルと期待していたが、実際は 3 ファイルになる | **検索語が成果物自身に含まれる場合。** 新規ファイルの `name:` や見出しがそのまま検索語になるとき、そのファイル自身が件数に入る。`--exclude` で外すか、期待値に自己参照分を含めて書く |
+| 2 | T7 の条件 1 は `汎用実装者` を 0 件と期待していたが、T7 完了時点では 1 件残るのが正しい | **同じファイルを複数タスクで分担する場合。** ファイル全体を数える条件は、担当範囲外の出現を拾ってしまう。分担があるときは「自分の担当範囲でいくつ消えたか」または「他タスクの担当分が残っているか」で書く |
+
+**落とし穴 2 を避ける書き方は、同じ T7 の中に既にあった。** 条件 3「`grep -n 'ハーネスが未初期化'` が **1 件のまま**」は、T7 が §0 を触っていないことの**証拠**として働いた。同じ発想を件数の条件にも適用すればよかった。分担のあるファイルでは、消える数だけでなく**残る数**も条件に書く。
 
 ---
 
