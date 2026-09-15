@@ -36,7 +36,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/check-intent-env.mjs"
 | 判定 | 見るもの | 扱い |
 | --- | --- | --- |
 | 起票できるか | `isGitRepo` / `repoSlug` / `ghInstalled` / `ghAuthenticated` | どれか 1 つでも欠ければ、起票を伴う選択肢を出さない |
-| 委譲できるか | `/codiel:run` が自分の利用可能コマンド一覧にあるか、かつ `codielReady` | 両方を満たすときだけ委譲を選択肢に出す |
+| 委譲できるか | `/codiel:run` が自分の利用可能コマンド一覧にあるか、かつ `codielHandoffCandidate` | 両方を満たすときだけ委譲を選択肢に出す |
 | Raguel MCP を確認できるか | 自分の利用可能ツール一覧に `mcp__raguel__` で始まるツールがあるか | 無くても選択肢は消さず、手順 2 の注記を添える |
 
 - **プラグインと MCP の可用性はファイルシステムの事実ではない。** 環境 JSON では判定できないため、
@@ -45,12 +45,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/check-intent-env.mjs"
   issue 作成権限までは保証しない。403 等は起票時に判明したら手順 7 へ合流する。
 - 畳んだ経路は必ず 1 行で理由を報告する(共通規律)。無言で選択肢を減らさない。
 
-**委譲を選択肢に出すのは `codielReady` が true のときだけである。** false のときは選択肢に出さず、
-1 行の案内に留める(選ばせても必ず失敗するため)。案内の文言は共通規律の「畳む経路の対応表」に従う。
+**委譲を選択肢に出すのは `codielHandoffCandidate` が true のときだけである。** false のときは選択肢に出さず、
+1 行の案内に留める。案内の文言は共通規律の「畳む経路の対応表」に従う。
 
-- **`domainsReadable: false` の案内先は、`/metatron:init` が自分の利用可能コマンドにあるかで分岐する。**
-  あれば `/metatron:init`(推奨)で ARCHITECTURE を整備するよう案内し、無ければ `/codiel:init` が
-  ドメインマップだけの最小 ARCHITECTURE を生成できると案内する。
 - `/codiel:run` が利用可能コマンド一覧に無いときは、案内も出さず委譲に言及しない。
 
 ### 2. 経路を 1 回の質問で決める

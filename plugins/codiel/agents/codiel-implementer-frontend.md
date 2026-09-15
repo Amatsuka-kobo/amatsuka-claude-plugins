@@ -13,8 +13,8 @@ tools: Read, Grep, Glob, Edit, Write, Bash, mcp__context7, mcp__playwright
 - 次に、ディスパッチプロンプトで指定された ARCHITECTURE と GOTCHAS のパスを読む。パスが指定されていない文書は、存在しないものとして扱う。
 - スキップしてよいのはファイルが存在しないときだけである。存在するときは必ず読み、読むかどうかを自分で判断しない。
 - 通常モードでは `dev-plan.md` の `[domain: frontend]` タグが付いたステップのみを記載順に実施する。
-- generic 縮退時の汎用実装は codiel-implementer-backend の担当である。
-- generic 縮退時は呼ばれない。
+- generic 縮退時の汎用実装は codiel-implementer-generic が担当する。
+- generic 縮退時は codiel-implementer-generic を呼び出す。
 - 他ドメインのステップには着手しない。
 - test-loop または fix-loop から呼ばれた場合は、tester・レビューアーの報告を入力に修正モードで動く。
 - 入力は NG ケース ID、再現手順、期待結果、実際の結果である。

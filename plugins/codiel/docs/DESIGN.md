@@ -390,10 +390,12 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
-機械的に配置し、ARCHITECTURE(ドメインマップだけの最小構成)/ CLAUDE.md / raguel.config.yaml は
-聞き取り(ドメイン分割と保護パス)の回答から生成する(既存ファイルは不足分のみ追記)。
+機械的に配置し、CLAUDE.md / raguel.config.yaml は聞き取り(ドメイン分割と保護パス)の回答から
+生成する(既存ファイルは不足分のみ追記)。
+ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
+ドメインマップを作らない。
 GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
-`/codiel:run` は資産配置を行わず、未初期化を検出したら `/codiel:init` を案内して終了する。
+`/codiel:run` は資産配置を行わず、B + C + D(`CLAUDE.md` が存在し `## Codiel ハーネス運用ルール` 見出しを含むこと、`raguel.config.yaml` が存在し YAML としてパースできること、`.codiel/specs` / `.codiel/runs` / `.codiel/reports` の 3 ディレクトリが存在すること)が揃っていることを初期化済みと判定する。いずれかが揃っていないときは未初期化として `/codiel:init` を案内して終了する。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
 本節が記す ARCHITECTURE の節構成と GOTCHAS のエントリ書式は執筆当時の設計であり、
