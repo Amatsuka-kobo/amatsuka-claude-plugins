@@ -82,5 +82,19 @@
 - `2026/0824/phyllis998/metatron-rules-expansion.md` | 2026-08-25 | phyllis998 | metatron 区間 2 完了：実装移行、rules 推敲、参照修正、検証
 - `2026/0825/phyllis998/agent-policy-claude-model-setup.md` | 2026-08-26 | phyllis998 | ガード検証・全変更コミット準備
 - `2026/0826/phyllis998/1752-agent-policy-external-agent-compatibility.md` | 2026-08-26 | phyllis998 | agent-policy互換性監査と結論
-- `2026/0826/phyllis998/2050-agent-policy-external-agent-compatibility.md` | 2026-08-26 | phyllis998 | 実装計画書第2版・引き継ぎ書・起動プロンプト完成
+- `2026/0826/phyllis998/2050-agent-policy-external-agent-compatibility.md` | 2026-08-26 | phyllis998 | 計画書第2版レビュー第2巡・修正反映完了
 - `2026/0826/phyllis998/agent-policy-codex-model-setup.md` | 2026-08-26 | phyllis998 | delegation gate 実装・全検証完了
+- `2026/0827/phyllis998/1936-subagent-start-hook-implementation.md` | 2026-08-27 | phyllis998 | agent-policy SubagentStart検証用プロンプト生成・docs/promptsへ保存
+- `2026/0828/phyllis998/0117-agent-policy-subagent-start-verification.md` | 2026-08-28 | phyllis998 | agent-policy SubagentStart 検証と setup-agents バグ調査
+- `2026/0831/phyllis998/0857-agent-policy-two-profile-design.md` | 2026-08-31 | phyllis998 | Agent Policy 2 プロファイル設計完了、レビュー反映と実装準備
+- `2026/0904/phyllis998/2100-custom-policy-role-table-update.md` | 2026-09-04 | phyllis998 | `AGENT_DENIED_MODELS` から `gpt-luna` を外し、帯ベース一本化を実装・検証完了
+- `2026/0907/phyllis998/1515-agent-policy-opus-role-revision.md` | 2026-09-07 | phyllis998 | agent-policy 0.16.0: Opus 役割導入・Fable アドバイザー一元化の実装
+- `2026/0907/phyllis998/1755-hook-auto-recording-ai-response.md` | 2026-09-07 | phyllis998 | 実装完了・レビュー採択・全テスト通過
+- `2026/0907/phyllis998/2211-raphael-antibody-diagnosis.md` | 2026-09-07 | phyllis998 | N7 実測で閾値 10% へ引き下げ、設計書第 3 版確定
+- `2026/0907/phyllis998/2220-chat-recorder-truncation-diagnosis.md` | 2026-09-07 | phyllis998 | chat-recorder 終端延長実装の完了・コミット・GOTCHAS 記録の要否検討
+- `2026/0909/phyllis998/0831-custom-policy-recommended-model-analysis.md` | 2026-09-09 | phyllis998 | 用語「帯」を「役割」に統一する改修の dispatch 済み・並行進行中
+- `2026/0909/phyllis998/1156-subagent-discipline-migration.md` | 2026-09-09 | phyllis998 | 実装プロンプト完成、成果物 4 点確定
+- `2026/0909/phyllis998/1912-agent-policy-role-mapping.md` | 2026-09-09 | phyllis998 | 役割マーカー対応表の確認
+- `2026/0910/phyllis998/1003-skill-reference-permission-investigation.md` | 2026-09-10 | phyllis998 | Claude Code スキル配置時のリファレンス読込権限要件を外部情報・実装根拠から調査
+- `2026/0910/phyllis998/1033-agent-policy-definition-method.md` | 2026-09-10 | phyllis998 | agent-policy エージェント定義ファイルの命名・分割・MCP配置を決定
+- `2026/0910/phyllis998/1155-codiel-agent-policy-compatibility.md` | 2026-09-10 | phyllis998 | Codiel エージェントの agent-policy 統合で、名指し dispatch が合成されない実態と改修方針(A/B/D推奨)を報告

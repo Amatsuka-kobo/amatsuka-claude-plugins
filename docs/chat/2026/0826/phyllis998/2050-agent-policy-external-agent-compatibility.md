@@ -1095,3 +1095,52 @@ Sol 突き合わせ受領(矛盾 5・漏れ 2 — block 配列 parse・照合曖
 # phyllis998
 
 > 第2巡回してください
+
+## セッション 26: 計画書第2版レビュー第2巡・修正反映完了
+
+# AI
+
+計画書第 2 版のレビュー第 2 巡を dispatch(Haiku / Grok 独立 / Sol 設計書突き合わせ)。全完了後に採否判断・反映して報告する。
+
+第 2 巡レビュー 3 本実行中。
+
+記録完了。第 2 巡レビュー 3 本実行中、完了待ち。
+
+Haiku 第 2 巡受領(実質指摘: Task 2↔5 の依存循環、複数ヒット時の deny 適用関係、固定文の責任分界 — いずれも文言修正で解消可能)。Grok・Sol 完了待ち。
+
+Sol 第 2 巡受領(矛盾 2・漏れ 5 — 全件計画側是正で解消可能、人間判断不要と明記)。Grok 完了待ち、揃い次第一括反映。
+
+第 2 巡出揃い。**Grok が設計レベルの致命バグを 1 件発見**: 適用除外 3 の allow-list(`name`/`description`/`model`/`tools` 以外で即そのまま起動)は、生成器が全定義に書く `color:` と `agent-policy-role:`、ウィザード自作定義の `color:` で**ほぼ全 Agent が適用除外に落ち、モデル注入も合成も発火しない**。既知の無害メタフィールドを allow-list へ追加する設計是正が必要。他は計画側の是正(照合順序・cwd フォールバック撤回・Task 依存順・block 拡張の tools 限定・stdin タイムアウト・ARCHITECTURE 追随の前倒し等)。一括反映する。
+
+引き継ぎ書に旧文の残骸 1 箇所(`cwd` フォールバック言及が新方針と矛盾)。修正。
+
+第 2 巡完了・全反映済み。
+
+## 第 2 巡の結果と採否
+
+**設計書側の是正 1 件(致命バグ、Grok 発見):**
+- 適用除外 3 の allow-list が狭すぎた — 生成器は全定義に `color:` と `agent-policy-role:` を書き、Claude Code のウィザード自作定義にも `color:` が付く。そのままでは**ほぼ全 Agent が適用除外 3 に落ち、モデル注入も合成も一度も発火しない**。allow-list に `color` / `agent-policy-role`(既知の無害メタフィールド)を追加して是正。未知フィールドへの頑健性は維持
+
+**計画書側の主要是正(第 3 版):**
+- **タスク順を 0 → 1 → 5 → 2 → 3 → 4 → 6 → 7 → 8 へ**(Task 2 の整合確認が Task 5 改訂後を基準にする依存循環の解消。Haiku・Grok 双方が指摘)
+- **`cwd` フォールバック撤回** — SessionStart は env のみで走査し `roleLabel` も env 依存のため、cwd に倒すと親子の対応表が分岐する。`CLAUDE_PROJECT_DIR` のみに統一(意図的逸脱と明記)
+- **parser 拡張を `tools` キー限定に** — 汎用 block 収集は `agent-policy-role:` の解釈まで変え「注入文面 1 文字不変」を破る
+- **照合を順序付きに**: 完全形一致(大小区別) → 末段一致 → 複数ヒットは注入。`Explore`/`Plan` の大小非区別は設計違反(user の `plan` カスタムを誤 deny)のため撤回、実表記は Task 8 で確認
+- **stdin を 2 秒タイムアウト付き読取に**(EOF 欠落で spawn 毎 10 秒ブロックする経路の遮断。metatron 既存実装と同型) / `agent_type` 欠落・空 → 注入側
+- **ARCHITECTURE 追随を Task 4 へ前倒し**(配布物 → 参照層の依存発生と同時期に。契約外依存の中間状態を作らない)
+- **`LABELS` キャッシュ廃止**(順序依存テストの芽) / GPT/Grok dispatch 節は「正本を discipline の合成手順へ移し、スキルは参照+profile 差分」へ / §4 提案文に永続変更・粒度拡大の注意を追加 / advisor 行 assertion・両 policy×複数 marker の cross-hook 同一性・解釈不能 tools → undefined のテスト追加 / Task 0(着手時再確認)新設 / ログ形式を既存 SessionStart に統一 / hooks.json description・README 動作要件節を改訂対象へ
+
+引き継ぎ書・メモリも第 3 版へ更新済み(落とし穴 4 件追記、旧文の矛盾 1 箇所修正)。
+
+## 成果物の最終状態
+
+- 設計書 第 4 版(+レビュー由来の是正 3 箇所): `harness-docs/design/2026-08-27-agent-policy-external-agent-model-assignment-design.md`
+- 実装計画書 **第 3 版・レビュー 2 巡完了**: `harness-docs/plans/2026-08-27-agent-policy-external-agent-model-assignment.md`
+- 実装引き継ぎ書: `harness-docs/handover/2026-08-27-agent-policy-external-agent-model-assignment-implementation-handover.md`
+- 起動プロンプト(goal 用): `docs/prompts/2026-08-27-agent-policy-external-agent-implementation-prompt.md`
+
+第 2 巡の指摘は第 1 巡より収束傾向(構造指摘は allow-list の 1 件のみ、残りは仕様精密化)。実装セッションへ渡せる状態。
+
+# phyllis998
+
+> すべてコミットお願いします
