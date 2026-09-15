@@ -408,6 +408,26 @@ var MODELS = [
     color: "red"
   }
 ];
+var ASSIGNMENTS = {
+  "claude-model-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["sonnet"],
+    "light-impl": ["haiku"],
+    escalation: ["fable"],
+    general: ["sonnet"],
+    "design-plan": ["opus"],
+    "explore-lead": ["opus"],
+    explore: ["sonnet"],
+    "realtime-research": ["sonnet"],
+    "e2e-verify": ["sonnet"],
+    "independent-review": ["sonnet"],
+    "doc-review": ["haiku"],
+    "code-review": ["sonnet"],
+    "final-review": ["fable"],
+    "gate-review": ["fable"],
+    advisor: ["fable"]
+  }
+};
 var RECOMMENDED = {
   "complex-impl": ["opus", "gpt-sol"],
   "normal-impl": ["sonnet", "gpt-luna", "grok"],
@@ -441,6 +461,31 @@ function allowsAgentTool(ids, model) {
 }
 function modelById(id) {
   return MODELS.find((model) => model.id === id);
+}
+var CUSTOM_INJECTION_VALUES = [
+  "custom",
+  "with-codex",
+  "with-grok",
+  "with-codex-grok"
+];
+function isCustomInjection(value) {
+  if (value === void 0) return false;
+  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
+}
+var CLAUDE_ENUM_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
+var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
+function runsOnClaude(model) {
+  return model === void 0 || CLAUDE_RESOLVED.has(model);
+}
+function candidateScopeFor(value) {
+  if (isCustomInjection(value)) return "with-external";
+  if (value?.trim().toLowerCase() === "claude") return "claude-only";
+  return void 0;
 }
 
 // src/agents/vocabulary.ts
@@ -737,7 +782,6 @@ function mcpCurrentOf(content) {
 }
 
 // src/setup-agents.ts
-var CLAUDE_ENUMS = ["sonnet", "opus", "haiku", "fable"];
 var VENDOR_COLORS = {
   gpt: "yellow",
   grok: "red",
@@ -842,7 +886,7 @@ function defaultAgentName(options, spec) {
   return defaultName === void 0 ? spec.id : `${spec.id}-${defaultName}`;
 }
 function isClaudeEnum(model) {
-  return CLAUDE_ENUMS.includes(model);
+  return CLAUDE_ENUM_MODELS.includes(model);
 }
 function unavailableWarning(live) {
   return `live models unavailable (${live.reason ?? "unknown"}); model existence was not validated`;
@@ -870,11 +914,13 @@ function targetsFor(options, live) {
       if (spec2 === void 0) throw new Error(`models: ${id} is unknown`);
       return spec2;
     });
-    const included = live.ok ? specs.filter((spec2) => modelIsAvailable(spec2.model, live)) : specs;
-    const modelsDropped = live.ok ? specs.filter((spec2) => !modelIsAvailable(spec2.model, live)).map((spec2) => spec2.id) : [];
+    const candidates = options.scope === "claude-only" ? specs.filter((spec2) => spec2.vendor === "claude") : specs;
+    const scopeDropped = options.scope === "claude-only" ? specs.filter((spec2) => spec2.vendor !== "claude").map((spec2) => spec2.id) : [];
+    const included = live.ok ? candidates.filter((spec2) => modelIsAvailable(spec2.model, live)) : candidates;
+    const unavailableDropped = live.ok ? candidates.filter((spec2) => !modelIsAvailable(spec2.model, live)).map((spec2) => spec2.id) : [];
     return {
       warnings,
-      modelsDropped,
+      modelsDropped: [...scopeDropped, ...unavailableDropped],
       targets: included.map((spec2) => {
         const vendor2 = resolveVendor(options, spec2.model, spec2, live);
         return {
@@ -890,6 +936,16 @@ function targetsFor(options, live) {
     };
   }
   const spec = requireModel(options);
+  if (options.scope === "claude-only" && spec.vendor !== "claude") {
+    throw new Error(
+      `model-id: ${options.modelId} is not available with --scope claude`
+    );
+  }
+  if (options.scope === "claude-only" && options.model !== "" && !isClaudeEnum(options.model)) {
+    throw new Error(
+      `model: ${options.model} is not available with --scope claude`
+    );
+  }
   const model = options.model === "" ? spec.model : options.model;
   if (options.write && live.ok && !modelIsAvailable(model, live)) {
     throw new Error(
@@ -1191,8 +1247,15 @@ function setup(options, live) {
     modelsDropped: resolution.modelsDropped
   };
 }
-function listLiveModels(live) {
-  const claudeEnums = [...CLAUDE_ENUMS];
+function listLiveModels(live, scope) {
+  const claudeEnums = [...CLAUDE_ENUM_MODELS];
+  if (scope === "claude-only") {
+    return {
+      ok: true,
+      models: [],
+      claudeEnums
+    };
+  }
   if (!live.ok) {
     return {
       ok: false,
@@ -1234,7 +1297,7 @@ function listAvailableRoles(options) {
   }));
   return { ok: true, lang: options.lang, roles };
 }
-function coveredDefinitions(projectDir, roleIds) {
+function coveredDefinitions(projectDir, roleIds, scope) {
   const covered = new Map(
     roleIds.map((roleId) => [roleId, []])
   );
@@ -1248,6 +1311,11 @@ function coveredDefinitions(projectDir, roleIds) {
       );
       const marker = document.meta.get("agent-policy-role");
       if (marker === void 0) continue;
+      const model = document.meta.get("model");
+      const vendor = document.meta.get("agent-policy-vendor");
+      if (scope === "claude-only" && (!runsOnClaude(model) || vendor !== void 0 && vendor !== "claude" && vendor !== "none")) {
+        continue;
+      }
       const name = document.meta.get("name") ?? file.replace(/\.md$/, "");
       for (const roleId of splitList(marker)) {
         covered.get(roleId)?.push(name);
@@ -1276,7 +1344,7 @@ function listCoverage(options) {
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
   );
-  const covered = coveredDefinitions(options.dir, roleIds);
+  const covered = coveredDefinitions(options.dir, roleIds, options.scope);
   const fallbackNames = options.lang === "en" ? void 0 : roleIds.some((id) => fragments.get(id)?.defaultName === void 0) ? bundledDefaultNames(options.dir) : void 0;
   const roles = roleIds.map((id) => {
     const fragment = fragments.get(id);
@@ -1287,7 +1355,7 @@ function listCoverage(options) {
       id,
       label: fragment.label,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
-      models: RECOMMENDED[id],
+      models: options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][id] : RECOMMENDED[id],
       coveredBy: covered.get(id) ?? []
     };
   });
@@ -1299,6 +1367,7 @@ function listCoverage(options) {
 }
 function parseArgs(argv) {
   const options = {
+    scope: candidateScopeFor(process.env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only",
     modelId: "",
     models: [],
     name: "",
@@ -1327,8 +1396,15 @@ function parseArgs(argv) {
       case "--list-policies":
       case "--list-models":
         throw new Error(
-          `Unsupported option: ${arg} was removed; setup-agents is custom-profile only`
+          `Unsupported option: ${arg} was removed; use --scope claude|custom to choose the candidate scope`
         );
+      case "--scope":
+        if (value !== "claude" && value !== "custom") {
+          throw new Error("scope: must be claude or custom");
+        }
+        options.scope = value === "claude" ? "claude-only" : "with-external";
+        index += 1;
+        break;
       case "--model-id":
         options.modelId = requireValue(value, "model-id");
         index += 1;
@@ -1446,7 +1522,8 @@ async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.listLiveModels) {
-      respond(listLiveModels(await fetchLiveModels(process.env)));
+      const live = options.scope === "claude-only" ? { ok: true, ids: [], vendors: {} } : await fetchLiveModels(process.env);
+      respond(listLiveModels(live, options.scope));
     } else if (options.listCoverage) {
       respond(listCoverage(options));
     } else if (options.listMcp) {
@@ -1468,7 +1545,8 @@ async function main() {
     } else if (options.listRoles) {
       respond(listAvailableRoles(options));
     } else {
-      respond(setup(options, await fetchLiveModels(process.env)));
+      const live = options.scope === "claude-only" ? { ok: true, ids: [], vendors: {} } : await fetchLiveModels(process.env);
+      respond(setup(options, live));
     }
   } catch (error) {
     respond({

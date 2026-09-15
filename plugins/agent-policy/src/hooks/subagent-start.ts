@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // SubagentStart フック: Agent tool を持つ可能性があるサブエージェントへ、
-// 役割マーカー対応表とサブエージェント向け規律を注入する。
+// その構成の候補集合による役割マーカー対応表を注入する。
 
-import fs from "node:fs"
 import path from "node:path"
-import { isCustomInjection } from "../agents/policies"
+import { candidateScopeFor } from "../agents/policies"
 import {
+  candidateAgents,
   type MarkedAgent,
   markerTable,
   projectAgentsDir,
@@ -14,7 +14,6 @@ import {
 
 const STDIN_TIMEOUT_MS = 2000
 const MAX_CONTEXT_CHARS = 9500
-const MARKER_LINE = "<!-- marker-table -->"
 const NO_MARKERS = "対応表なし(このプロジェクトに役割マーカー付き定義は無い)"
 
 interface SubagentStartInput {
@@ -37,12 +36,6 @@ interface Resolution {
   phase: "exact" | "suffix" | "unknown"
   matches: AgentMatch[]
   target: AgentMatch | undefined
-}
-
-interface ContextSections {
-  before: string[]
-  table: string[]
-  after: string[]
 }
 
 function report(reason: string): void {
@@ -189,62 +182,19 @@ function deniedBy(target: AgentMatch | undefined): string | undefined {
   return `${target.source}:${target.agent.name}:without-Agent`
 }
 
-function fragmentLines(fragment: string): string[] {
-  const normalized = fragment.replaceAll("\r\n", "\n")
-  const withoutTerminalNewline = normalized.endsWith("\n")
-    ? normalized.slice(0, -1)
-    : normalized
-  return withoutTerminalNewline === "" ? [] : withoutTerminalNewline.split("\n")
-}
-
-function composeSections(
-  fragment: string | undefined,
-  table: string
-): ContextSections {
-  const tableLines = table.split("\n")
-  if (fragment === undefined) {
-    return { before: [], table: tableLines, after: [] }
-  }
-
-  const lines = fragmentLines(fragment)
-  const markerIndex = lines.findIndex((line) => line.trim() === MARKER_LINE)
-  if (markerIndex >= 0) {
-    return {
-      before: lines.slice(0, markerIndex),
-      table: tableLines,
-      after: lines.slice(markerIndex + 1)
-    }
-  }
-
-  const before = [...lines]
-  while (before.at(-1) === "") before.pop()
-  return { before: [...before, ""], table: tableLines, after: [] }
-}
-
-function render(sections: ContextSections): string {
-  return [...sections.before, ...sections.table, ...sections.after].join("\n")
-}
-
-function truncateContext(sections: ContextSections): {
+function truncateTable(table: string): {
   context: string
   truncated: boolean
 } {
-  let context = render(sections)
-  if (context.length <= MAX_CONTEXT_CHARS) {
-    return { context, truncated: false }
+  if (table.length <= MAX_CONTEXT_CHARS) {
+    return { context: table, truncated: false }
   }
 
-  while (sections.after.length > 0 && context.length > MAX_CONTEXT_CHARS) {
-    sections.after.pop()
-    context = render(sections)
-  }
-  while (sections.before.length > 0 && context.length > MAX_CONTEXT_CHARS) {
-    sections.before.pop()
-    context = render(sections)
-  }
-  while (sections.table.length > 2 && context.length > MAX_CONTEXT_CHARS) {
-    sections.table.pop()
-    context = render(sections)
+  const lines = table.split("\n")
+  let context = lines.join("\n")
+  while (lines.length > 2 && context.length > MAX_CONTEXT_CHARS) {
+    lines.pop()
+    context = lines.join("\n")
   }
   if (context.length > MAX_CONTEXT_CHARS) {
     context = context.slice(0, MAX_CONTEXT_CHARS)
@@ -252,27 +202,21 @@ function truncateContext(sections: ContextSections): {
   return { context, truncated: true }
 }
 
-function readFragment(env: NodeJS.ProcessEnv): string | undefined {
-  const pluginRoot = env.CLAUDE_PLUGIN_ROOT
-  if (pluginRoot === undefined || pluginRoot === "") {
-    report("fragment missing")
-    return undefined
-  }
-  try {
-    return fs.readFileSync(
-      path.join(pluginRoot, "references", "subagent-discipline.md"),
-      "utf8"
-    )
-  } catch {
-    report("fragment missing")
-    return undefined
-  }
-}
-
 function bundledAgentsDir(env: NodeJS.ProcessEnv): string | undefined {
   const pluginRoot = env.CLAUDE_PLUGIN_ROOT
   if (pluginRoot === undefined || pluginRoot === "") return undefined
   return path.join(pluginRoot, "agents")
+}
+
+function tableFor(
+  env: NodeJS.ProcessEnv,
+  projectAgents: MarkedAgent[]
+): string {
+  const scope = candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION)
+  if (scope === undefined) return NO_MARKERS
+  return (
+    markerTable(env, candidateAgents(projectAgents, scope), scope) ?? NO_MARKERS
+  )
 }
 
 function buildContext(
@@ -291,20 +235,14 @@ function buildContext(
   debug(env, `match=${matchDescription(resolution)}`)
   debug(env, `deny=${denyReason ?? "no"}`)
   if (denyReason !== undefined) {
-    debug(env, "fragment-size=skipped table-size=skipped context-size=0")
+    debug(env, "table-size=skipped context-size=0")
     return undefined
   }
 
-  const table = isCustomInjection(env.AMATSUKA_AGENT_AUTO_INJECTION)
-    ? (markerTable(env, projectAgents) ?? NO_MARKERS)
-    : NO_MARKERS
-  const fragment = readFragment(env)
-  const result = truncateContext(composeSections(fragment, table))
+  const table = tableFor(env, projectAgents)
+  const result = truncateTable(table)
   if (result.truncated) report("truncated")
-  debug(
-    env,
-    `fragment-size=${fragment?.length ?? 0} table-size=${table.length} context-size=${result.context.length}`
-  )
+  debug(env, `table-size=${table.length} context-size=${result.context.length}`)
   return result.context
 }
 

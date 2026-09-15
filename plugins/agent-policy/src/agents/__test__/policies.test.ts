@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   ASSIGNMENTS,
   allowsAgentTool,
+  CLAUDE_ENUM_MODELS,
+  candidateScopeFor,
   isCustomInjection,
   MODELS,
   type ModelId,
@@ -9,7 +11,8 @@ import {
   POLICIES,
   policyForInjection,
   RECOMMENDED,
-  rolesFor
+  rolesFor,
+  runsOnClaude
 } from "../policies"
 import { ROLES, type RoleId } from "../roles"
 
@@ -81,7 +84,7 @@ describe("POLICIES", () => {
     expect(POLICIES).toEqual([
       {
         id: "claude-model-policy",
-        label: "Claude のみ(レガシー)",
+        label: "Claude のみ",
         injection: "claude"
       },
       {
@@ -149,6 +152,16 @@ describe("MODELS", () => {
     for (const model of MODELS) {
       expect("aliasEnv" in model, model.id).toBe(false)
     }
+  })
+})
+
+describe("CLAUDE_ENUM_MODELS", () => {
+  it("ウィザードの提示順を保ち、MODELS の Claude ベンダーと集合一致する", () => {
+    expect(CLAUDE_ENUM_MODELS).toEqual(["sonnet", "opus", "haiku", "fable"])
+    const claudeModelIds = MODELS.filter(
+      (model) => model.vendor === "claude"
+    ).map((model) => model.id)
+    expect([...CLAUDE_ENUM_MODELS].sort()).toEqual([...claudeModelIds].sort())
   })
 })
 
@@ -274,5 +287,49 @@ describe("isCustomInjection", () => {
     "unknown"
   ])("%s は custom 系として扱わない", (value) => {
     expect(isCustomInjection(value)).toBe(false)
+  })
+})
+
+describe("runsOnClaude", () => {
+  it.each([
+    undefined,
+    "inherit",
+    ...CLAUDE_ENUM_MODELS
+  ])("%s は Claude 上で実行される", (model) => {
+    expect(runsOnClaude(model)).toBe(true)
+  })
+
+  it.each([
+    "claude-gpt-5-6-luna",
+    "claude-grok-4-6"
+  ])("%s は Claude enum ではない", (model) => {
+    expect(runsOnClaude(model)).toBe(false)
+  })
+})
+
+describe("candidateScopeFor", () => {
+  it.each([
+    "custom",
+    "with-codex",
+    "with-grok",
+    "with-codex-grok",
+    "CuStOm",
+    " custom "
+  ])("%s は外部ベンダーを候補に含める", (value) => {
+    expect(candidateScopeFor(value)).toBe("with-external")
+  })
+
+  it("claude は Claude のみを候補にする", () => {
+    expect(candidateScopeFor("claude")).toBe("claude-only")
+  })
+
+  it.each([
+    undefined,
+    "",
+    "   ",
+    "none",
+    "unknown"
+  ])("%s は候補範囲を決めない", (value) => {
+    expect(candidateScopeFor(value)).toBeUndefined()
   })
 })

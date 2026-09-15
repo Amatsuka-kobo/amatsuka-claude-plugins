@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 // src/hooks/subagent-start.ts
-import fs2 from "node:fs";
 import path2 from "node:path";
 
 // src/agents/roles.ts
@@ -126,6 +125,21 @@ var CUSTOM_INJECTION_VALUES = [
 function isCustomInjection(value) {
   if (value === void 0) return false;
   return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
+}
+var CLAUDE_ENUM_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
+var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
+function runsOnClaude(model) {
+  return model === void 0 || CLAUDE_RESOLVED.has(model);
+}
+function candidateScopeFor(value) {
+  if (isCustomInjection(value)) return "with-external";
+  if (value?.trim().toLowerCase() === "claude") return "claude-only";
+  return void 0;
 }
 
 // src/hooks/marker-scan.ts
@@ -260,7 +274,19 @@ function roleLabels(env) {
     return label;
   };
 }
-function markerTable(env, marked) {
+var CLAUDE_VENDORS = /* @__PURE__ */ new Set(["claude", "none"]);
+function runsOnClaudeAgent(entry) {
+  return runsOnClaude(entry.model) && (entry.vendor === void 0 || CLAUDE_VENDORS.has(entry.vendor));
+}
+function candidateAgents(marked, scope) {
+  if (scope === "with-external") return marked;
+  return marked.filter(runsOnClaudeAgent);
+}
+var SCOPE_LINES = {
+  "claude-only": "\u8868\u306B\u7121\u3044\u5F79\u5272\u306E\u59D4\u8B72\u5148\u3082\u3001`model` \u304C `sonnet` / `opus` / `haiku` / `fable` / `inherit` \u306E\u3044\u305A\u308C\u304B\u307E\u305F\u306F\u672A\u5BA3\u8A00\u3067\u3001\u304B\u3064 `agent-policy-vendor` \u304C `claude` / `none` \u306E\u3044\u305A\u308C\u304B\u307E\u305F\u306F\u672A\u5BA3\u8A00\u3067\u3042\u308B\u5B9A\u7FA9\u304B\u3089\u9078\u3076\u3002\u305D\u308C\u4EE5\u5916\u306E\u5B9A\u7FA9\u306F\u59D4\u8B72\u5148\u306B\u3057\u306A\u3044\u3002",
+  "with-external": "\u8868\u306B\u7121\u3044\u5F79\u5272\u306E\u59D4\u8B72\u5148\u306F\u3001\u5916\u90E8\u30D9\u30F3\u30C0\u30FC\u306E\u30E2\u30C7\u30EB\u3092\u6307\u5B9A\u3057\u305F\u5B9A\u7FA9\u3082\u542B\u3081\u3066\u9078\u3093\u3067\u3088\u3044\u3002"
+};
+function markerTable(env, marked, scope) {
   const labelOf = roleLabels(env);
   const byRole = /* @__PURE__ */ new Map();
   for (const entry of marked) {
@@ -272,7 +298,8 @@ function markerTable(env, marked) {
   }
   if (byRole.size === 0) return void 0;
   const lines = [
-    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002"
+    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002",
+    SCOPE_LINES[scope]
   ];
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role);
@@ -286,7 +313,6 @@ function markerTable(env, marked) {
 // src/hooks/subagent-start.ts
 var STDIN_TIMEOUT_MS = 2e3;
 var MAX_CONTEXT_CHARS = 9500;
-var MARKER_LINE = "<!-- marker-table -->";
 var NO_MARKERS = "\u5BFE\u5FDC\u8868\u306A\u3057(\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u5B9A\u7FA9\u306F\u7121\u3044)";
 function report(reason) {
   process.stderr.write(`agent-policy subagent-start: ${reason}
@@ -400,74 +426,30 @@ function deniedBy(target) {
   }
   return `${target.source}:${target.agent.name}:without-Agent`;
 }
-function fragmentLines(fragment) {
-  const normalized = fragment.replaceAll("\r\n", "\n");
-  const withoutTerminalNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
-  return withoutTerminalNewline === "" ? [] : withoutTerminalNewline.split("\n");
-}
-function composeSections(fragment, table) {
-  const tableLines = table.split("\n");
-  if (fragment === void 0) {
-    return { before: [], table: tableLines, after: [] };
+function truncateTable(table) {
+  if (table.length <= MAX_CONTEXT_CHARS) {
+    return { context: table, truncated: false };
   }
-  const lines = fragmentLines(fragment);
-  const markerIndex = lines.findIndex((line) => line.trim() === MARKER_LINE);
-  if (markerIndex >= 0) {
-    return {
-      before: lines.slice(0, markerIndex),
-      table: tableLines,
-      after: lines.slice(markerIndex + 1)
-    };
-  }
-  const before = [...lines];
-  while (before.at(-1) === "") before.pop();
-  return { before: [...before, ""], table: tableLines, after: [] };
-}
-function render(sections) {
-  return [...sections.before, ...sections.table, ...sections.after].join("\n");
-}
-function truncateContext(sections) {
-  let context = render(sections);
-  if (context.length <= MAX_CONTEXT_CHARS) {
-    return { context, truncated: false };
-  }
-  while (sections.after.length > 0 && context.length > MAX_CONTEXT_CHARS) {
-    sections.after.pop();
-    context = render(sections);
-  }
-  while (sections.before.length > 0 && context.length > MAX_CONTEXT_CHARS) {
-    sections.before.pop();
-    context = render(sections);
-  }
-  while (sections.table.length > 2 && context.length > MAX_CONTEXT_CHARS) {
-    sections.table.pop();
-    context = render(sections);
+  const lines = table.split("\n");
+  let context = lines.join("\n");
+  while (lines.length > 2 && context.length > MAX_CONTEXT_CHARS) {
+    lines.pop();
+    context = lines.join("\n");
   }
   if (context.length > MAX_CONTEXT_CHARS) {
     context = context.slice(0, MAX_CONTEXT_CHARS);
   }
   return { context, truncated: true };
 }
-function readFragment(env) {
-  const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot === void 0 || pluginRoot === "") {
-    report("fragment missing");
-    return void 0;
-  }
-  try {
-    return fs2.readFileSync(
-      path2.join(pluginRoot, "references", "subagent-discipline.md"),
-      "utf8"
-    );
-  } catch {
-    report("fragment missing");
-    return void 0;
-  }
-}
 function bundledAgentsDir(env) {
   const pluginRoot = env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot === void 0 || pluginRoot === "") return void 0;
   return path2.join(pluginRoot, "agents");
+}
+function tableFor(env, projectAgents) {
+  const scope = candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION);
+  if (scope === void 0) return NO_MARKERS;
+  return markerTable(env, candidateAgents(projectAgents, scope), scope) ?? NO_MARKERS;
 }
 function buildContext(env, input) {
   const projectAgents = scanAgents(projectAgentsDir(env));
@@ -481,17 +463,13 @@ function buildContext(env, input) {
   debug(env, `match=${matchDescription(resolution)}`);
   debug(env, `deny=${denyReason ?? "no"}`);
   if (denyReason !== void 0) {
-    debug(env, "fragment-size=skipped table-size=skipped context-size=0");
+    debug(env, "table-size=skipped context-size=0");
     return void 0;
   }
-  const table = isCustomInjection(env.AMATSUKA_AGENT_AUTO_INJECTION) ? markerTable(env, projectAgents) ?? NO_MARKERS : NO_MARKERS;
-  const fragment = readFragment(env);
-  const result = truncateContext(composeSections(fragment, table));
+  const table = tableFor(env, projectAgents);
+  const result = truncateTable(table);
   if (result.truncated) report("truncated");
-  debug(
-    env,
-    `fragment-size=${fragment?.length ?? 0} table-size=${table.length} context-size=${result.context.length}`
-  );
+  debug(env, `table-size=${table.length} context-size=${result.context.length}`);
   return result.context;
 }
 function respond(context) {

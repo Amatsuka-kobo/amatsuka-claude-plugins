@@ -6,6 +6,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { candidateScopeFor } from "../agents/policies"
 import {
   type FakeModelsResponse,
   type FakeModelsServer,
@@ -221,8 +222,10 @@ function singleResult<T>(args: string[]): T {
   return result
 }
 
-function check(extra: string[] = []): CheckResult {
+function check(scope: "claude" | "custom", extra: string[] = []): CheckResult {
   return singleResult([
+    "--scope",
+    scope,
     "--model-id",
     "gpt-sol",
     "--name",
@@ -283,6 +286,161 @@ describe("廃止フラグ", () => {
   })
 })
 
+describe("--scope", () => {
+  it.each(["claude", "custom"] as const)("--scope %s を受理する", (scope) => {
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--scope",
+      scope,
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+  })
+
+  it("claude と custom 以外を拒否する", () => {
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--scope",
+      "external",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe("scope: must be claude or custom")
+  })
+
+  it.each([
+    ["未設定", [undefined], "claude-only"],
+    ["none", ["none"], "claude-only"],
+    ["claude", ["claude"], "claude-only"],
+    ["custom", ["custom"], "with-external"],
+    [
+      "旧 3 値",
+      ["with-codex", "with-grok", "with-codex-grok"],
+      "with-external"
+    ],
+    ["CuStOm", ["CuStOm"], "with-external"]
+  ] as const)("環境変数が %s のとき candidateScopeFor と同じ既定を使う", (_label, values, expected) => {
+    for (const value of values) {
+      const env =
+        value === undefined ? {} : { AMATSUKA_AGENT_AUTO_INJECTION: value }
+      const result = run<WriteResults>(
+        [
+          "--check",
+          "--model-id",
+          "gpt-sol",
+          "--name",
+          "gpt-sol-default-scope",
+          "--roles",
+          "complex-impl",
+          "--dir",
+          project
+        ],
+        env
+      )
+
+      expect(candidateScopeFor(value) ?? "claude-only").toBe(expected)
+      expect(result.ok).toBe(expected === "with-external")
+      if (expected === "claude-only") {
+        expect(result.error).toBe(
+          "model-id: gpt-sol is not available with --scope claude"
+        )
+      }
+    }
+  })
+
+  it("--scope claude では --models から外部モデルを落として報告する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--scope",
+      "claude",
+      "--models",
+      "gpt-sol,grok,sonnet",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(result.results.map((entry) => entry.modelId)).toEqual(["sonnet"])
+    expect(result.modelsDropped).toEqual(["gpt-sol", "grok"])
+  })
+
+  it("--scope claude では外部 model-id を拒否する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--scope",
+      "claude",
+      "--model-id",
+      "gpt-sol",
+      "--name",
+      "gpt-sol",
+      "--roles",
+      "complex-impl",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe(
+      "model-id: gpt-sol is not available with --scope claude"
+    )
+  })
+
+  it("--scope claude では Claude enum でない個別 --model を拒否する", () => {
+    const result = run<WriteResults>([
+      "--check",
+      "--scope",
+      "claude",
+      "--model-id",
+      "sonnet",
+      "--model",
+      "claude-gpt-5-6-sol",
+      "--name",
+      "external-model",
+      "--roles",
+      "normal-impl",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe(
+      "model: claude-gpt-5-6-sol is not available with --scope claude"
+    )
+  })
+
+  it("--scope claude の通常 write 経路では live models を照会しない", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "unexpected-live-model", owned_by: "other" }]
+      })
+    })
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--write",
+        "--scope",
+        "claude",
+        "--model-id",
+        "sonnet",
+        "--name",
+        "claude-sonnet-no-query",
+        "--roles",
+        "normal-impl",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(proxy.requests).toHaveLength(0)
+  })
+})
+
 describe("--list-live-models", () => {
   it("live models と Claude enum を推奨役割付きで返す", async () => {
     const proxy = await startModelsServer({
@@ -295,9 +453,12 @@ describe("--list-live-models", () => {
       })
     })
 
-    const result = await runAsync<LiveModelsResult>(["--list-live-models"], {
-      ANTHROPIC_BASE_URL: proxy.baseUrl
-    })
+    const result = await runAsync<LiveModelsResult>(
+      ["--list-live-models", "--scope", "custom"],
+      {
+        ANTHROPIC_BASE_URL: proxy.baseUrl
+      }
+    )
 
     expect(result).toEqual({
       ok: true,
@@ -324,12 +485,35 @@ describe("--list-live-models", () => {
     })
   })
 
+  it("--scope claude ではプロキシを照会せず Claude enum だけを返す", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "unexpected-live-model", owned_by: "other" }]
+      })
+    })
+
+    const result = await runAsync<LiveModelsResult>(
+      ["--list-live-models", "--scope", "claude"],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result).toEqual({
+      ok: true,
+      models: [],
+      claudeEnums: ["sonnet", "opus", "haiku", "fable"]
+    })
+    expect(proxy.requests).toHaveLength(0)
+  })
+
   it("照会失敗時も reason と Claude enum を返す", async () => {
     const proxy = await startModelsServer({ status: 503 })
 
-    const result = await runAsync<LiveModelsResult>(["--list-live-models"], {
-      ANTHROPIC_BASE_URL: proxy.baseUrl
-    })
+    const result = await runAsync<LiveModelsResult>(
+      ["--list-live-models", "--scope", "custom"],
+      {
+        ANTHROPIC_BASE_URL: proxy.baseUrl
+      }
+    )
 
     expect(result).toEqual({
       ok: false,
@@ -394,6 +578,8 @@ describe("--list-coverage", () => {
   it("複数モデルの役割と各役割の defaultName を返す", () => {
     const result = run<CoverageResult>([
       "--list-coverage",
+      "--scope",
+      "custom",
       "--lang",
       "en",
       "--dir",
@@ -413,7 +599,13 @@ describe("--list-coverage", () => {
   })
 
   it("RECOMMENDED の役割集合とモデル割当を返す", () => {
-    const result = run<CoverageResult>(["--list-coverage", "--dir", project])
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--scope",
+      "custom",
+      "--dir",
+      project
+    ])
 
     expect(result.roles).toHaveLength(16)
     expect(
@@ -426,6 +618,65 @@ describe("--list-coverage", () => {
       "fable",
       "gpt-astra"
     ])
+  })
+
+  it("--scope claude では外部ベンダーの既存定義を被覆に数えない", () => {
+    fs.writeFileSync(
+      path.join(project, ".claude", "agents", "external-complex.md"),
+      [
+        "---",
+        "name: external-complex",
+        "model: claude-gpt-5-6-sol",
+        "agent-policy-vendor: gpt",
+        "agent-policy-role: complex-impl",
+        "---",
+        ""
+      ].join("\n")
+    )
+
+    const custom = run<CoverageResult>([
+      "--list-coverage",
+      "--scope",
+      "custom",
+      "--dir",
+      project
+    ])
+    const claude = run<CoverageResult>([
+      "--list-coverage",
+      "--scope",
+      "claude",
+      "--dir",
+      project
+    ])
+
+    expect(
+      custom.roles.find((role) => role.id === "complex-impl")?.coveredBy
+    ).toEqual(["external-complex"])
+    expect(
+      claude.roles.find((role) => role.id === "complex-impl")?.coveredBy
+    ).toEqual([])
+    expect(claude.uncovered).toContain("complex-impl")
+  })
+
+  it("--scope claude では ASSIGNMENTS 由来の推奨を返す", () => {
+    const result = run<CoverageResult>([
+      "--list-coverage",
+      "--scope",
+      "claude",
+      "--dir",
+      project
+    ])
+
+    expect(
+      result.roles.find((role) => role.id === "complex-impl")?.models
+    ).toEqual(["opus"])
+    expect(
+      result.roles.find((role) => role.id === "escalation")?.models
+    ).toEqual(["fable"])
+    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
+      "fable"
+    ])
+    expect(result.roles.every((role) => role.models.length === 1)).toBe(true)
   })
 
   // default-name を持たない世代の翻訳断片は bodyHash が frontmatter を
@@ -610,13 +861,15 @@ describe("--scaffold-fragments", () => {
 
 describe("--check", () => {
   it("既存が無いとき exists: false を返す", () => {
-    const result = check()
+    const result = check("custom")
     expect(result.ok).toBe(true)
     expect(result.exists).toBe(false)
   })
 
   it("既存がテンプレートと同一のとき identical: true を返す", () => {
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -627,29 +880,29 @@ describe("--check", () => {
       project,
       "--write"
     ])
-    const result = check()
+    const result = check("custom")
     expect(result.exists).toBe(true)
     expect(result.identical).toBe(true)
   })
 
   it("既存にしかない tools を toolsOnlyInExisting に出す", () => {
-    seed({
+    seed("custom", {
       tools:
         "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
     })
-    const result = check()
+    const result = check("custom")
     expect(result.frontmatter.toolsOnlyInExisting).toContain("mcp__context7")
   })
 
   it("既存にしかない frontmatter キーを keysOnlyInExisting に出す", () => {
-    seed({ extraKeys: { permissionMode: "plan" } })
-    const result = check()
+    seed("custom", { extraKeys: { permissionMode: "plan" } })
+    const result = check("custom")
     expect(result.frontmatter.keysOnlyInExisting).toContain("permissionMode")
   })
 
   it("値の違う共通キーを changed に出す", () => {
-    seed({ model: "my-own-alias" })
-    const entry = check().frontmatter.changed.find(
+    seed("custom", { model: "my-own-alias" })
+    const entry = check("custom").frontmatter.changed.find(
       (item) => item.key === "model"
     )
     expect(entry?.existing).toBe("my-own-alias")
@@ -657,25 +910,25 @@ describe("--check", () => {
   })
 
   it("既存にしかない節を sectionsOnlyInExisting に出す", () => {
-    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
-    const result = check()
+    seed("custom", { extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    const result = check("custom")
     expect(result.body.sectionsOnlyInExisting).toContain("## ツール運用")
   })
 
   it("冒頭宣言の変更を preambleChanged に出す", () => {
-    seed({ preamble: "あなたは私が書き換えた冒頭である。" })
-    const result = check()
+    seed("custom", { preamble: "あなたは私が書き換えた冒頭である。" })
+    const result = check("custom")
     expect(result.preambleChanged).toBe(true)
   })
 
   it("節の中身の変更を sectionsChanged に出す", () => {
-    seed({ replaceConstraints: "- 私が書き換えた制約。\n" })
-    const result = check()
+    seed("custom", { replaceConstraints: "- 私が書き換えた制約。\n" })
+    const result = check("custom")
     expect(result.body.sectionsChanged).toContain("## 制約")
   })
 
   it("実装役割だけなら roles.mixedKinds が false になる", () => {
-    expect(check().roles).toEqual({
+    expect(check("custom").roles).toEqual({
       ids: ["complex-impl"],
       implRoles: ["complex-impl"],
       readonlyRoles: [],
@@ -686,6 +939,8 @@ describe("--check", () => {
 
   it("実装役割と読み取り役割を分類して混在を示す", () => {
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-terra",
       "--name",
@@ -710,6 +965,8 @@ describe("--check", () => {
 
   it("Agent tool の可否を役割から返す", () => {
     const light = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-luna",
       "--name",
@@ -723,12 +980,16 @@ describe("--check", () => {
       "--check"
     ])
     expect(light.roles.agentTool).toBe(false)
-    expect(check(["--roles", "complex-impl"]).roles.agentTool).toBe(true)
+    expect(check("custom", ["--roles", "complex-impl"]).roles.agentTool).toBe(
+      true
+    )
   })
 
   it("Agent tool の可否へ model-id を反映する", () => {
     const agentToolFor = (modelId: string, roles: string): boolean =>
       singleResult<CheckResult>([
+        "--scope",
+        "custom",
         "--model-id",
         modelId,
         "--name",
@@ -755,6 +1016,8 @@ describe("--check", () => {
 
   it("自由モデル値ではモデル制約を外して役割制約だけを使う", () => {
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "haiku",
       "--model",
@@ -778,7 +1041,7 @@ describe("--check", () => {
   it("frontmatter が無い既存ファイルを全体が本文の文書として扱う", () => {
     fs.writeFileSync(target(), "独自の冒頭。\n\n## 独自節\n\n- 独自の内容。\n")
 
-    const result = check()
+    const result = check("custom")
 
     expect(result.frontmatter.keysOnlyInExisting).toEqual([])
     expect(result.preambleChanged).toBe(true)
@@ -788,7 +1051,7 @@ describe("--check", () => {
   it("閉じていない frontmatter も全体を本文として扱う", () => {
     fs.writeFileSync(target(), "---\nname: broken\n\n## 独自節\n\n- 内容。\n")
 
-    const result = check()
+    const result = check("custom")
 
     expect(result.frontmatter.keysOnlyInExisting).toEqual([])
     expect(result.body.sectionsOnlyInExisting).toEqual(["## 独自節"])
@@ -796,6 +1059,8 @@ describe("--check", () => {
 
   it("不正な役割 ID でエラーを返す", () => {
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -826,6 +1091,8 @@ describe("--check", () => {
 
   it("翻訳断片が不完全な言語を拒否する", () => {
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -866,21 +1133,26 @@ describe("parseArgs", () => {
   })
 
   it("roles の重複を除去する", () => {
-    const result = check(["--roles", "complex-impl,complex-impl"])
+    const result = check("custom", ["--roles", "complex-impl,complex-impl"])
     expect(result.roles.ids).toEqual(["complex-impl"])
   })
 })
 
 // テンプレートを生成してから指定箇所を書き換え、既存ファイルとして置く。
-function seed(options: {
-  tools?: string
-  model?: string
-  extraKeys?: Record<string, string>
-  extraSection?: string
-  preamble?: string
-  replaceConstraints?: string
-}): void {
+function seed(
+  scope: "claude" | "custom",
+  options: {
+    tools?: string
+    model?: string
+    extraKeys?: Record<string, string>
+    extraSection?: string
+    preamble?: string
+    replaceConstraints?: string
+  }
+): void {
   run([
+    "--scope",
+    scope,
     "--model-id",
     "gpt-sol",
     "--name",
@@ -923,6 +1195,8 @@ function seed(options: {
 describe("--write", () => {
   it("既存が無いときテンプレートどおりに書く", () => {
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -941,6 +1215,8 @@ describe("--write", () => {
 
   it("--merge で新規作成すると空の保持・破棄情報を返す", () => {
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -964,8 +1240,10 @@ describe("--write", () => {
   })
 
   it("--keep なしでは完全上書きになる", () => {
-    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    seed("custom", { extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -980,13 +1258,15 @@ describe("--write", () => {
   })
 
   it("--merge なしでは overwritten と破棄した変更を返す", () => {
-    seed({
+    seed("custom", {
       model: "my-own-alias",
       preamble: "あなたは私が書き換えた冒頭である。",
       replaceConstraints: "- 私が書き換えた制約。\n"
     })
 
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1007,8 +1287,10 @@ describe("--write", () => {
   })
 
   it("--keep section で既存にしかない節を残す", () => {
-    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    seed("custom", { extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1027,11 +1309,13 @@ describe("--write", () => {
   })
 
   it("--keep tools で既存にしかない tools を残す", () => {
-    seed({
+    seed("custom", {
       tools:
         "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
     })
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1048,8 +1332,10 @@ describe("--write", () => {
   })
 
   it("--keep key で既存にしかないキーを残す", () => {
-    seed({ extraKeys: { permissionMode: "plan" } })
+    seed("custom", { extraKeys: { permissionMode: "plan" } })
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1066,8 +1352,10 @@ describe("--write", () => {
   })
 
   it("--keep key で値の違う共通キーを残す", () => {
-    seed({ model: "my-own-alias" })
+    seed("custom", { model: "my-own-alias" })
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1084,8 +1372,10 @@ describe("--write", () => {
   })
 
   it("--keep preamble で冒頭宣言を残す", () => {
-    seed({ preamble: "あなたは私が書き換えた冒頭である。" })
+    seed("custom", { preamble: "あなたは私が書き換えた冒頭である。" })
     run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1104,7 +1394,7 @@ describe("--write", () => {
   })
 
   it("--merge で既存にしかない tools・キー・節を自動保持する", () => {
-    seed({
+    seed("custom", {
       tools:
         "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, CustomTool",
       model: "my-own-alias",
@@ -1115,6 +1405,8 @@ describe("--write", () => {
     })
 
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1149,13 +1441,15 @@ describe("--write", () => {
   })
 
   it("--merge と明示 --keep を併用して変更済み項目も保持する", () => {
-    seed({
+    seed("custom", {
       model: "my-own-alias",
       preamble: "あなたは私が書き換えた冒頭である。",
       replaceConstraints: "- 私が書き換えた制約。\n"
     })
 
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1187,12 +1481,14 @@ describe("--write", () => {
   })
 
   it("明示保持した mcp__ tool を keptNeedsReview に分ける", () => {
-    seed({
+    seed("custom", {
       tools:
         "Read, Grep, Glob, Write, Edit, Bash, Skill, LSP, Agent, mcp__context7"
     })
 
     const result = singleResult<CheckResult>([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1211,10 +1507,12 @@ describe("--write", () => {
   })
 
   it("存在しない --keep section でエラーになり既存ファイルを変えない", () => {
-    seed({ extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
+    seed("custom", { extraSection: "## ツール運用\n\n- Context7 を使う。\n" })
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1235,10 +1533,12 @@ describe("--write", () => {
   })
 
   it("存在しない --keep tools でエラーになり既存ファイルを変えない", () => {
-    seed({})
+    seed("custom", {})
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1259,10 +1559,12 @@ describe("--write", () => {
   })
 
   it("存在しない --keep key でエラーになり既存ファイルを変えない", () => {
-    seed({})
+    seed("custom", {})
     const before = fs.readFileSync(target(), "utf8")
 
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1284,6 +1586,8 @@ describe("--write", () => {
 
   it("不正な --keep セレクタでエラーを返す", () => {
     const result = run([
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-sol",
       "--name",
@@ -1326,6 +1630,8 @@ describe("custom の役割検証", () => {
   it("custom では gpt-astra ModelId を明示指定できる", () => {
     const result = run<WriteResults>([
       "--check",
+      "--scope",
+      "custom",
       "--model-id",
       "gpt-astra",
       "--lang",
@@ -1399,8 +1705,10 @@ describe("custom の役割検証", () => {
 })
 
 describe("live model 検証と vendor", () => {
-  const writeArgs = (name: string): string[] => [
+  const writeArgs = (name: string, scope: "claude" | "custom"): string[] => [
     "--write",
+    "--scope",
+    scope,
     "--model-id",
     "gpt-sol",
     "--name",
@@ -1421,7 +1729,7 @@ describe("live model 検証と vendor", () => {
     })
 
     const result = await runAsync<WriteResults>(
-      [...writeArgs("live-sol-agent"), "--model", "live-sol"],
+      [...writeArgs("live-sol-agent", "custom"), "--model", "live-sol"],
       { ANTHROPIC_BASE_URL: proxy.baseUrl }
     )
 
@@ -1441,7 +1749,7 @@ describe("live model 検証と vendor", () => {
 
     const result = await runAsync<WriteResults>(
       [
-        ...writeArgs("missing-model"),
+        ...writeArgs("missing-model", "custom"),
         "--model",
         "missing-model",
         "--vendor",
@@ -1456,7 +1764,7 @@ describe("live model 検証と vendor", () => {
 
   it("照会失敗時は --model を検証せず警告付きで通す", () => {
     const result = run<WriteResults>([
-      ...writeArgs("offline-model"),
+      ...writeArgs("offline-model", "custom"),
       "--model",
       "offline-alias"
     ])
@@ -1474,7 +1782,11 @@ describe("live model 検証と vendor", () => {
     ["none", "blue", undefined]
   ] as const)("--vendor %s が overlay 用 marker と色を選ぶ", (vendor, color, marker) => {
     const name = `vendor-${vendor}`
-    const result = run<WriteResults>([...writeArgs(name), "--vendor", vendor])
+    const result = run<WriteResults>([
+      ...writeArgs(name, "custom"),
+      "--vendor",
+      vendor
+    ])
 
     expect(result.ok).toBe(true)
     const content = fs.readFileSync(
@@ -1499,7 +1811,11 @@ describe("live model 検証と vendor", () => {
     })
 
     const result = await runAsync<WriteResults>(
-      [...writeArgs("unknown-vendor"), "--model", "unknown-vendor-model"],
+      [
+        ...writeArgs("unknown-vendor", "custom"),
+        "--model",
+        "unknown-vendor-model"
+      ],
       { ANTHROPIC_BASE_URL: proxy.baseUrl }
     )
 
@@ -1514,6 +1830,8 @@ describe("--models による推奨一括", () => {
       "--check",
       "--lang",
       "ja",
+      "--scope",
+      "custom",
       "--models",
       "gpt-sol,gpt-terra,gpt-astra",
       "--dir",
@@ -1549,6 +1867,8 @@ describe("--models による推奨一括", () => {
         "--check",
         "--lang",
         "ja",
+        "--scope",
+        "custom",
         "--models",
         "gpt-sol,gpt-terra,sonnet",
         "--dir",
@@ -1580,6 +1900,8 @@ describe("--models による推奨一括", () => {
         "--check",
         "--lang",
         "ja",
+        "--scope",
+        "custom",
         "--models",
         "gpt-sol,gpt-terra",
         "--dir",
@@ -1599,6 +1921,8 @@ describe("--models による推奨一括", () => {
       "--check",
       "--lang",
       "ja",
+      "--scope",
+      "custom",
       "--models",
       "gpt-sol,gpt-terra",
       "--dir",
@@ -1620,6 +1944,8 @@ describe("--models による推奨一括", () => {
       "--write",
       "--lang",
       "ja",
+      "--scope",
+      "custom",
       "--models",
       "gpt-terra",
       "--dir",

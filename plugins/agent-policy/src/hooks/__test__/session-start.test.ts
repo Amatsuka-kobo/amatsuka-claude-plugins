@@ -19,6 +19,11 @@ const RUN_TS = fileURLToPath(
 )
 const TSX_IMPORT = createRequire(import.meta.url).resolve("tsx")
 const LEGACY_INJECTIONS = ["with-codex", "with-grok", "with-codex-grok"]
+const TABLE_INTRO =
+  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
+const CLAUDE_SCOPE = "それ以外の定義は委譲先にしない"
+const WITH_EXTERNAL_SCOPE =
+  "外部ベンダーのモデルを指定した定義も含めて選んでよい"
 const ALIAS_VARIABLES = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
   "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
@@ -210,13 +215,88 @@ describe("方針の注入", () => {
     expect(output).not.toContain("未知の役割 ID")
   })
 
-  it("claude なら claude 方針だけを出し、対応表・未知役割通知を出さない", () => {
+  it("claude では対応表を出さないが、候補内の未知 RoleId は通知する", () => {
     place("hidden", ["agent-policy-role: no-such-role"])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
 
     expect(output).toContain("agent-policy:claude-model-policy")
-    expect(output).not.toContain("hidden")
+    expect(output).not.toContain(TABLE_INTRO)
+    expect(output).toContain("未知の役割 ID")
+    expect(output).toContain("hidden")
+  })
+
+  it("claude で Claude 定義の対応表を注入する", () => {
+    place("claude-agent", ["model: sonnet", "agent-policy-role: complex-impl"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain(TABLE_INTRO)
+    expect(output).toContain("claude-agent")
+    expect(output).toContain("複雑または重要な実装")
+  })
+
+  it("claude で外部ベンダー定義を対応表に載せない", () => {
+    place("claude-kept", ["model: sonnet", "agent-policy-role: general"])
+    place("external-hidden", [
+      "model: claude-gpt-5-6-luna",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: complex-impl"
+    ])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+
+    expect(output).toContain(TABLE_INTRO)
+    expect(output).toContain("claude-kept")
+    expect(output).not.toContain("external-hidden")
+  })
+
+  it("claude の対応表 2 行目で claude-only の候補範囲を示す", () => {
+    place("claude-agent", ["model: sonnet", "agent-policy-role: general"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+    const lines = output.split("\n")
+    const introLine = lines.indexOf(TABLE_INTRO)
+
+    expect(introLine).toBeGreaterThanOrEqual(0)
+    expect(lines[introLine + 1]).toContain(CLAUDE_SCOPE)
+  })
+
+  it("custom 成功時の対応表 2 行目で with-external の候補範囲を示す", () => {
+    place("custom-agent", ["model: sonnet", "agent-policy-role: general"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+    const lines = output.split("\n")
+    const introLine = lines.indexOf(TABLE_INTRO)
+
+    expect(introLine).toBeGreaterThanOrEqual(0)
+    expect(lines[introLine + 1]).toContain(WITH_EXTERNAL_SCOPE)
+  })
+
+  it("claude で候補外の外部定義の未知 RoleId は通知しない", () => {
+    place("gpt-def", [
+      "model: claude-gpt-5-6-luna",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: no-such-role"
+    ])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).not.toContain("gpt-def")
     expect(output).not.toContain("未知の役割 ID")
+  })
+
+  it("claude で vendor 未宣言の sonnet 定義だけを対応表に載せる", () => {
+    place("implicit-vendor", [
+      "model: sonnet",
+      "agent-policy-role: normal-impl"
+    ])
+    place("gpt-vendor", [
+      "model: sonnet",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: complex-impl"
+    ])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
+
+    expect(output).toContain(TABLE_INTRO)
+    expect(output).toContain("implicit-vendor")
+    expect(output).not.toContain("gpt-vendor")
   })
 
   it("custom なら検証成立後に custom 方針と対応表を出す", () => {
@@ -293,6 +373,61 @@ describe("custom 構成の検証", () => {
     expect(output).toContain("未作成、または読み取れない")
     expect(output).toContain("agent-policy:setup-agents")
     expect(output).not.toContain("missing-external-model")
+  })
+
+  it("custom フォールバック(役割付き定義 0 件)では対応表を出さない", () => {
+    place("plain", ["model: missing-external-model"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("役割マーカー付き定義が見つからない")
+    expect(output).not.toContain(TABLE_INTRO)
+  })
+
+  it("custom フォールバック(モデル不在)で Claude 定義の対応表を末尾に付ける", async () => {
+    const server = await startServer([])
+    place("missing-external", [
+      "model: missing-model",
+      "agent-policy-role: complex-impl"
+    ])
+    place("claude-fallback", [
+      "model: sonnet",
+      "agent-policy-role: normal-impl"
+    ])
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("定義 `missing-external` の model `missing-model`")
+    expect(output).toContain(TABLE_INTRO)
+    expect(output).toContain("claude-fallback")
+    expect(output.lastIndexOf(TABLE_INTRO)).toBeGreaterThan(
+      output.indexOf("agent-policy:setup-agents")
+    )
+  })
+
+  it("custom フォールバック(照会失敗)で Claude 定義の対応表を末尾に付ける", () => {
+    place("external", [
+      "model: external-model",
+      "agent-policy-role: complex-impl"
+    ])
+    place("claude-fallback", [
+      "model: sonnet",
+      "agent-policy-role: normal-impl"
+    ])
+
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("ANTHROPIC_BASE_URL")
+    expect(output).toContain(TABLE_INTRO)
+    expect(output).toContain("claude-fallback")
+    expect(output.lastIndexOf(TABLE_INTRO)).toBeGreaterThan(
+      output.indexOf("agent-policy:setup-agents")
+    )
   })
 
   it("全 Claude enum 構成なら /v1/models を照会せず成立する", async () => {

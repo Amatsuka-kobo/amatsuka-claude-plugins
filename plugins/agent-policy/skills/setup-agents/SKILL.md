@@ -1,6 +1,6 @@
 ---
 name: setup-agents
-description: custom プロファイル専用で使う Agent 定義を、実在するモデルと役割を選んでプロジェクトの .claude/agents/ に生成するウィザード。ユーザーが「エージェントをセットアップして」「agent-policy の setup」等と明示的に依頼したとき、または SessionStart フックがエイリアス不一致を通知したときに必ず使用する。役割名の表示と生成される定義の本文はユーザーの使用言語に合わせる。接続済みの MCP サーバーを検出し、許可するものを選んで tools へ入れられる。明示的な依頼があったときのみ使い、自律的には発動しない。
+description: Agent 定義を、モデルと役割を選んでプロジェクトの .claude/agents/ に生成するウィザード。Claude のモデルだけで構成するか、外部ベンダーのモデルも候補に含めるかを最初に選ぶ。ユーザーが「エージェントをセットアップして」「agent-policy の setup」等と明示的に依頼したとき、または SessionStart フックがエイリアス不一致を通知したときに必ず使用する。役割名の表示と生成される定義の本文はユーザーの使用言語に合わせる。接続済みの MCP サーバーを検出し、許可するものを選んで tools へ入れられる。明示的な依頼があったときのみ使い、自律的には発動しない。
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" *), Edit(**/.claude/agent-policy/roles/**), AskUserQuestion
 disallowed-tools: Write
 ---
@@ -38,10 +38,17 @@ disallowed-tools: Write
 
 `$ARGUMENTS` に `--yes` が含まれるときは、この節だけに従い、対話モードの質問は一切しない。推奨構成を一括で保持マージ生成する。
 
+`$ARGUMENTS` に `--scope claude` または `--scope custom` があればそれを使う。無ければ `AMATSUKA_AGENT_AUTO_INJECTION` から決める(`custom` 系なら `custom`、それ以外は `claude`)。決めた値を以後の全 CLI コマンドへ渡す。
+
+手順 3 の `--models` はハードコードされているため、構成で出し分ける。
+
+- `--scope custom` —— 現行どおり `gpt-sol,gpt-terra,gpt-luna,gpt-astra,grok,haiku,sonnet,fable,opus` の 9 件。
+- `--scope claude` —— `haiku,sonnet,fable,opus` の 4 件。手順 1 の live models 照会は行わない。
+
 1. live models を照会する。応答の `ok`、`reason`、`models`、`claudeEnums` を保持する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope <claude|custom> --dir "$PWD"
    ```
 
 2. 会話の使用言語から決めた `lang` を使う。`lang` が `ja` / `en` 以外なら、翻訳断片の状態を確認する。`missing` または `stale` があれば、質問や scaffold をせず、対話モードで翻訳を準備するよう案内してエラーで終了する。
@@ -50,10 +57,10 @@ disallowed-tools: Write
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check-fragments --lang <lang> --dir "$PWD"
    ```
 
-3. 推奨モデル ID の全件 `gpt-sol,gpt-terra,gpt-luna,gpt-astra,grok,haiku,sonnet,fable,opus` を `--models` へ渡し、既定名・既定役割で保持マージ生成する。照会成功時に実在しない既定エイリアスは CLI が生成対象から除外し、`modelsDropped` で返す。照会失敗時は全件を生成し、`warnings` に実在検証を行わなかった警告が入る。照会成功後、生成対象に含まれる外部既定エイリアスの `vendor` が `unknown` なら、CLI はベンダーを推定できず `ok: false` を返す。非対話モードでは選択できないため、`error` を報告して終了し、対話モードでベンダーを確定するよう案内する。
+3. 構成ごとに上で定めた推奨モデル ID の全件を `--models` へ渡し、既定名・既定役割で保持マージ生成する。照会成功時に実在しない既定エイリアスは CLI が生成対象から除外し、`modelsDropped` で返す。照会失敗時は全件を生成し、`warnings` に実在検証を行わなかった警告が入る。照会成功後、生成対象に含まれる外部既定エイリアスの `vendor` が `unknown` なら、CLI はベンダーを推定できず `ok: false` を返す。非対話モードでは選択できないため、`error` を報告して終了し、対話モードでベンダーを確定するよう案内する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models gpt-sol,gpt-terra,gpt-luna,gpt-astra,grok,haiku,sonnet,fable,opus --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <model-id,...> --scope <claude|custom> --dir "$PWD"
    ```
 
 4. [ステップ 7: 報告](#ステップ-7-報告)の形式で `results`、`warnings`、`modelsDropped` を報告する。MCP は明示的な選択なしに付与しない。
@@ -64,14 +71,27 @@ disallowed-tools: Write
 
 ### ステップ 0: 言語判定
 
-会話でユーザーが使用している言語から `lang` を決める。会話が複数言語なら直近のユーザー発話の言語を採る。ステップ 1 の冒頭で「表示と生成には `<lang>` を使う」と明示し、変更したい場合は変更の機会を与える。以後の全 CLI コマンドに同じ `--lang <lang>` を渡す。
+会話でユーザーが使用している言語から `lang` を決める。会話が複数言語なら直近のユーザー発話の言語を採る。以後の全 CLI コマンドに同じ `--lang <lang>` を渡す。
+
+### ステップ 0b: 構成の選択
+
+`AskUserQuestion` を 1 回だけ使い、次の 2 択で構成を決める。選んだ値は以後の全 CLI コマンドへ `--scope <claude|custom>` として渡す。
+
+- **Claude のみ**(`--scope claude`)—— Claude のモデル(`sonnet` / `opus` / `haiku` / `fable`)だけを候補にする。プロキシは要らない。
+- **カスタム**(`--scope custom`)—— 外部ベンダーのモデルも候補に含める。ローカルプロキシの `/v1/models` に実在するモデルから選ぶ。
+
+同じ質問の中で「表示と生成には `<lang>` を使う」ことを伝え、変更の機会も与える。
+
+既存の `.claude/agents/` に役割マーカー付き定義があるときは、その `model` 値の内訳(Claude のモデルが何件、外部ベンダーが何件)を選択肢の説明に添える。
 
 ### ステップ 1: live models の照会
+
+`--scope claude` のときは `--list-live-models` を実行しない(実行しても `models` は空で返る)。候補は `sonnet` / `opus` / `haiku` / `fable` の 4 値に固定し、ステップ 3 を飛ばしてステップ 4 へ進む。以下は `--scope custom` の手順である。
 
 live models を取得する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope <claude|custom> --dir "$PWD"
 ```
 
 応答の `models` は `id`、`vendor`、`recommendedFor` を持つ。`claudeEnums` はプロキシ照会の成否にかかわらず常に返る Claude enum である。以後のために、この応答と `ok` / `reason` を保持する。
@@ -81,10 +101,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --dir "
 
 ### ステップ 1b: 既存定義の被覆確認
 
+`--list-coverage` にも `--scope` を渡す。`--scope claude` では、外部ベンダーのモデルを指定した既存定義は被覆に数えない。GPT / Grok の定義で埋まっている役割も未カバーとして現れる。
+
 推奨の役割集合が、プロジェクトの既存定義でどこまで埋まっているかを取得する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
 ```
 
 この応答の `roles` は `RECOMMENDED` の全 RoleId を対象にし、各要素は `id`、`label`、`defaultName`、推奨の `models`、`coveredBy` を返す。`uncovered` は `coveredBy` が空の役割だけである。
@@ -134,6 +156,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 ### ステップ 4: モデル値とベンダーの選択
 
+`--scope claude` のときは、候補を Claude の 4 値とし、ベンダーは聞かない。`--models` には選んだ Claude のモデル ID(`opus` / `sonnet` / `haiku` / `fable`)を渡す。
+
 ステップ 1 で保持した候補から、作る定義の `model` 値を複数選択で選ばせる。候補数の共通規則に従い、5 件以上なら配列順で 4 件ずつに分割する。`ok: true` のときは実在エイリアスを先に、`claudeEnums` を後に並べる。
 
 照会成功時は、`recommendedFor` を持つ実在エイリアスで構成できる推奨構成を数え、「推奨構成をそのまま作る」を第一候補に出す。推奨の既定エイリアスが live models に無いモデルは、推奨構成から除外したことと、そのモデル ID を明示する。この選択では、実在する推奨エイリアスに対応する推奨モデル ID を `--models` で一括生成する。`--models` は実在エイリアスそのものではなく、`gpt-sol`、`gpt-terra`、`gpt-luna`、`gpt-astra`、`grok`、`haiku`、`sonnet`、`fable`、`opus` の推奨モデル ID を受け取る。
@@ -156,7 +180,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 ステップ 4 で推奨構成または既定エイリアスのまま一括生成対象にした全モデルについて、確認コマンドを 1 回だけ実行する。個別調整対象だけを選んだ場合はこのコマンドを実行せず、全件をステップ 5b へ進める。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --lang <lang> --models <model-id,...> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --lang <lang> --models <model-id,...> --scope <claude|custom> --dir "$PWD"
 ```
 
 `results` の各要素とステップ 4 の一覧を結び付け、モデルごとに次を一覧で示す。
@@ -205,7 +229,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --lang <lang> --mo
 6. 決めた定義名・`model` 値・ベンダー・役割をまとめて示してから、現在の定義と、個別設定を反映した差分を確認する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <role-id,...> [--vendor <gpt|grok|claude|none>] --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <role-id,...> [--vendor <gpt|grok|claude|none>] --scope <claude|custom> --dir "$PWD"
    ```
 
    差分では、既存にしかない tools / frontmatter キー / 節と、共通キーの値差分 / preamble / 節本文の差分を区別して提示する。節本文は節単位でしか検出できず、見出し外の追記と HTML コメントは検出できないことを添える。
@@ -251,30 +275,32 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 1 回のコマンドに渡した `--mcp-servers` / `--mcp-deny` は、そのコマンドが生成する全定義へ同じ内容で適用される。MCP を選ばなかったときは、ステップ 5 で「このまま全部作る」を選んだモデルと、個別調整しなかったモデルを、従来どおり 1 回の一括生成で保持マージする。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <model-id,...> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <model-id,...> --scope <claude|custom> --dir "$PWD"
 ```
 
 MCP を選んだときは、付与するサーバーと denylist が同じモデルをグループに分け、グループごとに `--write` を発行する。付与内容が異なるモデルを同じ `--models` に含めてはならない。MCP を付けないモデルのグループでは `--mcp-servers` と `--mcp-deny` を省く。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <same-mcp-model-id,...> --mcp-servers <server,...> --mcp-deny <tool,...> --dir "$PWD"
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <model-id-without-mcp,...> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <same-mcp-model-id,...> --mcp-servers <server,...> --mcp-deny <tool,...> --scope <claude|custom> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --lang <lang> --models <model-id-without-mcp,...> --scope <claude|custom> --dir "$PWD"
 ```
 
 個別調整したモデルは、モデルごとに選んだ差分方針と、その定義に決めた MCP の付与内容を使って生成する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write [--merge] --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <role-id,...> [--vendor <gpt|grok|claude|none>] [--keep <selector> ...] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write [--merge] --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <role-id,...> [--vendor <gpt|grok|claude|none>] [--keep <selector> ...] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --scope <claude|custom> --dir "$PWD"
 ```
 
 `--keep` は `--models` と併用できない。`--keep` を選んだ場合は必ず個別コマンドで実行する。各書き込みの `results`、`warnings`、`modelsDropped` を保存し、次の報告に使う。
 
 ### ステップ 6b: 未カバー役割の生成
 
+`--scope claude` のときは、推奨モデル ID の出所が担当表の「Claude モデル」列になる。各役割につき 1 件なので、使う推奨モデル ID は聞かずにその 1 件を使う。ステップ 1 の照会結果を前提にする記述は `--scope claude` では読み替えず、常に成立するものとして扱う。
+
 被覆を取り直す。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
 ```
 
 この節は、ステップ 1b でどの選択をした場合でも必ず通る。`uncovered` が空なら何も聞かずステップ 7 へ進む。
@@ -292,7 +318,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 7. 生成する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --model-id <model-id> --lang <lang> --name <name> [--model <model-value>] --roles <role-id,...> [--vendor <gpt|grok|claude|none>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --model-id <model-id> --lang <lang> --name <name> [--model <model-value>] --roles <role-id,...> [--vendor <gpt|grok|claude|none>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --scope <claude|custom> --dir "$PWD"
    ```
 
 8. 被覆を取り直し、残った対象について 1 へ戻る。
@@ -311,11 +337,17 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 - モデル値とベンダーの確定方法。`agent-policy-vendor` を出力しない `none` の定義では、ベンダー断片を付けず色が blue になること
 - 方針の読み込ませ方。`AMATSUKA_AGENT_AUTO_INJECTION` は trim と小文字化の後、`none` / `claude` / `custom` の 3 値で扱われる。
 
-  - 未設定、空、または `none` のとき。自動注入はない。CLAUDE.md への追記文例を出す。自動では追記しない。
+  - 未設定、空、または `none` のとき。自動注入はない。CLAUDE.md への追記文例は、選んだ構成に応じて出し分ける。自動では追記しない。
 
-    > - 最初に必ず `agent-policy:custom-policy` スキルを使用し、この規律に従う。
+    - `--scope claude` のとき。
 
-  - `claude` のとき。SessionStart フックは `claude-model-policy` を注入する。生成した custom 定義を担当表のマーカーで使うには、環境変数を `custom` へ変更するか、CLAUDE.md へ上の 1 行を足すよう案内する。
+      > - 最初に必ず `agent-policy:claude-model-policy` スキルを使用し、この規律に従う。
+
+    - `--scope custom` のとき。
+
+      > - 最初に必ず `agent-policy:custom-policy` スキルを使用し、この規律に従う。
+
+  - `claude` のとき。SessionStart フックは `claude-model-policy` と、Claude のモデルで実行される定義だけの役割マーカー対応表を注入します。`--scope claude` で生成した定義はそのまま対応表に載ります。外部ベンダーの定義を委譲先に使うには、環境変数を `custom` へ変更します。
   - `custom` のとき。SessionStart フックは役割マーカー付き定義の `model` を検証する。すべて実在すれば custom プロファイルとマーカー対応表を注入する。照会失敗、実在しないモデル、または役割マーカー付き定義が 0 件なら、セッション全体で `claude-model-policy` へフォールバックすることを伝える。
   - 旧値 `with-codex` / `with-grok` / `with-codex-grok` のとき。custom として扱われるが、`custom` へ移行する通知が出る。環境変数を `custom` へ変更するよう案内する。
   - それ以外の値のとき。自動注入を行わない警告が出るため、`none` / `claude` / `custom` のいずれかへ変更するよう案内する。
