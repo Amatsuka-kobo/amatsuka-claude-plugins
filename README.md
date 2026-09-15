@@ -129,7 +129,7 @@ AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマン�
 
 プロジェクトアーキテクチャ(`ARCHITECTURE.md`)・失敗知識(`GOTCHAS.md`)・規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入し、rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。<br>
 3 種への書き込み口を CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械的に保証します。AI による直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい書き込み口へ案内します。<br>
-`/metatron:init` がコードベース解析から ARCHITECTURE を初回生成し、`/metatron:update` が現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。既定の `paths.architecture` と `paths.gotchas` はそれぞれ `docs/ARCHITECTURE.md` と `docs/GOTCHAS.md`、`paths.rulesDir` は `.claude/rules/metatron` です。<br>
+`/metatron:init` がコードベース解析から ARCHITECTURE と rules 3 ファイルを初回生成し、承認を経て GOTCHAS の空の台帳を作成します。`/metatron:update` は現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。既定の `paths.architecture` と `paths.gotchas` はそれぞれ `docs/ARCHITECTURE.md` と `docs/GOTCHAS.md`、`paths.rulesDir` は `.claude/rules/metatron` です。<br>
 ※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
 
 ### Sandalphon

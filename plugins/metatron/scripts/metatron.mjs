@@ -2957,6 +2957,25 @@ function formatToday(now) {
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+function initGotchasLedger(gotchasPath) {
+  return withFileLock(gotchasPath, () => {
+    const existing = readTextIfExists(gotchasPath);
+    if (existing !== null && existing.trim() !== "") {
+      throw new GotchaError(
+        "already_exists",
+        `${gotchasPath} \u306F\u65E2\u306B\u5B58\u5728\u3057\u307E\u3059\u3002\u65E2\u5B58\u306E\u53F0\u5E33\u3092\u4E0A\u66F8\u304D\u3057\u307E\u305B\u3093\u3002\u30A8\u30F3\u30C8\u30EA\u306E\u8FFD\u8A18\u306F append-gotcha \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002`
+      );
+    }
+    const text = renderGotchasTemplate();
+    fs5.mkdirSync(path4.dirname(gotchasPath), { recursive: true });
+    fs5.writeFileSync(gotchasPath, text);
+    return {
+      path: gotchasPath,
+      created: true,
+      bytesWritten: Buffer.byteLength(text)
+    };
+  });
+}
 function appendGotcha(gotchasPath, input, options = {}) {
   const validation = validateGotchaInput(input);
   if (validation.errors.length > 0) {
@@ -3787,6 +3806,10 @@ var INPUT_SCHEMAS = {
     input: '{ title, date?, task, mistake, cause, countermeasure, promotionCandidate: "Yes" | "No" }',
     note: "\u63A1\u756A\u306F CLI \u304C\u884C\u3046\u3002`## \u5931\u6557\u30D1\u30BF\u30FC\u30F3\u4E00\u89A7` \u306E\u76F4\u4E0B(\u5148\u982D)\u306B\u633F\u5165\u3059\u308B\u3002"
   },
+  "init-gotchas": {
+    usage: "init-gotchas",
+    note: "\u5165\u529B\u3092\u53D6\u3089\u306A\u3044\u3002\u96DB\u5F62\u3060\u3051\u306E\u53F0\u5E33\u3092\u65B0\u898F\u4F5C\u6210\u3059\u308B\u3002\u5185\u5BB9\u306E\u3042\u308B\u53F0\u5E33\u304C\u3042\u308B\u3068\u304D\u306F already_exists \u3067\u62D2\u5426\u3059\u308B\u3002\u5B9F\u884C\u306E\u524D\u306B\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u3053\u3068\u3002"
+  },
   "tag-gotcha": {
     usage: "tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916 --reason <\u7406\u7531>",
     note: "\u898B\u51FA\u3057\u3078\u306E\u30BF\u30B0\u633F\u5165\u3068\u672B\u5C3E\u306E\u7406\u7531\u884C\u306E\u8FFD\u8A18\u3060\u3051\u3092\u884C\u3046\u3002\u672C\u6587\u306F\u66F8\u304D\u63DB\u3048\u306A\u3044\u3002"
@@ -3800,6 +3823,7 @@ var USAGE_LINES = [
   "  get architecture [--section <\u898B\u51FA\u3057>]",
   "  get domains",
   "  get gotchas [--recent N | --id <ID> | --query <\u8A9E>] [--exclude-tagged] [--promotion-candidates]",
+  "  get gotchas-template",
   "  get adr [--id <ID> | --status <\u72B6\u614B>]",
   "  get rules [--name conventions|protected-paths|testing-policy]",
   "  scan",
@@ -3813,6 +3837,7 @@ var USAGE_LINES = [
   "\u66F8\u304D\u8FBC\u307F(\u62D2\u5426\u30FB\u5931\u6557\u306F\u975E 0):",
   "  commit-architecture --staging-id <id>",
   "  commit-rules --staging-id <id>",
+  "  init-gotchas",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>"
 ];
@@ -3878,6 +3903,8 @@ function runGetConfig(ctx) {
       stageRules: commandLine("stage-rules --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
       commitRules: commandLine("commit-rules --staging-id <id>"),
+      initGotchas: commandLine("init-gotchas"),
+      getGotchasTemplate: commandLine("get gotchas-template"),
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
         "tag-gotcha --id <GOTCHA-NNN> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>"
@@ -4025,7 +4052,7 @@ function runGetGotchas(ctx) {
     emitReadFailure(
       command,
       "not_created",
-      `${config.gotchasPath} \u306F\u672A\u4F5C\u6210\u3067\u3059\u3002append-gotcha \u304C\u53F0\u5E33\u3054\u3068\u4F5C\u6210\u3057\u307E\u3059\u3002`,
+      `${config.gotchasPath} \u306F\u672A\u4F5C\u6210\u3067\u3059\u3002/metatron:init \u304C\u53F0\u5E33\u3092\u4F5C\u308A\u307E\u3059\u3002init \u3092\u7D4C\u305A\u306B\u8A18\u9332\u3059\u308B\u3068\u304D\u306F append-gotcha \u304C\u53F0\u5E33\u3054\u3068\u4F5C\u6210\u3057\u307E\u3059\u3002`,
       {
         path: config.gotchasPath,
         exists: false,
@@ -4050,6 +4077,24 @@ function runGetGotchas(ctx) {
     ).length,
     filter,
     entries: entries.map(serializeGotcha),
+    warnings
+  });
+}
+function runGetGotchasTemplate(ctx) {
+  const command = "get gotchas-template";
+  const config = configOf(ctx.cwd);
+  const file = readDocument(config.gotchasPath);
+  const hasContent = file.exists && file.text.trim() !== "";
+  const warnings = [...config.warnings, ...file.warnings];
+  noteWarnings(warnings);
+  emitResult(command, {
+    ok: true,
+    path: config.gotchasPath,
+    relative: config.gotchasRelative,
+    exists: file.exists,
+    hasContent,
+    template: renderGotchasTemplate(),
+    next: hasContent ? null : commandLine("init-gotchas"),
     warnings
   });
 }
@@ -4152,6 +4197,7 @@ var GET_TARGETS = [
   "architecture",
   "domains",
   "gotchas",
+  "gotchas-template",
   "adr",
   "rules"
 ];
@@ -4170,6 +4216,9 @@ function runGet(target, ctx) {
         return;
       case "gotchas":
         runGetGotchas(ctx);
+        return;
+      case "gotchas-template":
+        runGetGotchasTemplate(ctx);
         return;
       case "adr":
         runGetAdr(ctx);
@@ -4201,6 +4250,28 @@ function failFromError(command, error, extra) {
     return;
   }
   emitWriteFailure(command, "internal_error", messageOf(error), extra);
+}
+function runInitGotchas(ctx) {
+  const command = "init-gotchas";
+  const config = loadConfig(ctx.cwd);
+  try {
+    const result = initGotchasLedger(config.gotchasPath);
+    noteWarnings(config.warnings);
+    emitResult(command, {
+      ok: true,
+      written: true,
+      created: result.created,
+      path: result.path,
+      relative: config.gotchasRelative,
+      bytesWritten: result.bytesWritten,
+      warnings: config.warnings
+    });
+  } catch (error) {
+    failFromError(command, error, {
+      written: false,
+      path: config.gotchasPath
+    });
+  }
 }
 function runAppendGotcha(ctx) {
   const command = "append-gotcha";
@@ -4760,6 +4831,7 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "stage-rules",
   "commit-architecture",
   "commit-rules",
+  "init-gotchas",
   "append-gotcha",
   "tag-gotcha"
 ]);
@@ -4821,6 +4893,9 @@ function main(argv, cwd = process.cwd()) {
         return;
       case "commit-rules":
         runCommitRules(ctx);
+        return;
+      case "init-gotchas":
+        runInitGotchas(ctx);
         return;
       case "append-gotcha":
         runAppendGotcha(ctx);

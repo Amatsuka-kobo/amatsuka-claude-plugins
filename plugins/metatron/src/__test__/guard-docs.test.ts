@@ -94,6 +94,16 @@ test("D2: GOTCHAS への Edit は deny。理由に append-gotcha --input と tag
   expect(reason).not.toContain("stage-architecture")
 })
 
+test("D2b: GOTCHAS の拒否理由に init-gotchas と append-gotcha の両方を含む", () => {
+  const root = project()
+  const reason =
+    write(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecisionReason ??
+    ""
+
+  expect(reason).toContain(`node ${CLI} init-gotchas`)
+  expect(reason).toContain(`node ${CLI} append-gotcha --input`)
+})
+
 test("D3: GOTCHAS への NotebookEdit は notebook_path を見て deny", () => {
   const root = project('{"version":1,"paths":{"gotchas":"docs/GOTCHAS.ipynb"}}')
   const r = notebookEdit(root, path.join(root, "docs/GOTCHAS.ipynb"))

@@ -1,9 +1,9 @@
 ---
 name: capturing-architecture
-description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を初めて作るとき、またはドメインマップだけの最小 ARCHITECTURE に技術スタック・レイヤー構造・コマンド定義などのセクションを足すときに必ず使用する。「アーキテクチャ文書を作って」「ARCHITECTURE.md を初期化して」「この構成をドキュメントに起こして」のような依頼と、初期化コマンド(`/metatron:init`)からの起動が該当する。コードベースを解析してセクションごとのドラフトを起草し、セクション単位の対話で確認・確定してから書き込む。既存 ARCHITECTURE と実装の乖離を検出して直す依頼は updating-architecture、AI の失敗を台帳に残す依頼は recording-gotchas が担当する。設計書・README・API 仕様など ARCHITECTURE 以外の文書を書く依頼には使わない。
+description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を初めて作るとき、またはドメインマップだけの最小 ARCHITECTURE に技術スタック・レイヤー構造・コマンド定義などのセクションを足すときに必ず使用する。「アーキテクチャ文書を作って」「ARCHITECTURE.md を初期化して」「この構成をドキュメントに起こして」のような依頼と、初期化コマンド(`/metatron:init`)からの起動が該当する。生成物には ARCHITECTURE、rules 3 ファイル、GOTCHAS の空の台帳が含まれる。コードベースを解析してセクションごとのドラフトを起草し、セクション単位の対話で確認・確定してから書き込む。既存 ARCHITECTURE と実装の乖離を検出して直す依頼は updating-architecture、AI の失敗を台帳に残す依頼は recording-gotchas が担当する。設計書・README・API 仕様など ARCHITECTURE 以外の文書を書く依頼には使わない。
 ---
 
-# ARCHITECTURE と rules の初回生成
+# ARCHITECTURE と rules と GOTCHAS の初回生成
 
 ## 目的
 
@@ -33,19 +33,20 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 - [ ] 3. ドラフトの起草
 - [ ] 4. 対話ウォークスルー
 - [ ] 5. stage(`stage-architecture` 1 回・`stage-rules` 3 回)
-- [ ] 6. diff の全文提示と承認(合計 4 回)
-- [ ] 7. commit(`commit-architecture` 1 回・`commit-rules` 3 回)
+- [ ] 6. 提示と承認(合計 5 回。ARCHITECTURE 1・rules 3・GOTCHAS 1)
+- [ ] 7. 書き込み(`commit-architecture` 1 回・`commit-rules` 3 回・`init-gotchas` 1 回)
 - [ ] 8. 完了報告
 
 ## 1. 現状確認
 
-- `get config` で ARCHITECTURE の解決先パスと存在の有無、`rules.dir` と 3 ファイルそれぞれの `exists` を確認する。
+- `get config` で ARCHITECTURE の解決先パスと存在の有無、`rules.dir` と 3 ファイルそれぞれの `exists`、GOTCHAS の解決先パスと `exists` を確認する。
 - `get config` の `warnings` に docRoot と起動ディレクトリのずれが載っているときは、rules を書く前にユーザーへ伝える。
 - ARCHITECTURE があれば `get architecture` で既存セクションの見出しと本文を取得する。
 - rules があれば `get rules` で既存の本文を取得する。
 - 既存の内容は「既存の内容」としてウォークスルーに載せ、残りの単位を埋める。
 - 既存の内容を勝手に上書きしない。書き換えが要ると判断したときは、変更案を提示してその単位単独で承認を得る。
-- 対象の 9 単位(下記)がすべて埋まっているときは初回生成ではない。`/metatron:update` を案内して終了する。
+- 対象の 9 単位(下記)がすべて埋まっており、かつ GOTCHAS の台帳に内容があるときは初回生成ではない。`/metatron:update` を案内して終了する。
+- 9 単位が埋まっていて GOTCHAS の台帳だけが無い(または空である)ときは、手順 2 から 5 を飛ばし、手順 6 と 7 の GOTCHAS の分だけを行う。
 
 ## 2. 事実の収集
 
@@ -70,6 +71,7 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 | rules `protected-paths.md` | `../../docs/RULES.example.md` の記入例と既存の設定ファイル |
 | rules `testing-policy.md` | `../../docs/RULES.example.md` の記入例と既存の文書 |
 
+- GOTCHAS の台帳はこの 9 単位に含めない。起草するものが無いため、手順 6 で承認対象として扱う。
 - rules の 3 単位を `scan` の事実から起草しない。`../../docs/RULES.example.md` の記入例を既定のドラフトとして提示し、指摘を受けて直す。
 - rules の各ファイルは `# 見出し` から始まる完全な本文として起草し、見出しの直後に管理者表示行を置く。文言は `../../references/rules-format.md` にある。
 - `## ADR 一覧` は初回生成で扱わない。ドラフトも空の節も作らない。最初の ADR を追加するときに `stage-adr` が節ごと作る。
@@ -93,7 +95,8 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 ## 5. stage-architecture と stage-rules
 
 - 9 単位すべての確定を得てから stage を始める。
-- 対象 1 つにつき、stage → 手順 6 の承認 → 手順 7 の commit を回す。4 対象分の stage をまとめて先に発行しない。
+- stage を要する対象は 4 つ(ARCHITECTURE 1・rules 3)である。GOTCHAS は stage を持たない。
+- stage を要する対象 1 つにつき、stage → 手順 6 の承認 → 手順 7 の commit を回す。4 対象分の stage をまとめて先に発行しない。
 - 確定した ARCHITECTURE の 6 セクションを 1 回の `stage-architecture --input <path>` にまとめて渡す。
 - rules は 1 ファイルにつき 1 回、合計 3 回の `stage-rules --input <path>` を発行する。1 回の staging に 2 ファイル以上は渡せない。
 - `stage-architecture` の入力の形は次のとおり。
@@ -129,7 +132,7 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 
 ## 6. diff の全文提示と承認
 
-- 承認は対象ごとに得る。ARCHITECTURE 1 回と rules 3 回で合計 4 回になる。
+- 承認は対象ごとに得る。ARCHITECTURE 1 回と rules 3 回と GOTCHAS 1 回で合計 5 回になる。
 - 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
 - `diff.truncated` が `false` のときは `diff.unified` を**全文**提示する。要約・抜粋・変更行数の報告に置き換えない。
 - `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わない。`diff.sections` の `before` / `after` をセクション単位で全文提示する。
@@ -140,28 +143,48 @@ description: プロジェクトのアーキテクチャ文書(ARCHITECTURE)を�
 - `stage-architecture` / `stage-rules` が exit 0 で返ったことを承認と読み替えない。
 - 否認されたら該当単位のウォークスルーへ戻る。`stagingId` は使い回さない。stage からやり直す。
 
+### GOTCHAS の台帳
+
+- `get gotchas-template` を実行する。分岐は `hasContent` で行う。`exists` では分岐しない(空のファイルがあるときに判断を誤る)。
+- `hasContent` が `true` のときは、提示も承認も行わない。既存の台帳がある旨を手順 8 で報告し、手順 7 の `init-gotchas` を実行しない。
+- `hasContent` が `false` のときは、返った `path` と `relative` と `template` を提示する。
+- 提示するのは次の 3 つとする。
+  1. 台帳を作る絶対パスと、docRoot からの相対パス。
+  2. `template` の**全文**。要約・抜粋に置き換えない。
+  3. 作成後は、この台帳への直接編集が PreToolUse hook に拒否されるようになること、および毎セッションの注入対象に入ることの 2 点。
+- 求める承認は「この台帳をこのパスに作ってよいか」の可否 1 点とする。本文の良し悪しを問わない。
+- **本文はこの場では書き換えられないことを併せて伝える。** 雛形は書式の契約で固定されており、`init-gotchas` は本文を入力に取らない。
+- 本文の変更を求められたときは、台帳の作成を保留する。書式の契約の変更として扱い、このセッションでは作らない。保留したことを手順 8 で報告する。
+- パスが意図と違うと指摘されたときは作成しない。`metatron.config.json` の `paths.gotchas` を直すのはユーザーの作業であり、このスキルは行わない。
+
 ## 7. commit-architecture と commit-rules
 
 - 承認を得た後に、その stage の出力の `next` に載っているコマンド行を実行する。
 - ARCHITECTURE の `stagingId` は `commit-architecture` へ、rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で拒否される。
 - `expired` で失敗したときは有効期限切れである。その対象について手順 5 からやり直す。
 - `file_changed` で失敗したときは stage 後に対象ファイルが変化している。現行内容を読み直し、手順 5 からやり直す。
+- GOTCHAS の承認を得た後に `init-gotchas` を実行する。`--staging-id` も `--input` も取らない。
+- `already_exists` で拒否されたときは、承認を得てから実行するまでの間に台帳が作られている。**再実行しない。** 既存の台帳があることを手順 8 で報告する。
+- `lock_timeout` で拒否されたときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
 ## 8. 完了報告
 
 - 書き込んだファイルのパスと、確定した単位の一覧を報告する。ARCHITECTURE のセクションと rules の 3 ファイルを分けて示す。
 - 未記入のまま残した単位があれば一覧で報告する。
-- GOTCHAS の台帳は初回生成では作らない。最初のエントリを記録するときに `append-gotcha` が台帳ごと作る。
+- GOTCHAS の台帳を作ったときは、そのパスを報告する。台帳は空であり、失敗を記録するときに `append-gotcha` でエントリが入る。
+- 既に台帳があって作らなかったとき、承認が得られず作らなかったときは、その事実と理由を報告する。
 - 「更新した(未コミット)。コミットするか」の確認を 1 行添える。
 - 呼び出し元のフローがコミットまでを担っているとき(ハーネスの run の一部として起動されたとき)は、この確認を添えない。
 
 <HARD-GATE>
-- **承認なしに `commit-architecture` / `commit-rules` を実行しない。** stage が成功したこと・CLI が拒否しなかったことは承認ではない。承認はユーザーの明示的な返答だけである。
-- **diff を全文提示せずに承認を求めない。**
-- **4 対象を 1 回の承認でまとめない。** 承認は ARCHITECTURE 1 回と rules 3 回に分ける。
-- **`diff.truncated` が `true` のまま承認を求めない。** ARCHITECTURE は `diff.sections` の `before` / `after` から全文を提示してから承認を得る。
+- **承認なしに `commit-architecture` / `commit-rules` / `init-gotchas` を実行しない。** stage が成功したこと・CLI が拒否しなかったことは承認ではない。承認はユーザーの明示的な返答だけである。
+- **書き込む内容を全文提示せずに承認を求めない。** stage を経る 4 対象は `diff` の全文を、GOTCHAS は `get gotchas-template` の `template` の全文を提示する。
+- **5 対象を 1 回の承認でまとめない。** 承認は ARCHITECTURE 1 回と rules 3 回と GOTCHAS 1 回に分ける。
+- **stage を経る 4 対象で `diff.truncated` が `true` のまま承認を求めない。** ARCHITECTURE は `diff.sections` の `before` / `after` から全文を提示してから承認を得る。
 - **生成物のファイルを直読させて承認に代えない。** 確認は単位ごとの問いで行う。
 - **既存の内容を勝手に上書きしない。**
+- **`already_exists` を握り潰して既存の台帳を消さない。** 拒否されたら再実行せず報告する。
+- **GOTCHAS の雛形を Write / Edit で書かない。** 生成は `init-gotchas` だけで行う。
 - **材料が無い単位を推測で埋めない。**
 - **`## ADR 一覧` を初回生成で書き込まない。**
 </HARD-GATE>

@@ -22,7 +22,8 @@ Codiel は単体で完結します。技術スタック・レイヤー構造・�
 前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
 検討してください。併用時は最小構成の ARCHITECTURE をそのまま活かして残りの節を足せます
 (書き換えや変換の作業はありません)。ARCHITECTURE / GOTCHAS のパスは `metatron.config.json` で
-変更でき、Codiel は解決されたパスを使います。
+変更でき、Codiel は解決されたパスを使います。GOTCHAS の台帳は metatron が管理します。metatron が
+無い環境では、失敗の記録は run のレポートと完了報告に残り、台帳へは追記されません。
 
 ### `/codiel:run <issue番号>`
 

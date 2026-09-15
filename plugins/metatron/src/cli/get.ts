@@ -18,7 +18,8 @@ import { loadConfig, type ResolvedConfig } from "../lib/config.js"
 import {
   filterGotchas,
   type GotchaEntry,
-  parseGotchas
+  parseGotchas,
+  renderGotchasTemplate
 } from "../lib/gotchas.js"
 import {
   isRulesName,
@@ -119,6 +120,8 @@ export function runGetConfig(ctx: GetContext): void {
       stageRules: commandLine("stage-rules --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
       commitRules: commandLine("commit-rules --staging-id <id>"),
+      initGotchas: commandLine("init-gotchas"),
+      getGotchasTemplate: commandLine("get gotchas-template"),
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
         "tag-gotcha --id <GOTCHA-NNN> --tag <解決済み|対象外> --reason <理由>"
@@ -291,7 +294,7 @@ export function runGetGotchas(ctx: GetContext): void {
     emitReadFailure(
       command,
       "not_created",
-      `${config.gotchasPath} は未作成です。append-gotcha が台帳ごと作成します。`,
+      `${config.gotchasPath} は未作成です。/metatron:init が台帳を作ります。init を経ずに記録するときは append-gotcha が台帳ごと作成します。`,
       {
         path: config.gotchasPath,
         exists: false,
@@ -317,6 +320,25 @@ export function runGetGotchas(ctx: GetContext): void {
     ).length,
     filter,
     entries: entries.map(serializeGotcha),
+    warnings
+  })
+}
+
+export function runGetGotchasTemplate(ctx: GetContext): void {
+  const command = "get gotchas-template"
+  const config = configOf(ctx.cwd)
+  const file = readDocument(config.gotchasPath)
+  const hasContent = file.exists && file.text.trim() !== ""
+  const warnings = [...config.warnings, ...file.warnings]
+  noteWarnings(warnings)
+  emitResult(command, {
+    ok: true,
+    path: config.gotchasPath,
+    relative: config.gotchasRelative,
+    exists: file.exists,
+    hasContent,
+    template: renderGotchasTemplate(),
+    next: hasContent ? null : commandLine("init-gotchas"),
     warnings
   })
 }
@@ -443,6 +465,7 @@ const GET_TARGETS = [
   "architecture",
   "domains",
   "gotchas",
+  "gotchas-template",
   "adr",
   "rules"
 ]
@@ -462,6 +485,9 @@ export function runGet(target: string | undefined, ctx: GetContext): void {
         return
       case "gotchas":
         runGetGotchas(ctx)
+        return
+      case "gotchas-template":
+        runGetGotchasTemplate(ctx)
         return
       case "adr":
         runGetAdr(ctx)

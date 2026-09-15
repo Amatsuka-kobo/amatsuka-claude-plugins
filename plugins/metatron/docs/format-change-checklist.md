@@ -22,7 +22,9 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 ## GOTCHAS の書式(`references/gotchas-format.md`)
 
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §7
-- [ ] codiel: `skills/recording-gotchas/SKILL.md` の書式の写し
+- [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` の GOTCHAS の承認節
+- [ ] `plugins/metatron/references/cli-usage.md` の `init-gotchas` の節
+- [ ] codiel: `skills/recording-gotchas/SKILL.md` のエントリ書式の写し(台帳の雛形は持たない)
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
