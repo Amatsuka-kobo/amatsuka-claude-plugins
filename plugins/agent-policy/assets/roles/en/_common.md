@@ -27,6 +27,7 @@ Your roles are {{ROLE_LABELS}}. The role you are invoked for is stated at the to
   - that the role is Document Authoring
   - that the content is already decided and only the writing and revision are delegated
   - the paths of the target files
+  - that the request must not include finished prose ready to copy into the target files
   - that the delegate must not use the `Agent` tool
 
 ## Constraints

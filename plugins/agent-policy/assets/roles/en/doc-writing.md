@@ -33,6 +33,7 @@ kind: impl
 - Do not decide design content, requirements, or specifications yourself. Leave undecided matters unwritten and send them back to the requester.
 - Do not write facts you cannot verify. Ask the requester about anything you cannot confirm.
 - Do not re-delegate the writing to another role. This role does the writing.
+- Do not transcribe finished prose from the requester, even if it uses the target file's style. Treat it as a draft and rewrite it in your own words.
 
 ## Output Format
 

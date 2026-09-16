@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.19.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.19.2-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -115,12 +115,20 @@ impl-role subagents writing a **file-persisted document** must re-delegate to th
 definition if the marker table has one, else write it themselves (no hand-back); report bodies are
 out of scope; design-plan/explore-lead write the first draft themselves. It lives in `_common.md`'s
 `## Agent tool の制約` / `## Agent tool limits` section (emitted only when `withAgent` is true) and
-as the 10th 「サブエージェントは〜」 clause in the discipline. **The en `_common.md` must contain no
-Japanese** — `compose.test.ts` has an English-purity check; a 「文書作成」 label was tried and
-reverted. *F1 (orchestrator-facing)*: three bullets at the end of §オーケストレーターが自ら担う作業
-— the orchestrator does not write file-persisted documents itself (incl. handover notes and
-`docs/prompts/` goal prompts), passes decided content + target path + references in the request,
-and requirement/judgement bullets inside a request are out of scope.
+is the 10th 「サブエージェントは〜」 clause in the discipline. Re-delegation requests in both
+language `_common.md` fragments must not include finished prose ready to use in the target file.
+**The en `_common.md` must contain no Japanese** — `compose.test.ts` has an English-purity check; a
+「文書作成」 label was tried and reverted. Both language `doc-writing.md` fragments require the
+Document Authoring role to treat requester-supplied finished prose as a draft and rewrite it in its
+own words instead of transcribing it. *F1 (orchestrator-facing)*: four bullets at the end of
+§オーケストレーターが自ら担う作業 — the orchestrator does not write file-persisted documents
+itself (incl. handover notes and `docs/prompts/` goal prompts), passes decided content + target path
++ references in the request, and document-authoring requests contain only facts, decisions,
+constraints, acceptance criteria, outline, terminology, and reference paths as bullets, tables, or
+keywords; target-file-style paragraphs and finished prose ready to paste are excluded. Requirement
+and judgement bullets in a request remain out of scope for the file-writing rule. These clauses are
+in `references/orchestration-discipline.md`, `assets/roles/ja/_common.md`,
+`assets/roles/en/_common.md`, `assets/roles/ja/doc-writing.md`, and `assets/roles/en/doc-writing.md`.
 
 **Agent Tool is decided by role only since 0.19.0-dev.** `allowsAgentTool(ids)` lost its `model`
 argument; `AGENT_DENIED_MODELS` (Haiku) is gone; `light-impl` moved to Agent Tool 可. The
