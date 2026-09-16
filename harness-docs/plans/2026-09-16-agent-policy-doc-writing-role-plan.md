@@ -114,7 +114,16 @@
 | T18 | このリポジトリの `.claude/agents/` の再生成(設計書 §5.18)。`agent-policy:setup-agents` で `doc-writing` の定義を新設し(Sonnet / gemini-flash の 2 件。`gpt-terra` も推奨に入るため 3 件目を作るかはユーザーが決める。**`doc-writing` は単独の役割を持つ定義にする**)、既存 13 定義を再生成する。**再生成が 13 定義すべてに及ぶ主因は `_common.md` の Agent tool の節の改訂であり、次いで `general` の文言である。Agent tool の付与が実際に変わるのは `light-impl` を持つ `general-implementer.md` だけである。唯一の Haiku 定義 `knowledge-elicitationer.md` は `doc-review` のみを持つため Agent 否のまま変わらない。** **着手前に 13 定義の `disallowedTools` と MCP の付与を一覧化する。**7 定義が `disallowedTools` を持つ(`complex-reviewer` / `general-explore` / `docs-reviewer` / `code-reviewer` / `realtime-researcher` / `technical-adviser` / `independent-tech-adviser`)。ウィザードで同じ `--mcp-deny` を再指定し、`independent-tech-adviser.md` のプレフィックス無しの別名(`write_memory` 等)は手で復元する。ウィザードは対話であり、定義名・MCP・作る定義の選択はユーザーが決める。完了後 `--list-coverage` で未被覆が無いことと、**7 定義の `disallowedTools` が保持されていること**を確認する | オーケストレーター | `agent-policy:setup-agents` |
 
 - T14 / T15 の依頼文には「ファイルを変更しない」「報告のみを返す」「使用してよい tools を読み取り系に限定する」を明記する。
-- **T14 の項目 (8)(`disallowedTools` の保持)は T18 の後でなければ確認できない。** T14 は T18 に先行するため、この項目だけは T18 の完了後にオーケストレーターが自分で確認するか、T14 を再度 dispatch して確認させる。どちらにするかは T18 の完了時に決める。
+- **T14 の項目 (8)(`disallowedTools` の保持)は T18 の後でなければ確認できない。** T14 は T18 に先行するため、この項目だけは後追いで確認する。**実施結果: オーケストレーターが T18 の完了後に自分で確認した(T14 の再 dispatch は行わなかった)。**
+
+#### T18 の実施記録(2026-09-16)
+
+- 新設は **`document-writer.md` の 1 件**のみ。`model` は `gemini-flash`、役割は `doc-writing` **単独**、MCP は serena、書き込み系の 11 ツールを `disallowedTools` で deny。
+- 既存 13 定義は `--write --merge` で再生成し、MCP と deny を現状どおり再指定した。
+- `independent-tech-adviser.md` の deny を、プレフィックス無しの別名から `mcp__serena__` 付きの表記へ統一した。
+- `--list-coverage` の `uncovered` は空。deny を持つ定義は **8 件**(既存 7 + 新規 1)。
+- `warnings` / `mcpDropped` / `keptNeedsReview` はいずれも空。
+- `sonnet` と `gpt-terra` の `doc-writing` 定義は**作らなかった**(ユーザー判断)。`RECOMMENDED` には残るため、次回のウィザードでも候補として提示される。
 - T16 で食い違いが見つかった場合は §7 へ記録し、該当フェーズのタスクをやり直す。
 - **T17 は T12 の後**(バージョンが確定していないと書けない)。**T18 は T12 の後**(`scripts/` が再生成されていないと新役割を生成できない)。
 - T18 はプラグインの改修ではなくこのリポジトリの構成変更である。別コミットに分ける(§5)。
@@ -217,11 +226,10 @@ e2e-verify, independent-review, code-review
 | 1 | 役割 `doc-writing`、ベンダー `gemini`、ModelId `gemini-flash`、Agent Tool の規定変更(D)の追加(テスト・実装・断片・`_common.md`・担当表・プラグイン README・SKILL.md) | T1-T11(T7b を含む) | `feat(agent-policy): 役割 doc-writing とベンダー gemini を追加する` |
 | 2 | バージョンと生成物 | T12 | `chore(agent-policy): 0.19.0-dev` |
 | 3 | ルート README と Serena メモリ | T11・T17 | `docs: agent-policy 0.19 に追随する` |
-| 4 | このリポジトリの Agent 定義の再生成 | T18 | `chore: doc-writing の Agent 定義を追加する` |
 
 - T11(ルート README)はプラグイン外の追随であり、コミット 3 に寄せる。コミット 1 には含めない。
 - コミット 2 は 1 の後に置く。`scripts/` は 1 の全変更を含むため分割できない。
-- コミット 4 は `.claude/agents/` の変更であり、プラグインの改修とは別物である。
+- **T18(`.claude/agents/` の再生成)はコミットを伴わない。** `.claude/agents` は `.gitignore:14` で無視されており git 管理外である(§7-4)。当初案にあった 4 本目のコミットは成立しないため削除した。
 
 ## 6. リスクと対処
 
@@ -252,7 +260,7 @@ e2e-verify, independent-review, code-review
 | T8 の担当が F1 の 3 項を置く位置を誤り、`## モデル別役割の運用` の並びへ入れてしまう | 設計書 §4.16 で位置(§オーケストレーターが自ら担う作業 の末尾、分析の 3 項目の直後)と根拠を確定した。T8 の依頼文へ転記する |
 | F1 と D1 の対象の列挙がずれる | 両方の全文を T8 の依頼文へ転記し、「対象の列挙は同じ文言にする」と明記する。T16 の項目 (7) で確認する |
 | T4 と T8 が `orchestration-discipline.md` を別フェーズで触り、片方が他方の変更を巻き戻す | T4 は担当表の `light-impl` の 1 セルだけ、T8 は行追加と条項追加だけ、と依頼文に明記する。T4 → T8 はフェーズが分かれており同時編集にはならない |
-| **T18 の再生成で 7 定義の `disallowedTools` と MCP の付与が失われる** | T18 の着手前に一覧化し、ウィザードで同じ `--mcp-deny` を再指定する。`independent-tech-adviser.md` のプレフィックス無しの別名は手で復元する。完了確認に保持の検査を入れた |
+| **T18 の再生成で 7 定義の `disallowedTools` と MCP の付与が失われる** | T18 の着手前に一覧化し、ウィザードで同じ `--mcp-deny` を再指定する。`independent-tech-adviser.md` のプレフィックス無しの別名は手で復元する。完了確認に保持の検査を入れた。**実施結果: 保持を確認済み。同定義の別名は `mcp__serena__` 付きへ統一した**(§2 フェーズ 5 の T18 実施記録) |
 | T18 で `doc-writing` を実装役割と兼ねた定義に入れてしまい、Agent Tool が「可」になる | T18 の記述に「`doc-writing` は単独の役割を持つ定義にする」と明記した(設計書 §5.18 / §8) |
 
 ## 7. 設計書との食い違い
@@ -264,6 +272,7 @@ e2e-verify, independent-review, code-review
 | 1 | T4 | 設計書 §3.1 と実コードの `MODELS` の並びは `gpt-sol, gpt-terra, gpt-luna, gpt-astra, grok` である | T1 が書いた `policies.test.ts` の `MODELS` 順序検査が `gpt-luna, gpt-terra` の順になっていた。**テスト側の誤記**であり、設計書と実コードは正しい | **テストを正本へ合わせる。** 設計書は変更しない。オーケストレーターが修正済み |
 | 2 | T7b | 設計書 §5.11c が en 断片へ日本語ラベルを併記する(`文書作成 (Document Authoring)`)としていた | `compose.test.ts:616`「英語で合成した定義に日本語と日本語約物が混入しない」が落ちる | **既存テストを英語出力の品質契約として維持し、併記を撤回する。** en 断片は `"Document Authoring"` のみとする。設計書 §5.11c / §9 / §10-9 を訂正済み。対応表の照合の問題は既存の欠陥のままスコープ外(設計書 §10-9) |
 | 3 | T14 | 設計書 §8 は「D1(§5.11b / §5.11c)と F1(§5.12-4)の対象の列挙を同じ文言で書く」としていた | D1 側が「…プロンプト・引継ぎ書)、…、その他の文書」、F1 側が「…プロンプト)、引継ぎ書と goal コマンドのプロンプト(…)、…、その他ファイルとして残す文書」で、文言も範囲も違っていた | **D1 側を F1 へ揃える。** ja / en とも設計書 §5.11b / §5.11c の列挙を差し替え済み。**パスの例示だけは F1 側にのみ残す**(オーケストレーター向けの具体化であり範囲は変えない)。この非対称を設計書 §8 のリスク欄へ明記した。実装はオーケストレーターが修正済み |
+| 4 | T18 | 本計画書 §5 が T18 を 4 本目のコミット(`chore: doc-writing の Agent 定義を追加する`)として置いていた | `.claude/agents` は `.gitignore:14` で無視されており、git 管理外である。コミットできない | **コミット 4 を削除する。** §5 に「T18 はコミットを伴わない」と注記した。コミットは 3 本のままで、§8 の Done 条件「変更を §5 の方針で分けてコミットしている」は成立する |
 
 計画立案時に実測で追認した記述(食い違いなし):
 
@@ -304,11 +313,12 @@ e2e-verify, independent-review, code-review
 - ARCHITECTURE への影響の有無を確認した記録が残っている(T15)。
 - オーケストレーターが全差分を一度に読んで設計書と突き合わせ、食い違いが無いことを確認している(T16)。
 - `.serena/memories/agent_policy/core.md` が更新されている(T17)。
-- このリポジトリの `.claude/agents/` に `doc-writing` を**単独で**持つ定義があり、`--list-coverage` の `uncovered` が空である(T18)。
-- 再生成後も 7 定義の `disallowedTools` が保持されている(T18)。
+- このリポジトリの `.claude/agents/` に `doc-writing` を**単独で**持つ定義があり、`--list-coverage` の `uncovered` が空である(T18。`document-writer.md` で充足)。
+- 再生成後も既存 7 定義の `disallowedTools` が保持されている(T18。新規 1 件を含め deny を持つ定義は 8 件)。
+- **`.claude/agents/` は gitignore 対象のため、T18 の成果はコミットに現れない**(§5 / §7-4)。
 - 変更を §5 の方針で分けてコミットしている。
 
 ## 9. 未解決事項
 
-1. T18 で作る `doc-writing` 定義の数(Sonnet / gemini-flash の 2 件か、`gpt-terra` を加えた 3 件か)・名前・MCP の付与内容。ウィザードでユーザーが決める(設計書 §10-7)。
+1. **解決済み(2026-09-16)。** T18 で作る `doc-writing` 定義は **`gemini-flash` の 1 件のみ**とし、名前は `document-writer`、MCP は serena(書き込み系 11 ツールを deny)とした。`sonnet` と `gpt-terra` の定義は作らない(ユーザー判断)。設計書 §10-3 / §10-7 もこの結果で閉じる。
 2. 設計書 §10 の 5 項(cliproxyapi-setup.md の追随、`subagent-start.test.ts` の stale なフィクスチャ、定義名、`doc-writing` の運用実績、Gemini Flash の執筆品質)は本改修のスコープ外である。
