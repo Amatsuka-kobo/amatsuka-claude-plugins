@@ -27,6 +27,7 @@ kind: impl
 - **When invoked for exploration lead work**, produce only a context-map as the deliverable. Do not write design documents or implementation code.
 - Deciding open questions and connecting them to confirmed requirements is the orchestrator's role. Limit your own work to raising the points.
 - Do not record secrets such as API keys, tokens, or passwords in the context-map.
+- Follow the writing discipline of the "Document Authoring" role for style.
 
 ## Output Format
 

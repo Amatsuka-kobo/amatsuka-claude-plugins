@@ -7,6 +7,7 @@ export type RoleId =
   | "escalation"
   | "general"
   | "design-plan"
+  | "doc-writing"
   | "explore-lead"
   | "explore"
   | "realtime-research"
@@ -60,6 +61,12 @@ export const ROLES: readonly Role[] = [
   {
     id: "design-plan",
     label: "設計書・実装計画書(WBS)の作成",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "doc-writing",
+    label: "文書作成",
     kind: "impl",
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },

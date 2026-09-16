@@ -88,6 +88,9 @@ describe("frontmatter", () => {
       "red"
     )
     expect(
+      frontmatter(build(["normal-impl"], { vendor: "gemini" })).color
+    ).toBe("green")
+    expect(
       frontmatter(build(["normal-impl"], { vendor: "claude" })).color
     ).toBe("blue")
   })
@@ -104,7 +107,7 @@ describe("frontmatter", () => {
   })
 
   it("vendor marker を role marker の直後へ出力する", () => {
-    for (const vendor of ["gpt", "grok", "claude"] as const) {
+    for (const vendor of ["gpt", "grok", "gemini", "claude"] as const) {
       const lines = build(["complex-impl"], { vendor }).split("\n")
       const roleAt = lines.indexOf("agent-policy-role: complex-impl")
 
@@ -137,9 +140,9 @@ describe("frontmatter", () => {
     expect(meta.tools).not.toContain("mcp__")
   })
 
-  it("Agent の付与が役割とモデルで決まる", () => {
+  it("Agent の付与が役割だけで決まる", () => {
     expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
-    expect(frontmatter(build(["light-impl"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["light-impl"])).tools).toContain("Agent")
     expect(frontmatter(build(["escalation"])).tools).toContain("Agent")
     expect(frontmatter(build(["e2e-verify"])).tools).toContain("Agent")
     expect(frontmatter(build(["code-review"])).tools).not.toContain("Agent")
@@ -151,25 +154,19 @@ describe("frontmatter", () => {
     )
     expect(
       frontmatter(build(["explore"], { modelId: "haiku" })).tools
-    ).not.toContain("Agent")
+    ).toContain("Agent")
   })
 
-  it("model ID が無いときは役割だけで Agent の有無を決める", () => {
-    expect(
-      frontmatter(buildWithoutModelId(["light-impl"])).tools
-    ).not.toContain("Agent")
+  it("model ID が無いときも役割だけで Agent の有無を決める", () => {
+    expect(frontmatter(buildWithoutModelId(["light-impl"])).tools).toContain(
+      "Agent"
+    )
     expect(frontmatter(buildWithoutModelId(["advisor"])).tools).not.toContain(
       "Agent"
     )
     expect(frontmatter(buildWithoutModelId(["complex-impl"])).tools).toContain(
       "Agent"
     )
-  })
-
-  it("model ID があるときは Haiku の Agent 除外を維持する", () => {
-    expect(
-      frontmatter(build(["complex-impl"], { modelId: "haiku" })).tools
-    ).not.toContain("Agent")
   })
 })
 
@@ -235,26 +232,24 @@ describe("本文", () => {
   })
 
   it("Agent が付かないとき「アドバイザーへの相談」節を出さない", () => {
-    expect(build(["light-impl"])).not.toContain("## アドバイザーへの相談")
+    expect(build(["code-review"])).not.toContain("## アドバイザーへの相談")
   })
 
   it("general だけでも Agent と Agent tool の制約を出す", () => {
     const body = build(["general"])
     expect(frontmatter(body).tools.split(", ")).toContain("Agent")
-    expect(body).toContain("`Agent` tool はアドバイザー相談専用")
+    expect(body).toContain("`Agent` tool を使うのは")
   })
 
   it("読み取り役割だけでも Agent と Agent tool の制約を出す", () => {
     const body = build(["explore"])
     expect(frontmatter(body).tools.split(", ")).toContain("Agent")
-    expect(body).toContain("`Agent` tool はアドバイザー相談専用")
+    expect(body).toContain("`Agent` tool を使うのは")
   })
 
   it("複数の Agent 対応役割を合成しても Agent tool の制約は重複しない", () => {
     const body = build(["complex-impl", "general"])
-    expect(
-      body.match(/`Agent` tool はアドバイザー相談専用/g) ?? []
-    ).toHaveLength(1)
+    expect(body.match(/`Agent` tool を使うのは/g) ?? []).toHaveLength(1)
   })
 
   it("ツール運用節を作らない", () => {

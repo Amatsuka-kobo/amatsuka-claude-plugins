@@ -23,7 +23,8 @@ const MODEL_IDS = {
   "GPT Terra": "gpt-terra",
   "GPT Luna": "gpt-luna",
   "GPT Astra": "gpt-astra",
-  Grok: "grok"
+  Grok: "grok",
+  "Gemini Flash": "gemini-flash"
 } as const satisfies Record<string, ModelId>
 
 const TABLE_HEADER = ["役割名", "RoleId", "種別", "Agent Tool", "Claude モデル"]

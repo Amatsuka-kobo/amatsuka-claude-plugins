@@ -1,7 +1,7 @@
 ---
 id: general
 label: General Tasks
-description: general work excluding review and design, including documentation and routine maintenance
+description: general work excluding review, design, and document authoring, such as routine maintenance
 default-name: generalist
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,12 +9,12 @@ kind: impl
 
 ## When to invoke
 
-- **Documentation work.** Use when READMEs or procedure guides need to be written or updated, or when existing documentation needs a consistency check.
+- **Work that fits no other role.** Use for work that is neither review, design, nor document authoring and needs no specialized expertise.
 - **Routine maintenance.** Use for general repository work that is not a one-off task and does not require specialized expertise.
 
 ## Core Responsibilities
 
-- Perform documentation work and routine maintenance according to existing repository conventions for file placement, naming, and writing style.
+- Perform routine maintenance according to existing repository conventions for file placement and naming.
 
 ## Procedure
 

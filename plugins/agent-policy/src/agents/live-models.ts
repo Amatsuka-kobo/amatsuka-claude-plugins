@@ -1,12 +1,15 @@
+import type { Vendor } from "./fragments"
+
+// プロキシ応答から推定したベンダー。"none" は生成側の指定でありプロキシ応答には現れないため除く。
+export type LiveVendor = Exclude<Vendor, "none"> | "unknown"
+
 export interface LiveModels {
   ok: boolean
   baseUrl?: string
   ids: string[]
-  vendors: Record<string, "gpt" | "grok" | "claude" | "unknown">
+  vendors: Record<string, LiveVendor>
   reason?: string
 }
-
-type Vendor = LiveModels["vendors"][string]
 
 const TIMEOUT_MS = 3_000
 
@@ -14,7 +17,7 @@ function failure(baseUrl: string, reason: string): LiveModels {
   return { ok: false, baseUrl, ids: [], vendors: {}, reason }
 }
 
-function vendorFor(ownedBy: unknown): Vendor {
+function vendorFor(ownedBy: unknown): LiveVendor {
   if (typeof ownedBy !== "string") {
     return "unknown"
   }
@@ -26,6 +29,8 @@ function vendorFor(ownedBy: unknown): Vendor {
       return "grok"
     case "anthropic":
       return "claude"
+    case "antigravity":
+      return "gemini"
     default:
       return "unknown"
   }

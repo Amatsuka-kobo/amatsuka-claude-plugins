@@ -8,7 +8,7 @@ import {
 } from "../roles"
 
 describe("ROLES", () => {
-  it("役割 ID が 16 件あり、定義順で重複しない", () => {
+  it("役割 ID が 17 件あり、定義順で重複しない", () => {
     expect(ROLES.map((role) => role.id)).toEqual([
       "complex-impl",
       "normal-impl",
@@ -16,6 +16,7 @@ describe("ROLES", () => {
       "escalation",
       "general",
       "design-plan",
+      "doc-writing",
       "explore-lead",
       "explore",
       "realtime-research",
@@ -27,7 +28,16 @@ describe("ROLES", () => {
       "gate-review",
       "advisor"
     ])
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(16)
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(17)
+  })
+
+  it("文書作成役割の label・kind・tools が固定値と一致する", () => {
+    expect(ROLES.find((role) => role.id === "doc-writing")).toEqual({
+      id: "doc-writing",
+      label: "文書作成",
+      kind: "impl",
+      tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+    })
   })
 
   it("追加した 2 役割の label・kind・tools が固定値と一致する", () => {
