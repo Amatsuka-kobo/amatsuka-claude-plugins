@@ -62,7 +62,6 @@ interface Options {
 
 interface Target {
   modelId: ModelId
-  composeModelId?: ModelId
   name: string
   model: string
   roles: RoleId[]
@@ -311,7 +310,6 @@ function targetsFor(options: Options, live: LiveModels): TargetResolution {
         const vendor = resolveVendor(options, spec.model, spec, live)
         return {
           modelId: spec.id,
-          composeModelId: spec.id,
           name: defaultAgentName(options, spec),
           model: spec.model,
           roles: recommendedRolesFor(spec.id),
@@ -351,7 +349,6 @@ function targetsFor(options: Options, live: LiveModels): TargetResolution {
     targets: [
       {
         modelId: spec.id,
-        composeModelId: options.model === "" ? spec.id : undefined,
         name: options.name,
         model,
         roles: options.roles,
@@ -371,7 +368,6 @@ function composeInputFor(
   return {
     name: target.name,
     model: target.model,
-    modelId: target.composeModelId,
     vendor: target.vendor,
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
