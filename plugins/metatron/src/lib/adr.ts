@@ -28,14 +28,14 @@ import {
 } from "./architecture.js"
 import { withFileLock } from "./gotchas.js"
 
-/** 契約 §5-1。`状態` の値域はこの 3 つ。他は拒否する。 */
+/** 契約 §6-1。`状態` の値域はこの 3 つ。他は拒否する。 */
 export const ADR_STATUSES = ["採用", "提案", "廃止"] as const
 export type AdrStatus = (typeof ADR_STATUSES)[number]
 
 /**
  * 追加時に `status` を省略したときの値。
  *
- * 設計書 §7-4 の `mode: "add"` の入力に `status` が無く、契約 §5-1 はエントリに
+ * 設計書 §7-4 の `mode: "add"` の入力に `status` が無く、契約 §6-1 はエントリに
  * `状態` 行を要求するため、既定値が要る。新規に書き起こす ADR は
  * 「採用した結論」を必須項目に持つ判断の記録であり、`採用` が既定として妥当である。
  * `提案` として起こしたい場合は `status` を明示する。
@@ -67,7 +67,7 @@ export class AdrError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// 行の書式(契約 §5-1・§5-2)
+// 行の書式(契約 §6-1・§6-2)
 // ---------------------------------------------------------------------------
 
 // エントリ見出し。1=番号までの接頭辞 / 2=番号 / 3=コロン以降。
@@ -80,7 +80,7 @@ const STATUS_LINE_RE = /^( {0,3}-[ \t]+状態[ \t]*:[ \t]*)(.*)$/
 const DECIDED_ON_RE = /^ {0,3}-[ \t]+決定日[ \t]*:[ \t]*(.*)$/
 const DECIDED_BY_RE = /^ {0,3}-[ \t]+決定者[ \t]*:[ \t]*(.*)$/
 
-// 契約 §5-2 の履歴行 `- 状態変更(YYYY-MM-DD): 旧 → 新。理由`。
+// 契約 §6-2 の履歴行 `- 状態変更(YYYY-MM-DD): 旧 → 新。理由`。
 const STATUS_CHANGE_RE =
   /^ {0,3}-[ \t]+状態変更\((\d{4}-\d{2}-\d{2})\)[ \t]*:[ \t]*(.*)$/
 
@@ -173,7 +173,7 @@ export interface AdrEntry {
   endIndex: number
   /** 見出しから本文の最終行までの原文。末尾の空行と区切り線は含まない。 */
   raw: string
-  /** 契約 §5-2 の履歴行。古いものから順に並ぶ。 */
+  /** 契約 §6-2 の履歴行。古いものから順に並ぶ。 */
   statusChanges: AdrStatusChange[]
 }
 
@@ -187,7 +187,7 @@ export interface AdrDocument {
   /** 出現順のエントリ。 */
   entries: AdrEntry[]
   maxNumber: number
-  /** 契約 §5-1: 全件走査して最大値 + 1。 */
+  /** 契約 §6-1: 全件走査して最大値 + 1。 */
   nextNumber: number
   /** 契約 §4-2 規則 5。書き込み経路はこれを見て拒否する。 */
   unclosedFence: boolean
@@ -429,7 +429,7 @@ export function filterAdrEntries(
 }
 
 // ---------------------------------------------------------------------------
-// 入力と検証(契約 §5-1・§5-2、設計書 §7-4)
+// 入力と検証(契約 §6-1・§6-2、設計書 §7-4)
 // ---------------------------------------------------------------------------
 
 export interface AdrAddInput {
@@ -453,7 +453,7 @@ export interface AdrStatusInput {
   /** `ADR-003` の形。数値だけでも受け付ける。 */
   id: string
   status: string
-  /** 契約 §5-2: 理由は必須。省略された状態変更は拒否する。 */
+  /** 契約 §6-2: 理由は必須。省略された状態変更は拒否する。 */
   reason: string
   /** 省略時は当日日付。 */
   changedOn?: string
@@ -538,11 +538,11 @@ export function validateAdrAddInput(input: AdrAddInput): AdrValidationResult {
     input.options.forEach((option, i) => {
       requireSingleLine(option, `options[${i}]`, errors)
     })
-    // 契約 §5-3 の 3 基準のうち「選択肢が実在した」だけが機械的に近似できる。
+    // 契約 §6-3 の 3 基準のうち「選択肢が実在した」だけが機械的に近似できる。
     // 判定そのものは人間とモデルが行うため、拒否ではなく警告にとどめる。
     if (input.options.length === 1) {
       warnings.push(
-        "options が 1 件だけです。比較した代替を挙げられないものは判断ではなく制約であり、`## 技術スタック` や `## 規約` に属する可能性があります(契約 §5-3)。"
+        "options が 1 件だけです。比較した代替を挙げられないものは判断ではなく制約であり、`## 技術スタック` や `## 規約` に属する可能性があります(契約 §6-3)。"
       )
     }
   }
@@ -563,7 +563,7 @@ export function validateAdrStatusInput(
   }
   validateStatusValue(input?.status, "status", errors)
 
-  // 契約 §5-2: 理由は必須。理由を残さない状態変更は、後から見て
+  // 契約 §6-2: 理由は必須。理由を残さない状態変更は、後から見て
   // 「誰かが気分で廃止した」のと区別がつかない。
   if (input?.reason === undefined || input?.reason === null) {
     errors.push("reason が指定されていません。状態変更の理由は必須です。")
@@ -596,10 +596,10 @@ function throwOnErrors(result: AdrValidationResult): void {
 }
 
 // ---------------------------------------------------------------------------
-// エントリの生成(契約 §5-1)
+// エントリの生成(契約 §6-1)
 // ---------------------------------------------------------------------------
 
-/** 契約 §5-1 のエントリ書式。改行を含まない行の配列で返す。 */
+/** 契約 §6-1 のエントリ書式。改行を含まない行の配列で返す。 */
 export function renderAdrEntryLines(
   num: number,
   input: AdrAddInput,
@@ -660,7 +660,7 @@ function normalizeSectionBody(body: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// 追加(契約 §5-1「追加位置は節の末尾」)
+// 追加(契約 §6-1「追加位置は節の末尾」)
 // ---------------------------------------------------------------------------
 
 export interface BuildAdrAddResult {
@@ -750,7 +750,7 @@ export function buildAdrAddition(
 }
 
 // ---------------------------------------------------------------------------
-// 状態変更(契約 §5-2)
+// 状態変更(契約 §6-2)
 // ---------------------------------------------------------------------------
 
 export interface BuildAdrStatusResult {
@@ -767,7 +767,7 @@ export interface BuildAdrStatusResult {
 /**
  * `- 状態:` 行を最新値に書き換え、エントリ末尾へ履歴行を 1 行**追記**した全文を返す。
  *
- * 過去の状態変更行は消さない。エントリも削除しない(契約 §5-1・§5-2)。
+ * 過去の状態変更行は消さない。エントリも削除しない(契約 §6-1・§6-2)。
  * 変更は「状態行の値」と「末尾 1 行の追加」の 2 箇所だけで、他のフィールドは不変。
  */
 export function buildAdrStatusChange(
@@ -797,11 +797,11 @@ export function buildAdrStatusChange(
     )
   }
   if (entry.statusLineIndex === null || entry.statusRaw === null) {
-    // 契約 §5-2 は「`状態` 行そのものは最新の値に書き換える」と定める。
+    // 契約 §6-2 は「`状態` 行そのものは最新の値に書き換える」と定める。
     // 書き換える対象が無いエントリは書式が壊れており、書き込み経路は拒否する。
     throw new AdrError(
       "invalid_entry",
-      `${entry.id} に \`- 状態:\` 行がありません。契約 §5-1 の書式に直してから再実行してください。`
+      `${entry.id} に \`- 状態:\` 行がありません。契約 §6-1 の書式に直してから再実行してください。`
     )
   }
 
