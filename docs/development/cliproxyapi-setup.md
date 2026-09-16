@@ -70,7 +70,7 @@ cp cliproxyapi.config.example.yaml cliproxyapi.config.yaml
 
 `claude-gpt-5-6-sol`、`claude-gpt-5-6-terra`、`claude-gpt-5-6-luna` は、`oauth-model-alias` が Codex の上流モデル（`gpt-5.6-sol` など）に付けるクライアント側の別名です。上流モデル ID そのものではありません。
 
-`claude-gemini-3-8-flash`、`claude-gemini-3.1-pro-high` は、`oauth-model-alias` が Antigravity（Gemini）の上流モデル（`gemini-3.8-flash`、`gemini-3.1-pro-high`）に付けるクライアント側の別名です。上流モデル ID そのものではありません。
+`claude-gemini-3-8-flash`、`claude-gemini-3-1-pro` は、`oauth-model-alias` が Antigravity（Gemini）の上流モデル（`gemini-3.8-flash-high`、`gemini-pro-agent`）に付けるクライアント側の別名です。上流モデル ID そのものではありません。上流モデル ID は Antigravity 側の実際の ID と一致している必要があります。存在しない ID を指定した場合、その別名は作られず、エラーにもならないまま無視されます。
 
 ## 3. OAuth を認証する（必要なものだけ）
 

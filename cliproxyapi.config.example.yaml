@@ -8,10 +8,10 @@ api-keys:
 
 oauth-model-alias:
   antigravity:
-    - name: "gemini-3.8-flash"
+    - name: "gemini-3.8-flash-high"
       alias: "claude-gemini-3-8-flash"
-    - name: "gemini-3.1-pro-high"
-      alias: "claude-gemini-3.1-pro-high"
+    - name: "gemini-pro-agent"
+      alias: "claude-gemini-3-1-pro"
   codex:
     - name: "gpt-6-astra"
       alias: "claude-gpt-6-astra"
