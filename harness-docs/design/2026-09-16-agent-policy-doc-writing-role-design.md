@@ -673,6 +673,10 @@ frontmatter の `description` は変更しない(役割数もベンダー名も�
 
 **再生成の前に、既存 13 定義の `disallowedTools` と MCP の付与を一覧化する。** 7 定義が `disallowedTools` を持つ(`complex-reviewer` / `general-explore` / `docs-reviewer` / `code-reviewer` / `realtime-researcher` / `technical-adviser` / `independent-tech-adviser`)。ウィザードで同じ `--mcp-deny` を指定して復元し、`independent-tech-adviser.md` のプレフィックス無しの別名(`write_memory` 等)は CLI が生成しないため手で戻す。再生成後に 7 定義の `disallowedTools` が残っていることを確認する。
 
+**修正結果(2026-09-17)。** 前回の再生成後、`disallowedTools` を持つ定義は `document-writer` を含む 8 件になっていた。`document-writer` の新設時に、既存 7 定義と同じ `--mcp-deny` を渡すコマンドの対象へ含めたことによる副作用である。setup-agents は、サーバーが付く読み取り役割だけの定義に限って denylist を尋ねる。`doc-writing` は `impl` 役割なので、deny を付ける対象ではない。
+
+この状態では、Markdown の作成と編集に使うべき Serena の編集ツールが `document-writer` で禁止されていた。`.serena/memories/` は Serena の `write_memory` / `edit_memory` でのみ変更する規約であるため、文書作成の役割からメモリを更新する手段も失われていた。2026-09-17 に `--mcp-deny` を渡さず `document-writer` だけを再生成し、`disallowedTools` を外した。`disallowedTools` を持つ定義は元の 7 件へ戻り、他の 13 定義は変更していない。
+
 定義名はウィザードで利用者が決めるため、上表は案である。
 
 ### 5.19 文書作成の依頼文に完成文を載せない規律(G)
