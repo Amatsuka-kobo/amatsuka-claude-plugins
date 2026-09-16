@@ -118,7 +118,7 @@
 
 #### T18 の実施記録(2026-09-16)
 
-- 新設は **`document-writer.md` の 1 件**のみ。`model` は `gemini-flash`、役割は `doc-writing` **単独**、MCP は serena、書き込み系の 11 ツールを `disallowedTools` で deny。
+- 新設は **`document-writer.md` の 1 件**のみ。`model` は初版 `gemini-flash`、**同日 `gpt-terra`(`claude-gpt-5-6-terra`)へ差し替え**(antigravity 経由の Gemini はサブエージェントとして起動できない。設計書 §10-5、`docs/cliproxyapi/2026-09-16-antigravity-false-429-system-prompt-filter.md`)。役割は `doc-writing` **単独**、MCP は serena、書き込み系の 11 ツールを `disallowedTools` で deny。
 - 既存 13 定義は `--write --merge` で再生成し、MCP と deny を現状どおり再指定した。
 - `independent-tech-adviser.md` の deny を、プレフィックス無しの別名から `mcp__serena__` 付きの表記へ統一した。
 - `--list-coverage` の `uncovered` は空。deny を持つ定義は **8 件**(既存 7 + 新規 1)。

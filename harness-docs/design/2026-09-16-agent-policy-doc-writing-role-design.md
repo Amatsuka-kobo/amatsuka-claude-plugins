@@ -645,6 +645,8 @@ frontmatter の `description` は変更しない(役割数もベンダー名も�
 
 `RECOMMENDED` には `gpt-terra` も入るため、ウィザードは 3 つ目の候補として提示する。作るかは利用者が決める(§10-7)。
 
+**実施結果(2026-09-16)。** 上表は案であり、実際に作ったのは **`document-writer` の 1 件だけ**である。初版は `gemini-flash`(`claude-gemini-3-8-flash`)で作ったが、同日 `gpt-terra`(`claude-gpt-5-6-terra`、codex 経路)へ差し替えた。antigravity 経由の Gemini はサブエージェントとして起動できないためである(§10-5)。`sonnet` の定義は作っていない。
+
 `doc-writing` は**単独の役割を持つ定義**として作る。実装役割と兼ねると Agent Tool が「可」になり、名指しで起動したときに再委譲を frontmatter で止められない(§8)。
 
 あわせて `general-worker.md` と `general-implementer.md` を再生成し、焼き込まれた「ドキュメント作成」の文言を追随させる。**再生成が 13 定義すべてに及ぶ主な理由は `_common.md` の Agent tool の節の改訂であり、次いで `general` の文言である。** Agent tool の付与が実際に変わるのは `light-impl` を持つ `general-implementer.md` だけである。**「Haiku の定義に Agent が付く」はこのリポジトリでは起こらない。** 唯一の Haiku 定義 `knowledge-elicitationer.md` は `doc-review` のみを持ち、役割として Agent 否のままである。
@@ -819,6 +821,10 @@ frontmatter の `description` は変更しない(役割数もベンダー名も�
 3. このリポジトリの `.claude/agents/` に作る 2 定義の名前(§5.18 の案)。ウィザードで利用者が決める。
 4. `doc-writing` が運用で実際に呼ばれるか。呼ばれない場合、§4.5 で不採用とした「§設計・実装計画の規律 への追記」を再検討する余地がある。運用後に観測して判断する。
 5. `RECOMMENDED["doc-writing"]` に入れた `gemini-flash` と `gpt-terra` が日本語の文書執筆でどの程度の品質を出すかは未検証である。運用で不足が分かれば推奨を見直す。
+
+   **2026-09-16 の初運用で判明した事実。** `gemini-flash`(antigravity 経由)の `document-writer` は、品質を評価する前に**可用性で失敗した**。Claude Code / Agent SDK はサブエージェントの起動時に system へ identity 文 `You are a Claude agent, built on Anthropic's Claude Agent SDK.` を入れる。antigravity の上流(Cloud Code エンドポイント)がこれを検出し、quota が 100% 残っていても `429 RESOURCE_EXHAUSTED` を偽装して返す。直の curl では同じ alias が全パターンで 200 を返し、メインセッションの identity 文は検出されない。詳細は `docs/cliproxyapi/2026-09-16-antigravity-false-429-system-prompt-filter.md` にある。
+
+   帰結として、**antigravity 経由の Gemini は現状 Claude Code のサブエージェントとして使えない。** `RECOMMENDED["doc-writing"]` に `gemini-flash` を残すかは別途判断が要る。agent-policy はプロキシの経路を知らないため、選べるのは「推奨から外す」か「README に『antigravity 経由はサブエージェントとして使えない』と注記する」かである。このリポジトリの `document-writer` は同日 `gpt-terra`(`claude-gpt-5-6-terra`、codex 経路)へ差し替えた。
 6. `ComposeInput.modelId` と `Target.composeModelId` の除去(§4.13)。本改修では死んだ配管として残す。**型でも lint でも検出されないため、放置すると「`modelId` に Haiku を載せても何も起きない」状態が合図なしに残り続ける。** 別の改修で除去するかを決める。
 7. このリポジトリで `gpt-terra` の `doc-writing` 定義を作るかどうか(追加要件 E-2)。`RECOMMENDED` に入ったため setup-agents が推奨構成として提示する。作るかはウィザードでユーザーが決める。
 8. D2 で Agent Tool の対象が広がるが、`light-impl` や Haiku のサブエージェントが実際に妥当な再委譲をするかは未検証である。運用で観測し、問題があれば `AGENT_DENIED_MODELS` の復活ではなく役割側の規定で絞る。
