@@ -1,13 +1,13 @@
 # CLIProxyAPI のセットアップ
 
-この手順は、CLIProxyAPI をローカルで起動し、必要に応じて Codex ・xAI ・ Claude の OAuth を使うための**任意設定**です。通常の Claude Code 利用には必要ありません。
+この手順は、CLIProxyAPI をローカルで起動し、必要に応じて Codex・xAI・Claude・Antigravity（Gemini）の OAuth を使うための**任意設定**です。通常の Claude Code 利用には必要ありません。
 
 対象環境は WSL2/Linux です。`ONBOARDING.md` の必須セットアップを完了してから進めてください。
 
 ## この手順でできること
 
 - CLIProxyAPI をローカルに導入する
-- Codex OAuth ・ xAI OAuth ・ Claude OAuth を必要なものだけ認証する
+- Codex OAuth ・ xAI OAuth ・ Claude OAuth ・ Antigravity OAuth（Gemini）を必要なものだけ認証する
 - `127.0.0.1:8317` のローカル API を確認する
 - Claude Code を CLIProxyAPI 経由で一時的に起動する
 
@@ -16,6 +16,7 @@
 - Codex OAuth を使う場合は、Codex を利用できる OpenAI アカウントが必要です。
 - xAI OAuth を使う場合は、Grok アカウントまたは X アカウントが必要です。
 - Claude OAuth を使う場合は、Claude を利用できるアカウントが必要です。
+- Antigravity OAuth（Gemini）を使う場合は、Google アカウントが必要です。
 - OAuth の認証情報とローカル API キーは個人の認証情報です。チャット、Issue、コミット、Pull Request に貼り付けないでください。
 - この手順ではプロキシを `127.0.0.1` だけで待ち受けます。`0.0.0.0` などへ変更してネットワークに公開しないでください。
 
@@ -63,15 +64,17 @@ cp cliproxyapi.config.example.yaml cliproxyapi.config.yaml
 | `port: 8317`                   | プロキシの待受ポート                    | 他のプロセスと競合するときだけ変更する  |
 | `auth-dir: "~/.cli-proxy-api"` | OAuth 認証情報の保存先                | 内容を共有・コミットしない        |
 | `api-keys`                     | ローカル API の認証キー                | プレースホルダーを必ず置換し、共有しない |
-| `oauth-model-alias`            | Codex モデルをクライアント側の別名として公開する設定 | 既定値を保持する             |
+| `oauth-model-alias`            | 上流モデルをクライアント側の別名として公開する設定    | 既定値を保持する             |
 | `oauth-excluded-models`        | この構成で公開しないモデルの設定              | 既定値を保持する             |
 
 
 `claude-gpt-5-6-sol`、`claude-gpt-5-6-terra`、`claude-gpt-5-6-luna` は、`oauth-model-alias` が Codex の上流モデル（`gpt-5.6-sol` など）に付けるクライアント側の別名です。上流モデル ID そのものではありません。
 
+`claude-gemini-3-8-flash`、`claude-gemini-3.1-pro-high` は、`oauth-model-alias` が Antigravity（Gemini）の上流モデル（`gemini-3.8-flash`、`gemini-3.1-pro-high`）に付けるクライアント側の別名です。上流モデル ID そのものではありません。
+
 ## 3. OAuth を認証する（必要なものだけ）
 
-Codex と Claude の両方を認証する必要はありません。使いたいサービスだけ認証してください。
+すべてを認証する必要はありません。使いたいサービスだけ認証してください。
 
 ### Codex OAuth
 
@@ -81,7 +84,7 @@ Codex を使う場合は、リポジトリルートで次を実行します。
 cli-proxy-api --config "cliproxyapi.config.yaml" --codex-login
 ```
 
-### xAI OAtuh
+### xAI OAuth
 
 Grok を使う場合は、リポジトリルートで次を実行します。
 
@@ -96,6 +99,16 @@ Claude を使う場合は、リポジトリルートで次を実行します。
 ```bash
 cli-proxy-api --config "cliproxyapi.config.yaml" --claude-login
 ```
+
+### Antigravity OAuth（Gemini）
+
+Gemini を使う場合は、リポジトリルートで次を実行します。
+
+```bash
+cli-proxy-api --config "cliproxyapi.config.yaml" --antigravity-login
+```
+
+OAuth のコールバックは既定でポート `51121`、パスは `/oauth-callback` を使います。認証情報は `auth-dir` に `antigravity-<メールアドレス>.json` という名前で保存されます。
 
 WSL などでブラウザが開かない場合は、コマンドに `--no-browser` を追加します。表示された URL を自分のブラウザで開いて認証を完了してください。認証が終わるまで、コマンドを実行したターミナルは閉じないでください。
 
@@ -132,7 +145,7 @@ JSON の応答が表示されれば、プロキシは起動しています。
 
 - `401` / `403` が返る場合は、`cliproxyapi.config.yaml` の `api-keys` と、リクエストの `Authorization` ヘッダーに設定したキーが一致しているか確認してください。
 - 接続が拒否される場合は、`./scripts/start-proxy.sh` を実行したターミナルでプロキシが起動しているか、設定の `host` と `port` が想定どおりか確認してください。
-- 期待するモデルが応答に含まれない場合は、必要な OAuth（Codex/Claude）を実施したか、`oauth-model-alias` と `oauth-excluded-models` の設定を確認してください。
+- 期待するモデルが応答に含まれない場合は、必要な OAuth（Codex/xAI/Claude/Antigravity（Gemini））を実施したか、`oauth-model-alias` と `oauth-excluded-models` の設定を確認してください。
 
 ## 5. Claude Code からプロキシを使う
 
