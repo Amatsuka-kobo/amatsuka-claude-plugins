@@ -256,6 +256,12 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
+    id: "doc-writing",
+    label: "\u6587\u66F8\u4F5C\u6210",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
     id: "explore-lead",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22\u7D71\u62EC",
     kind: "impl",
@@ -406,6 +412,14 @@ var MODELS = [
     defaultName: "grok",
     model: "claude-grok-4-6",
     color: "red"
+  },
+  {
+    id: "gemini-flash",
+    vendor: "gemini",
+    label: "Gemini Flash",
+    defaultName: "gemini-flash",
+    model: "claude-gemini-3-8-flash",
+    color: "green"
   }
 ];
 var ASSIGNMENTS = {
@@ -416,6 +430,7 @@ var ASSIGNMENTS = {
     escalation: ["fable"],
     general: ["sonnet"],
     "design-plan": ["opus"],
+    "doc-writing": ["sonnet"],
     "explore-lead": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
@@ -435,6 +450,7 @@ var RECOMMENDED = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
+  "doc-writing": ["sonnet", "gemini-flash", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -446,17 +462,15 @@ var RECOMMENDED = {
   "gate-review": ["fable", "gpt-astra"],
   advisor: ["fable", "gpt-astra"]
 };
-var AGENT_DENIED_MODELS = ["haiku"];
 var SOLO_DENIED_ROLES = [
-  "light-impl",
   "advisor",
   "doc-review",
   "code-review",
   "final-review",
-  "gate-review"
+  "gate-review",
+  "doc-writing"
 ];
-function allowsAgentTool(ids, model) {
-  if (model !== void 0 && AGENT_DENIED_MODELS.includes(model)) return false;
+function allowsAgentTool(ids) {
   return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));
 }
 function modelById(id) {
@@ -517,6 +531,7 @@ function vocabularyFor(lang) {
 var COLORS = {
   gpt: "yellow",
   grok: "red",
+  gemini: "green",
   claude: "blue",
   none: "blue"
 };
@@ -524,7 +539,7 @@ function compose(input) {
   const vocabulary = vocabularyFor(input.lang);
   const common = loadCommon(input.fragmentDirs);
   const { ids: ordered, selected } = selectFragments(input);
-  const withAgent = allowsAgentTool(input.roleIds, input.modelId);
+  const withAgent = allowsAgentTool(input.roleIds);
   const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? []);
   const denyTools = input.denyTools ?? [];
   const head = [
@@ -588,7 +603,7 @@ function describeRoles(input) {
     implRoles,
     readonlyRoles,
     mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds, input.modelId)
+    agentTool: allowsAgentTool(input.roleIds)
   };
 }
 function selectFragments(input) {
@@ -642,6 +657,8 @@ function vendorFor(ownedBy) {
       return "grok";
     case "anthropic":
       return "claude";
+    case "antigravity":
+      return "gemini";
     default:
       return "unknown";
   }
@@ -785,6 +802,7 @@ function mcpCurrentOf(content) {
 var VENDOR_COLORS = {
   gpt: "yellow",
   grok: "red",
+  gemini: "green",
   claude: "blue",
   none: "blue"
 };
@@ -898,7 +916,7 @@ function resolveVendor(options, model, spec, live) {
   const vendor = live.vendors[model] ?? "unknown";
   if (vendor === "unknown") {
     throw new Error(
-      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
+      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|gemini|claude|none`
     );
   }
   return vendor;
@@ -1422,8 +1440,8 @@ function parseArgs(argv) {
         index += 1;
         break;
       case "--vendor":
-        if (value !== "gpt" && value !== "grok" && value !== "claude" && value !== "none") {
-          throw new Error("vendor: must be gpt, grok, claude or none");
+        if (value !== "gpt" && value !== "grok" && value !== "gemini" && value !== "claude" && value !== "none") {
+          throw new Error("vendor: must be gpt, grok, gemini, claude or none");
         }
         options.vendor = value;
         index += 1;

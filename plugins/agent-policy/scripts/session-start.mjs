@@ -16,6 +16,8 @@ function vendorFor(ownedBy) {
       return "grok";
     case "anthropic":
       return "claude";
+    case "antigravity":
+      return "gemini";
     default:
       return "unknown";
   }
@@ -119,6 +121,12 @@ var ROLES = [
   {
     id: "design-plan",
     label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "doc-writing",
+    label: "\u6587\u66F8\u4F5C\u6210",
     kind: "impl",
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
