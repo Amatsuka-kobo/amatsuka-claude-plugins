@@ -11,6 +11,7 @@ export type ModelId =
   | "gpt-luna"
   | "gpt-astra"
   | "grok"
+  | "gemini-flash"
 
 // ja / en は同梱断片を持つ。それ以外は翻訳断片を要する任意のコード。
 export type Lang = string
@@ -116,6 +117,14 @@ export const MODELS: readonly ModelSpec[] = [
     defaultName: "grok",
     model: "claude-grok-4-6",
     color: "red"
+  },
+  {
+    id: "gemini-flash",
+    vendor: "gemini",
+    label: "Gemini Flash",
+    defaultName: "gemini-flash",
+    model: "claude-gemini-3-8-flash",
+    color: "green"
   }
 ]
 
@@ -132,6 +141,7 @@ export const ASSIGNMENTS: Record<
     escalation: ["fable"],
     general: ["sonnet"],
     "design-plan": ["opus"],
+    "doc-writing": ["sonnet"],
     "explore-lead": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
@@ -153,6 +163,7 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
+  "doc-writing": ["sonnet", "gemini-flash", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -165,23 +176,19 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   advisor: ["fable", "gpt-astra"]
 }
 
-// モデル ID を明示する推奨定義では、Haiku に Agent Tool を許可しない。
-// GPT Luna は「通常の実装」「その他のタスク」の役割も担うため、モデル側では除外せず役割の規定だけに従わせる。
-const AGENT_DENIED_MODELS: readonly ModelId[] = ["haiku"]
-
 // 単一役割の定義には、共通規律の除外がそのまま効く。
 // 複数役割を兼ねる定義は一つの役割に対応しないため効かない（設計 §5.2）。
 const SOLO_DENIED_ROLES: readonly RoleId[] = [
-  "light-impl",
   "advisor",
   "doc-review",
   "code-review",
   "final-review",
-  "gate-review"
+  "gate-review",
+  "doc-writing"
 ]
 
-export function allowsAgentTool(ids: RoleId[], model?: ModelId): boolean {
-  if (model !== undefined && AGENT_DENIED_MODELS.includes(model)) return false
+// Agent の可否は役割だけで決まる。モデルによる除外は持たない。
+export function allowsAgentTool(ids: RoleId[]): boolean {
   return ids.some((id) => !SOLO_DENIED_ROLES.includes(id))
 }
 

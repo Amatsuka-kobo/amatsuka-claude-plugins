@@ -7,6 +7,7 @@ import {
   isCustomInjection,
   MODELS,
   type ModelId,
+  modelById,
   modelsFor,
   POLICIES,
   policyForInjection,
@@ -23,6 +24,7 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   escalation: ["fable"],
   general: ["sonnet"],
   "design-plan": ["opus"],
+  "doc-writing": ["sonnet"],
   "explore-lead": ["opus"],
   explore: ["sonnet"],
   "realtime-research": ["sonnet"],
@@ -42,6 +44,7 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
+  "doc-writing": ["sonnet", "gemini-flash", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -57,10 +60,11 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
 const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
   "complex-impl": true,
   "normal-impl": true,
-  "light-impl": false,
+  "light-impl": true,
   escalation: true,
   general: true,
   "design-plan": true,
+  "doc-writing": false,
   "explore-lead": true,
   explore: true,
   "realtime-research": true,
@@ -97,7 +101,7 @@ describe("POLICIES", () => {
 })
 
 describe("ASSIGNMENTS", () => {
-  it("claude-model-policy だけに現行の全 16 役割を保持する", () => {
+  it("claude-model-policy だけに現行の全 17 役割を保持する", () => {
     expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
     expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
       ALL_ROLE_IDS
@@ -109,15 +113,15 @@ describe("ASSIGNMENTS", () => {
 })
 
 describe("RECOMMENDED", () => {
-  it("custom プロファイル向け推奨が全 16 役割と固定値を持つ", () => {
+  it("custom プロファイル向け推奨が全 17 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
   })
 })
 
 describe("MODELS", () => {
-  it("9 モデルを定義する", () => {
-    expect(MODELS).toHaveLength(9)
+  it("10 モデルを定義する", () => {
+    expect(MODELS).toHaveLength(10)
   })
 
   it("color が公式の 8 色から選ばれている", () => {
@@ -146,6 +150,32 @@ describe("MODELS", () => {
       color: "yellow"
     })
     expect(MODELS.at(8)?.id).toBe("grok")
+  })
+
+  it("MODELS の ID が定義順で全件一致する", () => {
+    expect(MODELS.map((model) => model.id)).toEqual([
+      "opus",
+      "sonnet",
+      "haiku",
+      "fable",
+      "gpt-sol",
+      "gpt-terra",
+      "gpt-luna",
+      "gpt-astra",
+      "grok",
+      "gemini-flash"
+    ])
+  })
+
+  it("gemini-flash が指定値で定義される", () => {
+    expect(modelById("gemini-flash")).toEqual({
+      id: "gemini-flash",
+      vendor: "gemini",
+      label: "Gemini Flash",
+      defaultName: "gemini-flash",
+      model: "claude-gemini-3-8-flash",
+      color: "green"
+    })
   })
 
   it("どのモデルも aliasEnv を持たない", () => {
@@ -177,10 +207,11 @@ describe("modelsFor", () => {
 })
 
 describe("rolesFor", () => {
-  it("sonnet が claude-model-policy で担う 7 役割を返す", () => {
+  it("sonnet が claude-model-policy で担う 8 役割を返す", () => {
     expect(rolesFor("sonnet")).toEqual([
       "normal-impl",
       "general",
+      "doc-writing",
       "explore",
       "realtime-research",
       "e2e-verify",
@@ -204,45 +235,32 @@ describe("rolesFor", () => {
 })
 
 describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 16 役割で現行規定を保つ", () => {
+  it("claude-model-policy の全 17 役割で現行規定を保つ", () => {
     for (const role of ROLES) {
-      for (const model of ASSIGNMENTS["claude-model-policy"][role.id]) {
-        expect(allowsAgentTool([role.id], model), `${role.id}/${model}`).toBe(
-          EXPECTED_AGENT_TOOL[role.id]
-        )
-      }
+      expect(allowsAgentTool([role.id]), role.id).toBe(
+        EXPECTED_AGENT_TOOL[role.id]
+      )
     }
   })
 
-  it("単独の除外役割だけを拒否し、他役割との混成を許可する", () => {
-    expect(allowsAgentTool(["light-impl"], "grok")).toBe(false)
-    expect(allowsAgentTool(["light-impl", "complex-impl"], "grok")).toBe(true)
-    expect(allowsAgentTool(["advisor"], "opus")).toBe(false)
-    expect(allowsAgentTool(["code-review"], "sonnet")).toBe(false)
-    expect(allowsAgentTool(["final-review"], "fable")).toBe(false)
-    expect(allowsAgentTool(["gate-review"], "fable")).toBe(false)
-    expect(allowsAgentTool(["complex-impl", "advisor"], "opus")).toBe(true)
+  it("役割の組み合わせに応じて Agent Tool を判定する", () => {
+    expect(allowsAgentTool(["light-impl"])).toBe(true)
+    expect(allowsAgentTool(["light-impl", "complex-impl"])).toBe(true)
+    expect(allowsAgentTool(["advisor"])).toBe(false)
+    expect(allowsAgentTool(["code-review"])).toBe(false)
+    expect(allowsAgentTool(["final-review"])).toBe(false)
+    expect(allowsAgentTool(["gate-review"])).toBe(false)
+    expect(allowsAgentTool(["complex-impl", "advisor"])).toBe(true)
   })
 
   it("Agent Tool を許可する新規役割を通す", () => {
-    expect(allowsAgentTool(["escalation"], "fable")).toBe(true)
-    expect(allowsAgentTool(["e2e-verify"], "sonnet")).toBe(true)
-  })
-
-  it("モデル側の除外を適用する", () => {
-    expect(allowsAgentTool(["explore"], "grok")).toBe(true)
-    expect(allowsAgentTool(["explore"], "haiku")).toBe(false)
-  })
-
-  it("GPT Luna はモデル側の除外を受けず役割の規定だけに従う", () => {
-    expect(allowsAgentTool(["normal-impl"], "gpt-luna")).toBe(true)
-    expect(allowsAgentTool(["general"], "gpt-luna")).toBe(true)
-    expect(allowsAgentTool(["light-impl"], "gpt-luna")).toBe(false)
+    expect(allowsAgentTool(["escalation"])).toBe(true)
+    expect(allowsAgentTool(["e2e-verify"])).toBe(true)
   })
 
   it("モデル未指定時は役割側の規定だけを適用する", () => {
     expect(allowsAgentTool(["explore"])).toBe(true)
-    expect(allowsAgentTool(["light-impl"])).toBe(false)
+    expect(allowsAgentTool(["light-impl"])).toBe(true)
     expect(allowsAgentTool(["final-review"])).toBe(false)
   })
 })

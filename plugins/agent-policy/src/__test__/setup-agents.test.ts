@@ -126,7 +126,7 @@ interface LiveModelsResult {
   reason?: string
   models: {
     id: string
-    vendor: "gpt" | "grok" | "claude" | "unknown"
+    vendor: "gpt" | "grok" | "gemini" | "claude" | "unknown"
     recommendedFor: string[]
   }[]
   claudeEnums: string[]
@@ -540,7 +540,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(17)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -607,7 +607,7 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(17)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
     ).toEqual(["opus", "gpt-sol"])
@@ -741,6 +741,7 @@ describe("--list-roles", () => {
       "escalation",
       "general",
       "design-plan",
+      "doc-writing",
       "explore-lead",
       "explore",
       "realtime-research",
@@ -964,7 +965,7 @@ describe("--check", () => {
   })
 
   it("Agent tool の可否を役割から返す", () => {
-    const light = singleResult<CheckResult>([
+    const denied = singleResult<CheckResult>([
       "--scope",
       "custom",
       "--model-id",
@@ -972,28 +973,28 @@ describe("--check", () => {
       "--name",
       "gpt-luna",
       "--roles",
-      "light-impl",
+      "code-review",
       "--lang",
       "ja",
       "--dir",
       project,
       "--check"
     ])
-    expect(light.roles.agentTool).toBe(false)
+    expect(denied.roles.agentTool).toBe(false)
     expect(check("custom", ["--roles", "complex-impl"]).roles.agentTool).toBe(
       true
     )
   })
 
-  it("Agent tool の可否へ model-id を反映する", () => {
-    const agentToolFor = (modelId: string, roles: string): boolean =>
+  it("Agent tool の可否を役割だけで決める", () => {
+    const agentToolFor = (roles: string): boolean =>
       singleResult<CheckResult>([
         "--scope",
         "custom",
         "--model-id",
-        modelId,
+        "grok",
         "--name",
-        `${modelId}-agent-tool-check`,
+        `${roles.replace(/,/g, "-")}-agent-tool-check`,
         "--roles",
         roles,
         "--lang",
@@ -1003,18 +1004,18 @@ describe("--check", () => {
         "--check"
       ]).roles.agentTool
 
-    expect(agentToolFor("sonnet", "code-review")).toBe(false)
-    expect(agentToolFor("fable", "final-review")).toBe(false)
-    expect(agentToolFor("fable", "gate-review")).toBe(false)
-    expect(agentToolFor("fable", "escalation")).toBe(true)
-    expect(agentToolFor("sonnet", "e2e-verify")).toBe(true)
-    expect(
-      agentToolFor("grok", "explore,realtime-research,independent-review")
-    ).toBe(true)
-    expect(agentToolFor("grok", "light-impl")).toBe(false)
+    expect(agentToolFor("code-review")).toBe(false)
+    expect(agentToolFor("final-review")).toBe(false)
+    expect(agentToolFor("gate-review")).toBe(false)
+    expect(agentToolFor("escalation")).toBe(true)
+    expect(agentToolFor("e2e-verify")).toBe(true)
+    expect(agentToolFor("explore,realtime-research,independent-review")).toBe(
+      true
+    )
+    expect(agentToolFor("light-impl")).toBe(true)
   })
 
-  it("自由モデル値ではモデル制約を外して役割制約だけを使う", () => {
+  it("自由モデル値でも役割だけで Agent の有無を決める", () => {
     const result = singleResult<CheckResult>([
       "--scope",
       "custom",
@@ -1778,6 +1779,7 @@ describe("live model 検証と vendor", () => {
   it.each([
     ["gpt", "yellow", "gpt"],
     ["grok", "red", "grok"],
+    ["gemini", "green", "gemini"],
     ["claude", "blue", "claude"],
     ["none", "blue", undefined]
   ] as const)("--vendor %s が overlay 用 marker と色を選ぶ", (vendor, color, marker) => {
@@ -1845,7 +1847,7 @@ describe("--models による推奨一括", () => {
       "gpt-astra"
     ])
     expect(result.results[0]?.roles.ids).toEqual(["complex-impl"])
-    expect(result.results[1]?.roles.ids).toEqual(["explore"])
+    expect(result.results[1]?.roles.ids).toEqual(["doc-writing", "explore"])
     expect(result.results[2]?.roles.ids).toEqual([
       "escalation",
       "e2e-verify",
@@ -1912,7 +1914,7 @@ describe("--models による推奨一括", () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toBe(
-      'vendor: could not infer vendor for model "claude-gpt-5-6-terra"; pass --vendor gpt|grok|claude|none'
+      'vendor: could not infer vendor for model "claude-gpt-5-6-terra"; pass --vendor gpt|grok|gemini|claude|none'
     )
   })
 
@@ -1947,18 +1949,18 @@ describe("--models による推奨一括", () => {
       "--scope",
       "custom",
       "--models",
-      "gpt-terra",
+      "gpt-sol",
       "--dir",
       project
     ])
 
     expect(result.ok).toBe(true)
     expect(result.results[0]?.target).toBe(
-      ".claude/agents/gpt-terra-explorer.md"
+      ".claude/agents/gpt-sol-lead-implementer.md"
     )
     expect(
       fs.existsSync(
-        path.join(project, ".claude", "agents", "gpt-terra-explorer.md")
+        path.join(project, ".claude", "agents", "gpt-sol-lead-implementer.md")
       )
     ).toBe(true)
   })

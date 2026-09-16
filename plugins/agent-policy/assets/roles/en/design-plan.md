@@ -28,6 +28,7 @@ kind: impl
 - **When invoked for design or plan authoring**, do not touch the implementation being designed. Produce only the design document or implementation plan file.
 - Do not decide requirement additions, changes, or scope expansions yourself. Send them back to the orchestrator.
 - Do not decide adoption or present to the user yourself. Leave both to the orchestrator.
+- Follow the writing discipline of the "Document Authoring" role for style.
 
 ## Output Format
 

@@ -79,6 +79,7 @@ interface TargetResolution {
 const VENDOR_COLORS: Record<Vendor, string> = {
   gpt: "yellow",
   grok: "red",
+  gemini: "green",
   claude: "blue",
   none: "blue"
 }
@@ -264,7 +265,7 @@ function resolveVendor(
   const vendor = live.vendors[model] ?? "unknown"
   if (vendor === "unknown") {
     throw new Error(
-      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
+      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|gemini|claude|none`
     )
   }
   return vendor
@@ -943,10 +944,11 @@ function parseArgs(argv: string[]): Options {
         if (
           value !== "gpt" &&
           value !== "grok" &&
+          value !== "gemini" &&
           value !== "claude" &&
           value !== "none"
         ) {
-          throw new Error("vendor: must be gpt, grok, claude or none")
+          throw new Error("vendor: must be gpt, grok, gemini, claude or none")
         }
         options.vendor = value
         index += 1

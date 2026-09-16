@@ -54,13 +54,14 @@ function writeFragment(dir: string, id: string, label: string): void {
 describe("loadFragments の 3 段探索", () => {
   it("同梱断片を読み込む", () => {
     const fragments = loadFragments([JA], "claude")
-    expect(fragments.size).toBe(16)
+    expect(fragments.size).toBe(17)
     expect(fragments.get("explore")?.source).toBe("plugin")
   })
 
   it("同梱断片から defaultName を読み込む", () => {
     const fragments = loadFragments([JA], "claude")
     expect(fragments.get("explore")?.defaultName).toBe("explorer")
+    expect(fragments.get("doc-writing")?.defaultName).toBe("writer")
     expect(fragments.get("escalation")?.defaultName).toBe(
       "escalation-implementer"
     )

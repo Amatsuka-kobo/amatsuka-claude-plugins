@@ -50,7 +50,8 @@ describe("fetchLiveModels", () => {
         data: [
           { id: "gpt-5", owned_by: "openai" },
           { id: "grok-4", owned_by: "xai" },
-          { id: "claude-sonnet", owned_by: "anthropic" }
+          { id: "claude-sonnet", owned_by: "anthropic" },
+          { id: "claude-gemini-3-8-flash", owned_by: "antigravity" }
         ]
       })
     })
@@ -60,11 +61,12 @@ describe("fetchLiveModels", () => {
     ).resolves.toEqual({
       ok: true,
       baseUrl: proxy.baseUrl,
-      ids: ["gpt-5", "grok-4", "claude-sonnet"],
+      ids: ["gpt-5", "grok-4", "claude-sonnet", "claude-gemini-3-8-flash"],
       vendors: {
         "gpt-5": "gpt",
         "grok-4": "grok",
-        "claude-sonnet": "claude"
+        "claude-sonnet": "claude",
+        "claude-gemini-3-8-flash": "gemini"
       }
     })
 

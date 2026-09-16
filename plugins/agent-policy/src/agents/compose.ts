@@ -12,6 +12,7 @@ import { type Vocabulary, vocabularyFor } from "./vocabulary"
 export interface ComposeInput {
   name: string
   model: string
+  // Agent の可否には使わない。
   modelId?: ModelId
   vendor: Vendor
   roleIds: RoleId[]
@@ -33,6 +34,7 @@ export interface RolesSummary {
 const COLORS: Record<Vendor, string> = {
   gpt: "yellow",
   grok: "red",
+  gemini: "green",
   claude: "blue",
   none: "blue"
 }
@@ -41,7 +43,7 @@ export function compose(input: ComposeInput): string {
   const vocabulary = vocabularyFor(input.lang)
   const common = loadCommon(input.fragmentDirs)
   const { ids: ordered, selected } = selectFragments(input)
-  const withAgent = allowsAgentTool(input.roleIds, input.modelId)
+  const withAgent = allowsAgentTool(input.roleIds)
   const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? [])
   const denyTools = input.denyTools ?? []
 
@@ -124,7 +126,7 @@ export function describeRoles(input: ComposeInput): RolesSummary {
     implRoles,
     readonlyRoles,
     mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds, input.modelId)
+    agentTool: allowsAgentTool(input.roleIds)
   }
 }
 

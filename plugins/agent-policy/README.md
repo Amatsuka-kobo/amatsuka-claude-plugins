@@ -100,13 +100,13 @@ Marketplace から `agent-policy` をインストールします。
 
 MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
 
-MCP の付与単位は役割ではなく定義です。既定では実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan` / `explore-lead`)を持つ定義にだけ付き、読み取り役割だけの定義には付きません。定義ごとの調整を選ぶと、この既定を定義単位で上書きできます。実装役割と読み取り役割を同じ定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できません。
+MCP の付与単位は役割ではなく定義です。既定では実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan` / `doc-writing` / `explore-lead`)を持つ定義にだけ付き、読み取り役割だけの定義には付きません。定義ごとの調整を選ぶと、この既定を定義単位で上書きできます。実装役割と読み取り役割を同じ定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できません。
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
 `--yes` を渡す非対話モードでは、推奨構成を一括で保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に成功した場合は実在しない推奨モデルを生成対象から外し、照会に失敗した場合は実在確認を行わなかった警告とともに生成します。
 
-組み込みの役割 ID は次の 16 種です。
+組み込みの役割 ID は次の 17 種です。
 
 | 役割 ID | 内容 |
 | --- | --- |
@@ -116,6 +116,7 @@ MCP の付与単位は役割ではなく定義です。既定では実装役割(
 | `escalation` | 行き詰まり時のエスカレーション |
 | `general` | その他のタスク |
 | `design-plan` | 設計書・実装計画書(WBS)の作成 |
+| `doc-writing` | 文書作成 |
 | `explore-lead` | コードベース探索統括 |
 | `explore` | コードベース探索実働 |
 | `realtime-research` | リアルタイム情報調査 |
@@ -127,7 +128,7 @@ MCP の付与単位は役割ではなく定義です。既定では実装役割(
 | `gate-review` | 設計書の最終ゲートレビュー |
 | `advisor` | 設計・計画・実装のアドバイザー |
 
-setup-agents が扱う推奨モデル ID は次の 9 種です。
+setup-agents が扱う推奨モデル ID は次の 10 種です。
 
 | モデル ID | 表示名 | 既定の `model` 値 |
 | --- | --- | --- |
@@ -140,6 +141,7 @@ setup-agents が扱う推奨モデル ID は次の 9 種です。
 | `gpt-luna` | GPT Luna | `claude-gpt-5-6-luna` |
 | `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
 | `grok` | Grok | `claude-grok-4-6` |
+| `gemini-flash` | Gemini Flash | `claude-gemini-3-8-flash` |
 
 生成した定義の frontmatter には、選んだ役割を記録する `agent-policy-role` マーカーが入ります。
 
@@ -204,6 +206,18 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
 
 ## 旧バージョンからの移行
+
+0.18 系から 0.19 系へ移行する場合は、次を確認してください。
+
+1. 役割 ID に `doc-writing`(文書作成)を追加しました。AI が読む文書 —— 引継ぎ書・Skills・Agents 定義・Rules・CLAUDE.md・フックが注入する文 —— とコードコメントの執筆を担う役割です。断片には、直訳を避ける・その言語の文法と慣用に従う・簡潔に書く・過剰な引用と冗長な表現を避ける、という執筆規律が入っています。設計書・実装計画書・context-map については、内容が確定した後の文章化・推敲・翻訳だけを担います。内容の決定と初稿は従来どおり `design-plan` と `explore-lead` の役割が担います。
+2. `general`(その他のタスク)から文書の責務を外しました。定型メンテナンスと、他の役割に当てはまらない作業が担当範囲になります。生成済みの定義の本文は自動では変わりません。文言を追随させるには `agent-policy:setup-agents` を再実行してください。
+3. `doc-writing` の Agent Tool は「否」です。この役割だけを持つ定義には Agent Tool が付きません。
+4. custom プロファイルで、生成済みの定義に `doc-writing` のマーカーが無い場合は、担当表の「Claude モデル」列(`Sonnet`)へ読み替えられます。委譲先を定義で固定したい場合は `agent-policy:setup-agents` を再実行してください。
+5. 推奨モデル ID に `gemini-flash`(`claude-gemini-3-8-flash`)を、ベンダーに `gemini` を追加しました。`--vendor` は `gpt` / `grok` / `gemini` / `claude` / `none` の 5 値になります。`gemini` の色は green です。
+6. **impl 役割のサブエージェントは、ファイルとして残す文書を書くときに「文書作成」の定義があればそこへ再委譲するようになりました。** 対応表に無ければ自分で書きます。報告の本文は対象外です。生成する定義の共通部分(`_common.md`)で、`Agent` tool の用途を「アドバイザーへの相談」と「文書作成への再委譲」の 2 つに広げています。**`doc-writing` は単独の定義として作ることを勧めます。** 実装役割と兼ねた定義は Agent Tool が「可」になり、名指しで起動したときに再委譲を frontmatter の段階では止められません。
+7. **`light-impl`(軽量な実装)の Agent Tool を「可」にしました。** あわせてモデルによる Agent Tool の除外を廃止したため、**Haiku を指定した定義でも、Agent Tool が「可」の役割を持つものには Agent tool が付きます**(従来はモデルが Haiku というだけで外れていました)。Agent の可否は役割だけで決まります。既存の生成済み定義は自動では変わりません。`agent-policy:setup-agents` を再実行してください。
+8. **オーケストレーターも、ファイルとして残す文書を自ら書かず「文書作成」の役割へ委譲するようになりました。** 対象は AI が読む文書・引継ぎ書・goal コマンドのプロンプト・内容が確定した後の設計書や実装計画書の文章化・コードコメントです。要件や判断の箇条書きを依頼文の中に書くことは対象外です。
+9. プロキシの `/v1/models` が返す `owned_by` が `antigravity` のモデルを `gemini` と判定します。`antigravity` のプロバイダで Gemini 以外のモデルも配っている場合、それらも `gemini` と推定されます。ウィザードは推定値を提示して確認を取るため、違うときはその場で選び直すか `--vendor` で上書きしてください。プロキシ側で Gemini のエイリアスを設定していない場合、この追加による影響はありません。
 
 0.17 系から 0.18 系へ移行する場合は、次を確認してください。
 
