@@ -453,10 +453,42 @@ describe("markerTable", () => {
       [
         TABLE_HEADING,
         "表に無い役割の委譲先は、外部ベンダーのモデルを指定した定義も含めて選んでよい。",
-        "- 通常の実装: gpt-terra-general-implementer (gpt) / grok-worker (grok) / local-implementer",
-        "- コードレビュー: sonnet-code-reviewer"
+        "- 通常の実装 [normal-impl]: gpt-terra-general-implementer (gpt) / grok-worker (grok) / local-implementer",
+        "- コードレビュー [code-review]: sonnet-code-reviewer"
       ].join("\n")
     )
+  })
+
+  it("役割行に RoleId を角括弧で併記する", () => {
+    const project = temporaryProject()
+    writeRoleFragment(project, "my_role", "プロジェクト独自役割")
+    const result = markerTable(
+      environment({ CLAUDE_PROJECT_DIR: project }),
+      [
+        {
+          name: "implementer",
+          model: "sonnet",
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined
+        },
+        {
+          name: "project-worker",
+          model: "sonnet",
+          roles: ["my_role"],
+          tools: undefined,
+          vendor: undefined
+        }
+      ],
+      "with-external"
+    )
+    if (result === undefined) throw new Error("marker table fixture is empty")
+
+    const roleLines = result.split("\n").slice(2)
+    expect(roleLines).toHaveLength(2)
+    for (const line of roleLines) {
+      expect(/^- .+ \[[^\]]+\]: /.test(line)).toBe(true)
+    }
   })
 
   it.each([

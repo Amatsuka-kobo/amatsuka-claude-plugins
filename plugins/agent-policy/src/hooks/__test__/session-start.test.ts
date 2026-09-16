@@ -667,9 +667,9 @@ describe("役割マーカーの走査", () => {
       "agent-policy-role: realtime-research, general, complex-impl"
     ])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
-    const complex = output.indexOf("- 複雑または重要な実装:")
-    const general = output.indexOf("- その他のタスク:")
-    const research = output.indexOf("- リアルタイム情報調査:")
+    const complex = output.indexOf("[complex-impl]")
+    const general = output.indexOf("[general]")
+    const research = output.indexOf("[realtime-research]")
     expect(complex).toBeLessThan(general)
     expect(general).toBeLessThan(research)
   })

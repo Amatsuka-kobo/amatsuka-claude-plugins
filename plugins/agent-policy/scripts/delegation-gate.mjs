@@ -306,7 +306,7 @@ function markerTable(env, marked, scope) {
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role);
     if (names !== void 0) {
-      lines.push(`- ${labelOf(role)}: ${names.join(" / ")}`);
+      lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`);
     }
   }
   return lines.join("\n");

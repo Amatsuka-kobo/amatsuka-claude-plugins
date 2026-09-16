@@ -11,14 +11,14 @@ Your roles are {{ROLE_LABELS}}. The role you are invoked for is stated at the to
 ## Consulting an advisor
 
 - Consult an advisor with the Agent tool only when you are genuinely undecided.
-- Use the definition for the "design, planning, and implementation advisor" band. If the project has one, call it by name; otherwise start a subagent with a `model` override of `Fable`. If `Fable` cannot be started, do not consult; resolve by handing the question back.
+- Use the definitions listed on the role marker table row whose RoleId is `advisor` (Design, Planning, and Implementation Advisor). If the project has one, call it by name; otherwise start a subagent with a `model` override of `Fable`. If `Fable` cannot be started, do not consult; resolve by handing the question back.
 - State explicitly in the request that the advisor returns advice only, and that it must not use the Agent tool.
 - Do not consult an advisor when you are not undecided.
 
 ## Agent tool limits
 
 - Use the `Agent` tool for two things only: consulting an advisor, and re-delegating to the document authoring role. Do not use it for any other delegation of work (re-orchestration). Do not grant the `Agent` tool to any subagent you start.
-- When you need to write a **document that is saved as a file**, re-delegate to the definition for the role labelled Document Authoring in the role marker table, if the table has one. If it does not, write the document yourself — do not hand the task back. The body of a report is out of scope; write it yourself.
+- When you need to write a **document that is saved as a file**, re-delegate to the definitions listed on the role marker table row whose RoleId is `doc-writing` (Document Authoring), if the table has one. If it does not, write the document yourself — do not hand the task back. The body of a report is out of scope; write it yourself.
 - If you hold the Document Authoring role yourself, write it yourself instead of re-delegating.
 - When you act as "Design and Implementation Plan Authoring" or "Codebase Exploration Lead", write the first draft yourself. Re-delegate only the writing, revision, and translation that follows once the content is decided.
 - This covers documents that AI reads (skills, agent definitions, rules, references, CLAUDE.md, output styles, text injected by hooks, prompts), handover notes and goal-command prompts, writing up design documents, implementation plans, and context-maps once their content is decided, code comments, and other documents saved as files.

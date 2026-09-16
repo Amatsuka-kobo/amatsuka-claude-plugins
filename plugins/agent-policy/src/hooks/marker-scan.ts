@@ -238,7 +238,7 @@ export function markerTable(
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role)
     if (names !== undefined) {
-      lines.push(`- ${labelOf(role)}: ${names.join(" / ")}`)
+      lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`)
     }
   }
   return lines.join("\n")
