@@ -101,3 +101,5 @@
 - `2026/0915/phyllis998/1041-metatron-gotchas-generation-design.md` | 2026-09-15 | phyllis998 | GOTCHAS 生成実装完了・設計書と記録をコミット
 - `2026/0915/phyllis998/1041-metatron-init-gotchas-spec.md` | 2026-09-15 | phyllis998 | 複数アドバイザー委譲でGOTCHAS・ドメイン依存解消を並列推進
 - `2026/0915/phyllis998/1915-codiel-domain-decoupling-investigation.md` | 2026-09-15 | phyllis998 | ドメインマップ依存の解消 — ADR-003・実装完了
+- `2026/0916/phyllis998/0832-adr-boundary-implementation.md` | 2026-09-16 | phyllis998 | ADRエントリ間区切り線の実装を毎回正規化で統一、format-change-checklistに書式を追加
+- `2026/0916/phyllis998/1033-api-credentials-check.md` | 2026-09-16 | phyllis998 | owned_by=antigravity のモデル ID を一覧表示
