@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.18.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.19.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -18,6 +18,9 @@ Design docs live in `harness-docs/design/`:
 `2026-09-09-agent-policy-profile-unification-design.md` (**current, 2nd ed., the 0.18.0-dev
 candidate-set model**) + its plan
 `harness-docs/plans/2026-09-09-agent-policy-profile-unification-implementation.md` (2nd ed.),
+`2026-09-16-agent-policy-doc-writing-role-design.md` (**current, the 0.19.0-dev `doc-writing`
+role + `gemini` vendor + Agent-tool-by-role-only change**) + its plan
+`harness-docs/plans/2026-09-16-agent-policy-doc-writing-role-plan.md`,
 plus `2026-08-09-prompt-smith-skill-creator-port-design.md`.
 Its §11 lists 15 rejected alternatives — read it before re-proposing anything about fragment
 distribution, per-hook scope predicates, or `--policy`.
@@ -64,7 +67,7 @@ Japanese; 「役割ラベル」 was rejected because it collides with `ROLES[].l
 0.17.0 and earlier still say 「帯」 — read them as 「役割」. Do not reintroduce 「帯」.
 
 **The 担当表 lives in exactly one place since 0.17.0-dev (2026-09-09)**: `references/
-orchestration-discipline.md` **§担当表** — 16 rows × 5 columns (役割名 / RoleId / 種別 / Agent Tool /
+orchestration-discipline.md` **§担当表** — 17 rows × 5 columns (役割名 / RoleId / 種別 / Agent Tool /
 Claude モデル). Its canonical sources are `ROLES[].label/id/kind`, `allowsAgentTool`, and
 `ASSIGNMENTS["claude-model-policy"]`; `src/agents/__test__/discipline-role-table.test.ts` pins all
 five columns and also asserts that **neither policy SKILL.md contains a Markdown table** (any line
@@ -86,11 +89,45 @@ old `policy-skill-assignments.test.ts` is deleted. Design:
   vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate,parallel-nudge}.ts`,
   `testing/{run-ts.ts,fake-models-server.ts,fake-claude.mjs}`.
 
-### Role fragments and the 16 role IDs
+### Role fragments and the 17 role IDs
 
-**16 role IDs since 2026-09-07 (0.16.0-dev)**: `complex-impl, normal-impl, light-impl, escalation,
-general, design-plan, explore-lead, explore, realtime-research, e2e-verify, independent-review,
-doc-review, code-review, final-review, gate-review, advisor`. The two new ones — `design-plan`
+**17 role IDs since 2026-09-16 (0.19.0-dev)**: `complex-impl, normal-impl, light-impl, escalation,
+general, design-plan, doc-writing, explore-lead, explore, realtime-research, e2e-verify,
+independent-review, doc-review, code-review, final-review, gate-review, advisor`.
+
+**`doc-writing` (文書作成 / Document Authoring), added 0.19.0-dev**: `kind: impl`, full impl tool
+set, **Agent Tool 否** (in `SOLO_DENIED_ROLES`, appended at the end), `ASSIGNMENTS` = Sonnet,
+`RECOMMENDED` = `["sonnet", "gemini-flash", "gpt-terra"]`, default-name `writer`. Sits right after
+`design-plan` — **not** at the end, because `roles.test.ts` pins `roleOrder("advisor") ===
+ROLES.length - 1`. Remit: documents that AI reads (Skills / Agents / Rules / References / CLAUDE.md /
+Output Styles / hook-injected text / prompts / handover notes), code comments, other documents, and
+— for design docs / plans / context-maps — **only the write-up/revision/translation after the content
+is decided**; the first draft stays with `design-plan` / `explore-lead` (discipline L166 unchanged).
+`general` lost its documentation remit (now routine maintenance + "fits no other role"). The ja
+fragment carries the writing discipline (意訳 not 直訳, correct grammar, concise, no roundabout
+phrasing, minimal citations) plus 4 Japanese wording examples (版→バージョン, 緑/赤→パス/失敗,
+凍結文書→確定版の文書, 台帳→一覧/管理表/ログ); the en fragment has the discipline only.
+**Fragment bodies must not use `###`** — `fragments.ts` collects body lines per `## ` heading, so a
+`###` line is swallowed into the previous section and leaks into other roles' bullets on compose.
+
+**Two re-delegation rules were added with it (design §2.4 D / §2.5 F).** *D1 (subagent-facing)*:
+impl-role subagents writing a **file-persisted document** must re-delegate to the 「文書作成」
+definition if the marker table has one, else write it themselves (no hand-back); report bodies are
+out of scope; design-plan/explore-lead write the first draft themselves. It lives in `_common.md`'s
+`## Agent tool の制約` / `## Agent tool limits` section (emitted only when `withAgent` is true) and
+as the 10th 「サブエージェントは〜」 clause in the discipline. **The en `_common.md` must contain no
+Japanese** — `compose.test.ts` has an English-purity check; a 「文書作成」 label was tried and
+reverted. *F1 (orchestrator-facing)*: three bullets at the end of §オーケストレーターが自ら担う作業
+— the orchestrator does not write file-persisted documents itself (incl. handover notes and
+`docs/prompts/` goal prompts), passes decided content + target path + references in the request,
+and requirement/judgement bullets inside a request are out of scope.
+
+**Agent Tool is decided by role only since 0.19.0-dev.** `allowsAgentTool(ids)` lost its `model`
+argument; `AGENT_DENIED_MODELS` (Haiku) is gone; `light-impl` moved to Agent Tool 可. The
+`ComposeInput.modelId` / `Target.composeModelId` plumbing still exists but is dead for Agent
+purposes (commented; removal is an open item — not detected by type or lint).
+
+The older two — `design-plan`
 (設計書・実装計画書(WBS)の作成) and `explore-lead` (コードベース探索統括) — sit between `general`
 and `explore`, are `kind: impl`, carry the complex-impl tool set, are Agent-tool-allowed, and are
 Opus-only in both `ASSIGNMENTS` and `RECOMMENDED`. They used to be labelled "orchestrator's own
@@ -134,8 +171,13 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
   ignored. Model existence is grounded in the proxy's `/v1/models`, so alias substitution has no
   problem left to solve.
 - `modelsFor()` / `rolesFor(model)` lost their policy argument — they are claude-only.
-- `allowsAgentTool(ids, model?)` takes the model optionally; omitted, only the role-based exclusion
-  applies (the free-alias path cannot know the ModelId).
+- `allowsAgentTool(ids)` — role-only since 0.19.0-dev (the `model?` parameter and
+  `AGENT_DENIED_MODELS` were removed).
+- **`gemini-flash` ModelId + `gemini` Vendor, added 0.19.0-dev.** `MODELS` now has 10 entries;
+  `gemini-flash` is appended at the end (index 9) so the `MODELS.at(7)`/`at(8)` assertions stay
+  intact. `model: "claude-gemini-3-8-flash"`, colour `green`. `Vendor` =
+  `"gpt" | "grok" | "gemini" | "claude" | "none"`; `COLORS` / `VENDOR_COLORS` / the `--vendor`
+  validator / the inference-failure message all list 5 values. No `.gemini.md` overlay fragment.
 
 ### `live-models.ts` — grounding in the proxy
 
@@ -143,8 +185,12 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
 throws** — every failure folds into `{ok: false, reason}` (`no-base-url` / `http-<status>` /
 `timeout` / `parse-error` / `fetch-failed`). Auth is one shot: `ANTHROPIC_AUTH_TOKEN` as Bearer →
 `ANTHROPIC_API_KEY` as `x-api-key` → unauthenticated. **No variable is assumed to exist.** Vendor
-is inferred from lowercased `owned_by` (`openai`→gpt, `xai`→grok, `anthropic`→claude, else
-unknown). Claude enums are never put in `ids`; callers add them separately.
+is inferred from lowercased `owned_by` (`openai`→gpt, `xai`→grok, `anthropic`→claude,
+`antigravity`→gemini since 0.19.0-dev, else unknown — **`google` is deliberately NOT mapped**; it
+was never observed, and `antigravity` is the measured value CLIProxyAPI returns for Gemini aliases).
+The return type is `LiveVendor = Exclude<Vendor, "none"> | "unknown"` (imports `Vendor` from
+`fragments.ts`; the old local union is gone). Adding a case is **not** type-enforced — forgetting it
+only surfaces as a `resolveVendor` throw when the live query succeeds. Claude enums are never put in `ids`; callers add them separately.
 
 Measured against CLIProxyAPI: client-side aliases appear verbatim in `data[].id`, `owned_by` came
 back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
@@ -239,7 +285,7 @@ Non-interactive `--yes` means "generate the recommended set".
 
 - **Gone**: `--policy`, `--list-policies`, `--list-models`. Passing them returns `ok: false`.
 - **New**: `--list-live-models` (`{ok, reason?, models:[{id, vendor, recommendedFor}], claudeEnums}`)
-  and `--vendor gpt|grok|claude|none`.
+  and `--vendor gpt|grok|gemini|claude|none` (5 values since 0.19.0-dev).
 - `--model <alias>` is checked against live `ids` + Claude enums **on `--write`**; a failed query
   skips the check and passes with a warning.
 - `--models <csv>` still means recommended ModelIds. On a successful query, IDs whose default alias
@@ -278,7 +324,8 @@ an **intentional** degradation, not a regression.
 
 `RECOMMENDED` in `policies.ts` still exists but is now **setup-agents-only** (`--list-live-models`
 `recommendedFor`, `--list-coverage` `models`); no skill shows it. Read values from `policies.ts` —
-as of 0.17.0-dev: complex-impl→Opus/GPT Sol, design-plan/explore-lead→Opus only, normal-impl→Sonnet/GPT
+as of 0.19.0-dev: complex-impl→Opus/GPT Sol, design-plan/explore-lead→Opus only,
+doc-writing→Sonnet/Gemini Flash/GPT Terra, normal-impl→Sonnet/GPT
 Luna/Grok, light-impl→Haiku/GPT Luna/Grok, general→Sonnet/GPT Luna, explore→Sonnet/Grok/GPT Terra,
 realtime-research/independent-review→Sonnet/Grok, doc-review→Haiku, code-review→Sonnet,
 escalation/final-review/gate-review/advisor→Fable/GPT Astra, e2e-verify→Sonnet/GPT Astra.
@@ -295,9 +342,11 @@ procedure is also discipline-only (§設計・実装計画の規律); custom kee
 
 Rules that bite:
 
-- The light-impl tier is denied the Agent tool (so are advisor / doc-review / code-review /
-  final-review / gate-review). `design-plan` and `explore-lead` are allowed it: explore-lead
-  re-delegates legwork to `explore`, design-plan consults the advisor.
+- Agent tool is denied to advisor / doc-review / code-review / final-review / gate-review /
+  doc-writing (solo). **`light-impl` is allowed it since 0.19.0-dev**, and Haiku no longer strips it.
+  `design-plan` and `explore-lead` are allowed it: explore-lead re-delegates legwork to `explore`,
+  design-plan consults the advisor; all impl roles may re-delegate file-persisted documents to
+  `doc-writing`.
 - Upstream flow since 0.16: explore-lead writes the context-map → **orchestrator** judges
   §未解決事項 and fixes requirements → design-plan writes design/WBS → doc-review (Haiku) →
   independent-review (Sonnet, original only) → orchestrator adopts/rejects → user approval → Approve.
