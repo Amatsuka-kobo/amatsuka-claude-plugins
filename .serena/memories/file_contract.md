@@ -69,6 +69,7 @@ sandalphon は件数までしか照合できない。
   `.claude/rules/metatron`)。**旧 `## テスト方針` / `## 保護パス` / `## 規約` は 2026-08-24 に
   rules(§5)へ移った。** rules は 3 ファイル固定、frontmatter を書かない、冒頭に管理者表示行。
   `unclosed_fence` の判定は rules に適用しない。
+- §6 に ADR エントリ間の区切り（前後を空行で挟んだ `---`）の規定が 2026-09-16 に加わり、`stage-adr` が節全体に対して毎回正規化する。
 - §9-§10 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
   完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表。**要約を伴う抽出をしない。**
 - §11 gh-utility `issue-craft` 持ち込みモードの固定開始句
