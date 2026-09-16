@@ -9,6 +9,17 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4
 - [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`
 - [ ] sandalphon: `src/check-intent-env.ts`、`references/handoff-contract.md`
+- [ ] ADR エントリの書式はこの節ではなく「ADR の書式」の節を見る(正本は契約 §4 ではなく §6)
+
+## ADR の書式(`references/architecture-format.md` の `## ADR 一覧`)
+
+- [ ] `plugins/metatron/src/lib/adr.ts` の `ENTRY_HEADING_RE` / `STATUS_LINE_RE` / `STATUS_CHANGE_RE` / `ADR_SEPARATOR` / `ADR_SEPARATOR_LINE_RE` / `normalizeAdrSeparators` / `renderAdrEntryLines`
+- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の **§6**(ADR の正本は §4 ではない)
+- [ ] `plugins/metatron/references/architecture-format.md` の `## ADR 一覧` の節
+- [ ] `plugins/metatron/docs/ARCHITECTURE.example.md` の `## ADR 一覧`(記入例は 2 件以上を保ち、区切りの見本を含める)
+- [ ] metatron 設計書 `harness-docs/design/2026-08-16-metatron-design.md` §6-6 の書式の写し
+- [ ] `plugins/metatron/src/lib/__test__/adr.test.ts` の固定データ(`THREE_ADRS` / `THREE_ADRS_SEPARATED`)
+- [ ] `plugins/metatron/scripts/` を `pnpm run build` で再生成する
 
 ## rules の書式(`references/rules-format.md`)
 
