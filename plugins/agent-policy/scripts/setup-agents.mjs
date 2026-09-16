@@ -943,7 +943,6 @@ function targetsFor(options, live) {
         const vendor2 = resolveVendor(options, spec2.model, spec2, live);
         return {
           modelId: spec2.id,
-          composeModelId: spec2.id,
           name: defaultAgentName(options, spec2),
           model: spec2.model,
           roles: recommendedRolesFor(spec2.id),
@@ -978,7 +977,6 @@ function targetsFor(options, live) {
     targets: [
       {
         modelId: spec.id,
-        composeModelId: options.model === "" ? spec.id : void 0,
         name: options.name,
         model,
         roles: options.roles,
@@ -992,7 +990,6 @@ function composeInputFor(options, target, mcpServers) {
   return {
     name: target.name,
     model: target.model,
-    modelId: target.composeModelId,
     vendor: target.vendor,
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),

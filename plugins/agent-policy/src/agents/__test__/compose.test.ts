@@ -32,22 +32,10 @@ function build(roleIds: string[], overrides: Record<string, unknown> = {}) {
     name: "test-agent",
     model: "test-alias",
     vendor: "gpt",
-    modelId: "gpt-terra",
     roleIds: roleIds as never,
     fragmentDirs: [PLUGIN_ROLES],
     lang: "ja",
     ...overrides
-  })
-}
-
-function buildWithoutModelId(roleIds: string[]) {
-  return compose({
-    name: "test-agent",
-    model: "test-alias",
-    vendor: "gpt",
-    roleIds: roleIds as never,
-    fragmentDirs: [PLUGIN_ROLES],
-    lang: "ja"
   })
 }
 
@@ -152,21 +140,13 @@ describe("frontmatter", () => {
     expect(frontmatter(build(["light-impl", "complex-impl"])).tools).toContain(
       "Agent"
     )
-    expect(
-      frontmatter(build(["explore"], { modelId: "haiku" })).tools
-    ).toContain("Agent")
+    expect(frontmatter(build(["explore"])).tools).toContain("Agent")
   })
 
-  it("model ID が無いときも役割だけで Agent の有無を決める", () => {
-    expect(frontmatter(buildWithoutModelId(["light-impl"])).tools).toContain(
-      "Agent"
-    )
-    expect(frontmatter(buildWithoutModelId(["advisor"])).tools).not.toContain(
-      "Agent"
-    )
-    expect(frontmatter(buildWithoutModelId(["complex-impl"])).tools).toContain(
-      "Agent"
-    )
+  it("役割だけで Agent の有無を決める", () => {
+    expect(frontmatter(build(["light-impl"])).tools).toContain("Agent")
+    expect(frontmatter(build(["advisor"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
   })
 })
 
@@ -196,7 +176,6 @@ describe("describeRoles", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
-      modelId: "gpt-terra",
       roleIds: ["triage", "normal-impl"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -393,7 +372,6 @@ describe("断片の解決", () => {
       name: "g",
       model: "m",
       vendor: "grok",
-      modelId: "grok",
       roleIds: ["realtime-research"] as never,
       fragmentDirs: [PLUGIN_ROLES],
       lang: "ja"
@@ -402,7 +380,6 @@ describe("断片の解決", () => {
       name: "g",
       model: "m",
       vendor: "gpt",
-      modelId: "gpt-terra",
       roleIds: ["realtime-research"] as never,
       fragmentDirs: [PLUGIN_ROLES],
       lang: "ja"
@@ -435,7 +412,6 @@ describe("断片の解決", () => {
       name: "none",
       model: "m",
       vendor: "none",
-      modelId: "gpt-terra",
       roleIds: ["realtime-research"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -471,7 +447,6 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
-      modelId: "gpt-terra",
       roleIds: ["explore"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -506,7 +481,6 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
-      modelId: "gpt-terra",
       roleIds: ["explore"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -539,7 +513,6 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
-      modelId: "gpt-terra",
       roleIds: ["triage"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -568,7 +541,6 @@ describe("断片の解決", () => {
       name: "x",
       model: "m",
       vendor: "gpt",
-      modelId: "gpt-terra",
       roleIds: ["complex-impl"] as never,
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
@@ -592,7 +564,6 @@ describe("英語断片での合成", () => {
         name: "test-agent",
         model: "sonnet",
         vendor: "claude",
-        modelId: "sonnet",
         roleIds: [role.id],
         fragmentDirs: [EN],
         lang: "en"
@@ -618,7 +589,6 @@ describe("英語断片での合成", () => {
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
-      modelId: "sonnet",
       roleIds: ["complex-impl", "explore"],
       fragmentDirs: [EN],
       lang: "en"
@@ -662,7 +632,6 @@ describe("英語断片での合成", () => {
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
-      modelId: "sonnet",
       roleIds: ["explore"],
       fragmentDirs: [EN, { path: projectRoles, source: "project" }],
       lang: "en"
@@ -680,7 +649,6 @@ describe("英語断片での合成", () => {
       name: "test-agent",
       model: "sonnet",
       vendor: "claude",
-      modelId: "sonnet",
       roleIds: ["complex-impl"],
       fragmentDirs: [EN],
       lang: "en"

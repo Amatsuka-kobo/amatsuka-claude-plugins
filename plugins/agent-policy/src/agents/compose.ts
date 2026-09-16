@@ -5,15 +5,13 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import { allowsAgentTool, type Lang, type ModelId } from "./policies"
+import { allowsAgentTool, type Lang } from "./policies"
 import { hasMixedKinds, type RoleId, sortRoleIds } from "./roles"
 import { type Vocabulary, vocabularyFor } from "./vocabulary"
 
 export interface ComposeInput {
   name: string
   model: string
-  // Agent の可否には使わない。
-  modelId?: ModelId
   vendor: Vendor
   roleIds: RoleId[]
   fragmentDirs: FragmentDir[]
