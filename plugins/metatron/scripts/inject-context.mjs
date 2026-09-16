@@ -371,6 +371,17 @@ var STATUS_LINE_RE = /^( {0,3}-[ \t]+状態[ \t]*:[ \t]*)(.*)$/;
 var DECIDED_ON_RE = /^ {0,3}-[ \t]+決定日[ \t]*:[ \t]*(.*)$/;
 var DECIDED_BY_RE = /^ {0,3}-[ \t]+決定者[ \t]*:[ \t]*(.*)$/;
 var STATUS_CHANGE_RE = /^ {0,3}-[ \t]+状態変更\((\d{4}-\d{2}-\d{2})\)[ \t]*:[ \t]*(.*)$/;
+var ADR_SEPARATOR = "---";
+var ADR_SEPARATOR_BLOCK = `
+
+${ADR_SEPARATOR}
+
+`;
+var ADR_SEPARATOR_LINE_RE = /^ {0,3}-{3,}[ \t]*$/;
+function isTrailingFiller(text, insideFence) {
+  if (insideFence) return false;
+  return text.trim() === "" || ADR_SEPARATOR_LINE_RE.test(text);
+}
 var STATUS_CHANGE_VALUE_RE = /^(.*?)[ \t]*→[ \t]*([^。]*)。?(.*)$/;
 function formatAdrId(num) {
   return `ADR-${String(num).padStart(3, "0")}`;
@@ -407,7 +418,10 @@ function parseEntries(sectionBody) {
     const { index: startIndex, number, title } = starts[s];
     const endIndex = s + 1 < starts.length ? starts[s + 1].index : lines.length;
     let contentEndIndex = endIndex;
-    while (contentEndIndex > startIndex + 1 && lines[contentEndIndex - 1].text.trim() === "") {
+    while (contentEndIndex > startIndex + 1 && isTrailingFiller(
+      lines[contentEndIndex - 1].text,
+      scan.insideFence[contentEndIndex - 1]
+    )) {
       contentEndIndex--;
     }
     let statusRaw = null;
@@ -461,7 +475,7 @@ function parseEntries(sectionBody) {
       startIndex,
       contentEndIndex,
       endIndex,
-      raw: joinRaw2(lines, startIndex, endIndex),
+      raw: joinRaw2(lines, startIndex, contentEndIndex),
       statusChanges
     });
   }

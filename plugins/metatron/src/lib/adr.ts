@@ -83,6 +83,30 @@ const DECIDED_BY_RE = /^ {0,3}-[ \t]+決定者[ \t]*:[ \t]*(.*)$/
 // 契約 §5-2 の履歴行 `- 状態変更(YYYY-MM-DD): 旧 → 新。理由`。
 const STATUS_CHANGE_RE =
   /^ {0,3}-[ \t]+状態変更\((\d{4}-\d{2}-\d{2})\)[ \t]*:[ \t]*(.*)$/
+
+/**
+ * 契約 §6-1。ADR エントリ同士の境界に置く水平線。
+ *
+ * 前後に必ず空行を伴う。非空行の直後の `---` は水平線ではなく
+ * setext heading(H2)として描かれるためである。パーサはこの行を
+ * 境界として扱わない(刻み目は `### ADR-NNN:` 見出しだけ)。
+ */
+export const ADR_SEPARATOR = "---"
+
+/** エントリ間の接着剤。前後の空行を含む。 */
+const ADR_SEPARATOR_BLOCK = `\n\n${ADR_SEPARATOR}\n\n`
+
+// 区切り線とみなす行。ハイフンだけの行に限る。
+// 表の区切り(`| --- |`)は `|` で始まるので一致しない。
+// `***` / `___` は metatron が生成しないため対象にしない。
+const ADR_SEPARATOR_LINE_RE = /^ {0,3}-{3,}[ \t]*$/
+
+// 末尾の埋め物(空行と区切り線)。フェンスの中は本文なので対象にしない。
+function isTrailingFiller(text: string, insideFence: boolean): boolean {
+  if (insideFence) return false
+  return text.trim() === "" || ADR_SEPARATOR_LINE_RE.test(text)
+}
+
 // 履歴行の値の分解(読み取り専用の寛容さ。生成は常に固定の形で出す)。
 const STATUS_CHANGE_VALUE_RE = /^(.*?)[ \t]*→[ \t]*([^。]*)。?(.*)$/
 
@@ -143,11 +167,11 @@ export interface AdrEntry {
   decidedBy: string | null
   /** 見出し行の 0 始まり行番号(節本文の中)。 */
   startIndex: number
-  /** 末尾の空行を除いた終端(この行は含まない)。追記位置でもある。 */
+  /** 末尾の空行と区切り線を除いた終端(この行は含まない)。追記位置でもある。 */
   contentEndIndex: number
   /** エントリの終端(この行は含まない)。次のエントリ見出し、または節末。 */
   endIndex: number
-  /** 見出しを含むエントリ全体の原文。 */
+  /** 見出しから本文の最終行までの原文。末尾の空行と区切り線は含まない。 */
   raw: string
   /** 契約 §5-2 の履歴行。古いものから順に並ぶ。 */
   statusChanges: AdrStatusChange[]
@@ -214,7 +238,10 @@ function parseEntries(sectionBody: string): AdrEntry[] {
     let contentEndIndex = endIndex
     while (
       contentEndIndex > startIndex + 1 &&
-      lines[contentEndIndex - 1].text.trim() === ""
+      isTrailingFiller(
+        lines[contentEndIndex - 1].text,
+        scan.insideFence[contentEndIndex - 1]
+      )
     ) {
       contentEndIndex--
     }
@@ -274,12 +301,53 @@ function parseEntries(sectionBody: string): AdrEntry[] {
       startIndex,
       contentEndIndex,
       endIndex,
-      raw: joinRaw(lines, startIndex, endIndex),
+      raw: joinRaw(lines, startIndex, contentEndIndex),
       statusChanges
     })
   }
 
   return entries
+}
+
+/**
+ * `## ADR 一覧` の節本文を受け取り、エントリ間の区切りを正規化して返す(純関数)。
+ *
+ * - エントリの**間**にだけ `\n\n---\n\n` を 1 つずつ置く(契約 §6-1)。
+ *   最初のエントリの前と最後のエントリの後には置かない。
+ * - 区切りが無い文書も、重複・欠落した文書も、1 回の実行で揃う。
+ * - エントリ本文は変えない。改行コードは `\n` に寄せるが、節の再結合時に
+ *   architecture.ts の normalizeBody が文書の EOL へ戻す。
+ * - エントリが 0 件なら本文をそのまま返す。
+ */
+export function normalizeAdrSeparators(body: string): string {
+  const entries = parseEntries(body)
+  if (entries.length === 0) return body
+
+  const scan = scanFences(body)
+  const textOf = (from: number, to: number): string =>
+    scan.lines
+      .slice(from, to)
+      .map((line) => line.text)
+      .join("\n")
+
+  // 最初のエントリより前(記入ガイド等)。末尾の空行と区切り線は落とす。
+  let prologueEnd = entries[0].startIndex
+  while (
+    prologueEnd > 0 &&
+    isTrailingFiller(
+      scan.lines[prologueEnd - 1].text,
+      scan.insideFence[prologueEnd - 1]
+    )
+  ) {
+    prologueEnd--
+  }
+  const prologue = textOf(0, prologueEnd)
+
+  const blocks = entries.map((entry) =>
+    textOf(entry.startIndex, entry.contentEndIndex)
+  )
+  const joined = blocks.join(ADR_SEPARATOR_BLOCK)
+  return prologue === "" ? joined : `${prologue}\n\n${joined}`
 }
 
 /**
@@ -615,7 +683,12 @@ function applyAdrSection(
 ): { text: string; created: boolean; warnings: string[] } {
   // 節の差し替えは architecture.ts に委ねる。対象セクション以外はバイト単位で
   // 不変であること、節が無ければ契約 §4-1 の順序で追加されることが保証される。
-  const result = applySectionChanges(current, [{ heading: ADR_HEADING, body }])
+  // 区切りの正規化はここで行う。`stage-adr` の追加経路と状態変更経路は、どちらも
+  // 必ずこの関数を通る(低位の applySectionChanges を直接呼べば通らないが、
+  // CLI の経路はこの 2 つしか無い)。2 箇所に分けると整形が食い違う(契約 §6-1)。
+  const result = applySectionChanges(current, [
+    { heading: ADR_HEADING, body: normalizeAdrSeparators(body) }
+  ])
   if (!result.ok) {
     if (result.error === "unclosed_fence") {
       throw new AdrError(

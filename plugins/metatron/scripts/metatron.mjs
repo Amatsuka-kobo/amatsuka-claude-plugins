@@ -3176,6 +3176,17 @@ var STATUS_LINE_RE = /^( {0,3}-[ \t]+状態[ \t]*:[ \t]*)(.*)$/;
 var DECIDED_ON_RE = /^ {0,3}-[ \t]+決定日[ \t]*:[ \t]*(.*)$/;
 var DECIDED_BY_RE = /^ {0,3}-[ \t]+決定者[ \t]*:[ \t]*(.*)$/;
 var STATUS_CHANGE_RE = /^ {0,3}-[ \t]+状態変更\((\d{4}-\d{2}-\d{2})\)[ \t]*:[ \t]*(.*)$/;
+var ADR_SEPARATOR = "---";
+var ADR_SEPARATOR_BLOCK = `
+
+${ADR_SEPARATOR}
+
+`;
+var ADR_SEPARATOR_LINE_RE = /^ {0,3}-{3,}[ \t]*$/;
+function isTrailingFiller(text, insideFence) {
+  if (insideFence) return false;
+  return text.trim() === "" || ADR_SEPARATOR_LINE_RE.test(text);
+}
 var STATUS_CHANGE_VALUE_RE = /^(.*?)[ \t]*→[ \t]*([^。]*)。?(.*)$/;
 var DATE_RE2 = /^\d{4}-\d{2}-\d{2}$/;
 function formatAdrId(num) {
@@ -3220,7 +3231,10 @@ function parseEntries(sectionBody) {
     const { index: startIndex, number, title } = starts[s];
     const endIndex = s + 1 < starts.length ? starts[s + 1].index : lines.length;
     let contentEndIndex = endIndex;
-    while (contentEndIndex > startIndex + 1 && lines[contentEndIndex - 1].text.trim() === "") {
+    while (contentEndIndex > startIndex + 1 && isTrailingFiller(
+      lines[contentEndIndex - 1].text,
+      scan2.insideFence[contentEndIndex - 1]
+    )) {
       contentEndIndex--;
     }
     let statusRaw = null;
@@ -3274,11 +3288,32 @@ function parseEntries(sectionBody) {
       startIndex,
       contentEndIndex,
       endIndex,
-      raw: joinRaw2(lines, startIndex, endIndex),
+      raw: joinRaw2(lines, startIndex, contentEndIndex),
       statusChanges
     });
   }
   return entries;
+}
+function normalizeAdrSeparators(body) {
+  const entries = parseEntries(body);
+  if (entries.length === 0) return body;
+  const scan2 = scanFences(body);
+  const textOf = (from, to) => scan2.lines.slice(from, to).map((line) => line.text).join("\n");
+  let prologueEnd = entries[0].startIndex;
+  while (prologueEnd > 0 && isTrailingFiller(
+    scan2.lines[prologueEnd - 1].text,
+    scan2.insideFence[prologueEnd - 1]
+  )) {
+    prologueEnd--;
+  }
+  const prologue = textOf(0, prologueEnd);
+  const blocks = entries.map(
+    (entry) => textOf(entry.startIndex, entry.contentEndIndex)
+  );
+  const joined = blocks.join(ADR_SEPARATOR_BLOCK);
+  return prologue === "" ? joined : `${prologue}
+
+${joined}`;
 }
 function parseAdrDocument(text) {
   const source = text ?? "";
@@ -3387,7 +3422,7 @@ function validateAdrAddInput(input) {
     });
     if (input.options.length === 1) {
       warnings.push(
-        "options \u304C 1 \u4EF6\u3060\u3051\u3067\u3059\u3002\u6BD4\u8F03\u3057\u305F\u4EE3\u66FF\u3092\u6319\u3052\u3089\u308C\u306A\u3044\u3082\u306E\u306F\u5224\u65AD\u3067\u306F\u306A\u304F\u5236\u7D04\u3067\u3042\u308A\u3001`## \u6280\u8853\u30B9\u30BF\u30C3\u30AF` \u3084 `## \u898F\u7D04` \u306B\u5C5E\u3059\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059(\u5951\u7D04 \xA75-3)\u3002"
+        "options \u304C 1 \u4EF6\u3060\u3051\u3067\u3059\u3002\u6BD4\u8F03\u3057\u305F\u4EE3\u66FF\u3092\u6319\u3052\u3089\u308C\u306A\u3044\u3082\u306E\u306F\u5224\u65AD\u3067\u306F\u306A\u304F\u5236\u7D04\u3067\u3042\u308A\u3001`## \u6280\u8853\u30B9\u30BF\u30C3\u30AF` \u3084 `## \u898F\u7D04` \u306B\u5C5E\u3059\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059(\u5951\u7D04 \xA76-3)\u3002"
       );
     }
   }
@@ -3469,7 +3504,9 @@ function normalizeSectionBody(body) {
   return body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[ \t\n]+$/, "").replace(/^\n+/, "");
 }
 function applyAdrSection(current, body) {
-  const result = applySectionChanges(current, [{ heading: ADR_HEADING, body }]);
+  const result = applySectionChanges(current, [
+    { heading: ADR_HEADING, body: normalizeAdrSeparators(body) }
+  ]);
   if (!result.ok) {
     if (result.error === "unclosed_fence") {
       throw new AdrError(
@@ -3539,7 +3576,7 @@ function buildAdrStatusChange(current, input, date) {
   if (entry.statusLineIndex === null || entry.statusRaw === null) {
     throw new AdrError(
       "invalid_entry",
-      `${entry.id} \u306B \`- \u72B6\u614B:\` \u884C\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5951\u7D04 \xA75-1 \u306E\u66F8\u5F0F\u306B\u76F4\u3057\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+      `${entry.id} \u306B \`- \u72B6\u614B:\` \u884C\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5951\u7D04 \xA76-1 \u306E\u66F8\u5F0F\u306B\u76F4\u3057\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
     );
   }
   const warnings = [...validation.warnings, ...doc.warnings];

@@ -16,6 +16,7 @@ import {
   buildAdrStatusChange,
   filterAdrEntries,
   formatAdrId,
+  normalizeAdrSeparators,
   parseAdrDocument,
   parseAdrId,
   stageAdr
@@ -96,6 +97,12 @@ const THREE_ADRS = doc(
   ""
 )
 
+// THREE_ADRS と同じ 3 件。エントリ間に契約 §6-1 の区切りが入った形。
+const THREE_ADRS_SEPARATED = THREE_ADRS.replace(
+  /\n\n(### ADR-00[23]:)/g,
+  "\n\n---\n\n$1"
+)
+
 const NO_ADR_SECTION = doc(
   "# ARCHITECTURE",
   "",
@@ -122,6 +129,284 @@ function sectionRaw(text: string, heading: string): string {
   const next = rest.indexOf("\n## ", 1)
   return next < 0 ? rest : rest.slice(0, next + 1)
 }
+
+// 区切り「行」があるか。D4 の ADR_SEPARATOR_LINE_RE と同じ規則で判定する。
+function separatorLines(text: string): string[] {
+  return text.split(/\r?\n/).filter((line) => /^ {0,3}-{3,}[ \t]*$/.test(line))
+}
+
+function hasSeparatorLine(text: string): boolean {
+  return separatorLines(text).length > 0
+}
+
+describe("ADR エントリの区切り", () => {
+  test("N1: 区切りが無い文書へ追加すると、既存エントリの間にも区切りが入る", () => {
+    const result = buildAdrAddition(THREE_ADRS, BASE_ADD, "2026-08-16")
+
+    expect(result.text).toContain(
+      doc("最初の背景。", "", "---", "", "### ADR-002: 2 番目の判断")
+    )
+    expect(result.text).toContain(
+      doc("永続化層。", "", "---", "", "### ADR-003: 3 番目の判断")
+    )
+    expect(result.text).toContain(
+      doc(
+        "3 番目の背景。",
+        "",
+        "---",
+        "",
+        "### ADR-004: 永続化に SQLite を使う"
+      )
+    )
+
+    const body = parseAdrDocument(result.text).sectionBody
+    expect(separatorLines(body)).toHaveLength(3)
+    expect(body.trimStart().startsWith("---")).toBe(false)
+    expect(body.trimEnd().endsWith("---")).toBe(false)
+  })
+
+  test("N2: 区切り入りの文書で状態変更すると、履歴行が区切り線の手前に入る", () => {
+    const result = buildAdrStatusChange(
+      THREE_ADRS_SEPARATED,
+      STATUS_CHANGE,
+      "2026-08-20"
+    )
+    const history = `- 状態変更(2026-08-20): 採用 → 廃止。${STATUS_CHANGE.reason}`
+
+    expect(result.text).toContain(
+      doc("永続化層。", "", history, "", "---", "", "### ADR-003: 3 番目の判断")
+    )
+    const entries = parseAdrDocument(result.text).entries
+    expect(
+      entries.find((entry) => entry.id === "ADR-002")?.statusChanges
+    ).toHaveLength(1)
+    expect(
+      entries.find((entry) => entry.id === "ADR-003")?.statusChanges
+    ).toHaveLength(0)
+  })
+
+  test("N3: ADR 本文中の `---` があってもエントリが切れない", () => {
+    const text = doc(
+      "# ARCHITECTURE",
+      "",
+      "## ADR 一覧",
+      "",
+      "### ADR-001: 本文に水平線を含む判断",
+      "",
+      "- 状態: 採用",
+      "- 決定日: 2026-08-01",
+      "- 決定者: あまつか工房",
+      "",
+      "本文の途中。",
+      "",
+      "---",
+      "",
+      "本文の続き。",
+      "",
+      "```text",
+      "---",
+      "```",
+      "",
+      "### ADR-002: 次の判断",
+      "",
+      "- 状態: 提案",
+      "- 決定日: 2026-08-02",
+      "- 決定者: あまつか工房",
+      "",
+      "次の本文。",
+      ""
+    )
+
+    expect(parseAdrDocument(text).entries).toHaveLength(2)
+
+    const added = buildAdrAddition(text, BASE_ADD, "2026-08-16")
+    expect(parseAdrDocument(added.text).entries).toHaveLength(3)
+    expect(added.text).toContain(
+      doc("本文の途中。", "", "---", "", "本文の続き。")
+    )
+    expect(added.text).toContain(doc("```text", "---", "```"))
+
+    const changed = buildAdrStatusChange(
+      text,
+      {
+        mode: "status",
+        id: "ADR-001",
+        status: "廃止",
+        reason: "本文中の水平線を保ったまま状態を変えるため"
+      },
+      "2026-08-20"
+    )
+    expect(parseAdrDocument(changed.text).entries).toHaveLength(2)
+    expect(changed.text).toContain(
+      doc("本文の途中。", "", "---", "", "本文の続き。")
+    )
+    expect(changed.text).toContain(doc("```text", "---", "```"))
+  })
+
+  test("N4: `raw` に区切りが含まれず、全エントリで対称である", () => {
+    expect(THREE_ADRS_SEPARATED.match(/^---$/gm)).toHaveLength(2)
+
+    const entries = parseAdrDocument(THREE_ADRS_SEPARATED).entries
+    expect(entries).toHaveLength(3)
+    expect(entries.every((entry) => !hasSeparatorLine(entry.raw))).toBe(true)
+    expect(entries.map((entry) => entry.raw.endsWith("\n"))).toEqual([
+      true,
+      true,
+      true
+    ])
+    expect(
+      entries.map((entry) => entry.raw.trimEnd().split(/\r?\n/).at(-1))
+    ).toEqual(["最初の背景。", "永続化層。", "3 番目の背景。"])
+  })
+
+  test("N5: 正規化は冪等で、崩れた区切りも 1 回で揃う", () => {
+    const withoutSeparators = parseAdrDocument(THREE_ADRS).sectionBody
+    const withSeparators = parseAdrDocument(THREE_ADRS_SEPARATED).sectionBody
+    const partial = withoutSeparators.replace(
+      "\n\n### ADR-002:",
+      "\n\n---\n\n### ADR-002:"
+    )
+    const duplicated = withSeparators.replace(
+      "\n\n---\n\n### ADR-002:",
+      "\n\n---\n\n---\n\n### ADR-002:"
+    )
+    const expected = normalizeAdrSeparators(withoutSeparators)
+
+    expect(normalizeAdrSeparators(withSeparators)).toBe(expected)
+    expect(normalizeAdrSeparators(partial)).toBe(expected)
+    expect(normalizeAdrSeparators(duplicated)).toBe(expected)
+    expect(normalizeAdrSeparators(expected)).toBe(expected)
+  })
+
+  test("N6: エントリが 1 件以下・見出しだけでも区切りが出ない", () => {
+    const added = buildAdrAddition(EMPTY_ADR_SECTION, BASE_ADD, "2026-08-16")
+    expect(
+      separatorLines(parseAdrDocument(added.text).sectionBody)
+    ).toHaveLength(0)
+
+    const changed = buildAdrStatusChange(
+      added.text,
+      {
+        mode: "status",
+        id: "ADR-001",
+        status: "廃止",
+        reason: "単一エントリでの状態変更を確認するため"
+      },
+      "2026-08-20"
+    )
+    expect(
+      separatorLines(parseAdrDocument(changed.text).sectionBody)
+    ).toHaveLength(0)
+    expect(normalizeAdrSeparators("")).toBe("")
+
+    const headingOnly = doc("### ADR-001: 最初", "", "### ADR-002: 2 番目")
+    const normalized = normalizeAdrSeparators(headingOnly)
+    expect(normalized).toBe(
+      doc("### ADR-001: 最初", "", "---", "", "### ADR-002: 2 番目")
+    )
+    const parsed = parseAdrDocument(
+      doc(
+        "# ARCHITECTURE",
+        "",
+        "## ADR 一覧",
+        "",
+        ...normalized.split("\n"),
+        ""
+      )
+    )
+    expect(parsed.entries.map((entry) => entry.raw.trim())).toEqual([
+      "### ADR-001: 最初",
+      "### ADR-002: 2 番目"
+    ])
+  })
+
+  test("N7: 前書きのある節で、前書きと 1 件目の間に区切りが出ない", () => {
+    const withGuide = doc(
+      "# ARCHITECTURE",
+      "",
+      "## ADR 一覧",
+      "",
+      "<!-- ADR は CLI で追加する。 -->",
+      ""
+    )
+    const first = buildAdrAddition(withGuide, BASE_ADD, "2026-08-16")
+    expect(first.text).toContain(
+      doc(
+        "<!-- ADR は CLI で追加する。 -->",
+        "",
+        "### ADR-001: 永続化に SQLite を使う"
+      )
+    )
+    const second = buildAdrAddition(first.text, BASE_ADD, "2026-08-17")
+    const body = parseAdrDocument(second.text).sectionBody
+    const firstHeading = body.indexOf("### ADR-001:")
+    expect(hasSeparatorLine(body.slice(0, firstHeading))).toBe(false)
+    expect(separatorLines(body)).toHaveLength(1)
+    expect(second.text).toContain(
+      doc(
+        "#### 影響範囲",
+        "",
+        "永続化層とテストのセットアップ。",
+        "",
+        "---",
+        "",
+        "### ADR-002: 永続化に SQLite を使う"
+      )
+    )
+
+    const handWritten = doc(
+      "<!-- ADR は CLI で追加する。 -->",
+      "",
+      "---",
+      "",
+      "### ADR-001: 判断"
+    )
+    expect(normalizeAdrSeparators(handWritten)).toBe(
+      doc("<!-- ADR は CLI で追加する。 -->", "", "### ADR-001: 判断")
+    )
+  })
+
+  test("N8: CRLF の文書でも区切りの改行が揃う", () => {
+    const crlf = THREE_ADRS_SEPARATED.replace(/\n/g, "\r\n")
+    const result = buildAdrStatusChange(crlf, STATUS_CHANGE, "2026-08-20")
+
+    expect(result.text).toContain("\r\n\r\n---\r\n\r\n")
+    expect(result.text).not.toMatch(/[^\r]\n/)
+  })
+
+  test("N9: エントリ本文の末尾に書かれた水平線は正規化で落ちる", () => {
+    const duplicated = doc(
+      "### ADR-001: 最初",
+      "",
+      "本文。",
+      "",
+      "---",
+      "",
+      "---",
+      "",
+      "### ADR-002: 2 番目",
+      "",
+      "次の本文。"
+    )
+    const normalized = normalizeAdrSeparators(duplicated)
+    expect(separatorLines(normalized)).toHaveLength(1)
+    expect(normalized).toContain(
+      doc("本文。", "", "---", "", "### ADR-002: 2 番目")
+    )
+
+    const oneEntry = doc("### ADR-001: 最初", "", "本文。", "", "---")
+    const normalizedOne = normalizeAdrSeparators(oneEntry)
+    expect(separatorLines(normalizedOne)).toHaveLength(0)
+    expect(normalizedOne).toBe(doc("### ADR-001: 最初", "", "本文。"))
+  })
+
+  test("N11: `***` / `___` / `- - -` は区切りとして扱わない", () => {
+    for (const thematicBreak of ["***", "___", "- - -"]) {
+      const body = doc("### ADR-001: 判断", "", "本文。", "", thematicBreak)
+      expect(normalizeAdrSeparators(body)).toBe(body)
+    }
+  })
+})
 
 // ---------------------------------------------------------------------------
 // 追加(契約 §5-1)
@@ -184,6 +469,11 @@ describe("R-A2: 既存 3 件への追加", () => {
     expect(entryRawById(result.text, "ADR-002")).toBe(
       entryRawById(THREE_ADRS, "ADR-002")
     )
+    expect(
+      parseAdrDocument(result.text).entries.every(
+        (entry) => !hasSeparatorLine(entry.raw)
+      )
+    ).toBe(true)
     expect(sectionRaw(result.text, "規約")).toBe(sectionRaw(THREE_ADRS, "規約"))
   })
 })
@@ -325,7 +615,9 @@ describe('R-A5: `mode: "status"` での状態変更', () => {
     // 「エントリ末尾」= 当該エントリの最後の非空行。次のエントリより前にある。
     const at = result.text.indexOf(line)
     expect(at).toBeGreaterThan(result.text.indexOf("### ADR-002:"))
-    expect(at).toBeLessThan(result.text.indexOf("### ADR-003:"))
+    const sep = result.text.indexOf("---", result.text.indexOf("### ADR-002:"))
+    expect(at).toBeLessThan(sep)
+    expect(sep).toBeLessThan(result.text.indexOf("### ADR-003:"))
     expect(at).toBeGreaterThan(result.text.indexOf("永続化層。"))
   })
 
@@ -411,7 +703,10 @@ describe("R-A8: 状態変更を 2 回行う", () => {
         "",
         "- 状態変更(2026-08-20): 採用 → 廃止。一度目の理由",
         "- 状態変更(2026-09-01): 廃止 → 採用。二度目の理由",
-        ""
+        "",
+        "---",
+        "",
+        "### ADR-003: 3 番目の判断"
       )
     )
   })

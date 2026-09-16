@@ -675,6 +675,63 @@ test("stage-adr → commit-architecture で ADR が採番されて末尾に追�
   }
 })
 
+test("N10: ADR を 2 件足すと区切りが入り、get adr の raw には含まれない", () => {
+  const root = mkTmp()
+  writeFile(root, "metatron.config.json", "{}")
+  const architecture = writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
+
+  const addAdr = (filename: string, title: string, impact: string): void => {
+    const inputPath = writeFile(
+      root,
+      filename,
+      JSON.stringify({
+        mode: "add",
+        title,
+        decidedBy: "team",
+        background: `${title}の背景`,
+        options: ["A: 採用する", "B: 採用しない"],
+        conclusion: `${title}を採用する`,
+        rationale: `${title}が要件に合うため`,
+        impact
+      })
+    )
+    const staged = runCli(["stage-adr", "--input", inputPath], root)
+    expect(staged.status, staged.stdout).toBe(0)
+    const stagedJson = staged.json as Record<string, unknown>
+    expect(stagedJson.ok).toBe(true)
+
+    const committed = runCli(
+      ["commit-architecture", "--staging-id", stagedJson.stagingId as string],
+      root
+    )
+    expect(committed.status, committed.stdout).toBe(0)
+    expect((committed.json as Record<string, unknown>).written).toBe(true)
+  }
+
+  addAdr("adr-1.json", "最初の判断", "最初の影響範囲。")
+  addAdr("adr-2.json", "2 番目の判断", "2 番目の影響範囲。")
+
+  const after = fs.readFileSync(architecture, "utf8")
+  expect(after.startsWith(ARCHITECTURE)).toBe(true)
+  expect(after).toContain(
+    "最初の影響範囲。\n\n---\n\n### ADR-002: 2 番目の判断"
+  )
+  expect(after.match(/\n\n---\n\n/g)).toHaveLength(1)
+
+  const listed = runCli(["get", "adr"], root)
+  expect(listed.status, listed.stdout).toBe(0)
+  const listedJson = listed.json as Record<string, unknown>
+  expect(listedJson.total).toBe(2)
+  const entries = listedJson.entries as Record<string, unknown>[]
+  expect(entries.map((entry) => entry.id)).toEqual(["ADR-001", "ADR-002"])
+  for (const entry of entries) {
+    const raw = String(entry.raw)
+    expect(
+      raw.split(/\r?\n/).some((line) => /^ {0,3}-{3,}[ \t]*$/.test(line))
+    ).toBe(false)
+  }
+})
+
 // ---------------------------------------------------------------------------
 // 巨大な文書での diff の省略
 //
