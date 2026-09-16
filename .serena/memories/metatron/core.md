@@ -1,4 +1,4 @@
-`plugins/metatron` (0.3.3-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.3.4-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -88,6 +88,8 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
   `sections` の `before` / `after` から全文提示する — 2 スキルの HARD-GATE に
   「`diff.truncated` が true のまま承認を求めない」がある。
 - ADR の追加・状態変更は `stage-adr` 専用。`stage-architecture` では拒否される。
+- `stage-adr` は追加・状態変更の両経路で `## ADR 一覧` 節全体を毎回正規化し、エントリ間だけ（前後を空行で挟んだ）`---` を 1 つ置く（先頭前・末尾後には置かない）。区切り無しの既存文書では、未変更エントリ間にも `+---` が現れるのは仕様。
+- 区切りは装飾であり権威的な境界ではなく、境界は `### ADR-NNN:` 見出しのみ（本文中の `---` では分割しない）。`get adr` の `entries[].raw` は区切り線と末尾空行を含まず、文書を書き換えなくても非最終エントリから次見出し直前の空行が落ちる。
 - 採番と挿入は `<文書パス>.lock` を `fs.open` の `wx` で取り、50ms × 最大 20 回リトライ、
   mtime 60 秒超で死んだロックを奪う(奪取前に mtime を再取得して確認)。
   **フェンシング(PID/nonce トークン)は意図的に導入しない。** 導入判断は設計書への差し戻しが要る。
