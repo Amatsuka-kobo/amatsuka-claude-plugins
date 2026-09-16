@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.19.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.19.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -124,8 +124,10 @@ and requirement/judgement bullets inside a request are out of scope.
 
 **Agent Tool is decided by role only since 0.19.0-dev.** `allowsAgentTool(ids)` lost its `model`
 argument; `AGENT_DENIED_MODELS` (Haiku) is gone; `light-impl` moved to Agent Tool 可. The
-`ComposeInput.modelId` / `Target.composeModelId` plumbing still exists but is dead for Agent
-purposes (commented; removal is an open item — not detected by type or lint).
+`ComposeInput.modelId` / `Target.composeModelId` plumbing was **removed in 0.19.1-dev**
+(2026-09-16, commit `99eb595`); it had been assigned in 3 places and read in none, and neither the
+type checker nor lint could see it (an optional interface field with no reader). `Target.modelId`
+(the recommended-model id) is a different thing and stays.
 
 The older two — `design-plan`
 (設計書・実装計画書(WBS)の作成) and `explore-lead` (コードベース探索統括) — sit between `general`
@@ -203,6 +205,16 @@ back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
 | SubagentStart | — | injects **only** the marker table, scoped by `candidateScopeFor` (claude → claude-only, custom-family → with-external, else the `NO_MARKERS` line). The discipline fragment is **gone** since 0.18.0-dev |
 | PreToolUse | `Edit\|Write\|NotebookEdit\|mcp__.*` | delegation gate (opt-in; denies edits to protected globs) |
 | PreToolUse | `Task\|Agent` | parallel nudge (on by default; one fixed additionalContext line) |
+
+**Marker-table row format since 0.19.1-dev (2026-09-16)**: each row is
+`- <role label> [<RoleId>]: <definition name(s)>`. The generated common-discipline clauses
+(`_common.md`, **both** languages) and the discipline's two 「サブエージェントは〜」 clauses look
+rows up **by RoleId, not by label text** — this is what lets `--lang en` definitions match a table
+whose labels are always Japanese. `marker-scan.ts`'s role-line template is the only place the
+format is decided; `marker-scan.test.ts` pins both the whole table (`toBe`) and the per-row shape
+(`/^- .+ \[[^\]]+\]: /` — deliberately **not** `[a-z0-9-]+`, because project-defined role ids have
+no documented charset and `my_role` must pass). Design:
+`harness-docs/design/2026-09-16-agent-policy-role-table-language-design.md`.
 
 **Matcher semantics, measured**: a value containing only alphanumerics / `_` / `-` / space / `,` /
 `|` is an **exact enumeration**; anything else makes it a **JavaScript regex**. So `Task|Agent`
