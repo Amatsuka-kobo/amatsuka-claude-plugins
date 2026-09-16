@@ -143,6 +143,12 @@ setup-agents が扱う推奨モデル ID は次の 10 種です。
 | `grok` | Grok | `claude-grok-4-6` |
 | `gemini-flash` | Gemini Flash | `claude-gemini-3-8-flash` |
 
+`gemini-flash` を Antigravity 経由で配っているプロキシ構成では、この定義を**サブエージェントとして起動できません。** Claude Code はサブエージェントを起動するとき、system に `You are a Claude agent, built on Anthropic's Claude Agent SDK.` という文を必ず含めます。Antigravity の上流はこの文字列を検出すると、quota が残っていても `429 RESOURCE_EXHAUSTED` を返します。quota の枯渇ではないため、時間を置いても別のアカウントに切り替えても解消しません。メインセッションのモデルとしては動作します。
+
+これは経路による判定であり、モデルそのものの問題ではありません。あわせて、Antigravity のログインを第三者のクライアントから使うことは Google の利用規約で禁じられており、アカウントの停止または終了の事由になりうるとされています。**この 429 を回避しようとしないでください。**
+
+Gemini をサブエージェントで使う場合は、Google が案内している API キーの経路に切り替えてください。Google AI Studio または Vertex AI で API キーを発行し、プロキシ側で Antigravity の OAuth ではなく API キーを使う設定にします。上流のモデル ID は Antigravity 経由とは別の体系で、Antigravity の `gemini-3.8-flash-high` に対して API キー経路では `gemini-3.8-flash` を使います。なお Google AI Pro などのサブスクリプションに API の利用権は含まれず、API は別の課金になります。課金を紐付けていない状態では送信した内容が Google のサービス改善に使われるため、業務のコードを扱う場合は課金を有効にした状態で使ってください。
+
 生成した定義の frontmatter には、選んだ役割を記録する `agent-policy-role` マーカーが入ります。
 
 ```yaml
