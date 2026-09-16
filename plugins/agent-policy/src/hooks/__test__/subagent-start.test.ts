@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { ROLES } from "../../agents/roles"
 import { runTs } from "../../testing/run-ts.js"
 import { markerTable, scanAgents } from "../marker-scan"
 
@@ -18,22 +19,7 @@ const TABLE_INTRO =
   "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
 const NO_MARKERS = "対応表なし(このプロジェクトに役割マーカー付き定義は無い)"
 
-const ROLE_IDS = [
-  "complex-impl",
-  "normal-impl",
-  "light-impl",
-  "escalation",
-  "general",
-  "explore",
-  "realtime-research",
-  "e2e-verify",
-  "independent-review",
-  "doc-review",
-  "code-review",
-  "final-review",
-  "gate-review",
-  "advisor"
-] as const
+const ROLE_IDS = ROLES.map((role) => role.id)
 
 let project: string
 
