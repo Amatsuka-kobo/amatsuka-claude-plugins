@@ -220,7 +220,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 
 - 1〜2 問の差で description や実装を疑わない。同条件で測り直す。
 - 過去の測定と比べるときは `environment` の一致を確かめる。
-- スコアは測定した環境に依存する。有効なプラグインやユーザースキルが変わった後の値を、変わる前の値と比べない。
+- スコアは測定した環境に依存する。CLI のバージョン、CLI 組み込みスキル、モデルの解決先が変わった後の値を、変わる前の値と比べない。
+- `errors` が 0 でない結果は比較に使わない。原因を直してから測り直す。
+- `environment` は文字列として比較する。`sonnet` と `claude-sonnet-5` は同じものとして扱わない。
+- `--model` は毎回同じ表記で指定する。
+- 既定モデルや eval の問を変えた後は、それ以前の値を捨ててベースラインを取り直す。
 - 全問が発火 0 で返ったときは、description ではなくタイムアウトを疑い、`--timeout` を伸ばして測り直す。
 - 公式 `skill-creator` プラグインの `run_eval.py` / `run_loop.py` は使わない。代わりに `${CLAUDE_PLUGIN_ROOT}/scripts/` の移植版を使う。
 
