@@ -40,6 +40,7 @@ import type {
 } from "./lib/types.js"
 import {
   runEval as defaultRunEval,
+  MeasurementFailedError,
   parseEvalSet,
   parseNumericOption
 } from "./run-trigger-eval.js"
@@ -212,18 +213,33 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
 
     const allQueries = [...trainSet, ...testSet]
     const evalStarted = performance.now()
-    const allResults = await runEval({
-      evalSet: allQueries,
-      skillName,
-      skillContent,
-      description: currentDescription,
-      numWorkers,
-      timeout,
-      runsPerQuery,
-      triggerThreshold,
-      model,
-      verbose: false
-    })
+    let allResults: EvalResult
+    try {
+      allResults = await runEval({
+        evalSet: allQueries,
+        skillName,
+        skillContent,
+        description: currentDescription,
+        numWorkers,
+        timeout,
+        runsPerQuery,
+        triggerThreshold,
+        model,
+        verbose: false
+      })
+    } catch (error) {
+      if (!(error instanceof MeasurementFailedError)) throw error
+      if (history.length === 0) throw error
+
+      const message = error.message
+      exitReason = `measurement_failed (iteration ${iteration}): ${message}`
+      if (verbose) {
+        process.stderr.write(
+          `Measurement failed: ${message}; stopping after iteration ${iteration}.\n`
+        )
+      }
+      break
+    }
     const evalElapsed = (performance.now() - evalStarted) / 1000
 
     const trainQueries = new Set(trainSet.map((item) => item.query))
