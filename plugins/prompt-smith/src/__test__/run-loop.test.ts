@@ -9,6 +9,7 @@ import {
   runLoop,
   selectBest
 } from "../run-loop.js"
+import { MeasurementFailedError } from "../run-trigger-eval.js"
 
 const record = (iteration: number, train: number, test: number) => ({
   iteration,
@@ -143,6 +144,66 @@ describe("runLoop", () => {
     expect(result.iterations_run).toBe(3)
     expect(result.exit_reason).toContain("max_iterations")
     expect(improve).toHaveBeenCalledTimes(2)
+  })
+
+  it("反復 2 の測定不能は打ち切り理由として記録し、反復 1 を最良結果にする", async () => {
+    const notAllPass = (
+      queries: { query: string; should_trigger: boolean }[]
+    ) => ({
+      ...allPass(queries),
+      results: queries.map((q) => ({
+        ...q,
+        trigger_rate: 0,
+        triggers: 0,
+        runs: 3,
+        errors: 0,
+        pass: false
+      })),
+      summary: { total: queries.length, passed: 0, failed: queries.length }
+    })
+    const runEval = vi.fn(async ({ evalSet: queries }) => {
+      if (runEval.mock.calls.length === 2) {
+        throw new MeasurementFailedError("all runs ended in errors")
+      }
+      return notAllPass(queries)
+    })
+    const improve = vi.fn(async () => "improved description")
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0,
+      maxIterations: 3,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+    expect(result.exit_reason).toBe(
+      "measurement_failed (iteration 2): all runs ended in errors"
+    )
+    expect(result.best_description).toBe("start")
+    expect(result.iterations_run).toBe(1)
+  })
+
+  it("反復 1 の測定不能は再 throw する", async () => {
+    const error = new MeasurementFailedError("all runs ended in errors")
+    const runEval = vi.fn(async () => {
+      throw error
+    })
+    await expect(
+      runLoop({
+        evalSet,
+        skillName: "s",
+        skillContent: "body",
+        originalDescription: "start",
+        holdout: 0,
+        maxIterations: 3,
+        model: "claude-opus-5",
+        runEval,
+        improveDescription: vi.fn()
+      })
+    ).rejects.toBe(error)
   })
 
   it("description タグの欠落時は最良結果を返して打ち切る", async () => {

@@ -1332,18 +1332,33 @@ ${"=".repeat(60)}
     }
     const allQueries = [...trainSet, ...testSet];
     const evalStarted = performance.now();
-    const allResults = await runEval2({
-      evalSet: allQueries,
-      skillName,
-      skillContent,
-      description: currentDescription,
-      numWorkers,
-      timeout,
-      runsPerQuery,
-      triggerThreshold,
-      model,
-      verbose: false
-    });
+    let allResults;
+    try {
+      allResults = await runEval2({
+        evalSet: allQueries,
+        skillName,
+        skillContent,
+        description: currentDescription,
+        numWorkers,
+        timeout,
+        runsPerQuery,
+        triggerThreshold,
+        model,
+        verbose: false
+      });
+    } catch (error) {
+      if (!(error instanceof MeasurementFailedError)) throw error;
+      if (history.length === 0) throw error;
+      const message = error.message;
+      exitReason = `measurement_failed (iteration ${iteration}): ${message}`;
+      if (verbose) {
+        process.stderr.write(
+          `Measurement failed: ${message}; stopping after iteration ${iteration}.
+`
+        );
+      }
+      break;
+    }
     const evalElapsed = (performance.now() - evalStarted) / 1e3;
     const trainQueries = new Set(trainSet.map((item) => item.query));
     const trainResultList = allResults.results.filter(
