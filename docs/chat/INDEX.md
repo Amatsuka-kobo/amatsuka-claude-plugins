@@ -107,3 +107,4 @@
 - `2026/0916/phyllis998/1620-agent-policy-role-id-design.md` | 2026-09-16 | phyllis998 | Gemini API 課金体系の調査と README 注記方針の決定
 - `2026/0916/phyllis998/1653-agent-policy-doc-writing-role-design.md` | 2026-09-16 | phyllis998 | document-writer(gpt-terra)動作確認とCLAUDE.mdのコミット完了
 - `2026/0917/phyllis998/0203-doc-writing-discipline.md` | 2026-09-17 | phyllis998 | document-writer の disallowedTools 定義の誤りを判定し、修正方針を決定する
+- `2026/0917/phyllis998/1013-metatron-skills-audit.md` | 2026-09-17 | phyllis998 | metatron 指示書 3 つの冗長さを除去し質を向上
