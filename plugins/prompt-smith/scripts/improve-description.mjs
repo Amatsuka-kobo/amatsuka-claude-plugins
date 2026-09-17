@@ -13,133 +13,6 @@ import { parseArgs as parseArgs2 } from "node:util";
 
 // src/lib/claude-cli.ts
 import { spawn } from "node:child_process";
-var AUTH_VARS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
-function buildEnv(env = process.env) {
-  const copy = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (key === "CLAUDECODE") continue;
-    copy[key] = value;
-  }
-  return copy;
-}
-function describeEnvironment(model, env = process.env) {
-  const authSource = AUTH_VARS.find((name) => env[name]) ?? "(claude.ai login)";
-  return {
-    base_url: env.ANTHROPIC_BASE_URL ?? "(default)",
-    auth_source: authSource,
-    model: model ?? null
-  };
-}
-async function callClaudeText(prompt, model, timeoutSeconds = 300) {
-  const args = ["-p", "--output-format", "text"];
-  if (model) args.push("--model", model);
-  return await new Promise((resolve, reject) => {
-    const child = spawn("claude", args, { env: buildEnv() });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`claude -p timed out after ${timeoutSeconds}s`));
-    }, timeoutSeconds * 1e3);
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`claude -p exited ${code}
-stderr: ${stderr}`));
-        return;
-      }
-      resolve(stdout);
-    });
-    child.stdin.write(prompt);
-    child.stdin.end();
-  });
-}
-
-// src/lib/parse-skill-md.ts
-function stripChar(value, ch) {
-  let start = 0;
-  let end = value.length;
-  while (start < end && value[start] === ch) start++;
-  while (end > start && value[end - 1] === ch) end--;
-  return value.slice(start, end);
-}
-function unquote(value) {
-  return stripChar(stripChar(value, '"'), "'");
-}
-var BLOCK_SCALARS = /* @__PURE__ */ new Set([">", "|", ">-", "|-"]);
-function parseSkillMd(content) {
-  const lines = content.split("\n");
-  if (lines[0]?.trim() !== "---") {
-    throw new Error("SKILL.md missing frontmatter (no opening ---)");
-  }
-  let endIdx = -1;
-  for (let i2 = 1; i2 < lines.length; i2++) {
-    if (lines[i2].trim() === "---") {
-      endIdx = i2;
-      break;
-    }
-  }
-  if (endIdx === -1) {
-    throw new Error("SKILL.md missing frontmatter (no closing ---)");
-  }
-  const frontmatter = lines.slice(1, endIdx);
-  let name = "";
-  let description = "";
-  let i = 0;
-  while (i < frontmatter.length) {
-    const line = frontmatter[i];
-    if (line.startsWith("name:")) {
-      name = unquote(line.slice("name:".length).trim());
-    } else if (line.startsWith("description:")) {
-      const value = line.slice("description:".length).trim();
-      if (BLOCK_SCALARS.has(value)) {
-        const continuation = [];
-        i++;
-        while (i < frontmatter.length && (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("	"))) {
-          continuation.push(frontmatter[i].trim());
-          i++;
-        }
-        description = continuation.join(" ");
-        continue;
-      }
-      description = unquote(value);
-    }
-    i++;
-  }
-  return { name, description, content };
-}
-
-// src/run-trigger-eval.ts
-import { spawn as spawn2 } from "node:child_process";
-import { readFile, writeFile as writeFile2 } from "node:fs/promises";
-import { basename, extname, join as join2 } from "node:path";
-import { parseArgs } from "node:util";
-
-// src/lib/pool.ts
-async function pool(items, workers, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  const limit = Math.max(1, Math.min(workers, items.length));
-  const worker = async () => {
-    while (true) {
-      const index = next++;
-      if (index >= items.length) return;
-      results[index] = await fn(items[index], index);
-    }
-  };
-  await Promise.all(Array.from({ length: limit }, () => worker()));
-  return results;
-}
 
 // src/lib/sandbox.ts
 import { randomBytes } from "node:crypto";
@@ -183,7 +56,7 @@ function buildSandboxSkillMd(original, cleanName) {
   if (!sawInvocationKey) rewritten.push("disable-model-invocation: false");
   return joinFrontmatter(rewritten, body);
 }
-var BLOCK_SCALARS2 = /* @__PURE__ */ new Set([">", "|", ">-", "|-"]);
+var BLOCK_SCALARS = /* @__PURE__ */ new Set([">", "|", ">-", "|-"]);
 function replaceDescription(original, description) {
   const { frontmatter, body } = splitFrontmatter(original);
   const rewritten = [];
@@ -198,7 +71,7 @@ function replaceDescription(original, description) {
     }
     const value = line.slice("description:".length).trim();
     i++;
-    if (BLOCK_SCALARS2.has(value)) {
+    if (BLOCK_SCALARS.has(value)) {
       while (i < frontmatter.length) {
         const next = frontmatter[i];
         if (next.trim() === "") {
@@ -271,6 +144,182 @@ async function createSandbox(skillMd, cleanName) {
   await mkdir(skillDir, { recursive: true });
   await writeFile(join(skillDir, "SKILL.md"), skillMd, "utf8");
   return sandbox;
+}
+
+// src/lib/claude-cli.ts
+var AUTH_VARS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+var ISOLATION_ARGS = [
+  "--setting-sources",
+  "project",
+  "--strict-mcp-config",
+  "--settings",
+  '{"disableAllHooks":true}',
+  "--no-session-persistence"
+];
+function buildEnv(env = process.env) {
+  const copy = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (key === "CLAUDECODE") continue;
+    copy[key] = value;
+  }
+  return copy;
+}
+function buildSpawnOptions(cwd, env = process.env) {
+  return { cwd, env: buildEnv(env) };
+}
+function buildTextArgs(model) {
+  const args = ["-p", "--output-format", "text"];
+  if (model) args.push("--model", model);
+  args.push(...ISOLATION_ARGS);
+  return args;
+}
+function killThenSettle(child, settle) {
+  if (child.exitCode === null && child.signalCode === null) {
+    child.once("close", settle);
+    child.kill("SIGKILL");
+    return;
+  }
+  settle();
+}
+function describeEnvironment(model, env = process.env) {
+  const authSource = AUTH_VARS.find((name) => env[name]) ?? "(claude.ai login)";
+  return {
+    base_url: env.ANTHROPIC_BASE_URL ?? "(default)",
+    auth_source: authSource,
+    model: model ?? null
+  };
+}
+async function callClaudeText(prompt, model, timeoutSeconds = 300, deps) {
+  const spawnClaude = deps?.spawn ?? spawn;
+  const createWorkspace = deps?.createWorkspace ?? createIsolatedWorkspace;
+  const workspace = await createWorkspace();
+  try {
+    return await new Promise((resolve, reject) => {
+      const child = spawnClaude(
+        "claude",
+        buildTextArgs(model),
+        buildSpawnOptions(workspace.dir)
+      );
+      let stdout = "";
+      let stderr = "";
+      let state = "running";
+      const timeoutError = new Error(
+        `claude -p timed out after ${timeoutSeconds}s`
+      );
+      const timer = setTimeout(() => {
+        if (state !== "running") return;
+        state = "timeout";
+        killThenSettle(child, () => {
+          if (state !== "timeout") return;
+          state = "settled";
+          reject(timeoutError);
+        });
+      }, timeoutSeconds * 1e3);
+      child.stdout.on("data", (chunk) => {
+        stdout += String(chunk);
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+      child.on("error", (error) => {
+        if (state === "settled") return;
+        state = "settled";
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        if (state !== "running") return;
+        state = "settled";
+        if (code !== 0) {
+          reject(new Error(`claude -p exited ${code}
+stderr: ${stderr}`));
+          return;
+        }
+        resolve(stdout);
+      });
+      child.stdin.write(prompt);
+      child.stdin.end();
+    });
+  } finally {
+    await workspace.cleanup();
+  }
+}
+
+// src/lib/parse-skill-md.ts
+function stripChar(value, ch) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === ch) start++;
+  while (end > start && value[end - 1] === ch) end--;
+  return value.slice(start, end);
+}
+function unquote(value) {
+  return stripChar(stripChar(value, '"'), "'");
+}
+var BLOCK_SCALARS2 = /* @__PURE__ */ new Set([">", "|", ">-", "|-"]);
+function parseSkillMd(content) {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() !== "---") {
+    throw new Error("SKILL.md missing frontmatter (no opening ---)");
+  }
+  let endIdx = -1;
+  for (let i2 = 1; i2 < lines.length; i2++) {
+    if (lines[i2].trim() === "---") {
+      endIdx = i2;
+      break;
+    }
+  }
+  if (endIdx === -1) {
+    throw new Error("SKILL.md missing frontmatter (no closing ---)");
+  }
+  const frontmatter = lines.slice(1, endIdx);
+  let name = "";
+  let description = "";
+  let i = 0;
+  while (i < frontmatter.length) {
+    const line = frontmatter[i];
+    if (line.startsWith("name:")) {
+      name = unquote(line.slice("name:".length).trim());
+    } else if (line.startsWith("description:")) {
+      const value = line.slice("description:".length).trim();
+      if (BLOCK_SCALARS2.has(value)) {
+        const continuation = [];
+        i++;
+        while (i < frontmatter.length && (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("	"))) {
+          continuation.push(frontmatter[i].trim());
+          i++;
+        }
+        description = continuation.join(" ");
+        continue;
+      }
+      description = unquote(value);
+    }
+    i++;
+  }
+  return { name, description, content };
+}
+
+// src/run-trigger-eval.ts
+import { spawn as spawn2 } from "node:child_process";
+import { readFile, writeFile as writeFile2 } from "node:fs/promises";
+import { basename, extname, join as join2 } from "node:path";
+import { parseArgs } from "node:util";
+
+// src/lib/pool.ts
+async function pool(items, workers, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const limit = Math.max(1, Math.min(workers, items.length));
+  const worker = async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return results;
 }
 
 // src/lib/stream-parse.ts
