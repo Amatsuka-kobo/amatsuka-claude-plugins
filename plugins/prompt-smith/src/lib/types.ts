@@ -7,6 +7,7 @@ export interface EvalResultItem extends EvalItem {
   trigger_rate: number
   triggers: number
   runs: number
+  errors: number
   pass: boolean
 }
 
@@ -26,6 +27,7 @@ export interface EvalResult {
   environment: Environment
   results: EvalResultItem[]
   summary: EvalSummary
+  errors: number
 }
 
 export interface RunEvalOptions {

@@ -17,6 +17,7 @@ const evalResults = {
       trigger_rate: 0,
       triggers: 0,
       runs: 3,
+      errors: 0,
       pass: false
     },
     {
@@ -25,6 +26,7 @@ const evalResults = {
       trigger_rate: 1,
       triggers: 3,
       runs: 3,
+      errors: 0,
       pass: false
     },
     {
@@ -33,6 +35,7 @@ const evalResults = {
       trigger_rate: 1,
       triggers: 3,
       runs: 3,
+      errors: 0,
       pass: true
     }
   ],
