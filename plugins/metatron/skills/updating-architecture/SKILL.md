@@ -1,6 +1,6 @@
 ---
 name: updating-architecture
-description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗い出して更新するとき、および更新コマンドから起動されたときに必ず使用する。依存やコマンドを足した後の記載の追随、ドメインマップの穴と死んだ glob の解消、欠けているセクションの追加、ADR の追加と状態変更(採用 → 廃止)、実装 diff を見て気づいた記述の食い違いの反映がここに含まれる。「アーキ文書が古い」「ドキュメントを実装に合わせて直して」のように、乖離の箇所も更新手段も名指ししない依頼でも使用する。ARCHITECTURE がまだ無い状態からの初回生成と、失敗の記録は別のスキルが担当する。
+description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規約・保護パス・テスト方針)を実装に合わせて更新するときに必ず使用する。「アーキ文書が古い」「実装に合わせて直して」「更新しといて」「ADR に残して」「前提だった ADR を廃止に」「保護パスがズレてる」「死んだ glob を直して」のような依頼が該当する。文書が 1 枚も無い状態からの初版作成、ドメインマップだけの最小構成を育てる依頼、失敗の記録は別のスキルが担当する。
 ---
 
 # ARCHITECTURE と rules の更新
@@ -11,7 +11,8 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 - 案内が無いときはユーザーに絶対パスを尋ねる。インストール先を推測して組み立てない。
 - 入力の渡し方・出力の読み方・失敗時の扱いは `../../references/cli-usage.md` を読む。
 - 長い入力は Write ツールで一時ファイルへ書き、`--input <path>` で渡す。
-- ARCHITECTURE と rules を Edit / Write で直接書き換えない。更新は CLI だけで行う。
+- 引数へ本文を直接埋め込まず、一時ファイルのパスだけを渡す。
+- ARCHITECTURE と rules の更新は CLI だけで行う。Edit / Write で直接書き換えない。
 
 ## 手順
 
@@ -51,7 +52,7 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 
 ## ADR
 
-- ADR 一覧の変更は `stage-adr` を使う。`stage-architecture` に `ADR 一覧` の見出しを渡すと拒否される。
+- ADR 一覧の変更は `stage-adr` を使う。`stage-architecture` には渡さない。
 - 追加と状態変更はどちらも承認を要する。状態変更は過去の判断を覆す行為であり、承認を省かない。
 - 状態を変えるときは理由を必須とする。理由が定まらないまま `stage-adr` を呼ばない。
 - エントリを削除しない。覆した判断は `廃止` の状態で残す。
@@ -61,20 +62,19 @@ description: ARCHITECTURE(既定 `docs/ARCHITECTURE.md`)と実装の乖離を洗
 
 - rules の変更は `stage-rules` を使う。1 回の staging で扱えるのは `conventions` / `protected-paths` / `testing-policy` のうち 1 ファイルである。
 - `body` はファイル全体とする。`# 見出し` の行と、その直後の管理者表示行を含める。
-- `body` に frontmatter を書かない。書くと拒否される。
-- rules の `stagingId` は `commit-rules` へ渡す。`commit-architecture` へ渡すと `staging_kind_mismatch` で拒否される。
-- `stage-architecture` に `テスト方針` / `保護パス` / `規約` の見出しを渡さない。この 3 節は rules へ移っており、`unknown_heading` で拒否される。
+- `body` に frontmatter を書かない。
+- rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で返る。
+- `stage-architecture` に `テスト方針` / `保護パス` / `規約` の見出しを渡さない。指定すると `unknown_heading` で返る。
 - `stage-rules` の diff は `sections` を持たない。`truncated` になったときは本文を短くしてから stage をやり直す。
 
 ## 承認
 
-- **HARD-GATE: ユーザーの承認を得ずに `commit-architecture` / `commit-rules` を実行しない。**
-- **HARD-GATE: `diff.truncated` が `true` のまま承認を求めない。** ARCHITECTURE は `diff.sections` の `before` / `after` から全文を提示してから承認を得る。
+- 提示したうえで、書き込んでよいかの明示的な承認を得てから `commit-architecture` / `commit-rules` を実行する。
 - `stage-architecture` / `stage-adr` / `stage-rules` が exit 0 で返ったことを承認と読み替えない。
 - 承認は stage 1 回につき 1 回得る。複数の stage を 1 回の承認でまとめない。
 - 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
 - `diff.truncated` が `false` のときは `diff.unified` を要約せず全文提示する。長いときは分割して提示する。
-- `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わない。`diff.sections` の `before` / `after` をセクション単位で全文提示する。
+- `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わず、`diff.sections` の `before` / `after` をセクション単位で全文提示してから承認を得る。
 - セクション単位でも一度に提示しきれないときは、`diff.sections` の `heading` を一覧で示し、どのセクションから見るかをユーザーに尋ねる。
 - 承認の後に文面を足さない。足すときは stage からやり直して承認を取り直す。
 - staging の期限切れや `file_changed` で commit が失敗したときは、現行を読み直して stage からやり直す。
