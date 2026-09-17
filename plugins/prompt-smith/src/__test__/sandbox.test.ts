@@ -1,8 +1,15 @@
-import { existsSync, readFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync
+} from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   buildSandboxSkillMd,
+  createIsolatedWorkspace,
   createSandbox,
   makeCleanName,
   replaceDescription
@@ -159,6 +166,47 @@ describe("makeCleanName", () => {
 
   it("呼ぶたびに違う hash になる", () => {
     expect(makeCleanName("s")).not.toBe(makeCleanName("s"))
+  })
+})
+
+describe("createIsolatedWorkspace", () => {
+  it("一時ディレクトリだけを作り、cleanup で削除する", async () => {
+    const workspace = await createIsolatedWorkspace()
+
+    expect(existsSync(workspace.dir)).toBe(true)
+    expect(existsSync(join(workspace.dir, ".claude"))).toBe(false)
+
+    await workspace.cleanup()
+    expect(existsSync(workspace.dir)).toBe(false)
+  })
+
+  it("TMPDIR の祖先に .claude があれば対処を示して拒否する", async () => {
+    const originalTmpdir = process.env.TMPDIR
+    const fakeTmpdir = mkdtempSync(join(process.cwd(), "prompt-smith-tmpdir-"))
+    process.env.TMPDIR = fakeTmpdir
+
+    try {
+      const claudeDir = realpathSync(join(process.cwd(), ".claude"))
+      let thrown: unknown
+      try {
+        await createIsolatedWorkspace()
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(Error)
+      const message = (thrown as Error).message
+      expect(message).toContain(claudeDir)
+      expect(message).toContain("TMPDIR")
+      expect(message).toContain(".claude を持たない場所へ変える")
+    } finally {
+      if (originalTmpdir === undefined) {
+        delete process.env.TMPDIR
+      } else {
+        process.env.TMPDIR = originalTmpdir
+      }
+      rmSync(fakeTmpdir, { recursive: true, force: true })
+    }
   })
 })
 
