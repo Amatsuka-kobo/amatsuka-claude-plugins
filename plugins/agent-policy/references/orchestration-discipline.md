@@ -11,7 +11,7 @@
 | 軽量な実装                       | `light-impl`         | `impl`     | 可         | `Haiku`       |
 | 行き詰まり時のエスカレーション   | `escalation`         | `impl`     | 可         | `Fable`       |
 | その他のタスク                   | `general`            | `impl`     | 可         | `Sonnet`      |
-| 設計・実装計画書(WBS)の作成    | `design-plan`        | `impl`     | 可         | `Opus`        |
+| 設計書・実装計画書(WBS)の作成   | `design-plan`        | `impl`     | 可         | `Opus`        |
 | 文書作成                         | `doc-writing`        | `impl`     | 否         | `Sonnet`      |
 | コードベース探索統括             | `explore-lead`       | `impl`     | 可         | `Opus`        |
 | コードベース探索実働             | `explore`            | `readonly` | 可         | `Sonnet`      |
