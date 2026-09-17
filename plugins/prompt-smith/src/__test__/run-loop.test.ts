@@ -76,6 +76,7 @@ describe("runLoop", () => {
   const allPass = (queries: { query: string; should_trigger: boolean }[]) => ({
     skill_name: "s",
     description: "d",
+    errors: 0,
     environment: {
       base_url: "(default)",
       auth_source: "(claude.ai login)",
@@ -86,6 +87,7 @@ describe("runLoop", () => {
       trigger_rate: 1,
       triggers: 3,
       runs: 3,
+      errors: 0,
       pass: true
     })),
     summary: { total: queries.length, passed: queries.length, failed: 0 }
@@ -120,6 +122,7 @@ describe("runLoop", () => {
         trigger_rate: 0,
         triggers: 0,
         runs: 3,
+        errors: 0,
         pass: false
       })),
       summary: { total: queries.length, passed: 0, failed: queries.length }
@@ -152,6 +155,7 @@ describe("runLoop", () => {
         trigger_rate: 0,
         triggers: 0,
         runs: 3,
+        errors: 0,
         pass: false
       })),
       summary: { total: queries.length, passed: 0, failed: queries.length }
@@ -188,6 +192,7 @@ describe("runLoop", () => {
         trigger_rate: 0,
         triggers: 0,
         runs: 3,
+        errors: 0,
         pass: false
       })),
       summary: { total: queries.length, passed: 0, failed: queries.length }
@@ -223,6 +228,7 @@ describe("runLoop", () => {
         trigger_rate: 0,
         triggers: 0,
         runs: 3,
+        errors: 0,
         pass: false
       })),
       summary: { total: queries.length, passed: 0, failed: queries.length }
@@ -252,6 +258,7 @@ describe("runLoop", () => {
         trigger_rate: i % 2,
         triggers: i % 2,
         runs: 3,
+        errors: 0,
         pass: i % 2 === 0
       })),
       summary: { total: queries.length, passed: 1, failed: queries.length - 1 }

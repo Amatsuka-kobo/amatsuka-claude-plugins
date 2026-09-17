@@ -9,23 +9,31 @@
  * per-run temporary directory rather than a slash command in the real
  * project; matching uses a name prefix; only the Skill tool counts;
  * find_project_root() is not ported; the result records an environment
- * object. See plugins/prompt-smith/NOTICE.
+ * object; CLI and result-event failures are recorded separately from non-triggers.
+ * See plugins/prompt-smith/NOTICE.
  */
 
 import { spawn } from "node:child_process"
 import { readFile, writeFile } from "node:fs/promises"
 import { basename, extname, join } from "node:path"
 import { parseArgs } from "node:util"
-import { buildEnv, describeEnvironment } from "./lib/claude-cli.js"
+import {
+  buildEvalArgs,
+  buildSpawnOptions,
+  describeEnvironment,
+  killThenSettle,
+  type SpawnFn
+} from "./lib/claude-cli.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { pool } from "./lib/pool.js"
 import {
   buildSandboxSkillMd,
   createSandbox,
   makeCleanName,
-  replaceDescription
+  replaceDescription,
+  type Sandbox
 } from "./lib/sandbox.js"
-import { judge, TriggerDetector } from "./lib/stream-parse.js"
+import { judge, readResultError, TriggerDetector } from "./lib/stream-parse.js"
 import type {
   EvalItem,
   EvalResult,
@@ -33,62 +41,66 @@ import type {
   RunEvalOptions
 } from "./lib/types.js"
 
-/** 1 クエリを 1 回だけ測る。発火したら true。 */
-async function runSingleQuery(
-  query: string,
-  skillName: string,
-  skillContent: string,
-  description: string,
-  timeout: number,
+export interface RunSingleQueryOptions {
+  query: string
+  skillName: string
+  skillContent: string
+  description: string
+  timeout: number
   model: string | undefined
-): Promise<boolean> {
-  const cleanName = makeCleanName(skillName)
+  spawn?: SpawnFn
+  createSandbox?: (skillMd: string, cleanName: string) => Promise<Sandbox>
+}
+
+export type QueryOutcome =
+  | { status: "triggered" }
+  | { status: "not_triggered" }
+  | { status: "error"; message: string }
+
+/** 1 クエリを 1 回だけ測り、発火・不発火・測定失敗を区別する。 */
+export async function runSingleQuery(
+  options: RunSingleQueryOptions
+): Promise<QueryOutcome> {
+  const cleanName = makeCleanName(options.skillName)
   // 改善ループが渡す description を frontmatter へ反映してから測る。
   // これを飛ばすと、反復しても初回の description を測り続ける。
   const measured = buildSandboxSkillMd(
-    replaceDescription(skillContent, description),
+    replaceDescription(options.skillContent, options.description),
     cleanName
   )
-  const sandbox = await createSandbox(measured, cleanName)
+  const createQuerySandbox = options.createSandbox ?? createSandbox
+  const spawnClaude = options.spawn ?? spawn
+  const sandbox = await createQuerySandbox(measured, cleanName)
 
   try {
-    const args = [
-      "-p",
-      query,
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--include-partial-messages"
-    ]
-    if (model) args.push("--model", model)
+    const child = spawnClaude(
+      "claude",
+      buildEvalArgs(options.query, options.model),
+      {
+        ...buildSpawnOptions(sandbox.dir),
+        stdio: ["ignore", "pipe", "ignore"]
+      }
+    )
 
-    const child = spawn("claude", args, {
-      cwd: sandbox.dir,
-      env: buildEnv(),
-      stdio: ["ignore", "pipe", "ignore"]
-    })
-
-    return await new Promise<boolean>((resolve) => {
-      const detector = new TriggerDetector(`${skillName}-skill-`)
+    return await new Promise<QueryOutcome>((resolve) => {
+      const detector = new TriggerDetector(`${options.skillName}-skill-`)
       let buffer = ""
       let settled = false
 
       // kill したあと、プロセスが終わるのを待ってから resolve する。
       // 待たずに抜けると、呼び出し側の finally が cwd を削る間に
       // プロセスがまだ生きている状態になりうる(移植元は kill の後 wait する)。
-      const finish = (value: boolean) => {
+      const finish = (outcome: QueryOutcome) => {
         if (settled) return
         settled = true
         clearTimeout(timer)
-        if (child.exitCode === null && child.signalCode === null) {
-          child.once("close", () => resolve(value))
-          child.kill("SIGKILL")
-          return
-        }
-        resolve(value)
+        killThenSettle(child, () => resolve(outcome))
       }
 
-      const timer = setTimeout(() => finish(false), timeout * 1000)
+      const timer = setTimeout(
+        () => finish({ status: "not_triggered" }),
+        options.timeout * 1000
+      )
 
       child.stdout.on("data", (chunk) => {
         if (settled) return
@@ -97,9 +109,14 @@ async function runSingleQuery(
         while (newline !== -1) {
           const line = buffer.slice(0, newline)
           buffer = buffer.slice(newline + 1)
+          const message = readResultError(line)
+          if (message !== null) {
+            finish({ status: "error", message })
+            return
+          }
           const verdict = detector.push(line)
           if (verdict !== null) {
-            finish(verdict)
+            finish({ status: verdict ? "triggered" : "not_triggered" })
             return
           }
           newline = buffer.indexOf("\n")
@@ -107,81 +124,138 @@ async function runSingleQuery(
       })
 
       child.on("error", (error) => {
-        process.stderr.write(`Warning: query failed: ${error.message}\n`)
-        finish(false)
+        finish({ status: "error", message: error.message })
       })
 
-      child.on("close", () => finish(false))
+      child.on("close", (code) => {
+        if (code !== 0 && code !== null) {
+          finish({ status: "error", message: `claude -p exited ${code}` })
+          return
+        }
+        finish({ status: "not_triggered" })
+      })
     })
   } finally {
     await sandbox.cleanup()
   }
 }
 
-export async function runEval(options: RunEvalOptions): Promise<EvalResult> {
-  const jobs = options.evalSet.flatMap((item) =>
-    Array.from({ length: options.runsPerQuery }, () => item)
-  )
-
-  // 1 件の失敗で eval 全体を落とさない。移植元も future の例外を False として
-  // 積み、残りを続ける(run_eval.py 221-225 行)。
-  const outcomes = await pool(jobs, options.numWorkers, async (item) => {
-    try {
-      return await runSingleQuery(
-        item.query,
-        options.skillName,
-        options.skillContent,
-        options.description,
-        options.timeout,
-        options.model
-      )
-    } catch (error) {
-      process.stderr.write(
-        `Warning: query failed: ${(error as Error).message}\n`
-      )
-      return false
-    }
-  })
-
-  const triggersByQuery = new Map<string, number[]>()
+export function aggregateOutcomes(
+  evalSet: EvalItem[],
+  jobs: EvalItem[],
+  outcomes: QueryOutcome[],
+  triggerThreshold: number
+): { results: EvalResultItem[]; errors: number } {
+  const outcomesByQuery = new Map<string, QueryOutcome[]>()
   jobs.forEach((item, index) => {
-    const list = triggersByQuery.get(item.query) ?? []
-    list.push(outcomes[index] ? 1 : 0)
-    triggersByQuery.set(item.query, list)
+    const list = outcomesByQuery.get(item.query) ?? []
+    list.push(outcomes[index])
+    outcomesByQuery.set(item.query, list)
   })
 
-  const results: EvalResultItem[] = options.evalSet.map((item) => {
-    const outcomesForQuery = triggersByQuery.get(item.query) ?? []
-    const triggers = outcomesForQuery.reduce((sum, value) => sum + value, 0)
-    const runs = outcomesForQuery.length
+  let errors = 0
+  const results = evalSet.map((item) => {
+    const outcomesForQuery = outcomesByQuery.get(item.query) ?? []
+    const queryErrors = outcomesForQuery.filter(
+      (outcome) => outcome.status === "error"
+    ).length
+    const triggers = outcomesForQuery.filter(
+      (outcome) => outcome.status === "triggered"
+    ).length
+    const runs = outcomesForQuery.length - queryErrors
     const triggerRate = runs === 0 ? 0 : triggers / runs
-    const passed = judge(
-      triggerRate,
-      item.should_trigger,
-      options.triggerThreshold
-    )
-    if (options.verbose) {
-      process.stderr.write(
-        `  [${passed ? "PASS" : "FAIL"}] rate=${triggers}/${runs} expected=${item.should_trigger}: ${item.query.slice(0, 60)}\n`
-      )
-    }
+    errors += queryErrors
+
     return {
       query: item.query,
       should_trigger: item.should_trigger,
       trigger_rate: triggerRate,
       triggers,
       runs,
-      pass: passed
+      errors: queryErrors,
+      pass: judge(triggerRate, item.should_trigger, triggerThreshold)
     }
   })
 
-  const passed = results.filter((r) => r.pass).length
+  return { results, errors }
+}
+
+export class MeasurementFailedError extends Error {
+  override readonly name = "MeasurementFailedError"
+}
+
+export function assertMeasurable(results: EvalResultItem[]): void {
+  const failed = results.find((result) => result.runs === 0)
+  if (!failed) return
+
+  throw new MeasurementFailedError(
+    `Measurement failed for query: ${failed.query}. All runs ended in errors. ` +
+      "If authentication depends on apiKeyHelper, awsAuthRefresh, or settings env, " +
+      "switch to authentication through environment variables (環境変数)."
+  )
+}
+
+export async function runEval(
+  options: RunEvalOptions,
+  deps?: { runSingleQuery?: typeof runSingleQuery }
+): Promise<EvalResult> {
+  const jobs = options.evalSet.flatMap((item) =>
+    Array.from({ length: options.runsPerQuery }, () => item)
+  )
+  const runQuery = deps?.runSingleQuery ?? runSingleQuery
+
+  // 1 件の失敗で eval 全体を落とさない。移植元も future の例外を False として
+  // 積み、残りを続ける(run_eval.py 221-225 行)。
+  const outcomes = await pool(jobs, options.numWorkers, async (item) => {
+    try {
+      return await runQuery({
+        query: item.query,
+        skillName: options.skillName,
+        skillContent: options.skillContent,
+        description: options.description,
+        timeout: options.timeout,
+        model: options.model
+      })
+    } catch (error) {
+      return {
+        status: "error" as const,
+        message: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+
+  const aggregated = aggregateOutcomes(
+    options.evalSet,
+    jobs,
+    outcomes,
+    options.triggerThreshold
+  )
+  if (aggregated.errors > 0) {
+    process.stderr.write(
+      `Warning: ${aggregated.errors} query run(s) failed and were excluded from trigger rates.\n`
+    )
+  }
+  if (options.verbose) {
+    for (const result of aggregated.results) {
+      process.stderr.write(
+        `  [${result.pass ? "PASS" : "FAIL"}] rate=${result.triggers}/${result.runs} expected=${result.should_trigger}: ${result.query.slice(0, 60)}\n`
+      )
+    }
+  }
+  assertMeasurable(aggregated.results)
+
+  const passed = aggregated.results.filter((result) => result.pass).length
   return {
     skill_name: options.skillName,
     description: options.description,
     environment: describeEnvironment(options.model),
-    results,
-    summary: { total: results.length, passed, failed: results.length - passed }
+    results: aggregated.results,
+    summary: {
+      total: aggregated.results.length,
+      passed,
+      failed: aggregated.results.length - passed
+    },
+    errors: aggregated.errors
   }
 }
 

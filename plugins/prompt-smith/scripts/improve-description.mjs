@@ -167,6 +167,19 @@ function buildEnv(env = process.env) {
 function buildSpawnOptions(cwd, env = process.env) {
   return { cwd, env: buildEnv(env) };
 }
+function buildEvalArgs(query, model) {
+  const args = [
+    "-p",
+    query,
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--include-partial-messages"
+  ];
+  if (model) args.push("--model", model);
+  args.push(...ISOLATION_ARGS);
+  return args;
+}
 function buildTextArgs(model) {
   const args = ["-p", "--output-format", "text"];
   if (model) args.push("--model", model);
@@ -323,6 +336,16 @@ async function pool(items, workers, fn) {
 }
 
 // src/lib/stream-parse.ts
+function readResultError(line) {
+  let event;
+  try {
+    event = JSON.parse(line.trim());
+  } catch {
+    return null;
+  }
+  if (event.type !== "result" || event.is_error !== true) return null;
+  return String(event.result ?? "");
+}
 function judge(triggerRate, shouldTrigger, threshold) {
   return shouldTrigger ? triggerRate >= threshold : triggerRate < threshold;
 }
@@ -397,44 +420,38 @@ var TriggerDetector = class {
 };
 
 // src/run-trigger-eval.ts
-async function runSingleQuery(query, skillName, skillContent, description, timeout, model) {
-  const cleanName = makeCleanName(skillName);
+async function runSingleQuery(options) {
+  const cleanName = makeCleanName(options.skillName);
   const measured = buildSandboxSkillMd(
-    replaceDescription(skillContent, description),
+    replaceDescription(options.skillContent, options.description),
     cleanName
   );
-  const sandbox = await createSandbox(measured, cleanName);
+  const createQuerySandbox = options.createSandbox ?? createSandbox;
+  const spawnClaude = options.spawn ?? spawn2;
+  const sandbox = await createQuerySandbox(measured, cleanName);
   try {
-    const args = [
-      "-p",
-      query,
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--include-partial-messages"
-    ];
-    if (model) args.push("--model", model);
-    const child = spawn2("claude", args, {
-      cwd: sandbox.dir,
-      env: buildEnv(),
-      stdio: ["ignore", "pipe", "ignore"]
-    });
+    const child = spawnClaude(
+      "claude",
+      buildEvalArgs(options.query, options.model),
+      {
+        ...buildSpawnOptions(sandbox.dir),
+        stdio: ["ignore", "pipe", "ignore"]
+      }
+    );
     return await new Promise((resolve) => {
-      const detector = new TriggerDetector(`${skillName}-skill-`);
+      const detector = new TriggerDetector(`${options.skillName}-skill-`);
       let buffer = "";
       let settled = false;
-      const finish = (value) => {
+      const finish = (outcome) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (child.exitCode === null && child.signalCode === null) {
-          child.once("close", () => resolve(value));
-          child.kill("SIGKILL");
-          return;
-        }
-        resolve(value);
+        killThenSettle(child, () => resolve(outcome));
       };
-      const timer = setTimeout(() => finish(false), timeout * 1e3);
+      const timer = setTimeout(
+        () => finish({ status: "not_triggered" }),
+        options.timeout * 1e3
+      );
       child.stdout.on("data", (chunk) => {
         if (settled) return;
         buffer += String(chunk);
@@ -442,85 +459,130 @@ async function runSingleQuery(query, skillName, skillContent, description, timeo
         while (newline !== -1) {
           const line = buffer.slice(0, newline);
           buffer = buffer.slice(newline + 1);
+          const message = readResultError(line);
+          if (message !== null) {
+            finish({ status: "error", message });
+            return;
+          }
           const verdict = detector.push(line);
           if (verdict !== null) {
-            finish(verdict);
+            finish({ status: verdict ? "triggered" : "not_triggered" });
             return;
           }
           newline = buffer.indexOf("\n");
         }
       });
       child.on("error", (error) => {
-        process.stderr.write(`Warning: query failed: ${error.message}
-`);
-        finish(false);
+        finish({ status: "error", message: error.message });
       });
-      child.on("close", () => finish(false));
+      child.on("close", (code) => {
+        if (code !== 0 && code !== null) {
+          finish({ status: "error", message: `claude -p exited ${code}` });
+          return;
+        }
+        finish({ status: "not_triggered" });
+      });
     });
   } finally {
     await sandbox.cleanup();
   }
 }
-async function runEval(options) {
-  const jobs = options.evalSet.flatMap(
-    (item) => Array.from({ length: options.runsPerQuery }, () => item)
-  );
-  const outcomes = await pool(jobs, options.numWorkers, async (item) => {
-    try {
-      return await runSingleQuery(
-        item.query,
-        options.skillName,
-        options.skillContent,
-        options.description,
-        options.timeout,
-        options.model
-      );
-    } catch (error) {
-      process.stderr.write(
-        `Warning: query failed: ${error.message}
-`
-      );
-      return false;
-    }
-  });
-  const triggersByQuery = /* @__PURE__ */ new Map();
+function aggregateOutcomes(evalSet, jobs, outcomes, triggerThreshold) {
+  const outcomesByQuery = /* @__PURE__ */ new Map();
   jobs.forEach((item, index) => {
-    const list = triggersByQuery.get(item.query) ?? [];
-    list.push(outcomes[index] ? 1 : 0);
-    triggersByQuery.set(item.query, list);
+    const list = outcomesByQuery.get(item.query) ?? [];
+    list.push(outcomes[index]);
+    outcomesByQuery.set(item.query, list);
   });
-  const results = options.evalSet.map((item) => {
-    const outcomesForQuery = triggersByQuery.get(item.query) ?? [];
-    const triggers = outcomesForQuery.reduce((sum, value) => sum + value, 0);
-    const runs = outcomesForQuery.length;
+  let errors = 0;
+  const results = evalSet.map((item) => {
+    const outcomesForQuery = outcomesByQuery.get(item.query) ?? [];
+    const queryErrors = outcomesForQuery.filter(
+      (outcome) => outcome.status === "error"
+    ).length;
+    const triggers = outcomesForQuery.filter(
+      (outcome) => outcome.status === "triggered"
+    ).length;
+    const runs = outcomesForQuery.length - queryErrors;
     const triggerRate = runs === 0 ? 0 : triggers / runs;
-    const passed2 = judge(
-      triggerRate,
-      item.should_trigger,
-      options.triggerThreshold
-    );
-    if (options.verbose) {
-      process.stderr.write(
-        `  [${passed2 ? "PASS" : "FAIL"}] rate=${triggers}/${runs} expected=${item.should_trigger}: ${item.query.slice(0, 60)}
-`
-      );
-    }
+    errors += queryErrors;
     return {
       query: item.query,
       should_trigger: item.should_trigger,
       trigger_rate: triggerRate,
       triggers,
       runs,
-      pass: passed2
+      errors: queryErrors,
+      pass: judge(triggerRate, item.should_trigger, triggerThreshold)
     };
   });
-  const passed = results.filter((r) => r.pass).length;
+  return { results, errors };
+}
+var MeasurementFailedError = class extends Error {
+  name = "MeasurementFailedError";
+};
+function assertMeasurable(results) {
+  const failed = results.find((result) => result.runs === 0);
+  if (!failed) return;
+  throw new MeasurementFailedError(
+    `Measurement failed for query: ${failed.query}. All runs ended in errors. If authentication depends on apiKeyHelper, awsAuthRefresh, or settings env, switch to authentication through environment variables (\u74B0\u5883\u5909\u6570).`
+  );
+}
+async function runEval(options, deps) {
+  const jobs = options.evalSet.flatMap(
+    (item) => Array.from({ length: options.runsPerQuery }, () => item)
+  );
+  const runQuery = deps?.runSingleQuery ?? runSingleQuery;
+  const outcomes = await pool(jobs, options.numWorkers, async (item) => {
+    try {
+      return await runQuery({
+        query: item.query,
+        skillName: options.skillName,
+        skillContent: options.skillContent,
+        description: options.description,
+        timeout: options.timeout,
+        model: options.model
+      });
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+  });
+  const aggregated = aggregateOutcomes(
+    options.evalSet,
+    jobs,
+    outcomes,
+    options.triggerThreshold
+  );
+  if (aggregated.errors > 0) {
+    process.stderr.write(
+      `Warning: ${aggregated.errors} query run(s) failed and were excluded from trigger rates.
+`
+    );
+  }
+  if (options.verbose) {
+    for (const result of aggregated.results) {
+      process.stderr.write(
+        `  [${result.pass ? "PASS" : "FAIL"}] rate=${result.triggers}/${result.runs} expected=${result.should_trigger}: ${result.query.slice(0, 60)}
+`
+      );
+    }
+  }
+  assertMeasurable(aggregated.results);
+  const passed = aggregated.results.filter((result) => result.pass).length;
   return {
     skill_name: options.skillName,
     description: options.description,
     environment: describeEnvironment(options.model),
-    results,
-    summary: { total: results.length, passed, failed: results.length - passed }
+    results: aggregated.results,
+    summary: {
+      total: aggregated.results.length,
+      passed,
+      failed: aggregated.results.length - passed
+    },
+    errors: aggregated.errors
   };
 }
 function parseNumericOption(name, value, defaultValue, integer = false) {

@@ -27,6 +27,7 @@ const output = {
           trigger_rate: 0,
           triggers: 0,
           runs: 3,
+          errors: 0,
           pass: false
         }
       ],

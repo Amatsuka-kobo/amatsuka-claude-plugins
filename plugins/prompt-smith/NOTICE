@@ -49,6 +49,11 @@ run_eval.py -> src/run-trigger-eval.ts (with src/lib/ as listed above)
   8. The measured description is applied to the SKILL.md frontmatter before
      staging, because this port copies the whole SKILL.md rather than
      building a file from the description alone.
+  17. CLI startup and execution failures are recorded as errors instead of
+      non-triggers. In particular, result events are checked for is_error
+      before the upstream detector treats every result as a non-trigger. If
+      every run for any query fails, evaluation stops without returning a
+      result.
 
   The child-process isolation and cleanup changes are shared with
   improve_description.py; see items 15 and 16 below.
