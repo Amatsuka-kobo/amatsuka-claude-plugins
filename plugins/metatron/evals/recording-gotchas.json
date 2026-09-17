@@ -4,7 +4,7 @@
     "should_trigger": true
   },
   {
-    "query": "`vitest.config.ts` に `environment: node` を書き忘れると、うちのテストだけ無言で 0 件パスになります。今日それで 1 時間溶かしたので記録しておきたい。",
+    "query": "これ次も絶対踏む。`vitest.config.ts` に `environment: node` 無いとテスト無言で 0 件パスになるやつ",
     "should_trigger": true
   },
   {
@@ -20,7 +20,7 @@
     "should_trigger": true
   },
   {
-    "query": "レビューで設計漏れが発覚して手戻りしました。原因は `docs/ARCHITECTURE.md` の保護パスを読まずに `infra/` を書き換えたことです。台帳に追記してから次に進みたい。",
+    "query": "残しといて。次も同じとこで止まると無駄",
     "should_trigger": true
   },
   {
@@ -32,7 +32,7 @@
     "should_trigger": true
   },
   {
-    "query": "実行を途中で止めた判断の理由を残しておきたいです。`docs/GOTCHAS.md` にあるかどうか先に確認して、重複してなければ追記してください。",
+    "query": "メモ残しといて。pnpm build 先に走らせないと古いバンドルでテスト通るやつ",
     "should_trigger": true
   },
   {

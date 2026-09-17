@@ -24,11 +24,11 @@
     "should_trigger": true
   },
   {
-    "query": "the architecture doc at `docs/ARCHITECTURE.md` still lists `npm run dev` but we moved to pnpm and renamed half the scripts last sprint. please diff it against the repo and fix whatever drifted, one finding at a time.",
+    "query": "ARCHITECTURE、今の実装と合ってる? ずれてたら直して",
     "should_trigger": true
   },
   {
-    "query": "ドキュメントを実装に合わせて直して。あと `## システム概要` の散文が「単一の Rails アプリ」って書いてあるけど、もう API が分離してるので直したい",
+    "query": "ADR に残して。前提だった方は廃止で",
     "should_trigger": true
   },
   {
@@ -36,7 +36,7 @@
     "should_trigger": true
   },
   {
-    "query": "`pnpm test:e2e` と `pnpm db:migrate` を新しく足したので、コマンド定義の節に反映してください。書き込む前に diff を全部見せてほしいです。",
+    "query": "更新しといて。他もズレてたら一緒に",
     "should_trigger": true
   },
   {
