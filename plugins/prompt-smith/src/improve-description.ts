@@ -19,6 +19,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, extname, join } from "node:path"
 import { parseArgs } from "node:util"
 import { callClaudeText } from "./lib/claude-cli.js"
+import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import type { EvalResultItem, EvalSummary } from "./lib/types.js"
 import { parseNumericOption } from "./run-trigger-eval.js"
@@ -56,7 +57,7 @@ type CallClaude = (
 ) => Promise<string>
 
 export interface ImproveOptions extends ImprovePromptInput {
-  model: string | undefined
+  model?: string
   callClaude?: CallClaude
   timeoutSeconds?: number
   logDir?: string
@@ -293,7 +294,7 @@ export async function improveDescription(
 ): Promise<string> {
   const {
     callClaude = callClaudeText,
-    model,
+    model = DEFAULT_MODEL,
     timeoutSeconds,
     logDir,
     iteration,
@@ -379,7 +380,6 @@ async function main(): Promise<void> {
   })
   if (!values["eval-results"]) throw new Error("--eval-results is required")
   if (!values["skill-path"]) throw new Error("--skill-path is required")
-  if (!values.model) throw new Error("--model is required")
 
   const skillPath = values["skill-path"]
   let skillContent: string
@@ -412,7 +412,11 @@ async function main(): Promise<void> {
     history,
     testResults: null,
     model: values.model,
-    timeoutSeconds: parseNumericOption("timeout", values.timeout, 300),
+    timeoutSeconds: parseNumericOption(
+      "timeout",
+      values.timeout,
+      DEFAULTS.improveTimeout
+    ),
     logDir: values["log-dir"],
     iteration: values.iteration ? Number(values.iteration) : undefined
   })

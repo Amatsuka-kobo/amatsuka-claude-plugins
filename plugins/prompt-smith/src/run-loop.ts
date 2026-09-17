@@ -28,6 +28,7 @@ import {
   improveDescription as defaultImproveDescription,
   type ImproveOptions
 } from "./improve-description.js"
+import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { splitEvalSet } from "./lib/split-eval-set.js"
 import type {
@@ -49,7 +50,7 @@ type RunEval = (options: RunEvalOptions) => Promise<EvalResult>
 type ImproveDescription = (options: ImproveOptions) => Promise<string>
 
 export function parseImproveTimeout(value: string | undefined): number {
-  return parseNumericOption("improve-timeout", value, 300)
+  return parseNumericOption("improve-timeout", value, DEFAULTS.improveTimeout)
 }
 
 export interface RunLoopOptions {
@@ -65,7 +66,7 @@ export interface RunLoopOptions {
   runsPerQuery?: number
   triggerThreshold?: number
   holdout?: number
-  model: string
+  model?: string
   verbose?: boolean
   logDir?: string
   runEval?: RunEval
@@ -176,14 +177,14 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
     skillContent,
     originalDescription,
     descriptionOverride,
-    numWorkers = 10,
-    timeout = 30,
-    improveTimeout = 300,
-    maxIterations = 5,
-    runsPerQuery = 3,
-    triggerThreshold = 0.5,
-    holdout = 0.4,
-    model,
+    numWorkers = DEFAULTS.numWorkers,
+    timeout = DEFAULTS.timeout,
+    improveTimeout = DEFAULTS.improveTimeout,
+    maxIterations = DEFAULTS.maxIterations,
+    runsPerQuery = DEFAULTS.runsPerQuery,
+    triggerThreshold = DEFAULTS.triggerThreshold,
+    holdout = DEFAULTS.holdout,
+    model = DEFAULT_MODEL,
     verbose = false,
     logDir,
     runEval = defaultRunEval,
@@ -431,7 +432,6 @@ async function main(): Promise<void> {
 
   if (!values["eval-set"]) throw new Error("--eval-set is required")
   if (!values["skill-path"]) throw new Error("--skill-path is required")
-  if (!values.model) throw new Error("--model is required")
 
   let skillContent: string
   try {
@@ -489,29 +489,29 @@ async function main(): Promise<void> {
     numWorkers: parseNumericOption(
       "num-workers",
       values["num-workers"],
-      10,
+      DEFAULTS.numWorkers,
       true
     ),
-    timeout: parseNumericOption("timeout", values.timeout, 30),
+    timeout: parseNumericOption("timeout", values.timeout, DEFAULTS.timeout),
     improveTimeout: parseImproveTimeout(values["improve-timeout"]),
     maxIterations: parseNumericOption(
       "max-iterations",
       values["max-iterations"],
-      5,
+      DEFAULTS.maxIterations,
       true
     ),
     runsPerQuery: parseNumericOption(
       "runs-per-query",
       values["runs-per-query"],
-      3,
+      DEFAULTS.runsPerQuery,
       true
     ),
     triggerThreshold: parseNumericOption(
       "trigger-threshold",
       values["trigger-threshold"],
-      0.5
+      DEFAULTS.triggerThreshold
     ),
-    holdout: parseNumericOption("holdout", values.holdout, 0.4),
+    holdout: parseNumericOption("holdout", values.holdout, DEFAULTS.holdout),
     model: values.model,
     verbose: values.verbose,
     logDir: resultsDir ? join(resultsDir, "logs") : undefined,
