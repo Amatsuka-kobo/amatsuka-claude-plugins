@@ -14,7 +14,6 @@ description: |-
 
   skill / command / output-style / references のファイルは対象外。subagent の概念説明だけの質問には使わない。
 ---
-
 # Agent 定義の作成
 
 対象は `.claude/agents/*.md` と `plugins/*/agents/*.md` である。
@@ -29,11 +28,13 @@ description: |-
 
 ### 2. 配置を決める
 
-| 配置                     | 使う場面             |
-| ------------------------ | -------------------- |
+
+| 配置                       | 使う場面       |
+| ------------------------ | ---------- |
 | `.claude/agents/`        | このプロジェクト専用 |
 | `~/.claude/agents/`      | 全プロジェクトで使う |
 | `plugins/<name>/agents/` | プラグインとして配る |
+
 
 配置で使えるフィールドが変わる。
 
@@ -50,7 +51,7 @@ description: |-
 
 ### 5. 本文を書く
 
-- `prompt-smith:prompt-smith` を読み、必ずこの規律に従う。
+- `prompt-smith:prompt-smith` を使用し、必ずその規律に従う。
 - 何をする agent か、どう進めるか、何を返すかを書く。
 
 ### 6. 既存定義を点検する
@@ -58,3 +59,4 @@ description: |-
 - 手順 3・4・5 の基準を既存の記述に当て、逸脱箇所を挙げる。
 - `tools` に、本文が使わないツールが含まれていないかを照合する。
 - `../../references/agent-definition-spec.md` §配置による制約 に照らし、その配置で使えないフィールドが書かれていないかを確認する。
+

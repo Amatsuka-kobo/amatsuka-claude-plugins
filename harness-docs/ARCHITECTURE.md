@@ -117,7 +117,6 @@
 | test | `pnpm run test` |
 
 - いずれも `pnpm install` が済んでいることを前提とする。
-- 初回のセットアップは `bash scripts/setup-workspace.sh` で行う。`pnpm install` と `pnpm run build` をまとめて実行する。
 - 単一のプラグインだけをビルドするときは `pnpm --filter <plugin>-scripts build` を使う。
 
 ## ADR 一覧

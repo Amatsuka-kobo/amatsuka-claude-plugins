@@ -2,12 +2,6 @@
 
 あまつか工房産 Claude Code プラグインの Marketplace
 
-## 前提と規律の在り処
-
-- 技術スタック・レイヤー構造・ディレクトリ構成・ドメインマップ・コマンドは `harness-docs/ARCHITECTURE.md` にあり、SessionStart hook が全文を注入する。
-- 注入が届いていないときは `harness-docs/ARCHITECTURE.md` を読む。
-- `harness-docs/ARCHITECTURE.md` と `harness-docs/GOTCHAS.md` と `.claude/rules/metatron/*.md` は直接編集せず、metatron の CLI で更新する。
-
 ## スクリプトツール
 
 - セッション内で使用する、一時スクリプト以外のツールは `Python` で作成し、`tools/` に配置する。
@@ -16,7 +10,6 @@
 ## git の運用
 
 - ブランチを切らない。切る必要があると判断したときは git worktree を使い、worktree 内で `scripts/setup-workspace.sh` を使用する。
-- `git push` に `--force` / `-f` / `--force-with-lease` / `--force-if-includes` を付けない。履歴を書き換えずに済む方法を取る。
 
 ## goal コマンド
 
