@@ -103,3 +103,7 @@
 - `2026/0915/phyllis998/1915-codiel-domain-decoupling-investigation.md` | 2026-09-15 | phyllis998 | ドメインマップ依存の解消 — ADR-003・実装完了
 - `2026/0916/phyllis998/0832-adr-boundary-implementation.md` | 2026-09-16 | phyllis998 | ADRエントリ間区切り線の実装を毎回正規化で統一、format-change-checklistに書式を追加
 - `2026/0916/phyllis998/1033-api-credentials-check.md` | 2026-09-16 | phyllis998 | owned_by=antigravity のモデル ID を一覧表示
+- `2026/0916/phyllis998/1127-doc-writing-role-spec.md` | 2026-09-16 | phyllis998 | CLIProxyAPI 調査記録作成・document-writer を gpt-terra に差し替え
+- `2026/0916/phyllis998/1620-agent-policy-role-id-design.md` | 2026-09-16 | phyllis998 | Gemini API 課金体系の調査と README 注記方針の決定
+- `2026/0916/phyllis998/1653-agent-policy-doc-writing-role-design.md` | 2026-09-16 | phyllis998 | document-writer(gpt-terra)動作確認とCLAUDE.mdのコミット完了
+- `2026/0917/phyllis998/0203-doc-writing-discipline.md` | 2026-09-17 | phyllis998 | document-writer の disallowedTools 定義の誤りを判定し、修正方針を決定する
