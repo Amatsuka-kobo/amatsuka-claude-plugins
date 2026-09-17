@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   type ImproveOptions,
+  improveDescription,
   MissingDescriptionTagError
 } from "../improve-description.js"
 import {
@@ -9,7 +10,7 @@ import {
   runLoop,
   selectBest
 } from "../run-loop.js"
-import { MeasurementFailedError } from "../run-trigger-eval.js"
+import { MeasurementFailedError, runEval } from "../run-trigger-eval.js"
 
 const record = (iteration: number, train: number, test: number) => ({
   iteration,
@@ -62,6 +63,52 @@ describe("parseImproveTimeout", () => {
   })
 })
 
+describe("既定モデル", () => {
+  it("runEval は model 未指定時に sonnet を使い、環境情報へ記録する", async () => {
+    const runSingleQuery = vi.fn(async (_options: { model?: string }) => ({
+      status: "triggered" as const
+    }))
+
+    const result = await runEval(
+      {
+        evalSet: [{ query: "positive", should_trigger: true }],
+        skillName: "s",
+        skillContent: "body",
+        description: "description",
+        runsPerQuery: 1,
+        numWorkers: 1,
+        timeout: 30,
+        triggerThreshold: 0.5
+      },
+      { runSingleQuery }
+    )
+
+    expect(runSingleQuery.mock.calls[0]?.[0].model).toBe("sonnet")
+    expect(result.environment.model).toBe("sonnet")
+  })
+
+  it("improveDescription は model 未指定時に sonnet を使う", async () => {
+    const callClaude = vi
+      .fn()
+      .mockResolvedValue("<new_description>improved</new_description>")
+
+    await improveDescription({
+      skillName: "s",
+      skillContent: "body",
+      currentDescription: "current",
+      evalResults: {
+        results: [],
+        summary: { total: 0, passed: 0, failed: 0 }
+      },
+      history: [],
+      testResults: null,
+      callClaude
+    })
+
+    expect(callClaude.mock.calls[0]?.[1]).toBe("sonnet")
+  })
+})
+
 describe("runLoop", () => {
   const evalSet = [
     ...Array.from({ length: 10 }, (_, i) => ({
@@ -92,6 +139,23 @@ describe("runLoop", () => {
       pass: true
     })),
     summary: { total: queries.length, passed: queries.length, failed: 0 }
+  })
+
+  it("model 未指定時に sonnet を測定へ渡す", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) => allPass(queries))
+
+    await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0,
+      maxIterations: 1,
+      runEval,
+      improveDescription: vi.fn()
+    })
+
+    expect(runEval.mock.calls[0]?.[0].model).toBe("sonnet")
   })
 
   it("train が全問合格したら打ち切る", async () => {

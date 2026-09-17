@@ -433,6 +433,18 @@ stderr: ${stderr}`));
   }
 }
 
+// src/lib/defaults.ts
+var DEFAULT_MODEL = "sonnet";
+var DEFAULTS = {
+  runsPerQuery: 3,
+  numWorkers: 10,
+  timeout: 30,
+  triggerThreshold: 0.5,
+  holdout: 0.4,
+  maxIterations: 5,
+  improveTimeout: 300
+};
+
 // src/lib/parse-skill-md.ts
 function stripChar(value, ch) {
   let start = 0;
@@ -703,6 +715,7 @@ function assertMeasurable(results) {
   );
 }
 async function runEval(options, deps) {
+  const { model = DEFAULT_MODEL } = options;
   const jobs = options.evalSet.flatMap(
     (item) => Array.from({ length: options.runsPerQuery }, () => item)
   );
@@ -715,7 +728,7 @@ async function runEval(options, deps) {
         skillContent: options.skillContent,
         description: options.description,
         timeout: options.timeout,
-        model: options.model
+        model
       });
     } catch (error) {
       return {
@@ -767,7 +780,7 @@ async function runEval(options, deps) {
   return {
     skill_name: options.skillName,
     description: options.description,
-    environment: describeEnvironment(options.model),
+    environment: describeEnvironment(model),
     results: aggregated.results,
     summary: {
       total: aggregated.results.length,
@@ -838,20 +851,20 @@ async function main() {
     runsPerQuery: parseNumericOption(
       "runs-per-query",
       values["runs-per-query"],
-      3,
+      DEFAULTS.runsPerQuery,
       true
     ),
     numWorkers: parseNumericOption(
       "num-workers",
       values["num-workers"],
-      10,
+      DEFAULTS.numWorkers,
       true
     ),
-    timeout: parseNumericOption("timeout", values.timeout, 30),
+    timeout: parseNumericOption("timeout", values.timeout, DEFAULTS.timeout),
     triggerThreshold: parseNumericOption(
       "trigger-threshold",
       values["trigger-threshold"],
-      0.5
+      DEFAULTS.triggerThreshold
     ),
     model: values.model,
     verbose: values.verbose
@@ -1052,7 +1065,7 @@ async function writeTranscript(logDir, iteration, transcript) {
 async function improveDescription(options) {
   const {
     callClaude = callClaudeText,
-    model,
+    model = DEFAULT_MODEL,
     timeoutSeconds,
     logDir,
     iteration,
@@ -1131,7 +1144,6 @@ async function main2() {
   });
   if (!values["eval-results"]) throw new Error("--eval-results is required");
   if (!values["skill-path"]) throw new Error("--skill-path is required");
-  if (!values.model) throw new Error("--model is required");
   const skillPath = values["skill-path"];
   let skillContent;
   try {
@@ -1160,7 +1172,11 @@ async function main2() {
     history,
     testResults: null,
     model: values.model,
-    timeoutSeconds: parseNumericOption("timeout", values.timeout, 300),
+    timeoutSeconds: parseNumericOption(
+      "timeout",
+      values.timeout,
+      DEFAULTS.improveTimeout
+    ),
     logDir: values["log-dir"],
     iteration: values.iteration ? Number(values.iteration) : void 0
   });
@@ -1240,7 +1256,7 @@ function splitEvalSet(evalSet, holdout, seed = 42) {
 
 // src/run-loop.ts
 function parseImproveTimeout(value) {
-  return parseNumericOption("improve-timeout", value, 300);
+  return parseNumericOption("improve-timeout", value, DEFAULTS.improveTimeout);
 }
 function score(record, hasTestSet) {
   return hasTestSet ? record.test_passed ?? 0 : record.train_passed;
@@ -1312,14 +1328,14 @@ async function runLoop(options) {
     skillContent,
     originalDescription,
     descriptionOverride,
-    numWorkers = 10,
-    timeout = 30,
-    improveTimeout = 300,
-    maxIterations = 5,
-    runsPerQuery = 3,
-    triggerThreshold = 0.5,
-    holdout = 0.4,
-    model,
+    numWorkers = DEFAULTS.numWorkers,
+    timeout = DEFAULTS.timeout,
+    improveTimeout = DEFAULTS.improveTimeout,
+    maxIterations = DEFAULTS.maxIterations,
+    runsPerQuery = DEFAULTS.runsPerQuery,
+    triggerThreshold = DEFAULTS.triggerThreshold,
+    holdout = DEFAULTS.holdout,
+    model = DEFAULT_MODEL,
     verbose = false,
     logDir,
     runEval: runEval2 = runEval,
@@ -1560,7 +1576,6 @@ async function main3() {
   });
   if (!values["eval-set"]) throw new Error("--eval-set is required");
   if (!values["skill-path"]) throw new Error("--skill-path is required");
-  if (!values.model) throw new Error("--model is required");
   let skillContent;
   try {
     skillContent = await readFile3(
@@ -1608,29 +1623,29 @@ async function main3() {
     numWorkers: parseNumericOption(
       "num-workers",
       values["num-workers"],
-      10,
+      DEFAULTS.numWorkers,
       true
     ),
-    timeout: parseNumericOption("timeout", values.timeout, 30),
+    timeout: parseNumericOption("timeout", values.timeout, DEFAULTS.timeout),
     improveTimeout: parseImproveTimeout(values["improve-timeout"]),
     maxIterations: parseNumericOption(
       "max-iterations",
       values["max-iterations"],
-      5,
+      DEFAULTS.maxIterations,
       true
     ),
     runsPerQuery: parseNumericOption(
       "runs-per-query",
       values["runs-per-query"],
-      3,
+      DEFAULTS.runsPerQuery,
       true
     ),
     triggerThreshold: parseNumericOption(
       "trigger-threshold",
       values["trigger-threshold"],
-      0.5
+      DEFAULTS.triggerThreshold
     ),
-    holdout: parseNumericOption("holdout", values.holdout, 0.4),
+    holdout: parseNumericOption("holdout", values.holdout, DEFAULTS.holdout),
     model: values.model,
     verbose: values.verbose,
     logDir: resultsDir ? join4(resultsDir, "logs") : void 0,

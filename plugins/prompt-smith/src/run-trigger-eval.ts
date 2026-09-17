@@ -24,6 +24,7 @@ import {
   killThenSettle,
   type SpawnFn
 } from "./lib/claude-cli.js"
+import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { pool } from "./lib/pool.js"
 import {
@@ -199,6 +200,7 @@ export async function runEval(
   options: RunEvalOptions,
   deps?: { runSingleQuery?: typeof runSingleQuery }
 ): Promise<EvalResult> {
+  const { model = DEFAULT_MODEL } = options
   const jobs = options.evalSet.flatMap((item) =>
     Array.from({ length: options.runsPerQuery }, () => item)
   )
@@ -214,7 +216,7 @@ export async function runEval(
         skillContent: options.skillContent,
         description: options.description,
         timeout: options.timeout,
-        model: options.model
+        model
       })
     } catch (error) {
       return {
@@ -265,7 +267,7 @@ export async function runEval(
   return {
     skill_name: options.skillName,
     description: options.description,
-    environment: describeEnvironment(options.model),
+    environment: describeEnvironment(model),
     results: aggregated.results,
     summary: {
       total: aggregated.results.length,
@@ -357,20 +359,20 @@ async function main(): Promise<void> {
     runsPerQuery: parseNumericOption(
       "runs-per-query",
       values["runs-per-query"],
-      3,
+      DEFAULTS.runsPerQuery,
       true
     ),
     numWorkers: parseNumericOption(
       "num-workers",
       values["num-workers"],
-      10,
+      DEFAULTS.numWorkers,
       true
     ),
-    timeout: parseNumericOption("timeout", values.timeout, 30),
+    timeout: parseNumericOption("timeout", values.timeout, DEFAULTS.timeout),
     triggerThreshold: parseNumericOption(
       "trigger-threshold",
       values["trigger-threshold"],
-      0.5
+      DEFAULTS.triggerThreshold
     ),
     model: values.model,
     verbose: values.verbose
