@@ -8,32 +8,33 @@
 - TypeScript / JavaScript / Markdown / Python の作成と編集は Serena の編集ツールで行う。
 - ライブラリ・フレームワーク・CLI・API の仕様、セットアップ手順、コード生成の方法が要るときは Context7 で取る。Web 検索より優先する。
 
-## プラグイン開発
+## プラグインのバージョン
 
-- Anthropic API のクライアントを追加しない。`ANTHROPIC_API_KEY` を前提にした実装をしない。ユーザーに CLI の直接操作を要求しない。LLM が必要な処理は Claude Code の機構か `claude` CLI のヘッドレス実行で行う。
-- プラグインが実行するスクリプトは TypeScript で書く。
-- Agents 定義は `prompt-smith:agent-creator` で作る。
-- Skills は `prompt-smith:skill-creator` で作る。
-- README や DESIGN 以外の文書は `prompt-smith:prompt-smith` で作る。
-- プラグインを追加するときは `.claude-plugin/marketplace.json` に登録し、`plugins/<plugin>/.claude-plugin/plugin.json` を作る。スクリプトを持つプラグインは `pnpm-workspace.yaml` の `packages` に追記する。
-- プラグインは他プラグインの存在を前提とせず、単体で使えるようにする。skills / agents / commands / references に他プラグインの名前を書かない。
+プラグインのバージョンは、以下の規則によって決定する。
+
+- 形式は `x1.x2.x3` とし、x1はメジャーバージョン、x2はマイナーバージョン、x3はパッチバージョンと呼称する。
+- 開発中のプラグインは末尾に `-dev` と付け、付けていないものはリリース済みのものである。
+- プラグインを改修したときはパッチバージョンを上げ、大規模で影響範囲が広い時はマイナーバージョンを上げる。
 
 ## 文書配置
 
-- 利用者が読まないと使えない情報は `plugins/<plugin>/README.md` に置く。
-- 設計・背景・根拠・経緯・不採用案が必要な時は `plugins/<plugin>/docs/` に置く。
-- 複数のスキルとエージェントで共有する規律と参照断片は `plugins/<plugin>/references/` に置く。
-- 設計書と実装計画書は `harness-docs/` に置く。
+- プラグインの利用者が読まないと使えない情報は `plugins/<plugin>/README.md` に置く。
+- プラグインの設計・背景・根拠・経緯・不採用案が必要な時は `plugins/<plugin>/docs/` に置く。
+- 設計書と実装計画書、その他主な読者がAIである文書は `harness-docs/` に置く。
 - プラグインに関わる ADR は、タイトルを `[<プラグイン名>] <タイトル>` の形にする。
 
 ## AI 向けの指示書
 
-以下に挙げる文書は AI 向けの指示書であり、作成・編集するときは必ず `prompt-smith` を使用し、その規律にしたがう。
+以下に挙げる文書は AI 向けの指示書であり、作成・編集するときは必ず `prompt-smith` プラグインを使用し、その規律にしたがう。
 
 - `CLAUDE.md`
 - `docs/prompts/`
 - `harness-docs/`
-- `.claude/rules/`
+- `.claude/rules/` 
+- `.claude/agents/` 
+- `.claude/output-styles/`
+- `SKILL.md` 
+- `plugins/<plugin>/references/`
 
 ## Done の条件
 

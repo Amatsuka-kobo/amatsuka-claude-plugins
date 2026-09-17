@@ -2,7 +2,6 @@
 name: skill-creator
 description: スキルまたはコマンド定義を新しく作るとき、既存のスキル構造や description を改善するときに必ず使用する。用途の聞き取り、配置と同梱物の設計、SKILL.md の作成、テストケースによる出力評価、eval セットの作成とレビュー、発火測定、description の改善ループを担当する。AI 向け指示書の本文だけを整える依頼は prompt-smith が担当し、Agent 定義の作成や検証は agent-creator が担当する。
 ---
-
 # スキルの作成
 
 対象は SKILL.md、スキルの同梱物、`commands/*.md` のコマンド定義とする。
@@ -11,45 +10,45 @@ description: スキルまたはコマンド定義を新しく作るとき、既�
 ## 手順
 
 1. 用途を聞く。
-   - 何をするスキルかを聞く。
-   - いつ発火すべきかを聞く。
-   - 出力の形式を聞く。
-   - テストケースの要否を判断する。
-   - 会話に既に現れている情報は抽出し、埋まらない箇所だけを聞く。
+  - 何をするスキルかを聞く。
+  - いつ発火すべきかを聞く。
+  - 出力の形式を聞く。
+  - テストケースの要否を判断する。
+  - 会話に既に現れている情報は抽出し、埋まらない箇所だけを聞く。
 2. 詳細を詰める。
-   - edge case を聞く。
-   - 入出力形式を聞く。
-   - 例示ファイルの有無を聞く。
-   - 成功条件を聞く。
-   - 依存を聞く。
-   - 使える MCP があるときは、先に調べてから質問する。
+  - edge case を聞く。
+  - 入出力形式を聞く。
+  - 例示ファイルの有無を聞く。
+  - 成功条件を聞く。
+  - 依存を聞く。
+  - 使える MCP があるときは、先に調べてから質問する。
 3. 配置を決める。
-   - プラグイン同梱のスキルは `plugins/<plugin>/skills/<name>/` に置く。
-   - プロジェクトのスキルは `.claude/skills/<name>/` に置く。
-   - ユーザーのスキルは `~/.claude/skills/<name>/` に置く。
+  - プラグイン同梱のスキルは `plugins/<plugin>/skills/<name>/` に置く。
+  - プロジェクトのスキルは `.claude/skills/<name>/` に置く。
+  - ユーザーのスキルは `~/.claude/skills/<name>/` に置く。
 4. 構成を決める。
-   - SKILL.md 単体で足りるかを判断する。
-   - 決まりきった処理があるときは `scripts/` を加える。
-   - 必要なときだけ読む文書があるときは `references/` を加える。
-   - 出力に使う素材があるときは `assets/` を加える。
+  - SKILL.md 単体で足りるかを判断する。
+  - 決まりきった処理があるときは `scripts/` を加える。
+  - 必要なときだけ読む文書があるときは `references/` を加える。
+  - 出力に使う素材があるときは `assets/` を加える。
 5. 本文を書く。
-   - スキルの構造は「スキルの構造」に従う。
-   - 文章は `prompt-smith:prompt-smith` の基準に従う。
+  - スキルの構造は「スキルの構造」に従う。
+  - 文章は `prompt-smith:prompt-smith` を使用し、必ずその規律に従う。
 6. description を書く。
-   - 「description の規律」に従う。
-   - `../../references/description-guide.md` の共通基準に従う。
+  - 「description の規律」に従う。
+  - `../../references/description-guide.md` の共通基準に従う。
 7. 出力を評価する。
-   - テストケースを作ると合意したときだけ「出力の評価」を行う。
+  - テストケースを作ると合意したときだけ「出力の評価」を行う。
 8. eval セットの有無を確かめる。
-   - eval セットが無いときは「eval セット」に従って作る。
+  - eval セットが無いときは「eval セット」に従って作る。
 9. eval セットの承認を得る。
-   - 「eval セット」のレビュー手順に従う。
+  - 「eval セット」のレビュー手順に従う。
 10. eval セットを保存する。
-    - 承認済みの内容を「eval セット」の置き場へ保存する。
+  - 承認済みの内容を「eval セット」の置き場へ保存する。
 11. description の改善ループを回す。
-    - `${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs` を使う。
+  - `${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs` を使う。
 12. 最良の description を適用する。
-    - 出力の `best_description` を SKILL.md に書く。
+  - 出力の `best_description` を SKILL.md に書く。
     - 変更前後の description を示す。
     - 変更前後のスコアを示す。
 
@@ -89,11 +88,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 
 ### 三層のロード
 
-| 層 | 内容 | 読まれる時 |
-| --- | --- | --- |
-| メタデータ | `name` と `description` | 常時 |
-| 本文 | SKILL.md の本体 | 発火した時 |
-| 同梱物 | `scripts/`・`references/`・`assets/` | 必要になった時 |
+
+| 層     | 内容                                 | 読まれる時   |
+| ----- | ---------------------------------- | ------- |
+| メタデータ | `name` と `description`             | 常時      |
+| 本文    | SKILL.md の本体                       | 発火した時   |
+| 同梱物   | `scripts/`・`references/`・`assets/` | 必要になった時 |
+
 
 - SKILL.md は 500 行以内を目安にする。
 - SKILL.md が 500 行を超えるときは階層を足す。
@@ -162,11 +163,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 
 ### 置き場
 
-| 形態 | 置き場 |
-| --- | --- |
-| プラグイン同梱 | `plugins/<plugin>/evals/<skill-name>.json` |
-| プロジェクトのスキル | `.claude/skills/<name>/evals/<name>.json` |
-| ユーザーのスキル | `~/.claude/skills/<name>/evals/<name>.json` |
+
+| 形態         | 置き場                                         |
+| ---------- | ------------------------------------------- |
+| プラグイン同梱    | `plugins/<plugin>/evals/<skill-name>.json`  |
+| プロジェクトのスキル | `.claude/skills/<name>/evals/<name>.json`   |
+| ユーザーのスキル   | `~/.claude/skills/<name>/evals/<name>.json` |
+
 
 ### 承認と回収
 
@@ -226,3 +229,4 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 - 相手の習熟度は会話の手がかりから判断する。
 - 「評価」と「ベンチマーク」は説明を添えずに使う。
 - 「JSON」と「assertion」は、相手が知っていると分かるまで短い説明を添える。
+
