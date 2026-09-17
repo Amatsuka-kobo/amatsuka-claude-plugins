@@ -368,4 +368,59 @@ describe("runEval", () => {
       runEval(baseOptions, { runSingleQuery: injected })
     ).rejects.toThrow(MeasurementFailedError)
   })
+
+  it("error の原因を stderr へ出す", async () => {
+    const outcomes: QueryOutcome[] = [
+      { status: "triggered" },
+      { status: "error", message: "network failure" },
+      { status: "not_triggered" },
+      { status: "not_triggered" },
+      { status: "triggered" },
+      { status: "not_triggered" }
+    ]
+    const injected = vi.fn(async () => outcomes.shift() as QueryOutcome)
+    const writes: string[] = []
+    const stderrWrite = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        writes.push(String(chunk))
+        return true
+      })
+
+    try {
+      await runEval(baseOptions, { runSingleQuery: injected })
+    } finally {
+      stderrWrite.mockRestore()
+    }
+
+    expect(writes.join("")).toContain("network failure")
+  })
+
+  it("同じ error 原因は stderr に一度だけ出す", async () => {
+    const outcomes: QueryOutcome[] = [
+      { status: "triggered" },
+      { status: "error", message: "same failure" },
+      { status: "error", message: "same failure" },
+      { status: "not_triggered" },
+      { status: "not_triggered" },
+      { status: "not_triggered" }
+    ]
+    const injected = vi.fn(async () => outcomes.shift() as QueryOutcome)
+    const writes: string[] = []
+    const stderrWrite = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        writes.push(String(chunk))
+        return true
+      })
+
+    try {
+      await runEval(baseOptions, { runSingleQuery: injected })
+    } finally {
+      stderrWrite.mockRestore()
+    }
+
+    const stderr = writes.join("")
+    expect(stderr.match(/same failure/g)).toHaveLength(1)
+  })
 })

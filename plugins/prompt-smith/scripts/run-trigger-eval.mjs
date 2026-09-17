@@ -490,6 +490,24 @@ async function runEval(options, deps) {
       `Warning: ${aggregated.errors} query run(s) failed and were excluded from trigger rates.
 `
     );
+    const errorMessages = [
+      ...new Set(
+        outcomes.flatMap(
+          (outcome) => outcome.status === "error" ? [outcome.message] : []
+        )
+      )
+    ];
+    const displayedMessages = errorMessages.slice(0, 5);
+    for (const message of displayedMessages) {
+      process.stderr.write(`  Cause: ${message}
+`);
+    }
+    if (errorMessages.length > displayedMessages.length) {
+      process.stderr.write(
+        `  ... ${errorMessages.length - displayedMessages.length} additional error cause(s) omitted.
+`
+      );
+    }
   }
   if (options.verbose) {
     for (const result of aggregated.results) {
