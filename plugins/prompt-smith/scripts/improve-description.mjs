@@ -143,9 +143,9 @@ async function pool(items, workers, fn) {
 
 // src/lib/sandbox.ts
 import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 function makeCleanName(skillName) {
   return `${skillName}-skill-${randomBytes(4).toString("hex")}`;
 }
@@ -218,17 +218,59 @@ function replaceDescription(original, description) {
   if (!replaced) rewritten.push(`description: ${JSON.stringify(description)}`);
   return joinFrontmatter(rewritten, body);
 }
-async function createSandbox(skillMd, cleanName) {
-  const dir = await mkdtemp(join(tmpdir(), "prompt-smith-eval-"));
-  const skillDir = join(dir, ".claude", "skills", cleanName);
-  await mkdir(skillDir, { recursive: true });
-  await writeFile(join(skillDir, "SKILL.md"), skillMd, "utf8");
+var ancestorClaudeChecks = /* @__PURE__ */ new Map();
+async function findAncestorClaude(dir) {
+  let current = await realpath(dirname(dir));
+  while (true) {
+    const candidate = join(current, ".claude");
+    try {
+      await realpath(candidate);
+      return candidate;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    const parent = await realpath(dirname(current));
+    if (parent === current) return void 0;
+    current = parent;
+  }
+}
+async function assertIsolatedWorkspace(dir) {
+  const tmpdirKey = await realpath(tmpdir());
+  let check = ancestorClaudeChecks.get(tmpdirKey);
+  if (!check) {
+    check = (async () => {
+      const claudeDir = await findAncestorClaude(dir);
+      if (claudeDir) {
+        throw new Error(
+          `\u4E00\u6642\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306E\u7956\u5148\u306B ${claudeDir} \u304C\u898B\u3064\u304B\u308A\u307E\u3057\u305F\u3002TMPDIR \u3092 .claude \u3092\u6301\u305F\u306A\u3044\u5834\u6240\u3078\u5909\u3048\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`
+        );
+      }
+    })();
+    ancestorClaudeChecks.set(tmpdirKey, check);
+  }
+  await check;
+}
+async function createIsolatedWorkspace() {
+  const dir = await mkdtemp(join(tmpdir(), "prompt-smith-cwd-"));
+  try {
+    await assertIsolatedWorkspace(dir);
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   return {
     dir,
     cleanup: async () => {
       await rm(dir, { recursive: true, force: true });
     }
   };
+}
+async function createSandbox(skillMd, cleanName) {
+  const sandbox = await createIsolatedWorkspace();
+  const skillDir = join(sandbox.dir, ".claude", "skills", cleanName);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(join(skillDir, "SKILL.md"), skillMd, "utf8");
+  return sandbox;
 }
 
 // src/lib/stream-parse.ts

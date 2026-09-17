@@ -15,9 +15,9 @@
  */
 
 import { randomBytes } from "node:crypto"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 
 export interface Sandbox {
   dir: string
@@ -129,18 +129,68 @@ export function replaceDescription(
   return joinFrontmatter(rewritten, body)
 }
 
-export async function createSandbox(
-  skillMd: string,
-  cleanName: string
-): Promise<Sandbox> {
-  const dir = await mkdtemp(join(tmpdir(), "prompt-smith-eval-"))
-  const skillDir = join(dir, ".claude", "skills", cleanName)
-  await mkdir(skillDir, { recursive: true })
-  await writeFile(join(skillDir, "SKILL.md"), skillMd, "utf8")
+const ancestorClaudeChecks = new Map<string, Promise<void>>()
+
+async function findAncestorClaude(dir: string): Promise<string | undefined> {
+  let current = await realpath(dirname(dir))
+
+  while (true) {
+    const candidate = join(current, ".claude")
+    try {
+      await realpath(candidate)
+      return candidate
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    }
+
+    const parent = await realpath(dirname(current))
+    if (parent === current) return undefined
+    current = parent
+  }
+}
+
+async function assertIsolatedWorkspace(dir: string): Promise<void> {
+  const tmpdirKey = await realpath(tmpdir())
+  let check = ancestorClaudeChecks.get(tmpdirKey)
+  if (!check) {
+    check = (async () => {
+      const claudeDir = await findAncestorClaude(dir)
+      if (claudeDir) {
+        throw new Error(
+          `一時ディレクトリの祖先に ${claudeDir} が見つかりました。` +
+            "TMPDIR を .claude を持たない場所へ変える必要があります。"
+        )
+      }
+    })()
+    ancestorClaudeChecks.set(tmpdirKey, check)
+  }
+  await check
+}
+
+export async function createIsolatedWorkspace(): Promise<Sandbox> {
+  const dir = await mkdtemp(join(tmpdir(), "prompt-smith-cwd-"))
+  try {
+    await assertIsolatedWorkspace(dir)
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true })
+    throw error
+  }
+
   return {
     dir,
     cleanup: async () => {
       await rm(dir, { recursive: true, force: true })
     }
   }
+}
+
+export async function createSandbox(
+  skillMd: string,
+  cleanName: string
+): Promise<Sandbox> {
+  const sandbox = await createIsolatedWorkspace()
+  const skillDir = join(sandbox.dir, ".claude", "skills", cleanName)
+  await mkdir(skillDir, { recursive: true })
+  await writeFile(join(skillDir, "SKILL.md"), skillMd, "utf8")
+  return sandbox
 }
