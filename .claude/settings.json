@@ -4,10 +4,20 @@
     "allow": [
       "Bash(node *)",
       "Bash(python3 -c ' *)",
+      "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git pull *)",
-      "Bash(git branch *)",
-      "Bash(git push *)"
+      "Bash(git branch*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git status*)",
+      "Bash(pnpm install*)",
+      "Bash(pnpm build*)",
+      "Bash(pnpm test*)",
+      "Bash(pnpm lint*)",
+      "Bash(pnpm typecheck*)",
+      "Bash(pnpm dlx *)",
+      "Bash(mkdir -p *)"
     ],
     "deny": [
       "Bash(rm -rf ./)",
@@ -17,6 +27,7 @@
     ],
     "ask": [
       "Bash(git checkout *)",
+      "Bash(git push *)",
       "Bash(rm *)"
     ]
   },
