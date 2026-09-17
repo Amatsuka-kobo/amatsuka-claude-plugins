@@ -15,6 +15,18 @@
  * Read), and matching uses a name prefix instead of the full unique name.
  */
 
+export function readResultError(line: string): string | null {
+  let event: Record<string, unknown>
+  try {
+    event = JSON.parse(line.trim()) as Record<string, unknown>
+  } catch {
+    return null
+  }
+
+  if (event.type !== "result" || event.is_error !== true) return null
+  return String(event.result ?? "")
+}
+
 export function judge(
   triggerRate: number,
   shouldTrigger: boolean,

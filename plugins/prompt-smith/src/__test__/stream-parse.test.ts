@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { judge, TriggerDetector } from "../lib/stream-parse.js"
+import { judge, readResultError, TriggerDetector } from "../lib/stream-parse.js"
 
 const streamEvent = (event: unknown) =>
   JSON.stringify({ type: "stream_event", event })
@@ -18,6 +18,48 @@ const delta = (partial: string) =>
 
 const blockStop = () => streamEvent({ type: "content_block_stop" })
 const messageStop = () => streamEvent({ type: "message_stop" })
+
+describe("readResultError", () => {
+  it("is_error が true の result でエラー文字列を返す", () => {
+    expect(
+      readResultError(
+        JSON.stringify({
+          type: "result",
+          is_error: true,
+          result: "authentication failed"
+        })
+      )
+    ).toBe("authentication failed")
+  })
+
+  it("is_error が false の result では null を返す", () => {
+    expect(
+      readResultError(
+        JSON.stringify({ type: "result", is_error: false, result: "ok" })
+      )
+    ).toBeNull()
+  })
+
+  it("subtype が success でも is_error が true ならエラー文字列を返す", () => {
+    expect(
+      readResultError(
+        JSON.stringify({
+          type: "result",
+          subtype: "success",
+          is_error: true,
+          result: "authentication failed"
+        })
+      )
+    ).toBe("authentication failed")
+  })
+
+  it("result 以外の行と壊れた JSON では null を返す", () => {
+    expect(
+      readResultError(JSON.stringify({ type: "assistant", result: "error" }))
+    ).toBeNull()
+    expect(readResultError("not json")).toBeNull()
+  })
+})
 
 describe("TriggerDetector", () => {
   it("関係のない行では確定しない", () => {
