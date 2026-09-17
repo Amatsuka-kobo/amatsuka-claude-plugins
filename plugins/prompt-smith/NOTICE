@@ -50,6 +50,9 @@ run_eval.py -> src/run-trigger-eval.ts (with src/lib/ as listed above)
      staging, because this port copies the whole SKILL.md rather than
      building a file from the description alone.
 
+  The child-process isolation and cleanup changes are shared with
+  improve_description.py; see items 15 and 16 below.
+
 run_loop.py -> src/run-loop.ts
   9. split_eval_set uses a seeded PRNG implemented in this project instead
      of Python's random module. The shuffle is deterministic across runs
@@ -65,6 +68,13 @@ improve_description.py -> src/improve-description.ts
       they are retried once, then produce an error if the retry also lacks
       the required tags. Upstream adopts the whole response instead. The
       timeout is configurable with --timeout.
+  15. Child processes for both this path and run_eval.py are started in a
+      dedicated temporary cwd with --setting-sources project,
+      --strict-mcp-config, --settings '{"disableAllHooks":true}', and
+      --no-session-persistence. Upstream narrows neither the cwd nor the
+      setting sources.
+  16. Temporary directories for both paths are removed only after waiting
+      for the child process close event.
 
 generate_report.py -> src/generate-report.ts
   10. The Google Fonts <link> tags are dropped and replaced with a system
