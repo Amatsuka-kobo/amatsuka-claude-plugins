@@ -11,17 +11,22 @@
       "Bash(git log*)",
       "Bash(git diff*)",
       "Bash(git status*)",
+      "Bash(git rm *)",
+      "Bash(git rm -r *)",
       "Bash(pnpm install*)",
       "Bash(pnpm build*)",
       "Bash(pnpm test*)",
       "Bash(pnpm lint*)",
       "Bash(pnpm typecheck*)",
       "Bash(pnpm dlx *)",
-      "Bash(mkdir -p *)"
+      "Bash(mkdir -p *)",
+      "Bash(rm /tmp/**/*)"
     ],
     "deny": [
       "Bash(rm -rf ./)",
       "Bash(rm -rf /)",
+      "Bash(git rm -rf *)",
+      "Bash(git rm -f *)",
       "Bash(git push --force *)",
       "Bash(sudo *)"
     ],
