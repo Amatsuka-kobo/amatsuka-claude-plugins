@@ -105,6 +105,21 @@ describe("buildImprovePrompt", () => {
     )
   })
 
+  it("短い説明の方が発火しやすいという案内を含める", () => {
+    const budget = 900
+    const prompt = buildImprovePrompt({
+      skillName: "s",
+      skillContent: "body",
+      currentDescription: "current",
+      budget,
+      evalResults,
+      history: [],
+      testResults: null
+    })
+    expect(prompt).toContain("Shorter descriptions trigger more reliably.")
+    expect(prompt).toContain(`Treat ${budget} as a ceiling to stay well below`)
+  })
+
   it("過去の試行を積む", () => {
     const prompt = buildImprovePrompt({
       skillName: "s",

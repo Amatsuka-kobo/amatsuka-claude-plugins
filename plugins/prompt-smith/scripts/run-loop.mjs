@@ -1069,7 +1069,7 @@ Based on the failures, write a new and improved description that is more likely 
 1. Avoid overfitting
 2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
 
-The current description is ${byteLength(currentDescription)} UTF-8 bytes. The new description must not exceed ${budget} UTF-8 bytes; target ${LENGTH_TARGET} UTF-8 bytes. For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes. When covering failures, rewrite, merge, or remove existing sections rather than adding sections.
+The current description is ${byteLength(currentDescription)} UTF-8 bytes. The new description must not exceed ${budget} UTF-8 bytes; target ${LENGTH_TARGET} UTF-8 bytes. For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes. When covering failures, rewrite, merge, or remove existing sections rather than adding sections. Shorter descriptions trigger more reliably. In our measurements, when a description grew while covering the same ground, it stopped triggering on queries that name a specific file, and the shorter version triggered on all of them; changes to sentence form, to decision rules, and to example topics made no measurable difference. Treat ${budget} as a ceiling to stay well below, not a target to fill, and spend the bytes on what the skill is used for rather than on rules, restatements, or examples.
 
 Here are some tips that we've found to work well in writing these descriptions:
 - The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
