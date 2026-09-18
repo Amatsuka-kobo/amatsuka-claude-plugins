@@ -455,6 +455,11 @@ function renderHelp(spec) {
 
 // src/lib/defaults.ts
 var DEFAULT_MODEL = "sonnet";
+var LENGTH_TARGET = 600;
+var LENGTH_FLOOR = 680;
+function byteLength(value) {
+  return Buffer.byteLength(value, "utf8");
+}
 var DEFAULTS = {
   runsPerQuery: 3,
   numWorkers: 10,
@@ -988,6 +993,7 @@ function buildImprovePrompt(input) {
     skillName,
     skillContent,
     currentDescription,
+    budget,
     evalResults,
     history,
     testResults
@@ -1063,7 +1069,7 @@ Based on the failures, write a new and improved description that is more likely 
 1. Avoid overfitting
 2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
 
-Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters \u2014 descriptions over that will be truncated, so stay comfortably under it.
+The current description is ${byteLength(currentDescription)} UTF-8 bytes. The new description must not exceed ${budget} UTF-8 bytes; target ${LENGTH_TARGET} UTF-8 bytes. For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes. When covering failures, rewrite, merge, or remove existing sections rather than adding sections.
 
 Here are some tips that we've found to work well in writing these descriptions:
 - The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
@@ -1087,16 +1093,16 @@ function extractDescription(text) {
   const match = /<new_description>([\s\S]*?)<\/new_description>/.exec(text);
   return match ? stripQuotes(match[1].trim()) : null;
 }
-function buildShortenPrompt(prompt, description) {
+function buildShortenPrompt(prompt, description, budget) {
   return `${prompt}
 
 ---
 
-A previous attempt produced this description, which at ${description.length} characters is over the 1024-character hard limit:
+A previous attempt produced this description, which at ${byteLength(description)} UTF-8 bytes is over the ${budget}-byte budget:
 
 "${description}"
 
-Rewrite it to be under 1024 characters while keeping the most important trigger words and intent coverage. Respond with only the new description in <new_description> tags.`;
+Rewrite it to fit within ${budget} UTF-8 bytes while keeping the most important trigger words and intent coverage. Try removing or merging content before compressing the wording. Respond with only the new description in <new_description> tags.`;
 }
 function buildTagRetryPrompt(prompt) {
   return `${prompt}
@@ -1175,15 +1181,15 @@ async function improveDescription(options) {
   let description = initial.description;
   transcript.response = initial.response;
   transcript.parsed_description = description;
-  transcript.char_count = description?.length ?? null;
-  transcript.over_limit = description !== null && description.length > 1024;
+  transcript.byte_count = description !== null ? byteLength(description) : null;
+  transcript.over_limit = description !== null && byteLength(description) > input.budget;
   addRetryTranscript(transcript, "", initial);
   if (description === null) {
     await writeTranscriptBeforeThrow(logDir, iteration, transcript);
     throw new MissingDescriptionTagError();
   }
-  if (description.length > 1024) {
-    const shortenPrompt = buildShortenPrompt(prompt, description);
+  if (byteLength(description) > input.budget) {
+    const shortenPrompt = buildShortenPrompt(prompt, description, input.budget);
     transcript.rewrite_prompt = shortenPrompt;
     let shortenedAttempt;
     try {
@@ -1201,7 +1207,7 @@ async function improveDescription(options) {
     const shortened = shortenedAttempt.description;
     transcript.rewrite_response = shortenedAttempt.response;
     transcript.rewrite_description = shortened;
-    transcript.rewrite_char_count = shortened?.length ?? null;
+    transcript.rewrite_byte_count = shortened !== null ? byteLength(shortened) : null;
     addRetryTranscript(transcript, "rewrite_", shortenedAttempt);
     if (shortened === null) {
       await writeTranscriptBeforeThrow(logDir, iteration, transcript);
@@ -1309,6 +1315,7 @@ async function main2() {
     evalResults,
     history,
     testResults: null,
+    budget: Math.max(byteLength(evalResults.description), LENGTH_FLOOR),
     model: values.model,
     timeoutSeconds: parseNumericOption(
       "timeout",
@@ -1634,6 +1641,12 @@ Max iterations reached (${maxIterations}).
           description: attempt.description
         })),
         testResults: null,
+        budget: Math.max(
+          byteLength(
+            selectBest(history, testSet.length > 0).description
+          ),
+          LENGTH_FLOOR
+        ),
         model,
         timeoutSeconds: improveTimeout,
         logDir,

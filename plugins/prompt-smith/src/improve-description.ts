@@ -12,7 +12,8 @@
  * This file is a TypeScript port of scripts/improve_description.py from the
  * skill-creator Claude Code plugin. Changes: responses without the required
  * <new_description> tag are retried once and then rejected; the timeout of
- * the claude -p call is configurable.
+ * the claude -p call is configurable; description length uses a UTF-8 byte
+ * budget derived from the best description instead of upstream's fixed limits.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -20,7 +21,13 @@ import { basename, extname, join } from "node:path"
 import { parseArgs } from "node:util"
 import { callClaudeText } from "./lib/claude-cli.js"
 import { type HelpSpec, renderHelp } from "./lib/cli-help.js"
-import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
+import {
+  byteLength,
+  DEFAULT_MODEL,
+  DEFAULTS,
+  LENGTH_FLOOR,
+  LENGTH_TARGET
+} from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import type { EvalResultItem, EvalSummary } from "./lib/types.js"
 import { parseNumericOption } from "./run-trigger-eval.js"
@@ -46,6 +53,7 @@ export interface ImprovePromptInput {
   skillName: string
   skillContent: string
   currentDescription: string
+  budget: number
   evalResults: EvalScores
   history: PreviousAttempt[]
   testResults: EvalScores | null
@@ -78,6 +86,7 @@ export function buildImprovePrompt(input: ImprovePromptInput): string {
     skillName,
     skillContent,
     currentDescription,
+    budget,
     evalResults,
     history,
     testResults
@@ -158,7 +167,7 @@ Based on the failures, write a new and improved description that is more likely 
 1. Avoid overfitting
 2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
 
-Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters — descriptions over that will be truncated, so stay comfortably under it.
+The current description is ${byteLength(currentDescription)} UTF-8 bytes. The new description must not exceed ${budget} UTF-8 bytes; target ${LENGTH_TARGET} UTF-8 bytes. For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes. When covering failures, rewrite, merge, or remove existing sections rather than adding sections.
 
 Here are some tips that we've found to work well in writing these descriptions:
 - The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
@@ -186,16 +195,20 @@ export function extractDescription(text: string): string | null {
   return match ? stripQuotes(match[1].trim()) : null
 }
 
-function buildShortenPrompt(prompt: string, description: string): string {
+function buildShortenPrompt(
+  prompt: string,
+  description: string,
+  budget: number
+): string {
   return `${prompt}
 
 ---
 
-A previous attempt produced this description, which at ${description.length} characters is over the 1024-character hard limit:
+A previous attempt produced this description, which at ${byteLength(description)} UTF-8 bytes is over the ${budget}-byte budget:
 
 "${description}"
 
-Rewrite it to be under 1024 characters while keeping the most important trigger words and intent coverage. Respond with only the new description in <new_description> tags.`
+Rewrite it to fit within ${budget} UTF-8 bytes while keeping the most important trigger words and intent coverage. Try removing or merging content before compressing the wording. Respond with only the new description in <new_description> tags.`
 }
 
 function buildTagRetryPrompt(prompt: string): string {
@@ -320,8 +333,9 @@ export async function improveDescription(
   let description = initial.description
   transcript.response = initial.response
   transcript.parsed_description = description
-  transcript.char_count = description?.length ?? null
-  transcript.over_limit = description !== null && description.length > 1024
+  transcript.byte_count = description !== null ? byteLength(description) : null
+  transcript.over_limit =
+    description !== null && byteLength(description) > input.budget
   addRetryTranscript(transcript, "", initial)
 
   if (description === null) {
@@ -329,8 +343,8 @@ export async function improveDescription(
     throw new MissingDescriptionTagError()
   }
 
-  if (description.length > 1024) {
-    const shortenPrompt = buildShortenPrompt(prompt, description)
+  if (byteLength(description) > input.budget) {
+    const shortenPrompt = buildShortenPrompt(prompt, description, input.budget)
     transcript.rewrite_prompt = shortenPrompt
     let shortenedAttempt: TaggedDescriptionResponse
     try {
@@ -349,7 +363,8 @@ export async function improveDescription(
     const shortened = shortenedAttempt.description
     transcript.rewrite_response = shortenedAttempt.response
     transcript.rewrite_description = shortened
-    transcript.rewrite_char_count = shortened?.length ?? null
+    transcript.rewrite_byte_count =
+      shortened !== null ? byteLength(shortened) : null
     addRetryTranscript(transcript, "rewrite_", shortenedAttempt)
 
     if (shortened === null) {
@@ -467,6 +482,7 @@ async function main(): Promise<void> {
     evalResults,
     history,
     testResults: null,
+    budget: Math.max(byteLength(evalResults.description), LENGTH_FLOOR),
     model: values.model,
     timeoutSeconds: parseNumericOption(
       "timeout",

@@ -86,6 +86,9 @@ improve_description.py -> src/improve-description.ts
       setting sources.
   16. Temporary directories for both paths are removed only after waiting
       for the child process close event.
+  23. The upstream "100-200 words / 1024 characters" length guidance is
+      replaced by a UTF-8 byte budget derived from the best-scoring
+      description.
 
 generate_report.py -> src/generate-report.ts
   10. The Google Fonts <link> tags are dropped and replaced with a system
