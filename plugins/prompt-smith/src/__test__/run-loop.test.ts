@@ -4,7 +4,11 @@ import {
   improveDescription,
   MissingDescriptionTagError
 } from "../improve-description.js"
-import { byteLength, LENGTH_FLOOR } from "../lib/defaults.js"
+import {
+  byteLength,
+  MULTIBYTE_LENGTH_LIMITS,
+  SINGLEBYTE_LENGTH_LIMITS
+} from "../lib/defaults.js"
 import {
   blindHistory,
   parseImproveTimeout,
@@ -97,7 +101,7 @@ describe("既定モデル", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: LENGTH_FLOOR,
+      budget: MULTIBYTE_LENGTH_LIMITS.floor,
       evalResults: {
         results: [],
         summary: { total: 0, passed: 0, failed: 0 }
@@ -595,11 +599,34 @@ describe("runLoop", () => {
 
     expect(byteLength(latestDescription)).toBe(1000)
     expect(improve.mock.calls[1]?.[0].budget).toBe(
-      Math.max(byteLength(bestDescription), LENGTH_FLOOR)
+      Math.max(byteLength(bestDescription), MULTIBYTE_LENGTH_LIMITS.floor)
     )
   })
 
   it("最良 description が短いとき改善予算に床を適用する", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) =>
+      resultWithPassPredicate(queries, () => false)
+    )
+    const improve = vi.fn(async (_options: ImproveOptions) => "next")
+
+    await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "短い説明",
+      holdout: 0,
+      maxIterations: 2,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(improve.mock.calls[0]?.[0].budget).toBe(
+      MULTIBYTE_LENGTH_LIMITS.floor
+    )
+  })
+
+  it("最良案が1バイト文字のとき改善予算に単一バイト用の床を適用する", async () => {
     const runEval = vi.fn(async ({ evalSet: queries }) =>
       resultWithPassPredicate(queries, () => false)
     )
@@ -617,7 +644,9 @@ describe("runLoop", () => {
       improveDescription: improve
     })
 
-    expect(improve.mock.calls[0]?.[0].budget).toBe(LENGTH_FLOOR)
+    expect(improve.mock.calls[0]?.[0].budget).toBe(
+      SINGLEBYTE_LENGTH_LIMITS.floor
+    )
   })
 
   it("同じ UTF-8 バイト数なら日本語と英語で同じ改善予算になる", async () => {

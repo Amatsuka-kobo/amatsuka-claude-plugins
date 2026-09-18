@@ -35,7 +35,7 @@ import {
   byteLength,
   DEFAULT_MODEL,
   DEFAULTS,
-  LENGTH_FLOOR
+  lengthLimitsFor
 } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { splitEvalSet } from "./lib/split-eval-set.js"
@@ -338,6 +338,7 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
 
     if (verbose) process.stderr.write("\nImproving description...\n")
     const improveStarted = performance.now()
+    const bestDescription = selectBest(history, testSet.length > 0).description
     let newDescription: string
     try {
       newDescription = await improveDescription({
@@ -358,8 +359,8 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
         })),
         testResults: null,
         budget: Math.max(
-          byteLength(selectBest(history, testSet.length > 0).description),
-          LENGTH_FLOOR
+          byteLength(bestDescription),
+          lengthLimitsFor(bestDescription).floor
         ),
         model,
         timeoutSeconds: improveTimeout,
