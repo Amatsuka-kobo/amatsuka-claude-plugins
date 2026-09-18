@@ -51,8 +51,8 @@ run_eval.py -> src/run-trigger-eval.ts (with src/lib/ as listed above)
      building a file from the description alone.
   17. CLI startup and execution failures are recorded as errors instead of
       non-triggers. In particular, result events are checked for is_error
-      before the upstream detector treats every result as a non-trigger. If
-      every run for any query fails, evaluation stops without returning a
+      before the upstream detector treats every result as a non-trigger.
+  19. If every run for any query fails, evaluation stops without returning a
       result.
 
   The child-process isolation and cleanup changes are shared with
@@ -67,7 +67,7 @@ run_loop.py -> src/run-loop.ts
       stops the loop and returns the best result so far. Upstream propagates
       the error and loses the whole run. The timeout for that step is
       configurable with --improve-timeout.
-  14. The result JSON records an "environment" object. The upstream does not
+  18. The result JSON records an "environment" object. The upstream does not
       record it.
 
 improve_description.py -> src/improve-description.ts
