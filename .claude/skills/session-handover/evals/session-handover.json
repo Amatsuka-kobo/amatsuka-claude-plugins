@@ -1,0 +1,22 @@
+[
+  {"query": "そろそろ日付変わるから、今日の分の作業を引き継ぎ資料にまとめておいて", "should_trigger": true},
+  {"query": "ここまでの実装、別セッションに任せたいから引継ぎドキュメント作って", "should_trigger": true},
+  {"query": "疲れたから今日はここで区切る。goalコマンドで続きやれるようにプロンプト用意して", "should_trigger": true},
+  {"query": "明日別の人がこの続きやるから、資料まとめといて", "should_trigger": true},
+  {"query": "agent-policyのモデル割当設計、実装フェーズに移すから引継ぎ用意して", "should_trigger": true},
+  {"query": "このセッション終わりにするけど、次動かす用のgoalプロンプトだけ先に作って", "should_trigger": true},
+  {"query": "codiel-metatron連携の続き、別チームに渡す形にしてほしい", "should_trigger": true},
+  {"query": "残りの作業を次のセッションに委ねたい。手順書とプロンプト頼む", "should_trigger": true},
+  {"query": "harness-docs/handover にまとめる形で今回の作業を残しておいて", "should_trigger": true},
+  {"query": "実装計画のここまでの分、後で goal コマンド一発で再開できるようにして", "should_trigger": true},
+  {"query": "前回のセッションで何やったか教えて", "should_trigger": false},
+  {"query": "docs/prompts/ にあるファイル一覧見せて", "should_trigger": false},
+  {"query": "harness-docs/handover の最新ファイル読んで内容要約して", "should_trigger": false},
+  {"query": "goal コマンドの使い方教えて", "should_trigger": false},
+  {"query": "このセッションの作業内容を一言でまとめて", "should_trigger": false},
+  {"query": "gh-utilityプラグイン削除の設定変更、コミットして", "should_trigger": false},
+  {"query": "agent-policyのバージョンいくつか確認して", "should_trigger": false},
+  {"query": "goal コマンドに渡すプロンプトの文字数制限は何文字?", "should_trigger": false},
+  {"query": "harness-docs/ARCHITECTURE.md 更新して", "should_trigger": false},
+  {"query": "sandalphonの設計完了の記録、メモリに書いておいて", "should_trigger": false}
+]
