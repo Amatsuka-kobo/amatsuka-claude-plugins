@@ -1,14 +1,14 @@
 [
   {
-    "query": "霜月ロジのモノレポ、`docs/ARCHITECTURE.md` がまだ一枚も無いです。apps/ と packages/ を解析して技術スタック・レイヤー構造・ディレクトリ責務まで一通り起こしてほしい。ドメインの切り方は勝手に決めずに節ごとに見せてください。",
+    "query": "サブエージェントやコーディングエージェントがこのリポジトリの構成を繰り返し取り違え、そのたびに apps/ と packages/ の責務を説明し直しています。原因を調べると ARCHITECTURE がまだ 1 枚もありませんでした。コードと rules を確認して初版の ARCHITECTURE を作り、各節を確認しながら定着させてください。",
     "should_trigger": true
   },
   {
-    "query": "`/codiel:init` が作った ARCHITECTURE が `## ドメインマップ` の 1 節しかありません。テスト方針・コマンド定義・保護パス・規約を足して普通のアーキ文書にしたい。既存のドメインマップは触らないでほしいです。",
+    "query": "新しく導入した AI ツールが各ディレクトリの責務を取り違え、変更先を誤る状態です。確認したところ、このリポジトリには ARCHITECTURE がまだ 1 枚もありません。コードベースと rules を調べ、技術スタック・構造・ディレクトリ責務を含む初版を、内容を確認しながら作成してください。",
     "should_trigger": true
   },
   {
-    "query": "来月から入る業務委託の方向けに、このリポジトリのアーキテクチャ文書を初期化してください。システム概要は Mermaid の図も入れて、粒度は相談させてほしい。",
+    "query": "`/codiel:init` 後の `docs/ARCHITECTURE.md` は `## ドメインマップ` の一節だけです。既存のマップを維持したまま、リポジトリと rules を調べて不足する技術スタック・レイヤー構造・検証手順の草案をそろえ、節ごとに確認しながら通常の構成へ整えてください。",
     "should_trigger": true
   },
   {
@@ -16,7 +16,7 @@
     "should_trigger": true
   },
   {
-    "query": "アーキ文書つくって。まだ一個もないので最初から。pnpm workspace で apps が 3 つ、prisma とー postgres 使ってる",
+    "query": "開発参加者が参照できるよう、`docs/ARCHITECTURE.md` が存在しないこのモノレポの技術資料を新設したいです。`apps/` と `packages/`、ワークスペース設定を調査し、技術要素・層ごとの責務・実行手順を草案化して、内容を確認しながら初回版を完成させてください。",
     "should_trigger": true
   },
   {
@@ -28,7 +28,7 @@
     "should_trigger": true
   },
   {
-    "query": "metatron を入れたので初期化したい。ARCHITECTURE の解決先が `docs/` でいいかも含めて確認しながら、対象セクションを埋めていってほしい。書き込む前に diff を見せて。",
+    "query": "新しい開発メンバー向けに、`orbit-ledger` の全体像をまとめた資料が必要です。`docs/ARCHITECTURE.md` はまだ存在しないため、コードと `package.json`、`CLAUDE.md` を調べ、技術スタック・構造・各ディレクトリの役割を段階的に確認して初版を用意してください。",
     "should_trigger": true
   },
   {
@@ -36,7 +36,7 @@
     "should_trigger": true
   },
   {
-    "query": "この構成をドキュメントに起こしてほしい。Next.js のフロント、Hono の API、Postgres、テストは vitest。ARCHITECTURE.md が無い状態からなので全部です。",
+    "query": "Next.js の画面、Hono のサービス、PostgreSQL、Vitest で構成する新規プロジェクトです。未作成の `ARCHITECTURE.md` に、各要素の関係とディレクトリの担当範囲、開発・検証コマンドを整理した参照資料を、実装を確認したうえでまとめてください。",
     "should_trigger": true
   },
   {
