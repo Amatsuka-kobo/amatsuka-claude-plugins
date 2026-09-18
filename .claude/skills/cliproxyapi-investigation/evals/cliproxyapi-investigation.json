@@ -1,0 +1,22 @@
+[
+  {"query": "サブエージェント起動したら急に429で落ちる、なんで?", "should_trigger": true},
+  {"query": "antigravity経由のGeminiが変な挙動する、確認して", "should_trigger": true},
+  {"query": "codexのモデル呼んだらタイムアウトばっかり、調査して", "should_trigger": true},
+  {"query": "起動したagentが毎回rate limitに引っかかる、なぜか調べて", "should_trigger": true},
+  {"query": "急にモデル応答が返らなくなった、通信周り調べて", "should_trigger": true},
+  {"query": "うん、先にプロキシ側疑ってみて", "should_trigger": true},
+  {"query": "そうして、CLIProxyAPIから確認して", "should_trigger": true},
+  {"query": "お願い、そっちの通信ログから当たって", "should_trigger": true},
+  {"query": "じゃあそれで、API側から調べて", "should_trigger": true},
+  {"query": "先にCLIProxyAPI疑う方でお願い", "should_trigger": true},
+  {"query": "CLIProxyAPIのセットアップ手順教えて", "should_trigger": false},
+  {"query": "cliproxyapi.config.yamlの書き方教えて", "should_trigger": false},
+  {"query": "docs/cliproxyapi/README.mdの表のフォーマット見せて", "should_trigger": false},
+  {"query": "OAuth認証もう一回やり直したい、手順教えて", "should_trigger": false},
+  {"query": "このコードのバグ直して", "should_trigger": false},
+  {"query": "テストが落ちてる、原因調べて", "should_trigger": false},
+  {"query": "Docker版CLIProxyAPIの構成教えて", "should_trigger": false},
+  {"query": "過去のCLIProxyAPI調査記録を一覧で見せて", "should_trigger": false},
+  {"query": "429エラーの意味を教えて", "should_trigger": false},
+  {"query": "gemini-3.8-flashの料金いくら?", "should_trigger": false}
+]
