@@ -66,9 +66,12 @@ export function parseSkillMd(content: string): ParsedSkill {
         i++
         while (
           i < frontmatter.length &&
-          (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("\t"))
+          (frontmatter[i].trim() === "" ||
+            frontmatter[i].startsWith("  ") ||
+            frontmatter[i].startsWith("\t"))
         ) {
-          continuation.push(frontmatter[i].trim())
+          const trimmed = frontmatter[i].trim()
+          if (trimmed) continuation.push(trimmed)
           i++
         }
         description = continuation.join(" ")
