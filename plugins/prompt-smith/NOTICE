@@ -104,7 +104,7 @@ utils.py -> src/lib/parse-skill-md.ts
       lines were truncated after the first paragraph.
 
 assets/eval_review.html -> skills/skill-creator/assets/eval-review.html
-  No behavioural changes.
+  24. The review UI displays the eval set creation criteria as a static list.
 
 Not ported: aggregate_benchmark.py, package_skill.py, quick_validate.py,
 eval-viewer/generate_review.py, agents/*.md.
