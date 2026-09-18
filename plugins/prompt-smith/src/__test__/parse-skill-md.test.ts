@@ -48,6 +48,22 @@ describe("parseSkillMd", () => {
     expect(parseSkillMd(md).description).toBe("first line second line")
   })
 
+  it("空行を含むブロックスカラーの継続行も連結する", () => {
+    const md = [
+      "---",
+      "name: my-skill",
+      "description: |",
+      "  first paragraph",
+      "",
+      "  second paragraph",
+      "---",
+      ""
+    ].join("\n")
+    expect(parseSkillMd(md).description).toBe(
+      "first paragraph second paragraph"
+    )
+  })
+
   it("タブ字下げの継続行も連結する", () => {
     const md = [
       "---",

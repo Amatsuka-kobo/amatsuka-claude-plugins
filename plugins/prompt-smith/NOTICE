@@ -96,7 +96,9 @@ generate_report.py -> src/generate-report.ts
       displayed best description "Current best".
 
 utils.py -> src/lib/parse-skill-md.ts
-  No behavioural changes.
+  22. Block-scalar descriptions skip blank lines. The upstream parser stops
+      continuation at an unindented line, so descriptions containing blank
+      lines were truncated after the first paragraph.
 
 assets/eval_review.html -> skills/skill-creator/assets/eval-review.html
   No behavioural changes.

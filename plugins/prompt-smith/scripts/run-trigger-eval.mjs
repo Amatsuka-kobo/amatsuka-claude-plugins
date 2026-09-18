@@ -266,8 +266,9 @@ function parseSkillMd(content) {
       if (BLOCK_SCALARS2.has(value)) {
         const continuation = [];
         i++;
-        while (i < frontmatter.length && (frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("	"))) {
-          continuation.push(frontmatter[i].trim());
+        while (i < frontmatter.length && (frontmatter[i].trim() === "" || frontmatter[i].startsWith("  ") || frontmatter[i].startsWith("	"))) {
+          const trimmed = frontmatter[i].trim();
+          if (trimmed) continuation.push(trimmed);
           i++;
         }
         description = continuation.join(" ");
