@@ -108,3 +108,8 @@
 - `2026/0916/phyllis998/1653-agent-policy-doc-writing-role-design.md` | 2026-09-16 | phyllis998 | document-writer(gpt-terra)動作確認とCLAUDE.mdのコミット完了
 - `2026/0917/phyllis998/0203-doc-writing-discipline.md` | 2026-09-17 | phyllis998 | document-writer の disallowedTools 定義の誤りを判定し、修正方針を決定する
 - `2026/0917/phyllis998/1013-metatron-skills-audit.md` | 2026-09-17 | phyllis998 | metatron 指示書 3 つの冗長さを除去し質を向上
+- `2026/0917/phyllis998/1741-prompt-smith-improvement-plan.md` | 2026-09-17 | phyllis998 | 設計版6完成・測定値確定・WBSレビュー方式を確認
+- `2026/0918/phyllis998/0151-prompt-smith-stage1-implementation.md` | 2026-09-18 | phyllis998 | 委譲依頼の説明例が成果物に混入する問題をGOTCHAS-002として記録
+- `2026/0918/phyllis998/0215-chat-recorder-startup.md` | 2026-09-18 | phyllis998 | チャット記録エージェントの動作検証
+- `2026/0918/phyllis998/0216-genshijin-statusline-setup.md` | 2026-09-18 | phyllis998 | statusline 設定と prompt 入力の意図確認
+- `2026/0918/phyllis998/1245-jev-ai-integration-planning.md` | 2026-09-18 | phyllis998 | Jev AI 調査と agent-policy への役割割当計画
