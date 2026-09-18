@@ -53,7 +53,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null
@@ -69,7 +69,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null
@@ -116,7 +116,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "description",
-      budget: SINGLEBYTE_LENGTH_LIMITS.floor,
+      budget: SINGLEBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null
@@ -131,7 +131,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "説明文です",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null
@@ -161,7 +161,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       history: [
         {
           description: "older one",
@@ -208,7 +208,7 @@ describe("extractDescription", () => {
 
 describe("improveDescription", () => {
   it("予算ちょうどの案なら短縮を依頼しない", async () => {
-    const withinBudget = "x".repeat(MULTIBYTE_LENGTH_LIMITS.floor)
+    const withinBudget = "x".repeat(MULTIBYTE_LENGTH_LIMITS.ceiling)
     const callClaude = vi
       .fn()
       .mockResolvedValue(`<new_description>${withinBudget}</new_description>`)
@@ -216,7 +216,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null,
@@ -236,7 +236,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null,
@@ -260,7 +260,7 @@ describe("improveDescription", () => {
         skillName: "s",
         skillContent: "body",
         currentDescription: "current",
-        budget: MULTIBYTE_LENGTH_LIMITS.floor,
+        budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
         evalResults,
         history: [],
         testResults: null,
@@ -280,7 +280,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null,
@@ -304,7 +304,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
-          budget: MULTIBYTE_LENGTH_LIMITS.floor,
+          budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
           evalResults,
           history: [],
           testResults: null,
@@ -337,7 +337,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
-          budget: MULTIBYTE_LENGTH_LIMITS.floor,
+          budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
           evalResults,
           history: [],
           testResults: null,
@@ -372,7 +372,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
-          budget: MULTIBYTE_LENGTH_LIMITS.floor,
+          budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
           evalResults,
           history: [],
           testResults: null,
@@ -389,7 +389,7 @@ describe("improveDescription", () => {
 
   it("短縮時の Claude 呼び出しが失敗しても transcript を残して例外を再送出する", async () => {
     const logDir = await mkdtemp(join(tmpdir(), "prompt-smith-test-"))
-    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.floor + 1)
+    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.ceiling + 1)
     const failure = new Error("Claude CLI failed")
     const callClaude = vi
       .fn()
@@ -402,7 +402,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
-          budget: MULTIBYTE_LENGTH_LIMITS.floor,
+          budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
           evalResults,
           history: [],
           testResults: null,
@@ -418,7 +418,7 @@ describe("improveDescription", () => {
       ) as Record<string, unknown>
       expect(transcript.prompt).toContain("<current_description>")
       expect(transcript.rewrite_prompt).toContain(
-        `over the ${MULTIBYTE_LENGTH_LIMITS.floor}-byte budget`
+        `over the ${MULTIBYTE_LENGTH_LIMITS.ceiling}-byte budget`
       )
       expect(transcript.failure_stage).toBe("rewrite_request")
       expect(transcript.failure_message).toBe("Claude CLI failed")
@@ -428,7 +428,7 @@ describe("improveDescription", () => {
   })
 
   it("予算を 1 バイト超えたら 1 回だけ再依頼する", async () => {
-    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.floor + 1)
+    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.ceiling + 1)
     const callClaude = vi
       .fn()
       .mockResolvedValueOnce(`<new_description>${tooLong}</new_description>`)
@@ -437,7 +437,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null,
@@ -447,12 +447,12 @@ describe("improveDescription", () => {
     expect(out).toBe("shortened")
     expect(callClaude).toHaveBeenCalledTimes(2)
     expect(callClaude.mock.calls[1]?.[0]).toContain(
-      `over the ${MULTIBYTE_LENGTH_LIMITS.floor}-byte budget`
+      `over the ${MULTIBYTE_LENGTH_LIMITS.ceiling}-byte budget`
     )
   })
 
   it("短縮応答にタグが無ければ 1 回だけ再依頼する", async () => {
-    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.floor + 1)
+    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.ceiling + 1)
     const callClaude = vi
       .fn()
       .mockResolvedValueOnce(`<new_description>${tooLong}</new_description>`)
@@ -462,7 +462,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null,
@@ -477,7 +477,7 @@ describe("improveDescription", () => {
   })
 
   it("再依頼の結果がなお長くてもそのまま返す", async () => {
-    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.floor + 1)
+    const tooLong = "x".repeat(MULTIBYTE_LENGTH_LIMITS.ceiling + 1)
     const callClaude = vi
       .fn()
       .mockResolvedValue(`<new_description>${tooLong}</new_description>`)
@@ -485,14 +485,14 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
-      budget: MULTIBYTE_LENGTH_LIMITS.floor,
+      budget: MULTIBYTE_LENGTH_LIMITS.ceiling,
       evalResults,
       history: [],
       testResults: null,
       model: "claude-opus-5",
       callClaude
     })
-    expect(byteLength(out)).toBe(MULTIBYTE_LENGTH_LIMITS.floor + 1)
+    expect(byteLength(out)).toBe(MULTIBYTE_LENGTH_LIMITS.ceiling + 1)
     expect(callClaude).toHaveBeenCalledTimes(2)
   })
 })

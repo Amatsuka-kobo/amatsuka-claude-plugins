@@ -13,7 +13,8 @@
  * skill-creator Claude Code plugin. Changes: responses without the required
  * <new_description> tag are retried once and then rejected; the timeout of
  * the claude -p call is configurable; description length uses a UTF-8 byte
- * budget derived from the best description instead of upstream's fixed limits.
+ * budget derived from the current description's byte-per-character classification
+ * instead of upstream's fixed limits.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -483,10 +484,7 @@ async function main(): Promise<void> {
     evalResults,
     history,
     testResults: null,
-    budget: Math.max(
-      byteLength(evalResults.description),
-      lengthLimitsFor(evalResults.description).floor
-    ),
+    budget: lengthLimitsFor(evalResults.description).ceiling,
     model: values.model,
     timeoutSeconds: parseNumericOption(
       "timeout",
