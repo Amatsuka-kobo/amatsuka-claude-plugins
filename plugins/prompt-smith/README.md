@@ -16,10 +16,14 @@ prompt-smith は、エージェントに渡すプロンプトを無駄なく理�
 
 | スクリプト | 用途 | CLI 引数 |
 | --- | --- | --- |
-| `scripts/run-trigger-eval.mjs` | 対象スキルを一時ディレクトリのプロジェクトスキルとして登録し、eval セットの各 query で Skill ツールが発火したかを測定する | 必須: `--skill-path <スキルディレクトリ>`、`--eval-set <eval セットJSON>`。任意: `--description <description>`、`--out <結果JSON>`、`--runs-per-query <回数>`、`--num-workers <並列数>`、`--timeout <秒>`、`--trigger-threshold <閾値>`、`--model <model-id>`、`--verbose`。 |
-| `scripts/improve-description.mjs` | eval の失敗結果を基に、対象スキルの description 改善案を 1 回生成する | 必須: `--eval-results <結果JSON>`、`--skill-path <スキルディレクトリ>`、`--model <model-id>`。任意: `--history <履歴JSON>`、`--timeout <秒>`、`--verbose`、`--log-dir <ログディレクトリ>`、`--iteration <反復番号>`。 |
-| `scripts/run-loop.mjs` | eval セットを学習用と holdout 用に分け、発火測定と description 改善を反復し、最良の description と結果を JSON で出力する | 必須: `--eval-set <eval セットJSON>`、`--skill-path <スキルディレクトリ>`、`--model <model-id>`。任意: `--description <description>`、`--num-workers <並列数>`、`--timeout <秒>`、`--improve-timeout <秒>`、`--max-iterations <回数>`、`--runs-per-query <回数>`、`--trigger-threshold <閾値>`、`--holdout <比率>`、`--verbose`、`--report <auto\|none\|出力HTMLパス>`、`--results-dir <結果ディレクトリ>`。 |
+| `scripts/run-trigger-eval.mjs` | 対象スキルを一時ディレクトリのプロジェクトスキルとして登録し、eval セットの各 query で Skill ツールが発火したかを測定する | 必須: `--skill-path <スキルディレクトリ>`、`--eval-set <eval セットJSON>`。任意: `--description <description>`、`--out <結果JSON>`、`--runs-per-query <回数>`、`--num-workers <並列数>`、`--timeout <秒>`、`--trigger-threshold <閾値>`、`--model <model-id>`、`--verbose`、`--help`。 |
+| `scripts/improve-description.mjs` | eval の失敗結果を基に、対象スキルの description 改善案を 1 回生成する | 必須: `--eval-results <結果JSON>`、`--skill-path <スキルディレクトリ>`。任意: `--history <履歴JSON>`、`--timeout <秒>`、`--model <model-id>`、`--verbose`、`--log-dir <ログディレクトリ>`、`--iteration <反復番号>`、`--help`。 |
+| `scripts/run-loop.mjs` | eval セットを学習用と holdout 用に分け、発火測定と description 改善を反復し、最良の description と結果を JSON で出力する | 必須: `--eval-set <eval セットJSON>`、`--skill-path <スキルディレクトリ>`。任意: `--description <description>`、`--num-workers <並列数>`、`--timeout <秒>`、`--improve-timeout <秒>`、`--max-iterations <回数>`、`--runs-per-query <回数>`、`--trigger-threshold <閾値>`、`--holdout <比率>`、`--model <model-id>`、`--verbose`、`--report <auto\|none\|出力HTMLパス>`、`--results-dir <結果ディレクトリ>`、`--help`。 |
 | `scripts/generate-report.mjs` | 改善ループの結果から HTML レポートを生成する | 単独実行用の CLI 引数はない。`run-loop.mjs` から呼び出すため、直接実行しない。 |
+
+`--model` を省略したときは、3 つのエントリで `sonnet` を使います。
+
+測定の子プロセスは設定の読み込み元を絞るため、`apiKeyHelper`、`awsAuthRefresh`、settings の `env` に依存する認証ではなく、環境変数による認証を使ってください。
 
 `--skill-path` には `SKILL.md` 自体ではなく、そのファイルを含むスキルディレクトリを指定します。
 
