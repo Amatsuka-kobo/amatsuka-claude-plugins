@@ -1642,9 +1642,7 @@ Max iterations reached (${maxIterations}).
         })),
         testResults: null,
         budget: Math.max(
-          byteLength(
-            selectBest(history, testSet.length > 0).description
-          ),
+          byteLength(selectBest(history, testSet.length > 0).description),
           LENGTH_FLOOR
         ),
         model,
