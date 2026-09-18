@@ -1,4 +1,4 @@
-`plugins/raphael` (0.2.0-dev) — a failure-immune system: accumulate failure signals, distill them
+`plugins/raphael` (0.2.1-dev) — a failure-immune system: accumulate failure signals, distill them
 into "antibodies", and re-inject a preventive instruction **only** when a later tool call matches
 the antibody's trigger. Design: `plugins/raphael/DESIGN.md` (at plugin root, not `docs/`).
 Workspace pkg `raphael-scripts`. Node stdlib only.
@@ -21,7 +21,11 @@ antibody from expiry decay.
    self-resolved infections, and cleans distilled records older than 14 days. The nag digest lives in
    `stats.json` at `distill.last_nag_digest` and suppresses duplicate nudges per project. Distillation
    is the **only** LLM step, done by the `antibody-synthesizer` subagent (tools `Read, Bash` — it must
-   go through the management CLI, never edit antibody files directly).
+   go through the management CLI, never edit antibody files directly). Non-adoption splits into two
+   kinds: an infection that fails either of the synthesizer's two screening questions carries no
+   retained value, while one that passes both but still fails to get a workable trigger pattern
+   written for it (including a `PATTERN_TOO_BROAD` rejection) remains valid knowledge. The
+   synthesizer distinguishes the two in its final report.
 3. `PreToolUse` (Bash|Edit|Write) → `inoculate.mjs` evaluates `active`/`confirmed` antibodies and
    injects at most `max_injections` (default 3) bodies as `additionalContext`, headed `[raphael:<id>]`.
    Fire statistics are recorded in `.raphael/stats.json`; antibody files are not rewritten, and an

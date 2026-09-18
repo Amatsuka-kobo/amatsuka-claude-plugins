@@ -114,3 +114,5 @@
 - `2026/0918/phyllis998/0216-genshijin-statusline-setup.md` | 2026-09-18 | phyllis998 | statusline 設定と prompt 入力の意図確認
 - `2026/0918/phyllis998/1245-jev-ai-integration-planning.md` | 2026-09-18 | phyllis998 | Jev AI 調査と agent-policy への役割割当計画
 - `2026/0918/phyllis998/1315-skill-description-eval.md` | 2026-09-18 | phyllis998 | prompt-smith description 改善測定・3 件解決・PR 公開済
+- `2026/0918/phyllis998/1328-orchestration-discipline-rule-revision.md` | 2026-09-18 | phyllis998 | 4コミットをプッシュしてPR#1へ反映
+- `2026/0918/phyllis998/metatron-raphael-boundary-criteria.md` | 2026-09-18 | phyllis998 | GOTCHAS と抗体の棲み分けを一般性と表現可能性の 2 軸へ改訂
