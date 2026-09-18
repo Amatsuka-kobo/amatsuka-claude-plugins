@@ -65,7 +65,6 @@ description: スキルまたはコマンド定義を新しく作るとき、既�
 node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
   --eval-set "<eval セット JSON>" \
   --skill-path "<スキルディレクトリ>" \
-  --model "<model-id>" \
   --max-iterations 5 \
   --holdout 0.4 \
   --runs-per-query 3 \
@@ -73,6 +72,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/run-loop.mjs" \
 ```
 
 - `--skill-path` には SKILL.md ではなくスキルディレクトリを渡す。
+- 既定の `sonnet` を上書きするときだけ `--model` を渡す。
+- 引数の一覧と既定値は `--help` で確認する。
 - 反復せず発火だけを測るときは `${CLAUDE_PLUGIN_ROOT}/scripts/run-trigger-eval.mjs` を使う。
 - 改善案を 1 回だけ得るときは `${CLAUDE_PLUGIN_ROOT}/scripts/improve-description.mjs` を使う。
 - 並列数は `--num-workers` で変える。
