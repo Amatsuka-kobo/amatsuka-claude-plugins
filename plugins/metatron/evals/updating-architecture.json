@@ -1,14 +1,14 @@
 [
   {
-    "query": "先週 Redis と BullMQ を入れたのに `docs/ARCHITECTURE.md` の技術スタックが古いままです。他にも追随してない箇所があるはずなので、洗い出して更新してください。",
+    "query": "`ADR-0015` として、単一クライアント化に伴い GraphQL から REST へ移行する選択を後から追える形に残したいです。関連する `ADR-0004` は根拠が失われているため、理由を整理して廃止扱いへ変更し、ARCHITECTURE との整合も確認してください。",
     "should_trigger": true
   },
   {
-    "query": "ドメインマップの glob が 2 本死んでます。`src/legacy/**` はもう無いし、逆に `src/billing/` がどのドメインにも入っていない。穴と死んだ glob を両方直したいです。",
+    "query": "ドメインマップの `src/legacy/**` は削除済みで、`src/billing/` はどの区分にも載っていません。実在しない参照先と分類漏れを調べ、現在のディレクトリ構成が正しく表れるよう ARCHITECTURE の該当箇所を改めてください。",
     "should_trigger": true
   },
   {
-    "query": "ADR を追加したい。GraphQL をやめて REST に戻した判断を残して、その前提になっていた ADR-0004 を廃止の状態に変えてください。理由は「クライアントが 1 つに減ったため」です。",
+    "query": "AI が既存の ARCHITECTURE の古い説明を正しいものとして扱い、実装と違う場所に変更を加えようとしています。実装と rules を突き合わせて不一致を洗い出し、ARCHITECTURE と必要な rules を整合するよう更新してください。",
     "should_trigger": true
   },
   {
@@ -16,11 +16,11 @@
     "should_trigger": true
   },
   {
-    "query": "今の diff で `apps/worker` を丸ごと `services/worker` に移しました。ディレクトリ構成と責務の記述、保護パスの設定が実態とズレたはずなので反映してください。",
+    "query": "`.claude/settings.json` の設定を変更する相談に見えますが、`plugins/*/dist/` を直接変更できない運用へ切り替えました。`harness-docs/ARCHITECTURE.md` の `## 保護パス` と各領域の責務を、rules と実装を突き合わせて見直し、必要な記述を更新してください。",
     "should_trigger": true
   },
   {
-    "query": "うちの ARCHITECTURE、`## テスト方針` の節が丸ごと抜けてます。vitest と playwright を使っているので、そこだけ足したい。埋まらない部分は推測で書かないでください。",
+    "query": "AI が保護すべき領域を把握できず、直接変更してはいけない場所を触ろうとしています。現行の rules と実装上の管理方法を確認し、ARCHITECTURE の `## 保護パス` と対応する rules を更新して、保護対象と変更方法を一致させてください。",
     "should_trigger": true
   },
   {
@@ -32,7 +32,7 @@
     "should_trigger": true
   },
   {
-    "query": "保護パスに `infra/terraform/**` が入っていないのに、実際は触ってはいけない領域です。ARCHITECTURE 側の記載を整合させて、ついでに他の不整合も見てほしい。",
+    "query": "`infra/terraform/` は運用上、直接変更を受け付けない範囲になったのに、ARCHITECTURE と rules の `## 保護パス` に反映されていません。実際の管理方法と他の一覧を確認し、変更を制限する領域の記述を整合させてください。",
     "should_trigger": true
   },
   {
