@@ -14,7 +14,8 @@
  * split-eval-set.ts instead of Python's random module; report generation is
  * delegated to generate-report.ts; a failed description improvement stops the
  * loop and returns the best result so far instead of propagating the error; the
- * best description's UTF-8 byte length supplies the next improvement budget.
+ * current description's byte-per-character classification supplies the next
+ * improvement budget.
  */
 
 import { spawn } from "node:child_process"
@@ -31,12 +32,7 @@ import {
 } from "./improve-description.js"
 import { describeEnvironment } from "./lib/claude-cli.js"
 import { type HelpSpec, renderHelp } from "./lib/cli-help.js"
-import {
-  byteLength,
-  DEFAULT_MODEL,
-  DEFAULTS,
-  LENGTH_FLOOR
-} from "./lib/defaults.js"
+import { DEFAULT_MODEL, DEFAULTS, lengthLimitsFor } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { splitEvalSet } from "./lib/split-eval-set.js"
 import type {
@@ -357,10 +353,7 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
           description: attempt.description as string
         })),
         testResults: null,
-        budget: Math.max(
-          byteLength(selectBest(history, testSet.length > 0).description),
-          LENGTH_FLOOR
-        ),
+        budget: lengthLimitsFor(currentDescription).ceiling,
         model,
         timeoutSeconds: improveTimeout,
         logDir,
