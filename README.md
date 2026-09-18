@@ -123,7 +123,8 @@ Agents 定義の名前、本文、その他フロントマターは利用者が�
 ### prompt-smith
 
 AI が読み手となる指示書(CLAUDE.md・SKILL.md・コマンド定義・Agents 定義・`references/` 配下の文書・他)を、無駄なく理解しやすい形に設計・改善するプラグインです。<br>
-AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマンド定義の作成・description の評価・改善は `skill-creator`、Agent 定義の作成・検証は `agent-creator` が担当します。
+AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマンド定義の作成・description の評価・改善は `skill-creator`、Agent 定義の作成・検証は `agent-creator` が担当します。<br>
+発火測定は、CLI 組み込みのスキルだけが同席する隔離された一時環境で実行します。
 
 ### Metatron 📜
 

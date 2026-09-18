@@ -1,5 +1,5 @@
-`plugins/agent-policy` (0.19.2-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
-(0.3.2-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
+`plugins/agent-policy` (0.19.4-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+(0.4.0-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
 CLAUDE.local.md prose.
@@ -423,9 +423,9 @@ The port's four bundles (`src/*.ts` → `scripts/*.mjs`, node22 target):
 
 | bundle | role |
 | --- | --- |
-| `run-trigger-eval.mjs` | registers the target skill in a temp sandbox, runs each eval query through `claude -p`, counts a fire only when the stream-JSON shows a `Skill` tool call |
-| `improve-description.mjs` | generates a new `description` from failing queries; retries missing tags, shortens >1024 chars, records runs |
-| `run-loop.mjs` | splits the eval set into train/holdout, iterates measure→improve, emits best-result JSON + HTML report |
+| `run-trigger-eval.mjs` | registers the target skill in a temp sandbox **outside the repo** and starts each child with `--setting-sources project` / `--strict-mcp-config` / `--settings '{"disableAllHooks":true}'` / `--no-session-persistence`, so only the CLI's built-in skills compete; runs each eval query through `claude -p`, counts a fire only when the stream-JSON shows a `Skill` tool call, and **records CLI start-up/execution failures as `errors` instead of folding them into "did not fire"** (it reads the `result` event's `is_error`; upstream treats every `result` as a non-fire). If every run of any one query fails it returns no result and fails |
+| `improve-description.mjs` | generates a new `description` from failing queries; retries missing tags, **treats the UTF-8 byte length of the best-scoring description (floor 680) as the budget and rewrites anything over it** (upstream's "100-200 words / 1024 characters" is not used), records runs |
+| `run-loop.mjs` | splits the eval set into train/holdout, iterates measure→improve, emits best-result JSON + HTML report; **the result JSON records `environment`**, and the loop stops when **train passes every query OR the holdout is perfect** (upstream only looks at train). A configuration whose holdout leaves train empty is rejected |
 | `generate-report.mjs` | renders the loop history / train-test scores / per-query results as HTML (library, not a standalone CLI) |
 
 `src/lib/` splits out `claude-cli`, `parse-skill-md`, `pool`, `sandbox`, `split-eval-set`,
