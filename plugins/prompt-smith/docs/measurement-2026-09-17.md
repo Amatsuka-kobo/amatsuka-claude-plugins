@@ -42,6 +42,17 @@
 - 出力 JSON の `errors` は 0 だった。
 - `environment` は `{"base_url":"http://127.0.0.1:8317","auth_source":"ANTHROPIC_AUTH_TOKEN","model":"sonnet"}` だった。トークンの値は含まれない。
 
+### 既定モデルのライブ確認(段 2)
+
+`--model` を省いたときに既定の `sonnet` が実際に使われることを、CLI から確認した。単体テストはライブラリ関数を直接呼ぶ経路だけを対象にしており、`main` が `values.model` をそのまま渡す経路はライブ起動でしか通らない。スモークテストは引数なしで起動するため、`--model` より手前の他の必須チェックで失敗する。
+
+段 1 と同じ `~/prompt-smith-probe/` の probe 資産を使い、3 エントリを `--model` 無しで起動した。
+
+- `run-trigger-eval.mjs` は終了コード 0 だった。`environment.model` は `"sonnet"`、`errors` は 0、`summary` は `{"total":3,"passed":3,"failed":0}` だった。
+- `run-loop.mjs` は終了コード 0 だった。`environment.model` は `"sonnet"`、`exit_reason` は `"all_passed (iteration 1)"` だった。probe が全問通ったため、改善案生成は呼ばれなかった。
+- `improve-description.mjs` は終了コード 0 だった。`<new_description>` を含む応答を 1 回で取得し、stdout に `description` が出た。このエントリの出力は `environment` を持たない。
+- `git status --porcelain=v1` は前後で完全に一致した。
+
 ## 実施の過程で判明した 2 点
 
 ### 合格条件を差し替えた
