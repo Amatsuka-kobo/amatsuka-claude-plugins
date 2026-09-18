@@ -71,6 +71,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/list-antibodies.mjs" --dir "$CLAUDE_PROJECT_
 
 各未蒸留 infection に対し、問 1「この知識を次回知らないと、同じ失敗をするか」と問う。問 1 と問 2 の両方が Yes のときだけ抗体にする。問 1 または問 2 が No、単発の偶然、既にコードで恒久修正済み、具体性がなく再利用不能、または証拠不足なら抗体を変更せず非採用とする。
 
+非採用には二種類ある。問 1 または問 2 が No、単発の偶然、修正済み、具体性なし、証拠不足によるものは、知識として残す価値がない。問 1 と問 2 の両方が Yes でありながら pattern を書けずに非採用にしたものは、知識自体は有効なまま残る。判断した非採用がどちらに当たるかを記録し、最終報告で区別する。
+
 答えが Yes の場合は次の表を上から適用する。
 
 | 分類 | 条件 | 操作 |
@@ -123,7 +125,7 @@ printf '%s\n' '<create-json>' | node "${CLAUDE_PLUGIN_ROOT}/scripts/update-antib
 }
 ```
 
-`PATTERN_TOO_BROAD` で拒否されたら、trigger の pattern を、その失敗を再現しうる形へ絞って一度だけ再試行する。返された `samples` を見て、無関係なコマンドが一致していることを確認してから絞る。絞り込んでもなお拒否される、または絞ると本来防ぎたい失敗に一致しなくなる場合は、その infection を非採用として報告する。抗体を作れなかったこと自体は失敗ではない。
+`PATTERN_TOO_BROAD` で拒否されたら、trigger の pattern を、その失敗を再現しうる形へ絞って一度だけ再試行する。返された `samples` を見て、無関係なコマンドが一致していることを確認してから絞る。絞り込んでもなお拒否される、または絞ると本来防ぎたい失敗に一致しなくなる場合は、その infection を非採用として報告する。抗体を作れなかったこと自体は失敗ではない。この非採用は、二問が両方 Yes のまま pattern を書けなかった扱いとし、最終報告でその区別を付ける。
 
 create が失敗した場合、record を直接修復せず、infection を未蒸留のまま残してエラーを報告する。
 
@@ -156,7 +158,7 @@ printf '%s\n' '{"ids":["<infection-id>"]}' | node "${CLAUDE_PLUGIN_ROOT}/scripts
 簡潔に次を報告する。
 
 - 読んだ未蒸留 infection 数と判断済み ID
-- duplicate / extend / generalize / new / bad antibody / 非採用の分類
+- duplicate / extend / generalize / new / bad antibody の分類、および非採用の内訳(二問のどちらかが No によるものと、二問は両方 Yes で pattern を書けなかったものの区別)
 - 実行した operation と対象抗体 ID(create は作成結果の ID)
 - patch dry-run または create preflight の結果
 - mark-distilled の結果
