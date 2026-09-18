@@ -1,22 +1,22 @@
 [
   {
-    "query": "`plugins/willow-ledger/skills/month-end/SKILL.md` の本文を、月末締めで実際に判断できる指示に直してください。`close_date` が休日なら翌営業日にする、未照合の `invoice_ref` は一覧に残す、という規則を入れ、背景説明と同じ意味の例は削りたいです。",
+    "query": "`plugins/cobalt-reef/skills/renewal-check/SKILL.md` の説明欄が広すぎるように見えるので見てほしいのですが、説明欄は変えないでください。実際には、`renewal_date` が空のときの確認順、`account_state=closed` の停止条件、重複した例の扱いを本文で整理し、担当者が迷わず処理できる規則にしたいです。",
     "should_trigger": true
   },
   {
-    "query": "青嶺モビリティの `CLAUDE.md` は『適切に確認する』ばかりでCI失敗時の動きが不明です。`apps/fleet/`、`contract_status=paused`、検証コマンドの順序を使って判断基準へ置き換え、古い移行経緯は本文から落としてください。",
+    "query": "青嶺モビリティの `CLAUDE.md` で『注意して確かめる』とある箇所を、CIが落ちた時の対応に具体化したいです。`apps/fleet/` で `contract_status=paused` の場合を例に、確かめるための処理を行う順番を決め、移行の経緯を述べた段落は取り除いてください。",
     "should_trigger": true
   },
   {
-    "query": "`plugins/oak-signal/commands/escalate.md` の本文を整えたいです。`ticket_url`、障害等級、顧客影響がそろわない場合の質問順と、P1だけに要求する報告先を矛盾なく書き、似た出力例は一つに絞ってください。descriptionの変更は不要です。",
+    "query": "`plugins/oak-signal/commands/escalate.md` のAI向け指示書をレビューしてください。`ticket_url`、障害等級、顧客影響がそろわない場合の質問順と、P1だけに要求する報告先に矛盾がないか確かめ、判断が分かれる箇所と似た出力例を整理したいです。descriptionは変えないでください。",
     "should_trigger": true
   },
   {
-    "query": "`plugins/copper-orbit/references/payment-exceptions.md` にカード会社別の上限表と、担当者へ連絡する指示が混在しています。`issuer_code` と金額の表は引くための情報として残し、AIの行動を変える曖昧な文だけを削って読みやすくしてください。",
+    "query": "問い合わせの内容から緊急度と対応部署を判断し、判断理由も添えるプロンプトを作ってください。曖昧な依頼への確認方法、出力形式、誤った断定を避けるルールまで設計したいです。",
     "should_trigger": true
   },
   {
-    "query": "古い `plugins/lumen-supply/memories/intake-notes.md` を棚卸ししたい。仕入先の連絡先一覧は参照情報として残す一方、既に失効した承認ルート、理由だけの注記、重複した確認手順を除き、`supplier_tier` ごとの判断を迷わない本文に直してほしい。",
+    "query": "このファイルを簡潔にしてレビューしてください。`plugins/opal-summit/output-styles/outage-update.md` は障害連絡用のAI向け指示書で、`severity` と `customer_impact` に応じた書き分けが説明に埋もれています。判断できない言い回しと重複した時刻規則を洗い出し、運用中に使える内容へまとめたいです。",
     "should_trigger": true
   },
   {
@@ -28,7 +28,7 @@
     "should_trigger": true
   },
   {
-    "query": "`plugins/mist-garden/skills/catalog-repair/SKILL.md` の手順に、商品URLの再試行回数と `sku_state=retired` の除外条件を加えたいです。現場担当が参照するエラーコード一覧は壊さず、本文の順序・例・禁止事項を見直して出力の一貫性を評価してください。",
+    "query": "`plugins/mist-garden/skills/catalog-repair/SKILL.md` の既存プロンプトを修正して、商品URLの再試行回数と `sku_state=retired` の除外条件を加える動きを追加してください。現場担当が参照するエラーコード一覧は残したまま、本文の順序・例・禁止事項を整合するよう見直したいです。",
     "should_trigger": true
   },
   {
@@ -36,7 +36,7 @@
     "should_trigger": true
   },
   {
-    "query": "`plugins/dawn-works/commands/reconcile.md` は会計担当の追加ルールが継ぎ足され、海外通貨の丸めと`ledger_date`の扱いが食い違っています。実行時の指示本文を再構成し、参照用の勘定科目表は残して、矛盾・冗長・判定不能な表現を評価してください。",
+    "query": "東港商事の `plugins/dawn-works/commands/settlement-runbook.md` は、外貨の端数処理と `ledger_date` の決め方が食い違っています。作業の流れを組み替え、勘定科目表は引ける状態で残したまま、同じ規則の繰り返しや解釈が一通りに定まらない箇所を洗い出してください。",
     "should_trigger": true
   },
   {
