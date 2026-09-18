@@ -433,6 +433,26 @@ stderr: ${stderr}`));
   }
 }
 
+// src/lib/cli-help.ts
+function renderHelp(spec) {
+  const lines = [
+    `Usage: ${spec.command} [options]`,
+    "",
+    spec.summary,
+    "",
+    "Options:"
+  ];
+  for (const option of spec.options) {
+    const value = option.value ? ` ${option.value}` : "";
+    const required = option.required ? " (required)" : "";
+    const defaultValue = option.defaultValue ? ` (default: ${option.defaultValue})` : "";
+    lines.push(`  ${option.flag}${value}${required}${defaultValue}`);
+    lines.push(`    ${option.summary}`);
+  }
+  return `${lines.join("\n")}
+`;
+}
+
 // src/lib/defaults.ts
 var DEFAULT_MODEL = "sonnet";
 var DEFAULTS = {
@@ -816,6 +836,66 @@ function parseEvalSet(content) {
   }
   return evalSet;
 }
+var helpSpec = {
+  command: "run-trigger-eval.mjs",
+  summary: "Evaluate whether a skill triggers for an evaluation set.",
+  options: [
+    {
+      flag: "--skill-path",
+      value: "<path>",
+      required: true,
+      summary: "Path to the skill directory."
+    },
+    {
+      flag: "--eval-set",
+      value: "<path>",
+      required: true,
+      summary: "Path to the evaluation set JSON file."
+    },
+    {
+      flag: "--description",
+      value: "<text>",
+      summary: "Description to evaluate instead of the one in SKILL.md."
+    },
+    {
+      flag: "--out",
+      value: "<path>",
+      summary: "Write the JSON result to a file instead of stdout."
+    },
+    {
+      flag: "--runs-per-query",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.runsPerQuery),
+      summary: "Number of runs for each evaluation query."
+    },
+    {
+      flag: "--num-workers",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.numWorkers),
+      summary: "Maximum number of concurrent workers."
+    },
+    {
+      flag: "--timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.timeout),
+      summary: "Timeout for each query run in seconds."
+    },
+    {
+      flag: "--trigger-threshold",
+      value: "<rate>",
+      defaultValue: String(DEFAULTS.triggerThreshold),
+      summary: "Minimum trigger rate required for a positive evaluation."
+    },
+    {
+      flag: "--model",
+      value: "<name>",
+      defaultValue: DEFAULT_MODEL,
+      summary: "Model passed to claude."
+    },
+    { flag: "--verbose", summary: "Print additional progress details." },
+    { flag: "--help", summary: "Show this help message." }
+  ]
+};
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -828,11 +908,16 @@ async function main() {
       timeout: { type: "string" },
       "trigger-threshold": { type: "string" },
       model: { type: "string" },
-      verbose: { type: "boolean", default: false }
+      verbose: { type: "boolean", default: false },
+      help: { type: "boolean", default: false }
     },
     strict: true,
     allowPositionals: false
   });
+  if (values.help) {
+    process.stdout.write(renderHelp(helpSpec));
+    return;
+  }
   if (!values["skill-path"]) throw new Error("--skill-path is required");
   if (!values["eval-set"]) throw new Error("--eval-set is required");
   const originalContent = await readFile(
@@ -1127,6 +1212,53 @@ async function improveDescription(options) {
   await writeTranscript(logDir, iteration, transcript);
   return description;
 }
+var helpSpec2 = {
+  command: "improve-description.mjs",
+  summary: "Generate an improved skill description from evaluation results.",
+  options: [
+    {
+      flag: "--eval-results",
+      value: "<path>",
+      required: true,
+      summary: "Path to the evaluation results JSON file."
+    },
+    {
+      flag: "--skill-path",
+      value: "<path>",
+      required: true,
+      summary: "Path to the skill directory."
+    },
+    {
+      flag: "--history",
+      value: "<path>",
+      summary: "Path to prior improvement attempts in JSON format."
+    },
+    {
+      flag: "--model",
+      value: "<name>",
+      defaultValue: DEFAULT_MODEL,
+      summary: "Model passed to claude."
+    },
+    { flag: "--verbose", summary: "Print additional progress details." },
+    {
+      flag: "--log-dir",
+      value: "<path>",
+      summary: "Directory where improvement transcripts are written."
+    },
+    {
+      flag: "--iteration",
+      value: "<number>",
+      summary: "Iteration number recorded in the transcript."
+    },
+    {
+      flag: "--timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.improveTimeout),
+      summary: "Timeout for the improvement request in seconds."
+    },
+    { flag: "--help", summary: "Show this help message." }
+  ]
+};
 async function main2() {
   const { values } = parseArgs2({
     options: {
@@ -1135,6 +1267,7 @@ async function main2() {
       history: { type: "string" },
       model: { type: "string" },
       verbose: { type: "boolean", default: false },
+      help: { type: "boolean", default: false },
       "log-dir": { type: "string" },
       iteration: { type: "string" },
       timeout: { type: "string" }
@@ -1142,6 +1275,10 @@ async function main2() {
     strict: true,
     allowPositionals: false
   });
+  if (values.help) {
+    process.stdout.write(renderHelp(helpSpec2));
+    return;
+  }
   if (!values["eval-results"]) throw new Error("--eval-results is required");
   if (!values["skill-path"]) throw new Error("--skill-path is required");
   const skillPath = values["skill-path"];
@@ -1557,6 +1694,90 @@ function openInBrowser(reportPath) {
   } catch {
   }
 }
+var helpSpec3 = {
+  command: "run-loop.mjs",
+  summary: "Iteratively improve a skill description against an evaluation set.",
+  options: [
+    {
+      flag: "--eval-set",
+      value: "<path>",
+      required: true,
+      summary: "Path to the evaluation set JSON file."
+    },
+    {
+      flag: "--skill-path",
+      value: "<path>",
+      required: true,
+      summary: "Path to the skill directory."
+    },
+    {
+      flag: "--description",
+      value: "<text>",
+      summary: "Description to improve instead of the one in SKILL.md."
+    },
+    {
+      flag: "--num-workers",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.numWorkers),
+      summary: "Maximum number of concurrent workers."
+    },
+    {
+      flag: "--timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.timeout),
+      summary: "Timeout for each query run in seconds."
+    },
+    {
+      flag: "--improve-timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.improveTimeout),
+      summary: "Timeout for each description improvement in seconds."
+    },
+    {
+      flag: "--max-iterations",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.maxIterations),
+      summary: "Maximum number of improvement iterations."
+    },
+    {
+      flag: "--runs-per-query",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.runsPerQuery),
+      summary: "Number of runs for each evaluation query."
+    },
+    {
+      flag: "--trigger-threshold",
+      value: "<rate>",
+      defaultValue: String(DEFAULTS.triggerThreshold),
+      summary: "Minimum trigger rate required for a positive evaluation."
+    },
+    {
+      flag: "--holdout",
+      value: "<fraction>",
+      defaultValue: String(DEFAULTS.holdout),
+      summary: "Fraction of the evaluation set reserved for holdout testing."
+    },
+    {
+      flag: "--model",
+      value: "<name>",
+      defaultValue: DEFAULT_MODEL,
+      summary: "Model passed to claude."
+    },
+    { flag: "--verbose", summary: "Print additional progress details." },
+    {
+      flag: "--report",
+      value: "<path|none|auto>",
+      defaultValue: "auto",
+      summary: "Write an HTML report, disable it, or open an automatic report."
+    },
+    {
+      flag: "--results-dir",
+      value: "<path>",
+      summary: "Directory where timestamped results are saved."
+    },
+    { flag: "--help", summary: "Show this help message." }
+  ]
+};
 async function main3() {
   const { values } = parseArgs3({
     options: {
@@ -1572,12 +1793,17 @@ async function main3() {
       holdout: { type: "string" },
       model: { type: "string" },
       verbose: { type: "boolean", default: false },
+      help: { type: "boolean", default: false },
       report: { type: "string", default: "auto" },
       "results-dir": { type: "string" }
     },
     strict: true,
     allowPositionals: false
   });
+  if (values.help) {
+    process.stdout.write(renderHelp(helpSpec3));
+    return;
+  }
   if (!values["eval-set"]) throw new Error("--eval-set is required");
   if (!values["skill-path"]) throw new Error("--skill-path is required");
   let skillContent;

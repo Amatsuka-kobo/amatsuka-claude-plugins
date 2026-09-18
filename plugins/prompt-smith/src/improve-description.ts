@@ -19,6 +19,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, extname, join } from "node:path"
 import { parseArgs } from "node:util"
 import { callClaudeText } from "./lib/claude-cli.js"
+import { type HelpSpec, renderHelp } from "./lib/cli-help.js"
 import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import type { EvalResultItem, EvalSummary } from "./lib/types.js"
@@ -363,6 +364,54 @@ export async function improveDescription(
   return description
 }
 
+const helpSpec: HelpSpec = {
+  command: "improve-description.mjs",
+  summary: "Generate an improved skill description from evaluation results.",
+  options: [
+    {
+      flag: "--eval-results",
+      value: "<path>",
+      required: true,
+      summary: "Path to the evaluation results JSON file."
+    },
+    {
+      flag: "--skill-path",
+      value: "<path>",
+      required: true,
+      summary: "Path to the skill directory."
+    },
+    {
+      flag: "--history",
+      value: "<path>",
+      summary: "Path to prior improvement attempts in JSON format."
+    },
+    {
+      flag: "--model",
+      value: "<name>",
+      defaultValue: DEFAULT_MODEL,
+      summary: "Model passed to claude."
+    },
+    { flag: "--verbose", summary: "Print additional progress details." },
+    {
+      flag: "--log-dir",
+      value: "<path>",
+      summary: "Directory where improvement transcripts are written."
+    },
+    {
+      flag: "--iteration",
+      value: "<number>",
+      summary: "Iteration number recorded in the transcript."
+    },
+    {
+      flag: "--timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.improveTimeout),
+      summary: "Timeout for the improvement request in seconds."
+    },
+    { flag: "--help", summary: "Show this help message." }
+  ]
+}
+
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
@@ -371,6 +420,7 @@ async function main(): Promise<void> {
       history: { type: "string" },
       model: { type: "string" },
       verbose: { type: "boolean", default: false },
+      help: { type: "boolean", default: false },
       "log-dir": { type: "string" },
       iteration: { type: "string" },
       timeout: { type: "string" }
@@ -378,6 +428,12 @@ async function main(): Promise<void> {
     strict: true,
     allowPositionals: false
   })
+
+  if (values.help) {
+    process.stdout.write(renderHelp(helpSpec))
+    return
+  }
+
   if (!values["eval-results"]) throw new Error("--eval-results is required")
   if (!values["skill-path"]) throw new Error("--skill-path is required")
 

@@ -24,6 +24,7 @@ import {
   killThenSettle,
   type SpawnFn
 } from "./lib/claude-cli.js"
+import { type HelpSpec, renderHelp } from "./lib/cli-help.js"
 import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { pool } from "./lib/pool.js"
@@ -318,6 +319,67 @@ export function parseEvalSet(content: string): EvalItem[] {
   return evalSet
 }
 
+const helpSpec: HelpSpec = {
+  command: "run-trigger-eval.mjs",
+  summary: "Evaluate whether a skill triggers for an evaluation set.",
+  options: [
+    {
+      flag: "--skill-path",
+      value: "<path>",
+      required: true,
+      summary: "Path to the skill directory."
+    },
+    {
+      flag: "--eval-set",
+      value: "<path>",
+      required: true,
+      summary: "Path to the evaluation set JSON file."
+    },
+    {
+      flag: "--description",
+      value: "<text>",
+      summary: "Description to evaluate instead of the one in SKILL.md."
+    },
+    {
+      flag: "--out",
+      value: "<path>",
+      summary: "Write the JSON result to a file instead of stdout."
+    },
+    {
+      flag: "--runs-per-query",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.runsPerQuery),
+      summary: "Number of runs for each evaluation query."
+    },
+    {
+      flag: "--num-workers",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.numWorkers),
+      summary: "Maximum number of concurrent workers."
+    },
+    {
+      flag: "--timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.timeout),
+      summary: "Timeout for each query run in seconds."
+    },
+    {
+      flag: "--trigger-threshold",
+      value: "<rate>",
+      defaultValue: String(DEFAULTS.triggerThreshold),
+      summary: "Minimum trigger rate required for a positive evaluation."
+    },
+    {
+      flag: "--model",
+      value: "<name>",
+      defaultValue: DEFAULT_MODEL,
+      summary: "Model passed to claude."
+    },
+    { flag: "--verbose", summary: "Print additional progress details." },
+    { flag: "--help", summary: "Show this help message." }
+  ]
+}
+
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
@@ -330,11 +392,17 @@ async function main(): Promise<void> {
       timeout: { type: "string" },
       "trigger-threshold": { type: "string" },
       model: { type: "string" },
-      verbose: { type: "boolean", default: false }
+      verbose: { type: "boolean", default: false },
+      help: { type: "boolean", default: false }
     },
     strict: true,
     allowPositionals: false
   })
+
+  if (values.help) {
+    process.stdout.write(renderHelp(helpSpec))
+    return
+  }
 
   if (!values["skill-path"]) throw new Error("--skill-path is required")
   if (!values["eval-set"]) throw new Error("--eval-set is required")

@@ -29,6 +29,7 @@ import {
   type ImproveOptions
 } from "./improve-description.js"
 import { describeEnvironment } from "./lib/claude-cli.js"
+import { type HelpSpec, renderHelp } from "./lib/cli-help.js"
 import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { splitEvalSet } from "./lib/split-eval-set.js"
@@ -415,6 +416,91 @@ function openInBrowser(reportPath: string): void {
   }
 }
 
+const helpSpec: HelpSpec = {
+  command: "run-loop.mjs",
+  summary: "Iteratively improve a skill description against an evaluation set.",
+  options: [
+    {
+      flag: "--eval-set",
+      value: "<path>",
+      required: true,
+      summary: "Path to the evaluation set JSON file."
+    },
+    {
+      flag: "--skill-path",
+      value: "<path>",
+      required: true,
+      summary: "Path to the skill directory."
+    },
+    {
+      flag: "--description",
+      value: "<text>",
+      summary: "Description to improve instead of the one in SKILL.md."
+    },
+    {
+      flag: "--num-workers",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.numWorkers),
+      summary: "Maximum number of concurrent workers."
+    },
+    {
+      flag: "--timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.timeout),
+      summary: "Timeout for each query run in seconds."
+    },
+    {
+      flag: "--improve-timeout",
+      value: "<seconds>",
+      defaultValue: String(DEFAULTS.improveTimeout),
+      summary: "Timeout for each description improvement in seconds."
+    },
+    {
+      flag: "--max-iterations",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.maxIterations),
+      summary: "Maximum number of improvement iterations."
+    },
+    {
+      flag: "--runs-per-query",
+      value: "<count>",
+      defaultValue: String(DEFAULTS.runsPerQuery),
+      summary: "Number of runs for each evaluation query."
+    },
+    {
+      flag: "--trigger-threshold",
+      value: "<rate>",
+      defaultValue: String(DEFAULTS.triggerThreshold),
+      summary: "Minimum trigger rate required for a positive evaluation."
+    },
+    {
+      flag: "--holdout",
+      value: "<fraction>",
+      defaultValue: String(DEFAULTS.holdout),
+      summary: "Fraction of the evaluation set reserved for holdout testing."
+    },
+    {
+      flag: "--model",
+      value: "<name>",
+      defaultValue: DEFAULT_MODEL,
+      summary: "Model passed to claude."
+    },
+    { flag: "--verbose", summary: "Print additional progress details." },
+    {
+      flag: "--report",
+      value: "<path|none|auto>",
+      defaultValue: "auto",
+      summary: "Write an HTML report, disable it, or open an automatic report."
+    },
+    {
+      flag: "--results-dir",
+      value: "<path>",
+      summary: "Directory where timestamped results are saved."
+    },
+    { flag: "--help", summary: "Show this help message." }
+  ]
+}
+
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
@@ -430,12 +516,18 @@ async function main(): Promise<void> {
       holdout: { type: "string" },
       model: { type: "string" },
       verbose: { type: "boolean", default: false },
+      help: { type: "boolean", default: false },
       report: { type: "string", default: "auto" },
       "results-dir": { type: "string" }
     },
     strict: true,
     allowPositionals: false
   })
+
+  if (values.help) {
+    process.stdout.write(renderHelp(helpSpec))
+    return
+  }
 
   if (!values["eval-set"]) throw new Error("--eval-set is required")
   if (!values["skill-path"]) throw new Error("--skill-path is required")
