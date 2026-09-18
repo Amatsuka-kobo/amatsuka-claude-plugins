@@ -2,7 +2,7 @@
 <!--
   This file is a copy of assets/eval_review.html from the skill-creator
   Claude Code plugin (Apache License, Version 2.0), Copyright Anthropic, PBC.
-  Modified by amatsuka-koubou: this notice was added. No other changes.
+  Modified by amatsuka-koubou: this notice and a static criteria list were added.
   See plugins/prompt-smith/NOTICE and plugins/prompt-smith/LICENSE.
 -->
 <html lang="en">
@@ -41,6 +41,10 @@
     .btn-delete { background: #c44; color: white; padding: 0.3rem 0.6rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-family: 'Poppins', sans-serif; }
     .btn-delete:hover { background: #a33; }
     .summary { margin-top: 1rem; color: #b0aea5; font-size: 0.875rem; }
+    .criteria { width: 100%; max-width: 1100px; margin: 1rem 0; padding: 1rem 1.25rem; background: white; border: 1px solid #e8e6dc; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .criteria h2 { font-family: 'Poppins', sans-serif; margin-bottom: 0.5rem; font-size: 1rem; }
+    .criteria ol { margin-left: 1.25rem; }
+    .criteria li { padding: 0.2rem 0; line-height: 1.45; }
   </style>
 </head>
 <body>
@@ -51,6 +55,29 @@
     <button class="btn btn-add" onclick="addRow()">+ Add Query</button>
     <button class="btn btn-export" onclick="exportEvalSet()">Export Eval Set</button>
   </div>
+
+  <section class="criteria" aria-labelledby="criteria-heading">
+    <h2 id="criteria-heading">Eval Set Creation Criteria</h2>
+    <ol>
+      <li>eval セットは 20 問にする。</li>
+      <li>should_trigger: true は 8〜10 問にする。</li>
+      <li>should_trigger: false は 8〜10 問にする。</li>
+      <li>クエリは具体的で現実的にする。</li>
+      <li>クエリにはファイルパス・仕事や状況の背景・列名と値・会社名・URL・短い前置きのような手がかりを混ぜる。</li>
+      <li>小文字・略語・タイプミス・口語を混ぜる。</li>
+      <li>クエリの長さを混ぜる。</li>
+      <li>明快な例ではなく境界事例を選ぶ。</li>
+      <li>1 手で終わる作業を求める問は作らない。多段の作業や専門的な判断を要する問を作る。問の短さで作業量を判断しない。</li>
+      <li>should_trigger: false は語や概念を共有する near-miss で埋める。</li>
+      <li>明らかに無関係な問は入れない。別の対応が要る問を入れる。</li>
+      <li>should_trigger: true には別のスキルが担当しそうに見えて、実はこのスキルが担当する依頼を入れる。</li>
+      <li>eval セットを作る前に、そのスキルの主な起動経路をユーザーに聞く。起動経路は「ユーザーが目的を明示して依頼する」と「AI が提案し、ユーザーがそれに答える」の 2 通りがある。</li>
+      <li>主な起動経路が AI の提案に対するユーザーの回答であるときは、その回答の形を should_trigger: true の問に入れる。</li>
+      <li>提案への回答を should_trigger: true の問に入れるときは、AI の発言をなぞらない。Input: 「AI: リリースノートの下書きを作りましょうか。」 Output: 「リリースノートの下書きを作ってください。」</li>
+      <li>短い問を作るときは、対象を指す語を 1 つ残す。測定は会話履歴を持たない単発実行であり、「お願いします」だけの返答ではどのスキルへの依頼かを判定できない。Input: 「このスキルを直してください。」 Output: 「スキルを直してください。」</li>
+      <li>description が使う語だけで should_trigger: true の問を作らない。同じ行為を指す別の語を混ぜる。</li>
+    </ol>
+  </section>
 
   <table>
     <thead>
