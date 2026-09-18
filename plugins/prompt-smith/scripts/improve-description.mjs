@@ -284,11 +284,11 @@ var DEFAULT_MODEL = "sonnet";
 var MULTIBYTE_RATIO_THRESHOLD = 1.5;
 var MULTIBYTE_LENGTH_LIMITS = {
   target: 600,
-  floor: 680
+  ceiling: 680
 };
 var SINGLEBYTE_LENGTH_LIMITS = {
   target: 450,
-  floor: 500
+  ceiling: 500
 };
 function bytesPerChar(value) {
   const charCount = [...value].length;
@@ -1156,10 +1156,7 @@ async function main2() {
     evalResults,
     history,
     testResults: null,
-    budget: Math.max(
-      byteLength(evalResults.description),
-      lengthLimitsFor(evalResults.description).floor
-    ),
+    budget: lengthLimitsFor(evalResults.description).ceiling,
     model: values.model,
     timeoutSeconds: parseNumericOption(
       "timeout",

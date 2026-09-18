@@ -458,11 +458,11 @@ var DEFAULT_MODEL = "sonnet";
 var MULTIBYTE_RATIO_THRESHOLD = 1.5;
 var MULTIBYTE_LENGTH_LIMITS = {
   target: 600,
-  floor: 680
+  ceiling: 680
 };
 var SINGLEBYTE_LENGTH_LIMITS = {
   target: 450,
-  floor: 500
+  ceiling: 500
 };
 function bytesPerChar(value) {
   const charCount = [...value].length;
@@ -1330,10 +1330,7 @@ async function main2() {
     evalResults,
     history,
     testResults: null,
-    budget: Math.max(
-      byteLength(evalResults.description),
-      lengthLimitsFor(evalResults.description).floor
-    ),
+    budget: lengthLimitsFor(evalResults.description).ceiling,
     model: values.model,
     timeoutSeconds: parseNumericOption(
       "timeout",
@@ -1640,7 +1637,6 @@ Max iterations reached (${maxIterations}).
     }
     if (verbose) process.stderr.write("\nImproving description...\n");
     const improveStarted = performance.now();
-    const bestDescription = selectBest(history, testSet.length > 0).description;
     let newDescription;
     try {
       newDescription = await improveDescription2({
@@ -1660,10 +1656,7 @@ Max iterations reached (${maxIterations}).
           description: attempt.description
         })),
         testResults: null,
-        budget: Math.max(
-          byteLength(bestDescription),
-          lengthLimitsFor(bestDescription).floor
-        ),
+        budget: lengthLimitsFor(currentDescription).ceiling,
         model,
         timeoutSeconds: improveTimeout,
         logDir,
