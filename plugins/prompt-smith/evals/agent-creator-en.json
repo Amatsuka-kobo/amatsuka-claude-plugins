@@ -1,0 +1,82 @@
+[
+  {
+    "query": "I need an agent to triage incoming requests for the finance team and route them to the right owner. Define how it recognizes work outside its remit, what evidence it sends back to its parent, and the smallest viable set of tools and model settings.",
+    "should_trigger": true
+  },
+  {
+    "query": "Northstar Therapeutics has `plugins/iron-grove/agents/contract-reader.md`, which should extract expiry dates and automatic-renewal terms from contract PDFs but is currently taking on negotiations as well. Remove its ability to rewrite records or execute shell commands, then reconcile its scope, frontmatter, and parent handoff fields so the definition has no contradictions.",
+    "should_trigger": true
+  },
+  {
+    "query": "Please make `plugins/copper-cove/agents/claims-triage.md` easier to follow. The substantive problems are that it is allowed `Read, Bash, Write` and that it decides refunds in addition to reporting verification results. Rework its permitted operations, responsibility boundary, and parent response fields so it only investigates claim numbers and `claim_state`.",
+    "should_trigger": true
+  },
+  {
+    "query": "`.claude/agents/build-witness.md` summarizes CI logs, but it also carries out its parent's repair instructions. Rebuild the definition so its execution lane is limited to observation and reporting; review excess tool permissions, the rationale for pinning a model, and the input/output contract.",
+    "should_trigger": true
+  },
+  {
+    "query": "We want a reusable Agents definition for internal research work that gathers information and reports evidence to a parent. Establish its responsibility boundary, allowed operations, input and output contract, and the appropriate location for the definition.",
+    "should_trigger": true
+  },
+  {
+    "query": "quick cleanup for `plugins/opal-field/agents/oncall-reader.md` pls: it reads incident timelines only, yet it can edit and use bash. tighten the frontmatter and instructions so the parent gets `incident_key,first_seen,impact`, the non-escalation boundary is explicit, and the description says what it actually does.",
+    "should_trigger": true
+  },
+  {
+    "query": "Split `.claude/agents/dataset-steward.md` rather than leaving one agent responsible for both investigation and updates. Define a read-only agent that searches the data dictionary and reports inconsistencies, including its boundary with the updating role, its tools, the JSON it hands off, and how it inherits the model setting.",
+    "should_trigger": true
+  },
+  {
+    "query": "Permission prompts are getting in the way. `plugins/cedar-fog/agents/release-noter.md` can currently save changes and run shell commands, even though it should only read a release number and `deploy_at`. Do not add settings that suppress confirmations; instead, reduce this definition's permissions and parent handoff to the minimum necessary.",
+    "should_trigger": true
+  },
+  {
+    "query": "Audit the Agent definition in Harborlight Realty's `plugins/glass-quay/agents/listing-evidence.md`. Its sole responsibility is to list evidence fragments for missing listing details from a property URL and `listing_id,ward,updated_at`. Check that its tools, response format to the parent, prohibition on contacting users, and model configuration all match that role.",
+    "should_trigger": true
+  },
+  {
+    "query": "For the monthly-cost reviewer at `plugins/glass-cedar/agents/cost-observer.md`, narrow the available capabilities and verify that its frontmatter identifier and concise guidance identify the situations that should invoke it. Also remove any instruction that encourages moving budget, while preserving the observer role.",
+    "should_trigger": true
+  },
+  {
+    "query": "Trim the over-explanatory sections from `plugins/sun-jet/skills/claim-sorter/SKILL.md`. Keep only operational rules such as asking when `claim_id` is empty and stopping when an attached image is corrupt; remove the history and duplicate examples, then assess the result.",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/mint-bridge/references/deployment-codes.md` contains an environment-code table and procedural notes. Preserve reference values such as `stage_code=marigold`, but remove repeated instructions to the AI and explanations of their rationale so the remaining guidance supports clear decisions.",
+    "should_trigger": false
+  },
+  {
+    "query": "For Paper Finch Press, create a `proof-compass` skill that accepts a PDF URL, a page number, and `proof_round` before summarizing differences for proofing support. Plan its plugin location, bundled reference table, activation description, and evaluation cases for its output.",
+    "should_trigger": false
+  },
+  {
+    "query": "Create `plugins/pine-terrace/commands/archive-cycle.md`. The command should ask for the URL to retain, the retention period, and the `legal_hold` value, then return questions when required confirmation is missing. Define the command, its purpose text, needed assets, and an eval set containing similar requests.",
+    "should_trigger": false
+  },
+  {
+    "query": "The body of `plugins/coal-bloom/output-styles/vendor-update.md` conflicts between a rule to lead supplier reports with the conclusion and a rule for presenting uncertain information. Edit the body only, leaving frontmatter unchanged, so writers can make the right choice using `supplier_ref` and delivery-date confidence.",
+    "should_trigger": false
+  },
+  {
+    "query": "need a better description for `plugins/aqua-verge/skills/access-review/SKILL.md` — trigger only on requests containing a permission-request URL, `role_code`, and a department transfer date, not on the audit report itself. draft candidates plus 20 test conversations.",
+    "should_trigger": false
+  },
+  {
+    "query": "Add a rule to `CLAUDE.md`: when Monday's ETL fails, check `job_run_id` before reporting to the ownership roster. Replace the existing vague instruction to share early with measurable conditions, and remove the rationale paragraph and duplicated examples.",
+    "should_trigger": false
+  },
+  {
+    "query": "`plugins/linen-spark/commands/verify-import.md` has become too long. Design the definition around validating `batch_ref` and record counts, when to use a dry run, and what to return after a failure; then provide a description that signals appropriate requests and evals that check output quality.",
+    "should_trigger": false
+  },
+  {
+    "query": "The examples in `plugins/moss-ferry/skills/expense-hints/SKILL.md` no longer match the expense CSV fields `receipt_ref,category,amount`. Update the skill's structure, decide whether scripting is warranted, and plan its placement, description, and regression conversations.",
+    "should_trigger": false
+  },
+  {
+    "query": "clean up `plugins/coral-slate/references/partner-messages.md`: keep the per-partner honorific list, but rewrite the AI-facing rules for emergency-contact thresholds, promises that are forbidden, and reply order so they are short, non-overlapping, and actionable.",
+    "should_trigger": false
+  }
+]
