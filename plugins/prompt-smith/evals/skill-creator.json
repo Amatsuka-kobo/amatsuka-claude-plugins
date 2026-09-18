@@ -8,15 +8,15 @@
     "should_trigger": true
   },
   {
-    "query": "`plugins/atlas-forms/skills/vendor-intake/SKILL.md` は作ったものの、descriptionが『取引先を処理する』だけで発火が曖昧です。購買部の月次登録フロー、添付PDF、`vendor_code` の検査を前提に候補を複数出し、20件程度の発話で誤発火を測れるセットも起草してほしい。",
+    "query": "購買部の月次登録用に `plugins/atlas-forms/skills/vendor-intake/` の入口文を見直したいです。添付PDFと `vendor_code` の確認を頼む会話だけが選ばれるよう候補を比べ、20件ほどの発話例で誤った呼び出しを数え、もっとも区別できる表現に改めてください。",
     "should_trigger": true
   },
   {
-    "query": "小規模チーム用の `retro-pulse` スキルを新設したい。Zoom文字起こし、投票CSVの `theme,count,owner`、前回アクションを突き合わせてふりかえり案を出す役目です。SKILL.mdだけで足りるか、scripts/ や references/ を分けるべきか判断し、失敗例を含む評価ケースまで設計してください。",
+    "query": "毎週のふりかえりで、議論と前回のアクションを整理して次の担当を決めるみたいなことをするスキルが欲しいです。どこに置くか、必要な参照情報、発火条件、出力を確かめる会話例まで考えてください。",
     "should_trigger": true
   },
   {
-    "query": "`plugins/marble-station/commands/import-members.md` を改修中です。人事CSVの列名変更（`dept_name`→`division`）に加えてdry-run、差分件数、欠損時の質問を扱えるようにしたい。コマンドの本文だけでなく、利用場面が誤解されないdescriptionと出力評価の観点も整えてください。",
+    "query": "人事CSVの列名が `dept_name` から `division` に変わった `plugins/marble-station/commands/import-members.md` で、試行だけの実行、件数の食い違い、空欄を尋ね返す流れまで扱えるようにしたいです。実行手順を改めるだけでなく、呼び出す場面が伝わる先頭の案内と、結果の良し悪しを確かめる観点も用意してください。",
     "should_trigger": true
   },
   {
@@ -24,7 +24,7 @@
     "should_trigger": true
   },
   {
-    "query": "社内の移行窓口で使う `/schema-diff` を作りたい。旧新のPostgres接続情報ではなく、エクスポート済みDDL URLと対象テーブル一覧から、破壊的変更・ロールバック手順・確認質問を返すコマンドにする。配置、frontmatter、参照資料の切り分け、期待出力を一緒に詰めたいです。",
+    "query": "社内の移行窓口で使う `plugins/amber-arch/commands/schema-diff.md` のコマンド定義をレビューしてください。エクスポート済みDDL URLと対象テーブル一覧を受け取る用途について、破壊的変更・ロールバック手順・確認質問の扱い、frontmatter、参照資料、期待出力が矛盾なく分かれているか見直したいです。",
     "should_trigger": true
   },
   {
@@ -32,11 +32,11 @@
     "should_trigger": true
   },
   {
-    "query": "通知疲れを減らすため、Pager URLと`alert_key,priority,repeat_count` を基にエスカレーション案を出す `signal-sifter` を作成予定です。オンコール、SRE、経理通知を区別できる設計にして、発火しやすい依頼と似ているが対象外の依頼を含むevalを用意したい。",
+    "query": "`plugins/jetty-craft/skills/incident-labeler/SKILL.md` の手順を読みやすく直したいです。ところが、実際に困っているのは `incident_ref` と `severity` を含む会話で選ばれず、対象外の障害報告にも反応することです。説明欄の候補を比べ、発話例を20件作って選択の誤りを確かめながら、もっとも区別できる表現へ改めてください。",
     "should_trigger": true
   },
   {
-    "query": "`plugins/ember-rail/commands/close-sprint.md` はチームによって完了条件が違うため、担当者・未消化issue URL・carryover理由を聞き取って締め処理を案内するものに直します。既存コマンドのdescription、入力不足時の分岐、出力例をレビュー可能な形に組み直してください。",
+    "query": "店舗改装プロジェクトの `fixture-plan` を用意したいです。店舗図面URL、改装日、拠点名、`fixture_batch` から準備手順を出す用途について、`plugins/atlas-lab/skills/` に含めるか `.claude/skills/` に置くかを決め、必要な参照資料や定型素材を仕分けし、近いが使わない相談も含む検証用の会話セットを組みたいです。",
     "should_trigger": true
   },
   {

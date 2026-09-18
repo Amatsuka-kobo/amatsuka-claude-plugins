@@ -1,14 +1,14 @@
 [
   {
-    "query": "`.claude/agents/invoice-sampler.md` を新設したいです。月次の請求CSVから `invoice_no,customer_ref,total` を読むだけで、異常候補と根拠を親へ返すsubagentにします。責務の境界、配置、最小tools、model設定、frontmatterと本文をまとめて設計してください。",
+    "query": "経理チームの問い合わせを一次整理して担当別に引き継ぐエージェントを作りたいです。対象外の依頼を見分ける基準、親に渡す情報、必要最小限のtoolsとmodel設定まで含めて設計してください。",
     "should_trigger": true
   },
   {
-    "query": "`plugins/iron-grove/agents/contract-reader.md` をレビューしてください。契約PDFの期限と自動更新を抽出するはずなのに、descriptionが交渉まで含み、BashとWriteも許可されています。読み取り専用の一責務に戻し、frontmatter・本文・返却形式の不整合を検証して直したい。",
+    "query": "北条製薬の `plugins/iron-grove/agents/contract-reader.md` は、契約PDFから期限と自動更新を抜き出す係なのに、交渉まで引き受ける状態です。記録を書き換えることとシェル実行を許さず、受け持つ範囲、先頭の設定欄、上位の担当へ返す項目を照合して、ずれをなくしてください。",
     "should_trigger": true
   },
   {
-    "query": "県央水産の受注窓口用に `order-clarifier` subagent を作ります。注文メールの `ship_date,temperature_zone,store_code` が欠ける時だけ質問案を作り、顧客への送信やDB更新はしない役目です。プラグイン配布向けのagent定義として、必要なtoolsと禁止操作を決めてください。",
+    "query": "`plugins/copper-cove/agents/claims-triage.md` の言い回しを読みやすくしたいです。ただし、中心にある問題は `Read, Bash, Write` を全部許していることと、照合結果の報告に加えて返金判断まで受け持たせていることです。請求番号と `claim_state` を調べる係だけに絞るため、許可操作、責務、親への返答項目を見直してください。",
     "should_trigger": true
   },
   {
@@ -16,7 +16,7 @@
     "should_trigger": true
   },
   {
-    "query": "`plugins/tide-plain/agents/warehouse-locator.md` を追加予定です。配送先CSVの `postal_code,zone,fragile` を調べ、候補倉庫と不確実性だけを返すsubagentにしたい。ネットワークなしでも動く前提で、配置ごとの使えるフィールドを踏まえたfrontmatterと本文を書いてください。",
+    "query": "社内の調査作業を任せる Agents 定義を整えたいです。情報を収集して根拠つきで親へ報告する役割について、責務境界、許可する操作、入力と出力の契約、配置先を決めてください。",
     "should_trigger": true
   },
   {
@@ -28,15 +28,15 @@
     "should_trigger": true
   },
   {
-    "query": "`plugins/brass-lantern/agents/link-checker.md` の変更相談です。外部URLの死活を調べる責務ですが、認証情報を要求する本文になっています。秘密情報を扱わない範囲に絞り、失敗時の報告、許可tools、description、frontmatterの正当性を検証してほしい。",
+    "query": "権限の確認が多くて煩わしいです。`plugins/cedar-fog/agents/release-noter.md` では、変更を保存する操作やシェル実行まで許可されていますが、リリース番号と `deploy_at` を読むだけの係にしたいです。確認を減らす設定を足すのではなく、この定義の許可範囲と親へ返す内容を必要最小限にしてください。",
     "should_trigger": true
   },
   {
-    "query": "舟影不動産の物件審査で使うsubagentを `listing-evidence.md` として置きます。物件URLと `listing_id,ward,updated_at` を基に、記載漏れの証拠箇所を列挙するだけにしたい。ユーザーへ連絡しない制約、適切なmodel、出力形式を含むAgent定義を作ってください。",
+    "query": "舟影不動産の `plugins/glass-quay/agents/listing-evidence.md` のAgent定義を監査してください。物件URLと `listing_id,ward,updated_at` から記載漏れの証拠箇所だけを列挙する責務に照らし、過剰なtools、親への返答形式、ユーザーへ連絡しない制約、model設定が整合しているか見直したいです。",
     "should_trigger": true
   },
   {
-    "query": "`plugins/glass-cedar/agents/cost-observer.md` は月次コストを報告する既存agentです。許可されたtoolsが本当に最小か、frontmatterのnameとdescriptionが実行条件を表すか、本文が予算変更を依頼していないかを監査し、必要なら修正案を適用してください。",
+    "query": "月次費用の集計係 `plugins/glass-cedar/agents/cost-observer.md` について、使える手段を絞り込み、冒頭の識別子と短い案内文が呼び出す場面を示せているか、手順内に予算を動かすよう促す文が紛れ込んでいないかを照らし合わせて、該当する部分を改めてください。",
     "should_trigger": true
   },
   {
