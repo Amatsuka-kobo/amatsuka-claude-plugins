@@ -13,7 +13,8 @@
  * skill-creator Claude Code plugin. Changes: responses without the required
  * <new_description> tag are retried once and then rejected; the timeout of
  * the claude -p call is configurable; description length uses a UTF-8 byte
- * budget derived from the best description instead of upstream's fixed limits.
+ * budget derived from the current description's byte-per-character classification
+ * instead of upstream's fixed limits.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -25,8 +26,7 @@ import {
   byteLength,
   DEFAULT_MODEL,
   DEFAULTS,
-  LENGTH_FLOOR,
-  LENGTH_TARGET
+  lengthLimitsFor
 } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import type { EvalResultItem, EvalSummary } from "./lib/types.js"
@@ -102,6 +102,8 @@ export function buildImprovePrompt(input: ImprovePromptInput): string {
     ? `Train: ${trainScore}, Test: ${testResults.summary.passed}/${testResults.summary.total}`
     : `Train: ${trainScore}`
 
+  const { target } = lengthLimitsFor(currentDescription)
+
   let prompt = `You are optimizing a skill description for a Claude Code skill called "${skillName}". A "skill" is sort of like a prompt, but with progressive disclosure -- there's a title and description that Claude sees when deciding whether to use the skill, and then if it does use the skill, it reads the .md file which has lots more details and potentially links to other resources in the skill folder like helper files and scripts and additional documentation or examples.
 
 The description appears in Claude's "available_skills" list. When a user sends a query, Claude decides whether to invoke the skill based solely on the title and on this description. Your goal is to write a description that triggers for relevant queries, and doesn't trigger for irrelevant ones.
@@ -167,7 +169,7 @@ Based on the failures, write a new and improved description that is more likely 
 1. Avoid overfitting
 2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
 
-The current description is ${byteLength(currentDescription)} UTF-8 bytes. The new description must not exceed ${budget} UTF-8 bytes; target ${LENGTH_TARGET} UTF-8 bytes. For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes. When covering failures, rewrite, merge, or remove existing sections rather than adding sections.
+The current description is ${byteLength(currentDescription)} UTF-8 bytes. The new description must not exceed ${budget} UTF-8 bytes; target ${target} UTF-8 bytes. For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes. When covering failures, rewrite, merge, or remove existing sections rather than adding sections. Shorter descriptions trigger more reliably. In our measurements, when a description grew while covering the same ground, it stopped triggering on queries that name a specific file, and the shorter version triggered on all of them; changes to sentence form, to decision rules, and to example topics made no measurable difference. Treat ${budget} as a ceiling to stay well below, not a target to fill, and spend the bytes on what the skill is used for rather than on rules, restatements, or examples.
 
 Here are some tips that we've found to work well in writing these descriptions:
 - The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
@@ -482,7 +484,7 @@ async function main(): Promise<void> {
     evalResults,
     history,
     testResults: null,
-    budget: Math.max(byteLength(evalResults.description), LENGTH_FLOOR),
+    budget: lengthLimitsFor(evalResults.description).ceiling,
     model: values.model,
     timeoutSeconds: parseNumericOption(
       "timeout",
