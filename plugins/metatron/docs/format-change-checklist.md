@@ -36,6 +36,9 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` の GOTCHAS の承認節
 - [ ] `plugins/metatron/references/cli-usage.md` の `init-gotchas` の節
 - [ ] codiel: `skills/recording-gotchas/SKILL.md` のエントリ書式の写し(台帳の雛形は持たない)
+- [ ] `plugins/metatron/docs/GOTCHAS.example.md` の冒頭の記入ガイド
+- [ ] `plugins/metatron/skills/recording-gotchas/SKILL.md` の `description` と `## 1. 記録の可否`
+- [ ] `plugins/raphael/skills/raphael/SKILL.md` と `plugins/raphael/agents/antibody-synthesizer.md`(棲み分けの節を変えたときだけ確認する)
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
