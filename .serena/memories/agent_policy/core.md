@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.19.4-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.19.6-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.4.0-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -129,6 +129,27 @@ keywords; target-file-style paragraphs and finished prose ready to paste are exc
 and judgement bullets in a request remain out of scope for the file-writing rule. These clauses are
 in `references/orchestration-discipline.md`, `assets/roles/ja/_common.md`,
 `assets/roles/en/_common.md`, `assets/roles/ja/doc-writing.md`, and `assets/roles/en/doc-writing.md`.
+
+**Delegation-request examples (0.19.6-dev).** An explanatory example from a requester was copied
+verbatim into a document in three consecutive attempts; `harness-docs/GOTCHAS.md` records the
+failure as `GOTCHA-002`. The rule reverses the default: requesters mark an example only when it is
+to appear in the produced document, with `本文に載せる`; every unmarked example is explanatory
+request context. Three sender rules were added to §文書作成を委譲するとき: mark only
+output examples; state in the request that marked examples are not a closed list; and, when asking
+for an item in an AI-facing document to be rewritten, provide the decision criteria first, add an
+example only if the criteria alone do not convey the result, and do not delegate until those criteria
+can be stated. §サブエージェントの規律 gained two corresponding recipient rules: treat unmarked
+examples as explanatory context and write independently chosen wording; present marked examples
+with the decision criteria rather than as a closed list. The recipient rules are in this section
+because only its clauses are transcribed into a delegation request; the sender rules apply only to
+the requester. Both `assets/roles/ja/_common.md` and `assets/roles/en/_common.md` gained two
+matching rules: sender-side rules in nested bullets for re-delegation request contents, and
+recipient-side rules in the constraints section. The English fragment says to mark examples intended
+for the produced document without reproducing the Japanese marker, because `compose.test.ts`
+enforces English purity. Two alternatives were rejected: adding examples to the L74 allow-list
+would make every example unconditionally usable and erase the distinction; banning explanatory
+examples would miss the cause, because two of the three failures happened without an example.
+`pnpm run test` passed (2307 passed / 2 skipped), as did `pnpm run lint` and `pnpm run typecheck`.
 
 **Agent Tool is decided by role only since 0.19.0-dev.** `allowsAgentTool(ids)` lost its `model`
 argument; `AGENT_DENIED_MODELS` (Haiku) is gone; `light-impl` moved to Agent Tool 可. The
@@ -333,11 +354,12 @@ cleanly), but do not treat either clause as absolute.
 
 Neither skill holds a table, and since 0.18.0-dev neither holds a resolution order either — both are
 down to one paragraph plus their profile-specific notes. The shared discipline is
-`references/orchestration-discipline.md` (**20,867 B** after 0.18.0-dev, holds both the 担当表 and
+`references/orchestration-discipline.md` (**24,227 B**, holds both the 担当表 and
 §委譲先の解決) and, for exploration only, `references/context-map-guide.md` (6,169 B); the two
-total **27,036 B**, under the 30,720 B ceiling. `assets/context-map-template.md` is the template.
+total **30,396 B**, leaving **324 B** below the 30,720 B ceiling. Before adding another clause,
+remove an existing one or split the document. `assets/context-map-template.md` is the template.
 **`references/subagent-discipline.md` was deleted in 0.18.0-dev** — SubagentStart no longer ships a
-discipline fragment, so the "サブエージェントは〜" clauses (now **9**, a contiguous block in
+discipline fragment, so the "サブエージェントは〜" clauses (now **12**, a contiguous block in
 §モデル別役割の運用) reach children only by transcription into the request text, plus the generated
 definitions' own `_common.md` body. Under `none`/unset that leaves `_common.md` as the sole path —
 an **intentional** degradation, not a regression.
