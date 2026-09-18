@@ -1273,11 +1273,12 @@ function blindHistory(history) {
     )
   );
 }
-function makeLoopResult(history, hasTestSet, exitReason, originalDescription, currentDescription, holdout, trainSize, testSize) {
+function makeLoopResult(history, hasTestSet, exitReason, environment, originalDescription, currentDescription, holdout, trainSize, testSize) {
   const best = selectBest(history, hasTestSet);
   const bestScore = hasTestSet ? `${best.test_passed}/${best.test_total}` : `${best.train_passed}/${best.train_total}`;
   return {
     exit_reason: exitReason,
+    environment,
     original_description: originalDescription,
     best_description: best.description,
     best_score: bestScore,
@@ -1342,6 +1343,7 @@ async function runLoop(options) {
     improveDescription: improveDescription2 = improveDescription,
     onIteration
   } = options;
+  const environment = describeEnvironment(model);
   let currentDescription = descriptionOverride ?? originalDescription;
   const { train: trainSet, test: testSet } = holdout > 0 ? splitEvalSet(evalSet, holdout) : { train: evalSet, test: [] };
   if (verbose && holdout > 0) {
@@ -1425,6 +1427,7 @@ ${"=".repeat(60)}
         history,
         testSet.length > 0,
         exitReason,
+        environment,
         originalDescription,
         currentDescription,
         holdout,
@@ -1506,6 +1509,7 @@ Max iterations reached (${maxIterations}).
     history,
     testSet.length > 0,
     exitReason,
+    environment,
     originalDescription,
     currentDescription,
     holdout,

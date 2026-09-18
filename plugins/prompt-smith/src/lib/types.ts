@@ -62,6 +62,7 @@ export interface IterationRecord {
 
 export interface LoopResult {
   exit_reason: string
+  environment: Environment
   original_description: string
   best_description: string
   best_score: string
