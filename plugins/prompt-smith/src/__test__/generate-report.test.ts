@@ -3,6 +3,11 @@ import { generateHtml } from "../generate-report.js"
 
 const output = {
   exit_reason: "all_passed (iteration 2)",
+  environment: {
+    base_url: "(default)",
+    auth_source: "(claude.ai login)",
+    model: "sonnet"
+  },
   original_description: "the original",
   best_description: "the best",
   best_score: "7/8",

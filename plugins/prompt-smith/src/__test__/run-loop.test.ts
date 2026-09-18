@@ -158,6 +158,56 @@ describe("runLoop", () => {
     expect(runEval.mock.calls[0]?.[0].model).toBe("sonnet")
   })
 
+  it("結果 JSON に環境情報を記録し、トークン値を含めない", async () => {
+    const token = "loop-secret-token"
+    const previousApiKey = process.env.ANTHROPIC_API_KEY
+    const previousBaseUrl = process.env.ANTHROPIC_BASE_URL
+    process.env.ANTHROPIC_API_KEY = token
+    delete process.env.ANTHROPIC_BASE_URL
+    let iterationEnvironment: unknown
+
+    try {
+      const result = await runLoop({
+        evalSet,
+        skillName: "s",
+        skillContent: "body",
+        originalDescription: "start",
+        holdout: 0,
+        maxIterations: 1,
+        model: "claude-opus-5",
+        runEval: vi.fn(async ({ evalSet: queries }) => allPass(queries)),
+        improveDescription: vi.fn(),
+        onIteration: (partial) => {
+          iterationEnvironment = partial.environment
+        }
+      })
+
+      expect(result.environment).toEqual({
+        base_url: "(default)",
+        auth_source: "ANTHROPIC_API_KEY",
+        model: "claude-opus-5"
+      })
+      expect(Object.keys(result.environment)).toEqual([
+        "base_url",
+        "auth_source",
+        "model"
+      ])
+      expect(iterationEnvironment).toEqual(result.environment)
+      expect(JSON.stringify(result)).not.toContain(token)
+    } finally {
+      if (previousApiKey === undefined) {
+        delete process.env.ANTHROPIC_API_KEY
+      } else {
+        process.env.ANTHROPIC_API_KEY = previousApiKey
+      }
+      if (previousBaseUrl === undefined) {
+        delete process.env.ANTHROPIC_BASE_URL
+      } else {
+        process.env.ANTHROPIC_BASE_URL = previousBaseUrl
+      }
+    }
+  })
+
   it("train が全問合格したら打ち切る", async () => {
     const runEval = vi.fn(async ({ evalSet: queries }) => allPass(queries))
     const improve = vi.fn()

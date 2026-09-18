@@ -67,6 +67,8 @@ run_loop.py -> src/run-loop.ts
       stops the loop and returns the best result so far. Upstream propagates
       the error and loses the whole run. The timeout for that step is
       configurable with --improve-timeout.
+  14. The result JSON records an "environment" object. The upstream does not
+      record it.
 
 improve_description.py -> src/improve-description.ts
   14. Responses without <new_description> tags are not used as descriptions:

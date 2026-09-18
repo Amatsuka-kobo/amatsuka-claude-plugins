@@ -28,10 +28,12 @@ import {
   improveDescription as defaultImproveDescription,
   type ImproveOptions
 } from "./improve-description.js"
+import { describeEnvironment } from "./lib/claude-cli.js"
 import { DEFAULT_MODEL, DEFAULTS } from "./lib/defaults.js"
 import { parseSkillMd } from "./lib/parse-skill-md.js"
 import { splitEvalSet } from "./lib/split-eval-set.js"
 import type {
+  Environment,
   EvalItem,
   EvalResult,
   EvalResultItem,
@@ -101,6 +103,7 @@ function makeLoopResult(
   history: IterationRecord[],
   hasTestSet: boolean,
   exitReason: string,
+  environment: Environment,
   originalDescription: string,
   currentDescription: string,
   holdout: number,
@@ -114,6 +117,7 @@ function makeLoopResult(
 
   return {
     exit_reason: exitReason,
+    environment,
     original_description: originalDescription,
     best_description: best.description,
     best_score: bestScore,
@@ -191,6 +195,7 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
     improveDescription = defaultImproveDescription,
     onIteration
   } = options
+  const environment = describeEnvironment(model)
   let currentDescription = descriptionOverride ?? originalDescription
 
   const { train: trainSet, test: testSet } =
@@ -277,6 +282,7 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
         history,
         testSet.length > 0,
         exitReason,
+        environment,
         originalDescription,
         currentDescription,
         holdout,
@@ -358,6 +364,7 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
     history,
     testSet.length > 0,
     exitReason,
+    environment,
     originalDescription,
     currentDescription,
     holdout,
