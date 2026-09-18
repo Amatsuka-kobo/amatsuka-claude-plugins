@@ -141,6 +141,33 @@ describe("runLoop", () => {
     summary: { total: queries.length, passed: queries.length, failed: 0 }
   })
 
+  const resultWithPassPredicate = (
+    queries: { query: string; should_trigger: boolean }[],
+    predicate: (
+      query: { query: string; should_trigger: boolean },
+      index: number
+    ) => boolean
+  ) => {
+    const results = queries.map((q, index) => ({
+      ...q,
+      trigger_rate: predicate(q, index) ? 1 : 0,
+      triggers: predicate(q, index) ? 3 : 0,
+      runs: 3,
+      errors: 0,
+      pass: predicate(q, index)
+    }))
+    const passed = results.filter((result) => result.pass).length
+    return {
+      ...allPass(queries),
+      results,
+      summary: {
+        total: queries.length,
+        passed,
+        failed: queries.length - passed
+      }
+    }
+  }
+
   it("model 未指定時に sonnet を測定へ渡す", async () => {
     const runEval = vi.fn(async ({ evalSet: queries }) => allPass(queries))
 
@@ -225,6 +252,117 @@ describe("runLoop", () => {
     expect(result.iterations_run).toBe(1)
     expect(result.exit_reason).toContain("all_passed")
     expect(improve).not.toHaveBeenCalled()
+  })
+
+  it("train 満点なら holdout 未満点でも反復 1 で打ち切る", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) =>
+      resultWithPassPredicate(queries, (_, index) => index < 12)
+    )
+    const improve = vi.fn()
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0.4,
+      maxIterations: 5,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(result.iterations_run).toBe(1)
+    expect(result.exit_reason).toBe("all_passed (iteration 1)")
+    expect(improve).not.toHaveBeenCalled()
+  })
+
+  it("holdout 満点なら train 未満点でも反復 1 で打ち切る", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) =>
+      resultWithPassPredicate(queries, (_, index) => index >= 12)
+    )
+    const improve = vi.fn()
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0.4,
+      maxIterations: 5,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(result.iterations_run).toBe(1)
+    expect(result.exit_reason).toBe("holdout_maxed (iteration 1)")
+    expect(improve).not.toHaveBeenCalled()
+  })
+
+  it("holdout 満点後に train スコアが上がっても最良説明は変わらない", () => {
+    const history = [record(1, 5, 8), record(2, 12, 7)]
+    expect(selectBest(history, true).description).toBe("desc-1")
+  })
+
+  it("train と holdout が未満点なら max-iterations まで継続する", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) =>
+      resultWithPassPredicate(queries, () => false)
+    )
+    const improve = vi.fn(async () => "next description")
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0.4,
+      maxIterations: 3,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(result.iterations_run).toBe(3)
+    expect(result.exit_reason).toBe("max_iterations (3)")
+    expect(improve).toHaveBeenCalledTimes(2)
+  })
+
+  it("holdout 0 でも train 満点なら all_passed で打ち切る", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) => allPass(queries))
+    const improve = vi.fn()
+    const result = await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "start",
+      holdout: 0,
+      maxIterations: 5,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(result.iterations_run).toBe(1)
+    expect(result.exit_reason).toBe("all_passed (iteration 1)")
+    expect(result.best_test_score).toBeNull()
+    expect(improve).not.toHaveBeenCalled()
+  })
+
+  it("holdout により train が空になる構成を拒否する", async () => {
+    await expect(
+      runLoop({
+        evalSet: [
+          { query: "positive", should_trigger: true },
+          { query: "negative", should_trigger: false }
+        ],
+        skillName: "s",
+        skillContent: "body",
+        originalDescription: "start",
+        holdout: 1,
+        maxIterations: 1,
+        model: "claude-opus-5",
+        runEval: vi.fn(async ({ evalSet: queries }) => allPass(queries)),
+        improveDescription: vi.fn()
+      })
+    ).rejects.toThrow(/lower --holdout or add more questions/)
   })
 
   it("max-iterations で打ち切る", async () => {

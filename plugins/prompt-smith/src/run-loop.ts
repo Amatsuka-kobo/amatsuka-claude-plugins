@@ -201,6 +201,11 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
 
   const { train: trainSet, test: testSet } =
     holdout > 0 ? splitEvalSet(evalSet, holdout) : { train: evalSet, test: [] }
+  if (trainSet.length === 0) {
+    throw new Error(
+      "Holdout leaves no training questions; lower --holdout or add more questions."
+    )
+  }
   if (verbose && holdout > 0) {
     process.stderr.write(
       `Split: ${trainSet.length} train, ${testSet.length} test (holdout=${holdout})\n`
@@ -302,6 +307,16 @@ export async function runLoop(options: RunLoopOptions): Promise<LoopResult> {
       if (verbose) {
         process.stderr.write(
           `\nAll train queries passed on iteration ${iteration}!\n`
+        )
+      }
+      break
+    }
+
+    if (testSet.length > 0 && record.test_failed === 0) {
+      exitReason = `holdout_maxed (iteration ${iteration})`
+      if (verbose) {
+        process.stderr.write(
+          `\nAll holdout queries passed on iteration ${iteration}!\n`
         )
       }
       break

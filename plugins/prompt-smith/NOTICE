@@ -69,6 +69,10 @@ run_loop.py -> src/run-loop.ts
       configurable with --improve-timeout.
   18. The result JSON records an "environment" object. The upstream does not
       record it.
+  20. Added: the loop stops when all holdout queries pass, while upstream
+      stops only when all train queries pass.
+  21. Added: configurations where holdout leaves no train queries are
+      rejected instead of silently stopping after the first iteration.
 
 improve_description.py -> src/improve-description.ts
   14. Responses without <new_description> tags are not used as descriptions:
