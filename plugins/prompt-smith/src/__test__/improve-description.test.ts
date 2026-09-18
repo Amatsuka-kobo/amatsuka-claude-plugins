@@ -8,6 +8,7 @@ import {
   improveDescription,
   MissingDescriptionTagError
 } from "../improve-description.js"
+import { byteLength, LENGTH_FLOOR, LENGTH_TARGET } from "../lib/defaults.js"
 
 const evalResults = {
   results: [
@@ -48,6 +49,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null
@@ -63,6 +65,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null
@@ -74,17 +77,32 @@ describe("buildImprovePrompt", () => {
     expect(failureSection).not.toContain('"fine"')
   })
 
-  it("1024 文字の上限を伝える", () => {
+  it("UTF-8 バイト数の現行値・予算・目標を伝え、旧上限を使わない", () => {
+    const currentDescription = "あ".repeat(10)
+    const budget = 900
     const prompt = buildImprovePrompt({
       skillName: "s",
       skillContent: "body",
-      currentDescription: "current",
+      currentDescription,
+      budget,
       evalResults,
       history: [],
       testResults: null
     })
-    expect(prompt).toContain("1024 characters")
-    expect(prompt).toContain("100-200 words")
+    expect(prompt).toContain(`${byteLength(currentDescription)} UTF-8 bytes`)
+    expect(prompt).toMatch(new RegExp(`must not exceed ${budget} UTF-8 bytes`))
+    expect(prompt).toContain(`target ${LENGTH_TARGET} UTF-8 bytes`)
+    expect(prompt).toContain(
+      "For English, bytes and characters are nearly the same; for Japanese, one character is about 3 bytes."
+    )
+    expect(prompt).toContain(
+      "rewrite, merge, or remove existing sections rather than adding sections"
+    )
+    expect(prompt).not.toContain(["100-200", "words"].join(" "))
+    expect(prompt).not.toContain(["1024", "characters"].join(" "))
+    expect(prompt).toContain(
+      "highest-scoring one at the end. \n\nPlease respond"
+    )
   })
 
   it("過去の試行を積む", () => {
@@ -92,6 +110,7 @@ describe("buildImprovePrompt", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       history: [
         {
           description: "older one",
@@ -137,21 +156,23 @@ describe("extractDescription", () => {
 })
 
 describe("improveDescription", () => {
-  it("1024 文字以内ならそのまま返す", async () => {
+  it("予算ちょうどの案なら短縮を依頼しない", async () => {
+    const withinBudget = "x".repeat(LENGTH_FLOOR)
     const callClaude = vi
       .fn()
-      .mockResolvedValue("<new_description>short</new_description>")
+      .mockResolvedValue(`<new_description>${withinBudget}</new_description>`)
     const out = await improveDescription({
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null,
       model: "claude-opus-5",
       callClaude
     })
-    expect(out).toBe("short")
+    expect(out).toBe(withinBudget)
     expect(callClaude).toHaveBeenCalledTimes(1)
   })
 
@@ -164,6 +185,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null,
@@ -187,6 +209,7 @@ describe("improveDescription", () => {
         skillName: "s",
         skillContent: "body",
         currentDescription: "current",
+        budget: LENGTH_FLOOR,
         evalResults,
         history: [],
         testResults: null,
@@ -206,6 +229,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null,
@@ -229,6 +253,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
+          budget: LENGTH_FLOOR,
           evalResults,
           history: [],
           testResults: null,
@@ -261,6 +286,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
+          budget: LENGTH_FLOOR,
           evalResults,
           history: [],
           testResults: null,
@@ -295,6 +321,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
+          budget: LENGTH_FLOOR,
           evalResults,
           history: [],
           testResults: null,
@@ -311,7 +338,7 @@ describe("improveDescription", () => {
 
   it("短縮時の Claude 呼び出しが失敗しても transcript を残して例外を再送出する", async () => {
     const logDir = await mkdtemp(join(tmpdir(), "prompt-smith-test-"))
-    const tooLong = "x".repeat(1100)
+    const tooLong = "x".repeat(LENGTH_FLOOR + 1)
     const failure = new Error("Claude CLI failed")
     const callClaude = vi
       .fn()
@@ -324,6 +351,7 @@ describe("improveDescription", () => {
           skillName: "s",
           skillContent: "body",
           currentDescription: "current",
+          budget: LENGTH_FLOOR,
           evalResults,
           history: [],
           testResults: null,
@@ -339,7 +367,7 @@ describe("improveDescription", () => {
       ) as Record<string, unknown>
       expect(transcript.prompt).toContain("<current_description>")
       expect(transcript.rewrite_prompt).toContain(
-        "over the 1024-character hard limit"
+        `over the ${LENGTH_FLOOR}-byte budget`
       )
       expect(transcript.failure_stage).toBe("rewrite_request")
       expect(transcript.failure_message).toBe("Claude CLI failed")
@@ -348,8 +376,8 @@ describe("improveDescription", () => {
     }
   })
 
-  it("1024 文字を超えたら 1 回だけ再依頼する", async () => {
-    const tooLong = "x".repeat(1100)
+  it("予算を 1 バイト超えたら 1 回だけ再依頼する", async () => {
+    const tooLong = "x".repeat(LENGTH_FLOOR + 1)
     const callClaude = vi
       .fn()
       .mockResolvedValueOnce(`<new_description>${tooLong}</new_description>`)
@@ -358,6 +386,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null,
@@ -367,12 +396,12 @@ describe("improveDescription", () => {
     expect(out).toBe("shortened")
     expect(callClaude).toHaveBeenCalledTimes(2)
     expect(callClaude.mock.calls[1]?.[0]).toContain(
-      "over the 1024-character hard limit"
+      `over the ${LENGTH_FLOOR}-byte budget`
     )
   })
 
   it("短縮応答にタグが無ければ 1 回だけ再依頼する", async () => {
-    const tooLong = "x".repeat(1100)
+    const tooLong = "x".repeat(LENGTH_FLOOR + 1)
     const callClaude = vi
       .fn()
       .mockResolvedValueOnce(`<new_description>${tooLong}</new_description>`)
@@ -382,6 +411,7 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null,
@@ -396,7 +426,7 @@ describe("improveDescription", () => {
   })
 
   it("再依頼の結果がなお長くてもそのまま返す", async () => {
-    const tooLong = "x".repeat(1100)
+    const tooLong = "x".repeat(LENGTH_FLOOR + 1)
     const callClaude = vi
       .fn()
       .mockResolvedValue(`<new_description>${tooLong}</new_description>`)
@@ -404,13 +434,14 @@ describe("improveDescription", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults,
       history: [],
       testResults: null,
       model: "claude-opus-5",
       callClaude
     })
-    expect(out).toHaveLength(1100)
+    expect(byteLength(out)).toBe(LENGTH_FLOOR + 1)
     expect(callClaude).toHaveBeenCalledTimes(2)
   })
 })

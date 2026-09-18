@@ -4,6 +4,7 @@ import {
   improveDescription,
   MissingDescriptionTagError
 } from "../improve-description.js"
+import { byteLength, LENGTH_FLOOR } from "../lib/defaults.js"
 import {
   blindHistory,
   parseImproveTimeout,
@@ -96,6 +97,7 @@ describe("既定モデル", () => {
       skillName: "s",
       skillContent: "body",
       currentDescription: "current",
+      budget: LENGTH_FLOOR,
       evalResults: {
         results: [],
         summary: { total: 0, passed: 0, failed: 0 }
@@ -561,6 +563,89 @@ describe("runLoop", () => {
       improveDescription: improve
     })
     expect(improve.mock.calls[0]?.[0].timeoutSeconds).toBe(480)
+  })
+
+  it("改善予算を最新案ではなく最良 description のバイト数に結び付ける", async () => {
+    const bestDescription = "a".repeat(700)
+    const latestDescription = "b".repeat(1000)
+    let evaluation = 0
+    const runEval = vi.fn(async ({ evalSet: queries }) => {
+      evaluation += 1
+      return resultWithPassPredicate(
+        queries,
+        (_, index) => index < (evaluation === 1 ? 5 : 1)
+      )
+    })
+    const improve = vi
+      .fn(async (_options: ImproveOptions) => latestDescription)
+      .mockResolvedValueOnce(latestDescription)
+      .mockResolvedValueOnce("third description")
+
+    await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: bestDescription,
+      holdout: 0,
+      maxIterations: 3,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(byteLength(latestDescription)).toBe(1000)
+    expect(improve.mock.calls[1]?.[0].budget).toBe(
+      Math.max(byteLength(bestDescription), LENGTH_FLOOR)
+    )
+  })
+
+  it("最良 description が短いとき改善予算に床を適用する", async () => {
+    const runEval = vi.fn(async ({ evalSet: queries }) =>
+      resultWithPassPredicate(queries, () => false)
+    )
+    const improve = vi.fn(async (_options: ImproveOptions) => "next")
+
+    await runLoop({
+      evalSet,
+      skillName: "s",
+      skillContent: "body",
+      originalDescription: "short",
+      holdout: 0,
+      maxIterations: 2,
+      model: "claude-opus-5",
+      runEval,
+      improveDescription: improve
+    })
+
+    expect(improve.mock.calls[0]?.[0].budget).toBe(LENGTH_FLOOR)
+  })
+
+  it("同じ UTF-8 バイト数なら日本語と英語で同じ改善予算になる", async () => {
+    const captureBudget = async (description: string): Promise<number> => {
+      const runEval = vi.fn(async ({ evalSet: queries }) =>
+        resultWithPassPredicate(queries, () => false)
+      )
+      const improve = vi.fn(async (_options: ImproveOptions) => "next")
+      await runLoop({
+        evalSet,
+        skillName: "s",
+        skillContent: "body",
+        originalDescription: description,
+        holdout: 0,
+        maxIterations: 2,
+        model: "claude-opus-5",
+        runEval,
+        improveDescription: improve
+      })
+      return improve.mock.calls[0]?.[0].budget ?? -1
+    }
+
+    const japanese = "あ".repeat(300)
+    const english = "x".repeat(900)
+    expect(byteLength(japanese)).toBe(900)
+    expect(byteLength(english)).toBe(900)
+    await expect(captureBudget(japanese)).resolves.toBe(900)
+    await expect(captureBudget(english)).resolves.toBe(900)
   })
 
   it("改善モデルに test スコアを渡さない", async () => {
