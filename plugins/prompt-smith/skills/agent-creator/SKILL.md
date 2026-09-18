@@ -1,18 +1,7 @@
 ---
 name: agent-creator
 description: |-
-  `.claude/agents/` や `plugins/*/agents/` にある subagent 定義ファイル(`*.md`)を触るときに使う。作る前も、直す前も、まずこの skill を開く。
-
-  含まれる依頼の形:
-  - 新規作成 —「〜するエージェントを作りたい」「subagent を追加」
-  - 既存定義の点検 — レビュー、監査、不備探し、「本当にこれで妥当か見て」
-  - 権限の見直し — tools を最小に、read-only にすべき agent に Write/Edit/Bash が付いている
-  - 責務の整理 — 1 つの agent を分割する、agent 間の境界・受け渡し形式・model 継承を決める
-  - 上記の判断を踏まえた実際の修正
-
-  依頼の動詞ではなく、触る対象で判断する。パスが `agents/` 配下、または「この agent 定義」を指しているなら、たとえ話題が「契約PDFの抽出精度」「コスト報告の中身」のような業務内容でも、作業の実体は agent 定義の編集なのでこの skill を使う。
-
-  skill / command / output-style / references のファイルは対象外。subagent の概念説明だけの質問には使わない。
+  `agents/` 配下(`.claude/agents/`, `plugins/*/agents/`, `~/.claude/agents/`)の subagent 定義 `*.md` を作る・直す・監査するときに使う。tools権限の絞り込み、責務分割、model継承、agent間の受け渡し形式を扱う。話題が契約書、請求、費用集計などの業務内容でも、対象ファイルが agent 定義なら使う。skill/command/output-style/references ファイルの編集や、subagent概念の説明だけの質問には使わない。
 ---
 # Agent 定義の作成
 
