@@ -80,7 +80,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   server. Largest/most complex. 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.3.3-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
+- **metatron** (0.3.7-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
   共有ライブラリ + CLI + 2 hook の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
 - **sandalphon** (0.2.0-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
@@ -90,7 +90,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   .drawio + HTML. Details: `mem:basic_design/core`.
 - **pitcrew** (0.10.2) — hooks-driven parallel-review layer: captures orchestration artifacts to
   `.pitcrew/review/` and injects human comments back into the session. Details: `mem:pitcrew/core`.
-- **raphael** (0.1.1-dev) — failure-immunity: detects failure signals into `.raphael/infections/`,
+- **raphael** (0.2.1-dev) — failure-immunity: detects failure signals into `.raphael/infections/`,
   distills them into antibodies (38 committed under `.raphael/antibodies/` as of 2026-08-17), and
   re-injects only on deterministic `PreToolUse` match. Details: `mem:raphael/core`.
 - **guidepost** (0.1.1-dev) — turns a commit range / PR diff into an AI-guided code-reading tour in
