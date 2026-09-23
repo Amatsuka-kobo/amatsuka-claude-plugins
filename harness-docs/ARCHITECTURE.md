@@ -149,6 +149,8 @@
 
 `--mcp-servers` はサーバー名、`--mcp-deny` はツール名を受ける。MCP の付与単位は役割ではなく定義になる。
 
+---
+
 ### ADR-002: [metatron] GOTCHAS の台帳は init が承認を得て生成する
 
 - 状態: 採用
@@ -177,6 +179,8 @@
 #### 影響範囲
 
 codiel は GOTCHAS の直接追記と雛形の写しを失う。CLI の案内が無い環境では、記録を run のレポート(`.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/`)と完了報告へ持ち越す。持ち越しは次のセッションで注入が届けば解消する。`harness-docs/design/2026-08-16-file-contract-freeze.md` のサブコマンド一覧とロック取得の表を更新する。init の承認回数が 4 回から 5 回へ増える。
+
+---
 
 ### ADR-003: [codiel] ドメインマップは metatron の資産とし、codiel は無くても汎用実行する
 
@@ -214,3 +218,33 @@ codiel は GOTCHAS の直接追記と雛形の写しを失う。CLI の案内が
 #### 影響範囲
 
 codiel は ARCHITECTURE を書かなくなる。`/codiel:init` の聞き取りは保護パスだけになり、初期化済みの判定は CLAUDE.md の運用ルール節・`raguel.config.yaml`・`.codiel/` の 3 ディレクトリで決まる。専門担当が無いドメイン名は汎用担当が受ける。planner と architect と implementer は、ドメインマップを渡された値として受け取る。sandalphon の委譲判定はドメイン可読性を見なくなる。凍結契約 `harness-docs/design/2026-08-16-file-contract-freeze.md:70` の警告経路から init の名指しが外れる。hook(`guard-write`)の挙動と既存テストは据え置く。将来予定される Agents から Skills への移行は、別の ADR で扱う。
+
+---
+
+### ADR-004: [codiel] ディスパッチ先を作業内容で表し、選択をセッションの運用方針に委ねる
+
+- 状態: 採用
+- 決定日: 2026-09-23
+- 決定者: phyllis998
+
+#### 背景
+
+codiel は各フェーズの担当を同梱 Agent 15 体の名前で固定し、名指しで dispatch していた。このため、プロジェクトの `.claude/agents/` にある最適化済みの定義が使われなかった。
+
+#### 検討した選択肢
+
+1. 同梱 15 体を維持し、名指し dispatch を続ける
+2. codiel の指示層に、委譲先の解決機構または役割名を書く
+3. 同梱を 2 体に絞り、残りは作業内容だけを渡す(採用)
+
+#### 採用した結論
+
+同梱 Agent を `codiel-analyst` と `codiel-test-designer` の 2 体に絞る。残るフェーズは作業内容と委譲の種別(成果物を書く/読み取りだけ)だけを渡す。削除した Agent の注意と観点は、各スキル配下の `references/` に置く。SubagentStop hook を廃止し、agent-policy の `e2e-verify` を `impl` へ昇格させる。
+
+#### 理由
+
+解決機構や役割名を codiel に書くと、運用方針との二重管理になる。また、作業の重さに応じて委譲先を選べなくなる。analyst と test-designer は tools の組合せが一般の委譲先と合わないため残す。
+
+#### 影響範囲
+
+codiel は委譲先を名指しでも役割名でも指定せず、作業内容と委譲の種別だけを渡す。選択はセッションの運用方針に委ね、方針が無い環境ではビルトイン(`general-purpose` / `Explore`)へ縮退する。ツール制限による構造的ハーネスは部分的に成立しなくなり、依頼文の tools 限定条項とスキル本文の HARD-GATE が代わりを担う。
