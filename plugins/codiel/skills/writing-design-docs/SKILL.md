@@ -7,7 +7,7 @@ description: Codiel の design フェーズで issue.md を入力に design.md �
 
 ## 概要
 
-`codiel-architect` が design フェーズで使うスキル。`issue.md`(要件・受け入れ基準・スコープ)と
+設計を担う担当が design フェーズで使うスキル。`issue.md`(要件・受け入れ基準・スコープ)と
 `discussion.md`(discuss フェーズでユーザーと合意した決定の記録)、
 ARCHITECTURE・GOTCHAS を入力に、変更方針・変更対象・影響を受ける機能単位を
 `design.md` として構造化する。

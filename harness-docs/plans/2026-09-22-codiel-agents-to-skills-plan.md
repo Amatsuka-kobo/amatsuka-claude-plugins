@@ -51,11 +51,11 @@
 
 | 項目 | 値 |
 | --- | --- |
-| HEAD | `e70a804`(2026-09-22 時点。着手時に再取得して**この表へ書き込む**) |
-| `git status --short` | 2026-09-22 時点の内訳は、`.claude/settings.json` の変更、`docs/chat/INDEX.md` の変更、`docs/chat/2026/0922/**` の未追跡の会話記録、本設計書と計画書自身(`harness-docs/design/2026-09-22-*.md` と `harness-docs/plans/2026-09-22-*.md`)の未追跡ファイルである。いずれも本改修と無関係なので、コミットに混ぜない |
-| `pnpm run lint` | 着手前に緑であることを確認して**この表へ書き込む** |
-| `pnpm run typecheck` | 同上 |
-| `pnpm run test` | 同上。files / tests の件数を書き込む |
+| HEAD | `4bdf799`(2026-09-23 実装着手時に取得。2026-09-22 時点は `e70a804`) |
+| `git status --short` | 2026-09-22 時点の内訳は、`.claude/settings.json` の変更、`docs/chat/INDEX.md` の変更、`docs/chat/2026/0922/**` の未追跡の会話記録、本設計書と計画書自身(`harness-docs/design/2026-09-22-*.md` と `harness-docs/plans/2026-09-22-*.md`)の未追跡ファイルである。いずれも本改修と無関係なので、コミットに混ぜない。2026-09-23 着手時は `.claude/settings.json`・`cliproxyapi.config.example.yaml`・`docs/chat/INDEX.md` の変更と `docs/chat/2026/0923/` の未追跡。設計書・計画書は `2bebe8d` でコミット済み。同じく触らない |
+| `pnpm run lint` | 緑(2026-09-23。387 files、infos 4 件、エラーなし) |
+| `pnpm run typecheck` | 緑(2026-09-23。`tsc --noEmit` 終了コード 0) |
+| `pnpm run test` | 緑(2026-09-23。Test Files 160 passed / 1 skipped (161)、Tests 2315 passed / 2 skipped (2317)) |
 | 現行バージョン | codiel `0.8.0-dev` / agent-policy `0.19.6-dev` / metatron `0.3.7-dev` |
 | `orchestrating-runs/SKILL.md` の変更後サイズ | T6 の実測値を書き込む(閾値判定はしない) |
 | hook 発火確認 | T20 の確認日時と、発火を確認したフック名を書き込む |
@@ -89,6 +89,7 @@ baseline は `plugins/codiel/` に限定せず**リポジトリ全体**で取る
 
 - **`plugins/codiel/src/hooks/__test__/guard-write.test.ts` を書き換えない。** 書き換えが要ると判断した時点で実装を止めて報告する。
 - `plugins/codiel/src/hooks/__test__/` の他の 3 本と `plugins/codiel/src/__test__/codiel-state.test.ts` を書き換えない。
+  - 例外(2026-09-23 のユーザー判断。§8 を参照): T9 で `stop-guard.test.ts` から SubagentStop の参照とテスト群だけを削除する。Stop のテストは変えない。
 - **`plugins/metatron/src/__test__/section-reference-inventory.test.ts` を書き換えない。** fixtures 側を直して V1 / V2 / V3 を通す。
 - **3 者比較テストを書き換えない**: `plugins/sandalphon/src/__test__/check-intent-env.test.ts` の 16f 群、`plugins/metatron/src/lib/__test__/config.test.ts` の R4 群。
 - **`plugins/*/scripts/` を手で編集しない。** ファイルの削除は `git rm`、内容の変更は `src/` を直して `pnpm run build` で再生成する。**このタスク分割に `scripts/` を手編集するタスクは 1 つも無い。**
@@ -875,7 +876,7 @@ grep -rn '対応表\|RoleId\|役割マーカー\|設計書・実装計画書(WBS
 
 実装中に設計書と実ファイルの食い違いを見つけたら、この節へ追記してからオーケストレーターへ報告する。設計判断の修正要否はオーケストレーターが決める。
 
-(着手時点では空)
+- **2026-09-23(T9)**: §0.3 と設計書 §3.4 は「`subagent-stop` のテストは無い」とするが、実際は `plugins/codiel/src/hooks/__test__/stop-guard.test.ts:10` が `new URL("../subagent-stop.ts", import.meta.url)` で削除対象のソースを参照し、`:132-305` に SubagentStop のテスト 11 件がある。§0.4 は同ファイルの書き換えを禁じているため、`subagent-stop.ts` を削除すると typecheck / test が落ち、T9 の完了条件と両立しない。ユーザー判断(2026-09-23): `stop-guard.test.ts` から `:10` の `subagent-stop.ts` の参照と `:132-305` の SubagentStop テスト群だけを削除し、Stop のテストは変えない。§0.4 に例外として追記した。
 
 ---
 

@@ -14,7 +14,7 @@ description: Codiel の test-spec フェーズで design.md の「影響を受�
 
 三層構造(`spec.md` → `cases.md` → `scripts/`)のうち本フェーズが
 担当するのは spec.md と cases.md まで。**`scripts/` はこのフェーズでは作らない**。ケースを
-実行する自動テストスクリプトは test-loop フェーズで `codiel-tester` が書く。
+実行する自動テストスクリプトは test-loop フェーズで書かれる。
 
 本スキルは unit 命名規則の**唯一の正式な定義元**である。`writing-design-docs` など他スキルに
 同種の記述があっても、それは概要としての参照であり、正はここに置く。

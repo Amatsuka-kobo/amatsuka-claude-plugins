@@ -1,13 +1,13 @@
 ---
 name: reviewing-diffs
-description: Codiel の review フェーズ(および fix-loop の再レビュー)で codiel-reviewer-frontend / -backend / -data / -doc / -security が PR diff をレビューするとき使用する。「実装者は優秀そうだから軽く見る」「diff が大きいのでサンプリングで済ます」と思いたくなる場面でこそ必ず使用する。
+description: Codiel の review フェーズ(および fix-loop の再レビュー)で各観点のレビュー担当が PR diff をレビューするとき使用する。「実装者は優秀そうだから軽く見る」「diff が大きいのでサンプリングで済ます」と思いたくなる場面でこそ必ず使用する。
 ---
 
 # diff レビュー規約
 
 ## 概要
 
-`codiel-reviewer-{frontend,backend,data,doc,security}` が review フェーズおよび fix-loop の
+レビューを担うサブエージェントが、依頼文で指定された観点で review フェーズおよび fix-loop の
 再レビューで使うスキル。入力は PR diff(`gh pr diff`)、`design.md`、`.codiel/specs/**` の
 `spec.md`/`cases.md`、`issue.md`。レビュー基準は常にこの 3 種の文書との整合であり、
 **レビュー担当個人の好みのコーディングスタイルではない**。「自分ならこう書く」という指摘は
@@ -23,8 +23,8 @@ fix-loop の再レビューでは、上記に加えて `fixing-review-findings` 
 - **未達方向**: design.md / spec.md / issue.md の受け入れ基準にあるのに、diff に実装が見当たらない。
 - **逸脱方向**: design.md / spec.md にない振る舞い・API・スキーマ変更が diff に追加されている。
 
-各 reviewer は自分の観点(frontend/backend/data/doc/security。詳細は各エージェント定義)に
-絞って診るが、両方向チェックの原則は全観点共通。
+各レビュー担当は依頼文で指定された観点に絞って診る。確認項目の詳細は依頼文で渡される観点ファイルにある。
+両方向チェックの原則は全観点共通。
 
 ## チェックリスト
 
@@ -50,7 +50,7 @@ fix-loop の再レビューでは、上記に加えて `fixing-review-findings` 
 
 ```markdown
 ### [critical|high|medium|low] <一行要約>
-- 観点: frontend|backend|data|doc|security
+- 観点: frontend|backend|data|doc|security|generic
 - 対象: `src/...:42`
 - 内容: <何が問題か>
 - 根拠: <設計書・仕様書・Issue のどこと矛盾するか、またはどんな障害が起きるか>
@@ -69,13 +69,13 @@ fix-loop の再レビューでは、上記に加えて `fixing-review-findings` 
 critical/high と medium/low で下流の扱いが完全に分かれるため、判定を曖昧にしない。
 「受け入れ基準に書かれた振る舞いが動かない」なら high 以上、「動くが読みにくい・将来のバグの
 温床になりうる」なら medium、「好みの範囲」なら low、と判断に迷ったら基準文書に立ち返る。
-`codiel-reviewer-security` の指摘は原則 medium 以上を検討する(セキュリティ上の懸念は
+security 観点の指摘は原則 medium 以上を検討する(セキュリティ上の懸念は
 「好み」に分類されにくいため)。
 
 ## 所見の統合と投稿(オーケストレーターの職務)
 
-reviewer 自身はここから先を行わない。オーケストレーターが全 reviewer(選択参加の
-frontend/backend/data + 常時参加の doc/security)の所見テキストを受け取ったあと:
+レビュー担当自身はここから先を行わない。オーケストレーターが各レビュー担当の
+所見テキストを受け取ったあと:
 
 1. severity 順(critical → high → medium → low)に並べ替えて `reports/review-<n>.md` に記録する。
    同一の対象・内容の所見が複数観点から出た場合は、最も高い severity で 1 件に
@@ -90,12 +90,12 @@ reviewer はこの投稿作業を代行してはならない(Bash で `gh pr rev
 
 ## 観点別の焦点
 
-観点ごとの具体的な確認項目は各 `codiel-reviewer-*` エージェント定義に記載する。
+観点ごとの確認項目は依頼文で渡される観点ファイルにある。渡された観点ファイルを読み、その項目で確認する。
 
 <HARD-GATE>
-- **コードを修正しない**。reviewer は Edit/Write を持たない読み取り専用の役割であり、
+- **コードを修正しない**。レビュー担当は読み取り系 tools に限って作業する委譲であり、
   問題を見つけても自分で直さない・diff を書き換えない。修正が必要なら所見として報告し、
-  fix-loop の implementer に委ねる。
+  fix-loop の実装を担う委譲先に委ねる。
 - **所見ゼロでも沈黙しない**。指摘がない場合も「どの観点をどう確認したか(読んだファイル・
   実行した検証コマンド)」を必ず報告する。何も言わずに approve 相当の空返答をすることは
   「確認したふりをして何も見ていない」のと区別がつかず禁止する。

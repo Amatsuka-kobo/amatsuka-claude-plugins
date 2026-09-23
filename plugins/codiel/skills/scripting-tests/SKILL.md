@@ -1,13 +1,13 @@
 ---
 name: scripting-tests
-description: Codiel の test-loop フェーズ (A) スクリプト安定化ループで codiel-tester が cases.md を E2E スクリプト化・実行するとき使用する。ケースの NG を直したくなる場面・アサーションを緩めたくなる場面・sleep で誤魔化したくなる場面でこそ必ず使用する。
+description: Codiel の test-loop フェーズ (A) スクリプト安定化ループで cases.md を E2E スクリプト化・実行するとき使用する。ケースの NG を直したくなる場面・アサーションを緩めたくなる場面・sleep で誤魔化したくなる場面でこそ必ず使用する。
 ---
 
 # テストスクリプト作成規約
 
 ## 概要
 
-`codiel-tester` が test-loop フェーズの (A) スクリプト安定化ループで使うスキル。
+test-loop フェーズの (A) スクリプト安定化ループを担う委譲先が使うスキル。
 `.codiel/specs/<unit-id>/cases.md` の各ケースを、E2E フレームワーク(Playwright 等)で
 実行可能なテストスクリプトに変換し、`.codiel/specs/<unit-id>/scripts/` に配置・実行する。
 
@@ -48,6 +48,14 @@ description: Codiel の test-loop フェーズ (A) スクリプト安定化ル�
   `page.waitForSelector` / `expect(locator).toBeVisible()` などフレームワークの組み込み待機)
   を使い、固定時間の `sleep` やリトライ回数を増やすことで誤魔化さない。
 
+## ツール運用
+
+- ライブラリ・フレームワークの仕様確認は Context7 の `resolve-library-id` → `query-docs` で行う。記憶で書かず、仕様を確認してから反映する。
+- Playwright MCP が使えるときは、ブラウザ操作でスクリプトの失敗原因を切り分け、NG を再現確認する。
+- Playwright MCP が使えないときは、コードリーディングとテストコマンドで切り分けを代替する。
+- 合否の判定はスクリプトの実行結果のみを根拠にする。
+- 手動操作の結果を合否の根拠にしない。
+
 ## チェックリスト
 
 1. E2E フレームワークと実行コマンドを「スクリプト規約」の解決順で決める。
@@ -75,7 +83,7 @@ description: Codiel の test-loop フェーズ (A) スクリプト安定化ル�
 
 ## コミット責務
 
-`codiel-tester` は Bash を保持するため、自分の変更を自分でコミットする
+テストの委譲先は自分の変更を自分でコミットする
 (`orchestrating-runs` のコード系フェーズ規約。`docs/DESIGN.md` §5, §7)。
 
 ```
@@ -85,6 +93,9 @@ git commit -m "codiel(test-loop): <内容> (issue-N try-M)"
 
 「スクリプトを修正した」「初回実行してレポートを出した」など、区切りごとに 1 コミットとする。
 まとめて 1 回にしない。
+
+- guard-write hook が機械的に守るのは、`spec.md` / `cases.md` への書き込みを ask にする部分までである。
+- hooks は呼び出し元の委譲先を識別できないため、これ以外の境界は自身の規律で守る。
 
 <HARD-GATE>
 `cases.md`・`spec.md`・プロダクトコードを変更しない。変更してよいのは
