@@ -118,3 +118,4 @@
 - `2026/0918/phyllis998/1703-pr-merge-conflict-resolution.md` | 2026-09-18 | phyllis998 | PR マージの docs/chat/INDEX.md 衝突を両側エントリ併存で解消
 - `2026/0918/phyllis998/metatron-raphael-boundary-criteria.md` | 2026-09-18 | phyllis998 | GOTCHAS と抗体の棲み分けを一般性と表現可能性の 2 軸へ改訂
 - `2026/0922/phyllis998/1846-index-merge-resolution.md` | 2026-09-22 | phyllis998 | Permission拡張候補を分析（9件提案）・INDEX.md のマージ衝突を 3-way で解決
+- `2026/0922/phyllis998/1950-codiel-agents-to-skills-design.md` | 2026-09-22 | phyllis998 | codiel エージェント削減・役割昇格設計の最終版が完成
