@@ -354,9 +354,9 @@ cleanly), but do not treat either clause as absolute.
 
 Neither skill holds a table, and since 0.18.0-dev neither holds a resolution order either — both are
 down to one paragraph plus their profile-specific notes. The shared discipline is
-`references/orchestration-discipline.md` (**24,227 B**, holds both the 担当表 and
+`references/orchestration-discipline.md` (**24,316 B**, holds both the 担当表 and
 §委譲先の解決) and, for exploration only, `references/context-map-guide.md` (6,169 B); the two
-total **30,396 B**, leaving **324 B** below the 30,720 B ceiling. Before adding another clause,
+total **30,485 B**, leaving **235 B** below the 30,720 B ceiling. Before adding another clause,
 remove an existing one or split the document. `assets/context-map-template.md` is the template.
 **`references/subagent-discipline.md` was deleted in 0.18.0-dev** — SubagentStart no longer ships a
 discipline fragment, so the "サブエージェントは〜" clauses (now **12**, a contiguous block in

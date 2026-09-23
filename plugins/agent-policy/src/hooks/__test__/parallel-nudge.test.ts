@@ -4,7 +4,7 @@ import { runTs } from "../../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../parallel-nudge.ts", import.meta.url))
 const PARALLEL_NUDGE =
-  "並列 dispatch の確認: まだ着手していない独立タスクが残っているなら、後続のメッセージではなく、この dispatch と同じメッセージ内で並列に dispatch する。逐次にするのは前の出力に依存するときだけである。"
+  "並列 dispatch の確認: まだ着手していない独立タスクが残っているなら、後続のメッセージではなく、この dispatch と同じメッセージ内で並列に dispatch する。逐次にするのは、前の出力に依存するとき、またはワークフローの手順が逐次を定めるときである。"
 
 function environment(value?: string): NodeJS.ProcessEnv {
   const env = { ...process.env }

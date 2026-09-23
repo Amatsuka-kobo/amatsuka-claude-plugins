@@ -3,7 +3,7 @@
 // ファイルは書かず、失敗しても Claude Code の処理を妨げない。
 
 const PARALLEL_NUDGE =
-  "並列 dispatch の確認: まだ着手していない独立タスクが残っているなら、後続のメッセージではなく、この dispatch と同じメッセージ内で並列に dispatch する。逐次にするのは前の出力に依存するときだけである。"
+  "並列 dispatch の確認: まだ着手していない独立タスクが残っているなら、後続のメッセージではなく、この dispatch と同じメッセージ内で並列に dispatch する。逐次にするのは、前の出力に依存するとき、またはワークフローの手順が逐次を定めるときである。"
 
 function respond(context: string): void {
   process.stdout.write(

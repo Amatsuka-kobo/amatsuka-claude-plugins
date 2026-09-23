@@ -76,8 +76,8 @@ describe("ROLES", () => {
       {
         id: "e2e-verify",
         label: "E2E 動作検証・ブラウザ/GUI 操作",
-        kind: "readonly",
-        tools: ["Read", "Grep", "Glob", "Bash"]
+        kind: "impl",
+        tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
       },
       {
         id: "final-review",

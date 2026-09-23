@@ -68,8 +68,8 @@ var ROLES = [
   {
     id: "e2e-verify",
     label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
     id: "independent-review",

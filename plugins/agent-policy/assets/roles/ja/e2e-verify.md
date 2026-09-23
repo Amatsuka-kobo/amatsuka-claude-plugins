@@ -3,8 +3,8 @@ id: e2e-verify
 label: E2E 動作検証・ブラウザ/GUI 操作
 description: E2E 動作検証とブラウザまたは GUI 操作を伴う確認
 default-name: e2e-verifier
-tools: Read, Grep, Glob, Bash
-kind: readonly
+tools: Read, Grep, Glob, Write, Edit, Bash, Skill
+kind: impl
 ---
 
 ## When to invoke
@@ -14,6 +14,7 @@ kind: readonly
 ## Core Responsibilities
 
 - 対象を実際に動かし、操作ごとの期待結果と観測結果を根拠付きで報告する。
+- 依頼された範囲でテストスクリプトを作成・修正し、実行する。
 
 ## 作業手順
 
@@ -23,13 +24,13 @@ kind: readonly
 
 ## 制約
 
-- **E2E 動作検証として依頼されたときは**、成果物(ファイル)を作らず、報告のみを返す。
 - 検証対象の永続データを変更しない。変更が避けられない手順は実行せず、未検証として報告する。
 - 必要なブラウザまたは GUI の操作手段が使えない場合は、その範囲を未検証として報告する。
 
 ## Output Format
 
 - 検証環境と起動方法
+- 作成・変更したファイル
 - 操作ごとの期待結果と観測結果
 - 失敗の再現手順と関連ログ
 - 未検証の範囲と理由
