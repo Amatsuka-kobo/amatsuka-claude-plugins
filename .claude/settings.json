@@ -1,5 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_THRIFTY_SONIC": "false",
+    "PONYTAIL_DEFAULT_MODE": "full"
+  },
   "permissions": {
     "allow": [
       "Bash(git add *)",
@@ -40,8 +44,7 @@
       "Bash(rm *)"
     ]
   },
-  "model": "claude-opus-5[1m]",
-  "effortLevel": "xhigh",
+  "model": "claude-opus-5-5[1m]",
   "enabledPlugins": {
     "agent-policy@amatsuka-claude-plugins": true,
     "chat-history@amatsuka-claude-plugins": true,
@@ -56,7 +59,8 @@
     "codiel@amatsuka-claude-plugins": true,
     "gh-utility@amatsuka-claude-plugins": true,
     "metatron@amatsuka-claude-plugins": true,
-    "sandalphon@amatsuka-claude-plugins": true
+    "sandalphon@amatsuka-claude-plugins": true,
+    "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
     "amatsuka-claude-plugins": {
@@ -77,15 +81,13 @@
         "repo": "InterfaceX-co-jp/genshijin"
       }
     },
-    "openai-codex": {
+    "ponytail": {
       "source": {
         "source": "github",
-        "repo": "openai/codex-plugin-cc"
+        "repo": "DietrichGebert/ponytail"
       }
     }
   },
   "outputStyle": "EnhancedClaude5",
-  "env": {
-    "CLAUDE_CODE_THRIFTY_SONIC": "false"
-  }
+  "effortLevel": "midium"
 }
