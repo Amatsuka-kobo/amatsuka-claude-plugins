@@ -125,21 +125,21 @@ node <plugin-root>/scripts/codiel-state.mjs get --issue N
 各フェーズはチェックリスト 3 の定型で進行する。
 ゲート種別と完了コマンドはフェーズ進行表の「ゲート種別」列に従う。
 
-| フェーズ | 担当エージェント | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 | コミット担当 |
+| フェーズ | 委譲の種別と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 | コミット担当 |
 |---|---|---|---|---|---|---|
-| [0] init | codiel-analyst | analyzing-issues | Issue(`gh issue view`)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `issue.md` | pass-gate(`evaluate_decision`) | オーケストレーター(ゲート通過直後) |
-| [1] discuss | codiel-architect(アジェンダ作成)→ オーケストレーター本体(ディスカッション進行・記録) | preparing-design-agendas(architect)/ facilitating-design-discussions(オーケストレーター) | `issue.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
-| [2] design | codiel-architect | writing-design-docs | `issue.md`、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `design.md` | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、ユーザー承認を得てから evaluate する** | オーケストレーター(ゲート通過直後) |
-| [3a] test-spec | codiel-test-designer | writing-test-specs | `design.md`(影響 unit 一覧)、既存 `.codiel/specs/<unit-id>/spec.md`(あれば) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
-| [3b] dev-plan | codiel-planner | writing-dev-plans | `design.md` | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
-| [4] implement | codiel-implementer-{frontend,backend,data,generic}(ステップのドメインタグで選択) | implementing | `dev-plan.md`(該当ステップ)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
-| [5A] test-loop(スクリプト安定化) | codiel-tester | scripting-tests, running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | codiel-tester(自分の変更を自分でコミット) |
-| [5B] test-loop(TDD 修正) | codiel-implementer-{該当ドメイン} | fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | 担当 implementer(自分の変更を自分でコミット) |
-| [6] pr | オーケストレーター本体(ディスパッチなし) | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する)。PR 本文には `design.md` の目的・`dev-plan.md` のステップ一覧・`test-run-<n>.md` の判定を転記し、`Closes #N` を含める。 | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
-| [7] review | codiel-reviewer-{frontend,backend,data,generic}(diff のドメインで選択参加)+ codiel-reviewer-doc/-security(常時参加)。**所見の統合・`reports/review-<n>.md` への記録・PR コメント投稿はオーケストレーターが行う** | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | オーケストレーター(review レポートのコミットも) |
-| [8] fix-loop | codiel-implementer-{該当ドメイン}(修正)+ codiel-tester(回帰再実行)+ reviewer 陣(再レビュー) | fixing-review-findings, running-regression-tests, reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | 担当 implementer / codiel-tester(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・reviewer 再ディスパッチ前にオーケストレーターが `git push` して PR ブランチを最新化する**(reviewer は `gh pr diff` を読むため、push しないと stale diff を見て同一所見を再報告する。guard-bash は fix-loop フェーズ + test-loop passed でこの push を許可済み) |
-| [9] triage | オーケストレーター本体(ユーザーの指示のもと) | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [9] の運用) | オーケストレーター(`review-<n>.md` への Issue 番号追記分。コード変更はなし) |
-| [10] finalize | オーケストレーター本体 | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない) | ―(コード変更なし) |
+| [0] init | 名指し `codiel-analyst`。Issue → `issue.md` | analyzing-issues | Issue(`gh issue view`)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `issue.md` | pass-gate(`evaluate_decision`) | オーケストレーター(ゲート通過直後) |
+| [1] discuss | 成果物を書く委譲。`issue.md` → `agenda.md` | preparing-design-agendas | `issue.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
+| [2] design | 成果物を書く委譲。`issue.md` + `discussion.md` → `design.md` | writing-design-docs | `issue.md`、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `design.md` | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、ユーザー承認を得てから evaluate する** | オーケストレーター(ゲート通過直後) |
+| [3a] test-spec | 名指し `codiel-test-designer`。`design.md` → `spec.md` / `cases.md` | writing-test-specs(委譲先の定義が読む) | `design.md`(影響 unit 一覧)、既存 `.codiel/specs/<unit-id>/spec.md`(あれば) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
+| [3b] dev-plan | 成果物を書く委譲。`design.md` → `dev-plan.md` | writing-dev-plans | `design.md` | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
+| [4] implement | 成果物を書く委譲。`dev-plan.md` の担当ステップ → コード diff + ユニットテスト | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
+| [5A] test-loop(スクリプト安定化) | 成果物を書く委譲。`cases.md` → `scripts/` + `test-run-<n>.md` | scripting-tests + running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
+| [5B] test-loop(TDD 修正) | 成果物を書く委譲。NG ケースの再現手順・期待結果・実際の結果 → コード修正 diff | implementing + fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
+| [6] pr | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する)。PR 本文には `design.md` の目的・`dev-plan.md` のステップ一覧・`test-run-<n>.md` の判定を転記し、`Closes #N` を含める。 | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
+| [7] review | 読み取りだけの委譲。diff + `design.md` + `.codiel/specs/**` → 指定観点の所見一覧(テキスト) | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | オーケストレーター(review レポートのコミットも) |
+| [8] fix-loop | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<n+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・再レビューの委譲前にオーケストレーターが `git push` して PR ブランチを最新化する**(再レビューは `gh pr diff` を読むため、push しないと stale diff を見て同一所見を再報告する。guard-bash は fix-loop フェーズ + test-loop passed でこの push を許可済み) |
+| [9] triage | オーケストレーター本体。`reports/review-<n>.md` の medium/low → 起票された Issue 番号 | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [9] の運用) | オーケストレーター(`review-<n>.md` への Issue 番号追記分。コード変更はなし) |
+| [10] finalize | オーケストレーター本体。全フェーズの成果物 → 結果レポート | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない) | ―(コード変更なし) |
 
 - **test-spec と dev-plan は単一メッセージで 2 体並列ディスパッチする**(Task ツールの呼び出しを 1 回の
   応答の中に 2 件含める)。片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
@@ -150,8 +150,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --issue N
 
 ### 2.1 成果物コミット規約
 
-`codiel-architect` / `codiel-test-designer` / `codiel-planner` は Bash を持たず、自分の成果物を
-自分でコミットできない(§7 の権限設計どおり)。したがって成果物のコミット責務はフェーズの種類で分かれる。
+文書系フェーズの委譲先は git 操作をしない。したがって成果物のコミット責務はフェーズの種類で分かれる。
 
 - **文書系フェーズ(init / discuss / design / test-spec / dev-plan)**: 成果物(`issue.md` /
   `agenda.md`・`discussion.md` / `design.md` / `spec.md`・`cases.md` / `dev-plan.md`)は、
@@ -163,22 +162,30 @@ node <plugin-root>/scripts/codiel-state.mjs get --issue N
 discuss は Raguel ゲートを持たないため、「ゲート通過直後」ではなく
   **complete-phase の直前**にコミットする(facilitating-design-discussions チェックリスト 8
   のとおり)。
-- **コード系フェーズ(implement / test-loop / fix-loop)**: 担当サブエージェント(implementer /
-  codiel-tester。いずれも Bash を保持)が**自分の変更を自分でコミットする**。オーケストレーターは
-  これらのフェーズではコミットしない。
+- **コード系フェーズ(implement / test-loop / fix-loop)**: コード系フェーズの委譲先は**自分の変更を自分でコミットする**。オーケストレーターはこれらのフェーズではコミットしない。
 - **確認義務**: オーケストレーターは `pr` フェーズを開始する前に `git status --short` を実行し、
   未コミットの変更がないことを確認する。残っていれば `pr` を開始せず、該当フェーズのサブエージェントに
   「変更をコミットしてください」と差し戻す(未コミット差分を抱えたまま PR を作成しない)。
 
 ## 3. ディスパッチプロンプトの規約
 
-サブエージェントのディスパッチは **Task ツール**(Claude Code の Agent/Task 機構)で、
-`subagent_type` にフェーズ担当のエージェント名(`codiel-analyst` 等)を指定して行う。
-プロンプトは次のテンプレートを満たす(担当スキル名・入出力ファイルパス・§0 で解決した前提値・前フェーズ findings 要約・報告形式のすべてを含める):
+サブエージェントのディスパッチは **Task ツール**で行う。
+委譲先は名指しするか、作業内容を渡して委譲する。作業内容による委譲の解決はセッションに注入された規律に従い、規律が無ければビルトインの委譲先へ送る。
+
+プロンプトは次のテンプレートを満たす。作業内容、読むスキルと観点ファイルの絶対パス、入出力ファイル、§0 で解決した前提値、前フェーズ findings の要約、完了条件を含める。
 
 ```
-あなたは <エージェント名> として、codiel プラグインの <スキル名> スキルを
-Skill ツールで起動し、その手順に厳密に従って作業してください。
+あなたはサブエージェントである。次の作業を担当する。
+- 作業内容: <このフェーズの作業内容>
+- 入力から出力: <入力 → 出力>
+
+## 読むスキル
+このフェーズで読むすべてのスキルを、解決済みの絶対パスで列挙する。
+- <plugin-root>/skills/<スキル名>/SKILL.md
+
+## 観点ファイル
+このフェーズで読むすべての観点ファイルを、解決済みの絶対パスで列挙する。
+- <plugin-root>/skills/<スキル名>/references/<担当タグまたは観点>.md
 
 ## 入力ファイル
 - <入力ファイルパス1>
@@ -194,51 +201,65 @@ Skill ツールで起動し、その手順に厳密に従って作業してく�
 - ドメインマップ: <mapped のときは §0 で読み取った JSON の全文。unscoped のときは「なし」>
 - 担当タグ: <このディスパッチで担当するタグ。ドメインに紐づかない役割では「なし」>
 
-ARCHITECTURE と GOTCHAS は、存在すれば作業前に読み、存在しなければスキップしてください。
-ドメインマップは上記の値を使い、ARCHITECTURE から読み直さないでください。
-過去の落とし穴は GOTCHAS を踏まえてください。
+ARCHITECTURE と GOTCHAS は、存在すれば作業前に読み、存在しなければスキップする。
+ドメインマップは上記の値を使い、ARCHITECTURE から読み直さない。
+過去の落とし穴は GOTCHAS を踏まえる。
 
 ## 前フェーズの申し送り(findings)
 <前フェーズの EvaluationResult.findings を ruleId + message の箇条書きで要約したもの。
 なければ「なし」>
 
 ## 完了条件
-完了したら、成果物のファイルパスのみを報告してください。
-diff の中身やファイル内容を会話に貼り付けないこと。
+完了したら、成果物のファイルパスのみを報告する。
+diff の中身やファイル内容を会話に貼り付けない。
+
+## セッションの規律の転記
+セッションの規律が依頼文への転記を求める条項があれば、ここに置く。
 ```
+
+読み取りだけの委譲では、依頼文に次の 3 条項を追加する。
+- 使用してよい tools を読み取り系に限定する。`Read` / `Grep` / `Glob` と読み取りに限った `Bash` だけを許可する。
+- ファイルを変更しない。
+- 報告のみを返す。
+
+discuss / design / dev-plan の依頼文には、git 操作をしない旨を追加する。
+
+観点ファイルは次の規則で依頼文に足す。
+- 実装の委譲(implement / test-loop B / fix-loop の修正)では、`mapped` のときに `<plugin-root>/skills/implementing/references/<担当タグ>.md` が存在すれば足す。存在しなければ足さない。`unscoped` では足さない。
+- review / 再レビューでは、観点ごとに `<plugin-root>/skills/reviewing-diffs/references/<観点>.md` を必ず足す。
+- 観点ファイルの存在はオーケストレーターが `Glob` または `ls` で確認する。委譲先に探させない。
 
 ARCHITECTURE / GOTCHAS のパス、実行モード、ドメインマップは §0 で解決した値をそのまま埋める。サブエージェントに解決させない。
 
-ディスパッチ後、成果物ファイルが実際に存在し空でないことを確認してから raguel-gating の
-ゲート手順に進む(サブエージェントの報告を鵜呑みにしない)。
+ディスパッチ後、オーケストレーターは成果物ファイルが実際に存在し空でないことを確認する。確認後に raguel-gating のゲート手順に進む。サブエージェントの報告だけで完了としない。
 
 ## 4. ドメインディスパッチ
 
-- ステップのタグ `X` に対し、`codiel-implementer-X` が自分の利用可能なエージェント一覧にあればそれへ、無ければ `codiel-implementer-generic` へディスパッチする。
-- 実在の判定は利用可能なエージェント一覧を見るだけで行う。プラグインルート・`agents/` ディレクトリ・定義ファイルを探索しない。`initializing-harness/SKILL.md:53-55` と同型の判定を使う。
-- review では、diff が触れたドメインタグ `X` に対して同型の規則を使う。`codiel-reviewer-X` が自分の利用可能なエージェント一覧にあればそれを選択参加させる。無ければ `codiel-reviewer-generic` を選択参加させる。`codiel-reviewer-doc` / `-security` は常時参加させる。
-- `set-domain` に渡す値はタグの値そのままとする。汎用担当へ送るときも `X` を渡す。エージェント名から別名を作らない。
+委譲先は、セッションに注入されているエージェント運用の規律に従って決める。そのような規律が無いときは、成果物を書く委譲は `general-purpose`、読み取りだけの委譲は `Explore` へ dispatch する。
+
+- `mapped` の実装 / test-loop B / fix-loop の修正では、ステップのタグ `X` を依頼文にそのまま渡し、`set-domain` にも渡す。汎用の実装へ送るときも `X` を渡す。
+- `set-domain` に渡す値はタグの値そのままとする。タグから別名を作らない。
+- review / 再レビューでは `set-domain` を実行しない。
 - `unscoped` では `set-domain` を呼ばない。ディスパッチ前に `clear-domain` を呼ぶ。
 
 ### 4.1 domain の設定と解除
 
-実行モードが `mapped` のときだけ、ドメインに紐づくサブエージェントへの委譲中に run の `domain` へ担当タグを持たせる。guard-write はこの値とドメインマップで境界を判定する。判定が働くのは implement / test-loop / fix-loop の 3 フェーズである。
+実行モードが `mapped` のときだけ、ドメインに紐づく実装の委譲中に run の `domain` へ担当タグを持たせる。guard-write はこの値とドメインマップで境界を判定する。判定が働くのは implement / test-loop / fix-loop の 3 フェーズである。
 
 ```
 node <plugin-root>/scripts/codiel-state.mjs set-domain --issue N --domain <タグ>
 node <plugin-root>/scripts/codiel-state.mjs clear-domain --issue N
 ```
 
-- `mapped` でドメイン別 implementer(implement / test-loop の TDD 修正 / fix-loop の修正)をディスパッチする直前に `set-domain` を実行する。
-- `--domain` にはステップに付いたタグの値をそのまま渡す。汎用担当へ送るときもタグの値を渡し、エージェント名から別名を作らない。
-- `mapped` でドメイン別 reviewer を 1 体だけディスパッチするときも、担当するドメインタグを `set-domain` に渡す。
-- `set-domain` を実行したサブエージェントの報告を受け取った直後に `clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
+- `mapped` で実装 / test-loop の TDD 修正 / fix-loop の修正を委譲する直前に `set-domain` を実行する。
+- `--domain` にはステップに付いたタグの値をそのまま渡す。汎用の実装へ送るときもタグの値を渡し、タグから別名を作らない。
+- `set-domain` を実行した委譲先の報告を受け取った直後に `clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
 - `unscoped` では `set-domain` を呼ばない。各ディスパッチの前に `clear-domain` を実行し、`domain` を残さない。
-- ドメインに紐づかないサブエージェント(`codiel-analyst` / `codiel-architect` / `codiel-test-designer` / `codiel-planner` / `codiel-tester` / `codiel-reviewer-doc` / `codiel-reviewer-security`)には `set-domain` を実行しない。`domain` が残っている可能性があるときは、ディスパッチ前に `clear-domain` を実行する。
-- ドメイン別 implementer は 1 体ずつ逐次ディスパッチする。未着手のステップが複数ドメインにまたがっていても、同じ応答で複数の implementer を起動しない。
-- 複数のドメイン別サブエージェントを同じ応答でディスパッチするとき(review フェーズでドメイン別 reviewer を同時参加させる場合など)は、先に `clear-domain` を実行し、`set-domain` は実行しない。state が持てる `domain` は 1 つだけである。この場合のドメイン規律はディスパッチプロンプトで運用する。
+- ドメインに紐づかない委譲へ移る前に、`domain` が残っている可能性があれば `clear-domain` を実行する。
+- 実装の委譲は 1 体ずつ逐次ディスパッチする。未着手のステップが複数ドメインにまたがっていても、同じ応答で複数の実装を起動しない。
+- 複数のドメイン別委譲を同じ応答でディスパッチするとき(レビューで複数の観点を同時に扱う場合など)は、先に `clear-domain` を実行し、`set-domain` は実行しない。state が持てる `domain` は 1 つだけである。この場合のドメイン規律はディスパッチプロンプトで運用する。
 
-境界違反は `deny` ではなく `ask` で返る。止まったら、`set-domain` した値と `dev-plan.md` の該当ステップのドメインタグを照合する。値が誤っていれば正しい値で `set-domain` し直して続行する。値が正しければ越境であり、その書き込みを認めず、該当ドメインの implementer にディスパッチし直す。
+境界違反は `deny` ではなく `ask` で返る。止まったら、`set-domain` した値と `dev-plan.md` の該当ステップのドメインタグを照合する。値が誤っていれば正しい値で `set-domain` し直して続行する。値が正しければ越境であり、その書き込みを認めず、該当ドメインの実装の委譲をやり直す。
 
 ## 5. ループ運転(test-loop / fix-loop)
 
@@ -301,7 +322,7 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reas
 | 思考 | 現実 |
 |---|---|
 | 「小さい Issue だからフェーズを飛ばしていい」 | `codiel-state start-phase` はステージ順序を機械的に強制する。小ささの判断自体がAIの自己評価であり、飛ばしていい理由にはならない。 |
-| 「サブエージェントより自分でやった方が速い」 | 権限を最小化したサブエージェントに任せることが「暴走できない」構造の前提。オーケストレーターが自分でコードを書けば hooks・Raguel の役割分離が意味を失う。 |
+| 「サブエージェントより自分でやった方が速い」 | 依頼文で範囲と tools を限定した委譲が「暴走できない」構造の前提。オーケストレーターが自分でコードを書けば hooks・Raguel の役割分離が意味を失う。 |
 | 「テストは明らかに通るので test-loop 省略」 | 「明らか」という判断こそ偽装グリーンのリスク源。スクリプトを実際に実行して出力を見るまで合否は不明。 |
 | 「state は手で直した方が早い」 | state.json への Edit/Write は hooks が deny する前提。手直しは「ゲート偽装」「フェーズ飛ばし」の温床であり、codiel-state の遷移検証を迂回する。 |
 | 「ASK だが自明なので自分で判断して続行」 | raguel-gating が明確に禁止する自己承認そのもの。ASK は人間の裁定を要求する合図であり、AI の代理判断はその意味を無効化する。 |
