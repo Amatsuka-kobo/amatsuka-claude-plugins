@@ -3,8 +3,8 @@ id: e2e-verify
 label: E2E Verification and Browser/GUI Operation
 description: end-to-end verification involving browser or GUI operation
 default-name: e2e-verifier
-tools: Read, Grep, Glob, Bash
-kind: readonly
+tools: Read, Grep, Glob, Write, Edit, Bash, Skill
+kind: impl
 ---
 
 ## When to invoke
@@ -14,6 +14,7 @@ kind: readonly
 ## Core Responsibilities
 
 - Run the target and report the expected and observed result of each operation with evidence.
+- Create or modify and run test scripts within the requested scope.
 
 ## Procedure
 
@@ -23,13 +24,13 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for E2E verification**, do not create deliverable files. Return a report only.
 - Do not modify persistent data in the target system. Skip steps that cannot avoid such changes and report them as unverified.
 - If the required browser or GUI mechanism is unavailable, report the affected scope as unverified.
 
 ## Output Format
 
 - State the verification environment and launch method.
+- List created or modified files.
 - List the expected and observed result for each operation.
 - Provide reproduction steps and relevant logs for failures.
 - List unverified scope and reasons.
