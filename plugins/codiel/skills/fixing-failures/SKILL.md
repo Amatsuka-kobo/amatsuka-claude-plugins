@@ -1,13 +1,13 @@
 ---
 name: fixing-failures
-description: Codiel の test-loop フェーズ (B) TDD 修正ループ、および fix-loop フェーズで codiel-implementer-frontend / -backend / -data が NG ケース・レビュー所見を修正するとき使用する(`implementing` スキルの修正モードから参照される)。原因を特定せず手当たり次第に直したくなる場面・症状だけ握り潰して緑にしたくなる場面でこそ必ず使用する。
+description: Codiel の test-loop フェーズ (B) TDD 修正ループ、および fix-loop フェーズで実装担当が NG ケース・レビュー所見を修正するとき使用する(`implementing` スキルの修正モードから参照される)。原因を特定せず手当たり次第に直したくなる場面・症状だけ握り潰して緑にしたくなる場面でこそ必ず使用する。
 ---
 
 # NG ケース修正(systematic-debugging)規約
 
 ## 概要
 
-`codiel-implementer-frontend` / `-backend` / `-data` が test-loop の (B) TDD 修正ループ、および
+実装担当が test-loop の (B) TDD 修正ループ、および
 fix-loop フェーズで使うスキル。入力の系統はチェックリスト 1 に従う。
 **再現 → 根本原因の特定 → 最小修正 → 対象ケース再実行 → 回帰(全件)再実行**の順で進める。
 本スキルは**デバッグの進め方**そのものを定める。

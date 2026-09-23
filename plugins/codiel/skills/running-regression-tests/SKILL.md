@@ -1,13 +1,13 @@
 ---
 name: running-regression-tests
-description: Codiel の test-loop フェーズ(スクリプト安定化ループ→TDD修正ループの二段構え)、および /codiel:test の単独回帰実行で codiel-tester が使用する。「今回は全件実行を省略していい」「2回目で通ったから採用しよう」と思いたくなる場面・broken と NG を混同したくなる場面でこそ必ず使用する。
+description: Codiel の test-loop フェーズ(スクリプト安定化ループ→TDD修正ループの二段構え)、および /codiel:test の単独回帰実行で使用する。「今回は全件実行を省略していい」「2回目で通ったから採用しよう」と思いたくなる場面・broken と NG を混同したくなる場面でこそ必ず使用する。
 ---
 
 # 回帰テスト運転規約
 
 ## 概要
 
-`codiel-tester` が test-loop フェーズおよび `/codiel:test`(単独実行)で使うスキル。
+test-loop フェーズおよび `/codiel:test`(単独実行)で使うスキル。
 `docs/DESIGN.md` §5 が定める二段ループ ── (A) スクリプト安定化ループ(`scripting-tests` が
 詳細を定める)と (B) TDD 修正ループ(`fixing-failures` が詳細を定める)── の**運転規約**
 (回帰範囲の決定・試行回数の記録・レポート書式・(A)→(B) の切り替えタイミング)を定める。
@@ -107,6 +107,15 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 
 <green | red | broken>
 ```
+
+## 完了報告
+
+レポート本文の書式とは別に、委譲先は完了時に次の 4 項目をオーケストレーターへ返す。
+
+- 実行ケース数
+- OK・NG・broken(判定不能)の内訳
+- レポートパス
+- コミットハッシュ
 
 ## HARD-GATE
 

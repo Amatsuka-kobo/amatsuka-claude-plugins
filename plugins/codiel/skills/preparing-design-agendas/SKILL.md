@@ -7,7 +7,7 @@ description: Codiel の discuss フェーズで issue.md からディスカッ�
 
 ## 概要
 
-`codiel-architect` が discuss フェーズの前半で使うスキル。`issue.md`・ARCHITECTURE・GOTCHAS・
+設計を担う担当が discuss フェーズの前半で使うスキル。`issue.md`・ARCHITECTURE・GOTCHAS・
 既存コードの調査結果を入力に、ユーザーとのディスカッションで扱う論点を
 `agenda.md` に構造化する。
 

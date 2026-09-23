@@ -151,6 +151,18 @@
       "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
     },
     {
+      "path": "plugins/codiel/skills/reviewing-diffs/references/doc.md",
+      "reference": "ドメインマップ",
+      "classification": "B",
+      "note": "ドメインマップと実装の乖離を確認する"
+    },
+    {
+      "path": "plugins/codiel/skills/reviewing-diffs/references/doc.md",
+      "reference": "(ARCHITECTURE への言及)",
+      "classification": "C",
+      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
+    },
+    {
       "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
       "reference": "ドメインマップ",
       "classification": "B",

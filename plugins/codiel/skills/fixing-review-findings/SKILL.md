@@ -54,7 +54,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    リモートへ最新化する**(reviewer は `gh pr diff` で PR の diff を読むため、push を怠ると
    reviewer は修正前の stale な diff を見ることになり、既に対応済みの所見を再度報告してしまう。
    guard-bash は fix-loop フェーズ + test-loop passed の条件下でこの push を許可済み)。
-9. push 後、diff のドメインに応じた `codiel-reviewer-*`(+ 常時参加の doc/security)を
+9. push 後、diff のドメインと共通観点に応じた担当を
    再ディスパッチし、`reviewing-diffs` の手順で `review-<n+1>.md` を作る。ディスパッチ時の
    申し送りに「反論済み一覧」を含め、reviewer が新たな根拠なしに同一所見を再報告しないようにする。
 10. `review-<n+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を

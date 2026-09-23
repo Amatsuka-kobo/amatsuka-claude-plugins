@@ -7,7 +7,7 @@ description: Codiel の dev-plan フェーズで design.md を入力に dev-plan
 
 ## 概要
 
-`codiel-planner` が dev-plan フェーズで使うスキル。`design.md`(目的・方針・変更対象・影響を受ける
+開発手順を作成する担当が dev-plan フェーズで使うスキル。`design.md`(目的・方針・変更対象・影響を受ける
 機能単位)と、ディスパッチプロンプトで渡された実行モード・ドメインマップを入力に、
 `design.md` の変更対象をドメイン単位の実行可能なステップ列へ分解し `dev-plan.md` として構造化する。
 
