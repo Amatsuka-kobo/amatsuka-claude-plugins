@@ -58,7 +58,7 @@
 | `pnpm run test` | 緑(2026-09-23。Test Files 160 passed / 1 skipped (161)、Tests 2315 passed / 2 skipped (2317)) |
 | 現行バージョン | codiel `0.8.0-dev` / agent-policy `0.19.6-dev` / metatron `0.3.7-dev` |
 | `orchestrating-runs/SKILL.md` の変更後サイズ | 30,950 B(2026-09-23、C2 時点。閾値判定はしない) |
-| hook 発火確認 | T20 の確認日時と、発火を確認したフック名を書き込む |
+| hook 発火確認 | 2026-09-23 21:19(JST)。`claude -p --plugin-dir plugins/codiel --debug-file` で新しいセッションを起動し、repo の codiel 0.9.0-dev の `hooks/hooks.json` が読み込まれたことを debug ログで確認した。発火を確認したのは PreToolUse:Bash(guard-bash)、PreToolUse:Write(guard-write)、Stop(stop-guard)。codiel の hooks.json に SubagentStop の登録は無い。同セッションで発火した SubagentStop は、ユーザー設定と security-guidance プラグインが登録したもので、codiel のものではない |
 
 **この表は T0 と T6 と T20 が書き込む。** 計画書は保護パスではないので、実測値を残す先としてここを使う。
 
