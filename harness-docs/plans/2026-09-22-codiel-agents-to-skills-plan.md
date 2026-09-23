@@ -878,6 +878,8 @@ grep -rn '対応表\|RoleId\|役割マーカー\|設計書・実装計画書(WBS
 
 - **2026-09-23(T9)**: §0.3 と設計書 §3.4 は「`subagent-stop` のテストは無い」とするが、実際は `plugins/codiel/src/hooks/__test__/stop-guard.test.ts:10` が `new URL("../subagent-stop.ts", import.meta.url)` で削除対象のソースを参照し、`:132-305` に SubagentStop のテスト 11 件がある。§0.4 は同ファイルの書き換えを禁じているため、`subagent-stop.ts` を削除すると typecheck / test が落ち、T9 の完了条件と両立しない。ユーザー判断(2026-09-23): `stop-guard.test.ts` から `:10` の `subagent-stop.ts` の参照と `:132-305` の SubagentStop テスト群だけを削除し、Stop のテストは変えない。§0.4 に例外として追記した。
 - **2026-09-23(T5)**: 本書 §5.3 末尾と設計書 §6.2 の表は「## 前提」に「ドメイン別の注意の節名」を足すとするが、設計書 §5.6-3 と §5.5(3 段階目の改定)ではドメイン別の注意は観点ファイルの絶対パスとして渡し、節は存在しない。§5.6-3 を正本とし、テンプレートに節名の項目を置かず、「## 観点ファイル」の絶対パス列挙で渡す形にした。
+- **2026-09-23(T18-12)**: 禁止語 grep が `raguel-gating/SKILL.md:40, 46` と `fixing-review-findings/SKILL.md:49` の「フェーズ→ツール対応表」を 3 件拾う。いずれも baseline(`4bdf799`)から存在し、Raguel の evaluate ツールの割当表を指す語であって、委譲先の解決機構の「対応表」ではない。誤検知として扱い、変更しない。
+- **2026-09-23(T17〜T19 の結果)**: lint(386 files、エラーなし)・typecheck・test(Test Files 160 passed / 1 skipped、Tests 2305 passed / 2 skipped。baseline 2315 から SubagentStop のテスト 10 件を削除した分)・build(後の差分なし)がすべて緑。T18 は #12 の誤検知を除き期待どおり(#6 は 30,485 B、#8 は 27)。T19 の差分は §0.4 の例外とした `stop-guard.test.ts` のみ。
 
 ---
 
