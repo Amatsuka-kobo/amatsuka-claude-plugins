@@ -6,9 +6,6 @@
       { "matcher": "Edit|Write",
         "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-write.mjs\"" }] }
     ],
-    "SubagentStop": [
-      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/subagent-stop.mjs\"" }] }
-    ],
     "Stop": [
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/stop-guard.mjs\"" }] }
     ]
