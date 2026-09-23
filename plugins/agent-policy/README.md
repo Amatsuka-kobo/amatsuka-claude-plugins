@@ -136,11 +136,11 @@ setup-agents が扱う推奨モデル ID は次の 10 種です。
 | `sonnet` | Sonnet | `sonnet` |
 | `haiku` | Haiku | `haiku` |
 | `fable` | Fable | `fable` |
-| `gpt-sol` | GPT Sol | `claude-gpt-5-6-sol` |
+| `gpt-sol` | GPT Sol | `claude-gpt-6-sol` |
 | `gpt-terra` | GPT Terra | `claude-gpt-5-6-terra` |
-| `gpt-luna` | GPT Luna | `claude-gpt-5-6-luna` |
+| `gpt-luna` | GPT Luna | `claude-gpt-6-luna` |
 | `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
-| `grok` | Grok | `claude-grok-4-6` |
+| `grok` | Grok | `claude-grok-4-7` |
 | `gemini-flash` | Gemini Flash | `claude-gemini-3-8-flash` |
 
 `gemini-flash` を Antigravity 経由で配っているプロキシ構成では、この定義を**サブエージェントとして起動できません。** Claude Code はサブエージェントを起動するとき、system に `You are a Claude agent, built on Anthropic's Claude Agent SDK.` という文を必ず含めます。Antigravity の上流はこの文字列を検出すると、quota が残っていても `429 RESOURCE_EXHAUSTED` を返します。quota の枯渇ではないため、時間を置いても別のアカウントに切り替えても解消しません。メインセッションのモデルとしては動作します。

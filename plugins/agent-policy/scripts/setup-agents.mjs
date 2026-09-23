@@ -378,7 +378,7 @@ var MODELS = [
     vendor: "gpt",
     label: "GPT Sol",
     defaultName: "gpt-sol",
-    model: "claude-gpt-5-6-sol",
+    model: "claude-gpt-6-sol",
     color: "yellow"
   },
   {
@@ -394,7 +394,7 @@ var MODELS = [
     vendor: "gpt",
     label: "GPT Luna",
     defaultName: "gpt-luna",
-    model: "claude-gpt-5-6-luna",
+    model: "claude-gpt-6-luna",
     color: "cyan"
   },
   {
@@ -410,7 +410,7 @@ var MODELS = [
     vendor: "grok",
     label: "Grok",
     defaultName: "grok",
-    model: "claude-grok-4-6",
+    model: "claude-grok-4-7",
     color: "red"
   },
   {
