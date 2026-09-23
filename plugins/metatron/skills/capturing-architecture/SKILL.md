@@ -14,7 +14,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - CLI の呼び出しは `../../references/cli-usage.md` に従う。
 - ARCHITECTURE のセクション構成と書式は `../../references/architecture-format.md` に従う。
 - rules の 3 ファイルの内容と書式は `../../references/rules-format.md` に従う。
-- ドラフトの文体は `../../references/writing-discipline.md` に従い草案を書いたのち、サブエージェントに同じ規律で検査させる。
+- ドラフトの文体は `../../references/writing-discipline.md` に従い草案を書いたのち、サブエージェントに同じ規律を守った上でより簡潔にさせる。
 
 ## CLI の呼び出し
 
