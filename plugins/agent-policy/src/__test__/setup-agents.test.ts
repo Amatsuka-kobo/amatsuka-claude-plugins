@@ -397,7 +397,7 @@ describe("--scope", () => {
       "--model-id",
       "sonnet",
       "--model",
-      "claude-gpt-5-6-sol",
+      "claude-gpt-6-sol",
       "--name",
       "external-model",
       "--roles",
@@ -408,7 +408,7 @@ describe("--scope", () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toBe(
-      "model: claude-gpt-5-6-sol is not available with --scope claude"
+      "model: claude-gpt-6-sol is not available with --scope claude"
     )
   })
 
@@ -446,7 +446,7 @@ describe("--list-live-models", () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
         data: [
-          { id: "claude-gpt-5-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-6-sol", owned_by: "openai" },
           { id: "claude-gpt-6-astra", owned_by: "openai" },
           { id: "custom-unknown", owned_by: "other" }
         ]
@@ -464,7 +464,7 @@ describe("--list-live-models", () => {
       ok: true,
       models: [
         {
-          id: "claude-gpt-5-6-sol",
+          id: "claude-gpt-6-sol",
           vendor: "gpt",
           recommendedFor: ["complex-impl"]
         },
@@ -626,7 +626,7 @@ describe("--list-coverage", () => {
       [
         "---",
         "name: external-complex",
-        "model: claude-gpt-5-6-sol",
+        "model: claude-gpt-6-sol",
         "agent-policy-vendor: gpt",
         "agent-policy-role: complex-impl",
         "---",
@@ -907,7 +907,7 @@ describe("--check", () => {
       (item) => item.key === "model"
     )
     expect(entry?.existing).toBe("my-own-alias")
-    expect(entry?.template).toBe("claude-gpt-5-6-sol")
+    expect(entry?.template).toBe("claude-gpt-6-sol")
   })
 
   it("既存にしかない節を sectionsOnlyInExisting に出す", () => {
@@ -1436,7 +1436,7 @@ describe("--write", () => {
     expect(content).toMatch(/^tools:.*CustomTool/m)
     expect(content).toContain("permissionMode: plan")
     expect(content).toContain("## 独自運用")
-    expect(content).toContain("model: claude-gpt-5-6-sol")
+    expect(content).toContain("model: claude-gpt-6-sol")
     expect(content).not.toContain("あなたは私が書き換えた冒頭である。")
     expect(content).not.toContain("私が書き換えた制約")
   })
@@ -1860,7 +1860,7 @@ describe("--models による推奨一括", () => {
   it("照会成功時は不在モデルを間引いて報告する", async () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
-        data: [{ id: "claude-gpt-5-6-sol", owned_by: "openai" }]
+        data: [{ id: "claude-gpt-6-sol", owned_by: "openai" }]
       })
     })
 
@@ -1891,7 +1891,7 @@ describe("--models による推奨一括", () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
         data: [
-          { id: "claude-gpt-5-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-6-sol", owned_by: "openai" },
           { id: "claude-gpt-5-6-terra", owned_by: "unknown" }
         ]
       })
