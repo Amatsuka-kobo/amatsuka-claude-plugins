@@ -261,12 +261,12 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 ### /codiel:test(オーケストレーター外の単独テスト実行)
 
 - `/codiel:test [unit-id...]` — 引数なしで全 unit、指定時はその unit のみ実行。
-- codiel-tester をディスパッチし、`.codiel/specs/**/scripts/` を実行、
+- テストスクリプトの作成・実行・合否判定を担う委譲先へディスパッチし、`.codiel/specs/**/scripts/` を実行、
   結果を `.codiel/reports/test-run-<timestamp>.md` に保存して要約を報告する。
 - run 中でなくても使える(手動回帰・CI 前チェック用)。スクリプト安定化ループは含むが、
   コード修正(B)はディスパッチしない(報告のみ)。
-- 単独実行中も hooks の書き込み制御は有効(アクティブ run がない場合も、tester の書き込み先は
-  `.codiel/specs/**/scripts/` と `.codiel/reports/` に限られる)。
+- 単独実行中も hooks の書き込み制御は有効(アクティブ run がない場合も、テスト作業を担う委譲先の
+  書き込み先は `.codiel/specs/**/scripts/` と `.codiel/reports/` に限られる)。
 
 ## 6. Skills(superpowers スタイルの自前スキル群)
 
@@ -321,55 +321,48 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 **「できないことは暴走もできない」**が原則。ドメインの境界(どのパスが frontend/backend/data か)は
 ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き込み制御に使う。
 
+Codiel に同梱して名指しする Agent は、Issue から `issue.md` を作る analyst と、設計書から
+テスト仕様書を作る test-designer の 2 体だけである。その他のフェーズは、固定した Agent 名ではなく
+「成果物を書く委譲」「読み取りだけの委譲」など作業内容をディスパッチプロンプトに渡して委譲する。
+委譲先の選択はセッションに注入された運用規律に委ね、規律が無い場合は成果物を書く作業を
+`general-purpose`、読み取りだけの作業を `Explore` に縮退する。
+
 ### MCP ツールの付与方針
 
-Context7 は全員に付与する。GitHub は読み取り系ツールだけを列挙して付与する。guard-bash hooks の matcher は Bash のみであり、GitHub MCP の書き込みツールは state ゲートを迂回するため、サーバー単位では許可しない。Playwright は codiel-implementer-frontend、codiel-tester、codiel-reviewer-frontend にだけ付与する。未接続の MCP エントリは他に解決するツールがあるため無視されるだけで、未接続環境でも動作に支障はない。
+Context7 はすべての委譲先に付与する。GitHub は読み取り系ツールだけを列挙して付与する。
+guard-bash hooks の matcher は Bash のみであり、GitHub MCP の書き込みツールは state ゲートを迂回するため、
+サーバー単位では許可しない。Playwright はテスト・実装・レビューの作業を受ける委譲先に必要に応じて付与する。
+どの委譲先に MCP を付与するかは、委譲先の定義側で判断する。未接続の MCP エントリは他に解決する
+ツールがあるため無視されるだけで、未接続環境でも動作に支障はない。
 
-### 文書系・分析系
+### 名前付き Agent
 
 | エージェント | 担当フェーズ | ツール権限 | 権限設計の意図 |
 |---|---|---|---|
 | `codiel-analyst` | init | Read, Grep, Glob, Write, Bash, Context7, GitHub Issue 読み取りツール | Issue 取得(gh issue view)と issue.md 執筆のみ |
-| `codiel-architect` | discuss(アジェンダ作成)/ design | Read, Grep, Glob, Write, Context7 | **Edit なし・Bash なし** — コードを触れない |
 | `codiel-test-designer` | test-spec | Read, Grep, Glob, Write, Edit, Context7 | spec.md / cases.md の新規作成と**更新**。書き込み先は hooks で `.codiel/specs/**` に制限 |
-| `codiel-planner` | dev-plan | Read, Grep, Glob, Write, Context7 | **Edit なし・Bash なし** |
 
-### 実装系(ドメイン別 3 体)
+### 作業内容による委譲
 
-| エージェント | 担当 | ツール権限 | 権限設計の意図 |
-|---|---|---|---|
-| `codiel-implementer-frontend` | UI・画面・クライアントロジック | Read, Grep, Glob, Edit, Write, Bash, Context7, Playwright | 書き込みはドメインマップの frontend パスに hooks で制限 |
-| `codiel-implementer-backend` | API・サーバーロジック | Read, Grep, Glob, Edit, Write, Bash, Context7 | 同 backend パスに制限 |
-| `codiel-implementer-data` | スキーマ・マイグレーション・シード | Read, Grep, Glob, Edit, Write, Bash, Context7 | 同 data パスに制限。不可逆操作が多い領域なので Raguel の `plan/irreversible-ops`・保護パスと整合させる |
+作業内容で委譲するフェーズでは、依頼文に作業内容、読み込むスキルと観点ファイル、入出力、
+実行モード、ドメイン境界、必要な tools の限定条項を含める。実装・テストのドメイン別注意事項は
+`skills/implementing/references/{frontend,backend,data}.md` に置く。レビューの観点別の焦点は
+`skills/reviewing-diffs/` の「観点別の焦点」節と
+`skills/reviewing-diffs/references/{frontend,backend,data,doc,security,generic}.md` に置く。
 
-- 共通制約: **テストスクリプト(`.codiel/specs/**`)への書き込み禁止**(hooks)。
-  git push / gh pr create は hooks が state ゲートで制御。
-- ドメインを跨ぐステップは、開発手順書の段階でドメイン単位に分割することを `writing-dev-plans` が要求する。
+| 委譲の種別 | 主な作業 | 担保する境界 |
+|---|---|---|
+| 成果物を書く委譲 | アジェンダ・設計書・開発計画、実装・テストスクリプト・修正 | 依頼文の tools 限定条項、hooks、各作業スキルの HARD-GATE |
+| 読み取りだけの委譲 | diff のレビュー、調査、再レビュー | 読み取り系 tools のみ、`reviewing-diffs` の HARD-GATE |
 
-### テスト系
+実装・テストの委譲では、開発手順書のドメインタグとディスパッチプロンプトで渡すドメインマップに
+従う。`mapped` では担当範囲外を書き込まず、`unscoped` ではドメイン境界を設けない。
+ドメインを跨ぐステップは、開発手順書の段階でドメイン単位に分割することを
+`writing-dev-plans` が要求する。
 
-| エージェント | 担当 | ツール権限 | 権限設計の意図 |
-|---|---|---|---|
-| `codiel-tester` | scripts/ の作成・修正、テスト実行、合否判定 | Read, Grep, Glob, Edit, Write, Bash, Context7, Playwright | **プロダクトコードと cases.md(期待値)は書かない** — スクリプトは直せるが期待値と実装は直せない。cases.md への書き込みは hooks が ask で機械的に検知、それ以外の境界はエージェント定義の職務規律で担保 |
-
-### レビュー系(観点別 5 体・全員読み取り専用)
-
-| エージェント | 観点 | 職務の焦点 | ツール権限 |
-|---|---|---|---|
-| `codiel-reviewer-frontend` | frontend | UI 実装・状態管理・アクセシビリティ・既存画面との一貫性 | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール, Playwright |
-| `codiel-reviewer-backend` | backend | API 設計・エラーハンドリング・パフォーマンス・互換性 | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
-| `codiel-reviewer-data` | data | スキーマ変更の妥当性・マイグレーションの可逆性・データ整合性 | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
-| `codiel-reviewer-doc` | doc | 設計書/テスト仕様書/実装の相互整合・ARCHITECTURE.md との乖離・ドキュメント更新漏れ | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
-| `codiel-reviewer-security` | security | 認可・入力検証・シークレット・依存脆弱性・インジェクション | Read, Grep, Glob, Bash, Context7, GitHub PR 読み取りツール |
-
-- ツール権限は全員 Read、Grep、Glob、Bash、Context7、GitHub PR 読み取りツールである。frontend には Playwright も付与する。**Edit・Write なし**。
-  所見はテキストで返し、PR への投稿(`gh pr review --comment` / 行コメント)は**オーケストレーターの職務**。
-- diff のドメインに応じて frontend/backend/data を選択参加、**doc / security は常時参加**。並列ディスパッチ。
-- 所見はオーケストレーターが統合して severity 順に review-<n>.md へ記録し、PR コメントに投稿。
-- **critical / high は fix-loop で修正**、**medium / low は triage フェーズでユーザーの指示のもと別 Issue 化**(§2 [9])。
-
-この分離により「テスターが期待値を緩めて合格させる」「レビューアーが自分で直して自己承認する」
-という利益相反経路が権限レベルで存在しなくなる(Raguel の「自己評価は採用しない」原則のエージェント版)。
+この分離により、テストの期待値を変更する委譲先が実装を修正して自己承認することや、
+レビューを担う委譲先が自分でコードを修正して自己承認することを防ぐ。担保するのは固定した
+Agent 名ではなく、依頼文の tools 限定条項、各作業スキル本文の HARD-GATE、hooks による境界制御である。
 
 ## 8. Hooks(決定論的な外壁)
 
@@ -383,7 +376,6 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
 | PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(init/discuss/design/test-spec/dev-plan)中の `src/**` への書き込み、コードフェーズ(implement/test-loop/fix-loop)中の `.codiel/specs/**` の spec.md / cases.md(期待値)への書き込み。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。**ドメイン単位の制御は、state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が設定されているとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない |
-| SubagentStop | 各フェーズ完了時 | 期待される成果物ファイルが存在し空でないかを検証。欠けていればフィードバックを返して差し戻す |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止) |
 
 ## 9. docs(プロジェクト毎に成長するハーネス資産)
@@ -480,12 +472,7 @@ plugins/codiel/
     recording-gotchas/SKILL.md
   agents/
     codiel-analyst.md
-    codiel-architect.md
     codiel-test-designer.md
-    codiel-planner.md
-    codiel-implementer-frontend.md / -backend.md / -data.md
-    codiel-tester.md
-    codiel-reviewer-frontend.md / -backend.md / -data.md / -doc.md / -security.md
   hooks/
     hooks.json
     scripts/                  # フックスクリプト(node)

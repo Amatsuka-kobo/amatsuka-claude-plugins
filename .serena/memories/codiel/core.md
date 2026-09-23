@@ -83,15 +83,16 @@ Raguel gates `init`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`
 `discuss` は起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙する。
 マーカーが完全一致しない (`intent:v2`、`<!--intent:v1-->`) ものは通常どおり本文から抽出する。
 
-## Agents (15) and domain split
+## Agents — bundled analysts and work-content dispatch
 
-`codiel-analyst`, `codiel-architect` (2 modes), `codiel-planner`, `codiel-test-designer`,
-`codiel-tester`, implementers `-frontend/-backend/-data/-generic`, reviewers
-`-frontend/-backend/-data/-generic/-doc/-security`.
-
-専門担当が存在しないドメイン名は `codiel-implementer-generic` / `codiel-reviewer-generic` へ
-ルーティングする。既存 backend 担当を汎用担当として兼任させない。doc/security reviewer は
-引き続き参加する。
+同梱する Agent 定義は `codiel-analyst` と `codiel-test-designer` の 2 体だけである。その他の
+フェーズは Agent 名や役割名を指定せず、「成果物を書く委譲」「読み取りだけの委譲」など作業内容と
+委譲の種別でサブエージェントへ委譲する。委譲先はセッションに注入された運用規律が選び、
+規律が無い環境では読み取りだけの委譲を `Explore`、それ以外を `general-purpose` へ縮退する。
+ドメイン固有の観点は
+`plugins/codiel/skills/implementing/references/{frontend,backend,data}.md` と
+`plugins/codiel/skills/reviewing-diffs/references/{frontend,backend,data,doc,security,generic}.md`
+に置く。
 
 ## Skills (17) and commands (3)
 
@@ -105,8 +106,7 @@ Skills: `analyzing-issues`, `preparing-design-agendas`, `facilitating-design-dis
 
 ## Hooks — phase-scoped, ask-by-default with hard denies
 
-`hooks/hooks.json`: `PreToolUse(Bash)` → `guard-bash.mjs`; `PreToolUse(Edit|Write)` →
-`guard-write.mjs`; `SubagentStop` → `subagent-stop.mjs`; `Stop` → `stop-guard.mjs`.
+`hooks/hooks.json`: `PreToolUse(Bash)` → `guard-bash.mjs`; `PreToolUse(Edit|Write)` → `guard-write.mjs`; `Stop` → `stop-guard.mjs`.
 codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。metatron 側と方針が逆なので混同しない。
 
 - 制限は**フェーズ単位でエージェント単位ではない**。フェーズ不一致は `ask`(偽陽性を許容)。

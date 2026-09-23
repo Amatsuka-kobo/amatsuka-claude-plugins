@@ -233,7 +233,7 @@ back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
 | SessionStart | — | injects the policy skill; under custom, validates model existence first |
 | SubagentStart | — | injects **only** the marker table, scoped by `candidateScopeFor` (claude → claude-only, custom-family → with-external, else the `NO_MARKERS` line). The discipline fragment is **gone** since 0.18.0-dev |
 | PreToolUse | `Edit\|Write\|NotebookEdit\|mcp__.*` | delegation gate (opt-in; denies edits to protected globs) |
-| PreToolUse | `Task\|Agent` | parallel nudge (on by default; one fixed additionalContext line) |
+| PreToolUse | `Task\|Agent` | parallel nudge (on by default; one fixed additionalContext line dispatching independent work in the same message; sequence only when the previous output is needed or the workflow prescribes sequential order) |
 
 **Marker-table row format since 0.19.1-dev (2026-09-16)**: each row is
 `- <role label> [<RoleId>]: <definition name(s)>`. The generated common-discipline clauses
