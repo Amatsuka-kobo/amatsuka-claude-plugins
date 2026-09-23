@@ -19,90 +19,6 @@
       "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
     },
     {
-      "path": "plugins/codiel/agents/codiel-architect.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-backend.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "担当範囲を backend パスから決める"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-backend.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-data.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "担当範囲を data パスから決める"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-data.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-frontend.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "担当範囲を frontend パスから決める"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-frontend.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-planner.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-backend.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-data.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-doc.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "ドメインマップと実装の乖離を確認する"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-doc.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-frontend.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-security.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
       "path": "plugins/codiel/commands/init.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",
@@ -176,18 +92,6 @@
     },
     {
       "path": "plugins/codiel/skills/writing-dev-plans/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-implementer-generic.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-reviewer-generic.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
       "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
