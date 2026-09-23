@@ -636,19 +636,19 @@ digraph codiel_run {
   node [fontname="sans-serif"];
 
   start [label="/codiel:run <issue>", shape=ellipse];
-  precheck [label="前提チェック\nARCHITECTURE.md / raguel MCP", shape=box];
+  precheck [label="前提チェック\nB + C + D / raguel MCP", shape=box];
   sync [label="outcome 自動同期\n(raguel-gating)", shape=box];
   resolve [label="codiel-state get --issue N", shape=diamond];
   resume [label="未完了 try を再開\n(state.phase から続行)", shape=box];
   init_run [label="codiel-state init\ngit switch -c <branch>", shape=box];
 
   init [label="[0] init\ncodiel-analyst", shape=box];
-  discuss [label="[1] discuss\narchitect(アジェンダ)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
-  design [label="[2] design\ncodiel-architect\n+ウォークスルー(ユーザー承認)", shape=box];
+  discuss [label="[1] discuss\n成果物を書く委譲(agenda.md)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
+  design [label="[2] design\n成果物を書く委譲(design.md)\n+ウォークスルー(ユーザー承認)", shape=box];
   testspec [label="[3a] test-spec\ncodiel-test-designer", shape=box];
-  devplan [label="[3b] dev-plan\ncodiel-planner", shape=box];
+  devplan [label="[3b] dev-plan\n成果物を書く委譲(dev-plan.md)", shape=box];
   parallel [label="単一メッセージで並列ディスパッチ", shape=note];
-  implement [label="[4] implement\ncodiel-implementer-*", shape=box];
+  implement [label="[4] implement\n成果物を書く委譲\n(コード diff + ユニットテスト)", shape=box];
   testloop [label="[5] test-loop\n(A)tester (B)implementer", shape=box];
   pr [label="[6] pr\ngh pr create", shape=box];
   review [label="[7] review\nreviewer 選択参加+doc/security", shape=box];

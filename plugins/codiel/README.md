@@ -54,7 +54,7 @@ init フェーズは合意済みのセクションを解釈し直さず `issue.m
 discuss フェーズは起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙します。
 
 詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
-二段ループ・スキル/エージェント構成・hooks 仕様などを記載)。
+二段ループ・スキル・同梱 Agent 2 体・作業内容による委譲構成・hooks 仕様などを記載)。
 
 ### `/codiel:test [unit-id...]`
 
@@ -65,15 +65,14 @@ NG があってもコード修正はディスパッチせず、結果を `.codie
 ## セットアップ
 
 1. このプラグインを Claude Code にインストールします(marketplace 経由、または `--plugin-dir` で直接指定)。
-2. 対象プロジェクトのルートで `/codiel:init` を実行します。対話に答えると、`CLAUDE.md` /
-   `raguel.config.yaml` / `.codiel/` 配下のディレクトリと、ARCHITECTURE が無ければ最小構成の
-   `docs/ARCHITECTURE.md` が作成されます。
+2. 対象プロジェクトのルートで `/codiel:init` を実行します。対話に答えると、
+   `CLAUDE.md` / `raguel.config.yaml` / `.codiel/` 配下のディレクトリが用意されます。
 3. `/codiel:run <issue番号>` で run を開始します。未初期化のまま `/codiel:run` を実行した場合は
    `/codiel:init` の実行を案内して終了します(フェイルクローズド)。
 
 ## 推奨 MCP サーバー(任意)
 
-`context7`、`github`、`playwright` を MCP サーバーとして登録すると、対応する Codiel エージェントが仕様確認、GitHub 情報の参照、画面挙動の確認に活用します。未接続でもエラーにはならず、利用可能な他のツールで作業を継続します。GitHub は読み取り系ツールだけを許可しています。
+`context7`、`github`、`playwright` を MCP サーバーとして登録すると、仕様確認や GitHub 情報の参照を行う委譲先が利用できます。テスト・実装・レビューの作業を受ける委譲先は、Playwright が付与されていれば画面挙動の確認にも活用できます。委譲先にどの MCP が付与されるかはプロジェクト側の定義によります。未接続でもエラーにはならず、利用可能な他のツールで作業を継続します。GitHub は読み取り系ツールだけを許可しています。
 
 ## raguel-mcp
 
