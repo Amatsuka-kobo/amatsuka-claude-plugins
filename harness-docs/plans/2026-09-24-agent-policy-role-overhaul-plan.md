@@ -36,7 +36,7 @@
 - 役割数は T2 で 16、T3 で 15、T4 で 15、T5 で 16 と推移する。各タスクは、そのタスクの完了時点の役割集合でテストの固定値を書く。最終形を先取りしない。
 - プラグイン README と SKILL.md は T9 / T10 でまとめて直す。T1b-T8 のコミットでは、これらの記述が一時的に古いままになる(テストは読まない)。
 - 設計判断・要件の追加・スコープの拡大は担当が決めず、オーケストレーターへ差し戻す。
-- 設計書 §10 に残った未解決事項が着手を止めるタスクを §8 に挙げた。オーケストレーターは該当タスクの前に決定する。
+- 設計書 §10 の未解決事項は無い。着手を止める判断は残っていない(§8)。
 
 ## 2. タスク
 
@@ -285,7 +285,7 @@ SKILL.md と README の `gemini` の記述は T9 / T10 で直す。
 3. `document-writer.md` の削除はユーザーの手で行う(既存ファイルの削除はユーザーが `!` で実行する運用)。絶対パスで示す。
 4. 各定義の生成の前に `--check` を実行し、`mcpCurrent.servers` と `mcpCurrent.denyTools` を控える。`--write` に `--mcp-servers` を渡すときは、控えた `denyTools` を `--mcp-deny` に渡す。
 5. 各定義を、現在の `name`・`model`・役割構成で `--write --merge --model-id <model-id> --name <name> --model <model> --roles <…>` により生成する。役割を変えるのは次の 3 定義だけである。`knowledge-elicitationer` は `--roles knowledge-elicitation`、`docs-reviewer` は `--roles design-review`、`system-planner` は `--roles design-plan`。
-6. ユーザーが決めた名前とモデルで、敵対的レビューの定義を `--roles adversarial-review` で新設する。
+6. 敵対的レビューの定義を `--write --model-id gpt-sol --name adversarial-reviewer --roles adversarial-review --scope custom` で新設する(名前とモデルはユーザー決定 2026-09-24)。
 7. 生成後、複製との `diff -r` を取り、`disallowedTools` と MCP の行が削除されていないことを確かめる。
 8. `--list-coverage --scope custom` の `uncovered` が空(または作らないと決めた役割だけ)であることを確かめる。`grep -l "agent-policy-role:.*\(doc-writing\|explore-lead\|independent-review\|doc-review\)" .claude/agents/*.md` が 0 件であることを確かめる。
 
@@ -416,7 +416,6 @@ normal-impl, general, explore, realtime-research, e2e-verify, design-review, cod
 | T9 の担当がウィザードの分岐条件だけを書き、「どう聞くか」を落とす | 依頼文で明記する(過去に 3 回起きた) |
 | T16 で `disallowedTools` と MCP の付与が失われる | GOTCHA-001 の手順(T16 の 1・4・7) |
 | T16 で旧 ID のマーカーを持つ定義を見落とし、対応表から役割が消える | T16 の 8 の grep で確認する |
-| 敵対的レビュー定義の名前とモデルを確認しないまま T16 に着手する | §8 の対応表に従い、T16 の手順 6 の前にユーザーへ確認する |
 | T2 の担当が `_common.md` の §制約(L34 以降)まで触り、T3 の L42 の変更と衝突する | T2 の依頼文に触る行と触らない行を ja / en それぞれで明記する |
 | 規律の純増が 3,983B を超え、`custom-policy` の SKILL.md との合計が 30,720B を超える | §1 の手順(撤去の先行 → 条項の短縮 → 報告)。T6 / T7 / T12 で測る |
 | T1b の担当が `live-models.test.ts` の `antigravity` の行を消し、推定が `unknown` に戻ったことが検査されなくなる | 依頼文で「行を消さず、期待値を `unknown` にする」と書く(設計書 §4.12) |
@@ -432,11 +431,7 @@ normal-impl, general, explore, realtime-research, e2e-verify, design-review, cod
 
 ## 8. 未解決事項と着手の関係
 
-設計書 §10 に残った項目が、どのタスクの着手を止めるかを示す。
-
-| 設計書 §10 | 内容 | 止めるタスク |
-| --- | --- | --- |
-| 1 | このリポジトリに新設する敵対的レビュー定義の名前とモデル | T16 の手順 6(着手時にユーザーへ確認する) |
+設計書 §10 に未解決事項は残っていない。敵対的レビュー定義の名前とモデルは `adversarial-reviewer` / `gpt-sol` に決まり(2026-09-24)、T16 の手順 6 に反映済みである。
 
 ## 9. Done 条件
 

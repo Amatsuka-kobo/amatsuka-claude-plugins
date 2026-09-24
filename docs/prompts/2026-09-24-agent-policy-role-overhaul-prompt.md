@@ -18,7 +18,7 @@ agent-policy の役割体系改修の 9 要件を、実装計画書の T0〜T16(
 2. T0 の baseline を取る。`pnpm run lint`、`pnpm run typecheck`、`pnpm run test`、`pnpm run build`、`git status --short plugins/agent-policy/scripts`、方針スキル本文と規律の `wc -c` を実行し、26,737B を基準値として記録する。
 3. T1 から T16 まで、実装計画書 `harness-docs/plans/2026-09-24-agent-policy-role-overhaul-plan.md` の順序とコミット単位で進める。
 4. `assets/roles/`、`references/`、`skills/` を変えるタスクでは `prompt-smith:prompt-smith` を起動する。
-5. T16 に入る前に、敵対的レビューの新規定義に使う名前とモデルをユーザーに確認する。
+5. T16 の敵対的レビュー定義は、名前 `adversarial-reviewer`、モデル `gpt-sol`(`claude-gpt-6-sol`)で作る。確認済みであり、改めて聞かない。
 
 ## 制約
 
