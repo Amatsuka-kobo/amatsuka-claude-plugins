@@ -304,6 +304,12 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob"]
   },
   {
+    id: "adversarial-review",
+    label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
     id: "advisor",
     label: "\u8A2D\u8A08\u30FB\u8A08\u753B\u30FB\u5B9F\u88C5\u306E\u30A2\u30C9\u30D0\u30A4\u30B6\u30FC",
     kind: "readonly",
@@ -418,6 +424,7 @@ var ASSIGNMENTS = {
     "code-review": ["sonnet"],
     "final-review": ["fable"],
     "gate-review": ["fable"],
+    "adversarial-review": ["opus"],
     advisor: ["fable"]
   }
 };
@@ -436,6 +443,7 @@ var RECOMMENDED = {
   "code-review": ["sonnet"],
   "final-review": ["fable", "gpt-astra"],
   "gate-review": ["fable", "gpt-astra"],
+  "adversarial-review": ["opus", "gpt-sol"],
   advisor: ["fable", "gpt-astra"]
 };
 var SOLO_DENIED_ROLES = [
@@ -443,7 +451,8 @@ var SOLO_DENIED_ROLES = [
   "knowledge-elicitation",
   "code-review",
   "final-review",
-  "gate-review"
+  "gate-review",
+  "adversarial-review"
 ];
 function allowsAgentTool(ids) {
   return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));

@@ -32,6 +32,7 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   "code-review": ["sonnet"],
   "final-review": ["fable"],
   "gate-review": ["fable"],
+  "adversarial-review": ["opus"],
   advisor: ["fable"]
 }
 
@@ -50,6 +51,7 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   "code-review": ["sonnet"],
   "final-review": ["fable", "gpt-astra"],
   "gate-review": ["fable", "gpt-astra"],
+  "adversarial-review": ["opus", "gpt-sol"],
   advisor: ["fable", "gpt-astra"]
 }
 
@@ -68,6 +70,7 @@ const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
   "code-review": false,
   "final-review": false,
   "gate-review": false,
+  "adversarial-review": false,
   advisor: false
 }
 
@@ -95,7 +98,7 @@ describe("POLICIES", () => {
 })
 
 describe("ASSIGNMENTS", () => {
-  it("claude-model-policy だけに現行の全 15 役割を保持する", () => {
+  it("claude-model-policy だけに現行の全 16 役割を保持する", () => {
     expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
     expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
       ALL_ROLE_IDS
@@ -107,7 +110,7 @@ describe("ASSIGNMENTS", () => {
 })
 
 describe("RECOMMENDED", () => {
-  it("custom プロファイル向け推奨が全 15 役割と固定値を持つ", () => {
+  it("custom プロファイル向け推奨が全 16 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
   })
@@ -193,7 +196,7 @@ describe("modelsFor", () => {
 })
 
 describe("rolesFor", () => {
-  it("sonnet が claude-model-policy で担う 8 役割を返す", () => {
+  it("sonnet が claude-model-policy で担う 7 役割を返す", () => {
     expect(rolesFor("sonnet")).toEqual([
       "normal-impl",
       "general",
@@ -220,7 +223,7 @@ describe("rolesFor", () => {
 })
 
 describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 15 役割で現行規定を保つ", () => {
+  it("claude-model-policy の全 16 役割で現行規定を保つ", () => {
     for (const role of ROLES) {
       expect(allowsAgentTool([role.id]), role.id).toBe(
         EXPECTED_AGENT_TOOL[role.id]

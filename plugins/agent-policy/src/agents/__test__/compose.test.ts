@@ -619,15 +619,17 @@ describe("英語断片での合成", () => {
   })
 
   it("英語で合成した定義に日本語と日本語約物が混入しない", () => {
-    const document = compose({
-      name: "test-agent",
-      model: "sonnet",
-      vendor: "claude",
-      roleIds: ["complex-impl", "explore"],
-      fragmentDirs: [EN],
-      lang: "en"
-    })
-    expect(document).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
+    for (const role of ROLES) {
+      const document = compose({
+        name: "test-agent",
+        model: "sonnet",
+        vendor: "claude",
+        roleIds: [role.id],
+        fragmentDirs: [EN],
+        lang: "en"
+      })
+      expect(document, role.id).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
+    }
   })
 
   it("日本語見出しのプロジェクト断片は英語合成で該当節を出さない", () => {

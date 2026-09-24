@@ -8,7 +8,7 @@ import {
 } from "../roles"
 
 describe("ROLES", () => {
-  it("役割 ID が 15 件あり、定義順で重複しない", () => {
+  it("役割 ID が 16 件あり、定義順で重複しない", () => {
     expect(ROLES.map((role) => role.id)).toEqual([
       "complex-impl",
       "normal-impl",
@@ -24,9 +24,10 @@ describe("ROLES", () => {
       "code-review",
       "final-review",
       "gate-review",
+      "adversarial-review",
       "advisor"
     ])
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(15)
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(16)
   })
 
   it("一般作業役割の label・kind・tools が固定値と一致する", () => {
@@ -78,12 +79,16 @@ describe("ROLES", () => {
     ])
   })
 
-  it("追加した 4 役割の label・kind・tools が固定値と一致する", () => {
+  it("追加した 5 役割の label・kind・tools が固定値と一致する", () => {
     expect(
       ROLES.filter((role) =>
-        ["escalation", "final-review", "e2e-verify", "gate-review"].includes(
-          role.id
-        )
+        [
+          "escalation",
+          "final-review",
+          "e2e-verify",
+          "gate-review",
+          "adversarial-review"
+        ].includes(role.id)
       )
     ).toEqual([
       {
@@ -109,6 +114,12 @@ describe("ROLES", () => {
         label: "設計書の最終ゲートレビュー",
         kind: "readonly",
         tools: ["Read", "Grep", "Glob"]
+      },
+      {
+        id: "adversarial-review",
+        label: "敵対的レビュー",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob", "Bash"]
       }
     ])
   })

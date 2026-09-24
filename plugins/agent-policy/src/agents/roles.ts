@@ -15,6 +15,7 @@ export type RoleId =
   | "code-review"
   | "final-review"
   | "gate-review"
+  | "adversarial-review"
   | "advisor"
 
 export interface Role {
@@ -109,6 +110,12 @@ export const ROLES: readonly Role[] = [
     label: "設計書の最終ゲートレビュー",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob"]
+  },
+  {
+    id: "adversarial-review",
+    label: "敵対的レビュー",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
     id: "advisor",
