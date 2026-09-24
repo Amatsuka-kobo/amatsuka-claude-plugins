@@ -1,7 +1,7 @@
 ---
 id: light-impl
 label: Lightweight Implementation
-description: bulk application, bulk checking, repetitive transformation, or minor coding
+description: bulk work or minor changes meeting any criterion of specified changes, enumerable targets, or no new logic
 default-name: light-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash
 kind: impl
@@ -9,10 +9,9 @@ kind: impl
 
 ## When to invoke
 
-- **Bulk application.** Use when applying the same mechanical change, such as a rename, import replacement, or terminology normalization, to many files.
-- **Bulk checking.** Use when scanning many files to list the presence or absence of a pattern or violations of a convention.
-- **Repetitive transformation.** Use when repeating non-judgmental operations such as format conversion, formatting, or extraction across many targets.
-- **Minor coding.** Use for small, routine code changes requiring almost no judgment.
+- Use when the requested changes are fully specified.
+- Use when the targets can be enumerated with Glob or Grep.
+- Use for bulk application, bulk checking, repetitive transformation, or routine minor changes that add no new logic.
 
 ## Core Responsibilities
 

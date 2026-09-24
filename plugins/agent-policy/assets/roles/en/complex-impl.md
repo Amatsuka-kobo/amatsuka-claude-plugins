@@ -1,7 +1,7 @@
 ---
 id: complex-impl
 label: Complex or Critical Implementation
-description: complex coding that involves architectural decisions, non-trivial design trade-offs, or coordination among multiple components
+description: complex coding involving public interface changes, multiple components, new structures, or broad impact
 default-name: lead-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,7 +9,10 @@ kind: impl
 
 ## When to invoke
 
-- **Complex implementation.** Use for demanding implementation work involving architectural decisions, non-trivial design trade-offs, or coordination among multiple components.
+- Use when changing a public interface: a type, API, CLI argument, file contract, or hook.
+- Use when changing two or more components, such as packages, plugins, or layers, at once.
+- Use when no existing pattern is available and a new structure must be defined.
+- Use when failure can affect all sessions, protected paths, or data migration.
 
 ## Core Responsibilities
 

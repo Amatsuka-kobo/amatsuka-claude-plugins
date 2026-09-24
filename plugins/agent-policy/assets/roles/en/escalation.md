@@ -1,7 +1,7 @@
 ---
 id: escalation
 label: Escalation for Blocked Work
-description: identifying the cause of blocked work and unblocking it through implementation
+description: identifies blocked-work causes from defined triggers and unblocks them through implementation
 default-name: escalation-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,7 +9,9 @@ kind: impl
 
 ## When to invoke
 
-- **Escalation.** Use when taking over work blocked in another band, identifying the cause, and unblocking it.
+- Use when the same work has been delegated twice to the same implementation role without completion.
+- Use when an implementation role returns work without identifying the cause.
+- Use when an implementation role has tried twice to fix a test, type-check, or lint failure without resolving it.
 
 ## Core Responsibilities
 
@@ -17,6 +19,7 @@ kind: impl
 
 ## Procedure
 
+- Return the task without starting if the request lacks the attempt history, verbatim failure output, or unresolved constraints.
 - Review what the previous assignee tried, the observed failures, and the unresolved constraints.
 - Reproduce or observe the cause before implementing a narrowly scoped fix.
 - Verify that the blockage is resolved with tests, type checking, or other applicable checks.
