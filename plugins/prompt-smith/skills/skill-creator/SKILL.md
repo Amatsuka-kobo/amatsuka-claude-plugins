@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: スキルまたはコマンド定義を新しく作るとき、既存のスキル構造や description を改善するときに必ず使用する。用途の聞き取り、配置と同梱物の設計、SKILL.md の作成、テストケースによる出力評価、eval セットの作成とレビュー、発火測定、description の改善ループを担当する。AI 向け指示書の本文だけを整える依頼は prompt-smith が担当し、Agent 定義の作成や検証は agent-creator が担当する。
+description: スキル(SKILL.md)やcommands/*.mdのコマンド定義を新規作成・レビュー・改善するときに必ず使用する。手順・説明文・frontmatter・参照資料・期待する出力の食い違いを直し、成果の良し悪しを判定する基準も整える。descriptionの発火精度を測って直す、evalセットで発火率を検証するといった依頼にも対応する。指示書本文だけの推敲はprompt-smith、Agent定義はagent-creator。
 ---
 # スキルの作成
 
