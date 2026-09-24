@@ -1,6 +1,6 @@
 ---
-id: independent-review
-label: Independent Design and Implementation Plan Review
+id: design-review
+label: Design and Implementation Plan Review
 description: testing assumptions in design documents and implementation plans and presenting counterevidence
 default-name: docs-reviewer
 tools: Read, Grep, Glob, Bash
@@ -9,7 +9,7 @@ kind: readonly
 
 ## When to invoke
 
-- **Independent review.** Use to test the premises, implicit assumptions, and optimistic estimates in design documents or implementation plans and present counterevidence.
+- **Design review.** Use to test the premises, implicit assumptions, and optimistic estimates in design documents or implementation plans and present counterevidence.
 
 ## Core Responsibilities
 
@@ -24,8 +24,8 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for independent review**, do not create deliverable files. Return a report only.
-- **When invoked for independent review**, do not decide whether findings should be accepted. Return the information needed to decide.
+- **When invoked for design and implementation plan review**, do not create deliverable files. Return a report only.
+- **When invoked for design and implementation plan review**, do not decide whether findings should be accepted. Return the information needed to decide.
 
 ## Output Format
 

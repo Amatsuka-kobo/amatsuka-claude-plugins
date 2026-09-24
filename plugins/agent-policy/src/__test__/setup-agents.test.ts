@@ -743,8 +743,8 @@ describe("--list-roles", () => {
       "explore",
       "realtime-research",
       "e2e-verify",
-      "independent-review",
-      "doc-review",
+      "design-review",
+      "knowledge-elicitation",
       "code-review",
       "final-review",
       "gate-review",
@@ -944,7 +944,7 @@ describe("--check", () => {
       "--name",
       "gpt-terra",
       "--roles",
-      "explore,normal-impl,independent-review",
+      "explore,normal-impl,design-review",
       "--lang",
       "ja",
       "--dir",
@@ -953,9 +953,9 @@ describe("--check", () => {
     ])
 
     expect(result.roles).toEqual({
-      ids: ["normal-impl", "explore", "independent-review"],
+      ids: ["normal-impl", "explore", "design-review"],
       implRoles: ["normal-impl"],
-      readonlyRoles: ["explore", "independent-review"],
+      readonlyRoles: ["explore", "design-review"],
       mixedKinds: true,
       agentTool: true
     })
@@ -1006,9 +1006,7 @@ describe("--check", () => {
     expect(agentToolFor("gate-review")).toBe(false)
     expect(agentToolFor("escalation")).toBe(true)
     expect(agentToolFor("e2e-verify")).toBe(true)
-    expect(agentToolFor("explore,realtime-research,independent-review")).toBe(
-      true
-    )
+    expect(agentToolFor("explore,realtime-research,design-review")).toBe(true)
     expect(agentToolFor("light-impl")).toBe(true)
   })
 

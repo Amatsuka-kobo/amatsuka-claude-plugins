@@ -62,6 +62,10 @@ describe("loadFragments の 3 段探索", () => {
     const fragments = loadFragments([JA], "claude")
     expect(fragments.get("explore")?.defaultName).toBe("explorer")
     expect(fragments.get("general")?.defaultName).toBe("generalist")
+    expect(fragments.get("design-review")?.defaultName).toBe("docs-reviewer")
+    expect(fragments.get("knowledge-elicitation")?.defaultName).toBe(
+      "knowledge-elicitor"
+    )
     expect(fragments.get("escalation")?.defaultName).toBe(
       "escalation-implementer"
     )
