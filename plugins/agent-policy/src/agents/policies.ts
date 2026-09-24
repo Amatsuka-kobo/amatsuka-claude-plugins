@@ -11,7 +11,6 @@ export type ModelId =
   | "gpt-luna"
   | "gpt-astra"
   | "grok"
-  | "gemini-flash"
 
 // ja / en は同梱断片を持つ。それ以外は翻訳断片を要する任意のコード。
 export type Lang = string
@@ -117,14 +116,6 @@ export const MODELS: readonly ModelSpec[] = [
     defaultName: "grok",
     model: "claude-grok-4-7",
     color: "red"
-  },
-  {
-    id: "gemini-flash",
-    vendor: "gemini",
-    label: "Gemini Flash",
-    defaultName: "gemini-flash",
-    model: "claude-gemini-3-8-flash",
-    color: "green"
   }
 ]
 
@@ -163,7 +154,7 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet", "gemini-flash", "gpt-terra"],
+  "doc-writing": ["sonnet", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],

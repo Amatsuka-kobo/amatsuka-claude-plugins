@@ -126,7 +126,7 @@ interface LiveModelsResult {
   reason?: string
   models: {
     id: string
-    vendor: "gpt" | "grok" | "gemini" | "claude" | "unknown"
+    vendor: "gpt" | "grok" | "claude" | "unknown"
     recommendedFor: string[]
   }[]
   claudeEnums: string[]
@@ -1778,7 +1778,6 @@ describe("live model 検証と vendor", () => {
   it.each([
     ["gpt", "yellow", "gpt"],
     ["grok", "red", "grok"],
-    ["gemini", "green", "gemini"],
     ["claude", "blue", "claude"],
     ["none", "blue", undefined]
   ] as const)("--vendor %s が overlay 用 marker と色を選ぶ", (vendor, color, marker) => {
@@ -1802,6 +1801,17 @@ describe("live model 検証と vendor", () => {
         new RegExp(`^agent-policy-vendor: ${marker}$`, "m")
       )
     }
+  })
+
+  it("--vendor gemini は拒否される", () => {
+    const result = run<WriteResults>([
+      ...writeArgs("vendor-invalid", "custom"),
+      "--vendor",
+      "gemini"
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe("vendor: must be gpt, grok, claude or none")
   })
 
   it("推定 vendor が unknown で省略されたとき拒否する", async () => {
@@ -1912,7 +1922,7 @@ describe("--models による推奨一括", () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toBe(
-      'vendor: could not infer vendor for model "claude-gpt-5-6-terra"; pass --vendor gpt|grok|gemini|claude|none'
+      'vendor: could not infer vendor for model "claude-gpt-5-6-terra"; pass --vendor gpt|grok|claude|none'
     )
   })
 

@@ -16,8 +16,6 @@ function vendorFor(ownedBy) {
       return "grok";
     case "anthropic":
       return "claude";
-    case "antigravity":
-      return "gemini";
     default:
       return "unknown";
   }

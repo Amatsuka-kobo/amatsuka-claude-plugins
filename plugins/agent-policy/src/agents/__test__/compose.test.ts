@@ -76,9 +76,6 @@ describe("frontmatter", () => {
       "red"
     )
     expect(
-      frontmatter(build(["normal-impl"], { vendor: "gemini" })).color
-    ).toBe("green")
-    expect(
       frontmatter(build(["normal-impl"], { vendor: "claude" })).color
     ).toBe("blue")
   })
@@ -95,7 +92,7 @@ describe("frontmatter", () => {
   })
 
   it("vendor marker を role marker の直後へ出力する", () => {
-    for (const vendor of ["gpt", "grok", "gemini", "claude"] as const) {
+    for (const vendor of ["gpt", "grok", "claude"] as const) {
       const lines = build(["complex-impl"], { vendor }).split("\n")
       const roleAt = lines.indexOf("agent-policy-role: complex-impl")
 

@@ -32,7 +32,6 @@ export interface RolesSummary {
 const COLORS: Record<Vendor, string> = {
   gpt: "yellow",
   grok: "red",
-  gemini: "green",
   claude: "blue",
   none: "blue"
 }
