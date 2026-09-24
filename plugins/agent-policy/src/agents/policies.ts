@@ -147,22 +147,22 @@ export const ASSIGNMENTS: Record<
 
 // custom プロファイル向けの推奨。setup-agents の提示だけに使う。方針スキルは推奨列を持たない。
 export const RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["opus", "gpt-sol"],
-  "normal-impl": ["sonnet", "gpt-luna", "grok"],
-  "light-impl": ["haiku", "gpt-luna", "grok"],
-  escalation: ["fable", "gpt-astra"],
-  general: ["sonnet", "gpt-luna"],
+  "complex-impl": ["gpt-sol", "opus"],
+  "normal-impl": ["gpt-luna", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku", "grok"],
+  escalation: ["gpt-astra", "fable"],
+  general: ["gpt-luna", "sonnet"],
   "design-plan": ["opus"],
-  explore: ["sonnet", "grok", "gpt-terra"],
-  "realtime-research": ["sonnet", "grok"],
+  explore: ["grok", "sonnet", "gpt-terra"],
+  "realtime-research": ["grok", "sonnet"],
   "e2e-verify": ["sonnet"],
-  "design-review": ["sonnet", "grok"],
+  "design-review": ["grok", "sonnet"],
   "knowledge-elicitation": ["haiku"],
   "code-review": ["sonnet"],
-  "final-review": ["fable", "gpt-astra"],
-  "gate-review": ["fable", "gpt-astra"],
+  "final-review": ["gpt-astra", "fable"],
+  "gate-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["fable", "gpt-astra"]
+  advisor: ["gpt-astra", "fable"]
 }
 
 // 単一役割の定義には、共通規律の除外がそのまま効く。
