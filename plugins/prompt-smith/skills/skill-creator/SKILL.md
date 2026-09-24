@@ -33,7 +33,7 @@ description: スキルまたはコマンド定義を新しく作るとき、既�
   - 出力に使う素材があるときは `assets/` を加える。
 5. 本文を書く。
   - スキルの構造は「スキルの構造」に従う。
-  - 文章は `prompt-smith:prompt-smith` を使用し、必ずその規律に従う。
+  - 本文を書く前に `prompt-smith:prompt-smith` スキルを起動し、その規律で書く。
 6. description を書く。
   - 「description の規律」に従う。
 7. 出力を評価する。
