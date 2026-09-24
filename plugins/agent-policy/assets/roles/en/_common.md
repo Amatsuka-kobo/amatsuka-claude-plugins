@@ -36,5 +36,5 @@ Your roles are {{ROLE_LABELS}}. The role you are invoked for is stated at the to
 - Do not load any skill with the Skill tool other than those named explicitly in the brief.
 - A skill's own trigger conditions rank below the explicit instructions in the brief.
 - If you realize a skill is needed, do not load it. Report it and send the task back.
-- When the orchestrator gives you a context-map, use it as your starting point and report any discrepancy between it and the actual code.
+- When the orchestrator provides exploration findings, use them as your starting point and report any mismatch with the actual code.
 - Treat examples of words or sentences in the request as explanations of the request unless they are marked for the document body. Do not write unmarked examples in the document body. Use wording you choose instead.

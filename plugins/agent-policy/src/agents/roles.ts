@@ -7,7 +7,6 @@ export type RoleId =
   | "escalation"
   | "general"
   | "design-plan"
-  | "explore-lead"
   | "explore"
   | "realtime-research"
   | "e2e-verify"
@@ -64,14 +63,8 @@ export const ROLES: readonly Role[] = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "explore-lead",
-    label: "コードベース探索統括",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore",
-    label: "コードベース探索実働",
+    label: "コードベース探索",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
   },

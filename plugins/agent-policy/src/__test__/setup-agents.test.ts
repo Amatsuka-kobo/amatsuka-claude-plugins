@@ -539,7 +539,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(15)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -606,7 +606,7 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(15)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
     ).toEqual(["opus", "gpt-sol"])
@@ -740,7 +740,6 @@ describe("--list-roles", () => {
       "escalation",
       "general",
       "design-plan",
-      "explore-lead",
       "explore",
       "realtime-research",
       "e2e-verify",
