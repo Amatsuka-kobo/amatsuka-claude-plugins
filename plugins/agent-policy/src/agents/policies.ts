@@ -140,6 +140,7 @@ export const ASSIGNMENTS: Record<
     "code-review": ["sonnet"],
     "final-review": ["fable"],
     "gate-review": ["fable"],
+    "adversarial-review": ["opus"],
     advisor: ["fable"]
   }
 }
@@ -160,6 +161,7 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   "code-review": ["sonnet"],
   "final-review": ["fable", "gpt-astra"],
   "gate-review": ["fable", "gpt-astra"],
+  "adversarial-review": ["opus", "gpt-sol"],
   advisor: ["fable", "gpt-astra"]
 }
 
@@ -170,7 +172,8 @@ const SOLO_DENIED_ROLES: readonly RoleId[] = [
   "knowledge-elicitation",
   "code-review",
   "final-review",
-  "gate-review"
+  "gate-review",
+  "adversarial-review"
 ]
 
 // Agent の可否は役割だけで決まる。モデルによる除外は持たない。

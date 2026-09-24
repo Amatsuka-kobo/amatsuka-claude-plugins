@@ -19,6 +19,7 @@
 | コードレビュー                   | `code-review`        | `readonly` | 否         | `Sonnet`      |
 | 重要な実装の最終レビュー         | `final-review`       | `readonly` | 否         | `Fable`       |
 | 設計書の最終ゲートレビュー       | `gate-review`        | `readonly` | 否         | `Fable`       |
+| 敵対的レビュー                   | `adversarial-review` | `readonly` | 否         | `Opus`        |
 | 設計・計画・実装のアドバイザー   | `advisor`            | `readonly` | 否         | `Fable`       |
 
 - 「RoleId」は Agent 定義の `agent-policy-role` マーカーに書く値であり、役割マーカーの対応表の各行にも `[general]` の形で載る。担当表の行と対応表の行は RoleId で対応づく。

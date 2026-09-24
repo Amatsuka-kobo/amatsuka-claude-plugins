@@ -466,7 +466,7 @@ describe("--list-live-models", () => {
         {
           id: "claude-gpt-6-sol",
           vendor: "gpt",
-          recommendedFor: ["complex-impl"]
+          recommendedFor: ["complex-impl", "adversarial-review"]
         },
         {
           id: "claude-gpt-6-astra",
@@ -539,7 +539,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(15)
+    expect(result.roles).toHaveLength(16)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -606,7 +606,7 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles).toHaveLength(15)
+    expect(result.roles).toHaveLength(16)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
     ).toEqual(["opus", "gpt-sol"])
@@ -748,6 +748,7 @@ describe("--list-roles", () => {
       "code-review",
       "final-review",
       "gate-review",
+      "adversarial-review",
       "advisor"
     ])
     expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
@@ -1851,7 +1852,10 @@ describe("--models による推奨一括", () => {
       "gpt-terra",
       "gpt-astra"
     ])
-    expect(result.results[0]?.roles.ids).toEqual(["complex-impl"])
+    expect(result.results[0]?.roles.ids).toEqual([
+      "complex-impl",
+      "adversarial-review"
+    ])
     expect(result.results[1]?.roles.ids).toEqual(["explore"])
     expect(result.results[2]?.roles.ids).toEqual([
       "escalation",
@@ -1959,13 +1963,9 @@ describe("--models による推奨一括", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.results[0]?.target).toBe(
-      ".claude/agents/gpt-sol-lead-implementer.md"
-    )
+    expect(result.results[0]?.target).toBe(".claude/agents/gpt-sol.md")
     expect(
-      fs.existsSync(
-        path.join(project, ".claude", "agents", "gpt-sol-lead-implementer.md")
-      )
+      fs.existsSync(path.join(project, ".claude", "agents", "gpt-sol.md"))
     ).toBe(true)
   })
 
