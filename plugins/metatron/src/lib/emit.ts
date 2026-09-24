@@ -1,5 +1,5 @@
 // hook 出力の組み立て。形式はファイル契約 §12 に従う。
-// リポジトリ内の既存実装(codiel / revelation / agent-policy)と同一の形に揃える。
+// リポジトリ内の既存実装(codiel / agent-policy)と同一の形に揃える。
 
 export interface HookInput {
   tool_input?: {

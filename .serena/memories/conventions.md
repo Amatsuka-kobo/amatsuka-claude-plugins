@@ -7,8 +7,7 @@
   gh-utility). `docs/` — human-read design & rationale. `README.md` — only what a **user** must read
   to use the plugin. This three-way split is defined in `harness-docs/ARCHITECTURE.md`.
   Plugin-level design docs are inconsistent by design: some live at the plugin root (`raphael/DESIGN.md`,
-  `guidepost/DESIGN.md`), some under `docs/` (`codiel/docs/DESIGN.md`,
-  `revelation/docs/DESIGN.md`), and the older ones only in `harness-docs/superpowers/specs/`.
+  `guidepost/DESIGN.md`), some under `docs/` (`codiel/docs/DESIGN.md`), and the older ones only in `harness-docs/superpowers/specs/`.
 - `package.json` (`build` script only, `private: true`, `type: module`) + `build.ts` (esbuild) +
   `src/` + `scripts/` — **every plugin now has these**; `agent-policy` and `prompt-smith` gained
   them in 2026-08 and are workspace members. `skills/<name>/assets/` holds skill-local templates
@@ -38,7 +37,7 @@ each target's `<source-file-name>.test.ts` in that source directory's `__test__/
 helpers are non-test modules in `__test__/helpers/`; child-process entry points and fault injection
 are in `src/testing/` (use `.mjs` when excluded from lint/typecheck); fixed test data is in
 `src/fixtures/`. `src/testing/run-ts.ts` is the shared pre-build CLI/hook child-process helper;
-copies exist in agent-policy, codiel, chat-history, gh-utility, and revelation.
+copies exist in agent-policy, codiel, chat-history, and gh-utility.
 
 ## Versioning (`harness-docs/ARCHITECTURE.md`)
 

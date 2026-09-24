@@ -117,8 +117,6 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
   `UserPromptSubmit` hook (`check-prefetch-manifest.mjs`) nagging only when `.prefetch/` holds
   uncollected results.
-- **revelation** (0.2.2-dev) — three `fable-*` skills teaching smaller models Fable 5's working
-  style, injected by `SessionStart` + `PreToolUse` hooks. README marks it 非推奨.
 
 ## 2026-08 plugin split — resolved
 
@@ -129,7 +127,6 @@ chat-history 0.6.0 with a read-side fallback so a failed rename never looks like
 
 Deliberately still on the old name — do not "fix" these:
 
-- `SKIP_AGENT_TYPES` in `plugins/revelation/src/remind-skill.ts` holds **both** ids.
 - Tests asserting `task-utility:chat-recorder` in `chat-history/src/hooks/__test__/` guard the
   `hasRunningRecorder` normalization (last-`:`-segment match), i.e. backward compatibility.
 - The env var `TASK_UTILITY_CHAT_STATE_DIR` keeps its name — renaming it would silently drop any

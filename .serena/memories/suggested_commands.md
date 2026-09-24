@@ -13,7 +13,7 @@ pnpm --filter basic-design-generator build   # single package
 
 Workspace package names differ from plugin names — `<plugin>-scripts` for most
 (`agent-policy-scripts`, `prompt-smith-scripts`, `chat-history-scripts`, `gh-utility-scripts`,
-`codiel-scripts`, `revelation-scripts`, `pitcrew-scripts`, `raphael-scripts`, `prefetch-scripts`,
+`codiel-scripts`, `pitcrew-scripts`, `raphael-scripts`, `prefetch-scripts`,
 `guidepost-scripts`), plus `basic-design-generator` and `raguel-mcp`.
 
 ## Repo-level shell scripts (`scripts/`)
