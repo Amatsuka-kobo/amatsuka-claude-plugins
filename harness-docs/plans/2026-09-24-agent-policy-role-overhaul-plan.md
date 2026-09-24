@@ -428,6 +428,10 @@ normal-impl, general, explore, realtime-research, e2e-verify, design-review, cod
 
 | # | 検出タスク | 設計書の記述 | 実際 | 判断 |
 | --- | --- | --- | --- | --- |
+| 1 | T14 | §5.8 担当表の列幅は既存の桁揃えに合わせる | `knowledge-elicitation` の行だけ RoleId 列の幅を超えていた | 列幅を揃えて修正(`0d74b52`) |
+| 2 | T14 | §2.8-2 advisor 条項は §分析 に置く | 「次の3つを含む」の列挙の中に入り 4 項目になっていた | 列挙の後へ移して修正(`0d74b52`) |
+| 3 | T14 | §2.7-1 各役割はどれか 1 つの条件で該当する | 規律の `normal-impl` だけが連言の 1 文だった | 「/」区切りの 3 条件に直して修正(`0d74b52`) |
+| 4 | T16 | §5.16 既存の役割構成を保って再生成する | `--merge` は tools をテンプレートで上書きし、`complex-reviewer` に `Write, Edit, Skill` が付く | 生成後に tools 行を既存の値へ戻した。`disallowedTools` と MCP は複製と一致 |
 
 ## 8. 未解決事項と着手の関係
 
@@ -442,3 +446,14 @@ normal-impl, general, explore, realtime-research, e2e-verify, design-review, cod
 - `src/` を変えたコミット(1、1b、2-5、8、11)に `scripts/` の差分が含まれ、`assets/` と `references/` だけを変えたコミット(6、7)に `scripts/` の差分が無い。
 - T13a / T13b の報告と T14 の突き合わせで見つかった食い違いが §7 に記録され、解消されている。
 - T16 の前後の `diff -r` で、`disallowedTools` と MCP の行の削除が無い。
+
+## 10. 実施記録(2026-09-24)
+
+| 時点 | 結果 |
+| --- | --- |
+| T0 | lint・typecheck・build 通過。test 2271 通過 / 2 skip。`scripts/` の差分なし。方針スキル本文と規律の合計 26,737B |
+| T12-1〜3 | build 後の `scripts/` の差分なし。lint・typecheck 通過。test 2285 件中、agent-policy の 462 件は全件通過。別プラグイン(codiel・metatron・raphael・sandalphon)で負荷由来のタイムアウトが実行ごとに 2〜5 件出たが、該当ファイルを単独で再実行すると全件通過し、いずれも本改修で未変更。合計 28,059B(修正後 28,158B) |
+| T12-4 | 旧 ID と context-map は `compose.test.ts` の否定検査だけに残る。gemini はテストの未定義・`unknown`・拒否の検査だけに残る |
+| T12-5〜7 | `--list-roles` は 16 役割を §5.1 の順で返す。`--check --recommended` は claude・custom とも 16 件。custom は照会に成功し、全役割で `RECOMMENDED` の先頭が採られた(次の候補へ進んだ役割は無い) |
+| T13 | コードレビューは確認点 10 件すべて一致で指摘なし。ARCHITECTURE・ADR への影響なし |
+| T16 | 14 定義を個別経路で再生成し、`adversarial-reviewer`(`claude-gpt-6-sol`)を新設。`--list-coverage --scope custom` の `uncovered` は空 |
