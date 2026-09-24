@@ -473,7 +473,6 @@ describe("--list-live-models", () => {
           vendor: "gpt",
           recommendedFor: [
             "escalation",
-            "e2e-verify",
             "final-review",
             "gate-review",
             "advisor"
@@ -1850,7 +1849,6 @@ describe("--models による推奨一括", () => {
     expect(result.results[1]?.roles.ids).toEqual(["doc-writing", "explore"])
     expect(result.results[2]?.roles.ids).toEqual([
       "escalation",
-      "e2e-verify",
       "final-review",
       "gate-review",
       "advisor"
