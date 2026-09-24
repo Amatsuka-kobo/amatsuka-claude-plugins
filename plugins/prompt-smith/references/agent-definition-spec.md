@@ -1,6 +1,6 @@
 # Agent 定義の仕様
 
-出典: https://code.claude.com/docs/en/sub-agents / https://code.claude.com/docs/en/plugins-reference (2026-08-02 時点)
+出典: https://code.claude.com/docs/en/sub-agents / https://code.claude.com/docs/en/plugins-reference (2026-09-24 時点)
 
 この文書と実際の挙動が食い違うときは公式ドキュメントを正とする。
 
@@ -10,17 +10,17 @@
 
 | フィールド | 内容 |
 | --- | --- |
-| `name` | 小文字英字とハイフンのみの識別子 |
+| `name` | 小文字英字とハイフンのみの識別子。`:` を含められない |
 | `description` | いつこの subagent へ委譲するか |
 
-任意は 14 個。
+任意は 16 個。
 
 | フィールド | 値 | 既定 |
 | --- | --- | --- |
 | `tools` | 使えるツール。カンマ区切りまたは配列 | 省略時はすべて継承 |
 | `disallowedTools` | 禁止するツール。`tools` より先に適用される | なし |
-| `model` | `sonnet` / `opus` / `haiku` / `fable` / 完全 ID / `inherit` | `inherit` |
-| `permissionMode` | `default` / `acceptEdits` / `auto` / `dontAsk` / `bypassPermissions` / `plan` / `manual` | `default` |
+| `model` | `sonnet` / `opus` / `haiku` / `fable` / 完全 ID / `inherit` | model の解決順に従う |
+| `permissionMode` | `default` / `acceptEdits` / `auto` / `dontAsk` / `bypassPermissions` / `plan` / `manual`(`default` の別名) | メイン会話のモードを継承 |
 | `maxTurns` | 停止までの最大ターン数 | 制限なし |
 | `skills` | 起動時にロードするスキル | なし |
 | `mcpServers` | 使える MCP サーバー | なし |
@@ -31,15 +31,17 @@
 | `isolation` | `worktree` で専用の git worktree を作る | なし |
 | `color` | 表示色。8 色から選ぶ | なし |
 | `initialPrompt` | メインセッションとして動くときの最初の入力 | なし |
+| `omitClaudeMd` | `true` で user・project・local の CLAUDE.md を読み込まない。v2.1.271 以降 | `false` |
+| `experimental` | `cacheTtl`(`5m` / `1h`)を持つマップ。v2.1.248 以降 | なし |
 
 ## 配置による制約
 
-プラグインが提供する agents は 3 つのフィールドを使えない。
+プラグインが提供する agents は 4 つのフィールドを使えない。
 
 | 配置 | 使えないフィールド |
 | --- | --- |
 | `.claude/agents/` / `~/.claude/agents/` | なし |
-| プラグインの `agents/` | `hooks` / `mcpServers` / `permissionMode` |
+| プラグインの `agents/` | `hooks` / `mcpServers` / `permissionMode` / `initialPrompt` |
 
 プラグイン配下では `isolation` の値は `worktree` のみ。
 
@@ -59,10 +61,12 @@
 
 ## model の解決順
 
-1. `CLAUDE_CODE_SUBAGENT_MODEL` 環境変数
-2. 起動時に渡した `model`
-3. 定義の `model`
+1. 起動時に渡した `model`
+2. 定義の `model`(`inherit` はメイン会話のモデル)
+3. `CLAUDE_CODE_SUBAGENT_MODEL` 環境変数
 4. メイン会話のモデル
+
+`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` のときは、定義と起動時の `model` を無視して環境変数のモデルを使う。
 
 ## 公式ドキュメントに記述がない事項
 
