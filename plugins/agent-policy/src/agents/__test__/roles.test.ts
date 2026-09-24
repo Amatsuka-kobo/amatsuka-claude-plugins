@@ -16,7 +16,6 @@ describe("ROLES", () => {
       "escalation",
       "general",
       "design-plan",
-      "doc-writing",
       "explore-lead",
       "explore",
       "realtime-research",
@@ -28,13 +27,13 @@ describe("ROLES", () => {
       "gate-review",
       "advisor"
     ])
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(17)
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(16)
   })
 
-  it("文書作成役割の label・kind・tools が固定値と一致する", () => {
-    expect(ROLES.find((role) => role.id === "doc-writing")).toEqual({
-      id: "doc-writing",
-      label: "文書作成",
+  it("一般作業役割の label・kind・tools が固定値と一致する", () => {
+    expect(ROLES.find((role) => role.id === "general")).toEqual({
+      id: "general",
+      label: "その他のタスク",
       kind: "impl",
       tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
     })

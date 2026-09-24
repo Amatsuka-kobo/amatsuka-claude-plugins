@@ -539,7 +539,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(17)
+    expect(result.roles).toHaveLength(16)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -606,7 +606,7 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles).toHaveLength(17)
+    expect(result.roles).toHaveLength(16)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
     ).toEqual(["opus", "gpt-sol"])
@@ -740,7 +740,6 @@ describe("--list-roles", () => {
       "escalation",
       "general",
       "design-plan",
-      "doc-writing",
       "explore-lead",
       "explore",
       "realtime-research",
@@ -1856,7 +1855,7 @@ describe("--models による推奨一括", () => {
       "gpt-astra"
     ])
     expect(result.results[0]?.roles.ids).toEqual(["complex-impl"])
-    expect(result.results[1]?.roles.ids).toEqual(["doc-writing", "explore"])
+    expect(result.results[1]?.roles.ids).toEqual(["explore"])
     expect(result.results[2]?.roles.ids).toEqual([
       "escalation",
       "final-review",

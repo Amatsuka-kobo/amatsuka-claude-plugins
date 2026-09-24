@@ -132,7 +132,6 @@ export const ASSIGNMENTS: Record<
     escalation: ["fable"],
     general: ["sonnet"],
     "design-plan": ["opus"],
-    "doc-writing": ["sonnet"],
     "explore-lead": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
@@ -154,7 +153,6 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -174,8 +172,7 @@ const SOLO_DENIED_ROLES: readonly RoleId[] = [
   "doc-review",
   "code-review",
   "final-review",
-  "gate-review",
-  "doc-writing"
+  "gate-review"
 ]
 
 // Agent の可否は役割だけで決まる。モデルによる除外は持たない。

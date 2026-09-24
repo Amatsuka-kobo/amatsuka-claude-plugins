@@ -196,6 +196,7 @@ describe("本文", () => {
       "## Core Responsibilities",
       "## 作業手順",
       "## アドバイザーへの相談",
+      "## 文書の執筆",
       "## 制約",
       "## Output Format"
     ]
@@ -207,6 +208,26 @@ describe("本文", () => {
     }
   })
 
+  it("執筆の節を Agent の有無にかかわらず一度だけ出す", () => {
+    for (const role of ["complex-impl", "code-review"] as const) {
+      const body = build([role])
+      expect(body.match(/^## 文書の執筆$/gm)).toHaveLength(1)
+      expect(body.indexOf("## 文書の執筆")).toBeLessThan(
+        body.indexOf("## 制約")
+      )
+      if (role === "complex-impl")
+        expect(body.indexOf("## 文書の執筆")).toBeGreaterThan(
+          body.indexOf("## アドバイザーへの相談")
+        )
+    }
+  })
+
+  it("英語の定義でも執筆の節を出す", () => {
+    expect(
+      build(["code-review"], { lang: "en", fragmentDirs: [EN] })
+    ).toContain("## Writing")
+  })
+
   it("Agent が付かないとき「アドバイザーへの相談」節を出さない", () => {
     expect(build(["code-review"])).not.toContain("## アドバイザーへの相談")
   })
@@ -214,18 +235,20 @@ describe("本文", () => {
   it("general だけでも Agent と Agent tool の制約を出す", () => {
     const body = build(["general"])
     expect(frontmatter(body).tools.split(", ")).toContain("Agent")
-    expect(body).toContain("`Agent` tool を使うのは")
+    expect(body).toContain("`Agent` tool はアドバイザーへの相談だけに使う")
   })
 
   it("読み取り役割だけでも Agent と Agent tool の制約を出す", () => {
     const body = build(["explore"])
     expect(frontmatter(body).tools.split(", ")).toContain("Agent")
-    expect(body).toContain("`Agent` tool を使うのは")
+    expect(body).toContain("`Agent` tool はアドバイザーへの相談だけに使う")
   })
 
   it("複数の Agent 対応役割を合成しても Agent tool の制約は重複しない", () => {
     const body = build(["complex-impl", "general"])
-    expect(body.match(/`Agent` tool を使うのは/g) ?? []).toHaveLength(1)
+    expect(
+      body.match(/`Agent` tool はアドバイザーへの相談だけに使う/g) ?? []
+    ).toHaveLength(1)
   })
 
   it("ツール運用節を作らない", () => {

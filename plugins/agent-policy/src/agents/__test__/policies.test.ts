@@ -24,7 +24,6 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   escalation: ["fable"],
   general: ["sonnet"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet"],
   "explore-lead": ["opus"],
   explore: ["sonnet"],
   "realtime-research": ["sonnet"],
@@ -44,7 +43,6 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -64,7 +62,6 @@ const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
   escalation: true,
   general: true,
   "design-plan": true,
-  "doc-writing": false,
   "explore-lead": true,
   explore: true,
   "realtime-research": true,
@@ -101,7 +98,7 @@ describe("POLICIES", () => {
 })
 
 describe("ASSIGNMENTS", () => {
-  it("claude-model-policy だけに現行の全 17 役割を保持する", () => {
+  it("claude-model-policy だけに現行の全 16 役割を保持する", () => {
     expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
     expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
       ALL_ROLE_IDS
@@ -113,7 +110,7 @@ describe("ASSIGNMENTS", () => {
 })
 
 describe("RECOMMENDED", () => {
-  it("custom プロファイル向け推奨が全 17 役割と固定値を持つ", () => {
+  it("custom プロファイル向け推奨が全 16 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
   })
@@ -203,7 +200,6 @@ describe("rolesFor", () => {
     expect(rolesFor("sonnet")).toEqual([
       "normal-impl",
       "general",
-      "doc-writing",
       "explore",
       "realtime-research",
       "e2e-verify",
@@ -227,7 +223,7 @@ describe("rolesFor", () => {
 })
 
 describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 17 役割で現行規定を保つ", () => {
+  it("claude-model-policy の全 16 役割で現行規定を保つ", () => {
     for (const role of ROLES) {
       expect(allowsAgentTool([role.id]), role.id).toBe(
         EXPECTED_AGENT_TOOL[role.id]
