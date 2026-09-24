@@ -2,7 +2,7 @@
 
 Claude Code を使うときのエージェント運用方針を、スキルとして配布する Claude Code プラグインです。
 
-モデル別または役割別の担当表、設計/実装フロー、アドバイザー運用、並列原則、コードベース探索のコスト効率化施策(context-map)を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
+モデル別または役割別の担当表、設計/実装フロー、アドバイザー運用、並列原則を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
 
 ## 動作要件
 
@@ -100,13 +100,13 @@ Marketplace から `agent-policy` をインストールします。
 
 MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
 
-MCP の付与単位は役割ではなく定義です。既定では実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan` / `doc-writing` / `explore-lead`)を持つ定義にだけ付き、読み取り役割だけの定義には付きません。定義ごとの調整を選ぶと、この既定を定義単位で上書きできます。実装役割と読み取り役割を同じ定義が持つ場合、MCP はその定義全体に付き、役割ごとには分離できません。
+MCP は既定で実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan`)の定義に付与し、読み取り役割だけの定義には付与しません。
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
-`--yes` を渡す非対話モードでは、推奨構成を一括で保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に成功した場合は実在しない推奨モデルを生成対象から外し、照会に失敗した場合は実在確認を行わなかった警告とともに生成します。
+`--yes` を渡す非対話モードでは、`--recommended` により役割ごとに 1 定義ずつ保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に失敗した場合は各役割の先頭候補を使い、実在確認を行わなかった警告とともに生成します。
 
-組み込みの役割 ID は次の 17 種です。
+組み込みの役割 ID は次の 16 種です。
 
 | 役割 ID | 内容 |
 | --- | --- |
@@ -116,19 +116,18 @@ MCP の付与単位は役割ではなく定義です。既定では実装役割(
 | `escalation` | 行き詰まり時のエスカレーション |
 | `general` | その他のタスク |
 | `design-plan` | 設計書・実装計画書(WBS)の作成 |
-| `doc-writing` | 文書作成 |
-| `explore-lead` | コードベース探索統括 |
-| `explore` | コードベース探索実働 |
+| `explore` | コードベース探索 |
 | `realtime-research` | リアルタイム情報調査 |
 | `e2e-verify` | E2E 動作検証・ブラウザ/GUI 操作 |
-| `independent-review` | 設計書・実装計画書の独立レビュー |
-| `doc-review` | 設計書・実装計画書のレビュー |
+| `design-review` | 設計書・実装計画書のレビュー |
+| `knowledge-elicitation` | 暗黙知の抽出・理解レビュー |
 | `code-review` | コードレビュー |
 | `final-review` | 重要な実装の最終レビュー |
 | `gate-review` | 設計書の最終ゲートレビュー |
+| `adversarial-review` | 敵対的レビュー |
 | `advisor` | 設計・計画・実装のアドバイザー |
 
-setup-agents が扱う推奨モデル ID は次の 10 種です。
+setup-agents が扱う推奨モデル ID は次の 9 種です。
 
 | モデル ID | 表示名 | 既定の `model` 値 |
 | --- | --- | --- |
@@ -141,14 +140,8 @@ setup-agents が扱う推奨モデル ID は次の 10 種です。
 | `gpt-luna` | GPT Luna | `claude-gpt-6-luna` |
 | `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
 | `grok` | Grok | `claude-grok-4-7` |
-| `gemini-flash` | Gemini Flash | `claude-gemini-3-8-flash` |
 
-`gemini-flash` を Antigravity 経由で配っているプロキシ構成では、この定義を**サブエージェントとして起動できません。** Claude Code はサブエージェントを起動するとき、system に `You are a Claude agent, built on Anthropic's Claude Agent SDK.` という文を必ず含めます。Antigravity の上流はこの文字列を検出すると、quota が残っていても `429 RESOURCE_EXHAUSTED` を返します。quota の枯渇ではないため、時間を置いても別のアカウントに切り替えても解消しません。メインセッションのモデルとしては動作します。
-
-これは経路による判定であり、モデルそのものの問題ではありません。あわせて、Antigravity のログインを第三者のクライアントから使うことは Google の利用規約で禁じられており、アカウントの停止または終了の事由になりうるとされています。**この 429 を回避しようとしないでください。**
-
-Gemini をサブエージェントで使う場合は、Google が案内している API キーの経路に切り替えてください。Google AI Studio または Vertex AI で API キーを発行し、プロキシ側で Antigravity の OAuth ではなく API キーを使う設定にします。上流のモデル ID は Antigravity 経由とは別の体系で、Antigravity の `gemini-3.8-flash-high` に対して API キー経路では `gemini-3.8-flash` を使います。なお Google AI Pro などのサブスクリプションに API の利用権は含まれず、API は別の課金になります。課金を紐付けていない状態では送信した内容が Google のサービス改善に使われるため、業務のコードを扱う場合は課金を有効にした状態で使ってください。
-
+ベンダーは `gpt` / `grok` / `claude` / `none` の 4 値です。
 生成した定義の frontmatter には、選んだ役割を記録する `agent-policy-role` マーカーが入ります。
 
 ```yaml
@@ -212,6 +205,19 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
 
 ## 旧バージョンからの移行
+
+0.19 系から 0.20 系へ移行する場合は、次を確認してください。
+
+1. 役割 ID `independent-review` を `design-review` に、`doc-review` を `knowledge-elicitation` に変更しました。生成済み定義の `agent-policy-role` を書き換えるか、setup-agents で再生成してください。旧 ID は組み込み役割として認識されません。「設計書・実装計画書のレビュー」は `doc-review` ではなく `design-review` を指すようになりました。
+2. `doc-writing` 役割を廃止しました。生成済みの `doc-writing` 定義を削除してください。執筆基準は全定義の共通部分に含まれ、再生成で反映されます。オーケストレーターは文書を自分で書きます。
+3. `explore-lead` と context-map を廃止しました。`explore-lead` 定義は削除するか、その役割マーカーを外してください。`.claude/context-maps/` の内容は今後読まれないため、残すか削除するかはプロジェクトで決めてください。
+4. `explore` の役割名を「コードベース探索実働」から「コードベース探索」へ変更しました。
+5. `adversarial-review` 役割を追加しました。標準フローには含まれません。
+6. setup-agents の `--models` を廃止し、`--recommended` を追加しました。推奨生成は役割ごとに 1 定義を作ります。応答から `modelsDropped` を削除し、代替キーはありません。`--recommended` は `--model-id` / `--name` / `--model` / `--vendor` / `--keep` と併用できません。推奨候補の順を変更したため、custom で採用されるモデルが変わる場合があります。
+7. 実装 4 役割と advisor の選定基準を変更しました。生成済み定義の本文へ反映するには再生成してください。
+8. `e2e-verify` の推奨モデルから `gpt-astra` を外しました。
+9. `ja` / `en` 以外の翻訳断片を使う場合は、`_common.md` の更新に合わせて再翻訳してください。削除・改名された役割の翻訳断片(`doc-writing.md` / `explore-lead.md` / `independent-review.md` / `doc-review.md`)が残っているとプロジェクト独自の役割として扱われるため、翻訳ディレクトリから削除してください。
+10. 推奨モデル ID `gemini-flash` とベンダー `gemini` を削除しました。`--vendor` は `gpt` / `grok` / `claude` / `none` の 4 値です。Gemini のエイリアスは `unknown` と推定されます。使う場合は個別調整で `--model` にエイリアスを指定し、`--vendor none` または別のベンダーを選んでください。
 
 0.18 系から 0.19 系へ移行する場合は、次を確認してください。
 
