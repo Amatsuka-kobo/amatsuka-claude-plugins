@@ -429,22 +429,22 @@ var ASSIGNMENTS = {
   }
 };
 var RECOMMENDED = {
-  "complex-impl": ["opus", "gpt-sol"],
-  "normal-impl": ["sonnet", "gpt-luna", "grok"],
-  "light-impl": ["haiku", "gpt-luna", "grok"],
-  escalation: ["fable", "gpt-astra"],
-  general: ["sonnet", "gpt-luna"],
+  "complex-impl": ["gpt-sol", "opus"],
+  "normal-impl": ["gpt-luna", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku", "grok"],
+  escalation: ["gpt-astra", "fable"],
+  general: ["gpt-luna", "sonnet"],
   "design-plan": ["opus"],
-  explore: ["sonnet", "grok", "gpt-terra"],
-  "realtime-research": ["sonnet", "grok"],
+  explore: ["grok", "sonnet", "gpt-terra"],
+  "realtime-research": ["grok", "sonnet"],
   "e2e-verify": ["sonnet"],
-  "design-review": ["sonnet", "grok"],
+  "design-review": ["grok", "sonnet"],
   "knowledge-elicitation": ["haiku"],
   "code-review": ["sonnet"],
-  "final-review": ["fable", "gpt-astra"],
-  "gate-review": ["fable", "gpt-astra"],
+  "final-review": ["gpt-astra", "fable"],
+  "gate-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["fable", "gpt-astra"]
+  advisor: ["gpt-astra", "fable"]
 };
 var SOLO_DENIED_ROLES = [
   "advisor",
@@ -839,11 +839,6 @@ function requireModel(options) {
   if (spec === void 0) throw new Error("model-id: is unknown");
   return spec;
 }
-function recommendedRolesFor(modelId) {
-  return sortRoleIds(
-    Object.entries(RECOMMENDED).filter(([, models]) => models.includes(modelId)).map(([role]) => role)
-  );
-}
 function recommendedForAlias(model) {
   const modelIds = MODELS.filter((spec) => spec.model === model).map(
     (spec) => spec.id
@@ -876,11 +871,7 @@ function validateFragments(options) {
     `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.map((entry) => entry.id).join(", ")}. Run --scaffold-fragments and translate them first`
   );
 }
-function defaultAgentName(options, spec) {
-  const roles = recommendedRolesFor(spec.id);
-  if (roles.length !== 1) return spec.id;
-  const role = roles[0];
-  if (role === void 0) return spec.id;
+function defaultAgentName(options, spec, role) {
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang),
     spec.vendor
@@ -911,28 +902,31 @@ function modelIsAvailable(model, live) {
 }
 function targetsFor(options, live) {
   const warnings = live.ok ? [] : [unavailableWarning(live)];
-  if (options.models.length > 0) {
-    const specs = options.models.map((id) => {
-      const spec2 = modelById(id);
-      if (spec2 === void 0) throw new Error(`models: ${id} is unknown`);
-      return spec2;
-    });
-    const candidates = options.scope === "claude-only" ? specs.filter((spec2) => spec2.vendor === "claude") : specs;
-    const scopeDropped = options.scope === "claude-only" ? specs.filter((spec2) => spec2.vendor !== "claude").map((spec2) => spec2.id) : [];
-    const included = live.ok ? candidates.filter((spec2) => modelIsAvailable(spec2.model, live)) : candidates;
-    const unavailableDropped = live.ok ? candidates.filter((spec2) => !modelIsAvailable(spec2.model, live)).map((spec2) => spec2.id) : [];
+  if (options.recommended) {
+    const roles = sortRoleIds(
+      options.roles.length > 0 ? options.roles : ROLES.map((role) => role.id)
+    );
     return {
       warnings,
-      modelsDropped: [...scopeDropped, ...unavailableDropped],
-      targets: included.map((spec2) => {
-        const vendor2 = resolveVendor(options, spec2.model, spec2, live);
+      targets: roles.map((role) => {
+        if (roleById(role) === void 0)
+          throw new Error(
+            `roles: ${role} is not a built-in role for --recommended`
+          );
+        const candidates = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][role] : RECOMMENDED[role];
+        const spec2 = candidates.map((id) => modelById(id)).find(
+          (candidate) => candidate !== void 0 && (!live.ok || modelIsAvailable(candidate.model, live))
+        );
+        if (spec2 === void 0)
+          throw new Error(`roles: no available model for ${role}`);
         return {
+          roleId: role,
           modelId: spec2.id,
-          name: defaultAgentName(options, spec2),
+          name: defaultAgentName(options, spec2, role),
           model: spec2.model,
-          roles: recommendedRolesFor(spec2.id),
-          color: VENDOR_COLORS[vendor2],
-          vendor: vendor2
+          roles: [role],
+          color: VENDOR_COLORS[spec2.vendor],
+          vendor: spec2.vendor
         };
       })
     };
@@ -958,7 +952,6 @@ function targetsFor(options, live) {
   const vendor = resolveVendor(options, model, spec, live);
   return {
     warnings: [...new Set(warnings)],
-    modelsDropped: [],
     targets: [
       {
         modelId: spec.id,
@@ -1236,6 +1229,7 @@ function setup(options, live) {
     return {
       ...result,
       modelId: target.modelId,
+      ...target.roleId === void 0 ? {} : { roleId: target.roleId },
       mcpCurrent: current,
       mcpDropped: mcp.dropped
     };
@@ -1243,8 +1237,7 @@ function setup(options, live) {
   return {
     ok: true,
     results,
-    warnings: resolution.warnings,
-    modelsDropped: resolution.modelsDropped
+    warnings: resolution.warnings
   };
 }
 function listLiveModels(live, scope) {
@@ -1369,7 +1362,7 @@ function parseArgs(argv) {
   const options = {
     scope: candidateScopeFor(process.env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only",
     modelId: "",
-    models: [],
+    recommended: false,
     name: "",
     model: "",
     vendor: "",
@@ -1398,6 +1391,10 @@ function parseArgs(argv) {
         throw new Error(
           `Unsupported option: ${arg} was removed; use --scope claude|custom to choose the candidate scope`
         );
+      case "--models":
+        throw new Error(
+          "Unsupported option: --models was removed; use --recommended"
+        );
       case "--scope":
         if (value !== "claude" && value !== "custom") {
           throw new Error("scope: must be claude or custom");
@@ -1409,9 +1406,8 @@ function parseArgs(argv) {
         options.modelId = requireValue(value, "model-id");
         index += 1;
         break;
-      case "--models":
-        options.models = splitList(requireValue(value, "models"));
-        index += 1;
+      case "--recommended":
+        options.recommended = true;
         break;
       case "--name":
         options.name = requireValue(value, "name");
@@ -1482,6 +1478,18 @@ function parseArgs(argv) {
         throw new Error(`Unsupported option: ${arg}`);
     }
   }
+  if (options.recommended) {
+    for (const [flag, supplied] of [
+      ["--model-id", options.modelId !== ""],
+      ["--name", options.name !== ""],
+      ["--model", options.model !== ""],
+      ["--vendor", options.vendor !== ""],
+      ["--keep", options.keep.length > 0]
+    ]) {
+      if (supplied)
+        throw new Error(`${flag}: cannot be used with --recommended`);
+    }
+  }
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
@@ -1490,12 +1498,7 @@ function parseArgs(argv) {
   }
   if (options.merge && !options.write)
     throw new Error("merge: requires --write");
-  if (options.models.length > 0) {
-    if (options.keep.length > 0) {
-      throw new Error("keep: cannot be used with --models");
-    }
-    return options;
-  }
+  if (options.recommended) return options;
   if (options.name === "") throw new Error("name: is required");
   if (options.modelId === "") throw new Error("model-id: is required");
   if (options.roles.length === 0) throw new Error("roles: is required");
