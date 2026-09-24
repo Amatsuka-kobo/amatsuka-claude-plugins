@@ -1,7 +1,7 @@
 ---
 id: normal-impl
 label: Routine Implementation
-description: routine coding with non-complex implementations, configuration updates, and build or test execution
+description: routine coding meeting any criterion of one component, existing patterns, or unchanged public interfaces
 default-name: implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,9 +9,9 @@ kind: impl
 
 ## When to invoke
 
-- **Routine coding.** Use for implementation or modification that follows established patterns without architectural decisions.
-- **Configuration and structure maintenance.** Use when configuration files, manifests, or directory layouts need updating.
-- **Build and test execution.** Use when commands must be run and their results organized and reported.
+- Use for implementation within one component.
+- Use for implementation that follows existing patterns.
+- Use for implementation that does not change public interfaces, including adding or updating tests, editing configuration, and running builds or tests.
 
 ## Core Responsibilities
 
