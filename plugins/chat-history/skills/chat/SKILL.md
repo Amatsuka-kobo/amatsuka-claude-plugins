@@ -49,7 +49,7 @@ description: AIとの会話をMarkdown形式でdocs/chat/に永続記録する�
 
 1. **ヘッダー**: タイトル(`# <題名>`)と箇条書きのメタ情報
    - 日付
-   - 参加者(ユーザーは GitHub ユーザー名。不明なら必ず本人に確認する)
+   - 参加者(ユーザーは GitHub ユーザー名。不明なら必ず本人に確認する。AI はセッションのモデル名を括弧で添える。モデル名が分からなければ `AI` とだけ書く)
    - 成果物(作成・変更したファイルのパス、コミットハッシュ)
    - 前提(参照した設計書・過去のチャット記録)
 2. **本文**: `## セッション N: <要旨>` で区切り、各ターンを `# <ユーザー名>` / `# AI` の見出しで記録する
@@ -85,7 +85,7 @@ chat-recorder は本文を読み書きしない。
 # CSV エクスポート機能 設計セッション
 
 - 日付: 2026-01-15
-- 参加者: exampleuser, AI (Claude Sonnet 5)
+- 参加者: exampleuser, AI (<モデル名>)
 - 成果物: `docs/DESIGN-csv-export.md`、コミット `f00ba55`
 - 前提: `docs/chat/2026/0110/exampleuser/reporting-requirements.md`
 
@@ -114,7 +114,7 @@ chat-recorder が `headerFile` に実際に書くのは次だけである:
 # CSV エクスポート機能 設計セッション
 
 - 日付: 2026-01-15
-- 参加者: exampleuser, AI (Claude Sonnet 5)
+- 参加者: exampleuser, AI (<モデル名>)
 - 成果物: `docs/DESIGN-csv-export.md`、コミット `f00ba55`
 - 前提: `docs/chat/2026/0110/exampleuser/reporting-requirements.md`
 ```
