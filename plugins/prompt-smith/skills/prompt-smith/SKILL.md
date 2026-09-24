@@ -1,6 +1,6 @@
 ---
 name: prompt-smith
-description: AI が読む指示書を書く・削る・整える・評価するスキル。対象は CLAUDE.md・SKILL.md・コマンド定義(commands/ 配下の .md)・output style・Agents 定義(subagent)・メモリと、references/ に置かれた文書(共有する規律・参照断片・仕様の写し・カタログ)である。「～ プラグインを検査して」「～ スキルを監査して」「～ するプロンプトを考えて」「このプロンプトを修正して」「プロンプトに ～ する動きを追加して」「～ するスキルを作成して」「この SKILL.md を直して」「CLAUDE.md が冗長なので削って」「この指示書、無駄が多いので整えて」「AI 向けの指示を書いて」「この指示書を評価して」「エージェント定義の本文を書き直して」「output style に『適宜』『必要に応じて』が多いので判断基準に置き換えて」のような依頼で必ず使用する。ファイル名だけを挙げて評価・整形・削減を頼まれたときも、それが references/ 配下または上記の指示書なら使う。references/ の文書は人間も読む内容であっても対象とする。README・設計書・チュートリアル・docs/ の文書には適用せず、指示書がそれらを参照していても対象は広がらない。Agent 定義の description と定義ファイルの新規作成・frontmatter の検証は agent-creator が担当する。スキル・コマンド定義の description の作成・改善と発火測定は `skill-creator` が担当する。
+description: AIが読む指示書(CLAUDE.md、SKILL.md本文、commands/やoutput-styles配下の.md、Agent定義、メモリ、references/文書)を書く・削る・整える・評価する。対象パスがこれらなら、ドメイン色の強い依頼やファイル名だけの「レビューして」「簡潔にして」「矛盾/重複/曖昧な言い回しを直して」でも必ず使う。README・設計書・docsなど人間向け文書は対象外。新規スキル/エージェントの作成(配置・スクリプト・eval)やdescription・frontmatterの作成/改善はskill-creator/agent-creatorが担当。
 ---
 # AI 向け指示書の鍛錬
 
