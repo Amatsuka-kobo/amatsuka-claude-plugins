@@ -1,7 +1,0 @@
-{
-  "name": "revelation-scripts",
-  "version": "0.2.2-dev",
-  "private": true,
-  "type": "module",
-  "scripts": { "build": "tsx build.ts" }
-}

@@ -1,6 +1,6 @@
 {
   "name": "metatron-scripts",
-  "version": "0.3.9-dev",
+  "version": "0.3.10-dev",
   "private": true,
   "type": "module",
   "scripts": { "build": "tsx build.ts" }

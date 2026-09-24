@@ -3,9 +3,9 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
 - Runtime: Node >= 26 (Volta-pinned: node 26.3.1, pnpm 11.8.0 — root `package.json`).
   Plugin READMEs state a lower **consumer** floor (Node >= 22); prompt-smith's bundles moved from
   node26 to the common node22 target in 0.3.2-dev. The >= 26 requirement is for building this repo.
-- Package manager: **pnpm** only. `pnpm-workspace.yaml` now lists **12 members** — every plugin
-  (`agent-policy`, `basic-design`, `codiel`, `chat-history`, `gh-utility`, `revelation`, `pitcrew`,
-  `raphael`, `prefetch`, `guidepost`, `prompt-smith`) plus the nested `plugins/codiel/raguel-mcp`.
+- Package manager: **pnpm** only. `pnpm-workspace.yaml` now lists **13 members** — every plugin
+  (`agent-policy`, `basic-design`, `codiel`, `chat-history`, `gh-utility`, `pitcrew`,
+  `raphael`, `prefetch`, `guidepost`, `prompt-smith`, `metatron`, `sandalphon`) plus the nested `plugins/codiel/raguel-mcp`.
   `allowBuilds: esbuild`. The old "agent-policy / prompt-smith are markdown-only non-members" rule
   is gone as of 2026-08.
 - Root devDeps: `typescript ^6.0.3`, `vitest ^4.1.10`, `@biomejs/biome ^2.5.0`, `esbuild ^0.28.1`,

@@ -271,8 +271,6 @@ importers:
 
   plugins/raphael: {}
 
-  plugins/revelation: {}
-
   plugins/sandalphon: {}
 
 packages:
