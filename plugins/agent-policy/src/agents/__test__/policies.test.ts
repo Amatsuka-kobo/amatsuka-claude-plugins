@@ -44,7 +44,7 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet", "gemini-flash", "gpt-terra"],
+  "doc-writing": ["sonnet", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -120,8 +120,8 @@ describe("RECOMMENDED", () => {
 })
 
 describe("MODELS", () => {
-  it("10 モデルを定義する", () => {
-    expect(MODELS).toHaveLength(10)
+  it("9 モデルを定義する", () => {
+    expect(MODELS).toHaveLength(9)
   })
 
   it("color が公式の 8 色から選ばれている", () => {
@@ -162,20 +162,12 @@ describe("MODELS", () => {
       "gpt-terra",
       "gpt-luna",
       "gpt-astra",
-      "grok",
-      "gemini-flash"
+      "grok"
     ])
   })
 
-  it("gemini-flash が指定値で定義される", () => {
-    expect(modelById("gemini-flash")).toEqual({
-      id: "gemini-flash",
-      vendor: "gemini",
-      label: "Gemini Flash",
-      defaultName: "gemini-flash",
-      model: "claude-gemini-3-8-flash",
-      color: "green"
-    })
+  it("gemini-flash は未定義", () => {
+    expect(modelById("gemini-flash")).toBeUndefined()
   })
 
   it("どのモデルも aliasEnv を持たない", () => {

@@ -412,14 +412,6 @@ var MODELS = [
     defaultName: "grok",
     model: "claude-grok-4-7",
     color: "red"
-  },
-  {
-    id: "gemini-flash",
-    vendor: "gemini",
-    label: "Gemini Flash",
-    defaultName: "gemini-flash",
-    model: "claude-gemini-3-8-flash",
-    color: "green"
   }
 ];
 var ASSIGNMENTS = {
@@ -450,7 +442,7 @@ var RECOMMENDED = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet", "gemini-flash", "gpt-terra"],
+  "doc-writing": ["sonnet", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -531,7 +523,6 @@ function vocabularyFor(lang) {
 var COLORS = {
   gpt: "yellow",
   grok: "red",
-  gemini: "green",
   claude: "blue",
   none: "blue"
 };
@@ -657,8 +648,6 @@ function vendorFor(ownedBy) {
       return "grok";
     case "anthropic":
       return "claude";
-    case "antigravity":
-      return "gemini";
     default:
       return "unknown";
   }
@@ -802,7 +791,6 @@ function mcpCurrentOf(content) {
 var VENDOR_COLORS = {
   gpt: "yellow",
   grok: "red",
-  gemini: "green",
   claude: "blue",
   none: "blue"
 };
@@ -916,7 +904,7 @@ function resolveVendor(options, model, spec, live) {
   const vendor = live.vendors[model] ?? "unknown";
   if (vendor === "unknown") {
     throw new Error(
-      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|gemini|claude|none`
+      `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
     );
   }
   return vendor;
@@ -1437,8 +1425,8 @@ function parseArgs(argv) {
         index += 1;
         break;
       case "--vendor":
-        if (value !== "gpt" && value !== "grok" && value !== "gemini" && value !== "claude" && value !== "none") {
-          throw new Error("vendor: must be gpt, grok, gemini, claude or none");
+        if (value !== "gpt" && value !== "grok" && value !== "claude" && value !== "none") {
+          throw new Error("vendor: must be gpt, grok, claude or none");
         }
         options.vendor = value;
         index += 1;

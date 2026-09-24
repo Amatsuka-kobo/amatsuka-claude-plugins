@@ -66,7 +66,7 @@ describe("fetchLiveModels", () => {
         "gpt-5": "gpt",
         "grok-4": "grok",
         "claude-sonnet": "claude",
-        "claude-gemini-3-8-flash": "gemini"
+        "claude-gemini-3-8-flash": "unknown"
       }
     })
 
