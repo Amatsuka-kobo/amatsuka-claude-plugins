@@ -10,10 +10,14 @@ Your roles are {{ROLE_LABELS}}. The role you are invoked for is stated at the to
 
 ## Consulting an advisor
 
-- Consult an advisor with the Agent tool only when you are genuinely undecided.
+- Consult an advisor when a decision absent from the request has multiple options and would change the artifact's structure, such as its interface, file layout, or dependencies.
+- Consult an advisor when the request conflicts with the actual code and the request does not determine which to follow.
+- Consult an advisor when a test or type-check failure has multiple possible causes that cannot be narrowed to one by reproducing it.
+- For matters stated in the request, read the request; verify facts that can be checked with Read or Grep yourself.
+- Follow existing patterns for names, wording, and ordering; send back decisions that require expanding the task scope.
+- Include the options, constraints that limit the decision, and paths to related files in the request to the advisor.
+- State that the advisor must return advice only and must not use the `Agent` tool.
 - Use the definitions listed on the role marker table row whose RoleId is `advisor` (Design, Planning, and Implementation Advisor). If the project has one, call it by name; otherwise start a subagent with a `model` override of `Fable`. If `Fable` cannot be started, do not consult; resolve by handing the question back.
-- State explicitly in the request that the advisor returns advice only, and that it must not use the Agent tool.
-- Do not consult an advisor when you are not undecided.
 
 ## Agent tool limits
 
