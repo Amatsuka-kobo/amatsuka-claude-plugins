@@ -256,12 +256,6 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "doc-writing",
-    label: "\u6587\u66F8\u4F5C\u6210",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore-lead",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22\u7D71\u62EC",
     kind: "impl",
@@ -422,7 +416,6 @@ var ASSIGNMENTS = {
     escalation: ["fable"],
     general: ["sonnet"],
     "design-plan": ["opus"],
-    "doc-writing": ["sonnet"],
     "explore-lead": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
@@ -442,7 +435,6 @@ var RECOMMENDED = {
   escalation: ["fable", "gpt-astra"],
   general: ["sonnet", "gpt-luna"],
   "design-plan": ["opus"],
-  "doc-writing": ["sonnet", "gpt-terra"],
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
@@ -459,8 +451,7 @@ var SOLO_DENIED_ROLES = [
   "doc-review",
   "code-review",
   "final-review",
-  "gate-review",
-  "doc-writing"
+  "gate-review"
 ];
 function allowsAgentTool(ids) {
   return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));
@@ -499,6 +490,7 @@ var JA = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
   advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
   agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
+  writingHeading: "## \u6587\u66F8\u306E\u57F7\u7B46",
   constraintHeading: "## \u5236\u7D04",
   outputFormatHeading: "## Output Format",
   listSeparator: "\u3001",
@@ -509,6 +501,7 @@ var EN = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
   advisorHeading: "## Consulting an advisor",
   agentConstraintHeading: "## Agent tool limits",
+  writingHeading: "## Writing",
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",
@@ -560,6 +553,9 @@ function compose(input) {
     if (advisor !== void 0)
       body.push(vocabulary.advisorHeading, "", ...advisor, "");
   }
+  const writing = common.get(vocabulary.writingHeading);
+  if (writing !== void 0)
+    body.push(vocabulary.writingHeading, "", ...writing, "");
   const constraints = [
     ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
     ...common.get(vocabulary.constraintHeading) ?? [],
