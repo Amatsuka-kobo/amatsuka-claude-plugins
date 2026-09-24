@@ -13,7 +13,7 @@
 | 実装計画書 | 完成。第 3 版。T0〜T16(T1b を含む)とコミット単位を定義済み |
 | ユーザー承認 | 取得済み。設計判断は確定している |
 | 実装 | 未着手 |
-| 未解決事項 | 1 件。敵対的レビュー定義の名前とモデルを T16 でユーザーに確認する |
+| 未解決事項 | なし。敵対的レビュー定義は `adversarial-reviewer` / `gpt-sol`(`claude-gpt-6-sol`)でユーザー決定済み |
 
 設計書は `harness-docs/design/2026-09-24-agent-policy-role-overhaul-design.md`、実装計画書は `harness-docs/plans/2026-09-24-agent-policy-role-overhaul-plan.md` である。どちらも HEAD `beda2ee` 以降のコミットで追加されている。
 
@@ -24,7 +24,7 @@
 1. この引き継ぎ書、設計書 §2・§11、実装計画書 §0〜§2 の順に読む。
 2. T0 として `git status`、`pnpm run lint`、`pnpm run typecheck`、`pnpm run test`、`pnpm run build` を実行する。方針スキル本文と規律の合計も `wc -c` で測り、baseline の 26,737B と照合する。
 3. baseline が通った後、T1 から計画書の順序とコミット単位で実装する。確定した設計を実装中に再検討しない。
-4. T16 に入る前に、敵対的レビューの新規定義に使う名前とモデルをユーザーに確認する。
+4. T16 の敵対的レビュー定義は `adversarial-reviewer`(`--model-id gpt-sol`)で作る。ユーザーへの確認は済んでいる。
 
 ## 確定した決定
 

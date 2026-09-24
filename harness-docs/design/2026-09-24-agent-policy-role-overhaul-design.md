@@ -590,7 +590,7 @@ frontmatter の `description` は変えない(モデルと役割を選ぶ、と�
 | `docs-reviewer.md` | independent-review | grok | マーカーを `design-review` にして再生成 |
 | `system-planner.md` | design-plan, explore-lead | opus | `design-plan` だけで再生成 |
 | `general-explore.md` | explore | grok | 再生成(役割名の変更を反映) |
-| 敵対的レビューの定義(新規) | adversarial-review | 未定 | 新設。名前とモデルは実装セッションでユーザーに確認する(未解決事項 1) |
+| `adversarial-reviewer.md`(新規) | adversarial-review | `claude-gpt-6-sol`(gpt) | 新設。名前とモデルはユーザー決定(2026-09-24)。`--model-id gpt-sol --name adversarial-reviewer --roles adversarial-review` で作る |
 | `complex-reviewer.md` | e2e-verify, final-review, gate-review | gpt-astra | 役割構成を保って再生成。`e2e-verify` が gpt-astra の推奨外になり警告が出るが受容する(§8) |
 | 残り 7 定義 | 変更なし | — | 本文(`_common.md`・断片)の変更を反映するため再生成 |
 
@@ -778,7 +778,7 @@ custom を要するケースで `--scope custom` を明示するのは、`AMBIEN
 
 ## 10. 未解決事項
 
-1. **このリポジトリに新設する敵対的レビュー定義の名前とモデル。** 推奨は `opus` / `gpt-sol` の 2 つ。実装セッションの再生成タスクでユーザーに確認する。
+なし。第 3 版で残っていた「このリポジトリに新設する敵対的レビュー定義の名前とモデル」は、ユーザーが `adversarial-reviewer` / `gpt-sol` と決めた(2026-09-24。§5.16)。
 
 ## 11. Done 条件
 
@@ -798,6 +798,6 @@ custom を要するケースで `--scope custom` を明示するのは、`AMBIEN
 - `compose.test.ts` の英語純度検査が `ROLES` の全 id を en で合成して検査している。
 - プラグイン README に 16 種の役割表、9 種のモデル表、6 件の MCP 既定列挙、移行節「0.19 系から 0.20 系へ」がある。ルート `README.md` に「context-map」と「Gemini」が無く、役割数が 16 種である。
 - `.serena/memories/agent_policy/core.md` と `.serena/memories/core.md` が 0.20 の内容に追随している。
-- このリポジトリの `.claude/agents/` が既存の定義名と役割構成を保ち、旧 ID のマーカーが残っておらず、敵対的レビューの定義があり、`--list-coverage` の `uncovered` が空(または作らないと決めた役割だけ)で、再生成の前後で `disallowedTools` と MCP の行が失われていない。
+- このリポジトリの `.claude/agents/` が既存の定義名と役割構成を保ち、旧 ID のマーカーが残っておらず、`adversarial-reviewer.md`(`claude-gpt-6-sol`)があり、`--list-coverage` の `uncovered` が空(または作らないと決めた役割だけ)で、再生成の前後で `disallowedTools` と MCP の行が失われていない。
 - ARCHITECTURE への影響が無いことを確認した記録がある。
 - 変更を実装計画書の方針で分けてコミットしている。
