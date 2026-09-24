@@ -9,7 +9,10 @@ kind: readonly
 
 ## When to invoke
 
-- **Advice.** Use when the requester is unsure about a design, planning, or implementation decision and seeks an evaluation of options.
+- **Advice.** Use when a decision absent from the request has multiple options and choosing among them would change the artifact's structure.
+- **Advice.** Use when the request conflicts with the actual code and does not determine which to follow.
+- **Advice.** Use when a test or type-check failure has multiple possible causes that cannot be narrowed to one by reproducing it.
+- If the request lacks the options, constraints that limit the decision, or paths to related files, do not infer them; return what is missing.
 
 ## Core Responsibilities
 
@@ -27,6 +30,6 @@ kind: readonly
 
 ## Output Format
 
-- State the recommendation and its rationale.
+- Give one recommendation; if it is conditional, state the condition and rationale.
 - List the decision criteria and evaluate each option against them.
 - List matters that cannot be decided because required premises are missing.
