@@ -8,7 +8,7 @@ import {
 } from "../roles"
 
 describe("ROLES", () => {
-  it("役割 ID が 17 件あり、定義順で重複しない", () => {
+  it("役割 ID が 15 件あり、定義順で重複しない", () => {
     expect(ROLES.map((role) => role.id)).toEqual([
       "complex-impl",
       "normal-impl",
@@ -16,7 +16,6 @@ describe("ROLES", () => {
       "escalation",
       "general",
       "design-plan",
-      "explore-lead",
       "explore",
       "realtime-research",
       "e2e-verify",
@@ -27,7 +26,7 @@ describe("ROLES", () => {
       "gate-review",
       "advisor"
     ])
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(16)
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(15)
   })
 
   it("一般作業役割の label・kind・tools が固定値と一致する", () => {
@@ -39,9 +38,9 @@ describe("ROLES", () => {
     })
   })
 
-  it("追加した 2 役割の label・kind・tools が固定値と一致する", () => {
+  it("設計書作成と探索役割の label・kind・tools が固定値と一致する", () => {
     expect(
-      ROLES.filter((role) => ["design-plan", "explore-lead"].includes(role.id))
+      ROLES.filter((role) => ["design-plan", "explore"].includes(role.id))
     ).toEqual([
       {
         id: "design-plan",
@@ -50,10 +49,10 @@ describe("ROLES", () => {
         tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
       },
       {
-        id: "explore-lead",
-        label: "コードベース探索統括",
-        kind: "impl",
-        tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+        id: "explore",
+        label: "コードベース探索",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob", "Bash"]
       }
     ])
   })

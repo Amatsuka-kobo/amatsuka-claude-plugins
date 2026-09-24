@@ -651,7 +651,7 @@ describe("役割マーカーの走査", () => {
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("my-heavy")
     expect(output).toContain("複雑または重要な実装")
-    expect(output).toContain("コードベース探索実働")
+    expect(output).toContain("コードベース探索")
   })
 
   it("同じ役割を複数定義が宣言したとき全て列挙する", () => {
@@ -729,7 +729,7 @@ describe("役割マーカーの走査", () => {
   it("同梱プリセットを走査しない", () => {
     place("dummy", ["agent-policy-role: explore"])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
-    expect(output).toContain("コードベース探索実働")
+    expect(output).toContain("コードベース探索")
     expect(output).not.toContain("複雑または重要な実装")
   })
 })
@@ -799,6 +799,6 @@ describe("フェイルオープン", () => {
 
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(output).toContain("healthy")
-    expect(output).toContain("コードベース探索実働")
+    expect(output).toContain("コードベース探索")
   })
 })

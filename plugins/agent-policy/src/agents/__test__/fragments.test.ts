@@ -54,7 +54,7 @@ function writeFragment(dir: string, id: string, label: string): void {
 describe("loadFragments の 3 段探索", () => {
   it("同梱断片を読み込む", () => {
     const fragments = loadFragments([JA], "claude")
-    expect(fragments.size).toBe(16)
+    expect(fragments.size).toBe(15)
     expect(fragments.get("explore")?.source).toBe("plugin")
   })
 

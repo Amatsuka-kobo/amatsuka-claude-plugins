@@ -1,7 +1,7 @@
 ---
 id: explore
 label: Codebase Exploration
-description: hands-on codebase exploration directed by the orchestrator
+description: investigate the codebase within the scope requested by the orchestrator
 default-name: explorer
 tools: Read, Grep, Glob, Bash
 kind: readonly
@@ -9,7 +9,7 @@ kind: readonly
 
 ## When to invoke
 
-- **Exploration work.** Use as an exploration-only subagent for part of the codebase exploration coordinated by the orchestrator.
+- **Codebase exploration.** Use when the orchestrator requests facts from a specified part of the codebase.
 
 ## Core Responsibilities
 
@@ -23,9 +23,9 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for exploration work**, do not create deliverable files. Return a report only.
+- **When invoked for codebase exploration**, do not create deliverable files. Return a report only.
 
 ## Output Format
 
-- List found targets with file paths and line numbers.
+- Report findings with supporting file paths and line numbers.
 - State the scanned scope and observations noticed outside it.

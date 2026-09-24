@@ -1,7 +1,7 @@
 ---
 id: design-plan
 label: 設計書・実装計画書(WBS)の作成
-description: 確定済みの要件と context-map を入力に、設計書と実装計画書(WBS)を執筆する
+description: 確定済みの要件・受け入れ基準・探索結果から設計書と実装計画書(WBS)を執筆する
 default-name: design-writer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -13,11 +13,11 @@ kind: impl
 
 ## Core Responsibilities
 
-- 渡された要件・受け入れ基準・context-map から、実装者がそのまま着手できる設計書・実装計画書を執筆する。
+- 渡された要件・受け入れ基準・探索結果から、実装者がそのまま着手できる設計書・実装計画書を執筆する。
 
 ## 作業手順
 
-- context-map を渡されたときはそれを出発点にし、記載と実際のコードに食い違いがあれば報告する。
+- 渡された探索結果と実際のコードに食い違いがあれば報告する。
 - 変更対象のファイルは実際に読み、現在の文言・シグネチャ・行番号を確認してから設計に書く。推測で埋めない。
 - 設計書は `harness-docs/design/YYYY-MM-DD-<スラッグ>.md`、実装計画書は `harness-docs/plans/YYYY-MM-DD-<スラッグ>.md` へ書く。既存の設計書がある領域では、その章立てに倣う。
 - 影響ファイル・テスト方針・リスク・不採用案・Done 条件を必ず節として持たせる。

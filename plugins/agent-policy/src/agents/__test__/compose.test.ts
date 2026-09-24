@@ -113,10 +113,10 @@ describe("frontmatter", () => {
 
   it("役割マーカーを新規 ID を含めても ROLES の定義順で並べる", () => {
     const meta = frontmatter(
-      build(["explore", "explore-lead", "general", "design-plan"])
+      build(["explore", "normal-impl", "general", "design-plan"])
     )
     expect(meta["agent-policy-role"]).toBe(
-      "general, design-plan, explore-lead, explore"
+      "normal-impl, general, design-plan, explore"
     )
   })
 
@@ -228,6 +228,20 @@ describe("本文", () => {
     ).toContain("## Writing")
   })
 
+  it("日英の合成定義に廃止した役割や探索文書への参照を含めない", () => {
+    for (const [lang, fragmentDirs] of [
+      ["ja", [PLUGIN_ROLES]],
+      ["en", [EN]]
+    ] as const) {
+      const body = build(
+        ROLES.map((role) => role.id),
+        { lang, fragmentDirs }
+      )
+      expect(body).not.toContain("doc-writing")
+      expect(body).not.toContain("context-map")
+    }
+  })
+
   it("Agent が付かないとき「アドバイザーへの相談」節を出さない", () => {
     expect(build(["code-review"])).not.toContain("## アドバイザーへの相談")
   })
@@ -265,7 +279,7 @@ describe("本文", () => {
     const body = build(["complex-impl", "explore"])
     const section = body.slice(body.indexOf("## Output Format"))
     expect(section).toContain("### 複雑または重要な実装")
-    expect(section).toContain("### コードベース探索実働")
+    expect(section).toContain("### コードベース探索")
   })
 
   it("読み取り役割の制約が役割スコープ付きで出る", () => {
@@ -278,7 +292,7 @@ describe("本文", () => {
     const body = build(["complex-impl", "explore"])
     expect(body).toContain("あなたは test-agent")
     expect(body).toContain("複雑または重要な実装")
-    expect(body).toContain("コードベース探索実働")
+    expect(body).toContain("コードベース探索")
   })
 
   it("他定義の固有名を含まない", () => {
@@ -450,7 +464,7 @@ describe("断片の解決", () => {
       [
         "---",
         "id: explore",
-        "label: コードベース探索実働",
+        "label: コードベース探索",
         "description: プロジェクト独自の探索規律",
         "tools: Read, Grep, Glob",
         "kind: readonly",
@@ -484,7 +498,7 @@ describe("断片の解決", () => {
       [
         "---",
         "id: explore",
-        "label: コードベース探索実働",
+        "label: コードベース探索",
         "description: プロジェクト独自の探索規律",
         "tools: Read, Grep, Glob, Agent",
         "kind: readonly",
