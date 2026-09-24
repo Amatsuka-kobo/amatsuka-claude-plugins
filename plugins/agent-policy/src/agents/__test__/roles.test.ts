@@ -19,8 +19,8 @@ describe("ROLES", () => {
       "explore",
       "realtime-research",
       "e2e-verify",
-      "independent-review",
-      "doc-review",
+      "design-review",
+      "knowledge-elicitation",
       "code-review",
       "final-review",
       "gate-review",
@@ -53,6 +53,27 @@ describe("ROLES", () => {
         label: "コードベース探索",
         kind: "readonly",
         tools: ["Read", "Grep", "Glob", "Bash"]
+      }
+    ])
+  })
+
+  it("改名したレビュー役割の label・kind・tools が固定値と一致する", () => {
+    expect(
+      ROLES.filter((role) =>
+        ["design-review", "knowledge-elicitation"].includes(role.id)
+      )
+    ).toEqual([
+      {
+        id: "design-review",
+        label: "設計書・実装計画書のレビュー",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob", "Bash"]
+      },
+      {
+        id: "knowledge-elicitation",
+        label: "暗黙知の抽出・理解レビュー",
+        kind: "readonly",
+        tools: ["Read", "Grep", "Glob"]
       }
     ])
   })

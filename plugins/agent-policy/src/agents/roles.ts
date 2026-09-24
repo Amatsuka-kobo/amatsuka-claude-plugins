@@ -10,8 +10,8 @@ export type RoleId =
   | "explore"
   | "realtime-research"
   | "e2e-verify"
-  | "independent-review"
-  | "doc-review"
+  | "design-review"
+  | "knowledge-elicitation"
   | "code-review"
   | "final-review"
   | "gate-review"
@@ -81,14 +81,14 @@ export const ROLES: readonly Role[] = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "independent-review",
-    label: "設計書・実装計画書の独立レビュー",
+    id: "design-review",
+    label: "設計書・実装計画書のレビュー",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
-    id: "doc-review",
-    label: "設計書・実装計画書のレビュー",
+    id: "knowledge-elicitation",
+    label: "暗黙知の抽出・理解レビュー",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob"]
   },

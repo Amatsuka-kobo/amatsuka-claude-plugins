@@ -135,8 +135,8 @@ export const ASSIGNMENTS: Record<
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
     "e2e-verify": ["sonnet"],
-    "independent-review": ["sonnet"],
-    "doc-review": ["haiku"],
+    "design-review": ["sonnet"],
+    "knowledge-elicitation": ["haiku"],
     "code-review": ["sonnet"],
     "final-review": ["fable"],
     "gate-review": ["fable"],
@@ -155,8 +155,8 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
   "e2e-verify": ["sonnet"],
-  "independent-review": ["sonnet", "grok"],
-  "doc-review": ["haiku"],
+  "design-review": ["sonnet", "grok"],
+  "knowledge-elicitation": ["haiku"],
   "code-review": ["sonnet"],
   "final-review": ["fable", "gpt-astra"],
   "gate-review": ["fable", "gpt-astra"],
@@ -167,7 +167,7 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
 // 複数役割を兼ねる定義は一つの役割に対応しないため効かない（設計 §5.2）。
 const SOLO_DENIED_ROLES: readonly RoleId[] = [
   "advisor",
-  "doc-review",
+  "knowledge-elicitation",
   "code-review",
   "final-review",
   "gate-review"

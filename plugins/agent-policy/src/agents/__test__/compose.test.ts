@@ -283,8 +283,8 @@ describe("本文", () => {
   })
 
   it("読み取り役割の制約が役割スコープ付きで出る", () => {
-    expect(build(["independent-review"])).toContain(
-      "**独立レビューとして依頼されたときは**"
+    expect(build(["design-review"])).toContain(
+      "**設計書・実装計画書のレビューとして依頼されたときは**"
     )
   })
 
