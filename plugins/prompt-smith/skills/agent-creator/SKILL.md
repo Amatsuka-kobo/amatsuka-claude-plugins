@@ -30,7 +30,7 @@ description: |-
 ### 3. frontmatter を書く
 
 - `tools` は必要なものだけを許可する。読み取りだけの agent に `Write` や `Edit` を与えない。
-- `model` は、担当表で実行役割を決める運用なら省略する。特定のモデルに固定したいときだけ書く。
+- `model` は、呼び出し側でモデルを決める運用なら省略する。特定のモデルに固定したいときだけ書く。
 
 ### 4. description を書く
 
@@ -40,7 +40,7 @@ description: |-
 
 ### 5. 本文を書く
 
-- `prompt-smith:prompt-smith` を使用し、必ずその規律に従う。
+- 本文を書く前に `prompt-smith:prompt-smith` スキルを起動し、その規律で書く。
 - 何をする agent か、どう進めるか、何を返すかを書く。
 
 ### 6. 既存定義を点検する
