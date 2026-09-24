@@ -48,7 +48,7 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   "explore-lead": ["opus"],
   explore: ["sonnet", "grok", "gpt-terra"],
   "realtime-research": ["sonnet", "grok"],
-  "e2e-verify": ["sonnet", "gpt-astra"],
+  "e2e-verify": ["sonnet"],
   "independent-review": ["sonnet", "grok"],
   "doc-review": ["haiku"],
   "code-review": ["sonnet"],
