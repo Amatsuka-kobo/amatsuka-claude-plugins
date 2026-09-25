@@ -382,6 +382,12 @@ T0 ─ T1 ─ T2 ─ T3 ─ T4 ─ T5 ─ T6 ─ T7 ─ T8 ─ T9 ─ T10 ─ T1
 | 2 | 計画 | §15 の表に `tools/api.test.ts`・`tools/browser.test.ts`・`tools/shared.test.ts`・`browser/driver.test.ts` の行が無い | キー確認・開始前の失敗・証跡の組み込み・route の判定を確かめるため、この 4 ファイルを足した。§15 の既存の行は削らない | 採用・設計書へ反映済み |
 | 3 | 計画 | §4-1 の構成図に `sanitizeUrl` と `allowedHosts` の一致規則の置き場所が無い | `redact` と同じ `src/api/http.ts` に置き(§9-3 の `redact` の置き場所に合わせた)、ブラウザ系から使う。これに合わせて API 系を先に実装する | 採用・設計書へ反映済み |
 | 4 | 計画(レビュー反映時) | §8-4 は「本文を空にしても収まらないときは `budget_exceeded` を返す」。§5-1 は「開始後の例外は `isError` にせず `status: "error"` の `RunRecord` を返す」 | ループ型の 2 ツールで、2 ステップ目以降(history が増えた後)に予算を超えたとき、どちらに従うかが決まっていない | 開始前は `isError` の `budget_exceeded`、開始後は `status: "error"`・`error.kind: "budget_exceeded"` の `RunRecord` と証跡(設計書 §8-4 の 5. と §5-1 の `RunRecord.error.kind`)。T7・T10 の要点と検証に反映 | 採用・反映済み |
+| 5 | T2 | SDK のログは使わない(§8-1) | SDK の既定ロガーは `console` で、`TYPESAFE_LOG_LEVEL` が info / debug だと stdout に書き MCP の stdio を壊す。クライアント生成時に `logLevel: "off"` を明示した | 採用・設計変更なし |
+| 6 | T9 | §6-1 の observe は `ariaHidden` のノードを除く。T9 の固定データ `excluded.json` は `ariaHidden` を含む | 引数なしの `ariaSnapshotJSON()` は aria-hidden の要素を戻り値に含めず、`ariaHidden` は `mode: "ai"` だけで付く。通常モードを維持し、`excluded.json` は採取結果のまま(aria-hidden が現れないことを固定)とし、`ariaHidden` の除外は合成ノードでテストする | 採用・設計書 §6-1 に追記 |
+| 7 | T10 | §9-2 はダイアログとポップアップを history の note に残す。§6-1 の `GoalDriver` にはそれを伝える口が無い | `observe()` の戻りに任意の `notes?: string[]` を足し、ドライバが前回の observe 以降の事象を返す。ループは history の note に載せる | 採用・設計書 §6-1 に追記 |
+| 8 | T14 | (設計書に記述なし) | esbuild がバンドルで SDK の `APIError` を `APIError2` に改名し、`errorClass` と `reason` が誤った名前になっていた。`build.ts` に `keepNames: true` を足した | 採用・設計変更なし |
+| 9 | T15a | §5-9 は `reason` の値に `goal_reached` / `assertion_failed` を挙げるが、§6-1 の終了条件の表に対応する記述が無く、実装も設定していなかった | 両ループで pass なら `goal_reached`、stuck でない fail なら `assertion_failed` を入れる | 採用・設計書 §6-1 の表に追記 |
+| 10 | T15a | §9-3 の `sanitizeUrl` は userinfo とクエリ値だけを伏せる | `api_run_goal` の path に埋めた `{{inputs.*}}` は証跡の URL に残る(Jev の state には入らない)。§9-3 が証跡に秘密が残ることを受け入れていること、§17-4 が範囲外であることから、コードは変えず README の「証跡と秘密」に注意を足した | 採用(文書のみ) |
 
 ## 8. 未解決事項と着手の関係
 
@@ -411,4 +417,55 @@ T0 ─ T1 ─ T2 ─ T3 ─ T4 ─ T5 ─ T6 ─ T7 ─ T8 ─ T9 ─ T10 ─ T1
 
 ## 10. 実施記録
 
-実装のセッションで追記する。
+実装のセッション(2026-09-25〜26)の記録。
+
+### T0 baseline
+
+- 本件と無関係な未コミット変更: `.raphael/antibodies/`、`cliproxyapi.config.example.yaml`、`docs/chat/`。触れていない。
+- Node.js 26.3.1。`@typesafe-ai/sdk@0.6.0` と `playwright-core@~1.63.0`(1.63.0)は取得できた。
+- lint パス(info 4 件。metatron の既存テスト)、typecheck パス、test 157 ファイル・2283 件パス / 2 件スキップ、build パス。
+
+### 実装時の確認
+
+- SDK 0.6.0 の型: `SystemOneResult<Q extends Questions>`(型引数必須)、`Questions`、noul の `criteria` が `{ true?, false? } | null`、例外クラス(`APIError` / `RateLimitError` / `APITimeoutError` / `APIConnectionError` など)は設計書と一致した。
+- 設計書 §17-5: キャッシュの Playwright 1.63.0 で `createRequire(...).resolve("playwright/package.json")` が成功した。その経路で版を読む。
+- 設計書 §17-6: `filechooser` を無視したままファイル選択のボタンを click しても、次の `ariaSnapshotJSON()` は 5ms で戻った(`stepTimeoutMs` 3000ms)。設計どおり。
+- T9 の固定データは Playwright 1.63.0 の `page.setContent` と引数なしの `ariaSnapshotJSON()` で採取した。開発環境(WSL の Ubuntu)では Chromium が `libasound.so.2` 不足で起動しなかったため、採取と確認の実行時だけ `LD_LIBRARY_PATH` で補った。
+- 設計書との食い違いは §7 の #5〜#10 に記録した。
+
+### T11 発火評価
+
+- 評価セット 20 件(発火すべき 10 / すべきでない 10)、1 件 3 回、holdout 0.4、5 反復。
+- 最良は初期案(description 242 バイト): 発火率 50%、誤発火率 0%(holdout 33% / 0%)。反復ごとの発火率は 23〜53% で収束しなかった。
+- 誤発火が 0% であること、改善案が初期案を上回らなかったことから、初期案で受け入れた。評価環境に MCP ツールの実体が無く、本体が直接答えられる依頼では発火しにくい。
+
+### T13
+
+- ADR-005「Anthropic 以外の外部の有料 API を必須依存とするプラグインを認める」を追加した。ユーザーの指摘により、jevriel だけの例外ではなくリポジトリの方針として起票した。
+- ARCHITECTURE のシステム概要を「Anthropic API が必要になる処理は…に閉じる」に改め、外部 API への依存を認める 1 文を足した。構成図に `.mcp.json` を足した。
+- Serena メモリ `core` を更新し、`jevriel/core` を追加した。
+
+### T14 統合検証
+
+1. lint パス(info 4 件)、typecheck パス、test 172 ファイル・2475 件パス / 2 件スキップ(T0 比 +192 件)。
+2. `pnpm --filter jevriel-scripts build` の後、dist に差分なし。
+3. dist に Playwright の注記 0 件、`@typesafe-ai+sdk@` 1 件、`@modelcontextprotocol+sdk@` 16 件、`zod@` 142 件。この段階で SDK の `APIError` が `APIError2` に改名されていたため `keepNames` を有効にした(§7 #8)。
+4. `TYPESAFE_API_KEY` を外したサーバーが `tools/list` に 10 ツールを返し、`jev_ask` が `not_configured` を返した。
+5. 保留: `TYPESAFE_API_KEY` が無い。
+6. 空のキャッシュで `browser_setup` を 2 回呼び、`installed` → `already_installed` を返した(進捗通知 4 手順分を受信)。`libasound` が無い状態では `setup_failed` と `install-deps` の案内を返した。`browser_check` はキー無しで `not_configured` を返した。公開ページでの応答の確認は保留(キーが要る)。
+7. 保留: 証跡の作成は Jev の判定を要し、キーが無いと開始前に `not_configured` で止まる。MCP サーバーの cwd と `CLAUDE_PROJECT_DIR` の実測(設計書 §17-1)も、キーを用意した時点で行う。
+8. `src` と `skills` に他プラグイン名 0 件。
+
+### T15 コードレビュー
+
+- T15a: high 1(パスに埋めた秘密が証跡に残る。§7 #10 で文書のみ)、medium 1(`reason` の 2 値。§7 #9 で採用)。
+- T15b: high 1(非ナビゲーション要求で `frame()` の例外が abort になる。採用・修正)、low 1(`browser_setup` の起動確認の close。採用・修正)。
+- T15c: medium 1(SKILL.md に `name` 省略時の挙動。採用)、low 1(README の既定値。採用)。バージョンを上げる指摘は、初版のため不採用とした。
+- 修正はコミット `c8b8476`。
+
+### T16 最終突き合わせ
+
+- 10 ツールの入力スキーマは設計書 §5-2〜§5-11 と一致した。
+- `RunRecord` / `BrowserStep` / `ApiStep` は設計書 §5-1 と一致した。4 ツールの `result.json` とツール出力の一致は各ツールのテストで確かめている。
+- §15 の表の全行に対応するテストファイルがある。
+- 設計書 §16 の Done 条件のうち、実キーを要する 2 項目(判断系 5 ツールの実応答、`browser_check` の公開ページでの応答)を除いて満たした。
