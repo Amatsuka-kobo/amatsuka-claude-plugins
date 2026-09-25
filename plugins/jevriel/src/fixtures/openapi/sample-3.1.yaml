@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  title: Sample API
+  version: "1"
+servers:
+  - url: https://{host}/v1
+    variables:
+      host:
+        default: api.example
+security:
+  - Bearer: []
+    HeaderKey: []
+  - OAuth: []
+paths:
+  /users/{id}:
+    servers:
+      - url: /path/{stage}
+        variables:
+          stage:
+            default: test
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/Shared"
+      - name: hidden
+        in: cookie
+        schema:
+          type: string
+      - name: authorization
+        in: header
+        schema:
+          type: string
+    get:
+      operationId: users.list
+      summary: Read user
+      parameters:
+        - name: q
+          in: query
+          explode: false
+          schema:
+            type: string
+            enum:
+              - one
+              - two
+            default: one
+            example: schema
+          examples:
+            first:
+              value: first
+            second:
+              value: second
+          example: ignored
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: override
+        - name: filter
+          in: query
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  active: true
+              example:
+                active: false
+      requestBody:
+        $ref: "#/components/requestBodies/User"
+      responses:
+        "200":
+          description: ok
+        2XX:
+          description: others
+        default:
+          description: fallback
+      servers:
+        - url: https://{host}/user
+          variables:
+            host:
+              default: operation.example
+    post:
+      operationId: create_user
+      parameters:
+        - $ref: "#/components/parameters/Shared"
+      requestBody:
+        $ref: "#/components/requestBodies/User"
+      security: []
+      responses:
+        "201":
+          description: created
+    delete:
+      responses:
+        "204":
+          description: deleted
+  /search:
+    get:
+      parameters:
+        - name: advanced
+          in: query
+          required: true
+          style: deepObject
+          schema:
+            type: object
+      responses:
+        "200":
+          description: ok
+    head:
+      responses:
+        "200":
+          description: ok
+    options:
+      responses:
+        "204":
+          description: ok
+  /forms:
+    post:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: ok
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Node"
+    Shared:
+      name: shared
+      in: query
+      schema:
+        type: integer
+        example: 7
+  schemas:
+    Node:
+      type: object
+      properties:
+        child:
+          $ref: "#/components/schemas/Node"
+  requestBodies:
+    User:
+      required: true
+      description: user
+      content:
+        application/json; charset=utf-8:
+          schema:
+            type: object
+            example:
+              name: example
+          example:
+            name: body
+        text/plain: {}
+  securitySchemes:
+    HeaderKey:
+      type: apiKey
+      in: header
+      name: X-Key
+    QueryKey:
+      type: apiKey
+      in: query
+      name: key
+    Bearer:
+      type: http
+      scheme: Bearer
+    Basic:
+      type: http
+      scheme: basic
+    OAuth:
+      type: oauth2
+      flows: {}

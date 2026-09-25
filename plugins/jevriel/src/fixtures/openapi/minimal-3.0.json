@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Minimal", "version": "1" },
+  "paths": {
+    "/users/{id}": {
+      "get": {
+        "parameters": [{ "$ref": "#/components/parameters/Id", "description": "ignored in 3.0", "required": false }],
+        "requestBody": { "content": { "application/json": { "example": { "x": 1 } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  },
+  "components": {
+    "parameters": { "Id": { "name": "id", "in": "path", "schema": { "type": "integer", "nullable": true, "example": 3 }, "example": 4, "description": "original" } }
+  }
+}
