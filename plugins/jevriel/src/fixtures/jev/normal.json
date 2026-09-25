@@ -1,0 +1,27 @@
+{
+  "model": "jev-test",
+  "answers": {
+    "decision": {
+      "type": "noul",
+      "noul": 0.9
+    },
+    "truth": {
+      "type": "noul",
+      "noul": 0.9
+    },
+    "pick": {
+      "type": "choice",
+      "choice": "yes",
+      "confidence": 0.8,
+      "probabilities": { "yes": 0.8, "no": 0.2 }
+    },
+    "rating": {
+      "type": "score",
+      "score": 1,
+      "confidence": 0.7,
+      "legend": { "0": "low", "1": "high" },
+      "probabilities": { "0": 0.3, "1": 0.7 }
+    }
+  },
+  "usage": { "input_tokens": 25, "output_tokens": 0 }
+}
