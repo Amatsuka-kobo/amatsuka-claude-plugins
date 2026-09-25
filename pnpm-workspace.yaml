@@ -12,5 +12,6 @@ packages:
   - plugins/prompt-smith
   - plugins/metatron
   - plugins/sandalphon
+  - plugins/jevriel
 allowBuilds:
   esbuild: true

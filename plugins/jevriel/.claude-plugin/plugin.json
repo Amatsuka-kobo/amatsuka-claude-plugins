@@ -1,0 +1,5 @@
+{
+  "name": "jevriel",
+  "description": "TypeSafe AI の判断モデル Jev を MCP で呼び、分類・採点・命題の検証・操作の安全性判定と、ブラウザや API の目的駆動の動作確認を行う",
+  "version": "0.1.0-dev"
+}
