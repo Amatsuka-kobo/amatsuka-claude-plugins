@@ -59,6 +59,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げるプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
 | Metatron     | プロジェクトアーキテクチャ・失敗知識・規律(rules)を管理し、毎セッション AI のコンテキストへ注入するプラグイン | 開発中     |
 | Sandalphon   | ユーザーの願い(TOBE)を聞き取って現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡すオーケストレーター                                          | 開発中     |
+| jevriel      | TypeSafe AI の判断モデル Jev を利用し、分類・順位付け・主張の確認・操作の安全性評価とブラウザ・API の動作確認を行う MCP プラグイン                                      | 開発中     |
 
 各プラグインの詳しい説明は、それぞれのフォルダ内（`plugins/<plugin-name>/`）にあるREADMEを参照してください。
 
@@ -139,3 +140,10 @@ TOBE → intent → issue → 実装という一続きの流れを分担しま�
 Codiel は Metatron が無くてもドメインマップなしで動作し、Sandalphon が無くても通常の自動開発ワークフローを実行します。<br>
 Sandalphon は Codiel が無くても intent 文書を残して自前実行まで行えます。Metatron も他の2つが無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体で運用価値があります。<br>
 これらのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / metatronが管理するrules / intent 文書)とコンテキストで相互補完を行います。
+
+
+### jevriel
+
+TypeSafe AI の判断モデル Jev を Claude Code から使う MCP プラグインです。<br>
+判断系のツールで分類・順位付け・主張の確認・操作の安全性評価を行い、ブラウザ系・API 系のツールで動作確認を支援します。<br>
+利用には TypeSafe AI の API キーが必要です。料金や提供状況は公式情報を確認してください。
