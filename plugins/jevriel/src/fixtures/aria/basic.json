@@ -1,0 +1,96 @@
+[
+  {
+    "role": "link",
+    "name": "Link",
+    "url": "#target"
+  },
+  {
+    "role": "button",
+    "name": "Button"
+  },
+  {
+    "role": "textbox",
+    "name": "Text field"
+  },
+  {
+    "role": "searchbox",
+    "name": "Search field"
+  },
+  {
+    "role": "checkbox",
+    "name": "Checkbox"
+  },
+  {
+    "role": "radio",
+    "name": "Radio"
+  },
+  {
+    "role": "combobox",
+    "name": "Combobox",
+    "children": [
+      {
+        "role": "option",
+        "name": "Option",
+        "selected": true
+      }
+    ]
+  },
+  {
+    "role": "tablist",
+    "children": [
+      {
+        "role": "tab",
+        "name": "Tab",
+        "selected": true
+      }
+    ]
+  },
+  {
+    "role": "menu",
+    "children": [
+      {
+        "role": "menuitem",
+        "name": "Menu item"
+      }
+    ]
+  },
+  {
+    "role": "menu",
+    "children": [
+      {
+        "role": "menuitemcheckbox",
+        "name": "Menu checkbox"
+      }
+    ]
+  },
+  {
+    "role": "menu",
+    "children": [
+      {
+        "role": "menuitemradio",
+        "name": "Menu radio"
+      }
+    ]
+  },
+  {
+    "role": "switch",
+    "name": "Switch"
+  },
+  {
+    "role": "slider",
+    "name": "Slider"
+  },
+  {
+    "role": "spinbutton",
+    "name": "Spinbutton"
+  },
+  {
+    "role": "tree",
+    "children": [
+      {
+        "role": "treeitem",
+        "name": "Tree item"
+      }
+    ]
+  }
+]
