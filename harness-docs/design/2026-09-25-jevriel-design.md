@@ -1036,7 +1036,7 @@ state の中でページ本文(`page.snapshot`)と応答本文(`last.body` / `re
 2. 本文が残りに収まらなければ、先頭から収まる長さで切り、末尾に `\n...[truncated <N> bytes]` を付ける。JSON 値の本文は `JSON.stringify` した文字列として切り、切った後は文字列で渡す。
 3. 本文と同じ階層の state に `truncated: true` を添え(`page.truncated` / `response.truncated` / `last.truncated`)、出力の `truncated` も true にする。
 4. actionables は切り詰めない(§6-1 の 200 件上限で抑える)。本文を空にしても収まらないときは `budget_exceeded` を返す。
-5. ループ開始後(`browser_run_goal` の 2 回目以降の observe、`api_run_goal` の 2 回目以降の送信)に 4. の超過が起きたときは、§5-1 の境目に従い `isError` にせず、`status: "error"`、`error.kind: "budget_exceeded"` の `RunRecord` を返し、証跡を保存する。開始前(最初の observe / 最初の送信の前)の超過は `isError` の `budget_exceeded` である。
+5. ループ開始後(`browser_run_goal` の 2 回目以降の observe、`api_run_goal` の 2 回目以降の送信)に 4. の超過が起きたときは、§5-1 の境目に従い `isError` にせず、`status: "error"`、`reason: "budget_exceeded"`、`error.kind: "budget_exceeded"` の `RunRecord` を返し、証跡を保存する。`reason` を `"budget_exceeded"` にするのは、§5-1 の「error のときの `reason` は例外のクラス名」に対する唯一の例外である。開始前(最初の observe / 最初の送信の前)の超過は `isError` の `budget_exceeded` である。
 
 ---
 
