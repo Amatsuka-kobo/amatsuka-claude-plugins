@@ -32643,6 +32643,293 @@ function registerApiTools(server, deps) {
   );
 }
 
+// src/tools/browser.ts
+import { spawn as nodeSpawn } from "node:child_process";
+import { createRequire as createRequire2 } from "node:module";
+import { homedir } from "node:os";
+import { join as join3, sep } from "node:path";
+
+// src/browser/playwright.ts
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir as mkdir2, writeFile as writeFile2 } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { join as join2 } from "node:path";
+var PLAYWRIGHT_RANGE = "~1.63.0";
+function packageAt(root) {
+  try {
+    const requireFromRoot = createRequire(join2(root, "package.json"));
+    requireFromRoot.resolve("playwright");
+    const metadataPath = requireFromRoot.resolve("playwright/package.json");
+    const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+    if (typeof metadata.version !== "string") return void 0;
+    return {
+      version: metadata.version,
+      load: () => requireFromRoot("playwright")
+    };
+  } catch {
+    return void 0;
+  }
+}
+function isPinnedVersion(version2) {
+  return /^1\.63\.\d+$/.test(version2);
+}
+function defaultCacheDir(home) {
+  return join2(home, ".cache", "jevriel");
+}
+function messageOf(error51) {
+  return error51 instanceof Error ? error51.message : String(error51);
+}
+var activeSetup;
+function trimOutputTail(outputTail) {
+  let tail = Buffer.from(outputTail).subarray(-2048).toString("utf8");
+  while (Buffer.byteLength(tail) > 2048) tail = tail.slice(1);
+  return tail;
+}
+function setupError(error51, outputTail) {
+  const detail = messageOf(error51).split(/\r?\n/, 1)[0];
+  const output = outputTail ? `
+${trimOutputTail(outputTail)}` : "";
+  return new Error(`Browser setup failed: ${detail}${output}`);
+}
+async function runBrowserSetupOnce(deps) {
+  const notify = (step, phase) => {
+    try {
+      deps.onProgress?.(step, phase);
+    } catch {
+    }
+  };
+  const withProgress = async (step, run) => {
+    notify(step, "start");
+    try {
+      return await run();
+    } finally {
+      notify(step, "end");
+    }
+  };
+  const runInstall = async (step, cmd, args, timeoutMs) => {
+    const startedAt = Date.now();
+    let result;
+    try {
+      result = await deps.spawn(cmd, args, { cwd: deps.cacheDir, timeoutMs });
+    } catch (error51) {
+      throw setupError(error51);
+    }
+    const outputTail = trimOutputTail(result.outputTail);
+    if (result.code !== 0) {
+      throw setupError(
+        new Error(
+          result.code === null ? `${cmd} was terminated before it completed.` : `${cmd} exited with code ${result.code}.`
+        ),
+        outputTail
+      );
+    }
+    return {
+      step,
+      ran: true,
+      durationMs: Date.now() - startedAt,
+      ...outputTail ? { outputTail } : {}
+    };
+  };
+  const cacheVersion = () => packageAt(deps.cacheDir)?.version;
+  const steps = [];
+  await withProgress(1, async () => {
+    await mkdir2(deps.cacheDir, { recursive: true });
+    const packageJson = join2(deps.cacheDir, "package.json");
+    if (!existsSync(packageJson)) {
+      await writeFile2(packageJson, JSON.stringify({ private: true }));
+    }
+  });
+  let version2;
+  await withProgress(2, async () => {
+    version2 = cacheVersion();
+    if (!version2 || !isPinnedVersion(version2)) {
+      const command = deps.platform === "win32" ? "npm.cmd" : "npm";
+      steps.push(
+        await runInstall(
+          "npm_install",
+          command,
+          [
+            "install",
+            `playwright@${PLAYWRIGHT_RANGE}`,
+            "--no-audit",
+            "--no-fund"
+          ],
+          5 * 60 * 1e3
+        )
+      );
+      version2 = cacheVersion();
+    } else {
+      steps.push({ step: "npm_install", ran: false });
+    }
+    if (!version2 || !isPinnedVersion(version2)) {
+      throw setupError(
+        new Error(
+          "Playwright ~1.63.0 was not found in the cache after installation."
+        )
+      );
+    }
+  });
+  let playwright = null;
+  let executablePath = "";
+  await withProgress(3, async () => {
+    try {
+      playwright = deps.load(deps.cacheDir);
+      if (!playwright)
+        throw new Error("Playwright could not be loaded from the cache.");
+      executablePath = playwright.chromium.executablePath();
+    } catch (error51) {
+      throw setupError(error51);
+    }
+    if (!existsSync(executablePath)) {
+      const command = deps.platform === "win32" ? "npx.cmd" : "npx";
+      steps.push(
+        await runInstall(
+          "browser_install",
+          command,
+          ["playwright", "install", "chromium"],
+          10 * 60 * 1e3
+        )
+      );
+    } else {
+      steps.push({ step: "browser_install", ran: false });
+    }
+  });
+  await withProgress(4, async () => {
+    try {
+      const browser = await playwright?.chromium.launch();
+      if (!browser)
+        throw new Error("Playwright could not be loaded from the cache.");
+      await browser.close();
+    } catch (error51) {
+      const firstLine = messageOf(error51).split(/\r?\n/, 1)[0];
+      const hint = deps.platform === "linux" ? " On Linux, run `sudo npx playwright install-deps chromium` manually if system libraries are missing." : "";
+      throw setupError(
+        new Error(`Chromium launch failed: ${firstLine}.${hint}`)
+      );
+    }
+  });
+  return {
+    status: steps.some((step) => step.ran) ? "installed" : "already_installed",
+    playwrightVersion: version2,
+    source: "cache",
+    cacheDir: deps.cacheDir,
+    steps
+  };
+}
+function runBrowserSetup(deps) {
+  if (activeSetup) return activeSetup;
+  const current = runBrowserSetupOnce(deps).finally(() => {
+    if (activeSetup === current) activeSetup = void 0;
+  });
+  activeSetup = current;
+  return current;
+}
+
+// src/tools/browser.ts
+function createBrowserToolDeps(base) {
+  return {
+    ...base,
+    cacheDir: defaultCacheDir(homedir()),
+    spawn: createSpawn(process.platform),
+    platform: process.platform
+  };
+}
+function boundedOutputTail(output) {
+  let tail = output.toString("utf8");
+  while (Buffer.byteLength(tail) > 2048) tail = tail.slice(1);
+  return tail;
+}
+function createSpawn(platform) {
+  return (cmd, args, { cwd, timeoutMs }) => new Promise((resolve2, reject) => {
+    let output = Buffer.alloc(0);
+    let settled = false;
+    let timer;
+    const child = nodeSpawn(cmd, args, {
+      cwd,
+      shell: platform === "win32",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const append = (chunk) => {
+      const next = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      output = Buffer.concat([output, next]).subarray(-2048);
+    };
+    const finish = (error51, code = null) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (error51) reject(error51);
+      else resolve2({ code, outputTail: boundedOutputTail(output) });
+    };
+    child.stdout?.on("data", append);
+    child.stderr?.on("data", append);
+    child.once("error", (error51) => finish(error51));
+    child.once("close", (code) => finish(void 0, code));
+    timer = setTimeout(() => {
+      child.kill();
+      finish(new Error(`${cmd} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+}
+var browserSetupInput = {};
+async function handleBrowserSetup(extra, deps) {
+  const sendProgress = extra.sendProgress;
+  try {
+    const result = await runBrowserSetup({
+      cacheDir: deps.cacheDir,
+      spawn: deps.spawn,
+      platform: deps.platform,
+      load: (cacheDir) => {
+        try {
+          const requireFromCache = createRequire2(join3(cacheDir, "package.json"));
+          const modulesRoot = `${join3(cacheDir, "node_modules")}${sep}`;
+          for (const modulePath of Object.keys(requireFromCache.cache)) {
+            if (modulePath.startsWith(modulesRoot)) {
+              delete requireFromCache.cache[modulePath];
+            }
+          }
+          return requireFromCache(
+            "playwright"
+          );
+        } catch {
+          return null;
+        }
+      },
+      onProgress: sendProgress ? (step, phase) => {
+        const progress = phase === "start" ? step - 1 : step;
+        void sendProgress(progress, 4).catch(() => {
+        });
+      } : void 0
+    });
+    return toResponse(result);
+  } catch (error51) {
+    return errorResponse(
+      "setup_failed",
+      error51 instanceof Error ? error51.message : String(error51)
+    );
+  }
+}
+function registerBrowserTools(server, deps) {
+  server.registerTool(
+    "browser_setup",
+    {
+      description: "Install the pinned Playwright package and Chromium browser in the local cache.",
+      inputSchema: browserSetupInput
+    },
+    (_args, extra) => {
+      const progressToken = extra._meta?.progressToken;
+      return handleBrowserSetup(
+        progressToken === void 0 ? {} : {
+          sendProgress: (progress, total) => extra.sendNotification({
+            method: "notifications/progress",
+            params: { progressToken, progress, total }
+          })
+        },
+        deps
+      );
+    }
+  );
+}
+
 // src/tools/judging.ts
 var itemSchema = external_exports.union([
   external_exports.string().min(1),
@@ -33083,6 +33370,7 @@ async function main() {
   const deps = createToolDeps(process.env);
   registerJudgingTools(server, deps);
   registerApiTools(server, deps);
+  registerBrowserTools(server, createBrowserToolDeps(deps));
   await server.connect(new StdioServerTransport());
 }
 main().catch((err) => {
