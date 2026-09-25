@@ -795,7 +795,7 @@ observe → decide → 終了判定 → (値の選択) → act → wait → 事�
 1. **observe。** `page.ariaSnapshotJSON()` でノードの配列を取り、`browser/snapshot.ts` の `extractActionables(nodes)` で操作可能ノードを抽出する。
    - `ariaSnapshotJSON()` の戻り値はノードの配列である。各ノードは role / name / text / children / 状態フラグなどを持つ。`ref` / `cursor` は mode `"ai"` のときだけ付くが、本プラグインは使わない。
    - 対象ロール: `link` `button` `textbox` `searchbox` `checkbox` `radio` `combobox` `option` `tab` `menuitem` `menuitemcheckbox` `menuitemradio` `switch` `slider` `spinbutton` `treeitem`
-   - 名前の無いノード、`disabled` のノード、`ariaHidden` のノードは除く(`ariaHidden` は Playwright の `packages/injected/src/ariaSnapshot.ts` が立てるフラグの名前)。
+   - 名前の無いノード、`disabled` のノード、`ariaHidden` のノードは除く(`ariaHidden` は Playwright の `packages/injected/src/ariaSnapshot.ts` が立てるフラグの名前)。引数なしの `ariaSnapshotJSON()` は aria-hidden の要素を戻り値に含めず、`ariaHidden` は `mode: "ai"` のときだけ付く(実装時に 1.63.0 で確認)。`ariaHidden` の除外は防御として残す。
    - 文書順に並べ、`a1`、`a2` … を振る。上限は 200 件。超えた分は捨て、state に `actionablesOmitted: <件数>` を入れる。
    - 同じ role と name の組が複数あるときは、disabled を除いた中での文書順の出現番号 `nth`(0 始まり)を記録する。
    - 併せて `page.ariaSnapshot()` の YAML 文字列を取り、§8-4 で切り詰める。
@@ -846,7 +846,7 @@ observe → decide → 終了判定 → (値の選択) → act → wait → 事�
 
 | 条件 | 見る時点 | 次の処理 | 結果 |
 | --- | --- | --- | --- |
-| `reached` が satisfied、または `next` が `done` | 3. | 最終判定へ | 最終判定で決まる |
+| `reached` が satisfied、または `next` が `done` | 3. | 最終判定へ | 最終判定で決まる。pass なら `goal_reached`、fail なら `assertion_failed` |
 | `next` が `stuck` | 3. | 最終判定へ | stuck(`chose_stuck`) |
 | 同じ操作を 3 回連続で選んだ | 3. | 最終判定へ | stuck(`repeated_action`) |
 | 許可外ホストへのナビゲーションを止めた、または事後検査で許可外だった | 7. | 最終判定へ | stuck(`host_not_allowed`) |
@@ -888,7 +888,8 @@ questions = {
 
 ```ts
 interface GoalDriver {
-  observe(): Promise<{ url: string; title: string; status: number | null; snapshot: string; nodes: AriaNode[] }>
+  observe(): Promise<{ url: string; title: string; status: number | null; snapshot: string; nodes: AriaNode[]; notes?: string[] }>
+  // notes: 前回の observe 以降に dismiss したダイアログと close したポップアップ。ループは history の note に載せる(§9-2)
   act(action: PlannedAction): Promise<void>                       // 失敗時は throw
   selectOptions(target: Actionable): Promise<string[] | null>     // <select> なら option 名、違えば null
   blockedNavigation(): string | null                              // 事前に止めた、または事後検査で見つけた許可外の URL
@@ -1242,8 +1243,8 @@ conventions の Done の条件に加えて、次をすべて満たす。
 2. **見積り係数 2.5 と上限の 8 割。** Jev のトークナイザが公開されていないため仮の値である。実装後、`usage.input_tokens` との比を見て調整する。
 3. **閾値の既定値 0.8 / 0.2 と、`reached` に同じ閾値を使うこと。** 運用で見直す。
 4. **証跡から秘密だけを除く手段。** 証跡全体は `evidence: "none"` で止められるが、trace とスクリーンショットを残したまま fill の値だけを除く手段は無い。`inputs` の一部を秘密として指定する引数を設けるかは、利用後に判断する。
-5. **`playwright/package.json` の解決。** Playwright の `exports` が `./package.json` を公開しているかを実装時に確かめる。公開していなければ、`resolve("playwright")` の結果からパッケージのディレクトリを辿って版を読む。
-6. **`filechooser` を無視したときの挙動。** ヘッドレスでファイル選択が開いたまま操作が待たされないかを実装時に確かめる。
+5. **`playwright/package.json` の解決。** Playwright の `exports` が `./package.json` を公開しているかを実装時に確かめる。公開していなければ、`resolve("playwright")` の結果からパッケージのディレクトリを辿って版を読む。**解決済み(実装時)**: 1.63.0 で `resolve("playwright/package.json")` が成功したため、その経路で版を読む。
+6. **`filechooser` を無視したときの挙動。** ヘッドレスでファイル選択が開いたまま操作が待たされないかを実装時に確かめる。**解決済み(実装時)**: 1.63.0 でファイル選択を開くボタンを click した後、次の `ariaSnapshotJSON()` は 5ms で戻った。現行の設計のままとする。
 7. **パッケージ名。** 依頼では Done 条件の例に `pnpm --filter jevriel build` とあるが、ARCHITECTURE のコマンド定義は `pnpm --filter <plugin>-scripts build` であり、既存プラグインは `<plugin>-scripts` を名乗る。本書は ARCHITECTURE に合わせて `jevriel-scripts` とした。
 
 ---
