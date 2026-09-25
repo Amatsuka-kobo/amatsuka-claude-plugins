@@ -505,3 +505,30 @@ describe("handleApiRunGoal", () => {
     }
   })
 })
+
+describe("template path evidence", () => {
+  it("sends the actual path but keeps inputs out of result.json and log.json", async () => {
+    const http = vi.fn<typeof fetch>(async () => httpResponse("{}"))
+    const result = await handleApiRunGoal(
+      goalArgs({
+        inputs: { uid: "s3cret-value" },
+        requests: {
+          get: { method: "GET", path: "/users/{{inputs.uid}}", headers: {} }
+        }
+      }),
+      depsFor(http, goalJev(["get", "done"]))
+    )
+    const record = body<{
+      evidence: { dir: string }
+      steps: Array<{ url: string }>
+    }>(result)
+    expect(http.mock.calls[0][0]).toContain("s3cret-value")
+    expect(record.steps[0].url).toContain("[redacted]")
+    expect(
+      await readFile(join(record.evidence.dir, "result.json"), "utf8")
+    ).not.toContain("s3cret-value")
+    expect(
+      await readFile(join(record.evidence.dir, "log.json"), "utf8")
+    ).not.toContain("s3cret-value")
+  })
+})

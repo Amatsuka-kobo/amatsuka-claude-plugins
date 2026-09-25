@@ -7,6 +7,7 @@ import {
   sendRequest
 } from "../api/http.js"
 import { InitialBudgetExceeded, runApiGoal } from "../api/loop.js"
+import { templateSource } from "../api/template.js"
 import {
   captureFlags,
   createRunDir,
@@ -132,7 +133,8 @@ export async function handleApiRunGoal(
       {
         baseUrl: args.baseUrl,
         goal: args.goal,
-        requests: args.requests,
+        source: templateSource(args.requests),
+        dropSummary: false,
         assertions: args.assertions,
         inputs: args.inputs,
         maxSteps: args.maxSteps,
