@@ -2,7 +2,7 @@
 
 ## システム概要
 
-あまつか工房が開発する Claude Code プラグインを配布する pnpm workspace のモノレポである。利用者は Claude Code のユーザーであり、提供するマーケットプレイスを通じてプラグインを導入する。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして `scripts/` へ出力し git 管理下に置く。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、LLM を要する処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。開発環境の用意とローカルプロキシの起動はルートの `scripts/` が担い、コードベース探索は Serena MCP が `.serena/` の設定とメモリを通じて担う。
+あまつか工房が開発する Claude Code プラグインを配布する pnpm workspace のモノレポである。利用者は Claude Code のユーザーであり、提供するマーケットプレイスを通じてプラグインを導入する。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして `scripts/` へ出力し git 管理下に置く。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が必要になる処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。開発環境の用意とローカルプロキシの起動はルートの `scripts/` が担い、コードベース探索は Serena MCP が `.serena/` の設定とメモリを通じて担う。
 
 ## 技術スタック
 
@@ -64,6 +64,7 @@
 ├── .serena/                         Serena のプロジェクト設定とメモリを置く
 └── plugins/<plugin>/
     ├── .claude-plugin/plugin.json   プラグイン名とバージョンを宣言する
+    ├── .mcp.json                    MCP サーバーの起動方法を宣言する
     ├── build.ts                     esbuild のバンドル定義を置く
     ├── src/                         TypeScript ソースを置く
     │   └── __test__/                vitest のテストを置く
@@ -248,3 +249,33 @@ codiel は各フェーズの担当を同梱 Agent 15 体の名前で固定し、
 #### 影響範囲
 
 codiel は委譲先を名指しでも役割名でも指定せず、作業内容と委譲の種別だけを渡す。選択はセッションの運用方針に委ね、方針が無い環境ではビルトイン(`general-purpose` / `Explore`)へ縮退する。ツール制限による構造的ハーネスは部分的に成立しなくなり、依頼文の tools 限定条項とスキル本文の HARD-GATE が代わりを担う。
+
+---
+
+### ADR-005: Anthropic 以外の外部の有料 API を必須依存とするプラグインを認める
+
+- 状態: 採用
+- 決定日: 2026-09-26
+- 決定者: phyllis998
+
+#### 背景
+
+このプロジェクトのプラグインは、LLM を要する処理を Claude Code の機構か claude CLI のヘッドレス実行に限定し、Anthropic API に依存しない構成を採用し、API キーを使用する外部 API への依存を避けてきた。しかし新しく作成した Jevriel プラグインは TypeSafe AI による外部の有料 API に依存するため、この前提が一部崩れてしまう。
+
+#### 検討した選択肢
+
+1. Anthropic 以外の外部 API にも依存しない
+2. 外部 API を使うが、キーが無いときは `claude` CLI で代替する
+3. 外部 API を必須依存として認め、キーが無いときはエラーを返す(採用)
+
+#### 採用した結論
+
+このプロジェクトのプラグインは、Anthropic 以外の API キーを使用する外部 API を必須依存としてよい。キーは利用者が環境変数に設定し、キーが設定されていないときはその API を要する機能だけがエラーを返す構成を採用する。依存外部 API が使用できないときの代替経路は作らない。Jevriel はこの方針で `TYPESAFE_API_KEY` の設定を必須とし、キーが設定されていない場合は Jev を呼ぶツールが `not_configured` を返す。
+
+#### 理由
+
+このプロジェクトで禁止しているのは Anthropic API の使用であり、他の外部 API は対象外である。
+
+#### 影響範囲
+
+システム概要の「LLM を要する処理は...に閉じる」が Anthropic API が必須の処理を指すと明確にし、外部 API を必須とするプラグインを認める記述を加える。ディレクトリ構成図に `plugins/<plugin>/.mcp.json` を加える。
