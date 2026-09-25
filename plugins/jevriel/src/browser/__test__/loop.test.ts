@@ -236,7 +236,10 @@ describe("runBrowserGoal", () => {
         ...h.deps,
         driver: fakeDriver()
       })
-      expect(record.status).toBe(probability === 0.9 ? "pass" : "fail")
+      expect(record).toMatchObject({
+        status: probability === 0.9 ? "pass" : "fail",
+        reason: probability === 0.9 ? "goal_reached" : "assertion_failed"
+      })
     }
   })
   it("takes step screenshots only when enabled, and keeps the last ten history entries", async () => {

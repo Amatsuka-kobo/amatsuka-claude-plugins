@@ -301,11 +301,13 @@ async function runBrowserSetupOnce(deps: {
   })
 
   await withProgress(4, async () => {
+    let browser:
+      | Awaited<ReturnType<PlaywrightModule["chromium"]["launch"]>>
+      | undefined
     try {
-      const browser = await playwright?.chromium.launch()
+      browser = await playwright?.chromium.launch()
       if (!browser)
         throw new Error("Playwright could not be loaded from the cache.")
-      await browser.close()
     } catch (error) {
       const firstLine = messageOf(error).split(/\r?\n/, 1)[0]
       const hint =
@@ -315,6 +317,12 @@ async function runBrowserSetupOnce(deps: {
       throw setupError(
         new Error(`Chromium launch failed: ${firstLine}.${hint}`)
       )
+    } finally {
+      try {
+        await browser?.close()
+      } catch {
+        // A successful launch verifies setup even if cleanup fails.
+      }
     }
   })
 

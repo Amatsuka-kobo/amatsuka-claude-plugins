@@ -31,8 +31,8 @@ export function navigationDecision(
   allowed: readonly string[]
 ): "abort" | "continue" {
   try {
-    const frame = req.frame()
-    if (!req.isNavigationRequest() || frame !== mainFrame) return "continue"
+    if (!req.isNavigationRequest()) return "continue"
+    if (req.frame() !== mainFrame) return "continue"
     return isHostAllowed(new URL(req.url()).host, allowed)
       ? "continue"
       : "abort"

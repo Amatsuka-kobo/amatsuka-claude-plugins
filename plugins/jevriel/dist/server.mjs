@@ -32642,6 +32642,8 @@ async function runApiGoal(input, deps) {
     reached = null;
     assertions = [];
   }
+  if (status === "pass") reason = "goal_reached";
+  else if (status === "fail") reason = "assertion_failed";
   const finished = deps.now();
   return {
     tool: "api_run_goal",
@@ -33844,8 +33846,8 @@ import { join as join5, sep } from "node:path";
 import { join as join2 } from "node:path";
 function navigationDecision(req, mainFrame, allowed) {
   try {
-    const frame = req.frame();
-    if (!req.isNavigationRequest() || frame !== mainFrame) return "continue";
+    if (!req.isNavigationRequest()) return "continue";
+    if (req.frame() !== mainFrame) return "continue";
     return isHostAllowed(new URL(req.url()).host, allowed) ? "continue" : "abort";
   } catch {
     return "abort";
@@ -34370,6 +34372,8 @@ async function runBrowserGoal(input, deps) {
     }
   }
   if (initialBudget) throw initialBudget;
+  if (status === "pass") reason = "goal_reached";
+  else if (status === "fail") reason = "assertion_failed";
   const finished = deps.now();
   const record2 = {
     tool: "browser_run_goal",
@@ -34624,17 +34628,22 @@ async function runBrowserSetupOnce(deps) {
     }
   });
   await withProgress(4, async () => {
+    let browser;
     try {
-      const browser = await playwright?.chromium.launch();
+      browser = await playwright?.chromium.launch();
       if (!browser)
         throw new Error("Playwright could not be loaded from the cache.");
-      await browser.close();
     } catch (error51) {
       const firstLine = messageOf(error51).split(/\r?\n/, 1)[0];
       const hint = deps.platform === "linux" ? " On Linux, run `sudo npx playwright install-deps chromium` manually if system libraries are missing." : "";
       throw setupError(
         new Error(`Chromium launch failed: ${firstLine}.${hint}`)
       );
+    } finally {
+      try {
+        await browser?.close();
+      } catch {
+      }
     }
   });
   return {
