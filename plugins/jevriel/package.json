@@ -1,0 +1,17 @@
+{
+  "name": "jevriel-scripts",
+  "version": "0.1.0-dev",
+  "description": "jevriel — Jev を Claude Code から使う MCP サーバー",
+  "type": "module",
+  "private": true,
+  "main": "dist/server.mjs",
+  "author": "Phyllis",
+  "license": "UNLICENSED",
+  "scripts": { "build": "tsx build.ts" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@typesafe-ai/sdk": "0.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": { "playwright-core": "~1.63.0" }
+}

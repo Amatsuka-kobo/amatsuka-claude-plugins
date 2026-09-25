@@ -261,6 +261,22 @@ importers:
 
   plugins/guidepost: {}
 
+  plugins/jevriel:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      '@typesafe-ai/sdk':
+        specifier: 0.6.0
+        version: 0.6.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      playwright-core:
+        specifier: ~1.63.0
+        version: 1.63.0
+
   plugins/metatron: {}
 
   plugins/pitcrew: {}
@@ -643,6 +659,10 @@ packages:
 
   '@types/picomatch@4.0.3':
     resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
+
+  '@typesafe-ai/sdk@0.6.0':
+    resolution: {integrity: sha512-IddX+Q0XM+VagOUZFeP7wZjaO4SHMdvnh2zEBdrZZnXedWI3BNK1lKhMx3ayrkFWvVLbVcUHJy6AVZlY+e6Jaw==}
+    engines: {node: '>=20'}
 
   '@vitest/expect@4.1.10':
     resolution: {integrity: sha512-YsCn+qAk1GWjQOWFEsEcL2gNQ0zmVmQu3T03qP6UyjhtmdtwtbuI+DASn/7iQB3HGTXkdBwGddzxPlmiql5vlA==}
@@ -1071,6 +1091,11 @@ packages:
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
+
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   postcss@8.5.18:
     resolution: {integrity: sha512-xdB1oSLHbz1vRWgCDalrCqEFTWzFlhqFC5tIHLMOSUIjhm3XXQ1qrFy8S/ESr1JYRRXqM3c1QFiMZUJdUTqyMQ==}
@@ -1558,6 +1583,8 @@ snapshots:
 
   '@types/picomatch@4.0.3': {}
 
+  '@typesafe-ai/sdk@0.6.0': {}
+
   '@vitest/expect@4.1.10':
     dependencies:
       '@standard-schema/spec': 1.1.0
@@ -1963,6 +1990,8 @@ snapshots:
   picomatch@4.0.5: {}
 
   pkce-challenge@5.0.1: {}
+
+  playwright-core@1.63.0: {}
 
   postcss@8.5.18:
     dependencies:
