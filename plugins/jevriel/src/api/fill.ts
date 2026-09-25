@@ -2,8 +2,10 @@ import type { Questions, SystemOneResult } from "@typesafe-ai/sdk"
 import type { ApiStepValue } from "../evidence.js"
 import { bodyAllowance } from "../jev/budget.js"
 import type { JevRequest, QuestionSpec } from "../jev/client.js"
+import type { ApiRequest, ApiResponse } from "./http.js"
 import type { RecentResponse } from "./loop.js"
-import type { Operation, OperationParam } from "./openapi.js"
+import type { Operation, OperationParam, SecurityScheme } from "./openapi.js"
+import { resolvePlaceholders } from "./template.js"
 
 export const CANDIDATE_LIMIT = 255
 export const LEAF_MAX_DEPTH = 6
@@ -419,4 +421,247 @@ export function readPicks(
     })
   }
   return { picks, values }
+}
+
+function setHeader(
+  headers: Record<string, string>,
+  name: string,
+  value: string
+): void {
+  const previous = Object.keys(headers).find(
+    (key) => key.toLowerCase() === name.toLowerCase()
+  )
+  if (previous !== undefined) delete headers[previous]
+  headers[name] = value
+}
+
+export function serializeParam(
+  param: OperationParam,
+  value: unknown
+):
+  | { ok: true; pairs: Array<[string, string]> }
+  | { ok: true; text: string }
+  | { ok: false } {
+  if (!param.supported) return { ok: false }
+  if (param.content) {
+    const text = JSON.stringify(value)
+    if (text === undefined) return { ok: false }
+    return param.in === "query"
+      ? { ok: true, pairs: [[param.name, text]] }
+      : {
+          ok: true,
+          text: param.in === "path" ? encodeURIComponent(text) : text
+        }
+  }
+  const scalar = (v: unknown): v is string | number | boolean =>
+    typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+  if (Array.isArray(value) && !value.every(scalar)) return { ok: false }
+  if (param.in === "query" && param.style === "form") {
+    if (scalar(value)) return { ok: true, pairs: [[param.name, String(value)]] }
+    if (Array.isArray(value))
+      return {
+        ok: true,
+        pairs: param.explode
+          ? value.map((item) => [param.name, String(item)])
+          : [[param.name, value.join(",")]]
+      }
+    if (value && typeof value === "object" && param.explode) {
+      const entries = Object.entries(value)
+      return entries.every(([, item]) => scalar(item))
+        ? {
+            ok: true,
+            pairs: entries.map(([name, item]) => [name, String(item)])
+          }
+        : { ok: false }
+    }
+    return { ok: false }
+  }
+  if (
+    param.style !== "simple" ||
+    param.explode ||
+    (param.in !== "path" && param.in !== "header")
+  )
+    return { ok: false }
+  if (scalar(value))
+    return {
+      ok: true,
+      text:
+        param.in === "path" ? encodeURIComponent(String(value)) : String(value)
+    }
+  if (Array.isArray(value))
+    return {
+      ok: true,
+      text: value
+        .map((item) =>
+          param.in === "path" ? encodeURIComponent(String(item)) : String(item)
+        )
+        .join(",")
+    }
+  return { ok: false }
+}
+
+export function selectSecurity(
+  security: string[][] | null,
+  schemes: Record<string, SecurityScheme>,
+  inputs: Record<string, string>
+): string[] | null {
+  return (
+    security?.find((alternative) =>
+      alternative.every(
+        (name) =>
+          Object.hasOwn(inputs, name) &&
+          Object.hasOwn(schemes, name) &&
+          schemes[name].type !== "unsupported"
+      )
+    ) ?? null
+  )
+}
+
+export function applyAuth(
+  schemeNames: string[],
+  schemes: Record<string, SecurityScheme>,
+  inputs: Record<string, string>
+): { headers: Record<string, string>; query: Record<string, string> } {
+  const headers: Record<string, string> = {}
+  const query: Record<string, string> = {}
+  for (const name of schemeNames) {
+    const scheme = schemes[name]
+    if (
+      !scheme ||
+      scheme.type === "unsupported" ||
+      !Object.hasOwn(inputs, name)
+    )
+      continue
+    const value = inputs[name]
+    if (scheme.type === "http") {
+      setHeader(
+        headers,
+        "Authorization",
+        scheme.scheme === "bearer"
+          ? `Bearer ${value}`
+          : `Basic ${Buffer.from(value, "utf8").toString("base64")}`
+      )
+    } else if (scheme.in === "header") {
+      setHeader(headers, scheme.paramName, value)
+    } else {
+      query[scheme.paramName] = value
+    }
+  }
+  return { headers, query }
+}
+
+export function assembleRequest(args: {
+  op: Operation
+  baseUrl: string
+  targets: Target[]
+  picks: Map<string, Pick>
+  inputs: Record<string, string>
+  steps: Record<string, ApiResponse>
+  schemes: Record<string, SecurityScheme>
+  headers: Record<string, string>
+}):
+  | {
+      ok: true
+      request: ApiRequest
+      inputHeaderNames: Set<string>
+      inputPathSegments: number[]
+    }
+  | { ok: false; skip: string } {
+  const { op, baseUrl, targets, picks, inputs, steps, schemes } = args
+  let path = op.path
+  const url = new URL(baseUrl)
+  const baseSegments = url.pathname.replace(/\/+$/, "").split("/").length - 1
+  const inputPathSegments = new Set<number>()
+  const headers: Record<string, string> = {}
+  const inputHeaderNames = new Set<string>()
+  let body: string | undefined
+  const query = url.searchParams
+  for (const target of targets) {
+    const candidate = picks.get(target.key)?.candidate
+    if (!candidate || candidate.source === "omit") continue
+    const value =
+      candidate.source === "input"
+        ? inputs[candidate.ref ?? ""]
+        : candidate.value
+    if (target.in === "body") {
+      body = JSON.stringify(
+        candidate.source === "input" ? JSON.parse(value as string) : value
+      )
+      setHeader(headers, "content-type", "application/json")
+      continue
+    }
+    if (!target.param) continue
+    const serialized: ReturnType<typeof serializeParam> =
+      candidate.source === "input" &&
+      target.param.content &&
+      target.param.supported
+        ? target.in === "query"
+          ? { ok: true, pairs: [[target.name, value as string]] }
+          : {
+              ok: true,
+              text:
+                target.in === "path"
+                  ? encodeURIComponent(value as string)
+                  : (value as string)
+            }
+        : serializeParam(target.param, value)
+    if (!serialized.ok) continue
+    if ("pairs" in serialized) {
+      for (const [name, text] of serialized.pairs) query.append(name, text)
+    } else if (target.in === "path") {
+      if (candidate.source === "input")
+        op.path.split("/").forEach((part, index) => {
+          if (part.includes(`{${target.name}}`))
+            inputPathSegments.add(baseSegments + index)
+        })
+      path = path.replaceAll(`{${target.name}}`, serialized.text)
+    } else {
+      setHeader(headers, target.name, serialized.text)
+      if (candidate.source === "input")
+        inputHeaderNames.add(target.name.toLowerCase())
+    }
+  }
+  const unresolvedPath = /\{[^{}]+\}/.exec(path)?.[0]
+  if (unresolvedPath)
+    return { ok: false, skip: `unresolved: ${unresolvedPath}` }
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
+  const selected = selectSecurity(op.security, schemes, inputs)
+  const auth = applyAuth(selected ?? [], schemes, inputs)
+  for (const [name, value] of Object.entries(auth.query)) query.set(name, value)
+  for (const [name, value] of Object.entries(auth.headers)) {
+    setHeader(headers, name, value)
+    inputHeaderNames.add(name.toLowerCase())
+  }
+  for (const [name, value] of Object.entries(args.headers)) {
+    inputHeaderNames.add(name.toLowerCase())
+    const resolved = resolvePlaceholders(value, { inputs, steps })
+    if (!resolved.ok)
+      return { ok: false, skip: `unresolved: ${resolved.unresolved}` }
+    setHeader(headers, name, resolved.value)
+  }
+  const request: ApiRequest = {
+    method: op.method,
+    url: url.toString(),
+    headers
+  }
+  if (body !== undefined) request.body = body
+  return {
+    ok: true,
+    request,
+    inputHeaderNames,
+    inputPathSegments: [...inputPathSegments]
+  }
+}
+
+export function isDocumented(
+  responses: readonly string[],
+  status: number
+): boolean {
+  const statusText = String(status)
+  return responses.some(
+    (key) =>
+      key === "default" ||
+      key === statusText ||
+      key.toUpperCase() === `${statusText[0]}XX`
+  )
 }

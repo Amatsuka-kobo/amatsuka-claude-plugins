@@ -1,17 +1,23 @@
 import type { Questions, SystemOneResult } from "@typesafe-ai/sdk"
 import { describe, expect, it } from "vitest"
 import {
+  applyAuth,
+  assembleRequest,
   buildTargets,
   collectLeaves,
+  isDocumented,
   planFill,
   readPicks,
+  selectSecurity,
+  serializeParam,
   type Target
 } from "../fill.js"
 import type { RecentResponse } from "../loop.js"
 import {
   listOperations,
   type Operation,
-  type OperationParam
+  type OperationParam,
+  type SecurityScheme
 } from "../openapi.js"
 
 const param = (overrides: Partial<OperationParam> = {}): OperationParam => ({
@@ -623,5 +629,495 @@ describe("planFill and readPicks", () => {
     expect(result.targets[1]?.candidates).toHaveLength(
       items[1]?.candidates.length ?? 0
     )
+  })
+})
+
+const assemble = (
+  op: Operation,
+  candidates: Array<{
+    source: "input" | "spec" | "response" | "omit"
+    ref?: string | null
+    value?: unknown
+  }>,
+  options: Partial<
+    Omit<Parameters<typeof assembleRequest>[0], "op" | "targets" | "picks">
+  > = {}
+) => {
+  const items: Target[] = [
+    ...op.parameters.map(
+      (p, index): Target => ({
+        key: `p${index + 1}`,
+        name: p.name,
+        in: p.in,
+        required: p.required,
+        param: p,
+        candidates: []
+      })
+    ),
+    ...(op.body
+      ? [
+          {
+            key: "body",
+            name: "body",
+            in: "body" as const,
+            required: op.body.required,
+            param: null,
+            candidates: []
+          }
+        ]
+      : [])
+  ]
+  const picks = new Map(
+    items.map(
+      (target, index) =>
+        [
+          target.key,
+          {
+            target,
+            candidate: {
+              source: candidates[index]?.source ?? "omit",
+              ref: candidates[index]?.ref ?? null,
+              value: candidates[index]?.value,
+              description: ""
+            },
+            confidence: null
+          }
+        ] as const
+    )
+  )
+  return assembleRequest({
+    op,
+    baseUrl: "http://h/api/v1",
+    targets: items,
+    picks,
+    inputs: {},
+    steps: {},
+    schemes: {},
+    headers: {},
+    ...options
+  })
+}
+
+const schemes: Record<string, SecurityScheme> = {
+  bearer: { name: "bearer", type: "http", scheme: "bearer" },
+  basic: { name: "basic", type: "http", scheme: "basic" },
+  headerKey: {
+    name: "headerKey",
+    type: "apiKey",
+    in: "header",
+    paramName: "X-API-Key"
+  },
+  queryKey: {
+    name: "queryKey",
+    type: "apiKey",
+    in: "query",
+    paramName: "token"
+  },
+  oauth: { name: "oauth", type: "unsupported" }
+}
+
+describe("serializeParam", () => {
+  it("encodes a path scalar and encodes each path array element separately", () => {
+    expect(
+      serializeParam(
+        param({ in: "path", style: "simple", explode: false }),
+        "a/b c"
+      )
+    ).toEqual({ ok: true, text: "a%2Fb%20c" })
+    expect(
+      serializeParam(param({ in: "path", style: "simple", explode: false }), [
+        "a/b",
+        "c"
+      ])
+    ).toEqual({ ok: true, text: "a%2Fb,c" })
+  })
+
+  it("repeats exploded query arrays and joins non-exploded arrays", () => {
+    expect(serializeParam(param({ name: "tag" }), ["a", "b"])).toEqual({
+      ok: true,
+      pairs: [
+        ["tag", "a"],
+        ["tag", "b"]
+      ]
+    })
+    expect(
+      serializeParam(param({ name: "tag", explode: false }), ["a", "b"])
+    ).toEqual({ ok: true, pairs: [["tag", "a,b"]] })
+  })
+
+  it("expands form objects into separate query keys", () => {
+    expect(serializeParam(param(), { x: 1, y: "z" })).toEqual({
+      ok: true,
+      pairs: [
+        ["x", "1"],
+        ["y", "z"]
+      ]
+    })
+  })
+
+  it("joins header arrays and JSON-serializes content parameters", () => {
+    expect(
+      serializeParam(param({ in: "header", style: "simple", explode: false }), [
+        "a",
+        "b"
+      ])
+    ).toEqual({ ok: true, text: "a,b" })
+    expect(serializeParam(param({ content: true }), { a: 1 })).toEqual({
+      ok: true,
+      pairs: [["id", '{"a":1}']]
+    })
+  })
+
+  it("rejects unsupported styles and objects outside exploded form query", () => {
+    expect(
+      serializeParam(
+        param({ in: "query", style: "deepObject", supported: false }),
+        "x"
+      )
+    ).toEqual({ ok: false })
+    for (const p of [
+      param({ in: "query", explode: false }),
+      param({ in: "path", style: "simple", explode: false }),
+      param({ in: "header", style: "simple", explode: false })
+    ]) {
+      const result = serializeParam(p, { a: 1 })
+      expect(result).toEqual({ ok: false })
+      expect(JSON.stringify(result)).not.toContain('{\\"a\\":1}')
+    }
+  })
+})
+
+describe("assembleRequest", () => {
+  it.each([
+    "http://localhost:3000/api/v1",
+    "http://localhost:3000/api/v1/"
+  ])("preserves a base URL path with or without trailing slash: %s", (baseUrl) => {
+    const op = operation({
+      path: "/users/{id}",
+      parameters: [param({ in: "path", style: "simple", explode: false })]
+    })
+    const result = assemble(op, [{ source: "spec", value: "7" }], { baseUrl })
+    expect(result.ok && result.request.url).toBe(
+      "http://localhost:3000/api/v1/users/7"
+    )
+  })
+
+  it("encodes path values without splitting an encoded slash into new segments", () => {
+    const op = operation({
+      path: "/users/{id}",
+      parameters: [param({ in: "path", style: "simple", explode: false })]
+    })
+    const scalar = assemble(op, [{ source: "input", ref: "id" }], {
+      inputs: { id: "a/b c" }
+    })
+    expect(scalar.ok && scalar.request.url).toBe(
+      "http://h/api/v1/users/a%2Fb%20c"
+    )
+    expect(scalar.ok && scalar.inputPathSegments).toEqual([4])
+    const array = assemble(op, [{ source: "spec", value: ["a/b", "c"] }])
+    expect(array.ok && array.request.url).toBe("http://h/api/v1/users/a%2Fb,c")
+  })
+
+  it("places a path input at the final URL segment index but does not mask a spec value", () => {
+    const op = operation({
+      path: "/users/{id}/posts/{pid}",
+      parameters: [
+        param({ in: "path", style: "simple", explode: false }),
+        param({ name: "pid", in: "path", style: "simple", explode: false })
+      ]
+    })
+    const result = assemble(
+      op,
+      [
+        { source: "input", ref: "id" },
+        { source: "spec", value: "9" }
+      ],
+      {
+        inputs: { id: "7" }
+      }
+    )
+    expect(result.ok && result.request.url).toBe(
+      "http://h/api/v1/users/7/posts/9"
+    )
+    expect(result.ok && result.inputPathSegments).toEqual([4])
+    const withoutInput = assemble(op, [
+      { source: "spec", value: "7" },
+      { source: "spec", value: "9" }
+    ])
+    expect(withoutInput.ok && withoutInput.inputPathSegments).toEqual([])
+  })
+
+  it("assembles query repetitions, non-exploded arrays, form objects and header arrays", () => {
+    const op = operation({
+      path: "/items",
+      parameters: [
+        param({ name: "tag", required: false }),
+        param({ name: "joined", explode: false }),
+        param({ name: "fields" }),
+        param({ name: "X-List", in: "header", style: "simple", explode: false })
+      ]
+    })
+    const result = assemble(op, [
+      { source: "spec", value: ["a", "b"] },
+      { source: "spec", value: ["a", "b"] },
+      { source: "spec", value: { x: 1, y: "z" } },
+      { source: "spec", value: ["a", "b"] }
+    ])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const url = new URL(result.request.url)
+    expect(url.searchParams.getAll("tag")).toEqual(["a", "b"])
+    expect(url.searchParams.get("joined")).toBe("a,b")
+    expect(url.searchParams.get("x")).toBe("1")
+    expect(url.searchParams.get("y")).toBe("z")
+    expect(result.request.headers["X-List"]).toBe("a,b")
+  })
+
+  it("parses input JSON body and gives manually supplied content-type final precedence", () => {
+    const op = operation({
+      path: "/items",
+      method: "POST",
+      body: {
+        required: true,
+        json: true,
+        contentTypes: ["application/json"],
+        examples: [],
+        description: null
+      }
+    })
+    const result = assemble(op, [{ source: "input", ref: "body" }], {
+      inputs: { body: '{"a":1}' },
+      headers: { "Content-Type": "application/custom" }
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.request.body).toBe('{"a":1}')
+    expect(
+      Object.entries(result.request.headers).filter(
+        ([name]) => name.toLowerCase() === "content-type"
+      )
+    ).toEqual([["Content-Type", "application/custom"]])
+    expect(result.inputHeaderNames).toContain("content-type")
+    const normal = assemble(op, [{ source: "input", ref: "body" }], {
+      inputs: { body: "[1,2]" }
+    })
+    expect(normal.ok && normal.request.body).toBe("[1,2]")
+    expect(normal.ok && normal.request.headers["content-type"]).toBe(
+      "application/json"
+    )
+  })
+
+  it("keeps an input value literal for a content parameter", () => {
+    const op = operation({
+      path: "/items",
+      parameters: [param({ name: "payload", content: true })]
+    })
+    const result = assemble(op, [{ source: "input", ref: "payload" }], {
+      inputs: { payload: '{"a":1}' }
+    })
+    expect(
+      result.ok && new URL(result.request.url).searchParams.get("payload")
+    ).toBe('{"a":1}')
+  })
+
+  it("returns skip for an unresolved path variable", () => {
+    expect(assemble(operation(), [])).toEqual({
+      ok: false,
+      skip: "unresolved: {id}"
+    })
+  })
+
+  it("skips unresolved header placeholders and fills known response values", () => {
+    const op = operation({ path: "/items" })
+    const headers = { "X-Value": "{{steps.x.body.t}}" }
+    expect(assemble(op, [], { headers })).toEqual({
+      ok: false,
+      skip: "unresolved: {{steps.x.body.t}}"
+    })
+    const result = assemble(op, [], {
+      headers,
+      steps: { x: recent("x", { t: "good" }).response }
+    })
+    expect(result.ok && result.request.headers["X-Value"]).toBe("good")
+    expect(result.ok && [...result.inputHeaderNames]).toEqual(["x-value"])
+  })
+
+  it("omits optional parameters and optional body when selected", () => {
+    const op = operation({
+      path: "/items",
+      parameters: [param({ required: false })],
+      body: {
+        required: false,
+        json: true,
+        contentTypes: ["application/json"],
+        examples: [],
+        description: null
+      }
+    })
+    const result = assemble(op, [{ source: "omit" }, { source: "omit" }])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.request.url).toBe("http://h/api/v1/items")
+    expect(result.request.body).toBeUndefined()
+  })
+
+  it("overrides a same-named query parameter with an apiKey query and masks placed headers", () => {
+    const op = operation({
+      path: "/items",
+      parameters: [
+        param({ name: "token" }),
+        param({
+          name: "X-Input",
+          in: "header",
+          style: "simple",
+          explode: false
+        })
+      ],
+      security: [["queryKey", "headerKey"]]
+    })
+    const result = assemble(
+      op,
+      [
+        { source: "spec", value: "old" },
+        { source: "input", ref: "header" }
+      ],
+      {
+        schemes,
+        inputs: { queryKey: "new", headerKey: "secret", header: "from-input" },
+        headers: { "X-Fixed": "public" }
+      }
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(new URL(result.request.url).searchParams.getAll("token")).toEqual([
+      "new"
+    ])
+    expect(result.request.headers["X-API-Key"]).toBe("secret")
+    expect(result.request.headers["X-Input"]).toBe("from-input")
+    expect(result.inputHeaderNames).toEqual(
+      new Set(["x-input", "x-api-key", "x-fixed"])
+    )
+  })
+
+  it("replaces a header parameter with the matching authentication header", () => {
+    const op = operation({
+      path: "/items",
+      parameters: [
+        param({
+          name: "x-api-key",
+          in: "header",
+          style: "simple",
+          explode: false
+        })
+      ],
+      security: [["headerKey"]]
+    })
+    const result = assemble(op, [{ source: "spec", value: "old" }], {
+      schemes,
+      inputs: { headerKey: "new" }
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(Object.entries(result.request.headers)).toEqual([
+      ["X-API-Key", "new"]
+    ])
+  })
+
+  it("gives case-insensitive manual authorization precedence over bearer without duplicates", () => {
+    const op = operation({ path: "/items", security: [["bearer"]] })
+    const result = assemble(op, [], {
+      schemes,
+      inputs: { bearer: "secret" },
+      headers: { authorization: "Bearer manual" }
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(
+      Object.entries(result.request.headers).filter(
+        ([name]) => name.toLowerCase() === "authorization"
+      )
+    ).toEqual([["authorization", "Bearer manual"]])
+    expect(result.inputHeaderNames).toEqual(new Set(["authorization"]))
+  })
+})
+
+describe("security", () => {
+  it("applies bearer, UTF-8 basic and both kinds of apiKey", () => {
+    expect(applyAuth(["bearer"], schemes, { bearer: "abc" })).toEqual({
+      headers: { Authorization: "Bearer abc" },
+      query: {}
+    })
+    expect(applyAuth(["basic"], schemes, { basic: "user:pass" })).toEqual({
+      headers: { Authorization: "Basic dXNlcjpwYXNz" },
+      query: {}
+    })
+    expect(
+      applyAuth(["headerKey", "queryKey"], schemes, {
+        headerKey: "secret",
+        queryKey: "value"
+      })
+    ).toEqual({ headers: { "X-API-Key": "secret" }, query: { token: "value" } })
+  })
+
+  it("selects the first complete OR alternative, requiring all schemes within an AND", () => {
+    expect(
+      selectSecurity([["a"], ["bearer", "headerKey"]], schemes, {
+        bearer: "b",
+        headerKey: "h"
+      })
+    ).toEqual(["bearer", "headerKey"])
+    const op = operation({
+      path: "/items",
+      security: [["a"], ["bearer", "headerKey"]]
+    })
+    const result = assemble(op, [], {
+      schemes,
+      inputs: { bearer: "b", headerKey: "h" }
+    })
+    expect(result.ok && result.request.headers).toEqual({
+      Authorization: "Bearer b",
+      "X-API-Key": "h"
+    })
+  })
+
+  it("does not partially apply an AND requirement or unsupported oauth2", () => {
+    expect(
+      selectSecurity([["a"], ["bearer", "headerKey"]], schemes, { bearer: "b" })
+    ).toBeNull()
+    expect(selectSecurity([["oauth"]], schemes, { oauth: "token" })).toBeNull()
+    const result = assemble(
+      operation({ path: "/items", security: [["bearer", "headerKey"]] }),
+      [],
+      {
+        schemes,
+        inputs: { bearer: "b" }
+      }
+    )
+    expect(result.ok && result.request.headers).toEqual({})
+  })
+
+  it("prefers an empty alternative, while empty and absent security apply nothing", () => {
+    expect(selectSecurity([[], ["bearer"]], schemes, { bearer: "b" })).toEqual(
+      []
+    )
+    expect(selectSecurity([], schemes, { bearer: "b" })).toBeNull()
+    expect(selectSecurity(null, schemes, { bearer: "b" })).toBeNull()
+    for (const security of [[[], ["bearer"]], [], null]) {
+      const result = assemble(operation({ path: "/items", security }), [], {
+        schemes,
+        inputs: { bearer: "b" }
+      })
+      expect(result.ok && result.request.headers).toEqual({})
+    }
+  })
+})
+
+describe("isDocumented", () => {
+  it("matches literal status, case-insensitive status class, and default, not other statuses", () => {
+    expect(isDocumented(["200"], 200)).toBe(true)
+    expect(isDocumented(["2XX"], 201)).toBe(true)
+    expect(isDocumented(["2xx"], 204)).toBe(true)
+    expect(isDocumented(["default"], 500)).toBe(true)
+    expect(isDocumented(["404"], 500)).toBe(false)
   })
 })
