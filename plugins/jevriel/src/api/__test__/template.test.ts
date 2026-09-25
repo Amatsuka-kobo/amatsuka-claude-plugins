@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import type { ApiResponse } from "../http.js"
-import { type RequestTemplate, resolveTemplate } from "../template.js"
+import {
+  type RequestTemplate,
+  resolvePlaceholders,
+  resolveTemplate,
+  templateSource
+} from "../template.js"
 
 const response = (body: unknown): ApiResponse => ({
   status: 201,
@@ -90,5 +95,124 @@ describe("resolveTemplate", () => {
     })
     expect(result.ok && result.request.url).toBe("https://other.test/a")
     expect(result.ok && [...result.inputHeaderNames]).toEqual(["x-tenant"])
+  })
+})
+
+describe("templateSource", () => {
+  const ctx = {
+    goal: "read",
+    step: 1,
+    baseUrl: "http://h/api",
+    inputs: { uid: "s3cret" },
+    steps: {},
+    recent: [],
+    history: [],
+    dropSummary: false
+  }
+  const jev = async () => {
+    throw new Error("Jev must not be called")
+  }
+  it("lists metadata with summary, required parameters, and body mode", () => {
+    expect(
+      templateSource({
+        a: { method: "GET", path: "/a", headers: {}, description: "read a" },
+        b: { method: "POST", path: "/b", headers: {}, body: {} }
+      }).list
+    ).toEqual({
+      a: {
+        method: "GET",
+        path: "/a",
+        summary: "read a",
+        requiredParams: [],
+        body: "none"
+      },
+      b: { method: "POST", path: "/b", requiredParams: [], body: "json" }
+    })
+  })
+  it("skips unresolved templates", async () => {
+    expect(
+      await templateSource({
+        a: { method: "GET", path: "/{{steps.x.body.id}}", headers: {} }
+      }).build("a", ctx, jev)
+    ).toEqual({ ok: false, skip: "unresolved: {{steps.x.body.id}}" })
+  })
+  it("identifies the final URL's input path segment for relative and absolute paths", async () => {
+    for (const [path, index] of [
+      ["/users/{{inputs.uid}}/posts", 2],
+      ["http://h/api/users/{{inputs.uid}}/posts", 3]
+    ] as const) {
+      const result = await templateSource({
+        a: { method: "GET", path, headers: {} }
+      }).build("a", ctx, jev)
+      expect(result.ok && result.inputPathSegments).toEqual([index])
+    }
+    const result = await templateSource({
+      a: { method: "GET", path: "/users/1", headers: {} }
+    }).build("a", ctx, jev)
+    expect(result.ok && result.inputPathSegments).toEqual([])
+  })
+  it("distinguishes inputs, response-only placeholders, and missing values", () => {
+    expect(resolvePlaceholders("{{inputs.uid}}", ctx)).toEqual({
+      ok: true,
+      value: "s3cret",
+      usedInputs: true
+    })
+    expect(
+      resolvePlaceholders("{{steps.x.body.id}}", {
+        ...ctx,
+        steps: { x: response({ id: 42 }) }
+      })
+    ).toEqual({ ok: true, value: "42", usedInputs: false })
+    expect(resolvePlaceholders("{{inputs.missing}}", ctx)).toEqual({
+      ok: false,
+      unresolved: "{{inputs.missing}}"
+    })
+  })
+})
+
+describe("template path boundaries", () => {
+  it("redacts the first URL path segment when baseUrl contains a path", async () => {
+    const source = templateSource({
+      first: { method: "GET", path: "/{{inputs.uid}}/posts", headers: {} }
+    })
+    const result = await source.build(
+      "first",
+      {
+        goal: "read",
+        step: 1,
+        baseUrl: "http://h/api",
+        inputs: { uid: "secret" },
+        steps: {},
+        recent: [],
+        history: [],
+        dropSummary: false
+      },
+      async () => {
+        throw new Error("unexpected Jev call")
+      }
+    )
+    expect(result.ok && result.inputPathSegments).toEqual([1])
+  })
+  it("covers every segment produced by an input containing a slash", async () => {
+    const source = templateSource({
+      first: { method: "GET", path: "/users/{{inputs.uid}}/posts", headers: {} }
+    })
+    const result = await source.build(
+      "first",
+      {
+        goal: "read",
+        step: 1,
+        baseUrl: "http://h/api",
+        inputs: { uid: "s3/cret" },
+        steps: {},
+        recent: [],
+        history: [],
+        dropSummary: false
+      },
+      async () => {
+        throw new Error("unexpected Jev call")
+      }
+    )
+    expect(result.ok && result.inputPathSegments).toEqual([2, 3])
   })
 })

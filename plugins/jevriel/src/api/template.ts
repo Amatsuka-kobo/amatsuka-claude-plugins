@@ -1,4 +1,5 @@
 import type { ApiRequest, ApiResponse } from "./http.js"
+import type { RequestSource } from "./loop.js"
 
 export type RequestTemplate = {
   method: string
@@ -9,6 +10,122 @@ export type RequestTemplate = {
 }
 
 const PLACEHOLDER = /{{([^{}]+)}}/g
+
+type PlaceholderContext = {
+  inputs: Record<string, string>
+  steps: Record<string, ApiResponse>
+}
+
+function lookup(token: string, ctx: PlaceholderContext): unknown {
+  const parts = token.split(".")
+  if (parts[0] === "inputs" && parts.length === 2)
+    return Object.hasOwn(ctx.inputs, parts[1])
+      ? ctx.inputs[parts[1]]
+      : undefined
+  if (
+    parts[0] !== "steps" ||
+    parts.length < 3 ||
+    !Object.hasOwn(ctx.steps, parts[1])
+  )
+    return undefined
+  const response = ctx.steps[parts[1]]
+  if (parts[2] === "status" && parts.length === 3) return response.status
+  if (parts[2] === "headers" && parts.length === 4)
+    return Object.entries(response.headers).find(
+      ([name]) => name.toLowerCase() === parts[3].toLowerCase()
+    )?.[1]
+  if (parts[2] !== "body" || parts.length < 4) return undefined
+  let value: unknown = response.body
+  for (const key of parts.slice(3)) {
+    if (
+      value === null ||
+      typeof value !== "object" ||
+      !Object.hasOwn(value, key)
+    )
+      return undefined
+    value = (value as Record<string, unknown>)[key]
+  }
+  return value
+}
+
+export function resolvePlaceholders(
+  text: string,
+  ctx: PlaceholderContext
+):
+  | { ok: true; value: string; usedInputs: boolean }
+  | { ok: false; unresolved: string } {
+  let unresolved: string | undefined
+  let usedInputs = false
+  const value = text.replace(PLACEHOLDER, (full, token: string) => {
+    const found = lookup(token, ctx)
+    if (found === undefined) {
+      unresolved ??= full
+      return full
+    }
+    if (token.startsWith("inputs.")) usedInputs = true
+    return typeof found === "string" ? found : JSON.stringify(found)
+  })
+  return unresolved === undefined
+    ? { ok: true, value, usedInputs }
+    : { ok: false, unresolved }
+}
+
+export function templateSource(
+  requests: Record<string, RequestTemplate>
+): RequestSource {
+  return {
+    stateKey: "requests",
+    list: Object.fromEntries(
+      Object.entries(requests).map(([name, tpl]) => [
+        name,
+        {
+          method: tpl.method,
+          path: tpl.path,
+          ...(tpl.description === undefined
+            ? {}
+            : { summary: tpl.description }),
+          requiredParams: [],
+          body: tpl.body === undefined ? "none" : "json"
+        }
+      ])
+    ),
+    async build(name, ctx) {
+      const tpl = requests[name]
+      const resolved = resolveTemplate(tpl, ctx)
+      if (!resolved.ok)
+        return { ok: false, skip: `unresolved: ${resolved.unresolved}` }
+      const inputPathSegments: number[] = []
+      const segments = tpl.path
+        .split(/[?#]/, 1)[0]
+        .split("/")
+        .map((part) => resolvePlaceholders(part, ctx))
+      const filled = segments.map((segment) =>
+        segment.ok ? segment.value : ""
+      )
+      const finalParts = new URL(resolved.request.url).pathname.split("/")
+      let marker = "__jevriel_input_segment__"
+      while (resolved.request.url.includes(marker)) marker += "_"
+      for (let index = 0; index < segments.length; index += 1) {
+        const segment = segments[index]
+        if (!segment.ok || !segment.usedInputs) continue
+        const marked = [...filled]
+        marked[index] = marker
+        const start = new URL(marked.join("/"), ctx.baseUrl).pathname
+          .split("/")
+          .indexOf(marker)
+        if (start < 0) continue
+        for (
+          let offset = 0;
+          offset < segment.value.split("/").length &&
+          start + offset < finalParts.length;
+          offset += 1
+        )
+          inputPathSegments.push(start + offset)
+      }
+      return { ...resolved, inputPathSegments }
+    }
+  }
+}
 
 export function resolveTemplate(
   tpl: RequestTemplate,
@@ -21,52 +138,19 @@ export function resolveTemplate(
   | { ok: true; request: ApiRequest; inputHeaderNames: Set<string> }
   | { ok: false; unresolved: string } {
   let unresolved: string | undefined
-  const lookup = (token: string): unknown => {
-    const parts = token.split(".")
-    if (parts[0] === "inputs" && parts.length === 2)
-      return Object.hasOwn(ctx.inputs, parts[1])
-        ? ctx.inputs[parts[1]]
-        : undefined
-    if (
-      parts[0] !== "steps" ||
-      parts.length < 3 ||
-      !Object.hasOwn(ctx.steps, parts[1])
-    )
-      return undefined
-    const response = ctx.steps[parts[1]]
-    if (parts[2] === "status" && parts.length === 3) return response.status
-    if (parts[2] === "headers" && parts.length === 4)
-      return Object.entries(response.headers).find(
-        ([name]) => name.toLowerCase() === parts[3].toLowerCase()
-      )?.[1]
-    if (parts[2] !== "body" || parts.length < 4) return undefined
-    let value: unknown = response.body
-    for (const key of parts.slice(3)) {
-      if (
-        value === null ||
-        typeof value !== "object" ||
-        !Object.hasOwn(value, key)
-      )
-        return undefined
-      value = (value as Record<string, unknown>)[key]
-    }
-    return value
-  }
   const fill = (text: string, preserveType = false): unknown => {
     const exact = /^{{([^{}]+)}}$/.exec(text)
     if (preserveType && exact) {
-      const value = lookup(exact[1])
+      const value = lookup(exact[1], ctx)
       if (value === undefined) unresolved ??= text
       return value
     }
-    return text.replace(PLACEHOLDER, (full, token: string) => {
-      const value = lookup(token)
-      if (value === undefined) {
-        unresolved ??= full
-        return full
-      }
-      return typeof value === "string" ? value : JSON.stringify(value)
-    })
+    const resolved = resolvePlaceholders(text, ctx)
+    if (!resolved.ok) {
+      unresolved ??= resolved.unresolved
+      return text
+    }
+    return resolved.value
   }
   const fillBody = (value: unknown): unknown => {
     if (typeof value === "string") return fill(value, true)

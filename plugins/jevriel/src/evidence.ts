@@ -24,6 +24,7 @@ export type RunRecord = {
   usage: { requests: number; inputTokens: number }
   evidence: { dir: string; files: string[] } | null
   error?: { errorClass: string; message: string; kind?: "budget_exceeded" }
+  spec?: { source: string; openapi: string; operations: number }
 }
 
 export type BrowserStep = {
@@ -39,6 +40,14 @@ export type BrowserStep = {
   note?: string
 }
 
+export type ApiStepValue = {
+  target: string
+  in: "path" | "query" | "header" | "body"
+  source: "input" | "spec" | "response" | "omit"
+  ref: string | null
+  confidence: number | null
+}
+
 export type ApiStep = {
   step: number
   request: string
@@ -49,6 +58,8 @@ export type ApiStep = {
   reached: number
   durationMs: number
   note?: string
+  values?: ApiStepValue[]
+  undocumented?: true
 }
 
 export type LogEntry =
