@@ -9,7 +9,7 @@ its full text at the start of each session in this repository; the root `CLAUDE.
 only the repository overview and that pointer.
 
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
-  listed here (name/source/description). 13 entries, matching the root `README.md` table 1:1
+  listed here (name/source/description). 14 entries since jevriel was added 2026-09-25 (13 before), matching the root `README.md` table 1:1
   (verified 2026-08-17; metatron + sandalphon added 2026-08-16).
 - `plugins/<name>/` — one dir per plugin. All 13 are pnpm workspace packages. Layout + bundle
   conventions: `mem:conventions`. Toolchain: `mem:tech_stack`.
@@ -60,7 +60,7 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 - `TERMS.md` — Japanese ToS; notably forbids using this service to generate illustration/Live2D/
   3D-model assets.
 
-## Distributed plugins (13, see `.claude-plugin/marketplace.json`)
+## Distributed plugins (14 incl. jevriel since 2026-09-25, see `.claude-plugin/marketplace.json`)
 
 Only **pitcrew (0.10.2)** and **chat-history (0.7.0)** are released; every other plugin is `-dev`.
 Manifest and sibling `package.json` versions were all in sync as of 2026-08-24.
@@ -114,6 +114,11 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 - **prompt-smith** (0.3.2-dev) — standards for AI-facing instruction docs (`prompt-smith`), agent
   definitions (`agent-creator`) and skill authoring + description eval loop (`skill-creator`, a
   TypeScript port of Anthropic's official skill-creator). Details: `mem:agent_policy/core`.
+- **jevriel** (0.1.0-dev, added 2026-09-25) — MCP server (`.mcp.json` → `dist/server.mjs`) that
+  calls TypeSafe AI's judgement model Jev via `@typesafe-ai/sdk` 0.6.0: 5 judging tools, 3 browser
+  tools (Playwright resolved at runtime, never bundled), 2 API tools, plus skill `judging`.
+  Requires `TYPESAFE_API_KEY` (a paid external API — see the invariant section). Details:
+  `mem:jevriel/core`.
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
   `UserPromptSubmit` hook (`check-prefetch-manifest.mjs`) nagging only when `.prefetch/` holds
   uncollected results.
@@ -143,6 +148,8 @@ CLI/script by hand — the user-facing surface is Claude Code skills/commands on
 「最重要」 in `plugins/codiel/docs/DESIGN.md` §0 and `harness-docs/ARCHITECTURE.md`; it binds every
 plugin here.
 (raguel-mcp's panel and prompt-smith's eval loop both shell out to `claude -p` for this reason.)
+The one exception is **jevriel**, which calls a non-Anthropic paid judgement API (Jev) and requires
+`TYPESAFE_API_KEY`; no other plugin may depend on it (ADR in `harness-docs/ARCHITECTURE.md`).
 
 ## Per-user files and gitignore (not misconfiguration)
 
