@@ -1,6 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { redact, sanitizeUrl, sendRequest } from "../api/http.js"
+import {
+  defaultAllowedHosts,
+  redact,
+  sanitizeUrl,
+  sendRequest
+} from "../api/http.js"
+import { InitialBudgetExceeded, runApiGoal } from "../api/loop.js"
 import {
   captureFlags,
   createRunDir,
@@ -65,6 +71,100 @@ function hasContentType(headers: Record<string, string>): boolean {
   return Object.keys(headers).some(
     (name) => name.toLowerCase() === "content-type"
   )
+}
+
+export const apiRunGoalInput = {
+  baseUrl: z.string().url(),
+  goal: z.string().min(1),
+  requests: z
+    .record(
+      z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+      z.object({
+        method: z.enum(apiMethods).default("GET"),
+        path: z.string().min(1),
+        headers: z.record(z.string(), z.string()).default({}),
+        body: z.json().optional(),
+        description: z.string().optional()
+      })
+    )
+    .refine(
+      (requests) =>
+        Object.keys(requests).length >= 1 &&
+        Object.keys(requests).length <= 200,
+      "Provide between 1 and 200 requests."
+    ),
+  assertions: z.array(z.string().min(1)).max(50).default([]),
+  inputs: z.record(z.string().min(1).max(64), z.string()).default({}),
+  maxSteps: z.number().int().min(1).max(50).default(15),
+  allowedHosts: z.array(z.string().min(1)).optional(),
+  timeoutMs: z.number().int().min(1000).max(120000).default(30000),
+  name: nameSchema,
+  evidence: evidenceSchema,
+  thresholds: thresholdsSchema
+}
+
+export type ApiRunGoalArgs = z.infer<z.ZodObject<typeof apiRunGoalInput>>
+
+export async function handleApiRunGoal(
+  args: ApiRunGoalArgs,
+  deps: ToolDeps
+): Promise<ToolResponse> {
+  if (!hasApiKey(deps.env)) return notConfiguredResponse()
+  const thresholdError = validateThresholds(args.thresholds)
+  if (thresholdError)
+    return errorResponse("invalid_input", `${thresholdError}.`)
+  if (
+    Object.keys(args.requests).some(
+      (name) => name === "done" || name === "stuck"
+    )
+  )
+    return errorResponse(
+      "invalid_input",
+      "Request names done and stuck are reserved. Rename the requests and try again."
+    )
+
+  const name = normalizeName(args.name, args.baseUrl, "api")
+  const log: LogEntry[] = []
+  const jev = recordingJev(deps.jev, log, deps.now)
+  let record: Awaited<ReturnType<typeof runApiGoal>>
+  try {
+    record = await runApiGoal(
+      {
+        baseUrl: args.baseUrl,
+        goal: args.goal,
+        requests: args.requests,
+        assertions: args.assertions,
+        inputs: args.inputs,
+        maxSteps: args.maxSteps,
+        allowedHosts: args.allowedHosts ?? defaultAllowedHosts(args.baseUrl),
+        timeoutMs: args.timeoutMs,
+        thresholds: args.thresholds,
+        name
+      },
+      {
+        jev,
+        send: (request) => sendRequest(request, args.timeoutMs, deps.httpFetch),
+        now: deps.now,
+        log
+      }
+    )
+  } catch (error) {
+    if (error instanceof InitialBudgetExceeded)
+      return errorResponse("budget_exceeded", error.message)
+    throw error
+  }
+  const flags = captureFlags(args.evidence)
+  const dir = flags.dir
+    ? await createRunDir(deps.projectDir, "api", name, deps.now())
+    : null
+  const finalized = await finalizeEvidence({
+    dir,
+    mode: args.evidence,
+    record: { ...record, evidence: null },
+    log,
+    files: []
+  })
+  return toResponse(finalized)
 }
 
 export async function handleApiCheck(
@@ -257,5 +357,14 @@ export function registerApiTools(server: McpServer, deps: ToolDeps): void {
       inputSchema: apiCheckInput
     },
     (args) => handleApiCheck(args, deps)
+  )
+  server.registerTool(
+    "api_run_goal",
+    {
+      description:
+        "Choose HTTP requests to achieve a goal, then judge the responses. Supply a base URL, request templates, a goal, and optional assertions.",
+      inputSchema: apiRunGoalInput
+    },
+    (args) => handleApiRunGoal(args, deps)
   )
 }
