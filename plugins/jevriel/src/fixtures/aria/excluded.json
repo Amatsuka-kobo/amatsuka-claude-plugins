@@ -1,0 +1,14 @@
+[
+  {
+    "role": "button"
+  },
+  {
+    "role": "button",
+    "name": "Disabled button",
+    "disabled": true
+  },
+  {
+    "role": "button",
+    "name": "Visible button"
+  }
+]
