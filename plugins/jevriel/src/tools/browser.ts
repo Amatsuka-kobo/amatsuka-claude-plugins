@@ -1,11 +1,14 @@
 import { spawn as nodeSpawn } from "node:child_process"
-import { writeFile } from "node:fs/promises"
+import { rm, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { homedir } from "node:os"
 import { join, sep } from "node:path"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { sanitizeUrl } from "../api/http.js"
+import { defaultAllowedHosts, sanitizeUrl } from "../api/http.js"
+import { InitialBudgetExceeded } from "../api/loop.js"
+import { createPlaywrightDriver } from "../browser/driver.js"
+import { runBrowserGoal } from "../browser/loop.js"
 import {
   BrowserLaunchError,
   defaultCacheDir,
@@ -154,6 +157,119 @@ type BrowserCheckResult = RunRecord & {
     title: string
     status: number | null
     truncated: boolean
+  }
+}
+
+export const browserRunGoalInput = {
+  url: z.string().url(),
+  goal: z.string().min(1),
+  assertions: z.array(z.string().min(1)).max(50).default([]),
+  inputs: z.record(z.string().min(1).max(64), z.string()).default({}),
+  maxSteps: z.number().int().min(1).max(50).default(15),
+  allowedHosts: z.array(z.string().min(1)).optional(),
+  stepTimeoutMs: z.number().int().min(1000).max(60000).default(10000),
+  name: nameSchema,
+  evidence: evidenceSchema,
+  thresholds: thresholdsSchema
+}
+
+type BrowserRunGoalArgs = z.infer<z.ZodObject<typeof browserRunGoalInput>>
+
+export async function handleBrowserRunGoal(
+  args: BrowserRunGoalArgs,
+  deps: BrowserToolDeps
+): Promise<ToolResponse> {
+  if (!hasApiKey(deps.env)) return notConfiguredResponse()
+  const thresholdError = validateThresholds(args.thresholds)
+  if (thresholdError)
+    return errorResponse("invalid_input", `${thresholdError}.`)
+  let url: URL
+  try {
+    url = new URL(args.url)
+  } catch {
+    return errorResponse("invalid_input", "Provide a valid HTTP or HTTPS URL.")
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:")
+    return errorResponse(
+      "invalid_input",
+      "Only HTTP and HTTPS URLs are supported."
+    )
+
+  const name = normalizeName(args.name, args.url, "browser")
+  let browser:
+    | Awaited<ReturnType<BrowserToolDeps["launch"]>>["browser"]
+    | null = null
+  let dir: string | null = null
+  try {
+    const launched = await deps.launch({
+      projectDir: deps.projectDir,
+      cacheDir: deps.cacheDir
+    })
+    browser = launched.browser
+    const flags = captureFlags(args.evidence)
+    if (flags.dir)
+      dir = await createRunDir(deps.projectDir, "browser", name, deps.now())
+    const { driver } = await createPlaywrightDriver({
+      browser,
+      url: args.url,
+      allowedHosts: args.allowedHosts ?? defaultAllowedHosts(args.url),
+      stepTimeoutMs: args.stepTimeoutMs,
+      captureTrace: flags.trace
+    })
+    const log: LogEntry[] = []
+    const jev = recordingJev(deps.jev, log, deps.now)
+    let result: Awaited<ReturnType<typeof runBrowserGoal>>
+    try {
+      result = await runBrowserGoal(
+        {
+          url: args.url,
+          goal: args.goal,
+          assertions: args.assertions,
+          inputs: args.inputs,
+          maxSteps: args.maxSteps,
+          thresholds: args.thresholds,
+          name,
+          screenshots: flags.screenshots,
+          evidenceDir: dir
+        },
+        { driver, jev, now: deps.now, log }
+      )
+    } catch (error) {
+      if (error instanceof InitialBudgetExceeded) {
+        if (dir) await rm(dir, { recursive: true, force: true })
+        return errorResponse("budget_exceeded", error.message)
+      }
+      throw error
+    }
+    if (
+      dir &&
+      (!result.files.includes("final.png") ||
+        !result.files.includes("trace.zip"))
+    ) {
+      console.error(
+        "Failed to save browser evidence: final screenshot or trace is missing."
+      )
+      await rm(dir, { recursive: true, force: true }).catch(() => {})
+      dir = null
+    }
+    const finalized = await finalizeEvidence({
+      dir,
+      mode: args.evidence,
+      record: { ...result.record, evidence: null },
+      log,
+      files: result.files
+    })
+    return toResponse(finalized)
+  } catch (error) {
+    if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {})
+    const cause = error instanceof Error ? error : new Error(String(error))
+    if (cause instanceof PlaywrightMissingError)
+      return errorResponse("playwright_missing", cause.message)
+    if (cause instanceof BrowserLaunchError)
+      return errorResponse("browser_failed", cause.message)
+    return errorResponse("browser_failed", cause.message)
+  } finally {
+    if (browser) await browser.close().catch(() => {})
   }
 }
 
@@ -393,5 +509,14 @@ export function registerBrowserTools(
       inputSchema: browserCheckInput
     },
     (args) => handleBrowserCheck(args, deps)
+  )
+  server.registerTool(
+    "browser_run_goal",
+    {
+      description:
+        "Navigate a page toward a goal and judge the final state. Provide an HTTP(S) URL, a goal, and optional assertions and input labels.",
+      inputSchema: browserRunGoalInput
+    },
+    (args) => handleBrowserRunGoal(args, deps)
   )
 }

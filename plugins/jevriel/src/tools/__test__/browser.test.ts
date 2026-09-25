@@ -1,5 +1,12 @@
 import { existsSync } from "node:fs"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile
+} from "node:fs/promises"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -19,7 +26,9 @@ import {
 import {
   type BrowserToolDeps,
   browserCheckInput,
+  browserRunGoalInput,
   handleBrowserCheck,
+  handleBrowserRunGoal,
   registerBrowserTools
 } from "../browser.js"
 import type { ToolResponse } from "../shared.js"
@@ -127,6 +136,105 @@ function jevFor(
       )
     }
   })
+}
+
+function goalHarness(
+  projectDir: string,
+  options: {
+    nodes?: unknown[]
+    nextNodes?: unknown[]
+    jevChoice?: string
+    reached?: number
+    evidence?: string
+  } = {}
+) {
+  const page = {
+    goto: vi.fn(async () => ({ status: () => 200 })),
+    title: vi.fn(async () => "Example"),
+    url: vi.fn(() => "http://localhost:3000/start?token=secret-query"),
+    ariaSnapshot: vi.fn(async () => "- button Submit"),
+    ariaSnapshotJSON: vi
+      .fn()
+      .mockImplementationOnce(
+        async () => options.nodes ?? [{ role: "button", name: "Submit" }]
+      )
+      .mockImplementation(
+        async () =>
+          options.nextNodes ??
+          options.nodes ?? [{ role: "button", name: "Submit" }]
+      ),
+    screenshot: vi.fn(async ({ path }: { path: string }) => {
+      await writeFile(path, "image")
+    }),
+    setDefaultTimeout: vi.fn(),
+    setDefaultNavigationTimeout: vi.fn(),
+    route: vi.fn(),
+    on: vi.fn(),
+    mainFrame: vi.fn(() => "main"),
+    waitForLoadState: vi.fn(async () => {}),
+    getByRole: vi.fn(() => ({
+      nth: () => ({
+        click: vi.fn(async () => {}),
+        evaluate: vi.fn(async () => "BUTTON")
+      })
+    }))
+  }
+  const context = {
+    newPage: vi.fn(async () => page),
+    on: vi.fn(),
+    close: vi.fn(async () => {}),
+    tracing: {
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async ({ path }: { path: string }) => {
+        await writeFile(path, "trace")
+      })
+    }
+  }
+  const browser = {
+    newContext: vi.fn(async () => context),
+    close: vi.fn(async () => {})
+  }
+  const launch = vi.fn(async () => ({
+    browser: browser as unknown as Browser,
+    source: "cache" as const
+  })) as unknown as BrowserToolDeps["launch"]
+  const deps = depsFor(projectDir, vi.fn(), launch)
+  deps.env = { TYPESAFE_API_KEY: "test" }
+  const requests: JevRequest[] = []
+  deps.jev = createJevCall({
+    apiKey: "test",
+    fetch: async (_url, init) => {
+      const req = JSON.parse(String(init?.body)) as JevRequest
+      requests.push(req)
+      const answers = Object.fromEntries(
+        Object.keys(req.questions).map((key) => [
+          key,
+          key === "next"
+            ? {
+                type: "choice",
+                choice: options.jevChoice ?? "done",
+                confidence: 0.9
+              }
+            : { type: "noul", noul: options.reached ?? 0.9 }
+        ])
+      )
+      return new Response(
+        JSON.stringify({
+          model: "jev-test",
+          answers,
+          usage: { input_tokens: 7, output_tokens: 0 }
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    }
+  })
+  const args = (extra: Record<string, unknown> = {}) =>
+    z.object(browserRunGoalInput).parse({
+      url: "http://localhost:3000/start?token=secret-query",
+      goal: "Submit",
+      ...extra
+    })
+  return { page, context, browser, launch, deps, requests, args }
 }
 
 function browserCheckHarness(
@@ -530,7 +638,11 @@ describe("browser_check", () => {
     const launch = vi.fn<BrowserToolDeps["launch"]>()
     registerBrowserTools(server, depsFor("/unused", vi.fn(), launch))
 
-    expect(names).toEqual(["browser_setup", "browser_check"])
+    expect(names).toEqual([
+      "browser_setup",
+      "browser_check",
+      "browser_run_goal"
+    ])
   })
 
   it("maps a browser launch error to browser_failed without creating evidence", async () => {
@@ -547,5 +659,184 @@ describe("browser_check", () => {
       "browser_failed"
     )
     expect(existsSync(join(cacheDir, ".jevriel"))).toBe(false)
+  })
+})
+
+describe("browser_run_goal", () => {
+  it("rejects missing key and non-http URLs before launch", async () => {
+    const h = goalHarness(await tempDir())
+    h.deps.env = {}
+    expect(
+      body<{ error: { kind: string } }>(
+        await handleBrowserRunGoal(h.args(), h.deps)
+      ).error.kind
+    ).toBe("not_configured")
+    h.deps.env = { TYPESAFE_API_KEY: "test" }
+    for (const url of ["file:///etc/passwd", "ftp://example.test/"]) {
+      expect(
+        body<{ error: { kind: string } }>(
+          await handleBrowserRunGoal(h.args({ url }), h.deps)
+        ).error.kind
+      ).toBe("invalid_input")
+    }
+    expect(h.launch).not.toHaveBeenCalled()
+  })
+  it("defaults to the origin host including port", async () => {
+    const h = goalHarness(await tempDir(), { jevChoice: "a1", reached: 0.1 })
+    const output = body<{ status: string }>(
+      await handleBrowserRunGoal(
+        h.args({ evidence: "none", maxSteps: 1 }),
+        h.deps
+      )
+    )
+    expect(output.status).toBe("stuck")
+    const route = h.page.route.mock.calls[0][1] as (
+      route: unknown
+    ) => Promise<void>
+    const allowed = vi.fn(async () => {}),
+      rejected = vi.fn(async () => {})
+    const request = (url: string) => ({
+      request: () => ({
+        isNavigationRequest: () => true,
+        frame: () => "main",
+        url: () => url
+      }),
+      abort: rejected,
+      continue: allowed
+    })
+    await route(request("http://localhost:3000/"))
+    await route(request("http://localhost:4000/"))
+    expect(allowed).toHaveBeenCalledOnce()
+    expect(rejected).toHaveBeenCalledOnce()
+    expect(h.browser.close).toHaveBeenCalledOnce()
+  })
+  it("does not create evidence or trace after a loop error with evidence none", async () => {
+    const dir = await tempDir(),
+      h = goalHarness(dir)
+    h.deps.jev = vi.fn(async () => {
+      throw new Error("Jev failed")
+    })
+    const result = body<{ status: string; evidence: unknown }>(
+      await handleBrowserRunGoal(h.args({ evidence: "none" }), h.deps)
+    )
+    expect(result).toMatchObject({ status: "error", evidence: null })
+    expect(h.context.tracing.start).not.toHaveBeenCalled()
+    expect(h.page.screenshot).not.toHaveBeenCalled()
+    expect(existsSync(join(dir, ".jevriel"))).toBe(false)
+    expect(h.browser.close).toHaveBeenCalledOnce()
+  })
+  it("removes successful on_failure evidence", async () => {
+    const dir = await tempDir(),
+      h = goalHarness(dir)
+    const result = body<{ status: string; evidence: unknown }>(
+      await handleBrowserRunGoal(h.args({ evidence: "on_failure" }), h.deps)
+    )
+    expect(result).toMatchObject({ status: "pass", evidence: null })
+    expect(
+      await readdir(
+        join(dir, ".jevriel", "runs", "browser", "localhost-3000-start")
+      )
+    ).toEqual([])
+    expect(h.context.tracing.start).toHaveBeenCalledOnce()
+  })
+  it("writes the output into result.json, with final URL and ordered evidence files", async () => {
+    const h = goalHarness(await tempDir())
+    const result = body<{
+      tool: string
+      kind: string
+      finalUrl: string
+      evidence: { dir: string; files: string[] }
+    }>(await handleBrowserRunGoal(h.args({ evidence: "always" }), h.deps))
+    expect(result).toMatchObject({
+      tool: "browser_run_goal",
+      kind: "browser",
+      finalUrl: "http://localhost:3000/start?token="
+    })
+    expect(result.evidence.files).toEqual([
+      "step-1.png",
+      "final.png",
+      "trace.zip",
+      "log.json",
+      "result.json"
+    ])
+    expect(
+      JSON.parse(
+        await readFile(join(result.evidence.dir, "result.json"), "utf8")
+      )
+    ).toEqual(result)
+    expect(h.browser.close).toHaveBeenCalledOnce()
+  })
+  it("reports the first over-budget observe as an isError without evidence", async () => {
+    const dir = await tempDir(),
+      h = goalHarness(dir)
+    const jev = vi.fn<BrowserToolDeps["jev"]>()
+    h.deps.jev = jev
+    const response = await handleBrowserRunGoal(
+      h.args({ goal: "x".repeat(100_000), evidence: "always" }),
+      h.deps
+    )
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "budget_exceeded"
+    )
+    expect(jev).not.toHaveBeenCalled()
+    expect(
+      await readdir(
+        join(dir, ".jevriel", "runs", "browser", "localhost-3000-start")
+      )
+    ).toEqual([])
+    expect(h.browser.close).toHaveBeenCalledOnce()
+  })
+  it("records a subsequent over-budget observe as a status error with evidence", async () => {
+    const hugeNodes = Array.from({ length: 200 }, (_, n) => ({
+      role: "button",
+      name: `${n}-${"x".repeat(200)}`
+    }))
+    const h = goalHarness(await tempDir(), {
+      jevChoice: "a1",
+      reached: 0.1,
+      nextNodes: hugeNodes
+    })
+    const response = await handleBrowserRunGoal(
+      h.args({ evidence: "always", maxSteps: 3 }),
+      h.deps
+    )
+    const result = body<{
+      status: string
+      reason: string
+      error: { kind: string }
+      evidence: { files: string[] }
+    }>(response)
+    expect(response.isError).toBeUndefined()
+    expect(result).toMatchObject({
+      status: "error",
+      reason: "budget_exceeded",
+      error: { kind: "budget_exceeded" }
+    })
+    expect(result.evidence.files).toContain("trace.zip")
+    expect(h.requests).toHaveLength(1)
+  })
+})
+
+describe("browser_run_goal initial navigation", () => {
+  it("returns browser_failed without evidence and always closes the browser", async () => {
+    const dir = await tempDir(),
+      h = goalHarness(dir)
+    h.page.goto.mockRejectedValueOnce(new Error("Navigation failed"))
+    const response = await handleBrowserRunGoal(
+      h.args({ evidence: "always" }),
+      h.deps
+    )
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "browser_failed"
+    )
+    expect(h.browser.close).toHaveBeenCalledOnce()
+    expect(h.context.close).toHaveBeenCalledOnce()
+    expect(
+      await readdir(
+        join(dir, ".jevriel", "runs", "browser", "localhost-3000-start")
+      )
+    ).toEqual([])
   })
 })
