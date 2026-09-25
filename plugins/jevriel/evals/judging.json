@@ -1,0 +1,82 @@
+[
+  {
+    "query": "`support/tickets.csv` の未処理 80 件を、請求・ログイン・配送・その他に振り分けて、担当チームに渡す一覧を作りたい。",
+    "should_trigger": true
+  },
+  {
+    "query": "Northwind社の `vendor_review.md` にある提案を、移行しやすさと運用負荷で採点して、優先順位を出してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "バックログの項目をユーザー影響と実装リスクで評価して、次スプリントに入れる順番を決めたいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "この `policy.json` と照らして、添付した各説明文の主張が本当に裏付けられているか確かめてください。根拠が弱いものは保留にしたいです。",
+    "should_trigger": true
+  },
+  {
+    "query": "本番の `rm -rf /var/app/cache/*` を実行する前に、消える範囲と取り消せるかを評価してください。コマンドは実行しないで。",
+    "should_trigger": true
+  },
+  {
+    "query": "2つの移行案で、停止時間とロールバック可能性のどちらを優先すべきか、設計メモを根拠に1つ判断してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`http://localhost:4173/login` を開いて、ログインフォームが表示されることと、画面にエラー文がないことを確かめて。",
+    "should_trigger": true
+  },
+  {
+    "query": "staging の `/checkout` を実際に操作してテスト注文まで進め、注文確認画面と注文番号の表示を検証してください。証跡名は `checkout-smoke` にしてください。",
+    "should_trigger": true
+  },
+  {
+    "query": "`https://api.example.test/v1/health` を GET して、HTTP 200 と `status: healthy` を確認する API テストを追加してください。",
+    "should_trigger": true
+  },
+  {
+    "query": "テスト環境の API でカート作成から注文確認まで複数のエンドポイントを使って確かめたいです。成功条件は注文状態が `confirmed` であること。",
+    "should_trigger": true
+  },
+  {
+    "query": "`git log` と課題一覧から今週のリリースノートをまとめ、利用者向けの日本語ドラフトを書いてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "添付した定例会議の文字起こしを要約し、決定事項と担当者ごとのアクションを読みやすく整理してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`locales/en.json` の UI メッセージを日本語へ翻訳し、プレースホルダーと改行を保った更新案を作ってください。",
+    "should_trigger": false
+  },
+  {
+    "query": "商品写真 300 枚を見て、各画像を家具・衣類・食品・その他に分類して一覧にしてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`screenshots/` の新旧画面を見比べて、色や配置がデザイン画像と一致しているか判定してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "サポートチケット `INC-4821` のやりとりを読み、謝罪と返金案内を含む丁寧な返信文を作成してください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`sla.csv` の期限と現在時刻から残り時間を正確に計算して、数値の小さい順に並べてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "スキャンした `receipts/` の金額・日付・店舗名を OCR で読み取り、列に分けた CSV にしてください。画像の内容判定は不要です。",
+    "should_trigger": false
+  },
+  {
+    "query": "この API レスポンス 200 件を要約し、役員向けに主要な傾向と注意点を説明するレポートを書いてください。",
+    "should_trigger": false
+  },
+  {
+    "query": "`uploads/` の写真を1枚ずつ見て、内容が社内の安全ガイドラインに適合するか判定し、違反理由を記録してください。",
+    "should_trigger": false
+  }
+]
