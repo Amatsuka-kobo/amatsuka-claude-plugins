@@ -327,6 +327,8 @@ export async function runApiGoal(
     reached = null
     assertions = []
   }
+  if (status === "pass") reason = "goal_reached"
+  else if (status === "fail") reason = "assertion_failed"
   const finished = deps.now()
   return {
     tool: "api_run_goal",

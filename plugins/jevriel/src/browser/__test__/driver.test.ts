@@ -80,9 +80,13 @@ describe("browser driver", () => {
       navigationDecision(req("https://elsewhere.test/"), main, ["example.test"])
     ).toBe("abort")
     expect(
-      navigationDecision(req("https://elsewhere.test/", false), main, [
-        "example.test"
-      ])
+      navigationDecision(
+        req("https://elsewhere.test/", false, () => {
+          throw new Error("detached")
+        }),
+        main,
+        ["example.test"]
+      )
     ).toBe("continue")
     expect(
       navigationDecision(

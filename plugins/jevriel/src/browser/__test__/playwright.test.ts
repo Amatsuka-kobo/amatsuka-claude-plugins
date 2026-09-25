@@ -191,6 +191,25 @@ describe("Playwright resolution", () => {
 })
 
 describe("runBrowserSetup", () => {
+  it("ignores a browser close failure after launch succeeds", async () => {
+    const cacheDir = await tempDir()
+    const executablePath = join(cacheDir, "chromium")
+    await writePlaywright(
+      cacheDir,
+      "1.63.2",
+      executablePath,
+      'return { close: async () => { throw new Error("close failed") } }'
+    )
+    await writeFile(executablePath, "")
+
+    await expect(
+      runBrowserSetup({
+        ...setupDeps(cacheDir),
+        onProgress: vi.fn()
+      })
+    ).resolves.toMatchObject({ status: "already_installed" })
+  })
+
   it("skips install when 1.63 Playwright and its browser executable exist", async () => {
     const cacheDir = await tempDir()
     const executablePath = join(cacheDir, "chromium")

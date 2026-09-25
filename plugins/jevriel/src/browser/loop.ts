@@ -373,6 +373,8 @@ export async function runBrowserGoal(
     }
   }
   if (initialBudget) throw initialBudget
+  if (status === "pass") reason = "goal_reached"
+  else if (status === "fail") reason = "assertion_failed"
   const finished = deps.now()
   const record: Omit<RunRecord, "evidence"> & { finalUrl: string } = {
     tool: "browser_run_goal",

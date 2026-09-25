@@ -63,6 +63,7 @@ allowed-tools:
 - 実行入力の値は Jev に直接送られないが、ブラウザに入力した値は trace やスクリーンショットに残ることがある。秘密を扱うときは `evidence` に `on_failure` または `none` を指定する。
 - `browser_check`、`browser_run_goal`、`api_check`、`api_run_goal` には、テスト対象の機能名や画面名を `name` として渡す。
 - 同じ URL の別テストには、それぞれの対象が分かる `name` を付け、証跡が混ざらないようにする。
+- `name` を省略すると URL 由来の名前が使われるため、同じ URL で行う別テストの証跡は同じディレクトリに保存される。
 
 ## 未セットアップのとき
 

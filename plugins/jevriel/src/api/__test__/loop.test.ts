@@ -93,6 +93,7 @@ describe("runApiGoal", () => {
     expect(h.send.mock.calls[1][0].url).toBe("https://api.test/items/abc")
     expect(record).toMatchObject({
       status: "pass",
+      reason: "goal_reached",
       steps: [{ request: "login" }, { request: "list" }]
     })
     expect(h.timeouts.every((timeout) => timeout === 30_000)).toBe(true)
@@ -200,7 +201,10 @@ describe("runApiGoal", () => {
   })
   it("requires both reached and all assertions for pass", async () => {
     const h = harness(["done"], 0.1, 0.1)
-    expect((await runApiGoal(input(), h.deps)).status).toBe("fail")
+    expect(await runApiGoal(input(), h.deps)).toMatchObject({
+      status: "fail",
+      reason: "assertion_failed"
+    })
   })
   it("sanitizes secrets and records masked HTTP metadata with truncated body", async () => {
     const h = harness(["login", "done"])

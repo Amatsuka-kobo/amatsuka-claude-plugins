@@ -55,7 +55,7 @@ sudo npx playwright install-deps chromium
 | `api_check` | HTTP リクエストを 1 回送り、応答を確認する | `request` (`method`, `url`, `headers`, `body`), `assertions`, `timeoutMs`, `name`, `evidence`, `thresholds` |
 | `api_run_goal` | リクエストのテンプレートから目的に沿う呼び出しを選び、結果を評価する | `baseUrl`, `goal`, `requests` (`method`, `path`, `headers`, `body`, `description`), `assertions`, `inputs`, `maxSteps`, `allowedHosts`, `timeoutMs`, `name`, `evidence`, `thresholds` |
 
-`browser_check` の `waitFor` は `load` または `domcontentloaded` を指定します。`browser_run_goal` と `api_run_goal` の `inputs` は名前と値の組で、Jev には名前だけが送られます。`name` は任意で、省略すると URL をもとに実行名が付けられます。
+`browser_check` の `waitFor` は `load` または `domcontentloaded` を指定します。主な既定値は `browser_check` の `waitFor: "load"` と `timeoutMs: 30000`、`browser_run_goal` の `maxSteps: 15` と `stepTimeoutMs: 10000` です。`browser_run_goal` と `api_run_goal` の `inputs` は名前と値の組で、Jev には名前だけが送られます。`name` は任意で、省略すると URL をもとに実行名が付けられます。
 
 `thresholds` を受け取るツールでは `satisfied` と `unsatisfied` を指定でき、既定値はそれぞれ `0.8` と `0.2` です。`evidence` を受け取るツールの値は `always` (既定)、`on_failure`、`none` です。
 
@@ -86,7 +86,7 @@ sudo npx playwright install-deps chromium
 
 実行内容に応じて `result.json`、`log.json`、`step-<n>.png`、`final.png`、`trace.zip` が保存されます。証跡は既定では成功時も保存されます。`evidence` を `on_failure` にすると失敗時だけ、`none` にすると保存されません。`none` のときはブラウザの trace とスクリーンショットも作成されません。
 
-`.jevriel/` を `.gitignore` に追加し、不要になった証跡は削除してください。共有する前にも中身を確認してください。ページや応答など `state` に入れた情報は TypeSafe AI へ送信されます。`inputs` の実際の値は Jev へ送信されませんが、ブラウザに入力した値は trace やスクリーンショットに残ることがあります。
+`.jevriel/` を `.gitignore` に追加し、不要になった証跡は削除してください。共有する前にも中身を確認してください。ページや応答など `state` に入れた情報は TypeSafe AI へ送信されます。`inputs` の実際の値は Jev へ送信されませんが、ブラウザに入力した値は trace やスクリーンショットに残ることがあります。`api_run_goal` の `requests` の `path` に `{{inputs.*}}` を埋めると、解決後の URL が `result.json` の steps と `log.json` に記録されます。クエリ値と `{{inputs.*}}` を埋めたヘッダーは伏字になりますが、パスは伏字にならないため、秘密をパスに含める場合は `evidence: "on_failure"` または `"none"` を指定してください。
 
 ## 9. Codiel との併用
 
