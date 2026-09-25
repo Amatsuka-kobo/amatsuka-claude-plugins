@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { log } from "./log.js"
 import { registerApiTools } from "./tools/api.js"
+import { createBrowserToolDeps, registerBrowserTools } from "./tools/browser.js"
 import { registerJudgingTools } from "./tools/judging.js"
 import { createToolDeps } from "./tools/shared.js"
 
@@ -11,6 +12,7 @@ export async function main(): Promise<void> {
   const deps = createToolDeps(process.env)
   registerJudgingTools(server, deps)
   registerApiTools(server, deps)
+  registerBrowserTools(server, createBrowserToolDeps(deps))
 
   await server.connect(new StdioServerTransport())
 }
