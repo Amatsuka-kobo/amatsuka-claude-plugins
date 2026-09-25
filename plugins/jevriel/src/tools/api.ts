@@ -1,12 +1,19 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
+import { INPUT_KEYS_LIMIT, specSource } from "../api/fill.js"
 import {
   defaultAllowedHosts,
   redact,
   sanitizeUrl,
   sendRequest
 } from "../api/http.js"
-import { InitialBudgetExceeded, runApiGoal } from "../api/loop.js"
+import {
+  chooseDropSummary,
+  InitialBudgetExceeded,
+  type RequestSource,
+  runApiGoal
+} from "../api/loop.js"
+import { listOperations, loadSpec, RUN_LIMIT } from "../api/openapi.js"
 import { templateSource } from "../api/template.js"
 import {
   captureFlags,
@@ -74,6 +81,14 @@ function hasContentType(headers: Record<string, string>): boolean {
   )
 }
 
+export const includeSchema = z
+  .object({
+    tags: z.array(z.string().min(1)).min(1).optional(),
+    pathPrefix: z.string().startsWith("/").optional(),
+    methods: z.array(z.enum(apiMethods)).min(1).optional()
+  })
+  .optional()
+
 export const apiRunGoalInput = {
   baseUrl: z.string().url(),
   goal: z.string().min(1),
@@ -93,7 +108,11 @@ export const apiRunGoalInput = {
         Object.keys(requests).length >= 1 &&
         Object.keys(requests).length <= 200,
       "Provide between 1 and 200 requests."
-    ),
+    )
+    .optional(),
+  spec: z.string().min(1).optional(),
+  include: includeSchema,
+  headers: z.record(z.string(), z.string()).optional(),
   assertions: z.array(z.string().min(1)).max(50).default([]),
   inputs: z.record(z.string().min(1).max(64), z.string()).default({}),
   maxSteps: z.number().int().min(1).max(50).default(15),
@@ -111,10 +130,34 @@ export async function handleApiRunGoal(
   deps: ToolDeps
 ): Promise<ToolResponse> {
   if (!hasApiKey(deps.env)) return notConfiguredResponse()
+  if ((args.spec === undefined) === (args.requests === undefined))
+    return errorResponse(
+      "invalid_input",
+      "Provide either spec or requests, but not both."
+    )
+  if (
+    args.requests !== undefined &&
+    (args.include !== undefined || args.headers !== undefined)
+  )
+    return errorResponse(
+      "invalid_input",
+      "include and headers are only available with spec."
+    )
   const thresholdError = validateThresholds(args.thresholds)
   if (thresholdError)
     return errorResponse("invalid_input", `${thresholdError}.`)
+  if (!apiRunGoalInput.baseUrl.safeParse(args.baseUrl).success)
+    return errorResponse("invalid_input", "Provide a valid baseUrl.")
   if (
+    args.spec !== undefined &&
+    Object.keys(args.inputs).length > INPUT_KEYS_LIMIT
+  )
+    return errorResponse(
+      "invalid_input",
+      `inputs exceed the ${INPUT_KEYS_LIMIT} candidate limit.`
+    )
+  if (
+    args.requests &&
     Object.keys(args.requests).some(
       (name) => name === "done" || name === "stuck"
     )
@@ -124,25 +167,57 @@ export async function handleApiRunGoal(
       "Request names done and stuck are reserved. Rename the requests and try again."
     )
 
+  let source: RequestSource
+  let spec: Awaited<ReturnType<typeof loadSpec>> | undefined
+  let operationsCount = 0
+  if (args.spec !== undefined) {
+    spec = await loadSpec(args.spec, {
+      projectDir: deps.projectDir,
+      fetch: deps.httpFetch,
+      timeoutMs: args.timeoutMs
+    })
+    if (!spec.ok) return errorResponse(spec.kind, spec.message)
+    const listed = listOperations(spec.spec, args.include, RUN_LIMIT)
+    if (!listed.ok) return errorResponse("invalid_input", listed.message)
+    operationsCount = listed.operations.length
+    if (operationsCount === 0)
+      return errorResponse(
+        "invalid_input",
+        "0 operations selected. Narrow or change include and try again."
+      )
+    source = specSource({
+      spec: spec.spec,
+      operations: listed.operations,
+      headers: args.headers ?? {}
+    })
+  } else {
+    source = templateSource(args.requests ?? {})
+  }
+
+  const input = {
+    baseUrl: args.baseUrl,
+    goal: args.goal,
+    source,
+    assertions: args.assertions,
+    inputs: args.inputs,
+    maxSteps: args.maxSteps,
+    allowedHosts: args.allowedHosts ?? defaultAllowedHosts(args.baseUrl),
+    timeoutMs: args.timeoutMs,
+    thresholds: args.thresholds,
+    name: ""
+  }
+  const choice = spec?.ok
+    ? chooseDropSummary(input)
+    : { ok: true as const, dropSummary: false }
+  if (!choice.ok) return errorResponse("budget_exceeded", choice.message)
+
   const name = normalizeName(args.name, args.baseUrl, "api")
   const log: LogEntry[] = []
   const jev = recordingJev(deps.jev, log, deps.now)
   let record: Awaited<ReturnType<typeof runApiGoal>>
   try {
     record = await runApiGoal(
-      {
-        baseUrl: args.baseUrl,
-        goal: args.goal,
-        source: templateSource(args.requests),
-        dropSummary: false,
-        assertions: args.assertions,
-        inputs: args.inputs,
-        maxSteps: args.maxSteps,
-        allowedHosts: args.allowedHosts ?? defaultAllowedHosts(args.baseUrl),
-        timeoutMs: args.timeoutMs,
-        thresholds: args.thresholds,
-        name
-      },
+      { ...input, name, dropSummary: choice.dropSummary },
       {
         jev,
         send: (request) => sendRequest(request, args.timeoutMs, deps.httpFetch),
@@ -162,7 +237,22 @@ export async function handleApiRunGoal(
   const finalized = await finalizeEvidence({
     dir,
     mode: args.evidence,
-    record: { ...record, evidence: null },
+    record: {
+      ...record,
+      evidence: null,
+      ...(spec?.ok
+        ? {
+            spec: {
+              source:
+                spec.spec.source.kind === "url"
+                  ? sanitizeUrl(spec.spec.source.location)
+                  : spec.spec.source.location,
+              openapi: spec.spec.openapi,
+              operations: operationsCount
+            }
+          }
+        : {})
+    },
     log,
     files: []
   })
@@ -364,7 +454,7 @@ export function registerApiTools(server: McpServer, deps: ToolDeps): void {
     "api_run_goal",
     {
       description:
-        "Choose HTTP requests to achieve a goal, then judge the responses. Supply a base URL, request templates, a goal, and optional assertions.",
+        "Choose HTTP requests to achieve a goal, then judge the responses. Supply a base URL, goal, and either request templates or an OpenAPI spec.",
       inputSchema: apiRunGoalInput
     },
     (args) => handleApiRunGoal(args, deps)

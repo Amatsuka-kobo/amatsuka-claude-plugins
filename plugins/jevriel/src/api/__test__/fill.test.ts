@@ -1,5 +1,6 @@
 import type { Questions, SystemOneResult } from "@typesafe-ai/sdk"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import { createJevCall } from "../../jev/client.js"
 import {
   applyAuth,
   assembleRequest,
@@ -10,10 +11,12 @@ import {
   readPicks,
   selectSecurity,
   serializeParam,
+  specSource,
   type Target
 } from "../fill.js"
 import type { RecentResponse } from "../loop.js"
 import {
+  type LoadedSpec,
   listOperations,
   type Operation,
   type OperationParam,
@@ -1119,5 +1122,221 @@ describe("isDocumented", () => {
     expect(isDocumented(["2xx"], 204)).toBe(true)
     expect(isDocumented(["default"], 500)).toBe(true)
     expect(isDocumented(["404"], 500)).toBe(false)
+  })
+})
+
+const loadedSpec: LoadedSpec = {
+  doc: {},
+  source: { kind: "file", location: "/openapi.json" },
+  openapi: "3.1.0",
+  schemes: {}
+}
+
+describe("specSource", () => {
+  const context = {
+    goal: "Check response",
+    step: 1,
+    baseUrl: "https://api.example.test/api",
+    inputs: {},
+    steps: {},
+    recent: [],
+    history: [],
+    dropSummary: false
+  }
+  const fakeJev = () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as {
+        questions: Record<string, unknown>
+      }
+      return new Response(
+        JSON.stringify({
+          model: "jev-test",
+          answers: Object.fromEntries(
+            Object.keys(request.questions).map((key) => [
+              key,
+              { type: "choice", choice: "c1", confidence: 0.9 }
+            ])
+          ),
+          usage: { input_tokens: 7, output_tokens: 0 }
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    })
+    return vi.fn(createJevCall({ apiKey: "test", fetch }))
+  }
+
+  it("lists required parameters and the three body kinds", () => {
+    const source = specSource({
+      spec: loadedSpec,
+      operations: [
+        operation({
+          name: "json",
+          parameters: [param({ in: "path" })],
+          body: {
+            required: true,
+            contentTypes: ["application/json"],
+            json: true,
+            examples: [],
+            description: null
+          }
+        }),
+        operation({
+          name: "unsupported",
+          body: {
+            required: false,
+            contentTypes: ["text/plain"],
+            json: false,
+            examples: [],
+            description: null
+          }
+        }),
+        operation({ name: "none", summary: null })
+      ],
+      headers: {}
+    })
+    expect(source.stateKey).toBe("operations")
+    expect(source.list).toEqual({
+      json: {
+        method: "GET",
+        path: "/items/{id}",
+        summary: "An item",
+        requiredParams: ["id"],
+        body: "json"
+      },
+      unsupported: {
+        method: "GET",
+        path: "/items/{id}",
+        summary: "An item",
+        requiredParams: [],
+        body: "unsupported"
+      },
+      none: {
+        method: "GET",
+        path: "/items/{id}",
+        requiredParams: [],
+        body: "none"
+      }
+    })
+  })
+
+  it("calls Jev once with a 30 second timeout only for multiple candidates", async () => {
+    const jev = fakeJev()
+    const op = operation({
+      path: "/items",
+      parameters: [param({ examples: ["a", "b"] })]
+    })
+    const source = specSource({
+      spec: loadedSpec,
+      operations: [op],
+      headers: {}
+    })
+    const result = await source.build(op.name, context, jev)
+    expect(jev).toHaveBeenCalledTimes(1)
+    expect(jev.mock.calls[0]?.[1]).toEqual({ timeout: 30_000 })
+    expect(result.ok && result.values).toEqual([
+      {
+        target: "id",
+        in: "query",
+        source: "spec",
+        ref: "example[0]",
+        confidence: 0.9
+      }
+    ])
+    const singleJev = fakeJev()
+    const single = specSource({
+      spec: loadedSpec,
+      operations: [
+        operation({ path: "/items", parameters: [param({ examples: ["a"] })] })
+      ],
+      headers: {}
+    })
+    const singleResult = await single.build(op.name, context, singleJev)
+    expect(singleJev).not.toHaveBeenCalled()
+    expect(singleResult.ok && singleResult.values?.[0]?.confidence).toBeNull()
+  })
+
+  it("stops on missing required values without calling Jev", async () => {
+    const jev = fakeJev()
+    const op = operation({
+      parameters: [param({ in: "path" })],
+      body: {
+        required: true,
+        contentTypes: ["application/json"],
+        json: true,
+        examples: [],
+        description: null
+      }
+    })
+    const result = await specSource({
+      spec: loadedSpec,
+      operations: [op],
+      headers: {}
+    }).build(op.name, context, jev)
+    expect(result).toEqual({
+      ok: false,
+      stuck: "missing_input",
+      note: "id, body"
+    })
+    expect(jev).not.toHaveBeenCalled()
+  })
+
+  it("reports fill budget overflow without calling Jev", async () => {
+    const jev = fakeJev()
+    const op = operation({
+      path: "/items",
+      parameters: [param({ examples: ["a", "b"] })]
+    })
+    const result = await specSource({
+      spec: loadedSpec,
+      operations: [op],
+      headers: {}
+    }).build(
+      op.name,
+      {
+        ...context,
+        history: [{ data: "h".repeat(200_000) }]
+      },
+      jev
+    )
+    expect(result).toMatchObject({ ok: false, kind: "budget_exceeded" })
+    expect(jev).not.toHaveBeenCalled()
+  })
+
+  it("always records values, including an empty list, and omits an empty note", async () => {
+    const jev = fakeJev()
+    const op = operation({ path: "/items", responses: ["200"] })
+    const result = await specSource({
+      spec: loadedSpec,
+      operations: [op],
+      headers: {}
+    }).build(op.name, context, jev)
+    expect(result).toMatchObject({ ok: true, values: [] })
+    expect(result).not.toHaveProperty("note")
+    expect(result.ok && result.isDocumented?.(404)).toBe(false)
+    expect(jev).not.toHaveBeenCalled()
+  })
+
+  it("joins unsupported-style and unsupported-body notes in order", async () => {
+    const op = operation({
+      path: "/items",
+      parameters: [param({ supported: false, required: false })],
+      body: {
+        required: false,
+        contentTypes: ["text/plain"],
+        json: false,
+        examples: [],
+        description: null
+      }
+    })
+    const result = await specSource({
+      spec: loadedSpec,
+      operations: [op],
+      headers: {}
+    }).build(op.name, context, fakeJev())
+    expect(result).toMatchObject({
+      ok: true,
+      values: [],
+      note: "style_unsupported, body_unsupported"
+    })
   })
 })
