@@ -1,7 +1,7 @@
 # jevriel プラグイン 設計書
 
 - 作成日: 2026-09-25
-- ステータス: レビュー待ち
+- ステータス: ユーザー承認済み(2026-09-25)
 - 更新基準: 実装開始後に本書を更新するのは、(a) 本書の 2 箇所が両立しないと実装中に判明したときの解消と、(b) 実装のほうが正しいと判断した箇所への追随(理由を添える)に限る。設計判断を変える必要が出たときは実装を止め、ユーザーに確認する。
 - 対象プラグイン: `plugins/jevriel/`(新規。`0.1.0-dev`)
 - 前提資料:
@@ -146,7 +146,7 @@ plugins/jevriel/
       __test__/
         helpers/fakeDriver.ts   GoalDriver のフェイク
     api/
-      http.ts                   fetch の送信、応答の整形、秘密ヘッダの伏字
+      http.ts                   fetch の送信、応答の整形、秘密ヘッダの伏字(redact)、URL の伏字(sanitizeUrl)、ホストの許可判定(isHostAllowed / defaultAllowedHosts)。ブラウザ系もここの関数を使う
       template.ts               {{inputs.*}} と {{steps.*}} の解決
       loop.ts                   api_run_goal のループ(送信関数を注入)
       __test__/
@@ -253,7 +253,7 @@ type ErrorBody = {
       | "playwright_missing"  // §7-1 の (1)(2) とも不成立
       | "browser_failed"      // ブラウザ起動・ページ読込の失敗
       | "setup_failed"        // browser_setup の失敗
-      | "request_failed"      // api_check の送信失敗(DNS、接続拒否、タイムアウト)
+      | "request_failed"      // api_check の送信失敗、spec の URL 取得の失敗(DNS、接続拒否、タイムアウト)
     message: string           // 次に何をすべきかを含む英語または日本語の 1〜2 文
     errorClass?: string       // SDK の例外クラス名
     status?: number
@@ -300,7 +300,7 @@ type RunRecord = {
   steps: Step[]                    // *_check では []
   usage: { requests: number; inputTokens: number }
   evidence: { dir: string; files: string[] } | null   // files は dir からの相対パス。result.json 自身を含む
-  error?: { errorClass: string; message: string }     // status が error のときだけ
+  error?: { errorClass: string; message: string; kind?: "budget_exceeded" }   // status が error のときだけ。kind は §8-4 の 5. のときだけ
 }
 
 // ブラウザ系のステップ
@@ -795,7 +795,7 @@ observe → decide → 終了判定 → (値の選択) → act → wait → 事�
 1. **observe。** `page.ariaSnapshotJSON()` でノードの配列を取り、`browser/snapshot.ts` の `extractActionables(nodes)` で操作可能ノードを抽出する。
    - `ariaSnapshotJSON()` の戻り値はノードの配列である。各ノードは role / name / text / children / 状態フラグなどを持つ。`ref` / `cursor` は mode `"ai"` のときだけ付くが、本プラグインは使わない。
    - 対象ロール: `link` `button` `textbox` `searchbox` `checkbox` `radio` `combobox` `option` `tab` `menuitem` `menuitemcheckbox` `menuitemradio` `switch` `slider` `spinbutton` `treeitem`
-   - 名前の無いノード、`disabled` のノード、`hidden` のノードは除く。
+   - 名前の無いノード、`disabled` のノード、`ariaHidden` のノードは除く(`ariaHidden` は Playwright の `packages/injected/src/ariaSnapshot.ts` が立てるフラグの名前)。
    - 文書順に並べ、`a1`、`a2` … を振る。上限は 200 件。超えた分は捨て、state に `actionablesOmitted: <件数>` を入れる。
    - 同じ role と name の組が複数あるときは、disabled を除いた中での文書順の出現番号 `nth`(0 始まり)を記録する。
    - 併せて `page.ariaSnapshot()` の YAML 文字列を取り、§8-4 で切り詰める。
@@ -897,7 +897,7 @@ interface GoalDriver {
 }
 ```
 
-`AriaNode` は `playwright-core` の `ariaSnapshotJSON()` の戻り値(配列)の要素型を `import type` で参照する。
+`AriaNode` は Playwright の公開型ではない。Playwright 1.63 の `ariaSnapshotJSON()` の公開型は `Promise<Serializable>`(実質 any)であり、ノードの型は公開されていない。このため `src/browser/snapshot.ts` にローカルの構造型(`role` / `name?` / `children?` / `disabled?` / `ariaHidden?` と、その他のキーを受ける index signature)として定義し、戻り値をこの型の配列として受ける。
 
 ### 6-2. `api_run_goal`
 
@@ -1036,6 +1036,7 @@ state の中でページ本文(`page.snapshot`)と応答本文(`last.body` / `re
 2. 本文が残りに収まらなければ、先頭から収まる長さで切り、末尾に `\n...[truncated <N> bytes]` を付ける。JSON 値の本文は `JSON.stringify` した文字列として切り、切った後は文字列で渡す。
 3. 本文と同じ階層の state に `truncated: true` を添え(`page.truncated` / `response.truncated` / `last.truncated`)、出力の `truncated` も true にする。
 4. actionables は切り詰めない(§6-1 の 200 件上限で抑える)。本文を空にしても収まらないときは `budget_exceeded` を返す。
+5. ループ開始後(`browser_run_goal` の 2 回目以降の observe、`api_run_goal` の 2 回目以降の送信)に 4. の超過が起きたときは、§5-1 の境目に従い `isError` にせず、`status: "error"`、`error.kind: "budget_exceeded"` の `RunRecord` を返し、証跡を保存する。開始前(最初の observe / 最初の送信の前)の超過は `isError` の `budget_exceeded` である。
 
 ---
 
@@ -1076,7 +1077,8 @@ state の中でページ本文(`page.snapshot`)と応答本文(`last.body` / `re
   - 名前に `token` / `secret` / `password` を含むもの
   - テンプレートで `{{inputs.*}}` を埋め込んだもの(名前に依らない)
 - `sanitizeUrl(url)` は URL の userinfo(`user:pass@`)を落とし、クエリはキー名だけ残して値を空にする(`?token=abc&page=2` → `?token=&page=`)。state と証跡へ入れる URL はすべてこれを通す。
-- 上の 2 つを通してから state と証跡へ入れる。応答 body の中の秘密は伏字にできない。
+- `redact` と `sanitizeUrl`、および `allowedHosts` の一致判定(`isHostAllowed(host, allowed)`)と既定の許可リスト(`defaultAllowedHosts(originUrl)`。起点の `URL.host` だけ)は `src/api/http.ts` に置く。ブラウザ系もこれらを使い、別に実装しない。
+- `redact` と `sanitizeUrl` を通してから state と証跡へ入れる。応答 body の中の秘密は伏字にできない。
 - Jev は外部サービスである。state に入れたものは TypeSafe AI へ送られる。README とスキルでこれを明示する。
 
 ### 9-4. `assess_action` の位置づけ
@@ -1200,13 +1202,17 @@ state の中でページ本文(`page.snapshot`)と応答本文(`last.body` / `re
 | `jev/verdict.test.ts` | 閾値の 3 値判定の境界(0.8 ちょうど、0.2 ちょうど)、`unsatisfied >= satisfied` の拒否、score から段階への丸め |
 | `jev/client.test.ts` | キー無しで `not_configured`。SDK の各例外(401、400、422、429、5xx、タイムアウト、接続失敗)が `api_error` と `errorClass` / `status` / `requestId` に変わる |
 | `tools/judging.test.ts` | 5 ツールが送る state と questions の形(fakeFetch で捕まえた body。ユーザーのデータが state のキーにあり、`criteria` に入っていないこと)、出力の形、入力順と降順整列、`too_large` の要素、単独上限での `budget_exceeded`、分割時の並列上限 4、`jev_ask` の choice の選択肢数 2〜255 |
-| `browser/snapshot.test.ts` | `src/fixtures/aria/` の JSON(ノードの配列)から、対象ロールだけを文書順で抽出する。名前無し・disabled・hidden の除外、disabled を除いた 0 始まりの `nth`、200 件上限と `actionablesOmitted` |
-| `browser/loop.test.ts` | フェイクの GoalDriver と Jev 応答で、各終了条件(reached、done、stuck、3 回連続、maxSteps、許可外ホストの事前と事後)、done / stuck / reached のときに act しないこと、値の選択(inputs と `<select>` の option)、checkbox を `click` すること、操作失敗の記録、Jev と Playwright の例外で証跡付きの `status: "error"` になること、最終判定の pass / fail |
-| `evidence.test.ts`(`src/__test__/`) | `evidence` の 3 値それぞれについて、status(pass / fail / stuck / error)ごとの保存の有無(`always` は常に保存、`on_failure` は pass のときディレクトリが残らず `evidence` が null、`none` はディレクトリを作らない)、trace の開始の有無(`none` では `tracing.start` もスクリーンショットも呼ばれない)、`files` の一覧と実在するファイルの一致、`step-<n>.png` の番号。`result.json` を読み戻した値がツール出力と一致すること(4 ツールすべて)。ディレクトリが `runs/<kind>/<name>/<timestamp>/` の階層になること。`name` の正規化(許可外の記号をハイフンへ置換、先頭と末尾のハイフンの除去、64 文字の上限、正規化で空になったときの既定値)と、省略時の既定値の導出(ブラウザ系はホストとパス、API 系はホスト。ポートを含み、クエリを含まない)。`RunRecord` の `kind` と `name` が正規化後の値であること |
+| `browser/snapshot.test.ts` | `src/fixtures/aria/` の JSON(ノードの配列)から、対象ロールだけを文書順で抽出する。名前無し・disabled・`ariaHidden` の除外、disabled を除いた 0 始まりの `nth`、200 件上限と `actionablesOmitted` |
+| `browser/loop.test.ts` | フェイクの GoalDriver と Jev 応答で、各終了条件(reached、done、stuck、3 回連続、maxSteps、許可外ホストの事前と事後)、done / stuck / reached のときに act しないこと、値の選択(inputs と `<select>` の option)、checkbox を `click` すること、操作失敗の記録、Jev と Playwright の例外で証跡付きの `status: "error"` になること、最終判定の pass / fail、`evidence` が `none` 以外のとき各ステップの act 前に `step-<n>.png` を撮り、`none` のとき撮らないこと、Playwright の例外で `status: "error"` になること、最終判定の例外で `status: "error"` になり stuck の記録にならないこと(§6-1) |
+| `browser/driver.test.ts` | Playwright の Page / Request / Route を最小のフェイクで渡し、route の判定(許可外のメインフレームのナビゲーションだけ abort、`request.frame()` の例外で abort)、`getByRole` に `{ name, exact: true, disabled: false }` と 0 始まりの `nth` が渡ること、`newContext` の `acceptDownloads: false` と `serviceWorkers: "block"`、ダイアログの dismiss と新しいページの close、`evidence` が `none` のとき `tracing.start` を呼ばないこと、終了時に `final.png` と `trace.zip` を書くこと |
+| `evidence.test.ts`(`src/__test__/`) | `evidence` の 3 値それぞれについて、status(pass / fail / stuck / error)ごとの保存の有無(`always` は常に保存、`on_failure` は pass のときディレクトリが残らず `evidence` が null、`none` はディレクトリを作らない)、3 値ごとの取得方針(ディレクトリ・trace・スクリーンショットの要否)、`files` の一覧と実在するファイルの一致、書いた `result.json` を読み戻すと返した記録と一致すること。trace とスクリーンショットが実際に呼ばれるかは `browser/driver.test.ts` と `browser/loop.test.ts` で、4 ツールの `result.json` とツール出力の一致は各ツールのテスト(`tools/api.test.ts` / `tools/browser.test.ts`)で確かめる。ディレクトリが `runs/<kind>/<name>/<timestamp>/` の階層になること。`name` の正規化(許可外の記号をハイフンへ置換、先頭と末尾のハイフンの除去、64 文字の上限、正規化で空になったときの既定値)と、省略時の既定値の導出(ブラウザ系はホストとパス、API 系はホスト。ポートを含み、クエリを含まない)。`RunRecord` の `kind` と `name` が正規化後の値であること |
 | `browser/playwright.test.ts` | 一時ディレクトリに偽の `node_modules/playwright/package.json` を置き、解決順 (1)→(2)→(3) と 1.63 未満の扱いを確かめる。`browser_setup` のスキップ判定(子プロセスの起動は関数を注入してフェイクにする) |
 | `api/template.test.ts` | `inputs` と `steps` の解決、配列の添字、型を保つ置換、解決できないときの検出 |
-| `api/http.test.ts` | JSON とテキストの判別、`redact` の対象(`{{inputs.*}}` を埋め込んだヘッダを含む)、`sanitizeUrl`(userinfo の除去、クエリ値の除去)、`api_check` が 3xx を追わないこと |
+| `api/http.test.ts` | JSON とテキストの判別、`redact` の対象(`{{inputs.*}}` を埋め込んだヘッダを含む)、`sanitizeUrl`(userinfo の除去、クエリ値の除去)、`api_check` が 3xx を追わないこと、`isHostAllowed` と `defaultAllowedHosts`(ポートを含む完全一致と `*.` のワイルドカード) |
 | `api/loop.test.ts` | フェイクの `send` と Jev 応答で、連鎖(前の応答の値が次の path に入る)、未解決の記録、許可外ホスト、3xx を追わないこと、done / stuck / reached のときに送信しないこと、終了条件、`log.json` にリクエストが伏字後・応答が切詰め後で残ること、`evidence` の 3 値での保存の有無 |
+| `tools/shared.test.ts` | `toResponse` と `errorResponse` の形、`projectDir` の決め方(`CLAUDE_PROJECT_DIR` を優先し、無ければ cwd) |
+| `tools/api.test.ts` | `api_check` と `api_run_goal` のキー確認、開始前の失敗(`request_failed`)で証跡を残さないこと、開始後の例外で `status: "error"` になること、state の伏字、`evidence` の 3 値での保存の有無、`result.json` を読み戻すとツール出力と一致すること、`tool` / `kind` / `name` の値、`api_run_goal` の `requests` の名前に `done` / `stuck` を使うと `invalid_input` |
+| `tools/browser.test.ts` | `browser_setup` がキー無しで動き progress 通知を送ること、`browser_check` と `browser_run_goal` のキー確認、開始前の失敗(`playwright_missing` / `browser_failed`)で証跡を残さないこと、4xx / 5xx を失敗にしないこと、`allowedHosts` の既定、`evidence` の 3 値での保存の有無、`result.json` を読み戻すとツール出力と一致すること、ブラウザを必ず close すること、`http` / `https` 以外の URL を `invalid_input` にしてブラウザを起動しないこと(§9-2)、`browser_check` は `evidence: "always"` でも trace を開始しないこと(§5-8) |
 
 - `src/fixtures/aria/` の JSON は、実装時に Playwright 1.63 で実ページ(静的な HTML を `page.setContent` で読ませたもの)から一度だけ採取し、固定する。採取の手順は `docs/rationale.md` に残す。
 
