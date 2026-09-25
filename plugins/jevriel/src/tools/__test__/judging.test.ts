@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { createJevCall, type JevCall } from "../../jev/client.js"
 import {
+  assessActionInput,
+  checkClaimsInput,
   classifyItemsInput,
+  handleAssessAction,
+  handleCheckClaims,
   handleClassifyItems,
   handleJevAsk,
   handleRankItems,
@@ -16,7 +20,12 @@ type RequestBody = {
   state: unknown
   questions: Record<
     string,
-    { type: string; instructions?: string; criteria?: unknown }
+    {
+      type: string
+      instructions?: string
+      criteria?: unknown
+      levels?: string[]
+    }
   >
   model?: string
 }
@@ -405,6 +414,211 @@ describe("judging tools", () => {
     expect(results[2]).toMatchObject({ score: 1.2, level: "middle" })
     expect(results[3]).toMatchObject({ score: 0.5, level: "middle" })
     expect(results[4]).toEqual({ id: "i5", status: "too_large" })
+  })
+
+  it("sends claims in keyed state without noul criteria", async () => {
+    let sent: RequestBody | undefined
+    const fakeFetch = vi.fn<typeof fetch>(async (_input, init) => {
+      sent = requestFrom(init)
+      return successfulResponse(sent)
+    })
+    const response = await handleCheckClaims(
+      z.object(checkClaimsInput).parse({
+        claims: ["first claim", "second claim"],
+        evidence: "source"
+      }),
+      depsFor(fakeFetch)
+    )
+
+    expect(sent?.state).toEqual({
+      evidence: "source",
+      claims: { c1: "first claim", c2: "second claim" }
+    })
+    expect(sent?.questions.c1).toMatchObject({
+      type: "noul",
+      instructions: expect.stringContaining('state.claims["c1"]')
+    })
+    expect(sent?.questions.c1).not.toHaveProperty("criteria")
+    expect(JSON.stringify(sent?.questions)).not.toContain("first claim")
+    expect(body<{ results: unknown[] }>(response).results).toHaveLength(2)
+  })
+
+  it("uses the default satisfied threshold for claim judgments", async () => {
+    const fakeFetch = vi.fn<typeof fetch>(async (_input, init) =>
+      successfulResponse(requestFrom(init), () => ({
+        type: "noul",
+        noul: 0.75
+      }))
+    )
+    const response = await handleCheckClaims(
+      z
+        .object(checkClaimsInput)
+        .parse({ claims: ["claim"], evidence: "source" }),
+      depsFor(fakeFetch)
+    )
+
+    expect(
+      body<{
+        results: Array<{ claim: string; probability: number; verdict: string }>
+      }>(response).results
+    ).toEqual([{ claim: "claim", probability: 0.75, verdict: "uncertain" }])
+  })
+
+  it("rejects invalid check_claims thresholds", async () => {
+    const fakeFetch = vi.fn<typeof fetch>()
+    const response = await handleCheckClaims(
+      {
+        claims: ["claim"],
+        evidence: "source",
+        thresholds: { satisfied: 0.3, unsatisfied: 0.5 }
+      },
+      depsFor(fakeFetch)
+    )
+
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "invalid_input"
+    )
+    expect(fakeFetch).not.toHaveBeenCalled()
+  })
+
+  it("rejects oversized evidence without calling Jev", async () => {
+    const fakeFetch = vi.fn<typeof fetch>()
+    const response = await handleCheckClaims(
+      {
+        claims: ["claim"],
+        evidence: "e".repeat(70_000),
+        thresholds: { satisfied: 0.8, unsatisfied: 0.2 }
+      },
+      depsFor(fakeFetch)
+    )
+
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "budget_exceeded"
+    )
+    expect(fakeFetch).not.toHaveBeenCalled()
+  })
+
+  it("marks an oversized claim too_large and keeps other results", async () => {
+    const largeClaim = "x".repeat(70_000)
+    const fakeFetch = vi.fn<typeof fetch>(async (_input, init) =>
+      successfulResponse(requestFrom(init))
+    )
+    const response = await handleCheckClaims(
+      {
+        claims: ["small claim", largeClaim],
+        evidence: "source",
+        thresholds: { satisfied: 0.8, unsatisfied: 0.2 }
+      },
+      depsFor(fakeFetch)
+    )
+
+    expect(
+      body<{
+        results: Array<
+          | { claim: string; probability: number; verdict: string }
+          | { claim: string; status: string }
+        >
+      }>(response).results
+    ).toEqual([
+      { claim: "small claim", probability: 0.9, verdict: "satisfied" },
+      { claim: largeClaim, status: "too_large" }
+    ])
+  })
+
+  it("sends destructive and impact questions for one assess_action request", async () => {
+    let sent: RequestBody | undefined
+    const fakeFetch = vi.fn<typeof fetch>(async (_input, init) => {
+      sent = requestFrom(init)
+      return successfulResponse(sent)
+    })
+    const action = "remove a temporary file"
+    const context = "local scratch directory"
+    await handleAssessAction(
+      z.object(assessActionInput).parse({ action, context }),
+      depsFor(fakeFetch)
+    )
+
+    expect(fakeFetch).toHaveBeenCalledTimes(1)
+    expect(sent?.state).toEqual({ action, context })
+    expect(sent?.questions.destructive?.type).toBe("noul")
+    expect(sent?.questions.impact).toMatchObject({
+      type: "score",
+      criteria: [
+        "no effect outside a temporary or scratch area",
+        "a few local files",
+        "the whole local project or repository",
+        "shared or remote resources such as a remote repository, a shared database, or cloud resources",
+        "production systems or external users"
+      ]
+    })
+  })
+
+  it("maps assess_action impact score to the matching stage label", async () => {
+    const fakeFetch = vi.fn<typeof fetch>(async (_input, init) =>
+      successfulResponse(requestFrom(init), (id) =>
+        id === "destructive"
+          ? { type: "noul", noul: 0.1 }
+          : { type: "score", score: 2.6, confidence: 0.7 }
+      )
+    )
+    const response = await handleAssessAction(
+      z.object(assessActionInput).parse({ action: "update a local file" }),
+      depsFor(fakeFetch)
+    )
+
+    expect(
+      body<{
+        impact: {
+          score: number
+          level: number
+          label: string
+          confidence: number
+        }
+      }>(response).impact
+    ).toEqual({
+      score: 2.6,
+      level: 3,
+      label:
+        "shared or remote resources such as a remote repository, a shared database, or cloud resources",
+      confidence: 0.7
+    })
+  })
+
+  it("rejects oversized assess_action state without calling Jev", async () => {
+    const fakeFetch = vi.fn<typeof fetch>()
+    const response = await handleAssessAction(
+      z.object(assessActionInput).parse({ action: "a".repeat(70_000) }),
+      depsFor(fakeFetch)
+    )
+
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "budget_exceeded"
+    )
+    expect(fakeFetch).not.toHaveBeenCalled()
+  })
+
+  it("returns not_configured for both new tools without calling Jev", async () => {
+    const fakeFetch = vi.fn<typeof fetch>()
+    const deps = depsFor(fakeFetch, "")
+    const responses = await Promise.all([
+      handleCheckClaims(
+        z
+          .object(checkClaimsInput)
+          .parse({ claims: ["claim"], evidence: "source" }),
+        deps
+      ),
+      handleAssessAction(
+        z.object(assessActionInput).parse({ action: "update a local file" }),
+        deps
+      )
+    ])
+
+    expect(
+      responses.map(
+        (response) => body<{ error: { kind: string } }>(response).error.kind
+      )
+    ).toEqual(["not_configured", "not_configured"])
+    expect(fakeFetch).not.toHaveBeenCalled()
   })
 
   it("validates rank input as a raw Zod shape", () => {
