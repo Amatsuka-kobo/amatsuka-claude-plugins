@@ -1,7 +1,7 @@
 # jevriel OpenAPI 連携 設計書
 
 - 作成日: 2026-09-25
-- ステータス: レビュー待ち
+- ステータス: ユーザー承認済み(2026-09-25)
 - 更新基準: 初版設計書と同じ(本書の 2 箇所が両立しないと判明したときの解消と、実装のほうが正しい箇所への追随に限る。設計判断を変えるときは実装を止めてユーザーに確認する)
 - 対象: `plugins/jevriel/`(初版 `0.1.0-dev` の実装完了後に着手し、`0.2.0-dev` へ上げる)
 - 前提資料:
@@ -87,7 +87,9 @@ plugins/jevriel/
 - ルート `README.md` の jevriel の節にツール数と OpenAPI 連携を足す(Done 条件)。他のワークスペース設定は変えない。
 - `yaml` の版と import の形は raguel-mcp に揃える(`plugins/codiel/raguel-mcp/package.json` の `^2.9.0`、`src/config/loader.ts` の `import { parse as parseYaml } from "yaml"`)。足した後に `pnpm install` を実行し、ロックファイルの差分を同じコミットに含める。
 
-初版の計画書は変えない。初版の実装は `requests` を `runApiGoal` に直結したまま完了させ、本拡張の実装計画書の最初のタスクで `ApiGoalInput.requests` を `source: RequestSource` へリファクタする(§5-5)。このタスクは、初版の計画書 §1 の「インターフェース行の名前とシグネチャは担当が変えない」という契約の凍結に対する例外である。`ApiGoalInput.requests` → `source: RequestSource` の変更を、明示的な報告の対象とする。完了の条件は、ツールの出力(`RunRecord`)と証跡が変わらないことである。Jev へ送る state の `requests` の形は `summary` / `requiredParams` / `body` の追加で変わってよく、state を比較する既存テストの期待値はその分だけ更新する。
+初版の計画書は変えない。初版の実装は `requests` を `runApiGoal` に直結したまま完了させ、本拡張の実装計画書の最初のタスクで `ApiGoalInput.requests` を `source: RequestSource` へリファクタする(§5-5)。このタスクは、初版の計画書 §1 の「インターフェース行の名前とシグネチャは担当が変えない」という契約の凍結に対する例外である。`ApiGoalInput.requests` → `source: RequestSource` の変更を、明示的な報告の対象とする。完了の条件は、ツールの出力(`RunRecord`)と証跡が変わらないことである。Jev へ送る state の `requests` の形は `summary` / `requiredParams` / `body` の追加で変わってよく、state を比較する既存テストの期待値はその分だけ更新する。例外として、テンプレートの path に `{{inputs.*}}` があるときは、証跡の URL の該当要素が `[redacted]` になる(§9-3)。これは秘密を証跡へ残さないための意図した変更である。
+
+`src/server.ts` のツールの登録は変えない(`registerApiTools` が 3 ツールを登録する)。`McpServer` の version の文字列だけを `0.2.0-dev` にする。
 
 `yaml` の追加は、初版の計画書 §1 の実行時依存の制限に対する例外であり、この拡張の実装計画で明示する。
 
@@ -198,6 +200,7 @@ type RequestSource = {
 
 type BuildResult =
   | { ok: true; request: ApiRequest; inputHeaderNames: Set<string>
+      inputPathSegments: number[]                             // §9-3。inputs の値を含む path の要素の添字
       values?: ApiStepValue[]; note?: string; isDocumented?: (status: number) => boolean }
   | { ok: false; skip: string }                               // 送らず history に note を残して次へ
   | { ok: false; stuck: "missing_input"; note: string }
@@ -247,17 +250,19 @@ spec を読み、操作の一覧と、用意すべき `inputs` のキーを返�
     name: string; method: string; path: string; summary: string | null; tags: string[]
     parameters: Array<{ name: string; in: "path" | "query" | "header"; required: boolean; type: string | null; style: string }>
     body: { required: boolean; contentTypes: string[]; json: boolean } | null
-    security: string[][]          // Security Requirement の要素ごとの scheme 名。対応外の方式も載せる
+    security: string[][] | null   // Security Requirement の要素ごとの scheme 名。null は宣言なし、[] は認証なし。対応外の方式も載せる
     servers: string[]             // §10-1。情報として載せるだけ
     supported: boolean            // false なら api_run_goal の選択肢に現れない(§7-4)
     unsupportedReason?: "style_unsupported"
   }>
   suggestedInputs: string[]
+  note?: string                   // suggestedInputs から外した名前とその理由
 }
 ```
 
 - `type` は schema の型を 1 つの文字列にしたもの(複数は `|` でつなぐ。無ければ null)。
-- `suggestedInputs` は、(a) 必須で例・`default`・`enum` のどれも持たないパラメータの名前と、(b) 必須の JSON 本文を持つ操作の `<操作名>_body` を、初出順に重複を除いて並べる。(b) は名前の提案であり、本文の候補には JSON のオブジェクトか配列を値に持つ `inputs` がキー名に依らず全部入る(§8-2)。
+- `suggestedInputs` は、(a) 必須で例・`default`・`enum` のどれも持たないパラメータの名前と、(b) 必須の JSON 本文を持つ操作の本文キーを、初出順に重複を除いて並べる。本文キーは操作名を 59 文字で切ってから `_body` を付けたもの(合計 64 文字以内)である。(b) は名前の提案であり、本文の候補には JSON のオブジェクトか配列を値に持つ `inputs` がキー名に依らず全部入る(§8-2)。
+- `inputs` のキーは 1〜64 文字なので(初版 §5-11)、64 文字を超えるパラメータ名は `suggestedInputs` に入れず、`note` に理由と、その名前を `", "` 区切りで並べて残す。該当が無ければ `note` を付けない。
 - エラーは `invalid_input`(§7 の失敗、255 件超過)と `request_failed`(URL の取得失敗と 3xx)だけである。0 件は空の一覧を返す。
 - キーの確認をしない。初版 §5-1 のキー確認の例外に、`browser_setup` と並べて加える。証跡は残さない。
 
@@ -319,7 +324,7 @@ loadSpec(spec: string, deps: { projectDir: string; fetch: typeof fetch; timeoutM
 
 - **URL。** `http:` / `https:` で始まれば URL として GET する(`redirect: "manual"`、`AbortSignal.timeout`)。3xx は追わず `request_failed` とし、message に `Location` を含めない。2xx 以外は `invalid_input`。`timeoutMs` は `api_run_goal` の引数、`api_list_operations` では 30,000ms とする。spec の取得は `allowedHosts` の検査を受けない(呼び出し側が明示した場所であり、対象 API への送信ではない)。
 - **ローカルパス。** それ以外はファイルパスとし、`projectDir` からの相対、または絶対パスとして解決して正規化する。正規化したパスが `projectDir` の配下に無ければ(`..` で抜ける、`projectDir` の外の絶対パス)`invalid_input`。
-- **大きさ。** 5MB まで。URL の本文はストリームで読み、累計が 5MB を超えた時点で読むのを打ち切って `invalid_input` とする。ファイルは読む前に大きさを確かめる。
+- **大きさ。** 5MiB(5,242,880 バイト)まで。URL の本文はストリームで読み、累計が 5,242,880 バイトを超えた読み取りのあとで打ち切り、以降は読まない。ちょうど 5,242,880 バイトで終わる文書は成功とし、1 バイトでも超えたら `invalid_input` とする。ファイルは読む前に大きさを確かめる(同じ境界)。
 - **解析。** 先に `JSON.parse` を試し、失敗したら `parseYaml` で読む。どちらも失敗したら `invalid_input` とし、message には種別(JSON の解析失敗 / YAML の解析失敗)と、取れるときは行番号だけを入れる。例外メッセージに含まれるソースの断片は載せない。別名展開の上限は `yaml` の既定(`maxAliasCount`)に任せる。
 - **版。** ルートがオブジェクトでない、`openapi` が `^3\.[01](\.\d+)?$` に合わない(Swagger 2.0 を含む)、`paths` が無い(webhooks だけの文書を含む)かオブジェクトでない、のいずれかは `invalid_input`。Swagger 2.0 には「3.x に変換して渡す」と案内する。
 
@@ -451,7 +456,7 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 3. **本文。** 選んだ値を `JSON.stringify` し、`content-type: application/json` を付ける。`inputs` の候補は `JSON.parse` した値を使う。
 4. **認証。** §9-2。
 5. **`headers` 引数。** 最後に重ねる(名前の大小文字を無視し、後のものが勝つ)。呼び出し側の明示を優先する。
-6. **伏字の対象。** 次の名前を小文字で `inputHeaderNames` に入れる: `inputs` の値を置いたヘッダ(パラメータ・認証)と、`headers` 引数のすべての名前(§5-1)。query の値は `sanitizeUrl` が落とす。
+6. **伏字の対象。** 次の名前を小文字で `inputHeaderNames` に入れる: `inputs` の値を置いたヘッダ(パラメータ・認証)と、`headers` 引数のすべての名前(§5-1)。query の値は `sanitizeUrl` が落とす。`inputs` の値を置いた path パラメータの要素の位置を `inputPathSegments` に入れる(§9-3)。
 
 `isDocumented(status)` は、`responses` に `default`、`String(status)`、`<百の位>XX`(大小文字を問わない)のいずれかがあれば true を返す。
 
@@ -461,7 +466,7 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 
 ### 9-1. 対象の scheme
 
-- `components.securitySchemes` の `apiKey`(`in: header` / `query`)と `http`(`scheme: bearer` / `basic`、大小文字を問わない)に対応する。それ以外は `unsupported` として名前だけを持つ。
+- `components.securitySchemes` の `apiKey`(`in: header` / `query`)と `http`(`scheme: bearer` / `basic`、大小文字を問わない)に対応する。それ以外(`oauth2`、`openIdConnect`、`in: cookie` の apiKey、ほかの http scheme)は `unsupported` として名前だけを持つ。分類とトップレベルの `security` の継承は読み込みと列挙(§7)で済ませ、付与(§9-2)は解決済みの配列だけを見る。
 - 操作の `security` が無ければトップレベルの `security` を使う。どちらも無ければ `Operation.security` は null で、何も付けない。
 - Security Requirement は「配列の要素の間が OR、要素の中が AND」である。`Operation.security` は要素ごとの scheme 名の配列として、文書の順に持つ。
 
@@ -487,6 +492,7 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 - spec の `example` / `examples` / `default` / `enum` の値は、候補の説明(40 文字の要約)として Jev へ送られる。秘密を含む spec を渡さない。
 - 応答の葉値も同じく送られる。初版でも `last.body` として送る範囲の値である。
 - `inputs` の値は送らない(初版 §9-3)。
+- `inputs` の値を置いた path の要素は、証跡と state に入れる URL で `[redacted]` に置き換える。`build` がその要素の位置(`request.url` の pathname を "/" で分けた配列の添字)を `inputPathSegments` で返し、ループが `sanitizeUrl` の前に置き換える。送信する URL は生のままとする。テンプレート経路で `{{inputs.*}}` を path に書いたときも同じ扱いとし、初版の同じ穴をこの拡張で塞ぐ。
 
 ---
 
@@ -535,7 +541,7 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 | --- | --- |
 | 4. ツール一覧 | `api_list_operations` を足す。`api_run_goal` に `spec` / `include` / `headers` を足す |
 | 新節(4 の後): OpenAPI からの動作確認 | 対応する版と形式、`spec` と `requests` の排他、`baseUrl` は必須で `servers` は使わないこと、`include` と既定のメソッド、操作名の決まり方、`inputs` の用意(`suggestedInputs`、本文は JSON 文字列)、値の候補の出所、`missing_input`。認証の小節: 対応方式、scheme 名と同名のキーで付くこと、OR / AND の要素から満たせるものを 1 つ選ぶこと、OAuth2 / OpenID Connect / cookie は `headers` 引数で手で付けること |
-| 7. 制約 | §2 の非スコープのうち利用者に関わるもの。`undocumented` はステータスだけを見ること。DELETE は既定で送らないが、POST / PUT / PATCH は状態を変えうるので、共有環境や本番では `include.methods` で絞ること |
+| 7. 制約 | §2 の非スコープのうち利用者に関わるもの。YAML のマージキー(`<<:`)は非対応で展開しないこと。`undocumented` はステータスだけを見ること。DELETE は既定で送らないが、POST / PUT / PATCH は状態を変えうるので、共有環境や本番では `include.methods` で絞ること |
 | 8. 証跡と秘密 | `ApiStep.values` に値そのものは残らないこと、認証と `headers` 引数の値は伏字になること、spec の例の値と応答の葉値の要約は Jev へ送られるので秘密を含む spec を渡さないこと |
 | 9. Codiel との併用 | (d) の動作確認に、OpenAPI 文書を持つ API では `spec` を使えることを足す。他プラグインの名前はこの節だけに書く |
 
@@ -587,8 +593,8 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 
 | 対象 | 確かめること |
 | --- | --- |
-| `api/openapi.test.ts` | JSON と YAML で同じ一覧 / `3.0.3`・`3.1`・`3.1.0` を受け、`2.0`・`3.2.0`・欠落・`paths` の無い文書を拒否 / URL の 5MB 超をストリームの途中で打ち切る / URL の 3xx を追わず `request_failed` で、message に `Location` が無い / 解析失敗の message が種別と行番号だけでソース断片を含まない / `..` で `projectDir` を抜けるパスと外の絶対パスを拒否 / `$ref` の解決 / 3.1 の Reference Object で `summary` と `description` だけが上書きされ、他の兄弟は無視 / 3.0 の兄弟の無視 / JSON Pointer のデコード順 / 外部参照の拒否 / 循環と 17 段の拒否、2 操作が同じ component を指す文書と再帰スキーマは通す / 名前の生成(そのまま、置換、スラッグ、`root`、64 文字)/ 重複と `done` の拒否 / path-level の継承と上書き / cookie と `authorization`(小文字)パラメータを捨てる / 例の読み方(`examples` があれば `example` を読まない、`enum` と `default` は schema から)/ parameter の `content` の schema と例 / 対応外の style が `supported: false` で、それが必須の操作は `api_run_goal` 用の列挙から除かれ、一覧用には `style_unsupported` 付きで残る / 3.0 の GET の requestBody を無視し、3.1 は読む / `include` の 3 条件と AND、既定のメソッドに DELETE が無い / 255 と 253 の境界 / servers の operation → path item → ルートの優先と variables の置換 / 取得失敗の `request_failed` と 404 の `invalid_input` |
-| `api/fill.test.ts` | 候補の順(inputs → spec → 名前一致の葉 → 不一致の葉 → omit)と新しい応答が先 / 型の一致と `enum` の絞り込み / 深さ 5 の葉を採り、深さ 7 は採らない / パスの表記が `items.0.id` / spec と同じ葉を除く / 255 への切り詰めが古い不一致の葉から落とす / `omit` の有無 / 必須の候補 0 個で `missing_input`、note がカンマ区切りで、Jev を呼ばない / 候補 1 個で問わず `confidence: null` で `values` に残る / パラメータの無い操作で `values` が空配列 / 本文の候補が JSON のオブジェクトと配列の `inputs` / 選択肢の説明に `inputs` の値が無く、spec の例の値はある / 直列化(query の配列の繰り返し、`explode: false` の配列のカンマ、`form` + `explode: true` のオブジェクト query、path の配列を要素ごとにエンコード、header のカンマ、`content` パラメータ)/ 対応外の style で `style_unsupported` / 本文と `headers` が最後に勝つこと / `{…}` が残れば `skip` / 認証の 3 方式、OR の要素から満たせる最初の要素だけを付ける、AND の一部だけ満たせる要素は選ばない、満たせないとき何も付けない、`{}` の要素、`security: []`、oauth2 で付けない、トップレベルの継承 / `headers` 引数の名前が値に依らず `inputHeaderNames` に入る / `isDocumented` / 予算超過で葉を落とし、尽きたら `kind: "budget_exceeded"` を返し例外を投げない |
+| `api/openapi.test.ts` | JSON と YAML で同じ一覧 / `3.0.3`・`3.1`・`3.1.0` を受け、`2.0`・`3.2.0`・欠落・`paths` の無い文書を拒否 / ちょうど 5MiB の文書は成功し、超えたら超えた読み取りのあとで打ち切る / securitySchemes の分類(apiKey・bearer・basic は対応、oauth2・openIdConnect・cookie の apiKey は `unsupported`)と、`security` の無い操作へのトップレベルの継承 / URL の 3xx を追わず `request_failed` で、message に `Location` が無い / 解析失敗の message が種別と行番号だけでソース断片を含まない / `..` で `projectDir` を抜けるパスと外の絶対パスを拒否 / `$ref` の解決 / 3.1 の Reference Object で `summary` と `description` だけが上書きされ、他の兄弟は無視 / 3.0 の兄弟の無視 / JSON Pointer のデコード順 / 外部参照の拒否 / 循環と 17 段の拒否、2 操作が同じ component を指す文書と再帰スキーマは通す / 名前の生成(そのまま、置換、スラッグ、`root`、64 文字)/ 重複と `done` の拒否 / path-level の継承と上書き / cookie と `authorization`(小文字)パラメータを捨てる / 例の読み方(`examples` があれば `example` を読まない、`enum` と `default` は schema から)/ parameter の `content` の schema と例 / 対応外の style が `supported: false` で、それが必須の操作は `api_run_goal` 用の列挙から除かれ、一覧用には `style_unsupported` 付きで残る / 3.0 の GET の requestBody を無視し、3.1 は読む / `include` の 3 条件と AND、既定のメソッドに DELETE が無い / 255 と 253 の境界 / servers の operation → path item → ルートの優先と variables の置換 / 取得失敗の `request_failed` と 404 の `invalid_input` |
+| `api/fill.test.ts` | 候補の順(inputs → spec → 名前一致の葉 → 不一致の葉 → omit)と新しい応答が先 / 型の一致と `enum` の絞り込み / 深さ 5 と 6 の葉を採り、深さ 7 は採らない / パスの表記が `items.0.id` / spec と同じ葉を除く / 255 への切り詰めが古い不一致の葉から落とす / `omit` の有無 / 必須の候補 0 個で `missing_input`、note がカンマ区切りで、Jev を呼ばない / 候補 1 個で問わず `confidence: null` で `values` に残る / パラメータの無い操作で `values` が空配列 / 本文の候補が JSON のオブジェクトと配列の `inputs` / 選択肢の説明に `inputs` の値が無く、spec の例の値はある / 直列化(query の配列の繰り返し、`explode: false` の配列のカンマ、`form` + `explode: true` のオブジェクト query、path の配列を要素ごとにエンコード、header のカンマ、`content` パラメータ)/ 対応外の style で `style_unsupported` / 本文と `headers` が最後に勝つこと / `{…}` が残れば `skip` / 認証の 3 方式、OR の要素から満たせる最初の要素だけを付ける、AND の一部だけ満たせる要素は選ばない、満たせないとき何も付けない、`{}` の要素、`security: []`、oauth2 で付けない / `headers` 引数の名前が値に依らず `inputHeaderNames` に入る / `isDocumented` / 予算超過で葉を落とし、尽きたら `kind: "budget_exceeded"` を返し例外を投げない |
 | `api/loop.test.ts`(追加) | 既存のケースが `templateSource` を通して `RunRecord` と証跡が同じ(state を比較する期待値は `summary` / `requiredParams` / `body` の追加分だけ更新)/ フェイクの `RequestSource` で、`skip` の note、`missing_input` で送らず stuck、`budget_exceeded` で証跡付きの `status: "error"` と `error.kind`、`isDocumented` が false なら次の `state.last` と同じステップの `ApiStep` に `undocumented` / 1 ステップの Jev 呼び出しが 2 回以下で `usage` に値埋めの分が入る / `recent` が新しい順で同じ名前は最新だけ、5 件まで / `ctx.dropSummary` が全ステップで同じ値 |
 | `api/template.test.ts`(追加) | `templateSource` の `list`(`requiredParams: []`、`body` の有無、`summary`)/ 未解決を `skip` にする / ヘッダ値のプレースホルダ解決 |
 | `tools/api.test.ts`(追加) | 排他条件の各行で `invalid_input` と証跡なし / `spec` でも `baseUrl` が必須 / `inputs` 254 キーの拒否 / 予算超過で `summary` が落ち、さらに超えると `budget_exceeded` / 送信先と `allowedHosts` と `name` の既定が `baseUrl` 由来で、spec の `servers` の影響を受けない / `values` と `spec` の形と `result.json` の一致 / **初版 F4 の拡張**: `inputs`・認証・`headers` 引数の値が、全 Jev 呼び出しの state と質問、`result.json` に現れない / spec の例の値が Jev への質問に含まれる / `api_list_operations` がキー無しで動き、`suggestedInputs`・`count`・`servers` を返し、証跡も Jev の呼び出しも無い |
@@ -601,6 +607,7 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 
 - `plugin.json` と `package.json` の version が `0.2.0-dev` で、dependencies に `"yaml": "^2.9.0"` があり、ロックファイルの差分が同じコミットにある。
 - `dist/server.mjs` に `yaml` が含まれる。
+- `src/server.ts` の `McpServer` の version が `0.2.0-dev` で、ツールの登録箇所に差分が無い。
 - キー無しで起動したサーバーが `tools/list` に 11 ツールを返し、`api_list_operations` が `sample-3.1.json` の一覧を返す(手動確認)。
 - キーを設定した実機で、OpenAPI 文書を持つ API(手元のモックサーバーでよい)に対して `spec` を渡した `api_run_goal` が完走し、`result.json` の `steps[].values` に値そのものが無い(手動確認)。
 - SKILL.md の `allowed-tools` と README のツール一覧が 11 ツールである。
