@@ -117,7 +117,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 - **jevriel** (0.1.0-dev, added 2026-09-25) — MCP server (`.mcp.json` → `dist/server.mjs`) that
   calls TypeSafe AI's judgement model Jev via `@typesafe-ai/sdk` 0.6.0: 5 judging tools, 3 browser
   tools (Playwright resolved at runtime, never bundled), 2 API tools, plus skill `judging`.
-  Requires `TYPESAFE_API_KEY` (a paid external API — see the invariant section). Details:
+  Requires `TYPESAFE_API_KEY` (a paid external API allowed by ADR-005 — see the invariant section). Details:
   `mem:jevriel/core`.
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
   `UserPromptSubmit` hook (`check-prefetch-manifest.mjs`) nagging only when `.prefetch/` holds
@@ -148,8 +148,10 @@ CLI/script by hand — the user-facing surface is Claude Code skills/commands on
 「最重要」 in `plugins/codiel/docs/DESIGN.md` §0 and `harness-docs/ARCHITECTURE.md`; it binds every
 plugin here.
 (raguel-mcp's panel and prompt-smith's eval loop both shell out to `claude -p` for this reason.)
-The one exception is **jevriel**, which calls a non-Anthropic paid judgement API (Jev) and requires
-`TYPESAFE_API_KEY`; no other plugin may depend on it (ADR in `harness-docs/ARCHITECTURE.md`).
+This bans the Anthropic API only. Since ADR-005 (2026-09-26) a plugin may take a non-Anthropic
+external API that needs the user's API key as a required dependency: key via env var, only the
+features needing it error when unset, no fallback path. **jevriel** (Jev, `TYPESAFE_API_KEY`) is the
+first such plugin.
 
 ## Per-user files and gitignore (not misconfiguration)
 
