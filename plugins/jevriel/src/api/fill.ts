@@ -1,10 +1,15 @@
 import type { Questions, SystemOneResult } from "@typesafe-ai/sdk"
 import type { ApiStepValue } from "../evidence.js"
 import { bodyAllowance } from "../jev/budget.js"
-import type { JevRequest, QuestionSpec } from "../jev/client.js"
+import type { JevCall, JevRequest, QuestionSpec } from "../jev/client.js"
 import type { ApiRequest, ApiResponse } from "./http.js"
-import type { RecentResponse } from "./loop.js"
-import type { Operation, OperationParam, SecurityScheme } from "./openapi.js"
+import type { RecentResponse, RequestSource } from "./loop.js"
+import type {
+  LoadedSpec,
+  Operation,
+  OperationParam,
+  SecurityScheme
+} from "./openapi.js"
 import { resolvePlaceholders } from "./template.js"
 
 export const CANDIDATE_LIMIT = 255
@@ -664,4 +669,72 @@ export function isDocumented(
       key === statusText ||
       key.toUpperCase() === `${statusText[0]}XX`
   )
+}
+
+export function specSource(args: {
+  spec: LoadedSpec
+  operations: Operation[]
+  headers: Record<string, string>
+}): RequestSource {
+  const operations = Object.fromEntries(
+    args.operations.map((op) => [op.name, op])
+  )
+  return {
+    stateKey: "operations",
+    list: Object.fromEntries(
+      args.operations.map((op) => [
+        op.name,
+        {
+          method: op.method,
+          path: op.path,
+          ...(op.summary === null ? {} : { summary: op.summary }),
+          requiredParams: op.parameters
+            .filter((param) => param.required)
+            .map((param) => param.name),
+          body:
+            op.body === null ? "none" : op.body.json ? "json" : "unsupported"
+        }
+      ])
+    ),
+    async build(name, ctx, jev: JevCall) {
+      const op = operations[name]
+      if (!op) throw new TypeError(`Unknown operation: ${name}`)
+      const targets = buildTargets(op, ctx.inputs, ctx.recent)
+      if (!targets.ok)
+        return {
+          ok: false,
+          stuck: "missing_input",
+          note: targets.missing.join(", ")
+        }
+      const planned = planFill(op, targets.targets, {
+        goal: ctx.goal,
+        step: ctx.step,
+        history: ctx.history,
+        inputKeys: Object.keys(ctx.inputs),
+        dropSummary: ctx.dropSummary
+      })
+      if (!planned.ok) return planned
+      const result = planned.request
+        ? await jev(planned.request, { timeout: 30_000 })
+        : null
+      const { picks, values } = readPicks(planned.targets, result)
+      const assembled = assembleRequest({
+        op,
+        baseUrl: ctx.baseUrl,
+        targets: planned.targets,
+        picks,
+        inputs: ctx.inputs,
+        steps: ctx.steps,
+        schemes: args.spec.schemes,
+        headers: args.headers
+      })
+      if (!assembled.ok) return assembled
+      return {
+        ...assembled,
+        values,
+        ...(targets.notes.length ? { note: targets.notes.join(", ") } : {}),
+        isDocumented: (status: number) => isDocumented(op.responses, status)
+      }
+    }
+  }
 }

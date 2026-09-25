@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { z } from "zod"
 import {
   createJevCall,
   type JevCall,
@@ -11,6 +12,7 @@ import {
 import {
   type ApiCheckArgs,
   apiCheckInput,
+  apiRunGoalInput,
   handleApiCheck,
   handleApiRunGoal
 } from "../api.js"
@@ -530,5 +532,421 @@ describe("template path evidence", () => {
     expect(
       await readFile(join(record.evidence.dir, "log.json"), "utf8")
     ).not.toContain("s3cret-value")
+  })
+})
+
+const specArgs = (overrides: Record<string, unknown> = {}) =>
+  goalArgs({
+    requests: undefined,
+    spec: "openapi.json",
+    allowedHosts: undefined,
+    ...overrides
+  })
+
+const specDocument = (
+  paths: Record<string, unknown> = {
+    "/items": {
+      get: {
+        operationId: "get_items",
+        responses: { 200: { description: "OK" } }
+      }
+    }
+  },
+  extra: Record<string, unknown> = {}
+) => ({
+  openapi: "3.1.0",
+  info: { title: "Test", version: "1" },
+  paths,
+  ...extra
+})
+
+async function saveSpec(doc: unknown): Promise<void> {
+  await writeFile(join(projectDir, "openapi.json"), JSON.stringify(doc))
+}
+
+function specJev(requests: JevRequest[] = [], choice = "get_items"): JevCall {
+  return createJevCall({
+    apiKey: "test",
+    fetch: async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as JevRequest
+      requests.push(request)
+      return new Response(
+        JSON.stringify({
+          model: "jev-test",
+          answers: Object.fromEntries(
+            Object.keys(request.questions).map((key) => [
+              key,
+              key === "next"
+                ? { type: "choice", choice, confidence: 0.9 }
+                : key === "reached" || key.startsWith("a")
+                  ? {
+                      type: "noul",
+                      noul:
+                        "assertions" in (request.state as object) ? 0.9 : 0.1
+                    }
+                  : { type: "choice", choice: "c1", confidence: 0.9 }
+            ])
+          ),
+          usage: { input_tokens: 7, output_tokens: 0 }
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    }
+  })
+}
+
+describe("api_run_goal with OpenAPI", () => {
+  it.each([
+    ["both", { requests: { get: { method: "GET", path: "/", headers: {} } } }],
+    ["neither", { spec: undefined }],
+    [
+      "include on templates",
+      {
+        spec: undefined,
+        requests: { get: { method: "GET", path: "/", headers: {} } },
+        include: { tags: ["test"] }
+      }
+    ],
+    [
+      "headers on templates",
+      {
+        spec: undefined,
+        requests: { get: { method: "GET", path: "/", headers: {} } },
+        headers: { X: "value" }
+      }
+    ]
+  ])("rejects %s before fetching, calling Jev, or creating evidence", async (_label, overrides) => {
+    const http = vi.fn<typeof fetch>()
+    const jevFetch = vi.fn<typeof fetch>()
+    const response = await handleApiRunGoal(
+      specArgs(overrides),
+      depsFor(http, createJevCall({ apiKey: "test", fetch: jevFetch }))
+    )
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "invalid_input"
+    )
+    expect(http).not.toHaveBeenCalled()
+    expect(jevFetch).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+
+  it("requires baseUrl for spec and validates include and headers", () => {
+    const schema = z.object(apiRunGoalInput)
+    expect(schema.safeParse(specArgs({ baseUrl: undefined })).success).toBe(
+      false
+    )
+    expect(
+      schema.safeParse(specArgs({ include: { methods: [] } })).success
+    ).toBe(false)
+    expect(
+      schema.safeParse(
+        specArgs({ headers: { X: "v" }, include: { methods: ["DELETE"] } })
+      ).success
+    ).toBe(true)
+  })
+
+  it("rejects 254 input keys before reading the spec; accepts 253", async () => {
+    const http = vi.fn<typeof fetch>()
+    const jevFetch = vi.fn<typeof fetch>()
+    const inputs = Object.fromEntries(
+      Array.from({ length: 254 }, (_, i) => [`k${i}`, "v"])
+    )
+    const response = await handleApiRunGoal(
+      specArgs({ inputs }),
+      depsFor(http, createJevCall({ apiKey: "test", fetch: jevFetch }))
+    )
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "invalid_input"
+    )
+    expect(jevFetch).not.toHaveBeenCalled()
+    expect(http).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+    await saveSpec(specDocument())
+    const accepted = await handleApiRunGoal(
+      specArgs({
+        inputs: Object.fromEntries(Object.entries(inputs).slice(0, 253))
+      }),
+      depsFor(http, specJev())
+    )
+    expect(accepted.isError).toBeUndefined()
+  })
+
+  it.each([
+    ["empty", {}, { tags: ["missing"] }, "invalid_input", "0"],
+    [
+      "too many",
+      Object.fromEntries(
+        Array.from({ length: 254 }, (_, i) => [
+          `/p${i}`,
+          { get: { operationId: `op${i}` } }
+        ])
+      ),
+      undefined,
+      "invalid_input",
+      "254"
+    ]
+  ])("rejects %s operations without evidence", async (_label, paths, include, kind, count) => {
+    await saveSpec(specDocument(paths))
+    const jevFetch = vi.fn<typeof fetch>()
+    const http = vi.fn<typeof fetch>()
+    const response = await handleApiRunGoal(
+      specArgs({ include }),
+      depsFor(http, createJevCall({ apiKey: "test", fetch: jevFetch }))
+    )
+    expect(response.isError).toBe(true)
+    const error = body<{ error: { kind: string; message: string } }>(
+      response
+    ).error
+    expect(error.kind).toBe(kind)
+    expect(error.message).toContain(count)
+    expect(error.message).toContain("include")
+    expect(jevFetch).not.toHaveBeenCalled()
+    expect(http).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+
+  it.each([
+    302, 404, 0
+  ])("sanitizes spec URL errors for status %s without evidence", async (status) => {
+    const http = vi.fn<typeof fetch>(async () => {
+      if (status === 0) throw new Error("secret abc")
+      return httpResponse("", { status })
+    })
+    const jevFetch = vi.fn<typeof fetch>()
+    const response = await handleApiRunGoal(
+      specArgs({ spec: "https://spec.example/openapi.json?token=abc" }),
+      depsFor(http, createJevCall({ apiKey: "test", fetch: jevFetch }))
+    )
+    const error = body<{ error: { kind: string; message: string } }>(
+      response
+    ).error
+    expect(response.isError).toBe(true)
+    expect(error.kind).toBe(status === 404 ? "invalid_input" : "request_failed")
+    expect(error.message).not.toContain("abc")
+    expect(jevFetch).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+
+  it("drops summaries before starting and rejects larger metadata with count and include guidance", async () => {
+    const paths = Object.fromEntries(
+      Array.from({ length: 12 }, (_, i) => [
+        `/p${i}`,
+        { get: { operationId: `op${i}`, summary: "a".repeat(6000) } }
+      ])
+    )
+    await saveSpec(specDocument(paths))
+    const seen: JevRequest[] = []
+    const result = await handleApiRunGoal(
+      specArgs({ maxSteps: 1 }),
+      depsFor(
+        vi.fn<typeof fetch>(async () => httpResponse("{}")),
+        specJev(seen, "op0")
+      )
+    )
+    expect(result.isError).toBeUndefined()
+    expect(JSON.stringify(seen[0]?.state)).not.toContain("a".repeat(6000))
+    await rm(join(projectDir, ".jevriel"), { recursive: true, force: true })
+    await saveSpec(
+      specDocument({ "/p": { get: { operationId: "x".repeat(64) } } })
+    )
+    const denied = await handleApiRunGoal(
+      specArgs({ goal: "g".repeat(200_000) }),
+      depsFor(vi.fn<typeof fetch>(), specJev())
+    )
+    const error = body<{ error: { kind: string; message: string } }>(
+      denied
+    ).error
+    expect(error.kind).toBe("budget_exceeded")
+    expect(error.message).toContain("1 operations")
+    expect(error.message).toContain("include")
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+
+  it("uses operations metadata and baseUrl defaults, ignoring spec servers", async () => {
+    await saveSpec(
+      specDocument(
+        {
+          "/items": {
+            get: {
+              operationId: "get_items",
+              summary: "Read items",
+              responses: { 200: {} },
+              parameters: [
+                {
+                  name: "id",
+                  in: "query",
+                  required: true,
+                  schema: { type: "integer", example: 7 }
+                }
+              ]
+            }
+          }
+        },
+        { servers: [{ url: "https://evil.example" }] }
+      )
+    )
+    const seen: JevRequest[] = []
+    const http = vi.fn<typeof fetch>(async () => httpResponse("{}"))
+    const response = await handleApiRunGoal(
+      specArgs({ maxSteps: 1, baseUrl: "https://api.example.test/v1" }),
+      depsFor(http, specJev(seen))
+    )
+    const record = body<{
+      name: string
+      evidence: { dir: string }
+      steps: Array<{ url: string; values: unknown[] }>
+      spec: unknown
+    }>(response)
+    expect(record.name).toBe("api.example.test")
+    expect(String(http.mock.calls[0]?.[0])).toContain(
+      "api.example.test/v1/items"
+    )
+    expect(JSON.stringify(seen[0]?.state)).toContain('"operations"')
+    expect(seen[0]?.state).toMatchObject({
+      operations: {
+        get_items: {
+          method: "GET",
+          path: "/items",
+          summary: "Read items",
+          requiredParams: ["id"],
+          body: "none"
+        }
+      }
+    })
+    expect(record.steps[0]?.values).toEqual([
+      {
+        target: "id",
+        in: "query",
+        source: "spec",
+        ref: "example[0]",
+        confidence: null
+      }
+    ])
+    expect(record.spec).toEqual({
+      source: join(projectDir, "openapi.json"),
+      openapi: "3.1.0",
+      operations: 1
+    })
+    expect(
+      JSON.parse(
+        await readFile(join(record.evidence.dir, "result.json"), "utf8")
+      )
+    ).toEqual(record)
+  })
+
+  it("sends examples to fill Jev but never sends or records private inputs, headers, or auth", async () => {
+    await saveSpec(
+      specDocument(
+        {
+          "/items/{id}": {
+            post: {
+              operationId: "get_items",
+              responses: { 200: {} },
+              security: [{ bearer: [] }],
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string", example: "example-marker-42" }
+                },
+                {
+                  name: "q",
+                  in: "query",
+                  required: true,
+                  schema: { type: "string" }
+                },
+                {
+                  name: "X-Private",
+                  in: "header",
+                  required: true,
+                  schema: { type: "string" }
+                }
+              ],
+              requestBody: {
+                required: true,
+                content: { "application/json": { schema: { type: "object" } } }
+              }
+            }
+          }
+        },
+        {
+          components: {
+            securitySchemes: { bearer: { type: "http", scheme: "bearer" } }
+          }
+        }
+      )
+    )
+    const secrets = ["s3cret-value", "bearer-value", "manual-value"]
+    const inputs = {
+      id: secrets[0],
+      q: secrets[0],
+      "X-Private": secrets[0],
+      payload: JSON.stringify({ value: secrets[0] }),
+      bearer: secrets[1]
+    }
+    const seen: JevRequest[] = []
+    const http = vi.fn<typeof fetch>(async () =>
+      httpResponse("{}", { status: 201 })
+    )
+    const response = await handleApiRunGoal(
+      specArgs({ inputs, headers: { "X-Manual": secrets[2] }, maxSteps: 1 }),
+      depsFor(http, specJev(seen))
+    )
+    const record = body<{
+      evidence: { dir: string }
+      spec: unknown
+      steps: Array<{ url: string; undocumented: boolean; values: unknown[] }>
+    }>(response)
+    expect(response.isError).toBeUndefined()
+    expect(record.steps[0]?.undocumented).toBe(true)
+    expect(record.steps[0]?.values[0]).toMatchObject({
+      target: "id",
+      in: "path",
+      source: "input",
+      ref: "id",
+      confidence: 0.9
+    })
+    expect(JSON.stringify(seen)).toContain("example-marker-42")
+    expect(String(http.mock.calls[0]?.[0])).toContain("s3cret-value")
+    expect(JSON.stringify(http.mock.calls[0]?.[1])).toContain("bearer-value")
+    expect(JSON.stringify(http.mock.calls[0]?.[1])).toContain("manual-value")
+    const resultJson = await readFile(
+      join(record.evidence.dir, "result.json"),
+      "utf8"
+    )
+    const logJson = await readFile(
+      join(record.evidence.dir, "log.json"),
+      "utf8"
+    )
+    for (const secret of secrets) {
+      expect(JSON.stringify(seen)).not.toContain(secret)
+      expect(resultJson).not.toContain(secret)
+      expect(logJson).not.toContain(secret)
+    }
+  })
+
+  it("sanitizes the URL source in the record and saved result", async () => {
+    const http = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes("spec.example")
+        ? httpResponse(JSON.stringify(specDocument()))
+        : httpResponse("{}")
+    )
+    const response = await handleApiRunGoal(
+      specArgs({
+        spec: "https://spec.example/openapi.json?token=abc",
+        maxSteps: 1
+      }),
+      depsFor(http, specJev())
+    )
+    const record = body<{
+      spec: { source: string }
+      evidence: { dir: string }
+    }>(response)
+    expect(record.spec.source).toBe("https://spec.example/openapi.json?token=")
+    expect(
+      await readFile(join(record.evidence.dir, "result.json"), "utf8")
+    ).not.toContain("abc")
   })
 })
