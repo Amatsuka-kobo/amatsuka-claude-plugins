@@ -8,7 +8,12 @@ import {
   type JevCall,
   type JevRequest
 } from "../../jev/client.js"
-import { type ApiCheckArgs, apiCheckInput, handleApiCheck } from "../api.js"
+import {
+  type ApiCheckArgs,
+  apiCheckInput,
+  handleApiCheck,
+  handleApiRunGoal
+} from "../api.js"
 import type { ToolDeps, ToolResponse } from "../shared.js"
 
 type JevPayload = JevRequest & {
@@ -327,5 +332,176 @@ describe("handleApiCheck", () => {
     expect(httpFetch).toHaveBeenCalledTimes(1)
     expect(jevFetch).not.toHaveBeenCalled()
     expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+})
+
+function goalArgs(overrides: Record<string, unknown> = {}) {
+  return {
+    baseUrl: "https://api.example.test/",
+    goal: "Finish",
+    requests: { get: { method: "GET" as const, path: "/", headers: {} } },
+    assertions: ["Complete"],
+    inputs: {},
+    maxSteps: 3,
+    timeoutMs: 30000,
+    allowedHosts: ["api.example.test"],
+    name: undefined,
+    evidence: "always" as const,
+    thresholds: { satisfied: 0.8, unsatisfied: 0.2 },
+    ...overrides
+  }
+}
+
+function goalJev(
+  choices: string[],
+  probability = 0.9,
+  states: unknown[] = []
+): JevCall {
+  return createJevCall({
+    apiKey: "test",
+    fetch: async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as JevRequest
+      states.push(request.state)
+      return new Response(
+        JSON.stringify({
+          model: "jev-test",
+          answers: Object.fromEntries(
+            Object.keys(request.questions).map((key) => [
+              key,
+              key === "next"
+                ? {
+                    type: "choice",
+                    choice: choices.shift() ?? "done",
+                    confidence: 0.9
+                  }
+                : {
+                    type: "noul",
+                    noul:
+                      "assertions" in (request.state as object)
+                        ? probability
+                        : 0.1
+                  }
+            ])
+          ),
+          usage: { input_tokens: 7, output_tokens: 0 }
+        }),
+        { headers: { "content-type": "application/json" } }
+      )
+    }
+  })
+}
+
+describe("handleApiRunGoal", () => {
+  it.each([
+    "done",
+    "stuck"
+  ])("rejects the reserved request name %s", async (name) => {
+    const response = await handleApiRunGoal(
+      goalArgs({
+        requests: { [name]: { method: "GET", path: "/", headers: {} } }
+      }),
+      depsFor(vi.fn<typeof fetch>(), goalJev([]))
+    )
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "invalid_input"
+    )
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+  it("returns a pre-send budget failure without evidence", async () => {
+    const http = vi.fn<typeof fetch>()
+    const response = await handleApiRunGoal(
+      goalArgs({ goal: "x".repeat(200_000) }),
+      depsFor(http, goalJev([]))
+    )
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "budget_exceeded"
+    )
+    expect(http).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+  it("records an after-send budget failure with evidence", async () => {
+    const result = await handleApiRunGoal(
+      goalArgs({ evidence: "always" }),
+      depsFor(
+        vi.fn<typeof fetch>(async () =>
+          httpResponse(JSON.stringify({ response: "x".repeat(400_000) }), {
+            headers: { "x-long": "x".repeat(100_000) }
+          })
+        ),
+        goalJev(["get"])
+      )
+    )
+    const record = body<{
+      status: string
+      reason: string
+      error: { kind: string }
+      evidence: { dir: string }
+    }>(result)
+    expect(result.isError).toBeUndefined()
+    expect(record).toMatchObject({
+      status: "error",
+      reason: "budget_exceeded",
+      error: { kind: "budget_exceeded" }
+    })
+    expect(existsSync(join(record.evidence.dir, "result.json"))).toBe(true)
+  })
+  it("saves sanitized logs and a result matching tool output", async () => {
+    const states: unknown[] = []
+    const result = await handleApiRunGoal(
+      goalArgs({
+        baseUrl: "https://api.example.test/?token=s3cret",
+        inputs: { tenant: "s3cret-value" },
+        requests: {
+          get: {
+            method: "GET",
+            path: "/?token={{inputs.tenant}}",
+            headers: { "X-Tenant": "{{inputs.tenant}}" }
+          }
+        }
+      }),
+      depsFor(
+        vi.fn<typeof fetch>(async () => httpResponse("{}")),
+        goalJev(["get", "done"], 0.9, states)
+      )
+    )
+    const record = body<{
+      tool: string
+      kind: string
+      name: string
+      evidence: { dir: string }
+    }>(result)
+    const log = await readFile(join(record.evidence.dir, "log.json"), "utf8")
+    expect(record).toMatchObject({
+      tool: "api_run_goal",
+      kind: "api",
+      name: "api.example.test"
+    })
+    expect(log).not.toContain("s3cret-value")
+    expect(log).toContain("[redacted]")
+    expect(JSON.stringify(states)).not.toContain("s3cret-value")
+    expect(
+      JSON.parse(
+        await readFile(join(record.evidence.dir, "result.json"), "utf8")
+      )
+    ).toEqual(record)
+  })
+  it.each([
+    "always",
+    "on_failure",
+    "none"
+  ] as const)("honors %s on success and failure", async (evidence) => {
+    for (const probability of [0.9, 0.1]) {
+      const result = await handleApiRunGoal(
+        goalArgs({ evidence }),
+        depsFor(vi.fn<typeof fetch>(), goalJev(["done"], probability))
+      )
+      const record = body<{ evidence: unknown }>(result)
+      expect(Boolean(record.evidence)).toBe(
+        evidence === "always" ||
+          (evidence === "on_failure" && probability === 0.1)
+      )
+    }
   })
 })
