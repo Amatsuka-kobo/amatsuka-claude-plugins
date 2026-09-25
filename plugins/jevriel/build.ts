@@ -2,6 +2,7 @@ import esbuild from "esbuild"
 
 await esbuild.build({
   bundle: true,
+  keepNames: true,
   entryPoints: ["./src/server.ts"],
   outdir: "./dist",
   outExtension: {
