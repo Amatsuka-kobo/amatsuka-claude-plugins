@@ -120,3 +120,13 @@
 - `2026/0922/phyllis998/1846-index-merge-resolution.md` | 2026-09-22 | phyllis998 | Permission拡張候補を分析（9件提案）・INDEX.md のマージ衝突を 3-way で解決
 - `2026/0922/phyllis998/1950-codiel-agents-to-skills-design.md` | 2026-09-22 | phyllis998 | codiel エージェント削減・役割昇格設計の最終版が完成
 - `2026/0923/phyllis998/1927-auto-mode-classifier-billing-research.md` | 2026-09-23 | phyllis998 | Auto mode 分類器課金の CLIProxyAPI 調査記録をコミット
+- `2026/0923/phyllis998/2152-agent-policy-flexible-model-alias.md` | 2026-09-23 | phyllis998 | agent-policyのモデル短名化方式:A案とB案の比較検討
+- `2026/0923/phyllis998/2355-agent-policy-model-update-2.md` | 2026-09-23 | phyllis998 | 推奨モデルを GPT 6・Grok 4.7 に更新
+- `2026/0923/phyllis998/2355-agent-policy-model-update.md` | 2026-09-23 | phyllis998 | agent-policyの推奨モデルを v6.x 系へ更新
+- `2026/0924/phyllis998/0121-api-models-check.md` | 2026-09-24 | phyllis998 | Anthropic API モデル一覧と版指定の不整合を検査
+- `2026/0924/phyllis998/1433-prompt-audit-revelation-removal.md` | 2026-09-24 | phyllis998 | Prompt-audit 指摘の言い換え案から description 改善ループの測定と適用まで
+- `2026/0924/phyllis998/1805-agent-policy-role-discipline-redesign.md` | 2026-09-24 | phyllis998 | Agent Policy 役割体系改修の設計・審査・確定と引継ぎ資料納品
+- `2026/0924/phyllis998/2352-jev-plugin-design.md` | 2026-09-24 | phyllis998 | 設計書委譲・OpenAPI別設計への方針確定
+- `2026/0924/phyllis998/2352-jevriel-design.md` | 2026-09-24 | phyllis998 | OpenAPI計画書完成・承認と引継ぎ書・起動プロンプト作成
+- `2026/0925/phyllis998/1508-jevriel-implementation.md` | 2026-09-25 | phyllis998 | Jevriel プラグイン実装と ADR-005 追加
+- `2026/0926/phyllis998/1618-japanese-writing-unified-skill.md` | 2026-09-26 | phyllis998 | 訳語セクションを翻訳調の言い換えへ統合し、語の表を追加
