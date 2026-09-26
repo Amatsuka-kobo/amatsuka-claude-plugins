@@ -7,7 +7,7 @@ import { registerJudgingTools } from "./tools/judging.js"
 import { createToolDeps } from "./tools/shared.js"
 
 export async function main(): Promise<void> {
-  const server = new McpServer({ name: "jevriel", version: "0.1.0-dev" })
+  const server = new McpServer({ name: "jevriel", version: "0.2.0-dev" })
 
   const deps = createToolDeps(process.env)
   registerJudgingTools(server, deps)
