@@ -394,6 +394,9 @@ type LoadedSpec = {
 | 5 | 計画 | §10-3 の開始前の予算の確認(`summary` を落とす)は spec の経路だけの話か、テンプレートの経路にも当てるかを書いていない | spec の経路だけに当てる。テンプレートの経路は常に `dropSummary: false` とし、初版の挙動を変えない(T1 の要点) | 計画で決定 |
 | 6 | 計画 | 設計書のヘッダの「ステータス」が「レビュー待ち」のままである(承認はコミット `cfe9adb` で取得済み) | 設計書のヘッダを「ユーザー承認済み(2026-09-25)」に直した | 反映済み |
 | 7 | 計画(レビュー反映時) | 設計書 §4 はツールの登録を変えないと書くが、`src/server.ts` の `McpServer` の version の扱いを書いていなかった | 設計書 §4 に「登録は変えない。version の文字列だけ `0.2.0-dev` にする」を、§16 の Done にも同じ項目を足した。T8 が行う | 採用・設計書へ反映済み |
+| 8 | T1 | T1 の検証欄は `baseUrl` が `http://h/api`、path が `/users/{{inputs.uid}}/posts` の `inputPathSegments` を `[3]` とする。初版の `resolveTemplate` は `new URL(path, baseUrl)` で組むため `/api` が消え、最終の pathname での添字は `[2]` になる | 規則(最終の URL の pathname での添字、`resolveTemplate` の結果は変えない)を優先し、テストの期待値を `[2]` にした。`[3]` のままでは別の要素を伏せ、秘密が証跡に残る | 実装で決定 |
+| 9 | T5 | 初版計画 §4 の「記録を返す 4 ツールの処理の順番」は証跡ディレクトリの作成を本体の実行前に置く。初版の `handleApiRunGoal` は実行後に作る | 初版の順番を保った。開始前の失敗で証跡を残さない規則(初版設計書 §5-1、設計書 §5-2)と既存テストに合う。実行中の予算超過は実行後に証跡を確定するので残る | 実装で決定 |
+| 10 | T11a | 設計書 §9-3 の path の伏字は添字で要素を指す。`inputs` の値が `.` / `..`(`%2e` を含む)を含むと URL の正規化で経路が畳み込まれ、添字がずれて秘密が証跡に残る。テンプレート経路と spec 経路の両方に当たる | 伏字の位置を確定できない値は送らない。`inputs` 由来の path 要素の値を "/" で分けた片が `.` / `..` になるときは `skip: "unsafe_path: <名前>"` を返す(`hasUnsafeDotSegment`)。設計書 §9-3 に追記した | 採用・設計書へ反映済み |
 
 ## 8. 未解決事項と着手の関係
 
@@ -421,4 +424,45 @@ type LoadedSpec = {
 
 ## 10. 実施記録
 
-実装のセッションで追記する。
+実施日: 2026-09-26。外部ベンダーの委譲先が途中で API の認証エラー(401)になったため、T6 の途中以降は担当表の「Claude モデル」列へ読み替えて委譲した。
+
+### T0 baseline
+
+- 本件と無関係な未コミット変更: `.claude/settings.json`、`CLAUDE.md`、`cliproxyapi.config.example.yaml`、`.raphael/`、`docs/chat/`。触れていない。
+- `pnpm run lint` / `typecheck` / `test` / `build` はすべてパス。テストは全体 2475 件(jevriel 192 件)。build の差分なし。
+- `plugin.json` と `package.json` の version は `0.1.0-dev`。キー無しの `tools/list` は 10 ツール。
+- `yaml@^2.9.0` の最新は 2.9.1(ロックファイルはワークスペースの既存解決により 2.9.0)。
+- 初版の export 名は初版計画 T5〜T7 の produces と一致。計画に無い追加として `loop.ts` の `InitialBudgetExceeded` がある。
+- 初版の予算超過は `reason: "budget_exceeded"`、`error.errorClass: "InitialBudgetExceeded"`、`error.kind: "budget_exceeded"`。
+
+### T1 契約の凍結の例外と既存テストの変更
+
+- `ApiGoalInput.requests` を `source: RequestSource` に置き換え、`dropSummary` を足した(契約の凍結の例外)。
+- path に `{{inputs.*}}` を書いたときは、証跡と state の URL の該当要素が `[redacted]` になる。
+- 更新した既存テストの期待値: なし。既存テストの変更は `loop.test.ts` の入力を `source: templateSource(...)` と `dropSummary: false` にしたもの(許可する差分 (3))だけ。
+- テンプレート経路の検証例の添字は §7 の #8 のとおり `[2]` にした。
+
+### 設計書 §17-1(choice の選択肢数の下限)
+
+SDK 0.6.0 の `choice` は選択肢 1 個を受け付ける(`index.d.mts` の `ChoiceCriteria` に下限が無く、`index.mjs` の `choice` は配列だけを拒否する)。扱いは変えず、候補 1 個の対象は問わない。
+
+### T9 ARCHITECTURE
+
+変更しない。`yaml` はプラグイン固有のランタイム依存で、「プラグイン固有のランタイム依存はそのプラグインの `package.json` に置く」の範囲に収まる。システム概要・ディレクトリ構成・依存方向・ADR に食い違いは無い。
+
+### T10 統合検証
+
+1. lint / typecheck / test はパス。全体 2593 件(+118)、jevriel 310 件(+118)。レビュー指摘の修正後は jevriel 321 件。
+2. build 後の `plugins/jevriel/dist` に差分なし。
+3. `dist/server.mjs` の `yaml@` は 144 件、`playwright-core@` と `/playwright@` は 0 件。
+4. キー無しで `tools/list` が 11 ツールを返し、`api_list_operations` が `sample-3.1.json` の 4 操作を返し、`api_run_goal` が `not_configured` を返した。stdout に応答以外の行は無い。
+5. 保留。`TYPESAFE_API_KEY` が無いため、実キーでの完走と `steps[].values` の確認は未実施。
+6. 他プラグイン名の grep は 0 件。
+
+### T11 レビューと T12 突き合わせ
+
+- T11a: critical 1 件(§7 の #10)と low 1 件(件数の単数形)。どちらも採用。
+- T11b: 確認点はすべて満たす。medium 1 件(深さ 7 の葉のテストが空振り)と low 1 件(ハンドラの `baseUrl` 検査のテスト欠落)。どちらも採用。
+- T11c: 確認点はすべて満たす。low 2 件(README の伏字の説明の欠け)。どちらも採用。
+- 修正はコミット `8ab6ebb` にまとめた。
+- T12: 入力スキーマ・`RunRecord` の型・コミット単位と `dist` の差分・G1〜G5 のテストを突き合わせ、食い違いは §7 の #8〜#10 だけだった。設計書 §16 の実キーの項目は保留。

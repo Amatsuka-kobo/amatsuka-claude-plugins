@@ -493,6 +493,7 @@ specSource(args: { spec: LoadedSpec; operations: Operation[]; headers: Record<st
 - 応答の葉値も同じく送られる。初版でも `last.body` として送る範囲の値である。
 - `inputs` の値は送らない(初版 §9-3)。
 - `inputs` の値を置いた path の要素は、証跡と state に入れる URL で `[redacted]` に置き換える。`build` がその要素の位置(`request.url` の pathname を "/" で分けた配列の添字)を `inputPathSegments` で返し、ループが `sanitizeUrl` の前に置き換える。送信する URL は生のままとする。テンプレート経路で `{{inputs.*}}` を path に書いたときも同じ扱いとし、初版の同じ穴をこの拡張で塞ぐ。
+- `inputs` の値を置く path の要素で、値を "/" で分けた片が `.` / `..`(`%2e` を `.` と見なす)になるときは、URL の正規化で添字がずれるので送らず、`skip: "unsafe_path: <パラメータ名またはプレースホルダ>"` を返す(実装時の追加。計画書 §7 の #10)。
 
 ---
 
