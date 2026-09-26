@@ -282,6 +282,8 @@ importers:
 
   plugins/metatron: {}
 
+  plugins/native-japanese: {}
+
   plugins/pitcrew: {}
 
   plugins/prefetch: {}
