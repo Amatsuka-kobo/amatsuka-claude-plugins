@@ -1034,17 +1034,41 @@ T0 ─ T1 ─ T2 ─ T3 ─(コミット 1)─ T4 ─ T5 ─(コミット 2)─ 
 
 ## 9. 実施記録
 
-(実装時に記入する)
+実施日は 2026-09-26。T1〜T4 は担当を分けて並行し(T1 と T4、T2 と T5)、実装者はコミットせず、オーケストレーターがコミット 1(`4049e9e`)とコミット 2(`7c37f4b`)を順に作った。
 
 ### T0 baseline
 
+- HEAD `01f2215`。`0e4639f` 以降のコミットは `01f2215`(計画書のレビュー反映)だけ。
+- 無関係な未コミット変更: `.claude/settings.json`、`CLAUDE.md`、`cliproxyapi.config.example.yaml`、`docs/chat/`、`.raphael/antibodies/`。触らず残した。
+- lint 通過(metatron の info 4 件は既存)、typecheck 通過、test 2604 passed / 2 skipped、build 通過で `scripts/` の差分なし。
+- `plugins/native-japanese` は無し。agent-policy の version は `0.20.0-dev`。`writingHeading` はバンドルに 4 件。
+
 ### T1 discipline.md の文字数と行数
+
+- 3,771 文字(`string.length`)、125 行(末尾の空行を含む)。1 行目と 6 つの節見出しは契約どおり。派生元名・他プラグイン名は 0 件。
+- 草案からの変更は 2 か所(適用範囲の 2 文を 1 文に統合、文の節で連体修飾の一般則を削除)。後者はコミット 1 の最終レビューで差し戻され、一般則を戻した。
 
 ### T6 Agent 定義の再生成
 
+- 複製 `/tmp/agents-backup-ZN9XQj`、作業用 `/tmp/agents-regen-m2ceNz`。撤去後のバンドルで `writingHeading` は 0 件。
+- 表と実ファイルの照合は 14 定義とも一致。`--check` の判定は 13 件が OK、`complex-reviewer` だけが NG(`toolsOnlyInTemplate` に `Write`・`Edit`・`Skill`。想定どおり)。
+- OK の 13 件を `--write`(`--merge` なし、`--mcp-servers` と `--mcp-deny` を同じコマンドで)で上書きし、`written.txt` は 13 件。`complex-reviewer` は 52〜64 行の「## 文書の執筆」節を手で削った。
+- 複製との差分は 14 定義すべてで `added=0`、`removed_nonblank=11`。`grep -l "文書の執筆" .claude/agents/*.md` は空。
+
 ### T7 目視検証
 
+- 実行方法は計画と変えた。他プラグインの hook が混ざらないよう、空の一時ディレクトリを cwd にし、`claude -p --plugin-dir <本プラグイン> --model haiku --setting-sources "" --strict-mcp-config` で headless に確かめた。
+- 新規セッション(startup): 6 つの見出しをツール呼び出しなしで返した。
+- サブエージェント(SubagentStart): `general-purpose` 1 体が同じ 6 つの見出しを返した。
+- `/clear` と `/compact` は対話専用のため headless では確かめていない。SessionStart は matcher なしで登録しており、Claude Code は startup / resume / clear / compact / fork のすべてで発火させる。ユーザーが対話セッションで確かめる項目として残す。
+- `echo '{"hook_event_name":"SessionStart"}' | node plugins/native-japanese/scripts/inject.mjs` は JSON 1 行を返した。
+
 ### T8 レビューと T9 突き合わせ
+
+- タスク単位のレビューは T1〜T4 とも仕様適合 ✅・品質 承認。deferred の Minor は 4 件(T1 の連体修飾の一般則、T3 の README 導入章の一語、ルート README 表のパディング、T4 の実装者がスキルをロードできなかった件)。
+- T8a(コミット 1): 実施記録が空である点と、T1 の Minor をマージ前に直す判定。README の 2 件は残してよい判定。→ 本節の記入と、discipline.md の一般則の復元で対応。
+- T8b(コミット 2): 指摘なし、マージ可。差分の範囲外の気づきとして、設計書 §8-2 の `compose.ts` の行範囲が「82-84 行」で実際の削除(直後の空行を含む 4 行)より 1 行少なかったため、設計書を「82-85 行」に直した。
+- T9: HEAD `7c37f4b` で lint / typecheck / test(2616 passed / 2 skipped)/ build 通過、`scripts/` の差分なし。設計書 §4-4 の 8 ケースは T2 のテスト名で確認。ARCHITECTURE はプラグイン一覧を持たず、本プラグインは既存のレイヤー規則に収まるため更新しない。
 
 ## 付録 A: `references/discipline.md` の草案
 

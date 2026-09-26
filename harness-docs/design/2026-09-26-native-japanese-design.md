@@ -288,7 +288,7 @@ agent-policy は、オーケストレーター向けの規律と各 Agent 定義
 | `plugins/agent-policy/references/orchestration-discipline.md` | 「### 文書の執筆」節(72-82 行) |
 | `plugins/agent-policy/assets/roles/ja/_common.md` | 「## 文書の執筆」節(27-38 行) |
 | `plugins/agent-policy/assets/roles/en/_common.md` | 「## Writing」節(27-33 行) |
-| `plugins/agent-policy/src/agents/compose.ts` | 執筆節を合成する分岐(82-84 行) |
+| `plugins/agent-policy/src/agents/compose.ts` | 執筆節を合成する分岐(82-85 行。直後の空行を含む) |
 | `plugins/agent-policy/src/agents/vocabulary.ts` | `Vocabulary` の `writingHeading`(7 行)と、JA・EN の値(19 行、32 行) |
 | `plugins/agent-policy/src/agents/__test__/compose.test.ts` | 「執筆の節を Agent の有無にかかわらず一度だけ出す」(211-223 行)と「英語の定義でも執筆の節を出す」(225-229 行)を削る。「節の順序が仕様どおりになる」(192-209 行)は配列から `"## 文書の執筆"` を外す |
 
