@@ -1,4 +1,4 @@
-# jevriel (0.1.0-dev)
+# jevriel (0.2.0-dev)
 
 MCP server that lets Claude Code delegate typed judgements to TypeSafe AI's Jev (`jev-latest`).
 Jev returns only noul (probability), choice, and score — never text. Design:
@@ -13,9 +13,19 @@ Jev returns only noul (probability), choice, and score — never text. Design:
   (51,200 / 25,600 token caps, 4 concurrent batches), verdict (thresholds → satisfied/unsatisfied/
   uncertain).
 - `src/tools/` judging.ts (jev_ask, classify_items, rank_items, check_claims, assess_action),
-  api.ts (api_check, api_run_goal), browser.ts (browser_setup, browser_check, browser_run_goal).
+  api.ts (api_check, api_run_goal, api_list_operations), browser.ts (browser_setup, browser_check,
+  browser_run_goal). 11 tools in total.
 - `src/api/` http (redact, sanitizeUrl, isHostAllowed — browser tools reuse these), template
-  (`{{inputs.*}}` / `{{steps.*}}`), loop.
+  (`{{inputs.*}}` / `{{steps.*}}`, `templateSource`), loop (`RequestSource` injection point shared
+  by the template and OpenAPI paths), openapi (load/`$ref`/list operations; `yaml ^2.9.0`), fill
+  (candidate-set value filling, request assembly, auth).
+- OpenAPI extension (design `harness-docs/design/2026-09-25-jevriel-openapi-design.md`, plan
+  `harness-docs/plans/2026-09-25-jevriel-openapi-plan.md`): `api_run_goal` takes `spec` (exclusive
+  with `requests`) plus `include` / `headers`; `baseUrl` stays required and spec `servers` are
+  display-only (never the send target or allowed host). Default methods GET/POST/PUT/PATCH; DELETE/
+  HEAD/OPTIONS only via `include.methods`. `api_list_operations` needs no API key, never calls Jev,
+  and writes no evidence. Spec URLs never follow redirects (5 MiB cap); local paths must stay under
+  `projectDir`. Path segments filled from `inputs` are `[redacted]` in evidence and state.
 - `src/browser/` playwright (resolution), snapshot (actionables from `ariaSnapshotJSON()`), driver
   (`GoalDriver` + Playwright impl; `observe()` also returns `notes` for dismissed dialogs / closed
   popups), loop.
