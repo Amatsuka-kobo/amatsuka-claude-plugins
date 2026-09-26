@@ -122,7 +122,7 @@ plugins/native-japanese/
 
 ### 4-4. テストの配置
 
-testing-policy に従い、テストは `src/__test__/inject.test.ts` に置く。子プロセスとして起動する補助は `src/testing/run-ts.ts` に置き、`plugins/gh-utility/src/testing/run-ts.ts` と同じ実装にする。他プラグインの `src/` を import できないため(ARCHITECTURE)、同じ内容を独立に持つ。prefetch はテストを持たないので、子プロセス起動の型は gh-utility に倣う。
+testing-policy に従い、テストは `src/__test__/inject.test.ts` に置く。hook スクリプトの契約は標準入力・標準出力・exit code なので、tsx で子プロセスとして起動して検証する。この起動補助 `src/testing/run-ts.ts` は、hook や CLI を持つ 9 プラグイン(agent-policy、chat-history、codiel、gh-utility、guidepost、metatron、pitcrew、raphael、sandalphon)が同一実装を持つリポジトリ共通の型であり、他プラグインの `src/` を import できないため(ARCHITECTURE)、本プラグインも同じ内容を独立に持つ。
 
 `runTs` は tsx で `src/inject.ts` を直接起動する。`src/` と `scripts/` はどちらもプラグインルートの 1 階層下にあるため、`import.meta.url` から `../references/discipline.md` を解決する処理は、ビルド前のソースでもバンドル後でも同じ場所を指す。
 
