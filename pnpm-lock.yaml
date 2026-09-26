@@ -292,8 +292,6 @@ importers:
 
   plugins/raphael: {}
 
-  plugins/sandalphon: {}
-
 packages:
 
   '@biomejs/biome@2.5.3':
