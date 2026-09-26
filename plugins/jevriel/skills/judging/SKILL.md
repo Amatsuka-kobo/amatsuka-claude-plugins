@@ -9,6 +9,7 @@ allowed-tools:
   - mcp__jevriel__assess_action
   - mcp__jevriel__api_check
   - mcp__jevriel__api_run_goal
+  - mcp__jevriel__api_list_operations
   - mcp__jevriel__browser_setup
   - mcp__jevriel__browser_check
   - mcp__jevriel__browser_run_goal
@@ -29,7 +30,8 @@ allowed-tools:
 | ページを読み込み、操作せず条件を確認する | `url`、`assertions`、`name`、`evidence`、`thresholds` | `browser_check` |
 | ブラウザを操作して目標を達成し、条件を確認する | `url`、`goal`、`assertions`、`inputs`、`allowedHosts`、`name`、`evidence`、`thresholds` | `browser_run_goal` |
 | API リクエストを 1 回送り、応答条件を確認する | `request`、`assertions`、`name`、`evidence`、`thresholds` | `api_check` |
-| 用意した API リクエストを選びながら目標を達成し、条件を確認する | `baseUrl`、`goal`、`requests`、`assertions`、`inputs`、`allowedHosts`、`name`、`evidence`、`thresholds` | `api_run_goal` |
+| OpenAPI 文書から操作と用意すべき `inputs` を確かめる | `spec`、任意の `include` | `api_list_operations` |
+| 用意した API リクエストを選びながら目標を達成し、条件を確認する | `baseUrl`、`goal`、`requests`(または OpenAPI 文書があれば `spec`)、`assertions`、`inputs`、`allowedHosts`、`name`、`evidence`、`thresholds` | `api_run_goal` |
 
 - 専用ツールで足りる判断には `jev_ask` を使わない。
 - 機械的な集計や比較はコードで行う。
@@ -64,14 +66,20 @@ allowed-tools:
 - `browser_check`、`browser_run_goal`、`api_check`、`api_run_goal` には、テスト対象の機能名や画面名を `name` として渡す。
 - 同じ URL の別テストには、それぞれの対象が分かる `name` を付け、証跡が混ざらないようにする。
 - `name` を省略すると URL 由来の名前が使われるため、同じ URL で行う別テストの証跡は同じディレクトリに保存される。
+- `spec` を使うときは、`api_list_operations` で件数・`suggestedInputs`・`supported` を見る → 認証は scheme 名と同じキー、本文は JSON 文字列として `inputs` を用意する → `include` で操作を絞る → `baseUrl` を添えて `api_run_goal` を呼ぶ、の順に進める。
+- `spec` を渡すときも `baseUrl` は必須で渡す。
+- DELETE は既定では列挙されないため、選択肢に入れるときは `include.methods` で明示する。POST / PUT / PATCH は既定で列挙され、状態を変えうる。
+- `api_run_goal` が `missing_input` で止まったら、不足している `inputs` を足して呼び直す。
 
 ## 未セットアップのとき
 
 - `not_configured` が返ったら、利用者に API キーの設定を依頼する。
 - `playwright_missing` が返ったら、`browser_setup` を呼ぶ。
 - `setup_failed` が返ったら、結果の案内を利用者に伝える。
+- `api_list_operations` は API キーが無くても使える。
 
 ## 外部送信
 
 - `state` に入れたデータは外部サービスへ送信される。
 - 秘密は `state` に入れない。
+- `spec` の例の値は候補の説明として Jev へ送られるため、秘密を含む `spec` を渡さない。
