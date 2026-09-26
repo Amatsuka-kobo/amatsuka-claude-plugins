@@ -130,3 +130,4 @@
 - `2026/0924/phyllis998/2352-jevriel-design.md` | 2026-09-24 | phyllis998 | OpenAPI計画書完成・承認と引継ぎ書・起動プロンプト作成
 - `2026/0925/phyllis998/1508-jevriel-implementation.md` | 2026-09-25 | phyllis998 | Jevriel プラグイン実装と ADR-005 追加
 - `2026/0926/phyllis998/1618-japanese-writing-unified-skill.md` | 2026-09-26 | phyllis998 | 訳語セクションを翻訳調の言い換えへ統合し、語の表を追加
+- `2026/0926/phyllis998/2224-agent-definition-role-validation.md` | 2026-09-26 | phyllis998 | エージェント定義の役割調整と検証、merge/keep 機構の問題発見
