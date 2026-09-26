@@ -1,6 +1,6 @@
 {
   "name": "jevriel-scripts",
-  "version": "0.1.0-dev",
+  "version": "0.2.0-dev",
   "description": "jevriel — Jev を Claude Code から使う MCP サーバー",
   "type": "module",
   "private": true,

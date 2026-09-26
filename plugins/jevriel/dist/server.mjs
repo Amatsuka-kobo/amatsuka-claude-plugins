@@ -44336,7 +44336,7 @@ __name(registerJudgingTools, "registerJudgingTools");
 
 // src/server.ts
 async function main() {
-  const server = new McpServer({ name: "jevriel", version: "0.1.0-dev" });
+  const server = new McpServer({ name: "jevriel", version: "0.2.0-dev" });
   const deps = createToolDeps(process.env);
   registerJudgingTools(server, deps);
   registerApiTools(server, deps);
