@@ -14,6 +14,7 @@ import {
   apiCheckInput,
   apiRunGoalInput,
   handleApiCheck,
+  handleApiListOperations,
   handleApiRunGoal
 } from "../api.js"
 import type { ToolDeps, ToolResponse } from "../shared.js"
@@ -948,5 +949,313 @@ describe("api_run_goal with OpenAPI", () => {
     expect(
       await readFile(join(record.evidence.dir, "result.json"), "utf8")
     ).not.toContain("abc")
+  })
+})
+
+describe("api_list_operations", () => {
+  it("lists sample operations without an API key or side effects", async () => {
+    const fixture = await readFile(
+      new URL("../../fixtures/openapi/sample-3.1.json", import.meta.url),
+      "utf8"
+    )
+    await writeFile(join(projectDir, "sample.json"), fixture)
+    const targetFetch = vi.fn<typeof fetch>()
+    const jevFetch = vi.fn<typeof fetch>()
+    const response = await handleApiListOperations(
+      { spec: "sample.json" },
+      depsFor(
+        targetFetch,
+        createJevCall({ apiKey: "test", fetch: jevFetch }),
+        undefined
+      )
+    )
+    const result = body<{
+      spec: {
+        source: string
+        openapi: string
+        title: string | null
+        version: string | null
+      }
+      count: number
+      operations: Array<{
+        name: string
+        method: string
+        path: string
+        summary: string | null
+        tags: string[]
+        parameters: Array<{
+          name: string
+          in: string
+          required: boolean
+          type: string | null
+          style: string
+        }>
+        body: {
+          required: boolean
+          contentTypes: string[]
+          json: boolean
+        } | null
+        security: string[][] | null
+        servers: string[]
+        supported: boolean
+        unsupportedReason?: string
+      }>
+      suggestedInputs: string[]
+      note?: string
+    }>(response)
+
+    expect(response.isError).toBeUndefined()
+    expect(result.spec).toEqual({
+      source: join(projectDir, "sample.json"),
+      openapi: "3.1.0",
+      title: "Sample API",
+      version: "1"
+    })
+    expect(result.count).toBe(result.operations.length)
+    expect(result.operations).toHaveLength(4)
+    expect(result).not.toHaveProperty("baseUrl")
+    for (const operation of result.operations) {
+      expect(operation).toHaveProperty("name")
+      expect(operation).toHaveProperty("method")
+      expect(operation).toHaveProperty("path")
+      expect(operation).toHaveProperty("summary")
+      expect(operation).toHaveProperty("tags")
+      expect(operation).toHaveProperty("parameters")
+      expect(operation).toHaveProperty("body")
+      expect(operation).toHaveProperty("security")
+      expect(operation).toHaveProperty("servers")
+      expect(operation).toHaveProperty("supported")
+      expect(typeof operation.name).toBe("string")
+      expect(typeof operation.method).toBe("string")
+      expect(typeof operation.path).toBe("string")
+      expect(
+        operation.summary === null || typeof operation.summary === "string"
+      ).toBe(true)
+      expect(Array.isArray(operation.tags)).toBe(true)
+      expect(Array.isArray(operation.parameters)).toBe(true)
+      expect(
+        operation.security === null || Array.isArray(operation.security)
+      ).toBe(true)
+      expect(Array.isArray(operation.servers)).toBe(true)
+      expect(typeof operation.supported).toBe("boolean")
+      for (const param of operation.parameters) {
+        expect(param).toEqual(
+          expect.objectContaining({
+            name: expect.any(String),
+            in: expect.any(String),
+            required: expect.any(Boolean),
+            style: expect.any(String)
+          })
+        )
+        expect(param).toHaveProperty("type")
+      }
+    }
+    expect(
+      result.operations.find((operation) => operation.name === "get_search")
+    ).toMatchObject({
+      supported: false,
+      unsupportedReason: "style_unsupported",
+      parameters: [
+        expect.objectContaining({ name: "advanced", style: "deepObject" })
+      ]
+    })
+    expect(targetFetch).not.toHaveBeenCalled()
+    expect(jevFetch).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
+
+  it("suggests required keys in order and explains omitted long parameter names", async () => {
+    const longName1 = "a".repeat(65)
+    const longName2 = "b".repeat(65)
+    const longOperationName = "x".repeat(64)
+    await saveSpec(
+      specDocument({
+        "/first": {
+          get: {
+            operationId: "first",
+            parameters: [
+              {
+                name: "plain",
+                in: "query",
+                required: true,
+                schema: { type: "string" }
+              },
+              {
+                name: "example",
+                in: "query",
+                required: true,
+                schema: { type: "string", example: "value" }
+              },
+              {
+                name: "defaulted",
+                in: "query",
+                required: true,
+                schema: { type: "string", default: "value" }
+              },
+              {
+                name: "enumerated",
+                in: "query",
+                required: true,
+                schema: { type: "string", enum: ["value"] }
+              },
+              {
+                name: longName1,
+                in: "query",
+                required: true,
+                schema: { type: "string" }
+              }
+            ],
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: { type: "object" } } }
+            }
+          }
+        },
+        "/second": {
+          get: {
+            operationId: longOperationName,
+            parameters: [
+              {
+                name: "plain",
+                in: "query",
+                required: true,
+                schema: { type: "string" }
+              },
+              {
+                name: longName2,
+                in: "query",
+                required: true,
+                schema: { type: "string" }
+              }
+            ],
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: { type: "object" } } }
+            }
+          }
+        }
+      })
+    )
+    const response = await handleApiListOperations(
+      { spec: "openapi.json" },
+      depsFor(vi.fn<typeof fetch>())
+    )
+    const result = body<{ suggestedInputs: string[]; note?: string }>(response)
+    const longBodyKey = `${longOperationName.slice(0, 59)}_body`
+
+    expect(result.suggestedInputs).toEqual(["plain", "first_body", longBodyKey])
+    expect(longBodyKey).toHaveLength(64)
+    expect(result.note).toContain(`${longName1}, ${longName2}`)
+    expect(result.suggestedInputs).not.toContain(longName1)
+    expect(result.suggestedInputs).not.toContain(longName2)
+    expect(
+      z.object(apiRunGoalInput).safeParse({
+        baseUrl: "https://api.example.test",
+        goal: "read data",
+        spec: "openapi.json",
+        inputs: Object.fromEntries(
+          result.suggestedInputs.map((key) => [key, "value"])
+        )
+      }).success
+    ).toBe(true)
+  })
+
+  it("omits note when every suggested input key is valid", async () => {
+    await saveSpec(specDocument())
+    const response = await handleApiListOperations(
+      { spec: "openapi.json" },
+      depsFor(vi.fn<typeof fetch>())
+    )
+    expect(
+      body<{ suggestedInputs: string[]; note?: string }>(response)
+    ).toEqual({
+      spec: {
+        source: join(projectDir, "openapi.json"),
+        openapi: "3.1.0",
+        title: "Test",
+        version: "1"
+      },
+      count: 1,
+      operations: [
+        expect.objectContaining({
+          name: "get_items",
+          method: "GET",
+          path: "/items"
+        })
+      ],
+      suggestedInputs: []
+    })
+  })
+
+  it("preserves undeclared and explicitly empty security requirements", async () => {
+    await saveSpec(
+      specDocument({
+        "/undeclared": { get: { operationId: "undeclared" } },
+        "/none": { get: { operationId: "none", security: [] } }
+      })
+    )
+    const response = await handleApiListOperations(
+      { spec: "openapi.json" },
+      depsFor(vi.fn<typeof fetch>())
+    )
+    const operations = body<{
+      operations: Array<{ name: string; security: string[][] | null }>
+    }>(response).operations
+
+    expect(
+      operations.find((operation) => operation.name === "undeclared")?.security
+    ).toBeNull()
+    expect(
+      operations.find((operation) => operation.name === "none")?.security
+    ).toEqual([])
+  })
+
+  it("returns an empty successful list after filtering", async () => {
+    await saveSpec(specDocument())
+    const response = await handleApiListOperations(
+      { spec: "openapi.json", include: { tags: ["missing"] } },
+      depsFor(vi.fn<typeof fetch>())
+    )
+    expect(response.isError).toBeUndefined()
+    expect(
+      body<{ count: number; operations: unknown[] }>(response)
+    ).toMatchObject({
+      count: 0,
+      operations: []
+    })
+  })
+
+  it("rejects more than 255 operations", async () => {
+    const paths = Object.fromEntries(
+      Array.from({ length: 256 }, (_, index) => [
+        `/items/${index}`,
+        { get: { operationId: `operation_${index}` } }
+      ])
+    )
+    await saveSpec(specDocument(paths))
+    const response = await handleApiListOperations(
+      { spec: "openapi.json" },
+      depsFor(vi.fn<typeof fetch>())
+    )
+
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "invalid_input"
+    )
+  })
+
+  it("returns request_failed for a redirected spec URL", async () => {
+    const http = vi.fn<typeof fetch>(async () =>
+      httpResponse("", { status: 302 })
+    )
+    const response = await handleApiListOperations(
+      { spec: "https://spec.example/openapi.json" },
+      depsFor(http)
+    )
+
+    expect(response.isError).toBe(true)
+    expect(body<{ error: { kind: string } }>(response).error.kind).toBe(
+      "request_failed"
+    )
   })
 })

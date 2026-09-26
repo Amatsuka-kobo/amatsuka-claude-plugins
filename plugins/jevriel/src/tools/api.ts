@@ -13,7 +13,13 @@ import {
   type RequestSource,
   runApiGoal
 } from "../api/loop.js"
-import { listOperations, loadSpec, RUN_LIMIT } from "../api/openapi.js"
+import {
+  LIST_LIMIT,
+  listOperations,
+  loadSpec,
+  type Operation,
+  RUN_LIMIT
+} from "../api/openapi.js"
 import { templateSource } from "../api/template.js"
 import {
   captureFlags,
@@ -89,6 +95,11 @@ export const includeSchema = z
   })
   .optional()
 
+export const apiListOperationsInput = {
+  spec: z.string().min(1),
+  include: includeSchema
+}
+
 export const apiRunGoalInput = {
   baseUrl: z.string().url(),
   goal: z.string().min(1),
@@ -124,6 +135,109 @@ export const apiRunGoalInput = {
 }
 
 export type ApiRunGoalArgs = z.infer<z.ZodObject<typeof apiRunGoalInput>>
+
+type ApiListOperationsArgs = z.infer<z.ZodObject<typeof apiListOperationsInput>>
+
+export function suggestInputs(operations: Operation[]): {
+  keys: string[]
+  note: string | null
+} {
+  const keys: string[] = []
+  const seen = new Set<string>()
+  const omitted = new Set<string>()
+  const add = (key: string) => {
+    if (!seen.has(key)) {
+      seen.add(key)
+      keys.push(key)
+    }
+  }
+
+  for (const operation of operations) {
+    for (const parameter of operation.parameters) {
+      if (
+        !parameter.required ||
+        parameter.examples.length > 0 ||
+        parameter.default !== undefined ||
+        parameter.enum !== null
+      )
+        continue
+      if (parameter.name.length > 64) omitted.add(parameter.name)
+      else add(parameter.name)
+    }
+    if (operation.body?.required && operation.body.json)
+      add(`${operation.name.slice(0, 59)}_body`)
+  }
+
+  return {
+    keys,
+    note:
+      omitted.size > 0
+        ? `Required parameter names longer than 64 characters were omitted: ${Array.from(omitted).join(", ")}`
+        : null
+  }
+}
+
+export async function handleApiListOperations(
+  args: ApiListOperationsArgs,
+  deps: ToolDeps
+): Promise<ToolResponse> {
+  const loaded = await loadSpec(args.spec, {
+    projectDir: deps.projectDir,
+    fetch: deps.httpFetch,
+    timeoutMs: 30_000
+  })
+  if (!loaded.ok) return errorResponse(loaded.kind, loaded.message)
+
+  const listed = listOperations(loaded.spec, args.include, LIST_LIMIT)
+  if (!listed.ok) return errorResponse("invalid_input", listed.message)
+
+  const info = loaded.spec.doc.info
+  const infoObject =
+    info && typeof info === "object" && !Array.isArray(info)
+      ? (info as Record<string, unknown>)
+      : {}
+  const suggestions = suggestInputs(listed.operations)
+
+  return toResponse({
+    spec: {
+      source: loaded.spec.source.location,
+      openapi: loaded.spec.openapi,
+      title: typeof infoObject.title === "string" ? infoObject.title : null,
+      version:
+        typeof infoObject.version === "string" ? infoObject.version : null
+    },
+    count: listed.operations.length,
+    operations: listed.operations.map((operation) => ({
+      name: operation.name,
+      method: operation.method,
+      path: operation.path,
+      summary: operation.summary,
+      tags: operation.tags,
+      parameters: operation.parameters.map((parameter) => ({
+        name: parameter.name,
+        in: parameter.in,
+        required: parameter.required,
+        type: parameter.types?.length ? parameter.types.join("|") : null,
+        style: parameter.style
+      })),
+      body: operation.body
+        ? {
+            required: operation.body.required,
+            contentTypes: operation.body.contentTypes,
+            json: operation.body.json
+          }
+        : null,
+      security: operation.security,
+      servers: operation.servers,
+      supported: operation.supported,
+      ...(!operation.supported
+        ? { unsupportedReason: "style_unsupported" as const }
+        : {})
+    })),
+    suggestedInputs: suggestions.keys,
+    ...(suggestions.note ? { note: suggestions.note } : {})
+  })
+}
 
 export async function handleApiRunGoal(
   args: ApiRunGoalArgs,
@@ -458,5 +572,14 @@ export function registerApiTools(server: McpServer, deps: ToolDeps): void {
       inputSchema: apiRunGoalInput
     },
     (args) => handleApiRunGoal(args, deps)
+  )
+  server.registerTool(
+    "api_list_operations",
+    {
+      description:
+        "List OpenAPI operations and suggested input keys before calling api_run_goal. Supply a spec path or URL and optional filters.",
+      inputSchema: apiListOperationsInput
+    },
+    (args) => handleApiListOperations(args, deps)
   )
 }

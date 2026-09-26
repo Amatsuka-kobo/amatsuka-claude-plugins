@@ -40863,6 +40863,7 @@ import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 var SPEC_MAX_BYTES = 5 * 1024 * 1024;
 var REF_MAX_DEPTH = 16;
+var LIST_LIMIT = 255;
 var RUN_LIMIT = 253;
 var DEFAULT_METHODS = [
   "GET",
@@ -42226,6 +42227,10 @@ var includeSchema = external_exports.object({
   pathPrefix: external_exports.string().startsWith("/").optional(),
   methods: external_exports.array(external_exports.enum(apiMethods)).min(1).optional()
 }).optional();
+var apiListOperationsInput = {
+  spec: external_exports.string().min(1),
+  include: includeSchema
+};
 var apiRunGoalInput = {
   baseUrl: external_exports.string().url(),
   goal: external_exports.string().min(1),
@@ -42254,6 +42259,80 @@ var apiRunGoalInput = {
   evidence: evidenceSchema,
   thresholds: thresholdsSchema
 };
+function suggestInputs(operations) {
+  const keys = [];
+  const seen = /* @__PURE__ */ new Set();
+  const omitted = /* @__PURE__ */ new Set();
+  const add = /* @__PURE__ */ __name((key) => {
+    if (!seen.has(key)) {
+      seen.add(key);
+      keys.push(key);
+    }
+  }, "add");
+  for (const operation of operations) {
+    for (const parameter of operation.parameters) {
+      if (!parameter.required || parameter.examples.length > 0 || parameter.default !== void 0 || parameter.enum !== null)
+        continue;
+      if (parameter.name.length > 64) omitted.add(parameter.name);
+      else add(parameter.name);
+    }
+    if (operation.body?.required && operation.body.json)
+      add(`${operation.name.slice(0, 59)}_body`);
+  }
+  return {
+    keys,
+    note: omitted.size > 0 ? `Required parameter names longer than 64 characters were omitted: ${Array.from(omitted).join(", ")}` : null
+  };
+}
+__name(suggestInputs, "suggestInputs");
+async function handleApiListOperations(args, deps) {
+  const loaded = await loadSpec(args.spec, {
+    projectDir: deps.projectDir,
+    fetch: deps.httpFetch,
+    timeoutMs: 3e4
+  });
+  if (!loaded.ok) return errorResponse(loaded.kind, loaded.message);
+  const listed = listOperations(loaded.spec, args.include, LIST_LIMIT);
+  if (!listed.ok) return errorResponse("invalid_input", listed.message);
+  const info = loaded.spec.doc.info;
+  const infoObject = info && typeof info === "object" && !Array.isArray(info) ? info : {};
+  const suggestions = suggestInputs(listed.operations);
+  return toResponse({
+    spec: {
+      source: loaded.spec.source.location,
+      openapi: loaded.spec.openapi,
+      title: typeof infoObject.title === "string" ? infoObject.title : null,
+      version: typeof infoObject.version === "string" ? infoObject.version : null
+    },
+    count: listed.operations.length,
+    operations: listed.operations.map((operation) => ({
+      name: operation.name,
+      method: operation.method,
+      path: operation.path,
+      summary: operation.summary,
+      tags: operation.tags,
+      parameters: operation.parameters.map((parameter) => ({
+        name: parameter.name,
+        in: parameter.in,
+        required: parameter.required,
+        type: parameter.types?.length ? parameter.types.join("|") : null,
+        style: parameter.style
+      })),
+      body: operation.body ? {
+        required: operation.body.required,
+        contentTypes: operation.body.contentTypes,
+        json: operation.body.json
+      } : null,
+      security: operation.security,
+      servers: operation.servers,
+      supported: operation.supported,
+      ...!operation.supported ? { unsupportedReason: "style_unsupported" } : {}
+    })),
+    suggestedInputs: suggestions.keys,
+    ...suggestions.note ? { note: suggestions.note } : {}
+  });
+}
+__name(handleApiListOperations, "handleApiListOperations");
 async function handleApiRunGoal(args, deps) {
   if (!hasApiKey(deps.env)) return notConfiguredResponse();
   if (args.spec === void 0 === (args.requests === void 0))
@@ -42547,6 +42626,14 @@ function registerApiTools(server, deps) {
       inputSchema: apiRunGoalInput
     },
     (args) => handleApiRunGoal(args, deps)
+  );
+  server.registerTool(
+    "api_list_operations",
+    {
+      description: "List OpenAPI operations and suggested input keys before calling api_run_goal. Supply a spec path or URL and optional filters.",
+      inputSchema: apiListOperationsInput
+    },
+    (args) => handleApiListOperations(args, deps)
   );
 }
 __name(registerApiTools, "registerApiTools");
