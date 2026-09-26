@@ -7,8 +7,7 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 
 - [ ] 見出し許可リストは `src/lib/architecture.ts` の `ARCHITECTURE_HEADINGS` と `src/lib/scan.ts` の `ARCHITECTURE_SECTIONS` の 2 箇所にある。同じコミットで直す
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4
-- [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`
-- [ ] sandalphon: `src/check-intent-env.ts`、`references/handoff-contract.md`
+- [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`、`src/check-intent-env.ts`、`references/handoff-contract.md`
 - [ ] ADR エントリの書式はこの節ではなく「ADR の書式」の節を見る(正本は契約 §4 ではなく §6)
 
 ## ADR の書式(`references/architecture-format.md` の `## ADR 一覧`)
@@ -42,11 +41,10 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
-この規則を変更したら、次をすべて更新して 3 者比較テストを通す。
+この規則を変更したら、次をすべて更新して 2 者比較テストを通す。
 
 - [ ] `plugins/metatron/src/lib/config.ts`(正本の実装)
 - [ ] `plugins/codiel/src/hooks/lib.ts` の `findDocRoot` / `resolveDocPaths`
-- [ ] `plugins/sandalphon/src/check-intent-env.ts`
-- [ ] 3 者比較テスト(metatron のテスト R4 / sandalphon のケース 16f)
+- [ ] 2 者比較テスト(metatron のテスト R4 / codiel のケース 16f)
 
-3 つのプラグインはこの規則を独立に実装している。写しが割れると、同じカレントディレクトリから別のファイルへ辿り着く。
+2 つのプラグインはこの規則を独立に実装している。写しが割れると、同じカレントディレクトリから別のファイルへ辿り着く。

@@ -113,9 +113,7 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
 
 Codiel は **metatron が無くても動きます。** `/codiel:init` はドメイン分割だけを聞き取って最小の ARCHITECTURE を自前で生成するフォールバックを持ちます。metatron を併用すると、`/metatron:init` がシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を作り、Codiel はそれをそのまま利用します。両者が共有するのはファイルの書式だけで、Codiel が metatron のインストール位置を参照することはありません。
 
-### sandalphon
-
-sandalphon の ASIS 探索が ARCHITECTURE と GOTCHAS を材料に使います。ドメインマップは探索スコープの決定にも使えます。こちらもファイルを直読するだけで、metatron の CLI には依存しません。
+Codiel の `capturing-intent` スキルによる ASIS 探索も、ARCHITECTURE と GOTCHAS を材料に使います。ドメインマップは探索スコープの決定にも使えます。こちらもファイルを直読するだけで、metatron の CLI には依存しません。
 
 ## 文書の置き場
 

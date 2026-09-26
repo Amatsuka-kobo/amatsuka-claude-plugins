@@ -81,7 +81,7 @@
 | --- | --- |
 | codiel `initializing-harness` | run 開始の前提条件(読めなければ run を開始しない) |
 | codiel `orchestrating-runs` | 実装ステップのディスパッチ先の選択 |
-| sandalphon `check-intent-env` | ASIS 探索のスコープ決定 |
+| codiel `check-intent-env` | ASIS 探索のスコープ決定 |
 | metatron の CLI と hook | `get domains` の応答と SessionStart 注入 |
 
 codiel の `guard-write` hook はこのブロックを読まない。書き込み境界の強制をこのブロックに期待せず、必要なら各エージェントの担当範囲として書く。

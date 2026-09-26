@@ -238,7 +238,7 @@ test("C12: maxChars を明示指定 → 既定 9000 を上書きする", () => {
   expect(cfg.warnings).toStrictEqual([])
 })
 
-// --- 契約 §13「検証する構成」由来の追加ケース ---
+// --- 契約 §14「検証する構成」由来の追加ケース ---
 
 test("C13: rulesDir 未指定 → 既定値が docRoot 基準で解決される", () => {
   const dir = mkTmp()

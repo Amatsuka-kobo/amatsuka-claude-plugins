@@ -102,8 +102,8 @@ tests/
 ドメイン名から、そのドメインに属するパスの glob への写像を書く。
 開始行の info string は `json metatron:domains` に固定する。ブロック内は有効な JSON だけを置く(コメント不可)。
 分割が馴染まないプロジェクトは `{ "generic": ["**"] }` に縮退させる。
-このブロックを機械的に読むのは、metatron の CLI と hook、codiel の `initializing-harness` と
-`orchestrating-runs`、sandalphon の `check-intent-env` である。codiel の `guard-write` hook は読まない。
+このブロックを機械的に読むのは、metatron の CLI と hook、codiel の `initializing-harness`、
+`orchestrating-runs`、`check-intent-env` である。codiel の `guard-write` hook は読まない。
 書き込みの禁止をこのブロックに期待せず、触ってほしくないパスは `.claude/rules/metatron/protected-paths.md` に書く。
 -->
 
