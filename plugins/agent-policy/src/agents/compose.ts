@@ -79,10 +79,6 @@ export function compose(input: ComposeInput): string {
       body.push(vocabulary.advisorHeading, "", ...advisor, "")
   }
 
-  const writing = common.get(vocabulary.writingHeading)
-  if (writing !== undefined)
-    body.push(vocabulary.writingHeading, "", ...writing, "")
-
   const constraints = [
     ...(withAgent ? (common.get(vocabulary.agentConstraintHeading) ?? []) : []),
     ...(common.get(vocabulary.constraintHeading) ?? []),

@@ -209,7 +209,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 0.19 系から 0.20 系へ移行する場合は、次を確認してください。
 
 1. 役割 ID `independent-review` を `design-review` に、`doc-review` を `knowledge-elicitation` に変更しました。生成済み定義の `agent-policy-role` を書き換えるか、setup-agents で再生成してください。旧 ID は組み込み役割として認識されません。「設計書・実装計画書のレビュー」は `doc-review` ではなく `design-review` を指すようになりました。
-2. `doc-writing` 役割を廃止しました。生成済みの `doc-writing` 定義を削除してください。執筆基準は全定義の共通部分に含まれ、再生成で反映されます。オーケストレーターは文書を自分で書きます。
+2. `doc-writing` 役割を廃止しました。生成済みの `doc-writing` 定義を削除してください。オーケストレーターは文書を自分で書きます。
 3. `explore-lead` と context-map を廃止しました。`explore-lead` 定義は削除するか、その役割マーカーを外してください。`.claude/context-maps/` の内容は今後読まれないため、残すか削除するかはプロジェクトで決めてください。
 4. `explore` の役割名を「コードベース探索実働」から「コードベース探索」へ変更しました。
 5. `adversarial-review` 役割を追加しました。標準フローには含まれません。
@@ -218,6 +218,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 8. `e2e-verify` の推奨モデルから `gpt-astra` を外しました。
 9. `ja` / `en` 以外の翻訳断片を使う場合は、`_common.md` の更新に合わせて再翻訳してください。削除・改名された役割の翻訳断片(`doc-writing.md` / `explore-lead.md` / `independent-review.md` / `doc-review.md`)が残っているとプロジェクト独自の役割として扱われるため、翻訳ディレクトリから削除してください。
 10. 推奨モデル ID `gemini-flash` とベンダー `gemini` を削除しました。`--vendor` は `gpt` / `grok` / `claude` / `none` の 4 値です。Gemini のエイリアスは `unknown` と推定されます。使う場合は個別調整で `--model` にエイリアスを指定し、`--vendor none` または別のベンダーを選んでください。
+11. 0.20.1 で、生成する定義の共通部分から「## 文書の執筆」(英語は「## Writing」)の節を削除しました。日本語の書き方の規律は、このプラグインでは扱いません。生成済みの定義からこの節を消すには、定義ファイルから節を手で削除するか、setup-agents の差分方針で「完全上書き」を選んでください。「保持マージ」では、テンプレートに無い節として残ります。
 
 0.18 系から 0.19 系へ移行する場合は、次を確認してください。
 

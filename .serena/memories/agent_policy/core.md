@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.20.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.20.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.4.0-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -113,11 +113,12 @@ knowledge-elicitation, code-review, final-review, gate-review, adversarial-revie
   The discipline tells the orchestrator to batch exploration expected to take ≥3 grep/read turns into
   one dispatch and to do the cross-checking and requirement fixing itself.
 - `general` has the document-writing remit back.
-- **Writing standards are common to every definition**: `_common.md` has `## 文書の執筆` / `## Writing`
-  (`Vocabulary.writingHeading`), emitted by `compose()` **regardless of `withAgent`**, after the
-  advisor section and before `## 制約`. Japanese rewording examples live only in the ja fragment.
-  The discipline carries the same standards for the orchestrator (duplication allowed: different
-  readers). The orchestrator may now write file-persisted documents itself (F1 withdrawn).
+- **Writing standards were removed in 0.20.1-dev**: `_common.md` (ja/en) no longer has
+  `## 文書の執筆` / `## Writing`, `Vocabulary.writingHeading` and its `compose()` branch are gone,
+  and the discipline lost `### 文書の執筆` (its `### 文書の執筆を委譲するとき` stays: it governs request
+  text, not style). Japanese writing style now comes from the separate `native-japanese` plugin's
+  SessionStart/SubagentStart injection; English definitions carry no style rules (accepted trade-off).
+  The orchestrator may write file-persisted documents itself (F1 withdrawn).
 - `_common.md`'s `## Agent tool の制約` shrank to "use `Agent` only to consult an advisor" + "do not
   grant `Agent` to subagents you start" (D1 re-delegation withdrawn).
 - The implementation roles are chosen by observable criteria evaluated top-down in the discipline
