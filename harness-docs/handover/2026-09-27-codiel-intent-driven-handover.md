@@ -3,6 +3,7 @@
 - 日付: 2026-09-27
 - 引き継ぎ元: 設計・計画セッション(調査・設計・実装計画は完了、実装は未着手)
 - 引き継ぎ先: 実装セッション(Dynamic Workflow で実装する)
+- 環境: `gh` 2.101.0(`--attach` あり)
 - 対象プラグイン: `plugins/codiel`(主)、`plugins/sandalphon`(撤去)、`plugins/metatron`、`plugins/gh-utility`
 - 作業場所: worktree `amatsuka-claude-plugins-intent-driven-development`、ブランチ `intent-driven-development`
 
@@ -36,7 +37,7 @@
 - Workflow 間のオーケストレーター手順は、Workflow の中に入れずメインセッションで実行する。ユーザーの手作業が要るのは次の 4 つ。
   - O1-5: `plugins/sandalphon/` の一括削除。クラシファイアに拒否されたら、絶対パスの `rm` をユーザーに `!` で実行してもらう。
   - O2-0: `hooks.json` の変更後、新しいセッションで hook の発火を確かめる。M2-B へ進む条件である。
-  - O2-2: `gh` を 2.99.0 以上へ更新する。この環境は 2.45.0 で `--attach` が無い。
+  - O2-2: `gh` を 2.99.0 以上へ更新する。2026-09-27 に 2.101.0 へ更新済みで、`gh issue create --help` に `--attach` があることを確かめた。実装セッションでは `gh --version` の確認だけを行う。
   - O2-3: claude-in-chrome を含む画像添付の E2E。確定した手順を計画書 §9.3 に記録し、M2-T14 がそれを読む。
 - ADR は `metatron:updating-architecture` スキルを起動して起票する。`stage-adr` → `commit-architecture` の直接呼び出しで代えない。
 

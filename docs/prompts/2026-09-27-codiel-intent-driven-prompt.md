@@ -19,7 +19,7 @@
 1. `workflow-authoring` スキルを読み、Workflow スクリプトの書き方を確かめる。役割マーカー付きの Agent 定義を `agent()` の委譲先にできるかもここで確かめ、計画書 §9.3 に記録する。
 2. O0-1: `git status`・HEAD・`pnpm run lint`・`typecheck`・`test`・`build`・`gh --version` を実測し、計画書 §0.2 に記入する。
 3. 計画書の順(M1 → M2-A → M2-B → M2-C → M2-D → M3-A → M3-B → M4)に Workflow を 1 本ずつ実行する。次の Workflow は、前の Workflow のゲートがコミットまで終えてから始める。
-4. Workflow の合間に、計画書のオーケストレーター手順をメインセッションで実行する。ユーザーの手作業(O1-5 の sandalphon 削除、O2-0 の新しいセッションでの hook 発火確認、O2-2 の gh 2.99.0 以上への更新、O2-3 の画像添付 E2E)は、ユーザーに依頼してから待つ。
+4. Workflow の合間に、計画書のオーケストレーター手順をメインセッションで実行する。ユーザーの手作業(O1-5 の sandalphon 削除、O2-0 の新しいセッションでの hook 発火確認、O2-3 の画像添付 E2E)は、ユーザーに依頼してから待つ。O2-2 の gh の更新は済んでいる(2.101.0)ので、`gh --version` の確認だけを行う。
 5. 各 M の終わりに計画書のレビュータスクを実行し、critical・high は同じ M の修正 Workflow で直してから次へ進む。
 6. 中断したら `resumeFromRunId` で再開する。完了したタスクを再実行しない。
 
