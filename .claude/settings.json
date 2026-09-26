@@ -60,6 +60,7 @@
     "gh-utility@amatsuka-claude-plugins": true,
     "metatron@amatsuka-claude-plugins": true,
     "sandalphon@amatsuka-claude-plugins": true,
+    "native-japanese@amatsuka-claude-plugins": true,
     "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
