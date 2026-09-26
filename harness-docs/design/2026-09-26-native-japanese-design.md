@@ -298,7 +298,7 @@ agent-policy は、オーケストレーター向けの規律と各 Agent 定義
 
 - `plugins/agent-policy/.claude-plugin/plugin.json` と `package.json` の `version` を、揃えてパッチで上げる(`0.20.0-dev` から `0.20.1-dev`)。
 - `.serena/memories/agent_policy/core.md:116-120` は、`_common.md` が「## 文書の執筆」「## Writing」を持ち `compose()` が出力すると書いている。撤去後の事実に合わせ、Serena の `edit_memory` で直す。
-- `plugins/agent-policy/README.md` と `docs/` に該当の記述があれば追随させる。設計時点の grep では README に該当は無かった。実装時にもう一度 grep する。
+- `plugins/agent-policy/README.md` の 0.19 系から 0.20 系への移行リストにある「執筆基準は全定義の共通部分に含まれ、再生成で反映されます」の 1 文を削る。同じリストに、文書規律を撤去したことと再生成の注意(§8-4)を 1 項として足す。`docs/` は無い。
 
 ### 8-4. Agent 定義の再生成
 
@@ -308,8 +308,8 @@ agent-policy は、オーケストレーター向けの規律と各 Agent 定義
 
 1. §8-2 の撤去を終え、`pnpm run build` を実行し、`scripts/setup-agents.mjs` に `writingHeading` が残っていないことを grep で確かめる。
 2. `.claude/agents/` を別ディレクトリへ複製する。このディレクトリは `.gitignore` の対象で、git では戻せない。
-3. `--check` を実行し、応答の `mcpCurrent.denyTools` を控える。
-4. `--write --merge` に `--mcp-servers` を渡すときは、同じコマンドに控えた値を `--mcp-deny` として渡す。
+3. `--check` を実行し、応答の `mcpCurrent.denyTools` を控える。あわせて、14 定義すべてで、テンプレートとの差分が「## 文書の執筆」節の有無だけであることを確かめる。ほかの差分があれば、その定義は再生成せず、手で節を削る。
+4. `--merge` を付けずに `--write` で上書きする。`--merge` は既存ファイルにだけある節を末尾に残す(`setup-agents.ts` の `automaticKeep` が `sectionsOnlyInExisting` を保持対象にする)ため、撤去した節が消えない。`--mcp-servers` を渡すときは、同じコマンドに控えた値を `--mcp-deny` として渡す。
 5. 生成後に複製との差分を取る。消えてよいのは「## 文書の執筆」節の行だけで、それ以外に削除行が無いことを確かめる。
 
 ---
