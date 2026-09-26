@@ -39,14 +39,14 @@ Workflow の中の作業は次の規則で分ける。
 
 | 項目 | 値 |
 | --- | --- |
-| HEAD | (実装セッションが記入) |
-| `git status --short` | (実装セッションが記入。2026-09-27 時点では `docs/chat/INDEX.md` の変更と `docs/chat/2026/0926/` の未追跡の会話記録があり、本改修と無関係なのでコミットに混ぜない) |
-| `pnpm run lint` | (実装セッションが記入) |
-| `pnpm run typecheck` | (実装セッションが記入) |
-| `pnpm run test` | (実装セッションが記入。Test Files と Tests の件数を書く) |
-| `pnpm run build` | (実装セッションが記入) |
-| `gh --version` | (実装セッションが記入。2026-09-27 の計画作成時は 2.45.0) |
-| `wc -c plugins/codiel/skills/orchestrating-runs/SKILL.md` | (実装セッションが記入。2026-09-27 の計画作成時は 30,950 B。閾値判定はしない) |
+| HEAD | `164b29542c7223e8d427b6d15175c314db1a7966`(2026-09-27 に実測) |
+| `git status --short` | `docs/chat/INDEX.md` の変更、未追跡の `docs/chat/2026/0926/phyllis998/2333-intent-driven-development-research.md` と `docs/chat/2026/0927/` だけ。本改修と無関係なのでコミットに混ぜない |
+| `pnpm run lint` | 終了コード 0(Checked 420 files、エラー 0、info 4) |
+| `pnpm run typecheck` | 終了コード 0 |
+| `pnpm run test` | 終了コード 0(Test Files 175 passed / 1 skipped(176)、Tests 2616 passed / 2 skipped(2618)) |
+| `pnpm run build` | 終了コード 0。実行後の `git status --short` に `scripts/` の差分なし |
+| `gh --version` | 2.101.0(2026-09-15) |
+| `wc -c plugins/codiel/skills/orchestrating-runs/SKILL.md` | 30,950 B |
 
 baseline が失敗を含むときは M1 に入らず、ユーザーに報告する。
 
@@ -998,6 +998,7 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | hooks.json の発火確認(O2-0) | (未記録) |
 | E2E で確定した手順(O2-3) | (未記録) |
 | 手動確認の結果(O2-4、O3-1、O4-1) | (未記録) |
+| `agent()` の委譲先の指定(§10 の未決事項 1) | 指定できる。`workflow-authoring` スキルの記述では、`agent()` の `opts.agentType` に Agent ツールと同じレジストリのサブエージェント名を渡せ、`schema` と併用できる。役割マーカーの対応表の定義を次のとおり指定する: complex-impl → `lead-implementer`(opus)、normal-impl → `claude-implementer`(sonnet)、light-impl → `claude-light-implementer`(haiku)、general → `general-worker`(sonnet)、code-review → `code-reviewer`(sonnet)、final-review → `claude-complex-reviewer`(fable)。各定義は担当表の Claude モデルと同じ `model` を宣言しているので、`opts.model` は渡さない(2026-09-27 確認) |
 | 設計書との食い違い(実装中に見つかったもの) | (未記録) |
 | レビューの medium / low | (未記録) |
 
