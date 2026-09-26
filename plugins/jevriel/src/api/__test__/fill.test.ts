@@ -95,8 +95,9 @@ describe("collectLeaves", () => {
   it("collects primitive JSON leaves, omitting null and stopping at depth six", () => {
     const leaves = collectLeaves([
       recent("x", {
-        a: { b: { c: { d: { e: "five", f: { g: "seven" } } } } },
+        a: { b: { c: { d: { e: "five" } } } },
         deep: { a: { b: { c: { d: { e: 6 } } } } },
+        deeper: { a: { b: { c: { d: { e: { f: "seven" } } } } } },
         flag: false,
         nil: null
       })
@@ -106,7 +107,7 @@ describe("collectLeaves", () => {
       "steps.x.body.deep.a.b.c.d.e"
     )
     expect(leaves.map(({ path }) => path)).not.toContain(
-      "steps.x.body.a.b.c.d.e.f.g"
+      "steps.x.body.deeper.a.b.c.d.e.f"
     )
     expect(leaves.map(({ path, value }) => [path, value])).toContainEqual([
       "steps.x.body.flag",
@@ -819,6 +820,20 @@ describe("assembleRequest", () => {
     expect(scalar.ok && scalar.inputPathSegments).toEqual([4])
     const array = assemble(op, [{ source: "spec", value: ["a/b", "c"] }])
     expect(array.ok && array.request.url).toBe("http://h/api/v1/users/a%2Fb,c")
+  })
+
+  it.each([
+    ".",
+    ".."
+  ])("returns skip instead of a foldable path value from an input: %s", (value) => {
+    const op = operation({
+      path: "/users/{id}",
+      parameters: [param({ in: "path", style: "simple", explode: false })]
+    })
+    const result = assemble(op, [{ source: "input", ref: "id" }], {
+      inputs: { id: value }
+    })
+    expect(result).toEqual({ ok: false, skip: "unsafe_path: id" })
   })
 
   it("places a path input at the final URL segment index but does not mask a spec value", () => {

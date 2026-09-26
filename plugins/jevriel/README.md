@@ -112,9 +112,9 @@ sudo npx playwright install-deps chromium
 
 実行内容に応じて `result.json`、`log.json`、`step-<n>.png`、`final.png`、`trace.zip` が保存されます。証跡は既定では成功時も保存されます。`evidence` を `on_failure` にすると失敗時だけ、`none` にすると保存されません。`none` のときはブラウザの trace とスクリーンショットも作成されません。
 
-`.jevriel/` を `.gitignore` に追加し、不要になった証跡は削除してください。共有する前にも中身を確認してください。ページや応答など `state` に入れた情報は TypeSafe AI へ送信されます。`inputs` の実際の値は Jev へ送信されませんが、ブラウザに入力した値は trace やスクリーンショットに残ることがあります。`api_run_goal` の `path` に `inputs` の値を置くと(テンプレートの `{{inputs.*}}`、または `spec` の path パラメータ)、`result.json` の steps と `log.json` に記録される URL では、その値を置いた要素が `[redacted]` になります。送信するリクエストの URL には元の値が入ります。
+`.jevriel/` を `.gitignore` に追加し、不要になった証跡は削除してください。共有する前にも中身を確認してください。ページや応答など `state` に入れた情報は TypeSafe AI へ送信されます。`inputs` の実際の値は Jev へ送信されませんが、ブラウザに入力した値は trace やスクリーンショットに残ることがあります。`api_run_goal` の `path` に `inputs` の値を置くと(テンプレートの `{{inputs.*}}`、または `spec` の path パラメータ)、`result.json` の steps と `log.json` に記録される URL では、その値を置いた要素が `[redacted]` になります。送信するリクエストの URL には元の値が入ります。その値が `.` や `..`(パーセントエンコードした表記を含む)へ折りたたまれるときは、パスを組み立てずに送信を取りやめ、該当するステップに `unsafe_path` という注記を残して次のステップへ進みます。クエリ文字列の値は出所に関わらず、常にすべて伏字になります。
 
-`spec` を使う実行では、`ApiStep.values` にどの対象へどの出所の値を使ったかが記録されますが、値そのものは残りません。認証で付けた値と `headers` 引数の値は、名前に関わらず伏字になります。一方で、spec の `example` / `examples` / `default` / `enum` の値と、直近の応答から採った値の要約は、選択肢の説明として Jev へ送信されます。秘密を含む `spec` を渡さないでください。
+`spec` を使う実行では、`ApiStep.values` にどの対象へどの出所の値を使ったかが記録されますが、値そのものは残りません。認証で付けた値・`inputs` から埋めたヘッダーパラメータの値・`headers` 引数の値は、名前に関わらず伏字になります。一方で、spec の `example` / `examples` / `default` / `enum` の値と、直近の応答から採った値の要約は、選択肢の説明として Jev へ送信されます。秘密を含む `spec` を渡さないでください。
 
 ## 9. Codiel との併用
 

@@ -507,6 +507,24 @@ describe("handleApiRunGoal", () => {
       )
     }
   })
+  it("rejects an invalid baseUrl before calling Jev or HTTP", async () => {
+    const http = vi.fn<typeof fetch>()
+    const jevFetch = vi.fn<typeof fetch>()
+    const response = await handleApiRunGoal(
+      goalArgs({ baseUrl: "not-a-url" }),
+      depsFor(http, createJevCall({ apiKey: "test", fetch: jevFetch }))
+    )
+    expect(response.isError).toBe(true)
+    expect(
+      body<{ error: { kind: string; message: string } }>(response).error
+    ).toEqual({
+      kind: "invalid_input",
+      message: "Provide a valid baseUrl."
+    })
+    expect(http).not.toHaveBeenCalled()
+    expect(jevFetch).not.toHaveBeenCalled()
+    expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
+  })
 })
 
 describe("template path evidence", () => {
@@ -533,6 +551,30 @@ describe("template path evidence", () => {
     expect(
       await readFile(join(record.evidence.dir, "log.json"), "utf8")
     ).not.toContain("s3cret-value")
+  })
+  it("never sends or records a path value that folds to a dot segment", async () => {
+    const http = vi.fn<typeof fetch>(async () => httpResponse("{}"))
+    const result = await handleApiRunGoal(
+      goalArgs({
+        inputs: { uid: "../secret-value" },
+        requests: {
+          get: { method: "GET", path: "/users/{{inputs.uid}}", headers: {} }
+        }
+      }),
+      depsFor(http, goalJev(["get", "done"]))
+    )
+    const record = body<{
+      evidence: { dir: string }
+      steps: Array<{ note?: string }>
+    }>(result)
+    expect(http).not.toHaveBeenCalled()
+    expect(record.steps[0].note).toBe("unsafe_path: {{inputs.uid}}")
+    expect(
+      await readFile(join(record.evidence.dir, "result.json"), "utf8")
+    ).not.toContain("secret-value")
+    expect(
+      await readFile(join(record.evidence.dir, "log.json"), "utf8")
+    ).not.toContain("secret-value")
   })
 })
 
@@ -759,7 +801,7 @@ describe("api_run_goal with OpenAPI", () => {
       denied
     ).error
     expect(error.kind).toBe("budget_exceeded")
-    expect(error.message).toContain("1 operations")
+    expect(error.message).toContain("1 operation")
     expect(error.message).toContain("include")
     expect(existsSync(join(projectDir, ".jevriel"))).toBe(false)
   })
