@@ -196,7 +196,6 @@ describe("本文", () => {
       "## Core Responsibilities",
       "## 作業手順",
       "## アドバイザーへの相談",
-      "## 文書の執筆",
       "## 制約",
       "## Output Format"
     ]
@@ -208,24 +207,16 @@ describe("本文", () => {
     }
   })
 
-  it("執筆の節を Agent の有無にかかわらず一度だけ出す", () => {
-    for (const role of ["complex-impl", "code-review"] as const) {
-      const body = build([role])
-      expect(body.match(/^## 文書の執筆$/gm)).toHaveLength(1)
-      expect(body.indexOf("## 文書の執筆")).toBeLessThan(
-        body.indexOf("## 制約")
-      )
-      if (role === "complex-impl")
-        expect(body.indexOf("## 文書の執筆")).toBeGreaterThan(
-          body.indexOf("## アドバイザーへの相談")
-        )
+  it("日英の合成定義に執筆の節を出さない", () => {
+    for (const [lang, fragmentDirs] of [
+      ["ja", [PLUGIN_ROLES]],
+      ["en", [EN]]
+    ] as const) {
+      for (const role of ["complex-impl", "code-review"]) {
+        const body = build([role], { lang, fragmentDirs })
+        expect(body).not.toMatch(/^## (文書の執筆|Writing)$/m)
+      }
     }
-  })
-
-  it("英語の定義でも執筆の節を出す", () => {
-    expect(
-      build(["code-review"], { lang: "en", fragmentDirs: [EN] })
-    ).toContain("## Writing")
   })
 
   it("日英の合成定義に廃止した役割や探索文書への参照を含めない", () => {

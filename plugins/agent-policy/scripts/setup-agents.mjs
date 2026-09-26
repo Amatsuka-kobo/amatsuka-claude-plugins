@@ -491,7 +491,6 @@ var JA = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
   advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
   agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
-  writingHeading: "## \u6587\u66F8\u306E\u57F7\u7B46",
   constraintHeading: "## \u5236\u7D04",
   outputFormatHeading: "## Output Format",
   listSeparator: "\u3001",
@@ -502,7 +501,6 @@ var EN = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
   advisorHeading: "## Consulting an advisor",
   agentConstraintHeading: "## Agent tool limits",
-  writingHeading: "## Writing",
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",
@@ -554,9 +552,6 @@ function compose(input) {
     if (advisor !== void 0)
       body.push(vocabulary.advisorHeading, "", ...advisor, "");
   }
-  const writing = common.get(vocabulary.writingHeading);
-  if (writing !== void 0)
-    body.push(vocabulary.writingHeading, "", ...writing, "");
   const constraints = [
     ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
     ...common.get(vocabulary.constraintHeading) ?? [],

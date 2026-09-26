@@ -4,7 +4,6 @@ export interface Vocabulary {
   bodyOrder: string[]
   advisorHeading: string
   agentConstraintHeading: string
-  writingHeading: string
   constraintHeading: string
   outputFormatHeading: string
   listSeparator: string
@@ -16,7 +15,6 @@ const JA: Vocabulary = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## 作業手順"],
   advisorHeading: "## アドバイザーへの相談",
   agentConstraintHeading: "## Agent tool の制約",
-  writingHeading: "## 文書の執筆",
   constraintHeading: "## 制約",
   outputFormatHeading: "## Output Format",
   listSeparator: "、",
@@ -29,7 +27,6 @@ const EN: Vocabulary = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
   advisorHeading: "## Consulting an advisor",
   agentConstraintHeading: "## Agent tool limits",
-  writingHeading: "## Writing",
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",

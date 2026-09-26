@@ -24,14 +24,6 @@ Your roles are {{ROLE_LABELS}}. The role you are invoked for is stated at the to
 - Use the `Agent` tool only to consult an advisor, not to delegate other work.
 - Do not grant the `Agent` tool to any subagent you start.
 
-## Writing
-
-- Follow the grammar and idiom of the language you write in, and check that each term fits its context.
-- Write concisely and plainly.
-- Avoid difficult or roundabout phrasing.
-- Limit quotations and citations to what readers need; omit distracting background and rationale.
-- When writing in a language other than English, follow that language's conventions rather than translating word for word.
-
 ## Constraints
 
 - Do not take on work outside your role. Send it back to the orchestrator.
