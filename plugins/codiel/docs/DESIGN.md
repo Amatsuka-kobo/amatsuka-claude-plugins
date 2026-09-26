@@ -172,7 +172,7 @@ GitHub Issue を起点に、設計 → テスト仕様 → 開発計画 → 実�
 ```
 
 - **try の運用**: `/codiel:run 123` 実行時、最新 try が未完了なら**その try を再開**、
-  終了状態(completed / stopped / rejected)なら **try-<n+1> を新規作成**して開始する。
+  終了状態(stopped / awaiting_outcome / completed / rejected)なら **try-<n+1> を新規作成**して開始する。
   新 try のサブエージェントは過去 try の成果物・レビュー所見を参照できる(前回の失敗を繰り返さないための入力)。
 - Raguel へ渡す runId は `issue-123-try-2` の形式(try 毎に独立したケースファイル・resubmission-loop カウンタを持つ)。
 
