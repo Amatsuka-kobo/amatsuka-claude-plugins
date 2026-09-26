@@ -25,16 +25,17 @@
 
 ## AI 向けの指示書
 
-以下に挙げる文書は AI 向けの指示書であり、作成・編集するときは必ず `prompt-smith` プラグインを使用し、その規律にしたがう。
+以下に挙げるファイルは AI 向けの指示書であり、作成・編集する前に `prompt-smith:prompt-smith` を起動し、その規律に従って書く。
 
 - `CLAUDE.md`
-- `docs/prompts/`
-- `harness-docs/`
-- `.claude/rules/` 
-- `.claude/agents/` 
-- `.claude/output-styles/`
-- `SKILL.md` 
-- `plugins/<plugin>/references/`
+- `docs/prompts/*.md`
+- `harness-docs/**/*.md`
+- `.claude/rules/**/*.md`
+- `.claude/output-styles/*.md`
+- `plugins/<plugin>/references/**/*.md`
+- `plugins/<plugin>/assets/**/*.md`
+- `**/skills/**/references/**/*.md`
+- `**/skills/**/assets/**/*.md`
 
 ## Done の条件
 
