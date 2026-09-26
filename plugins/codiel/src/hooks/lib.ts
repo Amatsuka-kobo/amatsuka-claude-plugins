@@ -59,8 +59,8 @@ export function globToRegExp(glob: string): RegExp {
 // 文書パスの解決(ファイル契約 §2・§3 の独立実装)
 //
 // 規則の正本は `harness-docs/design/2026-08-16-file-contract-freeze.md` の
-// §2(設定スキーマ)と §3(ルート解決とパス解決の規則)。metatron と sandalphon が
-// 同じ規則の写しを独立に持つ。3 プラグインは互いのインストールパスを解決できないため、
+// §2(設定スキーマ)と §3(ルート解決とパス解決の規則)。metatron が
+// 同じ規則の写しを独立に持つ。2 プラグインは互いのインストールパスを解決できないため、
 // ソースを共有せず同じ規則を独立に実装する。ここを変えたら契約 §14 の実装間一致テストを通す。
 //
 // codiel は基準の異なる 2 つのルート概念を持つ。関数名で区別し、混同しない。
@@ -85,8 +85,8 @@ export interface DocPaths {
   /**
    * 既定値へ落とした理由・設定を読めなかった理由(契約 §2・§3 規則 3)。
    * 空配列が正常。「設定ファイルが無い」は正常な状態なので警告にしない。
-   * metatron は ResolvedConfig.warnings、sandalphon は出力 JSON の configWarnings で
-   * 同じ理由を返す。3 実装で「警告が出るか出ないか」と件数を揃える。
+   * metatron は ResolvedConfig.warnings で同じ理由を返す。
+   * 2 実装で「警告が出るか出ないか」と件数を揃える。
    */
   warnings: string[]
 }
@@ -330,14 +330,13 @@ export function resolveDocPaths(startDir?: string): DocPaths {
 // 契約 §1 の**検証 4 項目**(有効な JSON / トップレベルがオブジェクトで配列でない /
 // 各値が 1 要素以上の文字列配列 / キーが 1 個以上)を読み取り時にも適用する。
 // JSON として parse できただけの値を「読めた」として返してはならない。metatron の
-// `validateDomainsValue` と sandalphon の `readDomains` が同じ判定を持っており、
-// ここだけ緩いと同じ ARCHITECTURE に対する 3 実装の答えが割れる。
+// `validateDomainsValue` が同じ判定を持っており、ここだけ緩いと同じ ARCHITECTURE に
+// 対する 2 実装の答えが割れる。
 //
 // 終了フェンスの判定は契約 §4-2 の規則 2 と同一とし、開始行・終了行の認識も
 // §4-2 の正規化(インデント許容・改行コード・末尾空白の扱い)に従う。
-// **独自のフェンス判定を書かない**(契約 §1)。metatron の `src/lib/architecture.ts` と
-// sandalphon の `src/check-intent-env.ts` が同じ規則の写しを独立に持つ。
-// ここを変えたら契約 §13 の 3 者比較テストを通す。
+// **独自のフェンス判定を書かない**(契約 §1)。metatron の `src/lib/architecture.ts` が
+// 同じ規則の写しを独立に持つ。ここを変えたら契約 §14 の 2 者比較テストを通す。
 //
 // 正規表現でブロックを切り出す実装に戻してはならない。CRLF 改行の文書を読めず
 // (開始行が `\r` で終わるため一致しない)、チルダのフェンスにも対応できず、
@@ -445,7 +444,7 @@ function findDomainsBlocks(text: string): DomainsBlockLookup {
 
 /**
  * 契約 §1 の検証 4 項目のうち 2〜4(値の形)。1(有効な JSON)は呼び出し元が担う。
- * metatron の `validateDomainsValue`、sandalphon の `readDomains` と**同じ判定**にする。
+ * metatron の `validateDomainsValue` と**同じ判定**にする。
  * ここを緩めると、同じ ARCHITECTURE を codiel だけが「読めた」と扱う契約の割れになる。
  */
 function validateDomainsValue(value: unknown): Record<string, string[]> | null {

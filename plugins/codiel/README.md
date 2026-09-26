@@ -49,7 +49,7 @@ GitHub Issue #`<issue番号>` を起点に、設計→実装→テスト→PR→
 [10] finalize    結果レポートを出力し run を終了(以後 PR のマージ/クローズを検知して自動で outcome を記録)
 ```
 
-sandalphon が起票した intent issue(本文に `<!-- intent:v1 -->` を持つ Issue)を起点にした場合、
+`capturing-intent` が起票した intent issue(本文に `<!-- intent:v1 -->` を持つ Issue)を起点にした場合、
 init フェーズは合意済みのセクションを解釈し直さず `issue.md` へそのまま転記します。
 discuss フェーズは起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙します。
 

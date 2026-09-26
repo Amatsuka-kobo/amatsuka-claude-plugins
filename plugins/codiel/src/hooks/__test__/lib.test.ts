@@ -3,7 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, expect, test } from "vitest"
-// 契約 §13 の実装間一致検証(R4)のためだけの相対 import。
+// 契約 §14 の実装間一致検証(R4)のためだけの相対 import。
 // codiel の実行時に metatron を参照することはない(テストコード限定)。
 import { extractDomains } from "../../../../metatron/src/lib/architecture.js"
 import { loadConfig } from "../../../../metatron/src/lib/config.js"
@@ -66,7 +66,7 @@ function insideGitRepo(dir: string): boolean {
   )
 }
 
-// 契約 §13: 同一構成に対して metatron の config.ts と codiel の resolveDocPaths が
+// 契約 §14: 同一構成に対して metatron の config.ts と codiel の resolveDocPaths が
 // docRoot と解決パスの**両方**で一致することを検証する。
 function expectSameResolution(startDir: string, label: string): void {
   const mine = resolveDocPaths(startDir)
@@ -203,7 +203,7 @@ test("R8: 最小 ARCHITECTURE(ドメインマップだけ)を readDomains が読
 //
 // 正規表現でブロックを切り出す実装は CRLF 改行の文書を読めず、チルダのフェンスにも
 // 対応できず、「開始と同じ文字を開始と同数以上」という終了条件も表現できない。
-// 同じ ARCHITECTURE を metatron / sandalphon が読めて codiel だけ読めない状態を防ぐ。
+// 同じ ARCHITECTURE を metatron が読めて codiel だけ読めない状態を防ぐ。
 // ---------------------------------------------------------------------------
 
 function writeArchitecture(root: string, lines: string[], eol = "\n"): void {
@@ -331,8 +331,8 @@ test("R9: 最初のブロックがチルダでもそれを採る", () => {
 // R11: 契約 §1 の検証 4 項目を読み取り時にも適用する
 //
 // JSON として parse できただけの値を「読めた」として返すと、metatron
-// (`extractDomains`)と sandalphon(`readDomains`)が「読めない」とする同じ入力を
-// codiel だけが受け入れ、3 実装の契約が割れる。各ケースで metatron の判定とも
+// (`extractDomains`)が「読めない」とする同じ入力を
+// codiel だけが受け入れ、2 実装の契約が割れる。各ケースで metatron の判定とも
 // 突き合わせ、割れていないことを機械的に確かめる。
 // ---------------------------------------------------------------------------
 
@@ -674,7 +674,7 @@ test("DomainsRead.unreadable の追加前後で R11 の domains と warnings は
 // ---------------------------------------------------------------------------
 // R10: 契約 §3 規則 3 — 拒否した理由を呼び出し元へ返す(黙って既定値に落とさない)
 //
-// metatron は ResolvedConfig.warnings、sandalphon は出力 JSON の configWarnings で
+// metatron は ResolvedConfig.warnings で
 // 同じ理由を返す。codiel だけが理由を落とすと、利用者は設定が効いていないことに
 // 気づけない。
 // ---------------------------------------------------------------------------
