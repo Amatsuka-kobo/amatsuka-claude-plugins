@@ -15,15 +15,15 @@ oauth-model-alias:
   codex:
     - name: "gpt-6-astra"
       alias: "claude-gpt-6-astra"
-    - name: "gpt-5.6-sol"
-      alias: "claude-gpt-5-6-sol"
+    - name: "gpt-6-sol"
+      alias: "claude-gpt-6-sol"
     - name: "gpt-5.6-terra"
       alias: "claude-gpt-5-6-terra"
-    - name: "gpt-5.6-luna"
-      alias: "claude-gpt-5-6-luna"
+    - name: "gpt-6-luna"
+      alias: "claude-gpt-6-luna"
   xai:
-    - name: "grok-4.6"
-      alias: "claude-grok-4-6"
+    - name: "grok-4.7"
+      alias: "claude-grok-4-7"
 
 oauth-excluded-models:
   antigravity:
@@ -50,12 +50,18 @@ oauth-excluded-models:
     - "claude-opus-4-1-20250805"
     - "claude-sonnet-4-20250514"
     - "claude-fable-5"
+    - "claude-opus-5"
   codex:
     - "gpt-5.5"
     - "gpt-5.4"
     - "gpt-5.4-mini"
+    - "gpt-5.6-sol"
+    - "gpt-5.6-luna"
     - "gpt-image-1.5"
     - "gpt-image-2"
+    - "gpt-image-2.5"
+    - "gpt-image-2.5-flare"
+    - "gpt-image-2.5-sunburst"
     - "gpt-5.3-codex-spark"
     - "codex-auto-review"
   xai:
@@ -66,6 +72,8 @@ oauth-excluded-models:
     - "grok-4.20-multi-agent-0309"
     - "grok-4.3"
     - "grok-4.5"
+    - "grok-4.6"
+    - "grok-4.7-build-fast"
     - "grok-build-0.1"
     - "grok-imagine-image"
     - "grok-imagine-image-quality"
