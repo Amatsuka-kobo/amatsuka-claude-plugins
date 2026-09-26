@@ -10,7 +10,6 @@
   - `plugins/prefetch/`(同型の小さな hook スクリプト。`build.ts` / `package.json` / `hooks/hooks.json` / `src/check-prefetch-manifest.ts`)
   - `plugins/agent-policy/src/hooks/session-start.ts` / `subagent-start.ts`(`hookSpecificOutput` の出力形式)
   - `plugins/agent-policy/references/orchestration-discipline.md`、`assets/roles/{ja,en}/_common.md`、`src/agents/compose.ts`、`src/agents/vocabulary.ts`、`src/agents/__test__/compose.test.ts`
-  - `plugins/prompt-smith/LICENSE`(Apache-2.0 の手本)
   - 派生元 coji/natural-japanese v1.5.0 の `LICENSE`、`README.md`、`skills/natural-japanese/references/` の `writing-constitution.md` / `forbidden-patterns.md` / `translationese.md` / `readability-principles.md`
 
 ---
@@ -266,9 +265,9 @@ agent-policy の「文書の執筆」節から移す。
 
 ## 7. 帰属とライセンス
 
-- 本プラグインのライセンスは Apache License 2.0 とする。デュアルライセンスではない。
-- `plugins/native-japanese/LICENSE` は、`plugins/prompt-smith/LICENSE` と同じ Apache License 2.0 の全文を先に置く。その後に「Third-party notice」の見出しを置き、`references/discipline.md` が次の MIT ライセンスの成果物から派生したこと、以下がその著作権表示と許諾文であることを 2 文で書いてから、派生元の MIT 許諾文を全文で併記する。MIT 側の著作権表示は `Copyright (c) 2026 coji` とする。この構成は MIT が求める著作権表示と許諾文の同梱を満たし、プラグイン全体を MIT でも配布できるとは読ませない。
-- `NOTICE` は作らない。Apache-2.0 の NOTICE 義務は元の作品が NOTICE を持つときに生じるもので、派生元は持たない。`plugins/prompt-smith/NOTICE` は別の上流を移植したときの差分表であり、本プラグインの先例にしない。
+- 本プラグインのライセンスは、派生元と同じ MIT License とする。
+- `plugins/native-japanese/LICENSE` は MIT License の本文 1 通とし、著作権表示を 2 行置く。1 行目は `Copyright (c) 2026 amatsuka-koubou`、2 行目は派生元の `Copyright (c) 2026 coji` とし、2 行目の末尾に派生部分(`references/discipline.md`)を指す短い注記を添える。これで MIT が求める著作権表示と許諾文の同梱を満たし、別ファイルは要らない。
+- `NOTICE` は作らない。MIT に NOTICE の仕組みは無い。
 - README の「由来」節には、coji/natural-japanese v1.5.0(MIT)の文体憲法・禁止語・翻訳調・読みやすさの原則を、常時適用の規律へ再構成したことを書く。派生元のリポジトリへのリンクを添える。
 - 派生元の名前を書くのは `LICENSE` と README の「由来」節だけとする。`discipline.md`、`plugin.json` と `marketplace.json` の `description`、README の説明文には書かない。
 
@@ -345,6 +344,7 @@ agent-policy は、オーケストレーター向けの規律と各 Agent 定義
 | 「スキルを使え」だけを注入する | 規律の中身が届くかどうかがスキルのロードに左右され、ロードを飛ばされたときに何も効かない。ロードの分だけ手番も増える。 |
 | hooks.json に awk 一行で本文を出力させる | JSON のエスケープとイベント名の追随をシェルで正しく書くのが難しく、テストもできない。 |
 | 英語版の「## Writing」を残す | 本プラグインは日本語だけを扱うので、英語版だけを残すと agent-policy に文体規律の置き場が二つ残る。英語での出力の規律は割り切ると決めている。 |
+| ライセンスを Apache-2.0 にする(prompt-smith に揃える) | prompt-smith が Apache-2.0 なのは移植元がそのライセンスだったためで、本プラグインには同じ制約が無い。MIT の派生元に Apache-2.0 を重ねると MIT 全文の併記が要り、デュアルライセンスと誤読される。特許条項は規律文書と小さなスクリプトに実益が無い。 |
 
 ---
 
