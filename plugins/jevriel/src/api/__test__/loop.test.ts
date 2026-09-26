@@ -453,6 +453,19 @@ describe("RequestSource", () => {
       chooseDropSummary({ ...huge, goal: "y".repeat(220_000) })
     ).toMatchObject({ ok: false, message: expect.stringMatching(/1.*include/) })
   })
+  it("uses the singular noun when exactly one operation exceeds the budget", () => {
+    const huge = input({
+      source: {
+        ...source(async () => built()),
+        list: { a: { ...list.a, summary: "x".repeat(220_000) } }
+      }
+    })
+    expect(chooseDropSummary({ ...huge, goal: "y".repeat(220_000) })).toEqual({
+      ok: false,
+      message:
+        "1 operation exceeds the Jev token budget. Narrow include and try again."
+    })
+  })
   it("redacts specified path segments and leaves query values for sanitizeUrl", () => {
     expect(redactPathSegments("https://h/api/v1/users/s3cret?x=1", [4])).toBe(
       "https://h/api/v1/users/[redacted]?x=1"

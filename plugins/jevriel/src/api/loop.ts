@@ -172,9 +172,10 @@ export function chooseDropSummary(
     ) >= 0
   )
     return { ok: true, dropSummary: true }
+  const count = Object.keys(input.source.list).length
   return {
     ok: false,
-    message: `${Object.keys(input.source.list).length} operations exceed the Jev token budget. Narrow include and try again.`
+    message: `${count} ${count === 1 ? "operation exceeds" : "operations exceed"} the Jev token budget. Narrow include and try again.`
   }
 }
 

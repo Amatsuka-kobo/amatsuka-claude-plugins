@@ -39757,6 +39757,17 @@ function resolvePlaceholders(text2, ctx) {
   return unresolved === void 0 ? { ok: true, value, usedInputs } : { ok: false, unresolved };
 }
 __name(resolvePlaceholders, "resolvePlaceholders");
+function normalizeDotEncoding(part) {
+  return part.replace(/%2e/gi, ".");
+}
+__name(normalizeDotEncoding, "normalizeDotEncoding");
+function hasUnsafeDotSegment(value) {
+  return value.split("/").some((part) => {
+    const normalized = normalizeDotEncoding(part);
+    return normalized === "." || normalized === "..";
+  });
+}
+__name(hasUnsafeDotSegment, "hasUnsafeDotSegment");
 function templateSource(requests) {
   return {
     stateKey: "requests",
@@ -39777,8 +39788,14 @@ function templateSource(requests) {
       const resolved = resolveTemplate(tpl, ctx);
       if (!resolved.ok)
         return { ok: false, skip: `unresolved: ${resolved.unresolved}` };
+      const rawSegments = tpl.path.split(/[?#]/, 1)[0].split("/");
+      const segments = rawSegments.map((part) => resolvePlaceholders(part, ctx));
+      for (let index = 0; index < segments.length; index += 1) {
+        const segment = segments[index];
+        if (segment.ok && segment.usedInputs && hasUnsafeDotSegment(segment.value))
+          return { ok: false, skip: `unsafe_path: ${rawSegments[index]}` };
+      }
       const inputPathSegments = [];
-      const segments = tpl.path.split(/[?#]/, 1)[0].split("/").map((part) => resolvePlaceholders(part, ctx));
       const filled = segments.map(
         (segment) => segment.ok ? segment.value : ""
       );
@@ -40250,6 +40267,8 @@ function assembleRequest(args) {
     const candidate = picks.get(target.key)?.candidate;
     if (!candidate || candidate.source === "omit") continue;
     const value = candidate.source === "input" ? inputs[candidate.ref ?? ""] : candidate.value;
+    if (target.in === "path" && candidate.source === "input" && hasUnsafeDotSegment(value))
+      return { ok: false, skip: `unsafe_path: ${target.name}` };
     if (target.in === "body") {
       body2 = JSON.stringify(
         candidate.source === "input" ? JSON.parse(value) : value
@@ -40564,9 +40583,10 @@ function chooseDropSummary(input) {
     questionsFor({ ...initial, dropSummary: true })
   ) >= 0)
     return { ok: true, dropSummary: true };
+  const count = Object.keys(input.source.list).length;
   return {
     ok: false,
-    message: `${Object.keys(input.source.list).length} operations exceed the Jev token budget. Narrow include and try again.`
+    message: `${count} ${count === 1 ? "operation exceeds" : "operations exceed"} the Jev token budget. Narrow include and try again.`
   };
 }
 __name(chooseDropSummary, "chooseDropSummary");

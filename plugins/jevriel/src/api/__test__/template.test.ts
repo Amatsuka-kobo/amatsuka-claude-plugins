@@ -215,4 +215,44 @@ describe("template path boundaries", () => {
     )
     expect(result.ok && result.inputPathSegments).toEqual([2, 3])
   })
+
+  const buildWithUid = async (uid: string) =>
+    templateSource({
+      first: { method: "GET", path: "/users/{{inputs.uid}}/posts", headers: {} }
+    }).build(
+      "first",
+      {
+        goal: "read",
+        step: 1,
+        baseUrl: "http://h/api",
+        inputs: { uid },
+        steps: {},
+        recent: [],
+        history: [],
+        dropSummary: false
+      },
+      async () => {
+        throw new Error("unexpected Jev call")
+      }
+    )
+
+  it.each([
+    "..",
+    ".",
+    "%2e%2E",
+    "a/../b"
+  ])("skips without building a request when an input path value is %s", async (uid) => {
+    expect(await buildWithUid(uid)).toEqual({
+      ok: false,
+      skip: "unsafe_path: {{inputs.uid}}"
+    })
+  })
+
+  it.each([
+    "...",
+    "a.b"
+  ])("still redacts the input segment for an ordinary value containing dots: %s", async (uid) => {
+    const result = await buildWithUid(uid)
+    expect(result.ok && result.inputPathSegments).toEqual([2])
+  })
 })

@@ -70,6 +70,23 @@ export function resolvePlaceholders(
     : { ok: false, unresolved }
 }
 
+function normalizeDotEncoding(part: string): string {
+  return part.replace(/%2e/gi, ".")
+}
+
+/**
+ * True when any "/"-separated part of `value` is exactly "." or ".."
+ * (including percent-encoded forms). A path built from such a value
+ * gets folded/collapsed by URL normalization, which would point a
+ * segment-index-based redaction at the wrong part of the final path.
+ */
+export function hasUnsafeDotSegment(value: string): boolean {
+  return value.split("/").some((part) => {
+    const normalized = normalizeDotEncoding(part)
+    return normalized === "." || normalized === ".."
+  })
+}
+
 export function templateSource(
   requests: Record<string, RequestTemplate>
 ): RequestSource {
@@ -94,11 +111,18 @@ export function templateSource(
       const resolved = resolveTemplate(tpl, ctx)
       if (!resolved.ok)
         return { ok: false, skip: `unresolved: ${resolved.unresolved}` }
+      const rawSegments = tpl.path.split(/[?#]/, 1)[0].split("/")
+      const segments = rawSegments.map((part) => resolvePlaceholders(part, ctx))
+      for (let index = 0; index < segments.length; index += 1) {
+        const segment = segments[index]
+        if (
+          segment.ok &&
+          segment.usedInputs &&
+          hasUnsafeDotSegment(segment.value)
+        )
+          return { ok: false, skip: `unsafe_path: ${rawSegments[index]}` }
+      }
       const inputPathSegments: number[] = []
-      const segments = tpl.path
-        .split(/[?#]/, 1)[0]
-        .split("/")
-        .map((part) => resolvePlaceholders(part, ctx))
       const filled = segments.map((segment) =>
         segment.ok ? segment.value : ""
       )

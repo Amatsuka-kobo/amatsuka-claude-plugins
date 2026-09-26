@@ -10,7 +10,7 @@ import type {
   OperationParam,
   SecurityScheme
 } from "./openapi.js"
-import { resolvePlaceholders } from "./template.js"
+import { hasUnsafeDotSegment, resolvePlaceholders } from "./template.js"
 
 export const CANDIDATE_LIMIT = 255
 export const LEAF_MAX_DEPTH = 6
@@ -588,6 +588,12 @@ export function assembleRequest(args: {
       candidate.source === "input"
         ? inputs[candidate.ref ?? ""]
         : candidate.value
+    if (
+      target.in === "path" &&
+      candidate.source === "input" &&
+      hasUnsafeDotSegment(value as string)
+    )
+      return { ok: false, skip: `unsafe_path: ${target.name}` }
     if (target.in === "body") {
       body = JSON.stringify(
         candidate.source === "input" ? JSON.parse(value as string) : value
