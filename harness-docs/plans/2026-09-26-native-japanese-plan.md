@@ -4,7 +4,7 @@
 - 対象プラグイン: `plugins/native-japanese`(新規。`0.1.0-dev`)、`plugins/agent-policy`(`0.20.0-dev` → `0.20.1-dev`)
 - 設計書(正本): `harness-docs/design/2026-09-26-native-japanese-design.md`(以下「設計書」)
 - 設計書のユーザー承認: 取得済み(2026-09-26)(コミット `407879f`)
-- 計画立案時の HEAD: `407879f`
+- 計画立案時の HEAD: `0e4639f`(本計画書の初版と、設計書 §8-3・§8-4 の更新を含む)
 - 前提: 計画立案時点で `plugins/native-japanese/` は無い。agent-policy の `plugin.json` と `package.json` は `0.20.0-dev`
 - 実装は別セッションで行う。
 
@@ -35,7 +35,7 @@
 - `discipline.md` に他プラグインの名前を書かない(設計書 §2-3、ARCHITECTURE「禁止される依存方向」)。
 - `inject.ts` はほかのモジュールを import しない。使ってよいのは `node:fs`・`node:path`・`node:url` だけである(設計書 §4-2)。
 - ブランチを切らない(プロジェクト規約)。main で作業する。
-- コミットは「native-japanese の新設」と「agent-policy からの撤去」の 2 つに分ける(設計書 §9-2)。本計画書のコミットは別に置く(§5)。
+- コミットは「native-japanese の新設」と「agent-policy からの撤去」の 2 つに分ける(設計書 §9-2)。本計画書は `0e4639f` でコミット済みである。
 - `git add` はパスを列挙して行う。`git add -A` と `git add .` は使わない。
 
 ### 作業の規律
@@ -72,7 +72,7 @@
 
 **手順**:
 
-1. `git rev-parse --short HEAD` を記録する。`407879f` 以降のコミットがあれば、その一覧を `git log --oneline 407879f..HEAD` で記録する。
+1. `git rev-parse --short HEAD` を記録する。`0e4639f` 以降のコミットがあれば、その一覧を `git log --oneline 0e4639f..HEAD` で記録する。
 2. `git status --short` で本件と無関係な未コミット変更を記録する。
 3. `pnpm run lint` / `pnpm run typecheck` / `pnpm run test` / `pnpm run build` を実行し、結果とテスト件数(全体と agent-policy)を記録する。
 4. `plugins/native-japanese` が無いことを `ls plugins` で確かめる。
@@ -405,7 +405,7 @@ await esbuild.build({
 
 **検証**:
 
-1. `pnpm run lint` / `pnpm run typecheck` / `pnpm run test` が通る。native-japanese のテストは 12 件(`test.each` の 2 + 6、単独の 4)。
+1. `pnpm run lint` / `pnpm run typecheck` / `pnpm run test` が通る。native-japanese のテストは 13 件(`test.each` の 2 + 6、単独の 5)。
 2. バンドル後のパス解決(R4)。cwd をリポジトリの外に置いて、次を実行する。出力が `SessionStart true` と `SubagentStart true` の 2 行になる。
 
 ```bash
@@ -661,7 +661,7 @@ export interface Vocabulary {
 7. `plugins/agent-policy/references/orchestration-discipline.md` の 72-83 行(`### 文書の執筆` の見出しから、82 行の「Step は…」の項目と直後の空行まで)を削る。84 行の `### 文書の執筆を委譲するとき` 以下は残す(設計書 §8-2)。削った後の見え方は次のとおり。
 
 ```markdown
-レビューの指摘が対立し採否の軸を自分で言葉にできないとき、(中略)結論はオーケストレーターが出し、採否を委ねない。
+レビューの指摘が対立し採否の軸を自分で言葉にできないとき、または要件確定で選択肢が複数ありユーザーへ示す判断軸を立てられないときは、advisor に軸と推奨を求めてから判断する。依頼文には選択肢・判断を縛る制約・関係ファイルのパスを含め、推奨は 1 案を求める。結論はオーケストレーターが出し、採否を委ねない。
 
 ### 文書の執筆を委譲するとき
 
@@ -678,7 +678,7 @@ export interface Vocabulary {
 
 9. `plugins/agent-policy/.claude-plugin/plugin.json` の `"version": "0.20.0-dev"` と、`plugins/agent-policy/package.json` の 3 行目の `"version": "0.20.0-dev",` を、どちらも `0.20.1-dev` にする。
 10. `pnpm run build` を実行する。
-11. `README.md` と `docs/` の追随漏れを探す(設計書 §8-3)。`grep -rn -e "文書の執筆" -e "## Writing" -e "執筆基準" plugins/agent-policy/README.md plugins/agent-policy/docs` を実行し、該当が手順 8 の 11. の 1 行と、廃止済みの役割の経緯(224 行以降の 0.18→0.19 の項目)だけであることを確かめる。ほかに該当があれば報告する。
+11. README の追随漏れを探す(設計書 §8-3)。`grep -n -e "文書の執筆" -e "## Writing" -e "執筆基準" plugins/agent-policy/README.md` を実行し、該当が手順 8 で足した移行リストの 11. の 1 行だけであることを確かめる。ほかに該当があれば報告する。
 
 **検証**:
 
@@ -732,7 +732,7 @@ export interface Vocabulary {
 
 ### T6: Agent 定義の再生成(オーケストレーター)
 
-**要点**: 設計書 §8-4、GOTCHAS の GOTCHA-001。設計書の手順 4 は `--write --merge` とするが、`--merge` は削った節を残す(§7 の #1)。本計画では `--merge` を付けず、書き込み前の `--check` で「削った節の他に差分が無い」ことを確かめてから上書きする。
+**要点**: 設計書 §8-4、GOTCHAS の GOTCHA-001。`--check` で差分が「## 文書の執筆」節の有無だけの定義は、`--merge` を付けずに `--write` で上書きする。ほかの差分がある定義は再生成せず、手で節を削る。
 
 **触るファイル**: `.claude/agents/*.md` の 14 ファイル(git の管理外。`.gitignore:14`)。
 
@@ -740,10 +740,10 @@ export interface Vocabulary {
 
 **スキル**: 不要。
 
-**手順**: リポジトリのルートで、1 つの bash セッションの中で順に実行する。どこかの段で期待と違う出力が出たら、その段で止めて手順 7 で元に戻し、ユーザーへ報告する。
+**手順**: リポジトリのルートで、1 つの bash セッションの中で順に実行する。期待と違う出力が出たら、その段で止めて手順 8 で戻し、ユーザーへ報告する。
 
 1. T4 の検証 2 で `grep -c writingHeading plugins/agent-policy/scripts/setup-agents.mjs` が 0 であることを確かめ直す。
-2. 複製と作業用ディレクトリを作り、14 定義の引数を表にする。値は計画立案時の各定義の frontmatter から写した(`model-id` は `README.md` の推奨モデル ID の表で `model` 値から引いた)。T0 の時点の frontmatter と食い違う行があれば、実値に直してから進める。
+2. 複製と作業用ディレクトリを作り、14 定義の引数を表にする。表の値は計画立案時の各定義の frontmatter から写した(`model-id` は `README.md` の推奨モデル ID の表で `model` 値から引いた)。表の後のループで、実ファイルの `model`・`agent-policy-vendor`・`agent-policy-role` と表を照合する。`agent-policy-role` はカンマの後に空白を持つので、空白を除いてから比べる。`--roles` には空白付きの値を渡しても通る(`splitList` が各要素を trim する)。
 
 ```bash
 cd /home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins
@@ -770,12 +770,20 @@ technical-leader gpt-astra claude-gpt-6-astra gpt escalation
 EOF
 for f in .claude/agents/*.md; do
   n=$(basename "$f" .md)
-  grep -q "^$n " "$WORK/targets.txt" || echo "表に無い定義: $n"
-  head -12 "$f" | grep -E "^(model|agent-policy-role|agent-policy-vendor):"
+  row=$(grep "^$n " "$WORK/targets.txt") || { echo "表に無い定義: $n"; continue; }
+  read -r _ _ t_model t_vendor t_roles <<< "$row"
+  model=$(sed -n 's/^model: //p' "$f" | head -1)
+  vendor=$(sed -n 's/^agent-policy-vendor: //p' "$f" | head -1)
+  roles=$(sed -n 's/^agent-policy-role: //p' "$f" | head -1 | tr -d ' ')
+  if [ "$model $vendor $roles" = "$t_model $t_vendor $t_roles" ]; then
+    echo "$n 一致"
+  else
+    echo "$n 不一致: $model $vendor $roles"
+  fi
 done
 ```
 
-   期待: 「表に無い定義」が出ない。表示された `model`・`agent-policy-role`・`agent-policy-vendor` が表の 3・5・4 列目と一致する。
+   期待: 14 行すべて「一致」で、「表に無い定義」が出ない。「不一致」が出たら、表の該当行を実値に直してから進める。
 
 3. 全定義を `--check` し、`mcpCurrent` と差分を控える。
 
@@ -783,20 +791,20 @@ done
 while read -r name mid model vendor roles; do
   node "$SETUP" --check --name "$name" --model-id "$mid" --model "$model" \
     --vendor "$vendor" --roles "$roles" --scope custom --lang ja --dir "$PWD" \
-    > "$WORK/$name.check.json"
+    < /dev/null > "$WORK/$name.check.json"
 done < "$WORK/targets.txt"
 ```
 
-4. 書き込みの前提を判定する。削った節の他に差分が無い定義だけが `OK` になる。1 つでも `NG` なら書き込まず、`NG` の定義の出力をユーザーへ報告する。
+4. 定義ごとに、再生成してよいかを判定する。差分が「## 文書の執筆」節の有無だけの定義を `ok.txt` に、ほかの差分がある定義を `ng.txt` に分ける。14 定義がどちらかに入るまで進め、`NG` があっても止めない。complex-reviewer は、断片の `e2e-verify` が `Write`・`Edit`・`Skill` を持ち、今の定義の `tools` と一致しないため `NG` になる想定である。判定はこの想定でなく、コマンドの結果で行う。
 
 ```bash
 node -e '
-const fs = require("fs"); const dir = process.argv[1]; let bad = 0
+const fs = require("fs"); const dir = process.argv[1]; const ok = []; const ng = []
 for (const line of fs.readFileSync(dir + "/targets.txt", "utf8").trim().split("\n")) {
   const name = line.split(" ")[0]
   const r = JSON.parse(fs.readFileSync(`${dir}/${name}.check.json`, "utf8"))
   const x = r.results?.[0]
-  const ok = r.ok === true && x?.exists === true &&
+  const pass = r.ok === true && x?.exists === true &&
     x.frontmatter.changed.length === 0 &&
     x.frontmatter.toolsOnlyInTemplate.length === 0 &&
     x.frontmatter.toolsOnlyInExisting.every((t) => t.startsWith("mcp__")) &&
@@ -805,41 +813,39 @@ for (const line of fs.readFileSync(dir + "/targets.txt", "utf8").trim().split("\
     x.body.sectionsChanged.length === 0 &&
     x.body.sectionsOnlyInTemplate.length === 0 &&
     JSON.stringify(x.body.sectionsOnlyInExisting) === JSON.stringify(["## 文書の執筆"])
-  console.log(name, ok ? "OK" : "NG " + JSON.stringify({ error: r.error, frontmatter: x?.frontmatter, preambleChanged: x?.preambleChanged, body: x?.body }))
-  if (!ok) bad++
+  ;(pass ? ok : ng).push(line)
+  console.log(name, pass ? "OK" : "NG " + JSON.stringify({ error: r.error, frontmatter: x?.frontmatter, preambleChanged: x?.preambleChanged, body: x?.body }))
 }
-process.exit(bad ? 1 : 0)' "$WORK"
+fs.writeFileSync(dir + "/ok.txt", ok.map((l) => l + "\n").join(""))
+fs.writeFileSync(dir + "/ng.txt", ng.map((l) => l + "\n").join(""))' "$WORK"
 ```
 
-5. 全定義を上書きで生成する。`mcpCurrent.servers` を `--mcp-servers` に、`mcpCurrent.denyTools` を同じコマンドの `--mcp-deny` に渡す(GOTCHA-001)。値が空のときはその引数を付けない。
+5. `ok.txt` の定義を 1 件ずつ上書きで生成する。`--merge` は付けない。`mcpCurrent.servers` を `--mcp-servers` に、`mcpCurrent.denyTools` を同じコマンドの `--mcp-deny` に渡す(GOTCHA-001)。値が空のときはその引数を付けない。`--write` はモデルが live models に無いと失敗する。失敗しても `while` は次の行へ進むので、失敗した時点で `break` で止める。止まったら手順 8 の「1 件だけ戻す」を行い、その定義を手順 6 の手作業へ回す。
 
 ```bash
+: > "$WORK/written.txt"
 while read -r name mid model vendor roles; do
-  cur=$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).results[0].mcpCurrent;console.log(c.servers.join(",")+" "+c.denyTools.join(","))' "$WORK/$name.check.json")
+  cur=$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).results[0].mcpCurrent;console.log(c.servers.join(",")+" "+c.denyTools.join(","))' "$WORK/$name.check.json" < /dev/null)
   servers=${cur% *}; deny=${cur#* }
   mcp=()
   [ -n "$servers" ] && mcp+=(--mcp-servers "$servers")
   [ -n "$deny" ] && mcp+=(--mcp-deny "$deny")
-  node "$SETUP" --write --name "$name" --model-id "$mid" --model "$model" \
-    --vendor "$vendor" --roles "$roles" --scope custom --lang ja --dir "$PWD" \
-    "${mcp[@]}" > "$WORK/$name.write.json"
-done < "$WORK/targets.txt"
-node -e '
-const fs = require("fs"); const dir = process.argv[1]; let bad = 0
-for (const line of fs.readFileSync(dir + "/targets.txt", "utf8").trim().split("\n")) {
-  const name = line.split(" ")[0]
-  const r = JSON.parse(fs.readFileSync(`${dir}/${name}.write.json`, "utf8"))
-  const x = r.results?.[0]
-  const ok = r.ok === true && x?.ok === true && x.mcpDropped.length === 0
-  console.log(name, ok ? "OK" : "NG " + JSON.stringify(r))
-  if (!ok) bad++
-}
-process.exit(bad ? 1 : 0)' "$WORK"
+  if node "$SETUP" --write --name "$name" --model-id "$mid" --model "$model" \
+       --vendor "$vendor" --roles "$roles" --scope custom --lang ja --dir "$PWD" \
+       "${mcp[@]}" < /dev/null > "$WORK/$name.write.json" &&
+     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(r.ok===true&&r.results[0].ok===true&&r.results[0].mcpDropped.length===0?0:1)' "$WORK/$name.write.json" < /dev/null
+  then
+    echo "$name" >> "$WORK/written.txt"
+  else
+    echo "NG: $name"; cat "$WORK/$name.write.json"; break
+  fi
+done < "$WORK/ok.txt"
 ```
 
-   期待: 14 行すべて `OK`。`mcpDropped` が空でない定義は、MCP サーバーが今のセッションで使えず `tools` から外れている。手順 7 で戻して報告する。
+   期待: `written.txt` が `ok.txt` と同じ件数になる。`mcpDropped` が空でない定義は、MCP サーバーが今のセッションで使えず `tools` から外れている。これも `NG` として止まる。
 
-6. 複製との差分を取る。追加された行が 0 で、削除された行が各定義で「## 文書の執筆」節の行だけであることを確かめる。
+6. `ng.txt` の定義(と、手順 5 で止まって戻した定義)は再生成しない。`.claude/agents/<name>.md` を Edit で開き、「## 文書の執筆」の見出し行から、次の `## ` 見出しの直前までを削る。`.claude/agents/` は git の管理外で metatron の保護対象でもないので、Edit で直してよい。
+7. 複製との差分を取る。追加された行が 0 で、削除された行が各定義で「## 文書の執筆」節の行だけであることを確かめる。
 
 ```bash
 for f in "$BACKUP"/*.md; do
@@ -851,12 +857,14 @@ done
 grep -l "文書の執筆" .claude/agents/*.md
 ```
 
-   期待: 全定義で `added=0`、`removed_nonblank=11`(見出し 1 行と `assets/roles/ja/_common.md` の 29-38 行に当たる 10 行)。最後の `grep -l` の出力が空。`diff "$f" ".claude/agents/$n"` を 1 ファイルだけ目で見て、削除行が節の中身だけであることも確かめる。
+   期待: 全定義で `added=0`、`removed_nonblank=11`(見出し 1 行と `assets/roles/ja/_common.md` の 29-38 行に当たる 10 行)。最後の `grep -l` の出力が空。`diff "$f" ".claude/agents/$n"` を 1 ファイルだけ目で見て、削除行が節の中身だけであることも確かめる。再生成した定義で `tools` の並びだけが複製と違うときは、手順 4 の判定を通っても `added=0` にならない。その定義は手順 8 の「1 件だけ戻す」で戻し、手順 6 の手作業で節を削る。
 
-7. 戻すとき(手順 3〜6 のどこかで期待と違ったとき)は `cp -a "$BACKUP/." .claude/agents/` を実行する。
-8. 期待どおりなら、`BACKUP` と `WORK` のパスと手順 4〜6 の出力の要約を §9 に記録する。複製は T7 が終わるまで消さない。
+8. 戻す手順は 2 つある。
+   - 1 件だけ戻す: `cp "$BACKUP/<name>.md" .claude/agents/<name>.md` を実行し、その定義を手順 6 へ回す。
+   - 全部戻す(手順 2〜7 を中止するとき): `cp -a "$BACKUP/." .claude/agents/` を実行する。
+9. 期待どおりなら、`BACKUP` と `WORK` のパス、`ok.txt` と `ng.txt` の中身、手順 7 の出力の要約を §9 に記録する。複製は T7 が終わるまで消さない。
 
-**検証**: 手順 4・5 が 14 件すべて `OK`。手順 6 が全定義で `added=0` と `removed_nonblank=11`、`grep -l` が空。
+**検証**: 手順 5 で `written.txt` と `ok.txt` の件数が一致する。手順 7 が全定義で `added=0` と `removed_nonblank=11`、`grep -l` が空。
 
 **コミット**: なし(`.claude/agents/` は git の管理外)。
 
@@ -976,12 +984,11 @@ T0 ─ T1 ─ T2 ─ T3 ─(コミット 1)─ T4 ─ T5 ─(コミット 2)─ 
 
 | # | タスク | メッセージ | 含めるファイル |
 | --- | --- | --- | --- |
-| 0 | 計画書 | `docs(native-japanese): 実装計画書を追加する` | `harness-docs/plans/2026-09-26-native-japanese-plan.md` |
 | 1 | T1〜T3 | `feat(native-japanese): 日本語の書き方の規律を注入するプラグインを追加する` | `plugins/native-japanese/.claude-plugin/plugin.json`、`plugins/native-japanese/hooks/hooks.json`、`plugins/native-japanese/references/discipline.md`、`plugins/native-japanese/src/inject.ts`、`plugins/native-japanese/src/__test__/inject.test.ts`、`plugins/native-japanese/src/testing/run-ts.ts`、`plugins/native-japanese/scripts/inject.mjs`、`plugins/native-japanese/build.ts`、`plugins/native-japanese/package.json`、`plugins/native-japanese/README.md`、`plugins/native-japanese/LICENSE`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`、`.claude-plugin/marketplace.json`、`README.md` |
 | 2 | T4・T5 | `refactor(agent-policy): 文書の執筆の規律を撤去し 0.20.1-dev に上げる` | `plugins/agent-policy/references/orchestration-discipline.md`、`plugins/agent-policy/assets/roles/ja/_common.md`、`plugins/agent-policy/assets/roles/en/_common.md`、`plugins/agent-policy/src/agents/compose.ts`、`plugins/agent-policy/src/agents/vocabulary.ts`、`plugins/agent-policy/src/agents/__test__/compose.test.ts`、`plugins/agent-policy/scripts/setup-agents.mjs`、`plugins/agent-policy/.claude-plugin/plugin.json`、`plugins/agent-policy/package.json`、`plugins/agent-policy/README.md`、`.serena/memories/agent_policy/core.md` |
 
 - すべてのメッセージの末尾に、セッションの指示にある Co-Authored-By の行を付ける。
-- コミット 0 は、ユーザー承認の後にコミット 1 の前で行う。
+- 本計画書は `0e4639f` でコミット済みのため、計画書のためのコミットは置かない。
 - コミット 1 は `scripts/inject.mjs` を、コミット 2 は `scripts/setup-agents.mjs` を、それぞれ対応する `src/` の変更と同じコミットに含める(設計書 §9-2)。
 - 各コミットの前に `git status --short` を見て、上の列のファイルだけを `git add <パス>` で加える。§0 の無関係な未コミット変更を含めない。
 - 各コミットの時点で `pnpm run lint` / `pnpm run typecheck` / `pnpm run test` / `pnpm run build` が通り、build の後に `git status --short plugins/*/scripts` に未コミットの差分が残らない。
@@ -991,9 +998,9 @@ T0 ─ T1 ─ T2 ─ T3 ─(コミット 1)─ T4 ─ T5 ─(コミット 2)─ 
 
 | リスク | 対処 |
 | --- | --- |
-| `setup-agents.mjs` の `--merge` が、テンプレートから消えた「## 文書の執筆」を利用者の節として残す(`src/setup-agents.ts:582-595` の `automaticKeep` が `sectionsOnlyInExisting` を保持し、`merge` が末尾へ足す) | T6 は `--merge` を付けずに上書きする。上書きで失うものが無いことを、書き込み前の `--check` の判定(手順 4)で 14 定義すべてについて確かめる(§7 の #1) |
+| `setup-agents.mjs` の `--merge` が、テンプレートから消えた「## 文書の執筆」を利用者の節として残す(`src/setup-agents.ts:582-595` の `automaticKeep` が `sectionsOnlyInExisting` を保持し、`merge` が末尾へ足す) | T6 は `--merge` を付けずに上書きする(設計書 §8-4)。上書きで失うものが無いことを、書き込み前の `--check` の判定(T6 の手順 4)で定義ごとに確かめる。ほかの差分がある定義は再生成せず、手で節を削る(T6 の手順 6) |
 | 再生成で `disallowedTools` が消える(GOTCHA-001) | `--check` の `mcpCurrent.denyTools` を同じコマンドの `--mcp-deny` に渡す。書き込み前に複製を取り、書き込み後に追加行が 0 であることを差分で確かめる |
-| 再生成の時点で MCP サーバーが使えず、`--mcp-servers` の名前が `mcpDropped` に落ちて `tools` から外れる | T6 の手順 5 で `mcpDropped` が空であることを確かめ、空でなければ複製から戻して報告する |
+| 再生成の時点でモデルが live models に無い、または MCP サーバーが使えず `mcpDropped` に落ちる | T6 の手順 5 で 1 件ずつ実行し、失敗した時点で止める。その定義は複製から戻し、手で節を削る(T6 の手順 8・6) |
 | 一時ディレクトリに複製した `inject.ts` を tsx が CommonJS として扱い、`import.meta.url` が使えずに空出力になる。ファイル不在のテストが空振りでパスする | 一時ディレクトリに `{"type":"module"}` の `package.json` を置く。差し替えた本文を注入する対照のテストで、起動そのものが通ることを確かめる |
 | tsx や Node の警告が stderr に出て、「失敗しても stderr に書かない」が本件と無関係な理由で失敗する | `NODE_NO_WARNINGS=1` を渡す。それでも出るときは、出力の中身を報告し、スクリプト由来でないことを確かめてからオーケストレーターが扱いを決める |
 | `discipline.md` を後から直したときに 9,000 文字を超え、注入がファイルへの退避に変わる(設計書 §2-3) | T2 のテストで上限を守る。README の「規律を直すとき」に上限を書く |
@@ -1006,8 +1013,8 @@ T0 ─ T1 ─ T2 ─ T3 ─(コミット 1)─ T4 ─ T5 ─(コミット 2)─ 
 
 | # | 検出タスク | 設計書の記述 | 計画での扱い | 判断 |
 | --- | --- | --- | --- | --- |
-| 1 | 計画 | §8-4 の手順 4 は `--write --merge` で再生成すれば「## 文書の執筆」節が消える前提で書かれている。実装では、`--merge` を付けると `automaticKeep`(`src/setup-agents.ts:582-595`)が `body.sectionsOnlyInExisting` を保持の対象に入れ、`merge`(同 572-577 行)がテンプレートに無い節を末尾へ残す。撤去後のテンプレートには執筆の節が無いので、節は消えない | `--merge` を付けず `--write` で上書きする。上書きで失うものが無いことを、書き込み前の `--check` で確かめる(`frontmatter.changed`・`toolsOnlyInTemplate`・`sectionsChanged`・`sectionsOnlyInTemplate` が空、`preambleChanged` が false、`toolsOnlyInExisting` が `mcp__` だけ、`keysOnlyInExisting` が `disallowedTools` だけ、`sectionsOnlyInExisting` が `["## 文書の執筆"]` だけ)。`--mcp-servers` と `--mcp-deny` は GOTCHA-001 のとおり渡す(T6) | 計画で仮置き。オーケストレーターが採否を決める |
-| 2 | 計画 | §8-3 は「設計時点の grep では README に該当は無かった」とする。`plugins/agent-policy/README.md:212`(0.19→0.20 の移行の 2.)に「執筆基準は全定義の共通部分に含まれ、再生成で反映されます。」があり、撤去後は事実と食い違う。また #1 のとおり、利用者が setup-agents の「保持マージ」で再生成しても節は消えない | 212 行のその 1 文を削り、同じリストに 11. として撤去と消し方(手で削るか「完全上書き」を選ぶ)を足す(T4 の手順 8) | 計画で仮置き。オーケストレーターが採否を決める |
+| 1 | 計画 | 承認時の §8-4 の手順 4 は `--write --merge` で再生成するとしていた。`--merge` を付けると `automaticKeep`(`src/setup-agents.ts:582-595`)が `body.sectionsOnlyInExisting` を保持の対象に入れ、`merge`(同 572-577 行)がテンプレートに無い節を末尾へ残すので、執筆の節は消えない。設計書は `0e4639f` で更新済みで、現行の §8-4 は `--check` で差分が節の有無だけかを 14 定義で確かめ、他の差分がある定義は手で節を削り、`--merge` を付けずに `--write` で上書きする | 現行の §8-4 に従う。T6 は定義ごとに再生成か手作業かを分け、再生成では `--mcp-servers` と `--mcp-deny` を同じコマンドで渡す | 設計書へ反映済み(0e4639f)。計画は現行設計書に従う |
+| 2 | 計画 | 承認時の §8-3 は「設計時点の grep では README に該当は無かった」としていた。`plugins/agent-policy/README.md:212`(0.19→0.20 の移行の 2.)に「執筆基準は全定義の共通部分に含まれ、再生成で反映されます。」があり、撤去後は事実と食い違う。設計書は `0e4639f` で更新済みで、現行の §8-3 はこの 1 文を削り、移行リストに撤去と再生成の注意を 1 項として足すとする | 現行の §8-3 に従う。212 行のその 1 文を削り、同じリストに 11. を足す(T4 の手順 8) | 設計書へ反映済み(0e4639f)。計画は現行設計書に従う |
 | 3 | 計画 | 依頼では `setup-agents.mjs --help` から引数の形を写すとしていたが、`--help` は `{"ok":false,"error":"Unsupported option: --help","results":[]}` を返す | 引数の形は `src/setup-agents.ts:869-1031`(`parseArgs`)と `skills/setup-agents/SKILL.md:194`・`234` から写した。1 回の呼び出しで 1 定義を扱う個別の経路(`--name`・`--model-id`・`--model`・`--vendor`・`--roles`)を使う | 計画で決定 |
 | 4 | 計画 | §4-2 は `inject.ts` の依存を `node:fs` と `node:path` と `node:url` だけとする | `fs.readFileSync` が URL を直接受け取るので、`node:fs` だけを使う。「だけ」の範囲に収まる | 計画で決定 |
 | 5 | 計画 | §4-4 は一時ディレクトリに `src/inject.ts` と `references/discipline.md` だけを置くとする | ESM として起動させるため、一時ディレクトリに `{"type":"module"}` の `package.json` も置く。起動の対照のテストを 1 件足す(T2) | 計画で決定 |
@@ -1067,9 +1074,10 @@ T1 がこの草案を置き、prompt-smith で 1 パス削ってから採用す�
   - 項目の間に「そのため」「だが」でつながる関係があれば、地の文に書き直す。
   - 因果と経緯は地の文で書き、接続詞で前後の関係を示す。
 - 専門用語は、機能を説明してから名前を示す。
-  - 初出の用語には、括弧で一言の説明を添えてもよい。
+  - 読み手がその用語を初めて見るときは、初出の箇所に括弧で一言の説明を添える。
 - 固有名詞・数値・実例で書く。
-  - 「担当者」は実名に、「一部の」は実数に置き換える。
+  - 「担当者」は実名に置き換える。
+  - 「一部の」は実数に置き換える。
   - 抽象的な主張が 3 文続いたら、実例か数値を足す。
   - 素材が無いときは推測で埋めず、何を確かめれば書けるかを書く。
 - 太字は、文中の核になる 1 箇所だけに使う。
@@ -1078,9 +1086,8 @@ T1 がこの草案を置き、prompt-smith で 1 パス削ってから採用す�
 - 軽い節は、厚さを揃えるための内容を足さずに短く終える。
   - 5 項目以上を並べるときは、上位 2〜3 項目に実例と数値を添え、残りは一言で済ませる。
   - 内容が順序を持たないときは、順序や優先順位を付けずに並べる。
-- 同じ鋳型を 3 回続けない。
+- 同じ鋳型が 2 回続いたら、3 回目は書き出しか組み立てを変える。
   - 鋳型には、定義文の型、節の内部の組み立て、文の書き出しを含める。
-  - 3 回目は、書き出しか組み立てを変える。
 - 「〜ではなく」は、読み手が実際に抱いている誤解を正すときだけ使う。
   - 対比の後半だけで意味が通らない文は、肯定の文に書き直す。
 - 確信度は語尾でぼかさず、ラベルで書き分ける。
@@ -1111,7 +1118,8 @@ T1 がこの草案を置き、prompt-smith で 1 パス削ってから採用す�
   - 文を短くするときも、必要な事実と主語は残す。
 - 主語と述語を近づける。
   - 主語と述語の間に長い修飾が入るときは、文を割る。
-  - 「〜の理由は」で始めた文は「〜からだ」で結ぶ。
+  - 主語に対応する述語で文を結ぶ。
+  - 「〜の理由は」で始めた文は、「〜ことだ」「〜である」で受けるか、文を分ける。
 - 1 つの名詞に連体修飾を重ねず、文を割る。
   - 名詞の前に修飾の節が 2 つ以上重なったら、時系列か因果の順に文を分ける。
 - 段落の先頭に、その段落の主題を述べる文を置く。
@@ -1120,13 +1128,14 @@ T1 がこの草案を置き、prompt-smith で 1 パス削ってから採用す�
   - 同じ文末表現が 3 文続いたら、次の文で形を変える。
   - 短い文と長い文を隣り合わせに置く。
 - 接続詞がどこまでを受けるか(射程)を、前後の関係に合わせる。
-  - 近い語句の並列には「あるいは」を、段落単位の対比には「一方」を使う。
+  - 近い語句の並列には「あるいは」を使う。
+  - 段落単位の対比には「一方」を使う。
   - 対比でない事柄を足すときは「また」を使う。
   - 逆接の接続詞を続けず、射程の合う別の語に言い換える。
 
 ## 翻訳調の言い換え
 
-左の型を書いたら、右の形に書き換える。
+Before の形を書いたら、After の形に書き換える。
 型の名前に当たらなくても、英語の構文を写した文は同じように書き換える。
 
 | 型 | Before | After |
@@ -1145,6 +1154,8 @@ T1 がこの草案を置き、prompt-smith で 1 パス削ってから採用す�
 
 表の語を書きかけたら、語を消して具体的な事実・数値・条件を書く。
 語尾や前後の形が違っても、同じ働きの言い回しは同じように扱う。
+「実は」「驚くべきことに」は、その情報が読み手にとって意外なときだけ使う。
+意外でない情報は、前置きの語を付けずに事実だけを書く。
 
 | 分類 | 語 |
 | --- | --- |
@@ -1156,7 +1167,7 @@ T1 がこの草案を置き、prompt-smith で 1 パス削ってから採用す�
 | 空虚な形容・動詞 | 「不可欠」「核心的」「鍵となる」「根本的な」「多角的」「包括的」「総合的」「様々な」「多様な」「掘り下げる」「深掘りする」「言語化する」「について見ていく」「を探求する」「正面から扱う」「正面から向き合う」 |
 | 決め文 | 「ところまでが仕事です」「これこそが〜の真髄です」「と言っても過言ではありません」「であることは間違いない」 |
 | 水増しの講釈 | 「近年、〜の重要性がますます高まっています」「ここでは〜について詳しく見ていきましょう」「つまり、〜ということでもあります」 |
-| 感嘆・共感の演出 | 「〜なんですよね」「驚くべきことに」「興味深いことに」「実は」「まさにその通り」「いかがでしょう、あなたも〜」 |
+| 感嘆・共感の演出 | 「〜なんですよね」「興味深いことに」「まさにその通り」「いかがでしょう、あなたも〜」 |
 
 ## 訳語
 
