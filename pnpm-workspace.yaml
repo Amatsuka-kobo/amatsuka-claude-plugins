@@ -13,5 +13,6 @@ packages:
   - plugins/metatron
   - plugins/sandalphon
   - plugins/jevriel
+  - plugins/native-japanese
 allowBuilds:
   esbuild: true
