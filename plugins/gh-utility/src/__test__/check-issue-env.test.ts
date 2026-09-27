@@ -46,27 +46,44 @@ test("リモート未設定の git リポジトリでは remoteUrl/repoSlug が 
   expect(out.repoSlug).toBe(null)
 })
 
-test("GitHub SSH リモートから repoSlug を抽出する", () => {
+test("GitHub SSH リモートから repoSlug と remoteHost を抽出する", () => {
   const out = runScript(gitRepo("git@github.com:owner/my-repo.git"))
   expect(out.remoteUrl).toBe("git@github.com:owner/my-repo.git")
+  expect(out.remoteHost).toBe("github.com")
   expect(out.repoSlug).toBe("owner/my-repo")
 })
 
 test("GitHub HTTPS リモート(.git なし)から repoSlug を抽出する", () => {
   const out = runScript(gitRepo("https://github.com/owner/my-repo"))
+  expect(out.remoteHost).toBe("github.com")
   expect(out.repoSlug).toBe("owner/my-repo")
+})
+
+test("*.ghe.com のリモートからも repoSlug と remoteHost を抽出する", () => {
+  const out = runScript(gitRepo("git@example.ghe.com:owner/my-repo.git"))
+  expect(out.remoteHost).toBe("example.ghe.com")
+  expect(out.repoSlug).toBe("owner/my-repo")
+})
+
+test("GHES の独自ドメインでは remoteHost は抽出するが repoSlug は null", () => {
+  const out = runScript(
+    gitRepo("git@github.mycompany-ghes.example:owner/repo.git")
+  )
+  expect(out.remoteHost).toBe("github.mycompany-ghes.example")
+  expect(out.repoSlug).toBe(null)
 })
 
 test("GitHub 以外のリモートでは repoSlug が null", () => {
   const out = runScript(gitRepo("git@gitlab.com:owner/repo.git"))
   expect(out.remoteUrl).toBe("git@gitlab.com:owner/repo.git")
+  expect(out.remoteHost).toBe("gitlab.com")
   expect(out.repoSlug).toBe(null)
 })
 
 test("github.com を含むだけの別ホストでは repoSlug が null", () => {
-  expect(runScript(gitRepo("git@notgithub.com:owner/repo.git")).repoSlug).toBe(
-    null
-  )
+  const notGithub = runScript(gitRepo("git@notgithub.com:owner/repo.git"))
+  expect(notGithub.remoteHost).toBe("notgithub.com")
+  expect(notGithub.repoSlug).toBe(null)
   expect(runScript(gitRepo("https://mygithub.com/owner/repo")).repoSlug).toBe(
     null
   )
@@ -107,6 +124,37 @@ test("gh があり認証済みなら両方 true", () => {
   const out = runScript(tmpdir(), [bin])
   expect(out.ghInstalled).toBe(true)
   expect(out.ghAuthenticated).toBe(true)
+})
+
+// gh スタブが受け取った引数をファイルへ書き出し、認証確認のコマンド行を検証する
+function fakeBinRecordingArgs(argsFile: string): string {
+  return fakeBin({
+    gh: [
+      "#!/bin/sh",
+      '[ "$1" = "--version" ] && exit 0',
+      `echo "$@" > "${argsFile}"`,
+      "exit 0"
+    ].join("\n")
+  })
+}
+
+test("リモートのホストが分かれば gh auth status --hostname <remoteHost> で確かめる", () => {
+  const argsFile = path.join(tmpdir(), "args.txt")
+  const bin = fakeBinRecordingArgs(argsFile)
+  const dir = gitRepo("git@example.ghe.com:owner/repo.git")
+  const out = runScript(dir, [bin])
+  expect(out.ghAuthenticated).toBe(true)
+  expect(fs.readFileSync(argsFile, "utf8").trim()).toBe(
+    "auth status --hostname example.ghe.com"
+  )
+})
+
+test("remoteHost が無ければ --hostname なしの gh auth status で確かめる", () => {
+  const argsFile = path.join(tmpdir(), "args.txt")
+  const bin = fakeBinRecordingArgs(argsFile)
+  const out = runScript(tmpdir(), [bin])
+  expect(out.ghAuthenticated).toBe(true)
+  expect(fs.readFileSync(argsFile, "utf8").trim()).toBe("auth status")
 })
 
 function withTemplates(files: Record<string, string>): string {
