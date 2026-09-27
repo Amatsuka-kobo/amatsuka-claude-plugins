@@ -410,7 +410,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
 機械的に配置する。raguel.config.yaml は聞き取り(保護パス)の回答から生成し、CLAUDE.md は
-`CLAUDE.example.md` の運用ルール節をそのまま追記する(既存ファイルは不足分のみ追記)。
+`CLAUDE.example.md` の運用ルールセクションをそのまま追記する(既存ファイルは不足分のみ追記)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
 GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。

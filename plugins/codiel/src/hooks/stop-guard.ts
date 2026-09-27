@@ -12,7 +12,9 @@ if (!input.stop_hook_active) {
         reason:
           `Codiel run ${run.state.runId} try-${run.state.try} が未完了です(phase: ${run.state.phase})。` +
           `フェーズを続行してください。中止する場合は codiel-state stop --reason で明示的に停止します。` +
-          `triage・discuss(論点の回答待ち)・design のウォークスルー等でユーザーの回答を待って停止する場合は正当な停止であり、その旨を最終メッセージで明示してから停止すること。`
+          `人に確認して止まるときは、先に codiel-state mark-ask ${run.state.phase} --slug ${run.state.runId} --kind confirm で awaiting_human にしてから停止すること。` +
+          `mark-ask が受け付けるのは in_progress のフェーズと pending の finalize だけなので、` +
+          `フェーズの合間(直前のフェーズが passed で次のフェーズがまだ pending)では、次のフェーズを start-phase してから mark-ask すること。`
       })}\n`
     )
   }

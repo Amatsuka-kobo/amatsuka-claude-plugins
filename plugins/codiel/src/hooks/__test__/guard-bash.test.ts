@@ -458,6 +458,31 @@ test("--body の本文が heredoc で複数行でも、マーカーがあれば�
   expect(r).toBe(null)
 })
 
+// --- heredoc の本文の行を gh の起動と見なさない(M2-AR の low、決定 64 関連の修正) ---
+
+test("git commit メッセージの heredoc に書かれた gh の使い方は gh の起動と誤認しない", () => {
+  const root = setupRun()
+  const command = [
+    "git commit -m \"$(cat <<'EOF'",
+    "gh pr comment 1 --body-file tmp.md",
+    "EOF",
+    ')"'
+  ].join("\n")
+  const r = hook(root, command)
+  expect(r).toBe(null)
+})
+
+test("bash <<EOF の中で実際に gh を起動する投稿はマーカーが無くても見逃す(既知の限界)", () => {
+  const root = setupRun()
+  const command = [
+    "bash <<EOF",
+    'gh pr comment 1 --body "no marker"',
+    "EOF"
+  ].join("\n")
+  const r = hook(root, command)
+  expect(r).toBe(null)
+})
+
 test("gh pr comment --body-file はファイルの中身にマーカーがあれば通る", () => {
   const root = setupRun()
   fs.writeFileSync(path.join(root, "body.md"), `本文\n${MARKER}\n`)
@@ -664,5 +689,55 @@ test("gh api の読み取りとラベルだけの更新は通る", () => {
 test("active run が無いときは、gh api の本文にマーカーが無くても通る", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   const r = hook(root, "gh api repos/o/r/issues/1/comments -f body=nomarker")
+  expect(r).toBe(null)
+})
+
+// --- 本文のフラグを持たない --fill 系・--template/-T は本文を検査できない(決定 64) ---
+
+test("gh pr create --fill は本文を検査できないため deny", () => {
+  const root = setupRunAtPr()
+  const r = hook(root, "gh pr create --fill")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh pr create --fill-first は本文を検査できないため deny", () => {
+  const root = setupRunAtPr()
+  const r = hook(root, "gh pr create --fill-first")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh pr create --fill-verbose は本文を検査できないため deny", () => {
+  const root = setupRunAtPr()
+  const r = hook(root, "gh pr create --fill-verbose")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh pr create --template <file> は本文を検査できないため deny", () => {
+  const root = setupRunAtPr()
+  const r = hook(root, "gh pr create --template file.md")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh pr create -T <file> は本文を検査できないため deny", () => {
+  const root = setupRunAtPr()
+  const r = hook(root, "gh pr create -T file.md")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh issue create --template <file> は本文を検査できないため deny", () => {
+  const root = setupRunAtTriage()
+  const r = hook(root, "gh issue create --template file.md")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh issue create --fill は pr create 専用のフラグなので、本文フラグ無しの従来どおり通る", () => {
+  const root = setupRunAtTriage()
+  const r = hook(root, "gh issue create --fill")
+  expect(r).toBe(null)
+})
+
+test("gh pr create --fill --body はマーカーがあれば通る(本文のフラグを持つ呼び出しは従来どおり本文を検査する)", () => {
+  const root = setupRunAtPr()
+  const r = hook(root, `gh pr create --fill --body "本文 ${MARKER}"`)
   expect(r).toBe(null)
 })

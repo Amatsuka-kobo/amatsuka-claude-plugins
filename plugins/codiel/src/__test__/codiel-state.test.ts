@@ -1120,11 +1120,10 @@ test("v1 の run には get と stop だけが通り、ほかのコマンドは 
   expect(stop.out.state.stopReason).toBe("migrate")
 })
 
-test("get --active は v1 の run を runs に含めず、未終端の v1 の run ごとに文言を stderr に出す", () => {
+test("get --active は v1 の active と awaiting_human の run を runs に含めず、run ごとに文言を stderr に出す", () => {
   const root = tmpProject()
   writeV1(root, 1, "active")
-  writeV1(root, 2, "awaiting_outcome")
-  writeV1(root, 3, "stopped")
+  writeV1(root, 4, "awaiting_human")
   init(root)
   fs.writeFileSync(path.join(root, ".codiel/runs/.gitkeep"), "")
   const r = run(root, ["get", "--active"])
@@ -1134,13 +1133,121 @@ test("get --active は v1 の run を runs に含めず、未終端の v1 の ru
   ).toStrictEqual(["demo"])
   const lines = r.err.split("\n").filter((l) => l !== "")
   expect(lines.sort()).toStrictEqual(
-    [v1Message(1, "active"), v1Message(2, "awaiting_outcome")].sort()
+    [v1Message(1, "active"), v1Message(4, "awaiting_human")].sort()
   )
+})
+
+test("get --active は v1 の awaiting_outcome の run を version 1 のまま runs に含め、文言を出さない", () => {
+  const root = tmpProject()
+  writeV1(root, 2, "awaiting_outcome")
+  // 終端の v1 の run は報告しない
+  for (const [n, status] of [
+    [3, "stopped"],
+    [6, "completed"],
+    [7, "rejected"]
+  ] as const)
+    writeV1(root, n, status)
+  init(root)
+  const r = run(root, ["get", "--active"])
+  expect(r.code).toBe(0)
+  expect(r.err).toBe("")
+  const byId = Object.fromEntries(
+    r.out.runs.map((x: { state: { runId: string } }) => [x.state.runId, x])
+  )
+  expect(Object.keys(byId).sort()).toStrictEqual(["demo", "issue-2"])
+  expect(byId["issue-2"].statePath).toBe(statePath(root, "issue-2"))
+  expect(byId["issue-2"].state.version).toBe(1)
+  expect(byId["issue-2"].state.status).toBe("awaiting_outcome")
+  expect("integration" in byId["issue-2"].state).toBe(false)
+  expect(byId.demo.state.version).toBe(2)
+})
+
+test("record-outcome は v1 の awaiting_outcome の run を v2 と同じ遷移で終端にし、version 1 のまま書き戻す", () => {
+  const root = tmpProject()
+  writeV1(root, 2, "awaiting_outcome")
+  writeV1(root, 3, "awaiting_outcome")
+  const incident = run(root, [
+    "record-outcome",
+    "--slug",
+    "issue-2",
+    "--outcome",
+    "incident",
+    "--note",
+    "n"
+  ])
+  expect(incident.code).toBe(0)
+  expect(incident.out.state.status).toBe("awaiting_outcome")
+  expect(incident.out.state.incidents).toHaveLength(1)
+  expect(incident.out.state.incidents[0].note).toBe("n")
+  const approved = run(root, [
+    "record-outcome",
+    "--slug",
+    "issue-2",
+    "--outcome",
+    "approved"
+  ])
+  expect(approved.code).toBe(0)
+  expect(approved.out.state.status).toBe("completed")
+  const rejected = run(root, [
+    "record-outcome",
+    "--slug",
+    "issue-3",
+    "--outcome",
+    "rejected"
+  ])
+  expect(rejected.code).toBe(0)
+  expect(rejected.out.state.status).toBe("rejected")
+  for (const [n, status] of [
+    [2, "completed"],
+    [3, "rejected"]
+  ] as const) {
+    const saved = JSON.parse(
+      fs.readFileSync(statePath(root, `issue-${n}`), "utf8")
+    )
+    expect(saved.version).toBe(1)
+    expect(saved.status).toBe(status)
+    expect(saved.runId).toBe(`issue-${n}`)
+    expect("integration" in saved).toBe(false)
+    expect("intent" in saved).toBe(false)
+  }
+  // 終端にした v1 の run は get --active に出ない
+  const active = run(root, ["get", "--active"])
+  expect(active.out.runs).toStrictEqual([])
+  expect(active.err).toBe("")
+})
+
+test("record-outcome は awaiting_outcome 以外の v1 の run を §6.2.4 の文言で拒否する", () => {
+  const root = tmpProject()
+  for (const [n, status] of [
+    [1, "active"],
+    [2, "awaiting_human"],
+    [3, "stopped"],
+    [4, "completed"],
+    [5, "rejected"]
+  ] as const) {
+    writeV1(root, n, status)
+    const r = run(root, [
+      "record-outcome",
+      "--slug",
+      `issue-${n}`,
+      "--outcome",
+      "incident"
+    ])
+    expect(r.code, status).toBe(1)
+    expect(r.err, status).toBe(`${v1Message(n, status)}\n`)
+    const saved = JSON.parse(
+      fs.readFileSync(statePath(root, `issue-${n}`), "utf8")
+    )
+    expect(saved.status, status).toBe(status)
+    expect(saved.incidents, status).toStrictEqual([])
+  }
 })
 
 test("findActiveRun は version 2 の run だけを返し、runs 直下のファイルと v1 の run を無視する", () => {
   const root = tmpProject()
   writeV1(root, 5, "active")
+  writeV1(root, 6, "awaiting_human")
+  writeV1(root, 7, "awaiting_outcome")
   fs.writeFileSync(path.join(root, ".codiel/runs/.gitkeep"), "")
   expect(findActiveRun(root)).toBeNull()
   init(root)

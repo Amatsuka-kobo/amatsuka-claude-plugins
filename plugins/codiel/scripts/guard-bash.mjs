@@ -163,6 +163,19 @@ var MARKED_GH_COMMANDS = /* @__PURE__ */ new Set([
   "pr edit",
   "pr review"
 ]);
+var FILL_FLAGS = ["--fill", "--fill-first", "--fill-verbose"];
+var TEMPLATE_FLAGS = ["--template", "-T"];
+var AUTO_BODY_FLAGS = {
+  "pr create": [...FILL_FLAGS, ...TEMPLATE_FLAGS],
+  "issue create": TEMPLATE_FLAGS
+};
+function hasFlag(tokens, names) {
+  return tokens.some(
+    (tok) => names.some(
+      (n) => tok === n || tok.startsWith(`${n}=`) || /^-[^-]$/.test(n) && tok.startsWith(n) && tok.length > 2
+    )
+  );
+}
 var GH_VALUE_OPTS = ["-R", "--repo"];
 function isGhToken(tok) {
   const stripped = tok.replace(/^[("'`$]+/, "");
@@ -171,9 +184,27 @@ function isGhToken(tok) {
 function unquote(tok) {
   return tok.replace(/^["']+|["']+$/g, "");
 }
+function stripHeredocBodies(cmd) {
+  const lines = cmd.split("\n");
+  const HEREDOC_START_RE = /<<-?(['"]?)(\w+)\1/;
+  let i = 0;
+  while (i < lines.length) {
+    const m = lines[i].match(HEREDOC_START_RE);
+    if (!m) {
+      i++;
+      continue;
+    }
+    const word = m[2];
+    let end = i + 1;
+    while (end < lines.length && lines[end].trim() !== word) end++;
+    for (let k = i + 1; k <= end && k < lines.length; k++) lines[k] = "";
+    i = end + 1;
+  }
+  return lines.join("\n");
+}
 function findGhInvocations(cmd) {
   const invocations = [];
-  for (const segment of cmd.split(SEGMENT_SPLIT_RE)) {
+  for (const segment of stripHeredocBodies(cmd).split(SEGMENT_SPLIT_RE)) {
     const tokens = segment.trim().split(/\s+/).filter(Boolean);
     const ghIdx = tokens.findIndex((tok) => isGhToken(tok));
     if (ghIdx === -1) continue;
@@ -267,7 +298,15 @@ function checkGeneratedMarker(cmd, cwd) {
     if (!MARKED_GH_COMMANDS.has(inv.command)) continue;
     const bodyVal = flagValue(inv.tokens, ["--body", "-b"]);
     const bodyFileVal = flagValue(inv.tokens, ["--body-file", "-F"]);
-    if (bodyVal === void 0 && bodyFileVal === void 0) continue;
+    if (bodyVal === void 0 && bodyFileVal === void 0) {
+      const autoFlags = AUTO_BODY_FLAGS[inv.command];
+      if (autoFlags && hasFlag(inv.tokens, autoFlags))
+        emit(
+          "deny",
+          `gh ${inv.command} \u306E --fill \u7CFB\u30FB--template/-T \u306F\u672C\u6587\u3092\u691C\u67FB\u3067\u304D\u307E\u305B\u3093\u3002\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u306E\u672C\u6587\u3092 --body-file \u3067\u6E21\u3057\u3066\u4F5C\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+        );
+      continue;
+    }
     if (bodyVal !== void 0 && !cmd.includes(GENERATED_MARKER))
       denyMissingMarker(inv.command);
     if (bodyFileVal !== void 0) {

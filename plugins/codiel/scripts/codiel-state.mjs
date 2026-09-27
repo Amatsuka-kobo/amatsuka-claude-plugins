@@ -220,9 +220,10 @@ function main(argv, root = process.cwd()) {
       for (const { statePath, state } of latestTries(root)) {
         if (["completed", "rejected", "stopped"].includes(state.status))
           continue;
-        if (state.version !== 2) process.stderr.write(`${v1Message(state)}
+        if (state.version === 2 || state.status === "awaiting_outcome")
+          runs.push({ statePath, state });
+        else process.stderr.write(`${v1Message(state)}
 `);
-        else runs.push({ statePath, state });
       }
       return ok({ runs });
     }
@@ -459,7 +460,9 @@ function main(argv, root = process.cwd()) {
     return ok({ statePath: latest.statePath, state: latest.state });
   }
   if (cmd === "record-outcome") {
-    const latest = loadRun(root, flags);
+    const latest = loadRun(root, flags, true);
+    if (latest.state.version !== 2 && latest.state.status !== "awaiting_outcome")
+      fail(v1Message(latest.state));
     const outcome = flags.outcome;
     if (!["approved", "rejected", "incident"].includes(outcome))
       fail(`\u4E0D\u6B63\u306A outcome: ${outcome}`);

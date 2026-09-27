@@ -139,6 +139,32 @@ const MARKED_GH_COMMANDS = new Set([
   "pr review"
 ])
 
+// --fill 系・--template/-T は本文のフラグ(--body/-b/--body-file/-F)を持たずに
+// 本文を作ってしまうため、投稿する中身を検査できない。run が active な間は
+// これらを deny し、マーカー付きの本文を --body-file で渡して作り直すよう
+// 案内する(決定 64)。--fill 系は pr create だけが持ち、--template/-T は
+// issue create にもある。
+const FILL_FLAGS = ["--fill", "--fill-first", "--fill-verbose"]
+const TEMPLATE_FLAGS = ["--template", "-T"]
+const AUTO_BODY_FLAGS: Record<string, string[]> = {
+  "pr create": [...FILL_FLAGS, ...TEMPLATE_FLAGS],
+  "issue create": TEMPLATE_FLAGS
+}
+
+// tokens が names のいずれかのフラグを持つか(値の有無は問わない)。
+// `--flag=value` の形に加え、`-Tfile.md` のように短いフラグへ値を連結した形も
+// 持つとみなす(flagAt の短いフラグの扱いと揃える)。
+function hasFlag(tokens: string[], names: string[]): boolean {
+  return tokens.some((tok) =>
+    names.some(
+      (n) =>
+        tok === n ||
+        tok.startsWith(`${n}=`) ||
+        (/^-[^-]$/.test(n) && tok.startsWith(n) && tok.length > 2)
+    )
+  )
+}
+
 // gh の object(pr・issue)と action の間に置ける、値を取るオプション。
 // `gh pr -R o/r comment 1` の o/r を action と取り違えないために読み飛ばす。
 const GH_VALUE_OPTS = ["-R", "--repo"]
@@ -160,6 +186,31 @@ function unquote(tok: string): string {
   return tok.replace(/^["']+|["']+$/g, "")
 }
 
+// heredoc(<<EOF・<<'EOF'・<<"EOF"・<<-EOF)の開始行から終端の行までを空行に
+// 置き換える。SEGMENT_SPLIT_RE は改行でも分割するため、置き換えないと
+// heredoc の本文に書かれた `gh ...` の行が単独の gh 起動と誤認される
+// (`git commit -m "$(cat <<'EOF' ... EOF)"` の 2 行目が典型例)。この結果、
+// `bash <<EOF` の中で実際に gh を起動する投稿は見逃す(既知の限界。
+// --body の本文としてコマンド全体からマーカーを探す経路には影響しない)。
+function stripHeredocBodies(cmd: string): string {
+  const lines = cmd.split("\n")
+  const HEREDOC_START_RE = /<<-?(['"]?)(\w+)\1/
+  let i = 0
+  while (i < lines.length) {
+    const m = lines[i].match(HEREDOC_START_RE)
+    if (!m) {
+      i++
+      continue
+    }
+    const word = m[2]
+    let end = i + 1
+    while (end < lines.length && lines[end].trim() !== word) end++
+    for (let k = i + 1; k <= end && k < lines.length; k++) lines[k] = ""
+    i = end + 1
+  }
+  return lines.join("\n")
+}
+
 // cmd をセグメントに分け(SEGMENT_SPLIT_RE)、各セグメントの gh 起動から
 // 「object action」(issue create など)を git と同じくトークン解析で取り出す。
 // gh api は action を持たないので、command を "api" とする。
@@ -167,7 +218,7 @@ function unquote(tok: string): string {
 // (guard-bash の他のトークン解析と同じ簡略さで足りるため)。
 function findGhInvocations(cmd: string): GhInvocation[] {
   const invocations: GhInvocation[] = []
-  for (const segment of cmd.split(SEGMENT_SPLIT_RE)) {
+  for (const segment of stripHeredocBodies(cmd).split(SEGMENT_SPLIT_RE)) {
     const tokens = segment.trim().split(/\s+/).filter(Boolean)
     const ghIdx = tokens.findIndex((tok) => isGhToken(tok))
     if (ghIdx === -1) continue
@@ -298,7 +349,15 @@ function checkGeneratedMarker(cmd: string, cwd: string): void {
     if (!MARKED_GH_COMMANDS.has(inv.command)) continue
     const bodyVal = flagValue(inv.tokens, ["--body", "-b"])
     const bodyFileVal = flagValue(inv.tokens, ["--body-file", "-F"])
-    if (bodyVal === undefined && bodyFileVal === undefined) continue
+    if (bodyVal === undefined && bodyFileVal === undefined) {
+      const autoFlags = AUTO_BODY_FLAGS[inv.command]
+      if (autoFlags && hasFlag(inv.tokens, autoFlags))
+        emit(
+          "deny",
+          `gh ${inv.command} の --fill 系・--template/-T は本文を検査できません。マーカー付きの本文を --body-file で渡して作り直してください`
+        )
+      continue
+    }
     if (bodyVal !== undefined && !cmd.includes(GENERATED_MARKER))
       denyMissingMarker(inv.command)
     if (bodyFileVal !== undefined) {

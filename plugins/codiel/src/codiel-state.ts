@@ -297,8 +297,8 @@ function newState(
   }
 }
 
-// --slug の run の最新 try を読む。v1 の run は allowV1(get と stop)のときだけ返し、
-// ほかのコマンドでは §6.2.4 の文言を出して失敗する。
+// --slug の run の最新 try を読む。v1 の run は allowV1(get と stop、awaiting_outcome に
+// 限った record-outcome)のときだけ返し、ほかのコマンドでは §6.2.4 の文言を出して失敗する。
 function loadRun(
   root: string,
   flags: Record<string, string>,
@@ -383,8 +383,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       for (const { statePath, state } of latestTries(root)) {
         if (["completed", "rejected", "stopped"].includes(state.status))
           continue
-        if (state.version !== 2) process.stderr.write(`${v1Message(state)}\n`)
-        else runs.push({ statePath, state })
+        // v1 の awaiting_outcome は outcome の自動同期で終端にできるので、文言を出さずに
+        // version 1 の state のまま返す(設計書 決定 63)。
+        if (state.version === 2 || state.status === "awaiting_outcome")
+          runs.push({ statePath, state })
+        else process.stderr.write(`${v1Message(state)}\n`)
       }
       return ok({ runs })
     }
@@ -651,7 +654,13 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
   }
 
   if (cmd === "record-outcome") {
-    const latest = loadRun(root, flags)
+    // v1 の run は awaiting_outcome のときだけ受け付け、version 1 のまま書き戻す(設計書 決定 63)
+    const latest = loadRun(root, flags, true)
+    if (
+      latest.state.version !== 2 &&
+      latest.state.status !== "awaiting_outcome"
+    )
+      fail(v1Message(latest.state))
     const outcome = flags.outcome
     if (!["approved", "rejected", "incident"].includes(outcome))
       fail(`不正な outcome: ${outcome}`)

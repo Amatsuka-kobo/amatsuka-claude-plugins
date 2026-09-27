@@ -36,10 +36,11 @@
 | `approved` | 承認ゲートを通過して保存された。文書だけで終えた run もこの値のまま残る | intent フェーズ |
 | `in-progress` | run が implement に入った | implement の開始時 |
 | `done` | 持ち越しを除く原文の要望が、finalize の判定ですべて達成だった | finalize |
-| `abandoned` | run を止め、この intent を続けない | `stop` の後にオーケストレーターが更新する。ただし `stop --reason intent-updated` のときは例外とし、`abandoned` にしない |
+| `abandoned` | run を止め、この intent を続けない | `stop` の後にオーケストレーターが更新する。ただし `stop --reason intent-updated` と `commit-failed` のときは例外とし、`abandoned` にしない |
 
 - 値域は `proposed` / `approved` / `in-progress` / `done` / `abandoned` の 5 つとする。遷移をスクリプトで検証しない。契約が定めるのは値域だけである。`check-intent-env` は読み取った値をそのまま返す。
 - intent-sync より後の要望をこの run に含めると決めて止めるときは、`codiel-state stop --slug <slug> --reason intent-updated` を使う。この値の停止では intent を `abandoned` にせず、`in-progress` のまま残す。
+- intent フェーズの `git commit` が失敗して止めるときは、`codiel-state stop --slug <slug> --reason commit-failed` を使う。この値の停止でも intent を `abandoned` にせず、そのときの status のまま残す。
 
 ## 本文のセクション
 

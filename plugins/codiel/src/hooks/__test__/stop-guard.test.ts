@@ -140,9 +140,11 @@ test("stop-guard: 入力に stop_hook_active: true → run active でも出力�
   expect(result.stdout.trim()).toBe("")
 })
 
-test("stop-guard: ブロック文言が discuss の回答待ち停止を正当な停止として案内する", () => {
+test("stop-guard: ブロック文言が mark-ask --kind confirm での確認を案内する(決定 52)", () => {
   const root = setupRunAtIntent()
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
-  expect(parsed.reason).toMatch(/discuss/)
+  expect(parsed.reason).toMatch(/mark-ask intent --slug demo --kind confirm/)
+  expect(parsed.reason).toMatch(/awaiting_human/)
+  expect(parsed.reason).toMatch(/start-phase/)
 })

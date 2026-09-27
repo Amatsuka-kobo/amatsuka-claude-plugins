@@ -144,6 +144,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 1. `node <plugin-root>/scripts/codiel-state.mjs get --active` を実行する。この実装は
    `active` / `awaiting_human` / `awaiting_outcome` の run を **すべて** `runs` に含めて返す。
+   ただし codiel 0.x の run(`state.version` が 1)は、`awaiting_outcome` のものだけが含まれる。
    同期対象はそのうち **`state.status === "awaiting_outcome"`** の run に絞り込む
    (それ以外の run はここでは何もしない)。
 2. 絞り込んだ各 run を `state.integration` で分岐する。
@@ -168,6 +169,12 @@ run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `
 **「最後にコードを検査した evaluate」の evaluationId** を使う。優先順は次のとおり:
 `state.phases["fix-loop"].evaluationId` → なければ `state.phases["test-loop"].evaluationId` →
 なければ `state.phases["implement"].evaluationId`。
+
+`state.version` が 1 の run は、次のとおり読む。
+
+- `state.integration` を持たないので、github として扱う。
+- `state.pr.url` と、evaluationId の選定順に挙げた 3 つのフェーズは version 2 と同じ名前で持つので、そのまま読む。
+- `record-outcome` の `--slug` には `state.runId`(`issue-<N>` の形)を渡す。
 
 <HARD-GATE>
 - **実在しない `evaluationId` での `pass-gate` は禁止。`evaluationId` の捏造は絶対禁止**。
