@@ -654,6 +654,62 @@ test("縮約: 書き込み先が repoRoot の docs/intents/domains/*.md 以外�
   }
 })
 
+test("縮約: docRoot が git リポジトリの外なら、何も書かずに拒否する", () => {
+  const root = mkTmp()
+  expect(
+    spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: root }).status
+  ).not.toBe(0)
+  const file = writeDomain(root, "frontend.md", durable(entry("frontend-3")))
+  const before = fs.readFileSync(file)
+
+  expectRejected(
+    () => shrink(root, file, "frontend-3", 12, "dummy-hash"),
+    "not_git_repository"
+  )
+  expect(fs.readFileSync(file).equals(before)).toBe(true)
+})
+
+test("縮約: --file の対象が無ければ、何も書かずに拒否する", () => {
+  const root = repo()
+  const file = writeDomain(root, "frontend.md", durable(entry("frontend-3")))
+  const missing = path.join(root, "docs/intents/domains/missing.md")
+  const before = fs.readFileSync(file)
+
+  expectRejected(
+    () => shrink(root, missing, "frontend-3", 12, "dummy-hash"),
+    "file_not_found"
+  )
+  expect(fs.readFileSync(file).equals(before)).toBe(true)
+  expect(fs.existsSync(missing)).toBe(false)
+})
+
+test("縮約: 候補 ID がファイルに無ければ、何も書かずに拒否する", () => {
+  const { root, file } = adoptedRepo()
+  const before = fs.readFileSync(file)
+
+  expectRejected(
+    () => shrink(root, file, "frontend-9", 12, "dummy-hash"),
+    "candidate_not_found"
+  )
+  expect(fs.readFileSync(file).equals(before)).toBe(true)
+})
+
+test("縮約: 同じファイルに同じ候補 ID が 2 つあれば、何も書かずに拒否する", () => {
+  const root = repo()
+  const file = writeDomain(
+    root,
+    "frontend.md",
+    durable(entry("frontend-2", "先の判断"), entry("frontend-2", "後の判断"))
+  )
+  const before = fs.readFileSync(file)
+
+  expectRejected(
+    () => shrink(root, file, "frontend-2", 1, "dummy-hash"),
+    "duplicate_candidate"
+  )
+  expect(fs.readFileSync(file).equals(before)).toBe(true)
+})
+
 test("縮約: docRoot の外(repoRoot の直下)にある持続層も書ける", () => {
   const root = repo()
   const sub = path.join(root, "sub")
