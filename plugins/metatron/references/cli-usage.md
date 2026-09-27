@@ -27,6 +27,8 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `init-gotchas` | 書 | 承認後に雛形だけの GOTCHAS 台帳を新規作成する |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
+| `scan-adr-candidates` | 読 | `docs/intents/domains/*.md` の `[ADR 候補]` を走査する。候補の配列と `warnings` を返す |
+| `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>` | 書 | 候補のエントリを参照形へ縮める。拒否・失敗は終了コード 3 で `shrinkPending` を返す |
 
 ## 入出力の規約
 
@@ -34,7 +36,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 読み取り系は常に exit 0 で終わる。読めなかったことも `ok: false` と `error` を持つ JSON で返るため、exit code で読み取りの成否を判定しない。
 - 読み取り系の `error: "not_created"` は「文書が未作成」という事実であって異常ではない。
 - 書き込み系は成功で exit 0、拒否・失敗で非 0 で終わる。理由は JSON の `error` に入る。
-- 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。
+- 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。
 - 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
@@ -126,6 +128,17 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 ### tag-gotcha
 
 入力 JSON を持たない。`--id` / `--tag` / `--reason` が必須で、`--date` は任意(省略時は当日日付)。
+
+### shrink-adr-candidate
+
+入力 JSON を持たない。`--file` / `--candidate-id` / `--adr` / `--hash` の 4 つとも必須。
+
+- `--file` は `scan-adr-candidates` が返した候補の `file` をそのまま渡せる。相対パスは cwd 基準で解決する。
+- `--adr` は `ADR-12` と `12` のどちらの形も受け付ける。
+- `--hash` には走査で得たその候補の `hash` を渡す。エントリの内容が走査時から変わっていれば `hash_mismatch` で拒否される。
+- 書き込み先が `<repoRoot>/docs/intents/domains/` 直下の通常ファイルであることを確かめてから書く。シンボリックリンクと下位ディレクトリは拒否する。
+- 既に参照形になっているエントリを指定したときは、何も書かずに成功で返る(冪等)。
+- 拒否・失敗は終了コード 3 で返り、対象ファイルは 1 バイトも変わらない。
 
 ## stage から commit の 2 段階
 

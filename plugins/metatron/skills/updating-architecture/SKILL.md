@@ -16,7 +16,7 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 
 ## 手順
 
-1. `diff-architecture` を実行し、`findings` と `skipped` を取る。
+1. `diff-architecture` と `scan-adr-candidates` を実行し、`findings` と `skipped`、ADR 候補の配列を取る。
 2. `get rules` を実行し、`exists` が `false` のファイルを候補に加える。
 3. 候補を一覧提示し、1 件ごとに更新するかしないかを選ばせる。
 4. 選ばれた分の本文を起草し、確認してほしい点を添えて提示する。
@@ -57,6 +57,15 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 - 状態を変えるときは理由を必須とする。理由が定まらないまま `stage-adr` を呼ばない。
 - エントリを削除しない。覆した判断は `廃止` の状態で残す。
 - ADR にするかどうかは `../../references/writing-discipline.md` の 3 条件で判断する。満たさないものは該当セクションの本文へ書く。
+
+## ADR 候補の取り込み
+
+- `scan-adr-candidates` が返した候補を、乖離の候補と並べて一覧提示する。候補が 0 件なら提示しない。
+- 見つかった候補のうち `adoptedAs` が `null` でないものは、ADR を作らず `shrink-adr-candidate` で縮約だけを提案する(前回の縮約が失敗して残ったエントリである)。
+- 承認された候補は、`## ADR` の規律(`stage-adr` → 承認 → `commit-architecture`)で ADR の草案にする。草案の `#### 背景` には、候補の `sourceIntents`(出典 intent)の各行と「ADR 候補 ID: <候補 ID>」の 1 行を文言を変えずに書き写す。候補には無い `決定者` はユーザーに聞く。
+- ADR の確定に失敗したときは持続層に触れない。候補は全文のまま持続層に残る。
+- `commit-architecture` が成功したら `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <候補の hash>` を呼ぶ。終了コード 3 で終わったら 1 回だけやり直し、それも失敗したらユーザーに報告する。
+- 却下された候補と、ADR の作成に失敗した候補は持続層に全文のまま残す。
 
 ## rules
 

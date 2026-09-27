@@ -89,6 +89,7 @@
 | GOTCHAS | `docs/GOTCHAS.md` | `docRoot`。設定で変更できる |
 | rules | `.claude/rules/metatron/{conventions,protected-paths,testing-policy}.md` | `docRoot`。ディレクトリだけ設定で変更でき、3 つのファイル名は固定 |
 | intent 文書 | `docs/intents/YYYY-MM-DD-<slug>.md` | `repoRoot`(git ルート)。設定を持たない |
+| 持続層 | `docs/intents/domains/<領域>.md` | `repoRoot`(git ルート)。設定を持たない。置き場の正本は codiel `references/intent-format.md` |
 
 ARCHITECTURE と GOTCHAS と rules のパスを固定と前提にしない。参照するときは `get config` の出力から取る。
 

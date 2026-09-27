@@ -36,7 +36,8 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - [ ] 5. stage(`stage-architecture` 1 回・`stage-rules` 3 回)
 - [ ] 6. 提示と承認(合計 5 回。ARCHITECTURE 1・rules 3・GOTCHAS 1)
 - [ ] 7. 書き込み(`commit-architecture` 1 回・`commit-rules` 3 回・`init-gotchas` 1 回)
-- [ ] 8. 完了報告
+- [ ] 8. ADR 候補の取り込み(`scan-adr-candidates`)
+- [ ] 9. 完了報告
 
 ## 1. 現状確認
 
@@ -147,7 +148,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 ### GOTCHAS の台帳
 
 - `get gotchas-template` を実行する。分岐は `hasContent` で行う。`exists` では分岐しない(空のファイルがあるときに判断を誤る)。
-- `hasContent` が `true` のときは、提示も承認も行わない。既存の台帳がある旨を手順 8 で報告し、手順 7 の `init-gotchas` を実行しない。
+- `hasContent` が `true` のときは、提示も承認も行わない。既存の台帳がある旨を手順 9 で報告し、手順 7 の `init-gotchas` を実行しない。
 - `hasContent` が `false` のときは、返った `path` と `relative` と `template` を提示する。
 - 提示するのは次の 3 つとする。
   1. 台帳を作る絶対パスと、docRoot からの相対パス。
@@ -155,7 +156,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
   3. 作成後は、この台帳への直接編集が PreToolUse hook に拒否されるようになること、および毎セッションの注入対象に入ることの 2 点。
 - 求める承認は「この台帳をこのパスに作ってよいか」の可否 1 点とする。本文の良し悪しを問わない。
 - **本文はこの場では書き換えられないことを併せて伝える。** 雛形は書式の契約で固定されており、`init-gotchas` は本文を入力に取らない。
-- 本文の変更を求められたときは、台帳の作成を保留する。書式の契約の変更として扱い、このセッションでは作らない。保留したことを手順 8 で報告する。
+- 本文の変更を求められたときは、台帳の作成を保留する。書式の契約の変更として扱い、このセッションでは作らない。保留したことを手順 9 で報告する。
 - パスが意図と違うと指摘されたときは作成しない。`metatron.config.json` の `paths.gotchas` を直すのはユーザーの作業であり、このスキルは行わない。
 
 ## 7. commit-architecture と commit-rules
@@ -165,10 +166,18 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - `expired` で失敗したときは有効期限切れである。その対象について手順 5 からやり直す。
 - `file_changed` で失敗したときは stage 後に対象ファイルが変化している。現行内容を読み直し、手順 5 からやり直す。
 - GOTCHAS の承認を得た後に `init-gotchas` を実行する。`--staging-id` も `--input` も取らない。
-- `already_exists` で拒否されたときは、承認を得てから実行するまでの間に台帳が作られている。**再実行しない。** 既存の台帳があることを手順 8 で報告する。
+- `already_exists` で拒否されたときは、承認を得てから実行するまでの間に台帳が作られている。**再実行しない。** 既存の台帳があることを手順 9 で報告する。
 - `lock_timeout` で拒否されたときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
-## 8. 完了報告
+## 8. ADR 候補の取り込み
+
+- 初版の ARCHITECTURE を `commit-architecture` で書き込んだ後に `scan-adr-candidates` を実行する。ARCHITECTURE が確定する前には呼ばない。
+- 候補が 0 件のときは何も提示せず、手順 9 へ進む。
+- 候補があれば `updating-architecture` の「## ADR 候補の取り込み」の規律(承認 → `stage-adr` → 承認 → `commit-architecture` → `shrink-adr-candidate`)で ADR にする。
+- `adoptedAs` が `null` でない候補は、ADR を作らず `shrink-adr-candidate` で縮約だけを提案する。
+- 却下された候補と、ADR の作成に失敗した候補は持続層に全文のまま残す。
+
+## 9. 完了報告
 
 - 書き込んだファイルのパスと、確定した単位の一覧を報告する。ARCHITECTURE のセクションと rules の 3 ファイルを分けて示す。
 - 未記入のまま残した単位があれば一覧で報告する。

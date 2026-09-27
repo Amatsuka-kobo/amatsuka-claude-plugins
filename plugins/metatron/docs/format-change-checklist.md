@@ -48,3 +48,23 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] 2 者比較テスト(metatron のテスト R4 / codiel のケース 16f)
 
 2 つのプラグインはこの規則を独立に実装している。写しが割れると、同じカレントディレクトリから別のファイルへ辿り着く。
+
+## writing-discipline の追随(`references/writing-discipline.md`)
+
+prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂したら、このセクションに沿って `writing-discipline.md` を見直す。
+
+- [ ] 削る基準・残す基準・書き方の基準・引くための記述の例外を、prompt-smith の現行規律に追随させる
+- [ ] ARCHITECTURE・GOTCHAS・ADR 向けの特化(適用の強さ、例外の範囲、GOTCHAS エントリを 1〜3 文に収めること、ADR の 3 条件、図の基準)は変えない
+- [ ] 引くための記述の例外は ARCHITECTURE と rules の値を引く先のブロックにだけ当て、GOTCHAS エントリには当てない
+- [ ] `skills/{capturing-architecture,updating-architecture,recording-gotchas}/SKILL.md`、`references/{gotchas-format,rules-format}.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
+- [ ] `plugins/metatron/references/writing-discipline.md` の既存の `##` 見出しの行を変えない
+
+## ADR の 3 条件(`references/writing-discipline.md` の「何を ADR にするか」節)
+
+- [ ] `plugins/codiel/references/intent-format.md` に置いた ADR の 3 条件の写しを追随させる
+
+## ADR 候補の取り込み(`references/architecture-format.md` の「ADR 候補の取り込み」節)
+
+`[ADR 候補]` の書式と参照形の正本は codiel にある。
+
+- [ ] `plugins/codiel/references/intent-format.md` の「## 持続層」セクションと揃っているかを確かめる

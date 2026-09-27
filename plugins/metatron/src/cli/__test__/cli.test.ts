@@ -6,6 +6,7 @@
 //
 // 加えて stage → commit の正常系を CLI 経由で通しで検証する。
 
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -1032,4 +1033,243 @@ test("S11: 移行後の ARCHITECTURE(3 節なし)で diff-architecture が secti
   for (const moved of ["テスト方針", "保護パス", "規約"]) {
     expect(missing, moved).not.toContain(moved)
   }
+})
+
+// ---------------------------------------------------------------------------
+// scan-adr-candidates / shrink-adr-candidate(codiel intent 駆動化の設計書 §6.11)
+// ---------------------------------------------------------------------------
+
+const CANDIDATE_ENTRY = [
+  "### 認証トークンはサーバーでだけ保持する [ADR 候補: frontend-3]",
+  "- 制約: ブラウザの保存領域に認証トークンを置かない",
+  "- 決定日: 2026-10-01",
+  "- 出典 intent: docs/intents/2026-09-30-login-rework.md",
+  "- 関連 ADR: なし(ADR 候補)",
+  "#### 背景",
+  "XSS でトークンが漏れた。",
+  "#### 検討した選択肢",
+  "1. localStorage",
+  "2. HttpOnly Cookie",
+  "#### 採用した結論",
+  "HttpOnly Cookie にする。",
+  "#### 理由",
+  "スクリプトから読めない。",
+  "#### 影響範囲",
+  "src/app/auth"
+]
+
+const CANDIDATE_REFERENCE = [
+  "### 認証トークンはサーバーでだけ保持する",
+  "- 制約: ブラウザの保存領域に認証トークンを置かない",
+  "- 関連 ADR: ADR-001(候補 ID: frontend-3)"
+]
+
+function durableDoc(entryLines: readonly string[]): string {
+  return [
+    "# frontend",
+    "",
+    "## 意図的な制約",
+    "",
+    ...entryLines,
+    "",
+    "## 出典",
+    "",
+    "なし",
+    ""
+  ].join("\n")
+}
+
+/** git リポジトリで、ARCHITECTURE と候補 frontend-3 を持つ持続層がある。 */
+function candidateProject(): { root: string; durable: string } {
+  const root = project()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  const durable = writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+  return { root, durable }
+}
+
+function scanCandidates(root: string): Record<string, unknown>[] {
+  const run = runCli(["scan-adr-candidates"], root)
+  expect(run.status).toBe(0)
+  const json = run.json as Record<string, unknown>
+  return json.candidates as Record<string, unknown>[]
+}
+
+/** 候補 frontend-3 を stage-adr → commit-architecture で ADR-001 にする。 */
+function adoptCandidate(root: string): void {
+  const inputPath = writeFile(
+    root,
+    "adr-input.json",
+    JSON.stringify({
+      mode: "add",
+      title: "認証トークンはサーバーでだけ保持する",
+      decidedBy: "team",
+      background: [
+        "XSS でトークンが漏れた。",
+        "- 出典 intent: docs/intents/2026-09-30-login-rework.md",
+        "ADR 候補 ID: frontend-3"
+      ].join("\n"),
+      options: ["localStorage", "HttpOnly Cookie"],
+      conclusion: "HttpOnly Cookie にする。",
+      rationale: "スクリプトから読めない。",
+      impact: "src/app/auth"
+    })
+  )
+  const staged = runCli(["stage-adr", "--input", inputPath], root)
+  expect(staged.status).toBe(0)
+  const stagingId = (staged.json as Record<string, unknown>).stagingId
+  const committed = runCli(
+    ["commit-architecture", "--staging-id", stagingId as string],
+    root
+  )
+  expect(committed.status).toBe(0)
+}
+
+function shrinkArgs(
+  file: string,
+  adr: string,
+  hash: string | undefined
+): string[] {
+  const args = [
+    "shrink-adr-candidate",
+    "--file",
+    file,
+    "--candidate-id",
+    "frontend-3",
+    "--adr",
+    adr
+  ]
+  return hash === undefined ? args : [...args, "--hash", hash]
+}
+
+test("scan-adr-candidates は git リポジトリの外では走査せず exit 0 で空を返す", () => {
+  const root = mkTmp()
+  writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+
+  const run = runCli(["scan-adr-candidates"], root)
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "scan-adr-candidates",
+    ok: true,
+    repoRoot: null,
+    candidates: []
+  })
+})
+
+test("stage-adr と commit-architecture は持続層に触れず、確定した ADR を adoptedAs が指し、shrink-adr-candidate が exit 0 で縮める", () => {
+  const { root, durable } = candidateProject()
+  const [candidate] = scanCandidates(root)
+  expect(candidate.candidateId).toBe("frontend-3")
+  expect(candidate.adoptedAs).toBeNull()
+
+  const beforeAdr = snapshot([durable])
+  adoptCandidate(root)
+  expectUnchanged(beforeAdr)
+  expect(scanCandidates(root)[0].adoptedAs).toBe("ADR-001")
+
+  const args = shrinkArgs(
+    candidate.file as string,
+    "ADR-001",
+    candidate.hash as string
+  )
+  const shrunk = runCli(args, root)
+  expect(shrunk.status).toBe(0)
+  expect(shrunk.json).toMatchObject({
+    command: "shrink-adr-candidate",
+    ok: true,
+    written: true,
+    alreadyShrunk: false,
+    file: durable,
+    candidateId: "frontend-3",
+    adr: "ADR-001"
+  })
+  expect(fs.readFileSync(durable, "utf8")).toBe(durableDoc(CANDIDATE_REFERENCE))
+  expect(scanCandidates(root)).toStrictEqual([])
+
+  // 既に参照形なら何もせず exit 0。
+  const beforeRetry = snapshot([durable])
+  const again = runCli(args, root)
+  expect(again.status).toBe(0)
+  expect(again.json).toMatchObject({
+    ok: true,
+    written: false,
+    alreadyShrunk: true
+  })
+  expectUnchanged(beforeRetry)
+})
+
+test("shrink-adr-candidate の拒否は終了コード 3 と shrinkPending を返し、持続層を変えない", () => {
+  const { root, durable } = candidateProject()
+  const [candidate] = scanCandidates(root)
+  adoptCandidate(root)
+  const outside = writeFile(
+    root,
+    "docs/intents/frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+  const hash = candidate.hash as string
+
+  const cases = [
+    { error: "hash_mismatch", file: durable, adr: "ADR-001", hash: "0" },
+    { error: "adr_not_found", file: durable, adr: "ADR-009", hash },
+    { error: "outside_domains_dir", file: outside, adr: "ADR-001", hash }
+  ]
+  for (const c of cases) {
+    const before = snapshot([durable, outside])
+    const run = runCli(shrinkArgs(c.file, c.adr, c.hash), root)
+    expect(run.status, c.error).toBe(3)
+    expect(run.json, c.error).toMatchObject({
+      ok: false,
+      error: c.error,
+      written: false,
+      shrinkPending: { file: c.file, candidateId: "frontend-3", adr: c.adr }
+    })
+    expectUnchanged(before)
+  }
+})
+
+test("shrink-adr-candidate の書き込みの失敗も終了コード 3 と shrinkPending を返す", () => {
+  if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
+  const { root, durable } = candidateProject()
+  const [candidate] = scanCandidates(root)
+  adoptCandidate(root)
+  const dir = path.dirname(durable)
+  const before = snapshot([durable])
+
+  fs.chmodSync(dir, 0o555)
+  let run: CliRun
+  try {
+    run = runCli(shrinkArgs(durable, "ADR-001", candidate.hash as string), root)
+  } finally {
+    fs.chmodSync(dir, 0o755)
+  }
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "write_failed",
+    shrinkPending: { file: durable, candidateId: "frontend-3", adr: "ADR-001" }
+  })
+  expectUnchanged(before)
+  expect(fs.readdirSync(dir)).toStrictEqual(["frontend.md"])
+})
+
+test("shrink-adr-candidate のオプションが欠けると終了コード 2 で、shrinkPending を返さない", () => {
+  const { root, durable } = candidateProject()
+  const before = snapshot([durable])
+
+  const run = runCli(shrinkArgs(durable, "ADR-001", undefined), root)
+
+  expect(run.status).toBe(2)
+  expect(run.json).toMatchObject({ ok: false, error: "missing_option" })
+  expect((run.json as Record<string, unknown>).shrinkPending).toBeUndefined()
+  expectUnchanged(before)
 })
