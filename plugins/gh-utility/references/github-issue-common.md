@@ -57,7 +57,7 @@ Issue 本文・コメント本文は一時ファイルに書き、`--body-file` 
 
 ## 画像の載せ方
 
-`--attach` は `gh` 2.99.0 以降で、`issue create`・`issue edit`・`issue comment`・`pr create`・`pr edit`・`pr comment` の 6 コマンドに使える。`gh pr review` には無い。
+`--attach` は `gh` 2.99.0 以降で、`issue create`・`issue edit`・`issue comment`・`pr create`・`pr edit`・`pr comment` の 6 コマンドに使える。`gh pr review` には無い。`--attach` に渡すパスは、本文に書いた `![alt](./file.png)` の相対パスと一致させる。`#` の後ろに alt を書ける(例: `--attach './file.png#alt'`)。
 
 画像を載せる手段は、実行のたびに `gh --version` と、環境チェックが返す `remoteHost`、そのセッションで claude-in-chrome の MCP ツール(`mcp__claude-in-chrome__*`)が使えるかを確かめて決める。縮退の順序は、文書の種類で 2 系統に分かれる。
 
@@ -79,8 +79,11 @@ Issue・PR・コメント全般:
 
 - `--attach` を使うのは、`gh` が 2.99.0 以上で、かつリモートのホストが `github.com` か `*.ghe.com` のときだけである。GHES のホストでは使わず、次の順へ縮退する。
 - ローカルに保存したときは、保存したパスを利用者に示す。
-- 画像のアップロードは取り消せない外部公開行為である。画像の可視性はリポジトリの可視性に従い、private リポジトリの画像は閲覧権限のある人にだけ見える。載せる前に、公開してよい画像かを確かめる。
-- claude-in-chrome を使う操作は、ブラウザが使えてログイン済みであることを前提とする。操作に失敗したら、次の順の手段へ縮退する。
+- 画像のアップロードは取り消せない外部公開行為である。画像の可視性はリポジトリの可視性に従い、private リポジトリの画像は `private-user-images.githubusercontent.com` から配信されて閲覧権限のある人にだけ見える。載せる前に、公開してよい画像かを確かめる。
+
+claude-in-chrome を使うときは、対象リポジトリに書き込める GitHub アカウントへログイン済みであることが前提である。対象の Issue または PR の画面を新しいタブで開く。コメント欄(Add a comment のフォーム)にある `type=file` の入力を探し、画像を渡す。「Attach files」のボタンは押さない。押すと OS のファイル選択画面が開き、そこから先を操作できなくなる。数秒待つと、コメント欄の `textarea`(`name="comment[body]"`)に `<img src="https://github.com/user-attachments/assets/<uuid>" ...>` が入るので、この値から `user-attachments` の URL だけを取り出す。取り出したら、`textarea` の値を空にしたうえで入力イベントを送り、未投稿の下書きを破棄する。そのうえでタブを閉じ、取り出した URL を本文の `![alt](URL)` に使う。
+
+ログイン画面が出る、`type=file` の入力が見つからない、待っても URL が入らないときは、いずれも操作の失敗として次の順の手段へ縮退する。
 
 ## 失敗時
 
