@@ -1,23 +1,26 @@
 ---
 name: orchestrating-runs
-description: /codiel:run で GitHub Issue 駆動の開発 run を進行するとき使用。フェーズ進行・サブエージェントディスパッチ・Raguel ゲート・再開のすべてはこのスキルに従う
+description: /codiel:run で intent 駆動の開発 run を進行するとき使用。フェーズ進行・サブエージェントディスパッチ・Raguel ゲート・再開のすべてはこのスキルに従う
 ---
 
 # Codiel run オーケストレーション
 
 ## 概要
 
-`/codiel:run <issue番号>` はメインセッション自身がオーケストレーターとなり、Issue を起点に
-init → discuss → design → test-spec/dev-plan → implement → test-loop → pr → review → fix-loop → triage → finalize
-の全フェーズを進行させる。各フェーズの実作業(分析・設計・実装・テスト・レビュー)はすべて
-専用サブエージェントにディスパッチし、成果物は Raguel MCP のゲートを経てのみ次フェーズへ進む。
-オーケストレーター自身は「進行管理」のみを行い、コードも文書もレビューも自分では書かない。
+`/codiel:run [<Issue番号> | <intent パス> | 省略]` はメインセッション自身がオーケストレーターとなり、
+intent を起点に
+intent → discuss → design → test-spec/dev-plan → implement → test-loop → intent-sync → pr → review → fix-loop → triage → finalize
+の全フェーズを進行させる。intent フェーズの聞き取りと合意形成は `capturing-intent` を通じてオーケストレーター
+本体が担い、それ以外のフェーズの実作業(調査・設計・実装・テスト・レビュー)はすべて専用サブエージェントに
+ディスパッチし、成果物は Raguel MCP のゲートを経てのみ次フェーズへ進む。オーケストレーター自身は
+「進行管理」のみを行い、コードも文書もレビューも自分では書かない。
 
 Raguel ゲートの呼び出し規約(evaluate ツール対応・verdict 別ハンドリング・record_outcome の運用)は
 すべて `raguel-gating` スキルに一元化されている。
 
-設計工程は人間と共同で行う: discuss フェーズ(論点の合意)と design フェーズのウォークスルー
-(設計書の確認)が常設の人間参加ポイントであり、進行規約は `facilitating-design-discussions`
+intent の聞き取りと確定は `capturing-intent` に、intent-sync フェーズの書き戻しは `syncing-intents` に
+一元化されている。設計工程は人間と共同で行う: discuss フェーズ(論点の合意)と design フェーズの
+ウォークスルー(設計書の確認)が常設の人間参加ポイントであり、進行規約は `facilitating-design-discussions`
 スキルに一元化されている。
 
 ## プラグインルート参照規約
@@ -27,32 +30,30 @@ Raguel ゲートの呼び出し規約(evaluate ツール対応・verdict 別ハ�
 ルートで次の形で呼ぶ:
 
 ```
-node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番号>
+node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ```
 
 ## チェックリスト
 
-- [ ] 0. **前提確認と実行モードの決定**を行う(下記)。停止条件に当たればここで終了する。
-      新規 run は決めた値を `codiel-state init --domain-mode <モード>` で記録する
-- [ ] 1. **outcome 自動同期**を行う(`raguel-gating` の「outcome の自動同期」節。起動時に 1 回のみ)
-- [ ] 2. **run を解決する**: `codiel-state get --issue N` → 未完了 try があれば `state.phase` から再開。
-      なければベースブランチを解決(コンテキストに宣言があればそれ → なければ main)→
-      `git switch <ベース> && git pull --ff-only` → `codiel-state init --issue N --base-branch <ベース> --domain-mode <モード>` →
-      `git switch -c <state.branch>`(詳細は「1. run の解決」参照)
+- [ ] 0. **前提確認・実行モード・連携モードの決定**を行う(下記)。停止条件に当たればここで終了する
+- [ ] 1. **outcome 自動同期**を行う(`raguel-gating` の「outcome の自動同期」に従う。起動時に 1 回のみ)
+- [ ] 2. **run を解決する**: `codiel-state get --active` でほかの run が active でないことを確かめ、
+      intent フェーズ(`capturing-intent` スキル)へつないで run を開始または再開する
+      (詳細は「1. run の解決」参照)
 - [ ] 3. 現在フェーズから、フェーズ進行表の定型(start-phase → ディスパッチ → 成果物検証 → raguel-gating
       でゲート → pass-gate/complete-phase)を順に実行する。ドメイン別のディスパッチは
       §4.1 の set-domain / clear-domain を伴う
       (discuss は raguel-gating を経ず、facilitating-design-discussions に従って進行し
       complete-phase で完了する)
 - [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に厳密に従う(自己判断しない)
-- [ ] 5. 全フェーズ `passed` になったら
-      `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N` を呼ぶ(全フェーズ passed を
-      検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない)。
-      結果レポートを出力して終了する
+- [ ] 5. 全フェーズ `passed` になったら「2.3 finalize の運転」の手順で結果レポートと intent の
+      `status` を確定してから `codiel-state finalize --slug <slug>` を呼ぶ。結果レポート
+      (原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)を出力して終了する
 
 ## 0. 前提確認と実行モードの決定
 
-run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決める。ドメインマップの不在それ自体は初期化の欠落に当たらない。
+run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決め、連携モードと画像添付・ADR の
+書き先を判定する。ドメインマップの不在それ自体は初期化の欠落に当たらない。
 
 1. 対象プロジェクトルートで次を実行し、ARCHITECTURE / GOTCHAS のパスとドメインマップの状態を解決する。
    **解決はこの 1 回だけ行い、以降は解決した値を各所へ渡す**(サブエージェントに解決させない)。
@@ -66,7 +67,27 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    ```
 
    (`<plugin-root>` は絶対パスに展開して実行する)
-2. 初期化の外形は B + C + D の 3 点で確認する。
+2. 続けて次を実行し、連携モードと `imageUpload`・`adrTarget` の判定材料を得る。**この呼び出しも 1 回だけ
+   行い、以降の手順は同じ出力を使い回す**。
+
+   ```
+   node <plugin-root>/scripts/check-intent-env.mjs
+   ```
+
+3. 手順 2 の出力にある事実(`repoSlug`・`ghAuthenticated`・`ghAttachSupported`・`projectDocs.architecture`
+   など)から、次のとおり判断する。判断はここで行い、check-intent-env は事実だけを返す。
+
+   | 項目 | 判断 |
+   | --- | --- |
+   | 連携モード | `repoSlug` が null でなく、かつ `ghAuthenticated` が true なら `github`。それ以外は `local`(GHES を含む) |
+   | `imageUpload.ghAttach` | 連携モードが `local` なら `false`。`github` では `ghAttachSupported` が true のとき `true` |
+   | `imageUpload.chrome` | 連携モードが `local` なら `false`。`github` ではセッションで `mcp__claude-in-chrome__*` のツールが使えるとき `true` |
+   | `adrTarget` | `projectDocs.architecture` が null なら `intents`、それ以外は `metatron` |
+
+   これらの値は run の開始時に決めて固定し、intent フェーズ(`capturing-intent`)が `codiel-state init` へ
+   渡す `--integration` / `--image-upload` / `--adr-target` の判断根拠になる。resume 時の再判定は
+   「6. 再開手順」に従う。
+4. 初期化の外形は B + C + D の 3 点で確認する。
 
    | 記号 | 確認対象 | 「揃っている」の判定 |
    | --- | --- | --- |
@@ -74,8 +95,9 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
    | D | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
 
-3. 既存 run がある場合は `state.domainMode` の記録も分岐の入力にする。新規 run と `domainMode` のない既存 run は記録なしとして扱う。
-4. 次の分岐表を上から順に評価し、最初に当たった行を採る。
+5. 既存 run がある場合は `state.domainMode` の記録も分岐の入力にする。新規 run と `domainMode` のない既存
+   run は記録なしとして扱う。
+6. 次の分岐表を上から順に評価し、最初に当たった行を採る。
 
    | # | 条件 | 判断 |
    | --- | --- | --- |
@@ -88,84 +110,164 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | 7 | 記録が `mapped` なのに再開時に `unreadable !== null` | **止めて確認する。** run 中のマップ消失を暗黙のモード変更にしない |
 
    機械的に決まるのは行の選択だけである。ユーザー確認を伴うのは行 5 と行 6 だけとする。
-5. 出力の `warnings` が空でなければ、その全文をユーザーへ提示してから次へ進む。警告だけを理由に run を止めない。
-6. 行 6 で (b) が選ばれた場合も `unscoped` を記録し、ユーザーが選択した事実を完了報告に残す。
-7. 新規 run では決めたモードを `codiel-state init --domain-mode <モード>` で記録する。既存 run の再開時は記録を正とする。未記録はモード未決としてこの判定をやり直す。
-8. 出力の `architecture` / `gotchas`、実行モード、使用するドメインマップは、ディスパッチプロンプト(§3)でそのまま使う。GOTCHAS はファイルが無くても終了せず、各所でスキップする。
+7. 出力の `warnings` が空でなければ、その全文をユーザーへ提示してから次へ進む。手順 2 の出力の
+   `configWarnings` が空でないときも同様に提示する。警告だけを理由に run を止めない。
+8. 行 6 で (b) が選ばれた場合も `unscoped` を記録し、ユーザーが選択した事実を完了報告に残す。
+9. 新規 run では決めたモードを `codiel-state init` の `--domain-mode` にそのまま渡す。既存 run の再開時は
+   記録を正とする。未記録はモード未決としてこの判定をやり直す。
+10. 出力の `architecture` / `gotchas`、実行モード、使用するドメインマップ、連携モード、`imageUpload`、
+    `adrTarget` は、intent フェーズとディスパッチプロンプト(§3)でそのまま使う。GOTCHAS はファイルが
+    無くても終了せず、各所でスキップする。
 
 ## 1. run の解決
 
+`/codiel:run` は次の 3 形のいずれかで起動する。
+
 ```
-node <plugin-root>/scripts/codiel-state.mjs get --issue N
+/codiel:run <Issue番号>
+/codiel:run <intent パス>
+/codiel:run
+```
+
+```
+node <plugin-root>/scripts/codiel-state.mjs get --active
 ```
 
 - **同時にアクティブにできる run は 1 つだけ**(hooks の `findActiveRun` は単一 run の存在を前提に
-  動作する)。別 Issue の run を新たに開始する前に、既存の `active`/`awaiting_human` の run を
-  `finalize`(全フェーズ完了時)または `codiel-state stop --reason`(中止時)して終端状態にする。
-- run が存在し `status` が終端(`stopped` / `awaiting_outcome` / `completed` / `rejected`)でなければ、
-  その `state.phase` から再開する(「再開手順」参照)。
-- **run が存在しない場合、`codiel-state get` は非ゼロ終了し stderr にエラーメッセージを出す。
-  これは異常ではなく「新規 init に進め」という合図である。** run 未存在をエラーとして扱って
-  ここで停止しない。
-- run が存在しない、または既存 run が終端状態なら、**init の前に**次の手順でベースブランチを
-  解決してから新しい try を作る:
-  1. ベースブランチ名は、コンテキストにブランチ規約の宣言があればそれに従う。
-     宣言が無ければ `main` を既定値とする。
-  2. `git switch <ベースブランチ>` した上で `git pull --ff-only` を実行し、ベースブランチを
-     最新化する。`pull --ff-only` が失敗した場合(ネットワーク不通・fast-forward 不可な競合など)は、
-     **その旨を人間に確認してから続行する**(黙って force する・スキップするなどの自己判断は禁止)。
-  3. 上記が完了したら:
-     ```
-     node <plugin-root>/scripts/codiel-state.mjs init --issue N --base-branch <ベースブランチ> --domain-mode <§0 で決めたモード>
-     git switch -c <init の結果で返る state.branch>
-     ```
+  動作する)。別の run を新たに開始する前に、既存の `active`/`awaiting_human` の run を
+  `finalize`(全フェーズ完了時)または `codiel-state stop --slug <slug> --reason <理由>`(中止時)で
+  終端状態にする。
+- run の解決自体は intent フェーズ(`capturing-intent` スキル)へつなぐ。Issue 番号・intent パス・省略の
+  どの入口でも、既存 intent との重複確認、聞き取り、現状調査、分岐の合意、ドラフト提示、承認ゲート、
+  `codiel-state init` による run 作成までを `capturing-intent` の手順に従って進める。
+- intent パスの frontmatter `run` に対応する未終端の run があれば、`capturing-intent` の入口の分岐が
+  それを検出し、`state.phase` から続けるべき既存 run として扱う。この場合は「6. 再開手順」に従う。
+- `capturing-intent` の承認ゲートで「文書だけ残して終える(intent-only)」が選ばれたら、run は `close`
+  で `completed` になり、以降のフェーズ進行表(discuss 以降)は実行しない。「続行する」が選ばれたら、
+  intent フェーズが `passed` になった run ブランチから、フェーズ進行表の discuss 以降を続ける。
 
 ## 2. フェーズ進行表
 
 各フェーズはチェックリスト 3 の定型で進行する。
-ゲート種別と完了コマンドはフェーズ進行表の「ゲート種別」列に従う。
+ゲート種別と完了コマンドはフェーズ進行表の「ゲート種別」列に従う。`STAGES` は次の 12 ステージである。
+
+```ts
+[["intent"], ["discuss"], ["design"], ["test-spec", "dev-plan"], ["implement"],
+ ["test-loop"], ["intent-sync"], ["pr"], ["review"], ["fix-loop"], ["triage"], ["finalize"]]
+```
 
 | フェーズ | 委譲の種別と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 | コミット担当 |
 |---|---|---|---|---|---|---|
-| [0] init | 名指し `codiel-analyst`。Issue → `issue.md` | analyzing-issues | Issue(`gh issue view`)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `issue.md` | pass-gate(`evaluate_decision`) | オーケストレーター(ゲート通過直後) |
-| [1] discuss | 成果物を書く委譲。`issue.md` → `agenda.md` | preparing-design-agendas | `issue.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
-| [2] design | 成果物を書く委譲。`issue.md` + `discussion.md` → `design.md` | writing-design-docs | `issue.md`、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `design.md` | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、ユーザー承認を得てから evaluate する** | オーケストレーター(ゲート通過直後) |
-| [3a] test-spec | 名指し `codiel-test-designer`。`design.md` → `spec.md` / `cases.md` | writing-test-specs(委譲先の定義が読む) | `design.md`(影響 unit 一覧)、既存 `.codiel/specs/<unit-id>/spec.md`(あれば) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
-| [3b] dev-plan | 成果物を書く委譲。`design.md` → `dev-plan.md` | writing-dev-plans | `design.md` | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
-| [4] implement | 成果物を書く委譲。`dev-plan.md` の担当ステップ → コード diff + ユニットテスト | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
-| [5A] test-loop(スクリプト安定化) | 成果物を書く委譲。`cases.md` → `scripts/` + `test-run-<n>.md` | scripting-tests + running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
-| [5B] test-loop(TDD 修正) | 成果物を書く委譲。NG ケースの再現手順・期待結果・実際の結果 → コード修正 diff | implementing + fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
-| [6] pr | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | PR(`git push -u origin <state.branch>` してから `gh pr create`。未 push ブランチでは PR 作成が失敗する)。PR 本文には `design.md` の目的・`dev-plan.md` のステップ一覧・`test-run-<n>.md` の判定を転記し、`Closes #N` を含める。 | complete-phase(`--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
-| [7] review | 読み取りだけの委譲。diff + `design.md` + `.codiel/specs/**` → 指定観点の所見一覧(テキスト) | reviewing-diffs | diff、`design.md`、`issue.md`、`.codiel/specs/**` | `reports/review-<n>.md` + PR コメント | complete-phase | オーケストレーター(review レポートのコミットも) |
-| [8] fix-loop | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<n+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・再レビューの委譲前にオーケストレーターが `git push` して PR ブランチを最新化する**(再レビューは `gh pr diff` を読むため、push しないと stale diff を見て同一所見を再報告する。guard-bash は fix-loop フェーズ + test-loop passed でこの push を許可済み) |
-| [9] triage | オーケストレーター本体。`reports/review-<n>.md` の medium/low → 起票された Issue 番号 | filing-followup-issues | `reports/review-<n>.md` の medium/low | 起票された Issue 番号(`review-<n>.md` と PR コメントに追記) | complete-phase(Raguel ゲートなし。§2 [9] の運用) | オーケストレーター(`review-<n>.md` への Issue 番号追記分。コード変更はなし) |
-| [10] finalize | オーケストレーター本体。全フェーズの成果物 → 結果レポート | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物 | 結果レポート | `node <plugin-root>/scripts/codiel-state.mjs finalize --issue N`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない) | ―(コード変更なし) |
+| [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) | オーケストレーター(intent-only では開始時のブランチへ、続行では run ブランチへ、ゲート通過直後) |
+| [discuss] | 成果物を書く委譲(アジェンダ)+ 本体の進行。intent → `agenda.md` | preparing-design-agendas | intent、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
+| [design] | 成果物を書く委譲。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md` | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、ユーザー承認を得てから evaluate する** | オーケストレーター(ゲート通過直後) |
+| [test-spec] | 名指し `codiel-test-designer`。`design.md`(軽量では intent と持続層) → `spec.md` / `cases.md` | writing-test-specs(委譲先の定義が読む) | `design.md`(影響 unit 一覧。軽量では intent の `## 受け入れ基準` と `## 実装方針`) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
+| [dev-plan] | 成果物を書く委譲。`design.md`(軽量では intent と持続層) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`) | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
+| [implement] | 成果物を書く委譲。`dev-plan.md` の担当ステップ → コード diff + ユニットテスト | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
+| [test-loop A] | 成果物を書く委譲。`cases.md` → `scripts/` + `test-run-<n>.md` | scripting-tests + running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
+| [test-loop B] | 成果物を書く委譲。NG ケースの再現手順・期待結果・実際の結果 → コード修正 diff | implementing + fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
+| [intent-sync] | 成果物を書く委譲。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映 | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
+| [pr] | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ(詳細は「2.2 pr の運転」) | complete-phase(github のときだけ `--pr-url` 必須) | ―(開始前に `git status --short` で未コミット差分がないことを確認) |
+| [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`.codiel/specs/**`、持続層 | `reports/review-<n>.md` + PR コメント(github のみ) | complete-phase | オーケストレーター(review レポートのコミットも) |
+| [fix-loop] | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<n+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
+| [triage] | オーケストレーター本体。`reports/review-<n>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<n>.md` の medium/low | github: 起票された Issue 番号(`review-<n>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) | オーケストレーター(`review-<n>.md` への追記分。コード変更はなし) |
+| [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない。詳細は「2.3 finalize の運転」) | ―(intent の更新分はオーケストレーターがコミットし、github モードでは push する) |
 
-- **test-spec と dev-plan は単一メッセージで 2 体並列ディスパッチする**(Task ツールの呼び出しを 1 回の
+- 軽量の経路(`scale: light`)では discuss と design を `skip-phase` で飛ばす。`SKIPPABLE` はこの 2 フェーズと
+  fix-loop に限られ、discuss と design の `skip-phase` は `state.scale === "light"` のときだけ成功する。
+  test-spec と dev-plan は `design.md` の代わりに intent の `## 受け入れ基準` と `## 実装方針`、関係する
+  持続層を入力にする。review も同様に `design.md` の代わりに intent と `dev-plan.md` を設計の入力にする。
+- test-spec と dev-plan は単一メッセージで 2 体並列ディスパッチする(Task ツールの呼び出しを 1 回の
   応答の中に 2 件含める)。片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
-- 実行モード（`mapped` / `unscoped`）に応じたドメインディスパッチは「ドメインディスパッチ」節を参照。
+- 実行モード(`mapped` / `unscoped`)に応じたドメインディスパッチは「4. ドメインディスパッチ」を参照。
 - critical/high が review でゼロだった場合、fix-loop は実作業なしで
-  `node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reason "<理由>"`
-  でスキップする(詳細は「5. ループ運転」節)。
+  `node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --reason "<理由>"`
+  でスキップする(詳細は「5. ループ運転」を参照)。
 
 ### 2.1 成果物コミット規約
 
 文書系フェーズの委譲先は git 操作をしない。したがって成果物のコミット責務はフェーズの種類で分かれる。
 
-- **文書系フェーズ(init / discuss / design / test-spec / dev-plan)**: 成果物(`issue.md` /
-  `agenda.md`・`discussion.md` / `design.md` / `spec.md`・`cases.md` / `dev-plan.md`)は、
-  **ゲート通過直後にオーケストレーター自身が**
+- **文書系フェーズ(intent / discuss / design / test-spec / dev-plan / intent-sync)**: 成果物(intent 文書 /
+  `agenda.md`・`discussion.md` / `design.md` / `spec.md`・`cases.md` / `dev-plan.md` / intent の派生文の
+  セクションと `## 変更履歴`)は、**ゲート通過直後にオーケストレーター自身が**
   ```
   git add <成果物パス>
-  git commit -m "codiel(<phase>): <要約> (issue-N try-M)"
+  git commit -m "codiel(<phase>): <要約> (<slug> try-<n>)"
   ```
-discuss は Raguel ゲートを持たないため、「ゲート通過直後」ではなく
-  **complete-phase の直前**にコミットする(facilitating-design-discussions チェックリスト 8
-  のとおり)。
-- **コード系フェーズ(implement / test-loop / fix-loop)**: コード系フェーズの委譲先は**自分の変更を自分でコミットする**。オーケストレーターはこれらのフェーズではコミットしない。
+  で確定する。discuss は Raguel ゲートを持たないため、「ゲート通過直後」ではなく **complete-phase の
+  直前**にコミットする(facilitating-design-discussions チェックリスト 8 のとおり)。intent フェーズの
+  コミットは「1. run の解決」と `capturing-intent` の手順に従う。
+- **コード系フェーズ(implement / test-loop / fix-loop)**: コード系フェーズの委譲先は**自分の変更を自分で
+  コミットする**。オーケストレーターはこれらのフェーズではコミットしない。
 - **確認義務**: オーケストレーターは `pr` フェーズを開始する前に `git status --short` を実行し、
   未コミットの変更がないことを確認する。残っていれば `pr` を開始せず、該当フェーズのサブエージェントに
   「変更をコミットしてください」と差し戻す(未コミット差分を抱えたまま PR を作成しない)。
+
+### 2.2 pr の運転
+
+連携モードで手順が分かれる(§0 で判定した値を使う)。
+
+- **github**: `git push -u origin <state.branch>` を実行してから `gh pr create` で PR を作る。本文は
+  `github-writing.md` の執筆規則に従って書き、intent 文書のパスを含め、`state.issue` があれば
+  `Closes #N` を含める。`imageUpload` に使える手段があれば、test-loop で得たスクリーンショットなど
+  関連する画像を `github-writing.md` の縮退の順序で載せる。本文には `<!-- codiel:generated -->` を
+  含める(投稿する本文すべてに共通する規律。§6.8)。作成後、次を実行する。
+  ```
+  node <plugin-root>/scripts/codiel-state.mjs complete-phase pr --slug <slug> --pr-url <URL>
+  ```
+- **local**: push しない。run ブランチと base は `state.branch` / `state.baseBranch` にある。次を
+  `--pr-url` なしで呼ぶ。
+  ```
+  node <plugin-root>/scripts/codiel-state.mjs complete-phase pr --slug <slug>
+  ```
+  完了報告に、ベースブランチへ取り込むためのマージ手順(マージ元のブランチ名とマージ先)を載せる。
+
+開始前に `git status --short` を実行し、未コミットの変更がないことを確認する(§2.1)。
+
+### 2.3 finalize の運転
+
+全フェーズが `passed` になったら、`codiel-state finalize --slug <slug>` を呼ぶ前に、次の手順で結果
+レポートと intent の `status` を確定する。
+
+1. intent の原文のセクション(`## ASIS` / `## TOBE`)の記録 1 件ごとに、「達成 / 未達 / 要確認 / 持ち越し」
+   のいずれかを判定する。持ち越しの注記(`intent-format.md` が定める形)がある記録は判定から外し、結果
+   レポートに「持ち越し」として示す。要望の単位は原文の記録 1 件を基本とし、1 件に複数の要望があるときは
+   原文の該当箇所を引用して分けて示す。分け方は表示のためだけであり、原文へ書き戻さない。
+2. 派生文のセクション(`## 現状調査`・`## 要求`・`## 受け入れ基準`)、設計、実装が原文と食い違ったら、
+   **原文を正とし**、次を実行して人に確認する。原文は自動で書き換えない。
+   ```
+   node <plugin-root>/scripts/codiel-state.mjs mark-ask finalize --slug <slug> --kind confirm
+   ```
+   人が派生文側を直すと決めたら、intent の派生文のセクションをこのフェーズの中で直し、確認を終えたら
+   `codiel-state resume --slug <slug>` で戻す。食い違いは結果レポートの「要確認」として示す。
+3. 持ち越しを除いて原文の要望が**すべて達成のときだけ `status: done`** にする。1 件でも「未達」か
+   「要確認」が残れば `in-progress` のままにし、結果レポートに残りを示す。
+4. intent を更新したら run ブランチへコミットする。github モードでは続けて `git push` し、PR に反映
+   させる。local モードでは push しない。
+5. 上記を終えてから次を呼ぶ(全フェーズ `passed` を検証し `status` を `awaiting_outcome` にする唯一の
+   コマンド。`complete-phase` ではない)。
+   ```
+   node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>
+   ```
+6. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表を含めて出力し、終了する。
+
+### 2.4 共通
+
+- フェーズの途中で人に確認するときは `mark-ask`(`--kind confirm` を付ける)を使う一般則とする。
+  ```
+  node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind confirm
+  node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>
+  ```
+  `awaiting_human` にしてから確認し、答えを得たら `resume` で戻す。`evaluationId` は無くてよい。
+- ユーザーが run の途中で言葉を足したら、どのフェーズでもその場で intent の原文のセクション
+  (`## ASIS` / `## TOBE`)の末尾へ、日付・話者・出所の行つきで即座に追記する。承認は要らない。
+  既存の原文は書き換えない。
+- 追記が intent-sync より後で、この run に含めると決めたときは、次を実行して run を止め、新しい
+  try を intent から始める。intent は `abandoned` にせず `in-progress` のまま残る。
+  ```
+  node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason intent-updated
+  ```
 
 ## 3. ディスパッチプロンプトの規約
 
@@ -224,6 +326,10 @@ diff の中身やファイル内容を会話に貼り付けない。
 
 discuss / design / dev-plan の依頼文には、git 操作をしない旨を追加する。
 
+intent-sync 以外の委譲の依頼文には「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ
+報告する」の文を入れる。intent-sync の依頼文には、派生文のセクションだけを書き換え、原文のセクションを
+書き換えないと明記する。
+
 観点ファイルは次の規則で依頼文に足す。
 - 実装の委譲(implement / test-loop B / fix-loop の修正)では、`mapped` のときに `<plugin-root>/skills/implementing/references/<担当タグ>.md` が存在すれば足す。存在しなければ足さない。`unscoped` では足さない。
 - review / 再レビューでは、観点ごとに `<plugin-root>/skills/reviewing-diffs/references/<観点>.md` を必ず足す。
@@ -247,8 +353,8 @@ ARCHITECTURE / GOTCHAS のパス、実行モード、ドメインマップは §
 実行モードが `mapped` のときだけ、ドメインに紐づく実装の委譲中に run の `domain` へ担当タグを持たせる。guard-write はこの値とドメインマップで境界を判定する。判定が働くのは implement / test-loop / fix-loop の 3 フェーズである。
 
 ```
-node <plugin-root>/scripts/codiel-state.mjs set-domain --issue N --domain <タグ>
-node <plugin-root>/scripts/codiel-state.mjs clear-domain --issue N
+node <plugin-root>/scripts/codiel-state.mjs set-domain --slug <slug> --domain <タグ>
+node <plugin-root>/scripts/codiel-state.mjs clear-domain --slug <slug>
 ```
 
 - `mapped` で実装 / test-loop の TDD 修正 / fix-loop の修正を委譲する直前に `set-domain` を実行する。
@@ -268,7 +374,7 @@ test-loop の内部運転(スクリプト安定化 → TDD 修正の二段構え
 役割は次の 2 点のみ:
 
 1. 修正のためのサブエージェント・ディスパッチ 1 往復ごとに(= 1 attempt)
-   `node <plugin-root>/scripts/codiel-state.mjs record-attempt <phase> --issue N` を呼ぶ。
+   `node <plugin-root>/scripts/codiel-state.mjs record-attempt <phase> --slug <slug>` を呼ぶ。
    **record-attempt を呼ぶのはオーケストレーターのみ**(tester / implementer は呼ばない。二重計上の防止)。
 2. exit code が `3`(試行上限超過・`capExceeded`)なら、**raguel-gating の ASK と同じ扱い**にする
    (`awaiting_human` は `record-attempt` 内部で既にセットされている。findings 相当の情報を人間に
@@ -281,10 +387,12 @@ review フェーズの所見に critical / high が **一件もなければ**、
 次のコマンドで明示的にスキップする:
 
 ```
-node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reason "review で critical/high 0 件"
+node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --reason "review で critical/high 0 件"
 ```
 
-- `skip-phase` は `fix-loop` にしか使えない(他フェーズはフェイルクローズドで拒否される)。
+- `skip-phase` は `fix-loop`・`discuss`・`design` にしか使えない(それ以外のフェーズはフェイルクローズドで
+  拒否される)。discuss と design の `skip-phase` は `state.scale === "light"` のときだけ成功する
+  (「2. フェーズ進行表」の注記を参照)。
 - 前提として review までの全フェーズが `passed` である必要がある。
 - 成功すると `fix-loop` は `status: passed` / `verdict: SKIPPED` になり、`attempts` はリセットされずに
   維持される。以降 `triage` を通常どおり `start-phase` できる。
@@ -293,15 +401,31 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --issue N --reas
 
 ## 6. 再開手順
 
-1. `node <plugin-root>/scripts/codiel-state.mjs get --issue N` で `state.json` を取得する。
-2. `git switch <state.branch>` で run のブランチに切り替える。カレントブランチが別 run やベースブランチのままだと、成果物コミットが誤ったブランチに乗る。
-3. `state.domainMode` から実行モードを復元する。
+1. run を特定する。`--slug <slug>` が分かっていればそれを使う。intent パスだけが分かっているときは、
+   その frontmatter `run` の値を slug として使う(逆引き)。
+   ```
+   node <plugin-root>/scripts/codiel-state.mjs get --slug <slug>
+   ```
+   で `state.json` を取得する。
+2. `state.branch` が `null` でなければ `git switch <state.branch>` で run のブランチに切り替える。
+   カレントブランチが別 run やベースブランチのままだと、成果物コミットが誤ったブランチに乗る。
+   `state.branch` が `null` の run(intent フェーズの承認から `start-phase intent` までの間で止まった
+   run)は、開始時のブランチの作業ツリーで intent フェーズの続きを行う。
+3. 連携モードを再判定する。`node <plugin-root>/scripts/check-intent-env.mjs` を実行し直し、§0 の手順 3
+   でもう一度判断する。判断が `state.integration` の記録と違えば、どちらで続けるかを人に確認する。
+   記録を変えるときは次を実行する。記録どおりなら何もしない。
+   ```
+   node <plugin-root>/scripts/codiel-state.mjs set-integration --slug <slug> --integration <github|local> --image-upload <値>
+   ```
+4. `state.domainMode` から実行モードを復元する。
    - 記録が `mapped` なのに §0 の `unreadable !== null` なら、分岐表の行 7 として止めて確認する。run 中のマップ消失を暗黙のモード変更にしない。
    - それ以外で記録があれば、その値を正として復元する。`unreadable` が `architecture_missing` または `block_missing` の場合は分岐表の行 4 として再確認しない。
    - 記録がなければモード未決として §0 の判定をやり直す。
-4. `state.phase` から続行する。すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に従い、`in_progress` のフェーズから再開する。
-   discuss フェーズで中断していた場合の再開位置(アジェンダ作成から/未決論点から/最終確認から)は facilitating-design-discussions の「中断再開」節に従う。design フェーズで design.md が既に存在する場合は、ウォークスルーの再提示から再開する。
-5. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、raguel-gating の ASK ハンドリング(裁定 A / 裁定 B / 中止)に従って人間の裁定を待つ。**再開できると思って勝手に続行しない**。
+5. `state.phase` から続行する。すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に従い、
+   `in_progress` のフェーズから再開する。discuss フェーズで中断していた場合の再開位置(アジェンダ作成
+   から/未決論点から/最終確認から)は facilitating-design-discussions の「中断再開」に従う。design
+   フェーズで design.md が既に存在する場合は、ウォークスルーの再提示から再開する。
+6. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、raguel-gating の ASK ハンドリング(裁定 A / 裁定 B / 中止)に従って人間の裁定を待つ。**再開できると思って勝手に続行しない**。
 
 <HARD-GATE>
 - **オーケストレーターは自分で実装・レビュー・テスト作成をしない**。すべてサブエージェントへの

@@ -67,12 +67,12 @@ RED を省略しない。
 コミットメッセージ規約:
 
 ```
-codiel(implement): <ステップ名> (issue-N try-M)           # 通常モード
-codiel(test-loop): <修正内容> (issue-N try-M)              # test-loop の修正モード
-codiel(fix-loop): <修正内容> (issue-N try-M)               # fix-loop の修正モード
+codiel(implement): <ステップ名> (<slug> try-<n>)           # 通常モード
+codiel(test-loop): <修正内容> (<slug> try-<n>)              # test-loop の修正モード
+codiel(fix-loop): <修正内容> (<slug> try-<n>)               # fix-loop の修正モード
 ```
 
-`issue-N try-M` は現在の runId/try(例: `issue-42 try-1`)をそのまま使う。この形式は
+`<slug> try-<n>` は現在の runId/try(例: `add-user-auth try-1`)をそのまま使う。この形式は
 `orchestrating-runs` が diff を辿る際の識別子になるため変更しない。
 
 ## HARD-GATE

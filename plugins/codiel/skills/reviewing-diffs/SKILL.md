@@ -8,8 +8,10 @@ description: Codiel の review フェーズ(および fix-loop の再レビュ�
 ## 概要
 
 レビューを担うサブエージェントが、依頼文で指定された観点で review フェーズおよび fix-loop の
-再レビューで使うスキル。入力は PR diff(`gh pr diff`)、`design.md`、`.codiel/specs/**` の
-`spec.md`/`cases.md`、`issue.md`。レビュー基準は常にこの 3 種の文書との整合であり、
+再レビューで使うスキル。入力は `git diff <base>...<branch>`、intent 文書(`docs/intents/**`)、
+`design.md`(design フェーズを経た run にはある)、`.codiel/specs/**` の `spec.md`/`cases.md`。
+`design.md` が無い軽量の run では、intent と `dev-plan.md` を設計の代わりに読む。受け入れ基準は
+intent の `## 受け入れ基準` を出所とする。レビュー基準は常にこれらの文書との整合であり、
 **レビュー担当個人の好みのコーディングスタイルではない**。「自分ならこう書く」という指摘は
 根拠が文書にない限り low 止まりとする。
 
@@ -20,29 +22,40 @@ fix-loop の再レビューでは、上記に加えて `fixing-review-findings` 
 
 レビューは**両方向**で行う。
 
-- **未達方向**: design.md / spec.md / issue.md の受け入れ基準にあるのに、diff に実装が見当たらない。
-- **逸脱方向**: design.md / spec.md にない振る舞い・API・スキーマ変更が diff に追加されている。
+- **未達方向**: intent の受け入れ基準 / design.md / spec.md にあるのに、diff に実装が見当たらない。
+- **逸脱方向**: intent / design.md / spec.md にない振る舞い・API・スキーマ変更が diff に追加されている。
+
+これに加え、intent の原文のセクション(`## ASIS` / `## TOBE`)が語る要望を diff が満たすかも確認する
+(手順 5)。完了判定の最高権威は原文のセクションである。
+
+github モードで投稿するレビュー本文の文の組み立てと画像の載せ方は
+`../../references/github-writing.md` に従う。
 
 各レビュー担当は依頼文で指定された観点に絞って診る。確認項目の詳細は依頼文で渡される観点ファイルにある。
 両方向チェックの原則は全観点共通。
 
 ## チェックリスト
 
-1. `design.md` / `.codiel/specs/**` の該当 `spec.md`・`cases.md` / `issue.md` の受け入れ基準を読む。
-   fix-loop の再レビューでは、申し送られた「反論済み所見一覧」も確認する。
-2. `gh pr diff <PR番号>` で diff を取得する。`gh pr view <PR番号>` で PR 概要・変更ファイル一覧を
-   確認する。diff が大きくても**全ファイルに目を通す**(サンプリングで一部だけ見て済ませない)。
+1. intent 文書(`docs/intents/**`)の `## 受け入れ基準` / `design.md` / `.codiel/specs/**` の該当
+   `spec.md`・`cases.md` を読む。`design.md` が無い軽量の run では、intent と `dev-plan.md` を
+   設計の代わりに読む。fix-loop の再レビューでは、申し送られた「反論済み所見一覧」も確認する。
+2. `git diff <base>...<branch>` で diff を取得する。diff が大きくても**全ファイルに目を通す**
+   (サンプリングで一部だけ見て済ませない)。
 3. 自分の観点(下記「観点別の焦点」)に該当する変更点を洗い出す。
 4. 各変更点について両方向チェックを行う:
    - 受け入れ基準・design.md にある振る舞いが diff で実現されているか(未達がないか)。
    - diff にある変更が design.md / spec.md のどこにも根拠を持たないものでないか(逸脱がないか)。
-5. diff が受け入れ基準の振る舞いに触れるときは、テスト・型検査を**読み取り実行**して裏取りする(`npm test` / `npm run typecheck` 等。
+5. intent の原文のセクション(`## ASIS` / `## TOBE`)が語る要望を diff が満たすかも確認する。
+   原文の要望の未達は severity high の所見にする。派生文(`## 現状調査` / `## 要求` /
+   `## 受け入れ基準` / design.md)と原文が食い違うときは、原文を正とし、食い違いを所見に挙げる。
+   人への確認はオーケストレーターが `mark-ask` の後に行う。
+6. diff が受け入れ基準の振る舞いに触れるときは、テスト・型検査を**読み取り実行**して裏取りする(`npm test` / `npm run typecheck` 等。
    コンテキストに宣言があればそれに従い、無ければ `package.json` の `scripts` から取る)。実行結果を書き換えたり、失敗を握り潰したりしない。
-6. 問題を見つけたら下記の所見書式でまとめる。severity は次節の定義に従って機械的に判定する
+7. 問題を見つけたら下記の所見書式でまとめる。severity は次節の定義に従って機械的に判定する
    (「なんとなく重大そう」で決めない)。「反論済み所見一覧」に該当し、かつ反論を覆す新たな根拠が
    ない場合は再報告しない。
-7. 所見がゼロの観点があっても、**確認した項目と確認方法を必ず報告する**(無言 approve 禁止)。
-8. 所見一覧(空の場合は確認記録)をテキストで返す。ファイルへの書き込みは行わない。
+8. 所見がゼロの観点があっても、**確認した項目と確認方法を必ず報告する**(無言 approve 禁止)。
+9. 所見一覧(空の場合は確認記録)をテキストで返す。ファイルへの書き込みは行わない。
 
 ## 所見書式
 
@@ -80,10 +93,16 @@ security 観点の指摘は原則 medium 以上を検討する(セキュリテ�
 1. severity 順(critical → high → medium → low)に並べ替えて `reports/review-<n>.md` に記録する。
    同一の対象・内容の所見が複数観点から出た場合は、最も高い severity で 1 件に
    統合し、観点を併記する。
-2. `gh pr review <PR番号> --comment --body "<本文サマリ>"` で概要(件数・severity 内訳・
-   fix-loop 対象の有無)を PR 本文コメントとして投稿する。
-3. 各所見の「対象」(`src/...:42`)に対応する行コメントを `gh api` 経由で投稿する。
-4. critical/high があれば fix-loop へ、ゼロなら triage へ進む(`orchestrating-runs` の
+2. local モードでは、この先の投稿を行わない。`reports/review-<n>.md` の記録だけを review フェーズの
+   成果物とする。
+3. github モードでは、`github-writing.md` の執筆規則に従ってレビュー本文を組み立てる。概要
+   (件数・severity 内訳・fix-loop 対象の有無)を `gh pr review <PR番号> --comment --body "<本文>"`
+   で PR 本文コメントとして投稿する。テストの結果得たスクリーンショットなど関連する画像があれば、
+   レビュー本文の縮退の順序(`github-writing.md` の画像の載せ方)で載せる。本文には
+   `<!-- codiel:generated -->` を含める。
+4. github モードでは、各所見の「対象」(`src/...:42`)に対応する行コメントを `gh api` 経由で
+   投稿する。本文には `<!-- codiel:generated -->` を含める。
+5. critical/high があれば fix-loop へ、ゼロなら triage へ進む(`orchestrating-runs` の
    フェーズ進行表のとおり)。
 
 reviewer はこの投稿作業を代行してはならない(Bash で `gh pr review` 等を叩かない)。
@@ -99,7 +118,7 @@ reviewer はこの投稿作業を代行してはならない(Bash で `gh pr rev
 - **所見ゼロでも沈黙しない**。指摘がない場合も「どの観点をどう確認したか(読んだファイル・
   実行した検証コマンド)」を必ず報告する。何も言わずに approve 相当の空返答をすることは
   「確認したふりをして何も見ていない」のと区別がつかず禁止する。
-- **Bash は読み取り専用の調査にのみ使う**。`gh pr diff` / `gh pr view` / テスト・型検査の
+- **Bash は読み取り専用の調査にのみ使う**。`git diff` / テスト・型検査の
   読み取り実行以外(`gh pr review` の投稿、`git commit`、ファイルへの書き込みを伴う操作等)には
   使わない。
 </HARD-GATE>

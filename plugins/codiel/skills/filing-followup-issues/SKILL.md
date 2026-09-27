@@ -15,6 +15,13 @@ triage は非 GATED フェーズであり、Raguel の `evaluate_*` は経ない
 前提として人間の明示的な指示を必須とする。
 
 入力は `reports/review-<n>.md` の所見のうち **medium / low のみ**。
+
+連携モードで手順が分かれる。github モードは Issue として起票し、local モードは
+`status: proposed` の intent 草案として `docs/intents/` に書く。
+
+github モードで投稿する本文の文の組み立てと画像の載せ方は `../../references/github-writing.md` に、
+local モードで書く intent 草案の文の組み立ては `../../references/intent-writing.md` に従う。
+
 ## プラグインルート参照規約
 
 このスキル起動時に通知される「Base directory for this skill」は
@@ -22,10 +29,10 @@ triage は非 GATED フェーズであり、Raguel の `evaluate_*` は経ない
 2 階層上**。`codiel-state` は対象プロジェクトのルートで次の形で呼ぶ:
 
 ```
-node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番号>
+node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ```
 
-## チェックリスト
+## github モードのチェックリスト
 
 1. 最新の `reports/review-<n>.md` を読み、medium/low の所見だけを抽出する(critical/high は
    すでに fix-loop で処理済みのはずであり、対象に含めない)。**既に「フォローアップ: #N」の
@@ -48,13 +55,35 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
 6. **重複確認**: 起票前に `gh issue list --search "<要約のキーワード>"` で既存 Issue との重複を
    確認する。ヒットがあれば起票を保留し、該当 Issue へのリンクをユーザーに提示して
    「新規起票する/既存 Issue に集約する/見送る」の判断を仰ぐ(ここも自己判断しない)。
-7. 選んだテンプレート(または既定書式)を最大限埋めた本文を組み立て、
-   `gh issue create --title "<タイトル>" --body "<本文>" --label "<ラベル>"` で起票する
+7. 選んだテンプレート(または既定書式)を最大限埋めた本文を、`github-writing.md` の執筆規則に
+   従って組み立てる。本文には `<!-- codiel:generated -->` を含める。組み立てた本文で
+   `gh issue create --title "<タイトル>" --body "<本文>" --label "<ラベル>"` を実行する
    (テンプレートの labels が複数ある場合は `--label` を複数回指定する)。
 8. 起票後、Issue 番号を `reports/review-<n>.md` の該当所見の行に追記し、
-   `gh pr comment <PR番号> --body "フォローアップ: #<Issue番号>"` で PR にコメントを投稿する。
+   `<!-- codiel:generated -->` を含む本文で `gh pr comment <PR番号> --body "フォローアップ: #<Issue番号>"`
+   を実行する。
 9. 全対象(見送られたものを除く)の処理が終わったら
-   `node <plugin-root>/scripts/codiel-state.mjs complete-phase triage --issue N` を呼び
+   `node <plugin-root>/scripts/codiel-state.mjs complete-phase triage --slug <slug>` を呼び
+   フェーズを完了させる。
+
+## local モードのチェックリスト
+
+1. 最新の `reports/review-<n>.md` を読み、medium/low の所見だけを抽出する(critical/high は
+   すでに fix-loop で処理済みのはずであり、対象に含めない)。既に intent 草案のパスが付記
+   されている所見は処理済みなので除外する。
+2. 抽出した所見を**番号付き一覧**(番号・severity・要約・対象 `src/...:42`)にしてユーザーに提示する。
+3. **起票対象の選択・複数所見のまとめ方・見送りをユーザーに確認する**(github モードの手順 3 と
+   同じ唯一のゲート)。回答が来るまで次の手順に進まない。
+4. ユーザーが対象を指示したら、対象ごとに `intent-writing.md` の規則に従い、`status: proposed` の
+   intent 草案を `docs/intents/YYYY-MM-DD-<slug>.md` に書く。frontmatter の `run` は空にする。
+   `## 現状調査` に、所見の出所(`review-<n>.md` の該当行)を書く。レビュー所見は AI が生成した文
+   なので、原文にしない。原文のセクション(`## ASIS` / `## TOBE`)には本文を置かず、見出しの下に
+   `<!-- codiel:unrecorded -->` だけを置く。この草案を入力に run を始めたときは、このセクションを
+   不足セクションとして聞き取りで埋める。
+5. 書いた intent 草案をコミットする。
+6. `reports/review-<n>.md` の該当所見の行に、書いた intent 草案のパスを追記する。
+7. 全対象(見送られたものを除く)の処理が終わったら
+   `node <plugin-root>/scripts/codiel-state.mjs complete-phase triage --slug <slug>` を呼び
    フェーズを完了させる。
 
 ## ISSUE_TEMPLATE の読み方とテンプレート選択
@@ -105,15 +134,15 @@ medium|low
 ```
 
 <HARD-GATE>
-- **ユーザーの指示なしに起票しない**。手順 2〜3 の提示と確認を経ず、あるいはユーザーの回答を
-  待たずに `gh issue create` を実行することは禁止。起票対象・まとめ方・見送りは常にユーザーが
-  決める。
+- **ユーザーの指示なしに起票・記録しない**。手順 2〜3 の提示と確認を経ず、あるいはユーザーの回答を
+  待たずに `gh issue create` や intent 草案の作成を実行することは禁止。起票対象・まとめ方・見送りは
+  常にユーザーが決める。
 - **critical/high をこのフェーズに持ち込まない**。critical/high は `fixing-review-findings` の
   fix-loop で必ず修正対象になっており、triage で「起票して終わり」にすることは fix-loop の職掌
   への越境であり行わない。
-- **`gh issue create` の実行はこのフェーズでのみ許される**。`guard-bash`(hooks)は
-  アクティブ run の現在フェーズが triage でなければ `gh issue create` を機械的に deny する
-  (`docs/DESIGN.md` §8 / §2 [9])。
+- **`gh issue create` の実行はこのフェーズでのみ許される**(github モードだけに当たる)。
+  `guard-bash`(hooks)はアクティブ run の現在フェーズが triage でなければ `gh issue create` を
+  機械的に deny する(`docs/DESIGN.md` §8 / §2 [9])。
 </HARD-GATE>
 
 ## Red Flags(合理化への反論)

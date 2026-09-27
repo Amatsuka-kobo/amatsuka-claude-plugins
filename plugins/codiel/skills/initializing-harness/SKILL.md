@@ -79,7 +79,7 @@ bash <plugin-root>/scripts/install-harness.sh
 
 - 配置・生成・追記したファイルの一覧(skip したものは skip と明記)
 - ユーザーが不明と答えて未記入のまま残した項目
-- 次のアクション: `/codiel:run <issue番号>` で run を開始できること
+- 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
 
 ## 修復の例外
 

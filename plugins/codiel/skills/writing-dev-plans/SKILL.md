@@ -11,6 +11,9 @@ description: Codiel の dev-plan フェーズで design.md を入力に dev-plan
 機能単位)と、ディスパッチプロンプトで渡された実行モード・ドメインマップを入力に、
 `design.md` の変更対象をドメイン単位の実行可能なステップ列へ分解し `dev-plan.md` として構造化する。
 
+`design.md` が無い run(軽量)では、`design.md` の代わりに intent の `## 受け入れ基準` と
+`## 実装方針` を入力にする。
+
 `dev-plan.md` は implement フェーズが読む唯一の実行手順書であり、各ステップの `[domain: ...]`
 タグは `orchestrating-runs` が「どの implementer(frontend/backend/data)にディスパッチするか」を
 機械的に決める入力になる。また各 implementer のエージェント定義は「担当ドメインのパスにのみ書く」
@@ -27,6 +30,7 @@ dev-plan は test-spec と並列ディスパッチされるが、test-spec の�
 ## チェックリスト
 
 1. `design.md` の `## 目的` `## 方針` `## 変更対象` `## 影響を受ける機能単位` を読む。
+   `design.md` が無い run(軽量)では、代わりに intent の `## 受け入れ基準` と `## 実装方針` を読む。
 2. ディスパッチプロンプトで渡された実行モードとドメインマップを使う。ARCHITECTURE を
    ドメインマップの取得元として読み直さない。
    `mapped` のとき、渡されたドメインマップが `{ "generic": ["**"] }` に縮退していれば、以降の

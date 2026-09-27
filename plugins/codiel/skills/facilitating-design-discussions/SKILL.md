@@ -34,8 +34,8 @@ description: Codiel の discuss フェーズでオーケストレーターが ag
 
    ```
    git add <try-dir>/agenda.md <try-dir>/discussion.md
-   git commit -m "codiel(discuss): 設計ディスカッションの合意を記録 (issue-N try-M)"
-   node <plugin-root>/scripts/codiel-state.mjs complete-phase discuss --issue N
+   git commit -m "codiel(discuss): 設計ディスカッションの合意を記録 (<slug> try-<n>)"
+   node <plugin-root>/scripts/codiel-state.mjs complete-phase discuss --slug <slug>
    ```
 
 ## discussion.md の書式
@@ -43,7 +43,7 @@ description: Codiel の discuss フェーズでオーケストレーターが ag
 design フェーズ(writing-design-docs)と reviewer-doc がこの書式のまま読む。項目名を変更しない。
 
 ```markdown
-# discussion: <issue タイトル>
+# discussion: <intent のゴール>
 
 ## 論点 1: <agenda.md と同じ論点名>
 

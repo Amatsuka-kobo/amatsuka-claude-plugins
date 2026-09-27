@@ -19,7 +19,7 @@ test-loop フェーズおよび `/codiel:test`(単独実行)で使うスキル�
 ディレクトリの 2 階層上**。`codiel-state` は対象プロジェクトのルートで次の形で呼ぶ:
 
 ```
-node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番号>
+node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ```
 
 ## 2 つの起動モード
@@ -61,7 +61,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --issue <番�
    **単独実行モードではディスパッチせず、NG のまま報告して終了する**。
 6. (run 経由のみ)implementer が `fixing-failures` の手順で修正し返してきたら、**回帰範囲全体
    (手順 1 の対象 unit すべて)を再実行する**(修正対象の unit だけを再実行しない)。
-   この修正ディスパッチもオーケストレーターが 1 往復ごとに `record-attempt test-loop --issue N` を
+   この修正ディスパッチもオーケストレーターが 1 往復ごとに `record-attempt test-loop --slug <slug>` を
    呼んで数える(`exit 3` なら手順 3 と同様に ASK)。全ケース OK になるまで手順 3〜6 を繰り返す。
 7. 手順 2 で確認したユニットテストコマンドを実行し、結果(pass/fail の
    件数、失敗があれば出力抜粋)を控える。コマンドが無ければ実行を省き、レポートに
