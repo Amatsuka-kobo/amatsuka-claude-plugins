@@ -155,24 +155,6 @@
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
       "note": "projectDocs / contextDocs の解決結果からパスを取るだけ"
-    },
-    {
-      "path": "plugins/sandalphon/references/intent-format.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "D",
-      "note": "マーカー検知の説明で例として触れているだけ"
-    },
-    {
-      "path": "plugins/sandalphon/references/sandalphon-common.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "projectDocs の解決結果からパスを取るだけ"
-    },
-    {
-      "path": "plugins/sandalphon/skills/capturing-intent/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "projectDocs / contextDocs の解決結果からパスを取るだけ"
     }
   ]
 }
