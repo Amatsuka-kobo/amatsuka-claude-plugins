@@ -1,7 +1,7 @@
 # codiel を intent 駆動へ改造し、sandalphon を吸収する 設計書
 
 - 作成日: 2026-09-27
-- 状態: 設計(第 9 版)・承認済み(2026-09-27)
+- 状態: 設計(第 9 版)・承認済み(2026-09-27)・実装時の追補(2026-09-27。決定 54〜62)
 - 対象プラグイン: `plugins/codiel`(主)、`plugins/sandalphon`(撤去)、`plugins/metatron`(参照文書・テストの追随、`[ADR 候補]` の走査と縮約の実装、執筆規律の追随)、`plugins/gh-utility`(GitHub の執筆規則と画像の載せ方)
 - 現行バージョン: codiel `0.9.0-dev` → `1.0.0`、metatron `0.3.10-dev` → `0.4.0-dev`(マイナー)、sandalphon `0.2.1-dev` → 撤去、gh-utility `0.5.2-dev` → `0.5.3-dev`(§9)
 - 入力: オーケストレーター確定事項(2026-09-27。ユーザー合意済み)、暗黙知レビューと反証レビューの採否(2026-09-27。オーケストレーター決定)、ユーザーレビューの修正指示 3 点と、独立性の要件・metatron が無いときの ADR の決定・ADR 候補の移送を metatron 側で行う決定・執筆規則の決定(2026-09-27)
@@ -35,6 +35,8 @@
 第 9 版では、原文まわりの 2 つのレビューの採用分を反映した。原文になるのは人が書いた・語った言葉だけという原則を置き、Issue を入口にしたときの扱い、途中の要望の即時追記と hook の許可、`status: done` を finalize が付けること、`mark-ask` による確認の一般則を決めた(決定 47・49 を改め、決定 50〜52 を足した)。
 
 第 9 版の追補では、`mark-ask --kind`、finalize での `resume` の遷移、intent 文書を書くのはオーケストレーターだけという規則、`stop --reason intent-updated` の例外、codiel が起票した Issue の人のコメントの扱いを決めた(§6.1.1、§6.2.2、§6.3.2、§6.3.5、§6.8)。続く追補では、run が active な間に GitHub へ投稿する本文すべてに `<!-- codiel:generated -->` を付け、hook で強制することを決めた(決定 53。§6.3.5、§6.8)。
+
+実装時の追補(2026-09-27)では、実装中のユーザー決定を決定 54〜59 として足し、M2 のレビューで直した仕様を決定 60〜62 として足した。これに合わせて §3.6・§6.1.1・§6.1.2・§6.2.2・§6.8・§6.9.4・§6.10.1・§7.1・§10・§11.1 の該当行を改めた。実装計画書 §9.4 の 11〜22 が経緯を持つ。
 
 | # | 論点 | 決定 | 具体化 |
 | --- | --- | --- | --- |
@@ -91,6 +93,15 @@
 | 51 | 途中の追記と hook | active run の `state.intent` が指すファイル 1 本への書き込みは、すべてのフェーズで許可する。原文を書き換えない・要約しないは AI 側の規律で守る。intent-sync より後の追加の要望は、ユーザーが run に含めるかを決め、含めなければ持ち越しの注記を付ける | §6.3.4、§6.8 |
 | 52 | 途中の人への確認 | フェーズの途中で人に確認するときは、`mark-ask` で `awaiting_human` にしてから確認する。stop-guard に止められないためである | §6.1 |
 | 53 | 投稿する本文のマーカー | run が active な間、GitHub へ本文を投稿する操作はすべて `<!-- codiel:generated -->` を本文に含める。対象は Issue の作成・編集・コメント、PR の作成・編集・コメント・レビュー本文である。スキルの規律で付けたうえで、`gh` のコマンドは guard-bash、GitHub MCP の書き込みツールは新しい PreToolUse の hook で強制し、マーカーが無ければ deny する。run が active でないセッションには掛けない。codiel を通さない投稿までは追わない。gh-utility の投稿にはマーカーを付けない | §6.3.5、§6.8、§6.12.3、§6.12.6 |
+| 54 | evals | codiel は `evals/` を持たない。codiel のスキルはどれもコマンド・`orchestrating-runs` の手順・依頼文から名前かパスで起動され、description の照合では起動されないので、発火率を測る evals は要らない | §6.9.4 |
+| 55 | スキルの description | codiel の全スキルの description を「Codiel の <フェーズ> フェーズで、<担い手> が <入力> から <出力> を<動作>ときに使う。<起動元> が名指しで起動する。」の形に揃える。発火を促す句は入れない。対象はスキルだけで、commands と Agent 定義は含めない | §6.9.1 |
+| 56 | 同梱 Agent | codiel は同梱 Agent を持たない。`codiel-test-designer` を廃止し、test-spec は成果物を書く委譲にする。書ける範囲(`.codiel/specs/<unit-id>/` の `spec.md` と `cases.md` だけ、Bash を使わない)は依頼文と `writing-test-specs` の HARD-GATE で表す | §3.6、§6.1.1、§10 |
+| 57 | `CLAUDE.example.md` | metatron への分離後と intent 駆動化後の実態に合わせて書き直す | §6.9.4 |
+| 58 | GOTCHAS の記録 | codiel の `recording-gotchas` スキルを削除し、GOTCHAS の記録は `metatron:recording-gotchas` に委ねる。codiel に残すのは、記録の契機 4 つ(Raguel の STOP、ループ上限超過、incident、レビューで発覚した設計漏れ)と、metatron の CLI の案内が無いときの退避(未記録の GOTCHAS)だけで、`orchestrating-runs` の「失敗の記録」のセクションに置く | §6.10.1 |
+| 59 | `CLAUDE.example.md` と metatron | `CLAUDE.example.md` に ARCHITECTURE・GOTCHAS・metatron の言及を書かない。metatron が無い環境では不要で、有る環境では metatron の SessionStart の注入が伝える。ARCHITECTURE との乖離の縮退は `orchestrating-runs` の依頼文テンプレートと finalize が持つ | §6.10.1 |
+| 60 | `gh api` の本文 | guard-bash は `gh api` の書き込み(POST・PATCH・PUT)のうち、`body` のフィールドか `--input` で本文を送るものにもマーカーを求める。codiel のスキルが `gh api` で PR の行コメントと反論を投稿するためである | §6.8 |
+| 61 | `mark-ask` の受け付ける状態 | `mark-ask` は `in_progress` のフェーズと、`pending` の finalize だけを受け付ける。終端の run、passed のフェーズ、finalize 以外の `pending` のフェーズは拒否する。フェーズの合間に確認するときは、次のフェーズを `start-phase` してから `mark-ask` する | §6.1.1、§6.2.2 |
+| 62 | intent フェーズの手順 0 と再開 | 手順 0 は、今回再開する run を終端にしない。終端にするのは再開しないほかの run だけで、終端にする前にユーザーに示して確かめる | §6.1.2 |
 
 ---
 
@@ -190,7 +201,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 - `plugins/codiel/raguel-mcp/`。runId の制約は slug 側で満たす(§6.2.3)。
 - ADR-004 のディスパッチ規則。codiel は委譲先を名指しでも役割名でも指定せず、作業内容と委譲の種別だけを渡す(`harness-docs/ARCHITECTURE.md:225-251`)。§6.6.4 の修正ループもこの規則に従う。
-- ただし ADR-004 の決定のうち「同梱 Agent を `codiel-analyst` と `codiel-test-designer` の 2 体に絞る」(`harness-docs/ARCHITECTURE.md:243`)は、本改修で `codiel-analyst` を削除するため成り立たなくなる。M2 で起票する新 ADR が、ADR-004 のこの部分を上書きする(§10)。ADR-004 の本文は書き換えない。
+- ただし ADR-004 の決定のうち「同梱 Agent を `codiel-analyst` と `codiel-test-designer` の 2 体に絞る」(`harness-docs/ARCHITECTURE.md:243`)は、本改修で `codiel-analyst` を削除するため成り立たなくなる。M2 で起票する新 ADR が、ADR-004 のこの部分を上書きする(§10)。実装時に `codiel-test-designer` も廃止したので(決定 56)、新 ADR は codiel が同梱 Agent を持たないことを内容とする。ADR-004 の本文は書き換えない。
 - ドメインマップの契約と実行モード(`mapped` / `unscoped`)の分岐(`orchestrating-runs/SKILL.md:53-94`)。
 - `/codiel:init` と `/codiel:test` の入口。init コマンドは初期化の外形(B + C + D)を作るもので、廃止する init フェーズとは別物である。
 - 確定版の契約文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の本文。書き換えず、上書きの記録を §7.5 に置く。
@@ -316,7 +327,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 | intent | オーケストレーター本体(対話)。現状調査は読み取りだけの委譲 | Issue 本文(任意)、既存 intent(任意)、ARCHITECTURE、GOTCHAS、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
 | discuss | 成果物を書く委譲(アジェンダ)+ 本体の進行 | intent | `agenda.md`、`discussion.md` | complete-phase |
 | design | 成果物を書く委譲 | intent、`discussion.md`、持続層 | `design.md` | ウォークスルー後に pass-gate(`evaluate_design`) |
-| test-spec | 名指し `codiel-test-designer` | `design.md`(軽量では intent と持続層) | `spec.md` / `cases.md` | pass-gate(`evaluate_plan`) |
+| test-spec | 成果物を書く委譲(決定 56) | `design.md`(軽量では intent と持続層) | `spec.md` / `cases.md` | pass-gate(`evaluate_plan`) |
 | dev-plan | 成果物を書く委譲 | `design.md`(軽量では intent と持続層) | `dev-plan.md` | `codiel-state waves` の成功を確かめた後に pass-gate(`evaluate_plan`) |
 | implement | 成果物を書く委譲をステップごとに並列 | `dev-plan.md` | コード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
 | test-loop | 成果物を書く委譲を unit ごとに並列 | `cases.md` | `scripts/`、`test-run-<n>.md`、修正 diff | pass-gate(`evaluate_code`) |
@@ -337,7 +348,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-intent/SKILL.md:20-118`)を移植し、run の開始手順と結合する。聞き取りには AskUserQuestion が要るため、intent フェーズの対話はオーケストレーター本体が行う。Issue の読み取りも本体が行う。intent 文書の本文はユーザーが承認したドラフトの保存であり、`discussion.md` と同じく合意の記録として本体が書く。
 
-0. 聞き取り・書き込み・起票のどれよりも前に、ほかの run が active でないことを確かめる。active / awaiting_human の run があれば、`finalize` か `codiel-state stop` で終端にしてから始める(現行 `orchestrating-runs/SKILL.md:102-104` の検査を、ここへ前倒しする)。これで、手順 5 の (1)〜(3) の間は active run が無いことが保証される。
+0. 聞き取り・書き込み・起票のどれよりも前に、ほかの run が active でないことを確かめる。active / awaiting_human の run があれば、`finalize` か `codiel-state stop` で終端にしてから始める(現行 `orchestrating-runs/SKILL.md:102-104` の検査を、ここへ前倒しする)。ただし、入口の intent パスの frontmatter `run` に当たる run と、ユーザーが今回再開すると答えた run は終端にせず、§6.2.5 の再開手順へ進む。終端にする run は、その前に内容(slug・intent のパス・現在のフェーズ)をユーザーに示して確かめる(決定 62)。これで、手順 5 の (1)〜(3) の間は active run が無いことが保証される。
 1. §0 の前提確認と連携モードの判定を行う(§6.5)。続けてベースブランチの名前を解決し、`git switch <ベース> && git pull --ff-only` で最新化する。聞き取りの前へ移すのは、現行 `orchestrating-runs/SKILL.md:110-116`(ベース名の解決と switch / pull)だけである。`:117-121`(`codiel-state init` と `git switch -c`)は承認後の手順 5 に置く。本設計では、このベースブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
 2. 入口の引数で分岐する。
    - Issue 番号: github モードでは `gh issue view`、読めなければ GitHub MCP の読み取りで本文とコメントを得る。local モードではユーザーに本文を貼ってもらう。本文を原文にするか派生にするかは、本文にあるマーカーで決める(§6.3.5)。正本は以後 intent になる。
@@ -460,7 +471,7 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 - `runDir` は `.codiel/runs/<slug>`。`findActiveRun` と `get --active` はディレクトリ名のパターンで絞らず、`runs/` 直下のディレクトリをすべて走査し、`version: 2` の state だけを run として扱う。
 - `complete-phase pr` の `--pr-url` 必須は `integration === "github"` のときだけにする。
 - `close`(§6.1.3)、`step-add` / `step-update` / `waves`(§6.6)を足す。
-- `mark-ask` に `--kind raguel|confirm` を足す。省略時は `raguel` とし、既存の呼び出しの意味を変えない。値はフェーズの `askKind` に記録する。`raguel` と `confirm` 以外は拒否する。`resume` は `askKind` を消さず、記録として残す。
+- `mark-ask` に `--kind raguel|confirm` を足す。省略時は `raguel` とし、既存の呼び出しの意味を変えない。値はフェーズの `askKind` に記録する。`raguel` と `confirm` 以外は拒否する。`resume` は `askKind` を消さず、記録として残す。`mark-ask` は `in_progress` のフェーズと `pending` の finalize だけを受け付け、終端の run・passed のフェーズ・finalize 以外の `pending` のフェーズを拒否する(決定 61)。
 - `stop --reason` の値のうち `intent-updated` を、intent を続ける停止として扱う(§6.3.2)。CLI は値を記録するだけで、intent の `status` は変えない。
 
 #### 6.2.3 slug の制約
@@ -1014,11 +1025,12 @@ guard-bash の規則は次のとおりである。
 - 値が `-`(標準入力)のときは中身を検査できないので deny し、ファイルに書いて `--body-file <パス>` で渡すよう案内する。
 - マーカーが無ければ deny し、「本文に `<!-- codiel:generated -->` を含めて投稿し直す」よう案内する。
 - 既存のフェーズの制限(`gh issue create` は triage だけ、`gh pr create` は pr だけ。`guard-bash.ts:164-173`)はそのまま残し、マーカーの検査はその後に当てる。
+- `gh api` も対象にする(決定 60)。メソッドは `-X` / `--method` の値で決め、指定が無ければフィールドか `--input` があるとき POST、無いとき GET とする。POST・PATCH・PUT のうち、キーが `body`(`comments[][body]` の形を含む)のフィールドを `-f` / `--raw-field` / `-F` / `--field` で送るものと、`"body":` を含む `--input <ファイル>` を送るものを検査する。`-F body=@<パス>` と `--input <パス>` はファイルの中身を見る。`@-` と `--input -` は deny し、読めないファイルも deny する。本文を持たない呼び出し(読み取り、ラベルだけの更新)は通す。GraphQL の mutation の query に本文を直接書く形と、`body` 以外の名前のフィールドで本文を送る形は検出しない。
 
 GitHub MCP の hook の規則は次のとおりである。
 
 - 新しい PreToolUse の hook(`src/hooks/guard-github-mcp.ts`)を足し、`build.ts` のエントリと `hooks/hooks.json` に登録する。
-- matcher は GitHub MCP の本文を書き込むツールに当てる。Claude Code は MCP のツールを `mcp__<サーバー名>__<ツール名>` の名前で渡すので、サーバー名の違い(プラグイン経由の接続を含む)を吸収できるよう、正規表現で書く。対象のツールは `issue_write`・`add_issue_comment`・`update_issue_comment`・`create_pull_request`・`update_pull_request`・`update_pull_request_body`・`create_pull_request_review`・`add_comment_to_pending_review`・`pull_request_review_write` などである。
+- matcher は GitHub MCP の本文を書き込むツールに当てる。Claude Code は MCP のツールを `mcp__<サーバー名>__<ツール名>` の名前で渡すので、サーバー名の違い(プラグイン経由の接続を含む)を吸収できるよう、正規表現で書く。対象のツールは `issue_write`・`add_issue_comment`・`update_issue_comment`・`create_pull_request`・`update_pull_request`・`update_pull_request_body`・`create_pull_request_review`・`add_comment_to_pending_review`・`pull_request_review_write`・`add_reply_to_pull_request_comment`・`submit_pending_pull_request_review`・`add_pull_request_review_comment`・`create_issue`・`update_issue_body`・`update_issue` の 15 個である(実装時に確定。実装計画書 §9.3)。サーバー名の `github` は大文字小文字を区別せずに照合する。
 - 本文にあたる引数(`body` など)を、guard-bash と同じ条件で検査する。本文の引数を持たない呼び出しは通す。マーカーが無ければ deny する。
 - ツールの一覧と、ツールごとの本文の引数の名前は、実装時に GitHub MCP の現行のツール定義で確かめて確定する(§10 の引き継ぎ)。
 
@@ -1106,11 +1118,12 @@ worktree 内の書き込みは、次の 3 点で判定する。worktree は `.co
 - `build.ts` のエントリに `check-intent-env` を加え、`scripts/check-intent-env.mjs` を生成する。
 - `lib.ts` と `check-intent-env.ts` のコメントにある「3 実装」「sandalphon」を「2 実装」「metatron」に改め、3 者比較を指す「契約 §13」を「契約 §14」に直す(§3.5)。
 
-#### 6.9.4 codiel の文書と evals
+#### 6.9.4 codiel の文書
 
 - `plugins/sandalphon/docs/rationale.md` を `plugins/codiel/docs/DESIGN.md` の新しいセクションへ統合する。
 - `plugins/sandalphon/docs/format-change-checklist.md` を `plugins/codiel/docs/format-change-checklist.md` へ移し、追随先を改める(`analyzing-issues` の行を削り、`filing-followup-issues` と `syncing-intents` を加える)。
-- `plugins/sandalphon/evals/capturing-intent.json` を `plugins/codiel/evals/capturing-intent.json` へ移し、改修後の手順に合わせる。ほか 2 本は廃止するスキルのものなので移さない。
+- codiel は `evals/` を持たない(決定 54)。M1 で移した `evals/capturing-intent.json` は M2 で削除した。
+- `plugins/codiel/CLAUDE.example.md` を、metatron への分離後と intent 駆動化後の実態に合わせて書き直す(決定 57)。ARCHITECTURE・GOTCHAS・metatron には触れない(決定 59)。
 - `plugins/codiel/docs/DESIGN.md` と `README.md` を intent 駆動の run に書き換える。
 - `plugins/codiel/README.md` には「metatron を導入すると `/metatron:init` と `/metatron:update` が `[ADR 候補]` を ADR へ移し、持続層を参照形に縮める」という内容だけを書く(§6.4.3)。手動で移す手順は書かない。
 
@@ -1127,9 +1140,9 @@ codiel と metatron は、どちらか一方だけを導入した環境でも、
 | `metatron.config.json` による ARCHITECTURE / GOTCHAS のパス解決 | 設定のパスを使う | 既定パス(`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md`)。解決は codiel の `lib.ts` が独立に実装しており、metatron のコードを呼ばない | `lib.ts` の `resolveDocPaths`(既存) |
 | ARCHITECTURE のドメインマップ | `mapped` で境界を課す | `unscoped` で実行する(ユーザー確認つき)。持続層の領域名は intent フェーズでユーザーと合意する | `orchestrating-runs` §0(既存)、§6.4.1 |
 | ARCHITECTURE と GOTCHAS を作業の前提として読む | 委譲先が読む | 読まない。依頼文の前提欄に「なし」と書く | `orchestrating-runs` §3 の依頼文テンプレート(既存) |
-| metatron の SessionStart による ARCHITECTURE / GOTCHAS の注入 | メインセッションに注入される | 注入は無い。codiel は注入に頼らず、§0 で解決したパスを依頼文で渡す | `CLAUDE.example.md` の「文書の扱い」(既存) |
-| GOTCHAS への記録(metatron の CLI `append-gotcha`) | CLI で台帳へ追記する | 台帳へ書かず、run の `reports/`(run が無ければ `.codiel/reports/`)へ「未記録の GOTCHAS」として退避し、完了報告にも載せる | `recording-gotchas/SKILL.md:102-112`(既存) |
-| ARCHITECTURE の更新(`/metatron:update`) | 乖離を報告し、所有者の更新へ渡す | 乖離を報告に残すだけにする。codiel は ARCHITECTURE を作らない | `CLAUDE.example.md` の「文書の扱い」(既存) |
+| metatron の SessionStart による ARCHITECTURE / GOTCHAS の注入 | メインセッションに注入される | 注入は無い。codiel は注入に頼らず、§0 で解決したパスを依頼文で渡す | `orchestrating-runs` の §0 と依頼文テンプレート(決定 59) |
+| GOTCHAS への記録(metatron の CLI `append-gotcha`) | CLI で台帳へ追記する | 台帳へ書かず、run の `reports/`(run が無ければ `.codiel/reports/`)へ「未記録の GOTCHAS」として退避し、完了報告にも載せる | `orchestrating-runs` の「失敗の記録」(決定 58) |
+| ARCHITECTURE の更新(`/metatron:update`) | 乖離を報告し、所有者の更新へ渡す | 乖離を報告に残すだけにする。codiel は ARCHITECTURE を作らない | `orchestrating-runs` の依頼文テンプレートと finalize の「乖離」(決定 59) |
 | ADR | metatron の ADR。持続層には番号参照だけ | 持続層に `[ADR 候補]` の全文(§6.4.2〜§6.4.3)。後で metatron を導入すると、metatron の init / update が ADR へ移して縮める(§6.11) | `intent-format.md`、`syncing-intents` |
 | ADR の 3 条件(`writing-discipline.md:69-73`) | metatron の定義を使う | codiel の `intent-format.md` の写しを使う | `intent-format.md`。写しの追随は `plugins/codiel/docs/format-change-checklist.md` と metatron の `format-change-checklist.md` の双方に 1 行ずつ載せる |
 | rules(`conventions.md` 等)を生成物の方式の根拠に読む(§6.6.1) | `.claude/rules/**` の rules を読む | `CLAUDE.md` などプロジェクトの指示書を読む。定めが無ければ方式 b | `writing-dev-plans` |
@@ -1354,7 +1367,7 @@ ADR を先に確定させるのは、候補の本文を失わないためであ�
 | `references/sandalphon-common.md` | `plugins/codiel/references/intent-common.md`(必要なセクション) |
 | `docs/rationale.md` | `plugins/codiel/docs/DESIGN.md` に統合 |
 | `docs/format-change-checklist.md` | `plugins/codiel/docs/format-change-checklist.md` |
-| `evals/capturing-intent.json` | `plugins/codiel/evals/capturing-intent.json` |
+| `evals/capturing-intent.json` | `plugins/codiel/evals/capturing-intent.json`(M2 で削除。決定 54) |
 | `evals/bridging-execution.json` / `executing-intent.json` | 廃止 |
 | `src/check-intent-env.ts` | `plugins/codiel/src/check-intent-env.ts`(config 解決は lib.ts へ寄せる) |
 | `src/__test__/check-intent-env.test.ts` | `plugins/codiel/src/__test__/check-intent-env.test.ts`(§8.3) |
@@ -1640,7 +1653,7 @@ run を intent から始める。
 ### 計画側への引き継ぎ
 
 - この改修(codiel の起点を intent へ変えたこと、sandalphon を統合したこと)は ADR 候補である。M2 の終点で新 ADR を起票する。
-- 新 ADR は ADR-004 の決定のうち「同梱 Agent を `codiel-analyst` と `codiel-test-designer` の 2 体に絞る」部分を上書きし、残る同梱 Agent を `codiel-test-designer` の 1 体とする。ADR-004 の本文は書き換えず、状態の変更は metatron の ADR の書式(状態変更の履歴)に従う。
+- 新 ADR は ADR-004 の決定のうち「同梱 Agent を `codiel-analyst` と `codiel-test-designer` の 2 体に絞る」部分を上書きし、codiel が同梱 Agent を持たないとする(決定 56)。ADR-004 の本文は書き換えず、状態の変更は metatron の ADR の書式(状態変更の履歴)に従う。
 - ADR の追加は `metatron:updating-architecture` スキルを起動して行う。`stage-adr` → `commit-architecture` を直接呼ぶ手順で代えない。
 - `harness-docs/ARCHITECTURE.md:50` の変更(§7.2)も同じスキルの経路で行う。
 - metatron が codiel の持続層を縮約すること(プラグインをまたぐ書き込み)も ADR 候補である。起票するかは M3 の終点で、同じスキルの手順の中で判断する。
@@ -1665,7 +1678,7 @@ run を intent から始める。
 | 指示層 | §6.9.1 の表のとおり |
 | 参照層 | 新設 `references/{intent-format,handoff-contract,intent-common,intent-writing,github-writing}.md` |
 | 文書 | `docs/DESIGN.md`、`docs/skill-flowcharts.md`、新設 `docs/format-change-checklist.md`、`README.md`、`CLAUDE.example.md` |
-| evals | 新設 `evals/capturing-intent.json` |
+| evals | なし(M1 で移し、M2 で削除した。決定 54) |
 | 配布 | `.claude-plugin/plugin.json`、`package.json` |
 
 ### 11.2 そのほか
