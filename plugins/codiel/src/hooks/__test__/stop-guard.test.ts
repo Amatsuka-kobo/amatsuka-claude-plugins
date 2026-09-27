@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { readState, writeState } from "../../codiel-state.js"
 import { runTs } from "../../testing/run-ts.js"
 
 const STOP_GUARD = fileURLToPath(new URL("../stop-guard.ts", import.meta.url))
@@ -16,6 +17,19 @@ const INIT_FLAGS = [
   "github",
   "--scale",
   "standard",
+  "--adr-target",
+  "metatron",
+  "--image-upload",
+  "gh-attach,chrome"
+]
+// discuss・design を skip-phase できるのは scale が light の run だけ(M2-FX5-B a)
+const INIT_FLAGS_LIGHT = [
+  "--intent",
+  "docs/intents/2026-09-27-demo.md",
+  "--integration",
+  "github",
+  "--scale",
+  "light",
   "--adr-target",
   "metatron",
   "--image-upload",
@@ -179,7 +193,7 @@ test("stop-guard: phase が passed のとき次に進めるフェーズの start
     /codiel-state start-phase <フェーズ> --slug demo/
   )
   expect(parsed.reason).toMatch(
-    /codiel-state skip-phase <フェーズ> --slug demo/
+    /codiel-state skip-phase <フェーズ> --slug demo --reason "<理由>"/
   )
   expect(parsed.reason).toMatch(
     /mark-ask <フェーズ> --slug demo --kind confirm/
@@ -217,4 +231,83 @@ test("stop-guard: どの分岐も codiel-state stop --reason で明示的に中�
   expect(JSON.parse(passedResult.stdout).reason).toMatch(
     /codiel-state stop --slug demo --reason <理由> で明示的に止めること/
   )
+})
+
+test("stop-guard: passed の案内どおりに --reason を付けて skip-phase を実行すると成功する(M2-FX5-B a)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS_LIGHT])
+  cli(root, ["start-phase", "intent", "--slug", SLUG])
+  cli(root, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    "e",
+    "--verdict",
+    "PROCEED"
+  ])
+  // 案内のプレースホルダに実際のフェーズ名と理由を当てはめると、書いたとおりに成功する
+  expect(() =>
+    cli(root, [
+      "skip-phase",
+      "discuss",
+      "--slug",
+      SLUG,
+      "--reason",
+      "time-constraint"
+    ])
+  ).not.toThrow()
+})
+
+test("stop-guard: 並列ステージで別フェーズが in_progress のとき、そのフェーズへの mark-ask を案内する(M2-FX5-B b)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
+  const passGate = (phase: string) =>
+    cli(root, [
+      "pass-gate",
+      phase,
+      "--slug",
+      SLUG,
+      "--evaluation-id",
+      "e",
+      "--verdict",
+      "PROCEED"
+    ])
+  cli(root, ["start-phase", "intent", "--slug", SLUG])
+  passGate("intent")
+  cli(root, ["start-phase", "discuss", "--slug", SLUG])
+  cli(root, ["complete-phase", "discuss", "--slug", SLUG])
+  cli(root, ["start-phase", "design", "--slug", SLUG])
+  passGate("design")
+  // 並列ステージ(test-spec・dev-plan)のうち dev-plan だけを passed にし、
+  // test-spec を in_progress のまま残す
+  cli(root, ["start-phase", "test-spec", "--slug", SLUG])
+  cli(root, ["start-phase", "dev-plan", "--slug", SLUG])
+  passGate("dev-plan")
+  const result = callHook(STOP_GUARD, root)
+  const parsed = JSON.parse(result.stdout)
+  expect(parsed.reason).toMatch(/phase: dev-plan/)
+  expect(parsed.reason).toMatch(
+    /codiel-state mark-ask test-spec --slug demo --kind confirm/
+  )
+})
+
+test("stop-guard: finalize が passed で status が active のときは finalize の再実行を案内する(M2-FX5-B c)", () => {
+  const root = setupRunAtIntent()
+  const statePath = path.join(
+    root,
+    ".codiel",
+    "runs",
+    SLUG,
+    "try-1",
+    "state.json"
+  )
+  const state = readState(statePath)
+  state.phase = "finalize"
+  state.phases.finalize.status = "passed"
+  writeState(statePath, state)
+  const result = callHook(STOP_GUARD, root)
+  const parsed = JSON.parse(result.stdout)
+  expect(parsed.reason).toMatch(/codiel-state finalize --slug demo/)
 })

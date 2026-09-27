@@ -193,44 +193,69 @@ interface GhInvocation {
   command: string
 }
 
-// heredoc の開始(`<<WORD`・`<<-WORD`・`<<'WORD'`・`<<"WORD"`)。終端の語は英字か _ で
-// 始まり、直後が語の区切りのものだけを受ける(`<<EOF-X` は開始と見なさない)。
-const HEREDOC_RE = /^<<(-?)(['"]?)([A-Za-z_]\w*)\2(?=[\s;&|)<>]|$)/
+// heredoc の開始。`<<` か `<<-` の後に空白を置いてよく、終端の語は次のどれかである。
+// - クォートした語(`'EOF'`・`"EOF"`・`'END-OF-MSG'`)。中は英数字以外の文字も受ける。
+// - `\` を前に付けた語(`\EOF`)と、クォートしない語(`EOF`)。英字か _ で始まり、英数字と
+//   _ だけから成るものを受ける。
+// どれも直後が語の区切りのものだけを受ける(`<<EOF-X`・`<<'A'B` は開始と見なさない)。
+// クォートした語と `\` を付けた語の heredoc は、bash が本文を展開しない。
+const HEREDOC_RE =
+  /^<<(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n\\$`]+)"|(\\?)([A-Za-z_]\w*))(?=[\s;&|)<>]|$)/
+
+// `-c` の直後の語を、中身もコマンドの列として読むシェル。
+const SHELLS = ["bash", "sh", "zsh", "dash", "ksh"]
 
 // シェルのコマンド文字列を字句解析し、単純なコマンドごとに、クォートを外した語の列を返す。
 // gh の起動を分けるのは、コマンドの区切り(; & | 改行とサブシェルの括弧)とコマンド置換
 // ($( … ) とバッククォート)の境界だけである。クォートの中は 1 つの語にまとめ、そこに
 // 書かれた gh で外側の起動を分けない。コマンド置換の中のコマンドは別のコマンドとしても
 // 返し、置換を含む語には置換の原文を残す(`--body "$(gh …)"` の値を失わないため)。
-// `bash -c "gh …"`・`eval "gh …"` のように `-c` と `eval` の直後に置いた語は、中身も
-// コマンドの列として読む。
-// 行末の `\` による継続は語をつなぐ。閉じていないクォートは残りをすべて 1 つの語とする
-// (bash はそのコマンドを実行しない)。
+// 次の語は、中身もコマンドの列として読む。
+// - シェル(SHELLS。絶対パスを含む)の語より後ろにある `-c`(`-lc` などの結合を含む)の
+//   直後の語。`env X=1 bash -lc "gh …"` を読み、`grep -c "gh pr create"` のような
+//   シェルでないコマンドの -c の値は読まない。
+// - `eval` の直後の語。
+// 行末の `\` による継続は語をつなぐ。
+// 閉じていないクォートかコマンド置換を残して文字列の終わりに達したときは、undefined を
+// 返す。bash はそのコマンドを実行しないが、この字句解析が heredoc の開始を見落とし、本文の
+// `don't` の `'` から後ろを 1 語に読んだときにも起きる。呼び出し元は splitLoosely で
+// 厳しい側に読み直す。
 //
 // heredoc の本文は、終端の行(<<- のときは先頭のタブを除いた行)が見つかったときだけ
 // 読み飛ばす。コミットメッセージの heredoc に書いた gh の使用例を起動と見なさないためである。
 // - 終端の語をクォートしない heredoc(<<EOF)では、bash が本文のコマンド置換を実行する
 //   ので、本文の $( … ) とバッククォートの中だけをコマンドとして読む。
-// - クォートとコメントの中の `<<` と、直前が `<`・英数字・`_`・`)` の `<<`(`<<<` の
-//   here-string、`1<<2`・`x<<y` の算術のシフト)は開始と見なさず、後の行も読み飛ばさない
-//   (判定に迷う形は検査する側に倒す)。
+// - クォートとコメントの中の `<<`、直前が数字・`)`・`<` の `<<`(`<<<` の here-string、
+//   `1<<2`・`(1)<<y` の算術のシフト)、算術の展開 `$(( … ))` の中の `<<` は開始と見なさず、
+//   後の行も読み飛ばさない(判定に迷う形は検査する側に倒す)。識別子の直後の `<<`
+//   (`cat<<EOF`)は開始と見なす。
 // 既知の限界は次のとおり。
-// - 空白を詰めた `cat<<EOF` も開始と見なさないので、本文の行をコマンドとして読む
-//   (誤検知の側に倒れる)。
 // - `bash <<EOF` の本文で起動した gh の投稿は見逃す。
-// - 算術の中で空白の後に置いた `<<b`(`$(( 1 <<b ))`)は開始と読み違え、`b` の行までを
-//   読み飛ばす。
-function parseCommands(text: string): string[][] {
+// - `$` の無い算術のコマンド `(( x << y ))` の `<<` は開始と読み違え、`y` だけの行が
+//   あればそこまでを読み飛ばす。
+// - HEREDOC_RE が受けない書き方(`<<END-OF-MSG`・`<<E"O"F`・`0<<EOF`)と、終端の語を
+//   `)` と同じ行に書く `$(cat <<'EOF' … EOF)` は、本文の行をコマンドとして読む(誤検知の
+//   側)。本文に対になっていないクォートがあれば、splitLoosely で読み直す。
+// - シェルの語がコマンド名かどうかは見ないので、`echo bash -c "gh pr create"` の値も
+//   コマンドとして読む(誤検知の側)。
+// - `case` の `)` を含むコマンド置換は早く閉じる。
+function parseCommands(text: string): string[][] | undefined {
   const commands: string[][] = []
   const pending: { word: string; dash: boolean; quoted: boolean }[] = []
   let i = 0
+  let inArith = false
+  let unclosed = false
 
   // text[i] の $( かバッククォートから置換の中をコマンドとして読み、置換の原文を返す。
+  // `$((` は算術の展開として読み、中の `<<` を heredoc の開始と見なさない。
   const readSubst = (): string => {
     const start = i
     const backquote = text[i] === "`"
+    const outer = inArith
+    inArith = text.startsWith("$((", i)
     i += backquote ? 1 : 2
     parseList(backquote ? "`" : ")")
+    inArith = outer
     return text.slice(start, i)
   }
 
@@ -250,6 +275,7 @@ function parseCommands(text: string): string[][] {
         i++
       }
     }
+    if (i >= text.length) unclosed = true
     i++
     return out
   }
@@ -268,17 +294,22 @@ function parseCommands(text: string): string[][] {
         let end = from
         while (end < text.length && text[end] !== "'")
           end += c === "$" && text[end] === "\\" ? 2 : 1
+        if (end >= text.length) unclosed = true
         out += text.slice(from, end)
         i = end + 1
       } else if (c === '"') out += readDouble()
       else if (c === "`" || text.startsWith("$(", i)) out += readSubst()
       else {
         const m =
-          c === "<" && !/[<\w)]/.test(text[i - 1] ?? "")
+          c === "<" && !inArith && !/[\d)<]/.test(text[i - 1] ?? "")
             ? text.slice(i).match(HEREDOC_RE)
             : null
         if (m)
-          pending.push({ word: m[3], dash: m[1] === "-", quoted: m[2] !== "" })
+          pending.push({
+            word: m[2] ?? m[3] ?? m[5],
+            dash: m[1] === "-",
+            quoted: m[5] === undefined || m[4] === "\\"
+          })
         const s = m ? m[0] : c
         out += s
         i += s.length
@@ -311,6 +342,7 @@ function parseCommands(text: string): string[][] {
   const parseList = (close?: string): void => {
     let words: string[] = []
     let depth = 0
+    let closed = false
     const flush = () => {
       if (words.length > 0) commands.push(words)
       words = []
@@ -318,6 +350,7 @@ function parseCommands(text: string): string[][] {
     while (i < text.length) {
       const c = text[i]
       if (c === close && (close === "`" || depth === 0)) {
+        closed = true
         i++
         break
       }
@@ -335,14 +368,46 @@ function parseCommands(text: string): string[][] {
       } else words.push(readWord(close))
     }
     flush()
+    if (close !== undefined && !closed) unclosed = true
   }
 
   parseList()
-  for (const words of [...commands])
-    words.forEach((w, k) => {
-      if (k > 0 && (/^-\w*c$/.test(words[k - 1]) || words[k - 1] === "eval"))
-        commands.push(...parseCommands(w))
-    })
+  if (unclosed) return undefined
+  for (const words of [...commands]) {
+    const shellAt = words.findIndex((w) => SHELLS.includes(path.basename(w)))
+    for (let k = 1; k < words.length; k++) {
+      const prev = words[k - 1]
+      if (
+        prev !== "eval" &&
+        !(shellAt !== -1 && shellAt < k - 1 && /^-\w*c$/.test(prev))
+      )
+        continue
+      const inner = parseCommands(words[k])
+      if (inner === undefined) return undefined
+      commands.push(...inner)
+    }
+  }
+  return commands
+}
+
+// parseCommands が閉じていないクォートかコマンド置換を残したときの、厳しい側の読み方
+// (字句解析に書き直す前の方式)。行の継続を戻して ; & | 改行で分け、空白で区切った語の
+// 前後のクォートと括弧を外し、gh の語ごとにコマンドを分ける。クォートの中と heredoc の
+// 本文の gh も起動と見なすので、誤検知の側に倒れる。
+function splitLoosely(cmd: string): string[][] {
+  const commands: string[][] = []
+  for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
+    let words: string[] = []
+    for (const tok of segment.split(/\s+/)) {
+      const w = tok.replace(/^[("'`$]+|["'`)]+$/g, "")
+      if (w === "gh" || w.endsWith("/gh")) {
+        commands.push(words)
+        words = []
+      }
+      if (w !== "") words.push(w)
+    }
+    commands.push(words)
+  }
   return commands
 }
 
@@ -369,7 +434,8 @@ function expandShortFlags(tokens: string[], valueShorts: string): string[] {
   })
 }
 
-// cmd をコマンドに分け(parseCommands)、gh の起動ごとに「object action」(issue create
+// cmd をコマンドに分け(parseCommands。閉じていないクォートかコマンド置換が残れば
+// splitLoosely)、gh の起動ごとに「object action」(issue create
 // など)を git と同じくトークン解析で取り出す。起動は、コマンドの中の最初の gh の語から
 // そのコマンドの終わりまでとする。gh api は action を持たないので、command を "api" と
 // する。GH_POST_COMMANDS に無いコマンドは返さず、あるものは短いフラグの結合を分けた
@@ -378,7 +444,7 @@ function expandShortFlags(tokens: string[], valueShorts: string): string[] {
 // (guard-bash の他のトークン解析と同じ簡略さで足りるため)。
 function findGhInvocations(cmd: string): GhInvocation[] {
   const invocations: GhInvocation[] = []
-  for (const words of parseCommands(cmd)) {
+  for (const words of parseCommands(cmd) ?? splitLoosely(cmd)) {
     const start = words.findIndex((w) => w === "gh" || w.endsWith("/gh"))
     if (start === -1) continue
     const tokens = words.slice(start)

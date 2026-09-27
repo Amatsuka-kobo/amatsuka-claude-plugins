@@ -1138,8 +1138,133 @@ test("終端の語の直後に語の区切り以外が続く <<EOF-X は heredoc
   expect(hook(root, command)?.permissionDecision).toBe("deny")
 })
 
-test("空白を詰めた cat<<EOF は heredoc の開始と見なさず、本文の行も検査する(既知の限界。誤検知の側)", () => {
+// --- heredoc の開始の書き方の揺れと、閉じていないクォートの読み直し(M2-FX4-AR の high、決定 69) ---
+
+test("空白ありや空白を詰めた heredoc の本文に対になっていないクォートがあっても、後ろの gh の投稿を検査する", () => {
+  const root = setupRun()
+  const commitThenComment = (start: string) =>
+    [
+      `git commit -m "$(${start}`,
+      "fix: don't skip",
+      "EOF",
+      `)" && ${NO_MARKER_COMMENT}`
+    ].join("\n")
+  const noteThenComment = (start: string, word = "EOF") =>
+    [start, "it's done", word, NO_MARKER_COMMENT].join("\n")
+  for (const command of [
+    commitThenComment("cat << 'EOF'"),
+    noteThenComment("cat > notes.txt << 'EOF'"),
+    commitThenComment("cat<<'EOF'"),
+    noteThenComment("cat <<\\EOF"),
+    noteThenComment("cat << EOF"),
+    noteThenComment('cat << "EOF"'),
+    noteThenComment("cat <<'END-OF-MSG'", "END-OF-MSG")
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("gh pr comment の本文")
+  }
+})
+
+test("空白ありの heredoc の本文の後ろの gh pr create は、フェーズの制限で deny", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "good.md"), `本文\n${MARKER}\n`)
+  const command = [
+    "git commit -m \"$(cat << 'EOF'",
+    "fix: don't",
+    "EOF",
+    ')" && gh pr create --title t --body-file good.md'
+  ].join("\n")
+  const r = hook(root, command)
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("pr フェーズ")
+})
+
+test("空白ありなどの heredoc で gh の使用例を書いたコミットメッセージは、phase intent でも通る", () => {
+  const root = setupRun()
+  const commit = (start: string, line: string, word = "EOF") =>
+    [`git commit -m "$(${start}`, line, word, ')"'].join("\n")
+  for (const command of [
+    commit("cat << 'EOF'", "feat: gh pr create の --fill を塞ぐ"),
+    commit("cat<<'EOF'", "fix: don't run gh issue create here"),
+    commit("cat <<\\EOF", "fix: gh pr create -T を塞ぐ"),
+    commit(
+      "cat <<'END-OF-MSG'",
+      "docs: it's gh issue create --web",
+      "END-OF-MSG"
+    )
+  ])
+    expect(hook(root, command)).toBe(null)
+})
+
+test("空白ありの heredoc で本文を渡す投稿は、本文に書いた gh の使用例を別の投稿と数えない", () => {
+  const root = setupRun()
+  const command = [
+    "gh pr comment 12 --body \"$(cat << 'EOF'",
+    MARKER,
+    "再現: gh pr comment 2 --body x",
+    "EOF",
+    ')"'
+  ].join("\n")
+  expect(hook(root, command)).toBe(null)
+})
+
+test("空白を詰めた cat<<EOF も heredoc の開始と見なし、本文の行を gh の起動と読まない", () => {
   const root = setupRun()
   const r = hook(root, ["cat<<EOF", NO_MARKER_COMMENT, "EOF"].join("\n"))
-  expect(r?.permissionDecision).toBe("deny")
+  expect(r).toBe(null)
+})
+
+test("算術の展開 $(( … )) の中の << は、空白や識別子の後でも heredoc の開始と見なさない", () => {
+  const root = setupRun()
+  for (const [first, word] of [
+    ["n=$(( x << y ))", "y"],
+    ["n=$(( 1 <<b ))", "b"]
+  ])
+    expect(
+      hook(root, [first, NO_MARKER_COMMENT, word].join("\n"))
+        ?.permissionDecision
+    ).toBe("deny")
+})
+
+test("字句解析が閉じていないクォートを残したときは、空白で区切る方式で gh の起動を探し直して検査する", () => {
+  const root = setupRun()
+  for (const command of [
+    // クォートしない語に - を含む終端は heredoc の開始と見なさない。
+    ["cat <<END-OF-MSG", "it's done", "END-OF-MSG", NO_MARKER_COMMENT].join(
+      "\n"
+    ),
+    // 終端の語と ) を同じ行に書くと、終端の行が見つからない。
+    [
+      "git commit -m \"$(cat <<'EOF'",
+      "fix: don't skip",
+      `EOF)" && ${NO_MARKER_COMMENT}`
+    ].join("\n")
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("gh pr comment の本文")
+  }
+})
+
+// --- -c の引数の中を読み直すのはシェルの -c と eval だけ(M2-FX4-AR の medium) ---
+
+test("シェルでないコマンドの -c の値は読み直さず、grep -c・rg -c の検索を phase intent で通す", () => {
+  const root = setupRun()
+  for (const command of [
+    'grep -c "gh pr create" plugins/codiel/skills/orchestrating-runs/SKILL.md',
+    'grep -rc "gh pr create" plugins/codiel/skills',
+    "rg -c 'gh issue create' plugins/"
+  ])
+    expect(hook(root, command)).toBe(null)
+})
+
+test("前置や結合したフラグのあるシェルの -c の引数の中の投稿も、マーカーが無ければ deny", () => {
+  const root = setupRun()
+  for (const command of [
+    'env X=1 bash -lc "gh pr comment 1 --body nomarker"',
+    "sudo sh -c 'gh pr comment 1 --body nomarker'",
+    '/bin/zsh -c "gh pr comment 1 --body nomarker"'
+  ])
+    expect(hook(root, command)?.permissionDecision).toBe("deny")
 })

@@ -43,12 +43,12 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 4. 不当と判断した所見は、`reports/review-<n>.md` に記録された PR コメント URL への返信として、
    `github-writing.md` の執筆規則に従い、下記「PR 反論記録書式」の内容と `<!-- codiel:generated -->`
    を本文に含めて組み立てる(URL が未記録なら新規コメントでよい)。組み立てた本文を Write ツールで
-   所見ごとに別名の `reports/rebuttal-<連番>.md` に書き、`review-<n>.md` と同じ書き方で run
-   ブランチへコミットする(`git add <パス>` の後
+   所見ごとに別名の `.codiel/runs/<slug>/try-<n>/reports/rebuttal-<連番>.md` に書き、`review-<n>.md`
+   と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
    `git commit -m "codiel(fix-loop): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
-   `gh api` を `-F body=@reports/rebuttal-<連番>.md` のように `-F body=@<パス>` で本文を渡して
-   呼び、反論を投稿する。修正はしない。反論後は所見の要約・反論根拠・投稿した PR コメント URL を
-   「反論済み一覧」に追記する。
+   `gh api` を `-F body=@.codiel/runs/<slug>/try-<n>/reports/rebuttal-<連番>.md` のように
+   `-F body=@<パス>` で本文を渡して呼び、反論を投稿する。修正はしない。反論後は所見の要約・反論根拠・
+   投稿した PR コメント URL を「反論済み一覧」に追記する。
 5. ディスパッチ 1 往復(implementer への修正依頼 → 完了報告)ごとに
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を呼ぶ。
    exit code が `3`(`capExceeded`)なら、それ以上ディスパッチせず `raguel-gating` の ASK
@@ -69,7 +69,12 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 10. `review-<n+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
     除外する(ただし reviewer が新たな根拠を伴って再主張したものは未決に戻し件数に含める)。
     除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 11 へ。
-    反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を PR コメントに 1 度だけ記録して件数から除外する。
+    反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を PR コメントに 1 度だけ記録して
+    件数から除外する。記録は反論と同じ流れで行う。組み立てた本文を Write ツールで所見ごとに別名の
+    `.codiel/runs/<slug>/try-<n>/reports/restatement-<連番>.md` に書き、`review-<n>.md` と同じ
+    書き方で run ブランチへコミットしてから、別の Bash 呼び出しで `gh api` を
+    `-F body=@.codiel/runs/<slug>/try-<n>/reports/restatement-<連番>.md` のように `-F body=@<パス>`
+    で本文を渡して投稿する。投稿は 1 回の Bash 呼び出しに 1 つとする。
 11. 最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
     `node <plugin-root>/scripts/codiel-state.mjs pass-gate fix-loop --slug <slug> --evaluation-id <id>
     --verdict PROCEED` を呼んでフェーズを完了させる(`pass-gate` はループの最後に 1 回だけ呼ぶ。
@@ -92,14 +97,19 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 再現を試みた結果どうだったか、といった技術的根拠>
 ```
 
-妥当と判断し修正が完了した所見には、修正を行った implementer のコミットハッシュを添えて次の形式で対応済みを記録する。
+妥当と判断し修正が完了した所見には、修正を行った implementer のコミットハッシュを添えて次の形式で
+対応済みを記録する。記録は反論と同じ流れで行う。組み立てた本文を Write ツールで所見ごとに別名の
+`.codiel/runs/<slug>/try-<n>/reports/resolution-<連番>.md` に書き、`review-<n>.md` と同じ書き方で
+run ブランチへコミットしてから、別の Bash 呼び出しで `gh api` を
+`-F body=@.codiel/runs/<slug>/try-<n>/reports/resolution-<連番>.md` のように `-F body=@<パス>` で
+本文を渡して呼び、対応済みを投稿する。
 
 ```markdown
 対応: <commit hash>
 ```
 
 「対応」も「反論」も**必ずどちらかを記録する**。所見に対して何も投稿しない状態を残さない。
-本文には `<!-- codiel:generated -->` を含める。
+本文には `<!-- codiel:generated -->` を含める。投稿は 1 回の Bash 呼び出しに 1 つとする。
 
 <HARD-GATE>
 - **検証せずに指摘へ盲従しない**。所見の severity や書き方がどれだけ断定的でも、対象ファイル・

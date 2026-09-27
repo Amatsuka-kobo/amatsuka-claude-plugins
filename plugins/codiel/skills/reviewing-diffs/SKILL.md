@@ -98,17 +98,18 @@ security 観点の指摘は原則 medium 以上を検討する(セキュリテ�
 3. github モードでは、`github-writing.md` の執筆規則に従ってレビュー本文を組み立てる。概要
    (件数・severity 内訳・fix-loop 対象の有無)に `<!-- codiel:generated -->` を含め、テストの結果
    得たスクリーンショットなど関連する画像があれば、レビュー本文の縮退の順序(`github-writing.md`
-   の画像の載せ方)で載せる。組み立てた本文を Write ツールで `reports/review-body-<n>.md` に書き、
-   `review-<n>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
+   の画像の載せ方)で載せる。組み立てた本文を Write ツールで
+   `.codiel/runs/<slug>/try-<n>/reports/review-body-<n>.md` に書き、`review-<n>.md` と同じ書き方で
+   run ブランチへコミットする(`git add <パス>` の後
    `git commit -m "codiel(review): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
-   `gh pr review <PR番号> --comment --body-file reports/review-body-<n>.md` を実行し、PR 本文
-   コメントとして投稿する。
+   `gh pr review <PR番号> --comment --body-file .codiel/runs/<slug>/try-<n>/reports/review-body-<n>.md`
+   を実行し、PR 本文コメントとして投稿する。
 4. github モードでは、各所見の「対象」(`src/...:42`)に対応する行コメントを投稿する。本文に
    `<!-- codiel:generated -->` を含め、所見ごとに別名で Write ツールで
-   `reports/review-comment-<連番>.md` に書く。書いたら手順 3 と同じ書き方で run ブランチへ
-   コミットしてから、別の Bash 呼び出しで `gh api` を
-   `-F body=@reports/review-comment-<連番>.md` のように `-F body=@<パス>` で呼び、行コメントを
-   投稿する。
+   `.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` に書く。書いたら手順 3 と同じ
+   書き方で run ブランチへコミットしてから、別の Bash 呼び出しで `gh api` を
+   `-F body=@.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` のように
+   `-F body=@<パス>` で呼び、行コメントを投稿する。
 5. critical/high があれば fix-loop へ、ゼロなら triage へ進む(`orchestrating-runs` の
    フェーズ進行表のとおり)。
 

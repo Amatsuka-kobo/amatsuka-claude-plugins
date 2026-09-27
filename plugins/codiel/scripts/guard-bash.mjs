@@ -182,16 +182,22 @@ function hasFlag(tokens, names) {
   );
 }
 var GH_VALUE_OPTS = ["-R", "--repo"];
-var HEREDOC_RE = /^<<(-?)(['"]?)([A-Za-z_]\w*)\2(?=[\s;&|)<>]|$)/;
+var HEREDOC_RE = /^<<(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n\\$`]+)"|(\\?)([A-Za-z_]\w*))(?=[\s;&|)<>]|$)/;
+var SHELLS = ["bash", "sh", "zsh", "dash", "ksh"];
 function parseCommands(text) {
   const commands = [];
   const pending = [];
   let i = 0;
+  let inArith = false;
+  let unclosed = false;
   const readSubst = () => {
     const start = i;
     const backquote = text[i] === "`";
+    const outer = inArith;
+    inArith = text.startsWith("$((", i);
     i += backquote ? 1 : 2;
     parseList(backquote ? "`" : ")");
+    inArith = outer;
     return text.slice(start, i);
   };
   const readDouble = () => {
@@ -209,6 +215,7 @@ function parseCommands(text) {
         i++;
       }
     }
+    if (i >= text.length) unclosed = true;
     i++;
     return out;
   };
@@ -225,14 +232,19 @@ function parseCommands(text) {
         let end = from;
         while (end < text.length && text[end] !== "'")
           end += c === "$" && text[end] === "\\" ? 2 : 1;
+        if (end >= text.length) unclosed = true;
         out += text.slice(from, end);
         i = end + 1;
       } else if (c === '"') out += readDouble();
       else if (c === "`" || text.startsWith("$(", i)) out += readSubst();
       else {
-        const m = c === "<" && !/[<\w)]/.test(text[i - 1] ?? "") ? text.slice(i).match(HEREDOC_RE) : null;
+        const m = c === "<" && !inArith && !/[\d)<]/.test(text[i - 1] ?? "") ? text.slice(i).match(HEREDOC_RE) : null;
         if (m)
-          pending.push({ word: m[3], dash: m[1] === "-", quoted: m[2] !== "" });
+          pending.push({
+            word: m[2] ?? m[3] ?? m[5],
+            dash: m[1] === "-",
+            quoted: m[5] === void 0 || m[4] === "\\"
+          });
         const s = m ? m[0] : c;
         out += s;
         i += s.length;
@@ -260,6 +272,7 @@ function parseCommands(text) {
   const parseList = (close) => {
     let words = [];
     let depth = 0;
+    let closed = false;
     const flush = () => {
       if (words.length > 0) commands.push(words);
       words = [];
@@ -267,6 +280,7 @@ function parseCommands(text) {
     while (i < text.length) {
       const c = text[i];
       if (c === close && (close === "`" || depth === 0)) {
+        closed = true;
         i++;
         break;
       }
@@ -284,13 +298,37 @@ function parseCommands(text) {
       } else words.push(readWord(close));
     }
     flush();
+    if (close !== void 0 && !closed) unclosed = true;
   };
   parseList();
-  for (const words of [...commands])
-    words.forEach((w, k) => {
-      if (k > 0 && (/^-\w*c$/.test(words[k - 1]) || words[k - 1] === "eval"))
-        commands.push(...parseCommands(w));
-    });
+  if (unclosed) return void 0;
+  for (const words of [...commands]) {
+    const shellAt = words.findIndex((w) => SHELLS.includes(path3.basename(w)));
+    for (let k = 1; k < words.length; k++) {
+      const prev = words[k - 1];
+      if (prev !== "eval" && !(shellAt !== -1 && shellAt < k - 1 && /^-\w*c$/.test(prev)))
+        continue;
+      const inner = parseCommands(words[k]);
+      if (inner === void 0) return void 0;
+      commands.push(...inner);
+    }
+  }
+  return commands;
+}
+function splitLoosely(cmd) {
+  const commands = [];
+  for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
+    let words = [];
+    for (const tok of segment.split(/\s+/)) {
+      const w = tok.replace(/^[("'`$]+|["'`)]+$/g, "");
+      if (w === "gh" || w.endsWith("/gh")) {
+        commands.push(words);
+        words = [];
+      }
+      if (w !== "") words.push(w);
+    }
+    commands.push(words);
+  }
   return commands;
 }
 function expandShortFlags(tokens, valueShorts) {
@@ -313,7 +351,7 @@ function expandShortFlags(tokens, valueShorts) {
 }
 function findGhInvocations(cmd) {
   const invocations = [];
-  for (const words of parseCommands(cmd)) {
+  for (const words of parseCommands(cmd) ?? splitLoosely(cmd)) {
     const start = words.findIndex((w) => w === "gh" || w.endsWith("/gh"));
     if (start === -1) continue;
     const tokens = words.slice(start);
