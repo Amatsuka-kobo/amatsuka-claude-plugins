@@ -303,6 +303,29 @@ function findProjectRoot(startDir) {
     dir = parent;
   }
 }
+var CODIEL_WORKTREE_RE = /[/\\]\.codiel[/\\]worktrees[/\\][^/\\]+[/\\][^/\\]+(?:[/\\]|$)/;
+function gitMainWorktree(cwd) {
+  try {
+    const res = spawnSync("git", ["worktree", "list", "--porcelain"], {
+      cwd,
+      encoding: "utf8",
+      timeout: 5e3,
+      windowsHide: true
+    });
+    if (res.status !== 0) return null;
+    const m = /^worktree (.+)$/m.exec(res.stdout ?? "");
+    return m ? path.resolve(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+function findMainRoot(startDir) {
+  if (CODIEL_WORKTREE_RE.test(startDir)) {
+    const main = gitMainWorktree(startDir);
+    if (main) return main;
+  }
+  return findProjectRoot(startDir);
+}
 export {
   DEFAULT_ARCHITECTURE_PATH,
   DEFAULT_GOTCHAS_PATH,
@@ -311,6 +334,7 @@ export {
   DOMAINS_MARKER,
   emit,
   findDocRoot,
+  findMainRoot,
   findProjectRoot,
   findRepoRoot,
   globToRegExp,

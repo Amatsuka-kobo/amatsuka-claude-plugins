@@ -71,7 +71,7 @@ function setupRunAtImplement(root: string, slug = SLUG): void {
   passGate("intent")
   cli(root, ["start-phase", "discuss", "--slug", slug])
   cli(root, ["complete-phase", "discuss", "--slug", slug])
-  for (const ph of ["design", "test-spec", "dev-plan"]) {
+  for (const ph of ["design", "test-spec", "dev-plan", "test-code"]) {
     cli(root, ["start-phase", ph, "--slug", slug])
     passGate(ph)
   }

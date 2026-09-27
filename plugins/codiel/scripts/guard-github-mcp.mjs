@@ -8,6 +8,7 @@ var STAGES = [
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
+  ["test-code"],
   ["implement"],
   ["test-loop"],
   ["intent-sync"],
@@ -45,7 +46,7 @@ function findActiveRun(root) {
   let best = null;
   for (const latest of latestTries(root)) {
     const st = latest.state;
-    if (st.version !== 2) continue;
+    if (isLegacy(st)) continue;
     if (st.status !== "active" && st.status !== "awaiting_human") continue;
     if (!best || st.updatedAt > best.state.updatedAt)
       best = {
@@ -55,6 +56,9 @@ function findActiveRun(root) {
       };
   }
   return best;
+}
+function isLegacy(st) {
+  return st.version !== 2 || !("test-code" in st.phases);
 }
 
 // src/hooks/lib.ts

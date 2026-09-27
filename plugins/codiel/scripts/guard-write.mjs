@@ -12,6 +12,7 @@ var STAGES = [
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
+  ["test-code"],
   ["implement"],
   ["test-loop"],
   ["intent-sync"],
@@ -22,6 +23,7 @@ var STAGES = [
   ["finalize"]
 ];
 var PHASES = STAGES.flat();
+var DEFAULT_TESTS_DIR = "docs/tests";
 function readState(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
@@ -49,7 +51,7 @@ function findActiveRun(root) {
   let best = null;
   for (const latest of latestTries(root)) {
     const st = latest.state;
-    if (st.version !== 2) continue;
+    if (isLegacy(st)) continue;
     if (st.status !== "active" && st.status !== "awaiting_human") continue;
     if (!best || st.updatedAt > best.state.updatedAt)
       best = {
@@ -59,6 +61,33 @@ function findActiveRun(root) {
       };
   }
   return best;
+}
+function isLegacy(st) {
+  return st.version !== 2 || !("test-code" in st.phases);
+}
+function readCodielConfig(codielRoot) {
+  const file = path.join(codielRoot, ".codiel", "config.json");
+  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR };
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    throw new Error(`${file} \u3092 JSON \u3068\u3057\u3066\u8AAD\u3081\u307E\u305B\u3093`);
+  }
+  if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
+    throw new Error(`${file} \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR };
+  const v = cfg.testsDir;
+  if (typeof v !== "string") throw new Error("testsDir \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+  if (v === "") throw new Error("testsDir \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093");
+  if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
+    throw new Error(`testsDir \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
+  if (v.split(/[/\\]/).includes(".."))
+    throw new Error(`testsDir \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
+  return { testsDir: normalizeRel(v) };
+}
+function normalizeRel(p) {
+  return path.posix.normalize(p.replaceAll("\\", "/")).replace(/\/+$/, "");
 }
 
 // src/hooks/lib.ts
@@ -363,6 +392,29 @@ function findProjectRoot(startDir) {
     dir = parent;
   }
 }
+var CODIEL_WORKTREE_RE = /[/\\]\.codiel[/\\]worktrees[/\\][^/\\]+[/\\][^/\\]+(?:[/\\]|$)/;
+function gitMainWorktree(cwd) {
+  try {
+    const res = spawnSync("git", ["worktree", "list", "--porcelain"], {
+      cwd,
+      encoding: "utf8",
+      timeout: 5e3,
+      windowsHide: true
+    });
+    if (res.status !== 0) return null;
+    const m = /^worktree (.+)$/m.exec(res.stdout ?? "");
+    return m ? path2.resolve(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+function findMainRoot(startDir) {
+  if (CODIEL_WORKTREE_RE.test(startDir)) {
+    const main = gitMainWorktree(startDir);
+    if (main) return main;
+  }
+  return findProjectRoot(startDir);
+}
 
 // src/hooks/guard-write.ts
 var DOC_PHASES = /* @__PURE__ */ new Set([
@@ -374,10 +426,17 @@ var DOC_PHASES = /* @__PURE__ */ new Set([
   "intent-sync"
 ]);
 var CODE_PHASES = /* @__PURE__ */ new Set([
+  "test-code",
   "implement",
   "test-loop",
   "fix-loop"
 ]);
+var TEST_GUARD_PHASES = /* @__PURE__ */ new Set([
+  "implement",
+  "test-loop",
+  "fix-loop"
+]);
+var WORKTREE_REL_RE = /^(\.codiel\/worktrees\/[^/]+\/[^/]+)(?:\/(.*))?$/;
 var INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/i;
 var INTENT_DOC_PHASES = /* @__PURE__ */ new Set([
   null,
@@ -411,6 +470,63 @@ function withDomainWarnings(reason, warnings) {
   return `${reason}
 [\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u8B66\u544A] ${warnings.join(" / ")}`;
 }
+function toPosix(p) {
+  return p.replaceAll("\\", "/");
+}
+function normalizeRel2(p) {
+  return path3.posix.normalize(toPosix(p)).replace(/\/+$/, "");
+}
+function underTestsDir(repoRel, testsDir) {
+  return testsDir === "." || repoRel.startsWith(`${testsDir}/`);
+}
+function frontmatterTests(text) {
+  const lines = text.split(/\r?\n/);
+  if (lines[0]?.trim() !== "---") return [];
+  const unquote = (s) => s.trim().replace(/^(["'])(.*)\1$/, "$2");
+  const tests = [];
+  let inTests = false;
+  for (const line of lines.slice(1)) {
+    if (line.trim() === "---") break;
+    const item = /^\s*-\s+(.+)$/.exec(line);
+    if (inTests && (item || line.trim() === "")) {
+      if (item) tests.push(unquote(item[1]));
+      continue;
+    }
+    const key = /^tests:\s*(.*)$/.exec(line);
+    inTests = key !== null;
+    const flow = key && /^\[(.*)\]$/.exec(key[1].trim());
+    if (flow) tests.push(...flow[1].split(",").map(unquote).filter(Boolean));
+  }
+  return tests;
+}
+function recordedTests(testsRoot) {
+  const found = /* @__PURE__ */ new Set();
+  const walk = (dir) => {
+    if (!fs3.existsSync(dir)) return;
+    for (const e of fs3.readdirSync(dir, { withFileTypes: true })) {
+      const p = path3.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name === "spec.md")
+        for (const t of frontmatterTests(fs3.readFileSync(p, "utf8")))
+          found.add(normalizeRel2(t));
+    }
+  };
+  walk(testsRoot);
+  return found;
+}
+function worktreeElements(st, wtRel) {
+  const tables = [
+    ["implement.steps", st.implement?.steps],
+    ["testCode.units", st.testCode?.units],
+    ["testLoop.units", st.testLoop?.units]
+  ];
+  const hits = [];
+  for (const [name, table] of tables)
+    for (const [id, step] of Object.entries(table ?? {}))
+      if (step.worktree && normalizeRel2(step.worktree) === wtRel)
+        hits.push({ label: `${name}[${id}]`, step });
+  return hits;
+}
 try {
   const input = await readStdin();
   const cwd = input.cwd ?? process.cwd();
@@ -422,12 +538,17 @@ try {
       "deny",
       "state.json \u306F codiel-state \u30B9\u30AF\u30EA\u30D7\u30C8\u7D4C\u7531\u3067\u306E\u307F\u5909\u66F4\u3067\u304D\u307E\u3059(\u30D5\u30A7\u30FC\u30BA\u98DB\u3070\u3057\u30FB\u30B2\u30FC\u30C8\u507D\u88C5\u306E\u9632\u6B62)"
     );
-  const codielRoot = findProjectRoot(cwd);
-  const codielRel = path3.relative(codielRoot, abs).replaceAll("\\", "/");
-  const run = findActiveRun(codielRoot);
+  const mainRoot = findMainRoot(cwd);
+  const run = findActiveRun(mainRoot);
   if (run?.state.status !== "active") pass();
   const phase = run.state.phase;
-  const repoRel = path3.relative(findRepoRoot(codielRoot), realpathOrAncestor(abs)).replaceAll("\\", "/");
+  const repoRoot = findRepoRoot(mainRoot);
+  const mainReal = realpathOrAncestor(mainRoot);
+  const absReal = realpathOrAncestor(abs);
+  const wt = WORKTREE_REL_RE.exec(toPosix(path3.relative(mainReal, absReal)));
+  const worktreeRoot = wt ? path3.join(mainReal, wt[1]) : null;
+  const codielRel = wt ? wt[2] ?? "" : toPosix(path3.relative(mainRoot, abs));
+  const repoRel = wt ? wt[2] ?? "" : toPosix(path3.relative(repoRoot, absReal));
   if (run.state.intent === repoRel) pass();
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass();
@@ -446,22 +567,56 @@ try {
   if (DOC_PHASES.has(phase)) {
     if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
       pass();
+    let testsDir;
+    try {
+      testsDir = readCodielConfig(mainRoot).testsDir;
+    } catch {
+      testsDir = null;
+    }
+    if (testsDir !== null && underTestsDir(repoRel, testsDir)) pass();
     emit(
       "ask",
       `\u6587\u66F8\u30D5\u30A7\u30FC\u30BA(${phase})\u4E2D\u306B\u30B3\u30FC\u30C9\u9818\u57DF ${codielRel} \u3078\u66F8\u304D\u8FBC\u3082\u3046\u3068\u3057\u3066\u3044\u307E\u3059`
     );
   }
   if (CODE_PHASES.has(phase)) {
-    if (/^\.codiel\/specs\/.+\/(spec|cases)\.md$/.test(codielRel))
-      emit(
-        "ask",
-        `\u30C6\u30B9\u30C8\u4ED5\u69D8\u30FB\u671F\u5F85\u5024(${codielRel})\u306E\u5909\u66F4\u306F test-designer \u306E\u62C5\u5F53\u3067\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u6539\u7AC4\u306E\u7591\u3044)`
-      );
-    const domain = run.state.domain;
+    if (TEST_GUARD_PHASES.has(phase)) {
+      let testsDir;
+      try {
+        testsDir = readCodielConfig(mainRoot).testsDir;
+      } catch (e) {
+        emit(
+          "ask",
+          `.codiel/config.json \u304C\u4E0D\u6B63\u306A\u305F\u3081\u3001${phase} \u4E2D\u306E\u66F8\u304D\u8FBC\u307F\u304C\u30C6\u30B9\u30C8\u306E\u4FDD\u8B77\u306B\u5F53\u305F\u308B\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(${e.message})`
+        );
+      }
+      const testEdit = phase === "fix-loop" && run.state.testEdit === true;
+      if (!testEdit && (underTestsDir(repoRel, testsDir) && /(^|\/)(spec|cases)\.md$/.test(repoRel) || recordedTests(path3.join(repoRoot, testsDir)).has(repoRel)))
+        emit(
+          "ask",
+          `\u30C6\u30B9\u30C8(${repoRel})\u306E\u5909\u66F4\u306F test-spec \u3068 test-code \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u6539\u7AC4\u306E\u7591\u3044)`
+        );
+    }
+    let domain = run.state.domain;
+    if (worktreeRoot) {
+      const wtRel = normalizeRel2(path3.relative(repoRoot, worktreeRoot));
+      const hits = worktreeElements(run.state, wtRel);
+      if (hits.length >= 2)
+        emit(
+          "ask",
+          `worktree ${wtRel} \u3092\u8A18\u9332\u3057\u305F\u8981\u7D20\u304C ${hits.length} \u500B\u3042\u308A(${hits.map((h) => h.label).join(", ")})\u3001\u5883\u754C\u306B\u4F7F\u3046\u30C9\u30E1\u30A4\u30F3\u3092 1 \u3064\u306B\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093(worktree \u306E\u30D1\u30B9\u306F run \u306E\u4E2D\u3067\u4E00\u610F\u306E\u306F\u305A\u3067\u3059)`
+        );
+      domain = hits[0]?.step.domain ?? null;
+    }
     if (domain && !codielRel.startsWith(".codiel/")) {
-      const docRoot = findDocRoot(cwd);
-      const docRel = path3.relative(docRoot, realpathOrAncestor(abs)).replaceAll("\\", "/");
-      const { domains: rawDomains, warnings } = readDomainsResult(cwd);
+      const cwdWt = WORKTREE_REL_RE.exec(
+        toPosix(path3.relative(mainReal, realpathOrAncestor(cwd)))
+      );
+      const docStart = cwdWt ? path3.join(repoRoot, cwdWt[2] ?? "") : cwd;
+      const mainDocRoot = findDocRoot(docStart);
+      const docRoot = worktreeRoot ? path3.join(worktreeRoot, path3.relative(repoRoot, mainDocRoot)) : mainDocRoot;
+      const docRel = toPosix(path3.relative(docRoot, absReal));
+      const { domains: rawDomains, warnings } = readDomainsResult(docStart);
       const domains = toDomainMap(rawDomains);
       if (domains) {
         const globs = domains[domain];

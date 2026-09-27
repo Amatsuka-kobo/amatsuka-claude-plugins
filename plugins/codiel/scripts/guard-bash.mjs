@@ -12,6 +12,7 @@ var STAGES = [
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
+  ["test-code"],
   ["implement"],
   ["test-loop"],
   ["intent-sync"],
@@ -49,7 +50,7 @@ function findActiveRun(root) {
   let best = null;
   for (const latest of latestTries(root)) {
     const st = latest.state;
-    if (st.version !== 2) continue;
+    if (isLegacy(st)) continue;
     if (st.status !== "active" && st.status !== "awaiting_human") continue;
     if (!best || st.updatedAt > best.state.updatedAt)
       best = {
@@ -60,8 +61,12 @@ function findActiveRun(root) {
   }
   return best;
 }
+function isLegacy(st) {
+  return st.version !== 2 || !("test-code" in st.phases);
+}
 
 // src/hooks/lib.ts
+import { spawnSync } from "node:child_process";
 import fs2 from "node:fs";
 import path2 from "node:path";
 async function readStdin() {
@@ -93,6 +98,29 @@ function findProjectRoot(startDir) {
     if (parent === dir) return startDir;
     dir = parent;
   }
+}
+var CODIEL_WORKTREE_RE = /[/\\]\.codiel[/\\]worktrees[/\\][^/\\]+[/\\][^/\\]+(?:[/\\]|$)/;
+function gitMainWorktree(cwd) {
+  try {
+    const res = spawnSync("git", ["worktree", "list", "--porcelain"], {
+      cwd,
+      encoding: "utf8",
+      timeout: 5e3,
+      windowsHide: true
+    });
+    if (res.status !== 0) return null;
+    const m = /^worktree (.+)$/m.exec(res.stdout ?? "");
+    return m ? path2.resolve(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+function findMainRoot(startDir) {
+  if (CODIEL_WORKTREE_RE.test(startDir)) {
+    const main = gitMainWorktree(startDir);
+    if (main) return main;
+  }
+  return findProjectRoot(startDir);
 }
 
 // src/hooks/guard-bash.ts
@@ -532,7 +560,7 @@ try {
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `\u7981\u6B62\u30B3\u30DE\u30F3\u30C9: ${why}`);
   const cwd = input.cwd ?? process.cwd();
-  const root = findProjectRoot(cwd);
+  const root = findMainRoot(cwd);
   const run = findActiveRun(root);
   if (run) {
     const phase = run.state.phase;

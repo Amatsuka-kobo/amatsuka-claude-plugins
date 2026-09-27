@@ -44,7 +44,9 @@ design.md がすでに unit-id を列挙しているため、本フェーズで�
    unit-id を同定する(命名規則は上記「unit の同定と命名規則」に従う)。
 2. intent の「## 受け入れ基準」を読み、各 unit がどの基準に対応するかを対応付ける。
 3. 各 unit について `.codiel/specs/<unit-id>/` が既存かを Glob で確認する。
-4. **新規 unit**: `spec.md` を作成し、続けて `cases.md` を新規に生成する。
+4. **新規 unit**: `spec.md` を作成する。先頭の frontmatter で `parallel` を決める。ポート・データベース・
+   外部サービスのような共有資源を使う unit は frontmatter を置かず直列のまま実行させる。続けて
+   `cases.md` を新規に生成する。
 5. **既存 unit**: 既存 `spec.md` を Read してから **Edit で更新**する(いきなり上書きしない)。
    更新後、`cases.md` を**再生成**する。既存ケース ID は挙動が変わらない限り維持し、挙動が
    変わるものは期待結果を更新し、消える機能のケースは spec.md の変更履歴節に削除理由を
@@ -63,7 +65,14 @@ design.md がすでに unit-id を列挙しているため、本フェーズで�
 
 ## spec.md の書式
 
+先頭に `---` で囲む YAML の frontmatter を置ける。定義するキーは `parallel`(真偽値)だけである。
+`parallel: true` の unit は test-loop で同時に実行され、frontmatter や `parallel` が無ければ直列として扱う。
+
 ```markdown
+---
+parallel: true
+---
+
 # spec: <unit-id>
 
 ## 概要

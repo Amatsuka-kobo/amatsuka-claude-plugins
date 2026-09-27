@@ -5,7 +5,17 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { findActiveRun, GATED, SKIPPABLE, STAGES } from "../codiel-state.js"
+import {
+  expandBraces,
+  findActiveRun,
+  GATED,
+  globsOverlap,
+  planWaves,
+  readCodielConfig,
+  SKIPPABLE,
+  STAGES,
+  type StepState
+} from "../codiel-state.js"
 
 const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
 const CLI = fileURLToPath(new URL("../codiel-state-cli.ts", import.meta.url))
@@ -16,6 +26,7 @@ const UNTIL_PR = [
   "design",
   "test-spec",
   "dev-plan",
+  "test-code",
   "implement",
   "test-loop",
   "intent-sync"
@@ -191,7 +202,7 @@ test("init は --intent を正規化して記録し、docs/intents/ 直下の .m
     "docs/intents/domains/frontend.md",
     "docs/intents/x.txt",
     "docs/x.md",
-    ".codiel/specs/u1/spec.md",
+    "docs/tests/units/src/a.ts/spec.md",
     "src/index.ts"
   ]) {
     const r = init(root, "demo", { intent: bad })
@@ -510,12 +521,13 @@ test("--slug の省略・不正な形・存在しない run はどのコマン�
 
 // --- フェーズ列とゲート ---
 
-test("STAGES は 12 ステージで、intent-sync が test-loop と pr の間のゲート対象フェーズである", () => {
+test("STAGES は 13 ステージで、intent-sync が test-loop と pr の間のゲート対象フェーズである", () => {
   expect(STAGES).toStrictEqual([
     ["intent"],
     ["discuss"],
     ["design"],
     ["test-spec", "dev-plan"],
+    ["test-code"],
     ["implement"],
     ["test-loop"],
     ["intent-sync"],
@@ -532,10 +544,59 @@ test("STAGES は 12 ステージで、intent-sync が test-loop と pr の間の
     "implement",
     "intent",
     "intent-sync",
+    "test-code",
     "test-loop",
     "test-spec"
   ])
   expect([...SKIPPABLE].sort()).toStrictEqual(["design", "discuss", "fix-loop"])
+})
+
+// --- テスト駆動のフェーズ(設計書 §6.1.1・§6.13.2、A6-1) ---
+
+test("STAGES の 5 番目が test-code で、GATED に含まれ SKIPPABLE に含まれない", () => {
+  expect(STAGES[4]).toStrictEqual(["test-code"])
+  expect(GATED.has("test-code")).toBe(true)
+  expect(SKIPPABLE.has("test-code")).toBe(false)
+})
+
+test("test-code が passed でないと start-phase implement が失敗し、pass-gate test-code の後に開始できる", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", UNTIL_PR.slice(0, 5))
+  const pending = run(root, ["start-phase", "implement", "--slug", "demo"])
+  expect(pending.code).toBe(1)
+  expect(pending.err).toMatch(/前フェーズが未完了です: test-code\(pending\)/)
+  expect(run(root, ["start-phase", "test-code", "--slug", "demo"]).code).toBe(0)
+  const inProgress = run(root, ["start-phase", "implement", "--slug", "demo"])
+  expect(inProgress.code).toBe(1)
+  expect(inProgress.err).toMatch(/test-code\(in_progress\)/)
+  const complete = run(root, ["complete-phase", "test-code", "--slug", "demo"])
+  expect(complete.code).toBe(1)
+  expect(complete.err).toMatch(/ゲート対象フェーズです/)
+  expect(passGate(root, "test-code", "PROCEED").code).toBe(0)
+  expect(run(root, ["start-phase", "implement", "--slug", "demo"]).code).toBe(0)
+})
+
+test("skip-phase test-code は軽量の run でも失敗し、test-code を pending のまま残す", () => {
+  const root = tmpProject()
+  init(root, "demo", { scale: "light" })
+  passThrough(root, "demo", ["intent"])
+  for (const ph of ["discuss", "design"])
+    run(root, ["skip-phase", ph, "--slug", "demo", "--reason", "軽量"])
+  passThrough(root, "demo", ["test-spec", "dev-plan"])
+  const r = run(root, [
+    "skip-phase",
+    "test-code",
+    "--slug",
+    "demo",
+    "--reason",
+    "理由"
+  ])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/test-code はスキップできません/)
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.phases["test-code"].status).toBe("pending")
+  expect(run(root, ["start-phase", "implement", "--slug", "demo"]).code).toBe(1)
 })
 
 test("intent-sync は pass-gate で通し、通るまで pr を開始できない", () => {
@@ -1309,6 +1370,248 @@ test("findActiveRun は version 2 の run だけを返し、runs 直下のファ
   expect(found?.dir).toBe(path.join(root, ".codiel/runs/demo/try-1"))
 })
 
+// --- M4 より前の state(設計書 §6.6 の冒頭、A6-18) ---
+
+// M4 より前に作った v2 の state(phases に test-code を持たない)を置く
+function writePreM4(root: string, slug: string, status: string): string {
+  expect(init(root, slug).code).toBe(0)
+  const p = statePath(root, slug)
+  const raw = JSON.parse(fs.readFileSync(p, "utf8"))
+  delete raw.phases["test-code"]
+  raw.status = status
+  fs.writeFileSync(p, `${JSON.stringify(raw, null, 2)}\n`)
+  return p
+}
+
+// 設計書 §6.6 の文言テンプレート
+function preM4Message(slug: string, status: string): string {
+  return `codiel: .codiel/runs/${slug} は test-code フェーズを持たない state の run(status: ${status})であり、この版では再開できない。\`codiel-state stop --slug ${slug} --reason migrate\` で止めてから、\`/codiel:run ${INIT_DEFAULTS.intent}\` で同じ intent の新しい try を始める。`
+}
+
+test("M4 より前の state の run には get と stop だけが通り、ほかのコマンドは §6.6 の文言で失敗して state のファイルを変えない", () => {
+  const root = tmpProject()
+  const p = writePreM4(root, "demo", "active")
+  const before = fs.readFileSync(p, "utf8")
+  const get = run(root, ["get", "--slug", "demo"])
+  expect(get.code).toBe(0)
+  expect("test-code" in get.out.state.phases).toBe(false)
+  for (const args of [
+    ["start-phase", "intent"],
+    ["skip-phase", "discuss", "--reason", "r"],
+    ["pass-gate", "intent", "--evaluation-id", "e", "--verdict", "PROCEED"],
+    ["complete-phase", "discuss"],
+    ["mark-ask", "intent"],
+    ["resume"],
+    ["set-domain", "--domain", "web"],
+    ["clear-domain"],
+    ["set-integration", "--integration", "local", "--image-upload", "none"],
+    ["record-attempt", "intent"],
+    ["close"],
+    ["finalize"],
+    ["record-outcome", "--outcome", "approved"],
+    ["step-add", "--id", "1", "--files", '["a/**"]', "--deps", "[]"],
+    ["step-update", "--id", "1", "--status", "running"],
+    ["waves"],
+    ["set-test-edit"],
+    ["clear-test-edit"]
+  ]) {
+    const r = run(root, [...args, "--slug", "demo"])
+    expect(r.code, args[0]).toBe(1)
+    expect(r.err, args[0]).toBe(`${preM4Message("demo", "active")}\n`)
+  }
+  // 同じ slug の新しい try も、止めるまでは作らない
+  const again = init(root)
+  expect(again.code).toBe(1)
+  expect(again.err).toBe(`${preM4Message("demo", "active")}\n`)
+  expect(fs.readFileSync(p, "utf8")).toBe(before)
+  expect(fs.existsSync(statePath(root, "demo", 2))).toBe(false)
+  // awaiting_human の run も同じ(文言の status だけが変わる)
+  writePreM4(root, "asked", "awaiting_human")
+  const resume = run(root, ["resume", "--slug", "asked"])
+  expect(resume.code).toBe(1)
+  expect(resume.err).toBe(`${preM4Message("asked", "awaiting_human")}\n`)
+})
+
+test("M4 より前の state の run を stop --reason migrate で止めても test-code を足さず、同じ slug の新しい try は test-code を持つ", () => {
+  const root = tmpProject()
+  const p = writePreM4(root, "demo", "active")
+  const phasesBefore = Object.keys(
+    JSON.parse(fs.readFileSync(p, "utf8")).phases
+  )
+  const stop = run(root, ["stop", "--slug", "demo", "--reason", "migrate"])
+  expect(stop.code).toBe(0)
+  expect(stop.out.state.status).toBe("stopped")
+  expect(stop.out.state.stopReason).toBe("migrate")
+  const saved = JSON.parse(fs.readFileSync(p, "utf8"))
+  expect(saved.status).toBe("stopped")
+  expect(Object.keys(saved.phases)).toStrictEqual(phasesBefore)
+  expect("test-code" in saved.phases).toBe(false)
+  // 終端にした後は、同じ intent の新しい try を始められる
+  const next = init(root)
+  expect(next.code).toBe(0)
+  expect(next.out.state.try).toBe(2)
+  expect("test-code" in next.out.state.phases).toBe(true)
+  expect(run(root, ["start-phase", "intent", "--slug", "demo"]).code).toBe(0)
+})
+
+test("M4 より前の state の record-outcome は awaiting_outcome の run と completed / rejected の run への incident だけを受け付ける", () => {
+  const root = tmpProject()
+  // awaiting_outcome は approved・rejected・incident を受け付け、test-code を足さずに書き戻す
+  for (const [slug, outcome, status] of [
+    ["out-approved", "approved", "completed"],
+    ["out-rejected", "rejected", "rejected"],
+    ["out-incident", "incident", "awaiting_outcome"]
+  ]) {
+    const p = writePreM4(root, slug, "awaiting_outcome")
+    const r = run(root, [
+      "record-outcome",
+      "--slug",
+      slug,
+      "--outcome",
+      outcome
+    ])
+    expect(r.code, slug).toBe(0)
+    expect(r.out.state.status, slug).toBe(status)
+    const saved = JSON.parse(fs.readFileSync(p, "utf8"))
+    expect(saved.status, slug).toBe(status)
+    expect("test-code" in saved.phases, slug).toBe(false)
+  }
+  // completed / rejected は incident だけを受け付け、status を変えない
+  for (const status of ["completed", "rejected"]) {
+    const slug = `done-${status}`
+    const p = writePreM4(root, slug, status)
+    const approved = run(root, [
+      "record-outcome",
+      "--slug",
+      slug,
+      "--outcome",
+      "approved"
+    ])
+    expect(approved.code, status).toBe(1)
+    expect(approved.err, status).toBe(`${preM4Message(slug, status)}\n`)
+    const incident = run(root, [
+      "record-outcome",
+      "--slug",
+      slug,
+      "--outcome",
+      "incident"
+    ])
+    expect(incident.code, status).toBe(0)
+    expect(incident.out.state.status, status).toBe(status)
+    expect(JSON.parse(fs.readFileSync(p, "utf8")).incidents).toHaveLength(1)
+  }
+  // ほかの状態はどの outcome も文言で拒否し、state のファイルを変えない
+  for (const status of ["active", "awaiting_human", "stopped"]) {
+    const slug = `live-${status.replace("_", "-")}`
+    const p = writePreM4(root, slug, status)
+    const before = fs.readFileSync(p, "utf8")
+    for (const outcome of ["approved", "incident"]) {
+      const r = run(root, [
+        "record-outcome",
+        "--slug",
+        slug,
+        "--outcome",
+        outcome
+      ])
+      expect(r.code, `${status} ${outcome}`).toBe(1)
+      expect(r.err, `${status} ${outcome}`).toBe(
+        `${preM4Message(slug, status)}\n`
+      )
+    }
+    expect(fs.readFileSync(p, "utf8"), status).toBe(before)
+  }
+})
+
+test("get --active は M4 より前の state の active と awaiting_human の run を runs に含めずに文言を出し、awaiting_outcome の run は含める", () => {
+  const root = tmpProject()
+  writePreM4(root, "one", "active")
+  writePreM4(root, "two", "awaiting_human")
+  writePreM4(root, "three", "awaiting_outcome")
+  writePreM4(root, "four", "stopped")
+  init(root)
+  const r = run(root, ["get", "--active"])
+  expect(r.code).toBe(0)
+  expect(
+    r.out.runs.map((x: { state: { runId: string } }) => x.state.runId).sort()
+  ).toStrictEqual(["demo", "three"])
+  const three = r.out.runs.find(
+    (x: { state: { runId: string } }) => x.state.runId === "three"
+  )
+  expect("test-code" in three.state.phases).toBe(false)
+  const lines = r.err.split("\n").filter((l) => l !== "")
+  expect(lines.sort()).toStrictEqual(
+    [
+      preM4Message("one", "active"),
+      preM4Message("two", "awaiting_human")
+    ].sort()
+  )
+})
+
+test("findActiveRun は M4 より前の state の run を返さない", () => {
+  const root = tmpProject()
+  init(root)
+  // demo より後に更新された M4 より前の run があっても、demo を返す
+  writePreM4(root, "old", "active")
+  writePreM4(root, "asked", "awaiting_human")
+  expect(findActiveRun(root)?.state.runId).toBe("demo")
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  expect(findActiveRun(root)).toBeNull()
+})
+
+// --- config(設計書 §6.13.4、A6-2) ---
+
+function writeConfig(root: string, body: string): void {
+  fs.mkdirSync(path.join(root, ".codiel"), { recursive: true })
+  fs.writeFileSync(path.join(root, ".codiel/config.json"), body)
+}
+
+test("config は .codiel/config.json が無いときとキーが無いときに docs/tests を返し、値があればその値を返す", () => {
+  const root = tmpProject()
+  // run を要しない
+  const none = run(root, ["config"])
+  expect(none.code).toBe(0)
+  expect(none.out).toStrictEqual({ testsDir: "docs/tests" })
+  expect(readCodielConfig(root)).toStrictEqual({ testsDir: "docs/tests" })
+  for (const [body, expected] of [
+    ["{}", "docs/tests"],
+    ['{ "other": 1 }', "docs/tests"],
+    ['{ "testsDir": "qa/specs", "other": true }', "qa/specs"],
+    ['{ "testsDir": "./qa/specs/" }', "qa/specs"]
+  ]) {
+    writeConfig(root, body)
+    const r = run(root, ["config"])
+    expect(r.code, body).toBe(0)
+    expect(r.out, body).toStrictEqual({ testsDir: expected })
+    expect(readCodielConfig(root), body).toStrictEqual({ testsDir: expected })
+  }
+  expect(fs.existsSync(path.join(root, ".codiel/runs"))).toBe(false)
+})
+
+test("config は不正な値で非ゼロ終了し、readCodielConfig は例外を投げる", () => {
+  const root = tmpProject()
+  for (const body of [
+    // JSON として読めない
+    '{ "testsDir": ',
+    '["docs/tests"]',
+    // 文字列でない
+    '{ "testsDir": 1 }',
+    '{ "testsDir": null }',
+    // 空文字列
+    '{ "testsDir": "" }',
+    // 絶対パス
+    '{ "testsDir": "/srv/tests" }',
+    // .. のセグメントを含む
+    '{ "testsDir": "../tests" }',
+    '{ "testsDir": "qa/../../tests" }'
+  ]) {
+    writeConfig(root, body)
+    const r = run(root, ["config"])
+    expect(r.code, body).toBe(1)
+    expect(r.err, body).not.toBe("")
+    expect(() => readCodielConfig(root), body).toThrow()
+  }
+})
+
 test("state.json の無い try は run として扱わず、手前の try を最新とする", () => {
   const root = tmpProject()
   // run でないディレクトリ
@@ -1566,6 +1869,733 @@ test("next-adr-candidate-id は --file に絶対パスを渡しても動く", ()
   ])
   expect(r.code).toBe(0)
   expect(r.out.candidateId).toBe("frontend-4")
+})
+
+// --- implement.steps・testLoop.units・waves(設計書 §6.6.2・§6.6.5、計画書 §6.2) ---
+
+// planWaves に渡すステップを組み立てる。files 以外は省略時に既定値を入れる
+function stepsOf(
+  spec: Record<string, { files: string[]; deps?: string[]; final?: boolean }>
+): Record<string, StepState> {
+  const out: Record<string, StepState> = {}
+  for (const [id, s] of Object.entries(spec))
+    out[id] = {
+      status: "pending",
+      files: s.files,
+      deps: s.deps ?? [],
+      final: s.final ?? false,
+      group: null,
+      worktree: null,
+      branch: null,
+      commits: { base: null, head: null },
+      attempts: 0,
+      domain: null
+    }
+  return out
+}
+
+function stepAdd(
+  root: string,
+  id: string,
+  files: string[],
+  deps: string[] = [],
+  extra: string[] = []
+) {
+  return run(root, [
+    "step-add",
+    "--slug",
+    "demo",
+    "--id",
+    id,
+    "--files",
+    JSON.stringify(files),
+    "--deps",
+    JSON.stringify(deps),
+    ...extra
+  ])
+}
+
+// test-code と test-loop の仕様のディレクトリを登録する。--files は渡さない
+function specAdd(root: string, kind: string, id: string, extra: string[] = []) {
+  const args = ["step-add", "--slug", "demo", "--kind", kind, "--id", id]
+  return run(root, [...args, ...extra])
+}
+
+function stepUpdate(
+  root: string,
+  id: string,
+  status: string,
+  extra: string[] = []
+) {
+  return run(root, [
+    "step-update",
+    "--slug",
+    "demo",
+    "--id",
+    id,
+    "--status",
+    status,
+    ...extra
+  ])
+}
+
+test("step-add は implement.steps に必須フィールドを持つステップを登録し、version を 2 のまま保つ", () => {
+  const root = tmpProject()
+  init(root)
+  const r = stepAdd(
+    root,
+    "1",
+    ["src/{a,b}/**"],
+    [],
+    ["--final", "--domain", "backend"]
+  )
+  expect(r.code).toBe(0)
+  expect(r.out.state.version).toBe(2)
+  expect(r.out.state.implement.steps["1"]).toStrictEqual({
+    status: "pending",
+    files: ["src/{a,b}/**"],
+    deps: [],
+    final: true,
+    group: null,
+    worktree: null,
+    branch: null,
+    commits: { base: null, head: null },
+    attempts: 0,
+    domain: "backend"
+  })
+  expect("testLoop" in r.out.state).toBe(false)
+  // 前提ステップは JSON 配列で受ける
+  const second = stepAdd(root, "2", ["src/c/**"], ["1"])
+  expect(second.out.state.implement.steps["2"].deps).toStrictEqual(["1"])
+  expect(second.out.state.implement.steps["2"].final).toBe(false)
+})
+
+test("step-add --kind test-loop は testLoop.units に登録し、--files を受け付け、前提ステップと --final を拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  const r = specAdd(root, "test-loop", "e2e/frontend/login", [
+    "--files",
+    '["src/pages/login/**"]',
+    "--domain",
+    "frontend"
+  ])
+  expect(r.code).toBe(0)
+  const unit = r.out.state.testLoop.units["e2e/frontend/login"]
+  expect(unit.files).toStrictEqual(["src/pages/login/**"])
+  expect(unit.deps).toStrictEqual([])
+  expect(unit.group).toBeNull()
+  expect(unit.final).toBe(false)
+  expect(unit.domain).toBe("frontend")
+  expect("implement" in r.out.state).toBe(false)
+  expect("testCode" in r.out.state).toBe(false)
+  const withDeps = specAdd(root, "test-loop", "units/src/a.ts", [
+    "--deps",
+    '["e2e/frontend/login"]'
+  ])
+  expect(withDeps.code).not.toBe(0)
+  const withFinal = specAdd(root, "test-loop", "units/src/b.ts", ["--final"])
+  expect(withFinal.code).not.toBe(0)
+})
+
+test("step-add は JSON 配列でない --files・--deps、空の --files、repoRoot の外を指す glob を拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  const base = ["step-add", "--slug", "demo", "--id", "1"]
+  const add = (files: string, deps = "[]") =>
+    run(root, [...base, "--files", files, "--deps", deps])
+  expect(add("src/a/**").code).not.toBe(0)
+  expect(add('"src/a/**"').code).not.toBe(0)
+  expect(add("[]").code).not.toBe(0)
+  expect(add('["/abs/**"]').code).not.toBe(0)
+  expect(add('["../x/**"]').code).not.toBe(0)
+  expect(add('["src/a/**"]', "1").code).not.toBe(0)
+  // --kind step では --deps を省けない
+  expect(run(root, [...base, "--files", '["a/**"]']).code).not.toBe(0)
+  expect(add('["src/a/**"]').code).toBe(0)
+})
+
+test("step-update は計画書 §6.2 の表の遷移だけを許し、記録のフラグを受け付ける", () => {
+  const root = tmpProject()
+  init(root)
+  stepAdd(root, "1", ["src/a/**"])
+  // 表に無い遷移
+  expect(stepUpdate(root, "1", "merged").code).not.toBe(0)
+  expect(stepUpdate(root, "1", "reviewing").code).not.toBe(0)
+  expect(stepUpdate(root, "1", "failed").code).not.toBe(0)
+  // 遷移が受け付けない記録のフラグ
+  expect(stepUpdate(root, "1", "running", ["--head", "h"]).code).not.toBe(0)
+  const running = stepUpdate(root, "1", "running", [
+    "--worktree",
+    ".codiel/worktrees/demo/step-1",
+    "--branch",
+    "codiel/demo-try-1-step-1",
+    "--base",
+    "b1"
+  ])
+  expect(running.code).toBe(0)
+  const s1 = running.out.state.implement.steps["1"]
+  expect(s1.status).toBe("running")
+  expect(s1.worktree).toBe(".codiel/worktrees/demo/step-1")
+  expect(s1.branch).toBe("codiel/demo-try-1-step-1")
+  expect(s1.commits).toStrictEqual({ base: "b1", head: null })
+  expect(stepUpdate(root, "1", "pending").code).not.toBe(0)
+  expect(stepUpdate(root, "1", "merged").code).not.toBe(0)
+  expect(stepUpdate(root, "1", "reviewing").code).toBe(0)
+  // reviewing → running で attempts を 1 増やす
+  const again = stepUpdate(root, "1", "running")
+  expect(again.out.state.implement.steps["1"].attempts).toBe(1)
+  expect(stepUpdate(root, "1", "reviewing").code).toBe(0)
+  const merged = stepUpdate(root, "1", "merged", ["--head", "h1"])
+  expect(merged.code).toBe(0)
+  expect(merged.out.state.implement.steps["1"].status).toBe("merged")
+  expect(merged.out.state.implement.steps["1"].commits).toStrictEqual({
+    base: "b1",
+    head: "h1"
+  })
+  // merged は終端
+  for (const to of ["pending", "running", "reviewing", "failed"])
+    expect(stepUpdate(root, "1", to).code, to).not.toBe(0)
+  // 未登録のステップ、値域の外の状態
+  expect(stepUpdate(root, "9", "running").code).not.toBe(0)
+  stepAdd(root, "2", ["src/b/**"])
+  expect(stepUpdate(root, "2", "done").code).not.toBe(0)
+})
+
+test("step-update は failed から pending で worktree・branch・commits を null に戻し、attempts は残す", () => {
+  const root = tmpProject()
+  init(root)
+  stepAdd(root, "1", ["src/a/**"])
+  const record = ["--worktree", "w", "--branch", "br", "--base", "b"]
+  stepUpdate(root, "1", "running", record)
+  stepUpdate(root, "1", "reviewing")
+  stepUpdate(root, "1", "running")
+  expect(stepUpdate(root, "1", "failed").code).toBe(0)
+  expect(stepUpdate(root, "1", "running").code).not.toBe(0)
+  const reset = stepUpdate(root, "1", "pending")
+  expect(reset.code).toBe(0)
+  const s = reset.out.state.implement.steps["1"]
+  expect(s.status).toBe("pending")
+  expect(s.worktree).toBeNull()
+  expect(s.branch).toBeNull()
+  expect(s.commits).toStrictEqual({ base: null, head: null })
+  expect(s.attempts).toBe(1)
+  // reviewing からも failed にできる
+  stepUpdate(root, "1", "running")
+  stepUpdate(root, "1", "reviewing")
+  expect(stepUpdate(root, "1", "failed").code).toBe(0)
+})
+
+test("step-update --kind test-code と test-loop はそれぞれの表の要素を同じ遷移で進める", () => {
+  const root = tmpProject()
+  init(root)
+  const id = "units/src/lib/foo.ts"
+  specAdd(root, "test-code", id)
+  specAdd(root, "test-loop", id)
+  // step の表には無いので、--kind を省くと失敗する
+  expect(stepUpdate(root, id, "running").code).not.toBe(0)
+  for (const kind of ["test-code", "test-loop"]) {
+    const wt = `.codiel/worktrees/demo/${kind}-1`
+    const r = stepUpdate(root, id, "running", [
+      "--kind",
+      kind,
+      "--worktree",
+      wt
+    ])
+    expect(r.code, kind).toBe(0)
+    const table = kind === "test-code" ? "testCode" : "testLoop"
+    expect(r.out.state[table].units[id].status, kind).toBe("running")
+    expect(r.out.state[table].units[id].worktree, kind).toBe(wt)
+    // 表に無い遷移は test-code と test-loop でも拒否する
+    expect(
+      stepUpdate(root, id, "merged", ["--kind", kind, "--head", "h"]).code,
+      kind
+    ).not.toBe(0)
+  }
+  const unitKind = stepUpdate(root, id, "reviewing", ["--kind", "unit"])
+  expect(unitKind.code).toBe(1)
+  expect(unitKind.err).toMatch(/不正な --kind: unit/)
+})
+
+// --- 仕様のディレクトリの登録(設計書 §6.13.3・§6.6.3、A6-5) ---
+
+const SPEC_IDS = [
+  "units/src/lib/foo.ts",
+  "e2e/frontend/login",
+  "e2e/backend/api/users/{id}",
+  "e2e/backend/_root",
+  "e2e/cli/codiel-state"
+]
+
+test("step-add --kind test-code と test-loop は仕様のディレクトリの ID を --files なしで受け付け、それぞれの表に登録する", () => {
+  const root = tmpProject()
+  init(root)
+  for (const kind of ["test-code", "test-loop"])
+    for (const id of SPEC_IDS)
+      expect(specAdd(root, kind, id).code, `${kind} ${id}`).toBe(0)
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(Object.keys(st.testCode.units)).toStrictEqual(SPEC_IDS)
+  expect(Object.keys(st.testLoop.units)).toStrictEqual(SPEC_IDS)
+  const fresh = {
+    status: "pending",
+    files: [],
+    deps: [],
+    final: false,
+    group: null,
+    worktree: null,
+    branch: null,
+    commits: { base: null, head: null },
+    attempts: 0,
+    domain: null
+  }
+  for (const id of SPEC_IDS) {
+    expect(st.testCode.units[id], id).toStrictEqual(fresh)
+    expect(st.testLoop.units[id], id).toStrictEqual(fresh)
+  }
+  expect("implement" in st).toBe(false)
+  expect(st.version).toBe(2)
+})
+
+test("step-add --kind test-code と test-loop は仕様のディレクトリの形でない ID・--deps・--final・--kind unit を拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  for (const kind of ["test-code", "test-loop"]) {
+    for (const bad of [
+      "units",
+      "units/",
+      "/units/a.ts",
+      "units/../a.ts",
+      "e2e/backend/api/users/:id",
+      "e2e/frontend/a/b",
+      "e2e/other/x",
+      "screen-login",
+      "e2e/cli/a/b",
+      "e2e/backend",
+      "e2e/frontend/",
+      "units//a.ts",
+      "units/./a.ts",
+      "units/src/a.ts/",
+      "units\\src\\a.ts"
+    ]) {
+      const r = specAdd(root, kind, bad)
+      expect(r.code, `${kind} ${bad}`).toBe(1)
+      expect(r.err, `${kind} ${bad}`).toMatch(/不正な --id/)
+    }
+    const deps = specAdd(root, kind, "units/src/a.ts", ["--deps", "[]"])
+    expect(deps.code, kind).toBe(1)
+    expect(deps.err, kind).toMatch(/--deps と --final を指定できません/)
+    const final = specAdd(root, kind, "units/src/a.ts", ["--final"])
+    expect(final.code, kind).toBe(1)
+    expect(final.err, kind).toMatch(/--deps と --final を指定できません/)
+  }
+  const unit = specAdd(root, "unit", "units/src/a.ts")
+  expect(unit.code).toBe(1)
+  expect(unit.err).toMatch(/不正な --kind: unit/)
+  // step の ID は現行の形のまま(仕様のディレクトリの ID は受け付けない)
+  const step = stepAdd(root, "units/src/a.ts", ["src/a.ts"])
+  expect(step.code).toBe(1)
+  expect(step.err).toMatch(/不正な --id/)
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  for (const key of ["implement", "testCode", "testLoop"])
+    expect(key in st, key).toBe(false)
+})
+
+// 要素を pending から merged まで進める
+function mergeElement(root: string, kind: string, id: string, wt: string) {
+  const k = ["--kind", kind]
+  expect(stepUpdate(root, id, "running", [...k, "--worktree", wt]).code).toBe(0)
+  expect(stepUpdate(root, id, "reviewing", k).code).toBe(0)
+  expect(stepUpdate(root, id, "merged", [...k, "--head", "h"]).code).toBe(0)
+}
+
+test("testLoop.units の merged の要素は登録し直せ、testCode.units と implement.steps の merged の要素は登録し直せない", () => {
+  const root = tmpProject()
+  init(root)
+  const [a, b] = SPEC_IDS
+  specAdd(root, "test-loop", a)
+  specAdd(root, "test-loop", b)
+  mergeElement(root, "test-loop", a, ".codiel/worktrees/demo/test-loop-1")
+  const again = specAdd(root, "test-loop", a)
+  expect(again.code).toBe(0)
+  const units = again.out.state.testLoop.units
+  expect(units[a].status).toBe("pending")
+  expect(units[a].worktree).toBeNull()
+  expect(units[a].commits).toStrictEqual({ base: null, head: null })
+  // 登録し直してもキーの位置(worktree の名前の k)は変わらない
+  expect(Object.keys(units)).toStrictEqual([a, b])
+  // merged でも pending でもない要素は test-loop でも登録し直せない
+  stepUpdate(root, b, "running", ["--kind", "test-loop"])
+  const running = specAdd(root, "test-loop", b)
+  expect(running.code).toBe(1)
+  expect(running.err).toMatch(/running のため登録し直せません/)
+  specAdd(root, "test-code", a)
+  mergeElement(root, "test-code", a, ".codiel/worktrees/demo/test-code-1")
+  const code = specAdd(root, "test-code", a)
+  expect(code.code).toBe(1)
+  expect(code.err).toMatch(/merged のため登録し直せません/)
+  stepAdd(root, "1", ["src/a/**"])
+  mergeElement(root, "step", "1", ".codiel/worktrees/demo/step-1")
+  const step = stepAdd(root, "1", ["src/a/**"])
+  expect(step.code).toBe(1)
+  expect(step.err).toMatch(/merged のため登録し直せません/)
+})
+
+test("step-update --worktree は 3 つの表のほかの要素がすでに記録したパスを拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  const id = "units/src/a.ts"
+  const stepWt = ".codiel/worktrees/demo/step-1"
+  const codeWt = ".codiel/worktrees/demo/test-code-1"
+  stepAdd(root, "1", ["src/a/**"])
+  stepAdd(root, "2", ["src/b/**"])
+  specAdd(root, "test-code", id)
+  specAdd(root, "test-loop", id)
+  expect(stepUpdate(root, "1", "running", ["--worktree", stepWt]).code).toBe(0)
+  const taken = [
+    ["2", "step", stepWt],
+    [id, "test-code", stepWt],
+    [id, "test-loop", `./${stepWt}/`]
+  ]
+  for (const [target, kind, wt] of taken) {
+    const r = stepUpdate(root, target, "running", [
+      "--kind",
+      kind,
+      "--worktree",
+      wt
+    ])
+    expect(r.code, `${kind} ${wt}`).toBe(1)
+    expect(r.err, `${kind} ${wt}`).toMatch(/step 1 がすでに記録しています/)
+  }
+  expect(
+    stepUpdate(root, id, "running", [
+      "--kind",
+      "test-code",
+      "--worktree",
+      codeWt
+    ]).code
+  ).toBe(0)
+  const loop = stepUpdate(root, id, "running", [
+    "--kind",
+    "test-loop",
+    "--worktree",
+    codeWt
+  ])
+  expect(loop.code).toBe(1)
+  expect(loop.err).toContain(`test-code ${id} がすでに記録しています`)
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.implement.steps["2"].status).toBe("pending")
+  expect(st.testLoop.units[id].status).toBe("pending")
+  expect(st.testLoop.units[id].worktree).toBeNull()
+  // failed から pending に戻した要素の記録は消えるので、そのパスは使える
+  stepUpdate(root, "1", "failed")
+  stepUpdate(root, "1", "pending")
+  expect(stepUpdate(root, "2", "running", ["--worktree", stepWt]).code).toBe(0)
+})
+
+// --- testEdit(設計書 §6.13.6、A6-6) ---
+
+test("set-test-edit は fix-loop が in_progress のときだけ testEdit を真にし、ほかのフェーズでは失敗する", () => {
+  const root = tmpProject()
+  init(root)
+  const set = () => run(root, ["set-test-edit", "--slug", "demo"])
+  const refuse = (label: string) => {
+    const r = set()
+    expect(r.code, label).toBe(1)
+    expect(r.err, label).toMatch(/fix-loop が in_progress のときだけ/)
+    const st = run(root, ["get", "--slug", "demo"]).out.state
+    expect("testEdit" in st, label).toBe(false)
+  }
+  refuse("phase null")
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  refuse("intent in_progress")
+  passGate(root, "intent", "PROCEED")
+  passThrough(root, "demo", UNTIL_REVIEW.slice(1))
+  refuse("fix-loop pending")
+  run(root, ["start-phase", "fix-loop", "--slug", "demo"])
+  run(root, ["mark-ask", "fix-loop", "--slug", "demo", "--kind", "confirm"])
+  refuse("fix-loop awaiting_human")
+  run(root, ["resume", "--slug", "demo"])
+  const r = set()
+  expect(r.code).toBe(0)
+  expect(r.out.state.testEdit).toBe(true)
+  expect(run(root, ["get", "--slug", "demo"]).out.state.testEdit).toBe(true)
+})
+
+test("clear-test-edit は testEdit を消し、値が無いときも終端の run でも成功する", () => {
+  const root = tmpProject()
+  init(root)
+  const clear = () => run(root, ["clear-test-edit", "--slug", "demo"])
+  const empty = clear()
+  expect(empty.code).toBe(0)
+  expect("testEdit" in empty.out.state).toBe(false)
+  // fix-loop まで進める代わりに state.json に直接立てる(set-test-edit の条件は上のテストで見る)
+  const setDirectly = () => {
+    const raw = JSON.parse(fs.readFileSync(statePath(root, "demo"), "utf8"))
+    raw.testEdit = true
+    fs.writeFileSync(statePath(root, "demo"), JSON.stringify(raw))
+  }
+  setDirectly()
+  const cleared = clear()
+  expect(cleared.code).toBe(0)
+  expect("testEdit" in cleared.out.state).toBe(false)
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  setDirectly()
+  const stopped = clear()
+  expect(stopped.code).toBe(0)
+  const saved = JSON.parse(fs.readFileSync(statePath(root, "demo"), "utf8"))
+  expect("testEdit" in saved).toBe(false)
+  expect(saved.status).toBe("stopped")
+})
+
+test("ステップの attempts はフェーズの record-attempt と独立に数える", () => {
+  const root = tmpProject()
+  init(root)
+  stepAdd(root, "1", ["src/a/**"])
+  const recordAttempt = ["record-attempt", "implement", "--slug", "demo"]
+  expect(run(root, recordAttempt).code).toBe(0)
+  expect(run(root, recordAttempt).code).toBe(0)
+  stepUpdate(root, "1", "running")
+  stepUpdate(root, "1", "reviewing")
+  const r = stepUpdate(root, "1", "running")
+  expect(r.out.state.implement.steps["1"].attempts).toBe(1)
+  expect(r.out.state.phases.implement.attempts).toBe(2)
+})
+
+test("waves は groups と final の JSON を出し、各ステップの group を記録し、test-code と test-loop の要素を出さない", () => {
+  const root = tmpProject()
+  init(root)
+  stepAdd(root, "1", ["src/a/**"])
+  stepAdd(root, "2", ["src/b/**"])
+  stepAdd(root, "3", ["pnpm-lock.yaml", "package.json"], ["1"])
+  stepAdd(root, "4", ["src/c/**"], ["3"])
+  const all = ["1", "2", "3", "4"]
+  stepAdd(root, "5", ["plugins/*/scripts/**"], all, ["--final"])
+  specAdd(root, "test-code", "units/src/z.ts")
+  specAdd(root, "test-loop", "e2e/cli/codiel-state", [
+    "--files",
+    '["src/z/**"]'
+  ])
+  const r = run(root, ["waves", "--slug", "demo"])
+  expect(r.code).toBe(0)
+  expect(r.out).toStrictEqual({
+    groups: [
+      { steps: ["1", "2"], mode: "parallel" },
+      { steps: ["3"], mode: "serial" },
+      { steps: ["4"], mode: "parallel" }
+    ],
+    final: ["5"]
+  })
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  const groupOf = (id: string) => st.implement.steps[id].group
+  expect(groupOf("1")).toStrictEqual({ index: 0, mode: "parallel" })
+  expect(groupOf("2")).toStrictEqual({ index: 0, mode: "parallel" })
+  expect(groupOf("3")).toStrictEqual({ index: 1, mode: "serial" })
+  expect(groupOf("4")).toStrictEqual({ index: 2, mode: "parallel" })
+  expect(groupOf("5")).toStrictEqual({ index: 0, mode: "final" })
+  expect(st.testCode.units["units/src/z.ts"].group).toBeNull()
+  expect(st.testLoop.units["e2e/cli/codiel-state"].group).toBeNull()
+  expect(st.version).toBe(2)
+})
+
+test("waves は循環依存で非ゼロ終了し、group を記録しない", () => {
+  const root = tmpProject()
+  init(root)
+  stepAdd(root, "1", ["src/a/**"], ["2"])
+  stepAdd(root, "2", ["src/b/**"], ["1"])
+  stepAdd(root, "3", ["src/c/**"])
+  const r = run(root, ["waves", "--slug", "demo"])
+  expect(r.code).not.toBe(0)
+  expect(r.err).toContain("循環依存")
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  for (const id of ["1", "2", "3"])
+    expect(st.implement.steps[id].group).toBeNull()
+})
+
+test("planWaves は groups をトポロジカル順に並べ、前提を含むグループより後に置く", () => {
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["src/a/**"] },
+      "2": { files: ["src/b/**"], deps: ["1"] },
+      "3": { files: ["src/c/**"], deps: ["2"] },
+      "4": { files: ["src/d/**"] }
+    })
+  )
+  expect(plan).toStrictEqual({
+    groups: [
+      { steps: ["1", "4"], mode: "parallel" },
+      { steps: ["2"], mode: "parallel" },
+      { steps: ["3"], mode: "parallel" }
+    ],
+    final: []
+  })
+})
+
+test("planWaves は循環依存・自己依存・未登録の前提で例外を投げる", () => {
+  expect(() =>
+    planWaves(
+      stepsOf({
+        "1": { files: ["a/**"], deps: ["3"] },
+        "2": { files: ["b/**"], deps: ["1"] },
+        "3": { files: ["c/**"], deps: ["2"] }
+      })
+    )
+  ).toThrow("循環依存")
+  expect(() =>
+    planWaves(stepsOf({ "1": { files: ["a/**"], deps: ["1"] } }))
+  ).toThrow("循環依存")
+  expect(() =>
+    planWaves(stepsOf({ "1": { files: ["a/**"], deps: ["9"] } }))
+  ).toThrow("登録されていません")
+})
+
+test("planWaves は触るファイルが重なりうるステップを同じグループに入れない", () => {
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["src/app/**"] },
+      "2": { files: ["src/app/x.ts"] },
+      "3": { files: ["src/lib/**"] },
+      "4": { files: ["src/lib/util.ts", "docs/a.md"] }
+    })
+  )
+  expect(plan.groups).toStrictEqual([
+    { steps: ["1", "3"], mode: "parallel" },
+    { steps: ["2", "4"], mode: "parallel" }
+  ])
+})
+
+test("planWaves は lockfile を触るステップを単独の serial グループにして依存順の位置に置き、その後続を後のグループに出す", () => {
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["src/a/**"] },
+      "2": { files: ["Cargo.lock"] },
+      "3": { files: ["src/b/**"] },
+      "4": { files: ["packages/web/yarn.lock"], deps: ["1"] },
+      "5": { files: ["src/c/**"], deps: ["4"] },
+      "6": { files: ["src/d/**"] }
+    })
+  )
+  expect(plan.groups).toStrictEqual([
+    { steps: ["1", "3", "6"], mode: "parallel" },
+    { steps: ["2"], mode: "serial" },
+    { steps: ["4"], mode: "serial" },
+    { steps: ["5"], mode: "parallel" }
+  ])
+})
+
+test("planWaves は計画書 §6.3 の 12 種の lockfile をファイル名の完全一致で判定する", () => {
+  const names = [
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "yarn.lock",
+    "bun.lockb",
+    "bun.lock",
+    "Cargo.lock",
+    "poetry.lock",
+    "uv.lock",
+    "Gemfile.lock",
+    "composer.lock",
+    "go.sum"
+  ]
+  for (const name of names) {
+    const plan = planWaves(
+      stepsOf({ "1": { files: [`sub/${name}`] }, "2": { files: ["src/**"] } })
+    )
+    expect(plan.groups[0], name).toStrictEqual({ steps: ["1"], mode: "serial" })
+  }
+  // 完全一致でないファイル名は lockfile ではない
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["x/pnpm-lock.yaml.bak"] },
+      "2": { files: ["y/my-go.sum"] }
+    })
+  )
+  expect(plan.groups).toStrictEqual([{ steps: ["1", "2"], mode: "parallel" }])
+})
+
+test("planWaves は --final のステップを final にだけ出す", () => {
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["src/a/**"] },
+      "2": { files: ["src/b/**"] },
+      "3": { files: ["plugins/*/scripts/**"], deps: ["1", "2"], final: true }
+    })
+  )
+  expect(plan).toStrictEqual({
+    groups: [{ steps: ["1", "2"], mode: "parallel" }],
+    final: ["3"]
+  })
+  // 通常のステップは最終ステップを前提にできない
+  expect(() =>
+    planWaves(
+      stepsOf({
+        "1": { files: ["a/**"], final: true },
+        "2": { files: ["b/**"], deps: ["1"] }
+      })
+    )
+  ).toThrow("最終ステップ")
+})
+
+test("planWaves は parallel グループを 4 件までにし、超える分を次のグループへ送る", () => {
+  const spec: Record<string, { files: string[] }> = {}
+  for (let i = 1; i <= 9; i++) spec[String(i)] = { files: [`src/s${i}/**`] }
+  expect(planWaves(stepsOf(spec)).groups).toStrictEqual([
+    { steps: ["1", "2", "3", "4"], mode: "parallel" },
+    { steps: ["5", "6", "7", "8"], mode: "parallel" },
+    { steps: ["9"], mode: "parallel" }
+  ])
+})
+
+test("重なりの判定: src/app/** と src/apple/** は重ならない", () => {
+  expect(globsOverlap("src/app/**", "src/apple/**")).toBe(false)
+  expect(globsOverlap("src/app/**", "src/app/x.ts")).toBe(true)
+  expect(globsOverlap("src/a.ts", "src/b.ts")).toBe(false)
+  expect(globsOverlap("./src/a/**", "src/a/x.ts")).toBe(true)
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["src/app/**"] },
+      "2": { files: ["src/apple/**"] }
+    })
+  )
+  expect(plan.groups).toStrictEqual([{ steps: ["1", "2"], mode: "parallel" }])
+})
+
+test("重なりの判定: src/{a,b}/** は展開されて src/a/x.ts と重なる", () => {
+  expect(expandBraces("src/{a,b}/**")).toStrictEqual(["src/a/**", "src/b/**"])
+  expect(expandBraces("{src,lib/{x,y}}/*.ts")).toStrictEqual([
+    "src/*.ts",
+    "lib/x/*.ts",
+    "lib/y/*.ts"
+  ])
+  expect(globsOverlap("src/{a,b}/**", "src/a/x.ts")).toBe(true)
+  expect(globsOverlap("src/{a,b}/**", "src/c/x.ts")).toBe(false)
+  const plan = planWaves(
+    stepsOf({
+      "1": { files: ["src/{a,b}/**"] },
+      "2": { files: ["src/a/x.ts"] }
+    })
+  )
+  expect(plan.groups).toStrictEqual([
+    { steps: ["1"], mode: "parallel" },
+    { steps: ["2"], mode: "parallel" }
+  ])
+})
+
+test("重なりの判定: 固定部が空の *.ts と **/* は全ステップと重なる", () => {
+  for (const g of ["*.ts", "**/*"]) {
+    expect(globsOverlap(g, "docs/a.md"), g).toBe(true)
+    expect(globsOverlap("src/x/y.ts", g), g).toBe(true)
+    const plan = planWaves(
+      stepsOf({
+        "1": { files: ["src/a/**"] },
+        "2": { files: [g] },
+        "3": { files: ["docs/**"] }
+      })
+    )
+    expect(plan.groups, g).toStrictEqual([
+      { steps: ["1", "3"], mode: "parallel" },
+      { steps: ["2"], mode: "parallel" }
+    ])
+  }
 })
 
 // テストヘルパー

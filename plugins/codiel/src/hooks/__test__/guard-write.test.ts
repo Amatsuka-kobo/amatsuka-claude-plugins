@@ -4,7 +4,14 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { GATED, readState, STAGES, writeState } from "../../codiel-state.js"
+import {
+  GATED,
+  type RunState,
+  readState,
+  STAGES,
+  type StepState,
+  writeState
+} from "../../codiel-state.js"
 import { runTs } from "../../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../guard-write.ts", import.meta.url))
@@ -127,23 +134,26 @@ test("文書フェーズ(intent)中の src への書き込みは ask、.codiel �
   ).toBe(null)
 })
 
-test("implement フェーズ中: src は素通し、specs の cases.md は ask", () => {
+test("implement フェーズ中: src は素通し、testsDir の cases.md と spec.md は ask", () => {
   const root = setupRun()
   advanceToImplement(root)
   expect(hook(root, "Edit", path.join(root, "src/app.ts"))).toBe(null)
   expect(
-    hook(root, "Edit", path.join(root, ".codiel/specs/screen-login/cases.md"))
-      ?.permissionDecision
+    hook(
+      root,
+      "Edit",
+      path.join(root, "docs/tests/e2e/frontend/login/cases.md")
+    )?.permissionDecision
   ).toBe("ask")
   expect(
-    hook(root, "Edit", path.join(root, ".codiel/specs/screen-login/spec.md"))
+    hook(root, "Edit", path.join(root, "docs/tests/e2e/frontend/login/spec.md"))
       ?.permissionDecision
   ).toBe("ask")
   expect(
     hook(
       root,
       "Write",
-      path.join(root, ".codiel/specs/screen-login/scripts/login.spec.ts")
+      path.join(root, ".codiel/runs/demo/try-1/steps/step-1/report.md")
     )
   ).toBe(null)
 })
@@ -504,13 +514,13 @@ test("domain 設定下でも .codiel/ 配下(ハーネス運用資産)はドメ�
   runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
-  // テストスクリプトの安定化(codiel-tester)は domain 非紐付けだが、
-  // TDD 修正後に clear-domain を呼び忘れたまま tester のターンへ入りうる
+  // ドメインに紐付かない委譲(テストの実行)は、コードの修正の後に clear-domain を
+  // 呼び忘れたまま報告を書きうる
   expect(
     hook(
       root,
       "Write",
-      path.join(root, ".codiel/specs/unit-1/scripts/a.spec.ts")
+      path.join(root, ".codiel/runs/demo/try-1/steps/step-1/report.md")
     )
   ).toBe(null)
   expect(
@@ -522,7 +532,7 @@ test("domain 設定下でも .codiel/ 配下(ハーネス運用資産)はドメ�
   expect(r?.permissionDecisionReason).toContain("担当範囲外")
 })
 
-test("domain 設定下でも spec.md / cases.md の ask は維持される(免除で潰れない)", () => {
+test("domain 設定下でも spec.md / cases.md はドメイン境界より先にテストの保護で ask になる", () => {
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
@@ -530,9 +540,9 @@ test("domain 設定下でも spec.md / cases.md の ask は維持される(免�
     cwd: root
   })
   for (const f of ["spec.md", "cases.md"]) {
-    const r = hook(root, "Edit", path.join(root, `.codiel/specs/unit-1/${f}`))
+    const r = hook(root, "Edit", path.join(root, `docs/tests/units/x.ts/${f}`))
     expect(r?.permissionDecision).toBe("ask")
-    expect(r?.permissionDecisionReason).toMatch(/test-designer/)
+    expect(r?.permissionDecisionReason).toMatch(/test-spec と test-code/)
   }
 })
 
@@ -627,13 +637,16 @@ test("docRoot ≠ codielRoot でも .codiel/ 配下は codielRoot 基準で素�
     hook(
       docRoot,
       "Write",
-      path.join(codielRoot, ".codiel/specs/unit-1/scripts/a.spec.ts")
+      path.join(codielRoot, ".codiel/runs/demo/try-1/steps/step-1/report.md")
     )
   ).toBe(null)
-  // spec.md / cases.md の ask は codielRoot 基準のまま維持される
+  // テストの保護(spec.md / cases.md)は docRoot ではなく repoRoot 基準で当たる
   expect(
-    hook(docRoot, "Edit", path.join(codielRoot, ".codiel/specs/unit-1/spec.md"))
-      ?.permissionDecision
+    hook(
+      docRoot,
+      "Edit",
+      path.join(codielRoot, "docs/tests/units/x.ts/spec.md")
+    )?.permissionDecision
   ).toBe("ask")
 })
 
@@ -753,7 +766,7 @@ function setupSymlinkedRepo(): { real: string; link: string } {
   // 実体パス基準へ揃える改変を通してしまう(変異が生き残る)。実運用でも 2 本目以降の
   // レポートやスペックは既存ディレクトリへ書かれるので、親が在る側が既定の状況である。
   fs.mkdirSync(path.join(real, ".codiel/reports"), { recursive: true })
-  fs.mkdirSync(path.join(real, ".codiel/specs/unit-1/scripts"), {
+  fs.mkdirSync(path.join(real, ".codiel/runs/demo/try-1/steps/step-1"), {
     recursive: true
   })
   const linkParent = fs.realpathSync(
@@ -794,7 +807,7 @@ test("symlink 経由の cwd でも .codiel/ 配下は codielRoot 基準で素通
     hook(
       link,
       "Write",
-      path.join(link, ".codiel/specs/unit-1/scripts/a.spec.ts")
+      path.join(link, ".codiel/runs/demo/try-1/steps/step-1/report.md")
     )
   ).toBe(null)
 })
@@ -808,4 +821,374 @@ test("symlink を使わない通常構成では既存の挙動が変わらない
   expect(
     hook(real, "Write", path.join(real, ".codiel/reports/test-run-1.md"))
   ).toBe(null)
+})
+
+// ---------------------------------------------------------------------------
+// テストの保護(設計書 §6.13.6、§8.2 の P 系)。testsDir は既定の docs/tests とし、
+// docs/tests/units/src/a.ts/spec.md の tests に src/__test__/a.test.ts を記録しておく。
+// ---------------------------------------------------------------------------
+
+const SPEC_DIR = "docs/tests/units/src/a.ts"
+const CASES = `${SPEC_DIR}/cases.md`
+const RECORDED = "src/__test__/a.test.ts"
+
+function writeSpec(root: string, dir: string, frontmatter: string): void {
+  fs.mkdirSync(path.join(root, dir), { recursive: true })
+  fs.writeFileSync(
+    path.join(root, dir, "spec.md"),
+    `---\n${frontmatter}\n---\n\n# 仕様\n`
+  )
+}
+
+function writeConfig(root: string, content: string): void {
+  fs.mkdirSync(path.join(root, ".codiel"), { recursive: true })
+  fs.writeFileSync(path.join(root, ".codiel/config.json"), content)
+}
+
+function patchState(root: string, fn: (s: RunState) => void): void {
+  const p = statePathFor(root, SLUG)
+  const s = readState(p)
+  fn(s)
+  writeState(p, s)
+}
+
+// phase を in_progress にし、tests を記録した spec.md を置いた run を作る。
+function setupProtectedRun(phase: string): string {
+  const root = setupRun()
+  advanceRunTo(root, phase)
+  writeSpec(root, SPEC_DIR, `parallel: true\ntests:\n  - ${RECORDED}`)
+  return root
+}
+
+function decision(root: string, rel: string): string | null {
+  return hook(root, "Write", path.join(root, rel))?.permissionDecision ?? null
+}
+
+test("P-1: implement で testsDir の cases.md は ask になり、理由はテストの保護", () => {
+  const root = setupProtectedRun("implement")
+  const r = hook(root, "Edit", path.join(root, CASES))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toBe(
+    `テスト(${CASES})の変更は test-spec と test-code フェーズの担当です(implement 中の変更は改竄の疑い)`
+  )
+})
+
+test("P-2: test-loop で spec.md の tests に載ったファイルは ask", () => {
+  const root = setupProtectedRun("test-loop")
+  expect(decision(root, RECORDED)).toBe("ask")
+  // 1 行の列で書いた tests と、別の仕様のディレクトリの記録も読む
+  writeSpec(
+    root,
+    "docs/tests/e2e/cli/tool",
+    `tests: ["test/e2e/tool.test.ts"]\nparallel: false`
+  )
+  expect(decision(root, "test/e2e/tool.test.ts")).toBe("ask")
+})
+
+test("P-3: implement で どの tests にも載っていないテストファイルは通す", () => {
+  const root = setupProtectedRun("implement")
+  expect(decision(root, "src/__test__/b.test.ts")).toBe(null)
+})
+
+test("P-4: test-code では cases.md も記録されたテストも通す", () => {
+  const root = setupProtectedRun("test-code")
+  expect(decision(root, CASES)).toBe(null)
+  expect(decision(root, RECORDED)).toBe(null)
+})
+
+test("P-5: fix-loop で testEdit が無ければ cases.md は ask", () => {
+  const root = setupProtectedRun("fix-loop")
+  expect(decision(root, CASES)).toBe("ask")
+})
+
+test("P-6: fix-loop で testEdit が真の間は cases.md も記録されたテストも通す", () => {
+  const root = setupProtectedRun("fix-loop")
+  patchState(root, (s) => {
+    s.testEdit = true
+  })
+  expect(decision(root, CASES)).toBe(null)
+  expect(decision(root, RECORDED)).toBe(null)
+})
+
+test("P-7: implement では testEdit が真でも cases.md は ask(fix-loop 以外では testEdit を見ない)", () => {
+  const root = setupProtectedRun("implement")
+  patchState(root, (s) => {
+    s.testEdit = true
+  })
+  expect(decision(root, CASES)).toBe("ask")
+})
+
+test("P-8: implement で testsDir が qa/specs なら qa/specs の spec.md は ask、docs/tests の spec.md は通す", () => {
+  const root = setupProtectedRun("implement")
+  writeConfig(root, JSON.stringify({ testsDir: "qa/specs" }))
+  expect(decision(root, "qa/specs/units/x.ts/spec.md")).toBe("ask")
+  expect(decision(root, "docs/tests/units/x.ts/spec.md")).toBe(null)
+})
+
+test("P-9: test-spec で testsDir が qa/specs なら、docs/ の外でも qa/specs の spec.md を通す", () => {
+  const root = setupRun()
+  advanceRunTo(root, "test-spec")
+  writeConfig(root, JSON.stringify({ testsDir: "qa/specs" }))
+  expect(decision(root, "qa/specs/units/x.ts/spec.md")).toBe(null)
+  // testsDir の外のコード領域は従来どおり ask
+  expect(decision(root, "qa/tools/x.ts")).toBe("ask")
+})
+
+test("P-10: implement で .codiel/config.json が JSON として読めなければ src への書き込みも ask", () => {
+  const root = setupProtectedRun("implement")
+  writeConfig(root, "{ testsDir: ")
+  const r = hook(root, "Write", path.join(root, "src/index.ts"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toMatch(/config\.json が不正/)
+})
+
+test("設定が不正でも、文書フェーズでは testsDir を通す規則だけを外し、docs/ は通す", () => {
+  const root = setupRun()
+  advanceRunTo(root, "test-spec")
+  writeConfig(root, JSON.stringify({ testsDir: "/abs/specs" }))
+  expect(decision(root, "docs/tests/units/x.ts/spec.md")).toBe(null)
+  expect(decision(root, "src/index.ts")).toBe("ask")
+})
+
+// ---------------------------------------------------------------------------
+// worktree の中の書き込み(設計書 §6.8 の (a)〜(c)、§8.2 の W 系)。
+// どのケースも mapped の run で、メインの state.domain は null にしておく。
+// worktree は `git worktree add` で実際に作る。ARCHITECTURE と spec.md はメインの作業ツリーに
+// だけ置き(コミットしない)、メインの作業ツリーで読んでいることも併せて確かめる。
+// ---------------------------------------------------------------------------
+
+function git(cwd: string, args: string[]): void {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=codiel-test",
+      "-c",
+      "user.email=codiel-test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      ...args
+    ],
+    { cwd, stdio: "ignore" }
+  )
+}
+
+// git リポジトリのメインの作業ツリーに run を作り、phase を in_progress にする。
+// commitCodiel が真なら .codiel/config.json をコミットし、worktree の checkout にも .codiel/ が現れる。
+function setupGitRun(phase: string, commitCodiel = false): string {
+  const main = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gw-wt-")))
+  git(main, ["init", "-q"])
+  fs.mkdirSync(path.join(main, "src"))
+  fs.writeFileSync(path.join(main, "src/index.ts"), "")
+  if (commitCodiel)
+    writeConfig(main, `${JSON.stringify({ testsDir: "docs/tests" })}\n`)
+  git(main, ["add", "-A"])
+  git(main, ["commit", "-q", "-m", "init"])
+  const args = ["init", "--slug", SLUG]
+  for (const [k, v] of Object.entries(INIT_DEFAULTS)) args.push(`--${k}`, v)
+  runTs(CLI, args, { cwd: main })
+  advanceRunTo(main, phase)
+  patchState(main, (s) => {
+    s.domainMode = "mapped"
+    s.domain = null
+  })
+  writeArchitecture(main, DOMAINS)
+  return main
+}
+
+function worktreeRel(name: string): string {
+  return `.codiel/worktrees/${SLUG}/${name}`
+}
+
+function addWorktree(main: string, name: string): string {
+  git(main, [
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    `codiel/${SLUG}-try-1-${name}`,
+    worktreeRel(name)
+  ])
+  return path.join(main, worktreeRel(name))
+}
+
+function element(worktree: string | null, domain: string | null): StepState {
+  return {
+    status: "running",
+    files: [],
+    deps: [],
+    final: false,
+    group: null,
+    worktree,
+    branch: null,
+    commits: { base: null, head: null },
+    attempts: 0,
+    domain
+  }
+}
+
+// 名前の接頭辞ごとに、その worktree を記録する表とフェーズ
+const WORKTREE_KINDS: [string, string, (s: RunState, e: StepState) => void][] =
+  [
+    [
+      "step-1",
+      "implement",
+      (s, e) => {
+        s.implement = { steps: { "1": e } }
+      }
+    ],
+    [
+      "test-code-1",
+      "test-code",
+      (s, e) => {
+        s.testCode = { units: { "units/src/server/db.ts": e } }
+      }
+    ],
+    [
+      "test-loop-1",
+      "test-loop",
+      (s, e) => {
+        s.testLoop = { units: { "units/src/server/db.ts": e } }
+      }
+    ]
+  ]
+
+for (const [name, phase, record] of WORKTREE_KINDS)
+  test(`W-2・W-2b・W-3(A4-3): ${name} の worktree への書き込みは、cwd が worktree の中でもメインのルートでも worktree ルート基準で判定する`, () => {
+    const main = setupGitRun(phase)
+    const wt = addWorktree(main, name)
+    patchState(main, (s) => record(s, element(worktreeRel(name), "backend")))
+    for (const cwd of [wt, main]) {
+      expect(hook(cwd, "Write", path.join(wt, "src/server/db.ts")), cwd).toBe(
+        null
+      )
+      const r = hook(cwd, "Write", path.join(wt, "src/app/page.tsx"))
+      expect(r?.permissionDecision, cwd).toBe("ask")
+      expect(r?.permissionDecisionReason).toContain(
+        "src/app/page.tsx はドメイン backend の担当範囲外"
+      )
+      // メインのルート基準の相対パス(.codiel/ の免除に入る)で判定していない
+      expect(r?.permissionDecisionReason).not.toContain(".codiel/worktrees")
+    }
+  })
+
+test("W-1・W-1b: cwd が step の worktree の中なら、テストの保護と要素の domain の境界が worktree ルート基準で効く", () => {
+  const main = setupGitRun("implement")
+  const wt = addWorktree(main, "step-1")
+  patchState(main, (s) => {
+    s.implement = { steps: { "1": element(worktreeRel("step-1"), "backend") } }
+  })
+  const cwd = path.join(wt, "src")
+  const r1 = hook(cwd, "Write", path.join(wt, CASES))
+  expect(r1?.permissionDecision).toBe("ask")
+  expect(r1?.permissionDecisionReason).toContain(`テスト(${CASES})`)
+  const r1b = hook(cwd, "Write", path.join(wt, "src/app/page.tsx"))
+  expect(r1b?.permissionDecision).toBe("ask")
+  expect(r1b?.permissionDecisionReason).toContain("担当範囲外")
+})
+
+test("W-4: docRoot がメインの sub/ なら、worktree の中の sub/ 配下を worktreeRoot/sub に写して照合する", () => {
+  const main = setupGitRun("implement")
+  const wt = addWorktree(main, "step-1")
+  patchState(main, (s) => {
+    s.implement = { steps: { "1": element(worktreeRel("step-1"), "backend") } }
+  })
+  // 設定と ARCHITECTURE はメインの sub/ にだけ置く。worktree の中から祖先を辿っても届かない
+  const sub = path.join(main, "sub")
+  fs.mkdirSync(sub)
+  fs.writeFileSync(
+    path.join(sub, "metatron.config.json"),
+    `${JSON.stringify({ version: 1 })}\n`
+  )
+  writeArchitecture(sub, DOMAINS)
+  const wtSub = path.join(wt, "sub")
+  fs.mkdirSync(wtSub)
+  expect(hook(wtSub, "Write", path.join(wtSub, "src/server/db.ts"))).toBe(null)
+  const r = hook(wtSub, "Write", path.join(wtSub, "src/app/page.tsx"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain(
+    "src/app/page.tsx はドメイン backend の担当範囲外"
+  )
+  expect(r?.permissionDecisionReason).not.toContain("sub/src")
+})
+
+for (const commitCodiel of [true, false])
+  test(`W-5: worktree の checkout に .codiel/ が${commitCodiel ? "ある" : "無い"}ときも、run はメインのルートで見つかる`, () => {
+    const main = setupGitRun("implement", commitCodiel)
+    const wt = addWorktree(main, "step-1")
+    expect(fs.existsSync(path.join(wt, ".codiel"))).toBe(commitCodiel)
+    // run が見つからなければ素通し(null)になる
+    expect(
+      hook(path.join(wt, "src"), "Write", path.join(wt, CASES))
+        ?.permissionDecision
+    ).toBe("ask")
+  })
+
+test("W-5: run の検索は worktree のパスの形ではなく git worktree list --porcelain の先頭のエントリで決まる", () => {
+  const main = setupGitRun("implement")
+  // メインの作業ツリーの外に、別のディレクトリの .codiel/worktrees/ の形で worktree を置く
+  const other = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "gw-other-"))
+  )
+  const wt = path.join(other, worktreeRel("step-1"))
+  git(main, ["worktree", "add", "-q", "-b", "codiel/other", wt])
+  // パスの形から other をルートとみなすと run が見つからず、素通しになる
+  const r = hook(wt, "Write", path.join(main, CASES))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain(`テスト(${CASES})`)
+})
+
+test("W-6: test-code の worktree で要素に domain が無ければ、範囲外のテストファイルも通す(state.domain も使わない)", () => {
+  const main = setupGitRun("test-code")
+  const wt = addWorktree(main, "test-code-1")
+  patchState(main, (s) => {
+    s.testCode = {
+      units: {
+        "units/src/server/db.ts": element(worktreeRel("test-code-1"), null)
+      }
+    }
+  })
+  const target = path.join(wt, "src/app/__test__/page.test.tsx")
+  expect(hook(wt, "Write", target)).toBe(null)
+  // メインの state.domain があっても、worktree の中への書き込みには使わない
+  patchState(main, (s) => {
+    s.domain = "backend"
+  })
+  expect(hook(wt, "Write", target)).toBe(null)
+  // メインの作業ツリーへの書き込みには従来どおり state.domain を使う
+  expect(
+    hook(main, "Write", path.join(main, "src/app/page.tsx"))?.permissionDecision
+  ).toBe("ask")
+})
+
+test("W-7: test-loop の worktree を 2 つの要素が記録していれば、範囲内のソースでも ask", () => {
+  const main = setupGitRun("test-loop")
+  const wt = addWorktree(main, "test-loop-1")
+  const rel = worktreeRel("test-loop-1")
+  patchState(main, (s) => {
+    s.testLoop = {
+      units: {
+        "units/src/server/db.ts": element(rel, "backend"),
+        // `./` と末尾の `/` を付けた記録も同じパスとして数える
+        "units/src/api/x.ts": element(`./${rel}/`, "backend")
+      }
+    }
+  })
+  const r = hook(wt, "Write", path.join(wt, "src/server/db.ts"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toBe(
+    `worktree ${rel} を記録した要素が 2 個あり(testLoop.units[units/src/server/db.ts], testLoop.units[units/src/api/x.ts])、境界に使うドメインを 1 つに決められません(worktree のパスは run の中で一意のはずです)`
+  )
+})
+
+test("P-11: implement で step の worktree の中の記録されたテストは、worktreeRoot 相対で保護が効く", () => {
+  const main = setupGitRun("implement")
+  const wt = addWorktree(main, "step-1")
+  // spec.md はメインの作業ツリーにだけ置く(worktree の中の spec.md は読まない)
+  writeSpec(main, SPEC_DIR, `tests:\n  - ${RECORDED}`)
+  const r = hook(wt, "Write", path.join(wt, RECORDED))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain(`テスト(${RECORDED})`)
 })

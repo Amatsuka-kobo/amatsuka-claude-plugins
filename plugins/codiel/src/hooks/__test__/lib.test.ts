@@ -9,6 +9,7 @@ import { extractDomains } from "../../../../metatron/src/lib/architecture.js"
 import { loadConfig } from "../../../../metatron/src/lib/config.js"
 import {
   findDocRoot,
+  findMainRoot,
   findProjectRoot,
   globToRegExp,
   readDomains,
@@ -76,7 +77,7 @@ function expectSameResolution(startDir: string, label: string): void {
     theirs.architecturePath
   )
   expect(mine.gotchas, `${label}: gotchas`).toBe(theirs.gotchasPath)
-  // 既定値へ落とした理由も揃える。文言の完全一致は求めず(3 実装の同期コストが上がる)、
+  // 既定値へ落とした理由も揃える。文言の完全一致は求めず(2 実装の同期コストが上がる)、
   // 警告が出るか出ないかと件数を見る(契約 §3 規則 3)。
   expect(mine.warnings.length > 0, `${label}: 警告の有無`).toBe(
     theirs.warnings.length > 0
@@ -909,4 +910,17 @@ test("findProjectRoot: .codiel が見つからなければ startDir をそのま
   const root = mkTmp("lib-noroot-")
   const sub = mkSub(root, "a", "b")
   expect(findProjectRoot(sub)).toBe(sub)
+})
+
+// worktree の中からメインのルートへ届くこと(git worktree list の先頭のエントリ)は、
+// guard-write.test.ts の W 系で実際の worktree を使って確かめる。
+test("findMainRoot: codiel の worktree の外と、git で worktree を引けないときは findProjectRoot と同じ値を返す", () => {
+  const root = mkTmp("lib-main-")
+  fs.mkdirSync(path.join(root, ".codiel"))
+  const src = mkSub(root, "src")
+  expect(findMainRoot(src)).toBe(findProjectRoot(src))
+  // worktree の形のパスだが git 管理外。checkout にある .codiel/ で止まる従来の値に戻る
+  const wt = mkSub(root, ".codiel", "worktrees", "demo", "step-1")
+  fs.mkdirSync(path.join(wt, ".codiel"))
+  expect(findMainRoot(wt)).toBe(wt)
 })

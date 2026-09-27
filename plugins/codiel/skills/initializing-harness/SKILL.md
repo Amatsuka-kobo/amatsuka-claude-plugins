@@ -30,7 +30,7 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 |---|---|---|
 | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
 | C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
-| D | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
+| D | `.codiel/runs` / `.codiel/reports` / `.codiel/config.json` | 3 つが存在する |
 
 - 3 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
@@ -45,7 +45,9 @@ bash <plugin-root>/scripts/install-harness.sh
 ```
 
 を対象プロジェクトのルートで Claude 自身が Bash ツールで実行する(ユーザーに実行させない)。
-このスクリプトが作るのは `.codiel/specs` / `.codiel/runs` / `.codiel/reports` だけである。
+このスクリプトが作るのは `.codiel/runs` / `.codiel/reports` の 2 ディレクトリと、無ければ
+既定値 `{ "testsDir": "docs/tests" }` で作る `.codiel/config.json` である。`.codiel/config.json` が
+既にあれば中身を変えない。
 
 ## 2. `raguel.config.yaml` の生成
 

@@ -42,6 +42,17 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 3. プロジェクトの test コマンド(ユニットテスト等)。コンテキストに宣言があればそれに従い、
    無ければ `package.json` の `scripts` から取る。どちらでも見つからなければ、この 3 は対象から外す。
 
+## unit ごとの並列実行
+
+Step A(スクリプト安定化)と Step B(NG 修正)は、unit ごとの worktree
+(`.codiel/worktrees/<slug>/unit-<unit-id>`)で作業する。対象 unit の `spec.md` の frontmatter に
+`parallel: true` を持つ unit だけを同時に実行し、持たない unit は直列に実行する。この規則は
+Step A の中の実行(チェックリスト 3)と回帰実行(チェックリスト 6)の両方に当てる。同時実行数の
+上限は 4 である。Step B の NG 修正も、対象 unit の worktree で implementer に委譲する。
+
+この並列化は test-loop の (A)(B) に限る。レビュー後の修正フェーズ(fix-loop)は直列のまま
+変わらない。
+
 ## チェックリスト
 
 1. 起動モード(run 経由 / 単独実行)を確認し、対象 unit(影響 unit + 既存全 unit、単独実行で

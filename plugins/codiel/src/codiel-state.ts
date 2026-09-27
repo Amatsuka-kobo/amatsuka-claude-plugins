@@ -62,6 +62,47 @@ export interface RunState {
   // 委譲していない間は null / 未定義。
   // 値がドメインマップに存在するかは検証しない — 判断は読む側(guard-write)の責務。
   domain?: string | null
+  // 並列実装のステップと、test-code・test-loop の仕様のディレクトリ(設計書 §6.6.5・§6.7・
+  // §6.13.2、計画書 §6.2)。units のキーは仕様のディレクトリの ID(§6.13.3)。
+  // M4 で足した任意フィールドで、version は 2 のまま据え置く。
+  implement?: { steps: Record<string, StepState> }
+  testCode?: { units: Record<string, StepState> }
+  testLoop?: { units: Record<string, StepState> }
+  // fix-loop でテストの保護を外す間だけ真(設計書 §6.13.6)。clear-test-edit でキーごと消す
+  testEdit?: boolean
+}
+
+export type StepStatus =
+  | "pending"
+  | "running"
+  | "reviewing"
+  | "merged"
+  | "failed"
+export type GroupMode = "parallel" | "serial" | "final"
+
+export interface StepState {
+  status: StepStatus
+  // 触るファイル(repoRoot 相対の glob)
+  files: string[]
+  // 前提ステップ。test-code と test-loop では常に空配列
+  deps: string[]
+  // 方式 b の最終ステップ(waves の final にだけ出る)。test-code と test-loop では常に false
+  final: boolean
+  // waves が記録する位置。index は groups(final なら final)の配列の添字。
+  // test-code と test-loop では常に null
+  group: { index: number; mode: GroupMode } | null
+  // repoRoot 相対の worktree のパス
+  worktree: string | null
+  branch: string | null
+  commits: { base: string | null; head: string | null }
+  // 修正ラウンド数。phases[phase].attempts(record-attempt)とは別に数える
+  attempts: number
+  domain: string | null
+}
+
+export interface WaveGroup {
+  steps: string[]
+  mode: "parallel" | "serial"
 }
 
 export interface LatestTry {
@@ -80,6 +121,7 @@ export const STAGES: string[][] = [
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
+  ["test-code"],
   ["implement"],
   ["test-loop"],
   ["intent-sync"],
@@ -95,6 +137,7 @@ export const GATED = new Set([
   "design",
   "test-spec",
   "dev-plan",
+  "test-code",
   "implement",
   "test-loop",
   "intent-sync",
@@ -118,7 +161,53 @@ const V1_RUN_RE = /^issue-\d+$/
 // intent 文書の置き場。domains/ 配下は持続層なので含めない
 const INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/
 const INTEGRATIONS = ["github", "local"] as const
-const BOOL_FLAGS = ["active", "human-approved", "intent-only"]
+const BOOL_FLAGS = ["active", "human-approved", "intent-only", "final"]
+
+// 触るとそのステップだけの serial グループになる lockfile(計画書 §6.3)。
+// ファイル名(最後のセグメント)の完全一致で判定し、置き場のディレクトリは問わない。
+const LOCKFILES = new Set([
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "bun.lockb",
+  "bun.lock",
+  "Cargo.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Gemfile.lock",
+  "composer.lock",
+  "go.sum"
+])
+// parallel グループのステップ数の上限(設計書 §6.6.2 の規則 5)
+const PARALLEL_MAX = 4
+const STEP_STATUSES = [
+  "pending",
+  "running",
+  "reviewing",
+  "merged",
+  "failed"
+] as const
+// 許す遷移と、その遷移で受け付ける記録のフラグ(計画書 §6.2 の表)
+const STEP_TRANSITIONS: Record<string, string[]> = {
+  "pending>running": ["worktree", "branch", "base"],
+  "running>reviewing": [],
+  "reviewing>running": [],
+  "reviewing>merged": ["head"],
+  "running>failed": [],
+  "reviewing>failed": [],
+  "failed>pending": []
+}
+const STEP_RECORD_FLAGS = ["worktree", "branch", "base", "head"]
+// step は implement.steps、test-code は testCode.units、test-loop は testLoop.units に当たる
+const STEP_KINDS = ["step", "test-code", "test-loop"] as const
+type StepKind = (typeof STEP_KINDS)[number]
+// 仕様のディレクトリの ID(設計書 §6.13.3)。units/ と e2e/backend/ の後は 1 つ以上、
+// e2e/frontend/ と e2e/cli/ の後はちょうど 1 つのセグメントを持つ。
+// 空のセグメント・`.`・`..`・`:`・`\` は isSpecDirId で別に拒否する。
+const SPEC_ID_RE = /^(units\/.+|e2e\/backend\/.+|e2e\/(frontend|cli)\/[^/]+)$/
+// .codiel/config.json が無いとき、または testsDir のキーが無いときの値(設計書 §6.13.4)
+const DEFAULT_TESTS_DIR = "docs/tests"
 
 const fail = (msg: string, code = 1): never => {
   process.stderr.write(`${msg}\n`)
@@ -175,15 +264,15 @@ function latestTries(root: string): LatestTry[] {
     .filter((t) => t !== null)
 }
 
-// hooks が使う active run の検索。version 2 の state だけを run として扱い、
-// v1 の run は run が無いときと同じにする(設計書 §6.2.4)。
+// hooks が使う active run の検索。この版で続けられる state だけを run として扱い、
+// v1 の run と M4 より前の state の run は run が無いときと同じにする(設計書 §6.2.4・§6.6)。
 // `get --active` より狭く、active と awaiting_human だけを返す。
 // awaiting_outcome は outcome の自動同期のために `get --active` にだけ含める。
 export function findActiveRun(root: string): ActiveRun | null {
   let best: ActiveRun | null = null
   for (const latest of latestTries(root)) {
     const st = latest.state
-    if (st.version !== 2) continue
+    if (isLegacy(st)) continue
     if (st.status !== "active" && st.status !== "awaiting_human") continue
     if (!best || st.updatedAt > best.state.updatedAt)
       best = {
@@ -195,13 +284,53 @@ export function findActiveRun(root: string): ActiveRun | null {
   return best
 }
 
-// codiel 0.x(state version 1)の run を指したときに出す文言(設計書 §6.2.4)
-function v1Message(st: RunState): string {
-  const n = st.issue
+// この版で続けられない state か。codiel 0.x(state version 1)の state と、phases に test-code を
+// 持たない v2 の state(M4 より前に作ったもの)が当たる(設計書 §6.2.4・§6.6)。
+// 判定は state の形だけで行い、phases の進み具合を見ない。読み込み時に test-code を補わない。
+function isLegacy(st: RunState): boolean {
+  return st.version !== 2 || !("test-code" in st.phases)
+}
+
+// isLegacy の run を指したときに出す文言。v1 は設計書 §6.2.4、M4 より前の state は §6.6 の
+// テンプレートを使う。
+function legacyMessage(st: RunState): string {
+  if (st.version !== 2) {
+    const n = st.issue
+    return (
+      `codiel: .codiel/runs/issue-${n} は codiel 0.x の run(state version 1、status: ${st.status})であり、この版では再開できない。` +
+      `codiel 0.x で完了させるか、\`codiel-state stop --slug issue-${n} --reason migrate\` で止めてから、\`/codiel:run ${n}\` で新しい run を始める。`
+    )
+  }
   return (
-    `codiel: .codiel/runs/issue-${n} は codiel 0.x の run(state version 1、status: ${st.status})であり、この版では再開できない。` +
-    `codiel 0.x で完了させるか、\`codiel-state stop --slug issue-${n} --reason migrate\` で止めてから、\`/codiel:run ${n}\` で新しい run を始める。`
+    `codiel: .codiel/runs/${st.runId} は test-code フェーズを持たない state の run(status: ${st.status})であり、この版では再開できない。` +
+    `\`codiel-state stop --slug ${st.runId} --reason migrate\` で止めてから、\`/codiel:run ${st.intent}\` で同じ intent の新しい try を始める。`
   )
+}
+
+// .codiel を持つディレクトリの .codiel/config.json から testsDir を読む(設計書 §6.13.4)。
+// ファイルかキーが無ければ docs/tests を返す。JSON として読めない・オブジェクトでない・
+// testsDir が文字列でない・空文字列・絶対パス・`..` のセグメントを含む、のいずれかは例外を投げる。
+// 値は `./` と末尾の `/` を落とした repoRoot 相対のパスにして返す。未知のキーは無視する。
+export function readCodielConfig(codielRoot: string): { testsDir: string } {
+  const file = path.join(codielRoot, ".codiel", "config.json")
+  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR }
+  let cfg: unknown
+  try {
+    cfg = JSON.parse(fs.readFileSync(file, "utf8"))
+  } catch {
+    throw new Error(`${file} を JSON として読めません`)
+  }
+  if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
+    throw new Error(`${file} は JSON のオブジェクトにしてください`)
+  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR }
+  const v = (cfg as { testsDir: unknown }).testsDir
+  if (typeof v !== "string") throw new Error("testsDir は文字列にしてください")
+  if (v === "") throw new Error("testsDir に空文字列は指定できません")
+  if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
+    throw new Error(`testsDir には repoRoot 相対のパスを書いてください: ${v}`)
+  if (v.split(/[/\\]/).includes(".."))
+    throw new Error(`testsDir に .. のセグメントは使えません: ${v}`)
+  return { testsDir: normalizeRel(v) }
 }
 
 function parseArgs(argv: string[]): {
@@ -227,6 +356,119 @@ function parseArgs(argv: string[]): {
 // 候補 ID の照合に使う。領域名に正規表現の特殊文字が来ても安全に扱う
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+// glob の中括弧を展開する(設計書 §6.6.2 の重なりの判定 1)。入れ子も展開し、
+// 閉じていない中括弧は展開せずに残す。
+export function expandBraces(glob: string): string[] {
+  const open = glob.indexOf("{")
+  if (open === -1) return [glob]
+  const cuts: number[] = []
+  let depth = 0
+  for (let i = open; i < glob.length; i++) {
+    const c = glob[i]
+    if (c === "{") depth++
+    else if (c === "," && depth === 1) cuts.push(i)
+    else if (c === "}" && --depth === 0) {
+      const head = glob.slice(0, open)
+      const tail = glob.slice(i + 1)
+      const alts: string[] = []
+      let from = open + 1
+      for (const cut of [...cuts, i]) {
+        alts.push(glob.slice(from, cut))
+        from = cut + 1
+      }
+      return alts.flatMap((alt) => expandBraces(head + alt + tail))
+    }
+  }
+  return [glob]
+}
+
+// ワイルドカードを含む最初のセグメントより前を固定部とする(判定 2)。
+// 展開後に残る `{` は閉じていない中括弧なので、保守的にワイルドカードと同じに扱う。
+function fixedSegments(glob: string): string[] {
+  const segs = glob.split("/").filter((s) => s !== "" && s !== ".")
+  const i = segs.findIndex((s) => /[*?[{]/.test(s))
+  return i === -1 ? segs : segs.slice(0, i)
+}
+
+// 2 つの glob が重なりうるか(判定 3・4)。固定部をセグメント単位で先頭から比べ、
+// 短いほうが長いほうの先頭に一致すれば重なりうるとみなす。固定部が空なら常に重なる。
+export function globsOverlap(a: string, b: string): boolean {
+  for (const x of expandBraces(a).map(fixedSegments))
+    for (const y of expandBraces(b).map(fixedSegments)) {
+      const n = Math.min(x.length, y.length)
+      if (x.slice(0, n).every((s, i) => s === y[i])) return true
+    }
+  return false
+}
+
+function touchesLockfile(files: string[]): boolean {
+  return files
+    .flatMap(expandBraces)
+    .some((f) => LOCKFILES.has(f.split("/").pop() ?? ""))
+}
+
+// implement.steps から実行の順序を決める(設計書 §6.6.2)。dev-plan の順(state のキーの順)に
+// 貪欲に詰め、前提がすべて前のグループに入ったステップだけを次のグループの候補にする。
+// 候補の先頭が lockfile を触るなら、そのステップだけの serial グループにする。
+// それ以外は、lockfile を触らず、触るファイルが重ならない候補を 4 件まで parallel グループに入れる。
+// 循環依存・未登録の前提・最終ステップを前提にする通常のステップは例外を投げる。
+export function planWaves(steps: Record<string, StepState>): {
+  groups: WaveGroup[]
+  final: string[]
+} {
+  const ids = Object.keys(steps)
+  for (const id of ids)
+    for (const d of steps[id].deps) {
+      if (!(d in steps))
+        throw new Error(
+          `ステップ ${id} の前提ステップ ${d} は登録されていません`
+        )
+      if (steps[d].final && !steps[id].final)
+        throw new Error(
+          `ステップ ${id} は最終ステップ ${d} を前提にできません(最終ステップは全グループの後に実行する)`
+        )
+    }
+  const placed = new Set<string>()
+  const readyOf = (rest: string[]): string[] => {
+    const ready = rest.filter((id) =>
+      steps[id].deps.every((d) => placed.has(d))
+    )
+    if (ready.length === 0)
+      throw new Error(`循環依存があります: ${rest.join(", ")}`)
+    return ready
+  }
+  const groups: WaveGroup[] = []
+  let rest = ids.filter((id) => !steps[id].final)
+  while (rest.length > 0) {
+    const ready = readyOf(rest)
+    const group: WaveGroup = touchesLockfile(steps[ready[0]].files)
+      ? { steps: [ready[0]], mode: "serial" }
+      : { steps: [], mode: "parallel" }
+    if (group.mode === "parallel")
+      for (const id of ready) {
+        if (group.steps.length === PARALLEL_MAX) break
+        const { files } = steps[id]
+        if (touchesLockfile(files)) continue
+        const clash = group.steps.some((m) =>
+          steps[m].files.some((a) => files.some((b) => globsOverlap(a, b)))
+        )
+        if (!clash) group.steps.push(id)
+      }
+    for (const id of group.steps) placed.add(id)
+    rest = rest.filter((id) => !placed.has(id))
+    groups.push(group)
+  }
+  const final: string[] = []
+  let finals = ids.filter((id) => steps[id].final)
+  while (finals.length > 0) {
+    const id = readyOf(finals)[0]
+    final.push(id)
+    placed.add(id)
+    finals = finals.filter((f) => f !== id)
+  }
+  return { groups, final }
 }
 
 // 値域の決まったフラグを読む。省略も値域の外も失敗にする。
@@ -258,6 +500,60 @@ function imageUpload(
     ghAttach: github && v.includes("gh-attach"),
     chrome: github && v.includes("chrome")
   }
+}
+
+// JSON の配列で渡すフラグを読む。glob に `{a,b}` のカンマが入るので区切り文字では受けない。
+function jsonList(
+  flags: Record<string, string>,
+  name: string,
+  required: boolean
+): string[] {
+  const raw = flags[name]
+  if (raw === undefined) {
+    if (required) fail(`--${name} が必要です`)
+    return []
+  }
+  let v: unknown = null
+  try {
+    v = JSON.parse(raw)
+  } catch {
+    fail(`--${name} は JSON の配列で渡してください: ${raw}`)
+  }
+  if (!Array.isArray(v) || !v.every((s) => typeof s === "string" && s !== ""))
+    fail(`--${name} は空でない文字列の JSON 配列で渡してください: ${raw}`)
+  return v as string[]
+}
+
+function stepKind(flags: Record<string, string>): StepKind {
+  return "kind" in flags ? oneOf(flags, "kind", STEP_KINDS) : "step"
+}
+
+// kind の表を返す。無ければ空で作る
+function stepTable(st: RunState, kind: StepKind): Record<string, StepState> {
+  if (kind === "test-code") {
+    st.testCode ??= { units: {} }
+    return st.testCode.units
+  }
+  if (kind === "test-loop") {
+    st.testLoop ??= { units: {} }
+    return st.testLoop.units
+  }
+  st.implement ??= { steps: {} }
+  return st.implement.steps
+}
+
+// 仕様のディレクトリの ID の形を検査する(設計書 §6.13.3)
+function isSpecDirId(id: string): boolean {
+  return (
+    SPEC_ID_RE.test(id) &&
+    !/[:\\]/.test(id) &&
+    id.split("/").every((s) => s !== "" && s !== "." && s !== "..")
+  )
+}
+
+// repoRoot 相対のパスを比べられるように、`./` と末尾の `/` を落とす
+function normalizeRel(p: string): string {
+  return path.posix.normalize(p.replaceAll("\\", "/")).replace(/\/+$/, "")
 }
 
 function newState(
@@ -302,20 +598,21 @@ function newState(
   }
 }
 
-// --slug の run の最新 try を読む。v1 の run は allowV1(get と stop、awaiting_outcome への
-// record-outcome、completed / rejected の v1 の run への record-outcome --outcome incident)
-// のときだけ返し、ほかのコマンドでは §6.2.4 の文言を出して失敗する(決定 63)。
+// --slug の run の最新 try を読む。isLegacy の run(v1 と M4 より前の state)は allowLegacy
+// (get と stop、awaiting_outcome への record-outcome、completed / rejected の run への
+// record-outcome --outcome incident)のときだけ返し、ほかのコマンドでは §6.2.4・§6.6 の
+// 文言を出して失敗する(決定 63)。
 function loadRun(
   root: string,
   flags: Record<string, string>,
-  allowV1 = false
+  allowLegacy = false
 ): LatestTry {
   const slug = flags.slug
   if (!slug) fail("--slug が必要です")
   if (!SLUG_RE.test(slug)) fail(`不正な --slug: ${slug}`)
   const latest = latestTry(root, slug) as LatestTry
   if (!latest) fail(`run が存在しません: ${slug}`)
-  if (latest.state.version !== 2 && !allowV1) fail(v1Message(latest.state))
+  if (isLegacy(latest.state) && !allowLegacy) fail(legacyMessage(latest.state))
   return latest
 }
 
@@ -362,7 +659,9 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const latest = latestTry(root, slug)
     if (latest && !TERMINAL.has(latest.state.status))
       fail(
-        `未完了の try があります: ${latest.statePath}(status: ${latest.state.status})。resume するか stop してください`
+        isLegacy(latest.state)
+          ? legacyMessage(latest.state)
+          : `未完了の try があります: ${latest.statePath}(status: ${latest.state.status})。resume するか stop してください`
       )
     const tryN = latest ? latest.tryN + 1 : 1
     const dir = path.join(runDir(root, slug), `try-${tryN}`)
@@ -389,11 +688,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       for (const { statePath, state } of latestTries(root)) {
         if (["completed", "rejected", "stopped"].includes(state.status))
           continue
-        // v1 の awaiting_outcome は outcome の自動同期で終端にできるので、文言を出さずに
-        // version 1 の state のまま返す(設計書 決定 63)。
-        if (state.version === 2 || state.status === "awaiting_outcome")
+        // v1 と M4 より前の state の awaiting_outcome は outcome の自動同期で終端にできるので、
+        // 文言を出さずに読んだ state のまま返す(設計書 決定 63・§6.6)。
+        if (!isLegacy(state) || state.status === "awaiting_outcome")
           runs.push({ statePath, state })
-        else process.stderr.write(`${v1Message(state)}\n`)
+        else process.stderr.write(`${legacyMessage(state)}\n`)
       }
       return ok({ runs })
     }
@@ -664,14 +963,14 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const outcome = flags.outcome
     if (!["approved", "rejected", "incident"].includes(outcome))
       fail(`不正な outcome: ${outcome}`)
-    // v1 の run は awaiting_outcome の run と、completed / rejected の run への
-    // incident だけを受け付け、version 1 のまま書き戻す(設計書 決定 63・§6.2.4)
-    if (latest.state.version !== 2) {
+    // v1 と M4 より前の state の run は、awaiting_outcome の run と、completed / rejected の
+    // run への incident だけを受け付け、読んだ形のまま書き戻す(設計書 決定 63・§6.2.4・§6.6)
+    if (isLegacy(latest.state)) {
       const st = latest.state.status
       const terminalIncident =
         outcome === "incident" && (st === "completed" || st === "rejected")
       if (st !== "awaiting_outcome" && !terminalIncident)
-        fail(v1Message(latest.state))
+        fail(legacyMessage(latest.state))
     }
     if (
       !["awaiting_outcome", "completed", "rejected"].includes(
@@ -712,6 +1011,182 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       }
     }
     return ok({ candidateId: `${domain}-${max + 1}` })
+  }
+
+  // 並列実装のステップ(--kind step)と、test-code・test-loop の仕様のディレクトリ
+  // (--kind test-code・test-loop)を登録する(計画書 §6.2)。pending のものは、dev-plan の
+  // 差し戻し後の登録し直しで上書きする。testLoop.units は、前の巡で merged になった要素も
+  // 次の巡の修正のために登録し直せる(設計書 §6.7)。キーの位置は変わらないので k も変わらない。
+  if (cmd === "step-add") {
+    const kind = stepKind(flags)
+    const isStep = kind === "step"
+    const id = flags.id
+    if (!id) fail("--id が必要です")
+    if (isStep && !SLUG_RE.test(id)) fail(`不正な --id: ${id}`)
+    if (!isStep && !isSpecDirId(id))
+      fail(
+        `不正な --id: ${id}。${kind} には units/・e2e/frontend/・e2e/backend/・e2e/cli/ で始まる仕様のディレクトリの ID を渡してください`
+      )
+    if (!isStep && ("deps" in flags || bools.has("final")))
+      fail(`${kind} には --deps と --final を指定できません`)
+    const files = jsonList(flags, "files", isStep)
+    if (isStep && files.length === 0)
+      fail("--files には触るファイルを 1 つ以上渡してください")
+    for (const f of files)
+      if (f.startsWith("/") || f.split("/").includes(".."))
+        fail(`--files には repoRoot 相対の glob を渡してください: ${f}`)
+    const deps = jsonList(flags, "deps", isStep)
+    const final = bools.has("final")
+    let domain: string | null = null
+    if ("domain" in flags) {
+      domain = (flags.domain ?? "").trim()
+      if (domain === "") fail("--domain に空文字列は指定できません")
+    }
+    const latest = loadRun(root, flags)
+    if (TERMINAL.has(latest.state.status))
+      fail(`すでに終端状態です: ${latest.state.status}`)
+    const table = stepTable(latest.state, kind)
+    const prev = table[id]
+    const reAddable =
+      prev?.status === "pending" ||
+      (kind === "test-loop" && prev?.status === "merged")
+    if (prev && !reAddable)
+      fail(`${kind} ${id} は ${prev.status} のため登録し直せません`)
+    table[id] = {
+      status: "pending",
+      files,
+      deps,
+      final,
+      group: null,
+      worktree: null,
+      branch: null,
+      commits: { base: null, head: null },
+      attempts: 0,
+      domain
+    }
+    writeState(latest.statePath, latest.state)
+    return ok({ statePath: latest.statePath, state: latest.state })
+  }
+
+  // ステップと仕様のディレクトリの状態を、計画書 §6.2 の表の遷移だけで進める
+  if (cmd === "step-update") {
+    const kind = stepKind(flags)
+    const id = flags.id
+    if (!id) fail("--id が必要です")
+    const to = oneOf(flags, "status", STEP_STATUSES)
+    const latest = loadRun(root, flags)
+    const st = latest.state
+    if (TERMINAL.has(st.status)) fail(`すでに終端状態です: ${st.status}`)
+    const step = stepTable(st, kind)[id]
+    if (!step) fail(`${kind} ${id} は登録されていません`)
+    const accepts = STEP_TRANSITIONS[`${step.status}>${to}`]
+    if (!accepts)
+      fail(`${kind} ${id} は ${step.status} から ${to} へ遷移できません`)
+    const record: Record<string, string> = {}
+    for (const name of STEP_RECORD_FLAGS) {
+      if (!(name in flags)) continue
+      if (!accepts.includes(name))
+        fail(
+          `--${name} は ${step.status} から ${to} への遷移では指定できません`
+        )
+      if (!flags[name]) fail(`--${name} に値が必要です`)
+      record[name] = flags[name]
+    }
+    if (record.worktree && path.isAbsolute(record.worktree))
+      fail(
+        `--worktree には repoRoot 相対のパスを渡してください: ${record.worktree}`
+      )
+    // worktree のパスは run の中で一意にする(設計書 §6.6.3)。hook は worktree の記録との
+    // 一致で要素を引くので、3 つの表のほかの要素がすでに記録したパスを拒否する。
+    if (record.worktree) {
+      const wt = normalizeRel(record.worktree)
+      const tables = {
+        step: st.implement?.steps,
+        "test-code": st.testCode?.units,
+        "test-loop": st.testLoop?.units
+      }
+      for (const [k, table] of Object.entries(tables))
+        for (const [otherId, other] of Object.entries(table ?? {}))
+          if (
+            other !== step &&
+            other.worktree !== null &&
+            normalizeRel(other.worktree) === wt
+          )
+            fail(
+              `--worktree ${record.worktree} は ${k} ${otherId} がすでに記録しています`
+            )
+    }
+    // 修正ラウンドは phases[phase].attempts(record-attempt)と別に数える
+    if (step.status === "reviewing" && to === "running") step.attempts++
+    // やり直しの前に worktree とブランチを消したので、記録も消す
+    if (step.status === "failed" && to === "pending") {
+      step.worktree = null
+      step.branch = null
+      step.commits = { base: null, head: null }
+    }
+    if (record.worktree) step.worktree = record.worktree
+    if (record.branch) step.branch = record.branch
+    if (record.base) step.commits.base = record.base
+    if (record.head) step.commits.head = record.head
+    step.status = to
+    writeState(latest.statePath, st)
+    return ok({ statePath: latest.statePath, state: st })
+  }
+
+  // implement.steps だけを対象に実行の順序を出し、各ステップの group を記録する
+  // (設計書 §6.6.2)。testCode.units と testLoop.units は対象外(仕様のディレクトリの
+  // 同時実行は spec.md の parallel で決まる)。
+  if (cmd === "waves") {
+    const latest = loadRun(root, flags)
+    if (TERMINAL.has(latest.state.status))
+      fail(`すでに終端状態です: ${latest.state.status}`)
+    const steps = latest.state.implement?.steps ?? {}
+    let plan: ReturnType<typeof planWaves> = { groups: [], final: [] }
+    try {
+      plan = planWaves(steps)
+    } catch (e) {
+      fail((e as Error).message)
+    }
+    plan.groups.forEach((g, index) => {
+      for (const id of g.steps) steps[id].group = { index, mode: g.mode }
+    })
+    plan.final.forEach((id, index) => {
+      steps[id].group = { index, mode: "final" }
+    })
+    if (latest.state.implement) writeState(latest.statePath, latest.state)
+    return ok(plan)
+  }
+
+  // .codiel/config.json の testsDir を返す(設計書 §6.13.4)。run を要しない
+  if (cmd === "config") {
+    try {
+      return ok(readCodielConfig(root))
+    } catch (e) {
+      fail((e as Error).message)
+    }
+  }
+
+  // fix-loop でテストの保護を外す(設計書 §6.13.6)。所見がテストに向くと確かめたときだけ使う
+  if (cmd === "set-test-edit") {
+    const latest = loadRun(root, flags)
+    const st = latest.state
+    if (TERMINAL.has(st.status)) fail(`すでに終端状態です: ${st.status}`)
+    const fixLoop = st.phases["fix-loop"].status
+    if (st.phase !== "fix-loop" || fixLoop !== "in_progress")
+      fail(
+        `set-test-edit は fix-loop が in_progress のときだけ使えます(phase: ${st.phase}、fix-loop: ${fixLoop})`
+      )
+    st.testEdit = true
+    writeState(latest.statePath, st)
+    return ok({ statePath: latest.statePath, state: st })
+  }
+
+  // clear-test-edit は状態を問わず通す。保護を外したまま残さないため(clear-domain と同じ)
+  if (cmd === "clear-test-edit") {
+    const latest = loadRun(root, flags)
+    delete latest.state.testEdit
+    writeState(latest.statePath, latest.state)
+    return ok({ statePath: latest.statePath, state: latest.state })
   }
 
   fail(`不明なコマンド: ${cmd}`)

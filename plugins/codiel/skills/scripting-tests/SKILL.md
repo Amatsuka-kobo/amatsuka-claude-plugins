@@ -12,8 +12,15 @@ test-loop フェーズの (A) スクリプト安定化ループを担う委譲�
 実行可能なテストスクリプトに変換し、`.codiel/specs/<unit-id>/scripts/` に配置・実行する。
 
 三層構造(`spec.md` → `cases.md` → `scripts/`、`docs/DESIGN.md` §4)のうち本スキルが
-担当するのは `scripts/` のみ。`spec.md` と `cases.md` は test-designer の職掌であり、tester は
-触らない。
+担当するのは `scripts/` のみ。`spec.md` と `cases.md` は test-spec フェーズの委譲
+(`writing-test-specs` に従って書く)が担当する範囲であり、tester は触らない。
+
+### 並列実行
+
+Step A のスクリプト作成は unit ごとに worktree(`.codiel/worktrees/<slug>/unit-<unit-id>`)を
+分けて行う。同時に実行するのは、対象 unit の `spec.md` の frontmatter に `parallel: true` を
+持つ unit だけであり、持たない unit は直列に実行する。ポート・データベースなど共有資源を持つ
+unit を守るためである。同時実行数の上限は 4 とする。
 
 ### 2 種類の失敗を区別する(最重要)
 
@@ -110,6 +117,6 @@ NG を OK にするための期待値の緩和(アサーションの書き換え
 
 | 思考 | 現実 |
 |---|---|
-| 「この NG はテストが厳しすぎるだけ」 | 期待結果は test-designer が intent の受け入れ基準から導出したものであり、tester が「厳しすぎる」と判断する権限はない。厳しすぎると思うなら NG のまま報告し、implementer または orchestrator の判断に委ねる。 |
+| 「この NG はテストが厳しすぎるだけ」 | 期待結果は test-spec フェーズの委譲が intent の受け入れ基準から導出したものであり、tester が「厳しすぎる」と判断する権限はない。厳しすぎると思うなら NG のまま報告し、implementer または orchestrator の判断に委ねる。 |
 | 「アサーションを緩めれば安定する」 | 「安定」は判定が機械的に出ることを指すのであって、判定結果を都合よく変えることではない。緩めた結果 OK になったケースは、バグを見逃した偽陽性にすぎない。 |
 | 「sleep を増やせばフレーキーさが直る」 | 固定時間の sleep は環境差でまた壊れる場当たり策であり、根本原因(待機対象の状態が何かを特定していない)を放置する。決定論的な待機条件に置き換えるのが唯一の恒久対策。 |

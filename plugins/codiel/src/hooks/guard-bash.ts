@@ -2,7 +2,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { findActiveRun } from "../codiel-state.js"
-import { emit, findProjectRoot, pass, readStdin } from "./lib.js"
+import { emit, findMainRoot, pass, readStdin } from "./lib.js"
 
 interface GitInvocation {
   tokens: string[]
@@ -714,7 +714,8 @@ try {
     if (triggered) emit("deny", `禁止コマンド: ${why}`)
 
   const cwd = input.cwd ?? process.cwd()
-  const root = findProjectRoot(cwd)
+  // run はメインの作業ツリーで探す。cwd が worktree の中でも同じ run に届く(設計書 §6.8 の (a))
+  const root = findMainRoot(cwd)
   const run = findActiveRun(root)
   // findActiveRun は active / awaiting_human の run しか返さない。
   // 人間の判断待ち(awaiting_human)中こそ PR 作成や push を許してはならないため、

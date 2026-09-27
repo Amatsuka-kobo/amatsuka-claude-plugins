@@ -31,6 +31,26 @@ RED を省略しない。
 3. 既存テストも無ければ `package.json` の `devDependencies` から推定する。
    推定で決めたときは、フレームワーク名と推定の根拠を完了報告に書く。
 
+## worktree 内での作業
+
+`implement.steps` の `parallel` グループのステップは、依頼文が渡す brief ファイル
+(`.codiel/runs/<slug>/try-<n>/steps/step-<k>/brief.md`)の絶対パスを Read し、実行モード・
+ドメインマップ・担当タグ・担当範囲・worktree の絶対パス・触るファイル・前提ステップ・
+環境準備のコマンドを、そこに書かれた値として確認する。`serial` グループのステップと、
+方式 b の最終ステップは worktree を作らず、run ブランチ上で直接作業する。
+
+worktree で作業するステップは、実装に入る前に依存をインストールする。コマンドは brief の
+`## 環境準備` の値を使う。「なし」のときは、その worktree の lockfile の種類から
+`writing-dev-plans` が定める既定のコマンドを選ぶ。対応する lockfile が無ければインストールを
+省く。
+
+ビルド生成物は dev-plan の `## 生成物` の方式に従う。方式 a では生成コマンドを実行し、
+生成物をそのステップのソースの変更と同じコミットに入れる。方式 b では生成物を作らず、
+コミットにも含めない(全 wave の後の最終ステップがまとめて生成する)。
+
+完了報告は、オーケストレーターへの返答に加え、brief ファイルと同じディレクトリに
+`report.md` として書く。state の更新はオーケストレーターが行うので、`codiel-state` は呼ばない。
+
 ## チェックリスト
 
 1. `dev-plan.md` を読み、実行モードに応じて対象ステップを抽出する。`mapped` ではディスパッチプロンプトで
@@ -80,8 +100,9 @@ codiel(fix-loop): <修正内容> (<slug> try-<n>)               # fix-loop の�
 <HARD-GATE>
 - `dev-plan.md` に記載のないファイルを変更しない。担当ステップの遂行に他ファイルの変更が
   必要だと判明した場合、無断で広げず、実施済み範囲までを報告し差し戻す。
-- `.codiel/specs/**`(spec.md / cases.md / scripts/)には一切書き込まない。テストシナリオ・
-  期待値・テストスクリプトは test-designer / tester の職掌であり、implementer の職掌ではない。
+- `.codiel/specs/**`(spec.md / cases.md / scripts/)には一切書き込まない。テストシナリオと
+  期待値は test-spec フェーズの委譲(`writing-test-specs` に従って書く)が定め、テストスクリプトは
+  test-loop の委譲(`scripting-tests` に従って書く)が作る。どちらも implementer の職掌ではない。
 - テストを skip 化・削除して緑にしない。RED で書いた(あるいは既存の)テストは通すか、
   正当な理由があれば実装ではなくテスト自体の妥当性を報告するかのいずれかであり、
   握りつぶして通過を装うことは捏造である。

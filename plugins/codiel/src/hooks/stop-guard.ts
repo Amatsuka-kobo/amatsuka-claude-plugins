@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { findActiveRun, STAGES } from "../codiel-state.js"
-import { findProjectRoot, readStdin } from "./lib.js"
+import { findMainRoot, readStdin } from "./lib.js"
 
 const input = await readStdin()
 if (!input.stop_hook_active) {
-  const run = findActiveRun(findProjectRoot(input.cwd ?? process.cwd()))
+  // run はメインの作業ツリーで探す。cwd が worktree の中でも同じ run に届く(設計書 §6.8 の (a))
+  const run = findActiveRun(findMainRoot(input.cwd ?? process.cwd()))
   if (run && run.state.status === "active") {
     const { runId, try: tryN, phase } = run.state
     const header = `Codiel run ${runId} try-${tryN} が未完了です(phase: ${phase})。`

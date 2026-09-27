@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 import fs from "node:fs"
 import path from "node:path"
-import { findActiveRun } from "../codiel-state.js"
+import {
+  findActiveRun,
+  type RunState,
+  readCodielConfig,
+  type StepState
+} from "../codiel-state.js"
 import {
   emit,
   findDocRoot,
-  findProjectRoot,
+  findMainRoot,
   findRepoRoot,
   globToRegExp,
   pass,
@@ -22,10 +27,21 @@ const DOC_PHASES = new Set<string | null>([
   "intent-sync"
 ])
 const CODE_PHASES = new Set<string | null>([
+  "test-code",
   "implement",
   "test-loop",
   "fix-loop"
 ])
+// テストの保護を当てるフェーズ(設計書 §6.13.6)。test-code はテストを書くフェーズなので当てない。
+const TEST_GUARD_PHASES = new Set<string | null>([
+  "implement",
+  "test-loop",
+  "fix-loop"
+])
+
+// codiel の worktree(`.codiel/worktrees/<slug>/<名前>`。設計書 §6.6.3)の中のパス。
+// 1 つ目のグループは worktree のルートの相対パス、2 つ目はその worktree の中の相対パスである。
+const WORKTREE_REL_RE = /^(\.codiel\/worktrees\/[^/]+\/[^/]+)(?:\/(.*))?$/
 
 // §6.8 の docs/intents/** の規則。直下(domains/ を含まない)の *.md と、
 // domains/ 配下とで通すフェーズが異なるため、2 本の正規表現に分ける。
@@ -85,6 +101,82 @@ function withDomainWarnings(reason: string, warnings: string[]): string {
   return `${reason}\n[ドメインマップの警告] ${warnings.join(" / ")}`
 }
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
+// repoRoot 相対のパスを比べられるように、`./` と末尾の `/` を落とす。
+// codiel-state の step-update が worktree の一意性を検査するときと同じ正規化である。
+function normalizeRel(p: string): string {
+  return path.posix.normalize(toPosix(p)).replace(/\/+$/, "")
+}
+
+// testsDir の配下か。testsDir が `.` ならリポジトリ全体を指す。
+function underTestsDir(repoRel: string, testsDir: string): boolean {
+  return testsDir === "." || repoRel.startsWith(`${testsDir}/`)
+}
+
+// spec.md の frontmatter(先頭の `---` で囲む部分)の tests の値を返す(設計書 §6.13.5)。
+// 値はブロックの列(`- <パス>`)か、1 行の列(`[a, b]`)で書かれる。
+function frontmatterTests(text: string): string[] {
+  const lines = text.split(/\r?\n/)
+  if (lines[0]?.trim() !== "---") return []
+  const unquote = (s: string) => s.trim().replace(/^(["'])(.*)\1$/, "$2")
+  const tests: string[] = []
+  let inTests = false
+  for (const line of lines.slice(1)) {
+    if (line.trim() === "---") break
+    const item = /^\s*-\s+(.+)$/.exec(line)
+    if (inTests && (item || line.trim() === "")) {
+      if (item) tests.push(unquote(item[1]))
+      continue
+    }
+    const key = /^tests:\s*(.*)$/.exec(line)
+    inTests = key !== null
+    const flow = key && /^\[(.*)\]$/.exec(key[1].trim())
+    if (flow) tests.push(...flow[1].split(",").map(unquote).filter(Boolean))
+  }
+  return tests
+}
+
+// メインの作業ツリーの `<testsDir>/**/spec.md` の tests に載ったパス(repoRoot 相対)を集める
+// (設計書 §6.13.6)。worktree の中の spec.md は読まない。記録は run ブランチの HEAD と同じである。
+// シンボリックリンクのディレクトリは辿らない(循環を避ける)。
+function recordedTests(testsRoot: string): Set<string> {
+  const found = new Set<string>()
+  const walk = (dir: string): void => {
+    if (!fs.existsSync(dir)) return
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) walk(p)
+      else if (e.name === "spec.md")
+        for (const t of frontmatterTests(fs.readFileSync(p, "utf8")))
+          found.add(normalizeRel(t))
+    }
+  }
+  walk(testsRoot)
+  return found
+}
+
+// worktree の記録が wtRel と一致する要素を 3 つの表から引く(設計書 §6.8 の (c))。
+// worktree の名前から ID を読み取らない。
+function worktreeElements(
+  st: RunState,
+  wtRel: string
+): { label: string; step: StepState }[] {
+  const tables: [string, Record<string, StepState> | undefined][] = [
+    ["implement.steps", st.implement?.steps],
+    ["testCode.units", st.testCode?.units],
+    ["testLoop.units", st.testLoop?.units]
+  ]
+  const hits: { label: string; step: StepState }[] = []
+  for (const [name, table] of tables)
+    for (const [id, step] of Object.entries(table ?? {}))
+      if (step.worktree && normalizeRel(step.worktree) === wtRel)
+        hits.push({ label: `${name}[${id}]`, step })
+  return hits
+}
+
 try {
   const input = await readStdin()
   const cwd = input.cwd ?? process.cwd()
@@ -104,9 +196,10 @@ try {
   // 基準の異なる 3 つの相対パスを持つ。同じ「rel」で複数を指すと取り違えが起きる。
   //
   // codielRel = codielRoot(`.codiel` を持つ最も近い祖先)基準。判定対象は
-  // **ハーネス自身の運用資産の位置**(`.codiel/` 配下か、specs の spec/cases か)。
-  // repoRel = repoRoot(git ルート)基準。判定対象は **intent 文書の位置**
-  // (`state.intent` との一致と `docs/intents/**`。設計書 §6.2.1・§6.3.1・§6.8)。
+  // **ハーネス自身の運用資産の位置**(`.codiel/` 配下か)。
+  // repoRel = repoRoot(git ルート)基準。判定対象は **intent 文書とテストの位置**
+  // (`state.intent` との一致と `docs/intents/**`、テストの保護と `<testsDir>/`。
+  // 設計書 §6.2.1・§6.3.1・§6.8・§6.13.6)。
   // docRel  = docRoot(契約 §3 規則 1)基準。判定対象は **ドメイン境界の glob**。
   //
   // 契約 §3 は docRoot と codielRoot が異なる構成(例: repo/.codiel と
@@ -121,18 +214,29 @@ try {
   // repoRel と docRel は **実体パス基準**(realpathOrAncestor を通す)。基準の findRepoRoot と
   // findDocRoot は、git の出力と契約 §3 規則 1 の細目に従って実体パスを返す。
   // 「一貫性のため」どれか 1 つに揃えると、揃えた側の基準関数と食い違って壊れる。
-  const codielRoot = findProjectRoot(cwd)
-  const codielRel = path.relative(codielRoot, abs).replaceAll("\\", "/")
-
-  const run = findActiveRun(codielRoot)
+  //
+  // 書き込み先が worktree の中なら、3 つとも worktree の中へ写した基準で取る(下記)。
+  // run は常にメインの作業ツリーで探す(設計書 §6.8 の (a))。cwd が worktree の中でも
+  // findMainRoot がメインのルートを返す。
+  const mainRoot = findMainRoot(cwd)
+  const run = findActiveRun(mainRoot)
   if (run?.state.status !== "active") pass()
 
   const phase = run.state.phase
-  // repoRoot は run の置き場(codielRoot)から解決する。git の子プロセスを起動するので、
+  // repoRoot は run の置き場(メインのルート)から解決する。git の子プロセスを起動するので、
   // active run があると分かってから求める。
-  const repoRel = path
-    .relative(findRepoRoot(codielRoot), realpathOrAncestor(abs))
-    .replaceAll("\\", "/")
+  const repoRoot = findRepoRoot(mainRoot)
+  const mainReal = realpathOrAncestor(mainRoot)
+  const absReal = realpathOrAncestor(abs)
+
+  // 書き込み先が worktree の中なら、その worktree のルートを基準に判定する(設計書 §6.8 の (b))。
+  // codielRel と repoRel は worktreeRoot 基準の相対パスになる。メインのルート基準のままだと、
+  // worktree の中のすべての書き込みが `.codiel/` 配下と判定されて免除される。
+  // worktree の位置は実体パスどうしで見る(findMainRoot が git から得たルートは実体パスである)。
+  const wt = WORKTREE_REL_RE.exec(toPosix(path.relative(mainReal, absReal)))
+  const worktreeRoot = wt ? path.join(mainReal, wt[1]) : null
+  const codielRel = wt ? (wt[2] ?? "") : toPosix(path.relative(mainRoot, abs))
+  const repoRel = wt ? (wt[2] ?? "") : toPosix(path.relative(repoRoot, absReal))
 
   // §6.8 の判定順序: まず state.intent のファイルかを見る。当たればすべての
   // フェーズで通す(run 途中の原文追記、review/finalize での派生文の反映)。
@@ -159,30 +263,75 @@ try {
   if (DOC_PHASES.has(phase)) {
     if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
       pass()
+    // test-spec が testsDir を docs/ の外に置いた仕様を書けるように、<testsDir>/ も通す
+    // (設計書 §6.13.6)。設定が不正なときはこの規則だけを外す(設計書 §6.13.4)。
+    let testsDir: string | null
+    try {
+      testsDir = readCodielConfig(mainRoot).testsDir
+    } catch {
+      testsDir = null
+    }
+    if (testsDir !== null && underTestsDir(repoRel, testsDir)) pass()
     emit(
       "ask",
       `文書フェーズ(${phase})中にコード領域 ${codielRel} へ書き込もうとしています`
     )
   }
   if (CODE_PHASES.has(phase)) {
-    if (/^\.codiel\/specs\/.+\/(spec|cases)\.md$/.test(codielRel))
-      emit(
-        "ask",
-        `テスト仕様・期待値(${codielRel})の変更は test-designer の担当です(${phase} 中の変更は改竄の疑い)`
+    // テストの保護(設計書 §6.13.6)。ドメイン境界より先に判定する。
+    // 期待結果(spec.md・cases.md)と記録されたテストは test-spec と test-code が書くもので、
+    // コードを直すフェーズで書き換えると、テストを実装に合わせる改竄になりうる。
+    // fix-loop だけは、所見がテストに向くときに set-test-edit で保護を外せる。
+    if (TEST_GUARD_PHASES.has(phase)) {
+      let testsDir: string
+      try {
+        testsDir = readCodielConfig(mainRoot).testsDir
+      } catch (e) {
+        // 保護の対象を決められないので、このフェーズの書き込みをすべて止める(フェイルクローズド)
+        emit(
+          "ask",
+          `.codiel/config.json が不正なため、${phase} 中の書き込みがテストの保護に当たるか判定できません(${(e as Error).message})`
+        )
+      }
+      const testEdit = phase === "fix-loop" && run.state.testEdit === true
+      if (
+        !testEdit &&
+        ((underTestsDir(repoRel, testsDir) &&
+          /(^|\/)(spec|cases)\.md$/.test(repoRel)) ||
+          recordedTests(path.join(repoRoot, testsDir)).has(repoRel))
       )
-    // ドメイン境界(設計書 §16-5 の配線)。ドメイン別 implementer / reviewer へ委譲中だけ
+        emit(
+          "ask",
+          `テスト(${repoRel})の変更は test-spec と test-code フェーズの担当です(${phase} 中の変更は改竄の疑い)`
+        )
+    }
+    // ドメイン境界(設計書 §16-5 の配線)。ドメイン別の実装・レビューへ委譲中だけ
     // state.json の domain が入る。値が無ければ(未定義・null)境界を課さない。
     // deny ではなく ask にするのは、境界の誤りは state.json の改竄と違って人間が判断して
     // 通せる余地があり、ドメインマップの記述漏れで正当な書き込みを止めたくないためである。
     // .codiel/ 配下はドメイン境界の対象外。ドメインマップは「どのコードがどの関心事に
     // 属するか」の写像であり、分類の対象はプロジェクトのソースである。.codiel/ 配下は
-    // ハーネス自身の運用資産(run の状態・テスト仕様・レポート)で、どのドメインにも
+    // ハーネス自身の運用資産(run の状態・報告・設定)で、どのドメインにも
     // 属さない。ドメインマップがこれを縛るのは責務の取り違えである。DOC_PHASES 分岐と
     // 末尾の catch-all は既に同じ免除を持っており、CODE_PHASES だけが例外になっていた。
-    // 免除が無いと、test-loop でスクリプト安定化(domain 非紐付け)と TDD 修正(domain
-    // 紐付け)を往復する際に clear-domain を呼び忘れると、tester の
-    // .codiel/specs/**/scripts/ への正当な書き込みが黙って ask になる。
-    const domain = run.state.domain
+    // 免除が無いと、ドメインに紐付かない委譲(テストの実行など)と紐付く委譲(コードの修正)を
+    // 往復する際に clear-domain を呼び忘れると、`.codiel/runs/` の報告のような
+    // 運用資産への正当な書き込みが黙って ask になる。
+    //
+    // worktree の中への書き込みでは、state.domain(1 値しか持てない)を使わず、worktree の
+    // 記録がこの worktree と一致する要素の domain を使う(設計書 §6.6.6・§6.8 の (c))。
+    let domain = run.state.domain
+    if (worktreeRoot) {
+      const wtRel = normalizeRel(path.relative(repoRoot, worktreeRoot))
+      const hits = worktreeElements(run.state, wtRel)
+      // worktree のパスは run の中で一意のはず(設計書 §6.6.3)。崩れたときの安全網である。
+      if (hits.length >= 2)
+        emit(
+          "ask",
+          `worktree ${wtRel} を記録した要素が ${hits.length} 個あり(${hits.map((h) => h.label).join(", ")})、境界に使うドメインを 1 つに決められません(worktree のパスは run の中で一意のはずです)`
+        )
+      domain = hits[0]?.step.domain ?? null
+    }
     // `.codiel/` 配下かどうかは codielRel で判定する(基準は運用資産の位置)。
     if (domain && !codielRel.startsWith(".codiel/")) {
       // ドメイン境界の照合は **docRoot 基準の docRel** で行う。ドメインマップは
@@ -192,16 +341,27 @@ try {
       // codielRel で照合すると、docRoot ≠ codielRoot の構成で同じ glob を 2 つの基準で
       // 解釈することになり、担当範囲内の書き込みが ask に落ち、docRoot 外のパスが
       // 範囲内として通りうる。
-      const docRoot = findDocRoot(cwd)
+      //
+      // docRoot とドメインマップはメインの作業ツリーで解決する。cwd が worktree の中なら、
+      // メインの作業ツリーの同じ位置に写してから探す。worktree はメインの作業ツリーの中にあるので、
+      // worktree の中から祖先を辿るとメインの metatron.config.json に届いてしまう。
+      const cwdWt = WORKTREE_REL_RE.exec(
+        toPosix(path.relative(mainReal, realpathOrAncestor(cwd)))
+      )
+      const docStart = cwdWt ? path.join(repoRoot, cwdWt[2] ?? "") : cwd
+      const mainDocRoot = findDocRoot(docStart)
+      // worktree の中への書き込みでは、docRoot を worktreeRoot + relative(repoRoot, docRoot) に
+      // 写す(設計書 §6.8 の (b))。docRoot が repoRoot の子(repo/sub)でも同じ位置関係で写る。
+      const docRoot = worktreeRoot
+        ? path.join(worktreeRoot, path.relative(repoRoot, mainDocRoot))
+        : mainDocRoot
       // findDocRoot が開始ディレクトリを実体パス化する以上、相対を取る相手も
       // 実体パスでなければ座標系が割れる。/tmp/link -> /repo のとき論理パスのまま
       // 相対を取ると docRel が `../tmp/link/src/server/a.ts` になり、
       // **担当範囲内の書き込みが範囲外として ask される**。
-      const docRel = path
-        .relative(docRoot, realpathOrAncestor(abs))
-        .replaceAll("\\", "/")
+      const docRel = toPosix(path.relative(docRoot, absReal))
       // 契約 §1「警告は経路を問わず返す」。警告を捨てる readDomains を使わない。
-      const { domains: rawDomains, warnings } = readDomainsResult(cwd)
+      const { domains: rawDomains, warnings } = readDomainsResult(docStart)
       const domains = toDomainMap(rawDomains)
       // ドメイン定義が無い・読めない環境で新たに書き込みを止めるのは配線の目的ではない。
       if (domains) {

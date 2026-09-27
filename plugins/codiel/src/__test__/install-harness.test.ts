@@ -16,12 +16,45 @@ function run(target: string): string {
   return execFileSync("bash", [SCRIPT, target], { encoding: "utf8" })
 }
 
-test(".codiel 配下のディレクトリを作成する", () => {
+test(".codiel/runs と .codiel/reports を作成する", () => {
   const root = tmpProject()
   run(root)
-  for (const d of [".codiel/specs", ".codiel/runs", ".codiel/reports"]) {
+  for (const d of [".codiel/runs", ".codiel/reports"]) {
     expect(fs.existsSync(path.join(root, d)), `${d} がない`).toBeTruthy()
   }
+})
+
+test(".codiel 配下は runs・reports・config.json だけを作る", () => {
+  const root = tmpProject()
+  run(root)
+  expect(fs.readdirSync(path.join(root, ".codiel")).sort()).toEqual([
+    "config.json",
+    "reports",
+    "runs"
+  ])
+})
+
+test(".codiel/config.json が無ければ既定値で作る", () => {
+  const root = tmpProject()
+  run(root)
+  const config = path.join(root, ".codiel/config.json")
+  expect(fs.existsSync(config), ".codiel/config.json がない").toBeTruthy()
+  expect(JSON.parse(fs.readFileSync(config, "utf8"))).toEqual({
+    testsDir: "docs/tests"
+  })
+})
+
+test("既存の .codiel/config.json を変更しない", () => {
+  const root = tmpProject()
+  fs.mkdirSync(path.join(root, ".codiel"), { recursive: true })
+  fs.writeFileSync(
+    path.join(root, ".codiel/config.json"),
+    '{"testsDir":"e2e/tests"}'
+  )
+  run(root)
+  expect(fs.readFileSync(path.join(root, ".codiel/config.json"), "utf8")).toBe(
+    '{"testsDir":"e2e/tests"}'
+  )
 })
 
 test("ARCHITECTURE / CLAUDE.md / raguel.config.yaml は作成しない(initializing-harness スキルが生成する)", () => {
