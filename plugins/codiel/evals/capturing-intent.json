@@ -40,8 +40,8 @@
     "should_trigger": true
   },
   {
-    "query": "`docs/intents/2026-08-16-add-oauth-login.md` が status: approved で保存済みです。ここから issue にして、実行を codiel に渡すか自分でやるかを決めたい。",
-    "should_trigger": false
+    "query": "`docs/intents/2026-08-16-add-oauth-login.md` が承認済みで保存されています。ここから Issue を起票するかどうかと、このまま実装まで進めるか文書だけで一旦止めるかを決めたいです。",
+    "should_trigger": true
   },
   {
     "query": "intent は確定済みで issue も起票しない方針にしました。テスト仕様を承認させてから TDD で実装まで運んでください。ブランチは切ってほしいです。",
@@ -53,7 +53,7 @@
   },
   {
     "query": "issue #57 を取ってきて、要件・受け入れ基準・スコープ・不明点に構造化してください。不明点は握りつぶさず全部挙げて。",
-    "should_trigger": false
+    "should_trigger": true
   },
   {
     "query": "`harness-docs/design/2026-08-20-search-rework.md` に検索基盤の設計書を書きたい。方式の比較と不採用理由まで含めて、章立てから相談させてください。",

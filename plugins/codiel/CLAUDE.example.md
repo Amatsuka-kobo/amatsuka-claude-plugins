@@ -30,7 +30,7 @@ ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で
 ### 7 つの規則
 
 1. **run から渡された前提を使う。GOTCHAS の該当エントリを確認する**
-   すべてのフェーズ(init〜finalize)の作業開始前に、run から渡された前提を使う。
+   すべてのフェーズ(intent〜finalize)の作業開始前に、run から渡された前提を使う。
    これから触るファイル・フェーズに関連する GOTCHAS のエントリを確認してから着手する。
 2. **失敗したら recording-gotchas の基準に従い GOTCHAS に追記する**
    Raguel の STOP、test-loop/fix-loop のループ上限超過、`record_outcome(incident)`、

@@ -1,6 +1,7 @@
 # Codiel 👀🌿
 
-GitHub issue の内容を取得・分析し、設計・開発・PR起票・レビューまでを一気通貫で行うオーケストレーターです。
+ユーザーの要望を聞き取って固定した intent(意図)を起点に、設計・開発・PR起票・レビューまでを
+一気通貫で行うオーケストレーターです。
 
 ## 動作要件
 
@@ -23,38 +24,51 @@ Codiel は単体で完結します。技術スタック・レイヤー構造・�
 読み取るだけです。パスは `metatron.config.json` で変更でき、metatron が無い環境では、失敗の記録は
 run のレポートと完了報告に残り、台帳へは追記されません。
 
-### `/codiel:run <issue番号>`
+### `/codiel:run [<Issue番号> | <intentパス>]`
 
-GitHub Issue #`<issue番号>` を起点に、設計→実装→テスト→PR→レビューまでを自律実行します。
-未完了の run(試行)があれば自動的に再開します。内部では `orchestrating-runs` スキルの手順に従い、
+引数を省略するとユーザーへの聞き取りから、Issue 番号を渡すと Issue の内容を intent の原文の
+入力として、intent 文書のパスを渡すとその内容から、それぞれ run を開始・再開します。未完了の
+run(試行)があれば自動的に再開します。内部では `orchestrating-runs` スキルの手順に従い、
 以下のフェーズを順に進めます(各フェーズは Raguel MCP のゲートを通過して初めて次に進みます)。
 
 ```
-[0] init         Issue を取得・分析しスコープを決定、feature ブランチと run を初期化
-                 ▶ Raguel: evaluate_decision
-[1] discuss      論点リストを基にユーザーとディスカッションし、設計方針・スコープを合意
-                 (合意は discussion.md に記録。Raguel ゲートなし)
-[2] design       設計書 design.md を執筆し、ユーザーとウォークスルー ▶ Raguel: evaluate_design
-[3] test-spec ∥ dev-plan  並列: テスト仕様書+テストケース作成 / 開発手順書作成
+[intent]        TOBE を聞き取り ASIS(現状調査)と突き合わせ、intent 文書
+                 docs/intents/<slug>.md に確定(連携モード github/local は
+                 このフェーズより前に判定) ▶ Raguel: evaluate_decision
+[discuss]        論点リストを基にユーザーとディスカッションし、設計方針・スコープを合意
+                 (合意は discussion.md に記録。軽量な run では skip。Raguel ゲートなし)
+[design]         設計書 design.md を執筆し、ユーザーとウォークスルー(軽量な run では skip)
+                                                                ▶ Raguel: evaluate_design
+[test-spec ∥ dev-plan]  並列: テスト仕様書+テストケース作成 / 開発手順書作成
                                                                 ▶ Raguel: evaluate_plan ×2
-[4] implement    開発手順書に従い TDD で実装(domain 別 implementer)
+[implement]      開発手順書に従い TDD で実装(domain 別 implementer)
                                                                 ▶ Raguel: evaluate_code
-[5] test-loop    (A) テストスクリプト安定化 → (B) NG=バグを TDD で修正、全ケース OK まで反復
+[test-loop]      (A) テストスクリプト安定化 → (B) NG=バグを TDD で修正、全ケース OK まで反復
                                                                 ▶ Raguel: evaluate_code(修正の都度)
-[6] pr           PR 作成(テスト green かつコード PROCEED を hooks が検証)
-[7] review       ドメイン別レビューアー + doc/security レビューアーを並列ディスパッチ、所見を PR に投稿
-[8] fix-loop     critical/high を修正 → 回帰テスト → 再レビュー、ゼロになるまで反復(所見が無ければ skip)
+[intent-sync]    承認済みの受け入れ基準の変更と、途中で追記された原文を派生文へ反映。持続層を更新
+                                                                ▶ Raguel: evaluate_design
+[pr]             github: PR 作成(テスト green かつコード PROCEED を hooks が検証) / local: 記録だけで終える
+[review]         ドメイン別レビューアー + doc/security レビューアーを並列ディスパッチ、所見を統合
+                 (github は PR にも投稿、local は投稿しない)
+[fix-loop]       critical/high を修正 → 回帰テスト → 再レビュー、ゼロになるまで反復(所見が無ければ skip)
                                                                 ▶ Raguel: evaluate_code(修正の都度)
-[9] triage       medium/low の指摘をユーザーに提示し、指示のもとフォローアップ Issue を起票
-[10] finalize    結果レポートを出力し run を終了(以後 PR のマージ/クローズを検知して自動で outcome を記録)
+[triage]         medium/low の指摘をユーザーに提示し、指示のもと github はフォローアップ Issue を起票、
+                 local は intent 草案を書く
+[finalize]       intent の原文(`## ASIS`/`## TOBE`)の要望ごとに達成/未達/要確認/持ち越しを報告し、
+                 持ち越しを除いてすべて達成のときだけ intent の status を done にして run を終了
+                 (以後 PR のマージ/クローズを検知して自動で outcome を記録)
 ```
 
-`capturing-intent` が起票した intent issue(本文に `<!-- intent:v1 -->` を持つ Issue)を起点にした場合、
-init フェーズは合意済みのセクションを解釈し直さず `issue.md` へそのまま転記します。
-discuss フェーズは起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙します。
+Issue 番号を渡した場合、本文に `<!-- intent:v2 -->` を持つ Issue は確定済みの intent として、
+`<!-- intent:v1 -->` を持つ Issue は聞き直しが要る intent として取り込みます。マーカーが無い
+Issue は本文を原文としてそのまま記録します。
 
 詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
-二段ループ・スキル・同梱 Agent 2 体・作業内容による委譲構成・hooks 仕様などを記載)。
+二段ループ・スキル・同梱 Agent・作業内容による委譲構成・hooks 仕様などを記載)。
+
+run が active な間は、gh-utility のスキル(`issue-craft` など)から GitHub へ投稿しないでください。
+投稿する本文に codiel のマーカー `<!-- codiel:generated -->` が付かないため、codiel の hook に
+deny されます。intent 承認時の任意の Issue 起票は run の作成前に行うため、この制限の対象外です。
 
 ### `/codiel:test [unit-id...]`
 
@@ -67,7 +81,7 @@ NG があってもコード修正はディスパッチせず、結果を `.codie
 1. このプラグインを Claude Code にインストールします(marketplace 経由、または `--plugin-dir` で直接指定)。
 2. 対象プロジェクトのルートで `/codiel:init` を実行します。対話に答えると、
    `CLAUDE.md` / `raguel.config.yaml` / `.codiel/` 配下のディレクトリが用意されます。
-3. `/codiel:run <issue番号>` で run を開始します。未初期化のまま `/codiel:run` を実行した場合は
+3. `/codiel:run [<Issue番号> | <intentパス>]` で run を開始します。未初期化のまま `/codiel:run` を実行した場合は
    `/codiel:init` の実行を案内して終了します(フェイルクローズド)。
 
 ## 推奨 MCP サーバー(任意)

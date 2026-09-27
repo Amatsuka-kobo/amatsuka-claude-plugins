@@ -3,43 +3,6 @@
 各スキルの手順を dot 形式で図示したもの。SKILL.md 本文から分離して集約している。
 図の正は各 SKILL.md のチェックリストであり、手順を変更したときはチェックリストを直してから図を追随させる。
 
-## analyzing-issues
-
-```dot
-digraph analyzing_issues {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  fetch [label="gh issue view N\n--json title,body,labels,comments", shape=box];
-  read_comments [label="コメントを読む\n(本文より新しい合意がないか)", shape=box];
-  raw [label="## 原文 に本文全文を転記", shape=box];
-  extract [label="## 要件 に要求を写像", shape=box];
-  check_map [label="原文の全要求を\n写像できたか?", shape=diamond];
-  criteria [label="## 受け入れ基準 を\n機械的判定可能な文に変換", shape=box];
-  scope [label="## スコープ / 非スコープ を書く", shape=box];
-  ambiguous [label="解釈が割れる/\n情報不足の箇所がある?", shape=diamond];
-  unknown [label="## 不明点 に列挙\n(推測で埋めない)", shape=box, style=filled, fillcolor="#fff2cc"];
-  write [label="issue.md を出力書式で作成", shape=box];
-  selfcheck [label="各行の根拠を\nIssue上で即答できるか?", shape=diamond];
-  demote [label="根拠を辿れない行を\n不明点へ格下げ", shape=box];
-  done [label="analyst 報告\n(issue.md パス + 不明点件数)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  gate [label="raguel-gating:\ninit ゲート(evaluate_decision)\nへ引き継ぎ", shape=ellipse];
-
-  fetch -> read_comments -> raw -> extract -> check_map;
-  check_map -> extract [label="No: 取りこぼしあり"];
-  check_map -> criteria [label="Yes"];
-  criteria -> scope -> ambiguous;
-  ambiguous -> unknown [label="Yes"];
-  ambiguous -> write [label="No"];
-  unknown -> write;
-  write -> selfcheck;
-  selfcheck -> demote [label="根拠不明な行がある"];
-  demote -> unknown;
-  selfcheck -> done [label="全行 OK"];
-  done -> gate;
-}
-```
-
 ## preparing-design-agendas
 
 ```dot
@@ -47,11 +10,11 @@ digraph preparing_design_agendas {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_issue [label="issue.md を読む\n(要件/基準/スコープ/不明点)", shape=box];
+  read_issue [label="intent を読む\n(要求/受け入れ基準/未確定事項)", shape=box];
   read_docs [label="ARCHITECTURE.md / GOTCHAS.md を読む", shape=box];
   read_code [label="影響しそうな既存コードを Read", shape=box];
-  extract [label="論点を抽出\n(方針分岐/不明点/スコープ線引き)", shape=box];
-  unknowns [label="issue.md の不明点を\n全件論点化したか?", shape=diamond];
+  extract [label="how の論点を抽出\n(実現方法の分岐/未確定事項)", shape=box];
+  unknowns [label="intent の未確定事項を\n全件論点化したか?", shape=diamond];
   options [label="各論点に選択肢2つ以上+\nトレードオフ+推奨を書く", shape=box];
   write [label="agenda.md を出力書式で作成", shape=box];
   selfcheck [label="各論点の根拠を即答できるか?\n漏れた分岐は無いか?", shape=diamond];
@@ -83,7 +46,7 @@ digraph facilitating_design_discussions {
   more [label="未提示の論点が残る?", shape=diamond];
   bulk [label="残り全論点に推奨案を\n採用として記録", shape=box];
   confirm [label="決定一覧+未決の有無を提示\n最終確認", shape=diamond];
-  commit [label="agenda.md/discussion.md をコミット\ncomplete-phase discuss", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  commit [label="agenda.md/discussion.md をコミット\ncomplete-phase discuss --slug <slug>", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   read -> overview -> mode;
   mode -> present [label="個別に議論"];
@@ -105,7 +68,7 @@ digraph writing_design_docs {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_issue [label="issue.md を読む\n(要件/受け入れ基準/スコープ)", shape=box];
+  read_issue [label="intent を読む\n(要求/受け入れ基準/未確定事項)", shape=box];
   read_discussion [label="discussion.md を読む\n(合意の決定/未決を確認)", shape=box];
   read_docs [label="ARCHITECTURE.md / GOTCHAS.md を読む", shape=box];
   read_existing [label="変更対象の既存ファイルを Read", shape=box];
@@ -114,11 +77,11 @@ digraph writing_design_docs {
   alternatives [label="## 方針 に代替案 2 つ以上と\n採用理由を書く", shape=box];
   targets [label="## 変更対象 を列挙\n(既存パターン踏襲)", shape=box];
   units [label="## 影響を受ける機能単位 を\nunit-id で列挙\n(screen-*/api-*/model-*/feat-*)", shape=box];
-  yagni [label="issue.mdにない機能を\n足していないか?", shape=diamond];
+  yagni [label="intentにない機能を\n足していないか?", shape=diamond];
   trim [label="要件にない項目を削る", shape=box];
   risk [label="## データ・API の変更 /\n## リスクと可逆性 を書く", shape=box];
   write [label="design.md を出力書式で作成", shape=box];
-  selfcheck [label="各変更対象の根拠を\nissue.md上で即答できるか?", shape=diamond];
+  selfcheck [label="各変更対象の根拠を\nintent上で即答できるか?", shape=diamond];
   demote [label="根拠不明な行を削るか\n要件との対応を書き直す", shape=box];
   done [label="architect 報告\n(design.md パス + 影響 unit 数)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ndesign ゲート(evaluate_design)\nへ引き継ぎ", shape=ellipse];
@@ -145,8 +108,8 @@ digraph writing_test_specs {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_design [label="design.md の\n影響を受ける機能単位を読む", shape=box];
-  read_criteria [label="issue.md の受け入れ基準を読む", shape=box];
+  read_design [label="design.md の\n影響を受ける機能単位を読む\n(軽量な run では intent と持続層)", shape=box];
+  read_criteria [label="intent の受け入れ基準を読む", shape=box];
   for_each_unit [label="unit ごとに処理", shape=box];
   exists [label=".codiel/specs/<unit-id>/\nが既存か?", shape=diamond];
   create_spec [label="spec.md を新規作成", shape=box];
@@ -237,7 +200,7 @@ digraph implementing {
   green [label="GREEN: 最小実装でテストを通す", shape=box];
   refactor [label="REFACTOR:\nステップ範囲内で整理", shape=box];
   verify [label="検証コマンドを実行し\n完了条件を満たすか?", shape=diamond];
-  commit_step [label="git commit\ncodiel(implement): <ステップ名> (issue-N try-M)", shape=box];
+  commit_step [label="git commit\ncodiel(implement): <ステップ名> (<slug> try-M)", shape=box];
   more_steps [label="自ドメインに\n未完了ステップが残る?", shape=diamond];
 
   receive_a [label="(a)テストNG由来:\nNGケースID+再現手順+\n期待結果+実際の結果", shape=box];
@@ -248,7 +211,7 @@ digraph implementing {
   escalate [label="修正せず報告(ASKへ)", shape=box, style=filled, fillcolor="#ffe0b3"];
   minimal_fix [label="最小修正を実装する", shape=box];
   verify_fix [label="検証コマンドを再実行し\n通るか確認", shape=diamond];
-  commit_fix [label="git commit\ncodiel(<test-loop|fix-loop>): <修正内容> (issue-N try-M)", shape=box];
+  commit_fix [label="git commit\ncodiel(<test-loop|fix-loop>): <修正内容> (<slug> try-M)", shape=box];
 
   report [label="完了報告\n(実施ステップ/変更ファイル/検証コマンドと結果/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
@@ -333,7 +296,7 @@ digraph running_regression_tests {
   loop_a [label="(A) scripting-tests の手順で\nスクリプト実行", shape=box];
   broken [label="異常終了があるか?", shape=diamond];
   fix_script [label="スクリプトを修正", shape=box];
-  record_a [label="record-attempt test-loop\n(オーケストレーターが\nディスパッチ毎に・run経由のみ)", shape=box];
+  record_a [label="record-attempt test-loop --slug <slug>\n(オーケストレーターが\nディスパッチ毎に・run経由のみ)", shape=box];
   cap_a [label="exit 3\n(capExceeded)?", shape=diamond];
   ask_stop [label="ASK相当で停止\nオーケストレーターへ報告", shape=box, style=filled, fillcolor="#fff2cc"];
   all_judged [label="全ケースが\nOK/NGの判定を出したか?", shape=diamond];
@@ -342,7 +305,7 @@ digraph running_regression_tests {
   standalone_end [label="単独実行: ディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   handoff [label="オーケストレーター経由で\n該当implementerへ差し戻し(B)", shape=box];
   loop_b [label="(B) fixing-failures の手順で\nimplementerが修正", shape=box];
-  record_b [label="record-attempt test-loop\n(オーケストレーターが\n修正ディスパッチ毎に)", shape=box];
+  record_b [label="record-attempt test-loop --slug <slug>\n(オーケストレーターが\n修正ディスパッチ毎に)", shape=box];
   cap_b [label="exit 3\n(capExceeded)?", shape=diamond];
   rerun_all [label="回帰範囲全体を再実行", shape=box];
   unit_test [label="ARCHITECTURE.mdのtestコマンドを実行", shape=box];
@@ -399,7 +362,7 @@ digraph fixing_failures {
   regress_all [label="回帰範囲全体を再実行\n(running-regression-tests)", shape=box];
   regress_ok [label="回帰は全てOKか?", shape=diamond];
 
-  commit [label="git commit\ncodiel(test-loop|fix-loop): <修正内容> (issue-N try-M)", shape=box];
+  commit [label="git commit\ncodiel(test-loop|fix-loop): <修正内容> (<slug> try-M)", shape=box];
   report [label="完了報告\n(修正内容/根本原因/変更ファイル/再実行結果/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   receive -> complete_input;
@@ -438,18 +401,18 @@ digraph reviewing_diffs {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_docs [label="design.md / spec.md・cases.md /\nissue.md の受け入れ基準を読む\n(再レビュー時は反論済み一覧も)", shape=box];
-  get_diff [label="gh pr diff / gh pr view で\n全ファイルの diff を取得", shape=box];
+  read_docs [label="design.md / spec.md・cases.md /\nintent の原文と受け入れ基準を読む\n(軽量な run では intent と dev-plan.md。\n再レビュー時は反論済み一覧も)", shape=box];
+  get_diff [label="git diff <base>...<branch> で\n全ファイルの diff を取得", shape=box];
   scope [label="自分の観点に該当する\n変更点を洗い出す", shape=box];
-  check_missing [label="未達方向: 基準にあるのに\n実装が見当たらないか?", shape=diamond];
+  check_missing [label="未達方向: 基準や intent の原文に\nあるのに実装が見当たらないか?", shape=diamond];
   check_deviation [label="逸脱方向: 基準にないのに\n実装されていないか?", shape=diamond];
   verify [label="必要ならテスト・型検査を\n読み取り実行して裏取り", shape=box];
-  classify [label="severity を定義表に沿って判定\n(critical/high/medium/low)", shape=box];
+  classify [label="severity を定義表に沿って判定\n(critical/high/medium/low。\n原文の要望の未達は high)", shape=box];
   write_finding [label="所見書式で記述\n(反論済み一覧は新根拠なければ除外)", shape=box];
   more [label="未確認の観点・変更点が残っているか?", shape=diamond];
   zero_findings [label="所見ゼロの観点がある場合、\n確認項目と確認方法を記録", shape=box];
   report [label="所見(または確認記録)を\nテキストで返す(ファイル書き込みなし)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  orchestrator [label="オーケストレーターが統合し\nreview-<n>.md 記録 + gh pr review 投稿", shape=box];
+  orchestrator [label="オーケストレーターが統合し review-<n>.md 記録\n(github は gh pr review でも投稿、local は投稿しない)", shape=box];
 
   read_docs -> get_diff -> scope -> check_missing;
   check_missing -> write_finding [label="未達あり"];
@@ -477,7 +440,7 @@ digraph fixing_review_findings {
   valid [label="妥当か?", shape=diamond];
   dispatch [label="implementer へディスパッチ\n(契約(b): 所見+根拠+提案+対象ファイル)", shape=box];
   rebut [label="PRコメントで反論\n(修正しない)\n反論済み一覧に追記", shape=box, style=filled, fillcolor="#ffe0b3"];
-  record_attempt [label="record-attempt fix-loop\n(ディスパッチ1往復ごと)", shape=box];
+  record_attempt [label="record-attempt fix-loop --slug <slug>\n(ディスパッチ1往復ごと)", shape=box];
   cap [label="exit 3\n(capExceeded)?", shape=diamond];
   ask [label="ASK相当で停止\n(raguel-gatingへ合流)", shape=box, style=filled, fillcolor="#fff2cc"];
   evaluate [label="evaluate_code で\n修正diffを検査", shape=box];
@@ -487,9 +450,9 @@ digraph fixing_review_findings {
   push [label="git push で\nPRブランチを最新化\n(reviewerのstale diff防止)", shape=box, style=filled, fillcolor="#d9e8ff"];
   rereview [label="該当観点reviewerを再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
   remaining [label="反論済み一覧を除いて\ncritical/highが残っているか?\n(新根拠の再主張は未決に戻す)", shape=diamond];
-  passgate [label="pass-gate fix-loop\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
+  passgate [label="pass-gate fix-loop --slug <slug>\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
   triage [label="triageフェーズへ\n(medium/lowはここで)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  skip [label="critical/high が最初から0件\n=> skip-phase fix-loop\n(orchestrating-runs)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  skip [label="critical/high が最初から0件\n=> skip-phase fix-loop --slug <slug>\n(orchestrating-runs)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   findings -> verify -> valid;
   valid -> dispatch [label="妥当"];
@@ -523,25 +486,32 @@ digraph filing_followup_issues {
   ask_user [label="起票対象・まとめ方・見送りを\nユーザーに確認", shape=box, style=filled, fillcolor="#fff2cc"];
   wait [label="ユーザーの回答が\n来たか?", shape=diamond];
   for_each [label="起票対象ごとに処理", shape=box];
+  mode [label="連携モード?", shape=diamond];
   find_template [label="Glob で ISSUE_TEMPLATE を探索\n(yml form / md / レガシー)", shape=box];
   select_template [label="所見の種類に最も合う\nテンプレートを選択\n(なければ既定書式)", shape=box];
   dup_check [label="gh issue list --search で\n重複確認", shape=box];
   dup_found [label="重複あり?", shape=diamond];
   ask_dup [label="重複 Issue を提示し\nユーザーに判断を仰ぐ", shape=box, style=filled, fillcolor="#fff2cc"];
-  create [label="gh issue create\n(テンプレート項目を最大限埋める)", shape=box];
+  create [label="gh issue create\n(テンプレート項目を最大限埋める。\n本文に <!-- codiel:generated -->)", shape=box];
   record [label="review-<n>.md に Issue 番号追記\n+ gh pr comment でフォローアップ投稿", shape=box];
+  draft_local [label="docs/intents/ に status: proposed の\nintent 草案を書く\n(intent-writing.md に従う。原文の\nセクションは <!-- codiel:unrecorded -->)", shape=box];
+  record_local [label="review-<n>.md に草案パスを追記", shape=box];
   more [label="未処理の起票対象が\n残っているか?", shape=diamond];
-  complete [label="codiel-state complete-phase triage", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  complete [label="codiel-state complete-phase triage --slug <slug>", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   read_report -> list -> ask_user -> wait;
   wait -> ask_user [label="未回答\n(先に進まない)"];
   wait -> for_each [label="回答あり"];
-  for_each -> find_template -> select_template -> dup_check -> dup_found;
+  for_each -> mode;
+  mode -> find_template [label="github"];
+  mode -> draft_local [label="local"];
+  find_template -> select_template -> dup_check -> dup_found;
   dup_found -> ask_dup [label="あり"];
   dup_found -> create [label="なし"];
   ask_dup -> create [label="新規起票を選択"];
   ask_dup -> more [label="見送り/既存に集約"];
   create -> record -> more;
+  draft_local -> record_local -> more;
   more -> for_each [label="残りあり"];
   more -> complete [label="なし"];
 }
@@ -585,21 +555,21 @@ digraph raguel_gate {
   evaluate [label="evaluate_* を呼ぶ\n(runId=raguelRunId, objective)", shape=box];
   verdict [label="verdict?", shape=diamond];
 
-  proceed [label="codiel-state pass-gate\n--verdict PROCEED", shape=box, style=filled, fillcolor="#ccffcc"];
+  proceed [label="codiel-state pass-gate <phase> --slug <slug>\n--verdict PROCEED", shape=box, style=filled, fillcolor="#ccffcc"];
   next [label="次フェーズへ自動遷移", shape=ellipse];
 
-  ask [label="findings を人間に提示\ncodiel-state mark-ask", shape=box, style=filled, fillcolor="#fff2cc"];
+  ask [label="findings を人間に提示\ncodiel-state mark-ask <phase> --slug <slug>\n--kind raguel", shape=box, style=filled, fillcolor="#fff2cc"];
   human [label="人間の裁定?", shape=diamond];
 
-  resume_a [label="裁定A: codiel-state resume\n(in_progress に戻すのみ)", shape=box];
+  resume_a [label="裁定A: codiel-state resume --slug <slug>\n(in_progress に戻すのみ)", shape=box];
   refix [label="成果物を修正\n(人間の指示に沿って)", shape=box];
   record_a [label="record_outcome\n(approved / rejected)", shape=box];
 
   record_ha [label="裁定B: record_outcome\n(approved, ASKのevaluationId)", shape=box];
-  resume_b [label="codiel-state resume", shape=box];
-  pass_gate_ha [label="pass-gate --verdict ASK\n--human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
+  resume_b [label="codiel-state resume --slug <slug>", shape=box];
+  pass_gate_ha [label="pass-gate <phase> --slug <slug>\n--verdict ASK\n--human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
 
-  stop_run [label="codiel-state stop --reason", shape=box, style=filled, fillcolor="#ffcccc"];
+  stop_run [label="codiel-state stop --slug <slug> --reason", shape=box, style=filled, fillcolor="#ffcccc"];
   gotchas [label="recording-gotchas 起動", shape=box];
   stopped [label="run 終了(stopped)", shape=ellipse];
 
@@ -635,38 +605,41 @@ digraph codiel_run {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  start [label="/codiel:run <issue>", shape=ellipse];
-  precheck [label="前提チェック\nB + C + D / raguel MCP", shape=box];
-  sync [label="outcome 自動同期\n(raguel-gating)", shape=box];
-  resolve [label="codiel-state get --issue N", shape=diamond];
-  resume [label="未完了 try を再開\n(state.phase から続行)", shape=box];
-  init_run [label="codiel-state init\ngit switch -c <branch>", shape=box];
+  start [label="/codiel:run [<Issue番号> | <intentパス>]", shape=ellipse];
+  precheck [label="前提チェック\nB + C + D / raguel MCP / check-intent-env", shape=box];
+  sync [label="outcome 自動同期\n(raguel-gating。github は gh pr view、\nlocal は git merge-base で判定)", shape=box];
+  resolve [label="run を解決\n(引数の frontmatter run /\n未完了 run の走査)", shape=diamond];
+  resume [label="未完了 try を再開\n(state.phase から続行。\n連携モードを再判定し set-integration)", shape=box];
 
-  init [label="[0] init\ncodiel-analyst", shape=box];
-  discuss [label="[1] discuss\n成果物を書く委譲(agenda.md)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
-  design [label="[2] design\n成果物を書く委譲(design.md)\n+ウォークスルー(ユーザー承認)", shape=box];
-  testspec [label="[3a] test-spec\ncodiel-test-designer", shape=box];
-  devplan [label="[3b] dev-plan\n成果物を書く委譲(dev-plan.md)", shape=box];
+  intent [label="[intent]\nオーケストレーター本体(対話)\n+capturing-intent の手順\n(承認ゲートで規模・終え方・\nIssue 起票を決定)", shape=box];
+  intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n(続行なら git switch -c <branch>)", shape=box];
+  discuss [label="[discuss]\n成果物を書く委譲(agenda.md)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
+  design [label="[design]\n成果物を書く委譲(design.md)\n+ウォークスルー(ユーザー承認)", shape=box];
+  testspec [label="[test-spec]\ncodiel-test-designer", shape=box];
+  devplan [label="[dev-plan]\n成果物を書く委譲(dev-plan.md)", shape=box];
   parallel [label="単一メッセージで並列ディスパッチ", shape=note];
-  implement [label="[4] implement\n成果物を書く委譲\n(コード diff + ユニットテスト)", shape=box];
-  testloop [label="[5] test-loop\n(A)tester (B)implementer", shape=box];
-  pr [label="[6] pr\ngh pr create", shape=box];
-  review [label="[7] review\nreviewer 選択参加+doc/security", shape=box];
-  fixloop [label="[8] fix-loop\nimplementer/tester/reviewer", shape=box];
-  triage [label="[9] triage\nユーザー指示+filing-followup-issues", shape=box];
-  finalize [label="[10] finalize\n結果レポート", shape=box];
+  implement [label="[implement]\n成果物を書く委譲\n(コード diff + ユニットテスト)", shape=box];
+  testloop [label="[test-loop]\n(A)tester (B)implementer", shape=box];
+  intentsync [label="[intent-sync]\n成果物を書く委譲\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層を更新)", shape=box];
+  pr [label="[pr]\ngithub: git push + gh pr create\nlocal: state に記録するだけ", shape=box];
+  review [label="[review]\nreviewer 選択参加+doc/security\n(github は PR にも投稿)", shape=box];
+  fixloop [label="[fix-loop]\nimplementer/tester/reviewer", shape=box];
+  triage [label="[triage]\nユーザー指示+filing-followup-issues\n(github: Issue 起票 / local: intent 草案)", shape=box];
+  finalize [label="[finalize]\n原文の要望ごとに達成/未達/要確認/\n持ち越しを判定し status を決める", shape=box];
 
   human [label="人間の裁定待ち\n(awaiting_human)", shape=box, style=filled, fillcolor="#fff2cc"];
   stopped [label="run 停止\nrecording-gotchas", shape=box, style=filled, fillcolor="#ffcccc"];
   outcome [label="run 完了\n(awaiting_outcome)\n次回起動時に outcome 自動同期", shape=ellipse];
+  intentonly [label="run 完了\n(intent-only。close --reason intent-only)", shape=ellipse];
 
   start -> precheck -> sync -> resolve;
-  resolve -> resume [label="未完了 try あり"];
-  resolve -> init_run [label="なし"];
-  resume -> init;
-  init_run -> init;
+  resolve -> resume [label="未完了 run あり"];
+  resolve -> intent [label="なし(新規)"];
+  resume -> intent [label="intent フェーズ以降を継続"];
 
-  init -> discuss [label="PROCEED"];
+  intent -> intent_init [label="承認ゲート通過\n(evaluate_decision PROCEED)"];
+  intent_init -> discuss [label="続行"];
+  intent_init -> intentonly [label="intent-only"];
   discuss -> design [label="合意記録+complete-phase"];
   design -> testspec [label="PROCEED"];
   design -> devplan [label="PROCEED"];
@@ -675,7 +648,8 @@ digraph codiel_run {
   parallel -> implement [label="両方 PROCEED"];
   implement -> testloop [label="PROCEED"];
   testloop -> testloop [label="NG(TDD修正)\nrecord-attempt"];
-  testloop -> pr [label="全ケース OK"];
+  testloop -> intentsync [label="全ケース OK"];
+  intentsync -> pr [label="PROCEED"];
   pr -> review;
   review -> fixloop [label="critical/high あり"];
   review -> triage [label="critical/high ゼロ\nskip-phase fix-loop"];
@@ -684,8 +658,8 @@ digraph codiel_run {
   triage -> finalize;
   finalize -> outcome;
 
-  { init design testspec devplan implement testloop fixloop } -> human [label="ASK / 上限超過", style=dashed];
-  { init design testspec devplan implement testloop fixloop } -> stopped [label="STOP", style=dashed];
+  { intent design testspec devplan implement testloop intentsync fixloop } -> human [label="ASK / 上限超過", style=dashed];
+  { intent design testspec devplan implement testloop intentsync fixloop } -> stopped [label="STOP", style=dashed];
   human -> stopped [label="裁定: 中止"];
   human -> implement [label="裁定A: 修正して再提出\n(該当フェーズへ)", style=dashed];
   human -> pr [label="裁定B: as-is承認\n(--human-approved で次へ)", style=dashed];

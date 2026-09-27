@@ -13,12 +13,6 @@
       "note": "ハーネスの構成要素としての言及"
     },
     {
-      "path": "plugins/codiel/agents/codiel-analyst.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
       "path": "plugins/codiel/commands/init.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",
