@@ -122,7 +122,7 @@ digraph writing_test_specs {
   selfcheck [label="各期待結果の根拠を\n受け入れ基準上で即答できるか?", shape=diamond];
   fix [label="実装詳細混入のケースを\n振る舞い記述に書き直す", shape=box];
   more_units [label="未処理の unit が残っているか?", shape=diamond];
-  done [label="test-designer 報告\n(作成/更新した unit 一覧)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  done [label="委譲先の報告\n(作成/更新した unit ごとの\nspec.md / cases.md のパス)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ntest-spec ゲートへ引き継ぎ", shape=ellipse];
 
   read_design -> read_criteria -> for_each_unit -> exists;
@@ -517,34 +517,6 @@ digraph filing_followup_issues {
 }
 ```
 
-## recording-gotchas
-
-```dot
-digraph recording_gotchas {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  trigger [label="契機発生\n(STOP/ループ上限超過/incident/\nレビュー発覚の設計漏れ)", shape=box];
-  judge [label="次の run の担当エージェントが\nこれを知らないと同じ失敗をするか?", shape=diamond];
-  skip [label="記録しない(終了)", shape=ellipse];
-  read_existing [label="既存エントリを確認\n(重複・関連の有無)", shape=box];
-  conflict [label="既存エントリと矛盾するか?", shape=diamond];
-  invalidate [label="矛盾する既存エントリの末尾に\n無効化(日付+理由)を追記", shape=box];
-  write_entry [label="GOTCHA-NNN を採番し末尾に追記\n(日付/発生フェーズ/症状/根本原因/\n予防策=具体的行動/関連ファイル)", shape=box];
-  cross_ref [label="関連する既存エントリへ\n相互参照を追記", shape=box];
-  commit [label="git commit\n\"codiel(gotchas): ...\"", shape=box, style=filled, fillcolor="#ccffcc"];
-
-  trigger -> judge;
-  judge -> skip [label="No"];
-  judge -> read_existing [label="Yes"];
-  read_existing -> conflict;
-  conflict -> invalidate [label="あり"];
-  conflict -> write_entry [label="なし"];
-  invalidate -> write_entry;
-  write_entry -> cross_ref -> commit;
-}
-```
-
 ## raguel-gating
 
 ```dot
@@ -570,7 +542,7 @@ digraph raguel_gate {
   pass_gate_ha [label="pass-gate <phase> --slug <slug>\n--verdict ASK\n--human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
 
   stop_run [label="codiel-state stop --slug <slug> --reason", shape=box, style=filled, fillcolor="#ffcccc"];
-  gotchas [label="recording-gotchas 起動", shape=box];
+  gotchas [label="失敗の記録\n(orchestrating-runs)", shape=box];
   stopped [label="run 終了(stopped)", shape=ellipse];
 
   evaluate -> verdict;
@@ -615,7 +587,7 @@ digraph codiel_run {
   intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n(続行なら git switch -c <branch>)", shape=box];
   discuss [label="[discuss]\n成果物を書く委譲(agenda.md)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
   design [label="[design]\n成果物を書く委譲(design.md)\n+ウォークスルー(ユーザー承認)", shape=box];
-  testspec [label="[test-spec]\ncodiel-test-designer", shape=box];
+  testspec [label="[test-spec]\n成果物を書く委譲\n(spec.md / cases.md)", shape=box];
   devplan [label="[dev-plan]\n成果物を書く委譲(dev-plan.md)", shape=box];
   parallel [label="単一メッセージで並列ディスパッチ", shape=note];
   implement [label="[implement]\n成果物を書く委譲\n(コード diff + ユニットテスト)", shape=box];
@@ -628,7 +600,7 @@ digraph codiel_run {
   finalize [label="[finalize]\n原文の要望ごとに達成/未達/要確認/\n持ち越しを判定し status を決める", shape=box];
 
   human [label="人間の裁定待ち\n(awaiting_human)", shape=box, style=filled, fillcolor="#fff2cc"];
-  stopped [label="run 停止\nrecording-gotchas", shape=box, style=filled, fillcolor="#ffcccc"];
+  stopped [label="run 停止\n失敗の記録", shape=box, style=filled, fillcolor="#ffcccc"];
   outcome [label="run 完了\n(awaiting_outcome)\n次回起動時に outcome 自動同期", shape=ellipse];
   intentonly [label="run 完了\n(intent-only。close --reason intent-only)", shape=ellipse];
 
@@ -663,5 +635,28 @@ digraph codiel_run {
   human -> stopped [label="裁定: 中止"];
   human -> implement [label="裁定A: 修正して再提出\n(該当フェーズへ)", style=dashed];
   human -> pr [label="裁定B: as-is承認\n(--human-approved で次へ)", style=dashed];
+}
+```
+
+## orchestrating-runs(失敗の記録)
+
+```dot
+digraph recording_failures {
+  rankdir=TB;
+  node [fontname="sans-serif"];
+
+  trigger [label="契機発生\n(STOP/ループ上限超過で中止/incident/\nレビューで発覚した設計漏れ)", shape=box];
+  guide [label="metatron の CLI の案内が\nコンテキストにあるか?", shape=diamond];
+  metatron [label="metatron:recording-gotchas を起動\n(判断・書式・採番・タグはそのスキル)", shape=box];
+  shelve [label="reports/unrecorded-gotchas.md の\n## 未記録の GOTCHAS に退避\n(title/task/mistake/cause/\ncountermeasure/promotionCandidate)", shape=box];
+  report [label="完了報告にも載せ、\n台帳へ入れる手段を添える\n(append-gotcha または /metatron:init)", shape=box];
+  commit [label="git commit\n\"codiel(gotchas): ... (<slug> try-<n>)\"", shape=box, style=filled, fillcolor="#ccffcc"];
+
+  trigger -> guide;
+  guide -> metatron [label="あり"];
+  guide -> shelve [label="なし\n(run は止めない)"];
+  shelve -> report;
+  metatron -> commit [label="記録した"];
+  report -> commit;
 }
 ```

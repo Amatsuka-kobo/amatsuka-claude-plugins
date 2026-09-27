@@ -45,7 +45,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
       §4.1 の set-domain / clear-domain を伴う
       (discuss は raguel-gating を経ず、facilitating-design-discussions に従って進行し
       complete-phase で完了する)
-- [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に厳密に従う(自己判断しない)
+- [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に厳密に従う(自己判断しない)。
+      失敗の契機が起きたら「7. 失敗の記録」に従って記録する
 - [ ] 5. 全フェーズ `passed` になったら「2.3 finalize の運転」の手順で結果レポートと intent の
       `status` を確定してから `codiel-state finalize --slug <slug>` を呼ぶ。結果レポート
       (原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)を出力して終了する
@@ -161,7 +162,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) | オーケストレーター(intent-only では開始時のブランチへ、続行では run ブランチへ、ゲート通過直後) |
 | [discuss] | 成果物を書く委譲(アジェンダ)+ 本体の進行。intent → `agenda.md` | preparing-design-agendas | intent、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
 | [design] | 成果物を書く委譲。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md` | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、ユーザー承認を得てから evaluate する** | オーケストレーター(ゲート通過直後) |
-| [test-spec] | 名指し `codiel-test-designer`。`design.md`(軽量では intent と持続層) → `spec.md` / `cases.md` | writing-test-specs(委譲先の定義が読む) | `design.md`(影響 unit 一覧。軽量では intent の `## 受け入れ基準` と `## 実装方針`) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
+| [test-spec] | 成果物を書く委譲。`design.md`(軽量では intent と持続層) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(影響 unit 一覧。軽量では intent の `## 受け入れ基準` と `## 実装方針`) | `.codiel/specs/<unit-id>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
 | [dev-plan] | 成果物を書く委譲。`design.md`(軽量では intent と持続層) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`) | `dev-plan.md`(ステップ毎にドメインタグ) | pass-gate(`evaluate_plan`。test-spec とは独立) | オーケストレーター(ゲート通過直後) |
 | [implement] | 成果物を書く委譲。`dev-plan.md` の担当ステップ → コード diff + ユニットテスト | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
 | [test-loop A] | 成果物を書く委譲。`cases.md` → `scripts/` + `test-run-<n>.md` | scripting-tests + running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
@@ -171,7 +172,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`.codiel/specs/**`、持続層 | `reports/review-<n>.md` + PR コメント(github のみ) | complete-phase | オーケストレーター(review レポートのコミットも) |
 | [fix-loop] | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<n+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<n+1>.md` はオーケストレーター。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
 | [triage] | オーケストレーター本体。`reports/review-<n>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<n>.md` の medium/low | github: 起票された Issue 番号(`review-<n>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) | オーケストレーター(`review-<n>.md` への追記分。コード変更はなし) |
-| [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | recording-gotchas(STOP/incident 発生時のみ起動) | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない。詳細は「2.3 finalize の運転」) | ―(intent の更新分はオーケストレーターがコミットし、github モードでは push する) |
+| [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | ―(失敗の契機があれば「7. 失敗の記録」) | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない。詳細は「2.3 finalize の運転」) | ―(intent の更新分はオーケストレーターがコミットし、github モードでは push する) |
 
 - 軽量の経路(`scale: light`)では discuss と design を `skip-phase` で飛ばす。`SKIPPABLE` はこの 2 フェーズと
   fix-loop に限られ、discuss と design の `skip-phase` は `state.scale === "light"` のときだけ成功する。
@@ -250,7 +251,11 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
    ```
    node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>
    ```
-6. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表を含めて出力し、終了する。
+6. run 中に委譲先またはオーケストレーターが気づいた ARCHITECTURE と実装の乖離を一覧にする。
+   metatron が導入されていれば `/metatron:update` へ引き渡す旨を結果レポートに書き、導入されていな
+   ければ報告に残すだけにする。codiel は ARCHITECTURE を作らない。
+7. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表と、6. の乖離の一覧を
+   含めて出力し、終了する。
 
 ### 2.4 共通
 
@@ -272,7 +277,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 ## 3. ディスパッチプロンプトの規約
 
 サブエージェントのディスパッチは **Task ツール**で行う。
-委譲先は名指しするか、作業内容を渡して委譲する。作業内容による委譲の解決はセッションに注入された規律に従い、規律が無ければビルトインの委譲先へ送る。
+委譲先は名指しせず、作業内容を渡して委譲する。作業内容による委譲の解決はセッションに注入された規律に従い、規律が無ければビルトインの委譲先へ送る。
 
 プロンプトは次のテンプレートを満たす。作業内容、読むスキルと観点ファイルの絶対パス、入出力ファイル、§0 で解決した前提値、前フェーズ findings の要約、完了条件を含める。
 
@@ -305,7 +310,8 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 
 ARCHITECTURE と GOTCHAS は、存在すれば作業前に読み、存在しなければスキップする。
 ドメインマップは上記の値を使い、ARCHITECTURE から読み直さない。
-過去の落とし穴は GOTCHAS を踏まえる。
+過去の落とし穴は GOTCHAS を踏まえる。委譲先は ARCHITECTURE と GOTCHAS を書き換えない。
+ARCHITECTURE と実装の乖離、または記録すべき失敗に気づいたら、その場で直さず報告に書く。
 
 ## 前フェーズの申し送り(findings)
 <前フェーズの EvaluationResult.findings を ruleId + message の箇条書きで要約したもの。
@@ -324,7 +330,11 @@ diff の中身やファイル内容を会話に貼り付けない。
 - ファイルを変更しない。
 - 報告のみを返す。
 
-discuss / design / dev-plan の依頼文には、git 操作をしない旨を追加する。
+discuss / design / test-spec / dev-plan の依頼文には、git 操作をしない旨を追加する。
+
+test-spec の依頼文には、次の 2 条項も追加する。
+- 使用してよい tools を `Read` / `Grep` / `Glob` / `Write` / `Edit` と Context7 に限定する。`Bash` は使わない。
+- 書き込み先を `.codiel/specs/<unit-id>/` の `spec.md` と `cases.md` に限る。
 
 intent-sync 以外の委譲の依頼文には「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ
 報告する」の文を入れる。intent-sync の依頼文には、派生文のセクションだけを書き換え、原文のセクションを
@@ -426,6 +436,45 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
    から/未決論点から/最終確認から)は facilitating-design-discussions の「中断再開」に従う。design
    フェーズで design.md が既に存在する場合は、ウォークスルーの再提示から再開する。
 6. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、raguel-gating の ASK ハンドリング(裁定 A / 裁定 B / 中止)に従って人間の裁定を待つ。**再開できると思って勝手に続行しない**。
+
+## 7. 失敗の記録
+
+次の 4 つの契機では、オーケストレーター本体が失敗を GOTCHAS に記録する。記録の判断・エントリの書式・採番・タグは
+`metatron:recording-gotchas` スキルに従う。
+
+| 契機 | 記録する時点 |
+|---|---|
+| Raguel が `STOP` を返した | `raguel-gating` の STOP の手順で run を止めた直後 |
+| test-loop / fix-loop の `record-attempt` が上限超過(exit 3)を返した | 人の裁定が中止に確定した時点 |
+| `record_outcome(incident)` を記録した | incident を記録した直後 |
+| レビューで、設計時に想定していなかった仕様漏れ・考慮漏れが見つかった | fix-loop を終えた時点 |
+
+記録の手段は、metatron の CLI の案内がコンテキストにあるかで分ける。
+
+- 案内があるときは、`metatron:recording-gotchas` スキルを名指しで起動して記録させる。
+- 案内が無いとき(metatron が無い、または未初期化)は台帳へ書かず、次の順で退避する。
+  1. エントリを `## 未記録の GOTCHAS` の見出しの下に書く。書き先は run があれば
+     `.codiel/runs/<slug>/try-<n>/reports/unrecorded-gotchas.md`、無ければ `.codiel/reports/unrecorded-gotchas.md` とする。
+  2. 同じエントリを完了報告にも載せる。
+  3. 完了報告に台帳へ入れる手段を添える。metatron を導入していれば「次のセッションで注入される CLI の案内から
+     `append-gotcha` で追記する」、導入していなければ「`/metatron:init` で台帳を作ってから追記する」と書く。
+- 退避では記録の可否を判断せず、契機ごとに 1 件書く。可否は台帳へ入れるときに判断する。
+
+退避するエントリは、`append-gotcha` の入力にそのまま使える次の 6 つの値だけを持つ。
+
+| キー | 値 |
+|---|---|
+| `title` | 失敗のタイトル |
+| `task` | 何をしようとしていたか |
+| `mistake` | 具体的に何を間違えたか |
+| `cause` | なぜそうなったか(推測) |
+| `countermeasure` | 次のエージェントがそのまま実行できる行動 |
+| `promotionCandidate` | `Yes` か `No` |
+
+- 台帳を Edit / Write で直接編集しない。
+- 記録の手段が無くても run は止めない。
+- 台帳へ記録したときは台帳(§0 で解決した GOTCHAS のパス)を、退避したときは退避先のレポートを、`codiel(gotchas): <一行要約> (<slug> try-<n>)`
+  の形式でコミットする。run が無いときだけ `(<slug> try-<n>)` を省く。
 
 <HARD-GATE>
 - **オーケストレーターは自分で実装・レビュー・テスト作成をしない**。すべてサブエージェントへの

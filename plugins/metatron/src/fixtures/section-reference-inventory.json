@@ -7,12 +7,6 @@
       "note": "生成するテンプレート自身の見出し。ARCHITECTURE の節ではない"
     },
     {
-      "path": "plugins/codiel/CLAUDE.example.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "D",
-      "note": "ハーネスの構成要素としての言及"
-    },
-    {
       "path": "plugins/codiel/commands/init.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",

@@ -2,7 +2,7 @@
 
 ユーザーの要望を聞き取って固定した intent 文書を起点に、discuss → design → テスト仕様 → 開発計画 →
 実装 → 回帰テスト → intent-sync → PR → レビュー → 修正を一気通貫で行うオーケストレーターと、
-それを支える skills / agents / hooks / docs の設計。起点は GitHub Issue に限らず、Issue 番号・
+それを支える skills / hooks / docs の設計。起点は GitHub Issue に限らず、Issue 番号・
 確定済み intent 文書のパス・省略のいずれからも始められる(§2)。
 
 各フェーズの進行には **Raguel MCP のゲートを逐一挟み**、AI の暴走(フェーズ飛ばし・偽装グリーン・
@@ -159,7 +159,8 @@
   `codiel-state pass-gate <phase> --slug <slug> --verdict ASK --human-approved` で通過させる。
   verdict は ASK のまま `humanApproved: true` が監査記録として残る。これがゲートの唯一の正規例外で、
   `record_outcome(approved)` の記録が前提条件(運用規約は raguel-gating スキル)
-- **STOP** → run を停止。`recording-gotchas` スキルを起動して失敗を GOTCHAS.md に記録
+- **STOP** → run を停止。`orchestrating-runs` の「失敗の記録」に従い、失敗を GOTCHAS に記録する
+  (記録は metatron の `recording-gotchas` に委ね、記録の手段が無ければ run のレポートへ退避する。§9)
 - **ループ上限超過**(test-loop / fix-loop の試行回数)→ ASK に倒す。
   Raguel の `common/resubmission-loop` ルールと合わせて二重の暴走防止
 
@@ -311,7 +312,7 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
 
 | スキル | 内容 |
 |---|---|
-| `orchestrating-runs` | `/codiel:run` の本体プロセス。state 駆動のフェーズ進行、サブエージェントのディスパッチ規約(担当スキル名・入出力パス・ARCHITECTURE/GOTCHAS 参照を必ず含める・ドメインタグによる implementer/reviewer の選択)、再開手順、ループ上限管理。HARD-GATE:「オーケストレーターは自分で実装・レビューしない」「Raguel ゲートを省略して遷移しない」 |
+| `orchestrating-runs` | `/codiel:run` の本体プロセス。state 駆動のフェーズ進行、サブエージェントのディスパッチ規約(担当スキル名・入出力パス・ARCHITECTURE/GOTCHAS 参照を必ず含める・ドメインタグによる implementer/reviewer の選択)、再開手順、ループ上限管理、失敗の記録(記録の契機と metatron への委譲、記録の手段が無いときの「未記録の GOTCHAS」への退避)。HARD-GATE:「オーケストレーターは自分で実装・レビューしない」「Raguel ゲートを省略して遷移しない」 |
 | `capturing-intent` | intent フェーズの進行規約。TOBE の聞き取り、ASIS(現状調査)の突き合わせ、分岐の合意、ドラフト全文提示、承認ゲートでの規模・終え方・Issue 起票の決定、`docs/intents/` への保存までの手順。原文(`## ASIS`/`## TOBE`)はユーザーの言葉のまま記録し、要約・翻訳をしない |
 | `raguel-gating` | Raguel 呼び出し規約。フェーズ→evaluate ツールの対応、objective の書き方、verdict 別ハンドリング、findings の次フェーズへの引き継ぎ、record_outcome の運用(承認・却下・incident)。Red Flags:「PROCEED 確実だからスキップ」「前回 PROCEED だったから今回も不要」等 |
 | `facilitating-design-discussions` | discuss フェーズの進行規約。論点の提示順序、AskUserQuestion と自由議論の使い分け、「すべて推奨案で進める」ショートカット、discussion.md の記録書式、design フェーズの設計ウォークスルー手順。HARD-GATE:「合意の捏造禁止」「アジェンダの改変禁止」 |
@@ -322,39 +323,43 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
 |---|---|---|
 | `preparing-design-agendas` | (独自) | intent・ARCHITECTURE.md・既存コードから、ユーザーと合意すべき how(実現方法)の論点を抽出し agenda.md に構造化する。選択肢 2 つ以上+トレードオフ+推奨案。intent の `## 未確定事項` は全件論点化。what(達成すること・受け入れ基準)は intent で合意済みとして立てない。HARD-GATE:「不明点を agenda から落とさない」 |
 | `writing-design-docs` | brainstorming(設計部) | intent + discussion.md + ARCHITECTURE.md + GOTCHAS.md + 持続層(意図的な制約)を入力に設計書を執筆。YAGNI、既存パターン踏襲、変更対象ファイルの明示、**影響を受ける機能単位(unit)の列挙**、代替案の検討記録 |
-| `writing-test-specs` | (独自) | unit の同定・命名規則、`.codiel/specs/<unit-id>/` の三層構造(spec.md → cases.md)の新規作成・**更新と再生成**の手順。実装詳細ではなく振る舞いをテストする。期待結果は受け入れ基準から導出する。軽量な run では design.md の代わりに intent の `## 受け入れ基準` と持続層を入力にする |
+| `writing-test-specs` | (独自) | unit の同定・命名規則、`.codiel/specs/<unit-id>/` の三層構造(spec.md → cases.md)の新規作成・**更新と再生成**の手順。実装詳細ではなく振る舞いをテストする。期待結果は受け入れ基準から導出する。軽量な run では design.md の代わりに intent の `## 受け入れ基準` と持続層を入力にする。HARD-GATE:「書き込みは `.codiel/specs/<unit-id>/` の spec.md と cases.md だけ」「`scripts/` に触れない」「Bash を使わない」 |
 | `writing-dev-plans` | writing-plans | 設計書を工程分解した開発手順書。各ステップに「変更ファイル・完了条件・検証コマンド・**ドメインタグ(frontend/backend/data)**」。軽量な run では design.md の代わりに intent の `## 実装方針` と持続層を入力にする |
-| `implementing` | executing-plans + test-driven-development | 手順書に沿った TDD 実装(RED→GREEN→REFACTOR)。手順逸脱の禁止、「ついでのリファクタ」禁止。3 ドメインの implementer 共通 + ドメイン別の注意事項(各エージェント定義に記載) |
+| `implementing` | executing-plans + test-driven-development | 手順書に沿った TDD 実装(RED→GREEN→REFACTOR)。手順逸脱の禁止、「ついでのリファクタ」禁止。3 ドメインの implementer 共通 + ドメイン別の注意事項(`skills/implementing/references/` に記載) |
 | `scripting-tests` | (独自) | cases.md からテストスクリプトを作成・修正する規約。ケース ID との対応、OK/NG の機械判定可能な出力、ARCHITECTURE.md のテストフレームワーク準拠。HARD-GATE:「期待値の変更・プロダクトコードの変更は禁止」 |
 | `running-regression-tests` | verification-before-completion | スクリプト安定化ループ(A)と TDD 修正ループ(B)の運転規約(§5)。回帰範囲の決定。HARD-GATE:「出力を見ずに合格を主張しない」「異常終了とテスト NG を混同しない」 |
 | `fixing-failures` | systematic-debugging | NG ケースの修正。根本原因特定→最小修正。**テストスクリプト・cases.md を触る修正の禁止**。「テストの方が間違っている」と思ったら ASK へ |
-| `reviewing-diffs` | requesting-code-review | design.md・テスト仕様書・intent の原文(`## ASIS`/`## TOBE`)と `## 受け入れ基準` を基準に diff をレビュー。severity 定義(critical/high/medium/low、原文の要望の未達と持続層の制約違反は high)、github では `gh pr review` / `gh pr comment` での投稿(local では投稿しない)。5 観点の reviewer 共通プロセス(観点別の職務は各エージェント定義に記載)。軽量な run では design.md の代わりに intent と dev-plan.md を入力にする |
+| `reviewing-diffs` | requesting-code-review | design.md・テスト仕様書・intent の原文(`## ASIS`/`## TOBE`)と `## 受け入れ基準` を基準に diff をレビュー。severity 定義(critical/high/medium/low、原文の要望の未達と持続層の制約違反は high)、github では `gh pr review` / `gh pr comment` での投稿(local では投稿しない)。5 観点の reviewer 共通プロセス(観点別の焦点は `skills/reviewing-diffs/references/` に記載)。軽量な run では design.md の代わりに intent と dev-plan.md を入力にする |
 | `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
 | `syncing-intents` | (独自) | intent-sync フェーズの運転規約。承認済みの受け入れ基準の変更と、途中でユーザーが追記した原文を、人の確認つきで派生文のセクションへ反映する。持続層(`docs/intents/domains/`)の更新。HARD-GATE:「原文のセクションは書き換えない」「intent の `status` を `done` にしない(finalize だけが付ける)」 |
 | `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方。github: Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認、**ISSUE_TEMPLATE の活用**(`.github/ISSUE_TEMPLATE/` の form 形式 .yml / markdown 形式 .md や `.github/ISSUE_TEMPLATE.md` を探索し、指摘の種類に最も合うテンプレートを選択、テンプレートがない場合のみ既定書式で起票)。local: `status: proposed` の intent 草案として `docs/intents/` に書く。HARD-GATE:「ユーザーの指示なしに起票しない」 |
-| `recording-gotchas` | (独自・成長機構) | 失敗(STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)から「プロジェクト固有で再発しうる教訓」を抽出し GOTCHAS.md に追記する基準と書式 |
 
 ### スキル本文に置かない根拠(退避)
 
 各スキルが「なぜその規律が必要か」を述べていた記述を、指示から分離してここに残す。
 
 - `preparing-design-agendas`: agenda に挙げた論点がそのままディスカッションの議題になり、合意結果(discussion.md)は design フェーズの設計を拘束する。論点を漏らすと、その分岐はユーザーに諮られないまま architect の独断で設計されることになる。
-- `recording-gotchas`: Codiel は 2 つの記憶で「プロジェクト毎に賢くなる」。Raguel の判例ストアは判定側の記憶(次の evaluate をどう判定するか)を、`docs/GOTCHAS.md` は生成側の記憶(次の実装・設計をどう書くか)を賢くする。GOTCHAS.md は全フェーズのサブエージェントが作業前に必読する共有資産であり、記録を怠れば同じプロジェクト固有の罠に次の run が再度落ちる。逆に何でも書けば台帳が肥大化しシグナルが埋もれるため、記録基準を 1 問に絞っている。
+- `orchestrating-runs`(失敗の記録): Codiel は 2 つの記憶で「プロジェクト毎に賢くなる」。Raguel の判例ストアは判定側の記憶(次の evaluate をどう判定するか)を、`docs/GOTCHAS.md` は生成側の記憶(次の実装・設計をどう書くか)を賢くする。GOTCHAS.md は全フェーズのサブエージェントが作業前に必読する共有資産であり、記録を怠れば同じプロジェクト固有の罠に次の run が再度落ちる。記録の判断(1 問)・書式・採番・タグは台帳の書式契約の持ち主である metatron の `recording-gotchas` に委ね、codiel は記録の契機と、記録の手段が無いときの退避だけを持つ。2026-09-27 までは codiel も同名のスキルで書式契約の写しを持っていたが、二重管理になるため削除した。
 - `writing-design-docs`: design.md で設計を誤ったり影響 unit を漏らすと、その誤りはテスト仕様書の漏れ・実装漏れとしてそのまま後続フェーズに伝播する。
 - `writing-dev-plans`: `[domain: ...]` タグはディスパッチ先の決定と implementer のドメイン規律の 2 箇所から機械的に参照される。タグを誤るか複数ドメインを 1 ステップに混ぜると、誤った implementer が呼ばれるか、hooks が正当な書き込みを ask で止める誤爆を招く。両者ともタグを機械的にしか読まないため、曖昧・複合のタグは下流のどこかで必ず事故になる。
 
-## 7. Agents(ツール制限 = 構造的ハーネス)
+## 7. Agents(同梱しない。作業内容で委譲する)
 
-サブエージェントは `agents/` で定義し、frontmatter の `tools` で権限を最小化する。
-**「できないことは暴走もできない」**が原則。ドメインの境界(どのパスが frontend/backend/data か)は
-ARCHITECTURE.md の**ドメインマップ**(§9)で宣言し、hooks が書き込み制御に使う。
-
-Codiel に同梱して名指しする Agent は、設計書からテスト仕様書を作る test-designer の 1 体だけである。
-intent フェーズはオーケストレーター本体が対話を担い(現状調査は読み取りだけの委譲)、
-その他のフェーズは、固定した Agent 名ではなく「成果物を書く委譲」「読み取りだけの委譲」など
-作業内容をディスパッチプロンプトに渡して委譲する。
+Codiel は Agent 定義を同梱しない。intent フェーズはオーケストレーター本体が対話を担い
+(現状調査は読み取りだけの委譲)、その他のフェーズは、固定した Agent 名ではなく
+「成果物を書く委譲」「読み取りだけの委譲」などの作業内容をディスパッチプロンプトに渡して委譲する。
 委譲先の選択はセッションに注入された運用規律に委ね、規律が無い場合は成果物を書く作業を
 `general-purpose`、読み取りだけの作業を `Explore` に縮退する。
+ドメインの境界(どのパスが frontend/backend/data か)は ARCHITECTURE.md の**ドメインマップ**(§9)で
+宣言し、hooks が書き込み制御に使う。
+
+以前は frontmatter の `tools` で権限を最小化した Agent を同梱し、「できないことは暴走もできない」を
+原則としていた。ADR-004(2026-09-23)で同梱を 2 体に絞り、intent 駆動化(2026-09-27)で残る
+`codiel-analyst`(init フェーズの廃止に伴い削除)と `codiel-test-designer` も撤去した。
+test-designer の「Bash を持たず、`.codiel/specs/<unit-id>/` の spec.md と cases.md だけを書く」という
+権限は、test-spec の依頼文の tools 限定条項と `writing-test-specs` の HARD-GATE が代わりに担う。
+成果物をオーケストレーターがコミットする責務の分配は、「Bash を持たない」ではなく
+「文書系フェーズの委譲先は git 操作をしない」という規約を根拠にする。
 
 ### MCP ツールの付与方針
 
@@ -363,12 +368,6 @@ guard-bash hooks の matcher は Bash のみであり、GitHub MCP の書き込�
 サーバー単位では許可しない。Playwright はテスト・実装・レビューの作業を受ける委譲先に必要に応じて付与する。
 どの委譲先に MCP を付与するかは、委譲先の定義側で判断する。未接続の MCP エントリは他に解決する
 ツールがあるため無視されるだけで、未接続環境でも動作に支障はない。
-
-### 名前付き Agent
-
-| エージェント | 担当フェーズ | ツール権限 | 権限設計の意図 |
-|---|---|---|---|
-| `codiel-test-designer` | test-spec | Read, Grep, Glob, Write, Edit, Context7 | spec.md / cases.md の新規作成と**更新**。書き込み先は hooks で `.codiel/specs/**` に制限 |
 
 ### 作業内容による委譲
 
@@ -380,7 +379,7 @@ guard-bash hooks の matcher は Bash のみであり、GitHub MCP の書き込�
 
 | 委譲の種別 | 主な作業 | 担保する境界 |
 |---|---|---|
-| 成果物を書く委譲 | アジェンダ・設計書・開発計画、実装・テストスクリプト・修正 | 依頼文の tools 限定条項、hooks、各作業スキルの HARD-GATE |
+| 成果物を書く委譲 | アジェンダ・設計書・テスト仕様・開発計画、実装・テストスクリプト・修正 | 依頼文の tools 限定条項、hooks、各作業スキルの HARD-GATE |
 | 読み取りだけの委譲 | diff のレビュー、調査、再レビュー | 読み取り系 tools のみ、`reviewing-diffs` の HARD-GATE |
 
 実装・テストの委譲では、開発手順書のドメインタグとディスパッチプロンプトで渡すドメインマップに
@@ -410,8 +409,8 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
-機械的に配置し、CLAUDE.md / raguel.config.yaml は聞き取り(ドメイン分割と保護パス)の回答から
-生成する(既存ファイルは不足分のみ追記)。
+機械的に配置する。raguel.config.yaml は聞き取り(保護パス)の回答から生成し、CLAUDE.md は
+`CLAUDE.example.md` の運用ルール節をそのまま追記する(既存ファイルは不足分のみ追記)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
 GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
@@ -454,22 +453,35 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
   **この旧書式は廃止され、互換読みも設けない**(契約 §6)。現行の書式・挿入位置・採番・タグは
   契約 §6-1〜§6-4 が正本である
 - 記録の契機: Raguel STOP、ループ上限超過、record_outcome(incident)、レビューで発覚した設計漏れ
-- 台帳の生成と書き込みは metatron の CLI が行う。CLI の案内が無い環境では、記録を run のレポートへ持ち越す(設計書 `2026-09-15-metatron-init-gotchas-design.md` §6.4)。
+- 台帳の生成と書き込みは metatron の CLI が行う。記録の判断と書式は metatron の `recording-gotchas` スキルに従い、codiel は契機が起きたらそのスキルを起動する(`orchestrating-runs` の「失敗の記録」)。CLI の案内が無い環境では、記録を「未記録の GOTCHAS」として run のレポートへ持ち越す(設計書 `2026-09-15-metatron-init-gotchas-design.md` §6.4)。
 - 全フェーズのサブエージェントが作業前に必読(ディスパッチプロンプトで強制)
 - Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成する
 
 ### CLAUDE.md(← CLAUDE.example.md)
 
-上記 2 つを適切に運用するための決まり。
+Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
+codiel はこの 2 つに触れないので、CLAUDE.md にも書かない。metatron が有る環境では、これらの
+存在と扱い方は SessionStart の注入と `.claude/rules/metatron/` を通して伝わる。
 
-- 作業前に ARCHITECTURE.md を読む。GOTCHAS.md の該当エントリを確認する
-- 失敗したら recording-gotchas の基準に従い GOTCHAS.md に追記する
+文書の扱い:
+
+- intent 文書(`docs/intents/`)の原文のセクション(`## ASIS` / `## TOBE`)はユーザーの言葉のまま
+  にし、要約・書き換えをせず、日付・話者・出所つきで末尾に追記する
+- 持続層(`docs/intents/domains/`)を書き換えるのは intent-sync フェーズだけにし、`[ADR 候補]`
+  の印が付いたエントリを参照形へ縮める作業も intent-sync フェーズの外で行う
+- テスト仕様書(`.codiel/specs/`)は機能の一部。機能を変えたら仕様書とケースも更新する
+
+規則:
+
+- run から渡された前提を使う
 - `.codiel/runs/**/state.json` を直接編集しない(codiel-state 経由のみ)
 - Raguel ゲートは省略しない。ASK / STOP には従う
-- ARCHITECTURE.md が現実と乖離したら更新する(乖離の放置は GOTCHAS 行き)
-- テスト仕様書(`.codiel/specs/`)は機能の一部。機能を変えたら仕様書とケースも更新する
 - PROCEED した変更が原因で実害(障害・リグレッション)が出たら、必ず incident として申告し
   `record_outcome(incident)` を記録させる(自動検知できない唯一の結末であり、最も価値の高い失敗判例)
+
+ARCHITECTURE / GOTCHAS を作業の前提として読む規律、乖離の報告、失敗の記録の手順は
+`orchestrating-runs`(依頼文テンプレートの「前提」、「7. 失敗の記録」、finalize の結果
+レポート)に置く。
 
 ## 10. ディレクトリ構成(プラグイン側)
 
@@ -498,9 +510,6 @@ plugins/codiel/
     fixing-review-findings/SKILL.md
     syncing-intents/SKILL.md
     filing-followup-issues/SKILL.md
-    recording-gotchas/SKILL.md
-  agents/
-    codiel-test-designer.md
   references/
     intent-format.md          # 変更 intent と持続層の書式(§6.3、§6.4)
     intent-writing.md         # intent 文書・持続層の執筆規則(§6.12.2)

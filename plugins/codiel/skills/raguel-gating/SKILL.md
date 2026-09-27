@@ -115,7 +115,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ### STOP
 
 1. `node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason "<理由>"` で run を停止する。
-2. 続けて `recording-gotchas` スキルを起動し、失敗の内容を GOTCHAS.md に記録させる
+2. 続けて `orchestrating-runs` の「7. 失敗の記録」に従い、失敗の内容を GOTCHAS に記録する
   (STOP は最も学習価値の高い失敗)。
 3. STOP はルール層の専権であり、パネル・meta がどれだけ良いスコアを出していても昇格しない
   (Raguel 側の不変条件)。Codiel 側でこれを覆す操作は一切行わない。
@@ -162,7 +162,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 4. **incident(PROCEED したのに実害が出た)は自動検知できない**。人間が明示的に申告したときのみ、
    `mcp__raguel__record_outcome`(`outcome: "incident"`、`evaluationId` は下記の選定順)+
    `codiel-state record-outcome --slug <slug> --outcome incident` を記録する。最も価値の高い失敗判例
-   なので、申告を勝手に補ったり省略したりしない。
+   なので、申告を勝手に補ったり省略したりしない。記録したら `orchestrating-runs` の「7. 失敗の記録」に従う。
 
 run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `evaluationId` は、
 **「最後にコードを検査した evaluate」の evaluationId** を使う。優先順は次のとおり:

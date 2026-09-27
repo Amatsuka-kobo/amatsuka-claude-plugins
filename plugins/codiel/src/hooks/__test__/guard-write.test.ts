@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { GATED, STAGES } from "../../codiel-state.js"
+import { GATED, readState, STAGES, writeState } from "../../codiel-state.js"
 import { runTs } from "../../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../guard-write.ts", import.meta.url))
@@ -65,37 +65,34 @@ function setupRun(slug = SLUG): string {
 
 const PHASE_SEQUENCE = STAGES.flat()
 
-// root の run を、targetPhase が in_progress になるまで進める。targetPhase の
-// 手前までは、GATED なフェーズは pass-gate、それ以外は complete-phase で終える
-// (pr だけ integration が github の run に必須の --pr-url を添える)。
+function statePathFor(root: string, slug: string): string {
+  return path.join(root, ".codiel/runs", slug, "try-1/state.json")
+}
+
+// root の run を、targetPhase が in_progress になるまで進める。CLI を 1 フェーズ
+// ずつ子プロセスで起動すると run 数が増えるほど遅くなるため、state.json を直接
+// 組み立てる(guard-write が読むのは state.json の内容だけであり、CLI 側の
+// バリデーションはここでの検証対象ではない)。手前までの GATED なフェーズは
+// pass-gate 相当、それ以外は complete-phase 相当で終える
+// (pr だけ integration が github の run に必須の pr.url を添える)。
 function advanceRunTo(root: string, targetPhase: string, slug = SLUG): void {
-  const cli = (args: string[]) => runTs(CLI, args, { cwd: root })
+  const p = statePathFor(root, slug)
+  const state = readState(p)
   const idx = PHASE_SEQUENCE.indexOf(targetPhase)
   for (let i = 0; i < idx; i++) {
     const ph = PHASE_SEQUENCE[i]
-    if (GATED.has(ph))
-      cli([
-        "pass-gate",
-        ph,
-        "--slug",
-        slug,
-        "--evaluation-id",
-        "e",
-        "--verdict",
-        "PROCEED"
-      ])
-    else if (ph === "pr")
-      cli([
-        "complete-phase",
-        ph,
-        "--slug",
-        slug,
-        "--pr-url",
-        "https://example.com/pr/1"
-      ])
-    else cli(["complete-phase", ph, "--slug", slug])
-    cli(["start-phase", PHASE_SEQUENCE[i + 1], "--slug", slug])
+    const phaseState = state.phases[ph]
+    if (GATED.has(ph)) {
+      phaseState.evaluationId = "e"
+      phaseState.verdict = "PROCEED"
+    } else if (ph === "pr") {
+      state.pr.url = "https://example.com/pr/1"
+    }
+    phaseState.status = "passed"
   }
+  state.phases[targetPhase].status = "in_progress"
+  state.phase = targetPhase
+  writeState(p, state)
 }
 
 // setupRun の run を implement フェーズまで進める。

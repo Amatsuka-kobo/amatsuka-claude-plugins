@@ -45,11 +45,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ## 1. 前提確認とベースブランチの最新化
 
 1. `orchestrating-runs` の前提確認(Raguel MCP の利用可否、ハーネスの初期化の確認)に従う。
-2. `node <plugin-root>/scripts/check-intent-env.mjs` を実行する。最初に 1 回だけ実行し、以降の手順も同じ出力を使い回す。
-3. 連携モードを判定する。`repoSlug` が null でなく `ghAuthenticated` が true なら github、それ以外は local とする。
-4. `imageUpload` の判定材料を控える。`ghAttachSupported` が true なら `ghAttach` を、セッションで `mcp__claude-in-chrome__*` のツールが使えるなら `chrome` を使える手段とする。local モードでは両方使わない。
-5. `adrTarget` の判定材料を控える。`projectDocs.architecture` が null なら `intents`、それ以外は `metatron` とする。
-6. ベースブランチの名前を解決し、`git switch <ベース> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。以降、このブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
+2. 連携モード・`imageUpload`・`adrTarget` の判定は `orchestrating-runs` の §0 が正本である。§0 を経て起動されたときは、そこで得た `check-intent-env` の出力と判定結果(連携モード・`imageUpload`・`adrTarget`)をそのまま使い、ここで判定し直さない。**§0 を経ずに起動されたときだけ**、`orchestrating-runs/SKILL.md` の §0 の手順(`check-intent-env.mjs` の実行、連携モード・`imageUpload`・`adrTarget` の判定)をこの場で行う。
+3. ベースブランチの名前を解決し、`git switch <ベース> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。以降、このブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
 
 `configWarnings` が空でないときは、その項目のパス設定が拒否されて既定値に落ちているか、ARCHITECTURE の構造に指摘がある。読めた文書だけで進み、警告の内容を完了報告に残す。
 

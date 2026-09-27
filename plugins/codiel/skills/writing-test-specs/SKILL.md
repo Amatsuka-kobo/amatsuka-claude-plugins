@@ -7,7 +7,7 @@ description: Codiel の test-spec フェーズで design.md の「影響を受�
 
 ## 概要
 
-`codiel-test-designer` が test-spec フェーズで使うスキル。`design.md` の
+test-spec フェーズでテスト仕様を書く委譲先が使うスキル。`design.md` の
 「## 影響を受ける機能単位」と intent の受け入れ基準を入力に、機能単位(unit)ごとの
 振る舞い仕様 `spec.md` と ID 付きテストケース表 `cases.md` を `.codiel/specs/<unit-id>/` に
 作成・更新する。
@@ -53,6 +53,12 @@ design.md がすでに unit-id を列挙しているため、本フェーズで�
 7. `scripts/` には一切触れない(作成もしない、既存があっても変更しない)。
 8. 自己チェック: 各ケースの期待結果について「intent のどの受け入れ基準が根拠か」を
    即答できるか確認する。答えられないケースは実装詳細の混入を疑う。
+9. 作成・更新した unit-id ごとに、`spec.md` と `cases.md` のパスを報告する。
+
+## ツール運用
+
+- ライブラリ・フレームワークの仕様確認は Context7 の `resolve-library-id` → `query-docs` で行う。記憶で書かず、仕様を確認してから反映する。
+- Context7 が使えないときは、コードリーディングで代替する。
 
 ## spec.md の書式
 
@@ -89,16 +95,22 @@ design.md がすでに unit-id を列挙しているため、本フェーズで�
 
 ## コミット責務
 
-`codiel-test-designer` は Bash を持たないため spec.md / cases.md を自らコミットする手段がない。
-`orchestrating-runs` の成果物コミット規約により、test-spec フェーズの成果物は Raguel の
-test-spec ゲート通過直後にオーケストレーター自身がコミットする。test-designer は spec.md /
-cases.md を書いて報告するところまでが職務。
+test-spec の委譲先は git 操作をしない。`orchestrating-runs` の成果物コミット規約により、test-spec
+フェーズの成果物は Raguel の test-spec ゲート通過直後にオーケストレーター自身がコミットする。
+委譲先の職務は spec.md / cases.md を書いて報告するところまでとする。
+
+- hooks は `.codiel/` 配下への書き込みを止めない。
+- hooks は呼び出し元の委譲先を識別できないため、下の HARD-GATE の境界は自身の規律で守る。
 
 <HARD-GATE>
 期待結果を実装に合わせて書かない。仕様が先、実装が後である。まだ実装されていない・
 これから変わる振る舞いであっても、intent の受け入れ基準に基づいて「あるべき」期待結果を
 書く。既存コードの現在の挙動を Read して「今こう動いているから」を期待結果の根拠にしては
-ならない。また `scripts/` には一切触れない(作成・変更・削除のいずれも禁止)。
+ならない。
+
+書き込んでよいのは `.codiel/specs/<unit-id>/` の `spec.md` と `cases.md` だけである。
+`scripts/` には一切触れない(作成・変更・削除のいずれも禁止)。プロダクトコードとほかの領域にも
+書き込まず、実装もしない。`Bash` は使わない。
 </HARD-GATE>
 
 ## Red Flags(合理化への反論)

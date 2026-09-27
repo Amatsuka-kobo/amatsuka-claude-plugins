@@ -21,8 +21,10 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
 前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
 検討してください。ARCHITECTURE と GOTCHAS は metatron が管理し、Codiel は解決されたパスから
-読み取るだけです。パスは `metatron.config.json` で変更でき、metatron が無い環境では、失敗の記録は
-run のレポートと完了報告に残り、台帳へは追記されません。
+読み取るだけです。パスは `metatron.config.json` で変更できます。run で起きた失敗(Raguel の STOP など)の
+GOTCHAS への記録は、metatron の `recording-gotchas` スキルに任せます。metatron が無い環境では、失敗の
+記録は「未記録の GOTCHAS」として run のレポートと完了報告に残り、台帳へは追記されません。後で metatron を
+導入すれば、残った記録を台帳へ移せます。
 
 ### `/codiel:run [<Issue番号> | <intentパス>]`
 
@@ -64,7 +66,9 @@ Issue 番号を渡した場合、本文に `<!-- intent:v2 -->` を持つ Issue 
 Issue は本文を原文としてそのまま記録します。
 
 詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
-二段ループ・スキル・同梱 Agent・作業内容による委譲構成・hooks 仕様などを記載)。
+二段ループ・スキル・作業内容による委譲構成・hooks 仕様などを記載)。Codiel は Agent 定義を同梱しません。
+各フェーズの作業は作業内容を渡して委譲し、委譲先はプロジェクトの Agent 定義やセッションの運用方針で
+決まります(方針が無ければ Claude Code の組み込みのサブエージェントへ送ります)。
 
 run が active な間は、gh-utility のスキル(`issue-craft` など)から GitHub へ投稿しないでください。
 投稿する本文に codiel のマーカー `<!-- codiel:generated -->` が付かないため、codiel の hook に
