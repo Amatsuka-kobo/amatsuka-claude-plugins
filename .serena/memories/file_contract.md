@@ -18,7 +18,8 @@
   `lib.ts` を import するので、実装としては metatron と codiel の 2 つを比べている。
   **このテストを消すと 2 実装のずれを検出する手段がゼロになる。**「重複テストだから」と削らない。
 - 契約を変更したら §15 のチェックリスト(2 実装 + metatron references 3 本 + codiel の
-  `references/intent-format.md` / `handoff-contract.md` と `recording-gotchas` / `preparing-design-agendas` の写し +
+  `references/intent-format.md` / `handoff-contract.md` と `preparing-design-agendas` の写し(codiel の `recording-gotchas` は
+  2026-09-27 に削除し、GOTCHAS の記録は metatron の `recording-gotchas` に委ねた) +
   gh-utility `issue-craft` の写し + 2 者比較テスト)を同じコミットで更新する。
 
 ### 2 者比較テストが実際に比較している項目
@@ -73,7 +74,8 @@
   `unclosed_fence` の判定は rules に適用しない。
 - §6 に ADR エントリ間の区切り（前後を空行で挟んだ `---`）の規定が 2026-09-16 に加わり、`stage-adr` が節全体に対して毎回正規化する。
 - §9-§10 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
-  完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表。**要約を伴う抽出をしない。**
+  完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表(`analyzing-issues` と `issue.md` は 2026-09-27 に廃止。
+  intent 書式 v2 と上書きの記録は `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.5)。**要約を伴う抽出をしない。**
 - §11 gh-utility `issue-craft` 持ち込みモードの固定開始句
   `持ち込みモード: 以下の完成済み本文で起票`。判定は固定句の一致のみ、推測で入らない。
 - §12 metatron CLI 入出力規約と staging・ロックの保証。staging は単一ターゲットのままで、

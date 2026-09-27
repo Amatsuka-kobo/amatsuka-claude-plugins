@@ -1,6 +1,7 @@
-`plugins/codiel` (1.0.0-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
-through analysis, design discussion, planning, implementation, testing, PR and review, gated by the
-bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
+`plugins/codiel` (1.0.0-dev) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
+ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
+local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
 `docs/skill-flowcharts.md` (commit 86b9483). MCP internals: `mem:codiel/raguel_mcp`.
 
@@ -14,7 +15,7 @@ bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel
   関連ファイル欄・関連エントリ欄・Codiel フェーズ名欄は**持たない**(必要ならすべて `対策` の本文へ)。
   タグは `[解決済み]` / `[対象外]` の 2 種だけを `GOTCHA-NNN:` の直後に置く。
 - `install-harness.sh` は **`.codiel/{specs,runs,reports}` を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
-- `recording-gotchas` は metatron CLI の案内がコンテキストにあるときだけ `append-gotcha` で追記する。プラグインルート・ソース・CLI パスは推測しない。案内が無いときは直接編集せず、エントリを `.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/` と完了報告へ持ち越す。
+- GOTCHAS の記録は metatron の `metatron:recording-gotchas` に委ねる(codiel の `recording-gotchas` スキルは 2026-09-27 に削除)。codiel が持つのは記録の契機(Raguel の STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)と、CLI の案内が無いときの退避(「未記録の GOTCHAS」を `.codiel/runs/<slug>/try-<n>/reports/` か `.codiel/reports/` と完了報告へ持ち越す)だけで、`orchestrating-runs` の「失敗の記録」にある。
 
 ## `/codiel:init` — 保護パスだけを確認する
 
@@ -25,8 +26,11 @@ metatron が行う。
 ARCHITECTURE にある ` ```json metatron:domains ` のドメインマップは、codiel が実行時に読み取る。
 マーカー名とドメインマップの存在は事実として扱うが、codiel が ARCHITECTURE に書き込むことはない。
 
-「初期化済み」の判定に ARCHITECTURE は使わない。`CLAUDE.md` の運用ルール節・
-`raguel.config.yaml`・`.codiel/` の 3 ディレクトリで判定する。
+「初期化済み」の判定に ARCHITECTURE は使わない。B = `.claude/rules/codiel.md`(運用の規律。init が
+`assets/rules/codiel.md` から置く。paths 指定なし)と、CLAUDE.md に行全体が `## Codiel` と一致する見出し
+(置き場の地図と入口だけ。`CLAUDE.example.md` が雛形)、C = `raguel.config.yaml`、D = `.codiel/` の 3 ディレクトリで
+判定する(設計書の決定 70)。旧セクション「## Codiel ハーネス運用ルール」は前方一致でも B を満たさず、
+init が差分を示して承認を得てから取り除く。
 
 ## `/codiel:run` のドメインモード
 
@@ -66,11 +70,16 @@ run 開始時に明示選択したモードである。選択したモードは 
 `domains` だけを返す薄い包み。警告は重複ブロック・未閉フェンス・マーカーを呑み込む未閉フェンスの
 3 種で、metatron の `findDomainsBlock` と**出る条件と件数を揃える**(文言も現状は一致)。
 
-## Flow — 11 stages / 12 named phases
+## Flow — 12 stages / 13 named phases
 
-`init → discuss → design → (test-spec ∥ dev-plan) → implement → test-loop → pr → review →
-fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ。
-Raguel gates `init`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`, `fix-loop`.
+`intent → discuss → design → (test-spec ∥ dev-plan) → implement → test-loop → intent-sync → pr →
+review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ。
+Raguel gates `intent`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`, `intent-sync`, `fix-loop`.
+`discuss`・`design` は scale light の run でだけ skip でき、`fix-loop` は所見が無ければ skip する。
+run state は version 2(slug で識別。`--issue` は任意の記録)。version 1 の run は `get`・`stop` と、
+`awaiting_outcome` の run の outcome の記録だけを受け付ける。
+`mark-ask` は `in_progress` のフェーズと `pending` の finalize だけを受け付ける(途中の確認は
+`mark-ask --kind confirm` → `resume`。stop-guard は `active` の run の停止を止める)。
 
 **Human touchpoints are not limited to Raguel ASK/STOP.** `discuss` は常時 human-in-the-loop、
 `design` は walkthrough + ユーザー承認を Raguel 評価の前に置く、`triage` は常にユーザー主導。
@@ -79,7 +88,8 @@ Raguel gates `init`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`
 ### intent 文書と capturing-intent(2026-09-27 に上流の intent 用プラグインから統合)
 
 上流の intent 用プラグインの `capturing-intent` スキル・参照文書・`check-intent-env` は codiel へ移り、そのプラグインは撤去された。
-run の起点を intent 文書へ替える改修は `harness-docs/design/2026-09-27-codiel-intent-driven-design.md`(M2 以降)。
+run の起点は intent 文書である(2026-09-27 の改修。設計書 `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` の決定 1〜70)。
+intent-sync フェーズは `skills/syncing-intents/` が、承認済みの受け入れ基準の変更と原文の追記を派生文のセクションへ書き戻す。
 
 - `skills/capturing-intent/`: TOBE の聞き取り → ASIS 探索 → 分岐の合意 → intent 文書
   `docs/intents/YYYY-MM-DD-<slug>.md` の全文提示と承認 → 保存。
@@ -95,13 +105,14 @@ run の起点を intent 文書へ替える改修は `harness-docs/design/2026-09
   2 つが別ディレクトリを指すのは正常な状態。
 - metatron との 2 者比較テストは `src/__test__/check-intent-env.test.ts` の `expectTwoWayMatch`
   (詳細は `mem:file_contract`)。
-- M1 の時点では、本文に `<!-- intent:v1 -->` を持つ intent issue を入力にした run は、従来どおり
-  `analyzing-issues` が `issue.md` へ転記する。
+- Issue を入口にしたときは capturing-intent が本文を読み、マーカー(`<!-- intent:v1 -->`・`<!-- codiel:generated -->`)で
+  原文か派生かを決める。`analyzing-issues` と `issue.md` は廃止した。
 
-## Agents — bundled analysts and work-content dispatch
+## Agents — 同梱しない。作業内容で委譲する
 
-同梱する Agent 定義は `codiel-analyst` と `codiel-test-designer` の 2 体だけである。その他の
-フェーズは Agent 名や役割名を指定せず、「成果物を書く委譲」「読み取りだけの委譲」など作業内容と
+codiel は同梱 Agent を持たない(2026-09-27。`codiel-analyst` と `codiel-test-designer` を廃止し、ADR-004 の
+「2 体に絞る」部分を上書きした)。test-spec の書き込み範囲の制限は、依頼文と `writing-test-specs` の HARD-GATE が担う。
+すべてのフェーズは Agent 名や役割名を指定せず、「成果物を書く委譲」「読み取りだけの委譲」など作業内容と
 委譲の種別でサブエージェントへ委譲する。委譲先はセッションに注入された運用規律が選び、
 規律が無い環境では読み取りだけの委譲を `Explore`、それ以外を `general-purpose` へ縮退する。
 ドメイン固有の観点は
@@ -112,22 +123,31 @@ run の起点を intent 文書へ替える改修は `harness-docs/design/2026-09
 ## Skills (17) and commands (3)
 
 Commands: `/codiel:init`, `/codiel:run`, `/codiel:test`.
-Skills: `analyzing-issues`, `preparing-design-agendas`, `facilitating-design-discussions`,
+Skills: `capturing-intent`, `preparing-design-agendas`, `facilitating-design-discussions`,
 `writing-design-docs`, `writing-test-specs`, `writing-dev-plans`, `implementing`, `scripting-tests`,
-`running-regression-tests`, `fixing-failures`, `reviewing-diffs`, `fixing-review-findings`,
-`filing-followup-issues`, `recording-gotchas`, `orchestrating-runs`, `raguel-gating`,
+`running-regression-tests`, `fixing-failures`, `syncing-intents`, `reviewing-diffs`, `fixing-review-findings`,
+`filing-followup-issues`, `orchestrating-runs`, `raguel-gating`,
 `initializing-harness` (+ その `raguel.config.example.yaml`)。
+どのスキルも description の照合では起動されず、コマンド・`orchestrating-runs` の手順・依頼文から名前かパスで起動される
+(そのため evals は持たない)。
 全スキルは commit 86b9483 で prompt-smith 標準に書き直され、2026-08-16 に契約追随の改訂が入った。
 
 ## Hooks — phase-scoped, ask-by-default with hard denies
 
-`hooks/hooks.json`: `PreToolUse(Bash)` → `guard-bash.mjs`; `PreToolUse(Edit|Write)` → `guard-write.mjs`; `Stop` → `stop-guard.mjs`.
+`hooks/hooks.json`: `PreToolUse(Bash)` → `guard-bash.mjs`; `PreToolUse(mcp__*github*__<書き込みツール 15 個>)` → `guard-github-mcp.mjs`; `PreToolUse(Edit|Write)` → `guard-write.mjs`; `Stop` → `stop-guard.mjs`.
+
+run が active な間、GitHub へ投稿する本文(gh の issue/pr の 7 コマンド、`gh api` の body、GitHub MCP の書き込み)には
+`<!-- codiel:generated -->` が要り、無ければ deny する(設計書の決定 53・60)。guard-bash はクォートと入れ子を追う字句解析で
+gh の起動を探す。検査の範囲は決定 69(手順と自然な書き方のすり抜けと誤検知を直し、意図的な回避は設計書 §6.8 の既知の限界)。
+本文は Write で run の `reports/` に投稿ごとに別名で書き、別の Bash 呼び出しで `--body-file` で渡す(決定 66)。
 codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。metatron 側と方針が逆なので混同しない。
 
 - 制限は**フェーズ単位でエージェント単位ではない**。フェーズ不一致は `ask`(偽陽性を許容)。
   無条件 `deny` は `rm -rf`、`curl | sh`、force push、main/master への push、
   shell からの `state.json` 書き込み、条件外の PR/issue 作成。
-- `guard-write` は `init`/`discuss`/`design`/`test-spec`/`dev-plan` を文書フェーズとして扱う。
+- `guard-write` は `intent`/`discuss`/`design`/`test-spec`/`dev-plan` などを文書フェーズとして扱う。`docs/intents/**` は
+  直下の intent 文書と `domains/`(持続層)で許すフェーズを分け、active な run の `state.intent` は repoRoot 基準の
+  パスで照合してどのフェーズでも通す。
 - Phase state: `src/codiel-state.ts`(CLI エントリは `src/codiel-state-cli.ts` に分離。esbuild が
   ライブラリを hook へインライン化しても自己実行しないようにするため)。共有ヘルパは `src/hooks/lib.ts`。
 
@@ -151,6 +171,7 @@ codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。meta
 
 ## Assets copied into target projects
 
-`CLAUDE.example.md` と `settings.json` がプラグインルートに、`scripts/install-harness.sh` が
+`CLAUDE.example.md`(CLAUDE.md の `## Codiel` の雛形)と `settings.json` がプラグインルートに、
+`assets/rules/codiel.md`(`.claude/rules/codiel.md` の雛形)が assets に、`scripts/install-harness.sh` が
 `.codiel/` 3 ディレクトリの機械的配置を担う(hand-written、esbuild 出力ではない)。
 ARCHITECTURE / GOTCHAS のテンプレートは**もうここには無い**(metatron へ移設)。

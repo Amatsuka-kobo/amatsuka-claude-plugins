@@ -77,8 +77,8 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
 パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (0.8.0-dev) — GitHub-issue-driven orchestrator gated by the bundled `raguel` MCP
-  server. Largest/most complex. 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
+- **codiel** (1.0.0-dev) — intent-driven orchestrator gated by the bundled `raguel` MCP
+  server. Largest/most complex. 2026-09-27 に sandalphon を吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
 - **metatron** (0.3.7-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
