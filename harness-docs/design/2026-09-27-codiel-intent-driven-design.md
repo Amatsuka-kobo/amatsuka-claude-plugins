@@ -1,7 +1,7 @@
 # codiel を intent 駆動へ改造し、sandalphon を吸収する 設計書
 
 - 作成日: 2026-09-27
-- 状態: 設計(第 9 版)・承認済み(2026-09-27)・実装時の追補(2026-09-27〜28。決定 54〜71)
+- 状態: 設計(第 9 版)・承認済み(2026-09-27)・実装時の追補(2026-09-27〜28。決定 54〜81)
 - 対象プラグイン: `plugins/codiel`(主)、`plugins/sandalphon`(撤去)、`plugins/metatron`(参照文書・テストの追随、`[ADR 候補]` の走査と縮約の実装、執筆規律の追随)、`plugins/gh-utility`(GitHub の執筆規則と画像の載せ方)
 - 現行バージョン: codiel `0.9.0-dev` → `1.0.0`、metatron `0.3.10-dev` → `0.4.0-dev`(マイナー)、sandalphon `0.2.1-dev` → 撤去、gh-utility `0.5.2-dev` → `0.5.3-dev`(§9)
 - 入力: オーケストレーター確定事項(2026-09-27。ユーザー合意済み)、暗黙知レビューと反証レビューの採否(2026-09-27。オーケストレーター決定)、ユーザーレビューの修正指示 3 点と、独立性の要件・metatron が無いときの ADR の決定・ADR 候補の移送を metatron 側で行う決定・執筆規則の決定(2026-09-27)
@@ -38,12 +38,18 @@
 
 実装時の追補(2026-09-27)では、実装中のユーザー決定を決定 54〜59 として足し、M2 のレビューで直した仕様を決定 60〜62 として足した。これに合わせて §3.6・§6.1.1・§6.1.2・§6.2.2・§6.8・§6.9.4・§6.10.1・§7.1・§10・§11.1 の該当行を改めた。続く追補では、M2 の再レビューとユーザー決定で決定 63〜71 を足し、§4.2 の A2-3・A2-21、§6.1.1・§6.1.2・§6.2.2・§6.2.4・§6.3.2・§6.8・§6.12.3・§6.12.6 を改め、§6.12.7 を足した。実装計画書 §9.4 の 11〜25 が経緯を持つ。
 
+実装時の追補(2026-09-28)では、テスト run を受けたユーザーの追加要件を決定 72〜79 として足し、決定 4・18・30・56 をこれに合わせて改めた。テストを実装より先に書く test-code フェーズを置き、テストの仕様とテストコードの置き場、作るテストの範囲、テストの保護、PR の本文を定めた。§4.4・§5・§6.1.1・§6.1.4・§6.2.1・§6.2.2・§6.6・§6.7・§6.8・§6.9.1・§6.9.4・§6.10.1・§6.12.3・§6.12.6・§6.12.7・§8・§10〜§12 を改め、§4.6・§6.12.8・§6.13 を足した。経緯は実装計画書 §9.4 の 32 にある。
+
+同じ日の 2 回目の見直しでは、ユーザー決定で決定 80(E2E も implement で通す)と決定 81(新しい画面の名前をユーザーに聞く)を足し、test-loop の修正の委譲を決定 30 の規則で並べることにした。決定 30・73・74 をこれに合わせて改め、§4.6・§5・§6.1.1・§6.1.4・§6.6.4・§6.7・§6.9.1・§6.13.1・§6.13.3・§6.13.4・§8.2・§10・§12・§15 を改めた。経緯は実装計画書 §9.4 の 33 にある。
+
+続く見直しでは、テストを実行する委譲の並べ方を §6.13.1 の 1 つの規則にまとめ、決定 30・80 と §6.6.4・§6.7・§6.13.2 をその参照に改めた。あわせて、E2E の実行環境と環境の失敗の扱い(§6.13.1)と、M4 より前に作った state を `stop --reason migrate` で止める手順(§6.6)を決め、§4.6・§6.2.2・§6.3.2・§6.9.1・§8.2・§10・§12・§15 を改めた。その後の見直しでは、環境の失敗を実行し直す時機と記録(§6.6.4、§6.13.1、§6.2.5)、`phases` に test-code を持たない state を CLI が v1 の run と同じ形で拒むこと(§6.6)、新しい try の intent を手順 2 より前に持ち込むこと(§6.1.2)を決め、§15 の 2・3 を閉じた。
+
 | # | 論点 | 決定 | 具体化 |
 | --- | --- | --- | --- |
 | 1 | 文書の本数 | 設計書 1 本。実装計画はマイルストーン分割 | §10 |
 | 2 | intent の層 | 2 層。変更ごとの intent と、長く残る持続層 | §6.3、§6.4 |
 | 3 | run の本数と入口 | run は 1 本。`/codiel:run [<Issue番号> \| <intent パス> \| 省略]` | §6.1 |
-| 4 | フェーズ列 | `intent → discuss → design → (test-spec ∥ dev-plan) → implement(並列) → test-loop(並列) → intent-sync → pr → review → fix-loop → triage → finalize` | §6.1 |
+| 4 | フェーズ列 | `intent → discuss → design → (test-spec ∥ dev-plan) → test-code(並列) → implement(並列) → test-loop(並列) → intent-sync → pr → review → fix-loop → triage → finalize`。test-code は決定 73 で足した | §6.1、§6.13 |
 | 5 | intent 承認ゲートで決めること | 規模(標準 / 軽量)、文書だけ残して終えるか、Issue 起票(github モードのみ・任意) | §6.1.3 |
 | 6 | 軽量でも review は飛ばさない | 軽量は discuss と design だけを飛ばす | §6.1.4 |
 | 7 | sandalphon の実行系 | `executing-intent`・`bridging-execution`・`/sandalphon:run` を廃止。起票部分だけ決定 5 の任意選択肢として残す | §7 |
@@ -57,7 +63,7 @@
 | 15 | コミット | intent 文書(両層)は codiel が run の中でコミットする | §6.1.2、§6.4.4 |
 | 16 | 連携モード | `github` / `local`。state に記録する | §6.5 |
 | 17 | 並列実装 | wave 分割・1 ステップ 1 worktree・brief / report ファイル・ステップごとのタスクレビュー・順次マージ | §6.6 |
-| 18 | test-loop の並列化 | Step A は unit ごと、Step B は worktree 方式。fix-loop は直列 | §6.7 |
+| 18 | テストの並列化 | test-code は仕様のディレクトリごとに worktree で並列に書く。test-loop の修正も仕様のディレクトリごとに worktree 方式で並列にする。fix-loop は直列(決定 73 で旧 Step A を test-code へ移した) | §6.7、§6.13.2 |
 | 19 | sandalphon の撤去 | 資産を codiel へ移し、波及先をすべて追随させる。`plugins/sandalphon/` の削除はユーザーが手で行う | §7 |
 | 20 | バージョン | codiel は M1〜M3 の終点で `1.0.0-dev`、M4 の終点で `1.0.0`。metatron は走査と縮約の実装が入るため、パッチではなくマイナーを上げて `0.4.0-dev` にする(執筆規律の追随も同じマイナーに含める)。gh-utility は GitHub の執筆規則と画像の載せ方を足すため、パッチを上げて `0.5.3-dev` にする。raguel-mcp は変更しない | §9 |
 | 21 | マイルストーン | M1 吸収 → M2 起点変更 → M3 持続層 → M4 並列化 | §10 |
@@ -69,7 +75,7 @@
 | 27 | worktree の後始末 | マージ済みは直後に削除する。失敗したものは run の終了まで残し、やり直しの前に必ず削除してから作り直す | §6.6.3 |
 | 28 | 連携モードの固定 | run 開始時に判定して固定する。再判定は resume 時だけ行い、変わっていたら人に確認する | §6.5.1 |
 | 29 | 並列度の上限 | 固定 4 | §6.6.2 |
-| 30 | Step A の実行 | 「並列可」の規則を当てる | §6.7 |
+| 30 | テストの同時実行 | 「並列可」の規則を当てる。`spec.md` に `parallel: true` を持つ仕様のディレクトリのテストだけを同時に実行し、持たないものは直列に実行する。test-loop の回帰の実行、`/codiel:test`、implement のグループのマージの後の実行に当てる。中でテストを実行する委譲(test-code、implement、test-loop)は、委譲そのものを同じ考え方で並べる。委譲の並べ方の規則は §6.13.1 に置く | §6.6.4、§6.7、§6.13.1、§6.13.2 |
 | 31 | 領域名の記録 | intent の frontmatter `domains` に YAML 配列で記録する。ファイル名に使えない領域名は slug と同じ規則に正規化する | §6.3.2、§6.4.1 |
 | 32 | `analyzing-issues` と `codiel-analyst` | 削除する。Issue の読み取りは intent フェーズのオーケストレーターが行う。ADR-004 との不整合は M2 で起票する新 ADR で解消する | §3.6、§6.1.6、§10 |
 | 33 | 軽量経路で持続層を読むフェーズ | intent・test-spec・dev-plan・review | §6.4.4 |
@@ -95,7 +101,7 @@
 | 53 | 投稿する本文のマーカー | run が active な間、GitHub へ本文を投稿する操作はすべて `<!-- codiel:generated -->` を本文に含める。対象は Issue の作成・編集・コメント、PR の作成・編集・コメント・レビュー本文である。スキルの規律で付けたうえで、`gh` のコマンドは guard-bash、GitHub MCP の書き込みツールは新しい PreToolUse の hook で強制し、マーカーが無ければ deny する。run が active でないセッションには掛けない。codiel を通さない投稿までは追わない。gh-utility の投稿にはマーカーを付けない | §6.3.5、§6.8、§6.12.3、§6.12.6 |
 | 54 | evals | codiel は `evals/` を持たない。codiel のスキルはどれもコマンド・`orchestrating-runs` の手順・依頼文から名前かパスで起動され、description の照合では起動されないので、発火率を測る evals は要らない | §6.9.4 |
 | 55 | スキルの description | codiel の全スキルの description を「Codiel の <フェーズ> フェーズで、<担い手> が <入力> から <出力> を<動作>ときに使う。<起動元> が名指しで起動する。」の形に揃える。発火を促す句は入れない。対象はスキルだけで、commands と Agent 定義は含めない | §6.9.1 |
-| 56 | 同梱 Agent | codiel は同梱 Agent を持たない。`codiel-test-designer` を廃止し、test-spec は成果物を書く委譲にする。書ける範囲(`.codiel/specs/<unit-id>/` の `spec.md` と `cases.md` だけ、Bash を使わない)は依頼文と `writing-test-specs` の HARD-GATE で表す | §3.6、§6.1.1、§10 |
+| 56 | 同梱 Agent | codiel は同梱 Agent を持たない。`codiel-test-designer` を廃止し、test-spec は成果物を書く委譲にする。書ける範囲は `<testsDir>/<仕様のディレクトリ>/` の `spec.md` と `cases.md` だけ(決定 74)とし、Bash を使わない。この制約は依頼文と `writing-test-specs` の HARD-GATE で表す | §3.6、§6.1.1、§10、§6.13.3、§6.13.5 |
 | 57 | `CLAUDE.example.md` | metatron への分離後と intent 駆動化後の実態に合わせて書き直す | §6.9.4 |
 | 58 | GOTCHAS の記録 | codiel の `recording-gotchas` スキルを削除し、GOTCHAS の記録は `metatron:recording-gotchas` に委ねる。codiel に残すのは、記録の契機 4 つ(Raguel の STOP、ループ上限超過、incident、レビューで発覚した設計漏れ)と、metatron の CLI の案内が無いときの退避(未記録の GOTCHAS)だけで、`orchestrating-runs` の「失敗の記録」のセクションに置く | §6.10.1 |
 | 59 | `CLAUDE.example.md` と metatron | `CLAUDE.example.md` に ARCHITECTURE・GOTCHAS・metatron の言及を書かない。metatron が無い環境では不要で、有る環境では metatron の SessionStart の注入が伝える。ARCHITECTURE との乖離の縮退は `orchestrating-runs` の依頼文テンプレートと finalize が持つ | §6.10.1 |
@@ -110,7 +116,17 @@
 | 68 | intent の保存に失敗したとき | intent フェーズの手順 5 の (6) で `git switch -c` か `git commit` が「変更なし」以外の理由で失敗したら、`codiel-state stop --slug <slug> --reason commit-failed` で run を終端にしてからユーザーに確かめる。この確認は手順 5 の (4)〜(6) の間に確認を挟まない規則の例外である。intent は `abandoned` にしない。次の try は、作業ツリーに残した intent をそのまま使い、前の try のブランチから持ち込まない | §6.1.1、§6.1.2、§6.3.2 |
 | 69 | 投稿のマーカーを検査する hook の範囲 | guard-bash と guard-github-mcp は、run の手順の中でマーカーを付け忘れた投稿を止める安全網である。塞ぐのは、スキルの手順で使う書き方と、自然に書きうる書き方(本文のコマンド置換、行の継続、短いフラグの結合、フラグの繰り返し、`-R` の位置)ですり抜ける投稿である。手順どおりの正当な呼び出しを止める誤検知も、同じ重さで直す。複雑なシェル構文による意図的な回避まですべて塞ぐことは目的にせず、既知の限界として §6.8 に記録する(決定 53 の「codiel を通さない投稿までは追わない」) | §6.8 |
 | 70 | 運用の規律の置き場 | codiel の運用の規律(intent の原文・持続層・テスト仕様書の扱いと、run の前提・state.json・Raguel ゲート・incident の規則)は、`/codiel:init` が対象プロジェクトの `.claude/rules/codiel.md`(`paths` の指定なし)に置く。CLAUDE.md はセッションの最初にだけ読まれるので、最初に知っておくべき知識(置き場の地図と入口のコマンド)だけを「## Codiel」のセクションに置く。雛形は `plugins/codiel/assets/rules/codiel.md` と `CLAUDE.example.md` である。既存の CLAUDE.md に旧セクション「## Codiel ハーネス運用ルール」があれば、取り除く差分を示して承認を得てから消し、承認されなければ残して報告する | §6.9.4 |
-| 71 | ADR の書き方 | metatron の `writing-discipline.md` に「## ADR の書き方」を足し、次の 6 つを定める。背景には、なぜその決定が要ったか(解きたい問題、反していた考え)を書き、現状の事実だけでは背景にしない。各欄の事実と決定を落とさない範囲で、最も短い文と最も少ない文数で書く。影響範囲には、その決定から直接生じる変化だけを 1 項目 1 文で書き、結論の繰り返しと別の決定の帰結は書かない。本文を書き換えないほかの ADR の記述が古くなるときは、その置き換えを影響範囲に 1 文で書き、ほかの ADR の一部を上書きするときは上書きする範囲を結論に書く。検討した選択肢は互いに食い違わない書き方にし、前の選択肢を土台にするときは差分を書く。理由には、採用した結論が背景の問題をどう解くかと選んだ根拠を書き、背景の文を繰り返さない(ADR-006 の起票で決めた基準) | §6.12.5 |
+| 71 | ADR の書き方 | metatron の `writing-discipline.md` に「## ADR の書き方」を足し、次の 6 つを定める。背景には、その決定が必要になった事情(解きたかった問題、反していた考え)を書き、現状の事実だけでは背景にしない。各欄の事実と決定を落とさない範囲で、最も短い文と最も少ない文数で書く。影響範囲には、その決定から直接生じる変化だけを 1 項目 1 文で書き、結論の繰り返しと別の決定の帰結は書かない。本文を書き換えないほかの ADR の記述が古くなるときは、その置き換えを影響範囲に 1 文で書き、ほかの ADR の一部を上書きするときは上書きする範囲を結論に書く。検討した選択肢は互いに食い違わない書き方にし、前の選択肢を土台にするときは差分を書く。理由には、採用した結論が背景の問題をどう解くかと選んだ根拠を書き、背景の文を繰り返さない(ADR-006 の起票で決めた基準) | §6.12.5 |
+| 72 | PR の本文 | 変更の説明を中心に書く。ほかに入れるのは `Closes #<N>`(Issue を入口にした run)、変更を示す画像(UI の変更など)、intent 文書へのリンク、テストの結果、`<!-- codiel:generated -->` だけとする。要望・受け入れ基準・原文の転記と run の経緯は入れず、`## 出典` も置かない | §6.12.7、§6.12.8 |
+| 73 | テスト駆動の順序 | test-code フェーズを (test-spec ∥ dev-plan) と implement の間に置く。test-code は `cases.md` からテストコード(ユニットテストと E2E)を書いて実行し、実装の前に失敗すること(Red)を確かめる。implement は各ステップの通すテストを通す(Green。決定 80)。test-loop は全テストの回帰の確認と修正を、全件が通るまで繰り返す。test-loop からテストを書く手順(旧 Step A)を除く | §6.1.1、§6.7、§6.13.1、§6.13.2 |
+| 74 | テストの仕様の置き場 | `<testsDir>/` の下に、仕様のディレクトリごとに `spec.md` と `cases.md` を置く。ユニットテストは `units/<対象ファイルの repoRoot 相対パス>/`、E2E は画面ごとの `e2e/frontend/<画面名>/`(画面名の決め方は決定 81)、API のルートパスごとの `e2e/backend/<ルートパス>/`、画面でも API でもない入口(CLI のコマンド・バッチ・hook など)ごとの `e2e/cli/<コマンド名>/` とする。サブコマンドは 1 つの仕様にまとめる。ルートパスのパラメータは `{id}` の形(`/api/users/:id` は `e2e/backend/api/users/{id}/`)、ルート `/` は `e2e/backend/_root/` とする。`.codiel/specs/` は使わない。codiel 0.x の旧 `.codiel/specs/` は読まず、移さず、報告もしない | §6.13.3 |
+| 75 | testsDir の設定 | 新設の `.codiel/config.json` の `testsDir` に持つ。既定は `docs/tests`。`/codiel:init` が既定値で作り、ファイルやキーが無ければ既定値を使う。CLI と hook は同じ関数で読む。ユーザーは値を変えてよい | §6.13.4 |
+| 76 | テストコードの置き場 | codiel は決めず、プロジェクトの規約(`CLAUDE.md`・`.claude/rules`・既存のテストの配置)に従う。置いたパスを `spec.md` の frontmatter の `tests` に記録し、回帰の実行と保護に使う | §6.13.5 |
+| 77 | テストの保護 | implement・test-loop・fix-loop の間、`<testsDir>/**/{spec,cases}.md` と `spec.md` の `tests` に載ったファイルへの書き込みを、guard-write が ask にする。fix-loop で所見がテストに向くときは、オーケストレーターが `set-test-edit` を立てている間だけ通す | §6.8、§6.13.6 |
+| 78 | E2E の要否 | プロジェクトの規約(`CLAUDE.md`・`.claude/rules` のテスト方針)に E2E の要否があれば従う。無ければ、この変更でユーザーから観測できる振る舞いが変わるときだけ作る。画面の表示・操作が変わる画面ごとに `e2e/frontend`、API の応答が変わるルートごとに `e2e/backend`、コマンドの入出力が変わるコマンドごとに `e2e/cli` の仕様を置く。内部だけの変更には作らない | §6.13.3 |
+| 79 | ユニットテストの対象 | 規約にユニットテストの要否・対象があれば従う。無ければ、この変更で追加・変更するファイルのうち、分岐・計算・変換などのロジックを持つものに作る。設定・型定義・表示だけのファイルには作らない | §6.13.3 |
+| 80 | E2E も implement で通す | test-code が実装の前に書くテストには、ユニットテストと E2E の両方が入る。dev-plan は仕様のディレクトリの一覧のすべて(ユニットと E2E)を、いずれかのステップの通すテストに割り当て、E2E を除外しない。implement の委譲が実行する通すテストは、§6.13.1 の委譲の並べ方でオーケストレーターが選ぶ。実行しなかった通すテストは委譲先が `report.md` に挙げる。グループのマージの後に、オーケストレーターが run ブランチでそのグループのステップの通すテスト(E2E を含む)を決定 30 に従って実行し、パスを確かめる。失敗は run ブランチ上で直列に直す。test-loop は全テストの回帰の確認と修正を担う | §6.6.4、§6.13.1 |
+| 81 | 新しい画面の名前 | `<testsDir>/e2e/frontend/` に既にある画面の仕様を更新するときは、その名前を使い、ユーザーに聞かない。新しい画面の仕様を作るときは、仕様のディレクトリを同定する委譲が画面ごとに名前の候補(英小文字のケバブケースの 1 セグメントを 2〜3 個)を出し、オーケストレーターが `mark-ask --kind confirm` の後に AskUserQuestion でユーザーに聞き、決まった名前を ID にする。候補の外の答えは、ケバブケースの 1 セグメントに直した形を示して確かめる。コマンド名と API のルートパスはコードから決まるので聞かない。標準の run では design のウォークスルーで聞く。軽量の run では、test-spec の開始時に同定の委譲を 1 回だけ出して一覧を作り、名前を聞いてから test-spec と dev-plan に同じ一覧を渡す | §6.1.4、§6.13.3 |
 
 ---
 
@@ -278,7 +294,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 - A4-1: `plugins/codiel/skills/writing-dev-plans/SKILL.md` の出力書式に `- 触るファイル:`、`- 前提ステップ:`、`## 環境準備`、`## 生成物` がある。同じファイルに、規約に定めが無ければ方式 b とする規則の文がある(grep)。
 - A4-2: `codiel-state waves --slug <slug>` が stdout に JSON `{ "groups": [{ "steps": [...], "mode": "parallel" | "serial" }], "final": [...] }` を出す。`groups` はトポロジカル順に並ぶ。lockfile を触るステップは単独の `serial` グループになり、依存順の位置に置かれる。前提が `serial` のステップも、前提を含むグループより後に並ぶ。`parallel` グループの大きさは 4 以下である。方式 b の最終ステップは `final` にだけ現れる。触るファイルが重なる 2 ステップは同じグループに入らない。`src/app/**` と `src/apple/**` は重ならない。中括弧の glob は展開してから比べる。固定部が空の glob(`*.ts`・`**/*`)を持つステップは全ステップと重なる。循環依存があれば非ゼロで終了する(テスト)。
-- A4-3: guard-write が、kind が `step` と `unit` の worktree の両方について、cwd が worktree 内のときと、cwd がメイン作業ツリーのルートで書き込み先が worktree 内のときの両方で、worktree ルート基準の相対パスで判定する。docRoot がメインルートのサブディレクトリのときも正しく照合する(テスト。§8.2 の worktree のケース)。
+- A4-3: guard-write が、implement・test-code・test-loop の worktree(名前が `step-<k>`・`test-code-<k>`・`test-loop-<k>`)のすべてについて、cwd が worktree 内のときと、cwd がメイン作業ツリーのルートで書き込み先が worktree 内のときの両方で、worktree ルート基準の相対パスで判定する。docRoot がメインルートのサブディレクトリのときも正しく照合する(テスト。§8.2 の worktree のケース)。
 - A4-4: `plugins/codiel/skills/writing-test-specs/SKILL.md` の `spec.md` の書式に、`---` で囲む frontmatter と `parallel: true` の記述と、「無ければ直列」の文がある(grep)。
 
 ### 4.5 独立性
@@ -287,6 +303,28 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 - A5-2: metatron の `src/` に、`codiel/src` を指す import が無い(grep)。持続層との連携はファイル契約だけで行う。
 - A5-3: §6.10.1 の依存表の各行について、縮退先を定めた指示書または実装の箇所がある(計画書の各タスクで、該当ファイルの grep で確かめる)。「定める箇所」が「縮退不要(理由)」の行は判定の対象から外す。
 - A5-4: metatron の既存テストが、`docs/intents/domains/` の無い一時リポジトリでも変更なしで通る(A3-9 の「ファイル無し」のケースと合わせて、codiel 未導入の環境で metatron の動作が変わらないことを確かめる)。
+
+### 4.6 テスト駆動とテスト資産(実装時の追補 2026-09-28)
+
+- A6-1: `STAGES` の 5 番目が `["test-code"]` で、`GATED` に test-code が含まれ、`SKIPPABLE` に含まれない。test-code が passed でない run で `start-phase implement` が失敗し、`skip-phase test-code` が失敗する(テスト)。
+- A6-2: `codiel-state config` が、`.codiel/config.json` が無いときとキーが無いときに `{ "testsDir": "docs/tests" }` を返し、値があればその値を返す。JSON として読めない・文字列でない・空・絶対パス・`..` を含む値では非ゼロで終了する(テスト)。
+- A6-3: `install-harness.sh` が、`.codiel/config.json` が無ければ `testsDir` が `docs/tests` のファイルを作り、あれば中身を変えない。`.codiel/specs` を作らない(テスト。`src/__test__/install-harness.test.ts`)。
+- A6-4: guard-write が §8.2 の P-1〜P-11 と W-1・W-3・W-5〜W-7 のとおりに判定する(テスト)。
+- A6-5: `step-add --kind test-code` と `--kind test-loop` が、ID `units/src/lib/foo.ts`・`e2e/frontend/login`・`e2e/backend/api/users/{id}`・`e2e/backend/_root`・`e2e/cli/codiel-state` を受け付け、それぞれ `testCode.units` と `testLoop.units` に登録する。`units`・`units/`・`/units/a.ts`・`units/../a.ts`・`e2e/backend/api/users/:id`・`e2e/frontend/a/b`・`e2e/other/x`・`screen-login` を拒否する。`--files` を省いても登録でき、`--deps` と `--final` は拒否する。`testLoop.units` の `merged` の要素は登録し直せ、`implement.steps` と `testCode.units` の `merged` の要素は登録し直せない。`step-update --worktree` が、ほかの要素がすでに記録したパスを拒否する。`waves` は test-code と test-loop の要素を出さない(テスト)。
+- A6-6: `set-test-edit` が、fix-loop が `in_progress` のときだけ `testEdit` を真にし、ほかのフェーズでは非ゼロで終了する。`clear-test-edit` が値を消す(テスト)。
+- A6-7: `grep -rn "\.codiel/specs" plugins/codiel --exclude-dir=node_modules` が 0 件である。
+- A6-8: `writing-test-specs/SKILL.md` が `units/`・`e2e/frontend/`・`e2e/backend/`・`e2e/cli/`・`{id}`・`_root`・`tests:`・「ユーザーから観測できる振る舞い」・「分岐・計算・変換」を含む。`writing-test-specs/SKILL.md` と `writing-design-docs/SKILL.md` が `screen-` を含まない(grep)。
+- A6-9: `scripting-tests/SKILL.md` が「Red」「既存のテストの配置」「cases.md の誤り」「`tests`」を含み、「スクリプト安定化」を含まない(grep)。
+- A6-10: `implementing/SKILL.md` が「通すテスト」を含み、`RED:` を含まない(grep)。
+- A6-11: `writing-dev-plans/SKILL.md` の出力書式に `- 通すテスト:` があり、`- ユニットテスト:` が無い(grep)。
+- A6-12: `references/github-writing.md` に「PR 本文」のセクションがあり、`Closes #<N>`・変更を示す画像・intent 文書へのリンク・テストの結果・`<!-- codiel:generated -->` の 5 項目と、入れない項目(要望・受け入れ基準・原文の転記・run の経緯)と、`## 出典` を置かない文を含む。`orchestrating-runs/SKILL.md` に `` 画像、`## 出典` `` の文字列が無い(grep)。
+- A6-13: `orchestrating-runs/SKILL.md` の `STAGES` のブロックとフェーズ進行表に `test-code` がある。同じファイルに `test-loop A`・`test-loop B`・`Step A`・`Step B` の文字列が、表の中にも外にも無い。`raguel-gating/SKILL.md` のフェーズ→ツール対応表に test-code の行がある(grep)。
+- A6-14: `writing-dev-plans/SKILL.md` が「E2E を除外しない」を含み、「worktree の中で実行できない」を含まない。`implementing/SKILL.md` が「実行しなかった通すテスト」を含む。`orchestrating-runs/SKILL.md` が「実行する通すテスト」と「グループのマージの後」を含む(grep)。
+- A6-15: `orchestrating-runs/SKILL.md` が「並列可の委譲」「単独の委譲」「報告がまだ返っていない」「同じ応答からまとめて」を含み、「1 体ずつ逐次」を含まない(grep)。
+- A6-16: `writing-design-docs/SKILL.md`・`writing-test-specs/SKILL.md`・`facilitating-design-discussions/SKILL.md`・`orchestrating-runs/SKILL.md` が「名前の候補」を含む。`orchestrating-runs/SKILL.md` が `mark-ask test-spec` を含む。`writing-test-specs/SKILL.md` が「一覧に無い仕様のディレクトリ」を含む(grep)。
+- A6-17: `scripting-tests`・`implementing`・`running-regression-tests`・`fixing-failures`・`orchestrating-runs` の SKILL.md が「環境の失敗」を含む。`orchestrating-runs/SKILL.md` と `running-regression-tests/SKILL.md` が「1 回だけ単独で」を含む。`orchestrating-runs/SKILL.md` が `## 実行し直し`・`merge-fix-`・`test-loop-project` を含む。`scripting-tests/SKILL.md` と `implementing/SKILL.md` が「プロジェクトの規約とテストの設定」を含む(grep)。
+- A6-18: `phases` に test-code を持たない v2 の state の run について、`get` と `stop` が成功する。`record-outcome` は `awaiting_outcome` の run と、`completed` / `rejected` の run への `--outcome incident` だけを受け付ける。ほかのコマンドは非ゼロで終了し、stderr に §6.6 の文言テンプレートと同じ文言を出す。`get --active` はその `active` / `awaiting_human` の run を `runs` に含めずに同じ文言を出し、`awaiting_outcome` の run は含める。`findActiveRun` はその run を返さない。拒んだコマンドは state のファイルを変えず、`stop` の後の state にも test-code が足されない(テスト)。`orchestrating-runs/SKILL.md` が `--reason migrate` を含む。`references/intent-format.md` の status の表の `abandoned` の行が `migrate` を含む(grep)。
+- A6-19: `capturing-intent/SKILL.md` で、`git checkout` と `commit-failed` が手順 1(前提確認とベースブランチの最新化)のセクションに現れ、手順 6 のセクションに `git checkout` が現れない。手順 0 と手順 2 のセクションに「state の `intent` だけ」が現れる(grep)。
 
 ---
 
@@ -302,12 +340,13 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
                      → intent-only: 開始時のブランチにコミット → Raguel ゲート → close(completed)
                      → 続行: run ブランチ作成 → コミット → Raguel ゲート
        [discuss]     how の論点だけ(軽量では skip)
-       [design]      持続層を読む(軽量では skip)
-       [test-spec ∥ dev-plan]  軽量では intent と持続層から直接作る
-       [implement]   wave ごとにステップを worktree で並列実装 → タスクレビュー → 順次マージ
-       [test-loop]   Step A を unit ごとに並列、Step B を worktree 方式で並列
+       [design]      持続層を読む。新しい画面の名前はウォークスルーで聞く(軽量では skip)
+       [test-spec ∥ dev-plan]  軽量では、同定の委譲が intent と持続層から仕様のディレクトリの一覧を作り、新しい画面の名前を聞いてから両方に渡す
+       [test-code]   仕様のディレクトリごとに worktree で並列にテスト(ユニットと E2E)を書き、実装の前に失敗する(Red)ことを確かめる
+       [implement]   wave ごとにステップを worktree で並列実装し、test-code のテストを通す(Green)→ タスクレビュー → 順次マージ → グループの通すテストを run ブランチで実行
+       [test-loop]   記録された全テストの回帰を確かめ、失敗を仕様のディレクトリごとに worktree で直す(並べ方は決定 30)。全件が通るまで繰り返す
        [intent-sync] 受け入れ基準の変更と、途中で追記された原文を派生文のセクションへ反映する / 持続層を更新する → Raguel ゲート
-       [pr]          github: push + gh pr create / local: 記録だけ
+       [pr]          github: push + gh pr create(本文は変更の説明が中心。§6.12.8)/ local: 記録だけ
        [review]      git diff <base>...<run ブランチ>。原文の要望の未達と持続層の制約違反は high
        [fix-loop]    直列
        [triage]      github: Issue 起票 / local: status: proposed の intent 草案
@@ -324,10 +363,10 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 #### 6.1.1 フェーズ列と種別
 
-コード上の `STAGES` を次の 12 ステージにする。
+コード上の `STAGES` を次の 13 ステージにする。
 
 ```ts
-[["intent"], ["discuss"], ["design"], ["test-spec", "dev-plan"], ["implement"],
+[["intent"], ["discuss"], ["design"], ["test-spec", "dev-plan"], ["test-code"], ["implement"],
  ["test-loop"], ["intent-sync"], ["pr"], ["review"], ["fix-loop"], ["triage"], ["finalize"]]
 ```
 
@@ -335,20 +374,22 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 | --- | --- | --- | --- | --- |
 | intent | オーケストレーター本体(対話)。現状調査は読み取りだけの委譲 | Issue 本文(任意)、既存 intent(任意)、ARCHITECTURE、GOTCHAS、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
 | discuss | 成果物を書く委譲(アジェンダ)+ 本体の進行 | intent | `agenda.md`、`discussion.md` | complete-phase |
-| design | 成果物を書く委譲 | intent、`discussion.md`、持続層 | `design.md` | ウォークスルー後に pass-gate(`evaluate_design`) |
-| test-spec | 成果物を書く委譲(決定 56) | `design.md`(軽量では intent と持続層) | `spec.md` / `cases.md` | pass-gate(`evaluate_plan`) |
-| dev-plan | 成果物を書く委譲 | `design.md`(軽量では intent と持続層) | `dev-plan.md` | `codiel-state waves` の成功を確かめた後に pass-gate(`evaluate_plan`) |
-| implement | 成果物を書く委譲をステップごとに並列 | `dev-plan.md` | コード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
-| test-loop | 成果物を書く委譲を unit ごとに並列 | `cases.md` | `scripts/`、`test-run-<n>.md`、修正 diff | pass-gate(`evaluate_code`) |
+| design | 成果物を書く委譲 | intent、`discussion.md`、持続層 | `design.md` | ウォークスルー(新しい画面の名前の確認を含む。§6.13.3)の後に pass-gate(`evaluate_design`) |
+| test-spec | 成果物を書く委譲(決定 56)。軽量では、その前に仕様のディレクトリを同定する読み取りだけの委譲を 1 回出す(§6.1.4) | `design.md`(軽量では intent と持続層と、同定した仕様のディレクトリの一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(§6.13.3) | pass-gate(`evaluate_plan`) |
+| dev-plan | 成果物を書く委譲 | `design.md`(軽量では intent と持続層と、test-spec と同じ仕様のディレクトリの一覧) | `dev-plan.md`(各ステップに「通すテスト」。§6.13.1) | `codiel-state waves` の成功を確かめた後に pass-gate(`evaluate_plan`) |
+| test-code | 成果物を書く委譲を仕様のディレクトリごとに並列 | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、Red の確認の報告(§6.13.2) | 全ディレクトリの後に pass-gate(`evaluate_code`)を 1 回 |
+| implement | 成果物を書く委譲をステップごとに並列。グループのマージの後にオーケストレーターが通すテストを実行する | `dev-plan.md`、test-code のテスト(ユニットと E2E) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
+| test-loop | 回帰の実行の委譲と、修正の委譲(仕様のディレクトリごと。並べ方は決定 30) | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`、修正 diff | pass-gate(`evaluate_code`) |
 | intent-sync | 成果物を書く委譲 | intent、承認済みの受け入れ基準変更、追加の要望(原文。intent に追記済み)、持続層 | intent の派生文のセクションと変更履歴、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) |
 | pr | オーケストレーター本体 | 各成果物 | github: PR / local: state の記録 | complete-phase |
-| review | 読み取りだけの委譲(観点ごと) | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、specs、持続層 | `reports/review-<n>.md` | complete-phase |
+| review | 読み取りだけの委譲(観点ごと) | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層 | `reports/review-<n>.md` | complete-phase |
 | fix-loop | 現行どおり(直列) | `review-<n>.md` の critical / high | 修正 diff | pass-gate(`evaluate_code`) |
 | triage | オーケストレーター本体 | `review-<n>.md` の medium / low | github: Issue / local: intent 草案 | complete-phase |
 | finalize | オーケストレーター本体 | 全成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む。§6.3.6)、intent の `status` | `codiel-state finalize` |
 
-- `GATED` は intent / design / test-spec / dev-plan / implement / test-loop / intent-sync / fix-loop の 8 フェーズにする。
+- `GATED` は intent / design / test-spec / dev-plan / test-code / implement / test-loop / intent-sync / fix-loop の 9 フェーズにする。test-code は `SKIPPABLE` に入れない。
 - guard-write の `DOC_PHASES` に intent と intent-sync を加え、init を除く。`docs/intents/**` の扱いは §6.8 に置く。
+- guard-write の `CODE_PHASES` に test-code を加える。テストの保護(§6.13.6)は、`CODE_PHASES` のうち test-code を除く 3 フェーズにだけ当てる。
 - フェーズの途中で人に確認するときは、`codiel-state mark-ask <phase> --slug <slug> --kind confirm` で run を `awaiting_human` にしてから確認し、答えを得たら `resume` で戻す。stop-guard(`stop-guard.ts`)は `active` の run でのセッションの停止を block するので、`active` のまま応答を待つと止まれないためである。`evaluationId` は無くてよい(`codiel-state.ts:381-391`)。例外は、run を作る前に確認を済ませる intent フェーズの手順 5 の (1)〜(3) と、(6) の保存に失敗して run を終端にしてから確かめる場合(決定 68)である(§6.1.2)。
 - `--kind` は確認の種類を表す。Raguel の ASK は `raguel`(既定)、人への確認の一般則は `confirm` を使う。値はフェーズの `askKind` に記録され、ゲートの記録(`raguel`)と区別できる(§6.2.2)。
 - finalize で `mark-ask` → `resume` を行うと、`phases.finalize` が `in_progress` になる。finalize はもともと `start-phase` しないフェーズだが、この遷移は許容する。`codiel-state finalize` は finalize 自身を検査から外す(`codiel-state.ts:453-457`)ので、`in_progress` のままでも成立する。
@@ -357,11 +398,20 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-intent/SKILL.md:20-118`)を移植し、run の開始手順と結合する。聞き取りには AskUserQuestion が要るため、intent フェーズの対話はオーケストレーター本体が行う。Issue の読み取りも本体が行う。intent 文書の本文はユーザーが承認したドラフトの保存であり、`discussion.md` と同じく合意の記録として本体が書く。
 
-0. 聞き取り・書き込み・起票のどれよりも前に、ほかの run が active でないことを確かめる。active / awaiting_human の run があれば、`finalize` か `codiel-state stop` で終端にしてから始める(現行 `orchestrating-runs/SKILL.md:102-104` の検査を、ここへ前倒しする)。ただし、入口の intent パスの frontmatter `run` に当たる run と、ユーザーが今回再開すると答えた run は終端にせず、§6.2.5 の再開手順へ進む。終端にする run は、その前に内容(slug・intent のパス・現在のフェーズ)をユーザーに示して確かめる(決定 62)。これで、手順 5 の (1)〜(3) の間は active run が無いことが保証される。
+0. 聞き取り・書き込み・起票のどれよりも前に、ほかの run が active でないことを確かめる。active / awaiting_human の run があれば、`finalize` か `codiel-state stop` で終端にしてから始める(現行 `orchestrating-runs/SKILL.md:102-104` の検査を、ここへ前倒しする)。ただし、入口の intent パスに当たる run と、ユーザーが今回再開すると答えた run は終端にせず、§6.2.5 の再開手順へ進む。入口の intent パスに当たる run は、slug が intent の frontmatter `run` と一致する run と、state の `intent` が入口のパスと同じ run である。state の `intent` でも照合するのは、作業ツリーに intent のファイルが無く frontmatter を読めないときも、再開する run を見つけるためである。入口のパスは、state の `intent` と同じく repoRoot 相対にして比べる(§6.2.1)。終端にする run は、その前に内容(slug・intent のパス・現在のフェーズ)をユーザーに示して確かめる(決定 62)。frontmatter の `run` で当たった run は、確かめずに再開する。state の `intent` だけで当たった run(frontmatter の `run` で確かめられない run)は、再開する前に同じ内容を示してユーザーに確かめ、再開しないと答えたら終端にする。同じパスに intent を作り直したとき、無関係な run を確かめずに再開しないためである。これで、手順 5 の (1)〜(3) の間は active run が無いことが保証される。
 1. §0 の前提確認と連携モードの判定を行う(§6.5)。続けてベースブランチの名前を解決し、`git switch <ベース> && git pull --ff-only` で最新化する。聞き取りの前へ移すのは、現行 `orchestrating-runs/SKILL.md:110-116`(ベース名の解決と switch / pull)だけである。`:117-121`(`codiel-state init` と `git switch -c`)は承認後の手順 5 に置く。本設計では、このベースブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
+
+   入口が intent パスのときは、最新化の後、手順 2 の前に、前の try の run ブランチから intent を持ち込む。手順 2 は intent の frontmatter と本文を読むが、実装の途中で止まった try の intent は、その run ブランチにしか無いためである。手順 0 と手順 2 が frontmatter の `run` と state の `intent` で終端でない run(再開の候補)を探すのに対し、持ち込みは入口のパスのファイル名の slug で終端になった前の try を探す。
+
+   - 入口のパスのファイル名の slug(§6.2.3)で `codiel-state get --slug <slug>` を実行し、最新の try の state を読む。run が無いとき、state の `intent` が入口のパスと違うとき、終端でないとき(手順 0 で扱う)は持ち込まない。
+   - 最新の try の `stopReason` が `commit-failed` なら持ち込まず、作業ツリーに残した intent をそのまま使う(決定 68)。承認済みの新しい版は作業ツリーにしか無く、その try のブランチからもそれより前の try のブランチからも、持ち込めば古い版で上書きするためである。
+   - 最新の try の `branch` が `null`(文書だけで終えた try)なら持ち込まない。intent は開始時のブランチにコミット済みである。
+   - それ以外は `git checkout <最新の try の branch> -- <intent パス>` で同じパスに持ち込む。失敗したら(run ブランチを消した場合など)、出力を示してユーザーに確かめる。この時点では active run が無いので、応答を待って止まれる。
+
+   この手順は、`.codiel/runs/` の state がブランチを切り替えても作業ツリーに残ることを前提にする。codiel は `.codiel/` を `.gitignore` に加えず(`install-harness.sh:9-10` は `mkdir` だけ)、run の手順が git に加えるのは `reports/` の本文ファイルと成果物だけで、`state.json` を stage しない(`orchestrating-runs/SKILL.md:198-199`、`:232-234`)。`state.json` は未追跡のまま残り、`git switch` では消えない。
 2. 入口の引数で分岐する。
    - Issue 番号: github モードでは `gh issue view`、読めなければ GitHub MCP の読み取りで本文とコメントを得る。local モードではユーザーに本文を貼ってもらう。本文を原文にするか派生にするかは、本文にあるマーカーで決める(§6.3.5)。正本は以後 intent になる。
-   - intent パス: frontmatter の `run` に対応する未終端の run があれば、その run を §6.2.5 の再開手順で続ける。無ければ、記載済みの内容を確定扱いにして聞き取りの不足分から始める。
+   - intent パス: 手順 0 と同じ照合(frontmatter の `run` と、state の `intent`)で未終端の run が見つかれば、その run を §6.2.5 の再開手順で続ける。state の `intent` だけで当たった run は、手順 0 と同じく確かめてから続ける。照合する run が無く、作業ツリーにも intent のファイルが無いときは、パスが無いことを示してユーザーに確かめる。run が無くファイルがあれば、記載済みの内容を確定扱いにして聞き取りの不足分から始める。
    - intent パスで frontmatter が `intent: v1` のとき: v2 へ昇格して再開する。v1 の `## ASIS` / `## TOBE` をそれぞれ `## 現状調査` / `## 要求` へ移す(§6.3.3 の変換の例)。既存のセクションは確定済みとして扱い、不足する原文の `## ASIS` / `## TOBE` と、`## 目的` と `## 意図的な制約` だけを聞き取る。原文はユーザーに尋ねて、ユーザーの言葉のまま埋める。昇格したドラフトを全文提示し、承認ゲートを取り直す。保存は元のパスへの上書きとし、`## 変更履歴` に v1 からの昇格を 1 行記録する。
    - 省略: 「何を達成したいか」から聞く。
 3. 既存 intent との重複確認、ゴールと現状の聞き取り、現状調査、分岐の合意を、移植元の手順 2〜5 のとおり行う。
@@ -402,7 +452,7 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
    - (1)〜(3) の間は active run が無い(手順 0 で保証する)。guard-write は active run が無いとき全面的に pass する(`guard-write.ts:104-105`)ので、(1) の書き込みはもともと妨げられない。(2) の起票も run の作成前なので、guard-bash の `gh issue create` の制限(`guard-bash.ts:164-168`)に掛からない。stop-guard も active run が無いので、(1)〜(3) でユーザーの応答を待って止まれる。
    - (4) の後から `start-phase intent` までは、active run の `phase` が `null` である。この間に intent 文書を直す必要が出ても、guard-write が `docs/intents/*.md` を phase `null` で通す(§6.8)。
    - `evaluate_decision` が ASK を返したときは、現行どおり `mark-ask` で run を `awaiting_human` にしてから人の裁定を待つ。stop-guard は `active` の run だけを block するので、この待ちは妨げられない。
-6. 前の try がある run(try-2 以降)では、新しい run ブランチは開始時のブランチから切る。実装の途中で止まった run の intent は前の try の run ブランチにしか無いため、手順 5 の (1) で新規に書かず、`git checkout <前の try のブランチ> -- <intent パス>` で同じパスに持ち込む。文書だけで終えた intent は開始時のブランチにコミット済みなので、持ち込みは要らない。前の try が `commit-failed` で止まったときは、作業ツリーに残した intent をそのまま使い、前の try のブランチから持ち込まない(決定 68)。そのブランチには intent のコミットが無く、開始時のブランチに古い版があれば、持ち込みが承認済みの新しい版を上書きするためである。
+6. 前の try がある run(try-2 以降)では、新しい run ブランチは開始時のブランチから切る。前の try の intent は手順 1 で持ち込んである(文書だけで終えた try と `commit-failed` で止めた try の扱いも手順 1 に置く)。手順 5 の (1) は、持ち込んだ intent と同じパスに承認済みのドラフトを書く。
 
 #### 6.1.3 承認ゲートで決める 3 項目
 
@@ -420,9 +470,14 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 #### 6.1.4 軽量の経路
 
 - 軽量では discuss と design を `skip-phase` で飛ばす。`SKIPPABLE` に discuss と design を加え、`skip-phase` はこの 2 フェーズについて `state.scale === "light"` のときだけ成功する。
-- test-spec と dev-plan は `design.md` の代わりに intent と持続層を入力にする。`writing-test-specs` と `writing-dev-plans` に「`design.md` が無い run では intent の `## 受け入れ基準` と `## 実装方針`、関係する領域の持続層を入力にする」規則を足す。
+- test-spec と dev-plan は `design.md` の代わりに intent と持続層を入力にする。`writing-test-specs` と `writing-dev-plans` に「`design.md` が無い run では intent の `## 受け入れ基準` と `## 実装方針`、関係する領域の持続層を入力にする」規則を足す。仕様のディレクトリは、自分で同定せず、依頼文の一覧を使う。
+- test-spec と dev-plan が同じ仕様のディレクトリと画面名を使うよう、オーケストレーターは 2 つの委譲の前に一覧を 1 つ作る(決定 81)。
+  1. `start-phase test-spec` の後、仕様のディレクトリを同定する読み取りだけの委譲を出す。委譲先は `writing-test-specs` の同定の規則(§6.13.3)で、intent・持続層・コード・`<testsDir>` から一覧を返し、新しい画面には名前の候補を付ける。ファイルは書かない。
+  2. 新しい画面があれば、`mark-ask test-spec --slug <slug> --kind confirm` の後に名前を聞き(§6.13.3)、`resume` する。無ければ聞かない。
+  3. `start-phase dev-plan` し、決まった一覧を test-spec と dev-plan の依頼文に同じ値で書き、2 つの委譲を同じ応答で出す。
+- 片方の委譲をやり直すときも、同じ一覧を渡す。再開で一覧が手元に無いときは、pass-gate 済みのフェーズの成果物(test-spec なら作成・更新した仕様のディレクトリ、dev-plan なら各ステップの通すテスト)から取り直す。どちらも pass-gate していなければ、手順 1 からやり直す。
 - review は `design.md` の代わりに intent と `dev-plan.md` を設計の入力にする(§6.5.2)。
-- implement 以降は標準と同じである。review を飛ばす経路は持たない。
+- test-code は `design.md` の代わりに intent を入力にする(§6.13.2)。それ以外の test-code 以降は標準と同じである。review を飛ばす経路は持たない。
 
 #### 6.1.5 discuss の範囲
 
@@ -456,6 +511,9 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 | `scale` | なし | `"standard" \| "light"`(必須) |
 | `pr` | `{ url: string \| null }` | 同じ。local では `null` のまま |
 | `implement` | なし | `{ steps: Record<string, StepState> }`(任意。M4 で追加。§6.6.5) |
+| `testCode` | なし | `{ units: Record<string, StepState> }`(任意。M4 で追加。キーは仕様のディレクトリの ID。§6.13.2) |
+| `testLoop` | なし | `{ units: Record<string, StepState> }`(任意。M4 で追加。キーは仕様のディレクトリの ID。§6.7) |
+| `testEdit` | なし | `boolean`(任意。M4 で追加。fix-loop でテストの保護を外す間だけ真。§6.13.6) |
 | `imageUpload` | なし | `{ ghAttach: boolean, chrome: boolean }`(必須。M2 で追加)。画像を GitHub に載せる手段が使えるか(§6.12.4) |
 | `adrTarget` | なし | `"metatron" \| "intents"`(必須。M2 で追加し、M3 から使う)。ADR の 3 条件を満たす判断の書き先(§6.4.3) |
 
@@ -479,9 +537,9 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 - `branch` が `null` の run では、`start-phase` は intent 以外を拒否する。run ブランチを持たないまま実装系のフェーズへ進ませないためである。
 - `runDir` は `.codiel/runs/<slug>`。`findActiveRun` と `get --active` はディレクトリ名のパターンで絞らず、`runs/` 直下のディレクトリをすべて走査し、`version: 2` の state だけを run として扱う。例外として、`get --active` は `version: 1` で `awaiting_outcome` の run も `runs` に含める(決定 63)。
 - `complete-phase pr` の `--pr-url` 必須は `integration === "github"` のときだけにする。
-- `close`(§6.1.3)、`step-add` / `step-update` / `waves`(§6.6)を足す。
+- `close`(§6.1.3)、`step-add` / `step-update` / `waves`(§6.6)、`config`(§6.13.4)、`set-test-edit` / `clear-test-edit`(§6.13.6)を足す。`step-add` と `step-update` の `--kind` は `step`(既定)・`test-code`・`test-loop` で、`--files` と `--deps` と `--final` は `step` のときだけ使う。
 - `mark-ask` に `--kind raguel|confirm` を足す。省略時は `raguel` とし、既存の呼び出しの意味を変えない。値はフェーズの `askKind` に記録する。`raguel` と `confirm` 以外は拒否する。`resume` は `askKind` を消さず、記録として残す。`mark-ask` は `in_progress` のフェーズと `pending` の finalize だけを受け付け、終端の run・passed のフェーズ・finalize 以外の `pending` のフェーズを拒否する(決定 61)。
-- `stop --reason` の値のうち `intent-updated` を、intent を続ける停止として扱う(§6.3.2)。CLI は値を記録するだけで、intent の `status` は変えない。
+- `stop --reason` の値のうち `intent-updated`・`commit-failed`・`migrate` を、intent を続ける停止として扱う(§6.3.2)。`migrate` は、この版で続けられない run(v1 の run と、M4 より前に作った state の run。§6.2.4、§6.6)を止める値である。CLI は値を検査せずに `stopReason` へ記録するだけで、intent の `status` は変えない。
 
 #### 6.2.3 slug の制約
 
@@ -503,9 +561,15 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 codiel: .codiel/runs/issue-<N> は codiel 0.x の run(state version 1、status: <status>)であり、この版では再開できない。codiel 0.x で完了させるか、`codiel-state stop --slug issue-<N> --reason migrate` で止めてから、`/codiel:run <N>` で新しい run を始める。
 ```
 
+`phases` に test-code を持たない v2 の state(M4 より前に作ったもの)も、同じ形で扱う(§6.6)。
+
 #### 6.2.5 再開
 
-`orchestrating-runs` §6 の再開手順を、`--slug <slug>` と intent の frontmatter `run` からの逆引きに替える。resume 時には連携モードを再判定し、state の記録と違えば人に確認する(§6.5.1)。
+`orchestrating-runs` §6 の再開手順を、`--slug <slug>` と、intent の frontmatter `run` または state の `intent`(§6.1.2 の手順 0)からの逆引きに替える。resume 時には連携モードを再判定し、state の記録と違えば人に確認する(§6.5.1)。`phases` に test-code を持たない state の run は、どのフェーズにあっても続行せず、§6.6 の手順で止める。環境の失敗を挙げた報告ファイルがあれば、末尾の `## 実行し直し` のセクションの有無で実行し直しが済んだかを判断し、済んでいれば実行し直さない(§6.13.1)。確かめる報告ファイルは、再開したフェーズの try の次のものである。
+
+- `steps/` の下の、状態が `running` か `reviewing` の要素(state で終わっていない要素)の `report.md`。`pending`・`merged`・`failed` の要素の報告は、実行し直しが済んでいるか、作り直す前の worktree の報告なので見ない。
+- run ブランチ上の修正の報告。implement ではすべてのグループの `steps/merge-fix-<g>/report.md`(§6.6.4 の手順 7)、test-loop では `steps/test-loop-project/report.md`(§6.7)である。
+- test-loop では、最新の `test-run-<n>.md`。
 
 ### 6.3 変更ごとの intent(書式 v2)
 
@@ -534,7 +598,7 @@ codiel: .codiel/runs/issue-<N> は codiel 0.x の run(state version 1、status: 
 | `approved` | 承認ゲートを通過して保存された。文書だけで終えた run もこの値のまま残る | intent フェーズ |
 | `in-progress` | run が implement に入った | implement の開始時 |
 | `done` | 持ち越しを除く原文の要望が、finalize の判定ですべて達成だった | finalize |
-| `abandoned` | run を止め、この intent を続けない | `stop` の後にオーケストレーターが更新する。ただし `stop --reason intent-updated` と `stop --reason commit-failed`(§6.1.2 手順 5 の (6))のときは例外とし、`abandoned` にしない |
+| `abandoned` | run を止め、この intent を続けない | `stop` の後にオーケストレーターが更新する。ただし `stop --reason intent-updated` と `stop --reason commit-failed`(§6.1.2 手順 5 の (6))と `stop --reason migrate`(§6.6)のときは例外とし、`abandoned` にしない |
 
 - intent-sync より後の要望を「この run に含める」と決めて止めるときは(§6.3.4)、`codiel-state stop --slug <slug> --reason intent-updated` を使う。この値の停止では intent を `abandoned` にせず、`in-progress` のまま残し、新しい try で intent から再開する。
 - `done` は intent-sync ではなく finalize が付ける。finalize の判定(§6.3.6)で、持ち越しを除く原文の要望がすべて「達成」のときだけ `done` にする。「未達」か「要確認」が 1 つでも残れば `in-progress` のままにし、結果レポートに残りを示す。
@@ -671,7 +735,7 @@ v1 の `## ASIS` と `## TOBE` の本文は、そのまま `## 現状調査` と
 2. 追記したのが intent-sync より前なら、派生文のセクション(要求・受け入れ基準など)への反映は intent-sync で行う。反映の内容は人に確認してから書く(`mark-ask --kind confirm`。§6.1.1)。
 3. 追記したのが intent-sync より後なら、`mark-ask --kind confirm` で `awaiting_human` にしてから、この run に含めるかをユーザーに確認する。
    - 含めないとき: 原文の記録の直後に持ち越しの注記(§6.3.3)を付ける。finalize はこの記録を達成の判定から外し、結果レポートに「持ち越し」として示す。
-   - 含めるとき: この run を `codiel-state stop --slug <slug> --reason intent-updated` で止め、新しい try を intent から始める(§6.1.2 の手順 6。前の try のブランチから intent を持ち込む)。intent は `abandoned` にせず、`in-progress` のまま残す(§6.3.2)。
+   - 含めるとき: この run を `codiel-state stop --slug <slug> --reason intent-updated` で止め、新しい try を intent から始める(前の try のブランチから intent を持ち込む。§6.1.2 の手順 1)。intent は `abandoned` にせず、`in-progress` のまま残す(§6.3.2)。
 
 #### 6.3.5 intent-issue の本文
 
@@ -898,7 +962,27 @@ guard-bash の 3 つの制限(`guard-bash.ts:164-182`)は現行どおりフェ�
 
 ### 6.6 並列実装
 
-並列実装(`implement.steps`、wave、worktree、hook の worktree の判定)は M4 で入れる。M2〜M3 の implement は現行どおり 1 ステップずつ直列に委譲し、hook の worktree の分岐も M4 で足す。M4 で state に `implement` と `testLoop` の任意フィールドを足すのは、既存の state を読めなくしない後方互換の追加として扱い、`version` は 2 のまま据え置く。
+並列実装(`implement.steps`、wave、worktree、hook の worktree の判定)は M4 で入れる。M2〜M3 の implement は現行どおり 1 ステップずつ直列に委譲し、hook の worktree の分岐も M4 で足す。M4 で state に `implement`・`testCode`・`testLoop`・`testEdit` の任意フィールドを足すのは、既存の state を読めなくしない後方互換の追加として扱い、`version` は 2 のまま据え置く。
+
+`phases` に test-code を持たない state(M4 より前に作ったもの)の run は、終端でなければ再開しない。判定は state の形だけで行い、phases の進み具合を見ない。test-spec を旧 `.codiel/specs/` で通した run は、進み具合では M4 の後に作った run と見分けられないためである。CLI は v1 の run(§6.2.4)と同じ形で扱う。
+
+- `get` と `stop` は受け付ける。`record-outcome` は、`awaiting_outcome` の run と、`completed` / `rejected` の run への `--outcome incident` だけを受け付ける。
+- ほかのコマンドは非ゼロで終了し、下の文言を stderr に出す。
+- `get --active` は `active` / `awaiting_human` の run を `runs` に含めず、同じ文言を stderr に出す。`awaiting_outcome` の run は `runs` に含め、文言を出さない。
+- `findActiveRun` はこの run を返さない。hook の挙動は run が無いときと同じになる。
+- state は読み込み時に補わない。受け付けたコマンドも、`phases` の形を変えずに書き戻す。
+
+文言のテンプレート。`<slug>`・`<status>`・`<intent パス>` を state の値に置き換えて出す。
+
+```
+codiel: .codiel/runs/<slug> は test-code フェーズを持たない state の run(status: <status>)であり、この版では再開できない。`codiel-state stop --slug <slug> --reason migrate` で止めてから、`/codiel:run <intent パス>` で同じ intent の新しい try を始める。
+```
+
+オーケストレーターは、この文言か、`get` で読んだ state に test-code が無いことでこの run を見つけたら、続行せず次の順に進める。
+
+1. `codiel-state stop --slug <slug> --reason migrate` で止める。値は、codiel 0.x の run を止めるときの `migrate`(§6.2.4)と同じものを使い、新しい値を足さない。intent は `abandoned` にしない(§6.3.2)。
+2. 止めたことと理由をユーザーに示す。
+3. 同じ intent パスを入口に新しい try を始める(§6.1.2 の手順 2 の intent パスの分岐)。intent は §6.1.2 の手順 1 で前の try の run ブランチから持ち込む。
 
 #### 6.6.1 dev-plan の書式
 
@@ -906,6 +990,7 @@ guard-bash の 3 つの制限(`guard-bash.ts:164-182`)は現行どおりフェ�
 
 - 「変更ファイル」を「触るファイル」に置き換える。値は repoRoot 相対の glob の列とする。触るファイルはディレクトリを含めて書く(`src/app/**/*.ts` のように書き、`*.ts` や `**/*` だけを書かない)。固定部が空の glob は全ステップと重なるとみなされ、並列にできなくなるためである(§6.6.2)。
 - 「前提ステップ」を足す。値は先に終わっている必要があるステップ番号の列で、無ければ「なし」。
+- 「ユニットテスト」を「通すテスト」に置き換える(§6.13.1)。
 - 文書の先頭に `## 環境準備` を置き、worktree で依存をインストールするコマンドを書かせる。lockfile を変更しないモードのコマンドにする。書けなければ「なし」とし、§6.6.3 の既定に任せる。
 - 文書の先頭に `## 生成物` を置き、ビルド生成物の扱いを宣言させる。項目は、方式(a または b)・生成コマンド・生成物のパス(glob)・方式を選んだ根拠(規約の出所)である。生成物が無いプロジェクトでは「なし」と書く。
 
@@ -955,7 +1040,9 @@ guard-bash の 3 つの制限(`guard-bash.ts:164-182`)は現行どおりフェ�
 
 #### 6.6.3 worktree
 
-- 1 ステップ 1 worktree とする。パスは `.codiel/worktrees/<slug>/<kind>-<id>` とし、kind は implement のステップなら `step`、test-loop の unit なら `unit` である。implement のステップは `.codiel/worktrees/<slug>/step-<k>`、ブランチは `codiel/<slug>-try-<n>-step-<k>` になる。test-loop の unit は `.codiel/worktrees/<slug>/unit-<unit-id>`、ブランチは `codiel/<slug>-try-<n>-unit-<unit-id>` になる。起点はそのグループを始める時点の run ブランチ HEAD である。
+- 1 つのステップ、または 1 つの仕様のディレクトリにつき 1 worktree とする。パスは `.codiel/worktrees/<slug>/<名前>`、ブランチは `codiel/<slug>-try-<n>-<名前>` とする。名前は、implement なら `step-<k>`(k はステップ番号)、test-code なら `test-code-<k>`、test-loop なら `test-loop-<k>` である。起点はそのグループを始める時点の run ブランチ HEAD である。
+- test-code と test-loop の k は、その表(`testCode.units` / `testLoop.units`)に ID を登録した順の番号(1 から)であり、登録し直しても変わらない。仕様のディレクトリの ID は `/` を含み、パスの区切りとブランチ名に紛れるので、名前に使わない。
+- worktree のパスは run の中で一意である。名前の接頭辞がフェーズごとに違い、k は同じ表の中で ID ごとに違うためである。`step-update --worktree` は、ほかの要素がすでに記録したパスを拒否する。
 - 触るファイルの glob は repoRoot 相対で書かれている。worktree 内では、その worktree のルートを同じ基準として当てる。
 - `.codiel/worktrees/` は run の最初の worktree 作成時に `.git/info/exclude` へ加える。追跡ファイルを変えずに、`pr` 前の `git status --short` の確認(`orchestrating-runs/SKILL.md:166-168`)を汚さないためである。
 - ステップの開始時に、worktree 内で依存をインストールする。コマンドは dev-plan の `## 環境準備` を使う。「なし」のときは lockfile の種類から既定を選ぶ(`pnpm-lock.yaml` なら `pnpm install --frozen-lockfile`、`package-lock.json` なら `npm ci` 等。対応表は計画書で確定する)。lockfile が無ければインストールを省く。
@@ -968,18 +1055,18 @@ guard-bash の 3 つの制限(`guard-bash.ts:164-182`)は現行どおりフェ�
 
 `groups` を先頭から順に処理する。`parallel` グループは次の手順で、`serial` グループと `final` は run ブランチ上で 1 ステップずつ委譲する(手順 8〜9)。
 
-1. オーケストレーターがステップごとに brief ファイル `.codiel/runs/<slug>/try-<n>/steps/step-<k>/brief.md` を書く。内容は現行の依頼文テンプレート(`orchestrating-runs/SKILL.md:177-218`)に、worktree の絶対パス・触るファイル・前提ステップ・環境準備のコマンドを加えたものである。
-2. 実装の委譲をステップ単位で同じ応答から並列に出す。依頼文は brief の絶対パスを読ませる。委譲先は worktree 内で依存のインストール・実装・ユニットテストを行う。生成物は dev-plan の `## 生成物` の方式に従う。方式 a では生成してソースの変更と同じコミットに入れ、方式 b では生成物をコミットしない。報告は `report.md` を同じディレクトリに書く。委譲先は `codiel-state` を呼ばない。
-3. ステップごとのタスクレビューを並列に出す。読み取りだけの委譲で、観点は仕様適合(dev-plan のステップと受け入れ基準に合うか)と品質の 2 つである。
-4. 所見があれば修正ループを回す。上限は 5 ラウンドとし、ラウンドは `implement.steps[k].attempts` で数える。
+1. オーケストレーターがステップごとに brief ファイル `.codiel/runs/<slug>/try-<n>/steps/<worktree の名前>/brief.md` を書く。内容は現行の依頼文テンプレート(`orchestrating-runs/SKILL.md:177-218`)に、worktree の絶対パス・触るファイル・前提ステップ・環境準備のコマンドと、委譲の種類と実行する通すテスト(§6.13.1 の委譲の並べ方で選んだ種類と仕様のディレクトリの ID、その `spec.md` の `tests`)を加えたものである。
+2. 実装の委譲をステップ単位で、§6.13.1 の委譲の並べ方に従って出す。依頼文は brief の絶対パスを読ませる。委譲先は worktree 内で依存のインストール・実装・brief が挙げた通すテストの実行を行い、実行しなかった通すテストと環境の失敗(§6.13.1)を `report.md` に挙げる。生成物は dev-plan の `## 生成物` の方式に従う。方式 a では生成してソースの変更と同じコミットに入れ、方式 b では生成物をコミットしない。報告は `report.md` を同じディレクトリに書く。委譲先は `codiel-state` を呼ばない。
+3. report.md に環境の失敗があれば、§6.13.1 のとおり実行し直させてから、タスクレビューへ進む。実行し直しはそのステップの worktree で行い、worktree はマージの直後に後始末する(§6.6.3)ので、手順 5 のマージより前に済ませる。タスクレビューはステップごとに並列に出す。読み取りだけの委譲で、観点は仕様適合(dev-plan のステップと受け入れ基準に合うか)と品質の 2 つである。
+4. 所見があれば修正ループを回す。上限は 5 ラウンドとし、ラウンドは `implement.steps[k].attempts` で数える。修正ラウンドの委譲の種類は §6.13.1 の委譲の並べ方で選ぶ。
    - 1〜3 ラウンド: 同じ委譲先を、文脈を保ったまま続投させる。
    - 4〜5 ラウンド: 作業内容を「行き詰まりの打開」と明記した新しい委譲として出す。委譲先の選択はセッションの規律に委ね、codiel は役割名もモデル名も書かない(ADR-004)。
    - 5 ラウンドで通らなければ、run を awaiting_human にする。
 5. レビューを通ったステップから、run ブランチへ順にマージする(`git merge --no-ff`)。
 6. 衝突したら `git merge --abort` し、そのステップを失敗として記録する。失敗したステップはグループの残りのマージが済んだ後、§6.6.3 の後始末をしてから新しい HEAD で作り直し、直列にやり直す。
-7. グループのマージが済んだら、オーケストレーターがユニットテストのコマンドを実行する。失敗したら、修正を成果物を書く委譲として run ブランチ上で直列に出す。
-8. `serial` グループ(lockfile を変えるステップ)は、`groups` の中の位置に来たときに run ブランチ上で委譲する。worktree は作らない。
-9. 方式 b では、全グループの後に `final` の最終ステップ(生成物の生成とコミット)を run ブランチ上で委譲する。
+7. グループのマージが済んだら、オーケストレーターが run ブランチでそのグループのステップの「通すテスト」(E2E を含む。§6.13.1)を実行し、パスを確かめる。同時に実行してよいテストは §6.7 の同時実行の規則(決定 30)で決める。環境の失敗は §6.13.1 のとおり扱う。それ以外の失敗は、修正を成果物を書く委譲として run ブランチ上で直列に出す。報告は `.codiel/runs/<slug>/try-<n>/steps/merge-fix-<g>/report.md` に書かせる。g は、そのグループのステップが state に持つ `group.index`(0 から)に 1 を足した値で、同じグループで修正を出し直すときは同じ置き場に書き直す。環境の失敗の実行し直し(§6.13.1)は、この報告を使う。後のステップのテストはまだ失敗するので、プロジェクト全体の test コマンドは test-loop で実行する。
+8. `serial` グループ(lockfile を変えるステップ)は、`groups` の中の位置に来たときに run ブランチ上で委譲する。worktree は作らない。委譲の種類は §6.13.1 の委譲の並べ方で選ぶ。報告は `.codiel/runs/<slug>/try-<n>/steps/step-<k>/report.md` に書かせる。環境の失敗の実行し直し(§6.13.1)がこの報告を使うためである。
+9. 方式 b では、全グループの後に `final` の最終ステップ(生成物の生成とコミット)を、手順 8 と同じ形で run ブランチ上で委譲する。
 10. 全グループと `final` の後、implement 全体に対して `evaluate_code` を 1 回呼び、`pass-gate implement` する。
 
 #### 6.6.5 `implement.steps` と state の更新
@@ -997,18 +1084,23 @@ guard-bash の 3 つの制限(`guard-bash.ts:164-182`)は現行どおりフェ�
 
 #### 6.6.6 ドメイン境界
 
-`state.domain` は 1 値しか持てず(`guard-write.ts:134`)、並列の委譲には使えない。`mapped` のとき、guard-write は書き込み先が属する worktree の kind と id から、`implement.steps[k].domain` または `testLoop.units[id].domain` を引いて境界を判定する(§6.8)。run ブランチ本体(メインの作業ツリー)への書き込みには、現行どおり `state.domain` を使う。
+`state.domain` は 1 値しか持てず(`guard-write.ts:134`)、並列の委譲には使えない。`mapped` のとき、guard-write は書き込み先が属する worktree の記録から要素を引き(§6.8 の (c))、その `domain` で境界を判定する。run ブランチ本体(メインの作業ツリー)への書き込みには、現行どおり `state.domain` を使う。
 
-### 6.7 test-loop の並列化
+### 6.7 test-loop は全テストの実行と修正を繰り返す
 
-- Step A(スクリプト安定化): スクリプトの作成は unit ごとに並列に委譲する。作業場所は unit ごとの worktree とし、作り方・後始末・マージは §6.6.3〜§6.6.4 に従う。同じ作業ツリーで複数の委譲先が同時にコミットすると `index.lock` で衝突するためである。
-- 実行: `spec.md` の frontmatter に `parallel: true` を持つ unit だけを同時に実行する。frontmatter は `spec.md` の先頭で `---` に囲む YAML とし、定義するキーは `parallel`(真偽値)だけである。frontmatter やキーが無ければ直列とする。持たない unit は直列に実行する。ポート・データベース・外部サービスのような共有資源を持つ unit を保護するためである。この規則はStep A の中の実行と回帰実行の両方に当てる。
-- Step B(NG 修正): unit ごとに §6.6 と同じ worktree とマージの方式で並列に修正する。
-- 並列度の上限は §6.6.2 と同じ 4 とする。
-- test-loop の worktree は `.codiel/worktrees/<slug>/unit-<unit-id>` に作り(§6.6.3)、state の `testLoop.units[unit-id]` に `implement.steps` と同じ必須フィールドで登録する。
-- unit のドメインは、`spec.md` が対象とする機能単位がドメインマップのどのドメインの glob に収まるかで決め、`testLoop.units[unit-id].domain` に入れる。1 つのドメインに決まらなければ、その unit は境界を課さない(unscoped として扱う)。
+- test-loop は、記録された全テストの回帰の確認と修正を、全件が通るまで繰り返す。テストを書く手順は持たない(決定 73。書くのは §6.13.2 の test-code)。各ステップの通すテスト(E2E を含む)は implement で通っている(決定 80)。
+- 実行の範囲は、`<testsDir>/**/spec.md` の `tests` に記録されたすべてのテストと、プロジェクトの test コマンドである。影響の有無で絞らない。
+- 同時実行: `spec.md` の frontmatter に `parallel: true` を持つ仕様のディレクトリのテストだけを同時に実行し、持たないものは直列に実行する。frontmatter やキーが無ければ直列とする。ポート・データベース・外部サービスのような共有資源を持つテストを保護するためである。この規則は、test-loop の実行、`/codiel:test` の実行、implement のグループのマージの後の実行(§6.6.4 の手順 7)に当てる。中でテストを実行する委譲(test-code・implement の委譲と、test-loop の回帰の実行と修正の委譲)は、§6.13.1 の委譲の並べ方に従う(決定 30)。
+- 失敗の分類は現行の 2 種を保つ。判定が出ないもの(broken)はテストの欠陥の疑いがあり、判定が出て期待と違うもの(NG)はプロダクトのバグである。
+- 理由が環境にある失敗(§6.13.1 の環境の失敗)は、broken にも NG にも数えず、§6.13.1 のとおり扱う。broken はテストを直す対象で、人の承認の下で保護を越えて直す。環境の失敗はテストもコードも直す対象にしない。
+- NG は仕様のディレクトリごとにまとめ、`step-add --kind test-loop` で `testLoop.units[<ID>]` に登録し、§6.6 と同じ worktree(名前は `test-loop-<k>`)とマージの方式で修正を委譲する。修正の委譲先は worktree の中で担当する仕様のディレクトリのテストを実行する。brief と report は、§6.6.4 の手順 1 のとおり `.codiel/runs/<slug>/try-<n>/steps/test-loop-<k>/` に置く。前の巡で `merged` になった要素は、次の巡で登録し直す。登録し直しても k は変わらないので、次の巡の brief と report は同じディレクトリに書き直す。
+- どの仕様のディレクトリにも属さない失敗(プロジェクトの test コマンドだけが見つけた失敗)は、run ブランチ上で直列に修正を委譲する。報告は `.codiel/runs/<slug>/try-<n>/steps/test-loop-project/report.md` に書かせ、次の巡でも同じ置き場に書き直す。環境の失敗の実行し直し(§6.13.1)は、この報告を使う。
+- broken は、テストが保護されている(§6.13.6)ので、`mark-ask test-loop --kind confirm` の後に人に確かめてから直す。直す委譲の書き込みは ask になり、人が承認する。
+- 修正の 1 巡(委譲・マージ・全体の再実行)を、`record-attempt test-loop` の 1 回と数える。
+- 要素のドメインは、ID が `units/<パス>` のとき、そのパスがドメインマップのどのドメインの glob に収まるかで決め、`step-add --domain` で渡す。E2E の ID と、1 つのドメインに決まらないものは、境界を課さない(unscoped として扱う)。
 - fix-loop は直列のまま変えない。
-- `writing-test-specs` の `spec.md` の書式に、`---` で囲む frontmatter と `parallel: true` の宣言を足し、「無ければ直列」と書く。
+- `writing-test-specs` の `spec.md` の書式に、`---` で囲む frontmatter と `parallel: true` の宣言を置き、「無ければ直列」と書く。
+- `/codiel:test` は、引数(testsDir からの相対パス。省略時は testsDir 全体)の下の仕様のディレクトリに記録されたテストを実行し、報告だけを行う。`tests` を持たない仕様のディレクトリは「テストコードなし」と報告し、テストを書かない。環境の失敗は §6.13.1 のとおり実行し直す。ただし `/codiel:test` は state を遷移させないので `mark-ask` を使わず、実行し直しても残った環境の失敗を報告に挙げてユーザーに示す。
 
 ### 6.8 hook
 
@@ -1017,6 +1109,7 @@ guard-bash の 3 つの制限(`guard-bash.ts:164-182`)は現行どおりフェ�
 | guard-bash | `findActiveRun` の走査範囲の変更(§6.2.2)と、run の検索をメイン作業ツリーのルートで行う変更(下記 (a))に追随する。制限の条件はフェーズのまま | M2(走査)、M4(ルート) |
 | guard-write | `DOC_PHASES` に intent / intent-sync を加え、init を除く。`docs/intents/**` の規則を足す(下記) | M2 |
 | guard-write | worktree 内の書き込みの判定(下記 (a)〜(c)) | M4 |
+| guard-write | `CODE_PHASES` に test-code を加える。テストの保護(§6.13.6)と、文書フェーズで `<testsDir>/` を通す規則を足す | M4 |
 | stop-guard | run の検索をメイン作業ツリーのルートで行う(下記 (a)) | M4 |
 | guard-bash | GitHub へ投稿する `gh` のコマンドの本文に `<!-- codiel:generated -->` を求める(下記「投稿する本文のマーカー」) | M2 |
 | 新設 guard-github-mcp | GitHub MCP の本文を書き込むツールの引数に `<!-- codiel:generated -->` を求める(同上) | M2 |
@@ -1085,14 +1178,14 @@ GitHub MCP の hook の規則は次のとおりである。
 
 intent フェーズの手順を「承認 → intent 文書を書く → run を作る」の順に保てるのは、この規則による。
 
-worktree 内の書き込みは、次の 3 点で判定する。worktree は `.codiel/worktrees/<slug>/<kind>-<id>/` にあり、kind は `step` か `unit` である(§6.6.3)。
+worktree 内の書き込みは、次の 3 点で判定する。worktree は `.codiel/worktrees/<slug>/<名前>/` にあり、名前は `step-<k>`・`test-code-<k>`・`test-loop-<k>` のいずれかの 1 セグメントである(§6.6.3)。
 
-- (a) run の検索は常にメイン作業ツリーのルートで行う。worktree はメインの作業ツリーの中にあり、現行の `findProjectRoot(cwd)`(`lib.ts:539-545`)の返り値は worktree の中身で変わる。worktree の checkout に `.codiel/` が無ければ親をたどってメインのルートを返し、`.codiel/specs` がコミットされていれば worktree のルートを返す。どちらも起こりうるので、cwd が worktree 内のときは `git worktree list --porcelain` の先頭のエントリ(メインの作業ツリー)のパスをメインのルートとし、そこで `findActiveRun` を呼ぶ。`git rev-parse --git-common-dir` の値は `.git` ディレクトリを指すので、そのままルートとして使わない。
-- (b) 書き込み先の絶対パスが `<メインのルート>/.codiel/worktrees/<slug>/<kind>-<id>/` 配下なら、その worktree のルート(`worktreeRoot`)を基準に判定する。
+- (a) run の検索は常にメイン作業ツリーのルートで行う。worktree はメインの作業ツリーの中にあり、現行の `findProjectRoot(cwd)`(`lib.ts:539-545`)の返り値は worktree の中身で変わる。worktree の checkout に `.codiel/` が無ければ親をたどってメインのルートを返し、`.codiel/` の一部(`.codiel/config.json` や run の `reports/` など)がコミットされていれば worktree のルートを返す。どちらも起こりうるので、cwd が worktree 内のときは `git worktree list --porcelain` の先頭のエントリ(メインの作業ツリー)のパスをメインのルートとし、そこで `findActiveRun` を呼ぶ。`git rev-parse --git-common-dir` の値は `.git` ディレクトリを指すので、そのままルートとして使わない。
+- (b) 書き込み先の絶対パスが `<メインのルート>/.codiel/worktrees/<slug>/<名前>/` 配下なら、その worktree のルート(`worktreeRoot`)を基準に判定する。
   - `codielRel` は `worktreeRoot` 基準の相対パスとする。
   - worktree の中の docRoot は `worktreeRoot + relative(mainRoot, docRoot)` で求め、`docRel` はそれを基準にする。docRoot がメインのルートの子(例 `repo/sub`)でも、同じ位置関係で worktree の中に写る。
-  - そのうえでドメイン境界・spec / cases の改竄検知(`guard-write.ts:117`)・DOC の判定を通常どおり当てる。この書き込みを `.codiel/` 配下の免除(`:136`、`:180`)に入れない。メインのルート基準で相対化すると、worktree 内のすべての書き込みが `.codiel/` 配下と判定されて免除される。
-- (c) (b) のとき、境界に使うドメインは、kind が `step` なら `implement.steps[id].domain`、`unit` なら `testLoop.units[id].domain` である。`state.domain` は使わない。値が無ければ境界を課さない。
+  - そのうえでドメイン境界・テストの保護(§6.13.6)・DOC の判定を通常どおり当てる。この書き込みを `.codiel/` 配下の免除(`:136`、`:180`)に入れない。メインのルート基準で相対化すると、worktree 内のすべての書き込みが `.codiel/` 配下と判定されて免除される。
+- (c) (b) のとき、境界に使うドメインは、`implement.steps`・`testCode.units`・`testLoop.units` のうち、`worktree` の記録がこの worktree のルートの repoRoot 相対のパスと一致する要素の `domain` である。worktree の名前から ID を読み取らない。`state.domain` は使わない。一致する要素が無いか、値が無ければ境界を課さない。一致が 2 つ以上あれば ask を返す(§6.6.3 の一意性が崩れたときの安全網)。
 
 `state.json` の保護(`guard-write.ts:79`)は絶対パスで判定しており、変えない。
 
@@ -1108,9 +1201,11 @@ worktree 内の書き込みは、次の 3 点で判定する。worktree は `.co
 | 削除 `agents/codiel-analyst.md` | §6.1.6 |
 | 改修 `skills/orchestrating-runs/` | フェーズ表・§0・§1・§2.1・§4.1・§5・§6 |
 | 改修 `skills/writing-dev-plans/` | §6.6.1(触るファイル・前提ステップ・`## 環境準備`・`## 生成物` と方式の選び方) |
-| 改修 `skills/writing-test-specs/` | 軽量の入力(§6.1.4)、`parallel: true` の宣言(§6.7) |
-| 改修 `skills/implementing/` | worktree 内での作業(依存のインストール、`## 生成物` の方式に従う生成物の扱い)と `report.md` |
-| 改修 `skills/running-regression-tests/` / `scripting-tests/` | §6.7 |
+| 改修 `skills/writing-test-specs/` | 軽量の入力(§6.1.4)、`parallel: true` の宣言(§6.7)、仕様の置き場と命名と作る仕様の規則(§6.13.3。規則の正本)、`tests` を書かず保つ規則(§6.13.5)。HARD-GATE の書き込み先を `<testsDir>/<仕様のディレクトリ>/` にする。渡された一覧(標準では `design.md`、軽量では依頼文)だけを使い、一覧に無い仕様のディレクトリは作らずに報告する。軽量の run で仕様のディレクトリを同定する委譲の手順(名前の候補を返し、ファイルを書かない。§6.1.4、§6.13.3) |
+| 改修 `skills/implementing/` | worktree 内での作業(依存のインストール、`## 生成物` の方式に従う生成物の扱い)と `report.md`(run ブランチ上の委譲では依頼文が指す置き場に書く。`serial` グループと `final` は `steps/step-<k>/`、グループのマージの後の修正は `steps/merge-fix-<g>/`、test-loop のどの仕様のディレクトリにも属さない失敗の修正は `steps/test-loop-project/`。§6.6.4 の手順 7〜9、§6.7)。RED の手順を除き、「通すテスト」を通す(§6.13.1)。brief が挙げた通すテスト(E2E を含む)を実行し、実行しなかった通すテストと環境の失敗(§6.13.1)を `report.md` に挙げる。テストと仕様を書き換えない |
+| 改修 `skills/scripting-tests/` | test-code フェーズの委譲先の手順(§6.13.2、§6.13.5)。E2E の実行の準備と環境の失敗の報告(§6.13.1)。名前は変えない |
+| 改修 `skills/running-regression-tests/` | test-loop と `/codiel:test`(§6.7)。環境の失敗を broken と NG から分け、§6.13.1 のとおり実行し直す。スクリプト安定化の手順を除く |
+| 改修 `skills/fixing-failures/` | 「(B) TDD 修正ループ」の呼び方を「test-loop の修正」に改める。NG の入力の出所を `running-regression-tests` にする。修正の後に実行したテストの環境の失敗を報告する(§6.13.1) |
 | 改修 `skills/reviewing-diffs/` | 入力を `git diff`、軽量の入力、持続層の違反は high(A3-4 の文言)、原文の `## ASIS` / `## TOBE` の要望を満たすかも見て未達は high、派生文と原文の食い違いは原文を正として所見に挙げる(§6.3.6)、local では投稿しない。投稿するレビュー本文は `github-writing.md` に従い、画像はレビュー本文の縮退の順序で載せる(§6.12.4) |
 | 改修 `skills/filing-followup-issues/` | local の草案(`intent-writing.md` に従う。原文のセクションは `<!-- codiel:unrecorded -->`)。github の Issue とコメントは `github-writing.md` に従い、本文に `<!-- codiel:generated -->` を置く |
 | 改修 `skills/orchestrating-runs/`(pr) | PR 本文を `github-writing.md` に従って書き、画像を載せる。§0 で `imageUpload` を判定する |
@@ -1122,6 +1217,17 @@ worktree 内の書き込みは、次の 3 点で判定する。worktree は `.co
 | 改修 `skills/raguel-gating/` | outcome 同期の local 分岐、`--slug` |
 | 改修 `skills/preparing-design-agendas/` / `writing-design-docs/` / `facilitating-design-discussions/` | 入力を intent に |
 | 改修 `commands/run.md` | 引数 3 形、description |
+| 改修 `skills/writing-design-docs/` | `## 影響を受ける機能単位` を仕様のディレクトリの ID(§6.13.3)で列挙する。作る仕様の規則は `writing-test-specs` を参照する。既にある画面は `<testsDir>/e2e/frontend/` の名前を使い、新しい画面は ID の代わりに名前の候補を書いて報告に挙げる。決まった名前を渡されたら、候補の行を ID に書き換える(§6.13.3) |
+| 改修 `skills/facilitating-design-discussions/`(TDD) | 設計ウォークスルーで、`design.md` の新しい画面ごとに名前の候補を示して AskUserQuestion で聞き、候補の外の答えはケバブケースの 1 セグメントに直して確かめる。決まった名前を修正の要望として design の委譲をやり直させ、名前の候補が残る `design.md` でゲートへ進まない(§6.13.3) |
+| 改修 `skills/writing-dev-plans/`(TDD) | 「ユニットテスト」を「通すテスト」に替え、全仕様のディレクトリ(ユニットと E2E)を割り当て、E2E を除外しない。軽量の run では依頼文の一覧を使う。検証コマンドを通すテストに絞る(§6.13.1) |
+| 改修 `skills/fixing-review-findings/` | 所見がテストに向くときの `set-test-edit` / `clear-test-edit` とテスト側の修正の順序(§6.13.6) |
+| 改修 `skills/reviewing-diffs/`(TDD) | 入力の `.codiel/specs/**` を `<testsDir>/**` と記録されたテストに替える |
+| 改修 `skills/raguel-gating/`(TDD) | フェーズ→ツール対応表に test-code の行(§6.13.2 の手順 8)。run の結末を記録するときの `evaluationId` の選定順(fix-loop → test-loop → implement)の末尾に test-code を足す |
+| 改修 `skills/initializing-harness/` と `scripts/install-harness.sh` | `.codiel/config.json` の作成と §0 の D(§6.13.4)。`.codiel/specs` を作らない |
+| 改修 `skills/orchestrating-runs/`(TDD) | `STAGES` とフェーズ進行表、§0 の `codiel-state config` と D の判定、test-code と test-loop の運転、依頼文の条項、§2.2 の PR 本文(§6.12.8)。テストを実行する委譲の並べ方と、implement の brief に書く委譲の種類と通すテスト、グループのマージの後の実行(§6.6.4、§6.13.1)、環境の失敗の実行し直しの時機・`## 実行し直し` の記録・人への確認(§6.6.4 の手順 3、§6.13.1)、軽量の run の同定の委譲と画面名の確認(§6.1.4、§6.13.3)、再開で `phases` に test-code を持たない state の run を `stop --reason migrate` で止める手順と、実行し直しが済んだかの判断と確かめる報告の範囲(§6.2.5、§6.6)。並列可の委譲を同じ応答からまとめて出すことと、§4.1 の逐次ディスパッチの段落を §6.13.1 と §6.6.6 に合わせること。run ブランチ上の修正の報告の置き場(§6.6.4 の手順 7、§6.7)。§1 と §6 で、state の `intent` でも再開する run を照合すること(§6.1.2 の手順 0、§6.2.5) |
+| 改修 `skills/capturing-intent/`(try の持ち込みと再開する run の照合) | 手順 1 の最新化の後に、前の try の run ブランチから intent を持ち込む(§6.1.2 の手順 1)。手順 6 は手順 1 を参照する形にする。手順 0 と手順 2 で、frontmatter の `run` に加えて state の `intent` でも再開する run を照合する(§6.1.2) |
+| 改修 `commands/test.md` | 引数を仕様のディレクトリの ID に替え、スクリプト安定化を除く(§6.7) |
+| 改修 `assets/rules/codiel.md`・`CLAUDE.example.md` | テストの仕様の置き場を testsDir にする |
 
 指示書の文面は `prompt-smith:prompt-smith` の規律で書く(`.claude/rules/metatron/conventions.md` の「AI 向けの指示書」)。スキルの description は `prompt-smith:skill-creator` で書く。
 
@@ -1157,6 +1263,8 @@ worktree 内の書き込みは、次の 3 点で判定する。worktree は `.co
 - `plugins/codiel/CLAUDE.example.md` を、metatron への分離後と intent 駆動化後の実態に合わせて書き直す(決定 57)。ARCHITECTURE・GOTCHAS・metatron には触れない(決定 59)。
 - 運用の規律は `plugins/codiel/assets/rules/codiel.md` を雛形として、`/codiel:init` が `.claude/rules/codiel.md` に置く。`CLAUDE.example.md` は、置き場の地図と入口のコマンドだけを持つ「## Codiel」のセクションにする(決定 70)。`/codiel:init` と `/codiel:run` の初期化の判定(B)は、`.claude/rules/codiel.md` が在ることと、CLAUDE.md に行全体が(前後の空白を除き)`## Codiel` と一致する行があることで行う。旧見出し「## Codiel ハーネス運用ルール」は前方一致でも満たさない。
 - `plugins/codiel/docs/DESIGN.md` と `README.md` を intent 駆動の run に書き換える。
+- `plugins/codiel/README.md` に、`.codiel/config.json` の `testsDir` の意味と既定値、書き換えるのは run が active でないときにすること、テストコードは規約の場所に置かれ `spec.md` に記録されることを書く。旧 `.codiel/specs/` の移行の注記は書かない(決定 74)。
+- `plugins/codiel/docs/DESIGN.md` の §2(全体フロー)・§3(成果物と state 管理)・§4(テスト資産モデル)・§5(test-loop の詳細)・§6(Skills)・§8(Hooks)を、§6.7 と §6.13 に合わせて書き換える。§4 の「ユニットテストはこの体系に含めない(2 レイヤー体制)」は、ユニットテストも `units/` の仕様に入るので改める。
 - `plugins/codiel/README.md` には「metatron を導入すると `/metatron:init` と `/metatron:update` が `[ADR 候補]` を ADR へ移し、持続層を参照形に縮める」という内容だけを書く(§6.4.3)。手動で移す手順は書かない。
 
 ### 6.10 metatron との独立性
@@ -1178,6 +1286,7 @@ codiel と metatron は、どちらか一方だけを導入した環境でも、
 | ADR | metatron の ADR。持続層には番号参照だけ | 持続層に `[ADR 候補]` の全文(§6.4.2〜§6.4.3)。後で metatron を導入すると、metatron の init / update が ADR へ移して縮める(§6.11) | `intent-format.md`、`syncing-intents` |
 | ADR の 3 条件(`writing-discipline.md:69-73`) | metatron の定義を使う | codiel の `intent-format.md` の写しを使う | `intent-format.md`。写しの追随は `plugins/codiel/docs/format-change-checklist.md` と metatron の `format-change-checklist.md` の双方に 1 行ずつ載せる |
 | rules(`conventions.md` 等)を生成物の方式の根拠に読む(§6.6.1) | `.claude/rules/**` の rules を読む | `CLAUDE.md` などプロジェクトの指示書を読む。定めが無ければ方式 b | `writing-dev-plans` |
+| rules(`testing-policy.md` 等)をテストコードの置き場の根拠に読む(§6.13.5) | `.claude/rules/**` の rules を読む | `CLAUDE.md` と既存のテストの配置に従う。どちらにも手掛かりが無ければフレームワークの既定 | `scripting-tests` |
 | metatron `config-schema.md` の `docs/intents/domains/<領域>.md` 行 | metatron の既定パス表に載る | 影響なし。置き場の正本は codiel の `intent-format.md` であり、metatron の行はそれを参照する記載にとどまる | `intent-format.md`、`config-schema.md` |
 | metatron の保護 hook(ARCHITECTURE・GOTCHAS・rules の直接編集を拒否) | 効く | 効かない。codiel はもともとこれらを直接編集しない | 縮退不要(codiel はこれらのファイルを直接編集しないので、hook が無くても振る舞いが変わらない) |
 | 2 者比較テスト(§8.3) | テストが metatron の `src/` を import する | 実行時の依存ではない(§6.10.3) | 縮退不要(テストはこのリポジトリでだけ走り、配布される codiel の動作に関わらない) |
@@ -1316,6 +1425,7 @@ ADR を先に確定させるのは、候補の本文を失わないためであ�
 - 画像の載せ方は §6.12.4 に従う。
 - run が active な間に投稿する本文には、`<!-- codiel:generated -->` を含める(§6.3.5)。この規則を「`<!-- codiel:generated -->` を本文に含める」の文で規則の本文に載せる。付け忘れると hook に deny される(§6.8)。
 - 本文は Write ツールで run の `reports/` に投稿ごとに別名のファイルで書き、別の Bash 呼び出しで `--body-file` で渡す(決定 66)。gh の `--template` / `-T`・`--fill` 系・`--web` は使わない(決定 64・66)。この 2 点は、マーカーの項と同じく gh-utility へ写さない(§6.12.6)。
+- PR 本文には §6.12.8 の制限を当てる。この規則の「引用・出典は削らず末尾にまとめる」は PR 本文に当てない。
 
 #### 6.12.4 画像の載せ方
 
@@ -1376,7 +1486,7 @@ ADR を先に確定させるのは、候補の本文を失わないためであ�
 
 - gh-utility に GitHub の執筆規則と画像の載せ方を独立に置く。置き場は `plugins/gh-utility/references/` の新しいファイルとし、名前は計画書で確定する。既存の `references/github-issue-common.md` にセクションとして足してもよい。
 - 内容は §6.12.3〜§6.12.4 と同じ規則である。codiel を参照せず、codiel の名前も書かない。
-- 投稿する本文のマーカー(§6.12.3 の最後から 2 番目の項)と、本文ファイルの書き方(§6.12.3 の最後の項)は写さない。gh-utility の投稿にはマーカーを付けない。テンプレートの扱い(§6.12.7)も写さない。gh-utility の `issue-craft` はテンプレートを利用者に選ばせる独自の手順を持つ。
+- 投稿する本文のマーカー(§6.12.3 の最後から 2 番目の項)と、本文ファイルの書き方(§6.12.3 の最後の項)は写さない。gh-utility の投稿にはマーカーを付けない。テンプレートの扱い(§6.12.7)も写さない。gh-utility の `issue-craft` はテンプレートを利用者に選ばせる独自の手順を持つ。PR 本文のセクション(§6.12.8)も写さない。gh-utility は PR を作らない。
 - codiel の run が active なセッションで gh-utility のスキルから本文を投稿すると、マーカーが無いので codiel の hook に deny される(§6.8)。codiel は run の間に gh-utility を起動しない。intent 承認時の任意の起票は run の作成前に行うので、この制限に当たらない。利用者が run の間に gh-utility を使うと deny されることは、codiel の README に書く。
 - Issue やコメントを書くスキル(`issue-craft`・`issue-split`・`issue-triage`)のすべてが、このファイルを読む指示を持つ。
 - gh-utility は state を持たないので、画像の手段は実行時に判定する(`gh --version`、`remoteHost`、セッションで claude-in-chrome のツールが使えるか)。ローカル保存の場合は保存パスを利用者に示す。
@@ -1389,12 +1499,226 @@ ADR を先に確定させるのは、候補の本文を失わないためであ�
 リポジトリの Issue・PR のテンプレートは、スキルが読んで本文の構成に使う(決定 65)。gh の `--template` / `-T` は使わない。gh 2.101.0 は TTY の無い環境で `-T` を拒み、`-T` と `--body` / `--body-file` の併用も拒むので、テンプレートを使えるのはスキルが読んで写す経路だけである。
 
 - PR: pr フェーズで、単一ファイルのテンプレートを探す。対象は `.github/`・リポジトリのルート・`docs/` の `pull_request_template.md` / `.txt` で、大文字小文字を区別せず、この順に最初に見つかったものを使う。`PULL_REQUEST_TEMPLATE/` 配下にしか無いときは使わない。GitHub の Web 画面も、`?template=` の指定が無ければそれらを適用しないためである。
-- テンプレートを使うときは、見出しの構成を保ち、記入の案内の HTML コメントを消す。codiel のマーカー(`<!-- codiel:generated -->` など)は消さない。codiel が必ず書く項目(intent のパス、`Closes #<N>`、画像、`## 出典`)に当たる見出しが無ければ末尾に足す。
+- テンプレートを使うときは、見出しの構成を保ち、記入の案内の HTML コメントを消す。codiel のマーカー(`<!-- codiel:generated -->` など)は消さない。codiel が必ず書く項目(変更の説明、intent 文書へのリンク、`Closes #<N>`(Issue を入口にした run)、テストの結果)に当たる見出しが無ければ末尾に足す。テンプレートの見出しのうち、PR 本文に入れない内容(要望・受け入れ基準・原文・run の経緯)を求めるものには、intent 文書へのリンクを書き、転記しない(§6.12.8)。
 - 同意・署名・人の確認を表すチェックボックス(行動規範への同意、CLA の署名、「テストした」など)は付けずに残し、人が確かめる項目であることを本文に書く。マーカーは描画されないので、付けると人が同意したように見えるためである。
 - 後続 Issue(triage): `filing-followup-issues` の既存の `.github/ISSUE_TEMPLATE` の探索と展開を使う。探索から `config.yml` を除き、チェックボックスは上と同じ規則にする。
 - intent-issue: gh-utility `issue-craft` の持ち込みモード(テンプレートの選択と、見出しが衝突したときの 3 択)と、`intent-common.md` の自前起票の 3 択のまま据え置く。テンプレートの項目を本文の末尾へ自動で足す既定は作らない。人が後で埋めた欄は、マーカーのある本文の中なので派生として扱われ、原文から落ちるためである。
 - 本文ファイルは Write ツールで `.codiel/runs/<slug>/try-<n>/reports/` に投稿ごとに別名で書き(PR は `pr-body.md`)、`review-<n>.md` と同じく run ブランチにコミットしてから投稿する(決定 67)。コミットしないと、次の try の pr フェーズの開始時の `git status --short` に未追跡の行が残る。
 - org やアカウントの `.github` リポジトリに置いた既定のテンプレートはローカルに無いので使わない。
+
+#### 6.12.8 PR の本文は変更の説明を中心にする
+
+PR の本文は、行った変更の説明を中心にする(決定 72)。要望と経緯は intent 文書にあるので、PR にはリンクだけを置く。PR を作るのは github モードだけなので、この規則も github モードにだけ当たる。local モードの pr フェーズは state に記録するだけで、本文を書かない。
+
+- 変更の説明は、何をどう変えたかを `git diff <base>...<run ブランチ>` と `dev-plan.md` から書く。
+- ほかに入れるのは次の 5 つだけである。
+  - `Closes #<N>`(`state.issue` があるとき)
+  - 変更を示す画像(UI の変更など。載せ方は §6.12.4)
+  - intent 文書へのリンク
+  - テストの結果(test-loop の最後の `test-run-<n>.md` のサマリ)
+  - `<!-- codiel:generated -->`(§6.8 の hook が求める)
+- 要望・受け入れ基準・原文の転記と、run の経緯(フェーズの進み方、ゲートの記録、修正の往復)は入れない。
+- `## 出典` を置かない。§6.12.3 の「引用・出典は削らず末尾にまとめる」は PR 本文に当てない。
+- intent 文書へのリンクは `https://<remoteHost>/<repoSlug>/blob/<SHA>/<state.intent>` の形にする。`remoteHost` と `repoSlug` は §0 の環境判定(`check-intent-env`)の出力、SHA は `pr-body.md` を書く直前の run ブランチの HEAD である。ブランチ名でなく SHA を使うのは、マージの後に run ブランチを消してもリンクが切れないようにするためである。
+- この規則は `github-writing.md` の「PR 本文」のセクションに置く。gh-utility へは写さない(§6.12.6)。
+
+### 6.13 テスト駆動の流れとテスト資産
+
+#### 6.13.1 テストを先に書き、実装がそれを通す
+
+テストを実装より先に書き、実装がそのテストを通す順序を、フェーズの並びで強制する(決定 73)。
+
+| フェーズ | テストについて行うこと |
+| --- | --- |
+| test-spec | 仕様のディレクトリごとに `spec.md` と `cases.md` を書く。期待結果は intent の受け入れ基準から導く |
+| test-code | `cases.md` からテストコード(ユニットと E2E)を書き、実行して Red を確かめる。置いたパスを `spec.md` の `tests` に記録する |
+| implement | dev-plan の各ステップの「通すテスト」(ユニットと E2E)を通す(Green)。テストと仕様を書き換えない |
+| test-loop | 記録された全テストとプロジェクトの test コマンドで回帰を確かめ、失敗を直す。全件が通るまで繰り返す(§6.7) |
+| fix-loop | レビュー所見を直す。所見がテストに向くときだけ、テストを先に直す(§6.13.6) |
+
+- 期待結果を書く委譲(test-spec)、テストを書く委譲(test-code)、コードを直す委譲(implement・test-loop・fix-loop)を分ける。現行の役割分担による捏造防止(`plugins/codiel/docs/DESIGN.md` §4)を保つためである。
+- dev-plan の各ステップは、「ユニットテスト」の項目の代わりに「通すテスト」を持つ。値は、そのステップと前提ステップが終わった時点で通る仕様のディレクトリの ID(§6.13.3)の列で、無ければ「なし」と書く。
+- dev-plan は、仕様のディレクトリの一覧(標準では `design.md` の `## 影響を受ける機能単位`、軽量では依頼文の一覧。§6.1.4)のすべて(ユニットと E2E)を、いずれかのステップの「通すテスト」に割り当てる。E2E を除外しない(決定 80)。
+- ステップの「検証コマンド」は、そのステップの通すテストだけを実行する。test-code の後の run ブランチには未実装のモジュールを参照するテストがあり、全体のテストと型検査は失敗しうるためである。全体のテストと型検査は test-loop で通す。
+- implement の委譲先が実行する通すテストは、下の委譲の並べ方でオーケストレーターが選んだ委譲の種類で決まる。オーケストレーターは種類と通すテストを brief(`serial` グループと `final` では依頼文)に書く(§6.6.4 の手順 1)。
+- 委譲先は、実行しなかった通すテストを `report.md` に挙げる。
+- グループのマージの後に、オーケストレーターが run ブランチでそのグループのステップの通すテスト(E2E を含む)を実行し、パスを確かめる(§6.6.4 の手順 7)。並列可の委譲で実行しなかった通すテストも、ここで通す。
+- test-loop は、全テストの回帰の確認と修正を担う(§6.7)。
+- implement はテストを足さない。テストが足りないと判断したら、書かずに報告する。
+
+テストを実行する委譲の並べ方(決定 30)は次のとおりである。ポートやデータベースを共有するテストを同時に走らせないための規則で、本文はここにだけ置く。
+
+- 当てる委譲は、中でテストを実行する委譲である。test-code の委譲、implement の実装と修正ラウンドの委譲、test-loop の回帰の実行と修正の委譲、run ブランチ上の修正の委譲(§6.6.4 の手順 7、§6.7)、環境の失敗の実行し直しの委譲(下記)が当たる。タスクレビューのような読み取りだけの委譲には当てない。
+- 委譲を次の 2 種類に分ける。
+  - 並列可の委譲: `parallel: true` の仕様のディレクトリのテストだけを実行する。
+  - 単独の委譲: 並列可の委譲に当たらないもの。implement ではすべての通すテストを実行する委譲、test-code と test-loop の修正では `parallel: true` を持たないディレクトリの委譲、test-loop の回帰の実行の委譲、run ブランチ上の修正の委譲が当たる。
+- 判定は委譲を出す時点で行う。動いている委譲は、同じフェーズでこの規則を当てる委譲のうち、出して報告がまだ返っていないものとする。
+- 並列可の委譲は、動いている委譲が無いか並列可の委譲だけのときに出し、同時に動かすのは 4 件までとする(決定 29)。
+- 出せる並列可の委譲が 2 件以上あるときは、4 件の上限の範囲で同じ応答からまとめて出す。test-code の委譲、implement の実装と修正ラウンドの委譲、test-loop の修正の委譲のすべてに当てる。
+- 単独の委譲は、動いている委譲が無いときだけ出す。報告が返るまで、同じフェーズでこの規則を当てるほかの委譲を出さない。
+- test-code と test-loop の修正では、担当する仕様のディレクトリの `parallel` で種類が決まる。
+- implement では、オーケストレーターが委譲ごとに種類を選ぶ。
+  - ステップが 2 つ以上のグループの最初の委譲は、並列可の委譲にする。
+  - ステップが 1 つのグループ、`serial` グループ、`final`、衝突の後のやり直しは、単独の委譲にする。
+  - 修正ラウンドの委譲は、動いている委譲があれば並列可の委譲にし、無ければどちらでもよい。
+
+テストの実行環境と環境の失敗は、次のとおり扱う。test-code・implement・test-loop・`/codiel:test` に同じ扱いを当てる(`/codiel:test` の差は §6.7)。
+
+- E2E の実行に要る準備(サーバーの起動、データベースの用意など、依存のインストールを超えるもの)は、プロジェクトの規約とテストの設定(テストフレームワークのサーバー起動の設定など)に従う。codiel は準備の手順を持たない。
+- テストの失敗の理由が環境にあるとき(サーバーが起動しない、接続が拒否される、ポートが使用中、必要なサービスが無い)は、環境の失敗とする。未実装による Red にも、プロダクトの失敗(NG)にも数えない。test-loop の broken との関係は §6.7 に置く。
+- 委譲先は、環境の失敗を理由と出力の抜粋とともに報告(`report.md`。test-loop の回帰の実行では `test-run-<n>.md`)に挙げる。
+- オーケストレーターは、環境の失敗が出た仕様のディレクトリ(どの仕様のディレクトリにも属さない失敗では、プロジェクトの test コマンド。§6.7)を、動いている委譲が無いときに 1 回だけ単独で実行し直させる。実行し直しは、同じ worktree(run ブランチ上の実行なら run ブランチ)でそのテストを実行して報告するだけの単独の委譲とし、要素の状態と `attempts` を変えない。オーケストレーターが自分で実行したテスト(§6.6.4 の手順 7)は、自分で実行し直す。オーケストレーター自身の実行し直しは記録しないので中断の後の再開で 1 回余分に実行しうるが、テストの実行は成果物を変えないので許す。
+- 実行し直しの委譲は、元の報告(`report.md`。test-loop の回帰の実行では `test-run-<n>.md`)の末尾に `## 実行し直し` のセクションを足して結果を書く。state は変えない。中断の後に再開したオーケストレーターは、このセクションの有無で実行し直しが済んだかを判断し、1 回だけの規則を保つ(§6.2.5)。
+- 実行し直しても環境の失敗なら、`mark-ask <フェーズ> --slug <slug> --kind confirm` の後に人に確かめる。
+
+#### 6.13.2 test-code フェーズは実装の前に Red を確かめる
+
+| 項目 | 内容 |
+| --- | --- |
+| 担い手 | 成果物を書く委譲を、仕様のディレクトリごとに並列に出す |
+| 入力 | 担当する仕様のディレクトリの `spec.md` と `cases.md`、`design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`)、`dev-plan.md` |
+| 出力 | テストコード(置き場は §6.13.5)、`spec.md` の frontmatter の `tests`、`steps/test-code-<k>/report.md` |
+| ゲート | 全ディレクトリのマージの後に pass-gate(`evaluate_code`)を 1 回 |
+| スキル | `scripting-tests`。cases.md を実行できるテストにする実態に合うので、名前は変えない |
+
+オーケストレーターの手順は次のとおりである。
+
+1. test-spec と dev-plan の pass-gate の後に `start-phase test-code` する。
+2. test-spec が作成・更新した仕様のディレクトリを、`step-add --kind test-code --id <ID>` で登録する。`--files`・`--deps`・`--final`・`--domain` は渡さない(test-code はドメイン境界を課さない)。
+3. 委譲先は委譲の中で Red を確かめるためにテストを実行するので、§6.13.1 の委譲の並べ方に従って委譲する。
+4. 委譲はすべて §6.6.3 の worktree(名前は `test-code-<k>`)で行う。brief と report は `.codiel/runs/<slug>/try-<n>/steps/test-code-<k>/` に置く。brief には testsDir の値、仕様のディレクトリの ID、入力のパスを書く。worktree の作成・依存のインストール・マージ・後始末は §6.6.3〜§6.6.4 に従う。
+5. report.md に環境の失敗があれば、§6.13.1 のとおり実行し直させてから、タスクレビューへ進む。タスクレビューは読み取りだけの委譲で出す。観点は、ケースとテストの 1 対 1、期待結果が `cases.md` の文言どおりか、Red の理由、置き場が規約どおりか、`tests` の記録と置いたファイルの一致、の 5 つである。修正ループは §6.6.4 の手順 4 に従い、`testCode.units[<ID>].attempts` で数える。
+6. レビューを通ったディレクトリから、run ブランチへ順にマージする。
+7. 委譲先が「cases.md の誤り」(下記)を報告したディレクトリは、マージせずに要素を `failed` にして worktree を後始末する。`writing-test-specs` に従う成果物を書く委譲で、run ブランチ上の `cases.md` を直させる。直す委譲が、期待結果を変える必要が無い(受け入れ基準の振る舞いが実装の前から成り立っている)と報告したら、`mark-ask test-code --kind confirm` の後に人に確かめる。直したら要素を `pending` に戻し、そのディレクトリの test-code をやり直す。
+8. 全ディレクトリのマージの後に `evaluate_code` を呼ぶ。`diff` はテストコードと `spec.md` の差分(手順 7 で直した `cases.md` の差分を含む)、`testResults` は各 report.md の Red の確認の要約とする。objective には「実装の前なので、Red の対象のテストが失敗するのは期待どおりである」の一文を入れる。
+9. `pass-gate test-code` する。
+
+委譲先(`scripting-tests` に従う)の手順は次のとおりである。
+
+- フレームワークと置き場を決める(§6.13.5)。E2E の実行の準備は §6.13.1 のとおりプロジェクトの規約とテストの設定に従う。
+- `cases.md` の 1 ケースを 1 テストにし、テスト名にケース ID を入れる。期待結果は `cases.md` の文言を変えずにアサーションへ写す。
+- 置いたテストファイルのパスを、`spec.md` の `tests` に記録する(§6.13.5)。`cases.md`、`spec.md` の本文と `parallel`、プロダクトコードは書き換えない。
+- テストを実行して Red を確かめる。Red の対象は、この run で追加・変更したケースであり、`git diff <base>...HEAD -- <cases.md のパス>` で決まる。実装の前なので、Red の対象のテストは失敗するのが期待どおりである。
+  - 失敗の理由が未実装(対象のモジュール・関数・画面・API・コマンドが無い、値や表示が期待と違う)なら Red とする。未実装のモジュールの import でファイル全体が失敗するときは、理由がその import であることを確かめ、そのファイルのケースをすべて Red とする。E2E で要素が見つからない失敗は、対象の画面が未実装なら Red とする。
+  - 失敗の理由が環境にある(§6.13.1 の環境の失敗)なら Red にせず、理由と出力の抜粋を report.md に挙げる。
+  - テストの記述の誤り(構文、テスト自身の import、フレームワークの設定)で失敗したら、テストを直して再実行する。
+  - Red の対象のテストが通ったら、cases.md かテストの誤りとして扱う。テストが期待結果を検出していない(アサーションの誤り、対象の取り違え)なら、テストを直して再実行する。テストが期待結果を検出していて、それでも通るなら、cases.md がこの run で変わる振る舞いを表していない。「cases.md の誤り」として report.md に挙げ、cases.md は書き換えない。
+  - Red の対象でないケースのテストは、現行のコードで通ることを確かめる。失敗したら report.md に挙げる。
+- worktree の中で `codiel(test-code): <内容> (<slug> try-<n>)` の形でコミットする。
+- report.md に、ケースごとの結果(Red / 通過 / 環境の失敗)と理由、置き場とその根拠、実行したコマンドと出力の抜粋を書く。`codiel-state` は呼ばない。
+
+#### 6.13.3 テストの仕様の置き場と、作る仕様
+
+仕様のディレクトリは、`spec.md` と `cases.md` を置く `<testsDir>` 配下のディレクトリである(決定 74)。testsDir からの相対パスを、そのディレクトリの ID とする。ID は `testCode.units` と `testLoop.units` のキー、`/codiel:test` の引数、`design.md` の `## 影響を受ける機能単位`・軽量の run の一覧(§6.1.4)・dev-plan の「通すテスト」の値に使う。
+
+| 系統 | 仕様のディレクトリ | 例(値は説明用) |
+| --- | --- | --- |
+| ユニットテスト | `units/<対象ファイルの repoRoot 相対パス>/` | `units/src/lib/foo.ts/` |
+| E2E(画面) | `e2e/frontend/<画面名>/` | `e2e/frontend/login/` |
+| E2E(API) | `e2e/backend/<API のルートパス>/` | `e2e/backend/api/users/{id}/` |
+| E2E(画面でも API でもない入口) | `e2e/cli/<コマンド名>/` | `e2e/cli/codiel-state/` |
+
+- 画面名とコマンド名は、英小文字のケバブケースの 1 セグメントにする。CLI のコマンド・バッチ・hook などは `e2e/cli` に置き、コマンドのサブコマンドは 1 つの仕様にまとめる。
+- 画面名は次のとおり決める(決定 81)。コマンド名(`e2e/cli`)と API のルートパス(`e2e/backend`)はコードから決まるので、ユーザーに聞かない。
+  - `<testsDir>/e2e/frontend/` に既にある画面の仕様を更新するときは、その名前を使い、聞かない。
+  - `e2e/frontend/` にまだ仕様のディレクトリが無い画面は、仕様のディレクトリを同定する委譲が、画面ごとに名前の候補を 2〜3 個出す。候補は上の画面名の規則に従う。
+  - 委譲先はユーザーと対話できないので、オーケストレーターが `mark-ask <フェーズ> --slug <slug> --kind confirm` の後に、画面ごとに候補を選択肢にして AskUserQuestion で聞く。決まった名前を ID にする。
+  - ユーザーが候補の外の名前を答えたら、ケバブケースの 1 セグメントに直した形を示して確かめる。
+  - 聞いたことは、フェーズの `askKind` の `confirm` として残る。確認の種類は足さない。
+- 標準の run では、design の委譲が `## 影響を受ける機能単位` の新しい画面の行に、ID の代わりに名前の候補を書き、報告にも挙げる。オーケストレーターは設計ウォークスルー(`facilitating-design-discussions`。`mark-ask design`)で名前を聞き、決まった名前を修正の要望として design の委譲をやり直させる。オーケストレーターは `design.md` を書き換えない。名前の候補が残る `design.md` では pass-gate へ進まない。
+- 軽量の run では、test-spec の開始時の同定の委譲が候補を返し、オーケストレーターが `mark-ask test-spec` で聞く(§6.1.4)。
+- API のルートパスは、先頭の `/` を除いたパスをディレクトリの並びにする。パスのパラメータは、フレームワークの書き方(`:id`・`[id]`・`<id>` など)にかかわらず `{id}` の形にそろえる。ルート `/` は `e2e/backend/_root/` にする。HTTP メソッドはディレクトリに含めず、同じパスの全メソッドを 1 つの仕様にまとめる。
+- 対象ファイルを移す・消す変更では、仕様のディレクトリも同じく移す・消す。
+- ID は `units/`・`e2e/frontend/`・`e2e/backend/`・`e2e/cli/` のいずれかで始まり、その後に 1 つ以上のセグメントを持つ。`e2e/frontend/` と `e2e/cli/` の後はちょうど 1 セグメントである。空のセグメント・`.`・`..`・`:`・`\` を含まず、先頭と末尾に `/` を持たない。CLI の `step-add` がこの形を検査する。
+- `spec.md` の frontmatter が定義するキーは、`parallel`(真偽値)と `tests`(§6.13.5)の 2 つである。
+- 命名と書式の正本は `writing-test-specs` とする(現行どおり、命名規則の唯一の定義元)。
+- codiel 0.x の旧 `.codiel/specs/` は読まず、移さず、報告もしない。
+
+作る仕様は次の規則で決める(決定 78・79)。
+
+| 系統 | 規約に要否・対象の定めがあるとき | 定めが無いとき |
+| --- | --- | --- |
+| E2E | 従う | この変更でユーザーから観測できる振る舞いが変わるときだけ作る。画面の表示・操作が変わる画面ごとに `e2e/frontend`、API の応答が変わるルートごとに `e2e/backend`、コマンドの入出力が変わるコマンドごとに `e2e/cli` の仕様を置く。内部だけの変更には作らない |
+| ユニットテスト | 従う | この変更で追加・変更するファイルのうち、分岐・計算・変換などのロジックを持つものに作る。設定・型定義・表示だけのファイルには作らない |
+
+- 規約は、docRoot 配下の `CLAUDE.md` と `.claude/rules/**/*.md` のテスト方針から読む(§6.6.1 と同じ読み先)。
+- 仕様のディレクトリを同定するのは、標準の run では `design.md` を書く委譲(`## 影響を受ける機能単位`)、軽量の run では test-spec の開始時に出す同定の委譲(§6.1.4)である。規則の正本は `writing-test-specs` に置き、`writing-design-docs` はそれを参照する。
+- test-spec と dev-plan は、渡された一覧(標準では `design.md`、軽量では依頼文)だけを使う。一覧に無い仕様のディレクトリが必要と判断したら、作らずにオーケストレーターへ報告する。
+
+#### 6.13.4 `.codiel/config.json` は testsDir だけを持つ
+
+codiel の設定ファイルを新設し、テストの仕様の置き場を持たせる(決定 75)。次は既定の内容である。
+
+```json
+{
+  "testsDir": "docs/tests"
+}
+```
+
+- 置き場は、`.codiel` を持つディレクトリの `.codiel/config.json` である。
+- `testsDir` は repoRoot からの相対パスであり、`state.intent` と同じ基準にそろえる。worktree の中への書き込みを判定するときは、worktreeRoot を基準にする(§6.13.6)。
+- ファイルが無いとき、またはキーが無いときは `docs/tests` を使う。
+- 次の値は不正とする。JSON として読めない、`testsDir` が文字列でない、空文字列、絶対パス、`..` のセグメントを含む。
+- 不正なとき、CLI の `config` は非ゼロで終了する。guard-write は、テストの保護を当てるフェーズ(implement・test-loop・fix-loop)の書き込みに ask を返す(フェイルクローズド)。文書フェーズでは `<testsDir>/` を通す規則だけを外す。
+- ほかのキーは定義しない。未知のキーは無視する。
+- 読み取りは `codiel-state.ts` の 1 つの関数に置き、`.codiel` を持つディレクトリを引数に取る。CLI の `codiel-state config` は他のコマンドと同じく cwd を渡し、stdout に `{ "testsDir": "<値>" }` を出す。run を要しない。guard-write は、run の検索に使うメインのルート(§6.8 の (a))を渡す。guard-write はすでに `codiel-state.ts` から `findActiveRun` を import しているので、依存は増えない。
+- スキルが値を得る手段は、`node <plugin-root>/scripts/codiel-state.mjs config` の出力だけである。`orchestrating-runs` は §0 で 1 回実行し、testsDir を使う委譲(design・軽量の run の同定・test-spec・dev-plan・test-code・test-loop・review)の依頼文に値を書く。`/codiel:test` は起動時に 1 回実行する。委譲先は `codiel-state` を呼ばず(決定 35)、依頼文の値を使う。
+- `/codiel:init`(`install-harness.sh`)は、ファイルが無ければ既定の内容で作り、あれば変えない。`.codiel/specs` は作らない。
+- ユーザーは値を書き換えてよい。run の途中で変えると依頼文の値と hook の値が食い違うので、変えるのは run が active でないときにする。これを README に書く。
+
+初期化の外形の判定 D は、`.codiel/` の配置が揃っているかを見る項目である。B・C・D の 3 点がすべて揃えば初期化済みとする。
+
+| 判定する者 | D が「揃っている」の条件 |
+| --- | --- |
+| `/codiel:run`(`orchestrating-runs` §0) | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在する。設定ファイルは無くても既定値で動くので、D に含めない |
+| `/codiel:init`(`initializing-harness` §0) | 上の 2 ディレクトリと `.codiel/config.json` の 3 つが存在する。すでに初期化したプロジェクトでも、`/codiel:init` を実行すれば設定ファイルが作られるようにするためである |
+
+どちらの D も `.codiel/specs` を見ない。
+
+#### 6.13.5 テストコードは規約の場所に置き、spec.md に記録する
+
+テストコードの置き場は codiel が決めず、プロジェクトの規約に従う(決定 76)。test-code の委譲先が、次の順で決める。
+
+1. docRoot 配下の `CLAUDE.md` と `.claude/rules/**/*.md` の定め
+2. 同じ種類の既存のテストの配置
+3. フレームワークの既定の置き場。3 で決めたときは、根拠を report.md に書く
+
+- フレームワークは、コンテキストの宣言、既存のテスト、`package.json` の `devDependencies` の順で決める。決まらなければテストを書かずに報告する。
+- 置いたテストファイルは、`spec.md` の frontmatter の `tests` に記録する。次は形の例であり、値は実際のパスに置き換える。
+
+```markdown
+---
+parallel: true
+tests:
+  - src/lib/__test__/foo.test.ts
+---
+```
+
+- `tests` の各行には、repoRoot 相対のファイルパスを 1 つ書く。glob は使わない。
+- 記録するのは test-code の委譲先である。テストファイルを置いた後、worktree の中の `spec.md` の `tests` に置いたファイルのパスを Edit で足し、テストコードと同じコミットに入れる。既存の値は消さず、テストファイルを移したときだけ古いパスを新しいパスに置き換える。
+- オーケストレーターは、タスクレビューで記録と置いたファイルが一致することを確かめ、マージで run ブランチに入れる(§6.13.2 の手順 5・6)。
+- test-spec は `tests` を書かない。`spec.md` を更新するときは、既存の `tests` の値を保つ。
+- fix-loop の `set-test-edit` の間にテストファイルを移す・足すときは、テスト側の修正の委譲が `tests` を直す。それ以外のフェーズでは `tests` を変えない。
+- 記録したテストは、test-loop と `/codiel:test` の実行の対象(§6.7)と、guard-write の保護の対象(§6.13.6)になる。
+
+#### 6.13.6 テストの保護は implement・test-loop・fix-loop に当てる
+
+| 書き込み先 | ask にするフェーズ | 通すフェーズ |
+| --- | --- | --- |
+| `<testsDir>/**/spec.md`、`<testsDir>/**/cases.md` | implement・test-loop・fix-loop | 文書フェーズ(test-spec が書く)、test-code |
+| いずれかの `spec.md` の `tests` に載ったファイル | implement・test-loop・fix-loop | test-code |
+
+- fix-loop では、`state.testEdit` が真の間だけ保護を外す(決定 77)。ほかのフェーズでは `testEdit` を見ない。
+- `codiel-state set-test-edit --slug <slug>` は、`state.phase` が fix-loop で、そのフェーズが `in_progress` のときだけ成功する。`clear-test-edit --slug <slug>` は常に成功し、値を消す。
+- オーケストレーターは、`fixing-review-findings` の検証で所見がテストに向く(テスト・`spec.md`・`cases.md` の誤りや不足を指摘する)と確かめたら、`set-test-edit` を実行する。続けてテスト側の修正を委譲し、報告を受けた直後に `clear-test-edit` を実行する。コードの修正はその後に委譲する。
+- テスト側の修正では、`spec.md` と `cases.md` を `writing-test-specs` に従って直し、テストコードを `scripting-tests` に従って直す。振る舞いを変える修正なら、コードの修正の前に Red を確かめる。
+- 判定には、書き込み先の repoRoot 相対のパス(`repoRel`)を使う。worktree の中への書き込み(§6.8 の (b))では、worktreeRoot 相対のパスを使う。`<testsDir>` と `tests` の値はどちらも repoRoot 相対なので、同じ基準で比べられる。`.codiel/` 配下の免除に使う `codielRel` とは基準が違う。
+- 保護の対象の一覧は、保護するフェーズの書き込みのたびに、メインの作業ツリーの `<testsDir>/**/spec.md` の `tests` を読んで作る。worktree の中の `spec.md` は読まない。worktree は run ブランチの HEAD から作り、メインの作業ツリーも run ブランチにあるので、記録は同じである。
+- guard-write は、`CODE_PHASES` の分岐の先頭(ドメイン境界の判定より前)で保護を判定する。
+- ask の理由は「テスト(<パス>)の変更は test-spec と test-code フェーズの担当です(<フェーズ> 中の変更は改竄の疑い)」の形にする。役割名 test-designer を使う現行の文言(`guard-write.ts:171`)を置き換える。
+- 文書フェーズの分岐は、`.codiel/` と `docs/` に加えて `<testsDir>/` 配下も通す。testsDir を `docs/` の外に置いたときも、test-spec が仕様を書けるようにするためである。`<testsDir>/` の判定には `repoRel` を使う。
+- test-loop でテストの欠陥(broken)を直すときは、保護が ask を返し、人が承認して直す(§6.7)。
+- Bash による書き込みは保護しない(現行の spec / cases の改竄検知と同じ範囲である)。
 
 ---
 
@@ -1537,9 +1861,10 @@ gh-utility への変更は、GitHub の執筆規則と画像の載せ方の写�
 | --- | --- |
 | `plugins/codiel/src/__test__/codiel-state.test.ts` | `--issue` を `--slug` に、init フェーズを intent に、`STAGES` に intent-sync |
 | `plugins/codiel/src/hooks/__test__/guard-bash.test.ts` | run の作り方(`init --issue 1`。`:37` ほか) |
-| `plugins/codiel/src/hooks/__test__/guard-write.test.ts` | `DOC_PHASES` の変更、run の作り方 |
+| `plugins/codiel/src/hooks/__test__/guard-write.test.ts` | `DOC_PHASES` の変更、run の作り方、`.codiel/specs` の値をテストの保護の書き込み先に替える(§6.13.6) |
 | `plugins/codiel/src/hooks/__test__/stop-guard.test.ts` | run の作り方 |
 | `plugins/metatron/src/__test__/section-reference-inventory.test.ts` の fixtures | §7.3 |
+| `plugins/codiel/src/__test__/install-harness.test.ts` | `.codiel/specs` を作らず、`.codiel/config.json` を作る(§6.13.4) |
 
 ### 8.2 新規テスト(vitest)
 
@@ -1554,6 +1879,13 @@ gh-utility への変更は、GitHub の執筆規則と画像の載せ方の写�
 | `mark-ask --kind` | 同上 | `--kind` を省くと `askKind` が `raguel` になる、`--kind confirm` で `confirm` になる、それ以外の値を拒否する、`resume` の後も `askKind` が残る、finalize で `mark-ask` → `resume` した後に `codiel-state finalize` が成功する、`stop --reason intent-updated` が `stopReason` に記録される |
 | v1 の扱い | 同上 | v1 の state で `get` / `stop` 以外が拒否され stderr に §6.2.4 の文言が出る、`get --active` が v1 を `runs` に含めず同じ文言を出す |
 | `implement.steps` | 同上 | 登録と更新、`waves` の JSON(`groups` の各要素が `steps` と `mode` を持ち、`final` がある)、トポロジカル順、循環で非ゼロ終了、触るファイルが重なるステップを分ける、lockfile を触るステップが単独の `serial` グループとして依存順の位置に出る、前提が `serial` のステップがその後のグループに出る、`--final` で登録したステップが `final` にだけ出る、`parallel` グループの 4 件の上限、`src/app/**` と `src/apple/**` が重ならない、`src/{a,b}/**` が展開されて `src/a/x.ts` と重なる、`*.ts` と `**/*` が全ステップと重なる、`attempts` がフェーズの `record-attempt` と独立に数えられる |
+| テスト駆動のフェーズ | `src/__test__/codiel-state.test.ts` | `STAGES` の test-code の位置、`GATED` と `SKIPPABLE`、test-code が passed でないと `start-phase implement` が失敗する、`skip-phase test-code` が失敗する |
+| M4 より前の state | 同上 | A6-18 のテストの部分(`phases` に test-code を持たない v2 の state で、`get` と `stop` が成功する、`record-outcome` の受け付けが v1 と同じ、ほかのコマンドが §6.6 の文言で非ゼロ終了する、`get --active` の `runs` と stderr、`findActiveRun` が返さない、拒んだコマンドで state のファイルが変わらない、`stop` の後の state に test-code が足されない) |
+| `config` | 同上 | ファイルが無い・キーが無いときの `docs/tests`、値があるときのその値、不正な 5 種の値で非ゼロ |
+| 仕様のディレクトリの登録 | 同上 | A6-5 のすべて(登録先、ID の受理と拒否、`--files` の省略、`--deps` と `--final` の拒否、`merged` からの登録し直し、`--worktree` の一意性、`waves` の範囲) |
+| `testEdit` | 同上 | `set-test-edit` が fix-loop の `in_progress` でだけ成功する、`clear-test-edit` が値を消す |
+| install-harness | `src/__test__/install-harness.test.ts` | `.codiel/config.json` が無ければ既定の内容で作る、あれば変えない、`.codiel/specs` を作らない |
+| guard-write(テストの保護) | `src/hooks/__test__/guard-write.test.ts` | 下の P 系のケース |
 | guard-bash | `src/hooks/__test__/guard-bash.test.ts` | `issue` が null の run でも 3 つの制限が phase で効く、intent-sync では push を拒否する、v1 の active run だけがあるとき制限が掛からない(run 無しと同じ) |
 | guard-bash(マーカー) | 同上 | active run があるとき、7 つの `gh` のコマンドそれぞれで、`--body` と `-b` の本文にマーカーがあれば通り無ければ deny、heredoc で複数行にした本文にマーカーがあれば通る、`--body-file` と `-F` のファイルの中身にマーカーがあれば通り無ければ deny、ファイルが読めなければ deny、`--body-file -` と `-F -` は deny、本文を持たない呼び出し(`gh pr review --approve`、`gh issue edit --add-label bug`)は通る。active run が無いときは、マーカーが無くても通る |
 | guard-github-mcp | `src/hooks/__test__/guard-github-mcp.test.ts` | active run があるとき、列挙した GitHub MCP の各ツールで、本文の引数にマーカーがあれば通り無ければ deny、本文の引数を持たない呼び出しは通る、対象外のツール名(読み取りのツールなど)は通る、サーバー名が違う(プラグイン経由の接続の)ツール名でも matcher と検査が効く。active run が無いときは、マーカーが無くても通る |
@@ -1566,21 +1898,39 @@ gh-utility への変更は、GitHub の執筆規則と画像の載せ方の写�
 | metatron の縮約 | 同上 | `shrink-adr-candidate` が、候補 ID で特定したエントリを候補 ID を残した参照形にし、0 で終わる。エントリの範囲の外がバイト単位で変わらない。既に参照形なら何もせず 0 で終わる。エントリのハッシュ不一致・ADR が無い・ADR の本文に `ADR 候補 ID:` の行が無い・書き込みの失敗のそれぞれで、何も書かずに終了コード 3 と `shrinkPending` を返す。書き込み先が repoRoot の `docs/intents/domains/*.md` 以外なら拒否する。docRoot の外にある持続層も書ける。同じファイルの 2 候補を順に縮約して、先の候補が印付きに戻らない。`stage-adr` と `commit-architecture` の既存テストが変わらず通り、持続層に触れない |
 | 採番 | codiel の intent-sync の規則(grep、A3-13)と、計画書で決める採番の実装のテスト | `frontend-1` と `frontend-10` が同じファイルにあるとき、最大連番を 10 と数え、次を `frontend-11` にする |
 
-guard-write の worktree のケースは次のとおりである。どのケースも `mapped` の run で、該当する `implement.steps[k].domain` または `testLoop.units[id].domain` にドメイン X を持たせ、メインの `state.domain` は null にしておく。
+guard-write の worktree のケースは次のとおりである。どのケースも `mapped` の run で、`worktree` の記録がその worktree のパスと一致する要素にドメイン X を持たせ(W-6 を除く)、メインの `state.domain` は null にしておく。
 
 | ケース | cwd | 書き込み先 | 期待 |
 | --- | --- | --- | --- |
-| W-1 | `<メイン>/.codiel/worktrees/<slug>/step-<k>/src`(worktree 内) | worktree 内の `.codiel/specs/<unit>/cases.md` | ask(改竄検知が効く) |
+| W-1 | `<メイン>/.codiel/worktrees/<slug>/step-<k>/src`(worktree 内) | worktree 内の `<testsDir>/<仕様のディレクトリ>/cases.md` | ask(テストの保護が効く) |
 | W-1b | 同上 | worktree 内で X の範囲外のソース | ask(X で境界判定する) |
 | W-2 | `<メイン>`(worktree の親) | worktree 内で X の範囲外のソース(絶対パス) | ask(`.codiel/` 免除に入らない) |
 | W-2b | 同上 | worktree 内で X の範囲内のソース(絶対パス) | 通す |
-| W-3 | `<メイン>/.codiel/worktrees/<slug>/unit-<id>/`(unit の worktree) | worktree 内で X の範囲外のソース | ask(`testLoop.units[id].domain` で判定する) |
+| W-3 | `<メイン>/.codiel/worktrees/<slug>/test-loop-<k>/`(test-loop の worktree) | worktree 内で X の範囲外のソース | ask(`testLoop.units` のうち `worktree` がこのパスの要素の `domain` で判定する) |
 | W-4 | worktree 内。docRoot はメインの `sub/`(`sub/metatron.config.json` がある) | worktree 内の `sub/` 配下で X の範囲内のソース | 通す(docRoot を `worktreeRoot/sub` に写して照合する) |
-| W-5 | worktree 内。worktree の checkout に `.codiel/specs` がある場合と無い場合の両方 | 任意 | どちらでも run がメインのルートで見つかる |
+| W-5 | worktree 内。worktree の checkout に `.codiel/` の一部がコミットされている場合と無い場合の両方 | 任意 | どちらでも run がメインのルートで見つかる |
+| W-6 | `<メイン>/.codiel/worktrees/<slug>/test-code-<k>/`(test-code の worktree。`testCode.units` の要素に `domain` が無い) | worktree 内で X の範囲外のテストファイル | 通す(境界を課さない) |
+| W-7 | `<メイン>/.codiel/worktrees/<slug>/test-loop-<k>/`。state では 2 つの要素の `worktree` がこのパスを記録している | worktree 内で X の範囲内のソース | ask(一致が 2 つ以上) |
 
 W 系では、run の検索が `git worktree list --porcelain` の先頭のエントリでメインのルートに届くことを確かめる。
 
-テストで見ない受け入れ基準は grep で確かめる。対象は A2-10〜A2-12、A2-16〜A2-20、A2-22 の matcher、A2-23、A3-2、A3-4〜A3-6、A3-8、A3-11〜A3-15、A4-1、A4-4、A5-1、A5-2 である。A5-1 と A5-2 の grep は、計画書の各マイルストーンの終点で毎回実行する。
+guard-write のテストの保護のケースは次のとおりである。どのケースも active run があり、`domain` は null とする。testsDir は P-8・P-9 を除いて既定の `docs/tests` とし、`docs/tests/units/src/a.ts/spec.md` の `tests` に `src/__test__/a.test.ts` を記録しておく。書き込み先は repoRoot 相対で示す。
+
+| ケース | フェーズと state | 書き込み先 | 期待 |
+| --- | --- | --- | --- |
+| P-1 | implement | `docs/tests/units/src/a.ts/cases.md` | ask |
+| P-2 | test-loop | `src/__test__/a.test.ts`(`tests` に載ったファイル) | ask |
+| P-3 | implement | `src/__test__/b.test.ts`(どの `tests` にも載っていない) | 通す |
+| P-4 | test-code | P-1 と P-2 の書き込み先 | 通す |
+| P-5 | fix-loop、`testEdit` なし | P-1 の書き込み先 | ask |
+| P-6 | fix-loop、`testEdit` が真 | P-1 と P-2 の書き込み先 | 通す |
+| P-7 | implement、`testEdit` が真 | P-1 の書き込み先 | ask(fix-loop 以外では `testEdit` を見ない) |
+| P-8 | implement、`.codiel/config.json` の testsDir が `qa/specs` | `qa/specs/units/x.ts/spec.md` と `docs/tests/units/x.ts/spec.md` | 前者は ask、後者は通す |
+| P-9 | test-spec、testsDir が `qa/specs` | `qa/specs/units/x.ts/spec.md` | 通す(文書フェーズで `<testsDir>/` を通す) |
+| P-10 | implement、`.codiel/config.json` が JSON として読めない | `src/index.ts` | ask(フェイルクローズド) |
+| P-11 | implement、`step-<k>` の worktree の中 | worktree の中の `src/__test__/a.test.ts` | ask(worktreeRoot 相対で保護が効く) |
+
+テストで見ない受け入れ基準は grep で確かめる。対象は A2-10〜A2-12、A2-16〜A2-20、A2-22 の matcher、A2-23、A3-2、A3-4〜A3-6、A3-8、A3-11〜A3-15、A4-1、A4-4、A5-1、A5-2、A6-7〜A6-17、A6-18 の grep の部分、A6-19 である。A5-1 と A5-2 の grep は、計画書の各マイルストーンの終点で毎回実行する。
 
 ### 8.3 3 者比較から 2 者比較への縮小
 
@@ -1591,6 +1941,15 @@ W 系では、run の検索が `git worktree list --porcelain` の先頭のエ�
 ### 8.4 テストで見られないものの確認
 
 intent フェーズの対話、並列の委譲、worktree のマージはユニットテストで見られない。計画書の各マイルストーンの終点で、このリポジトリを対象プロジェクトとして `/codiel:run` を 1 回通す手動の確認手順を置く。github と local の両モードを、M2 と M4 の終点でそれぞれ 1 回ずつ通す。このリポジトリの規約はソースと生成物を同じコミットに求めるため、M4 の確認では dev-plan の `## 生成物` が方式 a になることも確かめる(§6.6.1)。
+
+M4 の終点の手動確認では、テスト駆動の流れ(§6.13)も確かめる。確かめるのは次の 6 点である。
+
+- `/codiel:init` が `.codiel/config.json` を作ること。
+- test-code が、このリポジトリの規約(`.claude/rules/metatron/testing-policy.md` の `__test__/`)の場所にテストを置き、`spec.md` の `tests` に記録すること。
+- 同じテスト方針が E2E を持たないと定めるので、`e2e/` の仕様が作られないこと(決定 78)。
+- 実装の前に Red になり、implement の後に通ること。
+- implement の間に、テストへの書き込みが ask になること。
+- PR の本文が §6.12.8 に従うこと。
 
 このリポジトリは metatron を導入済みなので、metatron が無い経路は通らない。M3 の終点で、ARCHITECTURE を持たない一時の git リポジトリを用意し、`/codiel:init` の後に軽量の run を 1 回通す。確かめるのは、`adrTarget` が `intents` になること、`unscoped` で進むこと、ADR の 3 条件を満たす判断が持続層に `[ADR 候補]` の形で書かれ、finalize の報告に挙がることである。続けて同じリポジトリで `/metatron:init` を実行し、候補が提示され、承認した候補が ADR になり、持続層が参照形に縮むことを確かめる。
 
@@ -1688,13 +2047,15 @@ run を intent から始める。
 
 ### M4 並列化
 
-- 並列実装はこのマイルストーンで入れる。M2〜M3 の implement は現行どおり直列で、hook の worktree の分岐もここで足す。state の `implement` と `testLoop` は任意フィールドの後方互換の追加とし、`version` は 2 のまま据え置く(§6.6)。
+- 並列実装はこのマイルストーンで入れる。M2〜M3 の implement は現行どおり直列で、hook の worktree の分岐もここで足す。state の `implement`・`testCode`・`testLoop`・`testEdit` は任意フィールドの後方互換の追加とし、`version` は 2 のまま据え置く(§6.6)。
 - dev-plan の書式(§6.6.1)、`implement.steps` と `waves` のグループ分け(§6.6.2、§6.6.5)。
 - worktree・依存のインストール・生成物の方式 a / b・brief / report・タスクレビュー・マージ・後始末の手順(§6.6.3〜§6.6.4)。
-- hook の worktree 対応(kind が `step` と `unit` の両方、docRoot の写し)と、ステップ・unit 単位のドメイン境界(§6.6.6、§6.7、§6.8)。
-- test-loop の並列化(§6.7)。
+- hook の worktree 対応(implement・test-code・test-loop の worktree、docRoot の写し)と、ステップ・仕様のディレクトリ単位のドメイン境界(§6.6.6、§6.7、§6.8)。
+- test-code フェーズ(§6.13.1〜§6.13.2)、implement で E2E も通すこと(§6.6.4、§6.13.1)、test-loop の再定義と並列化(§6.7)。テストを実行する委譲の並べ方と環境の失敗の扱い(§6.13.1)。M4 より前に作った state の run を CLI が拒み、止める手順(§6.6)。新しい try での intent の持ち込み(§6.1.2 の手順 1)。
+- テストの仕様の置き場と作る仕様、新しい画面の名前の確認(§6.13.3、§6.1.4)、`.codiel/config.json`(§6.13.4)、テストコードの置き場の記録(§6.13.5)、テストの保護(§6.13.6)。
+- PR の本文(§6.12.8)。
 - codiel を `1.0.0` にする。
-- 終点: A4-1〜A4-4。
+- 終点: A4-1〜A4-4、A6-1〜A6-19。
 
 ### 計画側への引き継ぎ
 
@@ -1718,10 +2079,11 @@ run を intent から始める。
 | 区分 | ファイル |
 | --- | --- |
 | 実装層 | `src/codiel-state.ts`、`src/codiel-state-cli.ts`、`src/hooks/lib.ts`、`src/hooks/guard-bash.ts`、`src/hooks/guard-write.ts`、`src/hooks/stop-guard.ts`、新設 `src/hooks/guard-github-mcp.ts`、新設 `src/check-intent-env.ts`、`build.ts` |
-| テスト | `src/__test__/codiel-state.test.ts`、新設 `src/__test__/check-intent-env.test.ts`、`src/hooks/__test__/{guard-bash,guard-write,stop-guard,lib}.test.ts`、新設 `src/hooks/__test__/guard-github-mcp.test.ts` |
+| テスト | `src/__test__/codiel-state.test.ts`、新設 `src/__test__/check-intent-env.test.ts`、`src/hooks/__test__/{guard-bash,guard-write,stop-guard,lib}.test.ts`、新設 `src/hooks/__test__/guard-github-mcp.test.ts`、`src/__test__/install-harness.test.ts` |
 | hook の登録 | `hooks/hooks.json`(GitHub MCP の書き込みツールの matcher を足す。保護パス) |
 | バンドル | `scripts/*.mjs`(`pnpm run build` で再生成) |
-| 指示層 | §6.9.1 の表のとおり |
+| 配置のスクリプト | `scripts/install-harness.sh`(ShellScript。直接編集してよい) |
+| 指示層 | §6.9.1 の表のとおり(`commands/test.md`、`assets/rules/codiel.md` を含む) |
 | 参照層 | 新設 `references/{intent-format,handoff-contract,intent-common,intent-writing,github-writing}.md` |
 | 文書 | `docs/DESIGN.md`、`docs/skill-flowcharts.md`、新設 `docs/format-change-checklist.md`、`README.md`、`CLAUDE.example.md` |
 | evals | なし(M1 で移し、M2 で削除した。決定 54) |
@@ -1749,7 +2111,7 @@ run を intent から始める。
 | 10 | Issue だけを任意にし、PR は必須にする | local モードで run を最後まで通せない。PR を作れない環境こそ Issue を作れない環境と重なる |
 | 11 | 設計書を 3 本(吸収・起点変更・並列化)または 2 本に分ける | 3 つの変更は state のスキーマとフェーズ列を共有しており、分けると同じ決定を複数の文書で持つことになる |
 | 12 | 持続層を持たず、ADR に一本化する | ADR の 3 条件を満たさない設計理由と制約が行き場を失う。ADR の基準を緩めると ARCHITECTURE の注入が膨らむ |
-| 13 | intent 文書(両層)をコミットしない | 作業ツリーの外に残り、run ブランチと PR から辿れない。try をまたいだ持ち込み(§6.1.2 の 6)もできなくなる |
+| 13 | intent 文書(両層)をコミットしない | 作業ツリーの外に残り、run ブランチと PR から辿れない。try をまたいだ持ち込み(§6.1.2 の手順 1)もできなくなる |
 | 14 | 生成物の扱いを codiel が一律に決める(常に各ステップで生成する、または常に最終ステップでまとめる) | 生成物の扱いは対象プロジェクトの規約で決まる。「ソースと生成物を同じコミットに入れる」はこのリポジトリの規約であり、ほかのプロジェクトに課す根拠が無い。最終ステップでまとめる方式は不採用ではなく、規約に定めが無いときの既定(方式 b)として残す(§6.6.1) |
 | 15 | 文書だけ残して終える run を `stop --reason intent-only` で閉じる | stopped が中止と区別できない。`completed` で閉じる(§6.1.3) |
 | 16 | intent 文書の書き込みを hook に通させるため、`start-phase intent` の後に書く順序へ入れ替える | 承認の直後に文書を書くという自然な順序が崩れ、intent-only で run ブランチを作らない流れとも合わない。hook 側で phase `null` の `docs/intents/**` を通す(§6.8) |
@@ -1771,6 +2133,25 @@ run を intent から始める。
 | 32 | run の途中の追記に承認を要する | 追記するのはユーザー自身の言葉であり、承認を挟むとユーザーの言葉を AI の手順で止めることになる。承認が要るのは、原文を派生文へ反映するときだけである(§6.3.4) |
 | 33 | intent-sync が `status: done` を付ける | intent-sync は review と finalize の前にあり、原文の要望に未達が残っていても完了の扱いになる。原文による判定が済む finalize で付ける(§6.3.2) |
 | 34 | 投稿する本文のマーカーを、スキルの規律だけで付ける | 付け忘れを防げない。付け忘れた本文は人の言葉として原文に入り、AI の文が最高権威になる。hook で投稿を deny すれば、付け忘れた本文は GitHub に届かない(§6.8) |
+| 35 | implement の中で RED を書く(現行の TDD のまま) | テストを書く者とコードを直す者が同じ委譲になり、テストが実装に合わせて書かれうる。ユーザーはテストを実装より先に書く順序を求めた(決定 73) |
+| 36 | 保護するテストの一覧を run の state に持つ | `spec.md` の `tests` と二重に持つことになり、ずれる。hook が `spec.md` を読めば正本は 1 つで済む(決定 76) |
+| 37 | test-code を worktree なしで、同じ作業ツリーで並列に書く | 共有のヘルパーやテストの設定を複数の委譲が同時に書くと、衝突が検出されずに上書きされる。worktree ならマージの衝突として検出でき、§6.6.4 の手順で直列にやり直せる |
+| 38 | test-code と test-loop で `testLoop.units` を共有する | test-code で `merged` になった要素を test-loop でもう一度 `running` にする遷移が要り、§6.6.5 の遷移表が崩れる。フェーズごとに表を分ければ、`testLoop.units` の登録し直しだけで済む |
+| 39 | 仕様のディレクトリの ID を worktree の名前とブランチ名に使う | ID は `/` を含むので worktree のルートを 1 セグメントで切り出せず、hook の (b) の判定が壊れる |
+| 40 | fix-loop でテストへの書き込みを、所見の内容から hook が判定して通す | hook は所見を読めない。オーケストレーターが検証の後に `set-test-edit` で明示すれば、判定の根拠が state に残る |
+| 41 | 旧 Step A のまま、test-loop の中で実装の後にテストを書く | 実装の後に書くテストは実装を追認しやすい。ユーザーは実装の前にテストを書き Red を確かめる流れを求めた(決定 73) |
+| 42 | PR 本文に要望と受け入れ基準を再掲する | 要望と経緯は intent 文書にあり、PR に写すと二重になる。ユーザーは PR を変更の説明に絞ると決めた(決定 72) |
+| 43 | 旧 `.codiel/specs/` を `/codiel:init` が移す、または見つけたら報告する | 旧 unit-id(`screen-login` など)から新しい ID への対応は機械的に決まらない。ユーザーは何もしないと決めた(決定 74) |
+| 44 | 画面でも API でもない入口の仕様を、入口のファイルの `units/<パス>/` に置く | ユニットテストと振る舞いの仕様が同じ系統に混ざる。ユーザーは `e2e/cli/` を足すと決めた(決定 74) |
+| 45 | API のパスのパラメータをフレームワークの書き方(`:id` など)のまま使う | `:` は Windows のファイル名に使えず、フレームワークごとに書き方が割れる。ユーザーは `{id}` にそろえると決めた(決定 74) |
+| 46 | worktree の中で実行できない E2E を通すテストから外し、test-loop で通す(1 回目の追補の案) | E2E の失敗が test-loop まで見つからず、どのステップの実装が原因かを辿りにくい。ユーザーは E2E も implement で通すと決めた(決定 80) |
+| 47 | 並列のグループでも、委譲先が worktree ですべての通すテストを実行する | ポートやデータベースを共有する E2E が並行する委譲の間で衝突する。`parallel: true` のものだけを worktree で実行し、残りはマージの後に直列で実行すれば衝突しない(決定 30) |
+| 48 | 新しい画面の名前を委譲先が決める | 名前は仕様のディレクトリの ID として run をまたいで残る。ユーザーは自分で決めると決めた(決定 81) |
+| 49 | 軽量の run で、test-spec と dev-plan がそれぞれ仕様のディレクトリを同定する | 2 つの委譲が並列に動くので、一覧と画面名が食い違いうる。dev-plan が割り当てた通すテストに test-spec の仕様が無いと、test-code と implement が噛み合わない。同定を 1 回にまとめれば、名前を聞くのも 1 回で済む(§6.1.4) |
+| 50 | `mark-ask` に画面名の確認を表す種類を足す | `askKind` は Raguel の ASK と人への確認を分けるためのもので、確認の中身で分けて読む者がいない。足すと CLI とテストが増えるだけである(決定 52・61) |
+| 51 | オーケストレーターが `design.md` の名前の候補を決まった名前に書き換える | オーケストレーターは `design.md` を書かない(`facilitating-design-discussions` の HARD-GATE)。ウォークスルーの修正の要望と同じく design の委譲をやり直させれば、既存の往復の手順で済む |
+| 52 | M4 より前に作った state の run を、新しい `--reason` の値で止める | `migrate` がすでに「この版で続けられない run を止める」値として使われている(§6.2.4)。CLI は値を検査しないので、新しい値は同じ意味に 2 つ目の名前を付けるだけになる(§6.6) |
+| 53 | M4 より前に作った state の無いフェーズを、読み込み時に `pending` で補い、dev-plan より先へ進んだ run だけを止める | test-spec を旧 `.codiel/specs/` で通してまだ implement に入っていない run を、phases の進み具合では見分けられず、test-code の `step-add` が旧 unit-id を拒否して止まる。M4 より前の 1.0.0-dev は配布しておらず、使ったのは手動確認のテスト用のリポジトリだけなので、state の形で一律に止めても失うものが無い(§6.6) |
 
 ---
 
@@ -1811,4 +2192,13 @@ run を intent から始める。
 
 第 1 版の未決事項 14 件は、第 2 版ですべて確定した(§1 の決定 20、22〜35)。実装計画で確定させる細目は §10 の「計画側への引き継ぎ」に列挙した。
 
-第 7 版で生じた「`*.ghe.com` のリモートを連携モード `github` に含めるか」は、第 7 版の追補でユーザーが含めると決めた(決定 46)。本設計の範囲で判断が付いていない論点は残っていない。
+第 7 版で生じた「`*.ghe.com` のリモートを連携モード `github` に含めるか」は、第 7 版の追補でユーザーが含めると決めた(決定 46)。
+
+実装時の追補(2026-09-28 の 2 回目の見直し)で、次の 1 件が残った。
+
+1. E2E を implement で通す経路(決定 80)と、新しい画面の名前を聞く経路(決定 81)は、M4 の終点の手動確認(§8.4)では通らない。確認に使うこのリポジトリは、テスト方針で E2E を持たないと定めるためである。画面を持つプロジェクトで手動確認を足すかは、ユーザーが決める。
+
+続く見直しで 2 件が残り、その後の見直しで次のとおり決めた。
+
+2. (解決済み)test-spec か dev-plan を M4 より前に通し、implement にまだ入っていない run が、旧 unit-id のまま test-code へ進んで `step-add` で止まる問題。判定を phases の進み具合から state の形へ替え、`phases` に test-code を持たない state の run は、終端でなければ CLI が v1 の run と同じ形で拒む(§6.6、不採用案 53)。
+3. (解決済み)新しい try で前の try の run ブランチから intent を持ち込む時点が手順 5 の (1) にあり、手順 2 が intent を読む時点で作業ツリーに無い問題。持ち込みを手順 1 の最新化の後へ移した(§6.1.2)。手順 0 は未終端の run だけを扱い、state の `intent` でも照合するので、intent が作業ツリーに無くても再開する run を見つけられ、持ち込みを要しない。
