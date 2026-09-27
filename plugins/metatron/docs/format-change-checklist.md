@@ -59,11 +59,11 @@ prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂�
 - [ ] `skills/{capturing-architecture,updating-architecture,recording-gotchas}/SKILL.md`、`references/{gotchas-format,rules-format}.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
 - [ ] `plugins/metatron/references/writing-discipline.md` の既存の `##` 見出しの行を変えない
 
-## ADR の 3 条件(`references/writing-discipline.md` の「何を ADR にするか」節)
+## ADR の 3 条件(`references/writing-discipline.md` の「何を ADR にするか」セクション)
 
 - [ ] `plugins/codiel/references/intent-format.md` に置いた ADR の 3 条件の写しを追随させる
 
-## ADR 候補の取り込み(`references/architecture-format.md` の「ADR 候補の取り込み」節)
+## ADR 候補の取り込み(`references/architecture-format.md` の「ADR 候補の取り込み」セクション)
 
 `[ADR 候補]` の書式と参照形の正本は codiel にある。
 
