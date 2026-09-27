@@ -496,12 +496,12 @@ plugins/codiel/
 
 ## 12. capturing-intent の設計根拠(旧 sandalphon から統合)
 
-この節は、旧 `sandalphon` プラグインの `docs/rationale.md` にあった設計根拠を統合したものである。
+このセクションは、旧 `sandalphon` プラグインの `docs/rationale.md` にあった設計根拠を統合したものである。
 `sandalphon` の `capturing-intent` スキルは codiel の同名スキルへ移り、`bridging-execution` と
 `executing-intent` は廃止された(移設の全体は
 `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.1 が正本)。
 以下は sandalphon が独立したプラグインだった時点で固まった判断の記録であり、経緯として残す。
-現在の codiel の挙動を知りたいときは、この節ではなく本書の他の節と実装を見る。
+現在の codiel の挙動を知りたいときは、このセクションではなく本書の他のセクションと実装を見る。
 
 ### 承認ゲートを 2 点に絞った基準
 
