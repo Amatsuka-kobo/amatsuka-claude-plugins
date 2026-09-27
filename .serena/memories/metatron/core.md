@@ -1,4 +1,4 @@
-`plugins/metatron` (0.3.7-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.4.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -68,11 +68,30 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
   test is `src/cli/__test__/cli.test.ts`; `guard-docs` and `inject-context` tests remain in
   `src/__test__/` because their targets are directly under `src/`.
 
-## CLI 12 サブコマンド
+## CLI サブコマンド
 
-読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` /
-`scan` / `diff-architecture`。段階: `stage-architecture --input` / `stage-adr --input`。
-書: `commit-architecture --staging-id` / `append-gotcha --input` / `tag-gotcha`。
+読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` / `get rules` /
+`scan` / `diff-architecture` / `scan-adr-candidates`。段階: `stage-architecture --input` / `stage-adr --input` /
+`stage-rules --input`。書: `commit-architecture --staging-id` / `commit-rules --staging-id` / `init-gotchas` /
+`append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate`。
+
+### `[ADR 候補]` の走査と縮約(0.4.0-dev、2026-09-28)
+
+codiel の持続層 `<repoRoot>/docs/intents/domains/*.md` にある `[ADR 候補: <候補 ID>]` の印付きエントリを ADR へ移し、
+持続層を参照形に縮める。書式の正本は codiel の `references/intent-format.md` の「## 持続層」で、metatron は
+`references/architecture-format.md` の「ADR 候補の取り込み」に読み取りと縮約に要る最小限だけを写す(共有ファイル契約。
+採番の規則は写さない)。実装は `src/lib/adr-candidates.ts`、CLI は `src/cli/adr-candidate.ts`。
+
+- `scan-adr-candidates`(読み取り、常に exit 0): 候補ごとに file・candidateId・title・5 つの小見出しの本文・
+  エントリの範囲のバイト列の sha256 `hash`・`adoptedAs` を返す。`adoptedAs` は、ADR の本文に
+  「ADR 候補 ID: <候補 ID>」と行全体が一致する行を持つ ADR の番号(無ければ null)。タイトルの一致では判定しない。
+  候補 ID は完全一致のトークンとして比べる(`frontend-1` と `frontend-10` を混同しない)。
+- `shrink-adr-candidate --file --candidate-id --adr --hash`(書き込み): 候補 ID で特定したエントリの範囲だけを
+  参照形に置き換え、範囲の外はバイト列のまま残す。`--hash` は走査の値で、ずれていれば書かない。
+  書き込み先は `docs/intents/domains/` 直下の `.md` だけ。成功と「既に参照形」は 0、拒否と失敗は終了コード 3 と
+  `shrinkPending`。`stage-adr` と `commit-architecture` は持続層に触れない(ADR の確定と縮約は別コマンド)。
+- `/metatron:init` と `/metatron:update`(`capturing-architecture` / `updating-architecture`)が候補を提示し、
+  承認した候補を `stage-adr` → `commit-architecture` で ADR にしてから縮約する。
 
 - 出力は**常に JSON を stdout**。読み取り系は「読めなかった」も事実として返すため**常に exit 0**、
   書き込み系は拒否・失敗で非 0 かつ理由は JSON の `error`。

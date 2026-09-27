@@ -70,6 +70,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 ユーザーの「やりたいこと」を intent 文書(`docs/intents/YYYY-MM-DD-<slug>.md`)に聞き取り、それを起点に設計・開発・テスト・PR 起票・レビューを一気通貫で行うプラグインです。設計・実装・テスト・レビューの作業は、内容に応じた委譲先へ渡して進行します。<br>
 `/codiel:run` は、Issue 番号・intent 文書のパス・引数なしの 3 つの形で始められます。intent 文書には、ユーザーの言葉を要約せずに残す原文(`## ASIS` / `## TOBE`)と、受け入れ基準などの派生文を分けて書き、完了の判定は原文に照らして行います。GitHub を使えない環境でも、PR を作らない local モードで最後まで進みます。<br>
 `/codiel:init` は保護パスを聞き取り、運用の規律を `.claude/rules/codiel.md` に、置き場の地図を CLAUDE.md の `## Codiel` に置きます。ARCHITECTURE の散文や GOTCHAS は生成しません。ドメインマップが無くても動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
+変更ごとの intent とは別に、領域ごとの持続層(`docs/intents/domains/<領域>.md`)に目的と意図的な制約を残し、次の run の聞き取り・設計・レビューの前提にします。<br>
 run の間に GitHub へ投稿する本文には `<!-- codiel:generated -->` を付け、hook がこれを確かめます(run の間に gh-utility から投稿すると拒否されます)。スクリーンショットなどの画像は、`gh --attach` か claude-in-chrome で本文に載せます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。
 
@@ -126,14 +127,14 @@ AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマン�
 
 プロジェクトアーキテクチャ(`ARCHITECTURE.md`)・失敗知識(`GOTCHAS.md`)・規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入し、rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。<br>
 3 種への書き込み口を CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械的に保証します。AI による直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい書き込み口へ案内します。<br>
-`/metatron:init` がコードベース解析から ARCHITECTURE と rules 3 ファイルを初回生成し、承認を経て GOTCHAS の空の台帳を作成します。`/metatron:update` は現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。既定の `paths.architecture` と `paths.gotchas` はそれぞれ `docs/ARCHITECTURE.md` と `docs/GOTCHAS.md`、`paths.rulesDir` は `.claude/rules/metatron` です。<br>
+`/metatron:init` がコードベース解析から ARCHITECTURE と rules 3 ファイルを初回生成し、承認を経て GOTCHAS の空の台帳を作成します。`/metatron:update` は現行コードとの乖離を検出して更新します。どちらも、Codiel の持続層にある `[ADR 候補]` を見つけると提示し、承認されたものを ADR にしてから持続層を参照形に縮めます。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。既定の `paths.architecture` と `paths.gotchas` はそれぞれ `docs/ARCHITECTURE.md` と `docs/GOTCHAS.md`、`paths.rulesDir` は `.claude/rules/metatron` です。<br>
 ※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
 
 ### Metatron / Codiel の関係
 
 この 2 つのプラグインは連携することができます。(それぞれ独立して使用することも可)
 TOBE → intent → 実装という一続きの流れは Codiel が受け持ち、Metatron はプロジェクトの前提(ARCHITECTURE・rules)と失敗知識(GOTCHAS)を供給します。<br>
-Codiel は Metatron が無くてもドメインマップなしで動作します。Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体で運用価値があります。<br>
+Codiel は Metatron が無くてもドメインマップなしで動作し、残すべき判断は `[ADR 候補]` として intent の持続層(`docs/intents/domains/`)に全文で残します。後から Metatron を導入すると、`/metatron:init` と `/metatron:update` がそれを ADR へ移し、持続層を参照形に縮めます。Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体で運用価値があります。<br>
 これらのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / metatronが管理するrules / intent 文書)とコンテキストで相互補完を行います。
 
 

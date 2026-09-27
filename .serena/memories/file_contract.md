@@ -86,6 +86,11 @@
   文書が 1 つも無くても CLI 案内は出す。案内まで落とすのは `injection.enabled: false` と
   設定読み取り自体が例外で失敗したときの 2 つだけ。**rules 本文は注入しない**(Claude Code が
   起動時に読み、サブエージェントにも渡る)。
+- `[ADR 候補]` の書式と参照形(2026-09-28)は、codiel の `references/intent-format.md` の「## 持続層」が正本の
+  共有ファイル契約である。metatron は `references/architecture-format.md` の「ADR 候補の取り込み」に、読み取りと縮約に
+  要る最小限(印の形、候補 ID の書式、エントリの範囲、5 つの小見出しの名前、参照形、ADR の背景に書く
+  「ADR 候補 ID: <候補 ID>」の行)だけを写す。書式を変えたら両プラグインの `format-change-checklist.md` に沿って追随させる。
+  書き込みは metatron の `scan-adr-candidates` / `shrink-adr-candidate`(`mem:metatron/core`)。
 - §14 実装間の一致検証(上記の 2 者比較)。**`paths.rulesDir` は 2 者比較に含めない**(codiel は
   未知キーとして無視する)。
 
