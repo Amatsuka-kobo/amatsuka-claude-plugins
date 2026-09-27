@@ -101,6 +101,9 @@ function parseArgs(argv) {
   }
   return { pos, flags, bools };
 }
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function oneOf(flags, name, values) {
   const v = flags[name];
   if (v === void 0) fail(`--${name} \u304C\u5FC5\u8981\u3067\u3059`);
@@ -483,6 +486,25 @@ function main(argv, root = process.cwd()) {
       });
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
+  }
+  if (cmd === "next-adr-candidate-id") {
+    const file = flags.file;
+    if (!file) fail("--file \u304C\u5FC5\u8981\u3067\u3059");
+    const domain = flags.domain;
+    if (!domain) fail("--domain \u304C\u5FC5\u8981\u3067\u3059");
+    const filePath = path.isAbsolute(file) ? file : path.join(root, file);
+    let max = 0;
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8");
+      const domainRe = new RegExp(`^${escapeRegExp(domain)}-([0-9]+)$`);
+      const idRe = /\[ADR 候補: ([^\]]+)\]|\(候補 ID: ([^)]+)\)/g;
+      for (const m of content.matchAll(idRe)) {
+        const id = m[1] ?? m[2];
+        const digits = id.match(domainRe)?.[1];
+        if (digits) max = Math.max(max, Number(digits));
+      }
+    }
+    return ok({ candidateId: `${domain}-${max + 1}` });
   }
   fail(`\u4E0D\u660E\u306A\u30B3\u30DE\u30F3\u30C9: ${cmd}`);
 }

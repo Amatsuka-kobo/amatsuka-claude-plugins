@@ -169,7 +169,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [implement] | 成果物を書く委譲。`dev-plan.md` の担当ステップ → コード diff + ユニットテスト | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | コード diff + ユニットテスト | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
 | [test-loop A] | 成果物を書く委譲。`cases.md` → `scripts/` + `test-run-<n>.md` | scripting-tests + running-regression-tests | `.codiel/specs/<unit-id>/cases.md` | `.codiel/specs/<unit-id>/scripts/`、`reports/test-run-<n>.md` | pass-gate(`evaluate_code`。スクリプト diff) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
 | [test-loop B] | 成果物を書く委譲。NG ケースの再現手順・期待結果・実際の結果 → コード修正 diff | implementing + fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
-| [intent-sync] | 成果物を書く委譲。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映 | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
+| [intent-sync] | 成果物を書く委譲。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
 | [pr] | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ(詳細は「2.2 pr の運転」) | complete-phase(github のときだけ `--pr-url` 必須) | オーケストレーター(github モードでは `pr-body.md` のコミットも)。開始前に `git status --short` で未コミット差分がないことを確認 |
 | [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`.codiel/specs/**`、持続層 | `reports/review-<m>.md` + PR コメント(github のみ) | complete-phase | オーケストレーター(review レポートと、github モードではレビュー本文・行コメントの本文ファイル(`review-body-<m>.md`・`review-comment-<連番>.md`)のコミットも) |
 | [fix-loop] | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<m+1>.md` と、反論・対応・再報告記録の本文ファイル(`rebuttal-<連番>.md` など)のコミットはオーケストレーター(github モードでは続けて投稿する)。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
@@ -278,8 +278,11 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 6. run 中に委譲先またはオーケストレーターが気づいた ARCHITECTURE と実装の乖離を一覧にする。
    metatron が導入されていれば `/metatron:update` へ引き渡す旨を結果レポートに書き、導入されていな
    ければ報告に残すだけにする。codiel は ARCHITECTURE を作らない。
-7. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表と、6. の乖離の一覧を
-   含めて出力し、終了する。
+7. ADR 候補を結果レポートに挙げる。`adrTarget` が `metatron` なら intent-sync の委譲先の報告にある
+   ADR 候補の一覧を、`intents` なら今回取り込んだ持続層のファイルにある `[ADR 候補: <候補 ID>]` の
+   見出しの一覧を使う。
+8. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表と、6. の乖離の一覧と、
+   7. の ADR 候補の一覧を含めて出力し、終了する。
 
 ### 2.4 共通
 
@@ -365,7 +368,8 @@ test-spec の依頼文には、次の 2 条項も追加する。
 
 intent-sync 以外の委譲の依頼文には「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ
 報告する」の文を入れる。intent-sync の依頼文には、派生文のセクションだけを書き換え、原文のセクションを
-書き換えないと明記する。
+書き換えないと明記し、関係する領域の持続層(`docs/intents/domains/<領域>.md`)への取り込み作業を
+含める。
 
 観点ファイルは次の規則で依頼文に足す。
 - 実装の委譲(implement / test-loop B / fix-loop の修正)では、`mapped` のときに `<plugin-root>/skills/implementing/references/<担当タグ>.md` が存在すれば足す。存在しなければ足さない。`unscoped` では足さない。

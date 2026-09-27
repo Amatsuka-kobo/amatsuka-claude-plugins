@@ -224,6 +224,11 @@ function parseArgs(argv: string[]): {
   return { pos, flags, bools }
 }
 
+// 候補 ID の照合に使う。領域名に正規表現の特殊文字が来ても安全に扱う
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 // 値域の決まったフラグを読む。省略も値域の外も失敗にする。
 function oneOf<T extends string>(
   flags: Record<string, string>,
@@ -683,6 +688,30 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       })
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
+  }
+
+  // 持続層ファイルの ADR 候補 ID を採番する。run 状態を持たないので loadRun は使わない
+  // (計画書 §2、設計書 §6.4.2)。
+  if (cmd === "next-adr-candidate-id") {
+    const file = flags.file
+    if (!file) fail("--file が必要です")
+    const domain = flags.domain
+    if (!domain) fail("--domain が必要です")
+    const filePath = path.isAbsolute(file) ? file : path.join(root, file)
+    let max = 0
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8")
+      // 完全一致のトークンとして読む。frontend-1 が frontend-10 の一部として
+      // 拾われないよう、抽出した ID 全体を領域名の正規表現に照合する。
+      const domainRe = new RegExp(`^${escapeRegExp(domain)}-([0-9]+)$`)
+      const idRe = /\[ADR 候補: ([^\]]+)\]|\(候補 ID: ([^)]+)\)/g
+      for (const m of content.matchAll(idRe)) {
+        const id = m[1] ?? m[2]
+        const digits = id.match(domainRe)?.[1]
+        if (digits) max = Math.max(max, Number(digits))
+      }
+    }
+    return ok({ candidateId: `${domain}-${max + 1}` })
   }
 
   fail(`不明なコマンド: ${cmd}`)

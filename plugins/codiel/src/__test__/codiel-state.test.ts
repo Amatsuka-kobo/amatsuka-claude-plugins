@@ -1455,6 +1455,119 @@ test("set-domain 後も既存サブコマンドが正常に動き、他フィー
   ).toBe("completed")
 })
 
+function writeDomainDoc(root: string, body: string): string {
+  const rel = "docs/intents/domains/frontend.md"
+  const file = path.join(root, rel)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, body)
+  return rel
+}
+
+test("next-adr-candidate-id は持続層ファイルが無ければ <領域名>-1 を返す", () => {
+  const root = tmpProject()
+  const r = run(root, [
+    "next-adr-candidate-id",
+    "--file",
+    "docs/intents/domains/frontend.md",
+    "--domain",
+    "frontend"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.candidateId).toBe("frontend-1")
+})
+
+test("next-adr-candidate-id は frontend-1 と frontend-10 が同じファイルにあるとき次を frontend-11 にする", () => {
+  const root = tmpProject()
+  const rel = writeDomainDoc(
+    root,
+    [
+      "# frontend",
+      "",
+      "## 意図的な制約",
+      "### 判断 A [ADR 候補: frontend-1]",
+      "- 制約: a",
+      "### 判断 B [ADR 候補: frontend-10]",
+      "- 制約: b",
+      ""
+    ].join("\n")
+  )
+  const r = run(root, [
+    "next-adr-candidate-id",
+    "--file",
+    rel,
+    "--domain",
+    "frontend"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.candidateId).toBe("frontend-11")
+})
+
+test("next-adr-candidate-id は印付きエントリと参照形の両方を数える", () => {
+  const root = tmpProject()
+  const rel = writeDomainDoc(
+    root,
+    [
+      "# frontend",
+      "",
+      "## 意図的な制約",
+      "### 判断 A [ADR 候補: frontend-2]",
+      "- 制約: a",
+      "### 判断 B",
+      "- 制約: b",
+      "- 関連 ADR: ADR-005(候補 ID: frontend-5)",
+      ""
+    ].join("\n")
+  )
+  const r = run(root, [
+    "next-adr-candidate-id",
+    "--file",
+    rel,
+    "--domain",
+    "frontend"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.candidateId).toBe("frontend-6")
+})
+
+test("next-adr-candidate-id は別の領域名の候補 ID を数えない", () => {
+  const root = tmpProject()
+  const rel = writeDomainDoc(
+    root,
+    [
+      "# frontend",
+      "",
+      "## 意図的な制約",
+      "### 判断 A [ADR 候補: backend-9]",
+      "- 制約: a",
+      ""
+    ].join("\n")
+  )
+  const r = run(root, [
+    "next-adr-candidate-id",
+    "--file",
+    rel,
+    "--domain",
+    "frontend"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.candidateId).toBe("frontend-1")
+})
+
+test("next-adr-candidate-id は --file に絶対パスを渡しても動く", () => {
+  const root = tmpProject()
+  writeDomainDoc(root, "### 判断 A [ADR 候補: frontend-3]\n")
+  const abs = path.join(root, "docs/intents/domains/frontend.md")
+  const r = run(root, [
+    "next-adr-candidate-id",
+    "--file",
+    abs,
+    "--domain",
+    "frontend"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.candidateId).toBe("frontend-4")
+})
+
 // テストヘルパー
 function passGate(
   root: string,

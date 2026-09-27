@@ -29,6 +29,11 @@ GOTCHAS への記録は、metatron の `recording-gotchas` スキルに任せま
 記録は「未記録の GOTCHAS」として run のレポートと完了報告に残り、台帳へは追記されません。後で metatron を
 導入すれば、残った記録を台帳へ移せます。
 
+Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに 1 ファイルで、intent をまたいで効き続ける
+意図的な制約を蓄積します。metatron が無い環境では、ADR の条件を満たす判断も `[ADR 候補]` の印を付けて
+持続層に全文を残します。metatron を導入すると、`/metatron:init` と `/metatron:update` がこの印を ADR へ移し、
+持続層を参照形に縮めます。
+
 ### `/codiel:run [<Issue番号> | <intentパス>]`
 
 引数を省略するとユーザーへの聞き取りから、Issue 番号を渡すと Issue の内容を intent の原文の

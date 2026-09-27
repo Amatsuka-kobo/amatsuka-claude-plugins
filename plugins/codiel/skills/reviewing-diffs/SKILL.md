@@ -9,7 +9,8 @@ description: Codiel の review フェーズ(および fix-loop の再レビュ�
 
 レビューを担うサブエージェントが、依頼文で指定された観点で review フェーズおよび fix-loop の
 再レビューで使うスキル。入力は `git diff <base>...<branch>`、intent 文書(`docs/intents/**`)、
-`design.md`(design フェーズを経た run にはある)、`.codiel/specs/**` の `spec.md`/`cases.md`。
+`design.md`(design フェーズを経た run にはある)、`.codiel/specs/**` の `spec.md`/`cases.md`、
+関係する領域の持続層(`docs/intents/domains/<領域>.md`)。
 `design.md` が無い軽量の run では、intent と `dev-plan.md` を設計の代わりに読む。受け入れ基準は
 intent の `## 受け入れ基準` を出所とする。レビュー基準は常にこれらの文書との整合であり、
 **レビュー担当個人の好みのコーディングスタイルではない**。「自分ならこう書く」という指摘は
@@ -37,7 +38,8 @@ github モードで投稿するレビュー本文の文の組み立てと画像�
 ## チェックリスト
 
 1. intent 文書(`docs/intents/**`)の `## 受け入れ基準` / `design.md` / `.codiel/specs/**` の該当
-   `spec.md`・`cases.md` を読む。`design.md` が無い軽量の run では、intent と `dev-plan.md` を
+   `spec.md`・`cases.md` / 関係する領域の持続層(`docs/intents/domains/<領域>.md`)の
+   `## 意図的な制約` を読む。`design.md` が無い軽量の run では、intent と `dev-plan.md` を
    設計の代わりに読む。fix-loop の再レビューでは、申し送られた「反論済み所見一覧」も確認する。
 2. `git diff <base>...<branch>` で diff を取得する。diff が大きくても**全ファイルに目を通す**
    (サンプリングで一部だけ見て済ませない)。
@@ -83,7 +85,7 @@ critical/high と medium/low で下流の扱いが完全に分かれるため、
 「受け入れ基準に書かれた振る舞いが動かない」なら high 以上、「動くが読みにくい・将来のバグの
 温床になりうる」なら medium、「好みの範囲」なら low、と判断に迷ったら基準文書に立ち返る。
 security 観点の指摘は原則 medium 以上を検討する(セキュリティ上の懸念は
-「好み」に分類されにくいため)。
+「好み」に分類されにくいため)。持続層の意図的な制約に反する変更は severity high とする。
 
 ## 所見の統合と投稿(オーケストレーターの職務)
 
