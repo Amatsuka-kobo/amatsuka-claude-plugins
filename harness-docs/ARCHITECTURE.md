@@ -309,3 +309,33 @@ sandalphon と codiel を統合すると、intent の聞き取りから設計・
 #### 影響範囲
 
 run state は slug で識別する version 2 になり、version 1 の run は `get`・`stop` と、`awaiting_outcome` の run の outcome の記録だけを受け付ける。sandalphon はマーケットプレイスから消える。codiel は変更ごとの intent 文書と持続層 `docs/intents/domains/` を持つ。test-spec の書き込み範囲の制限は、依頼文とスキルの HARD-GATE が担う。ADR-003 の影響範囲にある「初期化済みの判定は CLAUDE.md の運用ルール節」は、`.claude/rules/codiel.md` と CLAUDE.md の `## Codiel` による判定に置き換わる。
+
+---
+
+### ADR-007: [metatron] codiel の持続層の ADR 候補を metatron が ADR へ移し、参照形に縮める
+
+- 状態: 採用
+- 決定日: 2026-09-27
+- 決定者: phyllis998
+
+#### 背景
+
+codiel は metatron が無くても動くよう(ADR-003)、ADR にすべき判断を持続層 `docs/intents/domains/` に `[ADR 候補]` として全文で書く。後から metatron を入れると、同じ判断が ADR と持続層の 2 か所に全文で残り、食い違っていく。プラグインは自分の資産だけを書く分担で、ほかのプラグインの資産を書き換える経路は無かった。
+
+#### 検討した選択肢
+
+1. 利用者が手で ADR へ移し、持続層を直す
+2. codiel が metatron の CLI を呼んで ADR を足し、自分の持続層を縮める
+3. metatron が持続層を走査して ADR へ移し、そのエントリを参照形に縮める(採用)
+
+#### 採用した結論
+
+`/metatron:init` と `/metatron:update` は `scan-adr-candidates` で `[ADR 候補]` を提示し、承認された候補を ADR にしてから `shrink-adr-candidate` でそのエントリを参照形に縮める。metatron が codiel の資産に書くのはこの縮約だけで、範囲は `docs/intents/domains/*.md` のうち候補 ID で特定したエントリに限る。書式は codiel の `intent-format.md` を正本とする共有ファイル契約とし、metatron は読み取りと縮約に要る最小限だけを写す。
+
+#### 理由
+
+ARCHITECTURE の持ち主である metatron が ADR の確定と縮約を同じ手順で行えば、判断の全文は ADR の 1 か所だけに残る。codiel が metatron を呼ぶと、metatron が無くても動くという codiel の独立性が崩れる。手で移すと、候補の取りこぼしと写し間違いを防げない。書き込みを候補 ID で特定したエントリに限り、走査時のハッシュと照合すれば、ほかのプラグインの資産でも範囲外を壊さない。
+
+#### 影響範囲
+
+metatron は codiel の持続層の書式に依存し、書式を変えたときは両プラグインの `format-change-checklist.md` に沿って追随させる。metatron に `scan-adr-candidates` と `shrink-adr-candidate` が加わり、縮約の失敗は終了コード 3 と `shrinkPending` で返る。codiel は ADR の確定に関わらず、`[ADR 候補]` を持続層に全文で書くことだけを担う。
