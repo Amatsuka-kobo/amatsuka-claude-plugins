@@ -43,7 +43,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 聞き取り・書き込み・起票のどれよりも前に、`node <plugin-root>/scripts/codiel-state.mjs get --active` でほかの run が active でないことを確かめる。`active` または `awaiting_human` の run が見つかったら、今回再開する run かどうかを次のとおり判定する。
 
 - 入口が intent パスで、その frontmatter の `run` が見つかった run の slug と一致するときは、今回再開する run とみなす。
-- それ以外の入口(Issue 番号・省略)では、見つかった run が `commands/run.md` の「未完了の run があれば再開」に当たる可能性がある。終端にする前にその run の内容(slug・intent のパス・現在のフェーズ)を示し、今回再開するかをユーザーに確かめる(run を作る前なので `mark-ask` は要らない)。
+- それ以外(frontmatter の `run` が一致しない intent パス、Issue 番号、省略)では、見つかった run が `commands/run.md` の「未完了の run があれば再開」に当たる可能性がある。終端にする前にその run の内容(slug・intent のパス・現在のフェーズ)を示し、今回再開するかをユーザーに確かめる(run を作る前なので `mark-ask` は要らない)。
 
 今回再開する run と決まったものは終端にせず、`orchestrating-runs` の再開手順(§6)へ進める。再開しないと決めた run だけを、`codiel-state finalize --slug <slug>` か `codiel-state stop --slug <slug> --reason <理由>` で終端にする。この確認により、手順 5 の (1)〜(3) の間は、再開する run 以外に active run が無い状態が保証される。
 
@@ -151,7 +151,7 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 (5) `git add -- <intent パス>` で intent 文書だけを stage する。未追跡のファイルでもパスを限定したコミットができるようにするためである。
 
-(6) 手順 4 で決めた「文書だけ残して終えるか」で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。`git commit` が「変更なし」で失敗したとき(前の try からパスだけを渡して続行する場合など)は、そのコミットを飛ばして次へ進む。それ以外の理由で `git commit` が失敗したときは、途中確認の一般則どおり `codiel-state mark-ask intent --slug <slug> --kind confirm` で `awaiting_human` にしてから人に確認し、答えを得たら `codiel-state resume --slug <slug>` で戻る。
+(6) 手順 4 で決めた「文書だけ残して終えるか」で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。`git commit` が「変更なし」で失敗したとき(前の try からパスだけを渡して続行する場合など)は、そのコミットを飛ばして次へ進む。それ以外の理由で `git commit` が失敗したときは、この区間では `mark-ask` できない(intent フェーズは `start-phase` 前の `pending` である)ので、`codiel-state stop --slug <slug> --reason commit-failed` で run を終端にしてから、失敗の出力と intent 文書のパスをユーザーに示して扱いを確かめる。intent 文書は作業ツリーに残す。やり直すときは、その intent パスを入口に run を始め直す。
 
 - 終える(intent-only)とき:
   1. 開始時のブランチで `git commit -m "codiel(intent): <要約> (<slug> try-<n>)" -- <intent パス>` を実行する。
