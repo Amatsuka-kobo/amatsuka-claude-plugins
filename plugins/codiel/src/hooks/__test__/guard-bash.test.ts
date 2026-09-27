@@ -1268,3 +1268,31 @@ test("前置や結合したフラグのあるシェルの -c の引数の中の�
   ])
     expect(hook(root, command)?.permissionDecision).toBe("deny")
 })
+
+// --- 字句解析が閉じていないクォートを残したとき、代入の形の gh の起動を見つける(M2-FX5-AR の medium) ---
+
+test("閉じていないクォートを残す入力(数字直後の << で heredoc と見なさない python3<<'EOF')の後ろの代入の形(url=$(gh …)、url=`gh …`)も見つけて検査する", () => {
+  const root = setupRun()
+  // <<'EOF' の直前は python3 の 3(数字)なので heredoc の開始と見なさず、
+  // 本文の対になっていない ' が字句解析を閉じていない状態のまま終わらせる。
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  for (const assignment of [
+    "url=$(gh pr comment 1 --body x)",
+    "url=`gh pr comment 1 --body x`"
+  ])
+    expect(
+      hook(root, [unclosedQuote, assignment].join("\n"))?.permissionDecision
+    ).toBe("deny")
+})
+
+test("閉じていないクォートを残す入力の後ろの PR=$(gh pr create …) も、フェーズの制限で deny", () => {
+  const root = setupRun()
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  const r = hook(
+    root,
+    [unclosedQuote, "PR=$(gh pr create --title t --body-file good.md)"].join(
+      "\n"
+    )
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})

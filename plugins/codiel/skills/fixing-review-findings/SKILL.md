@@ -10,7 +10,7 @@ description: Codiel の fix-loop フェーズでオーケストレーターが�
 `orchestrating-runs` の [8] fix-loop フェーズで**オーケストレーター自身**が使うスキルである。
 オーケストレーターが自分でコードを直すことは許されない。
 
-入力は `reports/review-<n>.md` の所見のうち **critical / high のみ**。medium/low は本スキルの
+入力は `reports/review-<m>.md` の所見のうち **critical / high のみ**。medium/low は本スキルの
 対象外であり、修正せず `triage` フェーズ(`filing-followup-issues`)へそのまま持ち越す
 (`reviewing-diffs` の severity 定義表のとおり下流の扱いが分かれる)。
 
@@ -32,7 +32,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## チェックリスト
 
-1. 最新の `reports/review-<n>.md` を読み、critical/high の所見を一覧化する(medium/low は対象外
+1. 最新の `reports/review-<m>.md` を読み、critical/high の所見を一覧化する(medium/low は対象外
    として除外する。除外した件数も後で triage へ引き継ぐため覚えておく)。
 2. 所見ごとに、対象ファイル・行・intent(`docs/intents/**`)/design.md/spec.md の根拠を突き合わせて
    技術的に検証する。必要なら読み取り専用サブエージェントへ調査を委譲するが、妥当性の最終判断は
@@ -40,15 +40,17 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 3. 妥当と判断した所見は、該当ドメインの implementer へ `implementing` の契約 (b) レビュー所見由来
    の形式(所見: severity・対象・内容・根拠・提案 + 対象ファイル)でディスパッチする(1 所見ずつ
    でも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分けてディスパッチする)。
-4. 不当と判断した所見は、`reports/review-<n>.md` に記録された PR コメント URL への返信として、
-   `github-writing.md` の執筆規則に従い、下記「PR 反論記録書式」の内容と `<!-- codiel:generated -->`
-   を本文に含めて組み立てる(URL が未記録なら新規コメントでよい)。組み立てた本文を Write ツールで
-   所見ごとに別名の `.codiel/runs/<slug>/try-<n>/reports/rebuttal-<連番>.md` に書き、`review-<n>.md`
-   と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
-   `git commit -m "codiel(fix-loop): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
-   `gh api` を `-F body=@.codiel/runs/<slug>/try-<n>/reports/rebuttal-<連番>.md` のように
-   `-F body=@<パス>` で本文を渡して呼び、反論を投稿する。修正はしない。反論後は所見の要約・反論根拠・
-   投稿した PR コメント URL を「反論済み一覧」に追記する。
+4. 不当と判断した所見は、`github-writing.md` の執筆規則に従い、下記「PR 反論記録書式」の内容と
+   `<!-- codiel:generated -->` を本文に含めて組み立てる。組み立てた本文を Write ツールで所見ごとに
+   別名の `.codiel/runs/<slug>/try-<n>/reports/rebuttal-<連番>.md` に書き、`review-<m>.md` と同じ
+   書き方で run ブランチへコミットする(`git add <パス>` の後
+   `git commit -m "codiel(fix-loop): <要約> (<slug> try-<n>)"`)。github モードでは、コミット後、
+   `reports/review-<m>.md` に記録された PR コメント URL への返信として(URL が未記録なら新規コメント
+   でよい)、別の Bash 呼び出しで `gh api` を
+   `-F body=@.codiel/runs/<slug>/try-<n>/reports/rebuttal-<連番>.md` のように `-F body=@<パス>` で
+   本文を渡して呼び、反論を投稿する。local モードでは投稿せず、コミットまでで記録を終える。修正は
+   しない。反論後は所見の要約・反論根拠・(github モードでは投稿した PR コメント URL、local モードでは
+   コミットした `rebuttal-<連番>.md` のパス)を「反論済み一覧」に追記する。
 5. ディスパッチ 1 往復(implementer への修正依頼 → 完了報告)ごとに
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を呼ぶ。
    exit code が `3`(`capExceeded`)なら、それ以上ディスパッチせず `raguel-gating` の ASK
@@ -64,17 +66,17 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    見る diff には影響しない。guard-bash は fix-loop フェーズ + test-loop passed の条件下でこの
    push を許可済み)。
 9. push 後、diff のドメインと共通観点に応じた担当を
-   再ディスパッチし、`reviewing-diffs` の手順で `review-<n+1>.md` を作る。ディスパッチ時の
+   再ディスパッチし、`reviewing-diffs` の手順で `review-<m+1>.md` を作る。ディスパッチ時の
    申し送りに「反論済み一覧」を含め、reviewer が新たな根拠なしに同一所見を再報告しないようにする。
-10. `review-<n+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
+10. `review-<m+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
     除外する(ただし reviewer が新たな根拠を伴って再主張したものは未決に戻し件数に含める)。
     除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 11 へ。
-    反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を PR コメントに 1 度だけ記録して
-    件数から除外する。記録は反論と同じ流れで行う。組み立てた本文を Write ツールで所見ごとに別名の
-    `.codiel/runs/<slug>/try-<n>/reports/restatement-<連番>.md` に書き、`review-<n>.md` と同じ
-    書き方で run ブランチへコミットしてから、別の Bash 呼び出しで `gh api` を
-    `-F body=@.codiel/runs/<slug>/try-<n>/reports/restatement-<連番>.md` のように `-F body=@<パス>`
-    で本文を渡して投稿する。投稿は 1 回の Bash 呼び出しに 1 つとする。
+    反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を 1 度だけ記録して件数から
+    除外する。記録は反論と同じ流れで行う。組み立てた本文を Write ツールで所見ごとに別名の
+    `.codiel/runs/<slug>/try-<n>/reports/restatement-<連番>.md` に書き、`review-<m>.md` と同じ
+    書き方で run ブランチへコミットする。github モードでは、コミット後、別の Bash 呼び出しで
+    `gh api` を `-F body=@.codiel/runs/<slug>/try-<n>/reports/restatement-<連番>.md` のように
+    `-F body=@<パス>` で本文を渡して投稿する(1 回の Bash 呼び出しに 1 つ)。local モードでは投稿しない。
 11. 最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
     `node <plugin-root>/scripts/codiel-state.mjs pass-gate fix-loop --slug <slug> --evaluation-id <id>
     --verdict PROCEED` を呼んでフェーズを完了させる(`pass-gate` はループの最後に 1 回だけ呼ぶ。
@@ -83,7 +85,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ## 所見と PR コメントの対応付け
 
 所見を PR へ投稿する(`reviewing-diffs` の「所見の統合と投稿」セクション、および再レビュー後)際、
-オーケストレーターは投稿した各行コメントの URL(または ID)を `reports/review-<n>.md` の該当所見に
+オーケストレーターは投稿した各行コメントの URL(または ID)を `reports/review-<m>.md` の該当所見に
 追記する。以降の「反論」「対応」の返信は常にこの URL に対して行う(所見テキストの一致だけで
 コメントを探し直さない)。
 
@@ -99,24 +101,26 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 妥当と判断し修正が完了した所見には、修正を行った implementer のコミットハッシュを添えて次の形式で
 対応済みを記録する。記録は反論と同じ流れで行う。組み立てた本文を Write ツールで所見ごとに別名の
-`.codiel/runs/<slug>/try-<n>/reports/resolution-<連番>.md` に書き、`review-<n>.md` と同じ書き方で
-run ブランチへコミットしてから、別の Bash 呼び出しで `gh api` を
+`.codiel/runs/<slug>/try-<n>/reports/resolution-<連番>.md` に書き、`review-<m>.md` と同じ書き方で
+run ブランチへコミットする。github モードでは、コミット後、別の Bash 呼び出しで `gh api` を
 `-F body=@.codiel/runs/<slug>/try-<n>/reports/resolution-<連番>.md` のように `-F body=@<パス>` で
-本文を渡して呼び、対応済みを投稿する。
+本文を渡して呼び、対応済みを投稿する。local モードでは投稿せず、コミットまでで記録を終える。
 
 ```markdown
 対応: <commit hash>
 ```
 
-「対応」も「反論」も**必ずどちらかを記録する**。所見に対して何も投稿しない状態を残さない。
-本文には `<!-- codiel:generated -->` を含める。投稿は 1 回の Bash 呼び出しに 1 つとする。
+「対応」も「反論」も**必ずどちらかを記録する**。所見に対して何も記録しない状態を残さない。
+本文には `<!-- codiel:generated -->` を含める。github モードでの投稿は 1 回の Bash 呼び出しに 1 つとする。
 
 <HARD-GATE>
 - **検証せずに指摘へ盲従しない**。所見の severity や書き方がどれだけ断定的でも、対象ファイル・
   intent/design.md/spec.md との突き合わせで技術的に検証するまでは、妥当と決めつけて
   implementer にディスパッチしない。
-- **critical/high の握り潰し禁止**。不当と判断して修正しない場合も、必ず PR 上に反論を記録する
-  (「対応」も「反論」もせず沈黙することは、指摘そのものが無かったことにするのと同じ)。
+- **critical/high の握り潰し禁止**。不当と判断して修正しない場合も、必ず反論を記録する(github
+  モードでは PR 上に、local モードでは `.codiel/runs/<slug>/try-<n>/reports/` の
+  `rebuttal-<連番>.md` として run ブランチにコミットする)。「対応」も「反論」もせず沈黙することは、
+  指摘そのものが無かったことにするのと同じ。
 - **medium/low を本スキルの対象に含めない**。critical/high 以外を fix-loop で修正することは
   triage フェーズの職掌への越境であり行わない。
 - **オーケストレーターは自分でコードを直さない**。`orchestrating-runs` の HARD-GATE と同じく、

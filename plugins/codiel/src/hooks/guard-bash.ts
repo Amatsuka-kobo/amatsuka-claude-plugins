@@ -392,14 +392,16 @@ function parseCommands(text: string): string[][] | undefined {
 
 // parseCommands が閉じていないクォートかコマンド置換を残したときの、厳しい側の読み方
 // (字句解析に書き直す前の方式)。行の継続を戻して ; & | 改行で分け、空白で区切った語の
-// 前後のクォートと括弧を外し、gh の語ごとにコマンドを分ける。クォートの中と heredoc の
-// 本文の gh も起動と見なすので、誤検知の側に倒れる。
+// 前後の代入(`NAME=`)・クォート・括弧・コマンド置換の開きを外してから gh の語かを
+// 判定し、gh の語ごとにコマンドを分ける。`url=$(gh …)`・`PR=$(gh pr create …)`・
+// `` x=`gh …` `` のように語の途中から始まる gh の起動も見つける(M2-FX5-AR)。クォートの
+// 中と heredoc の本文の gh も起動と見なすので、誤検知の側に倒れる。
 function splitLoosely(cmd: string): string[][] {
   const commands: string[][] = []
   for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
     let words: string[] = []
     for (const tok of segment.split(/\s+/)) {
-      const w = tok.replace(/^[("'`$]+|["'`)]+$/g, "")
+      const w = tok.replace(/^(?:[A-Za-z_]\w*=)?[("'`$]*|["'`)]+$/g, "")
       if (w === "gh" || w.endsWith("/gh")) {
         commands.push(words)
         words = []

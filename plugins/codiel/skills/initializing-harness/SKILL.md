@@ -1,6 +1,6 @@
 ---
 name: initializing-harness
-description: /codiel:init で対象プロジェクトに Codiel ハーネス(.codiel/・raguel.config.yaml・CLAUDE.md の運用ルール節)を初期化・補完するとき使用。/codiel:run が未初期化を検出した場合の案内先でもある
+description: /codiel:init で対象プロジェクトに Codiel ハーネス(.codiel/・raguel.config.yaml・.claude/rules/codiel.md・CLAUDE.md の ## Codiel)を初期化・補完するとき使用。/codiel:run が未初期化を検出した場合の案内先でもある
 ---
 
 # Codiel ハーネス初期化
@@ -18,7 +18,7 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 - [ ] 0. **現状調査**。3 点すべて揃っていれば「初期化済み」と報告して終了する
 - [ ] 1. **`.codiel/` の配置**
 - [ ] 2. **`raguel.config.yaml` の生成**(保護パス)
-- [ ] 3. **`CLAUDE.md` への運用ルール節の追記**
+- [ ] 3. **`.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記**
 - [ ] 4. **検証**
 - [ ] 5. **完了報告**
 
@@ -28,7 +28,7 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
-| B | `CLAUDE.md` | ファイルが存在し、`## Codiel ハーネス運用ルール` 見出しを含む |
+| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` が `## Codiel` 見出しを含む |
 | C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
 | D | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
 
@@ -58,19 +58,41 @@ bash <plugin-root>/scripts/install-harness.sh
   デフォルト全量をコピーしない。
 - 既にファイルがあれば触らない。
 
-## 3. `CLAUDE.md` への運用ルール節の追記
+## 3. `.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記
 
-- `<plugin-root>/CLAUDE.example.md` の `## Codiel ハーネス運用ルール` セクションを
-  **固定文言のまま**使う(追記前に必ず Read する)。冒頭の HTML コメントはコピーしない。
+### (a) `.claude/rules/codiel.md` の配置
+
+- `.claude/rules/codiel.md` が無ければ、`<plugin-root>/assets/rules/codiel.md` を
+  **固定文言のまま** Write で置く(置く前に必ず Read する)。
+- 既にあれば触らない。
+- 新規ファイルの全文を提示して承認を得てから書き込む。
+
+### (b) `CLAUDE.md` への `## Codiel` の追記
+
+- `CLAUDE.md` に `## Codiel` 見出しが無ければ、`<plugin-root>/CLAUDE.example.md` の
+  `## Codiel` セクションを**固定文言のまま**使う(追記前に必ず Read する)。冒頭の HTML
+  コメントはコピーしない。
 - `CLAUDE.md` が無ければ `# CLAUDE.md` 見出し + 同セクションで新規作成する。
 - 既にあり同見出しが無ければ**末尾に追記**する。あれば触らない。
-- 既存の他セクションは一切変更しない。
-- 追記する差分を提示して承認を得てから書き込む。
+- 追記する差分(新規作成のときは全文)を提示して承認を得てから書き込む。
+
+### (c) 旧セクション「## Codiel ハーネス運用ルール」の取り除き
+
+- `CLAUDE.md` に旧セクション `## Codiel ハーネス運用ルール` があれば、それを取り除く差分を
+  提示し、承認を得てから取り除く。
+- 承認されなければ残し、完了報告にその旨を書く。
+
+(a)(b)(c) のいずれも、既存の他セクションは一切変更しない。例外は (c) の旧セクション
+「## Codiel ハーネス運用ルール」の取り除きだけであり、承認を得た場合に限る。
 
 ## 4. 検証
 
 - `raguel.config.yaml` の `rules."code/protected-paths".globs` を Read し、手順 2 で承認された
   glob がそのまま入っていることを確認する。
+- 手順 3(a) を実行したときは `.claude/rules/codiel.md` を Read し、`<plugin-root>/assets/rules/codiel.md`
+  と同じ内容であることを確認する。
+- 手順 3(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 5 行の内容が
+  追記されていることを確認する。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 
 ## 5. 完了報告
@@ -79,6 +101,7 @@ bash <plugin-root>/scripts/install-harness.sh
 
 - 配置・生成・追記したファイルの一覧(skip したものは skip と明記)
 - ユーザーが不明と答えて未記入のまま残した項目
+- 手順 3(c) の旧セクションの取り除きが承認されず残った場合はその旨
 - 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
 
 ## 修復の例外
@@ -92,7 +115,8 @@ bash <plugin-root>/scripts/install-harness.sh
 - **承認なしに書き込まない**。ドラフト全文(新規ファイル)または追記差分(既存ファイル)の
   提示と承認の取得を省略しない。
 - **既存記述を削除・改変しない**。変更は不足分の追記だけにする
-  (「修復の例外」で明示承認を得た置換を除く)。
+  (「修復の例外」で明示承認を得た置換と、手順 3(c) で承認を得た旧セクション
+  「## Codiel ハーネス運用ルール」の取り除きを除く)。
 - **検証(手順 4)を省略して完了報告しない**。
 - **聞いた保護パスをコードベースの解析結果で置き換えない**。保護パスはユーザーの回答からのみ
   生成する。不明ならユーザーに聞く。
@@ -105,4 +129,4 @@ bash <plugin-root>/scripts/install-harness.sh
 | 「ドメイン分割を答えてもらったのだから、そのまま書き込んでよい」 | 回答はドラフトの入力であって承認ではない。全文提示と承認は別の手順。 |
 | 「小さいプロジェクトだからドラフト提示を飛ばして直接書いていい」 | CLAUDE.md / ARCHITECTURE はプロジェクトの恒久資産。承認なしの書き込みは HARD-GATE 違反。 |
 | 「metatron が入っているか確かめてから分岐しよう」 | インストール検出はしない。見るのはファイルが契約を満たすかと `/metatron:init` が利用可能コマンドにあるかの 2 点だけ。 |
-| 「既存 CLAUDE.md の古い記述もついでに直してあげよう」 | スコープ外。追記のみが許可された変更。気づいた問題は報告に留める。 |
+| 「既存 CLAUDE.md の古い記述もついでに直してあげよう」 | スコープ外。追記のみが許可された変更。例外は手順 3(c) の旧セクション「## Codiel ハーネス運用ルール」の取り除きだけで、承認を得てから行う。それ以外の気づいた問題は報告に留める。 |

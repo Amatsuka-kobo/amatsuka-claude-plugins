@@ -90,19 +90,19 @@ security 観点の指摘は原則 medium 以上を検討する(セキュリテ�
 レビュー担当自身はここから先を行わない。オーケストレーターが各レビュー担当の
 所見テキストを受け取ったあと:
 
-1. severity 順(critical → high → medium → low)に並べ替えて `reports/review-<n>.md` に記録する。
+1. severity 順(critical → high → medium → low)に並べ替えて `reports/review-<m>.md` に記録する。
    同一の対象・内容の所見が複数観点から出た場合は、最も高い severity で 1 件に
    統合し、観点を併記する。
-2. local モードでは、この先の投稿を行わない。`reports/review-<n>.md` の記録だけを review フェーズの
+2. local モードでは、この先の投稿を行わない。`reports/review-<m>.md` の記録だけを review フェーズの
    成果物とする。
 3. github モードでは、`github-writing.md` の執筆規則に従ってレビュー本文を組み立てる。概要
    (件数・severity 内訳・fix-loop 対象の有無)に `<!-- codiel:generated -->` を含め、テストの結果
    得たスクリーンショットなど関連する画像があれば、レビュー本文の縮退の順序(`github-writing.md`
    の画像の載せ方)で載せる。組み立てた本文を Write ツールで
-   `.codiel/runs/<slug>/try-<n>/reports/review-body-<n>.md` に書き、`review-<n>.md` と同じ書き方で
+   `.codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md` に書き、`review-<m>.md` と同じ書き方で
    run ブランチへコミットする(`git add <パス>` の後
    `git commit -m "codiel(review): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
-   `gh pr review <PR番号> --comment --body-file .codiel/runs/<slug>/try-<n>/reports/review-body-<n>.md`
+   `gh pr review <PR番号> --comment --body-file .codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md`
    を実行し、PR 本文コメントとして投稿する。
 4. github モードでは、各所見の「対象」(`src/...:42`)に対応する行コメントを投稿する。本文に
    `<!-- codiel:generated -->` を含め、所見ごとに別名で Write ツールで

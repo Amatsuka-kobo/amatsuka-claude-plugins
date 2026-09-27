@@ -148,7 +148,7 @@
     として `record_outcome(approved)`。偽なら squash merge・未取り込み・却下を履歴だけでは
     区別できないため、ユーザーに聞いて判定する。
 - **incident(PROCEED したのに実害が出た)だけは自動検知できない**ため、人間が明示的に申告したときに
-  `record_outcome(incident)` を記録する。最も価値の高い失敗判例なので、CLAUDE.md に申告の運用ルールを書く(§9)。
+  `record_outcome(incident)` を記録する。最も価値の高い失敗判例なので、`.claude/rules/codiel.md` に申告の運用ルールを書く(§9)。
 
 ### verdict 別ハンドリング
 
@@ -409,12 +409,13 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
-機械的に配置する。raguel.config.yaml は聞き取り(保護パス)の回答から生成し、CLAUDE.md は
-`CLAUDE.example.md` の運用ルールセクションをそのまま追記する(既存ファイルは不足分のみ追記)。
+機械的に配置する。raguel.config.yaml は聞き取り(保護パス)の回答から生成する。運用の規律は
+`assets/rules/codiel.md` を固定文言のまま `.claude/rules/codiel.md` に置き、CLAUDE.md には
+`CLAUDE.example.md` の「## Codiel」セクションをそのまま追記する(既存ファイルは不足分のみ追記)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
 GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
-`/codiel:run` は資産配置を行わず、B + C + D(`CLAUDE.md` が存在し `## Codiel ハーネス運用ルール` 見出しを含むこと、`raguel.config.yaml` が存在し YAML としてパースできること、`.codiel/specs` / `.codiel/runs` / `.codiel/reports` の 3 ディレクトリが存在すること)が揃っていることを初期化済みと判定する。いずれかが揃っていないときは未初期化として `/codiel:init` を案内して終了する。
+`/codiel:run` は資産配置を行わず、B + C + D(`.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` が `## Codiel` 見出しを含むこと、`raguel.config.yaml` が存在し YAML としてパースできること、`.codiel/specs` / `.codiel/runs` / `.codiel/reports` の 3 ディレクトリが存在すること)が揃っていることを初期化済みと判定する。いずれかが揃っていないときは未初期化として `/codiel:init` を案内して終了する。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
 本節が記す ARCHITECTURE の節構成と GOTCHAS のエントリ書式は執筆当時の設計であり、
@@ -457,10 +458,10 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
 - 全フェーズのサブエージェントが作業前に必読(ディスパッチプロンプトで強制)
 - Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成する
 
-### CLAUDE.md(← CLAUDE.example.md)
+### `.claude/rules/codiel.md`(← `assets/rules/codiel.md`)
 
 Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
-codiel はこの 2 つに触れないので、CLAUDE.md にも書かない。metatron が有る環境では、これらの
+codiel はこの 2 つに触れないので、rules にも書かない。metatron が有る環境では、これらの
 存在と扱い方は SessionStart の注入と `.claude/rules/metatron/` を通して伝わる。
 
 文書の扱い:
@@ -478,6 +479,13 @@ codiel はこの 2 つに触れないので、CLAUDE.md にも書かない。met
 - Raguel ゲートは省略しない。ASK / STOP には従う
 - PROCEED した変更が原因で実害(障害・リグレッション)が出たら、必ず incident として申告し
   `record_outcome(incident)` を記録させる(自動検知できない唯一の結末であり、最も価値の高い失敗判例)
+
+### CLAUDE.md の `## Codiel`(← `CLAUDE.example.md`)
+
+CLAUDE.md はセッションの最初にだけ読まれるので、規律の全文ではなく置き場の地図と入口の
+コマンドだけを置く。intent 文書・持続層・run の状態・テスト仕様書・保護パスの置き場と、
+`/codiel:run`・`/codiel:init`・`/codiel:test` の入口を示す(固定文言は `CLAUDE.example.md` の
+「## Codiel」セクションを参照)。
 
 ARCHITECTURE / GOTCHAS を作業の前提として読む規律、乖離の報告、失敗の記録の手順は
 `orchestrating-runs`(依頼文テンプレートの「前提」、「7. 失敗の記録」、finalize の結果

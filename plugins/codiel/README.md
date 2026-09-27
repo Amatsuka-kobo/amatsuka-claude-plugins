@@ -14,9 +14,9 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 ### `/codiel:init`
 
 対象プロジェクトに Codiel ハーネスを初期化します。対話で保護パスを聞き取り、
-`raguel.config.yaml` と `CLAUDE.md` の運用ルール節、`.codiel/` 配下のディレクトリを用意します。
-既存ファイルは壊さず不足分だけを追記するため、再実行は常に安全です。内部では
-`initializing-harness` スキルの手順に従います。
+`raguel.config.yaml` と `.claude/rules/codiel.md`、`CLAUDE.md` の `## Codiel` セクション、
+`.codiel/` 配下のディレクトリを用意します。既存ファイルは壊さず不足分だけを追記するため、
+再実行は常に安全です。内部では `initializing-harness` スキルの手順に従います。
 
 Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
 前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
@@ -84,7 +84,8 @@ NG があってもコード修正はディスパッチせず、結果を `.codie
 
 1. このプラグインを Claude Code にインストールします(marketplace 経由、または `--plugin-dir` で直接指定)。
 2. 対象プロジェクトのルートで `/codiel:init` を実行します。対話に答えると、
-   `CLAUDE.md` / `raguel.config.yaml` / `.codiel/` 配下のディレクトリが用意されます。
+   `.claude/rules/codiel.md` / `CLAUDE.md` / `raguel.config.yaml` / `.codiel/` 配下のディレクトリが
+   用意されます。
 3. `/codiel:run [<Issue番号> | <intentパス>]` で run を開始します。未初期化のまま `/codiel:run` を実行した場合は
    `/codiel:init` の実行を案内して終了します(フェイルクローズド)。
 

@@ -1,43 +1,22 @@
 # CLAUDE.md
 
 <!-- 記入ガイド
-このファイルは、Codiel ハーネス(`.codiel/` 配下・run の状態管理・変更ごとの intent 文書)を
-正しく運用するための決まりを、対象プロジェクトの CLAUDE.md に常駐させるための雛形です。
-`/codiel:init`(initializing-harness スキル)がこのファイルの「## Codiel ハーネス運用ルール」
-セクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md がなければ新規作成し、
-既にある場合は同セクションがなければ末尾に追記、あれば変更しません)。
-本文の規則は `plugins/codiel/docs/DESIGN.md` の「9. docs」の「CLAUDE.md」セクションと対応させます。
-文言は変更してよいが、規則の内容(何を・いつ・どう扱うか)は削らないこと。
+このファイルの「## Codiel」セクションは、Codiel ハーネス(`.codiel/` 配下・run の状態管理・
+変更ごとの intent 文書)の置き場の地図と入口のコマンドを、対象プロジェクトの CLAUDE.md へ
+常駐させるための雛形です。CLAUDE.md はセッションの最初にだけ読まれるため、ここには
+最初に知っておくべき知識だけを置きます。`/codiel:init`(initializing-harness スキル)が
+このセクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md が無ければ新規作成し、
+既にある場合は同セクションが無ければ末尾に追記、あれば変更しません)。
+運用の規律(文書の扱いと規則)は、対応する雛形 `plugins/codiel/assets/rules/codiel.md` から
+対象プロジェクトの `.claude/rules/codiel.md`(`paths` の指定なし)に置きます。
+本文は `plugins/codiel/docs/DESIGN.md` の「9. docs」の「CLAUDE.md の `## Codiel`」セクションと
+対応させます。文言は変更してよいが、置き場の情報は削らないこと。
 -->
 
-## Codiel ハーネス運用ルール
+## Codiel
 
-### 文書の扱い
-
-- intent 文書(`docs/intents/`)の原文のセクション(`## ASIS` / `## TOBE`)は、ユーザーが自分で
-  書いた・語った言葉の記録である。要約せず、言い換えず、既存の記録を書き換えない。言葉を足すときは、
-  日付・話者・出所の行を添えて末尾に追記する。
-- 持続層(`docs/intents/domains/`)は要件と意図的な制約を長く残す資産であり、intent-sync フェーズの
-  外では書き換えない。`[ADR 候補]` の印が付いたエントリを参照形へ縮める作業も intent-sync フェーズの
-  外で行うため、それ以外のセッションはこのエントリを書き換えない。
-- テスト仕様書(`.codiel/specs/`)は機能の一部であり、使い捨て成果物ではない。振る舞いを変える変更を
-  行ったら、対応する unit の `spec.md` を更新し、`cases.md` を再生成し、scripts を追随させる。
-
-### 規則
-
-1. **run から渡された前提を使う**
-   すべてのフェーズ(intent〜finalize)の作業開始前に、run から渡された前提を使う。
-2. **`.codiel/runs/**/state.json` を直接編集しない(codiel-state 経由のみ)**
-   フェーズ遷移・試行カウンタの更新は同梱スクリプト `codiel-state` のみが行う。Edit / Write
-   ツールによる state.json への直接変更は hooks が拒否する対象であり、それを回避する目的での
-   迂回(別名でのコピー→上書き等)も禁止する。
-3. **Raguel ゲートは省略しない。ASK / STOP には従う**
-   各フェーズで定められた Raguel の evaluate ツール呼び出しを、確実に PROCEED しそうだから・
-   前回 PROCEED だったから等の理由で省略しない。ASK が出たら人間の裁定を待ち、STOP が出たら
-   run を停止する。
-4. **PROCEED した変更が原因で実害が出たら、必ず incident として申告し `record_outcome(incident)`
-   を記録させる**
-   マージ・リリース後に障害やリグレッションが発生し、その原因が Codiel が PROCEED 判定を出した
-   変更にあると判明した場合、人間(または気づいたエージェント)は必ずその旨を明示的に申告する。
-   incident は自動検知できない唯一の結末であり、最も価値の高い失敗判例として Raguel に還流される。
-   申告を怠ると、同種の失敗が判例として蓄積されず再発を防げなくなる。
+- `docs/intents/`: 変更ごとの intent 文書。`domains/` は持続層
+- `.codiel/runs/`: run の状態(codiel-state が管理)
+- `.codiel/specs/`: 機能単位のテスト仕様書
+- `raguel.config.yaml`: Raguel の保護パス
+- 入口: `/codiel:run`・`/codiel:init`・`/codiel:test`

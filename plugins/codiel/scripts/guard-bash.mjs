@@ -320,7 +320,7 @@ function splitLoosely(cmd) {
   for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
     let words = [];
     for (const tok of segment.split(/\s+/)) {
-      const w = tok.replace(/^[("'`$]+|["'`)]+$/g, "");
+      const w = tok.replace(/^(?:[A-Za-z_]\w*=)?[("'`$]*|["'`)]+$/g, "");
       if (w === "gh" || w.endsWith("/gh")) {
         commands.push(words);
         words = [];

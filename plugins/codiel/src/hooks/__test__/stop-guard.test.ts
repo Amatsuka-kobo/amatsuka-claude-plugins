@@ -111,6 +111,24 @@ function setupRunAwaitingHuman(): string {
   return root
 }
 
+// intent-only の run(branch が null)で intent を passed にしたところで止める
+function setupIntentOnlyPassed(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS, "--intent-only"])
+  cli(root, ["start-phase", "intent", "--slug", SLUG])
+  cli(root, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    "e",
+    "--verdict",
+    "PROCEED"
+  ])
+  return root
+}
+
 // --- stop-guard.mjs テスト ---
 
 test("stop-guard: run なし → 出力なし(空 stdout)で exit 0", () => {
@@ -310,4 +328,15 @@ test("stop-guard: finalize が passed で status が active のときは finaliz
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.reason).toMatch(/codiel-state finalize --slug demo/)
+})
+
+test("stop-guard: intent-only の run(branch null)で intent が passed のときは close --reason intent-only を案内する(M2-FX5-AR medium)", () => {
+  const root = setupIntentOnlyPassed()
+  const result = callHook(STOP_GUARD, root)
+  const parsed = JSON.parse(result.stdout)
+  expect(parsed.reason).toMatch(
+    /codiel-state close --slug demo --reason intent-only/
+  )
+  expect(parsed.reason).not.toMatch(/mark-ask finalize/)
+  expect(parsed.reason).not.toMatch(/start-phase/)
 })

@@ -92,7 +92,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 
    | 記号 | 確認対象 | 「揃っている」の判定 |
    | --- | --- | --- |
-   | B | `CLAUDE.md` | ファイルが存在し、`## Codiel ハーネス運用ルール` 見出しを含む |
+   | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` が `## Codiel` 見出しを含む |
    | C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
    | D | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
 

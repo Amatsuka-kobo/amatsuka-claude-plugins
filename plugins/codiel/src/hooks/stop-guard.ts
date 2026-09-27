@@ -17,7 +17,19 @@ if (!input.stop_hook_active) {
         `capturing-intent の手順 5 の (6) を最後まで進めること。` +
         `git switch -c か git commit が失敗したときは、codiel-state stop --slug ${runId} --reason commit-failed で run を終端にしてから確かめること。`
     } else if (run.state.phases[phase].status === "passed") {
-      if (phase === "finalize") {
+      if (
+        run.state.branch === null &&
+        run.state.phases.intent.status === "passed"
+      ) {
+        // intent-only の run(branch が null)は intent 以外のフェーズを持てないので、
+        // intent の pass-gate の後は close で終える(決定 52・61、§6.1.2 の手順 5 の
+        // (6)、M2-FX5-AR medium)。start-phase・skip-phase・mark-ask finalize は
+        // どれも失敗するので示さない。
+        reason =
+          `${header}` +
+          stopHint +
+          `intent-only の run(branch が null)なので、codiel-state close --slug ${runId} --reason intent-only で run を終えること。`
+      } else if (phase === "finalize") {
         // finalize は自分自身の状態を検査しないので、通常の手順では起きないが
         // (phases.finalize が passed のまま status が active に残る状態)、
         // 再実行すれば awaiting_outcome に戻せる(M2-FX5-B c)。
@@ -39,8 +51,9 @@ if (!input.stop_hook_active) {
           `(スキップするフェーズなら先に codiel-state skip-phase <フェーズ> --slug ${runId} --reason "<理由>" で飛ばしてから)、` +
           `codiel-state mark-ask <フェーズ> --slug ${runId} --kind confirm で awaiting_human にしてから停止すること。` +
           `finalize へ進むときは start-phase を使わず、codiel-state mark-ask finalize --slug ${runId} --kind confirm で直接 awaiting_human にすること。` +
+          // 並列ステージの in_progress のきょうだいへの確認案内(M2-FX5-B b)。
           (inProgressSibling
-            ? `同じステージの ${inProgressSibling} が in_progress のまま残っているなら、次のフェーズへ進む前に codiel-state mark-ask ${inProgressSibling} --slug ${runId} --kind confirm で確認すること(M2-FX5-B b)。`
+            ? `同じステージの ${inProgressSibling} が in_progress のまま残っているなら、次のフェーズへ進む前に codiel-state mark-ask ${inProgressSibling} --slug ${runId} --kind confirm で確認すること。`
             : "")
       }
     } else {
