@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -299,6 +300,86 @@ test("active run が無ければ docs/intents/** への書き込みも素通し"
   expect(
     hook(root, "Write", path.join(root, "docs/intents/domains/frontend.md"))
   ).toBe(null)
+})
+
+test("docs/intents/** の規則は大文字小文字の違う綴りでもすり抜けない", () => {
+  const root = setupRun()
+  advanceRunTo(root, "design")
+  for (const f of [
+    "docs/intents/Domains/frontend.md",
+    "docs/Intents/domains/frontend.md",
+    "docs/intents/2026-09-27-other.MD"
+  ])
+    expect(hook(root, "Write", path.join(root, f))?.permissionDecision, f).toBe(
+      "ask"
+    )
+})
+
+// ---------------------------------------------------------------------------
+// intent 文書の基準は repoRoot(git ルート)である(設計書 §6.2.1・§6.3.1・§6.8)。
+// `.codiel` を git ルートの下のディレクトリに作った構成では codielRoot と一致しない。
+// ---------------------------------------------------------------------------
+
+// git ルート repo の下の repo/app に .codiel を置き、cwd=repo/app で init する。
+function setupNestedRun(): { repo: string; app: string } {
+  const repo = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "gw-nested-"))
+  )
+  execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" })
+  const app = path.join(repo, "app")
+  fs.mkdirSync(app)
+  const args = ["init", "--slug", SLUG]
+  for (const [k, v] of Object.entries(INIT_DEFAULTS)) args.push(`--${k}`, v)
+  runTs(CLI, args, { cwd: app })
+  return { repo, app }
+}
+
+test(".codiel が git ルートの下にあっても、state.intent のファイルは phase null と design で通る", () => {
+  const { repo, app } = setupNestedRun()
+  const intent = path.join(repo, INIT_DEFAULTS.intent)
+  expect(hook(app, "Write", intent)).toBe(null)
+  advanceRunTo(app, "design")
+  expect(hook(app, "Write", intent)).toBe(null)
+  // 1 文字違いの別の intent は規則外のフェーズで ask のまま
+  const sibling = path.join(repo, "docs/intents/2026-09-27-demp.md")
+  expect(hook(app, "Write", sibling)?.permissionDecision).toBe("ask")
+})
+
+test(".codiel が git ルートの下にあっても、docs/intents/** の規則は repoRoot 基準で当たる", () => {
+  const other = "docs/intents/2026-09-27-other.md"
+  const domainFile = "docs/intents/domains/frontend.md"
+
+  const nullRun = setupNestedRun()
+  expect(hook(nullRun.app, "Write", path.join(nullRun.repo, other))).toBeNull()
+
+  const syncRun = setupNestedRun()
+  advanceRunTo(syncRun.app, "intent-sync")
+  expect(
+    hook(syncRun.app, "Write", path.join(syncRun.repo, domainFile))
+  ).toBeNull()
+
+  const designRun = setupNestedRun()
+  advanceRunTo(designRun.app, "design")
+  const r = hook(designRun.app, "Write", path.join(designRun.repo, domainFile))
+  expect(r?.permissionDecision).toBe("ask")
+  // 理由のパスも repoRoot 相対(codielRoot 基準の ../docs/… ではない)
+  expect(r?.permissionDecisionReason).toContain(`持続層(${domainFile})`)
+})
+
+test("symlink 経由の cwd で docs/intents/domains/ がまだ無くても、持続層の規則が当たる", () => {
+  const real = fs.realpathSync(setupRun())
+  advanceRunTo(real, "design")
+  const link = path.join(
+    fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gw-link-"))),
+    "repo-link"
+  )
+  fs.symlinkSync(real, link, "dir")
+  // 親ディレクトリ(docs/intents/domains/)が無いので、1 段の実体化では論理パスのまま残り、
+  // 実体パスの repoRoot との相対が ../ に落ちて docs/ の素通しに紛れる
+  expect(
+    hook(link, "Write", path.join(link, "docs/intents/domains/frontend.md"))
+      ?.permissionDecision
+  ).toBe("ask")
 })
 
 // ---------------------------------------------------------------------------
@@ -662,12 +743,12 @@ function setupSymlinkedRepo(): { real: string; link: string } {
   runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: real
   })
-  // 実体化は「親ディレクトリまでは実在する」場合に効く(metatron の realpathOrParent と
-  // 同じ手法)。実運用の新規ファイル作成に合わせ、書き込み先の親を作っておく。
+  // 実運用の新規ファイル作成に合わせ、書き込み先の親を作っておく。
   fs.mkdirSync(path.join(real, "src/server"), { recursive: true })
   fs.mkdirSync(path.join(real, "src/app"), { recursive: true })
-  // **`.codiel/` 側の親も作る。** ここを省くと realpathOrParent が入力をそのまま返す
-  // 無害な恒等関数に落ち、codielRel を論理パス基準にしても実体パス基準にしても同じ値になる。
+  // **`.codiel/` 側の親も作る。** 親が無いと、親 1 つだけを実体化する手法(metatron の
+  // realpathOrParent)は入力をそのまま返す。その手法で codielRel を実体パス基準に揃えても
+  // 論理パス基準のままでも同じ値になる。
   // つまり「codielRel は論理パス基準のまま」という不変条件を張ったつもりのテストが、
   // 実体パス基準へ揃える改変を通してしまう(変異が生き残る)。実運用でも 2 本目以降の
   // レポートやスペックは既存ディレクトリへ書かれるので、親が在る側が既定の状況である。

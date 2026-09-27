@@ -179,6 +179,28 @@ test("init は --intent に絶対パスを受け付けない", () => {
   expect(fs.existsSync(statePath(root, "demo"))).toBe(false)
 })
 
+test("init は --intent を正規化して記録し、docs/intents/ 直下の .md 以外を拒否する", () => {
+  const root = tmpProject()
+  const dotted = init(root, "dotted", {
+    intent: "./docs/intents/2026-09-27-dotted.md"
+  })
+  expect(dotted.code).toBe(0)
+  expect(dotted.out.state.intent).toBe("docs/intents/2026-09-27-dotted.md")
+  for (const bad of [
+    "../docs/intents/x.md",
+    "docs/intents/domains/frontend.md",
+    "docs/intents/x.txt",
+    "docs/x.md",
+    ".codiel/specs/u1/spec.md",
+    "src/index.ts"
+  ]) {
+    const r = init(root, "demo", { intent: bad })
+    expect(r.code, bad).toBe(1)
+    expect(r.err, bad).toMatch(/docs\/intents\/ 直下の \.md/)
+  }
+  expect(fs.existsSync(statePath(root, "demo"))).toBe(false)
+})
+
 test("init は slug の書式と 40 文字の上限を守る", () => {
   const root = tmpProject()
   const max = "a".repeat(40)
@@ -786,6 +808,28 @@ test("branch が null の run では intent 以外の start-phase が失敗す�
   ).toBe("pending")
 })
 
+test("branch が null の run では skip-phase が失敗し、close できる状態を保つ", () => {
+  const root = tmpProject()
+  init(root, "demo", { scale: "light" }, ["--intent-only"])
+  passThrough(root, "demo", ["intent"])
+  for (const ph of ["discuss", "design"]) {
+    const r = run(root, [
+      "skip-phase",
+      ph,
+      "--slug",
+      "demo",
+      "--reason",
+      "軽量"
+    ])
+    expect(r.code, ph).toBe(1)
+    expect(r.err, ph).toMatch(/branch が null/)
+  }
+  expect(
+    run(root, ["get", "--slug", "demo"]).out.state.phases.discuss.status
+  ).toBe("pending")
+  expect(run(root, ["close", "--slug", "demo"]).code).toBe(0)
+})
+
 test("close は intent が passed でないと失敗する", () => {
   const root = tmpProject()
   init(root, "demo", {}, ["--intent-only"])
@@ -813,7 +857,11 @@ test("close は intent 以外のフェーズが pending でないと失敗する
   const root = tmpProject()
   init(root, "demo", { scale: "light" }, ["--intent-only"])
   passThrough(root, "demo", ["intent"])
-  run(root, ["skip-phase", "discuss", "--slug", "demo", "--reason", "軽量"])
+  // branch が null の run は CLI では discuss を動かせない(start-phase も skip-phase も拒否する)
+  // ので、state.json を直接書き換えて close の検査だけを確かめる
+  const raw = JSON.parse(fs.readFileSync(statePath(root, "demo"), "utf8"))
+  raw.phases.discuss.status = "passed"
+  fs.writeFileSync(statePath(root, "demo"), `${JSON.stringify(raw, null, 2)}\n`)
   const r = run(root, ["close", "--slug", "demo"])
   expect(r.code).toBe(1)
   expect(r.err).toMatch(/フェーズ discuss が pending ではありません/)
@@ -967,6 +1015,75 @@ test("finalize で mark-ask → resume した後に codiel-state finalize が成
   expect(r.out.state.phases.finalize.askKind).toBe("confirm")
 })
 
+test("mark-ask は passed と skip 済みのフェーズを拒否し、ゲートの記録を残す", () => {
+  const root = tmpProject()
+  init(root, "demo", { scale: "light" })
+  passThrough(root, "demo", ["intent"])
+  run(root, ["skip-phase", "discuss", "--slug", "demo", "--reason", "軽量"])
+  for (const ph of ["intent", "discuss"]) {
+    const r = run(root, ["mark-ask", ph, "--slug", "demo", "--kind", "confirm"])
+    expect(r.code, ph).toBe(1)
+    expect(r.err, ph).toMatch(/passed のため mark-ask できません/)
+  }
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.status).toBe("active")
+  expect(st.phases.intent.status).toBe("passed")
+  expect(st.phases.intent.evaluationId).toBe("e-intent")
+  expect(st.phases.intent.verdict).toBe("PROCEED")
+  expect(st.phases.discuss.status).toBe("passed")
+  expect(st.phases.discuss.verdict).toBe("SKIPPED")
+})
+
+test("mark-ask は finalize 以外の pending のフェーズを拒否し、start-phase の迂回を許さない", () => {
+  const root = tmpProject()
+  init(root, "demo", {}, ["--intent-only"])
+  const beforeStart = run(root, ["mark-ask", "intent", "--slug", "demo"])
+  expect(beforeStart.code).toBe(1)
+  expect(beforeStart.err).toMatch(/pending のため mark-ask できません/)
+  passThrough(root, "demo", ["intent"])
+  // branch が null の run の implement は start-phase が拒否する。mark-ask → resume でも進めない
+  const r = run(root, ["mark-ask", "implement", "--slug", "demo"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/pending のため mark-ask できません/)
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.status).toBe("active")
+  expect(st.phases.implement.status).toBe("pending")
+})
+
+test("mark-ask は終端の run を拒否し、run を生き返らせない", () => {
+  const root = tmpProject()
+  // completed(文書だけで終えた run)
+  init(root, "closed", {}, ["--intent-only"])
+  passThrough(root, "closed", ["intent"])
+  run(root, ["close", "--slug", "closed", "--reason", "intent-only"])
+  // stopped
+  init(root, "stopped")
+  run(root, ["start-phase", "intent", "--slug", "stopped"])
+  run(root, ["stop", "--slug", "stopped", "--reason", "test"])
+  // awaiting_outcome(finalize は passed)
+  init(root, "demo")
+  fullRun(root, "demo")
+  for (const [slug, phase, status] of [
+    ["closed", "intent", "completed"],
+    ["stopped", "intent", "stopped"],
+    ["demo", "finalize", "awaiting_outcome"]
+  ]) {
+    const r = run(root, [
+      "mark-ask",
+      phase,
+      "--slug",
+      slug,
+      "--kind",
+      "confirm"
+    ])
+    expect(r.code, slug).toBe(1)
+    expect(r.err, slug).toMatch(/すでに終端状態です/)
+    expect(run(root, ["get", "--slug", slug]).out.state.status, slug).toBe(
+      status
+    )
+  }
+})
+
 // --- v1 の扱い ---
 
 test("v1 の run には get と stop だけが通り、ほかのコマンドは §6.2.4 の文言で失敗する", () => {
@@ -1030,6 +1147,31 @@ test("findActiveRun は version 2 の run だけを返し、runs 直下のファ
   const found = findActiveRun(root)
   expect(found?.state.runId).toBe("demo")
   expect(found?.dir).toBe(path.join(root, ".codiel/runs/demo/try-1"))
+})
+
+test("state.json の無い try は run として扱わず、手前の try を最新とする", () => {
+  const root = tmpProject()
+  // run でないディレクトリ
+  fs.mkdirSync(path.join(root, ".codiel/runs/junk/try-1"), { recursive: true })
+  expect(findActiveRun(root)).toBeNull()
+  const empty = run(root, ["get", "--active"])
+  expect(empty.code).toBe(0)
+  expect(empty.out.runs).toStrictEqual([])
+  // init の mkdir の後、writeState の前で中断した try-2
+  init(root)
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  fs.mkdirSync(path.join(root, ".codiel/runs/demo/try-2/reports"), {
+    recursive: true
+  })
+  const got = run(root, ["get", "--slug", "demo"])
+  expect(got.code).toBe(0)
+  expect(got.out.state.try).toBe(1)
+  expect(got.out.state.status).toBe("stopped")
+  // 次の init は中断した try-2 を使い直す
+  const again = init(root)
+  expect(again.code).toBe(0)
+  expect(again.out.state.try).toBe(2)
+  expect(fs.existsSync(statePath(root, "demo", 2))).toBe(true)
 })
 
 // --- ドメイン ---

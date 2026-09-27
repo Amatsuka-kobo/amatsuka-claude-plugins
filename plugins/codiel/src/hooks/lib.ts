@@ -168,6 +168,19 @@ export function findDocRoot(startDir?: string): string {
   return start
 }
 
+/**
+ * intent 文書(`docs/intents/`)の基準になる repoRoot を返す(設計書 §6.3.1。設定を持たない)。
+ *
+ * `git rev-parse --show-toplevel` を使い、git が無い・git 管理外なら開始ディレクトリを返す
+ * (findDocRoot の、設定ファイルが無いときの解決と同じ扱い)。git が実体パスを返すので、
+ * 開始ディレクトリも実体パスにしてから使う。文書ルート(findDocRoot)と codiel 資産のルート
+ * (findProjectRoot)とは基準が異なる。
+ */
+export function findRepoRoot(startDir: string): string {
+  const start = realpathOrSelf(path.resolve(startDir))
+  return gitToplevel(start) ?? start
+}
+
 // Windows で書かれた設定を POSIX 上でも同じに解釈するため、区切りを "/" に寄せてから判定する。
 function normalizeSeparators(value: string): string {
   return value.replace(/\\/g, "/")

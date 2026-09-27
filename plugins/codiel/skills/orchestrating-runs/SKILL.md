@@ -135,9 +135,9 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 ```
 
 - **同時にアクティブにできる run は 1 つだけ**(hooks の `findActiveRun` は単一 run の存在を前提に
-  動作する)。別の run を新たに開始する前に、既存の `active`/`awaiting_human` の run を
+  動作する)。既存の `active`/`awaiting_human` の run のうち、今回再開しないものだけを
   `finalize`(全フェーズ完了時)または `codiel-state stop --slug <slug> --reason <理由>`(中止時)で
-  終端状態にする。
+  終端状態にする。今回再開する run かどうかの判定は `capturing-intent` の手順 0 に従う。
 - run の解決自体は intent フェーズ(`capturing-intent` スキル)へつなぐ。Issue 番号・intent パス・省略の
   どの入口でも、既存 intent との重複確認、聞き取り、現状調査、分岐の合意、ドラフト提示、承認ゲート、
   `codiel-state init` による run 作成までを `capturing-intent` の手順に従って進める。
@@ -265,6 +265,9 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>
   ```
   `awaiting_human` にしてから確認し、答えを得たら `resume` で戻す。`evaluationId` は無くてよい。
+  `mark-ask` が受け付けるのは `in_progress` のフェーズと、`pending` の finalize だけである。
+  フェーズの合間(直前のフェーズが passed で、次がまだ pending)に確認するときは、次のフェーズを
+  `start-phase` してから `mark-ask` する。
 - ユーザーが run の途中で言葉を足したら、どのフェーズでもその場で intent の原文のセクション
   (`## ASIS` / `## TOBE`)の末尾へ、日付・話者・出所の行つきで即座に追記する。承認は要らない。
   既存の原文は書き換えない。
@@ -419,8 +422,10 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
    で `state.json` を取得する。
 2. `state.branch` が `null` でなければ `git switch <state.branch>` で run のブランチに切り替える。
    カレントブランチが別 run やベースブランチのままだと、成果物コミットが誤ったブランチに乗る。
-   `state.branch` が `null` の run(intent フェーズの承認から `start-phase intent` までの間で止まった
-   run)は、開始時のブランチの作業ツリーで intent フェーズの続きを行う。
+   `git switch` の対象のブランチがまだ存在しないときは(`init` の後、`git switch -c` の前で止まった
+   続行する run)、`capturing-intent` の手順 5 の (6) の続きから行い、`git switch -c <state.branch>`
+   でブランチを作ってから続ける。`state.branch` が `null` の run(`--intent-only` の run)は、
+   開始時のブランチの作業ツリーで intent フェーズの続きを行う。
 3. 連携モードを再判定する。`node <plugin-root>/scripts/check-intent-env.mjs` を実行し直し、§0 の手順 3
    でもう一度判断する。判断が `state.integration` の記録と違えば、どちらで続けるかを人に確認する。
    記録を変えるときは次を実行する。記録どおりなら何もしない。

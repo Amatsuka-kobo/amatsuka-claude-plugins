@@ -34,11 +34,11 @@ function tries(dir) {
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
-  const ts = tries(dir);
-  if (ts.length === 0) return null;
-  const n = ts[ts.length - 1];
-  const p = path.join(dir, `try-${n}`, "state.json");
-  return { tryN: n, statePath: p, state: readState(p) };
+  for (const n of tries(dir).reverse()) {
+    const p = path.join(dir, `try-${n}`, "state.json");
+    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
 }
 function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");
@@ -150,6 +150,10 @@ function findDocRoot(startDir) {
   const top = gitToplevel(start);
   if (top) return top;
   return start;
+}
+function findRepoRoot(startDir) {
+  const start = realpathOrSelf(path2.resolve(startDir));
+  return gitToplevel(start) ?? start;
 }
 function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
@@ -374,28 +378,31 @@ var CODE_PHASES = /* @__PURE__ */ new Set([
   "test-loop",
   "fix-loop"
 ]);
-var INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/;
+var INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/i;
 var INTENT_DOC_PHASES = /* @__PURE__ */ new Set([
   null,
   "intent",
   "intent-sync",
   "triage"
 ]);
-var INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/;
+var INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/i;
 function toDomainMap(value) {
   if (value === null) return null;
   const map = /* @__PURE__ */ Object.create(null);
   for (const [name, globs] of Object.entries(value)) map[name] = globs;
   return map;
 }
-function realpathOrParent(abs) {
-  try {
-    return fs3.realpathSync(abs);
-  } catch {
+function realpathOrAncestor(abs) {
+  let dir = abs;
+  let rest = "";
+  while (true) {
     try {
-      return path3.join(fs3.realpathSync(path3.dirname(abs)), path3.basename(abs));
+      return path3.join(fs3.realpathSync(dir), rest);
     } catch {
-      return abs;
+      const parent = path3.dirname(dir);
+      if (parent === dir) return abs;
+      rest = path3.join(path3.basename(dir), rest);
+      dir = parent;
     }
   }
 }
@@ -420,19 +427,20 @@ try {
   const run = findActiveRun(codielRoot);
   if (run?.state.status !== "active") pass();
   const phase = run.state.phase;
-  if (run.state.intent === codielRel) pass();
-  if (INTENT_DOMAIN_RE.test(codielRel)) {
+  const repoRel = path3.relative(findRepoRoot(codielRoot), realpathOrAncestor(abs)).replaceAll("\\", "/");
+  if (run.state.intent === repoRel) pass();
+  if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass();
     emit(
       "ask",
-      `\u6301\u7D9A\u5C64(${codielRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F intent-sync \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
+      `\u6301\u7D9A\u5C64(${repoRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F intent-sync \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
     );
   }
-  if (INTENT_DOC_RE.test(codielRel)) {
+  if (INTENT_DOC_RE.test(repoRel)) {
     if (INTENT_DOC_PHASES.has(phase)) pass();
     emit(
       "ask",
-      `intent \u6587\u66F8(${codielRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F\u3053\u306E\u30D5\u30A7\u30FC\u30BA\u3067\u306F\u60F3\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
+      `intent \u6587\u66F8(${repoRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F\u3053\u306E\u30D5\u30A7\u30FC\u30BA\u3067\u306F\u60F3\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
     );
   }
   if (DOC_PHASES.has(phase)) {
@@ -452,7 +460,7 @@ try {
     const domain = run.state.domain;
     if (domain && !codielRel.startsWith(".codiel/")) {
       const docRoot = findDocRoot(cwd);
-      const docRel = path3.relative(docRoot, realpathOrParent(abs)).replaceAll("\\", "/");
+      const docRel = path3.relative(docRoot, realpathOrAncestor(abs)).replaceAll("\\", "/");
       const { domains: rawDomains, warnings } = readDomainsResult(cwd);
       const domains = toDomainMap(rawDomains);
       if (domains) {

@@ -6,7 +6,7 @@
 `/codiel:init`(initializing-harness スキル)がこのファイルの「## Codiel ハーネス運用ルール」
 セクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md がなければ新規作成し、
 既にある場合は同セクションがなければ末尾に追記、あれば変更しません)。
-本文の規則は `plugins/codiel/docs/DESIGN.md` の「9. docs」の「CLAUDE.md」節と対応させます。
+本文の規則は `plugins/codiel/docs/DESIGN.md` の「9. docs」の「CLAUDE.md」セクションと対応させます。
 文言は変更してよいが、規則の内容(何を・いつ・どう扱うか)は削らないこと。
 -->
 

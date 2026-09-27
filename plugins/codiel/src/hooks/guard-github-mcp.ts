@@ -4,13 +4,17 @@ import { emit, findProjectRoot, pass, readStdin } from "./lib.js"
 
 const MARKER = "<!-- codiel:generated -->"
 
-// GitHub MCP(github/github-mcp-server)で本文を書き込むツール。対象と本文の引数名は
-// Context7 で同ライブラリ(v1.12.2、2026-09-27 取得)の現行のツール定義を確認して確定した。
-// create_issue / update_issue は issue_write に統合済みで現行のツール定義に無いため対象から外した。
-// 本文の引数名はいずれも body である。
+// GitHub MCP で Issue・PR へ本文を書き込むツール。本文の引数名はいずれも body である。
+// 対象は 2026-09-27 に次の定義で確かめた。
+// - github/github-mcp-server の README.md(既定のツール)と docs/feature-flags.md
+//   (issues_granular・pull_requests_granular で有効になるツール)。Context7 の
+//   /github/github-mcp-server と、同リポジトリの main の原文で確かめた。
+// - 旧 @modelcontextprotocol/server-github(servers-archived)の update_issue。
 // サーバー名に github を含むことを条件にし、Linear など別の MCP の同名のツールには掛けない。
+// サーバー名は利用者が付けるので、github の大文字小文字は区別しない(例 mcp__GitHub__…)。
+// hooks/hooks.json の matcher と同じ正規表現にする。
 const TARGET_TOOL_RE =
-  /^mcp__.*github.*__(issue_write|add_issue_comment|update_issue_comment|create_pull_request|update_pull_request|update_pull_request_body|create_pull_request_review|add_comment_to_pending_review|pull_request_review_write)$/
+  /^mcp__.*[Gg][Ii][Tt][Hh][Uu][Bb].*__(issue_write|create_issue|update_issue|update_issue_body|add_issue_comment|update_issue_comment|create_pull_request|update_pull_request|update_pull_request_body|create_pull_request_review|pull_request_review_write|submit_pending_pull_request_review|add_comment_to_pending_review|add_pull_request_review_comment|add_reply_to_pull_request_comment)$/
 
 try {
   const input = await readStdin()

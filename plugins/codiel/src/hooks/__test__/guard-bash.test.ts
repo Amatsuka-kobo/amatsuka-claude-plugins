@@ -507,3 +507,162 @@ test("active run が無いときは、本文にマーカーが無くても通る
   const r = hook(root, 'gh issue comment 1 --body "マーカー無し"')
   expect(r).toBe(null)
 })
+
+// --- 本文フラグの書き方の揺れ(M2-AR の medium) ---
+
+test("短いフラグに値を連結した -b でも、マーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(root, 'gh pr comment 1 -b"no marker"')
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("短いフラグに値を連結した -F でも、ファイルにマーカーが無ければ deny", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "body.md"), "本文だけ\n")
+  const r = hook(root, "gh pr comment 1 -Fbody.md")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("--body-file のパスがクォートで囲まれていても、中身にマーカーがあれば通る", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "body.md"), `本文\n${MARKER}\n`)
+  const r = hook(root, 'gh pr comment 1 --body-file "body.md"')
+  expect(r).toBe(null)
+})
+
+test("object と action の間に -R <repo> があっても、マーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(root, "gh pr -R o/r comment 1 --body nomarker")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test('bash -c "gh …" の中の投稿も、マーカーが無ければ deny', () => {
+  const root = setupRun()
+  const r = hook(root, 'bash -c "gh pr comment 1 --body nomarker"')
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("$(gh …) の中の投稿も、マーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(root, "echo $(gh pr comment 1 --body nomarker)")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+// --- gh api で送る本文のマーカー(決定 53。§6.8 の 7 コマンドの外) ---
+
+test("gh api の -f body= はマーカーが無ければ deny(PR の行コメント)", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    'gh api repos/o/r/pulls/1/comments -f body="no marker" -f path=a -F line=1'
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh api の -f body= はマーカーがあれば通る", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    `gh api repos/o/r/pulls/1/comments -f body="本文 ${MARKER}" -f path=a -F line=1`
+  )
+  expect(r).toBe(null)
+})
+
+test("gh api の -X PATCH --raw-field body= はマーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    "gh api -X PATCH repos/o/r/issues/comments/1 --raw-field body=nomarker"
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh api の --field=body= はマーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    "gh api repos/o/r/issues/1/comments --field=body=nomarker"
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh api の入れ子の comments[][body] もマーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    "gh api repos/o/r/pulls/1/reviews -f event=COMMENT -f 'comments[][body]=nomarker' -f 'comments[][path]=a'"
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh api の -F body=@<パス> はファイルにマーカーがあれば通り、無ければ deny", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "ok.md"), `本文\n${MARKER}\n`)
+  fs.writeFileSync(path.join(root, "ng.md"), "本文だけ\n")
+  expect(hook(root, "gh api repos/o/r/issues/1/comments -F body=@ok.md")).toBe(
+    null
+  )
+  expect(
+    hook(root, "gh api repos/o/r/issues/1/comments -F body=@ng.md")
+      ?.permissionDecision
+  ).toBe("deny")
+})
+
+test("gh api の -F body=@- は標準入力を検査できないため deny", () => {
+  const root = setupRun()
+  const r = hook(root, "gh api repos/o/r/issues/1/comments -F body=@-")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh api の --input は body のキーを持つファイルにマーカーが無ければ deny、あれば通る", () => {
+  const root = setupRun()
+  fs.writeFileSync(
+    path.join(root, "ng.json"),
+    JSON.stringify({ event: "COMMENT", body: "本文だけ" })
+  )
+  fs.writeFileSync(
+    path.join(root, "ok.json"),
+    JSON.stringify({ event: "COMMENT", body: `本文 ${MARKER}` })
+  )
+  expect(
+    hook(root, "gh api repos/o/r/pulls/1/reviews --input ng.json")
+      ?.permissionDecision
+  ).toBe("deny")
+  expect(hook(root, "gh api repos/o/r/pulls/1/reviews --input ok.json")).toBe(
+    null
+  )
+})
+
+test("gh api の --input - は標準入力を検査できないため deny", () => {
+  const root = setupRun()
+  const r = hook(root, "gh api repos/o/r/pulls/1/reviews --input -")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("gh api の --input で body のキーを持たない更新(ラベルだけ)は通る", () => {
+  const root = setupRun()
+  fs.writeFileSync(
+    path.join(root, "labels.json"),
+    JSON.stringify({ labels: ["bug"] })
+  )
+  const r = hook(
+    root,
+    "gh api -X PUT repos/o/r/issues/1/labels --input labels.json"
+  )
+  expect(r).toBe(null)
+})
+
+test("gh api の読み取りとラベルだけの更新は通る", () => {
+  const root = setupRun()
+  expect(hook(root, "gh api repos/o/r/pulls/1/comments")).toBe(null)
+  expect(hook(root, "gh api repos/o/r/issues/1/labels -f 'labels[]=bug'")).toBe(
+    null
+  )
+  expect(hook(root, "gh api -X GET search/issues -f q=is:open")).toBe(null)
+})
+
+test("active run が無いときは、gh api の本文にマーカーが無くても通る", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const r = hook(root, "gh api repos/o/r/issues/1/comments -f body=nomarker")
+  expect(r).toBe(null)
+})

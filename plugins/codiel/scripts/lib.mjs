@@ -88,6 +88,10 @@ function findDocRoot(startDir) {
   if (top) return top;
   return start;
 }
+function findRepoRoot(startDir) {
+  const start = realpathOrSelf(path.resolve(startDir));
+  return gitToplevel(start) ?? start;
+}
 function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
 }
@@ -308,6 +312,7 @@ export {
   emit,
   findDocRoot,
   findProjectRoot,
+  findRepoRoot,
   globToRegExp,
   pass,
   readDomains,

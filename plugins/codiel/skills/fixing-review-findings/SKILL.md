@@ -72,7 +72,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 所見と PR コメントの対応付け
 
-所見を PR へ投稿する(`reviewing-diffs` の「所見の統合と投稿」節、および再レビュー後)際、
+所見を PR へ投稿する(`reviewing-diffs` の「所見の統合と投稿」セクション、および再レビュー後)際、
 オーケストレーターは投稿した各行コメントの URL(または ID)を `reports/review-<n>.md` の該当所見に
 追記する。以降の「反論」「対応」の返信は常にこの URL に対して行う(所見テキストの一致だけで
 コメントを探し直さない)。

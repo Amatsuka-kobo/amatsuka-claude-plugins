@@ -30,11 +30,11 @@ function tries(dir) {
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
-  const ts = tries(dir);
-  if (ts.length === 0) return null;
-  const n = ts[ts.length - 1];
-  const p = path.join(dir, `try-${n}`, "state.json");
-  return { tryN: n, statePath: p, state: readState(p) };
+  for (const n of tries(dir).reverse()) {
+    const p = path.join(dir, `try-${n}`, "state.json");
+    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
 }
 function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");

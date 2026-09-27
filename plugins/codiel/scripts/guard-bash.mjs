@@ -34,11 +34,11 @@ function tries(dir) {
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
-  const ts = tries(dir);
-  if (ts.length === 0) return null;
-  const n = ts[ts.length - 1];
-  const p = path.join(dir, `try-${n}`, "state.json");
-  return { tryN: n, statePath: p, state: readState(p) };
+  for (const n of tries(dir).reverse()) {
+    const p = path.join(dir, `try-${n}`, "state.json");
+    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
 }
 function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");
@@ -163,9 +163,13 @@ var MARKED_GH_COMMANDS = /* @__PURE__ */ new Set([
   "pr edit",
   "pr review"
 ]);
+var GH_VALUE_OPTS = ["-R", "--repo"];
 function isGhToken(tok) {
-  const stripped = tok.replace(/^\(+/, "");
+  const stripped = tok.replace(/^[("'`$]+/, "");
   return stripped === "gh" || stripped.endsWith("/gh");
+}
+function unquote(tok) {
+  return tok.replace(/^["']+|["']+$/g, "");
 }
 function findGhInvocations(cmd) {
   const invocations = [];
@@ -175,57 +179,100 @@ function findGhInvocations(cmd) {
     if (ghIdx === -1) continue;
     const skipOptions = (from) => {
       let idx = from;
-      while (idx < tokens.length && tokens[idx].startsWith("-")) idx++;
+      while (idx < tokens.length && tokens[idx].startsWith("-"))
+        idx += GH_VALUE_OPTS.includes(tokens[idx]) ? 2 : 1;
       return idx;
     };
     const objIdx = skipOptions(ghIdx + 1);
-    const actionIdx = skipOptions(objIdx + 1);
     const object = tokens[objIdx];
-    const action = tokens[actionIdx];
+    if (object === "api") {
+      invocations.push({ tokens, command: "api" });
+      continue;
+    }
+    const action = tokens[skipOptions(objIdx + 1)];
     if (object !== void 0 && action !== void 0)
       invocations.push({ tokens, command: `${object} ${action}` });
   }
   return invocations;
 }
-function flagValue(tokens, names) {
-  for (let i = 0; i < tokens.length; i++) {
-    const tok = tokens[i];
-    if (names.includes(tok)) return tokens[i + 1];
-    const matched = names.find((n) => tok.startsWith(`${n}=`));
-    if (matched !== void 0) return tok.slice(matched.length + 1);
+function flagAt(tokens, i, names) {
+  const tok = tokens[i];
+  for (const n of names) {
+    if (tok === n) return tokens[i + 1];
+    if (tok.startsWith(`${n}=`)) return tok.slice(n.length + 1);
+    if (/^-[^-]$/.test(n) && tok.startsWith(n) && tok.length > 2)
+      return tok.slice(2);
   }
   return void 0;
 }
-function readFileOrDeny(filePath) {
+function flagValue(tokens, names) {
+  for (let i = 0; i < tokens.length; i++) {
+    const value = flagAt(tokens, i, names);
+    if (value !== void 0) return value;
+  }
+  return void 0;
+}
+function readBodyFile(flag, file, cwd) {
+  if (file === "-")
+    emit(
+      "deny",
+      `${flag} \u306B - (\u6A19\u6E96\u5165\u529B)\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u30D1\u30B9\u3067\u6E21\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+    );
   try {
-    return fs3.readFileSync(filePath, "utf8");
+    return fs3.readFileSync(path3.resolve(cwd, file), "utf8");
   } catch {
-    return emit("deny", `--body-file \u306E\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${filePath}`);
+    return emit("deny", `${flag} \u306E\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${file}`);
+  }
+}
+function denyMissingMarker(command) {
+  return emit(
+    "deny",
+    `gh ${command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+  );
+}
+function checkGhApiBody(tokens, cmd, cwd) {
+  const fields = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const raw = flagAt(tokens, i, ["--raw-field", "-f"]);
+    if (raw !== void 0) fields.push({ typed: false, value: unquote(raw) });
+    const typed = flagAt(tokens, i, ["--field", "-F"]);
+    if (typed !== void 0) fields.push({ typed: true, value: unquote(typed) });
+  }
+  const input = flagValue(tokens, ["--input"]);
+  const explicitMethod = flagValue(tokens, ["--method", "-X"]);
+  const method = explicitMethod !== void 0 ? unquote(explicitMethod).toUpperCase() : fields.length > 0 || input !== void 0 ? "POST" : "GET";
+  if (!["POST", "PATCH", "PUT"].includes(method)) return;
+  for (const { typed, value } of fields) {
+    const eq = value.indexOf("=");
+    const key = eq === -1 ? value : value.slice(0, eq);
+    if (key !== "body" && !key.endsWith("[body]")) continue;
+    const val = value.slice(eq + 1);
+    if (typed && val.startsWith("@")) {
+      const content = readBodyFile("-F", unquote(val.slice(1)), cwd);
+      if (!content.includes(GENERATED_MARKER)) denyMissingMarker("api");
+    } else if (!cmd.includes(GENERATED_MARKER)) denyMissingMarker("api");
+  }
+  if (input !== void 0) {
+    const content = readBodyFile("--input", unquote(input), cwd);
+    if (/"body"\s*:/.test(content) && !content.includes(GENERATED_MARKER))
+      denyMissingMarker("api");
   }
 }
 function checkGeneratedMarker(cmd, cwd) {
   for (const inv of findGhInvocations(cmd)) {
+    if (inv.command === "api") {
+      checkGhApiBody(inv.tokens, cmd, cwd);
+      continue;
+    }
     if (!MARKED_GH_COMMANDS.has(inv.command)) continue;
     const bodyVal = flagValue(inv.tokens, ["--body", "-b"]);
     const bodyFileVal = flagValue(inv.tokens, ["--body-file", "-F"]);
     if (bodyVal === void 0 && bodyFileVal === void 0) continue;
     if (bodyVal !== void 0 && !cmd.includes(GENERATED_MARKER))
-      emit(
-        "deny",
-        `gh ${inv.command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
-      );
+      denyMissingMarker(inv.command);
     if (bodyFileVal !== void 0) {
-      if (bodyFileVal === "-")
-        emit(
-          "deny",
-          "--body-file \u306B - (\u6A19\u6E96\u5165\u529B)\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001--body-file <\u30D1\u30B9> \u3067\u6E21\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
-        );
-      const content = readFileOrDeny(path3.resolve(cwd, bodyFileVal));
-      if (!content.includes(GENERATED_MARKER))
-        emit(
-          "deny",
-          `gh ${inv.command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
-        );
+      const content = readBodyFile("--body-file", unquote(bodyFileVal), cwd);
+      if (!content.includes(GENERATED_MARKER)) denyMissingMarker(inv.command);
     }
   }
 }

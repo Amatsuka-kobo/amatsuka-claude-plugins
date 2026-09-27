@@ -6,6 +6,7 @@ import {
   emit,
   findDocRoot,
   findProjectRoot,
+  findRepoRoot,
   globToRegExp,
   pass,
   readDomainsResult,
@@ -28,14 +29,16 @@ const CODE_PHASES = new Set<string | null>([
 
 // §6.8 の docs/intents/** の規則。直下(domains/ を含まない)の *.md と、
 // domains/ 配下とで通すフェーズが異なるため、2 本の正規表現に分ける。
-const INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/
+// 大文字小文字を区別しない FS(macOS・Windows の既定)で、`docs/Intents/domains/` のような
+// 綴りで同じディレクトリへ書いて制限をすり抜けないよう、i フラグを付ける。
+const INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/i
 const INTENT_DOC_PHASES = new Set<string | null>([
   null,
   "intent",
   "intent-sync",
   "triage"
 ])
-const INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/
+const INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/i
 
 // 契約 §1 の検証 4 項目は `readDomains` 側で行う(2 実装で同じ判定にするため)。
 // ここが担うのは**プロトタイプなしのマップへの詰め替え**だけである。`toString` のような
@@ -50,19 +53,23 @@ function toDomainMap(
   return map
 }
 
-// 実体パスへ解決する。**書き込み先はまだ存在しないことがある**(新規作成)ため、
-// 本体が解決できなければ親ディレクトリで解決してファイル名を付け直す。
-// どちらも解決できなければ入力をそのまま返す(例外は投げない)。
-// metatron の `src/guard-docs.ts` の `realpathOrParent` と同じ手法。2 プラグイン(metatron と codiel)は
-// 互いのインストールパスを解決できないため、import せず同じ手法を独立に持つ。
-function realpathOrParent(abs: string): string {
-  try {
-    return fs.realpathSync(abs)
-  } catch {
+// 実体パスへ解決する。**書き込み先とその親はまだ存在しないことがある**(新規作成)ため、
+// 実在する最も近い祖先を実体パスにして、残りの区間を付け直す。例外は投げない。
+// metatron の `src/guard-docs.ts` の `realpathOrParent` は親 1 つだけを解決する。ここは
+// 祖先まで辿る。持続層の初回の書き込み(`docs/intents/domains/` がまだ無い)でも、
+// 実体パスで返る repoRoot と座標系をそろえるためである。親が在るときの結果は同じになる。
+// 2 プラグイン(metatron と codiel)は互いのインストールパスを解決できないため、import しない。
+function realpathOrAncestor(abs: string): string {
+  let dir = abs
+  let rest = ""
+  while (true) {
     try {
-      return path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs))
+      return path.join(fs.realpathSync(dir), rest)
     } catch {
-      return abs
+      const parent = path.dirname(dir)
+      if (parent === dir) return abs
+      rest = path.join(path.basename(dir), rest)
+      dir = parent
     }
   }
 }
@@ -94,22 +101,26 @@ try {
       "state.json は codiel-state スクリプト経由でのみ変更できます(フェーズ飛ばし・ゲート偽装の防止)"
     )
 
-  // 基準の異なる 2 つの相対パスを持つ。同じ「rel」で両方を指すと取り違えが起きる。
+  // 基準の異なる 3 つの相対パスを持つ。同じ「rel」で複数を指すと取り違えが起きる。
   //
   // codielRel = codielRoot(`.codiel` を持つ最も近い祖先)基準。判定対象は
   // **ハーネス自身の運用資産の位置**(`.codiel/` 配下か、specs の spec/cases か)。
+  // repoRel = repoRoot(git ルート)基準。判定対象は **intent 文書の位置**
+  // (`state.intent` との一致と `docs/intents/**`。設計書 §6.2.1・§6.3.1・§6.8)。
   // docRel  = docRoot(契約 §3 規則 1)基準。判定対象は **ドメイン境界の glob**。
   //
   // 契約 §3 は docRoot と codielRoot が異なる構成(例: repo/.codiel と
   // repo/sub/metatron.config.json)を正常と定めるため、この 2 つは一致するとは限らない。
+  // repoRoot と codielRoot も、git ルートの下のディレクトリでセッションを始めて
+  // `.codiel` をそこに作った構成(repo/app/.codiel)では一致しない。
   //
-  // **2 つの相対パスは前処理も異なる。** 揃える相手が違うためである。
+  // **相対パスは前処理も異なる。** 揃える相手が違うためである。
   // codielRel は **論理パス基準**(abs をそのまま使う)。基準の findProjectRoot は
   // 論理パスを `path.dirname` で辿るだけで実体化しないので、こちらだけ実体パス化すると
   // symlink 越しの cwd で相対が `../` に落ち、`.codiel/` 免除が外れる。
-  // docRel は **実体パス基準**(下の realpathOrParent を通す)。基準の findDocRoot は
-  // 契約 §3 規則 1 の細目に従って開始ディレクトリを実体パス化する。
-  // 「一貫性のため」どちらか片方に揃えると、揃えた側の基準関数と食い違って壊れる。
+  // repoRel と docRel は **実体パス基準**(realpathOrAncestor を通す)。基準の findRepoRoot と
+  // findDocRoot は、git の出力と契約 §3 規則 1 の細目に従って実体パスを返す。
+  // 「一貫性のため」どれか 1 つに揃えると、揃えた側の基準関数と食い違って壊れる。
   const codielRoot = findProjectRoot(cwd)
   const codielRel = path.relative(codielRoot, abs).replaceAll("\\", "/")
 
@@ -117,25 +128,31 @@ try {
   if (run?.state.status !== "active") pass()
 
   const phase = run.state.phase
+  // repoRoot は run の置き場(codielRoot)から解決する。git の子プロセスを起動するので、
+  // active run があると分かってから求める。
+  const repoRel = path
+    .relative(findRepoRoot(codielRoot), realpathOrAncestor(abs))
+    .replaceAll("\\", "/")
 
   // §6.8 の判定順序: まず state.intent のファイルかを見る。当たればすべての
   // フェーズで通す(run 途中の原文追記、review/finalize での派生文の反映)。
-  if (run.state.intent === codielRel) pass()
+  // 比べるのは repoRoot 相対のパスとの完全一致である(§6.8)。
+  if (run.state.intent === repoRel) pass()
 
   // 次に docs/intents/** の規則を当てる。DOC_PHASES の分岐(直後)は docs/ 全体を
   // 通してしまうため、domains/** への書き込みはそれより先に判定する。
-  if (INTENT_DOMAIN_RE.test(codielRel)) {
+  if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass()
     emit(
       "ask",
-      `持続層(${codielRel})への書き込みは intent-sync フェーズの担当です(現在のフェーズ: ${phase})`
+      `持続層(${repoRel})への書き込みは intent-sync フェーズの担当です(現在のフェーズ: ${phase})`
     )
   }
-  if (INTENT_DOC_RE.test(codielRel)) {
+  if (INTENT_DOC_RE.test(repoRel)) {
     if (INTENT_DOC_PHASES.has(phase)) pass()
     emit(
       "ask",
-      `intent 文書(${codielRel})への書き込みはこのフェーズでは想定していません(現在のフェーズ: ${phase})`
+      `intent 文書(${repoRel})への書き込みはこのフェーズでは想定していません(現在のフェーズ: ${phase})`
     )
   }
 
@@ -181,7 +198,7 @@ try {
       // 相対を取ると docRel が `../tmp/link/src/server/a.ts` になり、
       // **担当範囲内の書き込みが範囲外として ask される**。
       const docRel = path
-        .relative(docRoot, realpathOrParent(abs))
+        .relative(docRoot, realpathOrAncestor(abs))
         .replaceAll("\\", "/")
       // 契約 §1「警告は経路を問わず返す」。警告を捨てる readDomains を使わない。
       const { domains: rawDomains, warnings } = readDomainsResult(cwd)

@@ -115,6 +115,8 @@ const TERMINAL = new Set([
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const SLUG_MAX = 40
 const V1_RUN_RE = /^issue-\d+$/
+// intent 文書の置き場。domains/ 配下は持続層なので含めない
+const INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/
 const INTEGRATIONS = ["github", "local"] as const
 const BOOL_FLAGS = ["active", "human-approved", "intent-only"]
 
@@ -150,13 +152,15 @@ function tries(dir: string): number[] {
     .sort((a, b) => a - b)
 }
 
+// state.json の無い try(init の mkdir と writeState の間で中断したもの、run でない
+// ディレクトリ)は run として扱わず、その手前の try を最新とする。
 export function latestTry(root: string, slug: string): LatestTry | null {
   const dir = runDir(root, slug)
-  const ts = tries(dir)
-  if (ts.length === 0) return null
-  const n = ts[ts.length - 1]
-  const p = path.join(dir, `try-${n}`, "state.json")
-  return { tryN: n, statePath: p, state: readState(p) }
+  for (const n of tries(dir).reverse()) {
+    const p = path.join(dir, `try-${n}`, "state.json")
+    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) }
+  }
+  return null
 }
 
 // runs/ 直下のディレクトリをすべて走査し、各 run の最新 try を返す。
@@ -324,10 +328,18 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(
         `--slug に issue-<N> の形は使えません(codiel 0.x の run ディレクトリと重なるため): ${slug}`
       )
-    const intent = flags.intent
-    if (!intent) fail("--intent が必要です")
-    if (path.isAbsolute(intent))
-      fail(`--intent には repoRoot 相対のパスを渡してください: ${intent}`)
+    const rawIntent = flags.intent
+    if (!rawIntent) fail("--intent が必要です")
+    if (path.isAbsolute(rawIntent))
+      fail(`--intent には repoRoot 相対のパスを渡してください: ${rawIntent}`)
+    // guard-write は正規化した repoRoot 相対のパスと完全一致で比べるので、`./` などを
+    // 落としてから記録する。置き場は docs/intents/ 直下の *.md に限る(設計書 §6.3.1)。
+    // それ以外を受け付けると、そのファイルへの書き込みが全フェーズで通ってしまう。
+    const intent = path.posix.normalize(rawIntent.replaceAll("\\", "/"))
+    if (!INTENT_PATH_RE.test(intent))
+      fail(
+        `--intent には docs/intents/ 直下の .md を repoRoot 相対で渡してください: ${rawIntent}`
+      )
     if ("issue" in flags && !/^[1-9]\d*$/.test(flags.issue ?? ""))
       fail(`不正な --issue: ${flags.issue}`)
     const integration = oneOf(flags, "integration", INTEGRATIONS)
@@ -429,6 +441,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const st = latest.state
     if (st.status !== "active")
       fail(`run が active ではありません(${st.status})。resume してください`)
+    // start-phase と同じく、run ブランチを持たない run を intent より先へ進ませない
+    if (st.branch === null)
+      fail(
+        `branch が null の run(init --intent-only)では ${phase} をスキップできません`
+      )
     if (LIGHT_ONLY_SKIPPABLE.has(phase) && st.scale !== "light")
       fail(
         `${phase} をスキップできるのは scale が light の run だけです(scale: ${st.scale})`
@@ -505,7 +522,18 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         ? oneOf(flags, "kind", ["raguel", "confirm"] as const)
         : "raguel"
     const latest = loadRun(root, flags)
+    if (TERMINAL.has(latest.state.status))
+      fail(`すでに終端状態です: ${latest.state.status}`)
     const ph = latest.state.phases[phase]
+    // passed(skip 済みを含む)を巻き戻すと、ゲートの記録が消え、後続のフェーズを開始できなくなる。
+    // pending を in_progress にできるのは start-phase だけで、mark-ask → resume で迂回させない。
+    // 例外は start-phase を持たない finalize で、pending のまま確認してよい(設計書 §6.1.1)。
+    if (ph.status === "passed")
+      fail(`フェーズ ${phase} は passed のため mark-ask できません`)
+    if (ph.status === "pending" && phase !== "finalize")
+      fail(
+        `フェーズ ${phase} は pending のため mark-ask できません。start-phase してから確認してください`
+      )
     ph.status = "awaiting_human"
     ph.evaluationId = flags["evaluation-id"] ?? null
     ph.verdict = "ASK"

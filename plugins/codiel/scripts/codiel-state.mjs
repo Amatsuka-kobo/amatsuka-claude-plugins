@@ -39,6 +39,7 @@ var TERMINAL = /* @__PURE__ */ new Set([
 var SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 var SLUG_MAX = 40;
 var V1_RUN_RE = /^issue-\d+$/;
+var INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/;
 var INTEGRATIONS = ["github", "local"];
 var BOOL_FLAGS = ["active", "human-approved", "intent-only"];
 var fail = (msg, code = 1) => {
@@ -70,11 +71,11 @@ function tries(dir) {
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
-  const ts = tries(dir);
-  if (ts.length === 0) return null;
-  const n = ts[ts.length - 1];
-  const p = path.join(dir, `try-${n}`, "state.json");
-  return { tryN: n, statePath: p, state: readState(p) };
+  for (const n of tries(dir).reverse()) {
+    const p = path.join(dir, `try-${n}`, "state.json");
+    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
 }
 function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");
@@ -171,10 +172,15 @@ function main(argv, root = process.cwd()) {
       fail(
         `--slug \u306B issue-<N> \u306E\u5F62\u306F\u4F7F\u3048\u307E\u305B\u3093(codiel 0.x \u306E run \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3068\u91CD\u306A\u308B\u305F\u3081): ${slug}`
       );
-    const intent = flags.intent;
-    if (!intent) fail("--intent \u304C\u5FC5\u8981\u3067\u3059");
-    if (path.isAbsolute(intent))
-      fail(`--intent \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044: ${intent}`);
+    const rawIntent = flags.intent;
+    if (!rawIntent) fail("--intent \u304C\u5FC5\u8981\u3067\u3059");
+    if (path.isAbsolute(rawIntent))
+      fail(`--intent \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044: ${rawIntent}`);
+    const intent = path.posix.normalize(rawIntent.replaceAll("\\", "/"));
+    if (!INTENT_PATH_RE.test(intent))
+      fail(
+        `--intent \u306B\u306F docs/intents/ \u76F4\u4E0B\u306E .md \u3092 repoRoot \u76F8\u5BFE\u3067\u6E21\u3057\u3066\u304F\u3060\u3055\u3044: ${rawIntent}`
+      );
     if ("issue" in flags && !/^[1-9]\d*$/.test(flags.issue ?? ""))
       fail(`\u4E0D\u6B63\u306A --issue: ${flags.issue}`);
     const integration = oneOf(flags, "integration", INTEGRATIONS);
@@ -269,6 +275,10 @@ function main(argv, root = process.cwd()) {
     const st = latest.state;
     if (st.status !== "active")
       fail(`run \u304C active \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${st.status})\u3002resume \u3057\u3066\u304F\u3060\u3055\u3044`);
+    if (st.branch === null)
+      fail(
+        `branch \u304C null \u306E run(init --intent-only)\u3067\u306F ${phase} \u3092\u30B9\u30AD\u30C3\u30D7\u3067\u304D\u307E\u305B\u3093`
+      );
     if (LIGHT_ONLY_SKIPPABLE.has(phase) && st.scale !== "light")
       fail(
         `${phase} \u3092\u30B9\u30AD\u30C3\u30D7\u3067\u304D\u308B\u306E\u306F scale \u304C light \u306E run \u3060\u3051\u3067\u3059(scale: ${st.scale})`
@@ -338,7 +348,15 @@ function main(argv, root = process.cwd()) {
     if (!PHASES.includes(phase)) fail(`\u4E0D\u6B63\u306A\u30D5\u30A7\u30FC\u30BA: ${phase}`);
     const askKind = "kind" in flags ? oneOf(flags, "kind", ["raguel", "confirm"]) : "raguel";
     const latest = loadRun(root, flags);
+    if (TERMINAL.has(latest.state.status))
+      fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
     const ph = latest.state.phases[phase];
+    if (ph.status === "passed")
+      fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F passed \u306E\u305F\u3081 mark-ask \u3067\u304D\u307E\u305B\u3093`);
+    if (ph.status === "pending" && phase !== "finalize")
+      fail(
+        `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F pending \u306E\u305F\u3081 mark-ask \u3067\u304D\u307E\u305B\u3093\u3002start-phase \u3057\u3066\u304B\u3089\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`
+      );
     ph.status = "awaiting_human";
     ph.evaluationId = flags["evaluation-id"] ?? null;
     ph.verdict = "ASK";

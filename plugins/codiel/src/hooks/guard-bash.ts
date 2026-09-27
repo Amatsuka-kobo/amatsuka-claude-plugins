@@ -128,6 +128,7 @@ function pushesToProtectedBranch(invocations: GitInvocation[]): boolean {
 const GENERATED_MARKER = "<!-- codiel:generated -->"
 
 // マーカーの検査対象になる gh のコマンド。「object action」の形で持つ。
+// gh api は別の規則(checkGhApiBody)で検査する。
 const MARKED_GH_COMMANDS = new Set([
   "issue create",
   "issue comment",
@@ -138,21 +139,32 @@ const MARKED_GH_COMMANDS = new Set([
   "pr review"
 ])
 
+// gh の object(pr・issue)と action の間に置ける、値を取るオプション。
+// `gh pr -R o/r comment 1` の o/r を action と取り違えないために読み飛ばす。
+const GH_VALUE_OPTS = ["-R", "--repo"]
+
 interface GhInvocation {
   tokens: string[]
   command: string
 }
 
-// gh の起動トークンかどうか。git と同じく絶対パス・サブシェルの `(` を許容する。
+// gh の起動トークンかどうか。git と同じく絶対パス・サブシェルの `(` を許容するほか、
+// `bash -c "gh …"`・`$(gh …)`・バッククォートの中の gh も起動と見なす。
 function isGhToken(tok: string): boolean {
-  const stripped = tok.replace(/^\(+/, "")
+  const stripped = tok.replace(/^[("'`$]+/, "")
   return stripped === "gh" || stripped.endsWith("/gh")
+}
+
+// トークンの前後のクォートを外す(`"b.md"` や `'body=@b.md'` のような値のため)。
+function unquote(tok: string): string {
+  return tok.replace(/^["']+|["']+$/g, "")
 }
 
 // cmd をセグメントに分け(SEGMENT_SPLIT_RE)、各セグメントの gh 起動から
 // 「object action」(issue create など)を git と同じくトークン解析で取り出す。
-// オプションは値の有無を判定せず読み飛ばすだけに留める(guard-bash の他の
-// トークン解析と同じ簡略さで足りるため)。
+// gh api は action を持たないので、command を "api" とする。
+// オプションは GH_VALUE_OPTS の値だけを読み飛ばし、ほかは値の有無を判定しない
+// (guard-bash の他のトークン解析と同じ簡略さで足りるため)。
 function findGhInvocations(cmd: string): GhInvocation[] {
   const invocations: GhInvocation[] = []
   for (const segment of cmd.split(SEGMENT_SPLIT_RE)) {
@@ -161,38 +173,113 @@ function findGhInvocations(cmd: string): GhInvocation[] {
     if (ghIdx === -1) continue
     const skipOptions = (from: number): number => {
       let idx = from
-      while (idx < tokens.length && tokens[idx].startsWith("-")) idx++
+      while (idx < tokens.length && tokens[idx].startsWith("-"))
+        idx += GH_VALUE_OPTS.includes(tokens[idx]) ? 2 : 1
       return idx
     }
     const objIdx = skipOptions(ghIdx + 1)
-    const actionIdx = skipOptions(objIdx + 1)
     const object = tokens[objIdx]
-    const action = tokens[actionIdx]
+    if (object === "api") {
+      invocations.push({ tokens, command: "api" })
+      continue
+    }
+    const action = tokens[skipOptions(objIdx + 1)]
     if (object !== undefined && action !== undefined)
       invocations.push({ tokens, command: `${object} ${action}` })
   }
   return invocations
 }
 
-// tokens の中から names のいずれかのフラグの値を取る。`--body=x` のような
-// `=` 連結にも対応する。フラグが無ければ undefined を返す。
-function flagValue(tokens: string[], names: string[]): string | undefined {
-  for (let i = 0; i < tokens.length; i++) {
-    const tok = tokens[i]
-    if (names.includes(tok)) return tokens[i + 1]
-    const matched = names.find((n) => tok.startsWith(`${n}=`))
-    if (matched !== undefined) return tok.slice(matched.length + 1)
+// tokens[i] が names のいずれかのフラグなら、その値を返す。`--body x`・`--body=x`
+// に加え、短いフラグに値を連結した `-bx`・`-Fbody.md` も受ける(gh はこの形を受け付ける)。
+// フラグでなければ undefined を返す。
+function flagAt(
+  tokens: string[],
+  i: number,
+  names: string[]
+): string | undefined {
+  const tok = tokens[i]
+  for (const n of names) {
+    if (tok === n) return tokens[i + 1]
+    if (tok.startsWith(`${n}=`)) return tok.slice(n.length + 1)
+    if (/^-[^-]$/.test(n) && tok.startsWith(n) && tok.length > 2)
+      return tok.slice(2)
   }
   return undefined
 }
 
-// ファイルを読み、読めなければ deny する(emit は never を返すので、
-// この関数の戻り値は常に読めたときの文字列になる)。
-function readFileOrDeny(filePath: string): string {
+// tokens の中から names のいずれかのフラグの最初の値を取る。無ければ undefined。
+function flagValue(tokens: string[], names: string[]): string | undefined {
+  for (let i = 0; i < tokens.length; i++) {
+    const value = flagAt(tokens, i, names)
+    if (value !== undefined) return value
+  }
+  return undefined
+}
+
+// 本文のファイルを cwd 基準で読む。`-`(標準入力)は中身を検査できないので deny し、
+// 読めないファイルも deny する(emit は never を返すので、戻り値は常に読めた中身)。
+function readBodyFile(flag: string, file: string, cwd: string): string {
+  if (file === "-")
+    emit(
+      "deny",
+      `${flag} に - (標準入力)は指定できません。本文をファイルに書き、パスで渡し直してください`
+    )
   try {
-    return fs.readFileSync(filePath, "utf8")
+    return fs.readFileSync(path.resolve(cwd, file), "utf8")
   } catch {
-    return emit("deny", `--body-file のファイルを読み込めません: ${filePath}`)
+    return emit("deny", `${flag} のファイルを読み込めません: ${file}`)
+  }
+}
+
+function denyMissingMarker(command: string): never {
+  return emit(
+    "deny",
+    `gh ${command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください`
+  )
+}
+
+// gh api で送る本文を検査する(決定 53。§6.8 の 7 コマンドの外)。
+// メソッドは gh と同じく、-X/--method の指定があればそれ、無ければ
+// フィールドか --input があるとき POST、どちらも無いとき GET とする。
+// POST・PATCH・PUT のときだけ、次の本文を検査する。
+// - フィールド(-f/--raw-field・-F/--field)のキーが body か `…[body]` のもの。
+//   -F の値が `@<パス>` ならファイルの中身、`@-` なら deny、それ以外は
+//   --body と同じくコマンドの文字列全体でマーカーを探す。
+// - --input のファイル。`-` は deny し、中身に "body" のキーがあるときだけマーカーを求める。
+// 本文を持たない呼び出し(読み取り、ラベルだけの更新など)は通す。
+function checkGhApiBody(tokens: string[], cmd: string, cwd: string): void {
+  const fields: { typed: boolean; value: string }[] = []
+  for (let i = 0; i < tokens.length; i++) {
+    const raw = flagAt(tokens, i, ["--raw-field", "-f"])
+    if (raw !== undefined) fields.push({ typed: false, value: unquote(raw) })
+    const typed = flagAt(tokens, i, ["--field", "-F"])
+    if (typed !== undefined) fields.push({ typed: true, value: unquote(typed) })
+  }
+  const input = flagValue(tokens, ["--input"])
+  const explicitMethod = flagValue(tokens, ["--method", "-X"])
+  const method =
+    explicitMethod !== undefined
+      ? unquote(explicitMethod).toUpperCase()
+      : fields.length > 0 || input !== undefined
+        ? "POST"
+        : "GET"
+  if (!["POST", "PATCH", "PUT"].includes(method)) return
+
+  for (const { typed, value } of fields) {
+    const eq = value.indexOf("=")
+    const key = eq === -1 ? value : value.slice(0, eq)
+    if (key !== "body" && !key.endsWith("[body]")) continue
+    const val = value.slice(eq + 1)
+    if (typed && val.startsWith("@")) {
+      const content = readBodyFile("-F", unquote(val.slice(1)), cwd)
+      if (!content.includes(GENERATED_MARKER)) denyMissingMarker("api")
+    } else if (!cmd.includes(GENERATED_MARKER)) denyMissingMarker("api")
+  }
+  if (input !== undefined) {
+    const content = readBodyFile("--input", unquote(input), cwd)
+    if (/"body"\s*:/.test(content) && !content.includes(GENERATED_MARKER))
+      denyMissingMarker("api")
   }
 }
 
@@ -204,27 +291,19 @@ function readFileOrDeny(filePath: string): string {
 // 本文を持たない呼び出し(--body・-b・--body-file・-F のどれも無い)は通す。
 function checkGeneratedMarker(cmd: string, cwd: string): void {
   for (const inv of findGhInvocations(cmd)) {
+    if (inv.command === "api") {
+      checkGhApiBody(inv.tokens, cmd, cwd)
+      continue
+    }
     if (!MARKED_GH_COMMANDS.has(inv.command)) continue
     const bodyVal = flagValue(inv.tokens, ["--body", "-b"])
     const bodyFileVal = flagValue(inv.tokens, ["--body-file", "-F"])
     if (bodyVal === undefined && bodyFileVal === undefined) continue
     if (bodyVal !== undefined && !cmd.includes(GENERATED_MARKER))
-      emit(
-        "deny",
-        `gh ${inv.command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください`
-      )
+      denyMissingMarker(inv.command)
     if (bodyFileVal !== undefined) {
-      if (bodyFileVal === "-")
-        emit(
-          "deny",
-          "--body-file に - (標準入力)は指定できません。本文をファイルに書き、--body-file <パス> で渡し直してください"
-        )
-      const content = readFileOrDeny(path.resolve(cwd, bodyFileVal))
-      if (!content.includes(GENERATED_MARKER))
-        emit(
-          "deny",
-          `gh ${inv.command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください`
-        )
+      const content = readBodyFile("--body-file", unquote(bodyFileVal), cwd)
+      if (!content.includes(GENERATED_MARKER)) denyMissingMarker(inv.command)
     }
   }
 }

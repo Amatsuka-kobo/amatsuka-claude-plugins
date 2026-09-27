@@ -25,7 +25,7 @@ intent を Issue に転記するときは、原文のセクション(`## ASIS` �
 
 ## 投稿する本文のマーカー
 
-run が active な間に GitHub へ投稿するときは、`<!-- codiel:generated --> を本文に含める`。対象は Issue の作成・編集・コメント、PR の作成・編集・コメント・レビュー本文である。付け忘れた投稿は hook に deny される。
+run が active な間に GitHub へ投稿するときは、`<!-- codiel:generated -->` を本文に含める。対象は Issue の作成・編集・コメント、PR の作成・編集・コメント・レビュー本文である。付け忘れた投稿は hook に deny される。
 
 ## 画像の載せ方
 

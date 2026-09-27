@@ -30,11 +30,11 @@ function tries(dir) {
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
-  const ts = tries(dir);
-  if (ts.length === 0) return null;
-  const n = ts[ts.length - 1];
-  const p = path.join(dir, `try-${n}`, "state.json");
-  return { tryN: n, statePath: p, state: readState(p) };
+  for (const n of tries(dir).reverse()) {
+    const p = path.join(dir, `try-${n}`, "state.json");
+    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
 }
 function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");
@@ -93,7 +93,7 @@ function findProjectRoot(startDir) {
 
 // src/hooks/guard-github-mcp.ts
 var MARKER = "<!-- codiel:generated -->";
-var TARGET_TOOL_RE = /^mcp__.*github.*__(issue_write|add_issue_comment|update_issue_comment|create_pull_request|update_pull_request|update_pull_request_body|create_pull_request_review|add_comment_to_pending_review|pull_request_review_write)$/;
+var TARGET_TOOL_RE = /^mcp__.*[Gg][Ii][Tt][Hh][Uu][Bb].*__(issue_write|create_issue|update_issue|update_issue_body|add_issue_comment|update_issue_comment|create_pull_request|update_pull_request|update_pull_request_body|create_pull_request_review|pull_request_review_write|submit_pending_pull_request_review|add_comment_to_pending_review|add_pull_request_review_comment|add_reply_to_pull_request_comment)$/;
 try {
   const input = await readStdin();
   if (!TARGET_TOOL_RE.test(input.tool_name ?? "")) pass();

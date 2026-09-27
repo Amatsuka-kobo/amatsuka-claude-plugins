@@ -40,7 +40,12 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 0. active run の確認
 
-聞き取り・書き込み・起票のどれよりも前に、`node <plugin-root>/scripts/codiel-state.mjs get --active` でほかの run が active でないことを確かめる。`active` または `awaiting_human` の run があれば、`codiel-state finalize --slug <slug>` か `codiel-state stop --slug <slug> --reason <理由>` で終端にしてから始める。この確認により、手順 5 の (1)〜(3) の間は active run が無い状態が保証される。
+聞き取り・書き込み・起票のどれよりも前に、`node <plugin-root>/scripts/codiel-state.mjs get --active` でほかの run が active でないことを確かめる。`active` または `awaiting_human` の run が見つかったら、今回再開する run かどうかを次のとおり判定する。
+
+- 入口が intent パスで、その frontmatter の `run` が見つかった run の slug と一致するときは、今回再開する run とみなす。
+- それ以外の入口(Issue 番号・省略)では、見つかった run が `commands/run.md` の「未完了の run があれば再開」に当たる可能性がある。終端にする前にその run の内容(slug・intent のパス・現在のフェーズ)を示し、今回再開するかをユーザーに確かめる(run を作る前なので `mark-ask` は要らない)。
+
+今回再開する run と決まったものは終端にせず、`orchestrating-runs` の再開手順(§6)へ進める。再開しないと決めた run だけを、`codiel-state finalize --slug <slug>` か `codiel-state stop --slug <slug> --reason <理由>` で終端にする。この確認により、手順 5 の (1)〜(3) の間は、再開する run 以外に active run が無い状態が保証される。
 
 ## 1. 前提確認とベースブランチの最新化
 
@@ -89,7 +94,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ### 3-3. 現状調査
 
-`## 現状調査` はユーザーに聞かず、AI がコードと文書を読んで書く。ユーザーに聞くのは、読んでも分からないこと(何を達成したいか、どうなったら完了か)だけである。
+ASIS はユーザーに聞かず自分で読む。`## 現状調査` は AI がコードと文書を読んで書く。ユーザーに聞くのは、読んでも分からないこと(何を達成したいか、どうなったら完了か)だけである。
 
 優先順は **ARCHITECTURE → `CLAUDE.md` → GOTCHAS → `README.md`**。人間が書いた要約であり、コードを読むより桁で安い。
 
@@ -111,11 +116,11 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 4. ドラフトの提示と承認ゲート
 
-- ドラフトを書く前に、intent 文書の言語と issue 本文の言語を 1 回で確認する。リポジトリの既存文書から推定した言語を推奨として添える。両者が食い違うと、issue への転記に翻訳という加工が入り、原文をそのまま転記するという前提が崩れる。
+- ドラフトを書く前に、intent 文書の言語と issue 本文の言語を 1 回で確認する。リポジトリの既存文書から推定した言語を推奨として添える。両者が食い違うと、issue への転記に翻訳という加工が入り、原文をそのまま転記するという前提が崩れる。この確認は派生文のセクションだけに当て、原文のセクションは対象外とし、原語のまま残す。
 - 書式は `intent-format.md` に従う。見出しの名称と順序を変えない。
 - 提示はメッセージ本文で行う。先にファイルへ書いて「読んで確認してほしい」と依頼しない。保存は承認後である。
 - `## 実装方針` も承認対象に含める。設計書ではなく、どの層をどう変えるかの方針として書く。
-- slug は TOBE を表す英小文字ケバブケースにする。日本語のプロジェクトでも slug は英字にする。
+- slug は TOBE を表す ASCII の英小文字ケバブケース(`^[a-z0-9]+(-[a-z0-9]+)*$`)にし、最大 40 文字とする。日本語のプロジェクトでも slug は英字にする。`^issue-\d+$` に一致する形は使わない。同日に同じ slug の intent が既にあるときは、ファイル名の `-2`・`-3` の接尾辞を含めて run の slug にそろえる(`.codiel/runs/<run の slug>/` の衝突を避けるため)。接尾辞を足しても 40 文字を超えないよう、ここで決める slug はその分を残す。
 
 全文を提示したうえで、次の 3 項目を含む承認を同時に得る。差し戻されたら手順 3 へ戻り、指摘された観点を聞き直してからドラフトを作り直す。指摘部分だけを直して再提示することを繰り返さない。
 
@@ -146,7 +151,7 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 (5) `git add -- <intent パス>` で intent 文書だけを stage する。未追跡のファイルでもパスを限定したコミットができるようにするためである。
 
-(6) 手順 4 で決めた「文書だけ残して終えるか」で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。
+(6) 手順 4 で決めた「文書だけ残して終えるか」で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。`git commit` が「変更なし」で失敗したとき(前の try からパスだけを渡して続行する場合など)は、そのコミットを飛ばして次へ進む。それ以外の理由で `git commit` が失敗したときは、途中確認の一般則どおり `codiel-state mark-ask intent --slug <slug> --kind confirm` で `awaiting_human` にしてから人に確認し、答えを得たら `codiel-state resume --slug <slug>` で戻る。
 
 - 終える(intent-only)とき:
   1. 開始時のブランチで `git commit -m "codiel(intent): <要約> (<slug> try-<n>)" -- <intent パス>` を実行する。

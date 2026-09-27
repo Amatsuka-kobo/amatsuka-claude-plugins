@@ -10,17 +10,27 @@ const CLI = fileURLToPath(new URL("../../codiel-state-cli.ts", import.meta.url))
 
 const MARKER = "<!-- codiel:generated -->"
 
-// 対象ツール。本文の引数名はいずれも body(§9.3 の確認結果)。
+const HOOKS_JSON = fileURLToPath(
+  new URL("../../../hooks/hooks.json", import.meta.url)
+)
+
+// 対象ツール。本文の引数名はいずれも body(guard-github-mcp.ts の出典のコメントを参照)。
 const TARGET_TOOLS = [
   "issue_write",
+  "create_issue",
+  "update_issue",
+  "update_issue_body",
   "add_issue_comment",
   "update_issue_comment",
   "create_pull_request",
   "update_pull_request",
   "update_pull_request_body",
   "create_pull_request_review",
+  "pull_request_review_write",
+  "submit_pending_pull_request_review",
   "add_comment_to_pending_review",
-  "pull_request_review_write"
+  "add_pull_request_review_comment",
+  "add_reply_to_pull_request_comment"
 ]
 
 interface HookOutput {
@@ -108,6 +118,33 @@ test("run あり・サーバー名が違う github 系接続(プラグイン経�
     body: "マーカーが無い本文"
   })
   expect(r?.permissionDecision).toBe("deny")
+})
+
+test("run あり・github に大文字を含むサーバー名でも検査が効く", () => {
+  const root = setupRun()
+  const r = hook(root, "mcp__GitHub__add_reply_to_pull_request_comment", {
+    body: "マーカーが無い本文"
+  })
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("hooks.json の matcher が対象ツールすべてに当たり、github を含まないサーバーには当たらない", () => {
+  const hooks = JSON.parse(fs.readFileSync(HOOKS_JSON, "utf8")) as {
+    hooks: {
+      PreToolUse: { matcher: string; hooks: { command: string }[] }[]
+    }
+  }
+  const entry = hooks.hooks.PreToolUse.find((e) =>
+    e.hooks.some((h) => h.command.includes("guard-github-mcp"))
+  )
+  const matcher = new RegExp(entry?.matcher ?? "")
+  for (const tool of TARGET_TOOLS) {
+    expect(matcher.test(`mcp__github__${tool}`)).toBe(true)
+    expect(matcher.test(`mcp__plugin_github_github__${tool}`)).toBe(true)
+    expect(matcher.test(`mcp__GitHub__${tool}`)).toBe(true)
+    expect(matcher.test(`mcp__linear__${tool}`)).toBe(false)
+  }
+  expect(matcher.test("mcp__github__get_issue")).toBe(false)
 })
 
 test("run あり・github を含まないサーバー名の同名ツールは掛からない(Linear 等との混同防止)", () => {
