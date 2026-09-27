@@ -140,11 +140,41 @@ test("stop-guard: 入力に stop_hook_active: true → run active でも出力�
   expect(result.stdout.trim()).toBe("")
 })
 
-test("stop-guard: ブロック文言が mark-ask --kind confirm での確認を案内する(決定 52)", () => {
+test("stop-guard: phase が in_progress のとき mark-ask --kind confirm での確認を案内する(決定 52)", () => {
   const root = setupRunAtIntent()
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.reason).toMatch(/mark-ask intent --slug demo --kind confirm/)
   expect(parsed.reason).toMatch(/awaiting_human/)
-  expect(parsed.reason).toMatch(/start-phase/)
+})
+
+test("stop-guard: phase が null のとき capturing-intent の手順 5 の (6) と commit-failed での終端を案内する(M2-FX2-AR medium)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
+  const result = callHook(STOP_GUARD, root)
+  const parsed = JSON.parse(result.stdout)
+  expect(parsed.reason).toMatch(/phase: null/)
+  expect(parsed.reason).toMatch(/手順 5 の \(6\)/)
+  expect(parsed.reason).toMatch(
+    /codiel-state stop --slug demo --reason commit-failed/
+  )
+})
+
+test("stop-guard: phase が passed のとき次のフェーズの start-phase と mark-ask を案内する(M2-FX2-AR medium)", () => {
+  const root = setupRunAtIntent()
+  cli(root, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    "e",
+    "--verdict",
+    "PROCEED"
+  ])
+  const result = callHook(STOP_GUARD, root)
+  const parsed = JSON.parse(result.stdout)
+  expect(parsed.reason).toMatch(/phase: intent/)
+  expect(parsed.reason).toMatch(/codiel-state start-phase discuss --slug demo/)
+  expect(parsed.reason).toMatch(/mark-ask discuss --slug demo --kind confirm/)
 })

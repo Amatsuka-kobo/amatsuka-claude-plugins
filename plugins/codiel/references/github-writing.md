@@ -27,6 +27,8 @@ intent を Issue に転記するときは、原文のセクション(`## ASIS` �
 
 run が active な間に GitHub へ投稿するときは、`<!-- codiel:generated -->` を本文に含める。対象は Issue の作成・編集・コメント、PR の作成・編集・コメント・レビュー本文である。付け忘れた投稿は hook に deny される。
 
+投稿する本文は、Write ツールで run の `reports/` に投稿ごとに別名のファイルとして書き、投稿は別の Bash 呼び出しで `--body-file` に渡して行う。`gh` の `--template` / `-T`・`--fill` 系・`--web` は使わない。
+
 ## 画像の載せ方
 
 縮退の順序は、文書の種類で 2 つに分かれる。

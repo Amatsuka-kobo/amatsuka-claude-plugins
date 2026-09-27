@@ -1216,7 +1216,7 @@ test("record-outcome は v1 の awaiting_outcome の run を v2 と同じ遷移�
   expect(active.err).toBe("")
 })
 
-test("record-outcome は awaiting_outcome 以外の v1 の run を §6.2.4 の文言で拒否する", () => {
+test("record-outcome は awaiting_outcome 以外の v1 の run への approved を §6.2.4 の文言で拒否する", () => {
   const root = tmpProject()
   for (const [n, status] of [
     [1, "active"],
@@ -1224,6 +1224,30 @@ test("record-outcome は awaiting_outcome 以外の v1 の run を §6.2.4 の�
     [3, "stopped"],
     [4, "completed"],
     [5, "rejected"]
+  ] as const) {
+    writeV1(root, n, status)
+    const r = run(root, [
+      "record-outcome",
+      "--slug",
+      `issue-${n}`,
+      "--outcome",
+      "approved"
+    ])
+    expect(r.code, status).toBe(1)
+    expect(r.err, status).toBe(`${v1Message(n, status)}\n`)
+    const saved = JSON.parse(
+      fs.readFileSync(statePath(root, `issue-${n}`), "utf8")
+    )
+    expect(saved.status, status).toBe(status)
+  }
+})
+
+test("record-outcome は completed / rejected 以外の非 awaiting_outcome の v1 の run への incident を §6.2.4 の文言で拒否する", () => {
+  const root = tmpProject()
+  for (const [n, status] of [
+    [1, "active"],
+    [2, "awaiting_human"],
+    [3, "stopped"]
   ] as const) {
     writeV1(root, n, status)
     const r = run(root, [
@@ -1240,6 +1264,35 @@ test("record-outcome は awaiting_outcome 以外の v1 の run を §6.2.4 の�
     )
     expect(saved.status, status).toBe(status)
     expect(saved.incidents, status).toStrictEqual([])
+  }
+})
+
+test("record-outcome は completed / rejected の v1 の run への incident を受け付け、version 1 のまま status を変えない(決定 63)", () => {
+  const root = tmpProject()
+  for (const [n, status] of [
+    [4, "completed"],
+    [5, "rejected"]
+  ] as const) {
+    writeV1(root, n, status)
+    const r = run(root, [
+      "record-outcome",
+      "--slug",
+      `issue-${n}`,
+      "--outcome",
+      "incident",
+      "--note",
+      "n"
+    ])
+    expect(r.code, status).toBe(0)
+    expect(r.out.state.status, status).toBe(status)
+    expect(r.out.state.version, status).toBe(1)
+    expect(r.out.state.incidents, status).toHaveLength(1)
+    const saved = JSON.parse(
+      fs.readFileSync(statePath(root, `issue-${n}`), "utf8")
+    )
+    expect(saved.status, status).toBe(status)
+    expect(saved.version, status).toBe(1)
+    expect(saved.incidents, status).toHaveLength(1)
   }
 })
 

@@ -654,16 +654,19 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
   }
 
   if (cmd === "record-outcome") {
-    // v1 の run は awaiting_outcome のときだけ受け付け、version 1 のまま書き戻す(設計書 決定 63)
     const latest = loadRun(root, flags, true)
-    if (
-      latest.state.version !== 2 &&
-      latest.state.status !== "awaiting_outcome"
-    )
-      fail(v1Message(latest.state))
     const outcome = flags.outcome
     if (!["approved", "rejected", "incident"].includes(outcome))
       fail(`不正な outcome: ${outcome}`)
+    // v1 の run は awaiting_outcome の run と、completed / rejected の run への
+    // incident だけを受け付け、version 1 のまま書き戻す(設計書 決定 63・§6.2.4)
+    if (latest.state.version !== 2) {
+      const st = latest.state.status
+      const terminalIncident =
+        outcome === "incident" && (st === "completed" || st === "rejected")
+      if (st !== "awaiting_outcome" && !terminalIncident)
+        fail(v1Message(latest.state))
+    }
     if (
       !["awaiting_outcome", "completed", "rejected"].includes(
         latest.state.status

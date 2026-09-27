@@ -74,9 +74,21 @@ architect が design.md を書き終えて報告したら、raguel-gating の de
 
 ## 待機と Stop フック
 
-ユーザーの回答を待つ間、run は active のまま停止してよい(stop-guard はその旨を明示した停止を
-正当として扱う)。回答待ちで停止する際は「discuss フェーズ: 論点 <N> の回答待ち」
-「design フェーズ: ウォークスルーの確認待ち」のように待機理由を最終メッセージで明示する。
+stop-guard は active な run でのセッションの停止を block するため、active のまま止まって回答を
+待つことはできない。ユーザーの回答を待つ前に、次のコマンドで run を `awaiting_human` にする。
+
+```
+node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind confirm
+```
+
+`<phase>` には discuss の論点提示・最終確認では discuss を、design フェーズのウォークスルーの
+確認待ちでは design を入れる。「discuss フェーズ: 論点 <N> の回答待ち」「design フェーズ: ウォーク
+スルーの確認待ち」のように待機理由を最終メッセージで明示してから停止し、答えを得たら次のコマンド
+で戻す。
+
+```
+node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>
+```
 
 <HARD-GATE>
 - **合意の捏造禁止**: ユーザーが明示に選択・発言していない内容を「決定」として記録しない。

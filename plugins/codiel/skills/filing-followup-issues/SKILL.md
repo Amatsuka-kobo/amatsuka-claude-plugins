@@ -42,12 +42,16 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 2. 抽出した所見を**番号付き一覧**(番号・severity・要約・対象 `src/...:42`)にしてユーザーに提示する。
 3. **起票対象の選択・複数所見のまとめ方・見送りをユーザーに確認する**(AskUserQuestion か平文で
    問いかける)。まとめる/見送るの裁量はユーザーにあり、オーケストレーターが勝手に判断しない。
-   **回答が来るまで次の手順に進まない**(triage は非 GATED のため `mark-ask` は使わないが、
-   「ユーザーの回答を待つ」という運転自体がこのフェーズの唯一のゲートである)。
+   問いかける前に
+   `node <plugin-root>/scripts/codiel-state.mjs mark-ask triage --slug <slug> --kind confirm`
+   で `awaiting_human` にしてから待ち、回答を得たら
+   `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` で戻る。**回答が来るまで
+   次の手順に進まない**(「ユーザーの回答を待つ」という運転自体がこのフェーズの唯一のゲートである)。
 4. ユーザーが起票対象を指示したら、対象ごとに以下を行う。
    `gh` が使えないときは起票せず、所見一覧をユーザーへ提示して triage を保留する。
-5. **ISSUE_TEMPLATE の探索**: Glob で次を探す。
-   - `.github/ISSUE_TEMPLATE/*.yml` と `*.yaml`(GitHub フォーム形式)
+5. **ISSUE_TEMPLATE の探索**: Glob で次を探す。`config.yml`(テンプレート選択画面の設定ファイルで
+   あり、テンプレートではない)は探索から除く。
+   - `.github/ISSUE_TEMPLATE/*.yml` と `*.yaml`(`config.yml` を除く。GitHub フォーム形式)
    - `.github/ISSUE_TEMPLATE/*.md`(Markdown 形式、frontmatter 付き)
    - `.github/ISSUE_TEMPLATE.md`(レガシー単一テンプレート)
    複数ヒットする場合、指摘の種類(バグ/改善/タスク)に最も合うものを選ぶ(詳細は次節)。
@@ -56,11 +60,16 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    確認する。ヒットがあれば起票を保留し、該当 Issue へのリンクをユーザーに提示して
    「新規起票する/既存 Issue に集約する/見送る」の判断を仰ぐ(ここも自己判断しない)。
 7. 選んだテンプレート(または既定書式)を最大限埋めた本文を、`github-writing.md` の執筆規則に
-   従って組み立てる。本文には `<!-- codiel:generated -->` を含める。組み立てた本文で
-   `gh issue create --title "<タイトル>" --body "<本文>" --label "<ラベル>"` を実行する
-   (テンプレートの labels が複数ある場合は `--label` を複数回指定する)。
-8. 起票後、Issue 番号を `reports/review-<n>.md` の該当所見の行に追記し、
-   `<!-- codiel:generated -->` を含む本文で `gh pr comment <PR番号> --body "フォローアップ: #<Issue番号>"`
+   従って組み立てる。本文には `<!-- codiel:generated -->` を含める。組み立てた本文を Write ツールで
+   `.codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md` に書く(投稿ごとに別名にする)。書いたら
+   `review-<n>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
+   `git commit -m "codiel(triage): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
+   `gh issue create --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md --label "<ラベル>"`
+   を実行する(テンプレートの labels が複数ある場合は `--label` を複数回指定する)。
+8. 起票後、Issue 番号を `reports/review-<n>.md` の該当所見の行に追記する。`<!-- codiel:generated -->`
+   を含むフォローアップの本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/followup-<連番>.md`
+   に書き、同じく `review-<n>.md` と同じ書き方で run ブランチへコミットしてから、別の Bash 呼び出しで
+   `gh pr comment <PR番号> --body-file .codiel/runs/<slug>/try-<n>/reports/followup-<連番>.md`
    を実行する。
 9. 全対象(見送られたものを除く)の処理が終わったら
    `node <plugin-root>/scripts/codiel-state.mjs complete-phase triage --slug <slug>` を呼び
@@ -99,7 +108,9 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 フィールドが `label: "現象"` なら本文に `### 現象\n<所見の内容>` を差し込む。`required: true` の
 フィールドには、症状・根拠・対象ファイル・severity・元 PR リンクを割り当てる。
 埋められない項目があれば「(triage 起票のため情報なし)」等と明記し、
-無言で空欄にしない。
+無言で空欄にしない。`checkboxes` フィールドのうち、行動規範への同意・CLA の署名・「テストした」
+など同意・署名・人の確認を表す項目にはチェックを付けずに残し、人が確かめる項目であることを本文に
+書く。
 
 ### Markdown 形式(`.github/ISSUE_TEMPLATE/*.md` / `.github/ISSUE_TEMPLATE.md`)
 

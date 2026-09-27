@@ -461,11 +461,15 @@ function main(argv, root = process.cwd()) {
   }
   if (cmd === "record-outcome") {
     const latest = loadRun(root, flags, true);
-    if (latest.state.version !== 2 && latest.state.status !== "awaiting_outcome")
-      fail(v1Message(latest.state));
     const outcome = flags.outcome;
     if (!["approved", "rejected", "incident"].includes(outcome))
       fail(`\u4E0D\u6B63\u306A outcome: ${outcome}`);
+    if (latest.state.version !== 2) {
+      const st = latest.state.status;
+      const terminalIncident = outcome === "incident" && (st === "completed" || st === "rejected");
+      if (st !== "awaiting_outcome" && !terminalIncident)
+        fail(v1Message(latest.state));
+    }
     if (!["awaiting_outcome", "completed", "rejected"].includes(
       latest.state.status
     ))

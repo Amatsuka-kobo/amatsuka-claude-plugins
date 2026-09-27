@@ -209,11 +209,33 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 
 連携モードで手順が分かれる(§0 で判定した値を使う)。
 
-- **github**: `git push -u origin <state.branch>` を実行してから `gh pr create` で PR を作る。本文は
-  `github-writing.md` の執筆規則に従って書き、intent 文書のパスを含め、`state.issue` があれば
-  `Closes #N` を含める。`imageUpload` に使える手段があれば、test-loop で得たスクリーンショットなど
-  関連する画像を `github-writing.md` の縮退の順序で載せる。本文には `<!-- codiel:generated -->` を
-  含める(投稿する本文すべてに共通する規律。§6.8)。作成後、次を実行する。
+- **github**: 本文を組み立てる前に、次の読み取り専用の Bash で PR テンプレートを探す。
+  ```
+  find . -maxdepth 2 -iname 'pull_request_template.*'
+  ```
+  ヒットのうち `.github/`・リポジトリのルート・`docs/` にある `pull_request_template.md` / `.txt`
+  (大文字小文字を区別しない)だけを対象にし、`.github/` → ルート → `docs/` の順で最初に見つかった
+  ものを使う。`PULL_REQUEST_TEMPLATE/` 配下にしかヒットがないときは使わない(GitHub の Web 画面も
+  `?template=` の指定が無ければそれらを適用しないため)。
+  テンプレートを使うときは、見出しの構成を保ち、記入の案内の HTML コメントを消す。
+  `<!-- codiel:generated -->` などの codiel のマーカーは消さない。codiel が必ず書く項目(intent の
+  パス、`Closes #N`、画像、`## 出典`)に当たる見出しが無ければ末尾に足す。同意・署名・人の確認を
+  表すチェックボックス(行動規範への同意、CLA の署名、「テストした」など)は付けずに残し、人が
+  確かめる項目であることを本文に書く。テンプレートが見つからなければ、`github-writing.md` の
+  執筆規則だけに従って書く。
+  本文は `github-writing.md` の執筆規則に従って書き、intent 文書のパスを含め、`state.issue` が
+  あれば `Closes #N` を含める。`imageUpload` に使える手段があれば、test-loop で得たスクリーン
+  ショットなど関連する画像を `github-writing.md` の縮退の順序で載せる。本文には
+  `<!-- codiel:generated -->` を含める(投稿する本文すべてに共通する規律。§6.8)。
+  組み立てた本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/pr-body.md` に書き、
+  `review-<n>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
+  `git commit -m "codiel(pr): <要約> (<slug> try-<n>)"`)。コミット後、
+  `git push -u origin <state.branch>` を実行してから、別の Bash 呼び出しで次を実行して PR を作る。
+  gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わない。
+  ```
+  gh pr create --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md
+  ```
+  作成後、次を実行する。
   ```
   node <plugin-root>/scripts/codiel-state.mjs complete-phase pr --slug <slug> --pr-url <URL>
   ```

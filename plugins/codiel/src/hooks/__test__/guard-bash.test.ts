@@ -741,3 +741,228 @@ test("gh pr create --fill --body はマーカーがあれば通る(本文のフ�
   const r = hook(root, `gh pr create --fill --body "本文 ${MARKER}"`)
   expect(r).toBe(null)
 })
+
+// --- heredoc の本文を除くのは終端の行が見つかったときだけ(M2-FX2-R の critical、M2-FX2-AR の medium) ---
+
+const NO_MARKER_COMMENT = 'gh pr comment 1 --body "no marker"'
+
+test("閉じていない heredoc(cat <<NEVERCLOSED)の後の行の gh の投稿は、マーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(root, ["cat <<NEVERCLOSED", NO_MARKER_COMMENT].join("\n"))
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("here-string(<<<)を heredoc の開始と見なさず、後続の行の gh の投稿を検査する", () => {
+  const root = setupRun()
+  for (const first of ["echo <<<EOF", "x=$(cat <<<hello)"])
+    expect(
+      hook(root, [first, NO_MARKER_COMMENT].join("\n"))?.permissionDecision
+    ).toBe("deny")
+})
+
+test("直前が数字・識別子・) の <<(算術のシフト)を heredoc の開始と見なさず、後続の行の gh の投稿を検査する", () => {
+  const root = setupRun()
+  for (const first of ["n=$((1<<2))", "n=$((x<<y))", "n=$(( (1)<<y ))"])
+    expect(
+      hook(root, [first, NO_MARKER_COMMENT, "y"].join("\n"))?.permissionDecision
+    ).toBe("deny")
+})
+
+test("文字列の中の <<EOF を heredoc の開始と見なさず、後続の行の gh の投稿を検査する", () => {
+  const root = setupRun()
+  const first = 'git commit -m "doc: <<EOF の扱い"'
+  expect(
+    hook(root, [first, NO_MARKER_COMMENT].join("\n"))?.permissionDecision
+  ).toBe("deny")
+  // 後ろに同じ語で終わる本物の heredoc があっても、間の行を除かない。
+  expect(
+    hook(root, [first, NO_MARKER_COMMENT, "cat <<EOF", "x", "EOF"].join("\n"))
+      ?.permissionDecision
+  ).toBe("deny")
+})
+
+test("コメントの中の <<EOF を heredoc の開始と見なさず、後続の行の gh の投稿を検査する", () => {
+  const root = setupRun()
+  const command = ["# <<EOF", NO_MARKER_COMMENT, "cat <<EOF", "x", "EOF"].join(
+    "\n"
+  )
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("heredoc の終端の行より後の gh の投稿は検査する", () => {
+  const root = setupRun()
+  const command = [
+    "cat <<'EOF'",
+    "gh pr comment 1 --body-file tmp.md",
+    "EOF",
+    NO_MARKER_COMMENT
+  ].join("\n")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("<<- の heredoc は先頭のタブを除いた終端の行で閉じ、<< の heredoc は完全に一致する終端の行でだけ閉じる", () => {
+  const root = setupRun()
+  const dash = [
+    "cat <<-EOF",
+    "\tgh pr comment 1 --body-file tmp.md",
+    "\tEOF"
+  ].join("\n")
+  expect(hook(root, dash)).toBe(null)
+  const indented = ["cat <<EOF", NO_MARKER_COMMENT, "  EOF"].join("\n")
+  expect(hook(root, indented)?.permissionDecision).toBe("deny")
+})
+
+test("heredoc の開始行が行末の \\ で続くときは、論理行の次の行から本文とする", () => {
+  const root = setupRun()
+  const command = [
+    "cat <<EOF \\",
+    `&& ${NO_MARKER_COMMENT}`,
+    "本文",
+    "EOF"
+  ].join("\n")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+// --- --fill の短縮形 -f と短いフラグの結合(M2-FX2-AR の high、決定 64) ---
+
+test("gh pr create -f は --fill の短縮形として deny", () => {
+  const root = setupRunAtPr()
+  for (const command of ["gh pr create -f", "gh pr create -f --title x"])
+    expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("短いフラグの結合(-df・-dT・-dTfile.md)に含まれる -f・-T を読み deny", () => {
+  const root = setupRunAtPr()
+  for (const command of [
+    "gh pr create -df",
+    "gh pr create -dT file.md",
+    "gh pr create -dTfile.md"
+  ])
+    expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("値を取る短いフラグの後ろの文字は結合と読まない(-tf は --title f)。結合した -db の本文は検査する", () => {
+  const root = setupRunAtPr()
+  expect(hook(root, "gh pr create -tf")).toBe(null)
+  expect(hook(root, 'gh pr create -db "no marker"')?.permissionDecision).toBe(
+    "deny"
+  )
+  expect(hook(root, `gh pr create -db "本文 ${MARKER}"`)).toBe(null)
+})
+
+// --- 行末の \ による行の継続を 1 行へ戻す(M2-FX2-AR の high) ---
+
+test("行末の \\ で続けた gh pr comment の --body も、マーカーが無ければ deny", () => {
+  const root = setupRun()
+  const r = hook(root, 'gh pr comment 1 \\\n  --body "no marker"')
+  expect(r?.permissionDecision).toBe("deny")
+  // `\\` の直後の改行は継続ではないので、次の行は別のコマンドとして検査する。
+  const escaped = hook(root, `echo a\\\\\n${NO_MARKER_COMMENT}`)
+  expect(escaped?.permissionDecision).toBe("deny")
+})
+
+test("行末の \\ で続けた gh pr create の --body・--fill も deny", () => {
+  const root = setupRunAtPr()
+  expect(
+    hook(root, 'gh pr create \\\n  --title t \\\n  --body "no marker"')
+      ?.permissionDecision
+  ).toBe("deny")
+  expect(hook(root, "gh pr create \\\n  --fill")?.permissionDecision).toBe(
+    "deny"
+  )
+})
+
+test("行末の \\ で続けた git push --force origin main も deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const r = hook(root, "git push \\\n  --force origin main")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("行末の \\ で続けた gh pr create も、フェーズの制限で deny", () => {
+  const root = setupRun()
+  setupRunAtImplement(root)
+  const r = hook(root, "gh pr \\\ncreate --title t")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+// --- 同じコマンドでの本文ファイルの書き換えと複数の投稿、gh pr create --web(決定 66) ---
+
+test("同じコマンドで書き換えた本文ファイル(cat > x.md <<EOF、cp t.md x.md)を -F で渡すと deny", () => {
+  const root = setupRunAtPr()
+  // フックは実行前の中身を読むので、マーカーのある古い中身を置いておく。
+  fs.writeFileSync(path.join(root, "x.md"), `古い本文\n${MARKER}\n`)
+  const heredoc = [
+    "cat > x.md <<'EOF'",
+    "## Summary",
+    "- [x] I have signed the CLA",
+    "EOF",
+    "gh pr create --title fix -F x.md"
+  ].join("\n")
+  const copy = "cp t.md x.md && gh pr create -t a -F x.md"
+  for (const command of [heredoc, copy]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("Write ツール")
+  }
+})
+
+test("gh api の -F body=@<パス> と --input のパスが、同じコマンドの別の場所にも現れたら deny", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "x.md"), `本文\n${MARKER}\n`)
+  fs.writeFileSync(
+    path.join(root, "x.json"),
+    JSON.stringify({ body: `本文 ${MARKER}` })
+  )
+  for (const command of [
+    "cp t.md x.md && gh api repos/o/r/issues/1/comments -F body=@x.md",
+    "cp t.json x.json && gh api repos/o/r/pulls/1/reviews --input x.json"
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("Write ツール")
+  }
+})
+
+test("本文を引数で渡す投稿を含む複数の投稿は、1 つのマーカーがあっても deny", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "ok.md"), `本文\n${MARKER}\n`)
+  for (const command of [
+    `gh pr comment 1 -b "${MARKER} A" && gh pr comment 1 -b "B without marker"`,
+    `echo $(gh pr comment 1 -b "${MARKER} A") $(gh pr comment 2 -b B)`,
+    `gh api repos/o/r/issues/1/comments -f body="${MARKER}" && gh pr comment 1 -F ok.md`
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("1 回の Bash 呼び出しに 1 つ")
+  }
+})
+
+test("本文ファイルだけで渡す複数の投稿は、同じファイルを使っても中身にマーカーがあれば通る", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "ok.md"), `本文\n${MARKER}\n`)
+  const r = hook(
+    root,
+    "gh pr comment 1 -F ok.md && gh issue comment 1 -F ok.md"
+  )
+  expect(r).toBe(null)
+})
+
+test("gh pr create --web / -w は、本文のフラグの有無によらず deny", () => {
+  const root = setupRunAtPr()
+  fs.writeFileSync(path.join(root, "ok.md"), `本文\n${MARKER}\n`)
+  for (const command of [
+    "gh pr create -t x --web",
+    "gh pr create -w --body-file ok.md",
+    "gh pr create -dw"
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("--web")
+  }
+})
+
+test("gh issue create --web は対象にしない(gh が TTY の無い環境で拒む)", () => {
+  const root = setupRunAtTriage()
+  const r = hook(root, "gh issue create -t x --web")
+  expect(r).toBe(null)
+})

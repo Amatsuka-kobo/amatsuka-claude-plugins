@@ -80,13 +80,19 @@ var input = await readStdin();
 if (!input.stop_hook_active) {
   const run = findActiveRun(findProjectRoot(input.cwd ?? process.cwd()));
   if (run && run.state.status === "active") {
-    process.stdout.write(
-      `${JSON.stringify({
-        decision: "block",
-        reason: `Codiel run ${run.state.runId} try-${run.state.try} \u304C\u672A\u5B8C\u4E86\u3067\u3059(phase: ${run.state.phase})\u3002\u30D5\u30A7\u30FC\u30BA\u3092\u7D9A\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u4E2D\u6B62\u3059\u308B\u5834\u5408\u306F codiel-state stop --reason \u3067\u660E\u793A\u7684\u306B\u505C\u6B62\u3057\u307E\u3059\u3002\u4EBA\u306B\u78BA\u8A8D\u3057\u3066\u6B62\u307E\u308B\u3068\u304D\u306F\u3001\u5148\u306B codiel-state mark-ask ${run.state.phase} --slug ${run.state.runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002mark-ask \u304C\u53D7\u3051\u4ED8\u3051\u308B\u306E\u306F in_progress \u306E\u30D5\u30A7\u30FC\u30BA\u3068 pending \u306E finalize \u3060\u3051\u306A\u306E\u3067\u3001\u30D5\u30A7\u30FC\u30BA\u306E\u5408\u9593(\u76F4\u524D\u306E\u30D5\u30A7\u30FC\u30BA\u304C passed \u3067\u6B21\u306E\u30D5\u30A7\u30FC\u30BA\u304C\u307E\u3060 pending)\u3067\u306F\u3001\u6B21\u306E\u30D5\u30A7\u30FC\u30BA\u3092 start-phase \u3057\u3066\u304B\u3089 mark-ask \u3059\u308B\u3053\u3068\u3002`
-      })}
-`
-    );
+    const { runId, try: tryN, phase } = run.state;
+    const header = `Codiel run ${runId} try-${tryN} \u304C\u672A\u5B8C\u4E86\u3067\u3059(phase: ${phase})\u3002`;
+    let reason;
+    if (phase === null) {
+      reason = `${header}capturing-intent \u306E\u624B\u9806 5 \u306E (6) \u3092\u6700\u5F8C\u307E\u3067\u9032\u3081\u308B\u3053\u3068\u3002git switch -c \u304B git commit \u304C\u5931\u6557\u3057\u305F\u3068\u304D\u306F\u3001codiel-state stop --slug ${runId} --reason commit-failed \u3067 run \u3092\u7D42\u7AEF\u306B\u3057\u3066\u304B\u3089\u78BA\u304B\u3081\u308B\u3053\u3068\u3002`;
+    } else if (run.state.phases[phase].status === "passed") {
+      const next = PHASES[PHASES.indexOf(phase) + 1];
+      reason = `${header}\u6B21\u306E\u30D5\u30A7\u30FC\u30BA ${next} \u3092 codiel-state start-phase ${next} --slug ${runId} \u3067\u958B\u59CB\u3057\u3001\u4EBA\u306B\u78BA\u8A8D\u3057\u3066\u6B62\u307E\u308B\u3068\u304D\u306F codiel-state mark-ask ${next} --slug ${runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`;
+    } else {
+      reason = `${header}\u4EBA\u306B\u78BA\u8A8D\u3057\u3066\u6B62\u307E\u308B\u3068\u304D\u306F codiel-state mark-ask ${phase} --slug ${runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`;
+    }
+    process.stdout.write(`${JSON.stringify({ decision: "block", reason })}
+`);
   }
 }
 process.exit(0);
