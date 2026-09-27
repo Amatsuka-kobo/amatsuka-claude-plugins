@@ -999,8 +999,8 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | E2E で確定した手順(O2-3) | (未記録) |
 | 手動確認の結果(O2-4、O3-1、O4-1) | (未記録) |
 | `agent()` の委譲先の指定(§10 の未決事項 1) | 指定できる。`workflow-authoring` スキルの記述では、`agent()` の `opts.agentType` に Agent ツールと同じレジストリのサブエージェント名を渡せ、`schema` と併用できる。役割マーカーの対応表の定義を次のとおり指定する: complex-impl → `lead-implementer`(opus)、normal-impl → `claude-implementer`(sonnet)、light-impl → `claude-light-implementer`(haiku)、general → `general-worker`(sonnet)、code-review → `code-reviewer`(sonnet)、final-review → `claude-complex-reviewer`(fable)。各定義は担当表の Claude モデルと同じ `model` を宣言しているので、`opts.model` は渡さない(2026-09-27 確認) |
-| 設計書との食い違い(実装中に見つかったもの) | (未記録) |
-| レビューの medium / low | (未記録) |
+| 設計書との食い違い(実装中に見つかったもの) | M1-T01: `check-intent-env.ts` は `findDocRoot` を直接 import せず、`resolveDocPaths` が内部で解決した `docRoot` を使う(git の子プロセスを増やさず、文書パスと docRoot を同じ解決結果にするため)。独自の写しを持たないという §6.9.3 の目的は満たすので採用した。M1-T02・T05: `sandalphon-common.md` の ARCHITECTURE への言及は環境チェック(`:20-30`)にあり、capturing-intent の本文へ吸収された。登録簿は `intent-common.md` ではなく `plugins/codiel/references/intent-format.md` と `plugins/codiel/skills/capturing-intent/SKILL.md` の 2 エントリにした |
+| レビューの medium / low | M1-R: low 1 件。`plugins/codiel/docs/DESIGN.md` の統合セクション(§12)の導入文 2 文が「節」を使っていた。直訳語を使わない制約に当たるので「セクション」に直した(O1 の手順でコミット)。移設した本文の「二段構え」と、契約文書の規則番号を指す「段 3」は直していない |
 
 ### 9.4 計画の作成時に見つけた設計書と実コードの食い違い
 
@@ -1009,6 +1009,14 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 3. 設計書 §10 は M3 の終点に A5-1〜A5-4 を置くが、A5-3 の対象のうち `writing-dev-plans` の行(§6.10.1 の rules の行)は M4 の変更である。本書は A5-3 のこの行だけを M4 の終点で判定する(§8.3)。
 4. 設計書 §9 は metatron を M1 の終点で `0.3.11-dev` にするとし、依頼では metatron の値として `0.4.0-dev` だけが挙がっていた。両者は矛盾しない(M1 でパッチ、M3 でマイナー)ので、本書は設計書 §9 に従う。
 5. 設計書 §6.1.6 の入力の置き換えの表は `issue.md` を読むスキルを 5 つ挙げるが、実コードでは次のファイルにも `issue.md` への言及がある。`plugins/codiel/skills/scripting-tests/SKILL.md:113`、`plugins/codiel/skills/reviewing-diffs/references/generic.md:4`、`plugins/codiel/agents/codiel-test-designer.md:14,21`、`plugins/codiel/skills/raguel-gating/SKILL.md:35,37,58`、`plugins/codiel/skills/fixing-review-findings/SKILL.md:35,81,95`。本書はこれらを M2-T12a・M2-T12b の触るファイルに入れ、M2C-G で `plugins/codiel/skills` と `plugins/codiel/agents` の全体を grep する。
+
+実装中に見つけた食い違いは次のとおりである(2026-09-27 の実装セッションが記録)。
+
+6. 登録簿のテスト(`plugins/metatron/src/__test__/section-reference-inventory.test.ts` の V2)は `plugins/` 配下の全プラグインを走査するので、`plugins/sandalphon/` が残る M1 のゲートの時点で sandalphon の 3 エントリを消すと失敗する。M1-T05 は最終形(codiel の 2 エントリ)に置き換え、M1-T05b が移設元の 3 エントリを一時的に戻した。O1-6 で `plugins/sandalphon/` の削除と同じコミットに、3 エントリの削除を入れる(§7 の例外と同じ理由)。
+7. §3.2 の M1-G などの完了条件 `grep -rn "codiel/src" plugins/metatron/src` は、作成時点から既存のコメント 2 件(`plugins/metatron/src/lib/config.ts:7`、`plugins/metatron/src/__test__/inject-context.test.ts:6`)に一致し、0 件にならない。設計書の A5-1・A5-2 は import を対象にしているので、各ゲートは import 文に限った grep(`from "…/codiel/src…"` と `import("…/codiel/src…")`。A5-1 も同じ形)で判定する。
+8. 設計書 §6.2.2 は「すべてのコマンドの run 指定を `--slug` に替える」とするが、M2 のタスクに割り当てられていない `--issue` と `issue-N try-M` が次のファイルに残っている。`plugins/codiel/skills/{fixing-failures,recording-gotchas,implementing,running-regression-tests,initializing-harness}/SKILL.md`、`plugins/codiel/skills/scripting-tests/SKILL.md:91`。M2-C に M2-T12c(general)を足して前の 5 ファイルを直し、`scripting-tests/SKILL.md:91` は M2-T12b に含める。M2C-G で `--issue` と `issue-N try` の取り残しも grep する。M2-C のエージェント数は 5 になる。
+9. A2-12 の grep は `plugins/gh-utility` 配下の全体を対象にするので、M2-T07b が新設する `plugins/gh-utility/docs/format-change-checklist.md` にも codiel の名前を書けない。追随の相手は名前を出さずに特定できる書き方(同じ規則を独立に持つプラグインの `references/github-writing.md`)で書く。
+10. M1-T01 の報告で、指定行の外に「3 実装」「3 プラグイン」のコメントが残っていた(`plugins/codiel/src/hooks/guard-write.ts:28,44`、`plugins/codiel/src/hooks/__test__/lib.test.ts:79`)。`guard-write.ts` は M2-T04、`lib.test.ts` は M4-T02 の依頼文に含めて直す。
 
 ---
 
