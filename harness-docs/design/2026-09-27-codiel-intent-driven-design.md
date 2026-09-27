@@ -1054,6 +1054,8 @@ guard-bash の規則は次のとおりである。
 - `$` の無い算術コマンド `(( x << y ))` の `<<` は heredoc の開始と誤読し、`y` だけの行があればそこまでの行を読まない。`case` の `)` を含むコマンド置換は早く閉じる。
 - 開始として受けない heredoc の書き方(クォートしない `<<END-OF-MSG`、`<<E"O"F`、`0<<EOF`)と、終端の語を `)` と同じ行に書く `$(cat <<'EOF' … EOF)` は、本文の行をコマンドとして読む(誤検知の側。本文の gh の使用例がフェーズの制限に掛かりうる)。
 - シェルの語が実際のコマンド名かは確かめないので、`echo bash -c "gh pr create"` の値もコマンドとして読む(誤検知の側)。
+- 直前が数字の `<<`(空白を詰めた `python3<<'EOF'`)は heredoc の開始と見なさない。
+- 閉じていないクォートを残したときに使う読み直し(空白で区切る方式)は、`$(` の直前が代入以外の文字の形の gh の起動を見つけないことがあり、引数の値の `NAME=gh`(`-f name=gh`、クォートの中の `x=gh`)を gh の起動と読むことがある(誤検知と見逃しの両方)。この方式に入るのは、開始として受けない heredoc の本文に対になっていないクォートがあるときだけである。
 
 GitHub MCP の hook の規則は次のとおりである。
 
@@ -1152,7 +1154,7 @@ worktree 内の書き込みは、次の 3 点で判定する。worktree は `.co
 - `plugins/sandalphon/docs/format-change-checklist.md` を `plugins/codiel/docs/format-change-checklist.md` へ移し、追随先を改める(`analyzing-issues` の行を削り、`filing-followup-issues` と `syncing-intents` を加える)。
 - codiel は `evals/` を持たない(決定 54)。M1 で移した `evals/capturing-intent.json` は M2 で削除した。
 - `plugins/codiel/CLAUDE.example.md` を、metatron への分離後と intent 駆動化後の実態に合わせて書き直す(決定 57)。ARCHITECTURE・GOTCHAS・metatron には触れない(決定 59)。
-- 運用の規律は `plugins/codiel/assets/rules/codiel.md` を雛形として、`/codiel:init` が `.claude/rules/codiel.md` に置く。`CLAUDE.example.md` は、置き場の地図と入口のコマンドだけを持つ「## Codiel」のセクションにする(決定 70)。`/codiel:init` と `/codiel:run` の初期化の判定(B)は、`.claude/rules/codiel.md` が在ることと、CLAUDE.md に「## Codiel」の見出しがあることで行う。
+- 運用の規律は `plugins/codiel/assets/rules/codiel.md` を雛形として、`/codiel:init` が `.claude/rules/codiel.md` に置く。`CLAUDE.example.md` は、置き場の地図と入口のコマンドだけを持つ「## Codiel」のセクションにする(決定 70)。`/codiel:init` と `/codiel:run` の初期化の判定(B)は、`.claude/rules/codiel.md` が在ることと、CLAUDE.md に行全体が(前後の空白を除き)`## Codiel` と一致する行があることで行う。旧見出し「## Codiel ハーネス運用ルール」は前方一致でも満たさない。
 - `plugins/codiel/docs/DESIGN.md` と `README.md` を intent 駆動の run に書き換える。
 - `plugins/codiel/README.md` には「metatron を導入すると `/metatron:init` と `/metatron:update` が `[ADR 候補]` を ADR へ移し、持続層を参照形に縮める」という内容だけを書く(§6.4.3)。手動で移す手順は書かない。
 
