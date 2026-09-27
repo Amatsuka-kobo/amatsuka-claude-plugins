@@ -1,27 +1,31 @@
-# ファイル契約(metatron / codiel / sandalphon / gh-utility)
+# ファイル契約(metatron / codiel / gh-utility)
 
 正本: `harness-docs/design/2026-08-16-file-contract-freeze.md`(2026-08-16 凍結)。
 実装者はこの文書を**直接読む**。要約を経由すると実装ごとに契約が割れる。
+2026-09-27 に上流の intent 用プラグインを codiel へ吸収した。凍結文書は書き換えず、上書きの内容は
+`harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.5 にある(3 プラグイン → 2 プラグイン、
+3 者比較 → 2 者比較、intent 書式の正本は `plugins/codiel/references/intent-format.md`)。
 
 ## 構造上の要点(これを失うと壊れる)
 
-- 3 プラグインは互いのインストールパスを解決できない。したがって**ソースを共有せず、同じ規則を
-  独立に 3 回実装する**。写しが 3 つある状態が正常であり、共通ライブラリへの統合は不可能。
-- **唯一の機械的担保は sandalphon のケース 16f / テスト R4 の 3 者比較テスト**
-  (`plugins/sandalphon/src/__test__/check-intent-env.test.ts` の `expectThreeWayMatch`)。
-  metatron の `loadConfig` と codiel の `resolveDocPaths` はテストから直接呼び、sandalphon の
-  `check-intent-env` はトップレベル副作用を持つため子プロセスで起動して出力 JSON を突き合わせる。
-  **このテストを消すと 3 実装のずれを検出する手段がゼロになる。**「重複テストだから」と削らない。
-- 契約を変更したら §15 のチェックリスト 9 項目(3 実装 + metatron references 3 本 +
-  codiel `recording-gotchas` / `analyzing-issues` / `preparing-design-agendas` の写し +
-  sandalphon references 2 本 + gh-utility `issue-craft` の写し + 16f テスト)を同じコミットで更新する。
+- metatron と codiel は互いのインストールパスを解決できない。したがって**ソースを共有せず、同じ規則を
+  独立に 2 回実装する**。写しが 2 つある状態が正常であり、共通ライブラリへの統合は不可能。
+- **唯一の機械的担保は codiel の 2 者比較テストとテスト R4**
+  (`plugins/codiel/src/__test__/check-intent-env.test.ts` の `expectTwoWayMatch`、metatron 側は
+  `plugins/metatron/src/lib/__test__/config.test.ts` の R4-a〜f)。metatron の `loadConfig` / `extractDomains` と
+  codiel の `resolveDocPaths` / `readDomainsResult` はテストから直接呼び、codiel の `check-intent-env` は
+  トップレベル副作用を持つため子プロセスで起動して出力 JSON を突き合わせる。`check-intent-env` は
+  `lib.ts` を import するので、実装としては metatron と codiel の 2 つを比べている。
+  **このテストを消すと 2 実装のずれを検出する手段がゼロになる。**「重複テストだから」と削らない。
+- 契約を変更したら §15 のチェックリスト(2 実装 + metatron references 3 本 + codiel の
+  `references/intent-format.md` / `handoff-contract.md` と `recording-gotchas` / `preparing-design-agendas` の写し +
+  gh-utility `issue-craft` の写し + 2 者比較テスト)を同じコミットで更新する。
 
-### 3 者比較テストが実際に比較している項目(2026-08-17 拡張後)
+### 2 者比較テストが実際に比較している項目
 
-`expectThreeWayMatch(startDir, label, { withoutGit?, architecture? })` が突き合わせるのは以下。
-**ここに無いものは担保されていない。**
+`expectTwoWayMatch` が突き合わせるのは以下。**ここに無いものは担保されていない。**
 
-| 項目 | metatron 側の出所 | codiel 側 | sandalphon 側 |
+| 項目 | metatron 側の出所 | codiel `lib.ts` 側 | codiel `check-intent-env` 側 |
 | --- | --- | --- | --- |
 | `docRoot` | `loadConfig().docRoot` | `resolveDocPaths().docRoot` | `out.docRoot` |
 | ARCHITECTURE / GOTCHAS の解決パス | `architecturePath` / `gotchasPath` | `architecture` / `gotchas` | `projectDocs.*` |
@@ -32,19 +36,17 @@
 | 重複ブロック / 未閉フェンス警告の件数 | `extractDomains().warnings` | `readDomainsResult().warnings` | `configWarnings` に合算 |
 
 - **警告の文言までは一致を求めない**(同期コストが釣り合わないため、意図的)。
-- sandalphon は設定警告と文書構造警告を `configWarnings` の 1 本で返すため、比較相手は
+- `check-intent-env` は設定警告と文書構造警告を `configWarnings` の 1 本で返すため、比較相手は
   metatron の `loadConfig().warnings` + `extractDomains().warnings` の**合計**である。
-- 個別ケースは 16f 群のほか、`.codiel` の探索結果(`codielRoot` が codiel の `findProjectRoot`
-  と一致するか)、正当な Windows 区切りで**警告 0 件で揃う**こと、CRLF、絶対パス / ルート脱出、
-  ネスト git、git バイナリ無し、symlink 経由、ドメインブロックを呑み込む未閉フェンスを含む。
+- 個別ケースは旧 16f 群(設定の位置、絶対パス / ルート脱出、ネスト git、git バイナリ無し、symlink 経由、
+  CRLF、正当な Windows 区切り、壊れた設定、ドメインブロックを呑み込む未閉フェンス、無効な形状、重複ブロック)
+  をすべて残した。`.codiel` の探索と `testRunner` のケースは、対応する出力を削ったので消した。
 
 ### 構造上の限界(これを誤解するとテストを過信する)
 
-3 者比較は**実装間の差**しか見ない。**同じ誤実装が 3 者すべてに入れば全項目が一致して通る。**
+2 者比較は**実装間の差**しか見ない。**同じ誤実装が両方に入れば全項目が一致して通る。**
 契約文書に対する正しさは検証していない。したがって契約を変えるときは、テストが通ったことを
 根拠にせず §15 のチェックリストで写しを 1 つずつ突き合わせる。
-また sandalphon はドメイン定義の**値を返さない**ため、値の一致は metatron ↔ codiel の 2 者比較で、
-sandalphon は件数までしか照合できない。
 
 ## 条項の要点
 
@@ -82,8 +84,8 @@ sandalphon は件数までしか照合できない。
   文書が 1 つも無くても CLI 案内は出す。案内まで落とすのは `injection.enabled: false` と
   設定読み取り自体が例外で失敗したときの 2 つだけ。**rules 本文は注入しない**(Claude Code が
   起動時に読み、サブエージェントにも渡る)。
-- §14 実装間の一致検証(上記 16f)。**`paths.rulesDir` は 3 者比較に含めない**(codiel と
-  sandalphon は未知キーとして無視する)。
+- §14 実装間の一致検証(上記の 2 者比較)。**`paths.rulesDir` は 2 者比較に含めない**(codiel は
+  未知キーとして無視する)。
 
 ## 各実装の場所
 
@@ -91,4 +93,3 @@ sandalphon は件数までしか照合できない。
 | --- | --- | --- |
 | metatron | `plugins/metatron/src/lib/config.ts` | **正本の実装** |
 | codiel | `plugins/codiel/src/hooks/lib.ts` の `findDocRoot` / `resolveDocPaths` / `readDomainsResult`(薄い包み `readDomains`) | 独立実装 |
-| sandalphon | `plugins/sandalphon/src/check-intent-env.ts` | 独立実装 |

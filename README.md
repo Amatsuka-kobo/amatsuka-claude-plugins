@@ -58,7 +58,6 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | agent-policy | エージェント運用を最適化するプラグイン。Claude のモデル名で役割を固定する "claude" プロファイルと、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決める "custom" プロファイルを提供する | 開発中     |
 | prompt-smith | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げるプロンプト設計・改善・最適化のためのプラグイン  | 開発中     |
 | Metatron     | プロジェクトアーキテクチャ・失敗知識・規律(rules)を管理し、毎セッション AI のコンテキストへ注入するプラグイン | 開発中     |
-| Sandalphon   | ユーザーの願い(TOBE)を聞き取って現状(ASIS)と突き合わせ、intent 文書に固定して issue へ起票し、実行系へ引き渡すオーケストレーター                                          | 開発中     |
 | jevriel      | TypeSafe AI の判断モデル Jev を利用し、分類・順位付け・主張の確認・操作の安全性評価とブラウザ・API の動作確認を行う MCP プラグイン                                      | 開発中     |
 | native-japanese | 日本語で書く出力に、翻訳調や決まり文句を避けて結論から書く規律を、毎セッションとサブエージェントへ注入するプラグイン | 開発中 |
 
@@ -70,6 +69,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 
 GitHub issue の内容を取得し、設計・開発・PR起票・レビューを一気通貫で行うことができるプラグインです。分析・設計・実装・テスト・レビューの作業は、内容に応じた委譲先へ渡して進行します。<br>
 `/codiel:init` は保護パスの聞き取りだけを行い、ARCHITECTURE の散文や GOTCHAS は生成しません。ドメインマップが無くても動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
+`capturing-intent` スキルは、ユーザーの「やりたいこと」(TOBE)を聞き取ってソフトウェアの現状(ASIS)と突き合わせ、受け入れ基準まで含む intent 文書(`docs/intents/YYYY-MM-DD-<slug>.md`)に固定します。issue の起票は外部公開行為として、全文提示と承認を経ます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。
 
 ### Raphael
@@ -127,19 +127,11 @@ AI 向け指示書の作成・改善は `prompt-smith`、スキルとコマン�
 `/metatron:init` がコードベース解析から ARCHITECTURE と rules 3 ファイルを初回生成し、承認を経て GOTCHAS の空の台帳を作成します。`/metatron:update` は現行コードとの乖離を検出して更新します。設定ファイル `metatron.config.json` は任意で、無ければ全項目が既定値で動きます。既定の `paths.architecture` と `paths.gotchas` はそれぞれ `docs/ARCHITECTURE.md` と `docs/GOTCHAS.md`、`paths.rulesDir` は `.claude/rules/metatron` です。<br>
 ※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
 
-### Sandalphon
+### Metatron / Codiel の関係
 
-ユーザーの「やりたいこと」(TOBE)を聞き取り、ソフトウェアの現状(ASIS)と突き合わせて intent 文書に固定し、GitHub issue という形で実行系へ届けるオーケストレーターです。<br>
-成果物は `docs/intents/YYYY-MM-DD-<slug>.md` に残る intent 文書(ASIS / TOBE / 受け入れ基準 / 実装方針 / 合意済み事項 / 非スコープ / 未確定事項)であり、issue はその派生物です。<br>
-`/sandalphon:run` で聞き取りから引き渡しまでを進めます。承認ゲートは「取り消しコストが跳ね上がる直前」の 2 点だけに置き、issue の起票は外部公開行為としてゲートとは別に必ず全文提示と承認を経ます。<br>
-※ Sandalphon とは、人間の祈り・願いを束ねて天へ届ける天使の名前です。
-
-### Metatron / Sandalphon / Codiel の関係
-
-この3つのプラグインは連携することができます。(それぞれ独立して使用することも可)
-TOBE → intent → issue → 実装という一続きの流れを分担します。<br>
-Codiel は Metatron が無くてもドメインマップなしで動作し、Sandalphon が無くても通常の自動開発ワークフローを実行します。<br>
-Sandalphon は Codiel が無くても intent 文書を残して自前実行まで行えます。Metatron も他の2つが無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体で運用価値があります。<br>
+この 2 つのプラグインは連携することができます。(それぞれ独立して使用することも可)
+TOBE → intent → 実装という一続きの流れは Codiel が受け持ち、Metatron はプロジェクトの前提(ARCHITECTURE・rules)と失敗知識(GOTCHAS)を供給します。<br>
+Codiel は Metatron が無くてもドメインマップなしで動作します。Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体で運用価値があります。<br>
 これらのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / metatronが管理するrules / intent 文書)とコンテキストで相互補完を行います。
 
 

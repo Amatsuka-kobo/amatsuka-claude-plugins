@@ -129,5 +129,5 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 - **codiel は metatron 無しで動く。** `/codiel:init` は ARCHITECTURE を生成・修復せず、保護パスだけを確認する。
   ARCHITECTURE の作成と更新は metatron が担う。codiel は ARCHITECTURE にあるドメインマップを
   実行時に読み取るが、そこへ書き込まない。
-- sandalphon は ASIS 探索の材料として 2 文書を直読するだけ。
+- codiel の `capturing-intent` は ASIS 探索の材料として 2 文書を読むだけで、パスは `check-intent-env` の `projectDocs` から得る。
 - **どちらも metatron のインストール位置を参照しない。** 共有するのはファイルの書式だけ。

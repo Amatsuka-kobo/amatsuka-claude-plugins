@@ -1,4 +1,4 @@
-`plugins/codiel` (0.8.0-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
+`plugins/codiel` (1.0.0-dev) — GitHub-issue-driven orchestrator: takes an issue and drives it
 through analysis, design discussion, planning, implementation, testing, PR and review, gated by the
 bundled `raguel` MCP server. The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
@@ -76,12 +76,27 @@ Raguel gates `init`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`
 `design` は walkthrough + ユーザー承認を Raguel 評価の前に置く、`triage` は常にユーザー主導。
 「codiel には固定の人間承認チェックポイントが無い」という旧記述は誤り。
 
-### sandalphon の intent issue を起点にした場合
+### intent 文書と capturing-intent(2026-09-27 に上流の intent 用プラグインから統合)
 
-本文のどこかに `<!-- intent:v1 -->` があれば intent issue。`analyzing-issues` は要件抽出を
-一からやり直さず、契約 §9-3 の写像表どおり `issue.md` へ**そのまま転記する**(要約を伴う抽出をしない)。
-`discuss` は起票前に合意済みの分岐を論点として再提示せず、`agenda.md` に継承済みとして列挙する。
-マーカーが完全一致しない (`intent:v2`、`<!--intent:v1-->`) ものは通常どおり本文から抽出する。
+上流の intent 用プラグインの `capturing-intent` スキル・参照文書・`check-intent-env` は codiel へ移り、そのプラグインは撤去された。
+run の起点を intent 文書へ替える改修は `harness-docs/design/2026-09-27-codiel-intent-driven-design.md`(M2 以降)。
+
+- `skills/capturing-intent/`: TOBE の聞き取り → ASIS 探索 → 分岐の合意 → intent 文書
+  `docs/intents/YYYY-MM-DD-<slug>.md` の全文提示と承認 → 保存。
+- `references/intent-format.md`(intent 書式の正本)/ `handoff-contract.md`(gh-utility `issue-craft`
+  持ち込みモードの呼び出し契約)/ `intent-common.md`(基本方針・畳む経路・自前起票・失敗時)。
+- 基本方針は「経路の選択はグレースフルデグラデーション、承認はフェイルクローズド」。使えない経路は
+  理由 1 行で畳む。issue の起票は外部公開行為なので、環境がどれだけ縮退しても全文提示と明示承認を経る。
+- `scripts/check-intent-env.mjs`(`src/check-intent-env.ts`)は判断を持たず、常に exit 0 で事実の JSON
+  だけを返す読み取り専用スクリプト。ルート解決とドメインマップ読み取りは `src/hooks/lib.ts` の
+  `resolveDocPaths` / `readDomainsResult` を import し、写しを持たない。旧版の `codielHandoffCandidate` /
+  `codielHarness` / `testRunner` の出力は削除した。
+- intent 文書は `repoRoot`(git ルート)基準、ARCHITECTURE / GOTCHAS は契約 §3 の `docRoot` 基準。
+  2 つが別ディレクトリを指すのは正常な状態。
+- metatron との 2 者比較テストは `src/__test__/check-intent-env.test.ts` の `expectTwoWayMatch`
+  (詳細は `mem:file_contract`)。
+- M1 の時点では、本文に `<!-- intent:v1 -->` を持つ intent issue を入力にした run は、従来どおり
+  `analyzing-issues` が `issue.md` へ転記する。
 
 ## Agents — bundled analysts and work-content dispatch
 
