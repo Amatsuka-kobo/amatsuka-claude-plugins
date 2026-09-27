@@ -250,7 +250,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 - A2-18: `plugins/codiel/skills/reviewing-diffs/SKILL.md` が「原文の要望の未達は severity high」の文を含む。`orchestrating-runs/SKILL.md` の finalize のセクションが「達成 / 未達 / 要確認 / 持ち越し」と「すべて達成のときだけ `status: done`」を含む。両方が「原文を正とし」と「`mark-ask`」を含む。`orchestrating-runs/SKILL.md` が「フェーズの途中で人に確認するときは `mark-ask`」の文と `--kind confirm` と `--reason intent-updated` を含む。`orchestrating-runs/SKILL.md` の依頼文テンプレートが「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ報告する」の文を含む(grep)。
 - A2-19: `plugins/codiel/skills/capturing-intent/SKILL.md` が次の固定文字列をすべて含む(grep)。「`## 現状調査`」「1 問だけ」「要約しない」「書き換えない」「原文にしない」「今回やらないことも `## TOBE` に記録する」「翻訳しない」「<!-- codiel:generated -->」。同じファイルが、「ASIS はユーザーに聞かず自分で読む」を `## 現状調査` の規律として持つ。
 - A2-20: `codiel-state finalize` の後に intent の `status` が、持ち越しを除く原文の要望がすべて達成のときだけ `done` になり、未達か要確認が残れば `in-progress` のままである(スキルの手順の grep と §8.4 の手動確認)。intent-sync は `status` を `done` にしない(grep)。
-- A2-21: guard-bash が、active run があるとき、`gh issue create|comment|edit` と `gh pr create|comment|edit|review` のうち本文を持つ呼び出しで、本文(`--body` / `-b` の値、`--body-file` / `-F` のファイルの中身)に `<!-- codiel:generated -->` が無ければ deny する。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。ただし、本文を自動で作る呼び出し(決定 64)と `gh pr create --web` は deny する。`--body-file -` と `-F -` は deny する。active run が無ければ、どれも通す(テスト)。
+- A2-21: guard-bash が、active run があるとき、`gh issue create|comment|edit` と `gh pr create|comment|edit|review` のうち本文を持つ呼び出しで、本文(`--body` / `-b` の値、`--body-file` / `-F` のファイルの中身)に `<!-- codiel:generated -->` が無ければ deny する。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。ただし、本文を自動で作る呼び出し(決定 64)と、`gh pr create` / `gh issue create` の `--web` は deny する。`--body-file -` と `-F -` は deny する。active run が無ければ、どれも通す(テスト)。
 - A2-22: GitHub MCP の本文を書き込むツールに掛ける hook が、active run があるとき、本文の引数(`body` など)に `<!-- codiel:generated -->` が無ければ deny し、active run が無ければ通す(テスト)。`plugins/codiel/hooks/hooks.json` に、そのツール名に当たる matcher がある(grep)。
 - A2-23: `plugins/codiel/references/github-writing.md` が「`<!-- codiel:generated -->` を本文に含める」の文を含む。`plugins/gh-utility/references/` の GitHub の執筆規則のファイルに `codiel:generated` の語が無い(grep)。
 
@@ -1030,16 +1030,26 @@ guard-bash の規則は次のとおりである。
 - 対象のコマンドは `gh issue create`・`gh issue comment`・`gh issue edit`・`gh pr create`・`gh pr comment`・`gh pr edit`・`gh pr review` である。サブコマンドは、git と同じくトークンの解析で見分ける(`guard-bash.ts:36-60` の手法)。
 - 本文を持つ呼び出しだけを検査する。本文を持つとは、`--body` / `-b` か `--body-file` / `-F` を含むことである。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。例外は、下の項の本文を自動で作る呼び出しと `--web` である。
 - フラグは、短いフラグの結合(`-df`)と値の連結(`-bX`)も読む。行末の `\` による行の継続は、gh と git の起動を探す前に 1 行へ戻す。
-- `--body` / `-b` のときは、コマンドの文字列全体にマーカーが含まれるかを見る。本文はクォートや heredoc(`"$(cat <<'EOF' … EOF)"`)で複数行になり、改行で区切るセグメントの分割(`guard-bash.ts:18`)では切れてしまうので、セグメントに分けずに見る。
+- `--body` / `-b` のときは、コマンドの文字列全体にマーカーが含まれるかを見る。本文はクォートや heredoc(`"$(cat <<'EOF' … EOF)"`)で複数行になり、改行で区切るセグメントの分割(`guard-bash.ts:18`)では切れてしまうので、セグメントに分けずに見る。1 つの投稿が本文の値を 2 つ以上持つとき(本文のフラグの繰り返し、`gh api` の `comments[][body]`)は、値ごとにマーカーを求める。gh は繰り返したフラグの最後の値を使うためである。
 - `--body-file` / `-F` のときは、値のパスを cwd 基準で解決し、ファイルの中身にマーカーが含まれるかを見る。ファイルが読めなければ deny する。
 - 値が `-`(標準入力)のときは中身を検査できないので deny し、ファイルに書いて `--body-file <パス>` で渡すよう案内する。
 - マーカーが無ければ deny し、「本文に `<!-- codiel:generated -->` を含めて投稿し直す」よう案内する。
-- 既存のフェーズの制限(`gh issue create` は triage だけ、`gh pr create` は pr だけ。`guard-bash.ts:164-173`)はそのまま残し、マーカーの検査はその後に当てる。
+- 既存のフェーズの制限(`gh issue create` は triage だけ、`gh pr create` は pr だけ)は残し、マーカーの検査はその後に当てる。フェーズの制限は、正規表現ではなく、下の項の字句解析で見つけた gh の起動で判定する(`gh -R o/r pr create` を捕まえ、コミットメッセージに書いた使用例を捕まえないため)。
 - `gh api` も対象にする(決定 60)。メソッドは `-X` / `--method` の値で決め、指定が無ければフィールドか `--input` があるとき POST、無いとき GET とする。POST・PATCH・PUT のうち、キーが `body`(`comments[][body]` の形を含む)のフィールドを `-f` / `--raw-field` / `-F` / `--field` で送るものと、`"body":` を含む `--input <ファイル>` を送るものを検査する。`-F body=@<パス>` と `--input <パス>` はファイルの中身を見る。`@-` と `--input -` は deny し、読めないファイルも deny する。本文を持たない呼び出し(読み取り、ラベルだけの更新)は通す。GraphQL の mutation の query に本文を直接書く形と、`body` 以外の名前のフィールドで本文を送る形は検出しない。
-- 本文のフラグを持たずに本文を自動で作る呼び出しを deny する(決定 64)。対象は、`--fill`・`--fill-first`・`--fill-verbose`・`--template` / `-T` を持つ `gh pr create` と、`--template` / `-T` を持つ `gh issue create` である。`gh pr create --web` / `-w` も deny する(決定 66)。Web の作成画面はテンプレートを入れた状態で開くためである。
+- 本文のフラグを持たずに本文を自動で作る呼び出しを deny する(決定 64)。対象は、`--fill`・`--fill-first`・`--fill-verbose`・`--template` / `-T` を持つ `gh pr create` と、`--template` / `-T` を持つ `gh issue create` である。`gh pr create` と `gh issue create` の `--web` / `-w` も deny する(決定 66)。Web の作成画面はテンプレートを入れた状態で開き、画面で編集した本文は検査できないためである。
 - 本文ファイルのパス(`--body-file` / `-F` の値、`gh api` の `-F body=@<パス>`、`--input <パス>`)が、同じコマンドの中でフラグの値以外の場所にも現れたら deny する(決定 66)。hook は実行前にファイルを読むので、同じコマンドで書き換えると古い中身を検査してしまうためである。パスの表記を変えた書き換えは検出しないので、本文を Write ツールで書く規律(§6.12.3)と併せて防ぐ。
 - 1 つのコマンドに本文付きの投稿が 2 つ以上あり、いずれかが本文を引数(`--body` / `-b`、`gh api` の `-f body=`)で渡すときは deny する(決定 66)。コマンドの文字列全体でマーカーを探すので、1 つのマーカーで別の投稿まで通ってしまうためである。
-- gh の起動を探すときは、heredoc の本文の行(`<<WORD` から終端の `WORD` の行まで)を除く。除くのは終端の行が見つかったときだけで、`<<<`(here-string)と算術のシフト(`1<<2`)は heredoc の開始と見なさない。判定に迷う形は除かずに検査する。コミットメッセージに書いた gh の使用例を投稿と見なさないためである。この結果、`bash <<EOF` の中で起動した gh の投稿は検出しない(既知の限界)。マーカーの検査は、従来どおりコマンドの文字列全体で行う。
+- gh の起動は、クォートと入れ子を追う字句解析で探す。起動を分けるのは、コマンドの区切り(`;` `&` `|` 改行、サブシェルの括弧)とコマンド置換(`$( … )`、バッククォート)の境界だけである。クォートした文字列は 1 語として扱い、その中の語をフラグとも gh の起動とも読まない。コマンド置換の中と、`bash -c` / `eval` の引数の中の gh は、別の起動として検査する。
+- heredoc の本文の行(`<<WORD` から終端の `WORD` の行まで)は、gh の起動として読まない。コミットメッセージに書いた gh の使用例を投稿と見なさないためである。本文を除くのは終端の行が見つかったときだけで、`<<<`(here-string)、算術のシフト(`1<<2`)、終端の語の直後に語の区切り以外が続く形(`<<EOF-X`)は heredoc の開始と見なさない。終端の語をクォートしない heredoc(`<<EOF`)では、本文の中のコマンド置換を実行されるものとして検査する。マーカーの検査は、従来どおりコマンドの文字列全体で行う。
+
+既知の限界(決定 69。意図的な回避か、誤検知の側に倒れるもの)は次のとおりである。
+
+- `bash <<EOF` の本文の中で起動した gh の投稿は検出せず、フェーズの制限にも掛からない。
+- 1 つの本文の値は、コマンドの文字列全体でマーカーを探す(決定 53 の規則)。本文の外(`# <マーカー>` のコメント、別の heredoc、変数)にマーカーを置くと通る。
+- `-c` と `eval` 以外のコマンドが実行するクォートした文字列(`watch "gh …"`、`ssh host "gh …"`、`parallel`)の中の gh と、`sudo -u gh gh …` のように gh の語を 2 つ持つ形は検出しない。
+- 本文ファイルの書き換えは、同じパスの表記(`./x.md` と `x.md`)を変えると検出しない。GraphQL の mutation の query に直接書いた本文と、`body` 以外の名前のフィールドで送る本文も検出しない(§6.8 の `gh api` の項)。
+- 空白を詰めた `cat<<EOF`、`<<\EOF` は heredoc と見なさず、本文の行も検査する(誤検知の側)。算術の中のシフト `$(( 1 <<b ))` は heredoc の開始と誤読し、終端の語までの行を読まない。`case` の `)` を含むコマンド置換は早く閉じる。
+- 全体をクォートしたフラグ風の値(`--title "-webkit-"`)はフラグと読み、deny する(誤検知の側)。
 
 GitHub MCP の hook の規則は次のとおりである。
 
