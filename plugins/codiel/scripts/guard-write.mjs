@@ -8,12 +8,13 @@ import path3 from "node:path";
 import fs from "node:fs";
 import path from "node:path";
 var STAGES = [
-  ["init"],
+  ["intent"],
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
   ["implement"],
   ["test-loop"],
+  ["intent-sync"],
   ["pr"],
   ["review"],
   ["fix-loop"],
@@ -24,37 +25,38 @@ var PHASES = STAGES.flat();
 function readState(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
-function runDir(root, issue) {
-  return path.join(root, ".codiel", "runs", `issue-${issue}`);
+function runDir(root, slug) {
+  return path.join(root, ".codiel", "runs", slug);
 }
 function tries(dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
 }
-function latestTry(root, issue) {
-  const dir = runDir(root, issue);
+function latestTry(root, slug) {
+  const dir = runDir(root, slug);
   const ts = tries(dir);
   if (ts.length === 0) return null;
   const n = ts[ts.length - 1];
   const p = path.join(dir, `try-${n}`, "state.json");
   return { tryN: n, statePath: p, state: readState(p) };
 }
-function findActiveRun(root) {
+function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");
-  if (!fs.existsSync(runsRoot)) return null;
+  if (!fs.existsSync(runsRoot)) return [];
+  return fs.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
+}
+function findActiveRun(root) {
   let best = null;
-  for (const r of fs.readdirSync(runsRoot).filter((d) => /^issue-\d+$/.test(d))) {
-    const latest = latestTry(root, Number(r.slice(6)));
-    if (!latest) continue;
-    if (latest.state.status === "active" || latest.state.status === "awaiting_human") {
-      if (!best || latest.state.updatedAt > best.state.updatedAt) {
-        best = {
-          dir: path.dirname(latest.statePath),
-          statePath: latest.statePath,
-          state: latest.state
-        };
-      }
-    }
+  for (const latest of latestTries(root)) {
+    const st = latest.state;
+    if (st.version !== 2) continue;
+    if (st.status !== "active" && st.status !== "awaiting_human") continue;
+    if (!best || st.updatedAt > best.state.updatedAt)
+      best = {
+        dir: path.dirname(latest.statePath),
+        statePath: latest.statePath,
+        state: st
+      };
   }
   return best;
 }
@@ -360,17 +362,26 @@ function findProjectRoot(startDir) {
 
 // src/hooks/guard-write.ts
 var DOC_PHASES = /* @__PURE__ */ new Set([
-  "init",
+  "intent",
   "discuss",
   "design",
   "test-spec",
-  "dev-plan"
+  "dev-plan",
+  "intent-sync"
 ]);
 var CODE_PHASES = /* @__PURE__ */ new Set([
   "implement",
   "test-loop",
   "fix-loop"
 ]);
+var INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/;
+var INTENT_DOC_PHASES = /* @__PURE__ */ new Set([
+  null,
+  "intent",
+  "intent-sync",
+  "triage"
+]);
+var INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/;
 function toDomainMap(value) {
   if (value === null) return null;
   const map = /* @__PURE__ */ Object.create(null);
@@ -409,6 +420,21 @@ try {
   const run = findActiveRun(codielRoot);
   if (run?.state.status !== "active") pass();
   const phase = run.state.phase;
+  if (run.state.intent === codielRel) pass();
+  if (INTENT_DOMAIN_RE.test(codielRel)) {
+    if (phase === "intent-sync") pass();
+    emit(
+      "ask",
+      `\u6301\u7D9A\u5C64(${codielRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F intent-sync \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
+    );
+  }
+  if (INTENT_DOC_RE.test(codielRel)) {
+    if (INTENT_DOC_PHASES.has(phase)) pass();
+    emit(
+      "ask",
+      `intent \u6587\u66F8(${codielRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F\u3053\u306E\u30D5\u30A7\u30FC\u30BA\u3067\u306F\u60F3\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
+    );
+  }
   if (DOC_PHASES.has(phase)) {
     if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
       pass();

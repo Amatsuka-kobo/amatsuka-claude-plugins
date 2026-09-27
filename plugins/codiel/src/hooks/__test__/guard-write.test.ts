@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { GATED, STAGES } from "../../codiel-state.js"
 import { runTs } from "../../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../guard-write.ts", import.meta.url))
@@ -30,28 +31,76 @@ function hook(
   return (JSON.parse(out) as { hookSpecificOutput: HookOutput })
     .hookSpecificOutput
 }
-function setupRun(phasesToPass: string[] = []): string {
+
+const SLUG = "demo"
+// init の必須フラグの既定値。intent は state.intent とも一致させ、
+// 「state.intent のファイル」の判定を実際に検証できるようにする。
+const INIT_DEFAULTS: Record<string, string> = {
+  intent: "docs/intents/2026-09-27-demo.md",
+  integration: "github",
+  scale: "standard",
+  "adr-target": "metatron",
+  "image-upload": "gh-attach,chrome"
+}
+
+function intentPath(root: string): string {
+  return path.join(root, INIT_DEFAULTS.intent)
+}
+
+// init だけを行い、start-phase を呼ばない(state.phase が null の run)。
+function initOnly(slug = SLUG): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "guard-write-"))
-  runTs(CLI, ["init", "--issue", "1"], { cwd: root })
-  runTs(CLI, ["start-phase", "init", "--issue", "1"], { cwd: root })
-  for (const ph of phasesToPass) {
-    runTs(
-      CLI,
-      [
+  const args = ["init", "--slug", slug]
+  for (const [k, v] of Object.entries(INIT_DEFAULTS)) args.push(`--${k}`, v)
+  runTs(CLI, args, { cwd: root })
+  return root
+}
+
+// init の後、intent フェーズを in_progress にする。
+function setupRun(slug = SLUG): string {
+  const root = initOnly(slug)
+  runTs(CLI, ["start-phase", "intent", "--slug", slug], { cwd: root })
+  return root
+}
+
+const PHASE_SEQUENCE = STAGES.flat()
+
+// root の run を、targetPhase が in_progress になるまで進める。targetPhase の
+// 手前までは、GATED なフェーズは pass-gate、それ以外は complete-phase で終える
+// (pr だけ integration が github の run に必須の --pr-url を添える)。
+function advanceRunTo(root: string, targetPhase: string, slug = SLUG): void {
+  const cli = (args: string[]) => runTs(CLI, args, { cwd: root })
+  const idx = PHASE_SEQUENCE.indexOf(targetPhase)
+  for (let i = 0; i < idx; i++) {
+    const ph = PHASE_SEQUENCE[i]
+    if (GATED.has(ph))
+      cli([
         "pass-gate",
         ph,
-        "--issue",
-        "1",
+        "--slug",
+        slug,
         "--evaluation-id",
         "e",
         "--verdict",
         "PROCEED"
-      ],
-      { cwd: root }
-    )
-    // 次フェーズの start は呼び出し側で
+      ])
+    else if (ph === "pr")
+      cli([
+        "complete-phase",
+        ph,
+        "--slug",
+        slug,
+        "--pr-url",
+        "https://example.com/pr/1"
+      ])
+    else cli(["complete-phase", ph, "--slug", slug])
+    cli(["start-phase", PHASE_SEQUENCE[i + 1], "--slug", slug])
   }
-  return root
+}
+
+// setupRun の run を implement フェーズまで進める。
+function advanceToImplement(root: string): void {
+  advanceRunTo(root, "implement")
 }
 
 test("state.json への直接書き込みは run の有無に関わらず deny", () => {
@@ -59,7 +108,7 @@ test("state.json への直接書き込みは run の有無に関わらず deny",
   const r = hook(
     root,
     "Write",
-    path.join(root, ".codiel/runs/issue-1/try-1/state.json")
+    path.join(root, ".codiel/runs/demo/try-1/state.json")
   )
   expect(r?.permissionDecision).toBe("deny")
 })
@@ -70,45 +119,19 @@ test("アクティブ run がなければ通常の書き込みは素通し(無�
   expect(r).toBe(null)
 })
 
-test("文書フェーズ(init)中の src への書き込みは ask、.codiel 配下は素通し(無出力)", () => {
+test("文書フェーズ(intent)中の src への書き込みは ask、.codiel 配下は素通し(無出力)", () => {
   const root = setupRun()
   expect(
     hook(root, "Write", path.join(root, "src/app.ts"))?.permissionDecision
   ).toBe("ask")
   expect(
-    hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/issue.md"))
+    hook(root, "Write", path.join(root, ".codiel/runs/demo/try-1/issue.md"))
   ).toBe(null)
 })
 
 test("implement フェーズ中: src は素通し、specs の cases.md は ask", () => {
   const root = setupRun()
-  const cli = (args: string[]) => runTs(CLI, args, { cwd: root })
-  cli([
-    "pass-gate",
-    "init",
-    "--issue",
-    "1",
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
-  cli(["start-phase", "discuss", "--issue", "1"])
-  cli(["complete-phase", "discuss", "--issue", "1"])
-  for (const ph of ["design", "test-spec", "dev-plan"]) {
-    cli(["start-phase", ph, "--issue", "1"])
-    cli([
-      "pass-gate",
-      ph,
-      "--issue",
-      "1",
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
-  }
-  cli(["start-phase", "implement", "--issue", "1"])
+  advanceToImplement(root)
   expect(hook(root, "Edit", path.join(root, "src/app.ts"))).toBe(null)
   expect(
     hook(root, "Edit", path.join(root, ".codiel/specs/screen-login/cases.md"))
@@ -131,40 +154,29 @@ test("cwd がサブディレクトリでも state.json への絶対パス書き�
   const root = setupRun()
   const srcDir = path.join(root, "src")
   fs.mkdirSync(srcDir, { recursive: true })
-  const abs = path.join(root, ".codiel/runs/issue-1/try-1/state.json")
+  const abs = path.join(root, ".codiel/runs/demo/try-1/state.json")
   const r = hook(srcDir, "Write", abs)
   expect(r?.permissionDecision).toBe("deny")
 })
 
 test("state.json 保護は大文字パスでもバイパスされない(ケース非依存)", () => {
   const root = setupRun()
-  const abs = path.join(root, ".CODIEL/RUNS/issue-1/try-1/state.json")
+  const abs = path.join(root, ".CODIEL/RUNS/demo/try-1/state.json")
   const r = hook(root, "Write", abs)
   expect(r?.permissionDecision).toBe("deny")
 })
 
 test("discuss フェーズ中: .codiel 配下(agenda.md/discussion.md)は素通し、src への書き込みは ask", () => {
   const root = setupRun()
-  const cli = (args: string[]) => runTs(CLI, args, { cwd: root })
-  cli([
-    "pass-gate",
-    "init",
-    "--issue",
-    "1",
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
-  cli(["start-phase", "discuss", "--issue", "1"])
+  advanceRunTo(root, "discuss")
   expect(
-    hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/agenda.md"))
+    hook(root, "Write", path.join(root, ".codiel/runs/demo/try-1/agenda.md"))
   ).toBe(null)
   expect(
     hook(
       root,
       "Write",
-      path.join(root, ".codiel/runs/issue-1/try-1/discussion.md")
+      path.join(root, ".codiel/runs/demo/try-1/discussion.md")
     )
   ).toBe(null)
   const r = hook(root, "Write", path.join(root, "src/app.ts"))
@@ -179,6 +191,117 @@ test("cwd がサブディレクトリでも文書フェーズ制御が機能す�
   fs.mkdirSync(srcDir, { recursive: true })
   const r = hook(srcDir, "Write", path.join(root, "src/app.ts"))
   expect(r?.permissionDecision).toBe("ask")
+})
+
+// ---------------------------------------------------------------------------
+// docs/intents/** の規則(設計書 §6.8)。判定の順序は
+// (1) state.intent のファイルか → 当たれば全フェーズで通す
+// (2) docs/intents/** の規則(直下の *.md、domains/** で通すフェーズが違う)
+// (3) 従来の DOC_PHASES / CODE_PHASES / catch-all
+// ---------------------------------------------------------------------------
+
+test("state.intent のファイルは intent・discuss・design・implement フェーズで書き込める", () => {
+  const rootIntent = setupRun()
+  expect(hook(rootIntent, "Write", intentPath(rootIntent))).toBe(null)
+
+  for (const phase of ["discuss", "design", "implement"]) {
+    const root = setupRun()
+    advanceRunTo(root, phase)
+    expect(hook(root, "Write", intentPath(root))).toBe(null)
+  }
+})
+
+test("state.intent のファイルは review・fix-loop・finalize フェーズでも書き込める", () => {
+  for (const phase of ["review", "fix-loop", "finalize"]) {
+    const root = setupRun()
+    advanceRunTo(root, phase)
+    expect(hook(root, "Write", intentPath(root))).toBe(null)
+  }
+})
+
+test("docs/intents/ の同じディレクトリにある別のファイル(1 文字違い)は design フェーズで ask になる", () => {
+  const root = setupRun()
+  advanceRunTo(root, "design")
+  // state.intent は docs/intents/2026-09-27-demo.md。末尾を 1 文字だけ変えた
+  // 別ファイルが、規則外のフェーズで ask になることを確かめる。
+  const sibling = path.join(root, "docs/intents/2026-09-27-demp.md")
+  const r = hook(root, "Write", sibling)
+  expect(r?.permissionDecision).toBe("ask")
+})
+
+test("docs/intents/*.md(直下)は phase null・intent・intent-sync・triage で通る", () => {
+  const other = "docs/intents/2026-09-27-other.md"
+
+  const rootNull = initOnly()
+  expect(hook(rootNull, "Write", path.join(rootNull, other))).toBe(null)
+
+  const rootIntent = setupRun()
+  expect(hook(rootIntent, "Write", path.join(rootIntent, other))).toBe(null)
+
+  const rootIntentSync = setupRun()
+  advanceRunTo(rootIntentSync, "intent-sync")
+  expect(hook(rootIntentSync, "Write", path.join(rootIntentSync, other))).toBe(
+    null
+  )
+
+  const rootTriage = setupRun()
+  advanceRunTo(rootTriage, "triage")
+  expect(hook(rootTriage, "Write", path.join(rootTriage, other))).toBe(null)
+})
+
+test("docs/intents/*.md(直下)は discuss・implement・pr など規則外のフェーズで ask になる", () => {
+  const other = "docs/intents/2026-09-27-other.md"
+  for (const phase of ["discuss", "test-spec", "implement", "pr", "review"]) {
+    const root = setupRun()
+    advanceRunTo(root, phase)
+    const r = hook(root, "Write", path.join(root, other))
+    expect(r?.permissionDecision).toBe("ask")
+  }
+})
+
+test("docs/intents/domains/** は intent-sync だけで通る", () => {
+  const domainFile = "docs/intents/domains/frontend.md"
+  const root = setupRun()
+  advanceRunTo(root, "intent-sync")
+  expect(hook(root, "Write", path.join(root, domainFile))).toBe(null)
+})
+
+test("docs/intents/domains/** は intent・phase null・triage で ask になる(intent は DOC_PHASES に入るが ask)", () => {
+  const domainFile = "docs/intents/domains/frontend.md"
+
+  const rootNull = initOnly()
+  expect(
+    hook(rootNull, "Write", path.join(rootNull, domainFile))?.permissionDecision
+  ).toBe("ask")
+
+  const rootIntent = setupRun()
+  expect(
+    hook(rootIntent, "Write", path.join(rootIntent, domainFile))
+      ?.permissionDecision
+  ).toBe("ask")
+
+  const rootTriage = setupRun()
+  advanceRunTo(rootTriage, "triage")
+  expect(
+    hook(rootTriage, "Write", path.join(rootTriage, domainFile))
+      ?.permissionDecision
+  ).toBe("ask")
+})
+
+test("phase null で docs/intents/*.md 以外(.codiel 外のソース)への書き込みは従来どおり ask になる", () => {
+  const root = initOnly()
+  const r = hook(root, "Write", path.join(root, "src/app.ts"))
+  expect(r?.permissionDecision).toBe("ask")
+})
+
+test("active run が無ければ docs/intents/** への書き込みも素通し", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
+  expect(
+    hook(root, "Write", path.join(root, "docs/intents/2026-09-27-x.md"))
+  ).toBe(null)
+  expect(
+    hook(root, "Write", path.join(root, "docs/intents/domains/frontend.md"))
+  ).toBe(null)
 })
 
 // ---------------------------------------------------------------------------
@@ -205,44 +328,13 @@ function writeArchitecture(root: string, domains: Record<string, string[]>) {
   )
 }
 
-// setupRun の run を implement フェーズまで進める。
-function advanceToImplement(root: string) {
-  const cli = (args: string[]) => runTs(CLI, args, { cwd: root })
-  cli([
-    "pass-gate",
-    "init",
-    "--issue",
-    "1",
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
-  cli(["start-phase", "discuss", "--issue", "1"])
-  cli(["complete-phase", "discuss", "--issue", "1"])
-  for (const ph of ["design", "test-spec", "dev-plan"]) {
-    cli(["start-phase", ph, "--issue", "1"])
-    cli([
-      "pass-gate",
-      ph,
-      "--issue",
-      "1",
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
-  }
-  cli(["start-phase", "implement", "--issue", "1"])
-}
-
 test("domain 未設定(キーなし)の state では従来どおり素通し(後方互換)", () => {
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
   const state = JSON.parse(
     fs.readFileSync(
-      path.join(root, ".codiel/runs/issue-1/try-1/state.json"),
+      path.join(root, ".codiel/runs/demo/try-1/state.json"),
       "utf8"
     )
   )
@@ -256,10 +348,10 @@ test("domain が null(clear-domain 後)なら境界を課さない", () => {
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
-  runTs(CLI, ["clear-domain", "--issue", "1"], { cwd: root })
+  runTs(CLI, ["clear-domain", "--slug", SLUG], { cwd: root })
   expect(hook(root, "Edit", path.join(root, "src/app/page.tsx"))).toBe(null)
 })
 
@@ -267,7 +359,7 @@ test("domain が backend: 担当範囲内のパスは素通し", () => {
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   expect(hook(root, "Edit", path.join(root, "src/server/db.ts"))).toBe(null)
@@ -280,7 +372,7 @@ test("domain が backend: 担当範囲外(frontend の glob)への書き込み�
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   const r = hook(root, "Edit", path.join(root, "src/app/page.tsx"))
@@ -296,7 +388,7 @@ test("ドメインマップに無い domain 名は ask(タイポ・記述漏れ)
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backends"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backends"], {
     cwd: root
   })
   const r = hook(root, "Edit", path.join(root, "src/server/db.ts"))
@@ -308,7 +400,7 @@ test("ドメインマップに無い domain 名は ask(タイポ・記述漏れ)
 test("ドメインマップが読めない(ARCHITECTURE が無い)なら domain 設定があっても素通し", () => {
   const root = setupRun()
   advanceToImplement(root)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   expect(hook(root, "Edit", path.join(root, "src/app/page.tsx"))).toBe(null)
@@ -319,7 +411,7 @@ test("generic 縮退(**)では domain generic はどのパスでも素通し", (
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, { generic: ["**"] })
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "generic"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "generic"], {
     cwd: root
   })
   expect(hook(root, "Edit", path.join(root, "src/app/page.tsx"))).toBe(null)
@@ -331,7 +423,7 @@ test("domain 設定下でも .codiel/ 配下(ハーネス運用資産)はドメ�
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   // テストスクリプトの安定化(codiel-tester)は domain 非紐付けだが、
@@ -356,7 +448,7 @@ test("domain 設定下でも spec.md / cases.md の ask は維持される(免�
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   for (const f of ["spec.md", "cases.md"]) {
@@ -369,18 +461,18 @@ test("domain 設定下でも spec.md / cases.md の ask は維持される(免�
 test("文書フェーズでは domain の判定が働かない(既存の文書フェーズ判定が優先)", () => {
   const root = setupRun()
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   // 範囲内(src/server/**)でも文書フェーズなので ask。理由はドメインではなく文書フェーズ
   const r = hook(root, "Write", path.join(root, "src/server/db.ts"))
   expect(r?.permissionDecision).toBe("ask")
-  expect(r?.permissionDecisionReason).toMatch(/文書フェーズ\(init\)/)
+  expect(r?.permissionDecisionReason).toMatch(/文書フェーズ\(intent\)/)
   expect(r?.permissionDecisionReason).not.toMatch(/担当範囲/)
   // 範囲外の docs / .codiel は文書フェーズの規則どおり素通し
   expect(hook(root, "Write", path.join(root, "docs/notes.md"))).toBe(null)
   expect(
-    hook(root, "Write", path.join(root, ".codiel/runs/issue-1/try-1/issue.md"))
+    hook(root, "Write", path.join(root, ".codiel/runs/demo/try-1/issue.md"))
   ).toBe(null)
 })
 
@@ -402,7 +494,7 @@ function setupSplitRoots(): { codielRoot: string; docRoot: string } {
     `${JSON.stringify({ version: 1 }, null, 2)}\n`
   )
   writeArchitecture(docRoot, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: codielRoot
   })
   return { codielRoot, docRoot }
@@ -432,7 +524,7 @@ test("docRoot ≠ codielRoot: 担当範囲外は ask、理由の相対パスも 
 
 test("docRoot ≠ codielRoot: 未知の domain 名の ask も docRoot 基準のパスを示す", () => {
   const { codielRoot, docRoot } = setupSplitRoots()
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backends"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backends"], {
     cwd: codielRoot
   })
   const r = hook(docRoot, "Edit", path.join(docRoot, "src/server/db.ts"))
@@ -475,7 +567,7 @@ test("docRoot = codielRoot の通常構成では既存の挙動が変わらな�
     `${JSON.stringify({ version: 1 }, null, 2)}\n`
   )
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   expect(hook(root, "Edit", path.join(root, "src/server/db.ts"))).toBe(null)
@@ -521,7 +613,7 @@ test("重複ブロックがある状態で担当範囲外へ書き込むと ask 
   const root = setupRun()
   advanceToImplement(root)
   writeDuplicateArchitecture(root)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   const r = hook(root, "Edit", path.join(root, "src/app/page.tsx"))
@@ -536,7 +628,7 @@ test("重複ブロックがある状態では未知の domain 名の ask にも�
   const root = setupRun()
   advanceToImplement(root)
   writeDuplicateArchitecture(root)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backends"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backends"], {
     cwd: root
   })
   const r = hook(root, "Edit", path.join(root, "src/server/db.ts"))
@@ -549,7 +641,7 @@ test("警告が無ければ ask の理由に警告欄は出ない(定型文を�
   const root = setupRun()
   advanceToImplement(root)
   writeArchitecture(root, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: root
   })
   const r = hook(root, "Edit", path.join(root, "src/app/page.tsx"))
@@ -570,7 +662,7 @@ function setupSymlinkedRepo(): { real: string; link: string } {
   const real = fs.realpathSync(setupRun())
   advanceToImplement(real)
   writeArchitecture(real, DOMAINS)
-  runTs(CLI, ["set-domain", "--issue", "1", "--domain", "backend"], {
+  runTs(CLI, ["set-domain", "--slug", SLUG, "--domain", "backend"], {
     cwd: real
   })
   // 実体化は「親ディレクトリまでは実在する」場合に効く(metatron の realpathOrParent と

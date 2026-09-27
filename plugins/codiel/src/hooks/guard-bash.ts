@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import fs from "node:fs"
+import path from "node:path"
 import { findActiveRun } from "../codiel-state.js"
 import { emit, findProjectRoot, pass, readStdin } from "./lib.js"
 
@@ -115,6 +117,118 @@ function pushesToProtectedBranch(invocations: GitInvocation[]): boolean {
   )
 }
 
+// ---------------------------------------------------------------------------
+// 投稿する本文のマーカー(設計書 §6.8「投稿する本文のマーカー」)
+//
+// run が active な間、GitHub へ本文を投稿する gh のコマンドには
+// `<!-- codiel:generated -->` を求める。マーカーの検査は guard-github-mcp と
+// 関数を共有せず、このファイルの中だけで完結させる(計画書 §12 の不採用案)。
+// ---------------------------------------------------------------------------
+
+const GENERATED_MARKER = "<!-- codiel:generated -->"
+
+// マーカーの検査対象になる gh のコマンド。「object action」の形で持つ。
+const MARKED_GH_COMMANDS = new Set([
+  "issue create",
+  "issue comment",
+  "issue edit",
+  "pr create",
+  "pr comment",
+  "pr edit",
+  "pr review"
+])
+
+interface GhInvocation {
+  tokens: string[]
+  command: string
+}
+
+// gh の起動トークンかどうか。git と同じく絶対パス・サブシェルの `(` を許容する。
+function isGhToken(tok: string): boolean {
+  const stripped = tok.replace(/^\(+/, "")
+  return stripped === "gh" || stripped.endsWith("/gh")
+}
+
+// cmd をセグメントに分け(SEGMENT_SPLIT_RE)、各セグメントの gh 起動から
+// 「object action」(issue create など)を git と同じくトークン解析で取り出す。
+// オプションは値の有無を判定せず読み飛ばすだけに留める(guard-bash の他の
+// トークン解析と同じ簡略さで足りるため)。
+function findGhInvocations(cmd: string): GhInvocation[] {
+  const invocations: GhInvocation[] = []
+  for (const segment of cmd.split(SEGMENT_SPLIT_RE)) {
+    const tokens = segment.trim().split(/\s+/).filter(Boolean)
+    const ghIdx = tokens.findIndex((tok) => isGhToken(tok))
+    if (ghIdx === -1) continue
+    const skipOptions = (from: number): number => {
+      let idx = from
+      while (idx < tokens.length && tokens[idx].startsWith("-")) idx++
+      return idx
+    }
+    const objIdx = skipOptions(ghIdx + 1)
+    const actionIdx = skipOptions(objIdx + 1)
+    const object = tokens[objIdx]
+    const action = tokens[actionIdx]
+    if (object !== undefined && action !== undefined)
+      invocations.push({ tokens, command: `${object} ${action}` })
+  }
+  return invocations
+}
+
+// tokens の中から names のいずれかのフラグの値を取る。`--body=x` のような
+// `=` 連結にも対応する。フラグが無ければ undefined を返す。
+function flagValue(tokens: string[], names: string[]): string | undefined {
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i]
+    if (names.includes(tok)) return tokens[i + 1]
+    const matched = names.find((n) => tok.startsWith(`${n}=`))
+    if (matched !== undefined) return tok.slice(matched.length + 1)
+  }
+  return undefined
+}
+
+// ファイルを読み、読めなければ deny する(emit は never を返すので、
+// この関数の戻り値は常に読めたときの文字列になる)。
+function readFileOrDeny(filePath: string): string {
+  try {
+    return fs.readFileSync(filePath, "utf8")
+  } catch {
+    return emit("deny", `--body-file のファイルを読み込めません: ${filePath}`)
+  }
+}
+
+// 投稿する本文にマーカーがあるかを検査し、無ければ deny する。
+// --body / -b はコマンド文字列全体(セグメントに分けない)で見る。本文は
+// クォートや heredoc で複数行になり、改行を含むセグメント分割では本文の
+// 内容までは追えないため、マーカーの有無は cmd 全体を対象にする。
+// --body-file / -F は cwd 基準で解決したファイルの中身を見る。
+// 本文を持たない呼び出し(--body・-b・--body-file・-F のどれも無い)は通す。
+function checkGeneratedMarker(cmd: string, cwd: string): void {
+  for (const inv of findGhInvocations(cmd)) {
+    if (!MARKED_GH_COMMANDS.has(inv.command)) continue
+    const bodyVal = flagValue(inv.tokens, ["--body", "-b"])
+    const bodyFileVal = flagValue(inv.tokens, ["--body-file", "-F"])
+    if (bodyVal === undefined && bodyFileVal === undefined) continue
+    if (bodyVal !== undefined && !cmd.includes(GENERATED_MARKER))
+      emit(
+        "deny",
+        `gh ${inv.command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください`
+      )
+    if (bodyFileVal !== undefined) {
+      if (bodyFileVal === "-")
+        emit(
+          "deny",
+          "--body-file に - (標準入力)は指定できません。本文をファイルに書き、--body-file <パス> で渡し直してください"
+        )
+      const content = readFileOrDeny(path.resolve(cwd, bodyFileVal))
+      if (!content.includes(GENERATED_MARKER))
+        emit(
+          "deny",
+          `gh ${inv.command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください`
+        )
+    }
+  }
+}
+
 try {
   const input = await readStdin()
   const cmd = input.tool_input?.command ?? ""
@@ -153,7 +267,8 @@ try {
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `禁止コマンド: ${why}`)
 
-  const root = findProjectRoot(input.cwd ?? process.cwd())
+  const cwd = input.cwd ?? process.cwd()
+  const root = findProjectRoot(cwd)
   const run = findActiveRun(root)
   // findActiveRun は active / awaiting_human の run しか返さない。
   // 人間の判断待ち(awaiting_human)中こそ PR 作成や push を許してはならないため、
@@ -180,6 +295,7 @@ try {
         "deny",
         `push は test-loop 合格後の pr 以降のフェーズでのみ可能です(現在: ${phase})`
       )
+    checkGeneratedMarker(cmd, cwd)
   }
   pass()
 } catch (e) {

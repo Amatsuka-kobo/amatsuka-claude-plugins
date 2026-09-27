@@ -13,11 +13,12 @@ import {
 } from "./lib.js"
 
 const DOC_PHASES = new Set<string | null>([
-  "init",
+  "intent",
   "discuss",
   "design",
   "test-spec",
-  "dev-plan"
+  "dev-plan",
+  "intent-sync"
 ])
 const CODE_PHASES = new Set<string | null>([
   "implement",
@@ -25,7 +26,18 @@ const CODE_PHASES = new Set<string | null>([
   "fix-loop"
 ])
 
-// 契約 §1 の検証 4 項目は `readDomains` 側で行う(3 実装で同じ判定にするため)。
+// §6.8 の docs/intents/** の規則。直下(domains/ を含まない)の *.md と、
+// domains/ 配下とで通すフェーズが異なるため、2 本の正規表現に分ける。
+const INTENT_DOC_RE = /^docs\/intents\/[^/]+\.md$/
+const INTENT_DOC_PHASES = new Set<string | null>([
+  null,
+  "intent",
+  "intent-sync",
+  "triage"
+])
+const INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/
+
+// 契約 §1 の検証 4 項目は `readDomains` 側で行う(2 実装で同じ判定にするため)。
 // ここが担うのは**プロトタイプなしのマップへの詰め替え**だけである。`toString` のような
 // ドメイン名を引いたときに継承プロパティが返る(= 存在しないのに存在するとみなす)のと、
 // `__proto__` キーの代入がプロトタイプ差し替えになるのを防ぐ。例外は投げない。
@@ -41,7 +53,7 @@ function toDomainMap(
 // 実体パスへ解決する。**書き込み先はまだ存在しないことがある**(新規作成)ため、
 // 本体が解決できなければ親ディレクトリで解決してファイル名を付け直す。
 // どちらも解決できなければ入力をそのまま返す(例外は投げない)。
-// metatron の `src/guard-docs.ts` の `realpathOrParent` と同じ手法。3 プラグインは
+// metatron の `src/guard-docs.ts` の `realpathOrParent` と同じ手法。2 プラグイン(metatron と codiel)は
 // 互いのインストールパスを解決できないため、import せず同じ手法を独立に持つ。
 function realpathOrParent(abs: string): string {
   try {
@@ -105,6 +117,28 @@ try {
   if (run?.state.status !== "active") pass()
 
   const phase = run.state.phase
+
+  // §6.8 の判定順序: まず state.intent のファイルかを見る。当たればすべての
+  // フェーズで通す(run 途中の原文追記、review/finalize での派生文の反映)。
+  if (run.state.intent === codielRel) pass()
+
+  // 次に docs/intents/** の規則を当てる。DOC_PHASES の分岐(直後)は docs/ 全体を
+  // 通してしまうため、domains/** への書き込みはそれより先に判定する。
+  if (INTENT_DOMAIN_RE.test(codielRel)) {
+    if (phase === "intent-sync") pass()
+    emit(
+      "ask",
+      `持続層(${codielRel})への書き込みは intent-sync フェーズの担当です(現在のフェーズ: ${phase})`
+    )
+  }
+  if (INTENT_DOC_RE.test(codielRel)) {
+    if (INTENT_DOC_PHASES.has(phase)) pass()
+    emit(
+      "ask",
+      `intent 文書(${codielRel})への書き込みはこのフェーズでは想定していません(現在のフェーズ: ${phase})`
+    )
+  }
+
   if (DOC_PHASES.has(phase)) {
     if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
       pass()

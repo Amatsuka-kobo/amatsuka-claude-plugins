@@ -13,6 +13,7 @@ export type RunStatus =
   | "completed"
   | "rejected"
   | "stopped"
+export type AskKind = "raguel" | "confirm"
 
 export interface PhaseState {
   status: PhaseStatus
@@ -21,15 +22,27 @@ export interface PhaseState {
   verdict: string | null
   note: string | null
   humanApproved?: boolean
+  // mark-ask の確認の種類。raguel は Raguel の ASK、confirm は人への確認。
+  // resume の後も消さず、ゲートの記録と区別できるように残す。
+  askKind?: AskKind
 }
 
 export interface RunState {
   version: number
   runId: string
   try: number
-  issue: number
-  branch: string
+  issue: number | null
+  // intent 文書の repoRoot 相対パス
+  intent: string
+  // init --intent-only の run は run ブランチを作らないので null
+  branch: string | null
   raguelRunId: string
+  integration: "github" | "local"
+  scale: "standard" | "light"
+  // 画像を GitHub に載せる手段が使えるか。integration が local なら両方 false
+  imageUpload: { ghAttach: boolean; chrome: boolean }
+  // ADR の 3 条件を満たす判断の書き先
+  adrTarget: "metatron" | "intents"
   status: RunStatus
   phase: string | null
   phases: Record<string, PhaseState>
@@ -42,12 +55,11 @@ export interface RunState {
   baseBranch?: string
   // 境界の課し方(設計書 2026-09-15 §5.1)。"mapped" は有効なドメインマップに基づく境界、
   // "unscoped" は境界を設けないことを run 開始時に明示選択した状態。
-  // optional なので domainMode を持たない既存 state はそのまま読める(version 据え置き)。
+  // init で --domain-mode を省くとキーを持たない。
   // 未記録は「モード未決」として扱い、§0 の判定をやり直す。
   domainMode?: "mapped" | "unscoped"
   // 実装・レビューを委譲中のドメイン名(ARCHITECTURE のドメインマップのキー)。
-  // 委譲していない間は null / 未定義。optional なので domain を持たない
-  // 既存 state はそのまま読める(version 据え置き)。
+  // 委譲していない間は null / 未定義。
   // 値がドメインマップに存在するかは検証しない — 判断は読む側(guard-write)の責務。
   domain?: string | null
 }
@@ -64,12 +76,13 @@ export interface ActiveRun {
 }
 
 export const STAGES: string[][] = [
-  ["init"],
+  ["intent"],
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
   ["implement"],
   ["test-loop"],
+  ["intent-sync"],
   ["pr"],
   ["review"],
   ["fix-loop"],
@@ -78,21 +91,32 @@ export const STAGES: string[][] = [
 ]
 export const PHASES: string[] = STAGES.flat()
 export const GATED = new Set([
-  "init",
+  "intent",
   "design",
   "test-spec",
   "dev-plan",
   "implement",
   "test-loop",
+  "intent-sync",
   "fix-loop"
 ])
-export const SKIPPABLE = new Set(["fix-loop"])
+export const SKIPPABLE = new Set(["discuss", "design", "fix-loop"])
+// SKIPPABLE のうち、軽量(scale: light)の run でだけ skip できるフェーズ
+const LIGHT_ONLY_SKIPPABLE = new Set(["discuss", "design"])
 const TERMINAL = new Set([
   "stopped",
   "awaiting_outcome",
   "completed",
   "rejected"
 ])
+
+// slug は英小文字ケバブケースで 40 文字以内。issue-<N> の形は codiel 0.x
+// (state version 1)の run ディレクトリ名と重なるので init で拒否する。
+const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
+const SLUG_MAX = 40
+const V1_RUN_RE = /^issue-\d+$/
+const INTEGRATIONS = ["github", "local"] as const
+const BOOL_FLAGS = ["active", "human-approved", "intent-only"]
 
 const fail = (msg: string, code = 1): never => {
   process.stderr.write(`${msg}\n`)
@@ -113,8 +137,8 @@ export function writeState(p: string, state: RunState): void {
   fs.renameSync(tmp, p)
 }
 
-function runDir(root: string, issue: number | string): string {
-  return path.join(root, ".codiel", "runs", `issue-${issue}`)
+function runDir(root: string, slug: string): string {
+  return path.join(root, ".codiel", "runs", slug)
 }
 
 function tries(dir: string): number[] {
@@ -126,11 +150,8 @@ function tries(dir: string): number[] {
     .sort((a, b) => a - b)
 }
 
-export function latestTry(
-  root: string,
-  issue: number | string
-): LatestTry | null {
-  const dir = runDir(root, issue)
+export function latestTry(root: string, slug: string): LatestTry | null {
+  const dir = runDir(root, slug)
   const ts = tries(dir)
   if (ts.length === 0) return null
   const n = ts[ts.length - 1]
@@ -138,49 +159,112 @@ export function latestTry(
   return { tryN: n, statePath: p, state: readState(p) }
 }
 
-// Finds active runs for hooks. Intentionally narrower than `get --active`:
-// findActiveRun includes only "active" and "awaiting_human", while `get --active` also includes "awaiting_outcome" for auto-sync of outcomes.
-export function findActiveRun(root: string): ActiveRun | null {
+// runs/ 直下のディレクトリをすべて走査し、各 run の最新 try を返す。
+// ディレクトリ名では絞らない。v1 と v2 は呼び出し元が state の version で分ける。
+function latestTries(root: string): LatestTry[] {
   const runsRoot = path.join(root, ".codiel", "runs")
-  if (!fs.existsSync(runsRoot)) return null
+  if (!fs.existsSync(runsRoot)) return []
+  return fs
+    .readdirSync(runsRoot, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => latestTry(root, d.name))
+    .filter((t) => t !== null)
+}
+
+// hooks が使う active run の検索。version 2 の state だけを run として扱い、
+// v1 の run は run が無いときと同じにする(設計書 §6.2.4)。
+// `get --active` より狭く、active と awaiting_human だけを返す。
+// awaiting_outcome は outcome の自動同期のために `get --active` にだけ含める。
+export function findActiveRun(root: string): ActiveRun | null {
   let best: ActiveRun | null = null
-  for (const r of fs
-    .readdirSync(runsRoot)
-    .filter((d) => /^issue-\d+$/.test(d))) {
-    const latest = latestTry(root, Number(r.slice(6)))
-    if (!latest) continue
-    if (
-      latest.state.status === "active" ||
-      latest.state.status === "awaiting_human"
-    ) {
-      if (!best || latest.state.updatedAt > best.state.updatedAt) {
-        best = {
-          dir: path.dirname(latest.statePath),
-          statePath: latest.statePath,
-          state: latest.state
-        }
+  for (const latest of latestTries(root)) {
+    const st = latest.state
+    if (st.version !== 2) continue
+    if (st.status !== "active" && st.status !== "awaiting_human") continue
+    if (!best || st.updatedAt > best.state.updatedAt)
+      best = {
+        dir: path.dirname(latest.statePath),
+        statePath: latest.statePath,
+        state: st
       }
-    }
   }
   return best
+}
+
+// codiel 0.x(state version 1)の run を指したときに出す文言(設計書 §6.2.4)
+function v1Message(st: RunState): string {
+  const n = st.issue
+  return (
+    `codiel: .codiel/runs/issue-${n} は codiel 0.x の run(state version 1、status: ${st.status})であり、この版では再開できない。` +
+    `codiel 0.x で完了させるか、\`codiel-state stop --slug issue-${n} --reason migrate\` で止めてから、\`/codiel:run ${n}\` で新しい run を始める。`
+  )
 }
 
 function parseArgs(argv: string[]): {
   pos: string[]
   flags: Record<string, string>
+  bools: Set<string>
 } {
   const pos: string[] = []
   const flags: Record<string, string> = {}
+  const bools = new Set<string>()
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith("--")) {
-      flags[argv[i].slice(2)] = argv[i + 1]
+    const name = argv[i].slice(2)
+    if (!argv[i].startsWith("--")) pos.push(argv[i])
+    else if (BOOL_FLAGS.includes(name)) bools.add(name)
+    else {
+      flags[name] = argv[i + 1]
       i++
-    } else pos.push(argv[i])
+    }
   }
-  return { pos, flags }
+  return { pos, flags, bools }
 }
 
-function newState(issue: number | string, tryN: number): RunState {
+// 値域の決まったフラグを読む。省略も値域の外も失敗にする。
+function oneOf<T extends string>(
+  flags: Record<string, string>,
+  name: string,
+  values: readonly T[]
+): T {
+  const v = flags[name]
+  if (v === undefined) fail(`--${name} が必要です`)
+  if (!(values as readonly string[]).includes(v))
+    fail(`不正な --${name}: ${v}。許される値は ${values.join(", ")} です`)
+  return v as T
+}
+
+// --image-upload を state.imageUpload にする。local では値にかかわらず両方 false。
+function imageUpload(
+  flags: Record<string, string>,
+  integration: RunState["integration"]
+): RunState["imageUpload"] {
+  const v = oneOf(flags, "image-upload", [
+    "gh-attach",
+    "chrome",
+    "gh-attach,chrome",
+    "none"
+  ] as const)
+  const github = integration === "github"
+  return {
+    ghAttach: github && v.includes("gh-attach"),
+    chrome: github && v.includes("chrome")
+  }
+}
+
+function newState(
+  slug: string,
+  tryN: number,
+  fields: Pick<
+    RunState,
+    | "issue"
+    | "intent"
+    | "branch"
+    | "integration"
+    | "scale"
+    | "imageUpload"
+    | "adrTarget"
+  >
+): RunState {
   const phases: Record<string, PhaseState> = {}
   for (const ph of PHASES)
     phases[ph] = {
@@ -192,12 +276,11 @@ function newState(issue: number | string, tryN: number): RunState {
     }
   const now = new Date().toISOString()
   return {
-    version: 1,
-    runId: `issue-${issue}`,
+    version: 2,
+    runId: slug,
     try: tryN,
-    issue: Number(issue),
-    branch: `codiel/issue-${issue}-try-${tryN}`,
-    raguelRunId: `issue-${issue}-try-${tryN}`,
+    ...fields,
+    raguelRunId: `${slug}-try-${tryN}`,
     status: "active",
     phase: null,
     phases,
@@ -210,75 +293,95 @@ function newState(issue: number | string, tryN: number): RunState {
   }
 }
 
-function loadRun(root: string, flags: Record<string, string>): LatestTry {
-  if (!flags.issue) fail("--issue が必要です")
-  const latest = latestTry(root, flags.issue)
-  if (!latest) fail(`run が存在しません: issue-${flags.issue}`)
-  return latest as LatestTry
+// --slug の run の最新 try を読む。v1 の run は allowV1(get と stop)のときだけ返し、
+// ほかのコマンドでは §6.2.4 の文言を出して失敗する。
+function loadRun(
+  root: string,
+  flags: Record<string, string>,
+  allowV1 = false
+): LatestTry {
+  const slug = flags.slug
+  if (!slug) fail("--slug が必要です")
+  if (!SLUG_RE.test(slug)) fail(`不正な --slug: ${slug}`)
+  const latest = latestTry(root, slug) as LatestTry
+  if (!latest) fail(`run が存在しません: ${slug}`)
+  if (latest.state.version !== 2 && !allowV1) fail(v1Message(latest.state))
+  return latest
 }
 
 export function main(argv: string[], root: string = process.cwd()): undefined {
-  // Handle --active / --human-approved specially: boolean flags with no value,
-  // remove them from argv first to avoid parseArgs eating the next arg.
-  const hasActive = argv.includes("--active")
-  if (hasActive) {
-    argv = argv.filter((arg) => arg !== "--active")
-  }
-  const hasHumanApproved = argv.includes("--human-approved")
-  if (hasHumanApproved) {
-    argv = argv.filter((arg) => arg !== "--human-approved")
-  }
-
-  const { pos, flags } = parseArgs(argv)
+  const { pos, flags, bools } = parseArgs(argv)
   const cmd = pos[0]
 
   if (cmd === "init") {
-    if (!flags.issue) fail("--issue が必要です")
-    const domainMode = flags["domain-mode"]
-    if ("domain-mode" in flags && !["mapped", "unscoped"].includes(domainMode))
+    const slug = flags.slug
+    if (!slug) fail("--slug が必要です")
+    if (!SLUG_RE.test(slug) || slug.length > SLUG_MAX)
       fail(
-        `不正な --domain-mode: ${domainMode}。許される値は mapped, unscoped です`
+        `不正な --slug: ${slug}。英小文字と数字をハイフンでつないだ ${SLUG_MAX} 文字以内にしてください`
       )
-    const latest = latestTry(root, flags.issue)
+    if (V1_RUN_RE.test(slug))
+      fail(
+        `--slug に issue-<N> の形は使えません(codiel 0.x の run ディレクトリと重なるため): ${slug}`
+      )
+    const intent = flags.intent
+    if (!intent) fail("--intent が必要です")
+    if (path.isAbsolute(intent))
+      fail(`--intent には repoRoot 相対のパスを渡してください: ${intent}`)
+    if ("issue" in flags && !/^[1-9]\d*$/.test(flags.issue ?? ""))
+      fail(`不正な --issue: ${flags.issue}`)
+    const integration = oneOf(flags, "integration", INTEGRATIONS)
+    const scale = oneOf(flags, "scale", ["standard", "light"] as const)
+    const adrTarget = oneOf(flags, "adr-target", [
+      "metatron",
+      "intents"
+    ] as const)
+    const upload = imageUpload(flags, integration)
+    const domainMode =
+      "domain-mode" in flags
+        ? oneOf(flags, "domain-mode", ["mapped", "unscoped"] as const)
+        : undefined
+    const latest = latestTry(root, slug)
     if (latest && !TERMINAL.has(latest.state.status))
       fail(
         `未完了の try があります: ${latest.statePath}(status: ${latest.state.status})。resume するか stop してください`
       )
     const tryN = latest ? latest.tryN + 1 : 1
-    const dir = path.join(runDir(root, flags.issue), `try-${tryN}`)
+    const dir = path.join(runDir(root, slug), `try-${tryN}`)
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
-    const state = newState(flags.issue, tryN)
+    const state = newState(slug, tryN, {
+      issue: "issue" in flags ? Number(flags.issue) : null,
+      intent,
+      branch: bools.has("intent-only") ? null : `codiel/${slug}-try-${tryN}`,
+      integration,
+      scale,
+      imageUpload: upload,
+      adrTarget
+    })
     if (flags["base-branch"]) state.baseBranch = flags["base-branch"]
-    if (domainMode) state.domainMode = domainMode as "mapped" | "unscoped"
+    if (domainMode) state.domainMode = domainMode
     const p = path.join(dir, "state.json")
     writeState(p, state)
     return ok({ statePath: p, state })
   }
 
   if (cmd === "get") {
-    if (hasActive) {
-      const runsRoot = path.join(root, ".codiel", "runs")
+    if (bools.has("active")) {
       const runs: { statePath: string; state: RunState }[] = []
-      if (fs.existsSync(runsRoot)) {
-        for (const r of fs
-          .readdirSync(runsRoot)
-          .filter((d) => /^issue-\d+$/.test(d))) {
-          const latest = latestTry(root, Number(r.slice(6)))
-          if (
-            latest &&
-            !["completed", "rejected", "stopped"].includes(latest.state.status)
-          )
-            runs.push({ statePath: latest.statePath, state: latest.state })
-        }
+      for (const { statePath, state } of latestTries(root)) {
+        if (["completed", "rejected", "stopped"].includes(state.status))
+          continue
+        if (state.version !== 2) process.stderr.write(`${v1Message(state)}\n`)
+        else runs.push({ statePath, state })
       }
       return ok({ runs })
     }
-    const latest = loadRun(root, flags)
+    const latest = loadRun(root, flags, true)
     return ok({ statePath: latest.statePath, state: latest.state })
   }
 
   if (cmd === "stop") {
-    const latest = loadRun(root, flags)
+    const latest = loadRun(root, flags, true)
     if (TERMINAL.has(latest.state.status))
       fail(`すでに終端状態です: ${latest.state.status}`)
     latest.state.status = "stopped"
@@ -294,6 +397,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const st = latest.state
     if (st.status !== "active")
       fail(`run が active ではありません(${st.status})。resume してください`)
+    // run ブランチを持たないまま実装系のフェーズへ進ませない
+    if (st.branch === null && phase !== "intent")
+      fail(
+        `branch が null の run(init --intent-only)では intent 以外のフェーズを開始できません: ${phase}`
+      )
     const stageIdx = STAGES.findIndex((s) => s.includes(phase))
     for (let i = 0; i < stageIdx; i++)
       for (const prev of STAGES[i])
@@ -313,12 +421,18 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const phase = pos[1]
     if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`)
     if (!SKIPPABLE.has(phase))
-      fail(`${phase} はスキップできません(skip-phase は fix-loop のみ対応)`)
+      fail(
+        `${phase} はスキップできません(skip-phase は discuss・design・fix-loop のみ対応)`
+      )
     if (!flags.reason) fail("--reason が必要です")
     const latest = loadRun(root, flags)
     const st = latest.state
     if (st.status !== "active")
       fail(`run が active ではありません(${st.status})。resume してください`)
+    if (LIGHT_ONLY_SKIPPABLE.has(phase) && st.scale !== "light")
+      fail(
+        `${phase} をスキップできるのは scale が light の run だけです(scale: ${st.scale})`
+      )
     const ph = st.phases[phase]
     if (ph.status !== "pending")
       fail(
@@ -346,7 +460,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     if (ph.status !== "in_progress")
       fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`)
     if (!flags["evaluation-id"]) fail("--evaluation-id が必要です")
-    const acceptedVerdicts = hasHumanApproved ? ["PROCEED", "ASK"] : ["PROCEED"]
+    const humanApproved = bools.has("human-approved")
+    const acceptedVerdicts = humanApproved ? ["PROCEED", "ASK"] : ["PROCEED"]
     if (!acceptedVerdicts.includes(flags.verdict))
       fail(
         `verdict が PROCEED ではありません: ${flags.verdict}。ASK は mark-ask、STOP は stop を使用`
@@ -354,7 +469,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     ph.status = "passed"
     ph.evaluationId = flags["evaluation-id"]
     ph.verdict = flags.verdict
-    if (hasHumanApproved) ph.humanApproved = true
+    if (humanApproved) ph.humanApproved = true
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
   }
@@ -368,8 +483,12 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const ph = latest.state.phases[phase]
     if (ph.status !== "in_progress")
       fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`)
-    if (phase === "pr") {
-      if (!flags["pr-url"]) fail("pr フェーズには --pr-url が必要です")
+    // local の run は PR を作らないので、pr.url は null のまま残す
+    if (phase === "pr" && latest.state.integration === "github") {
+      if (!flags["pr-url"])
+        fail(
+          "integration が github の run の pr フェーズには --pr-url が必要です"
+        )
       latest.state.pr.url = flags["pr-url"]
     }
     ph.status = "passed"
@@ -381,10 +500,16 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
   if (cmd === "mark-ask") {
     const phase = pos[1]
     if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`)
+    const askKind =
+      "kind" in flags
+        ? oneOf(flags, "kind", ["raguel", "confirm"] as const)
+        : "raguel"
     const latest = loadRun(root, flags)
-    latest.state.phases[phase].status = "awaiting_human"
-    latest.state.phases[phase].evaluationId = flags["evaluation-id"] ?? null
-    latest.state.phases[phase].verdict = "ASK"
+    const ph = latest.state.phases[phase]
+    ph.status = "awaiting_human"
+    ph.evaluationId = flags["evaluation-id"] ?? null
+    ph.verdict = "ASK"
+    ph.askKind = askKind
     latest.state.status = "awaiting_human"
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
@@ -424,6 +549,20 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     return ok({ statePath: latest.statePath, state: latest.state })
   }
 
+  // resume 時の再判定で連携モードを変えるときに使う(計画書 §2)。
+  // imageUpload も連携モードと同じ扱いなので、1 回で両方を書き換える。
+  if (cmd === "set-integration") {
+    const integration = oneOf(flags, "integration", INTEGRATIONS)
+    const upload = imageUpload(flags, integration)
+    const latest = loadRun(root, flags)
+    if (TERMINAL.has(latest.state.status))
+      fail(`すでに終端状態です: ${latest.state.status}`)
+    latest.state.integration = integration
+    latest.state.imageUpload = upload
+    writeState(latest.statePath, latest.state)
+    return ok({ statePath: latest.statePath, state: latest.state })
+  }
+
   if (cmd === "record-attempt") {
     const phase = pos[1]
     if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`)
@@ -446,6 +585,28 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       state: latest.state,
       capExceeded: false
     })
+  }
+
+  // init --intent-only の run を、intent の pass-gate の後に終える(設計書 §6.1.3)。
+  // outcome の自動同期は PR も run ブランチも無い run を扱わないので、
+  // awaiting_outcome を経ずに completed にする。
+  if (cmd === "close") {
+    const latest = loadRun(root, flags)
+    const st = latest.state
+    if (TERMINAL.has(st.status)) fail(`すでに終端状態です: ${st.status}`)
+    if (st.branch !== null)
+      fail(
+        `close は branch が null の run(init --intent-only)でだけ使えます(branch: ${st.branch})`
+      )
+    if (st.phases.intent.status !== "passed")
+      fail(`intent が passed ではありません(${st.phases.intent.status})`)
+    for (const [name, ph] of Object.entries(st.phases))
+      if (name !== "intent" && ph.status !== "pending")
+        fail(`フェーズ ${name} が pending ではありません(${ph.status})`)
+    st.status = "completed"
+    st.stopReason = flags.reason ?? null
+    writeState(latest.statePath, st)
+    return ok({ statePath: latest.statePath, state: st })
   }
 
   if (cmd === "finalize") {

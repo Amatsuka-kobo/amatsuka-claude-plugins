@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 
+// src/hooks/guard-bash.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
+
 // src/codiel-state.ts
 import fs from "node:fs";
 import path from "node:path";
 var STAGES = [
-  ["init"],
+  ["intent"],
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
   ["implement"],
   ["test-loop"],
+  ["intent-sync"],
   ["pr"],
   ["review"],
   ["fix-loop"],
@@ -20,37 +25,38 @@ var PHASES = STAGES.flat();
 function readState(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
-function runDir(root, issue) {
-  return path.join(root, ".codiel", "runs", `issue-${issue}`);
+function runDir(root, slug) {
+  return path.join(root, ".codiel", "runs", slug);
 }
 function tries(dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
 }
-function latestTry(root, issue) {
-  const dir = runDir(root, issue);
+function latestTry(root, slug) {
+  const dir = runDir(root, slug);
   const ts = tries(dir);
   if (ts.length === 0) return null;
   const n = ts[ts.length - 1];
   const p = path.join(dir, `try-${n}`, "state.json");
   return { tryN: n, statePath: p, state: readState(p) };
 }
-function findActiveRun(root) {
+function latestTries(root) {
   const runsRoot = path.join(root, ".codiel", "runs");
-  if (!fs.existsSync(runsRoot)) return null;
+  if (!fs.existsSync(runsRoot)) return [];
+  return fs.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
+}
+function findActiveRun(root) {
   let best = null;
-  for (const r of fs.readdirSync(runsRoot).filter((d) => /^issue-\d+$/.test(d))) {
-    const latest = latestTry(root, Number(r.slice(6)));
-    if (!latest) continue;
-    if (latest.state.status === "active" || latest.state.status === "awaiting_human") {
-      if (!best || latest.state.updatedAt > best.state.updatedAt) {
-        best = {
-          dir: path.dirname(latest.statePath),
-          statePath: latest.statePath,
-          state: latest.state
-        };
-      }
-    }
+  for (const latest of latestTries(root)) {
+    const st = latest.state;
+    if (st.version !== 2) continue;
+    if (st.status !== "active" && st.status !== "awaiting_human") continue;
+    if (!best || st.updatedAt > best.state.updatedAt)
+      best = {
+        dir: path.dirname(latest.statePath),
+        statePath: latest.statePath,
+        state: st
+      };
   }
   return best;
 }
@@ -147,6 +153,82 @@ function pushesToProtectedBranch(invocations) {
     (inv) => inv.subcommand === "push" && pushArgs(inv).some((t) => !t.startsWith("-") && isProtectedBranchDest(t))
   );
 }
+var GENERATED_MARKER = "<!-- codiel:generated -->";
+var MARKED_GH_COMMANDS = /* @__PURE__ */ new Set([
+  "issue create",
+  "issue comment",
+  "issue edit",
+  "pr create",
+  "pr comment",
+  "pr edit",
+  "pr review"
+]);
+function isGhToken(tok) {
+  const stripped = tok.replace(/^\(+/, "");
+  return stripped === "gh" || stripped.endsWith("/gh");
+}
+function findGhInvocations(cmd) {
+  const invocations = [];
+  for (const segment of cmd.split(SEGMENT_SPLIT_RE)) {
+    const tokens = segment.trim().split(/\s+/).filter(Boolean);
+    const ghIdx = tokens.findIndex((tok) => isGhToken(tok));
+    if (ghIdx === -1) continue;
+    const skipOptions = (from) => {
+      let idx = from;
+      while (idx < tokens.length && tokens[idx].startsWith("-")) idx++;
+      return idx;
+    };
+    const objIdx = skipOptions(ghIdx + 1);
+    const actionIdx = skipOptions(objIdx + 1);
+    const object = tokens[objIdx];
+    const action = tokens[actionIdx];
+    if (object !== void 0 && action !== void 0)
+      invocations.push({ tokens, command: `${object} ${action}` });
+  }
+  return invocations;
+}
+function flagValue(tokens, names) {
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (names.includes(tok)) return tokens[i + 1];
+    const matched = names.find((n) => tok.startsWith(`${n}=`));
+    if (matched !== void 0) return tok.slice(matched.length + 1);
+  }
+  return void 0;
+}
+function readFileOrDeny(filePath) {
+  try {
+    return fs3.readFileSync(filePath, "utf8");
+  } catch {
+    return emit("deny", `--body-file \u306E\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${filePath}`);
+  }
+}
+function checkGeneratedMarker(cmd, cwd) {
+  for (const inv of findGhInvocations(cmd)) {
+    if (!MARKED_GH_COMMANDS.has(inv.command)) continue;
+    const bodyVal = flagValue(inv.tokens, ["--body", "-b"]);
+    const bodyFileVal = flagValue(inv.tokens, ["--body-file", "-F"]);
+    if (bodyVal === void 0 && bodyFileVal === void 0) continue;
+    if (bodyVal !== void 0 && !cmd.includes(GENERATED_MARKER))
+      emit(
+        "deny",
+        `gh ${inv.command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+      );
+    if (bodyFileVal !== void 0) {
+      if (bodyFileVal === "-")
+        emit(
+          "deny",
+          "--body-file \u306B - (\u6A19\u6E96\u5165\u529B)\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001--body-file <\u30D1\u30B9> \u3067\u6E21\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
+        );
+      const content = readFileOrDeny(path3.resolve(cwd, bodyFileVal));
+      if (!content.includes(GENERATED_MARKER))
+        emit(
+          "deny",
+          `gh ${inv.command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+        );
+    }
+  }
+}
 try {
   const input = await readStdin();
   const cmd = input.tool_input?.command ?? "";
@@ -183,7 +265,8 @@ try {
   ];
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `\u7981\u6B62\u30B3\u30DE\u30F3\u30C9: ${why}`);
-  const root = findProjectRoot(input.cwd ?? process.cwd());
+  const cwd = input.cwd ?? process.cwd();
+  const root = findProjectRoot(cwd);
   const run = findActiveRun(root);
   if (run) {
     const phase = run.state.phase;
@@ -203,6 +286,7 @@ try {
         "deny",
         `push \u306F test-loop \u5408\u683C\u5F8C\u306E pr \u4EE5\u964D\u306E\u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase})`
       );
+    checkGeneratedMarker(cmd, cwd);
   }
   pass();
 } catch (e) {

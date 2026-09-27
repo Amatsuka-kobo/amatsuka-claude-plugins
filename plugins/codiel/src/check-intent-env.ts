@@ -99,13 +99,18 @@ const gitToplevel = git("rev-parse", "--show-toplevel")
 const repoRoot = isGitRepo && gitToplevel ? path.resolve(gitToplevel) : null
 const remoteUrl = isGitRepo ? git("remote", "get-url", "origin") : null
 
-// SSH (git@github.com:owner/repo.git) と HTTPS (https://github.com/owner/repo) の両形式に対応。
-// ホスト名は github.com 完全一致(notgithub.com 等の部分一致を弾く)。
+// SSH (git@host:owner/repo.git) と HTTPS (https://host/owner/repo) の両形式からホストと
+// owner/repo を抽出する。repoSlug を返すのは github.com と <名前>.ghe.com のホストだけ
+// (notgithub.com 等の部分一致、GHES の独自ドメインは弾く)。remoteHost にはリモートの種類を
+// 問わず抽出したホスト名を入れる(決定 46)。
 // gh-utility の check-issue-env.ts と同一の正規表現(挙動をリポジトリ内で揃える)。
-const repoSlug =
-  remoteUrl?.match(
-    /^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
-  )?.[1] ?? null
+const remoteMatch = remoteUrl?.match(
+  /^(?:git@|ssh:\/\/git@|https?:\/\/)([^/:]+)[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
+)
+const remoteHost = remoteMatch?.[1] ?? null
+const isGithubHost =
+  remoteHost !== null && /^(?:github\.com|[^./]+\.ghe\.com)$/.test(remoteHost)
+const repoSlug = isGithubHost ? (remoteMatch?.[2] ?? null) : null
 
 // gh 未インストール時、spawnSync は ENOENT で status: null を返す(例外は投げない)
 function ghExitZero(args: string[]): boolean {
@@ -117,7 +122,44 @@ function ghExitZero(args: string[]): boolean {
 }
 
 const ghInstalled = ghExitZero(["--version"])
-const ghAuthenticated = ghInstalled && ghExitZero(["auth", "status"])
+// remoteHost が分かればホストを固定して認証を確かめ、無ければ現行どおりホスト指定なしで確かめる。
+const ghAuthenticated =
+  ghInstalled &&
+  ghExitZero(
+    remoteHost
+      ? ["auth", "status", "--hostname", remoteHost]
+      : ["auth", "status"]
+  )
+
+// gh --version の出力(例 "gh version 2.99.0 (2026-09-01)")からバージョン番号を取り出す。
+// 未導入・パース失敗は null。
+function ghVersionOf(): string | null {
+  if (!ghInstalled) return null
+  try {
+    const res = spawnSync("gh", ["--version"], { encoding: "utf8" })
+    return res.stdout?.match(/gh version (\d+\.\d+\.\d+)/)?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+
+const ghVersion = ghVersionOf()
+
+// x.y.z 形式のバージョン文字列を比較する(a が b 以上なら true)。
+function versionGte(a: string, b: string): boolean {
+  const pa = a.split(".").map(Number)
+  const pb = b.split(".").map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff > 0
+  }
+  return true
+}
+
+// --attach は 2.99.0 以上で、かつ origin のホストが github.com か *.ghe.com のときだけ使える
+// (画像の載せ方 §6.12.4)。判定は事実だけを返し、imageUpload の決定はスキルが行う。
+const ghAttachSupported =
+  ghVersion !== null && versionGte(ghVersion, "2.99.0") && isGithubHost
 
 // ---------------------------------------------------------------------------
 // Issue テンプレート(gh-utility の check-issue-env.ts と同一の実装パターン)
@@ -224,6 +266,7 @@ interface IntentSummary {
   slug: string
   status: string
   issue: string
+  intent: string
 }
 
 // 契約 §8-2: YAML パーサを導入せず、`---` で挟まれた先頭ブロックのトップレベルキーだけを
@@ -241,7 +284,8 @@ function parseIntentDoc(file: string, content: string): IntentSummary | null {
     title: title === "" ? null : title,
     slug: top.slug ?? "",
     status: top.status ?? "",
-    issue: top.issue ?? ""
+    issue: top.issue ?? "",
+    intent: top.intent
   }
 }
 
@@ -278,9 +322,12 @@ console.log(
       isGitRepo,
       repoRoot,
       remoteUrl,
+      remoteHost,
       repoSlug,
       ghInstalled,
+      ghVersion,
       ghAuthenticated,
+      ghAttachSupported,
       templates,
       blankIssuesEnabled,
       docRoot,

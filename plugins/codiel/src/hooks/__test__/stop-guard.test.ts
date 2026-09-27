@@ -8,6 +8,20 @@ import { runTs } from "../../testing/run-ts.js"
 const STOP_GUARD = fileURLToPath(new URL("../stop-guard.ts", import.meta.url))
 const CLI = fileURLToPath(new URL("../../codiel-state-cli.ts", import.meta.url))
 
+const SLUG = "demo"
+const INIT_FLAGS = [
+  "--intent",
+  "docs/intents/2026-09-27-demo.md",
+  "--integration",
+  "github",
+  "--scale",
+  "standard",
+  "--adr-target",
+  "metatron",
+  "--image-upload",
+  "gh-attach,chrome"
+]
+
 interface HookResult {
   stdout: string
   stderr?: string
@@ -41,45 +55,45 @@ function cli(root: string, args: string[]): string {
   return runTs(CLI, args, { cwd: root })
 }
 
-// init フェーズを in_progress にしたところで止める(phase=init)
-function setupRunAtInit(): string {
+// intent フェーズを in_progress にしたところで止める(phase=intent)
+function setupRunAtIntent(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
-  cli(root, ["init", "--issue", "1"])
-  cli(root, ["start-phase", "init", "--issue", "1"])
+  cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
+  cli(root, ["start-phase", "intent", "--slug", SLUG])
   return root
 }
 
 // implement フェーズを in_progress にしたところで止める
 function setupRunAtImplement(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
-  cli(root, ["init", "--issue", "1"])
-  cli(root, ["start-phase", "init", "--issue", "1"])
+  cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
+  cli(root, ["start-phase", "intent", "--slug", SLUG])
   const passGate = (phase: string) =>
     cli(root, [
       "pass-gate",
       phase,
-      "--issue",
-      "1",
+      "--slug",
+      SLUG,
       "--evaluation-id",
       "e",
       "--verdict",
       "PROCEED"
     ])
-  passGate("init")
-  cli(root, ["start-phase", "discuss", "--issue", "1"])
-  cli(root, ["complete-phase", "discuss", "--issue", "1"])
+  passGate("intent")
+  cli(root, ["start-phase", "discuss", "--slug", SLUG])
+  cli(root, ["complete-phase", "discuss", "--slug", SLUG])
   for (const ph of ["design", "test-spec", "dev-plan"]) {
-    cli(root, ["start-phase", ph, "--issue", "1"])
+    cli(root, ["start-phase", ph, "--slug", SLUG])
     passGate(ph)
   }
-  cli(root, ["start-phase", "implement", "--issue", "1"])
+  cli(root, ["start-phase", "implement", "--slug", SLUG])
   return root
 }
 
 // awaiting_human 状態にする
 function setupRunAwaitingHuman(): string {
-  const root = setupRunAtInit()
-  cli(root, ["mark-ask", "init", "--issue", "1", "--evaluation-id", "e"])
+  const root = setupRunAtIntent()
+  cli(root, ["mark-ask", "intent", "--slug", SLUG, "--evaluation-id", "e"])
   return root
 }
 
@@ -92,23 +106,23 @@ test("stop-guard: run なし → 出力なし(空 stdout)で exit 0", () => {
   expect(result.stdout.trim()).toBe("")
 })
 
-test("stop-guard: run active(phase=init)→ {decision:block, reason に issue 番号と phase を含む}", () => {
-  const root = setupRunAtInit()
+test("stop-guard: run active(phase=intent)→ {decision:block, reason に slug と phase を含む}", () => {
+  const root = setupRunAtIntent()
   const result = callHook(STOP_GUARD, root)
   expect(result.exitCode).toBe(0)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.decision).toBe("block")
-  expect(parsed.reason).toMatch(/issue-1|try-1/)
-  expect(parsed.reason).toMatch(/init/)
+  expect(parsed.reason).toMatch(/demo|try-1/)
+  expect(parsed.reason).toMatch(/intent/)
 })
 
-test("stop-guard: run active(phase=implement)→ {decision:block, reason に issue 番号と phase を含む}", () => {
+test("stop-guard: run active(phase=implement)→ {decision:block, reason に slug と phase を含む}", () => {
   const root = setupRunAtImplement()
   const result = callHook(STOP_GUARD, root)
   expect(result.exitCode).toBe(0)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.decision).toBe("block")
-  expect(parsed.reason).toMatch(/issue-1|try-1/)
+  expect(parsed.reason).toMatch(/demo|try-1/)
   expect(parsed.reason).toMatch(/implement/)
 })
 
@@ -120,14 +134,14 @@ test("stop-guard: run awaiting_human → 出力なし", () => {
 })
 
 test("stop-guard: 入力に stop_hook_active: true → run active でも出力なし(無限ループ防止)", () => {
-  const root = setupRunAtInit()
+  const root = setupRunAtIntent()
   const result = callHook(STOP_GUARD, root, true)
   expect(result.exitCode).toBe(0)
   expect(result.stdout.trim()).toBe("")
 })
 
 test("stop-guard: ブロック文言が discuss の回答待ち停止を正当な停止として案内する", () => {
-  const root = setupRunAtInit()
+  const root = setupRunAtIntent()
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.reason).toMatch(/discuss/)

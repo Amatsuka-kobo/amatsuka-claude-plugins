@@ -76,11 +76,12 @@ const INTENT_DOC = (
   slug: string,
   status: string,
   issue: string,
-  title: string
+  title: string,
+  intentVersion: string = "v1"
 ): string =>
   [
     "---",
-    "intent: v1",
+    `intent: ${intentVersion}`,
     `slug: ${slug}`,
     "created: 2026-08-16",
     `status: ${status}`,
@@ -145,6 +146,28 @@ test("ケース 5: GitHub 以外のリモートでは repoSlug が null", () => 
   )
 })
 
+test("ケース 3b: SSH 形式の *.ghe.com リモートからも repoSlug を抽出する", () => {
+  const out = runScript(gitRepo("git@example.ghe.com:owner/my-repo.git"))
+  expect(out.remoteHost).toBe("example.ghe.com")
+  expect(out.repoSlug).toBe("owner/my-repo")
+})
+
+test("ケース 4b: HTTPS 形式の *.ghe.com リモートからも repoSlug を抽出する", () => {
+  const out = runScript(gitRepo("https://example.ghe.com/owner/my-repo"))
+  expect(out.remoteHost).toBe("example.ghe.com")
+  expect(out.repoSlug).toBe("owner/my-repo")
+})
+
+test("ケース 5b: GHES の独自ドメインでは repoSlug が null で remoteHost に値が入る", () => {
+  const out = runScript(gitRepo("git@git.example.com:owner/repo.git"))
+  expect(out.remoteHost).toBe("git.example.com")
+  expect(out.repoSlug).toBe(null)
+})
+
+test("ケース 5c: remoteHost はリモート未設定なら null", () => {
+  expect(runScript(gitRepo()).remoteHost).toBe(null)
+})
+
 // ---------------------------------------------------------------------------
 // ケース 6〜7: gh
 // ---------------------------------------------------------------------------
@@ -170,6 +193,8 @@ test("ケース 6: gh が PATH に無ければ両方 false で exit 0", () => {
   const out = runScript(tmpdir(), [fakeBin()])
   expect(out.ghInstalled).toBe(false)
   expect(out.ghAuthenticated).toBe(false)
+  expect(out.ghVersion).toBe(null)
+  expect(out.ghAttachSupported).toBe(false)
 })
 
 test("ケース 7: gh スタブが exit 0 を返せば両方 true", () => {
@@ -185,6 +210,109 @@ test("ケース 7 補: gh はあるが未認証なら ghAuthenticated だけ fal
   const out = runScript(tmpdir(), [bin])
   expect(out.ghInstalled).toBe(true)
   expect(out.ghAuthenticated).toBe(false)
+})
+
+// ---------------------------------------------------------------------------
+// 環境判定: ghVersion / ghAttachSupported / 認証確認の --hostname 引数(A2-14)
+// ---------------------------------------------------------------------------
+
+// --version には指定バージョンを返し、それ以外の呼び出しは exit 0 を返しつつ
+// 引数を 1 行ずつ logFile に追記する gh スタブ(認証確認の引数を検証するため)。
+function ghStub(version: string, logFile: string): string {
+  return [
+    "#!/bin/sh",
+    `echo "$@" >> ${logFile}`,
+    'if [ "$1" = "--version" ]; then',
+    `  echo "gh version ${version} (2026-09-01)"`,
+    "  exit 0",
+    "fi",
+    "exit 0"
+  ].join("\n")
+}
+
+test("環境判定: gh のバージョンと remoteHost の組み合わせで ghAttachSupported と repoSlug を判定する", () => {
+  const cases = [
+    {
+      version: "2.45.0",
+      remote: "git@github.com:owner/repo.git",
+      slug: "owner/repo",
+      host: "github.com",
+      attach: false
+    },
+    {
+      version: "2.98.9",
+      remote: "git@github.com:owner/repo.git",
+      slug: "owner/repo",
+      host: "github.com",
+      attach: false
+    },
+    {
+      version: "2.99.0",
+      remote: "git@github.com:owner/repo.git",
+      slug: "owner/repo",
+      host: "github.com",
+      attach: true
+    },
+    {
+      version: "2.100.0",
+      remote: "git@github.com:owner/repo.git",
+      slug: "owner/repo",
+      host: "github.com",
+      attach: true
+    },
+    {
+      version: "2.99.0",
+      remote: "git@example.ghe.com:owner/repo.git",
+      slug: "owner/repo",
+      host: "example.ghe.com",
+      attach: true
+    },
+    {
+      // GHES の独自ドメインは 2.99.0 以上でも ghAttachSupported が偽になる
+      version: "2.99.0",
+      remote: "git@git.example.com:owner/repo.git",
+      slug: null,
+      host: "git.example.com",
+      attach: false
+    }
+  ]
+
+  for (const c of cases) {
+    const dir = gitRepo(c.remote)
+    const logDir = tmpdir()
+    const logFile = path.join(logDir, "gh-args.log")
+    const binDir = fakeBin({ gh: ghStub(c.version, logFile) })
+
+    const out = runScript(dir, [binDir])
+    expect(out.remoteHost, `${c.remote}: remoteHost`).toBe(c.host)
+    expect(out.repoSlug, `${c.remote}: repoSlug`).toBe(c.slug)
+    expect(out.ghVersion, `${c.remote} v${c.version}: ghVersion`).toBe(
+      c.version
+    )
+    expect(
+      out.ghAttachSupported,
+      `${c.remote} v${c.version}: ghAttachSupported`
+    ).toBe(c.attach)
+
+    const log = fs.readFileSync(logFile, "utf8")
+    expect(log, `${c.remote}: gh auth status の呼び出し引数`).toContain(
+      `auth status --hostname ${c.host}`
+    )
+  }
+})
+
+test("環境判定: remoteHost が無ければ gh auth status を --hostname なしで呼ぶ", () => {
+  const logDir = tmpdir()
+  const logFile = path.join(logDir, "gh-args.log")
+  const binDir = fakeBin({ gh: ghStub("2.45.0", logFile) })
+
+  const out = runScript(gitRepo(), [binDir])
+  expect(out.remoteHost).toBe(null)
+  expect(out.ghAuthenticated).toBe(true)
+
+  const log = fs.readFileSync(logFile, "utf8")
+  expect(log).toContain("auth status\n")
+  expect(log).not.toContain("--hostname")
 })
 
 // ---------------------------------------------------------------------------
@@ -408,14 +536,16 @@ test("ケース 18: intent 文書 2 件をファイル名昇順で返す", () =>
       title: "レスポンスキャッシュを入れる",
       slug: "add-cache",
       status: "done",
-      issue: "42"
+      issue: "42",
+      intent: "v1"
     },
     {
       file: "2026-08-16-add-oauth-login.md",
       title: "OAuth ログインを足す",
       slug: "add-oauth-login",
       status: "approved",
-      issue: ""
+      issue: "",
+      intent: "v1"
     }
   ])
 })
@@ -441,6 +571,31 @@ test("ケース 19: frontmatter が壊れた intent 文書は落として続行�
   const out = runScript(dir)
   expect(out.existingIntents.map((i: { file: string }) => i.file)).toEqual([
     "2026-08-03-ok.md"
+  ])
+})
+
+test("intent 書式 v2: v1 と v2 の intent 文書をどちらも列挙し、それぞれの intent の値を返す", () => {
+  const dir = gitRepo()
+  write(
+    dir,
+    "docs/intents/2026-08-10-add-cache.md",
+    INTENT_DOC("add-cache", "done", "42", "レスポンスキャッシュを入れる")
+  )
+  write(
+    dir,
+    "docs/intents/2026-09-20-add-oauth-login.md",
+    INTENT_DOC("add-oauth-login", "approved", "", "OAuth ログインを足す", "v2")
+  )
+
+  const out = runScript(dir)
+  expect(
+    out.existingIntents.map((i: { file: string; intent: string }) => ({
+      file: i.file,
+      intent: i.intent
+    }))
+  ).toEqual([
+    { file: "2026-08-10-add-cache.md", intent: "v1" },
+    { file: "2026-09-20-add-oauth-login.md", intent: "v2" }
   ])
 })
 

@@ -65,6 +65,22 @@ async function readStdin() {
   for await (const chunk of process.stdin) data += chunk;
   return JSON.parse(data);
 }
+function emit(decision, reason) {
+  process.stdout.write(
+    `${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: decision,
+        permissionDecisionReason: reason
+      }
+    })}
+`
+  );
+  process.exit(0);
+}
+function pass() {
+  process.exit(0);
+}
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (true) {
@@ -75,18 +91,26 @@ function findProjectRoot(startDir) {
   }
 }
 
-// src/hooks/stop-guard.ts
-var input = await readStdin();
-if (!input.stop_hook_active) {
-  const run = findActiveRun(findProjectRoot(input.cwd ?? process.cwd()));
-  if (run && run.state.status === "active") {
-    process.stdout.write(
-      `${JSON.stringify({
-        decision: "block",
-        reason: `Codiel run ${run.state.runId} try-${run.state.try} \u304C\u672A\u5B8C\u4E86\u3067\u3059(phase: ${run.state.phase})\u3002\u30D5\u30A7\u30FC\u30BA\u3092\u7D9A\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u4E2D\u6B62\u3059\u308B\u5834\u5408\u306F codiel-state stop --reason \u3067\u660E\u793A\u7684\u306B\u505C\u6B62\u3057\u307E\u3059\u3002triage\u30FBdiscuss(\u8AD6\u70B9\u306E\u56DE\u7B54\u5F85\u3061)\u30FBdesign \u306E\u30A6\u30A9\u30FC\u30AF\u30B9\u30EB\u30FC\u7B49\u3067\u30E6\u30FC\u30B6\u30FC\u306E\u56DE\u7B54\u3092\u5F85\u3063\u3066\u505C\u6B62\u3059\u308B\u5834\u5408\u306F\u6B63\u5F53\u306A\u505C\u6B62\u3067\u3042\u308A\u3001\u305D\u306E\u65E8\u3092\u6700\u7D42\u30E1\u30C3\u30BB\u30FC\u30B8\u3067\u660E\u793A\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`
-      })}
-`
+// src/hooks/guard-github-mcp.ts
+var MARKER = "<!-- codiel:generated -->";
+var TARGET_TOOL_RE = /^mcp__.*github.*__(issue_write|add_issue_comment|update_issue_comment|create_pull_request|update_pull_request|update_pull_request_body|create_pull_request_review|add_comment_to_pending_review|pull_request_review_write)$/;
+try {
+  const input = await readStdin();
+  if (!TARGET_TOOL_RE.test(input.tool_name ?? "")) pass();
+  const root = findProjectRoot(input.cwd ?? process.cwd());
+  const run = findActiveRun(root);
+  if (!run) pass();
+  const body = input.tool_input?.body;
+  if (typeof body !== "string") pass();
+  if (!body.includes(MARKER))
+    emit(
+      "deny",
+      `GitHub MCP \u306E\u6295\u7A3F\u306B\u306F\u30DE\u30FC\u30AB\u30FC\u304C\u5FC5\u8981\u3067\u3059\u3002\u672C\u6587\u306B ${MARKER} \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
     );
-  }
+  pass();
+} catch (e) {
+  emit(
+    "ask",
+    `guard-github-mcp \u306E\u5185\u90E8\u30A8\u30E9\u30FC(\u30D5\u30A7\u30A4\u30EB\u30AF\u30ED\u30FC\u30BA\u30C9): ${e.message}`
+  );
 }
-process.exit(0);

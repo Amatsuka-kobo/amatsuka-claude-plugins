@@ -316,9 +316,12 @@ var isGitRepo = git("rev-parse", "--is-inside-work-tree") === "true";
 var gitToplevel2 = git("rev-parse", "--show-toplevel");
 var repoRoot = isGitRepo && gitToplevel2 ? path2.resolve(gitToplevel2) : null;
 var remoteUrl = isGitRepo ? git("remote", "get-url", "origin") : null;
-var repoSlug = remoteUrl?.match(
-  /^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
-)?.[1] ?? null;
+var remoteMatch = remoteUrl?.match(
+  /^(?:git@|ssh:\/\/git@|https?:\/\/)([^/:]+)[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
+);
+var remoteHost = remoteMatch?.[1] ?? null;
+var isGithubHost = remoteHost !== null && /^(?:github\.com|[^./]+\.ghe\.com)$/.test(remoteHost);
+var repoSlug = isGithubHost ? remoteMatch?.[2] ?? null : null;
 function ghExitZero(args) {
   try {
     return spawnSync2("gh", args, { encoding: "utf8" }).status === 0;
@@ -327,7 +330,29 @@ function ghExitZero(args) {
   }
 }
 var ghInstalled = ghExitZero(["--version"]);
-var ghAuthenticated = ghInstalled && ghExitZero(["auth", "status"]);
+var ghAuthenticated = ghInstalled && ghExitZero(
+  remoteHost ? ["auth", "status", "--hostname", remoteHost] : ["auth", "status"]
+);
+function ghVersionOf() {
+  if (!ghInstalled) return null;
+  try {
+    const res = spawnSync2("gh", ["--version"], { encoding: "utf8" });
+    return res.stdout?.match(/gh version (\d+\.\d+\.\d+)/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+var ghVersion = ghVersionOf();
+function versionGte(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return true;
+}
+var ghAttachSupported = ghVersion !== null && versionGte(ghVersion, "2.99.0") && isGithubHost;
 var unquote = (v) => v.replace(/^(["'])(.*)\1$/, "$2");
 function parseTopLevel(src) {
   const top = {};
@@ -398,7 +423,8 @@ function parseIntentDoc(file, content) {
     title: title === "" ? null : title,
     slug: top.slug ?? "",
     status: top.status ?? "",
-    issue: top.issue ?? ""
+    issue: top.issue ?? "",
+    intent: top.intent
   };
 }
 var existingIntents = [];
@@ -423,9 +449,12 @@ console.log(
       isGitRepo,
       repoRoot,
       remoteUrl,
+      remoteHost,
       repoSlug,
       ghInstalled,
+      ghVersion,
       ghAuthenticated,
+      ghAttachSupported,
       templates,
       blankIssuesEnabled,
       docRoot,
