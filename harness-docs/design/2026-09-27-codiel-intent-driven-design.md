@@ -1,7 +1,7 @@
 # codiel を intent 駆動へ改造し、sandalphon を吸収する 設計書
 
 - 作成日: 2026-09-27
-- 状態: 設計(第 9 版)・承認済み(2026-09-27)・実装時の追補(2026-09-27。決定 54〜62)
+- 状態: 設計(第 9 版)・承認済み(2026-09-27)・実装時の追補(2026-09-27。決定 54〜68)
 - 対象プラグイン: `plugins/codiel`(主)、`plugins/sandalphon`(撤去)、`plugins/metatron`(参照文書・テストの追随、`[ADR 候補]` の走査と縮約の実装、執筆規律の追随)、`plugins/gh-utility`(GitHub の執筆規則と画像の載せ方)
 - 現行バージョン: codiel `0.9.0-dev` → `1.0.0`、metatron `0.3.10-dev` → `0.4.0-dev`(マイナー)、sandalphon `0.2.1-dev` → 撤去、gh-utility `0.5.2-dev` → `0.5.3-dev`(§9)
 - 入力: オーケストレーター確定事項(2026-09-27。ユーザー合意済み)、暗黙知レビューと反証レビューの採否(2026-09-27。オーケストレーター決定)、ユーザーレビューの修正指示 3 点と、独立性の要件・metatron が無いときの ADR の決定・ADR 候補の移送を metatron 側で行う決定・執筆規則の決定(2026-09-27)
@@ -36,7 +36,7 @@
 
 第 9 版の追補では、`mark-ask --kind`、finalize での `resume` の遷移、intent 文書を書くのはオーケストレーターだけという規則、`stop --reason intent-updated` の例外、codiel が起票した Issue の人のコメントの扱いを決めた(§6.1.1、§6.2.2、§6.3.2、§6.3.5、§6.8)。続く追補では、run が active な間に GitHub へ投稿する本文すべてに `<!-- codiel:generated -->` を付け、hook で強制することを決めた(決定 53。§6.3.5、§6.8)。
 
-実装時の追補(2026-09-27)では、実装中のユーザー決定を決定 54〜59 として足し、M2 のレビューで直した仕様を決定 60〜62 として足した。これに合わせて §3.6・§6.1.1・§6.1.2・§6.2.2・§6.8・§6.9.4・§6.10.1・§7.1・§10・§11.1 の該当行を改めた。実装計画書 §9.4 の 11〜22 が経緯を持つ。
+実装時の追補(2026-09-27)では、実装中のユーザー決定を決定 54〜59 として足し、M2 のレビューで直した仕様を決定 60〜62 として足した。これに合わせて §3.6・§6.1.1・§6.1.2・§6.2.2・§6.8・§6.9.4・§6.10.1・§7.1・§10・§11.1 の該当行を改めた。続く追補では、M2 の再レビューとユーザー決定で決定 63〜68 を足し、§4.2 の A2-3・A2-21、§6.1.1・§6.1.2・§6.2.2・§6.2.4・§6.3.2・§6.8・§6.12.3・§6.12.6 を改め、§6.12.7 を足した。実装計画書 §9.4 の 11〜25 が経緯を持つ。
 
 | # | 論点 | 決定 | 具体化 |
 | --- | --- | --- | --- |
@@ -102,6 +102,12 @@
 | 60 | `gh api` の本文 | guard-bash は `gh api` の書き込み(POST・PATCH・PUT)のうち、`body` のフィールドか `--input` で本文を送るものにもマーカーを求める。codiel のスキルが `gh api` で PR の行コメントと反論を投稿するためである | §6.8 |
 | 61 | `mark-ask` の受け付ける状態 | `mark-ask` は `in_progress` のフェーズと、`pending` の finalize だけを受け付ける。終端の run、passed のフェーズ、finalize 以外の `pending` のフェーズは拒否する。フェーズの合間に確認するときは、次のフェーズを `start-phase` してから `mark-ask` する | §6.1.1、§6.2.2 |
 | 62 | intent フェーズの手順 0 と再開 | 手順 0 は、今回再開する run を終端にしない。終端にするのは再開しないほかの run だけで、終端にする前にユーザーに示して確かめる | §6.1.2 |
+| 63 | v1 の run の outcome | `version: 1` で `awaiting_outcome` の run は、outcome を記録できる。`get --active` はこの run を `runs` に含めて文言を出さず、`record-outcome` はこの run と、`completed` / `rejected` の v1 の run への incident だけを受け付ける。同期では `integration` を github として扱う。§6.2.4 の例外である | §6.2.2、§6.2.4 |
+| 64 | 本文を自動で作るフラグ | run が active な間、本文のフラグ(`--body` / `-b` / `--body-file` / `-F`)を持たずに `--fill`・`--fill-first`・`--fill-verbose`・`--template` / `-T` を持つ `gh pr create` と、`--template` / `-T` を持つ `gh issue create` を deny する。本文のフラグを持つ呼び出しは本文を検査する | §6.8 |
+| 65 | Issue・PR のテンプレート | テンプレートはスキルが読み、その見出し構成に沿って本文を書き、マーカーを含む本文を `--body-file` で投稿する。gh の `-T` は使わない。PR は単一ファイルのテンプレートだけを使い、`PULL_REQUEST_TEMPLATE/` 配下にしか無いときは使わない。後続 Issue は `filing-followup-issues` の既存の探索を使う。intent-issue は gh-utility `issue-craft` の選択と 3 択のまま据え置く。同意・署名・人の確認を表すチェックボックスは付けずに残す | §6.12.7 |
+| 66 | 同じコマンドでの本文の書き換えと複数の投稿 | guard-bash は、本文ファイルのパスが同じコマンドの別の場所にも現れる呼び出し、本文付きの投稿が 2 つ以上あっていずれかが本文を引数で渡す呼び出し、`gh pr create --web` / `-w` を deny する。本文は Write ツールで run の `reports/` に投稿ごとに別名で書き、別の Bash 呼び出しで `--body-file` で渡す | §6.8、§6.12.3 |
+| 67 | 本文ファイルのコミット | PR と後続 Issue の本文ファイルは、`review-<n>.md` と同じく run ブランチにコミットする | §6.12.7 |
+| 68 | intent の保存に失敗したとき | intent フェーズの手順 5 の (6) で `git switch -c` か `git commit` が「変更なし」以外の理由で失敗したら、`codiel-state stop --slug <slug> --reason commit-failed` で run を終端にしてからユーザーに確かめる。この確認は手順 5 の (4)〜(6) の間に確認を挟まない規則の例外である。intent は `abandoned` にしない。次の try は、作業ツリーに残した intent をそのまま使い、前の try のブランチから持ち込まない | §6.1.1、§6.1.2、§6.3.2 |
 
 ---
 
@@ -225,7 +231,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 - A2-1: `/codiel:run` が引数なし・Issue 番号・intent パスの 3 形で起動でき、`commands/run.md` の `argument-hint` が 3 形を示す。
 - A2-2: `codiel-state init` が `--slug <slug>` と `--intent <パス>` を必須とし、`--issue` を任意とする。作られる state は `version: 2`、`runId: <slug>`、`branch: codiel/<slug>-try-<n>`、`raguelRunId: <slug>-try-<n>` を持つ(テスト)。
-- A2-3: `version: 1` の state に対し `get` と `stop` 以外のコマンドが非ゼロで終了し、stderr に §6.2.4 の文言テンプレートと同じ文言を出す(テスト)。`get --active` は v1 の active run を `runs` に含めず、同じ文言を stderr に出す(テスト)。
+- A2-3: `version: 1` の state に対し `get` と `stop` 以外のコマンドが非ゼロで終了し、stderr に §6.2.4 の文言テンプレートと同じ文言を出す(テスト)。`get --active` は v1 の `active` / `awaiting_human` の run を `runs` に含めず、同じ文言を stderr に出す(テスト)。v1 の `awaiting_outcome` の run は `runs` に含め、`record-outcome` を受け付ける(決定 63。テスト)。
 - A2-4: state に `integration: "github" | "local"` が記録され、`local` の run で `complete-phase pr` が `--pr-url` なしで成功する(テスト)。
 - A2-5: `issue` を持たない run でも、guard-bash が phase に応じて `gh issue create` / `gh pr create` / `git push` を拒否する(テスト)。
 - A2-6: `plugins/codiel/skills/analyzing-issues/` と `plugins/codiel/agents/codiel-analyst.md` が存在しない。
@@ -243,7 +249,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 - A2-18: `plugins/codiel/skills/reviewing-diffs/SKILL.md` が「原文の要望の未達は severity high」の文を含む。`orchestrating-runs/SKILL.md` の finalize のセクションが「達成 / 未達 / 要確認 / 持ち越し」と「すべて達成のときだけ `status: done`」を含む。両方が「原文を正とし」と「`mark-ask`」を含む。`orchestrating-runs/SKILL.md` が「フェーズの途中で人に確認するときは `mark-ask`」の文と `--kind confirm` と `--reason intent-updated` を含む。`orchestrating-runs/SKILL.md` の依頼文テンプレートが「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ報告する」の文を含む(grep)。
 - A2-19: `plugins/codiel/skills/capturing-intent/SKILL.md` が次の固定文字列をすべて含む(grep)。「`## 現状調査`」「1 問だけ」「要約しない」「書き換えない」「原文にしない」「今回やらないことも `## TOBE` に記録する」「翻訳しない」「<!-- codiel:generated -->」。同じファイルが、「ASIS はユーザーに聞かず自分で読む」を `## 現状調査` の規律として持つ。
 - A2-20: `codiel-state finalize` の後に intent の `status` が、持ち越しを除く原文の要望がすべて達成のときだけ `done` になり、未達か要確認が残れば `in-progress` のままである(スキルの手順の grep と §8.4 の手動確認)。intent-sync は `status` を `done` にしない(grep)。
-- A2-21: guard-bash が、active run があるとき、`gh issue create|comment|edit` と `gh pr create|comment|edit|review` のうち本文を持つ呼び出しで、本文(`--body` / `-b` の値、`--body-file` / `-F` のファイルの中身)に `<!-- codiel:generated -->` が無ければ deny する。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。`--body-file -` と `-F -` は deny する。active run が無ければ、どれも通す(テスト)。
+- A2-21: guard-bash が、active run があるとき、`gh issue create|comment|edit` と `gh pr create|comment|edit|review` のうち本文を持つ呼び出しで、本文(`--body` / `-b` の値、`--body-file` / `-F` のファイルの中身)に `<!-- codiel:generated -->` が無ければ deny する。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。ただし、本文を自動で作る呼び出し(決定 64)と `gh pr create --web` は deny する。`--body-file -` と `-F -` は deny する。active run が無ければ、どれも通す(テスト)。
 - A2-22: GitHub MCP の本文を書き込むツールに掛ける hook が、active run があるとき、本文の引数(`body` など)に `<!-- codiel:generated -->` が無ければ deny し、active run が無ければ通す(テスト)。`plugins/codiel/hooks/hooks.json` に、そのツール名に当たる matcher がある(grep)。
 - A2-23: `plugins/codiel/references/github-writing.md` が「`<!-- codiel:generated -->` を本文に含める」の文を含む。`plugins/gh-utility/references/` の GitHub の執筆規則のファイルに `codiel:generated` の語が無い(grep)。
 
@@ -340,7 +346,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 
 - `GATED` は intent / design / test-spec / dev-plan / implement / test-loop / intent-sync / fix-loop の 8 フェーズにする。
 - guard-write の `DOC_PHASES` に intent と intent-sync を加え、init を除く。`docs/intents/**` の扱いは §6.8 に置く。
-- フェーズの途中で人に確認するときは、`codiel-state mark-ask <phase> --slug <slug> --kind confirm` で run を `awaiting_human` にしてから確認し、答えを得たら `resume` で戻す。stop-guard(`stop-guard.ts`)は `active` の run でのセッションの停止を block するので、`active` のまま応答を待つと止まれないためである。`evaluationId` は無くてよい(`codiel-state.ts:381-391`)。例外は、run を作る前に確認を済ませる intent フェーズの手順 5 の (1)〜(3) である(§6.1.2)。
+- フェーズの途中で人に確認するときは、`codiel-state mark-ask <phase> --slug <slug> --kind confirm` で run を `awaiting_human` にしてから確認し、答えを得たら `resume` で戻す。stop-guard(`stop-guard.ts`)は `active` の run でのセッションの停止を block するので、`active` のまま応答を待つと止まれないためである。`evaluationId` は無くてよい(`codiel-state.ts:381-391`)。例外は、run を作る前に確認を済ませる intent フェーズの手順 5 の (1)〜(3) と、(6) の保存に失敗して run を終端にしてから確かめる場合(決定 68)である(§6.1.2)。
 - `--kind` は確認の種類を表す。Raguel の ASK は `raguel`(既定)、人への確認の一般則は `confirm` を使う。値はフェーズの `askKind` に記録され、ゲートの記録(`raguel`)と区別できる(§6.2.2)。
 - finalize で `mark-ask` → `resume` を行うと、`phases.finalize` が `in_progress` になる。finalize はもともと `start-phase` しないフェーズだが、この遷移は許容する。`codiel-state finalize` は finalize 自身を検査から外す(`codiel-state.ts:453-457`)ので、`in_progress` のままでも成立する。
 
@@ -376,7 +382,7 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 
    (5) `git add -- <intent パス>` で intent 文書だけを stage する。未追跡のファイルでもパスを限定したコミットができるようにするためである。
 
-   (6) 承認ゲートの「文書だけ残して終えるか」(§6.1.3)で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。
+   (6) 承認ゲートの「文書だけ残して終えるか」(§6.1.3)で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。`git commit` が「変更なし」で失敗したときは、そのコミットを飛ばして進む。`git switch -c` が失敗したとき、または `git commit` がそれ以外の理由で失敗したときは(決定 68)、intent フェーズがまだ `pending` で `mark-ask` できない(決定 61)ので、`codiel-state stop --slug <slug> --reason commit-failed` で run を終端にしてから、失敗の出力と intent のパスを示してユーザーに確かめる。続行の分岐で失敗したときは、先に開始時のブランチへ戻る。この停止では intent の `status` を変えない(§6.3.2)。
    - 終える(intent-only)とき:
      1. 開始時のブランチで `git commit -m "codiel(intent): <要約> (<slug> try-<n>)" -- <intent パス>` を実行する。
      2. `codiel-state start-phase intent --slug <slug>` を実行する。
@@ -393,7 +399,7 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
    - (1)〜(3) の間は active run が無い(手順 0 で保証する)。guard-write は active run が無いとき全面的に pass する(`guard-write.ts:104-105`)ので、(1) の書き込みはもともと妨げられない。(2) の起票も run の作成前なので、guard-bash の `gh issue create` の制限(`guard-bash.ts:164-168`)に掛からない。stop-guard も active run が無いので、(1)〜(3) でユーザーの応答を待って止まれる。
    - (4) の後から `start-phase intent` までは、active run の `phase` が `null` である。この間に intent 文書を直す必要が出ても、guard-write が `docs/intents/*.md` を phase `null` で通す(§6.8)。
    - `evaluate_decision` が ASK を返したときは、現行どおり `mark-ask` で run を `awaiting_human` にしてから人の裁定を待つ。stop-guard は `active` の run だけを block するので、この待ちは妨げられない。
-6. 前の try がある run(try-2 以降)では、新しい run ブランチは開始時のブランチから切る。実装の途中で止まった run の intent は前の try の run ブランチにしか無いため、手順 5 の (1) で新規に書かず、`git checkout <前の try のブランチ> -- <intent パス>` で同じパスに持ち込む。文書だけで終えた intent は開始時のブランチにコミット済みなので、持ち込みは要らない。
+6. 前の try がある run(try-2 以降)では、新しい run ブランチは開始時のブランチから切る。実装の途中で止まった run の intent は前の try の run ブランチにしか無いため、手順 5 の (1) で新規に書かず、`git checkout <前の try のブランチ> -- <intent パス>` で同じパスに持ち込む。文書だけで終えた intent は開始時のブランチにコミット済みなので、持ち込みは要らない。前の try が `commit-failed` で止まったときは、作業ツリーに残した intent をそのまま使い、前の try のブランチから持ち込まない(決定 68)。そのブランチには intent のコミットが無く、開始時のブランチに古い版があれば、持ち込みが承認済みの新しい版を上書きするためである。
 
 #### 6.1.3 承認ゲートで決める 3 項目
 
@@ -468,7 +474,7 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 - すべてのコマンドの run 指定を `--issue <N>` から `--slug <slug>` に替える。
 - `init` は `--slug` / `--intent` / `--integration` / `--scale` / `--adr-target` / `--image-upload` を必須、`--issue` と `--intent-only` を任意とする。`--intent-only` を付けると `branch` を `null` にする。
 - `branch` が `null` の run では、`start-phase` は intent 以外を拒否する。run ブランチを持たないまま実装系のフェーズへ進ませないためである。
-- `runDir` は `.codiel/runs/<slug>`。`findActiveRun` と `get --active` はディレクトリ名のパターンで絞らず、`runs/` 直下のディレクトリをすべて走査し、`version: 2` の state だけを run として扱う。
+- `runDir` は `.codiel/runs/<slug>`。`findActiveRun` と `get --active` はディレクトリ名のパターンで絞らず、`runs/` 直下のディレクトリをすべて走査し、`version: 2` の state だけを run として扱う。例外として、`get --active` は `version: 1` で `awaiting_outcome` の run も `runs` に含める(決定 63)。
 - `complete-phase pr` の `--pr-url` 必須は `integration === "github"` のときだけにする。
 - `close`(§6.1.3)、`step-add` / `step-update` / `waves`(§6.6)を足す。
 - `mark-ask` に `--kind raguel|confirm` を足す。省略時は `raguel` とし、既存の呼び出しの意味を変えない。値はフェーズの `askKind` に記録する。`raguel` と `confirm` 以外は拒否する。`resume` は `askKind` を消さず、記録として残す。`mark-ask` は `in_progress` のフェーズと `pending` の finalize だけを受け付け、終端の run・passed のフェーズ・finalize 以外の `pending` のフェーズを拒否する(決定 61)。
@@ -485,8 +491,8 @@ sandalphon `capturing-intent` の手順(`plugins/sandalphon/skills/capturing-int
 #### 6.2.4 version 1 の扱い
 
 - v2 の CLI と hook は、`version: 1` の state を持つ run ディレクトリを active run として扱わない。hook の挙動は run が無いときと同じになる。
-- `get --active` は v1 の active run(`active` / `awaiting_human` / `awaiting_outcome`)を `runs` に含めず、見つけたら run ごとに次の文言を stderr に出す。
-- `--slug issue-<N>` で v1 の run を直接指したときは、`get` と `stop` だけを受け付け、ほかのコマンドは非ゼロで終了して同じ文言を stderr に出す。`issue-<N>` の形は v2 の slug として禁止しているので(§6.2.3)、この形で指せるのは v1 の run だけである。
+- `get --active` は v1 の `active` / `awaiting_human` の run を `runs` に含めず、見つけたら run ごとに次の文言を stderr に出す。v1 の `awaiting_outcome` の run は `runs` に含め、文言を出さない。outcome の同期で記録して終端にするためである(決定 63)。同期では、v1 の state に無い `integration` を github として扱い、PR の URL(`pr.url`)と evaluationId(`phases.<fix-loop|test-loop|implement>.evaluationId`)は v2 と同じ場所から読む。
+- `--slug issue-<N>` で v1 の run を直接指したときは、`get` と `stop` だけを受け付け、ほかのコマンドは非ゼロで終了して同じ文言を stderr に出す。例外は、`awaiting_outcome` の v1 の run への `record-outcome` と、`completed` / `rejected` の v1 の run への `record-outcome --outcome incident` である(v2 と同じ扱い)。state は version 1 のまま書き戻す。`issue-<N>` の形は v2 の slug として禁止しているので(§6.2.3)、この形で指せるのは v1 の run だけである。
 
 文言のテンプレート。`<N>` と `<status>` を実際の値に置き換えて出す。
 
@@ -525,7 +531,7 @@ codiel: .codiel/runs/issue-<N> は codiel 0.x の run(state version 1、status: 
 | `approved` | 承認ゲートを通過して保存された。文書だけで終えた run もこの値のまま残る | intent フェーズ |
 | `in-progress` | run が implement に入った | implement の開始時 |
 | `done` | 持ち越しを除く原文の要望が、finalize の判定ですべて達成だった | finalize |
-| `abandoned` | run を止め、この intent を続けない | `stop` の後にオーケストレーターが更新する。ただし `stop --reason intent-updated` のときは例外とし、`abandoned` にしない |
+| `abandoned` | run を止め、この intent を続けない | `stop` の後にオーケストレーターが更新する。ただし `stop --reason intent-updated` と `stop --reason commit-failed`(§6.1.2 手順 5 の (6))のときは例外とし、`abandoned` にしない |
 
 - intent-sync より後の要望を「この run に含める」と決めて止めるときは(§6.3.4)、`codiel-state stop --slug <slug> --reason intent-updated` を使う。この値の停止では intent を `abandoned` にせず、`in-progress` のまま残し、新しい try で intent から再開する。
 - `done` は intent-sync ではなく finalize が付ける。finalize の判定(§6.3.6)で、持ち越しを除く原文の要望がすべて「達成」のときだけ `done` にする。「未達」か「要確認」が 1 つでも残れば `in-progress` のままにし、結果レポートに残りを示す。
@@ -1019,13 +1025,18 @@ run が active な間、GitHub へ本文を投稿する操作には `<!-- codiel
 guard-bash の規則は次のとおりである。
 
 - 対象のコマンドは `gh issue create`・`gh issue comment`・`gh issue edit`・`gh pr create`・`gh pr comment`・`gh pr edit`・`gh pr review` である。サブコマンドは、git と同じくトークンの解析で見分ける(`guard-bash.ts:36-60` の手法)。
-- 本文を持つ呼び出しだけを検査する。本文を持つとは、`--body` / `-b` か `--body-file` / `-F` を含むことである。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。
+- 本文を持つ呼び出しだけを検査する。本文を持つとは、`--body` / `-b` か `--body-file` / `-F` を含むことである。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。例外は、下の項の本文を自動で作る呼び出しと `--web` である。
+- フラグは、短いフラグの結合(`-df`)と値の連結(`-bX`)も読む。行末の `\` による行の継続は、gh と git の起動を探す前に 1 行へ戻す。
 - `--body` / `-b` のときは、コマンドの文字列全体にマーカーが含まれるかを見る。本文はクォートや heredoc(`"$(cat <<'EOF' … EOF)"`)で複数行になり、改行で区切るセグメントの分割(`guard-bash.ts:18`)では切れてしまうので、セグメントに分けずに見る。
 - `--body-file` / `-F` のときは、値のパスを cwd 基準で解決し、ファイルの中身にマーカーが含まれるかを見る。ファイルが読めなければ deny する。
 - 値が `-`(標準入力)のときは中身を検査できないので deny し、ファイルに書いて `--body-file <パス>` で渡すよう案内する。
 - マーカーが無ければ deny し、「本文に `<!-- codiel:generated -->` を含めて投稿し直す」よう案内する。
 - 既存のフェーズの制限(`gh issue create` は triage だけ、`gh pr create` は pr だけ。`guard-bash.ts:164-173`)はそのまま残し、マーカーの検査はその後に当てる。
 - `gh api` も対象にする(決定 60)。メソッドは `-X` / `--method` の値で決め、指定が無ければフィールドか `--input` があるとき POST、無いとき GET とする。POST・PATCH・PUT のうち、キーが `body`(`comments[][body]` の形を含む)のフィールドを `-f` / `--raw-field` / `-F` / `--field` で送るものと、`"body":` を含む `--input <ファイル>` を送るものを検査する。`-F body=@<パス>` と `--input <パス>` はファイルの中身を見る。`@-` と `--input -` は deny し、読めないファイルも deny する。本文を持たない呼び出し(読み取り、ラベルだけの更新)は通す。GraphQL の mutation の query に本文を直接書く形と、`body` 以外の名前のフィールドで本文を送る形は検出しない。
+- 本文のフラグを持たずに本文を自動で作る呼び出しを deny する(決定 64)。対象は、`--fill`・`--fill-first`・`--fill-verbose`・`--template` / `-T` を持つ `gh pr create` と、`--template` / `-T` を持つ `gh issue create` である。`gh pr create --web` / `-w` も deny する(決定 66)。Web の作成画面はテンプレートを入れた状態で開くためである。
+- 本文ファイルのパス(`--body-file` / `-F` の値、`gh api` の `-F body=@<パス>`、`--input <パス>`)が、同じコマンドの中でフラグの値以外の場所にも現れたら deny する(決定 66)。hook は実行前にファイルを読むので、同じコマンドで書き換えると古い中身を検査してしまうためである。パスの表記を変えた書き換えは検出しないので、本文を Write ツールで書く規律(§6.12.3)と併せて防ぐ。
+- 1 つのコマンドに本文付きの投稿が 2 つ以上あり、いずれかが本文を引数(`--body` / `-b`、`gh api` の `-f body=`)で渡すときは deny する(決定 66)。コマンドの文字列全体でマーカーを探すので、1 つのマーカーで別の投稿まで通ってしまうためである。
+- gh の起動を探すときは、heredoc の本文の行(`<<WORD` から終端の `WORD` の行まで)を除く。除くのは終端の行が見つかったときだけで、`<<<`(here-string)と算術のシフト(`1<<2`)は heredoc の開始と見なさない。判定に迷う形は除かずに検査する。コミットメッセージに書いた gh の使用例を投稿と見なさないためである。この結果、`bash <<EOF` の中で起動した gh の投稿は検出しない(既知の限界)。マーカーの検査は、従来どおりコマンドの文字列全体で行う。
 
 GitHub MCP の hook の規則は次のとおりである。
 
@@ -1283,6 +1294,7 @@ ADR を先に確定させるのは、候補の本文を失わないためであ�
   - 「引用・出典は削らず末尾にまとめる。」
 - 画像の載せ方は §6.12.4 に従う。
 - run が active な間に投稿する本文には、`<!-- codiel:generated -->` を含める(§6.3.5)。この規則を「`<!-- codiel:generated -->` を本文に含める」の文で規則の本文に載せる。付け忘れると hook に deny される(§6.8)。
+- 本文は Write ツールで run の `reports/` に投稿ごとに別名のファイルで書き、別の Bash 呼び出しで `--body-file` で渡す(決定 66)。gh の `--template` / `-T`・`--fill` 系・`--web` は使わない(決定 64・66)。この 2 点は、マーカーの項と同じく gh-utility へ写さない(§6.12.6)。
 
 #### 6.12.4 画像の載せ方
 
@@ -1342,13 +1354,25 @@ ADR を先に確定させるのは、候補の本文を失わないためであ�
 
 - gh-utility に GitHub の執筆規則と画像の載せ方を独立に置く。置き場は `plugins/gh-utility/references/` の新しいファイルとし、名前は計画書で確定する。既存の `references/github-issue-common.md` にセクションとして足してもよい。
 - 内容は §6.12.3〜§6.12.4 と同じ規則である。codiel を参照せず、codiel の名前も書かない。
-- 投稿する本文のマーカー(§6.12.3 の最後の項)は写さない。gh-utility の投稿にはマーカーを付けない。
+- 投稿する本文のマーカー(§6.12.3 の最後から 2 番目の項)と、本文ファイルの書き方(§6.12.3 の最後の項)は写さない。gh-utility の投稿にはマーカーを付けない。テンプレートの扱い(§6.12.7)も写さない。gh-utility の `issue-craft` はテンプレートを利用者に選ばせる独自の手順を持つ。
 - codiel の run が active なセッションで gh-utility のスキルから本文を投稿すると、マーカーが無いので codiel の hook に deny される(§6.8)。codiel は run の間に gh-utility を起動しない。intent 承認時の任意の起票は run の作成前に行うので、この制限に当たらない。利用者が run の間に gh-utility を使うと deny されることは、codiel の README に書く。
 - Issue やコメントを書くスキル(`issue-craft`・`issue-split`・`issue-triage`)のすべてが、このファイルを読む指示を持つ。
 - gh-utility は state を持たないので、画像の手段は実行時に判定する(`gh --version`、`remoteHost`、セッションで claude-in-chrome のツールが使えるか)。ローカル保存の場合は保存パスを利用者に示す。
 - gh-utility の `src/check-issue-env.ts` も、codiel と同じく `*.ghe.com` を受ける(決定 46)。`repoSlug` の正規表現を `github.com` と `<名前>.ghe.com` を受ける形に改め、出力に `remoteHost` を足し、認証を `gh auth status --hostname <remoteHost>` で確かめる。codiel とは独立実装なので、codiel のコードを使わずに個別に直す。
 - 同じ規則を codiel と gh-utility が別々に持つので、どちらかを変えたらもう一方を追随させる。codiel の `format-change-checklist.md` と、gh-utility の文書(置き場は計画書で確定)に追随の行を足す。
 - gh-utility は `0.5.2-dev` から `0.5.3-dev` に上げる。
+
+#### 6.12.7 Issue・PR のテンプレート
+
+リポジトリの Issue・PR のテンプレートは、スキルが読んで本文の構成に使う(決定 65)。gh の `--template` / `-T` は使わない。gh 2.101.0 は TTY の無い環境で `-T` を拒み、`-T` と `--body` / `--body-file` の併用も拒むので、テンプレートを使えるのはスキルが読んで写す経路だけである。
+
+- PR: pr フェーズで、単一ファイルのテンプレートを探す。対象は `.github/`・リポジトリのルート・`docs/` の `pull_request_template.md` / `.txt` で、大文字小文字を区別せず、この順に最初に見つかったものを使う。`PULL_REQUEST_TEMPLATE/` 配下にしか無いときは使わない。GitHub の Web 画面も、`?template=` の指定が無ければそれらを適用しないためである。
+- テンプレートを使うときは、見出しの構成を保ち、記入の案内の HTML コメントを消す。codiel のマーカー(`<!-- codiel:generated -->` など)は消さない。codiel が必ず書く項目(intent のパス、`Closes #<N>`、画像、`## 出典`)に当たる見出しが無ければ末尾に足す。
+- 同意・署名・人の確認を表すチェックボックス(行動規範への同意、CLA の署名、「テストした」など)は付けずに残し、人が確かめる項目であることを本文に書く。マーカーは描画されないので、付けると人が同意したように見えるためである。
+- 後続 Issue(triage): `filing-followup-issues` の既存の `.github/ISSUE_TEMPLATE` の探索と展開を使う。探索から `config.yml` を除き、チェックボックスは上と同じ規則にする。
+- intent-issue: gh-utility `issue-craft` の持ち込みモード(テンプレートの選択と、見出しが衝突したときの 3 択)と、`intent-common.md` の自前起票の 3 択のまま据え置く。テンプレートの項目を本文の末尾へ自動で足す既定は作らない。人が後で埋めた欄は、マーカーのある本文の中なので派生として扱われ、原文から落ちるためである。
+- 本文ファイルは Write ツールで `.codiel/runs/<slug>/try-<n>/reports/` に投稿ごとに別名で書き(PR は `pr-body.md`)、`review-<n>.md` と同じく run ブランチにコミットしてから投稿する(決定 67)。コミットしないと、次の try の pr フェーズの開始時の `git status --short` に未追跡の行が残る。
+- org やアカウントの `.github` リポジトリに置いた既定のテンプレートはローカルに無いので使わない。
 
 ---
 
