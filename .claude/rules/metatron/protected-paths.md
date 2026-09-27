@@ -18,5 +18,5 @@
 - `pnpm-workspace.yaml` — 変更するのはスクリプトを持つプラグインを追加または削除するときだけである。変更後 `pnpm install` を実行し、`pnpm run build` を通す。
 - `tsconfig.json` と `biome.json` と `vitest.config.ts` — 全プラグインに影響する。変更後 `pnpm run typecheck` と `pnpm run lint` と `pnpm run test` をすべて通す。
 - `CLAUDE.md` — 全セッションに注入される。ARCHITECTURE および `.claude/rules/metatron/` と内容が重ならないことを確認する。
-- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `rules-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当節の項目をすべて追随させる。`config-schema.md` を変更したときは 3 プラグインの独立実装を追随させ、3 者比較テストを通す。
-- `plugins/sandalphon/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/sandalphon/docs/format-change-checklist.md` の項目をすべて追随させる。
+- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `rules-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当節の項目をすべて追随させる。`config-schema.md` を変更したときは 2 プラグインの独立実装(metatron と codiel)を追随させ、2 者比較テストを通す。
+- `plugins/codiel/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/codiel/docs/format-change-checklist.md` の項目をすべて追随させる。
