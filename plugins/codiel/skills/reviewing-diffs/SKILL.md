@@ -91,6 +91,8 @@ security 観点の指摘は原則 medium 以上を検討する(セキュリテ�
 所見テキストを受け取ったあと:
 
 1. severity 順(critical → high → medium → low)に並べ替えて `reports/review-<m>.md` に記録する。
+   `<m>` はレビューの回の番号で、review フェーズが 1、fix-loop の再レビューごとに 1 つ増える。
+   `try-<n>` の `<n>` とは別の番号である。
    同一の対象・内容の所見が複数観点から出た場合は、最も高い severity で 1 件に
    統合し、観点を併記する。
 2. local モードでは、この先の投稿を行わない。`reports/review-<m>.md` の記録だけを review フェーズの
