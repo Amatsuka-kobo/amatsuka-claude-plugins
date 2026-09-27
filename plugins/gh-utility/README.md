@@ -32,6 +32,10 @@ open Issue を棚卸しし、ラベル提案・古い Issue の生死確認(既�
 
 issue-craft / issue-split / issue-triage は、環境チェック・操作手段の決定・言語規律・承認規律・ラベル規律・失敗時の扱いを `references/github-issue-common.md` で共有する。各 SKILL.md は冒頭でこのファイルを参照し、固有の手順だけを本文に持つ。規律を変えるときは共通ファイルを直す。
 
+## 画像の載せ方
+
+Issue・PR・コメント・レビューに画像を載せるときは、`gh` 2.99.0 以上でリモートのホストが `github.com` か `*.ghe.com` なら `--attach` で添付します。使えなければ claude-in-chrome でブラウザから GitHub にアップロードします(ブラウザが使えてログイン済みであることが前提です)。どちらも使えなければ画像をローカルに保存し、保存先のパスを示します。手段は実行のたびに判定するため、`gh` のバージョンを 2.99.0 以上に保つか、claude-in-chrome を使える状態にしておくと画像を本文に載せられます。縮退の順序と詳細は `references/github-issue-common.md` を参照してください。
+
 ## 会話記録について
 
 会話の記録・検索・再開(chat / recall / resume スキルと chat-recorder)は、このプラグインから分離した `chat-history` プラグインが担当します。
