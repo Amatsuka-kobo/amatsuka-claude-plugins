@@ -1230,7 +1230,7 @@ metatron が無い環境で持続層に全文で残した `[ADR 候補]` は、�
 | --- | --- | --- |
 | `scan-adr-candidates`(新設) | 読 | `{ candidates, warnings }` を返す。`candidates` の各要素は、ファイル・候補 ID・見出し・タイトル・制約・決定日・出典 intent の列・5 つの小見出しの本文・内容のハッシュ・`adoptedAs` を持つ。`adoptedAs` は、ADR の本文に `ADR 候補 ID: <候補 ID>` の行が完全一致で存在するときその番号、無ければ `null`。行の完全一致で判定し、部分文字列でもタイトルの一致でも判定しない(`frontend-1` の候補に `ADR 候補 ID: frontend-10` は一致しない)。対象が無ければ `candidates: []` で 0 で終わる。5 つの小見出しが揃わないエントリ、候補 ID の無い印、同じファイルで重複した候補 ID は候補にせず、`warnings` に載せる |
 | `stage-adr --input <path>` / `commit-architecture --staging-id <id>`(変更しない) | 段階・書 | 持続層には触れない。現行の staging は 1 ファイル・docRoot の中・全文のハッシュを前提にしており、docRoot の外にありうる持続層を含めない。`commit-architecture` は ADR だけを確定する |
-| `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN>`(新設) | 書 | 縮約を行う唯一のコマンド。手順は §6.11.4。成功と「既に参照形」は 0、拒否と失敗は終了コード 3 と `shrinkPending: { file, candidateId, adr }` を返す |
+| `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>`(新設) | 書 | 縮約を行う唯一のコマンド。`--hash` は `scan-adr-candidates` が返したエントリの範囲のハッシュで、§6.11.4 の手順 2 で走査のときの値と照らすために必須とする(実装時に追加)。手順は §6.11.4。成功と「既に参照形」は 0、拒否と失敗は終了コード 3 と `shrinkPending: { file, candidateId, adr }` を返す |
 
 `references/cli-usage.md` に 2 つの新設コマンドを載せ、`shrink-adr-candidate` の終了コード 3 を書く。終了コード 3 は metatron の既存の値(0 成功・1 拒否・2 使い方の誤り。`src/cli/output.ts`)と重ならない、縮約の失敗専用の値とする。
 
