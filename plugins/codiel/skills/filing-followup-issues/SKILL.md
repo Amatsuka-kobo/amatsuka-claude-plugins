@@ -14,7 +14,7 @@ description: Codiel の triage フェーズでオーケストレーター本体�
 triage は非 GATED フェーズであり、Raguel の `evaluate_*` は経ない。`complete-phase triage` の
 前提として人間の明示的な指示を必須とする。
 
-入力は `reports/review-<n>.md` の所見のうち **medium / low のみ**。
+入力は `reports/review-<m>.md` の所見のうち **medium / low のみ**。
 
 連携モードで手順が分かれる。github モードは Issue として起票し、local モードは
 `status: proposed` の intent 草案として `docs/intents/` に書く。
@@ -34,7 +34,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## github モードのチェックリスト
 
-1. 最新の `reports/review-<n>.md` を読み、medium/low の所見だけを抽出する(critical/high は
+1. 最新の `reports/review-<m>.md` を読み、medium/low の所見だけを抽出する(critical/high は
    すでに fix-loop で処理済みのはずであり、対象に含めない)。**既に「フォローアップ: #N」の
    注記が付いている所見は起票済みなので除外する**(triage 途中でセッションが切れて再開した場合の
    二重提示・二重起票の防止。`gh issue list --search` の重複確認はキーワード一致頼みで
@@ -65,13 +65,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 7. 選んだテンプレート(または既定書式)を最大限埋めた本文を、`github-writing.md` の執筆規則に
    従って組み立てる。本文には `<!-- codiel:generated -->` を含める。組み立てた本文を Write ツールで
    `.codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md` に書く(投稿ごとに別名にする)。書いたら
-   `review-<n>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
+   `review-<m>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
    `git commit -m "codiel(triage): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
    `gh issue create --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md --label "<ラベル>"`
    を実行する(テンプレートの labels が複数ある場合は `--label` を複数回指定する)。
-8. 起票後、Issue 番号を `reports/review-<n>.md` の該当所見の行に追記する。`<!-- codiel:generated -->`
+8. 起票後、Issue 番号を `reports/review-<m>.md` の該当所見の行に追記する。`<!-- codiel:generated -->`
    を含むフォローアップの本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/followup-<連番>.md`
-   に書き、同じく `review-<n>.md` と同じ書き方で run ブランチへコミットしてから、別の Bash 呼び出しで
+   に書き、同じく `review-<m>.md` と同じ書き方で run ブランチへコミットしてから、別の Bash 呼び出しで
    `gh pr comment <PR番号> --body-file .codiel/runs/<slug>/try-<n>/reports/followup-<連番>.md`
    を実行する。
 9. 全対象(見送られたものを除く)の処理が終わったら
@@ -80,7 +80,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## local モードのチェックリスト
 
-1. 最新の `reports/review-<n>.md` を読み、medium/low の所見だけを抽出する(critical/high は
+1. 最新の `reports/review-<m>.md` を読み、medium/low の所見だけを抽出する(critical/high は
    すでに fix-loop で処理済みのはずであり、対象に含めない)。既に intent 草案のパスが付記
    されている所見は処理済みなので除外する。
 2. 抽出した所見を**番号付き一覧**(番号・severity・要約・対象 `src/...:42`)にしてユーザーに提示する。
@@ -92,12 +92,12 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    次の手順に進まない**。
 4. ユーザーが対象を指示したら、対象ごとに `intent-writing.md` の規則に従い、`status: proposed` の
    intent 草案を `docs/intents/YYYY-MM-DD-<slug>.md` に書く。frontmatter の `run` は空にする。
-   `## 現状調査` に、所見の出所(`review-<n>.md` の該当行)を書く。レビュー所見は AI が生成した文
+   `## 現状調査` に、所見の出所(`review-<m>.md` の該当行)を書く。レビュー所見は AI が生成した文
    なので、原文にしない。原文のセクション(`## ASIS` / `## TOBE`)には本文を置かず、見出しの下に
    `<!-- codiel:unrecorded -->` だけを置く。この草案を入力に run を始めたときは、このセクションを
    不足セクションとして聞き取りで埋める。
 5. 書いた intent 草案をコミットする。
-6. `reports/review-<n>.md` の該当所見の行に、書いた intent 草案のパスを追記する。
+6. `reports/review-<m>.md` の該当所見の行に、書いた intent 草案のパスを追記する。
 7. 全対象(見送られたものを除く)の処理が終わったら
    `node <plugin-root>/scripts/codiel-state.mjs complete-phase triage --slug <slug>` を呼び
    フェーズを完了させる。
@@ -131,7 +131,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 <所見の要約>
 
 ## 根拠
-<review-<n>.md に記録された根拠(design.md/spec.md との不整合、または起こりうる障害)>
+<review-<m>.md に記録された根拠(design.md/spec.md との不整合、または起こりうる障害)>
 
 ## 対象ファイル
 `src/...:42`
@@ -143,7 +143,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 medium|low
 ```
 
-## 起票済み Issue の記録書式(`reports/review-<n>.md` への追記)
+## 起票済み Issue の記録書式(`reports/review-<m>.md` への追記)
 
 該当所見ブロック(`### [severity] <要約>` から始まる一連の箇条書き)の末尾に次の形式で追記する。
 
@@ -170,4 +170,4 @@ medium|low
 | 「テンプレートを読むのが面倒なので自由書式で起票する」 | ISSUE_TEMPLATE はリポジトリのラベル運用・Definition of Done と紐づく。自由書式は起票後にラベル漏れ・トリアージ漏れを招く。手順 5 のとおり探索・選択を必ず行う。 |
 | 「重複確認は面倒だから省略して起票する」 | 重複起票は Issue トラッカーを汚し、後続の対応を分散させる。`gh issue list --search` での確認を省略しない。 |
 | 「ユーザーの返信を待たずに一部だけ先に起票しておこう」 | 「回答が来るまで起票しない」がこのフェーズ唯一のゲート。一部でも先行起票すれば、ユーザーが後から「その所見は見送りたかった」と言っても取り消せない。 |
-| 「起票さえすれば review-<n>.md への追記や PR コメントは後回しでいい」 | 追記・コメントを怠ると Issue 番号と所見の対応が追跡不能になり、triage が行われたこと自体が記録に残らない。起票の都度、手順 8 を即時に行う。 |
+| 「起票さえすれば review-<m>.md への追記や PR コメントは後回しでいい」 | 追記・コメントを怠ると Issue 番号と所見の対応が追跡不能になり、triage が行われたこと自体が記録に残らない。起票の都度、手順 8 を即時に行う。 |

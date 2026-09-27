@@ -1296,3 +1296,51 @@ test("閉じていないクォートを残す入力の後ろの PR=$(gh pr creat
   )
   expect(r?.permissionDecision).toBe("deny")
 })
+
+test("フォールバックした gh api の -f body=<マーカー無し> は、代入の除去で body= キーを失わず deny(M2-E-R)", () => {
+  const root = setupRun()
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  const r = hook(
+    root,
+    [unclosedQuote, "gh api repos/o/r/issues/1/comments -f body=hello"].join(
+      "\n"
+    )
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("フォールバックした gh api の -F body=@<マーカー無しファイル> も、代入の除去でパスを失わず deny(M2-E-R)", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "nomark.md"), "本文だけ\n")
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  const r = hook(
+    root,
+    [
+      unclosedQuote,
+      "gh api repos/o/r/issues/1/comments -F body=@nomark.md"
+    ].join("\n")
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test('フォールバックした += の代入(x+=$(gh …)、arr+=("$(gh …)"))も見つけて検査する(M2-E-AR)', () => {
+  const root = setupRun()
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  for (const assignment of [
+    "x+=$(gh pr comment 1 --body nomarker)",
+    'arr+=("$(gh pr comment 1 --body nomarker)")'
+  ])
+    expect(
+      hook(root, [unclosedQuote, assignment].join("\n"))?.permissionDecision
+    ).toBe("deny")
+})
+
+test('フォールバックした echo "url=$(gh …)" のように引用符が代入より前にある形も見つけて検査する(M2-E-AR)', () => {
+  const root = setupRun()
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  const r = hook(
+    root,
+    [unclosedQuote, 'echo "url=$(gh pr comment 1 --body nomarker)"'].join("\n")
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})

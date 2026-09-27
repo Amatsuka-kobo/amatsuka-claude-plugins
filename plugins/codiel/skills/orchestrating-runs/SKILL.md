@@ -92,7 +92,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 
    | 記号 | 確認対象 | 「揃っている」の判定 |
    | --- | --- | --- |
-   | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` が `## Codiel` 見出しを含む |
+   | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
    | C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
    | D | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
 
@@ -169,9 +169,9 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [test-loop B] | 成果物を書く委譲。NG ケースの再現手順・期待結果・実際の結果 → コード修正 diff | implementing + fixing-failures | NG ケース ID + 再現手順 + 期待結果 + 実際の結果 | コード修正 diff | pass-gate(`evaluate_code`) | コード系フェーズの委譲先(自分の変更を自分でコミット) |
 | [intent-sync] | 成果物を書く委譲。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映 | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
 | [pr] | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ(詳細は「2.2 pr の運転」) | complete-phase(github のときだけ `--pr-url` 必須) | オーケストレーター(github モードでは `pr-body.md` のコミットも)。開始前に `git status --short` で未コミット差分がないことを確認 |
-| [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`.codiel/specs/**`、持続層 | `reports/review-<n>.md` + PR コメント(github のみ) | complete-phase | オーケストレーター(review レポートと、github モードではレビュー本文・行コメントの本文ファイル(`review-body-<n>.md`・`review-comment-<連番>.md`)のコミットも) |
-| [fix-loop] | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<n+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<n>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<n+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<n+1>.md` と、github モードでは反論・対応・再報告記録の本文ファイル(`rebuttal-<連番>.md` など)のコミットはオーケストレーター。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
-| [triage] | オーケストレーター本体。`reports/review-<n>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<n>.md` の medium/low | github: 起票された Issue 番号(`review-<n>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) | オーケストレーター(`review-<n>.md` への追記分と、github モードでは Issue・フォローアップコメントの本文ファイル(`issue-<連番>.md`・`followup-<連番>.md`)のコミットも。コード変更はなし) |
+| [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`.codiel/specs/**`、持続層 | `reports/review-<m>.md` + PR コメント(github のみ) | complete-phase | オーケストレーター(review レポートと、github モードではレビュー本文・行コメントの本文ファイル(`review-body-<m>.md`・`review-comment-<連番>.md`)のコミットも) |
+| [fix-loop] | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<m+1>.md` と、反論・対応・再報告記録の本文ファイル(`rebuttal-<連番>.md` など)のコミットはオーケストレーター(github モードでは続けて投稿する)。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
+| [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) | オーケストレーター(`review-<m>.md` への追記分と、github モードでは Issue・フォローアップコメントの本文ファイル(`issue-<連番>.md`・`followup-<連番>.md`)のコミットも。コード変更はなし) |
 | [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | ―(失敗の契機があれば「7. 失敗の記録」) | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない。詳細は「2.3 finalize の運転」) | ―(intent の更新分はオーケストレーターがコミットし、github モードでは push する) |
 
 - 軽量の経路(`scale: light`)では discuss と design を `skip-phase` で飛ばす。`SKIPPABLE` はこの 2 フェーズと
@@ -228,7 +228,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   ショットなど関連する画像を `github-writing.md` の縮退の順序で載せる。本文には
   `<!-- codiel:generated -->` を含める(投稿する本文すべてに共通する規律。§6.8)。
   組み立てた本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/pr-body.md` に書き、
-  `review-<n>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
+  `review-<m>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
   `git commit -m "codiel(pr): <要約> (<slug> try-<n>)"`)。コミット後、
   `git push -u origin <state.branch>` を実行してから、別の Bash 呼び出しで次を実行して PR を作る。
   gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わない。
@@ -507,7 +507,7 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
 - **オーケストレーターは自分で実装・レビュー・テスト作成をしない**。すべてサブエージェントへの
   ディスパッチを経由する。コード・design.md・review コメント等をオーケストレーター自身が書くことは
   一切禁止。なお `discussion.md` への合意の記録・ウォークスルーの進行は「進行管理」であり本項に
-  抵触しない(`review-<n>.md` と同じ分類。根拠は facilitating-design-discussions の概要)。
+  抵触しない(`review-<m>.md` と同じ分類。根拠は facilitating-design-discussions の概要)。
   ただし agenda.md / design.md の**内容**をオーケストレーターが書くことは引き続き禁止。
 - **Raguel ゲートの省略禁止**。GATED フェーズを `evaluate_*` なしに `passed` にしようとする行為
   (`pass-gate` の `--evaluation-id` を捏造する、evaluate を呼ばずに次フェーズへ進むなど)は

@@ -411,11 +411,12 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
 機械的に配置する。raguel.config.yaml は聞き取り(保護パス)の回答から生成する。運用の規律は
 `assets/rules/codiel.md` を固定文言のまま `.claude/rules/codiel.md` に置き、CLAUDE.md には
-`CLAUDE.example.md` の「## Codiel」セクションをそのまま追記する(既存ファイルは不足分のみ追記)。
+`CLAUDE.example.md` の「## Codiel」セクションをそのまま追記する(既存ファイルは不足分のみ追記。
+旧セクション「## Codiel ハーネス運用ルール」があれば承認を得て取り除く)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
 GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
-`/codiel:run` は資産配置を行わず、B + C + D(`.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` が `## Codiel` 見出しを含むこと、`raguel.config.yaml` が存在し YAML としてパースできること、`.codiel/specs` / `.codiel/runs` / `.codiel/reports` の 3 ディレクトリが存在すること)が揃っていることを初期化済みと判定する。いずれかが揃っていないときは未初期化として `/codiel:init` を案内して終了する。
+`/codiel:run` は資産配置を行わず、B + C + D(`.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に行全体が(前後の空白を除き)`## Codiel` と一致する行があること、`raguel.config.yaml` が存在し YAML としてパースできること、`.codiel/specs` / `.codiel/runs` / `.codiel/reports` の 3 ディレクトリが存在すること)が揃っていることを初期化済みと判定する。いずれかが揃っていないときは未初期化として `/codiel:init` を案内して終了する。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
 本節が記す ARCHITECTURE の節構成と GOTCHAS のエントリ書式は執筆当時の設計であり、
@@ -480,6 +481,10 @@ codiel はこの 2 つに触れないので、rules にも書かない。metatro
 - PROCEED した変更が原因で実害(障害・リグレッション)が出たら、必ず incident として申告し
   `record_outcome(incident)` を記録させる(自動検知できない唯一の結末であり、最も価値の高い失敗判例)
 
+ARCHITECTURE / GOTCHAS を作業の前提として読む規律、乖離の報告、失敗の記録の手順は
+`orchestrating-runs`(依頼文テンプレートの「前提」、「7. 失敗の記録」、finalize の結果
+レポート)に置く。
+
 ### CLAUDE.md の `## Codiel`(← `CLAUDE.example.md`)
 
 CLAUDE.md はセッションの最初にだけ読まれるので、規律の全文ではなく置き場の地図と入口の
@@ -487,15 +492,13 @@ CLAUDE.md はセッションの最初にだけ読まれるので、規律の全�
 `/codiel:run`・`/codiel:init`・`/codiel:test` の入口を示す(固定文言は `CLAUDE.example.md` の
 「## Codiel」セクションを参照)。
 
-ARCHITECTURE / GOTCHAS を作業の前提として読む規律、乖離の報告、失敗の記録の手順は
-`orchestrating-runs`(依頼文テンプレートの「前提」、「7. 失敗の記録」、finalize の結果
-レポート)に置く。
-
 ## 10. ディレクトリ構成(プラグイン側)
 
 ```
 plugins/codiel/
   .claude-plugin/plugin.json
+  assets/
+    rules/codiel.md             # `/codiel:init` が `.claude/rules/codiel.md` へ置く雛形(決定 70)
   commands/
     init.md                    # /codiel:init(薄い入口。initializing-harness を起動)
     run.md                     # /codiel:run [<Issue番号> | <intentパス>](薄い入口。orchestrating-runs を起動)

@@ -391,22 +391,31 @@ function parseCommands(text: string): string[][] | undefined {
 }
 
 // parseCommands が閉じていないクォートかコマンド置換を残したときの、厳しい側の読み方
-// (字句解析に書き直す前の方式)。行の継続を戻して ; & | 改行で分け、空白で区切った語の
-// 前後の代入(`NAME=`)・クォート・括弧・コマンド置換の開きを外してから gh の語かを
-// 判定し、gh の語ごとにコマンドを分ける。`url=$(gh …)`・`PR=$(gh pr create …)`・
-// `` x=`gh …` `` のように語の途中から始まる gh の起動も見つける(M2-FX5-AR)。クォートの
-// 中と heredoc の本文の gh も起動と見なすので、誤検知の側に倒れる。
+// (字句解析に書き直す前の方式)。行の継続を戻して ; & | 改行で分け、空白で区切った語ごとに
+// 2 つの値を作る。bare は、前後のクォート・括弧・コマンド置換の開きだけを外した値で、
+// これを words に積む(代入があれば残す)。ghWord は、bare からさらに前置きの代入
+// (`NAME=`・`NAME+=`)と開きを外した値で、この語が gh の起動の始まりかどうかの判定にだけ
+// 使う。判定用の値と積む値を分けるのは、`gh api … -f body=<値>` のように代入の形に
+// 見える引数(`body=`)を、gh の判定のためだけに剥がしてしまうと、積んだ words 側の
+// `body=` まで失われ、本文のキー照合が壊れるためである(M2-E-R)。ghWord が `gh` か
+// `*/gh` に一致したときだけそこでコマンドを分け、積む語には(元の代入つきの値ではなく)
+// 判定に使った ghWord を積む。`url=$(gh …)`・`PR=$(gh pr create …)`・`` x=`gh …` ``・
+// `x+=$(gh …)`・`arr+=("$(gh …)")`・`echo "url=$(gh …)"` のように、語の途中や引用符の
+// 中から始まる gh の起動も見つける(M2-FX5-AR、M2-E-AR)。クォートの中と heredoc の本文の
+// gh も起動と見なすので、誤検知の側に倒れる。
 function splitLoosely(cmd: string): string[][] {
   const commands: string[][] = []
   for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
     let words: string[] = []
     for (const tok of segment.split(/\s+/)) {
-      const w = tok.replace(/^(?:[A-Za-z_]\w*=)?[("'`$]*|["'`)]+$/g, "")
-      if (w === "gh" || w.endsWith("/gh")) {
+      const bare = tok.replace(/^[("'`$]+|["'`)]+$/g, "")
+      const ghWord = bare.replace(/^[A-Za-z_]\w*\+?=[("'`$]*/, "")
+      if (ghWord === "gh" || ghWord.endsWith("/gh")) {
         commands.push(words)
-        words = []
+        words = [ghWord]
+        continue
       }
-      if (w !== "") words.push(w)
+      if (bare !== "") words.push(bare)
     }
     commands.push(words)
   }

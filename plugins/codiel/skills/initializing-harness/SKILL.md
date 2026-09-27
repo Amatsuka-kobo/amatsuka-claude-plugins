@@ -28,7 +28,7 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
-| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` が `## Codiel` 見出しを含む |
+| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
 | C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
 | D | `.codiel/specs` / `.codiel/runs` / `.codiel/reports` | 3 ディレクトリが存在する |
 
@@ -69,9 +69,11 @@ bash <plugin-root>/scripts/install-harness.sh
 
 ### (b) `CLAUDE.md` への `## Codiel` の追記
 
-- `CLAUDE.md` に `## Codiel` 見出しが無ければ、`<plugin-root>/CLAUDE.example.md` の
-  `## Codiel` セクションを**固定文言のまま**使う(追記前に必ず Read する)。冒頭の HTML
-  コメントはコピーしない。
+- `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行が無ければ、
+  `<plugin-root>/CLAUDE.example.md` の `## Codiel` セクションを**固定文言のまま**使う
+  (追記前に必ず Read する)。冒頭の HTML コメントはコピーしない。旧見出し「## Codiel
+  ハーネス運用ルール」は先頭が `## Codiel` と一致するが行全体は一致しないため、この判定
+  では「無い」行として扱う。
 - `CLAUDE.md` が無ければ `# CLAUDE.md` 見出し + 同セクションで新規作成する。
 - 既にあり同見出しが無ければ**末尾に追記**する。あれば触らない。
 - 追記する差分(新規作成のときは全文)を提示して承認を得てから書き込む。

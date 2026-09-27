@@ -320,12 +320,14 @@ function splitLoosely(cmd) {
   for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
     let words = [];
     for (const tok of segment.split(/\s+/)) {
-      const w = tok.replace(/^(?:[A-Za-z_]\w*=)?[("'`$]*|["'`)]+$/g, "");
-      if (w === "gh" || w.endsWith("/gh")) {
+      const bare = tok.replace(/^[("'`$]+|["'`)]+$/g, "");
+      const ghWord = bare.replace(/^[A-Za-z_]\w*\+?=[("'`$]*/, "");
+      if (ghWord === "gh" || ghWord.endsWith("/gh")) {
         commands.push(words);
-        words = [];
+        words = [ghWord];
+        continue;
       }
-      if (w !== "") words.push(w);
+      if (bare !== "") words.push(bare);
     }
     commands.push(words);
   }
