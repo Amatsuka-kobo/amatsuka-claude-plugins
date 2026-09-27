@@ -279,3 +279,33 @@ codiel は委譲先を名指しでも役割名でも指定せず、作業内容�
 #### 影響範囲
 
 システム概要の「LLM を要する処理は...に閉じる」が Anthropic API が必須の処理を指すと明確にし、外部 API を必須とするプラグインを認める記述を加える。ディレクトリ構成図に `plugins/<plugin>/.mcp.json` を加える。
+
+---
+
+### ADR-006: [codiel] run の起点を intent 文書に替え、sandalphon を吸収し、同梱 Agent を持たない
+
+- 状態: 採用
+- 決定日: 2026-09-27
+- 決定者: phyllis998
+
+#### 背景
+
+sandalphon には intent の聞き取りと書式があるが、intent を起点に設計・実装・テスト・レビューまで進める機能が無く、単独では intent 駆動開発をフルサポートできなかった。codiel の GitHub Issue 起点のワークフローには特別な需要が無く、革新的なプラグインとして確立するには弱かった。ADR-004 で残した同梱 Agent 2 体(`codiel-analyst` と `codiel-test-designer`)は、特別な理由がない限りサブエージェントにはプロジェクトに最適化されたユーザー定義の Agent を使うべきという考えに反していた。
+
+#### 検討した選択肢
+
+1. Issue 起点を保ち、sandalphon を codiel の前段のプラグインとして残す
+2. sandalphon を codiel に吸収して run の起点を intent 文書にし、同梱 Agent は `codiel-test-designer` だけを残す
+3. 2 と同じだが、同梱 Agent を持たない(採用)
+
+#### 採用した結論
+
+sandalphon を codiel に吸収し、codiel を intent 駆動開発をフルサポートするプラグインとして確立する。run の起点は `docs/intents/` の intent 文書、入口は Issue 番号・intent パス・省略の 3 つとし、Issue は転記先も兼ねる。GitHub を使えない環境では local モードで run を進める。codiel は同梱 Agent を持たない。ADR-004 のうち上書きするのは「同梱 Agent を 2 体に絞る」部分だけで、それ以外(委譲先を作業内容で表す)は保つ。
+
+#### 理由
+
+sandalphon と codiel を統合すると、intent の聞き取りから設計・実装・テスト・レビュー・完了の判定までを 1 つのワークフローで支えられ、sandalphon の不足と codiel の弱さを解消できる。intent 文書を正本にすると、ユーザーの言葉(原文)と要件の由来が run の外に残り、完了を原文に照らして判定できる。同梱 Agent は背景の考えに反するため、ADR-004 で残した 2 体も残す価値が薄いと判断した。
+
+#### 影響範囲
+
+run state は slug で識別する version 2 になり、version 1 の run は `get`・`stop` と、`awaiting_outcome` の run の outcome の記録だけを受け付ける。sandalphon はマーケットプレイスから消える。codiel は変更ごとの intent 文書と持続層 `docs/intents/domains/` を持つ。test-spec の書き込み範囲の制限は、依頼文とスキルの HARD-GATE が担う。ADR-003 の影響範囲にある「初期化済みの判定は CLAUDE.md の運用ルール節」は、`.claude/rules/codiel.md` と CLAUDE.md の `## Codiel` による判定に置き換わる。
