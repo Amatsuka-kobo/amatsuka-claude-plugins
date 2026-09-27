@@ -42,8 +42,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    でも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分けてディスパッチする)。
 4. 不当と判断した所見は、`reports/review-<n>.md` に記録された PR コメント URL への返信として、
    `github-writing.md` の執筆規則に従い、下記「PR 反論記録書式」の内容と `<!-- codiel:generated -->`
-   を本文に含めて `gh api` で反論を投稿する(URL が未記録なら新規コメントでよい)。修正はしない。
-   反論後は所見の要約・反論根拠・投稿した PR コメント URL を「反論済み一覧」に追記する。
+   を本文に含めて組み立てる(URL が未記録なら新規コメントでよい)。組み立てた本文を Write ツールで
+   所見ごとに別名の `reports/rebuttal-<連番>.md` に書き、`review-<n>.md` と同じ書き方で run
+   ブランチへコミットする(`git add <パス>` の後
+   `git commit -m "codiel(fix-loop): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
+   `gh api` を `-F body=@reports/rebuttal-<連番>.md` のように `-F body=@<パス>` で本文を渡して
+   呼び、反論を投稿する。修正はしない。反論後は所見の要約・反論根拠・投稿した PR コメント URL を
+   「反論済み一覧」に追記する。
 5. ディスパッチ 1 往復(implementer への修正依頼 → 完了報告)ごとに
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を呼ぶ。
    exit code が `3`(`capExceeded`)なら、それ以上ディスパッチせず `raguel-gating` の ASK

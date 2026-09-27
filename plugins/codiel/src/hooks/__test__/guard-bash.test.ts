@@ -961,8 +961,185 @@ test("gh pr create --web / -w は、本文のフラグの有無によらず deny
   }
 })
 
-test("gh issue create --web は対象にしない(gh が TTY の無い環境で拒む)", () => {
+test("gh issue create --web / -w も、本文のフラグの有無によらず deny", () => {
   const root = setupRunAtTriage()
-  const r = hook(root, "gh issue create -t x --web")
-  expect(r).toBe(null)
+  for (const command of [
+    "gh issue create -t x --web",
+    `gh issue create -t x -b "${MARKER}" -w`
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("--web")
+  }
+})
+
+test("複数の投稿の deny は、Write ツールで書いた本文ファイルを --body-file で渡すよう案内する", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    `gh pr comment 1 -b "${MARKER} A" && gh pr comment 2 -b "${MARKER} B"`
+  )
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain(
+    "Write ツールで書いたファイルを --body-file"
+  )
+})
+
+// --- gh の起動を分けるのはコマンドの区切りとコマンド置換の境界だけ(M2-FX3-AR の high、決定 69) ---
+
+test("本文の値のコマンド置換に gh があっても、外側の投稿の本文を検査する", () => {
+  const root = setupRun()
+  for (const command of [
+    'gh pr comment 1 --body "$(gh pr view 2 --json body -q .body)"',
+    'gh pr comment 1 -b "$(gh api repos/o/r/pulls/2 -q .body)"',
+    'gh pr comment 1 -b "`gh pr view 2 --json body -q .body`"'
+  ])
+    expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("クォートの中のコマンド置換の gh の投稿も、別の起動として検査する", () => {
+  const root = setupRun()
+  const r = hook(root, 'echo "$(gh pr comment 1 --body nomarker)"')
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test('eval "gh …" の中の投稿も、マーカーが無ければ deny', () => {
+  const root = setupRun()
+  const r = hook(root, 'eval "gh pr comment 1 --body nomarker"')
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("クォートの中に書いた gh の使用例では起動を分けず、投稿を 1 つと数える", () => {
+  const root = setupRun()
+  for (const command of [
+    `gh pr comment 1 --body "${MARKER} 再現: gh pr comment 2 --body x"`,
+    `gh pr comment 1 --body "${MARKER}\n再現:\ngh pr comment 2 --body x"`
+  ])
+    expect(hook(root, command)).toBe(null)
+})
+
+// --- フラグはクォートを外した独立の語だけで読む(M2-FX3-AR の medium) ---
+
+test("クォートの中の --web・-w・-webkit- はフラグと読まず、手順どおりの PR 作成を通す", () => {
+  const root = setupRunAtPr()
+  fs.writeFileSync(path.join(root, "pr-body.md"), `本文\n${MARKER}\n`)
+  for (const title of [
+    "feat: CLI に --web オプションを足す",
+    "fix: -w フラグの既定値",
+    "fix: -webkit- 接頭辞を消す",
+    "docs: use -b flag"
+  ])
+    expect(
+      hook(root, `gh pr create --title "${title}" --body-file pr-body.md`)
+    ).toBe(null)
+})
+
+test("クォートの中の -F を本文ファイルと読まず、--body-file のファイルを検査する", () => {
+  const root = setupRunAtPr()
+  fs.writeFileSync(path.join(root, "good.md"), `本文\n${MARKER}\n`)
+  fs.writeFileSync(path.join(root, "bad.md"), "本文だけ\n")
+  const r = hook(root, 'gh pr create --title "x -F good.md" --body-file bad.md')
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+// --- 本文のフラグを繰り返したときは、すべての値を検査する(M2-FX3-AR の medium) ---
+
+test("本文のフラグを繰り返したときは、1 つでもマーカーが無いか読めなければ deny", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "good.md"), `本文\n${MARKER}\n`)
+  fs.writeFileSync(path.join(root, "bad.md"), "本文だけ\n")
+  for (const command of [
+    "gh pr comment 1 -F good.md -F bad.md",
+    "gh pr comment 1 --body-file good.md --body-file missing.md",
+    `gh pr comment 1 --body "${MARKER}" --body "no marker"`,
+    `gh pr comment 1 -b "${MARKER}" -F bad.md`,
+    `gh api repos/o/r/issues/1/comments -f body="${MARKER}" -f body="no marker"`
+  ])
+    expect(hook(root, command)?.permissionDecision).toBe("deny")
+  expect(hook(root, `gh pr comment 1 -b "${MARKER} a" -b "${MARKER} b"`)).toBe(
+    null
+  )
+  expect(
+    hook(
+      root,
+      `gh api repos/o/r/pulls/1/reviews -f event=COMMENT -f 'comments[][body]=${MARKER} a' -f 'comments[][body]=${MARKER} b'`
+    )
+  ).toBe(null)
+})
+
+test("gh api の -X を繰り返したときは、最後のメソッドで本文の有無を判定する", () => {
+  const root = setupRun()
+  const r = hook(
+    root,
+    "gh api -X GET -X POST repos/o/r/issues/1/comments -f body=nomarker"
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("本文ファイルの書き換えの検出は、繰り返した本文のフラグのすべてのパスに当てる", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "a.md"), `本文\n${MARKER}\n`)
+  fs.writeFileSync(path.join(root, "b.md"), `本文\n${MARKER}\n`)
+  const r = hook(root, "cp t.md b.md && gh pr comment 1 -F a.md -F b.md")
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("Write ツール")
+})
+
+// --- フェーズの制限を gh の起動の解析で判定する(M2-FX3-AR の medium) ---
+
+test("フェーズの制限は、-R・--repo を置いた gh pr create・gh issue create も捕まえる", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "good.md"), `本文\n${MARKER}\n`)
+  for (const command of [
+    "gh -R o/r pr create --title t --body-file good.md",
+    "gh pr -R o/r create --title t --body-file good.md",
+    "gh --repo o/r issue create --title t --body-file good.md",
+    "gh issue -R o/r create --title t --body-file good.md"
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toContain("フェーズ")
+  }
+})
+
+test("コミットメッセージに書いた gh pr create・gh issue create は、フェーズの制限に掛けない", () => {
+  const root = setupRun()
+  const heredoc = [
+    "git commit -m \"$(cat <<'EOF'",
+    "fix(guard): gh pr create の --web を塞ぐ",
+    "EOF",
+    ')"'
+  ].join("\n")
+  for (const command of [
+    heredoc,
+    'git commit -m "fix: gh issue create の -T を塞ぐ"'
+  ])
+    expect(hook(root, command)).toBe(null)
+})
+
+// --- 終端の語をクォートしない heredoc の本文のコマンド置換(M2-FX3-AR の medium) ---
+
+test("終端の語をクォートしない heredoc は、本文のコマンド置換の中の gh の投稿を検査する", () => {
+  const root = setupRun()
+  for (const subst of [`$(${NO_MARKER_COMMENT})`, `\`${NO_MARKER_COMMENT}\``])
+    expect(
+      hook(root, ["cat <<EOF", subst, "EOF"].join("\n"))?.permissionDecision
+    ).toBe("deny")
+  // 終端の語をクォートした heredoc の本文は bash が展開しないので、読み飛ばす。
+  for (const start of ["cat <<'EOF'", 'cat <<"EOF"'])
+    expect(
+      hook(root, [start, `$(${NO_MARKER_COMMENT})`, "EOF"].join("\n"))
+    ).toBe(null)
+})
+
+test("終端の語の直後に語の区切り以外が続く <<EOF-X は heredoc の開始と見なさず、後の行を検査する", () => {
+  const root = setupRun()
+  const command = ["cat <<EOF-X", "EOF-X", NO_MARKER_COMMENT, "EOF"].join("\n")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("空白を詰めた cat<<EOF は heredoc の開始と見なさず、本文の行も検査する(既知の限界。誤検知の側)", () => {
+  const root = setupRun()
+  const r = hook(root, ["cat<<EOF", NO_MARKER_COMMENT, "EOF"].join("\n"))
+  expect(r?.permissionDecision).toBe("deny")
 })

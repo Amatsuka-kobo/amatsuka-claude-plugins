@@ -160,7 +160,7 @@ test("stop-guard: phase が null のとき capturing-intent の手順 5 の (6) 
   )
 })
 
-test("stop-guard: phase が passed のとき次のフェーズの start-phase と mark-ask を案内する(M2-FX2-AR medium)", () => {
+test("stop-guard: phase が passed のとき次に進めるフェーズの start-phase・skip-phase と mark-ask を一般的に案内する(M2-FX3-AR medium)", () => {
   const root = setupRunAtIntent()
   cli(root, [
     "pass-gate",
@@ -175,6 +175,46 @@ test("stop-guard: phase が passed のとき次のフェーズの start-phase �
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.reason).toMatch(/phase: intent/)
-  expect(parsed.reason).toMatch(/codiel-state start-phase discuss --slug demo/)
-  expect(parsed.reason).toMatch(/mark-ask discuss --slug demo --kind confirm/)
+  expect(parsed.reason).toMatch(
+    /codiel-state start-phase <フェーズ> --slug demo/
+  )
+  expect(parsed.reason).toMatch(
+    /codiel-state skip-phase <フェーズ> --slug demo/
+  )
+  expect(parsed.reason).toMatch(
+    /mark-ask <フェーズ> --slug demo --kind confirm/
+  )
+  expect(parsed.reason).toMatch(/mark-ask finalize --slug demo --kind confirm/)
+  expect(parsed.reason).not.toMatch(/undefined/)
+})
+
+test("stop-guard: どの分岐も codiel-state stop --reason で明示的に中止する案内を含む(M2-FX3-AR low)", () => {
+  const nullPhaseRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  cli(nullPhaseRoot, ["init", "--slug", SLUG, ...INIT_FLAGS])
+  const nullPhaseResult = callHook(STOP_GUARD, nullPhaseRoot)
+  expect(JSON.parse(nullPhaseResult.stdout).reason).toMatch(
+    /codiel-state stop --slug demo --reason <理由> で明示的に止めること/
+  )
+
+  const inProgressRoot = setupRunAtIntent()
+  const inProgressResult = callHook(STOP_GUARD, inProgressRoot)
+  expect(JSON.parse(inProgressResult.stdout).reason).toMatch(
+    /codiel-state stop --slug demo --reason <理由> で明示的に止めること/
+  )
+
+  const passedRoot = setupRunAtIntent()
+  cli(passedRoot, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    "e",
+    "--verdict",
+    "PROCEED"
+  ])
+  const passedResult = callHook(STOP_GUARD, passedRoot)
+  expect(JSON.parse(passedResult.stdout).reason).toMatch(
+    /codiel-state stop --slug demo --reason <理由> で明示的に止めること/
+  )
 })

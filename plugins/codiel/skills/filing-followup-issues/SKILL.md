@@ -58,7 +58,10 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    どれもヒットしなければ既定書式(下記)を使う。
 6. **重複確認**: 起票前に `gh issue list --search "<要約のキーワード>"` で既存 Issue との重複を
    確認する。ヒットがあれば起票を保留し、該当 Issue へのリンクをユーザーに提示して
-   「新規起票する/既存 Issue に集約する/見送る」の判断を仰ぐ(ここも自己判断しない)。
+   「新規起票する/既存 Issue に集約する/見送る」の判断を仰ぐ(ここも自己判断しない)。問いかける前に
+   `node <plugin-root>/scripts/codiel-state.mjs mark-ask triage --slug <slug> --kind confirm`
+   で `awaiting_human` にしてから待ち、回答を得たら
+   `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` で戻る。
 7. 選んだテンプレート(または既定書式)を最大限埋めた本文を、`github-writing.md` の執筆規則に
    従って組み立てる。本文には `<!-- codiel:generated -->` を含める。組み立てた本文を Write ツールで
    `.codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md` に書く(投稿ごとに別名にする)。書いたら
@@ -82,7 +85,11 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    されている所見は処理済みなので除外する。
 2. 抽出した所見を**番号付き一覧**(番号・severity・要約・対象 `src/...:42`)にしてユーザーに提示する。
 3. **起票対象の選択・複数所見のまとめ方・見送りをユーザーに確認する**(github モードの手順 3 と
-   同じ唯一のゲート)。回答が来るまで次の手順に進まない。
+   同じ唯一のゲート)。問いかける前に
+   `node <plugin-root>/scripts/codiel-state.mjs mark-ask triage --slug <slug> --kind confirm`
+   で `awaiting_human` にしてから待ち、回答を得たら
+   `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` で戻る。**回答が来るまで
+   次の手順に進まない**。
 4. ユーザーが対象を指示したら、対象ごとに `intent-writing.md` の規則に従い、`status: proposed` の
    intent 草案を `docs/intents/YYYY-MM-DD-<slug>.md` に書く。frontmatter の `run` は空にする。
    `## 現状調査` に、所見の出所(`review-<n>.md` の該当行)を書く。レビュー所見は AI が生成した文

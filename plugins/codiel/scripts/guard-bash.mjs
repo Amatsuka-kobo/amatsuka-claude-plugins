@@ -182,73 +182,116 @@ function hasFlag(tokens, names) {
   );
 }
 var GH_VALUE_OPTS = ["-R", "--repo"];
-function isGhToken(tok) {
-  const stripped = tok.replace(/^[("'`$]+/, "");
-  return stripped === "gh" || stripped.endsWith("/gh");
-}
-function unquote(tok) {
-  return tok.replace(/^["']+|["']+$/g, "");
-}
-function stripHeredocBodies(cmd) {
-  const lines = cmd.split("\n");
-  const stack = [];
+var HEREDOC_RE = /^<<(-?)(['"]?)([A-Za-z_]\w*)\2(?=[\s;&|)<>]|$)/;
+function parseCommands(text) {
+  const commands = [];
   const pending = [];
-  let n = 0;
-  while (n < lines.length) {
-    const line = lines[n];
-    let continued = false;
-    for (let i = 0; i < line.length; i++) {
-      const top = stack.at(-1);
-      const c = line[i];
-      if (top === "'") {
-        if (c === "'") stack.pop();
-      } else if (c === "\\") {
-        continued = i === line.length - 1;
+  let i = 0;
+  const readSubst = () => {
+    const start = i;
+    const backquote = text[i] === "`";
+    i += backquote ? 1 : 2;
+    parseList(backquote ? "`" : ")");
+    return text.slice(start, i);
+  };
+  const readDouble = () => {
+    let out = "";
+    i++;
+    while (i < text.length && text[i] !== '"') {
+      const c = text[i];
+      if (c === "\\") {
+        const next = text[i + 1] ?? "";
+        if (next !== "\n") out += '$`"\\'.includes(next) ? next : c + next;
+        i += 2;
+      } else if (c === "`" || text.startsWith("$(", i)) out += readSubst();
+      else {
+        out += c;
         i++;
-      } else if (top === "$'") {
-        if (c === "'") stack.pop();
-      } else if (top === '"') {
-        if (c === '"') stack.pop();
-        else if (c === "`") stack.push("`");
-        else if (c === "$" && line[i + 1] === "(") {
-          stack.push("(");
-          i++;
-        }
-      } else if (c === "#" && /^$|[\s;&|(]/.test(line[i - 1] ?? "")) {
-        break;
-      } else if (c === "'" || c === '"') {
-        stack.push(c);
-      } else if (c === "$" && line[i + 1] === "'") {
-        stack.push("$'");
-        i++;
-      } else if (c === "(") {
-        stack.push("(");
-      } else if (c === ")" && top === "(") {
-        stack.pop();
-      } else if (c === "`") {
-        if (top === "`") stack.pop();
-        else stack.push("`");
-      } else if (c === "<" && !/[<\w)]/.test(line[i - 1] ?? "")) {
-        const m = line.slice(i).match(/^<<(-?)(['"]?)([A-Za-z_]\w*)\2/);
-        if (m) {
-          pending.push({ word: m[3], dash: m[1] === "-" });
-          i += m[0].length - 1;
-        }
       }
     }
-    n++;
-    if (continued || pending.length === 0) continue;
-    if (["'", '"', "$'"].includes(stack.at(-1) ?? "")) continue;
-    for (const { word, dash } of pending.splice(0)) {
-      const isEnd = (l) => (dash ? l.replace(/^\t+/, "") : l) === word;
-      let end = n;
-      while (end < lines.length && !isEnd(lines[end])) end++;
-      if (end === lines.length) break;
-      lines.fill("", n, end + 1);
-      n = end + 1;
+    i++;
+    return out;
+  };
+  const readWord = (close) => {
+    let out = "";
+    while (i < text.length) {
+      const c = text[i];
+      if (" 	\n;&|()".includes(c) || c === "`" && close === "`") break;
+      if (c === "\\") {
+        if (text[i + 1] !== "\n") out += text[i + 1] ?? "";
+        i += 2;
+      } else if (c === "'" || text.startsWith("$'", i)) {
+        const from = c === "'" ? i + 1 : i + 2;
+        let end = from;
+        while (end < text.length && text[end] !== "'")
+          end += c === "$" && text[end] === "\\" ? 2 : 1;
+        out += text.slice(from, end);
+        i = end + 1;
+      } else if (c === '"') out += readDouble();
+      else if (c === "`" || text.startsWith("$(", i)) out += readSubst();
+      else {
+        const m = c === "<" && !/[<\w)]/.test(text[i - 1] ?? "") ? text.slice(i).match(HEREDOC_RE) : null;
+        if (m)
+          pending.push({ word: m[3], dash: m[1] === "-", quoted: m[2] !== "" });
+        const s = m ? m[0] : c;
+        out += s;
+        i += s.length;
+      }
     }
-  }
-  return lines.join("\n");
+    return out;
+  };
+  const skipHeredocBodies = () => {
+    for (const { word, dash, quoted } of pending.splice(0)) {
+      const lines = text.slice(i).split("\n");
+      const k = lines.findIndex(
+        (l) => (dash ? l.replace(/^\t+/, "") : l) === word
+      );
+      if (k === -1) return;
+      let bodyEnd = i;
+      for (const l of lines.slice(0, k)) bodyEnd += l.length + 1;
+      while (!quoted && i < bodyEnd) {
+        if (text[i] === "\\") i += 2;
+        else if (text[i] === "`" || text.startsWith("$(", i)) readSubst();
+        else i++;
+      }
+      i = Math.max(i, bodyEnd + lines[k].length + 1);
+    }
+  };
+  const parseList = (close) => {
+    let words = [];
+    let depth = 0;
+    const flush = () => {
+      if (words.length > 0) commands.push(words);
+      words = [];
+    };
+    while (i < text.length) {
+      const c = text[i];
+      if (c === close && (close === "`" || depth === 0)) {
+        i++;
+        break;
+      }
+      if (c === "\\" && text[i + 1] === "\n") i += 2;
+      else if (c === " " || c === "	") i++;
+      else if (";&|()\n".includes(c)) {
+        flush();
+        if (c === "(") depth++;
+        if (c === ")") depth--;
+        i++;
+        if (c === "\n") skipHeredocBodies();
+      } else if (c === "#") {
+        const eol = text.indexOf("\n", i);
+        i = eol === -1 ? text.length : eol;
+      } else words.push(readWord(close));
+    }
+    flush();
+  };
+  parseList();
+  for (const words of [...commands])
+    words.forEach((w, k) => {
+      if (k > 0 && (/^-\w*c$/.test(words[k - 1]) || words[k - 1] === "eval"))
+        commands.push(...parseCommands(w));
+    });
+  return commands;
 }
 function expandShortFlags(tokens, valueShorts) {
   return tokens.flatMap((tok) => {
@@ -270,47 +313,47 @@ function expandShortFlags(tokens, valueShorts) {
 }
 function findGhInvocations(cmd) {
   const invocations = [];
-  const text = joinContinuedLines(stripHeredocBodies(cmd));
-  for (const segment of text.split(SEGMENT_SPLIT_RE)) {
-    const all = segment.trim().split(/\s+/).filter(Boolean);
-    const starts = all.flatMap((tok, i) => isGhToken(tok) ? [i] : []);
-    starts.forEach((start, k) => {
-      const tokens = all.slice(start, starts[k + 1]);
-      const skipOptions = (from) => {
-        let idx = from;
-        while (idx < tokens.length && tokens[idx].startsWith("-"))
-          idx += GH_VALUE_OPTS.includes(tokens[idx]) ? 2 : 1;
-        return idx;
-      };
-      const objIdx = skipOptions(1);
-      const object = tokens[objIdx];
-      const command = object === "api" ? "api" : `${object} ${tokens[skipOptions(objIdx + 1)]}`;
-      const valueShorts = GH_POST_COMMANDS[command];
-      if (valueShorts !== void 0)
-        invocations.push({
-          command,
-          tokens: expandShortFlags(tokens, valueShorts)
-        });
-    });
+  for (const words of parseCommands(cmd)) {
+    const start = words.findIndex((w) => w === "gh" || w.endsWith("/gh"));
+    if (start === -1) continue;
+    const tokens = words.slice(start);
+    const skipOptions = (from) => {
+      let idx = from;
+      while (idx < tokens.length && tokens[idx].startsWith("-"))
+        idx += GH_VALUE_OPTS.includes(tokens[idx]) ? 2 : 1;
+      return idx;
+    };
+    const objIdx = skipOptions(1);
+    const object = tokens[objIdx];
+    const command = object === "api" ? "api" : `${object} ${tokens[skipOptions(objIdx + 1)]}`;
+    const valueShorts = GH_POST_COMMANDS[command];
+    if (valueShorts !== void 0)
+      invocations.push({
+        command,
+        tokens: expandShortFlags(tokens, valueShorts)
+      });
   }
   return invocations;
 }
 function flagAt(tokens, i, names) {
   const tok = tokens[i];
   for (const n of names) {
-    if (tok === n) return tokens[i + 1];
+    if (tok === n) return tokens[i + 1] ?? "";
     if (tok.startsWith(`${n}=`)) return tok.slice(n.length + 1);
     if (/^-[^-]$/.test(n) && tok.startsWith(n) && tok.length > 2)
       return tok.slice(2);
   }
   return void 0;
 }
-function flagValue(tokens, names) {
+function flagValues(tokens, names) {
+  const values = [];
   for (let i = 0; i < tokens.length; i++) {
     const value = flagAt(tokens, i, names);
-    if (value !== void 0) return value;
+    if (value === void 0) continue;
+    values.push(value);
+    if (names.includes(tokens[i])) i++;
   }
-  return void 0;
+  return values;
 }
 function readBodyFile(flag, file, cwd) {
   if (file === "-")
@@ -331,14 +374,17 @@ function denyMissingMarker(command) {
   );
 }
 function readGhPost({ command, tokens }) {
-  if (command === "pr create" && hasFlag(tokens, WEB_FLAGS))
+  if ((command === "pr create" || command === "issue create") && hasFlag(tokens, WEB_FLAGS))
     emit(
       "deny",
-      "gh pr create \u306E --web / -w \u306F\u4F7F\u3048\u307E\u305B\u3093\u3002Web \u306E\u4F5C\u6210\u753B\u9762\u3067\u306E\u6295\u7A3F\u306F\u672C\u6587\u3092\u691C\u67FB\u3067\u304D\u306A\u3044\u305F\u3081\u3067\u3059\u3002\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u306E\u672C\u6587\u3092 --body-file \u3067\u6E21\u3057\u3066\u4F5C\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
+      `gh ${command} \u306E --web / -w \u306F\u4F7F\u3048\u307E\u305B\u3093\u3002Web \u306E\u4F5C\u6210\u753B\u9762\u3067\u306E\u6295\u7A3F\u306F\u672C\u6587\u3092\u691C\u67FB\u3067\u304D\u306A\u3044\u305F\u3081\u3067\u3059\u3002\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u306E\u672C\u6587\u3092 --body-file \u3067\u6E21\u3057\u3066\u4F5C\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
     );
-  const body = flagValue(tokens, ["--body", "-b"]);
-  const bodyFile = flagValue(tokens, ["--body-file", "-F"]);
-  if (body === void 0 && bodyFile === void 0) {
+  const inline = flagValues(tokens, ["--body", "-b"]);
+  const files = flagValues(tokens, ["--body-file", "-F"]).map((p) => ({
+    flag: "--body-file",
+    path: p
+  }));
+  if (inline.length === 0 && files.length === 0) {
     const autoFlags = AUTO_BODY_FLAGS[command];
     if (autoFlags && hasFlag(tokens, autoFlags))
       emit(
@@ -347,37 +393,35 @@ function readGhPost({ command, tokens }) {
       );
     return void 0;
   }
-  return {
-    command,
-    inline: body !== void 0,
-    files: bodyFile === void 0 ? [] : [{ flag: "--body-file", path: unquote(bodyFile) }]
-  };
+  return { command, inline, files };
 }
 function readGhApiPost(tokens) {
-  const fields = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const raw = flagAt(tokens, i, ["--raw-field", "-f"]);
-    if (raw !== void 0) fields.push({ typed: false, value: unquote(raw) });
-    const typed = flagAt(tokens, i, ["--field", "-F"]);
-    if (typed !== void 0) fields.push({ typed: true, value: unquote(typed) });
-  }
-  const input = flagValue(tokens, ["--input"]);
-  const explicitMethod = flagValue(tokens, ["--method", "-X"]);
-  const method = explicitMethod !== void 0 ? unquote(explicitMethod).toUpperCase() : fields.length > 0 || input !== void 0 ? "POST" : "GET";
+  const fields = [
+    ...flagValues(tokens, ["--raw-field", "-f"]).map((value) => ({
+      typed: false,
+      value
+    })),
+    ...flagValues(tokens, ["--field", "-F"]).map((value) => ({
+      typed: true,
+      value
+    }))
+  ];
+  const inputs = flagValues(tokens, ["--input"]);
+  const explicitMethod = flagValues(tokens, ["--method", "-X"]).at(-1);
+  const method = explicitMethod !== void 0 ? explicitMethod.toUpperCase() : fields.length > 0 || inputs.length > 0 ? "POST" : "GET";
   if (!["POST", "PATCH", "PUT"].includes(method)) return void 0;
-  const post = { command: "api", inline: false, files: [] };
+  const post = { command: "api", inline: [], files: [] };
   for (const { typed, value } of fields) {
     const eq = value.indexOf("=");
     const key = eq === -1 ? value : value.slice(0, eq);
     if (key !== "body" && !key.endsWith("[body]")) continue;
     const val = value.slice(eq + 1);
     if (typed && val.startsWith("@"))
-      post.files.push({ flag: "-F", path: unquote(val.slice(1)) });
-    else post.inline = true;
+      post.files.push({ flag: "-F", path: val.slice(1) });
+    else post.inline.push(val);
   }
-  if (input !== void 0)
-    post.files.push({ flag: "--input", path: unquote(input) });
-  return post.inline || post.files.length > 0 ? post : void 0;
+  for (const input of inputs) post.files.push({ flag: "--input", path: input });
+  return post.inline.length > 0 || post.files.length > 0 ? post : void 0;
 }
 function denyRewrittenBodyFile(posts, text) {
   const paths = posts.flatMap((p) => p.files.map((f) => f.path)).filter((p) => p !== "" && p !== "-");
@@ -388,20 +432,21 @@ function denyRewrittenBodyFile(posts, text) {
         `\u672C\u6587\u30D5\u30A1\u30A4\u30EB ${p} \u306E\u30D1\u30B9\u304C\u3001\u540C\u3058\u30B3\u30DE\u30F3\u30C9\u306E\u4E2D\u3067\u672C\u6587\u306E\u30D5\u30E9\u30B0\u306E\u5024\u4EE5\u5916\u306B\u3082\u73FE\u308C\u307E\u3059\u3002\u30D5\u30C3\u30AF\u306F\u5B9F\u884C\u524D\u306E\u30D5\u30A1\u30A4\u30EB\u3092\u691C\u67FB\u3059\u308B\u306E\u3067\u3001\u672C\u6587\u306F Write \u30C4\u30FC\u30EB\u3067\u5225\u540D\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u5225\u306E Bash \u547C\u3073\u51FA\u3057\u3067 --body-file \u3067\u6E21\u3057\u3066\u304F\u3060\u3055\u3044`
       );
 }
-function checkGeneratedMarker(cmd, cwd) {
+function checkGeneratedMarker(invocations, cmd, cwd) {
   const posts = [];
-  for (const inv of findGhInvocations(cmd)) {
+  for (const inv of invocations) {
     const post = inv.command === "api" ? readGhApiPost(inv.tokens) : readGhPost(inv);
     if (post) posts.push(post);
   }
-  if (posts.length >= 2 && posts.some((p) => p.inline))
+  if (posts.length >= 2 && posts.some((p) => p.inline.length > 0))
     emit(
       "deny",
-      "1 \u3064\u306E\u30B3\u30DE\u30F3\u30C9\u306B\u672C\u6587\u4ED8\u304D\u306E\u6295\u7A3F\u304C\u8907\u6570\u3042\u308A\u3001\u672C\u6587\u3092\u5F15\u6570\u3067\u6E21\u3059\u3082\u306E\u304C\u3042\u308A\u307E\u3059\u3002\u30DE\u30FC\u30AB\u30FC\u306F\u30B3\u30DE\u30F3\u30C9\u5168\u4F53\u3067\u63A2\u3059\u306E\u3067\u3001\u6295\u7A3F\u306F 1 \u56DE\u306E Bash \u547C\u3073\u51FA\u3057\u306B 1 \u3064\u306B\u3057\u3066\u304F\u3060\u3055\u3044"
+      "1 \u3064\u306E\u30B3\u30DE\u30F3\u30C9\u306B\u672C\u6587\u4ED8\u304D\u306E\u6295\u7A3F\u304C\u8907\u6570\u3042\u308A\u3001\u672C\u6587\u3092\u5F15\u6570\u3067\u6E21\u3059\u3082\u306E\u304C\u3042\u308A\u307E\u3059\u3002\u30DE\u30FC\u30AB\u30FC\u306F\u30B3\u30DE\u30F3\u30C9\u5168\u4F53\u3067\u63A2\u3059\u306E\u3067\u3001\u6295\u7A3F\u306F 1 \u56DE\u306E Bash \u547C\u3073\u51FA\u3057\u306B 1 \u3064\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u672C\u6587\u306F Write \u30C4\u30FC\u30EB\u3067\u66F8\u3044\u305F\u30D5\u30A1\u30A4\u30EB\u3092 --body-file(gh api \u3067\u306F -F body=@<\u30D1\u30B9>)\u3067\u6E21\u3057\u3066\u304F\u3060\u3055\u3044"
     );
   denyRewrittenBodyFile(posts, joinContinuedLines(cmd));
   for (const { command, inline, files } of posts) {
-    if (inline && !cmd.includes(GENERATED_MARKER)) denyMissingMarker(command);
+    const missing = inline.length + files.length >= 2 ? inline.some((body) => !body.includes(GENERATED_MARKER)) : inline.length === 1 && !cmd.includes(GENERATED_MARKER);
+    if (missing) denyMissingMarker(command);
     for (const { flag, path: file } of files) {
       const content = readBodyFile(flag, file, cwd);
       const needsMarker = flag !== "--input" || /"body"\s*:/.test(content);
@@ -452,13 +497,14 @@ try {
   if (run) {
     const phase = run.state.phase;
     const testLoopPassed = run.state.phases["test-loop"]?.status === "passed";
-    const oneLine = joinContinuedLines(cmd);
-    if (/\bgh\s+issue\s+create\b/.test(oneLine) && phase !== "triage")
+    const ghInvocations = findGhInvocations(cmd);
+    const invokes = (command) => ghInvocations.some((inv) => inv.command === command);
+    if (invokes("issue create") && phase !== "triage")
       emit(
         "deny",
         `gh issue create \u306F triage \u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`
       );
-    if (/\bgh\s+pr\s+create\b/.test(oneLine) && (phase !== "pr" || !testLoopPassed))
+    if (invokes("pr create") && (phase !== "pr" || !testLoopPassed))
       emit(
         "deny",
         `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`
@@ -468,7 +514,7 @@ try {
         "deny",
         `push \u306F test-loop \u5408\u683C\u5F8C\u306E pr \u4EE5\u964D\u306E\u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase})`
       );
-    checkGeneratedMarker(cmd, cwd);
+    checkGeneratedMarker(ghInvocations, cmd, cwd);
   }
   pass();
 } catch (e) {

@@ -164,9 +164,10 @@ const AUTO_BODY_FLAGS: Record<string, string[]> = {
   "pr create": [...FILL_FLAGS, ...TEMPLATE_FLAGS],
   "issue create": TEMPLATE_FLAGS
 }
-// gh pr create の --web / -w は、テンプレートを入れた Web の作成画面を開き、そこでの
+// gh pr create と gh issue create の --web / -w は Web の作成画面を開き、そこでの
 // 投稿は検査できないので、本文のフラグの有無によらず deny する(決定 66)。
-// gh issue create --web は gh 自身が TTY の無い環境で拒むので対象にしない。
+// gh issue create --web は、タイトルだけなら TTY の無い環境で gh が拒むが、タイトルと
+// 本文を渡すと作成画面へ進む。
 const WEB_FLAGS = ["--web", "-w"]
 
 // tokens が names のいずれかのフラグを持つか(値の有無は問わない)。
@@ -192,92 +193,157 @@ interface GhInvocation {
   command: string
 }
 
-// gh の起動トークンかどうか。git と同じく絶対パス・サブシェルの `(` を許容するほか、
-// `bash -c "gh …"`・`$(gh …)`・バッククォートの中の gh も起動と見なす。
-function isGhToken(tok: string): boolean {
-  const stripped = tok.replace(/^[("'`$]+/, "")
-  return stripped === "gh" || stripped.endsWith("/gh")
-}
+// heredoc の開始(`<<WORD`・`<<-WORD`・`<<'WORD'`・`<<"WORD"`)。終端の語は英字か _ で
+// 始まり、直後が語の区切りのものだけを受ける(`<<EOF-X` は開始と見なさない)。
+const HEREDOC_RE = /^<<(-?)(['"]?)([A-Za-z_]\w*)\2(?=[\s;&|)<>]|$)/
 
-// トークンの前後のクォートを外す(`"b.md"` や `'body=@b.md'` のような値のため)。
-function unquote(tok: string): string {
-  return tok.replace(/^["']+|["']+$/g, "")
-}
+// シェルのコマンド文字列を字句解析し、単純なコマンドごとに、クォートを外した語の列を返す。
+// gh の起動を分けるのは、コマンドの区切り(; & | 改行とサブシェルの括弧)とコマンド置換
+// ($( … ) とバッククォート)の境界だけである。クォートの中は 1 つの語にまとめ、そこに
+// 書かれた gh で外側の起動を分けない。コマンド置換の中のコマンドは別のコマンドとしても
+// 返し、置換を含む語には置換の原文を残す(`--body "$(gh …)"` の値を失わないため)。
+// `bash -c "gh …"`・`eval "gh …"` のように `-c` と `eval` の直後に置いた語は、中身も
+// コマンドの列として読む。
+// 行末の `\` による継続は語をつなぐ。閉じていないクォートは残りをすべて 1 つの語とする
+// (bash はそのコマンドを実行しない)。
+//
+// heredoc の本文は、終端の行(<<- のときは先頭のタブを除いた行)が見つかったときだけ
+// 読み飛ばす。コミットメッセージの heredoc に書いた gh の使用例を起動と見なさないためである。
+// - 終端の語をクォートしない heredoc(<<EOF)では、bash が本文のコマンド置換を実行する
+//   ので、本文の $( … ) とバッククォートの中だけをコマンドとして読む。
+// - クォートとコメントの中の `<<` と、直前が `<`・英数字・`_`・`)` の `<<`(`<<<` の
+//   here-string、`1<<2`・`x<<y` の算術のシフト)は開始と見なさず、後の行も読み飛ばさない
+//   (判定に迷う形は検査する側に倒す)。
+// 既知の限界は次のとおり。
+// - 空白を詰めた `cat<<EOF` も開始と見なさないので、本文の行をコマンドとして読む
+//   (誤検知の側に倒れる)。
+// - `bash <<EOF` の本文で起動した gh の投稿は見逃す。
+// - 算術の中で空白の後に置いた `<<b`(`$(( 1 <<b ))`)は開始と読み違え、`b` の行までを
+//   読み飛ばす。
+function parseCommands(text: string): string[][] {
+  const commands: string[][] = []
+  const pending: { word: string; dash: boolean; quoted: boolean }[] = []
+  let i = 0
 
-// heredoc の本文の行を空行に置き換える。SEGMENT_SPLIT_RE は改行でも分割するため、
-// 置き換えないと heredoc の本文に書かれた `gh ...` の行が単独の gh 起動と誤認される
-// (`git commit -m "$(cat <<'EOF' ... EOF)"` の本文が典型例)。
-// 除き過ぎると後続の行の gh の起動が検査から外れるので、判定に迷う形は除かずに残す。
-// - 本文を除くのは、終端の行(<<- のときは先頭のタブを除いた行)が見つかったときだけ。
-// - クォート(' $' ")の中とコメントの中の `<<` は開始と見なさない。クォートと
-//   `$( … )`・バッククォートの入れ子だけを追う簡易な字句解析で見分ける。
-// - 直前が `<`・数字・識別子・`)` の `<<`(`<<<` の here-string、`1<<2` のような
-//   算術のシフトなど)は開始と見なさない。終端の語は英字か _ で始まるものだけを受ける。
-// - 本文は、`<<` を含む論理行(行末の `\` による継続を含む)の次の行から始まる。
-// この結果、`bash <<EOF` の中で実際に gh を起動する投稿は見逃す(既知の限界。
-// --body の本文としてコマンド全体からマーカーを探す経路には影響しない)。
-function stripHeredocBodies(cmd: string): string {
-  const lines = cmd.split("\n")
-  // 開いているクォートと入れ子。' $' " は文字列、( と ` はコマンドの文脈。
-  const stack: string[] = []
-  const pending: { word: string; dash: boolean }[] = []
-  let n = 0
-  while (n < lines.length) {
-    const line = lines[n]
-    let continued = false
-    for (let i = 0; i < line.length; i++) {
-      const top = stack.at(-1)
-      const c = line[i]
-      if (top === "'") {
-        if (c === "'") stack.pop()
-      } else if (c === "\\") {
-        continued = i === line.length - 1
+  // text[i] の $( かバッククォートから置換の中をコマンドとして読み、置換の原文を返す。
+  const readSubst = (): string => {
+    const start = i
+    const backquote = text[i] === "`"
+    i += backquote ? 1 : 2
+    parseList(backquote ? "`" : ")")
+    return text.slice(start, i)
+  }
+
+  // text[i] の " から閉じの " までを読み、中身を返す。
+  const readDouble = (): string => {
+    let out = ""
+    i++
+    while (i < text.length && text[i] !== '"') {
+      const c = text[i]
+      if (c === "\\") {
+        const next = text[i + 1] ?? ""
+        if (next !== "\n") out += '$`"\\'.includes(next) ? next : c + next
+        i += 2
+      } else if (c === "`" || text.startsWith("$(", i)) out += readSubst()
+      else {
+        out += c
         i++
-      } else if (top === "$'") {
-        if (c === "'") stack.pop()
-      } else if (top === '"') {
-        if (c === '"') stack.pop()
-        else if (c === "`") stack.push("`")
-        else if (c === "$" && line[i + 1] === "(") {
-          stack.push("(")
-          i++
-        }
-      } else if (c === "#" && /^$|[\s;&|(]/.test(line[i - 1] ?? "")) {
-        break
-      } else if (c === "'" || c === '"') {
-        stack.push(c)
-      } else if (c === "$" && line[i + 1] === "'") {
-        stack.push("$'")
-        i++
-      } else if (c === "(") {
-        stack.push("(")
-      } else if (c === ")" && top === "(") {
-        stack.pop()
-      } else if (c === "`") {
-        if (top === "`") stack.pop()
-        else stack.push("`")
-      } else if (c === "<" && !/[<\w)]/.test(line[i - 1] ?? "")) {
-        const m = line.slice(i).match(/^<<(-?)(['"]?)([A-Za-z_]\w*)\2/)
-        if (m) {
-          pending.push({ word: m[3], dash: m[1] === "-" })
-          i += m[0].length - 1
-        }
       }
     }
-    n++
-    if (continued || pending.length === 0) continue
-    if (["'", '"', "$'"].includes(stack.at(-1) ?? "")) continue
-    // 論理行が終わったので、次の行から heredoc の本文が順に続く。
-    for (const { word, dash } of pending.splice(0)) {
-      const isEnd = (l: string) => (dash ? l.replace(/^\t+/, "") : l) === word
-      let end = n
-      while (end < lines.length && !isEnd(lines[end])) end++
-      if (end === lines.length) break
-      lines.fill("", n, end + 1)
-      n = end + 1
+    i++
+    return out
+  }
+
+  // 語を 1 つ読み、クォートを外した文字列を返す。close は読んでいる置換の閉じの文字。
+  const readWord = (close?: string): string => {
+    let out = ""
+    while (i < text.length) {
+      const c = text[i]
+      if (" \t\n;&|()".includes(c) || (c === "`" && close === "`")) break
+      if (c === "\\") {
+        if (text[i + 1] !== "\n") out += text[i + 1] ?? ""
+        i += 2
+      } else if (c === "'" || text.startsWith("$'", i)) {
+        const from = c === "'" ? i + 1 : i + 2
+        let end = from
+        while (end < text.length && text[end] !== "'")
+          end += c === "$" && text[end] === "\\" ? 2 : 1
+        out += text.slice(from, end)
+        i = end + 1
+      } else if (c === '"') out += readDouble()
+      else if (c === "`" || text.startsWith("$(", i)) out += readSubst()
+      else {
+        const m =
+          c === "<" && !/[<\w)]/.test(text[i - 1] ?? "")
+            ? text.slice(i).match(HEREDOC_RE)
+            : null
+        if (m)
+          pending.push({ word: m[3], dash: m[1] === "-", quoted: m[2] !== "" })
+        const s = m ? m[0] : c
+        out += s
+        i += s.length
+      }
+    }
+    return out
+  }
+
+  // 改行の直後で、待っている heredoc の本文を順に読み飛ばす。終端の行が無ければ、
+  // その heredoc から後は本文と見なさず、通常のコマンドとして読む。
+  const skipHeredocBodies = (): void => {
+    for (const { word, dash, quoted } of pending.splice(0)) {
+      const lines = text.slice(i).split("\n")
+      const k = lines.findIndex(
+        (l) => (dash ? l.replace(/^\t+/, "") : l) === word
+      )
+      if (k === -1) return
+      let bodyEnd = i
+      for (const l of lines.slice(0, k)) bodyEnd += l.length + 1
+      while (!quoted && i < bodyEnd) {
+        if (text[i] === "\\") i += 2
+        else if (text[i] === "`" || text.startsWith("$(", i)) readSubst()
+        else i++
+      }
+      i = Math.max(i, bodyEnd + lines[k].length + 1)
     }
   }
-  return lines.join("\n")
+
+  // close(置換の閉じの文字)か文字列の終わりまで、コマンドを読む。
+  const parseList = (close?: string): void => {
+    let words: string[] = []
+    let depth = 0
+    const flush = () => {
+      if (words.length > 0) commands.push(words)
+      words = []
+    }
+    while (i < text.length) {
+      const c = text[i]
+      if (c === close && (close === "`" || depth === 0)) {
+        i++
+        break
+      }
+      if (c === "\\" && text[i + 1] === "\n") i += 2
+      else if (c === " " || c === "\t") i++
+      else if (";&|()\n".includes(c)) {
+        flush()
+        if (c === "(") depth++
+        if (c === ")") depth--
+        i++
+        if (c === "\n") skipHeredocBodies()
+      } else if (c === "#") {
+        const eol = text.indexOf("\n", i)
+        i = eol === -1 ? text.length : eol
+      } else words.push(readWord(close))
+    }
+    flush()
+  }
+
+  parseList()
+  for (const words of [...commands])
+    words.forEach((w, k) => {
+      if (k > 0 && (/^-\w*c$/.test(words[k - 1]) || words[k - 1] === "eval"))
+        commands.push(...parseCommands(w))
+    })
+  return commands
 }
 
 // `-df` のような短いフラグの結合を `-d` `-f` に分ける(gh の引数の解釈と同じ)。
@@ -303,49 +369,42 @@ function expandShortFlags(tokens: string[], valueShorts: string): string[] {
   })
 }
 
-// cmd の heredoc の本文を除き(stripHeredocBodies)、行の継続を 1 行へ戻した
-// (joinContinuedLines)うえでセグメントに分け(SEGMENT_SPLIT_RE)、gh の起動ごとに
-// 「object action」(issue create など)を git と同じくトークン解析で取り出す。
-// 1 つのセグメントに gh の起動が複数あれば(`$(gh …) $(gh …)` など)、それぞれを
-// 次の gh の起動の手前までのトークンで扱う。gh api は action を持たないので、
-// command を "api" とする。GH_POST_COMMANDS に無いコマンドは返さず、あるものは
-// 短いフラグの結合を分けたトークンで返す(expandShortFlags)。
+// cmd をコマンドに分け(parseCommands)、gh の起動ごとに「object action」(issue create
+// など)を git と同じくトークン解析で取り出す。起動は、コマンドの中の最初の gh の語から
+// そのコマンドの終わりまでとする。gh api は action を持たないので、command を "api" と
+// する。GH_POST_COMMANDS に無いコマンドは返さず、あるものは短いフラグの結合を分けた
+// トークンで返す(expandShortFlags)。
 // オプションは GH_VALUE_OPTS の値だけを読み飛ばし、ほかは値の有無を判定しない
 // (guard-bash の他のトークン解析と同じ簡略さで足りるため)。
 function findGhInvocations(cmd: string): GhInvocation[] {
   const invocations: GhInvocation[] = []
-  const text = joinContinuedLines(stripHeredocBodies(cmd))
-  for (const segment of text.split(SEGMENT_SPLIT_RE)) {
-    const all = segment.trim().split(/\s+/).filter(Boolean)
-    const starts = all.flatMap((tok, i) => (isGhToken(tok) ? [i] : []))
-    starts.forEach((start, k) => {
-      const tokens = all.slice(start, starts[k + 1])
-      const skipOptions = (from: number): number => {
-        let idx = from
-        while (idx < tokens.length && tokens[idx].startsWith("-"))
-          idx += GH_VALUE_OPTS.includes(tokens[idx]) ? 2 : 1
-        return idx
-      }
-      const objIdx = skipOptions(1)
-      const object = tokens[objIdx]
-      const command =
-        object === "api"
-          ? "api"
-          : `${object} ${tokens[skipOptions(objIdx + 1)]}`
-      const valueShorts = GH_POST_COMMANDS[command]
-      if (valueShorts !== undefined)
-        invocations.push({
-          command,
-          tokens: expandShortFlags(tokens, valueShorts)
-        })
-    })
+  for (const words of parseCommands(cmd)) {
+    const start = words.findIndex((w) => w === "gh" || w.endsWith("/gh"))
+    if (start === -1) continue
+    const tokens = words.slice(start)
+    const skipOptions = (from: number): number => {
+      let idx = from
+      while (idx < tokens.length && tokens[idx].startsWith("-"))
+        idx += GH_VALUE_OPTS.includes(tokens[idx]) ? 2 : 1
+      return idx
+    }
+    const objIdx = skipOptions(1)
+    const object = tokens[objIdx]
+    const command =
+      object === "api" ? "api" : `${object} ${tokens[skipOptions(objIdx + 1)]}`
+    const valueShorts = GH_POST_COMMANDS[command]
+    if (valueShorts !== undefined)
+      invocations.push({
+        command,
+        tokens: expandShortFlags(tokens, valueShorts)
+      })
   }
   return invocations
 }
 
 // tokens[i] が names のいずれかのフラグなら、その値を返す。`--body x`・`--body=x`
 // に加え、短いフラグに値を連結した `-bx`・`-Fbody.md` も受ける(gh はこの形を受け付ける)。
-// フラグでなければ undefined を返す。
+// 値の無いフラグ(末尾の `--body`)は空の値とする。フラグでなければ undefined を返す。
 function flagAt(
   tokens: string[],
   i: number,
@@ -353,7 +412,7 @@ function flagAt(
 ): string | undefined {
   const tok = tokens[i]
   for (const n of names) {
-    if (tok === n) return tokens[i + 1]
+    if (tok === n) return tokens[i + 1] ?? ""
     if (tok.startsWith(`${n}=`)) return tok.slice(n.length + 1)
     if (/^-[^-]$/.test(n) && tok.startsWith(n) && tok.length > 2)
       return tok.slice(2)
@@ -361,13 +420,17 @@ function flagAt(
   return undefined
 }
 
-// tokens の中から names のいずれかのフラグの最初の値を取る。無ければ undefined。
-function flagValue(tokens: string[], names: string[]): string | undefined {
+// tokens から names のいずれかのフラグの値をすべて取る。gh は同じフラグを繰り返すと
+// 最後の値を使うので、本文の検査はすべての値に当てる。
+function flagValues(tokens: string[], names: string[]): string[] {
+  const values: string[] = []
   for (let i = 0; i < tokens.length; i++) {
     const value = flagAt(tokens, i, names)
-    if (value !== undefined) return value
+    if (value === undefined) continue
+    values.push(value)
+    if (names.includes(tokens[i])) i++
   }
-  return undefined
+  return values
 }
 
 // 本文のファイルを cwd 基準で読む。`-`(標準入力)は中身を検査できないので deny し、
@@ -393,25 +456,32 @@ function denyMissingMarker(command: string): never {
 }
 
 // 本文付きの投稿 1 つ分。inline は本文を引数で渡すもの(--body / -b、gh api の
-// 本文のフィールドの文字列)、files は中身を読んで検査する本文ファイル。
+// 本文のフィールドの文字列)の値、files は中身を読んで検査する本文ファイル。
 interface BodyPost {
   command: string
-  inline: boolean
+  inline: string[]
   files: { flag: string; path: string }[]
 }
 
 // gh の 7 コマンドの投稿を読む。本文のフラグ(--body/-b/--body-file/-F)を持たない
-// 呼び出しは投稿と見なさず undefined を返す。ただし、pr create の --web / -w
-// (決定 66)と、本文のフラグを持たない --fill 系・--template/-T(決定 64)は deny する。
+// 呼び出しは投稿と見なさず undefined を返す。ただし、pr create と issue create の
+// --web / -w(決定 66)と、本文のフラグを持たない --fill 系・--template/-T(決定 64)は
+// deny する。
 function readGhPost({ command, tokens }: GhInvocation): BodyPost | undefined {
-  if (command === "pr create" && hasFlag(tokens, WEB_FLAGS))
+  if (
+    (command === "pr create" || command === "issue create") &&
+    hasFlag(tokens, WEB_FLAGS)
+  )
     emit(
       "deny",
-      "gh pr create の --web / -w は使えません。Web の作成画面での投稿は本文を検査できないためです。マーカー付きの本文を --body-file で渡して作り直してください"
+      `gh ${command} の --web / -w は使えません。Web の作成画面での投稿は本文を検査できないためです。マーカー付きの本文を --body-file で渡して作り直してください`
     )
-  const body = flagValue(tokens, ["--body", "-b"])
-  const bodyFile = flagValue(tokens, ["--body-file", "-F"])
-  if (body === undefined && bodyFile === undefined) {
+  const inline = flagValues(tokens, ["--body", "-b"])
+  const files = flagValues(tokens, ["--body-file", "-F"]).map((p) => ({
+    flag: "--body-file",
+    path: p
+  }))
+  if (inline.length === 0 && files.length === 0) {
     const autoFlags = AUTO_BODY_FLAGS[command]
     if (autoFlags && hasFlag(tokens, autoFlags))
       emit(
@@ -420,18 +490,11 @@ function readGhPost({ command, tokens }: GhInvocation): BodyPost | undefined {
       )
     return undefined
   }
-  return {
-    command,
-    inline: body !== undefined,
-    files:
-      bodyFile === undefined
-        ? []
-        : [{ flag: "--body-file", path: unquote(bodyFile) }]
-  }
+  return { command, inline, files }
 }
 
 // gh api で送る本文を読む(決定 60。§6.8 の 7 コマンドの外)。
-// メソッドは gh と同じく、-X/--method の指定があればそれ、無ければ
+// メソッドは gh と同じく、-X/--method の指定があれば最後の値、無ければ
 // フィールドか --input があるとき POST、どちらも無いとき GET とする。
 // POST・PATCH・PUT のときだけ、次を本文として返す。
 // - フィールド(-f/--raw-field・-F/--field)のキーが body か `…[body]` のもの。
@@ -439,36 +502,38 @@ function readGhPost({ command, tokens }: GhInvocation): BodyPost | undefined {
 // - --input のファイル(中身に "body" のキーがあるときだけマーカーを求める)。
 // 本文を持たない呼び出し(読み取り、ラベルだけの更新など)は undefined を返す。
 function readGhApiPost(tokens: string[]): BodyPost | undefined {
-  const fields: { typed: boolean; value: string }[] = []
-  for (let i = 0; i < tokens.length; i++) {
-    const raw = flagAt(tokens, i, ["--raw-field", "-f"])
-    if (raw !== undefined) fields.push({ typed: false, value: unquote(raw) })
-    const typed = flagAt(tokens, i, ["--field", "-F"])
-    if (typed !== undefined) fields.push({ typed: true, value: unquote(typed) })
-  }
-  const input = flagValue(tokens, ["--input"])
-  const explicitMethod = flagValue(tokens, ["--method", "-X"])
+  const fields = [
+    ...flagValues(tokens, ["--raw-field", "-f"]).map((value) => ({
+      typed: false,
+      value
+    })),
+    ...flagValues(tokens, ["--field", "-F"]).map((value) => ({
+      typed: true,
+      value
+    }))
+  ]
+  const inputs = flagValues(tokens, ["--input"])
+  const explicitMethod = flagValues(tokens, ["--method", "-X"]).at(-1)
   const method =
     explicitMethod !== undefined
-      ? unquote(explicitMethod).toUpperCase()
-      : fields.length > 0 || input !== undefined
+      ? explicitMethod.toUpperCase()
+      : fields.length > 0 || inputs.length > 0
         ? "POST"
         : "GET"
   if (!["POST", "PATCH", "PUT"].includes(method)) return undefined
 
-  const post: BodyPost = { command: "api", inline: false, files: [] }
+  const post: BodyPost = { command: "api", inline: [], files: [] }
   for (const { typed, value } of fields) {
     const eq = value.indexOf("=")
     const key = eq === -1 ? value : value.slice(0, eq)
     if (key !== "body" && !key.endsWith("[body]")) continue
     const val = value.slice(eq + 1)
     if (typed && val.startsWith("@"))
-      post.files.push({ flag: "-F", path: unquote(val.slice(1)) })
-    else post.inline = true
+      post.files.push({ flag: "-F", path: val.slice(1) })
+    else post.inline.push(val)
   }
-  if (input !== undefined)
-    post.files.push({ flag: "--input", path: unquote(input) })
-  return post.inline || post.files.length > 0 ? post : undefined
+  for (const input of inputs) post.files.push({ flag: "--input", path: input })
+  return post.inline.length > 0 || post.files.length > 0 ? post : undefined
 }
 
 // 本文ファイルのパスが、本文のフラグの値として使った回数より多くコマンドに現れたら
@@ -490,29 +555,40 @@ function denyRewrittenBodyFile(posts: BodyPost[], text: string): void {
 }
 
 // 投稿する本文にマーカーがあるかを検査し、無ければ deny する。
-// 本文を引数で渡すもの(--body / -b、gh api の本文のフィールド)はコマンド文字列全体
-// (セグメントに分けない)で見る。本文はクォートや heredoc で複数行になり、改行を含む
-// セグメント分割では本文の内容までは追えないため、マーカーの有無は cmd 全体を対象にする。
-// その代わり、1 つのマーカーで別の投稿まで通らないよう、本文付きの投稿が 2 つ以上あって
-// いずれかが本文を引数で渡すコマンドは deny する(決定 66)。
-// 本文ファイル(--body-file / -F、gh api の -F body=@<パス>・--input)は、同じコマンドで
-// 書き換えていないことを確かめてから(denyRewrittenBodyFile)、cwd 基準で解決した
-// ファイルの中身を見る。本文を持たない呼び出しは通す。
-function checkGeneratedMarker(cmd: string, cwd: string): void {
+// 本文を引数で渡すもの(--body / -b、gh api の本文のフィールド)が 1 つなら、コマンド
+// 文字列全体で見る(§6.8)。本文は heredoc や変数で組み立てることがあり、値だけでは
+// 中身を追えないためである。
+// 1 つの投稿に本文が 2 つ以上あるとき(本文のフラグの繰り返し、gh api の
+// `comments[][body]`)は、引数の本文ごとに値そのものにマーカーを求める。gh は繰り返した
+// フラグの最後の値を使うので、1 つのマーカーで別の本文を通さないためである。
+// 同じ理由で、本文付きの投稿が 2 つ以上あっていずれかが本文を引数で渡すコマンドは
+// deny する(決定 66)。
+// 本文ファイル(--body-file / -F、gh api の -F body=@<パス>・--input)は、すべてのパスに
+// ついて同じコマンドで書き換えていないことを確かめてから(denyRewrittenBodyFile)、
+// cwd 基準で解決したファイルの中身を見る。本文を持たない呼び出しは通す。
+function checkGeneratedMarker(
+  invocations: GhInvocation[],
+  cmd: string,
+  cwd: string
+): void {
   const posts: BodyPost[] = []
-  for (const inv of findGhInvocations(cmd)) {
+  for (const inv of invocations) {
     const post =
       inv.command === "api" ? readGhApiPost(inv.tokens) : readGhPost(inv)
     if (post) posts.push(post)
   }
-  if (posts.length >= 2 && posts.some((p) => p.inline))
+  if (posts.length >= 2 && posts.some((p) => p.inline.length > 0))
     emit(
       "deny",
-      "1 つのコマンドに本文付きの投稿が複数あり、本文を引数で渡すものがあります。マーカーはコマンド全体で探すので、投稿は 1 回の Bash 呼び出しに 1 つにしてください"
+      "1 つのコマンドに本文付きの投稿が複数あり、本文を引数で渡すものがあります。マーカーはコマンド全体で探すので、投稿は 1 回の Bash 呼び出しに 1 つにしてください。本文は Write ツールで書いたファイルを --body-file(gh api では -F body=@<パス>)で渡してください"
     )
   denyRewrittenBodyFile(posts, joinContinuedLines(cmd))
   for (const { command, inline, files } of posts) {
-    if (inline && !cmd.includes(GENERATED_MARKER)) denyMissingMarker(command)
+    const missing =
+      inline.length + files.length >= 2
+        ? inline.some((body) => !body.includes(GENERATED_MARKER))
+        : inline.length === 1 && !cmd.includes(GENERATED_MARKER)
+    if (missing) denyMissingMarker(command)
     for (const { flag, path: file } of files) {
       const content = readBodyFile(flag, file, cwd)
       const needsMarker = flag !== "--input" || /"body"\s*:/.test(content)
@@ -569,17 +645,17 @@ try {
   if (run) {
     const phase = run.state.phase
     const testLoopPassed = run.state.phases["test-loop"]?.status === "passed"
-    // gh の起動は行の継続を 1 行へ戻してから探す(`gh pr \⏎ create` を見逃さない)。
-    const oneLine = joinContinuedLines(cmd)
-    if (/\bgh\s+issue\s+create\b/.test(oneLine) && phase !== "triage")
+    // フェーズの制限も、マーカーの検査と同じ gh の起動の解析(findGhInvocations)で判定する。
+    // `gh -R o/r pr create` を捕まえ、コミットメッセージに書いた使用例は起動と見なさない。
+    const ghInvocations = findGhInvocations(cmd)
+    const invokes = (command: string) =>
+      ghInvocations.some((inv) => inv.command === command)
+    if (invokes("issue create") && phase !== "triage")
       emit(
         "deny",
         `gh issue create は triage フェーズでのみ実行できます(現在: ${phase})`
       )
-    if (
-      /\bgh\s+pr\s+create\b/.test(oneLine) &&
-      (phase !== "pr" || !testLoopPassed)
-    )
+    if (invokes("pr create") && (phase !== "pr" || !testLoopPassed))
       emit(
         "deny",
         `PR 作成は pr フェーズかつ test-loop 合格後のみ可能です(現在: ${phase}, test-loop passed: ${testLoopPassed})`
@@ -593,7 +669,7 @@ try {
         "deny",
         `push は test-loop 合格後の pr 以降のフェーズでのみ可能です(現在: ${phase})`
       )
-    checkGeneratedMarker(cmd, cwd)
+    checkGeneratedMarker(ghInvocations, cmd, cwd)
   }
   pass()
 } catch (e) {

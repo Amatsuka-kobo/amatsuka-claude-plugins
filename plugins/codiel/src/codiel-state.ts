@@ -297,8 +297,9 @@ function newState(
   }
 }
 
-// --slug の run の最新 try を読む。v1 の run は allowV1(get と stop、awaiting_outcome に
-// 限った record-outcome)のときだけ返し、ほかのコマンドでは §6.2.4 の文言を出して失敗する。
+// --slug の run の最新 try を読む。v1 の run は allowV1(get と stop、awaiting_outcome への
+// record-outcome、completed / rejected の v1 の run への record-outcome --outcome incident)
+// のときだけ返し、ほかのコマンドでは §6.2.4 の文言を出して失敗する(決定 63)。
 function loadRun(
   root: string,
   flags: Record<string, string>,
