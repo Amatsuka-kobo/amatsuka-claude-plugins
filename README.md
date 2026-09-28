@@ -71,6 +71,8 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 `/codiel:run` は、Issue 番号・intent 文書のパス・引数なしの 3 つの形で始められます。intent 文書には、ユーザーの言葉を要約せずに残す原文(`## ASIS` / `## TOBE`)と、受け入れ基準などの派生文を分けて書き、完了の判定は原文に照らして行います。GitHub を使えない環境でも、PR を作らない local モードで最後まで進みます。<br>
 `/codiel:init` は保護パスを聞き取り、運用の規律を `.claude/rules/codiel.md` に、置き場の地図を CLAUDE.md の `## Codiel` に置きます。ARCHITECTURE の散文や GOTCHAS は生成しません。ドメインマップが無くても動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
 変更ごとの intent とは別に、領域ごとの持続層(`docs/intents/domains/<領域>.md`)に目的と意図的な制約を残し、次の run の聞き取り・設計・レビューの前提にします。<br>
+実装はテスト駆動で進みます。test-code フェーズが、仕様からユニットテストと E2E テストを先に書いて失敗を確かめ、implement フェーズがそれを通します。テストの仕様は `.codiel/config.json` の `testsDir`(既定は `docs/tests`)の下に置き、implement 以降にテストを書き換えようとすると hook が確認を求めます。<br>
+implement フェーズは、実装計画の Step を依存関係からグループに分け、同じグループの Step を git worktree で並列に実装してからマージします。<br>
 run の間に GitHub へ投稿する本文には `<!-- codiel:generated -->` を付け、hook がこれを確かめます(run の間に gh-utility から投稿すると拒否されます)。スクリーンショットなどの画像は、`gh --attach` か claude-in-chrome で本文に載せます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。
 
