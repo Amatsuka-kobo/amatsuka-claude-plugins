@@ -76,7 +76,7 @@ digraph writing_design_docs {
   check_criteria [label="満たされない基準が\n残っていないか?", shape=diamond];
   alternatives [label="## 方針 に代替案 2 つ以上と\n採用理由を書く", shape=box];
   targets [label="## 変更対象 を列挙\n(既存パターン踏襲)", shape=box];
-  units [label="## 影響を受ける機能単位 を\nunit-id で列挙\n(screen-*/api-*/model-*/feat-*)", shape=box];
+  units [label="## 影響を受ける機能単位 を\nディレクトリの ID で列挙\n(units/<パス>/、e2e/frontend/<画面名>/、\ne2e/backend/<ルートパス>/、e2e/cli/<コマンド名>/。\n新しい画面は名前の候補を書く)", shape=box];
   yagni [label="intentにない機能を\n足していないか?", shape=diamond];
   trim [label="要件にない項目を削る", shape=box];
   risk [label="## データ・API の変更 /\n## リスクと可逆性 を書く", shape=box];

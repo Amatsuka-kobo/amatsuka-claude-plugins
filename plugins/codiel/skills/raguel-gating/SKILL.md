@@ -197,7 +197,7 @@ run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `
 `state.version` が 1 の run は、次のとおり読む。
 
 - `state.integration` を持たないので、github として扱う。
-- `state.pr.url` と、evaluationId の選定順に挙げた 3 つのフェーズは version 2 と同じ名前で持つので、そのまま読む。
+- `state.pr.url` と、選定順に挙げたフェーズのうち fix-loop・test-loop・implement の 3 つは version 2 と同じ名前で持つので(test-code は version 1 に無い)、そのまま読む。
 - `record-outcome` の `--slug` には `state.runId`(`issue-<N>` の形)を渡す。
 
 <HARD-GATE>

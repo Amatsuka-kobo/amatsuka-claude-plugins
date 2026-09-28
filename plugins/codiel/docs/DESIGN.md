@@ -651,7 +651,7 @@ plugins/codiel/
   commands/
     init.md                    # /codiel:init(薄い入口。initializing-harness を起動)
     run.md                     # /codiel:run [<Issue番号> | <intentパス>](薄い入口。orchestrating-runs を起動)
-    test.md                    # /codiel:test [unit-id...](単独テスト実行。§5)
+    test.md                    # /codiel:test [パス](testsDir からの相対パス。省略時は全体)
   skills/
     initializing-harness/SKILL.md(+ raguel.config.example.yaml)
     orchestrating-runs/SKILL.md

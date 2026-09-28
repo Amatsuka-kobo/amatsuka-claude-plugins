@@ -876,7 +876,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     // 記録済みの STOP は verdict と evaluationId をどちらも、新しい --verdict と
     // --evaluation-id の有無と値にかかわらず残す。resume と mark-ask を挟んで
     // --human-approved の無い pass-gate を通させないためと、STOP の evaluationId を
-    // init の文言と capturing-intent の手順 1 に示し続けるため(設計書 §6.2.2、§6.14.1 の (2)、決定 83)
+    // init の文言と capturing-intent の手順 1 に示し続けるため(設計書 §6.2.2、§6.14.2 の (6)(7)、決定 83)
     if (ph.verdict !== "STOP") {
       ph.evaluationId = flags["evaluation-id"] ?? null
       ph.verdict = verdict
