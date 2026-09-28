@@ -2246,7 +2246,7 @@ O4-1b で、Claude Code 本体がサブエージェントによる `steps/**/rep
 ```markdown
 # E2E の実行: e2e/frontend/login
 
-- 実行: 20261001T031500Z-add-login-try1
+- 実行: 20261001-121500-add-login-try1
 - 結果: 失敗(パス 3 / 失敗 1 / 全 4)
 - フェーズ: test-loop(回帰の実行の委譲)
 - コミット: 3f2a9c1
