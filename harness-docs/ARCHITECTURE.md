@@ -339,3 +339,33 @@ ARCHITECTURE の持ち主である metatron が ADR の確定と縮約を同じ�
 #### 影響範囲
 
 metatron は codiel の持続層の書式に依存し、書式を変えたときは両プラグインの `format-change-checklist.md` に沿って追随させる。metatron に `scan-adr-candidates` と `shrink-adr-candidate` が加わり、縮約の失敗は終了コード 3 と `shrinkPending` で返る。codiel は ADR の確定に関わらず、`[ADR 候補]` を持続層に全文で書くことだけを担う。
+
+---
+
+### ADR-008: [codiel] テストを実装の前に別の委譲で書いて保護し、仕様を testsDir に置く
+
+- 状態: 採用
+- 決定日: 2026-09-28
+- 決定者: phyllis998
+
+#### 背景
+
+codiel 0.x では、implement の委譲がコードと一緒にテストを書き、test-loop も implement の後に書いていた。どちらのテストも実装に合わせて書かれるおそれがあった。テストは `.codiel/specs/` の下にあり、プロジェクトのテストの置き場にも実行の対象にも入らなかった。
+
+#### 検討した選択肢
+
+1. implement の委譲がコードと一緒にテストを書く形を保つ
+2. test-loop が implement の後にテストを書く形を保つ
+3. test-code フェーズを implement の前に置いてテストを別の委譲で書き、implement 以降はテストの書き換えを hook で止める(採用)
+
+#### 採用した結論
+
+test-code フェーズを (test-spec ∥ dev-plan) と implement の間に置く。test-code は仕様からユニットテストと E2E を書き、それらが実装の前に失敗することを確かめる。implement はそのテストを通し、test-loop は全テストの回帰を確かめて直す。テストの仕様は `.codiel/config.json` の `testsDir`(既定は `docs/tests`)の下に置く。テストコードはプロジェクトの規約の場所に置き、置いたパスを `spec.md` に記録する。implement・test-loop・fix-loop の間は、仕様と、`spec.md` に記録したテストコードへの書き込みを guard-write が ask にする。
+
+#### 理由
+
+実装の前に別の委譲でテストを確定させると、テストが実装を追認しなくなる。書き込みを ask にすれば、コードを直すフェーズでテストが実装に合わせて書き換えられるのを人が止められる。テストコードをプロジェクトの規約の場所に置くと、run の外でもプロジェクトのテストとして走る。保護の対象は `spec.md` の記録 1 か所で決まる。
+
+#### 影響範囲
+
+run state の `phases` に `test-code` が加わる。ADR-006 が version 1 の run に定めた扱いは、`phases` に `test-code` を持たない version 2 の run にも当たる。ADR-003 の初期化済みの判定にある `.codiel/` の 3 ディレクトリは、`.codiel/runs` と `.codiel/reports` の 2 つになり、`/codiel:init` の判定だけは `.codiel/config.json` も見る。codiel 0.x の `.codiel/specs/` は読まれず、移されず、報告もされない。fix-loop では、オーケストレーターが `set-test-edit` を立てている間だけテストの保護が外れる。
