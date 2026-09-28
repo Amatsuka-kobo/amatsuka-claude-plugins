@@ -232,7 +232,8 @@ try {
   // 書き込み先が worktree の中なら、その worktree のルートを基準に判定する(設計書 §6.8 の (b))。
   // codielRel と repoRel は worktreeRoot 基準の相対パスになる。メインのルート基準のままだと、
   // worktree の中のすべての書き込みが `.codiel/` 配下と判定されて免除される。
-  // worktree の位置は実体パスどうしで見る(findMainRoot が git から得たルートは実体パスである)。
+  // worktree の位置は実体パスどうしで見る(findMainRoot は cwd のパスの形からルートを得るので、
+  // realpathOrAncestor で実体化してから書き込み先の実体パスと比べる)。
   const wt = WORKTREE_REL_RE.exec(toPosix(path.relative(mainReal, absReal)))
   const worktreeRoot = wt ? path.join(mainReal, wt[1]) : null
   const codielRel = wt ? (wt[2] ?? "") : toPosix(path.relative(mainRoot, abs))

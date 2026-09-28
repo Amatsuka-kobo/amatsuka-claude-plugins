@@ -558,44 +558,23 @@ export function findProjectRoot(startDir: string): string {
   }
 }
 
-// codiel の worktree(`.codiel/worktrees/<slug>/<名前>`。設計書 §6.6.3)の中のパスか。
-// 名前の形(step-<k> など)は問わない。worktree の記録との照合は guard-write が行う。
-const CODIEL_WORKTREE_RE =
-  /[/\\]\.codiel[/\\]worktrees[/\\][^/\\]+[/\\][^/\\]+(?:[/\\]|$)/
-
-// `git worktree list --porcelain` の先頭のエントリ(メインの作業ツリー)のパス。
-// git が無い・git 管理外・失敗は、gitToplevel と同じく原因を区別せず null にする。
-function gitMainWorktree(cwd: string): string | null {
-  try {
-    const res = spawnSync("git", ["worktree", "list", "--porcelain"], {
-      cwd,
-      encoding: "utf8",
-      timeout: 5000,
-      windowsHide: true
-    })
-    if (res.status !== 0) return null
-    const m = /^worktree (.+)$/m.exec(res.stdout ?? "")
-    return m ? path.resolve(m[1]) : null
-  } catch {
-    return null
-  }
-}
+// codiel の worktree の置き場(`.codiel/worktrees/`。設計書 §6.6.3)。区切りは `/` と `\` の両方を受ける。
+const CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/
 
 /**
  * hook が run を探すルート(メインの作業ツリー)を返す(設計書 §6.8 の (a))。
  *
- * cwd が codiel の worktree の中なら、`git worktree list --porcelain` の先頭のエントリの
- * パスを返す。worktree の checkout に `.codiel/` の一部がコミットされていると、
+ * cwd のパスが `/.codiel/worktrees/` を含むなら、最初に現れるその位置より前を返す。
+ * worktree の checkout に `.codiel/` の一部がコミットされていると、
  * findProjectRoot は worktree のルートで止まり、メインの run を見つけられないためである。
- * `git rev-parse --git-common-dir` は `.git` ディレクトリを指すので使わない。
- * それ以外(git が使えないときを含む)は findProjectRoot と同じ値を返す。
- * worktree かどうかをパスの形で先に見るのは、Bash と書き込みのたびに git を起動しないためと、
- * ユーザーが自分で作った worktree で run を始めた構成を、メインの作業ツリーへ付け替えないためである。
+ * 含まなければ findProjectRoot と同じ値を返す。
+ * git は呼ばない。run を始めた作業ツリーが git の linked worktree だと、
+ * `git worktree list --porcelain` の先頭のエントリは primary の checkout を指すためである。
+ * 返すのはパスの形から切り出した論理パスで、実体化しない。
  */
 export function findMainRoot(startDir: string): string {
-  if (CODIEL_WORKTREE_RE.test(startDir)) {
-    const main = gitMainWorktree(startDir)
-    if (main) return main
-  }
+  const m = CODIEL_WORKTREES_RE.exec(startDir)
+  // ルート直下(`/.codiel/worktrees/…`)では空文字列にせず、区切りの 1 文字を返す
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1)
   return findProjectRoot(startDir)
 }

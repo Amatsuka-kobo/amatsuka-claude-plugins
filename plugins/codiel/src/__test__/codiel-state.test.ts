@@ -1145,6 +1145,254 @@ test("mark-ask は終端の run を拒否し、run を生き返らせない", ()
   }
 })
 
+// --- Raguel の STOP の裁定と次の try(決定 83、A6-27) ---
+
+test("mark-ask --verdict はフェーズの verdict に記録し、省略時は ASK にし、PROCEED・ASK・STOP 以外を拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  for (const bad of ["stop", "SKIPPED", "FOO"]) {
+    const r = run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "demo",
+      "--verdict",
+      bad
+    ])
+    expect(r.code, bad).toBe(1)
+    expect(r.err, bad).toMatch(/不正な --verdict/)
+  }
+  let st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.status).toBe("active")
+  expect(st.phases.intent.verdict).toBeNull()
+  let r = run(root, ["mark-ask", "intent", "--slug", "demo"])
+  expect(r.out.state.phases.intent.verdict).toBe("ASK")
+  run(root, ["resume", "--slug", "demo"])
+  r = run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--verdict",
+    "PROCEED"
+  ])
+  expect(r.out.state.phases.intent.verdict).toBe("PROCEED")
+  run(root, ["resume", "--slug", "demo"])
+  r = run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.state.status).toBe("awaiting_human")
+  expect(r.out.state.phases.intent.status).toBe("awaiting_human")
+  expect(r.out.state.phases.intent.verdict).toBe("STOP")
+  expect(r.out.state.phases.intent.askKind).toBe("raguel")
+  expect(r.out.state.phases.intent.evaluationId).toBe("ev-stop")
+  // resume の後も STOP が残る
+  st = run(root, ["resume", "--slug", "demo"]).out.state
+  expect(st.phases.intent.verdict).toBe("STOP")
+})
+
+test("pass-gate --verdict STOP は --human-approved のときだけ受け付け、STOP を記録したフェーズは --human-approved なしで上書きできない", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  let r = passGate(root, "intent", "STOP")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/verdict が PROCEED ではありません: STOP/)
+  run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  run(root, ["resume", "--slug", "demo"])
+  for (const verdict of ["PROCEED", "ASK"]) {
+    r = passGate(root, "intent", verdict)
+    expect(r.code, verdict).toBe(1)
+    expect(r.err, verdict).toMatch(
+      /フェーズ intent には Raguel の STOP が記録されています/
+    )
+  }
+  let st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.phases.intent.status).toBe("in_progress")
+  expect(st.phases.intent.verdict).toBe("STOP")
+  expect(st.phases.intent.humanApproved).toBeUndefined()
+  r = passGate(root, "intent", "FOO", ["--human-approved"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/不正な --verdict: FOO/)
+  r = passGate(root, "intent", "STOP", ["--human-approved"])
+  expect(r.code).toBe(0)
+  st = r.out.state
+  expect(st.phases.intent.status).toBe("passed")
+  expect(st.phases.intent.verdict).toBe("STOP")
+  expect(st.phases.intent.humanApproved).toBe(true)
+  expect(st.phases.intent.evaluationId).toBe("ev1")
+  expect(run(root, ["start-phase", "discuss", "--slug", "demo"]).code).toBe(0)
+})
+
+test("STOP を記録したフェーズは、resume の後の mark-ask --kind confirm でも STOP のまま残り、--human-approved の無い pass-gate は失敗する", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  // --verdict の有無と値にかかわらず、記録済みの STOP を上書きしない
+  for (const extra of [[], ["--verdict", "PROCEED"]]) {
+    run(root, ["resume", "--slug", "demo"])
+    const r = run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "demo",
+      "--kind",
+      "confirm",
+      ...extra
+    ])
+    const label = extra.join(" ") || "--verdict なし"
+    expect(r.code, label).toBe(0)
+    expect(r.out.state.phases.intent.verdict, label).toBe("STOP")
+    expect(r.out.state.phases.intent.askKind, label).toBe("confirm")
+  }
+  run(root, ["resume", "--slug", "demo"])
+  const r = passGate(root, "intent", "PROCEED")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /フェーズ intent には Raguel の STOP が記録されています/
+  )
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.phases.intent.status).toBe("in_progress")
+  expect(st.phases.intent.verdict).toBe("STOP")
+  expect(st.phases.intent.humanApproved).toBeUndefined()
+})
+
+test("STOP を記録したフェーズは、resume の後の --evaluation-id の無い mark-ask --kind confirm でも STOP の evaluationId を残す(新しい --evaluation-id を渡しても上書きしない)", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  for (const extra of [[], ["--evaluation-id", "ev-new"]]) {
+    run(root, ["resume", "--slug", "demo"])
+    const r = run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "demo",
+      "--kind",
+      "confirm",
+      ...extra
+    ])
+    const label = extra.join(" ") || "--evaluation-id なし"
+    expect(r.code, label).toBe(0)
+    expect(r.out.state.phases.intent.verdict, label).toBe("STOP")
+    expect(r.out.state.phases.intent.evaluationId, label).toBe("ev-stop")
+  }
+})
+
+test("init は、最新の try が raguel-stop で止まったか humanApproved の無い STOP のフェーズを持つとき --human-approved を求め、どちらでもなければ従来どおり作る", () => {
+  const root = tmpProject()
+  const markStop = (slug: string) => {
+    run(root, ["start-phase", "intent", "--slug", slug])
+    run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      slug,
+      "--kind",
+      "raguel",
+      "--verdict",
+      "STOP",
+      "--evaluation-id",
+      "ev-stop"
+    ])
+  }
+  // raguel-stop で止めた try
+  init(root, "judged")
+  markStop("judged")
+  run(root, ["stop", "--slug", "judged", "--reason", "raguel-stop"])
+  // STOP を記録した後に別の理由で止めた try
+  init(root, "other")
+  markStop("other")
+  run(root, ["stop", "--slug", "other", "--reason", "intent-updated"])
+  for (const slug of ["judged", "other"]) {
+    const r = init(root, slug)
+    expect(r.code, slug).toBe(1)
+    expect(r.err, slug).toMatch(/Raguel の STOP で止まっています/)
+    expect(r.err, slug).toMatch(/--human-approved を付けて init し直して/)
+    expect(fs.existsSync(statePath(root, slug, 2)), slug).toBe(false)
+  }
+  expect(init(root, "other").err).toMatch(
+    /stopReason: intent-updated、STOP のフェーズ: intent\(evaluationId: ev-stop\)/
+  )
+  for (const slug of ["judged", "other"]) {
+    const r = init(root, slug, {}, ["--human-approved"])
+    expect(r.code, slug).toBe(0)
+    expect(r.out.state.try, slug).toBe(2)
+  }
+
+  // 人が誤検知と裁定した STOP(humanApproved あり)と、ASK のまま止めた try には当たらない
+  init(root, "approved")
+  markStop("approved")
+  run(root, ["resume", "--slug", "approved"])
+  run(root, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    "approved",
+    "--evaluation-id",
+    "ev-stop",
+    "--verdict",
+    "STOP",
+    "--human-approved"
+  ])
+  run(root, ["stop", "--slug", "approved", "--reason", "test"])
+  init(root, "asked")
+  run(root, ["start-phase", "intent", "--slug", "asked"])
+  run(root, ["mark-ask", "intent", "--slug", "asked"])
+  run(root, ["stop", "--slug", "asked", "--reason", "test"])
+  for (const slug of ["approved", "asked"]) {
+    const r = init(root, slug)
+    expect(r.code, slug).toBe(0)
+    expect(r.out.state.try, slug).toBe(2)
+  }
+})
+
 // --- v1 の扱い ---
 
 test("v1 の run には get と stop だけが通り、ほかのコマンドは §6.2.4 の文言で失敗する", () => {

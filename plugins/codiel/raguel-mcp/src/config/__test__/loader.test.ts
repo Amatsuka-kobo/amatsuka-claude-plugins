@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { defaultConfig } from "../defaults"
-import { loadConfig } from "../loader"
+import { createConfigReloader, loadConfig } from "../loader"
 
 let workDir: string
 let originalCwd: string
@@ -93,6 +93,70 @@ describe("loadConfig - 深マージ", () => {
     expect(config.panel.critical).toEqual(["adversarial"])
     // 兄弟の standard は影響を受けない
     expect(config.panel.standard).toEqual(defaultConfig.panel.standard)
+  })
+
+  it.each([
+    ["[]", []],
+    ['["src/auth/**"]', ["src/auth/**"]]
+  ])("code/protected-paths の globs が %s でも既定の 3 つの glob が残る(和集合)", (yaml, extra) => {
+    useConfig(`rules:\n  code/protected-paths:\n    globs: ${yaml}\n`)
+    const { config } = loadConfig()
+    expect(config.rules["code/protected-paths"].globs).toEqual([
+      ".github/**",
+      "infra/**",
+      "**/*.env*",
+      ...extra
+    ])
+  })
+})
+
+describe("createConfigReloader - 読み直しの契機", () => {
+  it("ファイルの有無と mtime が変わったときだけ読み直し、configHash と source が変わる", () => {
+    delete process.env.RAGUEL_CONFIG
+    process.chdir(workDir)
+    let builds = 0
+    const current = createConfigReloader((loaded) => {
+      builds++
+      return loaded
+    })
+
+    const first = current()
+    expect(first.source).toBe("defaults")
+    expect(current()).toBe(first)
+    expect(builds).toBe(1)
+
+    const path = join(workDir, "raguel.config.yaml")
+    writeFileSync(path, "onError: STOP\n", "utf8")
+    const second = current()
+    expect(second.source).toBe(`cwd:${path}`)
+    expect(second.config.onError).toBe("STOP")
+    expect(second.configHash).not.toBe(first.configHash)
+    expect(builds).toBe(2)
+
+    writeFileSync(path, "onError: ASK\njudge:\n  model: sonnet\n", "utf8")
+    const later = new Date(Date.now() + 10_000)
+    utimesSync(path, later, later)
+    const third = current()
+    expect(third.config.judge.model).toBe("sonnet")
+    expect(third.configHash).not.toBe(second.configHash)
+    expect(builds).toBe(3)
+  })
+
+  it("読み込みに失敗したら前の設定に戻さず、直るまで失敗を返す", () => {
+    const path = useConfig("onError: STOP\n")
+    const current = createConfigReloader((loaded) => loaded)
+    expect(current().config.onError).toBe("STOP")
+
+    writeFileSync(path, "onError: PROCEED\n", "utf8")
+    const later = new Date(Date.now() + 10_000)
+    utimesSync(path, later, later)
+    expect(() => current()).toThrow()
+    expect(() => current()).toThrow()
+
+    writeFileSync(path, "onError: ASK\n", "utf8")
+    const evenLater = new Date(Date.now() + 20_000)
+    utimesSync(path, evenLater, evenLater)
+    expect(current().config.onError).toBe("ASK")
   })
 })
 

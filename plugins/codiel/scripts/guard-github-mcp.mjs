@@ -94,6 +94,12 @@ function findProjectRoot(startDir) {
     dir = parent;
   }
 }
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
+function findMainRoot(startDir) {
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
+  return findProjectRoot(startDir);
+}
 
 // src/hooks/guard-github-mcp.ts
 var MARKER = "<!-- codiel:generated -->";
@@ -101,8 +107,7 @@ var TARGET_TOOL_RE = /^mcp__.*[Gg][Ii][Tt][Hh][Uu][Bb].*__(issue_write|create_is
 try {
   const input = await readStdin();
   if (!TARGET_TOOL_RE.test(input.tool_name ?? "")) pass();
-  const root = findProjectRoot(input.cwd ?? process.cwd());
-  const run = findActiveRun(root);
+  const run = findActiveRun(findMainRoot(input.cwd ?? process.cwd()));
   if (!run) pass();
   const body = input.tool_input?.body;
   if (typeof body !== "string") pass();

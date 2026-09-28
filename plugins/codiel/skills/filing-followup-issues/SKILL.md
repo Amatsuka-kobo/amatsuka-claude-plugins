@@ -1,6 +1,6 @@
 ---
 name: filing-followup-issues
-description: Codiel の triage フェーズでオーケストレーター本体が medium/low のレビュー所見をユーザーの指示のもと別 Issue として起票するとき使用する。「軽微だからまとめて勝手に起票してよい」「テンプレートが面倒なので自由書式で」と思いたくなる場面でこそ必ず使用する。
+description: Codiel の triage フェーズで、オーケストレーター本体が review-<m>.md の medium・low 所見をユーザーの指示のもと Issue または intent 草案として起票するときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # triage フェーズ運転規約

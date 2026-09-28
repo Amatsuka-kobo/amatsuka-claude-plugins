@@ -1126,7 +1126,7 @@ for (const commitCodiel of [true, false])
     ).toBe("ask")
   })
 
-test("W-5: run の検索は worktree のパスの形ではなく git worktree list --porcelain の先頭のエントリで決まる", () => {
+test("W-5: メインの外の <other>/.codiel/worktrees/ の中では、git に問い合わせず other をルートとみなす", () => {
   const main = setupGitRun("implement")
   // メインの作業ツリーの外に、別のディレクトリの .codiel/worktrees/ の形で worktree を置く
   const other = fs.realpathSync(
@@ -1134,10 +1134,8 @@ test("W-5: run の検索は worktree のパスの形ではなく git worktree li
   )
   const wt = path.join(other, worktreeRel("step-1"))
   git(main, ["worktree", "add", "-q", "-b", "codiel/other", wt])
-  // パスの形から other をルートとみなすと run が見つからず、素通しになる
-  const r = hook(wt, "Write", path.join(main, CASES))
-  expect(r?.permissionDecision).toBe("ask")
-  expect(r?.permissionDecisionReason).toContain(`テスト(${CASES})`)
+  // other に run は無いので素通しになる。git に問い合わせればメインの run が見つかり ask になる
+  expect(hook(wt, "Write", path.join(main, CASES))).toBe(null)
 })
 
 test("W-6: test-code の worktree で要素に domain が無ければ、範囲外のテストファイルも通す(state.domain も使わない)", () => {

@@ -1,8 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { evaluateArtifact, type PipelineDeps } from "../core/pipeline.js"
 import type { Artifact } from "../core/types.js"
-import { failClosed, objectiveSchema, runIdSchema } from "./shared.js"
+import {
+  type DepsSource,
+  failClosed,
+  objectiveSchema,
+  runIdSchema
+} from "./shared.js"
 
 export const evaluateDesignInput = {
   runId: runIdSchema,
@@ -32,7 +36,7 @@ export function toDesignArtifact(args: EvaluateDesignArgs): Artifact {
 
 export function registerEvaluateDesign(
   server: McpServer,
-  deps: PipelineDeps
+  deps: DepsSource
 ): void {
   server.registerTool(
     "evaluate_design",
@@ -41,9 +45,6 @@ export function registerEvaluateDesign(
         "AI が書いた設計文書を検査し、PROCEED / ASK / STOP の判定を返す。",
       inputSchema: evaluateDesignInput
     },
-    (args) =>
-      failClosed(args.runId, deps, () =>
-        evaluateArtifact(toDesignArtifact(args), deps)
-      )
+    (args) => failClosed(args.runId, deps, () => toDesignArtifact(args))
   )
 }

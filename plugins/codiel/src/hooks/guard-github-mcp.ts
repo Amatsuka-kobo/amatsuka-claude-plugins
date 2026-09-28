@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { findActiveRun } from "../codiel-state.js"
-import { emit, findProjectRoot, pass, readStdin } from "./lib.js"
+import { emit, findMainRoot, pass, readStdin } from "./lib.js"
 
 const MARKER = "<!-- codiel:generated -->"
 
@@ -20,8 +20,8 @@ try {
   const input = await readStdin()
   if (!TARGET_TOOL_RE.test(input.tool_name ?? "")) pass()
 
-  const root = findProjectRoot(input.cwd ?? process.cwd())
-  const run = findActiveRun(root)
+  // run はメインの作業ツリーで探す。cwd が worktree の中でも同じ run に届く(設計書 §6.8 の (a))
+  const run = findActiveRun(findMainRoot(input.cwd ?? process.cwd()))
   // findActiveRun は active / awaiting_human の run しか返さない。
   // guard-bash と同じく、人間の判断待ち中も投稿を防ぐため status では分岐しない。
   if (!run) pass()

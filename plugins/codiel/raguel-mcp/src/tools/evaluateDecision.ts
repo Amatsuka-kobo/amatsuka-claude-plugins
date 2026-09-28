@@ -1,8 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { evaluateArtifact, type PipelineDeps } from "../core/pipeline.js"
 import type { Artifact } from "../core/types.js"
-import { failClosed, objectiveSchema, runIdSchema } from "./shared.js"
+import {
+  type DepsSource,
+  failClosed,
+  objectiveSchema,
+  runIdSchema
+} from "./shared.js"
 
 export const evaluateDecisionInput = {
   runId: runIdSchema,
@@ -37,7 +41,7 @@ export function toDecisionArtifact(args: EvaluateDecisionArgs): Artifact {
 
 export function registerEvaluateDecision(
   server: McpServer,
-  deps: PipelineDeps
+  deps: DepsSource
 ): void {
   server.registerTool(
     "evaluate_decision",
@@ -46,9 +50,6 @@ export function registerEvaluateDecision(
         "AI が下した個別の判断を検査し、PROCEED / ASK / STOP の判定を返す。",
       inputSchema: evaluateDecisionInput
     },
-    (args) =>
-      failClosed(args.runId, deps, () =>
-        evaluateArtifact(toDecisionArtifact(args), deps)
-      )
+    (args) => failClosed(args.runId, deps, () => toDecisionArtifact(args))
   )
 }

@@ -72,4 +72,12 @@ describe("toJsonSchema", () => {
     expect(jsonSchema.type).toBe("object")
     expect(jsonSchema.properties).toBeDefined()
   })
+
+  it("$schema のキーを含めない(claude CLI の --json-schema が拒むため)", () => {
+    const jsonSchema = toJsonSchema(
+      standardPanelResponseSchema(["objective_alignment"])
+    )
+    expect(Object.keys(jsonSchema)).not.toContain("$schema")
+    expect(JSON.stringify(jsonSchema)).not.toContain("json-schema.org")
+  })
 })

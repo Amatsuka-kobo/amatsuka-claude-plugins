@@ -4,7 +4,12 @@ import { log } from "../core/log.js"
 import type { PipelineDeps } from "../core/pipeline.js"
 import type { Precedent } from "../core/types.js"
 import { PrecedentStore } from "../precedent/store.js"
-import { type ToolResponse, toResponse } from "./shared.js"
+import {
+  type DepsSource,
+  resolveDeps,
+  type ToolResponse,
+  toResponse
+} from "./shared.js"
 
 export const recordOutcomeInput = {
   evaluationId: z.string().min(1),
@@ -80,7 +85,7 @@ export function handleRecordOutcome(
 
 export function registerRecordOutcome(
   server: McpServer,
-  deps: PipelineDeps
+  deps: DepsSource
 ): void {
   server.registerTool(
     "record_outcome",
@@ -92,7 +97,7 @@ export function registerRecordOutcome(
     },
     (args) => {
       try {
-        return handleRecordOutcome(args, deps)
+        return handleRecordOutcome(args, resolveDeps(deps))
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         log.error("record_outcome 内部エラー", { message })

@@ -43,7 +43,8 @@ export interface VerdictRecordInput {
   weightTier: WeightTier
   findings: Finding[]
   meta?: MetaReport
-  policy: { configHash: string; version: number }
+  /** configSource は決定 83 の応急処置で足した。それより前の verdict.json には無い */
+  policy: { configHash: string; version: number; configSource?: string }
   /** ISO 文字列。省略時は呼び出し時刻 */
   at?: string
   /** 判例化(record_outcome)のための元入力の要約 */

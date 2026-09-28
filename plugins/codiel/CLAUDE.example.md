@@ -17,6 +17,6 @@
 
 - `docs/intents/`: 変更ごとの intent 文書。`domains/` は持続層
 - `.codiel/runs/`: run の状態(codiel-state が管理)
-- `.codiel/specs/`: 機能単位のテスト仕様書
+- `<testsDir>`(既定は `docs/tests`。`.codiel/config.json` の `testsDir` で変える): 仕様のディレクトリごとのテスト仕様書
 - `raguel.config.yaml`: Raguel の保護パス
 - 入口: `/codiel:run`・`/codiel:init`・`/codiel:test`

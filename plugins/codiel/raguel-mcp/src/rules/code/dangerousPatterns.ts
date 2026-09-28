@@ -2,6 +2,7 @@
  * code/dangerous-patterns — 危険な操作パターンの検出(sealed, 既定 stop)。
  * diff の追加行のみを検査する(削除行での発火は誤爆になるため)。
  * diff でない生コードが渡された場合は全文を検査する。
+ * `.md` のファイル・テストファイル・コメント行で一致したときは stop を ask に下げる。
  */
 
 import type { Finding, Rule } from "../../core/types.js"
@@ -82,14 +83,20 @@ function scanLines(
   severity: Finding["severity"],
   location: string | undefined
 ): Finding[] {
+  const fileReason = location === undefined ? undefined : lowerReason(location)
   const findings: Finding[] = []
   for (const line of lines) {
     for (const check of CHECKS) {
       if (check.test(line)) {
+        const reason =
+          fileReason ?? (isCommentLine(line) ? "コメント行" : undefined)
+        const lowered = severity === "stop" && reason !== undefined
         findings.push({
           ruleId,
-          severity,
-          message: check.message,
+          severity: lowered ? "ask" : severity,
+          message: lowered
+            ? `${check.message}(${reason}のため ask に下げました)`
+            : check.message,
           evidence: {
             location,
             excerpt: truncateExcerpt(line)
@@ -99,6 +106,50 @@ function scanLines(
     }
   }
   return findings
+}
+
+/** `.md` のファイルとテストファイルは、一致しても stop を ask に下げる(決定 83 の (4)) */
+function lowerReason(path: string): string | undefined {
+  if (/\.md$/i.test(path)) return ".md のファイル"
+  const name = path.slice(path.lastIndexOf("/") + 1)
+  if (
+    /\.(test|spec)\./.test(name) ||
+    /_test\./.test(name) ||
+    name.startsWith("test_") ||
+    /(^|\/)(test|tests|__test__|__tests__|e2e|spec)\//.test(path)
+  ) {
+    return "テストファイル"
+  }
+  return undefined
+}
+
+/** 先頭の空白を除いて `//`・`#`・`/*`・`*`・`--`・`<!--` で始まる行 */
+function isCommentLine(line: string): boolean {
+  return /^\s*(\/\/|#|\/\*|\*|--|<!--)/.test(line)
+}
+
+/** files[] の本文の見出し(`tools/evaluateCode.ts` の toCodeArtifact が付ける) */
+const FILES_HEADING_RE = /^--- (.+) ---$/
+
+/**
+ * files[] の本文を見出しで区切る。見出しより前の本文はパス無し(location: undefined)。
+ * parseDiff は `--- <path> ---` の見出しを diff と見なさないので、パスをここで得る。
+ */
+function splitByFilesHeading(
+  content: string
+): Array<{ path: string | undefined; lines: string[] }> {
+  const sections: Array<{ path: string | undefined; lines: string[] }> = [
+    { path: undefined, lines: [] }
+  ]
+  for (const line of content.split("\n")) {
+    const heading = line.match(FILES_HEADING_RE)
+    if (heading) {
+      sections.push({ path: heading[1], lines: [] })
+    } else {
+      sections[sections.length - 1].lines.push(line)
+    }
+  }
+  return sections
 }
 
 export const dangerousPatternsRule: Rule = {
@@ -113,12 +164,9 @@ export const dangerousPatternsRule: Rule = {
     const parsed = parseDiff(artifact.content)
 
     if (parsed.files.length === 0) {
-      // diff でない生コードは全文検査
-      return scanLines(
-        artifact.content.split("\n"),
-        RULE_ID,
-        severity,
-        undefined
+      // diff でない本文は全文検査。files[] の見出しがあれば、その区間をそのパスの行として検査する
+      return splitByFilesHeading(artifact.content).flatMap((section) =>
+        scanLines(section.lines, RULE_ID, severity, section.path)
       )
     }
 

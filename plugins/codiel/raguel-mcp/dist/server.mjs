@@ -40336,7 +40336,7 @@ var CaseStore = class {
 // src/config/loader.ts
 var import_yaml = __toESM(require_dist2(), 1);
 import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync2, readFileSync as readFileSync2 } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { isAbsolute, resolve as resolve2 } from "node:path";
 
@@ -40545,7 +40545,7 @@ var configSchema = external_exports.object({
 var CWD_CONFIG_FILENAME = "raguel.config.yaml";
 function loadConfig() {
   const { raw, source } = resolveRawConfig();
-  const merged = deepMerge(defaultConfig, raw);
+  const merged = withProtectedGlobsUnion(deepMerge(defaultConfig, raw));
   const result = configSchema.safeParse(merged);
   if (!result.success) {
     throw new Error(
@@ -40558,16 +40558,36 @@ function loadConfig() {
   log.info("\u8A2D\u5B9A\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F", { source, configHash });
   return { config: config2, configHash, source };
 }
-function resolveRawConfig() {
+function configCandidate() {
   const envPath = process.env.RAGUEL_CONFIG;
-  if (envPath) {
-    return { raw: readYamlFile(envPath), source: `env:${envPath}` };
-  }
+  if (envPath) return { path: envPath, source: `env:${envPath}` };
   const cwdPath = resolve2(process.cwd(), CWD_CONFIG_FILENAME);
-  if (existsSync2(cwdPath)) {
-    return { raw: readYamlFile(cwdPath), source: `cwd:${cwdPath}` };
+  return { path: cwdPath, source: `cwd:${cwdPath}` };
+}
+function resolveRawConfig() {
+  const { path: path5, source } = configCandidate();
+  if (process.env.RAGUEL_CONFIG || existsSync2(path5)) {
+    return { raw: readYamlFile(path5), source };
   }
   return { raw: {}, source: "defaults" };
+}
+function createConfigReloader(build) {
+  let stamp;
+  let current;
+  return () => {
+    const next = configStamp();
+    if (current === void 0 || next !== stamp) {
+      current = void 0;
+      current = build(loadConfig());
+      stamp = next;
+    }
+    return current;
+  };
+}
+function configStamp() {
+  const { path: path5 } = configCandidate();
+  const stat = statSync2(path5, { throwIfNoEntry: false });
+  return JSON.stringify([path5, stat ? stat.mtimeMs : null]);
 }
 function readYamlFile(path5) {
   let text;
@@ -40610,6 +40630,25 @@ function deepMerge(base, override) {
 }
 function isPlainObject3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+var PROTECTED_PATHS_RULE = "code/protected-paths";
+function withProtectedGlobsUnion(merged) {
+  if (!isPlainObject3(merged) || !isPlainObject3(merged.rules)) return merged;
+  const settings = merged.rules[PROTECTED_PATHS_RULE];
+  const defaults = defaultConfig.rules[PROTECTED_PATHS_RULE]?.globs;
+  if (!isPlainObject3(settings) || !Array.isArray(settings.globs) || !Array.isArray(defaults)) {
+    return merged;
+  }
+  return {
+    ...merged,
+    rules: {
+      ...merged.rules,
+      [PROTECTED_PATHS_RULE]: {
+        ...settings,
+        globs: [.../* @__PURE__ */ new Set([...defaults, ...settings.globs])]
+      }
+    }
+  };
 }
 function withExpandedCasesDir(config2) {
   return {
@@ -40864,6 +40903,117 @@ function errorMessage(err) {
   return err instanceof Error ? err.message : String(err);
 }
 
+// src/rules/code/diffParse.ts
+var DIFF_GIT_RE = /^diff --git a\/(.+) b\/(.+)$/;
+var OLD_FILE_RE = /^--- (?:a\/(.+)|\/dev\/null)$/;
+var NEW_FILE_RE = /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/;
+var RENAME_FROM_RE = /^rename from (.+)$/;
+var RENAME_TO_RE = /^rename to (.+)$/;
+var BINARY_RE = /^Binary files (?:a\/(.+)|\/dev\/null) and (?:b\/(.+)|\/dev\/null) differ$/;
+function looksLikeDiff(text) {
+  const lines = text.split("\n");
+  if (lines.some((l) => DIFF_GIT_RE.test(l))) return true;
+  const hasOld = lines.some((l) => l.startsWith("--- "));
+  const hasNew = lines.some((l) => l.startsWith("+++ "));
+  const hasHunk = lines.some((l) => l.startsWith("@@ "));
+  return hasOld && hasNew && hasHunk;
+}
+function emptyFile(path5) {
+  return {
+    path: path5,
+    additions: [],
+    deletions: [],
+    isNew: false,
+    isDeleted: false,
+    isRename: false,
+    isBinary: false
+  };
+}
+function parseDiff(diff) {
+  if (!looksLikeDiff(diff)) {
+    return { files: [], totalChangedLines: 0 };
+  }
+  const lines = diff.split("\n");
+  const files = [];
+  let current = null;
+  let inHunk = false;
+  const flush = () => {
+    if (current) files.push(current);
+    current = null;
+    inHunk = false;
+  };
+  for (const line of lines) {
+    const gitMatch = line.match(DIFF_GIT_RE);
+    if (gitMatch) {
+      flush();
+      current = emptyFile(gitMatch[2] ?? "");
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith("new file mode")) {
+      current.isNew = true;
+      continue;
+    }
+    if (line.startsWith("deleted file mode")) {
+      current.isDeleted = true;
+      continue;
+    }
+    const renameFrom = line.match(RENAME_FROM_RE);
+    if (renameFrom) {
+      current.oldPath = renameFrom[1];
+      current.isRename = true;
+      continue;
+    }
+    const renameTo = line.match(RENAME_TO_RE);
+    if (renameTo) {
+      current.path = renameTo[1] ?? current.path;
+      current.isRename = true;
+      continue;
+    }
+    const binary = line.match(BINARY_RE);
+    if (binary) {
+      current.isBinary = true;
+      if (binary[1]) current.oldPath = binary[1];
+      if (binary[2]) current.path = binary[2];
+      continue;
+    }
+    const oldFile = line.match(OLD_FILE_RE);
+    if (oldFile) {
+      if (oldFile[1]) {
+        current.oldPath = oldFile[1];
+      } else {
+        current.isNew = true;
+      }
+      continue;
+    }
+    const newFile = line.match(NEW_FILE_RE);
+    if (newFile) {
+      if (newFile[1]) {
+        current.path = newFile[1];
+      } else {
+        current.isDeleted = true;
+      }
+      continue;
+    }
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) continue;
+    if (line.startsWith("+")) {
+      current.additions.push(line.slice(1));
+    } else if (line.startsWith("-")) {
+      current.deletions.push(line.slice(1));
+    }
+  }
+  flush();
+  const totalChangedLines = files.reduce(
+    (sum, f) => sum + f.additions.length + f.deletions.length,
+    0
+  );
+  return { files, totalChangedLines };
+}
+
 // src/core/pipeline.ts
 import { randomUUID } from "node:crypto";
 import { existsSync as existsSync4 } from "node:fs";
@@ -40988,7 +41138,8 @@ function toFindings(raw, panelist) {
   }));
 }
 function toJsonSchema(schema) {
-  return external_exports.toJSONSchema(schema);
+  const { $schema: _, ...rest } = external_exports.toJSONSchema(schema);
+  return rest;
 }
 
 // src/panel/panelists/adversarial.ts
@@ -41894,117 +42045,6 @@ var resubmissionLoopRule = {
   }
 };
 
-// src/rules/code/diffParse.ts
-var DIFF_GIT_RE = /^diff --git a\/(.+) b\/(.+)$/;
-var OLD_FILE_RE = /^--- (?:a\/(.+)|\/dev\/null)$/;
-var NEW_FILE_RE = /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/;
-var RENAME_FROM_RE = /^rename from (.+)$/;
-var RENAME_TO_RE = /^rename to (.+)$/;
-var BINARY_RE = /^Binary files (?:a\/(.+)|\/dev\/null) and (?:b\/(.+)|\/dev\/null) differ$/;
-function looksLikeDiff(text) {
-  const lines = text.split("\n");
-  if (lines.some((l) => DIFF_GIT_RE.test(l))) return true;
-  const hasOld = lines.some((l) => l.startsWith("--- "));
-  const hasNew = lines.some((l) => l.startsWith("+++ "));
-  const hasHunk = lines.some((l) => l.startsWith("@@ "));
-  return hasOld && hasNew && hasHunk;
-}
-function emptyFile(path5) {
-  return {
-    path: path5,
-    additions: [],
-    deletions: [],
-    isNew: false,
-    isDeleted: false,
-    isRename: false,
-    isBinary: false
-  };
-}
-function parseDiff(diff) {
-  if (!looksLikeDiff(diff)) {
-    return { files: [], totalChangedLines: 0 };
-  }
-  const lines = diff.split("\n");
-  const files = [];
-  let current = null;
-  let inHunk = false;
-  const flush = () => {
-    if (current) files.push(current);
-    current = null;
-    inHunk = false;
-  };
-  for (const line of lines) {
-    const gitMatch = line.match(DIFF_GIT_RE);
-    if (gitMatch) {
-      flush();
-      current = emptyFile(gitMatch[2] ?? "");
-      continue;
-    }
-    if (!current) continue;
-    if (line.startsWith("new file mode")) {
-      current.isNew = true;
-      continue;
-    }
-    if (line.startsWith("deleted file mode")) {
-      current.isDeleted = true;
-      continue;
-    }
-    const renameFrom = line.match(RENAME_FROM_RE);
-    if (renameFrom) {
-      current.oldPath = renameFrom[1];
-      current.isRename = true;
-      continue;
-    }
-    const renameTo = line.match(RENAME_TO_RE);
-    if (renameTo) {
-      current.path = renameTo[1] ?? current.path;
-      current.isRename = true;
-      continue;
-    }
-    const binary = line.match(BINARY_RE);
-    if (binary) {
-      current.isBinary = true;
-      if (binary[1]) current.oldPath = binary[1];
-      if (binary[2]) current.path = binary[2];
-      continue;
-    }
-    const oldFile = line.match(OLD_FILE_RE);
-    if (oldFile) {
-      if (oldFile[1]) {
-        current.oldPath = oldFile[1];
-      } else {
-        current.isNew = true;
-      }
-      continue;
-    }
-    const newFile = line.match(NEW_FILE_RE);
-    if (newFile) {
-      if (newFile[1]) {
-        current.path = newFile[1];
-      } else {
-        current.isDeleted = true;
-      }
-      continue;
-    }
-    if (line.startsWith("@@")) {
-      inHunk = true;
-      continue;
-    }
-    if (!inHunk) continue;
-    if (line.startsWith("+")) {
-      current.additions.push(line.slice(1));
-    } else if (line.startsWith("-")) {
-      current.deletions.push(line.slice(1));
-    }
-  }
-  flush();
-  const totalChangedLines = files.reduce(
-    (sum, f) => sum + f.additions.length + f.deletions.length,
-    0
-  );
-  return { files, totalChangedLines };
-}
-
 // src/rules/code/dangerousPatterns.ts
 var RULE_ID2 = "code/dangerous-patterns";
 var CHECKS = [
@@ -42061,14 +42101,17 @@ var CHECKS = [
   }
 ];
 function scanLines(lines, ruleId, severity, location) {
+  const fileReason = location === void 0 ? void 0 : lowerReason(location);
   const findings = [];
   for (const line of lines) {
     for (const check2 of CHECKS) {
       if (check2.test(line)) {
+        const reason = fileReason ?? (isCommentLine(line) ? "\u30B3\u30E1\u30F3\u30C8\u884C" : void 0);
+        const lowered = severity === "stop" && reason !== void 0;
         findings.push({
           ruleId,
-          severity,
-          message: check2.message,
+          severity: lowered ? "ask" : severity,
+          message: lowered ? `${check2.message}(${reason}\u306E\u305F\u3081 ask \u306B\u4E0B\u3052\u307E\u3057\u305F)` : check2.message,
           evidence: {
             location,
             excerpt: truncateExcerpt(line)
@@ -42078,6 +42121,32 @@ function scanLines(lines, ruleId, severity, location) {
     }
   }
   return findings;
+}
+function lowerReason(path5) {
+  if (/\.md$/i.test(path5)) return ".md \u306E\u30D5\u30A1\u30A4\u30EB";
+  const name = path5.slice(path5.lastIndexOf("/") + 1);
+  if (/\.(test|spec)\./.test(name) || /_test\./.test(name) || name.startsWith("test_") || /(^|\/)(test|tests|__test__|__tests__|e2e|spec)\//.test(path5)) {
+    return "\u30C6\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB";
+  }
+  return void 0;
+}
+function isCommentLine(line) {
+  return /^\s*(\/\/|#|\/\*|\*|--|<!--)/.test(line);
+}
+var FILES_HEADING_RE = /^--- (.+) ---$/;
+function splitByFilesHeading(content) {
+  const sections = [
+    { path: void 0, lines: [] }
+  ];
+  for (const line of content.split("\n")) {
+    const heading = line.match(FILES_HEADING_RE);
+    if (heading) {
+      sections.push({ path: heading[1], lines: [] });
+    } else {
+      sections[sections.length - 1].lines.push(line);
+    }
+  }
+  return sections;
 }
 var dangerousPatternsRule = {
   id: RULE_ID2,
@@ -42089,11 +42158,8 @@ var dangerousPatternsRule = {
     const severity = getSeverity(settings, "stop");
     const parsed = parseDiff(artifact.content);
     if (parsed.files.length === 0) {
-      return scanLines(
-        artifact.content.split("\n"),
-        RULE_ID2,
-        severity,
-        void 0
+      return splitByFilesHeading(artifact.content).flatMap(
+        (section) => scanLines(section.lines, RULE_ID2, severity, section.path)
       );
     }
     const findings = [];
@@ -42410,7 +42476,8 @@ var KNOWN_PATTERNS = [
   { name: "aws-access-key", regex: /AKIA[0-9A-Z]{16}/g },
   { name: "github-token", regex: /gh[pousr]_[A-Za-z0-9]{36,}/g },
   { name: "github-pat", regex: /github_pat_[A-Za-z0-9_]{20,}/g },
-  { name: "llm-api-key", regex: /sk-[A-Za-z0-9_-]{20,}/g },
+  // 直前が英数字でないときだけ一致させる(`task-` のような語の中の `sk-` を拾わない)
+  { name: "llm-api-key", regex: /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/g },
   { name: "private-key-block", regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
   {
     name: "jwt",
@@ -42427,6 +42494,9 @@ function isBuiltinFalsePositiveContext(line) {
   if (line.includes("node_modules/")) return true;
   if (line.includes("://")) return true;
   return false;
+}
+function isHeadingLine(line) {
+  return line.startsWith("diff --git ") || line.startsWith("--- ") || line.startsWith("+++ ");
 }
 function isAllowedByConfig(line, allowPatterns) {
   for (const pattern of allowPatterns) {
@@ -42463,9 +42533,7 @@ var secretsRule = {
     const lines = artifact.content.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (isBuiltinFalsePositiveContext(line) || isAllowedByConfig(line, allowPatterns)) {
-        continue;
-      }
+      if (isAllowedByConfig(line, allowPatterns)) continue;
       for (const pattern of KNOWN_PATTERNS) {
         pattern.regex.lastIndex = 0;
         let match;
@@ -42481,10 +42549,12 @@ var secretsRule = {
           });
         }
       }
+      if (isBuiltinFalsePositiveContext(line) || isHeadingLine(line)) continue;
       ENTROPY_TOKEN_RE.lastIndex = 0;
       let tokenMatch;
       while (tokenMatch = ENTROPY_TOKEN_RE.exec(line)) {
         const token = tokenMatch[0];
+        if (token.includes("/")) continue;
         if (HEX_40_OR_64_RE.test(token)) continue;
         if (shannonEntropy(token) > ENTROPY_THRESHOLD) {
           findings.push({
@@ -43012,8 +43082,9 @@ function panelistsForTier(tier, config2) {
   return config2.panel[tier];
 }
 async function evaluateArtifact(artifact, deps) {
-  const { config: config2, configHash, caseStore, provider } = deps;
+  const { config: config2, configHash, configSource, caseStore, provider } = deps;
   const evaluationId = randomUUID();
+  const policy = { configHash, version: POLICY_VERSION, configSource };
   const priorSubmissions = caseStore.readPriorSubmissions(
     artifact.runId,
     artifact.kind
@@ -43144,7 +43215,7 @@ ${JSON.stringify(meta3.scores, null, 2)}
     weightTier: weight.tier,
     findings: synthesis.findings,
     meta: meta3,
-    policy: { configHash, version: POLICY_VERSION },
+    policy,
     at,
     objective: artifact.objective,
     changedPaths: artifact.changedPaths
@@ -43173,7 +43244,7 @@ ${JSON.stringify(meta3.scores, null, 2)}
     findings: synthesis.findings,
     meta: meta3,
     casePath: dir,
-    policy: { configHash, version: POLICY_VERSION }
+    policy
   };
 }
 
@@ -43183,29 +43254,69 @@ var objectiveSchema = external_exports.string().min(1, "objective \u306F\u5FC5\u
 function toResponse(result) {
   return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
 }
-async function failClosed(runId, deps, run) {
+function resolveDeps(source) {
+  return typeof source === "function" ? source() : source;
+}
+var InputError = class extends Error {
+};
+function inputError(reason) {
+  return { content: [{ type: "text", text: reason }], isError: true };
+}
+function fallback(runId, verdict, finding, policy) {
+  const result = {
+    evaluationId: "internal-error",
+    runId,
+    verdict,
+    weightTier: "standard",
+    findings: [{ ...finding, severity: verdict === "STOP" ? "stop" : "ask" }],
+    casePath: "",
+    policy
+  };
+  return toResponse(result);
+}
+async function failClosed(runId, source, build) {
+  let deps;
   try {
-    return toResponse(await run());
+    deps = resolveDeps(source);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const candidate = configCandidate();
+    log.error("\u8A2D\u5B9A\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093(\u30D5\u30A7\u30A4\u30EB\u30AF\u30ED\u30FC\u30BA\u30C9)", {
+      configSource: candidate.source,
+      message
+    });
+    const verdict = defaultConfig.onError;
+    return fallback(
+      runId,
+      verdict,
+      {
+        ruleId: "kernel/config-error",
+        message: `\u8A2D\u5B9A(${candidate.path})\u3092\u8AAD\u307F\u8FBC\u3081\u306A\u3044\u305F\u3081 ${verdict} \u306B\u5012\u3057\u307E\u3059: ${message}`,
+        evidence: { location: candidate.path }
+      },
+      { configHash: "", version: 1, configSource: candidate.source }
+    );
+  }
+  try {
+    return toResponse(await evaluateArtifact(build(), deps));
+  } catch (err) {
+    if (err instanceof InputError) return inputError(err.message);
     const message = err instanceof Error ? err.message : String(err);
     log.error("evaluate \u5185\u90E8\u30A8\u30E9\u30FC(\u30D5\u30A7\u30A4\u30EB\u30AF\u30ED\u30FC\u30BA\u30C9)", { message });
     const verdict = deps.config.onError;
-    const fallback = {
-      evaluationId: "internal-error",
+    return fallback(
       runId,
       verdict,
-      weightTier: "standard",
-      findings: [
-        {
-          ruleId: "kernel/internal-error",
-          severity: verdict === "STOP" ? "stop" : "ask",
-          message: `\u5224\u5B9A\u30D1\u30A4\u30D7\u30E9\u30A4\u30F3\u306E\u5185\u90E8\u30A8\u30E9\u30FC\u306B\u3088\u308A ${verdict} \u306B\u5012\u3057\u307E\u3059: ${message}`
-        }
-      ],
-      casePath: "",
-      policy: { configHash: deps.configHash, version: 1 }
-    };
-    return toResponse(fallback);
+      {
+        ruleId: "kernel/internal-error",
+        message: `\u5224\u5B9A\u30D1\u30A4\u30D7\u30E9\u30A4\u30F3\u306E\u5185\u90E8\u30A8\u30E9\u30FC\u306B\u3088\u308A ${verdict} \u306B\u5012\u3057\u307E\u3059: ${message}`
+      },
+      {
+        configHash: deps.configHash,
+        version: 1,
+        configSource: deps.configSource
+      }
+    );
   }
 }
 
@@ -43221,9 +43332,34 @@ var evaluateCodeInput = {
   files: external_exports.array(fileSchema).optional().describe("diff \u304C\u306A\u3044\u5834\u5408\u306E\u5909\u66F4\u30D5\u30A1\u30A4\u30EB\u4E00\u89A7"),
   testResults: external_exports.string().optional().describe("\u30C6\u30B9\u30C8\u5B9F\u884C\u7D50\u679C\u306E\u8981\u7D04")
 };
+var HUNKLESS_CHANGE_MARKERS = [
+  "rename from ",
+  "rename to ",
+  "similarity index ",
+  "Binary files ",
+  "old mode ",
+  "new mode ",
+  "new file mode ",
+  "deleted file mode "
+];
+function hasHunkOrMarker(diff) {
+  return diff.split("\n").some(
+    (line) => line.startsWith("@@") || HUNKLESS_CHANGE_MARKERS.some((marker) => line.startsWith(marker))
+  );
+}
 function toCodeArtifact(args) {
+  if (args.diff !== void 0 && args.files !== void 0) {
+    throw new InputError(
+      "diff \u3068 files \u306F\u540C\u6642\u306B\u6E21\u305B\u306A\u3044\u306E\u3067\u3001git diff \u306E\u51FA\u529B\u3092 diff \u3060\u3051\u306B\u6E21\u3057\u3066\u304F\u3060\u3055\u3044"
+    );
+  }
   if (!args.diff && (!args.files || args.files.length === 0)) {
-    throw new Error("diff \u307E\u305F\u306F files \u306E\u3044\u305A\u308C\u304B\u304C\u5FC5\u9808\u3067\u3059");
+    throw new InputError("diff \u307E\u305F\u306F files \u306E\u3044\u305A\u308C\u304B\u304C\u5FC5\u9808\u3067\u3059");
+  }
+  if (args.diff && !hasHunkOrMarker(args.diff)) {
+    throw new InputError(
+      "diff \u306B\u30CF\u30F3\u30AF(@@ \u3067\u59CB\u307E\u308B\u884C)\u3082\u3001\u540D\u524D\u306E\u5909\u66F4\u30FB\u30D0\u30A4\u30CA\u30EA\u30FB\u30E2\u30FC\u30C9\u306E\u5909\u66F4\u30FB\u7A7A\u306E\u30D5\u30A1\u30A4\u30EB\u306E\u8FFD\u52A0\u3068\u524A\u9664\u306E\u5370\u306E\u884C\u3082\u7121\u3044\u306E\u3067\u3001\u8981\u7D04\u3067\u306F\u306A\u304F git diff \u306E\u51FA\u529B\u3092\u305D\u306E\u307E\u307E\u6E21\u3057\u3066\u304F\u3060\u3055\u3044"
+    );
   }
   const content = args.diff ?? (args.files ?? []).map((f) => `--- ${f.path} ---
 ${f.content}`).join("\n\n");
@@ -43245,11 +43381,7 @@ function registerEvaluateCode(server, deps) {
       description: "AI \u304C\u751F\u6210\u3057\u305F\u30B3\u30FC\u30C9(diff \u307E\u305F\u306F\u30D5\u30A1\u30A4\u30EB\u7FA4)\u3092\u691C\u67FB\u3057\u3001PROCEED / ASK / STOP \u306E\u5224\u5B9A\u3092\u8FD4\u3059\u3002\u8A3C\u62E0\u306F casePath \u306B\u6C38\u7D9A\u5316\u3055\u308C\u308B\u3002",
       inputSchema: evaluateCodeInput
     },
-    (args) => failClosed(
-      args.runId,
-      deps,
-      () => evaluateArtifact(toCodeArtifact(args), deps)
-    )
+    (args) => failClosed(args.runId, deps, () => toCodeArtifact(args))
   );
 }
 
@@ -43282,11 +43414,7 @@ function registerEvaluateDecision(server, deps) {
       description: "AI \u304C\u4E0B\u3057\u305F\u500B\u5225\u306E\u5224\u65AD\u3092\u691C\u67FB\u3057\u3001PROCEED / ASK / STOP \u306E\u5224\u5B9A\u3092\u8FD4\u3059\u3002",
       inputSchema: evaluateDecisionInput
     },
-    (args) => failClosed(
-      args.runId,
-      deps,
-      () => evaluateArtifact(toDecisionArtifact(args), deps)
-    )
+    (args) => failClosed(args.runId, deps, () => toDecisionArtifact(args))
   );
 }
 
@@ -43315,11 +43443,7 @@ function registerEvaluateDesign(server, deps) {
       description: "AI \u304C\u66F8\u3044\u305F\u8A2D\u8A08\u6587\u66F8\u3092\u691C\u67FB\u3057\u3001PROCEED / ASK / STOP \u306E\u5224\u5B9A\u3092\u8FD4\u3059\u3002",
       inputSchema: evaluateDesignInput
     },
-    (args) => failClosed(
-      args.runId,
-      deps,
-      () => evaluateArtifact(toDesignArtifact(args), deps)
-    )
+    (args) => failClosed(args.runId, deps, () => toDesignArtifact(args))
   );
 }
 
@@ -43333,15 +43457,22 @@ var evaluatePlanInput = {
 };
 function toPlanArtifact(args) {
   const steps = args.steps ?? [];
-  const content = args.plan ?? (steps.length > 0 ? steps.map((s, i) => `${i + 1}. ${s}`).join("\n") : void 0);
-  if (content === void 0) {
-    throw new Error("plan \u307E\u305F\u306F steps \u306E\u3044\u305A\u308C\u304B\u304C\u5FC5\u9808\u3067\u3059");
+  if (args.plan === void 0 && steps.length === 0) {
+    throw new InputError("plan \u307E\u305F\u306F steps \u306E\u3044\u305A\u308C\u304B\u304C\u5FC5\u9808\u3067\u3059");
+  }
+  const parts = [];
+  if (args.plan !== void 0) parts.push(args.plan);
+  if (steps.length > 0) {
+    parts.push(steps.map((s, i) => `${i + 1}. ${s}`).join("\n"));
+  }
+  if (args.constraints && args.constraints.length > 0) {
+    parts.push(args.constraints.join("\n"));
   }
   return {
     kind: "plan",
     runId: args.runId,
     objective: args.objective,
-    content,
+    content: parts.join("\n\n"),
     changedPaths: [],
     steps,
     context: { constraints: args.constraints }
@@ -43354,11 +43485,7 @@ function registerEvaluatePlan(server, deps) {
       description: "AI \u304C\u7ACB\u3066\u305F\u4ED5\u69D8\u30FB\u4F5C\u696D\u8A08\u753B\u3092\u691C\u67FB\u3057\u3001PROCEED / ASK / STOP \u306E\u5224\u5B9A\u3092\u8FD4\u3059\u3002",
       inputSchema: evaluatePlanInput
     },
-    (args) => failClosed(
-      args.runId,
-      deps,
-      () => evaluateArtifact(toPlanArtifact(args), deps)
-    )
+    (args) => failClosed(args.runId, deps, () => toPlanArtifact(args))
   );
 }
 
@@ -43367,7 +43494,7 @@ var listRulesInput = {
   kind: external_exports.enum(["decision", "plan", "design", "code"]).optional()
 };
 function buildRulesListing(deps, kind) {
-  const { config: config2, configHash } = deps;
+  const { config: config2, configHash, configSource } = deps;
   const rules = allRules.filter(
     (rule) => !kind || rule.appliesTo === "all" || rule.appliesTo.includes(kind)
   ).map((rule) => {
@@ -43394,17 +43521,27 @@ function buildRulesListing(deps, kind) {
     weight: config2.weight,
     precedent: config2.precedent,
     onError: config2.onError,
-    policy: { configHash, version: 1 }
+    policy: { configHash, version: 1, configSource }
   };
 }
 function registerListRules(server, deps) {
   server.registerTool(
     "list_rules",
     {
-      description: "\u73FE\u5728\u6709\u52B9\u306A\u30EB\u30FC\u30EB\u30FB\u30D1\u30CD\u30EB\u69CB\u6210\u30FB\u95BE\u5024\u30FBconfigHash \u306E\u4E00\u89A7\u3092\u8FD4\u3059\u3002",
+      description: "\u73FE\u5728\u6709\u52B9\u306A\u30EB\u30FC\u30EB\u30FB\u30D1\u30CD\u30EB\u69CB\u6210\u30FB\u95BE\u5024\u30FBconfigHash\u30FB\u8A2D\u5B9A\u306E\u51FA\u6240\u306E\u4E00\u89A7\u3092\u8FD4\u3059\u3002",
       inputSchema: listRulesInput
     },
-    (args) => toResponse(buildRulesListing(deps, args.kind))
+    (args) => {
+      try {
+        return toResponse(buildRulesListing(resolveDeps(deps), args.kind));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return toResponse({
+          error: `\u8A2D\u5B9A\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${message}`,
+          policy: { configSource: configCandidate().source }
+        });
+      }
+    }
   );
 }
 
@@ -43469,7 +43606,7 @@ function registerRecordOutcome(server, deps) {
     },
     (args) => {
       try {
-        return handleRecordOutcome(args, deps);
+        return handleRecordOutcome(args, resolveDeps(deps));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log.error("record_outcome \u5185\u90E8\u30A8\u30E9\u30FC", { message });
@@ -43487,13 +43624,15 @@ if (process.env.RAGUEL_PANELIST === "1") {
   process.exit(0);
 }
 async function main() {
-  const { config: config2, configHash, source } = loadConfig();
-  const deps = {
-    config: config2,
-    configHash,
-    caseStore: new CaseStore(config2),
-    provider: config2.judge.provider === "claude-cli" ? new ClaudeCliProvider(config2.judge.maxConcurrency) : new NoneProvider()
-  };
+  const deps = createConfigReloader(
+    ({ config: config2, configHash, source }) => ({
+      config: config2,
+      configHash,
+      configSource: source,
+      caseStore: new CaseStore(config2),
+      provider: config2.judge.provider === "claude-cli" ? new ClaudeCliProvider(config2.judge.maxConcurrency) : new NoneProvider()
+    })
+  );
   const server = new McpServer({ name: "raguel-mcp", version: "0.1.0" });
   registerEvaluateDecision(server, deps);
   registerEvaluatePlan(server, deps);
@@ -43502,11 +43641,7 @@ async function main() {
   registerListRules(server, deps);
   registerRecordOutcome(server, deps);
   await server.connect(new StdioServerTransport());
-  log.info("raguel-mcp \u304C\u8D77\u52D5\u3057\u307E\u3057\u305F", {
-    configSource: source,
-    configHash,
-    provider: config2.judge.provider
-  });
+  log.info("raguel-mcp \u304C\u8D77\u52D5\u3057\u307E\u3057\u305F");
 }
 main().catch((err) => {
   log.error("\u8D77\u52D5\u306B\u5931\u6557\u3057\u307E\u3057\u305F(\u30D5\u30A7\u30A4\u30EB\u30AF\u30ED\u30FC\u30BA\u30C9)", {

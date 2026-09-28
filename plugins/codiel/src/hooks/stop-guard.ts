@@ -61,7 +61,9 @@ if (!input.stop_hook_active) {
       reason =
         `${header}` +
         stopHint +
-        `人に確認して止まるときは codiel-state mark-ask ${phase} --slug ${runId} --kind confirm で awaiting_human にしてから停止すること。`
+        `人に確認して止まるときは codiel-state mark-ask ${phase} --slug ${runId} --kind confirm で awaiting_human にしてから停止すること。` +
+        // バックグラウンドの委譲の完了待ちでターンを終えると、ここで止められる(設計書 §6.14.2 の (10))
+        `サブエージェントの完了を待つなら、委譲を前景で出し直して報告を受け取ること(Agent ツールの run_in_background を使わない)。`
     }
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`)
   }

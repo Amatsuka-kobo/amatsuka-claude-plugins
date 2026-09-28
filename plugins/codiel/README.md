@@ -47,13 +47,17 @@ run(試行)があれば自動的に再開します。内部では `orchestrating
                  このフェーズより前に判定) ▶ Raguel: evaluate_decision
 [discuss]        論点リストを基にユーザーとディスカッションし、設計方針・スコープを合意
                  (合意は discussion.md に記録。軽量な run では skip。Raguel ゲートなし)
-[design]         設計書 design.md を執筆し、ユーザーとウォークスルー(軽量な run では skip)
-                                                                ▶ Raguel: evaluate_design
-[test-spec ∥ dev-plan]  並列: テスト仕様書+テストケース作成 / 開発手順書作成
+[design]         設計書 design.md を執筆し、ユーザーとウォークスルー(軽量な run では skip。
+                 新しい画面があれば候補から名前を決める)      ▶ Raguel: evaluate_design
+[test-spec ∥ dev-plan]  並列: テスト仕様(spec.md/cases.md)作成・更新 / 開発手順書作成
                                                                 ▶ Raguel: evaluate_plan ×2
-[implement]      開発手順書に従い TDD で実装(domain 別 implementer)
+[test-code]      仕様のディレクトリごとに worktree でテストコードを実装より先に書き、
+                 失敗すること(Red)を確認してから run ブランチへマージ
                                                                 ▶ Raguel: evaluate_code
-[test-loop]      (A) テストスクリプト安定化 → (B) NG=バグを TDD で修正、全ケース OK まで反復
+[implement]      依存の無い開発ステップを wave(worktree の並列グループ)ごとに実装し、
+                 通すテスト(ユニットと E2E)を Green にする  ▶ Raguel: evaluate_code
+[test-loop]      記録された全テストと test コマンドの回帰を確認し、NG を修正、全件 green まで反復
+                 (broken の疑いがあるテストは人の確認後に直す)
                                                                 ▶ Raguel: evaluate_code(修正の都度)
 [intent-sync]    承認済みの受け入れ基準の変更と、途中で追記された原文を派生文へ反映。持続層を更新
                                                                 ▶ Raguel: evaluate_design
@@ -73,8 +77,18 @@ Issue 番号を渡した場合、本文に `<!-- intent:v2 -->` を持つ Issue 
 `<!-- intent:v1 -->` を持つ Issue は聞き直しが要る intent として取り込みます。マーカーが無い
 Issue は本文を原文としてそのまま記録します。
 
+実装フェーズでは、依存関係の無い開発ステップを worktree(`.codiel/worktrees/` 配下の一時ディレクトリ)
+に分けて並列に進めます。ステップはレビューを終えたものから run ブランチへマージされ、
+`.codiel/worktrees/` の中身はマージ後または run の終了時に削除されます(`.git/info/exclude` に
+追加されるため、通常の `git status` には現れません)。
+
+テストの仕様(`spec.md`・`cases.md`)は、`.codiel/config.json` の `testsDir`(既定は `docs/tests`)配下に
+機能単位で永続します。テストコードの置き場はプロジェクトの規約に従って決まり、置いたパスは各 `spec.md`
+の `tests` に記録されます。`testsDir` を書き換えるのは run が active でないときにしてください(run の
+途中で変えると、進行中のディスパッチが使う値と食い違います)。
+
 詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
-二段ループ・スキル・作業内容による委譲構成・hooks 仕様などを記載)。Codiel は Agent 定義を同梱しません。
+test-loop の詳細・スキル・作業内容による委譲構成・hooks 仕様などを記載)。Codiel は Agent 定義を同梱しません。
 各フェーズの作業は作業内容を渡して委譲し、委譲先はプロジェクトの Agent 定義やセッションの運用方針で
 決まります(方針が無ければ Claude Code の組み込みのサブエージェントへ送ります)。
 
@@ -82,11 +96,12 @@ run が active な間は、gh-utility のスキル(`issue-craft` など)から G
 投稿する本文に codiel のマーカー `<!-- codiel:generated -->` が付かないため、codiel の hook に
 deny されます。intent 承認時の任意の Issue 起票は run の作成前に行うため、この制限の対象外です。
 
-### `/codiel:test [unit-id...]`
+### `/codiel:test [<testsDir> からの相対パス>]`
 
-`.codiel/specs/` のテスト仕様に基づく回帰テストを、run とは独立に単体実行します。unit-id を省略すると全 unit が対象です。
-NG があってもコード修正はディスパッチせず、結果を `.codiel/reports/` にレポートするだけに留めます
-(state 遷移や record_outcome は行いません)。
+`.codiel/config.json` の `testsDir`(既定 `docs/tests`)配下のテスト仕様に基づく回帰テストを、run とは
+独立に単体実行します。引数を省略すると testsDir 全体、指定するとその配下の仕様のディレクトリだけが
+対象です。NG があってもコード修正はディスパッチせず、結果を `.codiel/reports/` にレポートするだけに
+留めます(state 遷移や record_outcome は行いません)。
 
 ## セットアップ
 

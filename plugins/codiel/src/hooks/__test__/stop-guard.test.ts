@@ -180,6 +180,33 @@ test("stop-guard: phase が in_progress のとき mark-ask --kind confirm での
   expect(parsed.reason).toMatch(/awaiting_human/)
 })
 
+test("stop-guard: phase が in_progress のとき、サブエージェントの完了を待つなら委譲を前景で出し直す案内を添え、ほかの分岐には添えない(A6-28)", () => {
+  for (const root of [setupRunAtIntent(), setupRunAtImplement()]) {
+    const reason = JSON.parse(callHook(STOP_GUARD, root).stdout).reason
+    expect(reason).toMatch(
+      /サブエージェントの完了を待つなら、委譲を前景で出し直して報告を受け取ること/
+    )
+  }
+  // phase が null の分岐と passed の分岐
+  const nullPhaseRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  cli(nullPhaseRoot, ["init", "--slug", SLUG, ...INIT_FLAGS])
+  const passedRoot = setupRunAtIntent()
+  cli(passedRoot, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    "e",
+    "--verdict",
+    "PROCEED"
+  ])
+  for (const root of [nullPhaseRoot, passedRoot])
+    expect(JSON.parse(callHook(STOP_GUARD, root).stdout).reason).not.toMatch(
+      /前景で/
+    )
+})
+
 test("stop-guard: phase が null のとき capturing-intent の手順 5 の (6) と commit-failed での終端を案内する(M2-FX2-AR medium)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])

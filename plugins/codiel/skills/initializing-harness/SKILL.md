@@ -1,6 +1,6 @@
 ---
 name: initializing-harness
-description: /codiel:init で対象プロジェクトに Codiel ハーネス(.codiel/・raguel.config.yaml・.claude/rules/codiel.md・CLAUDE.md の ## Codiel)を初期化・補完するとき使用。/codiel:run が未初期化を検出した場合の案内先でもある
+description: Codiel のハーネス初期化で、セッション本体が保護パスをユーザーに確認しながら .codiel/・raguel.config.yaml・.claude/rules/codiel.md・CLAUDE.md の ## Codiel を生成・補完するときに使う。/codiel:init が名指しで起動する。
 ---
 
 # Codiel ハーネス初期化

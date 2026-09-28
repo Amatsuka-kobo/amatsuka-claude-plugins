@@ -1,6 +1,6 @@
 ---
 name: fixing-review-findings
-description: Codiel の fix-loop フェーズでオーケストレーターがレビュー所見(critical/high)への対応を運転するとき使用する。所見に検証なしで盲従したくなる場面・critical/high を握り潰したくなる場面・反論を記録せず済ませたくなる場面でこそ必ず使用する。
+description: Codiel の fix-loop フェーズで、オーケストレーター本体が review-<m>.md の critical・high 所見を検証し、実装への修正委譲と反論の記録までを運転するときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # fix-loop 運転規約
@@ -40,7 +40,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 2. 所見ごとに、対象ファイル・行・intent(`docs/intents/**`)/design.md/spec.md の根拠を突き合わせて
    技術的に検証する。必要なら読み取り専用サブエージェントへ調査を委譲するが、妥当性の最終判断は
    自分で行う。
-3. 妥当と判断した所見は、該当ドメインの implementer へ `implementing` の契約 (b) レビュー所見由来
+3. 所見がテスト・`spec.md`・`cases.md` の誤りや不足に向くときは、
+   `node <plugin-root>/scripts/codiel-state.mjs set-test-edit --slug <slug>` を実行してから、
+   `writing-test-specs`(`spec.md`・`cases.md` の直し)と `scripting-tests`(テストコードの直し)に
+   従う委譲でテスト側を先に直させる。振る舞いを変える修正なら、コードの修正の前に Red を確かめさせる。
+   報告を受けた直後に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
+   実行する。妥当と判断したそれ以外の所見(テスト側の修正の後にコードの修正が要る所見を含む)は、
+   該当ドメインの implementer へ `implementing` の契約 (b) レビュー所見由来
    の形式(所見: severity・対象・内容・根拠・提案 + 対象ファイル)でディスパッチする(1 所見ずつ
    でも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分けてディスパッチする)。
 4. 不当と判断した所見は、`github-writing.md` の執筆規則に従い、下記「PR 反論記録書式」の内容と
@@ -58,7 +64,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を呼ぶ。
    exit code が `3`(`capExceeded`)なら、それ以上ディスパッチせず `raguel-gating` の ASK
    ハンドリングに合流する(「あと 1 回だけ」と自己判断で続行しない)。
-6. implementer が返した修正 diff を `mcp__raguel__evaluate_code` に通す(`raguel-gating` の
+6. implementer が返した修正 diff を `mcp__plugin_codiel_raguel__evaluate_code` に通す(`raguel-gating` の
    フェーズ→ツール対応表のとおり)。`STOP`/`ASK` が返れば `raguel-gating` の該当ハンドリングに
    従う(自己判断で握り潰さない)。
 7. 修正が反映されたら `running-regression-tests` の手順で回帰全体(影響 unit + 既存全 unit +

@@ -66,7 +66,6 @@ function isLegacy(st) {
 }
 
 // src/hooks/lib.ts
-import { spawnSync } from "node:child_process";
 import fs2 from "node:fs";
 import path2 from "node:path";
 async function readStdin() {
@@ -99,27 +98,10 @@ function findProjectRoot(startDir) {
     dir = parent;
   }
 }
-var CODIEL_WORKTREE_RE = /[/\\]\.codiel[/\\]worktrees[/\\][^/\\]+[/\\][^/\\]+(?:[/\\]|$)/;
-function gitMainWorktree(cwd) {
-  try {
-    const res = spawnSync("git", ["worktree", "list", "--porcelain"], {
-      cwd,
-      encoding: "utf8",
-      timeout: 5e3,
-      windowsHide: true
-    });
-    if (res.status !== 0) return null;
-    const m = /^worktree (.+)$/m.exec(res.stdout ?? "");
-    return m ? path2.resolve(m[1]) : null;
-  } catch {
-    return null;
-  }
-}
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
 function findMainRoot(startDir) {
-  if (CODIEL_WORKTREE_RE.test(startDir)) {
-    const main = gitMainWorktree(startDir);
-    if (main) return main;
-  }
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
   return findProjectRoot(startDir);
 }
 

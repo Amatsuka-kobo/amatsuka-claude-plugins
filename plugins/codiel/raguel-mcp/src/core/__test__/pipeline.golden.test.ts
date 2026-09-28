@@ -106,6 +106,7 @@ describe("golden: 判定パイプライン", () => {
     deps = {
       config,
       configHash: "golden-hash",
+      configSource: "cwd:/work/raguel.config.yaml",
       caseStore: new CaseStore(config),
       provider
     }
@@ -130,6 +131,16 @@ describe("golden: 判定パイプライン", () => {
     expect(result.weightTier).toBe("trivial")
     expect(provider.calls).toHaveLength(0)
     expect(fs.existsSync(path.join(result.casePath, "verdict.json"))).toBe(true)
+    // policy に設定の出所が載り、verdict.json にも同じ policy が残る
+    expect(result.policy).toEqual({
+      configHash: "golden-hash",
+      version: 1,
+      configSource: "cwd:/work/raguel.config.yaml"
+    })
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(result.casePath, "verdict.json"), "utf8")
+    )
+    expect(persisted.policy).toEqual(result.policy)
   })
 
   it(".github への変更は即 STOP(パネルはスキップ)", async () => {

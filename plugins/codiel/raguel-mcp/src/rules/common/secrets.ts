@@ -17,7 +17,8 @@ const KNOWN_PATTERNS: KnownPattern[] = [
   { name: "aws-access-key", regex: /AKIA[0-9A-Z]{16}/g },
   { name: "github-token", regex: /gh[pousr]_[A-Za-z0-9]{36,}/g },
   { name: "github-pat", regex: /github_pat_[A-Za-z0-9_]{20,}/g },
-  { name: "llm-api-key", regex: /sk-[A-Za-z0-9_-]{20,}/g },
+  // 直前が英数字でないときだけ一致させる(`task-` のような語の中の `sk-` を拾わない)
+  { name: "llm-api-key", regex: /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/g },
   { name: "private-key-block", regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
   {
     name: "jwt",
@@ -30,12 +31,24 @@ const KNOWN_PATTERNS: KnownPattern[] = [
   }
 ]
 
-/** lockfile 由来・git ハッシュ等、既知の偽陽性文脈 */
+/**
+ * lockfile 由来・URL 等、エントロピーの判定で誤検知しやすい既知の文脈。
+ * 既知の形の照合はこの文脈の行でも行う(URL と本物の鍵が同じ行にあっても見逃さない)。
+ */
 function isBuiltinFalsePositiveContext(line: string): boolean {
   if (/integrity:|sha512-|sha256-|resolution:/.test(line)) return true
   if (line.includes("node_modules/")) return true
-  if (line.includes("://")) return true // URL 断片は誤検知しやすいため entropy スキャン対象外
+  if (line.includes("://")) return true // URL 断片は誤検知しやすい
   return false
+}
+
+/** diff の見出し行と、files[] の見出し `--- <path> ---`。パスの並びなのでエントロピーの判定から外す */
+function isHeadingLine(line: string): boolean {
+  return (
+    line.startsWith("diff --git ") ||
+    line.startsWith("--- ") ||
+    line.startsWith("+++ ")
+  )
 }
 
 function isAllowedByConfig(line: string, allowPatterns: string[]): boolean {
@@ -81,12 +94,7 @@ export const secretsRule: Rule = {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      if (
-        isBuiltinFalsePositiveContext(line) ||
-        isAllowedByConfig(line, allowPatterns)
-      ) {
-        continue
-      }
+      if (isAllowedByConfig(line, allowPatterns)) continue
 
       for (const pattern of KNOWN_PATTERNS) {
         pattern.regex.lastIndex = 0
@@ -105,11 +113,15 @@ export const secretsRule: Rule = {
         }
       }
 
+      if (isBuiltinFalsePositiveContext(line) || isHeadingLine(line)) continue
+
       ENTROPY_TOKEN_RE.lastIndex = 0
       let tokenMatch: RegExpExecArray | null
       // biome-ignore lint/suspicious/noAssignInExpressions: while-exec の定石
       while ((tokenMatch = ENTROPY_TOKEN_RE.exec(line))) {
         const token = tokenMatch[0]
+        // `/` を含む語(パス)は測らない。`/` を含む base64 の鍵は見逃す(応急処置の限界。作り直しで見直す)
+        if (token.includes("/")) continue
         if (HEX_40_OR_64_RE.test(token)) continue // git ハッシュ等
         if (shannonEntropy(token) > ENTROPY_THRESHOLD) {
           findings.push({

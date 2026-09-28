@@ -161,6 +161,8 @@ const V1_RUN_RE = /^issue-\d+$/
 // intent 文書の置き場。domains/ 配下は持続層なので含めない
 const INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/
 const INTEGRATIONS = ["github", "local"] as const
+// Raguel の判定。mark-ask --verdict と pass-gate --human-approved が受け付ける値(設計書 §6.2.2)
+const VERDICTS = ["PROCEED", "ASK", "STOP"] as const
 const BOOL_FLAGS = ["active", "human-approved", "intent-only", "final"]
 
 // 触るとそのステップだけの serial グループになる lockfile(計画書 §6.3)。
@@ -663,6 +665,23 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
           ? legacyMessage(latest.state)
           : `未完了の try があります: ${latest.statePath}(status: ${latest.state.status})。resume するか stop してください`
       )
+    // Raguel の STOP を記録したまま止めた try の次の try は、人の承認の後にだけ作る(設計書 §6.2.2、決定 83)。
+    // raguel-stop 以外の理由で止めた try も、humanApproved の無い STOP のフェーズを持てば当たる。
+    if (latest?.state.status === "stopped" && !bools.has("human-approved")) {
+      const st = latest.state
+      const stopPhases = Object.entries(st.phases)
+        .filter(([, ph]) => ph.verdict === "STOP" && !ph.humanApproved)
+        .map(([name, ph]) => `${name}(evaluationId: ${ph.evaluationId})`)
+      if (st.stopReason === "raguel-stop" || stopPhases.length > 0)
+        fail(
+          `前の try(${latest.statePath})は Raguel の STOP で止まっています` +
+            `(stopReason: ${st.stopReason}` +
+            (stopPhases.length > 0
+              ? `、STOP のフェーズ: ${stopPhases.join(", ")}`
+              : "") +
+            ")。新しい try を作ってよいか人に確かめ、承認されたら --human-approved を付けて init し直してください"
+        )
+    }
     const tryN = latest ? latest.tryN + 1 : 1
     const dir = path.join(runDir(root, slug), `try-${tryN}`)
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
@@ -786,10 +805,19 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`)
     if (!flags["evaluation-id"]) fail("--evaluation-id が必要です")
     const humanApproved = bools.has("human-approved")
-    const acceptedVerdicts = humanApproved ? ["PROCEED", "ASK"] : ["PROCEED"]
-    if (!acceptedVerdicts.includes(flags.verdict))
+    // STOP を記録したフェーズの verdict は、人の裁定なしに上書きさせない(設計書 §6.2.2、決定 83)
+    if (ph.verdict === "STOP" && !humanApproved)
       fail(
-        `verdict が PROCEED ではありません: ${flags.verdict}。ASK は mark-ask、STOP は stop を使用`
+        `フェーズ ${phase} には Raguel の STOP が記録されています。人が誤検知と裁定したときだけ --verdict STOP --human-approved で通してください`
+      )
+    if (humanApproved) {
+      if (!(VERDICTS as readonly string[]).includes(flags.verdict))
+        fail(
+          `不正な --verdict: ${flags.verdict}。許される値は ${VERDICTS.join(", ")} です`
+        )
+    } else if (flags.verdict !== "PROCEED")
+      fail(
+        `verdict が PROCEED ではありません: ${flags.verdict}。ASK と STOP は mark-ask(STOP は --verdict STOP を付ける)で人の裁定にかけてください`
       )
     ph.status = "passed"
     ph.evaluationId = flags["evaluation-id"]
@@ -829,6 +857,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       "kind" in flags
         ? oneOf(flags, "kind", ["raguel", "confirm"] as const)
         : "raguel"
+    const verdict =
+      "verdict" in flags ? oneOf(flags, "verdict", VERDICTS) : "ASK"
     const latest = loadRun(root, flags)
     if (TERMINAL.has(latest.state.status))
       fail(`すでに終端状態です: ${latest.state.status}`)
@@ -843,8 +873,14 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         `フェーズ ${phase} は pending のため mark-ask できません。start-phase してから確認してください`
       )
     ph.status = "awaiting_human"
-    ph.evaluationId = flags["evaluation-id"] ?? null
-    ph.verdict = "ASK"
+    // 記録済みの STOP は verdict と evaluationId をどちらも、新しい --verdict と
+    // --evaluation-id の有無と値にかかわらず残す。resume と mark-ask を挟んで
+    // --human-approved の無い pass-gate を通させないためと、STOP の evaluationId を
+    // init の文言と capturing-intent の手順 1 に示し続けるため(設計書 §6.2.2、§6.14.1 の (2)、決定 83)
+    if (ph.verdict !== "STOP") {
+      ph.evaluationId = flags["evaluation-id"] ?? null
+      ph.verdict = verdict
+    }
     ph.askKind = askKind
     latest.state.status = "awaiting_human"
     writeState(latest.statePath, latest.state)
