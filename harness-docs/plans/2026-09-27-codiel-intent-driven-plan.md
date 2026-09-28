@@ -1,12 +1,12 @@
 # codiel を intent 駆動へ改造し、sandalphon を吸収する 実装計画書
 
 - 作成日: 2026-09-27
-- 状態: 計画(第 3 版)・承認済み(2026-09-27)・M4 の組み直し(2026-09-28。設計書の決定 72〜79)・M4 の見直し(2026-09-28。決定 80・81)
+- 状態: 計画(第 3 版)・承認済み(2026-09-27)・M4 の組み直し(2026-09-28。設計書の決定 72〜79)・M4 の見直し(2026-09-28。決定 80・81)・M4-A の記録と M4-B の追補(2026-09-28。決定 82)・M4-B の前の見直し(2026-09-28。決定 83)
 - 設計書(正本): `harness-docs/design/2026-09-27-codiel-intent-driven-design.md`(第 9 版、決定 53 件、コミット `00fb6ae8`)
 - 対象プラグイン: `plugins/codiel`(主)、`plugins/sandalphon`(撤去)、`plugins/metatron`、`plugins/gh-utility`
 - バージョン: codiel `0.9.0-dev` → M1〜M3 の終点 `1.0.0-dev` → M4 の終点 `1.0.0`。metatron `0.3.10-dev` → M1 の終点 `0.3.11-dev` → M3 の終点 `0.4.0-dev`。gh-utility `0.5.2-dev` → M2 の終点 `0.5.3-dev`
-- Workflow 実行: 9 本(M1 が 1 本、M2 が 4 本、M3 が 2 本、M4 が 2 本)
-- 改訂履歴: 第 2 版で、反証レビューと暗黙知レビューの採用分(オーケストレーター決定)を反映した。主な変更は、並列タスクで型検査と lint を実行しないこと、コミットをゲートとプラグインの単位にしたこと、DESIGN.md の終了状態の修正を M1 の最初へ移したこと、`issue.md` の取り残しを M2 の対象に加えたこと、hooks.json の発火確認を M2-B の前の条件にしたことである。第 3 版で、テスト run を受けたユーザー決定(設計書の決定 72〜79)に合わせて M4 を 2 本の Workflow に組み直した(§6)。同じ日の見直しで、E2E を implement で通すこと、test-loop の修正の委譲の並べ方、新しい画面の名前をユーザーに聞くこと(設計書の決定 80・81 と決定 30 の改め)を M4-B のタスクに入れた(§9.4 の 33)。続く見直しで、テストを実行する委譲の並べ方、環境の失敗の扱い、M4 より前の state の止め方を M4 のタスクに入れた(§9.4 の 33)。その後の見直しで、M4 より前の state を CLI が拒む形と、新しい try での intent の持ち込み(M4-T13)を入れた(§9.4 の 33)
+- Workflow 実行: 10 本(M1 が 1 本、M2 が 4 本、M3 が 2 本、M4 が 3 本)
+- 改訂履歴: 第 2 版で、反証レビューと暗黙知レビューの採用分(オーケストレーター決定)を反映した。主な変更は、並列タスクで型検査と lint を実行しないこと、コミットをゲートとプラグインの単位にしたこと、DESIGN.md の終了状態の修正を M1 の最初へ移したこと、`issue.md` の取り残しを M2 の対象に加えたこと、hooks.json の発火確認を M2-B の前の条件にしたことである。第 3 版で、テスト run を受けたユーザー決定(設計書の決定 72〜79)に合わせて M4 を 2 本の Workflow に組み直した(§6)。同じ日の見直しで、E2E を implement で通すこと、test-loop の修正の委譲の並べ方、新しい画面の名前をユーザーに聞くこと(設計書の決定 80・81 と決定 30 の改め)を M4-B のタスクに入れた(§9.4 の 33)。続く見直しで、テストを実行する委譲の並べ方、環境の失敗の扱い、M4 より前の state の止め方を M4 のタスクに入れた(§9.4 の 33)。その後の見直しで、M4 より前の state を CLI が拒む形と、新しい try での intent の持ち込み(M4-T13)を入れた(§9.4 の 33)。M4-A の後に、確定した CLI と hook を §9.3 に記録し、決定 82 の M4-T14・guard-github-mcp の M4-T15・画面を持つサンプルでの手動確認(O4-6・O4-7)を足した(§9.4 の 34)。M4-B の前の見直しで、Raguel の応急処置(設計書の決定 83)の M4-T16 と M4-T15 の追補、intent の表の書式、`findMainRoot` の改め、レビューの Workflow の分離、O3-1 の結果と O4-8 を入れた(§9.4 の 35)
 
 この計画書は、設計書をタスク・順序・検証方法へ分けるだけで、設計判断を上書きしない。設計書と実コードの食い違いを見つけたタスクは、作業を止めて `status: blocked` で報告する。オーケストレーターは報告を §9.3 へ追記し、設計書を直すかをユーザーに確かめる。
 
@@ -21,7 +21,7 @@
 - スクリプトは `export const meta = { name, description, phases }` と、`phase()`・`agent(prompt, { label, phase, schema })`・`parallel()`・`pipeline()` で組む。
 - 各 `agent()` はサブエージェントであり、ユーザーと対話できない。判断が要る事態では `status: blocked` を返して終わる。
 - 完了したエージェントの結果は `resumeFromRunId` で再利用できる。
-- 1 Workflow あたりのエージェント数は 10 未満を目安にする(ユーザーが引き上げられる)。この計画書の Workflow はすべて 9 以下に収めた。
+- 1 Workflow あたりのエージェント数は 10 未満を目安にする(ユーザーが引き上げられる)。目安であり上限ではない。`codiel-m4b-tdd-skills`(§6.1.3)は 10 で目安を 1 超えるが、オーケストレーターが受け入れた(§10 の 8)。ほかの Workflow は 9 以下に収めた。
 - ユーザーの手作業と metatron の対話的な手順は Workflow の中に入れない。Workflow 実行の合間に、オーケストレーター(メインセッション)が §3.0・§3.4・§4.1.1・§4.4・§4.6・§5.3・§6.0・§6.1.2・§6.5 の手順で行う。
 - 各 Workflow は、前の Workflow のゲートがコミットまで終えてから始める。
 
@@ -52,7 +52,7 @@ baseline が失敗を含むときは M1 に入らず、ユーザーに報告す�
 
 ### 0.3 変えないもの
 
-- `plugins/codiel/raguel-mcp/` を変えない。
+- `plugins/codiel/raguel-mcp/` を変えない。例外は M4-T16 の応急処置(設計書 §6.14.1、決定 83)だけで、`raguel-mcp/src/` を変え、`raguel-mcp/dist/` はゲートのビルドで作り直す。
 - `harness-docs/ARCHITECTURE.md`・`harness-docs/GOTCHAS.md`・`.claude/rules/metatron/*.md` を Edit / Write で触らない。更新はオーケストレーターの手順で metatron の CLI とスキルを通す。
 - `harness-docs/design/2026-08-16-file-contract-freeze.md` を書き換えない(設計書 §7.5)。
 - `plugins/*/scripts/` と `plugins/*/dist/` を手で編集しない。例外は `plugins/codiel/scripts/install-harness.sh` だけである。
@@ -86,7 +86,7 @@ baseline が失敗を含むときは M1 に入らず、ユーザーに報告す�
 - 触ってよいファイルの外を変える必要が出たら、変えずに blocked で報告する。
 - テストは対象ソースと同じディレクトリの __test__/ に <対象ファイル名>.test.ts の名前で置き、vitest で書く。複数のテストから使うヘルパーは __test__/helpers/ に置く。子プロセスとして起動するエントリポイントは src/testing/ に置く。
 - プラグインに書く日本語は /home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins-intent-driven-development/plugins/native-japanese/references/discipline.md に従う。直訳語を使わない(Step は「Step」「ステップ」、section は「セクション」と書き、「段」「節」「〜の側」を使わない)。
-- バージョンは変えない(ゲートが上げる)。規則は次のとおり。codiel は M1〜M3 の終点で 1.0.0-dev、M4 の終点で 1.0.0。metatron は M1 の終点で 0.3.11-dev、M3 の終点で 0.4.0-dev。gh-utility は M2 の終点で 0.5.3-dev。
+- バージョンは変えない(ゲートが上げる)。規則は次のとおり。codiel は M1〜M3 の終点で 1.0.0-dev、M4 の終点で 1.0.0。metatron は M1 の終点で 0.3.11-dev、M3 の終点で 0.4.0-dev。gh-utility は M2 の終点で 0.5.3-dev。raguel-mcp の package.json は変えない。
 - harness-docs/ARCHITECTURE.md、harness-docs/GOTCHAS.md、.claude/rules/metatron/*.md、.serena/memories/ を変えない。
 - plugins/codiel/docs/DESIGN.md の終了状態の記述(M1-T00 で現行の TERMINAL に合わせたもの)を元に戻さない。
 - 設計書と実コードが食い違っていたら、どちらかに合わせて直さず、両方の該当行を報告する。
@@ -707,7 +707,7 @@ O2-4 で M2 の受け入れ基準に NO が出たら、修正の Workflow(`codie
 
 ## 6. M4 並列化とテスト駆動
 
-終点の受け入れ基準は A4-1〜A4-4、A6-1〜A6-19 と、A5-3 の `writing-dev-plans` と `scripting-tests` の行である。
+終点の受け入れ基準は A4-1〜A4-4、A6-1〜A6-29 と、A5-3 の `writing-dev-plans` と `scripting-tests` の行である。
 
 ### 6.0 組み直しの前に終えた作業
 
@@ -733,7 +733,7 @@ M4-A の前に、オーケストレーターが次の手順を行う。
 
 ### 6.1 Workflow の構成
 
-M4 を 2 本の Workflow に分ける。state・hook・init のコードを M4-A で固めてコミットし、M4-B のスキルは M4-A で確定した CLI を §9.3 の記録から参照する。
+M4 を 3 本の Workflow に分ける。state・hook・init のコードを M4-A で固めてコミットし、M4-B のスキルは M4-A で確定した CLI を §9.3 の記録から参照する。M4-B の実装とゲートを `codiel-m4b-tdd-skills` で、M4 のレビューを `codiel-m4b-review` で行う。
 
 #### 6.1.1 Workflow `codiel-m4a-tdd-code`
 
@@ -749,19 +749,28 @@ M4 を 2 本の Workflow に分ける。state・hook・init のコードを M4-A
 
 | # | 手順 | 実行者 | 確認方法 |
 | --- | --- | --- | --- |
-| O4A-1 | M4-T09 と M4-T02 の報告から、CLI(`step-add` / `step-update` の `--kind` と ID、`config`、`set-test-edit` / `clear-test-edit`)の引数と出力の形、設定を読む関数の名前とシグネチャ、guard-write の ask の理由文を §9.3 に記録する | オーケストレーター | M4-B の依頼文の「前の Workflow で確定した事項」に入れる |
+| O4A-1 | M4-T09 と M4-T02 の報告から、CLI(`step-add` / `step-update` の `--kind` と ID、`config`、`set-test-edit` / `clear-test-edit`)の引数と出力の形、設定を読む関数の名前とシグネチャ、guard-write の ask の理由文を §9.3 に記録する | オーケストレーター | M4-B の依頼文の「前の Workflow で確定した事項」に入れる。記録済み(2026-09-28。§9.3 の O4A-1 の行) |
 
 #### 6.1.3 Workflow `codiel-m4b-tdd-skills`
 
 | phase | タスク | 並列 | エージェント数 |
 | --- | --- | --- | --- |
-| 1 `skills` | M4-T11、M4-T12、M4-T13 | `parallel` | 3 |
-| 2 `orchestrate` | M4-T04 | 直列(M4-T11・T12・T13 に依存) | 1 |
+| 1 `skills-code` | M4-T11、M4-T12、M4-T13、M4-T14、M4-T15、M4-T16 | `parallel` | 6 |
+| 2 `orchestrate` | M4-T04 | 直列(M4-T11〜T14 に依存) | 1 |
 | 3 `docs` | M4-T06、M4-T07 | `parallel`(どちらも M4-T04 に依存) | 2 |
 | 4 `gate` | M4B-G | 直列 | 1 |
-| 5 `review` | M4-R、M4-FR | `parallel` | 2 |
 
-エージェント数は 9 で、10 未満である。
+エージェント数は 10 で、§0.1 の目安(10 未満)を 1 超える。レビューは `codiel-m4b-review`(§6.1.4)に分けたが、決定 83 の Raguel の応急処置の M4-T16 を足したためである。目安は上限ではないので、オーケストレーターが受け入れた(§10 の 8)。phase 1 の 6 タスクは触るファイルが重ならない。codiel 側の CLI と hook の変更(STOP の裁定、次の try の承認、stop-guard の理由文、`findMainRoot`)は、エージェントを増やさないよう M4-T15 にまとめた。
+
+#### 6.1.4 Workflow `codiel-m4b-review`
+
+`codiel-m4b-tdd-skills` の M4B-G がコミットまで終えてから始める。
+
+| phase | タスク | 並列 | エージェント数 |
+| --- | --- | --- | --- |
+| 1 `review` | M4-R、M4-FR | `parallel` | 2 |
+
+エージェント数は 2 である。critical・high があれば、M4 の修正の Workflow(`codiel-m4-fix`)で直し、ゲートをやり直してから §6.5 へ進む(§9.2)。
 
 ### 6.2 `implement.steps`・`testCode.units`・`testLoop.units` の型と遷移(確定)
 
@@ -883,6 +892,7 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
 
 #### M4-T09 テスト駆動のフェーズと設定の CLI
 
+- 状態: 完了(`codiel-m4a-tdd-code`。C4A-1 `508601b7`)
 - 内容: M4-T01 の実装を土台に、§6.2 の表の「M4-T09」の列を実装する。設計書 §6.1.1 の `STAGES` と `GATED` に test-code を足す。`step-add` / `step-update` の `--kind` を `step` / `test-code` / `test-loop` にし、`testCode.units` を足し、ID を設計書 §6.13.3 の形で検査する。`testLoop.units` の `merged` からの登録し直しと、`step-update --worktree` の一意性の検査を足す。`testEdit`・`config`・`set-test-edit` / `clear-test-edit` と、設計書 §6.6 の冒頭の `phases` に test-code を持たない state の扱い(§6.2 の CLI の最後の項目)を実装する。v1 の state を判定している箇所に同じ判定を足し、文言だけを state の形で出し分ける。`stop` の `--reason` の値は検査しない。設定の読み取りは `codiel-state.ts` の 1 つの関数にして export し、`.codiel` を持つディレクトリを引数に取る形にする。M4-T02 の guard-write がこの関数を使う(設計書 §6.13.4)。設計書 §8.2 の「テスト駆動のフェーズ」「M4 より前の state」「`config`」「仕様のディレクトリの登録」「`testEdit`」の行のテストを置き、M4-T01 の `--kind unit` のテストを `--kind test-loop` に改める。`.codiel/specs` を値に使っているテスト(`codiel-state.test.ts:203`、`:1686`)の値を置き換える。
 - 触るファイル: `plugins/codiel/src/codiel-state.ts`、`plugins/codiel/src/__test__/codiel-state.test.ts`(`codiel-state-cli.ts` はエントリの登録が要るときだけ)
 - ドメイン: impl
@@ -893,6 +903,7 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
 
 #### M4-T02 hook の worktree 対応とテストの保護
 
+- 状態: 完了(`codiel-m4a-tdd-code`。C4A-1 `508601b7`)
 - 内容: 第 2 版の内容(設計書 §6.8 の (a)〜(c)、guard-bash と stop-guard のルートの変更)に、次を加える。(c) の要素は、worktree の名前を読まず、3 つの表の `worktree` の記録との一致で引き、一致が 2 つ以上なら ask を返す。設計書 §6.13.6 のテストの保護(対象、フェーズ、`testEdit`、判定の基準、`<testsDir>/**/spec.md` の `tests` の読み取り、理由文)と、文書フェーズで `<testsDir>/` を通す規則と、`CODE_PHASES` に test-code を加えることを実装する。testsDir は M4-T09 の関数で読み、不正な値のときは設計書 §6.13.4 のとおりに扱う。`guard-write.ts` の「test-designer の担当です」の文言と、`:184` の `.codiel/specs/**/scripts/` のコメントを改める。`lib.test.ts:79` のコメント(§9.4 の 10)を直す。設計書 §8.2 の W-1〜W-7 と P-1〜P-11 のテストを置き、`.codiel/specs` を値に使っているテストの値を置き換える。M2 で入れた規則(`docs/intents/**`、`state.intent` の照合、guard-bash の字句解析とマーカーの検査、stop-guard の理由文の分岐)を保つ。
 - 触るファイル: `plugins/codiel/src/hooks/{lib,guard-write,guard-bash,stop-guard}.ts`、`plugins/codiel/src/hooks/__test__/{lib,guard-write,guard-bash,stop-guard}.test.ts`
 - ドメイン: impl
@@ -903,6 +914,7 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
 
 #### M4-T10 `/codiel:init` の設定ファイル
 
+- 状態: 完了(`codiel-m4a-tdd-code`。C4A-1 `508601b7`)
 - 内容: 設計書 §6.13.4 のとおり、`install-harness.sh` が `.codiel/specs` を作らず、`.codiel/config.json` が無ければ `{ "testsDir": "docs/tests" }` で作り、あれば変えないようにする。`install-harness.test.ts` を合わせる。`initializing-harness/SKILL.md` の §0 の D(`.codiel/runs`・`.codiel/reports`・`.codiel/config.json` の 3 つが存在する)と §1 の記述を改める。description は変えない(M4-T07 が行う)。`install-harness.sh` は保護パスの例外で、直接編集してよい。
 - 触るファイル: `plugins/codiel/scripts/install-harness.sh`、`plugins/codiel/src/__test__/install-harness.test.ts`、`plugins/codiel/skills/initializing-harness/SKILL.md`
 - ドメイン: impl
@@ -913,6 +925,7 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
 
 #### M4A-G ゲート
 
+- 状態: 完了(C4A-0 `8f89bd45`、C4A-1 `508601b7`。§9.3 の O4A-1 の行)
 - 内容: lint・typecheck・test・build を実行する。コミットの前に `git status --short` を見て、未コミットの変更が §6.0 の表の 8 ファイル、M4-A のタスクの触るファイル、ビルドが再生成した `plugins/codiel/scripts/`、`docs/chat/` に限られることを確かめる。ほかの変更があれば、コミットせずに blocked で報告する。C4A-0(M4-T08)と C4A-1(codiel の `src/`・`scripts/`・`install-harness.sh`・`initializing-harness`、M4-T03 と M4-T05 のスキルの変更)を §7.4 のとおりコミットする。バージョンは上げない。
 - 完了条件: 4 コマンドの終了コードが 0。A5-1、A5-2。`git status --short` に `docs/chat/` 以外の変更が残らない
 - 委譲先: light-impl
@@ -946,15 +959,65 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
 - 委譲先: general
 - スキル: `prompt-smith:prompt-smith`
 
-#### M4-T13 PR の本文と周辺のスキル・入口
+#### M4-T13 周辺のスキルと入口
 
-- 内容: `references/github-writing.md` に「PR 本文」のセクション(設計書 §6.12.8)を足す。既存の 3 文(A2-11)とマーカーの文(A2-23)は保つ。`fixing-review-findings` に `set-test-edit` / `clear-test-edit` とテスト側の修正の順序(設計書 §6.13.6)を足す。`reviewing-diffs` の入力を `<testsDir>/**` と記録されたテストに替える。`raguel-gating` の対応表に test-code の行(設計書 §6.13.2 の手順 8)を足し、run の結末を記録するときの `evaluationId` の選定順(`raguel-gating/SKILL.md:168-171`)の末尾に test-code を足す(設計書 §6.9.1)。`commands/test.md` の引数と手順を設計書 §6.7 に合わせ、description も改める。`assets/rules/codiel.md` と `CLAUDE.example.md` のテストの仕様の置き場を testsDir に替える。`references/intent-format.md` の status の表の `abandoned` の行の例外に `stop --reason migrate`(設計書 §6.3.2、§6.6)を足す。このファイルは保護パスの書式契約なので、`plugins/codiel/docs/format-change-checklist.md` の該当セクションの追随先を確かめる。追随先の写しは status の表を持たないので追随は要らない見込みであり、確かめた結果を報告に書く。`capturing-intent` の手順 1 の最新化の後に、前の try の run ブランチから intent を持ち込む手順(設計書 §6.1.2 の手順 1。`get --slug` で読む最新の try、持ち込まない 3 つの場合、`git checkout` の失敗時の確認、`state.json` がブランチの切り替えで残る前提)を足し、手順 6 の持ち込みの記述を手順 1 の参照に改める。`capturing-intent` の手順 0 と手順 2 で、再開する run を frontmatter の `run` に加えて、state の `intent` が入口のパス(repoRoot 相対にしたもの)と同じ run でも照合する(設計書 §6.1.2 の手順 0・2)。frontmatter の `run` で当たった run は確かめずに再開し、state の `intent` だけで当たった run は再開する前に slug・intent のパス・現在のフェーズを示してユーザーに確かめる。手順 2 の intent パスの分岐には、照合する run が無く作業ツリーにも intent のファイルが無いとき、パスが無いことを示してユーザーに確かめる文を足す(設計書 §6.1.2 の手順 2)。
-- 触るファイル: `plugins/codiel/references/{github-writing,intent-format}.md`、`plugins/codiel/skills/{fixing-review-findings,reviewing-diffs,raguel-gating,capturing-intent}/SKILL.md`、`plugins/codiel/commands/test.md`、`plugins/codiel/assets/rules/codiel.md`、`plugins/codiel/CLAUDE.example.md`
+- 内容: 参照文書(`references/*.md`)は M4-T14 が担うので触らない。`fixing-review-findings` に `set-test-edit` / `clear-test-edit` とテスト側の修正の順序(設計書 §6.13.6)を足す。`reviewing-diffs` の入力を `<testsDir>/**` と記録されたテストに替える。`raguel-gating` の対応表に test-code の行(設計書 §6.13.2 の手順 8)を足し、run の結末を記録するときの `evaluationId` の選定順(`raguel-gating/SKILL.md:168-171`)の末尾に test-code を足す(設計書 §6.9.1)。`commands/test.md` の引数と手順を設計書 §6.7 に合わせ、description も改める。`assets/rules/codiel.md` と `CLAUDE.example.md` のテストの仕様の置き場を testsDir に替える。`capturing-intent` の手順 1 の最新化の後に、前の try の run ブランチから intent を持ち込む手順(設計書 §6.1.2 の手順 1。`get --slug` で読む最新の try、持ち込まない 3 つの場合、`git checkout` の失敗時の確認、`state.json` がブランチの切り替えで残る前提)を足し、手順 6 の持ち込みの記述を手順 1 の参照に改める。`capturing-intent` の手順 0 と手順 2 で、再開する run を frontmatter の `run` に加えて、state の `intent` が入口のパス(repoRoot 相対にしたもの)と同じ run でも照合する(設計書 §6.1.2 の手順 0・2)。frontmatter の `run` で当たった run は確かめずに再開し、state の `intent` だけで当たった run は再開する前に slug・intent のパス・現在のフェーズを示してユーザーに確かめる。手順 2 の intent パスの分岐には、照合する run が無く作業ツリーにも intent のファイルが無いとき、パスが無いことを示してユーザーに確かめる文を足す(設計書 §6.1.2 の手順 2)。
+
+  決定 82 の (5) と決定 83 の分として、次も入れる。
+  - `capturing-intent`: `SKILL.md:115` の `## 合意済み事項` の書き方(`<論点>: <採用した選択肢>(理由: <...>)`)を、「論点 | 決定 | 理由」の表に改め、表のヘッダ行 `| 論点 | 決定 | 理由 |` を本文に示す。`## 意図的な制約` も「制約 | 理由」の表で書くと、`:111` の持続層の初稿の記述に添える(設計書 §6.3.3)。手順 1 の持ち込みの判定に、最新の try が `stopped` で、`stopReason` が `raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズを持つなら(設計書 §6.2.2 の `init` の検査と同じ条件)、STOP を受けたフェーズと `evaluationId` を示して新しい try を作ってよいかを確かめ、承認されたら手順 5 の (4) の `init` に `--human-approved` を付け、承認されなければ run を始めない手順を足す。手順 5 の (4) のコマンドに `[--human-approved]` を足す(設計書 §6.1.2、§6.14.2 の (7))。
+  - `raguel-gating`: 設計書 §6.14.2 の (6) の STOP の手順(`mark-ask --kind raguel --verdict STOP`、AskUserQuestion での「誤検知として続ける」と「妥当として止める」、誤検知の `record_outcome` と「Raguel の誤検知: <ruleId>」の退避、`pass-gate ... --verdict STOP --human-approved`、妥当なら `stop --reason raguel-stop`)に現行の STOP の手順を置き換える。HARD-GATE の `--human-approved` の例外を 2 つ(ASK の裁定 B と STOP の誤検知の裁定)にする。フェーズ→ツール対応表の「成果物として渡すもの」を設計書 §6.14.2 の (8) の表にし、intent-sync の行を足し、「要約や手で書いた diff を渡さない」の文と `files[]` を使わない規則と、入力の誤り(`isError`)が返ったら入力を直して呼び直し ASK に数えない規則を入れる。ツール名を `mcp__plugin_codiel_raguel__<ツール名>` に直す((9))。「ゲートを 1 回通すたびに」の手順 2 の objective の規則を、「objective の本体」を run を通じて同じ文言にし、フェーズに固有の注記を本体の後に 1 文だけ足す形に改め、test-code の注記と `testResults` を判定に使わないことを書く((11))。
+  - `fixing-review-findings`: `SKILL.md:61` のツール名を直す((9))。
+  - `reviewing-diffs`: レビュー担当がさらに委譲するときも前景で出す 1 文を入れる(設計書 §6.14.2 の (10))。
+- 触るファイル: `plugins/codiel/skills/{fixing-review-findings,reviewing-diffs,raguel-gating,capturing-intent}/SKILL.md`、`plugins/codiel/commands/test.md`、`plugins/codiel/assets/rules/codiel.md`、`plugins/codiel/CLAUDE.example.md`
 - ドメイン: prompt
 - 依存: なし
-- 完了条件: A6-12 と A6-13 の `github-writing.md` と `raguel-gating` の部分。A6-18 の `intent-format.md` の部分。A6-19。`grep -n "set-test-edit" plugins/codiel/skills/fixing-review-findings/SKILL.md` が 1 件以上。触ったファイルで `grep -n "\.codiel/specs"` が 0 件。A2-8・A2-11・A2-16・A2-19・A2-23・A3-5 の grep が引き続き通る。`pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.test.ts` が通る
+- 完了条件: A6-13 の `raguel-gating` の部分。A6-19。A6-21 の `capturing-intent` の部分。A6-29 の `raguel-gating`・`capturing-intent`・`reviewing-diffs` の部分。`grep -n "set-test-edit" plugins/codiel/skills/fixing-review-findings/SKILL.md` が 1 件以上。触ったファイルで `grep -n "\.codiel/specs"` と `grep -n "mcp__raguel__"` が 0 件。A2-8・A2-19 の grep が引き続き通る。`pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.test.ts` が通る
 - 委譲先: general
 - スキル: `prompt-smith:prompt-smith`、`prompt-smith:skill-creator`(`commands/test.md` の description)
+
+#### M4-T14 参照文書の書式と、人が読む文書の執筆規則
+
+- 内容: codiel の参照文書と gh-utility の執筆規則を、設計書の決定 82(§6.3.3、§6.3.5、§6.12.9、§7.4)と M4 の書式の変更に合わせる。
+  - 新設 `references/readable-writing.md`: 設計書 §6.12.9 の適用範囲、原文のセクションに当てないこと、書式が形を定めた箇所は書式に従うこと、4 つの規則(根拠の置き場、言語を問わない書き方、翻訳、環境に固有の値)を書く。AI 向けの指示書の規律(できるだけ削る)を写さない。ARCHITECTURE に触れない(触れると登録簿のエントリが要る)。
+  - `references/intent-writing.md` と `references/github-writing.md`: 「## 文の組み立て」の見出しを残し、本文を `readable-writing.md` に従うという 1 文だけにする。現行の箇条書きの 6 項目(「言い切りで書く」から「最も短い文にする」まで)はすべて除く。参照は同じディレクトリのファイル名で「文の組み立ては `readable-writing.md` に従う。」の形に書き、スキルからの参照の形(`../../references/readable-writing.md`)にしない(設計書 §6.12.9)。`intent-writing.md` の残す基準・削る基準の表と原文のセクションの 2 文(A2-10、A2-17)、`github-writing.md` の 3 文とマーカーの文(A2-11、A2-23)は保つ。
+  - `references/github-writing.md` に「PR 本文」のセクション(設計書 §6.12.8)を足す(M4-T13 から移した)。
+  - `references/intent-format.md`: 派生文のセクションの冒頭の定型文(`:78-79` の表の「原文のセクションからの派生である。」、`:130` の規則、`:158`・`:162` の例)を除き、原文の区切り(区切り線と 1 行)の規則と例を設計書 §6.3.3 のとおりに入れる。変更 intent の書式のコードブロック(`:53-69`)と v1 から v2 への変換の例にも原文の区切りを置く。intent-issue の本文のセクションに、原文の区切りを同じ位置に置くことと、Issue から intent へ転記するときに原文の区切りを写さないこと(設計書 §6.3.5)を足す。status の表の `abandoned` の行の例外に `stop --reason migrate`(設計書 §6.3.2、§6.6)を足す(M4-T13 から移した)。13 セクションを置く規則と「なし」は変えない。
+  - `references/intent-format.md`(決定 82 の (5)): 変更 intent のセクションの表の `## 意図的な制約` と `## 合意済み事項` の行(`:82-83`)と、派生文のセクションの規則(`:133`)を、設計書 §6.3.3 の 2 つの表(「制約 | 理由」と「論点 | 決定 | 理由」、1 行に 1 件、内容が無ければ表を置かずに「なし」)に改め、ヘッダ行 `| 制約 | 理由 |` と `| 論点 | 決定 | 理由 |` を含む表の例を置く。「「制約: 理由」の対で書く」の文は残さない。intent-issue の本文のセクションに、2 つの表を同じ形で転記することを足す。「## 持続層」のセクションの書式(`- 制約:` と `- 理由:` の行)は変えない。
+  - `skills/syncing-intents/SKILL.md`(`:64`)と `skills/preparing-design-agendas/SKILL.md`(`:74-85`、`## 合意済み事項の継承`): intent の `## 意図的な制約` と `## 合意済み事項` を、表の 1 行を 1 件として読む形に改める。持続層へ書く形と `agenda.md` へ書く形は変えない。
+  - `references/intent-common.md`: `:31` のツール名 `mcp__raguel__*` を `mcp__plugin_codiel_raguel__*` に直す(設計書 §6.14.2 の (9))。
+  - `docs/format-change-checklist.md`: `readable-writing.md` のセクションを足し、追随先に `intent-writing.md` と `github-writing.md` の「## 文の組み立て」と、gh-utility の `references/github-issue-common.md` の「## 執筆規則」を挙げる。設計書 §6.12.6 が求める `github-writing.md` と gh-utility の同じファイルを揃える行が無いので、同じく足す。intent 文書の書式のセクションに、`skills/capturing-intent/SKILL.md` の `## 合意済み事項` の書き方と、`skills/syncing-intents/SKILL.md` の持続層への取り込みの 2 行を足す(2 つの表の形に依存するため)。`intent-format.md` の変更について、既存のセクションの追随先(契約凍結文書の §9・§10 は設計書 §7.5 の上書き記録で扱う、`filing-followup-issues`・`syncing-intents`・`preparing-design-agendas`・gh-utility の `issue-craft`)を確かめ、結果を報告に書く。`syncing-intents` と `preparing-design-agendas` はこのタスクで直し、`capturing-intent` は M4-T13 が直す。ほかの追随先のスキルは触らず、追随が要るなら blocked で報告する。
+  - gh-utility の `references/github-issue-common.md`: 「## 執筆規則」の適用範囲と 3 文(A2-12)を保ち、「文の組み立ては次に従う」の列を設計書 §6.12.9 の 4 つの規則に置き換える。A6-21 の固定文字列は `readable-writing.md` と同じ文言で書く。何を残し何を削るかは、そのセクションの 3 文に従うと書く。codiel の名前を書かない。
+  - gh-utility の `docs/format-change-checklist.md`: 最初のセクションで揃える相手に `references/readable-writing.md` を足す。「## 文の組み立ての規律への追随」(prompt-smith に揃える)を、同じ Marketplace の別プラグインの `references/readable-writing.md` に揃える形に改め、`prompt-smith` の語を除く。codiel の名前を書かない(§9.4 の 9)。
+- 触るファイル: `plugins/codiel/references/{readable-writing,intent-writing,github-writing,intent-format,intent-common}.md`、`plugins/codiel/skills/{syncing-intents,preparing-design-agendas}/SKILL.md`、`plugins/codiel/docs/format-change-checklist.md`、`plugins/gh-utility/references/github-issue-common.md`、`plugins/gh-utility/docs/format-change-checklist.md`
+- ドメイン: prompt
+- 依存: なし
+- 完了条件: A6-12 の `github-writing.md` の部分。A6-18 の `intent-format.md` の部分。A6-21(`capturing-intent` の部分を除く)。`grep -n "mcp__raguel__" plugins/codiel/references/intent-common.md` が 0 件。`intent-writing.md` と `github-writing.md` の「## 文の組み立て」のセクションが 1 文だけである。A2-10・A2-11・A2-12・A2-16(決定 82 で改めた形)・A2-17・A2-23・A3-5 の grep が通る。`grep -rn "codiel" plugins/gh-utility --exclude-dir=node_modules` が 0 件。`grep -n "ARCHITECTURE" plugins/codiel/references/readable-writing.md` が 0 件。`pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.test.ts` が通る。報告の notes に、`intent-format.md` の追随先を確かめた結果を書く
+- 委譲先: general
+- スキル: `prompt-smith:prompt-smith`
+
+#### M4-T15 hook と CLI の追随(run の検索、STOP の裁定、stop-guard の理由文)
+
+- 内容: 次の 4 つを行う。
+  - guard-github-mcp: `plugins/codiel/src/hooks/guard-github-mcp.ts:23` の run の検索を `findProjectRoot` から `findMainRoot`(`lib.ts:595`)に替え、`:3` の import を合わせる(設計書 §6.8 の (a) と hook の表)。テストを足す。cwd が codiel の worktree(`.codiel/worktrees/<slug>/<名前>`)の中で、その checkout に `.codiel/` の一部がコミットされていても、メインの active run を見つけ、マーカーの無い本文を deny することを確かめる。worktree はテストの中で git で作り、作るための関数はこのテストファイルの中に置く。`guard-write.test.ts` の W 系の組み立てを参考にしてよいが、そのファイルは変えない。
+  - `findMainRoot`: 設計書 §6.8 の (a) のとおり、git を呼ばない形に改める。cwd のパスが `/.codiel/worktrees/` を含むとき(区切りは `/` と `\`)は最初に現れるその位置より前を返し、含まないときは `findProjectRoot(cwd)` を返す。`gitMainWorktree`(`lib.ts:568`)を除き、`findMainRoot` の説明のコメントを合わせる。`lib.test.ts:917-926` の既存のテストは、git 管理外の worktree の形のパスでもメインのルートを返す形に改める。linked worktree のケースのテストを足す。一時のリポジトリで `git worktree add` した作業ツリー L に `.codiel/` を置き、L の中に codiel の worktree(`L/.codiel/worktrees/<slug>/<名前>`)を作り、その中の cwd で `findMainRoot` が L を返すことを確かめる。`.codiel` を git のルートの下に置いた構成(`repo/app/.codiel`)で `repo/app` を返すことも確かめる。`guard-write.ts:235` の「findMainRoot が git から得たルートは実体パスである」のコメントを、パスの形から得たルートを `realpathOrAncestor` で実体化して比べる旨に直す(コメントだけ)。
+  - `codiel-state`: `mark-ask` に任意の `--verdict`(`PROCEED`・`ASK`・`STOP`。既定は `ASK`)を足し、値をフェーズの `verdict` に記録する(`codiel-state.ts:847` は `"ASK"` を固定で書く)。`pass-gate` が `--human-approved` のときだけ `--verdict STOP` を受け付け、フェーズの `verdict` がすでに `STOP` なら `--human-approved` の無い `PROCEED`・`ASK` も拒否する(`:789`。設計書 §6.2.2)。`init` が、同じ slug の最新の try が `stopped` であり、かつ `stopReason` が `raguel-stop` であるか、どれかのフェーズの `verdict` が `STOP` で `humanApproved` を持たないとき、`--human-approved` が無ければ失敗する(`:659-665` の未完了の try の検査の後)。文言は設計書 §6.2.2 のとおりにする。`--human-approved` は既存の値を取らないフラグである。
+  - stop-guard: `in_progress` のフェーズの理由文(`stop-guard.ts:60-65`)に、サブエージェントの完了を待つなら委譲を前景で出し直して報告を受け取る旨の 1 文を足す(「前景で」を含める。設計書 §6.14.2 の (10))。ほかの分岐の理由文は変えない。
+- 触るファイル: `plugins/codiel/src/hooks/{guard-github-mcp,lib,stop-guard}.ts`、`plugins/codiel/src/hooks/__test__/{guard-github-mcp,lib,stop-guard}.test.ts`、`plugins/codiel/src/hooks/guard-write.ts`(`:235` のコメントだけ)、`plugins/codiel/src/codiel-state.ts`、`plugins/codiel/src/__test__/codiel-state.test.ts`
+- ドメイン: impl
+- 依存: なし(M4A-G のコミットの上で編集する)
+- 完了条件: A6-20、A6-27、A6-28。`pnpm exec vitest run plugins/codiel/src/hooks/__test__/guard-github-mcp.test.ts plugins/codiel/src/hooks/__test__/lib.test.ts plugins/codiel/src/hooks/__test__/stop-guard.test.ts plugins/codiel/src/hooks/__test__/guard-write.test.ts plugins/codiel/src/hooks/__test__/guard-bash.test.ts plugins/codiel/src/__test__/codiel-state.test.ts` が通る(guard-write と guard-bash は変えないが、`findMainRoot` の改めで W 系が通ることを確かめる)。`grep -n "findProjectRoot" plugins/codiel/src/hooks/guard-github-mcp.ts` と `grep -n "gitMainWorktree" plugins/codiel/src/hooks/lib.ts` が 0 件
+- 委譲先: complex-impl
+- スキル: なし
+
+#### M4-T16 Raguel の応急処置
+
+- 内容: 設計書 §6.14.1 の 5 件を `plugins/codiel/raguel-mcp/src` に入れる。(1) `panel/schema.ts` の `toJsonSchema` の戻り値から `$schema` を除く。(2) `rules/common/secrets.ts` のエントロピーの判定から `/` を含む語と見出し行を外し、既知の形を組み込みの偽陽性の文脈でも照合し、`sk-` に直前が英数字でない条件を付ける。(3) 設定の読み直し(`server.ts` の起動時の 1 回だけの読み込みを、各ツールの呼び出しの初めの有無と mtime の比較に替える)、`code/protected-paths` の `globs` の和集合(`config/loader.ts` の深マージの後)、`policy` と `list_rules` の `configSource`。(4) `rules/code/dangerousPatterns.ts` の `.md`・テストファイル・コメント行での ask。files[] の本文には parseDiff がファイルを返さない(`--- <path> ---` の見出しを diff と見なさない)ので、dangerousPatterns が本文を `--- <path> ---` の行で区切ってパスを得る処理を足す。(5) `tools/evaluatePlan.ts` の本文のつなぎ方と、`tools/evaluateCode.ts`・`tools/shared.ts` の入力の誤り(`isError`)。見出しだけの diff は、ハンクも、設計書の (5) に挙げた印の行(名前の変更・バイナリ・モードの変更・空のファイルの追加と削除)も無いときだけ入力の誤りにする。どれも設計書の表の「変更」の列の文言どおりにする。設計書 §8.2 の「Raguel の応急処置」の行のテストを、既存のテストファイルに足す。既存のテストが旧い振る舞い(`$schema` がある、files[] が無いときの `internal-error` の ASK、`policy` の形など)を確かめているときは、設計書の新しい振る舞いに合わせて改め、改めたテストを報告に挙げる。`raguel-mcp/dist/`・`raguel-mcp/docs/`・`raguel-mcp/package.json` は変えない。
+- 触るファイル: `plugins/codiel/raguel-mcp/src/**`
+- ドメイン: impl
+- 依存: なし
+- 完了条件: A6-22〜A6-26。A6-25 は files[] の本文のケースを、A6-26 はハンクの無い正当な diff(名前の変更だけ・バイナリ・モードの変更だけ・空のファイルの追加と削除)で判定を返すケースを含む。`pnpm exec vitest run plugins/codiel/raguel-mcp/src` が通る。報告の notes に、設定の読み直しの契機(比べる値)と、入力の誤りを返す関数の名前と形を書く
+- 委譲先: complex-impl
+- スキル: なし
 
 #### M4-T04 orchestrating-runs の並列とテスト駆動の流れ
 
@@ -970,20 +1033,27 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
   - §1 の `SKILL.md:144-145` と §6 の手順 1(`:445-446`)で、再開する run を intent の frontmatter `run` に加えて state の `intent` でも照合する(設計書 §6.1.2 の手順 0、§6.2.5)。state の `intent` だけで当たった run は、再開する前に slug・intent のパス・現在のフェーズを示してユーザーに確かめる。
   - 軽量の経路の同定の委譲と画面名の確認(設計書 §6.1.4 の手順 1〜3 と、やり直しと再開のときの一覧の扱い)。フェーズ進行表の test-spec と dev-plan の行の入力に、軽量の一覧を足す。
   - フェーズ進行表の design の行に、ウォークスルーで新しい画面の名前を聞くこと(`facilitating-design-discussions`)を足す。
+
+  決定 83(設計書 §6.14.2)の分として、次も入れる。
+  - 「7. 失敗の記録」の契機「Raguel が `STOP` を返した」を「人が STOP を妥当と裁定した」に改め、記録する時点を `raguel-gating` の STOP の手順で `stop --reason raguel-stop` を実行した直後にする。誤検知と裁定した STOP は、退避の形で「Raguel の誤検知: <ruleId>」として 1 件書き、台帳へは書かないことを添える((6))。
+  - 前の try の成果物(intent 以外。STOP を受けたファイルを含む)を新しい try で使うときは、それを作るフェーズを新しい try で進めて「新しい try のゲートを通す」ことと、ゲートを通さずに run ブランチへ持ち込まないことを、§6 の再開手順か §1 の開始の手順に書く。STOP を記録したまま止めた try(`raguel-stop` など。設計書 §6.14.2 の (7))の次の try を作るときの承認は `capturing-intent` の手順 1 に従うと添える((7))。
+  - 各フェーズのゲートで Raguel に渡すものは `raguel-gating` の対応表に従い、要約や手で書いた diff を渡さないと書く((8))。
+  - `SKILL.md:105` のツール名を `mcp__plugin_codiel_raguel__*` に直す((9))。
+  - 委譲はすべて前景で出す(Agent ツールの `run_in_background` を使わない)ことと、並列にする委譲は同じ応答からまとめて出すことを、委譲の共通の規律として書く。review の観点ごとの委譲にも当てる((10))。
 - 触るファイル: `plugins/codiel/skills/orchestrating-runs/SKILL.md`
 - ドメイン: prompt
-- 依存: M4-T11、M4-T12、M4-T13、§9.3 の O4A-1 の記録
-- 完了条件: A6-12 と A6-13 の `orchestrating-runs` の部分。A6-14〜A6-18 の `orchestrating-runs` の部分。`grep -n "waves"`・`grep -n "info/exclude"`・`grep -n "codiel-state.mjs config"`・`grep -n "set-test-edit"`・`` grep -n 'state の `intent` だけ' `` が各 1 件以上。`grep -n "\.codiel/specs"` が 0 件。`:407` の書き直しの後も、`grep -n "レビューで複数の観点"` が 1 件以上で、その行が `clear-domain` を含む(`:406` の書き直しは A6-15 で確かめる)。`pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.test.ts` が通る。`wc -c` の値を報告する
+- 依存: M4-T11、M4-T12、M4-T13、M4-T14(`github-writing.md` の「PR 本文」)、§9.3 の O4A-1 の記録
+- 完了条件: A6-12 と A6-13 の `orchestrating-runs` の部分。A6-14〜A6-18 の `orchestrating-runs` の部分。A6-29 の `orchestrating-runs` の部分。`grep -n "waves"`・`grep -n "info/exclude"`・`grep -n "codiel-state.mjs config"`・`grep -n "set-test-edit"`・`` grep -n 'state の `intent` だけ' `` が各 1 件以上。`grep -n "\.codiel/specs"` と `grep -n "mcp__raguel__"` が 0 件。`:407` の書き直しの後も、`grep -n "レビューで複数の観点"` が 1 件以上で、その行が `clear-domain` を含む(`:406` の書き直しは A6-15 で確かめる)。`pnpm exec vitest run plugins/metatron/src/__test__/section-reference-inventory.test.ts` が通る。`wc -c` の値を報告する
 - 委譲先: general
 - スキル: `prompt-smith:prompt-smith`
 
 #### M4-T06 codiel の文書
 
-- 内容: 第 2 版の内容(`DESIGN.md`・`skill-flowcharts.md`・`README.md` に並列実装を足す)に、テスト駆動を加える。`DESIGN.md` の §2(全体フロー)・§3(成果物と state 管理)・§4(テスト資産モデル)・§5(test-loop の詳細と `/codiel:test`)・§6(Skills)・§8(Hooks)を、設計書 §6.7・§6.13・§6.9.4 に合わせる。implement が E2E も通すこととグループのマージの後の実行(決定 80)、新しい画面の名前をユーザーに聞くことと軽量の run の同定(決定 81)を、§2 と §4 に書く。テストを実行する委譲の並べ方と環境の失敗の扱い(設計書 §6.13.1)を、§5 に書く。`skill-flowcharts.md` の writing-test-specs・scripting-tests・running-regression-tests・implementing の図と全体の図を改める。`README.md` に、フェーズ図、`/codiel:test` の引数、`.codiel/config.json` と testsDir(設計書 §6.9.4)を書く。旧 `.codiel/specs/` の移行の注記は書かない(決定 74)。`DESIGN.md` の終了状態の記述(M1-T00)を保つ。
+- 内容: 第 2 版の内容(`DESIGN.md`・`skill-flowcharts.md`・`README.md` に並列実装を足す)に、テスト駆動を加える。`DESIGN.md` の §2(全体フロー)・§3(成果物と state 管理)・§4(テスト資産モデル)・§5(test-loop の詳細と `/codiel:test`)・§6(Skills)・§8(Hooks)を、設計書 §6.7・§6.13・§6.9.4 に合わせる。implement が E2E も通すこととグループのマージの後の実行(決定 80)、新しい画面の名前をユーザーに聞くことと軽量の run の同定(決定 81)を、§2 と §4 に書く。テストを実行する委譲の並べ方と環境の失敗の扱い(設計書 §6.13.1)を、§5 に書く。`skill-flowcharts.md` の writing-test-specs・scripting-tests・running-regression-tests・implementing の図と全体の図を改める。`README.md` に、フェーズ図、`/codiel:test` の引数、`.codiel/config.json` と testsDir(設計書 §6.9.4)を書く。旧 `.codiel/specs/` の移行の注記は書かない(決定 74)。`DESIGN.md` の終了状態の記述(M1-T00)を保つ。決定 83 の分として、`DESIGN.md:162` の STOP の扱い(run を停止して GOTCHAS に記録)を、人が「誤検知として続ける」か「妥当として止める」かを裁定する形に改め(設計書 §6.14.2 の (6))、`:160` の「ゲートの唯一の正規例外」を、ASK の as-is 承認と STOP の誤検知の裁定の 2 つにする。`:637` のツール名を `mcp__plugin_codiel_raguel__*` に直す((9))。`skill-flowcharts.md` の raguel-gating の図の STOP の枝(`:551` 付近)も裁定の分岐に改める。
 - 触るファイル: `plugins/codiel/docs/{DESIGN,skill-flowcharts}.md`、`plugins/codiel/README.md`
 - ドメイン: docs
 - 依存: M4-T04
-- 完了条件: 3 ファイルに `test-code` と `wave` の語がある。`DESIGN.md` に「名前の候補」の語がある。3 ファイルで `grep -n "\.codiel/specs"` が 0 件
+- 完了条件: 3 ファイルに `test-code` と `wave` の語がある。`DESIGN.md` に「名前の候補」と「誤検知」の語がある。3 ファイルで `grep -n "\.codiel/specs"` と `grep -n "mcp__raguel__"` が 0 件
 - 委譲先: general
 - スキル: なし
 
@@ -999,21 +1069,28 @@ dev-plan の `## 環境準備` が「なし」のときの既定は次の表に�
 
 #### M4B-G ゲート
 
-- 内容: lint・typecheck・test・build を実行し、§8.3 の A5-3 の grep をすべて実行し、A6-7 と A6-14〜A6-18 の grep を実行する。A6-14〜A6-18 は複数のタスクのファイルにまたがるので、ここで全体を判定する。codiel の `plugin.json` と `package.json` を `1.0.0` に上げ、§7.4 のとおりコミットする。
-- 完了条件: 4 コマンドの終了コードが 0。A5-1、A5-2、A5-3、A6-7、A6-14〜A6-18(A6-18 は grep の部分)
+- 内容: lint・typecheck・test・build を実行し、§8.3 の A5-3 の grep をすべて実行し、A6-7、A6-14〜A6-18、A6-21、A6-29 と A2-12 の grep を実行する。A6-14〜A6-18、A6-21、A6-29 は複数のタスクのファイルにまたがるので、ここで全体を判定する。build は、M4-T15 の変更で `plugins/codiel/scripts/` の hook と `codiel-state.mjs`(`codiel-state` をインラインする `.mjs` を含む)を、M4-T16 の変更で `plugins/codiel/raguel-mcp/dist/server.mjs` を再生成する。コミットの前に `git status --short` を見て、未コミットの変更が M4-B のタスクの触るファイル、ビルドが再生成したファイル、`docs/chat/` に限られることを確かめる。ほかの変更があれば、コミットせずに blocked で報告する。codiel の `plugin.json` と `package.json` を `1.0.0` に上げ、§7.4 のとおりコミットする。gh-utility のバージョンは `0.5.3-dev` のまま変えない(設計書 §9、§9.4 の 35)。raguel-mcp の `package.json` は変えない。
+- 完了条件: 4 コマンドの終了コードが 0。A5-1、A5-2、A5-3、A6-7、A6-14〜A6-18(A6-18 は grep の部分)、A6-20〜A6-29(テストの部分は `pnpm run test` で判定する)、A2-12
 - 委譲先: light-impl
 
 #### M4-R と M4-FR レビュー
 
-- M4-R: M4 の差分(O4A-0 で記録した起点から M4B-G のコミットまで)を、設計書 §6.1.2 の手順 0〜2、§6.1.4、§6.2.5、§6.3.2、§6.6〜§6.8、§6.12.8、§6.13、A4、A6 と照らす。委譲先は code-review。
-- M4-FR: M1 の開始時の HEAD から M4B-G のコミットまでの全体を、設計書 §1 の決定表(決定 1〜81)と §4 の受け入れ基準に照らす。委譲先は final-review。
-- どちらも所見は §1 の severity の基準で返す。
+Workflow `codiel-m4b-review`(§6.1.4)で行う。
+
+- M4-R: M4 の差分(O4A-0 で記録した起点から M4B-G のコミットまで)を、設計書 §6.1.2 の手順 0〜2、§6.1.4、§6.2.2、§6.2.5、§6.3.2、§6.3.3 の原文の区切りと 2 つの表、§6.6〜§6.8、§6.12.8、§6.12.9、§6.13、§6.14、A4、A6 と照らす。M4-T09 と M4-T02 が依頼文に無く自分で決めた扱い(§9.3 の O4A-1 の行の末尾)と、M4-T16 の報告の notes(設定の読み直しの契機、入力の誤りの形)が設計書と食い違わないかも見る。`--human-approved` の STOP の迂回が、人の明示の答えと `record_outcome` の記録を前提にしているかを確かめる。委譲先は code-review。
+- M4-FR: M1 の開始時の HEAD から M4B-G のコミットまでの全体を、設計書 §1 の決定表(決定 1〜83)と §4 の受け入れ基準に照らす。委譲先は final-review。
+- どちらも所見は §1 の severity の基準で返す。Raguel の応急処置の範囲の外の所見(設計書 §6.14.3)は、severity を付けずに「作り直しへ」と分けて返す。
 
 ### 6.5 M4 の後のオーケストレーターの手順
 
+手動確認(O4-1、O4-6〜O4-8)は、M4B-G のコミットと M4 のレビュー(`codiel-m4b-review`)の後に行う。レビューの critical・high は、先に M4 の修正の Workflow(`codiel-m4-fix`)で直す。確認項目が NO になったら、所見を §9.3 に記録し、`codiel-m4-fix` で直してから、その確認をやり直す。Raguel の ASK と STOP が出たら、裁定と所見を §9.3 に記録する(設計書 §6.14)。
+
 | # | 手順 | 実行者 | 確認方法 |
 | --- | --- | --- | --- |
-| O4-1 | このリポジトリを対象に `/codiel:run` を github モードと local モードで 1 回ずつ通す。dev-plan の `## 生成物` が方式 a になること、worktree が作られて後始末されること、設計書 §8.4 のテスト駆動の確認項目を確かめる | ユーザーとオーケストレーター | 結果を §9.3 に記録する。run を終端にする |
+| O4-1 | このリポジトリを対象に `/codiel:run` を github モードと local モードで 1 回ずつ通す。dev-plan の `## 生成物` が方式 a になること、worktree が作られて後始末されること、設計書 §8.4 のテスト駆動の確認項目を確かめる。このリポジトリは git の linked worktree だが、M4-T15 の `findMainRoot` で run が見つかる(§10 の 6) | ユーザーとオーケストレーター | 結果を §9.3 に記録する。run を終端にする |
+| O4-6 | 画面を持つサンプルは `/tmp/claude-1000/-home-hiro0209-amatsuka-kobo-amatsuka-claude-plugins-intent-driven-development/59313b99-90d9-4ff0-8421-0797da50ede1/scratchpad/o41b/` にある。この置き場はセッション `59313b99` の間だけ使う一時の場所で、セッションが終われば残らない。サンプルに、既存のホーム画面の仕様 `docs/tests/e2e/frontend/home/spec.md` と `cases.md` を M4 の最終の書式(`writing-test-specs`)で足す。`cases.md` には、既存の `tests/e2e/home.spec.js` が確かめる振る舞い(見出し「ようこそ」が出る)を 1 ケースとして書く。`spec.md` の frontmatter の `tests` に `tests/e2e/home.spec.js` を載せ、`parallel: true` を書かない。サンプルが消えていたら、設計書 §8.4 の構成(`server.js`、`public/index.html`、`src/routes.js` と `test/routes.test.js`、`tests/e2e/home.spec.js`、ポート 4173 の `playwright.config.js`、テスト方針を書いた `CLAUDE.md`)で作り直す | オーケストレーター | `docs/tests/e2e/frontend/home/` に 2 ファイルがあり、`spec.md` の frontmatter が `tests` だけを持つ |
+| O4-7 | ユーザーがサンプルを一時の git リポジトリへ写し、最初のコミットを作る。`origin` を持たないので local モードになる。`npm install` と Playwright のブラウザの導入の後、`npm test` と `npm run test:e2e` が通ることを確かめてから、`/codiel:init` と `/codiel:run` を実行する。要望は、ホーム画面からお問い合わせ画面へのリンクを置き、お問い合わせ画面を新しく作ることとする。規模はユーザーが選ぶ。設計書 §8.4 のサンプルの 5 点を確かめる | ユーザーとオーケストレーター | 5 点の結果、選んだ規模、名前を聞いたフェーズ(標準では design、軽量では test-spec)を §9.3 に記録する。run を終端にする |
+| O4-8 | O3-1 で確かめられなかった 3 点をやり直す。ARCHITECTURE を持たない一時の git リポジトリで、M4 の版(M4B-G のコミット)の codiel を使い、`/codiel:init` の後に軽量の run を 1 回通し、続けて `/metatron:init` を実行する(設計書 §8.4) | ユーザーとオーケストレーター | `[ADR 候補]` が持続層に書かれ finalize の報告に挙がる、`/metatron:init` が候補を提示し承認した候補が ADR になる、持続層が参照形に縮む、の 3 点の結果を §9.3 に記録する。run を終端にする |
 | O4-2 | `/metatron:update` で ARCHITECTURE の乖離を確かめる | オーケストレーターとユーザー | 乖離の報告が 0 件 |
 | O4-3 | Serena メモリ `codiel/core` に、並列実装、test-code フェーズと `GATED`、`.codiel/config.json` の testsDir、テストの保護を反映する。直すのは現行の 17 行目(`install-harness.sh` が作るディレクトリ)、56 行目(`specs/**` の判定)、75〜77 行目(フェーズ列と Raguel のゲート)、161〜170 行目(`CODE_PHASES` と `.codiel/specs/**/scripts/`)である | オーケストレーター | `waves` と `test-code` と `testsDir` の語があり、`.codiel/specs` の語が無い |
 | O4-4 | ルートの `README.md` の codiel のセクションに、並列化とテスト駆動と testsDir を足し、コミットする | オーケストレーター | `git status --short` に本改修の変更が残らない |
@@ -1071,8 +1148,9 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | --- | --- | --- |
 | C4A-0 | M4A-G | metatron の縮約の拒否の経路のテスト(M4-T08)。バージョンは上げない(テストだけで、配布する動作を変えない) |
 | C4A-1 | M4A-G | codiel(state・hook・init のコード、`scripts/`、`install-harness.sh`、`initializing-harness`、M4-T03・M4-T05 のスキルの変更) |
-| C4B-1 | M4B-G | codiel(スキル・参照文書・commands・assets・`CLAUDE.example.md`・文書) |
-| C4B-2 | M4B-G | codiel のバージョン `1.0.0` |
+| C4B-1 | M4B-G | codiel(スキル・参照文書・commands・assets・`CLAUDE.example.md`・文書、M4-T15 の hook と `codiel-state` の `src` とテストと `scripts/`、M4-T16 の `raguel-mcp/src` とテストと `raguel-mcp/dist/`)。Raguel は codiel に同梱するので、同じコミットに入れる |
+| C4B-2 | M4B-G | gh-utility(執筆規則と checklist の決定 82 の追随)。バージョンは `0.5.3-dev` のまま |
+| C4B-3 | M4B-G | codiel のバージョン `1.0.0` |
 
 ---
 
@@ -1087,7 +1165,7 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
   - `plugins/codiel/src/hooks/__test__/guard-write.test.ts`(M2-T04、M4-T02)
   - `plugins/codiel/src/hooks/__test__/stop-guard.test.ts`(M2-T02、M4-T02)
   - `plugins/metatron/src/__test__/section-reference-inventory.test.ts` が読む `plugins/metatron/src/fixtures/section-reference-inventory.json`(M1-T05、M2-T13。テスト本体は変えない)
-- このほか、`plugins/gh-utility/src/__test__/check-issue-env.test.ts`(M2-T07a)、`plugins/metatron/src/cli/__test__/cli.test.ts`(M3-T04)、`plugins/codiel/src/hooks/__test__/lib.test.ts`(M1-T01 のコメント、M4-T02)、`plugins/codiel/src/__test__/install-harness.test.ts`(M4-T10)、`plugins/metatron/src/lib/__test__/adr-candidates.test.ts`(M4-T08)を書き換える。
+- このほか、`plugins/codiel/src/hooks/__test__/guard-github-mcp.test.ts`(M4-T15)、`plugins/gh-utility/src/__test__/check-issue-env.test.ts`(M2-T07a)、`plugins/metatron/src/cli/__test__/cli.test.ts`(M3-T04)、`plugins/codiel/src/hooks/__test__/lib.test.ts`(M1-T01 のコメント、M4-T02、M4-T15)、`plugins/codiel/src/__test__/install-harness.test.ts`(M4-T10)、`plugins/metatron/src/lib/__test__/adr-candidates.test.ts`(M4-T08)を書き換える。M4-T15 は `codiel-state.test.ts` と `stop-guard.test.ts` も、M4-T16 は `plugins/codiel/raguel-mcp/src/**/__test__/` の既存のテスト(`schema`・`secrets`・`dangerousPatterns`・`loader`・`tools`・`pipeline.golden`)も書き換える。
 - タスクは自分のテストだけを実行する。型検査・lint・全体のテストはゲートで実行する(§0.1)。
 - テストで見ない受け入れ基準は grep で確かめる。grep の対象は設計書 §8.2 の最後の段落の一覧で、各タスクの完了条件に割り当てた。
 - 対話・並列の委譲・worktree のマージ・画像の載せ方・hook の発火は、O0〜O4 の手動確認で見る。
@@ -1101,7 +1179,10 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | A2-1〜A2-23、A3-1、A3-7 | §4 の各タスクの完了条件 | テストと grep。A2-20 の手動分は O2-4 |
 | A3-2〜A3-15 | §5 の各タスクの完了条件 | テストと grep |
 | A4-2、A4-3、A6-1〜A6-6、A6-18 のテストの部分 | M4-A のタスク(M4-T09・M4-T02・M4-T10)の完了条件。A6-18 のテストの部分は M4-T09 | テスト |
-| A4-1、A4-4、A6-7〜A6-17、A6-18 の grep の部分、A6-19 | M4-B のタスク(M4-T11・M4-T12・M4-T13・M4-T04)の完了条件。A6-19 は M4-T13(`capturing-intent`)。A6-14 は M4-T11(`writing-dev-plans`)・M4-T12(`implementing`)・M4-T04(`orchestrating-runs`)、A6-15 は M4-T04、A6-16 は M4-T11(`writing-design-docs`・`writing-test-specs`・`facilitating-design-discussions`)・M4-T04(`orchestrating-runs`)、A6-17 は M4-T12(`scripting-tests`・`implementing`・`running-regression-tests`・`fixing-failures`)・M4-T04(`orchestrating-runs`)、A6-18 は M4-T13(`intent-format.md`)・M4-T04(`orchestrating-runs`)が分けて持つ。A6-7 と A6-14〜A6-18 の最終判定は M4B-G | grep |
+| A6-20、A6-27、A6-28 | M4-T15 の完了条件。最終判定は M4B-G | テストと grep |
+| A6-22〜A6-26 | M4-T16 の完了条件。最終判定は M4B-G | テスト |
+| A6-29 | M4-T13(`raguel-gating`・`capturing-intent`・`reviewing-diffs`、ツール名は `fixing-review-findings` も)・M4-T14(`intent-common.md` のツール名)・M4-T04(`orchestrating-runs`)・M4-T06(`DESIGN.md` のツール名)の完了条件。最終判定は M4B-G | grep |
+| A4-1、A4-4、A6-7〜A6-17、A6-18 の grep の部分、A6-19、A6-21 | M4-B のタスク(M4-T11・M4-T12・M4-T13・M4-T14・M4-T04)の完了条件。A6-19 は M4-T13(`capturing-intent`)。A6-21 と、決定 82 で改めた A2-16 は M4-T14。ただし A6-21 の `capturing-intent` の部分(決定 82 の (5))は M4-T13。A6-12 は M4-T14(`github-writing.md`)・M4-T04(`orchestrating-runs`)。A6-14 は M4-T11(`writing-dev-plans`)・M4-T12(`implementing`)・M4-T04(`orchestrating-runs`)、A6-15 は M4-T04、A6-16 は M4-T11(`writing-design-docs`・`writing-test-specs`・`facilitating-design-discussions`)・M4-T04(`orchestrating-runs`)、A6-17 は M4-T12(`scripting-tests`・`implementing`・`running-regression-tests`・`fixing-failures`)・M4-T04(`orchestrating-runs`)、A6-18 は M4-T14(`intent-format.md`)・M4-T04(`orchestrating-runs`)が分けて持つ。A6-7、A6-14〜A6-18、A6-21 の最終判定は M4B-G | grep |
 | A5-1、A5-2 | 各ゲート | grep |
 | A5-3 | 各行の担当タスクと、M2 以降の各ゲート(回帰)。最終判定は M3B-G(M3 の行)と M4B-G(全行) | 下の表の grep |
 | A5-4 | M3-T04 | テスト |
@@ -1136,7 +1217,7 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | 隣のタスクの書きかけのファイルで型検査や lint が失敗する | タスクは型検査と lint を実行しない。ゲートでまとめて実行する |
 | M2-A の中で hook のテストが一時的に通らない | M2-T02 と M2-T04 が同じ Workflow の中で hook のテストを直し、ゲートで全体を通す。Workflow の境界では常に全テストが通る |
 | `orchestrating-runs/SKILL.md` を M2・M3・M4 の 3 回編集する | 同じ Workflow の中では 1 タスクだけが編集する。登録簿の 2 エントリと `unscoped` の記述を落とさないことを依頼文に入れた |
-| 手動確認の run が active のまま残り、実装セッションの停止を stop-guard が止める | O2-0・O2-4・O3-1・O4-1 の最後に run を終端にする |
+| 手動確認の run が active のまま残り、実装セッションの停止を stop-guard が止める | O2-0・O2-4・O3-1・O4-1・O4-7・O4-8 の最後に run を終端にする |
 | GitHub MCP のツール名が変わる | M2-T03 が確認の日付と出典を残す。変わったら matcher とテストを直す |
 | claude-in-chrome の操作が GitHub の画面の変更で壊れる | 手順に「失敗したら次の手段へ縮退する」を必ず入れる(M2-T08b、M2-T14) |
 | 画像のアップロードは取り消せない | E2E は private のテスト用リポジトリで、公開してよい画像だけで行う |
@@ -1148,6 +1229,12 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | M4A-G のコミットの時点で、スキルがまだ旧 `.codiel/specs` と Step A を指している | M4-A と M4-B の間に run を始めない。バージョンは M4B-G で上げる |
 | guard-write が、保護するフェーズの書き込みのたびに `spec.md` を走査して遅くなる | 走査は implement・test-loop・fix-loop の書き込みだけで行う。O4-1 で体感の遅さを記録する |
 | `orchestrating-runs/SKILL.md`(2026-09-28 に 47,776 B)が test-code の運転でさらに大きくなる | M4-T04 に `wc -c` を報告させ、M4-R で重複を見る |
+| 対象の作業ツリーが git の linked worktree のとき、codiel の worktree の中で hook が run を見つけない(M4-A の `findMainRoot` が primary の checkout を返す)。このリポジトリがこの形なので、O4-1 でテストの保護とドメイン境界が効かない | M4-T15 が `findMainRoot` を git を呼ばない形に改める(§10 の 6)。A6-20 の linked worktree のテストで確かめる |
+| Raguel の応急処置の後も、範囲の外の所見(重さの判定・パネル・resubmission-loop など)による ASK が手動確認の run で出る | ASK は裁定 A・B で、STOP は誤検知の裁定で扱う(設計書 §6.14.2 の (6))。出た ASK と STOP を §9.3 に記録し、作り直しの材料にする |
+| パネルが初めて動き、1 回の評価が数分かかる。2 分を超えた MCP の呼び出しは Claude Code がバックグラウンドへ移す(`harness-docs/handover/2026-09-28-raguel-redesign-findings.md` の所見 I2) | 手動確認で所要時間と、バックグラウンドへ移ったかを §9.3 に記録する。移ったら、結果を待ってからゲートの手順を進め、evaluate を呼び直さない |
+| common/secrets から `/` を含む語を外すので、`/` を含む高エントロピーの秘密情報を見逃す | 既知の形は引き続き検出する(設計書 §6.14.1)。検出の方式は作り直しで見直す |
+| STOP の迂回(`pass-gate --verdict STOP --human-approved`)が、人の裁定なしに使われる | `raguel-gating` の HARD-GATE で、人の明示の答えと `record_outcome` の記録を前提にする(設計書 §6.14.2 の (6))。M4-R で確かめる |
+| O4-7 のサンプルの E2E が、ブラウザの依存ライブラリの不足で起動しない(WSL で `libasound.so.2` が無いなど) | run の前に `npm run test:e2e` が通ることを確かめ、通らなければ環境を直してから run を始める。run の中で起きたら、設計書 §6.13.1 の環境の失敗として扱う |
 
 ### 9.2 中断と失敗の扱い
 
@@ -1168,10 +1255,11 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | hooks.json の発火確認(O2-0) | 通過(2026-09-27)。ユーザーが `/tmp/codiel-o20` の一時リポジトリで `claude --plugin-dir <worktree>/plugins/codiel --debug-file ...` を起動して確かめた: run が無いとき `gh pr comment 999999 --body "hook test"` は hook を通って gh 自身のエラー(no git remotes found)になった。codiel の hook が読み込まれて動いていることは、Stop の `stop_hook_summary` に `stop-guard.mjs` があることと、PreToolUse:Bash の 2 本目の hook が空出力(通過)を返した記録で確かめた。そのセッションの active run の間の試行はマーカー付きで実行されて通ったため(期待どおり)、マーカー無しの deny は観測できなかった。その 2 点を、同じリポジトリでオーケストレーターが新しいヘッドレスセッション(`claude -p --plugin-dir ... --mcp-config <偽の GitHub MCP> --debug-file /tmp/codiel-o20/debug-headless.log`)で補った: run を awaiting_human にした状態で、`gh pr comment 999999 --body 'hook test'` は「gh pr comment の本文に `<!-- codiel:generated -->` を含めて投稿し直してください」で deny、`mcp__fake-github__add_issue_comment`(matcher のサーバー名に github を含む偽のサーバー。何も投稿しない)は「GitHub MCP の投稿にはマーカーが必要です。本文に <!-- codiel:generated --> を含めて投稿し直してください。」で deny された。debug ログに両方の `permissionDecision: deny` がある。検査用の run はどちらも `stop` で終端にした。M2 の修正(`3cb2b628`)で matcher を変えたので、同じ手順でヘッドレスの確認をやり直した(2026-09-27): scratchpad の一時リポジトリで run を awaiting_human にし、偽のサーバー `FakeGitHub`(大文字を含む)の `add_reply_to_pull_request_comment` と、`gh api --hostname codiel-hook-test.invalid repos/o/r/issues/1/comments -f body='hook test'` を呼んだ。どちらもマーカーが無いので deny された(debug ログに `permissionDecision: deny` が 2 件)。旧版の codiel の matcher は小文字の `github` にしか当たらず、`gh api` も検査しないので、deny は worktree の hook による |
 | E2E で確定した手順(O2-3) | 2026-09-27 に private のテスト用リポジトリ `phyllis998/codiel-e2e-test`(ユーザーの承認で作成)で確かめた。gh 2.101.0、claude-in-chrome はログイン済み。4 手段とも成功した。(1) `gh --attach`: 画像のある場所を作業ディレクトリにし、本文に `![alt](./file.png)` を書き、同じ相対パスを `--attach './file.png#alt'` で渡す。`gh issue create`(Issue #1)・`gh pr create`(PR #2 の本文)・`gh pr comment` で、本文の参照が `https://github.com/user-attachments/assets/<uuid>` に置き換わった。`gh pr review` には `--attach` が無い。(2) claude-in-chrome: 新しいタブで PR(または Issue)の画面を開き、`find` でコメント欄(Add a comment のフォーム)の `type=file` の入力を探し、`file_upload` で画像を渡す。「Attach files」のボタンは click しない(OS のファイル選択画面が開き、操作できない)。数秒待つと textarea(`name="comment[body]"`)に `<img width=… alt=… src="https://github.com/user-attachments/assets/<uuid>" />` が入る。`javascript_tool` で値から `https://github\.com/user-attachments/assets/[0-9a-f-]+` の URL を取り出し、textarea の値を空にして input イベントを送り、未投稿の下書きを破棄する(localStorage・sessionStorage に `user-attachments` を含む値が残らないことを確かめた)。タブを閉じ、URL を本文の `![alt](URL)` にして `gh pr review <番号> --comment --body ...` で投稿した(判定を伴うときは `--approve` / `--request-changes`)。前提は、ブラウザで対象リポジトリに書き込める GitHub アカウントにログインしていること。ログイン画面が出る、ファイル入力が見つからない、待っても URL が入らないときは次の手段へ縮退する。(3) ブラウザが使えないとき: 画像付きの本文を `gh pr comment --attach` で投稿し、判定だけを `gh pr review` で行い、レビュー本文でそのコメントの URL を示した。(4) どれも使えないとき: 画像を `reports/` に保存し、本文に載せられなかった理由と保存パスを書いた。可視性: private リポジトリの画像は `private-user-images.githubusercontent.com` から配信され、閲覧権限に従う。テスト用リポジトリの削除はユーザーが行う(gh のトークンに `delete_repo` が無い) |
 | M4 の起点の HEAD(O4A-0) | `88c0474a`。O4A-0 の docs のコミットの親で、このコミットにこの記録を含めるために親を起点にした。M4-R は `harness-docs/` を除いて見るので、差分は O4A-0 のコミットを起点にしたときと同じになる。設計書と計画書の見直しはユーザーが 2026-09-28 に承認した |
-| 手動確認の結果(O2-4、O3-1、O4-1) | O2-4: 2026-09-28 に 2 回の run で行った。run A は github モードで、private のテスト用リポジトリ `phyllis998/codiel-e2e-test` を対象に、M3-A の時点(`11710152`)の codiel の複製を使った。run B は local モードで、`origin` を持たない一時のリポジトリを対象にした。設計書 §8.4 から写した確認項目(§4.6 の一覧)は、どちらの run でもすべて YES だった。指摘は、追加要件として設計書に入れた決定 72〜81 だけだった。O3-1・O4-1: (未記録) |
+| M4-A で確定した CLI と hook(O4A-1) | M4-T09・M4-T02・M4-T10 の報告と M4A-G(C4A-1 `508601b7`)。CLI の成功時の stdout は `{ statePath, state }`、失敗は stderr に理由を出して終了コード 1。`step-add --slug --id [--kind step\|test-code\|test-loop] [--files '<JSON 配列>'] [--deps '<JSON 配列>'] [--final] [--domain]`: `--kind` の既定は `step` で、値域の外(`unit` を含む)は拒否する。登録先は `step` が `implement.steps`、`test-code` が `testCode.units`、`test-loop` が `testLoop.units`。`step` は M4-T01 のままで、ID は英小文字と数字のケバブケース、`--files`(空でない配列)と `--deps` が必須。`test-code` と `test-loop` の ID は `^(units/.+\|e2e/backend/.+\|e2e/(frontend\|cli)/[^/]+)$` に一致し、空のセグメント・`.`・`..`・`:`・`\` を含まない(`codiel-state.ts:208`、`:546`)。`--files` は任意で、省くと `[]`、渡せば `step` と同じ検査をして `[]` も受ける。`--deps` と `--final` は値が `[]` でも「<kind> には --deps と --final を指定できません」で拒否する。`--domain` はどの kind でも受ける。登録し直しは、`pending` の要素ならどの表でも上書きし、`merged` の要素は `testLoop.units` だけで受ける。登録し直した要素は `pending`・`group`/`worktree`/`branch`/`commits` が null・`attempts` が 0 になり、キーの位置(worktree の名前の k)は変わらない(`codiel-state.ts:1055-1066`)。それ以外は「<kind> <ID> は <status> のため登録し直せません」で拒否する。`step-update --slug --id [--kind] --status [--worktree] [--branch] [--base] [--head]`: 遷移は §6.2 の表のまま。`--worktree` は `./` と末尾の `/` を落としてから、3 つの表の自分以外の要素の記録と比べ、一致すれば「--worktree <値> は <kind> <ID> がすでに記録しています」で拒否して state を変えない(`:1099`)。記録するのは渡された文字列のままで、null の記録は比べない。`waves` は変えず、test-code と test-loop の要素を出さない。`config`: cwd の `.codiel/config.json` を読み、`{ "testsDir": "<値>" }` を出す。`--slug` も run も要らず、不正な値は終了コード 1。`set-test-edit --slug`: 終端の run は「すでに終端状態です」で拒否し、`state.phase` が fix-loop で `phases.fix-loop.status` が `in_progress` のときだけ `testEdit` を true にする(ほかは「set-test-edit は fix-loop が in_progress のときだけ使えます(phase: …、fix-loop: …)」で拒否)。`clear-test-edit --slug`: 終端の run でも成功し、`testEdit` のキーを消す(false は書かない)。`STAGES` は 13 ステージで 5 番目が `["test-code"]`、`GATED` は test-code を含む 9 フェーズ、`SKIPPABLE` は変えていない(`:119-146`)。設定を読む関数: `export function readCodielConfig(codielRoot: string): { testsDir: string }`(`:314`)。引数は `.codiel` を持つディレクトリ。ファイルかキーが無ければ `{ testsDir: "docs/tests" }` を返し、未知のキーは無視する。不正(JSON として読めない、トップレベルがオブジェクトでない、`testsDir` が文字列でない、空文字列、posix か win32 の絶対パス、`..` のセグメント)は `Error` を投げる。戻り値は `./` と末尾の `/` を落とした値。M4 より前の state: `isLegacy(st)`(`st.version !== 2 \|\| !("test-code" in st.phases)`。export しない。`:290`)で判定し、文言は `legacyMessage`(`:296`)が state の形で設計書 §6.2.4 か §6.6 のテンプレートを出す。受け付けるのは `get`、`stop`(`--reason` を検査しない)、`record-outcome`(`awaiting_outcome` の run への approved・rejected・incident と、`completed`・`rejected` の run への incident)。拒むのは `start-phase`・`skip-phase`・`pass-gate`・`complete-phase`・`mark-ask`・`resume`・`set-domain`・`clear-domain`・`set-integration`・`record-attempt`・`close`・`finalize`・`step-add`・`step-update`・`waves`・`set-test-edit`・`clear-test-edit` と、最新の try が終端でないときの同じ slug への `init` で、文言を stderr に出して終了コード 1、state のファイルは変えない。`get --active` は active と awaiting_human の run を `runs` から除いて run ごとに文言を出し、awaiting_outcome の run は含める。`findActiveRun` はこの run を返さず、読み込み時に test-code を補わない。guard-write の ask の理由文(原文。`guard-write.ts:293`、`:305`、`:331`): テストの保護は `テスト(${repoRel})の変更は test-spec と test-code フェーズの担当です(${phase} 中の変更は改竄の疑い)`。worktree の一致が 2 つ以上は `worktree ${wtRel} を記録した要素が ${n} 個あり(${ラベル})、境界に使うドメインを 1 つに決められません(worktree のパスは run の中で一意のはずです)` で、ラベルは `implement.steps[<ID>]`・`testCode.units[<ID>]`・`testLoop.units[<ID>]` をカンマ区切りで並べる。設定が不正は `.codiel/config.json が不正なため、${phase} 中の書き込みがテストの保護に当たるか判定できません(<readCodielConfig の例外の文言>)`。findMainRoot: `export function findMainRoot(startDir: string): string`(`lib.ts:595`)。`startDir` が `.codiel/worktrees/<slug>/<名前>` を含むときだけ `git worktree list --porcelain` を実行して先頭の `worktree <パス>` を返し、それ以外と git の失敗では `findProjectRoot(startDir)` を返す。guard-write(`:221`)・guard-bash(`:718`)・stop-guard(`:8`)が使い、guard-github-mcp(`:23`)は `findProjectRoot` のまま(M4-T15 が直す)。対象の作業ツリーが git の linked worktree のときの限界は §10 の 6(解決済み。M4-T15 が git を呼ばない形に改める)。init: `install-harness.sh` は `.codiel/runs` と `.codiel/reports` を作り、`.codiel/config.json` が無ければ `{ "testsDir": "docs/tests" }` を書き、あれば変えない。`.codiel/specs` は作らない。`initializing-harness` の判定 D は 3 つの存在である。M4A-G: lint・typecheck・test(177 ファイル・2904 件パス)・build が通った。C4A-0 は `8f89bd45`(metatron のテスト)、C4A-1 は `508601b7`(codiel)。バージョンは上げていない。タスクが依頼文に無く自分で決めた扱い(M4-R で確かめる): M4-T09 は、`readCodielConfig` が不正を例外で知らせること、トップレベルが配列・null・文字列の JSON も不正とすること、testsDir と worktree のパスを正規化すること、`set-test-edit` が終端の run を拒むこと、M4 より前の state で終端でない slug への `init` にも §6.6 の文言を出すこと。M4-T02 は、worktree かどうかを cwd のパスの形で先に見て当たったときだけ git を実行すること、worktree の名前の形(`step-<k>` など)を検査しないこと、fix-loop で設定が不正なら `testEdit` が真でも ask にすること、保護の照合で大文字小文字を区別し testsDir が `.` ならリポジトリ全体とみなすこと、worktree の中の `.codiel/`(worktreeRoot 相対)を従来の免除に入れること、`spec.md` の `tests` をブロックの列・1 行の列・クォートで読むこと(YAML のライブラリは足していない)。guard-bash と stop-guard の worktree のテストは足していない(`findMainRoot` は guard-write の W 系が実際の worktree で確かめている) |
+| 手動確認の結果(O2-4、O3-1、O4-1、O4-7、O4-8) | O2-4: 2026-09-28 に 2 回の run で行った。run A は github モードで、private のテスト用リポジトリ `phyllis998/codiel-e2e-test` を対象に、M3-A の時点(`11710152`)の codiel の複製を使った。run B は local モードで、`origin` を持たない一時のリポジトリを対象にした。設計書 §8.4 から写した確認項目(§4.6 の一覧)は、どちらの run でもすべて YES だった。指摘は、追加要件として設計書に入れた決定 72〜81 だけだった。O3-1: 2026-09-28 に、ARCHITECTURE を持たない一時のリポジトリで行った。`adrTarget` が `intents` になり、`unscoped` で進んだ(YES)。残りの 3 点(`[ADR 候補]` の書き込みと finalize の報告、`/metatron:init` による ADR 化、持続層の縮約)は検証できなかった。3 つの try がすべて Raguel の common/secrets の STOP で止まったためである。try-1 は test-spec の `evaluate_plan`、try-2 と try-3 は test-loop の `evaluate_code` で止まり、intent のパス、テストの置き場 `.codiel/specs/<unit>/scripts/` のパス、diff の見出しが誤検知された。STOP の後に、オーケストレーターが人に確かめずに次の try を作り、STOP を受けたファイルをゲートなしで持ち込み、事実と違う報告をした(決定 83 の契機)。run は `stop` で止め、intent は書式の規則どおり `abandoned` にした。残りの 3 点は O4-8 でやり直す。O4-1・O4-7・O4-8: (未記録) |
 | `agent()` の委譲先の指定(§10 の未決事項 1) | 指定できる。`workflow-authoring` スキルの記述では、`agent()` の `opts.agentType` に Agent ツールと同じレジストリのサブエージェント名を渡せ、`schema` と併用できる。役割マーカーの対応表の定義を次のとおり指定する: complex-impl → `lead-implementer`(opus)、normal-impl → `claude-implementer`(sonnet)、light-impl → `claude-light-implementer`(haiku)、general → `general-worker`(sonnet)、code-review → `code-reviewer`(sonnet)、final-review → `claude-complex-reviewer`(fable)。各定義は担当表の Claude モデルと同じ `model` を宣言しているので、`opts.model` は渡さない(2026-09-27 確認) |
 | 設計書との食い違い(実装中に見つかったもの) | M1-T01: `check-intent-env.ts` は `findDocRoot` を直接 import せず、`resolveDocPaths` が内部で解決した `docRoot` を使う(git の子プロセスを増やさず、文書パスと docRoot を同じ解決結果にするため)。独自の写しを持たないという §6.9.3 の目的は満たすので採用した。M1-T02・T05: `sandalphon-common.md` の ARCHITECTURE への言及は環境チェック(`:20-30`)にあり、capturing-intent の本文へ吸収された。登録簿は `intent-common.md` ではなく `plugins/codiel/references/intent-format.md` と `plugins/codiel/skills/capturing-intent/SKILL.md` の 2 エントリにした。M2-T04: `state.intent` との照合に使う相対パスを、repoRoot ではなく `codielRel`(`.codiel` を持つ祖先が基準)で求めた。`.codiel` と git ルートが同じ通常の構成では一致するが、ずれる構成では設計書 §6.8 と食い違うので、M2-R で確かめる。M2-R と M2-AR が high として挙げ、M2 の修正(M2-FX-A、`3cb2b628`)で repoRoot(`lib.ts` の `findRepoRoot`)基準に直した。M2-T04 はテストファイルの全面書き換えに Serena ではなく Write を使い、M2A-G は lint の整形を biome で自動修正した(どちらも内容は差分とテストで確認済み)。M2-T08b: `github-writing.md` は構成を `intent-writing.md` に揃えたが、根拠と背景の残す・削るの表は再掲していない。設計書 §6.12.3 の「構成は Intent 文書の執筆規則に従う」を満たすかを M2-R で確かめる |
-| レビューの medium / low | M1-R: low 1 件。`plugins/codiel/docs/DESIGN.md` の統合セクション(§12)の導入文 2 文が「節」を使っていた。直訳語を使わない制約に当たるので「セクション」に直した(O1 の手順でコミット)。移設した本文の「二段構え」と、契約文書の規則番号を指す「段 3」は直していない。M2(M2-R・M2-AR と修正の再レビュー 6 回。所見の全文はセッションの scratchpad の m2-reviews.txt〜m2ef-reviews.txt): critical・high はすべて修正 Workflow(M2-FX〜M2-FX5、M2-E、M2-EF)で直し、経緯は §9.4 の 18〜29 にある。ユーザーが直すと決めた medium・low(stop-guard の理由文、「節」の残り、heredoc の誤検知、`--fill`・`-T`、v1 の outcome)も直した。直さずに残したものは、guard-bash の既知の限界(設計書 §6.8 の一覧。決定 69)と、guard-write の DOC_PHASES の `docs/` の判定が codielRel のままであること(`.codiel` が git ルートの下にある構成で、文書フェーズの `docs/intents` 以外の文書への書き込みが ask になる。変更前から同じ)である |
+| レビューの medium / low | M1-R: low 1 件。`plugins/codiel/docs/DESIGN.md` の統合セクション(§12)の導入文 2 文が「節」を使っていた。直訳語を使わない制約に当たるので「セクション」に直した(O1 の手順でコミット)。移設した本文の「二段構え」と、契約文書の規則番号を指す「段 3」は直していない。M2(M2-R・M2-AR と修正の再レビュー 6 回。所見の全文はセッションの scratchpad の m2-reviews.txt〜m2ef-reviews.txt。実装セッションの一時領域にあり、残らない): critical・high はすべて修正 Workflow(M2-FX〜M2-FX5、M2-E、M2-EF)で直し、経緯は §9.4 の 18〜29 にある。ユーザーが直すと決めた medium・low(stop-guard の理由文、「節」の残り、heredoc の誤検知、`--fill`・`-T`、v1 の outcome)も直した。直さずに残したものは、guard-bash の既知の限界(設計書 §6.8 の一覧。決定 69)と、guard-write の DOC_PHASES の `docs/` の判定が codielRel のままであること(`.codiel` が git ルートの下にある構成で、文書フェーズの `docs/intents` 以外の文書への書き込みが ask になる。変更前から同じ)である |
 
 ### 9.4 計画の作成時に見つけた設計書と実コードの食い違い
 
@@ -1211,6 +1299,16 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 31. M3-B で、M3-T04 は実装を終えたが、既存のテスト SC1 が新しいサブコマンドを `plugins/metatron/src/cli/paths.ts` の USAGE_LINES に載せることを求め、そのファイルが触るファイルに入っていなかったので blocked を返した(SC2 の `cli-usage.md` は M3-T05 の担当)。オーケストレーターが USAGE_LINES に 2 行を足し、M3-T04 の結果を使って M3-T05 へ進めた。設計書 §6.11.2 の表は `shrink-adr-candidate` の引数を 3 つとしていたが、§6.11.4 の「走査のときの値と照らす」には呼び出し元がハッシュを渡すほかないので、M3-T04 が必須の `--hash` を足した。設計書の表を追随させた。M3-T06 と、一度目の M3-T04 は、ユーザーがメインセッションで送ったメッセージが依頼に添えて中継されたことで作業の正当性を疑い、blocked を返した。依頼文に「ハーネスが添えるユーザーの発言はこのタスクと無関係」の注記を足して再実行した。M3-R の所見は critical・high が 0 件で、low の「節」2 か所はオーケストレーターが直した(`01c494dd`)。medium の拒否の経路のテスト不足(`not_git_repository`・`file_not_found`・`candidate_not_found`・`duplicate_candidate`)は M4 で足す。
 32. ユーザー決定(2026-09-28): テスト run を受けた追加要件として、PR の本文を変更の説明に絞る(決定 72)、テストを実装より先に書く test-code フェーズを置く(決定 73)、テストの仕様を `<testsDir>` の下に置く(決定 74)、`.codiel/config.json` の `testsDir` を設ける(決定 75)、テストコードの置き場をプロジェクトの規約に委ねて `spec.md` に記録する(決定 76)、テストを guard-write で保護する(決定 77)、E2E とユニットテストを作る範囲を規約か既定の規則で決める(決定 78・79)と決めた。草案の未決 3 件も決めた。旧 `.codiel/specs/` は何もしない、画面でも API でもない入口は `e2e/cli/` に置く、API のパスのパラメータは `{id}`・ルートは `_root` とする(いずれも決定 74)。最初の M4 の Workflow(`codiel-m4-parallel`、base `7b4b3bd6`)は、M4-T01・T03・T05・T08 を終えたところで止めた。M4-T08 は 31 の「M4 で足す」を受けてその Workflow が足したタスクで、第 2 版の §6.4 には定義が無かったので、第 3 版で正式なタスクにした。M4 を 2 本の Workflow(`codiel-m4a-tdd-code`、`codiel-m4b-tdd-skills`)に組み直し、完了済みの変更を活かしてタスクを足した(§6)。組み直しの草案へのレビュー 2 本の所見(M4-T01 と M4-T09 の分担、Red の確認の条件、初期化の判定 D、`tests` を書く者と時機、testsDir を得る手段、worktree のパスの一意性と判定の基準、PR のリンクを github モードに限ること、M4-T08 の定義、§8.2 の「M4-G」、決定 18・30・56 の具体化の列、A6-13 の grep の範囲)を反映した。続くレビュー 2 本の所見(完了済みの 4 タスクの変更の引き継ぎとコミットの時機、M4-A と M4-B の受け入れ基準の分担、決定 30 を test-code の委譲の単位に当てること、`raguel-gating` の `evaluationId` の選定順、test-loop の brief と report の置き場、フェーズ進行表の `[test-loop A]`・`[test-loop B]` の 2 行)も反映し、§6.0 に O4A-0 を足した。設計書は決定 72〜79、§4.6、§6.12.8、§6.13 などで追随した。
 33. ユーザー決定(2026-09-28、2 回目の見直し): 32 の組み直しは、worktree の中で実行できない E2E を通すテストから外し、test-loop で通すとしていた。ユーザーは、E2E も implement で通すと決めた(設計書の決定 80)。オーケストレーターの指定で、worktree で実行する通すテストは決定 30 と test-code の手順 3 と同じ考え方で選ぶ。同じグループのほかの委譲が動いている間は `parallel: true` のものだけを実行し、ほかの委譲が動いていなければすべてを実行する。実行しなかったものは委譲先が `report.md` に挙げ、グループのマージの後にオーケストレーターが run ブランチで E2E を含めて実行する。test-loop の修正の委譲も worktree でテストを実行するので、決定 30 で並べる(決定 30 を改めた)。新しい画面の仕様の名前はユーザーに聞き、既にある画面の名前は聞かない(決定 81)。軽量の run の手順(いつ誰が候補を出し、いつ聞くか)と、聞いた記録の残し方は執筆者に委ねられた。設計書は、軽量の run では test-spec の開始時に同定の委譲を 1 回だけ出して一覧と名前の候補を作り、`mark-ask test-spec --kind confirm` で聞いてから test-spec と dev-plan に同じ一覧を渡す形にした(§6.1.4)。記録は既存の `askKind` の `confirm` に残し、確認の種類は足さない。受け入れ基準 A6-14〜A6-16 を足した。計画は M4-T11(`facilitating-design-discussions` を触るファイルに足した)・M4-T12・M4-T04・M4-T06・M4-T07・M4B-G・M4-R・M4-FR と §8.2 を改めた。M4-T09・M4-T02・M4-T10・M4-T13 は、CLI・hook・init・PR 本文に変更が無いので改めていない。エージェント数は変わらない。続く見直し(2026-09-28)で、テストを実行する委譲の並べ方を設計書 §6.13.1 の 1 つの規則(並列可の委譲と単独の委譲)にまとめ、E2E の実行環境と環境の失敗の扱い(§6.13.1)と、M4 より前に作った state の run を既存の `stop --reason migrate` で止めて新しい try を始める手順(§6.6)を決め、M4-T04・M4-T06・M4-T09・M4-T11・M4-T12(`scripting-tests` のツール運用のセクションを保つことを含む)・M4-T13 と A6-15・A6-17・A6-18 を改めた。あわせて §9.3 に O2-4 の結果を記録し、§10 の未決事項 3 を閉じた。その後の見直し(オーケストレーターの決定、2026-09-28)で、環境の失敗の実行し直しを implement のタスクレビューとマージの前に置き、結果を報告の `## 実行し直し` に追記して再開の後も 1 回を守る形にし、設計書 §6.6.4 の規則の重複を参照に改めた。M4 より前の state を state の形で判定して CLI が v1 の run と同じ形で拒むこと、新しい try の intent を手順 1 の最新化の後に持ち込むこと、`scripting-tests` のツール運用の目的の書き直しも決め、M4-T04・M4-T09・M4-T12・M4-T13 と A6-1・A6-17〜A6-19・§10 の 5 を改めた。さらに続く見直し(オーケストレーターの決定、2026-09-28)で、並列可の委譲を同じ応答からまとめて出す規則を設計書 §6.13.1 に戻して `orchestrating-runs` §4.1 の逐次ディスパッチの段落を書き直すこと、run ブランチ上の修正の報告の置き場(`merge-fix-<g>`・`test-loop-project`)、オーケストレーター自身の実行し直しを記録しないこと、再開で確かめる報告の範囲、state の `intent` による再開する run の照合を決め、M4-T04・M4-T12・M4-T13・M4-R と A6-15・A6-17・A6-19 を改めた。次の見直し(オーケストレーターの決定、2026-09-28)で、state の `intent` だけで当たった run を再開の前に確かめること、run を探す 2 つの方法の使い分け、`merge-fix-<g>` の g の求め方、照合する run も intent のファイルも無いときの確認を設計書 §6.1.2 と §6.6.4 に足し、`:407` の書き直しをレビューの規律を残す形に改め、M4-T04・M4-T13 と A6-19 を改めた。
+34. M4-A(`codiel-m4a-tdd-code`)を終えた(2026-09-28。C4A-0 `8f89bd45`、C4A-1 `508601b7`)。O4A-1 として、確定した CLI・設定を読む関数・M4 より前の state の扱い・guard-write の理由文・`findMainRoot`・init の振る舞いを §9.3 に記録した。M4-A のタスクが報告した食い違い 3 件は、オーケストレーターが次のとおり決めた。(1) `guard-github-mcp.ts:23` の run の検索が `findProjectRoot` のままで、設計書 §6.8 の (a) と、hook の表(guard-bash と stop-guard だけを挙げていた)が食い違う。hook の表に guard-github-mcp を加え、M4-B に M4-T15(通常の実装)を足した。(2) 設計書 §6.2.2 の「`--files` と `--deps` と `--final` は `step` のときだけ使う」を、A6-5 と §6.2 に合わせて「`--files` は `step` のときだけ必須」と書き直した。(3) 設計書 §6.8 の (b) の `mainRoot` が git のルートを指すことを明記した(実装は `findRepoRoot(mainRoot)` を基準にしている)。ユーザー決定(2026-09-28)で、E2E と画面名の経路を画面を持つサンプルで確かめる手順を O4-6・O4-7 に足し、設計書 §8.4 に確認の 5 点を足して設計書 §15 の 1 と §10 の 4 を閉じた。同じ日のユーザー決定 82 で、intent の派生文の冒頭の定型文を原文の区切り(区切り線と 1 行)に替え、人が読む文書の共通の執筆規則 `readable-writing.md` を置き、gh-utility の執筆規則も揃える(バージョンは `0.5.3-dev` のまま)ことにした。書式の書き換えは保護パスの書式契約(`intent-format.md`)に当たるので、M4-T14 に `format-change-checklist.md` の追随を入れた。参照文書を 1 タスクにまとめるため、M4-T13 の `github-writing.md` と `intent-format.md` の作業を M4-T14 へ移した。設計書は決定 82、A2-16・A6-20・A6-21、§6.3.3・§6.3.5・§6.9.2・§6.12・§7.4・§7.5・§8・§9〜§12 で追随した。M4-B のエージェント数は 11 になり、§0.1 の目安を超える(§10 の 7)。計画の見直しの中で、`findMainRoot` が linked worktree の作業ツリーで primary の checkout を返し、このリポジトリを対象にした O4-1 で hook が run を見つけないことが分かった(§10 の 6、設計書 §15 の 4)。
+35. M4-B の前の見直し(2026-09-28)で、次のことを入れた。
+    - 34 の見直しへのレビューを採った。設計書 §6.8 の (b) の `mainRoot` は、コードの変数 `mainRoot`(`findMainRoot` の戻り値)と紛れるので、「メイン作業ツリーの git のルート(コードでは `repoRoot = findRepoRoot(mainRoot)`)」と書き直した。§9.3 の登録し直しの記録に、`group` も null に戻ること(`codiel-state.ts:1060`)を足した。O4-6・O4-7 を M4B-G と M4 のレビューの後に行い、失敗したら所見を記録して M4 の修正の Workflow で直すと書いた(§6.5)。M4-T14 に `readable-writing.md` の参照の形を明記した。gh-utility は M4 で改修するが、バージョンは `0.5.3-dev` のまま据え置く。ゴールの Done 条件が gh-utility を `0.5.3-dev` と定め、M4 の変更はこの改修の中で上げた未リリースの同じ dev 版の中の変更だからである。
+    - オーケストレーターの決定で、`findMainRoot` を git を呼ばない形(cwd のパスの `/.codiel/worktrees/` より前、無ければ `findProjectRoot(cwd)`)に改め、M4-T15 に `lib.ts` と `lib.test.ts` を足した(§10 の 6、設計書 §6.8 の (a)・§15 の 4)。M4-R と M4-FR を Workflow `codiel-m4b-review` に分けた(§6.1.4、§10 の 7)。決定 42 の読み替え(intent と GitHub の文書は prompt-smith 由来の文の組み立てをやめる)は維持した。
+    - ユーザー決定で、変更ごとの intent と intent-issue の `## 意図的な制約` を「制約 | 理由」、`## 合意済み事項` を「論点 | 決定 | 理由」の表にした(設計書の決定 82 の (5)、§6.3.3)。書式に依存するスキルを grep で洗い、`capturing-intent`(`:115`。M4-T13)と `syncing-intents`(`:64`)・`preparing-design-agendas`(`:74-85`)(M4-T14)を直すことにした。`reviewing-diffs`・`writing-design-docs`・`writing-dev-plans`・`writing-test-specs` は持続層か見出しだけを読むので直さない。A6-21 を追随させた。
+    - O3-1 の結果を §9.3 に記録し、残りの 3 点を O4-8 にした。
+    - ユーザー決定で、Raguel の応急処置の 11 件を決定 83 として足した(設計書 §6.14)。Raguel 側の 5 件を M4-T16 に、codiel 側の CLI と hook(STOP の裁定、次の try の承認、stop-guard の理由文)を M4-T15 に、スキルと文書を M4-T13・M4-T14・M4-T04・M4-T06 に割り当て、A6-22〜A6-29 を足した。Raguel の変更は codiel のコミット(C4B-1)に入れる。
+    - ユーザー決定で、Raguel の作り直しは別のセッションが別の git worktree で設計から行い、設計は M4 と並行に、実装は M4 の後の状態から始める(§10 の 9)。引継ぎ資料と起動プロンプトはオーケストレーターが別に作る。
+    - M4-T16 を足したので、`codiel-m4b-tdd-skills` のエージェント数は 10 になった。codiel 側の CLI と hook の変更は、エージェントを増やさないよう M4-T15 にまとめた(§10 の 8)。
+    - オーケストレーターが採った修正で、決定 83 の具体化を直した。`mark-ask --verdict` で STOP を state に残し、`init` の検査を `humanApproved` の無い STOP のフェーズにも広げ、dangerous-patterns が files[] の見出しでパスを得ることと、ハンクの無い正当な diff を入力の誤りにしないことを、M4-T13・M4-T15・M4-T16 と A6-25〜A6-27・A6-29 に入れた。あわせて、`findMainRoot` の改めがユーザー決定ではなくオーケストレーターの判断であると設計書に明記し、一時領域への参照を所見の文書 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md` に替え、`codiel-m4b-tdd-skills` の 10 エージェントを受け入れた(§0.1、§10 の 8)。
 
 ---
 
@@ -1219,8 +1317,12 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 1. Workflow の `agent()` が委譲先の Agent 定義(役割マーカーで選ぶ定義)を指定できるか。指定できないときは、依頼文に委譲先の種類を書くだけになり、モデルの割り当てが役割どおりにならない。実装セッションが `workflow-authoring` で確かめ、指定できなければユーザーに扱いを確かめる。
 2. §2 と §6.2 の CLI の形(`next-adr-candidate-id`、`step-add --kind step|test-code|test-loop`、JSON 配列での受け渡し、`testLoop.units` の `merged` からの登録し直し、`--worktree` の一意性)、metatron の実装の置き場、gh-utility の執筆規則を既存の `github-issue-common.md` に足すことは、本書が決めた(technical-adviser の助言で確かめた)ものである。ユーザーレビューで変えてよい。
 3. (解決済み。2026-09-28)O2-4 の local モードの手動確認は、`origin` を持たない新しい一時のリポジトリで行った(§9.3)。
-4. E2E を implement で通す経路(決定 80)と、新しい画面の名前を聞く経路(決定 81)は、O4-1 では通らない。このリポジトリはテスト方針で E2E を持たないと定めるためである。画面を持つプロジェクトで手動確認を足すかは、ユーザーが決める(設計書 §15)。
+4. (解決済み。2026-09-28)E2E を implement で通す経路(決定 80)と、新しい画面の名前を聞く経路(決定 81)は O4-1 では通らない。ユーザーは画面を持つサンプルで確かめると決め、O4-6・O4-7 を足した(設計書 §8.4、§15 の 1)。
 5. (解決済み。2026-09-28)M4 より前に test-spec か dev-plan を通し、implement に入っていない run の扱いと、新しい try で前の try の run ブランチから intent を持ち込む時点(設計書 §15 の 2・3)。前者は `phases` に test-code を持たない state を CLI が v1 の run と同じ形で拒むことにし(設計書 §6.6。M4-T09・M4-T04)、後者は持ち込みを手順 1 の最新化の後へ移した(設計書 §6.1.2。M4-T13)。
+6. (解決済み。2026-09-28)M4-A の `findMainRoot`(`lib.ts:595`)は、cwd が codiel の worktree の中のとき `git worktree list --porcelain` の先頭のエントリを返すので、対象の作業ツリーが git の linked worktree(このリポジトリがそう)だと primary の checkout を返す。オーケストレーターは、git を呼ばずに cwd のパスの `/.codiel/worktrees/` より前をメインのルートとし、含まないときは `findProjectRoot(cwd)` を返す形に改めると決めた(設計書 §6.8 の (a)・§15 の 4。M4-T15)。
+7. (解決済み。2026-09-28)M4-B のエージェント数が 11 で、§0.1 の目安を超えた。オーケストレーターは、M4-R と M4-FR を Workflow `codiel-m4b-review` に分けると決めた(§6.1.4)。
+8. (解決済み。2026-09-28)`codiel-m4b-tdd-skills` のエージェント数は、決定 83 の M4-T16 を足して 10 になり、§0.1 の目安(10 未満)を 1 超える。オーケストレーターは、目安は上限ではないので 10 のまま受け入れ、M4-T16 を別の Workflow に分けないと決めた。
+9. Raguel の点検の所見のうち決定 83 の応急処置に入れなかったものは、Raguel の作り直しに回す。所見は `harness-docs/handover/2026-09-28-raguel-redesign-findings.md` にまとめてある(設計書 §15 の 5)。
 
 ---
 
@@ -1249,4 +1351,5 @@ O1-1 と O1-2 のコミットは metatron の CLI とスキルの手順に従う
 | タスクごとに git worktree を切って並列に実装する | 本改修の並列は最大 5 で、触るファイルを分ければ衝突しない。worktree のマージと後始末の手間が増える |
 | 手動確認や ADR の起票を Workflow のエージェントに任せる | エージェントはユーザーと対話できず、metatron の ADR の手順は草案の承認を要する |
 | guard-bash と guard-github-mcp でマーカーの検査関数を共有する | 検査は文字列の包含の 1 行で済み、共有すると `lib.ts` を 2 タスクが同時に触る |
+| M4-R と M4-FR を `codiel-m4b-tdd-skills` の最後の phase に残す | エージェント数が 11 になり、§0.1 の目安を超える。レビューは読み取りだけでコミットしないので、ゲートのコミットの後に別の Workflow で行っても順序は変わらない |
 | M4 の最初の Workflow の変更を捨て、組み直した計画で最初からやり直す | M4-T01・T03・T05・T08 の変更は決定 72〜79 と矛盾しない。改めるのは `--kind` と ID の検査と一部の記述だけで、M4-T09・T11・T12 がそれを担う |
