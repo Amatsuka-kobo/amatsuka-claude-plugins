@@ -189,6 +189,68 @@ describe("lint: HTML", () => {
   })
 })
 
+describe("lint: 形態素解析の層", () => {
+  const FIXTURE: { text: string; tokens: ReturnType<Analyzer["tokenize"]> }[] =
+    JSON.parse(
+      fs.readFileSync(
+        new URL("../../fixtures/morph/tokens.json", import.meta.url),
+        "utf8"
+      )
+    )
+  // 固定データの例文だけを知っている解析器。知らない本文には何も返さない
+  const fake: Analyzer = {
+    tokenize: (t) => FIXTURE.find((s) => s.text === t)?.tokens ?? []
+  }
+  const sentence = (n: number) => (FIXTURE[n - 1] as { text: string }).text
+
+  test("形態素解析の違反が line と endLine を持ち、正規表現の層の違反と並ぶ", () => {
+    const text = `${sentence(9)}\n\n${sentence(1)}\n`
+    const got = lint({ path: "a.md", text }, { rules: RULES, analyzer: fake })
+    expect(got.map((v) => [v.ruleId, v.line, v.endLine])).toEqual([
+      ["koto-dekiru", 1, 1],
+      ["muse-shugo", 3, 3]
+    ])
+  })
+
+  test("形態素解析の層は書き込み後のファイル全体の段落に当てる", () => {
+    const whole = { path: "a.md", text: `${sentence(1)}\n\n${sentence(3)}\n` }
+    const got = lint(
+      { path: "a.md", text: sentence(3) },
+      { rules: RULES, analyzer: fake, wholeFile: whole }
+    )
+    expect(got.map((v) => [v.ruleId, v.line])).toEqual([
+      ["muse-shugo", 1],
+      ["muse-shugo", 3]
+    ])
+  })
+
+  test("編集範囲の外の文の違反は overlaps で落ちる", () => {
+    const whole = { path: "a.md", text: `${sentence(1)}\n\n${sentence(3)}\n` }
+    const [range] = findEditRanges(whole.text, [sentence(3)])
+    const got = lint(
+      { path: "a.md", text: sentence(3) },
+      { rules: RULES, analyzer: fake, wholeFile: whole }
+    ).filter((v) => overlaps(v, [range as { start: number; end: number }]))
+    expect(got.map((v) => [v.ruleId, v.line])).toEqual([["muse-shugo", 3]])
+  })
+
+  test("HTML でもブロックに形態素解析の規則を当てる", () => {
+    const text = `<ul><li>${sentence(11)}</li></ul>\n<p>${sentence(11)}</p>\n`
+    const got = lint({ path: "a.html", text }, { rules: RULES, analyzer: fake })
+    // li はリストなので文末の連続を当てない
+    expect(got.map((v) => [v.ruleId, v.line])).toEqual([
+      ["bunmatsu-renzoku", 2]
+    ])
+  })
+
+  test("ignore-file の目印があれば形態素解析の層も動かさない", () => {
+    const text = `<!-- native-japanese: ignore-file -->\n${sentence(1)}\n`
+    expect(
+      lint({ path: "a.md", text }, { rules: RULES, analyzer: fake })
+    ).toEqual([])
+  })
+})
+
 describe("findEditRanges", () => {
   const file = "一行目\n二行目\n三行目\n四行目\n"
 

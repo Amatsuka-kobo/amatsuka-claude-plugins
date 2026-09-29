@@ -14,14 +14,26 @@ import {
   isHtml,
   type Source
 } from "./lib/extract.js"
-import { lint, overlaps, type Violation } from "./lib/lint.js"
+import { type Analyzer, lint, overlaps, type Violation } from "./lib/lint.js"
+import { sentenceLines } from "./lib/morph.js"
 import { buildRules, type Rule } from "./lib/rules.js"
+import { loadAnalyzer } from "./morph-runtime.js"
 
 // 集計の単位。違反の例に出すため、違反にパスを添える
 type Found = Violation & { path: string }
 interface Tally {
   lines: number
+  sentences: number
   found: Found[]
+}
+type Range = { start: number; end: number }
+
+// 形態素解析の層にかけた文を数える。ranges を渡したときは、その範囲と重なる文だけを数える
+function countSentences(src: Source, ranges?: Range[]): number {
+  return sentenceLines(extractBlocks(src)).filter(
+    (s) =>
+      !ranges || ranges.some((r) => s.line <= r.end && r.start <= s.endLine)
+  ).length
 }
 
 const USAGE =
@@ -65,7 +77,11 @@ function parseDiff(diff: string): Added[] {
   return files
 }
 
-function measureGit(range: string, rules: Rule[]): Tally {
+function measureGit(
+  range: string,
+  rules: Rule[],
+  analyzer: Analyzer | null
+): Tally {
   const git = (...args: string[]) =>
     execFileSync("git", args, {
       encoding: "utf8",
@@ -87,7 +103,7 @@ function measureGit(range: string, rules: Rule[]): Tally {
   const dots = /\.\.\.?/.exec(range)
   const end = dots ? range.slice(dots.index + dots[0].length) || "HEAD" : null
   const top = git("rev-parse", "--show-toplevel").trim()
-  const tally: Tally = { lines: 0, found: [] }
+  const tally: Tally = { lines: 0, sentences: 0, found: [] }
   for (const file of parseDiff(diff)) {
     let text: string
     try {
@@ -101,7 +117,7 @@ function measureGit(range: string, rules: Rule[]): Tally {
     const whole: Source = { path: file.path, text }
     // 先頭に目印を持つファイルは、違反だけでなく行数にも入れない
     if (hasIgnoreMarker(whole)) continue
-    const ranges = file.hunks
+    const ranges: Range[] = file.hunks
       .filter((h) => h.lines.length > 0)
       .map((h) => ({ start: h.start, end: h.start + h.lines.length - 1 }))
     if (isHtml(file.path)) {
@@ -111,9 +127,16 @@ function measureGit(range: string, rules: Rule[]): Tally {
         for (const n of b.lineOf)
           if (ranges.some((r) => r.start <= n && n <= r.end)) seen.add(n)
       tally.lines += seen.size
-      for (const v of lint(whole, { rules }))
+      if (analyzer) tally.sentences += countSentences(whole, ranges)
+      for (const v of lint(whole, { rules, analyzer }))
         if (overlaps(v, ranges)) tally.found.push({ ...v, path: file.path })
       continue
+    }
+    // 形態素解析の層は変更後のファイル全体から段落を組み、加わった行と重なる違反だけを数える
+    if (analyzer) {
+      tally.sentences += countSentences(whole, ranges)
+      for (const v of lint(whole, { rules: [], analyzer }))
+        if (overlaps(v, ranges)) tally.found.push({ ...v, path: file.path })
     }
     for (const h of file.hunks) {
       const frag: Source = { path: file.path, text: h.lines.join("\n") }
@@ -180,7 +203,8 @@ function writerOf(file: string): string {
 function measureTranscripts(
   dir: string,
   since: string | undefined,
-  rules: Rule[]
+  rules: Rule[],
+  analyzer: Analyzer | null
 ): Map<string, Tally> {
   const byWriter = new Map<string, Tally>()
   const files = (fs.readdirSync(dir, { recursive: true }) as string[])
@@ -189,7 +213,7 @@ function measureTranscripts(
   for (const rel of files) {
     const file = path.join(dir, rel)
     const writer = writerOf(file)
-    const tally = byWriter.get(writer) ?? { lines: 0, found: [] }
+    const tally = byWriter.get(writer) ?? { lines: 0, sentences: 0, found: [] }
     byWriter.set(writer, tally)
     for (const l of fs.readFileSync(file, "utf8").split("\n")) {
       let rec: {
@@ -220,11 +244,12 @@ function measureTranscripts(
           continue
         for (const src of sourcesOf(c.input as Input)) {
           if (hasIgnoreMarker(src)) continue
-          // 書き込み後のファイルが無いので、HTML は本文全体を編集範囲とする
+          // 書き込み後のファイルが無いので、どちらの層も本文そのものに当て、全体を編集範囲とする
           tally.lines += isHtml(src.path)
             ? new Set(extractBlocks(src).flatMap((b) => b.lineOf)).size
             : extractLines(src).length
-          for (const v of lint(src, { rules }))
+          if (analyzer) tally.sentences += countSentences(src)
+          for (const v of lint(src, { rules, analyzer }))
             tally.found.push({ ...v, path: src.path })
         }
       }
@@ -235,10 +260,48 @@ function measureTranscripts(
 
 // --- 出力 ---
 
+type Morph = { used: boolean; reason?: string }
+
+// --data-dir を渡されたら、AMATSUKA_NATIVE_JAPANESE_MORPH を見ずに使う(設計書のセクション 5-5)。
+// 省略時は CLAUDE_PLUGIN_DATA を使い、こちらは hook と同じく off なら使わない
+function openAnalyzer(dataDir: string | undefined): {
+  analyzer: Analyzer | null
+  morph: Morph
+} {
+  let dir = dataDir
+  if (dir === undefined) {
+    if (process.env.AMATSUKA_NATIVE_JAPANESE_MORPH === "off")
+      return {
+        analyzer: null,
+        morph: { used: false, reason: "AMATSUKA_NATIVE_JAPANESE_MORPH=off" }
+      }
+    dir = process.env.CLAUDE_PLUGIN_DATA
+    if (!dir)
+      return {
+        analyzer: null,
+        morph: {
+          used: false,
+          reason: "--data-dir も CLAUDE_PLUGIN_DATA も指定されていない"
+        }
+      }
+  }
+  const analyzer = loadAnalyzer(dir)
+  return analyzer
+    ? { analyzer, morph: { used: true } }
+    : {
+        analyzer: null,
+        morph: {
+          used: false,
+          reason: `${dir} に取得物が無いか、読み込みに失敗した`
+        }
+      }
+}
+
 function report(
   tally: Tally,
   rules: Rule[],
-  byWriter: Map<string, Tally> | null
+  byWriter: Map<string, Tally> | null,
+  morph: Morph
 ) {
   const regexIds = new Set(rules.map((r) => r.id))
   const counts = new Map<string, number>()
@@ -251,14 +314,9 @@ function report(
   }
   const violations = tally.found.length
   return {
-    // T12: 形態素解析の層を組み込んだら、loadAnalyzer の結果で埋める
-    morph: {
-      used: false,
-      reason: "形態素解析の層はまだ組み込んでいない"
-    } as { used: boolean; reason?: string },
+    morph,
     lines: tally.lines,
-    // T12: 形態素解析の層で文に分けたら、その数を入れる
-    sentences: 0,
+    sentences: tally.sentences,
     violations,
     per100Lines:
       tally.lines === 0
@@ -332,7 +390,6 @@ try {
       git: { type: "string" },
       transcripts: { type: "string" },
       since: { type: "string" },
-      // T12: loadAnalyzer に渡す。いまは受け付けるだけ
       "data-dir": { type: "string" },
       format: { type: "string", default: "text" }
     }
@@ -357,22 +414,26 @@ const rules = buildRules(
   )
 )
 
+const { analyzer, morph } = openAnalyzer(values["data-dir"])
+
 let result: ReturnType<typeof report>
 try {
   if (values.git !== undefined) {
-    result = report(measureGit(values.git, rules), rules, null)
+    result = report(measureGit(values.git, rules, analyzer), rules, null, morph)
   } else {
     const byWriter = measureTranscripts(
       values.transcripts as string,
       values.since,
-      rules
+      rules,
+      analyzer
     )
-    const all: Tally = { lines: 0, found: [] }
+    const all: Tally = { lines: 0, sentences: 0, found: [] }
     for (const t of byWriter.values()) {
       all.lines += t.lines
+      all.sentences += t.sentences
       all.found.push(...t.found)
     }
-    result = report(all, rules, byWriter)
+    result = report(all, rules, byWriter, morph)
   }
 } catch (e) {
   process.stderr.write(`${(e as Error).message}\n`)

@@ -8,7 +8,7 @@ import {
   type Source
 } from "../extract.js"
 
-const PH = "Ｘ"
+const PH = "甲"
 
 function lines(path: string, text: string, cellType?: Source["cellType"]) {
   return extractLines({ path, text, cellType })

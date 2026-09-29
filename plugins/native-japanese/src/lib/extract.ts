@@ -36,9 +36,9 @@ for (const [lang, exts] of [
 }
 
 const KANA = /[ぁ-ゟ゠-ヿ]/
-// インラインコードと URL の置き換え先。全角にして、行をつなぐときに ASCII として扱われないようにする。
-// 名詞として解析されるかは、形態素解析の層のテストで確かめる
-const PLACEHOLDER = "Ｘ"
+// インラインコードと URL の置き換え先。ASCII 以外の字なので、行をつなぐ規則はそのまま働く。
+// 全角の「Ｘ」は IPADIC で記号と解析されるので、名詞と解析される「甲」を使う(morph.test.ts で確かめる)
+const PLACEHOLDER = "甲"
 const INLINE_CODE = /(`+)[^`]+\1/g
 const URL_RE = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/g
 const MARKER = "native-japanese: ignore-file"
