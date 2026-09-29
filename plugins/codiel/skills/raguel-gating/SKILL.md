@@ -65,6 +65,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 | intent-sync | `mcp__plugin_codiel_raguel__evaluate_design` | `intent-sync` | `paths`: intent-sync で書き換えた intent と持続層のファイル |
 
 - `paths` はプロジェクトルートからの相対パスで、1〜20 件である。
+- code 系フェーズ(test-code・implement・test-loop・fix-loop)の evaluate_code には `baseRef` だけを渡し、`paths` を渡さない。`paths` で範囲を絞った評価は pass-gate の検査 8 が拒む。
+- 文書のフェーズで渡すファイルは、pass-gate の検査 9 が照合する。design は `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` を、`paths` に含める。intent-sync は、書き換えたファイルをすべて渡す(書き換えるべきファイルがすべて含まれるかは照合されない)。
 - `discuss` は Raguel ゲート対象外(`pr / review / triage` と同様)。人間が直接参加する
   フェーズであり、合意内容の検査は design ゲートが design.md と discussion.md の整合として担う。
 - 全呼び出し共通の必須引数は `runId`(= `state.raguelRunId`)・`phase`・`objective` である。`repoPath` は渡さない。
@@ -81,6 +83,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - evaluate の呼び出しが長引いてバックグラウンドへ移ったら、完了の通知を待つ。待つ間は evaluate を呼び直さない。
 - 評価のあとに成果物を動かさない。code 系フェーズは、pass-gate までコミットを足さない(HEAD が変わると
   pass-gate が止まる)。文書のフェーズは、pass-gate まで文書を書き換えない(内容が変わると止まる)。
+- pass-gate の後も、次のフェーズの `start-phase` までコミットを足さない。`start-phase` は、直前に通ったフェーズの
+  `passedHead` と今の HEAD が等しいことを要り、コミットがあると「評価の後にコミットがある」旨で失敗する。
 
 ## verdict 別ハンドリング
 
@@ -152,9 +156,10 @@ verdict を上書きしない。
 1. 所見(`ruleId`・`severity`・`message`・`evidence`)と `decisionPoint`・`reasons`・`casePath` を読み、
    `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind raguel --verdict STOP --evaluation-id <STOP の evaluationId>`
    で run を `awaiting_human` にする。フェーズの `verdict` に `STOP` が残る。
+   所見に `casefile/tampered` があるときは、記録の改竄であり覆せないので、手順 2 に進まず、AskUserQuestion を使わずに止める。
+   応答の本文で、止めた理由(改竄の所見の要約と `decisionPoint`)を報告する(AskUserQuestion の選択肢は 2 件以上が要り、「止める」だけの質問にできないため)。
 2. AskUserQuestion で「誤検知として続ける」か「妥当として止める」かを聞く。質問文の中に、懸念の要約(何が、どこで)と
    `decisionPoint` を入れる。応答の本文だけに書かず、所見の原文は添えない。オーケストレーターはどちらも選ばない。
-   所見に `casefile/tampered` があるときは、記録の改竄であり覆せないので、誤検知の選択肢を出さず、「止める」だけを選択肢にする。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "false-positive"`、STOP の `evaluationId`、
       `notes` に誤検知と裁定した所見と理由)を記録する。失敗したら `pass-gate` に進まず、失敗を人に示す。

@@ -250,7 +250,12 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   (2.5・2.7〜2.9)。`serial` グループ・`final`・グループのマージの後の修正・test-loop のプロジェクト全体
   の修正・fix-loop の修正は run ブランチ上で直接委譲するので、委譲先が run ブランチへ直接コミットする。
   オーケストレーターはマージと worktree の後始末と、E2E のレポートのコミット(2.10)を除き、これらの
-  フェーズで自分の判断によるコミットをしない。
+  フェーズで自分の判断によるコミットをしない。コード系フェーズの pass-gate の後は、次のフェーズの
+  `start-phase` までコミットしない(`start-phase` が、直前に通ったフェーズの `passedHead` と今の HEAD の一致を要る)。
+- **文書系フェーズの後のコミットの範囲**: ゲート通過の直後にコミットするのは、そのゲートで評価した文書
+  (`paths` に渡したファイル)だけにする。ほかのファイルを同じコミットや次の code 系フェーズの `start-phase`
+  より前のコミットに入れると、`start-phase` がそのパスを挙げて失敗する。test-spec と dev-plan は、両方で
+  評価した文書をそれぞれの通過の直後にコミットしてよい。
 - **run の文書の置き場**: discuss・design・dev-plan の委譲が書く `agenda.md`・`discussion.md`・`design.md`・
   `dev-plan.md` は `<repoRoot>/<runsDir>/<slug>/` に置き、try で分けない。依頼文の出力先には
   `<repoRoot>/<runsDir>/<slug>/<ファイル名>` の絶対パスを書き、後のフェーズの入力にも同じパスを渡す。

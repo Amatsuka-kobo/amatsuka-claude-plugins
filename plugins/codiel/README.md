@@ -189,6 +189,7 @@ Raguel の設定は、プロジェクトルートの `.codiel/config.json` の `
 - 未知のキー・ルール ID・パラメータは読み込みエラーです。書き間違いが黙って無視されることはありません。
 - マージの規則: オブジェクトは再帰的に重ね、配列は置き換えます。例外は、sealed ルール(`common/secrets`・`code/protected-paths` など、設定で無効にできないルール)の一覧を表す配列で、既定値との和集合になります(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)。緩める方向の配列を、和集合のせいで置き換えられない事態は起きません。どの配列が和集合かは `list_rules` の `params` に出ます。
 - `testsDir` は、`RAGUEL_CONFIG` を設定したときも、プロジェクトルートの `.codiel/config.json` から読みます。不正な値(文字列でない・空・絶対パス・`..` を含む)は、Raguel も codiel も失敗にします。
+- `RAGUEL_CONFIG` は、MCP サーバーの設定の `env` だけに書くと、hook のプロセスから見えません。guard が `RAGUEL_CONFIG` のファイルを守れなくなるので、Claude Code を起動するシェルの環境変数として設定してください。
 - `.codiel/config.json` の `raguel` を書き換えるのは、run が active でないときにしてください。run が active か awaiting_human の間は、codiel の hook が `.codiel/config.json` の全体・`RAGUEL_CONFIG` のファイル・ケースファイルの置き場への書き込みを拒みます。設定を変えるときは run を止めるか、利用者が自分の手で変えます。
 
 ### パネルのプロバイダーは claude と codex から選ぶ
@@ -260,6 +261,10 @@ Raguel の設定は、プロジェクトルートの `.codiel/config.json` の `
 ### E2E のレポートは Raguel が評価から外す
 
 `<testsDir>/**/reports/**` の E2E のレポートは、利用者の設定なしに、生成物と同じ扱いで評価から外れます(`common/secrets` だけを当てます)。レポートだけの差分は「変更なし」として PROCEED になります。オーケストレーターがレポートを評価の前にコミットしても、差分に混ざって評価されることはありません。`testsDir` の外にある `reports/` は対象外です。
+
+### intent-sync のゲートには照合の限界がある
+
+intent-sync のゲートは、書き換えるべきファイルがすべて評価されたかを照合しません(既知の限界)。書き換えるファイルが run ごとに違うので、評価したファイルが、ゲートの後で変わっていないことだけを見ます。intent-sync では、書き換えたファイルをすべて `paths` に渡してください。
 
 ### ケースファイル・判例・ログの置き場
 

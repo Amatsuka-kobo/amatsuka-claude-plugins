@@ -72,7 +72,8 @@ codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を
 
 - 設定は評価ごとに読み直す(mtime で判定)。読み込みに失敗したら、評価対象を先に取ってから ASK・degraded で返し、所見に設定のパスと理由を載せる(§14.4)。
 - ルール層に stop があればパネルも Jev も起動せず STOP を返す。
-- 空の差分は [2] の後に [3]〜[7] を飛ばして PROCEED になり、[8] の記録だけを書く(§4.2)。
+- 空の差分は [2] の後に [4]〜[7] を飛ばして PROCEED になり、[8] の記録を書く(§4.2)。[3] のうち前フェーズの改竄の検証だけは、空の差分でも行う。
+- `subject.head` は、プロジェクトルートが git の管理外のときと、最初のコミットが無いリポジトリで文書と判断を評価したときに `null` になる。索引の `head` も同じである。evaluate_code は HEAD を解決できなければ入力の誤りにする。
 - 前フェーズ(§16.1)の最新 attempt の改竄を [3] で検証する。不一致は `casefile/tampered`(stop)である。前フェーズの提出本文の先頭 4000 文字、ルール層の ask 以上の ruleId、meta の rationale、人の裁定を、tier と verdict に関係なく crosscheck と meta に渡す。
 - [2]〜[7] を通して締切(既定 600 秒)が効く(§9)。
 
@@ -103,7 +104,7 @@ codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を
 2. 比べる終点は常に HEAD で、任意の終点は受けない。pass-gate が HEAD の一致を見るためである。
 3. `paths`(無ければ作業ツリー全体)に未コミットの変更があれば入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。
 4. `core.quotePath=false` などを固定した書式で `git diff` を実行する。差分が 20 MB を超えたら入力の誤りにする。
-5. 差分が空、または差分のファイルがすべて E2E のレポート(§5.3)なら、ルール層・Jev・重さ判定・パネルを通さずに PROCEED・trivial とし、`code/no-change`(info)を残す。変更の無いフェーズ(修正の要らない test-loop など)がこれに当たる。記録は通常どおり書くので pass-gate はそのまま照合できる。
+5. 差分が空、または差分のファイルがすべて E2E のレポートか生成物(§5.3)なら、Jev・重さ判定・パネルを通さずに PROCEED・trivial とし、`code/no-change`(info)を残す。変更の無いフェーズ(修正の要らない test-loop など)がこれに当たる。差分が空でないときは、レポートと生成物に `common/secrets` を当て、stop が出れば STOP にする。記録は通常どおり書くので pass-gate はそのまま照合できる。前フェーズの改竄の検証(§3 の [3])は変更なしでも行い、改竄があれば `casefile/tampered` の STOP にする。
 
 plan・design の `paths` は repoPath 相対で、実体パスが repoPath の内側にある通常のファイル(1 MB 以下、UTF-8)だけを受ける。追跡されていないファイルも読む。本文は `=== <path> ===` の見出し行でつなぎ、見出し行はルール層の検査から外す。decision は `decision`・`optionsConsidered`・`rollbackPlan` をこの順に見出し行でつなぐ。
 
@@ -143,7 +144,7 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 
 | ルール ID | 内容 | 既定 | sealed |
 | --- | --- | --- | --- |
-| `common/secrets` | API キー・トークン・秘密鍵・`user:pass@` の形の検出。エントロピーの判定は語を `/` と `.` で区切った部分に当て、英大文字・英小文字・数字の 3 種を含む 20 文字以上の部分だけを測る。一致したトークンは先頭 4 文字だけを残して伏せ、`01-rules.json`・verdict.json・応答・`submission.txt` のすべてで伏せる | stop | ✔ |
+| `common/secrets` | API キー・トークン・秘密鍵・`user:pass@` の形の検出。エントロピーの判定は語を `/` と `.` で区切った部分に当て、英大文字・英小文字・数字の 3 種を含む 20 文字以上の部分だけを測る。`://` を含む行も対象にし(URL のクエリに埋めた鍵を拾うため)、lockfile と `node_modules` の行だけを除く。一致したトークンは先頭 4 文字だけを残して伏せ、`01-rules.json`・verdict.json・応答・`submission.txt` のすべてで伏せる | stop | ✔ |
 | `common/injection-marker` | インジェクションの徴候。`system-prompt-forgery` は命令の語と同じ行にあるときだけ一致させる | ask | ✔ |
 | `common/resubmission-loop` | 同じ run・フェーズの過去の attempt との類似(MinHash の推定 Jaccard、既定 0.85、上限 0.95)。前回の ruleId が消えた再提出、人の裁定を経た attempt、degraded の attempt は比べない。stop には上げない | ask | ✔ |
 | `common/max-size` | 本文の大きさの上限 | ask | |
@@ -176,6 +177,7 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 
 - 保護の glob は、既定の glob と利用者の `globs` の和集合から `excludeDefaults` を除いたものである。
 - `generated` に当たるパスは、保護パス・重さ判定・パネルの入力・Jev の対象から外し、`common/secrets` だけを当てる。パネルには「生成物: `<パス>`(`<行数>` 行の変更)」の 1 行だけを渡す。生成物と保護パスの両方に当たるパスは生成物として扱う。
+- 名前の変更(rename)は、移動元と移動先の両方のパスで判定する。どちらかが保護パスなら `code/protected-paths` を当て、生成物・レポートとして外すのは両方が外す対象のときだけにする。重さの変更ファイル数と近接、`code/test-deletion` も移動元を見る。保護パスのファイルを外へ移して保護を抜ける経路を塞ぐためである。
 - 差分が生成物だけなら `code/generated-only`(info)を出し、手書きの変更を生成物に見せかける抜け道の手がかりにする。
 - 外した既定の glob と `generated` は `policy.protectedPaths` と list_rules に毎回出る。
 - E2E のレポートは、`.codiel/config.json` の `testsDir` の配下で、`testsDir` からの相対パスに `reports/` のセグメントを含むファイルである。利用者の設定なしに生成物と同じに扱い、レポートだけの差分は変更なしとして PROCEED にする。判定は codiel の `isE2eReport` と同じである(`src/config/paths.ts`)。
@@ -495,7 +497,9 @@ src/
 ### 16.2 記録の形と pass-gate の検査
 
 - Raguel が書く記録は 3 つで、評価の索引(`evaluations.jsonl`)、裁定の記録(`outcomes.jsonl`)、attempt ごとの `verdict.json` である。すべて `schemaVersion: 2` を持つ。
-- codiel の `codiel-state pass-gate` はこれらを自分の実装で読み、evaluationId・runId・フェーズ・verdict の一致、最後の評価であること、`--human-approved` のときの裁定(ASK は `as-is`、STOP は `false-positive`)、code 系フェーズの `subject.head` と `subject.base`、文書のフェーズの sha256 を照合する。ASK に `--verdict PROCEED` を付けても通らない。
+- codiel の `codiel-state pass-gate` はこれらを自分の実装で読み、evaluationId・runId・フェーズ・verdict の一致、最後の評価であること、`--human-approved` のときの裁定(ASK は `as-is`、STOP は `false-positive`)、code 系フェーズの `subject.head` と `subject.base`(検査 8。`subject.paths` があれば通さない)、文書のフェーズの sha256(検査 9。フェーズごとに期待するファイルが `subject.files` に含まれることも要る)を照合する。ASK に `--verdict PROCEED` を付けても通らない。
+- pass-gate は通したときの HEAD を `phases.<phase>.passedHead` に記録し、start-phase は直前に通ったゲート付きフェーズの `passedHead` が今の HEAD と等しいことを要る(フェーズの間の連続性)。pass-gate の後にコミットを足すと、次の start-phase が失敗する。
+- 既知の限界として、intent-sync のゲートは、書き換えるべきファイルがすべて評価されたかを照合しない。書き換えるファイルが run ごとに違うので、評価したファイルが変わっていないことだけを見る。
 - 両者は互いの src を import せず、同じ形を独立に実装する。2 者比較のテストだけが両方を読み、置き場の解決・projectId・`testsDir`・E2E のレポートの判定・pass-gate の検査が等しいことを確かめる。
 
 ## 17. 旧設計から変えたこと

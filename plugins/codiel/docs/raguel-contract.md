@@ -182,8 +182,8 @@ Raguel はこの判定を `classifyPath(repoRel, config, testsDir)` で使い、
 5. 行の `casePath` の `verdict.json` が読め、`evaluationId`・`runId`・`phase`・`verdict` が索引の行と等しい。
 6. `--human-approved` が無ければ、verdict が PROCEED である。
 7. `--human-approved` があれば、裁定の記録に同じ evaluationId の行があり、verdict が ASK なら `ruling` が `as-is`、STOP なら `false-positive` である。
-8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、`verdict.json` の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。`startHead` は `start-phase` が 4 フェーズで記録する。
-9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。
+8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、`verdict.json` の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。`startHead` は `start-phase` が 4 フェーズで記録する。さらに `subject.paths` が無いことを要り、`paths` で範囲を絞った評価では通さない。空の配列も絞った評価として扱う。
+9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。加えて、フェーズごとに期待するファイルが `subject.files` に含まれる。design は run の文書の置き場の `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` が 1 件以上である。intent-sync は書き換えるファイルが run ごとに違うので、期待するファイルを照合しない。
 10. state に `raguelContract: 2` が無い run(1.1.0 より前に作った run)では、検査の代わりに次の文言で失敗する。
 
 ```
@@ -192,6 +192,18 @@ codiel: この run は Raguel の記録の形式が古い(raguelContract なし)
 
 `<slug>` と `<intent パス>` は state の値に置き換えて出す。
 
-検査 8 の `subject.base` の照合は、`baseRef` を後ろへずらしてフェーズの差分の一部だけを評価させる抜け道を塞ぐ。検査 9 は、ゲートの後で文書を書き換えてからコミットする抜け道を塞ぐ。
+検査 8 の `subject.base` の照合と `paths` の拒否は、範囲を絞ってフェーズの差分の一部だけを評価させる抜け道を塞ぐ。検査 9 の sha256 の照合は、ゲートの後で文書を書き換える抜け道を塞ぎ、期待するファイルの照合は、無関係なファイルを評価させて通す抜け道を塞ぐ。
+
+pass-gate は、通したときの HEAD を `phases.<phase>.passedHead` に記録する(すべてのゲート付きフェーズ。git の管理外では記録しない)。`start-phase` は、`startHead` を記録するときに、直前に passed になったゲート付きフェーズの `passedHead` と今の HEAD を照らす(フェーズの間の連続性)。照らし方は直前のフェーズの種類で変わる。
+
+- code 系フェーズ: 今の HEAD が `passedHead` と等しいことを要る。等しくなければ「評価の後にコミットがある」旨で失敗する。code 系フェーズの pass-gate の後は、次のフェーズの `start-phase` までコミットしない。
+- 文書のフェーズ(design・test-spec・dev-plan・intent-sync): `git diff --name-only --no-renames <passedHead> HEAD` の変更が、すべてそのフェーズの `verdict.json` の `subject.files` にあることを要る。名前の変更は移動元と移動先の両方を照らす。外れたら、許されないファイルのパスを挙げて失敗する。評価した文書だけは、ゲート通過の直後にコミットしてよい。
+- 同じステージの test-spec と dev-plan は、両方の `subject.files` を合わせて許す。起点は、2 つの `passedHead` のうち、もう一方の祖先であるほう(先に通したほう)にする。
+
+`skip-phase` で通したフェーズは `passedHead` を持たないので、照合しない。
+
+Raguel の側では、`head` が `null` になる場合がある。プロジェクトルートが git の管理外のとき、または最初のコミットが無いリポジトリで文書と判断を評価したときで、索引の `head` と `subject.head` が `null` になる。evaluate_code は HEAD を解決できなければ入力の誤りにするので、code 系フェーズの `subject.head` は `null` にならない。
+
+差分が空のときと、レポートと生成物しかないときも、Raguel は前フェーズの改竄の検証を行う。改竄があれば `casefile/tampered` の STOP にする。変更なしを理由に、改竄の検証を飛ばさない。
 
 関連する `codiel-state` の変更は 3 つある。`mark-ask --kind raguel` は `--evaluation-id` を必須にし、索引の行があり、`runId`・`phase` が合い、`verdict` が `--verdict`(既定 ASK)と等しいことを確かめる。`init` は、同じ slug の最新の try の索引に、judgeStatus が ok の STOP で `false-positive` の裁定を持たないものがあれば `--human-approved` を要る。また `init` は、新しい state に `raguelContract: 2` を記録する。
