@@ -424,3 +424,71 @@ test("ファイルが消えていれば ready.json を消して null", async () 
   expect(loadAnalyzer(data)).toBeNull()
   expect(fs.existsSync(readyPath(data))).toBe(false)
 })
+
+test("files に .node と ipadic/ の 10 ファイルがそろっていなければ ready.json を消して null", async () => {
+  const data = tmpData()
+  await install(data)
+  const ready = JSON.parse(fs.readFileSync(readyPath(data), "utf8")) as {
+    files: Record<string, unknown>
+  }
+  delete ready.files["ipadic/dict.words"]
+  fs.writeFileSync(readyPath(data), JSON.stringify(ready))
+  expect(loadAnalyzer(data)).toBeNull()
+  expect(fs.existsSync(readyPath(data))).toBe(false)
+
+  const empty = tmpData()
+  await install(empty)
+  fs.writeFileSync(readyPath(empty), JSON.stringify({ ...ready, files: {} }))
+  expect(loadAnalyzer(empty)).toBeNull()
+  expect(fs.existsSync(readyPath(empty))).toBe(false)
+})
+
+// --- installMorph の失敗の経路
+
+test("書き込み後の sha256 が合わなければ何も残さず fetch-failed.json を書く", async () => {
+  const data = tmpData()
+  const readFileSync = fs.readFileSync
+  vi.spyOn(fs, "readFileSync").mockImplementation(((
+    p: fs.PathOrFileDescriptor,
+    ...rest: unknown[]
+  ) =>
+    String(p).includes(".tmp-")
+      ? Buffer.from("改変した中身")
+      : (readFileSync as (...a: unknown[]) => unknown)(
+          p,
+          ...rest
+        )) as typeof fs.readFileSync)
+  await install(data)
+  expect(fs.readdirSync(morphDir(data)).sort()).toEqual(["fetch-failed.json"])
+  const failed = JSON.parse(
+    readFileSync(path.join(morphDir(data), "fetch-failed.json"), "utf8")
+  ) as { reason: string }
+  expect(failed.reason).toContain("sha256")
+})
+
+test("rename の後に失敗したら、ready.json の無いディレクトリも一時ファイルも残さない", async () => {
+  const data = tmpData()
+  const renameSync = fs.renameSync
+  vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+    if (String(to).endsWith("ready.json")) throw new Error("rename に失敗した")
+    renameSync(from, to)
+  })
+  await install(data)
+  expect(fs.existsSync(installDir(data))).toBe(false)
+  expect(fs.readdirSync(morphDir(data)).sort()).toEqual(["fetch-failed.json"])
+})
+
+test("古いバージョンを消せなくても、取得は成功として扱う", async () => {
+  const data = tmpData()
+  touch(path.join(morphDir(data), "lindera-6.1.0", "ready.json"))
+  const rmSync = fs.rmSync
+  vi.spyOn(fs, "rmSync").mockImplementation((p, opts) => {
+    if (String(p).endsWith("lindera-6.1.0")) throw new Error("消せない")
+    rmSync(p, opts)
+  })
+  await install(data)
+  expect(fs.existsSync(readyPath(data))).toBe(true)
+  expect(fs.existsSync(path.join(morphDir(data), "fetch-failed.json"))).toBe(
+    false
+  )
+})

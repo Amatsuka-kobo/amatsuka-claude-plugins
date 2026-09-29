@@ -723,6 +723,19 @@ import { createRequire } from "node:module";
 import path2 from "node:path";
 var VERSION = "6.2.0";
 var INSTALL_DIR = `lindera-${VERSION}`;
+var DICT_DIR = "ipadic";
+var DICT_FILES = [
+  "NOTICE.txt",
+  "metadata.json",
+  "dict.trie",
+  "dict.wordsidx",
+  "char_def.bin",
+  "matrix.mtx",
+  "dict.vals",
+  "unk.bin",
+  "dict.valsidx",
+  "dict.words"
+];
 var LOCK_TTL_MS = 10 * 6e4;
 var FAILED_TTL_MS = 24 * 60 * 6e4;
 function loadAnalyzer(dataDir) {
@@ -732,7 +745,8 @@ function loadAnalyzer(dataDir) {
   try {
     if (!fs.existsSync(readyFile)) return null;
     const ready = JSON.parse(fs.readFileSync(readyFile, "utf8"));
-    const intact = Object.entries(ready.files).every(([rel, rec]) => {
+    const required = [ready.node, ...DICT_FILES.map((f) => `${DICT_DIR}/${f}`)];
+    const intact = required.every((rel) => Object.hasOwn(ready.files, rel)) && Object.entries(ready.files).every(([rel, rec]) => {
       try {
         const st = fs.statSync(path2.join(dir, rel));
         return st.size === rec.size && st.mtimeMs === rec.mtimeMs;
@@ -785,7 +799,7 @@ function main() {
   const cwd = typeof hook?.cwd === "string" ? hook.cwd : process.cwd();
   const file = path3.resolve(cwd, given);
   if (fs2.statSync(file).isDirectory()) return;
-  const cellType = input.cell_type === "markdown" || input.cell_type === "code" ? input.cell_type : void 0;
+  const cellType = input.cell_type === "markdown" || input.cell_type === "code" ? input.cell_type : input.notebook_path !== void 0 ? cellTypeOf(file, input.cell_id) : void 0;
   const wholeText = input.notebook_path !== void 0 ? bodies[0] : fs2.readFileSync(file, "utf8");
   const whole = { path: file, text: wholeText, cellType };
   if (hasIgnoreMarker(whole)) return;
@@ -798,9 +812,18 @@ function main() {
   const analyzer = process.env.AMATSUKA_NATIVE_JAPANESE_MORPH === "off" ? null : loadAnalyzer(process.env.CLAUDE_PLUGIN_DATA);
   const perBody = WHOLE_FILE.test(String(hook?.tool_name)) || input.notebook_path !== void 0 ? bodies.map(() => ({ start: 1, end: wholeText.split("\n").length })) : findEditRanges(wholeText, bodies);
   const ranges = perBody.filter((r) => r !== null);
+  let morphFound = [];
+  if (analyzer) {
+    try {
+      morphFound = lint(whole, { rules: [], analyzer }).filter(
+        (v) => overlaps(v, ranges)
+      );
+    } catch {
+    }
+  }
   let found;
   if (isHtml(file)) {
-    found = lint(whole, { rules, analyzer }).filter((v) => overlaps(v, ranges));
+    found = lint(whole, { rules }).filter((v) => overlaps(v, ranges));
   } else {
     found = bodies.flatMap((text, i) => {
       const shift = (perBody[i]?.start ?? 1) - 1;
@@ -810,13 +833,8 @@ function main() {
         endLine: v.endLine + shift
       }));
     });
-    if (analyzer)
-      found.push(
-        ...lint(whole, { rules: [], analyzer }).filter(
-          (v) => overlaps(v, ranges)
-        )
-      );
   }
+  found.push(...morphFound);
   if (found.length === 0) return;
   const fresh = unrecorded(hook?.session_id, file, found);
   if (fresh.length === 0) return;
@@ -831,6 +849,15 @@ function main() {
   ].join("\n");
   process.stdout.write(`${JSON.stringify({ decision: "block", reason })}
 `);
+}
+function cellTypeOf(file, cellId) {
+  try {
+    const nb = JSON.parse(fs2.readFileSync(file, "utf8"));
+    const cell = typeof cellId === "string" ? nb.cells?.find((c) => c.id === cellId) : void 0;
+    return cell?.cell_type === "markdown" ? "markdown" : "code";
+  } catch {
+    return "code";
+  }
 }
 function unrecorded(sessionId, file, found) {
   const key = (v) => JSON.stringify([file, v.ruleId, v.match]);

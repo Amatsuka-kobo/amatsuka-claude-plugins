@@ -722,6 +722,19 @@ import { createRequire } from "node:module";
 import path2 from "node:path";
 var VERSION = "6.2.0";
 var INSTALL_DIR = `lindera-${VERSION}`;
+var DICT_DIR = "ipadic";
+var DICT_FILES = [
+  "NOTICE.txt",
+  "metadata.json",
+  "dict.trie",
+  "dict.wordsidx",
+  "char_def.bin",
+  "matrix.mtx",
+  "dict.vals",
+  "unk.bin",
+  "dict.valsidx",
+  "dict.words"
+];
 var LOCK_TTL_MS = 10 * 6e4;
 var FAILED_TTL_MS = 24 * 60 * 6e4;
 function loadAnalyzer(dataDir) {
@@ -731,7 +744,8 @@ function loadAnalyzer(dataDir) {
   try {
     if (!fs.existsSync(readyFile)) return null;
     const ready = JSON.parse(fs.readFileSync(readyFile, "utf8"));
-    const intact = Object.entries(ready.files).every(([rel, rec]) => {
+    const required = [ready.node, ...DICT_FILES.map((f) => `${DICT_DIR}/${f}`)];
+    const intact = required.every((rel) => Object.hasOwn(ready.files, rel)) && Object.entries(ready.files).every(([rel, rec]) => {
       try {
         const st = fs.statSync(path2.join(dir, rel));
         return st.size === rec.size && st.mtimeMs === rec.mtimeMs;

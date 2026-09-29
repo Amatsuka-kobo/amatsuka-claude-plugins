@@ -111,8 +111,9 @@ function isFresh(file: string, ttlMs: number): boolean {
   }
 }
 
-// ready.json のサイズと mtime が実物と 1 つでも合わなければ ready.json を消し、
-// 次の SessionStart で取得をやり直させる。sha256 は取得の直後にだけ照合する。
+// ready.json の files に .node と辞書の 10 ファイルがそろっていないか、サイズと mtime が
+// 実物と 1 つでも合わなければ ready.json を消し、次の SessionStart で取得をやり直させる。
+// sha256 は取得の直後にだけ照合する。
 export function loadAnalyzer(dataDir: string | undefined): Analyzer | null {
   if (!dataDir) return null
   const dir = path.join(dataDir, "morph", INSTALL_DIR)
@@ -120,14 +121,17 @@ export function loadAnalyzer(dataDir: string | undefined): Analyzer | null {
   try {
     if (!fs.existsSync(readyFile)) return null
     const ready = JSON.parse(fs.readFileSync(readyFile, "utf8")) as Ready
-    const intact = Object.entries(ready.files).every(([rel, rec]) => {
-      try {
-        const st = fs.statSync(path.join(dir, rel))
-        return st.size === rec.size && st.mtimeMs === rec.mtimeMs
-      } catch {
-        return false
-      }
-    })
+    const required = [ready.node, ...DICT_FILES.map((f) => `${DICT_DIR}/${f}`)]
+    const intact =
+      required.every((rel) => Object.hasOwn(ready.files, rel)) &&
+      Object.entries(ready.files).every(([rel, rec]) => {
+        try {
+          const st = fs.statSync(path.join(dir, rel))
+          return st.size === rec.size && st.mtimeMs === rec.mtimeMs
+        } catch {
+          return false
+        }
+      })
     if (!intact) {
       fs.rmSync(readyFile, { force: true })
       return null
@@ -256,12 +260,18 @@ export async function installMorph(opts: {
     fs.writeFileSync(readyTmp, `${JSON.stringify(ready, null, 2)}\n`)
     fs.renameSync(readyTmp, path.join(dir, "ready.json"))
 
-    for (const entry of fs.readdirSync(morph)) {
-      if (entry.startsWith("lindera-") && entry !== INSTALL_DIR)
-        fs.rmSync(path.join(morph, entry), { recursive: true, force: true })
-    }
+    // 取得物はそろったので、古いバージョンを消せなくても成功として扱う
+    try {
+      for (const entry of fs.readdirSync(morph)) {
+        if (entry.startsWith("lindera-") && entry !== INSTALL_DIR)
+          fs.rmSync(path.join(morph, entry), { recursive: true, force: true })
+      }
+    } catch {}
   } catch (error) {
     fs.rmSync(tmp, { recursive: true, force: true })
+    // rename の後に失敗すると、ready.json の無い dir と ready.json.tmp-<pid> が残るので dir ごと消す
+    if (!fs.existsSync(path.join(dir, "ready.json")))
+      fs.rmSync(dir, { recursive: true, force: true })
     fs.writeFileSync(
       path.join(morph, "fetch-failed.json"),
       `${JSON.stringify({
