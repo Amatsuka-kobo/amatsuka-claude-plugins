@@ -11,6 +11,9 @@ const SCRIPT = fileURLToPath(new URL("../inject.ts", import.meta.url))
 const DISCIPLINE = fileURLToPath(
   new URL("../../references/discipline.md", import.meta.url)
 )
+const REMINDER = fileURLToPath(
+  new URL("../../references/reminder.md", import.meta.url)
+)
 const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
 const SESSION_START = JSON.stringify({ hook_event_name: "SessionStart" })
 const MORPH_RUNTIME = fileURLToPath(
@@ -31,7 +34,7 @@ function inject(input: string, script = SCRIPT): string {
 // src/inject.ts と、それが読み込む morph-runtime.ts と lib/archive.ts を複製した
 // プラグインルートを一時ディレクトリに作り、inject.ts のパスを返す。
 // 取得の起動先 scripts/fetch-morph.mjs は、目印のファイルを書くだけの差し替えにする。
-// discipline が null なら references/ を置かない。
+// discipline が null なら references/ を置かない。置くときは reminder.md にも同じ本文を書く。
 function makePluginRoot(discipline: string | null): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-"))
   fs.writeFileSync(path.join(root, "package.json"), '{"type":"module"}\n')
@@ -45,6 +48,7 @@ function makePluginRoot(discipline: string | null): string {
   if (discipline !== null) {
     fs.mkdirSync(path.join(root, "references"))
     fs.writeFileSync(path.join(root, "references", "discipline.md"), discipline)
+    fs.writeFileSync(path.join(root, "references", "reminder.md"), discipline)
   }
   return script
 }
@@ -83,6 +87,22 @@ test.each([
         .replace("<!-- native-japanese: ignore-file -->\n\n", "")
     }
   })
+})
+
+test("UserPromptSubmit で reminder.md を 1 行の JSON で注入する", () => {
+  const out = inject(JSON.stringify({ hook_event_name: "UserPromptSubmit" }))
+  expect(out.endsWith("\n")).toBe(true)
+  expect(out.slice(0, -1)).not.toContain("\n")
+  expect(JSON.parse(out)).toEqual({
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: fs.readFileSync(REMINDER, "utf8")
+    }
+  })
+})
+
+test("reminder.md は 300 文字以内", () => {
+  expect(fs.readFileSync(REMINDER, "utf8").length).toBeLessThanOrEqual(300)
 })
 
 test("注入文に ignore-file の行が含まれない", () => {
@@ -139,9 +159,12 @@ test("discipline.md が無ければ何も出力しない", () => {
   })
 })
 
-test("discipline.md が空白だけなら何も出力しない", () => {
+test.each([
+  "SessionStart",
+  "UserPromptSubmit"
+])("%s で注入する本文が空白だけなら何も出力しない", (event) => {
   withPluginRoot(" \n\t\n  \n", (script) => {
-    expect(inject(SESSION_START, script)).toBe("")
+    expect(inject(JSON.stringify({ hook_event_name: event }), script)).toBe("")
   })
 })
 
@@ -232,7 +255,12 @@ test.each([
     SESSION_START,
     { AMATSUKA_NATIVE_JAPANESE_CHECK: "off" }
   ],
-  ["SubagentStart", JSON.stringify({ hook_event_name: "SubagentStart" }), {}]
+  ["SubagentStart", JSON.stringify({ hook_event_name: "SubagentStart" }), {}],
+  [
+    "UserPromptSubmit",
+    JSON.stringify({ hook_event_name: "UserPromptSubmit" }),
+    {}
+  ]
 ])("%s では取得を起動しない", async (_, input, env) => {
   await injectWithStub(
     input,

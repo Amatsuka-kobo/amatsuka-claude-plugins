@@ -25,9 +25,9 @@ function resolveTarget() {
   if (key === "darwin-x64" || key === "darwin-arm64") return key;
   return null;
 }
-function isFresh(file, ttlMs) {
+function isFresh(file2, ttlMs) {
   try {
-    return Date.now() - fs.statSync(file).mtimeMs < ttlMs;
+    return Date.now() - fs.statSync(file2).mtimeMs < ttlMs;
   } catch {
     return false;
   }
@@ -57,7 +57,7 @@ function maybeStartFetch(env) {
 }
 
 // src/inject.ts
-var EVENTS = ["SessionStart", "SubagentStart"];
+var EVENTS = ["SessionStart", "SubagentStart", "UserPromptSubmit"];
 var event;
 try {
   const input = JSON.parse(fs2.readFileSync(0, "utf8"));
@@ -72,25 +72,23 @@ if (event === "SessionStart") {
   } catch {
   }
 }
-var discipline;
+var file = event === "UserPromptSubmit" ? "../references/reminder.md" : "../references/discipline.md";
+var body;
 try {
-  discipline = fs2.readFileSync(
-    new URL("../references/discipline.md", import.meta.url),
-    "utf8"
-  );
+  body = fs2.readFileSync(new URL(file, import.meta.url), "utf8");
 } catch {
   process.exit(0);
 }
-discipline = discipline.replace(
+body = body.replace(
   /^[ \t]*<!-- native-japanese: ignore-file -->[ \t]*(?:\r?\n|$)(?:[ \t]*\r?\n)?/gm,
   ""
 );
-if (discipline.trim() === "") process.exit(0);
+if (body.trim() === "") process.exit(0);
 process.stdout.write(
   `${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: event,
-      additionalContext: discipline
+      additionalContext: body
     }
   })}
 `

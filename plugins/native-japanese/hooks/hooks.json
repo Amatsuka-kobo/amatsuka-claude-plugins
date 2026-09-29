@@ -1,5 +1,5 @@
 {
-  "description": "日本語の書き方の規律を、セッション開始時とサブエージェント起動時に注入し、書き込み後に違反を差し戻す",
+  "description": "日本語の書き方の規律をセッション開始時とサブエージェント起動時に、その要約をプロンプトの送信ごとに注入し、書き込み後に違反を差し戻す",
   "hooks": {
     "SessionStart": [
       {
@@ -13,6 +13,17 @@
       }
     ],
     "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/inject.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
