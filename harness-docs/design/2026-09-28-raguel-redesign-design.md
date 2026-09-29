@@ -1068,7 +1068,7 @@ Raguel の記録を読む処理を `C/src/raguel-records.ts`(新設)に置く。
 
 | コマンド | 変更 | 受け入れ基準 |
 | --- | --- | --- |
-| `start-phase` | test-code・implement・test-loop・fix-loop では、`git rev-parse HEAD` をフェーズの `startHead` に記録する。加えて、直前に passed になったゲート付きフェーズの `passedHead` があれば、今の HEAD と等しいことを要る(フェーズの間の連続性。2026-09-29、W4 のレビューを受けたユーザー決定) | 4 フェーズで `phases.<phase>.startHead` が 40 桁のコミットになる。直前のフェーズの pass-gate の後にコミットを足すと、start-phase が「評価の後にコミットがある」旨で失敗する |
+| `start-phase` | test-code・implement・test-loop・fix-loop では、`git rev-parse HEAD` をフェーズの `startHead` に記録する。加えて、直前に passed になったゲート付きフェーズの `passedHead` があれば、フェーズの間の連続性を確かめる。直前が code 系フェーズなら、今の HEAD が `passedHead` と等しいことを要る。直前が文書のフェーズなら、`passedHead..HEAD` の変更がそのフェーズの `subject.files`(検査 9 で sha256 を照合した文書)だけであることを要る。文書のフェーズの成果物はゲート通過の直後にコミットする運用(`C/skills/orchestrating-runs/SKILL.md` の 2.1、§6.2.3)を保つためである。同じステージの test-spec と dev-plan は、両方の `subject.files` を合わせて見る(2026-09-29、W4 のレビューを受けたユーザー決定) | 4 フェーズで `phases.<phase>.startHead` が 40 桁のコミットになる。直前の code 系フェーズの pass-gate の後にコミットを足すと、start-phase が「評価の後にコミットがある」旨で失敗する。直前の文書のフェーズの後に、評価した文書のほかのファイルをコミットしても同じく失敗する |
 | `pass-gate` の記録 | 通したときの HEAD を `phases.<phase>.passedHead` に記録する(すべてのゲート付きフェーズ。git の管理外では記録しない) | passed のフェーズが `passedHead` を持つ |
 | `pass-gate` | 下の検査をすべて通ったときだけ通す | 検査ごとに、外れた入力で非ゼロ終了するテストがある |
 | `mark-ask` | `--kind raguel` では `--evaluation-id` を必須にし、索引の行があり、`runId`・`phase` が合い、`verdict` が `--verdict`(既定 ASK)と等しいことを確かめる | 存在しない evaluationId と、verdict の食い違いで非ゼロ終了する |
