@@ -3,25 +3,24 @@
 
 ## 担当表
 
-| 役割名                           | RoleId                  | 種別       | Agent Tool | Claude モデル |
-| -------------------------------- | ----------------------- | ---------- | ---------- | ------------- |
-| 複雑または重要な実装             | `complex-impl`          | `impl`     | 可         | `Opus`        |
-| 通常の実装                       | `normal-impl`           | `impl`     | 可         | `Sonnet`      |
-| 軽量な実装                       | `light-impl`            | `impl`     | 可         | `Haiku`       |
-| 行き詰まり時のエスカレーション   | `escalation`            | `impl`     | 可         | `Fable`       |
-| その他のタスク                   | `general`               | `impl`     | 可         | `Sonnet`      |
-| コードベース探索                 | `explore`               | `readonly` | 可         | `Sonnet`      |
-| リアルタイム情報調査             | `realtime-research`     | `readonly` | 可         | `Sonnet`      |
-| E2E 動作検証・ブラウザ/GUI 操作  | `e2e-verify`            | `impl`     | 可         | `Sonnet`      |
-| 設計書・実装計画書のレビュー     | `design-review`         | `readonly` | 可         | `Sonnet`      |
-| 暗黙知の抽出・理解レビュー       | `knowledge-elicitation` | `readonly` | 否         | `Haiku`       |
-| コードレビュー                   | `code-review`           | `readonly` | 否         | `Sonnet`      |
-| 重要な実装・高リスク設計書の最終レビュー | `complex-review`        | `readonly` | 否         | `Fable`       |
-| 敵対的レビュー                   | `adversarial-review`    | `readonly` | 否         | `Opus`        |
+| 役割名                                   | RoleId                  | 種別       | Claude モデル |
+| ---------------------------------------- | ----------------------- | ---------- | ------------- |
+| 複雑または重要な実装                     | `complex-impl`          | `impl`     | `Opus`        |
+| 通常の実装                               | `normal-impl`           | `impl`     | `Sonnet`      |
+| 軽量な実装                               | `light-impl`            | `impl`     | `Haiku`       |
+| 行き詰まり時のエスカレーション           | `escalation`            | `impl`     | `Fable`       |
+| その他のタスク                           | `general`               | `impl`     | `Sonnet`      |
+| コードベース探索                         | `explore`               | `readonly` | `Sonnet`      |
+| リアルタイム情報調査                     | `realtime-research`     | `readonly` | `Sonnet`      |
+| E2E 動作検証・ブラウザ/GUI 操作          | `e2e-verify`            | `impl`     | `Sonnet`      |
+| 設計書・実装計画書のレビュー             | `design-review`         | `readonly` | `Sonnet`      |
+| 暗黙知の抽出・理解レビュー               | `knowledge-elicitation` | `readonly` | `Haiku`       |
+| コードレビュー                           | `code-review`           | `readonly` | `Sonnet`      |
+| 重要な実装・高リスク設計書の最終レビュー | `complex-review`        | `readonly` | `Fable`       |
+| 敵対的レビュー                           | `adversarial-review`    | `readonly` | `Opus`        |
 
 - 「RoleId」は Agent 定義の `agent-policy-role` マーカーに書く値であり、役割マーカーの対応表の各行にも `[general]` の形で載る。担当表の行と対応表の行は RoleId で対応づく。
 - 「種別」は `impl` が成果物ファイルを書く役割、`readonly` が読み取りと報告だけの役割である。
-- 「Agent Tool」は、その役割として起動したサブエージェントに Agent Tool を許可してよいかである。
 - 「Claude モデル」は、その役割を Claude のモデルだけで実行するときのモデルである。`claude-model-policy` の運用では役割モデルそのものであり、`custom-policy` の運用では委譲先が決まらない役割の読み替え先である。
 
 ## 委譲先の解決

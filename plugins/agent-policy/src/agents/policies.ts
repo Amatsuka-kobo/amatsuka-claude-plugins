@@ -159,20 +159,6 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   "adversarial-review": ["opus", "gpt-sol"]
 }
 
-// 単一役割の定義には、共通規律の除外がそのまま効く。
-// 複数役割を兼ねる定義は一つの役割に対応しないため効かない（設計 §5.2）。
-const SOLO_DENIED_ROLES: readonly RoleId[] = [
-  "knowledge-elicitation",
-  "code-review",
-  "complex-review",
-  "adversarial-review"
-]
-
-// Agent の可否は役割だけで決まる。モデルによる除外は持たない。
-export function allowsAgentTool(ids: RoleId[]): boolean {
-  return ids.some((id) => !SOLO_DENIED_ROLES.includes(id))
-}
-
 export function modelById(id: string): ModelSpec | undefined {
   return MODELS.find((model) => model.id === id)
 }

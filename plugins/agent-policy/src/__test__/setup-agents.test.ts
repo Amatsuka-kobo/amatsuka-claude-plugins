@@ -49,7 +49,6 @@ interface RolesSummary {
   implRoles: string[]
   readonlyRoles: string[]
   mixedKinds: boolean
-  agentTool: boolean
 }
 
 interface Discarded {
@@ -937,8 +936,7 @@ describe("--check", () => {
       ids: ["complex-impl"],
       implRoles: ["complex-impl"],
       readonlyRoles: [],
-      mixedKinds: false,
-      agentTool: true
+      mixedKinds: false
     })
   })
 
@@ -963,82 +961,34 @@ describe("--check", () => {
       ids: ["normal-impl", "explore", "design-review"],
       implRoles: ["normal-impl"],
       readonlyRoles: ["explore", "design-review"],
-      mixedKinds: true,
-      agentTool: true
+      mixedKinds: true
     })
   })
 
-  it("Agent tool の可否を役割から返す", () => {
-    const denied = singleResult<CheckResult>([
+  it("生成した定義の tools に Agent を含めない", () => {
+    const result = run([
       "--scope",
       "custom",
       "--model-id",
-      "gpt-luna",
+      "gpt-sol",
       "--name",
-      "gpt-luna",
+      "gpt-sol-code-review",
       "--roles",
       "code-review",
       "--lang",
       "ja",
       "--dir",
       project,
-      "--check"
+      "--write"
     ])
-    expect(denied.roles.agentTool).toBe(false)
-    expect(check("custom", ["--roles", "complex-impl"]).roles.agentTool).toBe(
-      true
+    expect(result.ok).toBe(true)
+
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "gpt-sol-code-review.md"),
+      "utf8"
     )
-  })
-
-  it("Agent tool の可否を役割だけで決める", () => {
-    const agentToolFor = (roles: string): boolean =>
-      singleResult<CheckResult>([
-        "--scope",
-        "custom",
-        "--model-id",
-        "grok",
-        "--name",
-        `${roles.replace(/,/g, "-")}-agent-tool-check`,
-        "--roles",
-        roles,
-        "--lang",
-        "ja",
-        "--dir",
-        project,
-        "--check"
-      ]).roles.agentTool
-
-    expect(agentToolFor("code-review")).toBe(false)
-    expect(agentToolFor("complex-review")).toBe(false)
-    expect(agentToolFor("knowledge-elicitation")).toBe(false)
-    expect(agentToolFor("escalation")).toBe(true)
-    expect(agentToolFor("e2e-verify")).toBe(true)
-    expect(agentToolFor("explore,realtime-research,design-review")).toBe(true)
-    expect(agentToolFor("light-impl")).toBe(true)
-  })
-
-  it("自由モデル値でも役割だけで Agent の有無を決める", () => {
-    const result = singleResult<CheckResult>([
-      "--scope",
-      "custom",
-      "--model-id",
-      "haiku",
-      "--model",
-      "custom-live-model",
-      "--vendor",
-      "claude",
-      "--name",
-      "custom-claude-model",
-      "--roles",
-      "complex-impl",
-      "--lang",
-      "ja",
-      "--dir",
-      project,
-      "--check"
-    ])
-
-    expect(result.roles.agentTool).toBe(true)
+    const tools = content.match(/^tools: (.*)$/m)?.[1]?.split(", ") ?? []
+    expect(tools).not.toContain("Agent")
   })
 
   it("frontmatter が無い既存ファイルを全体が本文の文書として扱う", () => {
@@ -1426,6 +1376,7 @@ describe("--write", () => {
     expect(result.action).toBe("merged")
     expect(result.kept).toEqual([
       "tools:LSP",
+      "tools:Agent",
       "tools:CustomTool",
       "key:permissionMode",
       "section:## 独自運用"
