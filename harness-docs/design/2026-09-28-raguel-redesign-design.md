@@ -3,7 +3,7 @@
 - 作成日: 2026-09-28
 - 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直し、実機確認 4・9 の結果で §6.4.4・§6.12.1・§15 の 2・4 を確定した。W4 のレビューを受けて、§6.2.2 の手順 6・7、§6.4.2(`://` の行のエントロピー、rename)、§6.9.4(`head` の null)、§6.13.1(改竄の STOP)、§6.13.3(検査 8・9 と、フェーズの間の連続性)、§7.1(設定の行)、§13 を改めた(いずれも 2026-09-29、ユーザー承認)
 - 対象: `plugins/codiel/raguel-mcp`(主)、codiel で Raguel を使う箇所(`skills/raguel-gating`、`skills/orchestrating-runs`、`src/codiel-state.ts`、`src/hooks/guard-write.ts`・`guard-bash.ts`)
-- バージョン: codiel `1.0.0` → `1.1.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.1.0-dev`(§8)
+- バージョン: codiel `1.0.0` → `1.0.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.0.2-dev`(§8。2026-09-29 にユーザーの指示で改めた。旧目標は `1.1.0-dev`・`0.1.0-dev`)
 - 入力: ユーザー合意の決定 R1〜R24(2026-09-28〜29)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
 - 先行設計: `harness-docs/design/2026-09-27-codiel-intent-driven-design.md`(以下「codiel 設計」)の §6.1.1・§6.2.2・§6.13.2・§6.14(決定 83)、`plugins/codiel/raguel-mcp/docs/DESIGN.md`(以下「旧 DESIGN」)
 - 実装計画書(WBS): `harness-docs/plans/2026-09-29-raguel-redesign-plan.md`
@@ -1086,7 +1086,7 @@ pass-gate の検査は次のとおりである。
 7. `--human-approved` があれば、裁定の記録に同じ evaluationId の行があり、verdict が ASK なら `ruling` が `as-is`、STOP なら `false-positive` である。
 8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、verdict.json の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。さらに `subject.paths` が無いことを要り、`paths` で範囲を絞った評価では通さない(2026-09-29、W4 のレビューを受けたユーザー決定)。
 9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。加えて、フェーズごとに期待するファイルが `subject.files` に含まれる。design は run の文書の置き場の `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` が 1 件以上である。intent-sync は書き換えるファイルが可変なので、期待するファイルを照合しない(§13。2026-09-29、W4 のレビューを受けたユーザー決定)。
-10. state に `raguelContract: 2` が無い run(1.1.0 より前に作った run)では、pass-gate は検査の代わりに次の文言で失敗する。
+10. state に `raguelContract: 2` が無い run(この作り直しより前に作った run)では、pass-gate は検査の代わりに次の文言で失敗する。
 
 ```
 codiel: この run は Raguel の記録の形式が古い(raguelContract なし)ため、この版ではゲートを通せない。`codiel-state stop --slug <slug> --reason migrate` で止めてから、`/codiel:run <intent パス>` で同じ intent の新しい try を始める。
@@ -1184,8 +1184,8 @@ Bash でキー単位の判定ができず、run の間に codiel が config.json
 
 | 対象 | 現在 | 新 |
 | --- | --- | --- |
-| codiel `plugin.json`・`package.json` | `1.0.0` | `1.1.0-dev`(マイナー。ツールの入力と pass-gate の契約が変わるため) |
-| raguel-mcp `package.json` | `0.0.1-dev` | `0.1.0-dev` |
+| codiel `plugin.json`・`package.json` | `1.0.0` | `1.0.0-dev`(2026-09-29 にユーザーの指示で改めた) |
+| raguel-mcp `package.json` | `0.0.1-dev` | `0.0.2-dev`(同上) |
 | MCP サーバーが名乗るバージョン | `"0.1.0"` 固定(`R/server.ts:45`) | `package.json` の `version` |
 | `policy.version` | `1`(`R/core/pipeline.ts:38`) | `2` |
 | ケースファイルの `schemaVersion` | なし | `2` |
@@ -1277,7 +1277,7 @@ codiel(`C/`):
 | codex が `$CODEX_HOME/AGENTS.md` を読む | 利用者の全体の指示がパネリストの判定に混じる | 止める手段が無い(実機確認の 7)。README に既知の限界として書く。既定のプロバイダーは claude で、codex は利用者が選んだときだけ使う |
 | 人の裁定の真正性を機械で確かめられない | オーケストレーターが自分で record_outcome を呼べば、裁定を装える | codiel のスキルの HARD-GATE で禁じる(現行どおり)。§13 の既知の限界 |
 | projectId の算出が変わる | 旧ケースファイルと旧判例が見えなくなる | 引き継がない。シード判例は残る。README に書く |
-| ツールの入力が互換でなくなる | codiel `1.0.0` のスキルでは呼べない | codiel と raguel-mcp を同じリリース(`1.1.0-dev`)で出す。旧 run は migrate で止める(§6.13.3 の検査 10) |
+| ツールの入力が互換でなくなる | codiel `1.0.0` のスキルでは呼べない | codiel と raguel-mcp を同じリリース(codiel `1.0.0-dev`)で出す。旧 run は migrate で止める(§6.13.3 の検査 10) |
 | fix-loop の評価の範囲がフェーズ全体になる | 修正ごとの評価より diff が大きく、重さが上がる | 範囲を広げる代わりに、評価の一部だけを見せる抜け道が塞がる |
 | 文書の standard で crosscheck が並列に起動する(R15) | 起動数と費用が増え、crosscheck の所見による ASK が増えうる。並列なので所要時間はほぼ増えない | crosscheck の所見も steelman の反駁の対象にし、confidence の閾値を通ったものだけを採る(§6.6.3)。ASK の率は §7.2 の後に見直す |
 
@@ -1349,7 +1349,7 @@ codiel(`C/`):
 
 - `pnpm run lint` と `pnpm run typecheck` と `pnpm run test` が通る。
 - `pnpm run build` を実行し、`plugins/codiel/scripts/` と `plugins/codiel/raguel-mcp/dist/` の差分が同じコミットにある。
-- codiel の `plugin.json` と `package.json` が `1.1.0-dev`、raguel-mcp の `package.json` が `0.1.0-dev` で、MCP サーバーが同じ値を名乗る(§8)。
+- codiel の `plugin.json` と `package.json` が `1.0.0-dev`、raguel-mcp の `package.json` が `0.0.2-dev` で、MCP サーバーが同じ値を名乗る(§8)。
 - §4 の「直す」の所見ごとに、§7.1 のテストがある。
 - §7.2 の実機確認を、ユーザーに確かめた上で行い、結果を実装計画書に記録している。【要確認】の項目は、結果に合わせて本設計と README を直している。
 - §9 の文書を更新している。ADR「[codiel] Raguel の作り直し」を `metatron:updating-architecture` で足している。
