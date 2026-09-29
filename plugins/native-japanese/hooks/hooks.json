@@ -1,5 +1,5 @@
 {
-  "description": "日本語の書き方の規律を、セッション開始時とサブエージェント起動時に注入する",
+  "description": "日本語の書き方の規律を、セッション開始時とサブエージェント起動時に注入し、書き込み後に違反を差し戻す",
   "hooks": {
     "SessionStart": [
       {
@@ -18,6 +18,18 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/inject.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit|mcp__.+__(replace_content|replace_symbol_body|insert_after_symbol|insert_before_symbol|replace_in_files|create_text_file|replace_lines|insert_at_line))$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs\"",
             "timeout": 10
           }
         ]

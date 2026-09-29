@@ -5,7 +5,8 @@ await esbuild.build({
   entryPoints: {
     inject: "./src/inject.ts",
     "fetch-morph": "./src/fetch-morph.ts",
-    measure: "./src/measure.ts"
+    measure: "./src/measure.ts",
+    check: "./src/check.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
