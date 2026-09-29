@@ -15,6 +15,7 @@ export interface RecordedCall {
 export type CannedResponse = unknown | Error | (() => unknown)
 
 export class FakeJudgeProvider implements JudgeProvider {
+  readonly name = "claude"
   readonly calls: RecordedCall[] = []
   private readonly responses = new Map<string, CannedResponse>()
 

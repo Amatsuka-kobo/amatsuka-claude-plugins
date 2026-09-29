@@ -1870,8 +1870,8 @@ var require_keyword = __commonJS({
       var _a3;
       const { gen, keyword, schema, parentSchema, $data, it } = cxt;
       checkAsyncKeyword(it, def);
-      const validate = !$data && def.compile ? def.compile.call(it.self, schema, parentSchema, it) : def.validate;
-      const validateRef = useKeyword(gen, keyword, validate);
+      const validate2 = !$data && def.compile ? def.compile.call(it.self, schema, parentSchema, it) : def.validate;
+      const validateRef = useKeyword(gen, keyword, validate2);
       const valid = gen.let("valid");
       cxt.block$data(valid, validateKeyword);
       cxt.ok((_a3 = def.valid) !== null && _a3 !== void 0 ? _a3 : valid);
@@ -2944,28 +2944,28 @@ var require_compile = __commonJS({
         if (this.opts.code.process)
           sourceCode = this.opts.code.process(sourceCode, sch);
         const makeValidate = new Function(`${names_1.default.self}`, `${names_1.default.scope}`, sourceCode);
-        const validate = makeValidate(this, this.scope.get());
-        this.scope.value(validateName, { ref: validate });
-        validate.errors = null;
-        validate.schema = sch.schema;
-        validate.schemaEnv = sch;
+        const validate2 = makeValidate(this, this.scope.get());
+        this.scope.value(validateName, { ref: validate2 });
+        validate2.errors = null;
+        validate2.schema = sch.schema;
+        validate2.schemaEnv = sch;
         if (sch.$async)
-          validate.$async = true;
+          validate2.$async = true;
         if (this.opts.code.source === true) {
-          validate.source = { validateName, validateCode, scopeValues: gen._values };
+          validate2.source = { validateName, validateCode, scopeValues: gen._values };
         }
         if (this.opts.unevaluated) {
           const { props, items } = schemaCxt;
-          validate.evaluated = {
+          validate2.evaluated = {
             props: props instanceof codegen_1.Name ? void 0 : props,
             items: items instanceof codegen_1.Name ? void 0 : items,
             dynamicProps: props instanceof codegen_1.Name,
             dynamicItems: items instanceof codegen_1.Name
           };
-          if (validate.source)
-            validate.source.evaluated = (0, codegen_1.stringify)(validate.evaluated);
+          if (validate2.source)
+            validate2.source.evaluated = (0, codegen_1.stringify)(validate2.evaluated);
         }
-        sch.validate = validate;
+        sch.validate = validate2;
         return sch;
       } catch (e) {
         delete sch.validate;
@@ -3229,8 +3229,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path5) {
-      let input = path5;
+    function removeDotSegments(path6) {
+      let input = path6;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3482,8 +3482,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path5, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
+        const [path6, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path6 && path6 !== "/" ? path6 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6578,8 +6578,8 @@ var require_formats = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
-    function fmtDef(validate, compare) {
-      return { validate, compare };
+    function fmtDef(validate2, compare) {
+      return { validate: validate2, compare };
     }
     exports.fullFormats = {
       // date: http://tools.ietf.org/html/rfc3339#section-5.6
@@ -7144,8 +7144,8 @@ var require_utils2 = __commonJS({
       }
       return output;
     };
-    exports.basename = (path5, { windows } = {}) => {
-      const segs = path5.split(windows ? /[\\/]/ : "/");
+    exports.basename = (path6, { windows } = {}) => {
+      const segs = path6.split(windows ? /[\\/]/ : "/");
       const last = segs[segs.length - 1];
       if (last === "") {
         return segs[segs.length - 2];
@@ -9015,8 +9015,8 @@ function getErrorMap() {
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path6, errorMaps, issueData } = params;
+  const fullPath = [...path6, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -9131,11 +9131,11 @@ var errorUtil;
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path6, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path6;
     this._key = key;
   }
   get path() {
@@ -13055,10 +13055,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path5) {
-  if (!path5)
+function getElementAtPath(obj, path6) {
+  if (!path6)
     return obj;
-  return path5.reduce((acc, key) => acc?.[key], obj);
+  return path6.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -13467,11 +13467,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path5, issues) {
+function prefixIssues(path6, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path5);
+    iss.path.unshift(path6);
     return iss;
   });
 }
@@ -13618,16 +13618,16 @@ function flattenError(error51, mapper = (issue2) => issue2.message) {
 }
 function formatError(error51, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error52, path5 = []) => {
+  const processError = (error52, path6 = []) => {
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path6, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path6, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path6, ...issue2.path]);
       } else {
-        const fullpath = [...path5, ...issue2.path];
+        const fullpath = [...path6, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -13654,17 +13654,17 @@ function formatError(error51, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error51, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error52, path5 = []) => {
+  const processError = (error52, path6 = []) => {
     var _a3, _b;
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path6, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path6, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path6, ...issue2.path]);
       } else {
-        const fullpath = [...path5, ...issue2.path];
+        const fullpath = [...path6, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -13696,8 +13696,8 @@ function treeifyError(error51, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path5 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path5) {
+  const path6 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path6) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -26822,13 +26822,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path5 = ref.slice(1).split("/").filter(Boolean);
-  if (path5.length === 0) {
+  const path6 = ref.slice(1).split("/").filter(Boolean);
+  if (path6.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path5[0] === defsKey) {
-    const key = path5[1];
+  if (path6[0] === defsKey) {
+    const key = path6[1];
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -33231,16 +33231,16 @@ function configCandidate() {
   return { path: cwdPath, source: `cwd:${cwdPath}` };
 }
 function resolveRawConfig() {
-  const { path: path5, source } = configCandidate();
+  const { path: path6, source } = configCandidate();
   if (process.env.RAGUEL_CONFIG) {
-    return { raw: readJsonObject(path5), source };
+    return { raw: readJsonObject(path6), source };
   }
-  if (!existsSync2(path5)) return { raw: {}, source: "defaults" };
-  const raguel = readJsonObject(path5).raguel;
+  if (!existsSync2(path6)) return { raw: {}, source: "defaults" };
+  const raguel = readJsonObject(path6).raguel;
   if (raguel === void 0) return { raw: {}, source: "defaults" };
   if (!isPlainObject3(raguel)) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E raguel \u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path5}`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E raguel \u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path6}`
     );
   }
   return { raw: raguel, source };
@@ -33259,17 +33259,17 @@ function createConfigReloader(build) {
   };
 }
 function configStamp() {
-  const { path: path5 } = configCandidate();
-  const stat = statSync2(path5, { throwIfNoEntry: false });
-  return JSON.stringify([path5, stat ? stat.mtimeMs : null]);
+  const { path: path6 } = configCandidate();
+  const stat = statSync2(path6, { throwIfNoEntry: false });
+  return JSON.stringify([path6, stat ? stat.mtimeMs : null]);
 }
-function readJsonObject(path5) {
+function readJsonObject(path6) {
   let text;
   try {
-    text = readFileSync2(path5, "utf8");
+    text = readFileSync2(path6, "utf8");
   } catch (err) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${path5} (${err.message})`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${path6} (${err.message})`
     );
   }
   let parsed;
@@ -33277,12 +33277,12 @@ function readJsonObject(path5) {
     parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${path5} (${err.message})`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${path6} (${err.message})`
     );
   }
   if (!isPlainObject3(parsed)) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30EB\u30FC\u30C8\u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path5}`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30EB\u30FC\u30C8\u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path6}`
     );
   }
   return parsed;
@@ -33332,12 +33332,12 @@ function withExpandedCasesDir(config2) {
     }
   };
 }
-function expandHome2(path5) {
-  let expanded = path5;
-  if (path5 === "~") {
+function expandHome2(path6) {
+  let expanded = path6;
+  if (path6 === "~") {
     expanded = homedir2();
-  } else if (path5.startsWith("~/")) {
-    expanded = resolve2(homedir2(), path5.slice(2));
+  } else if (path6.startsWith("~/")) {
+    expanded = resolve2(homedir2(), path6.slice(2));
   }
   return isAbsolute(expanded) ? expanded : resolve2(expanded);
 }
@@ -33358,11 +33358,11 @@ function normalizeForHash(value) {
   return value;
 }
 
-// src/panel/claudeCli.ts
-import { spawn } from "node:child_process";
-import * as os2 from "node:os";
-
 // src/panel/provider.ts
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import * as os2 from "node:os";
+import * as path2 from "node:path";
 var JudgeError = class extends Error {
   reason;
   constructor(reason, message) {
@@ -33372,7 +33372,8 @@ var JudgeError = class extends Error {
   }
 };
 var NoneProvider = class {
-  invoke(_call) {
+  name = "none";
+  invoke(_call, _ctl) {
     return Promise.reject(
       new JudgeError(
         "provider-none",
@@ -33381,8 +33382,6 @@ var NoneProvider = class {
     );
   }
 };
-
-// src/panel/claudeCli.ts
 var Semaphore = class {
   constructor(max) {
     this.max = max;
@@ -33408,93 +33407,181 @@ var Semaphore = class {
     if (next) next();
   }
 };
+var RETRYABLE = /* @__PURE__ */ new Set([
+  "timeout",
+  "nonzero-exit",
+  "spawn-failure"
+]);
+async function runChildWithRetry(run) {
+  try {
+    return await runChild(run);
+  } catch (err) {
+    if (!(err instanceof JudgeError) || !RETRYABLE.has(err.reason) || run.signal?.aborted) {
+      throw err;
+    }
+    log.warn("panelist process failed, retrying once", {
+      role: run.role,
+      reason: err.reason
+    });
+    return runChild(run);
+  }
+}
+function runChild(run) {
+  return new Promise((resolve3, reject) => {
+    if (run.signal?.aborted) {
+      reject(run.signal.reason);
+      return;
+    }
+    let child;
+    try {
+      child = spawn(run.bin, run.args, {
+        cwd: run.cwd,
+        env: { ...process.env, RAGUEL_PANELIST: "1" }
+      });
+    } catch (err) {
+      reject(new JudgeError("spawn-failure", errorMessage(err)));
+      return;
+    }
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, run.timeoutMs);
+    const onAbort = () => child.kill("SIGKILL");
+    run.signal?.addEventListener("abort", onAbort, { once: true });
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      run.signal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.stdin?.on("error", () => {
+    });
+    child.on("error", (err) => {
+      finish(
+        () => reject(
+          err.code === "ENOENT" ? new JudgeError(
+            "unavailable",
+            `${run.bin} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093: ${err.message}`
+          ) : new JudgeError("spawn-failure", err.message)
+        )
+      );
+    });
+    child.on("close", (code) => {
+      finish(() => {
+        if (run.signal?.aborted) {
+          reject(run.signal.reason);
+        } else if (timedOut) {
+          reject(
+            new JudgeError(
+              "timeout",
+              `${run.timeoutMs}ms \u3067\u30BF\u30A4\u30E0\u30A2\u30A6\u30C8\u3057\u307E\u3057\u305F(role: ${run.role})`
+            )
+          );
+        } else if (code !== 0) {
+          reject(new JudgeError("nonzero-exit", stderr.slice(0, 500)));
+        } else {
+          resolve3(stdout);
+        }
+      });
+    });
+    child.stdin?.write(run.stdin);
+    child.stdin?.end();
+  });
+}
+async function withTempDir(fn) {
+  const dir = await mkdtemp(path2.join(os2.tmpdir(), "raguel-panelist-"));
+  try {
+    return await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+async function invokeWithSchemaRetry(call, attempt) {
+  const first = await attempt(call.prompt);
+  if (first.ok) return first.value;
+  log.warn("panelist response failed schema validation, retrying", {
+    role: call.role,
+    detail: first.detail
+  });
+  const second = await attempt(buildRetryPrompt(call.prompt, first.detail));
+  if (second.ok) return second.value;
+  throw new JudgeError(
+    "schema-mismatch",
+    `2\u56DE\u306E\u8A66\u884C\u5F8C\u3082\u30B9\u30AD\u30FC\u30DE\u691C\u8A3C\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${second.detail}`
+  );
+}
+function buildRetryPrompt(originalPrompt, detail) {
+  return [
+    originalPrompt,
+    "",
+    "---",
+    "\u524D\u56DE\u306E\u5FDC\u7B54\u306F\u671F\u5F85\u3059\u308B JSON \u30B9\u30AD\u30FC\u30DE\u306B\u9069\u5408\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u4EE5\u4E0B\u306E\u30A8\u30E9\u30FC\u6982\u8981\u3092\u8E0F\u307E\u3048\u3001",
+    "\u30B9\u30AD\u30FC\u30DE\u306B\u53B3\u5BC6\u306B\u5F93\u3046 JSON \u306E\u307F\u3092\u518D\u5EA6\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044(\u8AAC\u660E\u6587\u30FB\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u306F\u4E0D\u8981)\u3002",
+    `\u30A8\u30E9\u30FC\u6982\u8981: ${detail}`
+  ].join("\n");
+}
+function parseJsonText(text, label) {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  try {
+    return { ok: true, value: JSON.parse(match ? match[1] : trimmed) };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: `${label} \u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557: ${errorMessage(err)}`
+    };
+  }
+}
+function validate(value, schema) {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return { ok: true, value: parsed.data };
+  const summary = parsed.error.issues.map((issue2) => `${issue2.path.join(".") || "(root)"}: ${issue2.message}`).join("; ");
+  return { ok: false, detail: `zod \u691C\u8A3C\u30A8\u30E9\u30FC: ${summary}` };
+}
+function errorMessage(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// src/panel/claudeCli.ts
 var ClaudeCliProvider = class {
+  name = "claude";
   bin;
   semaphore;
   constructor(maxConcurrency = 4) {
     this.bin = process.env.RAGUEL_CLAUDE_BIN ?? "claude";
     this.semaphore = new Semaphore(maxConcurrency);
   }
-  async invoke(call) {
+  async invoke(call, ctl) {
     const release = await this.semaphore.acquire();
     try {
-      const stdout1 = await this.runProcess(call, call.prompt);
-      const parsed1 = extractStructured(stdout1, call.schema);
-      if (parsed1.ok) return parsed1.value;
-      log.warn("panelist response failed schema validation, retrying", {
-        role: call.role,
-        detail: parsed1.detail
-      });
-      const retryPrompt = buildRetryPrompt(call.prompt, parsed1.detail);
-      const stdout2 = await this.runProcess(call, retryPrompt);
-      const parsed2 = extractStructured(stdout2, call.schema);
-      if (parsed2.ok) return parsed2.value;
-      throw new JudgeError(
-        "schema-mismatch",
-        `2\u56DE\u306E\u8A66\u884C\u5F8C\u3082\u30B9\u30AD\u30FC\u30DE\u691C\u8A3C\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${parsed2.detail}`
+      return await withTempDir(
+        (cwd) => invokeWithSchemaRetry(call, async (prompt) => {
+          const stdout = await runChildWithRetry({
+            bin: this.bin,
+            args: buildArgs(call),
+            cwd,
+            stdin: prompt,
+            timeoutMs: ctl?.timeoutMs ?? call.timeoutMs,
+            role: call.role,
+            signal: ctl?.signal
+          });
+          return extractStructured(stdout, call.schema);
+        })
       );
     } finally {
       release();
     }
-  }
-  /** claude CLI を 1 回起動して stdout エンベロープ文字列を返す */
-  runProcess(call, prompt) {
-    return new Promise((resolve3, reject) => {
-      const args = buildArgs(call);
-      let child;
-      try {
-        child = spawn(this.bin, args, {
-          cwd: os2.tmpdir(),
-          env: { ...process.env, RAGUEL_PANELIST: "1" }
-        });
-      } catch (err) {
-        reject(new JudgeError("spawn-failure", errorMessage(err)));
-        return;
-      }
-      let stdout = "";
-      let stderr = "";
-      let timedOut = false;
-      let settled = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        child.kill("SIGKILL");
-      }, call.timeoutMs);
-      child.stdout?.on("data", (chunk) => {
-        stdout += chunk.toString("utf8");
-      });
-      child.stderr?.on("data", (chunk) => {
-        stderr += chunk.toString("utf8");
-      });
-      child.stdin?.on("error", () => {
-      });
-      child.on("error", (err) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        reject(new JudgeError("spawn-failure", errorMessage(err)));
-      });
-      child.on("close", (code) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (timedOut) {
-          reject(
-            new JudgeError(
-              "timeout",
-              `${call.timeoutMs}ms \u3067\u30BF\u30A4\u30E0\u30A2\u30A6\u30C8\u3057\u307E\u3057\u305F(role: ${call.role})`
-            )
-          );
-          return;
-        }
-        if (code !== 0) {
-          reject(new JudgeError("nonzero-exit", stderr.slice(0, 500)));
-          return;
-        }
-        resolve3(stdout);
-      });
-      child.stdin?.write(prompt);
-      child.stdin?.end();
-    });
   }
 };
 function buildArgs(call) {
@@ -33510,70 +33597,31 @@ function buildArgs(call) {
     "--strict-mcp-config",
     "--mcp-config",
     '{"mcpServers":{}}',
+    "--setting-sources",
+    "project",
+    "--no-session-persistence",
     "--json-schema",
     JSON.stringify(call.jsonSchema)
   ];
 }
-function buildRetryPrompt(originalPrompt, detail) {
-  return [
-    originalPrompt,
-    "",
-    "---",
-    "\u524D\u56DE\u306E\u5FDC\u7B54\u306F\u671F\u5F85\u3059\u308B JSON \u30B9\u30AD\u30FC\u30DE\u306B\u9069\u5408\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u4EE5\u4E0B\u306E\u30A8\u30E9\u30FC\u6982\u8981\u3092\u8E0F\u307E\u3048\u3001",
-    "\u30B9\u30AD\u30FC\u30DE\u306B\u53B3\u5BC6\u306B\u5F93\u3046 JSON \u306E\u307F\u3092\u518D\u5EA6\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044(\u8AAC\u660E\u6587\u30FB\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u306F\u4E0D\u8981)\u3002",
-    `\u30A8\u30E9\u30FC\u6982\u8981: ${detail}`
-  ].join("\n");
-}
 function extractStructured(stdout, schema) {
-  let envelope;
-  try {
-    envelope = JSON.parse(stdout);
-  } catch (err) {
-    return {
-      ok: false,
-      detail: `\u51FA\u529B\u30A8\u30F3\u30D9\u30ED\u30FC\u30D7\u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557: ${errorMessage(err)}`
-    };
-  }
-  const candidate = extractCandidate(envelope);
-  if (!candidate.ok) return candidate;
-  const parsed = schema.safeParse(candidate.value);
-  if (!parsed.success) {
-    const summary = parsed.error.issues.map((issue2) => `${issue2.path.join(".") || "(root)"}: ${issue2.message}`).join("; ");
-    return { ok: false, detail: `zod \u691C\u8A3C\u30A8\u30E9\u30FC: ${summary}` };
-  }
-  return { ok: true, value: parsed.data };
-}
-function extractCandidate(envelope) {
-  if (typeof envelope !== "object" || envelope === null) {
+  const envelope = parseJsonText(stdout, "\u51FA\u529B\u30A8\u30F3\u30D9\u30ED\u30FC\u30D7");
+  if (!envelope.ok) return envelope;
+  const record2 = envelope.value;
+  if (typeof record2 !== "object" || record2 === null) {
     return { ok: false, detail: "\u30A8\u30F3\u30D9\u30ED\u30FC\u30D7\u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306F\u3042\u308A\u307E\u305B\u3093" };
   }
-  const record2 = envelope;
-  if (record2.structured_output !== void 0) {
-    return { ok: true, value: record2.structured_output };
-  }
-  if (typeof record2.result === "string") {
-    const stripped = stripCodeFence(record2.result);
-    try {
-      return { ok: true, value: JSON.parse(stripped) };
-    } catch (err) {
-      return {
-        ok: false,
-        detail: `result \u30D5\u30A3\u30FC\u30EB\u30C9\u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557: ${errorMessage(err)}`
-      };
-    }
+  const { structured_output, result } = record2;
+  if (structured_output !== void 0)
+    return validate(structured_output, schema);
+  if (typeof result === "string") {
+    const parsed = parseJsonText(result, "result \u30D5\u30A3\u30FC\u30EB\u30C9");
+    return parsed.ok ? validate(parsed.value, schema) : parsed;
   }
   return {
     ok: false,
     detail: "structured_output \u3082 result \u3082\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F"
   };
-}
-function stripCodeFence(text) {
-  const trimmed = text.trim();
-  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  return match ? match[1] : trimmed;
-}
-function errorMessage(err) {
-  return err instanceof Error ? err.message : String(err);
 }
 
 // src/rules/code/diffParse.ts
@@ -33591,9 +33639,9 @@ function looksLikeDiff(text) {
   const hasHunk = lines.some((l) => l.startsWith("@@ "));
   return hasOld && hasNew && hasHunk;
 }
-function emptyFile(path5) {
+function emptyFile(path6) {
   return {
-    path: path5,
+    path: path6,
     additions: [],
     deletions: [],
     isNew: false,
@@ -33690,7 +33738,7 @@ function parseDiff(diff) {
 // src/core/pipeline.ts
 import { randomUUID } from "node:crypto";
 import { existsSync as existsSync4 } from "node:fs";
-import path4 from "node:path";
+import path5 from "node:path";
 
 // src/panel/prompts.ts
 import { randomBytes } from "node:crypto";
@@ -34241,7 +34289,7 @@ async function runMeta(evidenceBundle, kind, provider, config2) {
 }
 
 // src/precedent/retrieval.ts
-import * as path2 from "node:path";
+import * as path3 from "node:path";
 var BM25_K1 = 1.2;
 var BM25_B = 0.75;
 var WEIGHT_BM25 = 0.4;
@@ -34296,7 +34344,7 @@ function pathDirSet(paths) {
   const set2 = /* @__PURE__ */ new Set();
   for (const raw of paths) {
     const normalized = raw.replace(/\\/g, "/");
-    const dir = path2.posix.dirname(normalized);
+    const dir = path3.posix.dirname(normalized);
     if (dir === "." || dir === "") continue;
     const parts = dir.split("/").filter(Boolean);
     let acc = "";
@@ -34380,7 +34428,7 @@ function searchPrecedents(query, corpus, topN) {
 // src/precedent/store.ts
 import * as fs2 from "node:fs";
 import * as os3 from "node:os";
-import * as path3 from "node:path";
+import * as path4 from "node:path";
 
 // src/precedent/seed/index.ts
 var SEED_PRECEDENTS = [
@@ -34491,7 +34539,7 @@ var INDEX_FILE = "index.json";
 function expandHome3(dir) {
   if (dir === "~") return os3.homedir();
   if (dir.startsWith("~/") || dir.startsWith("~\\")) {
-    return path3.join(os3.homedir(), dir.slice(2));
+    return path4.join(os3.homedir(), dir.slice(2));
   }
   return dir;
 }
@@ -34506,13 +34554,13 @@ var PrecedentStore = class {
   constructor(config2) {
     const casesDir = expandHome3(config2.storage.casesDir);
     const projectId = resolveProjectId(config2);
-    this.dir = path3.join(casesDir, "precedents", projectId);
+    this.dir = path4.join(casesDir, "precedents", projectId);
   }
   indexPath() {
-    return path3.join(this.dir, INDEX_FILE);
+    return path4.join(this.dir, INDEX_FILE);
   }
   precedentPath(id) {
-    return path3.join(this.dir, `${sanitizeId(id)}.json`);
+    return path4.join(this.dir, `${sanitizeId(id)}.json`);
   }
   readIndex() {
     const indexPath = this.indexPath();
@@ -34548,7 +34596,7 @@ var PrecedentStore = class {
     const precedents = [];
     const tampered = [];
     for (const [id, expectedHash] of Object.entries(index)) {
-      const filePath = path3.join(this.dir, `${id}.json`);
+      const filePath = path4.join(this.dir, `${id}.json`);
       if (!fs2.existsSync(filePath)) {
         tampered.push(id);
         log.warn("\u5224\u4F8B\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093(index \u306B\u8A18\u9332\u3042\u308A)", { id });
@@ -34795,10 +34843,10 @@ function scanLines(lines, ruleId, severity, location) {
   }
   return findings;
 }
-function lowerReason(path5) {
-  if (/\.md$/i.test(path5)) return ".md \u306E\u30D5\u30A1\u30A4\u30EB";
-  const name = path5.slice(path5.lastIndexOf("/") + 1);
-  if (/\.(test|spec)\./.test(name) || /_test\./.test(name) || name.startsWith("test_") || /(^|\/)(test|tests|__test__|__tests__|e2e|spec)\//.test(path5)) {
+function lowerReason(path6) {
+  if (/\.md$/i.test(path6)) return ".md \u306E\u30D5\u30A1\u30A4\u30EB";
+  const name = path6.slice(path6.lastIndexOf("/") + 1);
+  if (/\.(test|spec)\./.test(name) || /_test\./.test(name) || name.startsWith("test_") || /(^|\/)(test|tests|__test__|__tests__|e2e|spec)\//.test(path6)) {
     return "\u30C6\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB";
   }
   return void 0;
@@ -34870,8 +34918,8 @@ var maxDiffLinesRule = {
 
 // src/rules/code/newDependency.ts
 var RULE_ID4 = "code/new-dependency";
-function manifestKind(path5) {
-  const base = path5.split("/").pop() ?? path5;
+function manifestKind(path6) {
+  const base = path6.split("/").pop() ?? path6;
   if (base === "package.json") return "npm-package";
   if (base === "pnpm-lock.yaml" || base === "package-lock.json" || base === "yarn.lock") {
     return "npm-lock";
@@ -35002,12 +35050,12 @@ var protectedPathsRule = {
     const severity = getSeverity(settings, "stop");
     const globs = Array.isArray(settings?.globs) ? settings.globs : DEFAULT_PROTECTED_GLOBS;
     const isMatch = (0, import_picomatch.default)(globs, { dot: true });
-    const matched = artifact.changedPaths.filter((path5) => isMatch(path5));
-    return matched.map((path5) => ({
+    const matched = artifact.changedPaths.filter((path6) => isMatch(path6));
+    return matched.map((path6) => ({
       ruleId: RULE_ID5,
       severity,
-      message: `\u4FDD\u8B77\u3055\u308C\u305F\u30D1\u30B9\u3078\u306E\u5909\u66F4\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${path5}`,
-      evidence: { location: path5 }
+      message: `\u4FDD\u8B77\u3055\u308C\u305F\u30D1\u30B9\u3078\u306E\u5909\u66F4\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${path6}`,
+      evidence: { location: path6 }
     }));
   }
 };
@@ -35016,8 +35064,8 @@ var protectedPathsRule = {
 var RULE_ID6 = "code/test-deletion";
 var TEST_FILE_RE = /(\.test\.[^./]+$)|(\.spec\.[^./]+$)|(^|\/)__tests__\//;
 var SKIP_MARKER_RE = /\b(it|describe|test)\.skip\s*\(|\bxit\s*\(|@pytest\.mark\.skip\b/;
-function isTestFile(path5) {
-  return TEST_FILE_RE.test(path5);
+function isTestFile(path6) {
+  return TEST_FILE_RE.test(path6);
 }
 var testDeletionRule = {
   id: RULE_ID6,
@@ -35637,7 +35685,7 @@ function computeWeight(artifact, ruleFindings, config2) {
     const protectedGlobs = Array.isArray(protectedSettings?.globs) ? protectedSettings.globs : DEFAULT_PROTECTED_GLOBS;
     const topDirs = protectedTopDirs(protectedGlobs);
     const isNearProtected = artifact.changedPaths.some(
-      (path5) => topDirs.has(firstSegment(path5))
+      (path6) => topDirs.has(firstSegment(path6))
     );
     if (isNearProtected) factors["protected-path-proximity"] = 25;
   }
@@ -35714,7 +35762,7 @@ function buildFactTable(artifact) {
   }
   for (const p of artifact.changedPaths) candidates.add(p);
   if (candidates.size === 0) return "(\u53C2\u7167\u30D1\u30B9\u306A\u3057)";
-  const rows = [...candidates].sort().map((p) => `${p}: ${existsSync4(path4.resolve(p)) ? "\u5B9F\u5728" : "\u4E0D\u5728"}`);
+  const rows = [...candidates].sort().map((p) => `${p}: ${existsSync4(path5.resolve(p)) ? "\u5B9F\u5728" : "\u4E0D\u5728"}`);
   return rows.join("\n");
 }
 function collectPriorEvidence(artifact, caseStore) {

@@ -10,6 +10,7 @@
   "scripts": { "build": "tsx build.ts" },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@typesafe-ai/sdk": "0.6.0",
     "picomatch": "^4.0.5",
     "zod": "^4.4.3"
   },
