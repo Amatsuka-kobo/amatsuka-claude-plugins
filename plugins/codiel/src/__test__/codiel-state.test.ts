@@ -1971,19 +1971,30 @@ test("gitignore は config.json が不正なら非ゼロで終了する", () => 
 })
 
 test("gitignore の必須の行は git check-ignore で意図どおりに無視する", () => {
-  for (const testsDir of ["docs/codiel/tests", "qa/specs"]) {
+  // "." はリポジトリ全体を指す値。"./" のように正規化すると "." になる書き方も同じ結果になる
+  for (const [testsDir, configured] of [
+    ["docs/codiel/tests", "docs/codiel/tests"],
+    ["qa/specs", "qa/specs"],
+    [".", "."],
+    [".", "./"]
+  ]) {
     const root = tmpProject()
     const git = (...args: string[]) =>
       spawnSync("git", args, { cwd: root, encoding: "utf8" })
     expect(git("init", "-q").status).toBe(0)
     if (testsDir !== "docs/codiel/tests")
-      writeConfig(root, JSON.stringify({ testsDir }))
+      writeConfig(root, JSON.stringify({ testsDir: configured }))
     const r = run(root, ["gitignore"])
+    const base = testsDir === "." ? "" : `${testsDir}/`
+    if (testsDir === ".")
+      expect(r.out.required[2], configured).toBe(
+        "e2e/**/reports/[0-9]*-try[0-9]*/**"
+      )
     fs.writeFileSync(
       path.join(root, ".gitignore"),
       `# codiel\n${r.out.required.join("\n")}\n`
     )
-    const execDir = `${testsDir}/e2e/frontend/a/reports/20260928-101500-demo-try1`
+    const execDir = `${base}e2e/frontend/a/reports/20260928-101500-demo-try1`
     const ignored = [
       ".codiel/runs/s/try-1/state.json",
       ".codiel/reports/test-run-x.md",
@@ -1994,7 +2005,7 @@ test("gitignore の必須の行は git check-ignore で意図どおりに無視�
       `${execDir}/results.json`,
       `${execDir}/summary.md`,
       `${execDir}/failure.md`,
-      `${testsDir}/e2e/backend/api/reports/spec.md`,
+      `${base}e2e/backend/api/reports/spec.md`,
       ".codiel/config.json"
     ]
     // check-ignore はファイルが無くても判定するが、ディレクトリの規則を確かめるため実物を置く

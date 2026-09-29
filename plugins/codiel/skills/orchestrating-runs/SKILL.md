@@ -90,6 +90,10 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    node <plugin-root>/scripts/codiel-state.mjs gitignore
    ```
 
+   `config` と `gitignore` のどちらかが失敗したとき(`.codiel/config.json` が不正なときは、標準エラー出力に
+   理由を出して終了コード 1 になる)は、標準エラー出力の理由をユーザーへ示して止め、`.codiel/config.json` を
+   直すか `/codiel:init` をやり直すよう案内する。C・D は揃っていないものとして、手順 6 の表の行 2 で止まる。
+
 3. 手順 2 の出力にある事実(`repoSlug`・`ghAuthenticated`・`ghAttachSupported`・`projectDocs.architecture`
    など)から、次のとおり判断する。判断はここで行い、check-intent-env は事実だけを返す。
 
@@ -191,7 +195,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [design] | 成果物を書く委譲。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、新しい画面の名前を聞いてから evaluate する** | オーケストレーター(ゲート通過直後) |
 | [test-spec] | 成果物を書く委譲。軽量では、その前に仕様のディレクトリを同定する読み取りだけの委譲を 1 回出す。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
 | [dev-plan] | 成果物を書く委譲。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) | オーケストレーター(ゲート通過直後) |
-| [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列(2.5〜2.7)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、Red の確認を記録した `report.md` | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
+| [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列(2.5〜2.7)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`(`report.md` は委譲先の返答からオーケストレーターが書く。2.1) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
 | [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列(2.8)。グループのマージの後にオーケストレーターがそのグループの通すテストを実行する | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
 | [test-loop] | 回帰の実行の委譲と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列。並べ方は 2.6)(2.9) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`、修正 diff | pass-gate(`evaluate_code`) | 修正の委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
 | [intent-sync] | 成果物を書く委譲(出す前に 2.11 の確認を行う)。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
@@ -379,10 +383,11 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
   変えずに、`pr` 前の `git status --short` の確認を汚さないためである。
 - worktree の開始時に、dev-plan の `## 環境準備` のコマンドで依存をインストールする。「なし」のときは
   lockfile の種類から既定を選び、lockfile が無ければ省く。
-- マージ済みの worktree は、マージの直後に `git worktree remove` し、ブランチを削除する。`git worktree remove` の後に空になった `.codiel/worktrees/<slug>/` は、
-  リポジトリ相対のパスの `rmdir` で消す。`rmdir` は空でなければ失敗するので、残った worktree を巻き込まない。失敗した
-  worktree は run の終了まで残すが、やり直す前には必ず削除してから新しい HEAD で作り直す。run の終了時
-  (finalize または stop)には、残っている worktree とブランチをすべて削除する。
+- マージ済みの worktree は、マージの直後に `git worktree remove` し、ブランチを削除する。`git worktree remove` の後に空になった
+  `.codiel/worktrees/<slug>/` は、リポジトリ相対のパスの `rmdir` で消す。`rmdir` は空でなければ失敗するので、
+  残った worktree を巻き込まない。失敗した worktree は run の終了まで残すが、やり直す前には必ず削除してから
+  新しい HEAD で作り直す。run の終了時(finalize または stop)には、残っている worktree とブランチを
+  すべて削除する。
 
 ### 2.6 テストを実行する委譲の並べ方と環境の失敗
 

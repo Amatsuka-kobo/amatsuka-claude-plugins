@@ -357,7 +357,10 @@ function configDir(
 // .gitignore に要る行(設計書 §6.15.5)。E2E の 4 行は、実行ごとのディレクトリの中を無視し、
 // 直下の results.json・summary.md・failure.md だけを戻す。runsDir は共有するので行を置かない。
 function gitignoreLines(testsDir: string): string[] {
-  const reports = `${testsDir}/e2e/**/reports/[0-9]*-try[0-9]*`
+  // testsDir がリポジトリ全体(`.`)のときは、`./` を付けると git が行に当たらないので接頭辞を付けない
+  const base = normalizeRel(testsDir)
+  const prefix = base === "." ? "" : `${base}/`
+  const reports = `${prefix}e2e/**/reports/[0-9]*-try[0-9]*`
   return [
     ".codiel/runs/",
     ".codiel/reports/",

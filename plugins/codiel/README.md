@@ -129,6 +129,9 @@ Raguel の設定が `.codiel/config.json` の `raguel` に無く、`.gitignore` 
 `.codiel` は git のルートに置いてください。git のルートの下のディレクトリ(たとえば `app/.codiel`)に置くと、
 `/codiel:init` が足す `.gitignore` の行が当たらず、`.codiel/runs/` などが `git status` に出続けます。
 
+`.gitignore` に足す E2E の行は testsDir をエスケープせずに使います。testsDir に `#` や `!` で始まる名前、空白、
+`[` などを含めると、行が意図どおりに当たりません。testsDir にはこれらを含まない名前を使ってください。
+
 詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
 test-loop の詳細・スキル・作業内容による委譲構成・hooks 仕様などを記載)。Codiel は Agent 定義を同梱しません。
 各フェーズの作業は作業内容を渡して委譲し、委譲先はプロジェクトの Agent 定義やセッションの運用方針で

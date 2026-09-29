@@ -15,7 +15,7 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 
 ## チェックリスト
 
-- [ ] 0. **現状調査**。4 点すべて揃っていれば「初期化済み」と報告して終了する
+- [ ] 0. **現状調査**。3 点すべて揃っていれば「初期化済み」と報告して終了する
 - [ ] 1. **`.codiel/` の配置**
 - [ ] 2. **`.codiel/config.json` の `raguel` の生成**(保護パス)
 - [ ] 3. **`.gitignore` の整備**
@@ -25,7 +25,7 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 
 ## 0. 現状調査
 
-次の 4 点を確認し、**不足しているものだけ**を以降の手順の対象にする。
+次の 3 点を確認し、**不足しているものだけ**を以降の手順の対象にする。
 
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
@@ -33,7 +33,7 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 | C | `.codiel/config.json` | JSON のオブジェクトとして読め、`raguel` がオブジェクトである(空のオブジェクトでよい)。`raguel.config.yaml` は見ない |
 | D | `.codiel/runs` / `.codiel/reports` / `.gitignore` | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在し、`node <plugin-root>/scripts/codiel-state.mjs gitignore` が返す `missing` が空である |
 
-- 4 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
+- 3 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
 - `codiel-state gitignore` が失敗したとき(config.json が不正なとき)は、標準エラー出力の理由を控え、D は揃っていないものとして扱う。
 - GOTCHAS は確認対象に含めない。台帳の生成は metatron が行う(`/metatron:init`)。codiel は台帳を作らない。

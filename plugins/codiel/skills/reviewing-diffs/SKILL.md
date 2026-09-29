@@ -43,7 +43,7 @@ github モードで投稿するレビュー本文の文の組み立てと画像�
    intent と `dev-plan.md` を設計の代わりに読む。fix-loop の再レビューでは、申し送られた
    「反論済み所見一覧」も確認する。
 2. `git diff <base>...<branch> -- ':(exclude,glob)<testsDir>/**/reports/**'` で diff を取得する。
-   `<testsDir>` は `codiel-state config` の出力から取る。E2E のレポートは diff から除く。
+   `<testsDir>` は依頼文に書かれた値を使う(`codiel-state` は呼ばない)。E2E のレポートは diff から除く。
    diff が大きくても**全ファイルに目を通す**(サンプリングで一部だけ見て済ませない)。
 3. 自分の観点(下記「観点別の焦点」)に該当する変更点を洗い出す。
 4. 各変更点について両方向チェックを行う:

@@ -161,7 +161,9 @@ function configDir(cfg, key, fallback) {
   return normalizeRel(v);
 }
 function gitignoreLines(testsDir) {
-  const reports = `${testsDir}/e2e/**/reports/[0-9]*-try[0-9]*`;
+  const base = normalizeRel(testsDir);
+  const prefix = base === "." ? "" : `${base}/`;
+  const reports = `${prefix}e2e/**/reports/[0-9]*-try[0-9]*`;
   return [
     ".codiel/runs/",
     ".codiel/reports/",

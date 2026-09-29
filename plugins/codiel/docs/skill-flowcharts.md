@@ -310,20 +310,19 @@ digraph running_regression_tests {
   run_cmd [label="プロジェクトの test コマンドを実行", shape=box];
   verdict [label="判定を決める\n(green / red / broken)", shape=box];
   report [label="レポート作成\n(実行出力の抜粋・NG は4項目)", shape=box];
-  commit [label="レポートを自分でコミット", shape=box];
   standalone_end [label="単独実行(/codiel:test):\nNG があってもディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   report_ng [label="run 経由: NG を仕様のディレクトリ\nごとにまとめてオーケストレーターへ報告\n(修正のディスパッチはオーケストレーターが行う)", shape=box];
   broken_gate [label="broken はテストが保護されているため\nmark-ask test-loop --kind confirm の後に\n人が承認してから直す", shape=box, style=filled, fillcolor="#fff2cc"];
-  done [label="tester 報告\n(判定 / レポートパス / コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  done [label="最終の返答で報告\n(レポート本文 / 実行したテストの件数 /\nOK・NG・broken・環境の失敗の内訳)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   mode -> scope;
   scope -> split -> run_tests -> judge;
   judge -> env_fail [style=dashed];
   env_fail -> retry_env -> judge [label="実行し直す"];
-  judge -> run_cmd -> verdict -> report -> commit;
-  commit -> standalone_end [label="単独実行"];
-  commit -> report_ng [label="run経由(NGまたはbrokenあり)"];
-  commit -> done [label="run経由(NGもbrokenも無し)"];
+  judge -> run_cmd -> verdict -> report;
+  report -> standalone_end [label="単独実行"];
+  report -> report_ng [label="run経由(NGまたはbrokenあり)"];
+  report -> done [label="run経由(NGもbrokenも無し)"];
   report_ng -> broken_gate [style=dashed, label="broken を含む場合"];
   report_ng -> done;
   broken_gate -> done;
