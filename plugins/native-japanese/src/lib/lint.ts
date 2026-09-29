@@ -9,6 +9,7 @@ import {
   isHtml,
   type Source
 } from "./extract.js"
+import { checkBlocks } from "./morph.js"
 import type { Rule } from "./rules.js"
 
 export interface Violation {
@@ -85,10 +86,10 @@ export function lint(
       }
     }
   }
-  if (opts.analyzer) {
-    // T12: 形態素解析の層はここで足す。extractBlocks(whole) を morph.ts の checkBlocks に渡し、
-    // 返った違反を out に加える
-  }
+  // 断片だけでは文の区切りも文末の連続も決まらないので、HTML 以外でも書き込み後のファイル全体から段落を組む。
+  // 編集範囲での絞り込みは呼び出し側が findEditRanges と overlaps で行う
+  if (opts.analyzer)
+    out.push(...checkBlocks(extractBlocks(whole), opts.analyzer))
   return out
 }
 

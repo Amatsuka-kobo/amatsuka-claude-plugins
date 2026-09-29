@@ -2,8 +2,8 @@
 
 // src/measure.ts
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import path2 from "node:path";
+import fs2 from "node:fs";
+import path3 from "node:path";
 import { parseArgs } from "node:util";
 
 // src/lib/extract.ts
@@ -23,7 +23,7 @@ for (const [lang, exts] of [
   for (const ext of exts.split(" ")) LANG_OF_EXT[ext] = lang;
 }
 var KANA = /[ぁ-ゟ゠-ヿ]/;
-var PLACEHOLDER = "\uFF38";
+var PLACEHOLDER = "\u7532";
 var INLINE_CODE = /(`+)[^`]+\1/g;
 var URL_RE = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/g;
 var MARKER = "native-japanese: ignore-file";
@@ -331,6 +331,229 @@ function hasIgnoreMarker(src) {
   return lines.some((l) => re.test(l.trim()));
 }
 
+// src/lib/morph.ts
+var MUSE_PREDICATES = /* @__PURE__ */ new Set([
+  "\u793A\u3059",
+  "\u610F\u5473\u3059\u308B",
+  "\u7269\u8A9E\u308B",
+  "\u88CF\u4ED8\u3051\u308B",
+  "\u793A\u5506\u3059\u308B"
+]);
+var PRONOUNS = /* @__PURE__ */ new Set(["\u79C1", "\u50D5", "\u6211\u3005", "\u5F7C", "\u5F7C\u5973", "\u3042\u306A\u305F"]);
+var RUN_LENGTH = 4;
+var MIN_ENDING_LENGTH = 2;
+var LONG_SENTENCE = 100;
+var MIN_CLAUSE_CUTS = 2;
+var MIN_SEGMENT_LENGTH = 30;
+var MIN_MODIFIER_CLAUSES = 2;
+var NOT_MODIFIED = new Set(
+  "\u3053\u3068 \u3082\u306E \u306E \u3068\u304D \u6642 \u969B \u305F\u3081 \u3088\u3046 \u3068\u3053\u308D \u5834\u5408 \u5F8C \u524D \u9593 \u3046\u3061 \u307E\u307E".split(" ")
+);
+var MATCH_LENGTH = 20;
+var TERMINATORS = /* @__PURE__ */ new Set(["\u3002", "\uFF01", "\uFF1F"]);
+var RULES = {
+  "muse-shugo": {
+    category: "\u7FFB\u8A33\u8ABF",
+    advice: "\u300C\u301C\u304B\u3089\u3001\u301C\u3068\u5206\u304B\u308B\u300D\u306E\u3088\u3046\u306B\u3001\u8AAD\u307F\u624B\u304C\u8AAD\u307F\u53D6\u308B\u5F62\u306B\u8A00\u3044\u63DB\u3048\u308B\u3002\u5143\u306E\u6587\u306E\u78BA\u4FE1\u5EA6\u306F\u5909\u3048\u306A\u3044"
+  },
+  "bunmatsu-renzoku": {
+    category: "\u6587",
+    advice: "4 \u6587\u76EE\u306E\u6587\u672B\u306E\u5F62\u3092\u5909\u3048\u308B\u304B\u3001\u96A3\u306E\u6587\u3068\u3064\u306A\u3050"
+  },
+  "bun-nagasa": {
+    category: "\u6587",
+    advice: "\u7BC0\u306E\u5207\u308C\u76EE\u3067\u6587\u3092\u5206\u3051\u308B\u3002\u5206\u3051\u305F\u5F8C\u3082\u4E3B\u8A9E\u3068\u5FC5\u8981\u306A\u4E8B\u5B9F\u3092\u6B8B\u3059"
+  },
+  "rentai-kasanari": {
+    category: "\u6587",
+    advice: "\u4FEE\u98FE\u306E\u7BC0\u3092 1 \u3064\u6B8B\u3057\u3001\u6B8B\u308A\u306F\u524D\u306E\u6587\u306B\u51FA\u3059\u3002\u6642\u7CFB\u5217\u304B\u56E0\u679C\u306E\u9806\u306B\u4E26\u3079\u308B"
+  }
+};
+function toToken(raw) {
+  const d = raw.details;
+  return {
+    surface: raw.surface,
+    pos: d[0] ?? "",
+    pos1: d[1] ?? "",
+    pos2: d[2] ?? "",
+    conjType: d[4] ?? "",
+    conjForm: d[5] ?? "",
+    base: d[6] ?? ""
+  };
+}
+function splitSentences(text) {
+  const out = [];
+  let start = 0;
+  const push = (end) => {
+    const s = text.slice(start, end);
+    const lead = s.length - s.trimStart().length;
+    if (s.trim() !== "") out.push({ start: start + lead, end });
+    start = end;
+  };
+  for (let i = 0; i < text.length; i++)
+    if (TERMINATORS.has(text[i])) push(i + 1);
+  push(text.length);
+  return out;
+}
+function sentencesOf(text, analyzer2) {
+  const sentences = splitSentences(text).map((r) => ({
+    ...r,
+    tokens: []
+  }));
+  let at = 0;
+  let k = 0;
+  for (const raw of analyzer2.tokenize(text)) {
+    const i = text.indexOf(raw.surface, at);
+    const pos = i < 0 ? at : i;
+    at = pos + raw.surface.length;
+    while (k < sentences.length - 1 && pos >= sentences[k].end)
+      k++;
+    sentences[k]?.tokens.push(toToken(raw));
+  }
+  return sentences;
+}
+var isVerbLike = (t) => t.pos === "\u52D5\u8A5E" || t.pos === "\u5F62\u5BB9\u8A5E" || t.pos === "\u52A9\u52D5\u8A5E";
+function isEndingPart(t) {
+  if (t.pos === "\u52A9\u52D5\u8A5E" || t.pos === "\u52A9\u8A5E") return true;
+  if (t.pos === "\u52D5\u8A5E") return t.pos1 === "\u975E\u81EA\u7ACB" || t.pos1 === "\u63A5\u5C3E";
+  return t.pos === "\u540D\u8A5E" && t.pos1 === "\u975E\u81EA\u7ACB";
+}
+function endingStart(ts) {
+  let last = ts.length;
+  while (last > 0 && ts[last - 1].pos === "\u8A18\u53F7") last--;
+  let stop = last;
+  while (stop > 0 && isEndingPart(ts[stop - 1])) stop--;
+  return { stop, last };
+}
+function endingOf(ts) {
+  const { stop, last } = endingStart(ts);
+  return ts.slice(stop, last).map((t) => t.surface).join("");
+}
+var len = (s) => [...s.replace(/\s/g, "")].length;
+function museShugo(ts) {
+  const core = endingStart(ts).stop - 1;
+  const verb = ts[core];
+  if (verb?.pos !== "\u52D5\u8A5E" || verb.pos1 !== "\u81EA\u7ACB") return false;
+  const noun = ts[core - 1];
+  const sahen = verb.base === "\u3059\u308B" && noun?.pos1 === "\u30B5\u5909\u63A5\u7D9A";
+  const base = sahen ? `${noun.surface}\u3059\u308B` : verb.base;
+  const head = sahen ? core - 1 : core;
+  if (!MUSE_PREDICATES.has(base)) return false;
+  const wo = ts[head - 1];
+  const koto = ts[head - 2];
+  if (wo?.surface !== "\u3092" || wo.pos1 !== "\u683C\u52A9\u8A5E") return false;
+  if (!koto || koto.surface !== "\u3053\u3068" && koto.surface !== "\u306E" || koto.pos !== "\u540D\u8A5E" || koto.pos1 !== "\u975E\u81EA\u7ACB")
+    return false;
+  const topicAt = (j) => {
+    const t = ts[j];
+    return (t.surface === "\u306F" || t.surface === "\u304C") && t.pos === "\u52A9\u8A5E" && (t.pos1 === "\u4FC2\u52A9\u8A5E" || t.pos1 === "\u683C\u52A9\u8A5E") && ts[j - 1]?.pos === "\u540D\u8A5E";
+  };
+  let hasSubject = false;
+  let nearestWa = -1;
+  for (let j = 1; j < head - 2; j++) {
+    if (!topicAt(j)) continue;
+    hasSubject = true;
+    if (ts[j].surface === "\u306F") nearestWa = j;
+  }
+  if (!hasSubject) return false;
+  if (nearestWa < 0) return true;
+  const subj = ts[nearestWa - 1];
+  const person = subj.pos1 === "\u4EE3\u540D\u8A5E" || PRONOUNS.has(subj.surface) || subj.pos1 === "\u56FA\u6709\u540D\u8A5E" && subj.pos2 === "\u4EBA\u540D";
+  return !person;
+}
+function clauseCuts(ts) {
+  let n = 0;
+  for (let k = 1; k < ts.length; k++) {
+    const t = ts[k];
+    if (t.pos !== "\u8A18\u53F7" || t.pos1 !== "\u8AAD\u70B9") continue;
+    const p = ts[k - 1];
+    if (p.pos === "\u52A9\u8A5E" && p.pos1 === "\u63A5\u7D9A\u52A9\u8A5E" || isVerbLike(p) && (p.conjForm === "\u9023\u7528\u5F62" || p.conjForm === "\u9023\u7528\u30C6\u63A5\u7D9A"))
+      n++;
+  }
+  return n;
+}
+function modifierClauses(seg) {
+  let n = 0;
+  for (let m = 0; m < seg.length; m++) {
+    const t = seg[m];
+    if (!isVerbLike(t)) continue;
+    if (t.conjForm !== "\u57FA\u672C\u5F62" && t.conjForm !== "\u4F53\u8A00\u63A5\u7D9A") continue;
+    const prev = seg[m - 1];
+    if (t.pos === "\u52A9\u52D5\u8A5E" && prev && (prev.pos1 === "\u5F62\u5BB9\u52D5\u8A5E\u8A9E\u5E79" || prev.pos2 === "\u5F62\u5BB9\u52D5\u8A5E\u8A9E\u5E79"))
+      continue;
+    let next = seg[m + 1];
+    if (next?.pos === "\u63A5\u982D\u8A5E") next = seg[m + 2];
+    if (next?.pos !== "\u540D\u8A5E") continue;
+    if (NOT_MODIFIED.has(next.surface)) continue;
+    if (["\u63A5\u5C3E", "\u4EE3\u540D\u8A5E", "\u6570"].includes(next.pos1)) continue;
+    n++;
+  }
+  return n;
+}
+function rentaiKasanari(ts) {
+  const segs = [[]];
+  for (const t of ts) {
+    const cut = t.pos === "\u8A18\u53F7" && (t.pos1 === "\u8AAD\u70B9" || t.pos1 === "\u53E5\u70B9") || t.surface === "\u306F" && t.pos === "\u52A9\u8A5E" && t.pos1 === "\u4FC2\u52A9\u8A5E";
+    if (cut) segs.push([]);
+    else segs.at(-1)?.push(t);
+  }
+  return segs.some(
+    (seg) => modifierClauses(seg) >= MIN_MODIFIER_CLAUSES && len(seg.map((t) => t.surface).join("")) >= MIN_SEGMENT_LENGTH
+  );
+}
+function runEnds(sentences) {
+  const hits = /* @__PURE__ */ new Set();
+  let prev = null;
+  let count = 0;
+  sentences.forEach((s, i) => {
+    const e = endingOf(s.tokens);
+    if ([...e].length < MIN_ENDING_LENGTH) {
+      prev = null;
+      count = 0;
+      return;
+    }
+    count = e === prev ? count + 1 : 1;
+    prev = e;
+    if (count === RUN_LENGTH) hits.add(i);
+  });
+  return hits;
+}
+var checked = (b) => b.kind !== "heading" && b.kind !== "table";
+function sentenceLines(blocks) {
+  return blocks.filter(checked).flatMap(
+    (b) => splitSentences(b.text).map((s) => ({
+      line: b.lineOf[s.start],
+      endLine: b.lineOf[s.end - 1]
+    }))
+  );
+}
+function checkBlocks(blocks, analyzer2) {
+  const out = [];
+  for (const b of blocks) {
+    if (!checked(b)) continue;
+    const sentences = sentencesOf(b.text, analyzer2);
+    const runs = b.kind === "list" ? /* @__PURE__ */ new Set() : runEnds(sentences);
+    sentences.forEach((s, i) => {
+      const text = b.text.slice(s.start, s.end);
+      const hit = (id) => out.push({
+        line: b.lineOf[s.start],
+        endLine: b.lineOf[s.end - 1],
+        text,
+        ruleId: id,
+        ...RULES[id],
+        match: [...text].slice(0, MATCH_LENGTH).join("")
+      });
+      if (museShugo(s.tokens)) hit("muse-shugo");
+      if (runs.has(i)) hit("bunmatsu-renzoku");
+      const body = TERMINATORS.has(text.at(-1)) ? text.slice(0, -1) : text;
+      if (len(body) >= LONG_SENTENCE && clauseCuts(s.tokens) >= MIN_CLAUSE_CUTS)
+        hit("bun-nagasa");
+      if (rentaiKasanari(s.tokens)) hit("rentai-kasanari");
+    });
+  }
+  return out;
+}
+
 // src/lib/lint.ts
 function matchesOf(rule, text) {
   const flags = `${rule.pattern.flags.replace("g", "")}g`;
@@ -377,8 +600,8 @@ function lint(src, opts) {
       }
     }
   }
-  if (opts.analyzer) {
-  }
+  if (opts.analyzer)
+    out.push(...checkBlocks(extractBlocks(whole), opts.analyzer));
   return out;
 }
 function overlaps(v, ranges) {
@@ -455,7 +678,51 @@ function buildRules(discipline) {
   return [...avoidRules(discipline), ...TRANSLATION];
 }
 
+// src/morph-runtime.ts
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import path2 from "node:path";
+var VERSION = "6.2.0";
+var INSTALL_DIR = `lindera-${VERSION}`;
+var LOCK_TTL_MS = 10 * 6e4;
+var FAILED_TTL_MS = 24 * 60 * 6e4;
+function loadAnalyzer(dataDir) {
+  if (!dataDir) return null;
+  const dir = path2.join(dataDir, "morph", INSTALL_DIR);
+  const readyFile = path2.join(dir, "ready.json");
+  try {
+    if (!fs.existsSync(readyFile)) return null;
+    const ready = JSON.parse(fs.readFileSync(readyFile, "utf8"));
+    const intact = Object.entries(ready.files).every(([rel, rec]) => {
+      try {
+        const st = fs.statSync(path2.join(dir, rel));
+        return st.size === rec.size && st.mtimeMs === rec.mtimeMs;
+      } catch {
+        return false;
+      }
+    });
+    if (!intact) {
+      fs.rmSync(readyFile, { force: true });
+      return null;
+    }
+    const lindera = createRequire(import.meta.url)(
+      path2.join(dir, ready.node)
+    );
+    return new lindera.Tokenizer(
+      lindera.loadDictionary(path2.join(dir, ready.dict)),
+      "normal"
+    );
+  } catch {
+    return null;
+  }
+}
+
 // src/measure.ts
+function countSentences(src, ranges) {
+  return sentenceLines(extractBlocks(src)).filter(
+    (s) => !ranges || ranges.some((r) => s.line <= r.end && r.start <= s.endLine)
+  ).length;
+}
 var USAGE = "\u4F7F\u3044\u65B9: measure.mjs (--git <range> | --transcripts <dir> [--since YYYY-MM-DD]) [--data-dir <dir>] [--format json|text]";
 function fail(message) {
   process.stderr.write(`${message}
@@ -490,7 +757,7 @@ function parseDiff(diff) {
   }
   return files;
 }
-function measureGit(range, rules2) {
+function measureGit(range, rules2, analyzer2) {
   const git = (...args) => execFileSync("git", args, {
     encoding: "utf8",
     maxBuffer: 1 << 28,
@@ -510,11 +777,11 @@ function measureGit(range, rules2) {
   const dots = /\.\.\.?/.exec(range);
   const end = dots ? range.slice(dots.index + dots[0].length) || "HEAD" : null;
   const top = git("rev-parse", "--show-toplevel").trim();
-  const tally = { lines: 0, found: [] };
+  const tally = { lines: 0, sentences: 0, found: [] };
   for (const file of parseDiff(diff)) {
     let text;
     try {
-      text = end === null ? fs.readFileSync(path2.join(top, file.path), "utf8") : git("show", `${end}:${file.path}`);
+      text = end === null ? fs2.readFileSync(path3.join(top, file.path), "utf8") : git("show", `${end}:${file.path}`);
     } catch {
       continue;
     }
@@ -527,9 +794,15 @@ function measureGit(range, rules2) {
         for (const n of b.lineOf)
           if (ranges.some((r) => r.start <= n && n <= r.end)) seen.add(n);
       tally.lines += seen.size;
-      for (const v of lint(whole, { rules: rules2 }))
+      if (analyzer2) tally.sentences += countSentences(whole, ranges);
+      for (const v of lint(whole, { rules: rules2, analyzer: analyzer2 }))
         if (overlaps(v, ranges)) tally.found.push({ ...v, path: file.path });
       continue;
+    }
+    if (analyzer2) {
+      tally.sentences += countSentences(whole, ranges);
+      for (const v of lint(whole, { rules: [], analyzer: analyzer2 }))
+        if (overlaps(v, ranges)) tally.found.push({ ...v, path: file.path });
     }
     for (const h of file.hunks) {
       const frag = { path: file.path, text: h.lines.join("\n") };
@@ -564,12 +837,12 @@ function sourcesOf(input) {
   return bodies.filter((b) => typeof b === "string" && b !== "").map((text) => ({ path: p, text, cellType }));
 }
 function writerOf(file) {
-  const m = /^agent-(.+)\.jsonl$/.exec(path2.basename(file));
-  if (!m || path2.basename(path2.dirname(file)) !== "subagents") return "main";
+  const m = /^agent-(.+)\.jsonl$/.exec(path3.basename(file));
+  if (!m || path3.basename(path3.dirname(file)) !== "subagents") return "main";
   try {
     const meta = JSON.parse(
-      fs.readFileSync(
-        path2.join(path2.dirname(file), `agent-${m[1]}.meta.json`),
+      fs2.readFileSync(
+        path3.join(path3.dirname(file), `agent-${m[1]}.meta.json`),
         "utf8"
       )
     );
@@ -578,15 +851,15 @@ function writerOf(file) {
   }
   return "unknown";
 }
-function measureTranscripts(dir, since, rules2) {
+function measureTranscripts(dir, since, rules2, analyzer2) {
   const byWriter = /* @__PURE__ */ new Map();
-  const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".jsonl")).sort();
+  const files = fs2.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".jsonl")).sort();
   for (const rel of files) {
-    const file = path2.join(dir, rel);
+    const file = path3.join(dir, rel);
     const writer = writerOf(file);
-    const tally = byWriter.get(writer) ?? { lines: 0, found: [] };
+    const tally = byWriter.get(writer) ?? { lines: 0, sentences: 0, found: [] };
     byWriter.set(writer, tally);
-    for (const l of fs.readFileSync(file, "utf8").split("\n")) {
+    for (const l of fs2.readFileSync(file, "utf8").split("\n")) {
       let rec;
       try {
         rec = JSON.parse(l);
@@ -605,7 +878,8 @@ function measureTranscripts(dir, since, rules2) {
         for (const src of sourcesOf(c.input)) {
           if (hasIgnoreMarker(src)) continue;
           tally.lines += isHtml(src.path) ? new Set(extractBlocks(src).flatMap((b) => b.lineOf)).size : extractLines(src).length;
-          for (const v of lint(src, { rules: rules2 }))
+          if (analyzer2) tally.sentences += countSentences(src);
+          for (const v of lint(src, { rules: rules2, analyzer: analyzer2 }))
             tally.found.push({ ...v, path: src.path });
         }
       }
@@ -613,7 +887,34 @@ function measureTranscripts(dir, since, rules2) {
   }
   return byWriter;
 }
-function report(tally, rules2, byWriter) {
+function openAnalyzer(dataDir) {
+  let dir = dataDir;
+  if (dir === void 0) {
+    if (process.env.AMATSUKA_NATIVE_JAPANESE_MORPH === "off")
+      return {
+        analyzer: null,
+        morph: { used: false, reason: "AMATSUKA_NATIVE_JAPANESE_MORPH=off" }
+      };
+    dir = process.env.CLAUDE_PLUGIN_DATA;
+    if (!dir)
+      return {
+        analyzer: null,
+        morph: {
+          used: false,
+          reason: "--data-dir \u3082 CLAUDE_PLUGIN_DATA \u3082\u6307\u5B9A\u3055\u308C\u3066\u3044\u306A\u3044"
+        }
+      };
+  }
+  const analyzer2 = loadAnalyzer(dir);
+  return analyzer2 ? { analyzer: analyzer2, morph: { used: true } } : {
+    analyzer: null,
+    morph: {
+      used: false,
+      reason: `${dir} \u306B\u53D6\u5F97\u7269\u304C\u7121\u3044\u304B\u3001\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u305F`
+    }
+  };
+}
+function report(tally, rules2, byWriter, morph2) {
   const regexIds = new Set(rules2.map((r) => r.id));
   const counts = /* @__PURE__ */ new Map();
   const examples = {};
@@ -625,14 +926,9 @@ function report(tally, rules2, byWriter) {
   }
   const violations = tally.found.length;
   return {
-    // T12: 形態素解析の層を組み込んだら、loadAnalyzer の結果で埋める
-    morph: {
-      used: false,
-      reason: "\u5F62\u614B\u7D20\u89E3\u6790\u306E\u5C64\u306F\u307E\u3060\u7D44\u307F\u8FBC\u3093\u3067\u3044\u306A\u3044"
-    },
+    morph: morph2,
     lines: tally.lines,
-    // T12: 形態素解析の層で文に分けたら、その数を入れる
-    sentences: 0,
+    sentences: tally.sentences,
     violations,
     per100Lines: tally.lines === 0 ? 0 : Math.round(violations / tally.lines * 100 * 100) / 100,
     // 多い順。同数なら id の順
@@ -690,7 +986,6 @@ try {
       git: { type: "string" },
       transcripts: { type: "string" },
       since: { type: "string" },
-      // T12: loadAnalyzer に渡す。いまは受け付けるだけ
       "data-dir": { type: "string" },
       format: { type: "string", default: "text" }
     }
@@ -707,27 +1002,30 @@ if (values.since !== void 0 && !/^\d{4}-\d{2}-\d{2}$/.test(values.since))
 if (values.since !== void 0 && values.transcripts === void 0)
   fail("--since \u306F --transcripts \u3068\u4E00\u7DD2\u306B\u4F7F\u3046");
 var rules = buildRules(
-  fs.readFileSync(
+  fs2.readFileSync(
     new URL("../references/discipline.md", import.meta.url),
     "utf8"
   )
 );
+var { analyzer, morph } = openAnalyzer(values["data-dir"]);
 var result;
 try {
   if (values.git !== void 0) {
-    result = report(measureGit(values.git, rules), rules, null);
+    result = report(measureGit(values.git, rules, analyzer), rules, null, morph);
   } else {
     const byWriter = measureTranscripts(
       values.transcripts,
       values.since,
-      rules
+      rules,
+      analyzer
     );
-    const all = { lines: 0, found: [] };
+    const all = { lines: 0, sentences: 0, found: [] };
     for (const t of byWriter.values()) {
       all.lines += t.lines;
+      all.sentences += t.sentences;
       all.found.push(...t.found);
     }
-    result = report(all, rules, byWriter);
+    result = report(all, rules, byWriter, morph);
   }
 } catch (e) {
   process.stderr.write(`${e.message}
