@@ -14,9 +14,11 @@ local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/
 - **GOTCHAS は新書式**: 本文は `タスク / 失敗内容 / 原因 (推測) / 対策 / 昇格候補` の 5 フィールドのみ。
   関連ファイル欄・関連エントリ欄・Codiel フェーズ名欄は**持たない**(必要ならすべて `対策` の本文へ)。
   タグは `[解決済み]` / `[対象外]` の 2 種だけを `GOTCHA-NNN:` の直後に置く。
-- `install-harness.sh` は **`.codiel/{runs,reports}` と `.codiel/config.json`(無ければ `{ "testsDir": "docs/tests" }`)を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
-  テストの仕様の置き場は config の `testsDir`(既定 `docs/tests`)の下にある(2026-09-28、M4)。
-- GOTCHAS の記録は metatron の `metatron:recording-gotchas` に委ねる(codiel の `recording-gotchas` スキルは 2026-09-27 に削除)。codiel が持つのは記録の契機(Raguel の STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)と、CLI の案内が無いときの退避(「未記録の GOTCHAS」を `.codiel/runs/<slug>/try-<n>/reports/` か `.codiel/reports/` と完了報告へ持ち越す)だけで、`orchestrating-runs` の「失敗の記録」にある。
+- `install-harness.sh` は **`.codiel/{runs,reports}` と `.codiel/config.json`(無ければ `{ "testsDir": "docs/codiel/tests", "runsDir": "docs/codiel/runs" }`。`raguel` と `.gitignore` の行は `initializing-harness` が承認を得て足す)を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
+  テストの仕様の置き場は config の `testsDir`(既定 `docs/codiel/tests`)の下にある。run の文書(agenda・discussion・design・dev-plan)は `<runsDir>/<slug>/` に try で分けずに置き、コミットする。
+  try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/`、`/codiel:test` の報告は `.codiel/reports/` に置き、`.gitignore` で外す(2026-09-29、M4-C。ADR-009)。
+  Raguel の設定は config.json の `raguel` にあり、以前の版の YAML の設定ファイルは読まれない(init が承認を得て写してから消す)。
+- GOTCHAS の記録は metatron の `metatron:recording-gotchas` に委ねる(codiel の `recording-gotchas` スキルは 2026-09-27 に削除)。codiel が持つのは記録の契機(Raguel の STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)と、CLI の案内が無いときの退避(「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無ければ `.codiel/reports/unrecorded-gotchas.md`)と完了報告へ持ち越す)だけで、`orchestrating-runs` の「失敗の記録」にある。
 
 ## `/codiel:init` — 保護パスだけを確認する
 
@@ -29,8 +31,8 @@ ARCHITECTURE にある ` ```json metatron:domains ` のドメインマップは�
 
 「初期化済み」の判定に ARCHITECTURE は使わない。B = `.claude/rules/codiel.md`(運用の規律。init が
 `assets/rules/codiel.md` から置く。paths 指定なし)と、CLAUDE.md に行全体が `## Codiel` と一致する見出し
-(置き場の地図と入口だけ。`CLAUDE.example.md` が雛形)、C = `raguel.config.yaml`、D = `.codiel/runs`・`.codiel/reports`・`.codiel/config.json` の 3 つで
-判定する(設計書の決定 70。D の `config.json` は M4 で入った)。旧セクション「## Codiel ハーネス運用ルール」は前方一致でも B を満たさず、
+(置き場の地図と入口だけ。`CLAUDE.example.md` が雛形)、C = `.codiel/config.json` が JSON のオブジェクトで `raguel` がオブジェクト、D = `.codiel/runs`・`.codiel/reports` の存在と `codiel-state gitignore` の `missing` が空、で
+判定する(設計書の決定 70、M4-C の決定 87・93)。`/codiel:run` の §0 も C・D を見て、欠けたら `/codiel:init` を案内する。旧セクション「## Codiel ハーネス運用ルール」は前方一致でも B を満たさず、
 init が差分を示して承認を得てから取り除く。
 
 ## `/codiel:run` のドメインモード
@@ -92,7 +94,9 @@ Raguel gates(`GATED` の 9 フェーズ)`intent`, `design`, `test-spec`, `dev-pl
 - implement は dev-plan の Step を `codiel-state waves` でグループに分け、グループごとに Step を `.codiel/worktrees/<slug>/<名前>` の
   worktree で並列に実装してマージする。`waves` が扱うのは `implement.steps` だけで、`testCode.units` と `testLoop.units` は対象外。
   dev-plan の `## 生成物` は方式 a(各 Step が生成物をコミット)か方式 b(既定。最後の生成だけの Step)を規約で選ぶ。
-- `.codiel/config.json` の `testsDir`(既定 `docs/tests`)は `readCodielConfig(codielRoot)` で読み、`codiel-state config` でも出る。
+- `.codiel/config.json` の `testsDir`(既定 `docs/codiel/tests`)と `runsDir`(既定 `docs/codiel/runs`)は `readCodielConfig(codielRoot)` で読み、`codiel-state config` でも出る。`codiel-state gitignore` は必要な `.gitignore` の 6 行と欠けている行(`missing`)を出す。
+- E2E のレポートは `<testsDir>/e2e/{frontend,backend,cli}/<名前>/reports/<YYYYMMDD-HHMMSS>-<slug>-try<n>/`(ローカルのタイムゾーン)に置き、`results.json` と `summary.md`/`failure.md` だけをコミットする。書式は `references/e2e-report-format.md`。
+- 報告のファイル(`report.md`・`test-run-<n>.md`)は委譲先が最終の返答で返し、オーケストレーターが書く。
 - step-add / step-update は `--kind step|test-code|test-loop` を取り、`implement.steps`・`testCode.units`・`testLoop.units` に分けて記録する。
 `discuss`・`design` は scale light の run でだけ skip でき、`fix-loop` は所見が無ければ skip する。
 run state は version 2(slug で識別。`--issue` は任意の記録)。version 1 の run と、`phases` に `test-code` を持たない
@@ -147,7 +151,7 @@ Skills: `capturing-intent`, `preparing-design-agendas`, `facilitating-design-dis
 `writing-design-docs`, `writing-test-specs`, `writing-dev-plans`, `implementing`, `scripting-tests`,
 `running-regression-tests`, `fixing-failures`, `syncing-intents`, `reviewing-diffs`, `fixing-review-findings`,
 `filing-followup-issues`, `orchestrating-runs`, `raguel-gating`,
-`initializing-harness` (+ その `raguel.config.example.yaml`)。
+`initializing-harness` (+ その `config.example.json`)。
 どのスキルも description の照合では起動されず、コマンド・`orchestrating-runs` の手順・依頼文から名前かパスで起動される
 (そのため evals は持たない)。
 全スキルは commit 86b9483 で prompt-smith 標準に書き直され、2026-08-16 に契約追随の改訂が入った。

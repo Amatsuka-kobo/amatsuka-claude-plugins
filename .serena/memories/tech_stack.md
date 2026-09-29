@@ -29,7 +29,7 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
 - Frontmatter schema check: **none**. mdbase (`mdbase.yaml` + `_types/`) and the `mdbase-lsp` LSP
   were retired in 2026-08 (commit 9ed55dd) and archived to `docs/old/mdbase-record/`; nothing
   validates `agents/`, `commands/`, `skills/` or antibody frontmatter any more.
-- Only non-dev runtime deps: raguel-mcp (`@modelcontextprotocol/sdk`, `zod` v4, `picomatch`, `yaml`)
+- Only non-dev runtime deps: raguel-mcp (`@modelcontextprotocol/sdk`, `zod` v4, `picomatch`; `yaml` removed in codiel 1.0.0 M4-C — config is JSON in `.codiel/config.json`)
   and basic-design (`elkjs`, pinned exact at 0.11.1). Every other plugin is Node stdlib
   (+ `git`/`gh`/`claude` CLI).
 
