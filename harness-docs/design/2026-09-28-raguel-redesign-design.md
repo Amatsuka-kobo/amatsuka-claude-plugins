@@ -1,7 +1,7 @@
 # Raguel を層ごとに作り直す 設計書
 
 - 作成日: 2026-09-28
-- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)
+- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直した(2026-09-29、ユーザー承認)
 - 対象: `plugins/codiel/raguel-mcp`(主)、codiel で Raguel を使う箇所(`skills/raguel-gating`、`skills/orchestrating-runs`、`src/codiel-state.ts`、`src/hooks/guard-write.ts`・`guard-bash.ts`)
 - バージョン: codiel `1.0.0` → `1.1.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.1.0-dev`(§8)
 - 入力: ユーザー合意の決定 R1〜R24(2026-09-28〜29)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
@@ -710,9 +710,9 @@ claude -p --output-format json --model <model> --tools "" --disable-slash-comman
 - プロンプトは stdin で渡す(現行どおり)。
 - 引数の組み立て(`buildArgs`)を export し、vitest で引数の列を固定する(§7.1)。
 
-`--setting-sources project` と空の cwd の組み合わせで、利用者の hooks・CLAUDE.md・プラグインが読まれないと推定する。ただし現行のコメント(`R/panel/claudeCli.ts:144-145`)は、`--setting-sources ""` と `--bare` がログインを外すと書く。`project` も `user` を含まないので、同じ失敗が起きうる。そのため §7.2 の 1 を、実装に着手する前に最初に行う。
+`--setting-sources project` と空の cwd の組み合わせで、ログインは保たれ、利用者の hooks・CLAUDE.md・プラグインは読まれない。2026-09-29 の実機確認(§7.2 の 1。claude 2.1.284)で、応答が返り、debug ログで hooks は 0 件、利用者のプラグインは読まれず(組み込みの 2 つだけ)、CLAUDE.md は 0 件だった。現行のコメント(`R/panel/claudeCli.ts:144-145`)が書く `--setting-sources ""` と `--bare` のログインの外れは、`project` では起きなかった。
 
-ログインが外れたときの代替の候補は次のとおりで、どれも【要確認】である。上から順に試す。
+次の代替の候補は、`project` でログインが外れたときのために用意したもので、実機確認の結果により使わない。
 
 | 候補 | 内容 | 残る懸念 |
 | --- | --- | --- |
@@ -728,7 +728,8 @@ claude -p --output-format json --model <model> --tools "" --disable-slash-comman
 
 ```
 codex exec --ephemeral --ignore-user-config --skip-git-repo-check
-           --sandbox read-only                          【要確認】
+           --sandbox read-only
+           --disable shell_tool --disable unified_exec --disable hooks
            --output-schema <一時ディレクトリ>/schema.json
            -o <一時ディレクトリ>/last-message.json
            [-m <model>] -
@@ -746,12 +747,14 @@ R8 と同じ趣旨の隔離は次のとおりに当てる。
 | 利用者の設定を読まない | `--ignore-user-config`(`$CODEX_HOME/config.toml` を読まない) | Context7 で確認 |
 | セッションを残さない | `--ephemeral` | Context7 で確認 |
 | プロジェクトの指示ファイルを読まない | 空の cwd。`AGENTS.md` を探す起点に何も無い | 推定 |
-| 利用者の全体の指示ファイルを読まない | `--ignore-rules` の効果か、`$CODEX_HOME/AGENTS.md` の扱い | 【要確認】 |
-| 書き込ませない | 読み取り専用のサンドボックス | 【要確認】(フラグの綴り) |
-| ツールを使わせない | シェルのツールを無効にする設定の上書き(`-c`) | 【要確認】 |
+| 利用者の全体の指示ファイルを読まない | 止める手段が無い。`$CODEX_HOME/AGENTS.md` は `--ignore-user-config` と `-c project_doc_max_bytes=0` の下でも読まれる。`--ignore-rules` は execpolicy の `.rules` を読まないフラグで、`AGENTS.md` には効かないので付けない | 実機で確認(2026-09-29、codex-cli 0.144.1)。既知の限界 |
+| 書き込ませない | `--sandbox read-only` | 実機で確認(cwd へのファイルの作成が失敗した) |
+| ツールを使わせない | `--disable shell_tool --disable unified_exec`(`codex features list` の機能名) | 実機で確認(付けないと cwd の外のファイルを読めた。付けるとシェルを使えず、読めなかった) |
+| 利用者の hooks を動かさない | `--disable hooks` | 機能名から推定 |
 
-- 読み取り専用のサンドボックスでも、シェルのツールはファイルを読める。成果物に仕込まれた指示で codex が利用者のファイルを読み、所見に書き写す経路が残りうる。ツールを無効にできなければ、この限界をリスク(§11)として README に書く。
-- `--output-schema` のスキーマは、全プロパティを `required` に並べ `additionalProperties: false` を付けた厳格な形にすると推定する(OpenAI の構造化出力の制約)。任意の欄(`evidence` など)は `null` を許す型にして必須に並べ、読んだ後で `null` を取り除く。厳格な形が要るかは【要確認】とする。
+- シェルのツールを無効にしたので、成果物に仕込まれた指示で codex が利用者のファイルを読み、所見に書き写す経路は塞がる。
+- `$CODEX_HOME/AGENTS.md` は読まれるので、利用者がそこに書いた指示はパネリストの判定に混じりうる。この限界をリスク(§11)とし、README に書く。
+- `--output-schema` のスキーマは、全プロパティを `required` に並べ `additionalProperties: false` を付けた厳格な形にする。`additionalProperties: false` の無いスキーマは 400(`'additionalProperties' is required to be supplied and to be false`)で失敗する(実機で確認)。任意の欄(`evidence` など)は `null` を許す型にして必須に並べ、読んだ後で `null` を取り除く。
 
 ### 6.8 基盤の障害を内容の懸念と分ける
 
@@ -1266,7 +1269,8 @@ codiel(`C/`):
 | codex と Jev(有効なとき)に成果物が外部へ送られる | ルール層が見逃した秘密情報が外へ出る | `common/secrets` の stop でパネルも Jev も呼ばない。Jev へは伏せ字の後の本文を送る。README に書く。既定は claude で、Jev は無効 |
 | Jev が破壊操作の stop を誤って ask に下げる | 実行される破壊操作が人の裁定に回る | STOP ではなくなるが PROCEED にはならず、人が ASK を裁定する。閾値 `lower` は実機で見直す(§15) |
 | Jev の問い合わせが締切の時間を使う | パネルの時間が最大 20 秒減る | 有効にしたときだけ起きる。600 秒の締切に比べて小さい。所要は §7.2 の 9 で測る |
-| codex のシェルのツールが利用者のファイルを読む | 読んだ内容がケースファイルに残る | 実機確認の 6。無効にできなければ README に限界を書く |
+| codex のシェルのツールが利用者のファイルを読む | 読んだ内容がケースファイルに残る | `--disable shell_tool --disable unified_exec` で塞ぐ(§6.7.3。実機確認の 6 で確認) |
+| codex が `$CODEX_HOME/AGENTS.md` を読む | 利用者の全体の指示がパネリストの判定に混じる | 止める手段が無い(実機確認の 7)。README に既知の限界として書く。既定のプロバイダーは claude で、codex は利用者が選んだときだけ使う |
 | 人の裁定の真正性を機械で確かめられない | オーケストレーターが自分で record_outcome を呼べば、裁定を装える | codiel のスキルの HARD-GATE で禁じる(現行どおり)。§13 の既知の限界 |
 | projectId の算出が変わる | 旧ケースファイルと旧判例が見えなくなる | 引き継がない。シード判例は残る。README に書く |
 | ツールの入力が互換でなくなる | codiel `1.0.0` のスキルでは呼べない | codiel と raguel-mcp を同じリリース(`1.1.0-dev`)で出す。旧 run は migrate で止める(§6.13.3 の検査 10) |
