@@ -55,7 +55,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 | test-spec | `mcp__plugin_codiel_raguel__evaluate_plan` | 作成・更新した `spec.md` と `cases.md` の全文を、ファイルごとにパスの見出しを付けてつないだもの(dev-plan とは独立にゲート) |
 | dev-plan | `mcp__plugin_codiel_raguel__evaluate_plan` | `dev-plan.md` の全文(test-spec とは独立にゲート) |
 | test-code | `mcp__plugin_codiel_raguel__evaluate_code` | テストコードと `spec.md`(手順 7 で直した `cases.md` を含む)の `git diff` |
-| implement / test-loop / fix-loop | `mcp__plugin_codiel_raguel__evaluate_code` | そのフェーズで run ブランチに入れた変更の `git diff`(フェーズを始めたときの HEAD から現在の HEAD まで。fix-loop の修正ごとの評価では、その修正の範囲) |
+| implement / test-loop / fix-loop | `mcp__plugin_codiel_raguel__evaluate_code` | そのフェーズで run ブランチに入れた変更の `git diff`(フェーズを始めたときの HEAD から現在の HEAD まで。fix-loop の修正ごとの評価では、その修正の範囲)。そのフェーズの差分が空なら、`git diff <base>...HEAD` を渡す。`<base>` は state の `baseBranch` である |
 | intent-sync | `mcp__plugin_codiel_raguel__evaluate_design` | intent-sync で書き換えた intent と持続層のファイルの全文 |
 
 - `discuss` は Raguel ゲート対象外(`pr / review / triage` と同様)。人間が直接参加する
@@ -63,6 +63,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - 全呼び出し共通の必須引数: `runId`(= `state.raguelRunId`)、`objective`(下記「objective を用意する」参照)。
 - 要約や手で書いた diff を渡さない。`diff` には `git diff` の出力をそのまま渡し、`files[]` は使わない(`diff` と
   `files` を両方渡すと入力の誤りになる)。
+- `evaluate_code` に渡す `git diff` から、E2E のレポートを除く。`<testsDir>` は `codiel-state config` の出力から取り、`git diff` の末尾に `-- ':(exclude,glob)<testsDir>/**/reports/**'` を足す。レポートの `results.json` は大きく、コードの評価と差分の行数の判定を乱すためである。差分が空かどうかも、レポートを除いた後の `git diff` の出力で決める。
 - 入力の誤り(`isError`)が返ったら、入力を直して呼び直す。入力の誤りは判定ではないので、ASK の回数に数えない。
 - test-spec と dev-plan は並列実行されるフェーズだが、Raguel へは**それぞれ独立に** `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
@@ -133,8 +134,8 @@ verdict を上書きしない。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、STOP の `evaluationId`、
       `notes` に誤検知と裁定した所見と理由)を記録する。失敗したら `pass-gate` に進まず、失敗を人に示す。
-   2. `orchestrating-runs` の「失敗の記録」の退避の形で、`reports/unrecorded-gotchas.md` の
-      `## 未記録の GOTCHAS` に 1 件書く。`title` は「Raguel の誤検知: <ruleId>」で始める。metatron の CLI の
+   2. `orchestrating-runs` の「失敗の記録」の退避の形で、`<runsDir>/<slug>/unrecorded-gotchas.md` の
+      `## 未記録の GOTCHAS` に 1 件書く。`<runsDir>` は `codiel-state config` の出力から取る。`title` は「Raguel の誤検知: <ruleId>」で始める。metatron の CLI の
       案内があっても、台帳へは書かない(誤検知は対象プロジェクトの失敗ではなく、Raguel の作り直しの材料である)。
    3. `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` の後に
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`

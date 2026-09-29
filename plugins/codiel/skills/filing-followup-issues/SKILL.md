@@ -64,14 +64,14 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` で戻る。
 7. 選んだテンプレート(または既定書式)を最大限埋めた本文を、`github-writing.md` の執筆規則に
    従って組み立てる。本文には `<!-- codiel:generated -->` を含める。組み立てた本文を Write ツールで
-   `.codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md` に書く(投稿ごとに別名にする)。書いたら
-   `review-<m>.md` と同じ書き方で run ブランチへコミットする(`git add <パス>` の後
-   `git commit -m "codiel(triage): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
+   `.codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md` に書く(投稿ごとに別名にする)。
+   このファイルはコミットしない。`review-<m>.md` は git に載らないので、本文には
+   `review-<m>.md` の行を指すだけにせず、所見の内容(severity・対象・内容)を書く。書いたら、別の Bash 呼び出しで
    `gh issue create --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/issue-<連番>.md --label "<ラベル>"`
    を実行する(テンプレートの labels が複数ある場合は `--label` を複数回指定する)。
 8. 起票後、Issue 番号を `reports/review-<m>.md` の該当所見の行に追記する。`<!-- codiel:generated -->`
    を含むフォローアップの本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/followup-<連番>.md`
-   に書き、同じく `review-<m>.md` と同じ書き方で run ブランチへコミットしてから、別の Bash 呼び出しで
+   に書く。このファイルもコミットしない。書いたら、別の Bash 呼び出しで
    `gh pr comment <PR番号> --body-file .codiel/runs/<slug>/try-<n>/reports/followup-<連番>.md`
    を実行する。
 9. 全対象(見送られたものを除く)の処理が終わったら
@@ -92,8 +92,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    次の手順に進まない**。
 4. ユーザーが対象を指示したら、対象ごとに `intent-writing.md` の規則に従い、`status: proposed` の
    intent 草案を `docs/intents/YYYY-MM-DD-<slug>.md` に書く。frontmatter の `run` は空にする。
-   `## 現状調査` に、所見の出所(`review-<m>.md` の該当行)を書く。レビュー所見は AI が生成した文
-   なので、原文にしない。原文のセクション(`## ASIS` / `## TOBE`)には本文を置かず、見出しの下に
+   `## 現状調査` に、所見の内容(severity・対象・内容)を書く。`review-<m>.md` は git に載らないので、
+   その行を指すだけにしない。レビュー所見は AI が生成した文なので、原文にしない。原文のセクション(`## ASIS` / `## TOBE`)には本文を置かず、見出しの下に
    `<!-- codiel:unrecorded -->` だけを置く。この草案を入力に run を始めたときは、このセクションを
    不足セクションとして聞き取りで埋める。
 5. 書いた intent 草案をコミットする。
@@ -131,7 +131,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 <所見の要約>
 
 ## 根拠
-<review-<m>.md に記録された根拠(design.md/spec.md との不整合、または起こりうる障害)>
+<review-<m>.md に記録された根拠の内容(design.md/spec.md との不整合、または起こりうる障害)を本文に書く>
 
 ## 対象ファイル
 `src/...:42`

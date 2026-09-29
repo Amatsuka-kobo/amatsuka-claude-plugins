@@ -185,7 +185,7 @@
   `casePath` を示し、`mark-ask <phase> --slug <slug> --kind raguel --verdict STOP
   --evaluation-id <STOP の evaluationId>` で run を `awaiting_human` にする。「誤検知として続ける」か
   「妥当として止める」かを AskUserQuestion で聞き、オーケストレーターはどちらの裁定も自分で選ばない。
-  誤検知として続けるときは `record_outcome(approved)` を記録し、`reports/unrecorded-gotchas.md` の
+  誤検知として続けるときは `record_outcome(approved)` を記録し、`<runsDir>/<slug>/unrecorded-gotchas.md` の
   `## 未記録の GOTCHAS` に「Raguel の誤検知: <ruleId>」として退避してから(GOTCHAS の台帳には書かない。
   誤検知は対象プロジェクトの失敗ではなく Raguel の作り直しの材料である)、`resume` の後に
   `pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP
@@ -200,29 +200,32 @@
 
 ## 3. 成果物と state 管理
 
-### .codiel/ ディレクトリと intent 文書(feature ブランチにコミットする)
+### 置き場と git の扱い(run の文書と intent 文書は feature ブランチにコミットする)
 
 ```
-docs/intents/<slug>.md      # 確定した intent 文書(原文の ASIS/TOBE・派生文・受け入れ基準。§6.3)
-docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非ゴール)
-<testsDir>/                 # ★永続テスト資産(既定 docs/tests。run を跨いで蓄積・更新される。§4)
+docs/intents/<slug>.md      # 確定した intent 文書(原文の ASIS/TOBE・派生文・受け入れ基準。§6.3)[git で共有]
+docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非ゴール)[git で共有]
+<runsDir>/<slug>/           # run の文書(既定 docs/codiel/runs)。try では分けず、新しい try は同じパスへ書き直す [git で共有]
+  agenda.md                 # ディスカッション論点リスト(選択肢・トレードオフ・推奨案)
+  discussion.md             # ユーザーとの合意記録(論点毎の決定・理由・却下案)
+  design.md                 # 設計書(影響を受ける機能単位の列挙を含む)
+  dev-plan.md               # 開発手順書(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト)
+  unrecorded-gotchas.md     # 台帳へ記録できなかった失敗の退避(## 未記録の GOTCHAS)
+<testsDir>/                 # ★永続テスト資産(既定 docs/codiel/tests。run を跨いで蓄積・更新される。§4)[git で共有]
   units/<対象ファイルの repoRoot 相対パス>/  # ユニットテストの仕様のディレクトリ
   e2e/frontend/<画面名>/             # 画面ごとの E2E の仕様のディレクトリ
   e2e/backend/<API のルートパス>/    # API ルートごとの E2E の仕様のディレクトリ
   e2e/cli/<コマンド名>/              # 画面でも API でもない入口(CLI 等)の仕様のディレクトリ
     spec.md                         # テスト仕様書(振る舞い・受け入れ基準との対応・tests の記録)
     cases.md                        # ID 付きテストケース表(前提・操作・期待結果)。仕様書から生成
+    reports/<日時>-<slug>-try<n>/   # E2E のレポート(実行ごと)。results.json・summary.md・failure.md だけ共有し、画像などは共有しない
 .codiel/
-  config.json               # testsDir だけを持つ設定(無い・キーが無ければ既定値 docs/tests。§4)
-  worktrees/<slug>/<名前>/  # 並列実装・test-code・test-loop が作る一時 worktree(マージ後・run 終了時に削除)
-  reports/                  # /codiel:test(単独実行)の結果レポート
-  runs/<slug>/              # slug は intent フェーズの承認ゲートで決める識別子
+  config.json               # testsDir・runsDir・raguel の 3 つのキーを持つ設定(キーが無ければ既定値。§4)[git で共有]
+  worktrees/<slug>/<名前>/  # 並列実装・test-code・test-loop が作る一時 worktree(マージ後・run 終了時に削除)[.git/info/exclude で外す]
+  reports/                  # /codiel:test(単独実行)のレポートと E2E のレポート、run が無いときの未記録の GOTCHAS の退避 [.gitignore で外す]
+  runs/<slug>/              # slug は intent フェーズの承認ゲートで決める識別子 [.gitignore で外す]
     try-<n>/                # 同一 run の挑戦毎のフォルダ(再挑戦で try-2, try-3, …)
       state.json            # フェーズ進捗・ゲート記録・試行カウンタ(直接編集は hooks で禁止)
-      agenda.md             # ディスカッション論点リスト(選択肢・トレードオフ・推奨案)
-      discussion.md         # ユーザーとの合意記録(論点毎の決定・理由・却下案)
-      design.md             # 設計書(影響を受ける機能単位の列挙を含む)
-      dev-plan.md           # 開発手順書(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト)
       steps/                # ステップ・仕様のディレクトリ毎の brief.md / report.md(§6.6.4)
         step-<k>/            # implement の直列グループ・最終ステップ・run ブランチ上の修正
         test-code-<k>/       # test-code の仕様のディレクトリごとの委譲
@@ -234,14 +237,31 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
         review-<n>.md       # 各回のレビュー所見
 ```
 
-- intent 文書は run ディレクトリの外、`docs/intents/` に置く。state の `intent` フィールド
+- `.codiel/runs/` と `.codiel/reports/` の行、E2E のレポートの `results.json`・`summary.md`・`failure.md` を戻す 4 行は、
+  `/codiel:init` が承認を得て `.gitignore` に足す。`.codiel/runs/` の下のファイルはコミットしない。
+  pr の前の確認で run の外のファイルが残っていたら、コミットも退避もせずにユーザーに聞く。
+- intent 文書は run の文書の外、`docs/intents/` に置く。state の `intent` フィールド
   (repoRoot 相対パス)が指す。
+- **報告は返答で受ける**: 委譲先は報告の本文を最終の返答で返し、報告のファイル(`report.md`・
+  `test-run-<n>.md` など)は返答を受けた直後にオーケストレーターが `.codiel/runs/` の下へそのまま書く。
+  Claude Code 本体がサブエージェントによる報告ファイルの Write を拒否するためである(決定 95)。
+- **E2E のレポート**: 仕様のディレクトリごとに 1 回の実行を、メインの作業ツリーの `reports/<日時>-<slug>-try<n>/`
+  に置く。日時は実行する機械のローカルのタイムゾーンで `YYYYMMDD-HHMMSS` とする。`results.json` はテスト
+  フレームワークの出力、`summary.md`(成功と Red の確認)と `failure.md`(失敗)はオーケストレーターが返答から書く。
+  書式は `references/e2e-report-format.md`。オーケストレーターが、コード系フェーズの `evaluate_code` の前と
+  `codiel-state stop` の直前にコミットし、finalize で途中のパスした実行と Red の確認の実行を消して、失敗した実行と
+  仕様のディレクトリごとの最後の実行だけを残す。`/codiel:test` の単独実行のレポートは
+  `.codiel/reports/test-run-<日時>/` にだけ置く。
 - **try の運用**: `/codiel:run` 実行時、最新 try が未完了なら**その try を再開**、
   終了状態(stopped / awaiting_outcome / completed / rejected)なら **try-<n+1> を新規作成**して開始する。
   新 try のサブエージェントは過去 try の成果物・レビュー所見を参照できる(前回の失敗を繰り返さないための入力)。
+  run の文書は try で分けず同じパスへ書き直すので、前の try の run ブランチにある文書は
+  `git show <前の try の branch>:<runsDir>/<slug>/<ファイル名>` で読む。
 - Raguel へ渡す `raguelRunId` は `<slug>-try-2` の形式(try 毎に独立したケースファイル・resubmission-loop カウンタを持つ)。
-- テストの仕様の置き場(`testsDir`)は `.codiel/config.json` で設定する。既定は `docs/tests`。ファイルが
-  無い、またはキーが無ければ既定値を使う。値は repoRoot 相対で、run が active な間は書き換えない(§4)。
+- テストの仕様の置き場(`testsDir`)と run の文書の置き場(`runsDir`)は `.codiel/config.json` で設定する。
+  既定は `docs/codiel/tests` と `docs/codiel/runs`。ファイルが無い、またはキーが無ければ既定値を使う。
+  値は repoRoot 相対で、run が active な間は書き換えない(§4)。Raguel の設定も同じファイルの `raguel` に
+  置き、Raguel は YAML を読まない。
 - 並列実装・test-code・test-loop の委譲は 1 ステップ(または 1 仕様のディレクトリ)につき 1 worktree
   (`.codiel/worktrees/<slug>/<名前>`)で行い、タスクレビューを通ったものから run ブランチへ
   `git merge --no-ff` する。worktree はマージ後、または run の終了時(finalize / stop)に削除する(§6.6)。
@@ -336,7 +356,7 @@ ADR へ移してから、そのエントリだけを参照形(見出し・制約
 
 ## 4. テスト資産モデル(永続・仕様のディレクトリ単位)
 
-テストの仕様は run の使い捨て成果物ではなく、`<testsDir>`(既定 `docs/tests`。`.codiel/config.json` の
+テストの仕様は run の使い捨て成果物ではなく、`<testsDir>`(既定 `docs/codiel/tests`。`.codiel/config.json` の
 `testsDir` で変更できる。§6.13.4)配下に、仕様のディレクトリ単位で蓄積する永続資産である(決定 74)。
 
 - **仕様のディレクトリの系統と ID**: `testsDir` からの相対パスがそのディレクトリの ID になる。
@@ -428,7 +448,14 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
   未実装による失敗にもプロダクトの失敗にも数えない。委譲先は理由と出力の抜粋を報告に挙げ、
   オーケストレーターは動いている委譲が無いときに 1 回だけ単独で実行し直させる(この扱いは
   test-code・implement・test-loop・`/codiel:test` に共通)。実行し直しても環境の失敗なら、人に
-  確かめる。
+  確かめる。委譲先の報告は最終の返答で返り、報告のファイルはオーケストレーターが書く(§3)。
+- **E2E のレポート(決定 103〜105)**: E2E は仕様のディレクトリごとに 1 回の実行にし、`results.json` と
+  スクリーンショットを、オーケストレーターが依頼文に書いた `<testsDir>/e2e/…/reports/<日時>-<slug>-try<n>/`
+  へ出す(worktree の中で実行しても、出力はメインの作業ツリーに出す)。実行の結果から
+  オーケストレーターが `summary.md` か `failure.md` を書く。test-code の Red の確認の実行は、結果に
+  かかわらず失敗した実行に数えず、`summary.md` を置く。NG を直す委譲には、失敗した仕様のディレクトリの
+  最新のレポートの絶対パスを渡し、委譲先が `failure.md`・`results.json`・画像から直し方を決める。
+  PR などの証拠の画像とログにも、このレポートを使う。
 - テストコードの diff も Raguel の `evaluate_code` に通す(期待値の骨抜き・ケースの無断削除は
   `code/test-deletion` 系ルール + reviewer の検査対象)。
 
@@ -437,7 +464,10 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 - `/codiel:test [<testsDir> からの相対パス>]` — 引数を省略すると `<testsDir>` 全体、指定時は
   その配下の仕様のディレクトリだけを対象にする。
 - `<testsDir>/**/spec.md` の `tests` に記録されたテストを実行し、結果を
-  `.codiel/reports/test-run-<ISO日時>.md` に保存して要約を報告する。`tests` を持たない仕様の
+  `.codiel/reports/test-run-<日時>.md`(日時は実行する機械のローカルのタイムゾーンで
+  `YYYYMMDD-HHMMSS`。決定 109)に保存して要約を報告する。E2E は仕様のディレクトリごとに実行し、
+  そのレポートは `.codiel/reports/test-run-<日時>/<仕様のディレクトリの ID>/` にだけ置いて、
+  報告からリンクする。`tests` を持たない仕様の
   ディレクトリは「テストコードなし」と報告し、テストは書かない。
 - run 中でなくても使える(手動回帰・CI 前チェック用)。state を遷移させないので、NG があっても
   コード修正はディスパッチせず(報告のみ)、broken の確認も `mark-ask` を使わずユーザーに直接
@@ -474,11 +504,11 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 | `writing-design-docs` | brainstorming(設計部) | intent + discussion.md + ARCHITECTURE.md + GOTCHAS.md + 持続層(意図的な制約)を入力に設計書を執筆。YAGNI、既存パターン踏襲、変更対象ファイルの明示、**影響を受ける機能単位(仕様のディレクトリの ID)の列挙**(新しい画面は決定 81 の名前の候補を書く)、代替案の検討記録 |
 | `writing-test-specs` | (独自) | 仕様のディレクトリの同定・命名規則(§4)、`<testsDir>/<ID>/` の spec.md → cases.md の新規作成・**更新と再生成**の手順。実装詳細ではなく振る舞いをテストする。期待結果は受け入れ基準から導出する。新しい画面の名前の候補を出す(決定 81)。テストコードには触れない(test-code フェーズの `scripting-tests` が書く)。軽量な run では design.md の代わりに intent の `## 受け入れ基準` と持続層を入力にする。HARD-GATE:「書き込みは `<testsDir>/<ID>/` の spec.md と cases.md だけ」「テストコードに触れない」「Bash を使わない」 |
 | `writing-dev-plans` | writing-plans | 設計書を工程分解した開発手順書。各ステップに「触るファイル・前提ステップ・内容・**通すテスト(仕様のディレクトリの ID)**・完了条件・検証コマンド・**ドメインタグ(frontend/backend/data)**」を書き、文書の先頭に `## 環境準備`(worktree での依存インストール)と `## 生成物`(ビルド生成物を方式 a/b のどちらで扱うか)を置く。オーケストレーターはこの手順書を `codiel-state waves` で wave に分割する。軽量な run では design.md の代わりに intent の `## 実装方針` と持続層を入力にする |
-| `implementing` | executing-plans + test-driven-development | dev-plan の対象ステップの「通すテスト」(ユニットと E2E の両方。決定 80)を通す実装。依存の無いステップは worktree で並列に進み、環境の失敗は理由と出力の抜粋を report.md に挙げる。手順逸脱の禁止、「ついでのリファクタ」禁止。3 ドメインの implementer 共通 + ドメイン別の注意事項(`skills/implementing/references/` に記載) |
+| `implementing` | executing-plans + test-driven-development | dev-plan の対象ステップの「通すテスト」(ユニットと E2E の両方。決定 80)を通す実装。依存の無いステップは worktree で並列に進み、環境の失敗は理由と出力の抜粋を報告に挙げ、報告は最終の返答で返す(`report.md` はオーケストレーターが書く)。手順逸脱の禁止、「ついでのリファクタ」禁止。3 ドメインの implementer 共通 + ドメイン別の注意事項と infra の観点(`skills/implementing/references/` に記載)。観点ファイルは、オーケストレーターが変更の中身から選んで依頼文に書く |
 | `scripting-tests` | (独自) | test-code フェーズで、`cases.md` から実装より先にテストコード(ユニットと E2E)を書いて実行し、失敗すること(Red)を確かめる規約。置いたパスを `spec.md` の `tests` に記録する。期待結果が変わらず通ってしまったケースは「cases.md の誤り」として報告し、cases.md 自体は書き換えない。HARD-GATE:「Red を消すための実装の先取り・期待値の緩和の禁止」「`cases.md`・`spec.md` の本文・プロダクトコードを変更しない」 |
 | `running-regression-tests` | verification-before-completion | 記録された全テスト(`<testsDir>/**/spec.md` の `tests`)とプロジェクトの test コマンドの回帰を確認し、判定(green/red/broken)を出す規約(§5)。テストを書く手順は持たない。NG の修正・broken の人への確認はオーケストレーターが担う。`/codiel:test` の単独実行にも使う。HARD-GATE:「出力を見ずに合格を主張しない」「broken と NG を混同しない」「単独実行では修正をディスパッチしない」 |
 | `fixing-failures` | systematic-debugging | test-loop の NG 修正、fix-loop のレビュー所見修正を担う。根本原因特定→最小修正。**テストコード・`spec.md`・`cases.md` を触る修正の禁止**(所見がテストに向くときは `set-test-edit` の間だけ解除される)。「テストの方が間違っている」と思ったら ASK へ |
-| `reviewing-diffs` | requesting-code-review | design.md・テスト仕様書・intent の原文(`## ASIS`/`## TOBE`)と `## 受け入れ基準` を基準に diff をレビュー。severity 定義(critical/high/medium/low、原文の要望の未達と持続層の制約違反は high)、github では `gh pr review` / `gh pr comment` での投稿(local では投稿しない)。5 観点の reviewer 共通プロセス(観点別の焦点は `skills/reviewing-diffs/references/` に記載)。軽量な run では design.md の代わりに intent と dev-plan.md を入力にする |
+| `reviewing-diffs` | requesting-code-review | design.md・テスト仕様書・intent の原文(`## ASIS`/`## TOBE`)と `## 受け入れ基準` を基準に diff をレビュー。severity 定義(critical/high/medium/low、原文の要望の未達と持続層の制約違反は high)、github では `gh pr review` / `gh pr comment` での投稿(local では投稿しない)。観点(infra を含む)ごとの reviewer 共通プロセス(観点別の焦点は `skills/reviewing-diffs/references/` に記載)。軽量な run では design.md の代わりに intent と dev-plan.md を入力にする |
 | `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
 | `syncing-intents` | (独自) | intent-sync フェーズの運転規約。承認済みの受け入れ基準の変更と、途中でユーザーが追記した原文を、人の確認つきで派生文のセクションへ反映する。持続層(`docs/intents/domains/`)の更新。HARD-GATE:「原文のセクションは書き換えない」「intent の `status` を `done` にしない(finalize だけが付ける)」 |
 | `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方。github: Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認、**ISSUE_TEMPLATE の活用**(`.github/ISSUE_TEMPLATE/` の form 形式 .yml / markdown 形式 .md や `.github/ISSUE_TEMPLATE.md` を探索し、指摘の種類に最も合うテンプレートを選択、テンプレートがない場合のみ既定書式で起票)。local: `status: proposed` の intent 草案として `docs/intents/` に書く。HARD-GATE:「ユーザーの指示なしに起票しない」 |
@@ -522,9 +552,11 @@ guard-bash hooks の matcher は Bash のみであり、GitHub MCP の書き込�
 
 作業内容で委譲するフェーズでは、依頼文に作業内容、読み込むスキルと観点ファイル、入出力、
 実行モード、ドメイン境界、必要な tools の限定条項を含める。実装・テストのドメイン別注意事項は
-`skills/implementing/references/{frontend,backend,data}.md` に置く。レビューの観点別の焦点は
-`skills/reviewing-diffs/` の「観点別の焦点」節と
-`skills/reviewing-diffs/references/{frontend,backend,data,doc,security,generic}.md` に置く。
+`skills/implementing/references/{frontend,backend,data,infra}.md` に置く。`infra` は、IaC・
+Kubernetes のマニフェスト・Dockerfile・CI の定義など、インフラをコードで管理する変更に当てる。
+レビューの観点別の焦点は
+`skills/reviewing-diffs/` の「観点別の焦点」セクションと
+`skills/reviewing-diffs/references/{frontend,backend,data,doc,security,generic,infra}.md` に置く。
 
 | 委譲の種別 | 主な作業 | 担保する境界 |
 |---|---|---|
@@ -547,25 +579,28 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 | フック | 対象 | 内容 |
 |---|---|---|
-| PreToolUse | Bash(`gh pr create`, `git push` 等の投稿系コマンド) | state.json を参照し、「テスト green + implement/test-loop が passed(PROCEED または human-approved の ASK)」でなければ **deny**。保護ブランチ(main 等)への push は常に deny。`gh issue create`・`gh pr create`・`gh pr comment`・`gh issue comment`・`gh pr edit`・`gh issue edit`・`gh pr review`・`gh api` の本文を持つ呼び出しに、本文へ `<!-- codiel:generated -->` マーカーを含むことを求める(active run が無ければ通す)。`--fill` 系・`-T`/`--template`・`--web`/`-w` を持つ呼び出しは、本文が検査できないため deny。`gh issue create` はアクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止) |
+| PreToolUse | Bash(`gh pr create`, `git push` 等の投稿系コマンド) | state.json を参照し、「テスト green + implement/test-loop が passed(PROCEED または human-approved の ASK)」でなければ **deny**。保護ブランチ(main 等)への push は常に deny。`gh issue create`・`gh pr create`・`gh pr comment`・`gh issue comment`・`gh pr edit`・`gh issue edit`・`gh pr review`・`gh api` の本文を持つ呼び出しに、本文へ `<!-- codiel:generated -->` マーカーを含むことを求める(active run が無ければ通す)。`--fill` 系・`-T`/`--template`・`--web`/`-w` を持つ呼び出しは、本文が検査できないため deny。`gh issue create` はアクティブ run の現在フェーズが **triage でなければ deny**(ユーザーの指示なき起票の防止)。追補(決定 96・99): push の拒否の理由文は「push は pr・fix-loop・triage・finalize のフェーズで、test-loop の合格の後にだけ実行できます(現在: <フェーズ>)」の形にし、`gh api` の本文に `@` で始まる `-f` の値があるときは、マーカー欠落の理由文に「`-f` は値をそのまま送る。ファイルの中身を本文にするには `-F body=@<パス>` を使う」旨を添える(deny の判定は変えない) |
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る |
 | PreToolUse | GitHub MCP の本文を書き込むツール(`issue_write`・`create_pull_request` 等。新設 `guard-github-mcp`) | 本文の引数(`body`)に `<!-- codiel:generated -->` マーカーが無ければ **deny**(active run が無ければ通す)。guard-bash と同じマーカーの規律を GitHub MCP 経由の投稿にも及ぼす |
-| PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3) |
-| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(intent/discuss/design/test-spec/dev-plan/intent-sync)中の `src/**` への書き込み、コードフェーズ(**test-code**/implement/test-loop/fix-loop)のうち implement・test-loop・fix-loop 中の `<testsDir>/**` の spec.md / cases.md(期待値)と、`spec.md` の `tests` に記録されたテストコードへの書き込み(test-spec と test-code は通す。fix-loop は `set-test-edit` を立てている間だけ通す。§4)。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。worktree(`.codiel/worktrees/<slug>/<名前>`)の中への書き込みは、そのメインの作業ツリーと worktree のルートを基準に同じ規則を当てる。**ドメイン単位の制御は、worktree の中では `step-add --domain` で記録した値、メインの作業ツリーでは state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が決まるとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない |
+| PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3)。Bash からの書き込みは、クォートの外のリダイレクトの行き先と、同じコマンドの区切りの中の `tee`・`sed -i` の引数が state.json のパスのときだけ deny する(決定 96。コミットの trailer の `>` から後ろのコマンドのパスへ誤って当たらないようにするため) |
+| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(intent/discuss/design/test-spec/dev-plan/intent-sync)中の `src/**` への書き込み、コードフェーズ(**test-code**/implement/test-loop/fix-loop)のうち implement・test-loop・fix-loop 中の `<testsDir>/**` の spec.md / cases.md(期待値)と、`spec.md` の `tests` に記録されたテストコードへの書き込み(test-spec と test-code は通す。fix-loop は `set-test-edit` を立てている間だけ通す。§4)。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。worktree(`.codiel/worktrees/<slug>/<名前>`)の中への書き込みは、そのメインの作業ツリーと worktree のルートを基準に同じ規則を当てる。**ドメイン単位の制御は、worktree の中では `step-add --domain` で記録した値、メインの作業ツリーでは state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が決まるとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない。追補(決定 106): 判定の順序は state.json の deny → active run → `state.intent`(どのフェーズでも通す)→ config.json を 1 回読む(不正なら「読めない」として扱う)→ 未記録の GOTCHAS の退避先 `<runsDir>/<runId>/unrecorded-gotchas.md`(どのフェーズでも通す。この 1 ファイルだけ)→ `docs/intents/**` → 文書フェーズ(`.codiel/`・`docs/`・`<testsDir>/`・`<runsDir>/` を通す)→ コード系フェーズ(テストの保護 → `<runsDir>/` の下への書き込みは実行モードと `domain` によらず ask → ドメイン境界。境界から `<testsDir>/**/reports/**` の E2E のレポートを免除する)→ pr・review・triage・finalize(`.codiel/` の外は ask。変更なし)。config.json が不正なときは、コード系フェーズの書き込みに ask を返し、文書フェーズの `<testsDir>/`・`<runsDir>/` の免除と退避先の免除を外す。理由文は「run の文書(<パス>)は文書フェーズで書きます(<フェーズ> 中の変更は想定外)」と、「.codiel/config.json が不正なため、<フェーズ> 中の書き込みが run の文書(runsDir)に当たるか判定できません(<理由>)」である |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止)。サブエージェントの完了を待っているだけなら、委譲を前景で出し直して報告を受け取るよう案内する(委譲は `run_in_background` を使わず前景で出す規律。決定 83) |
 
 ## 9. docs(プロジェクト毎に成長するハーネス資産)
 
 対象プロジェクトに配置するハーネス資産。`/codiel:init`(`initializing-harness` スキル)が
 初期化する: `.codiel/` 配下のディレクトリは同スキルが呼ぶ `scripts/install-harness.sh` が
-機械的に配置する。raguel.config.yaml は聞き取り(保護パス)の回答から生成する。運用の規律は
+機械的に配置し(`.codiel/config.json` は無ければ既定の 2 つのキーで作る)、Raguel の設定は聞き取り(保護パス)の
+回答から `.codiel/config.json` の `raguel` へ書く。以前の版の YAML の設定が残っていれば、承認を得て
+`raguel` へ移し、承認を得て消す。`.gitignore` には `codiel-state gitignore` の `missing` の行を、差分を示して
+承認を得てから足す。運用の規律は
 `assets/rules/codiel.md` を固定文言のまま `.claude/rules/codiel.md` に置き、CLAUDE.md には
 `CLAUDE.example.md` の「## Codiel」セクションをそのまま追記する(既存ファイルは不足分のみ追記。
 旧セクション「## Codiel ハーネス運用ルール」があれば承認を得て取り除く)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
 GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
-`/codiel:run` は資産配置を行わず、B + C + D(`.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に行全体が(前後の空白を除き)`## Codiel` と一致する行があること、`raguel.config.yaml` が存在し YAML としてパースできること、`.codiel/runs` / `.codiel/reports` の 2 ディレクトリが存在すること)が揃っていることを初期化済みと判定する。テストの仕様の置き場(`.codiel/config.json` の `testsDir`)が無くても既定値(`docs/tests`)で動くため、D の判定には含めない。いずれかが揃っていないときは未初期化として `/codiel:init` を案内して終了する。`/codiel:init`(`initializing-harness`)は、この 2 ディレクトリに加えて `.codiel/config.json` の存在も確かめ、無ければ既定値で作る(§4)。
+`/codiel:run` は資産配置を行わず、B + C + D が揃っていることを初期化済みと判定する。B は `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に行全体が(前後の空白を除き)`## Codiel` と一致する行があること。C は `.codiel/config.json` が JSON のオブジェクトとして読め、`raguel` がオブジェクトであること(空のオブジェクトでよい)。D は `.codiel/runs` / `.codiel/reports` の 2 ディレクトリが存在し、`codiel-state gitignore` の `missing` が空であること。C と D は `/codiel:run` と `/codiel:init` で同じ条件にする。テストの仕様の置き場と run の文書の置き場(`testsDir`・`runsDir`)は、キーが無くても既定値(`docs/codiel/tests`・`docs/codiel/runs`)で動くため、C の判定には含めない。いずれかが揃っていないときは未初期化として、欠けた項目を名指しして `/codiel:init` を案内して終了する。以前の版で初期化したプロジェクトは C と D を満たさないので、`/codiel:init` をやり直す(§3)。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
 本節が記す ARCHITECTURE の節構成と GOTCHAS のエントリ書式は執筆当時の設計であり、
@@ -589,7 +624,7 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
   (tester のスクリプト作成とオーケストレーターの検証はここを読む)
 - **テスト方針**: E2E フレームワーク(Playwright 等)と実行方法、
   ユニットテストの要否・フレームワーク・配置規約(implementer の TDD はこの宣言に従う)
-- 保護パス(raguel.config.yaml の `code/protected-paths` と整合させる)
+- 保護パス(`.codiel/config.json` の `raguel` の `code/protected-paths` と整合させる)
 - コーディング規約・ブランチ/PR 規約(命名・ベースブランチ)・Definition of Done
 
 このうち**ドメインマップの役割**(implementer / reviewer の選択と hooks の書き込み制御の基準、
@@ -604,7 +639,7 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
   **この旧書式は廃止され、互換読みも設けない**(契約 §6)。現行の書式・挿入位置・採番・タグは
   契約 §6-1〜§6-4 が正本である
 - 記録の契機: Raguel STOP、ループ上限超過、record_outcome(incident)、レビューで発覚した設計漏れ
-- 台帳の生成と書き込みは metatron の CLI が行う。記録の判断と書式は metatron の `recording-gotchas` スキルに従い、codiel は契機が起きたらそのスキルを起動する(`orchestrating-runs` の「失敗の記録」)。CLI の案内が無い環境では、記録を「未記録の GOTCHAS」として run のレポートへ持ち越す(設計書 `2026-09-15-metatron-init-gotchas-design.md` §6.4)。
+- 台帳の生成と書き込みは metatron の CLI が行う。記録の判断と書式は metatron の `recording-gotchas` スキルに従い、codiel は契機が起きたらそのスキルを起動する(`orchestrating-runs` の「失敗の記録」)。CLI の案内が無い環境では、記録を「未記録の GOTCHAS」として `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)へ退避し、完了報告にも載せる。退避先はどのフェーズでも guard-write が通す(設計書 `2026-09-15-metatron-init-gotchas-design.md` §6.4)。
 - 全フェーズのサブエージェントが作業前に必読(ディスパッチプロンプトで強制)
 - Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成する
 
@@ -653,7 +688,7 @@ plugins/codiel/
     run.md                     # /codiel:run [<Issue番号> | <intentパス>](薄い入口。orchestrating-runs を起動)
     test.md                    # /codiel:test [パス](testsDir からの相対パス。省略時は全体)
   skills/
-    initializing-harness/SKILL.md(+ raguel.config.example.yaml)
+    initializing-harness/SKILL.md(+ config.example.json)
     orchestrating-runs/SKILL.md
     raguel-gating/SKILL.md
     capturing-intent/SKILL.md
@@ -676,6 +711,7 @@ plugins/codiel/
     github-writing.md         # Issue・PR・コメント・レビュー本文の執筆規則と画像の載せ方(§6.12.3〜§6.12.4)
     handoff-contract.md       # gh-utility issue-craft への持ち込みモードの契約
     intent-common.md          # 経路選択・畳む経路の共通規律
+    e2e-report-format.md      # E2E のレポート(summary.md・failure.md)の書式と、委譲先が返答に入れる項目(§3)
   hooks/
     hooks.json
     scripts/                  # フックスクリプト(node)

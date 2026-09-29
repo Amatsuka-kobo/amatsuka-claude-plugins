@@ -22,7 +22,7 @@ intent を Issue に転記するときは、原文のセクション(`## ASIS` �
 
 run が active な間に GitHub へ投稿するときは、`<!-- codiel:generated -->` を本文に含める。対象は Issue の作成・編集・コメント、PR の作成・編集・コメント・レビュー本文である。付け忘れた投稿は hook に deny される。
 
-投稿する本文は、Write ツールで run の `reports/` に投稿ごとに別名のファイルとして書き、投稿は別の Bash 呼び出しで `--body-file` に渡して行う。`gh` の `--template` / `-T`・`--fill` 系・`--web` は使わない。
+投稿する本文は、Write ツールで run の `reports/` に投稿ごとに別名のファイルとして書き、投稿は別の Bash 呼び出しで `--body-file` に渡して行う。本文ファイルはコミットしない。`gh` の `--template` / `-T`・`--fill` 系・`--web` は使わない。
 
 ## 画像の載せ方
 
@@ -38,7 +38,7 @@ run が active な間に GitHub へ投稿するときは、`<!-- codiel:generate
 - `--attach` に渡すパスは、本文に書いた `![alt](./file.png)` の相対パスと一致させる。`#` の後ろに alt を書ける(例: `--attach './file.png#alt'`)。`gh pr review` には `--attach` が無いため、レビュー本文の画像は表の 2 系統目に従う。
 - 使える手段は、run の state の `imageUpload` フィールドで判定する。
 - local モードの run は、常にローカル保存を採る。
-- ローカルに保存するときの保存先は、run の `reports/` である。
+- ローカルに保存するときの保存先は、run の `reports/` である。E2E のレポートの画像を証拠に使うときは、画像の置き場(実行ごとのディレクトリ。`e2e-report-format.md`)を本文に書く。
 - 画像の可視性はリポジトリの可視性に従う。private リポジトリの画像は `private-user-images.githubusercontent.com` から配信され、閲覧権限のある人にだけ見える。画像を載せる前に、公開してよい画像かを確かめる。
 - アップロードは取り消せない外部公開行為である。
 

@@ -9,4 +9,4 @@
 - 外部キー制約の欠落を確認する。
 - トランザクション境界の誤りを確認する。
 - 並行書き込み時の競合を確認する。
-- データ削除を伴うマイグレーションなどの不可逆操作が、Raguel の `plan/irreversible-ops` と `raguel.config.yaml` の `rules."code/protected-paths".globs` に整合することを確認する。
+- データ削除を伴うマイグレーションなどの不可逆操作が、Raguel の `plan/irreversible-ops` と `.codiel/config.json` の `raguel` の `rules."code/protected-paths".globs` に整合することを確認する。

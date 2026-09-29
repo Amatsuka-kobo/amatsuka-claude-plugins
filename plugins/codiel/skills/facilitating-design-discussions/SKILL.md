@@ -30,10 +30,10 @@ description: Codiel の discuss フェーズで、オーケストレーター本
    修正があれば該当論点の提示に戻る。
 7. 未決論点が残る場合は「この論点は未決のまま design に進む(architect は未決を前提に設計し、
    ウォークスルーで再提示される)」ことを明示し、ユーザーの了解を得る。
-8. `agenda.md` と `discussion.md` をコミットし、フェーズを完了する:
+8. `agenda.md` と `discussion.md` をコミットし、フェーズを完了する。`<runsDir>/<slug>/` は依頼文が渡す run の文書の置き場のパスである:
 
    ```
-   git add <try-dir>/agenda.md <try-dir>/discussion.md
+   git add <runsDir>/<slug>/agenda.md <runsDir>/<slug>/discussion.md
    git commit -m "codiel(discuss): 設計ディスカッションの合意を記録 (<slug> try-<n>)"
    node <plugin-root>/scripts/codiel-state.mjs complete-phase discuss --slug <slug>
    ```

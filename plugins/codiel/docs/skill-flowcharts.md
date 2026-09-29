@@ -204,7 +204,7 @@ digraph implementing {
   implement_code [label="通すテストを通すように\nプロダクトコードを実装", shape=box];
   run_tests [label="brief/依頼文が挙げた\n通すテスト(ユニット+E2E)を実行", shape=box];
   env_check [label="失敗の理由は環境か?", shape=diamond];
-  env_report [label="環境の失敗として\nreport.md に記録\n(通すテストの失敗にも\nプロダクトの失敗にも数えない)", shape=box, style=filled, fillcolor="#fff2cc"];
+  env_report [label="環境の失敗として\n最終の返答の報告に挙げる\n(通すテストの失敗にも\nプロダクトの失敗にも数えない)", shape=box, style=filled, fillcolor="#fff2cc"];
   verify [label="完了条件を満たすか?", shape=diamond];
   commit_step [label="worktree の中で git commit\ncodiel(implement): <ステップ名> (<slug> try-M)", shape=box];
   more_steps [label="ほかに未完了ステップが残る?", shape=diamond];
@@ -265,13 +265,13 @@ digraph scripting_tests {
   map_expect [label="期待結果を cases.md から\n一字も改変せず写像", shape=box];
   run [label="テストを実行\n(Red の対象は git diff で決まる)", shape=box];
   reason [label="失敗・成功の理由は?", shape=diamond];
-  env_fail [label="環境の失敗として\nreport.md に記録\n(Red にも NG にも数えない)", shape=box, style=filled, fillcolor="#fff2cc"];
+  env_fail [label="環境の失敗として\n最終の返答の報告に挙げる\n(Red にも NG にも数えない)", shape=box, style=filled, fillcolor="#fff2cc"];
   test_bug [label="テストの記述の誤りを\n直して再実行", shape=box];
   red_ok [label="未実装による失敗\n= Red(期待どおり)", shape=box];
   cases_wrong [label="Red の対象なのに通った\n(期待結果を検出していてなお通る)\n=> cases.md の誤りとして記録\n(cases.md は書き換えない)", shape=box, style=filled, fillcolor="#ffe0b3"];
   record_tests [label="spec.md の frontmatter tests に\nテストファイルのパスを Edit で追記", shape=box];
   commit [label="worktree の中で\ncodiel(test-code): ... とコミット", shape=box];
-  report [label="report.md に結果・理由・\n置き場の根拠・出力抜粋を記録", shape=box];
+  report [label="結果・理由・置き場の根拠・\n出力抜粋を最終の返答に挙げる\n(report.md はオーケストレーターが書く)", shape=box];
   done [label="委譲先の報告\n(テストコードのパス・tests の記録・\nRed の確認・コミットハッシュ)\n※オーケストレーターがタスクレビュー後に\nrun ブランチへマージ", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ntest-code ゲート\n(全ディレクトリのマージ後に1回)", shape=ellipse];
 
@@ -656,7 +656,7 @@ digraph recording_failures {
   trigger [label="契機発生\n(STOP/ループ上限超過で中止/incident/\nレビューで発覚した設計漏れ)", shape=box];
   guide [label="metatron の CLI の案内が\nコンテキストにあるか?", shape=diamond];
   metatron [label="metatron:recording-gotchas を起動\n(判断・書式・採番・タグはそのスキル)", shape=box];
-  shelve [label="reports/unrecorded-gotchas.md の\n## 未記録の GOTCHAS に退避\n(title/task/mistake/cause/\ncountermeasure/promotionCandidate)", shape=box];
+  shelve [label="<runsDir>/<slug>/unrecorded-gotchas.md の\n## 未記録の GOTCHAS に退避\n(run が無いときは .codiel/reports/)\n(title/task/mistake/cause/\ncountermeasure/promotionCandidate)", shape=box];
   report [label="完了報告にも載せ、\n台帳へ入れる手段を添える\n(append-gotcha または /metatron:init)", shape=box];
   commit [label="git commit\n\"codiel(gotchas): ... (<slug> try-<n>)\"", shape=box, style=filled, fillcolor="#ccffcc"];
 

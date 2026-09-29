@@ -42,8 +42,9 @@ github モードで投稿するレビュー本文の文の組み立てと画像�
    (`docs/intents/domains/<領域>.md`)の `## 意図的な制約` を読む。`design.md` が無い軽量の run では、
    intent と `dev-plan.md` を設計の代わりに読む。fix-loop の再レビューでは、申し送られた
    「反論済み所見一覧」も確認する。
-2. `git diff <base>...<branch>` で diff を取得する。diff が大きくても**全ファイルに目を通す**
-   (サンプリングで一部だけ見て済ませない)。
+2. `git diff <base>...<branch> -- ':(exclude,glob)<testsDir>/**/reports/**'` で diff を取得する。
+   `<testsDir>` は `codiel-state config` の出力から取る。E2E のレポートは diff から除く。
+   diff が大きくても**全ファイルに目を通す**(サンプリングで一部だけ見て済ませない)。
 3. 自分の観点(下記「観点別の焦点」)に該当する変更点を洗い出す。
 4. 各変更点について両方向チェックを行う:
    - 受け入れ基準・design.md にある振る舞いが diff で実現されているか(未達がないか)。
@@ -66,7 +67,7 @@ github モードで投稿するレビュー本文の文の組み立てと画像�
 
 ```markdown
 ### [critical|high|medium|low] <一行要約>
-- 観点: frontend|backend|data|doc|security|generic
+- 観点: frontend|backend|data|doc|security|infra|generic
 - 対象: `src/...:42`
 - 内容: <何が問題か>
 - 根拠: <設計書・仕様書・Issue のどこと矛盾するか、またはどんな障害が起きるか>
@@ -104,15 +105,16 @@ security 観点の指摘は原則 medium 以上を検討する(セキュリテ�
    (件数・severity 内訳・fix-loop 対象の有無)に `<!-- codiel:generated -->` を含め、テストの結果
    得たスクリーンショットなど関連する画像があれば、レビュー本文の縮退の順序(`github-writing.md`
    の画像の載せ方)で載せる。組み立てた本文を Write ツールで
-   `.codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md` に書き、`review-<m>.md` と同じ書き方で
-   run ブランチへコミットする(`git add <パス>` の後
-   `git commit -m "codiel(review): <要約> (<slug> try-<n>)"`)。コミット後、別の Bash 呼び出しで
+   `.codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md` に書く。このファイルはコミットしない。
+   書いたら、別の Bash 呼び出しで
    `gh pr review <PR番号> --comment --body-file .codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md`
    を実行し、PR 本文コメントとして投稿する。
 4. github モードでは、各所見の「対象」(`src/...:42`)に対応する行コメントを投稿する。本文に
    `<!-- codiel:generated -->` を含め、所見ごとに別名で Write ツールで
-   `.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` に書く。書いたら手順 3 と同じ
-   書き方で run ブランチへコミットしてから、別の Bash 呼び出しで `gh api` を
+   `.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` に書く。このファイルもコミットしない。
+   行コメントの `commit_id` には PR の head を使う。値は `gh pr view <PR番号> --json headRefOid` で取る。
+   review では push しない(手元のコミットを `commit_id` に使うために push すると、guard-bash が止める)。
+   書いたら、別の Bash 呼び出しで `gh api` を
    `-F body=@.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` のように
    `-F body=@<パス>` で呼び、行コメントを投稿する。`review-comment-<連番>.md` の連番は同じ try の
    中で通し番号とし、レビューの回をまたいでも振り直さない。
