@@ -155,10 +155,14 @@ export class PrecedentStore {
     writeAtomic(this.indexPath(), JSON.stringify(index, null, 2))
   }
 
-  /** 判例を書き込み、索引に sha256 を記録する(kernel 専権) */
-  record(precedent: Precedent): void {
+  /**
+   * 判例を書き込み、索引に sha256 を記録する(kernel 専権)。
+   * 同じ id の判例が退役済みなら、ファイルも索引も書かずに false を返す(再記録で復活させない)
+   */
+  record(precedent: Precedent): boolean {
     const id = sanitizeId(precedent.id)
     const index = this.readIndex() // 読めなければここで例外にし、何も書かない
+    if ((index[id]?.retiredAt ?? null) !== null) return false
     fs.mkdirSync(this.dir, { recursive: true })
     const content = JSON.stringify(precedent, null, 2)
     writeAtomic(this.precedentPath(id), content)
@@ -168,6 +172,7 @@ export class PrecedentStore {
       retireReason: null
     }
     this.writeIndex(index)
+    return true
   }
 
   /**

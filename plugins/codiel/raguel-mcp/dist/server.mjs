@@ -3229,8 +3229,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path11) {
-      let input2 = path11;
+    function removeDotSegments(path12) {
+      let input2 = path12;
       const output2 = [];
       let nextSlash = -1;
       let len = 0;
@@ -3482,8 +3482,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path11, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path11 && path11 !== "/" ? path11 : void 0;
+        const [path12, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path12 && path12 !== "/" ? path12 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6876,12 +6876,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs8, exportName) {
+    function addFormats(ajv, list, fs9, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs8[f]);
+        ajv.addFormat(f, fs9[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7144,8 +7144,8 @@ var require_utils2 = __commonJS({
       }
       return output2;
     };
-    exports.basename = (path11, { windows } = {}) => {
-      const segs = path11.split(windows ? /[\\/]/ : "/");
+    exports.basename = (path12, { windows } = {}) => {
+      const segs = path12.split(windows ? /[\\/]/ : "/");
       const last = segs[segs.length - 1];
       if (last === "") {
         return segs[segs.length - 2];
@@ -9039,8 +9039,8 @@ function getErrorMap() {
 
 // ../../../node_modules/.pnpm/zod@4.6.5/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path11, errorMaps, issueData } = params;
-  const fullPath = [...path11, ...issueData.path || []];
+  const { data, path: path12, errorMaps, issueData } = params;
+  const fullPath = [...path12, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -9155,11 +9155,11 @@ var errorUtil;
 
 // ../../../node_modules/.pnpm/zod@4.6.5/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path11, key) {
+  constructor(parent, value, path12, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path11;
+    this._path = path12;
     this._key = key;
   }
   get path() {
@@ -13113,10 +13113,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path11) {
-  if (!path11)
+function getElementAtPath(obj, path12) {
+  if (!path12)
     return obj;
-  return path11.reduce((acc, key) => acc?.[key], obj);
+  return path12.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -13456,11 +13456,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path11, issues) {
+function prefixIssues(path12, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path11);
+    iss.path.unshift(path12);
     return iss;
   });
 }
@@ -13910,16 +13910,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path11 = []) => {
+  const processError = (error63, path12 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path12, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
       } else {
-        const fullpath = [...path11, ...issue2.path];
+        const fullpath = [...path12, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -13958,17 +13958,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path11 = []) => {
+  const processError = (error63, path12 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path12, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path12, ...issue2.path]);
       } else {
-        const fullpath = [...path11, ...issue2.path];
+        const fullpath = [...path12, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -14007,8 +14007,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path11 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path11) {
+  const path12 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path12) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -29523,11 +29523,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path11) {
-  if (path11.length === 0) {
+function getDotPath(path12) {
+  if (path12.length === 0) {
     return "object root";
   }
-  return path11.reduce((acc, seg, index) => {
+  return path12.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -31754,13 +31754,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path11 = ref.slice(1).split("/").filter(Boolean);
-  if (path11.length === 0) {
+  const path12 = ref.slice(1).split("/").filter(Boolean);
+  if (path12.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path11[0] === defsKey) {
-    const key = path11[1] === void 0 ? void 0 : decodeJSONPointerSegment(path11[1]);
+  if (path12[0] === defsKey) {
+    const key = path12[1] === void 0 ? void 0 : decodeJSONPointerSegment(path12[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -39068,8 +39068,8 @@ function projectConfigPath(cwd) {
 function configCandidate(cwd = process.cwd()) {
   const envPath = process.env.RAGUEL_CONFIG;
   if (envPath) return { path: envPath, source: `env:${envPath}` };
-  const path11 = projectConfigPath(cwd);
-  return { path: path11, source: `cwd:${path11}` };
+  const path12 = projectConfigPath(cwd);
+  return { path: path12, source: `cwd:${path12}` };
 }
 function loadConfig(cwd = process.cwd()) {
   const projectRoot = resolveProjectRoot(cwd);
@@ -39106,24 +39106,24 @@ function loadConfig(cwd = process.cwd()) {
   return { config: expanded, configHash, source, projectRoot, testsDir };
 }
 function resolveRawConfig(cwd) {
-  const { path: path11, source } = configCandidate(cwd);
+  const { path: path12, source } = configCandidate(cwd);
   if (process.env.RAGUEL_CONFIG) {
-    return { raw: readJsonObject(path11), source };
+    return { raw: readJsonObject(path12), source };
   }
-  if (!existsSync(path11)) return { raw: {}, source: "defaults" };
-  const raguel = readJsonObject(path11).raguel;
+  if (!existsSync(path12)) return { raw: {}, source: "defaults" };
+  const raguel = readJsonObject(path12).raguel;
   if (raguel === void 0) return { raw: {}, source: "defaults" };
   if (!isPlainObject3(raguel)) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E raguel \u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path11}`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E raguel \u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path12}`
     );
   }
   return { raw: raguel, source };
 }
 function assertNoRetiredKeys(raw, source) {
-  for (const { path: path11, reason } of ABOLISHED_KEYS) {
-    if (hasPath(raw, path11.split("."))) {
-      throw new Error(`${path11} \u306F\u5EC3\u6B62\u3057\u305F(${source})\u3002${reason}`);
+  for (const { path: path12, reason } of ABOLISHED_KEYS) {
+    if (hasPath(raw, path12.split("."))) {
+      throw new Error(`${path12} \u306F\u5EC3\u6B62\u3057\u305F(${source})\u3002${reason}`);
     }
   }
   const rules = raw.rules;
@@ -39166,13 +39166,13 @@ function configStamp(cwd) {
     })
   );
 }
-function readJsonObject(path11) {
+function readJsonObject(path12) {
   let text;
   try {
-    text = readFileSync(path11, "utf8");
+    text = readFileSync(path12, "utf8");
   } catch (err) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${path11} (${err.message})`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${path12} (${err.message})`
     );
   }
   let parsed;
@@ -39180,12 +39180,12 @@ function readJsonObject(path11) {
     parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${path11} (${err.message})`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E JSON \u30D1\u30FC\u30B9\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${path12} (${err.message})`
     );
   }
   if (!isPlainObject3(parsed)) {
     throw new Error(
-      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30EB\u30FC\u30C8\u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path11}`
+      `\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30EB\u30FC\u30C8\u306F\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${path12}`
     );
   }
   return parsed;
@@ -40181,7 +40181,7 @@ var TypeSafeClient = class {
     if (config2.fetch === void 0 && typeof globalThis.fetch !== "function") missingFetch();
     this.fetch = config2.fetch ?? defaultFetch;
     const transport = {
-      request: (method, path11, options) => this.#request(method, path11, options),
+      request: (method, path12, options) => this.#request(method, path12, options),
       defaultModel: this.defaultModel
     };
     this.models = new Models(transport);
@@ -40218,17 +40218,17 @@ var TypeSafeClient = class {
     });
   }
   /** Send a request and parse its response body. */
-  #request(method, path11, options = {}) {
+  #request(method, path12, options = {}) {
     const resolved = {
       method,
-      path: path11,
+      path: path12,
       body: options.body,
       headers: mergeHeaders(this.defaultHeaders, options.headers ?? {}),
       signal: options.signal,
       timeout: options.timeout === void 0 ? this.timeout : assertPositiveMs("timeout", options.timeout),
       retry: resolveRetryPolicy(this.retry, options.retry)
     };
-    const tag = `#${++this.#requestCount} ${method} ${path11}`;
+    const tag = `#${++this.#requestCount} ${method} ${path12}`;
     return new APIPromise(this.fetchWithRetries(tag, resolved), async (res) => {
       const parsed = await parseBody(res);
       this.logger.debug(`${tag} <- body`, parsed);
@@ -41657,10 +41657,14 @@ var PrecedentStore = class {
   writeIndex(index) {
     writeAtomic(this.indexPath(), JSON.stringify(index, null, 2));
   }
-  /** 判例を書き込み、索引に sha256 を記録する(kernel 専権) */
+  /**
+   * 判例を書き込み、索引に sha256 を記録する(kernel 専権)。
+   * 同じ id の判例が退役済みなら、ファイルも索引も書かずに false を返す(再記録で復活させない)
+   */
   record(precedent) {
     const id = sanitizeId(precedent.id);
     const index = this.readIndex();
+    if ((index[id]?.retiredAt ?? null) !== null) return false;
     fs4.mkdirSync(this.dir, { recursive: true });
     const content = JSON.stringify(precedent, null, 2);
     writeAtomic(this.precedentPath(id), content);
@@ -41670,6 +41674,7 @@ var PrecedentStore = class {
       retireReason: null
     };
     this.writeIndex(index);
+    return true;
   }
   /**
    * すべての判例を読む。索引の sha256 と実ファイルが合わない(改竄・破損)ものは
@@ -41871,8 +41876,11 @@ function parseGitHeader(rest) {
 function parseFileLine(rest, prefix) {
   const value = rest.replace(/\t$/, "");
   if (value === "/dev/null") return null;
-  const path11 = readWholePath(value);
-  return path11 === null ? void 0 : stripPrefix(path11, prefix) ?? void 0;
+  const path12 = readWholePath(value);
+  return path12 === null ? void 0 : stripPrefix(path12, prefix) ?? void 0;
+}
+function sidePaths(file2) {
+  return file2.oldPath !== void 0 && file2.oldPath !== file2.path ? [file2.path, file2.oldPath] : [file2.path];
 }
 var HUNK_RE = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/;
 function emptyFile(start) {
@@ -41954,22 +41962,22 @@ function parseDiff(diff) {
     else if (line.startsWith("Binary files ")) current.isBinary = true;
     else if (line.startsWith("rename from ") || line.startsWith("rename to ")) {
       const isFrom = line.startsWith("rename from ");
-      const path11 = readWholePath(line.slice(isFrom ? 12 : 10));
-      if (path11 === null) malformedHeaders.push(line);
-      else if (isFrom) current.oldPath = path11;
-      else current.path = path11;
+      const path12 = readWholePath(line.slice(isFrom ? 12 : 10));
+      if (path12 === null) malformedHeaders.push(line);
+      else if (isFrom) current.oldPath = path12;
+      else current.path = path12;
       current.isRename = true;
     } else if (line.startsWith("--- ") || line.startsWith("+++ ")) {
       const isOld = line.startsWith("--- ");
-      const path11 = parseFileLine(line.slice(4), isOld ? "a/" : "b/");
-      if (path11 === void 0) malformedHeaders.push(line);
-      else if (path11 === null) {
+      const path12 = parseFileLine(line.slice(4), isOld ? "a/" : "b/");
+      if (path12 === void 0) malformedHeaders.push(line);
+      else if (path12 === null) {
         if (isOld) current.isNew = true;
         else current.isDeleted = true;
       } else if (isOld) {
-        if (path11 !== current.path) current.oldPath = path11;
+        if (path12 !== current.path) current.oldPath = path12;
       } else {
-        current.path = path11;
+        current.path = path12;
       }
     }
   });
@@ -42008,7 +42016,6 @@ var PEM_BLOCK_RE = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]
 function isEntropyExemptLine(line) {
   if (/integrity:|sha512-|sha256-|resolution:/.test(line)) return true;
   if (line.includes("node_modules/")) return true;
-  if (line.includes("://")) return true;
   return false;
 }
 var WORD_RE = /[A-Za-z0-9+/=_.-]+/g;
@@ -42251,16 +42258,16 @@ var resubmissionLoopRule = {
 };
 
 // src/rules/code/patternScan.ts
-function isTestPath(path11) {
-  const name = path11.slice(path11.lastIndexOf("/") + 1);
-  return /\.(test|spec)\.[^./]+$/.test(name) || /_test\.[^./]+$/.test(name) || name.startsWith("test_") || /[A-Za-z0-9]Tests?\.java$/.test(name) || /(^|\/)(test|tests|__test__|__tests__|e2e|spec)\//.test(path11);
+function isTestPath(path12) {
+  const name = path12.slice(path12.lastIndexOf("/") + 1);
+  return /\.(test|spec)\.[^./]+$/.test(name) || /_test\.[^./]+$/.test(name) || name.startsWith("test_") || /[A-Za-z0-9]Tests?\.java$/.test(name) || /(^|\/)(test|tests|__test__|__tests__|e2e|spec)\//.test(path12);
 }
 function isCommentLine(line) {
   return /^\s*(\/\/|#|\/\*|\*|--|<!--)/.test(line);
 }
-function fileReason(path11) {
-  if (/\.md$/i.test(path11)) return ".md \u306E\u30D5\u30A1\u30A4\u30EB";
-  if (isTestPath(path11)) return "\u30C6\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB";
+function fileReason(path12) {
+  if (/\.md$/i.test(path12)) return ".md \u306E\u30D5\u30A1\u30A4\u30EB";
+  if (isTestPath(path12)) return "\u30C6\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB";
   return void 0;
 }
 var LOWER = {
@@ -42420,8 +42427,8 @@ var maxDiffLinesRule = {
 
 // src/rules/code/newDependency.ts
 var RULE_ID6 = "code/new-dependency";
-function manifestKind(path11) {
-  const base = path11.slice(path11.lastIndexOf("/") + 1);
+function manifestKind(path12) {
+  const base = path12.slice(path12.lastIndexOf("/") + 1);
   if (base === "package.json") return "npm-package";
   if (base === "pnpm-lock.yaml" || base === "package-lock.json" || base === "yarn.lock") {
     return "npm-lock";
@@ -42579,13 +42586,17 @@ var protectedPathsRule = {
     const globs = ruleParam(ctx.config, RULE_ID7, "globs");
     if (globs.length === 0) return [];
     const isMatch = (0, import_picomatch2.default)(globs, { dot: true });
-    return artifact.changedPaths.filter(
-      (path11) => classifyPath(path11, ctx.config, ctx.testsDir) === "normal" && isMatch(path11)
-    ).map((path11) => ({
+    const paths = new Set(artifact.changedPaths);
+    for (const file2 of parseDiff(artifact.content).files) {
+      for (const path12 of sidePaths(file2)) paths.add(path12);
+    }
+    return [...paths].filter(
+      (path12) => classifyPath(path12, ctx.config, ctx.testsDir) === "normal" && isMatch(path12)
+    ).map((path12) => ({
       ruleId: RULE_ID7,
       severity,
-      message: `\u4FDD\u8B77\u3055\u308C\u305F\u30D1\u30B9\u3078\u306E\u5909\u66F4\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${path11}`,
-      evidence: { location: path11, path: path11 }
+      message: `\u4FDD\u8B77\u3055\u308C\u305F\u30D1\u30B9\u3078\u306E\u5909\u66F4\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${path12}`,
+      evidence: { location: path12, path: path12 }
     }));
   }
 };
@@ -42608,6 +42619,15 @@ var testDeletionRule = {
           severity,
           message: `\u30C6\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB\u306E\u524A\u9664\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${file2.path}`,
           evidence: { location: file2.path, path: file2.path }
+        });
+      }
+      const from = file2.oldPath;
+      if (from !== void 0 && isTestPath(from) && !isTestPath(file2.path)) {
+        findings.push({
+          ruleId: RULE_ID8,
+          severity,
+          message: `\u30C6\u30B9\u30C8\u30D5\u30A1\u30A4\u30EB\u3092\u30C6\u30B9\u30C8\u306E\u30D1\u30B9\u306E\u5916\u3078\u79FB\u3059\u540D\u524D\u306E\u5909\u66F4\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${from} \u2192 ${file2.path}`,
+          evidence: { location: from, path: from }
         });
       }
       file2.additions.forEach((line, i) => {
@@ -42960,7 +42980,7 @@ function blankHeadings(artifact) {
 }
 function withoutExcluded(artifact, parsed, ctx) {
   const isNormal = (p) => classifyPath(p, ctx.config, ctx.testsDir) === "normal";
-  const excluded = parsed.files.filter((f) => !isNormal(f.path));
+  const excluded = parsed.files.filter((f) => !sidePaths(f).some(isNormal));
   if (excluded.length === 0) return { artifact, lineMap: null };
   const drop2 = /* @__PURE__ */ new Set();
   for (const f of excluded) for (let i = f.start; i < f.end; i++) drop2.add(i);
@@ -43003,9 +43023,10 @@ function diffFindings(parsed, ctx) {
       }
     });
   }
+  const classOf = (p) => classifyPath(p, ctx.config, ctx.testsDir);
   const classes = parsed.files.map((f) => ({
     path: f.path,
-    kind: classifyPath(f.path, ctx.config, ctx.testsDir)
+    kind: sidePaths(f).some((p) => classOf(p) === "normal") ? "normal" : classOf(f.path)
   }));
   const generated = classes.filter((c) => c.kind === "generated").map((c) => c.path);
   if (generated.length > 0 && classes.every((c) => c.kind === "generated")) {
@@ -43038,12 +43059,14 @@ function aggregateFindings(findings) {
     const [first] = group;
     if (group.length === 1) return first;
     const excerpts = group.map((f) => f.evidence?.excerpt).filter((e) => e !== void 0).slice(0, MAX_AGGREGATED_EXCERPTS);
+    const lines = group.map((f) => f.evidence?.line).filter((l) => l !== void 0);
     return {
       ...first,
       message: `${first.message}(\u540C\u3058\u30EB\u30FC\u30EB\u3068\u30D5\u30A1\u30A4\u30EB\u3067 ${group.length} \u4EF6\u3002\u629C\u7C8B\u306F\u6700\u521D\u306E ${excerpts.length} \u304B\u6240)`,
       evidence: {
         ...first.evidence,
-        ...excerpts.length > 0 ? { excerpt: excerpts.join("\n\u2026\n") } : {}
+        ...excerpts.length > 0 ? { excerpt: excerpts.join("\n\u2026\n") } : {},
+        ...lines.length > 0 ? { lines } : {}
       }
     };
   });
@@ -43592,8 +43615,8 @@ var TIER_RANK = {
 function maxTier(a, b) {
   return TIER_RANK[a] >= TIER_RANK[b] ? a : b;
 }
-function isNearProtected(path11, globs) {
-  const segments = path11.split("/");
+function isNearProtected(path12, globs) {
+  const segments = path12.split("/");
   return globs.some((glob) => {
     const fixed = globFixedPart(glob).split("/").filter((s) => s !== "");
     return fixed.length > 0 && fixed.length <= segments.length && fixed.every((s, i) => s === segments[i]);
@@ -43612,15 +43635,17 @@ function computeWeight(artifact, ruleFindings, config2, options = {}) {
     factors["kind-base"] = 20;
     const counted = (p) => classifyPath(p, config2, testsDir) === "normal";
     const parsed = parseDiff(artifact.content);
-    const changedLines = parsed.files.length > 0 ? parsed.files.filter((f) => counted(f.path)).reduce(
+    const files = parsed.files.filter((f) => sidePaths(f).some(counted));
+    const changedLines = parsed.files.length > 0 ? files.reduce(
       (sum, f) => sum + f.additions.length + f.deletions.length,
       0
     ) : artifact.content.split("\n").length;
     const linesFactor = Math.min(40, Math.floor(changedLines / 25) * 5);
     if (linesFactor > 0) factors["diff-lines"] = linesFactor;
-    const paths = artifact.changedPaths.filter(counted);
-    const filesFactor = Math.min(20, paths.length * 2);
+    const fileCount = parsed.files.length > 0 ? files.length : artifact.changedPaths.filter(counted).length;
+    const filesFactor = Math.min(20, fileCount * 2);
     if (filesFactor > 0) factors["changed-files"] = filesFactor;
+    const paths = parsed.files.length > 0 ? parsed.files.flatMap(sidePaths).filter(counted) : artifact.changedPaths.filter(counted);
     const globs = ruleParam(config2, "code/protected-paths", "globs");
     if (paths.some((p) => isNearProtected(p, globs))) {
       factors["protected-path-proximity"] = 25;
@@ -43765,7 +43790,8 @@ function collectTarget(req, projectRoot) {
           content: diff,
           headingLines: parsed.headingLines,
           subject,
-          changedPaths: parsed.files.map((f) => f.path),
+          // 名前の変更は移動元も載せる(§6.4.2)
+          changedPaths: parsed.files.flatMap(sidePaths),
           context: req.testResults === void 0 ? {} : { testResults: req.testResults }
         },
         parsed,
@@ -43824,13 +43850,15 @@ async function judge(input2) {
   const { artifact, parsed } = target;
   const store = new CaseStore(config2, deps.projectRoot);
   const classOf = (p) => classifyPath(p, config2, testsDir);
+  const fileClass = (f) => sidePaths(f).some((p) => classOf(p) === "normal") ? "normal" : classOf(f.path);
+  const normalPaths = parsed ? parsed.files.filter((f) => fileClass(f) === "normal").flatMap(sidePaths) : artifact.changedPaths;
   const jevSummary = (status) => ({
     enabled: config2.contextJudge.enabled,
     status: config2.contextJudge.enabled ? status : "off",
     adjustments: []
   });
   if (parsed) {
-    const classes = parsed.files.map((f) => classOf(f.path));
+    const classes = parsed.files.map(fileClass);
     const reports = classes.filter((c) => c === "report").length;
     if (target.empty || reports > 0 && classes.every((c) => c !== "normal")) {
       return finishNoChange(input2, store, reports, jevSummary("skipped"));
@@ -43860,7 +43888,7 @@ async function judge(input2) {
       contextInput(artifact, parsed, ruleFindings, others, {
         store,
         config: config2,
-        classOf,
+        fileClass,
         priorAttempts,
         compared
       }),
@@ -43903,9 +43931,7 @@ async function judge(input2) {
         firedRules: filterFiredRules([
           ...new Set(ruleFindings.map((f) => f.ruleId))
         ]),
-        changedPaths: artifact.changedPaths.filter(
-          (p) => classOf(p) === "normal"
-        )
+        changedPaths: normalPaths
       },
       loadCorpus(config2, deps.projectRoot),
       config2.precedent.topN
@@ -43923,12 +43949,12 @@ async function judge(input2) {
     ctl.progress?.("\u30D1\u30CD\u30EB");
     panel = await runPanel(
       {
-        artifact: panelArtifact(artifact, parsed, classOf),
+        artifact: panelArtifact(artifact, parsed, fileClass, normalPaths),
         tier: weight.tier,
         ruleFindings,
         precedents: precedents.map((m) => m.precedent),
         priorEvidence: prior.text,
-        facts: factRows(artifact, parsed, classOf)
+        facts: factRows(artifact, parsed, fileClass)
       },
       {
         config: config2,
@@ -43971,7 +43997,12 @@ function finishNoChange(input2, store, reports, contextSummary) {
     message: reports > 0 ? `\u5DEE\u5206\u306F E2E \u306E\u30EC\u30DD\u30FC\u30C8(${reports} \u30D5\u30A1\u30A4\u30EB)\u3068\u751F\u6210\u7269\u3060\u3051\u3067\u3001baseRef \u3068 HEAD \u306E\u9593\u306B\u3053\u306E\u30D5\u30A7\u30FC\u30BA\u306E\u5909\u66F4\u304C\u7121\u3044` : "baseRef \u3068 HEAD \u306E\u9593\u306B\u3053\u306E\u30D5\u30A7\u30FC\u30BA\u306E\u5909\u66F4\u304C\u7121\u3044"
   };
   const secrets = input2.target.empty ? [] : secretsRule.check(artifact, { config: config2, testsDir, priorAttempts: [] });
-  const ruleFindings = [...secrets, noChange];
+  const { tampered } = collectPriorEvidence(
+    store,
+    artifact.runId,
+    artifact.phase
+  );
+  const ruleFindings = [...tampered, ...secrets, noChange];
   const synthesis = synthesize({
     weightTier: "trivial",
     ruleFindings,
@@ -43985,7 +44016,7 @@ function finishNoChange(input2, store, reports, contextSummary) {
     ruleFindings,
     findings: synthesis.findings,
     reasons: [
-      `no-change: ${noChange.message}\u3002\u30EB\u30FC\u30EB\u5C64(\u30EC\u30DD\u30FC\u30C8\u3068\u751F\u6210\u7269\u306E common/secrets \u3092\u9664\u304F)\u30FBJev\u30FB\u91CD\u3055\u5224\u5B9A\u30FB\u30D1\u30CD\u30EB\u3092\u901A\u3055\u306A\u3044`,
+      `no-change: ${noChange.message}\u3002\u30EB\u30FC\u30EB\u5C64(\u524D\u30D5\u30A7\u30FC\u30BA\u306E\u6539\u7AC4\u306E\u691C\u8A3C\u3068\u3001\u30EC\u30DD\u30FC\u30C8\u3068\u751F\u6210\u7269\u306E common/secrets \u3092\u9664\u304F)\u30FBJev\u30FB\u91CD\u3055\u5224\u5B9A\u30FB\u30D1\u30CD\u30EB\u3092\u901A\u3055\u306A\u3044`,
       ...synthesis.reasons
     ],
     decisionPoint: synthesis.decisionPoint,
@@ -44068,7 +44099,7 @@ function testResultsFindings(artifact, ctx) {
 function contextInput(artifact, parsed, findings, others, env) {
   const view = parsed ? viewWithout(
     artifact.content,
-    parsed.files.filter((f) => env.classOf(f.path) !== "normal"),
+    parsed.files.filter((f) => env.fileClass(f) !== "normal"),
     () => null
   ) : null;
   const candidates = [];
@@ -44076,16 +44107,17 @@ function contextInput(artifact, parsed, findings, others, env) {
     if (f.ruleId !== "code/destructive-ops" && f.ruleId !== "code/unsafe-exec") {
       return;
     }
-    const original = f.evidence?.line;
-    if (original === void 0) return;
-    const line = view ? view.lineMap.get(original) : original;
-    if (line === void 0) return;
-    candidates.push({
-      ruleId: f.ruleId,
-      findingIndex,
-      path: f.evidence?.path ?? "",
-      line
-    });
+    const originals = f.evidence?.lines ?? (f.evidence?.line !== void 0 ? [f.evidence.line] : []);
+    const lines = originals.map((l) => view ? view.lineMap.get(l) : l);
+    if (lines.some((l) => l === void 0)) return;
+    for (const line of new Set(lines)) {
+      candidates.push({
+        ruleId: f.ruleId,
+        findingIndex,
+        path: f.evidence?.path ?? "",
+        line
+      });
+    }
   });
   const resubmissionTargets = findAddressedButSimilar(
     env.compared,
@@ -44104,9 +44136,12 @@ function contextInput(artifact, parsed, findings, others, env) {
       artifact,
       resubmissionTargets.map((t) => t.attempt)
     ),
+    // artifact と同じく伏せ字を当ててから送る(§6.4.4)
     decisionFields: {
-      ...artifact.context.rollbackPlan !== void 0 ? { rollbackPlan: artifact.context.rollbackPlan } : {},
-      ...artifact.context.optionsConsidered ? { optionsConsidered: artifact.context.optionsConsidered } : {}
+      ...artifact.context.rollbackPlan !== void 0 ? { rollbackPlan: maskSecrets(artifact.context.rollbackPlan) } : {},
+      ...artifact.context.optionsConsidered ? {
+        optionsConsidered: artifact.context.optionsConsidered.map(maskSecrets)
+      } : {}
     },
     resubmissionTargets
   };
@@ -44147,14 +44182,13 @@ function viewWithout(content, excluded, replace) {
   }
   return { text: out.join("\n"), lineMap };
 }
-function panelArtifact(artifact, parsed, classOf) {
+function panelArtifact(artifact, parsed, fileClass, normalPaths) {
   if (!parsed) return artifact;
-  const excluded = parsed.files.filter((f) => classOf(f.path) !== "normal");
-  const view = viewWithout(
-    artifact.content,
-    excluded,
-    (f) => classOf(f.path) === "report" ? `E2E \u306E\u30EC\u30DD\u30FC\u30C8: ${f.path}` : `\u751F\u6210\u7269: ${f.path}(${f.additions.length + f.deletions.length} \u884C\u306E\u5909\u66F4)`
-  );
+  const excluded = parsed.files.filter((f) => fileClass(f) !== "normal");
+  const view = viewWithout(artifact.content, excluded, (f) => {
+    const name = f.oldPath !== void 0 && f.oldPath !== f.path ? `${f.path}(\u79FB\u52D5\u5143: ${f.oldPath})` : f.path;
+    return fileClass(f) === "report" ? `E2E \u306E\u30EC\u30DD\u30FC\u30C8: ${name}` : `\u751F\u6210\u7269: ${name}(${f.additions.length + f.deletions.length} \u884C\u306E\u5909\u66F4)`;
+  });
   const testResults = artifact.context.testResults;
   return {
     ...artifact,
@@ -44163,13 +44197,13 @@ function panelArtifact(artifact, parsed, classOf) {
 === testResults(\u547C\u3073\u51FA\u3057\u5074\u306E\u5831\u544A\u3002\u4FE1\u983C\u3057\u306A\u3044\u5165\u529B\u3067\u3001\u5224\u5B9A\u306E\u6839\u62E0\u306B\u3057\u306A\u3044) ===
 ${testResults}`,
     headingLines: [],
-    changedPaths: artifact.changedPaths.filter((p) => classOf(p) === "normal")
+    changedPaths: normalPaths
   };
 }
-function factRows(artifact, parsed, classOf) {
+function factRows(artifact, parsed, fileClass) {
   if (parsed) {
     return factRowsFromDiff(
-      parsed.files.filter((f) => classOf(f.path) === "normal")
+      parsed.files.filter((f) => fileClass(f) === "normal")
     );
   }
   const found = /* @__PURE__ */ new Set();
@@ -44553,13 +44587,13 @@ function createRuntimeSource(makeProviders2, cwd = process.cwd()) {
     try {
       return { ok: true, runtime: reload() };
     } catch (err) {
-      const { path: path11, source } = configCandidate(cwd);
+      const { path: path12, source } = configCandidate(cwd);
       const error62 = err instanceof Error ? err.message : String(err);
       log.error("\u8A2D\u5B9A\u3092\u8AAD\u307F\u8FBC\u3081\u306A\u3044(\u8A55\u4FA1\u306F ASK\u30FBdegraded \u3067\u8FD4\u3059)", {
-        path: path11,
+        path: path12,
         error: error62
       });
-      return { ok: false, error: error62, path: path11, source };
+      return { ok: false, error: error62, path: path12, source };
     }
   };
 }
@@ -44766,6 +44800,8 @@ function registerListRules(server, deps) {
 }
 
 // src/tools/recordOutcome.ts
+import fs8 from "node:fs";
+import path11 from "node:path";
 var recordOutcomeInput = external_exports.strictObject({
   evaluationId: external_exports.string().min(1),
   outcome: external_exports.enum(["approved", "rejected", "incident"]),
@@ -44805,6 +44841,15 @@ function combinationError(args, v) {
       return null;
   }
 }
+function hasSameOutcome(store, args) {
+  const file2 = path11.join(store.projectDir, "outcomes.jsonl");
+  if (!fs8.existsSync(file2)) return false;
+  return fs8.readFileSync(file2, "utf-8").split("\n").some((line) => {
+    if (!line.trim()) return false;
+    const r = JSON.parse(line);
+    return r.evaluationId === args.evaluationId && r.outcome === args.outcome && (r.ruling ?? null) === (args.ruling ?? null);
+  });
+}
 function readObjective(store, dir) {
   const text = store.readEvidence(dir, "00-synthesis.json");
   if (text === void 0) return void 0;
@@ -44837,6 +44882,11 @@ function handleRecordOutcome(args, deps) {
   const v = store.readVerdict(entry.casePath);
   const invalid = combinationError(args, v);
   if (invalid) return refuse(invalid);
+  if (hasSameOutcome(store, args)) {
+    return refuse(
+      `\u540C\u3058\u88C1\u5B9A(outcome ${args.outcome}\u3001ruling ${args.ruling ?? "\u306A\u3057"})\u304C\u65E2\u306B\u8A18\u9332\u3055\u308C\u3066\u3044\u308B: ${args.evaluationId}`
+    );
+  }
   const makesPrecedent = args.ruling === "false-positive" || v.judgeStatus === "ok";
   let precedentId = null;
   if (makesPrecedent) {
@@ -44844,9 +44894,9 @@ function handleRecordOutcome(args, deps) {
       ...new Set(v.findings.map((f) => f.ruleId))
     ]);
     const objective = readObjective(store, entry.casePath);
-    precedentId = `prec-${args.evaluationId.slice(0, 8)}-${args.ruling ?? "run"}-${args.outcome}`;
+    const id = `prec-${args.evaluationId.slice(0, 8)}-${args.ruling ?? "run"}-${args.outcome}`;
     const precedent = {
-      id: precedentId,
+      id,
       source: "project",
       kind: v.kind,
       phase: v.phase,
@@ -44860,7 +44910,9 @@ function handleRecordOutcome(args, deps) {
       recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
       configHash
     };
-    new PrecedentStore(config2, deps.projectRoot).record(precedent);
+    if (new PrecedentStore(config2, deps.projectRoot).record(precedent)) {
+      precedentId = id;
+    }
   }
   store.appendOutcome({
     schemaVersion: 2,

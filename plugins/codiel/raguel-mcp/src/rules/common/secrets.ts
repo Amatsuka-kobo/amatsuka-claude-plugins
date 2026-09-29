@@ -43,13 +43,14 @@ const PEM_BLOCK_RE =
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g
 
 /**
- * lockfile 由来・URL など、エントロピーの判定で誤検知しやすい文脈。
- * 既知の形の照合はこの文脈の行でも行う(URL と本物の鍵が同じ行にあっても見逃さない)。
+ * lockfile と node_modules の行は、ハッシュが並ぶのでエントロピーの判定から外す。
+ * 既知の形の照合はこの行でも行う。
+ * `://` を含む行は外さない。URL のクエリに埋めた鍵を拾うためで、ホスト名とパスの部分は
+ * `/` と `.` の区切りと 3 種の条件で外れる(設計書 §6.4.2)
  */
 function isEntropyExemptLine(line: string): boolean {
   if (/integrity:|sha512-|sha256-|resolution:/.test(line)) return true
   if (line.includes("node_modules/")) return true
-  if (line.includes("://")) return true
   return false
 }
 

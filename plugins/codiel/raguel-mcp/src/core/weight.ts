@@ -8,7 +8,7 @@ import {
   DEFAULT_TESTS_DIR,
   globFixedPart
 } from "../config/paths.js"
-import { parseDiff } from "../rules/code/diffParse.js"
+import { parseDiff, sidePaths } from "../rules/code/diffParse.js"
 import { ruleParam } from "../rules/params.js"
 import { countStepsFromContent } from "../rules/util.js"
 import type {
@@ -70,26 +70,35 @@ export function computeWeight(
 
   if (artifact.kind === "code") {
     factors["kind-base"] = 20
-    // 生成物と E2E のレポートは、行数・ファイル数・近接の対象にしない
+    // 生成物と E2E のレポートは、行数・ファイル数・近接の対象にしない。
+    // 名前の変更は移動元も見て、どちらかが通常のパスなら数える(設計書 §6.4.2)
     const counted = (p: string): boolean =>
       classifyPath(p, config, testsDir) === "normal"
 
     const parsed = parseDiff(artifact.content)
+    const files = parsed.files.filter((f) => sidePaths(f).some(counted))
     const changedLines =
       parsed.files.length > 0
-        ? parsed.files
-            .filter((f) => counted(f.path))
-            .reduce(
-              (sum, f) => sum + f.additions.length + f.deletions.length,
-              0
-            )
+        ? files.reduce(
+            (sum, f) => sum + f.additions.length + f.deletions.length,
+            0
+          )
         : artifact.content.split("\n").length
     const linesFactor = Math.min(40, Math.floor(changedLines / 25) * 5)
     if (linesFactor > 0) factors["diff-lines"] = linesFactor
 
-    const paths = artifact.changedPaths.filter(counted)
-    const filesFactor = Math.min(20, paths.length * 2)
+    // 解析できたファイルが無いときは changedPaths で数える
+    const fileCount =
+      parsed.files.length > 0
+        ? files.length
+        : artifact.changedPaths.filter(counted).length
+    const filesFactor = Math.min(20, fileCount * 2)
     if (filesFactor > 0) factors["changed-files"] = filesFactor
+
+    const paths =
+      parsed.files.length > 0
+        ? parsed.files.flatMap(sidePaths).filter(counted)
+        : artifact.changedPaths.filter(counted)
 
     const globs = ruleParam<string[]>(config, "code/protected-paths", "globs")
     if (paths.some((p) => isNearProtected(p, globs))) {

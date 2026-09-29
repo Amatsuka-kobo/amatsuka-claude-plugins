@@ -17,6 +17,29 @@ export function fileDiff(
   ].join("\n")
 }
 
+/** from のファイルを to へ移す diff。additions を渡すと、移した上で行を足す */
+export function renameDiff(
+  from: string,
+  to: string,
+  additions: string[] = []
+): string {
+  const head = [
+    `diff --git a/${from} b/${to}`,
+    `similarity index ${additions.length === 0 ? 100 : 90}%`,
+    `rename from ${from}`,
+    `rename to ${to}`
+  ]
+  if (additions.length === 0) return head.join("\n")
+  return [
+    ...head,
+    "index 1111111..2222222 100644",
+    `--- a/${from}`,
+    `+++ b/${to}`,
+    `@@ -1,0 +1,${additions.length} @@`,
+    ...additions.map((l) => `+${l}`)
+  ].join("\n")
+}
+
 /** path のファイルを削除する diff */
 export function deletedFileDiff(path: string, lines: string[]): string {
   return [

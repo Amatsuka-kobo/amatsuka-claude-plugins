@@ -58,10 +58,37 @@ describe("secretsRule URL を含む行(所見 A2)", () => {
     expect(check(sk).some((f) => f.message.includes("llm-api-key"))).toBe(true)
   })
 
-  it("認証情報の無い URL は拾わない", () => {
+  it("URL のホスト名とパスは、部分ごとの判定と 3 種の条件で外れる(W4R2-06)", () => {
     expect(
       check(
-        `see https://example.com/docs/${HIGH_ENTROPY} and postgres://db.example.com:5432/app`
+        [
+          "see https://raguel-api-server-v2.internal.example.com/docs/managed-settings-script-2026/overview and postgres://db.example.com:5432/app",
+          "https://github.com/amatsuka-kobo/claude-plugins/commit/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+          "https://registry.npmjs.org/@typescript-eslint/eslint-plugin-kit/-/eslint-plugin-kit-0.2.8.tgz"
+        ].join("\n")
+      )
+    ).toEqual([])
+  })
+
+  it("URL のクエリの高エントロピーな値は拾う(W4R2-06)", () => {
+    const findings = check(
+      `fetch("https://api.example.com/v1/items?api_key=${HIGH_ENTROPY}&page=2")`
+    )
+    expect(findings).toHaveLength(1)
+    expect(findings[0].message).toContain("高エントロピー")
+    expect(findings[0].evidence?.excerpt).not.toContain(HIGH_ENTROPY)
+  })
+
+  it("URL のパスに埋めた高エントロピーな部分も拾う", () => {
+    expect(check(`see https://example.com/docs/${HIGH_ENTROPY}`)).toHaveLength(
+      1
+    )
+  })
+
+  it("node_modules の行は :// を含んでもエントロピーで測らない", () => {
+    expect(
+      check(
+        `  resolved "https://registry.example.com/x" node_modules/${HIGH_ENTROPY}`
       )
     ).toEqual([])
   })
@@ -226,6 +253,14 @@ describe("maskSecrets", () => {
     expect(masked.split("\n")).toHaveLength(5)
     expect(masked.split("\n")[0]).toBe("前")
     expect(masked.split("\n")[4]).toBe("後")
+  })
+
+  it("URL のクエリの高エントロピーな値を伏せ、ホスト名とパスは残す(W4R2-06)", () => {
+    const text = `https://api.example.com/v1/items?token=${HIGH_ENTROPY}`
+    const masked = maskSecrets(text)
+    expect(masked).not.toContain(HIGH_ENTROPY)
+    expect(masked.startsWith("https://api.example.com/v1/items?")).toBe(true)
+    expect(masked).toHaveLength(text.length)
   })
 
   it("秘密情報の無い本文はそのまま返す", () => {

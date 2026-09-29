@@ -212,6 +212,27 @@ describe("PrecedentStore", () => {
       })
     })
 
+    it("退役した判例は同じ id で record し直しても復活しない(所見 W4R1-07)", () => {
+      expect(store.record(makePrecedent("proj-r4"))).toBe(true)
+      store.retire("proj-r4", "古い", new Date("2026-09-29T01:02:03.000Z"))
+      const filePath = path.join(storeDir, "proj-r4.json")
+      const before = fs.readFileSync(filePath, "utf-8")
+
+      expect(
+        store.record(makePrecedent("proj-r4", { lesson: "書き換えた教訓" }))
+      ).toBe(false)
+      expect(fs.readFileSync(filePath, "utf-8")).toBe(before)
+      const index = JSON.parse(
+        fs.readFileSync(path.join(storeDir, "index.json"), "utf-8")
+      )
+      expect(index["proj-r4"]).toMatchObject({
+        retiredAt: "2026-09-29T01:02:03.000Z",
+        retireReason: "古い"
+      })
+      expect(store.list()).toEqual([])
+      expect(store.loadAll().tampered).toEqual([])
+    })
+
     it("シード判例は退役できない", () => {
       expect(store.retire("seed-001", "x")).toMatchObject({ retired: false })
     })

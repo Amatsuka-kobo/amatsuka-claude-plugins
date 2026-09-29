@@ -4,7 +4,8 @@ import type { Artifact, Finding, ParsedDiff, RaguelConfig } from "../types.js"
 
 // diffParse.ts の実装に依存しないよう、解析結果を差し替える
 const parsedRef = vi.hoisted(() => ({ value: null as unknown }))
-vi.mock("../../rules/code/diffParse.js", () => ({
+vi.mock("../../rules/code/diffParse.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../rules/code/diffParse.js")>()),
   parseDiff: () => parsedRef.value
 }))
 
@@ -13,17 +14,20 @@ const { computeWeight } = await import("../weight.js")
 interface F {
   path: string
   lines: number
+  /** 名前の変更の移動元 */
+  oldPath?: string
 }
 
 function setDiff(files: F[]): ParsedDiff {
   const parsed: ParsedDiff = {
     files: files.map((f) => ({
       path: f.path,
+      ...(f.oldPath !== undefined ? { oldPath: f.oldPath } : {}),
       additions: Array(f.lines).fill(""),
       deletions: [],
       isNew: false,
       isDeleted: false,
-      isRename: false,
+      isRename: f.oldPath !== undefined,
       isBinary: false
     })),
     totalChangedLines: files.reduce((s, f) => s + f.lines, 0),
@@ -264,6 +268,35 @@ describe("生成物と E2E のレポートの除外(R20・R24)", () => {
   it("testsDir を渡すと、その配下の reports を外す", () => {
     const artifact = codeArtifact([{ path: "t/reports/r.md", lines: 3000 }])
     const r = computeWeight(artifact, [], makeConfig(), { testsDir: "t" })
+    expect(r.factors).toEqual({ "kind-base": 20 })
+  })
+
+  it("保護パスから生成物へ移す名前の変更は、移動元で行数・ファイル数・近接を数える(W4R1-01)", () => {
+    const artifact = codeArtifact([
+      {
+        path: "plugins/a/scripts/out.js",
+        oldPath: "plugins/a/src/auth.ts",
+        lines: 25
+      }
+    ])
+    const r = computeWeight(artifact, [], generated)
+    expect(r.factors).toEqual({
+      "kind-base": 20,
+      "diff-lines": 5,
+      "changed-files": 2,
+      "protected-path-proximity": 25
+    })
+  })
+
+  it("移動元と移動先の両方が生成物の名前の変更は数えない", () => {
+    const artifact = codeArtifact([
+      {
+        path: "plugins/a/scripts/new.js",
+        oldPath: "plugins/a/scripts/old.js",
+        lines: 3000
+      }
+    ])
+    const r = computeWeight(artifact, [], generated)
     expect(r.factors).toEqual({ "kind-base": 20 })
   })
 

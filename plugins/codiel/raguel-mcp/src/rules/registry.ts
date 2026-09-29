@@ -21,7 +21,11 @@ import type {
   Severity
 } from "../core/types.js"
 import { destructiveOpsRule } from "./code/destructiveOps.js"
-import { type DetailedParsedDiff, parseDiff } from "./code/diffParse.js"
+import {
+  type DetailedParsedDiff,
+  parseDiff,
+  sidePaths
+} from "./code/diffParse.js"
 import { maxDiffLinesRule } from "./code/maxDiffLines.js"
 import { newDependencyRule } from "./code/newDependency.js"
 import { protectedPathsRule } from "./code/protectedPaths.js"
@@ -119,7 +123,10 @@ function blankHeadings(artifact: Artifact): RuleView {
   return { artifact: { ...artifact, content: lines.join("\n") }, lineMap: null }
 }
 
-/** code は生成物と E2E のレポートのファイルの区間を diff から外す */
+/**
+ * code は生成物と E2E のレポートのファイルの区間を diff から外す。
+ * 名前の変更は、移動元と移動先の両方が外す対象のときだけ外す(設計書 §6.4.2)
+ */
 function withoutExcluded(
   artifact: Artifact,
   parsed: DetailedParsedDiff,
@@ -127,7 +134,7 @@ function withoutExcluded(
 ): RuleView {
   const isNormal = (p: string) =>
     classifyPath(p, ctx.config, ctx.testsDir) === "normal"
-  const excluded = parsed.files.filter((f) => !isNormal(f.path))
+  const excluded = parsed.files.filter((f) => !sidePaths(f).some(isNormal))
   if (excluded.length === 0) return { artifact, lineMap: null }
 
   const drop = new Set<number>()
@@ -184,9 +191,13 @@ function diffFindings(parsed: DetailedParsedDiff, ctx: RuleContext): Finding[] {
       }
     })
   }
+  const classOf = (p: string) => classifyPath(p, ctx.config, ctx.testsDir)
+  // 名前の変更は、移動元か移動先が通常のパスなら通常のファイルとみなす
   const classes = parsed.files.map((f) => ({
     path: f.path,
-    kind: classifyPath(f.path, ctx.config, ctx.testsDir)
+    kind: sidePaths(f).some((p) => classOf(p) === "normal")
+      ? "normal"
+      : classOf(f.path)
   }))
   const generated = classes
     .filter((c) => c.kind === "generated")
@@ -211,7 +222,10 @@ function remapLine(finding: Finding, lineMap: number[] | null): Finding {
   return { ...finding, evidence: { ...finding.evidence, line: original + 1 } }
 }
 
-/** ルールとファイル(と severity)の組ごとに 1 件へ集約する。抜粋は最初の 3 か所だけを残す */
+/**
+ * ルールとファイル(と severity)の組ごとに 1 件へ集約する。抜粋は最初の 3 か所だけを残す。
+ * 行番号は evidence.lines に全件を残す。Jev の文脈判定が、まとめた候補のすべてを問えるようにするためである
+ */
 export function aggregateFindings(findings: Finding[]): Finding[] {
   const groups = new Map<string, Finding[]>()
   for (const f of findings) {
@@ -228,12 +242,16 @@ export function aggregateFindings(findings: Finding[]): Finding[] {
       .map((f) => f.evidence?.excerpt)
       .filter((e): e is string => e !== undefined)
       .slice(0, MAX_AGGREGATED_EXCERPTS)
+    const lines = group
+      .map((f) => f.evidence?.line)
+      .filter((l): l is number => l !== undefined)
     return {
       ...first,
       message: `${first.message}(同じルールとファイルで ${group.length} 件。抜粋は最初の ${excerpts.length} か所)`,
       evidence: {
         ...first.evidence,
-        ...(excerpts.length > 0 ? { excerpt: excerpts.join("\n…\n") } : {})
+        ...(excerpts.length > 0 ? { excerpt: excerpts.join("\n…\n") } : {}),
+        ...(lines.length > 0 ? { lines } : {})
       }
     }
   })

@@ -123,6 +123,16 @@ function parseFileLine(
   return path === null ? undefined : (stripPrefix(path, prefix) ?? undefined)
 }
 
+/**
+ * ファイルの判定に使うパス。名前の変更なら移動先と移動元の 2 つ、それ以外は変更後のパスだけを返す。
+ * 保護パスのファイルを外へ移して判定を抜ける経路を塞ぐため、移動元も見る(設計書 §6.4.2)
+ */
+export function sidePaths(file: DiffFile): string[] {
+  return file.oldPath !== undefined && file.oldPath !== file.path
+    ? [file.path, file.oldPath]
+    : [file.path]
+}
+
 const HUNK_RE = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/
 
 function emptyFile(start: number): DetailedDiffFile {

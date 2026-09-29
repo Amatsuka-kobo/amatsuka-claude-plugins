@@ -31,6 +31,16 @@ export const testDeletionRule: Rule = {
           evidence: { location: file.path, path: file.path }
         })
       }
+      // テストのパスから外へ移す名前の変更も削除とみなす(設計書 §6.4.2)
+      const from = file.oldPath
+      if (from !== undefined && isTestPath(from) && !isTestPath(file.path)) {
+        findings.push({
+          ruleId: RULE_ID,
+          severity,
+          message: `テストファイルをテストのパスの外へ移す名前の変更を検出しました: ${from} → ${file.path}`,
+          evidence: { location: from, path: from }
+        })
+      }
       file.additions.forEach((line, i) => {
         if (!SKIP_MARKER_RE.test(line)) return
         findings.push({

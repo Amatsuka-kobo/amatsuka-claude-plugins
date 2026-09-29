@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { protectedPathsRule } from "../protectedPaths.js"
+import { renameDiff } from "./helpers/diff.js"
 
 const RULE_ID = "code/protected-paths"
 
@@ -66,6 +67,65 @@ describe("protectedPathsRule", () => {
         evidence: { location: "infra/a.tf", path: "infra/a.tf" }
       })
     ])
+  })
+
+  describe("名前の変更は移動元と移動先の両方で判定する(W4R1-01)", () => {
+    const GENERATED_CTX = () =>
+      makeCtx({
+        rules: {
+          [RULE_ID]: {
+            globs: [".github/**", "plugins/*/scripts/**"],
+            generated: ["plugins/*/scripts/**"]
+          }
+        }
+      })
+    // パイプラインと同じく、changedPaths には移動先だけを載せる
+    const checkRename = (from: string, to: string, ctx = makeCtx()) =>
+      protectedPathsRule.check(
+        makeArtifact({ content: renameDiff(from, to), changedPaths: [to] }),
+        ctx
+      )
+
+    it("保護パスから通常のパスへ移すと、移動元で stop を出す", () => {
+      expect(checkRename(".github/workflows/ci.yml", "ci/ci.yml")).toEqual([
+        expect.objectContaining({
+          severity: "stop",
+          evidence: {
+            location: ".github/workflows/ci.yml",
+            path: ".github/workflows/ci.yml"
+          }
+        })
+      ])
+    })
+
+    it("保護パスから生成物のパスへ移しても、移動元で stop を出す", () => {
+      const findings = checkRename(
+        ".github/workflows/ci.yml",
+        "plugins/codiel/scripts/ci.yml",
+        GENERATED_CTX()
+      )
+      expect(findings.map((f) => f.evidence?.path)).toEqual([
+        ".github/workflows/ci.yml"
+      ])
+    })
+
+    it("通常のパスから保護パスへ移すと、移動先で stop を出す", () => {
+      expect(
+        checkRename("ci/ci.yml", ".github/workflows/ci.yml").map(
+          (f) => f.evidence?.path
+        )
+      ).toEqual([".github/workflows/ci.yml"])
+    })
+
+    it("移動元と移動先がどちらも生成物なら出さない", () => {
+      expect(
+        checkRename(
+          "plugins/a/scripts/old.mjs",
+          "plugins/a/scripts/new.mjs",
+          GENERATED_CTX()
+        )
+      ).toEqual([])
+    })
   })
 
   it("E2E のレポートのパスは保護パスでも当てない(R24)", () => {

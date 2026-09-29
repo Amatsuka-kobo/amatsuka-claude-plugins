@@ -1,3 +1,5 @@
+import fs from "node:fs"
+import path from "node:path"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import { CaseStore, NO_EVALUATION_RECORD } from "../casefile/store.js"
@@ -5,6 +7,7 @@ import { log } from "../core/log.js"
 import type { PipelineDeps } from "../core/pipeline.js"
 import type {
   OutcomeLabel,
+  OutcomeRecord,
   Precedent,
   Ruling,
   VerdictRecord
@@ -75,6 +78,27 @@ function combinationError(
   }
 }
 
+/**
+ * 同じ evaluationId・ruling・outcome の裁定の記録が既にあるか。
+ * CaseStore.lookupOutcome は最後の行しか返さないので、outcomes.jsonl の全行を見る。読めない行は例外にする
+ */
+function hasSameOutcome(store: CaseStore, args: RecordOutcomeArgs): boolean {
+  const file = path.join(store.projectDir, "outcomes.jsonl")
+  if (!fs.existsSync(file)) return false
+  return fs
+    .readFileSync(file, "utf-8")
+    .split("\n")
+    .some((line) => {
+      if (!line.trim()) return false
+      const r = JSON.parse(line) as OutcomeRecord
+      return (
+        r.evaluationId === args.evaluationId &&
+        r.outcome === args.outcome &&
+        (r.ruling ?? null) === (args.ruling ?? null)
+      )
+    })
+}
+
 function readObjective(store: CaseStore, dir: string): string | undefined {
   const text = store.readEvidence(dir, "00-synthesis.json")
   if (text === undefined) return undefined
@@ -116,6 +140,11 @@ export function handleRecordOutcome(
   const v = store.readVerdict(entry.casePath) as VerdictRecord
   const invalid = combinationError(args, v)
   if (invalid) return refuse(invalid)
+  if (hasSameOutcome(store, args)) {
+    return refuse(
+      `同じ裁定(outcome ${args.outcome}、ruling ${args.ruling ?? "なし"})が既に記録されている: ${args.evaluationId}`
+    )
+  }
 
   const makesPrecedent =
     args.ruling === "false-positive" || v.judgeStatus === "ok"
@@ -125,9 +154,9 @@ export function handleRecordOutcome(
       ...new Set(v.findings.map((f) => f.ruleId))
     ])
     const objective = readObjective(store, entry.casePath)
-    precedentId = `prec-${args.evaluationId.slice(0, 8)}-${args.ruling ?? "run"}-${args.outcome}`
+    const id = `prec-${args.evaluationId.slice(0, 8)}-${args.ruling ?? "run"}-${args.outcome}`
     const precedent: Precedent = {
-      id: precedentId,
+      id,
       source: "project",
       kind: v.kind,
       phase: v.phase,
@@ -147,7 +176,10 @@ export function handleRecordOutcome(
       recordedAt: new Date().toISOString(),
       configHash
     }
-    new PrecedentStore(config, deps.projectRoot).record(precedent)
+    // 退役した同じ id の判例は復活させない。そのときは判例を作らずに裁定だけを記録する
+    if (new PrecedentStore(config, deps.projectRoot).record(precedent)) {
+      precedentId = id
+    }
   }
 
   store.appendOutcome({

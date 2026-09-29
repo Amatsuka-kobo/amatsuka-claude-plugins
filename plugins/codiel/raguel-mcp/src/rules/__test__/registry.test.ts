@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { computeDigest, digestSimilarity } from "../../casefile/digest.js"
 import type { Artifact, Finding } from "../../core/types.js"
-import { fileDiff } from "../code/__test__/helpers/diff.js"
+import { fileDiff, renameDiff } from "../code/__test__/helpers/diff.js"
 import { parseDiff } from "../code/diffParse.js"
 import {
   aggregateFindings,
@@ -161,6 +161,39 @@ describe("runRules の集約と上限(所見 I3)", () => {
     expect(deps[0].evidence?.line).toBe(6)
   })
 
+  it("集約した所見は、まとめた全件の行番号を evidence.lines に残す(W4R1-02・W4R2-02)", () => {
+    const diff = fileDiff("a.sh", [
+      "echo 1",
+      "rm -rf /",
+      "echo 2",
+      "rm -rf ~",
+      "rm -rf /",
+      "rm -rf ~/"
+    ])
+    const [destructive] = runRules(codeArtifact(diff), makeCtx()).filter(
+      (f) => f.ruleId === "code/destructive-ops"
+    )
+    const lines = diff.split("\n")
+    expect(destructive.message).toContain("4 件")
+    expect(destructive.evidence?.line).toBe(7)
+    expect(destructive.evidence?.lines).toEqual([7, 9, 10, 11])
+    expect(
+      destructive.evidence?.lines?.map((l) => lines[l - 1].startsWith("+rm"))
+    ).toEqual([true, true, true, true])
+  })
+
+  it("集約しない 1 件の所見には lines を足さない", () => {
+    const [single] = aggregateFindings([
+      {
+        ruleId: "code/destructive-ops",
+        severity: "stop",
+        message: "m",
+        evidence: { path: "a.ts", line: 3 }
+      }
+    ])
+    expect(single.evidence).toEqual({ path: "a.ts", line: 3 })
+  })
+
   it("ファイルが違えば別の所見のまま", () => {
     const diff = [
       fileDiff("a.sh", ["rm -rf /", "rm -rf ~"]),
@@ -313,6 +346,36 @@ describe("runRules の生成物と E2E のレポート(R20・R24)", () => {
     )
     expect(resubmission?.severity).toBe("ask")
     expect(resubmission?.message).toContain("類似度 1.00")
+  })
+
+  it("保護パスから生成物へ移す名前の変更は、外さずに code/protected-paths を出す(W4R1-01)", () => {
+    const diff = renameDiff(
+      ".github/workflows/deploy.yml",
+      "plugins/codiel/scripts/deploy.yml",
+      ["rm -rf /"]
+    )
+    const findings = runRules(codeArtifact(diff), GENERATED_CTX())
+    const found = ids(findings)
+    expect(found).not.toContain(GENERATED_ONLY_ID)
+    expect(found).toContain("code/destructive-ops")
+    expect(
+      findings.find((f) => f.ruleId === "code/protected-paths")
+    ).toMatchObject({
+      severity: "stop",
+      evidence: { path: ".github/workflows/deploy.yml" }
+    })
+  })
+
+  it("移動元と移動先がどちらも生成物の名前の変更だけを外す", () => {
+    const diff = renameDiff(
+      "plugins/codiel/scripts/old.mjs",
+      "plugins/codiel/scripts/new.mjs",
+      ["rm -rf /"]
+    )
+    const found = ids(runRules(codeArtifact(diff), GENERATED_CTX()))
+    expect(found).toContain(GENERATED_ONLY_ID)
+    expect(found).not.toContain("code/protected-paths")
+    expect(found).not.toContain("code/destructive-ops")
   })
 
   it("testsDir の外の reports/ は外さない", () => {

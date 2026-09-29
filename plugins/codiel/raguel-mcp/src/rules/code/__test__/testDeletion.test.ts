@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { testDeletionRule } from "../testDeletion.js"
-import { deletedFileDiff, fileDiff } from "./helpers/diff.js"
+import { deletedFileDiff, fileDiff, renameDiff } from "./helpers/diff.js"
 
 function check(content: string) {
   return testDeletionRule.check(makeArtifact({ content }), makeCtx())
@@ -25,6 +25,19 @@ describe("testDeletionRule のファイルの削除", () => {
 
   it("通常ファイルの削除では出さない", () => {
     expect(check(deletedFileDiff("src/foo.ts", ["x"]))).toEqual([])
+  })
+
+  it("テストのパスから通常のパスへ移す名前の変更を削除とみなす(W4R1-01)", () => {
+    const findings = check(renameDiff("src/foo.test.ts", "src/foo.ts"))
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].evidence?.path).toBe("src/foo.test.ts")
+    expect(findings[0].message).toContain("src/foo.test.ts → src/foo.ts")
+  })
+
+  it("テストのパスの中での名前の変更と、テストのパスへ移す変更では出さない", () => {
+    expect(check(renameDiff("src/foo.test.ts", "src/bar.test.ts"))).toEqual([])
+    expect(check(renameDiff("src/foo.ts", "src/foo.test.ts"))).toEqual([])
   })
 })
 

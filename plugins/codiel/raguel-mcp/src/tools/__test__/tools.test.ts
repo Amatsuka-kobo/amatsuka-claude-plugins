@@ -396,6 +396,23 @@ describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見
       reason: "もう一度"
     })
     expect(again.body.retired).toBe(false)
+
+    // 同じ裁定の再記録は受け付けず、退役した判例も復活しない(所見 W4R1-07)
+    const outcomesBefore = h.outcomes().length
+    const duplicate = await call(client, "record_outcome", {
+      evaluationId,
+      outcome: "approved",
+      ruling: "false-positive",
+      notes: "もう一度記録する"
+    })
+    expect(duplicate.body.recorded).toBe(false)
+    expect(duplicate.body.precedentId).toBeNull()
+    expect(duplicate.body.reason).toContain("既に記録されている")
+    expect(h.outcomes()).toHaveLength(outcomesBefore)
+    expect(
+      (await call(client, "list_precedents", { phase: "intent" })).body
+        .precedents
+    ).toEqual([])
   })
 
   it("degraded の評価の裁定は記録するが、判例は作らない", async () => {

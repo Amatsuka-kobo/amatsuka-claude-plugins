@@ -56,6 +56,8 @@ export interface Finding {
     path?: string
     /** Artifact.content の 1 始まりの行番号 */
     line?: number
+    /** 集約した所見(§6.4.3)がまとめた全件の行番号。line は最初の 1 件の行だけを指す */
+    lines?: number[]
   }
 }
 
