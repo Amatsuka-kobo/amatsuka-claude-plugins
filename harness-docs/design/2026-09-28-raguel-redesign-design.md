@@ -1,16 +1,16 @@
 # Raguel を層ごとに作り直す 設計書
 
 - 作成日: 2026-09-28
-- 状態: 設計(第 6 版)・承認済み(2026-09-29)
+- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)
 - 対象: `plugins/codiel/raguel-mcp`(主)、codiel で Raguel を使う箇所(`skills/raguel-gating`、`skills/orchestrating-runs`、`src/codiel-state.ts`、`src/hooks/guard-write.ts`・`guard-bash.ts`)
 - バージョン: codiel `1.0.0` → `1.1.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.1.0-dev`(§8)
-- 入力: ユーザー合意の決定 R1〜R23(2026-09-28)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
+- 入力: ユーザー合意の決定 R1〜R24(2026-09-28〜29)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
 - 先行設計: `harness-docs/design/2026-09-27-codiel-intent-driven-design.md`(以下「codiel 設計」)の §6.1.1・§6.2.2・§6.13.2・§6.14(決定 83)、`plugins/codiel/raguel-mcp/docs/DESIGN.md`(以下「旧 DESIGN」)
 - 実装計画書(WBS): `harness-docs/plans/2026-09-29-raguel-redesign-plan.md`
 
-第 2 版では、レビューのうちオーケストレーターが採った 7 件を直した。プロジェクトルートを codiel の `findMainRoot` と同じアルゴリズムの独立実装に改め、projectId と書き分けた(§6.2.1、§6.9.1、§6.14、§11)。`code/dangerous-patterns` を破壊操作と実行の 2 つのルール ID に分けた(§4、§6.4、§6.12)。`--setting-sources project` の確認を着手前の最初の確認にし、代替の候補と判断を足した(§6.7.2、§7.2、§15)。MinHash の定義(§6.9.3)と、既知の証拠ファイルの範囲(§6.10)を明記した。jev を試験的な選択肢にした(§1、§6.7.4、§7.2、§9、§15)。所見文の読み手がオーケストレーターであることと、人に聞く質問文の規則を足した(§6.13.1)。第 3 版では、ユーザーが決めた第 2 版の未決事項 3〜6 を決定 R15〜R18 として §1 に足し、文書の standard での crosscheck(§6.6.1、§6.6.3、§6.8、§7.1、§11)、pass-gate の追加の検査の採用(§6.13.3)、ASK の回数の上限の撤去(§6.13.1)、ADR の 1 本化(§9、§14)を反映して、§15 から 4 件を消した。第 4 版では、ユーザーの決定で R14 を改めて jev をパネルのプロバイダーから外し(§6.7、§7、§12、§15)、R19 を足してルール層と重さ判定の一部を Jev の任意の文脈判定で補うようにした(§4、§6.3、§6.4.4、§6.5、§6.8、§6.12、§7、§9〜§12、§15)。第 5 版では、codiel 1.0.0 の手動確認の所見(§3.5)を受けたユーザーの決定 R20〜R22 を足し、保護パスの既定の除外と生成物の宣言(§6.4.2、§6.12、§9、§11)、締切の延長とバックグラウンドへの移行を正規の経路にすること(§5、§6.8、§6.12、§7.2、§11、§12、§15)、空の差分を正規の入力にすること(§6.2.2、§6.13.1、§7.1)を反映した。第 6 版では、codiel の M4 で `raguel.config.yaml` が `.codiel/config.json` の `raguel` キーへ移ることを出発点の前提に取り込み(R23、§3.1)、設定の置き場・形式・guard の対象・configSource・依存・文書の記述を改めた(§3.2、§6.2.5、§6.3、§6.9.1、§6.12、§6.13.3、§6.13.4、§6.14、§8〜§12)。
+第 2 版では、レビューのうちオーケストレーターが採った 7 件を直した。プロジェクトルートを codiel の `findMainRoot` と同じアルゴリズムの独立実装に改め、projectId と書き分けた(§6.2.1、§6.9.1、§6.14、§11)。`code/dangerous-patterns` を破壊操作と実行の 2 つのルール ID に分けた(§4、§6.4、§6.12)。`--setting-sources project` の確認を着手前の最初の確認にし、代替の候補と判断を足した(§6.7.2、§7.2、§15)。MinHash の定義(§6.9.3)と、既知の証拠ファイルの範囲(§6.10)を明記した。jev を試験的な選択肢にした(§1、§6.7.4、§7.2、§9、§15)。所見文の読み手がオーケストレーターであることと、人に聞く質問文の規則を足した(§6.13.1)。第 3 版では、ユーザーが決めた第 2 版の未決事項 3〜6 を決定 R15〜R18 として §1 に足し、文書の standard での crosscheck(§6.6.1、§6.6.3、§6.8、§7.1、§11)、pass-gate の追加の検査の採用(§6.13.3)、ASK の回数の上限の撤去(§6.13.1)、ADR の 1 本化(§9、§14)を反映して、§15 から 4 件を消した。第 4 版では、ユーザーの決定で R14 を改めて jev をパネルのプロバイダーから外し(§6.7、§7、§12、§15)、R19 を足してルール層と重さ判定の一部を Jev の任意の文脈判定で補うようにした(§4、§6.3、§6.4.4、§6.5、§6.8、§6.12、§7、§9〜§12、§15)。第 5 版では、codiel 1.0.0 の手動確認の所見(§3.5)を受けたユーザーの決定 R20〜R22 を足し、保護パスの既定の除外と生成物の宣言(§6.4.2、§6.12、§9、§11)、締切の延長とバックグラウンドへの移行を正規の経路にすること(§5、§6.8、§6.12、§7.2、§11、§12、§15)、空の差分を正規の入力にすること(§6.2.2、§6.13.1、§7.1)を反映した。第 6 版では、codiel の M4 で `raguel.config.yaml` が `.codiel/config.json` の `raguel` キーへ移ることを出発点の前提に取り込み(R23、§3.1)、設定の置き場・形式・guard の対象・configSource・依存・文書の記述を改めた(§3.2、§6.2.5、§6.3、§6.9.1、§6.12、§6.13.3、§6.13.4、§6.14、§8〜§12)。第 7 版では、codiel の M4-C(`7130f69c`)の結果を出発点に取り込み(§3.1)、ユーザーの決定 R24(Raguel が `testsDir` を読み、E2E のレポートを生成物と同じに扱う)を足し(§6.2.2、§6.4.2、§6.12、§6.14、§7.1)、configSource の文言の確定(§6.2.5)、`findMainRoot` の M4 後のアルゴリズムへの追随(§6.9.1)、raguel-gating の応急処置の撤去と退避先(§6.13.1)、guard の順序(§6.13.4)、ADR-009 との関係(§9)を反映した。
 
-ファイルパスは次のとおり略記する。R は `plugins/codiel/raguel-mcp/src`、C は `plugins/codiel`。行番号は、この worktree(ブランチ `raguel-redesign`、HEAD `c37ab969`)で確かめた値である。R の src は初版 `b188c72f` から判定ロジックが変わっていない(`git log -- plugins/codiel/raguel-mcp/src`)。M4 の応急処置が変えるファイルの行番号には「(M4 で変わる)」を添える。
+ファイルパスは次のとおり略記する。R は `plugins/codiel/raguel-mcp/src`、C は `plugins/codiel`。行番号は、第 6 版までは HEAD `c37ab969` で確かめた値である。第 7 版で codiel 側(`C/src/**`・`C/skills/**`)の行を引くときは、M4-C の後のコミット `7130f69c` で確かめた値にし、「(`7130f69c`)」を添える。R の行番号は `c37ab969` の値のままで、M4 と M4-C が変えた `R/config/loader.ts` などは作り直しで書き換える。
 
 ---
 
@@ -43,6 +43,7 @@
 | R21 | 締切の延長(所見 K2) | 1 回の呼び出しの既定を 180 秒、ゲート全体の既定を 600 秒にする。Claude Code が 120 秒で MCP の呼び出しをバックグラウンドへ移すのを正規の経路とし、codiel は完了の通知を待つ。進捗の通知とキャンセルは残す。値は実機で見直す | §5、§6.8、§6.12、§7.2、§11、§12、§15 |
 | R22 | 空の差分(所見 K4) | 空の差分を正規の入力にする。ルール層・パネル・Jev を通さずに PROCEED を返し、変更なしの info を残す。評価の記録は書くので pass-gate は通常どおり照合できる。codiel はフェーズの開始の HEAD を渡すだけで、run 全体の差分を渡さない | §6.2.2、§6.13.1、§7.1 |
 | R23 | 設定の置き場 | M4 で `raguel.config.yaml` が廃止され、中身が `.codiel/config.json` の `raguel` キー(JSON、内蔵の既定値への差分)へ移るのを前提にする。YAML の記述をすべて改める。作り直しでは `<プロジェクトルート>/.codiel/config.json` を読む。guard の対象、configSource の形、契約の文書と 2 者比較テストも新しい置き場に合わせる | §3.1、§6.9.1、§6.12、§6.13.4、§6.14、§8〜§12 |
+| R24 | testsDir と E2E のレポート(2026-09-29) | Raguel は `.codiel/config.json` の `testsDir` を読み、codiel の `readCodielConfig` と同じ規則と既定値を独立に実装する。`<testsDir>/**/reports/**` は生成物と同じに扱い(common/secrets だけを当て、保護パス・重さ・パネル・Jev から外す)、レポートだけの差分は変更なし(R22)として PROCEED にする。利用者の設定も呼び出し側の入力も要らない | §6.2.2、§6.4.2、§6.12、§6.14、§7.1 |
 
 R8 の env の扱いの根拠: 「Anthropic API を使えない利用者も全プラグインを使える」(`harness-docs/ARCHITECTURE.md:5`、ADR-005)は、プラグインが Anthropic API を必須にしないことを指す。利用者の環境に `ANTHROPIC_API_KEY` があり、子プロセスの `claude` がそれを使うのは利用者の裁量である(ユーザー決定 2026-09-28)。そのため所見 C3・H2 のうち鍵に関する部分は扱わない(§4)。
 
@@ -62,9 +63,9 @@ O2-4・O3-1 の 25 件の評価で、Raguel は run を止めるか素通しさ�
 
 ## 3. 前提
 
-### 3.1 出発点は codiel 1.0.0 の HEAD である
+### 3.1 出発点は M4-C の後の HEAD(`7130f69c` 以降)である
 
-実装は、codiel の M4 が終わった後(codiel `1.0.0`)の HEAD から始める。その時点の raguel-mcp には応急処置 11 件(codiel 設計 §6.14.1 の Raguel 側 5 件、§6.14.2 の codiel 側 6 件)が入っている。この worktree の src にはまだ入っていないので、応急処置の内容は codiel 設計 §6.14 の記述を正とする。
+実装は、codiel の M4 と M4-C が終わった後の HEAD(`intent-driven-development` の `7130f69c` 以降。codiel `1.0.0`)から始める。その時点の raguel-mcp には応急処置 11 件(codiel 設計 §6.14.1 の Raguel 側 5 件、§6.14.2 の codiel 側 6 件)が入っている。この worktree の src にはまだ入っていないので、応急処置の内容は codiel 設計 §6.14 の記述を正とする。
 
 M4 では、Raguel の設定の置き場と形式も変わる(ユーザー決定 2026-09-28。codiel の intent 駆動化の実装セッションからの知らせ)。本設計はこれを出発点に含める(R23)。
 
@@ -73,6 +74,19 @@ M4 では、Raguel の設定の置き場と形式も変わる(ユーザー決定
 - 応急処置 (3) の振る舞い(呼び出しごとに mtime で読み直す、protected-paths の globs の和集合、configSource)は保たれる。
 - `raguel.config.yaml` を持つプロジェクトでは、`/codiel:init` が中身を `config.json` の `raguel` へ写し、承認を得て YAML を消す。Raguel は YAML に縮退しない。移していないプロジェクトでは、codiel の初期化の判定で `/codiel:run` が止まり、`/codiel:init` を案内する。
 - M4 で直すのは `R/config/loader.ts` と、関係するテスト(`tools.test.ts`・`pipeline.golden.test.ts` の該当箇所)である。
+
+M4-C(codiel 設計の決定 84〜109、§6.15〜§6.19)は、`.codiel` の構成を組み直した。`7130f69c` で確かめた事実のうち、本設計に関わるものは次のとおりである。
+
+- 上の設定の移行は M4-C で入った。`R/config/loader.ts`(`7130f69c`)の configSource は `env:<パス>`・`cwd:<config.json の絶対パス>`・`defaults` の 3 種で、`config.json` はあるが `raguel` キーが無いときは `defaults` になる。読み直しは、`RAGUEL_CONFIG` か cwd の `config.json` のパスと mtime で判定する。raguel-mcp の `package.json` から `yaml` は消えた。
+- `C/src/codiel-state.ts:318`(`7130f69c`)の `readCodielConfig(codielRoot)` は `{ testsDir, runsDir }` を返し、`raguel` は読まない。既定は `testsDir` が `docs/codiel/tests`、`runsDir` が `docs/codiel/runs` である(`:212-213`)。JSON でない、オブジェクトでない、値が文字列でない・空・絶対パス・`..` のセグメントを含む、のどれかは例外を投げる。CLI の `codiel-state config` と `codiel-state gitignore` がこれを使う。
+- run の間に codiel が `.codiel/config.json` を書く手順は無い。書くのは run の外の `/codiel:init` だけである。雛形は `C/skills/initializing-harness/config.example.json` である。
+- E2E のレポートは `<testsDir>/e2e/{frontend,backend,cli}/<名前>/reports/<YYYYMMDD-HHMMSS>-<slug>-try<n>/` に置かれ、`results.json`・`summary.md`・`failure.md` がコミットされる。オーケストレーターは evaluate_code の前にレポートをコミットする。M4-C の raguel-gating は、`git diff` に `':(exclude,glob)<testsDir>/**/reports/**'` を足してレポートを外し、空かどうかも外した後の diff で決める(`C/skills/raguel-gating/SKILL.md:66`(`7130f69c`)、codiel 設計 §6.17.4、決定 104)。
+- M4-C の応急処置(codiel 決定 97)で、raguel-gating の対応表の implement・test-loop・fix-loop の行に「そのフェーズの差分が空なら `git diff <base>...HEAD` を渡す」が足された(`SKILL.md:58`(`7130f69c`))。
+- guard-write の判定の順序は、state.json の deny、active run、`state.intent`、config を 1 回読む(不正なら null)、未記録の GOTCHAS の退避先 1 ファイルを通す、`docs/intents/**`、文書フェーズ、コード系フェーズ、の順になった(codiel 設計 §6.17.6)。`findActiveRun` の後に `status !== "active"` で通す分岐があり、awaiting_human の run では以降の判定をすべて通す(`C/src/hooks/guard-write.ts:229-230`(`7130f69c`))。guard-bash の state.json の判定は、`parseCommands` の語の列で見る `writesStateJson` になった(`guard-bash.ts:754`(`7130f69c`)、決定 96)。
+- 誤検知の退避先(未記録の GOTCHAS)は `<runsDir>/<slug>/unrecorded-gotchas.md`、run が無いときは `.codiel/reports/unrecorded-gotchas.md` になった(raguel-gating `SKILL.md:137`(`7130f69c`))。
+- `findMainRoot` は git を呼ばない形になった(`C/src/hooks/lib.ts:575-580`(`7130f69c`)。§6.9.1)。
+- ARCHITECTURE に ADR-009(`.codiel/config.json` に testsDir・runsDir・raguel を集め、run の文書を git で共有し、state と報告を手元に残す)が足された。`R/../docs/DESIGN.md` は今も `raguel.config.yaml` を説明している。
+- codiel の手動確認 O4C-6〜O4C-8 は、作り直しの後へ回った(ユーザー決定。手順と確認項目は codiel 計画書 §6.8)。
 
 raguel-mcp は codiel プラグイン内の独立した pnpm workspace(`pnpm-workspace.yaml` の `plugins/codiel/raguel-mcp`)で、`raguel-mcp/build.ts` が `dist/server.mjs` を作る。`dist/` は手で編集しない。テストはルートの vitest(`vitest.config.ts` の `plugins/**/__test__/**/*.test.ts`)が実行する。
 
@@ -285,6 +299,7 @@ git -C <repoPath> -c core.quotePath=false -c diff.noprefix=false -c diff.mnemoni
 
 5. 差分が 20 MB を超えたら入力の誤りにする。これはメモリを守る上限で、内容の大きさの懸念は `common/max-size` が ask で扱う。
 6. 差分が空なら、正規の入力として扱う(R22)。ルール層・Jev の文脈判定・重さ判定・パネルを通さずに、verdict を PROCEED、`weightTier` を trivial にし、`code/no-change`(info。`baseRef` と HEAD の間にこのフェーズの変更が無い)の所見を 1 件残す。subject(`base` と `head`、`files` は空)・verdict.json・索引は通常どおり書くので、pass-gate の検査(§6.13.3。検査 8 の起点はフェーズの開始の HEAD のまま)はそのまま当たる。修正の要らない test-loop のように変更の無いフェーズがこれに当たる(所見 K4)。
+7. 差分のファイルがすべて E2E のレポート(`<testsDir>/**/reports/**`。§6.4.2)なら、手順 6 と同じく変更なしとして扱う(R24)。`code/no-change` の message に、レポートだけの差分であることと、レポートのパスの件数を書く。subject の `files` にはレポートのファイルを載せる。レポートは evaluate_code の前にコミットされる(§3.1)ので、レポートを除くと空になるフェーズがこれに当たる。
 
 手順 3 は手順 6 より前にある。コミットした差分が空でも、`paths` の範囲に未コミットの変更があれば入力の誤りになる。変更をコミットし忘れたまま「変更なし」で通ることは無い。
 
@@ -302,7 +317,7 @@ diff の書式が固定されるので、`--no-prefix`・`quotePath`・外部 di
 | evaluate_design | `paths` | なし | 必須。1〜20 件 |
 
 - `paths` は repoPath 相対のパスである。各パスの実体パスが repoPath の実体パスの内側にあり、通常のファイルで、1 MB 以下で、UTF-8 として読めなければ入力の誤りにする。
-- 追跡されていないファイルも読む。design.md と dev-plan.md はゲートを通った後にコミットされる(`C/skills/orchestrating-runs/SKILL.md:166-168` の「ゲート通過直後」)ためである。
+- 追跡されていないファイルも読む。design.md と dev-plan.md はゲートを通った後にコミットされる(`C/skills/orchestrating-runs/SKILL.md:195-197`(`7130f69c`)の「ゲート通過直後」)ためである。
 - 検査の本文は、ファイルごとに見出し行 `=== <path> ===` を置いてつなぐ。Raguel は見出し行の位置を持ち、ルール層の検査から外す(所見 A1 の files[] の見出しの問題が構造的に消える)。
 - ファイルごとのバイト列の sha256 と、読んだ時点の HEAD を記録する(§6.9.2)。
 - codiel が渡すファイルは次のとおりである。design は `design.md`、test-spec は作成・更新した `spec.md` と `cases.md`、dev-plan は `dev-plan.md`、intent-sync は書き換えた intent と持続層のファイルである。
@@ -342,7 +357,7 @@ diff の書式が固定されるので、`--no-prefix`・`quotePath`・外部 di
 | `contextJudge` | なし | `{ enabled, status, adjustments }`(§6.4.4) |
 
 - `decisionPoint` は合成規則から決定論で作る定型文である。所見 0 件の ASK(degraded など)でも、何を判断するかを示す(所見 D6)。
-- `configSource` は M4 の実装の値の形をそのまま使う。`defaults`・`env:<パス>` と、`.codiel/config.json` の `raguel` を読んだことを示す値の 3 種である。3 つ目の正確な文言(接頭辞)は M4 の `R/config/loader.ts` で決まり、この worktree では確かめられない【要確認】。M4 後の HEAD で確かめ、同じ文言にする。作り直しでは config.json を cwd ではなくプロジェクトルートから探すが(§6.9.1)、値には config.json の絶対パスが入るので、文言は変えない。
+- `configSource` は M4 の実装(`R/config/loader.ts`(`7130f69c`))の値をそのまま使う。`env:<RAGUEL_CONFIG のパス>`・`cwd:<config.json の絶対パス>`・`defaults` の 3 種で、`config.json` はあるが `raguel` キーが無いときも `defaults` である。作り直しでは config.json を cwd ではなくプロジェクトルートから探すが(§6.9.1)、接頭辞 `cwd:` は変えない。値には読んだ config.json の絶対パスが入るのでどのファイルかは分かり、この値を解釈するプログラムは無い(表示と記録だけに使う)。接頭辞を変えると、M4 の応答と記録を読み比べるときに同じ出所が別の表記になるためである。
 - `buildVersion` は raguel-mcp の `package.json` の `version` である(§8)。
 
 #### 6.2.6 入力の誤りと内部エラー
@@ -491,6 +506,15 @@ info の所見は判定を動かさず、adversarial・steelman・crosscheck・m
 - `generated` と保護パスの両方に当たるパスは、生成物として扱う。生成物を保護パスに入れて毎回 STOP になる(K1)のを解くためである。
 - 外した既定の glob と `generated` は、list_rules と応答の `policy.protectedPaths: { excludedDefaults, generated }` に出す。黙って外れないようにするためである。
 - 差分に生成物のファイルがあり、生成物でないファイルの変更が 1 つも無ければ、`code/generated-only`(info)の所見を出し、生成物のパスを message に書く。生成物に見せかけた手書きの変更を、オーケストレーターと人が見分ける手がかりにする(§11)。
+
+E2E のレポート(R24)は、利用者の設定なしに生成物と同じに扱う。
+
+- レポートは、`.codiel/config.json` の `testsDir`(§6.12.1)の配下で、`testsDir` からの相対パスに `reports/` のセグメントを含むファイルである。判定は codiel の `isE2eReport`(`C/src/hooks/guard-write.ts:119-124`(`7130f69c`))と同じにし、`testsDir` が `.` ならリポジトリ全体を配下とみなす。
+- レポートのパスには `common/secrets` だけを当て、`code/protected-paths`・重さ判定・パネルの入力・Jev の文脈判定から外す。パネルへの 1 行の渡し方は `generated` と同じで、「E2E のレポート: `<パス>`」とする。
+- レポートだけの差分は変更なしとして PROCEED にする(§6.2.2 の手順 7)。レポートと生成物しかない差分には、`code/generated-only` ではなく `code/no-change` を出す。
+- `policy.protectedPaths` には出さない。利用者が決める値ではなく、codiel の置き場の規則だからである。list_rules には、レポートとして外す `testsDir` の値を載せる。
+- 呼び出し側の入力は要らない。M4-C の raguel-gating が `git diff` に付けていたレポートの除外(§3.1)は、Raguel が差分を自分で作るので要らなくなる(§6.13.1)。
+- 抜け道にならない理由は次のとおりである。`testsDir` は `.codiel/config.json` にあり、run の間は codiel の guard が config.json への書き込みを拒む(§6.13.4)。レポートの置き場の外のファイルは、名前に `reports` を含んでも `testsDir` の配下でなければ外れない。
 
 再提出の判定(`common/resubmission-loop`)は次のとおりにする。
 
@@ -792,11 +816,11 @@ R8 と同じ趣旨の隔離は次のとおりに当てる。
 
 プロジェクトルートと projectId は別の概念である。プロジェクトルートは `.codiel/config.json` を探すディレクトリで、projectId はケースファイルと判例を束ねるキーである。
 
-- プロジェクトルートは、codiel の `findMainRoot`(`C/src/hooks/lib.ts:551-601`)と同じアルゴリズムで決め、raguel-mcp に独立に実装する。起点はサーバーの cwd である。
-  1. 起点が codiel の worktree の形(`/.codiel/worktrees/<slug>/<名前>` を含むパス。`C/src/hooks/lib.ts:563-564` の `CODIEL_WORKTREE_RE`)なら、`git worktree list --porcelain` の先頭のエントリ(メインの作業ツリー)のパスを返す。git が失敗したら 2 へ進む。
-  2. 起点から親へたどり、`.codiel` を持つ最初のディレクトリを返す(`findProjectRoot`、`:551-559`)。
+- プロジェクトルートは、codiel の `findMainRoot`(`C/src/hooks/lib.ts:551-580`(`7130f69c`))と同じアルゴリズムで決め、raguel-mcp に独立に実装する。起点はサーバーの cwd である。第 6 版までは、`c37ab969` の `findMainRoot` に合わせて手順 1 を `git worktree list --porcelain` で書いていた。M4 がこれを git を呼ばない形に改めたので、第 7 版で追随した。
+  1. 起点のパスが `/.codiel/worktrees/` を含む(`CODIEL_WORKTREES_RE`、`:562`(`7130f69c`))なら、最初に現れるその位置より前を返す。git は呼ばず、実体化もしない(論理パスのまま返す)。
+  2. 起点から親へたどり、`.codiel` を持つ最初のディレクトリを返す(`findProjectRoot`、`:551-559`(`7130f69c`))。
   3. 見つからなければ起点を返す。
-- 利用者が自分で作った worktree(codiel の worktree の形でないもの)は、メインの作業ツリーへ付け替えない(`:592-594` のコメント)。その worktree が `.codiel` を持てばそこがプロジェクトルートになり、持たなければ起点(cwd)になる。
+- 利用者が自分で作った worktree(パスが `/.codiel/worktrees/` を含まないもの)は、メインの作業ツリーへ付け替えない。その worktree が `.codiel` を持てばそこがプロジェクトルートになり、持たなければ起点(cwd)になる。
 - M4 からの変更: M4 の Raguel は `<cwd>/.codiel/config.json` を読む(§3.1)。本設計は `<プロジェクトルート>/.codiel/config.json` を読む。プロジェクトルートの手順 2 は `.codiel` を持つ祖先をたどるので、cwd がサブディレクトリのときも codiel の worktree の中のときも、M4 の形より正しく config.json を見つけ、codiel-state と同じ設定を読む。cwd がプロジェクトルートそのものなら、M4 と同じファイルを読む。
 - `projectId` は `storage.projectId` があればそれを使う。無ければ git の共通ディレクトリ(`git rev-parse --path-format=absolute --git-common-dir` の実体パス)から `<名前>-<sha256(共通ディレクトリの実体パス) の先頭 12 文字>` を作る。`<名前>` は、共通ディレクトリの basename が `.git` ならその親ディレクトリの basename、そうでなければ(bare リポジトリなど)共通ディレクトリの basename から末尾の `.git` を除いたものである。git の管理外では、プロジェクトルートの実体パスで同じ形を作る。
 - projectId はプロジェクトルートを使わずに共通ディレクトリだけから決まるので、どの worktree から評価しても同じ値になる(所見 G5)。codiel-state も同じ規則で求める。
@@ -914,7 +938,10 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 - Raguel は YAML を読まない。旧 `raguel.config.yaml` が残っていても読まず、YAML に縮退しない。移すのは `/codiel:init` の役目である(§3.1)。
 - `config.json` が無いとき、または `raguel` キーが無いときは内蔵の既定値を使う。
 - `config.json` か `RAGUEL_CONFIG` のファイルが JSON として読めないとき、`raguel` の値がオブジェクトでないときは読み込みの失敗にする(§6.12.4)。
-- Raguel が見るのは `raguel` キーの中だけである。`testsDir`・`runsDir` は codiel のキーなので、Raguel は検証も解釈もしない。§6.12.2 の「未知のキーを拒む」は `raguel` の値の中に当てる。
+- Raguel が見るのは、`raguel` キーの中と `testsDir` である(R24)。`runsDir` は codiel のキーなので、Raguel は検証も解釈もしない。§6.12.2 の「未知のキーを拒む」は `raguel` の値の中に当てる。
+- `testsDir` は、`RAGUEL_CONFIG` を設定したときも、プロジェクトルートの `.codiel/config.json` から読む。`RAGUEL_CONFIG` のファイルは `raguel` の値の形で `testsDir` を持たず、`testsDir` は codiel の置き場の規則だからである。
+- `testsDir` の読み方は、codiel の `readCodielConfig`(`C/src/codiel-state.ts:318`(`7130f69c`))と同じ規則と既定値を独立に実装する。`config.json` かキーが無ければ `docs/codiel/tests` を使う。値が文字列でない・空・絶対パス・`..` のセグメントを含むときは不正とし、`./` と末尾の `/` を落としてから使う。
+- `testsDir` が不正なときは、`raguel` の値が不正なときと同じく読み込みの失敗にする(§6.12.4)。codiel も同じ値で `readCodielConfig` が例外を投げ、`codiel-state config` が失敗し、guard-write が ask にする。Raguel だけが既定値で動くと、codiel と違う場所をレポートとみなすためである。
 
 `raguel` の値は `version: 1` を据え、スキーマを厳格にする。受け付けるのは次のキーだけである。値は既定の例であり、`<...>` は利用者が書く値の説明である。利用者は変えたいキーだけを書く。
 
@@ -1008,16 +1035,18 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 | フェーズ→ツール対応表の「渡すもの」を新しい入力にする。intent は判断文、design は `paths: [design.md]`、test-spec は `paths`(spec.md と cases.md)、dev-plan は `paths: [dev-plan.md]`、test-code・implement・test-loop・fix-loop は `baseRef`(そのフェーズを始めたときの HEAD)、intent-sync は `paths`(書き換えたファイル)。全行に `phase` を書く | 表の 9 行がそれぞれ §6.1 の phase と §6.2 の入力を持つ。`diff`・`files`・`plan`・`design` の語が表に無い |
 | fix-loop のゲートは、fix-loop を始めたときの HEAD から現在の HEAD までを 1 回で評価する。修正ごとの範囲を渡す旧規則をやめる | fix-loop の行の `baseRef` がフェーズの開始の HEAD である |
 | code 系フェーズの `baseRef` には、変更が無くてもフェーズの開始の HEAD を渡す。空の差分は PROCEED と「変更なし」の info で返る(§6.2.2、R22)。run 全体の差分や、ほかのフェーズの起点を渡して空を避ける運用をしない | 手順に、空の差分でも起点を変えない旨と、run 全体の差分を渡さない旨の 2 文がある |
-| STOP の手順(応急処置 (6))の「誤検知として続ける」の record_outcome を `outcome: approved, ruling: false-positive, notes: <裁定の理由>` にする。所見に `casefile/tampered` があれば、誤検知の選択肢を出さずに止める | 手順に `ruling: false-positive` がある。改竄の STOP で AskUserQuestion の選択肢が「止める」だけになる |
+| M4-C の応急処置(codiel 決定 97)で対応表の implement・test-loop・fix-loop の行に足した「そのフェーズの差分が空なら `git diff <base>...HEAD` を渡す」(`SKILL.md:58`(`7130f69c`))を消す。空の差分は Raguel が PROCEED で返す(R22) | `grep -n '<base>...HEAD' plugins/codiel/skills/raguel-gating/SKILL.md` が 0 件 |
+| M4-C で足した、`git diff` にレポートの除外の pathspec を付ける規則と、除外した後の diff で空を決める規則(`SKILL.md:66`(`7130f69c`)、codiel 決定 104)を消す。Raguel が差分を自分で作り、レポートを外す(R24、§6.4.2) | `grep -n 'exclude,glob' plugins/codiel/skills/raguel-gating/SKILL.md` が 0 件 |
+| STOP の手順(応急処置 (6))の「誤検知として続ける」の record_outcome を `outcome: approved, ruling: false-positive, notes: <裁定の理由>` にする。所見に `casefile/tampered` があれば、誤検知の選択肢を出さずに止める。誤検知の 1 件の退避先は M4-C の `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)のまま揃える(`SKILL.md:137`(`7130f69c`)) | 手順に `ruling: false-positive` がある。改竄の STOP で AskUserQuestion の選択肢が「止める」だけになる。退避先のパスが 2 つとも手順にある |
 | ASK の裁定 A は、再評価の前に `record_outcome(outcome: rejected, ruling: revise, notes: <人の指示>)` を記録する。旧規則の「最終的な裁定が固まったら記録」をやめる | 裁定 A の手順で record_outcome が evaluate の呼び直しより前にある |
 | ASK の裁定 B は `record_outcome(outcome: approved, ruling: as-is)` を記録する | 裁定 B の手順に `ruling: as-is` がある |
 | `judgeStatus` が degraded の ASK では、所見と `degradedReasons` を示し、AskUserQuestion で「再評価 / そのまま承認 / 止める」を聞く。再評価は evaluate を呼び直し、そのまま承認は裁定 B と同じ手順、止めるは `stop --reason raguel-degraded` | 手順に 3 択がある |
-| 「同一フェーズで ASK が 3 回続いたら再提出をやめ、STOP の手順で止める」(`C/skills/raguel-gating/SKILL.md:94`)を撤去する。ASK のたびに人が裁定するので、回数の上限は要らない(R17) | スキルにこの規則が無い |
+| 「同一フェーズで ASK が 3 回続いたら再提出をやめ、STOP の手順で止める」(`C/skills/raguel-gating/SKILL.md:103`(`7130f69c`))を撤去する。ASK のたびに人が裁定するので、回数の上限は要らない(R17) | スキルにこの規則が無い |
 | evaluate がバックグラウンドへ移ったら、完了の通知を待ち、その間に evaluate を呼び直さない | 手順に 1 文ある |
 | `decisionPoint` と `reasons` を人への提示に含める | ASK・STOP の提示の手順に 2 つの語がある |
 | ASK・STOP・degraded の ASK で人に聞くときは、懸念の要約(何が、どこで)と `decisionPoint` を AskUserQuestion の質問文の中に入れ、応答の本文だけに書かない。所見の原文は添えない | 3 つの場面の AskUserQuestion の手順に、質問文へ要約と `decisionPoint` を入れる規則がある |
 
-所見文(`findings` の `message` と `evidence`)を読むのはオーケストレーターであり、人に届くのはオーケストレーターが組んだ要約と質問だけである。現行の raguel-gating も要約の提示を求める(`C/skills/raguel-gating/SKILL.md:73-74`)が、要約を出さずに人に聞いた例があった(ユーザーの報告)。質問文そのものに要約を入れる規則は、この欠落を防ぐためのものである。
+所見文(`findings` の `message` と `evidence`)を読むのはオーケストレーターであり、人に届くのはオーケストレーターが組んだ要約と質問だけである。現行の raguel-gating も要約の提示を求める(`C/skills/raguel-gating/SKILL.md:82-83`(`7130f69c`))が、要約を出さずに人に聞いた例があった(ユーザーの報告)。質問文そのものに要約を入れる規則は、この欠落を防ぐためのものである。
 
 #### 6.13.2 orchestrating-runs
 
@@ -1029,7 +1058,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 
 #### 6.13.3 codiel-state
 
-Raguel の記録を読む処理を `C/src/raguel-records.ts`(新設)に置く。置き場の解決(§6.9.1)・索引と裁定の記録の読み込み・verdict.json の読み込みを持ち、raguel-mcp の src は import しない(R11)。設定は `.codiel/config.json` の `raguel` キー(JSON)なので、`JSON.parse` で読み、codiel の `package.json` に依存を足さない。config.json の読み込みは、M4 で codiel の CLI と hook が `testsDir` を読むのに使う関数(codiel 設計 §6.13.4)を使う。プロジェクトルートの探し方は `findMainRoot` と同じにする(§6.9.1)。
+Raguel の記録を読む処理を `C/src/raguel-records.ts`(新設)に置く。置き場の解決(§6.9.1)・索引と裁定の記録の読み込み・verdict.json の読み込みを持ち、raguel-mcp の src は import しない(R11)。設定は `.codiel/config.json` の `raguel` キー(JSON)なので、`JSON.parse` で読み、codiel の `package.json` に依存を足さない。M4-C の `readCodielConfig`(`C/src/codiel-state.ts:318`(`7130f69c`))は `testsDir`・`runsDir` だけを返し `raguel` を読まないので、`raguel.storage` は `raguel-records.ts` が同じ config.json から読む。`testsDir` が要るとき(2 者比較テスト)は `readCodielConfig` を使う。プロジェクトルートの探し方は `findMainRoot` と同じにする(§6.9.1)。M4-C の `config`・`gitignore` のサブコマンドと `isLegacy`(`:293`(`7130f69c`))の振る舞いは変えない。コマンドの位置は `init`(`:680`)・`start-phase`(`:787`)・`pass-gate`(`:853`)・`mark-ask`(`:908`)である(いずれも `7130f69c`)。
 
 | コマンド | 変更 | 受け入れ基準 |
 | --- | --- | --- |
@@ -1064,8 +1093,8 @@ codiel: この run は Raguel の記録の形式が古い(raguelContract なし)
 
 | hook | 変更 | 受け入れ基準 |
 | --- | --- | --- |
-| guard-write | run が active か awaiting_human の間、`.codiel/config.json` の全体、`RAGUEL_CONFIG` が指すファイル、`casesDir` の配下への書き込み(Write と Edit)を deny する。state.json の deny(`C/src/hooks/guard-write.ts:190-194`)と同じく、`status !== "active"` で通す分岐(`:223`)より前に置く | 2 つの状態の run で、3 種のパスへの Write と Edit が deny になる。run が無ければ通る |
-| guard-bash | 同じ条件で、同じパスを対象にするリダイレクト・`tee`・`sed -i`・`cp`・`mv`・`rm`・`dd`・`install` を deny する。state.json の検査(`C/src/hooks/guard-bash.ts:700-714`)と同じ形にする | 各コマンドの形が deny になる。複雑なシェル構文による回避は既知の限界として codiel 設計 §6.8 の書き方に倣って記録する |
+| guard-write | run が active か awaiting_human の間、`.codiel/config.json` の全体、`RAGUEL_CONFIG` が指すファイル、`casesDir` の配下への書き込み(Write と Edit)を deny する。置き場は、M4-C の判定の順序(§3.1、codiel 設計 §6.17.6)の「active run」の手順の中で、`findActiveRun` の直後、`status !== "active"` で通す分岐より前とする(`C/src/hooks/guard-write.ts:229-230` の間(`7130f69c`))。この分岐は awaiting_human の run で以降の判定をすべて通すので、後ろに置くと awaiting_human の間を守れない。`state.intent`・config を読む手順・未記録の GOTCHAS の退避先より前になるので、退避先のファイルや config の不正の扱いに左右されない | 2 つの状態の run で、3 種のパスへの Write と Edit が deny になる。run が無ければ通る。M4-C の guard-write のテスト(判定の順序、E2E のレポート、`<runsDir>/` の ask、退避先)がそのまま通る |
+| guard-bash | 同じ条件(`findActiveRun` が run を返したとき。`guard-bash.ts:798`(`7130f69c`))で、同じパスを対象にするリダイレクト・`tee`・`sed -i`・`cp`・`mv`・`rm`・`dd`・`install` を deny する。判定は、M4-C の state.json の判定(`writesStateJson`。`guard-bash.ts:754-790`(`7130f69c`)、codiel 決定 96)と同じく `parseCommands` の語の列に当て、閉じていないクォートのときは `splitLoosely` の語で見る | 各コマンドの形が deny になる。M4-C の guard-bash のテスト(state.json の判定の誤検知の再発)がそのまま通る。複雑なシェル構文による回避は既知の限界として codiel 設計 §6.8 の書き方に倣って記録する |
 | stop-guard | 変えない | |
 
 awaiting_human の間も守るのは、人の裁定を待つ間に設定を緩める操作(所見 G8 の「common/secrets を無効化する案」)を防ぐためである。利用者が設定を変えるときは、run を止めるか、自分の手で変える。
@@ -1079,7 +1108,7 @@ awaiting_human の間も守るのは、人の裁定を待つ間に設定を緩�
 | Bash で設定を緩める操作を止める | state.json と同じ文字列の照合で、書き込みの形を止められる | `jq` や `sed` の結果を実行前に知る手段が無く、判定できない |
 | codiel 自身の正当な書き込みを止めない | run の間に codiel が config.json を書く手順は無い。書くのは run の外の `/codiel:init` である。codiel-state は Node の中からファイルを書くので hook に掛からない | 同じ |
 
-Bash でキー単位の判定ができず、run の間に codiel が config.json を書かないので、ファイル全体を拒む。run の間に `testsDir` を変えることも止まるが、testsDir を変えると記録済みのテストの保護(codiel 設計 §6.13.6)が狂うので、run の間に変えない方がよいと推定する。run の間に codiel が config.json を書く手順が M4 で足されていないかは【要確認】とし、M4 後の HEAD で確かめる。
+Bash でキー単位の判定ができず、run の間に codiel が config.json を書かないので、ファイル全体を拒む。run の間に `testsDir` を変えることも止まるが、testsDir を変えると記録済みのテストの保護(codiel 設計 §6.13.6)が狂うので、run の間に変えない方がよいと推定する。run の間に codiel が config.json を書く手順は、M4-C の後(`7130f69c`)にも無い。書くのは run の外の `/codiel:init` だけである(§3.1)。
 
 ### 6.14 契約の文書と追随の手当て
 
@@ -1087,7 +1116,8 @@ Bash でキー単位の判定ができず、run の間に codiel が config.json
 - `C/docs/format-change-checklist.md` に「Raguel との契約」のセクションを足し、契約を変えたときに追随させるものを並べる。raguel-mcp の `R/codiel/phases.ts` と `R/casefile/`、codiel の `C/src/codiel-state.ts` の `STAGES`・`GATED` と `C/src/raguel-records.ts`、raguel-gating の対応表、2 者比較テスト、である。
 - 2 者比較テストを 2 本置く。
   - `R/codiel/__test__/phases.test.ts`: codiel の `STAGES`・`GATED` を相対パスで import し、Raguel のフェーズの表(フェーズ名・ステージ番号・ゲートの有無)と一致することを確かめる。
-  - `C/src/__test__/raguel-records.test.ts`: raguel-mcp の CaseStore で一時ディレクトリに評価と裁定を書き、codiel の `raguel-records.ts` で読んで pass-gate の検査が通ること、置き場の解決と projectId が両者で等しいことを確かめる。プロジェクトルートと projectId の比較は、少なくとも次の 4 つの起点で行う。codiel の worktree(`.codiel/worktrees/<slug>/<名前>`)の中、利用者が自分で作った worktree で `.codiel` を持つもの、同じく `.codiel` を持たないもの、git の管理外のディレクトリである。置き場の解決は、加えて次の 4 つで比べる。プロジェクトルートのサブディレクトリを起点にしたとき(M4 の `<cwd>/.codiel/config.json` では見つからない形)、`config.json` に `raguel` キーが無いとき、`raguel.storage.casesDir` を書いたとき、`RAGUEL_CONFIG` を設定したとき。
+  - `C/src/__test__/raguel-records.test.ts`: raguel-mcp の CaseStore で一時ディレクトリに評価と裁定を書き、codiel の `raguel-records.ts` で読んで pass-gate の検査が通ること、置き場の解決と projectId が両者で等しいことを確かめる。プロジェクトルートと projectId の比較は、少なくとも次の 4 つの起点で行う。codiel の worktree(`.codiel/worktrees/<slug>/<名前>`)の中、利用者が自分で作った worktree で `.codiel` を持つもの、同じく `.codiel` を持たないもの、git の管理外のディレクトリである。置き場の解決は、加えて次の 4 つで比べる。プロジェクトルートのサブディレクトリを起点にしたとき(M4 の `<cwd>/.codiel/config.json` では見つからない形)、`config.json` に `raguel` キーが無いとき、`raguel.storage.casesDir` を書いたとき、`RAGUEL_CONFIG` を設定したとき。`testsDir` の解決(R24)は、codiel の `readCodielConfig` と Raguel の読み方の結果が等しいことを、キーが無い(既定の `docs/codiel/tests`)、`./` と末尾の `/` の付いた値、`.`、不正な値(文字列でない・空・絶対パス・`..`。両方が失敗する)で確かめる。E2E のレポートの判定は、codiel の `isE2eReport` と Raguel の判定が同じパスの列で同じ答えを返すことを確かめる。
+- checklist の「Raguel との契約」には、`testsDir` の読み方とレポートの判定(codiel の `readCodielConfig`・`isE2eReport` と Raguel の対応する関数)も並べる。
 - どちらもテスト時だけの依存である。codiel 設計 §6.10.3 の扱い(`__test__/` はバンドルに入らない)に倣う。
 
 ---
@@ -1108,6 +1138,7 @@ Bash でキー単位の判定ができず、run の間に codiel が config.json
 | git からの差分 | 一時リポジトリで、worktree の `repoPath`、別のリポジトリの拒否、`core.quotePath=true` と `diff.noprefix=true` と `diff.external` を設定したリポジトリでの固定書式、日本語のファイル名、未コミットの変更の拒否、`-` で始まる baseRef の拒否 | R2、A6 |
 | 空の差分 | 空の差分で、ルール層・Jev・パネルが呼ばれずに PROCEED・trivial・`code/no-change` の info が返ること。subject・verdict.json・索引が書かれ、pass-gate の検査(検査 8 を含む)が通ること。差分が空で `paths` の範囲に未コミットの変更があれば入力の誤りになること | R22 |
 | 保護パスの除外と生成物 | `excludeDefaults` で既定の glob が外れ、`policy` と list_rules に出ること。既定に無い文字列と固定部が空の `generated` が読み込みエラーになること。生成物のパスで protected-paths・重さ・パネル・Jev が当たらず、common/secrets だけが当たること。生成物だけの差分で `code/generated-only` の info が出ること | R20 |
+| testsDir と E2E のレポート | `testsDir` のキーが無いときの既定、`RAGUEL_CONFIG` を設定したときもプロジェクトルートの config.json から読むこと、不正な値で読み込みの失敗になること。レポートのパスで protected-paths・重さ・パネル・Jev が当たらず common/secrets だけが当たること。レポートだけの差分とレポートと生成物だけの差分で PROCEED・`code/no-change` になり、記録が書かれること。`testsDir` の外の `reports/` は外れないこと | R24 |
 | ファイルの読み込み | repoPath の外・シンボリックリンク越し・1 MB 超・UTF-8 でないファイルの拒否 | R2 |
 | ルール層 | §6.4.2 の各変更。所見 A1 の 60 行の標本で common/secrets が出ないこと、A2 の `user:pass@`、A4 の見逃しの型、伏せ字 | A1〜A12、H1 |
 | 再提出の判定 | 前回の ruleId が消えた再提出、裁定のある attempt、degraded の attempt が比較から外れる | D5 |
@@ -1155,7 +1186,7 @@ Bash でキー単位の判定ができず、run の間に codiel が config.json
 
 - サーバーのバージョンは、`raguel-mcp/build.ts` の esbuild の `define` で `package.json` の `version` を埋め込む。tsconfig の `resolveJsonModule` を触らないためである。応答の `policy.buildVersion` も同じ値を使う(所見 J2)。
 - 依存は作り直しと同時に上げる(所見 J4)。`@modelcontextprotocol/sdk` 1.30 系、`zod` 4.6 系、`picomatch` 4.0.7 を目安とし、上げた版は実装時の最新で決める。`@typesafe-ai/sdk` は jevriel と同じ `0.6.0` を足す。
-- `yaml` は M4 で raguel-mcp の依存から外れる(§3.1)。作り直しでも戻さない。M4 後の HEAD の `raguel-mcp/package.json` に残っていないかを確かめ、残っていれば外す【要確認】。codiel の `package.json` にも依存を足さない(§6.13.3)。
+- `yaml` は M4-C で raguel-mcp の依存から外れた(`7130f69c` の `raguel-mcp/package.json`。§3.1)。作り直しでも戻さない。codiel の `package.json` にも依存を足さない(§6.13.3)。
 
 ---
 
@@ -1163,9 +1194,9 @@ Bash でキー単位の判定ができず、run の間に codiel が config.json
 
 | 文書 | 変更 |
 | --- | --- |
-| `plugins/codiel/raguel-mcp/docs/DESIGN.md` | 本設計に合わせて書き直す。判定モデル(`judgeStatus`・`subject`)、パイプライン、ツールの入出力、ルールの表(STOP 4 種)、重さ判定、パネル構成とプロバイダー、ケースファイルの配置(`<phase>/attempt-NN`)、判例、不変条件、設定(`casesDir` が `cases` と `precedents` の親であること。所見 J3)。旧 §11 の「kind ごとにモデルを上書き」は削る。契約の詳細は `C/docs/raguel-contract.md` を参照させる |
-| `plugins/codiel/README.md` | Raguel の運用のセクションを足す。設定の置き場(`.codiel/config.json` の `raguel` キーを JSON で書くこと、`RAGUEL_CONFIG` のファイルも JSON であること、YAML は読まないこと)と読み直し、配列のマージ規則、パネルのプロバイダー(claude / codex)の選び方と codex の認証、Jev の文脈判定(既定は無効、有効にする設定、鍵 `TYPESAFE_API_KEY`、有効にすると成果物が伏せ字の後で TypeSafe AI へ送られること、効かなかったときは決定論で動くこと)、codex を選ぶと成果物が OpenAI へ送られること、codex のツールの限界(§6.7.3)、ケースファイルとログの置き場、`list_precedents`・`retire_precedent` の使いどころ、保護パスの既定の除外(`excludeDefaults`)と生成物の宣言(`generated`)とその限界(§11)、評価が 120 秒を超えるとバックグラウンドへ移り完了の通知で返ること(R21) |
-| `plugins/codiel/skills/initializing-harness/` の雛形とスキル | M4 で雛形は `.codiel/config.json` の `raguel` キーに移っている(§3.1)。その上で、「差分オーバーレイ」の説明を、配列の和集合と置換の規則に改める(所見 E2 の `SKILL.md:58-60`。行番号は M4 で変わる)。JSON には注釈を書けないので、規則の説明はスキルの本文と README に置く。`storage.projectId` の書き方を例に足す(所見 G5)。`code/protected-paths` の `excludeDefaults` と `generated` の書き方と、使う場面(IaC・CI を直すプロジェクト、生成物をコミットする規約)を例に足す(R20) |
+| `plugins/codiel/raguel-mcp/docs/DESIGN.md` | 本設計に合わせて書き直す。判定モデル(`judgeStatus`・`subject`)、パイプライン、ツールの入出力、ルールの表(STOP 4 種)、重さ判定、パネル構成とプロバイダー、ケースファイルの配置(`<phase>/attempt-NN`)、判例、不変条件、設定(`casesDir` が `cases` と `precedents` の親であること。所見 J3)。今も残る `raguel.config.yaml` の設定の説明は撤去し、`.codiel/config.json` の `raguel` キーと `testsDir` の読み方に置き換える(§3.1、§6.12.1)。旧 §11 の「kind ごとにモデルを上書き」は削る。契約の詳細は `C/docs/raguel-contract.md` を参照させる |
+| `plugins/codiel/README.md` | Raguel の運用のセクションを足す。設定の置き場(`.codiel/config.json` の `raguel` キーを JSON で書くこと、`RAGUEL_CONFIG` のファイルも JSON であること、YAML は読まないこと)と読み直し、配列のマージ規則、パネルのプロバイダー(claude / codex)の選び方と codex の認証、Jev の文脈判定(既定は無効、有効にする設定、鍵 `TYPESAFE_API_KEY`、有効にすると成果物が伏せ字の後で TypeSafe AI へ送られること、効かなかったときは決定論で動くこと)、codex を選ぶと成果物が OpenAI へ送られること、codex のツールの限界(§6.7.3)、ケースファイルとログの置き場、`list_precedents`・`retire_precedent` の使いどころ、保護パスの既定の除外(`excludeDefaults`)と生成物の宣言(`generated`)とその限界(§11)、評価が 120 秒を超えるとバックグラウンドへ移り完了の通知で返ること(R21)、E2E のレポートを Raguel が評価から外すこと(R24) |
+| `plugins/codiel/skills/initializing-harness/` の雛形とスキル | M4-C で雛形は `C/skills/initializing-harness/config.example.json` に移っている(§3.1)。その上で、スキルの本文に残る設定のマージの説明を、配列の和集合と置換の規則に改める(所見 E2。旧 `SKILL.md:58-60` の「差分オーバーレイ」は M4-C で書き換わったので、`7130f69c` の本文で該当箇所を探す)。JSON には注釈を書けないので、規則の説明はスキルの本文と README に置く。`storage.projectId` の書き方を例に足す(所見 G5)。`code/protected-paths` の `excludeDefaults` と `generated` の書き方と、使う場面(IaC・CI を直すプロジェクト、生成物をコミットする規約)を例に足す(R20) |
 | ルートの `README.md` | codiel の行に Raguel のプロバイダーの選択を 1 文で足す |
 | `C/docs/raguel-contract.md`・`C/docs/format-change-checklist.md` | §6.14 |
 | `.serena/memories/codiel/raguel_mcp.md` | バージョン、パネリストの構成、プロバイダー、ケースファイルの配置、fake の置き場を改める。Serena の `edit_memory` で行う |
@@ -1177,6 +1208,7 @@ ARCHITECTURE への影響は次のとおりである。ADR の追加は、実装
   - ルール層と重さ判定の一部を、任意で Jev に文脈判定させられる。既定は無効で、Jev は stop → ask と info → ask などの限られた向きにだけ判定を動かす。Jev は ADR-005 の外部 API にあたる。
   - Raguel は評価対象を自分で読み、codiel の pass-gate は Raguel の記録(索引・verdict.json・裁定)を照合する。両者は同じファイル契約を独立に実装する。
   - Raguel の STOP は秘密情報・保護パス・破壊操作・改竄の 4 種に限り、改竄以外は人の誤検知の裁定で通せる。旧 DESIGN の原則「STOP は覆せない」を上書きする。
+- ADR-009(`.codiel/config.json` に testsDir・runsDir・raguel を集め、run の文書を git で共有し、state と報告を手元に残す)との関係は、新しい ADR の影響範囲に 1 文で書く。Raguel は ADR-009 が集めた `.codiel/config.json` から `raguel` と `testsDir` を読み、置き場を増やさない。ADR-009 の本文は書き換えず、上書きもしない。
 - ディレクトリ構成とレイヤー構造は変わらない。raguel-mcp の依存に `@typesafe-ai/sdk` が加わるが、技術スタックの表はプラグイン固有の依存を載せない(`harness-docs/ARCHITECTURE.md:25`)。
 
 ---
@@ -1198,7 +1230,7 @@ raguel-mcp(`R/`):
 | `context/jev.ts`・`context/judge.ts`(新設) | §6.4.4。Jev の呼び出しと、質問の組み立て・結果の当て方 |
 | `casefile/store.ts`・`hashchain.ts` | §6.9、§6.10 |
 | `precedent/store.ts`・`retrieval.ts` | §6.11 |
-| `config/schema.ts`・`defaults.ts`・`loader.ts` | §6.12。`loader.ts` は M4 で `.codiel/config.json` の `raguel` を読む形になっている。作り直しで、探す起点をプロジェクトルートに改める(§6.9.1) |
+| `config/schema.ts`・`defaults.ts`・`loader.ts` | §6.12。`loader.ts` は M4-C で `.codiel/config.json` の `raguel` を読む形になっている。作り直しで、探す起点をプロジェクトルートに改め、`testsDir` の読み方と E2E のレポートの判定を足す(§6.9.1、§6.12.1、R24) |
 | `testing/fake-claude.mjs`(移設)・`testing/fake-codex.mjs`(新設) | §7.1 |
 | `../package.json`・`../build.ts`・`../dist/server.mjs`(ビルドで再生成) | §8 |
 | `../docs/DESIGN.md` | §9 |
@@ -1226,7 +1258,8 @@ codiel(`C/`):
 | --- | --- | --- |
 | codiel と Raguel で置き場の解決がずれる(MCP サーバーと Bash の `RAGUEL_CONFIG` が違う、2 つの独立実装のプロジェクトルートか projectId の規則がずれる、サーバーの cwd と codiel-state の cwd が違うディレクトリを指す) | 違う設定を読む、または pass-gate が正しい評価を見つけられず run が進まない | 2 者比較テスト(§6.14 の 4 つの起点)。pass-gate の失敗の文言に、読んだ設定と索引のパスを出す |
 | 利用者が自分で作った worktree で `.codiel` を持たずに Claude Code を起動する | プロジェクトルートが cwd になり、メインの作業ツリーの `.codiel/config.json` を読まない | `findMainRoot` の意図(付け替えない)に揃えた結果である。README に、設定はプロジェクトルートに置くと書く |
-| guard が `.codiel/config.json` の全体を拒む(§6.13.4) | run の間は `testsDir`・`runsDir` も AI が変えられない | run の間に codiel が config.json を書く手順は無い。変えるときは run を止めるか、利用者が自分の手で変える。M4 後の HEAD で、run の間に書く手順が足されていないかを確かめる【要確認】 |
+| guard が `.codiel/config.json` の全体を拒む(§6.13.4) | run の間は `testsDir`・`runsDir` も AI が変えられない | run の間に codiel が config.json を書く手順は無い(`7130f69c` で確かめた)。変えるときは run を止めるか、利用者が自分の手で変える |
+| codiel と Raguel で `testsDir` の読み方か、E2E のレポートの判定がずれる(R24) | Raguel がレポートでないファイルを評価から外すか、レポートを評価して差分が空にならない | 2 者比較テストで、`readCodielConfig` と Raguel の `testsDir` の解決、`isE2eReport` と Raguel のレポートの判定を突き合わせる(§6.14)。どちらかを変えるときは checklist で追随させる |
 | 締切を延ばしたことで、評価が数分かかる | run の進みが遅くなる。バックグラウンドへ移った評価の完了の通知を codiel が取りこぼすと、run が止まる | 待つ手順を §6.13.1 に置き、完了の通知の形を §7.2 の 10 で確かめる。値は実機で測って見直す(§7.2 の 4、§15) |
 | 生成物の宣言(`generated`)が、生成物に見せかけた手書きの変更の抜け道になる | 宣言したパスの変更は、保護パス・重さ・パネル・Jev を通らない | 次の 4 つで手当てする。common/secrets は生成物にも必ず当てる。生成物だけの差分には `code/generated-only` の info を出す。固定部が空の glob は宣言できない(§6.12.3)。宣言は `policy` に出し、run の間は `.codiel/config.json` への書き込みを guard が拒む(§6.13.4)。生成物と、それを作るソースの対応を決める規則は持たない(プロジェクトごとに違うため)。§13 の既知の限界に置く |
 | `excludeDefaults` で `infra/**` などの保護を外したまま、外した事情が過ぎても残る | IaC や CI の変更が STOP されない | `policy` と list_rules に毎回出る。README に、run が終わったら戻すことを書く |
@@ -1261,6 +1294,10 @@ codiel(`C/`):
 | `excludeDefaults` に任意のパターンを受ける | R20 | 保護を黙って広く外せる。既定の glob の名指しで K1 は解ける |
 | `raguel.config.yaml` が残っていれば YAML に縮退して読む | R23 | M4 で廃止した置き場を Raguel が読み続けると、2 つの置き場の食い違いが残る。移行は `/codiel:init` が行う(§3.1) |
 | config.json を M4 と同じく `<cwd>` から探す | R23 | cwd がサブディレクトリや codiel の worktree のときに見つからないか、別の設定を読む。プロジェクトルートからなら codiel-state と同じ設定を読む(§6.9.1) |
+| M4-C のとおり、呼び出し側が `git diff` の pathspec で E2E のレポートを外す | R24 | Raguel は差分を自分で作る(R2)ので、呼び出し側の除外は届かない。入力に除外を足すと、評価から外す範囲を呼び出し側が決められる抜け道になる |
+| E2E のレポートを利用者に `generated` で宣言させる | R24 | レポートの置き場は codiel の規則で決まり、利用者の設定を要らない。宣言を忘れると、レポートだけの差分が変更ありとして評価される |
+| `testsDir` が不正なとき、Raguel だけ既定値で動く | §6.12.1 | codiel と違う場所をレポートとみなし、評価から外す範囲が食い違う |
+| configSource の接頭辞を、プロジェクトルートから探す形に合わせて `project:` などに改める | §6.2.5 | 値は表示と記録にだけ使い、絶対パスでファイルは分かる。M4 の記録と読み比べるときに、同じ出所が別の表記になる |
 | guard で `raguel` キーの変更だけを拒む | §6.13.4 | Bash の `jq`・`sed` による書き換えをキー単位で判定できず、緩める操作を止め切れない |
 | 障害をそのまま ASK として扱う | R6 | 障害の ASK が再提出の数と判例を汚し、人が同じ承認を繰り返した(D2) |
 | 障害を PROCEED にする | R6 | フェイルクローズドに反する |
@@ -1292,6 +1329,7 @@ codiel(`C/`):
 - npm 以外のマニフェストの依存の追加(所見 A10 の `pyproject.toml`・`Gemfile`・`uv.lock`)。
 - injection-marker の語順の変形(所見 A12 の後半)。adversarial が読む。
 - 英小文字と数字だけで書かれた秘密情報のエントロピーによる検出(§6.4.2 の 3 種の条件で外れる)。既知の形のパターンは引き続き当たる。
+- `testsDir` の配下で、`reports/` のセグメントを含むパスに置いた手書きのテストやコード(R24)。レポートとして評価から外れる。codiel の guard-write も同じパスをレポートとして扱う(`isE2eReport`)。
 - 生成物と、それを作るソースの対応の検証(R20)。宣言した生成物のパスに手で書いた変更は、`code/generated-only` の info と common/secrets のほかには検査されない。
 - ARCHITECTURE の禁止依存の文言がテストコードを除くと明記しない点。codiel 設計 §13 と同じく範囲外とする。
 - 旧 projectId のケースファイルと判例の移行。
