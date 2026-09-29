@@ -106,7 +106,7 @@ describe("golden: 判定パイプライン", () => {
     deps = {
       config,
       configHash: "golden-hash",
-      configSource: "cwd:/work/raguel.config.yaml",
+      configSource: "cwd:/work/.codiel/config.json",
       caseStore: new CaseStore(config),
       provider
     }
@@ -135,7 +135,7 @@ describe("golden: 判定パイプライン", () => {
     expect(result.policy).toEqual({
       configHash: "golden-hash",
       version: 1,
-      configSource: "cwd:/work/raguel.config.yaml"
+      configSource: "cwd:/work/.codiel/config.json"
     })
     const persisted = JSON.parse(
       fs.readFileSync(path.join(result.casePath, "verdict.json"), "utf8")

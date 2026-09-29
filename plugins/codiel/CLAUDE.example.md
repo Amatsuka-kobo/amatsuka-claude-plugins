@@ -16,7 +16,8 @@
 ## Codiel
 
 - `docs/intents/`: 変更ごとの intent 文書。`domains/` は持続層
-- `.codiel/runs/`: run の状態(codiel-state が管理)
-- `<testsDir>`(既定は `docs/tests`。`.codiel/config.json` の `testsDir` で変える): 仕様のディレクトリごとのテスト仕様書
-- `raguel.config.yaml`: Raguel の保護パス
+- `.codiel/config.json`: `testsDir`・`runsDir`・`raguel`(Raguel の保護パス)を持つ設定。git で共有する
+- `<testsDir>`(既定は `docs/codiel/tests`): 仕様のディレクトリごとのテスト仕様書
+- `<runsDir>/<slug>/`(既定は `docs/codiel/runs/<slug>/`): run の文書(`agenda.md`・`design.md` など)。git で共有する
+- `.codiel/runs/`・`.codiel/reports/`: run の状態(codiel-state が管理)とレポート。`.gitignore` で git に載せない
 - 入口: `/codiel:run`・`/codiel:init`・`/codiel:test`

@@ -1806,57 +1806,205 @@ test("findActiveRun は M4 より前の state の run を返さない", () => {
   expect(findActiveRun(root)).toBeNull()
 })
 
-// --- config(設計書 §6.13.4、A6-2) ---
+// --- config(設計書 §6.13.4、A6-2・A7-1) ---
+
+const DEFAULTS = { testsDir: "docs/codiel/tests", runsDir: "docs/codiel/runs" }
 
 function writeConfig(root: string, body: string): void {
   fs.mkdirSync(path.join(root, ".codiel"), { recursive: true })
   fs.writeFileSync(path.join(root, ".codiel/config.json"), body)
 }
 
-test("config は .codiel/config.json が無いときとキーが無いときに docs/tests を返し、値があればその値を返す", () => {
+test("config は .codiel/config.json が無いときとキーが無いときに既定の testsDir と runsDir を返し、値があればその値を返す", () => {
   const root = tmpProject()
   // run を要しない
   const none = run(root, ["config"])
   expect(none.code).toBe(0)
-  expect(none.out).toStrictEqual({ testsDir: "docs/tests" })
-  expect(readCodielConfig(root)).toStrictEqual({ testsDir: "docs/tests" })
+  expect(none.out).toStrictEqual(DEFAULTS)
+  expect(readCodielConfig(root)).toStrictEqual(DEFAULTS)
   for (const [body, expected] of [
-    ["{}", "docs/tests"],
-    ['{ "other": 1 }', "docs/tests"],
-    ['{ "testsDir": "qa/specs", "other": true }', "qa/specs"],
-    ['{ "testsDir": "./qa/specs/" }', "qa/specs"]
-  ]) {
+    ["{}", DEFAULTS],
+    ['{ "other": 1 }', DEFAULTS],
+    [
+      '{ "testsDir": "qa/specs", "other": true }',
+      { ...DEFAULTS, testsDir: "qa/specs" }
+    ],
+    ['{ "testsDir": "./qa/specs/" }', { ...DEFAULTS, testsDir: "qa/specs" }],
+    ['{ "runsDir": "./notes/runs/" }', { ...DEFAULTS, runsDir: "notes/runs" }],
+    [
+      '{ "testsDir": "qa", "runsDir": "qa-runs" }',
+      { testsDir: "qa", runsDir: "qa-runs" }
+    ]
+  ] as const) {
     writeConfig(root, body)
     const r = run(root, ["config"])
     expect(r.code, body).toBe(0)
-    expect(r.out, body).toStrictEqual({ testsDir: expected })
-    expect(readCodielConfig(root), body).toStrictEqual({ testsDir: expected })
+    expect(r.out, body).toStrictEqual(expected)
+    expect(readCodielConfig(root), body).toStrictEqual(expected)
   }
   expect(fs.existsSync(path.join(root, ".codiel/runs"))).toBe(false)
 })
 
+test("config の出力は raguel キーの有無と中身で変わらない", () => {
+  const root = tmpProject()
+  for (const raguel of [
+    "{}",
+    '{ "version": 1, "rules": { "code/protected-paths": { "globs": ["src/**"] } } }',
+    // codiel-state は raguel の中身を検査しない
+    '"not-an-object"',
+    "null",
+    "[1, 2]"
+  ]) {
+    writeConfig(root, `{ "raguel": ${raguel} }`)
+    const r = run(root, ["config"])
+    expect(r.code, raguel).toBe(0)
+    expect(r.out, raguel).toStrictEqual(DEFAULTS)
+    writeConfig(root, `{ "testsDir": "qa", "raguel": ${raguel} }`)
+    expect(run(root, ["config"]).out, raguel).toStrictEqual({
+      ...DEFAULTS,
+      testsDir: "qa"
+    })
+  }
+})
+
 test("config は不正な値で非ゼロ終了し、readCodielConfig は例外を投げる", () => {
   const root = tmpProject()
-  for (const body of [
+  const bodies = [
     // JSON として読めない
     '{ "testsDir": ',
-    '["docs/tests"]',
-    // 文字列でない
-    '{ "testsDir": 1 }',
-    '{ "testsDir": null }',
-    // 空文字列
-    '{ "testsDir": "" }',
-    // 絶対パス
-    '{ "testsDir": "/srv/tests" }',
-    // .. のセグメントを含む
-    '{ "testsDir": "../tests" }',
-    '{ "testsDir": "qa/../../tests" }'
-  ]) {
+    '["docs/tests"]'
+  ]
+  for (const key of ["testsDir", "runsDir"])
+    bodies.push(
+      // 文字列でない
+      `{ "${key}": 1 }`,
+      `{ "${key}": null }`,
+      // 空文字列
+      `{ "${key}": "" }`,
+      // 絶対パス
+      `{ "${key}": "/srv/x" }`,
+      // .. のセグメントを含む
+      `{ "${key}": "../x" }`,
+      `{ "${key}": "qa/../../x" }`
+    )
+  for (const body of bodies) {
     writeConfig(root, body)
     const r = run(root, ["config"])
     expect(r.code, body).toBe(1)
     expect(r.err, body).not.toBe("")
     expect(() => readCodielConfig(root), body).toThrow()
+  }
+})
+
+// --- gitignore(設計書 §6.15.5、A7-3) ---
+
+function requiredLines(testsDir: string): string[] {
+  const reports = `${testsDir}/e2e/**/reports/[0-9]*-try[0-9]*`
+  return [
+    ".codiel/runs/",
+    ".codiel/reports/",
+    `${reports}/**`,
+    `!${reports}/results.json`,
+    `!${reports}/summary.md`,
+    `!${reports}/failure.md`
+  ]
+}
+
+test("gitignore は testsDir に応じた必須の行を返し、.gitignore が無ければ全行を missing にする", () => {
+  const root = tmpProject()
+  // run を要しない
+  const r = run(root, ["gitignore"])
+  expect(r.code).toBe(0)
+  expect(r.out).toStrictEqual({
+    path: ".gitignore",
+    required: requiredLines("docs/codiel/tests"),
+    missing: requiredLines("docs/codiel/tests")
+  })
+  // runsDir は git で共有するので行に含めない
+  writeConfig(root, '{ "testsDir": "./qa/specs/", "runsDir": "notes/runs" }')
+  const custom = run(root, ["gitignore"])
+  expect(custom.code).toBe(0)
+  expect(custom.out.required).toStrictEqual(requiredLines("qa/specs"))
+  expect(custom.out.required.join("\n")).not.toContain("notes/runs")
+  // .gitignore を書かない
+  expect(fs.existsSync(path.join(root, ".gitignore"))).toBe(false)
+  expect(fs.existsSync(path.join(root, ".codiel/runs"))).toBe(false)
+})
+
+test("gitignore は前後の空白を除いた完全一致で比べ、# で始まる行と空行を数えない", () => {
+  const root = tmpProject()
+  const req = requiredLines("docs/codiel/tests")
+  const body = [
+    "node_modules/",
+    "",
+    "# .codiel/runs/",
+    `  ${req[1]}\t`,
+    // 完全一致でないものは数えない
+    ".codiel/reports",
+    `${req[2]}/extra`,
+    req[3],
+    "",
+    req[5]
+  ].join("\r\n")
+  fs.writeFileSync(path.join(root, ".gitignore"), body)
+  const r = run(root, ["gitignore"])
+  expect(r.code).toBe(0)
+  expect(r.out.missing).toStrictEqual([req[0], req[2], req[4]])
+  // .gitignore を変えない
+  expect(fs.readFileSync(path.join(root, ".gitignore"), "utf8")).toBe(body)
+  fs.writeFileSync(path.join(root, ".gitignore"), `${req.join("\n")}\n`)
+  expect(run(root, ["gitignore"]).out.missing).toStrictEqual([])
+})
+
+test("gitignore は config.json が不正なら非ゼロで終了する", () => {
+  const root = tmpProject()
+  for (const body of [
+    '{ "testsDir": ',
+    '{ "testsDir": "/x" }',
+    '{ "runsDir": "" }'
+  ]) {
+    writeConfig(root, body)
+    const r = run(root, ["gitignore"])
+    expect(r.code, body).toBe(1)
+    expect(r.err, body).not.toBe("")
+  }
+})
+
+test("gitignore の必須の行は git check-ignore で意図どおりに無視する", () => {
+  for (const testsDir of ["docs/codiel/tests", "qa/specs"]) {
+    const root = tmpProject()
+    const git = (...args: string[]) =>
+      spawnSync("git", args, { cwd: root, encoding: "utf8" })
+    expect(git("init", "-q").status).toBe(0)
+    if (testsDir !== "docs/codiel/tests")
+      writeConfig(root, JSON.stringify({ testsDir }))
+    const r = run(root, ["gitignore"])
+    fs.writeFileSync(
+      path.join(root, ".gitignore"),
+      `# codiel\n${r.out.required.join("\n")}\n`
+    )
+    const execDir = `${testsDir}/e2e/frontend/a/reports/20260928-101500-demo-try1`
+    const ignored = [
+      ".codiel/runs/s/try-1/state.json",
+      ".codiel/reports/test-run-x.md",
+      `${execDir}/x.png`,
+      `${execDir}/sub/error-context.md`
+    ]
+    const kept = [
+      `${execDir}/results.json`,
+      `${execDir}/summary.md`,
+      `${execDir}/failure.md`,
+      `${testsDir}/e2e/backend/api/reports/spec.md`,
+      ".codiel/config.json"
+    ]
+    // check-ignore はファイルが無くても判定するが、ディレクトリの規則を確かめるため実物を置く
+    for (const p of [...ignored, ...kept]) {
+      fs.mkdirSync(path.dirname(path.join(root, p)), { recursive: true })
+      fs.writeFileSync(path.join(root, p), "x")
+    }
+    for (const p of ignored)
+      expect(git("check-ignore", "-q", p).status, p).toBe(0)
+    for (const p of kept) expect(git("check-ignore", "-q", p).status, p).toBe(1)
   }
 })
 

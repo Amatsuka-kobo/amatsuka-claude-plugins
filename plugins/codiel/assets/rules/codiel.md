@@ -8,9 +8,15 @@
 - 持続層(`docs/intents/domains/`)は要件と意図的な制約を長く残す資産であり、intent-sync フェーズの
   外では書き換えない。`[ADR 候補]` の印が付いたエントリを参照形へ縮める作業も intent-sync フェーズの
   外で行うため、それ以外のセッションはこのエントリを書き換えない。
-- テスト仕様書(`<testsDir>/`。既定は `docs/tests`、置き場は `.codiel/config.json` の `testsDir` で
+- テスト仕様書(`<testsDir>/`。既定は `docs/codiel/tests`、置き場は `.codiel/config.json` の `testsDir` で
   決める)は機能の一部であり、使い捨て成果物ではない。振る舞いを変える変更を行ったら、対応する
   仕様のディレクトリの `spec.md` と `cases.md` を直し、テストコードを追随させる。
+- run の文書(`agenda.md`・`discussion.md`・`design.md`・`dev-plan.md`)は `<runsDir>/<slug>/`
+  (既定は `docs/codiel/runs/<slug>/`、置き場は `.codiel/config.json` の `runsDir` で決める)に置き、
+  git で共有する。
+- Raguel の設定(保護パスなど)は `.codiel/config.json` の `raguel` に書く。config.json は git で共有する。
+- `.codiel/runs/` と `.codiel/reports/` は run の状態とレポートの置き場であり、`.gitignore` で git に
+  載せない。コミットしない。
 
 ## 規則
 

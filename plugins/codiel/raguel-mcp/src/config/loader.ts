@@ -1,6 +1,6 @@
 /**
  * 設定の読込・深マージ・検証・configHash 算出と、ファイルが変わったときの読み直し。
- * 解決順: 環境変数 RAGUEL_CONFIG のパス → cwd/raguel.config.yaml → 内蔵デフォルトのみ。
+ * 解決順: 環境変数 RAGUEL_CONFIG のパス(JSON) → cwd/.codiel/config.json の raguel → 内蔵デフォルトのみ。
  * ファイルが存在するのに読めない・パースできない・zod 検証に落ちる場合は throw する
  * (フェイルクローズド。黙ってデフォルトに落ちない)。
  */
@@ -9,14 +9,13 @@ import { createHash } from "node:crypto"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { isAbsolute, resolve } from "node:path"
-import { parse as parseYaml } from "yaml"
 import { assertInvariants } from "../core/invariants"
 import { log } from "../core/log"
 import type { LoadedConfig, RaguelConfig } from "../core/types"
 import { defaultConfig } from "./defaults"
 import { configSchema } from "./schema"
 
-const CWD_CONFIG_FILENAME = "raguel.config.yaml"
+const CWD_CONFIG_PATH = [".codiel", "config.json"]
 
 export function loadConfig(): LoadedConfig {
   const { raw, source } = resolveRawConfig()
@@ -47,22 +46,31 @@ interface RawConfigSource {
 }
 
 /**
- * 設定の出所になりうるファイル。RAGUEL_CONFIG があればそのパス、無ければ cwd の raguel.config.yaml。
+ * 設定の出所になりうるファイル。RAGUEL_CONFIG があればそのパス、無ければ cwd の .codiel/config.json。
  * source はファイルから読んだときの値(`env:<パス>`・`cwd:<パス>`)である。
  */
 export function configCandidate(): { path: string; source: string } {
   const envPath = process.env.RAGUEL_CONFIG
   if (envPath) return { path: envPath, source: `env:${envPath}` }
-  const cwdPath = resolve(process.cwd(), CWD_CONFIG_FILENAME)
+  const cwdPath = resolve(process.cwd(), ...CWD_CONFIG_PATH)
   return { path: cwdPath, source: `cwd:${cwdPath}` }
 }
 
 function resolveRawConfig(): RawConfigSource {
   const { path, source } = configCandidate()
-  if (process.env.RAGUEL_CONFIG || existsSync(path)) {
-    return { raw: readYamlFile(path), source }
+  if (process.env.RAGUEL_CONFIG) {
+    return { raw: readJsonObject(path), source }
   }
-  return { raw: {}, source: "defaults" }
+  if (!existsSync(path)) return { raw: {}, source: "defaults" }
+  // config.json はあるが raguel が無いときは内蔵デフォルトで動く
+  const raguel = readJsonObject(path).raguel
+  if (raguel === undefined) return { raw: {}, source: "defaults" }
+  if (!isPlainObject(raguel)) {
+    throw new Error(
+      `設定ファイルの raguel はオブジェクトである必要があります: ${path}`
+    )
+  }
+  return { raw: raguel, source }
 }
 
 // ---- 読み直し(決定 83 の (3)) ----
@@ -94,7 +102,7 @@ function configStamp(): string {
   return JSON.stringify([path, stat ? stat.mtimeMs : null])
 }
 
-function readYamlFile(path: string): Record<string, unknown> {
+function readJsonObject(path: string): Record<string, unknown> {
   let text: string
   try {
     text = readFileSync(path, "utf8")
@@ -106,20 +114,19 @@ function readYamlFile(path: string): Record<string, unknown> {
 
   let parsed: unknown
   try {
-    parsed = parseYaml(text)
+    parsed = JSON.parse(text)
   } catch (err) {
     throw new Error(
-      `設定ファイルの YAML パースに失敗しました: ${path} (${(err as Error).message})`
+      `設定ファイルの JSON パースに失敗しました: ${path} (${(err as Error).message})`
     )
   }
 
-  if (parsed === null || parsed === undefined) return {}
-  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isPlainObject(parsed)) {
     throw new Error(
       `設定ファイルのルートはオブジェクトである必要があります: ${path}`
     )
   }
-  return parsed as Record<string, unknown>
+  return parsed
 }
 
 // ---- 深マージ(オブジェクトは再帰マージ、配列はユーザー値で置換、undefined はデフォルト維持) ----

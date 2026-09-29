@@ -525,10 +525,15 @@ function readBodyFile(flag: string, file: string, cwd: string): string {
   }
 }
 
-function denyMissingMarker(command: string): never {
+// rawFileRef は、gh api の本文を `-f body=@<パス>` で渡したとき(呼び出し元が判定する)に
+// 真にする。-f は値を文字列のまま送り、本文が `@<パス>` の文字列になるためである。
+function denyMissingMarker(command: string, rawFileRef = false): never {
+  const hint = rawFileRef
+    ? "。`-f` は値をそのまま送ります。ファイルの中身を本文にするには `-F body=@<パス>` を使ってください"
+    : ""
   return emit(
     "deny",
-    `gh ${command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください`
+    `gh ${command} の本文に \`${GENERATED_MARKER}\` を含めて投稿し直してください${hint}`
   )
 }
 
@@ -665,7 +670,13 @@ function checkGeneratedMarker(
       inline.length + files.length >= 2
         ? inline.some((body) => !body.includes(GENERATED_MARKER))
         : inline.length === 1 && !cmd.includes(GENERATED_MARKER)
-    if (missing) denyMissingMarker(command)
+    // gh api の inline に入るのは -f / --raw-field の値と @ で始まらない -F の値だけなので、
+    // @ で始まる値があれば -f body=@<パス> と判定できる(設計書 §6.16.5)
+    if (missing)
+      denyMissingMarker(
+        command,
+        command === "api" && inline.some((body) => body.startsWith("@"))
+      )
     for (const { flag, path: file } of files) {
       const content = readBodyFile(flag, file, cwd)
       const needsMarker = flag !== "--input" || /"body"\s*:/.test(content)
@@ -673,6 +684,79 @@ function checkGeneratedMarker(
         denyMissingMarker(command)
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// state.json へのシェル経由の書き込み(設計書 §6.16.2。決定 96)
+//
+// 判定は parseCommands の語の列に当てる。クォートの中の `>` を演算子と読まず、
+// `&&` などの区切りをまたいで後ろのコマンドのパスに当てないためである。
+// ---------------------------------------------------------------------------
+
+const STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/
+
+const isStateJson = (word: string | undefined): boolean =>
+  word !== undefined && STATE_JSON_RE.test(word)
+
+// リダイレクトの行き先が state.json のパスかどうか。readWord は `>` で語を区切らないので、
+// 語の中の `>` のそれぞれから演算子(`>` か `>>`)を切り出し、後ろから次の `>` か `<` の
+// 手前までを行き先とする(`2>` の `2` のような前の部分は含めない)。`&` と `|` は区切りなので、
+// `&>path` は語 `>path` になり、`>|path` は語 `>`・区切り・次のコマンドの `path` になる。
+// 行き先が空なら同じコマンドの次の語を、次の語が無ければ次のコマンドの最初の語を行き先とする。
+// クォートを外した語を読むので、`"x>…state.json"` や `">"` の直後のパスは余分に止める
+// (既知の限界。書き込みを見逃す側には倒れない)。
+function redirectsToStateJson(commands: string[][], ci: number): boolean {
+  const words = commands[ci]
+  for (let wi = 0; wi < words.length; wi++) {
+    const w = words[wi]
+    for (let p = w.indexOf(">"); p !== -1; ) {
+      const from = p + (w[p + 1] === ">" ? 2 : 1)
+      const dest = w.slice(from).split(/[<>]/)[0]
+      const target =
+        dest !== ""
+          ? dest
+          : wi + 1 < words.length
+            ? words[wi + 1]
+            : commands[ci + 1]?.[0]
+      if (isStateJson(target)) return true
+      p = w.indexOf(">", from)
+    }
+  }
+  return false
+}
+
+// 同じコマンドの中の tee と sed -i の引数に state.json のパスがあるか。リダイレクトの行き先と
+// 入力は引数に数えないので、語の中の最初の `>` か `<` から後ろを除き、演算子だけの語の
+// 次の語も除く(`tee x.log < state.json` の state.json は入力)。
+function teeOrSedWritesStateJson(words: string[]): boolean {
+  const args: string[] = []
+  for (let k = 0; k < words.length; k++) {
+    const op = words[k].search(/[<>]/)
+    if (op === -1) args.push(words[k])
+    else if (op > 0) args.push(words[k].slice(0, op))
+    else if (/^[<>]+$/.test(words[k])) k++
+  }
+  const after = (name: string) => {
+    const at = args.findIndex((a) => path.basename(a) === name)
+    return at === -1 ? [] : args.slice(at + 1)
+  }
+  const sedArgs = after("sed")
+  return (
+    after("tee").some(isStateJson) ||
+    (sedArgs.some((a) => /^(-[A-Za-z]*i|--in-place)/.test(a)) &&
+      sedArgs.some(isStateJson))
+  )
+}
+
+// cmd が state.json へリダイレクトか tee・sed -i で書き込むか。字句解析は gh の起動を
+// 探すものと同じ(閉じていないクォートが残れば splitLoosely で厳しい側に読み直す)。
+// 変数で渡したパスは見えない(既知の限界)。
+function writesStateJson(cmd: string): boolean {
+  const commands = parseCommands(cmd) ?? splitLoosely(cmd)
+  return commands.some(
+    (words, ci) =>
+      redirectsToStateJson(commands, ci) || teeOrSedWritesStateJson(words)
+  )
 }
 
 try {
@@ -697,12 +781,7 @@ try {
       pushesToProtectedBranch(gitInvocations),
       "保護ブランチ(main/master)への push"
     ],
-    [
-      /(>|>>|\btee\b|\bsed\s+-i\b)[^\n]*\.codiel\/runs\/[^\s]*state\.json/.test(
-        cmd
-      ),
-      "state.json へのシェル経由の書き込み"
-    ],
+    [writesStateJson(cmd), "state.json へのシェル経由の書き込み"],
     [
       /\b(cp|mv|dd|install)\b[^\n;|&]*\.codiel\/runs\/[^\s]*state\.json/.test(
         cmd
@@ -745,7 +824,7 @@ try {
     )
       emit(
         "deny",
-        `push は test-loop 合格後の pr 以降のフェーズでのみ可能です(現在: ${phase})`
+        `push は pr・fix-loop・triage・finalize のフェーズで、test-loop の合格の後にだけ実行できます(現在: ${phase})`
       )
     checkGeneratedMarker(ghInvocations, cmd, cwd)
   }

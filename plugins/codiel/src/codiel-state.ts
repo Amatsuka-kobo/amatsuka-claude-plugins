@@ -208,8 +208,9 @@ type StepKind = (typeof STEP_KINDS)[number]
 // e2e/frontend/ と e2e/cli/ の後はちょうど 1 つのセグメントを持つ。
 // 空のセグメント・`.`・`..`・`:`・`\` は isSpecDirId で別に拒否する。
 const SPEC_ID_RE = /^(units\/.+|e2e\/backend\/.+|e2e\/(frontend|cli)\/[^/]+)$/
-// .codiel/config.json が無いとき、または testsDir のキーが無いときの値(設計書 §6.13.4)
-const DEFAULT_TESTS_DIR = "docs/tests"
+// .codiel/config.json が無いとき、またはキーが無いときの値(設計書 §6.13.4)
+const DEFAULT_TESTS_DIR = "docs/codiel/tests"
+const DEFAULT_RUNS_DIR = "docs/codiel/runs"
 
 const fail = (msg: string, code = 1): never => {
   process.stderr.write(`${msg}\n`)
@@ -309,13 +310,18 @@ function legacyMessage(st: RunState): string {
   )
 }
 
-// .codiel を持つディレクトリの .codiel/config.json から testsDir を読む(設計書 §6.13.4)。
-// ファイルかキーが無ければ docs/tests を返す。JSON として読めない・オブジェクトでない・
-// testsDir が文字列でない・空文字列・絶対パス・`..` のセグメントを含む、のいずれかは例外を投げる。
-// 値は `./` と末尾の `/` を落とした repoRoot 相対のパスにして返す。未知のキーは無視する。
-export function readCodielConfig(codielRoot: string): { testsDir: string } {
+// .codiel を持つディレクトリの .codiel/config.json から testsDir と runsDir を読む(設計書 §6.13.4)。
+// ファイルかキーが無ければ既定の値を返す。JSON として読めない・オブジェクトでない・
+// testsDir か runsDir が文字列でない・空文字列・絶対パス・`..` のセグメントを含む、のいずれかは例外を投げる。
+// 値は `./` と末尾の `/` を落とした repoRoot 相対のパスにして返す。
+// raguel の中身は Raguel が検査するので見ない(§6.15.1)。未知のキーは無視する。
+export function readCodielConfig(codielRoot: string): {
+  testsDir: string
+  runsDir: string
+} {
   const file = path.join(codielRoot, ".codiel", "config.json")
-  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR }
+  if (!fs.existsSync(file))
+    return { testsDir: DEFAULT_TESTS_DIR, runsDir: DEFAULT_RUNS_DIR }
   let cfg: unknown
   try {
     cfg = JSON.parse(fs.readFileSync(file, "utf8"))
@@ -324,15 +330,61 @@ export function readCodielConfig(codielRoot: string): { testsDir: string } {
   }
   if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
     throw new Error(`${file} は JSON のオブジェクトにしてください`)
-  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR }
-  const v = (cfg as { testsDir: unknown }).testsDir
-  if (typeof v !== "string") throw new Error("testsDir は文字列にしてください")
-  if (v === "") throw new Error("testsDir に空文字列は指定できません")
+  const obj = cfg as Record<string, unknown>
+  return {
+    testsDir: configDir(obj, "testsDir", DEFAULT_TESTS_DIR),
+    runsDir: configDir(obj, "runsDir", DEFAULT_RUNS_DIR)
+  }
+}
+
+// config.json の 1 つのキーを repoRoot 相対のディレクトリとして検査し、正規化して返す
+function configDir(
+  cfg: Record<string, unknown>,
+  key: string,
+  fallback: string
+): string {
+  if (!(key in cfg)) return fallback
+  const v = cfg[key]
+  if (typeof v !== "string") throw new Error(`${key} は文字列にしてください`)
+  if (v === "") throw new Error(`${key} に空文字列は指定できません`)
   if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
-    throw new Error(`testsDir には repoRoot 相対のパスを書いてください: ${v}`)
+    throw new Error(`${key} には repoRoot 相対のパスを書いてください: ${v}`)
   if (v.split(/[/\\]/).includes(".."))
-    throw new Error(`testsDir に .. のセグメントは使えません: ${v}`)
-  return { testsDir: normalizeRel(v) }
+    throw new Error(`${key} に .. のセグメントは使えません: ${v}`)
+  return normalizeRel(v)
+}
+
+// .gitignore に要る行(設計書 §6.15.5)。E2E の 4 行は、実行ごとのディレクトリの中を無視し、
+// 直下の results.json・summary.md・failure.md だけを戻す。runsDir は共有するので行を置かない。
+function gitignoreLines(testsDir: string): string[] {
+  const reports = `${testsDir}/e2e/**/reports/[0-9]*-try[0-9]*`
+  return [
+    ".codiel/runs/",
+    ".codiel/reports/",
+    `${reports}/**`,
+    `!${reports}/results.json`,
+    `!${reports}/summary.md`,
+    `!${reports}/failure.md`
+  ]
+}
+
+// .codiel を持つディレクトリの .gitignore に無い必須の行を返す。行は前後の空白を除いた
+// 完全一致で比べ、`#` で始まる行と空行を数えない。ファイルが無ければ全行を返す。
+function missingGitignoreLines(
+  codielRoot: string,
+  required: string[]
+): string[] {
+  const file = path.join(codielRoot, ".gitignore")
+  const present = new Set(
+    fs.existsSync(file)
+      ? fs
+          .readFileSync(file, "utf8")
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l !== "" && !l.startsWith("#"))
+      : []
+  )
+  return required.filter((l) => !present.has(l))
 }
 
 function parseArgs(argv: string[]): {
@@ -1193,13 +1245,30 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     return ok(plan)
   }
 
-  // .codiel/config.json の testsDir を返す(設計書 §6.13.4)。run を要しない
+  // .codiel/config.json の testsDir と runsDir を返す(設計書 §6.13.4)。run を要しない
   if (cmd === "config") {
     try {
       return ok(readCodielConfig(root))
     } catch (e) {
       fail((e as Error).message)
     }
+  }
+
+  // .gitignore に要る行と、足りない行を返す(設計書 §6.15.5)。run を要しない。
+  // .gitignore は書かない(書くのは /codiel:init)
+  if (cmd === "gitignore") {
+    let testsDir = ""
+    try {
+      testsDir = readCodielConfig(root).testsDir
+    } catch (e) {
+      fail((e as Error).message)
+    }
+    const required = gitignoreLines(testsDir)
+    return ok({
+      path: ".gitignore",
+      required,
+      missing: missingGitignoreLines(root, required)
+    })
   }
 
   // fix-loop でテストの保護を外す(設計書 §6.13.6)。所見がテストに向くと確かめたときだけ使う

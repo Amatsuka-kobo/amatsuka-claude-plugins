@@ -1,0 +1,12 @@
+{
+  "testsDir": "docs/codiel/tests",
+  "runsDir": "docs/codiel/runs",
+  "raguel": {
+    "version": 1,
+    "rules": {
+      "code/protected-paths": {
+        "globs": ["src/server/auth/**"]
+      }
+    }
+  }
+}

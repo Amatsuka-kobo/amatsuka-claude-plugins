@@ -337,15 +337,25 @@ describe("設定の読み直し(createConfigReloader を渡したサーバー)",
     fs.utimesSync(file, later, later)
   }
 
-  it("起動の後に作った raguel.config.yaml を、次の評価と list_rules が使い、configHash が変わる", async () => {
+  /** workDir の .codiel/config.json に raguel を書く(raguel 以外のキーも併せて書ける) */
+  function writeCwdConfig(
+    raguel: unknown,
+    extra: Record<string, unknown> = {}
+  ): string {
+    const dir = path.join(workDir, ".codiel")
+    fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, "config.json")
+    fs.writeFileSync(file, JSON.stringify({ ...extra, raguel }), "utf8")
+    return file
+  }
+
+  it("起動の後に config.json へ書いた raguel を、次の評価と list_rules が使い、configHash が変わる", async () => {
     const before = (await call(client, "list_rules", {})).body
     expect(before.policy.configSource).toBe("defaults")
 
-    const file = path.join(workDir, "raguel.config.yaml")
-    fs.writeFileSync(
-      file,
-      "onError: STOP\nrules:\n  code/protected-paths:\n    globs: []\n",
-      "utf8"
+    const file = writeCwdConfig(
+      { onError: "STOP", rules: { "code/protected-paths": { globs: [] } } },
+      { testsDir: "docs/codiel/tests", runsDir: "docs/codiel/runs" }
     )
     const created = (await call(client, "list_rules", {})).body
     expect(created.onError).toBe("STOP")
@@ -366,11 +376,9 @@ describe("設定の読み直し(createConfigReloader を渡したサーバー)",
     expect(evaluated.policy.configSource).toBe(`cwd:${file}`)
     expect(evaluated.policy.configHash).toBe(created.policy.configHash)
 
-    fs.writeFileSync(
-      file,
-      'rules:\n  code/protected-paths:\n    globs: ["src/auth/**"]\n',
-      "utf8"
-    )
+    writeCwdConfig({
+      rules: { "code/protected-paths": { globs: ["src/auth/**"] } }
+    })
     touchLater(file, 10)
     const changed = (await call(client, "list_rules", {})).body
     expect(changed.policy.configHash).not.toBe(created.policy.configHash)
@@ -385,25 +393,45 @@ describe("設定の読み直し(createConfigReloader を渡したサーバー)",
     expect(stop.policy.configHash).toBe(changed.policy.configHash)
   })
 
-  it("RAGUEL_CONFIG が指すファイルの出所は env:<パス> になる", async () => {
-    const file = path.join(workDir, "custom.yaml")
-    fs.writeFileSync(file, "onError: STOP\n", "utf8")
+  it("cwd に raguel.config.yaml だけがあっても読まず、出所は defaults のままになる", async () => {
+    fs.writeFileSync(
+      path.join(workDir, "raguel.config.yaml"),
+      "onError: STOP\n",
+      "utf8"
+    )
+    const { body } = await call(client, "list_rules", {})
+    expect(body.policy.configSource).toBe("defaults")
+    expect(body.onError).toBe("ASK")
+  })
+
+  it("RAGUEL_CONFIG が指す JSON のファイルの出所は env:<パス> になる", async () => {
+    const file = path.join(workDir, "custom.json")
+    fs.writeFileSync(file, '{"onError":"STOP"}', "utf8")
     process.env.RAGUEL_CONFIG = file
     const { body } = await call(client, "list_rules", {})
     expect(body.policy.configSource).toBe(`env:${file}`)
     expect(body.onError).toBe("STOP")
   })
 
-  it("読めない設定では前の設定に戻さず、評価は既定の onError(ASK)で返し、所見に設定のパスと理由を載せる", async () => {
-    const file = path.join(workDir, "raguel.config.yaml")
+  it("RAGUEL_CONFIG が指すファイルが JSON として読めなければ、評価は既定の onError(ASK)で返す", async () => {
+    const file = path.join(workDir, "custom.json")
     fs.writeFileSync(file, "onError: STOP\n", "utf8")
+    process.env.RAGUEL_CONFIG = file
+    const res = await call(client, "evaluate_code", {
+      runId: "reload-env-broken",
+      objective: "typo 修正",
+      diff: HARMLESS_DIFF
+    })
+    expect(res.body.verdict).toBe("ASK")
+    expect(res.body.findings[0].ruleId).toBe("kernel/config-error")
+    expect(res.body.policy.configSource).toBe(`env:${file}`)
+  })
+
+  it("読めない設定では前の設定に戻さず、評価は既定の onError(ASK)で返し、所見に設定のパスと理由を載せる", async () => {
+    const file = writeCwdConfig({ onError: "STOP" })
     expect((await call(client, "list_rules", {})).body.onError).toBe("STOP")
 
-    fs.writeFileSync(
-      file,
-      "rules:\n  common/secrets:\n    enabled: false\n",
-      "utf8"
-    )
+    writeCwdConfig({ rules: { "common/secrets": { enabled: false } } })
     touchLater(file, 10)
     for (let i = 0; i < 2; i++) {
       const res = await call(client, "evaluate_code", {
@@ -422,7 +450,7 @@ describe("設定の読み直し(createConfigReloader を渡したサーバー)",
     expect(listing.error).toContain("common/secrets")
     expect(listing.rules).toBeUndefined()
 
-    fs.writeFileSync(file, "onError: ASK\n", "utf8")
+    writeCwdConfig({ onError: "ASK" })
     touchLater(file, 20)
     const fixed = (await call(client, "list_rules", {})).body
     expect(fixed.onError).toBe("ASK")

@@ -417,10 +417,11 @@ function readBodyFile(flag, file, cwd) {
     return emit("deny", `${flag} \u306E\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${file}`);
   }
 }
-function denyMissingMarker(command) {
+function denyMissingMarker(command, rawFileRef = false) {
+  const hint = rawFileRef ? "\u3002`-f` \u306F\u5024\u3092\u305D\u306E\u307E\u307E\u9001\u308A\u307E\u3059\u3002\u30D5\u30A1\u30A4\u30EB\u306E\u4E2D\u8EAB\u3092\u672C\u6587\u306B\u3059\u308B\u306B\u306F `-F body=@<\u30D1\u30B9>` \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044" : "";
   return emit(
     "deny",
-    `gh ${command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+    `gh ${command} \u306E\u672C\u6587\u306B \`${GENERATED_MARKER}\` \u3092\u542B\u3081\u3066\u6295\u7A3F\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044${hint}`
   );
 }
 function readGhPost({ command, tokens }) {
@@ -496,7 +497,11 @@ function checkGeneratedMarker(invocations, cmd, cwd) {
   denyRewrittenBodyFile(posts, joinContinuedLines(cmd));
   for (const { command, inline, files } of posts) {
     const missing = inline.length + files.length >= 2 ? inline.some((body) => !body.includes(GENERATED_MARKER)) : inline.length === 1 && !cmd.includes(GENERATED_MARKER);
-    if (missing) denyMissingMarker(command);
+    if (missing)
+      denyMissingMarker(
+        command,
+        command === "api" && inline.some((body) => body.startsWith("@"))
+      );
     for (const { flag, path: file } of files) {
       const content = readBodyFile(flag, file, cwd);
       const needsMarker = flag !== "--input" || /"body"\s*:/.test(content);
@@ -504,6 +509,43 @@ function checkGeneratedMarker(invocations, cmd, cwd) {
         denyMissingMarker(command);
     }
   }
+}
+var STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/;
+var isStateJson = (word) => word !== void 0 && STATE_JSON_RE.test(word);
+function redirectsToStateJson(commands, ci) {
+  const words = commands[ci];
+  for (let wi = 0; wi < words.length; wi++) {
+    const w = words[wi];
+    for (let p = w.indexOf(">"); p !== -1; ) {
+      const from = p + (w[p + 1] === ">" ? 2 : 1);
+      const dest = w.slice(from).split(/[<>]/)[0];
+      const target = dest !== "" ? dest : wi + 1 < words.length ? words[wi + 1] : commands[ci + 1]?.[0];
+      if (isStateJson(target)) return true;
+      p = w.indexOf(">", from);
+    }
+  }
+  return false;
+}
+function teeOrSedWritesStateJson(words) {
+  const args = [];
+  for (let k = 0; k < words.length; k++) {
+    const op = words[k].search(/[<>]/);
+    if (op === -1) args.push(words[k]);
+    else if (op > 0) args.push(words[k].slice(0, op));
+    else if (/^[<>]+$/.test(words[k])) k++;
+  }
+  const after = (name) => {
+    const at = args.findIndex((a) => path3.basename(a) === name);
+    return at === -1 ? [] : args.slice(at + 1);
+  };
+  const sedArgs = after("sed");
+  return after("tee").some(isStateJson) || sedArgs.some((a) => /^(-[A-Za-z]*i|--in-place)/.test(a)) && sedArgs.some(isStateJson);
+}
+function writesStateJson(cmd) {
+  const commands = parseCommands(cmd) ?? splitLoosely(cmd);
+  return commands.some(
+    (words, ci) => redirectsToStateJson(commands, ci) || teeOrSedWritesStateJson(words)
+  );
 }
 try {
   const input = await readStdin();
@@ -526,12 +568,7 @@ try {
       pushesToProtectedBranch(gitInvocations),
       "\u4FDD\u8B77\u30D6\u30E9\u30F3\u30C1(main/master)\u3078\u306E push"
     ],
-    [
-      /(>|>>|\btee\b|\bsed\s+-i\b)[^\n]*\.codiel\/runs\/[^\s]*state\.json/.test(
-        cmd
-      ),
-      "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F"
-    ],
+    [writesStateJson(cmd), "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F"],
     [
       /\b(cp|mv|dd|install)\b[^\n;|&]*\.codiel\/runs\/[^\s]*state\.json/.test(
         cmd
@@ -562,7 +599,7 @@ try {
     if (isGitPush && (!["pr", "fix-loop", "triage", "finalize"].includes(phase) || !testLoopPassed))
       emit(
         "deny",
-        `push \u306F test-loop \u5408\u683C\u5F8C\u306E pr \u4EE5\u964D\u306E\u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase})`
+        `push \u306F pr\u30FBfix-loop\u30FBtriage\u30FBfinalize \u306E\u30D5\u30A7\u30FC\u30BA\u3067\u3001test-loop \u306E\u5408\u683C\u306E\u5F8C\u306B\u3060\u3051\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`
       );
     checkGeneratedMarker(ghInvocations, cmd, cwd);
   }

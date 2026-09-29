@@ -40,7 +40,8 @@ test(".codiel/config.json が無ければ既定値で作る", () => {
   const config = path.join(root, ".codiel/config.json")
   expect(fs.existsSync(config), ".codiel/config.json がない").toBeTruthy()
   expect(JSON.parse(fs.readFileSync(config, "utf8"))).toEqual({
-    testsDir: "docs/tests"
+    testsDir: "docs/codiel/tests",
+    runsDir: "docs/codiel/runs"
   })
 })
 
@@ -57,7 +58,7 @@ test("既存の .codiel/config.json を変更しない", () => {
   )
 })
 
-test("ARCHITECTURE / CLAUDE.md / raguel.config.yaml は作成しない(initializing-harness スキルが生成する)", () => {
+test("config.json の raguel と .gitignore は書かない。ARCHITECTURE / CLAUDE.md / raguel.config.yaml も作成しない", () => {
   const root = tmpProject()
   run(root)
   expect(
@@ -72,6 +73,16 @@ test("ARCHITECTURE / CLAUDE.md / raguel.config.yaml は作成しない(initializ
     fs.existsSync(path.join(root, "raguel.config.yaml")),
     "raguel.config.yaml を作ってはいけない"
   ).toBeFalsy()
+  expect(
+    fs.existsSync(path.join(root, ".gitignore")),
+    ".gitignore を作ってはいけない"
+  ).toBeFalsy()
+  const config = JSON.parse(
+    fs.readFileSync(path.join(root, ".codiel/config.json"), "utf8")
+  )
+  expect(Object.hasOwn(config, "raguel"), "raguel を書いてはいけない").toBe(
+    false
+  )
 })
 
 test("GOTCHAS.md は作成しない(台帳の生成は metatron が行う)", () => {

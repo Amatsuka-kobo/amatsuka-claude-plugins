@@ -79,7 +79,8 @@ var STEP_TRANSITIONS = {
 var STEP_RECORD_FLAGS = ["worktree", "branch", "base", "head"];
 var STEP_KINDS = ["step", "test-code", "test-loop"];
 var SPEC_ID_RE = /^(units\/.+|e2e\/backend\/.+|e2e\/(frontend|cli)\/[^/]+)$/;
-var DEFAULT_TESTS_DIR = "docs/tests";
+var DEFAULT_TESTS_DIR = "docs/codiel/tests";
+var DEFAULT_RUNS_DIR = "docs/codiel/runs";
 var fail = (msg, code = 1) => {
   process.stderr.write(`${msg}
 `);
@@ -132,7 +133,8 @@ function legacyMessage(st) {
 }
 function readCodielConfig(codielRoot) {
   const file = path.join(codielRoot, ".codiel", "config.json");
-  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR };
+  if (!fs.existsSync(file))
+    return { testsDir: DEFAULT_TESTS_DIR, runsDir: DEFAULT_RUNS_DIR };
   let cfg;
   try {
     cfg = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -141,15 +143,40 @@ function readCodielConfig(codielRoot) {
   }
   if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
     throw new Error(`${file} \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
-  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR };
-  const v = cfg.testsDir;
-  if (typeof v !== "string") throw new Error("testsDir \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
-  if (v === "") throw new Error("testsDir \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093");
+  const obj = cfg;
+  return {
+    testsDir: configDir(obj, "testsDir", DEFAULT_TESTS_DIR),
+    runsDir: configDir(obj, "runsDir", DEFAULT_RUNS_DIR)
+  };
+}
+function configDir(cfg, key, fallback) {
+  if (!(key in cfg)) return fallback;
+  const v = cfg[key];
+  if (typeof v !== "string") throw new Error(`${key} \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+  if (v === "") throw new Error(`${key} \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093`);
   if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
-    throw new Error(`testsDir \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
+    throw new Error(`${key} \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
   if (v.split(/[/\\]/).includes(".."))
-    throw new Error(`testsDir \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
-  return { testsDir: normalizeRel(v) };
+    throw new Error(`${key} \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
+  return normalizeRel(v);
+}
+function gitignoreLines(testsDir) {
+  const reports = `${testsDir}/e2e/**/reports/[0-9]*-try[0-9]*`;
+  return [
+    ".codiel/runs/",
+    ".codiel/reports/",
+    `${reports}/**`,
+    `!${reports}/results.json`,
+    `!${reports}/summary.md`,
+    `!${reports}/failure.md`
+  ];
+}
+function missingGitignoreLines(codielRoot, required) {
+  const file = path.join(codielRoot, ".gitignore");
+  const present = new Set(
+    fs.existsSync(file) ? fs.readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("#")) : []
+  );
+  return required.filter((l) => !present.has(l));
 }
 function parseArgs(argv) {
   const pos = [];
@@ -846,6 +873,20 @@ function main(argv, root = process.cwd()) {
     } catch (e) {
       fail(e.message);
     }
+  }
+  if (cmd === "gitignore") {
+    let testsDir = "";
+    try {
+      testsDir = readCodielConfig(root).testsDir;
+    } catch (e) {
+      fail(e.message);
+    }
+    const required = gitignoreLines(testsDir);
+    return ok({
+      path: ".gitignore",
+      required,
+      missing: missingGitignoreLines(root, required)
+    });
   }
   if (cmd === "set-test-edit") {
     const latest = loadRun(root, flags);

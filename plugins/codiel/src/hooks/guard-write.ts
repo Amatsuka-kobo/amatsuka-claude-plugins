@@ -111,9 +111,16 @@ function normalizeRel(p: string): string {
   return path.posix.normalize(toPosix(p)).replace(/\/+$/, "")
 }
 
-// testsDir の配下か。testsDir が `.` ならリポジトリ全体を指す。
-function underTestsDir(repoRel: string, testsDir: string): boolean {
-  return testsDir === "." || repoRel.startsWith(`${testsDir}/`)
+// testsDir・runsDir の配下か。値が `.` ならリポジトリ全体を指す。
+function underDir(repoRel: string, dir: string): boolean {
+  return dir === "." || repoRel.startsWith(`${dir}/`)
+}
+
+// E2E のレポート `<testsDir>/**/reports/**` か(設計書 §6.17.3・§6.17.6)。
+function isE2eReport(repoRel: string, testsDir: string): boolean {
+  if (!underDir(repoRel, testsDir)) return false
+  const rest = testsDir === "." ? repoRel : repoRel.slice(testsDir.length + 1)
+  return /(^|\/)reports\//.test(rest)
 }
 
 // spec.md の frontmatter(先頭の `---` で囲む部分)の tests の値を返す(設計書 §6.13.5)。
@@ -244,6 +251,25 @@ try {
   // 比べるのは repoRoot 相対のパスとの完全一致である(§6.8)。
   if (run.state.intent === repoRel) pass()
 
+  // testsDir と runsDir(設計書 §6.13.4)。不正な設定では null にし、それに頼る規則だけを外すか、
+  // コード系フェーズでは ask にする(フェイルクローズド)。
+  let config: { testsDir: string; runsDir: string } | null = null
+  let configError = ""
+  try {
+    config = readCodielConfig(mainRoot)
+  } catch (e) {
+    configError = (e as Error).message
+  }
+
+  // 未記録の GOTCHAS の退避先(設計書 §6.15.4・§6.17.6)は、どのフェーズでも通す。
+  // 追記だけの失敗の記録で、書くたびに確認を出すほどの危険が無い。
+  if (
+    config &&
+    repoRel ===
+      path.posix.join(config.runsDir, run.state.runId, "unrecorded-gotchas.md")
+  )
+    pass()
+
   // 次に docs/intents/** の規則を当てる。DOC_PHASES の分岐(直後)は docs/ 全体を
   // 通してしまうため、domains/** への書き込みはそれより先に判定する。
   if (INTENT_DOMAIN_RE.test(repoRel)) {
@@ -265,14 +291,13 @@ try {
     if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
       pass()
     // test-spec が testsDir を docs/ の外に置いた仕様を書けるように、<testsDir>/ も通す
-    // (設計書 §6.13.6)。設定が不正なときはこの規則だけを外す(設計書 §6.13.4)。
-    let testsDir: string | null
-    try {
-      testsDir = readCodielConfig(mainRoot).testsDir
-    } catch {
-      testsDir = null
-    }
-    if (testsDir !== null && underTestsDir(repoRel, testsDir)) pass()
+    // (設計書 §6.13.6)。runsDir を docs/ の外に置いても run の文書を書けるように、
+    // <runsDir>/ も通す(§6.17.6)。設定が不正なときはこの 2 つの規則だけを外す(§6.13.4)。
+    if (
+      config &&
+      (underDir(repoRel, config.testsDir) || underDir(repoRel, config.runsDir))
+    )
+      pass()
     emit(
       "ask",
       `文書フェーズ(${phase})中にコード領域 ${codielRel} へ書き込もうとしています`
@@ -284,20 +309,17 @@ try {
     // コードを直すフェーズで書き換えると、テストを実装に合わせる改竄になりうる。
     // fix-loop だけは、所見がテストに向くときに set-test-edit で保護を外せる。
     if (TEST_GUARD_PHASES.has(phase)) {
-      let testsDir: string
-      try {
-        testsDir = readCodielConfig(mainRoot).testsDir
-      } catch (e) {
-        // 保護の対象を決められないので、このフェーズの書き込みをすべて止める(フェイルクローズド)
+      // 保護の対象を決められないので、このフェーズの書き込みをすべて止める(フェイルクローズド)
+      if (!config)
         emit(
           "ask",
-          `.codiel/config.json が不正なため、${phase} 中の書き込みがテストの保護に当たるか判定できません(${(e as Error).message})`
+          `.codiel/config.json が不正なため、${phase} 中の書き込みがテストの保護に当たるか判定できません(${configError})`
         )
-      }
+      const testsDir = config.testsDir
       const testEdit = phase === "fix-loop" && run.state.testEdit === true
       if (
         !testEdit &&
-        ((underTestsDir(repoRel, testsDir) &&
+        ((underDir(repoRel, testsDir) &&
           /(^|\/)(spec|cases)\.md$/.test(repoRel)) ||
           recordedTests(path.join(repoRoot, testsDir)).has(repoRel))
       )
@@ -306,6 +328,24 @@ try {
           `テスト(${repoRel})の変更は test-spec と test-code フェーズの担当です(${phase} 中の変更は改竄の疑い)`
         )
     }
+    // run の文書(設計書 §6.17.6)。書くのは文書フェーズだけなので、コード系フェーズの委譲が
+    // <runsDir>/ を書き換えたら、実行モードと domain によらず人に確かめる。ドメイン境界は
+    // mapped で domain があるときしか働かないので、境界の免除を外すだけでは足りない。
+    // E2E のレポートは runsDir と testsDir が重なる設定でもオーケストレーターが書けるよう、対象外にする。
+    // runsDir を決められなければ、test-code を含むコード系フェーズの書き込みをすべて止める。
+    if (!config)
+      emit(
+        "ask",
+        `.codiel/config.json が不正なため、${phase} 中の書き込みが run の文書(runsDir)に当たるか判定できません(${configError})`
+      )
+    if (
+      underDir(repoRel, config.runsDir) &&
+      !isE2eReport(repoRel, config.testsDir)
+    )
+      emit(
+        "ask",
+        `run の文書(${repoRel})は文書フェーズで書きます(${phase} 中の変更は想定外)`
+      )
     // ドメイン境界(設計書 §16-5 の配線)。ドメイン別の実装・レビューへ委譲中だけ
     // state.json の domain が入る。値が無ければ(未定義・null)境界を課さない。
     // deny ではなく ask にするのは、境界の誤りは state.json の改竄と違って人間が判断して
@@ -334,7 +374,13 @@ try {
       domain = hits[0]?.step.domain ?? null
     }
     // `.codiel/` 配下かどうかは codielRel で判定する(基準は運用資産の位置)。
-    if (domain && !codielRel.startsWith(".codiel/")) {
+    // E2E のレポートもどのドメインにも属さない(設計書 §6.17.6)。オーケストレーターが
+    // set-domain の間に md を書いても ask にしない。判定は repoRel で行う。
+    if (
+      domain &&
+      !codielRel.startsWith(".codiel/") &&
+      !isE2eReport(repoRel, config.testsDir)
+    ) {
       // ドメイン境界の照合は **docRoot 基準の docRel** で行う。ドメインマップは
       // ARCHITECTURE に書かれており、ARCHITECTURE の位置は契約 §3 規則 1 の docRoot で
       // 決まるので、そこに書かれた glob も docRoot 基準の相対パスと解釈するのが唯一
