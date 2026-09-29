@@ -44989,7 +44989,7 @@ function registerRetirePrecedent(server, deps) {
 }
 
 // src/server.ts
-var BUILD_VERSION = true ? "0.0.1-dev" : "unbundled";
+var BUILD_VERSION = true ? "0.0.2-dev" : "unbundled";
 if (process.env.RAGUEL_PANELIST === "1") {
   process.stderr.write(
     "[raguel] RAGUEL_PANELIST=1 \u3092\u691C\u51FA\u3057\u305F\u305F\u3081\u8D77\u52D5\u3057\u307E\u305B\u3093(\u518D\u5E30\u9632\u6B62)\n"

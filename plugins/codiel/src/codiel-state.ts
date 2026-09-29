@@ -92,7 +92,7 @@ export interface RunState {
   // fix-loop でテストの保護を外す間だけ真(設計書 §6.13.6)。clear-test-edit でキーごと消す
   testEdit?: boolean
   // Raguel の記録の形式(Raguel 設計書 §6.13.3)。init が 2 を記録する。
-  // 持たない run(1.1.0 より前に作ったもの)は pass-gate を通せない
+  // 持たない run(この作り直しより前に作ったもの)は pass-gate を通せない
   raguelContract?: 2
 }
 

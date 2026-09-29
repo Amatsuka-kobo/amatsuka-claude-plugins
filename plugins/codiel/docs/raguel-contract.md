@@ -184,7 +184,7 @@ Raguel はこの判定を `classifyPath(repoRel, config, testsDir)` で使い、
 7. `--human-approved` があれば、裁定の記録に同じ evaluationId の行があり、verdict が ASK なら `ruling` が `as-is`、STOP なら `false-positive` である。
 8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、`verdict.json` の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。`startHead` は `start-phase` が 4 フェーズで記録する。さらに `subject.paths` が無いことを要り、`paths` で範囲を絞った評価では通さない。空の配列も絞った評価として扱う。
 9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。加えて、フェーズごとに期待するファイルが `subject.files` に含まれる。design は run の文書の置き場の `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` が 1 件以上である。intent-sync は書き換えるファイルが run ごとに違うので、期待するファイルを照合しない。
-10. state に `raguelContract: 2` が無い run(1.1.0 より前に作った run)では、検査の代わりに次の文言で失敗する。
+10. state に `raguelContract: 2` が無い run(この作り直しより前に作った run)では、検査の代わりに次の文言で失敗する。
 
 ```
 codiel: この run は Raguel の記録の形式が古い(raguelContract なし)ため、この版ではゲートを通せない。`codiel-state stop --slug <slug> --reason migrate` で止めてから、`/codiel:run <intent パス>` で同じ intent の新しい try を始める。
