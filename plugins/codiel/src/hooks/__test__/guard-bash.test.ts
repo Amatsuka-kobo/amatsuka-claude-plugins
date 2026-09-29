@@ -398,6 +398,76 @@ test("mv (state.json と無関係)は素通し(無出力)", () => {
   expect(r).toBe(null)
 })
 
+// --- state.json の判定はリダイレクトの行き先と同じコマンドの引数だけを見る(A7-11) ---
+
+const STATE = ".codiel/runs/s/try-1/state.json"
+
+test.each([
+  `echo '{}' > ${STATE}`,
+  `echo x >>${STATE}`,
+  `jq . a.json | tee ${STATE}`,
+  `sed -i 's/a/b/' ${STATE}`,
+  `printf '{}'>${STATE}`,
+  `jq . a.json 2>${STATE}`,
+  `jq . a.json &>${STATE}`,
+  `jq . a.json >>${STATE}`,
+  `jq . a.json >|${STATE}`
+])("state.json への書き込み %s は deny", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const r = hook(root, command)
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("state.json")
+})
+
+test.each([
+  `git commit -m t -m "Co-Authored-By: X <noreply@anthropic.com>" && cat ${STATE}`,
+  `echo "a > b"; cat ${STATE}`,
+  `echo "x>"; cat ${STATE}`,
+  `cat ${STATE} > /tmp/x.json`,
+  `cat ${STATE}>/tmp/x.json`,
+  `tee /tmp/x.log < ${STATE}`,
+  `tee /tmp/x.log <${STATE}`
+])("state.json を読むだけの %s は ALWAYS_DENY に掛からない", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, command)).toBe(null)
+})
+
+// --- guard-bash の理由文(A7-12)。deny するかどうかは変わらない ---
+
+test("run あり(phase=review)で git push は deny し、理由に push を許すフェーズを挙げる", () => {
+  const root = setupRunAtPr()
+  cli(root, [
+    "complete-phase",
+    "pr",
+    "--slug",
+    SLUG,
+    "--pr-url",
+    "https://example.test/pull/1"
+  ])
+  cli(root, ["start-phase", "review", "--slug", SLUG])
+  const r = hook(root, "git push origin codiel/demo-try-1")
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain(
+    "pr・fix-loop・triage・finalize"
+  )
+  expect(r?.permissionDecisionReason).toContain("現在: review")
+})
+
+test("run ありで gh api の -f body=@<パス> は deny し、理由で -F body=@<パス> を案内する", () => {
+  const root = setupRun()
+  fs.writeFileSync(path.join(root, "x.md"), `本文 ${MARKER}`)
+  const r = hook(root, "gh api repos/o/r/pulls/1/comments -f body=@x.md")
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("-F body=@<パス>")
+})
+
+test("run ありで gh api の -f body=<文字列> の deny には -F body=@<パス> の案内を添えない", () => {
+  const root = setupRun()
+  const r = hook(root, "gh api repos/o/r/pulls/1/comments -f body=nomarker")
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).not.toContain("-F body=@<パス>")
+})
+
 // --- v1 の active run だけがあるとき、guard-bash の制限は run 無しと同じ ---
 
 test("v1 の active run だけがあるとき、guard-bash の制限は掛からない(run 無しと同じ)", () => {

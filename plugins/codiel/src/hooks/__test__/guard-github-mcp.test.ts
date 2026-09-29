@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -153,6 +154,79 @@ test("run あり・github を含まないサーバー名の同名ツールは掛
     body: "マーカーが無い本文"
   })
   expect(r).toBe(null)
+})
+
+function git(cwd: string, args: string[]): void {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=codiel-test",
+      "-c",
+      "user.email=codiel-test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      ...args
+    ],
+    { cwd, stdio: "ignore" }
+  )
+}
+
+// .codiel/config.json をコミットしたリポジトリのメインの作業ツリーに active な run を作り、
+// codiel の worktree(.codiel/worktrees/<slug>/<名前>)を git で作る。
+// worktree の checkout にも .codiel/ が現れるので、findProjectRoot は worktree のルートで止まる。
+function setupRunWithWorktree(): string {
+  const slug = "ghmcp-test"
+  const main = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "guard-github-mcp-wt-"))
+  )
+  git(main, ["init", "-q"])
+  fs.mkdirSync(path.join(main, ".codiel"))
+  fs.writeFileSync(
+    path.join(main, ".codiel", "config.json"),
+    `${JSON.stringify({ testsDir: "docs/tests" })}\n`
+  )
+  git(main, ["add", "-A"])
+  git(main, ["commit", "-q", "-m", "init"])
+  cli(main, [
+    "init",
+    "--slug",
+    slug,
+    "--intent",
+    "docs/intents/ghmcp-test.md",
+    "--integration",
+    "local",
+    "--scale",
+    "standard",
+    "--adr-target",
+    "intents",
+    "--image-upload",
+    "none"
+  ])
+  const wt = path.join(main, ".codiel", "worktrees", slug, "step-1")
+  git(main, ["worktree", "add", "-q", "-b", `codiel/${slug}-try-1-step-1`, wt])
+  return wt
+}
+
+test("cwd が codiel の worktree の中で checkout に .codiel/ があっても、メインの active run を見つけてマーカー無しの body を deny する", () => {
+  const wt = setupRunWithWorktree()
+  expect(fs.existsSync(path.join(wt, ".codiel", "config.json"))).toBe(true)
+  const sub = path.join(wt, "src")
+  fs.mkdirSync(sub)
+  for (const cwd of [wt, sub]) {
+    const r = hook(cwd, "mcp__github__add_issue_comment", {
+      body: "マーカーが無い本文"
+    })
+    expect(r?.permissionDecision, cwd).toBe("deny")
+    expect(
+      hook(cwd, "mcp__github__add_issue_comment", {
+        body: `内容\n\n${MARKER}`
+      }),
+      cwd
+    ).toBe(null)
+  }
 })
 
 test("run なしでマーカー無しの body でも素通し(無出力)", () => {

@@ -1,6 +1,6 @@
 ---
 name: initializing-harness
-description: /codiel:init で対象プロジェクトに Codiel ハーネス(.codiel/・raguel.config.yaml・.claude/rules/codiel.md・CLAUDE.md の ## Codiel)を初期化・補完するとき使用。/codiel:run が未初期化を検出した場合の案内先でもある
+description: Codiel のハーネス初期化で、セッション本体が保護パスをユーザーに確認しながら .codiel/・config.json の raguel・.gitignore・.claude/rules/codiel.md・CLAUDE.md の ## Codiel を生成・補完するときに使う。/codiel:init が名指しで起動する。
 ---
 
 # Codiel ハーネス初期化
@@ -17,10 +17,11 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 
 - [ ] 0. **現状調査**。3 点すべて揃っていれば「初期化済み」と報告して終了する
 - [ ] 1. **`.codiel/` の配置**
-- [ ] 2. **`raguel.config.yaml` の生成**(保護パス)
-- [ ] 3. **`.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記**
-- [ ] 4. **検証**
-- [ ] 5. **完了報告**
+- [ ] 2. **`.codiel/config.json` の `raguel` の生成**(保護パス)
+- [ ] 3. **`.gitignore` の整備**
+- [ ] 4. **`.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記**
+- [ ] 5. **検証**
+- [ ] 6. **完了報告**
 
 ## 0. 現状調査
 
@@ -29,11 +30,12 @@ description: /codiel:init で対象プロジェクトに Codiel ハーネス(.co
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
 | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
-| C | `raguel.config.yaml` | ファイルが存在し、YAML としてパースできる |
-| D | `.codiel/runs` / `.codiel/reports` / `.codiel/config.json` | 3 つが存在する |
+| C | `.codiel/config.json` | JSON のオブジェクトとして読め、`raguel` がオブジェクトである(空のオブジェクトでよい)。`raguel.config.yaml` は見ない |
+| D | `.codiel/runs` / `.codiel/reports` / `.gitignore` | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在し、`node <plugin-root>/scripts/codiel-state.mjs gitignore` が返す `missing` が空である |
 
 - 3 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
+- `codiel-state gitignore` が失敗したとき(config.json が不正なとき)は、標準エラー出力の理由を控え、D は揃っていないものとして扱う。
 - GOTCHAS は確認対象に含めない。台帳の生成は metatron が行う(`/metatron:init`)。codiel は台帳を作らない。
 - ARCHITECTURE は確認対象に含めない。作成と更新は metatron が行う。codiel は ARCHITECTURE を書かない。
 - git 管理外のプロジェクトでも実行する。警告を 1 行添えるだけにとどめる。
@@ -46,21 +48,47 @@ bash <plugin-root>/scripts/install-harness.sh
 
 を対象プロジェクトのルートで Claude 自身が Bash ツールで実行する(ユーザーに実行させない)。
 このスクリプトが作るのは `.codiel/runs` / `.codiel/reports` の 2 ディレクトリと、無ければ
-既定値 `{ "testsDir": "docs/tests" }` で作る `.codiel/config.json` である。`.codiel/config.json` が
-既にあれば中身を変えない。
+既定値 `testsDir`(`docs/codiel/tests`)と `runsDir`(`docs/codiel/runs`)で作る `.codiel/config.json` である。
+`.codiel/config.json` が既にあれば中身を変えない。`raguel` と `.gitignore` は書かない。
 
-## 2. `raguel.config.yaml` の生成
+`.codiel/config.json` が無いときは、手順 2 の前に必ずこの手順を実行する。ファイルがあれば
+スクリプトは中身を変えないので、D が揃っていても重ねて実行してよい。
 
-保護パスの正本は `raguel.config.yaml` である。他のファイルの記述と突き合わせない。
+## 2. `.codiel/config.json` の `raguel` の生成
 
-- AskUserQuestion で「触ってはいけない/特に慎重を要するパスの glob」を 1 回だけ聞く。
-- 形式は同梱の `raguel.config.example.yaml` に準拠する(生成前に必ず Read する)。
-- Raguel の設定は内蔵デフォルトへの**差分オーバーレイ**(deep merge)なので、
-  `rules."code/protected-paths".globs` だけを書いた最小ファイルを生成する。
-  デフォルト全量をコピーしない。
-- 既にファイルがあれば触らない。
+保護パスの正本は `.codiel/config.json` の `raguel` である。他のファイルの記述と突き合わせない。
+`raguel` の値は、Raguel が読む設定そのものであり、内蔵デフォルトへの**差分オーバーレイ**(deep merge)になる。
+形式は同梱の `config.example.json` に準拠する(書く前に必ず Read する)。
+JSON はコメントを持てないので、次の順と形をこの手順が定める。
 
-## 3. `.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記
+`raguel` の出所を次の順に判定し、当てはまる 1 つだけを行う。
+
+1. config.json に `raguel` があれば、判定 C を満たすので、この手順を行わない。
+2. `raguel` が無く、`raguel.config.yaml` が YAML として読めるときは、次の順に進める。
+   1. その中身を `raguel` に写す差分を示し、承認を得て config.json に書く。
+   2. 書いた後に config.json を Read し、`raguel` の中身が YAML と同じであることを確かめる。
+   3. `raguel.config.yaml` を消すことを示して承認を得てから、Bash の `rm` で消す。
+   4. 消す承認が得られなければ残し、Raguel が読まないファイルであることを完了報告に書く。
+3. どちらも無ければ、AskUserQuestion で「触ってはいけない/特に慎重を要するパスの glob」を 1 回だけ聞き、
+   `raguel` に `version` と `rules."code/protected-paths".globs` だけを書く。デフォルト全量をコピーしない。
+   保護パスは無いと答えたら、`raguel` を空のオブジェクトにする。
+
+config.json への書き込みは、既存のキーを変えずに `raguel` を足すだけにする。書く前に差分を示し、承認を得る。
+
+## 3. `.gitignore` の整備
+
+`.gitignore` は、`.codiel` を持つディレクトリ(カレントディレクトリ)のものを対象にする。
+git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレポートの画像など)の行を、次の順に足す。
+
+1. `node <plugin-root>/scripts/codiel-state.mjs gitignore` を実行する。出力は `{ "path": ".gitignore", "required": [...], "missing": [...] }` である。
+2. `missing` が空なら、この手順を行わない。
+3. `missing` が空でなければ、`# codiel` の行と `missing` の行を `.gitignore` の末尾に足す差分を示す。`.gitignore` が無ければ全文を示す。承認を得てから書く。
+4. 既存の行は変えない。
+5. `.gitignore` に `.codiel/` の行があり、`.codiel/config.json` まで無視されるとき(`git check-ignore -q .codiel/config.json` が成功する)は、その事実を示して扱いを AskUserQuestion で聞く。自動では消さない。
+
+`<runsDir>/` は git で共有するので、`.gitignore` に行を置かない。
+
+## 4. `.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記
 
 ### (a) `.claude/rules/codiel.md` の配置
 
@@ -89,28 +117,31 @@ bash <plugin-root>/scripts/install-harness.sh
 (a)(b)(c) のいずれも、既存の他セクションは一切変更しない。例外は (c) の旧セクション
 「## Codiel ハーネス運用ルール」の取り除きだけであり、承認を得た場合に限る。
 
-## 4. 検証
+## 5. 検証
 
-- `raguel.config.yaml` の `rules."code/protected-paths".globs` を Read し、手順 2 で承認された
-  glob がそのまま入っていることを確認する。
-- 手順 3(a) を実行したときは `.claude/rules/codiel.md` を Read し、`<plugin-root>/assets/rules/codiel.md`
+- 手順 2 を実行したときは `.codiel/config.json` を Read し、`raguel` に承認された内容
+  (保護パスの glob、または YAML から写した中身)がそのまま入っていて、既存のキーが変わっていないことを確認する。
+- 手順 3 を実行したときは `codiel-state gitignore` をもう一度実行し、`missing` が空であることを確認する。
+- 手順 4(a) を実行したときは `.claude/rules/codiel.md` を Read し、`<plugin-root>/assets/rules/codiel.md`
   と同じ内容であることを確認する。
-- 手順 3(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 5 行の内容が
+- 手順 4(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 6 行の内容が
   追記されていることを確認する。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 
-## 5. 完了報告
+## 6. 完了報告
 
 次を報告して終了する。
 
 - 配置・生成・追記したファイルの一覧(skip したものは skip と明記)
 - ユーザーが不明と答えて未記入のまま残した項目
-- 手順 3(c) の旧セクションの取り除きが承認されず残った場合はその旨
+- 手順 2 で `raguel.config.yaml` を消す承認が得られず残ったときは、Raguel が読まないファイルであること
+- 手順 4(c) の旧セクションの取り除きが承認されず残った場合はその旨
+- `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルなので、コミットは利用者が行うこと
 - 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
 
 ## 修復の例外
 
-既存 `raguel.config.yaml` が YAML として
+`.codiel/config.json` が JSON として読めない場合と、既存の `raguel.config.yaml` が YAML として
 読めない場合に限り、問題箇所と修正案を提示して
 **ユーザーの明示承認を得た上で**、該当キーのみを置換する。
 それ以外の既存記述は不改変のまま維持する。
@@ -119,9 +150,9 @@ bash <plugin-root>/scripts/install-harness.sh
 - **承認なしに書き込まない**。ドラフト全文(新規ファイル)または追記差分(既存ファイル)の
   提示と承認の取得を省略しない。
 - **既存記述を削除・改変しない**。変更は不足分の追記だけにする
-  (「修復の例外」で明示承認を得た置換と、手順 3(c) で承認を得た旧セクション
-  「## Codiel ハーネス運用ルール」の取り除きを除く)。
-- **検証(手順 4)を省略して完了報告しない**。
+  (「修復の例外」で明示承認を得た置換と、手順 4(c) で承認を得た旧セクション
+  「## Codiel ハーネス運用ルール」の取り除きと、手順 2 で承認を得た `raguel.config.yaml` の削除を除く)。
+- **検証(手順 5)を省略して完了報告しない**。
 - **聞いた保護パスをコードベースの解析結果で置き換えない**。保護パスはユーザーの回答からのみ
   生成する。不明ならユーザーに聞く。
 </HARD-GATE>
@@ -133,4 +164,5 @@ bash <plugin-root>/scripts/install-harness.sh
 | 「ドメイン分割を答えてもらったのだから、そのまま書き込んでよい」 | 回答はドラフトの入力であって承認ではない。全文提示と承認は別の手順。 |
 | 「小さいプロジェクトだからドラフト提示を飛ばして直接書いていい」 | CLAUDE.md / ARCHITECTURE はプロジェクトの恒久資産。承認なしの書き込みは HARD-GATE 違反。 |
 | 「metatron が入っているか確かめてから分岐しよう」 | インストール検出はしない。見るのはファイルが契約を満たすかと `/metatron:init` が利用可能コマンドにあるかの 2 点だけ。 |
-| 「既存 CLAUDE.md の古い記述もついでに直してあげよう」 | スコープ外。追記のみが許可された変更。例外は手順 3(c) の旧セクション「## Codiel ハーネス運用ルール」の取り除きだけで、承認を得てから行う。それ以外の気づいた問題は報告に留める。 |
+| 「既存 CLAUDE.md の古い記述もついでに直してあげよう」 | スコープ外。追記のみが許可された変更。例外は手順 4(c) の旧セクション「## Codiel ハーネス運用ルール」の取り除きだけで、承認を得てから行う。それ以外の気づいた問題は報告に留める。 |
+| 「YAML を写し終えたから、確認なしで消してよい」 | 消すのも承認を要する変更。写した中身を Read で確かめ、消すことを示して承認を得てから消す。 |

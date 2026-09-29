@@ -31,6 +31,8 @@ import { computeWeight } from "./weight.js"
 export interface PipelineDeps {
   config: RaguelConfig
   configHash: string
+  /** 設定の出所(LoadedConfig の source)。評価の結果の policy に載せる */
+  configSource: string
   caseStore: CaseStore
   provider: JudgeProvider
 }
@@ -152,8 +154,9 @@ export async function evaluateArtifact(
   artifact: Artifact,
   deps: PipelineDeps
 ): Promise<EvaluationResult> {
-  const { config, configHash, caseStore, provider } = deps
+  const { config, configHash, configSource, caseStore, provider } = deps
   const evaluationId = randomUUID()
+  const policy = { configHash, version: POLICY_VERSION, configSource }
 
   // [2] 決定論的ルールパス(再提出ループ検知の履歴供給を含む)
   const priorSubmissions = caseStore.readPriorSubmissions(
@@ -303,7 +306,7 @@ export async function evaluateArtifact(
     weightTier: weight.tier,
     findings: synthesis.findings,
     meta,
-    policy: { configHash, version: POLICY_VERSION },
+    policy,
     at,
     objective: artifact.objective,
     changedPaths: artifact.changedPaths
@@ -333,6 +336,6 @@ export async function evaluateArtifact(
     findings: synthesis.findings,
     meta,
     casePath: dir,
-    policy: { configHash, version: POLICY_VERSION }
+    policy
   }
 }

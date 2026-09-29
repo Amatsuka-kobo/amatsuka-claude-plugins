@@ -1145,6 +1145,254 @@ test("mark-ask は終端の run を拒否し、run を生き返らせない", ()
   }
 })
 
+// --- Raguel の STOP の裁定と次の try(決定 83、A6-27) ---
+
+test("mark-ask --verdict はフェーズの verdict に記録し、省略時は ASK にし、PROCEED・ASK・STOP 以外を拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  for (const bad of ["stop", "SKIPPED", "FOO"]) {
+    const r = run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "demo",
+      "--verdict",
+      bad
+    ])
+    expect(r.code, bad).toBe(1)
+    expect(r.err, bad).toMatch(/不正な --verdict/)
+  }
+  let st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.status).toBe("active")
+  expect(st.phases.intent.verdict).toBeNull()
+  let r = run(root, ["mark-ask", "intent", "--slug", "demo"])
+  expect(r.out.state.phases.intent.verdict).toBe("ASK")
+  run(root, ["resume", "--slug", "demo"])
+  r = run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--verdict",
+    "PROCEED"
+  ])
+  expect(r.out.state.phases.intent.verdict).toBe("PROCEED")
+  run(root, ["resume", "--slug", "demo"])
+  r = run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  expect(r.code).toBe(0)
+  expect(r.out.state.status).toBe("awaiting_human")
+  expect(r.out.state.phases.intent.status).toBe("awaiting_human")
+  expect(r.out.state.phases.intent.verdict).toBe("STOP")
+  expect(r.out.state.phases.intent.askKind).toBe("raguel")
+  expect(r.out.state.phases.intent.evaluationId).toBe("ev-stop")
+  // resume の後も STOP が残る
+  st = run(root, ["resume", "--slug", "demo"]).out.state
+  expect(st.phases.intent.verdict).toBe("STOP")
+})
+
+test("pass-gate --verdict STOP は --human-approved のときだけ受け付け、STOP を記録したフェーズは --human-approved なしで上書きできない", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  let r = passGate(root, "intent", "STOP")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/verdict が PROCEED ではありません: STOP/)
+  run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  run(root, ["resume", "--slug", "demo"])
+  for (const verdict of ["PROCEED", "ASK"]) {
+    r = passGate(root, "intent", verdict)
+    expect(r.code, verdict).toBe(1)
+    expect(r.err, verdict).toMatch(
+      /フェーズ intent には Raguel の STOP が記録されています/
+    )
+  }
+  let st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.phases.intent.status).toBe("in_progress")
+  expect(st.phases.intent.verdict).toBe("STOP")
+  expect(st.phases.intent.humanApproved).toBeUndefined()
+  r = passGate(root, "intent", "FOO", ["--human-approved"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/不正な --verdict: FOO/)
+  r = passGate(root, "intent", "STOP", ["--human-approved"])
+  expect(r.code).toBe(0)
+  st = r.out.state
+  expect(st.phases.intent.status).toBe("passed")
+  expect(st.phases.intent.verdict).toBe("STOP")
+  expect(st.phases.intent.humanApproved).toBe(true)
+  expect(st.phases.intent.evaluationId).toBe("ev1")
+  expect(run(root, ["start-phase", "discuss", "--slug", "demo"]).code).toBe(0)
+})
+
+test("STOP を記録したフェーズは、resume の後の mark-ask --kind confirm でも STOP のまま残り、--human-approved の無い pass-gate は失敗する", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  // --verdict の有無と値にかかわらず、記録済みの STOP を上書きしない
+  for (const extra of [[], ["--verdict", "PROCEED"]]) {
+    run(root, ["resume", "--slug", "demo"])
+    const r = run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "demo",
+      "--kind",
+      "confirm",
+      ...extra
+    ])
+    const label = extra.join(" ") || "--verdict なし"
+    expect(r.code, label).toBe(0)
+    expect(r.out.state.phases.intent.verdict, label).toBe("STOP")
+    expect(r.out.state.phases.intent.askKind, label).toBe("confirm")
+  }
+  run(root, ["resume", "--slug", "demo"])
+  const r = passGate(root, "intent", "PROCEED")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /フェーズ intent には Raguel の STOP が記録されています/
+  )
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.phases.intent.status).toBe("in_progress")
+  expect(st.phases.intent.verdict).toBe("STOP")
+  expect(st.phases.intent.humanApproved).toBeUndefined()
+})
+
+test("STOP を記録したフェーズは、resume の後の --evaluation-id の無い mark-ask --kind confirm でも STOP の evaluationId を残す(新しい --evaluation-id を渡しても上書きしない)", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--kind",
+    "raguel",
+    "--verdict",
+    "STOP",
+    "--evaluation-id",
+    "ev-stop"
+  ])
+  for (const extra of [[], ["--evaluation-id", "ev-new"]]) {
+    run(root, ["resume", "--slug", "demo"])
+    const r = run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "demo",
+      "--kind",
+      "confirm",
+      ...extra
+    ])
+    const label = extra.join(" ") || "--evaluation-id なし"
+    expect(r.code, label).toBe(0)
+    expect(r.out.state.phases.intent.verdict, label).toBe("STOP")
+    expect(r.out.state.phases.intent.evaluationId, label).toBe("ev-stop")
+  }
+})
+
+test("init は、最新の try が raguel-stop で止まったか humanApproved の無い STOP のフェーズを持つとき --human-approved を求め、どちらでもなければ従来どおり作る", () => {
+  const root = tmpProject()
+  const markStop = (slug: string) => {
+    run(root, ["start-phase", "intent", "--slug", slug])
+    run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      slug,
+      "--kind",
+      "raguel",
+      "--verdict",
+      "STOP",
+      "--evaluation-id",
+      "ev-stop"
+    ])
+  }
+  // raguel-stop で止めた try
+  init(root, "judged")
+  markStop("judged")
+  run(root, ["stop", "--slug", "judged", "--reason", "raguel-stop"])
+  // STOP を記録した後に別の理由で止めた try
+  init(root, "other")
+  markStop("other")
+  run(root, ["stop", "--slug", "other", "--reason", "intent-updated"])
+  for (const slug of ["judged", "other"]) {
+    const r = init(root, slug)
+    expect(r.code, slug).toBe(1)
+    expect(r.err, slug).toMatch(/Raguel の STOP で止まっています/)
+    expect(r.err, slug).toMatch(/--human-approved を付けて init し直して/)
+    expect(fs.existsSync(statePath(root, slug, 2)), slug).toBe(false)
+  }
+  expect(init(root, "other").err).toMatch(
+    /stopReason: intent-updated、STOP のフェーズ: intent\(evaluationId: ev-stop\)/
+  )
+  for (const slug of ["judged", "other"]) {
+    const r = init(root, slug, {}, ["--human-approved"])
+    expect(r.code, slug).toBe(0)
+    expect(r.out.state.try, slug).toBe(2)
+  }
+
+  // 人が誤検知と裁定した STOP(humanApproved あり)と、ASK のまま止めた try には当たらない
+  init(root, "approved")
+  markStop("approved")
+  run(root, ["resume", "--slug", "approved"])
+  run(root, [
+    "pass-gate",
+    "intent",
+    "--slug",
+    "approved",
+    "--evaluation-id",
+    "ev-stop",
+    "--verdict",
+    "STOP",
+    "--human-approved"
+  ])
+  run(root, ["stop", "--slug", "approved", "--reason", "test"])
+  init(root, "asked")
+  run(root, ["start-phase", "intent", "--slug", "asked"])
+  run(root, ["mark-ask", "intent", "--slug", "asked"])
+  run(root, ["stop", "--slug", "asked", "--reason", "test"])
+  for (const slug of ["approved", "asked"]) {
+    const r = init(root, slug)
+    expect(r.code, slug).toBe(0)
+    expect(r.out.state.try, slug).toBe(2)
+  }
+})
+
 // --- v1 の扱い ---
 
 test("v1 の run には get と stop だけが通り、ほかのコマンドは §6.2.4 の文言で失敗する", () => {
@@ -1558,57 +1806,216 @@ test("findActiveRun は M4 より前の state の run を返さない", () => {
   expect(findActiveRun(root)).toBeNull()
 })
 
-// --- config(設計書 §6.13.4、A6-2) ---
+// --- config(設計書 §6.13.4、A6-2・A7-1) ---
+
+const DEFAULTS = { testsDir: "docs/codiel/tests", runsDir: "docs/codiel/runs" }
 
 function writeConfig(root: string, body: string): void {
   fs.mkdirSync(path.join(root, ".codiel"), { recursive: true })
   fs.writeFileSync(path.join(root, ".codiel/config.json"), body)
 }
 
-test("config は .codiel/config.json が無いときとキーが無いときに docs/tests を返し、値があればその値を返す", () => {
+test("config は .codiel/config.json が無いときとキーが無いときに既定の testsDir と runsDir を返し、値があればその値を返す", () => {
   const root = tmpProject()
   // run を要しない
   const none = run(root, ["config"])
   expect(none.code).toBe(0)
-  expect(none.out).toStrictEqual({ testsDir: "docs/tests" })
-  expect(readCodielConfig(root)).toStrictEqual({ testsDir: "docs/tests" })
+  expect(none.out).toStrictEqual(DEFAULTS)
+  expect(readCodielConfig(root)).toStrictEqual(DEFAULTS)
   for (const [body, expected] of [
-    ["{}", "docs/tests"],
-    ['{ "other": 1 }', "docs/tests"],
-    ['{ "testsDir": "qa/specs", "other": true }', "qa/specs"],
-    ['{ "testsDir": "./qa/specs/" }', "qa/specs"]
-  ]) {
+    ["{}", DEFAULTS],
+    ['{ "other": 1 }', DEFAULTS],
+    [
+      '{ "testsDir": "qa/specs", "other": true }',
+      { ...DEFAULTS, testsDir: "qa/specs" }
+    ],
+    ['{ "testsDir": "./qa/specs/" }', { ...DEFAULTS, testsDir: "qa/specs" }],
+    ['{ "runsDir": "./notes/runs/" }', { ...DEFAULTS, runsDir: "notes/runs" }],
+    [
+      '{ "testsDir": "qa", "runsDir": "qa-runs" }',
+      { testsDir: "qa", runsDir: "qa-runs" }
+    ]
+  ] as const) {
     writeConfig(root, body)
     const r = run(root, ["config"])
     expect(r.code, body).toBe(0)
-    expect(r.out, body).toStrictEqual({ testsDir: expected })
-    expect(readCodielConfig(root), body).toStrictEqual({ testsDir: expected })
+    expect(r.out, body).toStrictEqual(expected)
+    expect(readCodielConfig(root), body).toStrictEqual(expected)
   }
   expect(fs.existsSync(path.join(root, ".codiel/runs"))).toBe(false)
 })
 
+test("config の出力は raguel キーの有無と中身で変わらない", () => {
+  const root = tmpProject()
+  for (const raguel of [
+    "{}",
+    '{ "version": 1, "rules": { "code/protected-paths": { "globs": ["src/**"] } } }',
+    // codiel-state は raguel の中身を検査しない
+    '"not-an-object"',
+    "null",
+    "[1, 2]"
+  ]) {
+    writeConfig(root, `{ "raguel": ${raguel} }`)
+    const r = run(root, ["config"])
+    expect(r.code, raguel).toBe(0)
+    expect(r.out, raguel).toStrictEqual(DEFAULTS)
+    writeConfig(root, `{ "testsDir": "qa", "raguel": ${raguel} }`)
+    expect(run(root, ["config"]).out, raguel).toStrictEqual({
+      ...DEFAULTS,
+      testsDir: "qa"
+    })
+  }
+})
+
 test("config は不正な値で非ゼロ終了し、readCodielConfig は例外を投げる", () => {
   const root = tmpProject()
-  for (const body of [
+  const bodies = [
     // JSON として読めない
     '{ "testsDir": ',
-    '["docs/tests"]',
-    // 文字列でない
-    '{ "testsDir": 1 }',
-    '{ "testsDir": null }',
-    // 空文字列
-    '{ "testsDir": "" }',
-    // 絶対パス
-    '{ "testsDir": "/srv/tests" }',
-    // .. のセグメントを含む
-    '{ "testsDir": "../tests" }',
-    '{ "testsDir": "qa/../../tests" }'
-  ]) {
+    '["docs/tests"]'
+  ]
+  for (const key of ["testsDir", "runsDir"])
+    bodies.push(
+      // 文字列でない
+      `{ "${key}": 1 }`,
+      `{ "${key}": null }`,
+      // 空文字列
+      `{ "${key}": "" }`,
+      // 絶対パス
+      `{ "${key}": "/srv/x" }`,
+      // .. のセグメントを含む
+      `{ "${key}": "../x" }`,
+      `{ "${key}": "qa/../../x" }`
+    )
+  for (const body of bodies) {
     writeConfig(root, body)
     const r = run(root, ["config"])
     expect(r.code, body).toBe(1)
     expect(r.err, body).not.toBe("")
     expect(() => readCodielConfig(root), body).toThrow()
+  }
+})
+
+// --- gitignore(設計書 §6.15.5、A7-3) ---
+
+function requiredLines(testsDir: string): string[] {
+  const reports = `${testsDir}/e2e/**/reports/[0-9]*-try[0-9]*`
+  return [
+    ".codiel/runs/",
+    ".codiel/reports/",
+    `${reports}/**`,
+    `!${reports}/results.json`,
+    `!${reports}/summary.md`,
+    `!${reports}/failure.md`
+  ]
+}
+
+test("gitignore は testsDir に応じた必須の行を返し、.gitignore が無ければ全行を missing にする", () => {
+  const root = tmpProject()
+  // run を要しない
+  const r = run(root, ["gitignore"])
+  expect(r.code).toBe(0)
+  expect(r.out).toStrictEqual({
+    path: ".gitignore",
+    required: requiredLines("docs/codiel/tests"),
+    missing: requiredLines("docs/codiel/tests")
+  })
+  // runsDir は git で共有するので行に含めない
+  writeConfig(root, '{ "testsDir": "./qa/specs/", "runsDir": "notes/runs" }')
+  const custom = run(root, ["gitignore"])
+  expect(custom.code).toBe(0)
+  expect(custom.out.required).toStrictEqual(requiredLines("qa/specs"))
+  expect(custom.out.required.join("\n")).not.toContain("notes/runs")
+  // .gitignore を書かない
+  expect(fs.existsSync(path.join(root, ".gitignore"))).toBe(false)
+  expect(fs.existsSync(path.join(root, ".codiel/runs"))).toBe(false)
+})
+
+test("gitignore は前後の空白を除いた完全一致で比べ、# で始まる行と空行を数えない", () => {
+  const root = tmpProject()
+  const req = requiredLines("docs/codiel/tests")
+  const body = [
+    "node_modules/",
+    "",
+    "# .codiel/runs/",
+    `  ${req[1]}\t`,
+    // 完全一致でないものは数えない
+    ".codiel/reports",
+    `${req[2]}/extra`,
+    req[3],
+    "",
+    req[5]
+  ].join("\r\n")
+  fs.writeFileSync(path.join(root, ".gitignore"), body)
+  const r = run(root, ["gitignore"])
+  expect(r.code).toBe(0)
+  expect(r.out.missing).toStrictEqual([req[0], req[2], req[4]])
+  // .gitignore を変えない
+  expect(fs.readFileSync(path.join(root, ".gitignore"), "utf8")).toBe(body)
+  fs.writeFileSync(path.join(root, ".gitignore"), `${req.join("\n")}\n`)
+  expect(run(root, ["gitignore"]).out.missing).toStrictEqual([])
+})
+
+test("gitignore は config.json が不正なら非ゼロで終了する", () => {
+  const root = tmpProject()
+  for (const body of [
+    '{ "testsDir": ',
+    '{ "testsDir": "/x" }',
+    '{ "runsDir": "" }'
+  ]) {
+    writeConfig(root, body)
+    const r = run(root, ["gitignore"])
+    expect(r.code, body).toBe(1)
+    expect(r.err, body).not.toBe("")
+  }
+})
+
+test("gitignore の必須の行は git check-ignore で意図どおりに無視する", () => {
+  // "." はリポジトリ全体を指す値。"./" のように正規化すると "." になる書き方も同じ結果になる
+  for (const [testsDir, configured] of [
+    ["docs/codiel/tests", "docs/codiel/tests"],
+    ["qa/specs", "qa/specs"],
+    [".", "."],
+    [".", "./"]
+  ]) {
+    const root = tmpProject()
+    const git = (...args: string[]) =>
+      spawnSync("git", args, { cwd: root, encoding: "utf8" })
+    expect(git("init", "-q").status).toBe(0)
+    if (testsDir !== "docs/codiel/tests")
+      writeConfig(root, JSON.stringify({ testsDir: configured }))
+    const r = run(root, ["gitignore"])
+    const base = testsDir === "." ? "" : `${testsDir}/`
+    if (testsDir === ".")
+      expect(r.out.required[2], configured).toBe(
+        "e2e/**/reports/[0-9]*-try[0-9]*/**"
+      )
+    fs.writeFileSync(
+      path.join(root, ".gitignore"),
+      `# codiel\n${r.out.required.join("\n")}\n`
+    )
+    const execDir = `${base}e2e/frontend/a/reports/20260928-101500-demo-try1`
+    const ignored = [
+      ".codiel/runs/s/try-1/state.json",
+      ".codiel/reports/test-run-x.md",
+      `${execDir}/x.png`,
+      `${execDir}/sub/error-context.md`
+    ]
+    const kept = [
+      `${execDir}/results.json`,
+      `${execDir}/summary.md`,
+      `${execDir}/failure.md`,
+      `${base}e2e/backend/api/reports/spec.md`,
+      ".codiel/config.json"
+    ]
+    // check-ignore はファイルが無くても判定するが、ディレクトリの規則を確かめるため実物を置く
+    for (const p of [...ignored, ...kept]) {
+      fs.mkdirSync(path.dirname(path.join(root, p)), { recursive: true })
+      fs.writeFileSync(path.join(root, p), "x")
+    }
+    for (const p of ignored)
+      expect(git("check-ignore", "-q", p).status, p).toBe(0)
+    for (const p of kept) expect(git("check-ignore", "-q", p).status, p).toBe(1)
   }
 })
 

@@ -1,9 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { evaluateArtifact, type PipelineDeps } from "../core/pipeline.js"
 import type { Artifact } from "../core/types.js"
 import { parseDiff } from "../rules/code/diffParse.js"
-import { failClosed, objectiveSchema, runIdSchema } from "./shared.js"
+import {
+  type DepsSource,
+  failClosed,
+  InputError,
+  objectiveSchema,
+  runIdSchema
+} from "./shared.js"
 
 const fileSchema = z.object({
   path: z.string().min(1),
@@ -29,9 +34,44 @@ type EvaluateCodeArgs = {
   testResults?: string
 }
 
+/**
+ * ハンクを持たない正当な変更の印の行(名前の変更・バイナリ・モードの変更・空のファイルの追加と削除)。
+ * ハンクもこの印も無い diff は、ファイルの見出しだけの要約なので入力の誤りにする(決定 83 の (5))。
+ */
+const HUNKLESS_CHANGE_MARKERS = [
+  "rename from ",
+  "rename to ",
+  "similarity index ",
+  "Binary files ",
+  "old mode ",
+  "new mode ",
+  "new file mode ",
+  "deleted file mode "
+]
+
+function hasHunkOrMarker(diff: string): boolean {
+  return diff
+    .split("\n")
+    .some(
+      (line) =>
+        line.startsWith("@@") ||
+        HUNKLESS_CHANGE_MARKERS.some((marker) => line.startsWith(marker))
+    )
+}
+
 export function toCodeArtifact(args: EvaluateCodeArgs): Artifact {
+  if (args.diff !== undefined && args.files !== undefined) {
+    throw new InputError(
+      "diff と files は同時に渡せないので、git diff の出力を diff だけに渡してください"
+    )
+  }
   if (!args.diff && (!args.files || args.files.length === 0)) {
-    throw new Error("diff または files のいずれかが必須です")
+    throw new InputError("diff または files のいずれかが必須です")
+  }
+  if (args.diff && !hasHunkOrMarker(args.diff)) {
+    throw new InputError(
+      "diff にハンク(@@ で始まる行)も、名前の変更・バイナリ・モードの変更・空のファイルの追加と削除の印の行も無いので、要約ではなく git diff の出力をそのまま渡してください"
+    )
   }
   const content =
     args.diff ??
@@ -54,7 +94,7 @@ export function toCodeArtifact(args: EvaluateCodeArgs): Artifact {
 
 export function registerEvaluateCode(
   server: McpServer,
-  deps: PipelineDeps
+  deps: DepsSource
 ): void {
   server.registerTool(
     "evaluate_code",
@@ -64,9 +104,6 @@ export function registerEvaluateCode(
         "PROCEED / ASK / STOP の判定を返す。証拠は casePath に永続化される。",
       inputSchema: evaluateCodeInput
     },
-    (args) =>
-      failClosed(args.runId, deps, () =>
-        evaluateArtifact(toCodeArtifact(args), deps)
-      )
+    (args) => failClosed(args.runId, deps, () => toCodeArtifact(args))
   )
 }

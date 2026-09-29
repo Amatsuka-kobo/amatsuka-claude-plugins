@@ -138,6 +138,56 @@ describe("secretsRule 偽陽性除外", () => {
     expect(findings).toEqual([])
   })
 
+  it("/ を含む語(intent のパス)ではエントロピーの所見を出さない", () => {
+    const line =
+      "intent: docs/intents/2026-09-28-managed-settings-script.md を読む"
+    const findings = secretsRule.check(makeArtifact(line), makeCtx())
+    expect(findings).toEqual([])
+  })
+
+  it("diff と files の見出し行ではエントロピーの所見を出さない", () => {
+    const path = "src/tools/backup-rotation-daemon/reports/cache.log"
+    const lines = [
+      `diff --git a/${path} b/${path}`,
+      `--- a/${path}`,
+      `+++ b/${path}`,
+      `--- ${path} ---`,
+      // `/` を含まない長い語でも、見出し行なら測らない
+      "--- Zq8xK2mP9vL4nR7tW3yB6cD1fG5hJ0sA ---"
+    ]
+    for (const line of lines) {
+      expect(secretsRule.check(makeArtifact(line), makeCtx())).toEqual([])
+    }
+  })
+
+  it("語の中の sk-(/tmp/task-...)は既知の形として拾わない", () => {
+    const line = "cd /tmp/task-utility-chat-recorder-0123456789abcdef"
+    const findings = secretsRule.check(makeArtifact(line), makeCtx())
+    expect(findings).toEqual([])
+  })
+
+  it(":// を含む行でも既知の形(ghp_・sk-)は検出する", () => {
+    const ghp = `git clone https://x-access-token:ghp_${"A1b2".repeat(9)}@github.com/o/r.git`
+    const sk = `curl -H "Authorization: Bearer sk-ant-api03-${"x".repeat(24)}" https://api.example.com`
+    const ghpFindings = secretsRule.check(makeArtifact(ghp), makeCtx())
+    expect(ghpFindings.some((f) => f.message.includes("github-token"))).toBe(
+      true
+    )
+    const skFindings = secretsRule.check(makeArtifact(sk), makeCtx())
+    expect(skFindings.some((f) => f.message.includes("llm-api-key"))).toBe(true)
+    expect(skFindings[0].severity).toBe("stop")
+  })
+
+  it("/ を含まない高エントロピーの語は、見出しでない行なら従来どおり検出する", () => {
+    const findings = secretsRule.check(
+      makeArtifact("const token = Zq8xK2mP9vL4nR7tW3yB6cD1fG5hJ0sA"),
+      makeCtx()
+    )
+    expect(findings.some((f) => f.message.includes("高エントロピー"))).toBe(
+      true
+    )
+  })
+
   it("URL を含む行は entropy スキャン対象外", () => {
     const line =
       "see https://example.com/path/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789 for docs"

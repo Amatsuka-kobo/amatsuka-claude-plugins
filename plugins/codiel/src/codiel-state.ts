@@ -161,6 +161,8 @@ const V1_RUN_RE = /^issue-\d+$/
 // intent 文書の置き場。domains/ 配下は持続層なので含めない
 const INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/
 const INTEGRATIONS = ["github", "local"] as const
+// Raguel の判定。mark-ask --verdict と pass-gate --human-approved が受け付ける値(設計書 §6.2.2)
+const VERDICTS = ["PROCEED", "ASK", "STOP"] as const
 const BOOL_FLAGS = ["active", "human-approved", "intent-only", "final"]
 
 // 触るとそのステップだけの serial グループになる lockfile(計画書 §6.3)。
@@ -206,8 +208,9 @@ type StepKind = (typeof STEP_KINDS)[number]
 // e2e/frontend/ と e2e/cli/ の後はちょうど 1 つのセグメントを持つ。
 // 空のセグメント・`.`・`..`・`:`・`\` は isSpecDirId で別に拒否する。
 const SPEC_ID_RE = /^(units\/.+|e2e\/backend\/.+|e2e\/(frontend|cli)\/[^/]+)$/
-// .codiel/config.json が無いとき、または testsDir のキーが無いときの値(設計書 §6.13.4)
-const DEFAULT_TESTS_DIR = "docs/tests"
+// .codiel/config.json が無いとき、またはキーが無いときの値(設計書 §6.13.4)
+const DEFAULT_TESTS_DIR = "docs/codiel/tests"
+const DEFAULT_RUNS_DIR = "docs/codiel/runs"
 
 const fail = (msg: string, code = 1): never => {
   process.stderr.write(`${msg}\n`)
@@ -307,13 +310,18 @@ function legacyMessage(st: RunState): string {
   )
 }
 
-// .codiel を持つディレクトリの .codiel/config.json から testsDir を読む(設計書 §6.13.4)。
-// ファイルかキーが無ければ docs/tests を返す。JSON として読めない・オブジェクトでない・
-// testsDir が文字列でない・空文字列・絶対パス・`..` のセグメントを含む、のいずれかは例外を投げる。
-// 値は `./` と末尾の `/` を落とした repoRoot 相対のパスにして返す。未知のキーは無視する。
-export function readCodielConfig(codielRoot: string): { testsDir: string } {
+// .codiel を持つディレクトリの .codiel/config.json から testsDir と runsDir を読む(設計書 §6.13.4)。
+// ファイルかキーが無ければ既定の値を返す。JSON として読めない・オブジェクトでない・
+// testsDir か runsDir が文字列でない・空文字列・絶対パス・`..` のセグメントを含む、のいずれかは例外を投げる。
+// 値は `./` と末尾の `/` を落とした repoRoot 相対のパスにして返す。
+// raguel の中身は Raguel が検査するので見ない(§6.15.1)。未知のキーは無視する。
+export function readCodielConfig(codielRoot: string): {
+  testsDir: string
+  runsDir: string
+} {
   const file = path.join(codielRoot, ".codiel", "config.json")
-  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR }
+  if (!fs.existsSync(file))
+    return { testsDir: DEFAULT_TESTS_DIR, runsDir: DEFAULT_RUNS_DIR }
   let cfg: unknown
   try {
     cfg = JSON.parse(fs.readFileSync(file, "utf8"))
@@ -322,15 +330,64 @@ export function readCodielConfig(codielRoot: string): { testsDir: string } {
   }
   if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
     throw new Error(`${file} は JSON のオブジェクトにしてください`)
-  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR }
-  const v = (cfg as { testsDir: unknown }).testsDir
-  if (typeof v !== "string") throw new Error("testsDir は文字列にしてください")
-  if (v === "") throw new Error("testsDir に空文字列は指定できません")
+  const obj = cfg as Record<string, unknown>
+  return {
+    testsDir: configDir(obj, "testsDir", DEFAULT_TESTS_DIR),
+    runsDir: configDir(obj, "runsDir", DEFAULT_RUNS_DIR)
+  }
+}
+
+// config.json の 1 つのキーを repoRoot 相対のディレクトリとして検査し、正規化して返す
+function configDir(
+  cfg: Record<string, unknown>,
+  key: string,
+  fallback: string
+): string {
+  if (!(key in cfg)) return fallback
+  const v = cfg[key]
+  if (typeof v !== "string") throw new Error(`${key} は文字列にしてください`)
+  if (v === "") throw new Error(`${key} に空文字列は指定できません`)
   if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
-    throw new Error(`testsDir には repoRoot 相対のパスを書いてください: ${v}`)
+    throw new Error(`${key} には repoRoot 相対のパスを書いてください: ${v}`)
   if (v.split(/[/\\]/).includes(".."))
-    throw new Error(`testsDir に .. のセグメントは使えません: ${v}`)
-  return { testsDir: normalizeRel(v) }
+    throw new Error(`${key} に .. のセグメントは使えません: ${v}`)
+  return normalizeRel(v)
+}
+
+// .gitignore に要る行(設計書 §6.15.5)。E2E の 4 行は、実行ごとのディレクトリの中を無視し、
+// 直下の results.json・summary.md・failure.md だけを戻す。runsDir は共有するので行を置かない。
+function gitignoreLines(testsDir: string): string[] {
+  // testsDir がリポジトリ全体(`.`)のときは、`./` を付けると git が行に当たらないので接頭辞を付けない
+  const base = normalizeRel(testsDir)
+  const prefix = base === "." ? "" : `${base}/`
+  const reports = `${prefix}e2e/**/reports/[0-9]*-try[0-9]*`
+  return [
+    ".codiel/runs/",
+    ".codiel/reports/",
+    `${reports}/**`,
+    `!${reports}/results.json`,
+    `!${reports}/summary.md`,
+    `!${reports}/failure.md`
+  ]
+}
+
+// .codiel を持つディレクトリの .gitignore に無い必須の行を返す。行は前後の空白を除いた
+// 完全一致で比べ、`#` で始まる行と空行を数えない。ファイルが無ければ全行を返す。
+function missingGitignoreLines(
+  codielRoot: string,
+  required: string[]
+): string[] {
+  const file = path.join(codielRoot, ".gitignore")
+  const present = new Set(
+    fs.existsSync(file)
+      ? fs
+          .readFileSync(file, "utf8")
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l !== "" && !l.startsWith("#"))
+      : []
+  )
+  return required.filter((l) => !present.has(l))
 }
 
 function parseArgs(argv: string[]): {
@@ -663,6 +720,23 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
           ? legacyMessage(latest.state)
           : `未完了の try があります: ${latest.statePath}(status: ${latest.state.status})。resume するか stop してください`
       )
+    // Raguel の STOP を記録したまま止めた try の次の try は、人の承認の後にだけ作る(設計書 §6.2.2、決定 83)。
+    // raguel-stop 以外の理由で止めた try も、humanApproved の無い STOP のフェーズを持てば当たる。
+    if (latest?.state.status === "stopped" && !bools.has("human-approved")) {
+      const st = latest.state
+      const stopPhases = Object.entries(st.phases)
+        .filter(([, ph]) => ph.verdict === "STOP" && !ph.humanApproved)
+        .map(([name, ph]) => `${name}(evaluationId: ${ph.evaluationId})`)
+      if (st.stopReason === "raguel-stop" || stopPhases.length > 0)
+        fail(
+          `前の try(${latest.statePath})は Raguel の STOP で止まっています` +
+            `(stopReason: ${st.stopReason}` +
+            (stopPhases.length > 0
+              ? `、STOP のフェーズ: ${stopPhases.join(", ")}`
+              : "") +
+            ")。新しい try を作ってよいか人に確かめ、承認されたら --human-approved を付けて init し直してください"
+        )
+    }
     const tryN = latest ? latest.tryN + 1 : 1
     const dir = path.join(runDir(root, slug), `try-${tryN}`)
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
@@ -786,10 +860,19 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`)
     if (!flags["evaluation-id"]) fail("--evaluation-id が必要です")
     const humanApproved = bools.has("human-approved")
-    const acceptedVerdicts = humanApproved ? ["PROCEED", "ASK"] : ["PROCEED"]
-    if (!acceptedVerdicts.includes(flags.verdict))
+    // STOP を記録したフェーズの verdict は、人の裁定なしに上書きさせない(設計書 §6.2.2、決定 83)
+    if (ph.verdict === "STOP" && !humanApproved)
       fail(
-        `verdict が PROCEED ではありません: ${flags.verdict}。ASK は mark-ask、STOP は stop を使用`
+        `フェーズ ${phase} には Raguel の STOP が記録されています。人が誤検知と裁定したときだけ --verdict STOP --human-approved で通してください`
+      )
+    if (humanApproved) {
+      if (!(VERDICTS as readonly string[]).includes(flags.verdict))
+        fail(
+          `不正な --verdict: ${flags.verdict}。許される値は ${VERDICTS.join(", ")} です`
+        )
+    } else if (flags.verdict !== "PROCEED")
+      fail(
+        `verdict が PROCEED ではありません: ${flags.verdict}。ASK と STOP は mark-ask(STOP は --verdict STOP を付ける)で人の裁定にかけてください`
       )
     ph.status = "passed"
     ph.evaluationId = flags["evaluation-id"]
@@ -829,6 +912,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       "kind" in flags
         ? oneOf(flags, "kind", ["raguel", "confirm"] as const)
         : "raguel"
+    const verdict =
+      "verdict" in flags ? oneOf(flags, "verdict", VERDICTS) : "ASK"
     const latest = loadRun(root, flags)
     if (TERMINAL.has(latest.state.status))
       fail(`すでに終端状態です: ${latest.state.status}`)
@@ -843,8 +928,14 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         `フェーズ ${phase} は pending のため mark-ask できません。start-phase してから確認してください`
       )
     ph.status = "awaiting_human"
-    ph.evaluationId = flags["evaluation-id"] ?? null
-    ph.verdict = "ASK"
+    // 記録済みの STOP は verdict と evaluationId をどちらも、新しい --verdict と
+    // --evaluation-id の有無と値にかかわらず残す。resume と mark-ask を挟んで
+    // --human-approved の無い pass-gate を通させないためと、STOP の evaluationId を
+    // init の文言と capturing-intent の手順 1 に示し続けるため(設計書 §6.2.2、§6.14.2 の (6)(7)、決定 83)
+    if (ph.verdict !== "STOP") {
+      ph.evaluationId = flags["evaluation-id"] ?? null
+      ph.verdict = verdict
+    }
     ph.askKind = askKind
     latest.state.status = "awaiting_human"
     writeState(latest.statePath, latest.state)
@@ -1157,13 +1248,30 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     return ok(plan)
   }
 
-  // .codiel/config.json の testsDir を返す(設計書 §6.13.4)。run を要しない
+  // .codiel/config.json の testsDir と runsDir を返す(設計書 §6.13.4)。run を要しない
   if (cmd === "config") {
     try {
       return ok(readCodielConfig(root))
     } catch (e) {
       fail((e as Error).message)
     }
+  }
+
+  // .gitignore に要る行と、足りない行を返す(設計書 §6.15.5)。run を要しない。
+  // .gitignore は書かない(書くのは /codiel:init)
+  if (cmd === "gitignore") {
+    let testsDir = ""
+    try {
+      testsDir = readCodielConfig(root).testsDir
+    } catch (e) {
+      fail((e as Error).message)
+    }
+    const required = gitignoreLines(testsDir)
+    return ok({
+      path: ".gitignore",
+      required,
+      missing: missingGitignoreLines(root, required)
+    })
   }
 
   // fix-loop でテストの保護を外す(設計書 §6.13.6)。所見がテストに向くと確かめたときだけ使う

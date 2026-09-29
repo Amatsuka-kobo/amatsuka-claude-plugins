@@ -142,12 +142,15 @@ test("implement フェーズ中: src は素通し、testsDir の cases.md と sp
     hook(
       root,
       "Edit",
-      path.join(root, "docs/tests/e2e/frontend/login/cases.md")
+      path.join(root, "docs/codiel/tests/e2e/frontend/login/cases.md")
     )?.permissionDecision
   ).toBe("ask")
   expect(
-    hook(root, "Edit", path.join(root, "docs/tests/e2e/frontend/login/spec.md"))
-      ?.permissionDecision
+    hook(
+      root,
+      "Edit",
+      path.join(root, "docs/codiel/tests/e2e/frontend/login/spec.md")
+    )?.permissionDecision
   ).toBe("ask")
   expect(
     hook(
@@ -191,6 +194,16 @@ test("discuss フェーズ中: .codiel 配下(agenda.md/discussion.md)は素通�
   expect(r?.permissionDecision).toBe("ask")
   expect(r?.permissionDecisionReason).toMatch(/文書フェーズ\(discuss\)/)
   expect(hook(root, "Write", path.join(root, "docs/notes.md"))).toBe(null)
+})
+
+test("discuss フェーズ中: <runsDir>/<slug>/ の agenda.md・discussion.md は素通し", () => {
+  const root = setupRun()
+  advanceRunTo(root, "discuss")
+  for (const f of ["agenda.md", "discussion.md"])
+    expect(
+      hook(root, "Write", path.join(root, `docs/codiel/runs/demo/${f}`)),
+      f
+    ).toBe(null)
 })
 
 test("cwd がサブディレクトリでも文書フェーズ制御が機能する(root/src への書き込みは ask)", () => {
@@ -540,7 +553,11 @@ test("domain 設定下でも spec.md / cases.md はドメイン境界より先�
     cwd: root
   })
   for (const f of ["spec.md", "cases.md"]) {
-    const r = hook(root, "Edit", path.join(root, `docs/tests/units/x.ts/${f}`))
+    const r = hook(
+      root,
+      "Edit",
+      path.join(root, `docs/codiel/tests/units/x.ts/${f}`)
+    )
     expect(r?.permissionDecision).toBe("ask")
     expect(r?.permissionDecisionReason).toMatch(/test-spec と test-code/)
   }
@@ -645,7 +662,7 @@ test("docRoot ≠ codielRoot でも .codiel/ 配下は codielRoot 基準で素�
     hook(
       docRoot,
       "Edit",
-      path.join(codielRoot, "docs/tests/units/x.ts/spec.md")
+      path.join(codielRoot, "docs/codiel/tests/units/x.ts/spec.md")
     )?.permissionDecision
   ).toBe("ask")
 })
@@ -824,11 +841,11 @@ test("symlink を使わない通常構成では既存の挙動が変わらない
 })
 
 // ---------------------------------------------------------------------------
-// テストの保護(設計書 §6.13.6、§8.2 の P 系)。testsDir は既定の docs/tests とし、
-// docs/tests/units/src/a.ts/spec.md の tests に src/__test__/a.test.ts を記録しておく。
+// テストの保護(設計書 §6.13.6、§8.2 の P 系)。testsDir は既定の docs/codiel/tests とし、
+// docs/codiel/tests/units/src/a.ts/spec.md の tests に src/__test__/a.test.ts を記録しておく。
 // ---------------------------------------------------------------------------
 
-const SPEC_DIR = "docs/tests/units/src/a.ts"
+const SPEC_DIR = "docs/codiel/tests/units/src/a.ts"
 const CASES = `${SPEC_DIR}/cases.md`
 const RECORDED = "src/__test__/a.test.ts"
 
@@ -879,7 +896,7 @@ test("P-2: test-loop で spec.md の tests に載ったファイルは ask", () 
   // 1 行の列で書いた tests と、別の仕様のディレクトリの記録も読む
   writeSpec(
     root,
-    "docs/tests/e2e/cli/tool",
+    "docs/codiel/tests/e2e/cli/tool",
     `tests: ["test/e2e/tool.test.ts"]\nparallel: false`
   )
   expect(decision(root, "test/e2e/tool.test.ts")).toBe("ask")
@@ -918,11 +935,11 @@ test("P-7: implement では testEdit が真でも cases.md は ask(fix-loop 以�
   expect(decision(root, CASES)).toBe("ask")
 })
 
-test("P-8: implement で testsDir が qa/specs なら qa/specs の spec.md は ask、docs/tests の spec.md は通す", () => {
+test("P-8: implement で testsDir が qa/specs なら qa/specs の spec.md は ask、docs/codiel/tests の spec.md は通す", () => {
   const root = setupProtectedRun("implement")
   writeConfig(root, JSON.stringify({ testsDir: "qa/specs" }))
   expect(decision(root, "qa/specs/units/x.ts/spec.md")).toBe("ask")
-  expect(decision(root, "docs/tests/units/x.ts/spec.md")).toBe(null)
+  expect(decision(root, "docs/codiel/tests/units/x.ts/spec.md")).toBe(null)
 })
 
 test("P-9: test-spec で testsDir が qa/specs なら、docs/ の外でも qa/specs の spec.md を通す", () => {
@@ -946,7 +963,7 @@ test("設定が不正でも、文書フェーズでは testsDir を通す規則�
   const root = setupRun()
   advanceRunTo(root, "test-spec")
   writeConfig(root, JSON.stringify({ testsDir: "/abs/specs" }))
-  expect(decision(root, "docs/tests/units/x.ts/spec.md")).toBe(null)
+  expect(decision(root, "docs/codiel/tests/units/x.ts/spec.md")).toBe(null)
   expect(decision(root, "src/index.ts")).toBe("ask")
 })
 
@@ -983,7 +1000,7 @@ function setupGitRun(phase: string, commitCodiel = false): string {
   fs.mkdirSync(path.join(main, "src"))
   fs.writeFileSync(path.join(main, "src/index.ts"), "")
   if (commitCodiel)
-    writeConfig(main, `${JSON.stringify({ testsDir: "docs/tests" })}\n`)
+    writeConfig(main, `${JSON.stringify({ testsDir: "docs/codiel/tests" })}\n`)
   git(main, ["add", "-A"])
   git(main, ["commit", "-q", "-m", "init"])
   const args = ["init", "--slug", SLUG]
@@ -1126,7 +1143,7 @@ for (const commitCodiel of [true, false])
     ).toBe("ask")
   })
 
-test("W-5: run の検索は worktree のパスの形ではなく git worktree list --porcelain の先頭のエントリで決まる", () => {
+test("W-5: メインの外の <other>/.codiel/worktrees/ の中では、git に問い合わせず other をルートとみなす", () => {
   const main = setupGitRun("implement")
   // メインの作業ツリーの外に、別のディレクトリの .codiel/worktrees/ の形で worktree を置く
   const other = fs.realpathSync(
@@ -1134,10 +1151,8 @@ test("W-5: run の検索は worktree のパスの形ではなく git worktree li
   )
   const wt = path.join(other, worktreeRel("step-1"))
   git(main, ["worktree", "add", "-q", "-b", "codiel/other", wt])
-  // パスの形から other をルートとみなすと run が見つからず、素通しになる
-  const r = hook(wt, "Write", path.join(main, CASES))
-  expect(r?.permissionDecision).toBe("ask")
-  expect(r?.permissionDecisionReason).toContain(`テスト(${CASES})`)
+  // other に run は無いので素通しになる。git に問い合わせればメインの run が見つかり ask になる
+  expect(hook(wt, "Write", path.join(main, CASES))).toBe(null)
 })
 
 test("W-6: test-code の worktree で要素に domain が無ければ、範囲外のテストファイルも通す(state.domain も使わない)", () => {
@@ -1191,4 +1206,172 @@ test("P-11: implement で step の worktree の中の記録されたテストは
   const r = hook(wt, "Write", path.join(wt, RECORDED))
   expect(r?.permissionDecision).toBe("ask")
   expect(r?.permissionDecisionReason).toContain(`テスト(${RECORDED})`)
+})
+
+// ---------------------------------------------------------------------------
+// E2E のレポートと runsDir(設計書 §6.17.6、§8.2 の R 系)。slug は demo、testsDir と runsDir は
+// ケースに書いたものを除いて既定の docs/codiel/tests と docs/codiel/runs とする。
+// mapped のケースでは、ドメイン x の範囲を src/x/** とする。
+// ---------------------------------------------------------------------------
+
+const REPORT_DIR =
+  "docs/codiel/tests/e2e/frontend/login/reports/20261001-121500-demo-try1"
+const RUN_DOC = (name: string) => `docs/codiel/runs/demo/${name}`
+
+// phase を in_progress にし、mapped でドメイン x を当てた run を作る。
+function setupMappedRun(phase: string): string {
+  const root = setupRun()
+  advanceRunTo(root, phase)
+  writeArchitecture(root, { x: ["src/x/**"] })
+  patchState(root, (s) => {
+    s.domainMode = "mapped"
+    s.domain = "x"
+  })
+  return root
+}
+
+test("R-1: implement・mapped・domain x で、E2E のレポートはドメイン境界の外でも通す", () => {
+  const root = setupMappedRun("implement")
+  expect(decision(root, `${REPORT_DIR}/summary.md`)).toBe(null)
+  expect(decision(root, `${REPORT_DIR}/results.json`)).toBe(null)
+  // 免除が効きすぎていないこと: reports/ の外の範囲外のパスは従来どおり ask
+  const r = hook(root, "Write", path.join(root, "src/y/a.ts"))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("担当範囲外")
+})
+
+test("R-2: implement・mapped・domain x で、仕様のディレクトリの cases.md はテストの保護が免除より先に効く", () => {
+  const root = setupMappedRun("implement")
+  const cases = "docs/codiel/tests/e2e/frontend/login/cases.md"
+  const r = hook(root, "Write", path.join(root, cases))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain(`テスト(${cases})`)
+})
+
+test("R-3: test-loop・domain なしで、E2E のレポートの failure.md はテストの保護の対象外で通す", () => {
+  const root = setupRun()
+  advanceRunTo(root, "test-loop")
+  expect(decision(root, `${REPORT_DIR}/failure.md`)).toBe(null)
+})
+
+test("R-4: design で runsDir が notes/runs なら、docs/ の外の <runsDir>/ を通す", () => {
+  const root = setupRun()
+  advanceRunTo(root, "design")
+  writeConfig(root, JSON.stringify({ runsDir: "notes/runs" }))
+  expect(decision(root, "notes/runs/demo/design.md")).toBe(null)
+  // runsDir の外のコード領域は従来どおり ask
+  expect(decision(root, "notes/other.md")).toBe("ask")
+})
+
+test("R-5: implement・mapped・domain x で、<runsDir>/ への書き込みは ask になり、理由は run の文書", () => {
+  const root = setupMappedRun("implement")
+  const r = hook(root, "Write", path.join(root, RUN_DOC("dev-plan.md")))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toBe(
+    `run の文書(${RUN_DOC("dev-plan.md")})は文書フェーズで書きます(implement 中の変更は想定外)`
+  )
+})
+
+test("R-6: review で <runsDir>/ への書き込みは、現行の pr・review・triage・finalize の分岐で ask", () => {
+  const root = setupRun()
+  advanceRunTo(root, "review")
+  const r = hook(root, "Write", path.join(root, RUN_DOC("design.md")))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toBe(
+    `フェーズ review 中の ${RUN_DOC("design.md")} への書き込みは想定外です`
+  )
+})
+
+test("R-7: design で config.json の runsDir が /abs なら、<runsDir>/ の規則だけを外す", () => {
+  const root = setupRun()
+  advanceRunTo(root, "design")
+  writeConfig(root, JSON.stringify({ runsDir: "/abs" }))
+  expect(decision(root, "notes/runs/demo/design.md")).toBe("ask")
+  // docs/ と .codiel/ を通す規則は残る
+  expect(decision(root, RUN_DOC("design.md"))).toBe(null)
+})
+
+test("R-8: implement・unscoped(domain なし)でも、<runsDir>/ への書き込みは ask", () => {
+  const root = setupRun()
+  advanceToImplement(root)
+  const r = hook(root, "Write", path.join(root, RUN_DOC("dev-plan.md")))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toContain("文書フェーズで書きます")
+})
+
+test("R-9: test-code の worktree の中の <runsDir>/ への書き込みは、worktreeRoot 相対で ask", () => {
+  const main = setupGitRun("test-code")
+  const wt = addWorktree(main, "test-code-1")
+  patchState(main, (s) => {
+    s.testCode = {
+      units: {
+        "units/src/server/db.ts": element(worktreeRel("test-code-1"), null)
+      }
+    }
+  })
+  const r = hook(wt, "Write", path.join(wt, RUN_DOC("design.md")))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toBe(
+    `run の文書(${RUN_DOC("design.md")})は文書フェーズで書きます(test-code 中の変更は想定外)`
+  )
+  // 同じ worktree のテストファイルは W-6 のとおり通す
+  expect(hook(wt, "Write", path.join(wt, "src/__test__/b.test.ts"))).toBe(null)
+})
+
+test("R-10: fix-loop・domain なしで runsDir が notes/runs なら、docs/ の外の <runsDir>/ も ask", () => {
+  const root = setupRun()
+  advanceRunTo(root, "fix-loop")
+  writeConfig(root, JSON.stringify({ runsDir: "notes/runs" }))
+  expect(decision(root, "notes/runs/demo/dev-plan.md")).toBe("ask")
+})
+
+test("R-11: implement で runsDir が testsDir の親でも、E2E のレポートは <runsDir>/ の規則の対象外で通す", () => {
+  const root = setupRun()
+  advanceToImplement(root)
+  writeConfig(root, JSON.stringify({ runsDir: "docs/codiel" }))
+  expect(decision(root, `${REPORT_DIR}/summary.md`)).toBe(null)
+  // reports/ の外の runsDir の配下は ask
+  expect(decision(root, "docs/codiel/demo/dev-plan.md")).toBe("ask")
+})
+
+test("R-12: test-code で config.json が JSON として読めなければ、テストファイルへの書き込みも ask", () => {
+  const root = setupRun()
+  advanceRunTo(root, "test-code")
+  writeConfig(root, "{ runsDir: ")
+  const r = hook(root, "Write", path.join(root, RECORDED))
+  expect(r?.permissionDecision).toBe("ask")
+  expect(r?.permissionDecisionReason).toMatch(
+    /^\.codiel\/config\.json が不正なため、test-code 中の書き込みが run の文書\(runsDir\)に当たるか判定できません/
+  )
+})
+
+test("R-13: fix-loop・mapped・domain x で、<runsDir>/demo/unrecorded-gotchas.md は通す", () => {
+  const root = setupMappedRun("fix-loop")
+  expect(decision(root, RUN_DOC("unrecorded-gotchas.md"))).toBe(null)
+  // 同じディレクトリのほかのファイルと、ほかの slug の退避先は通さない
+  expect(decision(root, RUN_DOC("dev-plan.md"))).toBe("ask")
+  expect(decision(root, "docs/codiel/runs/other/unrecorded-gotchas.md")).toBe(
+    "ask"
+  )
+})
+
+test("未記録の GOTCHAS の退避先は、phase null・review・finalize と runsDir を変えた run でも通す", () => {
+  const rootNull = initOnly()
+  expect(decision(rootNull, RUN_DOC("unrecorded-gotchas.md"))).toBe(null)
+  for (const phase of ["review", "triage", "finalize", "implement"]) {
+    const root = setupRun()
+    advanceRunTo(root, phase)
+    expect(decision(root, RUN_DOC("unrecorded-gotchas.md")), phase).toBe(null)
+  }
+  const root = setupRun()
+  advanceRunTo(root, "finalize")
+  writeConfig(root, JSON.stringify({ runsDir: "notes/runs" }))
+  expect(decision(root, "notes/runs/demo/unrecorded-gotchas.md")).toBe(null)
+})
+
+test("config.json が不正なら、未記録の GOTCHAS の退避先の免除を外す", () => {
+  const root = setupRun()
+  advanceRunTo(root, "review")
+  writeConfig(root, "{ runsDir: ")
+  expect(decision(root, RUN_DOC("unrecorded-gotchas.md"))).toBe("ask")
 })

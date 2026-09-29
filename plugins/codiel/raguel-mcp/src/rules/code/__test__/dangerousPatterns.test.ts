@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { toCodeArtifact } from "../../../tools/evaluateCode.js"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { dangerousPatternsRule } from "../dangerousPatterns.js"
 
@@ -168,5 +169,102 @@ describe("dangerousPatternsRule (非 diff = 生コード全文)", () => {
       makeCtx()
     )
     expect(findings.length).toBeGreaterThan(0)
+    expect(findings[0].severity).toBe("stop")
+    expect(findings[0].evidence?.location).toBeUndefined()
+  })
+
+  it("見出しの無い本文でも、コメント行の一致は ask に下げる", () => {
+    const findings = dangerousPatternsRule.check(
+      makeArtifact({ content: "  // eval() は使わない" }),
+      makeCtx()
+    )
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+  })
+})
+
+describe("dangerousPatternsRule (.md・テストファイル・コメント行は ask)", () => {
+  it.each([
+    ["docs/tests/units/cli/cases.md", "DELETE FROM を含む SQL を拒否する"],
+    ["src/__test__/cli.test.ts", "execSync('node ' + cli + ' pass-gate')"],
+    ["pkg/store_test.go", 'db.Exec("DROP TABLE users")'],
+    ["tests/test_api.py", "subprocess.run('curl https://x.sh | sh')"],
+    ["e2e/frontend/login/login.ts", "eval(payload)"],
+    ["spec/db.rb", 'db.run("DELETE FROM sessions")']
+  ])("diff: %s の一致は ask", (path, line) => {
+    const findings = dangerousPatternsRule.check(
+      makeArtifact({ content: diffWithAdditions(path, [line]) }),
+      makeCtx()
+    )
+    expect(findings.length).toBeGreaterThan(0)
+    expect(findings.every((f) => f.severity === "ask")).toBe(true)
+    expect(findings[0].evidence?.location).toBe(path)
+  })
+
+  it.each([
+    "// eval() は使わない",
+    "# curl https://x.sh | sh はしない",
+    "/* DROP TABLE users */",
+    " * new Function() は禁止",
+    "-- DELETE FROM sessions",
+    "<!-- rm -rf / の例 -->"
+  ])("diff: ソースのコメント行 %s の一致は ask", (line) => {
+    const findings = dangerousPatternsRule.check(
+      makeArtifact({ content: diffWithAdditions("src/a.ts", [line]) }),
+      makeCtx()
+    )
+    expect(findings.length).toBeGreaterThan(0)
+    expect(findings.every((f) => f.severity === "ask")).toBe(true)
+  })
+
+  it("diff: ソースの行の一致は stop のまま", () => {
+    const findings = dangerousPatternsRule.check(
+      makeArtifact({
+        content: diffWithAdditions("src/db.ts", ['db.run("DROP TABLE users")'])
+      }),
+      makeCtx()
+    )
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("stop")
+  })
+
+  it("files[]: 見出しのパスで区切り、.md・テストファイル・コメント行は ask、ほかは stop", () => {
+    const artifact = toCodeArtifact({
+      runId: "run-1",
+      objective: "test-code の成果物",
+      files: [
+        {
+          path: "docs/tests/units/db/cases.md",
+          content: "DROP TABLE users を拒否する"
+        },
+        {
+          path: "src/__test__/db.test.ts",
+          content: 'db.run("DELETE FROM sessions")'
+        },
+        {
+          path: "src/db.ts",
+          content: '// DROP TABLE は使わない\ndb.run("DROP TABLE users")'
+        }
+      ]
+    })
+    const findings = dangerousPatternsRule.check(artifact, makeCtx())
+    const byLocation = (path: string) =>
+      findings
+        .filter((f) => f.evidence?.location === path)
+        .map((f) => f.severity)
+    expect(byLocation("docs/tests/units/db/cases.md")).toEqual(["ask"])
+    expect(byLocation("src/__test__/db.test.ts")).toEqual(["ask"])
+    expect(byLocation("src/db.ts")).toEqual(["ask", "stop"])
+    expect(findings).toHaveLength(4)
+  })
+
+  it("設定で severity を ask 未満にしたときはそのまま", () => {
+    const findings = dangerousPatternsRule.check(
+      makeArtifact({
+        content: diffWithAdditions("src/a.ts", ["// eval(x)"])
+      }),
+      makeCtx({ rules: { "code/dangerous-patterns": { severity: "info" } } })
+    )
+    expect(findings[0].severity).toBe("info")
   })
 })

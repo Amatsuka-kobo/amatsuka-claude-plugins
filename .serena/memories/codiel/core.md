@@ -1,4 +1,4 @@
-`plugins/codiel` (1.0.0-dev) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+`plugins/codiel` (1.0.0) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
 design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
 ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
 local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
@@ -14,8 +14,11 @@ local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/
 - **GOTCHAS は新書式**: 本文は `タスク / 失敗内容 / 原因 (推測) / 対策 / 昇格候補` の 5 フィールドのみ。
   関連ファイル欄・関連エントリ欄・Codiel フェーズ名欄は**持たない**(必要ならすべて `対策` の本文へ)。
   タグは `[解決済み]` / `[対象外]` の 2 種だけを `GOTCHA-NNN:` の直後に置く。
-- `install-harness.sh` は **`.codiel/{specs,runs,reports}` を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
-- GOTCHAS の記録は metatron の `metatron:recording-gotchas` に委ねる(codiel の `recording-gotchas` スキルは 2026-09-27 に削除)。codiel が持つのは記録の契機(Raguel の STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)と、CLI の案内が無いときの退避(「未記録の GOTCHAS」を `.codiel/runs/<slug>/try-<n>/reports/` か `.codiel/reports/` と完了報告へ持ち越す)だけで、`orchestrating-runs` の「失敗の記録」にある。
+- `install-harness.sh` は **`.codiel/{runs,reports}` と `.codiel/config.json`(無ければ `{ "testsDir": "docs/codiel/tests", "runsDir": "docs/codiel/runs" }`。`raguel` と `.gitignore` の行は `initializing-harness` が承認を得て足す)を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
+  テストの仕様の置き場は config の `testsDir`(既定 `docs/codiel/tests`)の下にある。run の文書(agenda・discussion・design・dev-plan)は `<runsDir>/<slug>/` に try で分けずに置き、コミットする。
+  try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/`、`/codiel:test` の報告は `.codiel/reports/` に置き、`.gitignore` で外す(2026-09-29、M4-C。ADR-009)。
+  Raguel の設定は config.json の `raguel` にあり、以前の版の YAML の設定ファイルは読まれない(init が承認を得て写してから消す)。
+- GOTCHAS の記録は metatron の `metatron:recording-gotchas` に委ねる(codiel の `recording-gotchas` スキルは 2026-09-27 に削除)。codiel が持つのは記録の契機(Raguel の STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)と、CLI の案内が無いときの退避(「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無ければ `.codiel/reports/unrecorded-gotchas.md`)と完了報告へ持ち越す)だけで、`orchestrating-runs` の「失敗の記録」にある。
 
 ## `/codiel:init` — 保護パスだけを確認する
 
@@ -28,8 +31,8 @@ ARCHITECTURE にある ` ```json metatron:domains ` のドメインマップは�
 
 「初期化済み」の判定に ARCHITECTURE は使わない。B = `.claude/rules/codiel.md`(運用の規律。init が
 `assets/rules/codiel.md` から置く。paths 指定なし)と、CLAUDE.md に行全体が `## Codiel` と一致する見出し
-(置き場の地図と入口だけ。`CLAUDE.example.md` が雛形)、C = `raguel.config.yaml`、D = `.codiel/` の 3 ディレクトリで
-判定する(設計書の決定 70)。旧セクション「## Codiel ハーネス運用ルール」は前方一致でも B を満たさず、
+(置き場の地図と入口だけ。`CLAUDE.example.md` が雛形)、C = `.codiel/config.json` が JSON のオブジェクトで `raguel` がオブジェクト、D = `.codiel/runs`・`.codiel/reports` の存在と `codiel-state gitignore` の `missing` が空、で
+判定する(設計書の決定 70、M4-C の決定 87・93)。`/codiel:run` の §0 も C・D を見て、欠けたら `/codiel:init` を案内する。旧セクション「## Codiel ハーネス運用ルール」は前方一致でも B を満たさず、
 init が差分を示して承認を得てから取り除く。
 
 ## `/codiel:run` のドメインモード
@@ -53,8 +56,13 @@ run 開始時に明示選択したモードである。選択したモードは 
 
 | 変数 | 基準 | 判定対象 |
 | --- | --- | --- |
-| `codielRel` | `findProjectRoot(cwd)` = `codielRoot` | `.codiel/` 配下か、`specs/**/(spec\|cases).md` か、文書フェーズの `docs/` 判定、フェーズ外の書き込み |
+| `codielRel` | `findProjectRoot(cwd)` = `codielRoot` | `.codiel/` 配下か、文書フェーズの `docs/` 判定、フェーズ外の書き込み |
+| `repoRel` | `findRepoRoot(mainRoot)` = `repoRoot`(git ルート) | `state.intent` との一致、`docs/intents/**`、テストの保護と `<testsDir>/` |
 | `docRel` | `findDocRoot(cwd)` = `docRoot` | **ドメイン境界の glob 照合のみ** |
+
+(M4 で 3 つになった。書き込み先が `.codiel/worktrees/<slug>/<名前>` の中なら、3 つとも worktree のルートを基準に取り直す。
+run は常にメインの作業ツリーで探す: `findMainRoot(cwd)` は git を呼ばず、パスが `/.codiel/worktrees/` を含めば
+その手前を、含まなければ `findProjectRoot` を返す。linked worktree で run を始めても run が見つかるようにするため。)
 
 ドメインマップは ARCHITECTURE に書かれ、ARCHITECTURE の位置は契約 §3 規則 1 の `docRoot` で
 決まる。したがってそこに書かれた glob は `docRoot` 相対と読むのが唯一整合する
@@ -70,14 +78,30 @@ run 開始時に明示選択したモードである。選択したモードは 
 `domains` だけを返す薄い包み。警告は重複ブロック・未閉フェンス・マーカーを呑み込む未閉フェンスの
 3 種で、metatron の `findDomainsBlock` と**出る条件と件数を揃える**(文言も現状は一致)。
 
-## Flow — 12 stages / 13 named phases
+## Flow — 13 stages / 14 named phases
 
-`intent → discuss → design → (test-spec ∥ dev-plan) → implement → test-loop → intent-sync → pr →
+`intent → discuss → design → (test-spec ∥ dev-plan) → test-code → implement → test-loop → intent-sync → pr →
 review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ。
-Raguel gates `intent`, `design`, `test-spec`, `dev-plan`, `implement`, `test-loop`, `intent-sync`, `fix-loop`.
+Raguel gates(`GATED` の 9 フェーズ)`intent`, `design`, `test-spec`, `dev-plan`, `test-code`, `implement`, `test-loop`, `intent-sync`, `fix-loop`.
+
+### テスト駆動と並列実装(2026-09-28、M4。設計書 §6.6・§6.13、決定 72〜81)
+
+- `test-code` は test-spec の仕様からテストを書き、implement の前に失敗することを確かめる。書いたテストのパスは
+  `spec.md` の frontmatter の `tests` に記録する。E2E も implement で通す(通すテスト = unit + E2E)。
+  worktree で走らないテストは、グループのマージの後に run ブランチで走らせる。
+- テストの仕様は `<testsDir>/units/<パス>/` と `<testsDir>/e2e/{frontend,backend,cli}/<名前>/` に置く。
+  `spec.md` の `parallel: true` が無い仕様のディレクトリは、ほかと同時に走らせない。新しい画面の名前だけは、候補を出してユーザーに聞く。
+- implement は dev-plan の Step を `codiel-state waves` でグループに分け、グループごとに Step を `.codiel/worktrees/<slug>/<名前>` の
+  worktree で並列に実装してマージする。`waves` が扱うのは `implement.steps` だけで、`testCode.units` と `testLoop.units` は対象外。
+  dev-plan の `## 生成物` は方式 a(各 Step が生成物をコミット)か方式 b(既定。最後の生成だけの Step)を規約で選ぶ。
+- `.codiel/config.json` の `testsDir`(既定 `docs/codiel/tests`)と `runsDir`(既定 `docs/codiel/runs`)は `readCodielConfig(codielRoot)` で読み、`codiel-state config` でも出る。`codiel-state gitignore` は必要な `.gitignore` の 6 行と欠けている行(`missing`)を出す。
+- E2E のレポートは `<testsDir>/e2e/{frontend,backend,cli}/<名前>/reports/<YYYYMMDD-HHMMSS>-<slug>-try<n>/`(ローカルのタイムゾーン)に置き、`results.json` と `summary.md`/`failure.md` だけをコミットする。書式は `references/e2e-report-format.md`。
+- 報告のファイル(`report.md`・`test-run-<n>.md`)は委譲先が最終の返答で返し、オーケストレーターが書く。
+- step-add / step-update は `--kind step|test-code|test-loop` を取り、`implement.steps`・`testCode.units`・`testLoop.units` に分けて記録する。
 `discuss`・`design` は scale light の run でだけ skip でき、`fix-loop` は所見が無ければ skip する。
-run state は version 2(slug で識別。`--issue` は任意の記録)。version 1 の run は `get`・`stop` と、
-`awaiting_outcome` の run の outcome の記録だけを受け付ける。
+run state は version 2(slug で識別。`--issue` は任意の記録)。version 1 の run と、`phases` に `test-code` を持たない
+M4 より前の version 2 の run はどちらも `isLegacy` で、`get`・`stop`(`--reason migrate`)と、
+`awaiting_outcome` の run の outcome の記録だけを受け付ける。読み込み時に `test-code` を補わない。
 `mark-ask` は `in_progress` のフェーズと `pending` の finalize だけを受け付ける(途中の確認は
 `mark-ask --kind confirm` → `resume`。stop-guard は `active` の run の停止を止める)。
 
@@ -127,7 +151,7 @@ Skills: `capturing-intent`, `preparing-design-agendas`, `facilitating-design-dis
 `writing-design-docs`, `writing-test-specs`, `writing-dev-plans`, `implementing`, `scripting-tests`,
 `running-regression-tests`, `fixing-failures`, `syncing-intents`, `reviewing-diffs`, `fixing-review-findings`,
 `filing-followup-issues`, `orchestrating-runs`, `raguel-gating`,
-`initializing-harness` (+ その `raguel.config.example.yaml`)。
+`initializing-harness` (+ その `config.example.json`)。
 どのスキルも description の照合では起動されず、コマンド・`orchestrating-runs` の手順・依頼文から名前かパスで起動される
 (そのため evals は持たない)。
 全スキルは commit 86b9483 で prompt-smith 標準に書き直され、2026-08-16 に契約追随の改訂が入った。
@@ -158,8 +182,11 @@ codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。meta
 
 - `codiel-state set-domain --domain <名前>` / `clear-domain` で操作する。**`clear-domain` は状態を
   問わず通る**(委譲中に run が `awaiting_human` へ落ちても解除できないと古い domain が残るため)。
-- `guard-write` は CODE_PHASES(`implement`/`test-loop`/`fix-loop`)で `domain` が入っているときだけ
-  境界を課す。判定は `readDomains(cwd)`(契約 §1 の 4 項目はこの中で検証済み)→ `toDomainMap` で
+- `guard-write` は CODE_PHASES(`test-code`/`implement`/`test-loop`/`fix-loop`)で `domain` が入っているときだけ
+  境界を課す。worktree の中への書き込みでは `state.domain` を使わず、その worktree を記録した要素の `domain` を使う。
+  境界より先にテストの保護を当てる: `implement`/`test-loop`/`fix-loop` の間、`<testsDir>/**/(spec|cases).md` と
+  `spec.md` の `tests` に記録されたテストへの書き込みは `ask`。fix-loop だけ `codiel-state set-test-edit` で保護を外せる。
+  config が不正なら、この 3 フェーズの書き込みをすべて `ask` にする(フェイルクローズド)。判定は `readDomains(cwd)`(契約 §1 の 4 項目はこの中で検証済み)→ `toDomainMap` で
   プロトタイプなしへ詰め替え → `globToRegExp` で **`docRel`(docRoot 基準)** を照合。
 - 判定は **`deny` ではなく `ask`**(境界の誤りは人間が通せる余地があり、ドメインマップの記述漏れで
   正当な書き込みを止めたくないため)。ドメイン定義が無い・読めない環境では**新たに止めない**。
@@ -167,7 +194,7 @@ codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。meta
 - **`.codiel/` 配下はドメイン境界の対象外。** 判定は **`codielRel`** で行う(運用資産の位置が
   基準であり、`docRel` ではない)。ハーネス自身の運用資産でありどのドメインにも属さない。
   免除が無いと、test-loop で domain 非紐付けと紐付けを往復するとき `clear-domain` の呼び忘れで
-  tester の `.codiel/specs/**/scripts/` への正当な書き込みが黙って `ask` になる。
+  `.codiel/runs/` の報告への正当な書き込みが黙って `ask` になる。
 
 ## Assets copied into target projects
 

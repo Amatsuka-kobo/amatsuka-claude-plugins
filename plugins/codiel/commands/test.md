@@ -1,15 +1,21 @@
 ---
-description: Codiel のテスト仕様(.codiel/specs/)に基づく回帰テストを単独実行する
-argument-hint: "[unit-id...](省略時は全 unit)"
+description: <testsDir> 配下の仕様のディレクトリに記録されたテストを、run の状態を変えずに単独実行し結果を報告するとき使用する
+argument-hint: "[パス](testsDir からの相対パス。省略時は testsDir 全体)"
 ---
 
-対象 unit: $ARGUMENTS(空なら全 unit)
+対象パス: $ARGUMENTS(testsDir からの相対パス。空なら testsDir 全体)
 
-codiel プラグインの running-regression-tests スキルを Skill ツールで起動して従ってください。ただし単独実行モードです:
+codiel プラグインの running-regression-tests スキルを Skill ツールで起動して従ってください。単独実行モードです:
 
 - run 中でなくても実行できます(state 遷移・record-attempt は行いません)
-- サブエージェントに「対象 unit のスクリプト実行(必要ならスクリプト安定化)と
-  結果レポート作成」をディスパッチしてください
-- レポートは `.codiel/reports/test-run-<ISO日時>.md` に保存し、サマリを報告してください
+- サブエージェントに「対象パスの下の仕様のディレクトリに記録されたテストの実行と結果レポート作成」を
+  ディスパッチしてください。`tests` を持たない仕様のディレクトリは「テストコードなし」と報告させ、
+  テストを書かせないでください。レポートの本文は最終の返答で返させ、報告のファイルは書かせないでください
+- テストの失敗の理由が環境にあるときは、1 回だけ単独で実行し直させてください。それでも失敗が残るときは
+  `mark-ask` を使わず、報告に挙げてユーザーに示してください
+- サブエージェントの返答を受けたら、レポートの本文を `.codiel/reports/test-run-<日時>.md` に保存し、サマリを報告してください。
+  `<日時>` はローカルのタイムゾーンの `YYYYMMDD-HHMMSS`(`date +%Y%m%d-%H%M%S`)です
+- E2E のレポートは `.codiel/reports/test-run-<日時>/<仕様のディレクトリの ID>/` にだけ置き、
+  testsDir の `reports/` には書かないでください。`failure.md` の直し方は「なし」と理由(単独の実行は報告だけを行う)を書いてください
 - NG があってもコード修正はディスパッチせず、報告のみ行ってください
 - 起動時に raguel-gating スキルの「outcome の自動同期」を実行してください

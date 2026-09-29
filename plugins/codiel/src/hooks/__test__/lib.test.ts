@@ -912,15 +912,84 @@ test("findProjectRoot: .codiel が見つからなければ startDir をそのま
   expect(findProjectRoot(sub)).toBe(sub)
 })
 
-// worktree の中からメインのルートへ届くこと(git worktree list の先頭のエントリ)は、
-// guard-write.test.ts の W 系で実際の worktree を使って確かめる。
-test("findMainRoot: codiel の worktree の外と、git で worktree を引けないときは findProjectRoot と同じ値を返す", () => {
+test("findMainRoot: codiel の worktree の外では findProjectRoot と同じ値を返し、worktree の形のパスでは git 管理外でもメインのルートを返す", () => {
   const root = mkTmp("lib-main-")
   fs.mkdirSync(path.join(root, ".codiel"))
   const src = mkSub(root, "src")
   expect(findMainRoot(src)).toBe(findProjectRoot(src))
-  // worktree の形のパスだが git 管理外。checkout にある .codiel/ で止まる従来の値に戻る
+  expect(findMainRoot(root)).toBe(root)
+  // checkout に .codiel/ があると findProjectRoot は worktree で止まるが、パスの形でメインへ届く
   const wt = mkSub(root, ".codiel", "worktrees", "demo", "step-1")
   fs.mkdirSync(path.join(wt, ".codiel"))
-  expect(findMainRoot(wt)).toBe(wt)
+  expect(findProjectRoot(wt)).toBe(wt)
+  expect(findMainRoot(wt)).toBe(root)
+  expect(findMainRoot(mkSub(wt, "src", "a"))).toBe(root)
+  // 最初に現れる .codiel/worktrees/ の前を返す。区切りは / と \ の両方を受ける
+  expect(
+    findMainRoot(`${root}/.codiel/worktrees/demo/step-1/.codiel/worktrees/x/y`)
+  ).toBe(root)
+  expect(findMainRoot("C:\\work\\app\\.codiel\\worktrees\\demo\\step-1")).toBe(
+    "C:\\work\\app"
+  )
+  expect(findMainRoot("/.codiel/worktrees/demo/step-1")).toBe("/")
+})
+
+function git(cwd: string, args: string[]): void {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=codiel-test",
+      "-c",
+      "user.email=codiel-test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      ...args
+    ],
+    { cwd, stdio: "ignore" }
+  )
+}
+
+// primary の checkout と、`git worktree add` で作った linked worktree L を持つ一時リポジトリ。
+// L の中に codiel の worktree を作り、primary の checkout ではなく L を返すことを確かめる。
+test("findMainRoot: git の linked worktree に置いた .codiel/worktrees/<slug>/<名前>/ の中から、その linked worktree のルートを返す", () => {
+  const primary = mkTmp("lib-main-primary-")
+  git(primary, ["init", "-q"])
+  fs.writeFileSync(path.join(primary, "README.md"), "")
+  git(primary, ["add", "-A"])
+  git(primary, ["commit", "-q", "-m", "init"])
+  // primary にも .codiel/ を置き、git から primary を引く実装なら取り違えるようにする
+  fs.mkdirSync(path.join(primary, ".codiel"))
+  const linked = path.join(mkTmp("lib-main-linked-"), "L")
+  git(primary, ["worktree", "add", "-q", "-b", "linked", linked])
+  fs.mkdirSync(path.join(linked, ".codiel"))
+  const wt = path.join(linked, ".codiel", "worktrees", "demo", "step-1")
+  git(linked, ["worktree", "add", "-q", "-b", "codiel/demo-try-1-step-1", wt])
+  // codiel の worktree の checkout には .codiel/ が無い(findProjectRoot も L を返す)構成と、
+  // .codiel/ の一部がある構成の両方で L を返す
+  expect(findMainRoot(wt)).toBe(linked)
+  fs.mkdirSync(path.join(wt, ".codiel"))
+  expect(findMainRoot(wt)).toBe(linked)
+  expect(findMainRoot(mkSub(wt, "src"))).toBe(linked)
+  // codiel の worktree の外では findProjectRoot と同じ値
+  const linkedSrc = mkSub(linked, "src")
+  expect(findMainRoot(linkedSrc)).toBe(findProjectRoot(linkedSrc))
+  expect(findMainRoot(linkedSrc)).toBe(linked)
+})
+
+test("findMainRoot: .codiel を git のルートの下に置いた構成(repo/app/.codiel)では repo/app を返す", () => {
+  const repo = mkTmp("lib-main-nested-")
+  git(repo, ["init", "-q"])
+  const app = mkSub(repo, "app")
+  fs.mkdirSync(path.join(app, ".codiel"))
+  fs.writeFileSync(path.join(app, "index.ts"), "")
+  git(repo, ["add", "-A"])
+  git(repo, ["commit", "-q", "-m", "init"])
+  const wt = path.join(app, ".codiel", "worktrees", "demo", "step-1")
+  git(repo, ["worktree", "add", "-q", "-b", "codiel/demo-try-1-step-1", wt])
+  expect(findMainRoot(wt)).toBe(app)
+  expect(findMainRoot(path.join(wt, "app"))).toBe(app)
+  expect(findMainRoot(mkSub(app, "src"))).toBe(app)
 })

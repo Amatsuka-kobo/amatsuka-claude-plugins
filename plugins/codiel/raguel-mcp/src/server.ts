@@ -7,7 +7,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CaseStore } from "./casefile/store.js"
-import { loadConfig } from "./config/loader.js"
+import { createConfigReloader } from "./config/loader.js"
 import { log } from "./core/log.js"
 import type { PipelineDeps } from "./core/pipeline.js"
 import { ClaudeCliProvider } from "./panel/claudeCli.js"
@@ -29,18 +29,20 @@ if (process.env.RAGUEL_PANELIST === "1") {
 }
 
 async function main(): Promise<void> {
-  // 設定不備はフェイルクローズド = 起動失敗(§11)
-  const { config, configHash, source } = loadConfig()
-
-  const deps: PipelineDeps = {
-    config,
-    configHash,
-    caseStore: new CaseStore(config),
-    provider:
-      config.judge.provider === "claude-cli"
-        ? new ClaudeCliProvider(config.judge.maxConcurrency)
-        : new NoneProvider()
-  }
+  // 設定は各ツールの呼び出しの初めに、ファイルの有無と mtime が変わっていれば読み直す(決定 83 の (3))。
+  // 読めない設定はフェイルクローズド = その呼び出しを onError の判定で返す(tools/shared.ts)
+  const deps = createConfigReloader(
+    ({ config, configHash, source }): PipelineDeps => ({
+      config,
+      configHash,
+      configSource: source,
+      caseStore: new CaseStore(config),
+      provider:
+        config.judge.provider === "claude-cli"
+          ? new ClaudeCliProvider(config.judge.maxConcurrency)
+          : new NoneProvider()
+    })
+  )
 
   const server = new McpServer({ name: "raguel-mcp", version: "0.1.0" })
   registerEvaluateDecision(server, deps)
@@ -51,11 +53,7 @@ async function main(): Promise<void> {
   registerRecordOutcome(server, deps)
 
   await server.connect(new StdioServerTransport())
-  log.info("raguel-mcp が起動しました", {
-    configSource: source,
-    configHash,
-    provider: config.judge.provider
-  })
+  log.info("raguel-mcp が起動しました")
 }
 
 main().catch((err) => {

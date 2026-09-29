@@ -76,7 +76,7 @@ digraph writing_design_docs {
   check_criteria [label="満たされない基準が\n残っていないか?", shape=diamond];
   alternatives [label="## 方針 に代替案 2 つ以上と\n採用理由を書く", shape=box];
   targets [label="## 変更対象 を列挙\n(既存パターン踏襲)", shape=box];
-  units [label="## 影響を受ける機能単位 を\nunit-id で列挙\n(screen-*/api-*/model-*/feat-*)", shape=box];
+  units [label="## 影響を受ける機能単位 を\nディレクトリの ID で列挙\n(units/<パス>/、e2e/frontend/<画面名>/、\ne2e/backend/<ルートパス>/、e2e/cli/<コマンド名>/。\n新しい画面は名前の候補を書く)", shape=box];
   yagni [label="intentにない機能を\n足していないか?", shape=diamond];
   trim [label="要件にない項目を削る", shape=box];
   risk [label="## データ・API の変更 /\n## リスクと可逆性 を書く", shape=box];
@@ -108,30 +108,35 @@ digraph writing_test_specs {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_design [label="design.md の\n影響を受ける機能単位を読む\n(軽量な run では intent と持続層)", shape=box];
+  read_design [label="design.md の\n影響を受ける機能単位を読む\n(軽量な run では intent と持続層、\n同定の委譲が渡した一覧)", shape=box];
   read_criteria [label="intent の受け入れ基準を読む", shape=box];
-  for_each_unit [label="unit ごとに処理", shape=box];
-  exists [label=".codiel/specs/<unit-id>/\nが既存か?", shape=diamond];
-  create_spec [label="spec.md を新規作成", shape=box];
+  for_each_unit [label="仕様のディレクトリ(ID)ごとに処理", shape=box];
+  exists [label="<testsDir>/<ID>/\nが既存か?", shape=diamond];
+  create_spec [label="spec.md を新規作成\n(frontmatter に parallel)", shape=box];
   read_spec [label="既存 spec.md を Read", shape=box];
-  update_spec [label="spec.md を Edit で更新\n(変更履歴に記録)", shape=box];
-  gen_cases [label="cases.md を(再)生成\nID: <unit-id>-NNN", shape=box];
+  update_spec [label="spec.md を Edit で更新\n(tests は既存値を保つ。\n変更履歴に記録)", shape=box];
+  gen_cases [label="cases.md を(再)生成\nID: case-NNN", shape=box];
   keep_id [label="挙動不変のケース ID は維持", shape=box];
   removed [label="消える機能のケースは\n変更履歴に削除理由を記録して除去", shape=box];
-  no_scripts [label="scripts/ には触れない", shape=box];
+  no_code [label="テストコードには触れない\n(test-code フェーズが書く)", shape=box];
+  new_screen [label="新しい画面か?\n(e2e/frontend の新規)", shape=diamond];
+  candidates [label="ケバブケースの\n名前の候補を 2〜3 個出す\n(決定 81。ユーザーへの確認は\nオーケストレーターが行う)", shape=box, style=filled, fillcolor="#fff2cc"];
   selfcheck [label="各期待結果の根拠を\n受け入れ基準上で即答できるか?", shape=diamond];
   fix [label="実装詳細混入のケースを\n振る舞い記述に書き直す", shape=box];
-  more_units [label="未処理の unit が残っているか?", shape=diamond];
-  done [label="委譲先の報告\n(作成/更新した unit ごとの\nspec.md / cases.md のパス)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  more_units [label="未処理の仕様のディレクトリが\n残っているか?", shape=diamond];
+  done [label="委譲先の報告\n(仕様のディレクトリごとの\nspec.md / cases.md のパス・\n新しい画面の名前の候補)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ntest-spec ゲートへ引き継ぎ", shape=ellipse];
 
   read_design -> read_criteria -> for_each_unit -> exists;
   exists -> create_spec [label="新規"];
   exists -> read_spec [label="既存"];
   read_spec -> update_spec;
-  create_spec -> gen_cases;
+  create_spec -> new_screen;
+  new_screen -> candidates [label="Yes"];
+  new_screen -> gen_cases [label="No"];
+  candidates -> gen_cases;
   update_spec -> gen_cases;
-  gen_cases -> keep_id -> removed -> no_scripts -> selfcheck;
+  gen_cases -> keep_id -> removed -> no_code -> selfcheck;
   selfcheck -> fix [label="根拠不明あり"];
   fix -> selfcheck;
   selfcheck -> more_units [label="OK"];
@@ -190,41 +195,42 @@ digraph implementing {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_plan [label="dev-plan.md を読み\n自ドメインのステップを抽出", shape=box];
+  read_plan [label="dev-plan.md を読み\n自ステップの通すテストを確認\n(worktree なら brief.md も Read)", shape=box];
   read_arch [label="ARCHITECTURE.md\n(ドメインマップ/コマンド定義/テスト方針)\nGOTCHAS.md を読む", shape=box];
   mode [label="呼び出しモードは?", shape=diamond];
 
-  next_step [label="自ドメインの未完了ステップを1つ選ぶ", shape=box];
-  need_test [label="テスト方針で\nユニットテスト必要?", shape=diamond];
-  red [label="RED: 失敗するテストを書く", shape=box];
-  green [label="GREEN: 最小実装でテストを通す", shape=box];
-  refactor [label="REFACTOR:\nステップ範囲内で整理", shape=box];
-  verify [label="検証コマンドを実行し\n完了条件を満たすか?", shape=diamond];
-  commit_step [label="git commit\ncodiel(implement): <ステップ名> (<slug> try-M)", shape=box];
-  more_steps [label="自ドメインに\n未完了ステップが残る?", shape=diamond];
+  install [label="worktree の中で\n依存をインストール\n(brief の環境準備、無ければ既定)", shape=box];
+  next_step [label="担当ステップに着手\n(テスト・仕様は書き換えない)", shape=box];
+  implement_code [label="通すテストを通すように\nプロダクトコードを実装", shape=box];
+  run_tests [label="brief/依頼文が挙げた\n通すテスト(ユニット+E2E)を実行", shape=box];
+  env_check [label="失敗の理由は環境か?", shape=diamond];
+  env_report [label="環境の失敗として\n最終の返答の報告に挙げる\n(通すテストの失敗にも\nプロダクトの失敗にも数えない)", shape=box, style=filled, fillcolor="#fff2cc"];
+  verify [label="完了条件を満たすか?", shape=diamond];
+  commit_step [label="worktree の中で git commit\ncodiel(implement): <ステップ名> (<slug> try-M)", shape=box];
+  more_steps [label="ほかに未完了ステップが残る?", shape=diamond];
 
-  receive_a [label="(a)テストNG由来:\nNGケースID+再現手順+\n期待結果+実際の結果", shape=box];
-  receive_b [label="(b)レビュー所見由来:\n所見(severity/対象/内容/根拠/提案)\n+対象ファイル", shape=box];
+  receive_a [label="(a)test-loop の NG 由来:\nNGケースID+再現手順+\n期待結果+実際の結果", shape=box];
+  receive_b [label="(b)fix-loop のレビュー所見由来:\n所見(severity/対象/内容/根拠/提案)\n+対象ファイル", shape=box];
   reproduce [label="再現する\n(fixing-failures スキルの手順)", shape=box];
   root_cause [label="根本原因を特定する", shape=box];
   spec_wrong [label="テストの方が\n間違っていると判断?", shape=diamond];
   escalate [label="修正せず報告(ASKへ)", shape=box, style=filled, fillcolor="#ffe0b3"];
-  minimal_fix [label="最小修正を実装する", shape=box];
-  verify_fix [label="検証コマンドを再実行し\n通るか確認", shape=diamond];
+  minimal_fix [label="最小修正を実装する\n(テストコードには触れない)", shape=box];
+  verify_fix [label="通すテストを再実行し\n通るか確認", shape=diamond];
   commit_fix [label="git commit\ncodiel(<test-loop|fix-loop>): <修正内容> (<slug> try-M)", shape=box];
 
-  report [label="完了報告\n(実施ステップ/変更ファイル/検証コマンドと結果/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  report [label="完了報告\n(実施ステップ/変更ファイル/\n実行した通すテストと結果/\n実行しなかった通すテスト/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   read_plan -> read_arch -> mode;
-  mode -> next_step [label="通常モード"];
+  mode -> install [label="通常モード(worktree で並列)"];
   mode -> receive_a [label="修正モード(a)\ntest-loop"];
   mode -> receive_b [label="修正モード(b)\nfix-loop"];
 
-  next_step -> need_test;
-  need_test -> red [label="必要"];
-  need_test -> green [label="不要と宣言済み"];
-  red -> green -> refactor -> verify;
-  verify -> green [label="No"];
+  install -> next_step -> implement_code -> run_tests -> env_check;
+  env_check -> env_report [label="Yes"];
+  env_check -> verify [label="No"];
+  env_report -> verify;
+  verify -> implement_code [label="No"];
   verify -> commit_step [label="Yes"];
   commit_step -> more_steps;
   more_steps -> next_step [label="Yes"];
@@ -250,37 +256,40 @@ digraph scripting_tests {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_arch [label="ARCHITECTURE.md の\nテスト方針を読む", shape=box];
-  read_cases [label="cases.md を Read\n(全ケース ID・期待結果)", shape=box];
-  exists [label="scripts/ が既存か?", shape=diamond];
-  create [label="スクリプトを新規作成\n(1 ケース ID = 1 テスト)", shape=box];
-  update [label="既存スクリプトを Read してから\nEdit で追随", shape=box];
+  read_inputs [label="cases.md / spec.md /\ndesign.md(または intent)/\ndev-plan.md を読む", shape=box];
+  decide_place [label="置き場を決める\n(規約 → 既存の配置 →\nフレームワーク既定)", shape=box];
+  install [label="worktree(test-code-<k>)の中で\n依存をインストール", shape=box];
+  exists [label="テストコードが既存か?", shape=diamond];
+  create [label="新規作成\n(1 ケース ID = 1 テスト)", shape=box];
+  update [label="既存を Read してから\nEdit で追随", shape=box];
   map_expect [label="期待結果を cases.md から\n一字も改変せず写像", shape=box];
-  run [label="スクリプトを実行", shape=box];
-  broken [label="判定が出ないケースが\nあるか?(異常終了)", shape=diamond];
-  fix_script [label="原因を切り分けて\nスクリプトを修正\n(待機条件を決定論的に)", shape=box];
-  all_judged [label="全ケースが\nOK/NG いずれかの判定を出したか?", shape=diamond];
-  ng_found [label="NG があるか?", shape=diamond];
-  report_ng [label="NG をバグとして\nレポート(修正はしない)", shape=box];
-  commit [label="自分の変更\n(scripts・レポート)を\n自分でコミット", shape=box];
-  done [label="tester 報告\n(OK/NG/broken 内訳・\nレポートパス・コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  handoff [label="NG は (B) TDD 修正ループの\nimplementer へ差し戻し", shape=ellipse];
+  run [label="テストを実行\n(Red の対象は git diff で決まる)", shape=box];
+  reason [label="失敗・成功の理由は?", shape=diamond];
+  env_fail [label="環境の失敗として\n最終の返答の報告に挙げる\n(Red にも NG にも数えない)", shape=box, style=filled, fillcolor="#fff2cc"];
+  test_bug [label="テストの記述の誤りを\n直して再実行", shape=box];
+  red_ok [label="未実装による失敗\n= Red(期待どおり)", shape=box];
+  cases_wrong [label="Red の対象なのに通った\n(期待結果を検出していてなお通る)\n=> cases.md の誤りとして記録\n(cases.md は書き換えない)", shape=box, style=filled, fillcolor="#ffe0b3"];
+  record_tests [label="spec.md の frontmatter tests に\nテストファイルのパスを Edit で追記", shape=box];
+  commit [label="worktree の中で\ncodiel(test-code): ... とコミット", shape=box];
+  report [label="結果・理由・置き場の根拠・\n出力抜粋を最終の返答に挙げる\n(report.md はオーケストレーターが書く)", shape=box];
+  done [label="委譲先の報告\n(テストコードのパス・tests の記録・\nRed の確認・コミットハッシュ)\n※オーケストレーターがタスクレビュー後に\nrun ブランチへマージ", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  gate [label="raguel-gating:\ntest-code ゲート\n(全ディレクトリのマージ後に1回)", shape=ellipse];
 
-  read_arch -> read_cases -> exists;
+  read_inputs -> decide_place -> install -> exists;
   exists -> create [label="なし"];
   exists -> update [label="あり"];
   create -> map_expect;
   update -> map_expect;
-  map_expect -> run -> broken;
-  broken -> fix_script [label="Yes"];
-  fix_script -> run;
-  broken -> all_judged [label="No"];
-  all_judged -> run [label="No\n(判定漏れを修正)"];
-  all_judged -> ng_found [label="Yes"];
-  ng_found -> report_ng [label="Yes"];
-  ng_found -> commit [label="No(全 OK)"];
-  report_ng -> commit;
-  commit -> done -> handoff;
+  map_expect -> run -> reason;
+  reason -> env_fail [label="環境"];
+  reason -> test_bug [label="テスト自身の誤り"];
+  reason -> red_ok [label="未実装(Red の対象)"];
+  reason -> cases_wrong [label="Red の対象が通った"];
+  test_bug -> run;
+  red_ok -> record_tests;
+  cases_wrong -> record_tests;
+  env_fail -> record_tests;
+  record_tests -> commit -> report -> done -> gate;
 }
 ```
 
@@ -291,48 +300,32 @@ digraph running_regression_tests {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  mode [label="起動モードは?", shape=diamond];
-  scope [label="回帰範囲を決定\n(影響unit+既存全unit+ARCHITECTUREのtestコマンド)", shape=box];
-  loop_a [label="(A) scripting-tests の手順で\nスクリプト実行", shape=box];
-  broken [label="異常終了があるか?", shape=diamond];
-  fix_script [label="スクリプトを修正", shape=box];
-  record_a [label="record-attempt test-loop --slug <slug>\n(オーケストレーターが\nディスパッチ毎に・run経由のみ)", shape=box];
-  cap_a [label="exit 3\n(capExceeded)?", shape=diamond];
-  ask_stop [label="ASK相当で停止\nオーケストレーターへ報告", shape=box, style=filled, fillcolor="#fff2cc"];
-  all_judged [label="全ケースが\nOK/NGの判定を出したか?", shape=diamond];
-  ng_found [label="NGがあるか?", shape=diamond];
-  report_ng [label="NGを4項目でレポート\n(ケースID/再現手順/期待結果/実際の結果)", shape=box];
-  standalone_end [label="単独実行: ディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  handoff [label="オーケストレーター経由で\n該当implementerへ差し戻し(B)", shape=box];
-  loop_b [label="(B) fixing-failures の手順で\nimplementerが修正", shape=box];
-  record_b [label="record-attempt test-loop --slug <slug>\n(オーケストレーターが\n修正ディスパッチ毎に)", shape=box];
-  cap_b [label="exit 3\n(capExceeded)?", shape=diamond];
-  rerun_all [label="回帰範囲全体を再実行", shape=box];
-  unit_test [label="ARCHITECTURE.mdのtestコマンドを実行", shape=box];
-  verdict [label="判定を決める\n(green/red/broken)", shape=box];
-  report [label="レポート作成\n(実行出力の抜粋を含む)", shape=box];
-  commit [label="scripts・レポートを\n自分でコミット", shape=box];
-  done [label="tester報告\n(判定/レポートパス/コミットハッシュ)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  mode [label="起動モードは?\n(run 経由 test-loop / 単独 /codiel:test)", shape=diamond];
+  scope [label="回帰範囲を決定\n(<testsDir>/**/spec.md の tests\n+ プロジェクトの test コマンド)", shape=box];
+  split [label="spec.md の frontmatter parallel で\n並列可否を仕分ける", shape=box];
+  run_tests [label="parallel: true は同時実行(上限4)\nそれ以外は直列で実行", shape=box];
+  judge [label="ケースごとに判定\n(OK / NG / broken / 環境の失敗)", shape=box];
+  env_fail [label="環境の失敗は broken にも\nNG にも数えない", shape=box, style=filled, fillcolor="#fff2cc"];
+  retry_env [label="動いている委譲が無いとき\n1 回だけ実行し直す\n(単独実行は自分で行う)", shape=box];
+  run_cmd [label="プロジェクトの test コマンドを実行", shape=box];
+  verdict [label="判定を決める\n(green / red / broken)", shape=box];
+  report [label="レポート作成\n(実行出力の抜粋・NG は4項目)", shape=box];
+  standalone_end [label="単独実行(/codiel:test):\nNG があってもディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  report_ng [label="run 経由: NG を仕様のディレクトリ\nごとにまとめてオーケストレーターへ報告\n(修正のディスパッチはオーケストレーターが行う)", shape=box];
+  broken_gate [label="broken はテストが保護されているため\nmark-ask test-loop --kind confirm の後に\n人が承認してから直す", shape=box, style=filled, fillcolor="#fff2cc"];
+  done [label="最終の返答で報告\n(レポート本文 / 実行したテストの件数 /\nOK・NG・broken・環境の失敗の内訳)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
-  mode -> scope [label="run経由 / 単独"];
-  scope -> loop_a -> broken;
-  broken -> fix_script [label="Yes"];
-  fix_script -> record_a;
-  record_a -> cap_a;
-  cap_a -> ask_stop [label="Yes"];
-  cap_a -> loop_a [label="No"];
-  broken -> all_judged [label="No"];
-  all_judged -> loop_a [label="No(判定漏れ)"];
-  all_judged -> ng_found [label="Yes"];
-  ng_found -> unit_test [label="No"];
-  ng_found -> report_ng [label="Yes"];
-  report_ng -> standalone_end [label="単独実行"];
-  report_ng -> handoff [label="run経由"];
-  handoff -> loop_b -> record_b -> cap_b;
-  cap_b -> ask_stop [label="Yes"];
-  cap_b -> rerun_all [label="No"];
-  rerun_all -> loop_a [label="全体再実行として合流"];
-  unit_test -> verdict -> report -> commit -> done;
+  mode -> scope;
+  scope -> split -> run_tests -> judge;
+  judge -> env_fail [style=dashed];
+  env_fail -> retry_env -> judge [label="実行し直す"];
+  judge -> run_cmd -> verdict -> report;
+  report -> standalone_end [label="単独実行"];
+  report -> report_ng [label="run経由(NGまたはbrokenあり)"];
+  report -> done [label="run経由(NGもbrokenも無し)"];
+  report_ng -> broken_gate [style=dashed, label="broken を含む場合"];
+  report_ng -> done;
+  broken_gate -> done;
 }
 ```
 
@@ -541,21 +534,25 @@ digraph raguel_gate {
   resume_b [label="codiel-state resume --slug <slug>", shape=box];
   pass_gate_ha [label="pass-gate <phase> --slug <slug>\n--verdict ASK\n--human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
 
-  stop_run [label="codiel-state stop --slug <slug> --reason", shape=box, style=filled, fillcolor="#ffcccc"];
+  stop_mark [label="mark-ask <phase> --slug <slug>\n--kind raguel --verdict STOP\n--evaluation-id <STOPのevaluationId>", shape=box, style=filled, fillcolor="#ffcccc"];
+  stop_ask [label="AskUserQuestion:\n誤検知として続けるか\n妥当として止めるか?", shape=diamond, style=filled, fillcolor="#ffcccc"];
+  stop_misdetect [label="record_outcome(approved)\n+ 未記録の GOTCHAS へ退避\n(台帳には書かない)", shape=box];
+  stop_pass [label="resume の後に\npass-gate <phase> --slug <slug>\n--verdict STOP --human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
+  stop_valid [label="stop --slug <slug>\n--reason raguel-stop", shape=box, style=filled, fillcolor="#ffcccc"];
   gotchas [label="失敗の記録\n(orchestrating-runs)", shape=box];
   stopped [label="run 終了(stopped)", shape=ellipse];
 
   evaluate -> verdict;
   verdict -> proceed [label="PROCEED"];
   verdict -> ask [label="ASK"];
-  verdict -> stop_run [label="STOP"];
+  verdict -> stop_mark [label="STOP"];
 
   proceed -> next;
 
   ask -> human;
   human -> resume_a [label="裁定A: 修正して再提出"];
   human -> record_ha [label="裁定B: as-is 承認"];
-  human -> stop_run [label="中止の裁定"];
+  human -> stop_valid [label="中止の裁定"];
 
   resume_a -> refix;
   refix -> evaluate [label="再 evaluate\n(resubmission-loop に注意)"];
@@ -565,7 +562,13 @@ digraph raguel_gate {
   resume_b -> pass_gate_ha;
   pass_gate_ha -> next;
 
-  stop_run -> gotchas;
+  stop_mark -> stop_ask;
+  stop_ask -> stop_misdetect [label="誤検知として続ける"];
+  stop_misdetect -> stop_pass;
+  stop_pass -> next [label="次フェーズへ\n(所見は引き継ぐ)"];
+  stop_ask -> stop_valid [label="妥当として止める"];
+
+  stop_valid -> gotchas;
   gotchas -> stopped;
 }
 ```
@@ -587,11 +590,13 @@ digraph codiel_run {
   intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n(続行なら git switch -c <branch>)", shape=box];
   discuss [label="[discuss]\n成果物を書く委譲(agenda.md)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
   design [label="[design]\n成果物を書く委譲(design.md)\n+ウォークスルー(ユーザー承認)", shape=box];
-  testspec [label="[test-spec]\n成果物を書く委譲\n(spec.md / cases.md)", shape=box];
-  devplan [label="[dev-plan]\n成果物を書く委譲(dev-plan.md)", shape=box];
+  testspec [label="[test-spec]\n成果物を書く委譲\n(spec.md / cases.md。\n新しい画面は名前の候補)", shape=box];
+  devplan [label="[dev-plan]\n成果物を書く委譲\n(dev-plan.md。触るファイル・前提ステップ・\n通すテスト・環境準備・生成物)", shape=box];
   parallel [label="単一メッセージで並列ディスパッチ", shape=note];
-  implement [label="[implement]\n成果物を書く委譲\n(コード diff + ユニットテスト)", shape=box];
-  testloop [label="[test-loop]\n(A)tester (B)implementer", shape=box];
+  testcode [label="[test-code]\n仕様のディレクトリごとに worktree で\nテストコードを書き Red を確認\n(タスクレビュー後に順にマージ)", shape=box];
+  waves [label="codiel-state waves で\nwave(依存の無いステップの最大4件の\n並列グループ)に分ける", shape=note];
+  implement [label="[implement]\nwave ごとに worktree で並列実装\n(通すテストを Green にする。\nE2E も含む。wave のマージ後に\nrun ブランチで通すテストを実行)", shape=box];
+  testloop [label="[test-loop]\n記録された全テストと test コマンドの\n回帰を確認し、NG を worktree で修正\n(broken は人の確認後に直す)", shape=box];
   intentsync [label="[intent-sync]\n成果物を書く委譲\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層を更新)", shape=box];
   pr [label="[pr]\ngithub: git push + gh pr create\nlocal: state に記録するだけ", shape=box];
   review [label="[review]\nreviewer 選択参加+doc/security\n(github は PR にも投稿)", shape=box];
@@ -617,10 +622,12 @@ digraph codiel_run {
   design -> devplan [label="PROCEED"];
   testspec -> parallel [style=dashed];
   devplan -> parallel [style=dashed];
-  parallel -> implement [label="両方 PROCEED"];
-  implement -> testloop [label="PROCEED"];
-  testloop -> testloop [label="NG(TDD修正)\nrecord-attempt"];
-  testloop -> intentsync [label="全ケース OK"];
+  parallel -> testcode [label="両方 PROCEED"];
+  testcode -> waves [label="PROCEED"];
+  waves -> implement;
+  implement -> testloop [label="全 wave 完了・PROCEED"];
+  testloop -> testloop [label="NG(worktree で修正)\nrecord-attempt"];
+  testloop -> intentsync [label="全テスト green"];
   intentsync -> pr [label="PROCEED"];
   pr -> review;
   review -> fixloop [label="critical/high あり"];
@@ -630,8 +637,8 @@ digraph codiel_run {
   triage -> finalize;
   finalize -> outcome;
 
-  { intent design testspec devplan implement testloop intentsync fixloop } -> human [label="ASK / 上限超過", style=dashed];
-  { intent design testspec devplan implement testloop intentsync fixloop } -> stopped [label="STOP", style=dashed];
+  { intent design testspec devplan testcode implement testloop intentsync fixloop } -> human [label="ASK / 上限超過", style=dashed];
+  { intent design testspec devplan testcode implement testloop intentsync fixloop } -> stopped [label="STOP(誤検知として続けるか\n妥当として止めるかを人が裁定)", style=dashed];
   human -> stopped [label="裁定: 中止"];
   human -> implement [label="裁定A: 修正して再提出\n(該当フェーズへ)", style=dashed];
   human -> pr [label="裁定B: as-is承認\n(--human-approved で次へ)", style=dashed];
@@ -648,7 +655,7 @@ digraph recording_failures {
   trigger [label="契機発生\n(STOP/ループ上限超過で中止/incident/\nレビューで発覚した設計漏れ)", shape=box];
   guide [label="metatron の CLI の案内が\nコンテキストにあるか?", shape=diamond];
   metatron [label="metatron:recording-gotchas を起動\n(判断・書式・採番・タグはそのスキル)", shape=box];
-  shelve [label="reports/unrecorded-gotchas.md の\n## 未記録の GOTCHAS に退避\n(title/task/mistake/cause/\ncountermeasure/promotionCandidate)", shape=box];
+  shelve [label="<runsDir>/<slug>/unrecorded-gotchas.md の\n## 未記録の GOTCHAS に退避\n(run が無いときは .codiel/reports/)\n(title/task/mistake/cause/\ncountermeasure/promotionCandidate)", shape=box];
   report [label="完了報告にも載せ、\n台帳へ入れる手段を添える\n(append-gotcha または /metatron:init)", shape=box];
   commit [label="git commit\n\"codiel(gotchas): ... (<slug> try-<n>)\"", shape=box, style=filled, fillcolor="#ccffcc"];
 

@@ -1,26 +1,25 @@
 /**
- * 設定の読込・深マージ・検証・configHash 算出。
- * 解決順: 環境変数 RAGUEL_CONFIG のパス → cwd/raguel.config.yaml → 内蔵デフォルトのみ。
+ * 設定の読込・深マージ・検証・configHash 算出と、ファイルが変わったときの読み直し。
+ * 解決順: 環境変数 RAGUEL_CONFIG のパス(JSON) → cwd/.codiel/config.json の raguel → 内蔵デフォルトのみ。
  * ファイルが存在するのに読めない・パースできない・zod 検証に落ちる場合は throw する
  * (フェイルクローズド。黙ってデフォルトに落ちない)。
  */
 
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { isAbsolute, resolve } from "node:path"
-import { parse as parseYaml } from "yaml"
 import { assertInvariants } from "../core/invariants"
 import { log } from "../core/log"
 import type { LoadedConfig, RaguelConfig } from "../core/types"
 import { defaultConfig } from "./defaults"
 import { configSchema } from "./schema"
 
-const CWD_CONFIG_FILENAME = "raguel.config.yaml"
+const CWD_CONFIG_PATH = [".codiel", "config.json"]
 
 export function loadConfig(): LoadedConfig {
   const { raw, source } = resolveRawConfig()
-  const merged = deepMerge(defaultConfig, raw)
+  const merged = withProtectedGlobsUnion(deepMerge(defaultConfig, raw))
 
   const result = configSchema.safeParse(merged)
   if (!result.success) {
@@ -46,21 +45,64 @@ interface RawConfigSource {
   source: string
 }
 
-function resolveRawConfig(): RawConfigSource {
+/**
+ * 設定の出所になりうるファイル。RAGUEL_CONFIG があればそのパス、無ければ cwd の .codiel/config.json。
+ * source はファイルから読んだときの値(`env:<パス>`・`cwd:<パス>`)である。
+ */
+export function configCandidate(): { path: string; source: string } {
   const envPath = process.env.RAGUEL_CONFIG
-  if (envPath) {
-    return { raw: readYamlFile(envPath), source: `env:${envPath}` }
-  }
-
-  const cwdPath = resolve(process.cwd(), CWD_CONFIG_FILENAME)
-  if (existsSync(cwdPath)) {
-    return { raw: readYamlFile(cwdPath), source: `cwd:${cwdPath}` }
-  }
-
-  return { raw: {}, source: "defaults" }
+  if (envPath) return { path: envPath, source: `env:${envPath}` }
+  const cwdPath = resolve(process.cwd(), ...CWD_CONFIG_PATH)
+  return { path: cwdPath, source: `cwd:${cwdPath}` }
 }
 
-function readYamlFile(path: string): Record<string, unknown> {
+function resolveRawConfig(): RawConfigSource {
+  const { path, source } = configCandidate()
+  if (process.env.RAGUEL_CONFIG) {
+    return { raw: readJsonObject(path), source }
+  }
+  if (!existsSync(path)) return { raw: {}, source: "defaults" }
+  // config.json はあるが raguel が無いときは内蔵デフォルトで動く
+  const raguel = readJsonObject(path).raguel
+  if (raguel === undefined) return { raw: {}, source: "defaults" }
+  if (!isPlainObject(raguel)) {
+    throw new Error(
+      `設定ファイルの raguel はオブジェクトである必要があります: ${path}`
+    )
+  }
+  return { raw: raguel, source }
+}
+
+// ---- 読み直し(決定 83 の (3)) ----
+
+/**
+ * 呼ぶたびに設定の出所になりうるファイルのパス・有無・mtime を前回の読み込みと比べ、
+ * 違えば loadConfig で読み直して build の結果を作り直す関数を返す。
+ * 読み込みか build が失敗したら例外を投げ、前の結果には戻さない(次の呼び出しで読み直しを試す)。
+ */
+export function createConfigReloader<T>(
+  build: (loaded: LoadedConfig) => T
+): () => T {
+  let stamp: string | undefined
+  let current: T | undefined
+  return () => {
+    const next = configStamp()
+    if (current === undefined || next !== stamp) {
+      current = undefined // 失敗したら前の結果に戻さない
+      current = build(loadConfig())
+      stamp = next
+    }
+    return current
+  }
+}
+
+function configStamp(): string {
+  const { path } = configCandidate()
+  const stat = statSync(path, { throwIfNoEntry: false })
+  return JSON.stringify([path, stat ? stat.mtimeMs : null])
+}
+
+function readJsonObject(path: string): Record<string, unknown> {
   let text: string
   try {
     text = readFileSync(path, "utf8")
@@ -72,20 +114,19 @@ function readYamlFile(path: string): Record<string, unknown> {
 
   let parsed: unknown
   try {
-    parsed = parseYaml(text)
+    parsed = JSON.parse(text)
   } catch (err) {
     throw new Error(
-      `設定ファイルの YAML パースに失敗しました: ${path} (${(err as Error).message})`
+      `設定ファイルの JSON パースに失敗しました: ${path} (${(err as Error).message})`
     )
   }
 
-  if (parsed === null || parsed === undefined) return {}
-  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isPlainObject(parsed)) {
     throw new Error(
       `設定ファイルのルートはオブジェクトである必要があります: ${path}`
     )
   }
-  return parsed as Record<string, unknown>
+  return parsed
 }
 
 // ---- 深マージ(オブジェクトは再帰マージ、配列はユーザー値で置換、undefined はデフォルト維持) ----
@@ -107,6 +148,37 @@ function deepMerge(base: unknown, override: unknown): unknown {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+// ---- code/protected-paths の globs は既定値との和集合(決定 83 の (3)) ----
+
+const PROTECTED_PATHS_RULE = "code/protected-paths"
+
+/**
+ * sealed の保護パスは、利用者の設定で既定の glob を消せないようにする。
+ * ほかの配列は deepMerge のとおりユーザー値で置き換える。
+ */
+function withProtectedGlobsUnion(merged: unknown): unknown {
+  if (!isPlainObject(merged) || !isPlainObject(merged.rules)) return merged
+  const settings = merged.rules[PROTECTED_PATHS_RULE]
+  const defaults = defaultConfig.rules[PROTECTED_PATHS_RULE]?.globs
+  if (
+    !isPlainObject(settings) ||
+    !Array.isArray(settings.globs) ||
+    !Array.isArray(defaults)
+  ) {
+    return merged
+  }
+  return {
+    ...merged,
+    rules: {
+      ...merged.rules,
+      [PROTECTED_PATHS_RULE]: {
+        ...settings,
+        globs: [...new Set([...defaults, ...settings.globs])]
+      }
+    }
+  }
 }
 
 // ---- casesDir の ~ 展開(os.homedir() を使い絶対パス化) ----

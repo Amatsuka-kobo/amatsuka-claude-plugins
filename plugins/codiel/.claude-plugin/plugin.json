@@ -1,5 +1,5 @@
 {
   "name": "codiel",
   "description": "intent(要望の聞き取り)の確定から設計・実装・テスト・PR起票・レビューまでを一気通貫で行うオーケストレーター",
-  "version": "1.0.0-dev"
+  "version": "1.0.0"
 }

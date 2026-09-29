@@ -69,6 +69,8 @@ export interface EvaluationResult {
   policy: {
     configHash: string
     version: number
+    /** 設定の出所(`defaults`・`cwd:<パス>`・`env:<パス>`)。LoadedConfig の source と同じ形 */
+    configSource: string
   }
 }
 
@@ -210,6 +212,6 @@ export interface RaguelConfig {
 export interface LoadedConfig {
   config: RaguelConfig
   configHash: string
-  /** 設定の由来(explicit path / cwd / defaults)。ログ用 */
+  /** 設定の由来(`env:<パス>`・`cwd:<パス>`・`defaults`)。ログと評価の結果の policy に使う */
   source: string
 }

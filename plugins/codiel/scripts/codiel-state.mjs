@@ -43,6 +43,7 @@ var SLUG_MAX = 40;
 var V1_RUN_RE = /^issue-\d+$/;
 var INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/;
 var INTEGRATIONS = ["github", "local"];
+var VERDICTS = ["PROCEED", "ASK", "STOP"];
 var BOOL_FLAGS = ["active", "human-approved", "intent-only", "final"];
 var LOCKFILES = /* @__PURE__ */ new Set([
   "pnpm-lock.yaml",
@@ -78,7 +79,8 @@ var STEP_TRANSITIONS = {
 var STEP_RECORD_FLAGS = ["worktree", "branch", "base", "head"];
 var STEP_KINDS = ["step", "test-code", "test-loop"];
 var SPEC_ID_RE = /^(units\/.+|e2e\/backend\/.+|e2e\/(frontend|cli)\/[^/]+)$/;
-var DEFAULT_TESTS_DIR = "docs/tests";
+var DEFAULT_TESTS_DIR = "docs/codiel/tests";
+var DEFAULT_RUNS_DIR = "docs/codiel/runs";
 var fail = (msg, code = 1) => {
   process.stderr.write(`${msg}
 `);
@@ -131,7 +133,8 @@ function legacyMessage(st) {
 }
 function readCodielConfig(codielRoot) {
   const file = path.join(codielRoot, ".codiel", "config.json");
-  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR };
+  if (!fs.existsSync(file))
+    return { testsDir: DEFAULT_TESTS_DIR, runsDir: DEFAULT_RUNS_DIR };
   let cfg;
   try {
     cfg = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -140,15 +143,42 @@ function readCodielConfig(codielRoot) {
   }
   if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
     throw new Error(`${file} \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
-  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR };
-  const v = cfg.testsDir;
-  if (typeof v !== "string") throw new Error("testsDir \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
-  if (v === "") throw new Error("testsDir \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093");
+  const obj = cfg;
+  return {
+    testsDir: configDir(obj, "testsDir", DEFAULT_TESTS_DIR),
+    runsDir: configDir(obj, "runsDir", DEFAULT_RUNS_DIR)
+  };
+}
+function configDir(cfg, key, fallback) {
+  if (!(key in cfg)) return fallback;
+  const v = cfg[key];
+  if (typeof v !== "string") throw new Error(`${key} \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+  if (v === "") throw new Error(`${key} \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093`);
   if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
-    throw new Error(`testsDir \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
+    throw new Error(`${key} \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
   if (v.split(/[/\\]/).includes(".."))
-    throw new Error(`testsDir \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
-  return { testsDir: normalizeRel(v) };
+    throw new Error(`${key} \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
+  return normalizeRel(v);
+}
+function gitignoreLines(testsDir) {
+  const base = normalizeRel(testsDir);
+  const prefix = base === "." ? "" : `${base}/`;
+  const reports = `${prefix}e2e/**/reports/[0-9]*-try[0-9]*`;
+  return [
+    ".codiel/runs/",
+    ".codiel/reports/",
+    `${reports}/**`,
+    `!${reports}/results.json`,
+    `!${reports}/summary.md`,
+    `!${reports}/failure.md`
+  ];
+}
+function missingGitignoreLines(codielRoot, required) {
+  const file = path.join(codielRoot, ".gitignore");
+  const present = new Set(
+    fs.existsSync(file) ? fs.readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("#")) : []
+  );
+  return required.filter((l) => !present.has(l));
 }
 function parseArgs(argv) {
   const pos = [];
@@ -390,6 +420,14 @@ function main(argv, root = process.cwd()) {
       fail(
         isLegacy(latest.state) ? legacyMessage(latest.state) : `\u672A\u5B8C\u4E86\u306E try \u304C\u3042\u308A\u307E\u3059: ${latest.statePath}(status: ${latest.state.status})\u3002resume \u3059\u308B\u304B stop \u3057\u3066\u304F\u3060\u3055\u3044`
       );
+    if (latest?.state.status === "stopped" && !bools.has("human-approved")) {
+      const st = latest.state;
+      const stopPhases = Object.entries(st.phases).filter(([, ph]) => ph.verdict === "STOP" && !ph.humanApproved).map(([name, ph]) => `${name}(evaluationId: ${ph.evaluationId})`);
+      if (st.stopReason === "raguel-stop" || stopPhases.length > 0)
+        fail(
+          `\u524D\u306E try(${latest.statePath})\u306F Raguel \u306E STOP \u3067\u6B62\u307E\u3063\u3066\u3044\u307E\u3059(stopReason: ${st.stopReason}` + (stopPhases.length > 0 ? `\u3001STOP \u306E\u30D5\u30A7\u30FC\u30BA: ${stopPhases.join(", ")}` : "") + ")\u3002\u65B0\u3057\u3044 try \u3092\u4F5C\u3063\u3066\u3088\u3044\u304B\u4EBA\u306B\u78BA\u304B\u3081\u3001\u627F\u8A8D\u3055\u308C\u305F\u3089 --human-approved \u3092\u4ED8\u3051\u3066 init \u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
+        );
+    }
     const tryN = latest ? latest.tryN + 1 : 1;
     const dir = path.join(runDir(root, slug), `try-${tryN}`);
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true });
@@ -505,10 +543,18 @@ function main(argv, root = process.cwd()) {
       fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
     if (!flags["evaluation-id"]) fail("--evaluation-id \u304C\u5FC5\u8981\u3067\u3059");
     const humanApproved = bools.has("human-approved");
-    const acceptedVerdicts = humanApproved ? ["PROCEED", "ASK"] : ["PROCEED"];
-    if (!acceptedVerdicts.includes(flags.verdict))
+    if (ph.verdict === "STOP" && !humanApproved)
       fail(
-        `verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u306F mark-ask\u3001STOP \u306F stop \u3092\u4F7F\u7528`
+        `\u30D5\u30A7\u30FC\u30BA ${phase} \u306B\u306F Raguel \u306E STOP \u304C\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u4EBA\u304C\u8AA4\u691C\u77E5\u3068\u88C1\u5B9A\u3057\u305F\u3068\u304D\u3060\u3051 --verdict STOP --human-approved \u3067\u901A\u3057\u3066\u304F\u3060\u3055\u3044`
+      );
+    if (humanApproved) {
+      if (!VERDICTS.includes(flags.verdict))
+        fail(
+          `\u4E0D\u6B63\u306A --verdict: ${flags.verdict}\u3002\u8A31\u3055\u308C\u308B\u5024\u306F ${VERDICTS.join(", ")} \u3067\u3059`
+        );
+    } else if (flags.verdict !== "PROCEED")
+      fail(
+        `verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u3068 STOP \u306F mark-ask(STOP \u306F --verdict STOP \u3092\u4ED8\u3051\u308B)\u3067\u4EBA\u306E\u88C1\u5B9A\u306B\u304B\u3051\u3066\u304F\u3060\u3055\u3044`
       );
     ph.status = "passed";
     ph.evaluationId = flags["evaluation-id"];
@@ -542,6 +588,7 @@ function main(argv, root = process.cwd()) {
     const phase = pos[1];
     if (!PHASES.includes(phase)) fail(`\u4E0D\u6B63\u306A\u30D5\u30A7\u30FC\u30BA: ${phase}`);
     const askKind = "kind" in flags ? oneOf(flags, "kind", ["raguel", "confirm"]) : "raguel";
+    const verdict = "verdict" in flags ? oneOf(flags, "verdict", VERDICTS) : "ASK";
     const latest = loadRun(root, flags);
     if (TERMINAL.has(latest.state.status))
       fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
@@ -553,8 +600,10 @@ function main(argv, root = process.cwd()) {
         `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F pending \u306E\u305F\u3081 mark-ask \u3067\u304D\u307E\u305B\u3093\u3002start-phase \u3057\u3066\u304B\u3089\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`
       );
     ph.status = "awaiting_human";
-    ph.evaluationId = flags["evaluation-id"] ?? null;
-    ph.verdict = "ASK";
+    if (ph.verdict !== "STOP") {
+      ph.evaluationId = flags["evaluation-id"] ?? null;
+      ph.verdict = verdict;
+    }
     ph.askKind = askKind;
     latest.state.status = "awaiting_human";
     writeState(latest.statePath, latest.state);
@@ -826,6 +875,20 @@ function main(argv, root = process.cwd()) {
     } catch (e) {
       fail(e.message);
     }
+  }
+  if (cmd === "gitignore") {
+    let testsDir = "";
+    try {
+      testsDir = readCodielConfig(root).testsDir;
+    } catch (e) {
+      fail(e.message);
+    }
+    const required = gitignoreLines(testsDir);
+    return ok({
+      path: ".gitignore",
+      required,
+      missing: missingGitignoreLines(root, required)
+    });
   }
   if (cmd === "set-test-edit") {
     const latest = loadRun(root, flags);

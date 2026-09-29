@@ -28,7 +28,7 @@
 | 利用可能スキルに `issue-craft` が無い | 委譲。自前起票に切り替える | なし |
 | `blankIssuesEnabled: false` かつ `templates` が空でない | 何も畳まない | 自前起票で本文がテンプレートと衝突するときは、衝突内容を提示して 3 択でユーザーに選ばせる |
 | metatron が未導入 | 何も畳まない | なし |
-| 利用可能ツールに `mcp__raguel__*` が無い | 何も畳まない | `/codiel:run` は Raguel MCP 接続が無いと開始しない |
+| 利用可能ツールに `mcp__plugin_codiel_raguel__*` が無い | 何も畳まない | `/codiel:run` は Raguel MCP 接続が無いと開始しない |
 
 ## 畳んだことの報告
 

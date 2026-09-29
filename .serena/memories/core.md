@@ -77,8 +77,8 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
 パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (1.0.0-dev) — intent-driven orchestrator gated by the bundled `raguel` MCP
-  server. Largest/most complex. 2026-09-27 に sandalphon を吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
+- **codiel** (1.0.0) — intent-driven orchestrator gated by the bundled `raguel` MCP
+  server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
 - **metatron** (0.4.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮める(`scan-adr-candidates` / `shrink-adr-candidate`)。
@@ -97,7 +97,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 - **chat-history** (0.7.0) — chat logging / recall / resume skills + chat-recorder & chat-reader
   agents. The record format flipped from summary to **verbatim** on 2026-08-16, so records are
   bimodal and readers must branch on the date. Details: `mem:chat_history/core`.
-- **gh-utility** (0.5.2-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
+- **gh-utility** (0.5.3-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
   sharing `references/github-issue-common.md`; scripts (`check-issue-env`, `list-issues`,
   `link-sub-issue`) wrap `gh`/REST, skills own the judgement. `issue-craft` は 2026-08-16 に
   **持ち込みモード**を得た: 固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動されたときだけ

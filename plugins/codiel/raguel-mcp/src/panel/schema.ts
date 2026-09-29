@@ -56,5 +56,10 @@ export function toFindings(
 
 /** zod スキーマから claude CLI --json-schema 用の JSON Schema オブジェクトを生成する */
 export function toJsonSchema(schema: z.ZodType): object {
-  return z.toJSONSchema(schema) as object
+  // claude CLI の --json-schema は $schema を含むスキーマを拒むので外す(決定 83 の (1))
+  const { $schema: _, ...rest } = z.toJSONSchema(schema) as Record<
+    string,
+    unknown
+  >
+  return rest
 }

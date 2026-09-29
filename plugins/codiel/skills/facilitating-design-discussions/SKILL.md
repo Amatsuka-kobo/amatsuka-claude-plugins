@@ -1,6 +1,6 @@
 ---
 name: facilitating-design-discussions
-description: Codiel の discuss フェーズでオーケストレーターが agenda.md を用いてユーザーとディスカッションし合意を discussion.md に記録するとき、および design フェーズのウォークスルーで設計をユーザーに確認するとき使用する。合意を推測で埋めたくなる場面・確認を省略したくなる場面でこそ必ず使用する。
+description: Codiel の discuss フェーズで、オーケストレーター本体が agenda.md を基にユーザーと論点を議論し合意を discussion.md に記録するとき、および design フェーズのウォークスルーで design.md をユーザーに確認し新しい画面の名前を決めるときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # ディスカッション進行規約
@@ -30,10 +30,10 @@ description: Codiel の discuss フェーズでオーケストレーターが ag
    修正があれば該当論点の提示に戻る。
 7. 未決論点が残る場合は「この論点は未決のまま design に進む(architect は未決を前提に設計し、
    ウォークスルーで再提示される)」ことを明示し、ユーザーの了解を得る。
-8. `agenda.md` と `discussion.md` をコミットし、フェーズを完了する:
+8. `agenda.md` と `discussion.md` をコミットし、フェーズを完了する。`<runsDir>/<slug>/` は依頼文が渡す run の文書の置き場のパスである:
 
    ```
-   git add <try-dir>/agenda.md <try-dir>/discussion.md
+   git add <runsDir>/<slug>/agenda.md <runsDir>/<slug>/discussion.md
    git commit -m "codiel(discuss): 設計ディスカッションの合意を記録 (<slug> try-<n>)"
    node <plugin-root>/scripts/codiel-state.mjs complete-phase discuss --slug <slug>
    ```
@@ -58,13 +58,19 @@ design フェーズ(writing-design-docs)と reviewer-doc がこの書式のま�
 architect が design.md を書き終えて報告したら、raguel-gating の design ゲート
 (`evaluate_design`)を呼ぶ**前に**、必ず次を行う:
 
-1. design.md の要点(方針・変更対象・影響 unit・リスク)をユーザーに提示する。
+1. design.md の要点(方針・変更対象・影響を受ける機能単位・リスク)をユーザーに提示する。
    discussion.md の各決定がどこに反映されたかの対応を添える。architect が「合意との衝突・
    再協議事項」を報告している場合は、それを最初に提示する。
-2. 修正要望があれば、要望を**解釈を加えずそのまま**ディスパッチプロンプトに含めて architect を
-   再ディスパッチし、完了後に再度ウォークスルーする。往復に試行上限は設けない(`record-attempt` は呼ばない)。
-   要望が discussion.md の決定の変更を含む場合は、該当論点の記録を更新してから再ディスパッチする。
-3. ユーザーの承認が得られたら、raguel-gating の design ゲートへ進む。
+2. `## 影響を受ける機能単位` に名前の候補の行(新しい画面で名前が未定のもの)があれば、画面ごとに
+   候補を選択肢にして AskUserQuestion で聞く(待機は「## 待機と Stop フック」の手順に従う)。
+   候補の外の答えは、ケバブケースの 1 セグメントに直した形を示して確かめる。
+3. 修正要望(手順 2 で決まった画面名を含む)があれば、要望を**解釈を加えずそのまま**ディスパッチ
+   プロンプトに含めて architect を再ディスパッチし、完了後に再度ウォークスルーする。往復に試行
+   上限は設けない(`record-attempt` は呼ばない)。要望が discussion.md の決定の変更を含む場合は、
+   該当論点の記録を更新してから再ディスパッチする。
+4. `## 影響を受ける機能単位` に名前の候補の行が 1 件でも残る design.md では、raguel-gating の
+   design ゲートへ進まない。すべて ID に書き換わってから手順 5 へ進む。
+5. ユーザーの承認が得られたら、raguel-gating の design ゲートへ進む。
 
 ## 中断再開(discuss フェーズ)
 

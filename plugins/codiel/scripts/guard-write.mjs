@@ -23,7 +23,8 @@ var STAGES = [
   ["finalize"]
 ];
 var PHASES = STAGES.flat();
-var DEFAULT_TESTS_DIR = "docs/tests";
+var DEFAULT_TESTS_DIR = "docs/codiel/tests";
+var DEFAULT_RUNS_DIR = "docs/codiel/runs";
 function readState(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
@@ -67,7 +68,8 @@ function isLegacy(st) {
 }
 function readCodielConfig(codielRoot) {
   const file = path.join(codielRoot, ".codiel", "config.json");
-  if (!fs.existsSync(file)) return { testsDir: DEFAULT_TESTS_DIR };
+  if (!fs.existsSync(file))
+    return { testsDir: DEFAULT_TESTS_DIR, runsDir: DEFAULT_RUNS_DIR };
   let cfg;
   try {
     cfg = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -76,15 +78,22 @@ function readCodielConfig(codielRoot) {
   }
   if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg))
     throw new Error(`${file} \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
-  if (!("testsDir" in cfg)) return { testsDir: DEFAULT_TESTS_DIR };
-  const v = cfg.testsDir;
-  if (typeof v !== "string") throw new Error("testsDir \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
-  if (v === "") throw new Error("testsDir \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093");
+  const obj = cfg;
+  return {
+    testsDir: configDir(obj, "testsDir", DEFAULT_TESTS_DIR),
+    runsDir: configDir(obj, "runsDir", DEFAULT_RUNS_DIR)
+  };
+}
+function configDir(cfg, key, fallback) {
+  if (!(key in cfg)) return fallback;
+  const v = cfg[key];
+  if (typeof v !== "string") throw new Error(`${key} \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+  if (v === "") throw new Error(`${key} \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093`);
   if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
-    throw new Error(`testsDir \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
+    throw new Error(`${key} \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
   if (v.split(/[/\\]/).includes(".."))
-    throw new Error(`testsDir \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
-  return { testsDir: normalizeRel(v) };
+    throw new Error(`${key} \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
+  return normalizeRel(v);
 }
 function normalizeRel(p) {
   return path.posix.normalize(p.replaceAll("\\", "/")).replace(/\/+$/, "");
@@ -392,27 +401,10 @@ function findProjectRoot(startDir) {
     dir = parent;
   }
 }
-var CODIEL_WORKTREE_RE = /[/\\]\.codiel[/\\]worktrees[/\\][^/\\]+[/\\][^/\\]+(?:[/\\]|$)/;
-function gitMainWorktree(cwd) {
-  try {
-    const res = spawnSync("git", ["worktree", "list", "--porcelain"], {
-      cwd,
-      encoding: "utf8",
-      timeout: 5e3,
-      windowsHide: true
-    });
-    if (res.status !== 0) return null;
-    const m = /^worktree (.+)$/m.exec(res.stdout ?? "");
-    return m ? path2.resolve(m[1]) : null;
-  } catch {
-    return null;
-  }
-}
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
 function findMainRoot(startDir) {
-  if (CODIEL_WORKTREE_RE.test(startDir)) {
-    const main = gitMainWorktree(startDir);
-    if (main) return main;
-  }
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
   return findProjectRoot(startDir);
 }
 
@@ -476,8 +468,13 @@ function toPosix(p) {
 function normalizeRel2(p) {
   return path3.posix.normalize(toPosix(p)).replace(/\/+$/, "");
 }
-function underTestsDir(repoRel, testsDir) {
-  return testsDir === "." || repoRel.startsWith(`${testsDir}/`);
+function underDir(repoRel, dir) {
+  return dir === "." || repoRel.startsWith(`${dir}/`);
+}
+function isE2eReport(repoRel, testsDir) {
+  if (!underDir(repoRel, testsDir)) return false;
+  const rest = testsDir === "." ? repoRel : repoRel.slice(testsDir.length + 1);
+  return /(^|\/)reports\//.test(rest);
 }
 function frontmatterTests(text) {
   const lines = text.split(/\r?\n/);
@@ -550,6 +547,15 @@ try {
   const codielRel = wt ? wt[2] ?? "" : toPosix(path3.relative(mainRoot, abs));
   const repoRel = wt ? wt[2] ?? "" : toPosix(path3.relative(repoRoot, absReal));
   if (run.state.intent === repoRel) pass();
+  let config = null;
+  let configError = "";
+  try {
+    config = readCodielConfig(mainRoot);
+  } catch (e) {
+    configError = e.message;
+  }
+  if (config && repoRel === path3.posix.join(config.runsDir, run.state.runId, "unrecorded-gotchas.md"))
+    pass();
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass();
     emit(
@@ -567,13 +573,8 @@ try {
   if (DOC_PHASES.has(phase)) {
     if (codielRel.startsWith(".codiel/") || codielRel.startsWith("docs/"))
       pass();
-    let testsDir;
-    try {
-      testsDir = readCodielConfig(mainRoot).testsDir;
-    } catch {
-      testsDir = null;
-    }
-    if (testsDir !== null && underTestsDir(repoRel, testsDir)) pass();
+    if (config && (underDir(repoRel, config.testsDir) || underDir(repoRel, config.runsDir)))
+      pass();
     emit(
       "ask",
       `\u6587\u66F8\u30D5\u30A7\u30FC\u30BA(${phase})\u4E2D\u306B\u30B3\u30FC\u30C9\u9818\u57DF ${codielRel} \u3078\u66F8\u304D\u8FBC\u3082\u3046\u3068\u3057\u3066\u3044\u307E\u3059`
@@ -581,22 +582,29 @@ try {
   }
   if (CODE_PHASES.has(phase)) {
     if (TEST_GUARD_PHASES.has(phase)) {
-      let testsDir;
-      try {
-        testsDir = readCodielConfig(mainRoot).testsDir;
-      } catch (e) {
+      if (!config)
         emit(
           "ask",
-          `.codiel/config.json \u304C\u4E0D\u6B63\u306A\u305F\u3081\u3001${phase} \u4E2D\u306E\u66F8\u304D\u8FBC\u307F\u304C\u30C6\u30B9\u30C8\u306E\u4FDD\u8B77\u306B\u5F53\u305F\u308B\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(${e.message})`
+          `.codiel/config.json \u304C\u4E0D\u6B63\u306A\u305F\u3081\u3001${phase} \u4E2D\u306E\u66F8\u304D\u8FBC\u307F\u304C\u30C6\u30B9\u30C8\u306E\u4FDD\u8B77\u306B\u5F53\u305F\u308B\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(${configError})`
         );
-      }
+      const testsDir = config.testsDir;
       const testEdit = phase === "fix-loop" && run.state.testEdit === true;
-      if (!testEdit && (underTestsDir(repoRel, testsDir) && /(^|\/)(spec|cases)\.md$/.test(repoRel) || recordedTests(path3.join(repoRoot, testsDir)).has(repoRel)))
+      if (!testEdit && (underDir(repoRel, testsDir) && /(^|\/)(spec|cases)\.md$/.test(repoRel) || recordedTests(path3.join(repoRoot, testsDir)).has(repoRel)))
         emit(
           "ask",
           `\u30C6\u30B9\u30C8(${repoRel})\u306E\u5909\u66F4\u306F test-spec \u3068 test-code \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u6539\u7AC4\u306E\u7591\u3044)`
         );
     }
+    if (!config)
+      emit(
+        "ask",
+        `.codiel/config.json \u304C\u4E0D\u6B63\u306A\u305F\u3081\u3001${phase} \u4E2D\u306E\u66F8\u304D\u8FBC\u307F\u304C run \u306E\u6587\u66F8(runsDir)\u306B\u5F53\u305F\u308B\u304B\u5224\u5B9A\u3067\u304D\u307E\u305B\u3093(${configError})`
+      );
+    if (underDir(repoRel, config.runsDir) && !isE2eReport(repoRel, config.testsDir))
+      emit(
+        "ask",
+        `run \u306E\u6587\u66F8(${repoRel})\u306F\u6587\u66F8\u30D5\u30A7\u30FC\u30BA\u3067\u66F8\u304D\u307E\u3059(${phase} \u4E2D\u306E\u5909\u66F4\u306F\u60F3\u5B9A\u5916)`
+      );
     let domain = run.state.domain;
     if (worktreeRoot) {
       const wtRel = normalizeRel2(path3.relative(repoRoot, worktreeRoot));
@@ -608,7 +616,7 @@ try {
         );
       domain = hits[0]?.step.domain ?? null;
     }
-    if (domain && !codielRel.startsWith(".codiel/")) {
+    if (domain && !codielRel.startsWith(".codiel/") && !isE2eReport(repoRel, config.testsDir)) {
       const cwdWt = WORKTREE_REL_RE.exec(
         toPosix(path3.relative(mainReal, realpathOrAncestor(cwd)))
       );
