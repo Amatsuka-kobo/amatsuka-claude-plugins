@@ -1,7 +1,7 @@
 # Raguel を層ごとに作り直す 設計書
 
 - 作成日: 2026-09-28
-- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直し、実機確認 4・9 の結果で §6.4.4・§6.12.1・§15 の 2・4 を確定した(2026-09-29、ユーザー承認)
+- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直し、実機確認 4・9 の結果で §6.4.4・§6.12.1・§15 の 2・4 を確定した。W4 のレビューを受けて、§6.2.2 の手順 6・7、§6.4.2(`://` の行のエントロピー、rename)、§6.9.4(`head` の null)、§6.13.1(改竄の STOP)、§6.13.3(検査 8・9 と、フェーズの間の連続性)、§7.1(設定の行)、§13 を改めた(いずれも 2026-09-29、ユーザー承認)
 - 対象: `plugins/codiel/raguel-mcp`(主)、codiel で Raguel を使う箇所(`skills/raguel-gating`、`skills/orchestrating-runs`、`src/codiel-state.ts`、`src/hooks/guard-write.ts`・`guard-bash.ts`)
 - バージョン: codiel `1.0.0` → `1.1.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.1.0-dev`(§8)
 - 入力: ユーザー合意の決定 R1〜R24(2026-09-28〜29)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
@@ -298,8 +298,8 @@ git -C <repoPath> -c core.quotePath=false -c diff.noprefix=false -c diff.mnemoni
 ```
 
 5. 差分が 20 MB を超えたら入力の誤りにする。これはメモリを守る上限で、内容の大きさの懸念は `common/max-size` が ask で扱う。
-6. 差分が空なら、正規の入力として扱う(R22)。ルール層・Jev の文脈判定・重さ判定・パネルを通さずに、verdict を PROCEED、`weightTier` を trivial にし、`code/no-change`(info。`baseRef` と HEAD の間にこのフェーズの変更が無い)の所見を 1 件残す。subject(`base` と `head`、`files` は空)・verdict.json・索引は通常どおり書くので、pass-gate の検査(§6.13.3。検査 8 の起点はフェーズの開始の HEAD のまま)はそのまま当たる。修正の要らない test-loop のように変更の無いフェーズがこれに当たる(所見 K4)。
-7. 差分のファイルがすべて E2E のレポート(`<testsDir>/**/reports/**`。§6.4.2)なら、手順 6 と同じく変更なしとして扱う(R24)。`code/no-change` の message に、レポートだけの差分であることと、レポートのパスの件数を書く。subject の `files` にはレポートのファイルを載せる。レポートは evaluate_code の前にコミットされる(§3.1)ので、レポートを除くと空になるフェーズがこれに当たる。
+6. 差分が空なら、正規の入力として扱う(R22)。ルール層・Jev の文脈判定・重さ判定・パネルを通さずに、verdict を PROCEED、`weightTier` を trivial にし、`code/no-change`(info。`baseRef` と HEAD の間にこのフェーズの変更が無い)の所見を 1 件残す。subject(`base` と `head`、`files` は空)・verdict.json・索引は通常どおり書くので、pass-gate の検査(§6.13.3。検査 8 の起点はフェーズの開始の HEAD のまま)はそのまま当たる。修正の要らない test-loop のように変更の無いフェーズがこれに当たる(所見 K4)。前フェーズの改竄の検証(§6.3 の手順 3)は、変更なしでも行い、改竄があれば `casefile/tampered` の STOP にする(2026-09-29、W4 のレビューを受けたユーザー決定)。
+7. 差分のファイルがすべて E2E のレポート(`<testsDir>/**/reports/**`。§6.4.2)なら、手順 6 と同じく変更なしとして扱う(R24)。レポートと生成物しかない差分も同じである。レポートと生成物には common/secrets だけを当て(§6.4.2)、stop が出れば STOP にする。`code/no-change` の message に、レポートだけの差分であることと、レポートのパスの件数を書く。subject の `files` にはレポートのファイルを載せる。レポートは evaluate_code の前にコミットされる(§3.1)ので、レポートを除くと空になるフェーズがこれに当たる。
 
 手順 3 は手順 6 より前にある。コミットした差分が空でも、`paths` の範囲に未コミットの変更があれば入力の誤りになる。変更をコミットし忘れたまま「変更なし」で通ることは無い。
 
@@ -463,7 +463,7 @@ info の所見は判定を動かさず、adversarial・steelman・crosscheck・m
 秘密情報の検出は、応急処置 (2) を土台に次を足す。
 
 - 検査の対象は評価対象の本文だけである。diff のファイル見出し(`diff --git`・`index`・`---`・`+++`・`rename`・`similarity`)とファイルの見出し行は、Raguel が位置を持って外す。文字列の形で判定しない。
-- エントロピーの判定は、語を `/` と `.` で区切った各部分に当てる。部分が 20 文字以上で、英大文字・英小文字・数字のうち 3 種を含むときだけ測る。閾値は 4.0 のまま据える。パスや slug は小文字と数字と `-` で書かれることが多く、3 種の条件で外れる。
+- エントロピーの判定は、語を `/` と `.` で区切った各部分に当てる。部分が 20 文字以上で、英大文字・英小文字・数字のうち 3 種を含むときだけ測る。閾値は 4.0 のまま据える。パスや slug は小文字と数字と `-` で書かれることが多く、3 種の条件で外れる。`://` を含む行もエントロピーの判定の対象にする(URL のクエリに埋めた鍵を拾うため。ホスト名とパスの部分は区切りと 3 種の条件で外れる)。lockfile と `node_modules` の行の除外は残す(2026-09-29、W4 のレビューを受けたユーザー決定)。
 - `user:pass@` の形(`[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s@/]+@`)を既知パターンに足す(所見 A2)。
 - 所見の抜粋は一致した行の前後 1 行と行番号とし、一致したトークンは先頭 4 文字だけを残して `*` で伏せる。`01-rules.json`・verdict.json・応答・`submission.txt` のすべてで伏せる(所見 H1)。
 - `allowPatterns` はトークンに当てる(行に当てない)。
@@ -504,6 +504,7 @@ info の所見は判定を動かさず、adversarial・steelman・crosscheck・m
 - 保護パスの判定に使う glob は、既定の glob から `excludeDefaults` を除き、利用者の `globs` との和集合を取ったものである(§6.12.2)。
 - `generated` に当たるパスは、`code/protected-paths`・重さ判定(変更行数・ファイル数・保護パス近接)・パネルの入力・Jev の文脈判定の対象から外す。ほかのルールのうち当てるのは `common/secrets` だけである。パネルには、生成物のファイルごとに「生成物: `<パス>`(`<行数>` 行の変更)」の 1 行だけを渡す。
 - `generated` と保護パスの両方に当たるパスは、生成物として扱う。生成物を保護パスに入れて毎回 STOP になる(K1)のを解くためである。
+- 名前の変更(rename)は、移動元と移動先の両方のパスで判定する。どちらかが保護パスなら `code/protected-paths` を当て、生成物・レポートとして外すのは両方が外す対象のときだけにする。重さの変更ファイル数と近接、`code/test-deletion` も移動元を見る。保護パスのファイルを外へ移して保護を抜ける経路を塞ぐためである(2026-09-29、W4 のレビュー)。
 - 外した既定の glob と `generated` は、list_rules と応答の `policy.protectedPaths: { excludedDefaults, generated }` に出す。黙って外れないようにするためである。
 - 差分に生成物のファイルがあり、生成物でないファイルの変更が 1 つも無ければ、`code/generated-only`(info)の所見を出し、生成物のパスを message に書く。生成物に見せかけた手書きの変更を、オーケストレーターと人が見分ける手がかりにする(§11)。
 
@@ -882,6 +883,8 @@ verdict.json は次のフィールドを持つ。
   "verdict": "ASK", "judgeStatus": "ok", "head": "<40 桁>", "at": "..." }
 ```
 
+- `head` は、プロジェクトルートが git の管理外のときと、最初のコミットが無いリポジトリで文書と判断を評価したときに `null` になる。subject.json と verdict.json の `subject.head` も同じである。evaluate_code は HEAD を解決できなければ入力の誤りにする。
+
 `outcomes.jsonl` は record_outcome が記録したものごとに 1 行を追記する。
 
 ```jsonc
@@ -1040,7 +1043,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 | code 系フェーズの `baseRef` には、変更が無くてもフェーズの開始の HEAD を渡す。空の差分は PROCEED と「変更なし」の info で返る(§6.2.2、R22)。run 全体の差分や、ほかのフェーズの起点を渡して空を避ける運用をしない | 手順に、空の差分でも起点を変えない旨と、run 全体の差分を渡さない旨の 2 文がある |
 | M4-C の応急処置(codiel 決定 97)で対応表の implement・test-loop・fix-loop の行に足した「そのフェーズの差分が空なら `git diff <base>...HEAD` を渡す」(`SKILL.md:58`(`7130f69c`))を消す。空の差分は Raguel が PROCEED で返す(R22) | `grep -n '<base>...HEAD' plugins/codiel/skills/raguel-gating/SKILL.md` が 0 件 |
 | M4-C で足した、`git diff` にレポートの除外の pathspec を付ける規則と、除外した後の diff で空を決める規則(`SKILL.md:66`(`7130f69c`)、codiel 決定 104)を消す。Raguel が差分を自分で作り、レポートを外す(R24、§6.4.2) | `grep -n 'exclude,glob' plugins/codiel/skills/raguel-gating/SKILL.md` が 0 件 |
-| STOP の手順(応急処置 (6))の「誤検知として続ける」の record_outcome を `outcome: approved, ruling: false-positive, notes: <裁定の理由>` にする。所見に `casefile/tampered` があれば、誤検知の選択肢を出さずに止める。誤検知の 1 件の退避先は M4-C の `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)のまま揃える(`SKILL.md:137`(`7130f69c`)) | 手順に `ruling: false-positive` がある。改竄の STOP で AskUserQuestion の選択肢が「止める」だけになる。退避先のパスが 2 つとも手順にある |
+| STOP の手順(応急処置 (6))の「誤検知として続ける」の record_outcome を `outcome: approved, ruling: false-positive, notes: <裁定の理由>` にする。所見に `casefile/tampered` があれば、誤検知の選択肢を出さずに止める。人には AskUserQuestion で聞かず、止めた理由(改竄の所見の要約と `decisionPoint`)を報告する(AskUserQuestion の選択肢は 2 件以上が要るので、選択肢を「止める」だけにできない。2026-09-29 に改めた)。誤検知の 1 件の退避先は M4-C の `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)のまま揃える(`SKILL.md:137`(`7130f69c`)) | 手順に `ruling: false-positive` がある。改竄の STOP では AskUserQuestion を使わずに止め、理由を報告する。退避先のパスが 2 つとも手順にある |
 | ASK の裁定 A は、再評価の前に `record_outcome(outcome: rejected, ruling: revise, notes: <人の指示>)` を記録する。旧規則の「最終的な裁定が固まったら記録」をやめる | 裁定 A の手順で record_outcome が evaluate の呼び直しより前にある |
 | ASK の裁定 B は `record_outcome(outcome: approved, ruling: as-is)` を記録する | 裁定 B の手順に `ruling: as-is` がある |
 | `judgeStatus` が degraded の ASK では、所見と `degradedReasons` を示し、AskUserQuestion で「再評価 / そのまま承認 / 止める」を聞く。再評価は evaluate を呼び直し、そのまま承認は裁定 B と同じ手順、止めるは `stop --reason raguel-degraded` | 手順に 3 択がある |
@@ -1065,7 +1068,8 @@ Raguel の記録を読む処理を `C/src/raguel-records.ts`(新設)に置く。
 
 | コマンド | 変更 | 受け入れ基準 |
 | --- | --- | --- |
-| `start-phase` | test-code・implement・test-loop・fix-loop では、`git rev-parse HEAD` をフェーズの `startHead` に記録する | 4 フェーズで `phases.<phase>.startHead` が 40 桁のコミットになる |
+| `start-phase` | test-code・implement・test-loop・fix-loop では、`git rev-parse HEAD` をフェーズの `startHead` に記録する。加えて、直前に passed になったゲート付きフェーズの `passedHead` があれば、今の HEAD と等しいことを要る(フェーズの間の連続性。2026-09-29、W4 のレビューを受けたユーザー決定) | 4 フェーズで `phases.<phase>.startHead` が 40 桁のコミットになる。直前のフェーズの pass-gate の後にコミットを足すと、start-phase が「評価の後にコミットがある」旨で失敗する |
+| `pass-gate` の記録 | 通したときの HEAD を `phases.<phase>.passedHead` に記録する(すべてのゲート付きフェーズ。git の管理外では記録しない) | passed のフェーズが `passedHead` を持つ |
 | `pass-gate` | 下の検査をすべて通ったときだけ通す | 検査ごとに、外れた入力で非ゼロ終了するテストがある |
 | `mark-ask` | `--kind raguel` では `--evaluation-id` を必須にし、索引の行があり、`runId`・`phase` が合い、`verdict` が `--verdict`(既定 ASK)と等しいことを確かめる | 存在しない evaluationId と、verdict の食い違いで非ゼロ終了する |
 | `init` | 同じ slug の最新の try について、state の検査(codiel 設計 §6.2.2)に加え、その try の `raguelRunId` の索引の行に、judgeStatus が ok の STOP で、`false-positive` の裁定の記録を持たないものがあれば、`--human-approved` を要る | STOP を state に記録しないまま止めた try の次の `init` が、`--human-approved` なしで失敗する(codiel 設計 §6.14.3 の限界が閉じる) |
@@ -1080,8 +1084,8 @@ pass-gate の検査は次のとおりである。
 5. 行の `casePath` の verdict.json が読め、`evaluationId`・`runId`・`phase`・`verdict` が索引の行と等しい。
 6. `--human-approved` が無ければ、verdict が PROCEED である。
 7. `--human-approved` があれば、裁定の記録に同じ evaluationId の行があり、verdict が ASK なら `ruling` が `as-is`、STOP なら `false-positive` である。
-8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、verdict.json の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。
-9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。
+8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、verdict.json の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。さらに `subject.paths` が無いことを要り、`paths` で範囲を絞った評価では通さない(2026-09-29、W4 のレビューを受けたユーザー決定)。
+9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。加えて、フェーズごとに期待するファイルが `subject.files` に含まれる。design は run の文書の置き場の `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` が 1 件以上である。intent-sync は書き換えるファイルが可変なので、期待するファイルを照合しない(§13。2026-09-29、W4 のレビューを受けたユーザー決定)。
 10. state に `raguelContract: 2` が無い run(1.1.0 より前に作った run)では、pass-gate は検査の代わりに次の文言で失敗する。
 
 ```
@@ -1150,7 +1154,7 @@ Bash でキー単位の判定ができず、run の間に codiel が config.json
 | パネルの構成 | 文書の standard で、前フェーズの証拠があるときだけ crosscheck が起動し、intent では起動しないこと。meta が critical でだけ起動すること | R15 |
 | パイプライン | 前フェーズ改竄の STOP、meta 失敗の degraded、締切の打ち切り、`extra.signal` の abort で子プロセスが止まり索引に書かれないこと(所見 I1 が挙げた分岐を含む) | I1、R6 |
 | ケースファイル | チェーンが verdict の書き換えを検出すること、未知のファイルを無視すること、前の attempt の差し替えの検出、一時ファイルと rename、読めない `index.json` を上書きしないこと、掃除が索引を消すこと、`latestAttemptDir`・`resolveProjectId`・`sweepRetention` の `maxDays` | G3〜G8、I1 |
-| 設定 | §6.12.2・§6.12.3 の各エラー、sealed のリストの和集合、起動時に壊れた設定でも起動すること。§6.12.1 の読む順(`RAGUEL_CONFIG` の JSON、プロジェクトルートの `.codiel/config.json` の `raguel`、既定)、サブディレクトリの cwd から config.json を見つけること、`raguel` キーが無いときに既定を使うこと、`testsDir`・`runsDir` を検証しないこと、壊れた JSON と `raguel` がオブジェクトでないときに読み込みの失敗になること、`raguel.config.yaml` だけがあるときに読まず既定で動くこと | A3、A14、E2、R23 |
+| 設定 | §6.12.2・§6.12.3 の各エラー、sealed のリストの和集合、起動時に壊れた設定でも起動すること。§6.12.1 の読む順(`RAGUEL_CONFIG` の JSON、プロジェクトルートの `.codiel/config.json` の `raguel`、既定)、サブディレクトリの cwd から config.json を見つけること、`raguel` キーが無いときに既定を使うこと、`runsDir` を検証しないこと(`testsDir` は §6.12.1 と R24 のとおり検証し、不正なら読み込みの失敗)、壊れた JSON と `raguel` がオブジェクトでないときに読み込みの失敗になること、`raguel.config.yaml` だけがあるときに読まず既定で動くこと | A3、A14、E2、R23 |
 | 判例 | firedRules の除外、degraded から作らないこと、退役、`precedent/failure-match` | G2、R7 |
 | codiel-state | §6.13.3 の検査ごとのテスト | R11 |
 | hook | §6.13.4 の各 deny | R12 |
@@ -1337,6 +1341,7 @@ codiel(`C/`):
 - 生成物と、それを作るソースの対応の検証(R20)。宣言した生成物のパスに手で書いた変更は、`code/generated-only` の info と common/secrets のほかには検査されない。
 - ARCHITECTURE の禁止依存の文言がテストコードを除くと明記しない点。codiel 設計 §13 と同じく範囲外とする。
 - 旧 projectId のケースファイルと判例の移行。
+- intent-sync のゲートで、書き換えるべきファイルがすべて評価されたかの照合(§6.13.3 の検査 9)。書き換えるファイルが run ごとに違うので、評価したファイルが変わっていないことだけを見る。
 
 ---
 
