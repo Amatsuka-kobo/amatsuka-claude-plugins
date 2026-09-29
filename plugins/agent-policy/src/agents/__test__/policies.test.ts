@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   ASSIGNMENTS,
-  allowsAgentTool,
   CLAUDE_ENUM_MODELS,
   candidateScopeFor,
   isCustomInjection,
@@ -47,22 +46,6 @@ const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
   "code-review": ["gpt-sol", "sonnet"],
   "complex-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"]
-}
-
-const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
-  "complex-impl": true,
-  "normal-impl": true,
-  "light-impl": true,
-  escalation: true,
-  general: true,
-  explore: true,
-  "realtime-research": true,
-  "e2e-verify": true,
-  "design-review": true,
-  "knowledge-elicitation": false,
-  "code-review": false,
-  "complex-review": false,
-  "adversarial-review": false
 }
 
 function sortedRoleIds(value: Record<RoleId, ModelId[]>): RoleId[] {
@@ -205,37 +188,6 @@ describe("rolesFor", () => {
 
   it("claude-model-policy に登場しないモデルには空配列を返す", () => {
     expect(rolesFor("gpt-astra")).toEqual([])
-  })
-})
-
-describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 13 役割で現行規定を保つ", () => {
-    for (const role of ROLES) {
-      expect(allowsAgentTool([role.id]), role.id).toBe(
-        EXPECTED_AGENT_TOOL[role.id]
-      )
-    }
-  })
-
-  it("役割の組み合わせに応じて Agent Tool を判定する", () => {
-    expect(allowsAgentTool(["light-impl"])).toBe(true)
-    expect(allowsAgentTool(["light-impl", "complex-impl"])).toBe(true)
-    expect(allowsAgentTool(["adversarial-review"])).toBe(false)
-    expect(allowsAgentTool(["code-review"])).toBe(false)
-    expect(allowsAgentTool(["complex-review"])).toBe(false)
-    expect(allowsAgentTool(["knowledge-elicitation"])).toBe(false)
-    expect(allowsAgentTool(["complex-impl", "code-review"])).toBe(true)
-  })
-
-  it("Agent Tool を許可する新規役割を通す", () => {
-    expect(allowsAgentTool(["escalation"])).toBe(true)
-    expect(allowsAgentTool(["e2e-verify"])).toBe(true)
-  })
-
-  it("モデル未指定時は役割側の規定だけを適用する", () => {
-    expect(allowsAgentTool(["explore"])).toBe(true)
-    expect(allowsAgentTool(["light-impl"])).toBe(true)
-    expect(allowsAgentTool(["complex-review"])).toBe(false)
   })
 })
 

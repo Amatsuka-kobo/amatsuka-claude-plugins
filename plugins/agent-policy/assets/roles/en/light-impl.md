@@ -26,7 +26,7 @@ kind: impl
 ## Constraints
 
 - **When invoked for lightweight implementation**, stop instead of deciding how to handle a target that does not match the pattern. Do not make changes outside the supplied pattern.
-- **When invoked for lightweight implementation**, do not take on work requiring judgment, design, or complex interpretation. If you are uncertain, do not consult an advisor; report the uncertainty and send the task back.
+- **When invoked for lightweight implementation**, do not take on work requiring judgment, design, or complex interpretation. If you are uncertain, report the uncertainty and send the task back.
 
 ## Output Format
 

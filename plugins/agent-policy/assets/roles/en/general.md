@@ -20,7 +20,7 @@ kind: impl
 ## Procedure
 
 - Record progress in the report during long-running work.
-- If an advisor consultation does not resolve a decision, report the options and a recommendation.
+- For decisions you are unsure about, report the options and a recommendation.
 
 ## Constraints
 
