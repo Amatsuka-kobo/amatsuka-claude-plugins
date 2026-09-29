@@ -38934,7 +38934,7 @@ var defaultConfig = {
   contextJudge: {
     enabled: false,
     timeoutMs: 2e4,
-    thresholds: { lower: 0.2, raise: 0.7 }
+    thresholds: { lower: 0.5, raise: 0.7 }
   },
   precedent: {
     seedCatalog: true,

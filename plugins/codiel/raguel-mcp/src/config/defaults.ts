@@ -34,7 +34,7 @@ export const defaultConfig: RaguelConfig = {
   contextJudge: {
     enabled: false,
     timeoutMs: 20000,
-    thresholds: { lower: 0.2, raise: 0.7 }
+    thresholds: { lower: 0.5, raise: 0.7 }
   },
   precedent: {
     seedCatalog: true,

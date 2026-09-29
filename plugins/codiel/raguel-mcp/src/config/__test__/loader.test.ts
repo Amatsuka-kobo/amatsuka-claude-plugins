@@ -145,6 +145,10 @@ describe("loadConfig - 読む順と configSource(R23)", () => {
     expect(loaded.config.judge.deadlineMs).toBe(600000)
     expect(loaded.config.judge.thresholds.confidence).toBe(70)
     expect(loaded.config.contextJudge.enabled).toBe(false)
+    expect(loaded.config.contextJudge.thresholds).toEqual({
+      lower: 0.5,
+      raise: 0.7
+    })
   })
 
   it("RAGUEL_CONFIG が存在しないパスを指すときは既定値に落ちず throw する", () => {
