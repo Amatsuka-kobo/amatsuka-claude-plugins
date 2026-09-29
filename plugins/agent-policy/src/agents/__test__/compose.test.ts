@@ -57,6 +57,18 @@ describe("frontmatter", () => {
     expect(meta.model).toBe("test-alias")
   })
 
+  it("effort があれば model の直後へ出力する", () => {
+    const lines = build(["general", "code-review"], { effort: "high" }).split(
+      "\n"
+    )
+    const modelAt = lines.indexOf("model: test-alias")
+    expect(lines[modelAt + 1]).toBe("effort: high")
+  })
+
+  it("effort がなければ frontmatter に effort 行を出さない", () => {
+    expect(build(["general"])).not.toMatch(/^effort: /m)
+  })
+
   it("description を役割の description から組み立てる", () => {
     const meta = frontmatter(build(["complex-impl"]))
     expect(meta.description).toContain("Use this agent when")
