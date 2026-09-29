@@ -96,6 +96,65 @@ describe("lint: 翻訳調の型", () => {
     expect(run("a.md", text.join("\n"))).toEqual([])
   })
 
+  test("「」か『』の中に収まる一致は違反にしない", () => {
+    expect(ids("a.md", "「短縮することができる」のような癖を直す。")).toEqual(
+      []
+    )
+    expect(ids("a.md", "『様々な』を使わない。")).toEqual([])
+    // 入れ子の内側と、閉じた内側の括弧の後も外側の括弧の中とみなす
+    expect(
+      ids("a.md", "「型は『することができる』で、ことによって も同じ」と書く。")
+    ).toEqual([])
+    // 閉じていない括弧は行の終わりまでを中とみなす
+    expect(ids("a.md", "「短縮することができる")).toEqual([])
+  })
+
+  test("「〜」を前に置いて型の名前として示した一致は違反にしない", () => {
+    expect(ids("a.md", "〜することができる")).toEqual([])
+    expect(
+      ids("a.md", "型: 〜という観点から / 〜に他ならない / 〜にとって重要")
+    ).toEqual([])
+    expect(ids("a.md", "| 〜することによって |")).toEqual([])
+  })
+
+  test("「〜」との間に空白や区切りがあれば違反にする", () => {
+    expect(ids("a.md", "短縮することができる。")).toContain("koto-dekiru")
+    expect(ids("a.md", "〜 することができる")).toContain("koto-dekiru")
+    expect(ids("a.md", "〜、ことができる")).toContain("koto-dekiru")
+    // 「〜」が一致の 4 字以上前にあるときは型の名前とみなさない
+    expect(ids("a.md", "〜を短縮することができる")).toContain("koto-dekiru")
+  })
+
+  test("避ける語の先頭の「〜」で、一致が「」の外へ広がらない", () => {
+    expect(ids("a.md", "「〜なんですよね」「興味深いことに」")).toEqual([])
+    expect(ids("a.md", "そうなんですよね。")).toContain("avoid:〜なんですよね")
+  })
+
+  test("括弧の外の一致は違反にする", () => {
+    expect(
+      ids("a.md", "「例」の後で短縮することができる。").filter(
+        (id) => id === "koto-dekiru"
+      )
+    ).toHaveLength(1)
+    // 括弧は行ごとに閉じる。前の行の開いた括弧は次の行に及ばない
+    expect(ids("a.md", "「開いたまま\n短縮することができる。")).toContain(
+      "koto-dekiru"
+    )
+  })
+
+  test("HTML ではブロックの中の括弧で判定する", () => {
+    expect(
+      ids("a.html", "<p>「設定を変えることが<em>できる</em>」の型。</p>")
+    ).toEqual([])
+    expect(
+      ids("a.html", "<p>「開いたまま</p><p>変えることができる。</p>")
+    ).toEqual(["koto-dekiru"])
+  })
+
+  test("Markdown の > で始まる行(引用)は違反にしない", () => {
+    expect(ids("a.md", "> 様々な判断を行うことができれば")).toEqual([])
+  })
+
   test("対象外の拡張子は何も返さない", () => {
     expect(run("a.json", "することができる")).toEqual([])
   })

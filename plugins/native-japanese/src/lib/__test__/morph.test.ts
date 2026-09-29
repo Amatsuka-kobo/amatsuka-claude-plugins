@@ -65,7 +65,21 @@ const EXPECTED: Record<number, string[]> = {
   28: [],
   29: ["rentai-kasanari"],
   30: [],
-  31: []
+  31: [],
+  32: [],
+  33: [],
+  34: [],
+  35: [],
+  36: [],
+  37: [],
+  38: [],
+  39: ["bunmatsu-renzoku"],
+  40: [],
+  41: [],
+  42: [],
+  43: ["rentai-kasanari"],
+  44: [],
+  45: []
 }
 
 test("固定データは sentences.txt と同じ行数で、表がすべての行を覆う", () => {
@@ -187,6 +201,14 @@ describe("checkBlocks: bunmatsu-renzoku", () => {
     expect(ruleIds(16)).toEqual([]) // 3 文目の「消す」で切れ、そこから 2 文だけ続く
   })
 
+  test("文末表現が敬体の「ます」「です」「ました」「でした」だけの文で連続が切れる", () => {
+    for (const n of [35, 36, 37, 38]) expect(ruleIds(n)).toEqual([])
+  })
+
+  test("敬体を含んでも、それより長い文末表現の連続には当たる", () => {
+    expect(ruleIds(39)).toEqual(["bunmatsu-renzoku"]) // 「ています」が 4 文
+  })
+
   test("リストの項目には当てない", () => {
     expect(ruleIds(11, "list")).toEqual([])
   })
@@ -229,12 +251,37 @@ describe("checkBlocks: rentai-kasanari", () => {
     expect(ruleIds(27)).toEqual([])
   })
 
+  test("「たび」と「度」を修飾される名詞に数えない", () => {
+    expect(ruleIds(44)).toEqual([])
+    expect(ruleIds(45)).toEqual([])
+  })
+
   test("「静かな部屋」を修飾の節に数えない", () => {
     expect(ruleIds(28)).toEqual([])
   })
 
   test("「事実」と「結果」を修飾される名詞として数える", () => {
     expect(ruleIds(29)).toEqual(["rentai-kasanari"])
+  })
+
+  test("修飾する語と名詞の間に括弧がある箇所を修飾の節に数えない", () => {
+    // 半角の括弧は IPADIC で名詞と解析されるが、記号と同じに扱う
+    expect(ruleIds(32)).toEqual([])
+    expect(ruleIds(33)).toEqual([]) // 「」は記号と解析される
+  })
+
+  test("括弧類とコロンで区間を区切り、区切りの内と外の節を別々に数える", () => {
+    expect(ruleIds(40)).toEqual([]) // 半角の括弧
+    expect(ruleIds(41)).toEqual([]) // 全角のコロン
+    expect(ruleIds(42)).toEqual([]) // 「」
+  })
+
+  test("括弧で区切っても、同じ区間に節が 2 つあれば当たる", () => {
+    expect(ruleIds(43)).toEqual(["rentai-kasanari"])
+  })
+
+  test("形容詞 1 語の修飾を修飾の節に数えない", () => {
+    expect(ruleIds(34)).toEqual([]) // 「新しい事実」
   })
 })
 

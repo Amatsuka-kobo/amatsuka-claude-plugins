@@ -129,7 +129,7 @@ function extractLines(src) {
   if (lang === "markdown") {
     const fenced = fenceMask(lines);
     lines.forEach((l, i) => {
-      if (fenced[i]) return;
+      if (fenced[i] || MD_QUOTE.test(l)) return;
       const text = l.replace(INLINE_CODE, (m) => " ".repeat(m.length));
       if (KANA.test(text)) out.push({ line: i + 1, text });
     });
@@ -196,7 +196,7 @@ function finish(buf) {
 var MD_HEADING = /^\s{0,3}#{1,6}(?:\s+|$)/;
 var MD_TABLE = /^\s*\|/;
 var MD_LIST = /^\s*(?:[-*+]|\d+[.)])\s+/;
-var MD_QUOTE = /^\s*(?:>\s?)+/;
+var MD_QUOTE = /^\s*>/;
 function markdownBlocks(lines) {
   const fenced = fenceMask(lines);
   const blocks = [];
@@ -205,12 +205,13 @@ function markdownBlocks(lines) {
     const line = i + 1;
     const heading = MD_HEADING.exec(l);
     const list = MD_LIST.exec(l);
-    const body = toNoun(l.replace(MD_QUOTE, ""));
-    if (cur && (fenced[i] || l.trim() === "" || heading || list || MD_TABLE.test(l))) {
+    const body = toNoun(l);
+    const skipped = fenced[i] || l.trim() === "" || MD_QUOTE.test(l);
+    if (cur && (skipped || heading || list || MD_TABLE.test(l))) {
       blocks.push(finish(cur));
       cur = null;
     }
-    if (fenced[i] || l.trim() === "") continue;
+    if (skipped) continue;
     if (heading || MD_TABLE.test(l)) {
       const b = new Buf(heading ? "heading" : "table");
       b.push(toNoun(heading ? l.slice(heading[0].length) : l), line);
@@ -342,13 +343,18 @@ var MUSE_PREDICATES = /* @__PURE__ */ new Set([
 var PRONOUNS = /* @__PURE__ */ new Set(["\u79C1", "\u50D5", "\u6211\u3005", "\u5F7C", "\u5F7C\u5973", "\u3042\u306A\u305F"]);
 var RUN_LENGTH = 4;
 var MIN_ENDING_LENGTH = 2;
+var POLITE_ENDINGS = /* @__PURE__ */ new Set(["\u307E\u3059", "\u3067\u3059", "\u307E\u3057\u305F", "\u3067\u3057\u305F"]);
 var LONG_SENTENCE = 100;
 var MIN_CLAUSE_CUTS = 2;
 var MIN_SEGMENT_LENGTH = 30;
 var MIN_MODIFIER_CLAUSES = 2;
 var NOT_MODIFIED = new Set(
-  "\u3053\u3068 \u3082\u306E \u306E \u3068\u304D \u6642 \u969B \u305F\u3081 \u3088\u3046 \u3068\u3053\u308D \u5834\u5408 \u5F8C \u524D \u9593 \u3046\u3061 \u307E\u307E".split(" ")
+  "\u3053\u3068 \u3082\u306E \u306E \u3068\u304D \u6642 \u969B \u305F\u3073 \u5EA6 \u305F\u3081 \u3088\u3046 \u3068\u3053\u308D \u5834\u5408 \u5F8C \u524D \u9593 \u3046\u3061 \u307E\u307E".split(
+    " "
+  )
 );
+var ASCII_SYMBOL = /^[!-/:-@[-`{-~]+$/;
+var SEGMENT_CUT = /^[()（）[\]「」『』【】:：]+$/;
 var MATCH_LENGTH = 20;
 var TERMINATORS = /* @__PURE__ */ new Set(["\u3002", "\uFF01", "\uFF1F"]);
 var RULES = {
@@ -476,14 +482,14 @@ function modifierClauses(seg) {
   let n = 0;
   for (let m = 0; m < seg.length; m++) {
     const t = seg[m];
-    if (!isVerbLike(t)) continue;
+    if (!isVerbLike(t) || t.pos === "\u5F62\u5BB9\u8A5E") continue;
     if (t.conjForm !== "\u57FA\u672C\u5F62" && t.conjForm !== "\u4F53\u8A00\u63A5\u7D9A") continue;
     const prev = seg[m - 1];
     if (t.pos === "\u52A9\u52D5\u8A5E" && prev && (prev.pos1 === "\u5F62\u5BB9\u52D5\u8A5E\u8A9E\u5E79" || prev.pos2 === "\u5F62\u5BB9\u52D5\u8A5E\u8A9E\u5E79"))
       continue;
     let next = seg[m + 1];
     if (next?.pos === "\u63A5\u982D\u8A5E") next = seg[m + 2];
-    if (next?.pos !== "\u540D\u8A5E") continue;
+    if (next?.pos !== "\u540D\u8A5E" || ASCII_SYMBOL.test(next.surface)) continue;
     if (NOT_MODIFIED.has(next.surface)) continue;
     if (["\u63A5\u5C3E", "\u4EE3\u540D\u8A5E", "\u6570"].includes(next.pos1)) continue;
     n++;
@@ -493,7 +499,7 @@ function modifierClauses(seg) {
 function rentaiKasanari(ts) {
   const segs = [[]];
   for (const t of ts) {
-    const cut = t.pos === "\u8A18\u53F7" && (t.pos1 === "\u8AAD\u70B9" || t.pos1 === "\u53E5\u70B9") || t.surface === "\u306F" && t.pos === "\u52A9\u8A5E" && t.pos1 === "\u4FC2\u52A9\u8A5E";
+    const cut = t.pos === "\u8A18\u53F7" && (t.pos1 === "\u8AAD\u70B9" || t.pos1 === "\u53E5\u70B9") || t.surface === "\u306F" && t.pos === "\u52A9\u8A5E" && t.pos1 === "\u4FC2\u52A9\u8A5E" || SEGMENT_CUT.test(t.surface);
     if (cut) segs.push([]);
     else segs.at(-1)?.push(t);
   }
@@ -507,7 +513,7 @@ function runEnds(sentences) {
   let count = 0;
   sentences.forEach((s, i) => {
     const e = endingOf(s.tokens);
-    if ([...e].length < MIN_ENDING_LENGTH) {
+    if ([...e].length < MIN_ENDING_LENGTH || POLITE_ENDINGS.has(e)) {
       prev = null;
       count = 0;
       return;
@@ -559,6 +565,33 @@ function matchesOf(rule, text) {
   const flags = `${rule.pattern.flags.replace("g", "")}g`;
   return [...text.matchAll(new RegExp(rule.pattern.source, flags))];
 }
+var OPEN_OF = { "\u300D": "\u300C", "\u300F": "\u300E" };
+function quotedMask(text) {
+  const open = [];
+  return [...text].flatMap((ch) => {
+    const close = OPEN_OF[ch];
+    const now = open.length > 0 && ch !== "\u300C" && ch !== "\u300E" && !close;
+    if (ch === "\u300C" || ch === "\u300E") open.push(ch);
+    else if (close) {
+      const i = open.lastIndexOf(close);
+      if (i >= 0) open.length = i;
+    }
+    return ch.length === 2 ? [now, now] : [now];
+  });
+}
+function quoted(mask, m) {
+  const start = m.index ?? 0;
+  const end = start + Math.max(m[0].length, 1);
+  for (let i = start; i < end; i++) if (!mask[i]) return false;
+  return true;
+}
+var NOT_IN_TYPE_NAME = /[\s、。，．,.!?！？|/()（）[\]「」『』【】]/u;
+function typeName(text, m) {
+  const start = m.index ?? 0;
+  const before = text.slice(Math.max(0, start - 3), start);
+  const at = before.lastIndexOf("\u301C");
+  return at >= 0 && !NOT_IN_TYPE_NAME.test(before.slice(at + 1));
+}
 function violation(rule, m, text, line, endLine) {
   return {
     line,
@@ -576,8 +609,10 @@ function lint(src, opts) {
   const out = [];
   if (isHtml(src.path)) {
     for (const b of extractBlocks(whole)) {
+      const mask = quotedMask(b.text);
       for (const rule of opts.rules) {
         for (const m of matchesOf(rule, b.text)) {
+          if (quoted(mask, m) || typeName(b.text, m)) continue;
           const start = m.index ?? 0;
           const end = start + Math.max(m[0].length, 1) - 1;
           out.push(
@@ -594,9 +629,11 @@ function lint(src, opts) {
     }
   } else {
     for (const { line, text } of extractLines(src)) {
+      const mask = quotedMask(text);
       for (const rule of opts.rules) {
         for (const m of matchesOf(rule, text))
-          out.push(violation(rule, m, text, line, line));
+          if (!quoted(mask, m) && !typeName(text, m))
+            out.push(violation(rule, m, text, line, line));
       }
     }
   }
@@ -649,7 +686,8 @@ var TRANSLATION = [
   }
 ].map((r) => ({ ...r, category: "\u7FFB\u8A33\u8ABF" }));
 var KATAKANA_OR_KANJI = "[\\u30A0-\\u30FF\\p{sc=Han}]";
-function wordPattern(word) {
+function wordPattern(entry) {
+  const word = entry.replace(/^〜+|〜+$/g, "");
   const body = word.split("\u301C").map((part) => part.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join(".{0,30}?");
   const head = new RegExp(`^${KATAKANA_OR_KANJI}`, "u").test(word) ? `(?<!${KATAKANA_OR_KANJI})` : "";
   return new RegExp(head + body, "u");

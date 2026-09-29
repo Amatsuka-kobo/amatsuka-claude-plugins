@@ -32,6 +32,45 @@ function matchesOf(rule: Rule, text: string): RegExpMatchArray[] {
   return [...text.matchAll(new RegExp(rule.pattern.source, flags))]
 }
 
+const OPEN_OF: Record<string, string> = { "」": "「", "』": "『" }
+
+// 各字が「」か『』の中にあるかを返す。括弧の字そのものは中に含めない。
+// 入れ子を扱い、閉じていない括弧は text の終わりまでを中とみなす
+function quotedMask(text: string): boolean[] {
+  const open: string[] = []
+  return [...text].flatMap((ch) => {
+    const close = OPEN_OF[ch]
+    const now = open.length > 0 && ch !== "「" && ch !== "『" && !close
+    if (ch === "「" || ch === "『") open.push(ch)
+    else if (close) {
+      const i = open.lastIndexOf(close)
+      if (i >= 0) open.length = i
+    }
+    // 添字を UTF-16 の単位に揃えるため、サロゲートペアの字は 2 つ並べる
+    return ch.length === 2 ? [now, now] : [now]
+  })
+}
+
+// 型の名前や語を「」『』で引いた箇所は違反にしない。一致の全体が括弧の中にあるときだけ除く
+function quoted(mask: boolean[], m: RegExpMatchArray): boolean {
+  const start = m.index ?? 0
+  const end = start + Math.max(m[0].length, 1)
+  for (let i = start; i < end; i++) if (!mask[i]) return false
+  return true
+}
+
+// 「〜」と一致の間に置けない字。空白・句読点・表の区切り・スラッシュ・括弧
+const NOT_IN_TYPE_NAME = /[\s、。，．,.!?！？|/()（）[\]「」『』【】]/u
+
+// 「〜することができる」のように、型の名前を「〜」に続けて示した一致か。
+// 一致の開始の直前 3 字以内に「〜」があり、その間に区切りの字が無いときに限る
+function typeName(text: string, m: RegExpMatchArray): boolean {
+  const start = m.index ?? 0
+  const before = text.slice(Math.max(0, start - 3), start)
+  const at = before.lastIndexOf("〜")
+  return at >= 0 && !NOT_IN_TYPE_NAME.test(before.slice(at + 1))
+}
+
 function violation(
   rule: Rule,
   m: RegExpMatchArray,
@@ -62,8 +101,10 @@ export function lint(
   if (isHtml(src.path)) {
     // タグや改行をまたぐ文を拾うため、行ではなくブロックに当て、1 字ごとの元の行番号へ戻す
     for (const b of extractBlocks(whole)) {
+      const mask = quotedMask(b.text)
       for (const rule of opts.rules) {
         for (const m of matchesOf(rule, b.text)) {
+          if (quoted(mask, m) || typeName(b.text, m)) continue
           const start = m.index ?? 0
           const end = start + Math.max(m[0].length, 1) - 1
           out.push(
@@ -80,9 +121,11 @@ export function lint(
     }
   } else {
     for (const { line, text } of extractLines(src)) {
+      const mask = quotedMask(text)
       for (const rule of opts.rules) {
         for (const m of matchesOf(rule, text))
-          out.push(violation(rule, m, text, line, line))
+          if (!quoted(mask, m) && !typeName(text, m))
+            out.push(violation(rule, m, text, line, line))
       }
     }
   }

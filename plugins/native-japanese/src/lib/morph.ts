@@ -21,6 +21,8 @@ const PRONOUNS = new Set(["私", "僕", "我々", "彼", "彼女", "あなた"])
 const RUN_LENGTH = 4
 // bunmatsu-renzoku: これより短い文末表現は連続を切る
 const MIN_ENDING_LENGTH = 2
+// bunmatsu-renzoku: 敬体ではどの文もこれらで終わるので、1 字の文末表現と同じく連続を切る
+const POLITE_ENDINGS = new Set(["ます", "です", "ました", "でした"])
 // bun-nagasa: 文の字数(空白と文末の句点を除く)と、読点の付いた節の切れ目の数
 const LONG_SENTENCE = 100
 const MIN_CLAUSE_CUTS = 2
@@ -29,8 +31,16 @@ const MIN_SEGMENT_LENGTH = 30
 const MIN_MODIFIER_CLAUSES = 2
 // rentai-kasanari: 修飾される名詞がこれらなら、節を名詞にする働きか時や条件の副詞なので数えない
 const NOT_MODIFIED = new Set(
-  "こと もの の とき 時 際 ため よう ところ 場合 後 前 間 うち まま".split(" ")
+  "こと もの の とき 時 際 たび 度 ため よう ところ 場合 後 前 間 うち まま".split(
+    " "
+  )
 )
+// rentai-kasanari: 表層が半角の記号だけの形態素。IPADIC は半角の括弧や引用符を名詞と解析するので、
+// pos が「記号」の形態素と同じく記号として扱う
+const ASCII_SYMBOL = /^[!-/:-@[-`{-~]+$/
+// rentai-kasanari: 読点・句点・係助詞「は」のほかに区間を区切る、括弧類とコロンの形態素。
+// 括弧の中の語句と、「」やコロンで区切った語句を、本文の修飾と別の区間で数える
+const SEGMENT_CUT = /^[()（）[\]「」『』【】:：]+$/
 // 違反の match に入れる、文の先頭の字数
 const MATCH_LENGTH = 20
 
@@ -218,12 +228,14 @@ function clauseCuts(ts: Token[]): number {
   return n
 }
 
-// 動詞・形容詞・助動詞の基本形か体言接続の直後に名詞(接頭詞を含む)が来る箇所を数える
+// 動詞・助動詞の基本形か体言接続の直後に名詞(接頭詞を含む)が来る箇所を数える。
+// 間に記号(括弧など)が入る箇所は、直後が名詞でないので数えない
 function modifierClauses(seg: Token[]): number {
   let n = 0
   for (let m = 0; m < seg.length; m++) {
     const t = seg[m] as Token
-    if (!isVerbLike(t)) continue
+    // 形容詞は形容動詞と同じく 1 語の形容なので、節に数えない
+    if (!isVerbLike(t) || t.pos === "形容詞") continue
     if (t.conjForm !== "基本形" && t.conjForm !== "体言接続") continue
     // 形容動詞の語幹に「な」が続く形は 1 語の形容なので、節に数えない
     const prev = seg[m - 1]
@@ -235,7 +247,7 @@ function modifierClauses(seg: Token[]): number {
       continue
     let next = seg[m + 1]
     if (next?.pos === "接頭詞") next = seg[m + 2]
-    if (next?.pos !== "名詞") continue
+    if (next?.pos !== "名詞" || ASCII_SYMBOL.test(next.surface)) continue
     if (NOT_MODIFIED.has(next.surface)) continue
     if (["接尾", "代名詞", "数"].includes(next.pos1)) continue
     n++
@@ -243,13 +255,14 @@ function modifierClauses(seg: Token[]): number {
   return n
 }
 
-// 読点・句点・係助詞「は」で区切った区間のどれかが、長さと節の数の閾値をともに超えるか
+// 読点・句点・係助詞「は」・括弧類・コロンで区切った区間のどれかが、長さと節の数の閾値をともに超えるか
 function rentaiKasanari(ts: Token[]): boolean {
   const segs: Token[][] = [[]]
   for (const t of ts) {
     const cut =
       (t.pos === "記号" && (t.pos1 === "読点" || t.pos1 === "句点")) ||
-      (t.surface === "は" && t.pos === "助詞" && t.pos1 === "係助詞")
+      (t.surface === "は" && t.pos === "助詞" && t.pos1 === "係助詞") ||
+      SEGMENT_CUT.test(t.surface)
     if (cut) segs.push([])
     else segs.at(-1)?.push(t)
   }
@@ -260,14 +273,15 @@ function rentaiKasanari(ts: Token[]): boolean {
   )
 }
 
-// 2 字以上の同じ文末表現が RUN_LENGTH 文続いたとき、その文の添字を返す。同じ連続からは 1 つだけ
+// 2 字以上の同じ文末表現が RUN_LENGTH 文続いたとき、その文の添字を返す。同じ連続からは 1 つだけ。
+// 敬体の文末表現だけの文は、1 字の文末表現と同じく連続を切る
 function runEnds(sentences: Sentence[]): Set<number> {
   const hits = new Set<number>()
   let prev: string | null = null
   let count = 0
   sentences.forEach((s, i) => {
     const e = endingOf(s.tokens)
-    if ([...e].length < MIN_ENDING_LENGTH) {
+    if ([...e].length < MIN_ENDING_LENGTH || POLITE_ENDINGS.has(e)) {
       prev = null
       count = 0
       return

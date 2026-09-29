@@ -158,7 +158,7 @@ export function extractLines(src: Source): { line: number; text: string }[] {
   if (lang === "markdown") {
     const fenced = fenceMask(lines)
     lines.forEach((l, i) => {
-      if (fenced[i]) return
+      if (fenced[i] || MD_QUOTE.test(l)) return
       const text = l.replace(INLINE_CODE, (m) => " ".repeat(m.length))
       if (KANA.test(text)) out.push({ line: i + 1, text })
     })
@@ -234,9 +234,10 @@ function finish(buf: Buf): Block {
 const MD_HEADING = /^\s{0,3}#{1,6}(?:\s+|$)/
 const MD_TABLE = /^\s*\|/
 const MD_LIST = /^\s*(?:[-*+]|\d+[.)])\s+/
-const MD_QUOTE = /^\s*(?:>\s?)+/
+// 引用のブロックの行。引用は書き手の文ではないので、どちらの層にもかけない
+const MD_QUOTE = /^\s*>/
 
-// 地の文は空行・見出し・リスト・表・コードフェンスで区切り、リストは項目ごと(継続行を含む)にまとめる。
+// 地の文は空行・見出し・リスト・表・コードフェンス・引用で区切り、リストは項目ごと(継続行を含む)にまとめる。
 // 見出しと表は 1 行ずつ 1 ブロックにする
 function markdownBlocks(lines: string[]): Block[] {
   const fenced = fenceMask(lines)
@@ -246,15 +247,13 @@ function markdownBlocks(lines: string[]): Block[] {
     const line = i + 1
     const heading = MD_HEADING.exec(l)
     const list = MD_LIST.exec(l)
-    const body = toNoun(l.replace(MD_QUOTE, ""))
-    if (
-      cur &&
-      (fenced[i] || l.trim() === "" || heading || list || MD_TABLE.test(l))
-    ) {
+    const body = toNoun(l)
+    const skipped = fenced[i] || l.trim() === "" || MD_QUOTE.test(l)
+    if (cur && (skipped || heading || list || MD_TABLE.test(l))) {
       blocks.push(finish(cur))
       cur = null
     }
-    if (fenced[i] || l.trim() === "") continue
+    if (skipped) continue
     if (heading || MD_TABLE.test(l)) {
       const b = new Buf(heading ? "heading" : "table")
       b.push(toNoun(heading ? l.slice(heading[0].length) : l), line)
