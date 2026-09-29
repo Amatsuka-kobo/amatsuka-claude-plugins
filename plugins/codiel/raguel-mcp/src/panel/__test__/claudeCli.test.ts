@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
 import { buildArgs, ClaudeCliProvider } from "../claudeCli.js"
 import { JudgeError } from "../provider.js"
+import { makeCtl } from "./helpers/fakeProvider.js"
 
 const FAKE_CLAUDE = fileURLToPath(
   new URL("../../testing/fake-claude.mjs", import.meta.url)
@@ -57,7 +58,6 @@ afterEach(() => {
 
 function makeCall(
   overrides: Partial<{
-    timeoutMs: number
     role: string
     jsonSchema: object
   }> = {}
@@ -67,8 +67,7 @@ function makeCall(
     model: "haiku",
     prompt: "テストプロンプト",
     schema: responseSchema,
-    jsonSchema: overrides.jsonSchema ?? jsonSchema,
-    timeoutMs: overrides.timeoutMs ?? 5000
+    jsonSchema: overrides.jsonSchema ?? jsonSchema
   }
 }
 
@@ -186,7 +185,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_RESPONSE = JSON.stringify({ message: "hello" })
 
     const provider = new ClaudeCliProvider()
-    const result = await provider.invoke(makeCall())
+    const result = await provider.invoke(makeCall(), makeCtl())
 
     expect(result).toEqual({ message: "hello" })
   })
@@ -196,7 +195,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_RESPONSE = JSON.stringify({ message: "structured" })
 
     const provider = new ClaudeCliProvider()
-    const result = await provider.invoke(makeCall())
+    const result = await provider.invoke(makeCall(), makeCtl())
 
     expect(result).toEqual({ message: "structured" })
   })
@@ -206,7 +205,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_RESPONSE = JSON.stringify({ message: "fenced" })
 
     const provider = new ClaudeCliProvider()
-    const result = await provider.invoke(makeCall())
+    const result = await provider.invoke(makeCall(), makeCtl())
 
     expect(result).toEqual({ message: "fenced" })
   })
@@ -217,7 +216,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_STATE_FILE = path.join(dir, "state.txt")
 
     const provider = new ClaudeCliProvider()
-    const result = await provider.invoke(makeCall())
+    const result = await provider.invoke(makeCall(), makeCtl())
 
     expect(result).toEqual({ message: "recovered" })
   })
@@ -228,7 +227,7 @@ describe("ClaudeCliProvider", () => {
     // STATE_FILE を設定しないため常に bad-json のまま
 
     const provider = new ClaudeCliProvider()
-    await expect(provider.invoke(makeCall())).rejects.toMatchObject({
+    await expect(provider.invoke(makeCall(), makeCtl())).rejects.toMatchObject({
       name: "JudgeError",
       reason: "schema-mismatch"
     })
@@ -241,23 +240,50 @@ describe("ClaudeCliProvider", () => {
 
     const provider = new ClaudeCliProvider()
     await expect(
-      provider.invoke(makeCall({ timeoutMs: 300 }))
+      provider.invoke(makeCall(), makeCtl({ timeoutMs: 300 }))
     ).rejects.toMatchObject({ name: "JudgeError", reason: "timeout" })
     expect(callCount(stateFile)).toBe(2)
   })
 
-  it("CallControl の timeoutMs が JudgeCall の timeoutMs より優先される", async () => {
+  it("締切までの残りが 30 秒未満なら nonzero-exit を再試行しない", async () => {
+    process.env.FAKE_CLAUDE_MODE = "fail"
+    const stateFile = path.join(dir, "state.txt")
+    process.env.FAKE_CLAUDE_STATE_FILE = stateFile
+
+    const provider = new ClaudeCliProvider()
+    await expect(
+      provider.invoke(makeCall(), makeCtl({ deadline: Date.now() + 20000 }))
+    ).rejects.toMatchObject({ reason: "nonzero-exit" })
+    expect(callCount(stateFile)).toBe(1)
+  })
+
+  it("締切で縮んだ時間が切れたら deadline にし、再試行しない", async () => {
     process.env.FAKE_CLAUDE_MODE = "hang"
+    const stateFile = path.join(dir, "state.txt")
+    process.env.FAKE_CLAUDE_STATE_FILE = stateFile
 
     const provider = new ClaudeCliProvider()
     const started = Date.now()
     await expect(
-      provider.invoke(makeCall({ timeoutMs: 60000 }), {
-        timeoutMs: 300,
-        signal: new AbortController().signal
-      })
-    ).rejects.toMatchObject({ reason: "timeout" })
+      provider.invoke(
+        makeCall(),
+        makeCtl({ timeoutMs: 60000, deadline: Date.now() + 3500 })
+      )
+    ).rejects.toMatchObject({ name: "JudgeError", reason: "deadline" })
     expect(Date.now() - started).toBeLessThan(10000)
+    expect(callCount(stateFile)).toBe(1)
+  })
+
+  it("締切を過ぎていれば子プロセスを起動せず deadline にする", async () => {
+    process.env.FAKE_CLAUDE_MODE = "ok"
+    const stateFile = path.join(dir, "state.txt")
+    process.env.FAKE_CLAUDE_STATE_FILE = stateFile
+
+    const provider = new ClaudeCliProvider()
+    await expect(
+      provider.invoke(makeCall(), makeCtl({ deadline: Date.now() }))
+    ).rejects.toMatchObject({ reason: "deadline" })
+    expect(callCount(stateFile)).toBe(0)
   })
 
   it("exit 1: 1 回だけ再試行し、JudgeError(nonzero-exit) を投げる", async () => {
@@ -266,7 +292,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_STATE_FILE = stateFile
 
     const provider = new ClaudeCliProvider()
-    await expect(provider.invoke(makeCall())).rejects.toMatchObject({
+    await expect(provider.invoke(makeCall(), makeCtl())).rejects.toMatchObject({
       name: "JudgeError",
       reason: "nonzero-exit"
     })
@@ -279,7 +305,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_STATE_FILE = path.join(dir, "state.txt")
 
     const provider = new ClaudeCliProvider()
-    await expect(provider.invoke(makeCall())).resolves.toEqual({
+    await expect(provider.invoke(makeCall(), makeCtl())).resolves.toEqual({
       message: "again"
     })
   })
@@ -296,7 +322,8 @@ describe("ClaudeCliProvider", () => {
             $schema: "https://json-schema.org/draft/2020-12/schema",
             ...jsonSchema
           }
-        })
+        }),
+        makeCtl()
       )
     ).rejects.toMatchObject({ reason: "nonzero-exit" })
   })
@@ -305,7 +332,7 @@ describe("ClaudeCliProvider", () => {
     process.env.RAGUEL_CLAUDE_BIN = path.join(dir, "does-not-exist-binary")
 
     const provider = new ClaudeCliProvider()
-    await expect(provider.invoke(makeCall())).rejects.toMatchObject({
+    await expect(provider.invoke(makeCall(), makeCtl())).rejects.toMatchObject({
       name: "JudgeError",
       reason: "unavailable"
     })
@@ -319,10 +346,10 @@ describe("ClaudeCliProvider", () => {
 
     const provider = new ClaudeCliProvider()
     const started = Date.now()
-    const pending = provider.invoke(makeCall(), {
-      timeoutMs: 60000,
-      signal: controller.signal
-    })
+    const pending = provider.invoke(
+      makeCall(),
+      makeCtl({ timeoutMs: 60000, signal: controller.signal })
+    )
     setTimeout(() => controller.abort(), 500)
 
     await expect(pending).rejects.toMatchObject({ name: "AbortError" })
@@ -339,10 +366,7 @@ describe("ClaudeCliProvider", () => {
 
     const provider = new ClaudeCliProvider()
     await expect(
-      provider.invoke(makeCall(), {
-        timeoutMs: 5000,
-        signal: controller.signal
-      })
+      provider.invoke(makeCall(), makeCtl({ signal: controller.signal }))
     ).rejects.toMatchObject({ name: "AbortError" })
     expect(callCount(stateFile)).toBe(0)
   })
@@ -354,7 +378,7 @@ describe("ClaudeCliProvider", () => {
     process.env.RAGUEL_ENV_DUMP_FILE = dumpFile
 
     const provider = new ClaudeCliProvider()
-    await provider.invoke(makeCall())
+    await provider.invoke(makeCall(), makeCtl())
 
     const dump = JSON.parse(readFileSync(dumpFile, "utf8"))
     expect(dump.RAGUEL_PANELIST).toBe("1")
@@ -369,7 +393,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_STDIN_FILE = stdinFile
 
     const provider = new ClaudeCliProvider()
-    await provider.invoke(makeCall())
+    await provider.invoke(makeCall(), makeCtl())
 
     expect(existsSync(stdinFile)).toBe(true)
     expect(readFileSync(stdinFile, "utf8")).toBe("テストプロンプト")
@@ -379,7 +403,7 @@ describe("ClaudeCliProvider", () => {
     process.env.FAKE_CLAUDE_MODE = "fail"
     const provider = new ClaudeCliProvider()
     try {
-      await provider.invoke(makeCall())
+      await provider.invoke(makeCall(), makeCtl())
       throw new Error("エラーが投げられるはず")
     } catch (err) {
       expect(err).toBeInstanceOf(JudgeError)
@@ -397,7 +421,9 @@ describe("ClaudeCliProvider セマフォ", () => {
 
     const provider = new ClaudeCliProvider(2)
     await Promise.all(
-      [0, 1, 2, 3].map(() => provider.invoke(makeCall({ timeoutMs: 10000 })))
+      [0, 1, 2, 3].map(() =>
+        provider.invoke(makeCall(), makeCtl({ timeoutMs: 10000 }))
+      )
     )
 
     const lines = readFileSync(timelineFile, "utf8").trim().split("\n")

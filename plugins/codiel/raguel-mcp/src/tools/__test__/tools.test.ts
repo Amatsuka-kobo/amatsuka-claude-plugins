@@ -1,81 +1,99 @@
 /**
- * MCP レイヤの統合スモーク: InMemoryTransport でサーバーとクライアントを接続し、
- * list_rules / evaluate_code / evaluate_plan をエンドツーエンドで検証する。
+ * MCP のツール層の結合テスト。InMemoryTransport でサーバーとクライアントをつなぎ、
+ * 入力のスキーマ(旧入力の廃止)・入力の誤り・壊れた設定での起動・list_rules・record_outcome・
+ * 判例の保守ツール・進捗の通知・キャンセルを確かめる(設計書 §6.2・§6.8・§6.12.4)。
  */
 
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
+import * as fs from "node:fs"
+import * as path from "node:path"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { CaseStore } from "../../casefile/store.js"
-import { createConfigReloader } from "../../config/loader.js"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { NO_EVALUATION_RECORD } from "../../casefile/store.js"
 import type { PipelineDeps } from "../../core/pipeline.js"
-import type { RaguelConfig } from "../../core/types.js"
-import { FakeJudgeProvider } from "../../panel/testing/fakeProvider.js"
+import type { JudgeCall, JudgeProvider } from "../../panel/provider.js"
+import { makeTmpDir } from "../../subject/__test__/helpers/gitRepo.js"
 import { registerEvaluateCode } from "../evaluateCode.js"
+import { registerEvaluateDecision } from "../evaluateDecision.js"
+import { registerEvaluateDesign } from "../evaluateDesign.js"
 import { registerEvaluatePlan } from "../evaluatePlan.js"
+import { registerListPrecedents } from "../listPrecedents.js"
 import { registerListRules } from "../listRules.js"
-import type { DepsSource } from "../shared.js"
+import { registerRecordOutcome } from "../recordOutcome.js"
+import { registerRetirePrecedent } from "../retirePrecedent.js"
+import {
+  BUILD_VERSION,
+  benignPanel,
+  type Harness,
+  type HarnessOptions,
+  makeHarness
+} from "./helpers/harness.js"
 
-function makeConfig(casesDir: string): RaguelConfig {
-  return {
-    version: 1,
-    onError: "ASK",
-    storage: {
-      casesDir,
-      projectId: "tools-test",
-      retention: { maxRuns: 200, maxDays: 90 }
-    },
-    judge: {
-      provider: "claude-cli",
-      model: "haiku",
-      timeoutMs: 60000,
-      canStop: false,
-      maxConcurrency: 4,
-      thresholds: { proceed: 80, confidence: 60, maxVariance: 30 }
-    },
-    weight: { tiers: { standard: 30, critical: 70 } },
-    panel: {
-      trivial: [],
-      standard: ["adversarial"],
-      critical: ["adversarial", "steelman"],
-      perPanelist: {}
-    },
-    precedent: { seedCatalog: true, topN: 5 },
-    rules: {}
-  }
+const GHP_TOKEN = `ghp_${"A1b2C3d4E5f6".repeat(3)}`
+
+const harnesses: Harness[] = []
+const clients: Client[] = []
+function harness(opts: HarnessOptions = {}): Harness {
+  const h = makeHarness(opts)
+  harnesses.push(h)
+  return h
 }
 
-async function connect(deps: DepsSource): Promise<Client> {
-  const server = new McpServer({ name: "raguel-mcp", version: "test" })
-  registerEvaluateCode(server, deps)
-  registerEvaluatePlan(server, deps)
-  registerListRules(server, deps)
+const savedEnv = { ...process.env }
+beforeEach(() => {
+  delete process.env.RAGUEL_CONFIG
+})
+afterEach(async () => {
+  for (const c of clients.splice(0)) await c.close()
+  for (const h of harnesses.splice(0)) h.cleanup()
+  for (const key of Object.keys(process.env)) {
+    if (!(key in savedEnv)) delete process.env[key]
+  }
+  Object.assign(process.env, savedEnv)
+})
 
+async function connect(deps: PipelineDeps): Promise<Client> {
+  const server = new McpServer({ name: "raguel-mcp", version: BUILD_VERSION })
+  for (const register of [
+    registerEvaluateDecision,
+    registerEvaluatePlan,
+    registerEvaluateDesign,
+    registerEvaluateCode,
+    registerListRules,
+    registerRecordOutcome,
+    registerListPrecedents,
+    registerRetirePrecedent
+  ]) {
+    register(server, deps)
+  }
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
   const client = new Client({ name: "test-client", version: "0.0.0" })
   await client.connect(clientTransport)
+  clients.push(client)
   return client
 }
 
 interface CallResult {
   isError?: boolean
-  /** 応答の JSON(入力の誤りの応答は JSON でないので undefined) */
-  body: ReturnType<typeof JSON.parse>
+  // biome-ignore lint/suspicious/noExplicitAny: 応答の JSON をテストで読む
+  body: any
   text: string
 }
 
 async function call(
   client: Client,
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  options?: Parameters<Client["callTool"]>[2]
 ): Promise<CallResult> {
-  const res = await client.callTool({ name, arguments: args })
+  const res = await client.callTool(
+    { name, arguments: args },
+    undefined,
+    options
+  )
   const text = (res.content as Array<{ type: string; text: string }>)[0].text
   let body: unknown
   try {
@@ -86,374 +104,424 @@ async function call(
   return { isError: res.isError as boolean | undefined, body, text }
 }
 
-const HARMLESS_DIFF = [
-  "diff --git a/src/a.ts b/src/a.ts",
-  "--- a/src/a.ts",
-  "+++ b/src/a.ts",
-  "@@ -1,1 +1,2 @@",
-  " const x = 1",
-  "+const y = 2"
-].join("\n")
+const decisionArgs = (decision: string, runId = "run-1") => ({
+  runId,
+  phase: "intent",
+  objective: "方針を決める",
+  decision
+})
 
-describe("MCP ツール統合スモーク", () => {
-  let tmp: string
-  let client: Client
+describe("evaluate_* の入力(設計書 §6.2、所見 F1)", () => {
+  it("呼び出し側が本文を渡す旧入力は入力の誤りになり、記録しない", async () => {
+    const h = harness({ files: { "plan.md": "# 計画\n" } })
+    const client = await connect(h.deps)
+    const common = { runId: "run-1", objective: "x" }
 
-  beforeEach(async () => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "raguel-tools-"))
-    const config = makeConfig(tmp)
-    const deps: PipelineDeps = {
-      config,
-      configHash: "tools-hash",
-      configSource: "defaults",
-      caseStore: new CaseStore(config),
-      provider: new FakeJudgeProvider()
+    const cases: [string, Record<string, unknown>][] = [
+      [
+        "evaluate_code",
+        { ...common, phase: "implement", diff: "diff --git a/x b/x" }
+      ],
+      [
+        "evaluate_code",
+        { ...common, phase: "implement", baseRef: h.base, diff: "要約" }
+      ],
+      [
+        "evaluate_code",
+        {
+          ...common,
+          phase: "implement",
+          files: [{ path: "a.ts", content: "x" }]
+        }
+      ],
+      [
+        "evaluate_plan",
+        { ...common, phase: "dev-plan", plan: "要約", steps: ["a"] }
+      ],
+      [
+        "evaluate_plan",
+        { ...common, phase: "dev-plan", paths: ["plan.md"], constraints: ["c"] }
+      ],
+      [
+        "evaluate_design",
+        { ...common, phase: "design", design: "要約", requirements: ["r"] }
+      ]
+    ]
+    for (const [name, args] of cases) {
+      const res = await call(client, name, args)
+      expect(res.isError, `${name} ${JSON.stringify(args)}`).toBe(true)
     }
-    client = await connect(deps)
+    expect(h.index()).toEqual([])
   })
 
-  afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true })
-  })
-
-  it("list_rules がルール一覧と configHash と設定の出所を返す", async () => {
-    const { body } = await call(client, "list_rules", {})
-    expect(body.rules.length).toBeGreaterThan(10)
-    expect(
-      body.rules.find((r: { id: string }) => r.id === "common/secrets")?.sealed
-    ).toBe(true)
-    expect(body.policy.configHash).toBe("tools-hash")
-    expect(body.policy.configSource).toBe("defaults")
-  })
-
-  it("evaluate_code: 無害 diff → PROCEED", async () => {
-    const { body } = await call(client, "evaluate_code", {
-      runId: "smoke-1",
-      objective: "typo 修正",
-      diff: HARMLESS_DIFF
-    })
-    expect(body.verdict).toBe("PROCEED")
-    expect(body.casePath).toContain("smoke-1")
-    expect(body.policy.configSource).toBe("defaults")
-  })
-
-  it("evaluate_code: 保護パス diff → STOP", async () => {
-    const { body } = await call(client, "evaluate_code", {
-      runId: "smoke-2",
-      objective: "CI 変更",
-      diff: [
-        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml",
-        "--- a/.github/workflows/ci.yml",
-        "+++ b/.github/workflows/ci.yml",
-        "@@ -1,1 +1,2 @@",
-        " name: ci",
-        "+run: echo hi"
-      ].join("\n")
-    })
-    expect(body.verdict).toBe("STOP")
-  })
-
-  it.each([
-    ["diff も files も無い", {}],
-    [
-      "diff と files の両方",
-      {
-        diff: HARMLESS_DIFF,
-        files: [{ path: "src/a.ts", content: "const y = 2" }]
-      }
-    ],
-    [
-      "ハンクも印の行も無い見出しだけの diff",
-      {
-        diff: [
-          "diff --git a/src/a.ts b/src/a.ts",
-          "index 1234567..89abcde 100644",
-          "--- a/src/a.ts",
-          "+++ b/src/a.ts",
-          "--- (新規ファイル、120 行。テストを足した)"
-        ].join("\n")
-      }
-    ]
-  ])("evaluate_code: %s は判定を返さず入力の誤り(isError)を返し、ケースファイルを作らない", async (_label, input) => {
-    const res = await call(client, "evaluate_code", {
-      runId: "smoke-3",
-      objective: "何か",
-      ...input
-    })
-    expect(res.isError).toBe(true)
-    expect(res.body).toBeUndefined()
-    expect(res.text.length).toBeGreaterThan(0)
-    expect(fs.existsSync(path.join(tmp, "cases"))).toBe(false)
-  })
-
-  it.each([
-    [
-      "名前の変更だけ",
-      [
-        "diff --git a/src/old.ts b/src/new.ts",
-        "similarity index 100%",
-        "rename from src/old.ts",
-        "rename to src/new.ts"
-      ]
-    ],
-    [
-      "バイナリ",
-      [
-        "diff --git a/assets/logo.png b/assets/logo.png",
-        "index 1234567..89abcde 100644",
-        "Binary files a/assets/logo.png and b/assets/logo.png differ"
-      ]
-    ],
-    [
-      "モードの変更だけ",
-      [
-        "diff --git a/bin/run.sh b/bin/run.sh",
-        "old mode 100644",
-        "new mode 100755"
-      ]
-    ],
-    [
-      "空のファイルの追加",
-      [
-        "diff --git a/src/empty.ts b/src/empty.ts",
-        "new file mode 100644",
-        "index 0000000..e69de29"
-      ]
-    ],
-    [
-      "空のファイルの削除",
-      [
-        "diff --git a/src/empty.ts b/src/empty.ts",
-        "deleted file mode 100644",
-        "index e69de29..0000000"
-      ]
-    ]
-  ])("evaluate_code: ハンクの無い正当な diff(%s)では判定を返す", async (label, lines) => {
-    const res = await call(client, "evaluate_code", {
-      runId: "smoke-hunkless",
-      objective: label,
-      diff: lines.join("\n")
-    })
-    expect(res.isError).toBeFalsy()
-    expect(res.body.verdict).toBe("PROCEED")
-    expect(fs.existsSync(res.body.casePath)).toBe(true)
-  })
-
-  it("evaluate_code: 不正な runId は zod で拒否される", async () => {
-    const res = await client.callTool({
-      name: "evaluate_code",
-      arguments: { runId: "../evil", objective: "攻撃", diff: "x" }
-    })
-    expect(res.isError).toBe(true)
-  })
-
-  it("evaluate_plan: steps にだけ置いた既知の秘密情報の形で所見が出る", async () => {
-    const { body } = await call(client, "evaluate_plan", {
-      runId: "plan-1",
-      objective: "README に一文を足す",
-      plan: "README に一文を足す。",
-      steps: [
-        "README を開く",
-        `export OPENAI_KEY=sk-ant-api03-${"x".repeat(24)}`
-      ]
-    })
-    expect(body.verdict).toBe("STOP")
-    expect(
-      body.findings.some(
-        (f: { ruleId: string }) => f.ruleId === "common/secrets"
-      )
-    ).toBe(true)
-  })
-
-  it("evaluate_plan: constraints もつないで検査する", async () => {
-    const { body } = await call(client, "evaluate_plan", {
-      runId: "plan-2",
-      objective: "README に一文を足す",
-      plan: "README に一文を足す。",
-      constraints: [`トークンは ghp_${"A1b2".repeat(9)} を使う`]
-    })
-    expect(body.verdict).toBe("STOP")
-  })
-
-  it("evaluate_plan: plan も steps も無い入力は入力の誤り(isError)", async () => {
+  it("phase と ツールの kind が合わなければ入力の誤りにする", async () => {
+    const h = harness({ files: { "plan.md": "# 計画\n" } })
+    const client = await connect(h.deps)
     const res = await call(client, "evaluate_plan", {
-      runId: "plan-3",
-      objective: "何か",
-      constraints: ["何か"]
+      runId: "run-1",
+      phase: "implement",
+      objective: "x",
+      paths: ["plan.md"]
     })
     expect(res.isError).toBe(true)
-    expect(fs.existsSync(path.join(tmp, "cases"))).toBe(false)
+    expect(res.text).toContain("evaluate_code")
+    expect(h.index()).toEqual([])
+  })
+
+  it("評価対象の入力の誤り(repoPath の外のパス)は isError で返し、記録しない", async () => {
+    const h = harness()
+    const client = await connect(h.deps)
+    const res = await call(client, "evaluate_design", {
+      runId: "run-1",
+      phase: "design",
+      objective: "x",
+      paths: ["../outside.md"]
+    })
+    expect(res.isError).toBe(true)
+    expect(h.index()).toEqual([])
+  })
+
+  it("evaluate_plan は paths のファイルを読んで評価する", async () => {
+    const h = harness({ files: { "dev-plan.md": "# 計画\n## Step 1\n作る\n" } })
+    benignPanel(h.provider, "plan")
+    const client = await connect(h.deps)
+    const res = await call(client, "evaluate_plan", {
+      runId: "run-1",
+      phase: "dev-plan",
+      objective: "計画する",
+      paths: ["dev-plan.md"]
+    })
+    expect(res.isError).toBeUndefined()
+    expect(res.body).toMatchObject({
+      phase: "dev-plan",
+      kind: "plan",
+      verdict: "PROCEED",
+      policy: { buildVersion: BUILD_VERSION, version: 2 }
+    })
+    expect(res.body.subject.files[0].path).toBe("dev-plan.md")
   })
 })
 
-describe("設定の読み直し(createConfigReloader を渡したサーバー)", () => {
-  let tmp: string
-  let workDir: string
-  let originalCwd: string
-  let originalEnv: string | undefined
-  let client: Client
+describe("壊れた設定での起動(§6.12.4、所見 E1)", () => {
+  it("起動時に設定が壊れていても応答し、評価は ASK・degraded、list_rules は理由を返す。直れば読み直す", async () => {
+    const home = makeTmpDir("raguel-home-")
+    process.env.HOME = home
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    h.writeConfig({ raguel: { judge: { canStop: true } } })
+    const client = await connect(h.deps)
+    const configPath = path.join(h.repo, ".codiel", "config.json")
 
-  beforeEach(async () => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "raguel-tools-cases-"))
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), "raguel-tools-cwd-"))
-    originalCwd = process.cwd()
-    originalEnv = process.env.RAGUEL_CONFIG
-    delete process.env.RAGUEL_CONFIG
-    process.chdir(workDir)
-    // casesDir と provider だけはテスト用に差し替え、ほかは読んだ設定のまま使う
-    const deps = createConfigReloader((loaded): PipelineDeps => {
-      const config = {
-        ...loaded.config,
-        storage: {
-          ...loaded.config.storage,
-          casesDir: tmp,
-          projectId: "reload"
-        }
-      }
-      return {
-        config,
-        configHash: loaded.configHash,
-        configSource: loaded.source,
-        caseStore: new CaseStore(config),
-        provider: new FakeJudgeProvider()
-      }
-    })
-    client = await connect(deps)
-  })
+    const rules = await call(client, "list_rules", {})
+    expect(rules.body.error).toContain("judge.canStop")
+    expect(rules.body.path).toBe(configPath)
 
-  afterEach(() => {
-    process.chdir(originalCwd)
-    if (originalEnv === undefined) {
-      delete process.env.RAGUEL_CONFIG
-    } else {
-      process.env.RAGUEL_CONFIG = originalEnv
-    }
-    fs.rmSync(tmp, { recursive: true, force: true })
-    fs.rmSync(workDir, { recursive: true, force: true })
-  })
-
-  function touchLater(file: string, seconds: number): void {
-    const later = new Date(Date.now() + seconds * 1000)
-    fs.utimesSync(file, later, later)
-  }
-
-  /** workDir の .codiel/config.json に raguel を書く(raguel 以外のキーも併せて書ける) */
-  function writeCwdConfig(
-    raguel: unknown,
-    extra: Record<string, unknown> = {}
-  ): string {
-    const dir = path.join(workDir, ".codiel")
-    fs.mkdirSync(dir, { recursive: true })
-    const file = path.join(dir, "config.json")
-    fs.writeFileSync(file, JSON.stringify({ ...extra, raguel }), "utf8")
-    return file
-  }
-
-  it("起動の後に config.json へ書いた raguel を、次の評価と list_rules が使い、configHash が変わる", async () => {
-    const before = (await call(client, "list_rules", {})).body
-    expect(before.policy.configSource).toBe("defaults")
-
-    const file = writeCwdConfig(
-      { onError: "STOP", rules: { "code/protected-paths": { globs: [] } } },
-      { testsDir: "docs/codiel/tests", runsDir: "docs/codiel/runs" }
+    const evaluated = await call(
+      client,
+      "evaluate_decision",
+      decisionArgs("方針")
     )
-    const created = (await call(client, "list_rules", {})).body
-    expect(created.onError).toBe("STOP")
-    expect(created.policy.configSource).toBe(`cwd:${file}`)
-    expect(created.policy.configHash).not.toBe(before.policy.configHash)
-    const globs = created.rules.find(
-      (r: { id: string }) => r.id === "code/protected-paths"
-    ).params.globs
-    expect(globs).toEqual([".github/**", "infra/**", "**/*.env*"])
-
-    const evaluated = (
-      await call(client, "evaluate_code", {
-        runId: "reload-1",
-        objective: "typo 修正",
-        diff: HARMLESS_DIFF
-      })
-    ).body
-    expect(evaluated.policy.configSource).toBe(`cwd:${file}`)
-    expect(evaluated.policy.configHash).toBe(created.policy.configHash)
-
-    writeCwdConfig({
-      rules: { "code/protected-paths": { globs: ["src/auth/**"] } }
+    expect(evaluated.body).toMatchObject({
+      verdict: "ASK",
+      judgeStatus: "degraded",
+      degradedReasons: [{ source: "config", reason: "config-error" }]
     })
-    touchLater(file, 10)
-    const changed = (await call(client, "list_rules", {})).body
-    expect(changed.policy.configHash).not.toBe(created.policy.configHash)
-    const stop = (
-      await call(client, "evaluate_code", {
-        runId: "reload-2",
-        objective: "認証の変更",
-        diff: HARMLESS_DIFF.replaceAll("src/a.ts", "src/auth/login.ts")
-      })
-    ).body
-    expect(stop.verdict).toBe("STOP")
-    expect(stop.policy.configHash).toBe(changed.policy.configHash)
-  })
+    expect(evaluated.body.findings[0].evidence.location).toBe(configPath)
 
-  it("cwd に raguel.config.yaml だけがあっても読まず、出所は defaults のままになる", async () => {
-    fs.writeFileSync(
-      path.join(workDir, "raguel.config.yaml"),
-      "onError: STOP\n",
-      "utf8"
+    h.writeConfig({ raguel: { storage: { casesDir: h.casesDir } } })
+    const fixed = await call(client, "list_rules", {})
+    expect(fixed.body.error).toBeUndefined()
+    expect(fixed.body.configSource).toBe(`cwd:${configPath}`)
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+})
+
+describe("list_rules(設計書 §6.2.8)", () => {
+  it("パラメータ・設定の出所・ビルドのバージョン・プロバイダー・保護パスの除外・testsDir を返す", async () => {
+    const h = harness({
+      testsDir: "e2e",
+      raguel: {
+        rules: {
+          "code/protected-paths": {
+            excludeDefaults: ["infra/**"],
+            generated: ["dist/**"]
+          }
+        },
+        panel: { perPanelist: { meta: { provider: "codex" } } }
+      }
+    })
+    const client = await connect(h.deps)
+    const { body } = await call(client, "list_rules", {})
+
+    expect(body.buildVersion).toBe(BUILD_VERSION)
+    expect(body.configSource).toBe(
+      `cwd:${path.join(h.repo, ".codiel", "config.json")}`
     )
-    const { body } = await call(client, "list_rules", {})
-    expect(body.policy.configSource).toBe("defaults")
-    expect(body.onError).toBe("ASK")
-  })
-
-  it("RAGUEL_CONFIG が指す JSON のファイルの出所は env:<パス> になる", async () => {
-    const file = path.join(workDir, "custom.json")
-    fs.writeFileSync(file, '{"onError":"STOP"}', "utf8")
-    process.env.RAGUEL_CONFIG = file
-    const { body } = await call(client, "list_rules", {})
-    expect(body.policy.configSource).toBe(`env:${file}`)
-    expect(body.onError).toBe("STOP")
-  })
-
-  it("RAGUEL_CONFIG が指すファイルが JSON として読めなければ、評価は既定の onError(ASK)で返す", async () => {
-    const file = path.join(workDir, "custom.json")
-    fs.writeFileSync(file, "onError: STOP\n", "utf8")
-    process.env.RAGUEL_CONFIG = file
-    const res = await call(client, "evaluate_code", {
-      runId: "reload-env-broken",
-      objective: "typo 修正",
-      diff: HARMLESS_DIFF
+    expect(body.policy).toMatchObject({
+      version: 2,
+      buildVersion: BUILD_VERSION,
+      protectedPaths: { excludedDefaults: ["infra/**"], generated: ["dist/**"] }
     })
-    expect(res.body.verdict).toBe("ASK")
-    expect(res.body.findings[0].ruleId).toBe("kernel/config-error")
-    expect(res.body.policy.configSource).toBe(`env:${file}`)
+    expect(body.e2eReports.testsDir).toBe("e2e")
+    expect(body.panelists).toEqual({
+      adversarial: { provider: "claude", model: "sonnet" },
+      steelman: { provider: "claude", model: "haiku" },
+      crosscheck: { provider: "claude", model: "haiku" },
+      meta: { provider: "codex" }
+    })
+
+    // biome-ignore lint/suspicious/noExplicitAny: 応答の JSON をテストで読む
+    const byId = (id: string) => body.rules.find((r: any) => r.id === id)
+    const globs = byId("code/protected-paths").params.find(
+      // biome-ignore lint/suspicious/noExplicitAny: 応答の JSON をテストで読む
+      (p: any) => p.name === "globs"
+    )
+    expect(globs).toMatchObject({ type: "glob[]", merge: "union" })
+    expect(globs.current).not.toContain("infra/**")
+    expect(globs.default).toContain("infra/**")
+    expect(byId("common/secrets")).toMatchObject({
+      sealed: true,
+      severity: "stop"
+    })
+    expect(byId("common/secrets").params[0].constraint).toBeDefined()
+    expect(byId("precedent/failure-match")).toMatchObject({ severity: "info" })
+    expect(byId("code/dangerous-patterns")).toBeUndefined()
+
+    const planOnly = await call(client, "list_rules", { kind: "plan" })
+    // biome-ignore lint/suspicious/noExplicitAny: 応答の JSON をテストで読む
+    const planIds = planOnly.body.rules.map((r: any) => r.id)
+    expect(planIds).toContain("plan/max-steps")
+    expect(planIds).not.toContain("code/destructive-ops")
   })
 
-  it("読めない設定では前の設定に戻さず、評価は既定の onError(ASK)で返し、所見に設定のパスと理由を載せる", async () => {
-    const file = writeCwdConfig({ onError: "STOP" })
-    expect((await call(client, "list_rules", {})).body.onError).toBe("STOP")
+  it("judge.provider が none なら、どのパネリストも none と示す", async () => {
+    const h = harness({ raguel: { judge: { provider: "none" } } })
+    const client = await connect(h.deps)
+    const { body } = await call(client, "list_rules", {})
+    expect(body.panelists.adversarial).toEqual({ provider: "none" })
+  })
+})
 
-    writeCwdConfig({ rules: { "common/secrets": { enabled: false } } })
-    touchLater(file, 10)
-    for (let i = 0; i < 2; i++) {
-      const res = await call(client, "evaluate_code", {
-        runId: "reload-broken",
-        objective: "typo 修正",
-        diff: HARMLESS_DIFF
+describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見 G2・G7)", () => {
+  it("索引に無い evaluationId は「評価の記録が無い」と返す", async () => {
+    const h = harness()
+    const client = await connect(h.deps)
+    const { body } = await call(client, "record_outcome", {
+      evaluationId: "00000000-0000-4000-8000-000000000000",
+      outcome: "approved"
+    })
+    expect(body.recorded).toBe(false)
+    expect(body.reason).toContain(NO_EVALUATION_RECORD)
+  })
+
+  it("STOP の誤検知の裁定を記録して判例にし、一覧・退役できる", async () => {
+    const h = harness()
+    const client = await connect(h.deps)
+    const stop = await call(
+      client,
+      "evaluate_decision",
+      decisionArgs(`見本の鍵 ${GHP_TOKEN} を README に載せる`)
+    )
+    expect(stop.body.verdict).toBe("STOP")
+    const evaluationId = stop.body.evaluationId
+
+    const noNotes = await call(client, "record_outcome", {
+      evaluationId,
+      outcome: "approved",
+      ruling: "false-positive"
+    })
+    expect(noNotes.body).toMatchObject({ recorded: false })
+    expect(noNotes.body.reason).toContain("notes")
+
+    const asIs = await call(client, "record_outcome", {
+      evaluationId,
+      outcome: "approved",
+      ruling: "as-is"
+    })
+    expect(asIs.body.recorded).toBe(false)
+
+    const recorded = await call(client, "record_outcome", {
+      evaluationId,
+      outcome: "approved",
+      ruling: "false-positive",
+      notes: "文書に載せる見本の鍵で、実際の鍵ではない"
+    })
+    expect(recorded.body.recorded).toBe(true)
+    const precedentId = recorded.body.precedentId
+    expect(precedentId).toBe(
+      `prec-${evaluationId.slice(0, 8)}-false-positive-approved`
+    )
+    expect(h.outcomes().at(-1)).toMatchObject({
+      schemaVersion: 2,
+      evaluationId,
+      phase: "intent",
+      outcome: "approved",
+      ruling: "false-positive",
+      precedentId
+    })
+
+    const listed = await call(client, "list_precedents", { phase: "intent" })
+    expect(listed.body.precedents).toEqual([
+      expect.objectContaining({
+        id: precedentId,
+        source: "project",
+        phase: "intent",
+        ruling: "false-positive",
+        firedRules: expect.arrayContaining(["common/secrets"]),
+        retiredAt: null
       })
-      expect(res.isError).toBeFalsy()
-      expect(res.body.verdict).toBe("ASK")
-      expect(res.body.findings[0].ruleId).toBe("kernel/config-error")
-      expect(res.body.findings[0].message).toContain(file)
-      expect(res.body.findings[0].message).toContain("common/secrets")
-      expect(res.body.policy.configSource).toBe(`cwd:${file}`)
-    }
-    const listing = (await call(client, "list_rules", {})).body
-    expect(listing.error).toContain("common/secrets")
-    expect(listing.rules).toBeUndefined()
+    ])
+    const all = await call(client, "list_precedents", {})
+    expect(
+      // biome-ignore lint/suspicious/noExplicitAny: 応答の JSON をテストで読む
+      all.body.precedents.some((p: any) => p.source === "seed")
+    ).toBe(true)
 
-    writeCwdConfig({ onError: "ASK" })
-    touchLater(file, 20)
-    const fixed = (await call(client, "list_rules", {})).body
-    expect(fixed.onError).toBe("ASK")
-    expect(fixed.error).toBeUndefined()
+    const retired = await call(client, "retire_precedent", {
+      id: precedentId,
+      reason: "見本の鍵の書き方を変えた"
+    })
+    expect(retired.body).toEqual({ retired: true })
+    expect(
+      (await call(client, "list_precedents", { phase: "intent" })).body
+        .precedents
+    ).toEqual([])
+    const withRetired = await call(client, "list_precedents", {
+      phase: "intent",
+      includeRetired: true
+    })
+    expect(withRetired.body.precedents[0].retiredAt).toEqual(expect.any(String))
+    const again = await call(client, "retire_precedent", {
+      id: precedentId,
+      reason: "もう一度"
+    })
+    expect(again.body.retired).toBe(false)
+  })
+
+  it("degraded の評価の裁定は記録するが、判例は作らない", async () => {
+    const h = harness()
+    const client = await connect(h.deps)
+    // パネリストの応答が無いので degraded の ASK になる
+    const degraded = await call(
+      client,
+      "evaluate_decision",
+      decisionArgs("方針")
+    )
+    expect(degraded.body.judgeStatus).toBe("degraded")
+    const res = await call(client, "record_outcome", {
+      evaluationId: degraded.body.evaluationId,
+      outcome: "approved",
+      ruling: "as-is"
+    })
+    expect(res.body).toEqual({ recorded: true, precedentId: null })
+    expect(h.outcomes()).toHaveLength(1)
+    expect(h.outcomes()[0]).toMatchObject({
+      ruling: "as-is",
+      precedentId: null
+    })
+  })
+
+  it("ruling と outcome の組み合わせが表に無ければ記録しない", async () => {
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    const client = await connect(h.deps)
+    const ok = await call(client, "evaluate_decision", decisionArgs("方針"))
+    expect(ok.body.verdict).toBe("PROCEED")
+    for (const args of [
+      { outcome: "approved", ruling: "revise" },
+      { outcome: "rejected", ruling: "revise" },
+      { outcome: "rejected", ruling: "as-is" }
+    ]) {
+      const res = await call(client, "record_outcome", {
+        evaluationId: ok.body.evaluationId,
+        ...args
+      })
+      expect(res.body.recorded, JSON.stringify(args)).toBe(false)
+    }
+    expect(h.outcomes()).toEqual([])
+  })
+
+  it("casefile/tampered の STOP は false-positive で覆せない", async () => {
+    const h = harness({ files: { "design.md": "# 設計\n" } })
+    benignPanel(h.provider, "decision")
+    const client = await connect(h.deps)
+    const intent = await call(client, "evaluate_decision", decisionArgs("方針"))
+    fs.appendFileSync(
+      path.join(intent.body.casePath, "submission.txt"),
+      "書き換え"
+    )
+    const stop = await call(client, "evaluate_design", {
+      runId: "run-1",
+      phase: "design",
+      objective: "設計する",
+      paths: ["design.md"]
+    })
+    expect(stop.body.verdict).toBe("STOP")
+    const res = await call(client, "record_outcome", {
+      evaluationId: stop.body.evaluationId,
+      outcome: "approved",
+      ruling: "false-positive",
+      notes: "覆したい"
+    })
+    expect(res.body.recorded).toBe(false)
+    expect(res.body.reason).toContain("覆せない")
+  })
+})
+
+describe("進捗とキャンセル(§6.8、所見 I2)", () => {
+  it("progressToken があれば、ステップとパネリストの起動と終了を通知する", async () => {
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    const client = await connect(h.deps)
+    const messages: string[] = []
+    const res = await call(client, "evaluate_decision", decisionArgs("方針"), {
+      onprogress: (p) => {
+        if (p.message) messages.push(p.message)
+      }
+    })
+    expect(res.body.verdict).toBe("PROCEED")
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        "評価対象の取得",
+        "ルール層",
+        "パネル",
+        "adversarial を起動した",
+        "adversarial が終わった",
+        "steelman を起動した",
+        "合成"
+      ])
+    )
+  })
+
+  it("クライアントが中止したら、パネリストに中止を伝え、attempt と索引を残さない", async () => {
+    let started = false
+    let aborted = false
+    const hanging: JudgeProvider = {
+      name: "claude",
+      invoke<T>(_call: JudgeCall<T>, ctl: { signal: AbortSignal }): Promise<T> {
+        started = true
+        return new Promise<T>((_, reject) => {
+          ctl.signal.addEventListener("abort", () => {
+            aborted = true
+            reject(ctl.signal.reason)
+          })
+        })
+      }
+    }
+    const h = harness({ providers: () => ({ claude: hanging }) })
+    const client = await connect(h.deps)
+    const ac = new AbortController()
+    const pending = call(client, "evaluate_decision", decisionArgs("方針"), {
+      signal: ac.signal
+    })
+    await vi.waitFor(() => expect(started).toBe(true))
+    ac.abort("中止")
+    await expect(pending).rejects.toThrow()
+    await vi.waitFor(() => expect(aborted).toBe(true))
+    await new Promise((r) => setTimeout(r, 100))
+    expect(h.index()).toEqual([])
+    expect(
+      fs.existsSync(path.join(h.store().projectDir, "run-1", "intent"))
+    ).toBe(false)
   })
 })

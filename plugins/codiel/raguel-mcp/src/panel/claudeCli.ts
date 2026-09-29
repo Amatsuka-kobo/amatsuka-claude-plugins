@@ -28,7 +28,7 @@ export class ClaudeCliProvider implements JudgeProvider {
     this.semaphore = new Semaphore(maxConcurrency)
   }
 
-  async invoke<T>(call: JudgeCall<T>, ctl?: CallControl): Promise<T> {
+  async invoke<T>(call: JudgeCall<T>, ctl: CallControl): Promise<T> {
     const release = await this.semaphore.acquire()
     try {
       return await withTempDir((cwd) =>
@@ -38,9 +38,8 @@ export class ClaudeCliProvider implements JudgeProvider {
             args: buildArgs(call),
             cwd,
             stdin: prompt,
-            timeoutMs: ctl?.timeoutMs ?? call.timeoutMs,
             role: call.role,
-            signal: ctl?.signal
+            ctl
           })
           return extractStructured(stdout, call.schema)
         })

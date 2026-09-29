@@ -1,88 +1,135 @@
 /**
- * common/resubmission-loop — 同一 runId 内での近似成果物の再提出(暴走)検知(sealed, 既定 ask→stop 昇格)。
+ * common/resubmission-loop — 同じ run・同じフェーズでの似た成果物の再提出の検知(sealed, 既定 ask)。
+ * 設計書 §6.4.2 の「再提出の判定」。stop には上げない。
  *
- * NOTE(統合時の注意): computeSubmissionDigest は「今回提出された成果物のダイジェストを
- * 過去分と比較する」ためだけでなく、pipeline が評価完了後に「今回の提出を次回以降の
- * priorSubmissions として永続化する」ためにも使うヘルパーとして export している。
- * pipeline 側は評価が確定した後の実際の verdict を使って
- * `computeSubmissionDigest(artifact.content, attempt, verdict)` を呼び、
- * casefile store に SubmissionDigest を追記してから次回呼び出し時に
- * `ctx.priorSubmissions` として供給すること(このルール自身は保存を行わない)。
+ * 比べる相手は、verdict が ASK か STOP、judgeStatus が ok、裁定の記録が無い過去の attempt である。
+ * 相手の ask 以上の ruleId がどれも今回のルール層で出ていなければ、修正ありとみなして比べない。
+ * 今回のルール層の所見は Rule.check からは見えないので、所見を持つ呼び出し側は
+ * resubmissionFindings と findAddressedButSimilar に渡す。
  */
 
-import { createHash } from "node:crypto"
+import { computeDigest, digestSimilarity } from "../../casefile/digest.js"
 import type {
+  Artifact,
   Finding,
+  PriorAttempt,
   Rule,
-  Severity,
-  SubmissionDigest,
-  Verdict
+  RuleContext
 } from "../../core/types.js"
-import { getSeverity, truncateExcerpt } from "../util.js"
+import { MAX_SIMILARITY_THRESHOLD, ruleParam } from "../params.js"
+import { getSeverity } from "../util.js"
 
 const RULE_ID = "common/resubmission-loop"
 
-const DEFAULT_SIMILARITY_THRESHOLD = 0.85
-/** 緩和方向(閾値を上げる = 似ていると判定しにくくする)には限度を設ける(sealed ルール) */
-const MAX_SIMILARITY_THRESHOLD = 0.95
-const DEFAULT_STOP_AFTER = 3
-const SHINGLE_SIZE = 5
-
-/** 空白圧縮 + 小文字化による正規化 */
-function normalize(content: string): string {
-  return content.trim().replace(/\s+/g, " ").toLowerCase()
+/** 似ていると判定した過去の attempt。W1-T03 の ResubmissionTarget と同じ形 */
+export interface SimilarAttempt {
+  attempt: number
+  similarity: number
 }
 
-/** FNV-1a 32bit。決定論的でハッシュ集合の要素として十分な分散を持つ */
-function fnv1a32(str: string): number {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return hash >>> 0
+function isComparable(prior: PriorAttempt): boolean {
+  return (
+    (prior.verdict === "ASK" || prior.verdict === "STOP") &&
+    prior.judgeStatus === "ok" &&
+    !prior.hasRuling &&
+    prior.digest !== null
+  )
+}
+
+/** 今回のルール層の ask 以上の ruleId。このルール自身は数えない */
+function askRuleIdsOf(findings: readonly Finding[]): Set<string> {
+  return new Set(
+    findings
+      .filter((f) => f.severity !== "info" && f.ruleId !== RULE_ID)
+      .map((f) => f.ruleId)
+  )
 }
 
 /**
- * 提出内容のダイジェストを計算する。
- * sha256: 正規化後テキストの完全一致判定に使う
- * shingleHashes: 文字 5-gram のハッシュ集合。Jaccard 類似度(近似一致判定)に使う
+ * 前回の ask 以上の ruleId が空でなく、そのどれも今回出ていなければ修正ありとみなす。
+ * 前回このルールだけが出ていた attempt は、指摘の中身が無いので修正ありとみなさない
  */
-export function computeSubmissionDigest(
-  content: string,
-  attempt: number,
-  verdict: Verdict
-): SubmissionDigest {
-  const normalized = normalize(content)
-  const sha256 = createHash("sha256").update(normalized).digest("hex")
-
-  const shingles = new Set<number>()
-  if (normalized.length >= SHINGLE_SIZE) {
-    for (let i = 0; i + SHINGLE_SIZE <= normalized.length; i++) {
-      shingles.add(fnv1a32(normalized.slice(i, i + SHINGLE_SIZE)))
-    }
-  } else if (normalized.length > 0) {
-    // 短すぎる内容は全体を1つのシングルとして扱う
-    shingles.add(fnv1a32(normalized))
-  }
-
-  return { attempt, verdict, sha256, shingleHashes: [...shingles] }
+function isAddressed(prior: PriorAttempt, current: Set<string>): boolean {
+  const ids = prior.askRuleIds.filter((id) => id !== RULE_ID)
+  return ids.length > 0 && ids.every((id) => !current.has(id))
 }
 
-/** Jaccard 類似度(0〜1)。両方空集合なら 1(完全一致とみなす) */
-export function similarity(
-  a: number[] | Set<number>,
-  b: number[] | Set<number>
-): number {
-  const setA = a instanceof Set ? a : new Set(a)
-  const setB = b instanceof Set ? b : new Set(b)
-  if (setA.size === 0 && setB.size === 0) return 1
-  let intersection = 0
-  for (const x of setA) {
-    if (setB.has(x)) intersection++
+function similarityThreshold(ctx: RuleContext): number {
+  return Math.min(
+    ruleParam<number>(ctx.config, RULE_ID, "similarityThreshold"),
+    MAX_SIMILARITY_THRESHOLD
+  )
+}
+
+/** 比べられる相手ごとに、閾値以上に似ていれば返す。addressed で修正ありかどうかを選ぶ */
+function similarPriors(
+  content: string,
+  priors: readonly PriorAttempt[],
+  current: Set<string> | null,
+  threshold: number,
+  addressed: boolean
+): SimilarAttempt[] {
+  const digest = computeDigest(content)
+  const out: SimilarAttempt[] = []
+  for (const prior of priors) {
+    if (!isComparable(prior) || prior.digest === null) continue
+    const wasAddressed = current !== null && isAddressed(prior, current)
+    if (wasAddressed !== addressed) continue
+    const similarity = digestSimilarity(digest, prior.digest)
+    if (similarity !== null && similarity >= threshold) {
+      out.push({ attempt: prior.attempt, similarity })
+    }
   }
-  const union = setA.size + setB.size - intersection
-  return union === 0 ? 0 : intersection / union
+  return out
+}
+
+/**
+ * 修正ありとみなして比較から外した相手のうち、類似度が閾値以上のもの。
+ * Jev が有効なとき、前回の指摘への対処を問う対象(Jev の入力 resubmissionTargets)になる
+ */
+export function findAddressedButSimilar(
+  content: string,
+  priors: readonly PriorAttempt[],
+  currentFindings: readonly Finding[],
+  threshold: number
+): SimilarAttempt[] {
+  return similarPriors(
+    content,
+    priors,
+    askRuleIdsOf(currentFindings),
+    Math.min(threshold, MAX_SIMILARITY_THRESHOLD),
+    true
+  )
+}
+
+/**
+ * このルールの所見を返す。currentFindings は今回のルール層のほかの所見で、
+ * null なら修正ありの判定をせず、比べられる相手をすべて比べる
+ */
+export function resubmissionFindings(
+  artifact: Artifact,
+  ctx: RuleContext,
+  currentFindings: readonly Finding[] | null
+): Finding[] {
+  const matched = similarPriors(
+    artifact.content,
+    ctx.priorAttempts,
+    currentFindings === null ? null : askRuleIdsOf(currentFindings),
+    similarityThreshold(ctx),
+    false
+  )
+  if (matched.length === 0) return []
+
+  const list = matched
+    .map((m) => `試行 ${m.attempt}(類似度 ${m.similarity.toFixed(2)})`)
+    .join("、")
+  return [
+    {
+      ruleId: RULE_ID,
+      severity: getSeverity(ctx.config.rules[RULE_ID], "ask"),
+      message: `過去の提出と似た成果物が再提出されました: ${list}`
+    }
+  ]
 }
 
 export const resubmissionLoopRule: Rule = {
@@ -91,53 +138,6 @@ export const resubmissionLoopRule: Rule = {
   sealed: true,
   defaultSeverity: "ask",
   check(artifact, ctx): Finding[] {
-    const settings = ctx.config.rules[RULE_ID]
-    const baseSeverity = getSeverity(settings, "ask")
-
-    const configuredThreshold =
-      typeof settings?.similarityThreshold === "number"
-        ? settings.similarityThreshold
-        : DEFAULT_SIMILARITY_THRESHOLD
-    const similarityThreshold = Math.min(
-      configuredThreshold,
-      MAX_SIMILARITY_THRESHOLD
-    )
-    const stopAfter =
-      typeof settings?.stopAfter === "number"
-        ? settings.stopAfter
-        : DEFAULT_STOP_AFTER
-
-    const priorAskOrStop = ctx.priorSubmissions.filter(
-      (s) => s.verdict === "ASK" || s.verdict === "STOP"
-    )
-    if (priorAskOrStop.length === 0) return []
-
-    // 比較用の現在提出ダイジェスト。attempt/verdict は比較には使わないためプレースホルダでよい
-    const current = computeSubmissionDigest(artifact.content, 0, "ASK")
-
-    const matchedAttempts: number[] = []
-    for (const prior of priorAskOrStop) {
-      const exactMatch = current.sha256 === prior.sha256
-      const nearMatch =
-        similarity(current.shingleHashes, prior.shingleHashes) >=
-        similarityThreshold
-      if (exactMatch || nearMatch) {
-        matchedAttempts.push(prior.attempt)
-      }
-    }
-
-    if (matchedAttempts.length === 0) return []
-
-    const severity: Severity =
-      matchedAttempts.length >= stopAfter ? "stop" : baseSeverity
-
-    return [
-      {
-        ruleId: RULE_ID,
-        severity,
-        message: `過去の提出(試行 ${matchedAttempts.join(", ")})と類似した成果物が再提出されました(${matchedAttempts.length} 回一致)`,
-        evidence: { excerpt: truncateExcerpt(artifact.content) }
-      }
-    ]
+    return resubmissionFindings(artifact, ctx, null)
   }
 }

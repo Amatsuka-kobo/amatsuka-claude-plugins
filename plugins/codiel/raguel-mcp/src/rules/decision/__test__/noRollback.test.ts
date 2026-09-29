@@ -3,7 +3,7 @@ import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { noRollbackRule } from "../noRollback.js"
 
 describe("noRollbackRule", () => {
-  it("不可逆操作 + rollback 記載なしで ask 発火する", () => {
+  it("不可逆操作 + rollback 記載なしで info の所見を出す", () => {
     const findings = noRollbackRule.check(
       makeArtifact({
         kind: "decision",
@@ -12,7 +12,20 @@ describe("noRollbackRule", () => {
       makeCtx()
     )
     expect(findings).toHaveLength(1)
-    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].severity).toBe("info")
+  })
+
+  it("語幹で一致する(deployment・force-push)", () => {
+    for (const content of [
+      "deployment を今夜行う",
+      "履歴を force-push で直す"
+    ]) {
+      const findings = noRollbackRule.check(
+        makeArtifact({ kind: "decision", content }),
+        makeCtx()
+      )
+      expect(findings).toHaveLength(1)
+    }
   })
 
   it("context.rollbackPlan があれば発火しない", () => {

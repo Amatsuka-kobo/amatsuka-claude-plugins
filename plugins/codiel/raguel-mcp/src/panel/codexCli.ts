@@ -1,8 +1,9 @@
 /**
  * codex CLI(`codex exec`)をサブプロセス起動して LLM 判定を得るプロバイダー。
  * 利用者の設定を読まず(--ignore-user-config)、セッションを残さず(--ephemeral)、
- * 読み取り専用のサンドボックスで、呼び出しごとの空の cwd から起動する。
- * シェルのツールを無効にする専用のフラグは codex exec に無いので、ツールは止めていない。
+ * 読み取り専用のサンドボックスで、シェルのツールと利用者の hooks を無効にし、
+ * 呼び出しごとの空の cwd から起動する(設計書 §6.7.3)。
+ * `$CODEX_HOME/AGENTS.md` の読み込みは止める手段が無い(既知の限界)。
  */
 
 import { readFile, rm, writeFile } from "node:fs/promises"
@@ -34,7 +35,7 @@ export class CodexCliProvider implements JudgeProvider {
     this.semaphore = new Semaphore(maxConcurrency)
   }
 
-  async invoke<T>(call: JudgeCall<T>, ctl?: CallControl): Promise<T> {
+  async invoke<T>(call: JudgeCall<T>, ctl: CallControl): Promise<T> {
     const release = await this.semaphore.acquire()
     try {
       return await withTempDir(async (dir) => {
@@ -51,9 +52,8 @@ export class CodexCliProvider implements JudgeProvider {
             args: buildCodexArgs(dir, call.model),
             cwd: dir,
             stdin: prompt,
-            timeoutMs: ctl?.timeoutMs ?? call.timeoutMs,
             role: call.role,
-            signal: ctl?.signal
+            ctl
           })
           let text: string
           try {
@@ -84,6 +84,13 @@ export function buildCodexArgs(dir: string, model: string): string[] {
     "--skip-git-repo-check",
     "--sandbox",
     "read-only",
+    // 機能名は `codex features list` のもの。付けないとシェルで cwd の外のファイルを読めた(実機で確認)
+    "--disable",
+    "shell_tool",
+    "--disable",
+    "unified_exec",
+    "--disable",
+    "hooks",
     "--output-schema",
     path.join(dir, SCHEMA_FILE),
     "-o",

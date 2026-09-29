@@ -1,14 +1,15 @@
 /**
- * 判定の合成規則(DESIGN.md §2)。完全に決定論的な純関数。
- *
- * 優先順位は常に STOP > ASK > PROCEED。
- * - STOP はルール層の専権(judge.canStop での明示緩和のみ例外)
- * - steelman の反駁が降格できるのはパネル発(adversarial)の所見のみ
- * - 自由記述(rationale)は入力にしない。動かせるのは構造化フィールドのみ
+ * 判定の合成規則(設計書 §6.6.3)。10 のステップを順に当て、最初に決まったものを採る。決定論の純関数。
+ * - STOP はルール層だけが出す。パネルと meta は STOP を出せない
+ * - steelman の反駁で下げられるのは adversarial と crosscheck の所見だけ
+ * - 自由記述(rationale・rebuttal)は判定の入力にしない
+ * - 基盤の障害(§6.8)は内容の懸念と分け、judgeStatus を degraded にして ASK にする
  */
 
 import type {
+  DegradedReason,
   Finding,
+  JudgeStatus,
   MetaReport,
   PanelReport,
   RaguelConfig,
@@ -16,68 +17,71 @@ import type {
   WeightTier
 } from "./types.js"
 
-/**
- * judge.canStop 有効時に meta 軸スコアがこの値未満なら STOP を許す。
- * 設定项目にはしない(緩和方向の事故を防ぐための固定床)。
- */
-const CAN_STOP_SCORE_FLOOR = 20
+/** steelman の反駁の対象になるパネリスト(攻める立場) */
+export type TargetPanelist = "adversarial" | "crosscheck"
 
 export interface SteelmanVerdict {
-  /** adversarial findings 配列内のインデックス */
+  panelist: TargetPanelist
+  /** そのパネリストの findings の中の添字(0 始まり) */
   findingIndex: number
   outcome: "rebutted" | "conceded"
   rebuttal: string
 }
 
+/** パネルの実行結果のうち合成が読む部分(panel/runner.ts の PanelOutcome がこれを満たす) */
+export interface PanelResult {
+  reports: PanelReport[]
+  steelmanVerdicts: SteelmanVerdict[]
+  /** critical で meta が成功したときだけ */
+  meta?: MetaReport
+  /** 失敗したパネリストと meta の panel/<名前>-error(ask) */
+  errorFindings: Finding[]
+  degradedReasons: DegradedReason[]
+}
+
 export interface SynthesisInput {
   weightTier: WeightTier
-  /** ルール層の findings(severity info/ask/stop) */
+  /** ルール層の所見(前フェーズの改竄の casefile/tampered を含む) */
   ruleFindings: Finding[]
-  /** パネルを実行したか(trivial ティアや STOP 即決では false) */
-  panelRan: boolean
-  panelReports: PanelReport[]
-  /** steelman による adversarial 所見への個別反駁 */
-  steelmanVerdicts?: SteelmanVerdict[]
-  /** パネリスト失敗のフェイルクローズド所見(常に採用) */
-  panelErrorFindings: Finding[]
-  meta?: MetaReport
-  /** standard 以上なのにパネルを実行できなかった(provider none 等) */
-  panelUnavailable?: boolean
+  /** パネルを起動しなかったときは undefined(ルール層の stop・trivial) */
+  panel?: PanelResult
+  /** パネルの外の障害(kernel・config など) */
+  degradedReasons?: DegradedReason[]
   config: RaguelConfig
 }
 
 export interface SynthesisResult {
   verdict: Verdict
-  /** 合成後に生き残った findings(ルール + 採用/降格済みパネル所見) */
+  judgeStatus: JudgeStatus
+  /** judgeStatus が degraded のときだけ中身がある */
+  degradedReasons: DegradedReason[]
+  /** ルール層の所見、分類後のパネルの所見、パネルの失敗の所見の順 */
   findings: Finding[]
-  /** どの規則がどう効いたか(説明可能性・証拠ファイル用) */
+  /** 当てたステップの記録 */
   reasons: string[]
+  /** ASK と STOP のとき、人が判断することを 1 文で(所見 D6) */
+  decisionPoint?: string
+  /** adversarial と crosscheck の共通の軸のスコアの差の最大。両方がそろわなければ null。記録用 */
+  variance: number | null
 }
 
-/** パネル間(meta 含む)の同名軸スコアの最大乖離 */
-export function maxScoreVariance(
-  reports: PanelReport[],
-  meta?: MetaReport
-): number {
-  const byAxis = new Map<string, number[]>()
-  const all: Array<Record<string, number>> = [
-    ...reports.map((r) => r.scores),
-    ...(meta ? [meta.scores] : [])
-  ]
-  for (const scores of all) {
-    for (const [axis, value] of Object.entries(scores)) {
-      const list = byAxis.get(axis) ?? []
-      list.push(value)
-      byAxis.set(axis, list)
-    }
+/** adversarial と crosscheck の共通の軸ごとのスコアの差(同じ立場のパネリストの乖離度) */
+export function stanceVariance(
+  reports: readonly PanelReport[]
+): { max: number; byAxis: Record<string, number> } | null {
+  const adv = reports.find((r) => r.panelist === "adversarial")
+  const cross = reports.find((r) => r.panelist === "crosscheck")
+  if (!adv || !cross) return null
+  const byAxis: Record<string, number> = {}
+  let max = 0
+  for (const [axis, a] of Object.entries(adv.scores)) {
+    const c = cross.scores[axis]
+    if (c === undefined) continue
+    const diff = Math.abs(a - c)
+    byAxis[axis] = diff
+    if (diff > max) max = diff
   }
-  let worst = 0
-  for (const values of byAxis.values()) {
-    if (values.length < 2) continue
-    const spread = Math.max(...values) - Math.min(...values)
-    if (spread > worst) worst = spread
-  }
-  return worst
+  return { max, byAxis }
 }
 
 function asInfo(finding: Finding, note: string): Finding {
@@ -88,122 +92,214 @@ function asInfo(finding: Finding, note: string): Finding {
   }
 }
 
-export function synthesize(input: SynthesisInput): SynthesisResult {
-  const { config } = input
-  const reasons: string[] = []
-  const findings: Finding[] = [...input.ruleFindings]
+function uniqueIds(findings: readonly Finding[]): string {
+  return [...new Set(findings.map((f) => f.ruleId))].join("、")
+}
 
-  const ruleStop = input.ruleFindings.some((f) => f.severity === "stop")
-  const ruleAsk = input.ruleFindings.some((f) => f.severity === "ask")
+interface Classified {
+  findings: Finding[]
+  adopted: Finding[]
+  rebuttedCount: number
+  belowCount: number
+}
 
-  // 規則 1: ルール層の stop は即時確定。パネル・meta では覆せない
-  if (ruleStop) {
-    reasons.push("rule-stop: ルール層の stop 所見により STOP(覆せない)")
-    return { verdict: "STOP", findings, reasons }
+/** ステップ 2: パネルの所見を分類する */
+function classifyPanelFindings(
+  panel: PanelResult,
+  confidenceMin: number
+): Classified {
+  const out: Classified = {
+    findings: [],
+    adopted: [],
+    rebuttedCount: 0,
+    belowCount: 0
   }
-
-  // パネル所見の合成(規則 3)
-  const confidenceMin = config.judge.thresholds.confidence
-  let adoptedAsk = false
-
-  for (const report of input.panelReports) {
+  for (const report of panel.reports) {
+    const isTarget =
+      report.panelist === "adversarial" || report.panelist === "crosscheck"
     report.findings.forEach((finding, index) => {
-      const confidence = finding.confidence ?? 0
-      if (report.panelist === "adversarial") {
-        const rebutted = input.steelmanVerdicts?.some(
-          (v) => v.findingIndex === index && v.outcome === "rebutted"
+      if (!isTarget) {
+        // steelman 自身の所見は判定を動かさない
+        out.findings.push(
+          finding.severity === "info"
+            ? finding
+            : asInfo(finding, "steelman の所見は判定に使わない")
         )
-        if (rebutted) {
-          // 降格できるのはパネル発の所見のみ(不変条件 2)。ここがその唯一の適用点
-          findings.push(asInfo(finding, "steelman により反駁済み"))
-          return
-        }
-      }
-      if (finding.severity === "info") {
-        findings.push(finding)
         return
       }
-      if (confidence >= confidenceMin) {
-        findings.push({ ...finding, severity: "ask" })
-        adoptedAsk = true
-      } else {
-        findings.push(
+      if (finding.severity === "info") {
+        out.findings.push(finding)
+        return
+      }
+      const rebutted = panel.steelmanVerdicts.some(
+        (v) =>
+          v.panelist === report.panelist &&
+          v.findingIndex === index &&
+          v.outcome === "rebutted"
+      )
+      if (rebutted) {
+        out.rebuttedCount++
+        out.findings.push(asInfo(finding, "steelman が反駁した"))
+        return
+      }
+      const confidence = finding.confidence ?? 0
+      if (confidence < confidenceMin) {
+        out.belowCount++
+        out.findings.push(
           asInfo(finding, `confidence ${confidence} < ${confidenceMin}`)
         )
+        return
       }
+      const adopted: Finding = { ...finding, severity: "ask" }
+      out.adopted.push(adopted)
+      out.findings.push(adopted)
+    })
+  }
+  return out
+}
+
+export function synthesize(input: SynthesisInput): SynthesisResult {
+  const { config, panel, weightTier } = input
+  const reasons: string[] = []
+  const ruleFindings = input.ruleFindings
+  const variance = panel ? (stanceVariance(panel.reports)?.max ?? null) : null
+
+  const result = (
+    verdict: Verdict,
+    findings: Finding[],
+    extra: Partial<
+      Pick<SynthesisResult, "judgeStatus" | "degradedReasons" | "decisionPoint">
+    > = {}
+  ): SynthesisResult => ({
+    verdict,
+    judgeStatus: extra.judgeStatus ?? "ok",
+    degradedReasons: extra.degradedReasons ?? [],
+    findings,
+    reasons,
+    ...(extra.decisionPoint ? { decisionPoint: extra.decisionPoint } : {}),
+    variance
+  })
+
+  // 1. ルール層の stop。パネルは起動しない前提で、judgeStatus は ok のまま
+  const stops = ruleFindings.filter((f) => f.severity === "stop")
+  if (stops.length > 0) {
+    reasons.push(`rule-stop: ルール層の stop(${uniqueIds(stops)})により STOP`)
+    return result("STOP", [...ruleFindings], {
+      decisionPoint: `ルール層の stop の所見(${uniqueIds(stops)})を解消して再提出するか、誤検知として裁定するかを判断する。`
     })
   }
 
-  // パネリスト失敗はフェイルクローズドで常に採用
-  if (input.panelErrorFindings.length > 0) {
-    findings.push(...input.panelErrorFindings)
-    adoptedAsk = true
-    reasons.push("panel-error: パネリスト失敗によりフェイルクローズド")
-  }
-
-  if (input.panelUnavailable) {
-    adoptedAsk = true
-    reasons.push("panel-unavailable: パネル必要ティアで実行不能のため ASK")
-  }
-
-  // 規則 6(canStop 緩和): meta 軸スコアが固定床未満なら STOP を許す
-  if (config.judge.canStop && input.meta) {
-    const minScore = Math.min(...Object.values(input.meta.scores))
-    if (
-      Object.keys(input.meta.scores).length > 0 &&
-      minScore < CAN_STOP_SCORE_FLOOR
-    ) {
-      reasons.push(
-        `can-stop: meta 軸スコア最小値 ${minScore} < ${CAN_STOP_SCORE_FLOOR}`
-      )
-      return { verdict: "STOP", findings, reasons }
-    }
-  }
-
-  // 規則 2: ルール層の ask はパネルで下げられない(ASK 床)
-  if (ruleAsk) {
-    reasons.push("rule-ask: ルール層の ask 所見により ASK 床(降格不可)")
-    return { verdict: "ASK", findings, reasons }
-  }
-
-  if (adoptedAsk) {
-    reasons.push("panel-ask: 採用されたパネル所見により ASK")
-    return { verdict: "ASK", findings, reasons }
-  }
-
-  // パネル未実施(trivial)はルール全通過なら PROCEED(§3 [3])
-  if (!input.panelRan) {
-    reasons.push("trivial-pass: ルール全通過・パネル不要のため PROCEED")
-    return { verdict: "PROCEED", findings, reasons }
-  }
-
-  // 規則 5: 分散は ASK に倒す
-  const variance = maxScoreVariance(input.panelReports, input.meta)
-  if (variance > config.judge.thresholds.maxVariance) {
+  // 2. パネルの所見の分類
+  const classified = panel
+    ? classifyPanelFindings(panel, config.judge.thresholds.confidence)
+    : { findings: [], adopted: [], rebuttedCount: 0, belowCount: 0 }
+  const findings = [
+    ...ruleFindings,
+    ...classified.findings,
+    ...(panel?.errorFindings ?? [])
+  ]
+  if (panel) {
     reasons.push(
-      `variance: パネル間スコア乖離 ${variance} > ${config.judge.thresholds.maxVariance} のため ASK`
+      `panel-findings: 採用 ${classified.adopted.length} 件、steelman の反駁で info ${classified.rebuttedCount} 件、confidence ${config.judge.thresholds.confidence} 未満で info ${classified.belowCount} 件`
     )
-    return { verdict: "ASK", findings, reasons }
   }
 
-  // 規則 4: meta 評価の閾値写像。meta 不在はフェイルクローズドで ASK
-  if (!input.meta) {
-    reasons.push("meta-missing: meta 評価がないため ASK(フェイルクローズド)")
-    return { verdict: "ASK", findings, reasons }
+  // 3. 基盤の障害
+  const degradedReasons = [
+    ...(input.degradedReasons ?? []),
+    ...(panel?.degradedReasons ?? [])
+  ]
+  if (weightTier !== "trivial" && !panel) {
+    // パネルが要る重さなのに起動していない。黙って PROCEED にしない
+    degradedReasons.push({ source: "kernel", reason: "panel-not-run" })
   }
-  const axes = Object.entries(input.meta.scores)
+  if (degradedReasons.length > 0) {
+    const sources = [...new Set(degradedReasons.map((r) => r.source))].join(
+      "、"
+    )
+    reasons.push(
+      `degraded: 基盤の障害(${degradedReasons.map((r) => `${r.source}: ${r.reason}`).join("、")})により ASK`
+    )
+    return result("ASK", findings, {
+      judgeStatus: "degraded",
+      degradedReasons,
+      decisionPoint: `判定の基盤に障害があり(${sources})審査が欠けているので、人が成果物を確かめて進めるか、再評価するかを判断する。`
+    })
+  }
+
+  // 4. ルール層の ask
+  const ruleAsks = ruleFindings.filter((f) => f.severity === "ask")
+  if (ruleAsks.length > 0) {
+    reasons.push(`rule-ask: ルール層の ask(${uniqueIds(ruleAsks)})により ASK`)
+    return result("ASK", findings, {
+      decisionPoint: `ルール層の ask の所見(${uniqueIds(ruleAsks)})が妥当か、成果物を直すべきかを判断する。`
+    })
+  }
+
+  // 5. 採用されたパネルの所見
+  if (classified.adopted.length > 0) {
+    reasons.push(
+      `panel-ask: 採用されたパネルの所見 ${classified.adopted.length} 件により ASK`
+    )
+    return result("ASK", findings, {
+      decisionPoint: `パネルが採用した所見 ${classified.adopted.length} 件(${uniqueIds(classified.adopted)})に対処が要るかを判断する。`
+    })
+  }
+
+  // 6. trivial
+  if (weightTier === "trivial") {
+    reasons.push(
+      "trivial-pass: trivial でルール層に ask 以上が無いため PROCEED"
+    )
+    return result("PROCEED", findings)
+  }
+
+  // 7. standard。スコアと乖離度は記録するが判定に使わない
+  if (weightTier === "standard") {
+    reasons.push(
+      `standard-pass: standard で採用された所見が無いため PROCEED(スコアと乖離度 ${variance ?? "なし"} は判定に使わない)`
+    )
+    return result("PROCEED", findings)
+  }
+
+  // 8. critical の同じ立場のパネリストの乖離
+  const stance = panel ? stanceVariance(panel.reports) : null
+  const maxVariance = config.judge.thresholds.maxVariance
+  if (stance && stance.max > maxVariance) {
+    const axes = Object.entries(stance.byAxis)
+      .filter(([, d]) => d > maxVariance)
+      .map(([k]) => k)
+    reasons.push(
+      `variance: adversarial と crosscheck のスコアの差 ${stance.max} > ${maxVariance}(軸 ${axes.join("、")})のため ASK`
+    )
+    return result("ASK", findings, {
+      decisionPoint: `adversarial と crosscheck の評価が軸 ${axes.join("、")} で割れているので、どちらの見方を採るかを判断する。`
+    })
+  }
+
+  // 9. critical の meta
+  const meta = panel?.meta
+  const axes = meta ? Object.entries(meta.scores) : []
   if (axes.length === 0) {
-    reasons.push("meta-empty: meta スコアが空のため ASK(フェイルクローズド)")
-    return { verdict: "ASK", findings, reasons }
+    // 通常は meta の失敗が 3 で degraded になる。ここに来るのは想定外の形なので ASK に倒す
+    reasons.push("meta-missing: critical で meta のスコアが無いため ASK")
+    return result("ASK", findings, {
+      decisionPoint:
+        "critical の評価で meta のスコアが得られなかったので、人が成果物を確かめて進めるかを判断する。"
+    })
   }
-  const below = axes.filter(([, v]) => v < config.judge.thresholds.proceed)
+  const proceed = config.judge.thresholds.proceed
+  const below = axes.filter(([, v]) => v < proceed).map(([k]) => k)
   if (below.length > 0) {
     reasons.push(
-      `meta-below: 軸 ${below.map(([k]) => k).join(", ")} が閾値 ${config.judge.thresholds.proceed} 未満のため ASK`
+      `meta-below: meta の軸 ${below.join("、")} が閾値 ${proceed} 未満のため ASK`
     )
-    return { verdict: "ASK", findings, reasons }
+    return result("ASK", findings, {
+      decisionPoint: `meta が軸 ${below.join("、")} を閾値 ${proceed} 未満と評価したので、その懸念を受け入れて進めるかを判断する。`
+    })
   }
 
-  reasons.push("meta-pass: meta 全軸が閾値以上のため PROCEED")
-  return { verdict: "PROCEED", findings, reasons }
+  // 10. PROCEED
+  reasons.push(`meta-pass: meta の全軸が閾値 ${proceed} 以上のため PROCEED`)
+  return result("PROCEED", findings)
 }

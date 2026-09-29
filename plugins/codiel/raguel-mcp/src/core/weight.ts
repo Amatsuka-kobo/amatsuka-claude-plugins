@@ -1,26 +1,23 @@
 /**
- * 重さ判定(§6)。パネル構成の選択に使う完全に決定論的なスコアリング。
- * 昇格のみ原則: ルール層の findings が示す重さは下回れない(floors で床を記録する)。
+ * 重さ判定(設計書 §6.5)。パネル構成の選択に使う決定論のスコアリング。
+ * tier は下限(床)で上げることはあっても、下げることはない。
  */
 
+import {
+  classifyPath,
+  DEFAULT_TESTS_DIR,
+  globFixedPart
+} from "../config/paths.js"
 import { parseDiff } from "../rules/code/diffParse.js"
-import { DEFAULT_PROTECTED_GLOBS } from "../rules/code/protectedPaths.js"
-import { IRREVERSIBLE_KEYWORDS, keywordMatches } from "../rules/util.js"
+import { ruleParam } from "../rules/params.js"
+import { countStepsFromContent } from "../rules/util.js"
 import type {
   Artifact,
-  ArtifactKind,
   Finding,
   RaguelConfig,
   WeightResult,
   WeightTier
 } from "./types.js"
-
-const KIND_BASE: Record<ArtifactKind, number> = {
-  decision: 10,
-  plan: 10,
-  design: 15,
-  code: 20
-}
 
 const TIER_RANK: Record<WeightTier, number> = {
   trivial: 0,
@@ -32,88 +29,85 @@ function maxTier(a: WeightTier, b: WeightTier): WeightTier {
   return TIER_RANK[a] >= TIER_RANK[b] ? a : b
 }
 
-/** 本文中の箇条書き・番号付きリストからステップ数を推定する(plan/max-steps と同じヒューリスティック) */
-function countStepsFromContent(content: string): number {
-  const lines = content.split("\n")
-  let count = 0
-  for (const line of lines) {
-    if (/^\s*(\d+[.)]|[-*]\s*\[[ xX]\])\s+/.test(line)) count++
-  }
-  return count
+export interface WeightOptions {
+  /** 生成物と E2E のレポートの判定に使う。省略時は既定の testsDir */
+  testsDir?: string
+  /** Jev の文脈判定の tier の下限(W1-T03 の tierFloor)。上げる向きにだけ効く */
+  contextFloor?: WeightTier
 }
 
-function firstSegment(pattern: string): string {
-  return pattern.split("/")[0] ?? ""
+/** 保護 glob の固定部が空でなく、パスのセグメント列がその固定部で始まるとき true */
+function isNearProtected(path: string, globs: readonly string[]): boolean {
+  const segments = path.split("/")
+  return globs.some((glob) => {
+    const fixed = globFixedPart(glob)
+      .split("/")
+      .filter((s) => s !== "")
+    return (
+      fixed.length > 0 &&
+      fixed.length <= segments.length &&
+      fixed.every((s, i) => s === segments[i])
+    )
+  })
 }
 
-function hasWildcard(segment: string): boolean {
-  return /[*?[\]{}]/.test(segment)
-}
-
-/** 保護 glob の先頭セグメントがワイルドカードを含まない場合のみ「近接」判定の対象にする */
-function protectedTopDirs(globs: string[]): Set<string> {
-  const dirs = new Set<string>()
-  for (const glob of globs) {
-    const segment = firstSegment(glob)
-    if (segment && !hasWildcard(segment)) dirs.add(segment)
-  }
-  return dirs
-}
-
-function hasFinding(findings: Finding[], ruleId: string): boolean {
-  return findings.some((f) => f.ruleId === ruleId)
+function firesAtAsk(findings: Finding[], ruleId: string): boolean {
+  return findings.some(
+    (f) =>
+      f.ruleId === ruleId && (f.severity === "ask" || f.severity === "stop")
+  )
 }
 
 export function computeWeight(
   artifact: Artifact,
   ruleFindings: Finding[],
-  config: RaguelConfig
+  config: RaguelConfig,
+  options: WeightOptions = {}
 ): WeightResult {
+  const testsDir = options.testsDir ?? DEFAULT_TESTS_DIR
   const factors: Record<string, number> = {}
   const floors: string[] = []
 
   if (artifact.kind === "code") {
+    factors["kind-base"] = 20
+    // 生成物と E2E のレポートは、行数・ファイル数・近接の対象にしない
+    const counted = (p: string): boolean =>
+      classifyPath(p, config, testsDir) === "normal"
+
     const parsed = parseDiff(artifact.content)
-    const totalChangedLines =
+    const changedLines =
       parsed.files.length > 0
-        ? parsed.totalChangedLines
+        ? parsed.files
+            .filter((f) => counted(f.path))
+            .reduce((sum, f) => sum + f.additions.length + f.deletions.length, 0)
         : artifact.content.split("\n").length
+    const linesFactor = Math.min(40, Math.floor(changedLines / 25) * 5)
+    if (linesFactor > 0) factors["diff-lines"] = linesFactor
 
-    const diffLinesFactor = Math.min(40, Math.floor(totalChangedLines / 50) * 5)
-    if (diffLinesFactor > 0) factors["diff-lines"] = diffLinesFactor
+    const paths = artifact.changedPaths.filter(counted)
+    const filesFactor = Math.min(20, paths.length * 2)
+    if (filesFactor > 0) factors["changed-files"] = filesFactor
 
-    const changedFilesFactor = Math.min(20, artifact.changedPaths.length * 2)
-    if (changedFilesFactor > 0) factors["changed-files"] = changedFilesFactor
+    const globs = ruleParam<string[]>(config, "code/protected-paths", "globs")
+    if (paths.some((p) => isNearProtected(p, globs))) {
+      factors["protected-path-proximity"] = 25
+    }
 
-    const protectedSettings = config.rules["code/protected-paths"]
-    const protectedGlobs = Array.isArray(protectedSettings?.globs)
-      ? (protectedSettings.globs as string[])
-      : DEFAULT_PROTECTED_GLOBS
-    const topDirs = protectedTopDirs(protectedGlobs)
-    const isNearProtected = artifact.changedPaths.some((path) =>
-      topDirs.has(firstSegment(path))
+    if (ruleFindings.some((f) => f.ruleId === "code/new-dependency")) {
+      factors["new-dependency"] = 15
+    }
+  } else {
+    factors["kind-base"] = 30
+    const charsFactor = Math.min(
+      30,
+      Math.floor(artifact.content.length / 4000) * 5
     )
-    if (isNearProtected) factors["protected-path-proximity"] = 25
-  }
-
-  const mentionsIrreversible = IRREVERSIBLE_KEYWORDS.some((keyword) =>
-    keywordMatches(artifact.content, keyword)
-  )
-  if (mentionsIrreversible) factors["irreversible-keyword"] = 20
-
-  if (hasFinding(ruleFindings, "code/new-dependency")) {
-    factors["new-dependency"] = 15
-  }
-
-  factors["kind-base"] = KIND_BASE[artifact.kind]
-
-  if (artifact.kind === "plan") {
-    const stepCount =
-      artifact.steps.length > 0
-        ? artifact.steps.length
-        : countStepsFromContent(artifact.content)
-    if (stepCount > 5) {
-      factors["plan-steps"] = (stepCount - 5) * 2
+    if (charsFactor > 0) factors["content-length"] = charsFactor
+    if (artifact.kind === "plan") {
+      const stepCount = countStepsFromContent(artifact.content)
+      if (stepCount > 5) {
+        factors["plan-steps"] = Math.min(20, (stepCount - 5) * 2)
+      }
     }
   }
 
@@ -127,23 +121,30 @@ export function computeWeight(
         ? "standard"
         : "trivial"
 
-  // 昇格のみ原則(1): ルール findings に severity ask 以上が1つでもあれば最低 standard
-  if (ruleFindings.some((f) => f.severity === "ask" || f.severity === "stop")) {
-    if (TIER_RANK[tier] < TIER_RANK.standard) {
-      floors.push("rule-ask-floor:standard")
-    }
-    tier = maxTier(tier, "standard")
+  const raise = (to: WeightTier, label: string): void => {
+    if (TIER_RANK[tier] < TIER_RANK[to]) floors.push(`${label}:${to}`)
+    tier = maxTier(tier, to)
   }
 
-  // 昇格のみ原則(2): protected-paths / irreversible-ops の発火(severity 問わず)があれば critical
+  // 文書は最低 standard
+  if (artifact.kind !== "code") raise("standard", "kind-floor")
+
+  // ルール層に ask 以上の所見があれば最低 standard
+  if (ruleFindings.some((f) => f.severity === "ask" || f.severity === "stop")) {
+    raise("standard", "rule-ask-floor")
+  }
+
+  // protected-paths か irreversible-ops が ask 以上のときだけ critical
   if (
-    hasFinding(ruleFindings, "code/protected-paths") ||
-    hasFinding(ruleFindings, "plan/irreversible-ops")
+    firesAtAsk(ruleFindings, "code/protected-paths") ||
+    firesAtAsk(ruleFindings, "plan/irreversible-ops")
   ) {
-    if (TIER_RANK[tier] < TIER_RANK.critical) {
-      floors.push("rule-fire-floor:critical")
-    }
-    tier = maxTier(tier, "critical")
+    raise("critical", "rule-fire-floor")
+  }
+
+  // Jev の文脈判定の下限(上げる向きだけ)
+  if (options.contextFloor !== undefined) {
+    raise(options.contextFloor, "context-judge-floor")
   }
 
   return { tier, score, factors, floors }

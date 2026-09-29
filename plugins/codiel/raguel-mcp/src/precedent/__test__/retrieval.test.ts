@@ -202,4 +202,30 @@ describe("searchPrecedents", () => {
     }
     expect(searchPrecedents(query, [], 5)).toEqual([])
   })
+
+  it("退役した判例(retiredAt あり)は検索に出ない", () => {
+    const active = makePrecedent({
+      id: "p-active",
+      summary: "ハードコードされたAPIキーの混入",
+      firedRules: ["common/secrets"]
+    })
+    const retired = {
+      ...makePrecedent({
+        id: "p-retired",
+        summary: "ハードコードされたAPIキーの混入",
+        firedRules: ["common/secrets"]
+      }),
+      retiredAt: "2026-09-29T00:00:00.000Z"
+    }
+    const query = {
+      kind: "code" as const,
+      objective: "APIキー",
+      summaryText: "ハードコードされたAPIキーの混入",
+      firedRules: ["common/secrets"],
+      changedPaths: [] as string[]
+    }
+    const results = searchPrecedents(query, [retired, active], 5)
+    expect(results.map((m) => m.precedent.id)).toEqual(["p-active"])
+    expect(searchPrecedents(query, [retired], 5)).toEqual([])
+  })
 })

@@ -1,24 +1,60 @@
 /**
- * ツール層の共通部。入力の基本スキーマ、呼び出しのたびに設定を読み直す依存の解決、
- * 入力の誤り(MCP のツールエラー)、ハンドラ最外周のフェイルクローズドラッパー
- * (内部例外を MCP エラーではなく verdict: onError の正常応答として返す)を提供する。
+ * ツール層の共通部。入力の基本スキーマ、設定の読み直しとプロバイダーの作り直し、
+ * 評価の実行(進捗の通知・中止・入力の誤りの isError)を持つ(設計書 §6.2・§6.8・§6.12.4)。
  */
 
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js"
+import type {
+  ServerNotification,
+  ServerRequest
+} from "@modelcontextprotocol/sdk/types.js"
 import { z } from "zod"
-import { defaultConfig } from "../config/defaults.js"
-import { configCandidate } from "../config/loader.js"
+import { GATED_PHASES, type GatedPhase } from "../codiel/phases.js"
+import { configCandidate, createConfigReloader } from "../config/loader.js"
 import { log } from "../core/log.js"
-import { evaluateArtifact, type PipelineDeps } from "../core/pipeline.js"
-import type { Artifact, EvaluationResult, Finding } from "../core/types.js"
+import {
+  type EvaluationRequest,
+  evaluate,
+  type PipelineDeps,
+  type Providers,
+  type Runtime,
+  type RuntimeResult
+} from "../core/pipeline.js"
+import type { RaguelConfig } from "../core/types.js"
+import { SubjectInputError } from "../subject/types.js"
 
-/** path traversal 防止(§4 リスク)。runId はツール入力 = 信頼しない */
+/** path traversal を防ぐ。runId はツールの入力なので信頼しない */
 export const runIdSchema = z
   .string()
-  .regex(/^[A-Za-z0-9._-]{1,64}$/, "runId は英数字と . _ - のみ 64 文字まで")
+  .regex(/^[A-Za-z0-9._-]{1,64}$/, "runId は英数字と . _ - の 64 文字まで")
+
+export const phaseSchema = z
+  .enum(GATED_PHASES.map((e) => e.phase) as [GatedPhase, ...GatedPhase[]])
+  .describe(
+    "codiel のゲート付きフェーズ。ツールの kind と合わなければ入力の誤り"
+  )
 
 export const objectiveSchema = z
   .string()
-  .min(1, "objective は必須です(この成果物が何のためのものか)")
+  .min(1, "objective は必須(この成果物が何のためのものか)")
+
+export const repoPathSchema = z
+  .string()
+  .min(1)
+  .optional()
+  .describe(
+    "git を実行する作業ツリーの絶対パス。省略時はプロジェクトルート。同じリポジトリの worktree だけを受ける"
+  )
+
+/** evaluate_* に共通の入力(§6.2.1) */
+export const commonInput = {
+  runId: runIdSchema,
+  phase: phaseSchema,
+  objective: objectiveSchema,
+  repoPath: repoPathSchema
+}
+
+export type ToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>
 
 export interface ToolResponse {
   [key: string]: unknown
@@ -30,100 +66,80 @@ export function toResponse(result: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] }
 }
 
-/**
- * ツールが受け取る依存。関数なら呼び出しのたびに呼ぶ。server.ts は設定の読み直し
- * (config/loader.ts の createConfigReloader)を渡し、テストは固定の依存を渡す。
- */
-export type DepsSource = PipelineDeps | (() => PipelineDeps)
-
-/** 依存を解決する。関数の依存が設定を読めなければ例外を投げる */
-export function resolveDeps(source: DepsSource): PipelineDeps {
-  return typeof source === "function" ? source() : source
-}
-
-/** 判定ではなく入力の誤り。toCodeArtifact などが投げ、failClosed が inputError で返す */
-export class InputError extends Error {}
-
-/**
- * 入力の誤りの応答(決定 83 の (5))。判定を返さず、MCP のツールエラーと理由の 1 文で返す。
- * ケースファイルと評価の索引には書かない。
- */
+/** 入力の誤り(§6.2.6)。判定を返さず、MCP のツールエラーと理由の 1 文で返す。記録しない */
 export function inputError(reason: string): ToolResponse {
   return { content: [{ type: "text", text: reason }], isError: true }
 }
 
-function fallback(
-  runId: string,
-  verdict: EvaluationResult["verdict"],
-  finding: Omit<Finding, "severity">,
-  policy: EvaluationResult["policy"]
-): ToolResponse {
-  const result: EvaluationResult = {
-    evaluationId: "internal-error",
-    runId,
-    verdict,
-    weightTier: "standard",
-    findings: [{ ...finding, severity: verdict === "STOP" ? "stop" : "ask" }],
-    casePath: "",
-    policy
+/**
+ * 評価を実行して応答にする。progressToken があれば、ステップごとに notifications/progress を送る。
+ * 入力の誤り・中止・記録の書き込みの失敗は isError で返す
+ */
+export async function runEvaluation(
+  req: EvaluationRequest,
+  deps: PipelineDeps,
+  extra: ToolExtra
+): Promise<ToolResponse> {
+  const token = extra._meta?.progressToken
+  let step = 0
+  const progress =
+    token === undefined
+      ? undefined
+      : (message: string) => {
+          step++
+          extra
+            .sendNotification({
+              method: "notifications/progress",
+              params: { progressToken: token, progress: step, message }
+            })
+            .catch((err) =>
+              log.warn("進捗の通知を送れなかった", {
+                error: err instanceof Error ? err.message : String(err)
+              })
+            )
+        }
+  try {
+    return toResponse(
+      await evaluate(req, deps, { signal: extra.signal, progress })
+    )
+  } catch (err) {
+    if (err instanceof SubjectInputError) return inputError(err.message)
+    if (extra.signal.aborted) {
+      log.info("評価を中止した(attempt と索引は残さない)", {
+        runId: req.runId,
+        phase: req.phase
+      })
+      return inputError("評価は中止された")
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    log.error("評価の記録を書けなかった", { message })
+    return inputError(`評価の記録を書けなかった: ${message}`)
   }
-  return toResponse(result)
 }
 
 /**
- * evaluate 系ハンドラのフェイルクローズドラッパー。build で検査対象を作り、判定を返す。
- * - 設定を読めないときは、前の設定に戻さず、既定の onError(ASK)の判定で返す。所見に設定のパスと理由を載せる。
- * - build が InputError を投げたら、判定ではなく入力の誤り(isError)を返す。
- * - それ以外の内部例外は onError(既定 ASK、PROCEED は存在しない)の判定として返し、
- *   呼び出し側 AI が「エラーだから無視して続行」する余地を残さない。
+ * 呼ぶたびに設定を読み直す(ファイルの有無と mtime が変わったときだけ)。変わればプロバイダーも作り直す。
+ * 読み込みに失敗しても例外にせず、理由と設定のパスを返す(§6.12.4)。次の呼び出しで読み直しを試す
  */
-export async function failClosed(
-  runId: string,
-  source: DepsSource,
-  build: () => Artifact
-): Promise<ToolResponse> {
-  let deps: PipelineDeps
-  try {
-    deps = resolveDeps(source)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    const candidate = configCandidate()
-    log.error("設定を読み込めません(フェイルクローズド)", {
-      configSource: candidate.source,
-      message
-    })
-    const verdict = defaultConfig.onError
-    return fallback(
-      runId,
-      verdict,
-      {
-        ruleId: "kernel/config-error",
-        message: `設定(${candidate.path})を読み込めないため ${verdict} に倒します: ${message}`,
-        evidence: { location: candidate.path }
-      },
-      { configHash: "", version: 1, configSource: candidate.source }
-    )
-  }
-
-  try {
-    return toResponse(await evaluateArtifact(build(), deps))
-  } catch (err) {
-    if (err instanceof InputError) return inputError(err.message)
-    const message = err instanceof Error ? err.message : String(err)
-    log.error("evaluate 内部エラー(フェイルクローズド)", { message })
-    const verdict = deps.config.onError
-    return fallback(
-      runId,
-      verdict,
-      {
-        ruleId: "kernel/internal-error",
-        message: `判定パイプラインの内部エラーにより ${verdict} に倒します: ${message}`
-      },
-      {
-        configHash: deps.configHash,
-        version: 1,
-        configSource: deps.configSource
-      }
-    )
+export function createRuntimeSource(
+  makeProviders: (config: RaguelConfig) => Providers,
+  cwd: string = process.cwd()
+): () => RuntimeResult {
+  const reload = createConfigReloader(
+    (loaded): Runtime => ({ loaded, providers: makeProviders(loaded.config) }),
+    cwd
+  )
+  return () => {
+    try {
+      return { ok: true, runtime: reload() }
+    } catch (err) {
+      const { path, source } = configCandidate(cwd)
+      const error = err instanceof Error ? err.message : String(err)
+      log.error("設定を読み込めない(評価は ASK・degraded で返す)", {
+        path,
+        error
+      })
+      return { ok: false, error, path, source }
+    }
   }
 }

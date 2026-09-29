@@ -21,31 +21,38 @@ export interface JudgeCall<T> {
   schema: z.ZodType<T>
   /** CLI に渡す JSON Schema($schema を持たないもの) */
   jsonSchema: object
-  /** CallControl が無いときの 1 回の起動の時間 */
-  timeoutMs: number
 }
 
-/** 呼び出しごとの時間と中止。timeoutMs は 1 回の起動ごとに効く */
+/** 呼び出しごとの時間・締切・中止(設計書 §6.8) */
 export interface CallControl {
+  /** 1 回の起動の時間の上限(judge.timeoutMs)。締切までの残りでさらに縮む */
   timeoutMs: number
+  /** ゲート全体の締切の時刻(Date.now() と同じ単位のミリ秒) */
+  deadline: number
   signal: AbortSignal
 }
+
+/** 1 回の起動に残す締切までの余白 */
+export const DEADLINE_MARGIN_MS = 3000
+
+/** 締切までの残りがこれ未満なら再試行しない */
+export const RETRY_MIN_REMAINING_MS = 30000
 
 export type ProviderName = "claude" | "codex" | "none"
 
 export interface JudgeProvider {
   readonly name: ProviderName
   /** 失敗は JudgeError を throw する。signal の abort では signal.reason を throw する */
-  invoke<T>(call: JudgeCall<T>, ctl?: CallControl): Promise<T>
+  invoke<T>(call: JudgeCall<T>, ctl: CallControl): Promise<T>
 }
 
 export type JudgeErrorReason =
   | "timeout"
+  | "deadline"
   | "spawn-failure"
   | "bad-json"
   | "schema-mismatch"
   | "nonzero-exit"
-  | "provider-none"
   | "unavailable"
 
 export class JudgeError extends Error {
@@ -59,20 +66,34 @@ export class JudgeError extends Error {
 }
 
 /**
- * judge.provider: "none" 用の実装。常にフェイルクローズドでエラーを返す
- * (判定不能を PROCEED に化けさせない)
+ * judge.provider: "none" 用の実装。常に unavailable を返す
+ * (判定不能を PROCEED に化けさせない。設計書 §6.7.1)
  */
 export class NoneProvider implements JudgeProvider {
   readonly name = "none"
 
-  invoke<T>(_call: JudgeCall<T>, _ctl?: CallControl): Promise<T> {
+  invoke<T>(_call: JudgeCall<T>, _ctl: CallControl): Promise<T> {
     return Promise.reject(
       new JudgeError(
-        "provider-none",
+        "unavailable",
         "judge.provider が none のため LLM 判定は実行できません"
       )
     )
   }
+}
+
+/**
+ * 1 回の起動に使える時間。min(timeoutMs, 締切までの残り − 3000)(設計書 §6.8)。
+ * byDeadline は締切で縮んだことを表し、その時間切れは timeout でなく deadline にする
+ */
+export function launchBudget(
+  ctl: CallControl,
+  now: number = Date.now()
+): { ms: number; byDeadline: boolean } {
+  const remaining = ctl.deadline - now - DEADLINE_MARGIN_MS
+  return remaining < ctl.timeoutMs
+    ? { ms: remaining, byDeadline: true }
+    : { ms: ctl.timeoutMs, byDeadline: false }
 }
 
 /** 同時起動数を max に制限する */
@@ -110,9 +131,19 @@ export interface ChildRun {
   timeoutMs: number
   role: string
   signal?: AbortSignal
+  /** 時間が締切で縮んでいれば、時間切れを deadline として返す */
+  byDeadline?: boolean
 }
 
-/** 再試行するのは基盤の一時的な失敗だけ。unavailable と中止は再試行しない */
+/** runChildWithRetry の入力。時間は ctl から起動ごとに決める */
+export type ChildLaunch = Omit<
+  ChildRun,
+  "timeoutMs" | "signal" | "byDeadline"
+> & {
+  ctl: CallControl
+}
+
+/** 再試行するのは基盤の一時的な失敗だけ。unavailable・deadline と中止は再試行しない */
 const RETRYABLE: ReadonlySet<JudgeErrorReason> = new Set([
   "timeout",
   "nonzero-exit",
@@ -121,25 +152,53 @@ const RETRYABLE: ReadonlySet<JudgeErrorReason> = new Set([
 
 /**
  * 子プロセスを起動し、タイムアウト・nonzero-exit・spawn の失敗なら 1 回だけ起動し直す。
- * 締切までの残りで再試行を止める判断は、締切を知る呼び出し側が signal で行う。
+ * 締切までの残りが RETRY_MIN_REMAINING_MS 未満なら再試行しない(設計書 §6.8)。
  */
-export async function runChildWithRetry(run: ChildRun): Promise<string> {
+export async function runChildWithRetry(run: ChildLaunch): Promise<string> {
   try {
-    return await runChild(run)
+    return await launchChild(run)
   } catch (err) {
     if (
       !(err instanceof JudgeError) ||
       !RETRYABLE.has(err.reason) ||
-      run.signal?.aborted
+      run.ctl.signal.aborted
     ) {
+      throw err
+    }
+    const remaining = run.ctl.deadline - Date.now()
+    if (remaining < RETRY_MIN_REMAINING_MS) {
+      log.warn("panelist process failed, no time left to retry", {
+        role: run.role,
+        reason: err.reason,
+        remainingMs: remaining
+      })
       throw err
     }
     log.warn("panelist process failed, retrying once", {
       role: run.role,
       reason: err.reason
     })
-    return runChild(run)
+    return launchChild(run)
   }
+}
+
+function launchChild(run: ChildLaunch): Promise<string> {
+  const { ctl, ...rest } = run
+  const budget = launchBudget(ctl)
+  if (budget.ms <= 0) {
+    return Promise.reject(
+      new JudgeError(
+        "deadline",
+        `締切までの残りが無いので起動しません(role: ${run.role})`
+      )
+    )
+  }
+  return runChild({
+    ...rest,
+    timeoutMs: budget.ms,
+    signal: ctl.signal,
+    byDeadline: budget.byDeadline
+  })
 }
 
 /** 子プロセスを 1 回起動して stdout を返す */
@@ -208,10 +267,15 @@ export function runChild(run: ChildRun): Promise<string> {
           reject(run.signal.reason)
         } else if (timedOut) {
           reject(
-            new JudgeError(
-              "timeout",
-              `${run.timeoutMs}ms でタイムアウトしました(role: ${run.role})`
-            )
+            run.byDeadline
+              ? new JudgeError(
+                  "deadline",
+                  `締切で打ち切りました(${run.timeoutMs}ms、role: ${run.role})`
+                )
+              : new JudgeError(
+                  "timeout",
+                  `${run.timeoutMs}ms でタイムアウトしました(role: ${run.role})`
+                )
           )
         } else if (code !== 0) {
           reject(new JudgeError("nonzero-exit", stderr.slice(0, 500)))

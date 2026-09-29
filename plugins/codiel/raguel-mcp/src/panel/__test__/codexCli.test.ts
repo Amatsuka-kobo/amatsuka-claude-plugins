@@ -18,6 +18,7 @@ import {
   toStrictSchema
 } from "../codexCli.js"
 import { toJsonSchema } from "../schema.js"
+import { makeCtl } from "./helpers/fakeProvider.js"
 
 const FAKE_CODEX = fileURLToPath(
   new URL("../../testing/fake-codex.mjs", import.meta.url)
@@ -55,16 +56,13 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-function makeCall(
-  overrides: Partial<{ model: string; timeoutMs: number }> = {}
-) {
+function makeCall(overrides: Partial<{ model: string }> = {}) {
   return {
     role: "test-role",
     model: overrides.model ?? "",
     prompt: "テストプロンプト",
     schema: responseSchema,
-    jsonSchema,
-    timeoutMs: overrides.timeoutMs ?? 5000
+    jsonSchema
   }
 }
 
@@ -73,7 +71,7 @@ function callCount(stateFile: string): number {
 }
 
 describe("buildCodexArgs", () => {
-  it("隔離のフラグ・読み取り専用のサンドボックス・一時ディレクトリの中のファイル・stdin の - を並べる", () => {
+  it("隔離のフラグ・読み取り専用のサンドボックス・ツールと hooks の無効化・一時ディレクトリの中のファイル・stdin の - を並べる", () => {
     expect(buildCodexArgs("/tmp/x", "")).toEqual([
       "exec",
       "--ephemeral",
@@ -81,6 +79,12 @@ describe("buildCodexArgs", () => {
       "--skip-git-repo-check",
       "--sandbox",
       "read-only",
+      "--disable",
+      "shell_tool",
+      "--disable",
+      "unified_exec",
+      "--disable",
+      "hooks",
       "--output-schema",
       path.join("/tmp/x", "schema.json"),
       "-o",
@@ -201,7 +205,7 @@ describe("CodexCliProvider", () => {
     })
 
     const provider = new CodexCliProvider()
-    await expect(provider.invoke(makeCall())).resolves.toEqual({
+    await expect(provider.invoke(makeCall(), makeCtl())).resolves.toEqual({
       message: "hello"
     })
   })
@@ -212,10 +216,10 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_ARGS_FILE = argsFile
 
     const provider = new CodexCliProvider()
-    await provider.invoke(makeCall())
+    await provider.invoke(makeCall(), makeCtl())
     expect(JSON.parse(readFileSync(argsFile, "utf8"))).not.toContain("-m")
 
-    await provider.invoke(makeCall({ model: "gpt-5" }))
+    await provider.invoke(makeCall({ model: "gpt-5" }), makeCtl())
     const args = JSON.parse(readFileSync(argsFile, "utf8")) as string[]
     expect(args[args.indexOf("-m") + 1]).toBe("gpt-5")
   })
@@ -227,7 +231,7 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_STDIN_FILE = stdinFile
     process.env.RAGUEL_ENV_DUMP_FILE = dumpFile
 
-    await new CodexCliProvider().invoke(makeCall())
+    await new CodexCliProvider().invoke(makeCall(), makeCtl())
 
     expect(readFileSync(stdinFile, "utf8")).toBe("テストプロンプト")
     const dump = JSON.parse(readFileSync(dumpFile, "utf8"))
@@ -240,7 +244,9 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_RESPONSE = JSON.stringify({ message: "recovered" })
     process.env.FAKE_CODEX_STATE_FILE = path.join(dir, "state.txt")
 
-    await expect(new CodexCliProvider().invoke(makeCall())).resolves.toEqual({
+    await expect(
+      new CodexCliProvider().invoke(makeCall(), makeCtl())
+    ).resolves.toEqual({
       message: "recovered"
     })
   })
@@ -249,7 +255,7 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_MODE = "bad-json"
 
     await expect(
-      new CodexCliProvider().invoke(makeCall())
+      new CodexCliProvider().invoke(makeCall(), makeCtl())
     ).rejects.toMatchObject({ name: "JudgeError", reason: "schema-mismatch" })
   })
 
@@ -259,7 +265,7 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_STATE_FILE = stateFile
 
     await expect(
-      new CodexCliProvider().invoke(makeCall())
+      new CodexCliProvider().invoke(makeCall(), makeCtl())
     ).rejects.toMatchObject({ reason: "nonzero-exit" })
     expect(callCount(stateFile)).toBe(2)
   })
@@ -270,12 +276,23 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_STATE_FILE = stateFile
 
     await expect(
-      new CodexCliProvider().invoke(makeCall(), {
-        timeoutMs: 300,
-        signal: new AbortController().signal
-      })
+      new CodexCliProvider().invoke(makeCall(), makeCtl({ timeoutMs: 300 }))
     ).rejects.toMatchObject({ reason: "timeout" })
     expect(callCount(stateFile)).toBe(2)
+  })
+
+  it("締切までの残りが 30 秒未満なら再試行しない", async () => {
+    process.env.FAKE_CODEX_MODE = "fail"
+    const stateFile = path.join(dir, "state.txt")
+    process.env.FAKE_CODEX_STATE_FILE = stateFile
+
+    await expect(
+      new CodexCliProvider().invoke(
+        makeCall(),
+        makeCtl({ deadline: Date.now() + 20000 })
+      )
+    ).rejects.toMatchObject({ reason: "nonzero-exit" })
+    expect(callCount(stateFile)).toBe(1)
   })
 
   it("signal の abort で子プロセスを止め、再試行しない", async () => {
@@ -284,10 +301,10 @@ describe("CodexCliProvider", () => {
     process.env.FAKE_CODEX_STATE_FILE = stateFile
     const controller = new AbortController()
 
-    const pending = new CodexCliProvider().invoke(makeCall(), {
-      timeoutMs: 60000,
-      signal: controller.signal
-    })
+    const pending = new CodexCliProvider().invoke(
+      makeCall(),
+      makeCtl({ timeoutMs: 60000, signal: controller.signal })
+    )
     setTimeout(() => controller.abort(), 500)
 
     await expect(pending).rejects.toMatchObject({ name: "AbortError" })
@@ -298,7 +315,7 @@ describe("CodexCliProvider", () => {
     process.env.RAGUEL_CODEX_BIN = path.join(dir, "does-not-exist-binary")
 
     await expect(
-      new CodexCliProvider().invoke(makeCall())
+      new CodexCliProvider().invoke(makeCall(), makeCtl())
     ).rejects.toMatchObject({ reason: "unavailable" })
   })
 })

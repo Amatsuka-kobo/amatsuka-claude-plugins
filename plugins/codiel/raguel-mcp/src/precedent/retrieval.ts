@@ -146,12 +146,14 @@ function bm25Score(
  *            + 0.2*changedPathsのJaccard + 0.1*kind一致
  *            + (source==="project" ? 0.1 : 0)
  * スコア 0 のものは返さない。同点は id の辞書順でタイブレークする。
+ * 退役した判例(retiredAt を持つもの)は、BM25 の統計にも含めず検索から除く(§6.2.9)。
  */
 export function searchPrecedents(
   query: PrecedentQuery,
-  corpus: Precedent[],
+  allPrecedents: readonly (Precedent & { retiredAt?: string })[],
   topN: number
 ): PrecedentMatch[] {
+  const corpus = allPrecedents.filter((p) => p.retiredAt === undefined)
   if (corpus.length === 0 || topN <= 0) return []
 
   const docs: BM25Doc[] = corpus.map((precedent) => {

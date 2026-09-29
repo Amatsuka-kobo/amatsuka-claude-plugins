@@ -1,27 +1,27 @@
 /**
- * 内蔵デフォルト設定。docs/DESIGN.md §11 の YAML 例と同値。
- * ユーザー設定はこの値に深マージされる(src/config/loader.ts)。
+ * 内蔵の既定の設定(設計書 §6.12.1)。利用者の設定はこの値に深くマージされる(src/config/loader.ts)。
+ * ルールのパラメータの既定値は rules/params.ts の表から作る。
  */
 
-import type { RaguelConfig } from "../core/types"
+import type { JudgeProviderName, PanelRole, RaguelConfig } from "../core/types"
+import { RULE_SPECS } from "../rules/params"
 
 export const defaultConfig: RaguelConfig = {
   version: 1,
   onError: "ASK",
   storage: {
-    // ~ のまま保持し、loader.ts で os.homedir() を使って展開する
+    // ~ のまま持ち、loader.ts でホームディレクトリへ展開する
     casesDir: "~/.raguel",
     retention: { maxRuns: 200, maxDays: 90 }
   },
   judge: {
-    provider: "claude-cli",
-    model: "haiku",
-    timeoutMs: 60000,
-    canStop: false,
+    provider: "claude",
+    timeoutMs: 180000,
+    deadlineMs: 600000,
     maxConcurrency: 4,
     thresholds: {
       proceed: 80,
-      confidence: 60,
+      confidence: 70,
       maxVariance: 30
     }
   },
@@ -29,34 +29,49 @@ export const defaultConfig: RaguelConfig = {
     tiers: { standard: 30, critical: 70 }
   },
   panel: {
-    trivial: [],
-    standard: ["adversarial"],
-    critical: [
-      "adversarial",
-      "steelman",
-      "crosscheck",
-      "assumption",
-      "precedent"
-    ],
-    perPanelist: {
-      adversarial: { model: "sonnet" }
-    }
+    perPanelist: {}
+  },
+  contextJudge: {
+    enabled: false,
+    timeoutMs: 20000,
+    thresholds: { lower: 0.2, raise: 0.7 }
   },
   precedent: {
     seedCatalog: true,
     topN: 5
   },
-  rules: {
-    "code/protected-paths": {
-      globs: [".github/**", "infra/**", "**/*.env*"]
-    },
-    "code/max-diff-lines": {
-      limit: 500,
-      severity: "ask"
-    },
-    "plan/irreversible-ops": {
-      keywords: ["本番", "deploy", "drop table", "force push", "削除"],
-      severity: "ask"
-    }
-  }
+  rules: Object.fromEntries(
+    RULE_SPECS.filter((spec) => spec.params.length > 0).map((spec) => [
+      spec.id,
+      Object.fromEntries(
+        spec.params.map((p) => [p.name, structuredClone(p.default)])
+      )
+    ])
+  )
+}
+
+/** claude の既定のモデル(§6.7.1)。codex は model を指定せず CLI の既定に任せる */
+const CLAUDE_DEFAULT_MODELS: Record<PanelRole, string> = {
+  adversarial: "sonnet",
+  steelman: "haiku",
+  crosscheck: "haiku",
+  meta: "haiku"
+}
+
+/**
+ * パネリストか meta の provider と model を解決する(§6.7.1)。
+ * model は perPanelist.<名前>.model、provider が judge.provider と同じなら judge.model、プロバイダーごとの既定、の順。
+ * model が undefined ならプロバイダーの既定に任せる
+ */
+export function resolvePanelist(
+  config: RaguelConfig,
+  role: PanelRole
+): { provider: JudgeProviderName; model?: string } {
+  const own = config.panel.perPanelist[role]
+  const provider = own?.provider ?? config.judge.provider
+  const model =
+    own?.model ??
+    (provider === config.judge.provider ? config.judge.model : undefined) ??
+    (provider === "claude" ? CLAUDE_DEFAULT_MODELS[role] : undefined)
+  return model === undefined ? { provider } : { provider, model }
 }

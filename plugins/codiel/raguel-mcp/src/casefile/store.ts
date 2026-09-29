@@ -1,80 +1,80 @@
 /**
- * ケースファイル(§8)の読み書き。run 単位の証拠ディレクトリ・
- * 最終判定(verdict.json)・再提出ループ検知用ダイジェスト・
- * 評価インデックス(evaluations.jsonl)・保持ポリシーを扱う。
+ * ケースファイル・評価の索引・裁定の記録の読み書き(設計書 §6.9・§6.10)。
+ * この形式は codiel の pass-gate が読む契約である(R11)。
  *
- * ディレクトリレイアウト:
- *   <casesDir>/cases/<projectId>/<runId>/<kind>/attempt-NN/
- *     01-rules.json ... 08-meta.md   (実行された分のみ)
- *     submission-digest.json
- *     verdict.json
- *   <casesDir>/cases/<projectId>/evaluations.jsonl
+ *   <casesDir>/cases/<projectId>/
+ *     evaluations.jsonl   評価の索引
+ *     outcomes.jsonl      裁定の記録
+ *     <runId>/<phase>/attempt-NN/   EVIDENCE_FILES と verdict.json
  */
 
-import { execFileSync } from "node:child_process"
 import * as fs from "node:fs"
-import * as os from "node:os"
 import * as path from "node:path"
+import { findPhase } from "../codiel/phases.js"
+import { log } from "../core/log.js"
 import type {
-  ArtifactKind,
+  EvaluationIndexEntry,
   Finding,
-  MetaReport,
+  GatedPhase,
+  OutcomeRecord,
+  PriorAttempt,
   RaguelConfig,
-  SubmissionDigest,
-  Verdict,
-  WeightTier
-} from "../core/types"
-import { buildChain, sha256Hex } from "./hashchain"
+  VerdictRecord
+} from "../core/types.js"
+import {
+  resolveCasesDir,
+  resolveProjectId,
+  resolveProjectRoot
+} from "../project/root.js"
+import type { Digest } from "./digest.js"
+import { buildChain, type ChainHeader, sha256Hex } from "./hashchain.js"
 
 const RUN_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
 const ATTEMPT_DIR_PATTERN = /^attempt-(\d+)$/
-const ARTIFACT_KINDS: ArtifactKind[] = ["decision", "plan", "design", "code"]
 const VERDICT_FILE = "verdict.json"
+const SUBJECT_FILE = "subject.json"
+const RULES_FILE = "01-rules.json"
 const SUBMISSION_DIGEST_FILE = "submission-digest.json"
 const EVALUATIONS_FILE = "evaluations.jsonl"
+const OUTCOMES_FILE = "outcomes.jsonl"
 
-/** verdict.json 生成前に呼び出し側が渡す判定レコード */
-export interface VerdictRecordInput {
-  evaluationId: string
-  runId: string
-  kind: ArtifactKind
-  attempt: number
-  verdict: Verdict
-  weightTier: WeightTier
-  findings: Finding[]
-  meta?: MetaReport
-  /** configSource は決定 83 の応急処置で足した。それより前の verdict.json には無い */
-  policy: { configHash: string; version: number; configSource?: string }
-  /** ISO 文字列。省略時は呼び出し時刻 */
-  at?: string
-  /** 判例化(record_outcome)のための元入力の要約 */
-  objective?: string
-  changedPaths?: string[]
-}
+/** 既知の証拠ファイル(verdict.json を除く)。チェーンと照合はこの名前に限る(所見 G6) */
+export const EVIDENCE_FILES = [
+  "subject.json",
+  "submission.txt",
+  "00-synthesis.json",
+  "01-rules.json",
+  "02-weight.json",
+  "03-adversarial.md",
+  "04-steelman.md",
+  "05-crosscheck.md",
+  "06-precedents.json",
+  "07-context.json",
+  "08-meta.md",
+  "submission-digest.json"
+] as const
 
-/** verdict.json に永続化される内容 */
-export interface PersistedVerdict extends Omit<VerdictRecordInput, "at"> {
-  at: string
-  evidence: Array<{ name: string; sha256: string }>
-  chainHead: string
-}
+export type EvidenceName = (typeof EVIDENCE_FILES)[number]
 
-export interface EvaluationIndexEntry {
-  evaluationId: string
-  runId: string
-  kind: ArtifactKind
-  attempt: number
-  casePath: string
-  verdict: Verdict
-  at: string
-}
+const KNOWN = new Set<string>(EVIDENCE_FILES)
+
+/**
+ * record_outcome と前フェーズ証拠の読み込みで、索引に evaluationId が無いときの文言。
+ * 改竄の文言とは分ける(所見 G3)
+ */
+export const NO_EVALUATION_RECORD = "評価の記録が無い(掃除済みか、存在しない)"
+
+/** finalizeVerdict に渡す判定。チェーンに関わるフィールドはストアが埋める */
+export type VerdictRecordInput = Omit<
+  VerdictRecord,
+  "schemaVersion" | "at" | "prevChainHead" | "evidence" | "chainHead"
+> & { at?: string }
 
 export interface VerifyAttemptResult {
   ok: boolean
   mismatches: string[]
 }
 
-/** runId が path traversal に使えない安全な形式か検証する */
 function sanitizeRunId(runId: string): string {
   if (!RUN_ID_PATTERN.test(runId) || runId.includes("..")) {
     throw new Error(`不正な runId です: ${runId}`)
@@ -82,300 +82,438 @@ function sanitizeRunId(runId: string): string {
   return runId
 }
 
-/** kind が既知の ArtifactKind か検証する */
-function sanitizeKind(kind: ArtifactKind): ArtifactKind {
-  if (!ARTIFACT_KINDS.includes(kind)) {
-    throw new Error(`不正な kind です: ${kind}`)
-  }
-  return kind
+function sanitizePhase(phase: GatedPhase): GatedPhase {
+  if (!findPhase(phase)) throw new Error(`不正な phase です: ${phase}`)
+  return phase
 }
 
-/** "~" 始まりのパスを os.homedir() で展開する(念のための防御) */
-function expandHome(dir: string): string {
-  if (dir === "~") return os.homedir()
-  if (dir.startsWith("~/") || dir.startsWith("~\\")) {
-    return path.join(os.homedir(), dir.slice(2))
-  }
-  return dir
+/** 同じディレクトリの一時ファイルに書いて rename する(所見 G4) */
+function writeFileAtomic(file: string, content: string): void {
+  const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`
+  fs.writeFileSync(tmp, content, "utf-8")
+  fs.renameSync(tmp, file)
 }
 
-/**
- * projectId を解決する。config.storage.projectId があればそれを使い、
- * なければ git toplevel(失敗時は cwd)の絶対パスから
- * basename + "-" + sha256(絶対パス).slice(0, 12) を組み立てる。
- */
-export function resolveProjectId(config: RaguelConfig): string {
-  if (config.storage.projectId) return config.storage.projectId
-  const absPath = resolveProjectRoot()
-  return `${path.basename(absPath)}-${sha256Hex(absPath).slice(0, 12)}`
+/** JSON Lines を読む。読めない行があれば例外にし、呼び出し側に上書きさせない */
+function readJsonl<T>(file: string): T[] {
+  if (!fs.existsSync(file)) return []
+  const out: T[] = []
+  fs.readFileSync(file, "utf-8")
+    .split("\n")
+    .forEach((line, i) => {
+      if (!line.trim()) return
+      try {
+        out.push(JSON.parse(line) as T)
+      } catch {
+        throw new Error(`索引の行が読めません: ${file}:${i + 1}`)
+      }
+    })
+  return out
 }
 
-function resolveProjectRoot(): string {
+function readJsonOrWarn(file: string): unknown {
+  if (!fs.existsSync(file)) return undefined
   try {
-    const out = execFileSync(
-      "git",
-      ["-C", process.cwd(), "rev-parse", "--show-toplevel"],
-      { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }
-    ).trim()
-    return path.resolve(out)
+    return JSON.parse(fs.readFileSync(file, "utf-8"))
   } catch {
-    return process.cwd()
+    log.warn("証拠のファイルが読めません", { path: file })
+    return undefined
   }
 }
 
-/** ディレクトリ内のファイル名(verdict.json を除く)を名前順で列挙する */
-function listEvidenceFiles(dir: string): string[] {
-  if (!fs.existsSync(dir)) return []
-  return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name !== VERDICT_FILE)
-    .map((entry) => entry.name)
-    .sort()
+function isDigest(v: unknown): v is Digest {
+  const d = v as Digest
+  return (
+    typeof d === "object" &&
+    d !== null &&
+    typeof d.schemaVersion === "number" &&
+    typeof d.sha256 === "string" &&
+    Array.isArray(d.signature)
+  )
+}
+
+function attemptDirName(attempt: number): string {
+  return `attempt-${String(attempt).padStart(2, "0")}`
+}
+
+/** 構造の比較(キーの順序を問わない) */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const ka = Object.keys(a).filter(
+    (k) => (a as Record<string, unknown>)[k] !== undefined
+  )
+  const kb = Object.keys(b).filter(
+    (k) => (b as Record<string, unknown>)[k] !== undefined
+  )
+  if (ka.length !== kb.length) return false
+  return ka.every((k) =>
+    sameJson(
+      (a as Record<string, unknown>)[k],
+      (b as Record<string, unknown>)[k]
+    )
+  )
 }
 
 export class CaseStore {
-  private readonly casesDir: string
-  private readonly projectId: string
+  /** <casesDir>/cases/<projectId> */
+  readonly projectDir: string
   private readonly retention: { maxRuns: number; maxDays: number }
 
-  constructor(config: RaguelConfig) {
-    this.casesDir = expandHome(config.storage.casesDir)
-    this.projectId = resolveProjectId(config)
+  constructor(
+    config: RaguelConfig,
+    projectRoot: string = resolveProjectRoot(process.cwd())
+  ) {
+    this.projectDir = path.join(
+      resolveCasesDir(config.storage.casesDir),
+      "cases",
+      resolveProjectId(projectRoot, config.storage.projectId)
+    )
     this.retention = config.storage.retention
   }
 
-  /** <casesDir>/cases/<projectId> */
-  private projectRoot(): string {
-    return path.join(this.casesDir, "cases", this.projectId)
-  }
-
-  /** <casesDir>/cases/<projectId>/<runId>/<kind> */
-  private runKindDir(runId: string, kind: ArtifactKind): string {
+  /** <projectDir>/<runId>/<phase> */
+  private phaseDir(runId: string, phase: GatedPhase): string {
     return path.join(
-      this.projectRoot(),
+      this.projectDir,
       sanitizeRunId(runId),
-      sanitizeKind(kind)
+      sanitizePhase(phase)
     )
   }
 
-  /**
-   * 既存 attempt-NN を走査して次番号のディレクトリを作成する。
-   * 実行された分のみ証拠ファイルが作られるため、番号は欠番があり得る前提で
-   * 最大番号 + 1 を採用する。
-   */
+  /** run とフェーズの組の attempt を番号の昇順で返す */
+  private listAttempts(
+    runId: string,
+    phase: GatedPhase
+  ): Array<{ attempt: number; dir: string }> {
+    const dir = this.phaseDir(runId, phase)
+    if (!fs.existsSync(dir)) return []
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => ({ m: ATTEMPT_DIR_PATTERN.exec(e.name), name: e.name }))
+      .filter((e) => e.m !== null)
+      .map((e) => ({ attempt: Number(e.m?.[1]), dir: path.join(dir, e.name) }))
+      .sort((a, b) => a.attempt - b.attempt)
+  }
+
+  /** 次の attempt のディレクトリを作る。番号は run とフェーズの組ごとに振る(所見 F4) */
   openAttempt(
     runId: string,
-    kind: ArtifactKind
+    phase: GatedPhase
   ): { dir: string; attempt: number } {
-    const kindDir = this.runKindDir(runId, kind)
-    fs.mkdirSync(kindDir, { recursive: true })
-    const existing = fs.existsSync(kindDir)
-      ? fs.readdirSync(kindDir, { withFileTypes: true })
-      : []
-    let maxAttempt = 0
-    for (const entry of existing) {
-      if (!entry.isDirectory()) continue
-      const match = ATTEMPT_DIR_PATTERN.exec(entry.name)
-      if (!match) continue
-      maxAttempt = Math.max(maxAttempt, Number(match[1]))
-    }
-    const attempt = maxAttempt + 1
-    const dir = path.join(
-      kindDir,
-      `attempt-${String(attempt).padStart(2, "0")}`
-    )
+    const attempts = this.listAttempts(runId, phase)
+    const attempt = (attempts[attempts.length - 1]?.attempt ?? 0) + 1
+    const dir = path.join(this.phaseDir(runId, phase), attemptDirName(attempt))
     fs.mkdirSync(dir, { recursive: true })
     return { dir, attempt }
   }
 
-  /** 証拠ファイルを attempt ディレクトリへ書き込む */
-  writeEvidence(dir: string, name: string, content: string): void {
+  /** 最新の attempt のディレクトリ。無ければ undefined */
+  latestAttemptDir(runId: string, phase: GatedPhase): string | undefined {
+    const attempts = this.listAttempts(runId, phase)
+    return attempts[attempts.length - 1]?.dir
+  }
+
+  /** 既知の証拠ファイルを書く。一覧に無い名前は例外にする */
+  writeEvidence(dir: string, name: EvidenceName, content: string): void {
+    if (!KNOWN.has(name)) throw new Error(`未知の証拠ファイルです: ${name}`)
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(path.join(dir, name), content, "utf-8")
   }
 
-  /**
-   * dir 内の証拠ファイル(verdict.json 以外)を名前順に読み、
-   * sha256 一覧 + chainHead を計算して verdict.json として書き込む。
-   */
-  finalizeVerdict(dir: string, record: VerdictRecordInput): PersistedVerdict {
-    const names = listEvidenceFiles(dir)
-    const evidence = names.map((name) => ({
-      name,
-      sha256: sha256Hex(fs.readFileSync(path.join(dir, name)))
-    }))
-    const chainHead = buildChain(evidence)
-    const persisted: PersistedVerdict = {
-      ...record,
-      at: record.at ?? new Date().toISOString(),
-      evidence,
-      chainHead
-    }
-    fs.writeFileSync(
-      path.join(dir, VERDICT_FILE),
-      JSON.stringify(persisted, null, 2),
-      "utf-8"
+  writeSubmissionDigest(dir: string, digest: Digest): void {
+    this.writeEvidence(
+      dir,
+      SUBMISSION_DIGEST_FILE,
+      JSON.stringify(digest, null, 2)
     )
-    return persisted
   }
 
-  /**
-   * verdict.json の evidence と実ファイルを突合する(改竄検知)。
-   * 不一致があれば呼び出し側が STOP に使う。
-   */
-  verifyAttempt(dir: string): VerifyAttemptResult {
-    const verdictPath = path.join(dir, VERDICT_FILE)
-    if (!fs.existsSync(verdictPath)) {
-      return { ok: false, mismatches: ["verdict.json が存在しません"] }
-    }
-    let persisted: PersistedVerdict
-    try {
-      persisted = JSON.parse(fs.readFileSync(verdictPath, "utf-8"))
-    } catch {
-      return { ok: false, mismatches: ["verdict.json の parse に失敗しました"] }
-    }
-    const mismatches: string[] = []
-    const actualNames = listEvidenceFiles(dir)
-    const recorded = new Map(persisted.evidence.map((e) => [e.name, e.sha256]))
-    for (const name of actualNames) {
-      const expected = recorded.get(name)
-      if (expected === undefined) {
-        mismatches.push(`証拠に記録のないファイルが存在します: ${name}`)
-        continue
-      }
-      const actual = sha256Hex(fs.readFileSync(path.join(dir, name)))
-      if (actual !== expected) {
-        mismatches.push(`ハッシュ不一致: ${name}`)
-      }
-    }
-    for (const name of recorded.keys()) {
-      if (!actualNames.includes(name)) {
-        mismatches.push(`記録された証拠ファイルが失われています: ${name}`)
-      }
-    }
-    const recomputedHead = buildChain(persisted.evidence)
-    if (recomputedHead !== persisted.chainHead) {
-      mismatches.push("chainHead が evidence 一覧と一致しません")
-    }
-    return { ok: mismatches.length === 0, mismatches }
+  /** 既知の証拠ファイルを読む。無ければ undefined */
+  readEvidence(dir: string, name: EvidenceName): string | undefined {
+    const file = path.join(dir, name)
+    return fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : undefined
   }
 
-  /** 最新の attempt ディレクトリ(存在しなければ undefined) */
-  latestAttemptDir(runId: string, kind: ArtifactKind): string | undefined {
-    const kindDir = this.runKindDir(runId, kind)
-    if (!fs.existsSync(kindDir)) return undefined
-    const names = fs
-      .readdirSync(kindDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .filter((name) => ATTEMPT_DIR_PATTERN.test(name))
-      .sort()
-    const latest = names[names.length - 1]
-    return latest === undefined ? undefined : path.join(kindDir, latest)
-  }
-
-  /** attempt ディレクトリの verdict.json を読む(なければ undefined) */
-  readVerdict(dir: string): PersistedVerdict | undefined {
-    const file = path.join(dir, VERDICT_FILE)
-    if (!fs.existsSync(file)) return undefined
-    try {
-      return JSON.parse(fs.readFileSync(file, "utf-8"))
-    } catch {
-      return undefined
-    }
-  }
-
-  /** attempt ディレクトリの証拠ファイル群をテキストで読む(名前順) */
+  /** 既知の証拠ファイルを名前順にテキストで読む */
   readEvidenceTexts(dir: string): Array<{ name: string; content: string }> {
-    return listEvidenceFiles(dir).map((name) => ({
+    return this.presentEvidence(dir).map((name) => ({
       name,
       content: fs.readFileSync(path.join(dir, name), "utf-8")
     }))
   }
 
-  /** 各 attempt の submission-digest.json を attempt 番号順に読む */
-  readPriorSubmissions(runId: string, kind: ArtifactKind): SubmissionDigest[] {
-    const kindDir = this.runKindDir(runId, kind)
-    if (!fs.existsSync(kindDir)) return []
-    const attemptDirs = fs
-      .readdirSync(kindDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .filter((name) => ATTEMPT_DIR_PATTERN.test(name))
-      .sort()
-    const digests: SubmissionDigest[] = []
-    for (const attemptName of attemptDirs) {
-      const digestPath = path.join(kindDir, attemptName, SUBMISSION_DIGEST_FILE)
-      if (!fs.existsSync(digestPath)) continue
-      try {
-        digests.push(JSON.parse(fs.readFileSync(digestPath, "utf-8")))
-      } catch {
-        // 壊れている attempt はスキップ
+  private presentEvidence(dir: string): string[] {
+    return EVIDENCE_FILES.filter((n) => fs.existsSync(path.join(dir, n))).sort()
+  }
+
+  /**
+   * 同じ run・同じフェーズで、この attempt より前にある最も新しい verdict.json の chainHead。
+   * 無ければ null
+   */
+  private prevChainHead(dir: string): string | null {
+    const phaseDir = path.dirname(dir)
+    const own = Number(ATTEMPT_DIR_PATTERN.exec(path.basename(dir))?.[1])
+    const earlier = fs.existsSync(phaseDir)
+      ? fs
+          .readdirSync(phaseDir)
+          .map((n) => Number(ATTEMPT_DIR_PATTERN.exec(n)?.[1]))
+          .filter((n) => Number.isInteger(n) && n < own)
+          .sort((a, b) => b - a)
+      : []
+    for (const n of earlier) {
+      const file = path.join(phaseDir, attemptDirName(n), VERDICT_FILE)
+      if (!fs.existsSync(file)) continue
+      const v = readJsonOrWarn(file) as VerdictRecord | undefined
+      return typeof v?.chainHead === "string" ? v.chainHead : null
+    }
+    return null
+  }
+
+  /**
+   * subject.json を record.subject から書き、既知の証拠の sha256 と chainHead を計算して
+   * verdict.json を一時ファイルと rename で確定する
+   */
+  finalizeVerdict(dir: string, record: VerdictRecordInput): VerdictRecord {
+    this.writeEvidence(
+      dir,
+      SUBJECT_FILE,
+      JSON.stringify(record.subject, null, 2)
+    )
+    const evidence = this.presentEvidence(dir).map((name) => ({
+      name,
+      sha256: sha256Hex(fs.readFileSync(path.join(dir, name)))
+    }))
+    const prevChainHead = this.prevChainHead(dir)
+    const { at, ...rest } = record
+    const persisted: VerdictRecord = {
+      schemaVersion: 2,
+      ...rest,
+      at: at ?? new Date().toISOString(),
+      prevChainHead,
+      evidence,
+      chainHead: buildChain({ ...record, prevChainHead }, evidence)
+    }
+    writeFileAtomic(
+      path.join(dir, VERDICT_FILE),
+      JSON.stringify(persisted, null, 2)
+    )
+    return persisted
+  }
+
+  /** verdict.json を読む。無いか読めなければ undefined */
+  readVerdict(dir: string): VerdictRecord | undefined {
+    return readJsonOrWarn(path.join(dir, VERDICT_FILE)) as
+      | VerdictRecord
+      | undefined
+  }
+
+  /**
+   * 改竄の検証。既知の証拠ファイルの sha256、chainHead(seed を含む)、
+   * subject.json と verdict.json の subject、前の attempt の chainHead を照らす。
+   * 既知でないファイルは無視する(所見 G6)
+   */
+  verifyAttempt(dir: string): VerifyAttemptResult {
+    const file = path.join(dir, VERDICT_FILE)
+    if (!fs.existsSync(file)) {
+      return { ok: false, mismatches: ["verdict.json がありません"] }
+    }
+    let v: VerdictRecord
+    try {
+      v = JSON.parse(fs.readFileSync(file, "utf-8"))
+    } catch {
+      return { ok: false, mismatches: ["verdict.json が読めません"] }
+    }
+    if (!Array.isArray(v.evidence)) {
+      return {
+        ok: false,
+        mismatches: ["verdict.json に evidence がありません"]
       }
     }
-    return digests
-  }
-
-  /** 再提出ループ検知用のダイジェストを書き込む */
-  writeSubmissionDigest(dir: string, digest: SubmissionDigest): void {
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(
-      path.join(dir, SUBMISSION_DIGEST_FILE),
-      JSON.stringify(digest, null, 2),
-      "utf-8"
-    )
-  }
-
-  /** evaluations.jsonl に評価インデックスを追記する */
-  appendEvaluationIndex(entry: EvaluationIndexEntry): void {
-    const root = this.projectRoot()
-    fs.mkdirSync(root, { recursive: true })
-    fs.appendFileSync(
-      path.join(root, EVALUATIONS_FILE),
-      `${JSON.stringify(entry)}\n`,
-      "utf-8"
-    )
-  }
-
-  /** evaluations.jsonl を走査して evaluationId から逆引きする */
-  lookupEvaluation(evaluationId: string): EvaluationIndexEntry | undefined {
-    const file = path.join(this.projectRoot(), EVALUATIONS_FILE)
-    if (!fs.existsSync(file)) return undefined
-    const lines = fs.readFileSync(file, "utf-8").split("\n")
-    let found: EvaluationIndexEntry | undefined
-    for (const line of lines) {
-      if (!line.trim()) continue
-      try {
-        const entry: EvaluationIndexEntry = JSON.parse(line)
-        if (entry.evaluationId === evaluationId) found = entry
-      } catch {
-        // 壊れた行はスキップ
+    const mismatches: string[] = []
+    const recorded = new Map(v.evidence.map((e) => [e.name, e.sha256]))
+    for (const name of recorded.keys()) {
+      if (!KNOWN.has(name)) {
+        mismatches.push(`evidence に未知のファイル名があります: ${name}`)
       }
     }
-    return found
+    const present = this.presentEvidence(dir)
+    for (const name of present) {
+      const expected = recorded.get(name)
+      if (expected === undefined) {
+        mismatches.push(`evidence に記録の無い証拠ファイルがあります: ${name}`)
+      } else if (
+        sha256Hex(fs.readFileSync(path.join(dir, name))) !== expected
+      ) {
+        mismatches.push(`証拠ファイルの sha256 が合いません: ${name}`)
+      }
+    }
+    for (const name of recorded.keys()) {
+      if (KNOWN.has(name) && !present.includes(name)) {
+        mismatches.push(`記録された証拠ファイルがありません: ${name}`)
+      }
+    }
+    const header: ChainHeader = v
+    if (buildChain(header, v.evidence) !== v.chainHead) {
+      mismatches.push("chainHead が verdict.json の内容と合いません")
+    }
+    const subjectText = this.readEvidence(dir, SUBJECT_FILE)
+    let subjectOk = false
+    try {
+      subjectOk =
+        subjectText !== undefined &&
+        sameJson(JSON.parse(subjectText), v.subject)
+    } catch {
+      // 読めない subject.json は不一致として扱う
+    }
+    if (!subjectOk) {
+      mismatches.push("verdict.json の subject が subject.json と合いません")
+    }
+    const prev = this.prevChainHead(dir)
+    if (prev !== v.prevChainHead) {
+      mismatches.push(
+        "prevChainHead が前の attempt の chainHead と合いません(前の attempt の差し替えか削除)"
+      )
+    }
+    return { ok: mismatches.length === 0, mismatches }
   }
 
-  /** projectId 配下の run を mtime でソートし、保持ポリシー超過分を削除する */
-  sweepRetention(): void {
-    const root = this.projectRoot()
-    if (!fs.existsSync(root)) return
-    const runDirs = fs
-      .readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => {
-        const full = path.join(root, entry.name)
-        return { full, mtime: fs.statSync(full).mtimeMs }
+  /**
+   * 同じ run・同じフェーズの過去の attempt(verdict.json のあるもの)を番号の昇順で返す。
+   * 読めない証拠とダイジェストは warn を出して空とみなす
+   */
+  readPriorAttempts(runId: string, phase: GatedPhase): PriorAttempt[] {
+    const attempts = this.listAttempts(runId, phase)
+    if (attempts.length === 0) return []
+    const outcomes = this.latestOutcomes()
+    const out: PriorAttempt[] = []
+    for (const { attempt, dir } of attempts) {
+      const v = this.readVerdict(dir)
+      if (!v) continue
+      const rules = readJsonOrWarn(path.join(dir, RULES_FILE)) as
+        | { findings?: Finding[] }
+        | undefined
+      const askRuleIds = [
+        ...new Set(
+          (Array.isArray(rules?.findings) ? rules.findings : [])
+            .filter((f) => f.severity === "ask" || f.severity === "stop")
+            .map((f) => f.ruleId)
+        )
+      ]
+      const rawDigest = readJsonOrWarn(path.join(dir, SUBMISSION_DIGEST_FILE))
+      if (rawDigest !== undefined && !isDigest(rawDigest)) {
+        log.warn("ダイジェストの形が違います", {
+          path: path.join(dir, SUBMISSION_DIGEST_FILE)
+        })
+      }
+      out.push({
+        attempt,
+        verdict: v.verdict,
+        judgeStatus: v.judgeStatus,
+        hasRuling: (outcomes.get(v.evaluationId)?.ruling ?? null) !== null,
+        askRuleIds,
+        digest: isDigest(rawDigest) ? rawDigest : null
       })
-      .sort((a, b) => b.mtime - a.mtime) // 新しい順
+    }
+    return out
+  }
+
+  /** evaluations.jsonl に 1 行を追記する */
+  appendEvaluationIndex(entry: EvaluationIndexEntry): void {
+    this.appendLine(EVALUATIONS_FILE, entry)
+  }
+
+  /** outcomes.jsonl に 1 行を追記する */
+  appendOutcome(record: OutcomeRecord): void {
+    this.appendLine(OUTCOMES_FILE, record)
+  }
+
+  private appendLine(name: string, value: unknown): void {
+    fs.mkdirSync(this.projectDir, { recursive: true })
+    fs.appendFileSync(
+      path.join(this.projectDir, name),
+      `${JSON.stringify(value)}\n`,
+      "utf-8"
+    )
+  }
+
+  /** 索引から evaluationId の行を引く。複数あれば後の行。無ければ undefined(NO_EVALUATION_RECORD を返す場面) */
+  lookupEvaluation(evaluationId: string): EvaluationIndexEntry | undefined {
+    return readJsonl<EvaluationIndexEntry>(
+      path.join(this.projectDir, EVALUATIONS_FILE)
+    ).findLast((e) => e.evaluationId === evaluationId)
+  }
+
+  /** 裁定の記録から evaluationId の最後の行を引く */
+  lookupOutcome(evaluationId: string): OutcomeRecord | undefined {
+    return this.latestOutcomes().get(evaluationId)
+  }
+
+  private latestOutcomes(): Map<string, OutcomeRecord> {
+    const map = new Map<string, OutcomeRecord>()
+    for (const r of readJsonl<OutcomeRecord>(
+      path.join(this.projectDir, OUTCOMES_FILE)
+    )) {
+      map.set(r.evaluationId, r)
+    }
+    return map
+  }
+
+  /**
+   * 保持の上限を超えた run を消す。run の新しさは索引の最後の評価の at で決める。
+   * 索引に行の無い run のディレクトリは mtime で代える。
+   * 消した run の行は evaluations.jsonl と outcomes.jsonl からも消す(所見 G3)。
+   * 索引に読めない行があれば、何も消さずに例外にする
+   */
+  sweepRetention(now: number = Date.now()): string[] {
+    if (!fs.existsSync(this.projectDir)) return []
+    const evalFile = path.join(this.projectDir, EVALUATIONS_FILE)
+    const outFile = path.join(this.projectDir, OUTCOMES_FILE)
+    const evaluations = readJsonl<EvaluationIndexEntry>(evalFile)
+    const outcomes = readJsonl<OutcomeRecord>(outFile)
+
+    const lastAt = new Map<string, number>()
+    for (const e of evaluations) {
+      const t = Date.parse(e.at)
+      if (!Number.isNaN(t) && t > (lastAt.get(e.runId) ?? -Infinity)) {
+        lastAt.set(e.runId, t)
+      }
+    }
+    for (const entry of fs.readdirSync(this.projectDir, {
+      withFileTypes: true
+    })) {
+      if (entry.isDirectory() && !lastAt.has(entry.name)) {
+        lastAt.set(
+          entry.name,
+          fs.statSync(path.join(this.projectDir, entry.name)).mtimeMs
+        )
+      }
+    }
 
     const maxAgeMs = this.retention.maxDays * 24 * 60 * 60 * 1000
-    const now = Date.now()
-    runDirs.forEach((run, index) => {
-      const overCount = index >= this.retention.maxRuns
-      const overAge = now - run.mtime > maxAgeMs
-      if (overCount || overAge) {
-        fs.rmSync(run.full, { recursive: true, force: true })
-      }
-    })
+    const removed = [...lastAt.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .filter(([, t], i) => i >= this.retention.maxRuns || now - t > maxAgeMs)
+      .map(([runId]) => runId)
+    if (removed.length === 0) return []
+
+    const gone = new Set(removed)
+    const keep = <T extends { runId: string }>(rows: T[]) =>
+      rows
+        .filter((r) => !gone.has(r.runId))
+        .map((r) => `${JSON.stringify(r)}\n`)
+        .join("")
+    if (fs.existsSync(evalFile)) writeFileAtomic(evalFile, keep(evaluations))
+    if (fs.existsSync(outFile)) writeFileAtomic(outFile, keep(outcomes))
+    for (const runId of removed) {
+      if (!RUN_ID_PATTERN.test(runId) || runId.includes("..")) continue
+      fs.rmSync(path.join(this.projectDir, runId), {
+        recursive: true,
+        force: true
+      })
+    }
+    return removed
   }
 }

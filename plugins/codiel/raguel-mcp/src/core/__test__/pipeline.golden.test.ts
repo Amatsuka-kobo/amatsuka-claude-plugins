@@ -1,400 +1,740 @@
 /**
- * ゴールデンテスト: 成果物フィクスチャ → 期待 verdict(DESIGN.md §12)。
- * パネルは FakeJudgeProvider(インメモリ)。実プロセス・実 LLM は使わない。
+ * 判定パイプラインの結合テスト(設計書 §6.3・§7.1 の「空の差分」「保護パスの除外と生成物」
+ * 「testsDir と E2E のレポート」「パイプライン」「Jev の文脈判定」のつなぎ込み)。
+ * 一時の git リポジトリで評価対象を取り、パネルは FakeJudgeProvider か fake-claude.mjs で与える。
+ * 実際の claude・codex・Jev は呼ばない。
  */
 
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { CaseStore } from "../../casefile/store.js"
-import { FakeJudgeProvider } from "../../panel/testing/fakeProvider.js"
-import { toCodeArtifact } from "../../tools/evaluateCode.js"
-import { toDecisionArtifact } from "../../tools/evaluateDecision.js"
-import { toPlanArtifact } from "../../tools/evaluatePlan.js"
+import * as fs from "node:fs"
+import * as path from "node:path"
+import { fileURLToPath } from "node:url"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { JevCall, JevRequest } from "../../context/jev.js"
+import { ClaudeCliProvider } from "../../panel/claudeCli.js"
+import { JudgeError } from "../../panel/provider.js"
+import { NO_CHANGE_ID } from "../../rules/registry.js"
+import { makeTmpDir } from "../../subject/__test__/helpers/gitRepo.js"
+import { SubjectInputError } from "../../subject/types.js"
+import {
+  BUILD_VERSION,
+  benignPanel,
+  type Harness,
+  type HarnessOptions,
+  lines,
+  makeHarness,
+  scores
+} from "../../tools/__test__/helpers/harness.js"
 import { handleRecordOutcome } from "../../tools/recordOutcome.js"
-import { evaluateArtifact, type PipelineDeps } from "../pipeline.js"
-import type { RaguelConfig } from "../types.js"
+import { MAX_RESPONSE_FINDINGS } from "../pipeline.js"
+import type { EvaluationResult, VerdictRecord } from "../types.js"
 
-const CODE_SCORES = {
-  objective_alignment: 85,
-  unintended_changes: 85,
-  breaking_changes: 85
-}
-
-function makeConfig(casesDir: string): RaguelConfig {
-  return {
-    version: 1,
-    onError: "ASK",
-    storage: {
-      casesDir,
-      projectId: "golden-test",
-      retention: { maxRuns: 200, maxDays: 90 }
-    },
-    judge: {
-      provider: "claude-cli",
-      model: "haiku",
-      timeoutMs: 60000,
-      canStop: false,
-      maxConcurrency: 4,
-      thresholds: { proceed: 80, confidence: 60, maxVariance: 30 }
-    },
-    weight: { tiers: { standard: 30, critical: 70 } },
-    panel: {
-      trivial: [],
-      standard: ["adversarial"],
-      critical: [
-        "adversarial",
-        "steelman",
-        "crosscheck",
-        "assumption",
-        "precedent"
-      ],
-      perPanelist: {}
-    },
-    precedent: { seedCatalog: true, topN: 5 },
-    rules: {}
+const FAKE_CLAUDE = fileURLToPath(
+  new URL("../../testing/fake-claude.mjs", import.meta.url)
+)
+const GHP_TOKEN = `ghp_${"A1b2C3d4E5f6".repeat(3)}`
+const PKG_BEFORE = `{
+  "name": "demo",
+  "dependencies": {
+    "a": "^1.0.0"
   }
 }
+`
+const PKG_AFTER = `{
+  "name": "demo",
+  "dependencies": {
+    "a": "^1.0.0",
+    "b": "^2.0.0"
+  }
+}
+`
 
-/** 全パネリストが「問題なし」を返す canned 応答を登録する */
-function benignPanel(provider: FakeJudgeProvider): void {
-  provider.set("adversarial", { findings: [], scores: CODE_SCORES })
-  provider.set("steelman", {
-    verdicts: [],
-    defenseArgument: "問題は見当たらない",
-    findings: [],
-    scores: CODE_SCORES
-  })
-  provider.set("crosscheck", { findings: [], scores: CODE_SCORES })
-  provider.set("assumption", { findings: [], scores: CODE_SCORES })
-  provider.set("precedent", { evaluations: [], scores: CODE_SCORES })
-  provider.set("meta", {
-    scores: { ...CODE_SCORES, blast_radius: 85 },
-    rationale: "全証拠を確認したが問題なし"
+const harnesses: Harness[] = []
+function harness(opts: HarnessOptions = {}): Harness {
+  const h = makeHarness(opts)
+  harnesses.push(h)
+  return h
+}
+
+const savedEnv = { ...process.env }
+beforeEach(() => {
+  delete process.env.RAGUEL_CONFIG
+})
+afterEach(() => {
+  for (const h of harnesses.splice(0)) h.cleanup()
+  for (const key of Object.keys(process.env)) {
+    if (!(key in savedEnv)) delete process.env[key]
+  }
+  Object.assign(process.env, savedEnv)
+})
+
+function code(h: Harness, extra: Record<string, unknown> = {}) {
+  return h.evaluate({
+    tool: "evaluate_code",
+    runId: "run-1",
+    phase: "implement",
+    objective: "機能を足す",
+    baseRef: h.base,
+    ...extra
   })
 }
 
-function makeDiff(
-  filePath: string,
-  addedLines: string[],
-  fileCount = 1
-): string {
-  const one = (p: string) =>
-    [
-      `diff --git a/${p} b/${p}`,
-      `--- a/${p}`,
-      `+++ b/${p}`,
-      `@@ -1,1 +1,${addedLines.length + 1} @@`,
-      " existing line",
-      ...addedLines.map((l) => `+${l}`)
-    ].join("\n")
-  return Array.from({ length: fileCount }, (_, i) =>
-    one(fileCount === 1 ? filePath : `src/mod${i}/${filePath}`)
-  ).join("\n")
+function decision(
+  h: Harness,
+  text: string,
+  extra: Record<string, unknown> = {}
+) {
+  return h.evaluate({
+    tool: "evaluate_decision",
+    runId: "run-1",
+    phase: "intent",
+    objective: "方針を決める",
+    decision: text,
+    ...extra
+  })
 }
 
-describe("golden: 判定パイプライン", () => {
-  let tmp: string
-  let deps: PipelineDeps
-  let provider: FakeJudgeProvider
-
-  beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "raguel-golden-"))
-    const config = makeConfig(tmp)
-    provider = new FakeJudgeProvider()
-    deps = {
-      config,
-      configHash: "golden-hash",
-      configSource: "cwd:/work/.codiel/config.json",
-      caseStore: new CaseStore(config),
-      provider
-    }
+function design(h: Harness, runId = "run-1") {
+  return h.evaluate({
+    tool: "evaluate_design",
+    runId,
+    phase: "design",
+    objective: "設計する",
+    paths: ["design.md"]
   })
+}
 
-  afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true })
-  })
+function ids(r: EvaluationResult): string[] {
+  return r.findings.map((f) => f.ruleId)
+}
 
-  it("無害な 3 行修正は trivial → PROCEED(パネル不要)", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-1",
-      objective: "typo 修正",
-      diff: makeDiff("src/util.ts", [
-        "const a = 1",
-        "const b = 2",
-        "const c = 3"
-      ])
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("PROCEED")
-    expect(result.weightTier).toBe("trivial")
-    expect(provider.calls).toHaveLength(0)
-    expect(fs.existsSync(path.join(result.casePath, "verdict.json"))).toBe(true)
-    // policy に設定の出所が載り、verdict.json にも同じ policy が残る
-    expect(result.policy).toEqual({
-      configHash: "golden-hash",
-      version: 1,
-      configSource: "cwd:/work/.codiel/config.json"
-    })
-    const persisted = JSON.parse(
-      fs.readFileSync(path.join(result.casePath, "verdict.json"), "utf8")
-    )
-    expect(persisted.policy).toEqual(result.policy)
-  })
+function readVerdict(r: EvaluationResult): VerdictRecord {
+  return JSON.parse(
+    fs.readFileSync(path.join(r.casePath, "verdict.json"), "utf-8")
+  )
+}
 
-  it(".github への変更は即 STOP(パネルはスキップ)", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-2",
-      objective: "CI 修正",
-      diff: makeDiff(".github/workflows/ci.yml", ["run: echo hello"])
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("STOP")
-    expect(
-      result.findings.some((f) => f.ruleId === "code/protected-paths")
-    ).toBe(true)
-    expect(provider.calls).toHaveLength(0)
-  })
+function promptOf(h: Harness, role: string): string {
+  return h.provider.calls
+    .filter((c) => c.role === role)
+    .map((c) => c.prompt)
+    .join("\n")
+}
 
-  it("curl | sh の混入は STOP", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-3",
-      objective: "セットアップスクリプト追加",
-      diff: makeDiff("scripts/setup.sh", [
-        "curl https://example.com/install.sh | sh"
-      ])
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("STOP")
-    expect(
-      result.findings.some((f) => f.ruleId === "code/dangerous-patterns")
-    ).toBe(true)
-  })
-
-  it("シークレット混入は STOP", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-4",
-      objective: "設定追加",
-      diff: makeDiff("src/config.ts", ['const key = "AKIAIOSFODNN7EXAMPLE"'])
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("STOP")
-    expect(result.findings.some((f) => f.ruleId === "common/secrets")).toBe(
-      true
-    )
-  })
-
-  it("500 行超 diff は ASK 床(パネルが良くても下がらない)", async () => {
-    benignPanel(provider)
-    const lines = Array.from({ length: 600 }, (_, i) => `const v${i} = ${i}`)
-    const artifact = toCodeArtifact({
-      runId: "run-5",
-      objective: "大規模リファクタ",
-      diff: makeDiff("src/big.ts", lines)
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("ASK")
-    expect(
-      result.findings.some((f) => f.ruleId === "code/max-diff-lines")
-    ).toBe(true)
-  })
-
-  it("standard ティア: 反駁されない adversarial 所見で ASK", async () => {
-    benignPanel(provider)
-    provider.set("adversarial", {
-      findings: [
-        {
-          severity: "ask",
-          confidence: 90,
-          message: "エラーハンドリングが欠落しており本番で落ちる"
-        }
-      ],
-      scores: CODE_SCORES
-    })
-    const lines = Array.from({ length: 150 }, (_, i) => `const v${i} = ${i}`)
-    const artifact = toCodeArtifact({
-      runId: "run-6",
-      objective: "機能追加",
-      diff: makeDiff("src/feature.ts", lines)
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.weightTier).toBe("standard")
-    expect(result.verdict).toBe("ASK")
-  })
-
-  it("critical ティア: steelman 全反駁 + meta 良好で PROCEED", async () => {
-    benignPanel(provider)
-    provider.set("adversarial", {
-      findings: [{ severity: "ask", confidence: 90, message: "懸念 A" }],
-      scores: CODE_SCORES
-    })
-    provider.set("steelman", {
-      verdicts: [
-        { findingIndex: 0, rebuttal: "テストで担保済み", outcome: "rebutted" }
-      ],
-      defenseArgument: "堅牢",
-      findings: [],
-      scores: CODE_SCORES
-    })
-    const lines = Array.from({ length: 90 }, (_, i) => `const v${i} = ${i}`)
-    const artifact = toCodeArtifact({
-      runId: "run-7",
-      objective: "モジュール分割",
-      diff: makeDiff("part.ts", lines, 5)
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.weightTier).toBe("critical")
-    expect(result.verdict).toBe("PROCEED")
-    expect(result.meta?.rationale).toContain("問題なし")
-  })
-
-  it("パネル間のスコア乖離が閾値超過なら ASK", async () => {
-    benignPanel(provider)
-    provider.set("crosscheck", {
-      findings: [],
-      scores: { ...CODE_SCORES, objective_alignment: 30 }
-    })
-    const lines = Array.from({ length: 90 }, (_, i) => `const v${i} = ${i}`)
-    const artifact = toCodeArtifact({
-      runId: "run-8",
-      objective: "モジュール分割",
-      diff: makeDiff("part.ts", lines, 5)
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("ASK")
-  })
-
-  it("meta 閾値未満は ASK", async () => {
-    benignPanel(provider)
-    provider.set("meta", {
-      scores: { ...CODE_SCORES, blast_radius: 50 },
-      rationale: "影響範囲が読めない"
-    })
-    const lines = Array.from({ length: 150 }, (_, i) => `const v${i} = ${i}`)
-    const artifact = toCodeArtifact({
-      runId: "run-9",
-      objective: "機能追加",
-      diff: makeDiff("src/feature.ts", lines)
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("ASK")
-  })
-
-  it("provider: none でパネル必要ティアは ASK(フェイルクローズド)", async () => {
-    deps.config.judge.provider = "none"
-    const lines = Array.from({ length: 150 }, (_, i) => `const v${i} = ${i}`)
-    const artifact = toCodeArtifact({
-      runId: "run-10",
-      objective: "機能追加",
-      diff: makeDiff("src/feature.ts", lines)
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("ASK")
-    expect(provider.calls).toHaveLength(0)
-  })
-
-  it("再提出ループ: ASK 後の近似再提出 3 回で STOP へ昇格", async () => {
-    benignPanel(provider)
-    provider.set("adversarial", {
-      findings: [{ severity: "ask", confidence: 90, message: "同じ懸念" }],
-      scores: CODE_SCORES
-    })
-    const lines = Array.from({ length: 150 }, (_, i) => `const v${i} = ${i}`)
-    const submit = (salt: string) =>
-      evaluateArtifact(
-        toCodeArtifact({
-          runId: "run-loop",
-          objective: "機能追加",
-          diff: makeDiff("src/feature.ts", [...lines, `// ${salt}`])
-        }),
-        deps
+/** すべての質問に答える Jev の fake。候補(c0 など)には candidate の確率を返す */
+function fakeJev(answers: { candidate?: number; severity?: number } = {}) {
+  const requests: JevRequest[] = []
+  const call: JevCall = async (req) => {
+    requests.push(req)
+    return {
+      answers: Object.fromEntries(
+        Object.entries(req.questions).map(([id, q]) => [
+          id,
+          q.type === "score"
+            ? { type: "score" as const, score: answers.severity ?? 1 }
+            : {
+                type: "noul" as const,
+                noul: /^c\d+$/.test(id) ? (answers.candidate ?? 0.9) : 0.5
+              }
+        ])
       )
-    const first = await submit("v1")
-    expect(first.verdict).toBe("ASK")
-    const second = await submit("v2")
-    expect(
-      second.findings.some((f) => f.ruleId === "common/resubmission-loop")
-    ).toBe(true)
-    await submit("v3")
-    const fourth = await submit("v4")
-    expect(fourth.verdict).toBe("STOP")
+    }
+  }
+  return { call: vi.fn(call), requests }
+}
+
+const JEV_ON = {
+  contextJudge: { enabled: true, timeoutMs: 20000 }
+}
+
+describe("空の差分(R22、所見 K4)", () => {
+  it("ルール層・Jev・パネルを通さず PROCEED・trivial・code/no-change になり、記録が書かれる", async () => {
+    const jev = fakeJev()
+    const h = harness({ raguel: JEV_ON, jevCall: jev.call, jevApiKey: "k" })
+    const r = await code(h, { phase: "test-loop" })
+
+    expect(r.verdict).toBe("PROCEED")
+    expect(r.weightTier).toBe("trivial")
+    expect(r.judgeStatus).toBe("ok")
+    expect(ids(r)).toEqual([NO_CHANGE_ID])
+    expect(r.findings[0].severity).toBe("info")
+    expect(h.provider.calls).toHaveLength(0)
+    expect(jev.call).not.toHaveBeenCalled()
+    expect(r.contextJudge.status).toBe("skipped")
+    expect(r.subject).toMatchObject({ base: h.base, head: h.base, files: [] })
+
+    const [entry] = h.index()
+    expect(entry).toMatchObject({
+      evaluationId: r.evaluationId,
+      phase: "test-loop",
+      verdict: "PROCEED",
+      head: h.base
+    })
+    expect(readVerdict(r).subject.head).toBe(h.base)
+    expect(h.store().verifyAttempt(r.casePath).ok).toBe(true)
   })
 
-  it("plan: 本番デプロイ言及は ASK", async () => {
-    benignPanel(provider)
-    const artifact = toPlanArtifact({
-      runId: "run-11",
-      objective: "リリース準備",
-      steps: ["ビルドする", "本番へ deploy する"]
-    })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("ASK")
-    expect(
-      result.findings.some((f) => f.ruleId === "plan/irreversible-ops")
-    ).toBe(true)
+  it("差分が空でも paths の範囲に未コミットの変更があれば入力の誤りで、記録しない", async () => {
+    const h = harness()
+    fs.writeFileSync(path.join(h.repo, "README.md"), "書きかけ\n")
+    await expect(code(h, { paths: ["README.md"] })).rejects.toBeInstanceOf(
+      SubjectInputError
+    )
+    expect(h.index()).toEqual([])
+  })
+})
+
+describe("testsDir と E2E のレポート(R24)", () => {
+  it("レポートだけの差分は変更なしとして PROCEED になり、subject にレポートが載る", async () => {
+    const h = harness()
+    h.commit({ "docs/codiel/tests/login/reports/run.json": '{"ok":true}\n' })
+    const r = await code(h, { phase: "test-loop" })
+
+    expect(r.verdict).toBe("PROCEED")
+    expect(ids(r)).toEqual([NO_CHANGE_ID])
+    expect(r.findings[0].message).toContain("E2E のレポート(1 ファイル)")
+    expect(r.subject.files.map((f) => f.path)).toEqual([
+      "docs/codiel/tests/login/reports/run.json"
+    ])
+    expect(h.provider.calls).toHaveLength(0)
+    expect(h.index()).toHaveLength(1)
   })
 
-  it("decision: 不可逆判断なのに rollback なしは ASK", async () => {
-    benignPanel(provider)
-    const artifact = toDecisionArtifact({
-      runId: "run-12",
-      objective: "データ整理",
-      decision: "古いテーブルを drop table で削除する判断をした",
-      optionsConsidered: ["アーカイブ", "削除"]
+  it("レポートと生成物だけの差分も code/no-change で PROCEED になる", async () => {
+    const h = harness({
+      raguel: { rules: { "code/protected-paths": { generated: ["dist/**"] } } }
     })
-    const result = await evaluateArtifact(artifact, deps)
-    expect(result.verdict).toBe("ASK")
-    expect(
-      result.findings.some((f) => f.ruleId === "decision/no-rollback")
-    ).toBe(true)
+    h.commit({
+      "docs/codiel/tests/a/reports/r.json": "{}\n",
+      "dist/app.js": "console.log(1)\n"
+    })
+    const r = await code(h)
+    expect(r.verdict).toBe("PROCEED")
+    expect(ids(r)).toEqual([NO_CHANGE_ID])
+    expect(ids(r)).not.toContain("code/generated-only")
   })
 
-  it("record_outcome: 判定 → 判例化のラウンドトリップ", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-13",
-      objective: "typo 修正",
-      diff: makeDiff("src/util.ts", ["const a = 1"])
+  it("testsDir を変えると、その配下のレポートだけが外れる", async () => {
+    const h = harness({ testsDir: "e2e" })
+    h.commit({ "e2e/x/reports/r.json": "{}\n" })
+    expect(ids(await code(h))).toEqual([NO_CHANGE_ID])
+
+    h.commit({ "docs/codiel/tests/x/reports/r.json": "{}\n" })
+    const second = await h.evaluate({
+      tool: "evaluate_code",
+      runId: "run-2",
+      phase: "implement",
+      objective: "x",
+      baseRef: h.base
     })
-    const result = await evaluateArtifact(artifact, deps)
-    const response = handleRecordOutcome(
-      {
-        evaluationId: result.evaluationId,
-        outcome: "incident",
-        notes: "本番障害"
+    expect(ids(second)).not.toContain(NO_CHANGE_ID)
+  })
+
+  it("testsDir の外の reports/ は外れず、通常の評価になる", async () => {
+    const h = harness()
+    h.commit({ "other/reports/r.json": "{}\n" })
+    const r = await code(h)
+    expect(ids(r)).not.toContain(NO_CHANGE_ID)
+  })
+
+  it("レポートにも common/secrets は当たる", async () => {
+    const h = harness()
+    h.commit({ "docs/codiel/tests/a/reports/r.txt": `token=${GHP_TOKEN}\n` })
+    const r = await code(h)
+    expect(r.verdict).toBe("STOP")
+    expect(ids(r)).toContain("common/secrets")
+  })
+})
+
+describe("保護パスの除外と生成物(R20、所見 K1)", () => {
+  it("excludeDefaults で既定の glob が外れ、policy に出る", async () => {
+    const h = harness({
+      raguel: {
+        rules: { "code/protected-paths": { excludeDefaults: [".github/**"] } }
+      }
+    })
+    h.commit({ ".github/workflows/ci.yml": "on: push\n" })
+    const r = await code(h)
+    expect(ids(r)).not.toContain("code/protected-paths")
+    expect(r.verdict).not.toBe("STOP")
+    expect(r.policy.protectedPaths).toEqual({
+      excludedDefaults: [".github/**"],
+      generated: []
+    })
+
+    h.commit({ "infra/main.tf": 'resource "x" "y" {}\n' })
+    const infra = await h.evaluate({
+      tool: "evaluate_code",
+      runId: "run-2",
+      phase: "implement",
+      objective: "x",
+      baseRef: h.base
+    })
+    expect(infra.verdict).toBe("STOP")
+    expect(ids(infra)).toContain("code/protected-paths")
+  })
+
+  it("保護パスにも当たる生成物は生成物として扱い、生成物だけなら code/generated-only を出す", async () => {
+    const h = harness({
+      raguel: {
+        rules: {
+          "code/protected-paths": {
+            globs: ["plugins/**"],
+            generated: ["plugins/*/dist/**"]
+          }
+        }
+      }
+    })
+    h.commit({ "plugins/x/dist/a.js": "export const a = 1\n" })
+    const r = await code(h)
+    expect(r.verdict).toBe("PROCEED")
+    expect(ids(r)).not.toContain("code/protected-paths")
+    expect(ids(r)).toContain("code/generated-only")
+    expect(r.policy.protectedPaths.generated).toEqual(["plugins/*/dist/**"])
+  })
+
+  it("生成物にも common/secrets は当たる", async () => {
+    const h = harness({
+      raguel: { rules: { "code/protected-paths": { generated: ["dist/**"] } } }
+    })
+    h.commit({ "dist/a.js": `const t = "${GHP_TOKEN}"\n` })
+    const r = await code(h)
+    expect(r.verdict).toBe("STOP")
+    expect(ids(r)).toContain("common/secrets")
+  })
+
+  it("パネルと Jev には生成物とレポートを 1 行ずつで渡し、中身を渡さない", async () => {
+    const jev = fakeJev()
+    const h = harness({
+      raguel: {
+        ...JEV_ON,
+        rules: { "code/protected-paths": { generated: ["plugins/*/dist/**"] } }
       },
-      deps
+      jevCall: jev.call,
+      jevApiKey: "k",
+      files: { "package.json": PKG_BEFORE }
+    })
+    benignPanel(h.provider, "code")
+    h.commit({
+      "package.json": PKG_AFTER,
+      "plugins/x/dist/a.js": "GENERATED_MARKER\nGENERATED_MARKER\n",
+      "docs/codiel/tests/a/reports/r.json": "REPORT_MARKER\n"
+    })
+    const r = await code(h)
+
+    // new-dependency の ask で standard になり、パネルが動く
+    expect(ids(r)).toContain("code/new-dependency")
+    const prompt = promptOf(h, "adversarial")
+    expect(prompt).toContain("生成物: plugins/x/dist/a.js(2 行の変更)")
+    expect(prompt).toContain(
+      "E2E のレポート: docs/codiel/tests/a/reports/r.json"
     )
-    const body = JSON.parse(response.content[0].text)
-    expect(body.recorded).toBe(true)
-    expect(body.precedentId).toMatch(/^prec-/)
+    expect(prompt).not.toContain("GENERATED_MARKER")
+    expect(prompt).not.toContain("REPORT_MARKER")
+    const sent = JSON.stringify(jev.requests)
+    expect(sent).not.toContain("GENERATED_MARKER")
+    expect(sent).not.toContain("REPORT_MARKER")
+    expect(sent).toContain('b\\": \\"^2.0.0')
+  })
+})
+
+describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
+  it("common/secrets が stop を出したら Jev を呼ばない", async () => {
+    const jev = fakeJev()
+    const h = harness({ raguel: JEV_ON, jevCall: jev.call, jevApiKey: "k" })
+    const r = await decision(h, `鍵 ${GHP_TOKEN} を使う`)
+    expect(r.verdict).toBe("STOP")
+    expect(jev.call).not.toHaveBeenCalled()
+    expect(r.contextJudge).toEqual({
+      enabled: true,
+      status: "skipped",
+      adjustments: []
+    })
   })
 
-  it("record_outcome: 証拠改竄を検知したら判例化を拒否", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-14",
-      objective: "typo 修正",
-      diff: makeDiff("src/util.ts", ["const a = 1"])
+  it("送る state は伏せ字済みで、候補の抜粋も伏せ字になる", async () => {
+    const token = "Zq8Xw2Lm9Pk4Rt7Vy3Nb"
+    const jev = fakeJev()
+    const h = harness({
+      raguel: {
+        ...JEV_ON,
+        rules: { "common/secrets": { allowPatterns: ["^Zq8Xw2"] } }
+      },
+      jevCall: jev.call,
+      jevApiKey: "k"
     })
-    const result = await evaluateArtifact(artifact, deps)
-    fs.appendFileSync(path.join(result.casePath, "01-rules.json"), "\n// 改竄")
-    const response = handleRecordOutcome(
-      { evaluationId: result.evaluationId, outcome: "approved" },
-      deps
-    )
-    const body = JSON.parse(response.content[0].text)
-    expect(body.recorded).toBe(false)
+    benignPanel(h.provider, "code")
+    h.commit({
+      "src/run.ts": `const key = "${token}"\nexport const r = eval(userInput)\n`
+    })
+    const r = await code(h)
+
+    expect(ids(r)).toContain("code/unsafe-exec")
+    expect(ids(r)).not.toContain("common/secrets")
+    expect(jev.call).toHaveBeenCalledTimes(2)
+    const sent = JSON.stringify(jev.requests)
+    expect(sent).not.toContain(token)
+    expect(sent).toContain("Zq8X")
+    const candidates = jev.requests.find((q) => "candidates" in q.state)
+    expect(JSON.stringify(candidates?.state)).toContain("eval(userInput)")
+    expect(
+      fs.readFileSync(path.join(r.casePath, "07-context.json"), "utf-8")
+    ).not.toContain(token)
   })
 
-  it("ケースファイル: verdict.json のハッシュチェーンが検証を通る", async () => {
-    const artifact = toCodeArtifact({
-      runId: "run-15",
-      objective: "typo 修正",
-      diff: makeDiff("src/util.ts", ["const a = 1"])
+  it("destructive-ops の stop を、実行されない候補なら ask に下げる", async () => {
+    const jev = fakeJev({ candidate: 0.05 })
+    const h = harness({ raguel: JEV_ON, jevCall: jev.call, jevApiKey: "k" })
+    benignPanel(h.provider, "code")
+    h.commit({ "scripts/clean.sh": "#!/bin/sh\nrm -rf $HOME\n" })
+    const r = await code(h)
+    expect(r.verdict).not.toBe("STOP")
+    expect(r.contextJudge.adjustments).toContainEqual({
+      ruleId: "code/destructive-ops",
+      from: "stop",
+      to: "ask"
     })
-    const result = await evaluateArtifact(artifact, deps)
-    const check = deps.caseStore.verifyAttempt(result.casePath)
-    expect(check.ok).toBe(true)
-    expect(check.mismatches).toEqual([])
+  })
+
+  it("Jev が失敗しても judgeStatus は ok のままで、原因を所見と reasons に残す", async () => {
+    const h = harness({
+      raguel: JEV_ON,
+      jevCall: async () => {
+        throw new Error("jev down")
+      },
+      jevApiKey: "k"
+    })
+    benignPanel(h.provider, "decision")
+    const r = await decision(h, "小さな方針を決める")
+    expect(r.judgeStatus).toBe("ok")
+    expect(r.contextJudge.status).toBe("unavailable")
+    expect(ids(r)).toContain("contextJudge/unavailable")
+    expect(r.reasons.some((x) => x.startsWith("context-judge:"))).toBe(true)
+    expect(r.reasons.join("\n")).toContain("jev down")
+  })
+
+  it("重さの水準 4 で critical に上げ、crosscheck の事実表で新規ファイルを「新規」と書く(所見 A13)", async () => {
+    const jev = fakeJev({ severity: 4 })
+    const h = harness({ raguel: JEV_ON, jevCall: jev.call, jevApiKey: "k" })
+    benignPanel(h.provider, "code")
+    h.commit({ "src/new.ts": "export const x = 1\n" })
+    const r = await code(h)
+    expect(r.weightTier).toBe("critical")
+    expect(r.verdict).toBe("PROCEED")
+    const crosscheck = promptOf(h, "crosscheck")
+    expect(crosscheck).toContain("src/new.ts: 新規")
+    expect(crosscheck).not.toContain("src/new.ts: 不在")
+    expect(r.meta?.rationale).toBeDefined()
+  })
+
+  it("decision の optionsConsidered と rollbackPlan を検査の本文とパネルに入れる(所見 F6)", async () => {
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    const r = await decision(h, "キャッシュを入れる", {
+      optionsConsidered: ["OPTION_MARKER を使う"],
+      rollbackPlan: "ROLLBACK_MARKER で戻す"
+    })
+    const submission = fs.readFileSync(
+      path.join(r.casePath, "submission.txt"),
+      "utf-8"
+    )
+    expect(submission).toContain("1. OPTION_MARKER を使う")
+    expect(submission).toContain("ROLLBACK_MARKER で戻す")
+    expect(promptOf(h, "adversarial")).toContain("ROLLBACK_MARKER")
+    expect(r.subject.contentSha256).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+describe("前フェーズの証拠(所見 F2・I1)", () => {
+  it("前フェーズの verdict が ASK でも、本文と ruleId と人の裁定を crosscheck に渡す", async () => {
+    const h = harness({ files: { "design.md": "# 設計\n本文\n" } })
+    benignPanel(h.provider, "decision")
+    h.provider.set("adversarial", {
+      findings: [{ severity: "ask", confidence: 90, message: "前提が弱い" }],
+      scores: scores("decision", 60)
+    })
+    const intent = await decision(h, "INTENT_MARKER の方針にする")
+    expect(intent.verdict).toBe("ASK")
+    expect(
+      handleRecordOutcome(
+        {
+          evaluationId: intent.evaluationId,
+          outcome: "approved",
+          ruling: "as-is",
+          notes: "承知の上で進める"
+        },
+        h.deps
+      )
+    ).toMatchObject({ recorded: true })
+
+    benignPanel(h.provider, "design")
+    const r = await design(h)
+    const crosscheck = promptOf(h, "crosscheck")
+    expect(crosscheck).toContain("INTENT_MARKER")
+    expect(crosscheck).toContain("verdict ASK")
+    expect(crosscheck).toContain("as-is(outcome approved): 承知の上で進める")
+    expect(r.verdict).toBe("PROCEED")
+  })
+
+  it("前フェーズのケースファイルが改竄されていれば casefile/tampered で STOP にし、パネルを起動しない", async () => {
+    const h = harness({ files: { "design.md": "# 設計\n" } })
+    benignPanel(h.provider, "decision")
+    const intent = await decision(h, "方針")
+    const file = path.join(intent.casePath, "verdict.json")
+    const v = JSON.parse(fs.readFileSync(file, "utf-8"))
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ ...v, verdict: "PROCEED", weightTier: "trivial" })
+    )
+    fs.appendFileSync(path.join(intent.casePath, "submission.txt"), "書き換え")
+
+    const before = h.provider.calls.length
+    const r = await design(h)
+    expect(r.verdict).toBe("STOP")
+    expect(ids(r)).toContain("casefile/tampered")
+    expect(h.provider.calls.length).toBe(before)
+  })
+})
+
+describe("基盤の障害(R6、所見 I1・D3)", () => {
+  it("meta が失敗したら degraded の ASK にする", async () => {
+    const h = harness({
+      raguel: { weight: { tiers: { standard: 10, critical: 20 } } },
+      files: { "design.md": "# 設計\n" }
+    })
+    benignPanel(h.provider, "design")
+    h.provider.set("meta", new JudgeError("nonzero-exit", "meta が落ちた"))
+    const r = await design(h)
+    expect(r.weightTier).toBe("critical")
+    expect(r.verdict).toBe("ASK")
+    expect(r.judgeStatus).toBe("degraded")
+    expect(r.degradedReasons).toEqual([
+      { source: "meta", reason: "nonzero-exit" }
+    ])
+    expect(ids(r)).toContain("panel/meta-error")
+    expect(readVerdict(r).judgeStatus).toBe("degraded")
+  })
+
+  it("締切を過ぎたパネリストは子プロセスを止めて deadline の degraded にする", async () => {
+    process.env.RAGUEL_CLAUDE_BIN = FAKE_CLAUDE
+    process.env.FAKE_CLAUDE_MODE = "hang"
+    const h = harness({
+      raguel: {
+        judge: { provider: "claude", timeoutMs: 4000, deadlineMs: 5000 },
+        contextJudge: { timeoutMs: 1000 }
+      },
+      files: { "design.md": "# 設計\n" },
+      providers: () => ({ claude: new ClaudeCliProvider(4) })
+    })
+    const started = Date.now()
+    const r = await design(h)
+    // fake-claude の hang は 60 秒待つ。締切(5 秒)で打ち切れば、その前に終わる
+    expect(Date.now() - started).toBeLessThan(10000)
+    expect(r.verdict).toBe("ASK")
+    expect(r.judgeStatus).toBe("degraded")
+    expect(r.degradedReasons).toEqual([
+      { source: "adversarial", reason: "deadline" }
+    ])
+  }, 30000)
+
+  it("signal の abort で子プロセスを止め、attempt と索引を残さない", async () => {
+    process.env.RAGUEL_CLAUDE_BIN = FAKE_CLAUDE
+    process.env.FAKE_CLAUDE_MODE = "hang"
+    const h = harness({
+      files: { "design.md": "# 設計\n" },
+      providers: () => ({ claude: new ClaudeCliProvider(4) })
+    })
+    const ac = new AbortController()
+    const started = Date.now()
+    setTimeout(() => ac.abort(new Error("キャンセル")), 500)
+    await expect(
+      h.evaluate(
+        {
+          tool: "evaluate_design",
+          runId: "run-1",
+          phase: "design",
+          objective: "設計する",
+          paths: ["design.md"]
+        },
+        ac.signal
+      )
+    ).rejects.toThrow("キャンセル")
+    expect(Date.now() - started).toBeLessThan(10000)
+    expect(h.index()).toEqual([])
+    expect(
+      fs.existsSync(path.join(h.store().projectDir, "run-1", "design"))
+    ).toBe(false)
+  }, 30000)
+
+  it("内部エラーにも一意の evaluationId を発行し、ASK・degraded で索引に書く(所見 D3)", async () => {
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    const first = await decision(h, "方針")
+    fs.writeFileSync(
+      path.join(h.store().projectDir, "outcomes.jsonl"),
+      "{壊れた行\n"
+    )
+    const r = await decision(h, "方針")
+    expect(r.evaluationId).not.toBe(first.evaluationId)
+    expect(r.evaluationId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(r.verdict).toBe("ASK")
+    expect(r.judgeStatus).toBe("degraded")
+    expect(r.degradedReasons).toEqual([
+      { source: "kernel", reason: "internal-error" }
+    ])
+    expect(ids(r)).toEqual(["kernel/internal-error"])
+    expect(r.decisionPoint).toBeDefined()
+    expect(h.index().map((e) => e.evaluationId)).toContain(r.evaluationId)
+    expect(fs.existsSync(path.join(r.casePath, "verdict.json"))).toBe(true)
+  })
+
+  it("onError で STOP に倒す分岐は無い(基盤の障害は ASK だけ)", () => {
+    const source = fs.readFileSync(
+      fileURLToPath(new URL("../pipeline.ts", import.meta.url)),
+      "utf-8"
+    )
+    expect(source).not.toContain("onError")
+  })
+
+  it("設定が読めなければ ASK・degraded を記録する。所見には設定のパスを載せる。直った設定は次の評価から使う", async () => {
+    const home = makeTmpDir("raguel-home-")
+    process.env.HOME = home
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    h.writeConfig({ raguel: { version: 2 } })
+
+    const r = await decision(h, "方針")
+    const configPath = path.join(h.repo, ".codiel", "config.json")
+    expect(r.verdict).toBe("ASK")
+    expect(r.judgeStatus).toBe("degraded")
+    expect(r.degradedReasons).toEqual([
+      { source: "config", reason: "config-error" }
+    ])
+    expect(r.findings[0]).toMatchObject({
+      ruleId: "kernel/config-error",
+      evidence: { location: configPath }
+    })
+    expect(r.policy.configSource).toBe(`cwd:${configPath}`)
+    expect(r.casePath.startsWith(path.join(home, ".raguel"))).toBe(true)
+
+    h.writeConfig({ raguel: { storage: { casesDir: h.casesDir } } })
+    const fixed = await decision(h, "方針")
+    expect(fixed.judgeStatus).toBe("ok")
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+})
+
+describe("再提出の判定のつなぎ込み(所見 D5)", () => {
+  const body = lines(200, (i) => `export const value${i} = ${i} * 2`)
+
+  it("前回の ask の ruleId が消えた似た再提出は、修正ありとみなして比べない", async () => {
+    const h = harness()
+    benignPanel(h.provider, "code")
+    h.commit({ "src/big.ts": `${body}export const r = eval(input)\n` })
+    const first = await code(h)
+    expect(first.verdict).toBe("ASK")
+    expect(ids(first)).toContain("code/unsafe-exec")
+
+    h.commit({ "src/big.ts": body })
+    const second = await code(h)
+    expect(ids(second)).not.toContain("code/unsafe-exec")
+    expect(ids(second)).not.toContain("common/resubmission-loop")
+  })
+
+  it("前回の指摘が残ったままの似た再提出には ask を出す", async () => {
+    const h = harness()
+    benignPanel(h.provider, "code")
+    h.commit({ "src/big.ts": `${body}export const r = eval(input)\n` })
+    await code(h)
+    const again = await code(h)
+    expect(ids(again)).toContain("common/resubmission-loop")
+  })
+})
+
+describe("記録と応答", () => {
+  it("submission.txt・所見・応答で秘密情報を伏せる(所見 G1・H1)", async () => {
+    const h = harness()
+    const r = await decision(h, `鍵 ${GHP_TOKEN} を設定ファイルに書く`)
+    const submission = fs.readFileSync(
+      path.join(r.casePath, "submission.txt"),
+      "utf-8"
+    )
+    expect(submission).toContain("ghp_")
+    expect(submission).not.toContain(GHP_TOKEN)
+    expect(JSON.stringify(r)).not.toContain(GHP_TOKEN)
+    expect(
+      fs.readFileSync(path.join(r.casePath, "verdict.json"), "utf-8")
+    ).not.toContain(GHP_TOKEN)
+  })
+
+  it("応答と verdict.json の policy に package.json 由来の buildVersion を載せる(所見 J2)", async () => {
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    const r = await decision(h, "方針")
+    expect(r.policy).toMatchObject({ version: 2, buildVersion: BUILD_VERSION })
+    expect(r.policy.configSource).toBe(
+      `cwd:${path.join(h.repo, ".codiel", "config.json")}`
+    )
+    expect(readVerdict(r).policy).toEqual({
+      configHash: r.policy.configHash,
+      configSource: r.policy.configSource,
+      version: 2,
+      buildVersion: BUILD_VERSION
+    })
+    expect(r).toMatchObject({ phase: "intent", kind: "decision", attempt: 1 })
+    expect((await decision(h, "方針")).attempt).toBe(2)
+  })
+
+  it("応答の所見は severity の重い順で 50 件までにする。切った件数は reasons に書く(所見 I3)", async () => {
+    const h = harness()
+    benignPanel(h.provider, "code")
+    const files: Record<string, string> = {}
+    for (let i = 0; i < 60; i++) {
+      files[`src/m${i}.ts`] = lines(1, () => "export const r = eval(input)")
+    }
+    h.commit(files)
+    const r = await code(h)
+    expect(r.findings).toHaveLength(MAX_RESPONSE_FINDINGS)
+    expect(r.reasons.some((x) => x.startsWith("findings-cap:"))).toBe(true)
+    expect(readVerdict(r).findings.length).toBeGreaterThan(
+      MAX_RESPONSE_FINDINGS
+    )
+    const rank = { stop: 0, ask: 1, info: 2 }
+    const order = r.findings.map((f) => rank[f.severity])
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+  })
+
+  it("失敗に終わった判例に似た評価には precedent/failure-match(info)を出す", async () => {
+    const h = harness()
+    benignPanel(h.provider, "decision")
+    h.provider.set("adversarial", {
+      findings: [{ severity: "ask", confidence: 90, message: "危うい" }],
+      scores: scores("decision", 60)
+    })
+    const first = await decision(h, "本番のデータベースを直接書き換える方針")
+    expect(
+      handleRecordOutcome(
+        {
+          evaluationId: first.evaluationId,
+          outcome: "rejected",
+          ruling: "revise"
+        },
+        h.deps
+      )
+    ).toMatchObject({ recorded: true })
+
+    const again = await h.evaluate({
+      tool: "evaluate_decision",
+      runId: "run-2",
+      phase: "intent",
+      objective: "方針を決める",
+      decision: "本番のデータベースを直接書き換える方針"
+    })
+    const match = again.findings.find(
+      (f) => f.ruleId === "precedent/failure-match"
+    )
+    expect(match?.severity).toBe("info")
+    expect(match?.message).toContain(
+      `prec-${first.evaluationId.slice(0, 8)}-revise-rejected`
+    )
   })
 })
