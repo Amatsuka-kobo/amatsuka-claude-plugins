@@ -57,6 +57,15 @@ describe("extractLines: 拡張子ごとの抜き出し", () => {
     ])
   })
 
+  test("Markdown の > で始まる行(引用)を抜き出さない", () => {
+    const text =
+      "本文です。\n> 引用です。\n   > 字下げした引用です。\n比較に > を使う行です。"
+    expect(lines("a.md", text)).toEqual([
+      { line: 1, text: "本文です。" },
+      { line: 4, text: "比較に > を使う行です。" }
+    ])
+  })
+
   test("ひらがなもカタカナも無い行を除く", () => {
     expect(
       lines("a.md", "漢字文字列\nEnglish only\nカタカナ\nひらがな")
@@ -177,11 +186,23 @@ describe("extractBlocks: 段落の組み方", () => {
       ["list", "一つ目の項目です折り返した続きです。"],
       ["list", "二つ目の項目です"],
       ["table", "| 表の | 行です |"],
-      ["prose", "表の後の段落です。"],
-      ["prose", "引用の段落です。"]
+      ["prose", "表の後の段落です。"]
     ])
     expect(lineOfSub(got[1] as Block, "途中で折り")).toEqual([2, 2, 2, 3, 3])
     expect(lineOfSub(got[3] as Block, "です折")).toEqual([7, 7, 8])
+  })
+
+  test("Markdown の > で始まる行は段落に入れず、前後の段落を区切る", () => {
+    const text = [
+      "前の段落です。",
+      "> 引用の一行目です。",
+      "  >> 入れ子の引用です。",
+      "後の段落です。"
+    ].join("\n")
+    expect(blocks("a.md", text).map((b) => b.text)).toEqual([
+      "前の段落です。",
+      "後の段落です。"
+    ])
   })
 
   test("インラインコードと URL を名詞として解析される 1 字に置き換える", () => {

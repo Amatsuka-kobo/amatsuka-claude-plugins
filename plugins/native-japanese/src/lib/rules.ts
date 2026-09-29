@@ -55,7 +55,9 @@ const TRANSLATION: Rule[] = [
 // 語がカタカナか漢字で始まるとき、複合語の一部(承認ポイントは)に当たらないようにする
 const KATAKANA_OR_KANJI = "[\\u30A0-\\u30FF\\p{sc=Han}]"
 
-function wordPattern(word: string): RegExp {
+// 先頭と末尾の「〜」は落とす。任意の語句に一致させると、一致が「」の外まで広がるためである
+function wordPattern(entry: string): RegExp {
+  const word = entry.replace(/^〜+|〜+$/g, "")
   const body = word
     .split("〜")
     .map((part) => part.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"))
