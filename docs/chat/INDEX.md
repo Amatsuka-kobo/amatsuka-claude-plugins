@@ -132,4 +132,5 @@
 - `2026/0926/phyllis998/1618-japanese-writing-unified-skill.md` | 2026-09-26 | phyllis998 | 訳語セクションを翻訳調の言い換えへ統合し、語の表を追加
 - `2026/0926/phyllis998/2224-agent-definition-role-validation.md` | 2026-09-26 | phyllis998 | エージェント定義の役割調整と検証、merge/keep 機構の問題発見
 - `docs/chat/2026/0927/phyllis998/basic-design-output-location.md` | 2026-09-27 | phyllis998 | basic-designプラグインの出力ファイル配置を調査
-- `2026/0928/phyllis998/native-japanese-guideline-reinforcement.md` | 2026-09-28 | phyllis998 | native-japanese 強化の判断実施と対応進捗報告
+- `2026/0928/phyllis998/native-japanese-guideline-reinforcement.md` | 2026-09-28 | phyllis998 | native-japanese の強化設計と実装計画、引継ぎまで完了
+- `2026/0929/phyllis998/0825-native-japanese-enforcement-implementation.md` | 2026-09-29 | phyllis998 | T15〜T20 完了、PostToolUse hook の差し戻し確認
