@@ -51,7 +51,7 @@ import {
 } from "../rules/common/resubmissionLoop.js"
 import { maskSecrets, secretsRule } from "../rules/common/secrets.js"
 import { ruleParam } from "../rules/params.js"
-import { NO_CHANGE_ID, runRules } from "../rules/registry.js"
+import { comparisonContent, NO_CHANGE_ID, runRules } from "../rules/registry.js"
 import { collectDecisionSubject } from "../subject/body.js"
 import { collectCodeSubject } from "../subject/code.js"
 import { collectFilesSubject } from "../subject/files.js"
@@ -382,11 +382,13 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
     ...runRules(artifact, ruleCtx),
     ...testResultsFindings(artifact, ruleCtx)
   ]
-  // D5: 今回のほかの所見を渡して、修正ありの相手を比較から外す
+  // D5: 今回のほかの所見を渡して、修正ありの相手を比較から外す。
+  // 比べる本文は submission-digest.json と同じく生成物とレポートを外したもの(§6.4.2)
   const others = layered.filter((f) => f.ruleId !== RESUBMISSION_ID)
+  const compared = comparisonContent(artifact, ruleCtx)
   let ruleFindings = [
     ...others,
-    ...resubmissionFindings(artifact, ruleCtx, others)
+    ...resubmissionFindings({ ...artifact, content: compared }, ruleCtx, others)
   ]
 
   // 手順 6: Jev の文脈判定
@@ -400,7 +402,8 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
         store,
         config,
         classOf,
-        priorAttempts
+        priorAttempts,
+        compared
       }),
       {
         settings: config.contextJudge,
@@ -660,6 +663,8 @@ function contextInput(
     config: RaguelConfig
     classOf: (p: string) => PathClass
     priorAttempts: RuleContext["priorAttempts"]
+    /** 再提出の比較に使う本文(comparisonContent) */
+    compared: string
   }
 ) {
   // 生成物とレポートは Jev に送らない
@@ -690,7 +695,7 @@ function contextInput(
     })
   })
   const resubmissionTargets = findAddressedButSimilar(
-    artifact.content,
+    env.compared,
     env.priorAttempts,
     others,
     ruleParam<number>(env.config, RESUBMISSION_ID, "similarityThreshold")
@@ -1023,7 +1028,13 @@ function record(
       `# meta(model: ${meta.model})\n\n${meta.rationale}\n\n\`\`\`json\n${JSON.stringify(meta.scores, null, 2)}\n\`\`\``
     )
   }
-  store.writeSubmissionDigest(dir, computeDigest(artifact.content))
+  // 再提出の比較と同じ本文から作る(§6.4.2)。submission.txt は元の本文のまま
+  const compared = comparisonContent(artifact, {
+    config: loaded.config,
+    testsDir: loaded.testsDir,
+    priorAttempts: []
+  })
+  store.writeSubmissionDigest(dir, computeDigest(compared))
 
   const policy = policyOf(
     loaded.config,

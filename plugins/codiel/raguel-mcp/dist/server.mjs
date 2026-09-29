@@ -42940,10 +42940,7 @@ var RULE_LAYER_FINDING_IDS = [
 ];
 var MAX_RULE_FINDINGS = 500;
 var MAX_AGGREGATED_EXCERPTS = 3;
-var WHOLE_CONTENT_RULE_IDS = /* @__PURE__ */ new Set([
-  secretsRule.id,
-  resubmissionLoopRule.id
-]);
+var WHOLE_CONTENT_RULE_IDS = /* @__PURE__ */ new Set([secretsRule.id]);
 function appliesToKind(rule, kind) {
   return rule.appliesTo === "all" || rule.appliesTo.includes(kind);
 }
@@ -42985,6 +42982,10 @@ function withoutExcluded(artifact, parsed, ctx) {
     },
     lineMap
   };
+}
+function comparisonContent(artifact, ctx) {
+  if (artifact.kind !== "code") return artifact.content;
+  return withoutExcluded(artifact, parseDiff(artifact.content), ctx).artifact.content;
 }
 function diffFindings(parsed, ctx) {
   const findings = [];
@@ -43065,6 +43066,9 @@ function runRules(artifact, ctx) {
     try {
       if (WHOLE_CONTENT_RULE_IDS.has(rule.id)) {
         findings.push(...rule.check(artifact, ctx));
+      } else if (rule.id === resubmissionLoopRule.id) {
+        const content = comparisonContent(artifact, ctx);
+        findings.push(...rule.check({ ...artifact, content }, ctx));
       } else {
         findings.push(
           ...rule.check(view.artifact, ctx).map((f) => remapLine(f, view.lineMap))
@@ -43607,7 +43611,10 @@ function computeWeight(artifact, ruleFindings, config2, options = {}) {
     factors["kind-base"] = 20;
     const counted = (p) => classifyPath(p, config2, testsDir) === "normal";
     const parsed = parseDiff(artifact.content);
-    const changedLines = parsed.files.length > 0 ? parsed.files.filter((f) => counted(f.path)).reduce((sum, f) => sum + f.additions.length + f.deletions.length, 0) : artifact.content.split("\n").length;
+    const changedLines = parsed.files.length > 0 ? parsed.files.filter((f) => counted(f.path)).reduce(
+      (sum, f) => sum + f.additions.length + f.deletions.length,
+      0
+    ) : artifact.content.split("\n").length;
     const linesFactor = Math.min(40, Math.floor(changedLines / 25) * 5);
     if (linesFactor > 0) factors["diff-lines"] = linesFactor;
     const paths = artifact.changedPaths.filter(counted);
@@ -43838,9 +43845,10 @@ async function judge(input2) {
     ...testResultsFindings(artifact, ruleCtx)
   ];
   const others = layered.filter((f) => f.ruleId !== RESUBMISSION_ID);
+  const compared = comparisonContent(artifact, ruleCtx);
   let ruleFindings = [
     ...others,
-    ...resubmissionFindings(artifact, ruleCtx, others)
+    ...resubmissionFindings({ ...artifact, content: compared }, ruleCtx, others)
   ];
   const extraReasons = [];
   let context;
@@ -43852,7 +43860,8 @@ async function judge(input2) {
         store,
         config: config2,
         classOf,
-        priorAttempts
+        priorAttempts,
+        compared
       }),
       {
         settings: config2.contextJudge,
@@ -44078,7 +44087,7 @@ function contextInput(artifact, parsed, findings, others, env) {
     });
   });
   const resubmissionTargets = findAddressedButSimilar(
-    artifact.content,
+    env.compared,
     env.priorAttempts,
     others,
     ruleParam(env.config, RESUBMISSION_ID, "similarityThreshold")
@@ -44320,7 +44329,12 @@ ${JSON.stringify(meta3.scores, null, 2)}
 \`\`\``
     );
   }
-  store.writeSubmissionDigest(dir, computeDigest(artifact.content));
+  const compared = comparisonContent(artifact, {
+    config: loaded.config,
+    testsDir: loaded.testsDir,
+    priorAttempts: []
+  });
+  store.writeSubmissionDigest(dir, computeDigest(compared));
   const policy = policyOf(
     loaded.config,
     loaded.configHash,

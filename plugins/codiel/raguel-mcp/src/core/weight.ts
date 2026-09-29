@@ -79,7 +79,10 @@ export function computeWeight(
       parsed.files.length > 0
         ? parsed.files
             .filter((f) => counted(f.path))
-            .reduce((sum, f) => sum + f.additions.length + f.deletions.length, 0)
+            .reduce(
+              (sum, f) => sum + f.additions.length + f.deletions.length,
+              0
+            )
         : artifact.content.split("\n").length
     const linesFactor = Math.min(40, Math.floor(changedLines / 25) * 5)
     if (linesFactor > 0) factors["diff-lines"] = linesFactor

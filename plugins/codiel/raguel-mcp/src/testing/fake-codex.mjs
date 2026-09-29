@@ -2,7 +2,7 @@
 /**
  * codexCli.ts のテスト用スタブ。実 codex CLI の代わりに RAGUEL_CODEX_BIN として spawn される。
  *
- * 起動の検査: `exec` と隔離のフラグがすべてあり、プロンプトを stdin で受ける `-` が最後にあること。
+ * 起動の検査: `exec` と隔離のフラグ(`--disable` の shell_tool・unified_exec・hooks を含む)がすべてあり、プロンプトを stdin で受ける `-` が最後にあること。
  * --output-schema のファイルが厳格な形(オブジェクトごとに全プロパティを required に並べ、
  * additionalProperties: false を持つ)であること。--output-schema と -o のファイルが cwd の中にあり、
  * cwd にスキーマのファイルのほかに何も無いこと。外れたら stderr に理由を書いて非ゼロ(2)で終わる。
@@ -39,6 +39,8 @@ const REQUIRED_SWITCHES = [
   "--skip-git-repo-check"
 ]
 const VALUE_OPTIONS = ["--sandbox", "--output-schema", "-o", "-m"]
+/** --disable に渡す機能名。1 つでも欠ければ失敗にする(設計書 §6.7.3) */
+const REQUIRED_DISABLED = ["shell_tool", "unified_exec", "hooks"]
 
 function fail(problem) {
   process.stderr.write(`fake-codex: ${problem}\n`)
@@ -81,9 +83,12 @@ function checkInvocation(argv) {
   if (argv.at(-1) !== "-") fail("最後の引数が - ではありません")
   const options = {}
   const switches = new Set()
+  const disabled = new Set()
   for (let i = 1; i < argv.length - 1; i++) {
     const arg = argv[i]
-    if (VALUE_OPTIONS.includes(arg)) {
+    if (arg === "--disable") {
+      disabled.add(argv[++i])
+    } else if (VALUE_OPTIONS.includes(arg)) {
       options[arg] = argv[++i]
     } else {
       switches.add(arg)
@@ -91,6 +96,9 @@ function checkInvocation(argv) {
   }
   for (const flag of REQUIRED_SWITCHES) {
     if (!switches.has(flag)) fail(`${flag} がありません`)
+  }
+  for (const feature of REQUIRED_DISABLED) {
+    if (!disabled.has(feature)) fail(`--disable ${feature} がありません`)
   }
   if (options["--sandbox"] !== "read-only") {
     fail(`--sandbox の値が ${JSON.stringify(options["--sandbox"])} です`)

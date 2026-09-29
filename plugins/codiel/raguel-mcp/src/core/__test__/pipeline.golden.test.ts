@@ -648,6 +648,39 @@ describe("再提出の判定のつなぎ込み(所見 D5)", () => {
     const again = await code(h)
     expect(ids(again)).toContain("common/resubmission-loop")
   })
+
+  it("生成物の行だけが違う再提出には ask を出す。ダイジェストは生成物を外した本文から作る", async () => {
+    const h = harness({
+      raguel: { rules: { "code/protected-paths": { generated: ["dist/**"] } } }
+    })
+    benignPanel(h.provider, "code")
+    const src = `${body}export const r = eval(input)\n`
+    h.commit({
+      "src/big.ts": src,
+      "dist/app.js": lines(600, (i) => `var built${i} = ${i}`)
+    })
+    const first = await code(h)
+    expect(first.verdict).toBe("ASK")
+
+    h.commit({ "dist/app.js": lines(600, (i) => `qq_${i * 7}_zz()`) })
+    const again = await code(h)
+    const resubmission = again.findings.find(
+      (f) => f.ruleId === "common/resubmission-loop"
+    )
+    expect(resubmission?.severity).toBe("ask")
+    // 生成物の中身が大きく変わっても類似度は下がらない
+    expect(resubmission?.message).toContain("類似度 1.00")
+
+    // 2 回の提出のダイジェストは一致し、submission.txt には生成物を含む元の本文が残る
+    const digestOf = (r: EvaluationResult) =>
+      fs.readFileSync(path.join(r.casePath, "submission-digest.json"), "utf-8")
+    expect(digestOf(again)).toBe(digestOf(first))
+    const submission = fs.readFileSync(
+      path.join(again.casePath, "submission.txt"),
+      "utf-8"
+    )
+    expect(submission).toContain("qq_7_zz()")
+  })
 })
 
 describe("記録と応答", () => {

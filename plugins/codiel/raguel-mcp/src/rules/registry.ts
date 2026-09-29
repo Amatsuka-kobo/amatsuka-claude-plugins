@@ -3,8 +3,9 @@
  * 設計書 §6.4.2・§6.4.3(R20・R24)。
  *
  * - ルールに渡す本文から、見出し行と、生成物と E2E のレポートのファイルを外す。
- *   ただし common/secrets と common/resubmission-loop には元の本文を渡す
- *   (秘密情報はどのパスでも探し、再提出の比較は保存したダイジェストと同じ本文で行うため)。
+ *   ただし common/secrets には元の本文を渡す(秘密情報はどのパスでも探すため)。
+ * - common/resubmission-loop には comparisonContent の本文を渡す。パイプラインは同じ本文から
+ *   submission-digest.json を書くので、比べる 2 つのダイジェストは同じ規則の本文から作られる。
  * - 所見はルールとファイルの組ごとに 1 件へ集約し、件数に上限を置く。
  */
 
@@ -86,10 +87,7 @@ export const MAX_RULE_FINDINGS = 500
 const MAX_AGGREGATED_EXCERPTS = 3
 
 /** 元の本文で検査するルール */
-const WHOLE_CONTENT_RULE_IDS = new Set([
-  secretsRule.id,
-  resubmissionLoopRule.id
-])
+const WHOLE_CONTENT_RULE_IDS = new Set([secretsRule.id])
 
 function appliesToKind(rule: Rule, kind: ArtifactKind): boolean {
   return rule.appliesTo === "all" || rule.appliesTo.includes(kind)
@@ -155,6 +153,19 @@ function withoutExcluded(
     },
     lineMap
   }
+}
+
+/**
+ * 再提出の比較と submission-digest.json のダイジェストに使う本文(設計書 §6.4.2・§6.9.3)。
+ * code は生成物と E2E のレポートの区間を外す。ほかの kind は元の本文のまま(見出し行も含める)
+ */
+export function comparisonContent(
+  artifact: Artifact,
+  ctx: RuleContext
+): string {
+  if (artifact.kind !== "code") return artifact.content
+  return withoutExcluded(artifact, parseDiff(artifact.content), ctx).artifact
+    .content
 }
 
 /** 生成物と、ルール層の手前で見つかる diff の問題の所見 */
@@ -258,6 +269,9 @@ export function runRules(artifact: Artifact, ctx: RuleContext): Finding[] {
     try {
       if (WHOLE_CONTENT_RULE_IDS.has(rule.id)) {
         findings.push(...rule.check(artifact, ctx))
+      } else if (rule.id === resubmissionLoopRule.id) {
+        const content = comparisonContent(artifact, ctx)
+        findings.push(...rule.check({ ...artifact, content }, ctx))
       } else {
         findings.push(
           ...rule

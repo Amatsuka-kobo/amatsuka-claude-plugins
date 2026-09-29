@@ -177,6 +177,17 @@ describe("fake-codex.mjs の起動の検査", () => {
     }
   })
 
+  it("--disable の shell_tool・unified_exec・hooks のどれかが欠けると非ゼロで終わる", () => {
+    for (const feature of ["shell_tool", "unified_exec", "hooks"]) {
+      const work = prepare(strict)
+      const args = buildCodexArgs(work, "")
+      args.splice(args.indexOf(feature) - 1, 2)
+      const res = runFake(args, work)
+      expect(res.status, feature).not.toBe(0)
+      expect(res.stderr, feature).toContain(`--disable ${feature}`)
+    }
+  })
+
   it("サンドボックスが read-only でなければ非ゼロで終わる", () => {
     const work = prepare(strict)
     const args = buildCodexArgs(work, "")

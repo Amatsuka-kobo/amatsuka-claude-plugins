@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
+import { computeDigest, digestSimilarity } from "../../casefile/digest.js"
 import type { Artifact, Finding } from "../../core/types.js"
 import { fileDiff } from "../code/__test__/helpers/diff.js"
 import { parseDiff } from "../code/diffParse.js"
 import {
   aggregateFindings,
   allRules,
+  comparisonContent,
   GENERATED_ONLY_ID,
   MAX_RULE_FINDINGS,
   NO_CHANGE_ID,
@@ -269,6 +271,48 @@ describe("runRules の生成物と E2E のレポート(R20・R24)", () => {
     expect(found).not.toContain("code/destructive-ops")
     expect(found).not.toContain("code/unsafe-exec")
     expect(found).not.toContain(GENERATED_ONLY_ID)
+  })
+
+  it("common/resubmission-loop は生成物の中身の違いで類似度を下げない", () => {
+    const src = fileDiff(
+      "src/a.ts",
+      Array.from({ length: 30 }, (_, i) => `export const v${i} = ${i}`)
+    )
+    const withGenerated = (make: (i: number) => string) =>
+      [
+        src,
+        fileDiff(
+          "plugins/codiel/scripts/cli.mjs",
+          Array.from({ length: 300 }, (_, i) => make(i))
+        )
+      ].join("\n")
+    const first = codeArtifact(withGenerated((i) => `var a${i} = ${i}`))
+    const second = codeArtifact(withGenerated((i) => `qq_${i * 7}_zz()`))
+    const ctx = GENERATED_CTX()
+    // 元の本文で比べると、生成物の違いで閾値を下回る
+    expect(
+      digestSimilarity(
+        computeDigest(first.content),
+        computeDigest(second.content)
+      )
+    ).toBeLessThan(0.85)
+    expect(comparisonContent(second, ctx)).toBe(comparisonContent(first, ctx))
+
+    const priorCtx = makeCtx(ctx.config, [
+      {
+        attempt: 1,
+        verdict: "ASK",
+        judgeStatus: "ok",
+        hasRuling: false,
+        askRuleIds: [],
+        digest: computeDigest(comparisonContent(first, ctx))
+      }
+    ])
+    const resubmission = runRules(second, priorCtx).find(
+      (f) => f.ruleId === "common/resubmission-loop"
+    )
+    expect(resubmission?.severity).toBe("ask")
+    expect(resubmission?.message).toContain("類似度 1.00")
   })
 
   it("testsDir の外の reports/ は外さない", () => {
