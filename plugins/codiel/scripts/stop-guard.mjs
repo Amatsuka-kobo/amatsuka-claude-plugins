@@ -1,8 +1,34 @@
 #!/usr/bin/env node
 
 // src/codiel-state.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+
+// src/hooks/lib.ts
 import fs from "node:fs";
 import path from "node:path";
+async function readStdin() {
+  let data = "";
+  for await (const chunk of process.stdin) data += chunk;
+  return JSON.parse(data);
+}
+function findProjectRoot(startDir) {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, ".codiel"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return startDir;
+    dir = parent;
+  }
+}
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
+function findMainRoot(startDir) {
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
+  return findProjectRoot(startDir);
+}
+
+// src/codiel-state.ts
 var STAGES = [
   ["intent"],
   ["discuss"],
@@ -20,27 +46,27 @@ var STAGES = [
 ];
 var PHASES = STAGES.flat();
 function readState(p) {
-  return JSON.parse(fs.readFileSync(p, "utf8"));
+  return JSON.parse(fs2.readFileSync(p, "utf8"));
 }
 function runDir(root, slug) {
-  return path.join(root, ".codiel", "runs", slug);
+  return path2.join(root, ".codiel", "runs", slug);
 }
 function tries(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
+  if (!fs2.existsSync(dir)) return [];
+  return fs2.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
   for (const n of tries(dir).reverse()) {
-    const p = path.join(dir, `try-${n}`, "state.json");
-    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+    const p = path2.join(dir, `try-${n}`, "state.json");
+    if (fs2.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
   }
   return null;
 }
 function latestTries(root) {
-  const runsRoot = path.join(root, ".codiel", "runs");
-  if (!fs.existsSync(runsRoot)) return [];
-  return fs.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
+  const runsRoot = path2.join(root, ".codiel", "runs");
+  if (!fs2.existsSync(runsRoot)) return [];
+  return fs2.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
 }
 function findActiveRun(root) {
   let best = null;
@@ -50,7 +76,7 @@ function findActiveRun(root) {
     if (st.status !== "active" && st.status !== "awaiting_human") continue;
     if (!best || st.updatedAt > best.state.updatedAt)
       best = {
-        dir: path.dirname(latest.statePath),
+        dir: path2.dirname(latest.statePath),
         statePath: latest.statePath,
         state: st
       };
@@ -59,30 +85,6 @@ function findActiveRun(root) {
 }
 function isLegacy(st) {
   return st.version !== 2 || !("test-code" in st.phases);
-}
-
-// src/hooks/lib.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
-async function readStdin() {
-  let data = "";
-  for await (const chunk of process.stdin) data += chunk;
-  return JSON.parse(data);
-}
-function findProjectRoot(startDir) {
-  let dir = startDir;
-  while (true) {
-    if (fs2.existsSync(path2.join(dir, ".codiel"))) return dir;
-    const parent = path2.dirname(dir);
-    if (parent === dir) return startDir;
-    dir = parent;
-  }
-}
-var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
-function findMainRoot(startDir) {
-  const m = CODIEL_WORKTREES_RE.exec(startDir);
-  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
-  return findProjectRoot(startDir);
 }
 
 // src/hooks/stop-guard.ts

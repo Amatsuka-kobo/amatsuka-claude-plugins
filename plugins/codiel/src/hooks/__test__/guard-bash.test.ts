@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -30,25 +31,132 @@ interface HookOutput {
   permissionDecisionReason: string
 }
 
-function hook(cwd: string, command: string): HookOutput | null {
+// env を渡すと、フックの環境変数に足す(RAGUEL_CONFIG を指すときに使う)
+function hook(
+  cwd: string,
+  command: string,
+  env: Record<string, string> = {}
+): HookOutput | null {
   const input = JSON.stringify({
     cwd,
     tool_name: "Bash",
     tool_input: { command }
   })
-  const out = runTs(HOOK, [], { input })
+  const out = runTs(HOOK, [], { input, env: { ...process.env, ...env } })
   if (out === "") return null
   return (JSON.parse(out) as { hookSpecificOutput: HookOutput })
     .hookSpecificOutput
 }
 
+// Raguel の設定。cli が RAGUEL_CONFIG でこのファイルを指す
+function raguelConfigPath(root: string): string {
+  return path.join(root, ".raguel", "config.json")
+}
+
+function casesProjectDir(root: string): string {
+  return path.join(root, ".raguel", "cases", "demo")
+}
+
 function cli(root: string, args: string[]): string {
-  return runTs(CLI, args, { cwd: root })
+  return runTs(CLI, args, {
+    cwd: root,
+    env: { ...process.env, RAGUEL_CONFIG: raguelConfigPath(root) }
+  })
+}
+
+function git(root: string, ...args: string[]): string {
+  return execFileSync(
+    "git",
+    ["-c", "user.name=t", "-c", "user.email=t@example.test", ...args],
+    { cwd: root, encoding: "utf8" }
+  ).trim()
+}
+
+// git のリポジトリ(空のコミット 1 つ)に Raguel の記録の置き場を置く。
+// code 系フェーズの start-phase が HEAD を読み、pass-gate と mark-ask が Raguel の記録を照らすため
+function newProject(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "guard-bash-"))
+  git(root, "init", "-q")
+  git(root, "commit", "-q", "--allow-empty", "-m", "init")
+  fs.mkdirSync(path.join(root, ".raguel"))
+  fs.writeFileSync(
+    raguelConfigPath(root),
+    JSON.stringify({
+      storage: { casesDir: path.join(root, ".raguel"), projectId: "demo" }
+    })
+  )
+  return root
+}
+
+// Raguel が書く形で、評価の索引の行と verdict.json を置き、evaluationId を返す
+function recordEvaluation(
+  root: string,
+  slug: string,
+  phase: string,
+  verdict: string
+): string {
+  const st = JSON.parse(
+    fs.readFileSync(
+      path.join(root, ".codiel/runs", slug, "try-1/state.json"),
+      "utf8"
+    )
+  )
+  const evaluationId = `e-${slug}-${phase}`
+  const head = git(root, "rev-parse", "HEAD")
+  const casePath = path.join(
+    casesProjectDir(root),
+    st.raguelRunId,
+    phase,
+    "attempt-01"
+  )
+  fs.mkdirSync(casePath, { recursive: true })
+  const startHead = st.phases[phase]?.startHead
+  const row = {
+    schemaVersion: 2,
+    evaluationId,
+    runId: st.raguelRunId,
+    phase,
+    kind: startHead ? "code" : "design",
+    attempt: 1,
+    casePath,
+    verdict,
+    judgeStatus: "ok",
+    head,
+    at: new Date().toISOString()
+  }
+  const subject = {
+    repoPath: root,
+    head,
+    ...(startHead ? { base: startHead } : {}),
+    files: []
+  }
+  fs.writeFileSync(
+    path.join(casePath, "verdict.json"),
+    JSON.stringify({ ...row, subject })
+  )
+  fs.appendFileSync(
+    path.join(casesProjectDir(root), "evaluations.jsonl"),
+    `${JSON.stringify(row)}\n`
+  )
+  return evaluationId
+}
+
+function passGateOf(root: string, phase: string, slug = SLUG): void {
+  cli(root, [
+    "pass-gate",
+    phase,
+    "--slug",
+    slug,
+    "--evaluation-id",
+    recordEvaluation(root, slug, phase, "PROCEED"),
+    "--verdict",
+    "PROCEED"
+  ])
 }
 
 // run を作成し、intent フェーズを in_progress にしたところで止める(phase=intent)。
 function setupRun(slug = SLUG): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "guard-bash-"))
+  const root = newProject()
   cli(root, ["init", "--slug", slug, ...INIT_FLAGS])
   cli(root, ["start-phase", "intent", "--slug", slug])
   return root
@@ -57,23 +165,12 @@ function setupRun(slug = SLUG): string {
 // intent を pass させ、implement フェーズを in_progress にしたところで止める
 // (phase=implement, test-loop は未着手 = passed ではない)。
 function setupRunAtImplement(root: string, slug = SLUG): void {
-  const passGate = (phase: string) =>
-    cli(root, [
-      "pass-gate",
-      phase,
-      "--slug",
-      slug,
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
-  passGate("intent")
+  passGateOf(root, "intent", slug)
   cli(root, ["start-phase", "discuss", "--slug", slug])
   cli(root, ["complete-phase", "discuss", "--slug", slug])
   for (const ph of ["design", "test-spec", "dev-plan", "test-code"]) {
     cli(root, ["start-phase", ph, "--slug", slug])
-    passGate(ph)
+    passGateOf(root, ph, slug)
   }
   cli(root, ["start-phase", "implement", "--slug", slug])
 }
@@ -83,22 +180,11 @@ function setupRunAtImplement(root: string, slug = SLUG): void {
 function setupRunAtPr(slug = SLUG): string {
   const root = setupRun(slug)
   setupRunAtImplement(root, slug)
-  const passGate = (phase: string) =>
-    cli(root, [
-      "pass-gate",
-      phase,
-      "--slug",
-      slug,
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
-  passGate("implement")
+  passGateOf(root, "implement", slug)
   cli(root, ["start-phase", "test-loop", "--slug", slug])
-  passGate("test-loop")
+  passGateOf(root, "test-loop", slug)
   cli(root, ["start-phase", "intent-sync", "--slug", slug])
-  passGate("intent-sync")
+  passGateOf(root, "intent-sync", slug)
   cli(root, ["start-phase", "pr", "--slug", slug])
   return root
 }
@@ -109,20 +195,9 @@ function setupRunAtPr(slug = SLUG): string {
 function setupRunAtIntentSync(slug = SLUG): string {
   const root = setupRun(slug)
   setupRunAtImplement(root, slug)
-  const passGate = (phase: string) =>
-    cli(root, [
-      "pass-gate",
-      phase,
-      "--slug",
-      slug,
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
-  passGate("implement")
+  passGateOf(root, "implement", slug)
   cli(root, ["start-phase", "test-loop", "--slug", slug])
-  passGate("test-loop")
+  passGateOf(root, "test-loop", slug)
   cli(root, ["start-phase", "intent-sync", "--slug", slug])
   return root
 }
@@ -279,7 +354,14 @@ test("git -C <dir> push origin main はバイパスされず deny", () => {
 
 test("awaiting_human 中(phase=intent)の gh pr create は deny(ゲートスキップ防止)", () => {
   const root = setupRun()
-  cli(root, ["mark-ask", "intent", "--slug", SLUG, "--evaluation-id", "e"])
+  cli(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    recordEvaluation(root, SLUG, "intent", "ASK")
+  ])
   const r = hook(root, "gh pr create")
   expect(r?.permissionDecision).toBe("deny")
 })
@@ -1413,4 +1495,128 @@ test('フォールバックした echo "url=$(gh …)" のように引用符が�
     [unclosedQuote, 'echo "url=$(gh pr comment 1 --body nomarker)"'].join("\n")
   )
   expect(r?.permissionDecision).toBe("deny")
+})
+
+// --- Raguel の設定と記録の保護(Raguel 設計書 §6.13.4。所見 G8・R12) ---
+
+// RAGUEL_CONFIG で Raguel の設定を <root>/raguel.json に置き、casesDir を <root>/cases-store にする。
+// 守る 3 種のパス(cwd = root からの相対)と、フックに渡す環境変数を返す。
+function raguelEnv(root: string): {
+  env: Record<string, string>
+  targets: string[]
+} {
+  const file = path.join(root, "raguel.json")
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      storage: { casesDir: path.join(root, "cases-store"), projectId: "demo" }
+    })
+  )
+  return {
+    env: { RAGUEL_CONFIG: file },
+    targets: [
+      ".codiel/config.json",
+      "raguel.json",
+      "cases-store/cases/demo/evaluations.jsonl"
+    ]
+  }
+}
+
+// 書き込みの 8 つの形(リダイレクトは 3 通り)
+const WRITE_FORMS = [
+  (p: string) => `echo x > ${p}`,
+  (p: string) => `echo x >> ${p}`,
+  (p: string) => `echo x >${p}`,
+  (p: string) => `echo x | tee -a ${p}`,
+  (p: string) => `sed -i 's/a/b/' ${p}`,
+  (p: string) => `cp /tmp/x ${p}`,
+  (p: string) => `mv /tmp/x ${p}`,
+  (p: string) => `rm -f ${p}`,
+  (p: string) => `dd if=/tmp/x of=${p}`,
+  (p: string) => `install -m 644 /tmp/x ${p}`
+]
+
+function markAsk(root: string): void {
+  cli(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    recordEvaluation(root, SLUG, "intent", "ASK")
+  ])
+}
+
+test("R12: active と awaiting_human の run で、3 種のパスへの書き込みの各形は deny になる", () => {
+  const active = setupRun()
+  const waiting = setupRun()
+  markAsk(waiting)
+  for (const root of [active, waiting]) {
+    const { env, targets } = raguelEnv(root)
+    for (const p of targets)
+      for (const form of WRITE_FORMS) {
+        const r = hook(root, form(p), env)
+        expect(r?.permissionDecision, form(p)).toBe("deny")
+        expect(r?.permissionDecisionReason).toMatch(/Raguel の設定と記録/)
+      }
+  }
+})
+
+test("R12: run が無ければ、3 種のパスへの書き込みの各形は通す", () => {
+  const root = newProject()
+  const { env, targets } = raguelEnv(root)
+  for (const p of targets)
+    for (const form of WRITE_FORMS) expect(hook(root, form(p), env)).toBe(null)
+})
+
+test("G8: run の間に config.json の raguel を書き換えて common/secrets を無効化する形は deny", () => {
+  const root = setupRun()
+  markAsk(root)
+  for (const cmd of [
+    `jq '.raguel.rules.disabled += ["common/secrets"]' .codiel/config.json > /tmp/c.json && mv /tmp/c.json .codiel/config.json`,
+    `sed -i 's/"common\\/secrets"//' .codiel/config.json`,
+    "cp /tmp/loose/config.json .codiel",
+    "rm -rf .codiel"
+  ])
+    expect(hook(root, cmd)?.permissionDecision, cmd).toBe("deny")
+})
+
+test("守るパスを含むディレクトリの rm・mv と、~・$HOME で書いたパスも deny", () => {
+  const root = setupRun()
+  const { env } = raguelEnv(root)
+  const withHome = { ...env, HOME: root }
+  for (const cmd of [
+    "rm -rf cases-store",
+    "mv cases-store /tmp/moved",
+    "cp /tmp/loose/raguel.json .",
+    "rm -rf ~/cases-store",
+    "echo x > $HOME/cases-store/a",
+    "echo x > \\${HOME}/raguel.json"
+  ])
+    expect(hook(root, cmd, withHome)?.permissionDecision, cmd).toBe("deny")
+})
+
+test("閉じていないクォートが残っても、Raguel の設定への書き込みは splitLoosely の語で deny", () => {
+  const root = setupRun()
+  const unclosedQuote = ["python3<<'EOF'", "it's done", "EOF"].join("\n")
+  const r = hook(
+    root,
+    [unclosedQuote, "echo x > .codiel/config.json"].join("\n")
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("run の間でも、守るパスを読むだけのコマンドと別のパスへの書き込みは通す", () => {
+  const root = setupRun()
+  const { env } = raguelEnv(root)
+  for (const cmd of [
+    "cat .codiel/config.json",
+    "grep x cases-store/cases/demo/evaluations.jsonl > out.txt",
+    "tee out.log < .codiel/config.json",
+    "echo x > cases-store2/a",
+    "mv a.txt .",
+    "cp .codiel/runs/demo/try-1/issue.md /tmp/issue.md",
+    "rm -rf build"
+  ])
+    expect(hook(root, cmd, env), cmd).toBe(null)
 })

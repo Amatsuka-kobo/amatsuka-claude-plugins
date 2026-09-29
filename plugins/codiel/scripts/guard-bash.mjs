@@ -1,73 +1,17 @@
 #!/usr/bin/env node
 
 // src/hooks/guard-bash.ts
+import fs4 from "node:fs";
+import os2 from "node:os";
+import path4 from "node:path";
+
+// src/codiel-state.ts
 import fs3 from "node:fs";
 import path3 from "node:path";
 
-// src/codiel-state.ts
+// src/hooks/lib.ts
 import fs from "node:fs";
 import path from "node:path";
-var STAGES = [
-  ["intent"],
-  ["discuss"],
-  ["design"],
-  ["test-spec", "dev-plan"],
-  ["test-code"],
-  ["implement"],
-  ["test-loop"],
-  ["intent-sync"],
-  ["pr"],
-  ["review"],
-  ["fix-loop"],
-  ["triage"],
-  ["finalize"]
-];
-var PHASES = STAGES.flat();
-function readState(p) {
-  return JSON.parse(fs.readFileSync(p, "utf8"));
-}
-function runDir(root, slug) {
-  return path.join(root, ".codiel", "runs", slug);
-}
-function tries(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
-}
-function latestTry(root, slug) {
-  const dir = runDir(root, slug);
-  for (const n of tries(dir).reverse()) {
-    const p = path.join(dir, `try-${n}`, "state.json");
-    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
-  }
-  return null;
-}
-function latestTries(root) {
-  const runsRoot = path.join(root, ".codiel", "runs");
-  if (!fs.existsSync(runsRoot)) return [];
-  return fs.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
-}
-function findActiveRun(root) {
-  let best = null;
-  for (const latest of latestTries(root)) {
-    const st = latest.state;
-    if (isLegacy(st)) continue;
-    if (st.status !== "active" && st.status !== "awaiting_human") continue;
-    if (!best || st.updatedAt > best.state.updatedAt)
-      best = {
-        dir: path.dirname(latest.statePath),
-        statePath: latest.statePath,
-        state: st
-      };
-  }
-  return best;
-}
-function isLegacy(st) {
-  return st.version !== 2 || !("test-code" in st.phases);
-}
-
-// src/hooks/lib.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
 async function readStdin() {
   let data = "";
   for await (const chunk of process.stdin) data += chunk;
@@ -92,8 +36,8 @@ function pass() {
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (true) {
-    if (fs2.existsSync(path2.join(dir, ".codiel"))) return dir;
-    const parent = path2.dirname(dir);
+    if (fs.existsSync(path.join(dir, ".codiel"))) return dir;
+    const parent = path.dirname(dir);
     if (parent === dir) return startDir;
     dir = parent;
   }
@@ -103,6 +47,162 @@ function findMainRoot(startDir) {
   const m = CODIEL_WORKTREES_RE.exec(startDir);
   if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
   return findProjectRoot(startDir);
+}
+
+// src/raguel-records.ts
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs2 from "node:fs";
+import os from "node:os";
+import path2 from "node:path";
+var DEFAULT_CASES_DIR = "~/.raguel";
+function isObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readJsonObject(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs2.readFileSync(file, "utf8"));
+  } catch {
+    throw new Error(`Raguel \u306E\u8A2D\u5B9A ${file} \u3092 JSON \u3068\u3057\u3066\u8AAD\u3081\u307E\u305B\u3093`);
+  }
+  if (!isObject(parsed))
+    throw new Error(
+      `Raguel \u306E\u8A2D\u5B9A ${file} \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`
+    );
+  return parsed;
+}
+function readStorage(mainRoot) {
+  let raguel;
+  const env = process.env.RAGUEL_CONFIG;
+  if (env) raguel = readJsonObject(env);
+  else {
+    const file = path2.join(mainRoot, ".codiel", "config.json");
+    if (!fs2.existsSync(file)) return {};
+    raguel = readJsonObject(file).raguel;
+    if (raguel === void 0) return {};
+    if (!isObject(raguel))
+      throw new Error(`${file} \u306E raguel \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+  }
+  const storage = raguel.storage;
+  if (storage === void 0) return {};
+  if (!isObject(storage))
+    throw new Error("raguel.storage \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+  const text = (key) => {
+    const v = storage[key];
+    if (v === void 0) return void 0;
+    if (typeof v !== "string")
+      throw new Error(`raguel.storage.${key} \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+    return v;
+  };
+  return { casesDir: text("casesDir"), projectId: text("projectId") };
+}
+function resolveCasesDir(mainRoot, configured) {
+  const dir = configured || DEFAULT_CASES_DIR;
+  if (dir === "~") return path2.resolve(os.homedir());
+  if (dir.startsWith("~/") || dir.startsWith("~\\"))
+    return path2.resolve(os.homedir(), dir.slice(2));
+  return path2.resolve(mainRoot, dir);
+}
+function realpathOrResolve(p) {
+  try {
+    return fs2.realpathSync(p);
+  } catch {
+    return path2.resolve(p);
+  }
+}
+function gitCommonDir(dir) {
+  try {
+    const out = execFileSync(
+      "git",
+      ["-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim();
+    return out ? realpathOrResolve(out) : null;
+  } catch {
+    return null;
+  }
+}
+function resolveProjectId(projectRoot, storageProjectId) {
+  if (storageProjectId) return storageProjectId;
+  const common = gitCommonDir(projectRoot);
+  const base = common ?? realpathOrResolve(projectRoot);
+  let name;
+  if (common === null) name = path2.basename(base);
+  else if (path2.basename(base) === ".git")
+    name = path2.basename(path2.dirname(base));
+  else name = path2.basename(base).replace(/\.git$/, "");
+  const hash = createHash("sha256").update(base).digest("hex").slice(0, 12);
+  return `${name}-${hash}`;
+}
+function resolveRaguelStore(mainRoot) {
+  const storage = readStorage(mainRoot);
+  const casesDir = resolveCasesDir(mainRoot, storage.casesDir);
+  const projectId = resolveProjectId(mainRoot, storage.projectId);
+  return {
+    casesDir,
+    projectId,
+    projectDir: path2.join(casesDir, "cases", projectId)
+  };
+}
+
+// src/codiel-state.ts
+var STAGES = [
+  ["intent"],
+  ["discuss"],
+  ["design"],
+  ["test-spec", "dev-plan"],
+  ["test-code"],
+  ["implement"],
+  ["test-loop"],
+  ["intent-sync"],
+  ["pr"],
+  ["review"],
+  ["fix-loop"],
+  ["triage"],
+  ["finalize"]
+];
+var PHASES = STAGES.flat();
+function readState(p) {
+  return JSON.parse(fs3.readFileSync(p, "utf8"));
+}
+function runDir(root, slug) {
+  return path3.join(root, ".codiel", "runs", slug);
+}
+function tries(dir) {
+  if (!fs3.existsSync(dir)) return [];
+  return fs3.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
+}
+function latestTry(root, slug) {
+  const dir = runDir(root, slug);
+  for (const n of tries(dir).reverse()) {
+    const p = path3.join(dir, `try-${n}`, "state.json");
+    if (fs3.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
+}
+function latestTries(root) {
+  const runsRoot = path3.join(root, ".codiel", "runs");
+  if (!fs3.existsSync(runsRoot)) return [];
+  return fs3.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
+}
+function findActiveRun(root) {
+  let best = null;
+  for (const latest of latestTries(root)) {
+    const st = latest.state;
+    if (isLegacy(st)) continue;
+    if (st.status !== "active" && st.status !== "awaiting_human") continue;
+    if (!best || st.updatedAt > best.state.updatedAt)
+      best = {
+        dir: path3.dirname(latest.statePath),
+        statePath: latest.statePath,
+        state: st
+      };
+  }
+  return best;
+}
+function isLegacy(st) {
+  return st.version !== 2 || !("test-code" in st.phases);
 }
 
 // src/hooks/guard-bash.ts
@@ -313,7 +413,7 @@ function parseCommands(text) {
   parseList();
   if (unclosed) return void 0;
   for (const words of [...commands]) {
-    const shellAt = words.findIndex((w) => SHELLS.includes(path3.basename(w)));
+    const shellAt = words.findIndex((w) => SHELLS.includes(path4.basename(w)));
     for (let k = 1; k < words.length; k++) {
       const prev = words[k - 1];
       if (prev !== "eval" && !(shellAt !== -1 && shellAt < k - 1 && /^-\w*c$/.test(prev)))
@@ -412,7 +512,7 @@ function readBodyFile(flag, file, cwd) {
       `${flag} \u306B - (\u6A19\u6E96\u5165\u529B)\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u30D1\u30B9\u3067\u6E21\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
     );
   try {
-    return fs3.readFileSync(path3.resolve(cwd, file), "utf8");
+    return fs4.readFileSync(path4.resolve(cwd, file), "utf8");
   } catch {
     return emit("deny", `${flag} \u306E\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093: ${file}`);
   }
@@ -512,7 +612,7 @@ function checkGeneratedMarker(invocations, cmd, cwd) {
 }
 var STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/;
 var isStateJson = (word) => word !== void 0 && STATE_JSON_RE.test(word);
-function redirectsToStateJson(commands, ci) {
+function redirectsTo(commands, ci, hit) {
   const words = commands[ci];
   for (let wi = 0; wi < words.length; wi++) {
     const w = words[wi];
@@ -520,13 +620,13 @@ function redirectsToStateJson(commands, ci) {
       const from = p + (w[p + 1] === ">" ? 2 : 1);
       const dest = w.slice(from).split(/[<>]/)[0];
       const target = dest !== "" ? dest : wi + 1 < words.length ? words[wi + 1] : commands[ci + 1]?.[0];
-      if (isStateJson(target)) return true;
+      if (hit(target)) return true;
       p = w.indexOf(">", from);
     }
   }
   return false;
 }
-function teeOrSedWritesStateJson(words) {
+function teeOrSedWrites(words, hit) {
   const args = [];
   for (let k = 0; k < words.length; k++) {
     const op = words[k].search(/[<>]/);
@@ -535,17 +635,76 @@ function teeOrSedWritesStateJson(words) {
     else if (/^[<>]+$/.test(words[k])) k++;
   }
   const after = (name) => {
-    const at = args.findIndex((a) => path3.basename(a) === name);
+    const at = args.findIndex((a) => path4.basename(a) === name);
     return at === -1 ? [] : args.slice(at + 1);
   };
   const sedArgs = after("sed");
-  return after("tee").some(isStateJson) || sedArgs.some((a) => /^(-[A-Za-z]*i|--in-place)/.test(a)) && sedArgs.some(isStateJson);
+  return after("tee").some(hit) || sedArgs.some((a) => /^(-[A-Za-z]*i|--in-place)/.test(a)) && sedArgs.some(hit);
 }
 function writesStateJson(cmd) {
   const commands = parseCommands(cmd) ?? splitLoosely(cmd);
   return commands.some(
-    (words, ci) => redirectsToStateJson(commands, ci) || teeOrSedWritesStateJson(words)
+    (words, ci) => redirectsTo(commands, ci, isStateJson) || teeOrSedWrites(words, isStateJson)
   );
+}
+var FILE_COMMANDS = ["cp", "mv", "rm", "dd", "install"];
+var CODIEL_CONFIG_RE = /[/\\]\.codiel[/\\]config\.json$/i;
+function isUnder(p, dir) {
+  const rel = path4.relative(dir, p);
+  return rel === "" || rel !== ".." && !rel.startsWith(`..${path4.sep}`) && !path4.isAbsolute(rel);
+}
+function raguelTargets(root) {
+  const files = [path4.join(root, ".codiel", "config.json")];
+  const env = process.env.RAGUEL_CONFIG;
+  if (env) files.push(path4.resolve(env));
+  let casesDir = null;
+  try {
+    casesDir = resolveRaguelStore(root).casesDir;
+  } catch {
+  }
+  return { files, casesDir };
+}
+function wordPath(word, cwd) {
+  const w = word.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os2.homedir());
+  return path4.resolve(cwd, w);
+}
+function writesRaguelFiles(cmd, cwd, t) {
+  const isTarget = (abs) => CODIEL_CONFIG_RE.test(abs) || t.files.includes(abs) || t.casesDir !== null && isUnder(abs, t.casesDir);
+  const contains = (abs) => t.files.some((f) => isUnder(f, abs)) || t.casesDir !== null && isUnder(t.casesDir, abs);
+  const isParent = (abs, args) => t.files.some(
+    (f) => path4.dirname(f) === abs && args.some((a) => path4.basename(a) === path4.basename(f))
+  );
+  let found;
+  const hit = (word) => {
+    if (word === void 0 || word === "") return false;
+    if (!isTarget(wordPath(word, cwd))) return false;
+    found = word;
+    return true;
+  };
+  const commands = parseCommands(cmd) ?? splitLoosely(cmd);
+  for (let ci = 0; ci < commands.length; ci++) {
+    const words = commands[ci];
+    if (redirectsTo(commands, ci, hit) || teeOrSedWrites(words, hit))
+      return found;
+    const at = words.findIndex((w) => FILE_COMMANDS.includes(path4.basename(w)));
+    if (at === -1) continue;
+    const name = path4.basename(words[at]);
+    const args = [];
+    for (const a of words.slice(at + 1)) {
+      if (name === "dd") {
+        if (a.startsWith("of=")) args.push(a.slice(3));
+      } else if (a.startsWith("--target-directory="))
+        args.push(a.slice("--target-directory=".length));
+      else if (!a.startsWith("-") && a !== "") args.push(a);
+    }
+    for (const [k, a] of args.entries()) {
+      const abs = wordPath(a, cwd);
+      const moved = name === "rm" || name === "mv" && k < args.length - 1;
+      if (isTarget(abs) || moved && contains(abs) || name !== "rm" && name !== "dd" && isParent(abs, args))
+        return a;
+    }
+  }
+  return void 0;
 }
 try {
   const input = await readStdin();
@@ -582,6 +741,12 @@ try {
   const root = findMainRoot(cwd);
   const run = findActiveRun(root);
   if (run) {
+    const raguelWord = writesRaguelFiles(cmd, cwd, raguelTargets(root));
+    if (raguelWord !== void 0)
+      emit(
+        "deny",
+        `run \u306E\u9593(active\u30FBawaiting_human)\u306F Raguel \u306E\u8A2D\u5B9A\u3068\u8A18\u9332(${raguelWord})\u3092\u30B7\u30A7\u30EB\u3067\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u305B\u3093\u3002\u30B2\u30FC\u30C8\u306E\u507D\u88C5\u3092\u9632\u3050\u305F\u3081\u3067\u3059\u3002\u5909\u66F4\u3059\u308B\u3068\u304D\u306F run \u3092\u6B62\u3081\u308B\u304B\u3001\u5229\u7528\u8005\u304C\u81EA\u5206\u3067\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044`
+      );
     const phase = run.state.phase;
     const testLoopPassed = run.state.phases["test-loop"]?.status === "passed";
     const ghInvocations = findGhInvocations(cmd);

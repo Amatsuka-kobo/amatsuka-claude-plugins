@@ -39097,7 +39097,8 @@ function loadConfig(cwd = process.cwd()) {
     ...config2,
     storage: {
       ...config2.storage,
-      casesDir: resolve(resolveCasesDir(config2.storage.casesDir))
+      // 相対パスは、設定を探したプロジェクトルートを基準にする(cwd に依らず同じ置き場になる)
+      casesDir: resolve(projectRoot, resolveCasesDir(config2.storage.casesDir))
     }
   };
   const configHash = computeConfigHash(expanded);

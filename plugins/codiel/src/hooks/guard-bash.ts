@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { findActiveRun } from "../codiel-state.js"
+import { resolveRaguelStore } from "../raguel-records.js"
 import { emit, findMainRoot, pass, readStdin } from "./lib.js"
 
 interface GitInvocation {
@@ -698,14 +700,19 @@ const STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/
 const isStateJson = (word: string | undefined): boolean =>
   word !== undefined && STATE_JSON_RE.test(word)
 
-// リダイレクトの行き先が state.json のパスかどうか。readWord は `>` で語を区切らないので、
+// リダイレクトの行き先が hit を満たすか(state.json の判定と Raguel の設定と記録の判定で共有する)。
+// readWord は `>` で語を区切らないので、
 // 語の中の `>` のそれぞれから演算子(`>` か `>>`)を切り出し、後ろから次の `>` か `<` の
 // 手前までを行き先とする(`2>` の `2` のような前の部分は含めない)。`&` と `|` は区切りなので、
 // `&>path` は語 `>path` になり、`>|path` は語 `>`・区切り・次のコマンドの `path` になる。
 // 行き先が空なら同じコマンドの次の語を、次の語が無ければ次のコマンドの最初の語を行き先とする。
 // クォートを外した語を読むので、`"x>…state.json"` や `">"` の直後のパスは余分に止める
 // (既知の限界。書き込みを見逃す側には倒れない)。
-function redirectsToStateJson(commands: string[][], ci: number): boolean {
+function redirectsTo(
+  commands: string[][],
+  ci: number,
+  hit: (word: string | undefined) => boolean
+): boolean {
   const words = commands[ci]
   for (let wi = 0; wi < words.length; wi++) {
     const w = words[wi]
@@ -718,17 +725,20 @@ function redirectsToStateJson(commands: string[][], ci: number): boolean {
           : wi + 1 < words.length
             ? words[wi + 1]
             : commands[ci + 1]?.[0]
-      if (isStateJson(target)) return true
+      if (hit(target)) return true
       p = w.indexOf(">", from)
     }
   }
   return false
 }
 
-// 同じコマンドの中の tee と sed -i の引数に state.json のパスがあるか。リダイレクトの行き先と
+// 同じコマンドの中の tee と sed -i の引数に hit を満たす語があるか。リダイレクトの行き先と
 // 入力は引数に数えないので、語の中の最初の `>` か `<` から後ろを除き、演算子だけの語の
 // 次の語も除く(`tee x.log < state.json` の state.json は入力)。
-function teeOrSedWritesStateJson(words: string[]): boolean {
+function teeOrSedWrites(
+  words: string[],
+  hit: (word: string) => boolean
+): boolean {
   const args: string[] = []
   for (let k = 0; k < words.length; k++) {
     const op = words[k].search(/[<>]/)
@@ -742,9 +752,9 @@ function teeOrSedWritesStateJson(words: string[]): boolean {
   }
   const sedArgs = after("sed")
   return (
-    after("tee").some(isStateJson) ||
+    after("tee").some(hit) ||
     (sedArgs.some((a) => /^(-[A-Za-z]*i|--in-place)/.test(a)) &&
-      sedArgs.some(isStateJson))
+      sedArgs.some(hit))
   )
 }
 
@@ -755,8 +765,125 @@ function writesStateJson(cmd: string): boolean {
   const commands = parseCommands(cmd) ?? splitLoosely(cmd)
   return commands.some(
     (words, ci) =>
-      redirectsToStateJson(commands, ci) || teeOrSedWritesStateJson(words)
+      redirectsTo(commands, ci, isStateJson) ||
+      teeOrSedWrites(words, isStateJson)
   )
+}
+
+// ---------------------------------------------------------------------------
+// Raguel の設定と記録へのシェル経由の書き込み(Raguel 設計書 §6.13.4、所見 G8・R12)
+//
+// 守るのは `.codiel/config.json` と、RAGUEL_CONFIG が指すファイルと、casesDir の配下である。
+// run が active か awaiting_human の間は、これらを書き換えるコマンドを止める。人の裁定を待つ間に設定を緩めたり
+// 評価の記録を書き換えたりして、ゲートを偽装するのを防ぐためである。
+// 判定は state.json と同じく parseCommands の語の列に当てる(閉じていないクォートでは
+// splitLoosely)。見るのはリダイレクト・tee・sed -i・cp・mv・rm・dd・install である。
+// 既知の限界(codiel 設計 §6.8 の書き方に倣う)。どれも書き込みを見逃す側である。
+// - 変数(`$HOME` と `${HOME}` を除く)・グロブ・コマンド置換で組み立てたパスは展開しない。
+// - 上の 8 つ以外で書くコマンド(`truncate`・`ln -sf`・`perl -i`・`python -c`・`node -e`・
+//   `git checkout -- <パス>` など)と、`bash <<EOF` の本文は見ない。
+// - シンボリックリンクを経由した別名のパスは、論理パスのまま比べるので見逃す。
+// - ディレクトリごと写して中のファイルで上書きする形(`cp -r dir/ .codiel`)は見逃す。
+// 厳しい側の限界もある。cp と install はコピー元も判定に入れるので、設定や記録を
+// 外へ写すだけのコマンドも止める。
+// ---------------------------------------------------------------------------
+
+const FILE_COMMANDS = ["cp", "mv", "rm", "dd", "install"]
+const CODIEL_CONFIG_RE = /[/\\]\.codiel[/\\]config\.json$/i
+
+// p が dir そのものか、その配下か
+function isUnder(p: string, dir: string): boolean {
+  const rel = path.relative(dir, p)
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel))
+  )
+}
+
+interface RaguelTargets {
+  // 守るファイル。<root>/.codiel/config.json と、RAGUEL_CONFIG が指すファイル
+  files: string[]
+  // 守るディレクトリ。設定が読めなければ null(そのとき Raguel も評価できない)
+  casesDir: string | null
+}
+
+function raguelTargets(root: string): RaguelTargets {
+  const files = [path.join(root, ".codiel", "config.json")]
+  const env = process.env.RAGUEL_CONFIG
+  if (env) files.push(path.resolve(env))
+  let casesDir: string | null = null
+  try {
+    casesDir = resolveRaguelStore(root).casesDir
+  } catch {
+    // 設定の不正は pass-gate が失敗として扱う。ここで止めると run の間の Bash がすべて止まる
+  }
+  return { files, casesDir }
+}
+
+// 語をパスとして読む。`~`・`$HOME`・`${HOME}` の先頭だけをホームディレクトリへ展開する
+function wordPath(word: string, cwd: string): string {
+  const w = word.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os.homedir())
+  return path.resolve(cwd, w)
+}
+
+// cmd が Raguel の設定か記録を書き換えるか。書き換えるなら、その語を返す。
+function writesRaguelFiles(
+  cmd: string,
+  cwd: string,
+  t: RaguelTargets
+): string | undefined {
+  const isTarget = (abs: string) =>
+    CODIEL_CONFIG_RE.test(abs) ||
+    t.files.includes(abs) ||
+    (t.casesDir !== null && isUnder(abs, t.casesDir))
+  // rm と mv で動かすディレクトリが、守るパスを含むか(`rm -rf .codiel`)
+  const contains = (abs: string) =>
+    t.files.some((f) => isUnder(f, abs)) ||
+    (t.casesDir !== null && isUnder(t.casesDir, abs))
+  // cp・mv・install の行き先が守るファイルの親で、同じ名前のファイルを写すか
+  // (`cp x/config.json .codiel`)
+  const isParent = (abs: string, args: string[]) =>
+    t.files.some(
+      (f) =>
+        path.dirname(f) === abs &&
+        args.some((a) => path.basename(a) === path.basename(f))
+    )
+  let found: string | undefined
+  const hit = (word: string | undefined): boolean => {
+    if (word === undefined || word === "") return false
+    if (!isTarget(wordPath(word, cwd))) return false
+    found = word
+    return true
+  }
+  const commands = parseCommands(cmd) ?? splitLoosely(cmd)
+  for (let ci = 0; ci < commands.length; ci++) {
+    const words = commands[ci]
+    if (redirectsTo(commands, ci, hit) || teeOrSedWrites(words, hit))
+      return found
+    const at = words.findIndex((w) => FILE_COMMANDS.includes(path.basename(w)))
+    if (at === -1) continue
+    const name = path.basename(words[at])
+    const args: string[] = []
+    for (const a of words.slice(at + 1)) {
+      if (name === "dd") {
+        if (a.startsWith("of=")) args.push(a.slice(3))
+      } else if (a.startsWith("--target-directory="))
+        args.push(a.slice("--target-directory=".length))
+      else if (!a.startsWith("-") && a !== "") args.push(a)
+    }
+    for (const [k, a] of args.entries()) {
+      const abs = wordPath(a, cwd)
+      // mv の最後の引数は行き先なので、含む判定に入れない(`mv x .` を止めない)
+      const moved = name === "rm" || (name === "mv" && k < args.length - 1)
+      if (
+        isTarget(abs) ||
+        (moved && contains(abs)) ||
+        (name !== "rm" && name !== "dd" && isParent(abs, args))
+      )
+        return a
+    }
+  }
+  return undefined
 }
 
 try {
@@ -800,6 +927,12 @@ try {
   // 人間の判断待ち(awaiting_human)中こそ PR 作成や push を許してはならないため、
   // run が存在する限りゲートを適用する(status による分岐はしない)。
   if (run) {
+    const raguelWord = writesRaguelFiles(cmd, cwd, raguelTargets(root))
+    if (raguelWord !== undefined)
+      emit(
+        "deny",
+        `run の間(active・awaiting_human)は Raguel の設定と記録(${raguelWord})をシェルで書き換えられません。ゲートの偽装を防ぐためです。変更するときは run を止めるか、利用者が自分で変更してください`
+      )
     const phase = run.state.phase
     const testLoopPassed = run.state.phases["test-loop"]?.status === "passed"
     // フェーズの制限も、マーカーの検査と同じ gh の起動の解析(findGhInvocations)で判定する。

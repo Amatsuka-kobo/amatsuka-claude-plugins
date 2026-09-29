@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import { createRequire } from "node:module"
 import os from "node:os"
@@ -42,15 +43,42 @@ const INIT_DEFAULTS: Record<string, string> = {
   "image-upload": "gh-attach,chrome"
 }
 
+// git のリポジトリ(空のコミット 1 つ)にする。code 系フェーズの start-phase が HEAD を読むため
+function git(root: string, ...args: string[]): string {
+  const r = spawnSync(
+    "git",
+    ["-c", "user.name=t", "-c", "user.email=t@example.test", ...args],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`)
+  return r.stdout.trim()
+}
+
 function tmpProject(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "codiel-state-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "codiel-state-"))
+  git(root, "init", "-q")
+  git(root, "commit", "-q", "--allow-empty", "-m", "init")
+  // Raguel の記録の置き場。run() が RAGUEL_CONFIG でこの設定を指す
+  fs.mkdirSync(path.join(root, ".raguel"))
+  fs.writeFileSync(
+    raguelConfigPath(root),
+    JSON.stringify({
+      storage: { casesDir: path.join(root, ".raguel"), projectId: "demo" }
+    })
+  )
+  return root
+}
+
+function raguelConfigPath(root: string): string {
+  return path.join(root, ".raguel", "config.json")
 }
 
 // 終了コードにかかわらず stdout と stderr を返す(get --active は成功時にも stderr に書く)
 function run(cwd: string, args: string[]) {
   const r = spawnSync(process.execPath, [TSX_CLI, CLI, ...args], {
     cwd,
-    encoding: "utf8"
+    encoding: "utf8",
+    env: { ...process.env, RAGUEL_CONFIG: raguelConfigPath(cwd) }
   })
   return {
     code: r.status,
@@ -617,6 +645,7 @@ test("intent-sync は pass-gate で通し、通るまで pr を開始できな�
   ])
   expect(complete.code).toBe(1)
   expect(complete.err).toMatch(/ゲート対象フェーズです/)
+  recordEvaluation(root, "demo", "intent-sync", "PROCEED", "e1")
   const gate = run(root, [
     "pass-gate",
     "intent-sync",
@@ -1011,6 +1040,7 @@ test("mark-ask は --kind を省くと askKind を raguel にし、resume の後
   const root = tmpProject()
   init(root)
   run(root, ["start-phase", "intent", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "ASK", "e1")
   let r = run(root, [
     "mark-ask",
     "intent",
@@ -1166,19 +1196,31 @@ test("mark-ask --verdict はフェーズの verdict に記録し、省略時は 
   let st = run(root, ["get", "--slug", "demo"]).out.state
   expect(st.status).toBe("active")
   expect(st.phases.intent.verdict).toBeNull()
-  let r = run(root, ["mark-ask", "intent", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "ASK", "ev-ask")
+  let r = run(root, [
+    "mark-ask",
+    "intent",
+    "--slug",
+    "demo",
+    "--evaluation-id",
+    "ev-ask"
+  ])
   expect(r.out.state.phases.intent.verdict).toBe("ASK")
   run(root, ["resume", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-proceed")
   r = run(root, [
     "mark-ask",
     "intent",
     "--slug",
     "demo",
     "--verdict",
-    "PROCEED"
+    "PROCEED",
+    "--evaluation-id",
+    "ev-proceed"
   ])
   expect(r.out.state.phases.intent.verdict).toBe("PROCEED")
   run(root, ["resume", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-stop")
   r = run(root, [
     "mark-ask",
     "intent",
@@ -1209,6 +1251,7 @@ test("pass-gate --verdict STOP は --human-approved のときだけ受け付け�
   let r = passGate(root, "intent", "STOP")
   expect(r.code).toBe(1)
   expect(r.err).toMatch(/verdict が PROCEED ではありません: STOP/)
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-stop")
   run(root, [
     "mark-ask",
     "intent",
@@ -1250,6 +1293,7 @@ test("STOP を記録したフェーズは、resume の後の mark-ask --kind con
   const root = tmpProject()
   init(root)
   run(root, ["start-phase", "intent", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-stop")
   run(root, [
     "mark-ask",
     "intent",
@@ -1295,6 +1339,7 @@ test("STOP を記録したフェーズは、resume の後の --evaluation-id の
   const root = tmpProject()
   init(root)
   run(root, ["start-phase", "intent", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-stop")
   run(root, [
     "mark-ask",
     "intent",
@@ -1329,6 +1374,7 @@ test("init は、最新の try が raguel-stop で止まったか humanApproved 
   const root = tmpProject()
   const markStop = (slug: string) => {
     run(root, ["start-phase", "intent", "--slug", slug])
+    recordEvaluation(root, slug, "intent", "STOP", `ev-stop-${slug}`)
     run(root, [
       "mark-ask",
       "intent",
@@ -1339,7 +1385,7 @@ test("init は、最新の try が raguel-stop で止まったか humanApproved 
       "--verdict",
       "STOP",
       "--evaluation-id",
-      "ev-stop"
+      `ev-stop-${slug}`
     ])
   }
   // raguel-stop で止めた try
@@ -1358,7 +1404,7 @@ test("init は、最新の try が raguel-stop で止まったか humanApproved 
     expect(fs.existsSync(statePath(root, slug, 2)), slug).toBe(false)
   }
   expect(init(root, "other").err).toMatch(
-    /stopReason: intent-updated、STOP のフェーズ: intent\(evaluationId: ev-stop\)/
+    /stopReason: intent-updated、STOP のフェーズ: intent\(evaluationId: ev-stop-other\)/
   )
   for (const slug of ["judged", "other"]) {
     const r = init(root, slug, {}, ["--human-approved"])
@@ -1370,27 +1416,364 @@ test("init は、最新の try が raguel-stop で止まったか humanApproved 
   init(root, "approved")
   markStop("approved")
   run(root, ["resume", "--slug", "approved"])
-  run(root, [
+  recordRuling(root, "approved", "intent", "ev-stop-approved", "false-positive")
+  const approved = run(root, [
     "pass-gate",
     "intent",
     "--slug",
     "approved",
     "--evaluation-id",
-    "ev-stop",
+    "ev-stop-approved",
     "--verdict",
     "STOP",
     "--human-approved"
   ])
+  expect(approved.code).toBe(0)
   run(root, ["stop", "--slug", "approved", "--reason", "test"])
   init(root, "asked")
   run(root, ["start-phase", "intent", "--slug", "asked"])
-  run(root, ["mark-ask", "intent", "--slug", "asked"])
+  recordEvaluation(root, "asked", "intent", "ASK", "ev-ask-asked")
+  expect(
+    run(root, [
+      "mark-ask",
+      "intent",
+      "--slug",
+      "asked",
+      "--evaluation-id",
+      "ev-ask-asked"
+    ]).code
+  ).toBe(0)
   run(root, ["stop", "--slug", "asked", "--reason", "test"])
   for (const slug of ["approved", "asked"]) {
     const r = init(root, slug)
     expect(r.code, slug).toBe(0)
     expect(r.out.state.try, slug).toBe(2)
   }
+})
+
+// --- Raguel の記録との照合(Raguel 設計書 §6.13.3、所見 D1・D4、R11・R16) ---
+
+test("init は、STOP を state に記録しないまま止めた try でも、Raguel の索引の STOP を見て --human-approved を求める(D1)", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  // mark-ask を経ずに stop した(state には STOP が無い)
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-hidden")
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  expect(latestState(root, "demo").phases.intent.verdict).toBeNull()
+  const r = init(root)
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/誤検知の裁定の無い Raguel の STOP があります/)
+  expect(r.err).toMatch(/ev-hidden/)
+  expect(fs.existsSync(statePath(root, "demo", 2))).toBe(false)
+  // 誤検知の裁定があれば当たらない
+  recordRuling(root, "demo", "intent", "ev-hidden", "false-positive")
+  expect(init(root).code).toBe(0)
+  // --human-approved があれば、裁定が無くても作る
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-hidden-2")
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  expect(init(root).code).toBe(1)
+  const approved = init(root, "demo", {}, ["--human-approved"])
+  expect(approved.code).toBe(0)
+  expect(approved.out.state.try).toBe(3)
+})
+
+test("init は、degraded の STOP・別の run の STOP・revise の裁定のある ASK では --human-approved を求めない", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-degraded", {
+    judgeStatus: "degraded"
+  })
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-other-run", {
+    runId: "other-try-1"
+  })
+  recordEvaluation(root, "demo", "intent", "ASK", "ev-ask")
+  recordRuling(root, "demo", "intent", "ev-ask", "revise", "rejected")
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  expect(init(root).code).toBe(0)
+})
+
+test("init は新しい state に raguelContract: 2 を記録する", () => {
+  const root = tmpProject()
+  const r = init(root)
+  expect(r.code).toBe(0)
+  expect(r.out.state.raguelContract).toBe(2)
+  expect(latestState(root, "demo").raguelContract).toBe(2)
+})
+
+test("start-phase は code 系の 4 フェーズでだけ開始の HEAD を startHead に記録し、開始し直しても書き換えない", () => {
+  const root = tmpProject()
+  init(root)
+  const head0 = git(root, "rev-parse", "HEAD")
+  passThrough(root, "demo", UNTIL_PR.slice(0, 5))
+  expect(run(root, ["start-phase", "test-code", "--slug", "demo"]).code).toBe(0)
+  git(root, "commit", "-q", "--allow-empty", "-m", "c1")
+  // in_progress のフェーズを開始し直しても、起点は動かない
+  expect(run(root, ["start-phase", "test-code", "--slug", "demo"]).code).toBe(0)
+  let st = latestState(root, "demo")
+  expect(st.phases["test-code"].startHead).toBe(head0)
+  expect(st.phases["test-code"].startHead).toMatch(/^[0-9a-f]{40}$/)
+  for (const ph of ["intent", "design", "test-spec", "dev-plan"])
+    expect(st.phases[ph].startHead, ph).toBeUndefined()
+  expect(passGate(root, "test-code", "PROCEED").code).toBe(0)
+  const head1 = git(root, "rev-parse", "HEAD")
+  passThrough(root, "demo", ["implement", "test-loop", "intent-sync"])
+  passThrough(root, "demo", ["pr", "review", "fix-loop"])
+  st = latestState(root, "demo")
+  for (const ph of ["implement", "test-loop", "fix-loop"])
+    expect(st.phases[ph].startHead, ph).toBe(head1)
+  expect(st.phases["intent-sync"].startHead).toBeUndefined()
+})
+
+test("start-phase は code 系フェーズで HEAD を読めなければ失敗し、フェーズを開始しない", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", UNTIL_PR.slice(0, 5))
+  fs.rmSync(path.join(root, ".git"), { recursive: true, force: true })
+  const r = run(root, ["start-phase", "test-code", "--slug", "demo"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/開始の HEAD を読めません/)
+  expect(latestState(root, "demo").phases["test-code"].status).toBe("pending")
+})
+
+// pass-gate の検査の入口。intent を in_progress にした run を作る
+function gateRun(): string {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  return root
+}
+
+function gateArgs(phase: string, id: string, verdict: string): string[] {
+  return [
+    "pass-gate",
+    phase,
+    "--slug",
+    "demo",
+    "--evaluation-id",
+    id,
+    "--verdict",
+    verdict
+  ]
+}
+
+test("pass-gate 検査 1: 索引に --evaluation-id の行が無ければ失敗する(掃除済みか存在しない)", () => {
+  const root = gateRun()
+  const r = run(root, gateArgs("intent", "ev-missing", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/evaluationId ev-missing の行がありません/)
+  expect(r.err).toMatch(/掃除済みか、存在しない/)
+  expect(latestState(root, "demo").phases.intent.status).toBe("in_progress")
+})
+
+test("pass-gate 検査 2: 行の runId が raguelRunId と、phase がコマンドのフェーズと違えば失敗する", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-run", {
+    runId: "other-try-1"
+  })
+  let r = run(root, gateArgs("intent", "ev-run", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/別の run かフェーズの評価です/)
+  recordEvaluation(root, "demo", "design", "PROCEED", "ev-phase")
+  r = run(root, gateArgs("intent", "ev-phase", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/phase design/)
+})
+
+test("pass-gate 検査 3: 後の評価で ASK が出た後に、前の PROCEED では通せない", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-old")
+  recordEvaluation(root, "demo", "intent", "ASK", "ev-new")
+  const r = run(root, gateArgs("intent", "ev-old", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /最新の評価ではありません\(最新: ev-new、verdict: ASK\)/
+  )
+})
+
+test("pass-gate 検査 4: ASK の評価に --verdict PROCEED を付けても通せない(D4)", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "ASK", "ev-ask")
+  const r = run(root, gateArgs("intent", "ev-ask", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /--verdict PROCEED が Raguel の評価の verdict ASK と合いません/
+  )
+  expect(latestState(root, "demo").phases.intent.status).toBe("in_progress")
+})
+
+test("pass-gate 検査 5: verdict.json が読めないか、索引の行と食い違えば失敗する", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-none", {
+    noVerdictJson: true
+  })
+  let r = run(root, gateArgs("intent", "ev-none", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/verdict.json を読めません/)
+  for (const [key, value] of [
+    ["verdict", "STOP"],
+    ["evaluationId", "ev-x"],
+    ["runId", "x-try-1"],
+    ["phase", "design"]
+  ]) {
+    recordEvaluation(root, "demo", "intent", "PROCEED", `ev-${key}`, {
+      verdictJson: { [key]: value }
+    })
+    r = run(root, gateArgs("intent", `ev-${key}`, "PROCEED"))
+    expect(r.code, key).toBe(1)
+    expect(r.err, key).toMatch(new RegExp(`verdict.json の ${key}`))
+  }
+})
+
+test("pass-gate 検査 6: --human-approved が無ければ PROCEED の評価だけを通す", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "ASK", "ev-ask")
+  const r = run(root, gateArgs("intent", "ev-ask", "ASK"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/verdict が PROCEED ではありません: ASK/)
+})
+
+test("pass-gate 検査 7: --human-approved には裁定の記録が要り、ASK は as-is、STOP は false-positive だけを受ける", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "ASK", "ev-ask")
+  const approve = (id: string, verdict: string) =>
+    run(root, [...gateArgs("intent", id, verdict), "--human-approved"])
+  let r = approve("ev-ask", "ASK")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/裁定の記録が要ります/)
+  recordRuling(root, "demo", "intent", "ev-ask", "revise", "rejected")
+  r = approve("ev-ask", "ASK")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/ruling が as-is であることが要ります\(記録: revise\)/)
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-stop")
+  recordRuling(root, "demo", "intent", "ev-stop", "as-is")
+  r = approve("ev-stop", "STOP")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/ruling が false-positive であることが要ります/)
+  // 同じ evaluationId の行は後の行を正とする
+  recordRuling(root, "demo", "intent", "ev-stop", "false-positive")
+  r = approve("ev-stop", "STOP")
+  expect(r.code).toBe(0)
+  expect(r.out.state.phases.intent.humanApproved).toBe(true)
+})
+
+// test-code を in_progress にした run(開始の HEAD を記録済み)
+function codeRun(): string {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", UNTIL_PR.slice(0, 5))
+  run(root, ["start-phase", "test-code", "--slug", "demo"])
+  return root
+}
+
+test("pass-gate 検査 8: code 系フェーズで subject.head が今の HEAD と違えば失敗する(評価の後のコミット)", () => {
+  const root = codeRun()
+  recordEvaluation(root, "demo", "test-code", "PROCEED", "ev-tc")
+  git(root, "commit", "-q", "--allow-empty", "-m", "after")
+  const r = run(root, gateArgs("test-code", "ev-tc", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/現在の HEAD/)
+})
+
+test("pass-gate 検査 8: code 系フェーズで subject.base がフェーズの開始の HEAD と違えば失敗する(R16)", () => {
+  const root = codeRun()
+  const start = latestState(root, "demo").phases["test-code"].startHead
+  git(root, "commit", "-q", "--allow-empty", "-m", "part-1")
+  const mid = git(root, "rev-parse", "HEAD")
+  git(root, "commit", "-q", "--allow-empty", "-m", "part-2")
+  const head = git(root, "rev-parse", "HEAD")
+  // baseRef を後ろへずらし、フェーズの差分の一部だけを評価させた
+  recordEvaluation(root, "demo", "test-code", "PROCEED", "ev-part", {
+    subject: { repoPath: root, head, base: mid, files: [] }
+  })
+  let r = run(root, gateArgs("test-code", "ev-part", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/フェーズの開始の HEAD/)
+  recordEvaluation(root, "demo", "test-code", "PROCEED", "ev-full", {
+    subject: { repoPath: root, head, base: start, files: [] }
+  })
+  r = run(root, gateArgs("test-code", "ev-full", "PROCEED"))
+  expect(r.code).toBe(0)
+})
+
+test("pass-gate 検査 9: 文書のフェーズで subject.files の sha256 が今の中身と違えば失敗する(R16)", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", ["intent", "discuss"])
+  run(root, ["start-phase", "design", "--slug", "demo"])
+  const rel = "docs/codiel/runs/demo/design.md"
+  const file = path.join(root, rel)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, "# 設計\n")
+  const sha = createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+  const subject = {
+    repoPath: root,
+    head: git(root, "rev-parse", "HEAD"),
+    paths: [rel],
+    files: [{ path: rel, sha256: sha, isNew: true }]
+  }
+  recordEvaluation(root, "demo", "design", "PROCEED", "ev-design", { subject })
+  // ゲートの後に書き換えた
+  fs.appendFileSync(file, "追記\n")
+  let r = run(root, gateArgs("design", "ev-design", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(new RegExp(`${rel} が評価の後に変わっています`))
+  // 消した
+  fs.rmSync(file)
+  r = run(root, gateArgs("design", "ev-design", "PROCEED"))
+  expect(r.code).toBe(1)
+  fs.writeFileSync(file, "# 設計\n")
+  r = run(root, gateArgs("design", "ev-design", "PROCEED"))
+  expect(r.code).toBe(0)
+})
+
+test("pass-gate 検査 10: raguelContract の無い run は検査の代わりに移行の文言で失敗する", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-ok")
+  const raw = latestState(root, "demo")
+  delete raw.raguelContract
+  fs.writeFileSync(statePath(root, "demo"), JSON.stringify(raw, null, 2))
+  const r = run(root, gateArgs("intent", "ev-ok", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err.trim()).toBe(
+    "codiel: この run は Raguel の記録の形式が古い(raguelContract なし)ため、この版ではゲートを通せない。`codiel-state stop --slug demo --reason migrate` で止めてから、`/codiel:run docs/intents/2026-09-27-demo.md` で同じ intent の新しい try を始める。"
+  )
+})
+
+test("pass-gate は Raguel の設定が読めなければ失敗する(既定の置き場に落ちない)", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-ok")
+  fs.writeFileSync(raguelConfigPath(root), "{ broken")
+  const r = run(root, gateArgs("intent", "ev-ok", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/Raguel の記録を読めません/)
+})
+
+test("mark-ask --kind raguel は --evaluation-id を必須にし、索引に無い評価と verdict の食い違いで失敗する", () => {
+  const root = gateRun()
+  const ask = (...extra: string[]) =>
+    run(root, ["mark-ask", "intent", "--slug", "demo", ...extra])
+  let r = ask()
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/--kind raguel には --evaluation-id が必要です/)
+  r = ask("--evaluation-id", "ev-missing")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/evaluationId ev-missing の行がありません/)
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-proceed")
+  r = ask("--evaluation-id", "ev-proceed")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /--verdict ASK が Raguel の評価の verdict PROCEED と合いません/
+  )
+  recordEvaluation(root, "demo", "design", "ASK", "ev-design")
+  r = ask("--evaluation-id", "ev-design")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/別の run かフェーズの評価です/)
+  expect(latestState(root, "demo").status).toBe("active")
+  // --kind confirm は索引を見ない
+  expect(ask("--kind", "confirm").code).toBe(0)
 })
 
 // --- v1 の扱い ---
@@ -3006,12 +3389,133 @@ test("重なりの判定: 固定部が空の *.ts と **/* は全ステップと
 })
 
 // テストヘルパー
+
+// tmpProject の Raguel の記録の置き場(<casesDir>/cases/<projectId>)
+function casesProjectDir(root: string): string {
+  return path.join(root, ".raguel", "cases", "demo")
+}
+
+// slug の最新の try の state を読む
+function latestState(root: string, slug: string) {
+  const dir = path.join(root, ".codiel/runs", slug)
+  const n = Math.max(
+    ...fs
+      .readdirSync(dir)
+      .filter((d) => /^try-\d+$/.test(d))
+      .map((d) => Number(d.slice(4)))
+  )
+  return JSON.parse(fs.readFileSync(statePath(root, slug, n), "utf8"))
+}
+
+const CODE_PHASES = ["test-code", "implement", "test-loop", "fix-loop"]
+
+interface EvaluationOver {
+  judgeStatus?: string
+  runId?: string
+  // 索引の行と verdict.json の subject を替える
+  subject?: Record<string, unknown>
+  // verdict.json だけを替える(検査 5 の食い違いを作る)
+  verdictJson?: Record<string, unknown>
+  // verdict.json を書かない
+  noVerdictJson?: boolean
+}
+
+// Raguel が書く形で、評価の索引の行と verdict.json を置く(Raguel 設計書 §6.9)。
+// subject は、code 系フェーズでは今の HEAD とフェーズの開始の HEAD、文書では空の files にする
+function recordEvaluation(
+  root: string,
+  slug: string,
+  phase: string,
+  verdict: string,
+  evaluationId: string,
+  over: EvaluationOver = {}
+): string {
+  const st = latestState(root, slug)
+  const runId = over.runId ?? st.raguelRunId
+  const head = git(root, "rev-parse", "HEAD")
+  const subject = over.subject ?? {
+    repoPath: root,
+    head,
+    ...(CODE_PHASES.includes(phase)
+      ? { base: st.phases[phase]?.startHead ?? null }
+      : {}),
+    files: []
+  }
+  const phaseDir = path.join(casesProjectDir(root), runId, phase)
+  fs.mkdirSync(phaseDir, { recursive: true })
+  const attempt = fs.readdirSync(phaseDir).length + 1
+  const casePath = path.join(
+    phaseDir,
+    `attempt-${String(attempt).padStart(2, "0")}`
+  )
+  fs.mkdirSync(casePath)
+  const row = {
+    schemaVersion: 2,
+    evaluationId,
+    runId,
+    phase,
+    kind: CODE_PHASES.includes(phase) ? "code" : "design",
+    attempt,
+    casePath,
+    verdict,
+    judgeStatus: over.judgeStatus ?? "ok",
+    head,
+    at: new Date().toISOString()
+  }
+  if (!over.noVerdictJson)
+    fs.writeFileSync(
+      path.join(casePath, "verdict.json"),
+      JSON.stringify({ ...row, subject, ...over.verdictJson })
+    )
+  fs.appendFileSync(
+    path.join(casesProjectDir(root), "evaluations.jsonl"),
+    `${JSON.stringify(row)}\n`
+  )
+  return casePath
+}
+
+// Raguel の record_outcome が書く形で、裁定の記録を 1 行足す
+function recordRuling(
+  root: string,
+  slug: string,
+  phase: string,
+  evaluationId: string,
+  ruling: string | null,
+  outcome = "approved"
+): void {
+  fs.mkdirSync(casesProjectDir(root), { recursive: true })
+  fs.appendFileSync(
+    path.join(casesProjectDir(root), "outcomes.jsonl"),
+    `${JSON.stringify({
+      schemaVersion: 2,
+      evaluationId,
+      runId: latestState(root, slug).raguelRunId,
+      phase,
+      outcome,
+      ruling,
+      precedentId: null,
+      at: new Date().toISOString()
+    })}\n`
+  )
+}
+
+// 評価 ev1 を verdict で記録してから pass-gate する。--human-approved のときは、人の裁定
+// (ASK は as-is、STOP は false-positive)も記録する
 function passGate(
   root: string,
   phase: string,
   verdict: string,
   extra: string[] = []
 ) {
+  recordEvaluation(root, "demo", phase, verdict, "ev1")
+  if (extra.includes("--human-approved") && verdict !== "PROCEED")
+    recordRuling(
+      root,
+      "demo",
+      phase,
+      "ev1",
+      verdict === "STOP" ? "false-positive" : "as-is"
+    )
   return run(root, [
     "pass-gate",
     phase,
@@ -3029,6 +3533,7 @@ function passGate(
 function passThrough(root: string, slug: string, phases: string[]): void {
   for (const ph of phases) {
     expect(run(root, ["start-phase", ph, "--slug", slug]).code, ph).toBe(0)
+    if (GATED.has(ph)) recordEvaluation(root, slug, ph, "PROCEED", `e-${ph}`)
     const done = GATED.has(ph)
       ? [
           "pass-gate",

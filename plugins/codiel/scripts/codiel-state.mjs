@@ -1,8 +1,250 @@
 #!/usr/bin/env node
 
 // src/codiel-state.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
+
+// src/hooks/lib.ts
 import fs from "node:fs";
 import path from "node:path";
+function findProjectRoot(startDir) {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, ".codiel"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return startDir;
+    dir = parent;
+  }
+}
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
+function findMainRoot(startDir) {
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
+  return findProjectRoot(startDir);
+}
+
+// src/raguel-records.ts
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs2 from "node:fs";
+import os from "node:os";
+import path2 from "node:path";
+var DEFAULT_CASES_DIR = "~/.raguel";
+var EVALUATIONS_FILE = "evaluations.jsonl";
+var OUTCOMES_FILE = "outcomes.jsonl";
+var VERDICT_FILE = "verdict.json";
+var CODE_PHASES = /* @__PURE__ */ new Set([
+  "test-code",
+  "implement",
+  "test-loop",
+  "fix-loop"
+]);
+var DOC_PHASES = /* @__PURE__ */ new Set([
+  "design",
+  "test-spec",
+  "dev-plan",
+  "intent-sync"
+]);
+function isObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readJsonObject(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs2.readFileSync(file, "utf8"));
+  } catch {
+    throw new Error(`Raguel \u306E\u8A2D\u5B9A ${file} \u3092 JSON \u3068\u3057\u3066\u8AAD\u3081\u307E\u305B\u3093`);
+  }
+  if (!isObject(parsed))
+    throw new Error(
+      `Raguel \u306E\u8A2D\u5B9A ${file} \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`
+    );
+  return parsed;
+}
+function readStorage(mainRoot) {
+  let raguel;
+  const env = process.env.RAGUEL_CONFIG;
+  if (env) raguel = readJsonObject(env);
+  else {
+    const file = path2.join(mainRoot, ".codiel", "config.json");
+    if (!fs2.existsSync(file)) return {};
+    raguel = readJsonObject(file).raguel;
+    if (raguel === void 0) return {};
+    if (!isObject(raguel))
+      throw new Error(`${file} \u306E raguel \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+  }
+  const storage = raguel.storage;
+  if (storage === void 0) return {};
+  if (!isObject(storage))
+    throw new Error("raguel.storage \u306F JSON \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+  const text = (key) => {
+    const v = storage[key];
+    if (v === void 0) return void 0;
+    if (typeof v !== "string")
+      throw new Error(`raguel.storage.${key} \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
+    return v;
+  };
+  return { casesDir: text("casesDir"), projectId: text("projectId") };
+}
+function resolveCasesDir(mainRoot, configured) {
+  const dir = configured || DEFAULT_CASES_DIR;
+  if (dir === "~") return path2.resolve(os.homedir());
+  if (dir.startsWith("~/") || dir.startsWith("~\\"))
+    return path2.resolve(os.homedir(), dir.slice(2));
+  return path2.resolve(mainRoot, dir);
+}
+function realpathOrResolve(p) {
+  try {
+    return fs2.realpathSync(p);
+  } catch {
+    return path2.resolve(p);
+  }
+}
+function gitCommonDir(dir) {
+  try {
+    const out = execFileSync(
+      "git",
+      ["-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim();
+    return out ? realpathOrResolve(out) : null;
+  } catch {
+    return null;
+  }
+}
+function resolveProjectId(projectRoot, storageProjectId) {
+  if (storageProjectId) return storageProjectId;
+  const common = gitCommonDir(projectRoot);
+  const base = common ?? realpathOrResolve(projectRoot);
+  let name;
+  if (common === null) name = path2.basename(base);
+  else if (path2.basename(base) === ".git")
+    name = path2.basename(path2.dirname(base));
+  else name = path2.basename(base).replace(/\.git$/, "");
+  const hash = createHash("sha256").update(base).digest("hex").slice(0, 12);
+  return `${name}-${hash}`;
+}
+function resolveRaguelStore(mainRoot) {
+  const storage = readStorage(mainRoot);
+  const casesDir = resolveCasesDir(mainRoot, storage.casesDir);
+  const projectId = resolveProjectId(mainRoot, storage.projectId);
+  return {
+    casesDir,
+    projectId,
+    projectDir: path2.join(casesDir, "cases", projectId)
+  };
+}
+function readJsonl(file) {
+  if (!fs2.existsSync(file)) return [];
+  const rows = [];
+  fs2.readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+    if (!line.trim()) return;
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      throw new Error(`Raguel \u306E\u8A18\u9332\u306E\u884C\u304C\u8AAD\u3081\u307E\u305B\u3093: ${file}:${i + 1}`);
+    }
+  });
+  return rows;
+}
+function readEvaluationIndex(store) {
+  return readJsonl(path2.join(store.projectDir, EVALUATIONS_FILE));
+}
+function readOutcomes(store) {
+  const map = /* @__PURE__ */ new Map();
+  for (const r of readJsonl(
+    path2.join(store.projectDir, OUTCOMES_FILE)
+  ))
+    map.set(r.evaluationId, r);
+  return map;
+}
+function readVerdictRecord(casePath) {
+  try {
+    const v = JSON.parse(
+      fs2.readFileSync(path2.join(casePath, VERDICT_FILE), "utf8")
+    );
+    return isObject(v) ? v : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function findEvaluation(index, evaluationId) {
+  return index.findLast((e) => e.evaluationId === evaluationId);
+}
+function gitHead(dir) {
+  try {
+    return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+function sha256OfFile(file) {
+  try {
+    return createHash("sha256").update(fs2.readFileSync(file)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+function checkEvaluationRow(row, input) {
+  if (!row)
+    return `Raguel \u306E\u8A55\u4FA1\u306E\u7D22\u5F15\u306B evaluationId ${input.evaluationId} \u306E\u884C\u304C\u3042\u308A\u307E\u305B\u3093(\u8A55\u4FA1\u306E\u8A18\u9332\u304C\u7121\u3044\u3002\u6383\u9664\u6E08\u307F\u304B\u3001\u5B58\u5728\u3057\u306A\u3044)`;
+  if (row.runId !== input.runId || row.phase !== input.phase)
+    return `evaluationId ${input.evaluationId} \u306F\u5225\u306E run \u304B\u30D5\u30A7\u30FC\u30BA\u306E\u8A55\u4FA1\u3067\u3059(\u7D22\u5F15: runId ${row.runId}\u30FBphase ${row.phase}\u3001\u3053\u306E run: runId ${input.runId}\u30FBphase ${input.phase})`;
+  if (row.verdict !== input.verdict)
+    return `--verdict ${input.verdict} \u304C Raguel \u306E\u8A55\u4FA1\u306E verdict ${row.verdict} \u3068\u5408\u3044\u307E\u305B\u3093(evaluationId: ${input.evaluationId})`;
+  return null;
+}
+function checkGate(input) {
+  const index = readEvaluationIndex(input.store);
+  const row = findEvaluation(index, input.evaluationId);
+  const rowProblem = checkEvaluationRow(row, input);
+  if (rowProblem || !row) return rowProblem;
+  const last = index.findLast(
+    (e) => e.runId === input.runId && e.phase === input.phase
+  );
+  if (last && last.evaluationId !== input.evaluationId)
+    return `evaluationId ${input.evaluationId} \u306F ${input.phase} \u306E\u6700\u65B0\u306E\u8A55\u4FA1\u3067\u306F\u3042\u308A\u307E\u305B\u3093(\u6700\u65B0: ${last.evaluationId}\u3001verdict: ${last.verdict})`;
+  const v = readVerdictRecord(row.casePath);
+  if (!v) return `verdict.json \u3092\u8AAD\u3081\u307E\u305B\u3093: ${row.casePath}`;
+  for (const key of ["evaluationId", "runId", "phase", "verdict"])
+    if (v[key] !== row[key])
+      return `verdict.json \u306E ${key}(${String(v[key])})\u304C\u8A55\u4FA1\u306E\u7D22\u5F15(${row[key]})\u3068\u5408\u3044\u307E\u305B\u3093: ${row.casePath}`;
+  if (input.humanApproved) {
+    const outcome = readOutcomes(input.store).get(input.evaluationId);
+    if (!outcome)
+      return `--human-approved \u306B\u306F Raguel \u306E\u88C1\u5B9A\u306E\u8A18\u9332\u304C\u8981\u308A\u307E\u3059(evaluationId ${input.evaluationId} \u306E\u884C\u304C\u3042\u308A\u307E\u305B\u3093)\u3002record_outcome \u3067\u4EBA\u306E\u88C1\u5B9A\u3092\u8A18\u9332\u3057\u3066\u304F\u3060\u3055\u3044`;
+    const want = row.verdict === "ASK" ? "as-is" : row.verdict === "STOP" ? "false-positive" : null;
+    if (want && outcome.ruling !== want)
+      return `${row.verdict} \u3092 --human-approved \u3067\u901A\u3059\u306B\u306F\u88C1\u5B9A\u306E ruling \u304C ${want} \u3067\u3042\u308B\u3053\u3068\u304C\u8981\u308A\u307E\u3059(\u8A18\u9332: ${outcome.ruling})`;
+  }
+  const subject = isObject(v.subject) ? v.subject : void 0;
+  if (!subject) return `verdict.json \u306B subject \u304C\u3042\u308A\u307E\u305B\u3093: ${row.casePath}`;
+  if (CODE_PHASES.has(input.phase)) {
+    const head = gitHead(input.root);
+    if (!head || subject.head !== head)
+      return `\u8A55\u4FA1\u3057\u305F HEAD(${subject.head})\u304C\u73FE\u5728\u306E HEAD(${head})\u3068\u5408\u3044\u307E\u305B\u3093\u3002\u4ECA\u306E HEAD \u3067\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+    if (!input.startHead || subject.base !== input.startHead)
+      return `\u8A55\u4FA1\u306E\u8D77\u70B9(${subject.base})\u304C\u30D5\u30A7\u30FC\u30BA\u306E\u958B\u59CB\u306E HEAD(${input.startHead ?? "\u8A18\u9332\u306A\u3057"})\u3068\u5408\u3044\u307E\u305B\u3093\u3002baseRef \u306B\u30D5\u30A7\u30FC\u30BA\u306E\u958B\u59CB\u306E HEAD \u3092\u6E21\u3057\u3066\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+  }
+  if (DOC_PHASES.has(input.phase))
+    for (const f of Array.isArray(subject.files) ? subject.files : []) {
+      const now = sha256OfFile(path2.join(input.root, f.path));
+      if (now !== f.sha256)
+        return `${f.path} \u304C\u8A55\u4FA1\u306E\u5F8C\u306B\u5909\u308F\u3063\u3066\u3044\u307E\u3059(\u8A18\u9332: ${f.sha256}\u3001\u73FE\u5728: ${now})\u3002\u4ECA\u306E\u4E2D\u8EAB\u3067\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+    }
+  return null;
+}
+function unresolvedStops(store, runId) {
+  const outcomes = readOutcomes(store);
+  return readEvaluationIndex(store).filter(
+    (e) => e.runId === runId && e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive"
+  ).map((e) => e.evaluationId);
+}
+
+// src/codiel-state.ts
 var STAGES = [
   ["intent"],
   ["discuss"],
@@ -92,34 +334,34 @@ var ok = (obj) => {
   return void 0;
 };
 function readState(p) {
-  return JSON.parse(fs.readFileSync(p, "utf8"));
+  return JSON.parse(fs3.readFileSync(p, "utf8"));
 }
 function writeState(p, state) {
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const tmp = `${p}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}
+  fs3.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}
 `);
-  fs.renameSync(tmp, p);
+  fs3.renameSync(tmp, p);
 }
 function runDir(root, slug) {
-  return path.join(root, ".codiel", "runs", slug);
+  return path3.join(root, ".codiel", "runs", slug);
 }
 function tries(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
+  if (!fs3.existsSync(dir)) return [];
+  return fs3.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
 }
 function latestTry(root, slug) {
   const dir = runDir(root, slug);
   for (const n of tries(dir).reverse()) {
-    const p = path.join(dir, `try-${n}`, "state.json");
-    if (fs.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+    const p = path3.join(dir, `try-${n}`, "state.json");
+    if (fs3.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
   }
   return null;
 }
 function latestTries(root) {
-  const runsRoot = path.join(root, ".codiel", "runs");
-  if (!fs.existsSync(runsRoot)) return [];
-  return fs.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
+  const runsRoot = path3.join(root, ".codiel", "runs");
+  if (!fs3.existsSync(runsRoot)) return [];
+  return fs3.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
 }
 function isLegacy(st) {
   return st.version !== 2 || !("test-code" in st.phases);
@@ -132,12 +374,12 @@ function legacyMessage(st) {
   return `codiel: .codiel/runs/${st.runId} \u306F test-code \u30D5\u30A7\u30FC\u30BA\u3092\u6301\u305F\u306A\u3044 state \u306E run(status: ${st.status})\u3067\u3042\u308A\u3001\u3053\u306E\u7248\u3067\u306F\u518D\u958B\u3067\u304D\u306A\u3044\u3002\`codiel-state stop --slug ${st.runId} --reason migrate\` \u3067\u6B62\u3081\u3066\u304B\u3089\u3001\`/codiel:run ${st.intent}\` \u3067\u540C\u3058 intent \u306E\u65B0\u3057\u3044 try \u3092\u59CB\u3081\u308B\u3002`;
 }
 function readCodielConfig(codielRoot) {
-  const file = path.join(codielRoot, ".codiel", "config.json");
-  if (!fs.existsSync(file))
+  const file = path3.join(codielRoot, ".codiel", "config.json");
+  if (!fs3.existsSync(file))
     return { testsDir: DEFAULT_TESTS_DIR, runsDir: DEFAULT_RUNS_DIR };
   let cfg;
   try {
-    cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+    cfg = JSON.parse(fs3.readFileSync(file, "utf8"));
   } catch {
     throw new Error(`${file} \u3092 JSON \u3068\u3057\u3066\u8AAD\u3081\u307E\u305B\u3093`);
   }
@@ -154,7 +396,7 @@ function configDir(cfg, key, fallback) {
   const v = cfg[key];
   if (typeof v !== "string") throw new Error(`${key} \u306F\u6587\u5B57\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044`);
   if (v === "") throw new Error(`${key} \u306B\u7A7A\u6587\u5B57\u5217\u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093`);
-  if (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))
+  if (path3.posix.isAbsolute(v) || path3.win32.isAbsolute(v))
     throw new Error(`${key} \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044: ${v}`);
   if (v.split(/[/\\]/).includes(".."))
     throw new Error(`${key} \u306B .. \u306E\u30BB\u30B0\u30E1\u30F3\u30C8\u306F\u4F7F\u3048\u307E\u305B\u3093: ${v}`);
@@ -174,9 +416,9 @@ function gitignoreLines(testsDir) {
   ];
 }
 function missingGitignoreLines(codielRoot, required) {
-  const file = path.join(codielRoot, ".gitignore");
+  const file = path3.join(codielRoot, ".gitignore");
   const present = new Set(
-    fs.existsSync(file) ? fs.readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("#")) : []
+    fs3.existsSync(file) ? fs3.readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("#")) : []
   );
   return required.filter((l) => !present.has(l));
 }
@@ -343,7 +585,7 @@ function isSpecDirId(id) {
   return SPEC_ID_RE.test(id) && !/[:\\]/.test(id) && id.split("/").every((s) => s !== "" && s !== "." && s !== "..");
 }
 function normalizeRel(p) {
-  return path.posix.normalize(p.replaceAll("\\", "/")).replace(/\/+$/, "");
+  return path3.posix.normalize(p.replaceAll("\\", "/")).replace(/\/+$/, "");
 }
 function newState(slug, tryN, fields) {
   const phases = {};
@@ -370,8 +612,19 @@ function newState(slug, tryN, fields) {
     stopReason: null,
     incidents: [],
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    raguelContract: 2
   };
+}
+function raguelStore(root) {
+  try {
+    return resolveRaguelStore(findMainRoot(root));
+  } catch (e) {
+    return fail(`Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
+  }
+}
+function oldContractMessage(st) {
+  return `codiel: \u3053\u306E run \u306F Raguel \u306E\u8A18\u9332\u306E\u5F62\u5F0F\u304C\u53E4\u3044(raguelContract \u306A\u3057)\u305F\u3081\u3001\u3053\u306E\u7248\u3067\u306F\u30B2\u30FC\u30C8\u3092\u901A\u305B\u306A\u3044\u3002\`codiel-state stop --slug ${st.runId} --reason migrate\` \u3067\u6B62\u3081\u3066\u304B\u3089\u3001\`/codiel:run ${st.intent}\` \u3067\u540C\u3058 intent \u306E\u65B0\u3057\u3044 try \u3092\u59CB\u3081\u308B\u3002`;
 }
 function loadRun(root, flags, allowLegacy = false) {
   const slug = flags.slug;
@@ -398,9 +651,9 @@ function main(argv, root = process.cwd()) {
       );
     const rawIntent = flags.intent;
     if (!rawIntent) fail("--intent \u304C\u5FC5\u8981\u3067\u3059");
-    if (path.isAbsolute(rawIntent))
+    if (path3.isAbsolute(rawIntent))
       fail(`--intent \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044: ${rawIntent}`);
-    const intent = path.posix.normalize(rawIntent.replaceAll("\\", "/"));
+    const intent = path3.posix.normalize(rawIntent.replaceAll("\\", "/"));
     if (!INTENT_PATH_RE.test(intent))
       fail(
         `--intent \u306B\u306F docs/intents/ \u76F4\u4E0B\u306E .md \u3092 repoRoot \u76F8\u5BFE\u3067\u6E21\u3057\u3066\u304F\u3060\u3055\u3044: ${rawIntent}`
@@ -428,9 +681,21 @@ function main(argv, root = process.cwd()) {
           `\u524D\u306E try(${latest.statePath})\u306F Raguel \u306E STOP \u3067\u6B62\u307E\u3063\u3066\u3044\u307E\u3059(stopReason: ${st.stopReason}` + (stopPhases.length > 0 ? `\u3001STOP \u306E\u30D5\u30A7\u30FC\u30BA: ${stopPhases.join(", ")}` : "") + ")\u3002\u65B0\u3057\u3044 try \u3092\u4F5C\u3063\u3066\u3088\u3044\u304B\u4EBA\u306B\u78BA\u304B\u3081\u3001\u627F\u8A8D\u3055\u308C\u305F\u3089 --human-approved \u3092\u4ED8\u3051\u3066 init \u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
         );
     }
+    if (latest && !bools.has("human-approved")) {
+      let stops = [];
+      try {
+        stops = unresolvedStops(raguelStore(root), latest.state.raguelRunId);
+      } catch (e) {
+        fail(`Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
+      }
+      if (stops.length > 0)
+        fail(
+          `\u524D\u306E try(${latest.statePath})\u306B\u306F\u3001\u8AA4\u691C\u77E5\u306E\u88C1\u5B9A\u306E\u7121\u3044 Raguel \u306E STOP \u304C\u3042\u308A\u307E\u3059(evaluationId: ${stops.join(", ")})\u3002\u65B0\u3057\u3044 try \u3092\u4F5C\u3063\u3066\u3088\u3044\u304B\u4EBA\u306B\u78BA\u304B\u3081\u3001\u627F\u8A8D\u3055\u308C\u305F\u3089 --human-approved \u3092\u4ED8\u3051\u3066 init \u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
+        );
+    }
     const tryN = latest ? latest.tryN + 1 : 1;
-    const dir = path.join(runDir(root, slug), `try-${tryN}`);
-    fs.mkdirSync(path.join(dir, "reports"), { recursive: true });
+    const dir = path3.join(runDir(root, slug), `try-${tryN}`);
+    fs3.mkdirSync(path3.join(dir, "reports"), { recursive: true });
     const state = newState(slug, tryN, {
       issue: "issue" in flags ? Number(flags.issue) : null,
       intent,
@@ -442,7 +707,7 @@ function main(argv, root = process.cwd()) {
     });
     if (flags["base-branch"]) state.baseBranch = flags["base-branch"];
     if (domainMode) state.domainMode = domainMode;
-    const p = path.join(dir, "state.json");
+    const p = path3.join(dir, "state.json");
     writeState(p, state);
     return ok({ statePath: p, state });
   }
@@ -491,6 +756,14 @@ function main(argv, root = process.cwd()) {
       fail(
         `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F ${st.phases[phase].status} \u306E\u305F\u3081\u958B\u59CB\u3067\u304D\u307E\u305B\u3093`
       );
+    if (CODE_PHASES.has(phase) && !st.phases[phase].startHead) {
+      const head = gitHead(root);
+      if (!head)
+        fail(
+          `\u30D5\u30A7\u30FC\u30BA ${phase} \u306E\u958B\u59CB\u306E HEAD \u3092\u8AAD\u3081\u307E\u305B\u3093(git rev-parse HEAD \u304C\u5931\u6557\u3057\u305F): ${root}`
+        );
+      st.phases[phase].startHead = head;
+    }
     st.phases[phase].status = "in_progress";
     st.phase = phase;
     writeState(latest.statePath, st);
@@ -538,6 +811,8 @@ function main(argv, root = process.cwd()) {
     if (!GATED.has(phase))
       fail(`${phase} \u306F\u30B2\u30FC\u30C8\u5BFE\u8C61\u30D5\u30A7\u30FC\u30BA\u3067\u306F\u3042\u308A\u307E\u305B\u3093(complete-phase \u3092\u4F7F\u7528)`);
     const latest = loadRun(root, flags);
+    if (latest.state.raguelContract !== 2)
+      fail(oldContractMessage(latest.state));
     const ph = latest.state.phases[phase];
     if (ph.status !== "in_progress")
       fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
@@ -556,6 +831,22 @@ function main(argv, root = process.cwd()) {
       fail(
         `verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u3068 STOP \u306F mark-ask(STOP \u306F --verdict STOP \u3092\u4ED8\u3051\u308B)\u3067\u4EBA\u306E\u88C1\u5B9A\u306B\u304B\u3051\u3066\u304F\u3060\u3055\u3044`
       );
+    let problem = null;
+    try {
+      problem = checkGate({
+        store: raguelStore(root),
+        root,
+        runId: latest.state.raguelRunId,
+        phase,
+        evaluationId: flags["evaluation-id"],
+        verdict: flags.verdict,
+        humanApproved,
+        startHead: ph.startHead
+      });
+    } catch (e) {
+      problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;
+    }
+    if (problem) fail(problem);
     ph.status = "passed";
     ph.evaluationId = flags["evaluation-id"];
     ph.verdict = flags.verdict;
@@ -599,6 +890,25 @@ function main(argv, root = process.cwd()) {
       fail(
         `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F pending \u306E\u305F\u3081 mark-ask \u3067\u304D\u307E\u305B\u3093\u3002start-phase \u3057\u3066\u304B\u3089\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`
       );
+    if (askKind === "raguel") {
+      const evaluationId = flags["evaluation-id"];
+      if (!evaluationId) fail("--kind raguel \u306B\u306F --evaluation-id \u304C\u5FC5\u8981\u3067\u3059");
+      let problem = null;
+      try {
+        problem = checkEvaluationRow(
+          findEvaluation(readEvaluationIndex(raguelStore(root)), evaluationId),
+          {
+            evaluationId,
+            runId: latest.state.raguelRunId,
+            phase,
+            verdict
+          }
+        );
+      } catch (e) {
+        problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;
+      }
+      if (problem) fail(problem);
+    }
     ph.status = "awaiting_human";
     if (ph.verdict !== "STOP") {
       ph.evaluationId = flags["evaluation-id"] ?? null;
@@ -732,10 +1042,10 @@ function main(argv, root = process.cwd()) {
     if (!file) fail("--file \u304C\u5FC5\u8981\u3067\u3059");
     const domain = flags.domain;
     if (!domain) fail("--domain \u304C\u5FC5\u8981\u3067\u3059");
-    const filePath = path.isAbsolute(file) ? file : path.join(root, file);
+    const filePath = path3.isAbsolute(file) ? file : path3.join(root, file);
     let max = 0;
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8");
+    if (fs3.existsSync(filePath)) {
+      const content = fs3.readFileSync(filePath, "utf8");
       const domainRe = new RegExp(`^${escapeRegExp(domain)}-([0-9]+)$`);
       const idRe = /\[ADR 候補: ([^\]]+)\]|\(候補 ID: ([^)]+)\)/g;
       for (const m of content.matchAll(idRe)) {
@@ -817,7 +1127,7 @@ function main(argv, root = process.cwd()) {
       if (!flags[name]) fail(`--${name} \u306B\u5024\u304C\u5FC5\u8981\u3067\u3059`);
       record[name] = flags[name];
     }
-    if (record.worktree && path.isAbsolute(record.worktree))
+    if (record.worktree && path3.isAbsolute(record.worktree))
       fail(
         `--worktree \u306B\u306F repoRoot \u76F8\u5BFE\u306E\u30D1\u30B9\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044: ${record.worktree}`
       );

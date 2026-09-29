@@ -93,7 +93,8 @@ export function loadConfig(cwd: string = process.cwd()): LoadedConfig {
     ...config,
     storage: {
       ...config.storage,
-      casesDir: resolve(resolveCasesDir(config.storage.casesDir))
+      // 相対パスは、設定を探したプロジェクトルートを基準にする(cwd に依らず同じ置き場になる)
+      casesDir: resolve(projectRoot, resolveCasesDir(config.storage.casesDir))
     }
   }
   const configHash = computeConfigHash(expanded)

@@ -599,6 +599,16 @@ describe("loadConfig - storage.casesDir の ~ の展開", () => {
     expect(config.storage.casesDir).toBe(join(homedir(), "custom-cases"))
   })
 
+  it("相対パスは、サブディレクトリを cwd にしてもプロジェクトルートを基準に解決する", () => {
+    useProjectConfig({ raguel: { storage: { casesDir: "rel-cases" } } })
+    const sub = join(workDir, "src", "deep")
+    mkdirSync(sub, { recursive: true })
+    process.chdir(sub)
+    expect(loadConfig().config.storage.casesDir).toBe(
+      join(workDir, "rel-cases")
+    )
+  })
+
   it("既定の ~/.raguel も展開する", () => {
     const { config } = loadConfig(workDir)
     expect(config.storage.casesDir).toBe(join(homedir(), ".raguel"))
