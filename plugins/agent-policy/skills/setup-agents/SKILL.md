@@ -170,6 +170,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 
 `results` を `役割 / 採用モデル / 定義名 / 既存状態と差分` の表にして提示する。採用モデルは各結果の `roleId` と `modelId`、定義名は `target` から読み取る。`exists` / `identical` と差分を示す。`warnings` があれば併記する。
 
+生成する定義の frontmatter には、役割とモデルの組に応じた `effort` が入り、組に対応する値が無いときは入らない。値は CLI が決めるので、表には書かない。
+
 照会成功時に候補先頭の既定エイリアスが存在しない役割は次の候補へ進む。Claude のモデルは必ず存在するため、最初の Claude のモデルで採用を止める。照会失敗時は先頭候補を採用する。
 
 ベンダーの確定はステップ 5b で行う。
@@ -212,7 +214,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 1. ステップ 4 の `mcpCurrent` を、既存定義から読み戻した既定値として提示する。既存定義がなければ空である。
 2. `usable: true` のサーバーだけを名前と status とともに提示する。プラグイン側の既定は「付けない」だが、`mcpCurrent` があればそれを既定にする。サーバーの選択には候補数の共通規則を適用し、「どのサーバーも使わない」を先頭の選択肢に置く。それが選ばれたら、以降の MCP の質問をすべて省いてステップ 6 へ進む。
-3. 既定の配分を計算する。MCP は impl 役割の定義に付け、readonly 役割の定義には付けない。既定で付与する役割は `complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan` である。
+3. 既定の配分を計算する。MCP は impl 役割の定義に付け、readonly 役割の定義には付けない。既定で付与する役割は `complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` である。
 4. 既定の配分を「役割 → 付与するサーバー」の表で提示し、「この配分で進む」か「役割ごとに調整する」かを 1 回だけ質問する。付与先が 0 件の役割も表に載せる。
 5. 調整を選んだときだけ、役割ごとに付与するサーバーを複数選択で聞く。選択肢は選んだサーバーに限り、既定配分を初期選択とする。「この役割には付与しない」を先頭に置く。既定で付与先が 0 件の役割も同じ質問をする。
 6. 各サーバーについて、適用される `_common.md` の制約と矛盾しないことを確認する。プロジェクト側の `_common.md` があれば優先し、同梱版だけを根拠にしない。
