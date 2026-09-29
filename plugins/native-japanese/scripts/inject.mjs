@@ -20,6 +20,10 @@ try {
 } catch {
   process.exit(0);
 }
+discipline = discipline.replace(
+  /^[ \t]*<!-- native-japanese: ignore-file -->[ \t]*(?:\r?\n|$)(?:[ \t]*\r?\n)?/gm,
+  ""
+);
 if (discipline.trim() === "") process.exit(0);
 process.stdout.write(
   `${JSON.stringify({
