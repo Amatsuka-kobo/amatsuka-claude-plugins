@@ -1146,6 +1146,82 @@ function seed(
 }
 
 describe("--write", () => {
+  it("個別経路は model-id から effort を選ぶ", () => {
+    const result = run<WriteResults>([
+      "--write",
+      "--scope",
+      "custom",
+      "--model-id",
+      "sonnet",
+      "--model",
+      "test-alias",
+      "--name",
+      "effort-individual",
+      "--roles",
+      "general,code-review",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "effort-individual.md"),
+      "utf8"
+    )
+    expect(content).toMatch(/^model: test-alias\neffort: high$/m)
+  })
+
+  it("--merge は既存の effort をテンプレート値で上書きする", () => {
+    const args = [
+      "--scope",
+      "custom",
+      "--model-id",
+      "sonnet",
+      "--name",
+      "effort-merge",
+      "--roles",
+      "general",
+      "--dir",
+      project
+    ]
+    run(["--write", ...args])
+    const file = path.join(project, ".claude", "agents", "effort-merge.md")
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace(/^effort: .+$/m, "effort: low")
+    )
+
+    const result = run<WriteResults>(["--write", "--merge", ...args])
+    expect(result.ok).toBe(true)
+    expect(fs.readFileSync(file, "utf8")).toMatch(
+      /^model: .+\neffort: medium$/m
+    )
+  })
+
+  it("--merge はテンプレートに無い既存 effort を保持する", () => {
+    const args = [
+      "--scope",
+      "claude",
+      "--model-id",
+      "haiku",
+      "--name",
+      "effort-haiku",
+      "--roles",
+      "knowledge-elicitation",
+      "--dir",
+      project
+    ]
+    run(["--write", ...args])
+    const file = path.join(project, ".claude", "agents", "effort-haiku.md")
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace(/^(model: .+)$/m, "$1\neffort: low")
+    )
+
+    const result = run<WriteResults>(["--write", "--merge", ...args])
+    expect(result.ok).toBe(true)
+    expect(fs.readFileSync(file, "utf8")).toMatch(/^effort: low$/m)
+  })
+
   it("既存が無いときテンプレートどおりに書く", () => {
     const result = run([
       "--scope",
@@ -1826,6 +1902,48 @@ describe("--recommended", () => {
         ?.target
     ).toBe(".claude/agents/haiku-knowledge-elicitor.md")
     expect(result).not.toHaveProperty("modelsDropped")
+  })
+
+  it("Claude の推奨定義は ModelId に対応する effort を出す", () => {
+    const args = [
+      "--recommended",
+      "--scope",
+      "claude",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ]
+    const written = run<WriteResults>(["--write", ...args])
+    expect(written.ok).toBe(true)
+    const checked = run<WriteResults>(["--check", ...args])
+    expect(checked.ok).toBe(true)
+
+    const expected: Record<string, string | undefined> = {
+      "complex-impl": "medium",
+      "normal-impl": "medium",
+      "light-impl": undefined,
+      escalation: "high",
+      general: "medium",
+      explore: "medium",
+      "realtime-research": "low",
+      "e2e-verify": "medium",
+      "design-review": "medium",
+      "knowledge-elicitation": undefined,
+      "code-review": "high",
+      "complex-review": "high",
+      "adversarial-review": "high"
+    }
+    for (const entry of checked.results) {
+      const content = fs.readFileSync(path.join(project, entry.target), "utf8")
+      const modelAt = content
+        .split("\n")
+        .findIndex((line) => line.startsWith("model: "))
+      const nextLine = content.split("\n")[modelAt + 1]
+      const effort = expected[entry.roleId ?? ""]
+      if (effort === undefined) expect(nextLine).not.toMatch(/^effort: /)
+      else expect(nextLine).toBe(`effort: ${effort}`)
+    }
   })
 
   it("custom scope の複数役割は指定分のみ ROLES 順に返す", () => {

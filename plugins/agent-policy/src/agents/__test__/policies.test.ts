@@ -3,6 +3,9 @@ import {
   ASSIGNMENTS,
   CLAUDE_ENUM_MODELS,
   candidateScopeFor,
+  EFFORT,
+  EFFORT_ORDER,
+  effortFor,
   isCustomInjection,
   MODELS,
   type ModelId,
@@ -87,6 +90,39 @@ describe("RECOMMENDED", () => {
   it("custom プロファイル向け推奨が全 13 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
+  })
+})
+
+describe("EFFORT", () => {
+  it("役割とモデルごとの effort 表を固定する", () => {
+    expect(EFFORT).toEqual({
+      escalation: { fable: "high", "gpt-astra": "high" },
+      "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+      "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+      "light-impl": { "gpt-luna": "low" },
+      general: { sonnet: "medium", "gpt-luna": "medium" },
+      explore: { sonnet: "medium", "gpt-sol": "medium" },
+      "realtime-research": { grok: "low", sonnet: "low" },
+      "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+      "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+      "knowledge-elicitation": {},
+      "code-review": { sonnet: "high", "gpt-sol": "high" },
+      "complex-review": { "gpt-astra": "high", fable: "high" },
+      "adversarial-review": { opus: "high", "gpt-sol": "high" }
+    })
+    expect(EFFORT_ORDER).toEqual(["low", "medium", "high", "xhigh", "max"])
+    expect(Object.values(EFFORT).flatMap(Object.keys)).not.toContain("haiku")
+  })
+
+  it("複数役割では最も高い effort を選び、未定義の組は省く", () => {
+    expect(effortFor(["normal-impl"], "gpt-luna")).toBeUndefined()
+    expect(effortFor(["light-impl"], "gpt-luna")).toBe("low")
+    expect(effortFor(["normal-impl", "light-impl"], "gpt-luna")).toBe("low")
+    expect(effortFor(["general", "code-review"], "sonnet")).toBe("high")
+    expect(effortFor(["knowledge-elicitation"], "haiku")).toBeUndefined()
+    expect(() =>
+      effortFor(["unregistered-role" as RoleId], "sonnet")
+    ).not.toThrow()
   })
 })
 

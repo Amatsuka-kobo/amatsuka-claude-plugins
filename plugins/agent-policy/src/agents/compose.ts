@@ -5,7 +5,7 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import type { Lang } from "./policies"
+import type { Effort, Lang } from "./policies"
 import { hasMixedKinds, type RoleId, sortRoleIds } from "./roles"
 import { type Vocabulary, vocabularyFor } from "./vocabulary"
 
@@ -16,6 +16,7 @@ export interface ComposeInput {
   roleIds: RoleId[]
   fragmentDirs: FragmentDir[]
   lang: Lang
+  effort?: Effort
   color?: string
   mcpServers?: string[]
   denyTools?: string[]
@@ -47,6 +48,7 @@ export function compose(input: ComposeInput): string {
     `name: ${input.name}`,
     `description: ${describe(selected, vocabulary)}`,
     `model: ${input.model}`,
+    ...(input.effort === undefined ? [] : [`effort: ${input.effort}`]),
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     ...(denyTools.length > 0

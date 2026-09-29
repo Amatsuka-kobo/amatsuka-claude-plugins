@@ -12,6 +12,16 @@ export type ModelId =
   | "gpt-astra"
   | "grok"
 
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
+
+export const EFFORT_ORDER: readonly Effort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+]
+
 // ja / en は同梱断片を持つ。それ以外は翻訳断片を要する任意のコード。
 export type Lang = string
 
@@ -157,6 +167,40 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
   "code-review": ["gpt-sol", "sonnet"],
   "complex-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"]
+}
+
+export const EFFORT: Record<RoleId, Partial<Record<ModelId, Effort>>> = {
+  escalation: { fable: "high", "gpt-astra": "high" },
+  "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+  "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+  "light-impl": { "gpt-luna": "low" },
+  general: { sonnet: "medium", "gpt-luna": "medium" },
+  explore: { sonnet: "medium", "gpt-sol": "medium" },
+  "realtime-research": { grok: "low", sonnet: "low" },
+  "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+  "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+  "knowledge-elicitation": {},
+  "code-review": { sonnet: "high", "gpt-sol": "high" },
+  "complex-review": { "gpt-astra": "high", fable: "high" },
+  "adversarial-review": { opus: "high", "gpt-sol": "high" }
+}
+
+export function effortFor(
+  roleIds: readonly RoleId[],
+  modelId: ModelId
+): Effort | undefined {
+  let highest: Effort | undefined
+  for (const roleId of roleIds) {
+    const effort = EFFORT[roleId]?.[modelId]
+    if (
+      effort !== undefined &&
+      (highest === undefined ||
+        EFFORT_ORDER.indexOf(effort) > EFFORT_ORDER.indexOf(highest))
+    ) {
+      highest = effort
+    }
+  }
+  return highest
 }
 
 export function modelById(id: string): ModelSpec | undefined {

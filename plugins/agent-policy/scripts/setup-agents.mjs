@@ -354,6 +354,7 @@ function compose(input) {
     `name: ${input.name}`,
     `description: ${describe(selected, vocabulary)}`,
     `model: ${input.model}`,
+    ...input.effort === void 0 ? [] : [`effort: ${input.effort}`],
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
@@ -596,6 +597,13 @@ function mcpCurrentOf(content) {
 }
 
 // src/agents/policies.ts
+var EFFORT_ORDER = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+];
 var MODELS = [
   {
     id: "opus",
@@ -702,6 +710,31 @@ var RECOMMENDED = {
   "complex-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"]
 };
+var EFFORT = {
+  escalation: { fable: "high", "gpt-astra": "high" },
+  "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+  "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+  "light-impl": { "gpt-luna": "low" },
+  general: { sonnet: "medium", "gpt-luna": "medium" },
+  explore: { sonnet: "medium", "gpt-sol": "medium" },
+  "realtime-research": { grok: "low", sonnet: "low" },
+  "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+  "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+  "knowledge-elicitation": {},
+  "code-review": { sonnet: "high", "gpt-sol": "high" },
+  "complex-review": { "gpt-astra": "high", fable: "high" },
+  "adversarial-review": { opus: "high", "gpt-sol": "high" }
+};
+function effortFor(roleIds, modelId) {
+  let highest;
+  for (const roleId of roleIds) {
+    const effort = EFFORT[roleId]?.[modelId];
+    if (effort !== void 0 && (highest === void 0 || EFFORT_ORDER.indexOf(effort) > EFFORT_ORDER.indexOf(highest))) {
+      highest = effort;
+    }
+  }
+  return highest;
+}
 function modelById(id) {
   return MODELS.find((model) => model.id === id);
 }
@@ -919,6 +952,7 @@ function composeInputFor(options, target, mcpServers) {
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
     lang: options.lang,
+    effort: effortFor(target.roles, target.modelId),
     color: target.color,
     mcpServers,
     denyTools: options.mcpDeny
