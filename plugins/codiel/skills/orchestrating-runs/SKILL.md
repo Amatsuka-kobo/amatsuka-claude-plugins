@@ -91,8 +91,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    ```
 
    `config` と `gitignore` のどちらかが失敗したとき(`.codiel/config.json` が不正なときは、標準エラー出力に
-   理由を出して終了コード 1 になる)は、標準エラー出力の理由をユーザーへ示して止め、`.codiel/config.json` を
-   直すか `/codiel:init` をやり直すよう案内する。C・D は揃っていないものとして、手順 6 の表の行 2 で止まる。
+   理由を出して終了コード 1 になる)は、C・D を揃っていないものとして扱う。手順 6 の表の行 2 で止まるときに、
+   標準エラー出力の理由を添え、`.codiel/config.json` を直すか `/codiel:init` をやり直すよう案内する。
 
 3. 手順 2 の出力にある事実(`repoSlug`・`ghAuthenticated`・`ghAttachSupported`・`projectDocs.architecture`
    など)から、次のとおり判断する。判断はここで行い、check-intent-env は事実だけを返す。
@@ -197,7 +197,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [dev-plan] | 成果物を書く委譲。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) | オーケストレーター(ゲート通過直後) |
 | [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列(2.5〜2.7)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`(`report.md` は委譲先の返答からオーケストレーターが書く。2.1) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
 | [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列(2.8)。グループのマージの後にオーケストレーターがそのグループの通すテストを実行する | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
-| [test-loop] | 回帰の実行の委譲と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列。並べ方は 2.6)(2.9) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`、修正 diff | pass-gate(`evaluate_code`) | 修正の委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
+| [test-loop] | 回帰の実行の委譲と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列。並べ方は 2.6)(2.9) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(委譲先の返答からオーケストレーターが書く。2.1)、修正 diff | pass-gate(`evaluate_code`) | 修正の委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
 | [intent-sync] | 成果物を書く委譲(出す前に 2.11 の確認を行う)。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
 | [pr] | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ(詳細は「2.2 pr の運転」) | complete-phase(github のときだけ `--pr-url` 必須) | オーケストレーター。開始前に `git status --short` を実行し、2.1 の確認義務に従う |
 | [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層 | `reports/review-<m>.md` + PR コメント(github のみ) | complete-phase | ―(`reports/` の下のレポートと本文ファイル(`review-body-<m>.md`・`review-comment-<連番>.md`)はコミットしない) |
