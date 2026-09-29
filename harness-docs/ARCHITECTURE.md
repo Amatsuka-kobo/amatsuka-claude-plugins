@@ -432,3 +432,48 @@ native-japanese は、文の長さ・文末の連続・連体修飾の重なり�
 #### 影響範囲
 
 システム概要にバンドルと git の例外を、技術スタックに `package.json` の例外を足す。利用者の環境は、初回のセッションで約 13MB を取得する。
+
+---
+
+### ADR-011: [codiel] Raguel を層ごとに作り直し、評価対象を自分で読み、STOP を 4 種に絞る
+
+- 状態: 採用
+- 決定日: 2026-09-29
+- 決定者: phyllis998
+
+#### 背景
+
+codiel 1.0.0 の手動確認で、Raguel は run を止めるか素通しさせるかに偏った。25 件の評価のうち STOP 3 件はすべて codiel が作るパスへの秘密情報の誤検知、PROCEED 19 件はすべてパネルを通らない trivial、パネルの起動 12 回はすべて `claude` が `--json-schema` を拒んで失敗した。呼び出し側が渡す要約をそのまま検査していたので、PROCEED は成果物の実物を検査した結果になっていなかった。基盤の障害(タイムアウトなど)も内容の懸念と同じ ASK になり、判例を汚した。
+
+#### 検討した選択肢
+
+1. 全面的に書き直し、MCP ツール面と層の構成も新しく決める
+2. ルールだけに縮小し、LLM のパネルを外す
+3. MCP ツール面と層の構成(ルール・重さ・パネル・ケースファイル・判例)を残し、層ごとに改修する(採用)
+
+#### 採用した結論
+
+層の構成を残して改修する。
+- Raguel は評価対象を自分で読む。evaluate_code は baseRef から git diff を固定の書式で作る。evaluate_plan・evaluate_design は paths のファイルを読む。どちらも読んだ内容の sha256 と HEAD を記録し、呼び出し側が本文を渡す旧入力は廃止する。
+- codiel の pass-gate は Raguel の記録(評価の索引・verdict.json・裁定の記録)を照合する。code 系フェーズでは HEAD・起点・範囲の絞り込みの無さを、文書のフェーズではファイルの sha256 と期待するファイルを確かめる。
+- pass-gate と Raguel は同じファイル契約(plugins/codiel/docs/raguel-contract.md)を独立に実装し、2 者比較テストで突き合わせる。
+- STOP は秘密情報・保護パス・破壊操作・改竄の 4 種だけに出す。改竄以外は、人が誤検知と裁定すれば record_outcome を経て通せる。
+- ほかのルールは最大 ASK にする。語彙のルールは info にしてパネルの入力にする。
+- パネルのプロバイダーは claude と codex から選べ、既定は claude とする。
+- ルール層と重さ判定の一部は、任意で Jev(TypeSafe AI)に文脈判定させられる。既定は無効とする。Jev が動かせる向きは stop → ask と、語彙のルールの info → ask などに限る。
+- 基盤の障害は judgeStatus: degraded の ASK にし、判例と再提出の比較から外す。
+
+#### 理由
+
+要約を渡せば PROCEED を取れる入力が残る限り、ゲートの結果は実物の検査にならない。STOP を確かな危険に絞ると、誤検知で run が止まる回数が減り、それ以外の懸念はパネルと人の裁定に回せる。層の構成と MCP ツール面は codiel のスキルと hook が前提にしているので、残すと codiel 側の変更を入力と記録の形に限れる。ルールだけに縮小すると、文書の欠陥や設計の穴のように正規表現で拾えない懸念を検査できない。
+
+#### 影響範囲
+
+- codiel 1.0.0-dev と raguel-mcp 0.0.2-dev を同じリリースで出す。
+- ツールの入力が互換でないので、それより前に作った run は pass-gate が migrate で止める。旧 projectId のケースファイルと判例は引き継がない。
+- 旧 DESIGN の原則「STOP は覆せない」は、改竄以外について上書きする。
+- codex と Jev は ADR-005 の外部 API にあたり、選んだときだけ成果物が外部へ送られる。
+- 既定の claude のパネリストは --setting-sources project で利用者の hooks・CLAUDE.md・プラグインを読まない。codex は止められず $CODEX_HOME/AGENTS.md を読む。
+- Raguel は ADR-009 が集めた .codiel/config.json から raguel と testsDir を読み、設定の置き場を増やさない。
+- E2E のレポート(<testsDir>/**/reports/**)は生成物と同じに扱い、評価から外す。
+- run が active か awaiting_human の間、codiel の guard は .codiel/config.json・RAGUEL_CONFIG のファイル・ケースファイルの置き場への書き込みを拒む。
