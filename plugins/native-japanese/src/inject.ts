@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // SessionStart と SubagentStart で、references/discipline.md を
 // ignore-file の目印の行を除いて additionalContext として注入する。どの失敗でも何も書かず exit 0 で終える。
+// SessionStart では、形態素解析の取得を切り離した子プロセスで起動する。
 
 import fs from "node:fs"
+import { maybeStartFetch } from "./morph-runtime.js"
 
 const EVENTS = ["SessionStart", "SubagentStart"]
 
@@ -16,6 +18,13 @@ try {
   process.exit(0)
 }
 if (typeof event !== "string" || !EVENTS.includes(event)) process.exit(0)
+
+// 形態素解析の取得は SessionStart でだけ起動する。失敗しても注入は続ける。
+if (event === "SessionStart") {
+  try {
+    maybeStartFetch(process.env)
+  } catch {}
+}
 
 let discipline: string
 try {
