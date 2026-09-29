@@ -250,12 +250,6 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "design-plan",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
     kind: "readonly",
@@ -292,28 +286,16 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
-    id: "final-review",
-    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "gate-review",
-    label: "\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30B2\u30FC\u30C8\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "adversarial-review",
     label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "advisor",
-    label: "\u8A2D\u8A08\u30FB\u8A08\u753B\u30FB\u5B9F\u88C5\u306E\u30A2\u30C9\u30D0\u30A4\u30B6\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   }
 ];
 function roleById(id) {
@@ -415,43 +397,35 @@ var ASSIGNMENTS = {
     "light-impl": ["haiku"],
     escalation: ["fable"],
     general: ["sonnet"],
-    "design-plan": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
     "e2e-verify": ["sonnet"],
     "design-review": ["sonnet"],
     "knowledge-elicitation": ["haiku"],
     "code-review": ["sonnet"],
-    "final-review": ["fable"],
-    "gate-review": ["fable"],
-    "adversarial-review": ["opus"],
-    advisor: ["fable"]
+    "complex-review": ["fable"],
+    "adversarial-review": ["opus"]
   }
 };
 var RECOMMENDED = {
-  "complex-impl": ["gpt-sol", "opus"],
-  "normal-impl": ["gpt-luna", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku", "grok"],
+  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "normal-impl": ["gpt-sol", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku"],
   escalation: ["gpt-astra", "fable"],
   general: ["gpt-luna", "sonnet"],
-  "design-plan": ["opus"],
-  explore: ["grok", "sonnet", "gpt-terra"],
+  explore: ["gpt-sol", "sonnet"],
   "realtime-research": ["grok", "sonnet"],
-  "e2e-verify": ["sonnet"],
-  "design-review": ["grok", "sonnet"],
+  "e2e-verify": ["gpt-sol", "sonnet"],
+  "design-review": ["gpt-sol", "sonnet"],
   "knowledge-elicitation": ["haiku"],
-  "code-review": ["sonnet"],
-  "final-review": ["gpt-astra", "fable"],
-  "gate-review": ["gpt-astra", "fable"],
-  "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["gpt-astra", "fable"]
+  "code-review": ["gpt-sol", "sonnet"],
+  "complex-review": ["gpt-astra", "fable"],
+  "adversarial-review": ["opus", "gpt-sol"]
 };
 var SOLO_DENIED_ROLES = [
-  "advisor",
   "knowledge-elicitation",
   "code-review",
-  "final-review",
-  "gate-review",
+  "complex-review",
   "adversarial-review"
 ];
 function allowsAgentTool(ids) {

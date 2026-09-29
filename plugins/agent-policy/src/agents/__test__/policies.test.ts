@@ -23,36 +23,30 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   "light-impl": ["haiku"],
   escalation: ["fable"],
   general: ["sonnet"],
-  "design-plan": ["opus"],
   explore: ["sonnet"],
   "realtime-research": ["sonnet"],
   "e2e-verify": ["sonnet"],
   "design-review": ["sonnet"],
   "knowledge-elicitation": ["haiku"],
   "code-review": ["sonnet"],
-  "final-review": ["fable"],
-  "gate-review": ["fable"],
-  "adversarial-review": ["opus"],
-  advisor: ["fable"]
+  "complex-review": ["fable"],
+  "adversarial-review": ["opus"]
 }
 
 const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["gpt-sol", "opus"],
-  "normal-impl": ["gpt-luna", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku", "grok"],
+  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "normal-impl": ["gpt-sol", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku"],
   escalation: ["gpt-astra", "fable"],
   general: ["gpt-luna", "sonnet"],
-  "design-plan": ["opus"],
-  explore: ["grok", "sonnet", "gpt-terra"],
+  explore: ["gpt-sol", "sonnet"],
   "realtime-research": ["grok", "sonnet"],
-  "e2e-verify": ["sonnet"],
-  "design-review": ["grok", "sonnet"],
+  "e2e-verify": ["gpt-sol", "sonnet"],
+  "design-review": ["gpt-sol", "sonnet"],
   "knowledge-elicitation": ["haiku"],
-  "code-review": ["sonnet"],
-  "final-review": ["gpt-astra", "fable"],
-  "gate-review": ["gpt-astra", "fable"],
-  "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["gpt-astra", "fable"]
+  "code-review": ["gpt-sol", "sonnet"],
+  "complex-review": ["gpt-astra", "fable"],
+  "adversarial-review": ["opus", "gpt-sol"]
 }
 
 const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
@@ -61,17 +55,14 @@ const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
   "light-impl": true,
   escalation: true,
   general: true,
-  "design-plan": true,
   explore: true,
   "realtime-research": true,
   "e2e-verify": true,
   "design-review": true,
   "knowledge-elicitation": false,
   "code-review": false,
-  "final-review": false,
-  "gate-review": false,
-  "adversarial-review": false,
-  advisor: false
+  "complex-review": false,
+  "adversarial-review": false
 }
 
 function sortedRoleIds(value: Record<RoleId, ModelId[]>): RoleId[] {
@@ -98,7 +89,7 @@ describe("POLICIES", () => {
 })
 
 describe("ASSIGNMENTS", () => {
-  it("claude-model-policy だけに現行の全 16 役割を保持する", () => {
+  it("claude-model-policy だけに現行の全 13 役割を保持する", () => {
     expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
     expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
       ALL_ROLE_IDS
@@ -110,7 +101,7 @@ describe("ASSIGNMENTS", () => {
 })
 
 describe("RECOMMENDED", () => {
-  it("custom プロファイル向け推奨が全 16 役割と固定値を持つ", () => {
+  it("custom プロファイル向け推奨が全 13 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
   })
@@ -208,13 +199,8 @@ describe("rolesFor", () => {
     ])
   })
 
-  it("fable が escalation・final-review・gate-review・advisor を返す", () => {
-    expect(rolesFor("fable")).toEqual([
-      "escalation",
-      "final-review",
-      "gate-review",
-      "advisor"
-    ])
+  it("fable が escalation と complex-review を返す", () => {
+    expect(rolesFor("fable")).toEqual(["escalation", "complex-review"])
   })
 
   it("claude-model-policy に登場しないモデルには空配列を返す", () => {
@@ -223,7 +209,7 @@ describe("rolesFor", () => {
 })
 
 describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 16 役割で現行規定を保つ", () => {
+  it("claude-model-policy の全 13 役割で現行規定を保つ", () => {
     for (const role of ROLES) {
       expect(allowsAgentTool([role.id]), role.id).toBe(
         EXPECTED_AGENT_TOOL[role.id]
@@ -234,11 +220,11 @@ describe("allowsAgentTool", () => {
   it("役割の組み合わせに応じて Agent Tool を判定する", () => {
     expect(allowsAgentTool(["light-impl"])).toBe(true)
     expect(allowsAgentTool(["light-impl", "complex-impl"])).toBe(true)
-    expect(allowsAgentTool(["advisor"])).toBe(false)
+    expect(allowsAgentTool(["adversarial-review"])).toBe(false)
     expect(allowsAgentTool(["code-review"])).toBe(false)
-    expect(allowsAgentTool(["final-review"])).toBe(false)
-    expect(allowsAgentTool(["gate-review"])).toBe(false)
-    expect(allowsAgentTool(["complex-impl", "advisor"])).toBe(true)
+    expect(allowsAgentTool(["complex-review"])).toBe(false)
+    expect(allowsAgentTool(["knowledge-elicitation"])).toBe(false)
+    expect(allowsAgentTool(["complex-impl", "code-review"])).toBe(true)
   })
 
   it("Agent Tool を許可する新規役割を通す", () => {
@@ -249,7 +235,7 @@ describe("allowsAgentTool", () => {
   it("モデル未指定時は役割側の規定だけを適用する", () => {
     expect(allowsAgentTool(["explore"])).toBe(true)
     expect(allowsAgentTool(["light-impl"])).toBe(true)
-    expect(allowsAgentTool(["final-review"])).toBe(false)
+    expect(allowsAgentTool(["complex-review"])).toBe(false)
   })
 })
 

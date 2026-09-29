@@ -370,7 +370,7 @@ describe("--scope", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.results).toHaveLength(16)
+    expect(result.results).toHaveLength(13)
     expect(result.results.map((entry) => entry.modelId)).toEqual(
       ROLES.map((role) => ASSIGNMENTS["claude-model-policy"][role.id][0])
     )
@@ -474,17 +474,20 @@ describe("--list-live-models", () => {
         {
           id: "claude-gpt-6-sol",
           vendor: "gpt",
-          recommendedFor: ["complex-impl", "adversarial-review"]
+          recommendedFor: [
+            "complex-impl",
+            "normal-impl",
+            "explore",
+            "e2e-verify",
+            "design-review",
+            "code-review",
+            "adversarial-review"
+          ]
         },
         {
           id: "claude-gpt-6-astra",
           vendor: "gpt",
-          recommendedFor: [
-            "escalation",
-            "final-review",
-            "gate-review",
-            "advisor"
-          ]
+          recommendedFor: ["escalation", "complex-review"]
         },
         { id: "custom-unknown", vendor: "unknown", recommendedFor: [] }
       ],
@@ -547,7 +550,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(13)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -593,10 +596,9 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
-      "gpt-astra",
-      "fable"
-    ])
+    expect(
+      result.roles.find((role) => role.id === "complex-review")?.models
+    ).toEqual(["gpt-astra", "fable"])
     expect(
       result.roles.every(
         (role) =>
@@ -614,17 +616,16 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(13)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
-    ).toEqual(["gpt-sol", "opus"])
+    ).toEqual(["gpt-sol", "opus", "grok"])
     expect(
       result.roles.find((role) => role.id === "escalation")?.models
     ).toEqual(["gpt-astra", "fable"])
-    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
-      "gpt-astra",
-      "fable"
-    ])
+    expect(
+      result.roles.find((role) => role.id === "complex-review")?.models
+    ).toEqual(["gpt-astra", "fable"])
   })
 
   it("--scope claude では外部ベンダーの既存定義を被覆に数えない", () => {
@@ -680,9 +681,9 @@ describe("--list-coverage", () => {
     expect(
       result.roles.find((role) => role.id === "escalation")?.models
     ).toEqual(["fable"])
-    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
-      "fable"
-    ])
+    expect(
+      result.roles.find((role) => role.id === "complex-review")?.models
+    ).toEqual(["fable"])
     expect(result.roles.every((role) => role.models.length === 1)).toBe(true)
   })
 
@@ -719,8 +720,8 @@ describe("--list-coverage", () => {
     ])
 
     expect(
-      result.roles.find((role) => role.id === "advisor")?.defaultName
-    ).toBe("adviser")
+      result.roles.find((role) => role.id === "complex-review")?.defaultName
+    ).toBe("complex-reviewer")
     expect(
       result.roles.every(
         (role) =>
@@ -747,17 +748,14 @@ describe("--list-roles", () => {
       "light-impl",
       "escalation",
       "general",
-      "design-plan",
       "explore",
       "realtime-research",
       "e2e-verify",
       "design-review",
       "knowledge-elicitation",
       "code-review",
-      "final-review",
-      "gate-review",
-      "adversarial-review",
-      "advisor"
+      "complex-review",
+      "adversarial-review"
     ])
     expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
   })
@@ -1011,8 +1009,8 @@ describe("--check", () => {
       ]).roles.agentTool
 
     expect(agentToolFor("code-review")).toBe(false)
-    expect(agentToolFor("final-review")).toBe(false)
-    expect(agentToolFor("gate-review")).toBe(false)
+    expect(agentToolFor("complex-review")).toBe(false)
+    expect(agentToolFor("knowledge-elicitation")).toBe(false)
     expect(agentToolFor("escalation")).toBe(true)
     expect(agentToolFor("e2e-verify")).toBe(true)
     expect(agentToolFor("explore,realtime-research,design-review")).toBe(true)
@@ -1841,7 +1839,7 @@ describe("live model 検証と vendor", () => {
 })
 
 describe("--recommended", () => {
-  it("Claude scope は 16 役割を各 1 定義にし、roleId と既定名を返す", () => {
+  it("Claude scope は 13 役割を各 1 定義にし、roleId と既定名を返す", () => {
     const result = run<WriteResults>([
       "--check",
       "--recommended",
@@ -1854,7 +1852,7 @@ describe("--recommended", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.results).toHaveLength(16)
+    expect(result.results).toHaveLength(13)
     expect(result.results.map((entry) => entry.roleId)).toEqual(
       ROLES.map((role) => role.id)
     )
@@ -1886,7 +1884,7 @@ describe("--recommended", () => {
       "--scope",
       "custom",
       "--roles",
-      "design-review,complex-impl,design-plan",
+      "design-review,complex-impl,adversarial-review",
       "--dir",
       project
     ])
@@ -1895,8 +1893,8 @@ describe("--recommended", () => {
       result.results.map((entry) => [entry.roleId, entry.modelId])
     ).toEqual([
       ["complex-impl", "gpt-sol"],
-      ["design-plan", "opus"],
-      ["design-review", "grok"]
+      ["design-review", "gpt-sol"],
+      ["adversarial-review", "opus"]
     ])
   })
 
@@ -1922,7 +1920,7 @@ describe("--recommended", () => {
   it("先頭が live に無ければ次の Claude enum を採り、その後の候補は採らない", async () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
-        data: [{ id: "claude-gpt-6-sol", owned_by: "openai" }]
+        data: [{ id: "claude-grok-4-7", owned_by: "xai" }]
       })
     })
     const result = await runAsync<WriteResults>(
@@ -1932,16 +1930,13 @@ describe("--recommended", () => {
         "--scope",
         "custom",
         "--roles",
-        "design-review,adversarial-review",
+        "design-review",
         "--dir",
         project
       ],
       { ANTHROPIC_BASE_URL: proxy.baseUrl }
     )
-    expect(result.results.map((entry) => entry.modelId)).toEqual([
-      "sonnet",
-      "opus"
-    ])
+    expect(result.results.map((entry) => entry.modelId)).toEqual(["sonnet"])
   })
 
   it("live の照会失敗時は推奨先頭を採り警告を返す", () => {
@@ -1957,7 +1952,7 @@ describe("--recommended", () => {
     ])
     expect(result.results.map((entry) => entry.modelId)).toEqual([
       "gpt-sol",
-      "grok"
+      "gpt-sol"
     ])
     expect(result.warnings).toContain(
       "live models unavailable (no-base-url); model existence was not validated"
@@ -1988,8 +1983,9 @@ describe("--recommended", () => {
       path.join(project, result.results[0]?.target ?? ""),
       "utf8"
     )
-    expect(content).toMatch(/^agent-policy-vendor: grok$/m)
-    expect(content).toMatch(/^color: red$/m)
+    expect(result.results[0]?.modelId).toBe("sonnet")
+    expect(content).toMatch(/^agent-policy-vendor: claude$/m)
+    expect(content).toMatch(/^color: blue$/m)
   })
 
   it("役割ごとに分けた write は初回の定義だけ MCP を付ける", () => {
