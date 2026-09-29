@@ -46,16 +46,24 @@ function withPluginRoot(
 test.each([
   "SessionStart",
   "SubagentStart"
-])("%s で discipline.md の全文を 1 行の JSON で注入する", (event) => {
+])("%s で discipline.md を目印の行を除いて 1 行の JSON で注入する", (event) => {
   const out = inject(JSON.stringify({ hook_event_name: event }))
   expect(out.endsWith("\n")).toBe(true)
   expect(out.slice(0, -1)).not.toContain("\n")
   expect(JSON.parse(out)).toEqual({
     hookSpecificOutput: {
       hookEventName: event,
-      additionalContext: fs.readFileSync(DISCIPLINE, "utf8")
+      additionalContext: fs
+        .readFileSync(DISCIPLINE, "utf8")
+        .replace("<!-- native-japanese: ignore-file -->\n\n", "")
     }
   })
+})
+
+test("注入文に ignore-file の行が含まれない", () => {
+  expect(
+    JSON.parse(inject(SESSION_START)).hookSpecificOutput.additionalContext
+  ).not.toContain("ignore-file")
 })
 
 test.each([
@@ -76,6 +84,28 @@ test("差し替えた本文を注入する(一時ディレクトリでの起動�
         .additionalContext
     ).toBe("# 見出し\n\n- 本文\n")
   })
+})
+
+test("目印の無い本文はそのまま注入し、行の途中の目印は残す", () => {
+  const body = "# 見出し\n\n- 本文 <!-- native-japanese: ignore-file --> の例\n"
+  withPluginRoot(body, (script) => {
+    expect(
+      JSON.parse(inject(SESSION_START, script)).hookSpecificOutput
+        .additionalContext
+    ).toBe(body)
+  })
+})
+
+test("前後に空白のある目印の行も取り除く", () => {
+  withPluginRoot(
+    "  <!-- native-japanese: ignore-file -->\t\n\n# 見出し\n",
+    (script) => {
+      expect(
+        JSON.parse(inject(SESSION_START, script)).hookSpecificOutput
+          .additionalContext
+      ).toBe("# 見出し\n")
+    }
+  )
 })
 
 test("discipline.md が無ければ何も出力しない", () => {

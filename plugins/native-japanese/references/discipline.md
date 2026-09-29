@@ -1,3 +1,5 @@
+<!-- native-japanese: ignore-file -->
+
 # 日本語の書き方
 
 ## 適用範囲

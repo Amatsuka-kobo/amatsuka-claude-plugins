@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// SessionStart と SubagentStart で、references/discipline.md の全文を
-// additionalContext として注入する。どの失敗でも何も書かず exit 0 で終える。
+// SessionStart と SubagentStart で、references/discipline.md を
+// ignore-file の目印の行を除いて additionalContext として注入する。どの失敗でも何も書かず exit 0 で終える。
 
 import fs from "node:fs"
 
@@ -26,6 +26,12 @@ try {
 } catch {
   process.exit(0)
 }
+// 検査を外すための目印は注入先に要らないので、行全体が目印である行と
+// その直後の空行 1 行を取り除く。行の途中に書いた目印は残す。
+discipline = discipline.replace(
+  /^[ \t]*<!-- native-japanese: ignore-file -->[ \t]*(?:\r?\n|$)(?:[ \t]*\r?\n)?/gm,
+  ""
+)
 if (discipline.trim() === "") process.exit(0)
 
 process.stdout.write(
