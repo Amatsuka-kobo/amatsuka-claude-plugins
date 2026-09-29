@@ -5,8 +5,8 @@ and returns a machine PROCEED / ASK / STOP verdict; the only human touchpoint is
 Parent plugin: `mem:codiel/core` (codiel 1.0.0-dev). 2026-09-29 に作り直し済み(設計書
 `harness-docs/design/2026-09-28-raguel-redesign-design.md`、計画書 `harness-docs/plans/2026-09-29-raguel-redesign-plan.md`、
 ADR-011)。codiel との取り決めは `plugins/codiel/docs/raguel-contract.md` が正本で、フェーズの表・ケースファイルの配置・
-記録の形・裁定の組み合わせ・pass-gate の検査を持つ。`raguel-mcp/docs/DESIGN.md` の記述は作り直しの前のもので、
-設計書と契約の文書を優先する。
+記録の形・裁定の組み合わせ・pass-gate の検査を持つ。`raguel-mcp/docs/DESIGN.md` も作り直しに合わせて書き直してあり、
+食い違ったときは設計書と契約の文書を優先する。
 
 Own workspace package (`raguel-mcp`, 0.0.2-dev in `package.json`; the MCP server reports the same value via
 `BUILD_VERSION`, embedded by `build.ts`), but built/tested via the **root** toolchain
