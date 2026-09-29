@@ -4,6 +4,7 @@ await esbuild.build({
   bundle: true,
   entryPoints: {
     inject: "./src/inject.ts",
+    "fetch-morph": "./src/fetch-morph.ts",
     measure: "./src/measure.ts"
   },
   outdir: "./scripts",
