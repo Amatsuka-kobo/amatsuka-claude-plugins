@@ -23,6 +23,10 @@ import {
   resolveProjectId as raguelProjectId,
   resolveProjectRoot
 } from "../../raguel-mcp/src/project/root"
+import {
+  type Harness,
+  makeHarness
+} from "../../raguel-mcp/src/tools/__test__/helpers/harness"
 import { readCodielConfig } from "../codiel-state.js"
 import { isE2eReport } from "../hooks/guard-write.js"
 import { findMainRoot } from "../hooks/lib.js"
@@ -363,7 +367,9 @@ describe("Raguel が書いた記録を codiel が読む", () => {
       evaluationId,
       verdict,
       humanApproved: extra.humanApproved ?? false,
-      startHead: extra.startHead
+      startHead: extra.startHead,
+      runDocsDir: "docs/codiel/runs/demo",
+      testsDir: "docs/codiel/tests"
     })
 
   test("codiel の置き場は Raguel の CaseStore の置き場と等しい", () => {
@@ -413,15 +419,16 @@ describe("Raguel が書いた記録を codiel が読む", () => {
   })
 
   test("文書のフェーズは、subject.files の sha256 が今の中身と合えば通り、書き換えると外れる", () => {
-    const file = path.join(root, "docs", "design.md")
-    fs.mkdirSync(path.dirname(file))
+    const rel = "docs/codiel/runs/demo/design.md"
+    const file = path.join(root, rel)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, "# 設計\n")
     const sha = createHash("sha256").update(fs.readFileSync(file)).digest("hex")
     const id = evaluate("design", "PROCEED", {
       repoPath: root,
       head: git(root, "rev-parse", "HEAD"),
-      paths: ["docs/design.md"],
-      files: [{ path: "docs/design.md", sha256: sha, isNew: true }]
+      paths: [rel],
+      files: [{ path: rel, sha256: sha, isNew: true }]
     })
     expect(gate("design", id, "PROCEED")).toBeNull()
     fs.appendFileSync(file, "追記\n")
@@ -493,5 +500,49 @@ describe("Raguel が書いた記録を codiel が読む", () => {
     expect(r.stderr).toBe("")
     expect(r.status).toBe(0)
     expect(JSON.parse(r.stdout).state.phases.intent.status).toBe("passed")
+  })
+})
+
+describe("Raguel のパイプラインが書いた空の差分の記録(R22)", () => {
+  let h: Harness
+  afterEach(() => h.cleanup())
+
+  // Raguel の evaluate で test-loop を評価し、codiel の pass-gate の検査にかける
+  async function emptyDiffGate(extra: Record<string, unknown> = {}) {
+    h = makeHarness()
+    const r = await h.evaluate({
+      tool: "evaluate_code",
+      runId: "run-1",
+      phase: "test-loop",
+      objective: "回帰を通す",
+      baseRef: h.base,
+      ...extra
+    })
+    const problem = checkGate({
+      store: resolveRaguelStore(findMainRoot(h.repo)),
+      root: h.repo,
+      runId: "run-1",
+      phase: "test-loop",
+      evaluationId: r.evaluationId,
+      verdict: r.verdict,
+      humanApproved: false,
+      startHead: h.base,
+      runDocsDir: "docs/codiel/runs/demo",
+      testsDir: "docs/codiel/tests"
+    })
+    return { r, problem }
+  }
+
+  test("変更の無い test-loop の PROCEED で、code 系の pass-gate(検査 8)が通る(W4R2-07)", async () => {
+    const { r, problem } = await emptyDiffGate()
+    expect(r.verdict).toBe("PROCEED")
+    expect(r.subject).toMatchObject({ base: h.base, head: h.base, files: [] })
+    expect(problem).toBeNull()
+  })
+
+  test("paths で範囲を絞った空の差分の記録では、検査 8 が通さない(W4R2-01・W4R1-03)", async () => {
+    const { r, problem } = await emptyDiffGate({ paths: ["README.md"] })
+    expect(r.verdict).toBe("PROCEED")
+    expect(problem).toMatch(/paths\(\["README.md"\]\)で絞られています/)
   })
 })

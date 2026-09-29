@@ -3,10 +3,13 @@ import path from "node:path"
 import { findMainRoot } from "./hooks/lib.js"
 import {
   CODE_PHASES,
+  changedPathsSince,
   checkEvaluationRow,
   checkGate,
+  evaluatedFiles,
   findEvaluation,
   gitHead,
+  isAncestor,
   type RaguelStore,
   readEvaluationIndex,
   resolveRaguelStore,
@@ -40,6 +43,9 @@ export interface PhaseState {
   // code 系フェーズ(test-code・implement・test-loop・fix-loop)を始めたときの HEAD
   // (Raguel 設計書 §6.13.3)。pass-gate の検査 8 が評価の起点と照らす
   startHead?: string
+  // ゲート付きフェーズの pass-gate を通したときの HEAD(Raguel 設計書 §6.13.3)。git の管理外では持たない。
+  // 次の code 系フェーズの start-phase が、評価の後にコミットが足されていないかを照らす
+  passedHead?: string
 }
 
 export interface RunState {
@@ -688,6 +694,60 @@ function oldContractMessage(st: RunState): string {
   return `codiel: この run は Raguel の記録の形式が古い(raguelContract なし)ため、この版ではゲートを通せない。\`codiel-state stop --slug ${st.runId} --reason migrate\` で止めてから、\`/codiel:run ${st.intent}\` で同じ intent の新しい try を始める。`
 }
 
+// フェーズの間の連続性(Raguel 設計書 §6.13.3 の start-phase)。phase より前でゲート付きフェーズを
+// 持つ最も近いステージの、passedHead を持つフェーズと照らす。持つフェーズが無ければ照らさない
+// (skip-phase で通したフェーズは passedHead を持たない)。外れたら理由の文を返す。
+// 直前が code 系フェーズなら、今の HEAD が passedHead と等しいことを要る。文書のフェーズなら、
+// passedHead..HEAD の変更がそのフェーズの subject.files だけであることを要る(ゲート通過の直後の
+// 文書のコミットを許す)。同じステージの test-spec と dev-plan は、両方の subject.files を合わせる。
+// state は通した順を持たない。そこで、passedHead がもう一方の祖先であるほう(先に通したほう)を起点にする
+function continuityProblem(
+  root: string,
+  st: RunState,
+  phase: string,
+  head: string
+): string | null {
+  const stageIdx = STAGES.findIndex((s) => s.includes(phase))
+  for (let i = stageIdx - 1; i >= 0; i--) {
+    const gated = STAGES[i].filter((p) => GATED.has(p))
+    if (gated.length === 0) continue
+    const found = gated.flatMap((p) => {
+      const h = st.phases[p].passedHead
+      return h ? [{ phase: p, passedHead: h }] : []
+    })
+    if (found.length === 0) return null
+    const names = found.map((c) => c.phase).join("・")
+    if (found.some((c) => CODE_PHASES.has(c.phase))) {
+      const { passedHead } = found[0]
+      return passedHead === head
+        ? null
+        : `評価の後にコミットがある(${passedHead}..${head})。${names} を評価し直してください`
+    }
+    const base =
+      found.find((c) =>
+        found.every((o) => isAncestor(root, c.passedHead, o.passedHead))
+      ) ?? found[0]
+    const allowed = new Set<string>()
+    for (const c of found) {
+      const files = evaluatedFiles(
+        raguelStore(root),
+        st.phases[c.phase].evaluationId ?? ""
+      )
+      if (!files)
+        return `${c.phase} の評価の記録(evaluationId: ${st.phases[c.phase].evaluationId})から評価した文書を読めません`
+      for (const f of files) allowed.add(f)
+    }
+    const changed = changedPathsSince(root, base.passedHead)
+    if (!changed)
+      return `評価の後の変更を読めません(git diff ${base.passedHead} HEAD が失敗した)`
+    const extra = changed.filter((p) => !allowed.has(p))
+    return extra.length === 0
+      ? null
+      : `評価の後に、評価した文書のほかのファイルのコミットがある(${base.passedHead}..${head}: ${extra.join(", ")})。${names} を評価し直してください`
+  }
+  return null
+}
+
 // --slug の run の最新 try を読む。isLegacy の run(v1 と M4 より前の state)は allowLegacy
 // (get と stop、awaiting_outcome への record-outcome、completed / rejected の run への
 // record-outcome --outcome incident)のときだけ返し、ほかのコマンドでは §6.2.4・§6.6 の
@@ -860,6 +920,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         fail(
           `フェーズ ${phase} の開始の HEAD を読めません(git rev-parse HEAD が失敗した): ${root}`
         )
+      const problem = continuityProblem(root, st, phase, head as string)
+      if (problem) fail(problem)
       st.phases[phase].startHead = head as string
     }
     st.phases[phase].status = "in_progress"
@@ -934,6 +996,13 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         `verdict が PROCEED ではありません: ${flags.verdict}。ASK と STOP は mark-ask(STOP は --verdict STOP を付ける)で人の裁定にかけてください`
       )
     // 自己申告の --verdict を Raguel の記録で照らす(Raguel 設計書 §6.13.3 の検査 1〜5・7〜9)
+    // 検査 9 の期待するファイルの置き場
+    let dirs = { testsDir: "", runsDir: "" }
+    try {
+      dirs = readCodielConfig(root)
+    } catch (e) {
+      fail((e as Error).message)
+    }
     let problem: string | null = null
     try {
       problem = checkGate({
@@ -944,7 +1013,9 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         evaluationId: flags["evaluation-id"],
         verdict: flags.verdict,
         humanApproved,
-        startHead: ph.startHead
+        startHead: ph.startHead,
+        runDocsDir: path.posix.join(dirs.runsDir, latest.state.runId),
+        testsDir: dirs.testsDir
       })
     } catch (e) {
       problem = `Raguel の記録を読めません: ${(e as Error).message}`
@@ -954,6 +1025,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     ph.evaluationId = flags["evaluation-id"]
     ph.verdict = flags.verdict
     if (humanApproved) ph.humanApproved = true
+    const passedHead = gitHead(root)
+    if (passedHead) ph.passedHead = passedHead
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
   }

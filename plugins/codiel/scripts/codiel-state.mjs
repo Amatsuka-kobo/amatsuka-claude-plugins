@@ -181,12 +181,60 @@ function gitHead(dir) {
     return null;
   }
 }
+function isAncestor(dir, ancestor, descendant) {
+  try {
+    execFileSync(
+      "git",
+      ["-C", dir, "merge-base", "--is-ancestor", ancestor, descendant],
+      { stdio: "ignore" }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+function changedPathsSince(dir, base) {
+  try {
+    return execFileSync(
+      "git",
+      ["-C", dir, "diff", "--name-only", "--no-renames", "-z", base, "HEAD"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).split("\0").filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+function evaluatedFiles(store, evaluationId) {
+  const row = findEvaluation(readEvaluationIndex(store), evaluationId);
+  const v = row && readVerdictRecord(row.casePath);
+  if (!v || !isObject(v.subject) || !Array.isArray(v.subject.files)) return null;
+  return v.subject.files.map((f) => path2.posix.normalize(f.path));
+}
 function sha256OfFile(file) {
   try {
     return createHash("sha256").update(fs2.readFileSync(file)).digest("hex");
   } catch {
     return null;
   }
+}
+function missingExpectedDoc(input, files) {
+  const paths = files.map((f) => path2.posix.normalize(f.path));
+  const listed = paths.length > 0 ? paths.join(", ") : "\u306A\u3057";
+  const need = (expected, found) => found ? null : `${input.phase} \u306E\u8A55\u4FA1\u306B ${expected} \u304C\u542B\u307E\u308C\u3066\u3044\u307E\u305B\u3093(\u8A55\u4FA1\u3057\u305F\u30D5\u30A1\u30A4\u30EB: ${listed})\u3002${expected} \u3092 paths \u306B\u5165\u308C\u3066\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+  if (input.phase === "design" || input.phase === "dev-plan") {
+    const expected = path2.posix.join(input.runDocsDir, `${input.phase}.md`);
+    return need(expected, paths.includes(expected));
+  }
+  if (input.phase === "test-spec") {
+    const underTests = (p) => input.testsDir === "." || p.startsWith(`${input.testsDir}/`);
+    return need(
+      `${input.testsDir}/ \u914D\u4E0B\u306E spec.md \u304B cases.md`,
+      paths.some(
+        (p) => underTests(p) && ["spec.md", "cases.md"].includes(path2.posix.basename(p))
+      )
+    );
+  }
+  return null;
 }
 function checkEvaluationRow(row, input) {
   if (!row)
@@ -228,13 +276,18 @@ function checkGate(input) {
       return `\u8A55\u4FA1\u3057\u305F HEAD(${subject.head})\u304C\u73FE\u5728\u306E HEAD(${head})\u3068\u5408\u3044\u307E\u305B\u3093\u3002\u4ECA\u306E HEAD \u3067\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
     if (!input.startHead || subject.base !== input.startHead)
       return `\u8A55\u4FA1\u306E\u8D77\u70B9(${subject.base})\u304C\u30D5\u30A7\u30FC\u30BA\u306E\u958B\u59CB\u306E HEAD(${input.startHead ?? "\u8A18\u9332\u306A\u3057"})\u3068\u5408\u3044\u307E\u305B\u3093\u3002baseRef \u306B\u30D5\u30A7\u30FC\u30BA\u306E\u958B\u59CB\u306E HEAD \u3092\u6E21\u3057\u3066\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+    if (subject.paths !== void 0)
+      return `\u8A55\u4FA1\u306E\u7BC4\u56F2\u304C paths(${JSON.stringify(subject.paths)})\u3067\u7D5E\u3089\u308C\u3066\u3044\u307E\u3059\u3002code \u7CFB\u30D5\u30A7\u30FC\u30BA\u306F paths \u3092\u6E21\u3055\u305A\u306B\u3001\u30D5\u30A7\u30FC\u30BA\u306E\u5DEE\u5206\u306E\u5168\u4F53\u3092\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
   }
-  if (DOC_PHASES.has(input.phase))
-    for (const f of Array.isArray(subject.files) ? subject.files : []) {
+  if (DOC_PHASES.has(input.phase)) {
+    const files = Array.isArray(subject.files) ? subject.files : [];
+    for (const f of files) {
       const now = sha256OfFile(path2.join(input.root, f.path));
       if (now !== f.sha256)
         return `${f.path} \u304C\u8A55\u4FA1\u306E\u5F8C\u306B\u5909\u308F\u3063\u3066\u3044\u307E\u3059(\u8A18\u9332: ${f.sha256}\u3001\u73FE\u5728: ${now})\u3002\u4ECA\u306E\u4E2D\u8EAB\u3067\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
     }
+    return missingExpectedDoc(input, files);
+  }
   return null;
 }
 function unresolvedStops(store, runId) {
@@ -626,6 +679,42 @@ function raguelStore(root) {
 function oldContractMessage(st) {
   return `codiel: \u3053\u306E run \u306F Raguel \u306E\u8A18\u9332\u306E\u5F62\u5F0F\u304C\u53E4\u3044(raguelContract \u306A\u3057)\u305F\u3081\u3001\u3053\u306E\u7248\u3067\u306F\u30B2\u30FC\u30C8\u3092\u901A\u305B\u306A\u3044\u3002\`codiel-state stop --slug ${st.runId} --reason migrate\` \u3067\u6B62\u3081\u3066\u304B\u3089\u3001\`/codiel:run ${st.intent}\` \u3067\u540C\u3058 intent \u306E\u65B0\u3057\u3044 try \u3092\u59CB\u3081\u308B\u3002`;
 }
+function continuityProblem(root, st, phase, head) {
+  const stageIdx = STAGES.findIndex((s) => s.includes(phase));
+  for (let i = stageIdx - 1; i >= 0; i--) {
+    const gated = STAGES[i].filter((p) => GATED.has(p));
+    if (gated.length === 0) continue;
+    const found = gated.flatMap((p) => {
+      const h = st.phases[p].passedHead;
+      return h ? [{ phase: p, passedHead: h }] : [];
+    });
+    if (found.length === 0) return null;
+    const names = found.map((c) => c.phase).join("\u30FB");
+    if (found.some((c) => CODE_PHASES.has(c.phase))) {
+      const { passedHead } = found[0];
+      return passedHead === head ? null : `\u8A55\u4FA1\u306E\u5F8C\u306B\u30B3\u30DF\u30C3\u30C8\u304C\u3042\u308B(${passedHead}..${head})\u3002${names} \u3092\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+    }
+    const base = found.find(
+      (c) => found.every((o) => isAncestor(root, c.passedHead, o.passedHead))
+    ) ?? found[0];
+    const allowed = /* @__PURE__ */ new Set();
+    for (const c of found) {
+      const files = evaluatedFiles(
+        raguelStore(root),
+        st.phases[c.phase].evaluationId ?? ""
+      );
+      if (!files)
+        return `${c.phase} \u306E\u8A55\u4FA1\u306E\u8A18\u9332(evaluationId: ${st.phases[c.phase].evaluationId})\u304B\u3089\u8A55\u4FA1\u3057\u305F\u6587\u66F8\u3092\u8AAD\u3081\u307E\u305B\u3093`;
+      for (const f of files) allowed.add(f);
+    }
+    const changed = changedPathsSince(root, base.passedHead);
+    if (!changed)
+      return `\u8A55\u4FA1\u306E\u5F8C\u306E\u5909\u66F4\u3092\u8AAD\u3081\u307E\u305B\u3093(git diff ${base.passedHead} HEAD \u304C\u5931\u6557\u3057\u305F)`;
+    const extra = changed.filter((p) => !allowed.has(p));
+    return extra.length === 0 ? null : `\u8A55\u4FA1\u306E\u5F8C\u306B\u3001\u8A55\u4FA1\u3057\u305F\u6587\u66F8\u306E\u307B\u304B\u306E\u30D5\u30A1\u30A4\u30EB\u306E\u30B3\u30DF\u30C3\u30C8\u304C\u3042\u308B(${base.passedHead}..${head}: ${extra.join(", ")})\u3002${names} \u3092\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+  }
+  return null;
+}
 function loadRun(root, flags, allowLegacy = false) {
   const slug = flags.slug;
   if (!slug) fail("--slug \u304C\u5FC5\u8981\u3067\u3059");
@@ -762,6 +851,8 @@ function main(argv, root = process.cwd()) {
         fail(
           `\u30D5\u30A7\u30FC\u30BA ${phase} \u306E\u958B\u59CB\u306E HEAD \u3092\u8AAD\u3081\u307E\u305B\u3093(git rev-parse HEAD \u304C\u5931\u6557\u3057\u305F): ${root}`
         );
+      const problem = continuityProblem(root, st, phase, head);
+      if (problem) fail(problem);
       st.phases[phase].startHead = head;
     }
     st.phases[phase].status = "in_progress";
@@ -831,6 +922,12 @@ function main(argv, root = process.cwd()) {
       fail(
         `verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u3068 STOP \u306F mark-ask(STOP \u306F --verdict STOP \u3092\u4ED8\u3051\u308B)\u3067\u4EBA\u306E\u88C1\u5B9A\u306B\u304B\u3051\u3066\u304F\u3060\u3055\u3044`
       );
+    let dirs = { testsDir: "", runsDir: "" };
+    try {
+      dirs = readCodielConfig(root);
+    } catch (e) {
+      fail(e.message);
+    }
     let problem = null;
     try {
       problem = checkGate({
@@ -841,7 +938,9 @@ function main(argv, root = process.cwd()) {
         evaluationId: flags["evaluation-id"],
         verdict: flags.verdict,
         humanApproved,
-        startHead: ph.startHead
+        startHead: ph.startHead,
+        runDocsDir: path3.posix.join(dirs.runsDir, latest.state.runId),
+        testsDir: dirs.testsDir
       });
     } catch (e) {
       problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;
@@ -851,6 +950,8 @@ function main(argv, root = process.cwd()) {
     ph.evaluationId = flags["evaluation-id"];
     ph.verdict = flags.verdict;
     if (humanApproved) ph.humanApproved = true;
+    const passedHead = gitHead(root);
+    if (passedHead) ph.passedHead = passedHead;
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
   }

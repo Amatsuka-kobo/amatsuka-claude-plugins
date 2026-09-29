@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -100,6 +101,24 @@ function newRoot(): string {
   return root
 }
 
+// pass-gate の検査 9 が文書のフェーズに期待するファイル(既定の runsDir と testsDir)
+const DOC_FILE: Record<string, string> = {
+  design: `docs/codiel/runs/${SLUG}/design.md`,
+  "dev-plan": `docs/codiel/runs/${SLUG}/dev-plan.md`,
+  "test-spec": "docs/codiel/tests/units/demo/spec.md"
+}
+
+// 文書のフェーズでは、期待するファイルを評価したことにする。ファイルが無ければ sha256 は null
+function docFiles(root: string, phase: string) {
+  const rel = DOC_FILE[phase]
+  if (!rel) return []
+  const abs = path.join(root, rel)
+  const sha256 = fs.existsSync(abs)
+    ? createHash("sha256").update(fs.readFileSync(abs)).digest("hex")
+    : null
+  return [{ path: rel, sha256, isNew: true }]
+}
+
 // Raguel が書く形で、評価 "e" の索引の行と verdict.json を置く
 function recordEvaluation(root: string, phase: string, verdict: string): void {
   const stateFile = path.join(
@@ -133,7 +152,7 @@ function recordEvaluation(root: string, phase: string, verdict: string): void {
     repoPath: root,
     head,
     ...(isCode ? { base: st.phases[phase]?.startHead ?? null } : {}),
-    files: []
+    files: docFiles(root, phase)
   }
   fs.writeFileSync(
     path.join(casePath, "verdict.json"),

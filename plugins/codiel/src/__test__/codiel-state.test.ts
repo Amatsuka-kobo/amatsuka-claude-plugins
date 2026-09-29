@@ -1729,6 +1729,253 @@ test("pass-gate 検査 9: 文書のフェーズで subject.files の sha256 が�
   expect(r.code).toBe(0)
 })
 
+test("pass-gate 検査 8: code 系フェーズで paths を絞った評価は、head と base が合っても失敗する(W4R2-01・W4R1-03)", () => {
+  const root = codeRun()
+  const start = latestState(root, "demo").phases["test-code"].startHead
+  const head = git(root, "rev-parse", "HEAD")
+  recordEvaluation(root, "demo", "test-code", "PROCEED", "ev-paths", {
+    subject: { repoPath: root, head, base: start, paths: ["a.ts"], files: [] }
+  })
+  const r = run(root, gateArgs("test-code", "ev-paths", "PROCEED"))
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/paths\(\["a.ts"\]\)で絞られています/)
+  expect(latestState(root, "demo").phases["test-code"].status).toBe(
+    "in_progress"
+  )
+})
+
+// 文書のフェーズを in_progress にし、files に rels を載せた評価(今の中身の sha256)で pass-gate する
+function docGate(root: string, phase: string, rels: string[]) {
+  const files = rels.map((rel) => {
+    const file = path.join(root, rel)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, `# ${rel}\n`)
+    const sha256 = createHash("sha256")
+      .update(fs.readFileSync(file))
+      .digest("hex")
+    return { path: rel, sha256, isNew: true }
+  })
+  const id = `ev-${phase}-${rels.length}-${Math.random()}`
+  recordEvaluation(root, "demo", phase, "PROCEED", id, {
+    subject: {
+      repoPath: root,
+      head: git(root, "rev-parse", "HEAD"),
+      paths: rels,
+      files
+    }
+  })
+  return run(root, gateArgs(phase, id, "PROCEED"))
+}
+
+test("pass-gate 検査 9: design と dev-plan は run の文書の置き場の design.md・dev-plan.md を評価していなければ失敗する(W4R2-03・W4R1-04)", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", ["intent", "discuss"])
+  run(root, ["start-phase", "design", "--slug", "demo"])
+  // 別のファイルだけを評価した
+  let r = docGate(root, "design", ["docs/other.md"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /design の評価に docs\/codiel\/runs\/demo\/design.md が含まれていません/
+  )
+  // 別の run の置き場の design.md でも通さない
+  r = docGate(root, "design", ["docs/codiel/runs/other/design.md"])
+  expect(r.code).toBe(1)
+  r = docGate(root, "design", ["./docs/codiel/runs/demo/design.md"])
+  expect(r.code, r.err).toBe(0)
+  run(root, ["start-phase", "dev-plan", "--slug", "demo"])
+  r = docGate(root, "dev-plan", ["docs/codiel/runs/demo/design.md"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(
+    /docs\/codiel\/runs\/demo\/dev-plan.md が含まれていません/
+  )
+  r = docGate(root, "dev-plan", ["docs/codiel/runs/demo/dev-plan.md"])
+  expect(r.code, r.err).toBe(0)
+})
+
+test("pass-gate 検査 9: run の文書の置き場は .codiel/config.json の runsDir と slug から組む", () => {
+  const root = tmpProject()
+  init(root)
+  fs.writeFileSync(
+    path.join(root, ".codiel", "config.json"),
+    JSON.stringify({ runsDir: "notes/runs" })
+  )
+  passThrough(root, "demo", ["intent", "discuss"])
+  run(root, ["start-phase", "design", "--slug", "demo"])
+  let r = docGate(root, "design", ["docs/codiel/runs/demo/design.md"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/notes\/runs\/demo\/design.md が含まれていません/)
+  r = docGate(root, "design", ["notes/runs/demo/design.md"])
+  expect(r.code, r.err).toBe(0)
+})
+
+test("pass-gate 検査 9: test-spec は testsDir 配下の spec.md か cases.md を 1 件以上評価していなければ失敗する", () => {
+  const root = tmpProject()
+  init(root)
+  fs.writeFileSync(
+    path.join(root, ".codiel", "config.json"),
+    JSON.stringify({ testsDir: "qa/specs" })
+  )
+  passThrough(root, "demo", ["intent", "discuss", "design"])
+  run(root, ["start-phase", "test-spec", "--slug", "demo"])
+  for (const rels of [
+    ["qa/specs/units/a/notes.md"],
+    ["docs/codiel/tests/units/a/spec.md"],
+    ["other/qa/specs/units/a/cases.md"]
+  ]) {
+    const r = docGate(root, "test-spec", rels)
+    expect(r.code, rels[0]).toBe(1)
+    expect(r.err).toMatch(
+      /qa\/specs\/ 配下の spec.md か cases.md が含まれていません/
+    )
+  }
+  const r = docGate(root, "test-spec", [
+    "qa/specs/units/a/notes.md",
+    "qa/specs/units/a/cases.md"
+  ])
+  expect(r.code, r.err).toBe(0)
+})
+
+test("pass-gate 検査 9: intent-sync は期待するファイルを照合しない(sha256 の照合は行う)", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", UNTIL_PR.slice(0, -1))
+  run(root, ["start-phase", "intent-sync", "--slug", "demo"])
+  const r = docGate(root, "intent-sync", ["docs/intents/any.md"])
+  expect(r.code, r.err).toBe(0)
+})
+
+test("pass-gate は通したときの HEAD を passedHead に記録する(文書と code 系のゲート付きフェーズ)", () => {
+  const root = codeRun()
+  const st = latestState(root, "demo")
+  const head = git(root, "rev-parse", "HEAD")
+  for (const ph of ["intent", "design", "test-spec", "dev-plan"])
+    expect(st.phases[ph].passedHead, ph).toBe(head)
+  // ゲートを持たないフェーズは記録しない
+  expect(st.phases.discuss.passedHead).toBeUndefined()
+  git(root, "commit", "-q", "--allow-empty", "-m", "tests")
+  const after = git(root, "rev-parse", "HEAD")
+  recordEvaluation(root, "demo", "test-code", "PROCEED", "ev-tc")
+  expect(run(root, gateArgs("test-code", "ev-tc", "PROCEED")).code).toBe(0)
+  expect(latestState(root, "demo").phases["test-code"].passedHead).toBe(after)
+})
+
+test("pass-gate は git の管理外では passedHead を記録しない", () => {
+  const root = gateRun()
+  recordEvaluation(root, "demo", "intent", "PROCEED", "ev-intent")
+  fs.rmSync(path.join(root, ".git"), { recursive: true, force: true })
+  const r = run(root, gateArgs("intent", "ev-intent", "PROCEED"))
+  expect(r.code, r.err).toBe(0)
+  expect(r.out.state.phases.intent.status).toBe("passed")
+  expect(r.out.state.phases.intent.passedHead).toBeUndefined()
+})
+
+test("start-phase は、直前のゲート付きフェーズの pass-gate の後にコミットがあれば code 系フェーズを開始しない(W4R2-04)", () => {
+  const root = codeRun()
+  recordEvaluation(root, "demo", "test-code", "PROCEED", "ev-tc")
+  expect(run(root, gateArgs("test-code", "ev-tc", "PROCEED")).code).toBe(0)
+  const passed = git(root, "rev-parse", "HEAD")
+  git(root, "commit", "-q", "--allow-empty", "-m", "unevaluated")
+  const head = git(root, "rev-parse", "HEAD")
+  const r = run(root, ["start-phase", "implement", "--slug", "demo"])
+  expect(r.code).toBe(1)
+  expect(r.err).toContain(
+    `評価の後にコミットがある(${passed}..${head})。test-code を評価し直してください`
+  )
+  const st = latestState(root, "demo")
+  expect(st.phases.implement.status).toBe("pending")
+  expect(st.phases.implement.startHead).toBeUndefined()
+  // コミットを戻せば開始できる
+  git(root, "reset", "-q", "--hard", passed)
+  expect(run(root, ["start-phase", "implement", "--slug", "demo"]).code).toBe(0)
+})
+
+// ファイルを書いて(内容が無ければ既存のまま)コミットする
+function commitFiles(root: string, rels: string[], message: string): void {
+  for (const rel of rels) {
+    const file = path.join(root, rel)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    if (!fs.existsSync(file)) fs.writeFileSync(file, `# ${rel}\n`)
+  }
+  git(root, "add", "--", ...rels)
+  git(root, "commit", "-q", "-m", message)
+}
+
+const SPEC_DOC = "docs/codiel/tests/units/demo/spec.md"
+const PLAN_DOC = "docs/codiel/runs/demo/dev-plan.md"
+
+// 文書を書いてから、その文書を評価したことにして test-spec と dev-plan を順に通す。
+// commitAfter が真なら、各フェーズのゲート通過の直後に評価した文書をコミットする
+function passDocStage(
+  root: string,
+  order: string[],
+  commitAfter: boolean
+): void {
+  passThrough(root, "demo", ["intent", "discuss", "design"])
+  for (const ph of order) {
+    const doc = ph === "test-spec" ? SPEC_DOC : PLAN_DOC
+    fs.mkdirSync(path.dirname(path.join(root, doc)), { recursive: true })
+    fs.writeFileSync(path.join(root, doc), `# ${ph}\n`)
+    passThrough(root, "demo", [ph])
+    if (commitAfter) commitFiles(root, [doc], ph)
+  }
+}
+
+test("start-phase は、文書のフェーズの後に評価した文書だけをコミットしていれば code 系フェーズを開始する", () => {
+  const root = tmpProject()
+  init(root)
+  // test-spec を先に通して文書をコミットせず、dev-plan の後に dev-plan.md だけをコミットした
+  passDocStage(root, ["test-spec", "dev-plan"], false)
+  commitFiles(root, [PLAN_DOC], "dev-plan")
+  const r = run(root, ["start-phase", "test-code", "--slug", "demo"])
+  expect(r.code, r.err).toBe(0)
+  expect(r.out.state.phases["test-code"].startHead).toBe(
+    git(root, "rev-parse", "HEAD")
+  )
+})
+
+test("start-phase test-code は、test-spec と dev-plan の両方の文書のコミットを許し、先に通したほうの passedHead を起点にする", () => {
+  for (const order of [
+    ["test-spec", "dev-plan"],
+    ["dev-plan", "test-spec"]
+  ]) {
+    const root = tmpProject()
+    init(root)
+    passDocStage(root, order, true)
+    const st = latestState(root, "demo")
+    // 後に通したほうの passedHead は、先に通したほうの文書のコミットを含む
+    expect(st.phases[order[0]].passedHead).not.toBe(
+      st.phases[order[1]].passedHead
+    )
+    const r = run(root, ["start-phase", "test-code", "--slug", "demo"])
+    expect(r.code, `${order.join("→")}: ${r.err}`).toBe(0)
+  }
+})
+
+test("start-phase は、文書のフェーズの後に評価した文書のほかのファイルもコミットしていれば開始せず、そのパスを出す", () => {
+  const root = tmpProject()
+  init(root)
+  commitFiles(root, ["old.txt"], "old")
+  passDocStage(root, ["test-spec", "dev-plan"], true)
+  const clean = git(root, "rev-parse", "HEAD")
+  const base = latestState(root, "demo").phases["test-spec"].passedHead
+  commitFiles(root, ["src/extra.ts"], "unevaluated")
+  let r = run(root, ["start-phase", "test-code", "--slug", "demo"])
+  expect(r.code).toBe(1)
+  expect(r.err).toContain(
+    `評価の後に、評価した文書のほかのファイルのコミットがある(${base}..${git(root, "rev-parse", "HEAD")}: src/extra.ts)。test-spec・dev-plan を評価し直してください`
+  )
+  expect(latestState(root, "demo").phases["test-code"].status).toBe("pending")
+  // 名前の変更は移動元も見る(移動先が評価した文書でも、移動元は許されない)
+  git(root, "reset", "-q", "--hard", clean)
+  fs.renameSync(path.join(root, "old.txt"), path.join(root, PLAN_DOC))
+  git(root, "add", "-A", "--", "old.txt", PLAN_DOC)
+  git(root, "commit", "-q", "-m", "rename")
+  r = run(root, ["start-phase", "test-code", "--slug", "demo"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/: old\.txt\)/)
+})
+
 test("pass-gate 検査 10: raguelContract の無い run は検査の代わりに移行の文言で失敗する", () => {
   const root = gateRun()
   recordEvaluation(root, "demo", "intent", "PROCEED", "ev-ok")
@@ -3420,8 +3667,28 @@ interface EvaluationOver {
   noVerdictJson?: boolean
 }
 
+// pass-gate の検査 9 が文書のフェーズに期待するファイル(既定の runsDir と testsDir)
+function expectedDoc(slug: string, phase: string): string | undefined {
+  if (phase === "design" || phase === "dev-plan")
+    return `docs/codiel/runs/${slug}/${phase}.md`
+  if (phase === "test-spec") return "docs/codiel/tests/units/demo/spec.md"
+  return undefined
+}
+
+// 文書のフェーズでは、期待するファイルを評価したことにする。ファイルが無ければ sha256 は null
+function docFiles(root: string, slug: string, phase: string) {
+  const rel = expectedDoc(slug, phase)
+  if (!rel) return []
+  const abs = path.join(root, rel)
+  const sha256 = fs.existsSync(abs)
+    ? createHash("sha256").update(fs.readFileSync(abs)).digest("hex")
+    : null
+  return [{ path: rel, sha256, isNew: true }]
+}
+
 // Raguel が書く形で、評価の索引の行と verdict.json を置く(Raguel 設計書 §6.9)。
-// subject は、code 系フェーズでは今の HEAD とフェーズの開始の HEAD、文書では空の files にする
+// code 系フェーズの subject は今の HEAD とフェーズの開始の HEAD を持つ。
+// 文書のフェーズの files は docFiles で作る
 function recordEvaluation(
   root: string,
   slug: string,
@@ -3439,7 +3706,7 @@ function recordEvaluation(
     ...(CODE_PHASES.includes(phase)
       ? { base: st.phases[phase]?.startHead ?? null }
       : {}),
-    files: []
+    files: docFiles(root, slug, phase)
   }
   const phaseDir = path.join(casesProjectDir(root), runId, phase)
   fs.mkdirSync(phaseDir, { recursive: true })

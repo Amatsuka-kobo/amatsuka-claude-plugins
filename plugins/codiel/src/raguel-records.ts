@@ -265,6 +265,52 @@ export function gitHead(dir: string): string | null {
   }
 }
 
+// ancestor が descendant の祖先(同じコミットを含む)か。git が失敗したら false
+export function isAncestor(
+  dir: string,
+  ancestor: string,
+  descendant: string
+): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["-C", dir, "merge-base", "--is-ancestor", ancestor, descendant],
+      { stdio: "ignore" }
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+// base..HEAD で変わったファイルの repoRoot 相対のパス。名前の変更は --no-renames で削除と追加に
+// 分け、移動元と移動先の両方を返す。git が失敗したら null
+export function changedPathsSince(dir: string, base: string): string[] | null {
+  try {
+    return execFileSync(
+      "git",
+      ["-C", dir, "diff", "--name-only", "--no-renames", "-z", base, "HEAD"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    )
+      .split("\0")
+      .filter(Boolean)
+  } catch {
+    return null
+  }
+}
+
+// 評価の subject.files のパス(path.posix.normalize 済み)。索引の行か verdict.json が
+// 読めなければ null
+export function evaluatedFiles(
+  store: RaguelStore,
+  evaluationId: string
+): string[] | null {
+  const row = findEvaluation(readEvaluationIndex(store), evaluationId)
+  const v = row && readVerdictRecord(row.casePath)
+  if (!v || !isObject(v.subject) || !Array.isArray(v.subject.files)) return null
+  return v.subject.files.map((f) => path.posix.normalize(f.path))
+}
+
 function sha256OfFile(file: string): string | null {
   try {
     return createHash("sha256").update(fs.readFileSync(file)).digest("hex")
@@ -285,6 +331,41 @@ export interface GateInput {
   humanApproved: boolean
   // state の phases.<phase>.startHead
   startHead?: string
+  // 検査 9 で期待するファイルの置き場(repoRoot 相対)。runDocsDir は `<runsDir>/<slug>`、
+  // testsDir は .codiel/config.json の testsDir
+  runDocsDir: string
+  testsDir: string
+}
+
+// 検査 9 の後半。期待するファイルはフェーズごとに決まり、評価したファイルに無ければ理由の文を返す。
+// intent-sync は書き換えるファイルが run ごとに違うので照合しない(設計書 §13)
+function missingExpectedDoc(
+  input: GateInput,
+  files: { path: string }[]
+): string | null {
+  const paths = files.map((f) => path.posix.normalize(f.path))
+  const listed = paths.length > 0 ? paths.join(", ") : "なし"
+  const need = (expected: string, found: boolean): string | null =>
+    found
+      ? null
+      : `${input.phase} の評価に ${expected} が含まれていません(評価したファイル: ${listed})。${expected} を paths に入れて評価し直してください`
+  if (input.phase === "design" || input.phase === "dev-plan") {
+    const expected = path.posix.join(input.runDocsDir, `${input.phase}.md`)
+    return need(expected, paths.includes(expected))
+  }
+  if (input.phase === "test-spec") {
+    const underTests = (p: string) =>
+      input.testsDir === "." || p.startsWith(`${input.testsDir}/`)
+    return need(
+      `${input.testsDir}/ 配下の spec.md か cases.md`,
+      paths.some(
+        (p) =>
+          underTests(p) &&
+          ["spec.md", "cases.md"].includes(path.posix.basename(p))
+      )
+    )
+  }
+  return null
 }
 
 // 索引の行が run とフェーズと verdict に合うかを見る(検査 1・2・4)。
@@ -344,14 +425,19 @@ export function checkGate(input: GateInput): string | null {
       return `評価した HEAD(${subject.head})が現在の HEAD(${head})と合いません。今の HEAD で評価し直してください`
     if (!input.startHead || subject.base !== input.startHead)
       return `評価の起点(${subject.base})がフェーズの開始の HEAD(${input.startHead ?? "記録なし"})と合いません。baseRef にフェーズの開始の HEAD を渡して評価し直してください`
+    if (subject.paths !== undefined)
+      return `評価の範囲が paths(${JSON.stringify(subject.paths)})で絞られています。code 系フェーズは paths を渡さずに、フェーズの差分の全体を評価し直してください`
   }
-  // 検査 9: ゲートの後に文書を書き換える抜け道を塞ぐ
-  if (DOC_PHASES.has(input.phase))
-    for (const f of Array.isArray(subject.files) ? subject.files : []) {
+  // 検査 9: ゲートの後に文書を書き換える抜け道と、別のファイルを評価させる抜け道を塞ぐ
+  if (DOC_PHASES.has(input.phase)) {
+    const files = Array.isArray(subject.files) ? subject.files : []
+    for (const f of files) {
       const now = sha256OfFile(path.join(input.root, f.path))
       if (now !== f.sha256)
         return `${f.path} が評価の後に変わっています(記録: ${f.sha256}、現在: ${now})。今の中身で評価し直してください`
     }
+    return missingExpectedDoc(input, files)
+  }
   return null
 }
 
