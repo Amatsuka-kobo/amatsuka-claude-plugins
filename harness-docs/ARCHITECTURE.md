@@ -2,7 +2,7 @@
 
 ## システム概要
 
-あまつか工房が開発する Claude Code プラグインを配布する pnpm workspace のモノレポである。利用者は Claude Code のユーザーであり、提供するマーケットプレイスを通じてプラグインを導入する。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして `scripts/` へ出力し git 管理下に置く。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が必要になる処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。開発環境の用意とローカルプロキシの起動はルートの `scripts/` が担い、コードベース探索は Serena MCP が `.serena/` の設定とメモリを通じて担う。
+あまつか工房が開発する Claude Code プラグインを配布する pnpm workspace のモノレポである。利用者は Claude Code のユーザーであり、提供するマーケットプレイスを通じてプラグインを導入する。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして `scripts/` へ出力し git 管理下に置く。ネイティブコードと辞書はバンドルにも git にも含めず、初回に取得して `${CLAUDE_PLUGIN_DATA}` に置いてよい。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が必要になる処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。開発環境の用意とローカルプロキシの起動はルートの `scripts/` が担い、コードベース探索は Serena MCP が `.serena/` の設定とメモリを通じて担う。
 
 ## 技術スタック
 
@@ -23,6 +23,7 @@
 - esbuild の `target` は node22 に揃える。出力は ESM とし、拡張子は `.mjs` とする。
 - 共通の開発依存はルートの `package.json` に置く。
 - プラグイン固有のランタイム依存は、そのプラグインの `package.json` に置く。
+- 初回に取得するネイティブコードと辞書は `package.json` に置かず、取得元の URL と sha256 をコードに固定する。
 
 ## レイヤー構造
 
@@ -279,3 +280,34 @@ codiel は委譲先を名指しでも役割名でも指定せず、作業内容�
 #### 影響範囲
 
 システム概要の「LLM を要する処理は...に閉じる」が Anthropic API が必須の処理を指すと明確にし、外部 API を必須とするプラグインを認める記述を加える。ディレクトリ構成図に `plugins/<plugin>/.mcp.json` を加える。
+
+---
+
+### ADR-006: [native-japanese] 形態素解析の実行物と辞書は初回に取得し、git に同梱しない
+
+- 状態: 採用
+- 決定日: 2026-09-29
+- 決定者: phyllis998
+
+#### 背景
+
+native-japanese は、文の長さ・文末の連続・連体修飾の重なりの検査に形態素解析を使う。lindera 6.2.0(N-API)の `.node` は OS ごとに最大 7.4MB あり、IPADIC の辞書は展開後 46MB になる。バンドル出力を git に置く現行の方針のままでは、6 種の `.node` と辞書がリポジトリに入る。
+
+#### 検討した選択肢
+
+1. `.node` と辞書を git に同梱する
+2. lindera を `package.json` の依存にし、プラグイン導入時のインストールに任せる
+3. 初回に npm registry と GitHub のリリースから取得し、sha256 で検証する(採用)
+4. 辞書を同梱できる kuromoji(純 JavaScript)か lindera-wasm を使う
+
+#### 採用した結論
+
+取得元の URL と sha256 をコードに固定し、取得物を `${CLAUDE_PLUGIN_DATA}/morph/` に置く。取得は、SessionStart の hook が切り離して起動する子プロセスが行う。hook は子プロセスの終了を待たない。取得が済むまでと取得できない環境では、形態素解析を使わず正規表現だけで検査する。hook での取得と使用は `AMATSUKA_NATIVE_JAPANESE_MORPH=off` で止められる。
+
+#### 理由
+
+1 はリポジトリが 50MB 以上増え、使わない OS の `.node` まで全員に配る。2 は成り立たない。プラグインの導入はファイルの配置であり、`package.json` の依存は入らない。辞書も npm に無い。4 はプロセス全体に 300ms(lindera-wasm)と 820ms(kuromoji)かかり、書き込みのたびに起動する hook には重い。N-API なら 60ms で済む。
+
+#### 影響範囲
+
+システム概要にバンドルと git の例外を、技術スタックに `package.json` の例外を足す。利用者の環境は、初回のセッションで約 13MB を取得する。
