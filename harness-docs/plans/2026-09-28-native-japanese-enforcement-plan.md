@@ -998,7 +998,7 @@ conventions の Done の条件と、設計書のセクション 16 を合わせ�
 
 ### A1 ADR の承認
 
-- 2026-09-29 にユーザーが承認した。ADR-006 として追加した(コミット `1e1221fd`)。
+- 2026-09-29 にユーザーが承認した。ADR-006 として追加した(コミット `1e1221fd`)。その後、別のワークツリーのセッションが ADR-009 まで採番していたので、ユーザーの指示で ADR-010 に付け替えた。
 - 草案は、`metatron:updating-architecture` の手順で第三者に執筆規律を検査させ、11 件の指摘を反映した。設計書セクション 11 の `.node` の大きさ「5〜7.4MB」は下限の根拠が無かったので、「最大 7.4MB」と書いた(linux-x64 の実物は 7,654,784 バイト)。
 - システム概要と技術スタックへの追記は別の stage で承認を得た。ユーザーの指示で、追記の文から「(ADR-006)」の参照を外した。
 - `diff-architecture` が返した本件と無関係な既存の乖離 17 件(技術スタックの語の誤検出、`.vscode` `private` などの未記載のディレクトリ、死んだ glob)は、ユーザーの判断で今回は扱わない。
@@ -1137,7 +1137,7 @@ conventions の Done の条件と、設計書のセクション 16 を合わせ�
 ### T21 ARCHITECTURE とメモリ
 
 - `diff-architecture` の `findings` は 17 件で、どれも A1 の時点からある本件と無関係な乖離だった(技術スタックの語の誤検出、未記載のディレクトリ、死んだ glob)。本件で新しく生じた乖離は無い。
-- ARCHITECTURE の散文を実装と突き合わせた。システム概要と技術スタックの追記と ADR-006 は、T7 で入れた記述が実装と合っていた。ディレクトリ構成とドメインマップは、native-japanese の新しいファイル(`src/lib/` `src/fixtures/` `src/testing/` `references/reminder.md` `scripts/*.mjs`)を既存の glob で覆っている。ARCHITECTURE は変えず、コミット 8a は作らない。
+- ARCHITECTURE の散文を実装と突き合わせた。システム概要と技術スタックの追記と ADR-010 は、T7 で入れた記述が実装と合っていた。ディレクトリ構成とドメインマップは、native-japanese の新しいファイル(`src/lib/` `src/fixtures/` `src/testing/` `references/reminder.md` `scripts/*.mjs`)を既存の glob で覆っている。ARCHITECTURE は変えず、コミット 8a は作らない。
 - `.serena/memories/` で native-japanese に触れているのは `agent_policy/core.md` の 1 か所で、「SessionStart と SubagentStart の注入が日本語の書き方を担う」と書いている。改修後もこの記述は正しいので、メモリは変えない。
 
 ### T22 突き合わせと測定 CLI の結果
