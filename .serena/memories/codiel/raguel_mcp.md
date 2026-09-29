@@ -2,17 +2,16 @@
 行いを監視する天使 Raguel」). Inspects AI-produced artifacts (decisions, designs, plans, code diffs)
 and returns a machine PROCEED / ASK / STOP verdict; the only human touchpoint is ASK/STOP.
 
-Parent plugin: `mem:codiel/core` (codiel 1.0.0). 2026-09-28 の codiel 1.0.0(commit 08647269)で応急処置が入った
-(設計書 `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` の決定 83・§6.14.1):
-config を呼び出しごとに mtime で読み直す(protected-paths の glob は既定と和集合、結果に `configSource`)、
-common/secrets は `/` を含むトークンと diff・files の見出し行をエントロピーの対象から外し、既知の形式は常に見る、
-dangerous-patterns は `.md`・テスト・コメント行を `ask` に下げる、`evaluate_plan` は steps を連結して評価する、
-入力の誤りは `isError` で返す。作り直しは別セッションで設計中(`harness-docs/handover/2026-09-28-raguel-redesign-handover.md`)。
-`raguel-mcp/docs/DESIGN.md` は応急処置の前の記述のままで、作り直しで改める。Own workspace package (`raguel-mcp`, 0.0.1-dev in `package.json`,
-`0.1.0` as the version the MCP server reports at registration), but built/tested via the **root**
-toolchain
+Parent plugin: `mem:codiel/core` (codiel 1.0.0-dev). 2026-09-29 に作り直し済み(設計書
+`harness-docs/design/2026-09-28-raguel-redesign-design.md`、計画書 `harness-docs/plans/2026-09-29-raguel-redesign-plan.md`、
+ADR-011)。codiel との取り決めは `plugins/codiel/docs/raguel-contract.md` が正本で、フェーズの表・ケースファイルの配置・
+記録の形・裁定の組み合わせ・pass-gate の検査を持つ。`raguel-mcp/docs/DESIGN.md` の記述は作り直しの前のもので、
+設計書と契約の文書を優先する。
+
+Own workspace package (`raguel-mcp`, 0.0.2-dev in `package.json`; the MCP server reports the same value via
+`BUILD_VERSION`, embedded by `build.ts`), but built/tested via the **root** toolchain
 (`mem:suggested_commands`). `build.ts` → `dist/server.mjs`, committed and wired as the `raguel`
-server in `plugins/codiel/.mcp.json`. Own design doc: `raguel-mcp/docs/DESIGN.md`.
+server in `plugins/codiel/.mcp.json`.
 
 ## Source layout (`src/`)
 
@@ -20,21 +19,36 @@ server in `plugins/codiel/.mcp.json`. Own design doc: `raguel-mcp/docs/DESIGN.md
   `evaluateArtifact`. Has a golden test (`__test__/pipeline.golden.test.ts`).
 - `rules/` — the gating checks by artifact type: `decision/`, `plan/`, `code/`, plus `common/`
   (secrets, injection markers, resubmission-loop detection, max-size). `registry.ts` wires rules
-  per artifact type; `testHelpers.ts`/`util.ts` shared.
-- `panel/` — LLM-judge layer: `panelists/` (adversarial, assumption, crosscheck, precedent,
-  steelman, meta) scored against `rubrics.ts`, orchestrated by `runner.ts`/`prompts.ts`/`schema.ts`,
-  reached through `provider.ts` → `claudeCli.ts` — a **headless `claude` CLI subprocess, never the
-  Anthropic API** (`mem:core` invariant).
-- `precedent/` — stores/retrieves past verdicts (`store.ts`, `retrieval.ts`, `seed/`) so the panel
-  can cite precedent.
-- `casefile/` — hash-chained, tamper-evident audit log of evaluations (`hashchain.ts`, `store.ts`).
-- `tools/` — MCP tool entry points: `evaluateDecision`, `evaluateDesign`, `evaluatePlan`,
-  `evaluateCode`, `recordOutcome`, `listRules` (+ `shared.ts`).
-- `config/` — schema + loader + defaults for project-level Raguel config.
+  per artifact type; `params.ts` は規則のパラメータの表。
+- `panel/` — LLM-judge layer. パネリストは `panelists/` の adversarial・steelman・crosscheck・meta の 4 つ
+  (assumption と precedent は撤去済み)。`rubrics.ts` で採点し、`runner.ts`/`prompts.ts`/`schema.ts` が進行する。
+  プロバイダーは `provider.ts` の `JudgeProvider` 越しに `claudeCli.ts`(`claude -p`)か `codexCli.ts`(`codex exec`)を呼ぶ子プロセスで、
+  **Anthropic API は使わない**(`mem:core` invariant)。既定は claude(`judge.provider`、パネリストごとに `panel.perPanelist.<役>.provider`/`model`)。
+  隔離の引数: claude は `--setting-sources project`・`--tools ""`・`--strict-mcp-config`・`--no-session-persistence`・呼び出しごとの空の cwd
+  (`--bare` と空の設定は認証を外すので使わない)。codex は `--ephemeral`・`--ignore-user-config`・`--sandbox read-only`・
+  `--disable shell_tool/unified_exec/hooks`・`--output-schema`。実行ファイルは `RAGUEL_CLAUDE_BIN`・`RAGUEL_CODEX_BIN` で差し替える。
+- `context/` — Jev の文脈判定(`jev.ts`・`judge.ts`)。任意で、既定は無効(`contextJudge.enabled: false`)。有効にしても
+  `TYPESAFE_API_KEY` が無ければ使わない。jevriel の src は import しない。
+- `precedent/` — 判例の保存と検索(`store.ts`・`retrieval.ts`・`seed/`)。判例は `<casesDir>/precedents/<projectId>/` に置く。
+- `casefile/` — hash-chained, tamper-evident audit log of evaluations (`hashchain.ts`, `store.ts`, `digest.ts`).
+- `subject/` — 評価対象の組み立て(`body.ts`・`code.ts`・`files.ts`)。code は baseRef から HEAD の差分を Raguel が自分で作る。
+- `codiel/phases.ts` — フェーズの表。`project/root.ts` — プロジェクトルートと projectId の解決。
+- `tools/` — MCP tool entry points. `evaluate_decision`・`evaluate_design`・`evaluate_plan`・`evaluate_code` の 4 本は
+  `phase`・`baseRef`(code のみ)・`paths` を受ける。ほかに `record_outcome`・`list_rules`・`list_precedents`・`retire_precedent`(`shared.ts` が共通の入力)。
+- `config/` — schema + loader + defaults + paths. 設定は `.codiel/config.json` の `raguel` と `testsDir`。
+  `RAGUEL_CONFIG` に JSON のパスを渡すと `raguel` の代わりにそれを読む(testsDir は常にプロジェクトの `.codiel/config.json`)。
+  **YAML(旧 `raguel.config.yaml`)は読まない。** 呼び出しごとに mtime で読み直す。
 - `server.ts` — MCP server entry.
+
+## ケースファイルと記録
+
+`<casesDir>/cases/<projectId>/<runId>/<phase>/attempt-NN/` に証拠と `verdict.json` を置き、
+`<casesDir>/cases/<projectId>/` 直下の `evaluations.jsonl`(評価の索引)と `outcomes.jsonl`(裁定の記録)に 1 行ずつ追記する。
+`casesDir` の既定は `~/.raguel`。codiel 側の `codiel-state pass-gate` はこの索引と `verdict.json` を照合して、
+記録に無い・古い・書き換えられた評価ではゲートを通さない(検査は契約の文書 §5)。
 
 ## Subproject specifics
 
-- Tests live in `__test__/` dirs beside each module (rules, panelists, core, tools all have them).
-- `panel/testing/fakeProvider.ts` + `fake-claude.mjs` stand in for the real `claude` CLI, so panel
-  tests never shell out for real — keep new panel code injectable through `provider.ts`.
+- Tests live in `__test__/` dirs beside each module.
+- 子プロセスの fake は `src/testing/fake-claude.mjs`・`fake-codex.mjs`。パネルのテストのヘルパー(`fakeProvider.ts`・`fixtures.ts`)は
+  `src/panel/__test__/helpers/`。実際の claude・codex・Jev の API はテストで呼ばない。新しいパネルのコードは `provider.ts` 越しに注入できる形にする。
