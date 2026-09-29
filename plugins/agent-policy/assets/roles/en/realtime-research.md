@@ -19,6 +19,8 @@ kind: readonly
 
 - Research current developments and releases with WebSearch and WebFetch.
 - Consult primary sources.
+- Issue independent search queries together in one turn, in parallel.
+- Stop researching once primary sources answer the question.
 - Explicitly identify items for which only secondary sources were available.
 
 ## Constraints
@@ -27,6 +29,8 @@ kind: readonly
 - **When invoked for real-time research**, do not decide whether to adopt the findings. Return the information needed for the orchestrator to decide.
 
 ## Output Format
+
+Write only the results, with no preamble and no closing summary.
 
 - Summarize findings with source URLs.
 - State when each item of information was current.

@@ -1,7 +1,7 @@
 ---
 id: complex-impl
 label: 複雑または重要な実装
-description: 複雑なコーディング。公開インターフェース変更・複数コンポーネント・新構造・広範な影響を伴う実装
+description: 非自明な設計判断・複雑または曖昧な仕様・検証困難のいずれかに当たる複雑なコーディング
 default-name: lead-implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,10 +9,9 @@ kind: impl
 
 ## When to invoke
 
-- 公開インターフェース(型・API・CLI引数・ファイル契約・フック)を変更するとき。
-- 2つ以上のコンポーネント(パッケージ・プラグイン・層)を同時に変更するとき。
-- 参照できる既存パターンがなく、新しい構造を決めるとき。
-- 失敗の影響が全セッション・保護パス・データ移行に及ぶとき。
+- 非自明な設計判断を要するとき。
+- 仕様が複雑または曖昧なとき。
+- 検証が困難なとき。
 
 ## Core Responsibilities
 

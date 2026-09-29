@@ -1,7 +1,7 @@
 ---
 id: normal-impl
 label: 通常の実装
-description: 単一コンポーネント・既存パターン・公開インターフェース不変のいずれかに当たる通常のコーディング
+description: 仕様と設計が済んだ大半の実装・テスト作成のいずれかに当たる通常のコーディング
 default-name: implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,9 +9,8 @@ kind: impl
 
 ## When to invoke
 
-- 1つのコンポーネントを対象に実装するとき。
-- 既存パターンを踏襲する実装を行うとき。
-- 公開インターフェースを変えない実装を行うとき。テストの追加・修正、設定編集、ビルド・テストの実行も含む。
+- 仕様と設計が済んだ大半の実装を行うとき。
+- テストを作成するとき。
 
 ## Core Responsibilities
 
@@ -30,5 +29,5 @@ kind: impl
 ## Output Format
 
 - 実施した変更のファイルパス一覧と各変更の要旨
-- 実行したコマンドと結果(失敗した場合はその出力)
+- 変更した各箇所を判定した検査(型検査・テスト・lint・grep など)とその結果(失敗した場合はその出力)
 - 未完了・要判断の事項
