@@ -369,3 +369,34 @@ test-code フェーズを (test-spec ∥ dev-plan) と implement の間に置く
 #### 影響範囲
 
 run state の `phases` に `test-code` が加わる。ADR-006 が version 1 の run に定めた扱いは、`phases` に `test-code` を持たない version 2 の run にも当たる。ADR-003 の初期化済みの判定にある `.codiel/` の 3 ディレクトリは、`.codiel/runs` と `.codiel/reports` の 2 つになり、`/codiel:init` の判定だけは `.codiel/config.json` も見る。codiel 0.x の `.codiel/specs/` は読まれず、移されず、報告もされない。fix-loop では、オーケストレーターが `set-test-edit` を立てている間だけテストの保護が外れる。
+
+---
+
+### ADR-009: [codiel] 設定を .codiel/config.json に集め、run の文書を git で共有し、state と報告を手元に残す
+
+- 状態: 採用
+- 決定日: 2026-09-29
+- 決定者: phyllis998
+
+#### 背景
+
+Raguel は codiel と組にして使うのに、codiel 1.0.0 の初版では設定が `.codiel/config.json` と `raguel.config.yaml` に分かれ、2 つの置き場を別々に用意して管理する手間があった。また、run の文書(agenda・discussion・design・dev-plan)と state・報告が `.codiel/runs/<slug>/try-<n>/` にまとまり、run ブランチへコミットされていた。手動確認では `.codiel/` の中身が `git status` に残り、オーケストレーターが run と関係の無い変更や `state.json` をコミットした。
+
+#### 検討した選択肢
+
+1. `.codiel/` をまるごと git から外す
+2. run の文書を try ごとに分けて `.codiel/runs/<slug>/try-<n>/` に置き、コミットする形を保つ
+3. Raguel の設定を `raguel.config.yaml` に残し、codiel の設定と分ける
+4. 設定を `.codiel/config.json` に集めて共有し、run の文書を `runsDir` に置いて共有し、try ごとの state と報告を `.codiel/runs/` に置いて git から外す(採用)
+
+#### 採用した結論
+
+`.codiel/config.json` に `testsDir`(既定は `docs/codiel/tests`)・`runsDir`(既定は `docs/codiel/runs`)・`raguel` を置き、git で共有する。Raguel は `RAGUEL_CONFIG` か cwd の `.codiel/config.json` の `raguel` を読み、YAML を読まない。discuss・design・dev-plan の文書は `<runsDir>/<slug>/` に置き、try で分けずにコミットする。try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/` に、`/codiel:test` の報告は `.codiel/reports/` に置き、どちらも `.gitignore` で外す。E2E のレポートは `<testsDir>/e2e/` の下の `reports/` に置き、json と md だけを共有する。`/codiel:init` が `.gitignore` の行を足し、`/codiel:run` はその行が揃うまで始めない。
+
+#### 理由
+
+run の文書は後から設計の経緯を読む材料になるので、コードと同じ場所で共有する。state と報告は実行ごとの作業記録で、共有すると差分とコミットの誤りを生む。組で使う 2 つの設定を 1 ファイルに集めると、用意と管理が 1 か所で済み、init の判定と Raguel の読み込み先も 1 か所で決まる。新しい try は前の try の文書を置き換え、前の版は前の try のブランチから読めるので、try で分けない。
+
+#### 影響範囲
+
+`raguel.config.yaml` は読まれず、`/codiel:init` が承認を得て中身を `raguel` へ写してから消す。raguel-mcp は yaml の依存を持たない。未記録の GOTCHAS の退避先は `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)になる。PR・レビュー・Issue の本文ファイルは `reports/` に書き、コミットしない。`.codiel` は git のルートに置く。ADR-002 の影響範囲にある退避の置き場「`.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/`」は、上の退避先に置き換わる。ADR-003 の影響範囲にある初期化済みの判定の `raguel.config.yaml` は、`.codiel/config.json` の `raguel` に置き換わる。ADR-008 の結論にある testsDir の既定 `docs/tests` は、`docs/codiel/tests` に置き換わる。ADR-008 の影響範囲にある「`/codiel:init` の判定だけは `.codiel/config.json` も見る」は、`/codiel:init` と `/codiel:run` の両方が `.codiel/config.json` の `raguel` と `.gitignore` の行を見る判定に置き換わる。
