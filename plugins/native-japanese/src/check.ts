@@ -58,7 +58,9 @@ function main(): void {
   const cellType =
     input.cell_type === "markdown" || input.cell_type === "code"
       ? input.cell_type
-      : undefined
+      : input.notebook_path !== undefined
+        ? cellTypeOf(file, input.cell_id)
+        : undefined
   // ノートのファイルは JSON なので本文をそのまま探せない。書いたセルを書き込み後の全体とみなす
   const wholeText =
     input.notebook_path !== undefined
@@ -86,10 +88,21 @@ function main(): void {
       : findEditRanges(wholeText, bodies)
   const ranges = perBody.filter((r): r is Range => r !== null)
 
+  // 形態素解析の層は書き込み後のファイル全体のブロックに当て、編集範囲と重なる違反だけを残す。
+  // 解析で例外が起きたら、読み込みの失敗と同じく正規表現の層の結果だけで続ける(設計書のセクション 7-4)
+  let morphFound: Violation[] = []
+  if (analyzer) {
+    try {
+      morphFound = lint(whole, { rules: [], analyzer }).filter((v) =>
+        overlaps(v, ranges)
+      )
+    } catch {}
+  }
+
   let found: Violation[]
   if (isHtml(file)) {
     // HTML は正規表現の層も書き込み後のファイル全体のブロックに当て、編集範囲と重なる違反だけを残す
-    found = lint(whole, { rules, analyzer }).filter((v) => overlaps(v, ranges))
+    found = lint(whole, { rules }).filter((v) => overlaps(v, ranges))
   } else {
     // 正規表現の層は今回の本文にだけ当て、ファイルに元からある違反を差し戻さない。
     // 行番号は、本文が見つかればファイルの中の位置に直す
@@ -101,13 +114,8 @@ function main(): void {
         endLine: v.endLine + shift
       }))
     })
-    if (analyzer)
-      found.push(
-        ...lint(whole, { rules: [], analyzer }).filter((v) =>
-          overlaps(v, ranges)
-        )
-      )
   }
+  found.push(...morphFound)
   if (found.length === 0) return
 
   const fresh = unrecorded(hook?.session_id, file, found)
@@ -124,6 +132,23 @@ function main(): void {
     "引用・固有名詞・識別子・コード例として意図して書いた箇所と、検査の誤りと判断した箇所は、直さずに残してよい。直すときは、否定・条件・確信度を元の文のまま保つ。"
   ].join("\n")
   process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`)
+}
+
+// NotebookEdit の replace は cell_type を省けるので、書き込み後のノートから cell_id のセルの種類を取る。
+// 取れなければ code とみなす
+function cellTypeOf(file: string, cellId: unknown): "markdown" | "code" {
+  try {
+    const nb = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      cells?: { id?: unknown; cell_type?: unknown }[]
+    }
+    const cell =
+      typeof cellId === "string"
+        ? nb.cells?.find((c) => c.id === cellId)
+        : undefined
+    return cell?.cell_type === "markdown" ? "markdown" : "code"
+  } catch {
+    return "code"
+  }
 }
 
 // 記録に無い違反だけを返し、記録に加える。記録の読み書きに失敗したら記録なしとして扱う

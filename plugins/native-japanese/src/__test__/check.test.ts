@@ -5,6 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, expect, test } from "vitest"
 import { runTs } from "../testing/run-ts.js"
+import { fakeDataDir as makeFakeDataDir } from "./helpers/fake-data-dir.js"
 
 const SCRIPT = fileURLToPath(new URL("../check.ts", import.meta.url))
 const BUNDLE = fileURLToPath(
@@ -91,24 +92,9 @@ function writeInput(p: string, content: string, session_id = "s1") {
   return hookInput("Write", { file_path: p, content }, session_id)
 }
 
-// lindera の .node の代わりに src/testing/fake-lindera.cjs を読み込ませるデータディレクトリを作る
-function fakeDataDir(): string {
-  const dir = path.join(work, "data", "morph", "lindera-6.2.0")
-  fs.mkdirSync(dir, { recursive: true })
-  const stub = fileURLToPath(
-    new URL("../testing/fake-lindera.cjs", import.meta.url)
-  )
-  fs.writeFileSync(
-    path.join(dir, "ready.json"),
-    JSON.stringify({
-      version: "6.2.0",
-      target: "test",
-      node: path.relative(dir, stub),
-      dict: "ipadic",
-      files: {}
-    })
-  )
-  return path.join(work, "data")
+const fakeDataDir = () => {
+  fs.mkdirSync(path.join(work, "data"))
+  return makeFakeDataDir(path.join(work, "data"))
 }
 
 const RECORD = () => path.join(tmp, "native-japanese", "s1.json")
@@ -196,6 +182,56 @@ test("NotebookEdit の code セルでコメントの違反を差し戻す", () =
     )
   )
   expect(reason).toContain("することができ")
+})
+
+// 書き込み後のノートを置く。セル a は markdown、b は code
+function notebook(): string {
+  return write(
+    "n.ipynb",
+    JSON.stringify({
+      cells: [
+        { id: "a", cell_type: "markdown", source: [], metadata: {} },
+        { id: "b", cell_type: "code", source: [], metadata: {} }
+      ],
+      metadata: {},
+      nbformat: 4,
+      nbformat_minor: 5
+    })
+  )
+}
+
+const PROSE = "時間を短縮することができる。"
+const COMMENTED = "x = 1  # 時間を短縮することができる"
+
+function replaceCell(p: string, cell_id: string, new_source: string) {
+  return run(
+    hookInput(
+      "NotebookEdit",
+      { notebook_path: p, cell_id, new_source, edit_mode: "replace" },
+      `nb-${cell_id}-${new_source.length}`
+    )
+  )
+}
+
+test("cell_type の無い replace で、ノートの markdown のセルを markdown として検査する", () => {
+  expect(block(replaceCell(notebook(), "a", PROSE))).toContain("することができ")
+})
+
+test("cell_type の無い replace で、ノートの code のセルはコメントだけを検査する", () => {
+  const p = notebook()
+  expect(replaceCell(p, "b", PROSE)).toBe("")
+  expect(block(replaceCell(p, "b", COMMENTED))).toContain("することができ")
+})
+
+test("cell_type の無い replace で、セルの種類が取れなければ code とみなす", () => {
+  const p = notebook()
+  expect(replaceCell(p, "missing", PROSE)).toBe("")
+  expect(block(replaceCell(p, "missing", COMMENTED))).toContain(
+    "することができ"
+  )
+  write("n.ipynb", "{broken")
+  expect(replaceCell(p, "a", PROSE)).toBe("")
+  expect(block(replaceCell(p, "a", COMMENTED))).toContain("することができ")
 })
 
 test("Serena の relative_path を cwd から解決して差し戻す", () => {
@@ -383,6 +419,21 @@ test("形態素解析の違反のうち、編集範囲と重なるものだけ�
   expect(edit(`${LONG}追記`, "m3")).toBe("")
 })
 
+test.each([
+  ["a.md", "時間を短縮することができる。\n"],
+  ["a.html", "<p>時間を短縮することができる。</p>\n"]
+])("%s で形態素解析の層が例外を投げても、正規表現の層の違反を差し戻す", (name, text) => {
+  const p = write(name, text)
+  const reason = block(
+    run(writeInput(p, text), {
+      CLAUDE_PLUGIN_DATA: fakeDataDir(),
+      NJ_FAKE_LINDERA_THROW: "1"
+    })
+  )
+  expect(reason).toContain("違反が 1 件ある")
+  expect(reason).toContain("することができ")
+})
+
 test("AMATSUKA_NATIVE_JAPANESE_MORPH=off で解析器を読み込まない", () => {
   const p = write("b.md", `${LONG}\n`)
   expect(
@@ -398,4 +449,16 @@ test("バンドル後の scripts/check.mjs が discipline.md を読み、違反�
   const p = write("a.md", text)
   // 避ける語の規則は discipline.md から作るので、これが当たれば discipline.md を読めている
   expect(block(run(writeInput(p, text), {}, BUNDLE))).toContain("様々な")
+})
+
+test("バンドル後の scripts/check.mjs が解析器を読み込み、形態素解析の違反を返す", () => {
+  const p = write("b.md", `${LONG}\n`)
+  const reason = block(
+    run(
+      writeInput(p, `${LONG}\n`),
+      { CLAUDE_PLUGIN_DATA: fakeDataDir() },
+      BUNDLE
+    )
+  )
+  expect(reason).toContain(`- L1: 「${[...LONG].slice(0, 20).join("")}」(文)→`)
 })

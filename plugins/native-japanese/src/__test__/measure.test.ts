@@ -5,8 +5,12 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { runTs } from "../testing/run-ts.js"
+import { fakeDataDir } from "./helpers/fake-data-dir.js"
 
 const SCRIPT = fileURLToPath(new URL("../measure.ts", import.meta.url))
+const BUNDLE = fileURLToPath(
+  new URL("../../scripts/measure.mjs", import.meta.url)
+)
 const TRANSCRIPTS = fileURLToPath(
   new URL("../fixtures/transcripts", import.meta.url)
 )
@@ -49,27 +53,6 @@ const FIXTURE: { text: string }[] = JSON.parse(
 )
 // sentences.txt の n 行目(1 始まり)
 const sentence = (n: number) => (FIXTURE[n - 1] as { text: string }).text
-
-// lindera の .node の代わりに src/testing/fake-lindera.cjs を読み込ませるデータディレクトリを作る
-function fakeDataDir(): string {
-  const data = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-data-"))
-  const dir = path.join(data, "morph", "lindera-6.2.0")
-  fs.mkdirSync(dir, { recursive: true })
-  const stub = fileURLToPath(
-    new URL("../testing/fake-lindera.cjs", import.meta.url)
-  )
-  fs.writeFileSync(
-    path.join(dir, "ready.json"),
-    JSON.stringify({
-      version: "6.2.0",
-      target: "test",
-      node: path.relative(dir, stub),
-      dict: "ipadic",
-      files: {}
-    })
-  )
-  return data
-}
 
 test("--transcripts で main と agentType ごとに行数と違反数を集計する", () => {
   const r = measure(["--transcripts", TRANSCRIPTS])
@@ -192,7 +175,9 @@ describe("形態素解析の層", () => {
     fs.writeFileSync(path.join(repo2, p), text)
 
   beforeAll(() => {
-    data = fakeDataDir()
+    data = fakeDataDir(
+      fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-data-"))
+    )
     repo2 = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-morph-"))
     git2("init", "-q")
     write2("a.md", `${sentence(1)}\n`)
@@ -285,6 +270,26 @@ describe("形態素解析の層", () => {
       { ruleId: "bunmatsu-renzoku", layer: "morph", count: 1 }
     ])
     expect(since.sentences).toBe(4)
+  })
+
+  test("バンドル後の scripts/measure.mjs でも --data-dir の解析器を使い、違反を数える", () => {
+    const r = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          BUNDLE,
+          "--git",
+          "HEAD~1..HEAD",
+          "--data-dir",
+          data,
+          "--format",
+          "json"
+        ],
+        { cwd: repo2, encoding: "utf8" }
+      )
+    ) as Report
+    expect(r.morph.used).toBe(true)
+    expect(r.violations).toBeGreaterThanOrEqual(1)
   })
 
   test("取得物の無いディレクトリでは使わず、理由を書く", () => {

@@ -243,12 +243,17 @@ async function installMorph(opts) {
     fs.writeFileSync(readyTmp, `${JSON.stringify(ready, null, 2)}
 `);
     fs.renameSync(readyTmp, path.join(dir, "ready.json"));
-    for (const entry of fs.readdirSync(morph)) {
-      if (entry.startsWith("lindera-") && entry !== INSTALL_DIR)
-        fs.rmSync(path.join(morph, entry), { recursive: true, force: true });
+    try {
+      for (const entry of fs.readdirSync(morph)) {
+        if (entry.startsWith("lindera-") && entry !== INSTALL_DIR)
+          fs.rmSync(path.join(morph, entry), { recursive: true, force: true });
+      }
+    } catch {
     }
   } catch (error) {
     fs.rmSync(tmp, { recursive: true, force: true });
+    if (!fs.existsSync(path.join(dir, "ready.json")))
+      fs.rmSync(dir, { recursive: true, force: true });
     fs.writeFileSync(
       path.join(morph, "fetch-failed.json"),
       `${JSON.stringify({
