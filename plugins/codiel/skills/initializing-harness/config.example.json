@@ -3,9 +3,14 @@
   "runsDir": "docs/codiel/runs",
   "raguel": {
     "version": 1,
+    "storage": {
+      "projectId": "my-service"
+    },
     "rules": {
       "code/protected-paths": {
-        "globs": ["src/server/auth/**"]
+        "globs": ["src/server/auth/**"],
+        "excludeDefaults": [".github/**"],
+        "generated": ["dist/**"]
       }
     }
   }

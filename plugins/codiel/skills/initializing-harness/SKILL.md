@@ -57,20 +57,37 @@ bash <plugin-root>/scripts/install-harness.sh
 ## 2. `.codiel/config.json` の `raguel` の生成
 
 保護パスの正本は `.codiel/config.json` の `raguel` である。他のファイルの記述と突き合わせない。
-`raguel` の値は、Raguel が読む設定そのものであり、内蔵デフォルトへの**差分オーバーレイ**(deep merge)になる。
+`raguel` の値は、Raguel が読む設定そのものである。書いたキーだけが内蔵の既定値を上書きするので、変えたいキーだけを書く。
 形式は同梱の `config.example.json` に準拠する(書く前に必ず Read する)。
-JSON はコメントを持てないので、次の順と形をこの手順が定める。
+JSON はコメントを持てないので、マージの規則と、書くキーの意味は次のとおり本文が定める。
+
+### マージの規則
+
+- オブジェクトは再帰でマージする。書いていないキーは既定値のままである。
+- 配列は置換する。既定の要素を残したいときは、残す要素も自分で書く。
+- 例外は、和集合と宣言されたリスト(`code/protected-paths` の `globs`、`common/secrets` の `allowPatterns`)である。既定値に利用者の要素が加わり、既定の要素は消えない。
+
+### 書くキーと使う場面
+
+- `storage.projectId`: ケースファイルと判例を束ねるキーである。既定は git の共通ディレクトリから作る値で、どの worktree からでも同じになる。リポジトリを移したあとも履歴を引き継ぎたいときなど、名前を固定したいときだけ文字列で書く(例: `"storage": { "projectId": "my-service" }`)。
+- `code/protected-paths` の `excludeDefaults`: 和集合を取ったあとに、既定の保護の glob(`.github/**`・`infra/**`・`**/*.env*`)から取り除くものを書く。既定の glob と完全に一致する文字列だけを受け、利用者の `globs` を取り除く手段にはならない。IaC や CI の設定を直すプロジェクトでは、既定のままだと implement のゲートが毎回 STOP になるので、直す対象のパターンだけを名指しして外す(例: `"excludeDefaults": [".github/**"]`)。
+- `code/protected-paths` の `generated`: 生成物の glob を書く。和集合を取らず、既定は空である。生成物をコミットする規約のプロジェクトで、生成物が保護パスや重さの判定に掛からないようにする(例: `"generated": ["dist/**"]`)。秘密情報の検査は生成物にも掛かる。ワイルドカードより前の固定部が空の glob(`**/*`・`*.js`)は読み込みエラーになる。
+- `excludeDefaults` と `generated` は保護を緩めるので、聞いた回答に外す理由(IaC・CI を直す、生成物をコミットする)があるときだけ書く。理由を聞き取れなければ書かない。
+- run が active か awaiting_human の間は、config.json への書き込みを codiel の guard が拒む。書き込みは run の外で行う。
+
+### 書き込みの手順
 
 `raguel` の出所を次の順に判定し、当てはまる 1 つだけを行う。
 
 1. config.json に `raguel` があれば、判定 C を満たすので、この手順を行わない。
 2. `raguel` が無く、`raguel.config.yaml` が YAML として読めるときは、次の順に進める。
-   1. その中身を `raguel` に写す差分を示し、承認を得て config.json に書く。
+   1. その中身を `raguel` に写す差分を示し、承認を得て config.json に書く。廃止した旧版のキー(`judge.canStop`・`panel.trivial`・`panel.standard`・`panel.critical`・`common/resubmission-loop` の `stopAfter`)は、写すと読み込みエラーになる。写さずに外し、外したことを差分に示す。
    2. 書いた後に config.json を Read し、`raguel` の中身が YAML と同じであることを確かめる。
    3. `raguel.config.yaml` を消すことを示して承認を得てから、Bash の `rm` で消す。
    4. 消す承認が得られなければ残し、Raguel が読まないファイルであることを完了報告に書く。
 3. どちらも無ければ、AskUserQuestion で「触ってはいけない/特に慎重を要するパスの glob」を 1 回だけ聞き、
-   `raguel` に `version` と `rules."code/protected-paths".globs` だけを書く。デフォルト全量をコピーしない。
+   `raguel` に `version` と `rules."code/protected-paths".globs` を書く。デフォルト全量をコピーしない。
+   回答に、既定の保護から外す理由や生成物のコミット規約が含まれるときだけ、`excludeDefaults` と `generated` も足す。
    保護パスは無いと答えたら、`raguel` を空のオブジェクトにする。
 
 config.json への書き込みは、既存のキーを変えずに `raguel` を足すだけにする。書く前に差分を示し、承認を得る。

@@ -224,6 +224,10 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 - critical/high が review でゼロだった場合、fix-loop は実作業なしで
   `node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --reason "<理由>"`
   でスキップする(詳細は「5. ループ運転」を参照)。
+- ゲートで evaluate ツールへ渡すもの(`phase`・`paths`・`baseRef` など)は、`raguel-gating` のフェーズ→ツール
+  対応表だけが定める。このスキルは渡すものを書かず、各フェーズのゲートの手順から対応表の行を引く。
+- test-code・implement・test-loop・fix-loop の `start-phase` は、そのフェーズの開始の HEAD を state の
+  `phases.<phase>.startHead` に記録する。`baseRef` の値はこの記録であり、オーケストレーターが自分で決めない。
 
 ### 2.1 成果物コミット規約
 
@@ -448,9 +452,8 @@ test-loop の回帰の実行では `test-run-<n>.md`)に挙げ、最終の返答
    後始末し、`writing-test-specs` に従う成果物を書く委譲で run ブランチ上の `cases.md` を直させる。期待
    結果を変える必要が無いと直す委譲が報告したら `mark-ask test-code --kind confirm` の後に人に確かめる。
    直したら要素を `pending` に戻し、そのディレクトリの test-code をやり直す。
-7. 全ディレクトリのマージの後、E2E のレポートをコミットしてから(2.10)`evaluate_code` を呼ぶ。`diff` は
-   E2E のレポートを除いたテストコードと `spec.md` の
-   `git diff`(手順 6 で直した `cases.md` の差分を含む)、`testResults` は各 report.md の Red の確認の
+7. 全ディレクトリのマージの後、E2E のレポートをコミットしてから(2.10)`evaluate_code` を呼ぶ。渡すものは
+   `raguel-gating` の対応表の test-code の行に従う。`testResults` は各 report.md の Red の確認の
    要約とする。objective は、本体の後に「実装の前なので、Red の対象のテストが失敗するのは期待どおりで
    ある」の 1 文を足す。
 8. `pass-gate test-code` する。
@@ -488,8 +491,8 @@ test-loop の回帰の実行では `test-run-<n>.md`)に挙げ、最終の返答
 9. 方式 b では、全グループの後に `final` の最終ステップ(生成物の生成とコミット)を run ブランチ上で
    委譲する。
 10. 全グループと `final` の後、E2E のレポートをコミットしてから(2.10)、implement 全体に対して
-    `evaluate_code` を 1 回呼び、`pass-gate implement`
-    する。
+    `evaluate_code` を 1 回呼び(渡すものは `raguel-gating` の対応表の implement の行に従う)、
+    `pass-gate implement` する。
 
 state を書くのはオーケストレーターだけである。ステップ担当のサブエージェントとレビュー担当は
 `codiel-state` を呼ばない。
@@ -545,8 +548,9 @@ E2E のレポートは、E2E の仕様のディレクトリの `reports/` に実
   まだコミットしていない実行ごとのディレクトリと `failure.md`(直し方を「なし」に書き換えたものを含む)を
   同じ形でコミットする。コミットするものが無ければ行わない。git に載るのは `results.json` と md だけで、画像は
   `.gitignore` が外す。
-- Raguel と review に渡す diff からは、E2E のレポートを pathspec `':(exclude,glob)<testsDir>/**/reports/**'` で
-  除く。
+- review に渡す diff からは、E2E のレポートを pathspec `':(exclude,glob)<testsDir>/**/reports/**'` で
+  除く。Raguel は差分を自分で作ってレポートを評価から外すので、`evaluate_code` にはこの除外を渡さない。
+  一方、レポートのコミットは `evaluate_code` の前に要る。
 - implement の修正(タスクレビューの修正ラウンドとグループのマージの後の修正)と test-loop の修正の委譲には、
   失敗した仕様のディレクトリの最新のレポート(名前の順で最後の実行ごとのディレクトリ)の絶対パスを渡す。
   委譲先は `failure.md`・`results.json`・画像を読んで直し方を決め、直した実行ごとのディレクトリの名前と
