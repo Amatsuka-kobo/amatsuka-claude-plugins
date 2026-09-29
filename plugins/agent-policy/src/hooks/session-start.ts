@@ -26,6 +26,13 @@ const RETIRED = [
   "grok-implementer"
 ]
 
+const RETIRED_ROLES: ReadonlyMap<string, string> = new Map([
+  ["design-plan", "削除"],
+  ["final-review", "complex-review"],
+  ["gate-review", "complex-review"],
+  ["advisor", "削除"]
+])
+
 const DEPRECATED_ALIAS_VARIABLES = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
   "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
@@ -54,6 +61,7 @@ function unknownRoleBlock(
   const lines: string[] = []
   for (const entry of marked) {
     for (const role of entry.roles) {
+      if (RETIRED_ROLES.has(role)) continue
       if (labelOf(role) === undefined) {
         lines.push(`- ${entry.name}: ${role}`)
       }
@@ -72,6 +80,20 @@ function retiredBlock(marked: MarkedAgent[]): string | undefined {
     .filter((name) => RETIRED.includes(name))
   if (found.length === 0) return undefined
   return `次の Agent 定義は廃止済みである。プロジェクト定義は同梱定義より優先されるため削除する: ${found.join(", ")}`
+}
+
+function retiredRoleBlock(marked: MarkedAgent[]): string | undefined {
+  const lines = marked.flatMap((entry) =>
+    entry.roles
+      .filter((role) => RETIRED_ROLES.has(role))
+      .map((role) => `- ${entry.name}: ${role}`)
+  )
+  if (lines.length === 0) return undefined
+  return [
+    "次の Agent 定義は廃止済みの役割 ID を宣言している。",
+    ...lines,
+    "書き換え先: final-review / gate-review → complex-review、design-plan / advisor → 削除"
+  ].join("\n")
 }
 
 function deprecatedAliasesBlock(env: NodeJS.ProcessEnv): string | undefined {
@@ -224,6 +246,7 @@ async function build(env: NodeJS.ProcessEnv): Promise<string | undefined> {
   const blocks = compact([
     ...profileBlocks,
     retiredBlock(marked),
+    retiredRoleBlock(marked),
     deprecatedAliasesBlock(env)
   ])
   if (blocks.length === 0) return undefined

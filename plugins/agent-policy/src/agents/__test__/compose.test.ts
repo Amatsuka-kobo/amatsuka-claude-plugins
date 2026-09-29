@@ -113,10 +113,10 @@ describe("frontmatter", () => {
 
   it("役割マーカーを新規 ID を含めても ROLES の定義順で並べる", () => {
     const meta = frontmatter(
-      build(["explore", "normal-impl", "general", "design-plan"])
+      build(["explore", "normal-impl", "general", "complex-review"])
     )
     expect(meta["agent-policy-role"]).toBe(
-      "normal-impl, general, design-plan, explore"
+      "normal-impl, general, explore, complex-review"
     )
   })
 
@@ -131,8 +131,10 @@ describe("frontmatter", () => {
     expect(frontmatter(build(["escalation"])).tools).toContain("Agent")
     expect(frontmatter(build(["e2e-verify"])).tools).toContain("Agent")
     expect(frontmatter(build(["code-review"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["final-review"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["gate-review"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["complex-review"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["knowledge-elicitation"])).tools).not.toContain(
+      "Agent"
+    )
     expect(frontmatter(build(["explore"])).tools).toContain("Agent")
     expect(frontmatter(build(["light-impl", "complex-impl"])).tools).toContain(
       "Agent"
@@ -142,7 +144,9 @@ describe("frontmatter", () => {
 
   it("役割だけで Agent の有無を決める", () => {
     expect(frontmatter(build(["light-impl"])).tools).toContain("Agent")
-    expect(frontmatter(build(["advisor"])).tools).not.toContain("Agent")
+    expect(frontmatter(build(["adversarial-review"])).tools).not.toContain(
+      "Agent"
+    )
     expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
   })
 })

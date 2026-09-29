@@ -224,7 +224,10 @@ describe("注入内容の合成", () => {
       "tools: Read, Agent",
       "agent-policy-role: complex-impl"
     ])
-    place("advisor", ["tools: Read, Agent", "agent-policy-role: advisor"])
+    place("code-reviewer", [
+      "tools: Read, Agent",
+      "agent-policy-role: code-review"
+    ])
 
     for (const policy of ["custom", "with-codex-grok"]) {
       const env = { AMATSUKA_AGENT_AUTO_INJECTION: policy }

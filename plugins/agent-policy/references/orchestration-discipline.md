@@ -10,17 +10,14 @@
 | 軽量な実装                       | `light-impl`            | `impl`     | 可         | `Haiku`       |
 | 行き詰まり時のエスカレーション   | `escalation`            | `impl`     | 可         | `Fable`       |
 | その他のタスク                   | `general`               | `impl`     | 可         | `Sonnet`      |
-| 設計書・実装計画書(WBS)の作成   | `design-plan`           | `impl`     | 可         | `Opus`        |
 | コードベース探索                 | `explore`               | `readonly` | 可         | `Sonnet`      |
 | リアルタイム情報調査             | `realtime-research`     | `readonly` | 可         | `Sonnet`      |
 | E2E 動作検証・ブラウザ/GUI 操作  | `e2e-verify`            | `impl`     | 可         | `Sonnet`      |
 | 設計書・実装計画書のレビュー     | `design-review`         | `readonly` | 可         | `Sonnet`      |
 | 暗黙知の抽出・理解レビュー       | `knowledge-elicitation` | `readonly` | 否         | `Haiku`       |
 | コードレビュー                   | `code-review`           | `readonly` | 否         | `Sonnet`      |
-| 重要な実装の最終レビュー         | `final-review`          | `readonly` | 否         | `Fable`       |
-| 設計書の最終ゲートレビュー       | `gate-review`           | `readonly` | 否         | `Fable`       |
+| 重要な実装・高リスク設計書の最終レビュー | `complex-review`        | `readonly` | 否         | `Fable`       |
 | 敵対的レビュー                   | `adversarial-review`    | `readonly` | 否         | `Opus`        |
-| 設計・計画・実装のアドバイザー   | `advisor`               | `readonly` | 否         | `Fable`       |
 
 - 「RoleId」は Agent 定義の `agent-policy-role` マーカーに書く値であり、役割マーカーの対応表の各行にも `[general]` の形で載る。担当表の行と対応表の行は RoleId で対応づく。
 - 「種別」は `impl` が成果物ファイルを書く役割、`readonly` が読み取りと報告だけの役割である。

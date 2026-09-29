@@ -11,7 +11,6 @@ import {
   parseToolsField,
   projectAgentsDir,
   roleLabel,
-  roleLabels,
   scanAgents
 } from "../marker-scan"
 
@@ -303,9 +302,9 @@ describe("roleLabel", () => {
     expect(roleLabel({}, "complex-impl")).toBe("複雑または重要な実装")
     expect(roleLabel({}, "escalation")).toBe("行き詰まり時のエスカレーション")
     expect(roleLabel({}, "e2e-verify")).toBe("E2E 動作検証・ブラウザ/GUI 操作")
-    expect(roleLabel({}, "final-review")).toBe("重要な実装の最終レビュー")
-    expect(roleLabel({}, "gate-review")).toBe("設計書の最終ゲートレビュー")
-    expect(roleLabel({}, "design-plan")).toBe("設計書・実装計画書(WBS)の作成")
+    expect(roleLabel({}, "complex-review")).toBe(
+      "重要な実装・高リスク設計書の最終レビュー"
+    )
     expect(roleLabel({}, "explore")).toBe("コードベース探索")
   })
 
@@ -339,19 +338,42 @@ describe("roleLabel", () => {
 })
 
 describe("roleLabels", () => {
-  it("1 回の解決内だけ結果をメモする", () => {
-    const project = temporaryProject()
-    const fragment = writeRoleFragment(project, "triage", "変更前")
-    const env = { CLAUDE_PROJECT_DIR: project }
-    const labels = roleLabels(env)
-
-    expect(labels("triage")).toBe("変更前")
-    fs.writeFileSync(
-      fragment,
-      "---\nid: triage\nlabel: 変更後\nkind: readonly\n---\n"
+  it("既知の ROLES の label を返す", () => {
+    expect(roleLabel({}, "complex-impl")).toBe("複雑または重要な実装")
+    expect(roleLabel({}, "escalation")).toBe("行き詰まり時のエスカレーション")
+    expect(roleLabel({}, "e2e-verify")).toBe("E2E 動作検証・ブラウザ/GUI 操作")
+    expect(roleLabel({}, "complex-review")).toBe(
+      "重要な実装・高リスク設計書の最終レビュー"
     )
-    expect(labels("triage")).toBe("変更前")
-    expect(roleLabels(env)("triage")).toBe("変更後")
+    expect(roleLabel({}, "explore")).toBe("コードベース探索")
+  })
+
+  it("プロジェクト直下と言語別の役割断片から label を解決する", () => {
+    const project = temporaryProject()
+    writeRoleFragment(project, "triage", "障害の切り分け")
+    writeRoleFragment(project, "translate", "Uebersetzung", "de")
+    const env = { CLAUDE_PROJECT_DIR: project }
+
+    expect(roleLabel(env, "triage")).toBe("障害の切り分け")
+    expect(roleLabel(env, "translate")).toBe("Uebersetzung")
+  })
+
+  it("未知の役割は undefined を返す", () => {
+    expect(roleLabel({}, "no-such-role")).toBeUndefined()
+  })
+
+  it("同一 ID を別 env で解決しても結果を共有しない", () => {
+    const first = temporaryProject()
+    const second = temporaryProject()
+    writeRoleFragment(first, "triage", "最初のラベル")
+    writeRoleFragment(second, "triage", "二番目のラベル")
+
+    expect(roleLabel({ CLAUDE_PROJECT_DIR: first }, "triage")).toBe(
+      "最初のラベル"
+    )
+    expect(roleLabel({ CLAUDE_PROJECT_DIR: second }, "triage")).toBe(
+      "二番目のラベル"
+    )
   })
 })
 
