@@ -1,7 +1,7 @@
 # Raguel を層ごとに作り直す 設計書
 
 - 作成日: 2026-09-28
-- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直した(2026-09-29、ユーザー承認)
+- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直し、実機確認 4・9 の結果で §6.4.4・§6.12.1・§15 の 2・4 を確定した(2026-09-29、ユーザー承認)
 - 対象: `plugins/codiel/raguel-mcp`(主)、codiel で Raguel を使う箇所(`skills/raguel-gating`、`skills/orchestrating-runs`、`src/codiel-state.ts`、`src/hooks/guard-write.ts`・`guard-bash.ts`)
 - バージョン: codiel `1.0.0` → `1.1.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.1.0-dev`(§8)
 - 入力: ユーザー合意の決定 R1〜R24(2026-09-28〜29)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
@@ -545,7 +545,7 @@ E2E のレポート(R24)は、利用者の設定なしに生成物と同じに�
 | `contextJudge.enabled` | `false` | 文脈判定を使うか |
 | `contextJudge.model` | なし(SDK の既定) | Jev の model |
 | `contextJudge.timeoutMs` | `20000` | 問い合わせの時間の上限。`judge.deadlineMs` を超える値は読み込みエラー |
-| `contextJudge.thresholds.lower` | `0.2` | 下げる向きの判定に使う確率の閾値 |
+| `contextJudge.thresholds.lower` | `0.5` | 下げる向きの判定に使う確率の閾値。2026-09-29 の実機確認(§7.2 の 9)で、ヘルプ文の `rm -rf /`(所見 A4)が p=0.41、実行される破壊操作が p=0.79 だったので、0.2 から改めた |
 | `contextJudge.thresholds.raise` | `0.7` | 上げる向きの判定に使う確率の閾値 |
 
 質問と、判定を動かす向きは次のとおりにする。Jev が判定を動かせるのは、正規表現が出した stop を ask に下げる向きと、語彙系の info を ask に上げる向きだけである(ユーザー決定)。再提出・重さ・injection-marker は、表の「向き」列の上げる側だけに使う。
@@ -974,7 +974,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
       "enabled": false,
       "model": "<任意>",
       "timeoutMs": 20000,
-      "thresholds": { "lower": 0.2, "raise": 0.7 }
+      "thresholds": { "lower": 0.5, "raise": 0.7 }
     },
     "precedent": { "seedCatalog": true, "topN": 5 },
     "rules": {
@@ -1357,6 +1357,6 @@ codiel(`C/`):
 ## 15. 未決事項
 
 1. §7.2 の実機確認の結果による変更。codex のサンドボックスとツールの無効化が実現できないとき、codex をプロバイダーに残すか(README の限界で済ませるか)はユーザーが決める。
-2. 既定の `judge.timeoutMs`(180000)・`judge.deadlineMs`(600000、上限 1800000)と confidence の閾値(70)は、実機の所要時間と ASK の率で見直す。値は §7.2 の後に確定する。
+2. (確定。2026-09-29、ユーザー決定)既定の `judge.timeoutMs`(180000)・`judge.deadlineMs`(600000、上限 1800000)と confidence の閾値(70)は据え置く。§7.2 の 4 の実測は、standard が code 106 秒・文書 119 秒、critical が 243 秒で、再試行と degraded は無く、1 回の呼び出しの最長は steelman の約 106 秒だった。
 3. `--setting-sources project` でログインが外れ、§6.7.2 の代替の候補 a〜c も効かないときの扱い。選択肢は、利用者の設定を読むことを既知の限界として受け入れ README に書く、claude を既定のプロバイダーから外す、の 2 つである。Anthropic API を必須にしない要件は既定のプロバイダーで満たす必要があるので、後者を選ぶときは既定を何にするかも併せて決める。ユーザーが決める。
-4. Jev の文脈判定の閾値(`contextJudge.thresholds.lower` 0.2、`raise` 0.7)と、重さの水準の境(3 以上で standard、4 で critical)。§7.2 の 9 の標本の結果で見直して確定する。
+4. (確定。2026-09-29、ユーザー決定)Jev の文脈判定の閾値は `lower` を 0.2 から 0.5 に改め、`raise` 0.7 と重さの水準の境(3 以上で standard、4 で critical)は据え置く。§7.2 の 9 の標本 7 件のうち、見逃し(A7・A8・F6)は ask に上がり、否定文の不可逆キーワードは info のまま、実行される破壊操作は p=0.79 で stop のままだった。ヘルプ文の `rm -rf /`(A4)は p=0.41 で、0.2 では下がらなかった。
