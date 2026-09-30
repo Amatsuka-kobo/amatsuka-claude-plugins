@@ -395,24 +395,12 @@ function markerTable(env, marked, scope) {
 }
 
 // src/hooks/session-start.ts
-var RETIRED = [
-  "claude-researcher",
-  "gpt-researcher",
-  "grok-researcher",
-  "grok-implementer"
-];
 var RETIRED_ROLES = /* @__PURE__ */ new Set([
   "design-plan",
   "final-review",
   "gate-review",
   "advisor"
 ]);
-var DEPRECATED_ALIAS_VARIABLES = [
-  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-  "AMATSUKA_AGENT_GROK_ALIAS"
-];
 var REPAIR_BLOCK = "\u4FEE\u5FA9\u3059\u308B\u306B\u306F\u3001agent-policy:setup-agents \u3092\u518D\u5B9F\u884C\u3059\u308B\u304B\u3001\u5B9A\u7FA9\u306E `model` \u3092\u4FEE\u6B63\u3059\u308B\u304B\u3001\u30D7\u30ED\u30AD\u30B7\u3092\u8D77\u52D5\u3057\u3066\u304B\u3089\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B\u3002";
 function policyBlock(policy, legacyValue) {
   const instruction = `\u6700\u521D\u306B\u5FC5\u305A agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3057\u3001\u3053\u306E\u898F\u5F8B\u306B\u5F93\u3046`;
@@ -440,11 +428,6 @@ function unknownRoleBlock(env, marked) {
     ...lines
   ].join("\n");
 }
-function retiredBlock(marked) {
-  const found = marked.map((entry) => entry.name).filter((name) => RETIRED.includes(name));
-  if (found.length === 0) return void 0;
-  return `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`;
-}
 function retiredRoleBlock(marked) {
   const lines = marked.flatMap(
     (entry) => entry.roles.filter((role) => RETIRED_ROLES.has(role)).map((role) => `- ${entry.name}: ${role}`)
@@ -455,12 +438,6 @@ function retiredRoleBlock(marked) {
     ...lines,
     "\u66F8\u304D\u63DB\u3048\u5148: final-review / gate-review \u2192 complex-review\u3001design-plan / advisor \u2192 \u524A\u9664"
   ].join("\n");
-}
-function deprecatedAliasesBlock(env) {
-  if (!DEPRECATED_ALIAS_VARIABLES.some((variable) => env[variable] !== void 0)) {
-    return void 0;
-  }
-  return "AMATSUKA_AGENT_GPT_SOL_ALIAS / AMATSUKA_AGENT_GPT_TERRA_ALIAS / AMATSUKA_AGENT_GPT_LUNA_ALIAS / AMATSUKA_AGENT_GROK_ALIAS \u306E\u30A8\u30A4\u30EA\u30A2\u30B9\u5909\u6570\u306F\u53C2\u7167\u3055\u308C\u306A\u304F\u306A\u3063\u305F\u3002\u30E2\u30C7\u30EB\u306F agent-policy:setup-agents \u304C /v1/models \u304B\u3089\u9078\u3076\u3002\u5B9A\u7FA9\u306E `model` \u5024\u3092\u5909\u3048\u305F\u3044\u3068\u304D\u306F setup \u3092\u518D\u5B9F\u884C\u3059\u308B\u3002";
 }
 function markerlessFallbackBlock() {
   return "\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u5B9A\u7FA9\u304C\u898B\u3064\u304B\u3089\u306A\u3044(\u672A\u4F5C\u6210\u3001\u307E\u305F\u306F\u8AAD\u307F\u53D6\u308C\u306A\u3044)\u305F\u3081\u3001claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3067\u52D5\u4F5C\u3059\u308B\u3002agent-policy:setup-agents \u3067\u69CB\u6210\u3092\u4F5C\u308B\u3002";
@@ -560,12 +537,7 @@ async function build(env) {
   } else {
     profileBlocks = [unknownInjectionBlock(injection)];
   }
-  const blocks = compact([
-    ...profileBlocks,
-    retiredBlock(marked),
-    retiredRoleBlock(marked),
-    deprecatedAliasesBlock(env)
-  ]);
+  const blocks = compact([...profileBlocks, retiredRoleBlock(marked)]);
   if (blocks.length === 0) return void 0;
   return blocks.join("\n\n");
 }

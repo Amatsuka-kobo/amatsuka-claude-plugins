@@ -18,27 +18,12 @@ import {
   scanAgents
 } from "./marker-scan"
 
-// 廃止した定義。プロジェクト側に残っていると同梱プリセットより優先されるため通知する。
-const RETIRED = [
-  "claude-researcher",
-  "gpt-researcher",
-  "grok-researcher",
-  "grok-implementer"
-]
-
 const RETIRED_ROLES: ReadonlySet<string> = new Set([
   "design-plan",
   "final-review",
   "gate-review",
   "advisor"
 ])
-
-const DEPRECATED_ALIAS_VARIABLES = [
-  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-  "AMATSUKA_AGENT_GROK_ALIAS"
-]
 
 const REPAIR_BLOCK =
   "修復するには、agent-policy:setup-agents を再実行するか、定義の `model` を修正するか、プロキシを起動してからセッションを再起動する。"
@@ -74,14 +59,6 @@ function unknownRoleBlock(
   ].join("\n")
 }
 
-function retiredBlock(marked: MarkedAgent[]): string | undefined {
-  const found = marked
-    .map((entry) => entry.name)
-    .filter((name) => RETIRED.includes(name))
-  if (found.length === 0) return undefined
-  return `次の Agent 定義は廃止済みである。プロジェクト定義は同梱定義より優先されるため削除する: ${found.join(", ")}`
-}
-
 function retiredRoleBlock(marked: MarkedAgent[]): string | undefined {
   const lines = marked.flatMap((entry) =>
     entry.roles
@@ -94,15 +71,6 @@ function retiredRoleBlock(marked: MarkedAgent[]): string | undefined {
     ...lines,
     "書き換え先: final-review / gate-review → complex-review、design-plan / advisor → 削除"
   ].join("\n")
-}
-
-function deprecatedAliasesBlock(env: NodeJS.ProcessEnv): string | undefined {
-  if (
-    !DEPRECATED_ALIAS_VARIABLES.some((variable) => env[variable] !== undefined)
-  ) {
-    return undefined
-  }
-  return "AMATSUKA_AGENT_GPT_SOL_ALIAS / AMATSUKA_AGENT_GPT_TERRA_ALIAS / AMATSUKA_AGENT_GPT_LUNA_ALIAS / AMATSUKA_AGENT_GROK_ALIAS のエイリアス変数は参照されなくなった。モデルは agent-policy:setup-agents が /v1/models から選ぶ。定義の `model` 値を変えたいときは setup を再実行する。"
 }
 
 function markerlessFallbackBlock(): string {
@@ -243,12 +211,7 @@ async function build(env: NodeJS.ProcessEnv): Promise<string | undefined> {
     profileBlocks = [unknownInjectionBlock(injection)]
   }
 
-  const blocks = compact([
-    ...profileBlocks,
-    retiredBlock(marked),
-    retiredRoleBlock(marked),
-    deprecatedAliasesBlock(env)
-  ])
+  const blocks = compact([...profileBlocks, retiredRoleBlock(marked)])
   if (blocks.length === 0) return undefined
   return blocks.join("\n\n")
 }

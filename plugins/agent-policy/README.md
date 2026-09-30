@@ -292,8 +292,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 1. 同梱プリセット 4 定義(`agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` / `agent-policy:grok`)を廃止しました。これらを名指しで呼び出していた場合は動かなくなります。代わりに `agent-policy:setup-agents` を実行し、推奨構成を生成してください。非対話で推奨構成をまとめて作る場合は `/agent-policy:setup-agents --yes` を使えます。
 2. 方針スキル `with-codex-policy` / `with-grok-policy` / `codex-grok-policy` を廃止しました。custom 構成の方針は `custom-policy` に統合されています。
 3. `AMATSUKA_AGENT_AUTO_INJECTION` の旧値 `with-codex` / `with-grok` / `with-codex-grok` は custom として扱われるため、動作は継続します。ただし SessionStart は `custom` へ変更するよう通知します。環境変数を `custom` に更新してください。
-4. エイリアス変数 `AMATSUKA_AGENT_GPT_SOL_ALIAS`、`AMATSUKA_AGENT_GPT_TERRA_ALIAS`、`AMATSUKA_AGENT_GPT_LUNA_ALIAS`、`AMATSUKA_AGENT_GROK_ALIAS` は参照されなくなりました。設定されている場合、SessionStart が非推奨を通知します。モデルは setup-agents が `/v1/models` の実応答から選ぶため、定義の `model` を変えたいときは setup-agents を再実行してください。
-5. 以前の `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止済みです。プロジェクトの `.claude/agents/` に残っていれば削除してください。SessionStart は残骸を検知すると通知します。
+4. エイリアス変数 `AMATSUKA_AGENT_GPT_SOL_ALIAS`、`AMATSUKA_AGENT_GPT_TERRA_ALIAS`、`AMATSUKA_AGENT_GPT_LUNA_ALIAS`、`AMATSUKA_AGENT_GROK_ALIAS` は参照されなくなりました。モデルは setup-agents が `/v1/models` の実応答から選ぶため、定義の `model` を変えたいときは setup-agents を再実行してください。
+5. 以前の `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止済みです。プロジェクトの `.claude/agents/` に残っていれば削除してください。
 6. `setup-gpt` と `setup-grok` は `setup-agents` へ統合されています。0.14 系の setup-agents は custom プロファイル専用です。
 7. MCP ツールは setup-agents で定義ごとに付与します。既定では付きません。`claude mcp list` で接続済みのサーバーを検出し、許可するものを選べます。
 8. 役割定義から `LSP` を外しました。背景で起動するサブエージェントでは Claude Code が `LSP` を除去するため、定義に書いても機能しません。

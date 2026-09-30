@@ -24,13 +24,6 @@ const TABLE_INTRO =
 const CLAUDE_SCOPE = "それ以外の定義は委譲先にしない"
 const WITH_EXTERNAL_SCOPE =
   "外部ベンダーのモデルを指定した定義も含めて選んでよい"
-const ALIAS_VARIABLES = [
-  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-  "AMATSUKA_AGENT_GROK_ALIAS"
-]
-
 let project: string
 let servers: FakeModelsServer[]
 
@@ -558,41 +551,6 @@ describe("custom 構成の検証", () => {
   })
 })
 
-describe("非推奨エイリアス変数の通知", () => {
-  it.each(ALIAS_VARIABLES)("%s が設定されていると 1 回だけ通知する", (name) => {
-    const output = context({ [name]: "configured" })
-
-    expect(output).toContain("エイリアス変数は参照されなくなった")
-    expect(output).toContain("setup-agents が /v1/models から選ぶ")
-    expect(output).toContain("定義の `model` 値")
-    expect(output.match(/エイリアス変数は参照されなくなった/g)).toHaveLength(1)
-  })
-
-  it("複数の非推奨変数が設定されても通知は 1 回だけ出す", () => {
-    const output = context(
-      Object.fromEntries(ALIAS_VARIABLES.map((name) => [name, "configured"]))
-    )
-
-    expect(output.match(/エイリアス変数は参照されなくなった/g)).toHaveLength(1)
-  })
-
-  it.each([
-    undefined,
-    "none",
-    "claude",
-    "custom",
-    "with-codex",
-    "bogus"
-  ])("injection が %s の分岐でも通知する", (injection) => {
-    const output = context({
-      ...injectionEnvironment(injection),
-      AMATSUKA_AGENT_GPT_SOL_ALIAS: "configured"
-    })
-
-    expect(output).toContain("エイリアス変数は参照されなくなった")
-  })
-})
-
 describe("ファイルを書かない", () => {
   it.each([
     ["未設定", undefined],
@@ -746,28 +704,6 @@ describe("labelOf の言語別ディレクトリ", () => {
     const injected = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     expect(injected).toContain("Ersteinschatzung")
     expect(injected).not.toContain("未知の役割 ID")
-  })
-})
-
-describe("旧定義の残骸通知", () => {
-  it("廃止した 4 種を検出する", () => {
-    for (const name of [
-      "claude-researcher",
-      "gpt-researcher",
-      "grok-researcher",
-      "grok-implementer"
-    ]) {
-      place(name, ["model: sonnet"])
-    }
-    const output = context()
-    expect(output).toContain("claude-researcher")
-    expect(output).toContain("grok-implementer")
-    expect(output).toContain("廃止")
-  })
-
-  it("現行のプリセット名は残骸として扱わない", () => {
-    place("gpt-sol", ["model: claude-gpt-5-6-sol"])
-    expect(context()).not.toContain("廃止")
   })
 })
 
