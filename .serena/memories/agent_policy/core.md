@@ -240,8 +240,8 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
   (no lowercase) and returns `undefined` for the three legacy values, so `with-codex` and `CuStOm`
   would make the CLI and the hooks disagree on the same env. Use `candidateScopeFor`.
 - **Gone**: `aliasEnv` on `ModelSpec`, `resolveModelValue`, `rolesAcrossPolicies`. The four
-  `AMATSUKA_AGENT_*_ALIAS` env vars are **no longer read**; SessionStart only warns that they are
-  ignored. Model existence is grounded in the proxy's `/v1/models`, so alias substitution has no
+  `AMATSUKA_AGENT_*_ALIAS` env vars are **no longer read**, and since 0.21.2 SessionStart no longer
+  warns about them either (the retired-definition name warning was removed at the same time). Model existence is grounded in the proxy's `/v1/models`, so alias substitution has no
   problem left to solve.
 - `modelsFor()` / `rolesFor(model)` lost their policy argument — they are claude-only.
 - `allowsAgentTool` and `SOLO_DENIED_ROLES` — **deleted in 0.21** (every role is denied Agent).
