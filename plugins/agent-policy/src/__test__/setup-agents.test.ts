@@ -6,6 +6,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { textHash } from "../agents/hash"
 import {
   ASSIGNMENTS,
   candidateScopeFor,
@@ -57,6 +58,8 @@ interface Discarded {
   sections: string[]
 }
 
+type TextState = "same" | "templateChanged" | "userEdited" | "unknown"
+
 interface CheckResult {
   ok: boolean
   error: string
@@ -76,6 +79,8 @@ interface CheckResult {
     sectionsChanged: string[]
   }
   roles: RolesSummary
+  description: TextState | null
+  preamble: TextState | null
   action: string
   kept: string[]
   keptNeedsReview: string[]
@@ -1701,6 +1706,174 @@ describe("再生成の作成先は被覆する定義で決める", () => {
   })
 })
 
+describe("description と前置きの保持", () => {
+  const KEEPER = path.join(".claude", "agents", "keeper.md")
+
+  function keeper(
+    extra: string[] = [],
+    mode: "--write" | "--check" = "--write"
+  ) {
+    return singleResult<CheckResult>([
+      mode,
+      "--model-id",
+      "opus",
+      "--name",
+      "keeper",
+      "--roles",
+      "code-review",
+      "--scope",
+      "claude",
+      "--lang",
+      "ja",
+      "--dir",
+      project,
+      ...extra
+    ])
+  }
+
+  function content(): string {
+    return fs.readFileSync(path.join(project, KEEPER), "utf8")
+  }
+
+  function edit(transform: (text: string) => string): void {
+    fs.writeFileSync(path.join(project, KEEPER), transform(content()))
+  }
+
+  function metaValue(key: string): string | undefined {
+    return content().match(new RegExp(`^${key}: (.*)$`, "m"))?.[1]
+  }
+
+  const addPreamble = (text: string) =>
+    text.replace(/\n---\n\n/, "\n---\n\n利用者が足した前置き。\n\n")
+
+  it("新規生成で 2 つのハッシュを書き、直後の --check は same を返す", () => {
+    keeper()
+
+    expect(metaValue("agent-policy-description-hash")).toMatch(/^[0-9a-f]{16}$/)
+    expect(metaValue("agent-policy-preamble-hash")).toMatch(/^[0-9a-f]{16}$/)
+    expect(keeper([], "--check")).toMatchObject({
+      description: "same",
+      preamble: "same"
+    })
+  })
+
+  it("利用者が編集した description は userEdited になり、--merge で保持して記録も残す", () => {
+    keeper()
+    const record = metaValue("agent-policy-description-hash")
+    edit((text) =>
+      text.replace(/^description: .*$/m, "description: 利用者の説明")
+    )
+
+    expect(keeper([], "--check").description).toBe("userEdited")
+    const result = keeper(["--merge"])
+
+    expect(metaValue("description")).toBe("利用者の説明")
+    expect(metaValue("agent-policy-description-hash")).toBe(record)
+    expect(result.discarded.frontmatterKeys).not.toContain("description")
+  })
+
+  it("記録と一致する旧い description は templateChanged になり、--merge の既定では保持する", () => {
+    keeper()
+    const oldRecord = textHash("旧い説明")
+    edit((text) =>
+      text
+        .replace(/^description: .*$/m, "description: 旧い説明")
+        .replace(
+          /^agent-policy-description-hash: .*$/m,
+          `agent-policy-description-hash: ${oldRecord}`
+        )
+    )
+
+    expect(keeper([], "--check").description).toBe("templateChanged")
+    keeper(["--merge"])
+
+    expect(metaValue("description")).toBe("旧い説明")
+    expect(metaValue("agent-policy-description-hash")).toBe(oldRecord)
+  })
+
+  it("--replace で指定したものだけテンプレートに置き換え、新しい記録を書く", () => {
+    keeper()
+    const template = metaValue("description")
+    const templateRecord = metaValue("agent-policy-description-hash")
+    edit((text) =>
+      addPreamble(text)
+        .replace(/^description: .*$/m, "description: 旧い説明")
+        .replace(
+          /^agent-policy-description-hash: .*$/m,
+          `agent-policy-description-hash: ${textHash("旧い説明")}`
+        )
+    )
+
+    keeper(["--merge", "--replace", "description"])
+
+    expect(metaValue("description")).toBe(template)
+    expect(metaValue("agent-policy-description-hash")).toBe(templateRecord)
+    expect(content()).toContain("利用者が足した前置き。")
+  })
+
+  it("記録の無い既存の前置きは unknown になり、保持しても記録を書かない", () => {
+    keeper()
+    edit((text) =>
+      addPreamble(text).replace(/^agent-policy-preamble-hash: .*\n/m, "")
+    )
+
+    expect(keeper([], "--check").preamble).toBe("unknown")
+    const result = keeper(["--merge"])
+
+    expect(content()).toContain("利用者が足した前置き。")
+    expect(metaValue("agent-policy-preamble-hash")).toBeUndefined()
+    expect(result.discarded.preamble).toBe(false)
+  })
+
+  it("--replace preamble で前置きを置き換え、記録を書く", () => {
+    keeper()
+    const record = metaValue("agent-policy-preamble-hash")
+    edit((text) =>
+      addPreamble(text).replace(/^agent-policy-preamble-hash: .*\n/m, "")
+    )
+
+    keeper(["--merge", "--replace", "preamble"])
+
+    expect(content()).not.toContain("利用者が足した前置き。")
+    expect(metaValue("agent-policy-preamble-hash")).toBe(record)
+  })
+
+  it("--replace は --merge なし・--recommended・未知の値で拒否する", () => {
+    for (const args of [
+      ["--write", "--replace", "description"],
+      ["--write", "--merge", "--replace", "summary"]
+    ]) {
+      const result = run<{ ok: boolean }>([
+        ...args,
+        "--model-id",
+        "opus",
+        "--name",
+        "keeper",
+        "--roles",
+        "code-review",
+        "--scope",
+        "claude",
+        "--dir",
+        project
+      ])
+      expect(result.ok).toBe(false)
+    }
+    expect(
+      run<{ ok: boolean }>([
+        "--write",
+        "--merge",
+        "--recommended",
+        "--replace",
+        "description",
+        "--scope",
+        "claude",
+        "--dir",
+        project
+      ]).ok
+    ).toBe(false)
+  })
+})
+
 describe("--list-roles", () => {
   it("組み込み役割を担当表で絞らずすべて返す", () => {
     const result = run<ListRolesResult>([
@@ -2428,16 +2601,18 @@ describe("--write", () => {
       "key:permissionMode",
       "section:## 独自運用"
     ])
+    // 利用者が書き換えた前置きは userEdited として既定で保持するため、捨てた側に数えない。
     expect(result.discarded).toEqual({
       frontmatterKeys: ["model"],
-      preamble: true,
+      preamble: false,
       sections: ["## 制約"]
     })
+    expect(result.preamble).toBe("userEdited")
     expect(content).toMatch(/^tools:.*CustomTool/m)
     expect(content).toContain("permissionMode: plan")
     expect(content).toContain("## 独自運用")
     expect(content).toContain("model: claude-gpt-6-sol")
-    expect(content).not.toContain("あなたは私が書き換えた冒頭である。")
+    expect(content).toContain("あなたは私が書き換えた冒頭である。")
     expect(content).not.toContain("私が書き換えた制約")
   })
 

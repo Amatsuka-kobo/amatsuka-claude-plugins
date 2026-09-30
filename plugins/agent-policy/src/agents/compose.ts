@@ -5,6 +5,7 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
+import { textHash } from "./hash"
 import type { Effort, Lang } from "./policies"
 import { hasMixedKinds, type RoleId, sortRoleIds } from "./roles"
 import { type Vocabulary, vocabularyFor } from "./vocabulary"
@@ -43,10 +44,11 @@ export function compose(input: ComposeInput): string {
   const tools = resolveToolsFor(selected, input.mcpServers ?? [])
   const denyTools = input.denyTools ?? []
 
+  const description = describe(selected, vocabulary)
   const head = [
     "---",
     `name: ${input.name}`,
-    `description: ${describe(selected, vocabulary)}`,
+    `description: ${description}`,
     `model: ${input.model}`,
     ...(input.effort === undefined ? [] : [`effort: ${input.effort}`]),
     `color: ${input.color ?? COLORS[input.vendor]}`,
@@ -96,10 +98,29 @@ export function compose(input: ComposeInput): string {
     }
   }
 
-  return `${[...head, ...body]
+  // 再生成で description と前置きの編集を見分けるため、書き込んだ値の記録を残す。
+  const bodyText = body.join("\n").replace(/\n{3,}/g, "\n\n")
+  head.splice(
+    head.length - 2,
+    0,
+    `${DESCRIPTION_HASH_KEY}: ${textHash(description)}`,
+    `${PREAMBLE_HASH_KEY}: ${textHash(preambleOf(bodyText))}`
+  )
+
+  return `${[...head, bodyText]
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd()}\n`
+}
+
+export const DESCRIPTION_HASH_KEY = "agent-policy-description-hash"
+export const PREAMBLE_HASH_KEY = "agent-policy-preamble-hash"
+
+// 前置きは、frontmatter の後から最初の `## ` 見出しの前までの本文。
+export function preambleOf(body: string): string {
+  const lines = body.split("\n")
+  const heading = lines.findIndex((line) => line.startsWith("## "))
+  return (heading === -1 ? lines : lines.slice(0, heading)).join("\n").trim()
 }
 
 export function describeRoles(input: ComposeInput): RolesSummary {

@@ -16,7 +16,10 @@ function bodyHash(content) {
     const close = lines.indexOf("---", 1);
     if (close !== -1) body = lines.slice(close + 1);
   }
-  return crypto.createHash("sha256").update(body.join("\n").trim()).digest("hex").slice(0, 16);
+  return textHash(body.join("\n"));
+}
+function textHash(text) {
+  return crypto.createHash("sha256").update(text.trim()).digest("hex").slice(0, 16);
 }
 
 // src/agents/roles.ts
@@ -360,10 +363,11 @@ function compose(input) {
   const { ids: ordered, selected } = selectFragments(input);
   const tools = resolveToolsFor(selected, input.mcpServers ?? []);
   const denyTools = input.denyTools ?? [];
+  const description = describe(selected, vocabulary);
   const head = [
     "---",
     `name: ${input.name}`,
-    `description: ${describe(selected, vocabulary)}`,
+    `description: ${description}`,
     `model: ${input.model}`,
     ...input.effort === void 0 ? [] : [`effort: ${input.effort}`],
     `color: ${input.color ?? COLORS[input.vendor]}`,
@@ -404,8 +408,22 @@ function compose(input) {
       body.push(`### ${fragment.label}`, "", ...items, "");
     }
   }
-  return `${[...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
+  const bodyText = body.join("\n").replace(/\n{3,}/g, "\n\n");
+  head.splice(
+    head.length - 2,
+    0,
+    `${DESCRIPTION_HASH_KEY}: ${textHash(description)}`,
+    `${PREAMBLE_HASH_KEY}: ${textHash(preambleOf(bodyText))}`
+  );
+  return `${[...head, bodyText].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
 `;
+}
+var DESCRIPTION_HASH_KEY = "agent-policy-description-hash";
+var PREAMBLE_HASH_KEY = "agent-policy-preamble-hash";
+function preambleOf(body) {
+  const lines = body.split("\n");
+  const heading = lines.findIndex((line) => line.startsWith("## "));
+  return (heading === -1 ? lines : lines.slice(0, heading)).join("\n").trim();
 }
 function describeRoles(input) {
   const { ids, selected } = selectFragments(input);
@@ -1086,16 +1104,28 @@ function compare(options, target, input, rendered, existingRaw) {
         sectionsOnlyInTemplate: [],
         sectionsChanged: []
       },
-      roles
+      roles,
+      description: null,
+      preamble: null
     };
   }
   const existing = parseDocument(existingRaw);
   const expected = parseDocument(rendered);
+  const descriptionState = textState(
+    existing.meta.get("description") ?? "",
+    expected.meta.get("description") ?? "",
+    existing.meta.get(DESCRIPTION_HASH_KEY)
+  );
+  const preambleState = textState(
+    existing.preamble,
+    expected.preamble,
+    existing.meta.get(PREAMBLE_HASH_KEY)
+  );
   const existingTools = splitTools(existing.meta.get("tools"));
   const expectedTools = splitTools(expected.meta.get("tools"));
   const changed = [];
   for (const [key, value] of expected.meta) {
-    if (key === "tools") continue;
+    if (key === "tools" || RECORD_KEYS.includes(key)) continue;
     const current = existing.meta.get(key);
     if (current !== void 0 && current !== value) {
       changed.push({ key, existing: current, template: value });
@@ -1132,8 +1162,16 @@ function compare(options, target, input, rendered, existingRaw) {
       ),
       sectionsChanged
     },
-    roles
+    roles,
+    description: descriptionState,
+    preamble: preambleState
   };
+}
+var RECORD_KEYS = [DESCRIPTION_HASH_KEY, PREAMBLE_HASH_KEY];
+function textState(existing, template, record) {
+  if (existing.trim() === template.trim()) return "same";
+  if (record === void 0) return "unknown";
+  return textHash(existing) === record ? "templateChanged" : "userEdited";
 }
 function diff(options, target, mcpServers) {
   const input = composeInputFor(options, target, mcpServers);
@@ -1190,9 +1228,27 @@ function render(document) {
   return `${[...head, ...body].join("\n").trimEnd()}
 `;
 }
-function merge(existingRaw, renderedRaw, keep) {
+var RETAIN_NONE = { description: false, preamble: false };
+function retainText(existing, merged, recordKey) {
+  const record = existing.meta.get(recordKey);
+  if (record === void 0) {
+    merged.meta.delete(recordKey);
+    merged.order = merged.order.filter((key) => key !== recordKey);
+  } else {
+    merged.meta.set(recordKey, record);
+  }
+}
+function merge(existingRaw, renderedRaw, keep, retain = RETAIN_NONE) {
   const existing = parseDocument(existingRaw);
   const merged = parseDocument(renderedRaw);
+  if (retain.description) {
+    merged.meta.set("description", existing.meta.get("description") ?? "");
+    retainText(existing, merged, DESCRIPTION_HASH_KEY);
+  }
+  if (retain.preamble) {
+    merged.preamble = existing.preamble;
+    retainText(existing, merged, PREAMBLE_HASH_KEY);
+  }
   const missing = [];
   for (const heading of keep.sections) {
     if (!existing.sections.has(heading)) missing.push(`section:${heading}`);
@@ -1240,13 +1296,15 @@ function automaticKeep(difference) {
 function unique(selectors) {
   return [...new Set(selectors)];
 }
-function discarded(difference, keep) {
+function discarded(difference, keep, retain) {
   if (!difference.exists) {
     return { frontmatterKeys: [], preamble: false, sections: [] };
   }
   return {
-    frontmatterKeys: difference.frontmatter.changed.map((entry) => entry.key).filter((key) => !keep.keys.has(key)),
-    preamble: difference.preambleChanged && !keep.preamble,
+    frontmatterKeys: difference.frontmatter.changed.map((entry) => entry.key).filter(
+      (key) => !keep.keys.has(key) && !(key === "description" && retain.description)
+    ),
+    preamble: difference.preambleChanged && !keep.preamble && !retain.preamble,
     sections: difference.body.sectionsChanged.filter(
       (heading) => !keep.sections.has(heading)
     )
@@ -1268,7 +1326,8 @@ function write(options, target, mcpServers) {
   ]);
   const keep = parseKeep(selectors);
   const shouldMerge = existingRaw !== void 0 && (options.merge || options.keep.length > 0);
-  const content = shouldMerge ? merge(existingRaw, rendered, keep) : rendered;
+  const retain = shouldMerge ? retainFor(options, difference, keep) : RETAIN_NONE;
+  const content = shouldMerge ? merge(existingRaw, rendered, keep, retain) : rendered;
   const kept = shouldMerge ? selectors : [];
   fs3.mkdirSync(path2.dirname(file), { recursive: true });
   fs3.writeFileSync(file, content);
@@ -1278,8 +1337,30 @@ function write(options, target, mcpServers) {
     action: exists ? options.merge ? "merged" : "overwritten" : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(difference, shouldMerge ? keep : parseKeep([])),
-    roles: difference.roles
+    discarded: discarded(
+      difference,
+      shouldMerge ? keep : parseKeep([]),
+      retain
+    ),
+    roles: difference.roles,
+    description: difference.description,
+    preamble: difference.preamble
+  };
+}
+function retainFor(options, difference, keep) {
+  const replaceDescription = options.replace.includes("description");
+  const replacePreamble = options.replace.includes("preamble");
+  if (replaceDescription && keep.keys.has("description")) {
+    throw new Error(
+      "replace: description conflicts with --keep key:description"
+    );
+  }
+  if (replacePreamble && keep.preamble) {
+    throw new Error("replace: preamble conflicts with --keep preamble");
+  }
+  return {
+    description: keep.keys.has("description") || options.merge && !replaceDescription && difference.description !== null && difference.description !== "same",
+    preamble: keep.preamble || options.merge && !replacePreamble && difference.preamble !== null && difference.preamble !== "same"
   };
 }
 function resolveMcp(options) {
@@ -1723,7 +1804,8 @@ function parseArgs(argv) {
     keep: [],
     pruneTools: false,
     rewriteRoles: false,
-    tools: []
+    tools: [],
+    replace: []
   };
   const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < argv.length; index += 1) {
@@ -1830,6 +1912,15 @@ function parseArgs(argv) {
         options.tools = splitList(requireValue(value, "tools"));
         index += 1;
         break;
+      case "--replace":
+        options.replace = splitList(requireValue(value, "replace"));
+        for (const entry of options.replace) {
+          if (entry !== "description" && entry !== "preamble") {
+            throw new Error("replace: must be description or preamble");
+          }
+        }
+        index += 1;
+        break;
       default:
         throw new Error(`Unsupported option: ${arg}`);
     }
@@ -1840,7 +1931,8 @@ function parseArgs(argv) {
       ["--name", options.name !== ""],
       ["--model", options.model !== ""],
       ["--vendor", options.vendor !== ""],
-      ["--keep", options.keep.length > 0]
+      ["--keep", options.keep.length > 0],
+      ["--replace", options.replace.length > 0]
     ]) {
       if (supplied)
         throw new Error(`${flag}: cannot be used with --recommended`);
@@ -1877,6 +1969,8 @@ function parseArgs(argv) {
   }
   if (options.merge && !options.write)
     throw new Error("merge: requires --write");
+  if (options.replace.length > 0 && !options.merge)
+    throw new Error("replace: requires --merge");
   if (options.recommended) return options;
   if (options.name === "") throw new Error("name: is required");
   if (options.modelId === "") throw new Error("model-id: is required");

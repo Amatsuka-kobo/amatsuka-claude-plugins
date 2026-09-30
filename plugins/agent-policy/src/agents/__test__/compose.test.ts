@@ -3,8 +3,9 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { compose, describeRoles } from "../compose"
+import { compose, describeRoles, preambleOf } from "../compose"
 import { type FragmentDir, loadFragments } from "../fragments"
+import { textHash } from "../hash"
 import { ROLES } from "../roles"
 
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
@@ -100,7 +101,19 @@ describe("frontmatter", () => {
 
     expect(meta.color).toBe("blue")
     expect(meta["agent-policy-vendor"]).toBeUndefined()
-    expect(lines[roleAt + 1]).toBe("---")
+    // vendor 行が無いので、マーカーの直後は description と前置きの記録になる。
+    expect(lines[roleAt + 1]).toMatch(/^agent-policy-description-hash: /)
+  })
+
+  it("書き込んだ description と前置きのハッシュを frontmatter に記録する", () => {
+    const document = build(["complex-impl"])
+    const meta = frontmatter(document)
+    const body = document.split("\n---\n").slice(1).join("\n---\n")
+
+    expect(meta["agent-policy-description-hash"]).toBe(
+      textHash(meta.description ?? "")
+    )
+    expect(meta["agent-policy-preamble-hash"]).toBe(textHash(preambleOf(body)))
   })
 
   it("vendor marker を role marker の直後へ出力する", () => {

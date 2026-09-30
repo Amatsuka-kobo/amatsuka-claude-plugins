@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url"
 import {
   type ComposeInput,
   compose,
+  DESCRIPTION_HASH_KEY,
   describeRoles,
+  PREAMBLE_HASH_KEY,
   type RolesSummary,
   resolveToolsFor
 } from "./agents/compose"
@@ -17,6 +19,7 @@ import {
   scaffoldFragments,
   type Vendor
 } from "./agents/fragments"
+import { textHash } from "./agents/hash"
 import { fetchLiveModels, type LiveModels } from "./agents/live-models"
 import {
   listMcpServers,
@@ -72,6 +75,7 @@ interface Options {
   pruneTools: boolean
   rewriteRoles: boolean
   tools: string[]
+  replace: string[]
 }
 
 interface Target {
@@ -114,6 +118,9 @@ interface Diff {
     sectionsChanged: string[]
   }
   roles: RolesSummary
+  /** 既存ファイルが無いときは null */
+  description: TextState | null
+  preamble: TextState | null
 }
 
 interface Document {
@@ -438,19 +445,32 @@ function compare(
         sectionsOnlyInTemplate: [],
         sectionsChanged: []
       },
-      roles
+      roles,
+      description: null,
+      preamble: null
     }
   }
 
   const existing = parseDocument(existingRaw)
   const expected = parseDocument(rendered)
+  const descriptionState = textState(
+    existing.meta.get("description") ?? "",
+    expected.meta.get("description") ?? "",
+    existing.meta.get(DESCRIPTION_HASH_KEY)
+  )
+  const preambleState = textState(
+    existing.preamble,
+    expected.preamble,
+    existing.meta.get(PREAMBLE_HASH_KEY)
+  )
 
   const existingTools = splitTools(existing.meta.get("tools"))
   const expectedTools = splitTools(expected.meta.get("tools"))
 
   const changed: Diff["frontmatter"]["changed"] = []
   for (const [key, value] of expected.meta) {
-    if (key === "tools") continue
+    // 記録のキーは生成の管理用であり、利用者に見せる差分に含めない。
+    if (key === "tools" || RECORD_KEYS.includes(key)) continue
     const current = existing.meta.get(key)
     if (current !== undefined && current !== value) {
       changed.push({ key, existing: current, template: value })
@@ -489,8 +509,25 @@ function compare(
       ),
       sectionsChanged
     },
-    roles
+    roles,
+    description: descriptionState,
+    preamble: preambleState
   }
+}
+
+type TextState = "same" | "templateChanged" | "userEdited" | "unknown"
+
+const RECORD_KEYS: readonly string[] = [DESCRIPTION_HASH_KEY, PREAMBLE_HASH_KEY]
+
+// 既存の値を、テンプレートと生成時の記録に照らして分類する。
+function textState(
+  existing: string,
+  template: string,
+  record: string | undefined
+): TextState {
+  if (existing.trim() === template.trim()) return "same"
+  if (record === undefined) return "unknown"
+  return textHash(existing) === record ? "templateChanged" : "userEdited"
 }
 
 function diff(options: Options, target: Target, mcpServers: string[]): Diff {
@@ -564,9 +601,45 @@ function render(document: Document): string {
   return `${[...head, ...body].join("\n").trimEnd()}\n`
 }
 
-function merge(existingRaw: string, renderedRaw: string, keep: Keep): string {
+interface Retain {
+  description: boolean
+  preamble: boolean
+}
+
+const RETAIN_NONE: Retain = { description: false, preamble: false }
+
+// 保持した値には既存の記録を残す。記録が無ければ書かない。
+function retainText(
+  existing: Document,
+  merged: Document,
+  recordKey: string
+): void {
+  const record = existing.meta.get(recordKey)
+  if (record === undefined) {
+    merged.meta.delete(recordKey)
+    merged.order = merged.order.filter((key) => key !== recordKey)
+  } else {
+    merged.meta.set(recordKey, record)
+  }
+}
+
+function merge(
+  existingRaw: string,
+  renderedRaw: string,
+  keep: Keep,
+  retain: Retain = RETAIN_NONE
+): string {
   const existing = parseDocument(existingRaw)
   const merged = parseDocument(renderedRaw)
+
+  if (retain.description) {
+    merged.meta.set("description", existing.meta.get("description") ?? "")
+    retainText(existing, merged, DESCRIPTION_HASH_KEY)
+  }
+  if (retain.preamble) {
+    merged.preamble = existing.preamble
+    retainText(existing, merged, PREAMBLE_HASH_KEY)
+  }
 
   const missing: string[] = []
   for (const heading of keep.sections) {
@@ -633,7 +706,7 @@ function unique(selectors: string[]): string[] {
   return [...new Set(selectors)]
 }
 
-function discarded(difference: Diff, keep: Keep): Discarded {
+function discarded(difference: Diff, keep: Keep, retain: Retain): Discarded {
   if (!difference.exists) {
     return { frontmatterKeys: [], preamble: false, sections: [] }
   }
@@ -641,8 +714,11 @@ function discarded(difference: Diff, keep: Keep): Discarded {
   return {
     frontmatterKeys: difference.frontmatter.changed
       .map((entry) => entry.key)
-      .filter((key) => !keep.keys.has(key)),
-    preamble: difference.preambleChanged && !keep.preamble,
+      .filter(
+        (key) =>
+          !keep.keys.has(key) && !(key === "description" && retain.description)
+      ),
+    preamble: difference.preambleChanged && !keep.preamble && !retain.preamble,
     sections: difference.body.sectionsChanged.filter(
       (heading) => !keep.sections.has(heading)
     )
@@ -668,7 +744,12 @@ function write(options: Options, target: Target, mcpServers: string[]) {
   const keep = parseKeep(selectors)
   const shouldMerge =
     existingRaw !== undefined && (options.merge || options.keep.length > 0)
-  const content = shouldMerge ? merge(existingRaw, rendered, keep) : rendered
+  const retain = shouldMerge
+    ? retainFor(options, difference, keep)
+    : RETAIN_NONE
+  const content = shouldMerge
+    ? merge(existingRaw, rendered, keep, retain)
+    : rendered
   const kept = shouldMerge ? selectors : []
 
   fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -680,8 +761,43 @@ function write(options: Options, target: Target, mcpServers: string[]) {
     action: exists ? (options.merge ? "merged" : "overwritten") : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(difference, shouldMerge ? keep : parseKeep([])),
-    roles: difference.roles
+    discarded: discarded(
+      difference,
+      shouldMerge ? keep : parseKeep([]),
+      retain
+    ),
+    roles: difference.roles,
+    description: difference.description,
+    preamble: difference.preamble
+  }
+}
+
+// --merge は same 以外の description と前置きを既存のまま保持する。
+// --replace で指定したものだけテンプレートへ置き換える。--keep の明示指定も保持に数える。
+function retainFor(options: Options, difference: Diff, keep: Keep): Retain {
+  const replaceDescription = options.replace.includes("description")
+  const replacePreamble = options.replace.includes("preamble")
+  if (replaceDescription && keep.keys.has("description")) {
+    throw new Error(
+      "replace: description conflicts with --keep key:description"
+    )
+  }
+  if (replacePreamble && keep.preamble) {
+    throw new Error("replace: preamble conflicts with --keep preamble")
+  }
+  return {
+    description:
+      keep.keys.has("description") ||
+      (options.merge &&
+        !replaceDescription &&
+        difference.description !== null &&
+        difference.description !== "same"),
+    preamble:
+      keep.preamble ||
+      (options.merge &&
+        !replacePreamble &&
+        difference.preamble !== null &&
+        difference.preamble !== "same")
   }
 }
 
@@ -1285,7 +1401,8 @@ function parseArgs(argv: string[]): Options {
     keep: [],
     pruneTools: false,
     rewriteRoles: false,
-    tools: []
+    tools: [],
+    replace: []
   }
   const seen = new Set<string>()
 
@@ -1399,6 +1516,15 @@ function parseArgs(argv: string[]): Options {
         options.tools = splitList(requireValue(value, "tools"))
         index += 1
         break
+      case "--replace":
+        options.replace = splitList(requireValue(value, "replace"))
+        for (const entry of options.replace) {
+          if (entry !== "description" && entry !== "preamble") {
+            throw new Error("replace: must be description or preamble")
+          }
+        }
+        index += 1
+        break
       default:
         throw new Error(`Unsupported option: ${arg}`)
     }
@@ -1410,7 +1536,8 @@ function parseArgs(argv: string[]): Options {
       ["--name", options.name !== ""],
       ["--model", options.model !== ""],
       ["--vendor", options.vendor !== ""],
-      ["--keep", options.keep.length > 0]
+      ["--keep", options.keep.length > 0],
+      ["--replace", options.replace.length > 0]
     ] as const) {
       if (supplied)
         throw new Error(`${flag}: cannot be used with --recommended`)
@@ -1454,6 +1581,8 @@ function parseArgs(argv: string[]): Options {
   }
   if (options.merge && !options.write)
     throw new Error("merge: requires --write")
+  if (options.replace.length > 0 && !options.merge)
+    throw new Error("replace: requires --merge")
   if (options.recommended) return options
   if (options.name === "") throw new Error("name: is required")
   if (options.modelId === "") throw new Error("model-id: is required")
