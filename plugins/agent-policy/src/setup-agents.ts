@@ -69,6 +69,9 @@ interface Options {
   checkFragments: boolean
   scaffoldFragments: boolean
   keep: string[]
+  pruneTools: boolean
+  rewriteRoles: boolean
+  tools: string[]
 }
 
 interface Target {
@@ -958,6 +961,152 @@ function listCoverage(options: Options): unknown {
   }
 }
 
+interface DefinitionLines {
+  file: string
+  target: string
+  lines: string[]
+  close: number
+}
+
+// 既存定義の 1 行だけを文字列として差し替えるための読み込み。parseDocument /
+// render を通すと空行・コメント・block 配列が落ちるため使わない。
+function readDefinition(options: Options): DefinitionLines {
+  const file = path.join(options.dir, ".claude", "agents", `${options.name}.md`)
+  const target = path.relative(options.dir, file).split(path.sep).join("/")
+  if (!fs.existsSync(file)) {
+    throw new Error(`target: ${target} が存在しない`)
+  }
+  const lines = fs.readFileSync(file, "utf8").split("\n")
+  const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1
+  if (close === -1) {
+    throw new Error(`target: ${target} に frontmatter が無い`)
+  }
+  return { file, target, lines, close }
+}
+
+function keyLineIndex(definition: DefinitionLines, key: string): number {
+  const pattern = new RegExp(`^${key}\\s*:`)
+  const index = definition.lines
+    .slice(1, definition.close)
+    .findIndex((line) => pattern.test(line))
+  return index === -1 ? -1 : index + 1
+}
+
+function lineValue(line: string | undefined): string {
+  if (line === undefined) return ""
+  return line.slice(line.indexOf(":") + 1)
+}
+
+function writeDefinition(definition: DefinitionLines): void {
+  fs.writeFileSync(definition.file, definition.lines.join("\n"))
+}
+
+function definitionFragments(
+  options: Options,
+  ids: string[]
+): { fragments: Map<string, Fragment>; selected: Fragment[] } {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+  )
+  const selected = ids.flatMap((id) => {
+    const fragment = fragments.get(id)
+    return fragment === undefined ? [] : [fragment]
+  })
+  return { fragments, selected }
+}
+
+// tools 欄の無い定義へ、役割の許可集合を name 行の直後に 1 行で足す。
+function addToolsLine(definition: DefinitionLines, options: Options): unknown {
+  if (options.tools.length > 1) {
+    throw new Error('tools: "*" は他のツールと併用できない')
+  }
+  if (keyLineIndex(definition, "tools") !== -1) {
+    throw new Error(`tools: ${definition.target} には tools 欄が既にある`)
+  }
+  const marker = keyLineIndex(definition, "agent-policy-role")
+  const ids =
+    marker === -1 ? [] : splitList(lineValue(definition.lines[marker]))
+  const { selected } = definitionFragments(options, ids)
+  if (selected.length === 0) {
+    throw new Error(
+      `roles: ${definition.target} には解決できる役割が無く、許可するツールを決められない`
+    )
+  }
+  const nameLine = keyLineIndex(definition, "name")
+  if (nameLine === -1) {
+    throw new Error(`name: ${definition.target} に name 行が無い`)
+  }
+  definition.lines.splice(
+    nameLine + 1,
+    0,
+    `tools: ${resolveToolsFor(selected, []).join(", ")}`
+  )
+  writeDefinition(definition)
+  return { ok: true, target: definition.target, changed: true, warnings: [] }
+}
+
+function pruneTools(options: Options): unknown {
+  const definition = readDefinition(options)
+  if (options.tools.includes("*")) return addToolsLine(definition, options)
+
+  const index = keyLineIndex(definition, "tools")
+  if (index === -1) {
+    throw new Error(`tools: ${definition.target} に tools 行が無い`)
+  }
+  const line = definition.lines[index] ?? ""
+  const value = lineValue(line)
+  if (toolsFormatOf(value) !== "csv") {
+    throw new Error(
+      `tools: ${definition.target} の tools は未対応の書式のため書き換えない。1 行のカンマ区切りだけを扱う`
+    )
+  }
+
+  const current = splitTools(value)
+  const warnings = options.tools
+    .filter((tool) => !current.includes(tool))
+    .map((tool) => `tools: ${tool} は tools 行に無いため無視した`)
+  const remaining = current.filter((tool) => !options.tools.includes(tool))
+  if (remaining.length === current.length) {
+    return { ok: true, target: definition.target, changed: false, warnings }
+  }
+  // 空の tools は全ツール継承と区別できないため、残りが無くなる削除は拒む。
+  if (remaining.length === 0) {
+    throw new Error(
+      `tools: ${definition.target} のツールがすべて外れるため書き換えない`
+    )
+  }
+  definition.lines[index] =
+    `${line.slice(0, line.indexOf(":") + 1)} ${remaining.join(", ")}`
+  writeDefinition(definition)
+  return { ok: true, target: definition.target, changed: true, warnings }
+}
+
+function rewriteRoles(options: Options): unknown {
+  const definition = readDefinition(options)
+  const { fragments } = definitionFragments(options, [])
+  const invalid = options.roles.filter((id) => !fragments.has(id))
+  if (invalid.length > 0) {
+    throw new Error(
+      `roles: ${invalid.join(", ")} は廃止済みか未知の役割 ID のため書き込まない`
+    )
+  }
+  const index = keyLineIndex(definition, "agent-policy-role")
+  if (index === -1) {
+    throw new Error(`roles: ${definition.target} に agent-policy-role 行が無い`)
+  }
+
+  const before = definition.lines[index]
+  if (options.roles.length === 0) {
+    definition.lines.splice(index, 1)
+  } else {
+    definition.lines[index] = `agent-policy-role: ${options.roles.join(", ")}`
+  }
+  const changed =
+    options.roles.length === 0 || definition.lines[index] !== before
+  if (changed) writeDefinition(definition)
+  return { ok: true, target: definition.target, changed, warnings: [] }
+}
+
 function parseArgs(argv: string[]): Options {
   const options: Options = {
     scope:
@@ -981,12 +1130,17 @@ function parseArgs(argv: string[]): Options {
     listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
-    keep: []
+    keep: [],
+    pruneTools: false,
+    rewriteRoles: false,
+    tools: []
   }
+  const seen = new Set<string>()
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     const value = argv[index + 1]
+    if (arg !== undefined) seen.add(arg)
     switch (arg) {
       case "--policy":
       case "--list-policies":
@@ -1083,6 +1237,16 @@ function parseArgs(argv: string[]): Options {
         options.keep.push(requireValue(value, "keep"))
         index += 1
         break
+      case "--prune-tools":
+        options.pruneTools = true
+        break
+      case "--rewrite-roles":
+        options.rewriteRoles = true
+        break
+      case "--tools":
+        options.tools = splitList(requireValue(value, "tools"))
+        index += 1
+        break
       default:
         throw new Error(`Unsupported option: ${arg}`)
     }
@@ -1103,6 +1267,29 @@ function parseArgs(argv: string[]): Options {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens")
   }
+  if (options.pruneTools || options.rewriteRoles) {
+    const operation = options.pruneTools ? "--prune-tools" : "--rewrite-roles"
+    const accepted = new Set([
+      operation,
+      "--name",
+      "--dir",
+      options.pruneTools ? "--tools" : "--roles"
+    ])
+    for (const flag of seen) {
+      if (!accepted.has(flag)) {
+        throw new Error(`${flag}: cannot be used with ${operation}`)
+      }
+    }
+    if (options.name === "") throw new Error("name: is required")
+    if (options.pruneTools && options.tools.length === 0) {
+      throw new Error("tools: is required")
+    }
+    if (options.rewriteRoles && !seen.has("--roles")) {
+      throw new Error("roles: is required")
+    }
+    return options
+  }
+  if (seen.has("--tools")) throw new Error("tools: requires --prune-tools")
   if (
     options.listLiveModels ||
     options.listRoles ||
@@ -1147,7 +1334,11 @@ function respond(value: unknown): void {
 async function main(): Promise<void> {
   try {
     const options = parseArgs(process.argv.slice(2))
-    if (options.listLiveModels) {
+    if (options.pruneTools) {
+      respond(pruneTools(options))
+    } else if (options.rewriteRoles) {
+      respond(rewriteRoles(options))
+    } else if (options.listLiveModels) {
       const live =
         options.scope === "claude-only"
           ? { ok: true, ids: [], vendors: {} }

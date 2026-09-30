@@ -1486,6 +1486,120 @@ function listCoverage(options) {
     definitions: inspectDefinitions(options.dir, fragments)
   };
 }
+function readDefinition(options) {
+  const file = path2.join(options.dir, ".claude", "agents", `${options.name}.md`);
+  const target = path2.relative(options.dir, file).split(path2.sep).join("/");
+  if (!fs3.existsSync(file)) {
+    throw new Error(`target: ${target} \u304C\u5B58\u5728\u3057\u306A\u3044`);
+  }
+  const lines = fs3.readFileSync(file, "utf8").split("\n");
+  const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1;
+  if (close === -1) {
+    throw new Error(`target: ${target} \u306B frontmatter \u304C\u7121\u3044`);
+  }
+  return { file, target, lines, close };
+}
+function keyLineIndex(definition, key) {
+  const pattern = new RegExp(`^${key}\\s*:`);
+  const index = definition.lines.slice(1, definition.close).findIndex((line) => pattern.test(line));
+  return index === -1 ? -1 : index + 1;
+}
+function lineValue(line) {
+  if (line === void 0) return "";
+  return line.slice(line.indexOf(":") + 1);
+}
+function writeDefinition(definition) {
+  fs3.writeFileSync(definition.file, definition.lines.join("\n"));
+}
+function definitionFragments(options, ids) {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+  );
+  const selected = ids.flatMap((id) => {
+    const fragment = fragments.get(id);
+    return fragment === void 0 ? [] : [fragment];
+  });
+  return { fragments, selected };
+}
+function addToolsLine(definition, options) {
+  if (options.tools.length > 1) {
+    throw new Error('tools: "*" \u306F\u4ED6\u306E\u30C4\u30FC\u30EB\u3068\u4F75\u7528\u3067\u304D\u306A\u3044');
+  }
+  if (keyLineIndex(definition, "tools") !== -1) {
+    throw new Error(`tools: ${definition.target} \u306B\u306F tools \u6B04\u304C\u65E2\u306B\u3042\u308B`);
+  }
+  const marker = keyLineIndex(definition, "agent-policy-role");
+  const ids = marker === -1 ? [] : splitList(lineValue(definition.lines[marker]));
+  const { selected } = definitionFragments(options, ids);
+  if (selected.length === 0) {
+    throw new Error(
+      `roles: ${definition.target} \u306B\u306F\u89E3\u6C7A\u3067\u304D\u308B\u5F79\u5272\u304C\u7121\u304F\u3001\u8A31\u53EF\u3059\u308B\u30C4\u30FC\u30EB\u3092\u6C7A\u3081\u3089\u308C\u306A\u3044`
+    );
+  }
+  const nameLine = keyLineIndex(definition, "name");
+  if (nameLine === -1) {
+    throw new Error(`name: ${definition.target} \u306B name \u884C\u304C\u7121\u3044`);
+  }
+  definition.lines.splice(
+    nameLine + 1,
+    0,
+    `tools: ${resolveToolsFor(selected, []).join(", ")}`
+  );
+  writeDefinition(definition);
+  return { ok: true, target: definition.target, changed: true, warnings: [] };
+}
+function pruneTools(options) {
+  const definition = readDefinition(options);
+  if (options.tools.includes("*")) return addToolsLine(definition, options);
+  const index = keyLineIndex(definition, "tools");
+  if (index === -1) {
+    throw new Error(`tools: ${definition.target} \u306B tools \u884C\u304C\u7121\u3044`);
+  }
+  const line = definition.lines[index] ?? "";
+  const value = lineValue(line);
+  if (toolsFormatOf(value) !== "csv") {
+    throw new Error(
+      `tools: ${definition.target} \u306E tools \u306F\u672A\u5BFE\u5FDC\u306E\u66F8\u5F0F\u306E\u305F\u3081\u66F8\u304D\u63DB\u3048\u306A\u3044\u30021 \u884C\u306E\u30AB\u30F3\u30DE\u533A\u5207\u308A\u3060\u3051\u3092\u6271\u3046`
+    );
+  }
+  const current = splitTools(value);
+  const warnings = options.tools.filter((tool) => !current.includes(tool)).map((tool) => `tools: ${tool} \u306F tools \u884C\u306B\u7121\u3044\u305F\u3081\u7121\u8996\u3057\u305F`);
+  const remaining = current.filter((tool) => !options.tools.includes(tool));
+  if (remaining.length === current.length) {
+    return { ok: true, target: definition.target, changed: false, warnings };
+  }
+  if (remaining.length === 0) {
+    throw new Error(
+      `tools: ${definition.target} \u306E\u30C4\u30FC\u30EB\u304C\u3059\u3079\u3066\u5916\u308C\u308B\u305F\u3081\u66F8\u304D\u63DB\u3048\u306A\u3044`
+    );
+  }
+  definition.lines[index] = `${line.slice(0, line.indexOf(":") + 1)} ${remaining.join(", ")}`;
+  writeDefinition(definition);
+  return { ok: true, target: definition.target, changed: true, warnings };
+}
+function rewriteRoles(options) {
+  const definition = readDefinition(options);
+  const { fragments } = definitionFragments(options, []);
+  const invalid = options.roles.filter((id) => !fragments.has(id));
+  if (invalid.length > 0) {
+    throw new Error(
+      `roles: ${invalid.join(", ")} \u306F\u5EC3\u6B62\u6E08\u307F\u304B\u672A\u77E5\u306E\u5F79\u5272 ID \u306E\u305F\u3081\u66F8\u304D\u8FBC\u307E\u306A\u3044`
+    );
+  }
+  const index = keyLineIndex(definition, "agent-policy-role");
+  if (index === -1) {
+    throw new Error(`roles: ${definition.target} \u306B agent-policy-role \u884C\u304C\u7121\u3044`);
+  }
+  const before = definition.lines[index];
+  if (options.roles.length === 0) {
+    definition.lines.splice(index, 1);
+  } else {
+    definition.lines[index] = `agent-policy-role: ${options.roles.join(", ")}`;
+  }
+  const changed = options.roles.length === 0 || definition.lines[index] !== before;
+  if (changed) writeDefinition(definition);
+  return { ok: true, target: definition.target, changed, warnings: [] };
+}
 function parseArgs(argv) {
   const options = {
     scope: candidateScopeFor(process.env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only",
@@ -1507,11 +1621,16 @@ function parseArgs(argv) {
     listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
-    keep: []
+    keep: [],
+    pruneTools: false,
+    rewriteRoles: false,
+    tools: []
   };
+  const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
+    if (arg !== void 0) seen.add(arg);
     switch (arg) {
       case "--policy":
       case "--list-policies":
@@ -1602,6 +1721,16 @@ function parseArgs(argv) {
         options.keep.push(requireValue(value, "keep"));
         index += 1;
         break;
+      case "--prune-tools":
+        options.pruneTools = true;
+        break;
+      case "--rewrite-roles":
+        options.rewriteRoles = true;
+        break;
+      case "--tools":
+        options.tools = splitList(requireValue(value, "tools"));
+        index += 1;
+        break;
       default:
         throw new Error(`Unsupported option: ${arg}`);
     }
@@ -1621,6 +1750,29 @@ function parseArgs(argv) {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
+  if (options.pruneTools || options.rewriteRoles) {
+    const operation = options.pruneTools ? "--prune-tools" : "--rewrite-roles";
+    const accepted = /* @__PURE__ */ new Set([
+      operation,
+      "--name",
+      "--dir",
+      options.pruneTools ? "--tools" : "--roles"
+    ]);
+    for (const flag of seen) {
+      if (!accepted.has(flag)) {
+        throw new Error(`${flag}: cannot be used with ${operation}`);
+      }
+    }
+    if (options.name === "") throw new Error("name: is required");
+    if (options.pruneTools && options.tools.length === 0) {
+      throw new Error("tools: is required");
+    }
+    if (options.rewriteRoles && !seen.has("--roles")) {
+      throw new Error("roles: is required");
+    }
+    return options;
+  }
+  if (seen.has("--tools")) throw new Error("tools: requires --prune-tools");
   if (options.listLiveModels || options.listRoles || options.listCoverage || options.listMcp || options.checkFragments || options.scaffoldFragments) {
     return options;
   }
@@ -1652,7 +1804,11 @@ function respond(value) {
 async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
-    if (options.listLiveModels) {
+    if (options.pruneTools) {
+      respond(pruneTools(options));
+    } else if (options.rewriteRoles) {
+      respond(rewriteRoles(options));
+    } else if (options.listLiveModels) {
       const live = options.scope === "claude-only" ? { ok: true, ids: [], vendors: {} } : await fetchLiveModels(process.env);
       respond(listLiveModels(live, options.scope));
     } else if (options.listCoverage) {

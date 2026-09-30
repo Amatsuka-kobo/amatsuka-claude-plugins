@@ -139,6 +139,13 @@ interface CoverageDefinition {
   toolsFormat: "csv" | "other" | "none"
 }
 
+interface EditResult {
+  ok: boolean
+  error?: string
+  target: string
+  changed: boolean
+  warnings: string[]
+}
 
 interface LiveModelsResult {
   ok: boolean
@@ -966,6 +973,376 @@ describe("廃止済み ID の断片", () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toContain("final-review")
+  })
+})
+
+const EDIT_SOURCE = [
+  "---",
+  "name: target",
+  "# 手で足したコメント",
+  "description: 点検の対象",
+  "",
+  "model: opus",
+  "tools: Read, Agent, Grep, WebFetch",
+  "agent-policy-role: code-review, final-review",
+  "---",
+  "",
+  "本文",
+  "",
+  "## 見出し",
+  "",
+  "- 項目",
+  ""
+].join("\n")
+
+function readAgent(file: string): string {
+  return fs.readFileSync(path.join(project, ".claude", "agents", file), "utf8")
+}
+
+describe("--prune-tools", () => {
+  it("指定したツールだけを外し、他の行はバイト単位で変えない", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "Agent,Missing",
+      "--dir",
+      project
+    ])
+
+    expect(result).toMatchObject({
+      ok: true,
+      target: ".claude/agents/target.md",
+      changed: true
+    })
+    expect(result.warnings.some((warning) => warning.includes("Missing"))).toBe(
+      true
+    )
+    expect(readAgent("target.md")).toBe(
+      EDIT_SOURCE.replace(
+        "tools: Read, Agent, Grep, WebFetch",
+        "tools: Read, Grep, WebFetch"
+      )
+    )
+  })
+
+  it("行に無いツールだけを指定したときは書き換えない", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "Missing",
+      "--dir",
+      project
+    ])
+
+    expect(result).toMatchObject({ ok: true, changed: false })
+    expect(readAgent("target.md")).toBe(EDIT_SOURCE)
+  })
+
+  it.each([
+    ["block 配列", ["tools:", "  - Read", "  - Agent"]],
+    ["flow 配列", ["tools: [Read, Agent]"]],
+    ["引用符付き", ['tools: "Read", "Agent"']]
+  ])("%s の tools は未対応の書式として書き込まない", (_label, toolLines) => {
+    const source = [
+      "---",
+      "name: target",
+      ...toolLines,
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "Agent",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("未対応の書式")
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it('--tools "*" は tools 欄の無い定義に許可集合の 1 行を name 行の直後へ足す', () => {
+    const source = [
+      "---",
+      "name: target",
+      "description: 探索",
+      "agent-policy-role: explore",
+      "---",
+      "",
+      "本文",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "*",
+      "--dir",
+      project
+    ])
+
+    expect(result).toMatchObject({ ok: true, changed: true })
+    expect(readAgent("target.md")).toBe(
+      source.replace(
+        "name: target\n",
+        "name: target\ntools: Read, Grep, Glob, Bash\n"
+      )
+    )
+  })
+
+  it('roles が空の定義への --tools "*" は書き込まない', () => {
+    const source = [
+      "---",
+      "name: target",
+      "agent-policy-role: final-review",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "*",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it("tools 行の無い定義から個別のツールは外せない", () => {
+    const source = [
+      "---",
+      "name: target",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "Agent",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it("--scope と --lang は受け付けない", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    for (const extra of [
+      ["--scope", "claude"],
+      ["--lang", "ja"]
+    ]) {
+      const result = run<EditResult>([
+        "--prune-tools",
+        "--name",
+        "target",
+        "--tools",
+        "Agent",
+        "--dir",
+        project,
+        ...extra
+      ])
+      expect(result.ok).toBe(false)
+      expect(result.error).toContain(extra[0])
+    }
+    expect(readAgent("target.md")).toBe(EDIT_SOURCE)
+  })
+})
+
+describe("--rewrite-roles", () => {
+  it("agent-policy-role 行だけを指定の並びに置き換える", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--roles",
+      "code-review",
+      "--dir",
+      project
+    ])
+
+    expect(result).toMatchObject({
+      ok: true,
+      target: ".claude/agents/target.md",
+      changed: true
+    })
+    expect(readAgent("target.md")).toBe(
+      EDIT_SOURCE.replace(
+        "agent-policy-role: code-review, final-review",
+        "agent-policy-role: code-review"
+      )
+    )
+  })
+
+  it("空の --roles で agent-policy-role 行を消す", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--roles",
+      "",
+      "--dir",
+      project
+    ])
+
+    expect(result).toMatchObject({ ok: true, changed: true })
+    expect(readAgent("target.md")).toBe(
+      EDIT_SOURCE.replace("agent-policy-role: code-review, final-review\n", "")
+    )
+  })
+
+  it("プロジェクト独自の役割断片で解決できる ID を受け付ける", () => {
+    writeProjectRole({ id: "triage" })
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--roles",
+      "triage,code-review",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(readAgent("target.md")).toContain(
+      "agent-policy-role: triage, code-review\n"
+    )
+  })
+
+  it.each([
+    ["廃止済み ID", "code-review,final-review"],
+    ["未知の ID", "no-such-role"]
+  ])("%s を含むときは書き込まない", (_label, roles) => {
+    writeProjectRole({ id: "final-review", label: "最終レビュー" })
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--roles",
+      roles,
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe(EDIT_SOURCE)
+  })
+
+  it("agent-policy-role 行の無い定義には書き込まない", () => {
+    const source = ["---", "name: target", "tools: Read", "---", ""].join("\n")
+    writeAgent("target.md", [source])
+
+    const result = run<EditResult>([
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+  })
+})
+
+describe("既存定義の行単位操作に共通する規則", () => {
+  it.each([
+    ["--prune-tools", ["--tools", "Agent"]],
+    ["--rewrite-roles", ["--roles", "explore"]]
+  ])("%s は対象ファイルが無いとき失敗する", (flag, extra) => {
+    const result = run<EditResult>([
+      flag,
+      "--name",
+      "missing",
+      ...extra,
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(
+      fs.existsSync(path.join(project, ".claude", "agents", "missing.md"))
+    ).toBe(false)
+  })
+
+  it.each([
+    ["--prune-tools", ["--tools", "Agent"]],
+    ["--rewrite-roles", ["--roles", "explore"]]
+  ])("%s は frontmatter の無いファイルに書き込まない", (flag, extra) => {
+    writeAgent("target.md", ["本文だけ", ""])
+
+    const result = run<EditResult>([
+      flag,
+      "--name",
+      "target",
+      ...extra,
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe("本文だけ\n")
+  })
+
+  it("2 つの操作は併用できない", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--prune-tools",
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--tools",
+      "Agent",
+      "--roles",
+      "explore",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe(EDIT_SOURCE)
   })
 })
 
