@@ -114,7 +114,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --prune-tools --name <定�
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <定義のファイル名> --roles code-review --dir "$PWD"
 ```
 
-`--prune-tools` が扱うのは、`tools` が 1 行のカンマ区切りで書かれた定義だけです。block 配列・flow 配列・引用符付きの定義は書き換えず、手で直す箇所として報告します。`--rewrite-roles` は、廃止済みの ID と解決できない ID を受け付けません。
+`--prune-tools` が扱うのは、`tools` が 1 行のカンマ区切りで書かれた定義だけです。block 配列・flow 配列・引用符や括弧や `#` を含む定義と、同じキーが複数行ある定義は書き換えず、手で直す箇所として報告します。`--rewrite-roles` は、廃止済みの ID と解決できない ID を受け付けません。改行コードが CRLF の定義は、点検と書き換えの対象外です。
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 

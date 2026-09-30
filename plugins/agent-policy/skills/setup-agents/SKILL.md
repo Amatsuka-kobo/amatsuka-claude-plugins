@@ -20,7 +20,10 @@ disallowed-tools: Write
   ```
 
 - `Edit` を使ってよいのは、CLI が作成した `.claude/agent-policy/roles/<lang>/` 配下の翻訳断片だけである。それ以外のファイルを編集しない。
-- 各 CLI 応答の `ok` が `false` なら、`error` を報告してその処理を止める。例外はステップ 1b の `--prune-tools` と `--rewrite-roles` だけで、`ok: false` でもウィザードを続け、定義名と `error` を控えてステップ 7 で報告する。生成・差分確認の応答は、単一モデルでも必ず `results` 配列で読む。生成・差分確認では `warnings` も読む。
+- 各 CLI 応答の `ok` が `false` なら、`error` を報告してその処理を止める。
+- 例外はステップ 1b と非対話モード手順 3 の `--prune-tools` / `--rewrite-roles` だけである。この 2 つが `ok: false` を返しても、定義名と `error` を控えてウィザードを続ける。控えた内容は、対話モードではステップ 7、非対話モードでは手順 5 で報告する。
+- `--scope` / `--lang` は、各コマンド例に書かれたコマンドにだけ渡す。
+- 生成・差分確認の応答は、単一モデルでも必ず `results` 配列で読む。生成・差分確認では `warnings` も読む。
 - `AskUserQuestion` は 1 問につき選択肢を 2〜4 個しか受け付けない。すべての選択で次を守る。
 
   | 候補数 | 扱い |
@@ -38,7 +41,7 @@ disallowed-tools: Write
 
 `$ARGUMENTS` に `--yes` が含まれるときは、この節だけに従い、対話モードの質問は一切しない。推奨構成を役割ごとに 1 定義ずつ保持マージ生成する。
 
-`$ARGUMENTS` に `--scope claude` または `--scope custom` があればそれを使う。無ければ `AMATSUKA_AGENT_AUTO_INJECTION` から決める(`custom` 系なら `custom`、それ以外は `claude`)。決めた値を以後の全 CLI コマンドへ渡す。
+`$ARGUMENTS` に `--scope claude` または `--scope custom` があればそれを使う。無ければ `AMATSUKA_AGENT_AUTO_INJECTION` から決める(`custom` 系なら `custom`、それ以外は `claude`)。
 
 1. live models を照会する。応答の `ok`、`reason`、`models`、`claudeEnums` を保持する。
 
@@ -58,7 +61,7 @@ disallowed-tools: Write
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
    ```
 
-   応答の `definitions` のうち、`toolsFormat` が `csv` で `retiredRoles` が空の定義について、`disallowedTools` から `*` を除いたツールを外す。`--name` には `file` のファイル名から `.md` を除いた値を渡す。
+   応答の `definitions` のうち、`toolsFormat` が `csv` で `retiredRoles` が空の定義について、`disallowedTools` から `*` を除いたツールを外す。外すツールが無い定義には `--prune-tools` を実行しない。`--name` には `file` のファイル名から `.md` を除いた値を渡す。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --prune-tools --name <file の名前> --tools <tool,...> --dir "$PWD"
@@ -79,8 +82,9 @@ disallowed-tools: Write
 5. 結果を報告する。MCP は明示的な選択なしに付与しない。手順 3 について次を並べ、対話モードでの再実行を案内する。
 
    - 外したツールと定義名
-   - 変更しなかった定義と、その理由(全ツール継承・未対応の `tools` 書式・廃止済み役割を持つ)
+   - 変更しなかった定義と、その理由(全ツール継承・未対応の `tools` 書式・廃止済み役割を持つ・操作に失敗)
    - 廃止済み役割と後継
+   - `ok: false` になった操作の定義名と `error`
 
 ## 対話モード
 
@@ -88,11 +92,11 @@ disallowed-tools: Write
 
 ### ステップ 0: 言語判定
 
-会話でユーザーが使用している言語から `lang` を決める。会話が複数言語なら直近のユーザー発話の言語を採る。以後の全 CLI コマンドに同じ `--lang <lang>` を渡す。
+会話でユーザーが使用している言語から `lang` を決める。会話が複数言語なら直近のユーザー発話の言語を採る。
 
 ### ステップ 0b: 構成の選択
 
-`AskUserQuestion` を 1 回だけ使い、次の 2 択で構成を決める。選んだ値は以後の全 CLI コマンドへ `--scope <claude|custom>` として渡す。
+`AskUserQuestion` を 1 回だけ使い、次の 2 択で構成を決める。選んだ値は `--scope <claude|custom>` として渡す。
 
 - **Claude のみ**(`--scope claude`)—— Claude のモデル(`sonnet` / `opus` / `haiku` / `fable`)だけを候補にする。プロキシは要らない。
 - **カスタム**(`--scope custom`)—— 外部ベンダーのモデルも候補に含める。ローカルプロキシの `/v1/models` に実在するモデルから選ぶ。
@@ -133,8 +137,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 - `name`、`file`(プロジェクトルート相対)、`model`、`vendor`
 - `roles`: マーカーのうち、役割として解決できる ID
 - `retiredRoles`: マーカーのうち廃止済みの ID と、書き換え先の組 `{ id, replacement }`。`replacement` が `null` なら後継は無い。
+- `unknownRoles`: マーカーのうち、廃止済みでも役割として解決できるものでもない ID
 - `disallowedTools`: 役割に許されていない組み込みツール。`*` は `tools` 欄が無く、全ツールを継承していることを表す。
-- `toolsFormat`: `csv`(1 行のカンマ区切り)、`other`(block 配列・flow 配列・引用符付き)、`none`(欄が無い)
+- `toolsFormat`: `csv`(1 行のカンマ区切り)、`other`(1 行に特定できない・block 配列・flow 配列・引用符や括弧や `#` を含む)、`none`(欄が無い)
 
 #### 点検
 
@@ -142,25 +147,25 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 1. 扱う定義を「定義 / 廃止済み役割と後継 / 許されていないツール」の表で示す。
 2. 定義ごとに、`retiredRoles` → `disallowedTools` の順で別々の質問を出す。1 回の `AskUserQuestion` には 4 問まで入るので、複数の定義の質問を 4 問ずつまとめてよい。
-   - `retiredRoles` は定義ごとに 1 問とし、「廃止 ID を外す(推奨)」「このまま残す」の 2 択で聞く。質問文に後継の役割を書き、後継はこの後の新規生成で作ると伝える。後継が無い ID は、後継が無いと書く。
+   - `retiredRoles` は定義ごとに 1 問とし、「廃止 ID を外す(推奨)」「このまま残す」の 2 択で聞く。質問文には後継の役割を書く。後継が未カバーなら、被覆確認の後に新規生成で作ると添える。後継が無い ID は、後継が無いと書く。`unknownRoles` があれば、それもマーカーから落ちると質問文に書く。
    - `disallowedTools` はツールごとに 1 問とし、「削除する(推奨)」「残す」の 2 択で聞く。`*` のときは「役割の既定ツールに絞る(推奨)」「全ツール継承のまま残す」の 2 択にする。
-   - `toolsFormat` が `other` の定義には、ツールの質問を出さない。手で直す箇所としてステップ 7 で報告する。
-3. 回答が出そろったら、変更を選んだ定義にその場で操作を実行する。`--name` には `file` のファイル名から `.md` を除いた値を渡す。
-   - 「廃止 ID を外す」を選んだ定義は、`roles` だけを残した並びでマーカー行を書き換える。`roles` が空なら `--roles ""` を渡し、マーカー行を消す。後継の役割は未カバーのまま残り、以降の新規生成で作る。
-
-     ```bash
-     node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <file の名前> --roles <roles をカンマ区切り> --dir "$PWD"
-     ```
-
+   - `toolsFormat` が `other` の定義には、ツールの質問を出さない。
+3. 回答が出そろったら、変更を選んだ定義にその場で操作を実行する。`--name` には `file` のファイル名から `.md` を除いた値を渡す。同じ定義に両方を実行するときは、`--prune-tools` を先に、`--rewrite-roles` を後に実行する。
    - 削除または絞り込みを選んだツールは、定義ごとにまとめて外す。`*` の絞り込みには `--tools "*"` を渡す。
 
      ```bash
      node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --prune-tools --name <file の名前> --tools <tool,...> --dir "$PWD"
      ```
 
-   - 両コマンドは `--scope` と `--lang` を受け付けない。渡さない。
-   - `ok: false` の応答は、定義名と `error` を控えて次の操作へ進む。
-   - マーカー行を消した定義は、委譲先の候補から外れる。ステップ 7 で削除を利用者に委ねる。
+   - 「廃止 ID を外す」を選んだ定義は、`roles` だけを残した並びでマーカー行を書き換える。`roles` が空なら `--roles ""` を渡し、マーカー行を消す。
+
+     ```bash
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <file の名前> --roles <roles をカンマ区切り> --dir "$PWD"
+     ```
+
+   - 両コマンドには `--scope` と `--lang` を渡さない(CLI が受け付けない)。
+   - マーカー行を消した定義は、委譲先の候補から外れる。
+   - 応答の `warnings` は控え、ステップ 7 で報告する。
 4. 操作を 1 つでも実行したときは、同じ `--lang` と `--scope` で `--list-coverage` を取り直し、その結果で被覆確認に進む。
 
 #### 被覆確認
@@ -180,7 +185,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
   1. すべての役割の定義を確認し直す
   2. 中止する
 
-「未カバーの役割だけ作る」を選ばれたときは、以降の対象役割を `uncovered` に絞り、ステップ 2 から 6 までを通す。ステップ 4・5・5b・5c・6 の各コマンドに `--roles <uncovered…>` を付ける。
+「未カバーの役割だけ作る」を選ばれたときは、以降の対象役割を `uncovered` に絞る。ステップ 4 の `--check` に `--roles <uncovered…>` を付け、ステップ 5 以降はその役割だけを扱う。
+
+「すべての役割の定義を確認し直す」を選ばれたときは、全 RoleId を対象にステップ 2 へ進む。「中止する」を選ばれたときは、生成せずに終える。
 
 ### ステップ 2: 翻訳断片の準備
 
@@ -242,13 +249,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 
 | 条件 | 候補 |
 | --- | --- |
-| `--scope claude` | `claudeEnums` だけ |
+| `--scope claude` | `sonnet` / `opus` / `haiku` / `fable` の 4 値固定(ステップ 1) |
 | `--scope custom` で live 照会が成功した | `models` のうち、既定エイリアスが live にある ID と、`claudeEnums` |
 | `--scope custom` で live 照会が失敗した | `models` 全件 |
 
 質問では「どのモデル ID を使うか」を尋ね、1 件なら通常の確認文、2〜4 件なら `AskUserQuestion`、5 件以上なら配列順のまま 4 件ずつに分けた `AskUserQuestion` で選ばせる。候補が無い場合は質問せず報告して止める。
 
-選んだ ID で `--list-roles --model-id <model-id>` を実行して役割候補を確認する。調整対象の役割が候補に含まれない場合は、その ID を使わず利用者へ報告する。各個別定義は `--model-id … --roles <1 件>` で確認・生成し、既定の model 値は CLI がその ID から決める。定義名は「既定名を使う」か「別の名前を指定する」の 2 択で必ず尋ね、後者は自由入力で受ける。既定名は `<model-id>-<defaultName>` である。自由入力が `^[a-z0-9]+(?:-[a-z0-9]+)*$` に合わなければ聞き直す。
+各個別定義は `--model-id … --roles <1 件>` で確認・生成し、既定の model 値は CLI がその ID から決める。定義名は「既定名を使う」か「別の名前を指定する」の 2 択で必ず尋ね、後者は自由入力で受ける。既定名は `<model-id>-<defaultName>` である。自由入力が `^[a-z0-9]+(?:-[a-z0-9]+)*$` に合わなければ聞き直す。
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <1 件> [--vendor <gpt|grok|claude|none>] --scope <claude|custom> --dir "$PWD"
@@ -258,7 +265,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --model-id <model-
 
 複数役割を一括で個別調整し、その選択に impl と readonly の両方が含まれる場合だけ、kind 混在を警告して続行確認を取る。既定は続行しない。
 
-再生成の役割では、差分方針を保持マージ、選択した項目の保持、完全上書き、スキップから尋ねる。新規生成の役割には差分方針を尋ねない。保持対象を選ぶ場合は `--keep` を個別コマンドに渡す。`--recommended` は `--model-id` / `--name` / `--model` / `--vendor` / `--keep` と併用しない。
+再生成の役割では、差分方針を保持マージ、選択した項目の保持、完全上書き、スキップから尋ねる。新規生成の役割には差分方針を尋ねず、個別コマンドで生成する。保持対象を選ぶ場合は `--keep` を個別コマンドに渡す。
 
 ### ステップ 5c: MCP の付与
 
@@ -329,6 +336,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
   - `toolsFormat` が `other` で質問しなかった定義。ファイルの絶対パスと、手で外すツール
   - マーカー行を消した定義。ファイルの絶対パスを示し、削除するかは利用者に委ねる
   - `ok: false` になった操作の定義名と `error`
+  - 操作の応答にあった `warnings`
 - ステップ 6b で「作らない」と決めた役割があれば、その一覧と、次に setup-agents を実行したときに再び尋ねられること
 - 各定義の `action`、`kept`、`discarded`、`keptNeedsReview`
 - `mcpDropped`。再検証で落としたサーバーがあれば、tools へ入らなかったこと
@@ -346,7 +354,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
       > - 最初に `agent-policy:custom-policy` スキルを使用する。スキルの規律に従う。
 
-  - `claude` のとき。SessionStart フックは `claude-model-policy` と、Claude のモデルで実行される定義だけの役割マーカー対応表を注入します。`--scope claude` で生成した定義はそのまま対応表に載ります。外部ベンダーの定義を委譲先に使うには、環境変数を `custom` へ変更します。
+  - `claude` のとき。SessionStart フックは `claude-model-policy` と、Claude のモデルで実行される定義だけの役割マーカー対応表を注入する。`--scope claude` で生成した定義はそのまま対応表に載る。外部ベンダーの定義を委譲先に使うには、環境変数を `custom` へ変更する。
   - `custom` のとき。SessionStart フックは役割マーカー付き定義の `model` を検証する。すべて実在すれば custom プロファイルとマーカー対応表を注入する。照会失敗、実在しないモデル、または役割マーカー付き定義が 0 件なら、セッション全体で `claude-model-policy` へフォールバックすることを伝える。
   - 旧値 `with-codex` / `with-grok` / `with-codex-grok` のとき。custom として扱われるが、`custom` へ移行する通知が出る。環境変数を `custom` へ変更するよう案内する。
   - それ以外の値のとき。自動注入を行わない警告が出るため、`none` / `claude` / `custom` のいずれかへ変更するよう案内する。

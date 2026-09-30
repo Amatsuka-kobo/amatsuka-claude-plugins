@@ -383,7 +383,9 @@ bake it into the helpers, or the new default becomes untestable.
 - **Existing-definition inspection (2026-10-01, design
   `2026-10-01-agent-policy-setup-agents-existing-definitions-design.md`)**: `--list-coverage` adds
   `roles[].kind` and `definitions[]` (`name, file, model, vendor, roles, retiredRoles[{id,
-  replacement}], disallowedTools, toolsFormat csv|other|none`), all marker-bearing definitions
+  replacement}], unknownRoles, disallowedTools, toolsFormat csv|other|none`; duplicate or
+  indented tools / agent-policy-role keys and values containing quotes, parentheses or `#` are
+  `other`, CRLF files are skipped), all marker-bearing definitions
   regardless of scope; tools parsed by `marker-scan.ts`' `parseToolsField`, allowed set from the
   exported `resolveToolsFor`. `--prune-tools --name --tools` and `--rewrite-roles --name --roles`
   edit exactly one frontmatter line as a string (no `parseDocument`/`render`), accept only
