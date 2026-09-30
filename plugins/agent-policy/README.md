@@ -178,7 +178,7 @@ Delegation gate は、メインセッションから保護対象を直接編集�
 1. `AMATSUKA_AGENT_DELEGATION_GATE` を `1`、`true`、`on` のいずれかに設定する。
 2. 対象プロジェクトに `.claude/agent-policy/delegation-gate.json` を置く。
 
-設定ファイルは次をひな形にしてください。`denyGlobs` は必須で、空ではない文字列配列にします。`mcpTools` と `ttlSeconds` は任意です。
+設定ファイルは次をひな形にしてください。`denyGlobs` は必須で、空ではない文字列配列にします。`mcpTools` は任意です。
 
 ```json
 {
@@ -188,28 +188,17 @@ Delegation gate は、メインセッションから保護対象を直接編集�
       "pathParam": "relative_path",
       "absolute": false
     }
-  },
-  "ttlSeconds": 7200
+  }
 }
 ```
 
 `denyGlobs` には、プロジェクトで直接編集から保護したいパスをプロジェクトルート相対の glob で指定します。`mcpTools` には gate の対象に加える MCP ツール名と、パス引数の名前(`pathParam`)・絶対パスかどうか(`absolute`)を指定します。`mcpTools` を省略した場合、MCP ツールは対象になりません。
 
-組み込みの `Edit`、`Write`、`NotebookEdit` は宣言不要で、常に対象です。それぞれ `file_path`、`file_path`、`notebook_path` の絶対パスを検査します。`ttlSeconds` を省略したときの一時解除 TTL は 7,200 秒です。
+組み込みの `Edit`、`Write`、`NotebookEdit` は宣言不要で、常に対象です。それぞれ `file_path`、`file_path`、`notebook_path` の絶対パスを検査します。
 
-### 一時解除
+一時的に無効にするときは `AMATSUKA_AGENT_DELEGATION_GATE` を外し、Claude Code を再起動します。
 
-対象プロジェクトのルートで、agent-policy のインストール先を指定して次の CLI を実行します。Claude Code が設定する `CLAUDE_PLUGIN_ROOT` を利用できる環境では、そのまま使えます。
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct on
-node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct status
-node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
-```
-
-`--direct on` は一時解除を始め、`--direct status` は状態と残り時間を表示し、`--direct off` は解除を終了します。一時解除は `ttlSeconds` の経過で自動的に失効します。この解除は**ユーザー自身が実行するもの**です。Agent や AI に実行させないでください。
-
-このフックには既知の限界があります。Bash 経由の書き込みは技術的に止められません。また、AI 自身が `--direct on` を実行して回避することも技術的には可能であり、「ユーザー自身が実行する」という文言を守る運用に依存します。
+このフックには既知の限界があります。Bash 経由の書き込みは技術的に止められません。
 
 ## 旧バージョンからの移行
 

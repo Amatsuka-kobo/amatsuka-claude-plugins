@@ -3,9 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { candidateScopeFor } from "../../agents/policies"
 import { runTs } from "../../testing/run-ts.js"
-import { candidateAgents, markerTable, scanAgents } from "../marker-scan"
 
 const HOOK = fileURLToPath(new URL("../delegation-gate.ts", import.meta.url))
 
@@ -48,7 +46,6 @@ function environment(
 function invokeRaw(
   input: string | undefined,
   options: {
-    args?: string[]
     gateValue?: string | undefined
     env?: NodeJS.ProcessEnv
     cwd?: string
@@ -62,7 +59,7 @@ function invokeRaw(
   const stderrFd = fs.openSync(stderrPath, "w+")
   let stdout: string
   try {
-    stdout = runTs(HOOK, options.args ?? [], {
+    stdout = runTs(HOOK, [], {
       cwd: options.cwd,
       env: environment(gateValue, options.env),
       input,
@@ -101,7 +98,6 @@ function writeConfig(
     | {
         denyGlobs: string[]
         mcpTools?: Record<string, { pathParam: string; absolute: boolean }>
-        ttlSeconds?: number
       }
 ): string {
   const dir = path.join(project, ".claude", "agent-policy")
@@ -112,10 +108,6 @@ function writeConfig(
     typeof value === "string" ? value : JSON.stringify(value)
   )
   return file
-}
-
-function directFlag(): string {
-  return path.join(project, ".claude", "agent-policy", "delegation-gate.direct")
 }
 
 function denialReason(stdout: string): string {
@@ -188,7 +180,7 @@ describe("opt-in と fail-open", () => {
   })
 })
 
-describe("設定と TTL", () => {
+describe("設定", () => {
   it("設定ファイルが無いとき stderr へ 1 行だけ通知する", () => {
     const configPath = path.join(
       project,
@@ -245,23 +237,12 @@ describe("設定と TTL", () => {
     expect(result.stderr).toContain(configPath)
   })
 
-  it("TTL フラグが有効な間は保護パスを通過させる", () => {
-    writeConfig({ denyGlobs: ["plugins/*/src/**"], ttlSeconds: 60 })
-    fs.writeFileSync(directFlag(), "")
+  it("設定に残った ttlSeconds は値が不正でも無視して deny する", () => {
+    writeConfig('{"denyGlobs":["plugins/*/src/**"],"ttlSeconds":"broken"}')
 
     const result = invoke(hookInput())
 
-    expect(result).toEqual({ stdout: "", stderr: "" })
-  })
-
-  it("期限切れの TTL フラグを無視して deny する", () => {
-    writeConfig({ denyGlobs: ["plugins/*/src/**"], ttlSeconds: 60 })
-    fs.writeFileSync(directFlag(), "")
-    const expired = new Date(Date.now() - 61_000)
-    fs.utimesSync(directFlag(), expired, expired)
-
-    const result = invoke(hookInput())
-
+    expect(result.stderr).toBe("")
     expect(
       JSON.parse(result.stdout).hookSpecificOutput.permissionDecision
     ).toBe("deny")
@@ -368,12 +349,9 @@ describe("ツールとパスの判定", () => {
   })
 })
 
-describe("deny 理由の対応表", () => {
-  beforeEach(() => {
+describe("deny 理由", () => {
+  it("固定文を返し、役割マーカー付き定義があっても対応表を含めない", () => {
     writeConfig({ denyGlobs: ["plugins/*/src/**"] })
-  })
-
-  it("対応表があるとき markerTable の戻り値を委譲先候補へ載せる", () => {
     const agentsDir = path.join(project, ".claude", "agents")
     fs.mkdirSync(agentsDir, { recursive: true })
     fs.writeFileSync(
@@ -382,226 +360,19 @@ describe("deny 理由の対応表", () => {
         "---",
         "name: project-lead",
         "model: opus",
-        "tools: Read, Edit, Agent",
+        "tools: Read, Edit",
         "agent-policy-role: complex-impl",
         "---",
         ""
       ].join("\n")
     )
-    const env = environment("on", {
-      AMATSUKA_AGENT_AUTO_INJECTION: "custom"
-    })
-    const scope =
-      candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"
-    const expected = markerTable(
-      env,
-      candidateAgents(scanAgents(agentsDir), scope),
-      scope
-    )
-    expect(expected).toBeDefined()
 
-    const result = invoke(hookInput(), { env })
-    const reason = denialReason(result.stdout)
-
-    expect(reason).toContain(`委譲先候補 — ${expected}`)
-  })
-
-  it("custom では外部ベンダーの定義を委譲先候補へ載せる", () => {
-    const agentsDir = path.join(project, ".claude", "agents")
-    fs.mkdirSync(agentsDir, { recursive: true })
-    fs.writeFileSync(
-      path.join(agentsDir, "lead.md"),
-      [
-        "---",
-        "name: project-lead",
-        "model: opus",
-        "tools: Read, Edit, Agent",
-        "agent-policy-role: complex-impl",
-        "---",
-        ""
-      ].join("\n")
-    )
-    fs.writeFileSync(
-      path.join(agentsDir, "external.md"),
-      [
-        "---",
-        "name: external-luna",
-        "model: claude-gpt-5-6-luna",
-        "agent-policy-vendor: gpt",
-        "agent-policy-role: normal-impl",
-        "---",
-        ""
-      ].join("\n")
-    )
-    const env = environment("on", {
-      AMATSUKA_AGENT_AUTO_INJECTION: "custom"
-    })
-    const scope =
-      candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"
-    const expected = markerTable(
-      env,
-      candidateAgents(scanAgents(agentsDir), scope),
-      scope
-    )
-    expect(expected).toContain("external-luna (gpt)")
-    expect(expected).toContain(
-      "外部ベンダーのモデルを指定した定義も含めて選んでよい"
-    )
-
-    const result = invoke(hookInput(), { env })
-    const reason = denialReason(result.stdout)
-
-    expect(reason).toContain(`委譲先候補 — ${expected}`)
-  })
-
-  it("claude では外部ベンダーの定義を委譲先候補へ載せない", () => {
-    const agentsDir = path.join(project, ".claude", "agents")
-    fs.mkdirSync(agentsDir, { recursive: true })
-    fs.writeFileSync(
-      path.join(agentsDir, "lead.md"),
-      [
-        "---",
-        "name: project-lead",
-        "model: opus",
-        "tools: Read, Edit, Agent",
-        "agent-policy-role: complex-impl",
-        "---",
-        ""
-      ].join("\n")
-    )
-    fs.writeFileSync(
-      path.join(agentsDir, "external.md"),
-      [
-        "---",
-        "name: external-luna",
-        "model: claude-gpt-5-6-luna",
-        "agent-policy-vendor: gpt",
-        "agent-policy-role: normal-impl",
-        "---",
-        ""
-      ].join("\n")
-    )
-    const env = environment("on", {
-      AMATSUKA_AGENT_AUTO_INJECTION: "claude"
-    })
-    const scope =
-      candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"
-    const expected = markerTable(
-      env,
-      candidateAgents(scanAgents(agentsDir), scope),
-      scope
-    )
-    expect(expected).toContain("それ以外の定義は委譲先にしない")
-    expect(expected).not.toContain("external-luna (gpt)")
-
-    const result = invoke(hookInput(), { env })
-    const reason = denialReason(result.stdout)
-
-    expect(reason).toContain(`委譲先候補 — ${expected}`)
-    expect(reason).not.toContain("external-luna (gpt)")
-  })
-
-  it.each([
-    ["none", "none"],
-    ["未設定", undefined]
-  ])("%s では claude-only へ倒して外部ベンダーを載せない", (_label, injection) => {
-    const agentsDir = path.join(project, ".claude", "agents")
-    fs.mkdirSync(agentsDir, { recursive: true })
-    fs.writeFileSync(
-      path.join(agentsDir, "lead.md"),
-      [
-        "---",
-        "name: project-lead",
-        "model: opus",
-        "tools: Read, Edit, Agent",
-        "agent-policy-role: complex-impl",
-        "---",
-        ""
-      ].join("\n")
-    )
-    fs.writeFileSync(
-      path.join(agentsDir, "external.md"),
-      [
-        "---",
-        "name: external-luna",
-        "model: claude-gpt-5-6-luna",
-        "agent-policy-vendor: gpt",
-        "agent-policy-role: normal-impl",
-        "---",
-        ""
-      ].join("\n")
-    )
-    const overrides =
-      injection === undefined
-        ? {}
-        : { AMATSUKA_AGENT_AUTO_INJECTION: injection }
-    const env = environment("on", overrides)
-    const scope =
-      candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"
-    const expected = markerTable(
-      env,
-      candidateAgents(scanAgents(agentsDir), scope),
-      scope
-    )
-    expect(scope).toBe("claude-only")
-    expect(expected).toContain("それ以外の定義は委譲先にしない")
-    expect(expected).not.toContain("external-luna (gpt)")
-
-    const result = invoke(hookInput(), { env })
-    const reason = denialReason(result.stdout)
-
-    expect(reason).toContain(`委譲先候補 — ${expected}`)
-    expect(reason).not.toContain("external-luna (gpt)")
-  })
-
-  it("対応表が無いとき委譲先候補の丸括弧部分を省く", () => {
-    const result = invoke(hookInput())
-    const reason = denialReason(result.stdout)
-
-    expect(reason).not.toContain("委譲先候補")
-    expect(reason).toContain("担当表の役割に従い Agent tool で委譲する。Bash")
-  })
-})
-
-describe("--direct CLI", () => {
-  it("on、status、off の順に一時解除状態を変更して報告する", () => {
-    writeConfig({ denyGlobs: ["plugins/*/src/**"], ttlSeconds: 60 })
-
-    const on = invokeRaw(undefined, { args: ["--direct", "on"] })
-    expect(on.stderr).toBe("")
-    expect(on.stdout).toMatch(
-      /^delegation-gate: 一時解除を開始した\(期限: .+\)\n$/
-    )
-    expect(fs.existsSync(directFlag())).toBe(true)
-
-    const statusOn = invokeRaw(undefined, { args: ["--direct", "status"] })
-    expect(statusOn).toEqual({
-      stdout: expect.stringMatching(
-        /^delegation-gate: 一時解除中\(残り \d+ 秒\)\n$/
-      ),
-      stderr: ""
+    const result = invoke(hookInput(), {
+      env: { AMATSUKA_AGENT_AUTO_INJECTION: "custom" }
     })
 
-    const off = invokeRaw(undefined, { args: ["--direct", "off"] })
-    expect(off).toEqual({
-      stdout: "delegation-gate: 一時解除を終了した\n",
-      stderr: ""
-    })
-    expect(fs.existsSync(directFlag())).toBe(false)
-
-    const statusOff = invokeRaw(undefined, { args: ["--direct", "status"] })
-    expect(statusOff).toEqual({
-      stdout: "delegation-gate: 一時解除していない\n",
-      stderr: ""
-    })
-  })
-
-  it("未知の --direct 値を stderr へ 1 行だけ報告して exit 0 する", () => {
-    const result = invokeRaw(undefined, { args: ["--direct", "later"] })
-
-    expect(result.stdout).toBe("")
-    expect(result.stderr).toBe(
-      "delegation-gate: --direct には on / off / status を指定する\n"
+    expect(denialReason(result.stdout)).toBe(
+      "delegation-gate: このパスはメインセッションでは編集しない運用である。担当表の役割に従い、Agent tool で委譲する。Bash での書き込みや他ツールへの切り替えで回避せず、委譲で進める。"
     )
   })
 })

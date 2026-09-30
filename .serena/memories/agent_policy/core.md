@@ -232,10 +232,10 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
   presentation order, NOT `MODELS`' definition order, which starts with opus; the test compares the
   two as *sets*); non-exported `CLAUDE_RESOLVED = CLAUDE_ENUM_MODELS + "inherit"`;
   `runsOnClaude(model)` (true for `undefined`); `candidateScopeFor(value)` → `with-external` for
-  custom-family, `claude-only` for `claude`, else `undefined`. **All three hooks call
-  `candidateScopeFor`** — do not add a per-hook predicate; only the undefined fallback differs
-  (SessionStart decides from its validation result, SubagentStart emits `NO_MARKERS`,
-  delegation-gate falls to `claude-only`).
+  custom-family, `claude-only` for `claude`, else `undefined`. **Both marker-table hooks (SessionStart,
+  SubagentStart) call `candidateScopeFor`** — do not add a per-hook predicate; only the undefined
+  fallback differs (SessionStart decides from its validation result, SubagentStart emits
+  `NO_MARKERS`). delegation-gate no longer builds a table since 0.21.2-dev.
 - **`policyForInjection` must NOT be used to derive the CLI's `--scope` default.** It only `trim()`s
   (no lowercase) and returns `undefined` for the three legacy values, so `with-codex` and `CuStOm`
   would make the CLI and the hooks disagree on the same env. Use `candidateScopeFor`.
@@ -320,8 +320,8 @@ The judgement freezes at SessionStart; a proxy recovering mid-session goes unnot
 async now, but the outer try/catch still guarantees stderr + exit 0 and no file writes.
 
 **Known accepted divergence — do NOT "fix" it in code.** On a custom→claude fallback, SessionStart
-narrows to `claude-only` (it knows the validation failed) while SubagentStart and delegation-gate
-still see only the env var and stay `with-external`, so the child's table lists external
+narrows to `claude-only` (it knows the validation failed) while SubagentStart
+still sees only the env var and stays `with-external`, so the child's table lists external
 definitions the parent already ruled out. SubagentStart cannot query the proxy (a per-spawn HTTP
 round trip was rejected in `two-profile-design` §13), and recording the fallback in a state file was
 rejected because it is project-scoped: a concurrent *successful* custom session's children would be
@@ -332,16 +332,17 @@ today's behaviour — no worse.
 
 ### `delegation-gate.ts` — opt-in, measured to work
 
-Eight early returns; deny is reachable only at the last. Opt-in needs **both**
+Early returns everywhere except the last step, which is the deny. Opt-in needs **both**
 `AMATSUKA_AGENT_DELEGATION_GATE` ∈ {`1`,`true`,`on`} **and** a project config at
-`.claude/agent-policy/delegation-gate.json` (`denyGlobs` required; `mcpTools` and `ttlSeconds`
-optional). Built-in `Edit`/`Write` (`file_path`) and `NotebookEdit` (`notebook_path`) are always in
-scope. Glob matching uses `node:path`'s `matchesGlob` — no hand-rolled implementation. The deny
-reason embeds the marker table, so the model is told *who* to delegate to.
+`.claude/agent-policy/delegation-gate.json` (`denyGlobs` required; `mcpTools` optional; a leftover
+`ttlSeconds` is ignored without error). Built-in `Edit`/`Write` (`file_path`) and `NotebookEdit`
+(`notebook_path`) are always in scope. Glob matching uses `node:path`'s `matchesGlob` — no
+hand-rolled implementation. The deny reason is one fixed sentence (`DENIAL_REASON`); it embeds no
+marker table (removed in 0.21.2-dev). The hook writes nothing.
 
-`--direct on|off|status` touches a TTL flag file. **That is the only write path**; the hook path
-writes nothing. Known holes, accepted: Bash writes cannot be stopped, and the AI could run
-`--direct on` itself — the wording forbids both and compliance is all there is.
+Since 0.21.2-dev there is **no temporary bypass**: the `--direct on|off|status` CLI and its TTL flag
+file were removed. To disable the gate, unset `AMATSUKA_AGENT_DELEGATION_GATE` and restart Claude
+Code. Known hole, accepted: Bash writes cannot be stopped.
 
 Verified 2026-09-04 in a sandbox (`claude -p --plugin-dir <plugin>`): the deny fired, the model
 quoted the reason verbatim, did not route around it, and noticed on its own that the suggested
