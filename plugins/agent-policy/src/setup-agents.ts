@@ -822,11 +822,7 @@ function resolveMcp(options: Options): {
   dropped: string[]
 } {
   if (options.mcpServers.length === 0) return { servers: [], dropped: [] }
-  const usable = new Set(
-    listMcpServers(process.env)
-      .filter((server) => server.usable)
-      .map((server) => toolPrefix(server.name))
-  )
+  const usable = usableMcpPrefixes()
   const servers: string[] = []
   const dropped: string[] = []
   for (const name of options.mcpServers) {
@@ -847,17 +843,34 @@ function setup(options: Options, live: LiveModels): unknown {
   validateFragments(options)
   const resolution = targetsFor(options, live)
   const mcp = resolveMcp(options)
+  // 既存定義の MCP は既定で残す。--mcp-servers の明示が無い推奨の保持マージに限る。
+  const inherits =
+    options.recommended && options.merge && options.mcpServers.length === 0
+  let usable: Set<string> | undefined
   const results = resolution.targets.map((target) => {
-    const current = mcpCurrentFor(targetPath(options, target))
+    const file = targetPath(options, target)
+    const current = mcpCurrentFor(file)
+    let servers = mcp.servers
+    let dropped = mcp.dropped
+    let targetOptions = options
+    if (inherits && fs.existsSync(file)) {
+      usable ??= usableMcpPrefixes()
+      const inherited = inheritMcp(fs.readFileSync(file, "utf8"), usable)
+      servers = inherited.servers
+      dropped = inherited.dropped
+      if (options.mcpDeny.length === 0) {
+        targetOptions = { ...options, mcpDeny: current.denyTools }
+      }
+    }
     const result = options.write
-      ? write(options, target, mcp.servers)
-      : diff(options, target, mcp.servers)
+      ? write(targetOptions, target, servers)
+      : diff(targetOptions, target, servers)
     return {
       ...result,
       modelId: target.modelId,
       ...(target.roleId === undefined ? {} : { roleId: target.roleId }),
       mcpCurrent: current,
-      mcpDropped: mcp.dropped
+      mcpDropped: dropped
     }
   })
   return {
@@ -865,6 +878,35 @@ function setup(options: Options, live: LiveModels): unknown {
     results,
     warnings: resolution.warnings
   }
+}
+
+function usableMcpPrefixes(): Set<string> {
+  return new Set(
+    listMcpServers(process.env)
+      .filter((server) => server.usable)
+      .map((server) => toolPrefix(server.name))
+  )
+}
+
+// 既存の tools にある mcp__ の項目を、接続を再検証して引き継ぐ。
+// サーバー単位の項目もツール単位の項目も、そのサーバーが usable なら残す。
+function inheritMcp(
+  content: string,
+  usable: Set<string>
+): { servers: string[]; dropped: string[] } {
+  const entries = splitTools(parseDocument(content).meta.get("tools")).filter(
+    (tool) => tool.startsWith("mcp__")
+  )
+  const servers: string[] = []
+  const dropped: string[] = []
+  for (const entry of entries) {
+    const alive = [...usable].some(
+      (prefix) => entry === prefix || entry.startsWith(`${prefix}__`)
+    )
+    if (alive) servers.push(entry)
+    else dropped.push(entry.slice("mcp__".length))
+  }
+  return { servers, dropped }
 }
 
 // live の実在モデルへ、RECOMMENDED の既定エイリアス一致で役割を添える。

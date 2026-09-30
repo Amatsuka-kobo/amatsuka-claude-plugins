@@ -1371,9 +1371,7 @@ function retainFor(options, difference, keep) {
 }
 function resolveMcp(options) {
   if (options.mcpServers.length === 0) return { servers: [], dropped: [] };
-  const usable = new Set(
-    listMcpServers(process.env).filter((server) => server.usable).map((server) => toolPrefix(server.name))
-  );
+  const usable = usableMcpPrefixes();
   const servers = [];
   const dropped = [];
   for (const name of options.mcpServers) {
@@ -1391,15 +1389,30 @@ function setup(options, live) {
   validateFragments(options);
   const resolution = targetsFor(options, live);
   const mcp = resolveMcp(options);
+  const inherits = options.recommended && options.merge && options.mcpServers.length === 0;
+  let usable;
   const results = resolution.targets.map((target) => {
-    const current = mcpCurrentFor(targetPath(options, target));
-    const result = options.write ? write(options, target, mcp.servers) : diff(options, target, mcp.servers);
+    const file = targetPath(options, target);
+    const current = mcpCurrentFor(file);
+    let servers = mcp.servers;
+    let dropped = mcp.dropped;
+    let targetOptions = options;
+    if (inherits && fs3.existsSync(file)) {
+      usable ??= usableMcpPrefixes();
+      const inherited = inheritMcp(fs3.readFileSync(file, "utf8"), usable);
+      servers = inherited.servers;
+      dropped = inherited.dropped;
+      if (options.mcpDeny.length === 0) {
+        targetOptions = { ...options, mcpDeny: current.denyTools };
+      }
+    }
+    const result = options.write ? write(targetOptions, target, servers) : diff(targetOptions, target, servers);
     return {
       ...result,
       modelId: target.modelId,
       ...target.roleId === void 0 ? {} : { roleId: target.roleId },
       mcpCurrent: current,
-      mcpDropped: mcp.dropped
+      mcpDropped: dropped
     };
   });
   return {
@@ -1407,6 +1420,26 @@ function setup(options, live) {
     results,
     warnings: resolution.warnings
   };
+}
+function usableMcpPrefixes() {
+  return new Set(
+    listMcpServers(process.env).filter((server) => server.usable).map((server) => toolPrefix(server.name))
+  );
+}
+function inheritMcp(content, usable) {
+  const entries = splitTools(parseDocument(content).meta.get("tools")).filter(
+    (tool) => tool.startsWith("mcp__")
+  );
+  const servers = [];
+  const dropped = [];
+  for (const entry of entries) {
+    const alive = [...usable].some(
+      (prefix) => entry === prefix || entry.startsWith(`${prefix}__`)
+    );
+    if (alive) servers.push(entry);
+    else dropped.push(entry.slice("mcp__".length));
+  }
+  return { servers, dropped };
 }
 function listLiveModels(live, scope) {
   const claudeEnums = [...CLAUDE_ENUM_MODELS];

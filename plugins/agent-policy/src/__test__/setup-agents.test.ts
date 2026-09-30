@@ -3458,6 +3458,94 @@ describe("MCP の付与", () => {
   })
 })
 
+describe("--recommended --merge での MCP の引き継ぎ", () => {
+  const CONNECTED = "serena: uvx serena - ✔ Connected"
+
+  function seedExplorer(tools: string, deny?: string): void {
+    writeAgent("explorer.md", [
+      "---",
+      "name: explorer",
+      "model: sonnet",
+      `tools: ${tools}`,
+      ...(deny === undefined ? [] : [`disallowedTools: ${deny}`]),
+      "agent-policy-role: explore",
+      "---",
+      "",
+      "本文",
+      ""
+    ])
+  }
+
+  function recommendExplore(extra: string[] = []): WriteResults {
+    return runWithMcp<WriteResults>(
+      [
+        "--write",
+        "--merge",
+        "--recommended",
+        "--roles",
+        "explore,code-review",
+        "--scope",
+        "claude",
+        "--lang",
+        "ja",
+        "--dir",
+        project,
+        ...extra
+      ],
+      CONNECTED
+    )
+  }
+
+  function resultFor(result: WriteResults, file: string) {
+    return result.results.find(
+      (entry) => entry.target === `.claude/agents/${file}`
+    )
+  }
+
+  it("既存定義の mcp__ と disallowedTools を残し、新規生成には付けない", () => {
+    seedExplorer(
+      "Read, Grep, Glob, Bash, mcp__serena",
+      "mcp__serena__write_memory"
+    )
+
+    const result = recommendExplore()
+
+    expect(result.ok).toBe(true)
+    const written = readAgent("explorer.md")
+    expect(written).toMatch(/^tools:.*mcp__serena$/m)
+    expect(written).toMatch(/^disallowedTools: mcp__serena__write_memory$/m)
+    expect(resultFor(result, "explorer.md")?.mcpDropped).toEqual([])
+    const created = result.results.find(
+      (entry) => entry.roleId === "code-review"
+    )
+    expect(created).toBeDefined()
+    expect(readAgent(path.basename(created?.target ?? ""))).not.toContain(
+      "mcp__"
+    )
+  })
+
+  it("切断済みのサーバーは mcpDropped に載せて外す", () => {
+    seedExplorer("Read, Grep, Glob, Bash, mcp__serena, mcp__gone")
+
+    const result = recommendExplore()
+
+    expect(resultFor(result, "explorer.md")?.mcpDropped).toEqual(["gone"])
+    const written = readAgent("explorer.md")
+    expect(written).toMatch(/^tools:.*mcp__serena$/m)
+    expect(written).not.toContain("mcp__gone")
+  })
+
+  it("--mcp-servers を明示したときは既存の MCP を引き継がない", () => {
+    seedExplorer("Read, Grep, Glob, Bash, mcp__gone", "mcp__gone__delete")
+
+    recommendExplore(["--mcp-servers", "serena"])
+
+    const written = readAgent("explorer.md")
+    expect(written).toMatch(/^tools:.*mcp__serena$/m)
+    expect(written).not.toContain("mcp__gone")
+  })
+})
+
 describe("automaticKeep", () => {
   it("既存の mcp__ ツールと disallowedTools を保持しない", () => {
     const file = path.join(project, ".claude", "agents", "claude-explorer.md")
