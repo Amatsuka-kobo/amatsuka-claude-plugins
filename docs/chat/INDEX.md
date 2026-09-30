@@ -134,3 +134,13 @@
 - `docs/chat/2026/0927/phyllis998/basic-design-output-location.md` | 2026-09-27 | phyllis998 | basic-designプラグインの出力ファイル配置を調査
 - `2026/0928/phyllis998/native-japanese-guideline-reinforcement.md` | 2026-09-28 | phyllis998 | native-japanese の強化設計と実装計画、引継ぎまで完了
 - `2026/0929/phyllis998/0825-native-japanese-enforcement-implementation.md` | 2026-09-29 | phyllis998 | T15〜T20 完了、PostToolUse hook の差し戻し確認
+- `2026/0929/phyllis998/2120-agent-policy-role-effort-redesign.md` | 2026-09-29 | phyllis998 | agent-policy 0.21.0：役割体系実装 T1 をコミット、T2 相談廃止作業を開始
+- `2026/0930/phyllis998/1030-agent-role-definition-launch-test.md` | 2026-09-30 | phyllis998 | Agent 役割定義の起動テスト（light-implementer、docs-reviewer、complex-reviewer）
+- `2026/0930/phyllis998/1119-agent-definition-scope-test.md` | 2026-09-30 | phyllis998 | 複数 Agent 定義の担当範囲確認
+- `2026/0930/phyllis998/1123-agent-tool-docs-reviewer.md` | 2026-09-30 | phyllis998 | docs-reviewer の Agent tool 起動と SubagentHandback による報告取得
+- `2026/0930/phyllis998/1127-light-implementer-agent-test.md` | 2026-09-30 | phyllis998 | light-implementer 定義で README.md 1 行目読取確認
+- `2026/0930/phyllis998/1128-complex-reviewer-scope-test.md` | 2026-09-30 | phyllis998 | Agent で complex-reviewer を招いて権限外判定を確認
+- `2026/0930/phyllis998/1130-agent-delegation-test.md` | 2026-09-30 | phyllis998 | light-implementer で README 1 行目を取得
+- `2026/0930/phyllis998/1131-complex-reviewer-scope-test.md` | 2026-09-30 | phyllis998 | Agent tool で complex-reviewer スキルの担当範囲を確認
+- `2026/0930/phyllis998/1234-agent-subagent-light-implementer-test.md` | 2026-09-30 | phyllis998 | light-implementer への引数指定テスト・README読取
+- `2026/0930/phyllis998/1236-agent-scope-rejection.md` | 2026-09-30 | phyllis998 | Agent tool で complex-reviewer への依頼が範囲外で差し戻される
