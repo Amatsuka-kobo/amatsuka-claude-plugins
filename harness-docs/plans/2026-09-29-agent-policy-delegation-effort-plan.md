@@ -4,7 +4,7 @@
 - 対象プラグイン: `plugins/agent-policy`
 - バージョン: `0.20.1-dev` → `0.21.0-dev`
 - 設計書(正本): `harness-docs/design/2026-09-29-agent-policy-delegation-effort-design.md`
-- 承認: 要件はユーザー確定済み。設計書とこの計画書の文書としてのユーザー承認は**未取得**(承認後に着手する)
+- 承認: 要件はユーザー確定済み。設計書とこの計画書は 2026-09-29 にユーザーが承認した
 - 版: 第 2 版(D8(全役割の Agent Tool 廃止)とレビュー指摘を反映)
 - 計画立案時の HEAD: `9ea98e90`
 
@@ -478,3 +478,10 @@ code-review, complex-review, adversarial-review
 
 | 時点 | 結果 |
 | --- | --- |
+| 2026-09-29 T0 | lint / typecheck / test / build がすべて通った。テストは 2,894 件がパスし、5 件がスキップ。規律の合計は 27,188B |
+| 2026-09-30 T1-T8 | コミット cfb43f64・dfcb8920・14d790f0・ef89e71e・a9a50fd8・12b9aa41・55de16cd・8b5b8ba3。T1 は担当の文脈が上限を超えて止まり、src と断片に分けて再委譲した |
+| 2026-09-30 T9 | lint / typecheck / test / build がすべて通った。テストは 2,900 件がパスし、5 件がスキップ。規律の合計は 26,099B。grep で旧 ID が当たったのは SessionStart の廃止通知、規律の「変更量は条件に使わない」、README の移行節だけ。claude と custom の `--recommended` で 13 定義を生成し、effort・model 直後の位置・Agent の無いこと・旧節の無いことを確かめた |
+| 2026-09-30 T10-T11 | code-review は重大な指摘なし。complex-review の判定は「採用可」。ARCHITECTURE への影響は無し。指摘 3 件(plugin.json の description、テストのコメント、RETIRED_ROLES の Set 化)と marketplace.json の description を f2335d77 で直した。marketplace.json の変更はユーザーが承認した |
+| 2026-09-30 T12 | 85795b0f で agent_policy/core.md を更新した。core.md は T13 の後に更新した |
+| 2026-09-30 T13 | 12 定義を再生成し、light-implementer を新設した。再生成の前に MCP サーバー 4 つが Connected であることを確かめた。生成の前後を比べ、disallowedTools と MCP の行が消えていないことを確かめた。廃止する 3 定義はユーザーが削除する |
+| 2026-09-30 T14 | 上流の reasoning.effort を観測した。light-implementer(gpt-6-luna)は low、docs-reviewer(gpt-6-sol)は medium、complex-reviewer(gpt-6-astra)は high で、いずれも定義の effort と一致した。1 回目の観測では luna と astra のリクエストがプロキシに届かなかった。子の claude -p が Agent tool の model 引数で上書きしたためと推定する。model 引数を指定させない 2 回目の観測では、両方とも届いた。xhigh の写像は未確認 |

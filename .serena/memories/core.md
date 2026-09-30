@@ -166,17 +166,17 @@ the negation, to carry per-user state into `git worktree` checkouts.
   policy applies is now set by `AMATSUKA_AGENT_AUTO_INJECTION` in `.claude/settings.local.json`,
   not by prose in CLAUDE.local.md. `docs/ONBOARDING.md` still references the removed
   `CLAUDE.example.md` — stale.
-- **`.claude/agents/` holds this repo's own custom-profile setup** — 14 definitions after the
-  agent-policy 0.20.0-dev regeneration (2026-09-24), each carrying an `agent-policy-role` marker.
-  They keep their own names and role groupings (user decision; not the `<model-id>-<default-name>`
-  default): `lead-implementer` (complex-impl), `general-implementer` (normal-impl + light-impl +
-  general), `general-worker` (general), `technical-leader` (escalation), `system-planner`
-  (design-plan), `general-explore` (explore), `realtime-researcher` (realtime-research),
-  `complex-reviewer` (e2e-verify + final-review + gate-review; its e2e-verify is off-recommendation
-  and warns, accepted), `docs-reviewer` (design-review), `knowledge-elicitationer`
-  (knowledge-elicitation), `code-reviewer` (code-review), `adversarial-reviewer`
-  (adversarial-review, `claude-gpt-6-sol`), `independent-tech-adviser` / `technical-adviser`
-  (advisor). `document-writer` was deleted with the `doc-writing` role. Regenerate them with the
+- **`.claude/agents/` holds this repo's own custom-profile setup** — 13 definitions after the
+  agent-policy 0.21.0-dev regeneration (2026-09-30), each carrying an `agent-policy-role` marker and
+  (except haiku) an `effort`. They keep their own names (user decision; not the
+  `<model-id>-<default-name>` default): `lead-implementer` (complex-impl, opus), `general-implementer`
+  (normal-impl, sonnet), `light-implementer` (light-impl, gpt-luna, new in 0.21), `technical-leader`
+  (escalation, gpt-astra), `general-worker` (general, sonnet), `general-explore` (explore, sonnet),
+  `realtime-researcher` (realtime-research, grok), `e2e-tester` (e2e-verify, sonnet), `docs-reviewer`
+  (design-review, gpt-sol), `knowledge-elicitationer` (knowledge-elicitation, haiku), `code-reviewer`
+  (code-review, sonnet), `complex-reviewer` (complex-review, gpt-astra), `adversarial-reviewer`
+  (adversarial-review, gpt-sol). None has `Agent` in `tools`. `system-planner` and the two advisers
+  were deleted with the `design-plan` / `advisor` roles. Regenerate them with the
   individual `setup-agents` path and follow GOTCHA-001 (pass `--mcp-deny`). SessionStart reads them
   into the marker table it injects; **the hook writes nothing**. The agent-policy plugin itself ships **no** agent definitions since
   0.14.0-dev, and the `AMATSUKA_AGENT_*_ALIAS` env vars are no longer read.
