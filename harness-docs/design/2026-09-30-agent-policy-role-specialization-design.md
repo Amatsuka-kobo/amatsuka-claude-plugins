@@ -3,7 +3,7 @@
 - 作成日: 2026-09-30
 - 対象プラグイン: `plugins/agent-policy`
 - 現行バージョン: `0.21.0-dev` → `0.21.1-dev`
-- 状態: 設計(実装前・第 1 版)
+- 状態: 設計(実装前・初稿)
 - 承認: 要件(§2)はユーザー確定済み。この文書そのものへのユーザー承認は未取得
 - 計画立案時の HEAD: `f00b4bfb`
 - 関連: `harness-docs/design/2026-09-29-agent-policy-delegation-effort-design.md`(0.21 の 13 役割と Agent Tool の廃止)
