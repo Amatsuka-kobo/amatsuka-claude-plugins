@@ -87,10 +87,12 @@ disallowed-tools: Write
 
    その構成で役割を被覆する既存定義がちょうど 1 件あれば、CLI はその定義を作成先にして再生成する。被覆する定義が 2 件以上ある役割と、`model` からモデル ID を引けない定義は生成せず、`warnings` に載る。`--replace` は渡さず、既存の description と前置きはすべて保持する。
 
-5. 結果を報告する。MCP は明示的な選択なしに付与しない。全文の差分は載せない。手順 4 の `results` から、再生成した定義ごとに次を並べる。
+   `--mcp-servers` は渡さない。既存定義を作成先にする定義は、既存の MCP サーバーと `disallowedTools` を CLI が引き継ぐ。新規生成の定義には MCP を付けない。
+
+5. 結果を報告する。全文の差分は載せない。手順 4 の `results` から、再生成した定義ごとに次を並べる。
 
    - `tools` 行の変更前と変更後(`toolsBefore` と `toolsAfter`)
-   - 再生成で外れた MCP サーバー。`mcpCurrent` のサーバーのうち、`toolsAfter` に無いもの
+   - 再生成で外れた MCP サーバー。接続の再検証で落ちたもの(`mcpDropped`)
    - `description` と `preamble` の状態。`templateChanged` の定義には、対話モードで再実行すればテンプレートに置き換えられると案内する。
 
    手順 3 と 4 について次を並べ、対話モードでの再実行を案内する。

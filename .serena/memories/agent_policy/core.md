@@ -395,6 +395,10 @@ bake it into the helpers, or the new default becomes untestable.
   existing record, or no record) unless `--replace description,preamble`; `--replace` needs `--merge`
   and is rejected with `--recommended`. The record keys are excluded from `frontmatter.changed`
   and were added to the composition allow-list in `orchestration-discipline.md` (priority row 3).
+- **MCP inheritance (design 3-6)**: `--recommended --merge` without `--mcp-servers` carries over
+  an existing target file's `mcp__` tool entries (re-verified against `claude mcp list`; dead ones go
+  to `mcpDropped` without the `mcp__` prefix) and its `disallowedTools` (unless `--mcp-deny` is
+  given). New files get no MCP. `--check` does not inherit.
 - **Existing-definition inspection (2026-10-01, design
   `2026-10-01-agent-policy-setup-agents-existing-definitions-design.md`)**: `--list-coverage` adds
   `roles[].kind` and `definitions[]` (`name, file, model, vendor, roles, retiredRoles[{id,
