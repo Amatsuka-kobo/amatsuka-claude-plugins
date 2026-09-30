@@ -101,6 +101,8 @@ git commit -m "feat(agent-policy): 対応表の冒頭文を同じ役割の候補
 - Consumes: Task 1 の冒頭文が参照する節名 §同じ役割の候補から選ぶ
 - Produces: 節 §同じ役割の候補から選ぶ
 
+このタスクの行番号は、すべて編集前のファイルのものである。Step 4 は 19 行を挿入し、後ろの行番号をずらす。そのため Step 4 は Step 5 を終えてから行う。置き換えは、行番号でなく引用した旧文を検索して行う。
+
 - [ ] **Step 1: `prompt-smith:prompt-smith` を起動する**
 
 - [ ] **Step 2: 解決順の表を書き換える**
@@ -139,7 +141,7 @@ git commit -m "feat(agent-policy): 対応表の冒頭文を同じ役割の候補
 委譲のたびに、上から順に評価し、最初に該当したステップで確定する。
 
 1. 同じ役割の特化定義のうち、担当に作業が含まれるもの。複数当たるときは依頼内容に近いものを選ぶ。
-2. 同じ役割の汎用定義。
+2. 同じ役割の汎用定義。複数あるときは依頼内容に近いものを選ぶ。
 3. 「その他のタスク」の役割。その役割の候補に、件数を問わずこの節のステップ 1 とステップ 2 を当てる。
 4. ビルトイン Agents。元の役割の種別が `readonly` なら `Explore`、`impl` なら `general-purpose` とする。
 
@@ -155,7 +157,7 @@ git commit -m "feat(agent-policy): 対応表の冒頭文を同じ役割の候補
 
 - [ ] **Step 5: 後段の参照を書き換える**
 
-`:120` を次の文にする。
+`:120` の「- 役割マーカーの対応表が注入されているとき、その役割の委譲先を担当表より優先してその定義とする。同じ役割に複数あるときは依頼内容に近いものを選ぶ。」を次の文にする。
 
 ```text
 - 役割マーカーの対応表が注入されているとき、その役割の委譲先を担当表より優先してその定義とする。同じ役割に複数あるときは §同じ役割の候補から選ぶ に従う。
@@ -175,7 +177,7 @@ git commit -m "feat(agent-policy): 対応表の冒頭文を同じ役割の候補
 
 `:142` の列見出し `| 順  |` を `| 優先順位 |` にする。
 
-`:167` を次の文にする。
+`:167` の「- ホストは、役割マーカーの対応表でその役割に解決された定義から選ぶ。同じ役割に複数あるときは依頼内容に近いものを選ぶ。」を次の文にする。
 
 ```text
 - ホストは、§同じ役割の候補から選ぶ でそのタスクに選んだ定義とする。
@@ -184,14 +186,14 @@ git commit -m "feat(agent-policy): 対応表の冒頭文を同じ役割の候補
 - [ ] **Step 6: 文言を確かめる**
 
 Run: `grep -nE "順 ?[0-9]|\| 順 |依頼内容に近いものを選ぶ|一度だけ確定|段 ?[0-9]" plugins/agent-policy/references/orchestration-discipline.md`
-Expected: 出力は 2 件だけ。解決順の表の 2 行目の委譲先欄と、新しい節のステップ 1 である。どちらも「依頼内容に近いものを選ぶ」を含み、残してよい。
+Expected: 出力は 3 件だけ。解決順の表の 2 行目の委譲先欄と、新しい節のステップ 1 とステップ 2 である。どれも「依頼内容に近いものを選ぶ」を含み、残してよい。
 
 - [ ] **Step 7: Review Focus 1〜4 を読み合わせる**
 
-新しい節と `:46` `:47` `:50` `:115` を通して読み、次の 4 点がこの文言から一意に決まることを確かめる。決まらなければ、設計書の文言のどこが足りないかをオーケストレーターへ差し戻す。
+新しい節と、書き換えた `:46` `:47` `:50`、§モデル別役割の運用 の `readonly` の明記の項目(編集前の `:115`)を通して読み、次の 4 点がこの文言から一意に決まることを確かめる。決まらなければ、設計書の文言のどこが足りないかをオーケストレーターへ差し戻す。
 - 特化定義 1 件だけの役割では、その 1 件へ委譲する。
 - 「設計書・実装計画書のレビュー」はステップ 3 と 4 へ進まない。
-- `readonly` からステップ 3 へ回したとき、`:115` の明記が入る。
+- `readonly` からステップ 3 へ回したとき、§モデル別役割の運用 の `readonly` の明記が入る。
 - 候補が 1 件に減った役割は、その 1 件へ委譲する。
 
 - [ ] **Step 8: コミット**
@@ -257,17 +259,33 @@ git commit -m "docs(agent-policy): 同じ役割に複数の定義を置く方法
 ### Task 4: 全体の検査とメモリの追随
 
 **Files:**
-- Modify(該当があれば): `.serena/memories/` 配下
+- Modify: `.serena/memories/agent_policy/core.md`
 
 - [ ] **Step 1: lint・typecheck・test を通す**
 
 Run: `pnpm run lint && pnpm run typecheck && pnpm run test`
 Expected: すべて成功
 
-- [ ] **Step 2: Serena メモリの記述を確かめる**
+- [ ] **Step 2: Serena メモリの解決順を直す**
 
-Run: `grep -rnE "依頼内容に近い|一度確定|1 役割 1|順 [0-9]" .serena/memories`
-Expected: 出力なし。出力があれば、設計書 §2.2・§2.3 に合わせて Serena の `edit_memory` で直し、コミットする。
+`.serena/memories/agent_policy/core.md` は、解決順を「対応表にあればその 1 定義」として書いている。Serena の `edit_memory`(literal)で次の 3 か所を直す。
+
+1 行目の `(0.21.0-dev, pkg` を `(0.21.1-dev, pkg` にする。
+
+「(1) role present in the marker table → that definition;」を次にする。
+
+```text
+(1) role present in the marker table → that role's candidate set; with 2+ candidates, pick per delegation via §同じ役割の候補から選ぶ (specialised definition whose remit covers the work → generic definition of the same role → the `general` role's candidates → built-in), and decide the launch mode per delegation too;
+```
+
+「`design-review` (0.19: `independent-review`) never advances past step 1; it is skipped rather than read across.」の直後に、次の 1 文を足す。
+
+```text
+Specialised vs generic is judged by the orchestrator from `description` and body (a remit limited to a directory, tech area or feature area = specialised); no frontmatter field marks it. Work sent on to `general` counts as 「その他のタスク」 for the launch mode, so it is never composed. Since 0.21.1-dev.
+```
+
+Run: `grep -nE "candidate set; with 2\+|Since 0\.21\.1-dev|0\.21\.1-dev, pkg" .serena/memories/agent_policy/core.md`
+Expected: 3 件
 
 - [ ] **Step 3: 作業ツリーが空であることを確かめる**
 
@@ -276,27 +294,29 @@ Expected: `docs/chat/` の記録以外に出力なし
 
 ### Task 5: 新しいセッションでの実機確認(ユーザーと行う)
 
+このプロジェクトの `.claude/agents/` には、`normal-impl` の汎用定義 `general-implementer` と、`general` の定義 `general-worker` が既にある。確認ではこの 2 件を汎用定義と `general` の定義として使い、特化定義 2 件だけを足す。
+
 **Files:**
-- Create(確認の後に削除): `.claude/agents/verify-frontend-impl.md`、`.claude/agents/verify-backend-impl.md`、`.claude/agents/verify-generic-impl.md`
+- Create(確認の後に削除): `.claude/agents/verify-frontend-impl.md`、`.claude/agents/verify-backend-impl.md`
+- Move(確認の間だけ `.claude/agents/` の外へ出し、後で戻す): `.claude/agents/general-implementer.md`、`.claude/agents/general-worker.md`
 
-- [ ] **Step 1: 確認用の定義を 3 件置く**
+- [ ] **Step 1: 確認用の特化定義を 2 件置く**
 
-3 件とも `agent-policy-role: normal-impl` を付け、`model` は既存の `general-implementer` と同じ値にする。`description` は次のとおりにする。
+2 件とも `agent-policy-role: normal-impl` を付け、`model` は `general-implementer` と同じ値にする。`description` は次のとおりにする。
 - `verify-frontend-impl`: 「frontend(UI コンポーネントとスタイル)の実装を担当する。」
 - `verify-backend-impl`: 「backend(API と DB アクセス)の実装を担当する。」
-- `verify-generic-impl`: 「通常の実装を担当する。」
 
 - [ ] **Step 2: 新しいセッションで 3 種の作業を依頼する**
 
-frontend の作業、backend の作業、CI 設定の修正を 1 つずつ依頼する。transcript で Agent 呼び出しの `subagent_type` を読み、それぞれ `verify-frontend-impl`・`verify-backend-impl`・`verify-generic-impl` になっていることを確かめる。
+frontend の作業、backend の作業、CI 設定の修正を 1 つずつ依頼する。transcript で Agent 呼び出しの `subagent_type` を読み、それぞれ `verify-frontend-impl`・`verify-backend-impl`・`general-implementer` になっていることを確かめる。
 
 - [ ] **Step 3: 汎用定義を外して確かめる**
 
-`verify-generic-impl.md` を外して新しいセッションを開き、CI 設定の修正を依頼する。委譲先が `general` の定義になり、依頼文に外部定義の本文が入っていないことを確かめる。
+`general-implementer.md` を `.claude/agents/` の外へ移し、新しいセッションで CI 設定の修正を依頼する。委譲先が `general-worker` になり、依頼文に外部定義の本文が入っていないことを確かめる。
 
 - [ ] **Step 4: `general` の定義も外して確かめる**
 
-`general` の定義も一時的に外して新しいセッションを開き、CI 設定の修正を依頼する。委譲先が `general-purpose` になり、`model` に担当表の `normal-impl` の Claude モデルが入ることを確かめる。
+`general-worker.md` も外へ移し、新しいセッションで CI 設定の修正を依頼する。委譲先が `general-purpose` になり、`model` に担当表の `normal-impl` の Claude モデルが入ることを確かめる。
 
 - [ ] **Step 5: 確認用の定義を取り除き、外した定義を戻す**
 
