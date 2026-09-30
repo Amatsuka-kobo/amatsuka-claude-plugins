@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.21.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.21.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.4.0-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -57,11 +57,12 @@ The plugin now ships **two profiles**, selected by `AMATSUKA_AGENT_AUTO_INJECTIO
 `model` runs on Claude (`sonnet`/`opus`/`haiku`/`fable`/`inherit`/absent) **and** whose
 `agent-policy-vendor` is absent/`claude`/`none`; custom adds external-vendor definitions on top.
 The table's **2nd line** tells the reader which scope is in force. The candidate set applies to
-**both** step 1 and step 2. *解決順*: (1) role present in the marker table → that definition;
+**both** step 1 and step 2. *解決順*: (1) role present in the marker table → that role's candidate set; with 2+ candidates, pick per delegation via §同じ役割の候補から選ぶ (specialised definition whose remit covers the work → generic definition of the same role → the `general` role's candidates → built-in), and decide the launch mode per delegation too;
 (2) absent but a candidate's remit fits → that definition; (3) otherwise built-ins (`readonly` →
 `Explore`, `impl` → `general-purpose`). **Built-ins are the LAST resort, not the first choice** —
 the old "readonly bands go to `Explore`" wording was wrong and is gone from both skills.
 `design-review` (0.19: `independent-review`) never advances past step 1; it is skipped rather than read across.
+Specialised vs generic is judged by the orchestrator from `description` and body (a remit limited to a directory, tech area or feature area = specialised); no frontmatter field marks it. Work sent on to `general` counts as 「その他のタスク」 for the launch mode, so it is never composed. Since 0.21.1-dev.
 
 **Terminology since 0.17.1-dev (2026-09-09): the word 「帯」 is gone.** A role band is just
 「役割」; the table's first column is 「役割名」. **The discipline section is `## 担当表`** (renamed
