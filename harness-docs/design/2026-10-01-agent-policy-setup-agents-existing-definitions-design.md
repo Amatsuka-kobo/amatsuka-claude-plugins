@@ -188,6 +188,8 @@ CLI は readonly の役割への `--mcp-servers` と `--mcp-deny` を既に受�
 
 ### 3-6. 非対話モード(`--yes`)
 
+- 既存定義の MCP は既定で残す。`--recommended --merge` で `--mcp-servers` を渡さないとき、既存ファイルを作成先にする target は、そのファイルの `mcpCurrent` のサーバーを引き継ぐ。既存の `disallowedTools` も引き継ぐ。引き継いだサーバーも通常と同じく接続を再検証し、落ちたものは `mcpDropped` に載せる。新規生成の target には MCP を付けない(従来どおり)。
+
 - 生成の前に `--list-coverage` を実行し、`definitions` を読む。
 - `toolsFormat` が `"csv"` の定義について、`disallowedTools` のうち `"*"` 以外のツールを `--prune-tools` で外す。
 - 次の定義は変更しない。
