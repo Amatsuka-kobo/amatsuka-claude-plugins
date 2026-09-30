@@ -62,7 +62,6 @@ Marketplace から `agent-policy` をインストールします。
 | `ANTHROPIC_AUTH_TOKEN` | `/v1/models` 照会の Bearer 認証トークン | 未設定 |
 | `ANTHROPIC_API_KEY` | Bearer トークンが無い場合の `/v1/models` 照会用 API キー | 未設定 |
 | `AMATSUKA_AGENT_DELEGATION_GATE` | delegation gate の有効化 | 未設定(無効) |
-| `AMATSUKA_AGENT_PARALLEL_NUDGE` | 並列促しフックの無効化 | 未設定(有効) |
 | `CLAUDE_CODE_SUBAGENT_MODEL` | Claude Code が全サブエージェントへ適用するモデル | 未設定 |
 
 `CLAUDE_CODE_SUBAGENT_MODEL` を設定すると、Agent 定義の frontmatter にある `model` より優先されます。定義ごとに選んだモデルを使う場合は設定しないでください。
@@ -211,12 +210,6 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 `--direct on` は一時解除を始め、`--direct status` は状態と残り時間を表示し、`--direct off` は解除を終了します。一時解除は `ttlSeconds` の経過で自動的に失効します。この解除は**ユーザー自身が実行するもの**です。Agent や AI に実行させないでください。
 
 このフックには既知の限界があります。Bash 経由の書き込みは技術的に止められません。また、AI 自身が `--direct on` を実行して回避することも技術的には可能であり、「ユーザー自身が実行する」という文言を守る運用に依存します。
-
-## 並列促しフック
-
-サブエージェントを起動しようとするたびに、まだ着手していない独立タスクがあれば同じメッセージで並列 dispatch するよう促す短い文言を注入します。前の出力に依存する場合だけは逐次にします。
-
-このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
 
 ## 旧バージョンからの移行
 

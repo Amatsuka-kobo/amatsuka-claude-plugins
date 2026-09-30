@@ -93,7 +93,7 @@ old `policy-skill-assignments.test.ts` is deleted. Design:
   generating a recommended set.
 - **3 skills**: `claude-model-policy`, `custom-policy`, `setup-agents`.
 - `src/`: `setup-agents.ts` (the CLI), `agents/{policies,live-models,roles,fragments,compose,
-  vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate,parallel-nudge}.ts`,
+  vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate}.ts`,
   `testing/{run-ts.ts,fake-models-server.ts,fake-claude.mjs}`.
 
 ### Role fragments and the 13 role IDs
@@ -275,14 +275,13 @@ only surfaces as a `resolveVendor` throw when the live query succeeds. Claude en
 Measured against CLIProxyAPI: client-side aliases appear verbatim in `data[].id`, `owned_by` came
 back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
 
-### The four hooks
+### The three hooks
 
 | hook | matcher | what it does |
 | --- | --- | --- |
 | SessionStart | — | injects the policy skill; under custom, validates model existence first |
 | SubagentStart | — | injects **only** the marker table, scoped by `candidateScopeFor` (claude → claude-only, custom-family → with-external, else the `NO_MARKERS` line). The discipline fragment is **gone** since 0.18.0-dev |
 | PreToolUse | `Edit\|Write\|NotebookEdit\|mcp__.*` | delegation gate (opt-in; denies edits to protected globs) |
-| PreToolUse | `Task\|Agent` | parallel nudge (on by default; one fixed additionalContext line dispatching independent work in the same message; sequence only when the previous output is needed or the workflow prescribes sequential order) |
 
 **Marker-table row format since 0.19.1-dev (2026-09-16)**: each row is
 `- <role label> [<RoleId>]: <definition name(s)>`. The generated common-discipline clauses
