@@ -338,6 +338,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 定義を 1 つずつ、次の順で処理する。定義名は既存のファイル名のまま変えない。
 
 1. モデル ID を、5n の 1 の手順と候補で尋ねる。
+   - `modelId` が `null` の定義(推奨表に無いエイリアス、`inherit`、`model` 欄なし)では、選択肢の先頭に「再生成しない」を置く。選ばれたら、その定義をステップ 7 で報告する。
+   - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだモデル ID の既定の model 値> に変わる」と書く。<> の中は実際の値に置き換える。
 2. ベンダーを、5n の 4 の条件で確定する。
 3. 差分方針を、保持マージ、選択した項目の保持、完全上書き、スキップから尋ねる。保持対象を選ぶ場合は `--keep` を個別コマンドに渡す。`modelId` が `null` だけが理由の定義では、差分方針を尋ねず保持マージにする。
 
@@ -362,10 +364,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 定義ごとに次の個別コマンドで保持マージ生成する。`--recommended` は使わない。複数の役割を持つ定義も 1 回だけ実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <定義の model> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --scope <claude|custom> --lang <lang> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --scope <claude|custom> --lang <lang> --dir "$PWD"
 ```
 
 - `--model-id` には、定義の `modelId` か、ステップ 5b で決めたモデル ID を渡す。
+- `--model` には、定義の `model` を渡す。ステップ 5b でモデル ID を選んだ定義では、定義の元の値ではなく、選んだモデル ID の既定の model 値(ステップ 1 の対応)を渡す。
 - `--name` には、`file` のファイル名から `.md` を除いた値を渡す。
 - `--vendor` には、ステップ 5b でベンダーを確定したときはその値を渡す。確定していないときは、定義の `vendor` があればその値を、無ければ `none` を渡す。
 - ステップ 5b で差分方針を決めた定義は、`--merge` と `--keep` をその方針に合わせる。
@@ -394,7 +397,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
   - マーカー行を消した定義。ファイルの絶対パスを示し、削除するかは利用者に委ねる
   - `ok: false` になった操作の定義名と `error`
   - 操作の応答にあった `warnings`
-- ステップ 4 で再生成しなかった定義と、その理由(再生成しないと選ばれた・`model` が live に無い)
+- ステップ 4 と 5b で再生成しなかった定義と、その理由(再生成しないと選ばれた・`model` が live に無い)
 - ステップ 6b で「作らない」と決めた役割があれば、その一覧と、次に setup-agents を実行したときに再び尋ねられること
 - 各定義の `action`、`kept`、`discarded`、`keptNeedsReview`
 - `mcpDropped`。再検証で落としたサーバーがあれば、tools へ入らなかったこと

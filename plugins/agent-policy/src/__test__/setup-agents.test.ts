@@ -1658,6 +1658,36 @@ describe("再生成の作成先は被覆する定義で決める", () => {
     expect(agentFiles().map((file) => readAgent(file))).toEqual(before)
   })
 
+  it("modelId が null の定義は、選んだモデル ID と既定の model 値を個別コマンドに渡すと、その model で再生成される", () => {
+    marked("legacy.md", "inherit", "explore")
+
+    const result = run<WriteResults>([
+      "--write",
+      "--merge",
+      "--model-id",
+      "sonnet",
+      "--name",
+      "legacy",
+      "--model",
+      "sonnet",
+      "--roles",
+      "explore",
+      "--scope",
+      "claude",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(result.results[0]?.target).toBe(".claude/agents/legacy.md")
+    expect(agentFiles()).toEqual(["legacy.md"])
+    const content = readAgent("legacy.md")
+    expect(content).toContain("model: sonnet\n")
+    expect(content).not.toContain("model: inherit")
+  })
+
   it("claude-only で外部ベンダーの定義しか被覆しない役割は既定名で新規生成する", () => {
     marked("external.md", "claude-gpt-6-sol", "code-review", "gpt")
     const external = readAgent("external.md")
