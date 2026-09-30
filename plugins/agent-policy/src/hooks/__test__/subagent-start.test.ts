@@ -417,10 +417,10 @@ describe("切り詰め", () => {
       invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     )
     const fullLines = fullTable.split("\n")
-    const fullRoleLines = fullLines.slice(2)
-    const retainedRoleLines = context
-      .split("\n")
-      .filter((line) => line.startsWith("- "))
+    // 候補が複数ある役割は description 行(字下げ)を伴うため、役割行だけを取り出して比べる。
+    const isRoleLine = (line: string) => line.startsWith("- ")
+    const fullRoleLines = fullLines.slice(2).filter(isRoleLine)
+    const retainedRoleLines = context.split("\n").filter(isRoleLine)
     const removedRoleLines = fullRoleLines.slice(retainedRoleLines.length)
 
     expect(context.length).toBeLessThanOrEqual(9500)

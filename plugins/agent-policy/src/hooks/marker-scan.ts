@@ -10,6 +10,7 @@ export interface MarkedAgent {
   /** undefined = tools 欄なし・解釈不能(全ツール継承として扱う) / 値あり = 明示リスト */
   tools: string[] | undefined
   vendor: string | undefined
+  description: string | undefined
 }
 
 /** frontmatter の解析結果。tools が block 配列で書かれていたときだけ値が string[] になる。 */
@@ -117,6 +118,7 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
     const model = meta.get("model")
     const marker = meta.get("agent-policy-role")
     const vendor = meta.get("agent-policy-vendor")
+    const description = meta.get("description")
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : undefined,
@@ -128,7 +130,8 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
               .filter((role) => role !== "")
           : [],
       tools: parseToolsField(meta.get("tools")),
-      vendor: typeof vendor === "string" ? vendor : undefined
+      vendor: typeof vendor === "string" ? vendor : undefined,
+      description: typeof description === "string" ? description : undefined
     })
   }
 
@@ -219,6 +222,7 @@ export function markerTable(
 ): string | undefined {
   const labelOf = roleLabels(env)
   const byRole = new Map<string, string[]>()
+  const detailByRole = new Map<string, string[]>()
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === undefined) continue
@@ -227,6 +231,10 @@ export function markerTable(
           ? entry.name
           : `${entry.name} (${entry.vendor})`
       byRole.set(role, [...(byRole.get(role) ?? []), name])
+      detailByRole.set(role, [
+        ...(detailByRole.get(role) ?? []),
+        `  - ${entry.name}: ${entry.description ?? "(description なし)"}`
+      ])
     }
   }
   if (byRole.size === 0) return undefined
@@ -239,6 +247,7 @@ export function markerTable(
     const names = byRole.get(role)
     if (names !== undefined) {
       lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`)
+      if (names.length >= 2) lines.push(...(detailByRole.get(role) ?? []))
     }
   }
   return lines.join("\n")

@@ -286,12 +286,14 @@ function scanAgents(dir) {
     const model = meta.get("model");
     const marker = meta.get("agent-policy-role");
     const vendor = meta.get("agent-policy-vendor");
+    const description = meta.get("description");
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : void 0,
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
       tools: parseToolsField(meta.get("tools")),
-      vendor: typeof vendor === "string" ? vendor : void 0
+      vendor: typeof vendor === "string" ? vendor : void 0,
+      description: typeof description === "string" ? description : void 0
     });
   }
   return found;
@@ -347,11 +349,16 @@ var SCOPE_LINES = {
 function markerTable(env, marked, scope) {
   const labelOf = roleLabels(env);
   const byRole = /* @__PURE__ */ new Map();
+  const detailByRole = /* @__PURE__ */ new Map();
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === void 0) continue;
       const name = entry.vendor === void 0 ? entry.name : `${entry.name} (${entry.vendor})`;
       byRole.set(role, [...byRole.get(role) ?? [], name]);
+      detailByRole.set(role, [
+        ...detailByRole.get(role) ?? [],
+        `  - ${entry.name}: ${entry.description ?? "(description \u306A\u3057)"}`
+      ]);
     }
   }
   if (byRole.size === 0) return void 0;
@@ -363,6 +370,7 @@ function markerTable(env, marked, scope) {
     const names = byRole.get(role);
     if (names !== void 0) {
       lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`);
+      if (names.length >= 2) lines.push(...detailByRole.get(role) ?? []);
     }
   }
   return lines.join("\n");

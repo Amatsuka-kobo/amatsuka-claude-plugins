@@ -183,7 +183,8 @@ describe("frontmatter", () => {
         model: "sonnet",
         roles: [],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       }
     ])
   })
@@ -207,14 +208,16 @@ describe("scanAgents", () => {
         model: "claude-custom",
         roles: ["complex-impl", "explore"],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       },
       {
         name: "fallback-name",
         model: undefined,
         roles: ["normal-impl"],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       }
     ])
   })
@@ -233,7 +236,8 @@ describe("scanAgents", () => {
         model: undefined,
         roles: ["normal-impl"],
         tools: undefined,
-        vendor: "gpt"
+        vendor: "gpt",
+        description: undefined
       }
     ])
   })
@@ -268,7 +272,8 @@ describe("scanAgents", () => {
         model: undefined,
         roles: ["explore"],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       }
     ])
   })
@@ -384,42 +389,48 @@ describe("candidateAgents", () => {
       model: "sonnet",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "claude"
+      vendor: "claude",
+      description: undefined
     },
     {
       name: "sonnet-gpt-vendor",
       model: "sonnet",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "gpt"
+      vendor: "gpt",
+      description: undefined
     },
     {
       name: "implicit",
       model: undefined,
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: undefined
+      vendor: undefined,
+      description: undefined
     },
     {
       name: "inherit",
       model: "inherit",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: undefined
+      vendor: undefined,
+      description: undefined
     },
     {
       name: "vendor-none",
       model: "opus",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "none"
+      vendor: "none",
+      description: undefined
     },
     {
       name: "external-model",
       model: "gpt-5.3-codex",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "claude"
+      vendor: "claude",
+      description: undefined
     }
   ]
 
@@ -444,28 +455,32 @@ describe("markerTable", () => {
           model: undefined,
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: "gpt"
+          vendor: "gpt",
+          description: undefined
         },
         {
           name: "grok-worker",
           model: undefined,
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: "grok"
+          vendor: "grok",
+          description: undefined
         },
         {
           name: "local-implementer",
           model: undefined,
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         },
         {
           name: "sonnet-code-reviewer",
           model: undefined,
           roles: ["code-review"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         }
       ],
       "with-external"
@@ -476,9 +491,94 @@ describe("markerTable", () => {
         TABLE_HEADING,
         "表に無い役割の委譲先は、外部ベンダーのモデルを指定した定義も含めて選んでよい。",
         "- 通常の実装 [normal-impl]: gpt-terra-general-implementer (gpt) / grok-worker (grok) / local-implementer",
+        "  - gpt-terra-general-implementer: (description なし)",
+        "  - grok-worker: (description なし)",
+        "  - local-implementer: (description なし)",
         "- コードレビュー [code-review]: sonnet-code-reviewer"
       ].join("\n")
     )
+  })
+
+  it("同じ役割に候補が 2 件あるとき、役割行の直後に定義ごとの description 行を出す", () => {
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "gpt-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: "gpt",
+          description: "backend の実装を担当する。"
+        },
+        {
+          name: "ui-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined,
+          description: "frontend の実装を担当する。"
+        }
+      ],
+      "with-external"
+    )
+
+    expect(result?.split("\n").slice(2)).toEqual([
+      "- 通常の実装 [normal-impl]: gpt-impl (gpt) / ui-impl",
+      "  - gpt-impl: backend の実装を担当する。",
+      "  - ui-impl: frontend の実装を担当する。"
+    ])
+  })
+
+  it("候補が 1 件の役割には description 行を足さない", () => {
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "reviewer",
+          model: undefined,
+          roles: ["code-review"],
+          tools: undefined,
+          vendor: undefined,
+          description: "差分をレビューする。"
+        }
+      ],
+      "with-external"
+    )
+
+    expect(result?.split("\n").slice(2)).toEqual([
+      "- コードレビュー [code-review]: reviewer"
+    ])
+  })
+
+  it("description が無い定義は (description なし) と出す", () => {
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "a-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined,
+          description: undefined
+        },
+        {
+          name: "b-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined,
+          description: "b の説明"
+        }
+      ],
+      "with-external"
+    )
+
+    expect(result?.split("\n").slice(3)).toEqual([
+      "  - a-impl: (description なし)",
+      "  - b-impl: b の説明"
+    ])
   })
 
   it("役割行に RoleId を角括弧で併記する", () => {
@@ -492,14 +592,16 @@ describe("markerTable", () => {
           model: "sonnet",
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         },
         {
           name: "project-worker",
           model: "sonnet",
           roles: ["my_role"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         }
       ],
       "with-external"
@@ -526,7 +628,8 @@ describe("markerTable", () => {
           model: "sonnet",
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         }
       ],
       scope
