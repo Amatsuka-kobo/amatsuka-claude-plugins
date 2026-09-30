@@ -150,6 +150,24 @@ setup-agents を再実行したとき、既存の Agent 定義の不整合が利
   - `--scope custom` で live 照会が成功し、定義の `model` が live に無いときは、その定義を再生成せずにステップ 7 で報告する。
 - 非対話モード(`--yes`)は `--recommended` のまま、上の CLI の改修で被覆する定義を作成先にする。
 
+### 3-5d. 再生成で description と前置きを既定で保持する
+
+実機検証で、保持マージが既存定義の description と前置き(最初の見出しより前の本文)をテンプレートで置き換え、差分の表と報告にそれが現れないことが分かった。description と前置きは既定で保持し、役割の断片の更新で内容が変わったときだけ置き換えを勧める。
+
+- 生成時の記録: compose は frontmatter に `agent-policy-description-hash` と `agent-policy-preamble-hash` を書く。値は書き込んだ description と前置きのハッシュ(`bodyHash` と同じ 16 桁)とする。
+- 状態の判定: `--check` と `--write` の結果の各 target に、`description` と `preamble` の状態を返す。
+  - `same`: 既存がテンプレートと一致する。
+  - `templateChanged`: 既存が記録のハッシュと一致し、テンプレートは違う。利用者は編集しておらず、役割の断片の更新で変わった。
+  - `userEdited`: 記録があり、既存が記録と一致しない。
+  - `unknown`: 記録が無く、既存がテンプレートと違う。
+- 保持マージの既定: `--merge` は、`same` 以外の description と前置きを既存のまま保持する。`--replace <description|preamble>`(カンマ区切り)を渡したものだけテンプレートで置き換える。
+- 記録の更新: 置き換えたときは新しい値のハッシュを書く。保持したときは既存の記録をそのまま残す(記録が無ければ書かない)。
+- スキル(対話モード): ステップ 5 の差分の表に、再生成する定義ごとの description と前置きの状態を載せる。
+  - `templateChanged`: 「テンプレートに置き換える(推奨)」「保持する」を聞く。
+  - `unknown`: 既存とテンプレートの両方を preview に示し、「保持する」「テンプレートに置き換える」を聞く。推奨は付けない。
+  - `userEdited`: 質問せずに保持し、ステップ 7 で報告する。
+- 非対話モード: すべて保持する。`templateChanged` の定義は報告に載せ、対話モードでの再実行を案内する。
+
 ### 3-5b. スキル: readonly の役割にも MCP を既定で付与する
 
 CLI は readonly の役割への `--mcp-servers` と `--mcp-deny` を既に受け付ける。`--mcp-deny` はコマンド単位で全対象に付くので、impl と readonly は別のコマンドで生成する。サーバー単位で許可しツール単位で禁止する形は ADR-001 に従う。
@@ -176,7 +194,10 @@ CLI は readonly の役割への `--mcp-servers` と `--mcp-deny` を既に受�
   - `"*"`(全ツール継承)の定義
   - `toolsFormat` が `"other"` の定義
   - `retiredRoles` を持つ定義
-- 報告に次を並べ、対話モードでの再実行を案内する。
+- 報告に次を定義ごとに並べ、対話モードでの再実行を案内する。全文の差分は載せない。
+  - `tools` 行の変更前と変更後
+  - 再生成で外れた MCP サーバー(変更前の `mcpCurrent` と変更後の比較)
+  - description と前置きの状態(3-5d)
   - 外したツールと定義名
   - 変更しなかった定義と、その理由
   - 廃止済み役割と後継
