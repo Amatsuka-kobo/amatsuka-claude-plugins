@@ -573,6 +573,8 @@ E2E のレポートは、E2E の仕様のディレクトリの `reports/` に実
 
 intent-sync の委譲を出す前に、オーケストレーターが intent の frontmatter `domains` と `## 意図的な制約` を
 読む。取り込みを黙って飛ばさないための確認である。
+人の確認で止まった後に再開するときは、委譲を出す直前に intent をもう一度読み、`domains` の値をこの時点の
+値に置き換えてから、下の分岐を決める。止まっている間に、人が `domains` を書き換えていることがある。
 
 - `domains` が空で、`## 意図的な制約` の表に 1 行以上ある(「なし」でない)ときは、次の順に進める。
   1. intent-sync を `start-phase` した後に、`mark-ask intent-sync --slug <slug> --kind confirm` で
