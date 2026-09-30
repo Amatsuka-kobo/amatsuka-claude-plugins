@@ -127,7 +127,11 @@ bullets below wherever the two disagree):
   the host's effort). Measured 2026-09-29: CLIProxyAPI maps Claude Code's `output_config.effort` to
   upstream `reasoning.effort` for gpt/grok aliases.
 - SessionStart's `RETIRED_ROLES` (a Set) announces definitions still declaring the 4 retired IDs,
-  and those IDs are excluded from the unknown-role notice.
+  and those IDs are excluded from the unknown-role notice. Since 2026-10-01 the canon is
+  `roles.ts`' `RETIRED_ROLE_REPLACEMENTS` (id → successor or null); `RETIRED_ROLES` is built from
+  its keys, `loadFragments` skips fragments with those IDs and `roleLabel` returns undefined for
+  them, so a leftover `final-review.md` fragment never resolves as a role. SessionStart's text is
+  unchanged.
 
 0.20 changes (design `2026-09-24-agent-policy-role-overhaul-design.md`):
 
@@ -371,8 +375,20 @@ bake it into the helpers, or the new default becomes untestable.
   **not** `resolveVendor`. Each `results[]` element carries `roleId` (only on this path). The
   response is `{ok, results, warnings}` — `modelsDropped` is gone and `rolesDropped` never existed.
   Combining it with `--model-id` / `--name` / `--model` / `--vendor` / `--keep` returns `ok: false`.
-  `recommendedRolesFor` was deleted. The wizard runs `--recommended` twice when MCP servers are
-  granted (impl roles with `--mcp-servers`, readonly roles without).
+  `recommendedRolesFor` was deleted. Since 2026-10-01 MCP is granted to all roles by default: the
+  wizard splits commands by kind and server set — impl gets `--mcp-servers` only, readonly gets
+  `--mcp-servers` plus `--mcp-deny` (merge never keeps `disallowedTools`, so pass it every time).
+  Newly generated roles (`exists: false`) are never bulk-generated with `--recommended`; the wizard
+  asks model / name / MCP per role and uses the individual command.
+- **Existing-definition inspection (2026-10-01, design
+  `2026-10-01-agent-policy-setup-agents-existing-definitions-design.md`)**: `--list-coverage` adds
+  `roles[].kind` and `definitions[]` (`name, file, model, vendor, roles, retiredRoles[{id,
+  replacement}], disallowedTools, toolsFormat csv|other|none`), all marker-bearing definitions
+  regardless of scope; tools parsed by `marker-scan.ts`' `parseToolsField`, allowed set from the
+  exported `resolveToolsFor`. `--prune-tools --name --tools` and `--rewrite-roles --name --roles`
+  edit exactly one frontmatter line as a string (no `parseDocument`/`render`), accept only
+  `--dir`, and return `{ok, target, changed, warnings}`; non-csv tools, retired/unknown IDs,
+  missing file/frontmatter/line → `ok: false` with no write. `automaticKeep` is unchanged.
 - **Gone**: `--policy`, `--list-policies`, `--list-models`, and since 0.20 `--models`. Passing them
   returns `ok: false`.
 - `--list-live-models` returns `{ok, reason?, models:[{id, vendor, recommendedFor}], claudeEnums}`;
