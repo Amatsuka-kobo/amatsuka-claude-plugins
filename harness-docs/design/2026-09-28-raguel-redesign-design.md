@@ -287,7 +287,7 @@ Raguel は次の手順で差分を作る。
 
 1. `baseRef` が `-` で始まれば入力の誤りにする。`git rev-parse --verify --end-of-options <baseRef>^{commit}` でコミットに解決し、失敗したら入力の誤りにする。
 2. HEAD を `git rev-parse HEAD` で得る。比べる終点は常に HEAD とし、任意の終点は受けない。pass-gate が HEAD の一致を見る(§6.13.3)ためである。
-3. `git status --porcelain --untracked-files=no -- <paths>`(`paths` が無ければ作業ツリー全体)が空でなければ入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。未追跡のファイルは評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。設定 `subject.ignoreUncommitted`(glob の列、既定は空。§6.12.1)に当たるパスの未コミットの変更は、この検査で数えない。会話記録を `docs/chat/` に追記するプラグインのように、run と関係の無いファイルを同じ作業ツリーで書き続ける仕組みがある。その作業ツリーでは、code 系のゲートのたびに入力の誤りになる。codiel の手動確認 O4C-6 の local の run では、そのファイルを run ブランチへコミットして回避していた。これを受けて足した(2026-09-30、ユーザー決定)。当たるパスの変更は未コミットのまま評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。宣言した glob は応答の `policy.ignoreUncommitted` と list_rules に出す。
+3. `git status --porcelain --untracked-files=no -- <paths>`(`paths` が無ければ作業ツリー全体)が空でなければ入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。未追跡のファイルは評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。設定 `subject.ignoreUncommitted`(glob の列、既定は空。§6.12.1)に当たるパスの未コミットの変更は、この検査で数えない。会話記録を `docs/chat/` に追記するプラグインのように、run と関係の無いファイルを同じ作業ツリーで書き続ける仕組みがある。その作業ツリーでは、code 系のゲートのたびに入力の誤りになる。codiel の手動確認 O4C-6 の local の run では、そのファイルを run ブランチへコミットして回避していた。これを受けて足した(2026-09-30、ユーザー決定)。当たるパスの変更は未コミットのまま評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。宣言した glob は応答の `policy.ignoreUncommitted` と list_rules に出す。この検査では `git status` に `-z` を足して読む。空白を含むパス名と、名前の変更(移動元と移動先の組)を取り違えないためである。名前の変更とコピーは、移動元と移動先の両方が `subject.ignoreUncommitted` に当たるときだけ数えない。設定を読めないときは、何も外さない。
 4. 次の固定した書式で `git diff` を実行する。環境変数 `GIT_LITERAL_PATHSPECS=1` を付け、`paths` をパス指定の魔法の書式として解釈させない。
 
 ```
@@ -1017,6 +1017,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 | `code/protected-paths.excludeDefaults` に既定の glob と完全に一致しない文字列 | R20 |
 | `code/protected-paths.generated` に、固定部(ワイルドカードを含む最初のセグメントより前)が空の glob(`**/*`・`*.js` など) | R20。リポジトリ全体を生成物にする宣言を防ぐ |
 | `subject.ignoreUncommitted` に、固定部が空の glob | §6.2.2 の手順 3。作業ツリー全体を未コミットの検査から外す宣言を防ぐ |
+| `code/protected-paths.generated` と `subject.ignoreUncommitted` に、否定の glob(`!docs/**` のように `!` で始まるもの) | 否定の glob は固定部が空でないので上の 2 行の検査を通るが、指定したパスの外のすべてに一致する。手動確認 O4C-6 の後の修正のレビューで見つかった(2026-09-30) |
 | `perPanelist` のキーが adversarial・steelman・crosscheck・meta 以外 | R5 |
 | `perPanelist.<名前>.provider: none` | §6.7.1 |
 | `judge.provider` と `perPanelist.<名前>.provider` に `claude`・`codex`・`none` 以外(旧版の `jev` を含む) | R14 |
