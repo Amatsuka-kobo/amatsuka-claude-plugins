@@ -290,6 +290,57 @@ describe("scanAgents", () => {
 
     expect(scanAgents(agentsDir(project))[0]?.tools).toEqual(["Read", "Agent"])
   })
+
+  describe("description の形式", () => {
+    function read(metadata: string[]): string | undefined {
+      const project = temporaryProject()
+      writeDefinition(project, "d.md", ["name: d", ...metadata])
+      return scanAgents(agentsDir(project))[0]?.description
+    }
+
+    it("普通の 1 行", () => {
+      expect(read(["description: 一行 の説明"])).toBe("一行 の説明")
+    })
+
+    it("> 形式は字下げ行を空白 1 つで連結する", () => {
+      expect(
+        read(["description: >", "  一行目: あり", "  二行目", "model: x"])
+      ).toBe("一行目: あり 二行目")
+    })
+
+    it(">- と | と |- も同じ", () => {
+      expect(read(["description: >-", "  a", "  b"])).toBe("a b")
+      expect(read(["description: |", "  a", "  b"])).toBe("a b")
+      expect(read(["description: |-", "  a", "  b"])).toBe("a b")
+    })
+
+    it("続きの行の model: を model キーとして読まない", () => {
+      const project = temporaryProject()
+      writeDefinition(project, "d.md", [
+        "name: d",
+        "model: real",
+        "description: >",
+        "  説明",
+        "  model: x"
+      ])
+      const [agent] = scanAgents(agentsDir(project))
+      expect(agent?.model).toBe("real")
+      expect(agent?.description).toBe("説明 model: x")
+    })
+
+    it("二重引用符と単一引用符を外す", () => {
+      expect(read(['description: "引用 符"'])).toBe("引用 符")
+      expect(read(["description: '引用 符'"])).toBe("引用 符")
+    })
+
+    it("二重引用符の \\n は空白 1 つにする", () => {
+      expect(read(['description: "一行目\\n二行目"'])).toBe("一行目 二行目")
+    })
+
+    it("空の値は undefined", () => {
+      expect(read(["description:"])).toBeUndefined()
+    })
+  })
 })
 
 describe("projectAgentsDir", () => {

@@ -22,7 +22,9 @@ export function frontmatter(file: string): Map<string, string | string[]> {
   if (close === -1) return meta
 
   const metadataLines = lines.slice(1, close)
+  let skipUntil = 0
   for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue
     const at = line.indexOf(":")
     if (at <= 0) continue
     const key = line.slice(0, at).trim()
@@ -35,6 +37,17 @@ export function frontmatter(file: string): Map<string, string | string[]> {
         items.push(item)
       }
       meta.set(key, items.length === 0 ? value : items)
+      continue
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      // 複数行形式: 続く字下げ行を空白 1 つで連結し、その行を別キーとして読まない
+      const folded: string[] = []
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break
+        if (candidate.trim() !== "") folded.push(candidate.trim())
+      }
+      skipUntil = index + 1 + folded.length
+      meta.set(key, folded.join(" "))
       continue
     }
     meta.set(key, value)
@@ -85,6 +98,16 @@ export function parseToolsField(
   return parsed.length === 0 ? undefined : parsed
 }
 
+/** 引用符を外し、二重引用符の \n は空白 1 つにする。空なら undefined */
+function descriptionText(
+  raw: string | string[] | undefined
+): string | undefined {
+  if (typeof raw !== "string") return undefined
+  let text = unquote(raw)
+  if (raw.trim().startsWith('"')) text = text.replace(/\\n/g, " ")
+  return text === "" ? undefined : text
+}
+
 /** CLAUDE_PROJECT_DIR から .claude/agents のパスを組む。未設定・空なら undefined */
 export function projectAgentsDir(env: NodeJS.ProcessEnv): string | undefined {
   const projectDir = env.CLAUDE_PROJECT_DIR
@@ -118,7 +141,7 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
     const model = meta.get("model")
     const marker = meta.get("agent-policy-role")
     const vendor = meta.get("agent-policy-vendor")
-    const description = meta.get("description")
+    const description = descriptionText(meta.get("description"))
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : undefined,
@@ -131,7 +154,7 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
           : [],
       tools: parseToolsField(meta.get("tools")),
       vendor: typeof vendor === "string" ? vendor : undefined,
-      description: typeof description === "string" ? description : undefined
+      description
     })
   }
 

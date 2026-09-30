@@ -135,7 +135,9 @@ function frontmatter(file) {
   const close = lines.indexOf("---", 1);
   if (close === -1) return meta;
   const metadataLines = lines.slice(1, close);
+  let skipUntil = 0;
   for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue;
     const at = line.indexOf(":");
     if (at <= 0) continue;
     const key = line.slice(0, at).trim();
@@ -148,6 +150,16 @@ function frontmatter(file) {
         items.push(item);
       }
       meta.set(key, items.length === 0 ? value : items);
+      continue;
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      const folded = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break;
+        if (candidate.trim() !== "") folded.push(candidate.trim());
+      }
+      skipUntil = index + 1 + folded.length;
+      meta.set(key, folded.join(" "));
       continue;
     }
     meta.set(key, value);
@@ -185,6 +197,12 @@ function parseToolsField(raw) {
   const parsed = parseToolItems(value.split(","));
   return parsed.length === 0 ? void 0 : parsed;
 }
+function descriptionText(raw) {
+  if (typeof raw !== "string") return void 0;
+  let text = unquote(raw);
+  if (raw.trim().startsWith('"')) text = text.replace(/\\n/g, " ");
+  return text === "" ? void 0 : text;
+}
 function scanAgents(dir) {
   if (dir === void 0) return [];
   let files;
@@ -206,14 +224,14 @@ function scanAgents(dir) {
     const model = meta.get("model");
     const marker = meta.get("agent-policy-role");
     const vendor = meta.get("agent-policy-vendor");
-    const description = meta.get("description");
+    const description = descriptionText(meta.get("description"));
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : void 0,
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
       tools: parseToolsField(meta.get("tools")),
       vendor: typeof vendor === "string" ? vendor : void 0,
-      description: typeof description === "string" ? description : void 0
+      description
     });
   }
   return found;
