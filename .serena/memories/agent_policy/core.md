@@ -93,7 +93,7 @@ old `policy-skill-assignments.test.ts` is deleted. Design:
   generating a recommended set.
 - **3 skills**: `claude-model-policy`, `custom-policy`, `setup-agents`.
 - `src/`: `setup-agents.ts` (the CLI), `agents/{policies,live-models,roles,fragments,compose,
-  vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate}.ts`,
+  vocabulary,mcp,hash}.ts`, `hooks/{session-start,delegation-gate,marker-scan}.ts`,
   `testing/{run-ts.ts,fake-models-server.ts,fake-claude.mjs}`.
 
 ### Role fragments and the 13 role IDs
@@ -116,7 +116,6 @@ bullets below wherever the two disagree):
 - **Agent Tool is denied to every role** (user decision). `SOLO_DENIED_ROLES` / `allowsAgentTool` /
   `RolesSummary.agentTool` are deleted; `compose()` never emits `Agent` (it still strips `Agent`
   written in a fragment). The discipline dropped the subagent re-delegation clauses.
-  `subagent-start.ts` is unchanged (it still serves project definitions without a `tools` line).
 - **Impl roles are chosen on 5 axes** (仕様確定度 / 設計新規性 / 変更影響度 / 検証困難度 / 分解可能性),
   not change size. escalation = 原因不明/前提崩壊/再設計/行き詰まり; complex-impl = 非自明な設計判断/
   複雑・曖昧な仕様/検証困難; normal-impl = 仕様・設計済みの実装/テスト作成; light-impl = 定型/一括/明確な
@@ -232,10 +231,9 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
   presentation order, NOT `MODELS`' definition order, which starts with opus; the test compares the
   two as *sets*); non-exported `CLAUDE_RESOLVED = CLAUDE_ENUM_MODELS + "inherit"`;
   `runsOnClaude(model)` (true for `undefined`); `candidateScopeFor(value)` → `with-external` for
-  custom-family, `claude-only` for `claude`, else `undefined`. **Both marker-table hooks (SessionStart,
-  SubagentStart) call `candidateScopeFor`** — do not add a per-hook predicate; only the undefined
-  fallback differs (SessionStart decides from its validation result, SubagentStart emits
-  `NO_MARKERS`). delegation-gate no longer builds a table since 0.21.2-dev.
+  custom-family, `claude-only` for `claude`, else `undefined`. **SessionStart and the setup-agents
+  CLI call `candidateScopeFor`** — do not add a per-caller predicate. SubagentStart (which used to
+  call it too) and the delegation-gate table were removed in 0.21.2-dev.
 - **`policyForInjection` must NOT be used to derive the CLI's `--scope` default.** It only `trim()`s
   (no lowercase) and returns `undefined` for the three legacy values, so `with-codex` and `CuStOm`
   would make the CLI and the hooks disagree on the same env. Use `candidateScopeFor`.
@@ -275,12 +273,15 @@ only surfaces as a `resolveVendor` throw when the live query succeeds. Claude en
 Measured against CLIProxyAPI: client-side aliases appear verbatim in `data[].id`, `owned_by` came
 back lowercase for all 8 entries, unauthenticated returns 401 `Missing API key`.
 
-### The three hooks
+### The two hooks
+
+Removed in 0.21.2-dev: the SubagentStart hook (no generated definition carries `Agent` since 0.21, so
+nobody uses the table it injected) and the PreToolUse `Task|Agent` parallel nudge (an injection
+arrives after the dispatch is already out, so it cannot change the same message).
 
 | hook | matcher | what it does |
 | --- | --- | --- |
 | SessionStart | — | injects the policy skill; under custom, validates model existence first |
-| SubagentStart | — | injects **only** the marker table, scoped by `candidateScopeFor` (claude → claude-only, custom-family → with-external, else the `NO_MARKERS` line). The discipline fragment is **gone** since 0.18.0-dev |
 | PreToolUse | `Edit\|Write\|NotebookEdit\|mcp__.*` | delegation gate (opt-in; denies edits to protected globs) |
 
 **Marker-table row format since 0.19.1-dev (2026-09-16)**: each row is
@@ -319,16 +320,9 @@ not. That one difference is what lets the gate wave subagents through.
 The judgement freezes at SessionStart; a proxy recovering mid-session goes unnoticed. `build()` is
 async now, but the outer try/catch still guarantees stderr + exit 0 and no file writes.
 
-**Known accepted divergence — do NOT "fix" it in code.** On a custom→claude fallback, SessionStart
-narrows to `claude-only` (it knows the validation failed) while SubagentStart
-still sees only the env var and stays `with-external`, so the child's table lists external
-definitions the parent already ruled out. SubagentStart cannot query the proxy (a per-spawn HTTP
-round trip was rejected in `two-profile-design` §13), and recording the fallback in a state file was
-rejected because it is project-scoped: a concurrent *successful* custom session's children would be
-wrongly clamped to `claude-only`, a wider harm than the one being closed. The chosen cover is a
-discipline clause telling the orchestrator to state, in the request text, that external-vendor
-definitions are not delegation targets when a fallback was announced. Forgetting it degrades to
-today's behaviour — no worse.
+**Former divergence, gone with SubagentStart (0.21.2-dev).** The child-side table used to ignore a
+custom→claude fallback because SubagentStart saw only the env var. No hook injects a table into
+children now, so the divergence and its discipline-clause cover no longer matter as a hook concern.
 
 ### `delegation-gate.ts` — opt-in, measured to work
 
@@ -412,7 +406,7 @@ down to one paragraph plus their profile-specific notes. The shared discipline i
 `skills/custom-policy/SKILL.md` it measured **28,059 B** after the 0.20 changes, under the
 30,720 B ceiling the cost rule applies to a loaded skill plus its references. Measure with
 `wc -c` before adding clauses. **`references/subagent-discipline.md` was deleted in 0.18.0-dev** —
-SubagentStart ships no discipline fragment, so the 「サブエージェントは〜」 clauses (a contiguous
+no hook ships a discipline fragment to children (SubagentStart itself was removed in 0.21.2-dev), so the 「サブエージェントは〜」 clauses (a contiguous
 block in §サブエージェントの規律) reach children only by transcription into the request text, plus
 the generated definitions' own `_common.md` body. Under `none`/unset that leaves `_common.md` as the
 sole path — an **intentional** degradation, not a regression.

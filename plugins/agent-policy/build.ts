@@ -5,8 +5,7 @@ await esbuild.build({
   entryPoints: {
     "delegation-gate": "./src/hooks/delegation-gate.ts",
     "session-start": "./src/hooks/session-start.ts",
-    "setup-agents": "./src/setup-agents.ts",
-    "subagent-start": "./src/hooks/subagent-start.ts"
+    "setup-agents": "./src/setup-agents.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
