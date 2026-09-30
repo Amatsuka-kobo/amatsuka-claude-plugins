@@ -102,7 +102,7 @@ codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を
 
 1. `baseRef` を `git rev-parse --verify --end-of-options <baseRef>^{commit}` でコミットに解決する。`-` で始まる値は入力の誤りである。
 2. 比べる終点は常に HEAD で、任意の終点は受けない。pass-gate が HEAD の一致を見るためである。
-3. `paths`(無ければ作業ツリー全体)に未コミットの変更があれば入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。
+3. `paths`(無ければ作業ツリー全体)に未コミットの変更があれば入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。設定 `subject.ignoreUncommitted`(glob の列、既定は空)に当たるパスの変更は数えない。会話記録を `docs/chat/` に追記するプラグインのように、run と関係の無いファイルを同じ作業ツリーで書き続ける仕組みがあると、code 系のゲートのたびに入力の誤りになるためである。当たるパスの変更は未コミットのまま評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。宣言した glob は応答の `policy.ignoreUncommitted` と list_rules に毎回出る。固定部が空の glob は宣言できず、ソースのパスは宣言しない(§14.3)。
 4. `core.quotePath=false` などを固定した書式で `git diff` を実行する。差分が 20 MB を超えたら入力の誤りにする。
 5. 差分が空、または差分のファイルがすべて E2E のレポートか生成物(§5.3)なら、Jev・重さ判定・パネルを通さずに PROCEED・trivial とし、`code/no-change`(info)を残す。変更の無いフェーズ(修正の要らない test-loop など)がこれに当たる。差分が空でないときは、レポートと生成物に `common/secrets` を当て、stop が出れば STOP にする。記録は通常どおり書くので pass-gate はそのまま照合できる。前フェーズの改竄の検証(§3 の [3])は変更なしでも行い、改竄があれば `casefile/tampered` の STOP にする。
 
@@ -434,6 +434,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
       "thresholds": { "lower": 0.5, "raise": 0.7 }
     },
     "precedent": { "seedCatalog": true, "topN": 5 },
+    "subject": { "ignoreUncommitted": [] },
     "rules": {
       "<ruleId>": { "enabled": true, "severity": "<info | ask | stop>", "<パラメータ>": "<値>" }
     }
@@ -445,7 +446,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 
 - すべてのオブジェクトは厳格で、未知のキー・ルール ID・パラメータ・未知の `version` は読み込みエラーにする。厳しくするつもりの設定が黙って効かない事態を防ぐためである。
 - マージは、オブジェクトは再帰、配列は置換とする。例外は、ルールの `params` のスキーマが「和集合」と宣言した配列(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)で、既定値との和集合にする。
-- sealed ルールの無効化・severity の引き下げ、stop にできないルールの `severity: stop`、不正な正規表現や広すぎる `allowPatterns`(空文字列に一致する、内蔵の見本の秘密情報に一致する)、`excludeDefaults` の既定に無い文字列、固定部が空の `generated` は読み込みエラーにする。`allowPatterns` は行ではなくトークンに当てる。
+- sealed ルールの無効化・severity の引き下げ、stop にできないルールの `severity: stop`、不正な正規表現や広すぎる `allowPatterns`(空文字列に一致する、内蔵の見本の秘密情報に一致する)、`excludeDefaults` の既定に無い文字列、固定部が空の `generated` と、固定部が空の `subject.ignoreUncommitted`(作業ツリー全体を未コミットの検査から外す宣言を防ぐ)は読み込みエラーにする。`subject.ignoreUncommitted` にソースのパスを宣言すると、未コミットのコードの変更が評価に入らないままテストの結果に効く。宣言は毎回応答に出て、run の間は guard が `.codiel/config.json` への書き込みを拒む。README には、run と関係の無いファイルの置き場だけを書くと記す。`allowPatterns` は行ではなくトークンに当てる。
 - `judge.deadlineMs` が 1800000 を超える、`judge.timeoutMs` と `contextJudge.timeoutMs` が `judge.deadlineMs` を超える、`contextJudge.thresholds` の `lower` が `raise` 以上か 0〜1 の外、`resubmission-loop.similarityThreshold` が 0.95 を超える、も読み込みエラーである。
 - `perPanelist` のキーは adversarial・steelman・crosscheck・meta だけで、`perPanelist.<名前>.provider` に `none` は置けない。`judge.provider` と `perPanelist.<名前>.provider` は `claude`・`codex`・`none` だけを受ける。
 

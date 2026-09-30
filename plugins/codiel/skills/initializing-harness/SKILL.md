@@ -81,6 +81,7 @@ JSON はコメントを持てないので、マージの規則と、書くキー
 - `storage.projectId`: ケースファイルと判例を束ねるキーである。既定は git の共通ディレクトリから作る値で、どの worktree からでも同じになる。リポジトリを移したあとも履歴を引き継ぎたいときなど、名前を固定したいときだけ文字列で書く(例: `"storage": { "projectId": "my-service" }`)。
 - `code/protected-paths` の `excludeDefaults`: 和集合を取ったあとに、既定の保護の glob(`.github/**`・`infra/**`・`**/*.env*`)から取り除くものを書く。既定の glob と完全に一致する文字列だけを受け、利用者の `globs` を取り除く手段にはならない。IaC や CI の設定を直すプロジェクトでは、既定のままだと implement のゲートが毎回 STOP になるので、直す対象のパターンだけを名指しして外す(例: `"excludeDefaults": [".github/**"]`)。
 - `code/protected-paths` の `generated`: 生成物の glob を書く。和集合を取らず、既定は空である。生成物をコミットする規約のプロジェクトで、生成物が保護パスや重さの判定に掛からないようにする(例: `"generated": ["dist/**"]`)。秘密情報の検査は生成物にも掛かる。ワイルドカードより前の固定部が空の glob(`**/*`・`*.js`)は読み込みエラーになる。
+- `subject.ignoreUncommitted`: 未コミットの変更を、code 系のゲートの入力の誤りに数えないパスの glob を書く。配列は置換し、既定は空である。使うのは、会話記録の追記など、ほかの仕組みが同じ作業ツリーへ書き続けるプロジェクトである。書くのは、run と関係の無いそのファイルの置き場だけにする(例: `"subject": { "ignoreUncommitted": ["docs/chat/**"] }`)。ソースのパスは書かない。書くと、未コミットのコードの変更が評価に入らないまま残る。ワイルドカードより前の固定部が空の glob(`**/*`・`*.js`)は読み込みエラーになる。
 - `excludeDefaults` と `generated` は保護を緩めるので、聞いた回答に外す理由(IaC・CI を直す、生成物をコミットする)があるときだけ書く。理由を聞き取れなければ書かない。
 - run が active か awaiting_human の間は、config.json への書き込みを codiel の guard が拒む。書き込みは run の外で行う。
 

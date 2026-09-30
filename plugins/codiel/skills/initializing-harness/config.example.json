@@ -6,6 +6,9 @@
     "storage": {
       "projectId": "my-service"
     },
+    "subject": {
+      "ignoreUncommitted": ["docs/chat/**"]
+    },
     "rules": {
       "code/protected-paths": {
         "globs": ["src/server/auth/**"],

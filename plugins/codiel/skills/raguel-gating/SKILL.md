@@ -76,6 +76,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
   run 全体の範囲や、ほかのフェーズの起点へ替えて空の差分を避けない。空の差分は Raguel が PROCEED と
   「変更なし」の info で返す。E2E のレポートだけの差分も、Raguel が変更なしとして扱う。
 - 入力の誤り(`isError`)が返ったら、入力を直して呼び直す。入力の誤りは判定ではなく、評価の記録も残らない。
+- `evaluate_code` が、未コミットの変更を理由に入力の誤りを返したら、未コミットのパスごとに、run の成果物かどうかで扱いを分ける。
+  - このフェーズで変えたファイルなら、コミットしてから呼び直す。
+  - run と関係の無いファイル(会話記録など、ほかの仕組みが書くもの)は、run ブランチへコミットしない。
+    そのパスが `.codiel/config.json` の `raguel.subject.ignoreUncommitted` に宣言済みなら、未コミットの検査から外れているので、宣言に当たらないパスだけを直して呼び直す。
+    宣言されていなければ、`mark-ask` で run を `awaiting_human` にしてから人に知らせ、AskUserQuestion で次のどちらかを聞く。
+    宣言を足す(run の間は guard が `.codiel/config.json` への書き込みを拒むので、足すのは人の手か run の外である)、または人が自分でそのファイルを退避する。
+  - 宣言する glob は、run と関係の無いファイルの置き場だけにする。ソースのパスは宣言しない。
 - test-spec と dev-plan は並列実行されるフェーズだが、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
 - 同一 runId で呼び続けるからこそ `common/resubmission-loop`(暴走的な再提出の検知)が効く。
