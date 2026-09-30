@@ -26,11 +26,11 @@ const RETIRED = [
   "grok-implementer"
 ]
 
-const RETIRED_ROLES: ReadonlyMap<string, string> = new Map([
-  ["design-plan", "削除"],
-  ["final-review", "complex-review"],
-  ["gate-review", "complex-review"],
-  ["advisor", "削除"]
+const RETIRED_ROLES: ReadonlySet<string> = new Set([
+  "design-plan",
+  "final-review",
+  "gate-review",
+  "advisor"
 ])
 
 const DEPRECATED_ALIAS_VARIABLES = [

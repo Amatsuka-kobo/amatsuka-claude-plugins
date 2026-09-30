@@ -375,11 +375,11 @@ var RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ];
-var RETIRED_ROLES = /* @__PURE__ */ new Map([
-  ["design-plan", "\u524A\u9664"],
-  ["final-review", "complex-review"],
-  ["gate-review", "complex-review"],
-  ["advisor", "\u524A\u9664"]
+var RETIRED_ROLES = /* @__PURE__ */ new Set([
+  "design-plan",
+  "final-review",
+  "gate-review",
+  "advisor"
 ]);
 var DEPRECATED_ALIAS_VARIABLES = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
