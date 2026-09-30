@@ -232,7 +232,7 @@ export function markerTable(
   if (byRole.size === 0) return undefined
 
   const lines = [
-    "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。",
+    "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは、共通規律の §同じ役割の候補から選ぶ に従う。",
     SCOPE_LINES[scope]
   ]
   for (const role of sortRoleIds([...byRole.keys()])) {

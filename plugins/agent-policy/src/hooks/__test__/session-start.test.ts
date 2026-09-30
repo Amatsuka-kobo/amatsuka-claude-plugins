@@ -20,7 +20,7 @@ const RUN_TS = fileURLToPath(
 const TSX_IMPORT = createRequire(import.meta.url).resolve("tsx")
 const LEGACY_INJECTIONS = ["with-codex", "with-grok", "with-codex-grok"]
 const TABLE_INTRO =
-  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
+  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは、共通規律の §同じ役割の候補から選ぶ に従う。"
 const CLAUDE_SCOPE = "それ以外の定義は委譲先にしない"
 const WITH_EXTERNAL_SCOPE =
   "外部ベンダーのモデルを指定した定義も含めて選んでよい"
