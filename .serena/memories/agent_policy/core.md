@@ -378,8 +378,15 @@ bake it into the helpers, or the new default becomes untestable.
   `recommendedRolesFor` was deleted. Since 2026-10-01 MCP is granted to all roles by default: the
   wizard splits commands by kind and server set — impl gets `--mcp-servers` only, readonly gets
   `--mcp-servers` plus `--mcp-deny` (merge never keeps `disallowedTools`, so pass it every time).
-  Newly generated roles (`exists: false`) are never bulk-generated with `--recommended`; the wizard
-  asks model / name / MCP per role and uses the individual command.
+  New vs regenerate is decided by coverage (`coveredBy`), not by whether the default-named file
+  exists. New roles are never bulk-generated; the wizard asks model / name / MCP per role and uses
+  the individual command. Regeneration is per covering definition via the individual command
+  (`--model-id <modelId> --name <file> --model <def model> --roles <def roles>`), not
+  `--recommended`. `--recommended` itself (used by `--yes`) targets the single covering definition
+  in scope (file name, model, vendor — absent vendor becomes `none` —, roles), once per file; roles
+  with 2+ covering definitions, definitions whose model maps to no model id, unknown vendors, and
+  (live ok) models missing from live are skipped with warnings. `definitions[].modelId` is the
+  reverse lookup of `model` through `MODELS`.
 - **Existing-definition inspection (2026-10-01, design
   `2026-10-01-agent-policy-setup-agents-existing-definitions-design.md`)**: `--list-coverage` adds
   `roles[].kind` and `definitions[]` (`name, file, model, vendor, roles, retiredRoles[{id,
