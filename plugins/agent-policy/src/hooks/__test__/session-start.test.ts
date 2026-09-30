@@ -222,7 +222,9 @@ describe("方針の注入", () => {
     place("claude-agent", ["model: sonnet", "agent-policy-role: complex-impl"])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
 
-    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain(
+      "最初に agent-policy:claude-model-policy スキルを使用する。スキルの規律に従う。"
+    )
     expect(output).toContain(TABLE_INTRO)
     expect(output).toContain("claude-agent")
     expect(output).toContain("複雑または重要な実装")
@@ -339,7 +341,7 @@ describe("方針の注入", () => {
 
     expect(output).toContain("bogus")
     expect(output).toContain("未知")
-    expect(output).not.toContain("スキルを使用し")
+    expect(output).not.toContain("スキルを使用する")
     expect(output).not.toContain("hidden")
   })
 

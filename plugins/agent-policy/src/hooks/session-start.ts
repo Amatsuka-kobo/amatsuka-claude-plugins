@@ -29,7 +29,7 @@ const REPAIR_BLOCK =
   "修復するには、agent-policy:setup-agents を再実行するか、定義の `model` を修正するか、プロキシを起動してからセッションを再起動する。"
 
 function policyBlock(policy: PolicyName, legacyValue?: string): string {
-  const instruction = `最初に必ず agent-policy:${policy} スキルを使用し、この規律に従う`
+  const instruction = `最初に agent-policy:${policy} スキルを使用する。スキルの規律に従う。`
   if (legacyValue === undefined) return instruction
   return `${instruction}\n旧互換値 \`${legacyValue}\` を使用している。\`AMATSUKA_AGENT_AUTO_INJECTION\` を \`custom\` へ変更する。`
 }
