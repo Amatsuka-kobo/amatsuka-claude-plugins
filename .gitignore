@@ -27,3 +27,5 @@ cliproxyapi.config.yaml
 private/
 *.local.*
 !CLAUDE.local.example.md
+# 会話記録(ローカルのみ)
+docs/chat/
