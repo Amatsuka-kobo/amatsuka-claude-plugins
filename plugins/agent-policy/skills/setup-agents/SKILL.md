@@ -85,9 +85,15 @@ disallowed-tools: Write
 
    `--scope claude` では Claude の役割モデルを使い、live models の照会は生成時に行わない。
 
-   その構成で役割を被覆する既存定義がちょうど 1 件あれば、CLI はその定義を作成先にして再生成する。被覆する定義が 2 件以上ある役割と、`model` からモデル ID を引けない定義は生成せず、`warnings` に載る。
+   その構成で役割を被覆する既存定義がちょうど 1 件あれば、CLI はその定義を作成先にして再生成する。被覆する定義が 2 件以上ある役割と、`model` からモデル ID を引けない定義は生成せず、`warnings` に載る。`--replace` は渡さず、既存の description と前置きはすべて保持する。
 
-5. 結果を報告する。MCP は明示的な選択なしに付与しない。手順 3 と 4 について次を並べ、対話モードでの再実行を案内する。
+5. 結果を報告する。MCP は明示的な選択なしに付与しない。全文の差分は載せない。手順 4 の `results` から、再生成した定義ごとに次を並べる。
+
+   - `tools` 行の変更前と変更後(`toolsBefore` と `toolsAfter`)
+   - 再生成で外れた MCP サーバー。`mcpCurrent` のサーバーのうち、`toolsAfter` に無いもの
+   - `description` と `preamble` の状態。`templateChanged` の定義には、対話モードで再実行すればテンプレートに置き換えられると案内する。
+
+   手順 3 と 4 について次を並べ、対話モードでの再実行を案内する。
 
    - 外したツールと定義名
    - 変更しなかった定義と、その理由(全ツール継承・未対応の `tools` 書式・廃止済み役割を持つ・操作に失敗・同じ役割を 2 件以上の定義が被覆する・モデル ID を引けない)
@@ -243,11 +249,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 - 新規生成: `coveredBy` が空の役割。作成先は既定名である。
 - 再生成: `coveredBy` にある既存定義。役割ではなく定義を単位にし、複数の役割を持つ定義は 1 回だけ扱う。`coveredBy` の名前は `definitions[].name` と突き合わせ、`file`・`model`・`modelId`・`vendor`・`roles` を引く。
 
-`results` のうち再生成の定義を、`定義 / 役割 / 採用モデル / 既存状態と差分` の表にする。定義は `target`、採用モデルは `modelId` から読み取る。`exists` / `identical` と差分を示す。新規生成の役割は差分が無いので、表に載せない。
+`results` のうち再生成の定義を、`定義 / 役割 / 採用モデル / 既存状態と差分 / description / 前置き` の表にする。定義は `target`、採用モデルは `modelId`、description と前置きの列は `description` と `preamble` の状態から読み取る。`exists` / `identical` と差分を示す。新規生成の役割は差分が無いので、表に載せない。
 
 次の再生成の定義は `results` に現れず、`warnings` に載る。定義ごとに扱いを決める。
 
-- 1 つの役割を 2 件以上の定義が被覆する: どの定義を再生成するか、または再生成しないかを `AskUserQuestion` で聞く。選択肢は被覆する定義と「再生成しない」とする。
+- 1 つの役割を 2 件以上の定義が被覆する: どの定義を再生成するか、または再生成しないかを `AskUserQuestion` で聞く。選択肢は被覆する定義と「再生成しない」とする。候補の定義の表(名前・`model`・`roles`)を質問の中に入れる。
 - `modelId` が `null`: ステップ 5b でモデル ID を聞いてから再生成する。
 - `--scope custom` で live 照会が成功し、`model` が live に無い: 再生成せず、ステップ 7 で報告する。
 
@@ -331,6 +337,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 一部調整を選んだ場合は、調整する定義を候補数の共通規則に従って選ばせ、選んだ定義をステップ 5b の対象にする。
 
+「中止する」以外が選ばれたら、再生成する定義ごとに description と前置きの扱いを状態で決める。決めた置き換えは、ステップ 6 の `--replace` に渡す。
+
+- `same`: 質問しない。
+- `templateChanged`: 「テンプレートに置き換える(推奨)」「保持する」の 2 択で聞く。
+- `unknown`: 既存とテンプレートの両方を選択肢の preview に示し、「保持する」「テンプレートに置き換える」の 2 択で聞く。推奨は付けない。description の両方の値は `frontmatter.changed` の `description` から、前置きの両方の本文は `preambleTexts` から読み取る。
+- `userEdited`: 質問せずに保持し、ステップ 7 で報告する。
+
 ### ステップ 5b: 再生成の定義の個別調整
 
 ステップ 5 で調整を選んだ定義と、`modelId` が `null` の定義が 0 件なら、このステップを飛ばす。
@@ -364,10 +377,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 定義ごとに次の個別コマンドで保持マージ生成する。`--recommended` は使わない。複数の役割を持つ定義も 1 回だけ実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --scope <claude|custom> --lang <lang> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] [--replace <description,preamble>] --scope <claude|custom> --lang <lang> --dir "$PWD"
 ```
 
 - `--model-id` には、定義の `modelId` か、ステップ 5b で決めたモデル ID を渡す。
+- `--replace` には、ステップ 5 でテンプレートに置き換えると決めたもの(`description` / `preamble`)だけを渡す。渡さなかったものは、`same` 以外なら既存のまま保持される。
 - `--model` には、定義の `model` を渡す。ステップ 5b でモデル ID を選んだ定義では、定義の元の値ではなく、選んだモデル ID の既定の model 値(ステップ 1 の対応)を渡す。
 - `--name` には、`file` のファイル名から `.md` を除いた値を渡す。
 - `--vendor` には、ステップ 5b でベンダーを確定したときはその値を渡す。確定していないときは、定義の `vendor` があればその値を、無ければ `none` を渡す。
@@ -397,6 +411,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
   - マーカー行を消した定義。ファイルの絶対パスを示し、削除するかは利用者に委ねる
   - `ok: false` になった操作の定義名と `error`
   - 操作の応答にあった `warnings`
+- 保持した description と前置き。`userEdited` で質問せずに保持したものは、そのことを書く。
 - ステップ 4 と 5b で再生成しなかった定義と、その理由(再生成しないと選ばれた・`model` が live に無い)
 - ステップ 6b で「作らない」と決めた役割があれば、その一覧と、次に setup-agents を実行したときに再び尋ねられること
 - 各定義の `action`、`kept`、`discarded`、`keptNeedsReview`

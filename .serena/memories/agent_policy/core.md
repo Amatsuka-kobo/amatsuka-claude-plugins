@@ -387,6 +387,14 @@ bake it into the helpers, or the new default becomes untestable.
   with 2+ covering definitions, definitions whose model maps to no model id, unknown vendors, and
   (live ok) models missing from live are skipped with warnings. `definitions[].modelId` is the
   reverse lookup of `model` through `MODELS`.
+- **description / preamble retention (design 3-5d)**: `compose` writes
+  `agent-policy-description-hash` / `agent-policy-preamble-hash` (`textHash`, 16 hex; preamble =
+  body before the first `## `). `--check` / `--write` results carry `description` / `preamble`
+  states `same | templateChanged | userEdited | unknown` (null for a new file) and `preambleTexts`;
+  `--write` also returns `toolsBefore` / `toolsAfter`. `--merge` keeps non-`same` values (and their
+  existing record, or no record) unless `--replace description,preamble`; `--replace` needs `--merge`
+  and is rejected with `--recommended`. The record keys are excluded from `frontmatter.changed`
+  and were added to the composition allow-list in `orchestration-discipline.md` (priority row 3).
 - **Existing-definition inspection (2026-10-01, design
   `2026-10-01-agent-policy-setup-agents-existing-definitions-design.md`)**: `--list-coverage` adds
   `roles[].kind` and `definitions[]` (`name, file, model, vendor, roles, retiredRoles[{id,
