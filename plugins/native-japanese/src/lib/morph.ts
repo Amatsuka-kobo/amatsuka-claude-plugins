@@ -58,11 +58,13 @@ const RULES = {
   },
   "bun-nagasa": {
     category: "文",
-    advice: "節の切れ目で文を分ける。分けた後も主語と必要な事実を残す"
+    advice:
+      "述語を含む修飾語の切れ目で文を分ける。分けた後も主語と必要な事実を残す"
   },
   "rentai-kasanari": {
     category: "文",
-    advice: "修飾の節を 1 つ残し、残りは前の文に出す。時系列か因果の順に並べる"
+    advice:
+      "述語を含む修飾語を 1 つ残し、残りは前の文に出す。時系列か因果の順に並べる"
   }
 } as const
 type RuleId = keyof typeof RULES

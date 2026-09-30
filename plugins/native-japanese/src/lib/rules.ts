@@ -89,6 +89,51 @@ function avoidRules(discipline: string): Rule[] {
   return rules
 }
 
+function literalRules(discipline: string): Rule[] {
+  const lines = discipline.split("\n")
+  const headerIndex = lines.findIndex((line) => {
+    if (!line.startsWith("|")) return false
+    return line
+      .split("|")
+      .map((cell) => cell.trim())
+      .includes("避ける訳")
+  })
+  if (headerIndex === -1) return []
+  const header = (lines[headerIndex] ?? "")
+    .split("|")
+    .map((cell) => cell.trim())
+  const avoidIndex = header.indexOf("避ける訳")
+  const useIndex = header.indexOf("使う訳")
+  if (avoidIndex === -1 || useIndex === -1) return []
+
+  const rules: Rule[] = []
+  for (const line of lines.slice(headerIndex + 1)) {
+    if (!line.startsWith("|")) break
+    const cells = line.split("|").map((cell) => cell.trim())
+    const used = cells[useIndex] ?? ""
+    for (const word of (cells[avoidIndex] ?? "")
+      .split(/[・、]/)
+      .map((cell) => cell.trim())) {
+      if (!/^[゠-ヿ\p{sc=Han}]+$/u.test(word)) continue
+      rules.push({
+        id: `literal:${word}`,
+        category: "直訳語",
+        // 「2 段目」のように、助数表現として続く「目」を許す。
+        pattern: new RegExp(
+          `(?<!${KATAKANA_OR_KANJI})${word}(?=目|(?!${KATAKANA_OR_KANJI}))`,
+          "u"
+        ),
+        advice: `「使う訳」の列の「${used}」を参考に、文脈に合う語で書く`
+      })
+    }
+  }
+  return rules
+}
+
 export function buildRules(discipline: string): Rule[] {
-  return [...avoidRules(discipline), ...TRANSLATION]
+  return [
+    ...avoidRules(discipline),
+    ...literalRules(discipline),
+    ...TRANSLATION
+  ]
 }

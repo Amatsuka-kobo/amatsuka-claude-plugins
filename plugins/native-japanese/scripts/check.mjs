@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // src/check.ts
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs2 from "node:fs";
 import os from "node:os";
 import path3 from "node:path";
@@ -368,11 +368,11 @@ var RULES = {
   },
   "bun-nagasa": {
     category: "\u6587",
-    advice: "\u7BC0\u306E\u5207\u308C\u76EE\u3067\u6587\u3092\u5206\u3051\u308B\u3002\u5206\u3051\u305F\u5F8C\u3082\u4E3B\u8A9E\u3068\u5FC5\u8981\u306A\u4E8B\u5B9F\u3092\u6B8B\u3059"
+    advice: "\u8FF0\u8A9E\u3092\u542B\u3080\u4FEE\u98FE\u8A9E\u306E\u5207\u308C\u76EE\u3067\u6587\u3092\u5206\u3051\u308B\u3002\u5206\u3051\u305F\u5F8C\u3082\u4E3B\u8A9E\u3068\u5FC5\u8981\u306A\u4E8B\u5B9F\u3092\u6B8B\u3059"
   },
   "rentai-kasanari": {
     category: "\u6587",
-    advice: "\u4FEE\u98FE\u306E\u7BC0\u3092 1 \u3064\u6B8B\u3057\u3001\u6B8B\u308A\u306F\u524D\u306E\u6587\u306B\u51FA\u3059\u3002\u6642\u7CFB\u5217\u304B\u56E0\u679C\u306E\u9806\u306B\u4E26\u3079\u308B"
+    advice: "\u8FF0\u8A9E\u3092\u542B\u3080\u4FEE\u98FE\u8A9E\u3092 1 \u3064\u6B8B\u3057\u3001\u6B8B\u308A\u306F\u524D\u306E\u6587\u306B\u51FA\u3059\u3002\u6642\u7CFB\u5217\u304B\u56E0\u679C\u306E\u9806\u306B\u4E26\u3079\u308B"
   }
 };
 function toToken(raw) {
@@ -713,8 +713,44 @@ function avoidRules(discipline) {
   }
   return rules;
 }
+function literalRules(discipline) {
+  const lines = discipline.split("\n");
+  const headerIndex = lines.findIndex((line) => {
+    if (!line.startsWith("|")) return false;
+    return line.split("|").map((cell) => cell.trim()).includes("\u907F\u3051\u308B\u8A33");
+  });
+  if (headerIndex === -1) return [];
+  const header = (lines[headerIndex] ?? "").split("|").map((cell) => cell.trim());
+  const avoidIndex = header.indexOf("\u907F\u3051\u308B\u8A33");
+  const useIndex = header.indexOf("\u4F7F\u3046\u8A33");
+  if (avoidIndex === -1 || useIndex === -1) return [];
+  const rules = [];
+  for (const line of lines.slice(headerIndex + 1)) {
+    if (!line.startsWith("|")) break;
+    const cells = line.split("|").map((cell) => cell.trim());
+    const used = cells[useIndex] ?? "";
+    for (const word of (cells[avoidIndex] ?? "").split(/[・、]/).map((cell) => cell.trim())) {
+      if (!/^[゠-ヿ\p{sc=Han}]+$/u.test(word)) continue;
+      rules.push({
+        id: `literal:${word}`,
+        category: "\u76F4\u8A33\u8A9E",
+        // 「2 段目」のように、助数表現として続く「目」を許す。
+        pattern: new RegExp(
+          `(?<!${KATAKANA_OR_KANJI})${word}(?=\u76EE|(?!${KATAKANA_OR_KANJI}))`,
+          "u"
+        ),
+        advice: `\u300C\u4F7F\u3046\u8A33\u300D\u306E\u5217\u306E\u300C${used}\u300D\u3092\u53C2\u8003\u306B\u3001\u6587\u8108\u306B\u5408\u3046\u8A9E\u3067\u66F8\u304F`
+      });
+    }
+  }
+  return rules;
+}
 function buildRules(discipline) {
-  return [...avoidRules(discipline), ...TRANSLATION];
+  return [
+    ...avoidRules(discipline),
+    ...literalRules(discipline),
+    ...TRANSLATION
+  ];
 }
 
 // src/morph-runtime.ts
@@ -836,15 +872,18 @@ function main() {
   }
   found.push(...morphFound);
   if (found.length === 0) return;
-  const fresh = unrecorded(hook?.session_id, file, found);
+  const fresh = unrecorded(hook?.session_id, file, found, bodies.join(""));
   if (fresh.length === 0) return;
-  fresh.sort((a, b) => a.line - b.line);
+  fresh.sort(
+    (a, b) => Number(a.category === "\u6587") - Number(b.category === "\u6587") || a.line - b.line
+  );
   const listed = fresh.slice(0, MAX_LISTED).map((v) => `- L${v.line}: \u300C${v.match}\u300D(${v.category})\u2192 ${v.advice}`);
   if (fresh.length > MAX_LISTED)
     listed.push(`- \u307B\u304B ${fresh.length - MAX_LISTED} \u4EF6`);
   const reason = [
     `[native-japanese] ${file} \u306B\u66F8\u3044\u305F\u65E5\u672C\u8A9E\u306B\u3001\u66F8\u304D\u65B9\u306E\u898F\u5F8B\u306E\u9055\u53CD\u304C ${fresh.length} \u4EF6\u3042\u308B\u3002\u8A72\u5F53\u7B87\u6240\u3092\u66F8\u304D\u76F4\u3059\u3002`,
     ...listed,
+    "\u5217\u6319\u3057\u305F\u7B87\u6240\u306E\u307B\u304B\u306B\u3082\u3001\u7DE8\u96C6\u3057\u305F\u7BC4\u56F2\u306B\u82F1\u8A9E\u3092\u76F4\u8A33\u3057\u305F\u8A9E(\u898F\u5F8B\u306E\u8868\u306B\u7121\u3044\u8A9E\u3092\u542B\u3080)\u304C\u7121\u3044\u304B\u8AAD\u307F\u76F4\u3057\u3001\u3042\u308C\u3070\u76F4\u3059\u3002",
     "\u5F15\u7528\u30FB\u56FA\u6709\u540D\u8A5E\u30FB\u8B58\u5225\u5B50\u30FB\u30B3\u30FC\u30C9\u4F8B\u3068\u3057\u3066\u610F\u56F3\u3057\u3066\u66F8\u3044\u305F\u7B87\u6240\u3068\u3001\u691C\u67FB\u306E\u8AA4\u308A\u3068\u5224\u65AD\u3057\u305F\u7B87\u6240\u306F\u3001\u76F4\u3055\u305A\u306B\u6B8B\u3057\u3066\u3088\u3044\u3002\u76F4\u3059\u3068\u304D\u306F\u3001\u5426\u5B9A\u30FB\u6761\u4EF6\u30FB\u78BA\u4FE1\u5EA6\u3092\u5143\u306E\u6587\u306E\u307E\u307E\u4FDD\u3064\u3002"
   ].join("\n");
   process.stdout.write(`${JSON.stringify({ decision: "block", reason })}
@@ -859,8 +898,9 @@ function cellTypeOf(file, cellId) {
     return "code";
   }
 }
-function unrecorded(sessionId, file, found) {
-  const key = (v) => JSON.stringify([file, v.ruleId, v.match]);
+function unrecorded(sessionId, file, found, body) {
+  const bodyHash = createHash("sha1").update(body).digest("hex");
+  const key = (v) => JSON.stringify([file, v.ruleId, v.match, bodyHash]);
   if (typeof sessionId !== "string" || !/^[\w.-]+$/.test(sessionId))
     return found;
   const dir = path3.join(os.tmpdir(), "native-japanese");

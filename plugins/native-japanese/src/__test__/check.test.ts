@@ -99,6 +99,13 @@ const fakeDataDir = () => {
 
 const RECORD = () => path.join(tmp, "native-japanese", "s1.json")
 
+test("直訳語を含む Markdown の Write を差し戻す", () => {
+  const text = "# 見出し\n\n新しい版で直す。\n"
+  const p = write("a.md", text)
+  const reason = block(run(writeInput(p, text)))
+  expect(reason).toMatch(/「版」\(直訳語\)→/)
+})
+
 test("Write の違反を block で差し戻し、差し戻し文に行・該当部分・分類・advice を載せる", () => {
   const text = "# 見出し\n\nこの設定で作業時間を短縮することができる。\n"
   const p = write("a.md", text)
@@ -107,6 +114,9 @@ test("Write の違反を block で差し戻し、差し戻し文に行・該当�
     `[native-japanese] ${p} に書いた日本語に、書き方の規律の違反が 1 件ある。該当箇所を書き直す。`
   )
   expect(reason).toMatch(/^- L3: 「ことができ」\(翻訳調\)→ .+$/m)
+  expect(reason).toContain(
+    "列挙した箇所のほかにも、編集した範囲に英語を直訳した語(規律の表に無い語を含む)が無いか読み直し、あれば直す。"
+  )
   expect(reason).toContain(
     "引用・固有名詞・識別子・コード例として意図して書いた箇所と、検査の誤りと判断した箇所は、直さずに残してよい。直すときは、否定・条件・確信度を元の文のまま保つ。"
   )
@@ -305,12 +315,14 @@ test("同じ違反を 2 回目は差し戻さず、新しい違反だけを差�
   const p = write("a.md", first)
   expect(block(run(writeInput(p, first)))).toContain("することができ")
   expect(run(writeInput(p, first))).toBe("")
-  const second = `${first}これは変化に他ならない。\n`
+
+  const second = `${first}補足を追加した。\n`
   write("a.md", second)
   const reason = block(run(writeInput(p, second)))
   expect(reason).toContain("違反が 1 件ある")
-  expect(reason).toContain("に他ならない")
-  expect(reason).not.toContain("することができ")
+  expect(reason).toContain("することができ")
+  expect(run(writeInput(p, second))).toBe("")
+
   // 別のセッションでは記録が効かない
   expect(block(run(writeInput(p, first, "s2")))).toContain("することができ")
 })
@@ -390,6 +402,17 @@ test("CLAUDE_PLUGIN_DATA が無いか空のディレクトリでも、正規表�
   expect(
     block(run(writeInput(p, text, "n2"), { CLAUDE_PLUGIN_DATA: empty }))
   ).toContain("することができ")
+})
+
+test("語の違反を文の違反より先に並べる", () => {
+  const text = `${LONG}\n\n新しい版で進む。\n`
+  const p = write("a.md", text)
+  const reason = block(
+    run(writeInput(p, text), { CLAUDE_PLUGIN_DATA: fakeDataDir() })
+  )
+  const listed = reason.match(/^- L\d+:.*$/gm) ?? []
+  expect(listed[0]).toContain("「版」(直訳語)")
+  expect(listed[1]).toContain("(文)→")
 })
 
 test("形態素解析の違反を、文の先頭 20 字で差し戻す", () => {

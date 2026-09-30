@@ -44,7 +44,36 @@ function hitIds(rules: Rule[], text: string): string[] {
 }
 
 const rules = buildRules(DISCIPLINE)
-const avoidRules = rules.filter((r) => !TRANSLATION_IDS.includes(r.id))
+const avoidRules = rules.filter((r) => r.id.startsWith("avoid:"))
+const literalRules = rules.filter((r) => r.id.startsWith("literal:"))
+
+describe("直訳語", () => {
+  test("実物の規律の表から漢字・カタカナの語だけを規則にする", () => {
+    const ids = literalRules.map((rule) => rule.id)
+    for (const id of [
+      "literal:版",
+      "literal:緑",
+      "literal:赤",
+      "literal:凍結文書",
+      "literal:段"
+    ])
+      expect(ids).toContain(id)
+    expect(ids).not.toContain("literal:用途を無視した一語")
+  })
+
+  test.each([
+    ["literal:版", "新しい版で"],
+    ["literal:段", "2 段目"],
+    ["literal:緑", "テストが緑になる"]
+  ])("%s が「%s」に当たる", (id, text) => {
+    expect(hitIds(literalRules, text)).toContain(id)
+  })
+
+  test("漢字が隣接する複合語の一部には当たらない", () => {
+    for (const text of ["確定版", "出版", "段階", "手段", "凍結文書群"])
+      expect(hitIds(literalRules, text), text).toEqual([])
+  })
+})
 
 describe("避ける語", () => {
   const table = avoidTable()

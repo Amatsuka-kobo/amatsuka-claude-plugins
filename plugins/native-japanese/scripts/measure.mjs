@@ -368,11 +368,11 @@ var RULES = {
   },
   "bun-nagasa": {
     category: "\u6587",
-    advice: "\u7BC0\u306E\u5207\u308C\u76EE\u3067\u6587\u3092\u5206\u3051\u308B\u3002\u5206\u3051\u305F\u5F8C\u3082\u4E3B\u8A9E\u3068\u5FC5\u8981\u306A\u4E8B\u5B9F\u3092\u6B8B\u3059"
+    advice: "\u8FF0\u8A9E\u3092\u542B\u3080\u4FEE\u98FE\u8A9E\u306E\u5207\u308C\u76EE\u3067\u6587\u3092\u5206\u3051\u308B\u3002\u5206\u3051\u305F\u5F8C\u3082\u4E3B\u8A9E\u3068\u5FC5\u8981\u306A\u4E8B\u5B9F\u3092\u6B8B\u3059"
   },
   "rentai-kasanari": {
     category: "\u6587",
-    advice: "\u4FEE\u98FE\u306E\u7BC0\u3092 1 \u3064\u6B8B\u3057\u3001\u6B8B\u308A\u306F\u524D\u306E\u6587\u306B\u51FA\u3059\u3002\u6642\u7CFB\u5217\u304B\u56E0\u679C\u306E\u9806\u306B\u4E26\u3079\u308B"
+    advice: "\u8FF0\u8A9E\u3092\u542B\u3080\u4FEE\u98FE\u8A9E\u3092 1 \u3064\u6B8B\u3057\u3001\u6B8B\u308A\u306F\u524D\u306E\u6587\u306B\u51FA\u3059\u3002\u6642\u7CFB\u5217\u304B\u56E0\u679C\u306E\u9806\u306B\u4E26\u3079\u308B"
   }
 };
 function toToken(raw) {
@@ -712,8 +712,44 @@ function avoidRules(discipline) {
   }
   return rules2;
 }
+function literalRules(discipline) {
+  const lines = discipline.split("\n");
+  const headerIndex = lines.findIndex((line) => {
+    if (!line.startsWith("|")) return false;
+    return line.split("|").map((cell) => cell.trim()).includes("\u907F\u3051\u308B\u8A33");
+  });
+  if (headerIndex === -1) return [];
+  const header = (lines[headerIndex] ?? "").split("|").map((cell) => cell.trim());
+  const avoidIndex = header.indexOf("\u907F\u3051\u308B\u8A33");
+  const useIndex = header.indexOf("\u4F7F\u3046\u8A33");
+  if (avoidIndex === -1 || useIndex === -1) return [];
+  const rules2 = [];
+  for (const line of lines.slice(headerIndex + 1)) {
+    if (!line.startsWith("|")) break;
+    const cells = line.split("|").map((cell) => cell.trim());
+    const used = cells[useIndex] ?? "";
+    for (const word of (cells[avoidIndex] ?? "").split(/[・、]/).map((cell) => cell.trim())) {
+      if (!/^[゠-ヿ\p{sc=Han}]+$/u.test(word)) continue;
+      rules2.push({
+        id: `literal:${word}`,
+        category: "\u76F4\u8A33\u8A9E",
+        // 「2 段目」のように、助数表現として続く「目」を許す。
+        pattern: new RegExp(
+          `(?<!${KATAKANA_OR_KANJI})${word}(?=\u76EE|(?!${KATAKANA_OR_KANJI}))`,
+          "u"
+        ),
+        advice: `\u300C\u4F7F\u3046\u8A33\u300D\u306E\u5217\u306E\u300C${used}\u300D\u3092\u53C2\u8003\u306B\u3001\u6587\u8108\u306B\u5408\u3046\u8A9E\u3067\u66F8\u304F`
+      });
+    }
+  }
+  return rules2;
+}
 function buildRules(discipline) {
-  return [...avoidRules(discipline), ...TRANSLATION];
+  return [
+    ...avoidRules(discipline),
+    ...literalRules(discipline),
+    ...TRANSLATION
+  ];
 }
 
 // src/morph-runtime.ts

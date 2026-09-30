@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // PostToolUse で、書き込んだ日本語を規律の規則で検査し、違反を {"decision":"block"} で差し戻す。
-// 同じ違反(パス・規則 id・match の組)は 1 セッションで 1 回だけ差し戻す。
+// 同じ違反(パス・規則 id・match)は、同じ本文なら 1 セッションに 1 回だけ差し戻す。
 // どの失敗でも何も書かず exit 0 で終える。
 
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -118,9 +118,13 @@ function main(): void {
   found.push(...morphFound)
   if (found.length === 0) return
 
-  const fresh = unrecorded(hook?.session_id, file, found)
+  const fresh = unrecorded(hook?.session_id, file, found, bodies.join(""))
   if (fresh.length === 0) return
-  fresh.sort((a, b) => a.line - b.line)
+  fresh.sort(
+    (a, b) =>
+      Number(a.category === "文") - Number(b.category === "文") ||
+      a.line - b.line
+  )
   const listed = fresh
     .slice(0, MAX_LISTED)
     .map((v) => `- L${v.line}: 「${v.match}」(${v.category})→ ${v.advice}`)
@@ -129,6 +133,7 @@ function main(): void {
   const reason = [
     `[native-japanese] ${file} に書いた日本語に、書き方の規律の違反が ${fresh.length} 件ある。該当箇所を書き直す。`,
     ...listed,
+    "列挙した箇所のほかにも、編集した範囲に英語を直訳した語(規律の表に無い語を含む)が無いか読み直し、あれば直す。",
     "引用・固有名詞・識別子・コード例として意図して書いた箇所と、検査の誤りと判断した箇所は、直さずに残してよい。直すときは、否定・条件・確信度を元の文のまま保つ。"
   ].join("\n")
   process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`)
@@ -155,9 +160,12 @@ function cellTypeOf(file: string, cellId: unknown): "markdown" | "code" {
 function unrecorded(
   sessionId: unknown,
   file: string,
-  found: Violation[]
+  found: Violation[],
+  body: string
 ): Violation[] {
-  const key = (v: Violation) => JSON.stringify([file, v.ruleId, v.match])
+  const bodyHash = createHash("sha1").update(body).digest("hex")
+  const key = (v: Violation) =>
+    JSON.stringify([file, v.ruleId, v.match, bodyHash])
   // session_id をファイル名に使うので、パスを作れる字を含むものは記録しない
   if (typeof sessionId !== "string" || !/^[\w.-]+$/.test(sessionId))
     return found
