@@ -9,6 +9,7 @@ import {
   type PolicyName,
   runsOnClaude
 } from "../agents/policies"
+import { RETIRED_ROLE_REPLACEMENTS } from "../agents/roles"
 import {
   candidateAgents,
   type MarkedAgent,
@@ -18,12 +19,9 @@ import {
   scanAgents
 } from "./marker-scan"
 
-const RETIRED_ROLES: ReadonlySet<string> = new Set([
-  "design-plan",
-  "final-review",
-  "gate-review",
-  "advisor"
-])
+const RETIRED_ROLES: ReadonlySet<string> = new Set(
+  Object.keys(RETIRED_ROLE_REPLACEMENTS)
+)
 
 const REPAIR_BLOCK =
   "修復するには、agent-policy:setup-agents を再実行するか、定義の `model` を修正するか、プロキシを起動してからセッションを再起動する。"

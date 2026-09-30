@@ -104,6 +104,21 @@ export const ROLES: readonly Role[] = [
   }
 ]
 
+// 廃止済みの役割 ID と書き換え先。null は後継が無いことを表す。
+// プロジェクトに同名の断片が残っていても、これらは役割として解決しない。
+export const RETIRED_ROLE_REPLACEMENTS: Readonly<
+  Record<string, RoleId | null>
+> = {
+  "final-review": "complex-review",
+  "gate-review": "complex-review",
+  "design-plan": null,
+  advisor: null
+}
+
+export function isRetiredRole(id: string): boolean {
+  return Object.hasOwn(RETIRED_ROLE_REPLACEMENTS, id)
+}
+
 export function roleById(id: string): Role | undefined {
   return ROLES.find((role) => role.id === id)
 }

@@ -19,6 +19,113 @@ function bodyHash(content) {
   return crypto.createHash("sha256").update(body.join("\n").trim()).digest("hex").slice(0, 16);
 }
 
+// src/agents/roles.ts
+var ROLES = [
+  {
+    id: "complex-impl",
+    label: "\u8907\u96D1\u307E\u305F\u306F\u91CD\u8981\u306A\u5B9F\u88C5",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "normal-impl",
+    label: "\u901A\u5E38\u306E\u5B9F\u88C5",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "light-impl",
+    label: "\u8EFD\u91CF\u306A\u5B9F\u88C5",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
+  },
+  {
+    id: "escalation",
+    label: "\u884C\u304D\u8A70\u307E\u308A\u6642\u306E\u30A8\u30B9\u30AB\u30EC\u30FC\u30B7\u30E7\u30F3",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "general",
+    label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "explore",
+    label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "realtime-research",
+    label: "\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u60C5\u5831\u8ABF\u67FB",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
+  },
+  {
+    id: "e2e-verify",
+    label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "design-review",
+    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "knowledge-elicitation",
+    label: "\u6697\u9ED9\u77E5\u306E\u62BD\u51FA\u30FB\u7406\u89E3\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob"]
+  },
+  {
+    id: "code-review",
+    label: "\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "adversarial-review",
+    label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  }
+];
+var RETIRED_ROLE_REPLACEMENTS = {
+  "final-review": "complex-review",
+  "gate-review": "complex-review",
+  "design-plan": null,
+  advisor: null
+};
+function isRetiredRole(id) {
+  return Object.hasOwn(RETIRED_ROLE_REPLACEMENTS, id);
+}
+function roleById(id) {
+  return ROLES.find((role) => role.id === id);
+}
+function roleOrder(id) {
+  const index = ROLES.findIndex((role) => role.id === id);
+  return index === -1 ? ROLES.length : index;
+}
+function sortRoleIds(ids) {
+  return [...ids].sort(
+    (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
+  );
+}
+function hasMixedKinds(kinds) {
+  const unique2 = new Set(kinds);
+  return unique2.has("impl") && unique2.has("readonly");
+}
+
 // src/agents/fragments.ts
 function parse(content) {
   const lines = content.split("\n");
@@ -95,6 +202,7 @@ function loadFragments(dirs, vendor) {
     for (const name of files) {
       if (name.split(".").length > 2) continue;
       const fragment = readFragment(path.join(dir.path, name), dir.source);
+      if (isRetiredRole(fragment.id)) continue;
       fragments.set(fragment.id, fragment);
     }
   }
@@ -215,104 +323,6 @@ function scaffoldFragments(pluginRoot2, projectDir, lang) {
     written.push(target);
   }
   return written;
-}
-
-// src/agents/roles.ts
-var ROLES = [
-  {
-    id: "complex-impl",
-    label: "\u8907\u96D1\u307E\u305F\u306F\u91CD\u8981\u306A\u5B9F\u88C5",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "normal-impl",
-    label: "\u901A\u5E38\u306E\u5B9F\u88C5",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "light-impl",
-    label: "\u8EFD\u91CF\u306A\u5B9F\u88C5",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
-  },
-  {
-    id: "escalation",
-    label: "\u884C\u304D\u8A70\u307E\u308A\u6642\u306E\u30A8\u30B9\u30AB\u30EC\u30FC\u30B7\u30E7\u30F3",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "general",
-    label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "explore",
-    label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "realtime-research",
-    label: "\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u60C5\u5831\u8ABF\u67FB",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
-  },
-  {
-    id: "e2e-verify",
-    label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "design-review",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "knowledge-elicitation",
-    label: "\u6697\u9ED9\u77E5\u306E\u62BD\u51FA\u30FB\u7406\u89E3\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
-  },
-  {
-    id: "code-review",
-    label: "\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "complex-review",
-    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "adversarial-review",
-    label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  }
-];
-function roleById(id) {
-  return ROLES.find((role) => role.id === id);
-}
-function roleOrder(id) {
-  const index = ROLES.findIndex((role) => role.id === id);
-  return index === -1 ? ROLES.length : index;
-}
-function sortRoleIds(ids) {
-  return [...ids].sort(
-    (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
-  );
-}
-function hasMixedKinds(kinds) {
-  const unique2 = new Set(kinds);
-  return unique2.has("impl") && unique2.has("readonly");
 }
 
 // src/agents/vocabulary.ts

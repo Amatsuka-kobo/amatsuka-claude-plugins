@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { type CandidateScope, runsOnClaude } from "../agents/policies"
-import { roleById, sortRoleIds } from "../agents/roles"
+import { isRetiredRole, roleById, sortRoleIds } from "../agents/roles"
 
 export interface MarkedAgent {
   name: string
@@ -168,6 +168,8 @@ export function roleLabel(
 ): string | undefined {
   const known = roleById(role)
   if (known !== undefined) return known.label
+  // 廃止済み ID は、同名の断片が残っていても役割として解決しない。
+  if (isRetiredRole(role)) return undefined
 
   const projectDir = env.CLAUDE_PROJECT_DIR
   if (projectDir === undefined || projectDir === "") return undefined

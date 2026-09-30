@@ -165,6 +165,15 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Bash"]
   }
 ];
+var RETIRED_ROLE_REPLACEMENTS = {
+  "final-review": "complex-review",
+  "gate-review": "complex-review",
+  "design-plan": null,
+  advisor: null
+};
+function isRetiredRole(id) {
+  return Object.hasOwn(RETIRED_ROLE_REPLACEMENTS, id);
+}
 function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
@@ -319,6 +328,7 @@ function scanAgents(dir) {
 function roleLabel(env, role) {
   const known = roleById(role);
   if (known !== void 0) return known.label;
+  if (isRetiredRole(role)) return void 0;
   const projectDir = env.CLAUDE_PROJECT_DIR;
   if (projectDir === void 0 || projectDir === "") return void 0;
   const base = path.join(projectDir, ".claude", "agent-policy", "roles");
@@ -395,12 +405,9 @@ function markerTable(env, marked, scope) {
 }
 
 // src/hooks/session-start.ts
-var RETIRED_ROLES = /* @__PURE__ */ new Set([
-  "design-plan",
-  "final-review",
-  "gate-review",
-  "advisor"
-]);
+var RETIRED_ROLES = new Set(
+  Object.keys(RETIRED_ROLE_REPLACEMENTS)
+);
 var REPAIR_BLOCK = "\u4FEE\u5FA9\u3059\u308B\u306B\u306F\u3001agent-policy:setup-agents \u3092\u518D\u5B9F\u884C\u3059\u308B\u304B\u3001\u5B9A\u7FA9\u306E `model` \u3092\u4FEE\u6B63\u3059\u308B\u304B\u3001\u30D7\u30ED\u30AD\u30B7\u3092\u8D77\u52D5\u3057\u3066\u304B\u3089\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B\u3002";
 function policyBlock(policy, legacyValue) {
   const instruction = `\u6700\u521D\u306B agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3059\u308B\u3002\u30B9\u30AD\u30EB\u306E\u898F\u5F8B\u306B\u5F93\u3046\u3002`;

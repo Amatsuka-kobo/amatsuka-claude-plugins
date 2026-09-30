@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { bodyHash } from "./hash"
-import type { RoleKind } from "./roles"
+import { isRetiredRole, type RoleKind } from "./roles"
 
 export type Vendor = "gpt" | "grok" | "claude" | "none"
 
@@ -124,6 +124,8 @@ export function loadFragments(
       // <id>.<vendor>.md はベンダー別断片。ここでは読み飛ばす。
       if (name.split(".").length > 2) continue
       const fragment = readFragment(path.join(dir.path, name), dir.source)
+      // 廃止済み ID の断片が残っていても、役割として解決しない。
+      if (isRetiredRole(fragment.id)) continue
       fragments.set(fragment.id, fragment)
     }
   }

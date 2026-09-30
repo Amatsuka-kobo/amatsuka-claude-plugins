@@ -378,6 +378,30 @@ describe("roleLabel", () => {
     expect(roleLabel({}, "no-such-role")).toBeUndefined()
   })
 
+  it("廃止済み ID の断片がプロジェクトに残っていても解決せず、対応表に載せない", () => {
+    const project = temporaryProject()
+    writeRoleFragment(project, "final-review", "最終レビュー")
+    const env = environment({ CLAUDE_PROJECT_DIR: project })
+
+    expect(roleLabel(env, "final-review")).toBeUndefined()
+    expect(
+      markerTable(
+        env,
+        [
+          {
+            name: "old-reviewer",
+            model: undefined,
+            roles: ["final-review"],
+            tools: undefined,
+            vendor: undefined,
+            description: undefined
+          }
+        ],
+        "with-external"
+      )
+    ).toBeUndefined()
+  })
+
   it("同一 ID を別 env で解決しても結果を共有しない", () => {
     const first = temporaryProject()
     const second = temporaryProject()
