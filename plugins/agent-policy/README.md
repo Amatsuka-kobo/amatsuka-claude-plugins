@@ -48,7 +48,7 @@ Marketplace から `agent-policy` をインストールします。
 自動注入を使わない場合は、CLAUDE.md に方針スキルへ従う旨を直接書けます。たとえば custom 構成では、次のように書きます。
 
 ```markdown
-- 最初に必ず `agent-policy:custom-policy` スキルを使用し、この規律に従う。
+- 最初に `agent-policy:custom-policy` スキルを使用する。スキルの規律に従う。
 ```
 
 ## 環境変数

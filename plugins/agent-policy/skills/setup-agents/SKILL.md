@@ -272,11 +272,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --recommen
 
     - `--scope claude` のとき。
 
-      > - 最初に必ず `agent-policy:claude-model-policy` スキルを使用し、この規律に従う。
+      > - 最初に `agent-policy:claude-model-policy` スキルを使用する。スキルの規律に従う。
 
     - `--scope custom` のとき。
 
-      > - 最初に必ず `agent-policy:custom-policy` スキルを使用し、この規律に従う。
+      > - 最初に `agent-policy:custom-policy` スキルを使用する。スキルの規律に従う。
 
   - `claude` のとき。SessionStart フックは `claude-model-policy` と、Claude のモデルで実行される定義だけの役割マーカー対応表を注入します。`--scope claude` で生成した定義はそのまま対応表に載ります。外部ベンダーの定義を委譲先に使うには、環境変数を `custom` へ変更します。
   - `custom` のとき。SessionStart フックは役割マーカー付き定義の `model` を検証する。すべて実在すれば custom プロファイルとマーカー対応表を注入する。照会失敗、実在しないモデル、または役割マーカー付き定義が 0 件なら、セッション全体で `claude-model-policy` へフォールバックすることを伝える。
