@@ -280,43 +280,67 @@ function modelIsAvailable(model: string, live: LiveModels): boolean {
 
 // --recommended は各役割に推奨モデルの定義を 1 件ずつ作る。
 // --model-id は明示指定の 1 件を作る。live models が取れない場合は推奨候補の先頭を使う。
+// 被覆されていない役割は、推奨候補のうち実在する最初のモデルで既定名に作る。
+function recommendedTarget(
+  options: Options,
+  live: LiveModels,
+  role: RoleId
+): Target {
+  const candidates =
+    options.scope === "claude-only"
+      ? ASSIGNMENTS["claude-model-policy"][role]
+      : RECOMMENDED[role]
+  const spec = candidates
+    .map((id) => modelById(id))
+    .find(
+      (candidate) =>
+        candidate !== undefined &&
+        (!live.ok || modelIsAvailable(candidate.model, live))
+    )
+  if (spec === undefined)
+    throw new Error(`roles: no available model for ${role}`)
+  return {
+    roleId: role,
+    modelId: spec.id,
+    name: defaultAgentName(options, spec, role),
+    model: spec.model,
+    roles: [role],
+    color: VENDOR_COLORS[spec.vendor],
+    vendor: spec.vendor
+  }
+}
+
 function targetsFor(options: Options, live: LiveModels): TargetResolution {
   const warnings = live.ok ? [] : [unavailableWarning(live)]
   if (options.recommended) {
     const roles = sortRoleIds(
       options.roles.length > 0 ? options.roles : ROLES.map((role) => role.id)
     )
-    return {
-      warnings,
-      targets: roles.map((role) => {
-        if (roleById(role) === undefined)
-          throw new Error(
-            `roles: ${role} is not a built-in role for --recommended`
-          )
-        const candidates =
-          options.scope === "claude-only"
-            ? ASSIGNMENTS["claude-model-policy"][role]
-            : RECOMMENDED[role]
-        const spec = candidates
-          .map((id) => modelById(id))
-          .find(
-            (candidate) =>
-              candidate !== undefined &&
-              (!live.ok || modelIsAvailable(candidate.model, live))
-          )
-        if (spec === undefined)
-          throw new Error(`roles: no available model for ${role}`)
-        return {
-          roleId: role,
-          modelId: spec.id,
-          name: defaultAgentName(options, spec, role),
-          model: spec.model,
-          roles: [role],
-          color: VENDOR_COLORS[spec.vendor],
-          vendor: spec.vendor
-        }
-      })
+    const definitions = scopedDefinitions(options.dir, options.scope)
+    const fragments = loadFragments(
+      fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+    )
+    // 1 つの定義は 1 回だけ生成する。
+    const visited = new Set<string>()
+    const targets: Target[] = []
+    for (const role of roles) {
+      if (roleById(role) === undefined)
+        throw new Error(
+          `roles: ${role} is not a built-in role for --recommended`
+        )
+      const covering = definitions.filter((definition) =>
+        definition.markerIds.includes(role)
+      )
+      if (covering.length === 1 && covering[0] !== undefined) {
+        if (visited.has(covering[0].file)) continue
+        visited.add(covering[0].file)
+      }
+      const target = coveringTarget(role, covering, fragments, live, warnings)
+      if (target !== undefined) {
+        targets.push(target ?? recommendedTarget(options, live, role))
+      }
     }
+    return { warnings, targets }
   }
 
   const spec = requireModel(options)
@@ -788,9 +812,33 @@ function coveredDefinitions(
   const covered = new Map<RoleId, string[]>(
     roleIds.map((roleId) => [roleId, []])
   )
-  const agentsDir = path.join(projectDir, ".claude", "agents")
-  if (!fs.existsSync(agentsDir)) return covered
+  for (const definition of scopedDefinitions(projectDir, scope)) {
+    for (const roleId of definition.markerIds) {
+      covered.get(roleId as RoleId)?.push(definition.name)
+    }
+  }
+  return covered
+}
 
+interface ScopedDefinition {
+  name: string
+  /** ファイル名から .md を除いた値。再生成の作成先に使う。 */
+  file: string
+  model: string | undefined
+  vendor: string | undefined
+  markerIds: string[]
+}
+
+// マーカーを持つ定義のうち、その構成で被覆に数えるもの。
+// claude-only では、外部ベンダーのモデルを指定した定義を数えない。
+function scopedDefinitions(
+  projectDir: string,
+  scope: CandidateScope
+): ScopedDefinition[] {
+  const agentsDir = path.join(projectDir, ".claude", "agents")
+  if (!fs.existsSync(agentsDir)) return []
+
+  const definitions: ScopedDefinition[] = []
   for (const file of fs.readdirSync(agentsDir).sort()) {
     if (!file.endsWith(".md")) continue
     // 1 ファイルが読めなくても、他の定義と全体の応答は生かす。
@@ -809,14 +857,81 @@ function coveredDefinitions(
       ) {
         continue
       }
-      const name = document.meta.get("name") ?? file.replace(/\.md$/, "")
-      for (const roleId of splitList(marker)) {
-        covered.get(roleId as RoleId)?.push(name)
-      }
+      const base = file.replace(/\.md$/, "")
+      definitions.push({
+        name: document.meta.get("name") ?? base,
+        file: base,
+        model,
+        vendor,
+        markerIds: splitList(marker)
+      })
     } catch {}
   }
+  return definitions
+}
 
-  return covered
+// model 値から推奨モデル ID を逆引きする。Claude enum は同名の ID に当たる。
+function modelIdOf(model: string | null | undefined): ModelId | null {
+  if (model === null || model === undefined) return null
+  return MODELS.find((spec) => spec.model === model)?.id ?? null
+}
+
+function isVendor(value: string): value is Vendor {
+  return (
+    value === "gpt" ||
+    value === "grok" ||
+    value === "claude" ||
+    value === "none"
+  )
+}
+
+// 被覆する定義がちょうど 1 件の役割は、その定義を作成先にする。
+// 作成先を決められない役割は undefined を返し、理由を warnings に足す。
+// 被覆されていない役割は null を返し、呼び出し側が既定名で作る。
+function coveringTarget(
+  role: RoleId,
+  covering: ScopedDefinition[],
+  fragments: Map<string, Fragment>,
+  live: LiveModels,
+  warnings: string[]
+): Target | null | undefined {
+  if (covering.length === 0) return null
+  const [definition] = covering
+  if (covering.length > 1 || definition === undefined) {
+    warnings.push(
+      `roles: ${role} is covered by ${covering.map((entry) => entry.file).join(", ")}; not regenerated`
+    )
+    return undefined
+  }
+  const modelId = modelIdOf(definition.model)
+  if (modelId === null || definition.model === undefined) {
+    warnings.push(
+      `model: ${definition.file} declares model "${definition.model ?? ""}" that matches no model id; not regenerated`
+    )
+    return undefined
+  }
+  const vendor = definition.vendor ?? "none"
+  if (!isVendor(vendor)) {
+    warnings.push(
+      `vendor: ${definition.file} declares unknown vendor "${vendor}"; not regenerated`
+    )
+    return undefined
+  }
+  if (live.ok && !modelIsAvailable(definition.model, live)) {
+    warnings.push(
+      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated`
+    )
+    return undefined
+  }
+  return {
+    roleId: role,
+    modelId,
+    name: definition.file,
+    model: definition.model,
+    roles: definition.markerIds.filter((id) => fragments.has(id)) as RoleId[],
+    color: VENDOR_COLORS[vendor],
+    vendor
+  }
 }
 
 // default-name は言語に依存しない契約だが、この版より前に scaffold した
@@ -930,6 +1045,7 @@ function inspectDefinitions(
       name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
       file: path.posix.join(".claude", "agents", file),
       model: stringValue(meta.get("model")),
+      modelId: modelIdOf(stringValue(meta.get("model"))),
       vendor: stringValue(meta.get("agent-policy-vendor")),
       roles: selected.map((fragment) => fragment.id),
       retiredRoles: ids.filter(isRetiredRole).map((id) => ({

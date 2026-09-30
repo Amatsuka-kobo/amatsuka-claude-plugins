@@ -963,36 +963,53 @@ function resolveVendor(options, model, spec, live) {
 function modelIsAvailable(model, live) {
   return isClaudeEnum(model) || live.ids.includes(model);
 }
+function recommendedTarget(options, live, role) {
+  const candidates = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][role] : RECOMMENDED[role];
+  const spec = candidates.map((id) => modelById(id)).find(
+    (candidate) => candidate !== void 0 && (!live.ok || modelIsAvailable(candidate.model, live))
+  );
+  if (spec === void 0)
+    throw new Error(`roles: no available model for ${role}`);
+  return {
+    roleId: role,
+    modelId: spec.id,
+    name: defaultAgentName(options, spec, role),
+    model: spec.model,
+    roles: [role],
+    color: VENDOR_COLORS[spec.vendor],
+    vendor: spec.vendor
+  };
+}
 function targetsFor(options, live) {
   const warnings = live.ok ? [] : [unavailableWarning(live)];
   if (options.recommended) {
     const roles = sortRoleIds(
       options.roles.length > 0 ? options.roles : ROLES.map((role) => role.id)
     );
-    return {
-      warnings,
-      targets: roles.map((role) => {
-        if (roleById(role) === void 0)
-          throw new Error(
-            `roles: ${role} is not a built-in role for --recommended`
-          );
-        const candidates = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][role] : RECOMMENDED[role];
-        const spec2 = candidates.map((id) => modelById(id)).find(
-          (candidate) => candidate !== void 0 && (!live.ok || modelIsAvailable(candidate.model, live))
+    const definitions = scopedDefinitions(options.dir, options.scope);
+    const fragments = loadFragments(
+      fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+    );
+    const visited = /* @__PURE__ */ new Set();
+    const targets = [];
+    for (const role of roles) {
+      if (roleById(role) === void 0)
+        throw new Error(
+          `roles: ${role} is not a built-in role for --recommended`
         );
-        if (spec2 === void 0)
-          throw new Error(`roles: no available model for ${role}`);
-        return {
-          roleId: role,
-          modelId: spec2.id,
-          name: defaultAgentName(options, spec2, role),
-          model: spec2.model,
-          roles: [role],
-          color: VENDOR_COLORS[spec2.vendor],
-          vendor: spec2.vendor
-        };
-      })
-    };
+      const covering = definitions.filter(
+        (definition) => definition.markerIds.includes(role)
+      );
+      if (covering.length === 1 && covering[0] !== void 0) {
+        if (visited.has(covering[0].file)) continue;
+        visited.add(covering[0].file);
+      }
+      const target = coveringTarget(role, covering, fragments, live, warnings);
+      if (target !== void 0) {
+        targets.push(target ?? recommendedTarget(options, live, role));
+      }
+    }
+    return { warnings, targets };
   }
   const spec = requireModel(options);
   if (options.scope === "claude-only" && spec.vendor !== "claude") {
@@ -1358,8 +1375,17 @@ function coveredDefinitions(projectDir, roleIds, scope) {
   const covered = new Map(
     roleIds.map((roleId) => [roleId, []])
   );
+  for (const definition of scopedDefinitions(projectDir, scope)) {
+    for (const roleId of definition.markerIds) {
+      covered.get(roleId)?.push(definition.name);
+    }
+  }
+  return covered;
+}
+function scopedDefinitions(projectDir, scope) {
   const agentsDir = path2.join(projectDir, ".claude", "agents");
-  if (!fs3.existsSync(agentsDir)) return covered;
+  if (!fs3.existsSync(agentsDir)) return [];
+  const definitions = [];
   for (const file of fs3.readdirSync(agentsDir).sort()) {
     if (!file.endsWith(".md")) continue;
     try {
@@ -1373,14 +1399,64 @@ function coveredDefinitions(projectDir, roleIds, scope) {
       if (scope === "claude-only" && (!runsOnClaude(model) || vendor !== void 0 && vendor !== "claude" && vendor !== "none")) {
         continue;
       }
-      const name = document.meta.get("name") ?? file.replace(/\.md$/, "");
-      for (const roleId of splitList(marker)) {
-        covered.get(roleId)?.push(name);
-      }
+      const base = file.replace(/\.md$/, "");
+      definitions.push({
+        name: document.meta.get("name") ?? base,
+        file: base,
+        model,
+        vendor,
+        markerIds: splitList(marker)
+      });
     } catch {
     }
   }
-  return covered;
+  return definitions;
+}
+function modelIdOf(model) {
+  if (model === null || model === void 0) return null;
+  return MODELS.find((spec) => spec.model === model)?.id ?? null;
+}
+function isVendor(value) {
+  return value === "gpt" || value === "grok" || value === "claude" || value === "none";
+}
+function coveringTarget(role, covering, fragments, live, warnings) {
+  if (covering.length === 0) return null;
+  const [definition] = covering;
+  if (covering.length > 1 || definition === void 0) {
+    warnings.push(
+      `roles: ${role} is covered by ${covering.map((entry) => entry.file).join(", ")}; not regenerated`
+    );
+    return void 0;
+  }
+  const modelId = modelIdOf(definition.model);
+  if (modelId === null || definition.model === void 0) {
+    warnings.push(
+      `model: ${definition.file} declares model "${definition.model ?? ""}" that matches no model id; not regenerated`
+    );
+    return void 0;
+  }
+  const vendor = definition.vendor ?? "none";
+  if (!isVendor(vendor)) {
+    warnings.push(
+      `vendor: ${definition.file} declares unknown vendor "${vendor}"; not regenerated`
+    );
+    return void 0;
+  }
+  if (live.ok && !modelIsAvailable(definition.model, live)) {
+    warnings.push(
+      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated`
+    );
+    return void 0;
+  }
+  return {
+    roleId: role,
+    modelId,
+    name: definition.file,
+    model: definition.model,
+    roles: definition.markerIds.filter((id) => fragments.has(id)),
+    color: VENDOR_COLORS[vendor],
+    vendor
+  };
 }
 function bundledDefaultNames(projectDir) {
   const fragments = loadFragments(
@@ -1454,6 +1530,7 @@ function inspectDefinitions(projectDir, fragments) {
       name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
       file: path2.posix.join(".claude", "agents", file),
       model: stringValue(meta.get("model")),
+      modelId: modelIdOf(stringValue(meta.get("model"))),
       vendor: stringValue(meta.get("agent-policy-vendor")),
       roles: selected.map((fragment) => fragment.id),
       retiredRoles: ids.filter(isRetiredRole).map((id) => ({
