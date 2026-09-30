@@ -5,7 +5,8 @@ import {
   type ComposeInput,
   compose,
   describeRoles,
-  type RolesSummary
+  type RolesSummary,
+  resolveToolsFor
 } from "./agents/compose"
 import {
   checkFragments,
@@ -37,12 +38,15 @@ import {
   runsOnClaude
 } from "./agents/policies"
 import {
+  isRetiredRole,
+  RETIRED_ROLE_REPLACEMENTS,
   ROLES,
   type RoleId,
   roleById,
   roleOrder,
   sortRoleIds
 } from "./agents/roles"
+import { frontmatter, parseToolsField } from "./hooks/marker-scan"
 
 interface Options {
   scope: CandidateScope
@@ -831,6 +835,89 @@ function bundledDefaultNames(projectDir: string): Map<string, string> {
   return names
 }
 
+type ToolsFormat = "csv" | "other" | "none"
+
+// 1 行のカンマ区切りだけを csv とする。行単位の書き換えはこの書式にだけ効く。
+function toolsFormatOf(raw: string | string[] | undefined): ToolsFormat {
+  if (raw === undefined) return "none"
+  if (Array.isArray(raw)) return "other"
+  const value = raw.trim()
+  if (value === "" || /^[[{|>]/.test(value) || /["']/.test(value)) {
+    return "other"
+  }
+  return "csv"
+}
+
+// 役割の許可集合に無い組み込みツールを返す。mcp__ は --mcp-servers が決めるので見ない。
+// 解決できる役割が無い定義は、許可集合を決められないため Agent だけを返す。
+function disallowedToolsOf(
+  tools: string[] | undefined,
+  format: ToolsFormat,
+  selected: Fragment[]
+): string[] {
+  if (selected.length === 0) {
+    return (tools ?? []).filter((tool) => tool === "Agent")
+  }
+  if (format === "none") return ["*"]
+  const allowed = resolveToolsFor(selected, [])
+  return (tools ?? []).filter(
+    (tool) => !tool.startsWith("mcp__") && !allowed.includes(tool)
+  )
+}
+
+function stringValue(value: string | string[] | undefined): string | null {
+  return typeof value === "string" && value !== "" ? value : null
+}
+
+// マーカーを持つ定義をスコープで絞らずに点検する。
+function inspectDefinitions(
+  projectDir: string,
+  fragments: Map<string, Fragment>
+): unknown[] {
+  const agentsDir = path.join(projectDir, ".claude", "agents")
+  if (!fs.existsSync(agentsDir)) return []
+
+  const definitions: unknown[] = []
+  for (const file of fs.readdirSync(agentsDir).sort()) {
+    if (!file.endsWith(".md")) continue
+    let meta: Map<string, string | string[]>
+    // 1 ファイルが読めなくても、他の定義と全体の応答は生かす。
+    try {
+      meta = frontmatter(path.join(agentsDir, file))
+    } catch {
+      continue
+    }
+    const marker = meta.get("agent-policy-role")
+    if (typeof marker !== "string") continue
+
+    const ids = splitList(marker)
+    const selected = ids.flatMap((id) => {
+      const fragment = fragments.get(id)
+      return fragment === undefined ? [] : [fragment]
+    })
+    const rawTools = meta.get("tools")
+    const toolsFormat = toolsFormatOf(rawTools)
+    definitions.push({
+      name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
+      file: path.posix.join(".claude", "agents", file),
+      model: stringValue(meta.get("model")),
+      vendor: stringValue(meta.get("agent-policy-vendor")),
+      roles: selected.map((fragment) => fragment.id),
+      retiredRoles: ids.filter(isRetiredRole).map((id) => ({
+        id,
+        replacement: RETIRED_ROLE_REPLACEMENTS[id] ?? null
+      })),
+      disallowedTools: disallowedToolsOf(
+        parseToolsField(rawTools),
+        toolsFormat,
+        selected
+      ),
+      toolsFormat
+    })
+  }
+  return definitions
+}
+
 function listCoverage(options: Options): unknown {
   const roleIds = sortRoleIds(Object.keys(RECOMMENDED) as RoleId[])
   const fragments = loadFragments(
@@ -851,6 +938,7 @@ function listCoverage(options: Options): unknown {
     return {
       id,
       label: fragment.label,
+      kind: fragment.kind,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
       models:
         options.scope === "claude-only"
@@ -865,7 +953,8 @@ function listCoverage(options: Options): unknown {
     roles,
     uncovered: roles
       .filter((role) => role.coveredBy.length === 0)
-      .map((role) => role.id)
+      .map((role) => role.id),
+    definitions: inspectDefinitions(options.dir, fragments)
   }
 }
 

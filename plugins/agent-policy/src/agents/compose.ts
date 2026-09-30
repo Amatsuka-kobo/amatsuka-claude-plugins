@@ -136,7 +136,10 @@ function selectFragments(input: ComposeInput): {
 
 // MCP サーバーはサーバー単位で末尾へ足す。
 // mcpServers には mcp__ プレフィックス付きの完成した名前を渡す。
-function resolveToolsFor(selected: Fragment[], mcpServers: string[]): string[] {
+export function resolveToolsFor(
+  selected: Fragment[],
+  mcpServers: string[]
+): string[] {
   const tools: string[] = []
   for (const fragment of selected) {
     for (const tool of fragment.tools) {

@@ -1,5 +1,5 @@
 // src/setup-agents.ts
-import fs2 from "node:fs";
+import fs3 from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -774,6 +774,78 @@ function candidateScopeFor(value) {
   return void 0;
 }
 
+// src/hooks/marker-scan.ts
+import fs2 from "node:fs";
+function frontmatter(file) {
+  const lines = fs2.readFileSync(file, "utf8").split("\n");
+  const meta = /* @__PURE__ */ new Map();
+  if (lines[0]?.trim() !== "---") return meta;
+  const close = lines.indexOf("---", 1);
+  if (close === -1) return meta;
+  const metadataLines = lines.slice(1, close);
+  let skipUntil = 0;
+  for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue;
+    const at = line.indexOf(":");
+    if (at <= 0) continue;
+    const key = line.slice(0, at).trim();
+    const value = line.slice(at + 1).trim();
+    if (key === "tools" && value === "") {
+      const items = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        const item = candidate.match(/^\s*-\s+(.+)$/)?.[1];
+        if (item === void 0) break;
+        items.push(item);
+      }
+      meta.set(key, items.length === 0 ? value : items);
+      continue;
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      const folded = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break;
+        if (candidate.trim() !== "") folded.push(candidate.trim());
+      }
+      skipUntil = index + 1 + folded.length;
+      meta.set(key, folded.join(" "));
+      continue;
+    }
+    meta.set(key, value);
+  }
+  return meta;
+}
+function unquote(value) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if (trimmed.length >= 2 && (quote === '"' || quote === "'") && trimmed.at(-1) === quote) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+function parseToolItems(items) {
+  return items.map(unquote).filter((item) => item !== "");
+}
+function parseToolsField(raw) {
+  if (raw === void 0) return void 0;
+  if (Array.isArray(raw)) {
+    const parsed2 = parseToolItems(raw);
+    return parsed2.length === 0 ? void 0 : parsed2;
+  }
+  const value = raw.trim();
+  if (value === "") return void 0;
+  if (value.startsWith("[")) {
+    if (!value.endsWith("]")) return void 0;
+    const inner = value.slice(1, -1).trim();
+    if (inner === "") return [];
+    return parseToolItems(inner.split(","));
+  }
+  if (value.startsWith("{") || value.startsWith("|") || value.startsWith(">")) {
+    return void 0;
+  }
+  const parsed = parseToolItems(value.split(","));
+  return parsed.length === 0 ? void 0 : parsed;
+}
+
 // src/setup-agents.ts
 var VENDOR_COLORS = {
   gpt: "yellow",
@@ -1049,7 +1121,7 @@ function diff(options, target, mcpServers) {
   const input = composeInputFor(options, target, mcpServers);
   const rendered = templateFor(input);
   const file = targetPath(options, target);
-  const existingRaw = fs2.existsSync(file) ? fs2.readFileSync(file, "utf8") : void 0;
+  const existingRaw = fs3.existsSync(file) ? fs3.readFileSync(file, "utf8") : void 0;
   return compare(options, target, input, rendered, existingRaw);
 }
 function parseKeep(selectors) {
@@ -1169,8 +1241,8 @@ function write(options, target, mcpServers) {
   const file = targetPath(options, target);
   const input = composeInputFor(options, target, mcpServers);
   const rendered = templateFor(input);
-  const exists = fs2.existsSync(file);
-  const existingRaw = exists ? fs2.readFileSync(file, "utf8") : void 0;
+  const exists = fs3.existsSync(file);
+  const existingRaw = exists ? fs3.readFileSync(file, "utf8") : void 0;
   const difference = compare(options, target, input, rendered, existingRaw);
   const selectors = unique([
     ...exists && options.merge ? automaticKeep(difference) : [],
@@ -1180,8 +1252,8 @@ function write(options, target, mcpServers) {
   const shouldMerge = existingRaw !== void 0 && (options.merge || options.keep.length > 0);
   const content = shouldMerge ? merge(existingRaw, rendered, keep) : rendered;
   const kept = shouldMerge ? selectors : [];
-  fs2.mkdirSync(path2.dirname(file), { recursive: true });
-  fs2.writeFileSync(file, content);
+  fs3.mkdirSync(path2.dirname(file), { recursive: true });
+  fs3.writeFileSync(file, content);
   return {
     ok: true,
     target: path2.relative(options.dir, file).split(path2.sep).join("/"),
@@ -1207,8 +1279,8 @@ function resolveMcp(options) {
   return { servers, dropped };
 }
 function mcpCurrentFor(file) {
-  if (!fs2.existsSync(file)) return { servers: [], denyTools: [] };
-  return mcpCurrentOf(fs2.readFileSync(file, "utf8"));
+  if (!fs3.existsSync(file)) return { servers: [], denyTools: [] };
+  return mcpCurrentOf(fs3.readFileSync(file, "utf8"));
 }
 function setup(options, live) {
   validateFragments(options);
@@ -1277,7 +1349,7 @@ function listAvailableRoles(options) {
     kind: fragment.kind,
     tools: fragment.tools,
     source: fragment.source,
-    languageMismatch: options.lang !== "ja" && fragment.source === "project" && ownDir !== void 0 && fs2.existsSync(path2.join(ownDir, `${fragment.id}.md`))
+    languageMismatch: options.lang !== "ja" && fragment.source === "project" && ownDir !== void 0 && fs3.existsSync(path2.join(ownDir, `${fragment.id}.md`))
   }));
   return { ok: true, lang: options.lang, roles };
 }
@@ -1286,12 +1358,12 @@ function coveredDefinitions(projectDir, roleIds, scope) {
     roleIds.map((roleId) => [roleId, []])
   );
   const agentsDir = path2.join(projectDir, ".claude", "agents");
-  if (!fs2.existsSync(agentsDir)) return covered;
-  for (const file of fs2.readdirSync(agentsDir).sort()) {
+  if (!fs3.existsSync(agentsDir)) return covered;
+  for (const file of fs3.readdirSync(agentsDir).sort()) {
     if (!file.endsWith(".md")) continue;
     try {
       const document = parseDocument(
-        fs2.readFileSync(path2.join(agentsDir, file), "utf8")
+        fs3.readFileSync(path2.join(agentsDir, file), "utf8")
       );
       const marker = document.meta.get("agent-policy-role");
       if (marker === void 0) continue;
@@ -1323,6 +1395,69 @@ function bundledDefaultNames(projectDir) {
   }
   return names;
 }
+function toolsFormatOf(raw) {
+  if (raw === void 0) return "none";
+  if (Array.isArray(raw)) return "other";
+  const value = raw.trim();
+  if (value === "" || /^[[{|>]/.test(value) || /["']/.test(value)) {
+    return "other";
+  }
+  return "csv";
+}
+function disallowedToolsOf(tools, format, selected) {
+  if (selected.length === 0) {
+    return (tools ?? []).filter((tool) => tool === "Agent");
+  }
+  if (format === "none") return ["*"];
+  const allowed = resolveToolsFor(selected, []);
+  return (tools ?? []).filter(
+    (tool) => !tool.startsWith("mcp__") && !allowed.includes(tool)
+  );
+}
+function stringValue(value) {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+function inspectDefinitions(projectDir, fragments) {
+  const agentsDir = path2.join(projectDir, ".claude", "agents");
+  if (!fs3.existsSync(agentsDir)) return [];
+  const definitions = [];
+  for (const file of fs3.readdirSync(agentsDir).sort()) {
+    if (!file.endsWith(".md")) continue;
+    let meta;
+    try {
+      meta = frontmatter(path2.join(agentsDir, file));
+    } catch {
+      continue;
+    }
+    const marker = meta.get("agent-policy-role");
+    if (typeof marker !== "string") continue;
+    const ids = splitList(marker);
+    const selected = ids.flatMap((id) => {
+      const fragment = fragments.get(id);
+      return fragment === void 0 ? [] : [fragment];
+    });
+    const rawTools = meta.get("tools");
+    const toolsFormat = toolsFormatOf(rawTools);
+    definitions.push({
+      name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
+      file: path2.posix.join(".claude", "agents", file),
+      model: stringValue(meta.get("model")),
+      vendor: stringValue(meta.get("agent-policy-vendor")),
+      roles: selected.map((fragment) => fragment.id),
+      retiredRoles: ids.filter(isRetiredRole).map((id) => ({
+        id,
+        replacement: RETIRED_ROLE_REPLACEMENTS[id] ?? null
+      })),
+      disallowedTools: disallowedToolsOf(
+        parseToolsField(rawTools),
+        toolsFormat,
+        selected
+      ),
+      toolsFormat
+    });
+  }
+  return definitions;
+}
 function listCoverage(options) {
   const roleIds = sortRoleIds(Object.keys(RECOMMENDED));
   const fragments = loadFragments(
@@ -1338,6 +1473,7 @@ function listCoverage(options) {
     return {
       id,
       label: fragment.label,
+      kind: fragment.kind,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
       models: options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][id] : RECOMMENDED[id],
       coveredBy: covered.get(id) ?? []
@@ -1346,7 +1482,8 @@ function listCoverage(options) {
   return {
     ok: true,
     roles,
-    uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id)
+    uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id),
+    definitions: inspectDefinitions(options.dir, fragments)
   };
 }
 function parseArgs(argv) {

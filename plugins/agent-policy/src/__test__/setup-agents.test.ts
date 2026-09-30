@@ -119,12 +119,26 @@ interface CoverageResult {
   roles: {
     id: string
     label: string
+    kind: "impl" | "readonly"
     defaultName: string
     models: string[]
     coveredBy: string[]
   }[]
   uncovered: string[]
+  definitions: CoverageDefinition[]
 }
+
+interface CoverageDefinition {
+  name: string
+  file: string
+  model: string | null
+  vendor: string | null
+  roles: string[]
+  retiredRoles: { id: string; replacement: string | null }[]
+  disallowedTools: string[]
+  toolsFormat: "csv" | "other" | "none"
+}
+
 
 interface LiveModelsResult {
   ok: boolean
@@ -727,6 +741,231 @@ describe("--list-coverage", () => {
           typeof role.defaultName === "string" && role.defaultName !== ""
       )
     ).toBe(true)
+  })
+})
+
+function writeAgent(file: string, lines: string[]): string {
+  const target = path.join(project, ".claude", "agents", file)
+  fs.writeFileSync(target, lines.join("\n"))
+  return target
+}
+
+function coverage(extra: string[] = []): CoverageResult {
+  return run<CoverageResult>([
+    "--list-coverage",
+    "--lang",
+    "ja",
+    "--dir",
+    project,
+    ...extra
+  ])
+}
+
+function definitionOf(
+  result: CoverageResult,
+  name: string
+): CoverageDefinition | undefined {
+  return result.definitions.find((definition) => definition.name === name)
+}
+
+describe("--list-coverage の点検結果", () => {
+  it("roles の各要素に kind を返し、e2e-verify は impl になる", () => {
+    const result = coverage()
+
+    expect(result.roles.find((role) => role.id === "e2e-verify")?.kind).toBe(
+      "impl"
+    )
+    expect(result.roles.find((role) => role.id === "explore")?.kind).toBe(
+      "readonly"
+    )
+  })
+
+  it("Agent を disallowedTools に、final-review を retiredRoles に載せる", () => {
+    writeAgent("mixed.md", [
+      "---",
+      "name: mixed",
+      "model: opus",
+      "tools: Read, Grep, Glob, Bash, Agent, mcp__serena",
+      "agent-policy-role: code-review, final-review",
+      "---",
+      ""
+    ])
+
+    expect(definitionOf(coverage(), "mixed")).toEqual({
+      name: "mixed",
+      file: ".claude/agents/mixed.md",
+      model: "opus",
+      vendor: null,
+      roles: ["code-review"],
+      retiredRoles: [{ id: "final-review", replacement: "complex-review" }],
+      disallowedTools: ["Agent"],
+      toolsFormat: "csv"
+    })
+  })
+
+  it("廃止済み ID だけの定義でも Agent を載せ、tools 欄が無くても * は載せない", () => {
+    writeAgent("old-reviewer.md", [
+      "---",
+      "name: old-reviewer",
+      "tools: Read, Agent, WebFetch",
+      "agent-policy-role: final-review",
+      "---",
+      ""
+    ])
+    writeAgent("old-planner.md", [
+      "---",
+      "name: old-planner",
+      "agent-policy-role: design-plan",
+      "---",
+      ""
+    ])
+
+    const result = coverage()
+
+    expect(definitionOf(result, "old-reviewer")).toMatchObject({
+      roles: [],
+      retiredRoles: [{ id: "final-review", replacement: "complex-review" }],
+      disallowedTools: ["Agent"]
+    })
+    expect(definitionOf(result, "old-planner")).toMatchObject({
+      roles: [],
+      retiredRoles: [{ id: "design-plan", replacement: null }],
+      disallowedTools: [],
+      toolsFormat: "none"
+    })
+  })
+
+  it("tools 欄が無く roles がある定義は * になり、mcp__ のツールは載せない", () => {
+    writeAgent("inherit.md", [
+      "---",
+      "name: inherit",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+    writeAgent("with-mcp.md", [
+      "---",
+      "name: with-mcp",
+      "tools: Read, Grep, mcp__github__create_issue",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+
+    const result = coverage()
+
+    expect(definitionOf(result, "inherit")).toMatchObject({
+      disallowedTools: ["*"],
+      toolsFormat: "none"
+    })
+    expect(definitionOf(result, "with-mcp")).toMatchObject({
+      disallowedTools: [],
+      toolsFormat: "csv"
+    })
+  })
+
+  it("block 配列・flow 配列・引用符付きの tools を解釈し、書式を other とする", () => {
+    writeAgent("block.md", [
+      "---",
+      "name: block",
+      "tools:",
+      "  - Read",
+      '  - "Agent"',
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+    writeAgent("flow.md", [
+      "---",
+      "name: flow",
+      'tools: ["Read", "Agent"]',
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+    writeAgent("quoted.md", [
+      "---",
+      "name: quoted",
+      "tools: 'Read', 'Agent'",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+
+    const result = coverage()
+
+    for (const name of ["block", "flow", "quoted"]) {
+      expect(definitionOf(result, name)).toMatchObject({
+        disallowedTools: ["Agent"],
+        toolsFormat: "other"
+      })
+    }
+  })
+
+  it("プロジェクトに final-review.md の断片が残っていても roles に入れない", () => {
+    writeProjectRole({ id: "final-review", label: "最終レビュー" })
+    writeAgent("old-reviewer.md", [
+      "---",
+      "name: old-reviewer",
+      "tools: Read, Grep",
+      "agent-policy-role: final-review",
+      "---",
+      ""
+    ])
+
+    const result = coverage()
+
+    expect(definitionOf(result, "old-reviewer")).toMatchObject({
+      roles: [],
+      retiredRoles: [{ id: "final-review", replacement: "complex-review" }]
+    })
+  })
+
+  it("--scope claude でも外部ベンダーの定義を含め、マーカーの無い定義は含めない", () => {
+    writeAgent("external.md", [
+      "---",
+      "name: external",
+      "model: claude-gpt-6-sol",
+      "agent-policy-vendor: gpt",
+      "tools: Read, Agent",
+      "agent-policy-role: complex-impl",
+      "---",
+      ""
+    ])
+    writeAgent("plain.md", ["---", "name: plain", "tools: Agent", "---", ""])
+
+    const result = coverage(["--scope", "claude"])
+
+    expect(definitionOf(result, "external")).toMatchObject({
+      model: "claude-gpt-6-sol",
+      vendor: "gpt",
+      roles: ["complex-impl"],
+      disallowedTools: ["Agent"]
+    })
+    expect(definitionOf(result, "plain")).toBeUndefined()
+  })
+})
+
+describe("廃止済み ID の断片", () => {
+  it("プロジェクトに断片が残っていても生成の役割として解決しない", () => {
+    writeProjectRole({ id: "final-review", label: "最終レビュー" })
+
+    const result = run<{ ok: boolean; error: string }>([
+      "--scope",
+      "claude",
+      "--model-id",
+      "opus",
+      "--name",
+      "old-reviewer",
+      "--roles",
+      "final-review",
+      "--dir",
+      project,
+      "--check"
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("final-review")
   })
 })
 
