@@ -110,10 +110,16 @@ function literalRules(discipline: string): Rule[] {
   for (const line of lines.slice(headerIndex + 1)) {
     if (!line.startsWith("|")) break
     const cells = line.split("|").map((cell) => cell.trim())
+    const avoid = cells[avoidIndex] ?? ""
     const used = cells[useIndex] ?? ""
-    for (const word of (cells[avoidIndex] ?? "")
-      .split(/[・、]/)
-      .map((cell) => cell.trim())) {
+    const quotedWords = [...avoid.matchAll(/「([^」]+)」/g)].map(
+      (match) => match[1] ?? ""
+    )
+    const words =
+      quotedWords.length > 0
+        ? quotedWords
+        : avoid.split(/[・、]/).map((cell) => cell.trim())
+    for (const word of words) {
       if (!/^[゠-ヿ\p{sc=Han}]+$/u.test(word)) continue
       rules.push({
         id: `literal:${word}`,
