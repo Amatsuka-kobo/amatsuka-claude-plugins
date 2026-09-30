@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
   ASSIGNMENTS,
-  allowsAgentTool,
   CLAUDE_ENUM_MODELS,
   candidateScopeFor,
+  EFFORT,
+  EFFORT_ORDER,
+  effortFor,
   isCustomInjection,
   MODELS,
   type ModelId,
@@ -23,55 +25,30 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   "light-impl": ["haiku"],
   escalation: ["fable"],
   general: ["sonnet"],
-  "design-plan": ["opus"],
   explore: ["sonnet"],
   "realtime-research": ["sonnet"],
   "e2e-verify": ["sonnet"],
   "design-review": ["sonnet"],
   "knowledge-elicitation": ["haiku"],
   "code-review": ["sonnet"],
-  "final-review": ["fable"],
-  "gate-review": ["fable"],
-  "adversarial-review": ["opus"],
-  advisor: ["fable"]
+  "complex-review": ["fable"],
+  "adversarial-review": ["opus"]
 }
 
 const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["gpt-sol", "opus"],
-  "normal-impl": ["gpt-luna", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku", "grok"],
+  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "normal-impl": ["gpt-sol", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku"],
   escalation: ["gpt-astra", "fable"],
   general: ["gpt-luna", "sonnet"],
-  "design-plan": ["opus"],
-  explore: ["grok", "sonnet", "gpt-terra"],
+  explore: ["gpt-sol", "sonnet"],
   "realtime-research": ["grok", "sonnet"],
-  "e2e-verify": ["sonnet"],
-  "design-review": ["grok", "sonnet"],
+  "e2e-verify": ["gpt-sol", "sonnet"],
+  "design-review": ["gpt-sol", "sonnet"],
   "knowledge-elicitation": ["haiku"],
-  "code-review": ["sonnet"],
-  "final-review": ["gpt-astra", "fable"],
-  "gate-review": ["gpt-astra", "fable"],
-  "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["gpt-astra", "fable"]
-}
-
-const EXPECTED_AGENT_TOOL: Record<RoleId, boolean> = {
-  "complex-impl": true,
-  "normal-impl": true,
-  "light-impl": true,
-  escalation: true,
-  general: true,
-  "design-plan": true,
-  explore: true,
-  "realtime-research": true,
-  "e2e-verify": true,
-  "design-review": true,
-  "knowledge-elicitation": false,
-  "code-review": false,
-  "final-review": false,
-  "gate-review": false,
-  "adversarial-review": false,
-  advisor: false
+  "code-review": ["gpt-sol", "sonnet"],
+  "complex-review": ["gpt-astra", "fable"],
+  "adversarial-review": ["opus", "gpt-sol"]
 }
 
 function sortedRoleIds(value: Record<RoleId, ModelId[]>): RoleId[] {
@@ -98,7 +75,7 @@ describe("POLICIES", () => {
 })
 
 describe("ASSIGNMENTS", () => {
-  it("claude-model-policy だけに現行の全 16 役割を保持する", () => {
+  it("claude-model-policy だけに現行の全 13 役割を保持する", () => {
     expect(Object.keys(ASSIGNMENTS)).toEqual(["claude-model-policy"])
     expect(sortedRoleIds(ASSIGNMENTS["claude-model-policy"])).toEqual(
       ALL_ROLE_IDS
@@ -110,9 +87,42 @@ describe("ASSIGNMENTS", () => {
 })
 
 describe("RECOMMENDED", () => {
-  it("custom プロファイル向け推奨が全 16 役割と固定値を持つ", () => {
+  it("custom プロファイル向け推奨が全 13 役割と固定値を持つ", () => {
     expect(sortedRoleIds(RECOMMENDED)).toEqual(ALL_ROLE_IDS)
     expect(RECOMMENDED).toEqual(EXPECTED_RECOMMENDED)
+  })
+})
+
+describe("EFFORT", () => {
+  it("役割とモデルごとの effort 表を固定する", () => {
+    expect(EFFORT).toEqual({
+      escalation: { fable: "high", "gpt-astra": "high" },
+      "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+      "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+      "light-impl": { "gpt-luna": "low" },
+      general: { sonnet: "medium", "gpt-luna": "medium" },
+      explore: { sonnet: "medium", "gpt-sol": "medium" },
+      "realtime-research": { grok: "low", sonnet: "low" },
+      "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+      "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+      "knowledge-elicitation": {},
+      "code-review": { sonnet: "high", "gpt-sol": "high" },
+      "complex-review": { "gpt-astra": "high", fable: "high" },
+      "adversarial-review": { opus: "high", "gpt-sol": "high" }
+    })
+    expect(EFFORT_ORDER).toEqual(["low", "medium", "high", "xhigh", "max"])
+    expect(Object.values(EFFORT).flatMap(Object.keys)).not.toContain("haiku")
+  })
+
+  it("複数役割では最も高い effort を選び、未定義の組は省く", () => {
+    expect(effortFor(["normal-impl"], "gpt-luna")).toBeUndefined()
+    expect(effortFor(["light-impl"], "gpt-luna")).toBe("low")
+    expect(effortFor(["normal-impl", "light-impl"], "gpt-luna")).toBe("low")
+    expect(effortFor(["general", "code-review"], "sonnet")).toBe("high")
+    expect(effortFor(["knowledge-elicitation"], "haiku")).toBeUndefined()
+    expect(() =>
+      effortFor(["unregistered-role" as RoleId], "sonnet")
+    ).not.toThrow()
   })
 })
 
@@ -208,48 +218,12 @@ describe("rolesFor", () => {
     ])
   })
 
-  it("fable が escalation・final-review・gate-review・advisor を返す", () => {
-    expect(rolesFor("fable")).toEqual([
-      "escalation",
-      "final-review",
-      "gate-review",
-      "advisor"
-    ])
+  it("fable が escalation と complex-review を返す", () => {
+    expect(rolesFor("fable")).toEqual(["escalation", "complex-review"])
   })
 
   it("claude-model-policy に登場しないモデルには空配列を返す", () => {
     expect(rolesFor("gpt-astra")).toEqual([])
-  })
-})
-
-describe("allowsAgentTool", () => {
-  it("claude-model-policy の全 16 役割で現行規定を保つ", () => {
-    for (const role of ROLES) {
-      expect(allowsAgentTool([role.id]), role.id).toBe(
-        EXPECTED_AGENT_TOOL[role.id]
-      )
-    }
-  })
-
-  it("役割の組み合わせに応じて Agent Tool を判定する", () => {
-    expect(allowsAgentTool(["light-impl"])).toBe(true)
-    expect(allowsAgentTool(["light-impl", "complex-impl"])).toBe(true)
-    expect(allowsAgentTool(["advisor"])).toBe(false)
-    expect(allowsAgentTool(["code-review"])).toBe(false)
-    expect(allowsAgentTool(["final-review"])).toBe(false)
-    expect(allowsAgentTool(["gate-review"])).toBe(false)
-    expect(allowsAgentTool(["complex-impl", "advisor"])).toBe(true)
-  })
-
-  it("Agent Tool を許可する新規役割を通す", () => {
-    expect(allowsAgentTool(["escalation"])).toBe(true)
-    expect(allowsAgentTool(["e2e-verify"])).toBe(true)
-  })
-
-  it("モデル未指定時は役割側の規定だけを適用する", () => {
-    expect(allowsAgentTool(["explore"])).toBe(true)
-    expect(allowsAgentTool(["light-impl"])).toBe(true)
-    expect(allowsAgentTool(["final-review"])).toBe(false)
   })
 })
 

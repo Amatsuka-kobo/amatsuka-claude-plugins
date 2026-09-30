@@ -49,7 +49,6 @@ interface RolesSummary {
   implRoles: string[]
   readonlyRoles: string[]
   mixedKinds: boolean
-  agentTool: boolean
 }
 
 interface Discarded {
@@ -370,7 +369,7 @@ describe("--scope", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.results).toHaveLength(16)
+    expect(result.results).toHaveLength(13)
     expect(result.results.map((entry) => entry.modelId)).toEqual(
       ROLES.map((role) => ASSIGNMENTS["claude-model-policy"][role.id][0])
     )
@@ -474,17 +473,20 @@ describe("--list-live-models", () => {
         {
           id: "claude-gpt-6-sol",
           vendor: "gpt",
-          recommendedFor: ["complex-impl", "adversarial-review"]
+          recommendedFor: [
+            "complex-impl",
+            "normal-impl",
+            "explore",
+            "e2e-verify",
+            "design-review",
+            "code-review",
+            "adversarial-review"
+          ]
         },
         {
           id: "claude-gpt-6-astra",
           vendor: "gpt",
-          recommendedFor: [
-            "escalation",
-            "final-review",
-            "gate-review",
-            "advisor"
-          ]
+          recommendedFor: ["escalation", "complex-review"]
         },
         { id: "custom-unknown", vendor: "unknown", recommendedFor: [] }
       ],
@@ -547,7 +549,7 @@ describe("--list-coverage", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(13)
     expect(result.uncovered).toEqual(result.roles.map((role) => role.id))
     expect(result.roles.every((role) => role.coveredBy.length === 0)).toBe(true)
   })
@@ -593,10 +595,9 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
-      "gpt-astra",
-      "fable"
-    ])
+    expect(
+      result.roles.find((role) => role.id === "complex-review")?.models
+    ).toEqual(["gpt-astra", "fable"])
     expect(
       result.roles.every(
         (role) =>
@@ -614,17 +615,16 @@ describe("--list-coverage", () => {
       project
     ])
 
-    expect(result.roles).toHaveLength(16)
+    expect(result.roles).toHaveLength(13)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
-    ).toEqual(["gpt-sol", "opus"])
+    ).toEqual(["gpt-sol", "opus", "grok"])
     expect(
       result.roles.find((role) => role.id === "escalation")?.models
     ).toEqual(["gpt-astra", "fable"])
-    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
-      "gpt-astra",
-      "fable"
-    ])
+    expect(
+      result.roles.find((role) => role.id === "complex-review")?.models
+    ).toEqual(["gpt-astra", "fable"])
   })
 
   it("--scope claude では外部ベンダーの既存定義を被覆に数えない", () => {
@@ -680,9 +680,9 @@ describe("--list-coverage", () => {
     expect(
       result.roles.find((role) => role.id === "escalation")?.models
     ).toEqual(["fable"])
-    expect(result.roles.find((role) => role.id === "advisor")?.models).toEqual([
-      "fable"
-    ])
+    expect(
+      result.roles.find((role) => role.id === "complex-review")?.models
+    ).toEqual(["fable"])
     expect(result.roles.every((role) => role.models.length === 1)).toBe(true)
   })
 
@@ -719,8 +719,8 @@ describe("--list-coverage", () => {
     ])
 
     expect(
-      result.roles.find((role) => role.id === "advisor")?.defaultName
-    ).toBe("adviser")
+      result.roles.find((role) => role.id === "complex-review")?.defaultName
+    ).toBe("complex-reviewer")
     expect(
       result.roles.every(
         (role) =>
@@ -747,17 +747,14 @@ describe("--list-roles", () => {
       "light-impl",
       "escalation",
       "general",
-      "design-plan",
       "explore",
       "realtime-research",
       "e2e-verify",
       "design-review",
       "knowledge-elicitation",
       "code-review",
-      "final-review",
-      "gate-review",
-      "adversarial-review",
-      "advisor"
+      "complex-review",
+      "adversarial-review"
     ])
     expect(result.roles.every((role) => role.source === "plugin")).toBe(true)
   })
@@ -939,8 +936,7 @@ describe("--check", () => {
       ids: ["complex-impl"],
       implRoles: ["complex-impl"],
       readonlyRoles: [],
-      mixedKinds: false,
-      agentTool: true
+      mixedKinds: false
     })
   })
 
@@ -965,82 +961,34 @@ describe("--check", () => {
       ids: ["normal-impl", "explore", "design-review"],
       implRoles: ["normal-impl"],
       readonlyRoles: ["explore", "design-review"],
-      mixedKinds: true,
-      agentTool: true
+      mixedKinds: true
     })
   })
 
-  it("Agent tool の可否を役割から返す", () => {
-    const denied = singleResult<CheckResult>([
+  it("生成した定義の tools に Agent を含めない", () => {
+    const result = run([
       "--scope",
       "custom",
       "--model-id",
-      "gpt-luna",
+      "gpt-sol",
       "--name",
-      "gpt-luna",
+      "gpt-sol-code-review",
       "--roles",
       "code-review",
       "--lang",
       "ja",
       "--dir",
       project,
-      "--check"
+      "--write"
     ])
-    expect(denied.roles.agentTool).toBe(false)
-    expect(check("custom", ["--roles", "complex-impl"]).roles.agentTool).toBe(
-      true
+    expect(result.ok).toBe(true)
+
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "gpt-sol-code-review.md"),
+      "utf8"
     )
-  })
-
-  it("Agent tool の可否を役割だけで決める", () => {
-    const agentToolFor = (roles: string): boolean =>
-      singleResult<CheckResult>([
-        "--scope",
-        "custom",
-        "--model-id",
-        "grok",
-        "--name",
-        `${roles.replace(/,/g, "-")}-agent-tool-check`,
-        "--roles",
-        roles,
-        "--lang",
-        "ja",
-        "--dir",
-        project,
-        "--check"
-      ]).roles.agentTool
-
-    expect(agentToolFor("code-review")).toBe(false)
-    expect(agentToolFor("final-review")).toBe(false)
-    expect(agentToolFor("gate-review")).toBe(false)
-    expect(agentToolFor("escalation")).toBe(true)
-    expect(agentToolFor("e2e-verify")).toBe(true)
-    expect(agentToolFor("explore,realtime-research,design-review")).toBe(true)
-    expect(agentToolFor("light-impl")).toBe(true)
-  })
-
-  it("自由モデル値でも役割だけで Agent の有無を決める", () => {
-    const result = singleResult<CheckResult>([
-      "--scope",
-      "custom",
-      "--model-id",
-      "haiku",
-      "--model",
-      "custom-live-model",
-      "--vendor",
-      "claude",
-      "--name",
-      "custom-claude-model",
-      "--roles",
-      "complex-impl",
-      "--lang",
-      "ja",
-      "--dir",
-      project,
-      "--check"
-    ])
-
-    expect(result.roles.agentTool).toBe(true)
+    const tools = content.match(/^tools: (.*)$/m)?.[1]?.split(", ") ?? []
+    expect(tools).not.toContain("Agent")
   })
 
   it("frontmatter が無い既存ファイルを全体が本文の文書として扱う", () => {
@@ -1198,6 +1146,82 @@ function seed(
 }
 
 describe("--write", () => {
+  it("個別経路は model-id から effort を選ぶ", () => {
+    const result = run<WriteResults>([
+      "--write",
+      "--scope",
+      "custom",
+      "--model-id",
+      "sonnet",
+      "--model",
+      "test-alias",
+      "--name",
+      "effort-individual",
+      "--roles",
+      "general,code-review",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "effort-individual.md"),
+      "utf8"
+    )
+    expect(content).toMatch(/^model: test-alias\neffort: high$/m)
+  })
+
+  it("--merge は既存の effort をテンプレート値で上書きする", () => {
+    const args = [
+      "--scope",
+      "custom",
+      "--model-id",
+      "sonnet",
+      "--name",
+      "effort-merge",
+      "--roles",
+      "general",
+      "--dir",
+      project
+    ]
+    run(["--write", ...args])
+    const file = path.join(project, ".claude", "agents", "effort-merge.md")
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace(/^effort: .+$/m, "effort: low")
+    )
+
+    const result = run<WriteResults>(["--write", "--merge", ...args])
+    expect(result.ok).toBe(true)
+    expect(fs.readFileSync(file, "utf8")).toMatch(
+      /^model: .+\neffort: medium$/m
+    )
+  })
+
+  it("--merge はテンプレートに無い既存 effort を保持する", () => {
+    const args = [
+      "--scope",
+      "claude",
+      "--model-id",
+      "haiku",
+      "--name",
+      "effort-haiku",
+      "--roles",
+      "knowledge-elicitation",
+      "--dir",
+      project
+    ]
+    run(["--write", ...args])
+    const file = path.join(project, ".claude", "agents", "effort-haiku.md")
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace(/^(model: .+)$/m, "$1\neffort: low")
+    )
+
+    const result = run<WriteResults>(["--write", "--merge", ...args])
+    expect(result.ok).toBe(true)
+    expect(fs.readFileSync(file, "utf8")).toMatch(/^effort: low$/m)
+  })
+
   it("既存が無いときテンプレートどおりに書く", () => {
     const result = run([
       "--scope",
@@ -1428,6 +1452,7 @@ describe("--write", () => {
     expect(result.action).toBe("merged")
     expect(result.kept).toEqual([
       "tools:LSP",
+      "tools:Agent",
       "tools:CustomTool",
       "key:permissionMode",
       "section:## 独自運用"
@@ -1841,7 +1866,7 @@ describe("live model 検証と vendor", () => {
 })
 
 describe("--recommended", () => {
-  it("Claude scope は 16 役割を各 1 定義にし、roleId と既定名を返す", () => {
+  it("Claude scope は 13 役割を各 1 定義にし、roleId と既定名を返す", () => {
     const result = run<WriteResults>([
       "--check",
       "--recommended",
@@ -1854,7 +1879,7 @@ describe("--recommended", () => {
     ])
 
     expect(result.ok).toBe(true)
-    expect(result.results).toHaveLength(16)
+    expect(result.results).toHaveLength(13)
     expect(result.results.map((entry) => entry.roleId)).toEqual(
       ROLES.map((role) => role.id)
     )
@@ -1879,6 +1904,48 @@ describe("--recommended", () => {
     expect(result).not.toHaveProperty("modelsDropped")
   })
 
+  it("Claude の推奨定義は ModelId に対応する effort を出す", () => {
+    const args = [
+      "--recommended",
+      "--scope",
+      "claude",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ]
+    const written = run<WriteResults>(["--write", ...args])
+    expect(written.ok).toBe(true)
+    const checked = run<WriteResults>(["--check", ...args])
+    expect(checked.ok).toBe(true)
+
+    const expected: Record<string, string | undefined> = {
+      "complex-impl": "medium",
+      "normal-impl": "medium",
+      "light-impl": undefined,
+      escalation: "high",
+      general: "medium",
+      explore: "medium",
+      "realtime-research": "low",
+      "e2e-verify": "medium",
+      "design-review": "medium",
+      "knowledge-elicitation": undefined,
+      "code-review": "high",
+      "complex-review": "high",
+      "adversarial-review": "high"
+    }
+    for (const entry of checked.results) {
+      const content = fs.readFileSync(path.join(project, entry.target), "utf8")
+      const modelAt = content
+        .split("\n")
+        .findIndex((line) => line.startsWith("model: "))
+      const nextLine = content.split("\n")[modelAt + 1]
+      const effort = expected[entry.roleId ?? ""]
+      if (effort === undefined) expect(nextLine).not.toMatch(/^effort: /)
+      else expect(nextLine).toBe(`effort: ${effort}`)
+    }
+  })
+
   it("custom scope の複数役割は指定分のみ ROLES 順に返す", () => {
     const result = run<WriteResults>([
       "--check",
@@ -1886,7 +1953,7 @@ describe("--recommended", () => {
       "--scope",
       "custom",
       "--roles",
-      "design-review,complex-impl,design-plan",
+      "design-review,complex-impl,adversarial-review",
       "--dir",
       project
     ])
@@ -1895,8 +1962,8 @@ describe("--recommended", () => {
       result.results.map((entry) => [entry.roleId, entry.modelId])
     ).toEqual([
       ["complex-impl", "gpt-sol"],
-      ["design-plan", "opus"],
-      ["design-review", "grok"]
+      ["design-review", "gpt-sol"],
+      ["adversarial-review", "opus"]
     ])
   })
 
@@ -1922,7 +1989,7 @@ describe("--recommended", () => {
   it("先頭が live に無ければ次の Claude enum を採り、その後の候補は採らない", async () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
-        data: [{ id: "claude-gpt-6-sol", owned_by: "openai" }]
+        data: [{ id: "claude-grok-4-7", owned_by: "xai" }]
       })
     })
     const result = await runAsync<WriteResults>(
@@ -1932,16 +1999,13 @@ describe("--recommended", () => {
         "--scope",
         "custom",
         "--roles",
-        "design-review,adversarial-review",
+        "design-review",
         "--dir",
         project
       ],
       { ANTHROPIC_BASE_URL: proxy.baseUrl }
     )
-    expect(result.results.map((entry) => entry.modelId)).toEqual([
-      "sonnet",
-      "opus"
-    ])
+    expect(result.results.map((entry) => entry.modelId)).toEqual(["sonnet"])
   })
 
   it("live の照会失敗時は推奨先頭を採り警告を返す", () => {
@@ -1957,7 +2021,7 @@ describe("--recommended", () => {
     ])
     expect(result.results.map((entry) => entry.modelId)).toEqual([
       "gpt-sol",
-      "grok"
+      "gpt-sol"
     ])
     expect(result.warnings).toContain(
       "live models unavailable (no-base-url); model existence was not validated"
@@ -1988,8 +2052,9 @@ describe("--recommended", () => {
       path.join(project, result.results[0]?.target ?? ""),
       "utf8"
     )
-    expect(content).toMatch(/^agent-policy-vendor: grok$/m)
-    expect(content).toMatch(/^color: red$/m)
+    expect(result.results[0]?.modelId).toBe("sonnet")
+    expect(content).toMatch(/^agent-policy-vendor: claude$/m)
+    expect(content).toMatch(/^color: blue$/m)
   })
 
   it("役割ごとに分けた write は初回の定義だけ MCP を付ける", () => {

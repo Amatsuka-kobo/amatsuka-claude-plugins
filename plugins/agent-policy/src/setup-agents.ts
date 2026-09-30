@@ -28,6 +28,7 @@ import {
   type CandidateScope,
   CLAUDE_ENUM_MODELS,
   candidateScopeFor,
+  effortFor,
   MODELS,
   type ModelId,
   type ModelSpec,
@@ -362,6 +363,7 @@ function composeInputFor(
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
     lang: options.lang,
+    effort: effortFor(target.roles, target.modelId),
     color: target.color,
     mcpServers,
     denyTools: options.mcpDeny

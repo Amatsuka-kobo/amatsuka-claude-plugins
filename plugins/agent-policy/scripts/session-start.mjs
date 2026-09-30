@@ -117,12 +117,6 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "design-plan",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
     kind: "readonly",
@@ -159,28 +153,16 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
-    id: "final-review",
-    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "gate-review",
-    label: "\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30B2\u30FC\u30C8\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "adversarial-review",
     label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "advisor",
-    label: "\u8A2D\u8A08\u30FB\u8A08\u753B\u30FB\u5B9F\u88C5\u306E\u30A2\u30C9\u30D0\u30A4\u30B6\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   }
 ];
 function roleById(id) {
@@ -393,6 +375,12 @@ var RETIRED = [
   "grok-researcher",
   "grok-implementer"
 ];
+var RETIRED_ROLES = /* @__PURE__ */ new Set([
+  "design-plan",
+  "final-review",
+  "gate-review",
+  "advisor"
+]);
 var DEPRECATED_ALIAS_VARIABLES = [
   "AMATSUKA_AGENT_GPT_SOL_ALIAS",
   "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
@@ -414,6 +402,7 @@ function unknownRoleBlock(env, marked) {
   const lines = [];
   for (const entry of marked) {
     for (const role of entry.roles) {
+      if (RETIRED_ROLES.has(role)) continue;
       if (labelOf(role) === void 0) {
         lines.push(`- ${entry.name}: ${role}`);
       }
@@ -429,6 +418,17 @@ function retiredBlock(marked) {
   const found = marked.map((entry) => entry.name).filter((name) => RETIRED.includes(name));
   if (found.length === 0) return void 0;
   return `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`;
+}
+function retiredRoleBlock(marked) {
+  const lines = marked.flatMap(
+    (entry) => entry.roles.filter((role) => RETIRED_ROLES.has(role)).map((role) => `- ${entry.name}: ${role}`)
+  );
+  if (lines.length === 0) return void 0;
+  return [
+    "\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u306E\u5F79\u5272 ID \u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002",
+    ...lines,
+    "\u66F8\u304D\u63DB\u3048\u5148: final-review / gate-review \u2192 complex-review\u3001design-plan / advisor \u2192 \u524A\u9664"
+  ].join("\n");
 }
 function deprecatedAliasesBlock(env) {
   if (!DEPRECATED_ALIAS_VARIABLES.some((variable) => env[variable] !== void 0)) {
@@ -537,6 +537,7 @@ async function build(env) {
   const blocks = compact([
     ...profileBlocks,
     retiredBlock(marked),
+    retiredRoleBlock(marked),
     deprecatedAliasesBlock(env)
   ]);
   if (blocks.length === 0) return void 0;

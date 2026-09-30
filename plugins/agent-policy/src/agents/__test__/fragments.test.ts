@@ -54,7 +54,7 @@ function writeFragment(dir: string, id: string, label: string): void {
 describe("loadFragments の 3 段探索", () => {
   it("同梱断片を読み込む", () => {
     const fragments = loadFragments([JA], "claude")
-    expect(fragments.size).toBe(16)
+    expect(fragments.size).toBe(13)
     expect(fragments.get("explore")?.source).toBe("plugin")
   })
 
@@ -70,8 +70,9 @@ describe("loadFragments の 3 段探索", () => {
       "escalation-implementer"
     )
     expect(fragments.get("e2e-verify")?.defaultName).toBe("e2e-verifier")
-    expect(fragments.get("final-review")?.defaultName).toBe("final-reviewer")
-    expect(fragments.get("gate-review")?.defaultName).toBe("gate-reviewer")
+    expect(fragments.get("complex-review")?.defaultName).toBe(
+      "complex-reviewer"
+    )
     expect(fragments.get("adversarial-review")?.defaultName).toBe("adversary")
   })
 

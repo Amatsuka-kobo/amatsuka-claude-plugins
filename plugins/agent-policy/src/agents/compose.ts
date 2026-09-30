@@ -5,7 +5,7 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import { allowsAgentTool, type Lang } from "./policies"
+import type { Effort, Lang } from "./policies"
 import { hasMixedKinds, type RoleId, sortRoleIds } from "./roles"
 import { type Vocabulary, vocabularyFor } from "./vocabulary"
 
@@ -16,6 +16,7 @@ export interface ComposeInput {
   roleIds: RoleId[]
   fragmentDirs: FragmentDir[]
   lang: Lang
+  effort?: Effort
   color?: string
   mcpServers?: string[]
   denyTools?: string[]
@@ -26,7 +27,6 @@ export interface RolesSummary {
   implRoles: string[]
   readonlyRoles: string[]
   mixedKinds: boolean
-  agentTool: boolean
 }
 
 const COLORS: Record<Vendor, string> = {
@@ -40,8 +40,7 @@ export function compose(input: ComposeInput): string {
   const vocabulary = vocabularyFor(input.lang)
   const common = loadCommon(input.fragmentDirs)
   const { ids: ordered, selected } = selectFragments(input)
-  const withAgent = allowsAgentTool(input.roleIds)
-  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? [])
+  const tools = resolveToolsFor(selected, input.mcpServers ?? [])
   const denyTools = input.denyTools ?? []
 
   const head = [
@@ -49,6 +48,7 @@ export function compose(input: ComposeInput): string {
     `name: ${input.name}`,
     `description: ${describe(selected, vocabulary)}`,
     `model: ${input.model}`,
+    ...(input.effort === undefined ? [] : [`effort: ${input.effort}`]),
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     ...(denyTools.length > 0
@@ -73,14 +73,7 @@ export function compose(input: ComposeInput): string {
     body.push(heading, "", ...items, "")
   }
 
-  if (withAgent) {
-    const advisor = common.get(vocabulary.advisorHeading)
-    if (advisor !== undefined)
-      body.push(vocabulary.advisorHeading, "", ...advisor, "")
-  }
-
   const constraints = [
-    ...(withAgent ? (common.get(vocabulary.agentConstraintHeading) ?? []) : []),
     ...(common.get(vocabulary.constraintHeading) ?? []),
     ...selected.flatMap(
       (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
@@ -122,8 +115,7 @@ export function describeRoles(input: ComposeInput): RolesSummary {
     ids,
     implRoles,
     readonlyRoles,
-    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds)
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind))
   }
 }
 
@@ -142,20 +134,15 @@ function selectFragments(input: ComposeInput): {
   return { ids, selected }
 }
 
-// MCP サーバーはサーバー単位で末尾へ足す。Agent はその手前へ置く。
+// MCP サーバーはサーバー単位で末尾へ足す。
 // mcpServers には mcp__ プレフィックス付きの完成した名前を渡す。
-function resolveToolsFor(
-  selected: Fragment[],
-  withAgent: boolean,
-  mcpServers: string[]
-): string[] {
+function resolveToolsFor(selected: Fragment[], mcpServers: string[]): string[] {
   const tools: string[] = []
   for (const fragment of selected) {
     for (const tool of fragment.tools) {
       if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool)
     }
   }
-  if (withAgent) tools.push("Agent")
   for (const server of mcpServers) {
     if (!tools.includes(server)) tools.push(server)
   }

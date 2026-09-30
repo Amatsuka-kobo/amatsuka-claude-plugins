@@ -57,6 +57,18 @@ describe("frontmatter", () => {
     expect(meta.model).toBe("test-alias")
   })
 
+  it("effort があれば model の直後へ出力する", () => {
+    const lines = build(["general", "code-review"], { effort: "high" }).split(
+      "\n"
+    )
+    const modelAt = lines.indexOf("model: test-alias")
+    expect(lines[modelAt + 1]).toBe("effort: high")
+  })
+
+  it("effort がなければ frontmatter に effort 行を出さない", () => {
+    expect(build(["general"])).not.toMatch(/^effort: /m)
+  })
+
   it("description を役割の description から組み立てる", () => {
     const meta = frontmatter(build(["complex-impl"]))
     expect(meta.description).toContain("Use this agent when")
@@ -113,10 +125,10 @@ describe("frontmatter", () => {
 
   it("役割マーカーを新規 ID を含めても ROLES の定義順で並べる", () => {
     const meta = frontmatter(
-      build(["explore", "normal-impl", "general", "design-plan"])
+      build(["explore", "normal-impl", "general", "complex-review"])
     )
     expect(meta["agent-policy-role"]).toBe(
-      "normal-impl, general, design-plan, explore"
+      "normal-impl, general, explore, complex-review"
     )
   })
 
@@ -125,25 +137,11 @@ describe("frontmatter", () => {
     expect(meta.tools).not.toContain("mcp__")
   })
 
-  it("Agent の付与が役割だけで決まる", () => {
-    expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
-    expect(frontmatter(build(["light-impl"])).tools).toContain("Agent")
-    expect(frontmatter(build(["escalation"])).tools).toContain("Agent")
-    expect(frontmatter(build(["e2e-verify"])).tools).toContain("Agent")
-    expect(frontmatter(build(["code-review"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["final-review"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["gate-review"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["explore"])).tools).toContain("Agent")
-    expect(frontmatter(build(["light-impl", "complex-impl"])).tools).toContain(
-      "Agent"
-    )
-    expect(frontmatter(build(["explore"])).tools).toContain("Agent")
-  })
-
-  it("役割だけで Agent の有無を決める", () => {
-    expect(frontmatter(build(["light-impl"])).tools).toContain("Agent")
-    expect(frontmatter(build(["advisor"])).tools).not.toContain("Agent")
-    expect(frontmatter(build(["complex-impl"])).tools).toContain("Agent")
+  it("全 13 役割の tools に Agent を含めない", () => {
+    for (const role of ROLES) {
+      const tools = frontmatter(build([role.id])).tools.split(", ")
+      expect(tools, role.id).not.toContain("Agent")
+    }
   })
 })
 
@@ -182,8 +180,7 @@ describe("describeRoles", () => {
       ids: ["normal-impl", "triage"],
       implRoles: ["normal-impl"],
       readonlyRoles: ["triage"],
-      mixedKinds: true,
-      agentTool: true
+      mixedKinds: true
     })
   })
 })
@@ -195,7 +192,6 @@ describe("本文", () => {
       "## When to invoke",
       "## Core Responsibilities",
       "## 作業手順",
-      "## アドバイザーへの相談",
       "## 制約",
       "## Output Format"
     ]
@@ -220,6 +216,15 @@ describe("本文", () => {
   })
 
   it("日英の合成定義に廃止した役割や探索文書への参照を含めない", () => {
+    const forbidden = [
+      "doc-writing",
+      "context-map",
+      "advisor",
+      "アドバイザー",
+      "design-plan",
+      "final-review",
+      "gate-review"
+    ]
     for (const [lang, fragmentDirs] of [
       ["ja", [PLUGIN_ROLES]],
       ["en", [EN]]
@@ -228,32 +233,32 @@ describe("本文", () => {
         ROLES.map((role) => role.id),
         { lang, fragmentDirs }
       )
-      expect(body).not.toContain("doc-writing")
-      expect(body).not.toContain("context-map")
+      for (const phrase of forbidden) expect(body).not.toContain(phrase)
     }
   })
 
-  it("Agent が付かないとき「アドバイザーへの相談」節を出さない", () => {
-    expect(build(["code-review"])).not.toContain("## アドバイザーへの相談")
+  it("日英の全役割でアドバイザー相談と Agent tool の制約を出さない", () => {
+    for (const [lang, fragmentDirs] of [
+      ["ja", [PLUGIN_ROLES]],
+      ["en", [EN]]
+    ] as const) {
+      for (const role of ROLES) {
+        const body = build([role.id], { lang, fragmentDirs })
+        expect(body, role.id).not.toContain("## アドバイザーへの相談")
+        expect(body, role.id).not.toContain("## Consulting an advisor")
+        expect(body, role.id).not.toContain("## Agent tool の制約")
+        expect(body, role.id).not.toContain("## Agent tool limits")
+      }
+    }
   })
 
-  it("general だけでも Agent と Agent tool の制約を出す", () => {
-    const body = build(["general"])
-    expect(frontmatter(body).tools.split(", ")).toContain("Agent")
-    expect(body).toContain("`Agent` tool はアドバイザーへの相談だけに使う")
-  })
-
-  it("読み取り役割だけでも Agent と Agent tool の制約を出す", () => {
-    const body = build(["explore"])
-    expect(frontmatter(body).tools.split(", ")).toContain("Agent")
-    expect(body).toContain("`Agent` tool はアドバイザーへの相談だけに使う")
-  })
-
-  it("複数の Agent 対応役割を合成しても Agent tool の制約は重複しない", () => {
-    const body = build(["complex-impl", "general"])
-    expect(
-      body.match(/`Agent` tool はアドバイザーへの相談だけに使う/g) ?? []
-    ).toHaveLength(1)
+  it("日本語で合成した定義の制約に差し戻し条件を含む", () => {
+    const body = build(ROLES.map((role) => role.id))
+    const constraints = body.slice(
+      body.indexOf("## 制約"),
+      body.indexOf("## Output Format")
+    )
+    expect(constraints).toContain("差し戻す")
   })
 
   it("ツール運用節を作らない", () => {
@@ -478,10 +483,10 @@ describe("断片の解決", () => {
     })
     expect(body).toContain("独自探索")
     expect(body).not.toContain("依頼された探索範囲だけを走査する")
-    expect(frontmatter(body).tools).toBe("Read, Grep, Glob, Agent")
+    expect(frontmatter(body).tools).toBe("Read, Grep, Glob")
   })
 
-  it("プロジェクト側断片の Agent はモデルと役割の判定に従って付ける", () => {
+  it("プロジェクト側断片に Agent を書いても tools に出さない", () => {
     const projectRoles = path.join(temporary, "roles")
     fs.mkdirSync(projectRoles, { recursive: true })
     fs.writeFileSync(
@@ -510,7 +515,7 @@ describe("断片の解決", () => {
       fragmentDirs: [PLUGIN_ROLES, { path: projectRoles, source: "project" }],
       lang: "ja"
     })
-    expect(frontmatter(body).tools.split(", ")).toContain("Agent")
+    expect(frontmatter(body).tools.split(", ")).not.toContain("Agent")
   })
 
   it("プロジェクト側にしかない役割 ID を解決できる", () => {
@@ -574,7 +579,7 @@ describe("断片の解決", () => {
     expect(body).toContain("プロジェクト固有の共通制約")
     // 差し替えなかった節は残る
     expect(body).toContain("あなたは x")
-    expect(body).toContain("## アドバイザーへの相談")
+    expect(body).toContain("## Output Format")
   })
 
   it("未知の役割 ID ではエラーを投げる", () => {

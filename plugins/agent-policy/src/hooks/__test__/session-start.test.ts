@@ -771,6 +771,32 @@ describe("旧定義の残骸通知", () => {
   })
 })
 
+describe("廃止した役割 ID の通知", () => {
+  it("final-review と書き換え先を通知し、未知の役割 ID と重ねない", () => {
+    place("legacy-reviewer", ["agent-policy-role: final-review"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("legacy-reviewer")
+    expect(output).toContain("final-review")
+    expect(output).toContain("complex-review")
+    expect(output).not.toContain("未知の役割 ID")
+  })
+
+  it.each([
+    ["gate-review", "complex-review"],
+    ["design-plan", "削除"],
+    ["advisor", "削除"]
+  ])("%s の廃止と移行先を通知し、未知の役割 ID と重ねない", (role, target) => {
+    place("legacy-role-agent", [`agent-policy-role: ${role}`])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("legacy-role-agent")
+    expect(output).toContain(`- legacy-role-agent: ${role}`)
+    expect(output).toContain(target)
+    expect(output).not.toContain("未知の役割 ID")
+  })
+})
+
 describe("フェイルオープン", () => {
   it("CLAUDE_PROJECT_DIR が無いとき走査せず方針だけ出す", () => {
     const output = runTs(HOOK, [], {

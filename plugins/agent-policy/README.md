@@ -2,7 +2,7 @@
 
 Claude Code を使うときのエージェント運用方針を、スキルとして配布する Claude Code プラグインです。
 
-モデル別または役割別の担当表、設計/実装フロー、アドバイザー運用、並列原則を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
+モデル別または役割別の担当表、設計/実装フロー、差し戻しの経路、並列原則を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
 
 ## 動作要件
 
@@ -67,6 +67,8 @@ Marketplace から `agent-policy` をインストールします。
 
 `CLAUDE_CODE_SUBAGENT_MODEL` を設定すると、Agent 定義の frontmatter にある `model` より優先されます。定義ごとに選んだモデルを使う場合は設定しないでください。
 
+`effort` も同様です。環境変数 `CLAUDE_CODE_EFFORT_LEVEL` と設定 `maxEffortLevel` は、Agent 定義の frontmatter にある `effort` より優先されます。
+
 ### プロキシを使う custom 構成
 
 外部モデルの実在を検証する custom 構成では、`ANTHROPIC_BASE_URL` がフックの実行環境から見える必要があります。シェル環境に設定した値がフックへ継承されることは実測で確認しています。プロジェクトごとに固定したい場合などは、Claude Code の `settings.json` / `settings.local.json` の `env` に置くこともできます。プロジェクト単位では、そのプロジェクトの `.claude/settings.json` に書きます。
@@ -100,13 +102,13 @@ Marketplace から `agent-policy` をインストールします。
 
 MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
 
-MCP は既定で実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan`)の定義に付与し、読み取り役割だけの定義には付与しません。
+MCP は既定で実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general`)の定義に付与し、読み取り役割だけの定義には付与しません。
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
 `--yes` を渡す非対話モードでは、`--recommended` により役割ごとに 1 定義ずつ保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に失敗した場合は各役割の先頭候補を使い、実在確認を行わなかった警告とともに生成します。
 
-組み込みの役割 ID は次の 16 種です。
+組み込みの役割 ID は次の 13 種です。
 
 | 役割 ID | 内容 |
 | --- | --- |
@@ -115,17 +117,14 @@ MCP は既定で実装役割(`complex-impl` / `normal-impl` / `light-impl` / `es
 | `light-impl` | 軽量な実装 |
 | `escalation` | 行き詰まり時のエスカレーション |
 | `general` | その他のタスク |
-| `design-plan` | 設計書・実装計画書(WBS)の作成 |
 | `explore` | コードベース探索 |
 | `realtime-research` | リアルタイム情報調査 |
 | `e2e-verify` | E2E 動作検証・ブラウザ/GUI 操作 |
 | `design-review` | 設計書・実装計画書のレビュー |
 | `knowledge-elicitation` | 暗黙知の抽出・理解レビュー |
 | `code-review` | コードレビュー |
-| `final-review` | 重要な実装の最終レビュー |
-| `gate-review` | 設計書の最終ゲートレビュー |
+| `complex-review` | 重要な実装・高リスク設計書の最終レビュー |
 | `adversarial-review` | 敵対的レビュー |
-| `advisor` | 設計・計画・実装のアドバイザー |
 
 setup-agents が扱う推奨モデル ID は次の 9 種です。
 
@@ -147,6 +146,8 @@ setup-agents が扱う推奨モデル ID は次の 9 種です。
 ```yaml
 agent-policy-role: normal-impl, explore
 ```
+
+このほか、役割とモデルの組に応じて `effort` が frontmatter に入る場合があります。
 
 SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。注入される役割マーカー表の各行は `- 役割名 [RoleId]: 定義名` の形です。役割名は日本語表記で、`[RoleId]` は `agent-policy-role` マーカーに書く値と同じです。生成した定義の共通規律は、言語によらずこの RoleId で行を引きます。`--lang en` などで生成した定義でも、役割名の言語に関係なく対応表を照合できます。`custom` と旧互換値の設定では、検証が成立した場合にすべてのマーカー付き定義を載せます。`claude` の設定と、custom から claude へフォールバックした場合は、`model` が Claude のモデルで実行され、かつ外部ベンダーを宣言していない定義だけを載せます。SubagentStart フックは環境変数の値だけで範囲を決めるため、custom から claude へフォールバックしたセッションでは、SessionStart と違ってすべての定義を載せます。この差は既知のもので、親は絞り込んだ表で委譲するため実害は限定的です。`none` と未設定では対応表を注入しません。
 
@@ -205,6 +206,19 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
 
 ## 旧バージョンからの移行
+
+0.20 系から 0.21 系へ移行する場合は、次を確認してください。
+
+1. `design-plan` / `advisor` / `final-review` / `gate-review` を廃止し、`complex-review` を追加しました。旧 ID のマーカーは組み込み役割として認識されず、対応表に出ません。SessionStart が廃止として通知します。定義を削除するか、`agent-policy-role` を書き換えるか、再生成してください。
+2. サブエージェントは相談せず、オーケストレーターへ差し戻すようになりました。
+3. 全役割で Agent Tool を付与しなくなりました。生成する定義の tools に `Agent` が入りません。`--merge` で再生成すると既存定義の tools にある `Agent` が残るため、手で消してください。
+4. 保持マージで再生成すると、既存の定義に `## アドバイザーへの相談` と `## Agent tool の制約` の節が残ります。手で削除するか、差分方針で「完全上書き」を選んでください。
+5. 生成する定義に `effort` を付けるようになりました。役割とモデルの表に無い組には付きません。テンプレートに無く既存定義にだけある `effort` は、保持マージで残ります。`effort` は、名指しで起動したときに合成するかどうかの判定を変えません。合成したときは、ホスト定義の `effort` で動きます。
+6. 推奨モデル(`RECOMMENDED`)と Claude 割当を変更しました。custom で採用されるモデルが変わる場合があります。
+7. 実装 4 役割の選定基準を変更しました。変更量ではなく、仕様確定度・設計新規性・変更影響度・検証困難度・分解可能性の 5 軸で判断します。生成済みの定義の本文へ反映するには再生成してください。
+8. MCP の既定付与の列挙から `design-plan` を外しました。
+9. `--check` / `--write` の応答の `roles` から `agentTool` を削除しました。
+10. `ja` / `en` 以外の翻訳断片を使う場合は、`_common.md` の更新に合わせて再翻訳してください。削除した役割の翻訳断片(`design-plan.md` / `advisor.md` / `final-review.md` / `gate-review.md`)は削除してください。残っているとプロジェクト独自の役割として扱われます。
 
 0.19 系から 0.20 系へ移行する場合は、次を確認してください。
 

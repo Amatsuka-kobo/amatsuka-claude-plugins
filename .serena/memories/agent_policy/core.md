@@ -1,4 +1,4 @@
-`plugins/agent-policy` (0.20.1-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
+`plugins/agent-policy` (0.21.0-dev, pkg `agent-policy-scripts`) and `plugins/prompt-smith`
 (0.4.0-dev, pkg `prompt-smith-scripts`) — the two halves of the former `optimize-agents`, split in
 commit 849d3c7 (2026-08). Both are script-bearing pnpm workspace members. **This repo runs under
 agent-policy itself**, selected by the env var `AMATSUKA_AGENT_AUTO_INJECTION` (see below), not by
@@ -21,8 +21,12 @@ candidate-set model**) + its plan
 `2026-09-16-agent-policy-doc-writing-role-design.md` (0.19.0-dev; its `doc-writing` role, D1/F1
 re-delegation rules and `gemini` vendor are **withdrawn in 0.20**; the Agent-tool-by-role-only
 change still holds) + its plan `harness-docs/plans/2026-09-16-agent-policy-doc-writing-role-plan.md`,
-`2026-09-24-agent-policy-role-overhaul-design.md` (**current, the 0.20.0-dev role overhaul**) + its
-plan `harness-docs/plans/2026-09-24-agent-policy-role-overhaul-plan.md`,
+`2026-09-24-agent-policy-role-overhaul-design.md` (the 0.20.0-dev role overhaul; its `design-plan`,
+`advisor`, `final-review`/`gate-review`, advisor consultation and per-role Agent Tool are
+**superseded in 0.21**) + its plan `harness-docs/plans/2026-09-24-agent-policy-role-overhaul-plan.md`,
+`2026-09-29-agent-policy-delegation-effort-design.md` (**current, 0.21.0-dev**: 13 roles, no
+consultation, Agent Tool denied to every role, 5-axis impl criteria, effort) + its plan
+`harness-docs/plans/2026-09-29-agent-policy-delegation-effort-plan.md`,
 plus `2026-08-09-prompt-smith-skill-creator-port-design.md`.
 Its §11 lists 15 rejected alternatives — read it before re-proposing anything about fragment
 distribution, per-hook scope predicates, or `--policy`.
@@ -69,10 +73,10 @@ Japanese; 「役割ラベル」 was rejected because it collides with `ROLES[].l
 0.17.0 and earlier still say 「帯」 — read them as 「役割」. Do not reintroduce 「帯」.
 
 **The 担当表 lives in exactly one place since 0.17.0-dev (2026-09-09)**: `references/
-orchestration-discipline.md` **§担当表** — 16 rows (since 0.20) × 5 columns (役割名 / RoleId / 種別 / Agent Tool /
-Claude モデル). Its canonical sources are `ROLES[].label/id/kind`, `allowsAgentTool`, and
-`ASSIGNMENTS["claude-model-policy"]`; `src/agents/__test__/discipline-role-table.test.ts` pins all
-five columns and also asserts that **neither policy SKILL.md contains a Markdown table** (any line
+orchestration-discipline.md` **§担当表** — 13 rows × 4 columns since 0.21 (役割名 / RoleId / 種別 /
+Claude モデル; the Agent Tool column was removed because every role is denied it). Its canonical
+sources are `ROLES[].label/id/kind` and `ASSIGNMENTS["claude-model-policy"]`;
+`src/agents/__test__/discipline-role-table.test.ts` pins all four columns and also asserts that **neither policy SKILL.md contains a Markdown table** (any line
 starting with `|`) nor a `## 担当表` / `## 役割` / `## 役割の帯` / `## モデル別役割` /
 `## 役割の帯と推奨モデル` heading. **Two traps in that test** (both fixed in 0.18.0-dev): its
 heading regex must match `## 担当表`, and its separator-row parser must accept `/^-+$/` — the
@@ -91,11 +95,39 @@ old `policy-skill-assignments.test.ts` is deleted. Design:
   vocabulary,mcp,hash}.ts`, `hooks/{session-start,subagent-start,delegation-gate,parallel-nudge}.ts`,
   `testing/{run-ts.ts,fake-models-server.ts,fake-claude.mjs}`.
 
-### Role fragments and the 16 role IDs
+### Role fragments and the 13 role IDs
 
-**16 role IDs since 2026-09-24 (0.20.0-dev)**, in `ROLES` order: `complex-impl, normal-impl,
-light-impl, escalation, general, design-plan, explore, realtime-research, e2e-verify, design-review,
-knowledge-elicitation, code-review, final-review, gate-review, adversarial-review, advisor`.
+**13 role IDs since 2026-09-29 (0.21.0-dev)**, in `ROLES` order: `complex-impl, normal-impl,
+light-impl, escalation, general, explore, realtime-research, e2e-verify, design-review,
+knowledge-elicitation, code-review, complex-review, adversarial-review`.
+
+0.21 changes (design `2026-09-29-agent-policy-delegation-effort-design.md`; they supersede the 0.20
+bullets below wherever the two disagree):
+
+- **`design-plan` and `advisor` are gone**; `final-review` + `gate-review` merged into
+  **`complex-review`** (重要な実装・高リスク設計書の最終レビュー, default-name `complex-reviewer`, readonly,
+  tools `Read, Grep, Glob, Bash`, Claude Fable, RECOMMENDED gpt-astra,fable). The orchestrator
+  writes design docs and WBS itself.
+- **No consultation.** Subagents hand work back instead; the old 3 advisor triggers are now hand-back
+  conditions in `_common.md` §制約. `_common.md` lost `## アドバイザーへの相談` and
+  `## Agent tool の制約`; `vocabulary.ts` lost `advisorHeading` / `agentConstraintHeading`. When the
+  orchestrator cannot state a decision axis it asks the user with `AskUserQuestion`.
+- **Agent Tool is denied to every role** (user decision). `SOLO_DENIED_ROLES` / `allowsAgentTool` /
+  `RolesSummary.agentTool` are deleted; `compose()` never emits `Agent` (it still strips `Agent`
+  written in a fragment). The discipline dropped the subagent re-delegation clauses.
+  `subagent-start.ts` is unchanged (it still serves project definitions without a `tools` line).
+- **Impl roles are chosen on 5 axes** (仕様確定度 / 設計新規性 / 変更影響度 / 検証困難度 / 分解可能性),
+  not change size. escalation = 原因不明/前提崩壊/再設計/行き詰まり; complex-impl = 非自明な設計判断/
+  複雑・曖昧な仕様/検証困難; normal-impl = 仕様・設計済みの実装/テスト作成; light-impl = 定型/一括/明確な
+  小変更/機械的に検証可能. Hand-backs from light/normal go to complex-impl, then escalation.
+  Decisions (a) decomposition and (b) impact×verifiability live in the discipline.
+- **effort**: `policies.ts` has `Effort`, `EFFORT` (role → model → effort) and `effortFor(roles,
+  modelId)` (highest level wins; unknown pairs → none; haiku never). `compose()` writes `effort`
+  right after `model`. The discipline's composition allow-list includes `effort` (composition keeps
+  the host's effort). Measured 2026-09-29: CLIProxyAPI maps Claude Code's `output_config.effort` to
+  upstream `reasoning.effort` for gpt/grok aliases.
+- SessionStart's `RETIRED_ROLES` (a Set) announces definitions still declaring the 4 retired IDs,
+  and those IDs are excluded from the unknown-role notice.
 
 0.20 changes (design `2026-09-24-agent-policy-role-overhaul-design.md`):
 
@@ -161,6 +193,7 @@ would make every example unconditionally usable and erase the distinction; banni
 examples would miss the cause, because two of the three failures happened without an example.
 `pnpm run test` passed (2307 passed / 2 skipped), as did `pnpm run lint` and `pnpm run typecheck`.
 
+**(Superseded in 0.21: Agent Tool is denied to every role and `allowsAgentTool` is deleted.)**
 **Agent Tool is decided by role only since 0.19.0-dev.** `allowsAgentTool(ids)` lost its `model`
 argument; `AGENT_DENIED_MODELS` (Haiku) is gone; `light-impl` moved to Agent Tool 可. The
 `ComposeInput.modelId` / `Target.composeModelId` plumbing was **removed in 0.19.1-dev**
@@ -168,7 +201,7 @@ argument; `AGENT_DENIED_MODELS` (Haiku) is gone; `light-impl` moved to Agent Too
 type checker nor lint could see it (an optional interface field with no reader). `Target.modelId`
 (the recommended-model id) is a different thing and stays.
 
-`design-plan` (設計書・実装計画書(WBS)の作成) sits between `general` and `explore`, is `kind: impl`,
+(0.20 only — `design-plan` was removed in 0.21.) `design-plan` (設計書・実装計画書(WBS)の作成) sat between `general` and `explore`, is `kind: impl`,
 carries the complex-impl tool set, is Agent-tool-allowed, and is Opus-only in both `ASSIGNMENTS` and
 `RECOMMENDED`. It takes requirements, acceptance criteria and exploration findings in the request
 (no context-map). **Every band in the 担当表 is a subagent role.** The orchestrator keeps only
@@ -210,22 +243,20 @@ before reaching `loadFragments` — there is no `.none.md` fragment.
   ignored. Model existence is grounded in the proxy's `/v1/models`, so alias substitution has no
   problem left to solve.
 - `modelsFor()` / `rolesFor(model)` lost their policy argument — they are claude-only.
-- `allowsAgentTool(ids)` — role-only since 0.19.0-dev (the `model?` parameter and
-  `AGENT_DENIED_MODELS` were removed).
+- `allowsAgentTool` and `SOLO_DENIED_ROLES` — **deleted in 0.21** (every role is denied Agent).
+- `EFFORT` / `effortFor(roleIds, modelId)` — 0.21; see the 0.21 bullets above.
 - **`MODELS` has 9 entries since 0.20.0-dev**: `opus, sonnet, haiku, fable, gpt-sol, gpt-terra,
   gpt-luna, gpt-astra, grok`. `gemini-flash` and the `gemini` vendor (added in 0.19) were removed.
   `Vendor` = `"gpt" | "grok" | "claude" | "none"`; `COLORS` / `VENDOR_COLORS` / the `--vendor`
   validator / the inference-failure message all list 4 values.
 - **`RECOMMENDED` order is meaningful since 0.20.0-dev**: `setup-agents --recommended` takes the
   first candidate present in live models, and Claude enums always count as present, so each row
-  stops at its first Claude enum. The rows were reordered so custom picks the intended vendor first
-  (`complex-impl` gpt-sol,opus / `normal-impl` gpt-luna,sonnet,grok / `light-impl` gpt-luna,haiku,grok /
-  `escalation` gpt-astra,fable / `general` gpt-luna,sonnet / `design-plan` opus / `explore`
-  grok,sonnet,gpt-terra / `realtime-research` grok,sonnet / `e2e-verify` sonnet / `design-review`
-  grok,sonnet / `knowledge-elicitation` haiku / `code-review` sonnet / `final-review`, `gate-review`,
-  `advisor` gpt-astra,fable / `adversarial-review` opus,gpt-sol). `ASSIGNMENTS` was not reordered.
-  `SOLO_DENIED_ROLES` = advisor, knowledge-elicitation, code-review, final-review, gate-review,
-  adversarial-review.
+  stops at its first Claude enum. 0.21 rows: `complex-impl` gpt-sol,opus,grok / `normal-impl`
+  gpt-sol,sonnet,grok / `light-impl` gpt-luna,haiku / `escalation` gpt-astra,fable / `general`
+  gpt-luna,sonnet / `explore` gpt-sol,sonnet / `realtime-research` grok,sonnet / `e2e-verify`
+  gpt-sol,sonnet / `design-review` gpt-sol,sonnet / `knowledge-elicitation` haiku / `code-review`
+  gpt-sol,sonnet / `complex-review` gpt-astra,fable / `adversarial-review` opus,gpt-sol. gpt-terra
+  stays in `MODELS` but is recommended nowhere.
 
 ### `live-models.ts` — grounding in the proxy
 
@@ -388,26 +419,24 @@ sole path — an **intentional** degradation, not a regression.
 `RECOMMENDED` in `policies.ts` is **setup-agents-only** (`--recommended`, `--list-live-models`
 `recommendedFor`, `--list-coverage` `models`); no skill shows it. Read values from `policies.ts`
 (0.20 order is listed in the `policies.ts` section above).
-In `ASSIGNMENTS` (claude profile, = the 担当表's "Claude モデル" column) advisor is **Fable only**
-since 0.16.0-dev. When Fable cannot start, subagents hand the question back instead of consulting.
+In `ASSIGNMENTS` (claude profile, = the 担当表's "Claude モデル" column) escalation and complex-review
+are Fable. There is no advisor since 0.21.
 The 担当表 rows use `ROLES[].label` verbatim (no parenthetical annotations any more); the test
 matches by exact equality.
 
 Three rules that used to be duplicated across both SKILLs now live only in the discipline:
-Agent-Tool denial (now the 担当表's "Agent Tool" column), the "name the band + Output Format in the
+Agent-Tool denial (a single "never grant Agent" clause since 0.21), the "name the band + Output Format in the
 request" rule, and the read-only-band-to-Write/Edit-definition wording. The design-review
 procedure is also discipline-only (§設計・実装計画の規律); custom keeps just its skip-exception.
 `ja/_common.md` L14 says 「対応表」 (was 「担当表」 — subagents never see the 担当表).
 
 Rules that bite:
 
-- Agent tool is denied to advisor / knowledge-elicitation / code-review / final-review /
-  gate-review / adversarial-review (solo). **`light-impl` is allowed it since 0.19.0-dev**, and
-  Haiku no longer strips it. Subagents use `Agent` only to consult the advisor since 0.20.
-- Upstream flow since 0.20: orchestrator dispatches exploration to `explore`, fixes requirements
-  from the findings → design-plan writes design/WBS from requirements + findings in the request →
-  knowledge-elicitation (Haiku) → design-review (external vendor, original only) → orchestrator
-  adopts/rejects → user approval → Approve. adversarial-review is outside this flow.
+- Agent tool is denied to every role since 0.21; subagents do not re-delegate.
+- Upstream flow since 0.21: orchestrator dispatches exploration to `explore`, fixes requirements
+  from the findings → the orchestrator writes design/WBS itself → knowledge-elicitation (Haiku) →
+  design-review (original only) → orchestrator adopts/rejects → user approval → Approve.
+  adversarial-review is outside this flow.
 - **Execution-tier resolution is profile-independent since 0.18.0-dev** and lives in the discipline's
   §委譲先の解決 (see above). Both profiles use the same three steps; only the *candidate set* differs,
   and the marker table's 2nd line announces which one is in force. `design-review` is still

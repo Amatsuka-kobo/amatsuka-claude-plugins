@@ -8,26 +8,23 @@ import {
 } from "../roles"
 
 describe("ROLES", () => {
-  it("役割 ID が 16 件あり、定義順で重複しない", () => {
+  it("役割 ID が 13 件あり、定義順で重複しない", () => {
     expect(ROLES.map((role) => role.id)).toEqual([
       "complex-impl",
       "normal-impl",
       "light-impl",
       "escalation",
       "general",
-      "design-plan",
       "explore",
       "realtime-research",
       "e2e-verify",
       "design-review",
       "knowledge-elicitation",
       "code-review",
-      "final-review",
-      "gate-review",
-      "adversarial-review",
-      "advisor"
+      "complex-review",
+      "adversarial-review"
     ])
-    expect(new Set(ROLES.map((role) => role.id)).size).toBe(16)
+    expect(new Set(ROLES.map((role) => role.id)).size).toBe(13)
   })
 
   it("一般作業役割の label・kind・tools が固定値と一致する", () => {
@@ -39,23 +36,13 @@ describe("ROLES", () => {
     })
   })
 
-  it("設計書作成と探索役割の label・kind・tools が固定値と一致する", () => {
-    expect(
-      ROLES.filter((role) => ["design-plan", "explore"].includes(role.id))
-    ).toEqual([
-      {
-        id: "design-plan",
-        label: "設計書・実装計画書(WBS)の作成",
-        kind: "impl",
-        tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-      },
-      {
-        id: "explore",
-        label: "コードベース探索",
-        kind: "readonly",
-        tools: ["Read", "Grep", "Glob", "Bash"]
-      }
-    ])
+  it("探索役割の label・kind・tools が固定値と一致する", () => {
+    expect(ROLES.find((role) => role.id === "explore")).toEqual({
+      id: "explore",
+      label: "コードベース探索",
+      kind: "readonly",
+      tools: ["Read", "Grep", "Glob", "Bash"]
+    })
   })
 
   it("改名したレビュー役割の label・kind・tools が固定値と一致する", () => {
@@ -79,16 +66,19 @@ describe("ROLES", () => {
     ])
   })
 
-  it("追加した 5 役割の label・kind・tools が固定値と一致する", () => {
+  it("complex-review の label・kind・tools が固定値と一致する", () => {
+    expect(ROLES.find((role) => role.id === "complex-review")).toEqual({
+      id: "complex-review",
+      label: "重要な実装・高リスク設計書の最終レビュー",
+      kind: "readonly",
+      tools: ["Read", "Grep", "Glob", "Bash"]
+    })
+  })
+
+  it("escalation・E2E・敵対的レビューの形が固定値と一致する", () => {
     expect(
       ROLES.filter((role) =>
-        [
-          "escalation",
-          "final-review",
-          "e2e-verify",
-          "gate-review",
-          "adversarial-review"
-        ].includes(role.id)
+        ["escalation", "e2e-verify", "adversarial-review"].includes(role.id)
       )
     ).toEqual([
       {
@@ -102,18 +92,6 @@ describe("ROLES", () => {
         label: "E2E 動作検証・ブラウザ/GUI 操作",
         kind: "impl",
         tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-      },
-      {
-        id: "final-review",
-        label: "重要な実装の最終レビュー",
-        kind: "readonly",
-        tools: ["Read", "Grep", "Glob", "Bash"]
-      },
-      {
-        id: "gate-review",
-        label: "設計書の最終ゲートレビュー",
-        kind: "readonly",
-        tools: ["Read", "Grep", "Glob"]
       },
       {
         id: "adversarial-review",
@@ -167,7 +145,7 @@ describe("roleById", () => {
 describe("roleOrder", () => {
   it("組み込み役割には ROLES の添字を返す", () => {
     expect(roleOrder("complex-impl")).toBe(0)
-    expect(roleOrder("advisor")).toBe(ROLES.length - 1)
+    expect(roleOrder("adversarial-review")).toBe(ROLES.length - 1)
   })
 
   it("未知の ID には ROLES.length を返す", () => {

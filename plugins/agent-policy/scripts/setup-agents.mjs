@@ -250,12 +250,6 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "design-plan",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
     kind: "readonly",
@@ -292,28 +286,16 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
-    id: "final-review",
-    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "gate-review",
-    label: "\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30B2\u30FC\u30C8\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "adversarial-review",
     label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "advisor",
-    label: "\u8A2D\u8A08\u30FB\u8A08\u753B\u30FB\u5B9F\u88C5\u306E\u30A2\u30C9\u30D0\u30A4\u30B6\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   }
 ];
 function roleById(id) {
@@ -333,164 +315,9 @@ function hasMixedKinds(kinds) {
   return unique2.has("impl") && unique2.has("readonly");
 }
 
-// src/agents/policies.ts
-var MODELS = [
-  {
-    id: "opus",
-    vendor: "claude",
-    label: "Opus",
-    defaultName: "claude-opus",
-    model: "opus",
-    color: "blue"
-  },
-  {
-    id: "sonnet",
-    vendor: "claude",
-    label: "Sonnet",
-    defaultName: "claude-sonnet",
-    model: "sonnet",
-    color: "purple"
-  },
-  {
-    id: "haiku",
-    vendor: "claude",
-    label: "Haiku",
-    defaultName: "claude-haiku",
-    model: "haiku",
-    color: "pink"
-  },
-  {
-    id: "fable",
-    vendor: "claude",
-    label: "Fable",
-    defaultName: "claude-fable",
-    model: "fable",
-    color: "orange"
-  },
-  {
-    id: "gpt-sol",
-    vendor: "gpt",
-    label: "GPT Sol",
-    defaultName: "gpt-sol",
-    model: "claude-gpt-6-sol",
-    color: "yellow"
-  },
-  {
-    id: "gpt-terra",
-    vendor: "gpt",
-    label: "GPT Terra",
-    defaultName: "gpt-terra",
-    model: "claude-gpt-5-6-terra",
-    color: "green"
-  },
-  {
-    id: "gpt-luna",
-    vendor: "gpt",
-    label: "GPT Luna",
-    defaultName: "gpt-luna",
-    model: "claude-gpt-6-luna",
-    color: "cyan"
-  },
-  {
-    id: "gpt-astra",
-    vendor: "gpt",
-    label: "GPT Astra",
-    defaultName: "gpt-astra",
-    model: "claude-gpt-6-astra",
-    color: "yellow"
-  },
-  {
-    id: "grok",
-    vendor: "grok",
-    label: "Grok",
-    defaultName: "grok",
-    model: "claude-grok-4-7",
-    color: "red"
-  }
-];
-var ASSIGNMENTS = {
-  "claude-model-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["sonnet"],
-    "light-impl": ["haiku"],
-    escalation: ["fable"],
-    general: ["sonnet"],
-    "design-plan": ["opus"],
-    explore: ["sonnet"],
-    "realtime-research": ["sonnet"],
-    "e2e-verify": ["sonnet"],
-    "design-review": ["sonnet"],
-    "knowledge-elicitation": ["haiku"],
-    "code-review": ["sonnet"],
-    "final-review": ["fable"],
-    "gate-review": ["fable"],
-    "adversarial-review": ["opus"],
-    advisor: ["fable"]
-  }
-};
-var RECOMMENDED = {
-  "complex-impl": ["gpt-sol", "opus"],
-  "normal-impl": ["gpt-luna", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku", "grok"],
-  escalation: ["gpt-astra", "fable"],
-  general: ["gpt-luna", "sonnet"],
-  "design-plan": ["opus"],
-  explore: ["grok", "sonnet", "gpt-terra"],
-  "realtime-research": ["grok", "sonnet"],
-  "e2e-verify": ["sonnet"],
-  "design-review": ["grok", "sonnet"],
-  "knowledge-elicitation": ["haiku"],
-  "code-review": ["sonnet"],
-  "final-review": ["gpt-astra", "fable"],
-  "gate-review": ["gpt-astra", "fable"],
-  "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["gpt-astra", "fable"]
-};
-var SOLO_DENIED_ROLES = [
-  "advisor",
-  "knowledge-elicitation",
-  "code-review",
-  "final-review",
-  "gate-review",
-  "adversarial-review"
-];
-function allowsAgentTool(ids) {
-  return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));
-}
-function modelById(id) {
-  return MODELS.find((model) => model.id === id);
-}
-var CUSTOM_INJECTION_VALUES = [
-  "custom",
-  "with-codex",
-  "with-grok",
-  "with-codex-grok"
-];
-function isCustomInjection(value) {
-  if (value === void 0) return false;
-  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
-}
-var CLAUDE_ENUM_MODELS = [
-  "sonnet",
-  "opus",
-  "haiku",
-  "fable"
-];
-var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
-function runsOnClaude(model) {
-  return model === void 0 || CLAUDE_RESOLVED.has(model);
-}
-function candidateScopeFor(value) {
-  if (isCustomInjection(value)) return "with-external";
-  if (value?.trim().toLowerCase() === "claude") return "claude-only";
-  return void 0;
-}
-
 // src/agents/vocabulary.ts
 var JA = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
-  advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
-  agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
   constraintHeading: "## \u5236\u7D04",
   outputFormatHeading: "## Output Format",
   listSeparator: "\u3001",
@@ -499,8 +326,6 @@ var JA = {
 };
 var EN = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
-  advisorHeading: "## Consulting an advisor",
-  agentConstraintHeading: "## Agent tool limits",
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",
@@ -522,14 +347,14 @@ function compose(input) {
   const vocabulary = vocabularyFor(input.lang);
   const common = loadCommon(input.fragmentDirs);
   const { ids: ordered, selected } = selectFragments(input);
-  const withAgent = allowsAgentTool(input.roleIds);
-  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? []);
+  const tools = resolveToolsFor(selected, input.mcpServers ?? []);
   const denyTools = input.denyTools ?? [];
   const head = [
     "---",
     `name: ${input.name}`,
     `description: ${describe(selected, vocabulary)}`,
     `model: ${input.model}`,
+    ...input.effort === void 0 ? [] : [`effort: ${input.effort}`],
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
@@ -547,13 +372,7 @@ function compose(input) {
     if (items.length === 0) continue;
     body.push(heading, "", ...items, "");
   }
-  if (withAgent) {
-    const advisor = common.get(vocabulary.advisorHeading);
-    if (advisor !== void 0)
-      body.push(vocabulary.advisorHeading, "", ...advisor, "");
-  }
   const constraints = [
-    ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
     ...common.get(vocabulary.constraintHeading) ?? [],
     ...selected.flatMap(
       (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
@@ -585,8 +404,7 @@ function describeRoles(input) {
     ids,
     implRoles,
     readonlyRoles,
-    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds)
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind))
   };
 }
 function selectFragments(input) {
@@ -600,14 +418,13 @@ function selectFragments(input) {
   });
   return { ids, selected };
 }
-function resolveToolsFor(selected, withAgent, mcpServers) {
+function resolveToolsFor(selected, mcpServers) {
   const tools = [];
   for (const fragment of selected) {
     for (const tool of fragment.tools) {
       if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool);
     }
   }
-  if (withAgent) tools.push("Agent");
   for (const server of mcpServers) {
     if (!tools.includes(server)) tools.push(server);
   }
@@ -777,6 +594,174 @@ function mcpCurrentOf(content) {
     servers: split(meta.get("tools")).filter((tool) => tool.startsWith("mcp__")).map((tool) => tool.slice("mcp__".length)),
     denyTools: split(meta.get("disallowedTools"))
   };
+}
+
+// src/agents/policies.ts
+var EFFORT_ORDER = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+];
+var MODELS = [
+  {
+    id: "opus",
+    vendor: "claude",
+    label: "Opus",
+    defaultName: "claude-opus",
+    model: "opus",
+    color: "blue"
+  },
+  {
+    id: "sonnet",
+    vendor: "claude",
+    label: "Sonnet",
+    defaultName: "claude-sonnet",
+    model: "sonnet",
+    color: "purple"
+  },
+  {
+    id: "haiku",
+    vendor: "claude",
+    label: "Haiku",
+    defaultName: "claude-haiku",
+    model: "haiku",
+    color: "pink"
+  },
+  {
+    id: "fable",
+    vendor: "claude",
+    label: "Fable",
+    defaultName: "claude-fable",
+    model: "fable",
+    color: "orange"
+  },
+  {
+    id: "gpt-sol",
+    vendor: "gpt",
+    label: "GPT Sol",
+    defaultName: "gpt-sol",
+    model: "claude-gpt-6-sol",
+    color: "yellow"
+  },
+  {
+    id: "gpt-terra",
+    vendor: "gpt",
+    label: "GPT Terra",
+    defaultName: "gpt-terra",
+    model: "claude-gpt-5-6-terra",
+    color: "green"
+  },
+  {
+    id: "gpt-luna",
+    vendor: "gpt",
+    label: "GPT Luna",
+    defaultName: "gpt-luna",
+    model: "claude-gpt-6-luna",
+    color: "cyan"
+  },
+  {
+    id: "gpt-astra",
+    vendor: "gpt",
+    label: "GPT Astra",
+    defaultName: "gpt-astra",
+    model: "claude-gpt-6-astra",
+    color: "yellow"
+  },
+  {
+    id: "grok",
+    vendor: "grok",
+    label: "Grok",
+    defaultName: "grok",
+    model: "claude-grok-4-7",
+    color: "red"
+  }
+];
+var ASSIGNMENTS = {
+  "claude-model-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["sonnet"],
+    "light-impl": ["haiku"],
+    escalation: ["fable"],
+    general: ["sonnet"],
+    explore: ["sonnet"],
+    "realtime-research": ["sonnet"],
+    "e2e-verify": ["sonnet"],
+    "design-review": ["sonnet"],
+    "knowledge-elicitation": ["haiku"],
+    "code-review": ["sonnet"],
+    "complex-review": ["fable"],
+    "adversarial-review": ["opus"]
+  }
+};
+var RECOMMENDED = {
+  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "normal-impl": ["gpt-sol", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku"],
+  escalation: ["gpt-astra", "fable"],
+  general: ["gpt-luna", "sonnet"],
+  explore: ["gpt-sol", "sonnet"],
+  "realtime-research": ["grok", "sonnet"],
+  "e2e-verify": ["gpt-sol", "sonnet"],
+  "design-review": ["gpt-sol", "sonnet"],
+  "knowledge-elicitation": ["haiku"],
+  "code-review": ["gpt-sol", "sonnet"],
+  "complex-review": ["gpt-astra", "fable"],
+  "adversarial-review": ["opus", "gpt-sol"]
+};
+var EFFORT = {
+  escalation: { fable: "high", "gpt-astra": "high" },
+  "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+  "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+  "light-impl": { "gpt-luna": "low" },
+  general: { sonnet: "medium", "gpt-luna": "medium" },
+  explore: { sonnet: "medium", "gpt-sol": "medium" },
+  "realtime-research": { grok: "low", sonnet: "low" },
+  "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+  "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+  "knowledge-elicitation": {},
+  "code-review": { sonnet: "high", "gpt-sol": "high" },
+  "complex-review": { "gpt-astra": "high", fable: "high" },
+  "adversarial-review": { opus: "high", "gpt-sol": "high" }
+};
+function effortFor(roleIds, modelId) {
+  let highest;
+  for (const roleId of roleIds) {
+    const effort = EFFORT[roleId]?.[modelId];
+    if (effort !== void 0 && (highest === void 0 || EFFORT_ORDER.indexOf(effort) > EFFORT_ORDER.indexOf(highest))) {
+      highest = effort;
+    }
+  }
+  return highest;
+}
+function modelById(id) {
+  return MODELS.find((model) => model.id === id);
+}
+var CUSTOM_INJECTION_VALUES = [
+  "custom",
+  "with-codex",
+  "with-grok",
+  "with-codex-grok"
+];
+function isCustomInjection(value) {
+  if (value === void 0) return false;
+  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
+}
+var CLAUDE_ENUM_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
+var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
+function runsOnClaude(model) {
+  return model === void 0 || CLAUDE_RESOLVED.has(model);
+}
+function candidateScopeFor(value) {
+  if (isCustomInjection(value)) return "with-external";
+  if (value?.trim().toLowerCase() === "claude") return "claude-only";
+  return void 0;
 }
 
 // src/setup-agents.ts
@@ -967,6 +952,7 @@ function composeInputFor(options, target, mcpServers) {
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
     lang: options.lang,
+    effort: effortFor(target.roles, target.modelId),
     color: target.color,
     mcpServers,
     denyTools: options.mcpDeny
