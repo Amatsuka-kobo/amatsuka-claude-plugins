@@ -87,3 +87,11 @@ export function classifyPath(
 export function globFixedPart(glob: string): string {
   return picomatch.scan(glob).base
 }
+
+/**
+ * 先頭が `!` の否定 glob かを返す。`!docs/**` は固定部が `docs` でも、`docs/` の外すべてに一致する。
+ * extglob の `!(docs)/**` は否定に数えない(固定部が空になり globFixedPart で弾かれる)
+ */
+export function isNegatedGlob(glob: string): boolean {
+  return picomatch.scan(glob).negated
+}

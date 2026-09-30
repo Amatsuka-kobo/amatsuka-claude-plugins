@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import * as fs from "node:fs"
 import * as path from "node:path"
+import picomatch from "picomatch"
 import { type Subject, type SubjectFile, SubjectInputError } from "./types"
 
 /** 差分の上限。メモリを守るためのもので、内容の大きさは common/max-size が扱う */
@@ -147,22 +148,66 @@ export function validateRelativePaths(paths: string[]): void {
   }
 }
 
-/** paths の範囲(無ければ作業ツリー全体)に未コミットの変更があれば入力の誤りにする */
-export function assertNoUncommitted(repoPath: string, paths?: string[]): void {
+interface StatusEntry {
+  /** 2 文字の状態(`XY`) */
+  code: string
+  path: string
+  /** 名前の変更とコピーの移動元 */
+  from?: string
+}
+
+/** `git status --porcelain -z` の出力を読む。名前の変更とコピーは、移動先の次に移動元が続く */
+export function parseStatusZ(out: string): StatusEntry[] {
+  const tokens = out.split("\0")
+  const result: StatusEntry[] = []
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i] as string
+    if (token === "") continue
+    const code = token.slice(0, 2)
+    const entry: StatusEntry = { code, path: token.slice(3) }
+    if (/[RC]/.test(code)) {
+      i += 1
+      entry.from = tokens[i]
+    }
+    result.push(entry)
+  }
+  return result
+}
+
+/**
+ * paths の範囲(無ければ作業ツリー全体)に未コミットの変更があれば入力の誤りにする。
+ * ignore(設定の subject.ignoreUncommitted)の glob に当たるパスの変更は数えない。
+ * 名前の変更は、移動元と移動先の両方が当たるときだけ数えない
+ */
+export function assertNoUncommitted(
+  repoPath: string,
+  paths?: string[],
+  ignore: string[] = []
+): void {
   const res = runGit(repoPath, [
     ...FIXED_CONFIG,
     "status",
     "--porcelain",
+    "-z",
     "--untracked-files=no",
     "--",
     ...(paths ?? [])
   ])
   if (!res.ok) throw new Error(`git status が失敗した: ${res.stderr}`)
-  const changed = res.stdout.toString("utf-8").trim()
-  if (changed !== "") {
-    const first = changed.split("\n")[0]
+  // git status --porcelain のパスはリポジトリのルート相対で、repoPath がサブディレクトリでも変わらない。
+  // その場合は glob が当たらず未コミットとして数える。入力の誤りとして止まる安全な側に倒れる
+  // 照合は classifyPath(config/paths.ts)の generated と同じにする
+  const ignored =
+    ignore.length > 0 ? picomatch(ignore, { dot: true }) : () => false
+  const rest = parseStatusZ(res.stdout.toString("utf-8")).filter(
+    (e) => !(ignored(e.path) && (e.from === undefined || ignored(e.from)))
+  )
+  const first = rest[0]
+  if (first) {
+    const shown =
+      first.from === undefined ? first.path : `${first.from} -> ${first.path}`
     throw new SubjectInputError(
-      `未コミットの変更があるので評価できない(${first} ほか)。コミットしてから呼び直す`
+      `未コミットの変更があるので評価できない(${first.code.trim()} ${shown} ほか)。コミットしてから呼び直す`
     )
   }
 }
@@ -204,6 +249,8 @@ export interface CodeSubjectInput {
   repoPath?: string
   baseRef: string
   paths?: string[]
+  /** 未コミットの検査で数えないパスの glob(設定の subject.ignoreUncommitted)。省略時は空 */
+  ignoreUncommitted?: string[]
 }
 
 export interface CodeSubject {
@@ -226,7 +273,7 @@ export function collectCodeSubject(input: CodeSubjectInput): CodeSubject {
     throw new SubjectInputError(`HEAD をコミットに解決できない: ${repoPath}`)
   }
   // 空の差分より先に見る。コミットし忘れたまま「変更なし」で通さない
-  assertNoUncommitted(repoPath, input.paths)
+  assertNoUncommitted(repoPath, input.paths, input.ignoreUncommitted)
 
   const diffRes = runGit(
     repoPath,

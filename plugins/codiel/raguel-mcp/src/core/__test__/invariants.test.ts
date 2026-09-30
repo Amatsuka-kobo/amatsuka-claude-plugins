@@ -187,6 +187,18 @@ describe("assertInvariants(設計書 §6.12.3)", () => {
       ).toThrow(/generated/)
     })
 
+    it.each([
+      "!docs/**",
+      "!dist/**",
+      "!plugins/*/scripts/**"
+    ])("否定の generated %j は拒否する", (glob) => {
+      expect(() =>
+        assertInvariants(
+          withRule("code/protected-paths", { generated: [glob] })
+        )
+      ).toThrow(/generated.*否定/)
+    })
+
     it("固定部のある generated は受ける", () => {
       expect(() =>
         assertInvariants(
@@ -195,6 +207,43 @@ describe("assertInvariants(設計書 §6.12.3)", () => {
           })
         )
       ).not.toThrow()
+    })
+  })
+
+  describe("subject.ignoreUncommitted(§6.2.2 の手順 3)", () => {
+    it.each([
+      "**/*",
+      "*.md",
+      "*/chat/**",
+      "**"
+    ])("固定部の無い glob %j は拒否する", (glob) => {
+      const config = baseConfig()
+      config.subject.ignoreUncommitted = ["docs/chat/**", glob]
+      expect(() => assertInvariants(config)).toThrow(
+        /subject\.ignoreUncommitted/
+      )
+    })
+
+    it.each([
+      "!docs/**",
+      "!docs/chat/**",
+      "!plugins/*/scripts/**"
+    ])("否定の glob %j は拒否する", (glob) => {
+      const config = baseConfig()
+      config.subject.ignoreUncommitted = ["docs/chat/**", glob]
+      expect(() => assertInvariants(config)).toThrow(
+        /subject\.ignoreUncommitted.*否定/
+      )
+    })
+
+    it("固定部のある glob は受ける", () => {
+      const config = baseConfig()
+      config.subject.ignoreUncommitted = [
+        "docs/chat/**",
+        "plugins/*/scripts/**",
+        "notes/*/log.md"
+      ]
+      expect(() => assertInvariants(config)).not.toThrow()
     })
   })
 

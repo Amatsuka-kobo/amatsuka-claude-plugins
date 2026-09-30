@@ -83,6 +83,10 @@ const precedentSchema = z.strictObject({
   topN: z.number().int().positive()
 })
 
+const subjectSchema = z.strictObject({
+  ignoreUncommitted: z.array(z.string().min(1))
+})
+
 export const configSchema = z.strictObject({
   version: z.literal(1),
   onError: z.literal("ASK"),
@@ -92,6 +96,7 @@ export const configSchema = z.strictObject({
   panel: panelSchema,
   contextJudge: contextJudgeSchema,
   precedent: precedentSchema,
+  subject: subjectSchema,
   rules: z.strictObject(ruleSettingsShape)
 })
 

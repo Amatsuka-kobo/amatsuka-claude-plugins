@@ -96,9 +96,14 @@ export interface PolicyRecord {
   buildVersion: string
 }
 
-/** 応答に載せる policy(§6.2.5)。verdict.json の policy に保護パスの除外と生成物を足したもの */
+/**
+ * 応答に載せる policy(§6.2.5)。verdict.json の policy に、保護パスの除外と生成物、
+ * 未コミットの検査から外すパスの宣言を足したもの
+ */
 export interface Policy extends PolicyRecord {
   protectedPaths: { excludedDefaults: string[]; generated: string[] }
+  /** 設定の subject.ignoreUncommitted に宣言した glob(§6.2.2 の手順 3) */
+  ignoreUncommitted: string[]
 }
 
 export interface ContextJudgeSummary {
@@ -366,6 +371,13 @@ export interface RaguelConfig {
   precedent: {
     seedCatalog: boolean
     topN: number
+  }
+  subject: {
+    /**
+     * evaluate_code の未コミットの検査(§6.2.2 の手順 3)で数えないパスの glob(repoPath 相対)。
+     * run と関係の無いファイルの置き場だけを書く
+     */
+    ignoreUncommitted: string[]
   }
   rules: Record<string, RuleSettings>
 }

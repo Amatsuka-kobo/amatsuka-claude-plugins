@@ -415,6 +415,15 @@ describe("loadConfig - 保護パスの既定の除外と生成物(R20)", () => {
     ).toThrow(/generated/)
   })
 
+  it.each([
+    "!docs/**",
+    "!dist/**"
+  ])("generated に否定の glob(%s)を書くと読み込みエラー", (glob) => {
+    expect(() =>
+      loadRaguel({ rules: { "code/protected-paths": { generated: [glob] } } })
+    ).toThrow(/generated.*否定/)
+  })
+
   it("generated は和集合を取らず、固定部のある glob を受ける", () => {
     const { config } = loadRaguel({
       rules: {
@@ -427,6 +436,69 @@ describe("loadConfig - 保護パスの既定の除外と生成物(R20)", () => {
       "plugins/*/scripts/**",
       "plugins/*/dist/**"
     ])
+  })
+})
+
+describe("loadConfig - subject.ignoreUncommitted(§6.2.2 の手順 3)", () => {
+  it("書かなければ空の配列になる", () => {
+    expect(loadRaguel({}).config.subject).toEqual({ ignoreUncommitted: [] })
+  })
+
+  it("宣言した glob をそのまま持ち、configHash が変わる", () => {
+    const before = loadRaguel({}).configHash
+    const { config, configHash } = loadRaguel({
+      subject: { ignoreUncommitted: ["docs/chat/**", "notes/**"] }
+    })
+    expect(config.subject.ignoreUncommitted).toEqual([
+      "docs/chat/**",
+      "notes/**"
+    ])
+    expect(configHash).not.toBe(before)
+  })
+
+  it.each([
+    "**/*",
+    "*.md",
+    "**"
+  ])("固定部の無い glob(%s)を書くと読み込みエラー", (glob) => {
+    expect(() =>
+      loadRaguel({ subject: { ignoreUncommitted: ["docs/chat/**", glob] } })
+    ).toThrow(/subject\.ignoreUncommitted/)
+  })
+
+  it.each([
+    "!docs/**",
+    "!docs/chat/**"
+  ])("否定の glob(%s)を書くと読み込みエラー", (glob) => {
+    expect(() =>
+      loadRaguel({ subject: { ignoreUncommitted: ["docs/chat/**", glob] } })
+    ).toThrow(/subject\.ignoreUncommitted.*否定/)
+  })
+
+  it("正当な glob(docs/chat/**、plugins/*/scripts/**)は受ける", () => {
+    const { config } = loadRaguel({
+      subject: { ignoreUncommitted: ["docs/chat/**", "plugins/*/scripts/**"] }
+    })
+    expect(config.subject.ignoreUncommitted).toEqual([
+      "docs/chat/**",
+      "plugins/*/scripts/**"
+    ])
+  })
+
+  it("subject の未知のキーは読み込みエラー", () => {
+    expect(() => loadRaguel({ subject: { ignoreUntracked: [] } })).toThrow(
+      /ignoreUntracked/
+    )
+  })
+
+  it.each([
+    ["配列でない値", "docs/chat/**"],
+    ["空文字列の要素", [""]],
+    ["数値の要素", [1]]
+  ])("ignoreUncommitted の%sは読み込みエラー", (_, value) => {
+    expect(() => loadRaguel({ subject: { ignoreUncommitted: value } })).toThrow(
+      /ignoreUncommitted/
+    )
   })
 })
 

@@ -204,7 +204,12 @@ export async function evaluate(
 
   try {
     ctl.progress?.("評価対象の取得")
-    target = collectTarget(req, deps.projectRoot)
+    // 設定を読めないときは、未コミットの検査から何も外さない
+    target = collectTarget(
+      req,
+      deps.projectRoot,
+      rt.ok ? rt.runtime.loaded.config.subject.ignoreUncommitted : []
+    )
     if (!rt.ok) {
       return recordDegraded({
         evaluationId,
@@ -261,8 +266,15 @@ export async function evaluate(
   }
 }
 
-/** 手順 2: 入力を検証し、評価対象を読む(§6.2.2〜§6.2.4) */
-function collectTarget(req: EvaluationRequest, projectRoot: string): Target {
+/**
+ * 手順 2: 入力を検証し、評価対象を読む(§6.2.2〜§6.2.4)。
+ * ignoreUncommitted は設定の subject.ignoreUncommitted で、evaluate_code の未コミットの検査だけが使う
+ */
+function collectTarget(
+  req: EvaluationRequest,
+  projectRoot: string,
+  ignoreUncommitted: string[]
+): Target {
   const base = { phase: req.phase, runId: req.runId, objective: req.objective }
   switch (req.tool) {
     case "evaluate_code": {
@@ -270,7 +282,8 @@ function collectTarget(req: EvaluationRequest, projectRoot: string): Target {
         projectRoot,
         repoPath: req.repoPath,
         baseRef: req.baseRef,
-        paths: req.paths
+        paths: req.paths,
+        ignoreUncommitted
       })
       const parsed = parseDiff(diff)
       return {
@@ -939,7 +952,7 @@ function maskFinding(f: Finding): Finding {
   }
 }
 
-/** 応答と list_rules の policy(§6.2.5)。protectedPaths は verdict.json には載せない */
+/** 応答と list_rules の policy(§6.2.5)。protectedPaths と ignoreUncommitted は verdict.json には載せない */
 export function policyOf(
   config: RaguelConfig,
   configHash: string,
@@ -962,7 +975,8 @@ export function policyOf(
         "code/protected-paths",
         "generated"
       )
-    }
+    },
+    ignoreUncommitted: config.subject.ignoreUncommitted
   }
 }
 
@@ -1130,7 +1144,7 @@ function commit(
   dir: string,
   c: CommitInput
 ): EvaluationResult {
-  const { protectedPaths: _, ...policyRecord } = c.policy
+  const { protectedPaths: _, ignoreUncommitted: __, ...policyRecord } = c.policy
   const persisted = store.finalizeVerdict(dir, {
     evaluationId: c.evaluationId,
     runId: c.runId,
@@ -1259,7 +1273,8 @@ function recordDegraded(args: {
           configSource: args.configSource,
           version: POLICY_VERSION,
           buildVersion: args.deps.buildVersion,
-          protectedPaths: { excludedDefaults: [], generated: [] }
+          protectedPaths: { excludedDefaults: [], generated: [] },
+          ignoreUncommitted: []
         },
     contextJudge: {
       enabled: config.contextJudge.enabled,

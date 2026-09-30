@@ -4,7 +4,7 @@
  * 型と列挙の値(perPanelist のキー、provider の値、thresholds の 0〜1 など)は config/schema.ts が拒む。
  */
 
-import { globFixedPart } from "../config/paths"
+import { globFixedPart, isNegatedGlob } from "../config/paths"
 import {
   DEFAULT_PROTECTED_GLOBS,
   MAX_SIMILARITY_THRESHOLD,
@@ -39,6 +39,7 @@ export function assertInvariants(config: RaguelConfig): void {
   assertAllowPatterns(config)
   assertResubmissionThreshold(config)
   assertProtectedPathsParams(config)
+  assertIgnoreUncommitted(config)
   assertTimeLimits(config)
   assertContextJudgeThresholds(config)
 }
@@ -124,12 +125,36 @@ function assertProtectedPathsParams(config: RaguelConfig): void {
   const generated = settings?.generated
   if (Array.isArray(generated)) {
     for (const glob of generated as string[]) {
+      if (isNegatedGlob(glob)) {
+        throw new Error(
+          `rules."code/protected-paths".generated に否定の glob は置けません: ${glob}。` +
+            "否定は指定した範囲の外すべてに一致します。除く範囲でなく含める範囲を書いてください(例: dist/**)。"
+        )
+      }
       if (globFixedPart(glob) === "") {
         throw new Error(
           `rules."code/protected-paths".generated に固定部の無い glob は置けません: ${glob}。` +
             "ワイルドカードより前にディレクトリを書いてください(例: dist/**)。"
         )
       }
+    }
+  }
+}
+
+// subject.ignoreUncommitted の glob には固定部が要る(§6.2.2 の手順 3)。作業ツリー全体を検査から外させない
+function assertIgnoreUncommitted(config: RaguelConfig): void {
+  for (const glob of config.subject.ignoreUncommitted) {
+    if (isNegatedGlob(glob)) {
+      throw new Error(
+        `subject.ignoreUncommitted に否定の glob は置けません: ${glob}。` +
+          "否定は指定した範囲の外すべてに一致します。除く範囲でなく含める範囲を書いてください(例: docs/chat/**)。"
+      )
+    }
+    if (globFixedPart(glob) === "") {
+      throw new Error(
+        `subject.ignoreUncommitted に固定部の無い glob は置けません: ${glob}。` +
+          "ワイルドカードより前にディレクトリを書いてください(例: docs/chat/**)。"
+      )
     }
   }
 }

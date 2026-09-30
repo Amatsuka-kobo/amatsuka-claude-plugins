@@ -197,6 +197,73 @@ describe("空の差分(R22、所見 K4)", () => {
   })
 })
 
+describe("未コミットの検査から外すパスの宣言(§6.2.2 の手順 3)", () => {
+  const IGNORE = { subject: { ignoreUncommitted: ["docs/chat/**"] } }
+  const FILES = {
+    "docs/chat/log.md": "1\n",
+    "src/a.ts": "export const a = 1\n"
+  }
+
+  it("宣言したパスの未コミットの変更では拒まれずに評価し、policy に宣言が出る", async () => {
+    const h = harness({ raguel: IGNORE, files: FILES })
+    benignPanel(h.provider, "code")
+    const head = h.commit({ "src/a.ts": "export const a = 2\n" })
+    fs.writeFileSync(path.join(h.repo, "docs/chat/log.md"), "1\n2\n")
+
+    const r = await code(h)
+    expect(r.verdict).toBe("PROCEED")
+    expect(r.subject.head).toBe(head)
+    // 未コミットの変更は評価に入らない
+    expect(r.subject.files.map((f) => f.path)).toEqual(["src/a.ts"])
+    expect(r.policy.ignoreUncommitted).toEqual(["docs/chat/**"])
+    expect(h.index()).toHaveLength(1)
+
+    // verdict.json の policy には載せない(protectedPaths と同じ扱い)
+    const persisted = readVerdict(r).policy
+    expect(persisted).not.toHaveProperty("ignoreUncommitted")
+    expect(persisted).not.toHaveProperty("protectedPaths")
+    expect(h.store().verifyAttempt(r.casePath).ok).toBe(true)
+  })
+
+  it("宣言の外のパスの未コミットの変更は入力の誤りで、記録しない", async () => {
+    const h = harness({ raguel: IGNORE, files: FILES })
+    fs.writeFileSync(path.join(h.repo, "src/a.ts"), "書きかけ\n")
+    await expect(code(h)).rejects.toBeInstanceOf(SubjectInputError)
+    expect(h.index()).toEqual([])
+  })
+
+  it("宣言したパスとそれ以外の両方に変更があれば入力の誤りで、残ったパスをメッセージに出す", async () => {
+    const h = harness({ raguel: IGNORE, files: FILES })
+    fs.writeFileSync(path.join(h.repo, "docs/chat/log.md"), "1\n2\n")
+    fs.writeFileSync(path.join(h.repo, "src/a.ts"), "書きかけ\n")
+    const err = await code(h).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(SubjectInputError)
+    expect((err as Error).message).toContain("src/a.ts")
+    expect((err as Error).message).not.toContain("docs/chat")
+    expect(h.index()).toEqual([])
+  })
+
+  it("宣言が無ければ policy は空の配列で、どのパスの未コミットの変更も入力の誤りになる", async () => {
+    const h = harness({ files: FILES })
+    expect((await code(h)).policy.ignoreUncommitted).toEqual([])
+    fs.writeFileSync(path.join(h.repo, "docs/chat/log.md"), "1\n2\n")
+    await expect(code(h, { runId: "run-2" })).rejects.toBeInstanceOf(
+      SubjectInputError
+    )
+  })
+
+  it("設定を読めないときは宣言を使わず、宣言したパスの未コミットの変更も入力の誤りになる", async () => {
+    const h = harness({ raguel: IGNORE, files: FILES })
+    h.commit({
+      ".codiel/config.json": JSON.stringify({
+        raguel: { ...IGNORE, unknownKey: true }
+      })
+    })
+    fs.writeFileSync(path.join(h.repo, "docs/chat/log.md"), "1\n2\n")
+    await expect(code(h)).rejects.toBeInstanceOf(SubjectInputError)
+  })
+})
+
 describe("testsDir と E2E のレポート(R24)", () => {
   it("レポートだけの差分は変更なしとして PROCEED になり、subject にレポートが載る", async () => {
     const h = harness()

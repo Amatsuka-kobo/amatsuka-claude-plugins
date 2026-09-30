@@ -8517,9 +8517,9 @@ var require_picomatch = __commonJS({
     var utils = require_utils2();
     var constants = require_constants();
     var isObject2 = (val) => val && typeof val === "object" && !Array.isArray(val);
-    var picomatch3 = (glob, options, returnState = false) => {
+    var picomatch4 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
-        const fns = glob.map((input2) => picomatch3(input2, options, returnState));
+        const fns = glob.map((input2) => picomatch4(input2, options, returnState));
         const arrayMatcher = (str) => {
           for (const isMatch of fns) {
             const state2 = isMatch(str);
@@ -8535,16 +8535,16 @@ var require_picomatch = __commonJS({
       }
       const opts = options || {};
       const posix3 = opts.windows;
-      const regex = isState ? picomatch3.compileRe(glob, options) : picomatch3.makeRe(glob, options, false, true);
+      const regex = isState ? picomatch4.compileRe(glob, options) : picomatch4.makeRe(glob, options, false, true);
       const state = regex.state;
       delete regex.state;
       let isIgnored = () => false;
       if (opts.ignore) {
         const ignoreOpts = { ...options, ignore: null, onMatch: null, onResult: null };
-        isIgnored = picomatch3(opts.ignore, ignoreOpts, returnState);
+        isIgnored = picomatch4(opts.ignore, ignoreOpts, returnState);
       }
       const matcher = (input2, returnObject = false) => {
-        const { isMatch, match, output: output2 } = picomatch3.test(input2, regex, options, { glob, posix: posix3 });
+        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob, posix: posix3 });
         const result = { glob, state, regex, posix: posix3, input: input2, output: output2, match, isMatch };
         if (typeof opts.onResult === "function") {
           opts.onResult(result);
@@ -8570,7 +8570,7 @@ var require_picomatch = __commonJS({
       }
       return matcher;
     };
-    picomatch3.test = (input2, regex, options, { glob, posix: posix3 } = {}) => {
+    picomatch4.test = (input2, regex, options, { glob, posix: posix3 } = {}) => {
       if (typeof input2 !== "string") {
         throw new TypeError("Expected input to be a string");
       }
@@ -8587,24 +8587,24 @@ var require_picomatch = __commonJS({
       }
       if (match === false || opts.capture === true) {
         if (opts.matchBase === true || opts.basename === true) {
-          match = picomatch3.matchBase(input2, regex, options, posix3);
+          match = picomatch4.matchBase(input2, regex, options, posix3);
         } else {
           match = regex.exec(output2);
         }
       }
       return { isMatch: Boolean(match), match, output: output2 };
     };
-    picomatch3.matchBase = (input2, glob, options, posix3 = options && options.windows) => {
-      const regex = glob instanceof RegExp ? glob : picomatch3.makeRe(glob, options);
+    picomatch4.matchBase = (input2, glob, options, posix3 = options && options.windows) => {
+      const regex = glob instanceof RegExp ? glob : picomatch4.makeRe(glob, options);
       return regex.test(utils.basename(input2, { windows: posix3 }));
     };
-    picomatch3.isMatch = (str, patterns, options) => picomatch3(patterns, options)(str);
-    picomatch3.parse = (pattern, options) => {
-      if (Array.isArray(pattern)) return pattern.map((p) => picomatch3.parse(p, options));
+    picomatch4.isMatch = (str, patterns, options) => picomatch4(patterns, options)(str);
+    picomatch4.parse = (pattern, options) => {
+      if (Array.isArray(pattern)) return pattern.map((p) => picomatch4.parse(p, options));
       return parse3(pattern, { ...options, fastpaths: false });
     };
-    picomatch3.scan = (input2, options) => scan(input2, options);
-    picomatch3.compileRe = (state, options, returnOutput = false, returnState = false) => {
+    picomatch4.scan = (input2, options) => scan(input2, options);
+    picomatch4.compileRe = (state, options, returnOutput = false, returnState = false) => {
       if (returnOutput === true) {
         return state.output;
       }
@@ -8615,13 +8615,13 @@ var require_picomatch = __commonJS({
       if (state && state.negated === true) {
         source = `^(?!${source}).*$`;
       }
-      const regex = picomatch3.toRegex(source, options);
+      const regex = picomatch4.toRegex(source, options);
       if (returnState === true) {
         regex.state = state;
       }
       return regex;
     };
-    picomatch3.makeRe = (input2, options = {}, returnOutput = false, returnState = false) => {
+    picomatch4.makeRe = (input2, options = {}, returnOutput = false, returnState = false) => {
       if (!input2 || typeof input2 !== "string") {
         throw new TypeError("Expected a non-empty string");
       }
@@ -8632,9 +8632,9 @@ var require_picomatch = __commonJS({
       if (!parsed.output) {
         parsed = parse3(input2, options);
       }
-      return picomatch3.compileRe(parsed, options, returnOutput, returnState);
+      return picomatch4.compileRe(parsed, options, returnOutput, returnState);
     };
-    picomatch3.toRegex = (source, options) => {
+    picomatch4.toRegex = (source, options) => {
       try {
         const opts = options || {};
         return new RegExp(source, opts.flags || (opts.nocase ? "i" : ""));
@@ -8643,8 +8643,8 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch3.constants = constants;
-    module.exports = picomatch3;
+    picomatch4.constants = constants;
+    module.exports = picomatch4;
   }
 });
 
@@ -8654,14 +8654,14 @@ var require_picomatch2 = __commonJS({
     "use strict";
     var pico = require_picomatch();
     var utils = require_utils2();
-    function picomatch3(glob, options, returnState = false) {
+    function picomatch4(glob, options, returnState = false) {
       if (options && (options.windows === null || options.windows === void 0)) {
         options = { ...options, windows: utils.isWindows() };
       }
       return pico(glob, options, returnState);
     }
-    Object.assign(picomatch3, pico);
-    module.exports = picomatch3;
+    Object.assign(picomatch4, pico);
+    module.exports = picomatch4;
   }
 });
 
@@ -38525,6 +38525,9 @@ function classifyPath(repoRel, config2, testsDir) {
 function globFixedPart(glob) {
   return import_picomatch.default.scan(glob).base;
 }
+function isNegatedGlob(glob) {
+  return import_picomatch.default.scan(glob).negated;
+}
 
 // src/core/types.ts
 var MAX_EXCERPT_LENGTH = 300;
@@ -38798,6 +38801,7 @@ function assertInvariants(config2) {
   assertAllowPatterns(config2);
   assertResubmissionThreshold(config2);
   assertProtectedPathsParams(config2);
+  assertIgnoreUncommitted(config2);
   assertTimeLimits(config2);
   assertContextJudgeThresholds(config2);
 }
@@ -38870,11 +38874,30 @@ function assertProtectedPathsParams(config2) {
   const generated = settings?.generated;
   if (Array.isArray(generated)) {
     for (const glob of generated) {
+      if (isNegatedGlob(glob)) {
+        throw new Error(
+          `rules."code/protected-paths".generated \u306B\u5426\u5B9A\u306E glob \u306F\u7F6E\u3051\u307E\u305B\u3093: ${glob}\u3002\u5426\u5B9A\u306F\u6307\u5B9A\u3057\u305F\u7BC4\u56F2\u306E\u5916\u3059\u3079\u3066\u306B\u4E00\u81F4\u3057\u307E\u3059\u3002\u9664\u304F\u7BC4\u56F2\u3067\u306A\u304F\u542B\u3081\u308B\u7BC4\u56F2\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044(\u4F8B: dist/**)\u3002`
+        );
+      }
       if (globFixedPart(glob) === "") {
         throw new Error(
           `rules."code/protected-paths".generated \u306B\u56FA\u5B9A\u90E8\u306E\u7121\u3044 glob \u306F\u7F6E\u3051\u307E\u305B\u3093: ${glob}\u3002\u30EF\u30A4\u30EB\u30C9\u30AB\u30FC\u30C9\u3088\u308A\u524D\u306B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044(\u4F8B: dist/**)\u3002`
         );
       }
+    }
+  }
+}
+function assertIgnoreUncommitted(config2) {
+  for (const glob of config2.subject.ignoreUncommitted) {
+    if (isNegatedGlob(glob)) {
+      throw new Error(
+        `subject.ignoreUncommitted \u306B\u5426\u5B9A\u306E glob \u306F\u7F6E\u3051\u307E\u305B\u3093: ${glob}\u3002\u5426\u5B9A\u306F\u6307\u5B9A\u3057\u305F\u7BC4\u56F2\u306E\u5916\u3059\u3079\u3066\u306B\u4E00\u81F4\u3057\u307E\u3059\u3002\u9664\u304F\u7BC4\u56F2\u3067\u306A\u304F\u542B\u3081\u308B\u7BC4\u56F2\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044(\u4F8B: docs/chat/**)\u3002`
+      );
+    }
+    if (globFixedPart(glob) === "") {
+      throw new Error(
+        `subject.ignoreUncommitted \u306B\u56FA\u5B9A\u90E8\u306E\u7121\u3044 glob \u306F\u7F6E\u3051\u307E\u305B\u3093: ${glob}\u3002\u30EF\u30A4\u30EB\u30C9\u30AB\u30FC\u30C9\u3088\u308A\u524D\u306B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u66F8\u3044\u3066\u304F\u3060\u3055\u3044(\u4F8B: docs/chat/**)\u3002`
+      );
     }
   }
 }
@@ -38939,6 +38962,9 @@ var defaultConfig = {
   precedent: {
     seedCatalog: true,
     topN: 5
+  },
+  subject: {
+    ignoreUncommitted: []
   },
   rules: Object.fromEntries(
     RULE_SPECS.filter((spec) => spec.params.length > 0).map((spec) => [
@@ -39027,6 +39053,9 @@ var precedentSchema = external_exports.strictObject({
   seedCatalog: external_exports.boolean(),
   topN: external_exports.number().int().positive()
 });
+var subjectSchema = external_exports.strictObject({
+  ignoreUncommitted: external_exports.array(external_exports.string().min(1))
+});
 var configSchema = external_exports.strictObject({
   version: external_exports.literal(1),
   onError: external_exports.literal("ASK"),
@@ -39036,6 +39065,7 @@ var configSchema = external_exports.strictObject({
   panel: panelSchema,
   contextJudge: contextJudgeSchema,
   precedent: precedentSchema,
+  subject: subjectSchema,
   rules: external_exports.strictObject(ruleSettingsShape)
 });
 function parseConfig(value) {
@@ -43113,6 +43143,7 @@ function runRules(artifact, ctx) {
 }
 
 // src/subject/code.ts
+var import_picomatch3 = __toESM(require_picomatch2(), 1);
 import { spawnSync } from "node:child_process";
 import { createHash as createHash5 } from "node:crypto";
 import * as fs5 from "node:fs";
@@ -43227,21 +43258,42 @@ function validateRelativePaths(paths) {
     }
   }
 }
-function assertNoUncommitted(repoPath, paths) {
+function parseStatusZ(out) {
+  const tokens = out.split("\0");
+  const result = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === "") continue;
+    const code = token.slice(0, 2);
+    const entry = { code, path: token.slice(3) };
+    if (/[RC]/.test(code)) {
+      i += 1;
+      entry.from = tokens[i];
+    }
+    result.push(entry);
+  }
+  return result;
+}
+function assertNoUncommitted(repoPath, paths, ignore = []) {
   const res = runGit(repoPath, [
     ...FIXED_CONFIG,
     "status",
     "--porcelain",
+    "-z",
     "--untracked-files=no",
     "--",
     ...paths ?? []
   ]);
   if (!res.ok) throw new Error(`git status \u304C\u5931\u6557\u3057\u305F: ${res.stderr}`);
-  const changed = res.stdout.toString("utf-8").trim();
-  if (changed !== "") {
-    const first = changed.split("\n")[0];
+  const ignored = ignore.length > 0 ? (0, import_picomatch3.default)(ignore, { dot: true }) : () => false;
+  const rest = parseStatusZ(res.stdout.toString("utf-8")).filter(
+    (e) => !(ignored(e.path) && (e.from === void 0 || ignored(e.from)))
+  );
+  const first = rest[0];
+  if (first) {
+    const shown = first.from === void 0 ? first.path : `${first.from} -> ${first.path}`;
     throw new SubjectInputError(
-      `\u672A\u30B3\u30DF\u30C3\u30C8\u306E\u5909\u66F4\u304C\u3042\u308B\u306E\u3067\u8A55\u4FA1\u3067\u304D\u306A\u3044(${first} \u307B\u304B)\u3002\u30B3\u30DF\u30C3\u30C8\u3057\u3066\u304B\u3089\u547C\u3073\u76F4\u3059`
+      `\u672A\u30B3\u30DF\u30C3\u30C8\u306E\u5909\u66F4\u304C\u3042\u308B\u306E\u3067\u8A55\u4FA1\u3067\u304D\u306A\u3044(${first.code.trim()} ${shown} \u307B\u304B)\u3002\u30B3\u30DF\u30C3\u30C8\u3057\u3066\u304B\u3089\u547C\u3073\u76F4\u3059`
     );
   }
 }
@@ -43275,7 +43327,7 @@ function collectCodeSubject(input2) {
   if (head === null) {
     throw new SubjectInputError(`HEAD \u3092\u30B3\u30DF\u30C3\u30C8\u306B\u89E3\u6C7A\u3067\u304D\u306A\u3044: ${repoPath}`);
   }
-  assertNoUncommitted(repoPath, input2.paths);
+  assertNoUncommitted(repoPath, input2.paths, input2.ignoreUncommitted);
   const diffRes = runGit(
     repoPath,
     [
@@ -43716,7 +43768,11 @@ async function evaluate(req, deps, ctl) {
   let target;
   try {
     ctl.progress?.("\u8A55\u4FA1\u5BFE\u8C61\u306E\u53D6\u5F97");
-    target = collectTarget(req, deps.projectRoot);
+    target = collectTarget(
+      req,
+      deps.projectRoot,
+      rt.ok ? rt.runtime.loaded.config.subject.ignoreUncommitted : []
+    );
     if (!rt.ok) {
       return recordDegraded({
         evaluationId,
@@ -43772,7 +43828,7 @@ async function evaluate(req, deps, ctl) {
     });
   }
 }
-function collectTarget(req, projectRoot) {
+function collectTarget(req, projectRoot, ignoreUncommitted) {
   const base = { phase: req.phase, runId: req.runId, objective: req.objective };
   switch (req.tool) {
     case "evaluate_code": {
@@ -43780,7 +43836,8 @@ function collectTarget(req, projectRoot) {
         projectRoot,
         repoPath: req.repoPath,
         baseRef: req.baseRef,
-        paths: req.paths
+        paths: req.paths,
+        ignoreUncommitted
       });
       const parsed = parseDiff(diff);
       return {
@@ -44277,7 +44334,8 @@ function policyOf(config2, configHash, configSource, buildVersion) {
         "code/protected-paths",
         "generated"
       )
-    }
+    },
+    ignoreUncommitted: config2.subject.ignoreUncommitted
   };
 }
 function capForResponse(findings) {
@@ -44403,7 +44461,7 @@ ${JSON.stringify(meta3.scores, null, 2)}
   });
 }
 function commit(store, dir, c) {
-  const { protectedPaths: _, ...policyRecord } = c.policy;
+  const { protectedPaths: _, ignoreUncommitted: __, ...policyRecord } = c.policy;
   const persisted = store.finalizeVerdict(dir, {
     evaluationId: c.evaluationId,
     runId: c.runId,
@@ -44515,7 +44573,8 @@ function recordDegraded(args) {
       configSource: args.configSource,
       version: POLICY_VERSION,
       buildVersion: args.deps.buildVersion,
-      protectedPaths: { excludedDefaults: [], generated: [] }
+      protectedPaths: { excludedDefaults: [], generated: [] },
+      ignoreUncommitted: []
     },
     contextJudge: {
       enabled: config2.contextJudge.enabled,
@@ -44611,7 +44670,7 @@ function registerEvaluateCode(server, deps) {
   server.registerTool(
     "evaluate_code",
     {
-      description: "baseRef \u304B\u3089 HEAD \u307E\u3067\u306E git \u306E\u5DEE\u5206\u3092 Raguel \u304C\u81EA\u5206\u3067\u4F5C\u3063\u3066\u691C\u67FB\u3057\u3001PROCEED / ASK / STOP \u306E\u5224\u5B9A\u3092\u8FD4\u3059\u3002\u4F5C\u696D\u30C4\u30EA\u30FC\u306B\u672A\u30B3\u30DF\u30C3\u30C8\u306E\u5909\u66F4\u304C\u3042\u308C\u3070\u5165\u529B\u306E\u8AA4\u308A\u306B\u306A\u308B\u3002\u8A3C\u62E0\u306F casePath \u306B\u6B8B\u308B\u3002",
+      description: "baseRef \u304B\u3089 HEAD \u307E\u3067\u306E git \u306E\u5DEE\u5206\u3092 Raguel \u304C\u81EA\u5206\u3067\u4F5C\u3063\u3066\u691C\u67FB\u3057\u3001PROCEED / ASK / STOP \u306E\u5224\u5B9A\u3092\u8FD4\u3059\u3002\u4F5C\u696D\u30C4\u30EA\u30FC\u306B\u672A\u30B3\u30DF\u30C3\u30C8\u306E\u5909\u66F4\u304C\u3042\u308C\u3070\u5165\u529B\u306E\u8AA4\u308A\u306B\u306A\u308B(\u8A2D\u5B9A\u306E subject.ignoreUncommitted \u306B\u5F53\u305F\u308B\u30D1\u30B9\u306E\u5909\u66F4\u306F\u6570\u3048\u306A\u3044)\u3002\u8A3C\u62E0\u306F casePath \u306B\u6B8B\u308B\u3002",
       inputSchema: evaluateCodeInput
     },
     (args, extra) => runEvaluation({ tool: "evaluate_code", ...args }, deps, extra)

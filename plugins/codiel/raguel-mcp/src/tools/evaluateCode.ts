@@ -32,7 +32,8 @@ export function registerEvaluateCode(
     {
       description:
         "baseRef から HEAD までの git の差分を Raguel が自分で作って検査し、PROCEED / ASK / STOP の判定を返す。" +
-        "作業ツリーに未コミットの変更があれば入力の誤りになる。証拠は casePath に残る。",
+        "作業ツリーに未コミットの変更があれば入力の誤りになる(設定の subject.ignoreUncommitted に当たるパスの変更は数えない)。" +
+        "証拠は casePath に残る。",
       inputSchema: evaluateCodeInput
     },
     (args, extra) =>

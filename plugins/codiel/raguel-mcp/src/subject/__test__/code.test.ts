@@ -6,6 +6,7 @@ import {
   collectCodeSubject,
   MAX_DIFF_BYTES,
   parseNameStatusZ,
+  parseStatusZ,
   resolveRepoPath
 } from "../code"
 import { SubjectInputError } from "../types"
@@ -130,6 +131,81 @@ describe("collectCodeSubject", () => {
     ).toBe(true)
   })
 
+  it("ignoreUncommitted に当たるパスの未コミットの変更は数えず、評価に入れない", () => {
+    const repo = track(
+      makeRepo({ "a.ts": "a\n", "docs/chat/log.md": "1\n", "docs/.env": "x\n" })
+    )
+    const base = git(repo, "rev-parse", "HEAD")
+    writeFile(repo, "a.ts", "a2\n")
+    const head = commitAll(repo)
+    writeFile(repo, "docs/chat/log.md", "1\n2\n")
+    writeFile(repo, "docs/.env", "y\n")
+    git(repo, "add", "docs/.env")
+
+    expect(() =>
+      collectCodeSubject({ projectRoot: repo, baseRef: base })
+    ).toThrow(/未コミットの変更/)
+    // ドットで始まるファイルにも当たる(classifyPath の generated と同じ照合)
+    const r = collectCodeSubject({
+      projectRoot: repo,
+      baseRef: base,
+      ignoreUncommitted: ["docs/**"]
+    })
+    expect(r.subject.head).toBe(head)
+    expect(r.subject.files.map((f) => f.path)).toEqual(["a.ts"])
+    expect(r.diff).not.toContain("docs/chat/log.md")
+  })
+
+  it("ignoreUncommitted の外にも変更があれば入力の誤りにし、残ったパスをメッセージに出す", () => {
+    const repo = track(
+      makeRepo({
+        "a.ts": "a\n",
+        "docs/chat/log.md": "1\n",
+        "src/b c.ts": "b\n"
+      })
+    )
+    writeFile(repo, "docs/chat/log.md", "1\n2\n")
+    writeFile(repo, "src/b c.ts", "dirty\n")
+    const run = () =>
+      collectCodeSubject({
+        projectRoot: repo,
+        baseRef: "HEAD",
+        ignoreUncommitted: ["docs/chat/**"]
+      })
+    expect(run).toThrow(SubjectInputError)
+    expect(run).toThrow(/M src\/b c\.ts ほか/)
+    expect(run).not.toThrow(/docs\/chat/)
+
+    // 宣言の外のパスだけの変更も、今までどおり入力の誤りになる
+    git(repo, "checkout", "--", "docs/chat/log.md")
+    expect(run).toThrow(/M src\/b c\.ts ほか/)
+  })
+
+  it("名前の変更は、移動元と移動先の両方が ignoreUncommitted に当たるときだけ数えない", () => {
+    const body = "line\n".repeat(20)
+    const repo = track(
+      makeRepo({ "docs/chat/a.md": body, "src/keep.ts": body })
+    )
+    const collect = () =>
+      collectCodeSubject({
+        projectRoot: repo,
+        baseRef: "HEAD",
+        ignoreUncommitted: ["docs/chat/**"]
+      })
+
+    git(repo, "mv", "docs/chat/a.md", "docs/chat/b.md")
+    expect(collect().empty).toBe(true)
+
+    // 宣言の中から外へ
+    git(repo, "mv", "docs/chat/b.md", "src/moved.ts")
+    expect(collect).toThrow(/R docs\/chat\/a\.md -> src\/moved\.ts/)
+    git(repo, "mv", "src/moved.ts", "docs/chat/a.md")
+
+    // 宣言の外から中へ
+    git(repo, "mv", "src/keep.ts", "docs/chat/keep.md")
+    expect(collect).toThrow(/R src\/keep\.ts -> docs\/chat\/keep\.md/)
+  })
+
   it("空の差分は入力の誤りにせず、空であることと subject を返す", () => {
     const repo = track(makeRepo({ "a.ts": "a\n" }))
     const head = git(repo, "rev-parse", "HEAD")
@@ -222,6 +298,20 @@ describe("resolveRepoPath", () => {
     const plain = track(makeTmpDir())
     expect(() => resolveRepoPath(plain, repo)).toThrow(/作業ツリーでない/)
     expect(() => resolveRepoPath(repo, plain)).toThrow(/管理外/)
+  })
+})
+
+describe("parseStatusZ", () => {
+  it("名前の変更とコピーは移動先の次の移動元を読み、ほかは 1 つのパスを読む", () => {
+    expect(
+      parseStatusZ(" M a b.ts\0R  new name\0old name\0MM x\0C  c2\0c1\0")
+    ).toEqual([
+      { code: " M", path: "a b.ts" },
+      { code: "R ", path: "new name", from: "old name" },
+      { code: "MM", path: "x" },
+      { code: "C ", path: "c2", from: "c1" }
+    ])
+    expect(parseStatusZ("")).toEqual([])
   })
 })
 

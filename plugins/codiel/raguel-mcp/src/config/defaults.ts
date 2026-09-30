@@ -40,6 +40,9 @@ export const defaultConfig: RaguelConfig = {
     seedCatalog: true,
     topN: 5
   },
+  subject: {
+    ignoreUncommitted: []
+  },
   rules: Object.fromEntries(
     RULE_SPECS.filter((spec) => spec.params.length > 0).map((spec) => [
       spec.id,

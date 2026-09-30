@@ -247,7 +247,8 @@ describe("list_rules(設計書 §6.2.8)", () => {
             generated: ["dist/**"]
           }
         },
-        panel: { perPanelist: { meta: { provider: "codex" } } }
+        panel: { perPanelist: { meta: { provider: "codex" } } },
+        subject: { ignoreUncommitted: ["docs/chat/**"] }
       }
     })
     const client = await connect(h.deps)
@@ -260,7 +261,11 @@ describe("list_rules(設計書 §6.2.8)", () => {
     expect(body.policy).toMatchObject({
       version: 2,
       buildVersion: BUILD_VERSION,
-      protectedPaths: { excludedDefaults: ["infra/**"], generated: ["dist/**"] }
+      protectedPaths: {
+        excludedDefaults: ["infra/**"],
+        generated: ["dist/**"]
+      },
+      ignoreUncommitted: ["docs/chat/**"]
     })
     expect(body.e2eReports.testsDir).toBe("e2e")
     expect(body.panelists).toEqual({
@@ -299,6 +304,39 @@ describe("list_rules(設計書 §6.2.8)", () => {
     const client = await connect(h.deps)
     const { body } = await call(client, "list_rules", {})
     expect(body.panelists.adversarial).toEqual({ provider: "none" })
+    // 宣言が無ければ空の配列を返す
+    expect(body.policy.ignoreUncommitted).toEqual([])
+  })
+})
+
+describe("evaluate_code の未コミットの検査(設計書 §6.2.2 の手順 3)", () => {
+  it("宣言したパスの変更は数えず、宣言の外のパスの変更は isError で残ったパスを返す", async () => {
+    const h = harness({
+      raguel: { subject: { ignoreUncommitted: ["docs/chat/**"] } },
+      files: { "docs/chat/log.md": "1\n" }
+    })
+    const client = await connect(h.deps)
+    const args = {
+      runId: "run-1",
+      phase: "test-loop",
+      objective: "x",
+      baseRef: h.base
+    }
+
+    fs.writeFileSync(path.join(h.repo, "docs/chat/log.md"), "1\n2\n")
+    const ignored = await call(client, "evaluate_code", args)
+    expect(ignored.isError).toBeUndefined()
+    expect(ignored.body.policy.ignoreUncommitted).toEqual(["docs/chat/**"])
+
+    fs.writeFileSync(path.join(h.repo, "README.md"), "書きかけ\n")
+    const rejected = await call(client, "evaluate_code", {
+      ...args,
+      runId: "run-2"
+    })
+    expect(rejected.isError).toBe(true)
+    expect(rejected.text).toContain("README.md")
+    expect(rejected.text).not.toContain("docs/chat")
+    expect(h.index()).toHaveLength(1)
   })
 })
 
