@@ -121,6 +121,8 @@ interface Diff {
   /** 既存ファイルが無いときは null */
   description: TextState | null
   preamble: TextState | null
+  /** 前置きが same でないときの既存とテンプレート。それ以外は null */
+  preambleTexts: { existing: string; template: string } | null
 }
 
 interface Document {
@@ -447,7 +449,8 @@ function compare(
       },
       roles,
       description: null,
-      preamble: null
+      preamble: null,
+      preambleTexts: null
     }
   }
 
@@ -511,7 +514,12 @@ function compare(
     },
     roles,
     description: descriptionState,
-    preamble: preambleState
+    preamble: preambleState,
+    // description の両方の値は frontmatter.changed に載る。前置きはここで返す。
+    preambleTexts:
+      preambleState === "same"
+        ? null
+        : { existing: existing.preamble, template: expected.preamble }
   }
 }
 
@@ -768,7 +776,13 @@ function write(options: Options, target: Target, mcpServers: string[]) {
     ),
     roles: difference.roles,
     description: difference.description,
-    preamble: difference.preamble
+    preamble: difference.preamble,
+    preambleTexts: difference.preambleTexts,
+    toolsBefore:
+      existingRaw === undefined
+        ? []
+        : splitTools(parseDocument(existingRaw).meta.get("tools")),
+    toolsAfter: splitTools(parseDocument(content).meta.get("tools"))
   }
 }
 

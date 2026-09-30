@@ -1106,7 +1106,8 @@ function compare(options, target, input, rendered, existingRaw) {
       },
       roles,
       description: null,
-      preamble: null
+      preamble: null,
+      preambleTexts: null
     };
   }
   const existing = parseDocument(existingRaw);
@@ -1164,7 +1165,9 @@ function compare(options, target, input, rendered, existingRaw) {
     },
     roles,
     description: descriptionState,
-    preamble: preambleState
+    preamble: preambleState,
+    // description の両方の値は frontmatter.changed に載る。前置きはここで返す。
+    preambleTexts: preambleState === "same" ? null : { existing: existing.preamble, template: expected.preamble }
   };
 }
 var RECORD_KEYS = [DESCRIPTION_HASH_KEY, PREAMBLE_HASH_KEY];
@@ -1344,7 +1347,10 @@ function write(options, target, mcpServers) {
     ),
     roles: difference.roles,
     description: difference.description,
-    preamble: difference.preamble
+    preamble: difference.preamble,
+    preambleTexts: difference.preambleTexts,
+    toolsBefore: existingRaw === void 0 ? [] : splitTools(parseDocument(existingRaw).meta.get("tools")),
+    toolsAfter: splitTools(parseDocument(content).meta.get("tools"))
   };
 }
 function retainFor(options, difference, keep) {

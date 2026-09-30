@@ -81,6 +81,9 @@ interface CheckResult {
   roles: RolesSummary
   description: TextState | null
   preamble: TextState | null
+  preambleTexts: { existing: string; template: string } | null
+  toolsBefore: string[]
+  toolsAfter: string[]
   action: string
   kept: string[]
   keptNeedsReview: string[]
@@ -1817,7 +1820,12 @@ describe("description と前置きの保持", () => {
       addPreamble(text).replace(/^agent-policy-preamble-hash: .*\n/m, "")
     )
 
-    expect(keeper([], "--check").preamble).toBe("unknown")
+    const checked = keeper([], "--check")
+    expect(checked.preamble).toBe("unknown")
+    expect(checked.preambleTexts?.existing).toContain("利用者が足した前置き。")
+    expect(checked.preambleTexts?.template).not.toContain(
+      "利用者が足した前置き。"
+    )
     const result = keeper(["--merge"])
 
     expect(content()).toContain("利用者が足した前置き。")
@@ -1836,6 +1844,22 @@ describe("description と前置きの保持", () => {
 
     expect(content()).not.toContain("利用者が足した前置き。")
     expect(metaValue("agent-policy-preamble-hash")).toBe(record)
+  })
+
+  it("--write は tools 行の変更前と変更後を返し、前置きが same なら preambleTexts は null", () => {
+    keeper()
+    edit((text) =>
+      text.replace(/^tools: (.*)$/m, "tools: $1, Agent, mcp__gone")
+    )
+
+    const result = keeper(["--merge"])
+
+    expect(result.toolsBefore).toEqual(
+      expect.arrayContaining(["Agent", "mcp__gone"])
+    )
+    expect(result.toolsAfter).toContain("Agent")
+    expect(result.toolsAfter).not.toContain("mcp__gone")
+    expect(result.preambleTexts).toBeNull()
   })
 
   it("--replace は --merge なし・--recommended・未知の値で拒否する", () => {
