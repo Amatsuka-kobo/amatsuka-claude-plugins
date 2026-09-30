@@ -845,10 +845,28 @@ function toolsFormatOf(raw: string | string[] | undefined): ToolsFormat {
   if (raw === undefined) return "none"
   if (Array.isArray(raw)) return "other"
   const value = raw.trim()
-  if (value === "" || /^[[{|>]/.test(value) || /["']/.test(value)) {
+  if (value === "" || /^[[{|>]/.test(value) || /["'()#]/.test(value)) {
     return "other"
   }
   return "csv"
+}
+
+// frontmatter() は字下げ付きのキーも読み、同じキーは後勝ちにする。
+// 書き換える行を 1 行に特定できるのは、字下げの無い行がちょうど 1 行のときだけである。
+function keyLinesOf(lines: string[], close: number, key: string): number[] {
+  const pattern = new RegExp(`^\\s*${key}\\s*:`)
+  return lines
+    .slice(1, Math.max(close, 1))
+    .flatMap((line, index) => (pattern.test(line) ? [index + 1] : []))
+}
+
+function keyLineAmbiguous(
+  lines: string[],
+  close: number,
+  key: string
+): boolean {
+  const found = keyLinesOf(lines, close, key)
+  return found.length > 1 || /^\s/.test(lines[found[0] ?? -1] ?? "")
 }
 
 // 役割の許可集合に無い組み込みツールを返す。mcp__ は --mcp-servers が決めるので見ない。
@@ -884,9 +902,11 @@ function inspectDefinitions(
   for (const file of fs.readdirSync(agentsDir).sort()) {
     if (!file.endsWith(".md")) continue
     let meta: Map<string, string | string[]>
+    let lines: string[]
     // 1 ファイルが読めなくても、他の定義と全体の応答は生かす。
     try {
       meta = frontmatter(path.join(agentsDir, file))
+      lines = fs.readFileSync(path.join(agentsDir, file), "utf8").split("\n")
     } catch {
       continue
     }
@@ -899,7 +919,13 @@ function inspectDefinitions(
       return fragment === undefined ? [] : [fragment]
     })
     const rawTools = meta.get("tools")
-    const toolsFormat = toolsFormatOf(rawTools)
+    // 書き換え側が 1 行に特定できない定義は、手で直す側へ寄せる。
+    const close = lines.indexOf("---", 1)
+    const toolsFormat =
+      keyLineAmbiguous(lines, close, "tools") ||
+      keyLineAmbiguous(lines, close, "agent-policy-role")
+        ? "other"
+        : toolsFormatOf(rawTools)
     definitions.push({
       name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
       file: path.posix.join(".claude", "agents", file),
@@ -910,6 +936,9 @@ function inspectDefinitions(
         id,
         replacement: RETIRED_ROLE_REPLACEMENTS[id] ?? null
       })),
+      unknownRoles: ids.filter(
+        (id) => !isRetiredRole(id) && !fragments.has(id)
+      ),
       disallowedTools: disallowedToolsOf(
         parseToolsField(rawTools),
         toolsFormat,
@@ -976,20 +1005,27 @@ function readDefinition(options: Options): DefinitionLines {
   if (!fs.existsSync(file)) {
     throw new Error(`target: ${target} が存在しない`)
   }
-  const lines = fs.readFileSync(file, "utf8").split("\n")
+  const raw = fs.readFileSync(file, "utf8")
+  const lines = raw.split("\n")
   const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1
   if (close === -1) {
-    throw new Error(`target: ${target} に frontmatter が無い`)
+    throw new Error(
+      raw.includes("\r\n")
+        ? `target: ${target} の frontmatter を読み取れない。改行コードが CRLF の可能性がある(CRLF の定義は書き換えの対象外)`
+        : `target: ${target} に frontmatter が無い`
+    )
   }
   return { file, target, lines, close }
 }
 
 function keyLineIndex(definition: DefinitionLines, key: string): number {
-  const pattern = new RegExp(`^${key}\\s*:`)
-  const index = definition.lines
-    .slice(1, definition.close)
-    .findIndex((line) => pattern.test(line))
-  return index === -1 ? -1 : index + 1
+  const { lines, close } = definition
+  if (keyLineAmbiguous(lines, close, key)) {
+    throw new Error(
+      `${key}: ${definition.target} の ${key} 行を 1 行に特定できないため書き換えない(同じキーが複数ある、または字下げされている)`
+    )
+  }
+  return keyLinesOf(lines, close, key)[0] ?? -1
 }
 
 function lineValue(line: string | undefined): string {

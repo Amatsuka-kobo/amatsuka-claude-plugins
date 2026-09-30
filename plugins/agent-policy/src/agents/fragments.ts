@@ -123,6 +123,8 @@ export function loadFragments(
     for (const name of files) {
       // <id>.<vendor>.md はベンダー別断片。ここでは読み飛ばす。
       if (name.split(".").length > 2) continue
+      // 廃止済み ID の旧断片は形式が古く、読むと例外になりうるため先に除く。
+      if (isRetiredRole(name.replace(/\.md$/, ""))) continue
       const fragment = readFragment(path.join(dir.path, name), dir.source)
       // 廃止済み ID の断片が残っていても、役割として解決しない。
       if (isRetiredRole(fragment.id)) continue

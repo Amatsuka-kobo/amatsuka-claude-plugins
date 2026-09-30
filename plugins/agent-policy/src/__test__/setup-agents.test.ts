@@ -135,6 +135,7 @@ interface CoverageDefinition {
   vendor: string | null
   roles: string[]
   retiredRoles: { id: string; replacement: string | null }[]
+  unknownRoles: string[]
   disallowedTools: string[]
   toolsFormat: "csv" | "other" | "none"
 }
@@ -805,6 +806,7 @@ describe("--list-coverage の点検結果", () => {
       vendor: null,
       roles: ["code-review"],
       retiredRoles: [{ id: "final-review", replacement: "complex-review" }],
+      unknownRoles: [],
       disallowedTools: ["Agent"],
       toolsFormat: "csv"
     })
@@ -1342,6 +1344,211 @@ describe("既存定義の行単位操作に共通する規則", () => {
     ])
 
     expect(result.ok).toBe(false)
+    expect(readAgent("target.md")).toBe(EDIT_SOURCE)
+  })
+})
+
+describe("点検と行単位操作の境界", () => {
+  function prune(name: string, tools: string): EditResult {
+    return run<EditResult>([
+      "--prune-tools",
+      "--name",
+      name,
+      "--tools",
+      tools,
+      "--dir",
+      project
+    ])
+  }
+
+  it("末尾に改行の無いファイルでも、他の行をバイト単位で保つ", () => {
+    const source = EDIT_SOURCE.trimEnd()
+    writeAgent("target.md", [source])
+
+    expect(prune("target", "Agent").ok).toBe(true)
+    expect(readAgent("target.md")).toBe(
+      source.replace("Read, Agent, Grep", "Read, Grep")
+    )
+  })
+
+  it("改行が CRLF の定義は、CRLF の可能性を示して書き込まない", () => {
+    const source = EDIT_SOURCE.replace(/\n/g, "\r\n")
+    writeAgent("target.md", [source])
+
+    const result = prune("target", "Agent")
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("CRLF")
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it("frontmatter に同じキーが 2 行あるときは、両操作とも書き込まず点検では other にする", () => {
+    const source = [
+      "---",
+      "name: target",
+      "tools: Read, Agent",
+      "tools: Read, Grep",
+      "agent-policy-role: explore",
+      "agent-policy-role: code-review",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    expect(prune("target", "Agent").ok).toBe(false)
+    expect(
+      run<EditResult>([
+        "--rewrite-roles",
+        "--name",
+        "target",
+        "--roles",
+        "explore",
+        "--dir",
+        project
+      ]).ok
+    ).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+    expect(definitionOf(coverage(), "target")?.toolsFormat).toBe("other")
+  })
+
+  it("字下げ付きの tools キーは点検で other にし、書き換えない", () => {
+    const source = [
+      "---",
+      "name: target",
+      "  tools: Read, Agent",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    expect(definitionOf(coverage(), "target")?.toolsFormat).toBe("other")
+    expect(prune("target", "Agent").ok).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it("本文中の tools: 行は書き換えない", () => {
+    const source = [
+      "---",
+      "name: target",
+      "tools: Read, Agent",
+      "agent-policy-role: explore",
+      "---",
+      "",
+      "tools: Read, Agent",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    expect(prune("target", "Agent").ok).toBe(true)
+    expect(readAgent("target.md")).toBe(
+      source.replace("tools: Read, Agent\nagent", "tools: Read\nagent")
+    )
+  })
+
+  it("tools が Agent だけの定義からは Agent を外さない", () => {
+    const source = [
+      "---",
+      "name: target",
+      "tools: Agent",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    expect(prune("target", "Agent").ok).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it('tools 欄がある定義への --tools "*" と、"*" と他ツールの併用を拒む', () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    expect(prune("target", "*").ok).toBe(false)
+    expect(prune("target", "*,Agent").ok).toBe(false)
+    expect(readAgent("target.md")).toBe(EDIT_SOURCE)
+  })
+
+  it.each([
+    ["括弧を含むトークン", "tools: Read, Bash(git status, git diff), Agent"],
+    ["# を含む値", "tools: Read, Agent # 後で消す"],
+    ["値が空で block も続かない", "tools:"]
+  ])("%s の tools は other とし、書き換えない", (_label, toolsLine) => {
+    const source = [
+      "---",
+      "name: target",
+      toolsLine,
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ].join("\n")
+    writeAgent("target.md", [source])
+
+    expect(definitionOf(coverage(), "target")?.toolsFormat).toBe("other")
+    expect(prune("target", "Agent").ok).toBe(false)
+    expect(readAgent("target.md")).toBe(source)
+  })
+
+  it("廃止済みでも解決可能でもない ID を unknownRoles に載せる", () => {
+    writeAgent("target.md", [
+      "---",
+      "name: target",
+      "tools: Read",
+      "agent-policy-role: explore, final-review, no-such-role",
+      "---",
+      ""
+    ])
+
+    expect(definitionOf(coverage(), "target")).toMatchObject({
+      roles: ["explore"],
+      retiredRoles: [{ id: "final-review", replacement: "complex-review" }],
+      unknownRoles: ["no-such-role"]
+    })
+  })
+
+  it("kind の無い旧形式の final-review.md が残っていても --list-coverage が成功する", () => {
+    const roles = path.join(project, ".claude", "agent-policy", "roles")
+    fs.mkdirSync(roles, { recursive: true })
+    fs.writeFileSync(
+      path.join(roles, "final-review.md"),
+      ["---", "id: final-review", "label: 最終レビュー", "---", ""].join("\n")
+    )
+
+    expect(coverage().ok).toBe(true)
+  })
+
+  it("--list-roles に廃止済み ID の断片を載せない", () => {
+    writeProjectRole({ id: "final-review", label: "最終レビュー" })
+
+    const result = run<ListRolesResult>([
+      "--list-roles",
+      "--lang",
+      "ja",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(true)
+    expect(result.roles.map((role) => role.id)).not.toContain("final-review")
+  })
+
+  it("--rewrite-roles と --tools は併用できない", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<EditResult>([
+      "--rewrite-roles",
+      "--name",
+      "target",
+      "--roles",
+      "code-review",
+      "--tools",
+      "Agent",
+      "--dir",
+      project
+    ])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("--tools")
     expect(readAgent("target.md")).toBe(EDIT_SOURCE)
   })
 })

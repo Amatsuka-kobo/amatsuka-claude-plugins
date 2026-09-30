@@ -201,6 +201,7 @@ function loadFragments(dirs, vendor) {
     const files = fs.readdirSync(dir.path).filter((name) => name.endsWith(".md") && !name.startsWith("_")).sort((left, right) => left.localeCompare(right));
     for (const name of files) {
       if (name.split(".").length > 2) continue;
+      if (isRetiredRole(name.replace(/\.md$/, ""))) continue;
       const fragment = readFragment(path.join(dir.path, name), dir.source);
       if (isRetiredRole(fragment.id)) continue;
       fragments.set(fragment.id, fragment);
@@ -1399,10 +1400,18 @@ function toolsFormatOf(raw) {
   if (raw === void 0) return "none";
   if (Array.isArray(raw)) return "other";
   const value = raw.trim();
-  if (value === "" || /^[[{|>]/.test(value) || /["']/.test(value)) {
+  if (value === "" || /^[[{|>]/.test(value) || /["'()#]/.test(value)) {
     return "other";
   }
   return "csv";
+}
+function keyLinesOf(lines, close, key) {
+  const pattern = new RegExp(`^\\s*${key}\\s*:`);
+  return lines.slice(1, Math.max(close, 1)).flatMap((line, index) => pattern.test(line) ? [index + 1] : []);
+}
+function keyLineAmbiguous(lines, close, key) {
+  const found = keyLinesOf(lines, close, key);
+  return found.length > 1 || /^\s/.test(lines[found[0] ?? -1] ?? "");
 }
 function disallowedToolsOf(tools, format, selected) {
   if (selected.length === 0) {
@@ -1424,8 +1433,10 @@ function inspectDefinitions(projectDir, fragments) {
   for (const file of fs3.readdirSync(agentsDir).sort()) {
     if (!file.endsWith(".md")) continue;
     let meta;
+    let lines;
     try {
       meta = frontmatter(path2.join(agentsDir, file));
+      lines = fs3.readFileSync(path2.join(agentsDir, file), "utf8").split("\n");
     } catch {
       continue;
     }
@@ -1437,7 +1448,8 @@ function inspectDefinitions(projectDir, fragments) {
       return fragment === void 0 ? [] : [fragment];
     });
     const rawTools = meta.get("tools");
-    const toolsFormat = toolsFormatOf(rawTools);
+    const close = lines.indexOf("---", 1);
+    const toolsFormat = keyLineAmbiguous(lines, close, "tools") || keyLineAmbiguous(lines, close, "agent-policy-role") ? "other" : toolsFormatOf(rawTools);
     definitions.push({
       name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
       file: path2.posix.join(".claude", "agents", file),
@@ -1448,6 +1460,9 @@ function inspectDefinitions(projectDir, fragments) {
         id,
         replacement: RETIRED_ROLE_REPLACEMENTS[id] ?? null
       })),
+      unknownRoles: ids.filter(
+        (id) => !isRetiredRole(id) && !fragments.has(id)
+      ),
       disallowedTools: disallowedToolsOf(
         parseToolsField(rawTools),
         toolsFormat,
@@ -1492,17 +1507,24 @@ function readDefinition(options) {
   if (!fs3.existsSync(file)) {
     throw new Error(`target: ${target} \u304C\u5B58\u5728\u3057\u306A\u3044`);
   }
-  const lines = fs3.readFileSync(file, "utf8").split("\n");
+  const raw = fs3.readFileSync(file, "utf8");
+  const lines = raw.split("\n");
   const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1;
   if (close === -1) {
-    throw new Error(`target: ${target} \u306B frontmatter \u304C\u7121\u3044`);
+    throw new Error(
+      raw.includes("\r\n") ? `target: ${target} \u306E frontmatter \u3092\u8AAD\u307F\u53D6\u308C\u306A\u3044\u3002\u6539\u884C\u30B3\u30FC\u30C9\u304C CRLF \u306E\u53EF\u80FD\u6027\u304C\u3042\u308B(CRLF \u306E\u5B9A\u7FA9\u306F\u66F8\u304D\u63DB\u3048\u306E\u5BFE\u8C61\u5916)` : `target: ${target} \u306B frontmatter \u304C\u7121\u3044`
+    );
   }
   return { file, target, lines, close };
 }
 function keyLineIndex(definition, key) {
-  const pattern = new RegExp(`^${key}\\s*:`);
-  const index = definition.lines.slice(1, definition.close).findIndex((line) => pattern.test(line));
-  return index === -1 ? -1 : index + 1;
+  const { lines, close } = definition;
+  if (keyLineAmbiguous(lines, close, key)) {
+    throw new Error(
+      `${key}: ${definition.target} \u306E ${key} \u884C\u3092 1 \u884C\u306B\u7279\u5B9A\u3067\u304D\u306A\u3044\u305F\u3081\u66F8\u304D\u63DB\u3048\u306A\u3044(\u540C\u3058\u30AD\u30FC\u304C\u8907\u6570\u3042\u308B\u3001\u307E\u305F\u306F\u5B57\u4E0B\u3052\u3055\u308C\u3066\u3044\u308B)`
+    );
+  }
+  return keyLinesOf(lines, close, key)[0] ?? -1;
 }
 function lineValue(line) {
   if (line === void 0) return "";
