@@ -1,7 +1,7 @@
 # Raguel を層ごとに作り直す 設計書
 
 - 作成日: 2026-09-28
-- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直し、実機確認 4・9 の結果で §6.4.4・§6.12.1・§15 の 2・4 を確定した。W4 のレビューを受けて、§6.2.2 の手順 6・7、§6.4.2(`://` の行のエントロピー、rename)、§6.9.4(`head` の null)、§6.13.1(改竄の STOP)、§6.13.3(検査 8・9 と、フェーズの間の連続性)、§7.1(設定の行)、§13 を改めた(いずれも 2026-09-29、ユーザー承認)
+- 状態: 設計(第 7 版)・承認済み(2026-09-29。第 6 版も 2026-09-29 に承認)。実装中に、実機確認 1〜3・5〜8 の結果で §6.7.2・§6.7.3・§11 の【要確認】を確定値に直し、実機確認 4・9 の結果で §6.4.4・§6.12.1・§15 の 2・4 を確定した。W4 のレビューを受けて、§6.2.2 の手順 6・7、§6.4.2(`://` の行のエントロピー、rename)、§6.9.4(`head` の null)、§6.13.1(改竄の STOP)、§6.13.3(検査 8・9 と、フェーズの間の連続性)、§7.1(設定の行)、§13 を改めた(いずれも 2026-09-29、ユーザー承認)。2026-09-30 には、codiel の手動確認 O4C-6 を受けて `subject.ignoreUncommitted` を足した(§6.2.2 の手順 3、§6.2.5、§6.12.1、§6.12.3、§11。ユーザー承認)。未コミットの検査から外すパスを宣言する設定である
 - 対象: `plugins/codiel/raguel-mcp`(主)、codiel で Raguel を使う箇所(`skills/raguel-gating`、`skills/orchestrating-runs`、`src/codiel-state.ts`、`src/hooks/guard-write.ts`・`guard-bash.ts`)
 - バージョン: codiel `1.0.0` → `1.0.0-dev`、raguel-mcp の `package.json` `0.0.1-dev` → `0.0.2-dev`(§8。2026-09-29 にユーザーの指示で改めた。旧目標は `1.1.0-dev`・`0.1.0-dev`)
 - 入力: ユーザー合意の決定 R1〜R24(2026-09-28〜29)、所見 `harness-docs/handover/2026-09-28-raguel-redesign-findings.md`(以下「所見」。A1 などの番号はこの文書のもの)、引継ぎ `harness-docs/handover/2026-09-28-raguel-redesign-handover.md`
@@ -287,7 +287,7 @@ Raguel は次の手順で差分を作る。
 
 1. `baseRef` が `-` で始まれば入力の誤りにする。`git rev-parse --verify --end-of-options <baseRef>^{commit}` でコミットに解決し、失敗したら入力の誤りにする。
 2. HEAD を `git rev-parse HEAD` で得る。比べる終点は常に HEAD とし、任意の終点は受けない。pass-gate が HEAD の一致を見る(§6.13.3)ためである。
-3. `git status --porcelain --untracked-files=no -- <paths>`(`paths` が無ければ作業ツリー全体)が空でなければ入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。未追跡のファイルは評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。
+3. `git status --porcelain --untracked-files=no -- <paths>`(`paths` が無ければ作業ツリー全体)が空でなければ入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。未追跡のファイルは評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。設定 `subject.ignoreUncommitted`(glob の列、既定は空。§6.12.1)に当たるパスの未コミットの変更は、この検査で数えない。会話記録を `docs/chat/` に追記するプラグインのように、run と関係の無いファイルを同じ作業ツリーで書き続ける仕組みがある。その作業ツリーでは、code 系のゲートのたびに入力の誤りになる。codiel の手動確認 O4C-6 の local の run では、そのファイルを run ブランチへコミットして回避していた。これを受けて足した(2026-09-30、ユーザー決定)。当たるパスの変更は未コミットのまま評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。宣言した glob は応答の `policy.ignoreUncommitted` と list_rules に出す。
 4. 次の固定した書式で `git diff` を実行する。環境変数 `GIT_LITERAL_PATHSPECS=1` を付け、`paths` をパス指定の魔法の書式として解釈させない。
 
 ```
@@ -353,7 +353,7 @@ diff の書式が固定されるので、`--no-prefix`・`quotePath`・外部 di
 | `subject` | なし | `{ repoPath, head, base?, files: [{ path, sha256 }] }` |
 | `meta` | あり | 変えない |
 | `casePath` | あり(内部エラーは空文字) | 常にあり |
-| `policy` | `{ configHash, version: 1 }` | `{ configHash, configSource, version: 2, buildVersion, protectedPaths: { excludedDefaults, generated } }`(§6.4.2) |
+| `policy` | `{ configHash, version: 1 }` | `{ configHash, configSource, version: 2, buildVersion, protectedPaths: { excludedDefaults, generated }, ignoreUncommitted }`(§6.4.2、§6.2.2 の手順 3) |
 | `contextJudge` | なし | `{ enabled, status, adjustments }`(§6.4.4) |
 
 - `decisionPoint` は合成規則から決定論で作る定型文である。所見 0 件の ASK(degraded など)でも、何を判断するかを示す(所見 D6)。
@@ -980,6 +980,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
       "thresholds": { "lower": 0.5, "raise": 0.7 }
     },
     "precedent": { "seedCatalog": true, "topN": 5 },
+    "subject": { "ignoreUncommitted": [] },
     "rules": {
       "<ruleId>": { "enabled": true, "severity": "<info | ask | stop>", "<パラメータ>": "<値>" }
     }
@@ -1015,6 +1016,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 | `judge.deadlineMs` が 1800000 を超える。`judge.timeoutMs` が `judge.deadlineMs` を超える | R6、R21 |
 | `code/protected-paths.excludeDefaults` に既定の glob と完全に一致しない文字列 | R20 |
 | `code/protected-paths.generated` に、固定部(ワイルドカードを含む最初のセグメントより前)が空の glob(`**/*`・`*.js` など) | R20。リポジトリ全体を生成物にする宣言を防ぐ |
+| `subject.ignoreUncommitted` に、固定部が空の glob | §6.2.2 の手順 3。作業ツリー全体を未コミットの検査から外す宣言を防ぐ |
 | `perPanelist` のキーが adversarial・steelman・crosscheck・meta 以外 | R5 |
 | `perPanelist.<名前>.provider: none` | §6.7.1 |
 | `judge.provider` と `perPanelist.<名前>.provider` に `claude`・`codex`・`none` 以外(旧版の `jev` を含む) | R14 |
@@ -1274,6 +1276,7 @@ codiel(`C/`):
 | Jev が破壊操作の stop を誤って ask に下げる | 実行される破壊操作が人の裁定に回る | STOP ではなくなるが PROCEED にはならず、人が ASK を裁定する。閾値 `lower` は実機で見直す(§15) |
 | Jev の問い合わせが締切の時間を使う | パネルの時間が最大 20 秒減る | 有効にしたときだけ起きる。600 秒の締切に比べて小さい。所要は §7.2 の 9 で測る |
 | codex のシェルのツールが利用者のファイルを読む | 読んだ内容がケースファイルに残る | `--disable shell_tool --disable unified_exec` で塞ぐ(§6.7.3。実機確認の 6 で確認) |
+| `subject.ignoreUncommitted` にソースのパスを宣言する | 未コミットのコードの変更が、評価に入らないままテストの結果に効く | 宣言は `policy.ignoreUncommitted` と list_rules に毎回出る。固定部が空の glob は宣言できない(§6.12.3)。run の間は guard が `.codiel/config.json` への書き込みを拒む(§6.13.4)。README に、run と関係の無いファイルの置き場だけを書くと記す |
 | codex が `$CODEX_HOME/AGENTS.md` を読む | 利用者の全体の指示がパネリストの判定に混じる | 止める手段が無い(実機確認の 7)。README に既知の限界として書く。既定のプロバイダーは claude で、codex は利用者が選んだときだけ使う |
 | 人の裁定の真正性を機械で確かめられない | オーケストレーターが自分で record_outcome を呼べば、裁定を装える | codiel のスキルの HARD-GATE で禁じる(現行どおり)。§13 の既知の限界 |
 | projectId の算出が変わる | 旧ケースファイルと旧判例が見えなくなる | 引き継がない。シード判例は残る。README に書く |
