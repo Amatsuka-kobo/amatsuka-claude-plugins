@@ -16,7 +16,7 @@ const SESSION_HOOK = fileURLToPath(
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
 const TABLE_INTRO =
-  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
+  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは、共通規律の §同じ役割の候補から選ぶ に従う。"
 const NO_MARKERS = "対応表なし(このプロジェクトに役割マーカー付き定義は無い)"
 
 const ROLE_IDS = ROLES.map((role) => role.id)
@@ -417,10 +417,10 @@ describe("切り詰め", () => {
       invoke("unknown-agent", { AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
     )
     const fullLines = fullTable.split("\n")
-    const fullRoleLines = fullLines.slice(2)
-    const retainedRoleLines = context
-      .split("\n")
-      .filter((line) => line.startsWith("- "))
+    // 候補が複数ある役割は description 行(字下げ)を伴うため、役割行だけを取り出して比べる。
+    const isRoleLine = (line: string) => line.startsWith("- ")
+    const fullRoleLines = fullLines.slice(2).filter(isRoleLine)
+    const retainedRoleLines = context.split("\n").filter(isRoleLine)
     const removedRoleLines = fullRoleLines.slice(retainedRoleLines.length)
 
     expect(context.length).toBeLessThanOrEqual(9500)

@@ -134,7 +134,9 @@ function frontmatter(file) {
   const close = lines.indexOf("---", 1);
   if (close === -1) return meta;
   const metadataLines = lines.slice(1, close);
+  let skipUntil = 0;
   for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue;
     const at = line.indexOf(":");
     if (at <= 0) continue;
     const key = line.slice(0, at).trim();
@@ -147,6 +149,16 @@ function frontmatter(file) {
         items.push(item);
       }
       meta.set(key, items.length === 0 ? value : items);
+      continue;
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      const folded = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break;
+        if (candidate.trim() !== "") folded.push(candidate.trim());
+      }
+      skipUntil = index + 1 + folded.length;
+      meta.set(key, folded.join(" "));
       continue;
     }
     meta.set(key, value);
@@ -184,6 +196,12 @@ function parseToolsField(raw) {
   const parsed = parseToolItems(value.split(","));
   return parsed.length === 0 ? void 0 : parsed;
 }
+function descriptionText(raw) {
+  if (typeof raw !== "string") return void 0;
+  let text = unquote(raw);
+  if (raw.trim().startsWith('"')) text = text.replace(/\\n/g, " ");
+  return text === "" ? void 0 : text;
+}
 function projectAgentsDir(env) {
   const projectDir = env.CLAUDE_PROJECT_DIR;
   if (projectDir === void 0 || projectDir === "") return void 0;
@@ -210,12 +228,14 @@ function scanAgents(dir) {
     const model = meta.get("model");
     const marker = meta.get("agent-policy-role");
     const vendor = meta.get("agent-policy-vendor");
+    const description = descriptionText(meta.get("description"));
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : void 0,
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
       tools: parseToolsField(meta.get("tools")),
-      vendor: typeof vendor === "string" ? vendor : void 0
+      vendor: typeof vendor === "string" ? vendor : void 0,
+      description
     });
   }
   return found;
@@ -271,22 +291,28 @@ var SCOPE_LINES = {
 function markerTable(env, marked, scope) {
   const labelOf = roleLabels(env);
   const byRole = /* @__PURE__ */ new Map();
+  const detailByRole = /* @__PURE__ */ new Map();
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === void 0) continue;
       const name = entry.vendor === void 0 ? entry.name : `${entry.name} (${entry.vendor})`;
       byRole.set(role, [...byRole.get(role) ?? [], name]);
+      detailByRole.set(role, [
+        ...detailByRole.get(role) ?? [],
+        `  - ${entry.name}: ${entry.description ?? "(description \u306A\u3057)"}`
+      ]);
     }
   }
   if (byRole.size === 0) return void 0;
   const lines = [
-    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002",
+    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u3001\u5171\u901A\u898F\u5F8B\u306E \xA7\u540C\u3058\u5F79\u5272\u306E\u5019\u88DC\u304B\u3089\u9078\u3076 \u306B\u5F93\u3046\u3002",
     SCOPE_LINES[scope]
   ];
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role);
     if (names !== void 0) {
       lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`);
+      if (names.length >= 2) lines.push(...detailByRole.get(role) ?? []);
     }
   }
   return lines.join("\n");
