@@ -80,17 +80,19 @@
                行い、新しい画面があれば候補から名前を決めてから、承認後に evaluate_design する。
                ▶ Raguel: evaluate_design
    ▼
-[test-spec → dev-plan → test-spec の委譲]  直列(設計書 2026-10-01-codiel-run-speedup-design.md §5.3):
+[test-spec ∥ dev-plan]  並列(設計書 2026-10-01-codiel-run-speedup-design.md §10.3):
                1. オーケストレーターが仕様のディレクトリを同定する(軽量でなければ design.md の
                   一覧を使い、軽量な run では新しい画面があれば名前を聞いてから同定する)
-               2. dev-plan: オーケストレーターが開発手順書 dev-plan.md を書く。各ステップに
-                  ドメイン(frontend/backend/data)タグ・触るファイル・前提ステップ・通すテスト
-                  (仕様のディレクトリの ID)を書く。文書の先頭に `## 環境準備`(worktree で依存を
-                  インストールするコマンド)と `## 生成物`(ビルド生成物を各ステップでコミットする
-                  方式 a か、全 wave の後の最終ステップでまとめる方式 b か)を置く
-               3. test-spec: dev-plan のゲートの後に、影響を受ける機能単位ごとにテスト仕様書
-                  spec.md を新規作成 or 更新し、続けて ID 付きテストケース表 cases.md を(再)生成する
-                  委譲を前景で出す(§4)。新しい画面の名前の候補は委譲の報告で受け取る
+               2. test-spec: 影響を受ける機能単位ごとにテスト仕様書 spec.md を新規作成 or 更新し、
+                  続けて ID 付きテストケース表 cases.md を(再)生成する委譲を出し、待ちを記録する
+                  (§4)。新しい画面の名前の候補は委譲の報告で受け取る
+               3. dev-plan: 委譲が動いている間に、オーケストレーターが開発手順書 dev-plan.md を
+                  書く。各ステップにドメイン(frontend/backend/data)タグ・触るファイル・前提
+                  ステップ・通すテスト(仕様のディレクトリの ID)を書く。文書の先頭に
+                  `## 環境準備`(worktree で依存をインストールするコマンド)と `## 生成物`
+                  (ビルド生成物を各ステップでコミットする方式 a か、全 wave の後の最終ステップで
+                  まとめる方式 b か)を置く
+               4. spec の委譲の完了通知を受けたら、報告を書いて待ちを消す
                ▶ Raguel: evaluate_plan ×2(dev-plan と test-spec をそれぞれ独立にゲート)
    ▼
 [test-code]    仕様のディレクトリごとに worktree を作り、cases.md からテストコード(ユニットと
@@ -244,7 +246,7 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
 - intent 文書は run の文書の外、`docs/intents/` に置く。state の `intent` フィールド
   (repoRoot 相対パス)が指す。
 - **報告は返答で受ける**: 委譲先は報告の本文を最終の返答で返し、報告のファイル(`report.md`・
-  `test-run-<n>.md` など)は返答を受けた直後にオーケストレーターが `.codiel/runs/` の下へそのまま書く。
+  `test-run-<n>.md` など)は、委譲の完了通知を受けた直後にオーケストレーターが `waits/<id>.md` と一緒に `.codiel/runs/` の下へそのまま書く。
   Claude Code 本体がサブエージェントによる報告ファイルの Write を拒否するためである(決定 95)。
 - **E2E のレポート**: 仕様のディレクトリごとに 1 回の実行を、メインの作業ツリーの `reports/<日時>-<slug>-try<n>/`
   に置く。日時は実行する機械のローカルのタイムゾーンで `YYYYMMDD-HHMMSS` とする。`results.json` はテスト
@@ -440,9 +442,10 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 - **テストを実行する委譲の並べ方(§6.13.1)**: 中でテストを実行する委譲(test-code・implement・
   test-loop の委譲、run ブランチ上の修正の委譲、環境の失敗の実行し直しの委譲)を、`parallel: true`
   の仕様のディレクトリだけを実行する「並列可の委譲」と、それ以外の「単独の委譲」に分ける。
-  並列可の委譲は、動いている委譲が無いか並列可の委譲だけのときに、上限 4 件の範囲でまとめて出す。
-  単独の委譲は、動いている委譲が無いときだけ出し、報告が返るまで同じフェーズのほかの委譲を
-  出さない。
+  「動いている委譲」は待ちの記録が残っている委譲を指す。並列可の委譲は、動いている委譲が無いか
+  並列可の委譲だけのときに、上限 4 件の範囲でまとめて出す。単独の委譲は、待ちが空のときだけ出し、
+  その待ちが残っている間は同じフェーズのほかの委譲を出さない。メインの作業ツリーで `set-domain` を
+  伴う委譲の待ちが残る間は、メインの作業ツリーのほかの委譲も出さない。
 - **テストの実行環境と環境の失敗**: E2E の実行に要る準備(サーバー起動・データベースの用意など)
   はプロジェクトの規約とテストの設定に従い、codiel は準備の手順を持たない。サーバーが起動しない・
   接続が拒否される・ポートが使用中・必要なサービスが無い、といった理由の失敗は「環境の失敗」とし、
@@ -585,7 +588,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | PreToolUse | GitHub MCP の本文を書き込むツール(`issue_write`・`create_pull_request` 等。新設 `guard-github-mcp`) | 本文の引数(`body`)に `<!-- codiel:generated -->` マーカーが無ければ **deny**(active run が無ければ通す)。guard-bash と同じマーカーの規律を GitHub MCP 経由の投稿にも及ぼす |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3)。Bash からの書き込みの判定は Bash の行に書く |
 | PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(intent/discuss/design/test-spec/dev-plan/intent-sync)中の `src/**` への書き込み、コードフェーズ(**test-code**/implement/test-loop/fix-loop)のうち implement・test-loop・fix-loop 中の `<testsDir>/**` の spec.md / cases.md(期待値)と、`spec.md` の `tests` に記録されたテストコードへの書き込み(test-spec と test-code は通す。fix-loop は `set-test-edit` を立てている間だけ通す。§4)。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。worktree(`.codiel/worktrees/<slug>/<名前>`)の中への書き込みは、そのメインの作業ツリーと worktree のルートを基準に同じ規則を当てる。**ドメイン単位の制御は、worktree の中では `step-add --domain` で記録した値、メインの作業ツリーでは state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が決まるとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない。追補(決定 106): 判定の順序は state.json の deny → active run → `state.intent`(どのフェーズでも通す)→ config.json を 1 回読む(不正なら「読めない」として扱う)→ 未記録の GOTCHAS の退避先 `<runsDir>/<runId>/unrecorded-gotchas.md`(どのフェーズでも通す。この 1 ファイルだけ)→ `docs/intents/**` → 文書フェーズ(`.codiel/`・`docs/`・`<testsDir>/`・`<runsDir>/` を通す)→ コード系フェーズ(テストの保護 → `<runsDir>/` の下への書き込みは実行モードと `domain` によらず ask → ドメイン境界。境界から `<testsDir>/**/reports/**` の E2E のレポートを免除する)→ pr・review・triage・finalize(`.codiel/` の外は ask。変更なし)。config.json が不正なときは、コード系フェーズの書き込みに ask を返し、文書フェーズの `<testsDir>/`・`<runsDir>/` の免除と退避先の免除を外す。理由文は「run の文書(<パス>)は文書フェーズで書きます(<フェーズ> 中の変更は想定外)」と、「.codiel/config.json が不正なため、<フェーズ> 中の書き込みが run の文書(runsDir)に当たるか判定できません(<理由>)」である |
-| Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止)。サブエージェントの完了を待っているだけなら、委譲を前景で出し直して報告を受け取るよう案内する(委譲は `run_in_background` を使わず前景で出す規律。決定 83) |
+| Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止)。委譲は常にバックグラウンドで動くので、待ちが 1 件以上記録されている間は止めずに通す。待ちが無く `in_progress` のときは、委譲の完了を待つなら `codiel-state wait-add` で待ちを記録してから停止するよう案内する(設計書 2026-10-01-codiel-run-speedup-design.md §10.2) |
 
 ## 9. docs(プロジェクト毎に成長するハーネス資産)
 

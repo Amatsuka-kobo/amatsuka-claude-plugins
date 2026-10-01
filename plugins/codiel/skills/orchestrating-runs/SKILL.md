@@ -160,7 +160,8 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 - **同時にアクティブにできる run は 1 つだけ**(hooks の `findActiveRun` は単一 run の存在を前提に
   動作する)。既存の `active`/`awaiting_human` の run のうち、今回再開しないものだけを
   `finalize`(全フェーズ完了時)または `codiel-state stop --slug <slug> --reason <理由>`(中止時)で
-  終端状態にする。今回再開する run かどうかの判定は `capturing-intent` の手順 0 に従う。
+  終端状態にする。`waits` が残っている run を止めるときは、2.4 の手順で先に待ちを片付ける。今回再開する
+  run かどうかの判定は `capturing-intent` の手順 0 に従う。
 - run の解決自体は intent フェーズ(`capturing-intent` スキル)へつなぐ。Issue 番号・intent パス・省略の
   どの入口でも、既存 intent との重複確認、聞き取り、現状調査、分岐の合意、ドラフト提示、承認ゲート、
   `codiel-state init` による run 作成までを `capturing-intent` の手順に従って進める。
@@ -195,7 +196,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) | オーケストレーター(intent-only では開始時のブランチへ、続行では run ブランチへ、ゲート通過直後) |
 | [discuss] | オーケストレーター本体がアジェンダを書き、進行する。intent → `agenda.md` | preparing-design-agendas | intent、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
 | [design] | オーケストレーター本体が書く。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、新しい画面の名前を聞いてから evaluate する** | オーケストレーター(ゲート通過直後) |
-| [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、dev-plan のゲートの後に成果物を書く委譲を前景で出す。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
+| [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、成果物を書く委譲を出して待ちを記録し、その間に dev-plan を書いてゲートする。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
 | [dev-plan] | オーケストレーター本体が書く。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) | オーケストレーター(ゲート通過直後) |
 | [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列(2.5〜2.7)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`(`report.md` は委譲先の返答からオーケストレーターが書く。2.1) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
 | [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列(2.8)。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは実行の委譲を出す | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
@@ -217,18 +218,25 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   候補の外の答えはケバブケースの 1 セグメントに直して確かめてから `resume` する。無ければ聞かない。決ま
   った一覧は、dev-plan の執筆と spec の委譲の依頼文に同じ値で使う。
 - test-spec と dev-plan は、design が `passed` か `skipped` になった後、`start-phase test-spec` を行ってから、
-  次の 3 ステップで直列に進める。spec の委譲は dev-plan のゲートの後に出す(軽量の経路では、上の同定が
-  `start-phase test-spec` の直後に入る)。
+  次の順に並列で進める(軽量の経路では、上の同定が `start-phase test-spec` の直後に入る)。
   1. 仕様のディレクトリを同定する(軽量でなければ `design.md` の一覧を使う)。
-  2. `start-phase dev-plan` の後に dev-plan.md を自分で書き、`evaluate_plan` でゲートする。
-  3. spec.md / cases.md の委譲を前景で出し、返ったら spec の `evaluate_plan` でゲートする。
+  2. spec.md / cases.md の委譲を出し、`wait-add` する。
+  3. 委譲の完了を待つ間に、`start-phase dev-plan` の後で dev-plan.md を自分で書き、`evaluate_plan` でゲートする。
+  4. spec の委譲の完了通知を受けたら、報告を書いて `wait-done` し、spec の `evaluate_plan` でゲートする。
+
   2 つのゲートの判定は互いに独立で、一方の verdict が他方の判定を変えない(raguel-gating 参照)。dev-plan が
-  `ASK`/`STOP` の間は、spec の委譲を出さない。
-- test-spec の再開は、標準でも軽量でも、dev-plan と test-spec の `passed` の状態で分ける。
-  - 両方 `passed`: test-spec の作業は済んでいる。次のフェーズへ進む。
-  - dev-plan だけ `passed`: 同定の一覧で spec の委譲を出す。
-  - test-spec だけ `passed`: 旧順序で途中まで進んだ run で起きる。dev-plan を書き、`evaluate_plan` でゲートする。
-  - どちらも `passed` でない: 同定からやり直す。
+  `ASK`/`STOP` でも、spec の委譲は止めず、完了したら spec のゲートまで進める。
+- dev-plan が `ASK`/`STOP` になっても、spec の委譲の待ちが残っている間は `mark-ask` を呼ばない。`mark-ask` は
+  run を `awaiting_human` にし、その間は guard-write の境界が外れるためである。spec のゲートの結果が出てから、
+  2 つのゲートの結果をまとめて人に示す。2 つとも `ASK`/`STOP` なら、両方に `mark-ask` し、両方の裁定を
+  `record_outcome` で記録してから `resume` する。`resume` は awaiting_human のフェーズを一括で戻すので、
+  片方の裁定だけで呼ばない。
+- test-code へ進めるのは、dev-plan と test-spec の両方が `passed` になってからである。
+- test-spec の再開は、標準でも軽量でも、次の順で分ける。
+  1. 裁定待ちの `ASK`/`STOP` があれば、先に人の裁定を受ける(`STOP` の後に再評価しない)。
+  2. dev-plan が `passed` でなく裁定待ちでもなければ、dev-plan を書いてゲートする。
+  3. test-spec は §6 の待ちの扱いで決める。受け取り済みなら spec のゲートへ進み、そうでなければ spec の委譲を出し直す(出し直す間に 2. を進めてよい)。
+  4. 両方 `passed` なら、test-spec の作業は済んでいるので次のフェーズへ進む。
   - 一覧が手元に無いときは、dev-plan が `passed` なら `dev-plan.md` の各ステップの通すテストから取り直し、そうでなければ同定し直す。
 - 実行モード(`mapped` / `unscoped`)に応じたドメインディスパッチは「4. ドメインディスパッチ」を参照。
   test-code・implement・test-loop の運転は「2.6〜2.9」を参照。
@@ -276,8 +284,9 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   git から外れている。`pr-body.md` や `review-body-<m>.md` などの本文ファイルは Write ツールで `reports/` に
   書き、コミットせずに投稿する。
 - **報告のファイル**: 報告のファイル(`report.md`・`test-run-<n>.md`)を持つ委譲の先は、報告の本文を最終の
-  返答で返し、報告のファイルを書かず、`git add` もしない。オーケストレーターは、その返答を受けた直後に、
-  state の更新や次の委譲より先に、本文を要約せずに報告のファイルへ書く。置き場は 2.6 に従う。
+  返答で返し、報告のファイルを書かず、`git add` もしない。オーケストレーターは、完了通知を受けた直後に、
+  state の更新や次の委譲より先に、本文を要約せずに `waits/<id>.md` と報告のファイルへ書き、その後で
+  `wait-done` を呼ぶ(§3)。置き場は 2.6 に従う。
   `test-run-<n>.md` は、自分で実行した結果と `e2e/` の委譲の返答を合わせて書く。E2E の
   `summary.md` と `failure.md` は 2.10 に従う。
 - **確認義務**: `pr` フェーズを開始する前に `git status --short` を実行し、残ったファイルを次のとおり分ける。
@@ -387,6 +396,11 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   ```
   node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason intent-updated
   ```
+- run を止めるとき(人が中止を選んだとき、`intent-updated` で止めるとき、別の try を始めるとき)は、`stop` の前に、
+  `codiel-state get` の `waits` に残っている委譲を片付ける。`taskId` がある委譲は `TaskStop` で止め、無い委譲は
+  完了通知を待つ。`stop` は待ちが残っていると失敗する。片付けても `waits` が残る事情(委譲を止められず、
+  完了も待てない)があるときだけ、人に確かめてから `stop` に `--abandon-waits` を付ける。worktree とブランチの
+  削除は、`waits` が空になってから行う。委譲が止まる前に、書き込み中の worktree を消さないためである。
 
 ### 2.5 worktree
 
@@ -408,7 +422,7 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
   `.codiel/worktrees/<slug>/` は、リポジトリ相対のパスの `rmdir` で消す。`rmdir` は空でなければ失敗するので、
   残った worktree を巻き込まない。失敗した worktree は run の終了まで残すが、やり直す前には必ず削除してから
   新しい HEAD で作り直す。run の終了時(finalize または stop)には、残っている worktree とブランチを
-  すべて削除する。
+  すべて削除する。stop のときは、`waits` が空になってから削除する(2.4)。
 
 ### 2.6 テストを実行する委譲の並べ方と環境の失敗
 
@@ -417,13 +431,14 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
 下記の環境の失敗の実行し直しの委譲)を、次の 2 種類に分けて出す。タスクレビューのような読み取りだけの
 委譲には当てない。
 
-- 並列可の委譲: 担当する仕様のディレクトリの `spec.md` の frontmatter `parallel: true` のテストだけを
-  実行する委譲。動いている委譲(同じフェーズでこの規則を当てる委譲のうち、出して報告がまだ返っていない
-  もの)が無いか、並列可の委譲だけのときに出す。同時に動かすのは 4 件までとし、出せるものが 2 件以上
+- 並列可の委譲: `parallel: true` を `spec.md` の frontmatter に持つ仕様のディレクトリで、そのテストだけを
+  実行する委譲。「動いている委譲」は、同じフェーズでこの規則を当てる委譲のうち待ちの記録が残っているものを指す。
+  動いている委譲が無いか、並列可の委譲だけのときに出す。同時に動かすのは 4 件までとし、出せるものが 2 件以上
   あれば、上限の範囲で同じ応答からまとめて出す。
 - 単独の委譲: 並列可の委譲に当たらないもの(implement のすべての通すテストを実行する委譲、`parallel`
   を持たない仕様のディレクトリの test-code・test-loop の修正、test-loop と fix-loop の `e2e/` の回帰の実行、run ブランチ上の
-  修正)。動いている委譲が無いときだけ出し、報告が返るまで同じフェーズのほかの委譲を出さない。
+  修正)。待ちが空のときだけ出し、その待ちが残っている間は同じフェーズのほかの委譲を出さない。
+  メインの作業ツリーで `set-domain` を伴う委譲の待ちが残っている間は、メインの作業ツリーで動くほかの委譲も出さない(`domain` は 1 値しか持てない)。worktree の中で動く委譲には当てない。
 
 test-code と test-loop の修正は、担当する仕様のディレクトリの `parallel` で種類が決まる。implement で
 はオーケストレーターが委譲ごとに選ぶ。ステップが 2 つ以上のグループの最初の委譲は並列可、ステップが
@@ -445,7 +460,7 @@ test-loop の `e2e/` の回帰の実行では `test-run-<n>.md`、fix-loop の�
 中断後の再開では、このセクションの有無で実行し直しが済んだかを判断し、1 回だけの規則を保つ。
 実行し直しても環境の失敗なら、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
 
-報告のファイルは、返答を受けたオーケストレーターが次の置き場へ書く(2.1)。
+報告のファイルは、完了通知で返答を受けたオーケストレーターが `waits/<id>.md` に書いた後、次の置き場へ書く(2.1)。
 - `parallel` グループの各ステップ・test-code・test-loop の各仕様のディレクトリ: `steps/<worktree の
   名前>/report.md`
 - `serial` グループと `final`: `steps/step-<k>/report.md`
@@ -564,10 +579,10 @@ E2E のレポートは、E2E の仕様のディレクトリの `reports/` に実
   委譲も、出力はメインの作業ツリーの置き場に出させる。
 - E2E は仕様のディレクトリごとに 1 回起動させる。1 回の起動で複数の仕様のディレクトリを走らせると、
   `results.json` を置き場ごとに分けられない。
-- `summary.md`・`failure.md`・JSON を出せないフレームワークの `results.json` は、委譲先の返答を受けた直後に、
-  `e2e-report-format.md` に従ってオーケストレーターが書く。Red の確認の実行は、ケースの結果にかかわらず `summary.md` を置く。
+- `summary.md`・`failure.md`・JSON を出せないフレームワークの `results.json` は、委譲先の完了通知を受けて
+  `waits/<id>.md` を書いた直後に、`e2e-report-format.md` に従ってオーケストレーターが書く。Red の確認の実行は、ケースの結果にかかわらず `summary.md` を置く。
 - `failure.md` の直し方は、その回の失敗を直した委譲の返答から書く。書く時点で分からなければ「未記入」と書き、
-  次のどれかで書き換える。修正の委譲の返答を受けた直後に、返答の直し方を書く。修正の委譲が無いまま失敗が
+  次のどれかで書き換える。修正の委譲の完了通知を受けて `waits/<id>.md` を書いた直後に、返答の直し方を書く。修正の委譲が無いまま失敗が
   消えたときは、同じ仕様のディレクトリの次の実行がパスした時点で「なし」と理由を書く。直す前に run が止まる
   ときは、stop の前に「なし」と理由を書く。
 - コミットは 2 つの契機で行う。`evaluate_code` を呼ぶ前に、そのフェーズで作った実行ごとのディレクトリと、
@@ -618,9 +633,21 @@ intent-sync を書く前に、オーケストレーターが intent の frontmat
 ## 3. ディスパッチプロンプトの規約
 
 サブエージェントのディスパッチは **Agent ツール**で行う。
-委譲はすべて前景で出す(Agent ツールの `run_in_background` を使わない)。前景の委譲は報告が返るまで
-ターンを終えない。並列にする委譲は、同じ応答からまとめて出す(review の観点ごとの委譲を含む)。
 委譲先は名指しせず、作業内容を渡して委譲する。作業内容による委譲の解決はセッションに注入された規律に従い、規律が無ければビルトインの委譲先へ送る。
+
+委譲はバックグラウンドで動く。完了は後のターンに通知として届く。run があるときの委譲は、次の順で扱う。
+
+- Agent ツールの結果で起動を確かめてから、`codiel-state wait-add --slug <slug> --id <id> --purpose <文> --task-id <返った ID>` で待ちを記録する。起動に失敗した委譲は記録しない。
+- `id` は `<フェーズ>-<要素>-<回>` の形(英小文字と数字をハイフンでつなぐ)で委譲ごとに付け、try の中で使い回さない。修正ラウンド・回帰の巡・実行し直しは回を上げて別の待ちにする。`purpose` は何の委譲かを書く 1 文にする。
+- 並列にする委譲は同じ応答からまとめて出し(review の観点ごとの委譲を含む)、`wait-add` は 1 件ずつ順に呼ぶ。`codiel-state` の呼び出しは並列の Bash にしない。state の読み書きにロックが無く、並列に呼ぶと更新が失われる。
+- `evaluate_*` が Claude Code にバックグラウンドへ移されたときも、`gate-<フェーズ>-<回>` の `id` で `wait-add` する。
+- 待つ間にできる作業(自分が書く文書・自分が実行するテスト)があれば進める。無ければターンを終えて完了通知を待つ。
+- 完了通知を受けたら、返答の本文を要約せずに `.codiel/runs/<slug>/try-<n>/waits/<id>.md` へ書き、続けて既存の報告の置き場(2.1・2.6)へ書く。その後で `codiel-state wait-done --slug <slug> --id <id>` を呼び、次の委譲やゲートへ進む。報告を書く前に state の更新や次の委譲へ進まない。
+- 委譲を出し直すときは、新しい回の `id` で記録する。
+
+run が無いときの委譲(`capturing-intent` の現状調査、`/codiel:test` の単独実行)は、待ちを記録しない。stop-guard も run が無ければ止めない。
+
+待ちの記録が残っている間、stop-guard は停止を止めない。消し忘れた待ちがあると、その run では未完了の停止を検出できなくなるので、報告を書いたら必ず `wait-done` を呼ぶ。
 
 プロンプトは次のテンプレートを満たす。作業内容、読むスキルと観点ファイルの絶対パス、入出力ファイル、§0 で解決した前提値、前フェーズ findings の要約、完了条件を含める。
 
@@ -733,10 +760,11 @@ node <plugin-root>/scripts/codiel-state.mjs clear-domain --slug <slug>
   後の run ブランチ上の修正、test-loop のプロジェクト全体の修正、fix-loop の修正)を委譲する直前だけで
   ある。
 - `--domain` にはステップに付いたタグの値をそのまま渡す。汎用の実装へ送るときもタグの値を渡し、タグから別名を作らない。
-- `set-domain` を実行した委譲先の報告を受け取った直後に `clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
+- `set-domain` を実行した委譲の完了通知を受け、`wait-done` を呼んだら、直後に `clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
 - `unscoped` では `set-domain` を呼ばない。各ディスパッチの前に `clear-domain` を実行し、`domain` を残さない。
 - ドメインに紐づかない委譲へ移る前に、`domain` が残っている可能性があれば `clear-domain` を実行する。
 - 実装と test-loop の修正の委譲の並べ方は「2.6 テストを実行する委譲の並べ方と環境の失敗」に従う。
+- メインの作業ツリーで `set-domain` を伴う委譲の待ちが残っている間は、メインの作業ツリーで動くほかの委譲を出さない(2.6)。
 - 複数のドメイン別委譲を同じ応答でディスパッチするとき(レビューで複数の観点を同時に扱う場合など)は、先に `clear-domain` を実行し、`set-domain` は実行しない。state が持てる `domain` は 1 つだけである。この場合のドメイン規律はディスパッチプロンプトで運用する。
 
 境界違反は `deny` ではなく `ask` で返る。止まったら、`set-domain` した値と `dev-plan.md` の該当ステップのドメインタグを照合する。値が誤っていれば正しい値で `set-domain` し直して続行する。値が正しければ越境であり、その書き込みを認めず、該当ドメインの実装の委譲をやり直す。
@@ -756,7 +784,7 @@ test-loop の内部運転(回帰の実行と修正。「2.9 test-loop の運転�
    提示し裁定を待つ。自分で「あと1回だけ」と続行してはならない)。
 3. fix-loop の所見がテストに向くと `fixing-review-findings` の検証で確かめたら、
    `node <plugin-root>/scripts/codiel-state.mjs set-test-edit --slug <slug>` を実行してからテスト側の
-   修正を委譲する。報告を受けたら
+   修正を委譲する。完了通知を受けて報告を書いたら
    `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を実行してから、コードの
    修正を委譲する。
 
@@ -810,7 +838,14 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
    - 記録が `mapped` なのに §0 の `unreadable !== null` なら、分岐表の行 7 として止めて確認する。run 中のマップ消失を暗黙のモード変更にしない。
    - それ以外で記録があれば、その値を正として復元する。`unreadable` が `architecture_missing` または `block_missing` の場合は分岐表の行 4 として再確認しない。
    - 記録がなければモード未決として §0 の判定をやり直す。
-5. `state.phase` から続行する。すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に従い、
+5. `state.phase` から続行する前に、`waits` に残っている待ちを処理する。前のセッションの委譲は失われたものとして扱う。
+   1. 待ちごとに、`waits/<id>.md` が `startedAt` より後に書かれているかを確かめる。
+   2. 書かれていれば、返答を受け取り済みとして、既存の報告の置き場への転記を済ませる。
+   3. 書かれていなければ、委譲を出し直す(新しい回の `id` で `wait-add` する)。古い報告のファイルや成果が残っていても、`waits/<id>.md` が無い委譲の成果としては使わない。
+   4. worktree の中の委譲を出し直すときは、2.5 の規則どおり、残っている worktree とそのブランチを削除し、新しい HEAD で作り直す。
+   5. 確かめ終えたら `codiel-state wait-clear --slug <slug>` で残りを消す。
+
+   続けて、`state.phase` から続行する。すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に従い、
    `in_progress` のフェーズから再開する。中断していた委譲があれば、次の報告ファイルの末尾の
    `## 実行し直し` セクションの有無で、環境の失敗の実行し直しが済んだかを判断する(済んでいれば実行し
    直さない。2.6)。
@@ -873,7 +908,7 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
 <HARD-GATE>
 - **オーケストレーターは、コード(テストコードを含む)・spec.md / cases.md・レビューの所見を自分で書かない**。
   実装・テストコードの作成・spec.md / cases.md の執筆・タスクレビュー・review は、すべてサブエージェントへの
-  ディスパッチを経由する。委譲先の返答の本文を `review-<m>.md` などの報告のファイルへ転記することは、
+  ディスパッチを経由する。委譲先の返答の本文を `waits/<id>.md` や `review-<m>.md` などの報告のファイルへ転記することは、
   所見を書くことに当たらない。
 - オーケストレーターは、agenda.md・design.md・dev-plan.md・discussion.md・intent 文書(持続層を含む)を
   自分で書く。プロジェクトの test コマンドと、ID が `units/` で始まる仕様のディレクトリのテストも自分で

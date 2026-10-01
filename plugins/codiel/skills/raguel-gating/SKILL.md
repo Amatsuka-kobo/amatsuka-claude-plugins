@@ -83,11 +83,17 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
     宣言されていなければ、`mark-ask` で run を `awaiting_human` にしてから人に知らせ、AskUserQuestion で次のどちらかを聞く。
     宣言を足す(run の間は guard が `.codiel/config.json` への書き込みを拒むので、足すのは人の手か run の外である)、または人が自分でそのファイルを退避する。
   - 宣言する glob は、run と関係の無いファイルの置き場だけにする。ソースのパスは宣言しない。
-- test-spec と dev-plan は同じステージで直列に進めるフェーズだが、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
+- test-spec と dev-plan は同じステージで並列に進めるフェーズで、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
+- 片方が ASK・STOP になっても、もう片方の委譲の待ちが残っている間は `mark-ask` を呼ばない。`mark-ask` は run を
+  `awaiting_human` にし、その間は guard-write の境界が外れるためである。もう片方のゲートの結果が出てから、
+  2 つのゲートの結果をまとめて人に示す。2 つとも ASK・STOP なら、両方に `mark-ask` し、両方の裁定を
+  `record_outcome` で記録してから `resume` する。`resume` は awaiting_human のフェーズを一括で戻すので、
+  片方の裁定だけで呼ばない。
 - 同一 runId で呼び続けるからこそ `common/resubmission-loop`(暴走的な再提出の検知)が効く。
   フェーズが変わっても try が同じなら `raguelRunId` は変えない。
-- evaluate の呼び出しが 120 秒を超えて Claude Code にバックグラウンドへ移されたら、完了の通知を待つ。待つ間は evaluate を呼び直さない。
+- evaluate の呼び出しが 120 秒を超えて Claude Code にバックグラウンドへ移されたら、`codiel-state wait-add --slug <slug> --id gate-<フェーズ>-<回> --purpose <文>` で待ちを記録し、完了の通知を待つ。
+  結果が届いたら、本文を `waits/<id>.md` に書いてから `wait-done` で待ちを消す。待つ間は evaluate を呼び直さない。
   Jev の問い合わせの上限は既定で 20 秒なので、通常は移る前に返る。
 - 評価のあとに成果物を動かさない。code 系フェーズは、pass-gate までコミットを足さない(HEAD が変わると
   pass-gate が止まる)。文書のフェーズは、pass-gate まで文書を書き換えない(内容が変わると止まる)。
@@ -113,6 +119,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    選択肢は「修正して再提出」「このまま承認」「中止」である。
 4. 裁定はオーケストレーターが選ばない。「多分大丈夫」の代理判断は、Red Flags のとおり自己承認である。
    「中止」なら、STOP の「妥当として止める」と同じ手順で終了させる。
+5. 並列に進めるフェーズ(test-spec と dev-plan)の ASK は、上のとおり、もう片方の待ちが残っている間は手順 2 の `mark-ask` を保留する。
 
 #### 裁定 A: 修正して再提出
 
@@ -153,7 +160,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    `decisionPoint` を入れる。応答の本文だけに書かず、所見の原文は添えない。
 4. 再評価が選ばれたら、`resume` してフェーズを `in_progress` に戻し、evaluate を呼び直す。
 5. そのまま承認が選ばれたら、裁定 B と同じ手順(record_outcome の `ruling: "as-is"` から pass-gate まで)で通す。
-6. 止めるが選ばれたら、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-degraded` で止める。
+6. 止めるが選ばれたら、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-degraded` で止める。
 
 ### STOP
 
@@ -179,7 +186,7 @@ verdict を上書きしない。
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    4. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
-4. 妥当として止めるときは、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止め、
+4. 妥当として止めるときは、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止め、
    続けて `orchestrating-runs` の「7. 失敗の記録」に従い、失敗の内容を GOTCHAS に記録する
    (STOP は最も学習価値の高い失敗)。
 

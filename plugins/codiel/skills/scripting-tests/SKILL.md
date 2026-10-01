@@ -13,7 +13,7 @@ test-code フェーズの委譲先が、仕様のディレクトリ(`<testsDir>/
 
 ## worktree での作業
 
-test-code の委譲は仕様のディレクトリごとに worktree(`.codiel/worktrees/<slug>/test-code-<k>`)で行う。k は `testCode.units` にその ID を登録した順の番号であり、登録し直しても変わらない。依頼文が渡す brief ファイル(`.codiel/runs/<slug>/try-<n>/steps/test-code-<k>/brief.md`)の絶対パスを Read し、testsDir の値・担当する仕様のディレクトリの ID・入力のパスを、そこに書かれた値として確認する。報告の本文は最終の返答で返し、報告のファイルを Write で書かず、`git add` もしない。返答を受けたオーケストレーターが報告のファイルへ書く。委譲を出す順序と同時実行数は `orchestrating-runs` の規律に従う。
+test-code の委譲は仕様のディレクトリごとに worktree(`.codiel/worktrees/<slug>/test-code-<k>`)で行う。k は `testCode.units` にその ID を登録した順の番号であり、登録し直しても変わらない。依頼文が渡す brief ファイル(`.codiel/runs/<slug>/try-<n>/steps/test-code-<k>/brief.md`)の絶対パスを Read し、testsDir の値・担当する仕様のディレクトリの ID・入力のパスを、そこに書かれた値として確認する。報告の本文は最終の返答で返し、報告のファイルを Write で書かず、`git add` もしない。完了通知で返答を受けたオーケストレーターが `waits/<id>.md` と報告のファイルへ書く。委譲を出す順序と同時実行数は `orchestrating-runs` の規律に従う。
 
 worktree の中では、実装に入る前に依存をインストールする。コマンドは brief の `## 環境準備` の値を使う。「なし」のときは、その worktree の lockfile の種類から選ぶ既定のコマンドを使う。
 

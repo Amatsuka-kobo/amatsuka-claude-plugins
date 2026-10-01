@@ -21,7 +21,7 @@ description: Codiel の dev-plan フェーズで、オーケストレーター�
 という規律を持ち、ドメインタグはその規律の判定基準になる(hooks はエージェント個体を識別できないため、
 ドメイン規律はエージェント定義側で担保される)。
 
-dev-plan は test-spec の委譲より先に書きゲートするので、test-spec の出力(`cases.md`)を入力にしない。
+dev-plan は test-spec の委譲が動いている間に書きゲートするので、test-spec の出力(`cases.md`)を入力にしない。
 `design.md` のみを入力とする独立した成果物であり、`evaluate_plan` は test-spec と dev-plan それぞれに
 独立してゲートされる。
 

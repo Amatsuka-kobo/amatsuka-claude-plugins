@@ -74,7 +74,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 実装はテスト駆動で進みます。test-code フェーズが、仕様からユニットテストと E2E テストを先に書いて失敗を確かめ、implement フェーズがそれを通します。テストの仕様は `.codiel/config.json` の `testsDir`(既定は `docs/codiel/tests`)の下に置き、implement 以降にテストを書き換えようとすると hook が確認を求めます。<br>
 `.codiel/config.json` には testsDir のほか、run の文書(議題・設計・実装計画)の置き場 `runsDir`(既定は `docs/codiel/runs`)と Raguel の設定 `raguel` を置き、git で共有します。run の state と報告は `.codiel/runs/` に残り、`/codiel:init` が足す `.gitignore` の行で git から外れます。<br>
 Raguel は決定論のルール層で判定します。環境変数 `TYPESAFE_API_KEY` があれば、Jev(TypeSafe AI)が成果物の内容も判定しますが、その場合は秘密情報の伏せ字を当てた後の成果物が TypeSafe AI へ送られます。鍵が無ければルール層だけで判定し、Jev は推奨依存です。撤去した `judge`・`weight`・`panel` などの設定キーは、警告付きで無視されます。<br>
-implement フェーズは、実装計画の Step を依存関係からグループに分け、同じグループの Step を git worktree で並列に実装してからマージします。<br>
+implement フェーズは、実装計画の Step を依存関係からグループに分け、同じグループの Step を git worktree で並列に実装してからマージします。委譲はバックグラウンドで動き、run は待ちを state に記録します。セッションを途中で終えても、再開すると失われた委譲を出し直します。<br>
 run の間に GitHub へ投稿する本文には `<!-- codiel:generated -->` を付け、hook がこれを確かめます(run の間に gh-utility から投稿すると拒否されます)。スクリーンショットなどの画像は、`gh --attach` か claude-in-chrome で本文に載せます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。
 

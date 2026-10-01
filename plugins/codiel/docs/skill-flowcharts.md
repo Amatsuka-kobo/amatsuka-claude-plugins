@@ -590,7 +590,7 @@ digraph codiel_run {
   intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n(続行なら git switch -c <branch>)", shape=box];
   discuss [label="[discuss]\nオーケストレーターが agenda.md を書き、\n進行する+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
   design [label="[design]\nオーケストレーターが design.md を書く\n+ウォークスルー(ユーザー承認)", shape=box];
-  testspec [label="[test-spec]\n仕様のディレクトリの同定は自分で行い、\ndev-plan のゲートの後に spec.md / cases.md を\n書く委譲を前景で出す(新しい画面は名前の候補)", shape=box];
+  testspec [label="[test-spec]\n仕様のディレクトリの同定は自分で行い、\nspec.md / cases.md を書く委譲を出して待ちを記録する\n(新しい画面は名前の候補)。待つ間に dev-plan を書く", shape=box];
   devplan [label="[dev-plan]\nオーケストレーターが書く\n(dev-plan.md。触るファイル・前提ステップ・\n通すテスト・環境準備・生成物)", shape=box];
   testcode [label="[test-code]\n仕様のディレクトリごとに worktree で\nテストコードを書き Red を確認\n(タスクレビュー後に順にマージ)", shape=box];
   waves [label="codiel-state waves で\nwave(依存の無いステップの最大4件の\n並列グループ)に分ける", shape=note];
