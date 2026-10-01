@@ -144,17 +144,23 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <�
 
 setup-agents が扱う推奨モデル ID は次の 9 種です。
 
-| モデル ID | 表示名 | 既定の `model` 値 |
-| --- | --- | --- |
-| `opus` | Opus | `opus` |
-| `sonnet` | Sonnet | `sonnet` |
-| `haiku` | Haiku | `haiku` |
-| `fable` | Fable | `fable` |
-| `gpt-sol` | GPT Sol | `claude-gpt-6-1-sol` |
-| `gpt-terra` | GPT Terra | `claude-gpt-5-6-terra` |
-| `gpt-luna` | GPT Luna | `claude-gpt-6-luna` |
-| `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
-| `grok` | Grok | `claude-grok-4-7` |
+| モデル ID | 表示名 |
+| --- | --- |
+| `opus` | Opus |
+| `sonnet` | Sonnet |
+| `haiku` | Haiku |
+| `fable` | Fable |
+| `gpt-sol` | GPT Sol |
+| `gpt-terra` | GPT Terra |
+| `gpt-luna` | GPT Luna |
+| `gpt-astra` | GPT Astra |
+| `grok` | Grok |
+
+実際に使うエイリアスは、プロキシの `/v1/models` と、次に書く部分一致の規則で決まります。現在の既定値と、live のエイリアスとの一致は、次のコマンドで確かめられます。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope custom --dir "$PWD"
+```
 
 外部モデルは、プロキシの `/v1/models` にあるエイリアスを部分一致で認識します。既定の `model` 値と名前が違っていても(`claude-gpt6-sol`、`claude-gpt-6.1-sol-pro` など)同じモデルとして扱います。
 
