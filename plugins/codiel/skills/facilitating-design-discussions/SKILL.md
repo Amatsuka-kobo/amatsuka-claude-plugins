@@ -40,7 +40,7 @@ description: Codiel の discuss フェーズで、オーケストレーター本
 
 ## discussion.md の書式
 
-design フェーズ(writing-design-docs)と design.md のレビューの委譲先がこの書式のまま読む。項目名を変更しない。
+design フェーズで design を書くオーケストレーター(writing-design-docs)と、`evaluate_design` のゲートがこの書式のまま読む。項目名を変更しない。
 
 ```markdown
 # discussion: <intent のゴール>
@@ -74,7 +74,8 @@ design フェーズ(writing-design-docs)と design.md のレビューの委譲�
 
 ## 中断再開(discuss フェーズ)
 
-- `agenda.md` が無い → アジェンダ作成から
+- `agenda.md` が無く、`discussion.md` に「論点なし」の記録も無い → アジェンダ作成から
+- `agenda.md` が無く、`discussion.md` に「論点なし」の記録がある → discuss を終え、design へ進む
 - `agenda.md` があり、`discussion.md` が無い/「状態: 未決」の論点が残る → 未決論点の提示から再開
 - 全論点が決定済み → 最終確認から再開
 

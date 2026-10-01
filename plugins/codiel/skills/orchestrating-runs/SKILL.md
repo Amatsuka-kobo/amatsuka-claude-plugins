@@ -215,14 +215,21 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   (`writing-test-specs` の同定の規則。ファイルは書かない)。新しい画面があれば
   `mark-ask test-spec --slug <slug> --kind confirm` の後に画面ごとの名前の候補を AskUserQuestion で聞き、
   候補の外の答えはケバブケースの 1 セグメントに直して確かめてから `resume` する。無ければ聞かない。決ま
-  った一覧は、dev-plan の執筆と spec の委譲の依頼文に同じ値で使う。再開では、dev-plan が `passed` で
-  test-spec が `passed` でなければ、同定の一覧で spec の委譲を出す(一覧が手元に無ければ同定し直す)。
-  どちらも `passed` でなければ、同定からやり直す。
-- test-spec と dev-plan は次の 3 ステップで直列に進める。spec の委譲は dev-plan のゲートの後に出す。
+  った一覧は、dev-plan の執筆と spec の委譲の依頼文に同じ値で使う。
+- test-spec と dev-plan は、design が `passed` か `skipped` になった後、`start-phase test-spec` を行ってから、
+  次の 3 ステップで直列に進める。spec の委譲は dev-plan のゲートの後に出す(軽量の経路では、上の同定が
+  `start-phase test-spec` の直後に入る)。
   1. 仕様のディレクトリを同定する(軽量でなければ `design.md` の一覧を使う)。
   2. `start-phase dev-plan` の後に dev-plan.md を自分で書き、`evaluate_plan` でゲートする。
   3. spec.md / cases.md の委譲を前景で出し、返ったら spec の `evaluate_plan` でゲートする。
-  片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
+  2 つのゲートの判定は互いに独立で、一方の verdict が他方の判定を変えない(raguel-gating 参照)。dev-plan が
+  `ASK`/`STOP` の間は、spec の委譲を出さない。
+- test-spec の再開は、標準でも軽量でも、dev-plan と test-spec の `passed` の状態で分ける。
+  - 両方 `passed`: test-spec の作業は済んでいる。次のフェーズへ進む。
+  - dev-plan だけ `passed`: 同定の一覧で spec の委譲を出す。
+  - test-spec だけ `passed`: 旧順序で途中まで進んだ run で起きる。dev-plan を書き、`evaluate_plan` でゲートする。
+  - どちらも `passed` でない: 同定からやり直す。
+  - 一覧が手元に無いときは、dev-plan が `passed` なら `dev-plan.md` の各ステップの通すテストから取り直し、そうでなければ同定し直す。
 - 実行モード(`mapped` / `unscoped`)に応じたドメインディスパッチは「4. ドメインディスパッチ」を参照。
   test-code・implement・test-loop の運転は「2.6〜2.9」を参照。
 - critical/high が review でゼロだった場合、fix-loop は実作業なしで
@@ -353,7 +360,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
    metatron が導入されていれば `/metatron:update` へ引き渡す旨を結果レポートに書き、導入されていな
    ければ報告に残すだけにする。codiel は ARCHITECTURE を作らない。
 7. ADR 候補を結果レポートに挙げる。一覧の出どころは `adrTarget` で分ける。
-   `metatron` は intent-sync を書いたときの ADR 候補の一覧、`intents` は今回取り込んだ持続層のファイルにある
+   `metatron` は `steps/intent-sync/report.md` に書き残した ADR 候補の一覧、`intents` は今回取り込んだ持続層のファイルにある
    `[ADR 候補: <候補 ID>]` の見出しの一覧である。候補が無いときは、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのかを書く。
 8. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表と、6. の乖離の一覧と、
    7. の ADR 候補の一覧と、持続層への取り込みの結果を含めて出力し、終了する。取り込みの結果には、取り込んだ
@@ -406,7 +413,7 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
 ### 2.6 テストを実行する委譲の並べ方と環境の失敗
 
 中でテストを実行する委譲(test-code の委譲、implement の実装と修正ラウンドの委譲、グループのマージの
-後の `e2e/` の実行の委譲、test-loop の `e2e/` の回帰の実行と修正の委譲、グループのマージの後や test-loop のプロジェクト全体の run ブランチ上の修正の委譲、
+後の `e2e/` の実行の委譲、test-loop の `e2e/` の回帰の実行と修正の委譲、fix-loop の `e2e/` の回帰の実行の委譲、グループのマージの後や test-loop のプロジェクト全体の run ブランチ上の修正の委譲、
 下記の環境の失敗の実行し直しの委譲)を、次の 2 種類に分けて出す。タスクレビューのような読み取りだけの
 委譲には当てない。
 
@@ -415,7 +422,7 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
   もの)が無いか、並列可の委譲だけのときに出す。同時に動かすのは 4 件までとし、出せるものが 2 件以上
   あれば、上限の範囲で同じ応答からまとめて出す。
 - 単独の委譲: 並列可の委譲に当たらないもの(implement のすべての通すテストを実行する委譲、`parallel`
-  を持たない仕様のディレクトリの test-code・test-loop の修正、test-loop の `e2e/` の回帰の実行、run ブランチ上の
+  を持たない仕様のディレクトリの test-code・test-loop の修正、test-loop と fix-loop の `e2e/` の回帰の実行、run ブランチ上の
   修正)。動いている委譲が無いときだけ出し、報告が返るまで同じフェーズのほかの委譲を出さない。
 
 test-code と test-loop の修正は、担当する仕様のディレクトリの `parallel` で種類が決まる。implement で
@@ -431,10 +438,11 @@ test-code と test-loop の修正は、担当する仕様のディレクトリ�
 
 環境の失敗(サーバーが起動しない、接続が拒否される、ポートが使用中、必要なサービスが無いなど)は、
 未実装による失敗にもプロダクトの失敗にも数えない。委譲先は理由と出力の抜粋を報告(`report.md`。
-test-loop の `e2e/` の回帰の実行では `test-run-<n>.md`)に挙げ、最終の返答で返す。オーケストレーターは、動いている委譲が
+test-loop の `e2e/` の回帰の実行では `test-run-<n>.md`、fix-loop の回帰の実行では `test-run-<n+1>.md`)に挙げ、最終の返答で返す。オーケストレーターは、動いている委譲が
 無いときに 1 回だけ単独で実行し直させ、実行し直した委譲の返答を、元の報告の末尾の `## 実行し直し` の
-セクションへ自分で書く(state は変えない)。中断後の再開では、このセクションの有無で実行し直しが済んだかを判断し、1 回だけの
-規則を保つ。オーケストレーター自身が実行したテスト(プロジェクトの test コマンドと `units/` のテスト)は、自分で実行し直す。
+セクションへ自分で書く(state は変えない)。オーケストレーター自身が実行したテスト(プロジェクトの test コマンドと `units/` のテスト)は、自分で 1 回だけ実行し直し、
+その回の報告(implement のグループのマージの後は `steps/merge-test-<g>/report.md`、test-loop は `test-run-<n>.md`、fix-loop は `test-run-<n+1>.md`)の `## 実行し直し` のセクションへ自分で書く。
+中断後の再開では、このセクションの有無で実行し直しが済んだかを判断し、1 回だけの規則を保つ。
 実行し直しても環境の失敗なら、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
 
 報告のファイルは、返答を受けたオーケストレーターが次の置き場へ書く(2.1)。
@@ -443,7 +451,12 @@ test-loop の `e2e/` の回帰の実行では `test-run-<n>.md`)に挙げ、最�
 - `serial` グループと `final`: `steps/step-<k>/report.md`
 - グループのマージの後の修正: `steps/merge-fix-<g>/report.md`(g は、そのグループのステップの state の
   `group.index`(0 から)に 1 を足した値)
+- グループのマージの後のテストの実行: `steps/merge-test-<g>/report.md`(g は `merge-fix-<g>` と同じ番号)。
+  自分で実行した結果と、そのグループの `e2e/` の実行の委譲の返答を合わせて書く
 - test-loop のどの仕様のディレクトリにも属さない失敗の修正: `steps/test-loop-project/report.md`
+- intent-sync の控え(取り込んだ領域ファイルのパス・書かずに終えた矛盾・ADR 候補): `steps/intent-sync/report.md`(テストの実行ではなく、`syncing-intents` が書く)
+- test-loop の回帰: `reports/test-run-<n>.md`
+- fix-loop の回帰: `reports/test-run-<n+1>.md`
 
 ### 2.7 test-code の運転
 
@@ -498,7 +511,8 @@ test-loop の `e2e/` の回帰の実行では `test-run-<n>.md`)に挙げ、最�
    `git merge --abort` し、そのステップを `failed` にする。グループの残りのマージが済んだ後、worktree
    を後始末してから新しい HEAD で作り直し、直列にやり直す。
 8. グループのマージが済んだら、run ブランチでそのグループの実行する通すテストを実行する(プロジェクトの
-   test コマンドと `units/` は自分で、`e2e/` は委譲する。2.6)。それ
+   test コマンドと `units/` は自分で、`e2e/` は委譲する。2.6)。自分の実行結果と `e2e/` の委譲の返答は
+   `steps/merge-test-<g>/report.md` に書く。それ
    以外の失敗は、修正を成果物を書く委譲として run ブランチ上で直列に出す。報告は
    返答で返させ、`steps/merge-fix-<g>/report.md` に書く(2.6)。
 9. 方式 b では、全グループの後に `final` の最終ステップ(生成物の生成とコミット)を run ブランチ上で
@@ -801,9 +815,10 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
    `## 実行し直し` セクションの有無で、環境の失敗の実行し直しが済んだかを判断する(済んでいれば実行し
    直さない。2.6)。
    - `steps/` の下の、状態が `running` か `reviewing` の要素(state で終わっていない要素)の `report.md`。
-   - implement では全グループの `steps/merge-fix-<g>/report.md`、test-loop では
-     `steps/test-loop-project/report.md`。
-   - test-loop では、最新の `test-run-<n>.md`。
+   - implement では全グループの `steps/merge-test-<g>/report.md` と `steps/merge-fix-<g>/report.md`、
+     test-loop では `steps/test-loop-project/report.md`。
+   - test-loop では、最新の `test-run-<n>.md`。fix-loop では、最新の `test-run-<n+1>.md`。
+   - intent-sync では `steps/intent-sync/report.md`。このファイルがあれば、取り込みと控えは済んでいる。
    discuss フェーズで中断していた場合の再開位置(アジェンダ作成
    から/未決論点から/最終確認から)は facilitating-design-discussions の「中断再開」に従う。design
    フェーズで design.md が既に存在する場合は、ウォークスルーの再提示から再開する。
