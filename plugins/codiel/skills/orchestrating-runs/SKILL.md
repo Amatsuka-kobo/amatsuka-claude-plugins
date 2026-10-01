@@ -11,9 +11,11 @@ description: Codiel の run で、メインセッション自身がオーケス�
 intent を起点に
 intent → discuss → design → test-spec/dev-plan → test-code → implement → test-loop → intent-sync → pr → review → fix-loop → triage → finalize
 の全フェーズを進行させる。intent フェーズの聞き取りと合意形成は `capturing-intent` を通じてオーケストレーター
-本体が担い、それ以外のフェーズの実作業(調査・設計・実装・テスト・レビュー)はすべて専用サブエージェントに
-ディスパッチし、成果物は Raguel MCP のゲートを経てのみ次フェーズへ進む。オーケストレーター自身は
-「進行管理」のみを行い、コードも文書もレビューも自分では書かない。
+本体が担う。agenda.md・design.md・dev-plan.md・discussion.md・intent 文書(持続層を含む)の執筆と、
+プロジェクトの test コマンドと `units/` のテストの実行も、オーケストレーター本体が行う。調査・
+spec.md / cases.md の執筆・テストコード・実装と修正・タスクレビュー・review・`e2e/` の実行は専用
+サブエージェントにディスパッチし、成果物は Raguel MCP のゲートを経てのみ次フェーズへ進む。
+オーケストレーター自身は、コード(テストコードを含む)・spec.md / cases.md・レビューの所見を自分では書かない。
 
 Raguel ゲートの呼び出し規約(evaluate ツール対応・verdict 別ハンドリング・record_outcome の運用)は
 すべて `raguel-gating` スキルに一元化されている。
@@ -191,17 +193,17 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 | フェーズ | 委譲の種別と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 | コミット担当 |
 |---|---|---|---|---|---|---|
 | [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) | オーケストレーター(intent-only では開始時のブランチへ、続行では run ブランチへ、ゲート通過直後) |
-| [discuss] | 成果物を書く委譲(アジェンダ)+ 本体の進行。intent → `agenda.md` | preparing-design-agendas | intent、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
-| [design] | 成果物を書く委譲。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、新しい画面の名前を聞いてから evaluate する** | オーケストレーター(ゲート通過直後) |
-| [test-spec] | 成果物を書く委譲。軽量では、その前に仕様のディレクトリを同定する読み取りだけの委譲を 1 回出す。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
-| [dev-plan] | 成果物を書く委譲。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) | オーケストレーター(ゲート通過直後) |
+| [discuss] | オーケストレーター本体がアジェンダを書き、進行する。intent → `agenda.md` | preparing-design-agendas | intent、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) | オーケストレーター(complete-phase 直前に agenda.md / discussion.md をまとめて) |
+| [design] | オーケストレーター本体が書く。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。**ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を実施し、新しい画面の名前を聞いてから evaluate する** | オーケストレーター(ゲート通過直後) |
+| [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、dev-plan のゲートの後に成果物を書く委譲を前景で出す。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) | オーケストレーター(ゲート通過直後) |
+| [dev-plan] | オーケストレーター本体が書く。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) | オーケストレーター(ゲート通過直後) |
 | [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列(2.5〜2.7)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`(`report.md` は委譲先の返答からオーケストレーターが書く。2.1) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
-| [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列(2.8)。グループのマージの後にオーケストレーターがそのグループの通すテストを実行する | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
-| [test-loop] | 回帰の実行の委譲と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列。並べ方は 2.6)(2.9) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(委譲先の返答からオーケストレーターが書く。2.1)、修正 diff | pass-gate(`evaluate_code`) | 修正の委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
-| [intent-sync] | 成果物を書く委譲(出す前に 2.11 の確認を行う)。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
+| [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列(2.8)。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは実行の委譲を出す | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 | 委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
+| [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列。並べ方は 2.6)(2.9) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の委譲の返答を合わせてオーケストレーターが書く。2.1)、修正 diff | pass-gate(`evaluate_code`) | 修正の委譲先が worktree の中で自分の変更をコミットし、オーケストレーターがレビュー後に run ブランチへマージする |
+| [intent-sync] | オーケストレーター本体が書く(書く前に 2.11 の確認を行う)。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) | オーケストレーター(ゲート通過直後) |
 | [pr] | オーケストレーター本体。— | — | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ(詳細は「2.2 pr の運転」) | complete-phase(github のときだけ `--pr-url` 必須) | オーケストレーター。開始前に `git status --short` を実行し、2.1 の確認義務に従う |
 | [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層 | `reports/review-<m>.md` + PR コメント(github のみ) | complete-phase | ―(`reports/` の下のレポートと本文ファイル(`review-body-<m>.md`・`review-comment-<連番>.md`)はコミットしない) |
-| [fix-loop] | 成果物を書く委譲(修正・回帰)と読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<m+1>.md` と、反論・対応・再報告記録の本文ファイル(`rebuttal-<連番>.md` など)は `reports/` に書き、コミットしない(github モードでは続けて投稿する)。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
+| [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) | コード系フェーズの委譲先(自分の変更を自分でコミット)。`review-<m+1>.md` と、反論・対応・再報告記録の本文ファイル(`rebuttal-<連番>.md` など)は `reports/` に書き、コミットしない(github モードでは続けて投稿する)。**修正コミット完了後・再レビューの委譲前に、github モードではオーケストレーターが `git push` して PR ブランチを最新化する** |
 | [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) | ―(`review-<m>.md` への追記分と、Issue・フォローアップコメントの本文ファイル(`issue-<連番>.md`・`followup-<連番>.md`)はコミットしない。コード変更はなし) |
 | [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | ―(失敗の契機があれば「7. 失敗の記録」) | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(全フェーズ passed を検証し `status` を `awaiting_outcome` にする唯一のコマンド。`complete-phase` ではない。詳細は「2.3 finalize の運転」) | ―(intent の更新分はオーケストレーターがコミットし、github モードでは push する) |
 
@@ -209,16 +211,18 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   fix-loop に限られ、discuss と design の `skip-phase` は `state.scale === "light"` のときだけ成功する。
   test-spec と dev-plan は `design.md` の代わりに intent の `## 受け入れ基準` と `## 実装方針`、関係する
   持続層を入力にする。review も同様に `design.md` の代わりに intent と `dev-plan.md` を設計の入力にする。
-- 軽量の経路では、`start-phase test-spec` の直後に、仕様のディレクトリを同定する読み取りだけの委譲を
-  1 回出す(委譲先は `writing-test-specs` の同定の規則。ファイルは書かない)。新しい画面があれば
+- 軽量の経路では、`start-phase test-spec` の直後に、オーケストレーター本体が仕様のディレクトリを同定する
+  (`writing-test-specs` の同定の規則。ファイルは書かない)。新しい画面があれば
   `mark-ask test-spec --slug <slug> --kind confirm` の後に画面ごとの名前の候補を AskUserQuestion で聞き、
   候補の外の答えはケバブケースの 1 セグメントに直して確かめてから `resume` する。無ければ聞かない。決ま
-  った一覧を test-spec と dev-plan の依頼文に同じ値で書き、`start-phase dev-plan` の後に 2 つの委譲を
-  同じ応答で出す。片方をやり直すときも同じ一覧を渡す。一覧が手元に無い再開では、pass-gate 済みのフェー
-  ズの成果物(test-spec なら作成・更新した仕様のディレクトリ、dev-plan なら各ステップの通すテスト)から
-  取り直し、どちらも pass-gate していなければ同定の委譲からやり直す。
-- test-spec と dev-plan は単一メッセージで 2 体並列ディスパッチする(Agent ツールの呼び出しを 1 回の
-  応答の中に 2 件含める)。片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
+  った一覧は、dev-plan の執筆と spec の委譲の依頼文に同じ値で使う。再開では、dev-plan が `passed` で
+  test-spec が `passed` でなければ、同定の一覧で spec の委譲を出す(一覧が手元に無ければ同定し直す)。
+  どちらも `passed` でなければ、同定からやり直す。
+- test-spec と dev-plan は次の 3 ステップで直列に進める。spec の委譲は dev-plan のゲートの後に出す。
+  1. 仕様のディレクトリを同定する(軽量でなければ `design.md` の一覧を使う)。
+  2. `start-phase dev-plan` の後に dev-plan.md を自分で書き、`evaluate_plan` でゲートする。
+  3. spec.md / cases.md の委譲を前景で出し、返ったら spec の `evaluate_plan` でゲートする。
+  片方が `ASK`/`STOP` でももう片方の結果には影響しない(raguel-gating 参照)。
 - 実行モード(`mapped` / `unscoped`)に応じたドメインディスパッチは「4. ドメインディスパッチ」を参照。
   test-code・implement・test-loop の運転は「2.6〜2.9」を参照。
 - critical/high が review でゼロだった場合、fix-loop は実作業なしで
@@ -256,7 +260,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   (`paths` に渡したファイル)だけにする。ほかのファイルを同じコミットや次の code 系フェーズの `start-phase`
   より前のコミットに入れると、`start-phase` がそのパスを挙げて失敗する。test-spec と dev-plan は、両方で
   評価した文書をそれぞれの通過の直後にコミットしてよい。
-- **run の文書の置き場**: discuss・design・dev-plan の委譲が書く `agenda.md`・`discussion.md`・`design.md`・
+- **run の文書の置き場**: オーケストレーターが書く `agenda.md`・`discussion.md`・`design.md`・
   `dev-plan.md` は `<repoRoot>/<runsDir>/<slug>/` に置き、try で分けない。依頼文の出力先には
   `<repoRoot>/<runsDir>/<slug>/<ファイル名>` の絶対パスを書き、後のフェーズの入力にも同じパスを渡す。
   コミットの時機は上のとおりである。新しい try は同じパスに書き直し、前の try の文書は
@@ -266,7 +270,8 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   書き、コミットせずに投稿する。
 - **報告のファイル**: 報告のファイル(`report.md`・`test-run-<n>.md`)を持つ委譲の先は、報告の本文を最終の
   返答で返し、報告のファイルを書かず、`git add` もしない。オーケストレーターは、その返答を受けた直後に、
-  state の更新や次の委譲より先に、本文を要約せずに報告のファイルへ書く。置き場は 2.6 に従う。E2E の
+  state の更新や次の委譲より先に、本文を要約せずに報告のファイルへ書く。置き場は 2.6 に従う。
+  `test-run-<n>.md` は、自分で実行した結果と `e2e/` の委譲の返答を合わせて書く。E2E の
   `summary.md` と `failure.md` は 2.10 に従う。
 - **確認義務**: `pr` フェーズを開始する前に `git status --short` を実行し、残ったファイルを次のとおり分ける。
   - run の成果物(委譲先の変更、run の文書、intent、E2E のレポートの `results.json` と md)が残っていれば、
@@ -347,9 +352,9 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 6. run 中に委譲先またはオーケストレーターが気づいた ARCHITECTURE と実装の乖離を一覧にする。
    metatron が導入されていれば `/metatron:update` へ引き渡す旨を結果レポートに書き、導入されていな
    ければ報告に残すだけにする。codiel は ARCHITECTURE を作らない。
-7. ADR 候補を結果レポートに挙げる。`adrTarget` が `metatron` なら intent-sync の委譲先の報告にある
-   ADR 候補の一覧を、`intents` なら今回取り込んだ持続層のファイルにある `[ADR 候補: <候補 ID>]` の
-   見出しの一覧を使う。候補が無いときは、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのかを書く。
+7. ADR 候補を結果レポートに挙げる。一覧の出どころは `adrTarget` で分ける。
+   `metatron` は intent-sync を書いたときの ADR 候補の一覧、`intents` は今回取り込んだ持続層のファイルにある
+   `[ADR 候補: <候補 ID>]` の見出しの一覧である。候補が無いときは、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのかを書く。
 8. 結果レポートを、原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表と、6. の乖離の一覧と、
    7. の ADR 候補の一覧と、持続層への取り込みの結果を含めて出力し、終了する。取り込みの結果には、取り込んだ
    領域ファイルのパスを書く。取り込みを飛ばしたときは「対象外」とだけ書かず、「取り込みを飛ばした理由」を
@@ -400,8 +405,8 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
 
 ### 2.6 テストを実行する委譲の並べ方と環境の失敗
 
-中でテストを実行する委譲(test-code の委譲、implement の実装と修正ラウンドの委譲、test-loop の回帰の
-実行と修正の委譲、グループのマージの後や test-loop のプロジェクト全体の run ブランチ上の修正の委譲、
+中でテストを実行する委譲(test-code の委譲、implement の実装と修正ラウンドの委譲、グループのマージの
+後の `e2e/` の実行の委譲、test-loop の `e2e/` の回帰の実行と修正の委譲、グループのマージの後や test-loop のプロジェクト全体の run ブランチ上の修正の委譲、
 下記の環境の失敗の実行し直しの委譲)を、次の 2 種類に分けて出す。タスクレビューのような読み取りだけの
 委譲には当てない。
 
@@ -410,7 +415,7 @@ test-code・implement・test-loop の並列委譲は、1 ステップまたは 1
   もの)が無いか、並列可の委譲だけのときに出す。同時に動かすのは 4 件までとし、出せるものが 2 件以上
   あれば、上限の範囲で同じ応答からまとめて出す。
 - 単独の委譲: 並列可の委譲に当たらないもの(implement のすべての通すテストを実行する委譲、`parallel`
-  を持たない仕様のディレクトリの test-code・test-loop の修正、test-loop の回帰の実行、run ブランチ上の
+  を持たない仕様のディレクトリの test-code・test-loop の修正、test-loop の `e2e/` の回帰の実行、run ブランチ上の
   修正)。動いている委譲が無いときだけ出し、報告が返るまで同じフェーズのほかの委譲を出さない。
 
 test-code と test-loop の修正は、担当する仕様のディレクトリの `parallel` で種類が決まる。implement で
@@ -418,16 +423,18 @@ test-code と test-loop の修正は、担当する仕様のディレクトリ�
 1 つのグループ・`serial` グループ・`final`・衝突の後のやり直しは単独にする。修正ラウンドの委譲は、動い
 ている委譲があれば並列可、無ければどちらでもよい。
 
-グループのマージの後、オーケストレーターは run ブランチでそのグループの実行する通すテスト(E2E を含む)
-を実行する。同じグループのほかの委譲が動いている間は `parallel: true` のものだけを実行し、動いていな
-ければすべてを実行する。実行しなかったものは委譲先が報告に挙げ、ここで含めて実行する。
+グループのマージの後、オーケストレーターは run ブランチでそのグループの実行する通すテストのうち、
+プロジェクトの test コマンドと `units/` のテストを自分で実行する。`e2e/` のテストは、仕様のディレクトリ
+ごとに実行の委譲を出す(2.10)。自分の実行は直列で行い、このセクションの並列可・単独の規則は委譲にだけ当てる。
+同じグループのほかの委譲が動いている間は `parallel: true` のものだけを実行し、動いていなければすべて
+を実行する。実行しなかったものは委譲先が報告に挙げ、ここで含めて実行する(`e2e/` は委譲する)。
 
 環境の失敗(サーバーが起動しない、接続が拒否される、ポートが使用中、必要なサービスが無いなど)は、
 未実装による失敗にもプロダクトの失敗にも数えない。委譲先は理由と出力の抜粋を報告(`report.md`。
-test-loop の回帰の実行では `test-run-<n>.md`)に挙げ、最終の返答で返す。オーケストレーターは、動いている委譲が
+test-loop の `e2e/` の回帰の実行では `test-run-<n>.md`)に挙げ、最終の返答で返す。オーケストレーターは、動いている委譲が
 無いときに 1 回だけ単独で実行し直させ、実行し直した委譲の返答を、元の報告の末尾の `## 実行し直し` の
 セクションへ自分で書く(state は変えない)。中断後の再開では、このセクションの有無で実行し直しが済んだかを判断し、1 回だけの
-規則を保つ。オーケストレーター自身が実行したテスト(グループのマージの後の実行)は、自分で実行し直す。
+規則を保つ。オーケストレーター自身が実行したテスト(プロジェクトの test コマンドと `units/` のテスト)は、自分で実行し直す。
 実行し直しても環境の失敗なら、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
 
 報告のファイルは、返答を受けたオーケストレーターが次の置き場へ書く(2.1)。
@@ -490,7 +497,8 @@ test-loop の回帰の実行では `test-run-<n>.md`)に挙げ、最終の返答
 7. レビューを通ったステップから、run ブランチへ順に `git merge --no-ff` する。衝突したら
    `git merge --abort` し、そのステップを `failed` にする。グループの残りのマージが済んだ後、worktree
    を後始末してから新しい HEAD で作り直し、直列にやり直す。
-8. グループのマージが済んだら、run ブランチでそのグループの実行する通すテストを実行する(2.6)。それ
+8. グループのマージが済んだら、run ブランチでそのグループの実行する通すテストを実行する(プロジェクトの
+   test コマンドと `units/` は自分で、`e2e/` は委譲する。2.6)。それ
    以外の失敗は、修正を成果物を書く委譲として run ブランチ上で直列に出す。報告は
    返答で返させ、`steps/merge-fix-<g>/report.md` に書く(2.6)。
 9. 方式 b では、全グループの後に `final` の最終ステップ(生成物の生成とコミット)を run ブランチ上で
@@ -508,8 +516,10 @@ test-loop はテストを書く手順を持たない。記録された全テス�
 返す。
 
 1. `<testsDir>/**/spec.md` の `tests` に記録された全テストと、プロジェクトの test コマンドを実行する。
+   プロジェクトの test コマンドと ID が `units/` で始まる仕様のディレクトリは、オーケストレーターが
+   run ブランチ上で直列に実行する。ID が `e2e/` で始まる仕様のディレクトリは実行の委譲を出し、
    同時実行は `spec.md` の frontmatter `parallel: true` の仕様のディレクトリだけとし、無ければ直列に
-   する。影響の有無で絞らない。E2E の仕様のディレクトリは、ディレクトリごとに 1 回の実行にし、出力を 2.10 の置き場へ出させる。
+   する(2.6)。影響の有無で絞らない。E2E の仕様のディレクトリは、ディレクトリごとに 1 回の実行にし、出力を 2.10 の置き場へ出させる。
 2. 判定が出ないもの(broken)はテストの欠陥の疑いとし、判定が出て期待と違うもの(NG)はプロダクトの
    バグとする。理由が環境にある失敗は broken にも NG にも数えず、「2.6」のとおり扱う。
 3. NG は仕様のディレクトリごとにまとめ、`step-add --kind test-loop --id <ID>` で `testLoop.units` に
@@ -541,8 +551,7 @@ E2E のレポートは、E2E の仕様のディレクトリの `reports/` に実
 - E2E は仕様のディレクトリごとに 1 回起動させる。1 回の起動で複数の仕様のディレクトリを走らせると、
   `results.json` を置き場ごとに分けられない。
 - `summary.md`・`failure.md`・JSON を出せないフレームワークの `results.json` は、委譲先の返答を受けた直後に、
-  `e2e-report-format.md` に従ってオーケストレーターが書く。オーケストレーター自身が実行したときは、実行の
-  直後に自分の出力から書く。Red の確認の実行は、ケースの結果にかかわらず `summary.md` を置く。
+  `e2e-report-format.md` に従ってオーケストレーターが書く。Red の確認の実行は、ケースの結果にかかわらず `summary.md` を置く。
 - `failure.md` の直し方は、その回の失敗を直した委譲の返答から書く。書く時点で分からなければ「未記入」と書き、
   次のどれかで書き換える。修正の委譲の返答を受けた直後に、返答の直し方を書く。修正の委譲が無いまま失敗が
   消えたときは、同じ仕様のディレクトリの次の実行がパスした時点で「なし」と理由を書く。直す前に run が止まる
@@ -571,9 +580,9 @@ E2E のレポートは、E2E の仕様のディレクトリの `reports/` に実
 
 ### 2.11 intent-sync の運転
 
-intent-sync の委譲を出す前に、オーケストレーターが intent の frontmatter `domains` と `## 意図的な制約` を
+intent-sync を書く前に、オーケストレーターが intent の frontmatter `domains` と `## 意図的な制約` を
 読む。取り込みを黙って飛ばさないための確認である。
-人の確認で止まった後に再開するときは、委譲を出す直前に intent をもう一度読み、`domains` の値をこの時点の
+人の確認で止まった後に再開するときは、書く直前に intent をもう一度読み、`domains` の値をこの時点の
 値に置き換えてから、下の分岐を決める。止まっている間に、人が `domains` を書き換えていることがある。
 
 - `domains` が空で、`## 意図的な制約` の表に 1 行以上ある(「なし」でない)ときは、次の順に進める。
@@ -583,14 +592,14 @@ intent-sync の委譲を出す前に、オーケストレーターが intent の
      読めればそのキー、読めなければ TOBE と現状調査から作った 2〜3 個(英小文字のケバブケース)にする。
      複数を選べるようにし、候補の外の答えも受ける。
   3. 決まった領域名を intent の frontmatter `domains` に書く(1 行のフロー形式)。
-  4. `resume` で戻し、`domains` を依頼文に書いて委譲する。frontmatter の変更は、intent-sync の成果物と
+  4. `resume` で戻し、`domains` を使って intent-sync を書く。frontmatter の変更は、intent-sync の成果物と
      一緒にコミットする。
 - 領域を決めないと答えたときは、`domains` を空のまま `resume` し、取り込みを行わずに進む。理由は finalize の
   結果レポートに書く(2.3)。
 - `## 意図的な制約` が「なし」で `domains` が空なら、確かめずに取り込みを行わない。`## 目的` と `## 非スコープ`
   だけのために領域を聞かない。
-- 依頼文には取り込み先の領域(`domains`)を書く。委譲先は、領域が空なら取り込みを行わず、取り込まなかった
-  理由と、`## 意図的な制約` に行があったかを報告する。
+- 取り込み先は `domains` の領域とする。領域が空なら取り込みを行わず、取り込まなかった理由と、
+  `## 意図的な制約` に行があったかを finalize の結果レポートに書く(2.3)。
 
 ## 3. ディスパッチプロンプトの規約
 
@@ -651,11 +660,9 @@ diff の中身やファイル内容を会話に貼り付けない。
 - ファイルを変更しない。
 - 報告のみを返す。
 
-discuss / design / test-spec / dev-plan の依頼文には、git 操作をしない旨を追加する。
+test-spec の依頼文には、git 操作をしない旨を追加する。
 
 すべての委譲の依頼文に、§0 で得た testsDir の値を書く。
-
-discuss・design・dev-plan の依頼文には、出力先を `<repoRoot>/<runsDir>/<slug>/<ファイル名>` の絶対パスで書く(2.1)。
 
 test-spec の依頼文には、次の 2 条項も追加する。
 - 使用してよい tools を `Read` / `Grep` / `Glob` / `Write` / `Edit` と Context7 に限定する。`Bash` は使わない。
@@ -670,10 +677,10 @@ test-code の依頼文には、次の 2 条項も追加する。
 implement・test-loop・fix-loop の依頼文には「テストと `<testsDir>/**` の仕様(`spec.md`・`cases.md`)を
 書き換えない」の文を入れる。
 
-intent-sync 以外の委譲の依頼文には「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ
-報告する」の文を入れる。intent-sync の依頼文には、派生文のセクションだけを書き換え、原文のセクションを
-書き換えないと明記し、関係する領域の持続層(`docs/intents/domains/<領域>.md`)への取り込み作業を
-含める。
+委譲の依頼文には「intent 文書を書き換えない。原文の追加が必要ならオーケストレーターへ
+報告する」の文を入れる。intent-sync はオーケストレーターが `syncing-intents` に従って書く。派生文の
+セクションだけを書き換え、原文のセクションを書き換えず、関係する領域の持続層
+(`docs/intents/domains/<領域>.md`)への取り込み作業を含める。
 
 観点ファイルは次の規則で依頼文に足す。
 - 実装の委譲(implement / test-loop の修正 / fix-loop の修正)では、変更の中身から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す(dev-plan の触るファイルと内容、直す所見や失敗を見る)。`mapped` でタグ名と同じ名前のファイルがあれば必ず含める。`unscoped` でも、変更の中身に合うものを渡す。
@@ -728,7 +735,7 @@ test-loop の内部運転(回帰の実行と修正。「2.9 test-loop の運転�
 
 1. 修正のためのサブエージェント・ディスパッチ 1 往復ごとに(= 1 attempt)
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt <phase> --slug <slug>` を呼ぶ。
-   **record-attempt を呼ぶのはオーケストレーターのみ**(tester / implementer は呼ばない。二重計上の防止)。
+   **record-attempt を呼ぶのはオーケストレーターのみ**(委譲先は呼ばない。二重計上の防止)。
    test-loop では修正の 1 巡(委譲・マージ・全体の再実行)を 1 回と数える。
 2. exit code が `3`(試行上限超過・`capExceeded`)なら、**raguel-gating の ASK と同じ扱い**にする
    (`awaiting_human` は `record-attempt` 内部で既にセットされている。findings 相当の情報を人間に
@@ -756,7 +763,7 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
 - 成功すると `fix-loop` は `status: passed` / `verdict: SKIPPED` になり、`attempts` はリセットされずに
   維持される。以降 `triage` を通常どおり `start-phase` できる。
 - **review に critical/high が 1 件でも残っている場合は skip-phase を使わない**。通常どおり
-  implementer にディスパッチして修正させる。
+  修正を委譲する。
 
 ## 6. 再開手順
 
@@ -849,11 +856,13 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
   台帳のコミットだけ `(<slug> try-<n>)` を省く。
 
 <HARD-GATE>
-- **オーケストレーターは自分で実装・レビュー・テスト作成をしない**。すべてサブエージェントへの
-  ディスパッチを経由する。コード・design.md・review コメント等をオーケストレーター自身が書くことは
-  一切禁止。なお `discussion.md` への合意の記録・ウォークスルーの進行は「進行管理」であり本項に
-  抵触しない(`review-<m>.md` と同じ分類。根拠は facilitating-design-discussions の概要)。
-  ただし agenda.md / design.md の**内容**をオーケストレーターが書くことは引き続き禁止。
+- **オーケストレーターは、コード(テストコードを含む)・spec.md / cases.md・レビューの所見を自分で書かない**。
+  実装・テストコードの作成・spec.md / cases.md の執筆・タスクレビュー・review は、すべてサブエージェントへの
+  ディスパッチを経由する。委譲先の返答の本文を `review-<m>.md` などの報告のファイルへ転記することは、
+  所見を書くことに当たらない。
+- オーケストレーターは、agenda.md・design.md・dev-plan.md・discussion.md・intent 文書(持続層を含む)を
+  自分で書く。プロジェクトの test コマンドと、ID が `units/` で始まる仕様のディレクトリのテストも自分で
+  実行する。ID が `e2e/` で始まる仕様のディレクトリの実行は委譲する。
 - **Raguel ゲートの省略禁止**。GATED フェーズを `evaluate_*` なしに `passed` にしようとする行為
   (`pass-gate` の `--evaluation-id` を捏造する、evaluate を呼ばずに次フェーズへ進むなど)は
   raguel-gating の HARD-GATE と同様に禁止。

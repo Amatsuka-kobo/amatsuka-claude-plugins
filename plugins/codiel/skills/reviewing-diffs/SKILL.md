@@ -121,7 +121,7 @@ security 観点の指摘は原則 medium 以上を検討する(セキュリテ�
 5. critical/high があれば fix-loop へ、ゼロなら triage へ進む(`orchestrating-runs` の
    フェーズ進行表のとおり)。
 
-reviewer はこの投稿作業を代行してはならない(Bash で `gh pr review` 等を叩かない)。
+レビューの委譲先はこの投稿作業を代行してはならない(Bash で `gh pr review` 等を叩かない)。
 
 ## 観点別の焦点
 

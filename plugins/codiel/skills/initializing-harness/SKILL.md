@@ -91,7 +91,7 @@ JSON はコメントを持てないので、マージの規則と、書くキー
 
 1. config.json に `raguel` があれば、判定 C を満たすので、この手順を行わない。
 2. `raguel` が無く、`raguel.config.yaml` が YAML として読めるときは、次の順に進める。
-   1. その中身を `raguel` に写す差分を示し、承認を得て config.json に書く。廃止した旧版のキー(`judge.canStop`・`panel.trivial`・`panel.standard`・`panel.critical`・`common/resubmission-loop` の `stopAfter`)は、写すと読み込みエラーになる。写さずに外し、外したことを差分に示す。
+   1. その中身を `raguel` に写す差分を示し、承認を得て config.json に書く。撤去したキー(`judge`・`weight`・`panel` の全体と `contextJudge.enabled`)は、Raguel が警告を出して無視する。`common/resubmission-loop` の `stopAfter` は、写すと読み込みエラーになる。どちらも写さずに外し、外したことを差分に示す。
    2. 書いた後に config.json を Read し、`raguel` の中身が YAML と同じであることを確かめる。
    3. `raguel.config.yaml` を消すことを示して承認を得てから、Bash の `rm` で消す。
    4. 消す承認が得られなければ残し、Raguel が読まないファイルであることを完了報告に書く。
@@ -153,6 +153,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
   と同じ内容であることを確認する。
 - 手順 4(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 6 行の内容が
   追記されていることを確認する。
+- 環境変数 `TYPESAFE_API_KEY` の有無を `test -n "$TYPESAFE_API_KEY"` で確かめる。値は表示しない。無くても初期化は失敗にせず、完了報告で伝える。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 
 ## 6. 完了報告
@@ -164,6 +165,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - 手順 2 で `raguel.config.yaml` を消す承認が得られず残ったときは、Raguel が読まないファイルであること
 - 手順 4(c) の旧セクションの取り除きが承認されず残った場合はその旨
 - `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルなので、コミットは利用者が行うこと
+- `TYPESAFE_API_KEY` が無いときは、Raguel が Jev による内容の判定と文脈の補正をせず、ルール層だけで判定すること。有効にするには、キーをシェルの環境変数 `TYPESAFE_API_KEY` に設定して Claude Code を起動し直す(手順は `jevriel` プラグインの README に従う)
 - 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
 
 ## 修復の例外

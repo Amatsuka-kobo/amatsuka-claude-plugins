@@ -1,6 +1,6 @@
 ---
 name: running-regression-tests
-description: Codiel の test-loop フェーズ、および /codiel:test による単独の回帰実行で、回帰の実行を担う委譲先が記録された全テストを実行し green・red・broken の判定をまとめるときに使う。orchestrating-runs と /codiel:test が名指しで起動する。
+description: Codiel の test-loop フェーズ、および /codiel:test による単独の回帰実行で、オーケストレーターが記録された全テストの回帰を実行し green・red・broken の判定を出すときに使う。`e2e/` のテストの実行だけは委譲先が担う。orchestrating-runs と /codiel:test が名指しで起動する。
 ---
 
 # 回帰テスト運転規約
@@ -8,6 +8,8 @@ description: Codiel の test-loop フェーズ、および /codiel:test によ�
 ## 概要
 
 test-loop フェーズと `/codiel:test`(単独実行)で使うスキル。記録された全テストの回帰の確認を行い、判定(green / red / broken)を出す。テストを書く手順は持たない(test-code フェーズの `scripting-tests` が書く)。NG が残ったときの修正の委譲は `orchestrating-runs` が出す。
+
+実行の担い手は ID で分かれる。プロジェクトの test コマンドと、ID が `units/` で始まる仕様のディレクトリのテストはオーケストレーターが実行する。ID が `e2e/` で始まる仕様のディレクトリのテストは、実行の委譲先が担う。
 
 ## プラグインルート参照規約
 
@@ -21,10 +23,10 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 2 つの起動モード
 
-- run 経由(test-loop フェーズ): `orchestrating-runs` からディスパッチされ、run ブランチ上で全テストの回帰を確認する。NG は仕様のディレクトリごとにまとめて報告するだけで、修正の委譲・`record-attempt`・state の更新はオーケストレーターが行う。このスキルの委譲先は `codiel-state` を呼ばない。
+- run 経由(test-loop フェーズ): `orchestrating-runs` が運転し、run ブランチ上で全テストの回帰を確認する。NG は仕様のディレクトリごとにまとめて報告するだけで、修正の委譲・`record-attempt`・state の更新はオーケストレーターが行う。`e2e/` の実行の委譲先は `codiel-state` を呼ばない。
 - 単独実行モード(`/codiel:test`): run の有無に関係なく実行できる。state 遷移はせず、NG があってもディスパッチせず報告のみ行う。引数(testsDir からの相対パス)があればそのディレクトリのテストだけに絞り、無ければ testsDir 全体を対象にする。
 
-レポートの本文は、どちらのモードでも最終の返答で返す。報告のファイルを Write で書かず、`git add` もしない。返答を受けた側が、run 経由では `runs/<slug>/try-<n>/reports/test-run-<n>.md` へ、単独実行では `.codiel/reports/test-run-<日時>.md` へ書く。
+`e2e/` の実行の委譲先は、レポートの本文を最終の返答で返す。報告のファイルを Write で書かず、`git add` もしない。run 経由ではオーケストレーターが、自分で実行した結果と委譲先の返答を合わせて `runs/<slug>/try-<n>/reports/test-run-<n>.md` へ書く。単独実行では、返答を受けた側が `.codiel/reports/test-run-<日時>.md` へ書く。
 
 名前の `<日時>` は、実行する機械のローカルのタイムゾーンの時刻で、`YYYYMMDD-HHMMSS` の形にする。タイムゾーンは名前に含めない。Bash では `date +%Y%m%d-%H%M%S` で得る(`date -u` を使わない)。
 
@@ -49,7 +51,7 @@ JSON の出力と、frontend では各ケースの最後の画面のスクリー
 
 理由が環境にある失敗(サーバーが起動しない、接続が拒否される、ポートが使用中、必要なサービスが無い)は、broken にも NG にも数えず、環境の失敗として理由と出力の抜粋をレポートに挙げる。
 
-run 経由では、環境の失敗が出た仕様のディレクトリ(どの仕様のディレクトリにも属さない失敗ではプロジェクトの test コマンド)を、オーケストレーターが動いている委譲が無いときに 1 回だけ単独で実行し直させる。単独実行モードでは、自分で 1 回だけ実行し直し、残れば報告に挙げてユーザーに示す。`mark-ask` は使わない。
+run 経由では、オーケストレーターが自分で実行したもの(プロジェクトの test コマンドと `units/` のテスト)は自分で 1 回だけ実行し直す。`e2e/` の仕様のディレクトリは、動いている委譲が無いときに 1 回だけ単独で実行し直させる。単独実行モードでは、自分で 1 回だけ実行し直し、残れば報告に挙げてユーザーに示す。`mark-ask` は使わない。
 
 broken の修正は、テストが保護されているため、オーケストレーターの `mark-ask test-loop --kind confirm` を経て人が承認してから行う。このスキルは判定と報告までを担い、修正はしない。
 
@@ -107,7 +109,7 @@ broken の修正は、テストが保護されているため、オーケスト�
 
 ## 完了報告
 
-レポート本文の書式とは別に、委譲先は完了時に次の項目を最終の返答でオーケストレーターへ返す。
+レポート本文の書式とは別に、`e2e/` の実行の委譲先は完了時に次の項目を最終の返答でオーケストレーターへ返す。
 
 - 実行したテストの件数
 - OK・NG・broken・環境の失敗の内訳

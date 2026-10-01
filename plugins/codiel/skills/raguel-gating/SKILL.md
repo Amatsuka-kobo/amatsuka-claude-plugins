@@ -36,7 +36,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    `raguelRunId`(`<slug>-try-<n>` 形式)を確認する。これが Raguel へ渡す `runId` になる。code 系のフェーズでは、
    `phases.<phase>.startHead` も控える。これが `baseRef` になる。
 2. objective の本体は、intent 文書の `## 要求` と `## 受け入れ基準` から 1〜2 文で書き、
-   run を通じて同じ文言にする(本体がブレると crosscheck パネルの整合性判定が弱くなる)。フェーズに固有の
+   run を通じて同じ文言にする(本体がブレると、Jev の内容判定が成果物を照らす基準が揺れる)。フェーズに固有の
    事情があれば、本体の後に 1 文だけ注記を足す。intent ゲートでは、intent に不明点が残っていても
    「不明点は後続の discuss フェーズでユーザーと対話的に解消される」ことを注記に含める(不明点の存在だけを
    理由に ASK へ倒す必要はないという文脈を Raguel に渡す。解消の場が保証されているため)。test-code ゲートでは、
@@ -83,7 +83,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
     宣言されていなければ、`mark-ask` で run を `awaiting_human` にしてから人に知らせ、AskUserQuestion で次のどちらかを聞く。
     宣言を足す(run の間は guard が `.codiel/config.json` への書き込みを拒むので、足すのは人の手か run の外である)、または人が自分でそのファイルを退避する。
   - 宣言する glob は、run と関係の無いファイルの置き場だけにする。ソースのパスは宣言しない。
-- test-spec と dev-plan は並列実行されるフェーズだが、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
+- test-spec と dev-plan は同じステージで直列に進めるフェーズだが、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
 - 同一 runId で呼び続けるからこそ `common/resubmission-loop`(暴走的な再提出の検知)が効く。
   フェーズが変わっても try が同じなら `raguelRunId` は変えない。
@@ -144,7 +144,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ### degraded の ASK
 
-`judgeStatus` が `degraded` の ASK は、内容の懸念ではなく、評価の基盤が失敗したことを表す(パネリストの失敗・締切の超過など)。
+`judgeStatus` が `degraded` の ASK は、内容の懸念ではなく、評価の基盤が失敗したことを表す(設定の読み込みエラー・パイプラインの内部エラーなど)。
 
 1. 所見と `degradedReasons` を読み、何が失敗したかを要約する。
 2. 通常の ASK と同じく `mark-ask <phase> --slug <slug> --kind raguel --evaluation-id <evaluationId>` で run を `awaiting_human` にする。
@@ -156,7 +156,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ### STOP
 
-STOP は人が裁定する。STOP はルール層の専権であり、パネル・meta がどれだけ良いスコアを出していても昇格しない
+STOP は人が裁定する。STOP はルール層の専権であり、Jev の内容判定は STOP を出さない
 (Raguel 側の不変条件)。Codiel 側でこれを覆す操作は行わない。STOP の後に evaluate を呼び直して
 verdict を上書きしない。
 
@@ -192,7 +192,7 @@ verdict を上書きしない。
 
 次フェーズのサブエージェントをディスパッチする際、前フェーズの `EvaluationResult.findings` のうち
 残っているもの(severity: info 含む)を `ruleId` + `message` の短い箇条書きで渡す。
-これにより、たとえば design フェーズで指摘された懸念を implement フェーズの implementer が
+これにより、たとえば design フェーズで指摘された懸念を implement フェーズの実装の委譲先が
 無視せず踏まえられる。findings の全文(evidence.excerpt 等)は転記しない
 (`casePath` を渡し、必要なら読みに行かせる)。
 
@@ -256,5 +256,5 @@ run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `
 | 思考 | 現実 |
 |---|---|
 | 「前回 PROCEED だったから今回も呼ばなくていい」 | フェーズが変われば成果物も objective も別物。`resubmission-loop` 検知も呼び出しの継続があって初めて機能する。呼ばない run は判例としても蓄積されない。 |
-| 「軽微な diff だから evaluate_code は過剰」 | 重さ判定(weight tier)は Raguel 側の決定論ロジックが行う。「軽く見える危険な変更」を人間・AI の目で先に篩い落とす行為自体が、Raguel が対策している攻撃パターン。呼び出しコストを気にして省略していい理由にはならない。 |
+| 「軽微な diff だから evaluate_code は過剰」 | 危険かどうかは Raguel 側のルール層が決定論で判定する。「軽く見える危険な変更」を人間・AI の目で先に篩い落とす行為自体が、Raguel が対策している攻撃パターン。呼び出しコストを気にして省略していい理由にはならない。 |
 | 「ASK だが人間は多分承認するので進めてよい」 | 「多分」は推測であり ASK の意味そのものを無効化する。ASK は人間の判断を要求している合図であり、AI が代理で承認したことにするのは自己承認の別形態。必ず停止して裁定を待つ。 |
