@@ -92,7 +92,9 @@ disallowed-tools: Write
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --recommended --scope <claude|custom> --lang <lang> --dir "$PWD"
    ```
 
-   custom の照会成功時は、各役割の推奨候補を順に調べ、実在する最初のモデルを採る。先頭の既定エイリアスが存在しない役割は次の候補へ進む。Claude のモデルは必ず実在するため、最初の Claude モデルで採用を止める。照会に失敗したときは各役割の先頭候補を採り、`warnings` に実在検証なしの警告が入る。
+   custom の照会成功時は、各役割の推奨候補を順に調べ、live にエイリアスがある最初のモデルを採る。エイリアスは CLI が部分一致で判定するので、既定エイリアスと名前が違っても当たる。Claude のモデルは必ず実在するため、最初の Claude モデルで採用を止める。照会に失敗したときは各役割の先頭候補を採り、`warnings` に実在検証なしの警告が入る。
+
+   1 つのモデル ID に live のエイリアスが複数当たったときは、CLI が推奨の印の付いた 1 つを `model` に使い、選ばなかったエイリアスを `warnings` に載せる。
 
    `--scope claude` では Claude の役割モデルを使い、live models の照会は生成時に行わない。
 
@@ -114,6 +116,7 @@ disallowed-tools: Write
    - 外したツールと定義名
    - 変更しなかった定義と、その理由(全ツール継承・未対応の `tools` 書式・廃止済みか未知の役割 ID を持つ・操作に失敗・同じ役割を 2 件以上の定義が被覆する・モデル ID を引けない)
    - 廃止済み役割と後継
+   - 複数のエイリアスが当たったモデル ID と、使ったエイリアス・選ばなかったエイリアス(手順 4 の `warnings`)
    - `ok: false` になった操作の定義名と `error`
 
 ## 対話モード
@@ -273,12 +276,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 
 - 1 つの役割を 2 件以上の定義が被覆する: どの定義を再生成するか、または再生成しないかを `AskUserQuestion` で聞く。選択肢は被覆する定義と「再生成しない」とする。候補の定義の表(名前・`model`・`roles`)を質問の中に入れる。
 - `modelId` が `null`: ステップ 5b でモデル ID を聞いてから再生成する。
-- `--scope custom` で live 照会が成功し、`model` が live に無い: 再生成せず、ステップ 7 で報告する。
+- `--scope custom` で live 照会が成功し、`model` が live に無い: 再生成せず、ステップ 7 で報告する。`warnings` に同じモデルの live のエイリアスが載っていれば、書き換え先の候補として報告に添える。
 - `retiredRoles` か `unknownRoles` が残っている: 作り直すとそれらの ID がマーカーから落ちるため、再生成せず、ステップ 7 で報告する。その定義が被覆する役割は、新規生成もしない。ステップ 1b で「廃止 ID を外す」を選んで外し終えた定義は、ここに当たらず再生成してよい。
 
 生成する定義の frontmatter には、役割とモデルの組に応じた `effort` が入り、組に対応する値が無いときは入らない。値は CLI が決めるので、表には書かない。
 
-照会成功時に候補先頭の既定エイリアスが存在しない役割は次の候補へ進む。Claude のモデルは必ず存在するため、最初の Claude のモデルで採用を止める。照会失敗時は先頭候補を採用する。
+照会成功時に候補先頭のモデルのエイリアスが live に無い役割は次の候補へ進む。Claude のモデルは必ず存在するため、最初の Claude のモデルで採用を止める。照会失敗時は先頭候補を採用する。
 
 再生成の対象は、振り分けで決まった定義をすべて含む。description と前置きが既存とテンプレートで違うことは、対象から外す理由にせず、ステップ 5 の質問で扱う。対象から外せるのは、次の場合に限る。
 
@@ -312,12 +315,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 1. モデル ID を聞く。候補は、ステップ 1b で最後に取った `--list-coverage` の、その役割の `candidates` をそのまま使う。
    - 候補を自分で組み立てず、足したり除いたりせず、並び順も変えない。
    - `recommended` が `true` の候補に推奨の印を付ける。
+   - 各選択肢には `modelId` とエイリアス名(`model`)を示す。同じ `modelId` の候補が複数あっても 1 つにまとめない。選ばれた候補の `model` を、手順 4 の `--model` にそのまま渡す。
    - `candidates` は、CLI が次の規則で返す。表は参照用である。
 
    | 条件 | 候補 |
    | --- | --- |
    | `--scope claude` | `sonnet` / `opus` / `haiku` / `fable` の 4 値 |
-   | `--scope custom` で live 照会が成功した | その役割の `models` のうち、既定エイリアスが live にある ID に、`claudeEnums`(`sonnet` / `opus` / `haiku` / `fable`)を加えたもの。重複は除く。 |
+   | `--scope custom` で live 照会が成功した | その役割の `models` のうち、live のエイリアスが部分一致で当たる ID に、`claudeEnums`(`sonnet` / `opus` / `haiku` / `fable`)を加えたもの。1 つの ID に複数のエイリアスが当たれば、エイリアスごとに別の候補になり、推奨の印は 1 つにだけ付く。 |
    | `--scope custom` で live 照会が失敗した | その役割の `models` すべてに、`claudeEnums` を加えたもの。重複は除く。 |
 
    - 単一選択なので、ページに分けない。選択肢の数は「この役割は作らない」と候補を合わせて数える。
@@ -347,7 +351,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 4. この 1 役割だけを対象にした個別コマンドで生成する。`--recommended` と `--merge` は付けない。
 
-   - モデル値が既定エイリアスと違う場合、またはベンダーが `unknown` の場合は、ベンダーを確定する。候補は `gpt` / `grok` / `claude` / 「どれでもない」(`none`) の 4 値とする。既知ベンダーは推定値を示して確認し、変更を望む場合に 4 値から選ばせる。ベンダーが `none` なら `--vendor none` を渡す。`--vendor` は、ここでベンダーを確定したときだけ渡す。
+   - モデル値が `candidates` の `model` に無い場合、またはベンダーが `unknown` の場合は、ベンダーを確定する。候補は `gpt` / `grok` / `claude` / 「どれでもない」(`none`) の 4 値とする。既知ベンダーは推定値を示して確認し、変更を望む場合に 4 値から選ばせる。ベンダーが `none` なら `--vendor none` を渡す。`--vendor` は、ここでベンダーを確定したときだけ渡す。
    - MCP の引数は、impl の役割にサーバーが付くときは `--mcp-servers` だけを渡す。readonly の役割にサーバーが付くときは、`--mcp-servers` と `--mcp-deny` の両方を渡す。
 
    まず生成対象を確認する。
@@ -393,7 +397,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 定義を 1 つずつ、次の順で処理する。定義名は既存のファイル名のまま変えない。
 
 1. モデル ID を、5n の 1 の手順と候補で尋ねる。1 問か 2 問かの分け方も 5n の 1 に従う。
-   - `modelId` が `null` の定義(推奨表に無いエイリアス、`inherit`、`model` 欄なし)では、5n の「この役割は作らない」の位置に「再生成しない」を置き、選択肢の数に含める。選ばれたら、その定義をステップ 7 で報告する。
+   - `modelId` が `null` の定義(どのモデル ID にも当たらないエイリアス、`inherit`、`model` 欄なし)では、5n の「この役割は作らない」の位置に「再生成しない」を置き、選択肢の数に含める。選ばれたら、その定義をステップ 7 で報告する。
    - `modelId` が `null` でない定義では、空の選択肢を置かない。
    - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだモデル ID の既定の model 値> に変わる」と書く。<> の中は実際の値に置き換える。
 2. ベンダーを、5n の 4 の条件で確定する。
