@@ -477,3 +477,46 @@ codiel 1.0.0 の手動確認で、Raguel は run を止めるか素通しさせ�
 - Raguel は ADR-009 が集めた .codiel/config.json から raguel と testsDir を読み、設定の置き場を増やさない。
 - E2E のレポート(<testsDir>/**/reports/**)は生成物と同じに扱い、評価から外す。
 - run が active か awaiting_human の間、codiel の guard は .codiel/config.json・RAGUEL_CONFIG のファイル・ケースファイルの置き場への書き込みを拒む。
+
+---
+
+### ADR-012: [codiel] Raguel の LLM パネルを廃止し、Jev を推奨依存として内容を判定する
+
+- 状態: 採用
+- 決定日: 2026-10-01
+- 決定者: phyllis998
+
+#### 背景
+
+codiel の run は、Raguel のゲートがパネルの完了を待つため遅い。パネルは claude -p を 2〜4 体、2〜3 回の待ちに分けて起動し、1 回の上限は 180 秒、ゲートの締切は 600 秒である。2026-09-28〜10-01 の判定 106 件のうち ASK は 28 件で、ルール層だけの ASK は 2 件、残りはパネルの所見(crosscheck 26 件など)と起動失敗・タイムアウト(22 件)だった。
+
+#### 検討した選択肢
+
+1. パネルを残す(ADR-011 のまま)
+2. パネルを 1 体に減らして残す
+3. パネルを廃止し、ルール層だけで判定する
+4. パネルを廃止し、Jev が使える環境では Jev に成果物の内容を固定の問いで判定させ、使えない環境ではルール層だけで判定する(採用)
+
+#### 採用した結論
+
+- パネル(adversarial・steelman・crosscheck・meta)、claude と codex のプロバイダー、重さ判定(tier)を撤去する。
+- 環境変数 TYPESAFE_API_KEY があれば Jev を使う。contextJudge.enabled は廃止する。
+- Jev の内容判定は、評価の種別(code・plan・design・decision)ごとの固定の問いで行う。plan は test-spec とそれ以外で問いを分ける。閾値を外れた問いは定型文の ASK にする。
+- Jev によるルール層の文脈判定補正は残す。
+- Jev が無いとき、または失敗したときは、内容判定を行わずルール層だけで判定し、ASK にも degraded にもしない。
+- 判例検索は tier に関係なく毎回行う。
+- verdict は、ルールの stop → STOP、パイプラインの例外 → ASK(degraded)、ルールか Jev の ask → ASK、それ以外 → PROCEED の順に合成する。
+- codiel は Jev を推奨依存とする。
+
+#### 理由
+
+パネルは遅さと誤検知の ASK の発生源だった。現行のモデルと Claude Code の権限機構は codiel を最初に設計した当時より精密になり、内容の水準の検査力を手放しても run の速さを取る(ユーザー判断)。Jev の内容判定は本文の問い合わせ 1 回に入り、リクエスト本数は文脈判定だけのときと変わらない。パネルを 1 体に減らしても claude -p の起動と応答の待ちは残る。ルール層の補正をやめると、決定論の引き下げ規則が拾わないソースコード中の文字列リテラルなどで、destructive-ops の誤検知が STOP のまま残る。
+
+#### 影響範囲
+
+- ADR-011 のうち、パネル・プロバイダー・重さ判定・Jev を既定で無効にする決定を置き換える。評価対象を自分で読むこと、pass-gate との照合、STOP の 4 種、ケースファイル、判例は ADR-011 のまま残す。
+- 設定の judge.*・panel.*・weight.*・contextJudge.enabled を撤去する。残っていても読み込みエラーにせず、警告を残して無視する。
+- 既知のケースファイル名から撤去したファイル名を消さない。消すと変更前のケースファイルが改竄扱いになる。
+- 鍵がある環境では、伏せ字を当てた後の成果物が TypeSafe AI へ送られる(ADR-005)。codex のパネルで OpenAI へ送られる経路は無くなる。
+- 内容判定の閾値は、過去に PROCEED になった成果物で較正してから確定する。
+- 設計書: harness-docs/design/2026-10-01-codiel-run-speedup-design.md
