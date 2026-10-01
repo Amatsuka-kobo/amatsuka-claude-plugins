@@ -145,7 +145,7 @@ Never add an Anthropic API client, and never design a flow that requires the use
 CLI/script by hand — the user-facing surface is Claude Code skills/commands only. Documented as
 「最重要」 in `plugins/codiel/docs/DESIGN.md` §0 and `harness-docs/ARCHITECTURE.md`; it binds every
 plugin here.
-(raguel-mcp's panel and prompt-smith's eval loop both shell out to `claude -p` for this reason.)
+(prompt-smith's eval loop shells out to `claude -p` for this reason. raguel-mcp's LLM panel used to as well, but was removed on 2026-10-01 in favor of Jev, an external non-Anthropic API allowed by ADR-005.)
 This bans the Anthropic API only. Since ADR-005 (2026-09-26) a plugin may take a non-Anthropic
 external API that needs the user's API key as a required dependency: key via env var, only the
 features needing it error when unset, no fallback path. **jevriel** (Jev, `TYPESAFE_API_KEY`) is the

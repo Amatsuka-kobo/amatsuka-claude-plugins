@@ -80,8 +80,9 @@ run は常にメインの作業ツリーで探す: `findMainRoot(cwd)` は git �
 
 ## Flow — 13 stages / 14 named phases
 
-`intent → discuss → design → (test-spec ∥ dev-plan) → test-code → implement → test-loop → intent-sync → pr →
-review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ。
+`intent → discuss → design → (test-spec, dev-plan) → test-code → implement → test-loop → intent-sync → pr →
+review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つのステージだが、2026-10-01 から直列に進める
+(仕様のディレクトリを同定 → dev-plan.md をオーケストレーターが書いてゲート → spec.md / cases.md の委譲を前景で出してゲート)。
 Raguel gates(`GATED` の 9 フェーズ)`intent`, `design`, `test-spec`, `dev-plan`, `test-code`, `implement`, `test-loop`, `intent-sync`, `fix-loop`.
 
 ### テスト駆動と並列実装(2026-09-28、M4。設計書 §6.6・§6.13、決定 72〜81)
@@ -97,6 +98,8 @@ Raguel gates(`GATED` の 9 フェーズ)`intent`, `design`, `test-spec`, `dev-pl
 - `.codiel/config.json` の `testsDir`(既定 `docs/codiel/tests`)と `runsDir`(既定 `docs/codiel/runs`)は `readCodielConfig(codielRoot)` で読み、`codiel-state config` でも出る。`codiel-state gitignore` は必要な `.gitignore` の 6 行と欠けている行(`missing`)を出す。
 - E2E のレポートは `<testsDir>/e2e/{frontend,backend,cli}/<名前>/reports/<YYYYMMDD-HHMMSS>-<slug>-try<n>/`(ローカルのタイムゾーン)に置き、`results.json` と `summary.md`/`failure.md` だけをコミットする。書式は `references/e2e-report-format.md`。
 - 報告のファイル(`report.md`・`test-run-<n>.md`)は委譲先が最終の返答で返し、オーケストレーターが書く。
+  オーケストレーター自身が実行したテストの結果と実行し直しも同じ報告に書く(implement のマージ後は `steps/merge-test-<g>/report.md`、
+  intent-sync の控えと ADR 候補は `steps/intent-sync/report.md`)。
 - step-add / step-update は `--kind step|test-code|test-loop` を取り、`implement.steps`・`testCode.units`・`testLoop.units` に分けて記録する。
 `discuss`・`design` は scale light の run でだけ skip でき、`fix-loop` は所見が無ければ skip する。
 run state は version 2(slug で識別。`--issue` は任意の記録)。version 1 の run と、`phases` に `test-code` を持たない
@@ -139,6 +142,12 @@ codiel は同梱 Agent を持たない(2026-09-27。`codiel-analyst` と `codiel
 すべてのフェーズは Agent 名や役割名を指定せず、「成果物を書く委譲」「読み取りだけの委譲」など作業内容と
 委譲の種別でサブエージェントへ委譲する。委譲先はセッションに注入された運用規律が選び、
 規律が無い環境では読み取りだけの委譲を `Explore`、それ以外を `general-purpose` へ縮退する。
+
+**委譲の線引き(2026-10-01、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` §5)**:
+オーケストレーターは agenda.md・design.md・dev-plan.md・discussion.md・intent 文書(持続層を含む)を自分で書き、
+プロジェクトの test コマンドと `units/` の仕様のディレクトリのテストを run ブランチで自分で直列に実行する。
+spec.md / cases.md・テストコード・実装と修正・タスクレビュー・review・`e2e/` の実行は委譲を続ける。
+HARD-GATE はコード(テストコードを含む)・spec.md / cases.md・レビューの所見をオーケストレーターが書かないことを定める。
 ドメイン固有の観点は
 `plugins/codiel/skills/implementing/references/{frontend,backend,data}.md` と
 `plugins/codiel/skills/reviewing-diffs/references/{frontend,backend,data,doc,security,generic}.md`
