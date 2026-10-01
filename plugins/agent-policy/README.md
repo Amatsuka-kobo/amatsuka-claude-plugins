@@ -156,6 +156,14 @@ setup-agents が扱う推奨モデル ID は次の 9 種です。
 | `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
 | `grok` | Grok | `claude-grok-4-7` |
 
+外部モデルは、プロキシの `/v1/models` にあるエイリアスを部分一致で認識します。既定の `model` 値と名前が違っていても(`claude-gpt6-sol`、`claude-gpt-6.1-sol-pro` など)同じモデルとして扱います。
+
+- エイリアスは `claude-` で始まる必要があります。大文字と小文字は区別しません。
+- `gpt` と `grok` は名前のどこに含まれていても当たります。
+- GPT の系統名(`sol` / `terra` / `luna` / `astra`)は、名前を `-` `.` `_` で区切った語と完全一致したときだけ当たります。GPT は `gpt` と系統名の両方がそろったときに認識します。
+- 同じモデルに複数のエイリアスが当たったときは、既定の `model` 値と同じもの、短いもの、辞書順で先のものの順に推奨します。
+- 定義に書く `model` 値はエイリアスそのものです。SessionStart の実在検証は、その値が `/v1/models` にあるかを完全一致で確かめます。
+
 ベンダーは `gpt` / `grok` / `claude` / `none` の 4 値です。
 生成した定義の frontmatter には、選んだ役割を記録する `agent-policy-role` マーカーが入ります。
 
