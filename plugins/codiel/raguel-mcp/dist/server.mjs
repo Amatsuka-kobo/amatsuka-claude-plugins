@@ -44867,7 +44867,9 @@ var recordOutcomeInput = external_exports.strictObject({
   ruling: external_exports.enum(["as-is", "false-positive", "revise"]).optional().describe(
     "\u30D5\u30A7\u30FC\u30BA\u306E\u30B2\u30FC\u30C8\u3067\u306E\u4EBA\u306E\u88C1\u5B9A\u3002\u7121\u3044\u3068\u304D\u306F run \u5168\u4F53\u306E\u7D50\u672B(PR \u306E\u30DE\u30FC\u30B8\u30FB\u5374\u4E0B\u30FBincident)\u3092\u8868\u3059"
   ),
-  notes: external_exports.string().optional().describe("\u7D50\u672B\u306E\u88DC\u8DB3\u3002ruling \u304C false-positive \u306E\u3068\u304D\u306F\u5FC5\u9808")
+  notes: external_exports.string().optional().describe(
+    "\u7D50\u672B\u306E\u88DC\u8DB3\u3002ruling \u304C false-positive \u306E\u3068\u304D\u306F\u5FC5\u9808\u3002\u79D8\u5BC6\u60C5\u5831\u3089\u3057\u3044\u30C8\u30FC\u30AF\u30F3\u306F\u3001\u4FDD\u5B58\u306E\u524D\u306B\u5148\u982D 4 \u6587\u5B57\u3060\u3051\u3092\u6B8B\u3057\u3066\u4F0F\u305B\u308B"
+  )
 });
 function refuse(reason) {
   return { recorded: false, precedentId: null, reason };
@@ -44946,6 +44948,7 @@ function handleRecordOutcome(args, deps) {
       `\u540C\u3058\u88C1\u5B9A(outcome ${args.outcome}\u3001ruling ${args.ruling ?? "\u306A\u3057"})\u304C\u65E2\u306B\u8A18\u9332\u3055\u308C\u3066\u3044\u308B: ${args.evaluationId}`
     );
   }
+  const notes = args.notes === void 0 ? void 0 : maskSecrets(args.notes);
   const makesPrecedent = args.ruling === "false-positive" || v.judgeStatus === "ok";
   let precedentId = null;
   if (makesPrecedent) {
@@ -44965,7 +44968,7 @@ function handleRecordOutcome(args, deps) {
       ...objective ? { objective } : {},
       firedRules,
       changedPaths: v.subject.files.map((f) => f.path),
-      lesson: args.notes ?? v.meta?.rationale ?? `findings: ${firedRules.join(", ") || "\u306A\u3057"}`,
+      lesson: notes ?? v.meta?.rationale ?? `findings: ${firedRules.join(", ") || "\u306A\u3057"}`,
       recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
       configHash
     };
@@ -44980,7 +44983,7 @@ function handleRecordOutcome(args, deps) {
     phase: v.phase,
     outcome: args.outcome,
     ruling: args.ruling ?? null,
-    ...args.notes !== void 0 ? { notes: args.notes } : {},
+    ...notes !== void 0 ? { notes } : {},
     precedentId,
     at: (/* @__PURE__ */ new Date()).toISOString()
   });

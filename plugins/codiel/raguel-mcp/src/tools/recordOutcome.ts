@@ -13,6 +13,7 @@ import type {
   VerdictRecord
 } from "../core/types.js"
 import { filterFiredRules, PrecedentStore } from "../precedent/store.js"
+import { maskSecrets } from "../rules/common/secrets.js"
 import { toResponse } from "./shared.js"
 
 export const recordOutcomeInput = z.strictObject({
@@ -27,7 +28,9 @@ export const recordOutcomeInput = z.strictObject({
   notes: z
     .string()
     .optional()
-    .describe("結末の補足。ruling が false-positive のときは必須")
+    .describe(
+      "結末の補足。ruling が false-positive のときは必須。秘密情報らしいトークンは、保存の前に先頭 4 文字だけを残して伏せる"
+    )
 })
 
 export interface RecordOutcomeArgs {
@@ -146,6 +149,8 @@ export function handleRecordOutcome(
     )
   }
 
+  // notes に検出値が書かれることがあるので、保存の前に一度だけ伏せる(設計書 §6.4.2)
+  const notes = args.notes === undefined ? undefined : maskSecrets(args.notes)
   const makesPrecedent =
     args.ruling === "false-positive" || v.judgeStatus === "ok"
   let precedentId: string | null = null
@@ -170,7 +175,7 @@ export function handleRecordOutcome(
       firedRules,
       changedPaths: v.subject.files.map((f) => f.path),
       lesson:
-        args.notes ??
+        notes ??
         v.meta?.rationale ??
         `findings: ${firedRules.join(", ") || "なし"}`,
       recordedAt: new Date().toISOString(),
@@ -189,7 +194,7 @@ export function handleRecordOutcome(
     phase: v.phase,
     outcome: args.outcome,
     ruling: args.ruling ?? null,
-    ...(args.notes !== undefined ? { notes: args.notes } : {}),
+    ...(notes !== undefined ? { notes } : {}),
     precedentId,
     at: new Date().toISOString()
   })

@@ -453,6 +453,39 @@ describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見
     ).toEqual([])
   })
 
+  it("notes の検出値は outcomes.jsonl と判例の lesson に伏せて保存する", async () => {
+    const h = harness()
+    const client = await connect(h.deps)
+    const stop = await call(
+      client,
+      "evaluate_decision",
+      decisionArgs(`見本の鍵 ${GHP_TOKEN} を README に載せる`)
+    )
+    const key = "AKIAIOSFODNN7EXAMPLE"
+    const recorded = await call(client, "record_outcome", {
+      evaluationId: stop.body.evaluationId,
+      outcome: "approved",
+      ruling: "false-positive",
+      notes: `検出値 ${key} は見本である`
+    })
+    expect(recorded.body.recorded).toBe(true)
+    const masked = h.outcomes().at(-1)?.notes
+    expect(masked).toContain("AKIA")
+    expect(masked).toContain("*")
+    expect(masked).not.toContain(key)
+    // list_precedents は lesson を返さないので、判例のファイルを直接読む
+    const precedentsDir = path.join(h.casesDir, "precedents")
+    const [projectId] = fs.readdirSync(precedentsDir)
+    const file = path.join(
+      precedentsDir,
+      projectId,
+      `${recorded.body.precedentId}.json`
+    )
+    const { lesson } = JSON.parse(fs.readFileSync(file, "utf-8"))
+    expect(lesson).toContain("AKIA*")
+    expect(lesson).not.toContain(key)
+  })
+
   it("degraded の評価の裁定は記録するが、判例は作らない", async () => {
     const h = harness()
     const client = await connect(h.deps)
