@@ -6,7 +6,12 @@
  * STOP も PROCEED も単独では出さない。`maskedArtifact` と `priorFindings` は呼び出し側が伏せ字を当てて渡す。
  */
 
-import type { ArtifactKind, Finding, Severity } from "../core/types.js"
+import type {
+  ArtifactKind,
+  Finding,
+  GatedPhase,
+  Severity
+} from "../core/types.js"
 import {
   type Answer,
   checkBudget,
@@ -45,6 +50,7 @@ export interface ResubmissionTarget {
 
 export interface ContextJudgeInput {
   kind: ArtifactKind
+  phase: GatedPhase
   objective: string
   maskedArtifact: string
   /** ルール層の所見 */
@@ -108,6 +114,7 @@ export const UNAVAILABLE_RULE_ID = "contextJudge/unavailable"
 const NO_KEY_MESSAGE =
   "TYPESAFE_API_KEY が無いため、Jev による内容の判定と文脈の補正をしていない"
 const EXCERPT_RADIUS = 5
+const CONTENT_PREFIX = "judge/"
 
 /** これらが stop を出したら呼ばない(秘密情報を外へ送らない。判定は Jev に関係なく STOP) */
 const SKIP_ON_STOP = new Set([
@@ -160,6 +167,125 @@ const LEXICAL: {
       "Is the decision in state.artifact a choice among options while state.optionsConsidered does not show that alternatives were actually examined?",
     label:
       "判断が選択肢からの選択であり、optionsConsidered が代替案の検討を示していない"
+  }
+]
+
+/**
+ * 内容判定の問い(設計書 §4.2)。`lower` は「満たす」を問い、p ≤ lower で ask。
+ * `raise` は「欠陥がある」を問い、p ≥ raise で ask。閾値の間は所見を出さない。
+ * `id` は質問のキーで、ruleId は `judge/<id>`。
+ */
+interface ContentQuestion {
+  id: string
+  /** 対象。plan は test-spec かどうかで分ける */
+  applies: (input: ContextJudgeInput) => boolean
+  instructions: string
+  /** ASK の message に入れる問いの日本語。末尾の「可能性が高い/低い」は組み立てで足す */
+  label: string
+  direction: "lower" | "raise"
+}
+
+const isPlan = (i: ContextJudgeInput) =>
+  i.kind === "plan" && i.phase !== "test-spec"
+const isSpec = (i: ContextJudgeInput) =>
+  i.kind === "plan" && i.phase === "test-spec"
+
+const CONTENT: ContentQuestion[] = [
+  {
+    id: "code-meets-objective",
+    applies: (i) => i.kind === "code",
+    instructions:
+      "Does the diff in state.artifact include changes that achieve the goal stated in state.objective?",
+    label: "diff は objective を達成する変更を含む",
+    direction: "lower"
+  },
+  {
+    id: "code-out-of-scope",
+    applies: (i) => i.kind === "code",
+    instructions:
+      "Does the diff in state.artifact include changes outside the goal stated in state.objective?",
+    label: "diff は objective の外の変更を含む",
+    direction: "raise"
+  },
+  {
+    id: "code-weakens-tests",
+    applies: (i) => i.kind === "code",
+    instructions:
+      "Does the diff in state.artifact weaken tests, such as loosening assertions, skipping tests, or rewriting expected values to match the implementation?",
+    label: "diff はテストを弱める",
+    direction: "raise"
+  },
+  {
+    id: "code-security",
+    applies: (i) => i.kind === "code",
+    instructions:
+      "Does the diff in state.artifact introduce an authentication bypass, an injection vulnerability, or an exposure of secrets?",
+    label: "diff は認証の回避・注入・秘密の露出のいずれかを持ち込む",
+    direction: "raise"
+  },
+  {
+    id: "plan-covers-objective",
+    applies: isPlan,
+    instructions:
+      "If the steps of the plan in state.artifact are executed in order, would the goal stated in state.objective be achieved?",
+    label: "計画の手順を順に実行すれば objective を達成できる",
+    direction: "lower"
+  },
+  {
+    id: "plan-verifiable",
+    applies: isPlan,
+    instructions:
+      "Does each step of the plan in state.artifact have a way to confirm that it is complete?",
+    label: "各手順は、完了を確かめる方法を持つ",
+    direction: "lower"
+  },
+  {
+    id: "spec-covers-objective",
+    applies: isSpec,
+    instructions:
+      "Does the test specification in state.artifact cover every observable behavior that changes because of the goal stated in state.objective?",
+    label: "テスト仕様は、objective で変わる観測できる振る舞いをすべて扱う",
+    direction: "lower"
+  },
+  {
+    id: "spec-verifiable",
+    applies: isSpec,
+    instructions:
+      "Does each case in the test specification in state.artifact have an expected result that can be judged?",
+    label: "各ケースは、判定できる期待結果を持つ",
+    direction: "lower"
+  },
+  {
+    id: "design-covers-objective",
+    applies: (i) => i.kind === "design",
+    instructions:
+      "Does the design in state.artifact address every requirement of the goal stated in state.objective?",
+    label: "設計は objective の要件をすべて扱う",
+    direction: "lower"
+  },
+  {
+    id: "design-contradiction",
+    applies: (i) => i.kind === "design",
+    instructions:
+      "Does the design in state.artifact contain decisions that contradict each other?",
+    label: "設計は互いに矛盾する決定を含む",
+    direction: "raise"
+  },
+  {
+    id: "design-open-decisions",
+    applies: (i) => i.kind === "design",
+    instructions:
+      "Does the design in state.artifact leave decisions that are needed for implementation unresolved?",
+    label: "設計は、実装に要る決定を未決のまま残す",
+    direction: "raise"
+  },
+  {
+    id: "decision-fits-objective",
+    applies: (i) => i.kind === "decision",
+    instructions:
+      "Is the decision in state.artifact consistent with the goal stated in state.objective?",
+    label: "判断は objective に沿う",
+    direction: "lower"
   }
 ]
 
@@ -229,6 +355,7 @@ function buildBodyQuery(
 ): Query {
   const state: Record<string, unknown> = {
     objective: input.objective,
+    phase: input.phase,
     artifact: input.maskedArtifact
   }
   const questions: Record<string, QuestionSpec> = {
@@ -248,6 +375,14 @@ function buildBodyQuery(
       instructions: `${lex.instructions} ${GUARD}`
     }
     targets[lex.id] = lex.ruleId
+  }
+  for (const c of CONTENT) {
+    if (!c.applies(input)) continue
+    questions[c.id] = {
+      type: "noul",
+      instructions: `${c.instructions} ${GUARD}`
+    }
+    targets[c.id] = `${CONTENT_PREFIX}${c.id}`
   }
   if (input.kind === "decision") {
     state.rollbackPlan = input.decisionFields.rollbackPlan ?? ""
@@ -497,6 +632,21 @@ export async function runContextJudge(
         f.message += `(${note})`
         adjustments.push({ ruleId: lex.ruleId, from: "info", to: "ask" })
       }
+    }
+
+    for (const c of CONTENT) {
+      if (!(c.id in answers)) continue
+      const q = noul(c.id)
+      const fires = c.direction === "lower" ? q <= lower : q >= raise
+      if (!fires) continue
+      const ruleId = `${CONTENT_PREFIX}${c.id}`
+      const verdict = c.direction === "lower" ? "低い" : "高い"
+      findings.push({
+        ruleId,
+        severity: "ask",
+        message: `Jev: ${c.label}可能性が${verdict}(p=${fmt(q)})`
+      })
+      adjustments.push({ ruleId, from: "none", to: "ask" })
     }
 
     for (const t of input.resubmissionTargets) {

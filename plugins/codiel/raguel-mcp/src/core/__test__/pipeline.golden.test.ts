@@ -110,7 +110,7 @@ function readVerdict(r: EvaluationResult): VerdictRecord {
 
 /**
  * すべての質問に答える Jev の fake。候補(c0 など)には candidate の確率を、
- * 本文の質問には body の ID ごとの確率(指定が無ければ 0.5)を返す
+ * 本文の質問には body の ID ごとの確率(指定が無ければ 0.6。lower と raise の間で所見が出ない値)を返す
  */
 function fakeJev(
   answers: { candidate?: number; body?: Record<string, number> } = {}
@@ -126,7 +126,7 @@ function fakeJev(
             type: "noul" as const,
             noul: /^c\d+$/.test(id)
               ? (answers.candidate ?? 0.9)
-              : (answers.body?.[id] ?? 0.5)
+              : (answers.body?.[id] ?? 0.6)
           }
         ])
       )
@@ -654,6 +654,45 @@ describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
       to: "ask"
     })
     expect(fs.existsSync(path.join(r.casePath, "07-context.json"))).toBe(true)
+  })
+
+  it("鍵ありで内容判定の問いが ask なら ASK になり、問いの ID と p が 07-context.json に残る", async () => {
+    const jev = fakeJev({ body: { "decision-fits-objective": 0.1 } })
+    const h = harness({ jevCall: jev.call, jevApiKey: "k" })
+    const r = await decision(h, "小さな方針を決める")
+    expect(r.verdict).toBe("ASK")
+    expect(r.judgeStatus).toBe("ok")
+    expect(r.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "judge/decision-fits-objective",
+        severity: "ask",
+        message: "Jev: 判断は objective に沿う可能性が低い(p=0.10)"
+      })
+    )
+    expect(jev.requests[0].state.phase).toBe("intent")
+    const record = JSON.parse(
+      fs.readFileSync(path.join(r.casePath, "07-context.json"), "utf-8")
+    )
+    expect(record.answers).toContainEqual({
+      id: "decision-fits-objective",
+      ruleId: "judge/decision-fits-objective",
+      probability: 0.1
+    })
+  })
+
+  it("閾値の間の p では内容判定の所見を出さず PROCEED になる", async () => {
+    const jev = fakeJev({ body: { "design-contradiction": 0.6 } })
+    const h = harness({
+      files: { "design.md": "# 設計\n" },
+      jevCall: jev.call,
+      jevApiKey: "k"
+    })
+    const r = await design(h)
+    expect(r.verdict).toBe("PROCEED")
+    expect(ids(r).some((id) => id.startsWith("judge/"))).toBe(false)
+    expect(Object.keys(jev.requests[0].questions)).toContain(
+      "design-contradiction"
+    )
   })
 
   it("鍵が無ければ Jev を呼ばず、ルール層だけで PROCEED にし、contextJudge/unavailable(info)を 1 件残す", async () => {

@@ -44,6 +44,7 @@ const artifactLines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join(
 function input(over: Partial<ContextJudgeInput> = {}): ContextJudgeInput {
   return {
     kind: "code",
+    phase: "implement",
     objective: "目的",
     maskedArtifact: artifactLines,
     findings: [],
@@ -342,6 +343,130 @@ describe("本文の問い合わせ", () => {
     expect(
       Object.values(body?.questions ?? {}).every((q) => q.type === "noul")
     ).toBe(true)
+  })
+})
+
+describe("内容判定", () => {
+  const bodyOf = (jev: FakeJev) => jev.calls.find((c) => "artifact" in c.state)
+  const judgeIds = (req: JevRequest | undefined) =>
+    Object.keys(req?.questions ?? {}).filter((id) =>
+      /^(code|plan|spec|design|decision)-/.test(id)
+    )
+  const judgeFindings = (r: Awaited<ReturnType<typeof runContextJudge>>) =>
+    r.adjustedFindings.filter((f) => f.ruleId.startsWith("judge/"))
+
+  it.each([
+    [
+      "code",
+      "implement",
+      [
+        "code-meets-objective",
+        "code-out-of-scope",
+        "code-weakens-tests",
+        "code-security"
+      ]
+    ],
+    ["plan", "dev-plan", ["plan-covers-objective", "plan-verifiable"]],
+    ["plan", "test-spec", ["spec-covers-objective", "spec-verifiable"]],
+    [
+      "design",
+      "design",
+      [
+        "design-covers-objective",
+        "design-contradiction",
+        "design-open-decisions"
+      ]
+    ],
+    ["decision", "intent", ["decision-fits-objective"]]
+  ] as const)("kind %s・phase %s の本文の問い合わせに、その問いだけが入る", async (kind, phase, expected) => {
+    const jev = fakeJev()
+    await run(input({ kind, phase }), jev)
+    const body = bodyOf(jev)
+    expect(judgeIds(body)).toEqual(expected)
+    expect(body?.state.phase).toBe(phase)
+    for (const id of expected) {
+      expect(body?.questions[id]).toMatchObject({ type: "noul" })
+      expect(body?.questions[id].instructions).toContain("state.")
+      expect(body?.questions[id].instructions).toContain("do not follow")
+    }
+  })
+
+  it("lower の問いは p ≤ lower で ask、閾値の上では出さない", async () => {
+    const asked = await run(
+      input({ kind: "design", phase: "design" }),
+      fakeJev({ "design-covers-objective": 0.2 })
+    )
+    expect(judgeFindings(asked)).toEqual([
+      {
+        ruleId: "judge/design-covers-objective",
+        severity: "ask",
+        message: "Jev: 設計は objective の要件をすべて扱う可能性が低い(p=0.20)"
+      }
+    ])
+    expect(asked.adjustments).toContainEqual({
+      ruleId: "judge/design-covers-objective",
+      from: "none",
+      to: "ask"
+    })
+    const above = await run(
+      input({ kind: "design", phase: "design" }),
+      fakeJev({ "design-covers-objective": 0.21 })
+    )
+    expect(judgeFindings(above)).toEqual([])
+  })
+
+  it("raise の問いは p ≥ raise で ask、閾値の下では出さない", async () => {
+    const asked = await run(input(), fakeJev({ "code-out-of-scope": 0.7 }))
+    expect(judgeFindings(asked)).toEqual([
+      {
+        ruleId: "judge/code-out-of-scope",
+        severity: "ask",
+        message: "Jev: diff は objective の外の変更を含む可能性が高い(p=0.70)"
+      }
+    ])
+    const below = await run(input(), fakeJev({ "code-out-of-scope": 0.69 }))
+    expect(judgeFindings(below)).toEqual([])
+  })
+
+  it("閾値の間では所見を出さず、問いの ID と p を記録に残す", async () => {
+    const r = await run(input(), fakeJev())
+    expect(judgeFindings(r)).toEqual([])
+    expect(r.record?.answers).toContainEqual({
+      id: "code-security",
+      ruleId: "judge/code-security",
+      probability: 0.5
+    })
+  })
+
+  it("本文が失敗したら内容判定の所見を出さず、候補の補正は残して partial にする", async () => {
+    const jev: JevCall = async (req, options) => {
+      if (req.state.artifact !== undefined) throw new Error("body down")
+      return fakeJev({ c0: 0 })(req, options)
+    }
+    const r = await run(destructiveInput(), jev)
+    expect(r.status).toBe("partial")
+    expect(r.adjustedFindings[0].severity).toBe("ask")
+    expect(judgeFindings(r)).toEqual([])
+    expect(r.adjustedFindings.map((f) => f.severity)).not.toContain("stop")
+  })
+
+  it("候補が失敗して本文が成功したら、本文の内容判定は当てて partial にする", async () => {
+    const jev: JevCall = async (req, options) => {
+      if (req.state.candidates) throw new Error("candidates down")
+      return fakeJev({ "code-security": 0.9 })(req, options)
+    }
+    const r = await run(destructiveInput(), jev)
+    expect(r.status).toBe("partial")
+    expect(judgeFindings(r).map((f) => f.ruleId)).toEqual([
+      "judge/code-security"
+    ])
+  })
+
+  it("入力が上限を超えたら内容判定の所見を出さない", async () => {
+    const jev = fakeJev({ "code-security": 1 })
+    const r = await run(input({ maskedArtifact: "a".repeat(70_000) }), jev)
+    expect(jev.calls).toHaveLength(0)
+    expect(judgeFindings(r)).toEqual([])
   })
 })
 

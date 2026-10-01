@@ -39954,6 +39954,7 @@ function createJevCall(apiKey, fetch) {
 var UNAVAILABLE_RULE_ID = "contextJudge/unavailable";
 var NO_KEY_MESSAGE = "TYPESAFE_API_KEY \u304C\u7121\u3044\u305F\u3081\u3001Jev \u306B\u3088\u308B\u5185\u5BB9\u306E\u5224\u5B9A\u3068\u6587\u8108\u306E\u88DC\u6B63\u3092\u3057\u3066\u3044\u306A\u3044";
 var EXCERPT_RADIUS = 5;
+var CONTENT_PREFIX = "judge/";
 var SKIP_ON_STOP = /* @__PURE__ */ new Set([
   "common/secrets",
   "code/protected-paths",
@@ -39988,6 +39989,94 @@ var LEXICAL = [
     kinds: ["decision"],
     instructions: "Is the decision in state.artifact a choice among options while state.optionsConsidered does not show that alternatives were actually examined?",
     label: "\u5224\u65AD\u304C\u9078\u629E\u80A2\u304B\u3089\u306E\u9078\u629E\u3067\u3042\u308A\u3001optionsConsidered \u304C\u4EE3\u66FF\u6848\u306E\u691C\u8A0E\u3092\u793A\u3057\u3066\u3044\u306A\u3044"
+  }
+];
+var isPlan = (i) => i.kind === "plan" && i.phase !== "test-spec";
+var isSpec = (i) => i.kind === "plan" && i.phase === "test-spec";
+var CONTENT = [
+  {
+    id: "code-meets-objective",
+    applies: (i) => i.kind === "code",
+    instructions: "Does the diff in state.artifact include changes that achieve the goal stated in state.objective?",
+    label: "diff \u306F objective \u3092\u9054\u6210\u3059\u308B\u5909\u66F4\u3092\u542B\u3080",
+    direction: "lower"
+  },
+  {
+    id: "code-out-of-scope",
+    applies: (i) => i.kind === "code",
+    instructions: "Does the diff in state.artifact include changes outside the goal stated in state.objective?",
+    label: "diff \u306F objective \u306E\u5916\u306E\u5909\u66F4\u3092\u542B\u3080",
+    direction: "raise"
+  },
+  {
+    id: "code-weakens-tests",
+    applies: (i) => i.kind === "code",
+    instructions: "Does the diff in state.artifact weaken tests, such as loosening assertions, skipping tests, or rewriting expected values to match the implementation?",
+    label: "diff \u306F\u30C6\u30B9\u30C8\u3092\u5F31\u3081\u308B",
+    direction: "raise"
+  },
+  {
+    id: "code-security",
+    applies: (i) => i.kind === "code",
+    instructions: "Does the diff in state.artifact introduce an authentication bypass, an injection vulnerability, or an exposure of secrets?",
+    label: "diff \u306F\u8A8D\u8A3C\u306E\u56DE\u907F\u30FB\u6CE8\u5165\u30FB\u79D8\u5BC6\u306E\u9732\u51FA\u306E\u3044\u305A\u308C\u304B\u3092\u6301\u3061\u8FBC\u3080",
+    direction: "raise"
+  },
+  {
+    id: "plan-covers-objective",
+    applies: isPlan,
+    instructions: "If the steps of the plan in state.artifact are executed in order, would the goal stated in state.objective be achieved?",
+    label: "\u8A08\u753B\u306E\u624B\u9806\u3092\u9806\u306B\u5B9F\u884C\u3059\u308C\u3070 objective \u3092\u9054\u6210\u3067\u304D\u308B",
+    direction: "lower"
+  },
+  {
+    id: "plan-verifiable",
+    applies: isPlan,
+    instructions: "Does each step of the plan in state.artifact have a way to confirm that it is complete?",
+    label: "\u5404\u624B\u9806\u306F\u3001\u5B8C\u4E86\u3092\u78BA\u304B\u3081\u308B\u65B9\u6CD5\u3092\u6301\u3064",
+    direction: "lower"
+  },
+  {
+    id: "spec-covers-objective",
+    applies: isSpec,
+    instructions: "Does the test specification in state.artifact cover every observable behavior that changes because of the goal stated in state.objective?",
+    label: "\u30C6\u30B9\u30C8\u4ED5\u69D8\u306F\u3001objective \u3067\u5909\u308F\u308B\u89B3\u6E2C\u3067\u304D\u308B\u632F\u308B\u821E\u3044\u3092\u3059\u3079\u3066\u6271\u3046",
+    direction: "lower"
+  },
+  {
+    id: "spec-verifiable",
+    applies: isSpec,
+    instructions: "Does each case in the test specification in state.artifact have an expected result that can be judged?",
+    label: "\u5404\u30B1\u30FC\u30B9\u306F\u3001\u5224\u5B9A\u3067\u304D\u308B\u671F\u5F85\u7D50\u679C\u3092\u6301\u3064",
+    direction: "lower"
+  },
+  {
+    id: "design-covers-objective",
+    applies: (i) => i.kind === "design",
+    instructions: "Does the design in state.artifact address every requirement of the goal stated in state.objective?",
+    label: "\u8A2D\u8A08\u306F objective \u306E\u8981\u4EF6\u3092\u3059\u3079\u3066\u6271\u3046",
+    direction: "lower"
+  },
+  {
+    id: "design-contradiction",
+    applies: (i) => i.kind === "design",
+    instructions: "Does the design in state.artifact contain decisions that contradict each other?",
+    label: "\u8A2D\u8A08\u306F\u4E92\u3044\u306B\u77DB\u76FE\u3059\u308B\u6C7A\u5B9A\u3092\u542B\u3080",
+    direction: "raise"
+  },
+  {
+    id: "design-open-decisions",
+    applies: (i) => i.kind === "design",
+    instructions: "Does the design in state.artifact leave decisions that are needed for implementation unresolved?",
+    label: "\u8A2D\u8A08\u306F\u3001\u5B9F\u88C5\u306B\u8981\u308B\u6C7A\u5B9A\u3092\u672A\u6C7A\u306E\u307E\u307E\u6B8B\u3059",
+    direction: "raise"
+  },
+  {
+    id: "decision-fits-objective",
+    applies: (i) => i.kind === "decision",
+    instructions: "Is the decision in state.artifact consistent with the goal stated in state.objective?",
+    label: "\u5224\u65AD\u306F objective \u306B\u6CBF\u3046",
+    direction: "lower"
   }
 ];
 function excerptAround(text, line) {
@@ -40030,6 +40119,7 @@ function buildCandidateQuery(input2, model) {
 function buildBodyQuery(input2, model) {
   const state = {
     objective: input2.objective,
+    phase: input2.phase,
     artifact: input2.maskedArtifact
   };
   const questions = {
@@ -40048,6 +40138,14 @@ function buildBodyQuery(input2, model) {
       instructions: `${lex.instructions} ${GUARD}`
     };
     targets[lex.id] = lex.ruleId;
+  }
+  for (const c of CONTENT) {
+    if (!c.applies(input2)) continue;
+    questions[c.id] = {
+      type: "noul",
+      instructions: `${c.instructions} ${GUARD}`
+    };
+    targets[c.id] = `${CONTENT_PREFIX}${c.id}`;
   }
   if (input2.kind === "decision") {
     state.rollbackPlan = input2.decisionFields.rollbackPlan ?? "";
@@ -40261,6 +40359,20 @@ async function runContextJudge(input2, opts) {
         f.message += `(${note})`;
         adjustments.push({ ruleId: lex.ruleId, from: "info", to: "ask" });
       }
+    }
+    for (const c of CONTENT) {
+      if (!(c.id in answers)) continue;
+      const q = noul(c.id);
+      const fires = c.direction === "lower" ? q <= lower : q >= raise;
+      if (!fires) continue;
+      const ruleId = `${CONTENT_PREFIX}${c.id}`;
+      const verdict = c.direction === "lower" ? "\u4F4E\u3044" : "\u9AD8\u3044";
+      findings.push({
+        ruleId,
+        severity: "ask",
+        message: `Jev: ${c.label}\u53EF\u80FD\u6027\u304C${verdict}(p=${fmt(q)})`
+      });
+      adjustments.push({ ruleId, from: "none", to: "ask" });
     }
     for (const t of input2.resubmissionTargets) {
       const q = noul(`resubmission${t.attempt}`);
@@ -42822,6 +42934,7 @@ function contextInput(artifact, parsed, findings, others, env) {
   );
   return {
     kind: artifact.kind,
+    phase: artifact.phase,
     objective: artifact.objective,
     maskedArtifact: maskSecrets(view ? view.text : artifact.content),
     findings,

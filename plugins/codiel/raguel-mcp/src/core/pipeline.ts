@@ -631,6 +631,7 @@ function contextInput(
   )
   return {
     kind: artifact.kind,
+    phase: artifact.phase,
     objective: artifact.objective,
     maskedArtifact: maskSecrets(view ? view.text : artifact.content),
     findings,
