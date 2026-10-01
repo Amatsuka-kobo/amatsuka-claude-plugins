@@ -176,7 +176,6 @@ Raguel の設定は、プロジェクトルートの `.codiel/config.json` の `
 ```json
 {
   "raguel": {
-    "judge": { "provider": "codex" },
     "storage": { "projectId": "my-project" }
   }
 }
@@ -186,54 +185,35 @@ Raguel の設定は、プロジェクトルートの `.codiel/config.json` の `
 - プロジェクトルートは、`.codiel` を持つ最も近い祖先のディレクトリです。利用者が自分で作った worktree で Claude Code を起動するときは、その worktree に `.codiel/config.json` を置いてください。持たない worktree では、メインの作業ツリーの設定を読みません。
 - 設定は評価のたびに読み直します。書き直した内容は、Claude Code を再起動せずに次の評価から効きます。
 - 設定が壊れていても Raguel は起動し、評価は ASK になって、所見に設定のパスと理由が出ます。直せば次の評価から使われます。
-- 未知のキー・ルール ID・パラメータは読み込みエラーです。書き間違いが黙って無視されることはありません。
+- 未知のキー・ルール ID・パラメータは読み込みエラーです。書き間違いが黙って無視されることはありません。例外は、撤去したキー(後述)で、警告付きで無視します。
 - マージの規則: オブジェクトは再帰的に重ね、配列は置き換えます。例外は、sealed ルール(`common/secrets`・`code/protected-paths` など、設定で無効にできないルール)の一覧を表す配列で、既定値との和集合になります(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)。緩める方向の配列を、和集合のせいで置き換えられない事態は起きません。どの配列が和集合かは `list_rules` の `params` に出ます。
 - `testsDir` は、`RAGUEL_CONFIG` を設定したときも、プロジェクトルートの `.codiel/config.json` から読みます。不正な値(文字列でない・空・絶対パス・`..` を含む)は、Raguel も codiel も失敗にします。
 - `RAGUEL_CONFIG` は、MCP サーバーの設定の `env` だけに書くと、hook のプロセスから見えません。guard が `RAGUEL_CONFIG` のファイルを守れなくなるので、Claude Code を起動するシェルの環境変数として設定してください。
 - `.codiel/config.json` の `raguel` を書き換えるのは、run が active でないときにしてください。run が active か awaiting_human の間は、codiel の hook が `.codiel/config.json` の全体・`RAGUEL_CONFIG` のファイル・ケースファイルの置き場への書き込みを拒みます。設定を変えるときは run を止めるか、利用者が自分の手で変えます。
 
-### パネルのプロバイダーは claude と codex から選ぶ
+### Jev(TYPESAFE_API_KEY)を設定すると内容も判定する
 
-パネル(adversarial・steelman・crosscheck・meta)は、既定では `claude` CLI で動きます。`judge.provider` で `codex` に切り替えられ、`panel.perPanelist.<名前>.provider` でパネリストごとに上書きできます。`judge.provider: none` は LLM を起動しないので、パネルが要る評価はすべて ASK になります。
+Raguel の判定は、決定論のルール層に、Jev(TypeSafe AI)による判定を足した形です。正規表現と語彙のルールは文脈を見ないため、説明文の中の `rm -rf /` を誤検知したり、否定文や中身の無い欄を見逃したりします。Jev はこれを補い、さらに成果物が objective を満たすか(code なら範囲外の変更・テストの弱体化・セキュリティ上の持ち込みの有無、設計なら矛盾や未決の決定の有無)を、種別ごとの固定の問いで判定します。codiel は Jev を推奨依存とします。
 
-- claude は Claude Code のログインをそのまま使い、Anthropic API を必須にしません。
-- codex を使うには、`codex` CLI が PATH にあり、`codex login` を済ませておきます。認証は `CODEX_HOME`(既定は `~/.codex`)だけで通ります。
-- **claude のパネリストは `--setting-sources project` と空の作業ディレクトリで起動し、利用者の hooks・CLAUDE.md・プラグインを読みません。** ログインは保たれます。
-- **codex のパネリストは、`--sandbox read-only` と `--disable shell_tool`・`unified_exec`・`hooks` で隔離します。** 書き込みとシェルの実行を止め、利用者の hooks を動かしません。ただし `$CODEX_HOME/AGENTS.md` は止められず、パネリストに読まれます(既知の限界)。そこに書いた全体の指示は、パネリストの判定に混じりえます。`AGENTS.md` を置いている利用者は、codex を選ぶかどうかをそれを踏まえて決めてください。
+- 環境変数 `TYPESAFE_API_KEY` を設定すると、自動で使います。有効にする設定はありません。
+- 鍵が無いときは、ルール層だけで判定します。Jev による内容の判定と文脈の補正は行わず、`contextJudge/unavailable`(info)の所見を残します。判定が ASK や degraded になることはありません。
+- **鍵があると、検査する成果物(差分・ファイルの本文)が、秘密情報の伏せ字を当てた後の形で TypeSafe AI へ送られます。** 鍵を設定するかどうかは、その内容を送ってよいかを踏まえて決めてください。
+- 秘密情報の混入は、`common/secrets` が stop を出した時点で Jev を呼ばずに止めます(`code/protected-paths` と `casefile/tampered` の stop も同じです)。ただし、ルールが見逃した秘密情報は外へ出えます。
+- Jev が動かせる向きは限られます。破壊操作の stop を ask に下げる向きと、語彙系の info を ask に上げる向きなどの補正と、内容の問いが閾値の外のときの ask です。Jev 単独で STOP も PROCEED も出しません。
+- 判定の閾値は `contextJudge.thresholds` の `lower`(既定 0.5。確率がこれ以下なら stop を ask に下げ、「満たす」型の問いを ask にする)と `raise`(既定 0.7。これ以上なら info を ask に上げ、「持ち込む」型の問いを ask にする)です。
+- 鍵があっても、Jev が失敗した(時間切れ・応答の形の不正)・入力が大きすぎるときは、失敗した問い合わせの結果だけを使わず、`contextJudge/unavailable`(info)に原因を残します。再試行はしません。判定が ASK や degraded になることはありません。
 
-### codex と Jev には成果物が外部へ送られる
+### 評価は Jev の上限(既定 20 秒)で返る
 
-- `judge.provider` を `codex` にすると、検査する成果物(差分・ファイルの本文・前フェーズの証拠)が OpenAI へ送られます。
-- Jev の文脈判定を有効にすると、成果物が秘密情報の伏せ字を当てた後の形で TypeSafe AI へ送られます。
-- 既定は claude で、Jev は無効です。秘密情報の混入は、`common/secrets` が stop を出した時点でパネルも Jev も呼ばずに止めるので、外部へ送られません。ただし、ルールが見逃した秘密情報は外へ出えます。
+Jev の問い合わせは 2 本を並列に送り、1 回の上限は `contextJudge.timeoutMs`(既定 20000。ミリ秒)です。LLM を起動するパネルは無いので、評価は通常この上限の範囲で返ります。鍵が無ければルール層だけなので、待ちはほとんどありません。
 
-### Jev の文脈判定は既定で無効である
+Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウンドへ移し、完了の通知で結果を返します。通常の評価はこの手前で返りますが、移ったときは codiel が通知を待ち、待つ間に evaluate を呼び直しません。
 
-正規表現と語彙の判定は文脈を見ないため、説明文の中の `rm -rf /` を誤検知したり、否定文や中身の無い欄を見逃したりします。Jev(TypeSafe AI)による文脈判定は、これを補う任意の機能です。
+`degraded` になるのは、設定を読み込めない・Raguel の内部エラーのときだけです。degraded は、成果物の懸念ではなく Raguel 側の障害を表し、codiel は「再評価 / そのまま承認 / 止める」を人に聞きます。
 
-```json
-{
-  "raguel": {
-    "contextJudge": { "enabled": true }
-  }
-}
-```
+### 撤去した設定キーは警告付きで無視される
 
-- 有効にするには `contextJudge.enabled: true` を書き、環境変数 `TYPESAFE_API_KEY` を設定します。
-- 判定の閾値は `contextJudge.thresholds` の `lower`(既定 0.5。確率がこれ以下なら stop を ask に下げる)と `raise`(既定 0.7。これ以上なら info を ask に上げる)です。
-- Jev が動かせるのは、破壊操作の stop を ask に下げる向きと、語彙系の info を ask に上げる向きなど、限られた向きだけです。単独で STOP も PROCEED も出しません。
-- 鍵が無い・Jev が失敗した・入力が大きすぎるときは、その対象を決定論の規則で判定し、`contextJudge/unavailable` の所見を残します。判定が ASK に倒れることはありません。
-
-### 評価は 120 秒を超えるとバックグラウンドへ移る
-
-1 回の評価は、standard で 2 分前後、critical で 4 分前後かかります。Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウンドへ移し、完了の通知で結果を返します。codiel はその通知を待ち、待つ間に evaluate を呼び直しません。
-
-| 設定 | 既定 | 意味 |
-| --- | --- | --- |
-| `judge.timeoutMs` | 180000(3 分) | パネリスト 1 回の呼び出しの時間の上限 |
-| `judge.deadlineMs` | 600000(10 分) | 評価全体の締切。上限は 1800000 |
-
-失敗した呼び出しは 1 回だけ再試行します。それでも失敗するか締切を超えたときは、評価が `judgeStatus: degraded` の ASK になります。degraded は、成果物の懸念ではなく Raguel 側の障害を表します。codiel は「再評価 / そのまま承認 / 止める」を人に聞きます。
+LLM パネルと重さ判定の撤去(ADR-012)で、`judge`・`weight`・`panel` の全体と `contextJudge.enabled` は廃止しました。`.codiel/config.json` に残っていても、読み込みエラーにはならず、無視されます。評価のたびに、無視したキーを並べた警告が `reasons` に 1 件出るので、設定から削除してください。
 
 ### 保護パスの既定の除外と生成物の宣言は、使い終えたら戻す
 
@@ -253,7 +233,7 @@ Raguel の設定は、プロジェクトルートの `.codiel/config.json` の `
 ```
 
 - `excludeDefaults` は、既定の glob のうち保護から外すものを、文字列で完全に一致する形で名指しします。既定に無い文字列は読み込みエラーです。`globs` は既定との和集合なので、`globs` で既定の保護を外すことはできません。
-- `generated` は、生成物のパスの glob です。生成物には `common/secrets` だけを当て、保護パス・重さ判定・パネル・Jev の対象から外します。リポジトリ全体を生成物にする glob(`**/*` など)は宣言できません。
+- `generated` は、生成物のパスの glob です。生成物には `common/secrets` だけを当て、保護パス・Jev の対象から外します。リポジトリ全体を生成物にする glob(`**/*` など)は宣言できません。
 - 生成物だけの差分には `code/generated-only` の info が付きます。宣言したパスに手書きの変更を紛れ込ませても、生成物との対応は検証されません(既知の限界)。
 - 外した glob と `generated` は、評価の応答の `policy.protectedPaths` と `list_rules` に毎回出ます。
 - **`excludeDefaults` は、run が終わったら戻してください。** IaC や CI を直す事情が過ぎても外したままだと、その変更が STOP されません。`generated` は、生成物を同じコミットに入れる規約が続く間は残して構いません。

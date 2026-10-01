@@ -19,7 +19,7 @@ digraph preparing_design_agendas {
   write [label="agenda.md を出力書式で作成", shape=box];
   selfcheck [label="各論点の根拠を即答できるか?\n漏れた分岐は無いか?", shape=diamond];
   fix [label="根拠不明な論点を削除/修正\n漏れた分岐を追加", shape=box];
-  done [label="architect 報告\n(agenda.md パス + 論点数)\n※コミットはオーケストレーター", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  done [label="agenda.md を書き終える\n(agenda.md パス + 論点数)\n※コミットもオーケストレーター", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   read_issue -> read_docs -> read_code -> extract -> unknowns;
   unknowns -> extract [label="No: 落ちている不明点あり"];
@@ -83,7 +83,7 @@ digraph writing_design_docs {
   write [label="design.md を出力書式で作成", shape=box];
   selfcheck [label="各変更対象の根拠を\nintent上で即答できるか?", shape=diamond];
   demote [label="根拠不明な行を削るか\n要件との対応を書き直す", shape=box];
-  done [label="architect 報告\n(design.md パス + 影響 unit 数)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  done [label="design.md を書き終える\n(design.md パス + 影響 unit 数)\n※コミットもオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ndesign ゲート(evaluate_design)\nへ引き継ぎ", shape=ellipse];
 
   read_issue -> read_discussion -> read_docs -> read_existing -> map_criteria -> check_criteria;
@@ -108,7 +108,7 @@ digraph writing_test_specs {
   rankdir=TB;
   node [fontname="sans-serif"];
 
-  read_design [label="design.md の\n影響を受ける機能単位を読む\n(軽量な run では intent と持続層、\n同定の委譲が渡した一覧)", shape=box];
+  read_design [label="design.md の\n影響を受ける機能単位を読む\n(軽量な run では intent と持続層、\nオーケストレーターが同定した一覧)", shape=box];
   read_criteria [label="intent の受け入れ基準を読む", shape=box];
   for_each_unit [label="仕様のディレクトリ(ID)ごとに処理", shape=box];
   exists [label="<testsDir>/<ID>/\nが既存か?", shape=diamond];
@@ -303,10 +303,10 @@ digraph running_regression_tests {
   mode [label="起動モードは?\n(run 経由 test-loop / 単独 /codiel:test)", shape=diamond];
   scope [label="回帰範囲を決定\n(<testsDir>/**/spec.md の tests\n+ プロジェクトの test コマンド)", shape=box];
   split [label="spec.md の frontmatter parallel で\n並列可否を仕分ける", shape=box];
-  run_tests [label="parallel: true は同時実行(上限4)\nそれ以外は直列で実行", shape=box];
+  run_tests [label="自分で実行するテスト(test コマンドと units/)は直列、\ne2e/ の委譲は parallel: true だけ同時実行(上限4)", shape=box];
   judge [label="ケースごとに判定\n(OK / NG / broken / 環境の失敗)", shape=box];
   env_fail [label="環境の失敗は broken にも\nNG にも数えない", shape=box, style=filled, fillcolor="#fff2cc"];
-  retry_env [label="動いている委譲が無いとき\n1 回だけ実行し直す\n(単独実行は自分で行う)", shape=box];
+  retry_env [label="自分で実行したものは、動いている委譲が\n無いとき 1 回だけ自分で実行し直す\n(e2e/ の実行し直しは委譲先が行う。単独実行は自分で行う)", shape=box];
   run_cmd [label="プロジェクトの test コマンドを実行", shape=box];
   verdict [label="判定を決める\n(green / red / broken)", shape=box];
   report [label="レポート作成\n(実行出力の抜粋・NG は4項目)", shape=box];
@@ -431,7 +431,7 @@ digraph fixing_review_findings {
   findings [label="review-<n>.md の\ncritical/high 所見を一覧化", shape=box];
   verify [label="技術的に検証する\n(必要なら読み取り調査を委譲)", shape=box];
   valid [label="妥当か?", shape=diamond];
-  dispatch [label="implementer へディスパッチ\n(契約(b): 所見+根拠+提案+対象ファイル)", shape=box];
+  dispatch [label="実装の委譲先へディスパッチ\n(契約(b): 所見+根拠+提案+対象ファイル)", shape=box];
   rebut [label="PRコメントで反論\n(修正しない)\n反論済み一覧に追記", shape=box, style=filled, fillcolor="#ffe0b3"];
   record_attempt [label="record-attempt fix-loop --slug <slug>\n(ディスパッチ1往復ごと)", shape=box];
   cap [label="exit 3\n(capExceeded)?", shape=diamond];
@@ -440,8 +440,8 @@ digraph fixing_review_findings {
   verdict [label="verdict?", shape=diamond];
   stop_ask [label="STOP/ASKハンドリング\n(raguel-gating)", shape=box, style=filled, fillcolor="#fff2cc"];
   regress [label="running-regression-tests で\n回帰全体を再実行", shape=box];
-  push [label="git push で\nPRブランチを最新化\n(reviewerのstale diff防止)", shape=box, style=filled, fillcolor="#d9e8ff"];
-  rereview [label="該当観点reviewerを再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
+  push [label="git push で\nPRブランチを最新化\n(レビューの委譲先の stale diff 防止)", shape=box, style=filled, fillcolor="#d9e8ff"];
+  rereview [label="該当観点のレビューの委譲先を再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
   remaining [label="反論済み一覧を除いて\ncritical/highが残っているか?\n(新根拠の再主張は未決に戻す)", shape=diamond];
   passgate [label="pass-gate fix-loop --slug <slug>\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
   triage [label="triageフェーズへ\n(medium/lowはここで)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
@@ -588,19 +588,18 @@ digraph codiel_run {
 
   intent [label="[intent]\nオーケストレーター本体(対話)\n+capturing-intent の手順\n(承認ゲートで規模・終え方・\nIssue 起票を決定)", shape=box];
   intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n(続行なら git switch -c <branch>)", shape=box];
-  discuss [label="[discuss]\n成果物を書く委譲(agenda.md)+\nオーケストレーター(進行)+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
-  design [label="[design]\n成果物を書く委譲(design.md)\n+ウォークスルー(ユーザー承認)", shape=box];
-  testspec [label="[test-spec]\n成果物を書く委譲\n(spec.md / cases.md。\n新しい画面は名前の候補)", shape=box];
-  devplan [label="[dev-plan]\n成果物を書く委譲\n(dev-plan.md。触るファイル・前提ステップ・\n通すテスト・環境準備・生成物)", shape=box];
-  parallel [label="単一メッセージで並列ディスパッチ", shape=note];
+  discuss [label="[discuss]\nオーケストレーターが agenda.md を書き、\n進行する+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
+  design [label="[design]\nオーケストレーターが design.md を書く\n+ウォークスルー(ユーザー承認)", shape=box];
+  testspec [label="[test-spec]\n仕様のディレクトリの同定は自分で行い、\ndev-plan のゲートの後に spec.md / cases.md を\n書く委譲を前景で出す(新しい画面は名前の候補)", shape=box];
+  devplan [label="[dev-plan]\nオーケストレーターが書く\n(dev-plan.md。触るファイル・前提ステップ・\n通すテスト・環境準備・生成物)", shape=box];
   testcode [label="[test-code]\n仕様のディレクトリごとに worktree で\nテストコードを書き Red を確認\n(タスクレビュー後に順にマージ)", shape=box];
   waves [label="codiel-state waves で\nwave(依存の無いステップの最大4件の\n並列グループ)に分ける", shape=note];
   implement [label="[implement]\nwave ごとに worktree で並列実装\n(通すテストを Green にする。\nE2E も含む。wave のマージ後に\nrun ブランチで通すテストを実行)", shape=box];
-  testloop [label="[test-loop]\n記録された全テストと test コマンドの\n回帰を確認し、NG を worktree で修正\n(broken は人の確認後に直す)", shape=box];
-  intentsync [label="[intent-sync]\n成果物を書く委譲\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層を更新)", shape=box];
+  testloop [label="[test-loop]\n記録された全テストと test コマンドの回帰を確認\n(units/ と test コマンドは自分で、e2e/ は委譲)\nNG は worktree で修正(broken は人の確認後に直す)", shape=box];
+  intentsync [label="[intent-sync]\nオーケストレーターが書く\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層を更新)", shape=box];
   pr [label="[pr]\ngithub: git push + gh pr create\nlocal: state に記録するだけ", shape=box];
-  review [label="[review]\nreviewer 選択参加+doc/security\n(github は PR にも投稿)", shape=box];
-  fixloop [label="[fix-loop]\nimplementer/tester/reviewer", shape=box];
+  review [label="[review]\nドメイン別+doc/security の観点で\nレビューを委譲\n(github は PR にも投稿)", shape=box];
+  fixloop [label="[fix-loop]\n修正・再レビューは委譲、回帰は\nunits/ を自分で・e2e/ を委譲", shape=box];
   triage [label="[triage]\nユーザー指示+filing-followup-issues\n(github: Issue 起票 / local: intent 草案)", shape=box];
   finalize [label="[finalize]\n原文の要望ごとに達成/未達/要確認/\n持ち越しを判定し status を決める", shape=box];
 
@@ -619,10 +618,8 @@ digraph codiel_run {
   intent_init -> intentonly [label="intent-only"];
   discuss -> design [label="合意記録+complete-phase"];
   design -> testspec [label="PROCEED"];
-  design -> devplan [label="PROCEED"];
-  testspec -> parallel [style=dashed];
-  devplan -> parallel [style=dashed];
-  parallel -> testcode [label="両方 PROCEED"];
+  testspec -> devplan [label="同定の一覧を渡す"];
+  devplan -> testcode [label="dev-plan と spec の\n両方 PROCEED"];
   testcode -> waves [label="PROCEED"];
   waves -> implement;
   implement -> testloop [label="全 wave 完了・PROCEED"];

@@ -160,7 +160,7 @@ medium|low
   への越境であり行わない。
 - **`gh issue create` の実行はこのフェーズでのみ許される**(github モードだけに当たる)。
   `guard-bash`(hooks)はアクティブ run の現在フェーズが triage でなければ `gh issue create` を
-  機械的に deny する(`docs/DESIGN.md` §8 / §2 [9])。
+  機械的に deny する(`docs/DESIGN.md` §8 の PreToolUse(Bash)の行と、§2 の [triage])。
 </HARD-GATE>
 
 ## Red Flags(合理化への反論)

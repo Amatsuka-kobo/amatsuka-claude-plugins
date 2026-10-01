@@ -87,7 +87,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
   片方が PROCEED でももう片方の結果には影響しない。
 - 同一 runId で呼び続けるからこそ `common/resubmission-loop`(暴走的な再提出の検知)が効く。
   フェーズが変わっても try が同じなら `raguelRunId` は変えない。
-- evaluate の呼び出しが長引いてバックグラウンドへ移ったら、完了の通知を待つ。待つ間は evaluate を呼び直さない。
+- evaluate の呼び出しが 120 秒を超えて Claude Code にバックグラウンドへ移されたら、完了の通知を待つ。待つ間は evaluate を呼び直さない。
+  Jev の問い合わせの上限は既定で 20 秒なので、通常は移る前に返る。
 - 評価のあとに成果物を動かさない。code 系フェーズは、pass-gate までコミットを足さない(HEAD が変わると
   pass-gate が止まる)。文書のフェーズは、pass-gate まで文書を書き換えない(内容が変わると止まる)。
 - pass-gate の後も、次のフェーズの `start-phase` までコミットを足さない。`start-phase` は、直前に通ったフェーズの

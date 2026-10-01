@@ -8,17 +8,17 @@ Codiel オーケストレーターの基幹システム。AI が出力した成�
 
 この文書は Raguel 単体の設計を書く。codiel との間で結ぶファイル形式と pass-gate の検査(契約)の正本は
 [`../../docs/raguel-contract.md`](../../docs/raguel-contract.md) で、この文書は要点だけを §16 に載せる。
-利用者が読む運用の説明(設定の書き方、プロバイダーの選び方、外部への送信)は
+利用者が読む運用の説明(設定の書き方、Jev の鍵、外部への送信)は
 [`../../README.md`](../../README.md) の「Raguel の運用」にある。
 
 以下、`src/` は `plugins/codiel/raguel-mcp/src/` を指す。
 
 ## 1. 設計原則
 
-1. **最終判定は決定論的** — LLM 判定を含むすべてのシグナルは、設定に宣言された閾値と合成規則によって機械的に判定へ写像される。決定論的なのは「どの観点をいつ走らせ、結果をどう合成するか」であり、パネリストそのものは LLM 判定である(§7)。
-2. **フェイルクローズド** — 内部エラー・LLM のタイムアウト・設定の不備など、判定不能な状況では必ず `ASK` に倒す。エラーが `PROCEED` になる経路を作らない。
+1. **最終判定は決定論的** — Jev の判定を含むすべてのシグナルは、設定に宣言された閾値と合成規則によって機械的に判定へ写像される。決定論的なのは「どの観点をいつ走らせ、結果をどう合成するか」であり、Jev の確率そのものは LLM の判定である(§8)。
+2. **フェイルクローズド** — 内部エラー・設定の不備など、判定不能な状況では必ず `ASK` に倒す。エラーが `PROCEED` になる経路を作らない。
 3. **説明可能性** — すべての判定は「どのルールが・どの証拠で・どう発火したか」を findings と reasons で返し、証拠をケースファイル(§10)に残す。
-4. **STOP は 4 種の確かな危険に限る** — STOP を出せるのは秘密情報・保護パス・破壊操作・改竄の 4 種だけで、改竄以外は人が誤検知と裁定すれば通せる(§5.1、§4.3)。優先順位は `STOP > ASK > PROCEED` のままで、LLM のスコアが良くても STOP は下がらない。
+4. **STOP は 4 種の確かな危険に限る** — STOP を出せるのは秘密情報・保護パス・破壊操作・改竄の 4 種だけで、改竄以外は人が誤検知と裁定すれば通せる(§5.1、§4.3)。優先順位は `STOP > ASK > PROCEED` のままで、Jev の確率が良くても STOP は下がらない。
 5. **Raguel が評価対象を自分で読む** — 呼び出し側が渡す要約や本文を検査しない。git の差分とファイルを Raguel が読み、その sha256 と HEAD を記録して、codiel の pass-gate が照合する。PROCEED は実物を検査した結果を意味する。
 6. **成果物は信頼しない入力** — 検査対象にはプロンプトインジェクションが含まれ得る前提で、ランダムなノンス付きのデリミタで囲んだデータとして渡す。
 7. **基盤の障害は内容の懸念と分ける** — 障害で ASK になった評価は `judgeStatus: degraded` を持ち、再提出の数にも判例にも入らない(§9)。
@@ -30,7 +30,6 @@ Codiel オーケストレーターの基幹システム。AI が出力した成�
 type Verdict = "PROCEED" | "ASK" | "STOP"
 type JudgeStatus = "ok" | "degraded"        // 基盤が正常に判定できたか(§9)
 type Severity = "info" | "ask" | "stop"
-type WeightTier = "trivial" | "standard" | "critical"
 ```
 
 応答(`EvaluationResult`。型は `src/core/types.ts`)は次のフィールドを持つ。
@@ -39,14 +38,12 @@ type WeightTier = "trivial" | "standard" | "critical"
 | --- | --- |
 | `evaluationId`・`runId`・`phase`・`kind`・`attempt` | 識別。evaluationId は内部エラーでも必ず一意の UUID。attempt は run とフェーズの組ごとの番号 |
 | `verdict`・`judgeStatus`・`degradedReasons` | 判定と、基盤の状態。degraded のとき、原因を `{ source, reason }` の列で持つ |
-| `weightTier` | trivial / standard / critical |
-| `findings` | ルール層とパネルの所見。severity の重い順に 50 件まで。切ったら `reasons` に件数を書く |
+| `findings` | ルール層と Jev の所見。severity の重い順に 50 件まで。切ったら `reasons` に件数を書く |
 | `reasons`・`decisionPoint` | 判定の理由(接頭辞つきの定型文)と、ASK・STOP のとき人が判断することの 1 文。どちらも合成規則から決定論で作る |
 | `subject` | `{ repoPath, head, base?, files: [{ path, sha256 }] }`。評価対象の出所 |
-| `meta` | critical で meta を起動したときの軸別スコアと rationale |
 | `casePath` | 証拠のディレクトリ。証拠の全文は応答に含めない |
 | `policy` | `{ configHash, configSource, version: 2, buildVersion, protectedPaths: { excludedDefaults, generated } }` |
-| `contextJudge` | `{ enabled, status, adjustments }`。Jev の文脈判定の結果(§8) |
+| `contextJudge` | `{ enabled, status, adjustments }`。Jev の結果(§8)。`enabled` は鍵があるかを表す |
 
 `policy.buildVersion` は raguel-mcp の `package.json` の `version` で、MCP サーバーが名乗るバージョンと同じ値である(`build.ts` が esbuild の `define` で埋め込む)。
 
@@ -59,23 +56,20 @@ codiel(オーケストレーター)
 [1] 入力の検証 ── 誤りは isError で返し、記録しない
 [2] 評価対象の取得 ── git diff / ファイルを Raguel が読む。sha256 と HEAD を記録
 [3] ルール層 ── STOP 4 種 / ask / info。前フェーズ証拠の改竄検知
-[4] 文脈判定(任意) ── Jev が stop → ask、info → ask、tier の下限を調整
-[5] 重さ判定 ── code だけ trivial がある。文書は standard 以上
-[6] パネル ── standard: adversarial(文書は前フェーズの証拠があれば ∥ crosscheck)→ steelman
-              critical: adversarial ∥ crosscheck → steelman → meta
-[7] 合成 ── 決定論。judgeStatus(ok / degraded)を決める
-[8] 記録 ── ケースファイル・評価の索引・ハッシュチェーン
+[4] Jev(鍵があるとき) ── 文脈の補正(stop → ask、info → ask)と内容判定(問いが閾値の外なら ask)
+[5] 判例検索 ── ルールの stop が無いとき毎回。失敗判例に似ていれば info
+[6] 合成 ── 決定論の 4 行(§7.1)。judgeStatus(ok / degraded)を決める
+[7] 記録 ── ケースファイル・評価の索引・ハッシュチェーン
   │ EvaluationResult
   ▼
 codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を照合
 ```
 
 - 設定は評価ごとに読み直す(mtime で判定)。読み込みに失敗したら、評価対象を先に取ってから ASK・degraded で返し、所見に設定のパスと理由を載せる(§14.4)。
-- ルール層に stop があればパネルも Jev も起動せず STOP を返す。
-- 空の差分は [2] の後に [4]〜[7] を飛ばして PROCEED になり、[8] の記録を書く(§4.2)。[3] のうち前フェーズの改竄の検証だけは、空の差分でも行う。
+- ルール層に stop があれば Jev を呼ばず STOP を返す。
+- 空の差分は [2] の後に [4]〜[6] を飛ばして PROCEED になり、[7] の記録を書く(§4.2)。[3] のうち前フェーズの改竄の検証だけは、空の差分でも行う。
 - `subject.head` は、プロジェクトルートが git の管理外のときと、最初のコミットが無いリポジトリで文書と判断を評価したときに `null` になる。索引の `head` も同じである。evaluate_code は HEAD を解決できなければ入力の誤りにする。
-- 前フェーズ(§16.1)の最新 attempt の改竄を [3] で検証する。不一致は `casefile/tampered`(stop)である。前フェーズの提出本文の先頭 4000 文字、ルール層の ask 以上の ruleId、meta の rationale、人の裁定を、tier と verdict に関係なく crosscheck と meta に渡す。
-- [2]〜[7] を通して締切(既定 600 秒)が効く(§9)。
+- 前フェーズ(§16.1)の最新 attempt の改竄を [3] で検証する。不一致は `casefile/tampered`(stop)である。
 
 ## 4. MCP ツール
 
@@ -104,7 +98,7 @@ codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を
 2. 比べる終点は常に HEAD で、任意の終点は受けない。pass-gate が HEAD の一致を見るためである。
 3. `paths`(無ければ作業ツリー全体)に未コミットの変更があれば入力の誤りにする。評価した内容と作業ツリーが食い違ったまま記録を残さないためである。設定 `subject.ignoreUncommitted`(glob の列、既定は空)に当たるパスの変更は数えない。会話記録を `docs/chat/` に追記するプラグインのように、run と関係の無いファイルを同じ作業ツリーで書き続ける仕組みがあると、code 系のゲートのたびに入力の誤りになるためである。当たるパスの変更は未コミットのまま評価に入らず、後でコミットすれば HEAD が変わって pass-gate で止まる。宣言した glob は応答の `policy.ignoreUncommitted` と list_rules に毎回出る。固定部が空の glob は宣言できず、ソースのパスは宣言しない(§14.3)。
 4. `core.quotePath=false` などを固定した書式で `git diff` を実行する。差分が 20 MB を超えたら入力の誤りにする。
-5. 差分が空、または差分のファイルがすべて E2E のレポートか生成物(§5.3)なら、Jev・重さ判定・パネルを通さずに PROCEED・trivial とし、`code/no-change`(info)を残す。変更の無いフェーズ(修正の要らない test-loop など)がこれに当たる。差分が空でないときは、レポートと生成物に `common/secrets` を当て、stop が出れば STOP にする。記録は通常どおり書くので pass-gate はそのまま照合できる。前フェーズの改竄の検証(§3 の [3])は変更なしでも行い、改竄があれば `casefile/tampered` の STOP にする。
+5. 差分が空、または差分のファイルがすべて E2E のレポートか生成物(§5.3)なら、Jev を通さずに PROCEED とし、`code/no-change`(info)を残す。変更の無いフェーズ(修正の要らない test-loop など)がこれに当たる。差分が空でないときは、レポートと生成物に `common/secrets` を当て、stop が出れば STOP にする。記録は通常どおり書くので pass-gate はそのまま照合できる。前フェーズの改竄の検証(§3 の [3])は変更なしでも行い、改竄があれば `casefile/tampered` の STOP にする。
 
 plan・design の `paths` は repoPath 相対で、実体パスが repoPath の内側にある通常のファイル(1 MB 以下、UTF-8)だけを受ける。追跡されていないファイルも読む。本文は `=== <path> ===` の見出し行でつなぎ、見出し行はルール層の検査から外す。decision は `decision`・`optionsConsidered`・`rollbackPlan` をこの順に見出し行でつなぐ。
 
@@ -136,7 +130,7 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 | 破壊操作 | `code/destructive-ops` | stop |
 | 改竄 | `casefile/tampered`(Raguel 本体が出す。設定不可) | stop |
 
-ほかのルールは設定で `severity: stop` にできない(読み込みエラー)。パネルと meta は STOP を出せない。`onError` は `ASK` だけを受け付ける。キーは既存の設定を読み込みエラーにしないために残してある。
+ほかのルールは設定で `severity: stop` にできない(読み込みエラー)。Jev は STOP を出せない。`onError` は `ASK` だけを受け付ける。キーは既存の設定を読み込みエラーにしないために残してある。
 
 ### 5.2 ルール一覧
 
@@ -154,7 +148,7 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 | `code/max-diff-lines` | 差分の行数の上限(既定 500) | ask | |
 | `code/test-deletion` | テストの削除・skip 化(Go・Python・Java の命名と skip 表記を含む) | ask | |
 | `code/new-dependency` | package.json の依存ブロックの内側の新しい名前 | ask | |
-| `plan/irreversible-ops` | 不可逆な操作の語(語幹一致)。パネルの入力になる | info | |
+| `plan/irreversible-ops` | 不可逆な操作の語(語幹一致) | info | |
 | `plan/max-steps` | plan のステップ数。`## Step N` の見出しを数え、無ければ番号付きリストを数える | info | |
 | `plan/scope-keywords` | objective に含まれない領域への言及 | info | |
 | `decision/no-alternatives` | 代替案の検討の記載が無い | info | |
@@ -162,7 +156,7 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 | `precedent/failure-match` | 失敗判例に合致した(判例の id を message に書く)。判定は動かさない | info | |
 
 - `.md`・テストファイル・コメント行では、`code/destructive-ops` は stop を ask に、`code/unsafe-exec` は ask を info に下げる。ファイルの種別は Raguel が組んだ diff のパスで決まる。
-- info の所見は判定を動かさず、パネルへのプロンプトの「ルール層の所見」に入る。
+- info の所見は判定を動かさない。
 - 所見はルールとファイルの組ごとに 1 件へ集約し、抜粋は最初の 3 か所だけを残す。`01-rules.json` は 500 件までとする。
 - 各ルールは `params` のスキーマ(名前・型・既定値・和集合か置換か)を持ち、list_rules がそれを載せる。
 
@@ -176,153 +170,58 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 | `generated` | `[]` | 生成物の glob。固定部(ワイルドカードを含む最初のセグメントより前)が空の glob は受けない |
 
 - 保護の glob は、既定の glob と利用者の `globs` の和集合から `excludeDefaults` を除いたものである。
-- `generated` に当たるパスは、保護パス・重さ判定・パネルの入力・Jev の対象から外し、`common/secrets` だけを当てる。パネルには「生成物: `<パス>`(`<行数>` 行の変更)」の 1 行だけを渡す。生成物と保護パスの両方に当たるパスは生成物として扱う。
-- 名前の変更(rename)は、移動元と移動先の両方のパスで判定する。どちらかが保護パスなら `code/protected-paths` を当て、生成物・レポートとして外すのは両方が外す対象のときだけにする。重さの変更ファイル数と近接、`code/test-deletion` も移動元を見る。保護パスのファイルを外へ移して保護を抜ける経路を塞ぐためである。
+- `generated` に当たるパスは、保護パス・Jev の対象から外し、`common/secrets` だけを当てる。生成物と保護パスの両方に当たるパスは生成物として扱う。
+- 名前の変更(rename)は、移動元と移動先の両方のパスで判定する。どちらかが保護パスなら `code/protected-paths` を当て、生成物・レポートとして外すのは両方が外す対象のときだけにする。`code/test-deletion` も移動元を見る。保護パスのファイルを外へ移して保護を抜ける経路を塞ぐためである。
 - 差分が生成物だけなら `code/generated-only`(info)を出し、手書きの変更を生成物に見せかける抜け道の手がかりにする。
 - 外した既定の glob と `generated` は `policy.protectedPaths` と list_rules に毎回出る。
 - E2E のレポートは、`.codiel/config.json` の `testsDir` の配下で、`testsDir` からの相対パスに `reports/` のセグメントを含むファイルである。利用者の設定なしに生成物と同じに扱い、レポートだけの差分は変更なしとして PROCEED にする。判定は codiel の `isE2eReport` と同じである(`src/config/paths.ts`)。
 
-## 6. 重さ判定
+## 6. 重さ判定は撤去した
 
-| kind | 基礎点 | 加点 | tier の下限 |
-| --- | --- | --- | --- |
-| code | 20 | 変更行数 `min(40, floor(行数 / 25) × 5)`、変更ファイル数 `min(20, 2 × 件数)`、保護パス近接 25、新しい依存 15 | なし |
-| design・plan・decision | 30 | 本文の文字数 `min(30, floor(文字数 / 4000) × 5)`。plan はステップ数 `min(20, (件数 − 5) × 2)` | standard |
+重さ判定(tier)と、tier に応じた判定の分岐を廃止した。判例検索は残り、tier に関係なく毎回行う(§12)。理由と決定は ADR-012 と、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` の S7・S8 にある。応答と `verdict.json` に `weightTier` と `meta` は無い。
 
-- tier の閾値は `weight.tiers`(standard 30、critical 70)である。
-- trivial になるのは code の小さな差分だけである。文書は常に standard 以上である。
-- ルール層に ask 以上の所見があれば下限を standard に、`code/protected-paths` か `plan/irreversible-ops` の ask 以上の所見があれば critical にする。
-- 保護パス近接は、保護 glob の固定部が 1 セグメント以上あり、変更パスがその固定部で始まるときに加点する。
-- 重さ判定は tier を上げる方向にだけ働く。危険な変更を軽く見せてパネルを避ける攻撃を、これで封じる。
-- Jev の文脈判定が有効なら、被害と取り消しにくさの水準で tier の下限を上げうる(§8)。
+## 7. LLM 判定パネルは撤去し、合成規則は 4 行である
 
-## 7. LLM 判定パネルとプロバイダー
+adversarial・steelman・crosscheck・meta の LLM パネルと、`claude`・`codex` の子プロセスの起動は撤去した。理由は ADR-012 と、設計書の §2 にある。内容の判定は Jev が担う(§8)。
 
-### 7.1 パネルの構成
+### 7.1 合成規則
 
-| tier | 手順 | meta |
+上から順に評価し、最初に該当した行で確定する(`src/core/verdict.ts` の `synthesize`)。
+
+| 順 | 条件 | verdict |
 | --- | --- | --- |
-| trivial | パネルなし | なし |
-| standard(code) | adversarial → steelman | なし。合成は決定論 |
-| standard(文書) | 前フェーズの証拠があれば adversarial と crosscheck を並列、無ければ adversarial だけ → steelman | なし。合成は決定論 |
-| critical | adversarial と crosscheck を並列 → steelman → meta | あり |
+| 1 | ルール層に stop がある | STOP |
+| 2 | 設定の読み込みエラーか内部エラー | ASK(degraded) |
+| 3 | ルール層か Jev の内容判定に ask がある | ASK |
+| 4 | 上記以外 | PROCEED |
 
-| 役割 | 立場 | 職務 |
-| --- | --- | --- |
-| adversarial | 検察 | 成果物がなぜ失敗するかを攻める。セキュリティ(権限・機密情報・インジェクション・破壊的操作・サプライチェーン)と成果物が暗黙に置く前提を必ず点検し、具体的な失敗の筋書きがあるものだけを所見にする。無ければ所見は 0 件でよい |
-| steelman | 弁護 | adversarial と crosscheck の所見に 1 件ずつ反駁するか認める |
-| crosscheck | 鑑識 | 成果物の主張を事実(リポジトリ・objective・前フェーズの承認済みの証拠)と突合する。未達と逸脱の両方向を見る |
-| meta | 裁判官 | 独立した子プロセスで、ケースファイルの証拠だけを読み、最終根拠文と軸別スコアを出す |
+順 2 の内部エラーは、パイプラインが例外で止まったときだけを指す。個々のルールの例外は `rule-error` の ask で、順 3 の通常の ASK になる。
 
-- steelman は adversarial が有効なときだけ起動する。adversarial が失敗したら steelman は起動しない。
-- 軸のキーは「100 = 問題なし」と読める名前にし、すべてのプロンプトに「スコアは 0〜100 の整数で、100 は問題が無いこと」と書く(向きを書かないと同じ run の中でスコアの向きが逆転した)。軸は評価の種類(decision・plan・design・code)で固定である(`src/panel/rubrics.ts`)。
-- 判例の検索結果は adversarial と meta に「参考: 類似の過去の裁定」として、日付と outcome と ruling を添えて渡す。
-- 成果物はデリミタで囲んだデータとして渡し、システムプロンプトで成果物内の指示に従わないことを明示する。証拠ファイルへの引用にも同じ枠づけと抜粋長の上限を当てる。
-- パネルの構成は設定で変えられない。空にして黙って PROCEED させる構成を作れないようにするためである。
+## 8. Jev は鍵があれば文脈を補正し、内容を判定する
 
-### 7.2 合成規則
+正規表現と語彙の判定は文脈を見ないので、説明文やテストの固定データで誤検知し、否定文や中身の無い欄を見逃す。そこで TypeSafe AI の Jev(`@typesafe-ai/sdk`、鍵は環境変数 `TYPESAFE_API_KEY`)で、ルール層の補正(文脈判定)と成果物の内容の判定(内容判定)を行う。パネルを撤去した後の内容の検査は、この内容判定が担う(ADR-012)。問いの表と閾値の規則は設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` の §4.2・§4.3 にある。
 
-次の順に当て、最初に決まったものを採る。
-
-1. ルール層に stop があれば STOP。パネルは起動しない。
-2. adversarial と crosscheck の所見のうち、severity が ask で confidence が `judge.thresholds.confidence`(既定 70)以上で、steelman に反駁されていないものを採用する。反駁されたものと閾値未満のものは info にする。steelman 自身の所見は判定を動かさない。
-3. 基盤の障害があれば `judgeStatus` を degraded にし、ASK。
-4. ルール層に ask があれば ASK。
-5. 採用された所見があれば ASK。
-6. trivial なら PROCEED。
-7. standard なら PROCEED。パネルのスコアと乖離度は記録するが、判定に使わない。
-8. critical で、adversarial と crosscheck の共通の軸のスコアの差が `judge.thresholds.maxVariance`(既定 30)を超えたら ASK。
-9. critical で meta のいずれかの軸が `judge.thresholds.proceed`(既定 80)未満なら ASK。
-10. PROCEED。
-
-パネルと meta の自由記述(rationale・message)は合成の入力にしない。判定に影響できるのは severity・confidence・スコアの構造化フィールドだけである。
-
-### 7.3 プロバイダーは claude と codex から選ぶ
-
-パネリストと meta は `claude` か `codex` で動かす。どちらも「プロンプトを受けて JSON を返す」実装で、共通のインターフェース(`src/panel/provider.ts` の `JudgeProvider`)を持つ。プロンプトの組み立ては共有し、子プロセスの起動だけが違う。
-
-| キー | 値 | 既定 |
-| --- | --- | --- |
-| `judge.provider` | `claude` / `codex` / `none` | `claude` |
-| `judge.model` | 文字列 | なし(プロバイダーの既定) |
-| `panel.perPanelist.<名前>.provider` | `claude` / `codex` | `judge.provider` |
-| `panel.perPanelist.<名前>.model` | 文字列 | 下の規則 |
-
-- `<名前>` は adversarial・steelman・crosscheck・meta である。
-- model は、`perPanelist.<名前>.model`、そのパネリストの provider が `judge.provider` と同じなら `judge.model`、プロバイダーごとの既定、の順に解決する。別のプロバイダー向けの model 名が流れ込まないようにするためである。
-- claude の既定は adversarial が `sonnet`、ほかが `haiku` である。codex は model を指定せず CLI の既定に任せる。
-- `none` は `judge.provider` だけに置け、LLM を起動しない。パネルが要る評価はすべて degraded の ASK になる。設定 1 行で LLM の検査を黙って外せないようにするためである。
-- 起動した子プロセスへは `RAGUEL_PANELIST=1` を渡す。この値を持つプロセスでは raguel-mcp が起動せず、パネリストが Raguel を呼び返す再帰を防ぐ。
-
-### 7.4 claude の隔離
-
-```
-claude -p --output-format json --model <model> --tools "" --disable-slash-commands
-       --strict-mcp-config --mcp-config '{"mcpServers":{}}'
-       --setting-sources project --no-session-persistence
-       --json-schema <$schema を除いた JSON Schema>
-```
-
-- cwd は呼び出しごとに作る空の一時ディレクトリで、終わったら消す。プロンプトは stdin で渡す。
-- `--setting-sources project` と空の cwd の組み合わせで、ログインは保たれ、利用者の hooks・CLAUDE.md・プラグインは読まれない。実機で確かめた(claude 2.1.284。hooks は 0 件、利用者のプラグインは読まれず、CLAUDE.md は 0 件)。
-- `--strict-mcp-config` は、プラグイン同梱の MCP サーバーも claude.ai のコネクタも、モデルに渡さない。モデルに見えるツールは構造化出力の `StructuredOutput` だけである。
-- env は `process.env` に `RAGUEL_PANELIST=1` を足したものである。鍵を除く操作はしない。子プロセスの `claude` が利用者の `ANTHROPIC_API_KEY` を使うかは利用者の裁量で、プラグインは Anthropic API を必須にしない。
-- JSON Schema から `$schema` を外す。付いていると CLI が拒否する。
-
-### 7.5 codex の隔離と既知の限界
-
-```
-codex exec --ephemeral --ignore-user-config --skip-git-repo-check
-           --sandbox read-only
-           --disable shell_tool --disable unified_exec --disable hooks
-           --output-schema <一時ディレクトリ>/schema.json
-           -o <一時ディレクトリ>/last-message.json
-           [-m <model>] -
-```
-
-- プロンプトは stdin で渡す。cwd・スキーマ・出力は呼び出しごとの空の一時ディレクトリに置く。応答は `-o` のファイルを読んで zod で検証する。
-- 認証は `CODEX_HOME` だけで通る。
-- `--output-schema` は全プロパティを `required` に並べ `additionalProperties: false` を付けた厳格な形を要る(無いスキーマは 400 になる)。任意の欄は `null` を許す型にして必須に並べ、読んだ後で `null` を取り除く(`toStrictSchema`・`stripOptionalNulls`)。
-- 実機の確認(codex-cli 0.144.1)で、`--sandbox read-only` は cwd へのファイルの作成を止め、`--disable shell_tool --disable unified_exec` は cwd の外のファイルの読み取りとシェルの使用を止めた。付けないと cwd の外のファイルを読めた。
-- **既知の限界**: `$CODEX_HOME/AGENTS.md` は止められず、読まれる。`--ignore-user-config`、`-c project_doc_max_bytes=0`、`--disable hooks` のどれを足しても読まれた。`--ignore-rules` は execpolicy の `.rules` を読まないフラグで、`AGENTS.md` には効かない。利用者がそこに書いた指示は、パネリストの判定に混じりうる。既定のプロバイダーは claude で、codex は利用者が選んだときだけ使う。
-- codex を選ぶと、成果物(差分・ファイルの本文・前フェーズの証拠)が OpenAI へ送られる。
-
-## 8. Jev による文脈判定は任意の補強である
-
-正規表現と語彙の判定は文脈を見ないので、説明文やテストの固定データで誤検知し、否定文や中身の無い欄を見逃す。そこで、ルール層と重さ判定の一部を TypeSafe AI の Jev(`@typesafe-ai/sdk`、鍵は環境変数 `TYPESAFE_API_KEY`)で文脈判定できる。
-
-- 既定は無効である(`contextJudge.enabled: false`)。無効のときの挙動は、§5 の決定論の規則そのものである。鍵の無い利用者は決定論で動く。
-- 正規表現の判定を土台に残し、Jev は文脈で絞るか上げるだけである。Jev は単独で STOP も PROCEED も出さない。動かせる向きは、`code/destructive-ops` の stop → ask と、語彙系の info → ask(`plan/irreversible-ops`・`plan/scope-keywords`・`decision/no-rollback`・`decision/no-alternatives`)、および再提出・injection-marker・重さの「上げる」向きだけである。`code/unsafe-exec` は確率を message に添えるだけで severity を変えない。
-- 閾値は `contextJudge.thresholds.lower`(既定 0.5、下げる向き)と `raise`(既定 0.7、上げる向き)である。確率が閾値の間にあるときは決定論の結果のままにする。
-- `contextJudge.timeoutMs` の既定は 20000 で、`judge.deadlineMs` を超える値は読み込みエラーにする。2 つの問い合わせを並列に送る。
-- 送る本文は `common/secrets` の伏せ字を当てた後のものである。入力が上限(合計 51,200 トークン相当、1 つの値 25,600)を超えた対象は、本文を切らずに決定論の結果に残す。切ると、切った先を見ないまま判定を下げうるためである。
+- 鍵があれば自動で使う。有効にする設定は無い(`contextJudge.enabled` は廃止した)。鍵が無い利用者は、ルール層だけで判定し、`contextJudge/unavailable`(info)を 1 件残す。ASK にも degraded にもしない。
+- 正規表現の判定を土台に残し、Jev は文脈で絞るか上げるだけである。Jev は単独で STOP も PROCEED も出さない。動かせる向きは、`code/destructive-ops` の stop → ask と、語彙系の info → ask(`plan/irreversible-ops`・`plan/scope-keywords`・`decision/no-rollback`・`decision/no-alternatives`)、再提出・injection-marker の「上げる」向きだけである。内容判定の問いは、閾値の外のとき `judge/<ID>` の ask を足す。`code/unsafe-exec` は確率を message に添えるだけで severity を変えない。
+- 閾値は `contextJudge.thresholds.lower`(既定 0.5、下げる向きと「満たす」型の問い)と `raise`(既定 0.7、上げる向きと「持ち込む」型の問い)である。確率が閾値の間にあるときは決定論の結果のままにする。
+- 問い合わせは、候補の補正と本文(語彙・再提出・injection・内容判定)の 2 本を並列に送る。上限は `contextJudge.timeoutMs`(既定 20000)である。
+- 送る本文は `common/secrets` の伏せ字を当てた後のものである。入力が上限(合計 51,200 トークン相当、1 つの値 25,600)を超えた対象は、本文を切らずに送らない。切ると、切った先を見ないまま判定を下げうるためである。
 - `common/secrets`・`code/protected-paths`・`casefile/tampered` が stop を出したときは Jev を呼ばない(成果物を外部へ送らず、判定も変わらないため)。
-- 鍵が無い・Jev が失敗した・入力が上限を超えた、のいずれかのときは、その対象を決定論の結果で判定し、`contextJudge/unavailable`(info)の所見と `reasons` に原因を残す。`judgeStatus` は ok のままである。再試行はしない。
+- Jev の失敗・入力の上限超過のときは、失敗した問い合わせの結果だけを使わず、成功した側は使って `status` を `partial` にする。本文が失敗したときは、内容判定を行わない。`contextJudge/unavailable`(info)と `reasons` に原因を残す。`judgeStatus` は ok のままで、再試行はしない。
 - 質問の ID・確率・水準・当てた変更は `07-context.json` に残す(本文は入れない)。
-- 有効にすると、成果物が伏せ字の後で TypeSafe AI へ送られる。
+- 鍵があると、成果物が伏せ字の後で TypeSafe AI へ送られる。
 
 ## 9. 基盤の障害を内容の懸念と分ける
 
-- 次のどれかが起きたら `judgeStatus` を degraded にし、`degradedReasons` に書く。パネリストか meta の失敗(再試行の後)、締切の超過、プロバイダーの `unavailable`、内部エラー、設定の読み込みの失敗。
+- 次のどれかが起きたら `judgeStatus` を degraded にし、`degradedReasons` に書く。設定の読み込みの失敗、内部エラー(パイプラインが例外で止まったとき)。
 - degraded の評価の verdict は ASK である。ルール層に stop があれば STOP のままで、`judgeStatus` は ok である。
-- 失敗の所見 `panel/<名前>-error` は判例の firedRules と再提出の比較に入れない。
+- 個々のルールの例外は `rule-error` の ask(通常の ASK)になり、degraded にしない。
+- Jev の失敗(タイムアウト・応答の形の不正・入力の上限超過)は degraded にも ASK にもしない。失敗した問い合わせの結果だけを使わず、`contextJudge/unavailable`(info)に原因を残す。再試行はしない(§8)。
 
-| 失敗 | 再試行 |
-| --- | --- |
-| タイムアウト・nonzero-exit・spawn の失敗 | 1 回。締切までの残りが 30 秒未満なら行わない |
-| スキーマの不一致 | 1 回 |
-| Jev の失敗 | 行わない。決定論の結果で進む |
+Jev の問い合わせの時間の上限は `contextJudge.timeoutMs`(既定 20000)だけで決まる。ゲート全体の締切は無い。
 
-締切と時間は次の既定である。
-
-| 設定 | 既定 | 意味 |
-| --- | --- | --- |
-| `judge.timeoutMs` | 180000 | 1 回の呼び出しの時間の上限。`judge.deadlineMs` を超える値は読み込みエラー |
-| `judge.deadlineMs` | 600000(上限 1800000) | ゲート全体の締切。超えた波は障害になり、子プロセスを SIGKILL して `degradedReasons` に `deadline` と書く |
-
-- 1 回の呼び出しの時間は `min(judge.timeoutMs, 締切までの残り − 3000)` である。
-- Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウンドへ移し、完了の通知で結果を返す。この移行を正規の経路とし、codiel は通知を待つ。所要の実測は standard が code 106 秒・文書 119 秒、critical が 243 秒で、1 回の呼び出しの最長は steelman の約 106 秒だった。
-- ツールのハンドラの `extra.signal` が abort したら、動いている子プロセスをすべて SIGKILL し、Jev の呼び出しを止め、その attempt のディレクトリを消して索引に書かない。`progressToken` があるときは、ステップごとに進捗を通知する。
+- Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウンドへ移し、完了の通知で結果を返す。Jev の上限が 20 秒なので、通常は移る前に返る。移ったときは、codiel が通知を待つ。
+- ツールのハンドラの `extra.signal` が abort したら、Jev の呼び出しを止め、その attempt のディレクトリを消して索引に書かない。`progressToken` があるときは、ステップごとに進捗を通知する。
 
 ## 10. ケースファイル・評価の索引・裁定の記録
 
@@ -333,15 +232,14 @@ codex exec --ephemeral --ignore-user-config --skip-git-repo-check
     outcomes.jsonl                        裁定の記録
     <runId>/<phase>/attempt-NN/
       subject.json  submission.txt  00-synthesis.json  01-rules.json
-      02-weight.json  03-adversarial.md  04-steelman.md  05-crosscheck.md
-      06-precedents.json  07-context.json  08-meta.md
-      submission-digest.json  verdict.json
+      06-precedents.json  07-context.json  submission-digest.json
+      verdict.json
   precedents/<projectId>/
     index.json  <id>.json
 ```
 
 - `casesDir` は、`cases` と `precedents` の親である。既定は `~/.raguel` で、作業ツリーの外に置く。判定対象の AI が自分のケースファイルを書き換えて無罪の証拠を作る攻撃への一次防壁である。
-- 証拠ファイルの名前は上の 12 件に固定する。attempt はフェーズ単位で番号を振る。
+- 新しい評価が書く証拠ファイルは、上に載せたものである。`02-weight.json`・`03-adversarial.md`・`04-steelman.md`・`05-crosscheck.md`・`08-meta.md` は書かない。ただし既知の名前の一覧(`EVIDENCE_FILES`)と §11 のチェーンの照合からは消さない。変更前に通したフェーズのケースファイルを、改竄(`casefile/tampered`)とみなさず読むためである。attempt はフェーズ単位で番号を振る。
 - projectId は `storage.projectId` があればそれを使う。無ければ git の共通ディレクトリの実体パスから `<名前>-<sha256 の先頭 12 文字>` を作るので、どの worktree から評価しても同じ値になる。この算出は旧版と違い、旧版のケースファイルと判例は引き継がない(シード判例は残る)。
 - プロジェクトルートは、codiel の `findMainRoot` と同じアルゴリズムの独立実装で決める(`src/project/root.ts`)。`.codiel/config.json` はプロジェクトルートから探す。
 - `submission-digest.json` は、本文の正規化した sha256 と、5-gram の MinHash 署名(128 個の 32 bit の整数)を持つ。固定長なので、大きな本文でも記録が膨らまない。
@@ -365,9 +263,9 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 ## 12. 判例は人の裁定と incident だけから作る
 
 - 判例を作るのは `record_outcome` だけで、§4.3 の表の「判例」列に従う。判定対象の AI は判例ストアに書けない。degraded の評価からは作らない。
-- 判例は `phase` と `ruling` を持つ。`firedRules` から `panel/*-error`・`kernel/*`・`rule-error` を除く。
+- 判例は `phase` と `ruling` を持つ。`firedRules` から `panel/*-error`・`kernel/*`・`rule-error` を除く。`panel/*-error` は、パネルを撤去する前の判例の `firedRules` に残るため、除く正規表現を残してある。
 - 検索は決定論(kind・発火ルールの指紋・変更パスの重なり・語彙類似)で、埋め込みも API も使わない。退役した判例は除く。
-- 上位 `precedent.topN`(既定 5)を adversarial と meta の参考入力にし、`06-precedents.json` に残す。上位に rejected か incident で合成スコア 0.5 以上のものがあれば、`precedent/failure-match`(info)を出す。判定は動かさない。
+- 上位 `precedent.topN`(既定 5)を `06-precedents.json` に残す。検索は、ルールの stop が無いときに毎回行う(tier による省略は無い)。上位に rejected か incident で合成スコア 0.5 以上のものがあれば、`precedent/failure-match`(info)を出す。判定は動かさない。
 - コールドスタート対策として、AI の一般的な失敗パターン(存在しない API の幻覚、テスト削除による偽装パス、スコープ肥大など)を内蔵のシード判例として同梱する。
 - 失敗判例の合致だけが所見になり、approved 判例は参考情報に留める。その時の文脈での承認は、次の文脈に自動で延ばせないためである。
 
@@ -375,15 +273,12 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 
 設定でどう変えても壊れない制約である。
 
-1. **弁護は検察なしに存在できない** — steelman は adversarial が起動したときだけ起動する。
-2. **昇格のみ** — 重さ判定・steelman の反駁・approved 判例は、ルール層と sealed ルールの所見を下げられない。降格できるのはパネル発の所見だけである。Jev が動かせる向きは §8 の限られた向きに限る。
-3. **sealed ルール** — `common/secrets`・`common/injection-marker`・`common/resubmission-loop`・`code/protected-paths`・`code/destructive-ops`・`code/unsafe-exec` は設定で無効化できず、severity を既定より軽くできない。例外は `code/protected-paths` の `excludeDefaults` と `generated` で、名指しした既定の glob と生成物だけを外せ、外したものは応答に出る。
-4. **meta の独立性** — meta は別の子プロセスで起動する。成果物を作ったコンテキストとは状態を共有せず、入力はケースファイルの証拠だけで、ツールも実行できない。
-5. **分散は ASK に倒す** — critical で、パネル間のスコアの乖離が閾値を超えたら平均せず ASK。
-6. **証拠・判例の書き込みは Raguel 本体の専権** — 検証の不一致は STOP である。
-7. **自由記述は判定を動かせない** — 判定に影響できるのは構造化フィールドだけである。
-8. **`onError: PROCEED` は指定できない** — フェイルクローズド。
-9. **STOP は 4 種に限る** — パネルと meta は STOP を出せない。
+1. **昇格は人の裁定でしか下げない** — approved 判例はルール層と sealed ルールの所見を下げられない。Jev が動かせる向きは §8 の限られた向きに限る。
+2. **sealed ルール** — `common/secrets`・`common/injection-marker`・`common/resubmission-loop`・`code/protected-paths`・`code/destructive-ops`・`code/unsafe-exec` は設定で無効化できず、severity を既定より軽くできない。例外は `code/protected-paths` の `excludeDefaults` と `generated` で、名指しした既定の glob と生成物だけを外せ、外したものは応答に出る。
+3. **証拠・判例の書き込みは Raguel 本体の専権** — 検証の不一致は STOP である。
+4. **自由記述は判定を動かせない** — 判定に影響できるのは構造化フィールドだけである。
+5. **`onError: PROCEED` は指定できない** — フェイルクローズド。
+6. **STOP は 4 種に限る** — Jev は STOP を出せない。
 
 ## 14. 設定
 
@@ -415,20 +310,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
       "projectId": "<任意>",
       "retention": { "maxRuns": 200, "maxDays": 90 }
     },
-    "judge": {
-      "provider": "claude",
-      "model": "<任意>",
-      "timeoutMs": 180000,
-      "deadlineMs": 600000,
-      "maxConcurrency": 4,
-      "thresholds": { "proceed": 80, "confidence": 70, "maxVariance": 30 }
-    },
-    "weight": { "tiers": { "standard": 30, "critical": 70 } },
-    "panel": {
-      "perPanelist": { "adversarial": { "provider": "<任意>", "model": "<任意>" } }
-    },
     "contextJudge": {
-      "enabled": false,
       "model": "<任意>",
       "timeoutMs": 20000,
       "thresholds": { "lower": 0.5, "raise": 0.7 }
@@ -447,8 +329,8 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 - すべてのオブジェクトは厳格で、未知のキー・ルール ID・パラメータ・未知の `version` は読み込みエラーにする。厳しくするつもりの設定が黙って効かない事態を防ぐためである。
 - マージは、オブジェクトは再帰、配列は置換とする。例外は、ルールの `params` のスキーマが「和集合」と宣言した配列(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)で、既定値との和集合にする。
 - sealed ルールの無効化・severity の引き下げ、stop にできないルールの `severity: stop`、不正な正規表現や広すぎる `allowPatterns`(空文字列に一致する、内蔵の見本の秘密情報に一致する)、`excludeDefaults` の既定に無い文字列、固定部が空の `generated` と、固定部が空の `subject.ignoreUncommitted`(作業ツリー全体を未コミットの検査から外す宣言を防ぐ)は読み込みエラーにする。`subject.ignoreUncommitted` にソースのパスを宣言すると、未コミットのコードの変更が評価に入らないままテストの結果に効く。宣言は毎回応答に出て、run の間は guard が `.codiel/config.json` への書き込みを拒む。README には、run と関係の無いファイルの置き場だけを書くと記す。`allowPatterns` は行ではなくトークンに当てる。
-- `judge.deadlineMs` が 1800000 を超える、`judge.timeoutMs` と `contextJudge.timeoutMs` が `judge.deadlineMs` を超える、`contextJudge.thresholds` の `lower` が `raise` 以上か 0〜1 の外、`resubmission-loop.similarityThreshold` が 0.95 を超える、も読み込みエラーである。
-- `perPanelist` のキーは adversarial・steelman・crosscheck・meta だけで、`perPanelist.<名前>.provider` に `none` は置けない。`judge.provider` と `perPanelist.<名前>.provider` は `claude`・`codex`・`none` だけを受ける。
+- `contextJudge.timeoutMs` が 1800000 を超える、`contextJudge.thresholds` の `lower` が `raise` 以上か 0〜1 の外、`resubmission-loop.similarityThreshold` が 0.95 を超える、も読み込みエラーである。
+- 撤去した `judge`・`weight`・`panel` の全体と `contextJudge.enabled` は、読み込みエラーにせず取り除き、取り除いたキーを並べた警告を評価のたびに `reasons` に 1 件残す。既存の利用者の設定ファイルで run が止まらないようにするためである(ADR-012)。
 
 ### 14.4 設定が壊れていても起動し、次の評価で直る
 
@@ -458,22 +340,20 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 
 ```
 src/
-  server.ts              エントリポイント。stdio transport でツールを登録。RAGUEL_PANELIST=1 なら起動しない
+  server.ts              エントリポイント。stdio transport でツールを登録
   tools/                 MCP ツール(evaluate* 4 本・recordOutcome・listRules・listPrecedents・retirePrecedent)
   codiel/phases.ts       codiel のフェーズの表
   project/root.ts        プロジェクトルート・projectId・casesDir の解決
   subject/               git 差分の作成、ファイルの読み込み、repoPath の検証、決定の本文
-  core/                  pipeline・verdict(合成規則)・weight・invariants・types・log
+  core/                  pipeline・verdict(合成規則)・invariants・types・log
   rules/                 ルールのレジストリと params の表。common/ code/ plan/ decision/
   context/               Jev の呼び出し(jev.ts)と、質問の組み立て・結果の当て方(judge.ts)
-  panel/                 provider・claudeCli・codexCli・runner・prompts・rubrics・schema・panelists/
   casefile/              store(索引・裁定・証拠)・hashchain・digest(MinHash)
   precedent/             store・retrieval・seed/
   config/                schema・defaults・loader・paths(testsDir と E2E のレポートの判定)
-  testing/               fake-claude.mjs・fake-codex.mjs(子プロセスとして起動する fake)
 ```
 
-依存は `@modelcontextprotocol/sdk`・`@typesafe-ai/sdk`・`picomatch`・`zod` である。judge は `claude` と `codex` の CLI を子プロセスで起動するので、追加の依存は要らない。テストは vitest で、対象と同じディレクトリの `__test__/` に置く。パネルと Jev は fake に差し替え、実際の `claude`・`codex`・Jev の API は呼ばない。
+依存は `@modelcontextprotocol/sdk`・`@typesafe-ai/sdk`・`picomatch`・`zod` である。子プロセスは起動しない。テストは vitest で、対象と同じディレクトリの `__test__/` に置く。Jev は `PipelineDeps.jevCall` で差し替え、実際の Jev の API は呼ばない。
 
 ## 16. codiel との契約
 
@@ -509,8 +389,10 @@ src/
 
 - 原則「STOP は覆せない」を改め、STOP を 4 種に絞って、改竄以外は人の裁定で通せるようにした。`judge.canStop` は廃止した。
 - 評価の入力を、呼び出し側が本文を渡す形から、Raguel が git とファイルを読む形へ置き換えた。フェーズを必須にし、attempt をフェーズ単位で数える。
-- 前提監査のパネリストと判例調査のパネリストは撤去し、職務を adversarial と参考入力に移した。standard は meta を持たない。
+- 前提監査のパネリストと判例調査のパネリストは撤去し、職務を adversarial と参考入力に移した。その adversarial も後に撤去した(ADR-012)。
 - 設定の置き場を、リポジトリ直下の `raguel.config.yaml` から、`.codiel/config.json` の `raguel` キー(JSON)へ移した。旧 YAML の設定は `/codiel:init` が移す。
-- パネルのモデルは、プロバイダー(claude / codex)とパネリストごとの上書きで決める。旧設計にあった、評価の種類ごとにモデルを切り替える設定は無い。
+- パネルのモデルを決める設定(プロバイダーとパネリストごとの上書き)は、パネルごと撤去した。
 - `code/dangerous-patterns` を、破壊操作(stop)と実行・権限(ask)の 2 つのルール ID に分けた。
 - 判定に `judgeStatus` を足し、基盤の障害を内容の懸念と分けた。
+
+- LLM パネル(adversarial・steelman・crosscheck・meta)と重さ判定を撤去し、Jev の内容判定に置き換えた(ADR-012、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md`)。`judge`・`weight`・`panel`・`contextJudge.enabled` の設定は廃止した。

@@ -67,13 +67,13 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 
 ### Codiel 👀🌿
 
-ユーザーの「やりたいこと」を intent 文書(`docs/intents/YYYY-MM-DD-<slug>.md`)に聞き取り、それを起点に設計・開発・テスト・PR 起票・レビューを一気通貫で行うプラグインです。設計・実装・テスト・レビューの作業は、内容に応じた委譲先へ渡して進行します。<br>
+ユーザーの「やりたいこと」を intent 文書(`docs/intents/YYYY-MM-DD-<slug>.md`)に聞き取り、それを起点に設計・開発・テスト・PR 起票・レビューを一気通貫で行うプラグインです。設計書・実装計画書・intent 文書の執筆とテストコマンドの実行はオーケストレーターが自分で行い、テスト仕様・テストコード・実装・レビュー・E2E の実行は内容に応じた委譲先へ渡して進行します。<br>
 `/codiel:run` は、Issue 番号・intent 文書のパス・引数なしの 3 つの形で始められます。intent 文書には、ユーザーの言葉を要約せずに残す原文(`## ASIS` / `## TOBE`)と、受け入れ基準などの派生文を分けて書き、完了の判定は原文に照らして行います。GitHub を使えない環境でも、PR を作らない local モードで最後まで進みます。<br>
 `/codiel:init` は保護パスを聞き取り、運用の規律を `.claude/rules/codiel.md` に、置き場の地図を CLAUDE.md の `## Codiel` に置きます。ARCHITECTURE の散文や GOTCHAS は生成しません。ドメインマップが無くても動きますが、Metatron を併用するとシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を持てます。<br>
 変更ごとの intent とは別に、領域ごとの持続層(`docs/intents/domains/<領域>.md`)に目的と意図的な制約を残し、次の run の聞き取り・設計・レビューの前提にします。<br>
 実装はテスト駆動で進みます。test-code フェーズが、仕様からユニットテストと E2E テストを先に書いて失敗を確かめ、implement フェーズがそれを通します。テストの仕様は `.codiel/config.json` の `testsDir`(既定は `docs/codiel/tests`)の下に置き、implement 以降にテストを書き換えようとすると hook が確認を求めます。<br>
 `.codiel/config.json` には testsDir のほか、run の文書(議題・設計・実装計画)の置き場 `runsDir`(既定は `docs/codiel/runs`)と Raguel の設定 `raguel` を置き、git で共有します。run の state と報告は `.codiel/runs/` に残り、`/codiel:init` が足す `.gitignore` の行で git から外れます。<br>
-Raguel のパネルのプロバイダーは `claude` と `codex` から選べ、既定は `claude` です。<br>
+Raguel は決定論のルール層で判定します。環境変数 `TYPESAFE_API_KEY` があれば、Jev(TypeSafe AI)が成果物の内容も判定しますが、その場合は秘密情報の伏せ字を当てた後の成果物が TypeSafe AI へ送られます。鍵が無ければルール層だけで判定し、Jev は推奨依存です。撤去した `judge`・`weight`・`panel` などの設定キーは、警告付きで無視されます。<br>
 implement フェーズは、実装計画の Step を依存関係からグループに分け、同じグループの Step を git worktree で並列に実装してからマージします。<br>
 run の間に GitHub へ投稿する本文には `<!-- codiel:generated -->` を付け、hook がこれを確かめます(run の間に gh-utility から投稿すると拒否されます)。スクリーンショットなどの画像は、`gh --attach` か claude-in-chrome で本文に載せます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。

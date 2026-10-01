@@ -36,15 +36,14 @@ Raguel は codiel のゲート付きフェーズを定数として持つ(`R/codi
     outcomes.jsonl                        裁定の記録
     <runId>/<phase>/attempt-NN/
       subject.json  submission.txt  00-synthesis.json  01-rules.json
-      02-weight.json  03-adversarial.md  04-steelman.md  05-crosscheck.md
-      06-precedents.json  07-context.json(Jev の文脈判定が有効なときだけ)
-      08-meta.md  submission-digest.json  verdict.json
+      06-precedents.json  07-context.json(Jev を使ったときだけ)
+      submission-digest.json  verdict.json
   precedents/<projectId>/
     index.json
     <id>.json
 ```
 
-証拠ファイルの名前は 12 件に固定される(`R/casefile/store.ts` の `EVIDENCE_FILES`)。`verdict.json` は証拠の 12 件に含まれず、その `evidence` の列と `chainHead` が 12 件を束ねる。attempt の番号は run とフェーズの組ごとに 1 から振り、ディレクトリ名の `NN` は 2 桁で、並べるときは数値で比べる。
+既知の証拠ファイルの名前は 12 件に固定される(`R/casefile/store.ts` の `EVIDENCE_FILES`)。`02-weight.json`・`03-adversarial.md`・`04-steelman.md`・`05-crosscheck.md`・`08-meta.md` は新しい評価では書かないが、改竄の検査では既知として扱う。変更前に通したフェーズのケースファイルが、改竄とみなされないようにするためである。`verdict.json` は証拠の 12 件に含まれず、その `evidence` の列と `chainHead` が、書かれた証拠を束ねる。attempt の番号は run とフェーズの組ごとに 1 から振り、ディレクトリ名の `NN` は 2 桁で、並べるときは数値で比べる。
 
 ### 置き場の解決
 
@@ -128,8 +127,8 @@ Raguel はこの判定を `classifyPath(repoRel, config, testsDir)` で使い、
 | --- | --- |
 | `schemaVersion` | `2` |
 | `evaluationId`・`runId`・`phase`・`kind`・`attempt` | 識別 |
-| `verdict`・`judgeStatus`・`degradedReasons`・`weightTier` | 判定 |
-| `findings`・`reasons`・`meta` | 判定の中身 |
+| `verdict`・`judgeStatus`・`degradedReasons` | 判定 |
+| `findings`・`reasons` | 判定の中身 |
 | `subject` | `subject.json` と同じ内容 |
 | `policy` | `{ configHash, configSource, version: 2, buildVersion }`。`protectedPaths` は含まない |
 | `at` | ISO 8601 |

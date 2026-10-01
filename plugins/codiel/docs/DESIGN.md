@@ -41,16 +41,16 @@
 | 成果物の置き場 | 対象プロジェクトの `.codiel/` 配下。feature ブランチにコミットする |
 | コマンド構成 | `/codiel:run [<Issue番号> \| <intentパス>]`(省略可。オーケストレーター)+ `/codiel:test`(単独テスト実行)。state による再開機能 |
 | 連携モード | `github`(gh / GitHub MCP で起票・PR・投稿する)と `local`(投稿せず記録だけで終える)の 2 択。§0 で判定し run の間固定する(§2) |
-| 実行モデル | メインセッション=オーケストレーター。各フェーズは専用サブエージェント(fresh コンテキスト・ツール制限付き)が実行 |
+| 実行モデル | メインセッション=オーケストレーター。文書(agenda.md・design.md・dev-plan.md・discussion.md・intent 文書)の執筆と、テストコマンドの実行は、オーケストレーターが自分で行う。spec.md / cases.md・テストコード・実装・レビュー・E2E の実行は、サブエージェント(fresh コンテキスト・ツール制限付き)へ委譲する |
 | テスト仕様書 | run 使い捨てではなく**機能単位の永続資産**。機能更新時に仕様書を更新しテストケースを再生成する |
-| テスト体系 | 仕様書駆動テストは **Playwright 等の E2E**。ユニットテストは別レイヤーで、implementer が ARCHITECTURE.md のテスト方針宣言に従い TDD の中で作成する |
-| implementer | frontend / backend / data のドメイン別 3 体 |
-| reviewer | frontend / backend / data / doc / security の 5 体 |
-| ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、implementer / reviewer も汎用 1 体で回す |
+| テスト体系 | 仕様書駆動テストは **Playwright 等の E2E**。ユニットテストは別レイヤーで、実装の委譲先が ARCHITECTURE.md のテスト方針宣言に従い TDD の中で作成する |
+| 実装の委譲先 | frontend / backend / data のドメイン別に分ける |
+| レビューの委譲先 | frontend / backend / data / doc / security の観点別に分ける |
+| ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、実装とレビューの委譲先も汎用の 1 つで回す |
 | runId / 再挑戦 | runId は intent フェーズで決めた **slug**(英小文字ケバブケース)。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 run の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
 | 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
-| 設計ディスカッション | 常に実施・アジェンダ駆動型(論点抽出=architect、進行と記録=オーケストレーター、決定=ユーザー)。discuss は非 GATED、ウォークスルーは design フェーズ内。詳細は `harness-docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md` |
+| 設計ディスカッション | 常に実施・アジェンダ駆動型(論点抽出・進行・記録=オーケストレーター、決定=ユーザー)。discuss は非 GATED、ウォークスルーは design フェーズ内。詳細は `harness-docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md` |
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
 
@@ -67,8 +67,8 @@
                固定する。
                ▶ Raguel: evaluate_decision(承認ゲートで規模・終え方・Issue 起票の 3 項目も決める)
    ▼
-[discuss]      architect が論点リスト agenda.md を作成(選択肢・トレードオフ・推奨案。
-               intent の不明点は全件論点化)→ オーケストレーターがユーザーとディスカッション
+[discuss]      オーケストレーターが論点リスト agenda.md を作成(選択肢・トレードオフ・推奨案。
+               intent の不明点は全件論点化)→ ユーザーとディスカッション
                (「すべて推奨案で進める」ショートカットあり)→ 合意を discussion.md に記録する
                (軽量な run では skip)
                ▶ Raguel ゲートなし(合意の検査は design の evaluate_design が担う)
@@ -80,17 +80,18 @@
                行い、新しい画面があれば候補から名前を決めてから、承認後に evaluate_design する。
                ▶ Raguel: evaluate_design
    ▼
-[test-spec ∥ dev-plan]  並列実行:
-               (a) test-spec: 影響を受ける機能単位ごとにテスト仕様書 spec.md を新規作成 or 更新し、
-                   続けて ID 付きテストケース表 cases.md を(再)生成する(§4)。軽量な run では、
-                   フェーズの開始時に仕様のディレクトリを同定する読み取りだけの委譲を 1 回出し、
-                   新しい画面があれば名前を聞いてから dev-plan と同じ一覧を使う
-               (b) dev-plan: 開発手順書を作成。各ステップにドメイン(frontend/backend/data)タグ・
-                   触るファイル・前提ステップ・通すテスト(仕様のディレクトリの ID)を書く。文書の
-                   先頭に `## 環境準備`(worktree で依存をインストールするコマンド)と
-                   `## 生成物`(ビルド生成物を各ステップでコミットする方式 a か、全 wave の後の
-                   最終ステップでまとめる方式 b か)を置く
-               ▶ Raguel: evaluate_plan ×2(それぞれ独立にゲート)
+[test-spec → dev-plan → test-spec の委譲]  直列(設計書 2026-10-01-codiel-run-speedup-design.md §5.3):
+               1. オーケストレーターが仕様のディレクトリを同定する(軽量でなければ design.md の
+                  一覧を使い、軽量な run では新しい画面があれば名前を聞いてから同定する)
+               2. dev-plan: オーケストレーターが開発手順書 dev-plan.md を書く。各ステップに
+                  ドメイン(frontend/backend/data)タグ・触るファイル・前提ステップ・通すテスト
+                  (仕様のディレクトリの ID)を書く。文書の先頭に `## 環境準備`(worktree で依存を
+                  インストールするコマンド)と `## 生成物`(ビルド生成物を各ステップでコミットする
+                  方式 a か、全 wave の後の最終ステップでまとめる方式 b か)を置く
+               3. test-spec: dev-plan のゲートの後に、影響を受ける機能単位ごとにテスト仕様書
+                  spec.md を新規作成 or 更新し、続けて ID 付きテストケース表 cases.md を(再)生成する
+                  委譲を前景で出す(§4)。新しい画面の名前の候補は委譲の報告で受け取る
+               ▶ Raguel: evaluate_plan ×2(dev-plan と test-spec をそれぞれ独立にゲート)
    ▼
 [test-code]    仕様のディレクトリごとに worktree を作り、cases.md からテストコード(ユニットと
                E2E)を実装より先に並列で書いて実行し、失敗すること(Red)を確かめる。テストを
@@ -104,8 +105,8 @@
                の wave に分け、lockfile を触るステップは単独の直列グループにする)で、各 wave を
                worktree に並列実装する。各ステップは、そのステップまでで通る仕様のディレクトリ
                (ユニットと E2E の両方。E2E も除外しない。決定 80)を「通すテスト」として通す
-               (Green)。wave のマージの後、オーケストレーターが run ブランチでそのグループの
-               通すテスト(E2E を含む)を実行して確かめる
+               (Green)。wave のマージの後、そのグループの通すテストを run ブランチで実行して確かめる
+               (プロジェクトの test コマンドと `units/` はオーケストレーターが自分で、`e2e/` は委譲で実行する)
                ▶ Raguel: evaluate_code(全 wave の後に 1 回。diff + testResults)
    ▼
 [test-loop]    記録された全テスト(各 spec.md の `tests`)とプロジェクトの test コマンドで回帰を
@@ -131,7 +132,7 @@
                github では PR コメントに投稿し(local では投稿しない)、
                severity(critical / high / medium / low)を付ける
    ▼
-[fix-loop]     critical & high を該当ドメインの implementer が修正 → 回帰テスト再実行
+[fix-loop]     critical & high を該当ドメインの実装の委譲先が修正 → 回帰テスト再実行
                → 再レビュー → critical/high ゼロ & テスト合格まで反復(試行上限あり)
                medium 以下の指摘は修正せず triage へ持ち越す
                レビューで critical/high がゼロなら fix-loop は開始せず
