@@ -17,6 +17,9 @@
 | S9 | オーケストレーターは agenda.md・design.md・dev-plan.md・discussion.md・intent 文書(持続層を含む)を自分で書く |
 | S10 | オーケストレーターはユニットテスト・型検査・lint・ビルドなど、コマンドを実行するだけの作業を自分で行う |
 | S11 | spec.md / cases.md の執筆、テストコード、実装と修正、タスクレビュー、review、E2E の実行は委譲を続ける |
+| S12 | 内容判定の欠落を問う問いに、フェーズの担当範囲を渡す(手動確認の後、§10.1) |
+| S13 | codiel の委譲をバックグラウンド前提に組み替える。委譲の完了待ちは state に記録し、待ちがある間は stop-guard が止めない(§10.2) |
+| S14 | test-spec と dev-plan を並列に戻す。§5.3 の直列化を置き換える(§10.3) |
 
 S1・S2 は ADR-011 の「LLM パネルを残す」決定と、設計書 `2026-09-28-raguel-redesign-design.md` §12 の不採用案(R1「ルールだけに縮める」、§6.7.1「`provider: none` をルールだけで PROCEED するモードにする」)を覆す。理由は §2 に置く。
 
@@ -60,7 +63,7 @@ codiel を最初に設計したとき、パネルを置いた目的は、AI の�
 - HARD-GATE(`ORS:850-856`)は、オーケストレーターが実装・レビュー・テスト作成をせず、design.md も書かないと定める。
 - 文書の執筆の委譲: discuss の agenda.md(`ORS:194`)、design の design.md(`ORS:195`)、dev-plan の dev-plan.md(`ORS:197`)、intent-sync の書き戻しと持続層への取り込み(`ORS:201, 572-593`)。
 - コマンドを実行するだけの委譲: test-loop の回帰の実行(`ORS:200, 505-528`)、fix-loop の回帰(`fixing-review-findings/SKILL.md:76`)、環境の失敗の実行し直し(`ORS:425-431`)、test-spec の仕様のディレクトリの同定(読み取り 1 回、`ORS:212-219`)。
-- 委譲はすべて前景で出す(`ORS:597-600`)。test-spec と dev-plan は同じ応答で 2 件を並列に出す(`ORS:220-221`)。
+- 委譲はすべて foreground で出す(`ORS:597-600`)。test-spec と dev-plan は同じ応答で 2 件を並列に出す(`ORS:220-221`)。
 - 仕様のディレクトリの ID は `units/` か `e2e/` で始まる(`writing-test-specs/SKILL.md:45`)。E2E は ID で見分けられる。
 
 ## 4. Raguel の変更
@@ -204,13 +207,15 @@ codiel を最初に設計したとき、パネルを置いた目的は、AI の�
 
 ### 5.3 test-spec と dev-plan の並び
 
-現行は 2 件の委譲を同じ応答から前景で並列に出す(`ORS:220-221`)。dev-plan をオーケストレーターが書くと、並列にするには spec の委譲を background で出すしかない。background の委譲の完了を待ってターンを終えると、stop-guard の hook(`plugins/codiel/src/hooks/stop-guard.ts:44-68`)が止めて前景で出し直すよう促す。前景に限った理由は codiel 設計書 `2026-09-27-codiel-intent-driven-design.md:1995-1999` にある。そこで並列をやめ、次の順に直列で行う。
+このセクションの直列化は、§10.3(S14)で並列に置き換えた。経緯として残す。
+
+現行は 2 件の委譲を同じ応答から foreground で並列に出す(`ORS:220-221`)。dev-plan をオーケストレーターが書くと、並列にするには spec の委譲を background で出すしかない。background の委譲の完了を待ってターンを終えると、stop-guard の hook(`plugins/codiel/src/hooks/stop-guard.ts:44-68`)が止めて foreground で出し直すよう促す。foreground に限った理由は codiel 設計書 `2026-09-27-codiel-intent-driven-design.md:1995-1999` にある。そこで並列をやめ、次の順に直列で行う。
 
 1. 仕様のディレクトリを自分で同定する。
 2. dev-plan.md を自分で書き、`evaluate_plan` でゲートする。
-3. spec.md / cases.md の委譲を前景で出し、返ったら spec の `evaluate_plan` でゲートする。
+3. spec.md / cases.md の委譲を foreground で出し、返ったら spec の `evaluate_plan` でゲートする。
 
-`ORS:597-600` の「委譲はすべて前景で出す」は変えない。
+`ORS:597-600` の「委譲はすべて foreground で出す」は変えない。
 
 ### 5.4 HARD-GATE と委譲先の旧称
 
@@ -256,7 +261,7 @@ codiel を最初に設計したとき、パネルを置いた目的は、AI の�
   4. 割合が 10% を超える問いは、閾値を問いごとに変えるか、問いを外す。変えた閾値と外した問いは、この設計書の §4.2 に書き戻す。
 - codiel 側はスキルの文書の変更なので、vitest の対象は無い。手動確認は、1 回の run で次を確かめる。
   - design・dev-plan・intent-sync をオーケストレーターが書く。
-  - test-spec で dev-plan のゲートの後に spec の委譲を前景で出す。
+  - test-spec で dev-plan のゲートの後に spec の委譲を foreground で出す。
   - implement のマージの後と test-loop で、`units/` と test コマンドを自分で、`e2e/` を委譲で実行する。
   - Raguel の変更前に通したフェーズがある run を、変更後に再開して後続のゲートを通せる。
 - 速さの確認として、変更前後で同じ intent の run のゲート 1 回あたりの所要時間を比べる。【要確認】比べる run の選び方は実装計画で決める。
@@ -278,3 +283,137 @@ codiel を最初に設計したとき、パネルを置いた目的は、AI の�
 ## 9. 未決事項
 
 未決事項は、実装計画書 `harness-docs/plans/2026-10-01-codiel-run-speedup-plan.md` の「細目の決定」と Task 7 で決めた。
+
+## 10. 追補: 手動確認の後の変更(2026-10-01)
+
+手動確認(計画書 Task 7。検証用リポジトリ `~/codiel-speedup`、slug `add-reverse-function`)で 2 つの問題が見つかった。どちらもユーザーの判断で、この設計の範囲で直す。
+
+- 内容判定が、ほかのフェーズの担当を欠落と判定した。dev-plan の `judge/plan-omits-objective`(p=0.84)と implement の `judge/code-omits-objective`(p=0.94)で、どちらも人が「修正して再提出」と裁定した。objective は intent 全体の目的(「テストも書く」)で、テストを書くのは test-spec と test-code の担当である。
+- 委譲がすべてバックグラウンドで起動した。完了待ちでターンを終えるたびに stop-guard が止め、オーケストレーターが `mark-ask` と `resume` を往復した。
+
+### 10.1 内容判定に担当範囲を渡す(S12)
+
+- 本文の問い合わせの `state` に `phaseScope`(フェーズごとの固定の英文)を足す。値は次のとおりにする。
+
+| phase | phaseScope |
+| --- | --- |
+| intent | This phase records the intent of the whole change. |
+| design | This phase designs the whole change. |
+| dev-plan | This phase plans the implementation steps of product code. Test specifications and test code are produced in the separate test-spec and test-code phases, not in this plan. |
+| test-spec | This phase writes test specifications only. |
+| test-code | This phase writes test code only. Product code is written later in the implement phase. |
+| implement | This phase writes product code only. Test specifications and test code were already written in the earlier test-spec and test-code phases. |
+| test-loop | This phase only fixes failures found by running the existing tests; the diff may be small or empty. |
+| fix-loop | This phase only fixes review findings; the diff may be small. |
+| intent-sync | This phase writes the agreed changes back to the intent documents. |
+
+- `code-omits-objective`・`plan-omits-objective`・`design-omits-objective` の instructions の先頭に「Considering only the work that state.phaseScope assigns to this phase,」を、末尾(GUARD の前)に「Work assigned to other phases is not an omission.」を足す。ID・向き・閾値・問いの日本語は変えない。足す 2 文は `CONTENT` の instructions の定数そのものに書き、GUARD は今のとおり組み立て時に末尾へ付ける。
+- 較正(2026-10-01)の結果は次のとおりである。
+
+| 組 | code-omits | plan-omits | design-omits |
+| --- | --- | --- | --- |
+| 手動確認の誤検知 | 0.94 → 0.25 | 0.84 → 0.24 | — |
+| 正しい成果物の誤検知 | 0/21(最大 0.35) | 0/7(最大 0.31) | 0/10(最大 0.27) |
+| 擬似欠陥の検出 | 20/21 | 6/7(漏れは p=0.69) | 9/10 |
+
+### 10.2 委譲をバックグラウンド前提にする(S13)
+
+前提となる Claude Code の挙動は次のとおりである(公式ドキュメント「sub-agents」「hooks」と、このセッションと手動確認での観察)。
+
+- 対話セッションでは、Agent ツールの委譲は常にバックグラウンドで起動する。foreground を強制できるのは、全セッションに効く環境変数 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` だけである。
+- 委譲の完了は、後のターンに自動のイベントとして届き、ターンを起こす。
+- Stop hook の入力に、実行中の委譲を示すフィールドは無い。
+- セッションを終えたときに実行中の委譲がどうなるかは文書に無い。失われるものとして扱う。
+
+#### 10.2.1 待ちの記録
+
+- `RunState` に任意のフィールド `waits?: Wait[]` を足す。`version` は 2 のまま据え置く(`domain` などと同じ扱い)。`Wait` は `{ id: string; purpose: string; phase: string; startedAt: string; taskId?: string }` とする。`taskId` は Agent ツールが返す委譲の ID で、run を止めるときに委譲を止めるのに使う。
+- 待ちごとに、返答を書く報告のファイル `.codiel/runs/<slug>/try-<n>/waits/<id>.md` を 1 つ持つ。完了通知を受けたら、オーケストレーターは返答の本文を要約せずにこのファイルへ書く。既存の報告の置き場(`report.md`・`test-run-<n>.md`・`review-<m>.md` など)への転記は、今のとおりその後で行う。報告の置き場を持たなかった委譲(test-spec、タスクレビュー、観点ごとの review、E2E)も、このファイルで完了を判定できる。
+- `codiel-state` に 3 つのサブコマンドを足す。
+
+| サブコマンド | 動作 |
+| --- | --- |
+| `wait-add --slug <slug> --id <id> --purpose <文> [--task-id <ID>]` | `waits` に 1 件足す。`phase` は `state.phase`、`startedAt` は現在時刻。同じ `id` の待ちが残っているとき、または `waits/<id>.md` が既にあるときは失敗する(`id` は try の中で使い回さない)。run が終端の状態なら失敗する |
+| `wait-done --slug <slug> --id <id>` | その `id` を取り除く。無いとき、または `waits/<id>.md` が無いときは失敗する(報告を書いてから消す順序を機械で守る) |
+| `wait-clear --slug <slug>` | `waits` を空にし、消した待ちの一覧を出力する。状態を問わず通す(`clear-domain` と同じ) |
+
+- `stop` は、`waits` が 1 件以上あるとき失敗する。`--abandon-waits` を付けたときだけ、`waits` を空にして止める。
+- `codiel-state` の呼び出しは、`wait-add` を含めて並列にせず 1 つずつ行う。state の読み書きにロックが無く、並列に呼ぶと更新が失われるためである。
+- 待ちは委譲 1 件につき 1 件記録する。仕様のディレクトリが 2 つあって spec の委譲を 2 件出すなら、`wait-add` も 2 回呼ぶ。
+- `purpose` は、再開時に人とオーケストレーターが読む 1 文で、何の委譲かを書く(例: 「units/src/reverse の spec.md と cases.md を書く」。本文に載せる例で、閉じた列挙ではない)。
+- `id` はオーケストレーターが委譲ごとに付け、try の中で一意にする。形は `<フェーズ>-<要素>-<回>`(例: `test-spec-units-src-reverse-1`、`step-1-impl-2`、`review-1-security-1`。本文に載せる例で、閉じた列挙ではない)。修正ラウンド・回帰の巡・実行し直しは、回を上げて別の待ちにする。
+
+#### 10.2.2 stop-guard
+
+- status が `active` で `waits` が 1 件以上あるときは、止めずに通す(何も出力しない)。
+- `waits` が空のときは、今の分岐のとおりに止める。`in_progress` の分岐の末尾の文「委譲を foreground で出し直して報告を受け取ること」は、「委譲の完了を待つなら、`codiel-state wait-add` で待ちを記録してから停止すること」に置き換える。
+- 待ちの記録を消し忘れると、その run では止まらなくなる。再開の手順(§10.2.4)で必ず `wait-clear` するので、影響はそのセッションの中に限られる。
+
+#### 10.2.3 委譲の規律
+
+`orchestrating-runs` の §3 の「委譲はすべて foreground で出す」を、次の規律に置き換える。
+
+- 委譲は Agent ツールで出し、バックグラウンドで動くものとして扱う。
+- Agent ツールの結果で起動を確かめてから、`wait-add` で待ちを記録する(`--task-id` に返った ID を渡す)。起動に失敗した委譲は記録しない。並列に出すものは同じ応答からまとめて出し、記録は 1 件ずつ順に行う。
+- `evaluate_*` が長引いてバックグラウンドへ移ったときも、`gate-<フェーズ>-<回>` の id で `wait-add` し、結果を `waits/<id>.md` に書いてから `wait-done` する。
+- 待つ間にできる作業(自分が書く文書・自分が実行するテスト)があれば進め、無ければターンを終えて完了通知を待つ。
+- 完了通知を受けたら、返答の本文を `waits/<id>.md` と既存の報告の置き場へ書く。その後で `wait-done` で待ちを消し、次の委譲やゲートへ進む。今の「返答を受けた直後に、state の更新や次の委譲より先に本文を書く」の順序を保つためである。
+- run が無いときの委譲(capturing-intent の現状調査、`/codiel:test` の単独実行)には待ちの記録を使わない。stop-guard も run が無ければ止めない。
+- 2.6 の「並列可・単独」の規則は、「動いている委譲」を「待ちの記録が残っている委譲」と読み替えてそのまま使う。単独の委譲は、待ちが空のときだけ出す。
+- `set-domain` を伴う委譲(メインの作業ツリーで動く単独の委譲)の待ちが残っている間は、メインの作業ツリーで動くほかの委譲を出さない。`domain` は 1 値しか持てないためである。worktree の中で動く委譲には当てない。
+- `reviewing-diffs` の「レビュー担当がさらに委譲するときも foreground で出す」は削除する。サブエージェントは Agent ツールを使わない(セッションの規律)ためである。
+
+#### 10.2.4 中断後の再開
+
+- `orchestrating-runs` の §6(再開手順)に、次を足す。
+  1. `waits` に残っている待ちを読む。前のセッションの委譲は失われたものとして扱う。
+  2. 待ちごとに、`waits/<id>.md` が `startedAt` より後に書かれているかを確かめる。書かれていれば、その返答を受け取り済みとして既存の報告の置き場への転記を済ませる。書かれていなければ、委譲を出し直す(新しい回の id で記録する)。古い報告のファイルや成果が残っていても、`waits/<id>.md` が無い委譲の成果としては使わない。
+  3. worktree の中の委譲を出し直すときは、2.5 の規則どおり、残っている worktree とそのブランチを削除し、新しい HEAD で作り直す。
+  4. 確かめ終えたら `wait-clear` で残りを消す。
+
+#### 10.2.5 run を止めるとき
+
+- 人が中止を選んだとき、`intent-updated` で止めるとき、別の try を始めるときは、`waits` に残っている委譲を先に片付ける。`taskId` がある委譲は `TaskStop` で止め、無いものは完了通知を待つ。
+- 片付けた後に `stop` を呼ぶ。委譲を止められず、完了も待てない事情があるときだけ、人に確かめてから `--abandon-waits` を付ける。
+- worktree とブランチの削除は、`waits` が空になってから行う。委譲が止まる前に、書き込み中の worktree を消さないためである。
+
+### 10.3 test-spec と dev-plan を並列に戻す(S14)
+
+§5.3 の 3 ステップの直列を、次の順に置き換える。
+
+1. オーケストレーターが仕様のディレクトリを同定する(§5.1)。
+2. spec.md / cases.md の委譲を出し、`wait-add` する。
+3. 委譲の完了を待つ間に、dev-plan.md を書き、`evaluate_plan` でゲートする。
+4. 委譲の完了通知を受けたら、報告を書いて `wait-done` し、spec の `evaluate_plan` でゲートする。
+
+- 2 つのゲートの判定は互いに独立である。dev-plan が ASK・STOP でも spec の委譲は止めず、完了したら spec のゲートまで進める。
+- dev-plan が ASK・STOP になっても、spec の委譲の待ちが残っている間は `mark-ask` を呼ばない。`mark-ask` は run を `awaiting_human` にし、その間は guard-write の境界が外れるためである。spec のゲートの結果が出てから、2 つのゲートの結果をまとめて人に示す。
+- 2 つとも ASK・STOP なら、両方に `mark-ask` し、両方の裁定を `record_outcome` で記録してから `resume` する。`resume` は awaiting_human のフェーズを一括で戻すので、片方の裁定だけで呼ばない。
+- 次のステージ(test-code)へ進めるのは、今のステージの規則どおり、dev-plan と test-spec の両方が passed になってからである。
+- 再開の分岐は、次の順に決める。裁定待ちの ASK・STOP があれば、先に人の裁定を受ける(STOP の後に再評価しない現行の規則を保つ)。そのうえで、dev-plan が passed でなく裁定待ちでもなければ dev-plan を書いてゲートする。test-spec は §10.2.4 の待ちの扱いで、受け取り済みならゲートし、そうでなければ spec の委譲を出し直す。
+- §8 の不採用案「spec の委譲を background で出し、dev-plan の執筆と並列にする」は、委譲が常にバックグラウンドになったことと、§10.2.2 で stop-guard が待ちの間は止めなくなったことにより、採用に変わる。
+
+### 10.4 変更の範囲
+
+- 実装: `plugins/codiel/src/codiel-state.ts`(`waits`、3 サブコマンド、`stop` の `--abandon-waits`)、`plugins/codiel/src/hooks/stop-guard.ts`、`plugins/codiel/raguel-mcp/src/context/judge.ts`(`phaseScope` と 3 問の instructions)。
+- スキル: `orchestrating-runs`(§3、2.1、2.6、2.8、2.9、test-spec の行と手順、§6 の再開、4.1、HARD-GATE の周辺、run を止める手順)、`raguel-gating`(:90 の evaluate のバックグラウンド化、:137-143・:158-180 の裁定と resume、:113-115・:182-183 の stop)、`reviewing-diffs:140-141`、`writing-test-specs:87`、`writing-dev-plans`、`raguel-gating:86`、`running-regression-tests`、`implementing:48`、`scripting-tests:16`。
+- 文書: `plugins/codiel/docs/DESIGN.md`(:83-95、:93、:247、:440-445、:588)、`docs/skill-flowcharts.md:593`、`references/e2e-report-format.md:29, 86`、`README.md:55, 68, 84`、ルートの `README.md` の codiel のセクション。
+- テスト: `src/__test__/codiel-state.test.ts`(3 サブコマンドと互換)、`src/hooks/__test__/stop-guard.test.ts`(:274 の foreground の文言のテストを置き換え、待ちがあると通すケースを足す)、`raguel-mcp/src/context/__test__/judge.test.ts`(`phaseScope` が state に入ること)。
+
+### 10.5 テスト方針
+
+- `codiel-state`: `wait-add`・`wait-done`・`wait-clear` の成功と失敗(残っている同じ id、`waits/<id>.md` が既にある id、無い id、報告の無い `wait-done`、終端の run)。`stop` が `waits` の残りで失敗し、`--abandon-waits` で通ること。`waits` を持たない既存の state を読めること。
+- stop-guard: `waits` が 1 件以上なら何も出さない。空なら今の分岐のとおり止め、`in_progress` の案内に `wait-add` が入る。`awaiting_human` と `stop_hook_active` の扱いは変えない。
+- judge: 本文の問い合わせの `state` に、9 つの phase のそれぞれで対応する `phaseScope` が入ること。3 問の instructions に「Work assigned to other phases is not an omission.」が入ること。入力の上限の近くで、`phaseScope` を足した分だけ上限を超えた本文は送らず、従来どおり `contextJudge/unavailable` になること。
+- 手動確認: 新しいセッションで run を 1 本通し、次を確かめる。stop-guard による止めと `mark-ask`・`resume` の往復が起きないこと。test-spec の委譲の間に dev-plan を書いてゲートすること。内容判定の誤検知が出ないこと。途中でセッションを終えて再開し、`wait-clear` と委譲の出し直しが行われること。
+
+### 10.6 不採用案
+
+| 案 | 不採用の理由 |
+| --- | --- |
+| `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` で foreground を強制する | 全セッションに効き、利用者の環境変数に依存する。待ちの間に dev-plan を書ける利点も失う |
+| stop-guard が transcript_path を読み、完了通知の届いていない委譲を探す | トランスクリプトの形は公開されておらず、Claude Code の更新で壊れうる(ユーザー決定) |
+| `in_progress` のフェーズでは止めない | 委譲もせずに途中でターンを終えたときも黙って止まり、run が停滞する(ユーザー決定) |
+| 待ちに期限を設けて古いものを無視する | 実装の委譲は長くかかることがあり、期限を決める根拠が無い。再開時の `wait-clear` で足りる |
+| 既存の報告のファイル(`report.md` など)の有無で、待ちの完了を判定する | 修正ラウンド・回帰の巡・実行し直しは同じ報告のファイルを書き直すので、前の回の報告が残り、中断した委譲を完了と見誤る。test-spec・タスクレビュー・観点ごとの review は報告のファイルを持たない |
+| state の読み書きにロックを入れる | 呼び出しを 1 つずつ行う規律で足り、全サブコマンドの書き込みの経路を変える費用に見合わない |
