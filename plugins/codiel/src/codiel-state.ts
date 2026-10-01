@@ -1178,8 +1178,10 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
   if (cmd === "wait-add") {
     const id = flags.id
     if (!id) fail("--id が必要です")
-    if (!SLUG_RE.test(id))
-      fail(`不正な --id: ${id}。英小文字と数字をハイフンでつないでください`)
+    if (!SLUG_RE.test(id) || id.length > 100)
+      fail(
+        `不正な --id: ${id}。英小文字と数字をハイフンでつなぎ、100 文字以内にしてください`
+      )
     const purpose = (flags.purpose ?? "").trim()
     if (purpose === "") fail("--purpose が必要です")
     const latest = loadRun(root, flags)

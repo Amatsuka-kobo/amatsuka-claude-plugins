@@ -408,7 +408,7 @@ describe("phaseScope(設計書 §10.1)", () => {
     expect(text).toContain("Work assigned to other phases is not an omission.")
   })
 
-  it("入力の上限の近くでは、phaseScope を足した分だけ超えた本文を送らない", async () => {
+  it("phaseScope を足した上限ちょうどの本文は送り、1 字でも超えた本文は送らない", async () => {
     // 空の本文で基準の合計を測り、上限ちょうどの本文を作る
     const probe = fakeJev()
     await run(input({ maskedArtifact: " x", objective: "" }), probe)

@@ -3891,6 +3891,10 @@ test("wait-add は残っている同じ id・報告のある id・不正な id�
     const r = waitAdd(root, bad)
     expect(r.code, bad).toBe(1)
   }
+  const long = waitAdd(root, "a".repeat(101))
+  expect(long.code).toBe(1)
+  expect(long.err).toMatch(/不正な --id/)
+  expect(waitAdd(root, "a".repeat(100)).code).toBe(0)
   expect(run(root, ["wait-add", "--slug", "demo", "--id", "c-1"]).err).toMatch(
     /--purpose が必要です/
   )
@@ -3915,6 +3919,14 @@ test("wait-done は報告のファイルがあるときだけ待ちを消し、�
   const none = run(root, ["wait-done", "--slug", "demo", "--id", "a-1"])
   expect(none.code).toBe(1)
   expect(none.err).toMatch(/待ち a-1 はありません/)
+})
+
+test("wait-done は不正な id を、待ちの有無の判定より先に拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  const r = run(root, ["wait-done", "--slug", "demo", "--id", "../x"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/不正な --id/)
 })
 
 test("wait-clear は残りを出力して空にし、終端の run でも通る", () => {

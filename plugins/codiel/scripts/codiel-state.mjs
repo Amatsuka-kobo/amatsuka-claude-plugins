@@ -1067,8 +1067,10 @@ function main(argv, root = process.cwd()) {
   if (cmd === "wait-add") {
     const id = flags.id;
     if (!id) fail("--id \u304C\u5FC5\u8981\u3067\u3059");
-    if (!SLUG_RE.test(id))
-      fail(`\u4E0D\u6B63\u306A --id: ${id}\u3002\u82F1\u5C0F\u6587\u5B57\u3068\u6570\u5B57\u3092\u30CF\u30A4\u30D5\u30F3\u3067\u3064\u306A\u3044\u3067\u304F\u3060\u3055\u3044`);
+    if (!SLUG_RE.test(id) || id.length > 100)
+      fail(
+        `\u4E0D\u6B63\u306A --id: ${id}\u3002\u82F1\u5C0F\u6587\u5B57\u3068\u6570\u5B57\u3092\u30CF\u30A4\u30D5\u30F3\u3067\u3064\u306A\u304E\u3001100 \u6587\u5B57\u4EE5\u5185\u306B\u3057\u3066\u304F\u3060\u3055\u3044`
+      );
     const purpose = (flags.purpose ?? "").trim();
     if (purpose === "") fail("--purpose \u304C\u5FC5\u8981\u3067\u3059");
     const latest = loadRun(root, flags);
