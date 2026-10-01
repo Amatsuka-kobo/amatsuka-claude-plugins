@@ -196,6 +196,25 @@
 - [ ] ステップ 1: Task 8・9 の diff をコードレビューへ、Task 10 の diff をスキル改訂のレビューへ並列に出す。
 - [ ] ステップ 2: 新しいセッションで run を 1 本通し、設計書 §10.5 の手動確認の 4 点を確かめる。結果をこの計画書に書く。
 
+### Task 11 の結果(2026-10-02、`~/codiel-speedup2`、slug `capitalize-function`)
+
+- stop-guard の止めは 0 回。待ちがある間の Stop は 5 回とも通した。`mark-ask` と `resume` の不要な往復は無い。
+- 委譲 7 件のすべてで、起動 → `wait-add` → 完了通知 → `waits/<id>.md` → `wait-done` の順を守った。codiel-state を並列に呼んだ箇所は無い。
+- review の 2 観点は両方の待ちが消えてから統合した。ただし `wait-done` を統合報告 `review-1.md` の Write より先に呼んだ(Task 12 で規則を明記する)。
+- spec の委譲の間に dev-plan.md を書いた。spec の委譲が 26 秒で終わったので、dev-plan のゲートは待ちの後に 2 本まとめて呼んだ。
+- ゲート 9 回で ASK・STOP は 0 回。1 回あたり 0.4〜4.3 秒。
+- 中断と再開は未実施(Task 12 の後に短い run で確かめる)。
+- init の成果物 4 件が未コミットのまま run に入り、test-code のゲートが評価できずに止まった。人の手間の多く(AskUserQuestion 3 回と `!` の手動実行 1 回)がこれだった(Task 12 で直す)。
+
+### Task 12: init の成果物のコミットと統合報告の時点(ユーザー承認、2026-10-02)
+
+役割: 通常の実装。AI 向けの指示書なので `prompt-smith:prompt-smith` を起動してから書く。
+
+- [ ] ステップ 1: `initializing-harness` の最後で、書き込んだ 4 件(`.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md`)をコミットしてよいかを承認で尋ね、承認ならオーケストレーターが `codiel(init): ...` でコミットする。断られたら今のとおり利用者に任せる。
+- [ ] ステップ 2: `capturing-intent` の手順 5 (3) に「コミットしてから始める(推奨)」の選択肢を足し、持ち越すときは code 系のゲート(`evaluate_code`)が評価できずに止まることと、`subject.ignoreUncommitted` に宣言すれば避けられることを示す。
+- [ ] ステップ 3: `orchestrating-runs` の review に、観点ごとの返答をまとめる報告(`review-<m>.md`)はグループのすべての待ちを消してから書く、と明記する。
+- [ ] ステップ 4: コミットし、短い run で中断と再開を確かめる(`/exit` の後の再開で `wait-clear` と新しい回の id での出し直しが行われること)。
+
 ## コミットの分け方
 
 | コミット | 内容 |
