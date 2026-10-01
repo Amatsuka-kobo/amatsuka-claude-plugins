@@ -19,12 +19,12 @@ kind: impl
 
 ## Procedure
 
-- Record progress in the report during long-running work.
-- For decisions you are unsure about, report the options and a recommendation.
+- When you split the work into multiple steps, record the result of each step in the report.
+- When you are unsure about a decision that does not meet the send-back conditions in the constraints, report the options and a recommendation.
 
 ## Constraints
 
-- **When invoked for general tasks**, keep work within the stated scope. Do not make out-of-scope changes.
+- **When invoked for general tasks**, keep work within the stated scope.
 
 ## Output Format
 

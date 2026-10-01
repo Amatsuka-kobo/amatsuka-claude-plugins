@@ -13,7 +13,7 @@ kind: readonly
 
 ## Core Responsibilities
 
-- Report with primary-source URLs and the freshness of each item of information.
+- Research current external information and report it.
 
 ## Procedure
 

@@ -13,7 +13,7 @@ kind: readonly
 
 ## Core Responsibilities
 
-- 一次情報源の URL と情報の鮮度を添えて報告する。
+- 外部の最新情報を調べて報告する。
 
 ## 作業手順
 

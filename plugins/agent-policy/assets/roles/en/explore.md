@@ -13,7 +13,7 @@ kind: readonly
 
 ## Core Responsibilities
 
-- Scan the specified scope without omissions and report findings with supporting file paths and line numbers.
+- Scan the specified scope without omissions.
 
 ## Procedure
 

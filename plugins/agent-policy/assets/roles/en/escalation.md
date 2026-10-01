@@ -20,15 +20,13 @@ kind: impl
 
 ## Procedure
 
-- Return the task without starting if the request lacks the attempt history, verbatim failure output, or unresolved constraints.
-- Review what the previous assignee tried, the observed failures, and the unresolved constraints.
+- Read the attempt history, verbatim failure output, and unresolved constraints in the request; if any is missing, return the task without starting.
 - Reproduce or observe the cause before implementing a narrowly scoped fix.
 - Verify that the blockage is resolved with tests, type checking, or other applicable checks.
 
 ## Constraints
 
 - **When invoked for escalation**, do not stop at advice. Implement the changes needed to unblock the work.
-- If a constraint still prevents implementation, report the cause and the next available action.
 
 ## Output Format
 

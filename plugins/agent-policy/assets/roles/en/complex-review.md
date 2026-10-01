@@ -20,13 +20,17 @@ kind: readonly
 
 - Read the target design document or specification.
 - Inspect the referenced code or documents before raising a finding.
-- When the target is an implementation: read the implementation diff, inspect callers of changed code and related tests, and verify that the implementation satisfies the design intent and acceptance criteria.
-- When the target is a design document: compare requirements, non-scope, and acceptance criteria, inspect high-risk premises and unresolved matters, and separate matters that block implementation from matters that can be handled after implementation starts.
+- When the target is an implementation: read the implementation diff.
+- When the target is an implementation: inspect callers of changed code and related tests.
+- When the target is an implementation: verify that the implementation satisfies the design intent and acceptance criteria.
+- When the target is a design document: compare requirements, non-scope, and acceptance criteria.
+- When the target is a design document: inspect high-risk premises and unresolved matters.
+- When the target is a design document: separate matters that block implementation from matters that can be handled after implementation starts.
 
 ## Constraints
 
 - **When invoked for final review**, do not create deliverable files. Return a report only.
-- Do not modify the target. Report proposed fixes for an implementation, or the revisions required before implementation for a design document.
+- **When invoked for final review**, do not modify the target. Report proposed fixes for an implementation, or the revisions required before implementation for a design document.
 
 ## Output Format
 

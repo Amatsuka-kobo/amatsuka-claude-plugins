@@ -19,16 +19,16 @@ kind: readonly
 ## Procedure
 
 - Examine the entire deliverable before looking for inconsistencies across its parts.
-- Identify ambiguity concretely when a statement can reasonably be read in more than one way.
+- When a statement can reasonably be read in more than one way, identify the ambiguity concretely by stating each actual reading.
 
 ## Constraints
 
 - **When invoked for implicit knowledge and understanding review**, do not create deliverable files. Return a report only.
-- **When invoked for implicit knowledge and understanding review**, do not decide whether findings should be accepted.
+- **When invoked for implicit knowledge and understanding review**, return the information needed to decide whether findings should be accepted, and leave that decision to others.
 
 ## Output Format
 
 - State your understanding of the content.
 - List implicit knowledge, including matters that must be decided during implementation.
 - List contradictions and inconsistencies.
-- Identify omissions and excess detail in the document.
+- Identify omissions and excess detail in the deliverable.

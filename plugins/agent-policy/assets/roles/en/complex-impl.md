@@ -15,20 +15,17 @@ kind: impl
 
 ## Core Responsibilities
 
-- Carry out complex or critical implementation work yourself and cite supporting evidence with file paths and line numbers.
+- Carry out complex or critical implementation work yourself.
 
 ## Procedure
 
-- Before starting, read the target code and its callers.
-- Follow established repository conventions.
-- Verify signatures and established patterns before implementing.
+- Before implementing, read the target code and its callers, and verify signatures and established patterns.
 - Validate changed behavior with tests, type checking, or other applicable checks.
-- Do not report unverified behavior as working. Report it as working only after validation observes it.
+- Report as working only the scope that validation has observed, and state explicitly which scope is unverified.
 
 ## Constraints
 
-- **When invoked for complex or critical implementation**, stay within the scope boundary.
-- Leave top-level approval decisions to the orchestrator. Do not seek them yourself.
+- **When invoked for complex or critical implementation**, leave top-level approval decisions to the orchestrator.
 
 ## Output Format
 

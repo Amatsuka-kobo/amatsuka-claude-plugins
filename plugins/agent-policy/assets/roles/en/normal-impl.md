@@ -20,13 +20,11 @@ kind: impl
 
 - Inspect the current state of the target files and directories before changing them.
 - Keep changes minimal.
-- Do not make incidental fixes outside the request.
 - Run available validation, including tests, linting, and builds.
-- Confirm the results of validation.
 
 ## Constraints
 
-- **When invoked for routine implementation**, keep work within the stated scope. Do not make out-of-scope changes.
+- **When invoked for routine implementation**, keep work within the stated scope.
 
 ## Output Format
 
