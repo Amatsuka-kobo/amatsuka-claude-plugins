@@ -1282,8 +1282,20 @@ function listCoverage(options: Options): unknown {
     uncovered: roles
       .filter((role) => role.coveredBy.length === 0)
       .map((role) => role.id),
-    definitions: inspectDefinitions(options.dir, fragments)
+    definitions: inspectDefinitions(options.dir, fragments),
+    modelBreakdown: modelBreakdownOf(options.dir)
   }
+}
+
+// マーカー付き定義を、claude 構成で被覆に数えるものとそれ以外に分けて数える。
+// --scope に依らず、構成を選ぶ前の質問で使う。
+function modelBreakdownOf(projectDir: string): {
+  claude: number
+  external: number
+} {
+  const all = scopedDefinitions(projectDir, "with-external").length
+  const claude = scopedDefinitions(projectDir, "claude-only").length
+  return { claude, external: all - claude }
 }
 
 interface DefinitionLines {

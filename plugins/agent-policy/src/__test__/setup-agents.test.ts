@@ -786,6 +786,55 @@ function definitionOf(
 }
 
 describe("--list-coverage の点検結果", () => {
+  it("modelBreakdown はマーカー付き定義を Claude で動くものと外部ベンダーに分けて数える", () => {
+    const marker = "agent-policy-role: explore"
+    writeAgent("enum.md", [
+      "---",
+      "name: enum",
+      "model: opus",
+      marker,
+      "---",
+      ""
+    ])
+    writeAgent("inherit.md", [
+      "---",
+      "name: inherit",
+      "model: inherit",
+      marker,
+      "---",
+      ""
+    ])
+    writeAgent("undeclared.md", ["---", "name: undeclared", marker, "---", ""])
+    writeAgent("external.md", [
+      "---",
+      "name: external",
+      "model: claude-gpt-6-sol",
+      "agent-policy-vendor: gpt",
+      marker,
+      "---",
+      ""
+    ])
+    writeAgent("plain.md", [
+      "---",
+      "name: plain",
+      "model: claude-gpt-6-sol",
+      "---",
+      ""
+    ])
+
+    for (const scope of ["claude", "custom"]) {
+      expect(
+        run<CoverageResult & { modelBreakdown: unknown }>([
+          "--list-coverage",
+          "--scope",
+          scope,
+          "--dir",
+          project
+        ]).modelBreakdown
+      ).toEqual({ claude: 3, external: 1 })
+    }
+  })
+
   it("roles の各要素に kind を返し、e2e-verify は impl になる", () => {
     const result = coverage()
 

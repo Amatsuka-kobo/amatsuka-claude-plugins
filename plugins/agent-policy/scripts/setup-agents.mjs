@@ -1702,8 +1702,14 @@ function listCoverage(options) {
     ok: true,
     roles,
     uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id),
-    definitions: inspectDefinitions(options.dir, fragments)
+    definitions: inspectDefinitions(options.dir, fragments),
+    modelBreakdown: modelBreakdownOf(options.dir)
   };
+}
+function modelBreakdownOf(projectDir) {
+  const all = scopedDefinitions(projectDir, "with-external").length;
+  const claude = scopedDefinitions(projectDir, "claude-only").length;
+  return { claude, external: all - claude };
 }
 function readDefinition(options) {
   const file = path2.join(options.dir, ".claude", "agents", `${options.name}.md`);
