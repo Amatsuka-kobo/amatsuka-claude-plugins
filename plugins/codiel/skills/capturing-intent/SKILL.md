@@ -46,7 +46,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - 入口が intent パスで、frontmatter の `run` では当たらないが、見つかった run の state の `intent`(repoRoot 相対にしたもの)が入口のパスと同じときは、state の `intent` だけで当たった run とみなす。作業ツリーに intent のファイルが無く frontmatter を読めないときも、この照合で再開する run を見つけられる。この run は確かめずには再開せず、内容(slug・intent のパス・現在のフェーズ)を示して今回再開するかをユーザーに確かめる。
 - それ以外(上の 2 つに当たらない intent パス、Issue 番号、省略)では、見つかった run が `commands/run.md` の「未完了の run があれば再開」に当たる可能性がある。終端にする前にその run の内容(slug・intent のパス・現在のフェーズ)を示し、今回再開するかをユーザーに確かめる(run を作る前なので `mark-ask` は要らない)。
 
-今回再開する run と決まったものは終端にせず、`orchestrating-runs` の再開手順(§6)へ進める。再開しないと答えたものと、確認の対象にならなかったものは、`codiel-state finalize --slug <slug>` か `codiel-state stop --slug <slug> --reason <理由>` で終端にする。この確認により、手順 5 の (1)〜(3) の間は、再開する run 以外に active run が無い状態が保証される。
+今回再開する run と決まったものは終端にせず、`orchestrating-runs` の再開手順(§6)へ進める。再開しないと答えたものと、確認の対象にならなかったものは、`codiel-state finalize --slug <slug>` か、前のセッションから残った待ちを `codiel-state wait-clear --slug <slug>` で消してからの `codiel-state stop --slug <slug> --reason <理由>` で終端にする。この確認により、手順 5 の (1)〜(3) の間は、再開する run 以外に active run が無い状態が保証される。
 
 ## 1. 前提確認とベースブランチの最新化
 

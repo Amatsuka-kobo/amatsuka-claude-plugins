@@ -24,7 +24,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ## 2 つの起動モード
 
 - run 経由(test-loop フェーズ): `orchestrating-runs` が運転し、run ブランチ上で全テストの回帰を確認する。NG は仕様のディレクトリごとにまとめて報告するだけで、修正の委譲・`record-attempt`・state の更新はオーケストレーターが行う。`e2e/` の実行の委譲先は `codiel-state` を呼ばない。
-- 単独実行モード(`/codiel:test`): run の有無に関係なく実行できる。state 遷移はせず、NG があってもディスパッチせず報告のみ行う。引数(testsDir からの相対パス)があればそのディレクトリのテストだけに絞り、プロジェクトの test コマンドは実行しない。引数が無ければ testsDir 全体と test コマンドを対象にする。
+- 単独実行モード(`/codiel:test`): run の有無に関係なく実行できる。state 遷移はせず、NG があってもディスパッチせず報告のみ行う。引数(testsDir からの相対パス)があればそのディレクトリのテストだけに絞り、プロジェクトの test コマンドは実行しない。引数が無ければ testsDir 全体と test コマンドを対象にする。 active な run があるときは、委譲の待ちを `adhoc-` で始まる id で記録する(`orchestrating-runs` の §3)。
 
 `e2e/` の実行の委譲先は、レポートの本文を最終の返答で返す。報告のファイルを Write で書かず、`git add` もしない。レポートを作るのはオーケストレーターで、自分で実行した結果と委譲先の返答を合わせて、run 経由では `runs/<slug>/try-<n>/reports/test-run-<n>.md` へ、単独実行では `.codiel/reports/test-run-<日時>.md` へ書く。run 経由では、委譲先の返答を `waits/<id>.md` へ書いてから、レポートへ合わせる。
 

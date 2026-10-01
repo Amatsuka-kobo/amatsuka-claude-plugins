@@ -235,7 +235,7 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
 - test-spec の再開は、標準でも軽量でも、次の順で分ける。
   1. 裁定待ちの `ASK`/`STOP` があれば、先に人の裁定を受ける(`STOP` の後に再評価しない)。
   2. dev-plan が `passed` でなく裁定待ちでもなければ、dev-plan を書いてゲートする。
-  3. test-spec は §6 の待ちの扱いで決める。受け取り済みなら spec のゲートへ進み、そうでなければ spec の委譲を出し直す(出し直す間に 2. を進めてよい)。
+  3. spec の委譲の出し直しは §6 の手順に任せる。その後で、受け取り済みの返答があれば spec のゲートへ進み、無ければ出し直した委譲を待つ(待つ間に 2. を進めてよい)。
   4. 両方 `passed` なら、test-spec の作業は済んでいるので次のフェーズへ進む。
   - 一覧が手元に無いときは、dev-plan が `passed` なら `dev-plan.md` の各ステップの通すテストから取り直し、そうでなければ同定し直す。
 - 実行モード(`mapped` / `unscoped`)に応じたドメインディスパッチは「4. ドメインディスパッチ」を参照。
@@ -397,9 +397,10 @@ node <plugin-root>/scripts/codiel-state.mjs get --active
   node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason intent-updated
   ```
 - run を止めるとき(人が中止を選んだとき、`intent-updated` で止めるとき、別の try を始めるとき)は、`stop` の前に、
-  `codiel-state get` の `waits` に残っている委譲を片付ける。`taskId` がある委譲は `TaskStop` で止め、無い委譲は
-  完了通知を待つ。`stop` は待ちが残っていると失敗する。片付けても `waits` が残る事情(委譲を止められず、
-  完了も待てない)があるときだけ、人に確かめてから `stop` に `--abandon-waits` を付ける。worktree とブランチの
+  `codiel-state get` の `waits` に残っている委譲を、出どころで分けて片付ける。
+  - 今のセッションで出した委譲: `taskId` があれば `TaskStop` で止め、`wait-clear` で待ちを消す(返答が無いので `wait-done` は使えない)。`taskId` が無ければ完了通知を待ち、返答を書いて `wait-done` する。
+  - 前のセッションから残った待ち: 通知は来ないので待たず、`wait-clear` で消す。
+  `stop` は待ちが残っていると失敗する。`--abandon-waits` は、今のセッションの委譲を止めず完了も待たずに止めると人が決めたときだけ付ける。worktree とブランチの
   削除は、`waits` が空になってから行う。委譲が止まる前に、書き込み中の worktree を消さないためである。
 
 ### 2.5 worktree
@@ -638,14 +639,16 @@ intent-sync を書く前に、オーケストレーターが intent の frontmat
 委譲はバックグラウンドで動く。完了は後のターンに通知として届く。run があるときの委譲は、次の順で扱う。
 
 - Agent ツールの結果で起動を確かめてから、`codiel-state wait-add --slug <slug> --id <id> --purpose <文> --task-id <返った ID>` で待ちを記録する。起動に失敗した委譲は記録しない。
-- `id` は `<フェーズ>-<要素>-<回>` の形(英小文字と数字をハイフンでつなぐ)で委譲ごとに付け、try の中で使い回さない。修正ラウンド・回帰の巡・実行し直しは回を上げて別の待ちにする。`purpose` は何の委譲かを書く 1 文にする。
+- `id` は `<フェーズ>-<要素>-<回>` の形で委譲ごとに付け、try の中で使い回さない。要素の部分は、仕様のディレクトリの ID やステップの名前から作る。英小文字と数字以外の文字(`/`・`_`・`.`・大文字など)は、小文字にしてハイフンに置き換え、連続するハイフンは 1 つにする。100 文字を超える `id` は `wait-add` が拒否する。修正ラウンド・回帰の巡・実行し直しは回を上げて別の待ちにする。`purpose` は何の委譲かを書く 1 文にする。
 - 並列にする委譲は同じ応答からまとめて出し(review の観点ごとの委譲を含む)、`wait-add` は 1 件ずつ順に呼ぶ。`codiel-state` の呼び出しは並列の Bash にしない。state の読み書きにロックが無く、並列に呼ぶと更新が失われる。
-- `evaluate_*` が Claude Code にバックグラウンドへ移されたときも、`gate-<フェーズ>-<回>` の `id` で `wait-add` する。
-- 待つ間にできる作業(自分が書く文書・自分が実行するテスト)があれば進める。無ければターンを終えて完了通知を待つ。
+- `evaluate_*` が Claude Code にバックグラウンドへ移されたときも、`gate-<フェーズ>-<回>` の `id` で `wait-add` する。`<回>` は、そのフェーズの評価の回(attempt)である。
+- 待つ間にできる作業(自分が書く文書・自分が実行するテスト)があれば進める。自分でテストを実行するのは、2.6 の規則で許される場合(動いている委譲が worktree の中だけか、`parallel: true` のものだけ)に限る。メインの作業ツリーで単独の委譲が動いている間は実行しない。作業が無ければターンを終えて完了通知を待つ。
+- 並列に出した委譲のグループ(同じ応答で出した委譲、implement の同じグループ、観点ごとの review)は、そのグループの待ちがすべて消えてから、マージ・まとめての実行・`evaluate_*` へ進む。要素ごとに進めてよいのは、タスクレビューのような要素単位の作業だけである。
 - 完了通知を受けたら、返答の本文を要約せずに `.codiel/runs/<slug>/try-<n>/waits/<id>.md` へ書き、続けて既存の報告の置き場(2.1・2.6)へ書く。その後で `codiel-state wait-done --slug <slug> --id <id>` を呼び、次の委譲やゲートへ進む。報告を書く前に state の更新や次の委譲へ進まない。
 - 委譲を出し直すときは、新しい回の `id` で記録する。
 
 run が無いときの委譲(`capturing-intent` の現状調査、`/codiel:test` の単独実行)は、待ちを記録しない。stop-guard も run が無ければ止めない。
+active な run があるときの `/codiel:test` の単独実行は、`adhoc-` で始まる `id` で待ちを記録する。
 
 待ちの記録が残っている間、stop-guard は停止を止めない。消し忘れた待ちがあると、その run では未完了の停止を検出できなくなるので、報告を書いたら必ず `wait-done` を呼ぶ。
 
@@ -784,8 +787,8 @@ test-loop の内部運転(回帰の実行と修正。「2.9 test-loop の運転�
    提示し裁定を待つ。自分で「あと1回だけ」と続行してはならない)。
 3. fix-loop の所見がテストに向くと `fixing-review-findings` の検証で確かめたら、
    `node <plugin-root>/scripts/codiel-state.mjs set-test-edit --slug <slug>` を実行してからテスト側の
-   修正を委譲する。完了通知を受けて報告を書いたら
-   `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を実行してから、コードの
+   修正を委譲する。完了通知を受けて報告を `waits/<id>.md` に書き、`wait-done` した直後に
+   `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を実行する。その後でコードの
    修正を委譲する。
 
 ### fix-loop のスキップ経路
@@ -838,12 +841,12 @@ node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --
    - 記録が `mapped` なのに §0 の `unreadable !== null` なら、分岐表の行 7 として止めて確認する。run 中のマップ消失を暗黙のモード変更にしない。
    - それ以外で記録があれば、その値を正として復元する。`unreadable` が `architecture_missing` または `block_missing` の場合は分岐表の行 4 として再確認しない。
    - 記録がなければモード未決として §0 の判定をやり直す。
-5. `state.phase` から続行する前に、`waits` に残っている待ちを処理する。前のセッションの委譲は失われたものとして扱う。
-   1. 待ちごとに、`waits/<id>.md` が `startedAt` より後に書かれているかを確かめる。
-   2. 書かれていれば、返答を受け取り済みとして、既存の報告の置き場への転記を済ませる。
-   3. 書かれていなければ、委譲を出し直す(新しい回の `id` で `wait-add` する)。古い報告のファイルや成果が残っていても、`waits/<id>.md` が無い委譲の成果としては使わない。
+5. `state.phase` から続行する前に、待ちを次の順に処理する。前のセッションの委譲は失われたものとして扱う。
+   1. 最初に `codiel-state wait-clear --slug <slug>` を 1 回だけ呼び、出力の `cleared`(前のセッションで残った待ちの一覧)を控える。出し直した委譲の待ちを後から消さないよう、出し直しより先に呼ぶ。
+   2. `cleared` の待ちごとに、`waits/<id>.md` が `startedAt` より後に書かれているかを確かめる。書かれていれば、返答を受け取り済みとして、既存の報告の置き場への転記を済ませる。書かれていなければ、委譲を出し直す(新しい回の `id` で `wait-add` する)。古い報告のファイルや成果が残っていても、`waits/<id>.md` が無い委譲の成果としては使わない。
+   3. `cleared` に無くても、state の要素(`implement.steps`・`testCode.units`・`testLoop.units`)が `running` か `reviewing` のままで、その要素の `waits/*.md` が無いものは、起動から `wait-add` までの間に失われた委譲として出し直す。続投していた修正ラウンドも、新しい委譲に切り替える。
    4. worktree の中の委譲を出し直すときは、2.5 の規則どおり、残っている worktree とそのブランチを削除し、新しい HEAD で作り直す。
-   5. 確かめ終えたら `codiel-state wait-clear --slug <slug>` で残りを消す。
+   5. 委譲を出し直す判断はこの手順に一本化する。フェーズごとの再開の分岐(test-spec など)は、この手順の後に、受け取り済みの返答でゲートへ進むかだけを決める。
 
    続けて、`state.phase` から続行する。すでに `passed` のフェーズはやり直さない。フェーズ進行表の定型に従い、
    `in_progress` のフェーズから再開する。中断していた委譲があれば、次の報告ファイルの末尾の

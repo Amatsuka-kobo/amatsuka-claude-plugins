@@ -45,7 +45,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    `node <plugin-root>/scripts/codiel-state.mjs set-test-edit --slug <slug>` を実行してから、
    `writing-test-specs`(`spec.md`・`cases.md` の直し)と `scripting-tests`(テストコードの直し)に
    従う委譲でテスト側を先に直させる。振る舞いを変える修正なら、コードの修正の前に Red を確かめさせる。
-   報告を受けた直後に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
+   報告を `waits/<id>.md` に書いて `wait-done` した直後に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
    実行する。妥当と判断したそれ以外の所見(テスト側の修正の後にコードの修正が要る所見を含む)は、
    該当ドメインの実装の委譲先へ `implementing` の契約 (b) レビュー所見由来
    の形式(所見: severity・対象・内容・根拠・提案 + 対象ファイル)でディスパッチする(1 所見ずつ
