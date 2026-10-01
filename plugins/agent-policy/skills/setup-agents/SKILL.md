@@ -300,13 +300,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 役割を 1 つずつ、次の 1〜4 を最後まで処理してから、次の役割へ進む。モデル ID・定義名・MCP は、それぞれ別の `AskUserQuestion` 呼び出しで、前の回答を受け取ってから聞く。複数の役割をまとめて決める選択肢(「推奨をそのまま使う」「既定で全部作る」「全役割に付与」など)は出さない。`--recommended` と `--merge` は使わない。役割の kind(`impl` / `readonly`)は、`--list-coverage` の `roles[].kind` で判定する。
 
-1. モデル ID を聞く。候補は役割によらず次の表で決める。役割ごとの `--list-coverage` の `models` は候補の絞り込みに使わず、どの候補に推奨の印を付けるかにだけ使う。
+1. モデル ID を聞く。候補は次の表で決める。推奨の印は、その役割の `--list-coverage` の `models` に含まれる候補に付ける。
 
    | 条件 | 候補 |
    | --- | --- |
    | `--scope claude` | `sonnet` / `opus` / `haiku` / `fable` の 4 値 |
-   | `--scope custom` で live 照会が成功した | ステップ 1 の推奨モデル ID 9 種のうち、既定エイリアスが live にあるもの |
-   | `--scope custom` で live 照会が失敗した | ステップ 1 の推奨モデル ID 9 種すべて |
+   | `--scope custom` で live 照会が成功した | その役割の `models` のうち、既定エイリアスが live にある ID に、`claudeEnums`(`sonnet` / `opus` / `haiku` / `fable`)を加えたもの。重複は除く。 |
+   | `--scope custom` で live 照会が失敗した | その役割の `models` すべてに、`claudeEnums` を加えたもの。重複は除く。 |
 
    - 推奨の候補を先頭に置く。「この役割は作らない」は、候補の最後(ページを分けるときは最後のページの末尾)に必ず置く。選ばれたら、この役割の 2〜4 を聞かずに次の役割へ進み、ステップ 7 で報告する。
    - 選択肢は「この役割は作らない」と候補を合わせて数え、候補数の共通規則に従って出す。質問はこの役割だけを対象にし、他の役割の確認を同じ質問に入れない。
