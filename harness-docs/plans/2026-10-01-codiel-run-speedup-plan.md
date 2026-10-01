@@ -147,6 +147,55 @@
 - [ ] ステップ 4: ゲート 1 回あたりの所要時間を、`~/.raguel` の変更前の評価(同じ kind)の所要時間と比べる。所要時間は各評価の記録の時刻から取る。
 - [ ] ステップ 5: 結果を、この計画書の末尾に「手動確認の結果」として書く。
 
+### Task 7 の結果(2026-10-01、`~/codiel-speedup`、slug `add-reverse-function`)
+
+- ステップ 1: 通過。変更前の codiel で intent・design を通し、変更後の codiel で再開した。`casefile/tampered` は出なかった。
+- ステップ 2: dev-plan と intent-sync はオーケストレーターが書いた。design は変更前の codiel で通したので確かめていない。spec の委譲は dev-plan のゲートの後に 1 件出たが、Claude Code が委譲をバックグラウンドで起動し、stop-guard が止めて `mark-ask`・`resume` を往復した(設計書 §10、S13)。
+- ステップ 3: 通過。マージの後と test-loop で `node --test` を Bash で直接実行した。`e2e/` は無かった。
+- ステップ 4: ゲート 1 回は 0.5〜2.4 秒(変更前の intent 78 秒、design 127 秒)。トランスクリプトの呼び出しの時刻から測った。
+- 内容判定の誤検知が 2 件(dev-plan の plan-omits-objective、implement の code-omits-objective)。ほかのフェーズの担当を欠落と判定した(設計書 §10、S12)。
+
+### Task 8: 内容判定にフェーズの担当範囲を渡す(設計書 §10.1)
+
+役割: 軽量な実装。英文と追加位置は設計書で確定している。
+
+**Files:** `R/context/judge.ts`(`buildBodyQuery` の state、`CONTENT` の 3 問)、`R/context/__test__/judge.test.ts`
+
+- [ ] ステップ 1: 設計書 §10.1 の表の `phaseScope` を定数にし、本文の問い合わせの `state` に足す。
+- [ ] ステップ 2: `code-omits-objective`・`plan-omits-objective`・`design-omits-objective` の instructions に、設計書 §10.1 の 2 文を足す。
+- [ ] ステップ 3: 設計書 §10.5 の judge のテストを足す(9 つの phase の `phaseScope`、2 文、入力の上限の近く)。
+- [ ] ステップ 4: Done の条件を通し、`pnpm run build` の差分を含めてコミットする。
+
+### Task 9: 待ちの記録と stop-guard(設計書 §10.2.1・§10.2.2・§10.2.5)
+
+役割: 通常の実装。全セッションに作用する hook を変えるので、軽量な実装には回さない。
+
+**Files:** `plugins/codiel/src/codiel-state.ts`(`Wait`・`waits`・`wait-add`・`wait-done`・`wait-clear`・`stop --abandon-waits`)、`plugins/codiel/src/hooks/stop-guard.ts`、`plugins/codiel/src/__test__/codiel-state.test.ts`、`plugins/codiel/src/hooks/__test__/stop-guard.test.ts`
+
+- [ ] ステップ 1: `codiel-state` に設計書 §10.2.1 の型・3 サブコマンド・`stop` の変更を、既存の `set-domain`・`set-test-edit` の書き方に合わせて足す。`waits/<id>.md` の場所は `try` のディレクトリから決める。
+- [ ] ステップ 2: stop-guard を設計書 §10.2.2 のとおりに変える。「前景」という語は使わない。
+- [ ] ステップ 3: 設計書 §10.5 の codiel-state と stop-guard のテストを足し、`stop-guard.test.ts:274` の文言のテストを置き換える。
+- [ ] ステップ 4: Done の条件を通し、`pnpm run build` の差分を含めてコミットする。
+
+### Task 10: スキルと文書をバックグラウンド前提に書き換える(設計書 §10.2.3〜§10.3)
+
+役割: 通常の実装。AI 向けの指示書なので `prompt-smith:prompt-smith` を起動してから書く。Task 9 のサブコマンドの名前と引数に合わせるので、Task 9 の後に行う。
+
+**Files:** 設計書 §10.4 の「スキル」と「文書」の全ファイル
+
+- [ ] ステップ 1: `orchestrating-runs` §3 の委譲の規律を、設計書 §10.2.3 に置き換える。
+- [ ] ステップ 2: 再開の手順に §10.2.4 を、run を止める手順に §10.2.5 を足す。
+- [ ] ステップ 3: test-spec と dev-plan を §10.3 の並列に戻す。再開の分岐と、2 つの ASK をまとめて裁定する規則を入れる。
+- [ ] ステップ 4: `raguel-gating` の evaluate のバックグラウンド化・裁定と `resume`・stop の記述を合わせる。`reviewing-diffs:140-141` を削る。
+- [ ] ステップ 5: 「返答を受けた直後に書く」系統の箇所に `waits/<id>.md` を足し、文書(`docs/DESIGN.md`・`skill-flowcharts.md`・`e2e-report-format.md`・README 2 本)を合わせる。
+- [ ] ステップ 6: `grep -rn -E "前景|run_in_background|同じ応答で|返るまで" plugins/codiel/skills plugins/codiel/docs plugins/codiel/references` の残りが、バックグラウンド前提と矛盾しない文だけであることを確かめ、理由を完了報告に書く。
+- [ ] ステップ 7: コミットする。
+
+### Task 11: レビューと手動確認
+
+- [ ] ステップ 1: Task 8・9 の diff をコードレビューへ、Task 10 の diff をスキル改訂のレビューへ並列に出す。
+- [ ] ステップ 2: 新しいセッションで run を 1 本通し、設計書 §10.5 の手動確認の 4 点を確かめる。結果をこの計画書に書く。
+
 ## コミットの分け方
 
 | コミット | 内容 |
