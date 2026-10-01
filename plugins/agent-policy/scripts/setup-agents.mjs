@@ -767,6 +767,22 @@ function effortFor(roleIds, modelId) {
 function modelById(id) {
   return MODELS.find((model) => model.id === id);
 }
+function modelIdForAlias(alias) {
+  const lower = alias.toLowerCase();
+  if (!lower.startsWith("claude-")) return void 0;
+  const tokens = lower.split(/[-._]/);
+  return MODELS.find((spec) => {
+    if (spec.vendor === "claude" || !lower.includes(spec.vendor)) return false;
+    const family = spec.id.slice(spec.vendor.length + 1);
+    return family === "" || tokens.includes(family);
+  })?.id;
+}
+function rankAliases(modelId, aliases) {
+  const preset = modelById(modelId)?.model;
+  return aliases.filter((alias) => modelIdForAlias(alias) === modelId).sort(
+    (a, b) => Number(b === preset) - Number(a === preset) || a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)
+  );
+}
 var CUSTOM_INJECTION_VALUES = [
   "custom",
   "with-codex",
@@ -921,13 +937,10 @@ function requireModel(options) {
   return spec;
 }
 function recommendedForAlias(model) {
-  const modelIds = MODELS.filter((spec) => spec.model === model).map(
-    (spec) => spec.id
-  );
+  const modelId = modelIdOf(model);
+  if (modelId === null) return [];
   return sortRoleIds(
-    Object.entries(RECOMMENDED).filter(
-      ([, recommended]) => recommended.some((modelId) => modelIds.includes(modelId))
-    ).map(([role]) => role)
+    Object.entries(RECOMMENDED).filter(([, recommended]) => recommended.includes(modelId)).map(([role]) => role)
   );
 }
 function validateRoles(options, model) {
@@ -970,7 +983,7 @@ function resolveVendor(options, model, spec, live) {
   if (options.vendor !== "") return options.vendor;
   if (isClaudeEnum(model)) return "claude";
   if (!live.ok) return spec.vendor;
-  const vendor = live.vendors[model] ?? "unknown";
+  const vendor = liveVendorOf(model, live);
   if (vendor === "unknown") {
     throw new Error(
       `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
@@ -978,25 +991,46 @@ function resolveVendor(options, model, spec, live) {
   }
   return vendor;
 }
+function liveVendorOf(model, live) {
+  const vendor = live.vendors[model] ?? "unknown";
+  if (vendor !== "unknown") return vendor;
+  const modelId = modelIdForAlias(model);
+  return modelId === void 0 ? "unknown" : modelById(modelId)?.vendor ?? "unknown";
+}
 function modelIsAvailable(model, live) {
   return isClaudeEnum(model) || live.ids.includes(model);
 }
-function recommendedTarget(options, live, role) {
+function liveAliasesOf(spec, live) {
+  if (!live.ok || isClaudeEnum(spec.model)) return [spec.model];
+  return rankAliases(spec.id, live.ids);
+}
+function aliasWarnings(modelId, aliases) {
+  const [chosen, ...rest] = aliases;
+  if (chosen === void 0 || rest.length === 0) return [];
+  return [
+    `model: ${modelId} matches several live aliases; using ${chosen}, not ${rest.join(", ")}`
+  ];
+}
+function recommendedTarget(options, live, role, warnings) {
   const candidates = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][role] : RECOMMENDED[role];
-  const spec = candidates.map((id) => modelById(id)).find(
-    (candidate) => candidate !== void 0 && (!live.ok || modelIsAvailable(candidate.model, live))
-  );
-  if (spec === void 0)
-    throw new Error(`roles: no available model for ${role}`);
-  return {
-    roleId: role,
-    modelId: spec.id,
-    name: defaultAgentName(options, spec, role),
-    model: spec.model,
-    roles: [role],
-    color: VENDOR_COLORS[spec.vendor],
-    vendor: spec.vendor
-  };
+  for (const id of candidates) {
+    const spec = modelById(id);
+    if (spec === void 0) continue;
+    const aliases = liveAliasesOf(spec, live);
+    const model = aliases[0];
+    if (model === void 0) continue;
+    warnings.push(...aliasWarnings(spec.id, aliases));
+    return {
+      roleId: role,
+      modelId: spec.id,
+      name: defaultAgentName(options, spec, role),
+      model,
+      roles: [role],
+      color: VENDOR_COLORS[spec.vendor],
+      vendor: spec.vendor
+    };
+  }
+  throw new Error(`roles: no available model for ${role}`);
 }
 function targetsFor(options, live) {
   const warnings = live.ok ? [] : [unavailableWarning(live)];
@@ -1024,7 +1058,7 @@ function targetsFor(options, live) {
       }
       const target = coveringTarget(role, covering, fragments, live, warnings);
       if (target !== void 0) {
-        targets.push(target ?? recommendedTarget(options, live, role));
+        targets.push(target ?? recommendedTarget(options, live, role, warnings));
       }
     }
     return { warnings, targets };
@@ -1040,7 +1074,12 @@ function targetsFor(options, live) {
       `model: ${options.model} is not available with --scope claude`
     );
   }
-  const model = options.model === "" ? spec.model : options.model;
+  let model = options.model;
+  if (model === "") {
+    const aliases = liveAliasesOf(spec, live);
+    model = aliases[0] ?? spec.model;
+    warnings.push(...aliasWarnings(spec.id, aliases));
+  }
   if (options.write && live.ok && !modelIsAvailable(model, live)) {
     throw new Error(
       `model: ${model} is not a Claude enum and was not found in live models`
@@ -1462,7 +1501,7 @@ function listLiveModels(live, scope) {
     ok: true,
     models: live.ids.map((id) => ({
       id,
-      vendor: live.vendors[id] ?? "unknown",
+      vendor: liveVendorOf(id, live),
       recommendedFor: recommendedForAlias(id)
     })),
     claudeEnums
@@ -1534,7 +1573,7 @@ function scopedDefinitions(projectDir, scope) {
 }
 function modelIdOf(model) {
   if (model === null || model === void 0) return null;
-  return MODELS.find((spec) => spec.model === model)?.id ?? null;
+  return MODELS.find((spec) => spec.model === model)?.id ?? modelIdForAlias(model) ?? null;
 }
 function isVendor(value) {
   return value === "gpt" || value === "grok" || value === "claude" || value === "none";
@@ -1570,8 +1609,10 @@ function coveringTarget(role, covering, fragments, live, warnings) {
     return void 0;
   }
   if (live.ok && !modelIsAvailable(definition.model, live)) {
+    const others = rankAliases(modelId, live.ids);
+    const hint = others.length > 0 ? ` (live aliases of ${modelId}: ${others.join(", ")})` : "";
     warnings.push(
-      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated`
+      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated${hint}`
     );
     return void 0;
   }
@@ -1678,21 +1719,21 @@ function inspectDefinitions(projectDir, fragments) {
   return definitions;
 }
 function candidatesFor(recommended, scope, live) {
-  const pool = scope === "claude-only" ? recommended.filter((id) => isClaudeEnum(id)) : recommended.filter((id) => {
-    const spec = modelById(id);
-    return spec !== void 0 && (!live.ok || modelIsAvailable(spec.model, live));
-  });
+  const pool = scope === "claude-only" ? recommended.filter((id) => isClaudeEnum(id)) : recommended;
   const ids = [.../* @__PURE__ */ new Set([...pool, ...CLAUDE_ENUM_MODELS])];
-  return ids.flatMap((id) => {
+  const candidates = ids.flatMap((id) => {
     const spec = modelById(id);
-    return spec === void 0 ? [] : [
-      {
-        modelId: spec.id,
-        model: spec.model,
-        recommended: recommended.includes(id)
-      }
-    ];
+    if (spec === void 0) return [];
+    return liveAliasesOf(spec, live).map((model, index) => ({
+      modelId: spec.id,
+      model,
+      recommended: index === 0 && recommended.includes(id)
+    }));
   });
+  return [
+    ...candidates.filter((candidate) => candidate.recommended),
+    ...candidates.filter((candidate) => !candidate.recommended)
+  ];
 }
 function listCoverage(options, live) {
   const roleIds = sortRoleIds(Object.keys(RECOMMENDED));

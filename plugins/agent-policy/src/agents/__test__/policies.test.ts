@@ -10,10 +10,12 @@ import {
   MODELS,
   type ModelId,
   modelById,
+  modelIdForAlias,
   modelsFor,
   POLICIES,
   policyForInjection,
   RECOMMENDED,
+  rankAliases,
   rolesFor,
   runsOnClaude
 } from "../policies"
@@ -311,5 +313,58 @@ describe("candidateScopeFor", () => {
     "unknown"
   ])("%s は候補範囲を決めない", (value) => {
     expect(candidateScopeFor(value)).toBeUndefined()
+  })
+})
+
+describe("modelIdForAlias", () => {
+  it.each([
+    ["claude-gpt6-sol", "gpt-sol"],
+    ["claude-gpt-6.1-sol", "gpt-sol"],
+    ["claude-GPT-6-1-Sol", "gpt-sol"],
+    ["claude-gpt-6.1-sol-pro", "gpt-sol"],
+    ["claude-gpt_6_terra", "gpt-terra"],
+    ["claude-gpt-6-luna", "gpt-luna"],
+    ["claude-gpt-6-astra", "gpt-astra"],
+    ["claude-grok-4-7", "grok"],
+    ["claude-grok5", "grok"]
+  ])("%s は %s に当たる", (alias, modelId) => {
+    expect(modelIdForAlias(alias)).toBe(modelId)
+  })
+
+  it.each([
+    "gpt-6-sol",
+    "claude-gpt-6-console",
+    "claude-gpt-6",
+    "claude-sol",
+    "opus",
+    "my-model"
+  ])("%s はどのモデルにも当たらない", (alias) => {
+    expect(modelIdForAlias(alias)).toBeUndefined()
+  })
+})
+
+describe("rankAliases", () => {
+  it("既定エイリアスと完全一致するものを長さより先に置く", () => {
+    expect(
+      rankAliases("gpt-sol", ["claude-gpt6-sol", "claude-gpt-6-1-sol"])
+    ).toEqual(["claude-gpt-6-1-sol", "claude-gpt6-sol"])
+  })
+
+  it("既定エイリアスが無ければ短いものを先に置く", () => {
+    expect(
+      rankAliases("gpt-sol", ["claude-gpt-6.1-sol-pro", "claude-gpt6-sol"])
+    ).toEqual(["claude-gpt6-sol", "claude-gpt-6.1-sol-pro"])
+  })
+
+  it("同じ長さなら辞書順で先のものを先に置く", () => {
+    expect(
+      rankAliases("gpt-sol", ["claude-gpt-6.2-sol", "claude-gpt-6.1-sol"])
+    ).toEqual(["claude-gpt-6.1-sol", "claude-gpt-6.2-sol"])
+  })
+
+  it("モデル ID に当たらないエイリアスを除く", () => {
+    expect(
+      rankAliases("gpt-sol", ["claude-grok-4-7", "custom", "claude-gpt6-sol"])
+    ).toEqual(["claude-gpt6-sol"])
   })
 })

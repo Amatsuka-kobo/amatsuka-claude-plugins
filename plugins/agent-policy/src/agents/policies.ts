@@ -207,6 +207,38 @@ export function modelById(id: string): ModelSpec | undefined {
   return MODELS.find((model) => model.id === id)
 }
 
+// live のエイリアスを外部モデルの ID に当てる。付け方が利用者とプロキシで変わるため、完全一致に頼らない。
+// 外部モデルの ID は `<ベンダー語>` か `<ベンダー語>-<系統名>` の形で、ベンダー語は部分一致、
+// 系統名は `-` `.` `_` で区切ったトークンとの完全一致で見る(`console` が `sol` に当たらないように)。
+// Claude Code は外部モデルを `claude-` で始まる名前でしか呼べないため、それ以外は当てない。
+export function modelIdForAlias(alias: string): ModelId | undefined {
+  const lower = alias.toLowerCase()
+  if (!lower.startsWith("claude-")) return undefined
+  const tokens = lower.split(/[-._]/)
+  return MODELS.find((spec) => {
+    if (spec.vendor === "claude" || !lower.includes(spec.vendor)) return false
+    const family = spec.id.slice(spec.vendor.length + 1)
+    return family === "" || tokens.includes(family)
+  })?.id
+}
+
+// modelId に当たるエイリアスを推奨順に返す。先頭が推奨である。
+// 既定エイリアスと完全一致するもの、短いもの、辞書順で先のものの順に置く。
+export function rankAliases(
+  modelId: ModelId,
+  aliases: readonly string[]
+): string[] {
+  const preset = modelById(modelId)?.model
+  return aliases
+    .filter((alias) => modelIdForAlias(alias) === modelId)
+    .sort(
+      (a, b) =>
+        Number(b === preset) - Number(a === preset) ||
+        a.length - b.length ||
+        (a < b ? -1 : a > b ? 1 : 0)
+    )
+}
+
 export function policyById(id: string): Policy | undefined {
   return POLICIES.find((policy) => policy.id === id)
 }

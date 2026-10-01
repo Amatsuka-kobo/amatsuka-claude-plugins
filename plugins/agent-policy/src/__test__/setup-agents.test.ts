@@ -905,6 +905,188 @@ describe("--list-coverage の candidates", () => {
   })
 })
 
+describe("エイリアスの部分一致", () => {
+  const RENAMED = [
+    { id: "claude-gpt-6.1-sol-pro", owned_by: "other" },
+    { id: "claude-gpt6-sol", owned_by: "other" },
+    { id: "claude-grok5", owned_by: "other" }
+  ]
+
+  async function renamedProxy(): Promise<FakeModelsServer> {
+    return startModelsServer({ body: JSON.stringify({ data: RENAMED }) })
+  }
+
+  it("--list-live-models は既定と違うエイリアスにも vendor と推奨役割を付ける", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<LiveModelsResult>(
+      ["--list-live-models", "--scope", "custom"],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(
+      result.models.map((model) => [
+        model.id,
+        model.vendor,
+        model.recommendedFor.includes("complex-impl")
+      ])
+    ).toEqual([
+      ["claude-gpt-6.1-sol-pro", "gpt", true],
+      ["claude-gpt6-sol", "gpt", true],
+      ["claude-grok5", "grok", true]
+    ])
+  })
+
+  it("candidates は当たったエイリアスを別々の要素で返し、推奨の印を 1 つだけ付ける", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<CoverageResult>(
+      ["--list-coverage", "--scope", "custom", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(
+      result.roles.find((role) => role.id === "complex-impl")?.candidates
+    ).toEqual([
+      { modelId: "gpt-sol", model: "claude-gpt6-sol", recommended: true },
+      { modelId: "opus", model: "opus", recommended: true },
+      { modelId: "grok", model: "claude-grok5", recommended: true },
+      {
+        modelId: "gpt-sol",
+        model: "claude-gpt-6.1-sol-pro",
+        recommended: false
+      },
+      { modelId: "sonnet", model: "sonnet", recommended: false },
+      { modelId: "haiku", model: "haiku", recommended: false },
+      { modelId: "fable", model: "fable", recommended: false }
+    ])
+  })
+
+  it("definitions の modelId を既定と違うエイリアスからも逆引きする", () => {
+    writeAgent("renamed.md", [
+      "---",
+      "name: renamed",
+      "model: claude-gpt-6.1-sol",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+
+    expect(definitionOf(coverage(), "renamed")?.modelId).toBe("gpt-sol")
+  })
+
+  it("--recommended は live にある推奨のエイリアスを model にし、選ばなかったエイリアスを warnings に載せる", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--write",
+        "--recommended",
+        "--scope",
+        "custom",
+        "--roles",
+        "complex-impl",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.results[0]?.modelId).toBe("gpt-sol")
+    const content = fs.readFileSync(
+      path.join(project, result.results[0]?.target ?? ""),
+      "utf8"
+    )
+    expect(content).toMatch(/^model: claude-gpt6-sol$/m)
+    expect(content).toMatch(/^agent-policy-vendor: gpt$/m)
+    expect(
+      result.warnings.some(
+        (warning) =>
+          warning.includes("claude-gpt6-sol") &&
+          warning.includes("claude-gpt-6.1-sol-pro")
+      )
+    ).toBe(true)
+  })
+
+  it("--model-id だけを渡すと live にあるエイリアスを model の既定値にし、vendor を判定で補う", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--write",
+        "--model-id",
+        "grok",
+        "--name",
+        "grok-explorer",
+        "--roles",
+        "realtime-research",
+        "--scope",
+        "custom",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "grok-explorer.md"),
+      "utf8"
+    )
+    expect(content).toMatch(/^model: claude-grok5$/m)
+    expect(content).toMatch(/^agent-policy-vendor: grok$/m)
+  })
+
+  it("--recommended は live にある既定外エイリアスの被覆定義を再生成し、live に無いものは同じモデルのエイリアスを添えて warnings に載せる", async () => {
+    const proxy = await renamedProxy()
+    writeAgent("present.md", [
+      "---",
+      "name: present",
+      "model: claude-gpt-6.1-sol-pro",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: complex-impl",
+      "---",
+      ""
+    ])
+    writeAgent("absent.md", [
+      "---",
+      "name: absent",
+      "model: claude-gpt-6-1-sol",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: code-review",
+      "---",
+      ""
+    ])
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--check",
+        "--recommended",
+        "--scope",
+        "custom",
+        "--roles",
+        "complex-impl,code-review",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.results.map((entry) => entry.target)).toEqual([
+      ".claude/agents/present.md"
+    ])
+    expect(
+      result.warnings.some(
+        (warning) =>
+          warning.includes("absent") && warning.includes("claude-gpt6-sol")
+      )
+    ).toBe(true)
+  })
+})
+
 describe("--list-coverage の点検結果", () => {
   it("modelBreakdown はマーカー付き定義を Claude で動くものと外部ベンダーに分けて数える", () => {
     const marker = "agent-policy-role: explore"

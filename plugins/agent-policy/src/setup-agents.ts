@@ -20,7 +20,11 @@ import {
   type Vendor
 } from "./agents/fragments"
 import { textHash } from "./agents/hash"
-import { fetchLiveModels, type LiveModels } from "./agents/live-models"
+import {
+  fetchLiveModels,
+  type LiveModels,
+  type LiveVendor
+} from "./agents/live-models"
 import {
   listMcpServers,
   type McpCurrent,
@@ -37,7 +41,9 @@ import {
   type ModelId,
   type ModelSpec,
   modelById,
+  modelIdForAlias,
   RECOMMENDED,
+  rankAliases,
   runsOnClaude
 } from "./agents/policies"
 import {
@@ -202,14 +208,11 @@ function requireModel(options: Options): ModelSpec {
 }
 
 function recommendedForAlias(model: string): RoleId[] {
-  const modelIds = MODELS.filter((spec) => spec.model === model).map(
-    (spec) => spec.id
-  )
+  const modelId = modelIdOf(model)
+  if (modelId === null) return []
   return sortRoleIds(
     (Object.entries(RECOMMENDED) as [RoleId, ModelId[]][])
-      .filter(([, recommended]) =>
-        recommended.some((modelId) => modelIds.includes(modelId))
-      )
+      .filter(([, recommended]) => recommended.includes(modelId))
       .map(([role]) => role)
   )
 }
@@ -274,7 +277,7 @@ function resolveVendor(
   if (isClaudeEnum(model)) return "claude"
   if (!live.ok) return spec.vendor
 
-  const vendor = live.vendors[model] ?? "unknown"
+  const vendor = liveVendorOf(model, live)
   if (vendor === "unknown") {
     throw new Error(
       `vendor: could not infer vendor for model "${model}"; pass --vendor gpt|grok|claude|none`
@@ -283,8 +286,34 @@ function resolveVendor(
   return vendor
 }
 
+// プロキシの owned_by が分からないときは、エイリアスの判定でベンダーを補う。
+function liveVendorOf(model: string, live: LiveModels): LiveVendor {
+  const vendor = live.vendors[model] ?? "unknown"
+  if (vendor !== "unknown") return vendor
+  const modelId = modelIdForAlias(model)
+  return modelId === undefined
+    ? "unknown"
+    : ((modelById(modelId)?.vendor as LiveVendor | undefined) ?? "unknown")
+}
+
+// Claude Code は定義の model 値そのものを呼ぶため、書き込む値は live との完全一致で確かめる。
 function modelIsAvailable(model: string, live: LiveModels): boolean {
   return isClaudeEnum(model) || live.ids.includes(model)
+}
+
+// モデル ID に使える model 値を推奨順に返す。先頭が推奨である。
+// live が取れないときと Claude の enum は既定の値だけを返す。
+function liveAliasesOf(spec: ModelSpec, live: LiveModels): string[] {
+  if (!live.ok || isClaudeEnum(spec.model)) return [spec.model]
+  return rankAliases(spec.id, live.ids)
+}
+
+function aliasWarnings(modelId: ModelId, aliases: string[]): string[] {
+  const [chosen, ...rest] = aliases
+  if (chosen === undefined || rest.length === 0) return []
+  return [
+    `model: ${modelId} matches several live aliases; using ${chosen}, not ${rest.join(", ")}`
+  ]
 }
 
 // --recommended は各役割に推奨モデルの定義を 1 件ずつ作る。
@@ -293,30 +322,31 @@ function modelIsAvailable(model: string, live: LiveModels): boolean {
 function recommendedTarget(
   options: Options,
   live: LiveModels,
-  role: RoleId
+  role: RoleId,
+  warnings: string[]
 ): Target {
   const candidates =
     options.scope === "claude-only"
       ? ASSIGNMENTS["claude-model-policy"][role]
       : RECOMMENDED[role]
-  const spec = candidates
-    .map((id) => modelById(id))
-    .find(
-      (candidate) =>
-        candidate !== undefined &&
-        (!live.ok || modelIsAvailable(candidate.model, live))
-    )
-  if (spec === undefined)
-    throw new Error(`roles: no available model for ${role}`)
-  return {
-    roleId: role,
-    modelId: spec.id,
-    name: defaultAgentName(options, spec, role),
-    model: spec.model,
-    roles: [role],
-    color: VENDOR_COLORS[spec.vendor],
-    vendor: spec.vendor
+  for (const id of candidates) {
+    const spec = modelById(id)
+    if (spec === undefined) continue
+    const aliases = liveAliasesOf(spec, live)
+    const model = aliases[0]
+    if (model === undefined) continue
+    warnings.push(...aliasWarnings(spec.id, aliases))
+    return {
+      roleId: role,
+      modelId: spec.id,
+      name: defaultAgentName(options, spec, role),
+      model,
+      roles: [role],
+      color: VENDOR_COLORS[spec.vendor],
+      vendor: spec.vendor
+    }
   }
+  throw new Error(`roles: no available model for ${role}`)
 }
 
 function targetsFor(options: Options, live: LiveModels): TargetResolution {
@@ -346,7 +376,7 @@ function targetsFor(options: Options, live: LiveModels): TargetResolution {
       }
       const target = coveringTarget(role, covering, fragments, live, warnings)
       if (target !== undefined) {
-        targets.push(target ?? recommendedTarget(options, live, role))
+        targets.push(target ?? recommendedTarget(options, live, role, warnings))
       }
     }
     return { warnings, targets }
@@ -367,7 +397,12 @@ function targetsFor(options: Options, live: LiveModels): TargetResolution {
       `model: ${options.model} is not available with --scope claude`
     )
   }
-  const model = options.model === "" ? spec.model : options.model
+  let model = options.model
+  if (model === "") {
+    const aliases = liveAliasesOf(spec, live)
+    model = aliases[0] ?? spec.model
+    warnings.push(...aliasWarnings(spec.id, aliases))
+  }
   if (options.write && live.ok && !modelIsAvailable(model, live)) {
     throw new Error(
       `model: ${model} is not a Claude enum and was not found in live models`
@@ -909,7 +944,7 @@ function inheritMcp(
   return { servers, dropped }
 }
 
-// live の実在モデルへ、RECOMMENDED の既定エイリアス一致で役割を添える。
+// live の実在モデルへ、エイリアスの判定で当てたモデル ID の推奨役割を添える。
 function listLiveModels(live: LiveModels, scope: CandidateScope): unknown {
   const claudeEnums = [...CLAUDE_ENUM_MODELS]
   if (scope === "claude-only") {
@@ -932,7 +967,7 @@ function listLiveModels(live: LiveModels, scope: CandidateScope): unknown {
     ok: true,
     models: live.ids.map((id) => ({
       id,
-      vendor: live.vendors[id] ?? "unknown",
+      vendor: liveVendorOf(id, live),
       recommendedFor: recommendedForAlias(id)
     })),
     claudeEnums
@@ -1043,9 +1078,14 @@ function scopedDefinitions(
 }
 
 // model 値から推奨モデル ID を逆引きする。Claude enum は同名の ID に当たる。
+// 外部モデルは既定エイリアスと違う名前でも、エイリアスの判定で当てる。
 function modelIdOf(model: string | null | undefined): ModelId | null {
   if (model === null || model === undefined) return null
-  return MODELS.find((spec) => spec.model === model)?.id ?? null
+  return (
+    MODELS.find((spec) => spec.model === model)?.id ??
+    modelIdForAlias(model) ??
+    null
+  )
 }
 
 function isVendor(value: string): value is Vendor {
@@ -1098,8 +1138,14 @@ function coveringTarget(
     return undefined
   }
   if (live.ok && !modelIsAvailable(definition.model, live)) {
+    // 同じモデルの別エイリアスが live にあっても書き換えない。利用者が選び直す。
+    const others = rankAliases(modelId, live.ids)
+    const hint =
+      others.length > 0
+        ? ` (live aliases of ${modelId}: ${others.join(", ")})`
+        : ""
     warnings.push(
-      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated`
+      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated${hint}`
     )
     return undefined
   }
@@ -1256,26 +1302,22 @@ function candidatesFor(
   const pool =
     scope === "claude-only"
       ? recommended.filter((id) => isClaudeEnum(id))
-      : recommended.filter((id) => {
-          const spec = modelById(id)
-          return (
-            spec !== undefined &&
-            (!live.ok || modelIsAvailable(spec.model, live))
-          )
-        })
+      : recommended
   const ids = [...new Set([...pool, ...(CLAUDE_ENUM_MODELS as ModelId[])])]
-  return ids.flatMap((id) => {
+  // 1 つのモデル ID に live のエイリアスが複数当たれば、それぞれを候補にし、推奨の印は先頭だけに付ける。
+  const candidates = ids.flatMap((id) => {
     const spec = modelById(id)
-    return spec === undefined
-      ? []
-      : [
-          {
-            modelId: spec.id,
-            model: spec.model,
-            recommended: recommended.includes(id)
-          }
-        ]
+    if (spec === undefined) return []
+    return liveAliasesOf(spec, live).map((model, index) => ({
+      modelId: spec.id,
+      model,
+      recommended: index === 0 && recommended.includes(id)
+    }))
   })
+  return [
+    ...candidates.filter((candidate) => candidate.recommended),
+    ...candidates.filter((candidate) => !candidate.recommended)
+  ]
 }
 
 function listCoverage(options: Options, live: LiveModels): unknown {
