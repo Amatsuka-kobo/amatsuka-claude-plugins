@@ -60,7 +60,7 @@ disallowed-tools: Write
 
 `$ARGUMENTS` に `--scope claude` または `--scope custom` があればそれを使う。無ければ `AMATSUKA_AGENT_AUTO_INJECTION` から決める(`custom` 系なら `custom`、それ以外は `claude`)。
 
-1. live models を照会する。応答の `ok`、`reason`、`models`、`claudeEnums` を保持する。
+1. live models を照会する。応答の `ok` と `reason` を保持する。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope <claude|custom> --dir "$PWD"
@@ -148,7 +148,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 ### ステップ 1: live models の照会
 
-`--scope claude` のときは `--list-live-models` を実行しない(実行しても `models` は空で返る)。候補は `sonnet` / `opus` / `haiku` / `fable` の 4 値に固定し、ステップ 3 を飛ばしてステップ 4 へ進む。以下は `--scope custom` の手順である。
+`--scope claude` のときは `--list-live-models` を実行しない。ステップ 3 を飛ばしてステップ 4 へ進む。以下は `--scope custom` の手順である。
 
 live models を取得する。
 
@@ -156,10 +156,9 @@ live models を取得する。
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope <claude|custom> --dir "$PWD"
 ```
 
-応答の `models` は `id`、`vendor`、`recommendedFor` を持つ。`claudeEnums` はプロキシ照会の成否にかかわらず常に返る Claude enum である。以後のために、この応答と `ok` / `reason` を保持する。
+この応答の `ok` / `reason` を保持し、照会が成功したかどうかだけを決める。モデル候補はここで組み立てない。候補は 5n と 5b で、`--list-coverage` の `candidates` を使う。照会に失敗したときは、CLI が既定エイリアスを `model` に入れて返す。
 
-- `ok: true` のときは、`models` にある実在エイリアスと `claudeEnums` の両方をモデル候補にする。各実在エイリアスには `vendor` と `recommendedFor` を添え、`recommendedFor` が空でないものには推奨役割を明示する。
-- `ok: false` のときは、`claudeEnums` と、推奨モデル ID の既定エイリアスを候補にする。推奨モデル ID と既定エイリアスは、`gpt-sol` = `claude-gpt-6-1-sol`、`gpt-terra` = `claude-gpt-5-6-terra`、`gpt-luna` = `claude-gpt-6-luna`、`gpt-astra` = `claude-gpt-6-astra`、`grok` = `claude-grok-4-7`、`haiku` = `haiku`、`sonnet` = `sonnet`、`fable` = `fable`、`opus` = `opus` である。「プロキシ未検出または照会失敗(`<reason>`)のため実在の確認ができない。定義は作れるが実在は保証されない」と明示して続行する。
+- `ok: false` のときは、「プロキシ未検出または照会失敗(`<reason>`)のため実在の確認ができない。定義は作れるが実在は保証されない」と明示して続行する。
 
 ### ステップ 1b: 既存定義の点検と被覆確認
 
@@ -171,7 +170,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
 ```
 
-この応答の `roles` は `RECOMMENDED` の全 RoleId を対象にし、各要素は `id`、`label`、`kind`(`impl` / `readonly`)、`defaultName`、推奨の `models`、`coveredBy` を返す。`uncovered` は `coveredBy` が空の役割だけである。
+この応答の `roles` は `RECOMMENDED` の全 RoleId を対象にし、各要素は `id`、`label`、`kind`(`impl` / `readonly`)、`defaultName`、`candidates`(`modelId`・`model`・`recommended`)、`coveredBy` を返す。`uncovered` は `coveredBy` が空の役割だけである。
 
 `definitions` は、`agent-policy-role` を持つ全定義の点検結果である。`--scope` では絞られない。各要素は次を持つ。
 
@@ -254,7 +253,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 ステップ 1 の `--list-live-models` がプロキシ前提確認を兼ねる。別の検証コマンドの実行は求めない。
 
-- `ok: true` のときは、`models` の各 `id` だけを外部モデルの実在する候補として扱う。
+- `ok: true` のときは、`candidates` に載る外部モデルは実在するものとして扱う。
 - `ok: false` のときは、`reason` を示し、外部モデルの生成物は実在保証を持たないことを再度伝える。後続の `--write` / `--check` は、照会失敗を `warnings` に入れて検証なしで続行する。
 
 ### ステップ 4: 推奨定義の確認
@@ -399,7 +398,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 1. モデル ID を、5n の 1 の手順と候補で尋ねる。1 問か 2 問かの分け方も 5n の 1 に従う。
    - `modelId` が `null` の定義(どのモデル ID にも当たらないエイリアス、`inherit`、`model` 欄なし)では、5n の「この役割は作らない」の位置に「再生成しない」を置き、選択肢の数に含める。選ばれたら、その定義をステップ 7 で報告する。
    - `modelId` が `null` でない定義では、空の選択肢を置かない。
-   - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだモデル ID の既定の model 値> に変わる」と書く。<> の中は実際の値に置き換える。
+   - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだ候補の `model`> に変わる」と書く。<> の中は実際の値に置き換える。
 2. ベンダーを、5n の 4 の条件で確定する。
 3. 差分方針を、保持マージ、選択した項目の保持、完全上書き、スキップから尋ねる。保持対象を選ぶ場合は `--keep` を個別コマンドに渡す。`modelId` が `null` だけが理由の定義では、差分方針を尋ねず保持マージにする。
 
@@ -434,7 +433,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id
 
 - `--model-id` には、定義の `modelId` か、ステップ 5b で決めたモデル ID を渡す。
 - `--replace` には、ステップ 5 でテンプレートに置き換えると決めたもの(`description` / `preamble`)だけを渡す。渡さなかったものは、`same` 以外なら既存のまま保持される。
-- `--model` には、定義の `model` を渡す。ステップ 5b でモデル ID を選んだ定義では、定義の元の値ではなく、選んだモデル ID の既定の model 値(ステップ 1 の対応)を渡す。
+- `--model` には、定義の `model` を渡す。ステップ 5b でモデル ID を選んだ定義では、定義の元の値ではなく、選んだ候補の `model`(5n の 1)を渡す。
 - `--name` には、`file` のファイル名から `.md` を除いた値を渡す。
 - `--vendor` には、ステップ 5b でベンダーを確定したときはその値を渡す。確定していないときは、定義の `vendor` があればその値を、無ければ `none` を渡す。
 - ステップ 5b で差分方針を決めた定義は、`--merge` と `--keep` をその方針に合わせる。
