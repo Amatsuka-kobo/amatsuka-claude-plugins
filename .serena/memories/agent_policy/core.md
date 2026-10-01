@@ -384,7 +384,8 @@ bake it into the helpers, or the new default becomes untestable.
   (`--model-id <modelId> --name <file> --model <def model> --roles <def roles>`), not
   `--recommended`. `--recommended` itself (used by `--yes`) targets the single covering definition
   in scope (file name, model, vendor — absent vendor becomes `none` —, roles), once per file; roles
-  with 2+ covering definitions, definitions whose model maps to no model id, unknown vendors, and
+  with 2+ covering definitions, definitions still declaring retired or unknown role ids (their
+  roles are not default-generated either), definitions whose model maps to no model id, unknown vendors, and
   (live ok) models missing from live are skipped with warnings. `definitions[].modelId` is the
   reverse lookup of `model` through `MODELS`.
 - **description / preamble retention (design 3-5d)**: `compose` writes
