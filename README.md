@@ -73,6 +73,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 変更ごとの intent とは別に、領域ごとの持続層(`docs/intents/domains/<領域>.md`)に目的と意図的な制約を残し、次の run の聞き取り・設計・レビューの前提にします。<br>
 実装はテスト駆動で進みます。test-code フェーズが、仕様からユニットテストと E2E テストを先に書いて失敗を確かめ、implement フェーズがそれを通します。テストの仕様は `.codiel/config.json` の `testsDir`(既定は `docs/codiel/tests`)の下に置き、implement 以降にテストを書き換えようとすると hook が確認を求めます。<br>
 `.codiel/config.json` には testsDir のほか、run の文書(議題・設計・実装計画)の置き場 `runsDir`(既定は `docs/codiel/runs`)と Raguel の設定 `raguel` を置き、git で共有します。run の state と報告は `.codiel/runs/` に残り、`/codiel:init` が足す `.gitignore` の行で git から外れます。<br>
+Raguel のパネルのプロバイダーは `claude` と `codex` から選べ、既定は `claude` です。<br>
 implement フェーズは、実装計画の Step を依存関係からグループに分け、同じグループの Step を git worktree で並列に実装してからマージします。<br>
 run の間に GitHub へ投稿する本文には `<!-- codiel:generated -->` を付け、hook がこれを確かめます(run の間に gh-utility から投稿すると拒否されます)。スクリーンショットなどの画像は、`gh --attach` か claude-in-chrome で本文に載せます。<br>
 ※ Codiel とは、Code + el（ヘブライ語で神を意味する、大天使の名前に付く接尾辞）の造語です。天使（👀🌿）が嬉々としてコーディングする様をイメージしています。

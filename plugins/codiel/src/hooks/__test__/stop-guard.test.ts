@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -66,12 +68,120 @@ function callHook(
 }
 
 function cli(root: string, args: string[]): string {
-  return runTs(CLI, args, { cwd: root })
+  return runTs(CLI, args, {
+    cwd: root,
+    env: {
+      ...process.env,
+      RAGUEL_CONFIG: path.join(root, ".raguel", "config.json")
+    }
+  })
+}
+
+function git(root: string, ...args: string[]): string {
+  return execFileSync(
+    "git",
+    ["-c", "user.name=t", "-c", "user.email=t@example.test", ...args],
+    { cwd: root, encoding: "utf8" }
+  ).trim()
+}
+
+// git のリポジトリ(空のコミット 1 つ)にし、Raguel の記録の置き場を root の中へ向ける。
+// code 系フェーズの start-phase が HEAD を読み、pass-gate と mark-ask が Raguel の記録を読むため
+function newRoot(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  git(root, "init", "-q")
+  git(root, "commit", "-q", "--allow-empty", "-m", "init")
+  fs.mkdirSync(path.join(root, ".raguel"))
+  fs.writeFileSync(
+    path.join(root, ".raguel", "config.json"),
+    JSON.stringify({
+      storage: { casesDir: path.join(root, ".raguel"), projectId: "demo" }
+    })
+  )
+  return root
+}
+
+// pass-gate の検査 9 が文書のフェーズに期待するファイル(既定の runsDir と testsDir)
+const DOC_FILE: Record<string, string> = {
+  design: `docs/codiel/runs/${SLUG}/design.md`,
+  "dev-plan": `docs/codiel/runs/${SLUG}/dev-plan.md`,
+  "test-spec": "docs/codiel/tests/units/demo/spec.md"
+}
+
+// 文書のフェーズでは、期待するファイルを評価したことにする。ファイルが無ければ sha256 は null
+function docFiles(root: string, phase: string) {
+  const rel = DOC_FILE[phase]
+  if (!rel) return []
+  const abs = path.join(root, rel)
+  const sha256 = fs.existsSync(abs)
+    ? createHash("sha256").update(fs.readFileSync(abs)).digest("hex")
+    : null
+  return [{ path: rel, sha256, isNew: true }]
+}
+
+// Raguel が書く形で、評価 "e" の索引の行と verdict.json を置く
+function recordEvaluation(root: string, phase: string, verdict: string): void {
+  const stateFile = path.join(
+    root,
+    ".codiel",
+    "runs",
+    SLUG,
+    "try-1",
+    "state.json"
+  )
+  const st = readState(stateFile)
+  const head = git(root, "rev-parse", "HEAD")
+  const isCode = phase === "test-code"
+  const dir = path.join(root, ".raguel", "cases", "demo")
+  const casePath = path.join(dir, st.raguelRunId, phase, "attempt-01")
+  fs.mkdirSync(casePath, { recursive: true })
+  const row = {
+    schemaVersion: 2,
+    evaluationId: "e",
+    runId: st.raguelRunId,
+    phase,
+    kind: isCode ? "code" : "design",
+    attempt: 1,
+    casePath,
+    verdict,
+    judgeStatus: "ok",
+    head,
+    at: new Date().toISOString()
+  }
+  const subject = {
+    repoPath: root,
+    head,
+    ...(isCode ? { base: st.phases[phase]?.startHead ?? null } : {}),
+    files: docFiles(root, phase)
+  }
+  fs.writeFileSync(
+    path.join(casePath, "verdict.json"),
+    JSON.stringify({ ...row, subject })
+  )
+  fs.appendFileSync(
+    path.join(dir, "evaluations.jsonl"),
+    `${JSON.stringify(row)}\n`
+  )
+}
+
+// 評価 "e" を記録してから PROCEED で pass-gate を通す
+function passGate(root: string, phase: string): string {
+  recordEvaluation(root, phase, "PROCEED")
+  return cli(root, [
+    "pass-gate",
+    phase,
+    "--slug",
+    SLUG,
+    "--evaluation-id",
+    "e",
+    "--verdict",
+    "PROCEED"
+  ])
 }
 
 // intent フェーズを in_progress にしたところで止める(phase=intent)
 function setupRunAtIntent(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
   cli(root, ["start-phase", "intent", "--slug", SLUG])
   return root
@@ -79,26 +189,15 @@ function setupRunAtIntent(): string {
 
 // implement フェーズを in_progress にしたところで止める
 function setupRunAtImplement(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
   cli(root, ["start-phase", "intent", "--slug", SLUG])
-  const passGate = (phase: string) =>
-    cli(root, [
-      "pass-gate",
-      phase,
-      "--slug",
-      SLUG,
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
-  passGate("intent")
+  passGate(root, "intent")
   cli(root, ["start-phase", "discuss", "--slug", SLUG])
   cli(root, ["complete-phase", "discuss", "--slug", SLUG])
   for (const ph of ["design", "test-spec", "dev-plan", "test-code"]) {
     cli(root, ["start-phase", ph, "--slug", SLUG])
-    passGate(ph)
+    passGate(root, ph)
   }
   cli(root, ["start-phase", "implement", "--slug", SLUG])
   return root
@@ -107,32 +206,24 @@ function setupRunAtImplement(): string {
 // awaiting_human 状態にする
 function setupRunAwaitingHuman(): string {
   const root = setupRunAtIntent()
+  recordEvaluation(root, "intent", "ASK")
   cli(root, ["mark-ask", "intent", "--slug", SLUG, "--evaluation-id", "e"])
   return root
 }
 
 // intent-only の run(branch が null)で intent を passed にしたところで止める
 function setupIntentOnlyPassed(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS, "--intent-only"])
   cli(root, ["start-phase", "intent", "--slug", SLUG])
-  cli(root, [
-    "pass-gate",
-    "intent",
-    "--slug",
-    SLUG,
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
+  passGate(root, "intent")
   return root
 }
 
 // --- stop-guard.mjs テスト ---
 
 test("stop-guard: run なし → 出力なし(空 stdout)で exit 0", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   const result = callHook(STOP_GUARD, root)
   expect(result.exitCode).toBe(0)
   expect(result.stdout.trim()).toBe("")
@@ -188,19 +279,10 @@ test("stop-guard: phase が in_progress のとき、サブエージェントの�
     )
   }
   // phase が null の分岐と passed の分岐
-  const nullPhaseRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const nullPhaseRoot = newRoot()
   cli(nullPhaseRoot, ["init", "--slug", SLUG, ...INIT_FLAGS])
   const passedRoot = setupRunAtIntent()
-  cli(passedRoot, [
-    "pass-gate",
-    "intent",
-    "--slug",
-    SLUG,
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
+  passGate(passedRoot, "intent")
   for (const root of [nullPhaseRoot, passedRoot])
     expect(JSON.parse(callHook(STOP_GUARD, root).stdout).reason).not.toMatch(
       /前景で/
@@ -208,7 +290,7 @@ test("stop-guard: phase が in_progress のとき、サブエージェントの�
 })
 
 test("stop-guard: phase が null のとき capturing-intent の手順 5 の (6) と commit-failed での終端を案内する(M2-FX2-AR medium)", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
@@ -221,16 +303,7 @@ test("stop-guard: phase が null のとき capturing-intent の手順 5 の (6) 
 
 test("stop-guard: phase が passed のとき次に進めるフェーズの start-phase・skip-phase と mark-ask を一般的に案内する(M2-FX3-AR medium)", () => {
   const root = setupRunAtIntent()
-  cli(root, [
-    "pass-gate",
-    "intent",
-    "--slug",
-    SLUG,
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
+  passGate(root, "intent")
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.reason).toMatch(/phase: intent/)
@@ -248,7 +321,7 @@ test("stop-guard: phase が passed のとき次に進めるフェーズの start
 })
 
 test("stop-guard: どの分岐も codiel-state stop --reason で明示的に中止する案内を含む(M2-FX3-AR low)", () => {
-  const nullPhaseRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const nullPhaseRoot = newRoot()
   cli(nullPhaseRoot, ["init", "--slug", SLUG, ...INIT_FLAGS])
   const nullPhaseResult = callHook(STOP_GUARD, nullPhaseRoot)
   expect(JSON.parse(nullPhaseResult.stdout).reason).toMatch(
@@ -262,16 +335,7 @@ test("stop-guard: どの分岐も codiel-state stop --reason で明示的に中�
   )
 
   const passedRoot = setupRunAtIntent()
-  cli(passedRoot, [
-    "pass-gate",
-    "intent",
-    "--slug",
-    SLUG,
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
+  passGate(passedRoot, "intent")
   const passedResult = callHook(STOP_GUARD, passedRoot)
   expect(JSON.parse(passedResult.stdout).reason).toMatch(
     /codiel-state stop --slug demo --reason <理由> で明示的に止めること/
@@ -279,19 +343,10 @@ test("stop-guard: どの分岐も codiel-state stop --reason で明示的に中�
 })
 
 test("stop-guard: passed の案内どおりに --reason を付けて skip-phase を実行すると成功する(M2-FX5-B a)", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS_LIGHT])
   cli(root, ["start-phase", "intent", "--slug", SLUG])
-  cli(root, [
-    "pass-gate",
-    "intent",
-    "--slug",
-    SLUG,
-    "--evaluation-id",
-    "e",
-    "--verdict",
-    "PROCEED"
-  ])
+  passGate(root, "intent")
   // 案内のプレースホルダに実際のフェーズ名と理由を当てはめると、書いたとおりに成功する
   expect(() =>
     cli(root, [
@@ -306,30 +361,19 @@ test("stop-guard: passed の案内どおりに --reason を付けて skip-phase 
 })
 
 test("stop-guard: 並列ステージで別フェーズが in_progress のとき、そのフェーズへの mark-ask を案内する(M2-FX5-B b)", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stop-guard-"))
+  const root = newRoot()
   cli(root, ["init", "--slug", SLUG, ...INIT_FLAGS])
-  const passGate = (phase: string) =>
-    cli(root, [
-      "pass-gate",
-      phase,
-      "--slug",
-      SLUG,
-      "--evaluation-id",
-      "e",
-      "--verdict",
-      "PROCEED"
-    ])
   cli(root, ["start-phase", "intent", "--slug", SLUG])
-  passGate("intent")
+  passGate(root, "intent")
   cli(root, ["start-phase", "discuss", "--slug", SLUG])
   cli(root, ["complete-phase", "discuss", "--slug", SLUG])
   cli(root, ["start-phase", "design", "--slug", SLUG])
-  passGate("design")
+  passGate(root, "design")
   // 並列ステージ(test-spec・dev-plan)のうち dev-plan だけを passed にし、
   // test-spec を in_progress のまま残す
   cli(root, ["start-phase", "test-spec", "--slug", SLUG])
   cli(root, ["start-phase", "dev-plan", "--slug", SLUG])
-  passGate("dev-plan")
+  passGate(root, "dev-plan")
   const result = callHook(STOP_GUARD, root)
   const parsed = JSON.parse(result.stdout)
   expect(parsed.reason).toMatch(/phase: dev-plan/)

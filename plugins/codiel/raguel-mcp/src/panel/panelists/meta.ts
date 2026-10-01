@@ -1,14 +1,18 @@
 /**
- * 裁判官(meta): 独立した fresh なサブプロセスで起動し、入力はケースファイルの
- * 証拠テキストのみ(成果物原文は含めない。呼び出し側が連結・抜粋済みのバンドル
- * 文字列を渡す)。全証拠を読み、rubric 全軸 + blast_radius のスコアと rationale
- * (最終根拠文)を出す(docs/DESIGN.md §7、不変条件 4)。
+ * 裁判官(meta): critical だけで起動する(設計書 §6.6.1)。成果物の原文は見ず、
+ * ルール層とパネルの所見・反駁・前フェーズの証拠をまとめた証拠の束と、判例の参考入力を読んで、
+ * ルーブリックの全軸と blast_radius_contained のスコアと rationale を出す。
  */
 
 import { z } from "zod"
-import type { ArtifactKind, MetaReport } from "../../core/types.js"
-import { commonHeader, frameUntrusted } from "../prompts.js"
-import type { JudgeProvider } from "../provider.js"
+import type { ArtifactKind, MetaReport, Precedent } from "../../core/types.js"
+import {
+  commonHeader,
+  formatPrecedents,
+  frameUntrusted,
+  PRECEDENTS_HEADING
+} from "../prompts.js"
+import type { CallControl, JudgeProvider } from "../provider.js"
 import { formatRubric, metaRubricFor } from "../rubrics.js"
 import { scoresSchema, toJsonSchema } from "../schema.js"
 
@@ -19,14 +23,20 @@ function metaResponseSchema(axisKeys: readonly string[]) {
   })
 }
 
+export interface MetaInput {
+  /** 呼び出し側がまとめた証拠の束(成果物の原文を含めない) */
+  evidenceBundle: string
+  kind: ArtifactKind
+  precedents: Precedent[]
+}
+
 export async function runMetaPanelist(
-  evidenceBundle: string,
-  kind: ArtifactKind,
+  input: MetaInput,
   provider: JudgeProvider,
   model: string,
-  timeoutMs: number
+  ctl: CallControl
 ): Promise<MetaReport> {
-  const axes = metaRubricFor(kind)
+  const axes = metaRubricFor(input.kind)
   const schema = metaResponseSchema(axes.map((a) => a.key))
 
   const prompt = [
@@ -39,20 +49,25 @@ export async function runMetaPanelist(
     "rationale は人間と次フェーズの AI に向けた説明であり、判定そのものはスコアで表現すること。",
     "",
     "## ケースファイル証拠",
-    frameUntrusted("case-evidence", evidenceBundle),
+    frameUntrusted("case-evidence", input.evidenceBundle),
     "",
-    "## ルーブリック(blast_radius はこの成果物が間違っていた場合の最悪の被害と可逆性)",
+    PRECEDENTS_HEADING,
+    formatPrecedents(input.precedents),
+    "",
+    "## ルーブリック(scores はこの軸ごとに付ける)",
     formatRubric(axes)
   ].join("\n")
 
-  const response = await provider.invoke({
-    role: "meta",
-    model,
-    prompt,
-    schema,
-    jsonSchema: toJsonSchema(schema),
-    timeoutMs
-  })
+  const response = await provider.invoke(
+    {
+      role: "meta",
+      model,
+      prompt,
+      schema,
+      jsonSchema: toJsonSchema(schema)
+    },
+    ctl
+  )
 
   return {
     model,

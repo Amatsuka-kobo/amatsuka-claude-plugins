@@ -1,9 +1,11 @@
 /**
- * common/secrets — APIキー・トークン・秘密鍵の混入検出(sealed, 既定 stop)。
- * (a) 既知パターン正規表現カタログ + (b) シャノンエントロピーによる高エントロピー文字列検出、の2段構え。
+ * common/secrets — API キー・トークン・秘密鍵の混入の検出(sealed, 既定 stop)。設計書 §6.4.2。
+ * 既知の形の正規表現と、語を `/` と `.` で区切った部分のエントロピーの 2 つで見る。
+ * 見出し行(Artifact.headingLines)は位置で外し、抜粋と maskSecrets では一致したトークンを伏せる。
  */
 
 import type { Finding, Rule } from "../../core/types.js"
+import { ruleParam } from "../params.js"
 import { getSeverity, truncateExcerpt } from "../util.js"
 
 const RULE_ID = "common/secrets"
@@ -28,42 +30,32 @@ const KNOWN_PATTERNS: KnownPattern[] = [
   {
     name: "generic-secret-assignment",
     regex: /(?:api[_-]?key|token|secret|password)\s*[:=]\s*['"][^'"]{16,}['"]/gi
+  },
+  // URL に埋め込んだ認証情報(所見 A2)
+  {
+    name: "url-credentials",
+    regex: /[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s@/]+@/gi
   }
 ]
 
+/** PEM の秘密鍵は本体の行ごと伏せる(本体の行は 1 行ずつでは既知の形に当たらない) */
+const PEM_BLOCK_RE =
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g
+
 /**
- * lockfile 由来・URL 等、エントロピーの判定で誤検知しやすい既知の文脈。
- * 既知の形の照合はこの文脈の行でも行う(URL と本物の鍵が同じ行にあっても見逃さない)。
+ * lockfile と node_modules の行は、ハッシュが並ぶのでエントロピーの判定から外す。
+ * 既知の形の照合はこの行でも行う。
+ * `://` を含む行は外さない。URL のクエリに埋めた鍵を拾うためで、ホスト名とパスの部分は
+ * `/` と `.` の区切りと 3 種の条件で外れる(設計書 §6.4.2)
  */
-function isBuiltinFalsePositiveContext(line: string): boolean {
+function isEntropyExemptLine(line: string): boolean {
   if (/integrity:|sha512-|sha256-|resolution:/.test(line)) return true
   if (line.includes("node_modules/")) return true
-  if (line.includes("://")) return true // URL 断片は誤検知しやすい
   return false
 }
 
-/** diff の見出し行と、files[] の見出し `--- <path> ---`。パスの並びなのでエントロピーの判定から外す */
-function isHeadingLine(line: string): boolean {
-  return (
-    line.startsWith("diff --git ") ||
-    line.startsWith("--- ") ||
-    line.startsWith("+++ ")
-  )
-}
-
-function isAllowedByConfig(line: string, allowPatterns: string[]): boolean {
-  for (const pattern of allowPatterns) {
-    try {
-      if (new RegExp(pattern).test(line)) return true
-    } catch {
-      // 不正な正規表現は無視(設定ミスで検査自体を壊さない)
-    }
-  }
-  return false
-}
-
-const ENTROPY_TOKEN_RE = /[A-Za-z0-9+/=_-]{20,}/g
-const HEX_40_OR_64_RE = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/i
+const WORD_RE = /[A-Za-z0-9+/=_.-]+/g
+const ENTROPY_MIN_LENGTH = 20
 const ENTROPY_THRESHOLD = 4.0
 
 function shannonEntropy(s: string): number {
@@ -77,66 +69,136 @@ function shannonEntropy(s: string): number {
   return entropy
 }
 
+/**
+ * 英大文字・英小文字・数字の 3 種をすべて含む 20 文字以上の部分だけを測る。
+ * パスや slug は小文字・数字・`-` で書かれることが多く、この条件で外れる(所見 A1)
+ */
+function isHighEntropyPart(part: string): boolean {
+  if (part.length < ENTROPY_MIN_LENGTH) return false
+  if (!/[A-Z]/.test(part) || !/[a-z]/.test(part) || !/[0-9]/.test(part))
+    return false
+  return shannonEntropy(part) > ENTROPY_THRESHOLD
+}
+
+interface SecretToken {
+  /** 既知の形の名前。エントロピーで拾ったものは "high-entropy" */
+  name: string
+  start: number
+  end: number
+}
+
+/** 1 行の中の秘密情報らしいトークンの位置を返す */
+function findSecretTokens(line: string): SecretToken[] {
+  const tokens: SecretToken[] = []
+  for (const { name, regex } of KNOWN_PATTERNS) {
+    for (const m of line.matchAll(regex)) {
+      tokens.push({ name, start: m.index, end: m.index + m[0].length })
+    }
+  }
+  if (isEntropyExemptLine(line)) return tokens
+  for (const m of line.matchAll(WORD_RE)) {
+    let offset = m.index
+    for (const part of m[0].split(/[/.]/)) {
+      if (isHighEntropyPart(part)) {
+        tokens.push({
+          name: "high-entropy",
+          start: offset,
+          end: offset + part.length
+        })
+      }
+      offset += part.length + 1
+    }
+  }
+  return tokens
+}
+
+/** 先頭 4 文字だけを残し、残りを `*` にする。改行は残して行の数を変えない */
+function maskToken(token: string): string {
+  return token.slice(0, 4) + token.slice(4).replace(/[^\n]/g, "*")
+}
+
+function maskLine(line: string): string {
+  let out = line
+  // 後ろのトークンから置き換える。置き換えは長さを変えないので、前のトークンの位置はずれない
+  const tokens = findSecretTokens(line).sort((a, b) => b.start - a.start)
+  for (const { start, end } of tokens) {
+    out =
+      out.slice(0, start) + maskToken(out.slice(start, end)) + out.slice(end)
+  }
+  return out
+}
+
+/**
+ * 秘密情報らしいトークンを伏せ字にした本文を返す。行の数と各行の長さは変えない。
+ * ケースファイルの submission.txt、Jev への送信、応答の抜粋はこの関数を通す(計画書 §2)
+ */
+export function maskSecrets(text: string): string {
+  return text
+    .replace(PEM_BLOCK_RE, maskToken)
+    .split("\n")
+    .map(maskLine)
+    .join("\n")
+}
+
+function compileAllowPatterns(patterns: string[]): RegExp[] {
+  const compiled: RegExp[] = []
+  for (const pattern of patterns) {
+    try {
+      compiled.push(new RegExp(pattern))
+    } catch {
+      // 不正な正規表現は設定の読み込み(core/invariants.ts)で拒む。ここでは除外に使わない
+    }
+  }
+  return compiled
+}
+
+/** 一致した行の前後 1 行を、行番号を付けて伏せ字の本文から切り出す */
+function excerptAround(maskedLines: string[], index: number): string {
+  const from = Math.max(0, index - 1)
+  const to = Math.min(maskedLines.length - 1, index + 1)
+  const out: string[] = []
+  for (let i = from; i <= to; i++) out.push(`${i + 1}: ${maskedLines[i]}`)
+  return truncateExcerpt(out.join("\n"))
+}
+
 export const secretsRule: Rule = {
   id: RULE_ID,
   appliesTo: "all",
   sealed: true,
   defaultSeverity: "stop",
   check(artifact, ctx): Finding[] {
-    const settings = ctx.config.rules[RULE_ID]
-    const severity = getSeverity(settings, "stop")
-    const allowPatterns = Array.isArray(settings?.allowPatterns)
-      ? (settings.allowPatterns as string[])
-      : []
+    const severity = getSeverity(ctx.config.rules[RULE_ID], "stop")
+    const allow = compileAllowPatterns(
+      ruleParam<string[]>(ctx.config, RULE_ID, "allowPatterns")
+    )
+    const skip = new Set(artifact.headingLines)
+    const lines = artifact.content.split("\n")
+    let maskedLines: string[] | null = null
 
     const findings: Finding[] = []
-    const lines = artifact.content.split("\n")
-
     for (let i = 0; i < lines.length; i++) {
+      if (skip.has(i)) continue
       const line = lines[i]
-      if (isAllowedByConfig(line, allowPatterns)) continue
-
-      for (const pattern of KNOWN_PATTERNS) {
-        pattern.regex.lastIndex = 0
-        let match: RegExpExecArray | null
-        // biome-ignore lint/suspicious/noAssignInExpressions: while-exec の定石
-        while ((match = pattern.regex.exec(line))) {
-          findings.push({
-            ruleId: RULE_ID,
-            severity,
-            message: `既知の秘密情報パターン(${pattern.name})を検出しました`,
-            evidence: {
-              location: `${i + 1} 行目`,
-              excerpt: truncateExcerpt(line)
-            }
-          })
-        }
-      }
-
-      if (isBuiltinFalsePositiveContext(line) || isHeadingLine(line)) continue
-
-      ENTROPY_TOKEN_RE.lastIndex = 0
-      let tokenMatch: RegExpExecArray | null
-      // biome-ignore lint/suspicious/noAssignInExpressions: while-exec の定石
-      while ((tokenMatch = ENTROPY_TOKEN_RE.exec(line))) {
-        const token = tokenMatch[0]
-        // `/` を含む語(パス)は測らない。`/` を含む base64 の鍵は見逃す(応急処置の限界。作り直しで見直す)
-        if (token.includes("/")) continue
-        if (HEX_40_OR_64_RE.test(token)) continue // git ハッシュ等
-        if (shannonEntropy(token) > ENTROPY_THRESHOLD) {
-          findings.push({
-            ruleId: RULE_ID,
-            severity,
-            message: "高エントロピーな文字列を検出しました(秘密情報の可能性)",
-            evidence: {
-              location: `${i + 1} 行目`,
-              excerpt: truncateExcerpt(line)
-            }
-          })
-        }
+      for (const token of findSecretTokens(line)) {
+        // allowPatterns は行ではなくトークンに当てる(所見 A3)
+        const text = line.slice(token.start, token.end)
+        if (allow.some((re) => re.test(text))) continue
+        maskedLines ??= maskSecrets(artifact.content).split("\n")
+        findings.push({
+          ruleId: RULE_ID,
+          severity,
+          message:
+            token.name === "high-entropy"
+              ? "高エントロピーな文字列を検出しました(秘密情報の可能性)"
+              : `既知の秘密情報パターン(${token.name})を検出しました`,
+          evidence: {
+            location: `${i + 1} 行目`,
+            line: i + 1,
+            excerpt: excerptAround(maskedLines, i)
+          }
+        })
       }
     }
-
     return findings
   }
 }

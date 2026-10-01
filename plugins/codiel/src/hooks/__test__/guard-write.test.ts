@@ -24,17 +24,19 @@ interface HookOutput {
   permissionDecisionReason: string
 }
 
+// env を渡すと、フックの環境変数に足す(RAGUEL_CONFIG を指すときに使う)
 function hook(
   cwd: string,
   toolName: string,
-  filePath: string
+  filePath: string,
+  env: Record<string, string> = {}
 ): HookOutput | null {
   const input = JSON.stringify({
     cwd,
     tool_name: toolName,
     tool_input: { file_path: filePath }
   })
-  const out = runTs(HOOK, [], { input })
+  const out = runTs(HOOK, [], { input, env: { ...process.env, ...env } })
   if (out === "") return null
   return (JSON.parse(out) as { hookSpecificOutput: HookOutput })
     .hookSpecificOutput
@@ -1374,4 +1376,106 @@ test("config.json が不正なら、未記録の GOTCHAS の退避先の免除�
   advanceRunTo(root, "review")
   writeConfig(root, "{ runsDir: ")
   expect(decision(root, RUN_DOC("unrecorded-gotchas.md"))).toBe("ask")
+})
+
+// --- Raguel の設定と記録の保護(Raguel 設計書 §6.13.4。所見 G8・R12) ---
+
+// RAGUEL_CONFIG で Raguel の設定を <root>/raguel.json に置き、casesDir を <root>/cases-store にする。
+// 守る 3 種のパス(root 相対)と、フックに渡す環境変数を返す。
+function raguelEnv(root: string): {
+  env: Record<string, string>
+  targets: string[]
+} {
+  const file = path.join(root, "raguel.json")
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      storage: { casesDir: path.join(root, "cases-store"), projectId: "demo" }
+    })
+  )
+  return {
+    env: { RAGUEL_CONFIG: file },
+    targets: [
+      ".codiel/config.json",
+      "raguel.json",
+      "cases-store/cases/demo/evaluations.jsonl"
+    ]
+  }
+}
+
+test("R12: active と awaiting_human の run で、3 種のパスへの Write と Edit は deny になる", () => {
+  for (const status of ["active", "awaiting_human"] as const) {
+    const root = setupRun()
+    advanceRunTo(root, "implement")
+    patchState(root, (s) => {
+      s.status = status
+    })
+    const { env, targets } = raguelEnv(root)
+    for (const rel of targets)
+      for (const tool of ["Write", "Edit"]) {
+        const r = hook(root, tool, path.join(root, rel), env)
+        expect(r?.permissionDecision, `${status} ${tool} ${rel}`).toBe("deny")
+        expect(r?.permissionDecisionReason).toMatch(/Raguel の設定と記録/)
+      }
+  }
+})
+
+test("R12: run が無ければ、3 種のパスへの Write と Edit は通す", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
+  const { env, targets } = raguelEnv(root)
+  for (const rel of targets)
+    for (const tool of ["Write", "Edit"])
+      expect(hook(root, tool, path.join(root, rel), env), rel).toBe(null)
+})
+
+test("G8: 文書フェーズで .codiel/ 配下を通す規則より先に、config.json を deny する(設定を緩める案を止める)", () => {
+  const root = setupRun()
+  const r = hook(root, "Write", path.join(root, ".codiel/config.json"))
+  expect(r?.permissionDecision).toBe("deny")
+  // 同じ .codiel/ 配下のほかのファイルは従来どおり通す
+  expect(decision(root, ".codiel/runs/demo/try-1/issue.md")).toBe(null)
+})
+
+test("RAGUEL_CONFIG が無ければ、.codiel/config.json の raguel.storage.casesDir の配下を守る", () => {
+  const root = setupRun()
+  const store = path.join(root, "store")
+  writeConfig(
+    root,
+    JSON.stringify({ raguel: { storage: { casesDir: store, projectId: "p" } } })
+  )
+  const noEnv = { RAGUEL_CONFIG: "" }
+  const r = hook(
+    root,
+    "Edit",
+    path.join(store, "cases/p/outcomes.jsonl"),
+    noEnv
+  )
+  expect(r?.permissionDecision).toBe("deny")
+  expect(
+    hook(root, "Write", path.join(root, "store-other/a.txt"), noEnv)
+      ?.permissionDecision
+  ).toBe("ask")
+})
+
+test("codiel の worktree の中の .codiel/config.json の写しも deny し、config.json が不正でも deny は変わらない", () => {
+  const root = setupRun()
+  writeConfig(root, "{ runsDir: ")
+  expect(decision(root, ".codiel/config.json")).toBe("deny")
+  expect(decision(root, ".codiel/worktrees/demo/s1/.codiel/config.json")).toBe(
+    "deny"
+  )
+})
+
+test("casesDir と同じ接頭辞を持つ別のディレクトリは守る対象にしない", () => {
+  const root = setupRun()
+  const { env } = raguelEnv(root)
+  const r = hook(
+    root,
+    "Write",
+    path.join(root, ".codiel/runs/demo/try-1/cases-store.md"),
+    env
+  )
+  expect(r).toBe(null)
+  const other = hook(root, "Write", path.join(root, "cases-store2/x"), env)
+  expect(other?.permissionDecision).toBe("ask")
 })

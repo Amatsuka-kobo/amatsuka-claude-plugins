@@ -161,6 +161,141 @@ deny されます。intent 承認時の任意の Issue 起票は run の作成�
 
 `context7`、`github`、`playwright` を MCP サーバーとして登録すると、仕様確認や GitHub 情報の参照を行う委譲先が利用できます。テスト・実装・レビューの作業を受ける委譲先は、Playwright が付与されていれば画面挙動の確認にも活用できます。委譲先にどの MCP が付与されるかはプロジェクト側の定義によります。未接続でもエラーにはならず、利用可能な他のツールで作業を継続します。GitHub は読み取り系ツールだけを許可しています。
 
+## Raguel の運用
+
+Raguel は、各フェーズの成果物を検査して PROCEED / ASK / STOP を返すゲートです。呼び出し側が渡した要約ではなく、Raguel 自身が git の差分とファイルを読んで検査します。設計は [`raguel-mcp/docs/DESIGN.md`](./raguel-mcp/docs/DESIGN.md)、codiel との間のファイル形式と pass-gate の検査は [`docs/raguel-contract.md`](./docs/raguel-contract.md) にあります。
+
+### 設定は `.codiel/config.json` の `raguel` キーに JSON で書く
+
+Raguel の設定は、プロジェクトルートの `.codiel/config.json` の `raguel` キーに、内蔵の既定値との差分だけを JSON で書きます。読む順は次のとおりで、最初に見つかったものだけを使います。
+
+1. 環境変数 `RAGUEL_CONFIG` が指すファイル(中身は `raguel` キーの値と同じ形の JSON)
+2. プロジェクトルートの `.codiel/config.json` の `raguel` キー
+3. 内蔵の既定値
+
+```json
+{
+  "raguel": {
+    "judge": { "provider": "codex" },
+    "storage": { "projectId": "my-project" }
+  }
+}
+```
+
+- 旧設定ファイルの `raguel.config.yaml` は廃止しました。YAML は読まず、残っていても使いません。以前の版から移すときは `/codiel:init` をやり直してください。
+- プロジェクトルートは、`.codiel` を持つ最も近い祖先のディレクトリです。利用者が自分で作った worktree で Claude Code を起動するときは、その worktree に `.codiel/config.json` を置いてください。持たない worktree では、メインの作業ツリーの設定を読みません。
+- 設定は評価のたびに読み直します。書き直した内容は、Claude Code を再起動せずに次の評価から効きます。
+- 設定が壊れていても Raguel は起動し、評価は ASK になって、所見に設定のパスと理由が出ます。直せば次の評価から使われます。
+- 未知のキー・ルール ID・パラメータは読み込みエラーです。書き間違いが黙って無視されることはありません。
+- マージの規則: オブジェクトは再帰的に重ね、配列は置き換えます。例外は、sealed ルール(`common/secrets`・`code/protected-paths` など、設定で無効にできないルール)の一覧を表す配列で、既定値との和集合になります(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)。緩める方向の配列を、和集合のせいで置き換えられない事態は起きません。どの配列が和集合かは `list_rules` の `params` に出ます。
+- `testsDir` は、`RAGUEL_CONFIG` を設定したときも、プロジェクトルートの `.codiel/config.json` から読みます。不正な値(文字列でない・空・絶対パス・`..` を含む)は、Raguel も codiel も失敗にします。
+- `RAGUEL_CONFIG` は、MCP サーバーの設定の `env` だけに書くと、hook のプロセスから見えません。guard が `RAGUEL_CONFIG` のファイルを守れなくなるので、Claude Code を起動するシェルの環境変数として設定してください。
+- `.codiel/config.json` の `raguel` を書き換えるのは、run が active でないときにしてください。run が active か awaiting_human の間は、codiel の hook が `.codiel/config.json` の全体・`RAGUEL_CONFIG` のファイル・ケースファイルの置き場への書き込みを拒みます。設定を変えるときは run を止めるか、利用者が自分の手で変えます。
+
+### パネルのプロバイダーは claude と codex から選ぶ
+
+パネル(adversarial・steelman・crosscheck・meta)は、既定では `claude` CLI で動きます。`judge.provider` で `codex` に切り替えられ、`panel.perPanelist.<名前>.provider` でパネリストごとに上書きできます。`judge.provider: none` は LLM を起動しないので、パネルが要る評価はすべて ASK になります。
+
+- claude は Claude Code のログインをそのまま使い、Anthropic API を必須にしません。
+- codex を使うには、`codex` CLI が PATH にあり、`codex login` を済ませておきます。認証は `CODEX_HOME`(既定は `~/.codex`)だけで通ります。
+- **claude のパネリストは `--setting-sources project` と空の作業ディレクトリで起動し、利用者の hooks・CLAUDE.md・プラグインを読みません。** ログインは保たれます。
+- **codex のパネリストは、`--sandbox read-only` と `--disable shell_tool`・`unified_exec`・`hooks` で隔離します。** 書き込みとシェルの実行を止め、利用者の hooks を動かしません。ただし `$CODEX_HOME/AGENTS.md` は止められず、パネリストに読まれます(既知の限界)。そこに書いた全体の指示は、パネリストの判定に混じりえます。`AGENTS.md` を置いている利用者は、codex を選ぶかどうかをそれを踏まえて決めてください。
+
+### codex と Jev には成果物が外部へ送られる
+
+- `judge.provider` を `codex` にすると、検査する成果物(差分・ファイルの本文・前フェーズの証拠)が OpenAI へ送られます。
+- Jev の文脈判定を有効にすると、成果物が秘密情報の伏せ字を当てた後の形で TypeSafe AI へ送られます。
+- 既定は claude で、Jev は無効です。秘密情報の混入は、`common/secrets` が stop を出した時点でパネルも Jev も呼ばずに止めるので、外部へ送られません。ただし、ルールが見逃した秘密情報は外へ出えます。
+
+### Jev の文脈判定は既定で無効である
+
+正規表現と語彙の判定は文脈を見ないため、説明文の中の `rm -rf /` を誤検知したり、否定文や中身の無い欄を見逃したりします。Jev(TypeSafe AI)による文脈判定は、これを補う任意の機能です。
+
+```json
+{
+  "raguel": {
+    "contextJudge": { "enabled": true }
+  }
+}
+```
+
+- 有効にするには `contextJudge.enabled: true` を書き、環境変数 `TYPESAFE_API_KEY` を設定します。
+- 判定の閾値は `contextJudge.thresholds` の `lower`(既定 0.5。確率がこれ以下なら stop を ask に下げる)と `raise`(既定 0.7。これ以上なら info を ask に上げる)です。
+- Jev が動かせるのは、破壊操作の stop を ask に下げる向きと、語彙系の info を ask に上げる向きなど、限られた向きだけです。単独で STOP も PROCEED も出しません。
+- 鍵が無い・Jev が失敗した・入力が大きすぎるときは、その対象を決定論の規則で判定し、`contextJudge/unavailable` の所見を残します。判定が ASK に倒れることはありません。
+
+### 評価は 120 秒を超えるとバックグラウンドへ移る
+
+1 回の評価は、standard で 2 分前後、critical で 4 分前後かかります。Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウンドへ移し、完了の通知で結果を返します。codiel はその通知を待ち、待つ間に evaluate を呼び直しません。
+
+| 設定 | 既定 | 意味 |
+| --- | --- | --- |
+| `judge.timeoutMs` | 180000(3 分) | パネリスト 1 回の呼び出しの時間の上限 |
+| `judge.deadlineMs` | 600000(10 分) | 評価全体の締切。上限は 1800000 |
+
+失敗した呼び出しは 1 回だけ再試行します。それでも失敗するか締切を超えたときは、評価が `judgeStatus: degraded` の ASK になります。degraded は、成果物の懸念ではなく Raguel 側の障害を表します。codiel は「再評価 / そのまま承認 / 止める」を人に聞きます。
+
+### 保護パスの既定の除外と生成物の宣言は、使い終えたら戻す
+
+`code/protected-paths` は、既定で `.github/**`・`infra/**`・`**/*.env*` への変更を STOP にします。IaC や CI を直す run と、ビルドの出力をソースと同じコミットに入れる規約のプロジェクトでは、次の 2 つのパラメータを使います。
+
+```json
+{
+  "raguel": {
+    "rules": {
+      "code/protected-paths": {
+        "excludeDefaults": ["infra/**"],
+        "generated": ["plugins/*/dist/**"]
+      }
+    }
+  }
+}
+```
+
+- `excludeDefaults` は、既定の glob のうち保護から外すものを、文字列で完全に一致する形で名指しします。既定に無い文字列は読み込みエラーです。`globs` は既定との和集合なので、`globs` で既定の保護を外すことはできません。
+- `generated` は、生成物のパスの glob です。生成物には `common/secrets` だけを当て、保護パス・重さ判定・パネル・Jev の対象から外します。リポジトリ全体を生成物にする glob(`**/*` など)は宣言できません。
+- 生成物だけの差分には `code/generated-only` の info が付きます。宣言したパスに手書きの変更を紛れ込ませても、生成物との対応は検証されません(既知の限界)。
+- 外した glob と `generated` は、評価の応答の `policy.protectedPaths` と `list_rules` に毎回出ます。
+- **`excludeDefaults` は、run が終わったら戻してください。** IaC や CI を直す事情が過ぎても外したままだと、その変更が STOP されません。`generated` は、生成物を同じコミットに入れる規約が続く間は残して構いません。
+
+### run と関係の無い未コミットのファイルは、パスを宣言して検査から外す
+
+`evaluate_code` は、評価した内容と作業ツリーが食い違ったまま記録を残さないために、未コミットの変更があると入力の誤りを返します。たとえば会話記録を `docs/chat/` に追記するプラグインが、同じ作業ツリーで動くとします。その記録は run と関係が無いのに、code 系のゲートのたびにこの誤りを起こします。そのファイルの置き場を `raguel.subject.ignoreUncommitted` に宣言すると、その未コミットの変更は検査に数えません。
+
+```json
+{
+  "raguel": {
+    "subject": { "ignoreUncommitted": ["docs/chat/**"] }
+  }
+}
+```
+
+- 値は glob の列で、既定は空です。配列は置き換わります。
+- 宣言したパスの変更は、未コミットのままだと評価に入りません。後でコミットすると HEAD が変わり、pass-gate で止まります。
+- 宣言した glob は、評価の応答の `policy.ignoreUncommitted` と `list_rules` に毎回出ます。
+- ワイルドカードより前の固定部が空の glob(`**/*`・`*.js` など)は宣言できず、読み込みエラーです。作業ツリー全体を検査から外す宣言を防ぐためです。
+- **ソースのパスは宣言しないでください。** 宣言すると、未コミットのコードの変更が評価に入らないまま、テストの結果に効きます。書くのは、run と関係の無いファイルの置き場だけにしてください。
+- run の間は guard が `.codiel/config.json` への書き込みを拒みます。宣言は run の外で足してください。宣言が無いまま未コミットのファイルで止まったときは、オーケストレーターが run を `awaiting_human` にして知らせます。宣言を足すか、そのファイルを自分で退避してください。
+
+### E2E のレポートは Raguel が評価から外す
+
+`<testsDir>/**/reports/**` の E2E のレポートは、利用者の設定なしに、生成物と同じ扱いで評価から外れます(`common/secrets` だけを当てます)。レポートだけの差分は「変更なし」として PROCEED になります。オーケストレーターがレポートを評価の前にコミットしても、差分に混ざって評価されることはありません。`testsDir` の外にある `reports/` は対象外です。
+
+### intent-sync のゲートには照合の限界がある
+
+intent-sync のゲートは、書き換えるべきファイルがすべて評価されたかを照合しません(既知の限界)。書き換えるファイルが run ごとに違うので、評価したファイルが、ゲートの後で変わっていないことだけを見ます。intent-sync では、書き換えたファイルをすべて `paths` に渡してください。
+
+### ケースファイル・判例・ログの置き場
+
+- ケースファイルと判例は、作業ツリーの外の `~/.raguel`(既定)に置きます。`raguel.storage.casesDir` で変えられ、その下の `cases/<projectId>/` と `precedents/<projectId>/` に入ります。`<runId>/<phase>/attempt-NN/` に証拠が残り、評価の索引 `evaluations.jsonl` と裁定の記録 `outcomes.jsonl` を codiel の pass-gate が照合します。
+- 古い run は、既定で 200 件か 90 日を超えたものから消えます(`storage.retention`)。
+- ログは stderr にだけ出ます。詳しく見たいときは環境変数 `RAGUEL_LOG_LEVEL=debug` を設定します。
+- **projectId の算出が変わりました。** git の共通ディレクトリから決まるので、どの worktree から評価しても同じ値になりますが、以前の版のケースファイルと判例は引き継ぎません。内蔵のシード判例は残ります。複数のクローンで 1 つの projectId を共有したいときは、`raguel.storage.projectId` に同じ値を書いてください。
+
+### 判例の一覧と退役は `list_precedents` と `retire_precedent` を使う
+
+判例は、人の裁定(承認・差し戻し・誤検知)と、PROCEED のあとに実害が出た incident からだけ作られます。一覧は `list_precedents`、誤った判例の取り消しは `retire_precedent` で、どちらも人か、人に頼まれたオーケストレーターが使います。codiel の run は呼びません。退役した判例は検索に出なくなり、ファイルは消えません。内蔵のシード判例をまとめて外すには `precedent.seedCatalog: false` を書きます。
+
 ## raguel-mcp
 
 Codiel オーケストレータ―の基幹システム。名前は「他の天使たちの行いを監視する天使 Raguel」に由来。

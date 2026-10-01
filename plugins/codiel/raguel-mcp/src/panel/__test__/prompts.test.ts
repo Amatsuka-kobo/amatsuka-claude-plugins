@@ -1,11 +1,45 @@
 import { describe, expect, it } from "vitest"
 import { MAX_EXCERPT_LENGTH } from "../../core/types.js"
 import {
+  commonHeader,
   excerptOf,
+  formatPrecedents,
   formatPriorEvidence,
   formatRuleFindings,
-  frameUntrusted
+  frameUntrusted,
+  SCORE_SCALE
 } from "../prompts.js"
+
+describe("commonHeader", () => {
+  it("スコアの向き(100 = 問題なし)を書く(所見 C2)", () => {
+    expect(SCORE_SCALE).toContain("100 は問題が無いこと")
+    expect(SCORE_SCALE).toContain("0 は重大な問題があること")
+    expect(commonHeader("検察")).toContain(SCORE_SCALE)
+  })
+})
+
+describe("formatPrecedents", () => {
+  it("空なら類似の裁定なしと書く", () => {
+    expect(formatPrecedents([])).toContain("類似の過去の裁定なし")
+  })
+
+  it("日付・outcome・ruling を添え、信頼しない入力として囲む", () => {
+    const text = formatPrecedents([
+      {
+        id: "p-1",
+        outcome: "rejected",
+        ruling: "false-positive",
+        recordedAt: "2026-08-31T12:00:00.000Z",
+        summary: "要約",
+        lesson: "教訓"
+      }
+    ])
+    expect(text).toContain("<<<UNTRUSTED:precedents:")
+    expect(text).toContain(
+      "p-1(日付: 2026-08-31、outcome: rejected、ruling: false-positive)"
+    )
+  })
+})
 
 describe("frameUntrusted", () => {
   it("ノンスは呼び出し毎に異なる", () => {

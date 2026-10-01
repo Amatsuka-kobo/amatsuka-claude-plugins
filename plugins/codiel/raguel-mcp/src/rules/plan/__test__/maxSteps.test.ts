@@ -2,53 +2,45 @@ import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { maxStepsRule } from "../maxSteps.js"
 
-describe("maxStepsRule", () => {
-  it("steps 配列が上限以下では発火しない", () => {
-    const findings = maxStepsRule.check(
-      makeArtifact({ kind: "plan", steps: ["a", "b", "c"] }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
+function check(content: string, ctx = makeCtx()) {
+  return maxStepsRule.check(makeArtifact({ kind: "plan", content }), ctx)
+}
+
+function stepHeadings(n: number): string {
+  return Array.from(
+    { length: n },
+    (_, i) => `## Step ${i + 1}: 作業 ${i + 1}\n本文`
+  ).join("\n")
+}
+
+function numberedList(n: number): string {
+  return Array.from({ length: n }, (_, i) => `${i + 1}. 手順`).join("\n")
+}
+
+describe("maxStepsRule(所見 A9)", () => {
+  it("plan だけに当て、既定は info", () => {
+    expect(maxStepsRule.appliesTo).toEqual(["plan"])
+    expect(maxStepsRule.defaultSeverity).toBe("info")
   })
 
-  it("steps 配列が上限超過で ask 発火する", () => {
-    const findings = maxStepsRule.check(
-      makeArtifact({
-        kind: "plan",
-        steps: Array.from({ length: 16 }, (_, i) => `step ${i}`)
-      }),
-      makeCtx()
-    )
+  it("`## Step N` の見出しを数え、上限を超えたら info を出す", () => {
+    expect(check(stepHeadings(15))).toEqual([])
+    const findings = check(stepHeadings(25))
     expect(findings).toHaveLength(1)
-    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].severity).toBe("info")
+    expect(findings[0].message).toContain("実際: 25")
   })
 
-  it("steps が空なら本文の番号付きリストから推定する", () => {
-    const content = Array.from(
-      { length: 20 },
-      (_, i) => `${i + 1}. do something`
-    ).join("\n")
-    const findings = maxStepsRule.check(
-      makeArtifact({ kind: "plan", content, steps: [] }),
-      makeCtx()
-    )
-    expect(findings).toHaveLength(1)
+  it("見出しがあれば番号付きリストを数えない", () => {
+    expect(check(`${stepHeadings(2)}\n${numberedList(20)}`)).toEqual([])
   })
 
-  it("steps が空ならチェックボックスからも推定する", () => {
-    const content = Array.from({ length: 20 }, () => "- [ ] task").join("\n")
-    const findings = maxStepsRule.check(
-      makeArtifact({ kind: "plan", content, steps: [] }),
-      makeCtx()
-    )
-    expect(findings).toHaveLength(1)
+  it("見出しが無ければ番号付きリストを数える", () => {
+    expect(check(numberedList(20))).toHaveLength(1)
   })
 
   it("設定で limit を調整できる", () => {
-    const findings = maxStepsRule.check(
-      makeArtifact({ kind: "plan", steps: ["a", "b", "c"] }),
-      makeCtx({ rules: { "plan/max-steps": { limit: 2 } } })
-    )
-    expect(findings).toHaveLength(1)
+    const ctx = makeCtx({ rules: { "plan/max-steps": { limit: 2 } } })
+    expect(check(stepHeadings(3), ctx)).toHaveLength(1)
   })
 })

@@ -1,11 +1,10 @@
 /**
- * 鑑識(crosscheck): 成果物の主張を事実と突合する。両方向必須:
- * 未達(計画にあるのにやっていない)と逸脱(計画にないのにやっている)(docs/DESIGN.md §7)。
- * 参照ファイルの実在確認等は呼び出し側が決定論的に作った factTable で補助する
- * (このパネリスト自身はツールを持たない)。
+ * 鑑識(crosscheck): 成果物の主張を objective・前フェーズの証拠・事実表と突き合わせる。
+ * 未達(書いてあるのにやっていない)と逸脱(書いていないのにやっている)の両方を見る。
+ * このパネリストはツールを持たないので、ファイルの状態は呼び出し側が決定論で作った事実表で渡す。
  */
 
-import type { Artifact, PanelReport } from "../../core/types.js"
+import type { Artifact, DiffFile, PanelReport } from "../../core/types.js"
 import {
   commonHeader,
   formatArtifact,
@@ -13,7 +12,7 @@ import {
   formatPriorEvidence,
   frameUntrusted
 } from "../prompts.js"
-import type { JudgeProvider } from "../provider.js"
+import type { CallControl, JudgeProvider } from "../provider.js"
 import { formatRubric, rubricFor } from "../rubrics.js"
 import {
   standardPanelResponseSchema,
@@ -21,29 +20,80 @@ import {
   toJsonSchema
 } from "../schema.js"
 
-export interface CrosscheckInput {
-  artifact: Artifact
-  /** 前フェーズの承認済み証拠テキスト。無ければ初回フェーズとして扱う */
-  priorEvidence?: string
-  /** 「成果物中の参照パス → 実在するか」等、呼び出し側が決定論的に作った事実表 */
-  factTable?: string
+/** 事実表の 1 行の状態。diff から作るものと、本文の参照パスの実在の確認から作るもの */
+export type FactState =
+  | "new"
+  | "deleted"
+  | "renamed"
+  | "modified"
+  | "exists"
+  | "missing"
+
+export interface FactRow {
+  /** a/・b/ を除いた repoPath 相対のパス */
+  path: string
+  state: FactState
+  /** renamed のときの元のパス */
+  oldPath?: string
 }
 
-function formatFactTable(factTable?: string): string {
-  if (!factTable) {
+const STATE_LABELS: Record<FactState, string> = {
+  new: "新規",
+  deleted: "削除",
+  renamed: "改名",
+  modified: "変更",
+  exists: "実在",
+  missing: "不在"
+}
+
+/**
+ * Raguel が組んだ diff の解析結果から事実表の行を作る(所見 A13)。
+ * 新規ファイルは変更前の作業ツリーには無いが、「不在」でなく「新規」と書く
+ */
+export function factRowsFromDiff(files: readonly DiffFile[]): FactRow[] {
+  return files.map((f): FactRow => {
+    if (f.isNew) return { path: f.path, state: "new" }
+    if (f.isDeleted) return { path: f.path, state: "deleted" }
+    if (f.isRename)
+      return { path: f.path, state: "renamed", oldPath: f.oldPath }
+    return { path: f.path, state: "modified" }
+  })
+}
+
+export function formatFactTable(rows: readonly FactRow[]): string {
+  if (rows.length === 0) return "(参照パスなし)"
+  return rows
+    .map(
+      (r) =>
+        `${r.path}: ${STATE_LABELS[r.state]}` +
+        (r.oldPath ? `(旧: ${r.oldPath})` : "")
+    )
+    .join("\n")
+}
+
+export interface CrosscheckInput {
+  artifact: Artifact
+  /** 前フェーズの証拠。無ければ初回フェーズとして扱う */
+  priorEvidence?: string
+  /** 呼び出し側が決定論で作った事実表 */
+  facts?: readonly FactRow[]
+}
+
+function factSection(facts?: readonly FactRow[]): string {
+  if (!facts) {
     return (
       "(事実表なし。決定論的な実在確認は行われていない。成果物内の記述同士の" +
       "内部矛盾のみを確認すること)"
     )
   }
-  return frameUntrusted("fact-table", factTable)
+  return frameUntrusted("fact-table", formatFactTable(facts))
 }
 
 export async function runCrosscheck(
   input: CrosscheckInput,
   provider: JudgeProvider,
   model: string,
-  timeoutMs: number
+  ctl: CallControl
 ): Promise<PanelReport> {
   const axes = rubricFor(input.artifact.kind)
   const schema = standardPanelResponseSchema(axes.map((a) => a.key))
@@ -56,7 +106,7 @@ export async function runCrosscheck(
     "以下の両方向を必ず確認すること:",
     "- 未達: 計画・主張に書かれているのに、成果物内で実施された形跡がないもの",
     "- 逸脱: 計画・主張に書かれていないのに、成果物内で実施されているもの",
-    "事実表にある「実在しない参照」は特に重視すること。",
+    "事実表の「不在」は参照先が無いことを表す。「新規」はこの変更で作られるファイルで、不在ではない。",
     "",
     "## objective(この成果物が何のためのものか)",
     formatObjective(input.artifact.objective),
@@ -64,27 +114,29 @@ export async function runCrosscheck(
     "## 成果物",
     formatArtifact(input.artifact.content),
     "",
-    "## 前フェーズの承認済み証拠",
+    "## 前フェーズの証拠",
     formatPriorEvidence(input.priorEvidence),
     "",
-    "## 事実表(参照パスの実在確認など、決定論チェックの結果)",
-    formatFactTable(input.factTable),
+    "## 事実表(ファイルの状態。決定論で作ったもの)",
+    factSection(input.facts),
     "",
-    "## ルーブリック(scores はこの軸ごとに 0-100 の整数で評価)",
+    "## ルーブリック(scores はこの軸ごとに付ける)",
     formatRubric(axes),
     "",
     "各 finding は severity(info|ask)・confidence(0-100)・message を含めること。",
     "severity は ask までしか使えない。"
   ].join("\n")
 
-  const response = await provider.invoke({
-    role: "crosscheck",
-    model,
-    prompt,
-    schema,
-    jsonSchema: toJsonSchema(schema),
-    timeoutMs
-  })
+  const response = await provider.invoke(
+    {
+      role: "crosscheck",
+      model,
+      prompt,
+      schema,
+      jsonSchema: toJsonSchema(schema)
+    },
+    ctl
+  )
 
   return {
     panelist: "crosscheck",

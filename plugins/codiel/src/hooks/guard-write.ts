@@ -7,6 +7,7 @@ import {
   readCodielConfig,
   type StepState
 } from "../codiel-state.js"
+import { resolveRaguelStore } from "../raguel-records.js"
 import {
   emit,
   findDocRoot,
@@ -117,7 +118,7 @@ function underDir(repoRel: string, dir: string): boolean {
 }
 
 // E2E のレポート `<testsDir>/**/reports/**` か(設計書 §6.17.3・§6.17.6)。
-function isE2eReport(repoRel: string, testsDir: string): boolean {
+export function isE2eReport(repoRel: string, testsDir: string): boolean {
   if (!underDir(repoRel, testsDir)) return false
   const rest = testsDir === "." ? repoRel : repoRel.slice(testsDir.length + 1)
   return /(^|\/)reports\//.test(rest)
@@ -184,6 +185,47 @@ function worktreeElements(
   return hits
 }
 
+// Raguel の設定と記録(Raguel 設計書 §6.13.4、所見 G8・R12)。守るのは次の 3 つである。
+// - `.codiel/config.json`。raguel キーだけでなくファイル全体を守る。
+//   codiel の worktree の写しも同じ形なので、パスの末尾で判定する。
+// - RAGUEL_CONFIG が指すファイル。
+// - casesDir の配下。
+// 当たればそのパスの表示を返し、当たらなければ null を返す。
+// casesDir は raguel-records の置き場の解決で求める。設定が読めないときは casesDir の判定だけを外す。
+// そのとき Raguel も評価できず、pass-gate が失敗として扱う。
+// シンボリックリンクの別名は、論理パスと実体パスの両方で比べて塞ぐ。
+const CODIEL_CONFIG_RE = /[/\\]\.codiel[/\\]config\.json$/i
+
+// p が dir そのものか、その配下か
+function isUnder(p: string, dir: string): boolean {
+  const rel = path.relative(dir, p)
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel))
+  )
+}
+
+function raguelTarget(abs: string, mainRoot: string): string | null {
+  const absReal = realpathOrAncestor(abs)
+  if (CODIEL_CONFIG_RE.test(abs) || CODIEL_CONFIG_RE.test(absReal))
+    return ".codiel/config.json"
+  const env = process.env.RAGUEL_CONFIG
+  if (env) {
+    const file = path.resolve(env)
+    if (abs === file || absReal === realpathOrAncestor(file))
+      return `RAGUEL_CONFIG が指す ${file}`
+  }
+  let casesDir: string
+  try {
+    casesDir = resolveRaguelStore(mainRoot).casesDir
+  } catch {
+    return null
+  }
+  if (isUnder(abs, casesDir) || isUnder(absReal, realpathOrAncestor(casesDir)))
+    return `casesDir ${casesDir} の配下`
+  return null
+}
+
 try {
   const input = await readStdin()
   const cwd = input.cwd ?? process.cwd()
@@ -227,6 +269,17 @@ try {
   // findMainRoot がメインのルートを返す。
   const mainRoot = findMainRoot(cwd)
   const run = findActiveRun(mainRoot)
+  // Raguel の設定と記録(Raguel 設計書 §6.13.4)。awaiting_human の run でも効かせるため、
+  // status で通す分岐より前に置く。state.intent・config の読み込み・退避先の判定より前なので、
+  // それらの扱いに左右されない。
+  if (run) {
+    const target = raguelTarget(abs, mainRoot)
+    if (target)
+      emit(
+        "deny",
+        `run の間(active・awaiting_human)は Raguel の設定と記録(${target})を書き換えられません。ゲートの偽装を防ぐためです。変更するときは run を止めるか、利用者が自分で変更してください`
+      )
+  }
   if (run?.state.status !== "active") pass()
 
   const phase = run.state.phase

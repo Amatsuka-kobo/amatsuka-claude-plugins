@@ -1,5 +1,6 @@
 /**
- * decision/no-alternatives — 代替案の検討が記載されていないことの検出(既定 info)
+ * decision/no-alternatives — 代替案の検討が記載されていないことの検出(既定 info)。設計書 §6.4.2。
+ * 中身の無い optionsConsidered は Jev の文脈判定(有効なときだけ)が見る
  */
 
 import type { Finding, Rule } from "../../core/types.js"

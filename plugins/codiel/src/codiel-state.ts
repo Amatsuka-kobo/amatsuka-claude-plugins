@@ -1,5 +1,20 @@
 import fs from "node:fs"
 import path from "node:path"
+import { findMainRoot } from "./hooks/lib.js"
+import {
+  CODE_PHASES,
+  changedPathsSince,
+  checkEvaluationRow,
+  checkGate,
+  evaluatedFiles,
+  findEvaluation,
+  gitHead,
+  isAncestor,
+  type RaguelStore,
+  readEvaluationIndex,
+  resolveRaguelStore,
+  unresolvedStops
+} from "./raguel-records.js"
 
 export type PhaseStatus =
   | "pending"
@@ -25,6 +40,12 @@ export interface PhaseState {
   // mark-ask の確認の種類。raguel は Raguel の ASK、confirm は人への確認。
   // resume の後も消さず、ゲートの記録と区別できるように残す。
   askKind?: AskKind
+  // code 系フェーズ(test-code・implement・test-loop・fix-loop)を始めたときの HEAD
+  // (Raguel 設計書 §6.13.3)。pass-gate の検査 8 が評価の起点と照らす
+  startHead?: string
+  // ゲート付きフェーズの pass-gate を通したときの HEAD(Raguel 設計書 §6.13.3)。git の管理外では持たない。
+  // 次の code 系フェーズの start-phase が、評価の後にコミットが足されていないかを照らす
+  passedHead?: string
 }
 
 export interface RunState {
@@ -70,6 +91,9 @@ export interface RunState {
   testLoop?: { units: Record<string, StepState> }
   // fix-loop でテストの保護を外す間だけ真(設計書 §6.13.6)。clear-test-edit でキーごと消す
   testEdit?: boolean
+  // Raguel の記録の形式(Raguel 設計書 §6.13.3)。init が 2 を記録する。
+  // 持たない run(この作り直しより前に作ったもの)は pass-gate を通せない
+  raguelContract?: 2
 }
 
 export type StepStatus =
@@ -651,8 +675,77 @@ function newState(
     stopReason: null,
     incidents: [],
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    raguelContract: 2
   }
+}
+
+// Raguel の記録の置き場。設定が読めなければ失敗する(黙って既定の置き場を読まない)
+function raguelStore(root: string): RaguelStore {
+  try {
+    return resolveRaguelStore(findMainRoot(root))
+  } catch (e) {
+    return fail(`Raguel の記録を読めません: ${(e as Error).message}`)
+  }
+}
+
+// pass-gate の検査 10 の文言(Raguel 設計書 §6.13.3)
+function oldContractMessage(st: RunState): string {
+  return `codiel: この run は Raguel の記録の形式が古い(raguelContract なし)ため、この版ではゲートを通せない。\`codiel-state stop --slug ${st.runId} --reason migrate\` で止めてから、\`/codiel:run ${st.intent}\` で同じ intent の新しい try を始める。`
+}
+
+// フェーズの間の連続性(Raguel 設計書 §6.13.3 の start-phase)。phase より前でゲート付きフェーズを
+// 持つ最も近いステージの、passedHead を持つフェーズと照らす。持つフェーズが無ければ照らさない
+// (skip-phase で通したフェーズは passedHead を持たない)。外れたら理由の文を返す。
+// 直前が code 系フェーズなら、今の HEAD が passedHead と等しいことを要る。文書のフェーズなら、
+// passedHead..HEAD の変更がそのフェーズの subject.files だけであることを要る(ゲート通過の直後の
+// 文書のコミットを許す)。同じステージの test-spec と dev-plan は、両方の subject.files を合わせる。
+// state は通した順を持たない。そこで、passedHead がもう一方の祖先であるほう(先に通したほう)を起点にする
+function continuityProblem(
+  root: string,
+  st: RunState,
+  phase: string,
+  head: string
+): string | null {
+  const stageIdx = STAGES.findIndex((s) => s.includes(phase))
+  for (let i = stageIdx - 1; i >= 0; i--) {
+    const gated = STAGES[i].filter((p) => GATED.has(p))
+    if (gated.length === 0) continue
+    const found = gated.flatMap((p) => {
+      const h = st.phases[p].passedHead
+      return h ? [{ phase: p, passedHead: h }] : []
+    })
+    if (found.length === 0) return null
+    const names = found.map((c) => c.phase).join("・")
+    if (found.some((c) => CODE_PHASES.has(c.phase))) {
+      const { passedHead } = found[0]
+      return passedHead === head
+        ? null
+        : `評価の後にコミットがある(${passedHead}..${head})。${names} を評価し直してください`
+    }
+    const base =
+      found.find((c) =>
+        found.every((o) => isAncestor(root, c.passedHead, o.passedHead))
+      ) ?? found[0]
+    const allowed = new Set<string>()
+    for (const c of found) {
+      const files = evaluatedFiles(
+        raguelStore(root),
+        st.phases[c.phase].evaluationId ?? ""
+      )
+      if (!files)
+        return `${c.phase} の評価の記録(evaluationId: ${st.phases[c.phase].evaluationId})から評価した文書を読めません`
+      for (const f of files) allowed.add(f)
+    }
+    const changed = changedPathsSince(root, base.passedHead)
+    if (!changed)
+      return `評価の後の変更を読めません(git diff ${base.passedHead} HEAD が失敗した)`
+    const extra = changed.filter((p) => !allowed.has(p))
+    return extra.length === 0
+      ? null
+      : `評価の後に、評価した文書のほかのファイルのコミットがある(${base.passedHead}..${head}: ${extra.join(", ")})。${names} を評価し直してください`
+  }
+  return null
 }
 
 // --slug の run の最新 try を読む。isLegacy の run(v1 と M4 より前の state)は allowLegacy
@@ -737,6 +830,20 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
             ")。新しい try を作ってよいか人に確かめ、承認されたら --human-approved を付けて init し直してください"
         )
     }
+    // STOP を state に記録しないまま止めた try も、Raguel の評価の索引で見つける(Raguel 設計書 §6.13.3)
+    if (latest && !bools.has("human-approved")) {
+      let stops: string[] = []
+      try {
+        stops = unresolvedStops(raguelStore(root), latest.state.raguelRunId)
+      } catch (e) {
+        fail(`Raguel の記録を読めません: ${(e as Error).message}`)
+      }
+      if (stops.length > 0)
+        fail(
+          `前の try(${latest.statePath})には、誤検知の裁定の無い Raguel の STOP があります` +
+            `(evaluationId: ${stops.join(", ")})。新しい try を作ってよいか人に確かめ、承認されたら --human-approved を付けて init し直してください`
+        )
+    }
     const tryN = latest ? latest.tryN + 1 : 1
     const dir = path.join(runDir(root, slug), `try-${tryN}`)
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
@@ -805,6 +912,18 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(
         `フェーズ ${phase} は ${st.phases[phase].status} のため開始できません`
       )
+    // code 系フェーズは開始の HEAD を記録する(Raguel 設計書 §6.13.3)。in_progress のフェーズを
+    // 開始し直しても書き換えない。起点を後ろへずらして差分の一部だけを評価させないため
+    if (CODE_PHASES.has(phase) && !st.phases[phase].startHead) {
+      const head = gitHead(root)
+      if (!head)
+        fail(
+          `フェーズ ${phase} の開始の HEAD を読めません(git rev-parse HEAD が失敗した): ${root}`
+        )
+      const problem = continuityProblem(root, st, phase, head as string)
+      if (problem) fail(problem)
+      st.phases[phase].startHead = head as string
+    }
     st.phases[phase].status = "in_progress"
     st.phase = phase
     writeState(latest.statePath, st)
@@ -855,6 +974,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     if (!GATED.has(phase))
       fail(`${phase} はゲート対象フェーズではありません(complete-phase を使用)`)
     const latest = loadRun(root, flags)
+    if (latest.state.raguelContract !== 2)
+      fail(oldContractMessage(latest.state))
     const ph = latest.state.phases[phase]
     if (ph.status !== "in_progress")
       fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`)
@@ -874,10 +995,38 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(
         `verdict が PROCEED ではありません: ${flags.verdict}。ASK と STOP は mark-ask(STOP は --verdict STOP を付ける)で人の裁定にかけてください`
       )
+    // 自己申告の --verdict を Raguel の記録で照らす(Raguel 設計書 §6.13.3 の検査 1〜5・7〜9)
+    // 検査 9 の期待するファイルの置き場
+    let dirs = { testsDir: "", runsDir: "" }
+    try {
+      dirs = readCodielConfig(root)
+    } catch (e) {
+      fail((e as Error).message)
+    }
+    let problem: string | null = null
+    try {
+      problem = checkGate({
+        store: raguelStore(root),
+        root,
+        runId: latest.state.raguelRunId,
+        phase,
+        evaluationId: flags["evaluation-id"],
+        verdict: flags.verdict,
+        humanApproved,
+        startHead: ph.startHead,
+        runDocsDir: path.posix.join(dirs.runsDir, latest.state.runId),
+        testsDir: dirs.testsDir
+      })
+    } catch (e) {
+      problem = `Raguel の記録を読めません: ${(e as Error).message}`
+    }
+    if (problem) fail(problem)
     ph.status = "passed"
     ph.evaluationId = flags["evaluation-id"]
     ph.verdict = flags.verdict
     if (humanApproved) ph.humanApproved = true
+    const passedHead = gitHead(root)
+    if (passedHead) ph.passedHead = passedHead
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
   }
@@ -927,6 +1076,26 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(
         `フェーズ ${phase} は pending のため mark-ask できません。start-phase してから確認してください`
       )
+    // Raguel の ASK・STOP は、評価の索引にその評価があるときだけ人の裁定にかける(Raguel 設計書 §6.13.3)
+    if (askKind === "raguel") {
+      const evaluationId = flags["evaluation-id"]
+      if (!evaluationId) fail("--kind raguel には --evaluation-id が必要です")
+      let problem: string | null = null
+      try {
+        problem = checkEvaluationRow(
+          findEvaluation(readEvaluationIndex(raguelStore(root)), evaluationId),
+          {
+            evaluationId,
+            runId: latest.state.raguelRunId,
+            phase,
+            verdict
+          }
+        )
+      } catch (e) {
+        problem = `Raguel の記録を読めません: ${(e as Error).message}`
+      }
+      if (problem) fail(problem)
+    }
     ph.status = "awaiting_human"
     // 記録済みの STOP は verdict と evaluationId をどちらも、新しい --verdict と
     // --evaluation-id の有無と値にかかわらず残す。resume と mark-ask を挟んで

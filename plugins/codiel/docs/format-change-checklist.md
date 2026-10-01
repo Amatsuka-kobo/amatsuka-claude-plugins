@@ -30,3 +30,18 @@ codiel が定める書式を変更したときに、同じコミットで追随�
 - [ ] gh-utility: `references/github-issue-common.md` の「## 執筆規則」
 
 4 つの規則(根拠の置き場・言語を問わない書き方・翻訳・環境に固有の値)の文言を揃える。何を残し何を削るかの基準は、それぞれの規則(`intent-writing.md`・`github-writing.md`・gh-utility の `## 執筆規則` の 3 文)が個別に持つので、`readable-writing.md` の変更では追随させない。
+
+## Raguel との契約(`docs/raguel-contract.md`)
+
+契約の正本は `docs/raguel-contract.md` である。フェーズの表・ケースファイルの配置と置き場の解決・記録の形・裁定の組み合わせ・pass-gate の検査・`testsDir` の読み方・E2E のレポートの判定のどれかを変えたら、次を同じコミットで追随させる。`R/` は `raguel-mcp/src/`、`C/` は `src/` である。
+
+- [ ] `R/codiel/phases.ts` のフェーズの表(フェーズ名・ステージ番号・kind・ツール)
+- [ ] `R/casefile/`(`store.ts` の `EVIDENCE_FILES`・索引と裁定の記録の形・verdict.json・ハッシュチェーン)
+- [ ] `R/config/paths.ts` の `resolveTestsDir`・`isE2eReport`・`classifyPath`と、`R/project/root.ts` の置き場・projectId の解決
+- [ ] `C/codiel-state.ts` の `STAGES`・`GATED`と、`readCodielConfig` の `testsDir` の読み方
+- [ ] `C/hooks/guard-write.ts` の `isE2eReport`
+- [ ] `C/raguel-records.ts`(置き場の解決・索引と裁定の記録・verdict.json の読み込み)と、`C/codiel-state.ts` の `start-phase`・`pass-gate`・`mark-ask`・`init` の検査
+- [ ] `skills/raguel-gating/SKILL.md` のフェーズ→ツール対応表と、`phase`・`baseRef`・`paths` の渡し方
+- [ ] 2 者比較テスト 2 本。`R/codiel/__test__/phases.test.ts`(フェーズの表。codiel の `STAGES`・`GATED` と照らす)と、`C/__test__/raguel-records.test.ts`(記録の読み込み・置き場の解決・projectId・`testsDir`・レポートの判定を、raguel-mcp の CaseStore と照らす)
+
+`testsDir` の読み方(codiel の `readCodielConfig` と Raguel の `resolveTestsDir`)とレポートの判定(codiel の `isE2eReport` と Raguel の `isE2eReport`・`classifyPath`)は、どちらか片方だけを変えるとレポートとみなす範囲がずれる。両方を同じ規則にそろえ、2 本目の比較テストで確かめる。

@@ -1,69 +1,190 @@
 /**
- * マージ・zod 検証済みの RaguelConfig に対し、docs/DESIGN.md §10 の不変条件のうち
- * 設定レベルで検証できるものをチェックする。違反はサーバー起動失敗として throw する
- * (フェイルクローズド)。
+ * マージと zod の検証を通った RaguelConfig に、設計書 §6.12.3 の検査を当てる。
+ * 違反は読み込みエラーとして throw する(フェイルクローズド)。
+ * 型と列挙の値(perPanelist のキー、provider の値、thresholds の 0〜1 など)は config/schema.ts が拒む。
  */
 
-import type { RaguelConfig } from "./types"
+import { globFixedPart, isNegatedGlob } from "../config/paths"
+import {
+  DEFAULT_PROTECTED_GLOBS,
+  MAX_SIMILARITY_THRESHOLD,
+  RULE_SPECS,
+  STOP_CAPABLE_RULE_IDS
+} from "../rules/params"
+import type { RaguelConfig, Severity } from "./types"
 
-/** 設定で無効化できない sealed ルールの一覧(§10 不変条件 3)。list_rules からも参照する */
-export const SEALED_RULES: readonly string[] = [
-  "common/secrets",
-  "common/injection-marker",
-  "common/resubmission-loop",
-  "code/protected-paths",
-  "code/dangerous-patterns"
+/** 設定で無効にできず、severity を既定より軽くできないルール。list_rules からも参照する */
+export const SEALED_RULES: readonly string[] = RULE_SPECS.filter(
+  (spec) => spec.sealed
+).map((spec) => spec.id)
+
+/** judge.deadlineMs の上限(R21) */
+export const MAX_DEADLINE_MS = 1800000
+
+const SEVERITY_RANK: Record<Severity, number> = { info: 0, ask: 1, stop: 2 }
+
+/**
+ * allowPatterns が一致してはならない見本の秘密情報。
+ * 見本そのものが秘密情報の検出に掛からないよう、実行時に組み立てる
+ */
+const SAMPLE_SECRETS: readonly string[] = [
+  `sk-ant-api03-${"A1b2C3d4".repeat(12)}`,
+  `AKIA${"ABCDEFGHIJ234567"}`,
+  `ghp_${"a1B2c3D4e5".repeat(4)}`.slice(0, 40),
+  `-----BEGIN ${"RSA PRIVATE"} KEY-----`
 ]
 
-const RESUBMISSION_LOOP_RULE_ID = "common/resubmission-loop"
-// sealed ルールの緩和限度: stopAfter はこれを超えて大きくできない(緩和方向の限度値)
-const RESUBMISSION_LOOP_MAX_STOP_AFTER = 5
-
 export function assertInvariants(config: RaguelConfig): void {
-  assertSteelmanRequiresAdversarial(config)
-  assertSealedRulesEnabled(config)
-  assertResubmissionLoopLimit(config)
+  assertRuleSeverities(config)
+  assertAllowPatterns(config)
+  assertResubmissionThreshold(config)
+  assertProtectedPathsParams(config)
+  assertIgnoreUncommitted(config)
+  assertTimeLimits(config)
+  assertContextJudgeThresholds(config)
 }
 
-// 不変条件 1: 弁護(steelman)は検察(adversarial)が有効なティアでのみ有効化できる
-function assertSteelmanRequiresAdversarial(config: RaguelConfig): void {
-  const tiers: ReadonlyArray<readonly [string, readonly string[]]> = [
-    ["trivial", config.panel.trivial],
-    ["standard", config.panel.standard],
-    ["critical", config.panel.critical]
-  ]
-  for (const [tierName, panelists] of tiers) {
-    if (panelists.includes("steelman") && !panelists.includes("adversarial")) {
+// sealed ルールの無効化と severity の引き下げ、STOP を出せないルールの stop
+function assertRuleSeverities(config: RaguelConfig): void {
+  for (const spec of RULE_SPECS) {
+    const settings = config.rules[spec.id]
+    if (spec.sealed && settings?.enabled === false) {
       throw new Error(
-        `panel.${tierName} に steelman が含まれていますが adversarial が含まれていません。` +
-          "弁護(steelman)は検察(adversarial)が有効なティアでのみ有効化できます(docs/DESIGN.md §10 不変条件 1)。"
+        `sealed ルール "${spec.id}" は設定で無効にできません。rules から enabled: false を削除してください。`
+      )
+    }
+    const severity = settings?.severity
+    if (severity === undefined) continue
+    if (
+      spec.sealed &&
+      SEVERITY_RANK[severity] < SEVERITY_RANK[spec.defaultSeverity]
+    ) {
+      throw new Error(
+        `sealed ルール "${spec.id}" の severity は既定の ${spec.defaultSeverity} より軽くできません(指定値: ${severity})。`
+      )
+    }
+    if (severity === "stop" && !STOP_CAPABLE_RULE_IDS.includes(spec.id)) {
+      throw new Error(
+        `ルール "${spec.id}" は severity: stop にできません。STOP を出せるのは ${STOP_CAPABLE_RULE_IDS.join("・")} だけです。`
       )
     }
   }
 }
 
-// 不変条件 3: sealed ルールは enabled: false で無効化できない
-function assertSealedRulesEnabled(config: RaguelConfig): void {
-  for (const ruleId of SEALED_RULES) {
-    if (config.rules[ruleId]?.enabled === false) {
+// common/secrets.allowPatterns は正しい正規表現で、空文字列と見本の秘密情報に一致しない
+function assertAllowPatterns(config: RaguelConfig): void {
+  const patterns = config.rules["common/secrets"]?.allowPatterns
+  if (!Array.isArray(patterns)) return
+  for (const pattern of patterns as string[]) {
+    let re: RegExp
+    try {
+      re = new RegExp(pattern)
+    } catch (err) {
       throw new Error(
-        `sealed ルール "${ruleId}" は設定で無効化できません(docs/DESIGN.md §10 不変条件 3)。` +
-          "rules から enabled: false の指定を削除してください。"
+        `rules."common/secrets".allowPatterns の正規表現が不正です: ${pattern}(${(err as Error).message})`
+      )
+    }
+    if (re.test("")) {
+      throw new Error(
+        `rules."common/secrets".allowPatterns に空文字列に一致する正規表現は置けません: ${pattern}`
+      )
+    }
+    if (SAMPLE_SECRETS.some((sample) => re.test(sample))) {
+      throw new Error(
+        `rules."common/secrets".allowPatterns が内蔵の見本の秘密情報に一致します。秘密情報の検出を外す正規表現は置けません: ${pattern}`
       )
     }
   }
 }
 
-// sealed ルールの緩和限度: common/resubmission-loop の昇格回数(stopAfter)は 5 が上限
-function assertResubmissionLoopLimit(config: RaguelConfig): void {
-  const stopAfter = config.rules[RESUBMISSION_LOOP_RULE_ID]?.stopAfter
-  if (
-    typeof stopAfter === "number" &&
-    stopAfter > RESUBMISSION_LOOP_MAX_STOP_AFTER
-  ) {
+// common/resubmission-loop.similarityThreshold の緩和の限度
+function assertResubmissionThreshold(config: RaguelConfig): void {
+  const threshold =
+    config.rules["common/resubmission-loop"]?.similarityThreshold
+  if (typeof threshold === "number" && threshold > MAX_SIMILARITY_THRESHOLD) {
     throw new Error(
-      `rules."${RESUBMISSION_LOOP_RULE_ID}".stopAfter は ${RESUBMISSION_LOOP_MAX_STOP_AFTER} を超えて緩和できません` +
-        `(sealed ルールの緩和限度)。指定値: ${stopAfter}`
+      `rules."common/resubmission-loop".similarityThreshold は ${MAX_SIMILARITY_THRESHOLD} を超えられません(指定値: ${threshold})。`
+    )
+  }
+}
+
+// code/protected-paths の excludeDefaults と generated(R20)
+function assertProtectedPathsParams(config: RaguelConfig): void {
+  const settings = config.rules["code/protected-paths"]
+  const excluded = settings?.excludeDefaults
+  if (Array.isArray(excluded)) {
+    for (const glob of excluded as string[]) {
+      if (!DEFAULT_PROTECTED_GLOBS.includes(glob)) {
+        throw new Error(
+          `rules."code/protected-paths".excludeDefaults に既定の glob と一致しない文字列があります: ${glob}。` +
+            `外せるのは ${DEFAULT_PROTECTED_GLOBS.join("・")} だけです。`
+        )
+      }
+    }
+  }
+  const generated = settings?.generated
+  if (Array.isArray(generated)) {
+    for (const glob of generated as string[]) {
+      if (isNegatedGlob(glob)) {
+        throw new Error(
+          `rules."code/protected-paths".generated に否定の glob は置けません: ${glob}。` +
+            "否定は指定した範囲の外すべてに一致します。除く範囲でなく含める範囲を書いてください(例: dist/**)。"
+        )
+      }
+      if (globFixedPart(glob) === "") {
+        throw new Error(
+          `rules."code/protected-paths".generated に固定部の無い glob は置けません: ${glob}。` +
+            "ワイルドカードより前にディレクトリを書いてください(例: dist/**)。"
+        )
+      }
+    }
+  }
+}
+
+// subject.ignoreUncommitted の glob には固定部が要る(§6.2.2 の手順 3)。作業ツリー全体を検査から外させない
+function assertIgnoreUncommitted(config: RaguelConfig): void {
+  for (const glob of config.subject.ignoreUncommitted) {
+    if (isNegatedGlob(glob)) {
+      throw new Error(
+        `subject.ignoreUncommitted に否定の glob は置けません: ${glob}。` +
+          "否定は指定した範囲の外すべてに一致します。除く範囲でなく含める範囲を書いてください(例: docs/chat/**)。"
+      )
+    }
+    if (globFixedPart(glob) === "") {
+      throw new Error(
+        `subject.ignoreUncommitted に固定部の無い glob は置けません: ${glob}。` +
+          "ワイルドカードより前にディレクトリを書いてください(例: docs/chat/**)。"
+      )
+    }
+  }
+}
+
+// 締切と時間の上限(R6、R21、R19)
+function assertTimeLimits(config: RaguelConfig): void {
+  const { deadlineMs, timeoutMs } = config.judge
+  if (deadlineMs > MAX_DEADLINE_MS) {
+    throw new Error(
+      `judge.deadlineMs は ${MAX_DEADLINE_MS} を超えられません(指定値: ${deadlineMs})。`
+    )
+  }
+  if (timeoutMs > deadlineMs) {
+    throw new Error(
+      `judge.timeoutMs(${timeoutMs})は judge.deadlineMs(${deadlineMs})を超えられません。`
+    )
+  }
+  if (config.contextJudge.timeoutMs > deadlineMs) {
+    throw new Error(
+      `contextJudge.timeoutMs(${config.contextJudge.timeoutMs})は judge.deadlineMs(${deadlineMs})を超えられません。`
+    )
+  }
+}
+
+// contextJudge.thresholds は lower < raise(0〜1 の範囲はスキーマが拒む)
+function assertContextJudgeThresholds(config: RaguelConfig): void {
+  const { lower, raise } = config.contextJudge.thresholds
+  if (lower >= raise) {
+    throw new Error(
+      `contextJudge.thresholds.lower(${lower})は raise(${raise})より小さくしてください。`
     )
   }
 }
