@@ -1075,6 +1075,14 @@ function coveringTarget(
     )
     return undefined
   }
+  // 作り直すと解決できない ID がマーカーから落ちるため、点検で外し終えるまで触らない。
+  const unresolved = definition.markerIds.filter((id) => !fragments.has(id))
+  if (unresolved.length > 0) {
+    warnings.push(
+      `roles: ${definition.file} declares retired or unknown role ids (${unresolved.join(", ")}); not regenerated`
+    )
+    return undefined
+  }
   const modelId = modelIdOf(definition.model)
   if (modelId === null || definition.model === undefined) {
     warnings.push(

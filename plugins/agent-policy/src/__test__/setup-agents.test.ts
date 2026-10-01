@@ -1696,6 +1696,22 @@ describe("再生成の作成先は被覆する定義で決める", () => {
     expect(content).not.toContain("model: inherit")
   })
 
+  it.each([
+    ["廃止済み ID", "code-review, final-review"],
+    ["未知の ID", "code-review, no-such-role"]
+  ])("%s を持つ被覆定義は変更せず warnings に載せ、既定名のファイルも作らない", (_label, roles) => {
+    marked("x.md", "sonnet", roles)
+    const before = readAgent("x.md")
+
+    const result = recommend("claude", "code-review")
+
+    expect(result.ok).toBe(true)
+    expect(result.results).toEqual([])
+    expect(result.warnings.some((warning) => warning.includes("x"))).toBe(true)
+    expect(readAgent("x.md")).toBe(before)
+    expect(agentFiles()).toEqual(["x.md"])
+  })
+
   it("claude-only で外部ベンダーの定義しか被覆しない役割は既定名で新規生成する", () => {
     marked("external.md", "claude-gpt-6-sol", "code-review", "gpt")
     const external = readAgent("external.md")

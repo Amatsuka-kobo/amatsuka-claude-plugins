@@ -1548,6 +1548,13 @@ function coveringTarget(role, covering, fragments, live, warnings) {
     );
     return void 0;
   }
+  const unresolved = definition.markerIds.filter((id) => !fragments.has(id));
+  if (unresolved.length > 0) {
+    warnings.push(
+      `roles: ${definition.file} declares retired or unknown role ids (${unresolved.join(", ")}); not regenerated`
+    );
+    return void 0;
+  }
   const modelId = modelIdOf(definition.model);
   if (modelId === null || definition.model === void 0) {
     warnings.push(
