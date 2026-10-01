@@ -1,5 +1,5 @@
 /**
- * ツール層の共通部。入力の基本スキーマ、設定の読み直しとプロバイダーの作り直し、
+ * ツール層の共通部。入力の基本スキーマ、設定の読み直し、
  * 評価の実行(進捗の通知・中止・入力の誤りの isError)を持つ(設計書 §6.2・§6.8・§6.12.4)。
  */
 
@@ -16,11 +16,9 @@ import {
   type EvaluationRequest,
   evaluate,
   type PipelineDeps,
-  type Providers,
   type Runtime,
   type RuntimeResult
 } from "../core/pipeline.js"
-import type { RaguelConfig } from "../core/types.js"
 import { SubjectInputError } from "../subject/types.js"
 
 /** path traversal を防ぐ。runId はツールの入力なので信頼しない */
@@ -118,17 +116,13 @@ export async function runEvaluation(
 }
 
 /**
- * 呼ぶたびに設定を読み直す(ファイルの有無と mtime が変わったときだけ)。変わればプロバイダーも作り直す。
+ * 呼ぶたびに設定を読み直す(ファイルの有無と mtime が変わったときだけ)。
  * 読み込みに失敗しても例外にせず、理由と設定のパスを返す(§6.12.4)。次の呼び出しで読み直しを試す
  */
 export function createRuntimeSource(
-  makeProviders: (config: RaguelConfig) => Providers,
   cwd: string = process.cwd()
 ): () => RuntimeResult {
-  const reload = createConfigReloader(
-    (loaded): Runtime => ({ loaded, providers: makeProviders(loaded.config) }),
-    cwd
-  )
+  const reload = createConfigReloader((loaded): Runtime => ({ loaded }), cwd)
   return () => {
     try {
       return { ok: true, runtime: reload() }

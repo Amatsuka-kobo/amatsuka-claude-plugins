@@ -31,19 +31,21 @@ const PROJECT_CONFIG_PATH = [".codiel", "config.json"]
 /** 廃止したキー。path は raguel の値の中の位置で、`.` で区切る(ルール ID は `.` を含まない) */
 const ABOLISHED_KEYS: readonly { path: string; reason: string }[] = [
   {
-    path: "judge.canStop",
-    reason: "パネルと meta は STOP を出せない。設定から削除してください。"
-  },
-  ...["trivial", "standard", "critical"].map((tier) => ({
-    path: `panel.${tier}`,
-    reason:
-      "パネルの構成は tier ごとに固定で、設定では変えられない。設定から削除してください。"
-  })),
-  {
     path: "rules.common/resubmission-loop.stopAfter",
     reason:
       "再提出は ask の所見だけを出し、stop へ上げない。設定から削除してください。"
   }
+]
+
+/**
+ * LLM パネルと重さ判定とともに撤去したキー(ADR-012)。path の書き方は ABOLISHED_KEYS と同じ。
+ * 既存の設定ファイルで run が止まらないよう、読み込みエラーにせず取り除き、評価のたびに警告する
+ */
+const RETIRED_KEYS: readonly string[] = [
+  "judge",
+  "weight",
+  "panel",
+  "contextJudge.enabled"
 ]
 
 function projectConfigPath(cwd: string): string {
@@ -66,8 +68,10 @@ export function configCandidate(cwd: string = process.cwd()): {
 
 export function loadConfig(cwd: string = process.cwd()): LoadedConfig {
   const projectRoot = resolveProjectRoot(cwd)
-  const { raw, source } = resolveRawConfig(cwd)
-  assertNoRetiredKeys(raw, source)
+  const resolved = resolveRawConfig(cwd)
+  const { source } = resolved
+  assertNoRetiredKeys(resolved.raw, source)
+  const { raw, retiredKeys } = stripRetiredKeys(resolved.raw)
 
   const parsed = parseConfig(deepMerge(defaultConfig, raw))
   if (!parsed.success) {
@@ -100,8 +104,18 @@ export function loadConfig(cwd: string = process.cwd()): LoadedConfig {
   const configHash = computeConfigHash(expanded)
 
   log.info("設定を読み込みました", { source, configHash })
+  if (retiredKeys.length > 0) {
+    log.warn("撤去した設定キーを無視しました", { source, retiredKeys })
+  }
 
-  return { config: expanded, configHash, source, projectRoot, testsDir }
+  return {
+    config: expanded,
+    configHash,
+    source,
+    projectRoot,
+    testsDir,
+    retiredKeys
+  }
 }
 
 /**
@@ -172,6 +186,28 @@ function hasPath(obj: Record<string, unknown>, keys: string[]): boolean {
     cur = cur[key]
   }
   return true
+}
+
+/** RETIRED_KEYS にあるキーを取り除いた写しと、取り除いたキーの path を返す */
+function stripRetiredKeys(raw: Record<string, unknown>): {
+  raw: Record<string, unknown>
+  retiredKeys: string[]
+} {
+  const out = structuredClone(raw)
+  const retiredKeys: string[] = []
+  for (const path of RETIRED_KEYS) {
+    const keys = path.split(".")
+    const last = keys.pop() as string
+    let parent: unknown = out
+    for (const key of keys) {
+      parent = isPlainObject(parent) ? parent[key] : undefined
+    }
+    if (isPlainObject(parent) && last in parent) {
+      delete parent[last]
+      retiredKeys.push(path)
+    }
+  }
+  return { raw: out, retiredKeys }
 }
 
 // ---- 読み直し ----

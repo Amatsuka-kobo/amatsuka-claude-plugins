@@ -1,7 +1,7 @@
 /**
  * マージと zod の検証を通った RaguelConfig に、設計書 §6.12.3 の検査を当てる。
  * 違反は読み込みエラーとして throw する(フェイルクローズド)。
- * 型と列挙の値(perPanelist のキー、provider の値、thresholds の 0〜1 など)は config/schema.ts が拒む。
+ * 型と列挙の値(thresholds の 0〜1 など)は config/schema.ts が拒む。
  */
 
 import { globFixedPart, isNegatedGlob } from "../config/paths"
@@ -18,7 +18,7 @@ export const SEALED_RULES: readonly string[] = RULE_SPECS.filter(
   (spec) => spec.sealed
 ).map((spec) => spec.id)
 
-/** judge.deadlineMs の上限(R21) */
+/** contextJudge.timeoutMs の上限(R21) */
 export const MAX_DEADLINE_MS = 1800000
 
 const SEVERITY_RANK: Record<Severity, number> = { info: 0, ask: 1, stop: 2 }
@@ -159,22 +159,12 @@ function assertIgnoreUncommitted(config: RaguelConfig): void {
   }
 }
 
-// 締切と時間の上限(R6、R21、R19)
+// Jev の問い合わせの時間の上限(R21、R19)
 function assertTimeLimits(config: RaguelConfig): void {
-  const { deadlineMs, timeoutMs } = config.judge
-  if (deadlineMs > MAX_DEADLINE_MS) {
+  const { timeoutMs } = config.contextJudge
+  if (timeoutMs > MAX_DEADLINE_MS) {
     throw new Error(
-      `judge.deadlineMs は ${MAX_DEADLINE_MS} を超えられません(指定値: ${deadlineMs})。`
-    )
-  }
-  if (timeoutMs > deadlineMs) {
-    throw new Error(
-      `judge.timeoutMs(${timeoutMs})は judge.deadlineMs(${deadlineMs})を超えられません。`
-    )
-  }
-  if (config.contextJudge.timeoutMs > deadlineMs) {
-    throw new Error(
-      `contextJudge.timeoutMs(${config.contextJudge.timeoutMs})は judge.deadlineMs(${deadlineMs})を超えられません。`
+      `contextJudge.timeoutMs は ${MAX_DEADLINE_MS} を超えられません(指定値: ${timeoutMs})。`
     )
   }
 }

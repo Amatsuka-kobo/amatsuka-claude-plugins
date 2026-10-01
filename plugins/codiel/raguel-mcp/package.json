@@ -1,6 +1,6 @@
 {
   "name": "raguel-mcp",
-  "version": "0.0.2-dev",
+  "version": "1.0.0-dev",
   "description": "Raguel — AI の成果物を検査し PROCEED / ASK / STOP を判定する MCP サーバー",
   "type": "module",
   "private": true,

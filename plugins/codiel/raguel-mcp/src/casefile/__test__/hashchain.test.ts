@@ -18,7 +18,7 @@ const header: ChainHeader = {
 
 const entries = [
   { name: "01-rules.json", sha256: sha256Hex("rules") },
-  { name: "02-weight.json", sha256: sha256Hex("weight") }
+  { name: "06-precedents.json", sha256: sha256Hex("precedents") }
 ]
 
 describe("hashchain", () => {

@@ -307,10 +307,8 @@ describe("Raguel が書いた記録を codiel が読む", () => {
       verdict,
       judgeStatus,
       degradedReasons: [],
-      weightTier: "standard",
       findings: [],
       reasons: [],
-      meta: null,
       subject,
       policy: {
         configHash: "h",

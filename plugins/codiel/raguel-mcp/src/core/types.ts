@@ -1,5 +1,5 @@
 /**
- * Raguel の共有語彙。全モジュール(config / rules / casefile / precedent / panel / core)が
+ * Raguel の共有語彙。全モジュール(config / rules / casefile / precedent / context / core)が
  * このファイルの型を介して会話する。形は設計書(harness-docs/design/2026-09-28-raguel-redesign-design.md)の
  * §6.2.5・§6.9.2・§6.9.4・§6.12 に従う。
  * Subject の型の正本は subject/types.ts で、ここでは re-export だけを行う。
@@ -19,32 +19,18 @@ export type { Subject, SubjectFile } from "../subject/types.js"
 
 export type Verdict = "PROCEED" | "ASK" | "STOP"
 
-/** ルールとパネルの所見が判定へ与える効果 */
+/** ルール層と Jev の所見が判定へ与える効果 */
 export type Severity = "info" | "ask" | "stop"
-
-/** タスクの重さ(§6.5)。パネルの構成の選択に使う */
-export type WeightTier = "trivial" | "standard" | "critical"
 
 export type ArtifactKind = "decision" | "plan" | "design" | "code"
 
-/** 基盤の障害があれば degraded(§6.8) */
+/** 設定の読み込みエラーか内部エラーがあれば degraded(§6.8) */
 export type JudgeStatus = "ok" | "degraded"
 
-/** パネリスト(§6.6.1)。meta はパネリストに数えない */
-export type PanelistName = "adversarial" | "steelman" | "crosscheck"
-
-/** 設定の `panel.perPanelist` のキー(§6.7.1) */
-export type PanelRole = PanelistName | "meta"
-
-/** 設定の `judge.provider` に置ける値。`none` は `judge.provider` だけに置ける */
-export type JudgeProviderName = "claude" | "codex" | "none"
-
 export interface Finding {
-  /** 例: "code/protected-paths", "panel/adversarial" */
+  /** 例: "code/protected-paths", "contextJudge/unavailable" */
   ruleId: string
   severity: Severity
-  /** パネルの所見だけ 0–100 */
-  confidence?: number
   /** 人が読める発火の理由 */
   message: string
   evidence?: {
@@ -64,25 +50,10 @@ export interface Finding {
 /** 証拠として引用できる抜粋の最大長 */
 export const MAX_EXCERPT_LENGTH = 300
 
-export interface PanelReport {
-  panelist: PanelistName
-  model: string
-  findings: Finding[]
-  /** ルーブリックの軸ごとの 0–100。100 は問題が無いこと */
-  scores: Record<string, number>
-}
-
-export interface MetaReport {
-  model: string
-  scores: Record<string, number>
-  /** 根拠の文。人と次フェーズの AI のためのもので、合成の入力にしない */
-  rationale: string
-}
-
-/** degraded の原因 1 件。source はパネリスト名か meta、それ以外は kernel・config など */
+/** degraded の原因 1 件。source は kernel か config */
 export interface DegradedReason {
   source: string
-  /** 例: "timeout"・"nonzero-exit"・"unavailable"・"deadline"・"internal-error"・"config-error" */
+  /** "internal-error" か "config-error" */
   reason: string
 }
 
@@ -107,6 +78,7 @@ export interface Policy extends PolicyRecord {
 }
 
 export interface ContextJudgeSummary {
+  /** TYPESAFE_API_KEY があるか(§4.3)。鍵があれば Jev を使う */
   enabled: boolean
   status: ContextJudgeStatus
   adjustments: Adjustment[]
@@ -126,15 +98,12 @@ export interface EvaluationResult {
   judgeStatus: JudgeStatus
   /** judgeStatus が degraded のときだけ中身がある */
   degradedReasons: DegradedReason[]
-  weightTier: WeightTier
   /** 上限付き(§6.4.3) */
   findings: Finding[]
   reasons: string[]
   /** ASK と STOP のとき、人が判断することを 1 文で */
   decisionPoint?: string
   subject: Subject
-  /** meta を起動したときだけ */
-  meta?: MetaReport
   /** ケースファイルの attempt のディレクトリ */
   casePath: string
   policy: Policy
@@ -198,15 +167,6 @@ export interface Rule {
   sealed: boolean
   defaultSeverity: Severity
   check(artifact: Artifact, ctx: RuleContext): Finding[]
-}
-
-export interface WeightResult {
-  tier: WeightTier
-  score: number
-  /** 点数の内訳(証拠ファイルに残す) */
-  factors: Record<string, number>
-  /** 当てた下限(例: "rule-ask-floor:standard") */
-  floors: string[]
 }
 
 // ---- diff の解析(実装は rules/code/diffParse.ts) ----
@@ -278,10 +238,8 @@ export interface VerdictRecord {
   verdict: Verdict
   judgeStatus: JudgeStatus
   degradedReasons: DegradedReason[]
-  weightTier: WeightTier
   findings: Finding[]
   reasons: string[]
-  meta: MetaReport | null
   subject: Subject
   policy: PolicyRecord
   /** ISO 8601 */
@@ -310,7 +268,7 @@ export interface Precedent {
   /** 発火したルール ID。panel/*-error・kernel/*・rule-error は含めない */
   firedRules: string[]
   changedPaths: string[]
-  /** 参考入力として adversarial と meta に渡す教訓 */
+  /** 判例から得た教訓。プロジェクトの判例は裁定の notes か、発火したルールの一覧 */
   lesson: string
   recordedAt?: string
   configHash?: string
@@ -325,11 +283,6 @@ export interface RuleSettings {
   [param: string]: unknown
 }
 
-export interface PanelistSettings {
-  provider?: "claude" | "codex"
-  model?: string
-}
-
 export interface RaguelConfig {
   version: 1
   /** 判定不能のときの verdict。受け付けるのは ASK だけ(§6.4.1) */
@@ -340,31 +293,6 @@ export interface RaguelConfig {
     /** 省略時は git の共通ディレクトリから作る(project/root.ts) */
     projectId?: string
     retention: { maxRuns: number; maxDays: number }
-  }
-  judge: {
-    provider: JudgeProviderName
-    /** 省略時はプロバイダーごとの既定(config/defaults.ts の resolvePanelist) */
-    model?: string
-    /** 1 回の呼び出しの時間の上限 */
-    timeoutMs: number
-    /** ゲート全体の締切 */
-    deadlineMs: number
-    /** パネリストを同時に起動する数の上限 */
-    maxConcurrency: number
-    thresholds: {
-      /** critical で meta の全軸がこれ以上なら PROCEED */
-      proceed: number
-      /** パネルの所見を採用する最低の confidence */
-      confidence: number
-      /** critical で同じ立場のパネリストのスコアの差がこれを超えたら ASK */
-      maxVariance: number
-    }
-  }
-  weight: {
-    tiers: { standard: number; critical: number }
-  }
-  panel: {
-    perPanelist: Partial<Record<PanelRole, PanelistSettings>>
   }
   /** Jev の文脈判定(§6.4.4)。形は context/judge.ts の ContextJudgeSettings */
   contextJudge: ContextJudgeSettings
@@ -393,6 +321,8 @@ export interface LoadedConfig {
   projectRoot: string
   /** プロジェクトルートの .codiel/config.json の testsDir(正規化済み) */
   testsDir: string
+  /** 撤去したため読み込み前に取り除いた設定キーの path(config/loader.ts の RETIRED_KEYS)。評価のたびに警告する */
+  retiredKeys: string[]
 }
 
 /**

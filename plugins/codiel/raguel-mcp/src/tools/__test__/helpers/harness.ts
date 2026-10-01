@@ -1,6 +1,8 @@
 /**
  * パイプラインとツールのテストの共通の足場。一時の git リポジトリをプロジェクトルートにし、
- * `.codiel/config.json` を実際の読み込み(createRuntimeSource)で読む。パネルは FakeJudgeProvider で与える。
+ * `.codiel/config.json` を実際の読み込み(createRuntimeSource)で読む。
+ * Jev は PipelineDeps.jevCall で差し替える。jevApiKey を渡さなければ鍵が無い扱いにし、
+ * 環境変数 TYPESAFE_API_KEY があっても実際の Jev を呼ばない。
  */
 
 import * as fs from "node:fs"
@@ -10,16 +12,13 @@ import type { JevCall } from "../../../context/jev.js"
 import {
   type EvaluationRequest,
   evaluate,
-  type PipelineDeps,
-  type Providers
+  type PipelineDeps
 } from "../../../core/pipeline.js"
 import type {
-  ArtifactKind,
   EvaluationIndexEntry,
   EvaluationResult,
   OutcomeRecord
 } from "../../../core/types.js"
-import { FakeJudgeProvider } from "../../../panel/__test__/helpers/fakeProvider.js"
 import {
   commitAll,
   git,
@@ -31,44 +30,6 @@ import { createRuntimeSource } from "../../shared.js"
 
 export const BUILD_VERSION = "9.9.9-test"
 
-/** ルーブリックの軸(panel/rubrics.ts と同じ) */
-export const AXES: Record<ArtifactKind, string[]> = {
-  decision: [
-    "objective_alignment",
-    "risk_awareness",
-    "reversibility",
-    "alternatives_considered"
-  ],
-  plan: [
-    "objective_alignment",
-    "scope_fit",
-    "procedure_completeness",
-    "risk_controlled"
-  ],
-  design: ["requirement_coverage", "appropriate_complexity", "consistency"],
-  code: ["objective_alignment", "no_unintended_changes", "no_breaking_changes"]
-}
-
-export function scores(kind: ArtifactKind, value = 90): Record<string, number> {
-  return Object.fromEntries(AXES[kind].map((k) => [k, value]))
-}
-
-/** 全パネリストと meta が「問題なし」を返す応答を登録する */
-export function benignPanel(provider: FakeJudgeProvider, kind: ArtifactKind) {
-  provider.set("adversarial", { findings: [], scores: scores(kind) })
-  provider.set("crosscheck", { findings: [], scores: scores(kind) })
-  provider.set("steelman", {
-    verdicts: [],
-    defenseArgument: "問題は見当たらない",
-    findings: [],
-    scores: scores(kind)
-  })
-  provider.set("meta", {
-    scores: { ...scores(kind), blast_radius_contained: 90 },
-    rationale: "証拠を確かめたが問題は無い"
-  })
-}
-
 export interface HarnessOptions {
   /** `.codiel/config.json` の raguel に重ねる値(トップレベルのキー単位) */
   raguel?: Record<string, unknown>
@@ -76,15 +37,14 @@ export interface HarnessOptions {
   testsDir?: string
   /** 最初のコミットに入れるファイル */
   files?: Record<string, string>
-  providers?: (fake: FakeJudgeProvider) => Providers
   jevCall?: JevCall
+  /** 省略時は空文字列(鍵が無い) */
   jevApiKey?: string
 }
 
 export interface Harness {
   repo: string
   casesDir: string
-  provider: FakeJudgeProvider
   deps: PipelineDeps
   /** 最初のコミット */
   base: string
@@ -118,10 +78,6 @@ export function makeHarness(opts: HarnessOptions = {}): Harness {
     storage: {
       casesDir,
       ...(opts.raguel?.storage as Record<string, unknown> | undefined)
-    },
-    judge: {
-      provider: "claude",
-      ...(opts.raguel?.judge as Record<string, unknown> | undefined)
     }
   }
   const configJson = JSON.stringify(
@@ -137,15 +93,12 @@ export function makeHarness(opts: HarnessOptions = {}): Harness {
     "README.md": "# テスト用のリポジトリ\n",
     ...opts.files
   })
-  const provider = new FakeJudgeProvider("claude")
-  const makeProviders = () =>
-    opts.providers ? opts.providers(provider) : { claude: provider }
   const deps: PipelineDeps = {
-    runtime: createRuntimeSource(makeProviders, repo),
+    runtime: createRuntimeSource(repo),
     projectRoot: repo,
     buildVersion: BUILD_VERSION,
     ...(opts.jevCall ? { jevCall: opts.jevCall } : {}),
-    ...(opts.jevApiKey !== undefined ? { jevApiKey: opts.jevApiKey } : {})
+    jevApiKey: opts.jevApiKey ?? ""
   }
   const base = git(repo, "rev-parse", "HEAD")
   const store = () => {
@@ -156,7 +109,6 @@ export function makeHarness(opts: HarnessOptions = {}): Harness {
   return {
     repo,
     casesDir,
-    provider,
     deps,
     base,
     store,

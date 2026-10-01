@@ -4,12 +4,12 @@ import type { JevCall, JevRequest } from "../jev.js"
 import {
   type ContextJudgeInput,
   type ContextJudgeSettings,
+  resolveJevApiKey,
   runContextJudge,
   UNAVAILABLE_RULE_ID
 } from "../judge.js"
 
 const settings: ContextJudgeSettings = {
-  enabled: true,
   timeoutMs: 1000,
   thresholds: { lower: 0.2, raise: 0.7 }
 }
@@ -76,19 +76,45 @@ function destructiveInput(severity: Severity = "stop"): ContextJudgeInput {
 const run = (i: ContextJudgeInput, jev: JevCall, extra = {}) =>
   runContextJudge(i, { settings, apiKey: "test-key", jevCall: jev, ...extra })
 
-describe("無効のとき", () => {
-  it("呼ばずに決定論の結果をそのまま返す", async () => {
-    const jev = fakeJev({ c0: 0 })
+describe("鍵が無いとき", () => {
+  it.each([
+    ["空白だけ", " "],
+    ["空", ""]
+  ])("鍵が%sなら呼ばず、決定論の結果に contextJudge/unavailable(info)を 1 件だけ足す", async (_name, apiKey) => {
+    const jev = fakeJev({ c0: 0, injection: 1 })
     const i = destructiveInput()
-    const r = await runContextJudge(i, {
-      settings: { ...settings, enabled: false },
-      apiKey: "test-key",
-      jevCall: jev
-    })
-    expect(r.status).toBe("off")
-    expect(r.adjustedFindings).toEqual(i.findings)
-    expect(r.record).toBeNull()
+    const r = await runContextJudge(i, { settings, apiKey, jevCall: jev })
     expect(jev.calls).toHaveLength(0)
+    expect(r.status).toBe("unavailable")
+    expect(r.record).toBeNull()
+    expect(r.adjustments).toEqual([])
+    expect(r.adjustedFindings).toEqual([
+      ...i.findings,
+      {
+        ruleId: UNAVAILABLE_RULE_ID,
+        severity: "info",
+        message:
+          "TYPESAFE_API_KEY が無いため、Jev による内容の判定と文脈の補正をしていない"
+      }
+    ])
+  })
+
+  it("apiKey を省略したら環境変数 TYPESAFE_API_KEY を使う", async () => {
+    const saved = process.env.TYPESAFE_API_KEY
+    try {
+      delete process.env.TYPESAFE_API_KEY
+      expect(resolveJevApiKey()).toBeUndefined()
+      process.env.TYPESAFE_API_KEY = "env-key"
+      expect(resolveJevApiKey()).toBe("env-key")
+      expect(resolveJevApiKey("")).toBeUndefined()
+      const jev = fakeJev()
+      const r = await runContextJudge(input(), { settings, jevCall: jev })
+      expect(jev.calls).toHaveLength(1)
+      expect(r.status).toBe("ok")
+    } finally {
+      if (saved === undefined) delete process.env.TYPESAFE_API_KEY
+      else process.env.TYPESAFE_API_KEY = saved
+    }
   })
 })
 
@@ -272,7 +298,7 @@ describe("common/resubmission-loop", () => {
   const i = input({
     resubmissionTargets: [{ attempt: 2, similarity: 0.9 }],
     priorFindings: [
-      { attempt: 2, ruleId: "panel/adversarial", message: "前回の指摘" },
+      { attempt: 2, ruleId: "plan/scope-keywords", message: "前回の指摘" },
       { attempt: 1, ruleId: "code/unsafe-exec", message: "古い指摘" }
     ]
   })
@@ -301,17 +327,21 @@ describe("common/resubmission-loop", () => {
   })
 })
 
-describe("重さ", () => {
+describe("本文の問い合わせ", () => {
   it.each([
-    [0, undefined],
-    [2.4, undefined],
-    [2.6, "standard"],
-    [3.4, "standard"],
-    [3.6, "critical"]
-  ])("水準 %s で tier の下限は %s", async (s, floor) => {
-    const r = await run(input(), fakeJev({ severity: s }))
-    expect(r.tierFloor).toBe(floor)
-    expect(r.record?.tierFloor).toBe(floor)
+    "code",
+    "plan",
+    "design",
+    "decision"
+  ] as const)("%s でも重さ(score)の問いを含まない", async (kind) => {
+    const jev = fakeJev()
+    await run(input({ kind }), jev)
+    const body = jev.calls.find((c) => "artifact" in c.state)
+    expect(body).toBeDefined()
+    expect(Object.keys(body?.questions ?? {})).not.toContain("severity")
+    expect(
+      Object.values(body?.questions ?? {}).every((q) => q.type === "noul")
+    ).toBe(true)
   })
 })
 
@@ -347,16 +377,7 @@ describe("効かなかったとき", () => {
       severity: "info"
     })
     expect(extra[0].message).toMatch(cause)
-    expect(r.tierFloor).toBeUndefined()
   }
-
-  it("鍵が無ければ呼ばない", async () => {
-    const jev = fakeJev({ c0: 0 })
-    const i = destructiveInput()
-    const r = await runContextJudge(i, { settings, apiKey: " ", jevCall: jev })
-    expect(jev.calls).toHaveLength(0)
-    expectDeterministic(r, i, /TYPESAFE_API_KEY/)
-  })
 
   it("例外で決定論の結果のままにし、再試行しない", async () => {
     let count = 0
@@ -399,13 +420,6 @@ describe("効かなかったとき", () => {
     expectDeterministic(r, input(), /回答の形が不正/)
   })
 
-  it("締切までの残りが 3000 ms 以下なら呼ばない", async () => {
-    const jev = fakeJev()
-    const r = await run(input(), jev, { remainingMs: 3000 })
-    expect(jev.calls).toHaveLength(0)
-    expectDeterministic(r, input(), /締切/)
-  })
-
   it("候補だけが失敗したら partial で、本文の結果は当てる", async () => {
     const jev: JevCall = async (req, options) => {
       if (req.state.candidates) throw new Error("candidates down")
@@ -428,26 +442,25 @@ describe("効かなかったとき", () => {
 })
 
 describe("時間の上限", () => {
-  it("min(timeoutMs, 締切までの残り − 3000) を渡す", async () => {
+  it("contextJudge.timeoutMs をそのまま渡す(締切との調整はしない)", async () => {
     const jev = fakeJev()
-    await runContextJudge(input(), {
+    await runContextJudge(destructiveInput(), {
       settings: { ...settings, timeoutMs: 20000 },
       apiKey: "k",
-      jevCall: jev,
-      remainingMs: 10000
+      jevCall: jev
     })
-    expect(jev.timeouts).toEqual([7000])
+    expect(jev.timeouts).toEqual([20000, 20000])
   })
 })
 
 describe("記録", () => {
-  it("質問の ID・確率・水準・変更を残し、本文を入れない", async () => {
+  it("質問の ID・確率・変更を残し、本文を入れない", async () => {
     const i = destructiveInput()
     i.maskedArtifact = artifactLines.replace(
       "line10",
       "rm -rf / UNIQUE_BODY_TEXT"
     )
-    const r = await run(i, fakeJev({ c0: 0.1, severity: 3 }))
+    const r = await run(i, fakeJev({ c0: 0.1, injection: 0.3 }))
     expect(r.record?.answers).toContainEqual({
       id: "c0",
       ruleId: "code/destructive-ops",
@@ -455,9 +468,9 @@ describe("記録", () => {
       probability: 0.1
     })
     expect(r.record?.answers).toContainEqual({
-      id: "severity",
-      ruleId: "weight",
-      level: 3
+      id: "injection",
+      ruleId: "common/injection-marker",
+      probability: 0.3
     })
     expect(r.record?.adjustments).toEqual(r.adjustments)
     expect(JSON.stringify(r.record)).not.toContain("UNIQUE_BODY_TEXT")
@@ -494,7 +507,7 @@ describe("Jev は単独で STOP も PROCEED も出さない", () => {
     0, 1
   ])("すべての確率が %s でも許された向きの外へ動かさない", async (p) => {
     for (const i of cases) {
-      const values: Record<string, number> = { severity: p * 4 }
+      const values: Record<string, number> = {}
       for (const id of [
         "c0",
         "c1",
@@ -531,7 +544,6 @@ describe("Jev は単独で STOP も PROCEED も出さない", () => {
           })
         if (a.from === "info") expect(a.to).toBe("ask")
       }
-      expect(r.tierFloor === undefined || r.tierFloor !== "trivial").toBe(true)
     }
   })
 })

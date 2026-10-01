@@ -11,8 +11,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NO_EVALUATION_RECORD } from "../../casefile/store.js"
+import type { JevCall } from "../../context/jev.js"
 import type { PipelineDeps } from "../../core/pipeline.js"
-import type { JudgeCall, JudgeProvider } from "../../panel/provider.js"
 import { makeTmpDir } from "../../subject/__test__/helpers/gitRepo.js"
 import { registerEvaluateCode } from "../evaluateCode.js"
 import { registerEvaluateDecision } from "../evaluateDecision.js"
@@ -24,7 +24,6 @@ import { registerRecordOutcome } from "../recordOutcome.js"
 import { registerRetirePrecedent } from "../retirePrecedent.js"
 import {
   BUILD_VERSION,
-  benignPanel,
   type Harness,
   type HarnessOptions,
   makeHarness
@@ -183,7 +182,6 @@ describe("evaluate_* の入力(設計書 §6.2、所見 F1)", () => {
 
   it("evaluate_plan は paths のファイルを読んで評価する", async () => {
     const h = harness({ files: { "dev-plan.md": "# 計画\n## Step 1\n作る\n" } })
-    benignPanel(h.provider, "plan")
     const client = await connect(h.deps)
     const res = await call(client, "evaluate_plan", {
       runId: "run-1",
@@ -207,13 +205,14 @@ describe("壊れた設定での起動(§6.12.4、所見 E1)", () => {
     const home = makeTmpDir("raguel-home-")
     process.env.HOME = home
     const h = harness()
-    benignPanel(h.provider, "decision")
-    h.writeConfig({ raguel: { judge: { canStop: true } } })
+    h.writeConfig({
+      raguel: { rules: { "common/resubmission-loop": { stopAfter: 3 } } }
+    })
     const client = await connect(h.deps)
     const configPath = path.join(h.repo, ".codiel", "config.json")
 
     const rules = await call(client, "list_rules", {})
-    expect(rules.body.error).toContain("judge.canStop")
+    expect(rules.body.error).toContain("stopAfter は廃止した")
     expect(rules.body.path).toBe(configPath)
 
     const evaluated = await call(
@@ -247,7 +246,6 @@ describe("list_rules(設計書 §6.2.8)", () => {
             generated: ["dist/**"]
           }
         },
-        panel: { perPanelist: { meta: { provider: "codex" } } },
         subject: { ignoreUncommitted: ["docs/chat/**"] }
       }
     })
@@ -268,12 +266,16 @@ describe("list_rules(設計書 §6.2.8)", () => {
       ignoreUncommitted: ["docs/chat/**"]
     })
     expect(body.e2eReports.testsDir).toBe("e2e")
-    expect(body.panelists).toEqual({
-      adversarial: { provider: "claude", model: "sonnet" },
-      steelman: { provider: "claude", model: "haiku" },
-      crosscheck: { provider: "claude", model: "haiku" },
-      meta: { provider: "codex" }
+    expect(body.e2eReports.rule).toBe(
+      "e2e/**/reports/** を E2E のレポートとして common/secrets 以外のルール・Jev から外す"
+    )
+    expect(body.contextJudge).toEqual({
+      timeoutMs: 20000,
+      thresholds: { lower: 0.5, raise: 0.7 }
     })
+    for (const key of ["panelists", "judge", "weight"]) {
+      expect(body).not.toHaveProperty(key)
+    }
 
     // biome-ignore lint/suspicious/noExplicitAny: 応答の JSON をテストで読む
     const byId = (id: string) => body.rules.find((r: any) => r.id === id)
@@ -299,13 +301,58 @@ describe("list_rules(設計書 §6.2.8)", () => {
     expect(planIds).not.toContain("code/destructive-ops")
   })
 
-  it("judge.provider が none なら、どのパネリストも none と示す", async () => {
-    const h = harness({ raguel: { judge: { provider: "none" } } })
+  it("未コミットの検査から外すパスの宣言が無ければ空の配列を返す", async () => {
+    const h = harness()
     const client = await connect(h.deps)
     const { body } = await call(client, "list_rules", {})
-    expect(body.panelists.adversarial).toEqual({ provider: "none" })
-    // 宣言が無ければ空の配列を返す
     expect(body.policy.ignoreUncommitted).toEqual([])
+  })
+})
+
+describe("撤去した設定キー(ADR-012)", () => {
+  it("judge・weight・panel・contextJudge.enabled が残る設定でも起動して評価し、警告を reasons に 1 件だけ出す", async () => {
+    const h = harness({
+      raguel: {
+        judge: { provider: "codex", deadlineMs: 600000, canStop: false },
+        weight: { tiers: { standard: 30, critical: 70 } },
+        panel: { perPanelist: { meta: { provider: "codex" } } },
+        contextJudge: { enabled: true }
+      }
+    })
+    const client = await connect(h.deps)
+
+    const rules = await call(client, "list_rules", {})
+    expect(rules.body.error).toBeUndefined()
+
+    const res = await call(client, "evaluate_decision", decisionArgs("方針"))
+    expect(res.isError).toBeUndefined()
+    expect(res.body).toMatchObject({ verdict: "PROCEED", judgeStatus: "ok" })
+    const warnings = res.body.reasons.filter((r: string) =>
+      r.startsWith("retired-config:")
+    )
+    expect(warnings).toHaveLength(1)
+    for (const key of ["judge", "weight", "panel", "contextJudge.enabled"]) {
+      expect(warnings[0]).toContain(key)
+    }
+
+    // キーが残る間は評価のたびに出す
+    const again = await call(
+      client,
+      "evaluate_decision",
+      decisionArgs("方針", "run-2")
+    )
+    expect(
+      again.body.reasons.filter((r: string) => r.startsWith("retired-config:"))
+    ).toHaveLength(1)
+  })
+
+  it("撤去したキーが無ければ警告を出さない", async () => {
+    const h = harness()
+    const client = await connect(h.deps)
+    const res = await call(client, "evaluate_decision", decisionArgs("方針"))
+    expect(
+      res.body.reasons.some((r: string) => r.startsWith("retired-config:"))
+    ).toBe(false)
   })
 })
 
@@ -489,13 +536,17 @@ describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見
   it("degraded の評価の裁定は記録するが、判例は作らない", async () => {
     const h = harness()
     const client = await connect(h.deps)
-    // パネリストの応答が無いので degraded の ASK になる
+    await call(client, "evaluate_decision", decisionArgs("方針"))
+    // 過去の attempt の裁定を読めないので、内部エラーの degraded の ASK になる
+    const outcomesFile = path.join(h.store().projectDir, "outcomes.jsonl")
+    fs.writeFileSync(outcomesFile, "{壊れた行\n")
     const degraded = await call(
       client,
       "evaluate_decision",
       decisionArgs("方針")
     )
     expect(degraded.body.judgeStatus).toBe("degraded")
+    fs.rmSync(outcomesFile)
     const res = await call(client, "record_outcome", {
       evaluationId: degraded.body.evaluationId,
       outcome: "approved",
@@ -511,7 +562,6 @@ describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見
 
   it("ruling と outcome の組み合わせが表に無ければ記録しない", async () => {
     const h = harness()
-    benignPanel(h.provider, "decision")
     const client = await connect(h.deps)
     const ok = await call(client, "evaluate_decision", decisionArgs("方針"))
     expect(ok.body.verdict).toBe("PROCEED")
@@ -531,7 +581,6 @@ describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見
 
   it("casefile/tampered の STOP は false-positive で覆せない", async () => {
     const h = harness({ files: { "design.md": "# 設計\n" } })
-    benignPanel(h.provider, "decision")
     const client = await connect(h.deps)
     const intent = await call(client, "evaluate_decision", decisionArgs("方針"))
     fs.appendFileSync(
@@ -557,9 +606,8 @@ describe("record_outcome と判例(設計書 §6.2.7・§6.2.9・§6.11、所見
 })
 
 describe("進捗とキャンセル(§6.8、所見 I2)", () => {
-  it("progressToken があれば、ステップとパネリストの起動と終了を通知する", async () => {
+  it("progressToken があれば、ステップごとに通知する", async () => {
     const h = harness()
-    benignPanel(h.provider, "decision")
     const client = await connect(h.deps)
     const messages: string[] = []
     const res = await call(client, "evaluate_decision", decisionArgs("方針"), {
@@ -568,35 +616,27 @@ describe("進捗とキャンセル(§6.8、所見 I2)", () => {
       }
     })
     expect(res.body.verdict).toBe("PROCEED")
-    expect(messages).toEqual(
-      expect.arrayContaining([
-        "評価対象の取得",
-        "ルール層",
-        "パネル",
-        "adversarial を起動した",
-        "adversarial が終わった",
-        "steelman を起動した",
-        "合成"
-      ])
-    )
+    expect(messages).toEqual([
+      "評価対象の取得",
+      "ルール層",
+      "Jev の文脈判定",
+      "合成"
+    ])
   })
 
-  it("クライアントが中止したら、パネリストに中止を伝え、attempt と索引を残さない", async () => {
+  it("クライアントが中止したら、Jev の問い合わせに中止を伝え、attempt と索引を残さない", async () => {
     let started = false
     let aborted = false
-    const hanging: JudgeProvider = {
-      name: "claude",
-      invoke<T>(_call: JudgeCall<T>, ctl: { signal: AbortSignal }): Promise<T> {
-        started = true
-        return new Promise<T>((_, reject) => {
-          ctl.signal.addEventListener("abort", () => {
-            aborted = true
-            reject(ctl.signal.reason)
-          })
+    const hanging: JevCall = (_req, { signal }) => {
+      started = true
+      return new Promise((_, reject) => {
+        signal.addEventListener("abort", () => {
+          aborted = true
+          reject(signal.reason)
         })
-      }
+      })
     }
-    const h = harness({ providers: () => ({ claude: hanging }) })
+    const h = harness({ jevCall: hanging, jevApiKey: "k" })
     const client = await connect(h.deps)
     const ac = new AbortController()
     const pending = call(client, "evaluate_decision", decisionArgs("方針"), {

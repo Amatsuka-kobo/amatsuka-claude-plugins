@@ -25,11 +25,6 @@ const ruleSettingsShape = Object.fromEntries(
   ])
 )
 
-const panelistSettingsSchema = z.strictObject({
-  provider: z.enum(["claude", "codex"]).optional(),
-  model: z.string().min(1).optional()
-})
-
 const storageSchema = z.strictObject({
   casesDir: z.string().min(1),
   projectId: z.string().min(1).optional(),
@@ -39,37 +34,7 @@ const storageSchema = z.strictObject({
   })
 })
 
-const judgeSchema = z.strictObject({
-  provider: z.enum(["claude", "codex", "none"]),
-  model: z.string().min(1).optional(),
-  timeoutMs: z.number().int().positive(),
-  deadlineMs: z.number().int().positive(),
-  maxConcurrency: z.number().int().positive(),
-  thresholds: z.strictObject({
-    proceed: z.number().min(0).max(100),
-    confidence: z.number().min(0).max(100),
-    maxVariance: z.number().min(0).max(100)
-  })
-})
-
-const weightSchema = z.strictObject({
-  tiers: z.strictObject({
-    standard: z.number().min(0).max(100),
-    critical: z.number().min(0).max(100)
-  })
-})
-
-const panelSchema = z.strictObject({
-  perPanelist: z.strictObject({
-    adversarial: panelistSettingsSchema.optional(),
-    steelman: panelistSettingsSchema.optional(),
-    crosscheck: panelistSettingsSchema.optional(),
-    meta: panelistSettingsSchema.optional()
-  })
-})
-
 const contextJudgeSchema = z.strictObject({
-  enabled: z.boolean(),
   model: z.string().min(1).optional(),
   timeoutMs: z.number().int().positive(),
   thresholds: z.strictObject({
@@ -91,9 +56,6 @@ export const configSchema = z.strictObject({
   version: z.literal(1),
   onError: z.literal("ASK"),
   storage: storageSchema,
-  judge: judgeSchema,
-  weight: weightSchema,
-  panel: panelSchema,
   contextJudge: contextJudgeSchema,
   precedent: precedentSchema,
   subject: subjectSchema,

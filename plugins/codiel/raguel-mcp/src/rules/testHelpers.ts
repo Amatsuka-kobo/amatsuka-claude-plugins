@@ -29,7 +29,7 @@ export function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
 
 /**
  * 内蔵の既定の設定(ルールのパラメータの既定値を含む)に overrides を浅く重ねて返す。
- * パネルを起動しないよう judge.provider は none、置き場は /tmp にする
+ * 置き場は /tmp にする
  */
 export function makeConfig(
   overrides: Partial<RaguelConfig> = {}
@@ -38,7 +38,6 @@ export function makeConfig(
   return {
     ...base,
     storage: { ...base.storage, casesDir: "/tmp/raguel-cases" },
-    judge: { ...base.judge, provider: "none" },
     ...overrides
   }
 }

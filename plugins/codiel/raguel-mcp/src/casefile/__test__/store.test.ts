@@ -51,10 +51,8 @@ function record(
     verdict: "ASK",
     judgeStatus: "ok",
     degradedReasons: [],
-    weightTier: "standard",
     findings: [],
     reasons: [],
-    meta: null,
     subject,
     policy: {
       configHash: "hash",
@@ -127,7 +125,7 @@ describe("CaseStore", () => {
     const { dir, attempt } = store.openAttempt(runId, phase)
     store.writeEvidence(dir, "submission.txt", `本文 ${attempt}`)
     store.writeEvidence(dir, "01-rules.json", JSON.stringify({ findings: [] }))
-    store.writeEvidence(dir, "02-weight.json", "{}")
+    store.writeEvidence(dir, "06-precedents.json", "[]")
     const verdict = store.finalizeVerdict(
       dir,
       record({ runId, phase, attempt, ...over })
@@ -297,15 +295,15 @@ describe("CaseStore", () => {
       )
 
       const b = evaluate("run-2", "implement")
-      fs.rmSync(path.join(b.dir, "02-weight.json"))
+      fs.rmSync(path.join(b.dir, "06-precedents.json"))
       expect(store.verifyAttempt(b.dir).mismatches.join("\n")).toMatch(
-        /ありません: 02-weight\.json/
+        /ありません: 06-precedents\.json/
       )
 
       const c = evaluate("run-3", "implement")
-      fs.writeFileSync(path.join(c.dir, "08-meta.md"), "後から")
+      fs.writeFileSync(path.join(c.dir, "07-context.json"), "後から")
       expect(store.verifyAttempt(c.dir).mismatches.join("\n")).toMatch(
-        /記録の無い.*08-meta\.md/
+        /記録の無い.*07-context\.json/
       )
     })
 

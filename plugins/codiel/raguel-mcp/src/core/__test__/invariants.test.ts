@@ -247,28 +247,16 @@ describe("assertInvariants(設計書 §6.12.3)", () => {
     })
   })
 
-  describe("締切と時間の上限(R21)", () => {
-    it("judge.deadlineMs の上限ちょうどは受け、超えると拒否する", () => {
+  describe("Jev の問い合わせの時間の上限(R21)", () => {
+    it("contextJudge.timeoutMs の上限ちょうどは受け、超えると拒否する", () => {
       const ok = baseConfig()
-      ok.judge.deadlineMs = MAX_DEADLINE_MS
+      ok.contextJudge.timeoutMs = MAX_DEADLINE_MS
       expect(() => assertInvariants(ok)).not.toThrow()
 
       const over = baseConfig()
-      over.judge.deadlineMs = MAX_DEADLINE_MS + 1
-      expect(() => assertInvariants(over)).toThrow(/deadlineMs/)
+      over.contextJudge.timeoutMs = MAX_DEADLINE_MS + 1
+      expect(() => assertInvariants(over)).toThrow(/contextJudge\.timeoutMs/)
       expect(MAX_DEADLINE_MS).toBe(1800000)
-    })
-
-    it("judge.timeoutMs が judge.deadlineMs を超えると拒否する", () => {
-      const config = baseConfig()
-      config.judge.timeoutMs = config.judge.deadlineMs + 1
-      expect(() => assertInvariants(config)).toThrow(/timeoutMs/)
-    })
-
-    it("contextJudge.timeoutMs が judge.deadlineMs を超えると拒否する", () => {
-      const config = baseConfig()
-      config.contextJudge.timeoutMs = config.judge.deadlineMs + 1
-      expect(() => assertInvariants(config)).toThrow(/contextJudge\.timeoutMs/)
     })
   })
 

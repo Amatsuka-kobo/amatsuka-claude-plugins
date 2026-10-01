@@ -83,39 +83,41 @@ function touchLater(path: string, offsetMs: number): void {
 
 describe("loadConfig - 読む順と configSource(R23)", () => {
   it("RAGUEL_CONFIG が指すパスを JSON として読み、source は env:<パス> になる", () => {
-    const path = useConfig({ judge: { model: "sonnet" } })
+    const path = useConfig({ contextJudge: { model: "sonnet" } })
     const loaded = loadConfig(workDir)
     expect(loaded.source).toBe(`env:${path}`)
-    expect(loaded.config.judge.model).toBe("sonnet")
+    expect(loaded.config.contextJudge.model).toBe("sonnet")
   })
 
   it("RAGUEL_CONFIG が無く、プロジェクトルートの config.json に raguel があればそれを使い、source は cwd:<絶対パス> になる", () => {
     const path = useProjectConfig({
       testsDir: "docs/codiel/tests",
-      raguel: { judge: { model: "sonnet" } }
+      raguel: { contextJudge: { model: "sonnet" } }
     })
     const loaded = loadConfig()
     expect(loaded.source).toBe(`cwd:${path}`)
-    expect(loaded.config.judge.model).toBe("sonnet")
+    expect(loaded.config.contextJudge.model).toBe("sonnet")
   })
 
   it("RAGUEL_CONFIG があればプロジェクトルートの config.json より優先する", () => {
-    useProjectConfig({ raguel: { judge: { model: "sonnet" } } })
+    useProjectConfig({ raguel: { contextJudge: { model: "sonnet" } } })
     const path = useConfig({ precedent: { topN: 3 } })
     const loaded = loadConfig()
     expect(loaded.source).toBe(`env:${path}`)
     expect(loaded.config.precedent.topN).toBe(3)
-    expect(loaded.config.judge.model).toBeUndefined()
+    expect(loaded.config.contextJudge.model).toBeUndefined()
   })
 
   it("サブディレクトリの cwd からプロジェクトルートの config.json を見つける", () => {
-    const path = useProjectConfig({ raguel: { judge: { model: "sonnet" } } })
+    const path = useProjectConfig({
+      raguel: { contextJudge: { model: "sonnet" } }
+    })
     const sub = join(workDir, "src", "deep")
     mkdirSync(sub, { recursive: true })
     const loaded = loadConfig(sub)
     expect(loaded.source).toBe(`cwd:${path}`)
     expect(loaded.projectRoot).toBe(workDir)
-    expect(loaded.config.judge.model).toBe("sonnet")
+    expect(loaded.config.contextJudge.model).toBe("sonnet")
     expect(configCandidate(sub)).toEqual({ path, source: `cwd:${path}` })
   })
 
@@ -123,7 +125,7 @@ describe("loadConfig - 読む順と configSource(R23)", () => {
     useProjectConfig({ testsDir: "docs/codiel/tests" })
     const loaded = loadConfig()
     expect(loaded.source).toBe("defaults")
-    expect(loaded.config.judge).toEqual(defaultConfig.judge)
+    expect(loaded.config.contextJudge).toEqual(defaultConfig.contextJudge)
   })
 
   it("raguel.config.yaml だけがあっても読まず、source は defaults になる", () => {
@@ -134,17 +136,18 @@ describe("loadConfig - 読む順と configSource(R23)", () => {
     )
     const loaded = loadConfig(workDir)
     expect(loaded.source).toBe("defaults")
-    expect(loaded.config.judge.model).toBeUndefined()
+    expect(loaded.config.contextJudge.model).toBeUndefined()
   })
 
   it("設定ファイルが一切無ければ内蔵の既定値だけを使う", () => {
     const loaded = loadConfig(workDir)
     expect(loaded.source).toBe("defaults")
-    expect(loaded.config.judge.provider).toBe("claude")
-    expect(loaded.config.judge.timeoutMs).toBe(180000)
-    expect(loaded.config.judge.deadlineMs).toBe(600000)
-    expect(loaded.config.judge.thresholds.confidence).toBe(70)
-    expect(loaded.config.contextJudge.enabled).toBe(false)
+    expect(loaded.retiredKeys).toEqual([])
+    expect(loaded.config).not.toHaveProperty("judge")
+    expect(loaded.config).not.toHaveProperty("weight")
+    expect(loaded.config).not.toHaveProperty("panel")
+    expect(loaded.config.contextJudge).not.toHaveProperty("enabled")
+    expect(loaded.config.contextJudge.timeoutMs).toBe(20000)
     expect(loaded.config.contextJudge.thresholds).toEqual({
       lower: 0.5,
       raise: 0.7
@@ -224,7 +227,9 @@ describe("loadConfig - 厳格なスキーマ(A14)", () => {
   })
 
   it("未知のネストしたキーは読み込みエラー", () => {
-    expect(() => loadRaguel({ judge: { timeout: 1 } })).toThrow(/timeout/)
+    expect(() => loadRaguel({ contextJudge: { timeout: 1 } })).toThrow(
+      /timeout/
+    )
   })
 
   it("登録されていないルール ID は読み込みエラー", () => {
@@ -259,52 +264,50 @@ describe("loadConfig - 厳格なスキーマ(A14)", () => {
   it('onError: "ASK" は受ける(M4 で写した設定を読み込める)', () => {
     expect(loadRaguel({ onError: "ASK" }).config.onError).toBe("ASK")
   })
+})
 
-  it.each([
-    "jev",
-    "claude-cli"
-  ])("judge.provider: %s は読み込みエラー", (provider) => {
-    expect(() => loadRaguel({ judge: { provider } })).toThrow(/provider/)
-  })
-
-  it("perPanelist のキーが adversarial・steelman・crosscheck・meta 以外なら読み込みエラー", () => {
-    expect(() =>
-      loadRaguel({ panel: { perPanelist: { assumption: { model: "x" } } } })
-    ).toThrow(/assumption/)
-  })
-
-  it("perPanelist.<名前>.provider: none は読み込みエラー", () => {
-    expect(() =>
-      loadRaguel({
-        panel: { perPanelist: { adversarial: { provider: "none" } } }
-      })
-    ).toThrow(/provider/)
-  })
-
-  it("perPanelist に codex を書ける", () => {
-    const { config } = loadRaguel({
-      panel: { perPanelist: { meta: { provider: "codex" } } }
+describe("loadConfig - 撤去したキー(ADR-012)", () => {
+  it("judge・weight・panel・contextJudge.enabled は読み込みエラーにせず取り除き、retiredKeys に挙げる", () => {
+    const loaded = loadRaguel({
+      judge: { provider: "codex", canStop: false, deadlineMs: 1 },
+      weight: { tiers: { standard: 10, critical: 20 } },
+      panel: { perPanelist: { meta: { provider: "codex" } }, critical: [] },
+      contextJudge: { enabled: true, timeoutMs: 5000 }
     })
-    expect(config.panel.perPanelist.meta?.provider).toBe("codex")
+    expect(loaded.retiredKeys).toEqual([
+      "judge",
+      "weight",
+      "panel",
+      "contextJudge.enabled"
+    ])
+    expect(loaded.config).not.toHaveProperty("judge")
+    expect(loaded.config).not.toHaveProperty("weight")
+    expect(loaded.config).not.toHaveProperty("panel")
+    expect(loaded.config.contextJudge).toEqual({
+      ...defaultConfig.contextJudge,
+      timeoutMs: 5000
+    })
+  })
+
+  it("撤去したキーは configHash に効かない", () => {
+    const plain = loadRaguel({ precedent: { topN: 3 } })
+    const retired = loadRaguel({
+      precedent: { topN: 3 },
+      judge: { model: "opus" },
+      contextJudge: { enabled: false }
+    })
+    expect(retired.configHash).toBe(plain.configHash)
+    expect(retired.retiredKeys).toEqual(["judge", "contextJudge.enabled"])
+  })
+
+  it("撤去したキーの中身が壊れていても読み込める", () => {
+    expect(
+      loadRaguel({ judge: "x", panel: [1], weight: null }).retiredKeys
+    ).toEqual(["judge", "weight", "panel"])
   })
 })
 
 describe("loadConfig - 廃止したキーとルール ID(C5 ほか)", () => {
-  it.each([
-    "trivial",
-    "standard",
-    "critical"
-  ])("panel.%s は廃止を名指しする読み込みエラー", (tier) => {
-    expect(() => loadRaguel({ panel: { [tier]: ["adversarial"] } })).toThrow(
-      new RegExp(`panel\\.${tier} は廃止した`)
-    )
-  })
-
-  it("judge の STOP の許可のキーは廃止を名指しする読み込みエラー", () => {
-    // biome-ignore format: 廃止のキーと文言を同じ行に置く(廃止の文言の行だけに旧キーの名前を残す)
-    expect(() => loadRaguel({ judge: { canStop: false } })).toThrow(/judge\.canStop は廃止した/)
-  })
-
   it("common/resubmission-loop.stopAfter は廃止を名指しする読み込みエラー", () => {
     expect(() =>
       loadRaguel({ rules: { "common/resubmission-loop": { stopAfter: 3 } } })
@@ -320,12 +323,16 @@ describe("loadConfig - 廃止したキーとルール ID(C5 ほか)", () => {
 
 describe("loadConfig - 深いマージと和集合(E2)", () => {
   it("ネストしたオブジェクトは再帰でマージし、書かなかった兄弟は既定値を保つ", () => {
-    const { config } = loadRaguel({ judge: { thresholds: { proceed: 55 } } })
-    expect(config.judge.thresholds).toEqual({
-      ...defaultConfig.judge.thresholds,
-      proceed: 55
+    const { config } = loadRaguel({
+      contextJudge: { thresholds: { raise: 0.8 } }
     })
-    expect(config.judge.timeoutMs).toBe(defaultConfig.judge.timeoutMs)
+    expect(config.contextJudge.thresholds).toEqual({
+      ...defaultConfig.contextJudge.thresholds,
+      raise: 0.8
+    })
+    expect(config.contextJudge.timeoutMs).toBe(
+      defaultConfig.contextJudge.timeoutMs
+    )
   })
 
   it("和集合と宣言していない配列は利用者の値で置き換える", () => {
@@ -544,28 +551,17 @@ describe("loadConfig - sealed と不変条件(A3・R21)", () => {
     ).toThrow(/similarityThreshold/)
   })
 
-  it("judge.deadlineMs が 1800000 を超えると読み込みエラー", () => {
-    expect(() => loadRaguel({ judge: { deadlineMs: 1800001 } })).toThrow(
-      /deadlineMs/
-    )
-  })
-
-  it("judge.deadlineMs の上限ちょうどは受ける", () => {
-    expect(
-      loadRaguel({ judge: { deadlineMs: 1800000 } }).config.judge.deadlineMs
-    ).toBe(1800000)
-  })
-
-  it("judge.timeoutMs が judge.deadlineMs を超えると読み込みエラー", () => {
-    expect(() =>
-      loadRaguel({ judge: { timeoutMs: 300000, deadlineMs: 200000 } })
-    ).toThrow(/timeoutMs/)
-  })
-
-  it("contextJudge.timeoutMs が judge.deadlineMs を超えると読み込みエラー", () => {
-    expect(() => loadRaguel({ contextJudge: { timeoutMs: 700000 } })).toThrow(
+  it("contextJudge.timeoutMs が 1800000 を超えると読み込みエラー", () => {
+    expect(() => loadRaguel({ contextJudge: { timeoutMs: 1800001 } })).toThrow(
       /contextJudge\.timeoutMs/
     )
+  })
+
+  it("contextJudge.timeoutMs は上限ちょうど(1800000)まで受ける", () => {
+    expect(
+      loadRaguel({ contextJudge: { timeoutMs: 1800000 } }).config.contextJudge
+        .timeoutMs
+    ).toBe(1800000)
   })
 
   it.each([
@@ -610,21 +606,23 @@ describe("createConfigReloader - 読み直しの契機", () => {
     expect(current()).toBe(first)
     expect(builds).toBe(1)
 
-    const path = useProjectConfig({ raguel: { judge: { model: "sonnet" } } })
+    const path = useProjectConfig({
+      raguel: { contextJudge: { model: "sonnet" } }
+    })
     const second = current()
     expect(second.source).toBe(`cwd:${path}`)
-    expect(second.config.judge.model).toBe("sonnet")
+    expect(second.config.contextJudge.model).toBe("sonnet")
     expect(second.configHash).not.toBe(first.configHash)
     expect(builds).toBe(2)
 
     writeFileSync(
       path,
-      JSON.stringify({ raguel: { judge: { model: "opus" } } }),
+      JSON.stringify({ raguel: { contextJudge: { model: "opus" } } }),
       "utf8"
     )
     touchLater(path, 10_000)
     const third = current()
-    expect(third.config.judge.model).toBe("opus")
+    expect(third.config.contextJudge.model).toBe("opus")
     expect(third.configHash).not.toBe(second.configHash)
     expect(builds).toBe(3)
   })
@@ -691,12 +689,12 @@ describe("loadConfig - configHash の安定性", () => {
   it("キーの順が違うだけの同じ設定は同じハッシュになる", () => {
     process.chdir(workDir)
     useConfig(
-      '{"version":1,"onError":"ASK","judge":{"model":"haiku","timeoutMs":60000}}'
+      '{"version":1,"onError":"ASK","contextJudge":{"model":"haiku","timeoutMs":60000}}'
     )
     const first = loadConfig().configHash
 
     useConfig(
-      '{"judge":{"timeoutMs":60000,"model":"haiku"},"onError":"ASK","version":1}'
+      '{"contextJudge":{"timeoutMs":60000,"model":"haiku"},"onError":"ASK","version":1}'
     )
     const second = loadConfig().configHash
 
@@ -704,8 +702,8 @@ describe("loadConfig - configHash の安定性", () => {
   })
 
   it("値が違えば違うハッシュになる", () => {
-    const first = loadRaguel({ judge: { model: "haiku" } }).configHash
-    const second = loadRaguel({ judge: { model: "sonnet" } }).configHash
+    const first = loadRaguel({ contextJudge: { model: "haiku" } }).configHash
+    const second = loadRaguel({ contextJudge: { model: "sonnet" } }).configHash
     expect(first).not.toBe(second)
   })
 })

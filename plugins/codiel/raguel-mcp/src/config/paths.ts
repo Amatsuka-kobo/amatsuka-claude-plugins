@@ -61,7 +61,7 @@ export type PathClass = "generated" | "report" | "normal"
 /**
  * diff のパス(repoPath 相対、`/` 区切り)を分類する。
  * report は E2E のレポート、generated は code/protected-paths の generated に当たるパス。
- * どちらも common/secrets だけを当て、保護パス・重さ・パネル・Jev から外す
+ * どちらも common/secrets だけを当て、保護パス・Jev から外す
  */
 export function classifyPath(
   repoRel: string,
@@ -82,7 +82,7 @@ export function classifyPath(
 
 /**
  * glob の固定部(ワイルドカードを含む最初のセグメントより前)を返す。例: `plugins/*\/scripts/**` は `plugins`、
- * `**\/*` と `*.js` は空文字列。generated の検査と重さ判定の保護パス近接が使う
+ * `**\/*` と `*.js` は空文字列。generated と ignoreUncommitted の検査が使う
  */
 export function globFixedPart(glob: string): string {
   return picomatch.scan(glob).base

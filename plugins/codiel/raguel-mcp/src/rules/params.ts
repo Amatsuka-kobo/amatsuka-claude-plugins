@@ -161,7 +161,7 @@ export const RULE_SPECS: readonly RuleSpec[] = [
         default: [],
         merge: "replace",
         description:
-          "生成物のパスの glob。common/secrets だけを当て、保護パス・重さ・パネル・Jev から外す",
+          "生成物のパスの glob。common/secrets だけを当て、保護パス・Jev から外す",
         constraint:
           "固定部(ワイルドカードを含む最初のセグメントより前)が空の glob は受けない",
         schema: stringList

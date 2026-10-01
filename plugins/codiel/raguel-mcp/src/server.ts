@@ -7,11 +7,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { log } from "./core/log.js"
-import type { PipelineDeps, Providers } from "./core/pipeline.js"
-import type { RaguelConfig } from "./core/types.js"
-import { ClaudeCliProvider } from "./panel/claudeCli.js"
-import { CodexCliProvider } from "./panel/codexCli.js"
-import { NoneProvider } from "./panel/provider.js"
+import type { PipelineDeps } from "./core/pipeline.js"
 import { resolveProjectRoot } from "./project/root.js"
 import { registerEvaluateCode } from "./tools/evaluateCode.js"
 import { registerEvaluateDecision } from "./tools/evaluateDecision.js"
@@ -28,25 +24,9 @@ declare const __RAGUEL_VERSION__: string
 const BUILD_VERSION =
   typeof __RAGUEL_VERSION__ === "string" ? __RAGUEL_VERSION__ : "unbundled"
 
-// 再帰の防止: パネリストとして起動された claude が(プロジェクトの設定を経て)raguel を起動する無限ループを断つ
-if (process.env.RAGUEL_PANELIST === "1") {
-  process.stderr.write(
-    "[raguel] RAGUEL_PANELIST=1 を検出したため起動しません(再帰防止)\n"
-  )
-  process.exit(0)
-}
-
-function makeProviders(config: RaguelConfig): Providers {
-  return {
-    claude: new ClaudeCliProvider(config.judge.maxConcurrency),
-    codex: new CodexCliProvider(config.judge.maxConcurrency),
-    none: new NoneProvider()
-  }
-}
-
 async function main(): Promise<void> {
   const deps: PipelineDeps = {
-    runtime: createRuntimeSource(makeProviders),
+    runtime: createRuntimeSource(),
     projectRoot: resolveProjectRoot(process.cwd()),
     buildVersion: BUILD_VERSION
   }

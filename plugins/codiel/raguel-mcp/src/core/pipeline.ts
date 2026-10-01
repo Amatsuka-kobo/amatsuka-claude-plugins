@@ -1,8 +1,8 @@
 /**
- * 判定パイプライン(設計書 §6.3)。
- * 1 設定の読み直し → 2 入力の検証と評価対象の取得 → 3 前フェーズの証拠と改竄の検証 →
- * 4 過去の attempt のダイジェスト → 5 ルール層 → 6 Jev の文脈判定(有効なときだけ) → 7 重さ判定 →
- * 8 判例の検索とパネル → 9 合成 → 10 ケースファイルと索引 → 11 保持の上限の掃除。
+ * 判定パイプライン(設計書 §6.3 と 2026-10-01-codiel-run-speedup-design.md §4)。
+ * 1 設定の読み直し → 2 入力の検証と評価対象の取得 → 3 前フェーズの改竄の検証 →
+ * 4 過去の attempt のダイジェスト → 5 ルール層 → 6 Jev の文脈判定(鍵があるときだけ問い合わせる) →
+ * 7 判例の検索(ルールの stop が無いとき) → 8 合成 → 9 ケースファイルと索引 → 10 保持の上限の掃除。
  *
  * - 入力の誤りは SubjectInputError で投げ、記録しない(§6.2.6)。
  * - 設定の読み込みの失敗と内部エラーは、一意の evaluationId で ASK・degraded を記録する(§6.2.6、所見 D3)。
@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { computeDigest } from "../casefile/digest.js"
-import { CaseStore, NO_EVALUATION_RECORD } from "../casefile/store.js"
+import { CaseStore } from "../casefile/store.js"
 import { findPhase, priorPhasesOf } from "../codiel/phases.js"
 import { defaultConfig } from "../config/defaults.js"
 import { classifyPath, type PathClass } from "../config/paths.js"
@@ -22,18 +22,9 @@ import type { JevCall } from "../context/jev.js"
 import {
   type ContextJudgeResult,
   type JudgeCandidate,
+  resolveJevApiKey,
   runContextJudge
 } from "../context/judge.js"
-import {
-  type FactRow,
-  factRowsFromDiff
-} from "../panel/panelists/crosscheck.js"
-import type {
-  CallControl,
-  JudgeCall,
-  JudgeProvider
-} from "../panel/provider.js"
-import { type PanelOutcome, runPanel } from "../panel/runner.js"
 import {
   type PrecedentMatch,
   searchPrecedents
@@ -65,21 +56,14 @@ import type {
   EvaluationResult,
   Finding,
   GatedPhase,
-  JudgeProviderName,
   LoadedConfig,
-  MetaReport,
-  PanelReport,
   Policy,
   RaguelConfig,
   RuleContext,
   Severity,
-  Subject,
-  VerdictRecord,
-  WeightResult,
-  WeightTier
+  Subject
 } from "./types.js"
 import { synthesize } from "./verdict.js"
-import { computeWeight } from "./weight.js"
 
 // ---- 入力と依存 ----
 
@@ -109,12 +93,9 @@ export type EvaluationRequest =
       rollbackPlan?: string
     })
 
-export type Providers = Partial<Record<JudgeProviderName, JudgeProvider>>
-
-/** 読み込んだ設定と、その設定で作ったプロバイダー */
+/** 読み込んだ設定 */
 export interface Runtime {
   loaded: LoadedConfig
-  providers: Providers
 }
 
 /** 設定の読み込みの結果(§6.12.4)。壊れた設定でも評価は ASK・degraded で返す */
@@ -123,7 +104,7 @@ export type RuntimeResult =
   | { ok: false; error: string; path: string; source: string }
 
 export interface PipelineDeps {
-  /** 評価ごとに呼ぶ。設定を読み直し、変わっていればプロバイダーを作り直す(§6.3 の 1) */
+  /** 評価ごとに呼ぶ。設定を読み直す(§6.3 の 1) */
   runtime: () => RuntimeResult
   /** 評価対象の取得と記録の置き場に使うプロジェクトルート(§6.9.1) */
   projectRoot: string
@@ -147,22 +128,12 @@ export interface EvaluationControl {
 const POLICY_VERSION = 2
 /** 応答に載せる所見の上限(§6.4.3) */
 export const MAX_RESPONSE_FINDINGS = 50
-/** 前フェーズの証拠に載せる提出本文の長さ(§6.3) */
-const PRIOR_SUBMISSION_LIMIT = 4000
-/** 文書の事実表に載せる参照パスの上限 */
-const MAX_FACT_PATHS = 30
 /** precedent/failure-match を出す合成スコアの下限(§6.11) */
 const FAILURE_MATCH_SCORE = 0.5
 
 const RESUBMISSION_ID = "common/resubmission-loop"
 const FAILURE_MATCH_ID = "precedent/failure-match"
 const TAMPERED_ID = "casefile/tampered"
-
-const PANEL_EVIDENCE = {
-  adversarial: "03-adversarial.md",
-  steelman: "04-steelman.md",
-  crosscheck: "05-crosscheck.md"
-} as const
 
 const SEVERITY_RANK: Record<Severity, number> = { stop: 0, ask: 1, info: 2 }
 
@@ -196,7 +167,6 @@ export async function evaluate(
       `phase ${req.phase} は ${req.tool} で評価しない(このフェーズのツールは ${entry?.tool ?? "無い"})`
     )
   }
-  const started = Date.now()
   const evaluationId = randomUUID()
   const rt = deps.runtime()
   const opened: { current?: Attempt } = {}
@@ -234,7 +204,6 @@ export async function evaluate(
       deps,
       runtime: rt.runtime,
       target,
-      deadline: started + rt.runtime.loaded.config.judge.deadlineMs,
       ctl,
       opened
     })
@@ -361,7 +330,6 @@ interface JudgeInput {
   deps: PipelineDeps
   runtime: Runtime
   target: Target
-  deadline: number
   ctl: EvaluationControl
   opened: { current?: Attempt }
 }
@@ -381,28 +349,27 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
   const normalPaths = parsed
     ? parsed.files.filter((f) => fileClass(f) === "normal").flatMap(sidePaths)
     : artifact.changedPaths
-  const jevSummary = (status: "off" | "skipped"): ContextJudgeSummary => ({
-    enabled: config.contextJudge.enabled,
-    status: config.contextJudge.enabled ? status : "off",
-    adjustments: []
-  })
 
   // 手順 6・7 の変更なし(R22・R24)
   if (parsed) {
     const classes = parsed.files.map(fileClass)
     const reports = classes.filter((c) => c === "report").length
     if (target.empty || (reports > 0 && classes.every((c) => c !== "normal"))) {
-      return finishNoChange(input, store, reports, jevSummary("skipped"))
+      return finishNoChange(
+        input,
+        store,
+        reports,
+        skippedJevSummary(deps.jevApiKey)
+      )
     }
   }
 
   // 手順 3〜5
   ctl.progress?.("ルール層")
   const priorAttempts = store.readPriorAttempts(artifact.runId, artifact.phase)
-  const prior = collectPriorEvidence(store, artifact.runId, artifact.phase)
   const ruleCtx: RuleContext = { config, testsDir, priorAttempts }
   const layered = [
-    ...prior.tampered,
+    ...tamperedPriorPhases(store, artifact.runId, artifact.phase),
     ...runRules(artifact, ruleCtx),
     ...testResultsFindings(artifact, ruleCtx)
   ]
@@ -415,56 +382,44 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
     ...resubmissionFindings({ ...artifact, content: compared }, ruleCtx, others)
   ]
 
-  // 手順 6: Jev の文脈判定
+  // 手順 6: Jev の文脈判定。鍵が無ければ runContextJudge が contextJudge/unavailable を足して返す
   const extraReasons: string[] = []
-  let context: ContextJudgeResult | undefined
-  let contextSummary = jevSummary("off")
-  if (config.contextJudge.enabled) {
-    ctl.progress?.("Jev の文脈判定")
-    context = await runContextJudge(
-      contextInput(artifact, parsed, ruleFindings, others, {
-        store,
-        config,
-        fileClass,
-        priorAttempts,
-        compared
-      }),
-      {
-        settings: config.contextJudge,
-        apiKey: deps.jevApiKey,
-        jevCall: deps.jevCall,
-        remainingMs: input.deadline - Date.now(),
-        signal: ctl.signal
-      }
+  ctl.progress?.("Jev の文脈判定")
+  const context = await runContextJudge(
+    contextInput(artifact, parsed, ruleFindings, others, {
+      store,
+      config,
+      fileClass,
+      priorAttempts,
+      compared
+    }),
+    {
+      settings: config.contextJudge,
+      apiKey: deps.jevApiKey,
+      jevCall: deps.jevCall,
+      signal: ctl.signal
+    }
+  )
+  ctl.signal.throwIfAborted()
+  // 設定で無効にしたルールの所見は、Jev が作ったものも残さない
+  const enabled = (id: string) => config.rules[id]?.enabled !== false
+  ruleFindings = context.adjustedFindings.filter((f) => enabled(f.ruleId))
+  const contextSummary: ContextJudgeSummary = {
+    enabled: resolveJevApiKey(deps.jevApiKey) !== undefined,
+    status: context.status,
+    adjustments: context.adjustments.filter((a) => enabled(a.ruleId))
+  }
+  const unavailable = context.record?.unavailableReasons ?? []
+  if (unavailable.length > 0) {
+    extraReasons.push(
+      `context-judge: Jev の文脈判定が効かなかった対象は決定論の結果で判定した(${unavailable.join("; ")})`
     )
-    ctl.signal.throwIfAborted()
-    // 設定で無効にしたルールの所見は、Jev が作ったものも残さない
-    const enabled = (id: string) => config.rules[id]?.enabled !== false
-    ruleFindings = context.adjustedFindings.filter((f) => enabled(f.ruleId))
-    contextSummary = {
-      enabled: true,
-      status: context.status,
-      adjustments: context.adjustments.filter((a) => enabled(a.ruleId))
-    }
-    const unavailable = context.record?.unavailableReasons ?? []
-    if (unavailable.length > 0) {
-      extraReasons.push(
-        `context-judge: Jev の文脈判定が効かなかった対象は決定論の結果で判定した(${unavailable.join("; ")})`
-      )
-    }
   }
 
   // 手順 7
-  const weight = computeWeight(artifact, ruleFindings, config, {
-    testsDir,
-    contextFloor: context?.tierFloor
-  })
-
-  // 手順 8
-  let panel: PanelOutcome | undefined
   let precedents: PrecedentMatch[] | undefined
   const ruleStop = ruleFindings.some((f) => f.severity === "stop")
-  if (!ruleStop && weight.tier !== "trivial") {
+  if (!ruleStop) {
     precedents = searchPrecedents(
       {
         kind: artifact.kind,
@@ -494,55 +449,40 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
         message: `失敗に終わった過去の判例に似ている: ${failures.map((m) => m.precedent.id).join(", ")}`
       })
     }
-    ctl.progress?.("パネル")
-    panel = await runPanel(
-      {
-        artifact: panelArtifact(artifact, parsed, fileClass, normalPaths),
-        tier: weight.tier,
-        ruleFindings,
-        precedents: precedents.map((m) => m.precedent),
-        priorEvidence: prior.text,
-        facts: factRows(artifact, parsed, fileClass)
-      },
-      {
-        config,
-        providers: withProgress(runtime.providers, ctl.progress),
-        deadline: input.deadline,
-        signal: ctl.signal
-      }
-    )
   }
 
-  // 手順 9
+  // 手順 8
   ctl.progress?.("合成")
-  const synthesis = synthesize({
-    weightTier: weight.tier,
-    ruleFindings,
-    panel,
-    config
-  })
+  const synthesis = synthesize({ ruleFindings })
   ctl.signal.throwIfAborted()
 
-  // 手順 10・11
+  // 手順 9・10
   return record(input, store, {
     verdict: synthesis.verdict,
     judgeStatus: synthesis.judgeStatus,
     degradedReasons: synthesis.degradedReasons,
-    weight,
     ruleFindings,
     findings: synthesis.findings,
     reasons: [...synthesis.reasons, ...extraReasons],
     decisionPoint: synthesis.decisionPoint,
-    variance: synthesis.variance,
-    panel,
     precedents,
-    contextRecord: context?.record ?? null,
+    contextRecord: context.record,
     contextSummary
   })
 }
 
+/** Jev を通さなかった評価の contextJudge。鍵が無ければ unavailable */
+function skippedJevSummary(apiKey: string | undefined): ContextJudgeSummary {
+  const enabled = resolveJevApiKey(apiKey) !== undefined
+  return {
+    enabled,
+    status: enabled ? "skipped" : "unavailable",
+    adjustments: []
+  }
+}
+
 /**
- * 変更なしの評価(§6.2.2 の手順 6・7)。ルール層・Jev・重さ判定・パネルを通さない。
+ * 変更なしの評価(§6.2.2 の手順 6・7)。ルール層・Jev を通さない。
  * 前フェーズの改竄の検証(§6.3 の手順 3)は行い、改竄があれば STOP にする
  */
 function finishNoChange(
@@ -565,43 +505,35 @@ function finishNoChange(
   const secrets = input.target.empty
     ? []
     : secretsRule.check(artifact, { config, testsDir, priorAttempts: [] })
-  const { tampered } = collectPriorEvidence(
-    store,
-    artifact.runId,
-    artifact.phase
-  )
-  const ruleFindings = [...tampered, ...secrets, noChange]
-  const synthesis = synthesize({
-    weightTier: "trivial",
-    ruleFindings,
-    config
-  })
+  const ruleFindings = [
+    ...tamperedPriorPhases(store, artifact.runId, artifact.phase),
+    ...secrets,
+    noChange
+  ]
+  const synthesis = synthesize({ ruleFindings })
   return record(input, store, {
     verdict: synthesis.verdict,
     judgeStatus: synthesis.judgeStatus,
     degradedReasons: synthesis.degradedReasons,
-    weight: { tier: "trivial", score: 0, factors: {}, floors: [] },
     ruleFindings,
     findings: synthesis.findings,
     reasons: [
-      `no-change: ${noChange.message}。ルール層(前フェーズの改竄の検証と、レポートと生成物の common/secrets を除く)・Jev・重さ判定・パネルを通さない`,
+      `no-change: ${noChange.message}。ルール層(前フェーズの改竄の検証と、レポートと生成物の common/secrets を除く)・Jev を通さない`,
       ...synthesis.reasons
     ],
     decisionPoint: synthesis.decisionPoint,
-    variance: null,
     contextRecord: null,
     contextSummary
   })
 }
 
-// ---- 前フェーズの証拠(§6.3) ----
+// ---- 前フェーズの改竄の検証(§6.3) ----
 
-function collectPriorEvidence(
+function tamperedPriorPhases(
   store: CaseStore,
   runId: string,
   phase: GatedPhase
-): { text?: string; tampered: Finding[] } {
-  const chunks: string[] = []
+): Finding[] {
   const tampered: Finding[] = []
   for (const prior of priorPhasesOf(phase)) {
     const dir = store.latestAttemptDir(runId, prior)
@@ -614,46 +546,9 @@ function collectPriorEvidence(
         message: `前フェーズ ${prior} のケースファイルが改竄されている: ${check.mismatches.join("; ")}`,
         evidence: { location: dir }
       })
-      continue
     }
-    const v = store.readVerdict(dir) as VerdictRecord
-    if (!store.lookupEvaluation(v.evaluationId)) {
-      chunks.push(`## 前フェーズ ${prior}\n${NO_EVALUATION_RECORD}`)
-      continue
-    }
-    const ruling = store.lookupOutcome(v.evaluationId)
-    const submission = store.readEvidence(dir, "submission.txt") ?? ""
-    chunks.push(
-      [
-        `## 前フェーズ ${prior}(attempt ${v.attempt}、verdict ${v.verdict}、judgeStatus ${v.judgeStatus})`,
-        `ルール層の ask 以上の所見: ${askRuleIds(store.readEvidence(dir, "01-rules.json")).join(", ") || "なし"}`,
-        `meta の rationale: ${v.meta?.rationale ?? "なし"}`,
-        `人の裁定: ${ruling ? `${ruling.ruling ?? "なし"}(outcome ${ruling.outcome})${ruling.notes ? `: ${ruling.notes}` : ""}` : "なし"}`,
-        `提出本文(先頭 ${PRIOR_SUBMISSION_LIMIT} 文字):`,
-        submission.slice(0, PRIOR_SUBMISSION_LIMIT)
-      ].join("\n")
-    )
   }
-  return {
-    ...(chunks.length > 0 ? { text: chunks.join("\n\n") } : {}),
-    tampered
-  }
-}
-
-function askRuleIds(rulesJson: string | undefined): string[] {
-  if (rulesJson === undefined) return []
-  try {
-    const { findings } = JSON.parse(rulesJson) as { findings?: Finding[] }
-    return [
-      ...new Set(
-        (findings ?? [])
-          .filter((f) => f.severity !== "info")
-          .map((f) => f.ruleId)
-      )
-    ]
-  } catch {
-    return []
-  }
+  return tampered
 }
 
 // ---- ルール層の補い ----
@@ -701,8 +596,7 @@ function contextInput(
   const view = parsed
     ? viewWithout(
         artifact.content,
-        parsed.files.filter((f) => env.fileClass(f) !== "normal"),
-        () => null
+        parsed.files.filter((f) => env.fileClass(f) !== "normal")
       )
     : null
   // 集約した所見は、まとめた全件の行(evidence.lines)を 1 問ずつ問う。
@@ -762,7 +656,7 @@ function contextInput(
   }
 }
 
-/** 対象の attempt の verdict.json から ask 以上の所見(パネルの採用所見を含む)を伏せ字にして取る */
+/** 対象の attempt の verdict.json から ask 以上の所見を伏せ字にして取る */
 function priorFindingsOf(
   store: CaseStore,
   artifact: Artifact,
@@ -788,16 +682,15 @@ function priorFindingsOf(
   })
 }
 
-// ---- パネルの入力 ----
+// ---- Jev に送る本文 ----
 
 /**
- * diff の本文から、除くファイルの区間を外す。replace が行を返せば、その区間を 1 行に置き換える。
+ * diff の本文から、除くファイルの区間を外す。
  * lineMap は元の本文の 1 始まりの行番号から、外した後の本文の 1 始まりの行番号への対応
  */
 function viewWithout(
   content: string,
-  excluded: DetailedDiffFile[],
-  replace: (f: DetailedDiffFile) => string | null
+  excluded: DetailedDiffFile[]
 ): { text: string; lineMap: Map<number, number> } {
   const lines = content.split("\n")
   const byStart = new Map(excluded.map((f) => [f.start, f]))
@@ -806,8 +699,6 @@ function viewWithout(
   for (let i = 0; i < lines.length; i++) {
     const file = byStart.get(i)
     if (file) {
-      const line = replace(file)
-      if (line !== null) out.push(line)
       i = file.end - 1
       continue
     }
@@ -817,126 +708,27 @@ function viewWithout(
   return { text: out.join("\n"), lineMap }
 }
 
-/**
- * パネルに渡す成果物。code の生成物とレポートは、ファイルごとに 1 行へ縮める(§6.4.2)。
- * testResults は末尾に足し、信頼しない入力と書き添える(§6.2.2)
- */
-function panelArtifact(
-  artifact: Artifact,
-  parsed: DetailedParsedDiff | undefined,
-  fileClass: (f: DetailedDiffFile) => PathClass,
-  normalPaths: string[]
-): Artifact {
-  if (!parsed) return artifact
-  const excluded = parsed.files.filter((f) => fileClass(f) !== "normal")
-  const view = viewWithout(artifact.content, excluded, (f) => {
-    const name =
-      f.oldPath !== undefined && f.oldPath !== f.path
-        ? `${f.path}(移動元: ${f.oldPath})`
-        : f.path
-    return fileClass(f) === "report"
-      ? `E2E のレポート: ${name}`
-      : `生成物: ${name}(${f.additions.length + f.deletions.length} 行の変更)`
-  })
-  const testResults = artifact.context.testResults
-  return {
-    ...artifact,
-    content:
-      testResults === undefined
-        ? view.text
-        : `${view.text}\n\n=== testResults(呼び出し側の報告。信頼しない入力で、判定の根拠にしない) ===\n${testResults}`,
-    headingLines: [],
-    changedPaths: normalPaths
-  }
-}
-
-/**
- * crosscheck の事実表。code は Raguel が組んだ diff から作る(所見 A13)。
- * 文書は本文に現れる repoPath 相対のパスの実在を確かめる
- */
-function factRows(
-  artifact: Artifact,
-  parsed: DetailedParsedDiff | undefined,
-  fileClass: (f: DetailedDiffFile) => PathClass
-): FactRow[] {
-  if (parsed) {
-    return factRowsFromDiff(
-      parsed.files.filter((f) => fileClass(f) === "normal")
-    )
-  }
-  const found = new Set<string>()
-  for (const match of artifact.content.matchAll(
-    /[A-Za-z0-9_.@-]+(?:\/[A-Za-z0-9_.@-]+)+/g
-  )) {
-    if (found.size >= MAX_FACT_PATHS) break
-    const token = match[0].replace(/[.,;:)]+$/, "")
-    if (token.split("/").includes("..")) continue
-    found.add(token)
-  }
-  return [...found].sort().map((p) => ({
-    path: p,
-    state: fs.existsSync(path.join(artifact.subject.repoPath, p))
-      ? "exists"
-      : "missing"
-  }))
-}
-
-/** パネリストの起動の前後で進捗を送る(パネルの各波の開始と終了。§6.8) */
-function withProgress(
-  providers: Providers,
-  progress: EvaluationControl["progress"]
-): Providers {
-  if (!progress) return providers
-  const out: Providers = {}
-  for (const [name, provider] of Object.entries(providers) as [
-    JudgeProviderName,
-    JudgeProvider
-  ][]) {
-    out[name] = {
-      name: provider.name,
-      async invoke<T>(call: JudgeCall<T>, ctl: CallControl): Promise<T> {
-        progress(`${call.role} を起動した`)
-        try {
-          return await provider.invoke(call, ctl)
-        } finally {
-          progress(`${call.role} が終わった`)
-        }
-      }
-    }
-  }
-  return out
-}
-
 // ---- 記録(§6.9) ----
 
 interface Outcome {
   verdict: EvaluationResult["verdict"]
   judgeStatus: EvaluationResult["judgeStatus"]
   degradedReasons: DegradedReason[]
-  weight: WeightResult
   ruleFindings: Finding[]
   findings: Finding[]
   reasons: string[]
   decisionPoint?: string
-  variance: number | null
-  panel?: PanelOutcome
   precedents?: PrecedentMatch[]
   contextRecord: ContextJudgeResult["record"]
   contextSummary: ContextJudgeSummary
 }
 
-function reportToMarkdown(report: PanelReport): string {
+/** 撤去した設定キーが残っているときの警告(評価のたびに 1 件) */
+function retiredKeysReason(loaded: LoadedConfig): string[] {
+  if (loaded.retiredKeys.length === 0) return []
   return [
-    `# ${report.panelist}(model: ${report.model})`,
-    "",
-    "```json",
-    JSON.stringify(
-      { findings: report.findings, scores: report.scores },
-      null,
-      2
-    ),
-    "```"
-  ].join("\n")
+    `retired-config: 撤去した設定キー(${loaded.retiredKeys.join("、")})を無視した。設定(${loaded.source})から削除してください`
+  ]
 }
 
 /** 抜粋と message の秘密情報を伏せる(所見 H1) */
@@ -1011,6 +803,7 @@ function record(
   const { artifact } = input.target
   const { loaded } = input.runtime
   const { dir, attempt } = openAttempt(store, artifact, input.opened)
+  const judged = [...o.reasons, ...retiredKeysReason(loaded)]
 
   store.writeEvidence(dir, "submission.txt", maskSecrets(artifact.content))
   store.writeEvidence(
@@ -1019,9 +812,8 @@ function record(
     JSON.stringify(
       {
         objective: artifact.objective,
-        reasons: o.reasons,
-        decisionPoint: o.decisionPoint ?? null,
-        variance: o.variance
+        reasons: judged,
+        decisionPoint: o.decisionPoint ?? null
       },
       null,
       2
@@ -1032,14 +824,6 @@ function record(
     "01-rules.json",
     JSON.stringify({ findings: o.ruleFindings.map(maskFinding) }, null, 2)
   )
-  store.writeEvidence(dir, "02-weight.json", JSON.stringify(o.weight, null, 2))
-  for (const report of o.panel?.reports ?? []) {
-    store.writeEvidence(
-      dir,
-      PANEL_EVIDENCE[report.panelist],
-      reportToMarkdown(report)
-    )
-  }
   if (o.precedents) {
     store.writeEvidence(
       dir,
@@ -1065,14 +849,6 @@ function record(
       JSON.stringify(o.contextRecord, null, 2)
     )
   }
-  const meta = o.panel?.meta
-  if (meta) {
-    store.writeEvidence(
-      dir,
-      "08-meta.md",
-      `# meta(model: ${meta.model})\n\n${meta.rationale}\n\n\`\`\`json\n${JSON.stringify(meta.scores, null, 2)}\n\`\`\``
-    )
-  }
   // 再提出の比較と同じ本文から作る(§6.4.2)。submission.txt は元の本文のまま
   const compared = comparisonContent(artifact, {
     config: loaded.config,
@@ -1092,10 +868,10 @@ function record(
   const reasons =
     cap.omitted > 0
       ? [
-          ...o.reasons,
+          ...judged,
           `findings-cap: 応答の所見を ${MAX_RESPONSE_FINDINGS} 件に切った(${cap.omitted} 件を省いた。全件は verdict.json にある)`
         ]
-      : o.reasons
+      : judged
 
   return commit(store, dir, {
     evaluationId: input.evaluationId,
@@ -1106,12 +882,10 @@ function record(
     verdict: o.verdict,
     judgeStatus: o.judgeStatus,
     degradedReasons: o.degradedReasons,
-    weightTier: o.weight.tier,
     allFindings: findings,
     responseFindings: cap.findings,
     reasons,
     decisionPoint: o.decisionPoint,
-    meta: meta ?? null,
     subject: artifact.subject,
     policy,
     contextJudge: o.contextSummary
@@ -1127,12 +901,10 @@ interface CommitInput {
   verdict: EvaluationResult["verdict"]
   judgeStatus: EvaluationResult["judgeStatus"]
   degradedReasons: DegradedReason[]
-  weightTier: WeightTier
   allFindings: Finding[]
   responseFindings: Finding[]
   reasons: string[]
   decisionPoint?: string
-  meta: MetaReport | null
   subject: Subject
   policy: Policy
   contextJudge: ContextJudgeSummary
@@ -1154,10 +926,8 @@ function commit(
     verdict: c.verdict,
     judgeStatus: c.judgeStatus,
     degradedReasons: c.degradedReasons,
-    weightTier: c.weightTier,
     findings: c.allFindings,
     reasons: c.reasons,
-    meta: c.meta,
     subject: c.subject,
     policy: policyRecord
   })
@@ -1190,12 +960,10 @@ function commit(
     verdict: c.verdict,
     judgeStatus: c.judgeStatus,
     degradedReasons: c.degradedReasons,
-    weightTier: c.weightTier,
     findings: c.responseFindings,
     reasons: c.reasons,
     ...(c.decisionPoint ? { decisionPoint: c.decisionPoint } : {}),
     subject: c.subject,
-    ...(c.meta ? { meta: c.meta } : {}),
     casePath: dir,
     policy: c.policy,
     contextJudge: c.contextJudge
@@ -1223,7 +991,10 @@ function recordDegraded(args: {
   const kind = (findPhase(req.phase) as { kind: Artifact["kind"] }).kind
   const { dir, attempt } = openAttempt(store, req, args.opened)
   const finding = maskFinding(args.finding)
-  const reasons = [`degraded: ${finding.message}`]
+  const reasons = [
+    `degraded: ${finding.message}`,
+    ...(runtime ? retiredKeysReason(runtime.loaded) : [])
+  ]
   const decisionPoint = `判定の基盤に障害があり(${args.reason.source})審査が欠けているので、人が成果物を確かめて進めるか、原因を直して再評価するかを判断する。`
   if (target) {
     store.writeEvidence(
@@ -1236,7 +1007,7 @@ function recordDegraded(args: {
     dir,
     "00-synthesis.json",
     JSON.stringify(
-      { objective: req.objective, reasons, decisionPoint, variance: null },
+      { objective: req.objective, reasons, decisionPoint },
       null,
       2
     )
@@ -1250,12 +1021,10 @@ function recordDegraded(args: {
     verdict: "ASK",
     judgeStatus: "degraded",
     degradedReasons: [args.reason],
-    weightTier: "standard",
     allFindings: [finding],
     responseFindings: [finding],
     reasons,
     decisionPoint,
-    meta: null,
     subject: target?.artifact.subject ?? {
       repoPath: req.repoPath ?? args.deps.projectRoot,
       head: null,
@@ -1276,10 +1045,6 @@ function recordDegraded(args: {
           protectedPaths: { excludedDefaults: [], generated: [] },
           ignoreUncommitted: []
         },
-    contextJudge: {
-      enabled: config.contextJudge.enabled,
-      status: config.contextJudge.enabled ? "skipped" : "off",
-      adjustments: []
-    }
+    contextJudge: skippedJevSummary(args.deps.jevApiKey)
   })
 }

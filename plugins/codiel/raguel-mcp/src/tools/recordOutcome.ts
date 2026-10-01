@@ -168,16 +168,13 @@ export function handleRecordOutcome(
       outcome: args.outcome,
       ruling: args.ruling ?? null,
       summary:
-        `${v.phase} の判定 ${v.verdict}(${v.weightTier})の結末は ${args.outcome}` +
+        `${v.phase} の判定 ${v.verdict} の結末は ${args.outcome}` +
         `${args.ruling ? `、裁定は ${args.ruling}` : ""}。` +
         (objective ? ` objective: ${objective}` : ""),
       ...(objective ? { objective } : {}),
       firedRules,
       changedPaths: v.subject.files.map((f) => f.path),
-      lesson:
-        notes ??
-        v.meta?.rationale ??
-        `findings: ${firedRules.join(", ") || "なし"}`,
+      lesson: notes ?? `findings: ${firedRules.join(", ") || "なし"}`,
       recordedAt: new Date().toISOString(),
       configHash
     }

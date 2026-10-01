@@ -1,6 +1,6 @@
 /**
  * plan/irreversible-ops — 不可逆な操作への言及の検出(既定 info)。設計書 §6.4.2(A8)。
- * 語は語幹で一致させる。判定を動かさず、パネルへの入力と Jev の文脈判定の手がかりになる。
+ * 語は語幹で一致させる。判定を動かさず、Jev の文脈判定の手がかりになる。
  */
 
 import type { Finding, Rule } from "../../core/types.js"

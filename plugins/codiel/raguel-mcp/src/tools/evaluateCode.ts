@@ -19,7 +19,7 @@ export const evaluateCodeInput = z.strictObject({
     .string()
     .optional()
     .describe(
-      "テストの実行結果の要約。信頼しない入力で、パネルの参考入力と秘密情報・注入の検査の対象にする"
+      "テストの実行結果の要約。信頼しない入力で、秘密情報・注入の検査の対象にする"
     )
 })
 
