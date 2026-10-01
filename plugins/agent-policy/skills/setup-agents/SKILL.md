@@ -102,7 +102,10 @@ disallowed-tools: Write
 
 5. 結果を報告する。全文の差分は載せない。手順 4 の `results` から、再生成した定義ごとに次を並べる。
 
-   - `tools` 行の変更前と変更後。変更後は手順 4 の `toolsAfter` を使う。変更前は、手順 3 で `--prune-tools` を実行した定義ではその応答の `toolsBefore` を使い、実行しなかった定義では手順 4 の `toolsBefore` を使う。
+   - `tools` 行の変更前と変更後。手順 3 で `--prune-tools` を実行した定義は 2 行に分け、1 行にまとめない。
+     - 1 行目: `--prune-tools` の応答の `toolsBefore` → `toolsAfter`
+     - 2 行目: 手順 4 の再生成の `toolsBefore` → `toolsAfter`
+   - `--prune-tools` を実行しなかった定義は、手順 4 の `toolsBefore` → `toolsAfter` を 1 行で書く。
    - 再生成で外れた MCP サーバー。接続の再検証で落ちたもの(`mcpDropped`)
    - `description` と `preamble` の状態。`templateChanged` の定義には、対話モードで再実行すればテンプレートに置き換えられると案内する。
 
@@ -398,7 +401,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 調整する定義の役割に impl と readonly の両方が含まれる場合だけ、kind 混在を警告して続行確認を取る。既定は続行しない。
 
-確認は、ステップ 6 のコマンドの `--write` を `--check` に替えて行う。
+確認は、ステップ 6 のコマンドの `--write` を `--check` に替え、`--merge` と `--replace` を外して行う。`--check` に `--merge` を付けると `merge: requires --write` で、`--replace` を付けると `replace: requires --merge` で CLI が止まる。`--keep` は `--check` でも使えるので外さない。
 
 ### ステップ 5c: 再生成の定義への MCP の付与
 
