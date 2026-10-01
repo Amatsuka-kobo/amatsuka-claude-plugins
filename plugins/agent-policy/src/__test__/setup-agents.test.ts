@@ -437,7 +437,7 @@ describe("--scope", () => {
       "--model-id",
       "sonnet",
       "--model",
-      "claude-gpt-6-sol",
+      "claude-gpt-6-1-sol",
       "--name",
       "external-model",
       "--roles",
@@ -448,7 +448,7 @@ describe("--scope", () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toBe(
-      "model: claude-gpt-6-sol is not available with --scope claude"
+      "model: claude-gpt-6-1-sol is not available with --scope claude"
     )
   })
 
@@ -486,7 +486,7 @@ describe("--list-live-models", () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
         data: [
-          { id: "claude-gpt-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-6-1-sol", owned_by: "openai" },
           { id: "claude-gpt-6-astra", owned_by: "openai" },
           { id: "custom-unknown", owned_by: "other" }
         ]
@@ -504,7 +504,7 @@ describe("--list-live-models", () => {
       ok: true,
       models: [
         {
-          id: "claude-gpt-6-sol",
+          id: "claude-gpt-6-1-sol",
           vendor: "gpt",
           recommendedFor: [
             "complex-impl",
@@ -666,7 +666,7 @@ describe("--list-coverage", () => {
       [
         "---",
         "name: external-complex",
-        "model: claude-gpt-6-sol",
+        "model: claude-gpt-6-1-sol",
         "agent-policy-vendor: gpt",
         "agent-policy-role: complex-impl",
         "---",
@@ -827,7 +827,7 @@ describe("--list-coverage の candidates", () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
         data: [
-          { id: "claude-gpt-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-6-1-sol", owned_by: "openai" },
           { id: "claude-grok-4-7", owned_by: "xai" }
         ]
       })
@@ -859,7 +859,7 @@ describe("--list-coverage の candidates", () => {
   it("custom で live に無い推奨の外部モデルは候補から外す", async () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
-        data: [{ id: "claude-gpt-6-sol", owned_by: "openai" }]
+        data: [{ id: "claude-gpt-6-1-sol", owned_by: "openai" }]
       })
     })
 
@@ -928,7 +928,7 @@ describe("--list-coverage の点検結果", () => {
     writeAgent("external.md", [
       "---",
       "name: external",
-      "model: claude-gpt-6-sol",
+      "model: claude-gpt-6-1-sol",
       "agent-policy-vendor: gpt",
       marker,
       "---",
@@ -937,7 +937,7 @@ describe("--list-coverage の点検結果", () => {
     writeAgent("plain.md", [
       "---",
       "name: plain",
-      "model: claude-gpt-6-sol",
+      "model: claude-gpt-6-1-sol",
       "---",
       ""
     ])
@@ -1113,7 +1113,7 @@ describe("--list-coverage の点検結果", () => {
     writeAgent("external.md", [
       "---",
       "name: external",
-      "model: claude-gpt-6-sol",
+      "model: claude-gpt-6-1-sol",
       "agent-policy-vendor: gpt",
       "tools: Read, Agent",
       "agent-policy-role: complex-impl",
@@ -1125,7 +1125,7 @@ describe("--list-coverage の点検結果", () => {
     const result = coverage(["--scope", "claude"])
 
     expect(definitionOf(result, "external")).toMatchObject({
-      model: "claude-gpt-6-sol",
+      model: "claude-gpt-6-1-sol",
       vendor: "gpt",
       roles: ["complex-impl"],
       disallowedTools: ["Agent"]
@@ -1789,7 +1789,7 @@ describe("再生成の作成先は被覆する定義で決める", () => {
 
   it("definitions の modelId を Claude enum・MODELS の model・該当なしの 3 通りで返す", () => {
     marked("enum.md", "opus", "explore")
-    marked("alias.md", "claude-gpt-6-sol", "explore", "gpt")
+    marked("alias.md", "claude-gpt-6-1-sol", "explore", "gpt")
     marked("unknown.md", "my-model", "explore")
 
     const result = coverage()
@@ -1901,7 +1901,7 @@ describe("再生成の作成先は被覆する定義で決める", () => {
   })
 
   it("claude-only で外部ベンダーの定義しか被覆しない役割は既定名で新規生成する", () => {
-    marked("external.md", "claude-gpt-6-sol", "code-review", "gpt")
+    marked("external.md", "claude-gpt-6-1-sol", "code-review", "gpt")
     const external = readAgent("external.md")
 
     const result = recommend("claude", "code-review")
@@ -2282,7 +2282,7 @@ describe("--check", () => {
       (item) => item.key === "model"
     )
     expect(entry?.existing).toBe("my-own-alias")
-    expect(entry?.template).toBe("claude-gpt-6-sol")
+    expect(entry?.template).toBe("claude-gpt-6-1-sol")
   })
 
   it("既存にしかない節を sectionsOnlyInExisting に出す", () => {
@@ -2839,7 +2839,7 @@ describe("--write", () => {
     expect(content).toMatch(/^tools:.*CustomTool/m)
     expect(content).toContain("permissionMode: plan")
     expect(content).toContain("## 独自運用")
-    expect(content).toContain("model: claude-gpt-6-sol")
+    expect(content).toContain("model: claude-gpt-6-1-sol")
     expect(content).toContain("あなたは私が書き換えた冒頭である。")
     expect(content).not.toContain("私が書き換えた制約")
   })

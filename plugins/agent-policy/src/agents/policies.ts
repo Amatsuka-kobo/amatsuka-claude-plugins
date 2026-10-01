@@ -92,7 +92,7 @@ export const MODELS: readonly ModelSpec[] = [
     vendor: "gpt",
     label: "GPT Sol",
     defaultName: "gpt-sol",
-    model: "claude-gpt-6-sol",
+    model: "claude-gpt-6-1-sol",
     color: "yellow"
   },
   {

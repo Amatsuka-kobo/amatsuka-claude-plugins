@@ -150,7 +150,7 @@ setup-agents が扱う推奨モデル ID は次の 9 種です。
 | `sonnet` | Sonnet | `sonnet` |
 | `haiku` | Haiku | `haiku` |
 | `fable` | Fable | `fable` |
-| `gpt-sol` | GPT Sol | `claude-gpt-6-sol` |
+| `gpt-sol` | GPT Sol | `claude-gpt-6-1-sol` |
 | `gpt-terra` | GPT Terra | `claude-gpt-5-6-terra` |
 | `gpt-luna` | GPT Luna | `claude-gpt-6-luna` |
 | `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
