@@ -81,8 +81,16 @@ run は常にメインの作業ツリーで探す: `findMainRoot(cwd)` は git �
 ## Flow — 13 stages / 14 named phases
 
 `intent → discuss → design → (test-spec, dev-plan) → test-code → implement → test-loop → intent-sync → pr →
-review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つのステージだが、2026-10-01 から直列に進める
-(仕様のディレクトリを同定 → dev-plan.md をオーケストレーターが書いてゲート → spec.md / cases.md の委譲を前景で出してゲート)。
+review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ(仕様のディレクトリを同定 → spec.md / cases.md の委譲を出して wait-add →
+待つ間に dev-plan.md をオーケストレーターが書いてゲート → spec の完了通知で wait-done してゲート)。片方の委譲の待ちが残る間は mark-ask を
+呼ばず、2 つとも ASK・STOP なら両方の裁定を記録してから resume する。
+
+**委譲はバックグラウンド前提(2026-10-02、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` §10.2)**:
+Claude Code の対話セッションでは Agent の委譲が常にバックグラウンドで起動し、完了は後のターンに通知で届く。委譲を出したら
+`codiel-state wait-add`(id は try の中で一意、英小文字と数字のハイフン区切り)で待ちを記録し、通知を受けたら返答を
+`.codiel/runs/<slug>/try-<n>/waits/<id>.md` と既存の報告に書いて `wait-done`(報告が無いと失敗する)。stop-guard は待ちが
+1 件以上あれば止めない。再開時は `startedAt` より後の `waits/<id>.md` の有無で出し直しを決め、`wait-clear` する。`stop` は
+待ちが残ると失敗し、`--abandon-waits` で通る。codiel-state は並列に呼ばない(ロックが無い)。
 Raguel gates(`GATED` の 9 フェーズ)`intent`, `design`, `test-spec`, `dev-plan`, `test-code`, `implement`, `test-loop`, `intent-sync`, `fix-loop`.
 
 ### テスト駆動と並列実装(2026-09-28、M4。設計書 §6.6・§6.13、決定 72〜81)

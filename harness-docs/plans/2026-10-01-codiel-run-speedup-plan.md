@@ -98,7 +98,7 @@
 - Modify: `plugins/codiel/skills/` の `preparing-design-agendas`(:3, 7-9, 111)、`facilitating-design-discussions`(:11, 24, 31, 43, 58, 62, 68, 77)、`writing-design-docs`(:3, 6, 132)、`writing-dev-plans`(:3, 6, 19-20, 167)、`syncing-intents`(:3, 6, 12 付近)、`running-regression-tests`(:3, 6, 40-62)、`fixing-review-findings`(:10, 50, 62, 66, 76-80, 111, 129, 137)、`implementing`(:119, 129, 145)、`filing-followup-issues`(:10)、`reviewing-diffs`(:124)、`raguel-gating`(:39, 105, 147, 149, 159, 259)、`initializing-harness`(:94 と鍵の案内)の各 SKILL.md
 
 - [ ] ステップ 1: 実行者を示す記述(description と、誰が書くか・誰が実行するかを述べる文)を、設計書 §5.1・§5.2 の線引きに合わせて書き換える。このステップでは手順・規律・出力の形を変えない。手順を変えるのはステップ 2 と 3 だけである。
-- [ ] ステップ 2: test-spec の順序を設計書 §5.3 の 3 ステップにする。`ORS:212-221` の同時に出す手順と再開の分岐を、細目の決定「test-spec の再開」に書き換える。`writing-test-specs/SKILL.md:78-87` の「両方のディスパッチプロンプトに渡す」を、spec の委譲にだけ渡し、dev-plan はオーケストレーターが同じ一覧を使って書く形に直す。`ORS:597-600` の「委譲はすべて foreground で出す」は変えない。
+- [ ] ステップ 2: test-spec の順序を設計書 §5.3 の 3 ステップにする。`ORS:212-221` の同時に出す手順と再開の分岐を、細目の決定「test-spec の再開」に書き換える。`writing-test-specs/SKILL.md:78-87` の「両方のディスパッチプロンプトに渡す」を、spec の委譲にだけ渡し、dev-plan はオーケストレーターが同じ一覧を使って書く形に直す。`ORS:597-600` の「委譲はすべて foreground で出す」は変えない(この規則は設計書 §10・Task 10 でバックグラウンド前提に置き換えた)。
 - [ ] ステップ 3: HARD-GATE を設計書 §5.4 の内容に書き直す。
 - [ ] ステップ 4: 旧称(architect・implementer・tester・reviewer・reviewer-doc)を作業内容の表現に直し、`[8] fix-loop`・`[9] triage` を `ORS:182-187` の番号に直す。
 - [ ] ステップ 5: raguel-gating のパネル・crosscheck・meta・重さ判定・パネリストの失敗への言及を外し、`degradedReasons` の説明をパイプラインの例外に合わせる。
