@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest"
-import type { ArtifactKind, Finding, Severity } from "../../core/types.js"
-import type { JevCall, JevRequest } from "../jev.js"
+import type {
+  ArtifactKind,
+  Finding,
+  GatedPhase,
+  Severity
+} from "../../core/types.js"
+import {
+  estimateTokens,
+  type JevCall,
+  type JevRequest,
+  TOTAL_BUDGET
+} from "../jev.js"
 import {
   type ContextJudgeInput,
   type ContextJudgeSettings,
@@ -343,6 +353,90 @@ describe("本文の問い合わせ", () => {
     expect(
       Object.values(body?.questions ?? {}).every((q) => q.type === "noul")
     ).toBe(true)
+  })
+})
+
+describe("phaseScope(設計書 §10.1)", () => {
+  const scopes: [GatedPhase, string][] = [
+    ["intent", "This phase records the intent of the whole change."],
+    ["design", "This phase designs the whole change."],
+    [
+      "dev-plan",
+      "This phase plans the implementation steps of product code. Test specifications and test code are produced in the separate test-spec and test-code phases, not in this plan."
+    ],
+    ["test-spec", "This phase writes test specifications only."],
+    [
+      "test-code",
+      "This phase writes test code only. Product code is written later in the implement phase."
+    ],
+    [
+      "implement",
+      "This phase writes product code only. Test specifications and test code were already written in the earlier test-spec and test-code phases."
+    ],
+    [
+      "test-loop",
+      "This phase only fixes failures found by running the existing tests; the diff may be small or empty."
+    ],
+    [
+      "fix-loop",
+      "This phase only fixes review findings; the diff may be small."
+    ],
+    [
+      "intent-sync",
+      "This phase writes the agreed changes back to the intent documents."
+    ]
+  ]
+  const bodyOf = (jev: FakeJev) => jev.calls.find((c) => "artifact" in c.state)
+
+  it.each(scopes)("%s の phaseScope が state に入る", async (phase, scope) => {
+    const jev = fakeJev()
+    await run(input({ phase }), jev)
+    expect(bodyOf(jev)?.state.phaseScope).toBe(scope)
+  })
+
+  it.each([
+    ["code", "code-omits-objective"],
+    ["plan", "plan-omits-objective"],
+    ["design", "design-omits-objective"]
+  ] as const)("%s の欠落の問いに 2 文が入る", async (kind, id) => {
+    const jev = fakeJev()
+    await run(input({ kind }), jev)
+    const text = bodyOf(jev)?.questions[id]?.instructions ?? ""
+    expect(text).toMatch(
+      /^Considering only the work that state\.phaseScope assigns to this phase, /
+    )
+    expect(text).toContain("Work assigned to other phases is not an omission.")
+  })
+
+  it("入力の上限の近くでは、phaseScope を足した分だけ超えた本文を送らない", async () => {
+    // 空の本文で基準の合計を測り、上限ちょうどの本文を作る
+    const probe = fakeJev()
+    await run(input({ maskedArtifact: " x", objective: "" }), probe)
+    const req = bodyOf(probe) as JevRequest
+    const base = [
+      ...Object.values(req.state),
+      ...Object.values(req.questions).map((q) => JSON.stringify(q))
+    ]
+      .map((v) => estimateTokens(typeof v === "string" ? v : JSON.stringify(v)))
+      .reduce((a, b) => a + b, 0)
+    const objective = "a".repeat(64_000)
+    const room = TOTAL_BUDGET - base - estimateTokens(objective)
+    const fit = "a".repeat(Math.floor(room * 2.5))
+
+    const okJev = fakeJev()
+    await run(input({ objective, maskedArtifact: fit }), okJev)
+    expect(bodyOf(okJev)).toBeDefined()
+
+    const overJev = fakeJev()
+    const r = await run(
+      input({ objective, maskedArtifact: `${fit}${"a".repeat(10)}` }),
+      overJev
+    )
+    expect(overJev.calls).toHaveLength(0)
+    expect(r.status).toBe("unavailable")
+    expect(r.adjustedFindings.map((f) => f.ruleId)).toContain(
+      UNAVAILABLE_RULE_ID
+    )
   })
 })
 
