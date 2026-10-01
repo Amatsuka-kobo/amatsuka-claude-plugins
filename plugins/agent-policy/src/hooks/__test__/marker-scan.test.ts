@@ -11,14 +11,13 @@ import {
   parseToolsField,
   projectAgentsDir,
   roleLabel,
-  roleLabels,
   scanAgents
 } from "../marker-scan"
 
 const HOOK = fileURLToPath(new URL("../session-start.ts", import.meta.url))
 const PLUGIN_ROOT = fileURLToPath(new URL("../../../", import.meta.url))
 const TABLE_HEADING =
-  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
+  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは、共通規律の §同じ役割の候補から選ぶ に従う。"
 
 const projects: string[] = []
 
@@ -184,7 +183,8 @@ describe("frontmatter", () => {
         model: "sonnet",
         roles: [],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       }
     ])
   })
@@ -208,14 +208,16 @@ describe("scanAgents", () => {
         model: "claude-custom",
         roles: ["complex-impl", "explore"],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       },
       {
         name: "fallback-name",
         model: undefined,
         roles: ["normal-impl"],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       }
     ])
   })
@@ -234,7 +236,8 @@ describe("scanAgents", () => {
         model: undefined,
         roles: ["normal-impl"],
         tools: undefined,
-        vendor: "gpt"
+        vendor: "gpt",
+        description: undefined
       }
     ])
   })
@@ -269,7 +272,8 @@ describe("scanAgents", () => {
         model: undefined,
         roles: ["explore"],
         tools: undefined,
-        vendor: undefined
+        vendor: undefined,
+        description: undefined
       }
     ])
   })
@@ -285,6 +289,57 @@ describe("scanAgents", () => {
     ])
 
     expect(scanAgents(agentsDir(project))[0]?.tools).toEqual(["Read", "Agent"])
+  })
+
+  describe("description の形式", () => {
+    function read(metadata: string[]): string | undefined {
+      const project = temporaryProject()
+      writeDefinition(project, "d.md", ["name: d", ...metadata])
+      return scanAgents(agentsDir(project))[0]?.description
+    }
+
+    it("普通の 1 行", () => {
+      expect(read(["description: 一行 の説明"])).toBe("一行 の説明")
+    })
+
+    it("> 形式は字下げ行を空白 1 つで連結する", () => {
+      expect(
+        read(["description: >", "  一行目: あり", "  二行目", "model: x"])
+      ).toBe("一行目: あり 二行目")
+    })
+
+    it(">- と | と |- も同じ", () => {
+      expect(read(["description: >-", "  a", "  b"])).toBe("a b")
+      expect(read(["description: |", "  a", "  b"])).toBe("a b")
+      expect(read(["description: |-", "  a", "  b"])).toBe("a b")
+    })
+
+    it("続きの行の model: を model キーとして読まない", () => {
+      const project = temporaryProject()
+      writeDefinition(project, "d.md", [
+        "name: d",
+        "model: real",
+        "description: >",
+        "  説明",
+        "  model: x"
+      ])
+      const [agent] = scanAgents(agentsDir(project))
+      expect(agent?.model).toBe("real")
+      expect(agent?.description).toBe("説明 model: x")
+    })
+
+    it("二重引用符と単一引用符を外す", () => {
+      expect(read(['description: "引用 符"'])).toBe("引用 符")
+      expect(read(["description: '引用 符'"])).toBe("引用 符")
+    })
+
+    it("二重引用符の \\n は空白 1 つにする", () => {
+      expect(read(['description: "一行目\\n二行目"'])).toBe("一行目 二行目")
+    })
+
+    it("空の値は undefined", () => {
+      expect(read(["description:"])).toBeUndefined()
+    })
   })
 })
 
@@ -303,9 +358,73 @@ describe("roleLabel", () => {
     expect(roleLabel({}, "complex-impl")).toBe("複雑または重要な実装")
     expect(roleLabel({}, "escalation")).toBe("行き詰まり時のエスカレーション")
     expect(roleLabel({}, "e2e-verify")).toBe("E2E 動作検証・ブラウザ/GUI 操作")
-    expect(roleLabel({}, "final-review")).toBe("重要な実装の最終レビュー")
-    expect(roleLabel({}, "gate-review")).toBe("設計書の最終ゲートレビュー")
-    expect(roleLabel({}, "design-plan")).toBe("設計書・実装計画書(WBS)の作成")
+    expect(roleLabel({}, "complex-review")).toBe(
+      "重要な実装・高リスク設計書の最終レビュー"
+    )
+    expect(roleLabel({}, "explore")).toBe("コードベース探索")
+  })
+
+  it("プロジェクト直下と言語別の役割断片から label を解決する", () => {
+    const project = temporaryProject()
+    writeRoleFragment(project, "triage", "障害の切り分け")
+    writeRoleFragment(project, "translate", "Uebersetzung", "de")
+    const env = { CLAUDE_PROJECT_DIR: project }
+
+    expect(roleLabel(env, "triage")).toBe("障害の切り分け")
+    expect(roleLabel(env, "translate")).toBe("Uebersetzung")
+  })
+
+  it("未知の役割は undefined を返す", () => {
+    expect(roleLabel({}, "no-such-role")).toBeUndefined()
+  })
+
+  it("廃止済み ID の断片がプロジェクトに残っていても解決せず、対応表に載せない", () => {
+    const project = temporaryProject()
+    writeRoleFragment(project, "final-review", "最終レビュー")
+    const env = environment({ CLAUDE_PROJECT_DIR: project })
+
+    expect(roleLabel(env, "final-review")).toBeUndefined()
+    expect(
+      markerTable(
+        env,
+        [
+          {
+            name: "old-reviewer",
+            model: undefined,
+            roles: ["final-review"],
+            tools: undefined,
+            vendor: undefined,
+            description: undefined
+          }
+        ],
+        "with-external"
+      )
+    ).toBeUndefined()
+  })
+
+  it("同一 ID を別 env で解決しても結果を共有しない", () => {
+    const first = temporaryProject()
+    const second = temporaryProject()
+    writeRoleFragment(first, "triage", "最初のラベル")
+    writeRoleFragment(second, "triage", "二番目のラベル")
+
+    expect(roleLabel({ CLAUDE_PROJECT_DIR: first }, "triage")).toBe(
+      "最初のラベル"
+    )
+    expect(roleLabel({ CLAUDE_PROJECT_DIR: second }, "triage")).toBe(
+      "二番目のラベル"
+    )
+  })
+})
+
+describe("roleLabels", () => {
+  it("既知の ROLES の label を返す", () => {
+    expect(roleLabel({}, "complex-impl")).toBe("複雑または重要な実装")
+    expect(roleLabel({}, "escalation")).toBe("行き詰まり時のエスカレーション")
+    expect(roleLabel({}, "e2e-verify")).toBe("E2E 動作検証・ブラウザ/GUI 操作")
+    expect(roleLabel({}, "complex-review")).toBe(
+      "重要な実装・高リスク設計書の最終レビュー"
+    )
     expect(roleLabel({}, "explore")).toBe("コードベース探索")
   })
 
@@ -338,23 +457,6 @@ describe("roleLabel", () => {
   })
 })
 
-describe("roleLabels", () => {
-  it("1 回の解決内だけ結果をメモする", () => {
-    const project = temporaryProject()
-    const fragment = writeRoleFragment(project, "triage", "変更前")
-    const env = { CLAUDE_PROJECT_DIR: project }
-    const labels = roleLabels(env)
-
-    expect(labels("triage")).toBe("変更前")
-    fs.writeFileSync(
-      fragment,
-      "---\nid: triage\nlabel: 変更後\nkind: readonly\n---\n"
-    )
-    expect(labels("triage")).toBe("変更前")
-    expect(roleLabels(env)("triage")).toBe("変更後")
-  })
-})
-
 describe("candidateAgents", () => {
   const marked = [
     {
@@ -362,42 +464,48 @@ describe("candidateAgents", () => {
       model: "sonnet",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "claude"
+      vendor: "claude",
+      description: undefined
     },
     {
       name: "sonnet-gpt-vendor",
       model: "sonnet",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "gpt"
+      vendor: "gpt",
+      description: undefined
     },
     {
       name: "implicit",
       model: undefined,
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: undefined
+      vendor: undefined,
+      description: undefined
     },
     {
       name: "inherit",
       model: "inherit",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: undefined
+      vendor: undefined,
+      description: undefined
     },
     {
       name: "vendor-none",
       model: "opus",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "none"
+      vendor: "none",
+      description: undefined
     },
     {
       name: "external-model",
       model: "gpt-5.3-codex",
       roles: ["normal-impl"],
       tools: undefined,
-      vendor: "claude"
+      vendor: "claude",
+      description: undefined
     }
   ]
 
@@ -422,28 +530,32 @@ describe("markerTable", () => {
           model: undefined,
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: "gpt"
+          vendor: "gpt",
+          description: undefined
         },
         {
           name: "grok-worker",
           model: undefined,
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: "grok"
+          vendor: "grok",
+          description: undefined
         },
         {
           name: "local-implementer",
           model: undefined,
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         },
         {
           name: "sonnet-code-reviewer",
           model: undefined,
           roles: ["code-review"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         }
       ],
       "with-external"
@@ -454,9 +566,94 @@ describe("markerTable", () => {
         TABLE_HEADING,
         "表に無い役割の委譲先は、外部ベンダーのモデルを指定した定義も含めて選んでよい。",
         "- 通常の実装 [normal-impl]: gpt-terra-general-implementer (gpt) / grok-worker (grok) / local-implementer",
+        "  - gpt-terra-general-implementer: (description なし)",
+        "  - grok-worker: (description なし)",
+        "  - local-implementer: (description なし)",
         "- コードレビュー [code-review]: sonnet-code-reviewer"
       ].join("\n")
     )
+  })
+
+  it("同じ役割に候補が 2 件あるとき、役割行の直後に定義ごとの description 行を出す", () => {
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "gpt-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: "gpt",
+          description: "backend の実装を担当する。"
+        },
+        {
+          name: "ui-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined,
+          description: "frontend の実装を担当する。"
+        }
+      ],
+      "with-external"
+    )
+
+    expect(result?.split("\n").slice(2)).toEqual([
+      "- 通常の実装 [normal-impl]: gpt-impl (gpt) / ui-impl",
+      "  - gpt-impl: backend の実装を担当する。",
+      "  - ui-impl: frontend の実装を担当する。"
+    ])
+  })
+
+  it("候補が 1 件の役割には description 行を足さない", () => {
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "reviewer",
+          model: undefined,
+          roles: ["code-review"],
+          tools: undefined,
+          vendor: undefined,
+          description: "差分をレビューする。"
+        }
+      ],
+      "with-external"
+    )
+
+    expect(result?.split("\n").slice(2)).toEqual([
+      "- コードレビュー [code-review]: reviewer"
+    ])
+  })
+
+  it("description が無い定義は (description なし) と出す", () => {
+    const result = markerTable(
+      environment({}),
+      [
+        {
+          name: "a-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined,
+          description: undefined
+        },
+        {
+          name: "b-impl",
+          model: undefined,
+          roles: ["normal-impl"],
+          tools: undefined,
+          vendor: undefined,
+          description: "b の説明"
+        }
+      ],
+      "with-external"
+    )
+
+    expect(result?.split("\n").slice(3)).toEqual([
+      "  - a-impl: (description なし)",
+      "  - b-impl: b の説明"
+    ])
   })
 
   it("役割行に RoleId を角括弧で併記する", () => {
@@ -470,14 +667,16 @@ describe("markerTable", () => {
           model: "sonnet",
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         },
         {
           name: "project-worker",
           model: "sonnet",
           roles: ["my_role"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         }
       ],
       "with-external"
@@ -504,7 +703,8 @@ describe("markerTable", () => {
           model: "sonnet",
           roles: ["normal-impl"],
           tools: undefined,
-          vendor: undefined
+          vendor: undefined,
+          description: undefined
         }
       ],
       scope

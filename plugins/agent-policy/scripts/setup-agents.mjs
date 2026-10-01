@@ -1,5 +1,5 @@
 // src/setup-agents.ts
-import fs2 from "node:fs";
+import fs3 from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,7 +16,117 @@ function bodyHash(content) {
     const close = lines.indexOf("---", 1);
     if (close !== -1) body = lines.slice(close + 1);
   }
-  return crypto.createHash("sha256").update(body.join("\n").trim()).digest("hex").slice(0, 16);
+  return textHash(body.join("\n"));
+}
+function textHash(text) {
+  return crypto.createHash("sha256").update(text.trim()).digest("hex").slice(0, 16);
+}
+
+// src/agents/roles.ts
+var ROLES = [
+  {
+    id: "complex-impl",
+    label: "\u8907\u96D1\u307E\u305F\u306F\u91CD\u8981\u306A\u5B9F\u88C5",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "normal-impl",
+    label: "\u901A\u5E38\u306E\u5B9F\u88C5",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "light-impl",
+    label: "\u8EFD\u91CF\u306A\u5B9F\u88C5",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
+  },
+  {
+    id: "escalation",
+    label: "\u884C\u304D\u8A70\u307E\u308A\u6642\u306E\u30A8\u30B9\u30AB\u30EC\u30FC\u30B7\u30E7\u30F3",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "general",
+    label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "explore",
+    label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "realtime-research",
+    label: "\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u60C5\u5831\u8ABF\u67FB",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
+  },
+  {
+    id: "e2e-verify",
+    label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
+    kind: "impl",
+    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
+  },
+  {
+    id: "design-review",
+    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "knowledge-elicitation",
+    label: "\u6697\u9ED9\u77E5\u306E\u62BD\u51FA\u30FB\u7406\u89E3\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob"]
+  },
+  {
+    id: "code-review",
+    label: "\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  },
+  {
+    id: "adversarial-review",
+    label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    tools: ["Read", "Grep", "Glob", "Bash"]
+  }
+];
+var RETIRED_ROLE_REPLACEMENTS = {
+  "final-review": "complex-review",
+  "gate-review": "complex-review",
+  "design-plan": null,
+  advisor: null
+};
+function isRetiredRole(id) {
+  return Object.hasOwn(RETIRED_ROLE_REPLACEMENTS, id);
+}
+function roleById(id) {
+  return ROLES.find((role) => role.id === id);
+}
+function roleOrder(id) {
+  const index = ROLES.findIndex((role) => role.id === id);
+  return index === -1 ? ROLES.length : index;
+}
+function sortRoleIds(ids) {
+  return [...ids].sort(
+    (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
+  );
+}
+function hasMixedKinds(kinds) {
+  const unique2 = new Set(kinds);
+  return unique2.has("impl") && unique2.has("readonly");
 }
 
 // src/agents/fragments.ts
@@ -94,7 +204,9 @@ function loadFragments(dirs, vendor) {
     const files = fs.readdirSync(dir.path).filter((name) => name.endsWith(".md") && !name.startsWith("_")).sort((left, right) => left.localeCompare(right));
     for (const name of files) {
       if (name.split(".").length > 2) continue;
+      if (isRetiredRole(name.replace(/\.md$/, ""))) continue;
       const fragment = readFragment(path.join(dir.path, name), dir.source);
+      if (isRetiredRole(fragment.id)) continue;
       fragments.set(fragment.id, fragment);
     }
   }
@@ -217,280 +329,9 @@ function scaffoldFragments(pluginRoot2, projectDir, lang) {
   return written;
 }
 
-// src/agents/roles.ts
-var ROLES = [
-  {
-    id: "complex-impl",
-    label: "\u8907\u96D1\u307E\u305F\u306F\u91CD\u8981\u306A\u5B9F\u88C5",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "normal-impl",
-    label: "\u901A\u5E38\u306E\u5B9F\u88C5",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "light-impl",
-    label: "\u8EFD\u91CF\u306A\u5B9F\u88C5",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash"]
-  },
-  {
-    id: "escalation",
-    label: "\u884C\u304D\u8A70\u307E\u308A\u6642\u306E\u30A8\u30B9\u30AB\u30EC\u30FC\u30B7\u30E7\u30F3",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "general",
-    label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "design-plan",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "explore",
-    label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "realtime-research",
-    label: "\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u60C5\u5831\u8ABF\u67FB",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"]
-  },
-  {
-    id: "e2e-verify",
-    label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
-    id: "design-review",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "knowledge-elicitation",
-    label: "\u6697\u9ED9\u77E5\u306E\u62BD\u51FA\u30FB\u7406\u89E3\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
-  },
-  {
-    id: "code-review",
-    label: "\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "final-review",
-    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "gate-review",
-    label: "\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30B2\u30FC\u30C8\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
-  },
-  {
-    id: "adversarial-review",
-    label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "advisor",
-    label: "\u8A2D\u8A08\u30FB\u8A08\u753B\u30FB\u5B9F\u88C5\u306E\u30A2\u30C9\u30D0\u30A4\u30B6\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
-  }
-];
-function roleById(id) {
-  return ROLES.find((role) => role.id === id);
-}
-function roleOrder(id) {
-  const index = ROLES.findIndex((role) => role.id === id);
-  return index === -1 ? ROLES.length : index;
-}
-function sortRoleIds(ids) {
-  return [...ids].sort(
-    (left, right) => roleOrder(left) - roleOrder(right) || left.localeCompare(right)
-  );
-}
-function hasMixedKinds(kinds) {
-  const unique2 = new Set(kinds);
-  return unique2.has("impl") && unique2.has("readonly");
-}
-
-// src/agents/policies.ts
-var MODELS = [
-  {
-    id: "opus",
-    vendor: "claude",
-    label: "Opus",
-    defaultName: "claude-opus",
-    model: "opus",
-    color: "blue"
-  },
-  {
-    id: "sonnet",
-    vendor: "claude",
-    label: "Sonnet",
-    defaultName: "claude-sonnet",
-    model: "sonnet",
-    color: "purple"
-  },
-  {
-    id: "haiku",
-    vendor: "claude",
-    label: "Haiku",
-    defaultName: "claude-haiku",
-    model: "haiku",
-    color: "pink"
-  },
-  {
-    id: "fable",
-    vendor: "claude",
-    label: "Fable",
-    defaultName: "claude-fable",
-    model: "fable",
-    color: "orange"
-  },
-  {
-    id: "gpt-sol",
-    vendor: "gpt",
-    label: "GPT Sol",
-    defaultName: "gpt-sol",
-    model: "claude-gpt-6-sol",
-    color: "yellow"
-  },
-  {
-    id: "gpt-terra",
-    vendor: "gpt",
-    label: "GPT Terra",
-    defaultName: "gpt-terra",
-    model: "claude-gpt-5-6-terra",
-    color: "green"
-  },
-  {
-    id: "gpt-luna",
-    vendor: "gpt",
-    label: "GPT Luna",
-    defaultName: "gpt-luna",
-    model: "claude-gpt-6-luna",
-    color: "cyan"
-  },
-  {
-    id: "gpt-astra",
-    vendor: "gpt",
-    label: "GPT Astra",
-    defaultName: "gpt-astra",
-    model: "claude-gpt-6-astra",
-    color: "yellow"
-  },
-  {
-    id: "grok",
-    vendor: "grok",
-    label: "Grok",
-    defaultName: "grok",
-    model: "claude-grok-4-7",
-    color: "red"
-  }
-];
-var ASSIGNMENTS = {
-  "claude-model-policy": {
-    "complex-impl": ["opus"],
-    "normal-impl": ["sonnet"],
-    "light-impl": ["haiku"],
-    escalation: ["fable"],
-    general: ["sonnet"],
-    "design-plan": ["opus"],
-    explore: ["sonnet"],
-    "realtime-research": ["sonnet"],
-    "e2e-verify": ["sonnet"],
-    "design-review": ["sonnet"],
-    "knowledge-elicitation": ["haiku"],
-    "code-review": ["sonnet"],
-    "final-review": ["fable"],
-    "gate-review": ["fable"],
-    "adversarial-review": ["opus"],
-    advisor: ["fable"]
-  }
-};
-var RECOMMENDED = {
-  "complex-impl": ["gpt-sol", "opus"],
-  "normal-impl": ["gpt-luna", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku", "grok"],
-  escalation: ["gpt-astra", "fable"],
-  general: ["gpt-luna", "sonnet"],
-  "design-plan": ["opus"],
-  explore: ["grok", "sonnet", "gpt-terra"],
-  "realtime-research": ["grok", "sonnet"],
-  "e2e-verify": ["sonnet"],
-  "design-review": ["grok", "sonnet"],
-  "knowledge-elicitation": ["haiku"],
-  "code-review": ["sonnet"],
-  "final-review": ["gpt-astra", "fable"],
-  "gate-review": ["gpt-astra", "fable"],
-  "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["gpt-astra", "fable"]
-};
-var SOLO_DENIED_ROLES = [
-  "advisor",
-  "knowledge-elicitation",
-  "code-review",
-  "final-review",
-  "gate-review",
-  "adversarial-review"
-];
-function allowsAgentTool(ids) {
-  return ids.some((id) => !SOLO_DENIED_ROLES.includes(id));
-}
-function modelById(id) {
-  return MODELS.find((model) => model.id === id);
-}
-var CUSTOM_INJECTION_VALUES = [
-  "custom",
-  "with-codex",
-  "with-grok",
-  "with-codex-grok"
-];
-function isCustomInjection(value) {
-  if (value === void 0) return false;
-  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
-}
-var CLAUDE_ENUM_MODELS = [
-  "sonnet",
-  "opus",
-  "haiku",
-  "fable"
-];
-var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
-function runsOnClaude(model) {
-  return model === void 0 || CLAUDE_RESOLVED.has(model);
-}
-function candidateScopeFor(value) {
-  if (isCustomInjection(value)) return "with-external";
-  if (value?.trim().toLowerCase() === "claude") return "claude-only";
-  return void 0;
-}
-
 // src/agents/vocabulary.ts
 var JA = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## \u4F5C\u696D\u624B\u9806"],
-  advisorHeading: "## \u30A2\u30C9\u30D0\u30A4\u30B6\u30FC\u3078\u306E\u76F8\u8AC7",
-  agentConstraintHeading: "## Agent tool \u306E\u5236\u7D04",
   constraintHeading: "## \u5236\u7D04",
   outputFormatHeading: "## Output Format",
   listSeparator: "\u3001",
@@ -499,8 +340,6 @@ var JA = {
 };
 var EN = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
-  advisorHeading: "## Consulting an advisor",
-  agentConstraintHeading: "## Agent tool limits",
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",
@@ -522,14 +361,15 @@ function compose(input) {
   const vocabulary = vocabularyFor(input.lang);
   const common = loadCommon(input.fragmentDirs);
   const { ids: ordered, selected } = selectFragments(input);
-  const withAgent = allowsAgentTool(input.roleIds);
-  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? []);
+  const tools = resolveToolsFor(selected, input.mcpServers ?? []);
   const denyTools = input.denyTools ?? [];
+  const description = describe(selected, vocabulary);
   const head = [
     "---",
     `name: ${input.name}`,
-    `description: ${describe(selected, vocabulary)}`,
+    `description: ${description}`,
     `model: ${input.model}`,
+    ...input.effort === void 0 ? [] : [`effort: ${input.effort}`],
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     ...denyTools.length > 0 ? [`disallowedTools: ${denyTools.join(", ")}`] : [],
@@ -547,13 +387,7 @@ function compose(input) {
     if (items.length === 0) continue;
     body.push(heading, "", ...items, "");
   }
-  if (withAgent) {
-    const advisor = common.get(vocabulary.advisorHeading);
-    if (advisor !== void 0)
-      body.push(vocabulary.advisorHeading, "", ...advisor, "");
-  }
   const constraints = [
-    ...withAgent ? common.get(vocabulary.agentConstraintHeading) ?? [] : [],
     ...common.get(vocabulary.constraintHeading) ?? [],
     ...selected.flatMap(
       (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
@@ -574,8 +408,22 @@ function compose(input) {
       body.push(`### ${fragment.label}`, "", ...items, "");
     }
   }
-  return `${[...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
+  const bodyText = body.join("\n").replace(/\n{3,}/g, "\n\n");
+  head.splice(
+    head.length - 2,
+    0,
+    `${DESCRIPTION_HASH_KEY}: ${textHash(description)}`,
+    `${PREAMBLE_HASH_KEY}: ${textHash(preambleOf(bodyText))}`
+  );
+  return `${[...head, bodyText].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
 `;
+}
+var DESCRIPTION_HASH_KEY = "agent-policy-description-hash";
+var PREAMBLE_HASH_KEY = "agent-policy-preamble-hash";
+function preambleOf(body) {
+  const lines = body.split("\n");
+  const heading = lines.findIndex((line) => line.startsWith("## "));
+  return (heading === -1 ? lines : lines.slice(0, heading)).join("\n").trim();
 }
 function describeRoles(input) {
   const { ids, selected } = selectFragments(input);
@@ -585,8 +433,7 @@ function describeRoles(input) {
     ids,
     implRoles,
     readonlyRoles,
-    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds)
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind))
   };
 }
 function selectFragments(input) {
@@ -600,14 +447,13 @@ function selectFragments(input) {
   });
   return { ids, selected };
 }
-function resolveToolsFor(selected, withAgent, mcpServers) {
+function resolveToolsFor(selected, mcpServers) {
   const tools = [];
   for (const fragment of selected) {
     for (const tool of fragment.tools) {
       if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool);
     }
   }
-  if (withAgent) tools.push("Agent");
   for (const server of mcpServers) {
     if (!tools.includes(server)) tools.push(server);
   }
@@ -779,6 +625,246 @@ function mcpCurrentOf(content) {
   };
 }
 
+// src/agents/policies.ts
+var EFFORT_ORDER = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+];
+var MODELS = [
+  {
+    id: "opus",
+    vendor: "claude",
+    label: "Opus",
+    defaultName: "claude-opus",
+    model: "opus",
+    color: "blue"
+  },
+  {
+    id: "sonnet",
+    vendor: "claude",
+    label: "Sonnet",
+    defaultName: "claude-sonnet",
+    model: "sonnet",
+    color: "purple"
+  },
+  {
+    id: "haiku",
+    vendor: "claude",
+    label: "Haiku",
+    defaultName: "claude-haiku",
+    model: "haiku",
+    color: "pink"
+  },
+  {
+    id: "fable",
+    vendor: "claude",
+    label: "Fable",
+    defaultName: "claude-fable",
+    model: "fable",
+    color: "orange"
+  },
+  {
+    id: "gpt-sol",
+    vendor: "gpt",
+    label: "GPT Sol",
+    defaultName: "gpt-sol",
+    model: "claude-gpt-6-sol",
+    color: "yellow"
+  },
+  {
+    id: "gpt-terra",
+    vendor: "gpt",
+    label: "GPT Terra",
+    defaultName: "gpt-terra",
+    model: "claude-gpt-5-6-terra",
+    color: "green"
+  },
+  {
+    id: "gpt-luna",
+    vendor: "gpt",
+    label: "GPT Luna",
+    defaultName: "gpt-luna",
+    model: "claude-gpt-6-luna",
+    color: "cyan"
+  },
+  {
+    id: "gpt-astra",
+    vendor: "gpt",
+    label: "GPT Astra",
+    defaultName: "gpt-astra",
+    model: "claude-gpt-6-astra",
+    color: "yellow"
+  },
+  {
+    id: "grok",
+    vendor: "grok",
+    label: "Grok",
+    defaultName: "grok",
+    model: "claude-grok-4-7",
+    color: "red"
+  }
+];
+var ASSIGNMENTS = {
+  "claude-model-policy": {
+    "complex-impl": ["opus"],
+    "normal-impl": ["sonnet"],
+    "light-impl": ["haiku"],
+    escalation: ["fable"],
+    general: ["sonnet"],
+    explore: ["sonnet"],
+    "realtime-research": ["sonnet"],
+    "e2e-verify": ["sonnet"],
+    "design-review": ["sonnet"],
+    "knowledge-elicitation": ["haiku"],
+    "code-review": ["sonnet"],
+    "complex-review": ["fable"],
+    "adversarial-review": ["opus"]
+  }
+};
+var RECOMMENDED = {
+  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "normal-impl": ["gpt-sol", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku"],
+  escalation: ["gpt-astra", "fable"],
+  general: ["gpt-luna", "sonnet"],
+  explore: ["gpt-sol", "sonnet"],
+  "realtime-research": ["grok", "sonnet"],
+  "e2e-verify": ["gpt-sol", "sonnet"],
+  "design-review": ["gpt-sol", "sonnet"],
+  "knowledge-elicitation": ["haiku"],
+  "code-review": ["gpt-sol", "sonnet"],
+  "complex-review": ["gpt-astra", "fable"],
+  "adversarial-review": ["opus", "gpt-sol"]
+};
+var EFFORT = {
+  escalation: { fable: "high", "gpt-astra": "high" },
+  "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+  "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+  "light-impl": { "gpt-luna": "low" },
+  general: { sonnet: "medium", "gpt-luna": "medium" },
+  explore: { sonnet: "medium", "gpt-sol": "medium" },
+  "realtime-research": { grok: "low", sonnet: "low" },
+  "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+  "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+  "knowledge-elicitation": {},
+  "code-review": { sonnet: "high", "gpt-sol": "high" },
+  "complex-review": { "gpt-astra": "high", fable: "high" },
+  "adversarial-review": { opus: "high", "gpt-sol": "high" }
+};
+function effortFor(roleIds, modelId) {
+  let highest;
+  for (const roleId of roleIds) {
+    const effort = EFFORT[roleId]?.[modelId];
+    if (effort !== void 0 && (highest === void 0 || EFFORT_ORDER.indexOf(effort) > EFFORT_ORDER.indexOf(highest))) {
+      highest = effort;
+    }
+  }
+  return highest;
+}
+function modelById(id) {
+  return MODELS.find((model) => model.id === id);
+}
+var CUSTOM_INJECTION_VALUES = [
+  "custom",
+  "with-codex",
+  "with-grok",
+  "with-codex-grok"
+];
+function isCustomInjection(value) {
+  if (value === void 0) return false;
+  return CUSTOM_INJECTION_VALUES.includes(value.trim().toLowerCase());
+}
+var CLAUDE_ENUM_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
+var CLAUDE_RESOLVED = /* @__PURE__ */ new Set([...CLAUDE_ENUM_MODELS, "inherit"]);
+function runsOnClaude(model) {
+  return model === void 0 || CLAUDE_RESOLVED.has(model);
+}
+function candidateScopeFor(value) {
+  if (isCustomInjection(value)) return "with-external";
+  if (value?.trim().toLowerCase() === "claude") return "claude-only";
+  return void 0;
+}
+
+// src/hooks/marker-scan.ts
+import fs2 from "node:fs";
+function frontmatter(file) {
+  const lines = fs2.readFileSync(file, "utf8").split("\n");
+  const meta = /* @__PURE__ */ new Map();
+  if (lines[0]?.trim() !== "---") return meta;
+  const close = lines.indexOf("---", 1);
+  if (close === -1) return meta;
+  const metadataLines = lines.slice(1, close);
+  let skipUntil = 0;
+  for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue;
+    const at = line.indexOf(":");
+    if (at <= 0) continue;
+    const key = line.slice(0, at).trim();
+    const value = line.slice(at + 1).trim();
+    if (key === "tools" && value === "") {
+      const items = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        const item = candidate.match(/^\s*-\s+(.+)$/)?.[1];
+        if (item === void 0) break;
+        items.push(item);
+      }
+      meta.set(key, items.length === 0 ? value : items);
+      continue;
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      const folded = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break;
+        if (candidate.trim() !== "") folded.push(candidate.trim());
+      }
+      skipUntil = index + 1 + folded.length;
+      meta.set(key, folded.join(" "));
+      continue;
+    }
+    meta.set(key, value);
+  }
+  return meta;
+}
+function unquote(value) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if (trimmed.length >= 2 && (quote === '"' || quote === "'") && trimmed.at(-1) === quote) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+function parseToolItems(items) {
+  return items.map(unquote).filter((item) => item !== "");
+}
+function parseToolsField(raw) {
+  if (raw === void 0) return void 0;
+  if (Array.isArray(raw)) {
+    const parsed2 = parseToolItems(raw);
+    return parsed2.length === 0 ? void 0 : parsed2;
+  }
+  const value = raw.trim();
+  if (value === "") return void 0;
+  if (value.startsWith("[")) {
+    if (!value.endsWith("]")) return void 0;
+    const inner = value.slice(1, -1).trim();
+    if (inner === "") return [];
+    return parseToolItems(inner.split(","));
+  }
+  if (value.startsWith("{") || value.startsWith("|") || value.startsWith(">")) {
+    return void 0;
+  }
+  const parsed = parseToolItems(value.split(","));
+  return parsed.length === 0 ? void 0 : parsed;
+}
+
 // src/setup-agents.ts
 var VENDOR_COLORS = {
   gpt: "yellow",
@@ -895,36 +981,53 @@ function resolveVendor(options, model, spec, live) {
 function modelIsAvailable(model, live) {
   return isClaudeEnum(model) || live.ids.includes(model);
 }
+function recommendedTarget(options, live, role) {
+  const candidates = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][role] : RECOMMENDED[role];
+  const spec = candidates.map((id) => modelById(id)).find(
+    (candidate) => candidate !== void 0 && (!live.ok || modelIsAvailable(candidate.model, live))
+  );
+  if (spec === void 0)
+    throw new Error(`roles: no available model for ${role}`);
+  return {
+    roleId: role,
+    modelId: spec.id,
+    name: defaultAgentName(options, spec, role),
+    model: spec.model,
+    roles: [role],
+    color: VENDOR_COLORS[spec.vendor],
+    vendor: spec.vendor
+  };
+}
 function targetsFor(options, live) {
   const warnings = live.ok ? [] : [unavailableWarning(live)];
   if (options.recommended) {
     const roles = sortRoleIds(
       options.roles.length > 0 ? options.roles : ROLES.map((role) => role.id)
     );
-    return {
-      warnings,
-      targets: roles.map((role) => {
-        if (roleById(role) === void 0)
-          throw new Error(
-            `roles: ${role} is not a built-in role for --recommended`
-          );
-        const candidates = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][role] : RECOMMENDED[role];
-        const spec2 = candidates.map((id) => modelById(id)).find(
-          (candidate) => candidate !== void 0 && (!live.ok || modelIsAvailable(candidate.model, live))
+    const definitions = scopedDefinitions(options.dir, options.scope);
+    const fragments = loadFragments(
+      fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+    );
+    const visited = /* @__PURE__ */ new Set();
+    const targets = [];
+    for (const role of roles) {
+      if (roleById(role) === void 0)
+        throw new Error(
+          `roles: ${role} is not a built-in role for --recommended`
         );
-        if (spec2 === void 0)
-          throw new Error(`roles: no available model for ${role}`);
-        return {
-          roleId: role,
-          modelId: spec2.id,
-          name: defaultAgentName(options, spec2, role),
-          model: spec2.model,
-          roles: [role],
-          color: VENDOR_COLORS[spec2.vendor],
-          vendor: spec2.vendor
-        };
-      })
-    };
+      const covering = definitions.filter(
+        (definition) => definition.markerIds.includes(role)
+      );
+      if (covering.length === 1 && covering[0] !== void 0) {
+        if (visited.has(covering[0].file)) continue;
+        visited.add(covering[0].file);
+      }
+      const target = coveringTarget(role, covering, fragments, live, warnings);
+      if (target !== void 0) {
+        targets.push(target ?? recommendedTarget(options, live, role));
+      }
+    }
+    return { warnings, targets };
   }
   const spec = requireModel(options);
   if (options.scope === "claude-only" && spec.vendor !== "claude") {
@@ -967,6 +1070,7 @@ function composeInputFor(options, target, mcpServers) {
     roleIds: target.roles,
     fragmentDirs: fragmentDirsFor(pluginRoot(), options.dir, options.lang),
     lang: options.lang,
+    effort: effortFor(target.roles, target.modelId),
     color: target.color,
     mcpServers,
     denyTools: options.mcpDeny
@@ -1000,16 +1104,29 @@ function compare(options, target, input, rendered, existingRaw) {
         sectionsOnlyInTemplate: [],
         sectionsChanged: []
       },
-      roles
+      roles,
+      description: null,
+      preamble: null,
+      preambleTexts: null
     };
   }
   const existing = parseDocument(existingRaw);
   const expected = parseDocument(rendered);
+  const descriptionState = textState(
+    existing.meta.get("description") ?? "",
+    expected.meta.get("description") ?? "",
+    existing.meta.get(DESCRIPTION_HASH_KEY)
+  );
+  const preambleState = textState(
+    existing.preamble,
+    expected.preamble,
+    existing.meta.get(PREAMBLE_HASH_KEY)
+  );
   const existingTools = splitTools(existing.meta.get("tools"));
   const expectedTools = splitTools(expected.meta.get("tools"));
   const changed = [];
   for (const [key, value] of expected.meta) {
-    if (key === "tools") continue;
+    if (key === "tools" || RECORD_KEYS.includes(key)) continue;
     const current = existing.meta.get(key);
     if (current !== void 0 && current !== value) {
       changed.push({ key, existing: current, template: value });
@@ -1046,14 +1163,24 @@ function compare(options, target, input, rendered, existingRaw) {
       ),
       sectionsChanged
     },
-    roles
+    roles,
+    description: descriptionState,
+    preamble: preambleState,
+    // description の両方の値は frontmatter.changed に載る。前置きはここで返す。
+    preambleTexts: preambleState === "same" ? null : { existing: existing.preamble, template: expected.preamble }
   };
+}
+var RECORD_KEYS = [DESCRIPTION_HASH_KEY, PREAMBLE_HASH_KEY];
+function textState(existing, template, record) {
+  if (existing.trim() === template.trim()) return "same";
+  if (record === void 0) return "unknown";
+  return textHash(existing) === record ? "templateChanged" : "userEdited";
 }
 function diff(options, target, mcpServers) {
   const input = composeInputFor(options, target, mcpServers);
   const rendered = templateFor(input);
   const file = targetPath(options, target);
-  const existingRaw = fs2.existsSync(file) ? fs2.readFileSync(file, "utf8") : void 0;
+  const existingRaw = fs3.existsSync(file) ? fs3.readFileSync(file, "utf8") : void 0;
   return compare(options, target, input, rendered, existingRaw);
 }
 function parseKeep(selectors) {
@@ -1104,9 +1231,27 @@ function render(document) {
   return `${[...head, ...body].join("\n").trimEnd()}
 `;
 }
-function merge(existingRaw, renderedRaw, keep) {
+var RETAIN_NONE = { description: false, preamble: false };
+function retainText(existing, merged, recordKey) {
+  const record = existing.meta.get(recordKey);
+  if (record === void 0) {
+    merged.meta.delete(recordKey);
+    merged.order = merged.order.filter((key) => key !== recordKey);
+  } else {
+    merged.meta.set(recordKey, record);
+  }
+}
+function merge(existingRaw, renderedRaw, keep, retain = RETAIN_NONE) {
   const existing = parseDocument(existingRaw);
   const merged = parseDocument(renderedRaw);
+  if (retain.description) {
+    merged.meta.set("description", existing.meta.get("description") ?? "");
+    retainText(existing, merged, DESCRIPTION_HASH_KEY);
+  }
+  if (retain.preamble) {
+    merged.preamble = existing.preamble;
+    retainText(existing, merged, PREAMBLE_HASH_KEY);
+  }
   const missing = [];
   for (const heading of keep.sections) {
     if (!existing.sections.has(heading)) missing.push(`section:${heading}`);
@@ -1154,13 +1299,15 @@ function automaticKeep(difference) {
 function unique(selectors) {
   return [...new Set(selectors)];
 }
-function discarded(difference, keep) {
+function discarded(difference, keep, retain) {
   if (!difference.exists) {
     return { frontmatterKeys: [], preamble: false, sections: [] };
   }
   return {
-    frontmatterKeys: difference.frontmatter.changed.map((entry) => entry.key).filter((key) => !keep.keys.has(key)),
-    preamble: difference.preambleChanged && !keep.preamble,
+    frontmatterKeys: difference.frontmatter.changed.map((entry) => entry.key).filter(
+      (key) => !keep.keys.has(key) && !(key === "description" && retain.description)
+    ),
+    preamble: difference.preambleChanged && !keep.preamble && !retain.preamble,
     sections: difference.body.sectionsChanged.filter(
       (heading) => !keep.sections.has(heading)
     )
@@ -1173,8 +1320,8 @@ function write(options, target, mcpServers) {
   const file = targetPath(options, target);
   const input = composeInputFor(options, target, mcpServers);
   const rendered = templateFor(input);
-  const exists = fs2.existsSync(file);
-  const existingRaw = exists ? fs2.readFileSync(file, "utf8") : void 0;
+  const exists = fs3.existsSync(file);
+  const existingRaw = exists ? fs3.readFileSync(file, "utf8") : void 0;
   const difference = compare(options, target, input, rendered, existingRaw);
   const selectors = unique([
     ...exists && options.merge ? automaticKeep(difference) : [],
@@ -1182,25 +1329,49 @@ function write(options, target, mcpServers) {
   ]);
   const keep = parseKeep(selectors);
   const shouldMerge = existingRaw !== void 0 && (options.merge || options.keep.length > 0);
-  const content = shouldMerge ? merge(existingRaw, rendered, keep) : rendered;
+  const retain = shouldMerge ? retainFor(options, difference, keep) : RETAIN_NONE;
+  const content = shouldMerge ? merge(existingRaw, rendered, keep, retain) : rendered;
   const kept = shouldMerge ? selectors : [];
-  fs2.mkdirSync(path2.dirname(file), { recursive: true });
-  fs2.writeFileSync(file, content);
+  fs3.mkdirSync(path2.dirname(file), { recursive: true });
+  fs3.writeFileSync(file, content);
   return {
     ok: true,
     target: path2.relative(options.dir, file).split(path2.sep).join("/"),
     action: exists ? options.merge ? "merged" : "overwritten" : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(difference, shouldMerge ? keep : parseKeep([])),
-    roles: difference.roles
+    discarded: discarded(
+      difference,
+      shouldMerge ? keep : parseKeep([]),
+      retain
+    ),
+    roles: difference.roles,
+    description: difference.description,
+    preamble: difference.preamble,
+    preambleTexts: difference.preambleTexts,
+    toolsBefore: existingRaw === void 0 ? [] : splitTools(parseDocument(existingRaw).meta.get("tools")),
+    toolsAfter: splitTools(parseDocument(content).meta.get("tools"))
+  };
+}
+function retainFor(options, difference, keep) {
+  const replaceDescription = options.replace.includes("description");
+  const replacePreamble = options.replace.includes("preamble");
+  if (replaceDescription && keep.keys.has("description")) {
+    throw new Error(
+      "replace: description conflicts with --keep key:description"
+    );
+  }
+  if (replacePreamble && keep.preamble) {
+    throw new Error("replace: preamble conflicts with --keep preamble");
+  }
+  return {
+    description: keep.keys.has("description") || options.merge && !replaceDescription && difference.description !== null && difference.description !== "same",
+    preamble: keep.preamble || options.merge && !replacePreamble && difference.preamble !== null && difference.preamble !== "same"
   };
 }
 function resolveMcp(options) {
   if (options.mcpServers.length === 0) return { servers: [], dropped: [] };
-  const usable = new Set(
-    listMcpServers(process.env).filter((server) => server.usable).map((server) => toolPrefix(server.name))
-  );
+  const usable = usableMcpPrefixes();
   const servers = [];
   const dropped = [];
   for (const name of options.mcpServers) {
@@ -1211,22 +1382,37 @@ function resolveMcp(options) {
   return { servers, dropped };
 }
 function mcpCurrentFor(file) {
-  if (!fs2.existsSync(file)) return { servers: [], denyTools: [] };
-  return mcpCurrentOf(fs2.readFileSync(file, "utf8"));
+  if (!fs3.existsSync(file)) return { servers: [], denyTools: [] };
+  return mcpCurrentOf(fs3.readFileSync(file, "utf8"));
 }
 function setup(options, live) {
   validateFragments(options);
   const resolution = targetsFor(options, live);
   const mcp = resolveMcp(options);
+  const inherits = options.recommended && options.merge && options.mcpServers.length === 0;
+  let usable;
   const results = resolution.targets.map((target) => {
-    const current = mcpCurrentFor(targetPath(options, target));
-    const result = options.write ? write(options, target, mcp.servers) : diff(options, target, mcp.servers);
+    const file = targetPath(options, target);
+    const current = mcpCurrentFor(file);
+    let servers = mcp.servers;
+    let dropped = mcp.dropped;
+    let targetOptions = options;
+    if (inherits && fs3.existsSync(file)) {
+      usable ??= usableMcpPrefixes();
+      const inherited = inheritMcp(fs3.readFileSync(file, "utf8"), usable);
+      servers = inherited.servers;
+      dropped = inherited.dropped;
+      if (options.mcpDeny.length === 0) {
+        targetOptions = { ...options, mcpDeny: current.denyTools };
+      }
+    }
+    const result = options.write ? write(targetOptions, target, servers) : diff(targetOptions, target, servers);
     return {
       ...result,
       modelId: target.modelId,
       ...target.roleId === void 0 ? {} : { roleId: target.roleId },
       mcpCurrent: current,
-      mcpDropped: mcp.dropped
+      mcpDropped: dropped
     };
   });
   return {
@@ -1234,6 +1420,26 @@ function setup(options, live) {
     results,
     warnings: resolution.warnings
   };
+}
+function usableMcpPrefixes() {
+  return new Set(
+    listMcpServers(process.env).filter((server) => server.usable).map((server) => toolPrefix(server.name))
+  );
+}
+function inheritMcp(content, usable) {
+  const entries = splitTools(parseDocument(content).meta.get("tools")).filter(
+    (tool) => tool.startsWith("mcp__")
+  );
+  const servers = [];
+  const dropped = [];
+  for (const entry of entries) {
+    const alive = [...usable].some(
+      (prefix) => entry === prefix || entry.startsWith(`${prefix}__`)
+    );
+    if (alive) servers.push(entry);
+    else dropped.push(entry.slice("mcp__".length));
+  }
+  return { servers, dropped };
 }
 function listLiveModels(live, scope) {
   const claudeEnums = [...CLAUDE_ENUM_MODELS];
@@ -1281,7 +1487,7 @@ function listAvailableRoles(options) {
     kind: fragment.kind,
     tools: fragment.tools,
     source: fragment.source,
-    languageMismatch: options.lang !== "ja" && fragment.source === "project" && ownDir !== void 0 && fs2.existsSync(path2.join(ownDir, `${fragment.id}.md`))
+    languageMismatch: options.lang !== "ja" && fragment.source === "project" && ownDir !== void 0 && fs3.existsSync(path2.join(ownDir, `${fragment.id}.md`))
   }));
   return { ok: true, lang: options.lang, roles };
 }
@@ -1289,13 +1495,22 @@ function coveredDefinitions(projectDir, roleIds, scope) {
   const covered = new Map(
     roleIds.map((roleId) => [roleId, []])
   );
+  for (const definition of scopedDefinitions(projectDir, scope)) {
+    for (const roleId of definition.markerIds) {
+      covered.get(roleId)?.push(definition.name);
+    }
+  }
+  return covered;
+}
+function scopedDefinitions(projectDir, scope) {
   const agentsDir = path2.join(projectDir, ".claude", "agents");
-  if (!fs2.existsSync(agentsDir)) return covered;
-  for (const file of fs2.readdirSync(agentsDir).sort()) {
+  if (!fs3.existsSync(agentsDir)) return [];
+  const definitions = [];
+  for (const file of fs3.readdirSync(agentsDir).sort()) {
     if (!file.endsWith(".md")) continue;
     try {
       const document = parseDocument(
-        fs2.readFileSync(path2.join(agentsDir, file), "utf8")
+        fs3.readFileSync(path2.join(agentsDir, file), "utf8")
       );
       const marker = document.meta.get("agent-policy-role");
       if (marker === void 0) continue;
@@ -1304,14 +1519,71 @@ function coveredDefinitions(projectDir, roleIds, scope) {
       if (scope === "claude-only" && (!runsOnClaude(model) || vendor !== void 0 && vendor !== "claude" && vendor !== "none")) {
         continue;
       }
-      const name = document.meta.get("name") ?? file.replace(/\.md$/, "");
-      for (const roleId of splitList(marker)) {
-        covered.get(roleId)?.push(name);
-      }
+      const base = file.replace(/\.md$/, "");
+      definitions.push({
+        name: document.meta.get("name") ?? base,
+        file: base,
+        model,
+        vendor,
+        markerIds: splitList(marker)
+      });
     } catch {
     }
   }
-  return covered;
+  return definitions;
+}
+function modelIdOf(model) {
+  if (model === null || model === void 0) return null;
+  return MODELS.find((spec) => spec.model === model)?.id ?? null;
+}
+function isVendor(value) {
+  return value === "gpt" || value === "grok" || value === "claude" || value === "none";
+}
+function coveringTarget(role, covering, fragments, live, warnings) {
+  if (covering.length === 0) return null;
+  const [definition] = covering;
+  if (covering.length > 1 || definition === void 0) {
+    warnings.push(
+      `roles: ${role} is covered by ${covering.map((entry) => entry.file).join(", ")}; not regenerated`
+    );
+    return void 0;
+  }
+  const unresolved = definition.markerIds.filter((id) => !fragments.has(id));
+  if (unresolved.length > 0) {
+    warnings.push(
+      `roles: ${definition.file} declares retired or unknown role ids (${unresolved.join(", ")}); not regenerated`
+    );
+    return void 0;
+  }
+  const modelId = modelIdOf(definition.model);
+  if (modelId === null || definition.model === void 0) {
+    warnings.push(
+      `model: ${definition.file} declares model "${definition.model ?? ""}" that matches no model id; not regenerated`
+    );
+    return void 0;
+  }
+  const vendor = definition.vendor ?? "none";
+  if (!isVendor(vendor)) {
+    warnings.push(
+      `vendor: ${definition.file} declares unknown vendor "${vendor}"; not regenerated`
+    );
+    return void 0;
+  }
+  if (live.ok && !modelIsAvailable(definition.model, live)) {
+    warnings.push(
+      `model: ${definition.file} declares model "${definition.model}" that was not found in live models; not regenerated`
+    );
+    return void 0;
+  }
+  return {
+    roleId: role,
+    modelId,
+    name: definition.file,
+    model: definition.model,
+    roles: definition.markerIds.filter((id) => fragments.has(id)),
+    color: VENDOR_COLORS[vendor],
+    vendor
+  };
 }
 function bundledDefaultNames(projectDir) {
   const fragments = loadFragments(
@@ -1326,6 +1598,84 @@ function bundledDefaultNames(projectDir) {
     }
   }
   return names;
+}
+function toolsFormatOf(raw) {
+  if (raw === void 0) return "none";
+  if (Array.isArray(raw)) return "other";
+  const value = raw.trim();
+  if (value === "" || /^[[{|>]/.test(value) || /["'()#]/.test(value)) {
+    return "other";
+  }
+  return "csv";
+}
+function keyLinesOf(lines, close, key) {
+  const pattern = new RegExp(`^\\s*${key}\\s*:`);
+  return lines.slice(1, Math.max(close, 1)).flatMap((line, index) => pattern.test(line) ? [index + 1] : []);
+}
+function keyLineAmbiguous(lines, close, key) {
+  const found = keyLinesOf(lines, close, key);
+  return found.length > 1 || /^\s/.test(lines[found[0] ?? -1] ?? "");
+}
+function disallowedToolsOf(tools, format, selected) {
+  if (selected.length === 0) {
+    return (tools ?? []).filter((tool) => tool === "Agent");
+  }
+  if (format === "none") return ["*"];
+  const allowed = resolveToolsFor(selected, []);
+  return (tools ?? []).filter(
+    (tool) => !tool.startsWith("mcp__") && !allowed.includes(tool)
+  );
+}
+function stringValue(value) {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+function inspectDefinitions(projectDir, fragments) {
+  const agentsDir = path2.join(projectDir, ".claude", "agents");
+  if (!fs3.existsSync(agentsDir)) return [];
+  const definitions = [];
+  for (const file of fs3.readdirSync(agentsDir).sort()) {
+    if (!file.endsWith(".md")) continue;
+    let meta;
+    let lines;
+    try {
+      meta = frontmatter(path2.join(agentsDir, file));
+      lines = fs3.readFileSync(path2.join(agentsDir, file), "utf8").split("\n");
+    } catch {
+      continue;
+    }
+    const marker = meta.get("agent-policy-role");
+    if (typeof marker !== "string") continue;
+    const ids = splitList(marker);
+    const selected = ids.flatMap((id) => {
+      const fragment = fragments.get(id);
+      return fragment === void 0 ? [] : [fragment];
+    });
+    const rawTools = meta.get("tools");
+    const close = lines.indexOf("---", 1);
+    const toolsFormat = keyLineAmbiguous(lines, close, "tools") || keyLineAmbiguous(lines, close, "agent-policy-role") ? "other" : toolsFormatOf(rawTools);
+    definitions.push({
+      name: stringValue(meta.get("name")) ?? file.replace(/\.md$/, ""),
+      file: path2.posix.join(".claude", "agents", file),
+      model: stringValue(meta.get("model")),
+      modelId: modelIdOf(stringValue(meta.get("model"))),
+      vendor: stringValue(meta.get("agent-policy-vendor")),
+      roles: selected.map((fragment) => fragment.id),
+      retiredRoles: ids.filter(isRetiredRole).map((id) => ({
+        id,
+        replacement: RETIRED_ROLE_REPLACEMENTS[id] ?? null
+      })),
+      unknownRoles: ids.filter(
+        (id) => !isRetiredRole(id) && !fragments.has(id)
+      ),
+      disallowedTools: disallowedToolsOf(
+        parseToolsField(rawTools),
+        toolsFormat,
+        selected
+      ),
+      toolsFormat
+    });
+  }
+  return definitions;
 }
 function listCoverage(options) {
   const roleIds = sortRoleIds(Object.keys(RECOMMENDED));
@@ -1342,6 +1692,7 @@ function listCoverage(options) {
     return {
       id,
       label: fragment.label,
+      kind: fragment.kind,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
       models: options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][id] : RECOMMENDED[id],
       coveredBy: covered.get(id) ?? []
@@ -1350,8 +1701,136 @@ function listCoverage(options) {
   return {
     ok: true,
     roles,
-    uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id)
+    uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id),
+    definitions: inspectDefinitions(options.dir, fragments),
+    modelBreakdown: modelBreakdownOf(options.dir)
   };
+}
+function modelBreakdownOf(projectDir) {
+  const all = scopedDefinitions(projectDir, "with-external").length;
+  const claude = scopedDefinitions(projectDir, "claude-only").length;
+  return { claude, external: all - claude };
+}
+function readDefinition(options) {
+  const file = path2.join(options.dir, ".claude", "agents", `${options.name}.md`);
+  const target = path2.relative(options.dir, file).split(path2.sep).join("/");
+  if (!fs3.existsSync(file)) {
+    throw new Error(`target: ${target} \u304C\u5B58\u5728\u3057\u306A\u3044`);
+  }
+  const raw = fs3.readFileSync(file, "utf8");
+  const lines = raw.split("\n");
+  const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1;
+  if (close === -1) {
+    throw new Error(
+      raw.includes("\r\n") ? `target: ${target} \u306E frontmatter \u3092\u8AAD\u307F\u53D6\u308C\u306A\u3044\u3002\u6539\u884C\u30B3\u30FC\u30C9\u304C CRLF \u306E\u53EF\u80FD\u6027\u304C\u3042\u308B(CRLF \u306E\u5B9A\u7FA9\u306F\u66F8\u304D\u63DB\u3048\u306E\u5BFE\u8C61\u5916)` : `target: ${target} \u306B frontmatter \u304C\u7121\u3044`
+    );
+  }
+  return { file, target, lines, close };
+}
+function keyLineIndex(definition, key) {
+  const { lines, close } = definition;
+  if (keyLineAmbiguous(lines, close, key)) {
+    throw new Error(
+      `${key}: ${definition.target} \u306E ${key} \u884C\u3092 1 \u884C\u306B\u7279\u5B9A\u3067\u304D\u306A\u3044\u305F\u3081\u66F8\u304D\u63DB\u3048\u306A\u3044(\u540C\u3058\u30AD\u30FC\u304C\u8907\u6570\u3042\u308B\u3001\u307E\u305F\u306F\u5B57\u4E0B\u3052\u3055\u308C\u3066\u3044\u308B)`
+    );
+  }
+  return keyLinesOf(lines, close, key)[0] ?? -1;
+}
+function lineValue(line) {
+  if (line === void 0) return "";
+  return line.slice(line.indexOf(":") + 1);
+}
+function writeDefinition(definition) {
+  fs3.writeFileSync(definition.file, definition.lines.join("\n"));
+}
+function definitionFragments(options, ids) {
+  const fragments = loadFragments(
+    fragmentDirsFor(pluginRoot(), options.dir, options.lang)
+  );
+  const selected = ids.flatMap((id) => {
+    const fragment = fragments.get(id);
+    return fragment === void 0 ? [] : [fragment];
+  });
+  return { fragments, selected };
+}
+function addToolsLine(definition, options) {
+  if (options.tools.length > 1) {
+    throw new Error('tools: "*" \u306F\u4ED6\u306E\u30C4\u30FC\u30EB\u3068\u4F75\u7528\u3067\u304D\u306A\u3044');
+  }
+  if (keyLineIndex(definition, "tools") !== -1) {
+    throw new Error(`tools: ${definition.target} \u306B\u306F tools \u6B04\u304C\u65E2\u306B\u3042\u308B`);
+  }
+  const marker = keyLineIndex(definition, "agent-policy-role");
+  const ids = marker === -1 ? [] : splitList(lineValue(definition.lines[marker]));
+  const { selected } = definitionFragments(options, ids);
+  if (selected.length === 0) {
+    throw new Error(
+      `roles: ${definition.target} \u306B\u306F\u89E3\u6C7A\u3067\u304D\u308B\u5F79\u5272\u304C\u7121\u304F\u3001\u8A31\u53EF\u3059\u308B\u30C4\u30FC\u30EB\u3092\u6C7A\u3081\u3089\u308C\u306A\u3044`
+    );
+  }
+  const nameLine = keyLineIndex(definition, "name");
+  if (nameLine === -1) {
+    throw new Error(`name: ${definition.target} \u306B name \u884C\u304C\u7121\u3044`);
+  }
+  definition.lines.splice(
+    nameLine + 1,
+    0,
+    `tools: ${resolveToolsFor(selected, []).join(", ")}`
+  );
+  writeDefinition(definition);
+  return { ok: true, target: definition.target, changed: true, warnings: [] };
+}
+function pruneTools(options) {
+  const definition = readDefinition(options);
+  if (options.tools.includes("*")) return addToolsLine(definition, options);
+  const index = keyLineIndex(definition, "tools");
+  if (index === -1) {
+    throw new Error(`tools: ${definition.target} \u306B tools \u884C\u304C\u7121\u3044`);
+  }
+  const line = definition.lines[index] ?? "";
+  const value = lineValue(line);
+  if (toolsFormatOf(value) !== "csv") {
+    throw new Error(
+      `tools: ${definition.target} \u306E tools \u306F\u672A\u5BFE\u5FDC\u306E\u66F8\u5F0F\u306E\u305F\u3081\u66F8\u304D\u63DB\u3048\u306A\u3044\u30021 \u884C\u306E\u30AB\u30F3\u30DE\u533A\u5207\u308A\u3060\u3051\u3092\u6271\u3046`
+    );
+  }
+  const current = splitTools(value);
+  const warnings = options.tools.filter((tool) => !current.includes(tool)).map((tool) => `tools: ${tool} \u306F tools \u884C\u306B\u7121\u3044\u305F\u3081\u7121\u8996\u3057\u305F`);
+  const remaining = current.filter((tool) => !options.tools.includes(tool));
+  if (remaining.length === current.length) {
+    return { ok: true, target: definition.target, changed: false, warnings };
+  }
+  if (remaining.length === 0) {
+    throw new Error(
+      `tools: ${definition.target} \u306E\u30C4\u30FC\u30EB\u304C\u3059\u3079\u3066\u5916\u308C\u308B\u305F\u3081\u66F8\u304D\u63DB\u3048\u306A\u3044`
+    );
+  }
+  definition.lines[index] = `${line.slice(0, line.indexOf(":") + 1)} ${remaining.join(", ")}`;
+  writeDefinition(definition);
+  return { ok: true, target: definition.target, changed: true, warnings };
+}
+function rewriteRoles(options) {
+  const definition = readDefinition(options);
+  const { fragments } = definitionFragments(options, []);
+  const invalid = options.roles.filter((id) => !fragments.has(id));
+  if (invalid.length > 0) {
+    throw new Error(
+      `roles: ${invalid.join(", ")} \u306F\u5EC3\u6B62\u6E08\u307F\u304B\u672A\u77E5\u306E\u5F79\u5272 ID \u306E\u305F\u3081\u66F8\u304D\u8FBC\u307E\u306A\u3044`
+    );
+  }
+  const index = keyLineIndex(definition, "agent-policy-role");
+  if (index === -1) {
+    throw new Error(`roles: ${definition.target} \u306B agent-policy-role \u884C\u304C\u7121\u3044`);
+  }
+  const before = definition.lines[index];
+  if (options.roles.length === 0) {
+    definition.lines.splice(index, 1);
+  } else {
+    definition.lines[index] = `agent-policy-role: ${options.roles.join(", ")}`;
+  }
+  const changed = options.roles.length === 0 || definition.lines[index] !== before;
+  if (changed) writeDefinition(definition);
+  return { ok: true, target: definition.target, changed, warnings: [] };
 }
 function parseArgs(argv) {
   const options = {
@@ -1374,11 +1853,17 @@ function parseArgs(argv) {
     listMcp: false,
     checkFragments: false,
     scaffoldFragments: false,
-    keep: []
+    keep: [],
+    pruneTools: false,
+    rewriteRoles: false,
+    tools: [],
+    replace: []
   };
+  const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
+    if (arg !== void 0) seen.add(arg);
     switch (arg) {
       case "--policy":
       case "--list-policies":
@@ -1469,6 +1954,25 @@ function parseArgs(argv) {
         options.keep.push(requireValue(value, "keep"));
         index += 1;
         break;
+      case "--prune-tools":
+        options.pruneTools = true;
+        break;
+      case "--rewrite-roles":
+        options.rewriteRoles = true;
+        break;
+      case "--tools":
+        options.tools = splitList(requireValue(value, "tools"));
+        index += 1;
+        break;
+      case "--replace":
+        options.replace = splitList(requireValue(value, "replace"));
+        for (const entry of options.replace) {
+          if (entry !== "description" && entry !== "preamble") {
+            throw new Error("replace: must be description or preamble");
+          }
+        }
+        index += 1;
+        break;
       default:
         throw new Error(`Unsupported option: ${arg}`);
     }
@@ -1479,7 +1983,8 @@ function parseArgs(argv) {
       ["--name", options.name !== ""],
       ["--model", options.model !== ""],
       ["--vendor", options.vendor !== ""],
-      ["--keep", options.keep.length > 0]
+      ["--keep", options.keep.length > 0],
+      ["--replace", options.replace.length > 0]
     ]) {
       if (supplied)
         throw new Error(`${flag}: cannot be used with --recommended`);
@@ -1488,11 +1993,36 @@ function parseArgs(argv) {
   if (options.name !== "" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name)) {
     throw new Error("name: must be lowercase letters, digits and hyphens");
   }
+  if (options.pruneTools || options.rewriteRoles) {
+    const operation = options.pruneTools ? "--prune-tools" : "--rewrite-roles";
+    const accepted = /* @__PURE__ */ new Set([
+      operation,
+      "--name",
+      "--dir",
+      options.pruneTools ? "--tools" : "--roles"
+    ]);
+    for (const flag of seen) {
+      if (!accepted.has(flag)) {
+        throw new Error(`${flag}: cannot be used with ${operation}`);
+      }
+    }
+    if (options.name === "") throw new Error("name: is required");
+    if (options.pruneTools && options.tools.length === 0) {
+      throw new Error("tools: is required");
+    }
+    if (options.rewriteRoles && !seen.has("--roles")) {
+      throw new Error("roles: is required");
+    }
+    return options;
+  }
+  if (seen.has("--tools")) throw new Error("tools: requires --prune-tools");
   if (options.listLiveModels || options.listRoles || options.listCoverage || options.listMcp || options.checkFragments || options.scaffoldFragments) {
     return options;
   }
   if (options.merge && !options.write)
     throw new Error("merge: requires --write");
+  if (options.replace.length > 0 && !options.merge)
+    throw new Error("replace: requires --merge");
   if (options.recommended) return options;
   if (options.name === "") throw new Error("name: is required");
   if (options.modelId === "") throw new Error("model-id: is required");
@@ -1519,7 +2049,11 @@ function respond(value) {
 async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
-    if (options.listLiveModels) {
+    if (options.pruneTools) {
+      respond(pruneTools(options));
+    } else if (options.rewriteRoles) {
+      respond(rewriteRoles(options));
+    } else if (options.listLiveModels) {
       const live = options.scope === "claude-only" ? { ok: true, ids: [], vendors: {} } : await fetchLiveModels(process.env);
       respond(listLiveModels(live, options.scope));
     } else if (options.listCoverage) {

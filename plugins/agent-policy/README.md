@@ -2,15 +2,13 @@
 
 Claude Code を使うときのエージェント運用方針を、スキルとして配布する Claude Code プラグインです。
 
-モデル別または役割別の担当表、設計/実装フロー、アドバイザー運用、並列原則を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
+モデル別または役割別の担当表、設計/実装フロー、差し戻しの経路、並列原則を定めます。Claude モデルだけで完結するプロファイルと、プロジェクト固有の Agent 定義を使う custom プロファイルを選べます。`AMATSUKA_AGENT_AUTO_INJECTION` を設定すれば、任意のプロジェクトへ同じ運用を持ち込めます。
 
 ## 動作要件
 
 方針スキル自体に依存はありません。
 
-SessionStart フックと SubagentStart フックは Node.js で動作します。`node` が PATH 上にあり、バージョンが 22 以上である必要があります。
-
-SubagentStart フックはサブエージェントの起動時に発火し、役割マーカーの対応表を注入します。Claude Code 2.0.43 より前のバージョンにはこのイベントが無いため、注入は行われません。
+SessionStart フックと delegation gate は Node.js で動作します。`node` が PATH 上にあり、バージョンが 22 以上である必要があります。
 
 Claude Code 本体はネイティブバイナリで配布され Node.js を同梱しないため、未導入の場合は別途インストールしてください。
 
@@ -50,7 +48,7 @@ Marketplace から `agent-policy` をインストールします。
 自動注入を使わない場合は、CLAUDE.md に方針スキルへ従う旨を直接書けます。たとえば custom 構成では、次のように書きます。
 
 ```markdown
-- 最初に必ず `agent-policy:custom-policy` スキルを使用し、この規律に従う。
+- 最初に `agent-policy:custom-policy` スキルを使用する。スキルの規律に従う。
 ```
 
 ## 環境変数
@@ -62,10 +60,11 @@ Marketplace から `agent-policy` をインストールします。
 | `ANTHROPIC_AUTH_TOKEN` | `/v1/models` 照会の Bearer 認証トークン | 未設定 |
 | `ANTHROPIC_API_KEY` | Bearer トークンが無い場合の `/v1/models` 照会用 API キー | 未設定 |
 | `AMATSUKA_AGENT_DELEGATION_GATE` | delegation gate の有効化 | 未設定(無効) |
-| `AMATSUKA_AGENT_PARALLEL_NUDGE` | 並列促しフックの無効化 | 未設定(有効) |
 | `CLAUDE_CODE_SUBAGENT_MODEL` | Claude Code が全サブエージェントへ適用するモデル | 未設定 |
 
 `CLAUDE_CODE_SUBAGENT_MODEL` を設定すると、Agent 定義の frontmatter にある `model` より優先されます。定義ごとに選んだモデルを使う場合は設定しないでください。
+
+`effort` も同様です。環境変数 `CLAUDE_CODE_EFFORT_LEVEL` と設定 `maxEffortLevel` は、Agent 定義の frontmatter にある `effort` より優先されます。
 
 ### プロキシを使う custom 構成
 
@@ -100,13 +99,32 @@ Marketplace から `agent-policy` をインストールします。
 
 MCP サーバーの検出には `claude mcp list` を使い、接続済みまたはキャッシュ済みのサーバーだけを候補にします。WebSocket 経由の MCP サーバーは検出対象外です。読み取り役割へ MCP を付ける場合は、外部状態を変更するツールを `disallowedTools` へ入れる案を確認してから生成します。
 
-MCP は既定で実装役割(`complex-impl` / `normal-impl` / `light-impl` / `escalation` / `general` / `design-plan`)の定義に付与し、読み取り役割だけの定義には付与しません。
+MCP は既定で全役割に付与します。読み取り役割には、書き込み系ツールを `disallowedTools` に入れて付与します。
+
+### 既存定義の点検
+
+setup-agents を再実行すると、生成の前に役割マーカー付きの既存定義を点検します。役割に許されていない組み込みツール(`Agent` など)と、廃止済みの役割 ID を宣言する定義を一覧にし、定義ごとに直すかどうかを確認します。新規に作る役割では、役割ごとにモデル・定義名・MCP サーバーを尋ねます。
+
+既存定義が担っている役割は、既定名とは違うファイル名でも、その定義を作成先にして再生成します。同じ役割を 2 件以上の定義が担っているときは、どれを再生成するかを尋ねます(`--yes` では再生成せず報告します)。
+
+再生成では、既存定義の description と前置き(最初の見出しより前の本文)を既定で保持します。生成した定義には、書き込んだ description と前置きのハッシュを `agent-policy-description-hash` / `agent-policy-preamble-hash` として記録し、役割の断片の更新で内容が変わったときだけテンプレートへの置き換えを勧めます。置き換えるものは `--replace description,preamble` で指定します(`--merge` が必要で、`--recommended` とは併用できません)。
+
+点検で直すと決めた定義は、次の 2 つの操作で frontmatter の 1 行だけを書き換えます。他の行は変わりません。どちらも `--dir` だけを受け付け、`--scope` と `--lang` は受け付けません。
+
+```bash
+# tools 行から指定したツールを外す。--tools "*" は、tools 欄の無い定義に役割の既定ツールの行を足す
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --prune-tools --name <定義のファイル名> --tools Agent --dir "$PWD"
+# agent-policy-role 行を指定した役割 ID の並びに置き換える。--roles "" で行を消す
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <定義のファイル名> --roles code-review --dir "$PWD"
+```
+
+`--prune-tools` が扱うのは、`tools` が 1 行のカンマ区切りで書かれた定義だけです。block 配列・flow 配列・引用符や括弧や `#` を含む定義と、同じキーが複数行ある定義は書き換えず、手で直す箇所として報告します。`--rewrite-roles` は、廃止済みの ID と解決できない ID を受け付けません。改行コードが CRLF の定義は、点検と書き換えの対象外です。
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
-`--yes` を渡す非対話モードでは、`--recommended` により役割ごとに 1 定義ずつ保持マージ生成します。MCP ツールは明示的な選択がないため付きません。照会に失敗した場合は各役割の先頭候補を使い、実在確認を行わなかった警告とともに生成します。
+`--yes` を渡す非対話モードでは、既存定義から役割に許されていないツールを確認なしで外してから、`--recommended` により役割ごとに 1 定義ずつ保持マージ生成します。全ツール継承の定義、`tools` の書式が 1 行のカンマ区切りでない定義、廃止済みの役割 ID を持つ定義は変更せず、報告に載せます。既存定義の MCP サーバーと `disallowedTools` は、接続を再検証したうえで引き継ぎます。新規に作る定義には MCP ツールを付けません。照会に失敗した場合は各役割の先頭候補を使い、実在確認を行わなかった警告とともに生成します。
 
-組み込みの役割 ID は次の 16 種です。
+組み込みの役割 ID は次の 13 種です。
 
 | 役割 ID | 内容 |
 | --- | --- |
@@ -115,17 +133,14 @@ MCP は既定で実装役割(`complex-impl` / `normal-impl` / `light-impl` / `es
 | `light-impl` | 軽量な実装 |
 | `escalation` | 行き詰まり時のエスカレーション |
 | `general` | その他のタスク |
-| `design-plan` | 設計書・実装計画書(WBS)の作成 |
 | `explore` | コードベース探索 |
 | `realtime-research` | リアルタイム情報調査 |
 | `e2e-verify` | E2E 動作検証・ブラウザ/GUI 操作 |
 | `design-review` | 設計書・実装計画書のレビュー |
 | `knowledge-elicitation` | 暗黙知の抽出・理解レビュー |
 | `code-review` | コードレビュー |
-| `final-review` | 重要な実装の最終レビュー |
-| `gate-review` | 設計書の最終ゲートレビュー |
+| `complex-review` | 重要な実装・高リスク設計書の最終レビュー |
 | `adversarial-review` | 敵対的レビュー |
-| `advisor` | 設計・計画・実装のアドバイザー |
 
 setup-agents が扱う推奨モデル ID は次の 9 種です。
 
@@ -148,9 +163,24 @@ setup-agents が扱う推奨モデル ID は次の 9 種です。
 agent-policy-role: normal-impl, explore
 ```
 
-SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。注入される役割マーカー表の各行は `- 役割名 [RoleId]: 定義名` の形です。役割名は日本語表記で、`[RoleId]` は `agent-policy-role` マーカーに書く値と同じです。生成した定義の共通規律は、言語によらずこの RoleId で行を引きます。`--lang en` などで生成した定義でも、役割名の言語に関係なく対応表を照合できます。`custom` と旧互換値の設定では、検証が成立した場合にすべてのマーカー付き定義を載せます。`claude` の設定と、custom から claude へフォールバックした場合は、`model` が Claude のモデルで実行され、かつ外部ベンダーを宣言していない定義だけを載せます。SubagentStart フックは環境変数の値だけで範囲を決めるため、custom から claude へフォールバックしたセッションでは、SessionStart と違ってすべての定義を載せます。この差は既知のもので、親は絞り込んだ表で委譲するため実害は限定的です。`none` と未設定では対応表を注入しません。
+このほか、役割とモデルの組に応じて `effort` が frontmatter に入る場合があります。
+
+SessionStart フックはプロジェクトの `.claude/agents/` を走査し、このマーカーから「役割 → Agent 名」の対応をセッションへ注入します。注入される役割マーカー表の各行は `- 役割名 [RoleId]: 定義名` の形です。同じ役割に定義が 2 件以上あるときは、その行の直後に `  - 定義名: description` の行を定義ごとに足します。役割名は日本語表記で、`[RoleId]` は `agent-policy-role` マーカーに書く値と同じです。生成した定義の共通規律は、言語によらずこの RoleId で行を引きます。`--lang en` などで生成した定義でも、役割名の言語に関係なく対応表を照合できます。`custom` と旧互換値の設定では、検証が成立した場合にすべてのマーカー付き定義を載せます。`claude` の設定と、custom から claude へフォールバックした場合は、`model` が Claude のモデルで実行され、かつ外部ベンダーを宣言していない定義だけを載せます。`none` と未設定では対応表を注入しません。
 
 このマーカーは、その役割の委譲先候補になることに加えて、外部 Agent を名指しで dispatch するときにプロジェクト最適化(MCP tools と適応本文)を届ける合成ホストの候補になることも表します。合成ホストにしたくない定義からは、マーカーを外してください。
+
+### 同じ役割に複数の定義を置く
+
+同じ役割マーカーを宣言する定義を、複数置けます。たとえば `frontend-general-implementer` と `backend-general-implementer` に、どちらも `agent-policy-role: normal-impl` を付けられます。定義を分けるときは、担当するディレクトリ・技術領域・機能領域を `description` と本文に書いてください。frontmatter に新しい欄は要りません。
+
+オーケストレーターは委譲のたびに、次の順で委譲先を選びます。
+
+1. 同じ役割の定義のうち、担当に作業が含まれるもの
+2. 同じ役割の定義のうち、担当を限っていないもの(汎用定義)
+3. 「その他のタスク」(`general`)の役割の定義。選び方は 1 と 2 と同じです
+4. ビルトインの `Explore`(読み取り専用の役割)または `general-purpose`
+
+担当の限定を書かない定義は汎用定義として扱われます。どの定義にも当たらない作業を受けさせたい定義は、担当を限らずに書いてください。「設計書・実装計画書のレビュー」だけは 3 と 4 へ進まず、該当が無ければレビューを省略します。
 
 プロジェクト固有の役割断片は `.claude/agent-policy/roles/` に Markdown ファイルとして置けます。断片の frontmatter には `id`、`label`、`description`、`default-name`、`tools`、`kind` を指定します。`default-name` は未カバーの役割を個別に作るときの既定名 `<model-id>-<default-name>` に使われます。`kind` は `impl` または `readonly` です。独自の `id` は setup の選択肢に追加され、既存の役割と同じ `id` を指定すると組み込み断片を置き換えます。
 
@@ -165,7 +195,7 @@ Delegation gate は、メインセッションから保護対象を直接編集�
 1. `AMATSUKA_AGENT_DELEGATION_GATE` を `1`、`true`、`on` のいずれかに設定する。
 2. 対象プロジェクトに `.claude/agent-policy/delegation-gate.json` を置く。
 
-設定ファイルは次をひな形にしてください。`denyGlobs` は必須で、空ではない文字列配列にします。`mcpTools` と `ttlSeconds` は任意です。
+設定ファイルは次をひな形にしてください。`denyGlobs` は必須で、空ではない文字列配列にします。`mcpTools` は任意です。
 
 ```json
 {
@@ -175,36 +205,33 @@ Delegation gate は、メインセッションから保護対象を直接編集�
       "pathParam": "relative_path",
       "absolute": false
     }
-  },
-  "ttlSeconds": 7200
+  }
 }
 ```
 
 `denyGlobs` には、プロジェクトで直接編集から保護したいパスをプロジェクトルート相対の glob で指定します。`mcpTools` には gate の対象に加える MCP ツール名と、パス引数の名前(`pathParam`)・絶対パスかどうか(`absolute`)を指定します。`mcpTools` を省略した場合、MCP ツールは対象になりません。
 
-組み込みの `Edit`、`Write`、`NotebookEdit` は宣言不要で、常に対象です。それぞれ `file_path`、`file_path`、`notebook_path` の絶対パスを検査します。`ttlSeconds` を省略したときの一時解除 TTL は 7,200 秒です。
+組み込みの `Edit`、`Write`、`NotebookEdit` は宣言不要で、常に対象です。それぞれ `file_path`、`file_path`、`notebook_path` の絶対パスを検査します。
 
-### 一時解除
+一時的に無効にするときは `AMATSUKA_AGENT_DELEGATION_GATE` を外し、Claude Code を再起動します。
 
-対象プロジェクトのルートで、agent-policy のインストール先を指定して次の CLI を実行します。Claude Code が設定する `CLAUDE_PLUGIN_ROOT` を利用できる環境では、そのまま使えます。
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct on
-node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct status
-node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
-```
-
-`--direct on` は一時解除を始め、`--direct status` は状態と残り時間を表示し、`--direct off` は解除を終了します。一時解除は `ttlSeconds` の経過で自動的に失効します。この解除は**ユーザー自身が実行するもの**です。Agent や AI に実行させないでください。
-
-このフックには既知の限界があります。Bash 経由の書き込みは技術的に止められません。また、AI 自身が `--direct on` を実行して回避することも技術的には可能であり、「ユーザー自身が実行する」という文言を守る運用に依存します。
-
-## 並列促しフック
-
-サブエージェントを起動しようとするたびに、まだ着手していない独立タスクがあれば同じメッセージで並列 dispatch するよう促す短い文言を注入します。前の出力に依存する場合だけは逐次にします。
-
-このフックは既定で有効です。`AMATSUKA_AGENT_PARALLEL_NUDGE` を `0`、`false`、`off` のいずれかにすると無効にできます。効果は未実証であり、dispatch 時だけ動く低コストな補助として置いています。
+このフックには既知の限界があります。Bash 経由の書き込みは技術的に止められません。
 
 ## 旧バージョンからの移行
+
+0.20 系から 0.21 系へ移行する場合は、次を確認してください。
+
+1. `design-plan` / `advisor` / `final-review` / `gate-review` を廃止し、`complex-review` を追加しました。旧 ID のマーカーは組み込み役割として認識されず、対応表に出ません。SessionStart が廃止として通知します。定義を削除するか、`agent-policy-role` を書き換えるか、再生成してください。
+2. サブエージェントは相談せず、オーケストレーターへ差し戻すようになりました。
+3. 全役割で Agent Tool を付与しなくなりました。生成する定義の tools に `Agent` が入りません。setup-agents の再実行で、役割に許されていないツールの削除を確認します。
+4. 保持マージで再生成すると、既存の定義に `## アドバイザーへの相談` と `## Agent tool の制約` の節が残ります。手で削除するか、差分方針で「完全上書き」を選んでください。
+5. 生成する定義に `effort` を付けるようになりました。役割とモデルの表に無い組には付きません。テンプレートに無く既存定義にだけある `effort` は、保持マージで残ります。`effort` は、名指しで起動したときに合成するかどうかの判定を変えません。合成したときは、ホスト定義の `effort` で動きます。
+6. 推奨モデル(`RECOMMENDED`)と Claude 割当を変更しました。custom で採用されるモデルが変わる場合があります。
+7. 実装 4 役割の選定基準を変更しました。変更量ではなく、仕様確定度・設計新規性・変更影響度・検証困難度・分解可能性の 5 軸で判断します。生成済みの定義の本文へ反映するには再生成してください。
+8. MCP の既定付与の列挙から `design-plan` を外しました。
+9. `--check` / `--write` の応答の `roles` から `agentTool` を削除しました。
+10. `ja` / `en` 以外の翻訳断片を使う場合は、`_common.md` の更新に合わせて再翻訳してください。削除した役割の翻訳断片(`design-plan.md` / `advisor.md` / `final-review.md` / `gate-review.md`)は削除してください。残っていても、廃止済みの ID は役割として扱いません。
+11. SubagentStart フックと並列促しフックを廃止しました。delegation gate の一時解除(`--direct`)も廃止しました。
 
 0.19 系から 0.20 系へ移行する場合は、次を確認してください。
 
@@ -265,8 +292,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/delegation-gate.mjs" --direct off
 1. 同梱プリセット 4 定義(`agent-policy:gpt-sol` / `agent-policy:gpt-terra` / `agent-policy:gpt-luna` / `agent-policy:grok`)を廃止しました。これらを名指しで呼び出していた場合は動かなくなります。代わりに `agent-policy:setup-agents` を実行し、推奨構成を生成してください。非対話で推奨構成をまとめて作る場合は `/agent-policy:setup-agents --yes` を使えます。
 2. 方針スキル `with-codex-policy` / `with-grok-policy` / `codex-grok-policy` を廃止しました。custom 構成の方針は `custom-policy` に統合されています。
 3. `AMATSUKA_AGENT_AUTO_INJECTION` の旧値 `with-codex` / `with-grok` / `with-codex-grok` は custom として扱われるため、動作は継続します。ただし SessionStart は `custom` へ変更するよう通知します。環境変数を `custom` に更新してください。
-4. エイリアス変数 `AMATSUKA_AGENT_GPT_SOL_ALIAS`、`AMATSUKA_AGENT_GPT_TERRA_ALIAS`、`AMATSUKA_AGENT_GPT_LUNA_ALIAS`、`AMATSUKA_AGENT_GROK_ALIAS` は参照されなくなりました。設定されている場合、SessionStart が非推奨を通知します。モデルは setup-agents が `/v1/models` の実応答から選ぶため、定義の `model` を変えたいときは setup-agents を再実行してください。
-5. 以前の `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止済みです。プロジェクトの `.claude/agents/` に残っていれば削除してください。SessionStart は残骸を検知すると通知します。
+4. エイリアス変数 `AMATSUKA_AGENT_GPT_SOL_ALIAS`、`AMATSUKA_AGENT_GPT_TERRA_ALIAS`、`AMATSUKA_AGENT_GPT_LUNA_ALIAS`、`AMATSUKA_AGENT_GROK_ALIAS` は参照されなくなりました。モデルは setup-agents が `/v1/models` の実応答から選ぶため、定義の `model` を変えたいときは setup-agents を再実行してください。
+5. 以前の `claude-researcher.md`、`gpt-researcher.md`、`grok-researcher.md`、`grok-implementer.md` は廃止済みです。プロジェクトの `.claude/agents/` に残っていれば削除してください。
 6. `setup-gpt` と `setup-grok` は `setup-agents` へ統合されています。0.14 系の setup-agents は custom プロファイル専用です。
 7. MCP ツールは setup-agents で定義ごとに付与します。既定では付きません。`claude mcp list` で接続済みのサーバーを検出し、許可するものを選べます。
 8. 役割定義から `LSP` を外しました。背景で起動するサブエージェントでは Claude Code が `LSP` を除去するため、定義に書いても機能しません。

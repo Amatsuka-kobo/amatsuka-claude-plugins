@@ -9,9 +9,14 @@ export function bodyHash(content: string): string {
     const close = lines.indexOf("---", 1)
     if (close !== -1) body = lines.slice(close + 1)
   }
+  return textHash(body.join("\n"))
+}
+
+// 生成した定義の description と前置きの記録に使う。前後の空白は無視する。
+export function textHash(text: string): string {
   return crypto
     .createHash("sha256")
-    .update(body.join("\n").trim())
+    .update(text.trim())
     .digest("hex")
     .slice(0, 16)
 }

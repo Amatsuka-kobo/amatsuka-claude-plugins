@@ -2,21 +2,15 @@
 
 import fs from "node:fs"
 import path from "node:path"
-import { candidateScopeFor } from "../agents/policies"
-import { candidateAgents, markerTable, scanAgents } from "./marker-scan"
 
 const STDIN_TIMEOUT_MS = 2000
-const DEFAULT_TTL_SECONDS = 7200
 const CONFIG_RELATIVE_PATH = path.join(
   ".claude",
   "agent-policy",
   "delegation-gate.json"
 )
-const DIRECT_FLAG_RELATIVE_PATH = path.join(
-  ".claude",
-  "agent-policy",
-  "delegation-gate.direct"
-)
+const DENIAL_REASON =
+  "delegation-gate: このパスはメインセッションでは編集しない運用である。担当表の役割に従い、Agent tool で委譲する。Bash での書き込みや他ツールへの切り替えで回避せず、委譲で進める。"
 
 interface HookInput {
   tool_name?: unknown
@@ -33,7 +27,6 @@ interface ToolPathSpec {
 interface GateConfig {
   denyGlobs: string[]
   mcpTools: Record<string, ToolPathSpec>
-  ttlSeconds: number
 }
 
 type InputResult =
@@ -132,10 +125,6 @@ function configPath(projectRoot: string): string {
   return path.join(projectRoot, CONFIG_RELATIVE_PATH)
 }
 
-function directFlagPath(projectRoot: string): string {
-  return path.join(projectRoot, DIRECT_FLAG_RELATIVE_PATH)
-}
-
 function invalidConfigMessage(file: string): string {
   return `delegation-gate: 有効化されているが設定ファイルが壊れている(${file})`
 }
@@ -201,91 +190,7 @@ function readConfig(projectRoot: string): ConfigResult {
     }
   }
 
-  const ttlSeconds = parsed.ttlSeconds ?? DEFAULT_TTL_SECONDS
-  if (
-    typeof ttlSeconds !== "number" ||
-    !Number.isFinite(ttlSeconds) ||
-    ttlSeconds < 0
-  ) {
-    return { ok: false, message: invalidConfigMessage(file) }
-  }
-
-  return {
-    ok: true,
-    config: { denyGlobs, mcpTools, ttlSeconds }
-  }
-}
-
-function readCliTtlSeconds(projectRoot: string): number {
-  try {
-    const parsed: unknown = JSON.parse(
-      fs.readFileSync(configPath(projectRoot), "utf8")
-    )
-    if (!isRecord(parsed)) return DEFAULT_TTL_SECONDS
-    const ttl = parsed.ttlSeconds
-    return typeof ttl === "number" && Number.isFinite(ttl) && ttl >= 0
-      ? ttl
-      : DEFAULT_TTL_SECONDS
-  } catch {
-    return DEFAULT_TTL_SECONDS
-  }
-}
-
-function remainingDirectSeconds(
-  projectRoot: string,
-  ttlSeconds: number,
-  now = Date.now()
-): number | undefined {
-  const flag = directFlagPath(projectRoot)
-  let modifiedAt: number
-  try {
-    const stats = fs.statSync(flag)
-    if (!stats.isFile()) return undefined
-    modifiedAt = stats.mtimeMs
-  } catch {
-    return undefined
-  }
-
-  const ageSeconds = (now - modifiedAt) / 1000
-  if (ageSeconds < 0 || ageSeconds > ttlSeconds) return undefined
-  return Math.max(0, Math.ceil(ttlSeconds - ageSeconds))
-}
-
-function runDirectCli(args: string[], directIndex: number): void {
-  const mode = args[directIndex + 1]
-  if (mode !== "on" && mode !== "off" && mode !== "status") {
-    report("delegation-gate: --direct には on / off / status を指定する")
-    return
-  }
-
-  const projectRoot = resolveProjectRoot()
-  const flag = directFlagPath(projectRoot)
-  const ttlSeconds = readCliTtlSeconds(projectRoot)
-
-  if (mode === "on") {
-    fs.mkdirSync(path.dirname(flag), { recursive: true })
-    fs.closeSync(fs.openSync(flag, "a"))
-    const now = new Date()
-    fs.utimesSync(flag, now, now)
-    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000)
-    process.stdout.write(
-      `delegation-gate: 一時解除を開始した(期限: ${expiresAt.toISOString()})\n`
-    )
-    return
-  }
-
-  if (mode === "off") {
-    fs.rmSync(flag, { force: true })
-    process.stdout.write("delegation-gate: 一時解除を終了した\n")
-    return
-  }
-
-  const remaining = remainingDirectSeconds(projectRoot, ttlSeconds)
-  process.stdout.write(
-    remaining === undefined
-      ? "delegation-gate: 一時解除していない\n"
-      : `delegation-gate: 一時解除中(残り ${remaining} 秒)\n`
-  )
+  return { ok: true, config: { denyGlobs, mcpTools } }
 }
 
 function toolPathSpec(
@@ -319,37 +224,13 @@ function normalizedTargetPath(
   return relative.split(path.sep).join("/")
 }
 
-function denialReason(projectRoot: string): string {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_PROJECT_DIR: projectRoot
-  }
-  const scope =
-    candidateScopeFor(env.AMATSUKA_AGENT_AUTO_INJECTION) ?? "claude-only"
-  const table = markerTable(
-    env,
-    candidateAgents(
-      scanAgents(path.join(projectRoot, ".claude", "agents")),
-      scope
-    ),
-    scope
-  )
-  const candidates = table === undefined ? "" : `(委譲先候補 — ${table})。`
-  return (
-    "delegation-gate: メインセッションでこの層のファイルは編集しない運用方針である。" +
-    `担当表の役割に従い Agent tool で委譲する。${candidates}` +
-    "Bash 経由の書き込みや他ツールへの切替で回避しない。" +
-    "直接編集が必要なときは、ユーザー自身が `--direct on` を実行して一時解除する(TTL で自動失効)。"
-  )
-}
-
-function respondDeny(projectRoot: string): void {
+function respondDeny(): void {
   process.stdout.write(
     `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: denialReason(projectRoot)
+        permissionDecisionReason: DENIAL_REASON
       }
     })}\n`
   )
@@ -373,10 +254,6 @@ async function runHook(): Promise<void> {
   }
   const { config } = configResult
 
-  if (remainingDirectSeconds(projectRoot, config.ttlSeconds) !== undefined) {
-    return
-  }
-
   const toolName = result.input.tool_name
   if (typeof toolName !== "string") return
   const spec = toolPathSpec(toolName, config)
@@ -390,19 +267,14 @@ async function runHook(): Promise<void> {
   if (target === undefined) return
   if (!config.denyGlobs.some((glob) => path.matchesGlob(target, glob))) return
 
-  respondDeny(projectRoot)
+  respondDeny()
 }
 
 async function main(): Promise<void> {
   try {
-    const directIndex = process.argv.indexOf("--direct")
-    if (directIndex !== -1) {
-      runDirectCli(process.argv, directIndex)
-      return
-    }
     await runHook()
   } catch {
-    // フック・CLI の予期しない例外は fail-open とし、何も出力しない。
+    // フックの予期しない例外は fail-open とし、何も出力しない。
   }
 }
 

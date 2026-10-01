@@ -5,7 +5,8 @@ import {
   loadFragments,
   type Vendor
 } from "./fragments"
-import { allowsAgentTool, type Lang } from "./policies"
+import { textHash } from "./hash"
+import type { Effort, Lang } from "./policies"
 import { hasMixedKinds, type RoleId, sortRoleIds } from "./roles"
 import { type Vocabulary, vocabularyFor } from "./vocabulary"
 
@@ -16,6 +17,7 @@ export interface ComposeInput {
   roleIds: RoleId[]
   fragmentDirs: FragmentDir[]
   lang: Lang
+  effort?: Effort
   color?: string
   mcpServers?: string[]
   denyTools?: string[]
@@ -26,7 +28,6 @@ export interface RolesSummary {
   implRoles: string[]
   readonlyRoles: string[]
   mixedKinds: boolean
-  agentTool: boolean
 }
 
 const COLORS: Record<Vendor, string> = {
@@ -40,15 +41,16 @@ export function compose(input: ComposeInput): string {
   const vocabulary = vocabularyFor(input.lang)
   const common = loadCommon(input.fragmentDirs)
   const { ids: ordered, selected } = selectFragments(input)
-  const withAgent = allowsAgentTool(input.roleIds)
-  const tools = resolveToolsFor(selected, withAgent, input.mcpServers ?? [])
+  const tools = resolveToolsFor(selected, input.mcpServers ?? [])
   const denyTools = input.denyTools ?? []
 
+  const description = describe(selected, vocabulary)
   const head = [
     "---",
     `name: ${input.name}`,
-    `description: ${describe(selected, vocabulary)}`,
+    `description: ${description}`,
     `model: ${input.model}`,
+    ...(input.effort === undefined ? [] : [`effort: ${input.effort}`]),
     `color: ${input.color ?? COLORS[input.vendor]}`,
     `tools: ${tools.join(", ")}`,
     ...(denyTools.length > 0
@@ -73,14 +75,7 @@ export function compose(input: ComposeInput): string {
     body.push(heading, "", ...items, "")
   }
 
-  if (withAgent) {
-    const advisor = common.get(vocabulary.advisorHeading)
-    if (advisor !== undefined)
-      body.push(vocabulary.advisorHeading, "", ...advisor, "")
-  }
-
   const constraints = [
-    ...(withAgent ? (common.get(vocabulary.agentConstraintHeading) ?? []) : []),
     ...(common.get(vocabulary.constraintHeading) ?? []),
     ...selected.flatMap(
       (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
@@ -103,10 +98,29 @@ export function compose(input: ComposeInput): string {
     }
   }
 
-  return `${[...head, ...body]
+  // 再生成で description と前置きの編集を見分けるため、書き込んだ値の記録を残す。
+  const bodyText = body.join("\n").replace(/\n{3,}/g, "\n\n")
+  head.splice(
+    head.length - 2,
+    0,
+    `${DESCRIPTION_HASH_KEY}: ${textHash(description)}`,
+    `${PREAMBLE_HASH_KEY}: ${textHash(preambleOf(bodyText))}`
+  )
+
+  return `${[...head, bodyText]
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd()}\n`
+}
+
+export const DESCRIPTION_HASH_KEY = "agent-policy-description-hash"
+export const PREAMBLE_HASH_KEY = "agent-policy-preamble-hash"
+
+// 前置きは、frontmatter の後から最初の `## ` 見出しの前までの本文。
+export function preambleOf(body: string): string {
+  const lines = body.split("\n")
+  const heading = lines.findIndex((line) => line.startsWith("## "))
+  return (heading === -1 ? lines : lines.slice(0, heading)).join("\n").trim()
 }
 
 export function describeRoles(input: ComposeInput): RolesSummary {
@@ -122,8 +136,7 @@ export function describeRoles(input: ComposeInput): RolesSummary {
     ids,
     implRoles,
     readonlyRoles,
-    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind)),
-    agentTool: allowsAgentTool(input.roleIds)
+    mixedKinds: hasMixedKinds(selected.map((fragment) => fragment.kind))
   }
 }
 
@@ -142,11 +155,10 @@ function selectFragments(input: ComposeInput): {
   return { ids, selected }
 }
 
-// MCP サーバーはサーバー単位で末尾へ足す。Agent はその手前へ置く。
+// MCP サーバーはサーバー単位で末尾へ足す。
 // mcpServers には mcp__ プレフィックス付きの完成した名前を渡す。
-function resolveToolsFor(
+export function resolveToolsFor(
   selected: Fragment[],
-  withAgent: boolean,
   mcpServers: string[]
 ): string[] {
   const tools: string[] = []
@@ -155,7 +167,6 @@ function resolveToolsFor(
       if (tool !== "Agent" && !tools.includes(tool)) tools.push(tool)
     }
   }
-  if (withAgent) tools.push("Agent")
   for (const server of mcpServers) {
     if (!tools.includes(server)) tools.push(server)
   }

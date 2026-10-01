@@ -20,17 +20,10 @@ const RUN_TS = fileURLToPath(
 const TSX_IMPORT = createRequire(import.meta.url).resolve("tsx")
 const LEGACY_INJECTIONS = ["with-codex", "with-grok", "with-codex-grok"]
 const TABLE_INTRO =
-  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。"
+  "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは、共通規律の §同じ役割の候補から選ぶ に従う。"
 const CLAUDE_SCOPE = "それ以外の定義は委譲先にしない"
 const WITH_EXTERNAL_SCOPE =
   "外部ベンダーのモデルを指定した定義も含めて選んでよい"
-const ALIAS_VARIABLES = [
-  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-  "AMATSUKA_AGENT_GROK_ALIAS"
-]
-
 let project: string
 let servers: FakeModelsServer[]
 
@@ -229,7 +222,9 @@ describe("方針の注入", () => {
     place("claude-agent", ["model: sonnet", "agent-policy-role: complex-impl"])
     const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude" })
 
-    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain(
+      "最初に agent-policy:claude-model-policy スキルを使用する。スキルの規律に従う。"
+    )
     expect(output).toContain(TABLE_INTRO)
     expect(output).toContain("claude-agent")
     expect(output).toContain("複雑または重要な実装")
@@ -346,7 +341,7 @@ describe("方針の注入", () => {
 
     expect(output).toContain("bogus")
     expect(output).toContain("未知")
-    expect(output).not.toContain("スキルを使用し")
+    expect(output).not.toContain("スキルを使用する")
     expect(output).not.toContain("hidden")
   })
 
@@ -558,41 +553,6 @@ describe("custom 構成の検証", () => {
   })
 })
 
-describe("非推奨エイリアス変数の通知", () => {
-  it.each(ALIAS_VARIABLES)("%s が設定されていると 1 回だけ通知する", (name) => {
-    const output = context({ [name]: "configured" })
-
-    expect(output).toContain("エイリアス変数は参照されなくなった")
-    expect(output).toContain("setup-agents が /v1/models から選ぶ")
-    expect(output).toContain("定義の `model` 値")
-    expect(output.match(/エイリアス変数は参照されなくなった/g)).toHaveLength(1)
-  })
-
-  it("複数の非推奨変数が設定されても通知は 1 回だけ出す", () => {
-    const output = context(
-      Object.fromEntries(ALIAS_VARIABLES.map((name) => [name, "configured"]))
-    )
-
-    expect(output.match(/エイリアス変数は参照されなくなった/g)).toHaveLength(1)
-  })
-
-  it.each([
-    undefined,
-    "none",
-    "claude",
-    "custom",
-    "with-codex",
-    "bogus"
-  ])("injection が %s の分岐でも通知する", (injection) => {
-    const output = context({
-      ...injectionEnvironment(injection),
-      AMATSUKA_AGENT_GPT_SOL_ALIAS: "configured"
-    })
-
-    expect(output).toContain("エイリアス変数は参照されなくなった")
-  })
-})
-
 describe("ファイルを書かない", () => {
   it.each([
     ["未設定", undefined],
@@ -749,25 +709,29 @@ describe("labelOf の言語別ディレクトリ", () => {
   })
 })
 
-describe("旧定義の残骸通知", () => {
-  it("廃止した 4 種を検出する", () => {
-    for (const name of [
-      "claude-researcher",
-      "gpt-researcher",
-      "grok-researcher",
-      "grok-implementer"
-    ]) {
-      place(name, ["model: sonnet"])
-    }
-    const output = context()
-    expect(output).toContain("claude-researcher")
-    expect(output).toContain("grok-implementer")
-    expect(output).toContain("廃止")
+describe("廃止した役割 ID の通知", () => {
+  it("final-review と書き換え先を通知し、未知の役割 ID と重ねない", () => {
+    place("legacy-reviewer", ["agent-policy-role: final-review"])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("legacy-reviewer")
+    expect(output).toContain("final-review")
+    expect(output).toContain("complex-review")
+    expect(output).not.toContain("未知の役割 ID")
   })
 
-  it("現行のプリセット名は残骸として扱わない", () => {
-    place("gpt-sol", ["model: claude-gpt-5-6-sol"])
-    expect(context()).not.toContain("廃止")
+  it.each([
+    ["gate-review", "complex-review"],
+    ["design-plan", "削除"],
+    ["advisor", "削除"]
+  ])("%s の廃止と移行先を通知し、未知の役割 ID と重ねない", (role, target) => {
+    place("legacy-role-agent", [`agent-policy-role: ${role}`])
+    const output = context({ AMATSUKA_AGENT_AUTO_INJECTION: "custom" })
+
+    expect(output).toContain("legacy-role-agent")
+    expect(output).toContain(`- legacy-role-agent: ${role}`)
+    expect(output).toContain(target)
+    expect(output).not.toContain("未知の役割 ID")
   })
 })
 

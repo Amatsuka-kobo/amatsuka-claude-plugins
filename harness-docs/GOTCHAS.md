@@ -22,6 +22,22 @@
 
 ## 失敗パターン一覧
 
+### [2026-09-28] GOTCHA-004: lindera の npm パッケージを ESM でバンドルすると Dynamic require で落ちた
+
+**タスク**: native-japanese の hook(esbuild で ESM の .mjs にバンドルする)から lindera 6.2.0(N-API)を使えるか確かめるため、npm の lindera パッケージを import してバンドルした。
+**失敗内容**: esbuild の --format=esm でバンドルした成果物を実行すると、Error: Dynamic require of "fs" is not supported で失敗した。lindera の index.js が内部で require('fs') を呼び、esbuild がこれを ESM 非対応の動的 require に変換していた。
+**原因 (推測)**: lindera の npm パッケージは CommonJS 前提で書かれ、プラットフォーム別の .node を require で選ぶ。このリポジトリの ARCHITECTURE は配布物を ESM の .mjs と定めており、パッケージをそのまま import するとこの前提に反する。
+**対策**: plugins/native-japanese で lindera を使うときは、npm の lindera パッケージを import せず、取得した .node を createRequire(import.meta.url) で直接読み込む(設計書 harness-docs/design/2026-09-28-native-japanese-enforcement-design.md のセクション 2-3)。バンドル後は pnpm run build の成果物 scripts/*.mjs を node で実行し、形態素解析の違反が 1 件以上返ることを確かめる。
+**昇格候補**: No
+
+### [2026-09-28] GOTCHA-003: lindera の conjugation_form と conjugation_type を名前どおりに読みかけた
+
+**タスク**: native-japanese 0.2.0-dev の形態素解析層の設計で、lindera 6.2.0(N-API)と IPADIC 6.2.0 から活用型と活用形を取り出そうとした。
+**失敗内容**: conjugation_form を活用形、conjugation_type を活用型だとフィールド名から読みかけた。実際は逆で、conjugation_form に「サ変・スル」などの活用型、conjugation_type に「基本形」などの活用形が入る。kuromoji の conjugated_form と conjugated_type も対応が逆になる。
+**原因 (推測)**: lindera の IPADIC の metadata.json は、MeCab の CSV の列(活用型、活用形の順)とフィールドの英語名の対応を入れ替えている。名前だけで判断し、値を見なかった。
+**対策**: plugins/native-japanese/src/ で lindera のトークンから活用を読むときは、フィールド名でなく details の添字で読む(details[4] が活用型、details[5] が活用形)。「短縮することができる」を解析し、「する」の details[4] が「サ変・スル」になることをテストで固定する。
+**昇格候補**: No
+
 ### [2026-09-18] GOTCHA-002: [解決済み] 委譲の依頼文に書いた説明用の例が成果物へ入った
 
 **タスク**: AI が読む指示書の 1 項目の改訂を、文書作成の役割へ委譲した。

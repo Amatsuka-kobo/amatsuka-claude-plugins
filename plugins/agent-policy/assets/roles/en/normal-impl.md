@@ -1,7 +1,7 @@
 ---
 id: normal-impl
 label: Routine Implementation
-description: routine coding meeting any criterion of one component, existing patterns, or unchanged public interfaces
+description: routine coding meeting any criterion of implementation with settled specification and design, or test authoring
 default-name: implementer
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill
 kind: impl
@@ -9,9 +9,8 @@ kind: impl
 
 ## When to invoke
 
-- Use for implementation within one component.
-- Use for implementation that follows existing patterns.
-- Use for implementation that does not change public interfaces, including adding or updating tests, editing configuration, and running builds or tests.
+- Use for most implementation whose specification and design are settled.
+- Use when writing tests.
 
 ## Core Responsibilities
 
@@ -32,5 +31,5 @@ kind: impl
 ## Output Format
 
 - List changed file paths and summarize each change.
-- List commands run and their results, including output for failures.
+- List the checks that judged each changed location, such as type checking, tests, linting, or grep, and their results, including output for failures.
 - List incomplete items and matters requiring a decision.

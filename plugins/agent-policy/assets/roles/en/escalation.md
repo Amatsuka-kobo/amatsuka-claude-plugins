@@ -9,9 +9,10 @@ kind: impl
 
 ## When to invoke
 
-- Use when the same work has been delegated twice to the same implementation role without completion.
-- Use when an implementation role returns work without identifying the cause.
-- Use when an implementation role has tried twice to fix a test, type-check, or lint failure without resolving it.
+- Use when the cause is unknown.
+- Use when a premise has collapsed.
+- Use when redesign is needed.
+- Use to resolve a blockage, including work sent back from a lower implementation role that the complex implementation role cannot solve either.
 
 ## Core Responsibilities
 

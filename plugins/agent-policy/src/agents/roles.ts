@@ -6,17 +6,14 @@ export type RoleId =
   | "light-impl"
   | "escalation"
   | "general"
-  | "design-plan"
   | "explore"
   | "realtime-research"
   | "e2e-verify"
   | "design-review"
   | "knowledge-elicitation"
   | "code-review"
-  | "final-review"
-  | "gate-review"
+  | "complex-review"
   | "adversarial-review"
-  | "advisor"
 
 export interface Role {
   id: RoleId
@@ -58,12 +55,6 @@ export const ROLES: readonly Role[] = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "design-plan",
-    label: "設計書・実装計画書(WBS)の作成",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore",
     label: "コードベース探索",
     kind: "readonly",
@@ -100,30 +91,33 @@ export const ROLES: readonly Role[] = [
     tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
-    id: "final-review",
-    label: "重要な実装の最終レビュー",
+    id: "complex-review",
+    label: "重要な実装・高リスク設計書の最終レビュー",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "gate-review",
-    label: "設計書の最終ゲートレビュー",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "adversarial-review",
     label: "敵対的レビュー",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "advisor",
-    label: "設計・計画・実装のアドバイザー",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   }
 ]
+
+// 廃止済みの役割 ID と書き換え先。null は後継が無いことを表す。
+// プロジェクトに同名の断片が残っていても、これらは役割として解決しない。
+export const RETIRED_ROLE_REPLACEMENTS: Readonly<
+  Record<string, RoleId | null>
+> = {
+  "final-review": "complex-review",
+  "gate-review": "complex-review",
+  "design-plan": null,
+  advisor: null
+}
+
+export function isRetiredRole(id: string): boolean {
+  return Object.hasOwn(RETIRED_ROLE_REPLACEMENTS, id)
+}
 
 export function roleById(id: string): Role | undefined {
   return ROLES.find((role) => role.id === id)

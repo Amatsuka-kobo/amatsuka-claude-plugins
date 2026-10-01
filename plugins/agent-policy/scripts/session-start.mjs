@@ -117,12 +117,6 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
   },
   {
-    id: "design-plan",
-    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8(WBS)\u306E\u4F5C\u6210",
-    kind: "impl",
-    tools: ["Read", "Grep", "Glob", "Write", "Edit", "Bash", "Skill"]
-  },
-  {
     id: "explore",
     label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
     kind: "readonly",
@@ -159,30 +153,27 @@ var ROLES = [
     tools: ["Read", "Grep", "Glob", "Bash"]
   },
   {
-    id: "final-review",
-    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "gate-review",
-    label: "\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30B2\u30FC\u30C8\u30EC\u30D3\u30E5\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   },
   {
     id: "adversarial-review",
     label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
     kind: "readonly",
     tools: ["Read", "Grep", "Glob", "Bash"]
-  },
-  {
-    id: "advisor",
-    label: "\u8A2D\u8A08\u30FB\u8A08\u753B\u30FB\u5B9F\u88C5\u306E\u30A2\u30C9\u30D0\u30A4\u30B6\u30FC",
-    kind: "readonly",
-    tools: ["Read", "Grep", "Glob"]
   }
 ];
+var RETIRED_ROLE_REPLACEMENTS = {
+  "final-review": "complex-review",
+  "gate-review": "complex-review",
+  "design-plan": null,
+  advisor: null
+};
+function isRetiredRole(id) {
+  return Object.hasOwn(RETIRED_ROLE_REPLACEMENTS, id);
+}
 function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
@@ -228,7 +219,9 @@ function frontmatter(file) {
   const close = lines.indexOf("---", 1);
   if (close === -1) return meta;
   const metadataLines = lines.slice(1, close);
+  let skipUntil = 0;
   for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue;
     const at = line.indexOf(":");
     if (at <= 0) continue;
     const key = line.slice(0, at).trim();
@@ -241,6 +234,16 @@ function frontmatter(file) {
         items.push(item);
       }
       meta.set(key, items.length === 0 ? value : items);
+      continue;
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      const folded = [];
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break;
+        if (candidate.trim() !== "") folded.push(candidate.trim());
+      }
+      skipUntil = index + 1 + folded.length;
+      meta.set(key, folded.join(" "));
       continue;
     }
     meta.set(key, value);
@@ -278,6 +281,12 @@ function parseToolsField(raw) {
   const parsed = parseToolItems(value.split(","));
   return parsed.length === 0 ? void 0 : parsed;
 }
+function descriptionText(raw) {
+  if (typeof raw !== "string") return void 0;
+  let text = unquote(raw);
+  if (raw.trim().startsWith('"')) text = text.replace(/\\n/g, " ");
+  return text === "" ? void 0 : text;
+}
 function projectAgentsDir(env) {
   const projectDir = env.CLAUDE_PROJECT_DIR;
   if (projectDir === void 0 || projectDir === "") return void 0;
@@ -304,12 +313,14 @@ function scanAgents(dir) {
     const model = meta.get("model");
     const marker = meta.get("agent-policy-role");
     const vendor = meta.get("agent-policy-vendor");
+    const description = descriptionText(meta.get("description"));
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : void 0,
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
       tools: parseToolsField(meta.get("tools")),
-      vendor: typeof vendor === "string" ? vendor : void 0
+      vendor: typeof vendor === "string" ? vendor : void 0,
+      description
     });
   }
   return found;
@@ -317,6 +328,7 @@ function scanAgents(dir) {
 function roleLabel(env, role) {
   const known = roleById(role);
   if (known !== void 0) return known.label;
+  if (isRetiredRole(role)) return void 0;
   const projectDir = env.CLAUDE_PROJECT_DIR;
   if (projectDir === void 0 || projectDir === "") return void 0;
   const base = path.join(projectDir, ".claude", "agent-policy", "roles");
@@ -365,43 +377,40 @@ var SCOPE_LINES = {
 function markerTable(env, marked, scope) {
   const labelOf = roleLabels(env);
   const byRole = /* @__PURE__ */ new Map();
+  const detailByRole = /* @__PURE__ */ new Map();
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === void 0) continue;
       const name = entry.vendor === void 0 ? entry.name : `${entry.name} (${entry.vendor})`;
       byRole.set(role, [...byRole.get(role) ?? [], name]);
+      detailByRole.set(role, [
+        ...detailByRole.get(role) ?? [],
+        `  - ${entry.name}: ${entry.description ?? "(description \u306A\u3057)"}`
+      ]);
     }
   }
   if (byRole.size === 0) return void 0;
   const lines = [
-    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u4F9D\u983C\u5185\u5BB9\u306B\u8FD1\u3044\u3082\u306E\u3092\u9078\u3076\u3002",
+    "\u6B21\u306E Agent \u306F\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002\u62C5\u5F53\u8868\u306E\u8A72\u5F53\u3059\u308B\u5F79\u5272\u306F\u3001\u3053\u308C\u3089\u3092\u512A\u5148\u3057\u3066\u4F7F\u3046\u3002\u540C\u3058\u5F79\u5272\u306B\u8907\u6570\u3042\u308B\u3068\u304D\u306F\u3001\u5171\u901A\u898F\u5F8B\u306E \xA7\u540C\u3058\u5F79\u5272\u306E\u5019\u88DC\u304B\u3089\u9078\u3076 \u306B\u5F93\u3046\u3002",
     SCOPE_LINES[scope]
   ];
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role);
     if (names !== void 0) {
       lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`);
+      if (names.length >= 2) lines.push(...detailByRole.get(role) ?? []);
     }
   }
   return lines.join("\n");
 }
 
 // src/hooks/session-start.ts
-var RETIRED = [
-  "claude-researcher",
-  "gpt-researcher",
-  "grok-researcher",
-  "grok-implementer"
-];
-var DEPRECATED_ALIAS_VARIABLES = [
-  "AMATSUKA_AGENT_GPT_SOL_ALIAS",
-  "AMATSUKA_AGENT_GPT_TERRA_ALIAS",
-  "AMATSUKA_AGENT_GPT_LUNA_ALIAS",
-  "AMATSUKA_AGENT_GROK_ALIAS"
-];
+var RETIRED_ROLES = new Set(
+  Object.keys(RETIRED_ROLE_REPLACEMENTS)
+);
 var REPAIR_BLOCK = "\u4FEE\u5FA9\u3059\u308B\u306B\u306F\u3001agent-policy:setup-agents \u3092\u518D\u5B9F\u884C\u3059\u308B\u304B\u3001\u5B9A\u7FA9\u306E `model` \u3092\u4FEE\u6B63\u3059\u308B\u304B\u3001\u30D7\u30ED\u30AD\u30B7\u3092\u8D77\u52D5\u3057\u3066\u304B\u3089\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B\u3002";
 function policyBlock(policy, legacyValue) {
-  const instruction = `\u6700\u521D\u306B\u5FC5\u305A agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3057\u3001\u3053\u306E\u898F\u5F8B\u306B\u5F93\u3046`;
+  const instruction = `\u6700\u521D\u306B agent-policy:${policy} \u30B9\u30AD\u30EB\u3092\u4F7F\u7528\u3059\u308B\u3002\u30B9\u30AD\u30EB\u306E\u898F\u5F8B\u306B\u5F93\u3046\u3002`;
   if (legacyValue === void 0) return instruction;
   return `${instruction}
 \u65E7\u4E92\u63DB\u5024 \`${legacyValue}\` \u3092\u4F7F\u7528\u3057\u3066\u3044\u308B\u3002\`AMATSUKA_AGENT_AUTO_INJECTION\` \u3092 \`custom\` \u3078\u5909\u66F4\u3059\u308B\u3002`;
@@ -414,6 +423,7 @@ function unknownRoleBlock(env, marked) {
   const lines = [];
   for (const entry of marked) {
     for (const role of entry.roles) {
+      if (RETIRED_ROLES.has(role)) continue;
       if (labelOf(role) === void 0) {
         lines.push(`- ${entry.name}: ${role}`);
       }
@@ -425,16 +435,16 @@ function unknownRoleBlock(env, marked) {
     ...lines
   ].join("\n");
 }
-function retiredBlock(marked) {
-  const found = marked.map((entry) => entry.name).filter((name) => RETIRED.includes(name));
-  if (found.length === 0) return void 0;
-  return `\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u3067\u3042\u308B\u3002\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306F\u540C\u68B1\u5B9A\u7FA9\u3088\u308A\u512A\u5148\u3055\u308C\u308B\u305F\u3081\u524A\u9664\u3059\u308B: ${found.join(", ")}`;
-}
-function deprecatedAliasesBlock(env) {
-  if (!DEPRECATED_ALIAS_VARIABLES.some((variable) => env[variable] !== void 0)) {
-    return void 0;
-  }
-  return "AMATSUKA_AGENT_GPT_SOL_ALIAS / AMATSUKA_AGENT_GPT_TERRA_ALIAS / AMATSUKA_AGENT_GPT_LUNA_ALIAS / AMATSUKA_AGENT_GROK_ALIAS \u306E\u30A8\u30A4\u30EA\u30A2\u30B9\u5909\u6570\u306F\u53C2\u7167\u3055\u308C\u306A\u304F\u306A\u3063\u305F\u3002\u30E2\u30C7\u30EB\u306F agent-policy:setup-agents \u304C /v1/models \u304B\u3089\u9078\u3076\u3002\u5B9A\u7FA9\u306E `model` \u5024\u3092\u5909\u3048\u305F\u3044\u3068\u304D\u306F setup \u3092\u518D\u5B9F\u884C\u3059\u308B\u3002";
+function retiredRoleBlock(marked) {
+  const lines = marked.flatMap(
+    (entry) => entry.roles.filter((role) => RETIRED_ROLES.has(role)).map((role) => `- ${entry.name}: ${role}`)
+  );
+  if (lines.length === 0) return void 0;
+  return [
+    "\u6B21\u306E Agent \u5B9A\u7FA9\u306F\u5EC3\u6B62\u6E08\u307F\u306E\u5F79\u5272 ID \u3092\u5BA3\u8A00\u3057\u3066\u3044\u308B\u3002",
+    ...lines,
+    "\u66F8\u304D\u63DB\u3048\u5148: final-review / gate-review \u2192 complex-review\u3001design-plan / advisor \u2192 \u524A\u9664"
+  ].join("\n");
 }
 function markerlessFallbackBlock() {
   return "\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u5B9A\u7FA9\u304C\u898B\u3064\u304B\u3089\u306A\u3044(\u672A\u4F5C\u6210\u3001\u307E\u305F\u306F\u8AAD\u307F\u53D6\u308C\u306A\u3044)\u305F\u3081\u3001claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3067\u52D5\u4F5C\u3059\u308B\u3002agent-policy:setup-agents \u3067\u69CB\u6210\u3092\u4F5C\u308B\u3002";
@@ -534,11 +544,7 @@ async function build(env) {
   } else {
     profileBlocks = [unknownInjectionBlock(injection)];
   }
-  const blocks = compact([
-    ...profileBlocks,
-    retiredBlock(marked),
-    deprecatedAliasesBlock(env)
-  ]);
+  const blocks = compact([...profileBlocks, retiredRoleBlock(marked)]);
   if (blocks.length === 0) return void 0;
   return blocks.join("\n\n");
 }

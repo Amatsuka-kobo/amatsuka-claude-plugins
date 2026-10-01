@@ -20,7 +20,7 @@ kind: readonly
 
 - Read only the original target document.
 - Do not read findings from other reviews. Report that they were provided.
-- Before raising a finding, use Read, Grep, or Glob to verify that code and files mentioned by the document exist and that the description matches them.
+- Before raising a finding, use Read, Grep, or Glob to verify, for the code and files mentioned by the document whose description would change a decision if wrong, that they exist and that the description matches them.
 
 ## Constraints
 
@@ -29,7 +29,7 @@ kind: readonly
 
 ## Output Format
 
-For each finding, provide the following.
+Write only the findings, with no preamble and no closing summary. For each finding, provide the following.
 
 - Target location, including section and line.
 - The questioned assumption and counterevidence, citing a file path and line number or an information source.

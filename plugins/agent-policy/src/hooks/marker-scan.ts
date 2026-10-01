@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { type CandidateScope, runsOnClaude } from "../agents/policies"
-import { roleById, sortRoleIds } from "../agents/roles"
+import { isRetiredRole, roleById, sortRoleIds } from "../agents/roles"
 
 export interface MarkedAgent {
   name: string
@@ -10,6 +10,7 @@ export interface MarkedAgent {
   /** undefined = tools 欄なし・解釈不能(全ツール継承として扱う) / 値あり = 明示リスト */
   tools: string[] | undefined
   vendor: string | undefined
+  description: string | undefined
 }
 
 /** frontmatter の解析結果。tools が block 配列で書かれていたときだけ値が string[] になる。 */
@@ -21,7 +22,9 @@ export function frontmatter(file: string): Map<string, string | string[]> {
   if (close === -1) return meta
 
   const metadataLines = lines.slice(1, close)
+  let skipUntil = 0
   for (const [index, line] of metadataLines.entries()) {
+    if (index < skipUntil) continue
     const at = line.indexOf(":")
     if (at <= 0) continue
     const key = line.slice(0, at).trim()
@@ -34,6 +37,17 @@ export function frontmatter(file: string): Map<string, string | string[]> {
         items.push(item)
       }
       meta.set(key, items.length === 0 ? value : items)
+      continue
+    }
+    if (key === "description" && /^[>|][+-]?$/.test(value)) {
+      // 複数行形式: 続く字下げ行を空白 1 つで連結し、その行を別キーとして読まない
+      const folded: string[] = []
+      for (const candidate of metadataLines.slice(index + 1)) {
+        if (!/^\s/.test(candidate)) break
+        if (candidate.trim() !== "") folded.push(candidate.trim())
+      }
+      skipUntil = index + 1 + folded.length
+      meta.set(key, folded.join(" "))
       continue
     }
     meta.set(key, value)
@@ -84,6 +98,16 @@ export function parseToolsField(
   return parsed.length === 0 ? undefined : parsed
 }
 
+/** 引用符を外し、二重引用符の \n は空白 1 つにする。空なら undefined */
+function descriptionText(
+  raw: string | string[] | undefined
+): string | undefined {
+  if (typeof raw !== "string") return undefined
+  let text = unquote(raw)
+  if (raw.trim().startsWith('"')) text = text.replace(/\\n/g, " ")
+  return text === "" ? undefined : text
+}
+
 /** CLAUDE_PROJECT_DIR から .claude/agents のパスを組む。未設定・空なら undefined */
 export function projectAgentsDir(env: NodeJS.ProcessEnv): string | undefined {
   const projectDir = env.CLAUDE_PROJECT_DIR
@@ -117,6 +141,7 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
     const model = meta.get("model")
     const marker = meta.get("agent-policy-role")
     const vendor = meta.get("agent-policy-vendor")
+    const description = descriptionText(meta.get("description"))
     found.push({
       name: typeof name === "string" ? name : file.replace(/\.md$/, ""),
       model: typeof model === "string" ? model : undefined,
@@ -128,7 +153,8 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
               .filter((role) => role !== "")
           : [],
       tools: parseToolsField(meta.get("tools")),
-      vendor: typeof vendor === "string" ? vendor : undefined
+      vendor: typeof vendor === "string" ? vendor : undefined,
+      description
     })
   }
 
@@ -142,6 +168,8 @@ export function roleLabel(
 ): string | undefined {
   const known = roleById(role)
   if (known !== undefined) return known.label
+  // 廃止済み ID は、同名の断片が残っていても役割として解決しない。
+  if (isRetiredRole(role)) return undefined
 
   const projectDir = env.CLAUDE_PROJECT_DIR
   if (projectDir === undefined || projectDir === "") return undefined
@@ -219,6 +247,7 @@ export function markerTable(
 ): string | undefined {
   const labelOf = roleLabels(env)
   const byRole = new Map<string, string[]>()
+  const detailByRole = new Map<string, string[]>()
   for (const entry of marked) {
     for (const role of entry.roles) {
       if (labelOf(role) === undefined) continue
@@ -227,18 +256,23 @@ export function markerTable(
           ? entry.name
           : `${entry.name} (${entry.vendor})`
       byRole.set(role, [...(byRole.get(role) ?? []), name])
+      detailByRole.set(role, [
+        ...(detailByRole.get(role) ?? []),
+        `  - ${entry.name}: ${entry.description ?? "(description なし)"}`
+      ])
     }
   }
   if (byRole.size === 0) return undefined
 
   const lines = [
-    "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは依頼内容に近いものを選ぶ。",
+    "次の Agent は役割マーカーを宣言している。担当表の該当する役割は、これらを優先して使う。同じ役割に複数あるときは、共通規律の §同じ役割の候補から選ぶ に従う。",
     SCOPE_LINES[scope]
   ]
   for (const role of sortRoleIds([...byRole.keys()])) {
     const names = byRole.get(role)
     if (names !== undefined) {
       lines.push(`- ${labelOf(role)} [${role}]: ${names.join(" / ")}`)
+      if (names.length >= 2) lines.push(...(detailByRole.get(role) ?? []))
     }
   }
   return lines.join("\n")

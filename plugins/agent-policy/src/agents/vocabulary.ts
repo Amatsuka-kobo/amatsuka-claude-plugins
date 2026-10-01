@@ -2,8 +2,6 @@ import type { Lang } from "./policies"
 
 export interface Vocabulary {
   bodyOrder: string[]
-  advisorHeading: string
-  agentConstraintHeading: string
   constraintHeading: string
   outputFormatHeading: string
   listSeparator: string
@@ -13,8 +11,6 @@ export interface Vocabulary {
 
 const JA: Vocabulary = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## 作業手順"],
-  advisorHeading: "## アドバイザーへの相談",
-  agentConstraintHeading: "## Agent tool の制約",
   constraintHeading: "## 制約",
   outputFormatHeading: "## Output Format",
   listSeparator: "、",
@@ -25,8 +21,6 @@ const JA: Vocabulary = {
 
 const EN: Vocabulary = {
   bodyOrder: ["## When to invoke", "## Core Responsibilities", "## Procedure"],
-  advisorHeading: "## Consulting an advisor",
-  agentConstraintHeading: "## Agent tool limits",
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",

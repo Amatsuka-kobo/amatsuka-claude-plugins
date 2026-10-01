@@ -11,7 +11,7 @@ kind: readonly
 
 - **Adversarial review.** Use when a design, implementation plan, code, instruction, test, or other deliverable needs a deliberate search for failure paths and counterexamples.
 - `design-review` tests assumptions in an original design or plan from a different vendor. Adversarial review can target any deliverable or vendor and focuses on how it can fail.
-- `final-review` decides whether a critical implementation is ready to complete. Adversarial review reports counterexamples without deciding readiness.
+- `complex-review` decides whether a critical implementation is ready to complete or a high-risk design document is ready for implementation. Adversarial review reports counterexamples without deciding readiness.
 
 ## Core Responsibilities
 

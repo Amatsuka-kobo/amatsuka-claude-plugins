@@ -12,6 +12,16 @@ export type ModelId =
   | "gpt-astra"
   | "grok"
 
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
+
+export const EFFORT_ORDER: readonly Effort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+]
+
 // ja / en は同梱断片を持つ。それ以外は翻訳断片を要する任意のコード。
 export type Lang = string
 
@@ -131,54 +141,66 @@ export const ASSIGNMENTS: Record<
     "light-impl": ["haiku"],
     escalation: ["fable"],
     general: ["sonnet"],
-    "design-plan": ["opus"],
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
     "e2e-verify": ["sonnet"],
     "design-review": ["sonnet"],
     "knowledge-elicitation": ["haiku"],
     "code-review": ["sonnet"],
-    "final-review": ["fable"],
-    "gate-review": ["fable"],
-    "adversarial-review": ["opus"],
-    advisor: ["fable"]
+    "complex-review": ["fable"],
+    "adversarial-review": ["opus"]
   }
 }
 
 // custom プロファイル向けの推奨。setup-agents の提示だけに使う。方針スキルは推奨列を持たない。
 export const RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["gpt-sol", "opus"],
-  "normal-impl": ["gpt-luna", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku", "grok"],
+  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "normal-impl": ["gpt-sol", "sonnet", "grok"],
+  "light-impl": ["gpt-luna", "haiku"],
   escalation: ["gpt-astra", "fable"],
   general: ["gpt-luna", "sonnet"],
-  "design-plan": ["opus"],
-  explore: ["grok", "sonnet", "gpt-terra"],
+  explore: ["gpt-sol", "sonnet"],
   "realtime-research": ["grok", "sonnet"],
-  "e2e-verify": ["sonnet"],
-  "design-review": ["grok", "sonnet"],
+  "e2e-verify": ["gpt-sol", "sonnet"],
+  "design-review": ["gpt-sol", "sonnet"],
   "knowledge-elicitation": ["haiku"],
-  "code-review": ["sonnet"],
-  "final-review": ["gpt-astra", "fable"],
-  "gate-review": ["gpt-astra", "fable"],
-  "adversarial-review": ["opus", "gpt-sol"],
-  advisor: ["gpt-astra", "fable"]
+  "code-review": ["gpt-sol", "sonnet"],
+  "complex-review": ["gpt-astra", "fable"],
+  "adversarial-review": ["opus", "gpt-sol"]
 }
 
-// 単一役割の定義には、共通規律の除外がそのまま効く。
-// 複数役割を兼ねる定義は一つの役割に対応しないため効かない（設計 §5.2）。
-const SOLO_DENIED_ROLES: readonly RoleId[] = [
-  "advisor",
-  "knowledge-elicitation",
-  "code-review",
-  "final-review",
-  "gate-review",
-  "adversarial-review"
-]
+export const EFFORT: Record<RoleId, Partial<Record<ModelId, Effort>>> = {
+  escalation: { fable: "high", "gpt-astra": "high" },
+  "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+  "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
+  "light-impl": { "gpt-luna": "low" },
+  general: { sonnet: "medium", "gpt-luna": "medium" },
+  explore: { sonnet: "medium", "gpt-sol": "medium" },
+  "realtime-research": { grok: "low", sonnet: "low" },
+  "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
+  "design-review": { sonnet: "medium", "gpt-sol": "medium" },
+  "knowledge-elicitation": {},
+  "code-review": { sonnet: "high", "gpt-sol": "high" },
+  "complex-review": { "gpt-astra": "high", fable: "high" },
+  "adversarial-review": { opus: "high", "gpt-sol": "high" }
+}
 
-// Agent の可否は役割だけで決まる。モデルによる除外は持たない。
-export function allowsAgentTool(ids: RoleId[]): boolean {
-  return ids.some((id) => !SOLO_DENIED_ROLES.includes(id))
+export function effortFor(
+  roleIds: readonly RoleId[],
+  modelId: ModelId
+): Effort | undefined {
+  let highest: Effort | undefined
+  for (const roleId of roleIds) {
+    const effort = EFFORT[roleId]?.[modelId]
+    if (
+      effort !== undefined &&
+      (highest === undefined ||
+        EFFORT_ORDER.indexOf(effort) > EFFORT_ORDER.indexOf(highest))
+    ) {
+      highest = effort
+    }
+  }
+  return highest
 }
 
 export function modelById(id: string): ModelSpec | undefined {
