@@ -158,13 +158,17 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 
 ## 6. 完了報告
 
+報告の前に、この実行で書き込んだファイル(`.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` のうち実際に書いたものだけ)をコミットしてよいかを、AskUserQuestion で聞く。書いたファイルが無ければ聞かない。
+承認されたら、書いたファイルのパスを指定して `git add -- <パス>` を行い、`git commit -m "codiel(init): ハーネスを初期化する" -- <パス>` でそのファイルだけをコミットする。ステージ済みのほかの変更は巻き込まない。
+断られたら、コミットは利用者に任せる。未コミットのまま run を始めると、code 系のゲート(`evaluate_code`)が未コミットの変更を評価できずに止まることを伝える。
+
 次を報告して終了する。
 
 - 配置・生成・追記したファイルの一覧(skip したものは skip と明記)
 - ユーザーが不明と答えて未記入のまま残した項目
 - 手順 2 で `raguel.config.yaml` を消す承認が得られず残ったときは、Raguel が読まないファイルであること
 - 手順 4(c) の旧セクションの取り除きが承認されず残った場合はその旨
-- `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルなので、コミットは利用者が行うこと
+- `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルである。コミットしたか、断られて利用者に任せたかを書く
 - `TYPESAFE_API_KEY` が無いときは、Raguel が Jev による内容の判定と文脈の補正をせず、ルール層だけで判定すること。有効にするには、キーをシェルの環境変数 `TYPESAFE_API_KEY` に設定して Claude Code を起動し直す(手順は `jevriel` プラグインの README に従う)
 - 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
 
