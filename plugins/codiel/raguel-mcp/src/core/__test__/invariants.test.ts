@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { defaultConfig } from "../../config/defaults"
-import { assertInvariants, MAX_DEADLINE_MS, SEALED_RULES } from "../invariants"
+import { assertInvariants, MAX_TIMEOUT_MS, SEALED_RULES } from "../invariants"
 import type { RaguelConfig, RuleSettings } from "../types"
 
 function baseConfig(): RaguelConfig {
@@ -250,13 +250,13 @@ describe("assertInvariants(設計書 §6.12.3)", () => {
   describe("Jev の問い合わせの時間の上限(R21)", () => {
     it("contextJudge.timeoutMs の上限ちょうどは受け、超えると拒否する", () => {
       const ok = baseConfig()
-      ok.contextJudge.timeoutMs = MAX_DEADLINE_MS
+      ok.contextJudge.timeoutMs = MAX_TIMEOUT_MS
       expect(() => assertInvariants(ok)).not.toThrow()
 
       const over = baseConfig()
-      over.contextJudge.timeoutMs = MAX_DEADLINE_MS + 1
+      over.contextJudge.timeoutMs = MAX_TIMEOUT_MS + 1
       expect(() => assertInvariants(over)).toThrow(/contextJudge\.timeoutMs/)
-      expect(MAX_DEADLINE_MS).toBe(1800000)
+      expect(MAX_TIMEOUT_MS).toBe(1800000)
     })
   })
 

@@ -192,12 +192,12 @@ const isSpec = (i: ContextJudgeInput) =>
 
 const CONTENT: ContentQuestion[] = [
   {
-    id: "code-meets-objective",
+    id: "code-omits-objective",
     applies: (i) => i.kind === "code",
     instructions:
-      "Does the diff in state.artifact include changes that achieve the goal stated in state.objective?",
-    label: "diff は objective を達成する変更を含む",
-    direction: "lower"
+      "Does the diff in state.artifact clearly fail to make a change that state.objective explicitly requires for this phase (state.phase)?",
+    label: "diff は、objective がこのフェーズに求める変更を明らかに欠いている",
+    direction: "raise"
   },
   {
     id: "code-out-of-scope",
@@ -224,12 +224,12 @@ const CONTENT: ContentQuestion[] = [
     direction: "raise"
   },
   {
-    id: "plan-covers-objective",
+    id: "plan-omits-objective",
     applies: isPlan,
     instructions:
-      "If the steps of the plan in state.artifact are executed in order, would the goal stated in state.objective be achieved?",
-    label: "計画の手順を順に実行すれば objective を達成できる",
-    direction: "lower"
+      "Does the plan in state.artifact clearly omit work that state.objective explicitly requires?",
+    label: "計画は、objective が求める作業を明らかに欠いている",
+    direction: "raise"
   },
   {
     id: "plan-verifiable",
@@ -237,14 +237,6 @@ const CONTENT: ContentQuestion[] = [
     instructions:
       "Does each step of the plan in state.artifact have a way to confirm that it is complete?",
     label: "各手順は、完了を確かめる方法を持つ",
-    direction: "lower"
-  },
-  {
-    id: "spec-covers-objective",
-    applies: isSpec,
-    instructions:
-      "Does the test specification in state.artifact cover every observable behavior that changes because of the goal stated in state.objective?",
-    label: "テスト仕様は、objective で変わる観測できる振る舞いをすべて扱う",
     direction: "lower"
   },
   {
@@ -256,12 +248,12 @@ const CONTENT: ContentQuestion[] = [
     direction: "lower"
   },
   {
-    id: "design-covers-objective",
+    id: "design-omits-objective",
     applies: (i) => i.kind === "design",
     instructions:
-      "Does the design in state.artifact address every requirement of the goal stated in state.objective?",
-    label: "設計は objective の要件をすべて扱う",
-    direction: "lower"
+      "Does the design in state.artifact clearly omit a requirement that state.objective explicitly states?",
+    label: "設計は、objective が明示する要件を明らかに欠いている",
+    direction: "raise"
   },
   {
     id: "design-contradiction",
@@ -272,20 +264,20 @@ const CONTENT: ContentQuestion[] = [
     direction: "raise"
   },
   {
-    id: "design-open-decisions",
+    id: "design-unlisted-open-decision",
     applies: (i) => i.kind === "design",
     instructions:
-      "Does the design in state.artifact leave decisions that are needed for implementation unresolved?",
-    label: "設計は、実装に要る決定を未決のまま残す",
+      "Does the design in state.artifact leave a decision needed for implementation unresolved without listing it as an open item?",
+    label: "設計は、実装に要る決定を未決事項として挙げないまま残している",
     direction: "raise"
   },
   {
-    id: "decision-fits-objective",
+    id: "decision-contradicts-objective",
     applies: (i) => i.kind === "decision",
     instructions:
-      "Is the decision in state.artifact consistent with the goal stated in state.objective?",
-    label: "判断は objective に沿う",
-    direction: "lower"
+      "Does the decision in state.artifact contradict the goal stated in state.objective?",
+    label: "判断は objective と矛盾する",
+    direction: "raise"
   }
 ]
 
@@ -376,7 +368,8 @@ function buildBodyQuery(
     }
     targets[lex.id] = lex.ruleId
   }
-  for (const c of CONTENT) {
+  // 本文が空白だけ(差分がすべて生成物など)なら、内容を問わない
+  for (const c of input.maskedArtifact.trim() === "" ? [] : CONTENT) {
     if (!c.applies(input)) continue
     questions[c.id] = {
       type: "noul",

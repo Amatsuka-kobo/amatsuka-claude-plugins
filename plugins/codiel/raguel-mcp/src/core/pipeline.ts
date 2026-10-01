@@ -727,8 +727,11 @@ interface Outcome {
 /** 撤去した設定キーが残っているときの警告(評価のたびに 1 件) */
 function retiredKeysReason(loaded: LoadedConfig): string[] {
   if (loaded.retiredKeys.length === 0) return []
+  const note = loaded.retiredKeys.includes("contextJudge.enabled")
+    ? "。TYPESAFE_API_KEY があれば Jev に成果物を送る"
+    : ""
   return [
-    `retired-config: 撤去した設定キー(${loaded.retiredKeys.join("、")})を無視した。設定(${loaded.source})から削除してください`
+    `retired-config: 撤去した設定キー(${loaded.retiredKeys.join("、")})を無視した${note}。設定(${loaded.source})から削除してください`
   ]
 }
 

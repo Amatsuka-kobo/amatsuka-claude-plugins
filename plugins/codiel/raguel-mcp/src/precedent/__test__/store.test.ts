@@ -330,7 +330,7 @@ describe("PrecedentStore", () => {
 })
 
 describe("filterFiredRules", () => {
-  it("panel/*-error・kernel/*・rule-error を除き、通常のルール ID は残す(所見 G2)", () => {
+  it("過去の panel/*-error・kernel/*・rule-error・contextJudge/unavailable を除き、通常のルール ID は残す(所見 G2)", () => {
     expect(
       filterFiredRules([
         "common/secrets",
@@ -339,6 +339,7 @@ describe("filterFiredRules", () => {
         "kernel/config-error",
         "kernel/internal-error",
         "rule-error",
+        "contextJudge/unavailable",
         "casefile/tampered",
         "code/protected-paths"
       ])

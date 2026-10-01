@@ -657,16 +657,16 @@ describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
   })
 
   it("鍵ありで内容判定の問いが ask なら ASK になり、問いの ID と p が 07-context.json に残る", async () => {
-    const jev = fakeJev({ body: { "decision-fits-objective": 0.1 } })
+    const jev = fakeJev({ body: { "decision-contradicts-objective": 0.9 } })
     const h = harness({ jevCall: jev.call, jevApiKey: "k" })
     const r = await decision(h, "小さな方針を決める")
     expect(r.verdict).toBe("ASK")
     expect(r.judgeStatus).toBe("ok")
     expect(r.findings).toContainEqual(
       expect.objectContaining({
-        ruleId: "judge/decision-fits-objective",
+        ruleId: "judge/decision-contradicts-objective",
         severity: "ask",
-        message: "Jev: 判断は objective に沿う可能性が低い(p=0.10)"
+        message: "Jev: 判断は objective と矛盾する可能性が高い(p=0.90)"
       })
     )
     expect(jev.requests[0].state.phase).toBe("intent")
@@ -674,9 +674,9 @@ describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
       fs.readFileSync(path.join(r.casePath, "07-context.json"), "utf-8")
     )
     expect(record.answers).toContainEqual({
-      id: "decision-fits-objective",
-      ruleId: "judge/decision-fits-objective",
-      probability: 0.1
+      id: "decision-contradicts-objective",
+      ruleId: "judge/decision-contradicts-objective",
+      probability: 0.9
     })
   })
 

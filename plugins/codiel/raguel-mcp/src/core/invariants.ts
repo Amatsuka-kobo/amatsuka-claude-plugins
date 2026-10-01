@@ -19,7 +19,7 @@ export const SEALED_RULES: readonly string[] = RULE_SPECS.filter(
 ).map((spec) => spec.id)
 
 /** contextJudge.timeoutMs の上限(R21) */
-export const MAX_DEADLINE_MS = 1800000
+export const MAX_TIMEOUT_MS = 1800000
 
 const SEVERITY_RANK: Record<Severity, number> = { info: 0, ask: 1, stop: 2 }
 
@@ -162,9 +162,9 @@ function assertIgnoreUncommitted(config: RaguelConfig): void {
 // Jev の問い合わせの時間の上限(R21、R19)
 function assertTimeLimits(config: RaguelConfig): void {
   const { timeoutMs } = config.contextJudge
-  if (timeoutMs > MAX_DEADLINE_MS) {
+  if (timeoutMs > MAX_TIMEOUT_MS) {
     throw new Error(
-      `contextJudge.timeoutMs は ${MAX_DEADLINE_MS} を超えられません(指定値: ${timeoutMs})。`
+      `contextJudge.timeoutMs は ${MAX_TIMEOUT_MS} を超えられません(指定値: ${timeoutMs})。`
     )
   }
 }

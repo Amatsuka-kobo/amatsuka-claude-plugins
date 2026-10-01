@@ -47,10 +47,13 @@ function askRuleIdsOf(findings: readonly Finding[]): Set<string> {
 
 /**
  * 前回の ask 以上の ruleId が空でなく、そのどれも今回出ていなければ修正ありとみなす。
- * 前回このルールだけが出ていた attempt は、指摘の中身が無いので修正ありとみなさない
+ * 前回このルールだけが出ていた attempt は、指摘の中身が無いので修正ありとみなさない。
+ * Jev の内容判定(judge/*)は今回のルール層に出ないので、比べる ID から除く
  */
 function isAddressed(prior: PriorAttempt, current: Set<string>): boolean {
-  const ids = prior.askRuleIds.filter((id) => id !== RULE_ID)
+  const ids = prior.askRuleIds.filter(
+    (id) => id !== RULE_ID && !id.startsWith("judge/")
+  )
   return ids.length > 0 && ids.every((id) => !current.has(id))
 }
 

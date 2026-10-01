@@ -23,10 +23,14 @@ import { SEED_PRECEDENTS } from "./seed"
 const ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/
 const INDEX_FILE = "index.json"
 
-/** firedRules に入れない障害由来のルール ID(§6.11、所見 G2) */
-const NON_PRECEDENT_RULE = /^(panel\/[^/]+-error|kernel\/.+|rule-error)$/
+/**
+ * firedRules に入れない障害由来のルール ID(§6.11、所見 G2)。
+ * `panel/*-error` は撤去した LLM パネルの過去の判例を除くために残す
+ */
+const NON_PRECEDENT_RULE =
+  /^(panel\/[^/]+-error|kernel\/.+|rule-error|contextJudge\/unavailable)$/
 
-/** 障害由来の所見(panel/*-error・kernel/*・rule-error)を firedRules から除く */
+/** 障害由来の所見(kernel/*・rule-error・contextJudge/unavailable と過去の panel/*-error)を firedRules から除く */
 export function filterFiredRules(ruleIds: readonly string[]): string[] {
   return ruleIds.filter((id) => !NON_PRECEDENT_RULE.test(id))
 }

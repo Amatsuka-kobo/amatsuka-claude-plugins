@@ -360,24 +360,24 @@ describe("内容判定", () => {
       "code",
       "implement",
       [
-        "code-meets-objective",
+        "code-omits-objective",
         "code-out-of-scope",
         "code-weakens-tests",
         "code-security"
       ]
     ],
-    ["plan", "dev-plan", ["plan-covers-objective", "plan-verifiable"]],
-    ["plan", "test-spec", ["spec-covers-objective", "spec-verifiable"]],
+    ["plan", "dev-plan", ["plan-omits-objective", "plan-verifiable"]],
+    ["plan", "test-spec", ["spec-verifiable"]],
     [
       "design",
       "design",
       [
-        "design-covers-objective",
+        "design-omits-objective",
         "design-contradiction",
-        "design-open-decisions"
+        "design-unlisted-open-decision"
       ]
     ],
-    ["decision", "intent", ["decision-fits-objective"]]
+    ["decision", "intent", ["decision-contradicts-objective"]]
   ] as const)("kind %s・phase %s の本文の問い合わせに、その問いだけが入る", async (kind, phase, expected) => {
     const jev = fakeJev()
     await run(input({ kind, phase }), jev)
@@ -392,26 +392,21 @@ describe("内容判定", () => {
   })
 
   it("lower の問いは p ≤ lower で ask、閾値の上では出さない", async () => {
-    const asked = await run(
-      input({ kind: "design", phase: "design" }),
-      fakeJev({ "design-covers-objective": 0.2 })
-    )
+    const plan = input({ kind: "plan", phase: "dev-plan" })
+    const asked = await run(plan, fakeJev({ "plan-verifiable": 0.2 }))
     expect(judgeFindings(asked)).toEqual([
       {
-        ruleId: "judge/design-covers-objective",
+        ruleId: "judge/plan-verifiable",
         severity: "ask",
-        message: "Jev: 設計は objective の要件をすべて扱う可能性が低い(p=0.20)"
+        message: "Jev: 各手順は、完了を確かめる方法を持つ可能性が低い(p=0.20)"
       }
     ])
     expect(asked.adjustments).toContainEqual({
-      ruleId: "judge/design-covers-objective",
+      ruleId: "judge/plan-verifiable",
       from: "none",
       to: "ask"
     })
-    const above = await run(
-      input({ kind: "design", phase: "design" }),
-      fakeJev({ "design-covers-objective": 0.21 })
-    )
+    const above = await run(plan, fakeJev({ "plan-verifiable": 0.21 }))
     expect(judgeFindings(above)).toEqual([])
   })
 
@@ -426,6 +421,14 @@ describe("内容判定", () => {
     ])
     const below = await run(input(), fakeJev({ "code-out-of-scope": 0.69 }))
     expect(judgeFindings(below)).toEqual([])
+  })
+
+  it("本文が空白だけなら、内容判定の問いを本文の問い合わせに足さない", async () => {
+    const jev = fakeJev()
+    await run(input({ maskedArtifact: " \n\t\n" }), jev)
+    const ids = Object.keys(bodyOf(jev)?.questions ?? {})
+    expect(ids).toContain("injection")
+    expect(judgeIds(bodyOf(jev))).toEqual([])
   })
 
   it("閾値の間では所見を出さず、問いの ID と p を記録に残す", async () => {

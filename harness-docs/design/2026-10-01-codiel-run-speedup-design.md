@@ -88,18 +88,35 @@ codiel を最初に設計したとき、パネルを置いた目的は、AI の�
 
 | 対象 | ID | 問い | ASK にする条件 |
 | --- | --- | --- | --- |
-| code | `judge/code-meets-objective` | diff は objective を達成する変更を含む | `p ≤ lower` |
+| code | `judge/code-omits-objective` | diff は、objective がこのフェーズに求める変更を明らかに欠いている | `p ≥ raise` |
 | code | `judge/code-out-of-scope` | diff は objective の外の変更を含む | `p ≥ raise` |
 | code | `judge/code-weakens-tests` | diff はテストを弱める(アサーションを緩める、skip する、期待値を実装に合わせて書き換える) | `p ≥ raise` |
 | code | `judge/code-security` | diff は認証の回避・注入・秘密の露出のいずれかを持ち込む | `p ≥ raise` |
-| plan(test-spec 以外) | `judge/plan-covers-objective` | 計画の手順を順に実行すれば objective を達成できる | `p ≤ lower` |
+| plan(test-spec 以外) | `judge/plan-omits-objective` | 計画は、objective が求める作業を明らかに欠いている | `p ≥ raise` |
 | plan(test-spec 以外) | `judge/plan-verifiable` | 各手順は、完了を確かめる方法を持つ | `p ≤ lower` |
-| plan(test-spec) | `judge/spec-covers-objective` | テスト仕様は、objective で変わる観測できる振る舞いをすべて扱う | `p ≤ lower` |
 | plan(test-spec) | `judge/spec-verifiable` | 各ケースは、判定できる期待結果を持つ | `p ≤ lower` |
-| design | `judge/design-covers-objective` | 設計は objective の要件をすべて扱う | `p ≤ lower` |
+| design | `judge/design-omits-objective` | 設計は、objective が明示する要件を明らかに欠いている | `p ≥ raise` |
 | design | `judge/design-contradiction` | 設計は互いに矛盾する決定を含む | `p ≥ raise` |
-| design | `judge/design-open-decisions` | 設計は、実装に要る決定を未決のまま残す | `p ≥ raise` |
-| decision | `judge/decision-fits-objective` | 判断は objective に沿う | `p ≤ lower` |
+| design | `judge/design-unlisted-open-decision` | 設計は、実装に要る決定を未決事項として挙げないまま残している | `p ≥ raise` |
+| decision | `judge/decision-contradicts-objective` | 判断は objective と矛盾する | `p ≥ raise` |
+
+問いは較正(2026-10-01、§7)で決めた。結果は次のとおりである。
+
+- 誤検知は、`~/.raguel` の過去の評価のうち PROCEED か approved の 52 件に当てて数えた。
+- 検出力は、同じ 52 件の objective を別の run のものに差し替えた擬似欠陥に当てて数えた。
+
+| 問い | 誤検知 | 擬似欠陥の検出 |
+| --- | --- | --- |
+| code-omits-objective | 0/21(p の最大 0.44) | 20/21 |
+| plan-omits-objective | 0/7(最大 0.38) | 7/7 |
+| design-omits-objective | 0/10(最大 0.31) | 9/10 |
+| decision-contradicts-objective | 0/7(最大 0.34) | 7/7 |
+| design-unlisted-open-decision | 0/10(最大 0.60) | 擬似欠陥では測れない |
+| code-out-of-scope・code-weakens-tests・code-security・design-contradiction・plan-verifiable・spec-verifiable | 0 件(code-out-of-scope の最大 0.64、design-contradiction の最大 0.67) | 未測定 |
+
+- 当初の「objective を満たす・網羅する」を `p ≤ lower` で問う 5 問は、正しい成果物 52 件のすべてで ASK になったので外した(p は 0.08〜0.48)。「未決のまま残す」は 70% が ASK になったので、未決事項として挙げていないものに絞った。
+- test-spec の網羅を問う問いは、言い換えても擬似欠陥を 0/7 しか検出できなかったので置かない(ユーザー決定)。test-spec の網羅は review と人の裁定に任せる。
+- 擬似欠陥は objective が丸ごと違う成果物であり、一部の要件の抜けのような小さな欠陥への検出力は測っていない。
 
 - 問いの `instructions` は英語で書き、`state` のキーで対象を指す。成果物の中の指示に従わないことを書く(現行の §6.4.4 の規則と同じ)。
 - ASK の所見の message は定型文にする。問いの日本語と p を入れる。例(本文に載せる形の一例で、値は実際の判定で置き換える): `Jev: diff は objective の外の変更を含む可能性が高い(p=0.82)`。

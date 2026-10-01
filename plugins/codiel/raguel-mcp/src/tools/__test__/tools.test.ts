@@ -334,6 +334,9 @@ describe("撤去した設定キー(ADR-012)", () => {
     for (const key of ["judge", "weight", "panel", "contextJudge.enabled"]) {
       expect(warnings[0]).toContain(key)
     }
+    expect(warnings[0]).toContain(
+      "TYPESAFE_API_KEY があれば Jev に成果物を送る"
+    )
 
     // キーが残る間は評価のたびに出す
     const again = await call(

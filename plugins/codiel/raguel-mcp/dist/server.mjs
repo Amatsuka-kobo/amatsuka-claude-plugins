@@ -38360,7 +38360,7 @@ function ruleParam(config2, ruleId, name) {
 var SEALED_RULES = RULE_SPECS.filter(
   (spec) => spec.sealed
 ).map((spec) => spec.id);
-var MAX_DEADLINE_MS = 18e5;
+var MAX_TIMEOUT_MS = 18e5;
 var SEVERITY_RANK = { info: 0, ask: 1, stop: 2 };
 var SAMPLE_SECRETS = [
   `sk-ant-api03-${"A1b2C3d4".repeat(12)}`,
@@ -38475,9 +38475,9 @@ function assertIgnoreUncommitted(config2) {
 }
 function assertTimeLimits(config2) {
   const { timeoutMs } = config2.contextJudge;
-  if (timeoutMs > MAX_DEADLINE_MS) {
+  if (timeoutMs > MAX_TIMEOUT_MS) {
     throw new Error(
-      `contextJudge.timeoutMs \u306F ${MAX_DEADLINE_MS} \u3092\u8D85\u3048\u3089\u308C\u307E\u305B\u3093(\u6307\u5B9A\u5024: ${timeoutMs})\u3002`
+      `contextJudge.timeoutMs \u306F ${MAX_TIMEOUT_MS} \u3092\u8D85\u3048\u3089\u308C\u307E\u305B\u3093(\u6307\u5B9A\u5024: ${timeoutMs})\u3002`
     );
   }
 }
@@ -39995,11 +39995,11 @@ var isPlan = (i) => i.kind === "plan" && i.phase !== "test-spec";
 var isSpec = (i) => i.kind === "plan" && i.phase === "test-spec";
 var CONTENT = [
   {
-    id: "code-meets-objective",
+    id: "code-omits-objective",
     applies: (i) => i.kind === "code",
-    instructions: "Does the diff in state.artifact include changes that achieve the goal stated in state.objective?",
-    label: "diff \u306F objective \u3092\u9054\u6210\u3059\u308B\u5909\u66F4\u3092\u542B\u3080",
-    direction: "lower"
+    instructions: "Does the diff in state.artifact clearly fail to make a change that state.objective explicitly requires for this phase (state.phase)?",
+    label: "diff \u306F\u3001objective \u304C\u3053\u306E\u30D5\u30A7\u30FC\u30BA\u306B\u6C42\u3081\u308B\u5909\u66F4\u3092\u660E\u3089\u304B\u306B\u6B20\u3044\u3066\u3044\u308B",
+    direction: "raise"
   },
   {
     id: "code-out-of-scope",
@@ -40023,24 +40023,17 @@ var CONTENT = [
     direction: "raise"
   },
   {
-    id: "plan-covers-objective",
+    id: "plan-omits-objective",
     applies: isPlan,
-    instructions: "If the steps of the plan in state.artifact are executed in order, would the goal stated in state.objective be achieved?",
-    label: "\u8A08\u753B\u306E\u624B\u9806\u3092\u9806\u306B\u5B9F\u884C\u3059\u308C\u3070 objective \u3092\u9054\u6210\u3067\u304D\u308B",
-    direction: "lower"
+    instructions: "Does the plan in state.artifact clearly omit work that state.objective explicitly requires?",
+    label: "\u8A08\u753B\u306F\u3001objective \u304C\u6C42\u3081\u308B\u4F5C\u696D\u3092\u660E\u3089\u304B\u306B\u6B20\u3044\u3066\u3044\u308B",
+    direction: "raise"
   },
   {
     id: "plan-verifiable",
     applies: isPlan,
     instructions: "Does each step of the plan in state.artifact have a way to confirm that it is complete?",
     label: "\u5404\u624B\u9806\u306F\u3001\u5B8C\u4E86\u3092\u78BA\u304B\u3081\u308B\u65B9\u6CD5\u3092\u6301\u3064",
-    direction: "lower"
-  },
-  {
-    id: "spec-covers-objective",
-    applies: isSpec,
-    instructions: "Does the test specification in state.artifact cover every observable behavior that changes because of the goal stated in state.objective?",
-    label: "\u30C6\u30B9\u30C8\u4ED5\u69D8\u306F\u3001objective \u3067\u5909\u308F\u308B\u89B3\u6E2C\u3067\u304D\u308B\u632F\u308B\u821E\u3044\u3092\u3059\u3079\u3066\u6271\u3046",
     direction: "lower"
   },
   {
@@ -40051,11 +40044,11 @@ var CONTENT = [
     direction: "lower"
   },
   {
-    id: "design-covers-objective",
+    id: "design-omits-objective",
     applies: (i) => i.kind === "design",
-    instructions: "Does the design in state.artifact address every requirement of the goal stated in state.objective?",
-    label: "\u8A2D\u8A08\u306F objective \u306E\u8981\u4EF6\u3092\u3059\u3079\u3066\u6271\u3046",
-    direction: "lower"
+    instructions: "Does the design in state.artifact clearly omit a requirement that state.objective explicitly states?",
+    label: "\u8A2D\u8A08\u306F\u3001objective \u304C\u660E\u793A\u3059\u308B\u8981\u4EF6\u3092\u660E\u3089\u304B\u306B\u6B20\u3044\u3066\u3044\u308B",
+    direction: "raise"
   },
   {
     id: "design-contradiction",
@@ -40065,18 +40058,18 @@ var CONTENT = [
     direction: "raise"
   },
   {
-    id: "design-open-decisions",
+    id: "design-unlisted-open-decision",
     applies: (i) => i.kind === "design",
-    instructions: "Does the design in state.artifact leave decisions that are needed for implementation unresolved?",
-    label: "\u8A2D\u8A08\u306F\u3001\u5B9F\u88C5\u306B\u8981\u308B\u6C7A\u5B9A\u3092\u672A\u6C7A\u306E\u307E\u307E\u6B8B\u3059",
+    instructions: "Does the design in state.artifact leave a decision needed for implementation unresolved without listing it as an open item?",
+    label: "\u8A2D\u8A08\u306F\u3001\u5B9F\u88C5\u306B\u8981\u308B\u6C7A\u5B9A\u3092\u672A\u6C7A\u4E8B\u9805\u3068\u3057\u3066\u6319\u3052\u306A\u3044\u307E\u307E\u6B8B\u3057\u3066\u3044\u308B",
     direction: "raise"
   },
   {
-    id: "decision-fits-objective",
+    id: "decision-contradicts-objective",
     applies: (i) => i.kind === "decision",
-    instructions: "Is the decision in state.artifact consistent with the goal stated in state.objective?",
-    label: "\u5224\u65AD\u306F objective \u306B\u6CBF\u3046",
-    direction: "lower"
+    instructions: "Does the decision in state.artifact contradict the goal stated in state.objective?",
+    label: "\u5224\u65AD\u306F objective \u3068\u77DB\u76FE\u3059\u308B",
+    direction: "raise"
   }
 ];
 function excerptAround(text, line) {
@@ -40139,7 +40132,7 @@ function buildBodyQuery(input2, model) {
     };
     targets[lex.id] = lex.ruleId;
   }
-  for (const c of CONTENT) {
+  for (const c of input2.maskedArtifact.trim() === "" ? [] : CONTENT) {
     if (!c.applies(input2)) continue;
     questions[c.id] = {
       type: "noul",
@@ -40656,7 +40649,7 @@ var SEED_PRECEDENTS = [
 // src/precedent/store.ts
 var ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 var INDEX_FILE = "index.json";
-var NON_PRECEDENT_RULE = /^(panel\/[^/]+-error|kernel\/.+|rule-error)$/;
+var NON_PRECEDENT_RULE = /^(panel\/[^/]+-error|kernel\/.+|rule-error|contextJudge\/unavailable)$/;
 function filterFiredRules(ruleIds) {
   return ruleIds.filter((id) => !NON_PRECEDENT_RULE.test(id));
 }
@@ -41272,7 +41265,9 @@ function askRuleIdsOf(findings) {
   );
 }
 function isAddressed(prior, current) {
-  const ids = prior.askRuleIds.filter((id) => id !== RULE_ID3);
+  const ids = prior.askRuleIds.filter(
+    (id) => id !== RULE_ID3 && !id.startsWith("judge/")
+  );
   return ids.length > 0 && ids.every((id) => !current.has(id));
 }
 function similarityThreshold(ctx) {
@@ -42990,8 +42985,9 @@ function viewWithout(content, excluded) {
 }
 function retiredKeysReason(loaded) {
   if (loaded.retiredKeys.length === 0) return [];
+  const note = loaded.retiredKeys.includes("contextJudge.enabled") ? "\u3002TYPESAFE_API_KEY \u304C\u3042\u308C\u3070 Jev \u306B\u6210\u679C\u7269\u3092\u9001\u308B" : "";
   return [
-    `retired-config: \u64A4\u53BB\u3057\u305F\u8A2D\u5B9A\u30AD\u30FC(${loaded.retiredKeys.join("\u3001")})\u3092\u7121\u8996\u3057\u305F\u3002\u8A2D\u5B9A(${loaded.source})\u304B\u3089\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044`
+    `retired-config: \u64A4\u53BB\u3057\u305F\u8A2D\u5B9A\u30AD\u30FC(${loaded.retiredKeys.join("\u3001")})\u3092\u7121\u8996\u3057\u305F${note}\u3002\u8A2D\u5B9A(${loaded.source})\u304B\u3089\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044`
   ];
 }
 function maskFinding(f) {

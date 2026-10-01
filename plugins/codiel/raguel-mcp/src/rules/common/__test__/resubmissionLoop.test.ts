@@ -103,6 +103,20 @@ describe("resubmission-loop 修正ありの判定(所見 D5)", () => {
     ).toHaveLength(1)
   })
 
+  it("前回の ask が judge/* だけなら、決定論の所見を持たない前回と同じく比べる", () => {
+    expect(
+      run([prior({ askRuleIds: ["judge/code-security"] })], [])
+    ).toHaveLength(1)
+  })
+
+  it("前回の ask に judge/* と決定論の ruleId があれば、決定論のほうだけで修正ありを判定する", () => {
+    const p = prior({
+      askRuleIds: ["judge/code-security", "code/max-diff-lines"]
+    })
+    expect(run([p], [])).toEqual([])
+    expect(run([p], [askFinding("code/max-diff-lines")])).toHaveLength(1)
+  })
+
   it("今回の所見を渡さない Rule.check は、比べられる相手をすべて比べる", () => {
     const findings = resubmissionLoopRule.check(
       makeArtifact({ content: CONTENT }),

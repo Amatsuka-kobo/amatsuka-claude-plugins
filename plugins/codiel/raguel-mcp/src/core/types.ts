@@ -265,7 +265,7 @@ export interface Precedent {
   /** 何が起きたかの要約(BM25 の検索の本文の一部) */
   summary: string
   objective?: string
-  /** 発火したルール ID。panel/*-error・kernel/*・rule-error は含めない */
+  /** 発火したルール ID。kernel/*・rule-error・contextJudge/unavailable は含めない(過去の panel/*-error も除く) */
   firedRules: string[]
   changedPaths: string[]
   /** 判例から得た教訓。プロジェクトの判例は裁定の notes か、発火したルールの一覧 */
