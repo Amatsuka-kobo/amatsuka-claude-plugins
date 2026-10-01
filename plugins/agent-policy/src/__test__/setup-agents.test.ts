@@ -130,10 +130,12 @@ interface CoverageResult {
     kind: "impl" | "readonly"
     defaultName: string
     models: string[]
+    candidates: { modelId: string; model: string; recommended: boolean }[]
     coveredBy: string[]
   }[]
   uncovered: string[]
   definitions: CoverageDefinition[]
+  liveOk: boolean
 }
 
 interface CoverageDefinition {
@@ -784,6 +786,124 @@ function definitionOf(
 ): CoverageDefinition | undefined {
   return result.definitions.find((definition) => definition.name === name)
 }
+
+describe("--list-coverage の candidates", () => {
+  type CandidatesResult = CoverageResult
+
+  function candidatesOf(result: CandidatesResult, role: string) {
+    return result.roles
+      .find((entry) => entry.id === role)
+      ?.candidates.map((candidate) =>
+        candidate.recommended ? `${candidate.modelId}*` : candidate.modelId
+      )
+  }
+
+  it("--scope claude は Claude の 4 値で、推奨を先頭に並べ、live を照会しない", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({ data: [{ id: "claude-grok-4-7" }] })
+    })
+
+    const result = await runAsync<CandidatesResult>(
+      ["--list-coverage", "--scope", "claude", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.liveOk).toBe(true)
+    expect(proxy.requests).toHaveLength(0)
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "opus*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+    expect(
+      result.roles
+        .find((entry) => entry.id === "complex-impl")
+        ?.candidates.find((candidate) => candidate.modelId === "opus")?.model
+    ).toBe("opus")
+  })
+
+  it("custom で live が取れたら、live にある推奨と Claude の 4 値を返し、推奨に無いモデルは入れない", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [
+          { id: "claude-gpt-6-sol", owned_by: "openai" },
+          { id: "claude-grok-4-7", owned_by: "xai" }
+        ]
+      })
+    })
+
+    const result = await runAsync<CandidatesResult>(
+      ["--list-coverage", "--scope", "custom", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.liveOk).toBe(true)
+    expect(candidatesOf(result, "e2e-verify")).toEqual([
+      "gpt-sol*",
+      "sonnet*",
+      "opus",
+      "haiku",
+      "fable"
+    ])
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "gpt-sol*",
+      "opus*",
+      "grok*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+
+  it("custom で live に無い推奨の外部モデルは候補から外す", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "claude-gpt-6-sol", owned_by: "openai" }]
+      })
+    })
+
+    const result = await runAsync<CandidatesResult>(
+      ["--list-coverage", "--scope", "custom", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "gpt-sol*",
+      "opus*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+
+  it("custom で live が取れなければ liveOk: false とし、推奨すべてと Claude の 4 値を返す", () => {
+    const result = run<CandidatesResult>([
+      "--list-coverage",
+      "--scope",
+      "custom",
+      "--dir",
+      project
+    ])
+
+    expect(result.liveOk).toBe(false)
+    expect(candidatesOf(result, "e2e-verify")).toEqual([
+      "gpt-sol*",
+      "sonnet*",
+      "opus",
+      "haiku",
+      "fable"
+    ])
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "gpt-sol*",
+      "opus*",
+      "grok*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+})
 
 describe("--list-coverage の点検結果", () => {
   it("modelBreakdown はマーカー付き定義を Claude で動くものと外部ベンダーに分けて数える", () => {

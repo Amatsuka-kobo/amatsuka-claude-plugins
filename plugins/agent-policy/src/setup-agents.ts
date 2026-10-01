@@ -1246,7 +1246,39 @@ function inspectDefinitions(
   return definitions
 }
 
-function listCoverage(options: Options): unknown {
+// モデル ID の候補。推奨を推奨の順に先頭へ置き、Claude の enum を後ろに足す。
+// custom で live が取れたときは、live に無い推奨の外部モデルを除く。
+function candidatesFor(
+  recommended: readonly ModelId[],
+  scope: CandidateScope,
+  live: LiveModels
+): { modelId: ModelId; model: string; recommended: boolean }[] {
+  const pool =
+    scope === "claude-only"
+      ? recommended.filter((id) => isClaudeEnum(id))
+      : recommended.filter((id) => {
+          const spec = modelById(id)
+          return (
+            spec !== undefined &&
+            (!live.ok || modelIsAvailable(spec.model, live))
+          )
+        })
+  const ids = [...new Set([...pool, ...(CLAUDE_ENUM_MODELS as ModelId[])])]
+  return ids.flatMap((id) => {
+    const spec = modelById(id)
+    return spec === undefined
+      ? []
+      : [
+          {
+            modelId: spec.id,
+            model: spec.model,
+            recommended: recommended.includes(id)
+          }
+        ]
+  })
+}
+
+function listCoverage(options: Options, live: LiveModels): unknown {
   const roleIds = sortRoleIds(Object.keys(RECOMMENDED) as RoleId[])
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
@@ -1263,21 +1295,24 @@ function listCoverage(options: Options): unknown {
     if (fragment === undefined) {
       throw new Error(`Role fragment not found: ${id}`)
     }
+    const models =
+      options.scope === "claude-only"
+        ? ASSIGNMENTS["claude-model-policy"][id]
+        : RECOMMENDED[id]
     return {
       id,
       label: fragment.label,
       kind: fragment.kind,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
-      models:
-        options.scope === "claude-only"
-          ? ASSIGNMENTS["claude-model-policy"][id]
-          : RECOMMENDED[id],
+      models,
+      candidates: candidatesFor(models, options.scope, live),
       coveredBy: covered.get(id) ?? []
     }
   })
 
   return {
     ok: true,
+    liveOk: live.ok,
     roles,
     uncovered: roles
       .filter((role) => role.coveredBy.length === 0)
@@ -1702,7 +1737,11 @@ async function main(): Promise<void> {
           : await fetchLiveModels(process.env)
       respond(listLiveModels(live, options.scope))
     } else if (options.listCoverage) {
-      respond(listCoverage(options))
+      const live =
+        options.scope === "claude-only"
+          ? { ok: true, ids: [], vendors: {} }
+          : await fetchLiveModels(process.env)
+      respond(listCoverage(options, live))
     } else if (options.listMcp) {
       respond(listMcp())
     } else if (options.checkFragments) {

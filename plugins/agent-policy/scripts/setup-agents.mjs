@@ -1677,7 +1677,24 @@ function inspectDefinitions(projectDir, fragments) {
   }
   return definitions;
 }
-function listCoverage(options) {
+function candidatesFor(recommended, scope, live) {
+  const pool = scope === "claude-only" ? recommended.filter((id) => isClaudeEnum(id)) : recommended.filter((id) => {
+    const spec = modelById(id);
+    return spec !== void 0 && (!live.ok || modelIsAvailable(spec.model, live));
+  });
+  const ids = [.../* @__PURE__ */ new Set([...pool, ...CLAUDE_ENUM_MODELS])];
+  return ids.flatMap((id) => {
+    const spec = modelById(id);
+    return spec === void 0 ? [] : [
+      {
+        modelId: spec.id,
+        model: spec.model,
+        recommended: recommended.includes(id)
+      }
+    ];
+  });
+}
+function listCoverage(options, live) {
   const roleIds = sortRoleIds(Object.keys(RECOMMENDED));
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
@@ -1689,17 +1706,20 @@ function listCoverage(options) {
     if (fragment === void 0) {
       throw new Error(`Role fragment not found: ${id}`);
     }
+    const models = options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][id] : RECOMMENDED[id];
     return {
       id,
       label: fragment.label,
       kind: fragment.kind,
       defaultName: fragment.defaultName ?? fallbackNames?.get(id),
-      models: options.scope === "claude-only" ? ASSIGNMENTS["claude-model-policy"][id] : RECOMMENDED[id],
+      models,
+      candidates: candidatesFor(models, options.scope, live),
       coveredBy: covered.get(id) ?? []
     };
   });
   return {
     ok: true,
+    liveOk: live.ok,
     roles,
     uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id),
     definitions: inspectDefinitions(options.dir, fragments),
@@ -2057,7 +2077,8 @@ async function main() {
       const live = options.scope === "claude-only" ? { ok: true, ids: [], vendors: {} } : await fetchLiveModels(process.env);
       respond(listLiveModels(live, options.scope));
     } else if (options.listCoverage) {
-      respond(listCoverage(options));
+      const live = options.scope === "claude-only" ? { ok: true, ids: [], vendors: {} } : await fetchLiveModels(process.env);
+      respond(listCoverage(options, live));
     } else if (options.listMcp) {
       respond(listMcp());
     } else if (options.checkFragments) {
