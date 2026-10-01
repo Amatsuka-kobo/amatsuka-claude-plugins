@@ -1818,7 +1818,14 @@ function pruneTools(options) {
   const warnings = options.tools.filter((tool) => !current.includes(tool)).map((tool) => `tools: ${tool} \u306F tools \u884C\u306B\u7121\u3044\u305F\u3081\u7121\u8996\u3057\u305F`);
   const remaining = current.filter((tool) => !options.tools.includes(tool));
   if (remaining.length === current.length) {
-    return { ok: true, target: definition.target, changed: false, warnings };
+    return {
+      ok: true,
+      target: definition.target,
+      changed: false,
+      warnings,
+      toolsBefore: current,
+      toolsAfter: current
+    };
   }
   if (remaining.length === 0) {
     throw new Error(
@@ -1827,7 +1834,14 @@ function pruneTools(options) {
   }
   definition.lines[index] = `${line.slice(0, line.indexOf(":") + 1)} ${remaining.join(", ")}`;
   writeDefinition(definition);
-  return { ok: true, target: definition.target, changed: true, warnings };
+  return {
+    ok: true,
+    target: definition.target,
+    changed: true,
+    warnings,
+    toolsBefore: current,
+    toolsAfter: remaining
+  };
 }
 function rewriteRoles(options) {
   const definition = readDefinition(options);

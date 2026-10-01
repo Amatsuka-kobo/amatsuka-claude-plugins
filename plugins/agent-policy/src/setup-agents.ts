@@ -1446,7 +1446,14 @@ function pruneTools(options: Options): unknown {
     .map((tool) => `tools: ${tool} は tools 行に無いため無視した`)
   const remaining = current.filter((tool) => !options.tools.includes(tool))
   if (remaining.length === current.length) {
-    return { ok: true, target: definition.target, changed: false, warnings }
+    return {
+      ok: true,
+      target: definition.target,
+      changed: false,
+      warnings,
+      toolsBefore: current,
+      toolsAfter: current
+    }
   }
   // 空の tools は全ツール継承と区別できないため、残りが無くなる削除は拒む。
   if (remaining.length === 0) {
@@ -1457,7 +1464,15 @@ function pruneTools(options: Options): unknown {
   definition.lines[index] =
     `${line.slice(0, line.indexOf(":") + 1)} ${remaining.join(", ")}`
   writeDefinition(definition)
-  return { ok: true, target: definition.target, changed: true, warnings }
+  // 非対話モードの報告は、この後の再生成でなく prune の前の値を「変更前」にする。
+  return {
+    ok: true,
+    target: definition.target,
+    changed: true,
+    warnings,
+    toolsBefore: current,
+    toolsAfter: remaining
+  }
 }
 
 function rewriteRoles(options: Options): unknown {

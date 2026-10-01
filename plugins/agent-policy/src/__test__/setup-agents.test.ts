@@ -1210,6 +1210,25 @@ describe("--prune-tools", () => {
     )
   })
 
+  it("応答に tools 行の変更前と変更後を返す", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<
+      EditResult & { toolsBefore: string[]; toolsAfter: string[] }
+    >([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "Agent",
+      "--dir",
+      project
+    ])
+
+    expect(result.toolsBefore).toEqual(["Read", "Agent", "Grep", "WebFetch"])
+    expect(result.toolsAfter).toEqual(["Read", "Grep", "WebFetch"])
+  })
+
   it("行に無いツールだけを指定したときは書き換えない", () => {
     writeAgent("target.md", [EDIT_SOURCE])
 
