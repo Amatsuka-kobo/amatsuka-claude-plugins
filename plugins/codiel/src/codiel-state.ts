@@ -48,6 +48,16 @@ export interface PhaseState {
   passedHead?: string
 }
 
+// バックグラウンドで動く委譲 1 件の待ちの記録。返答は try の waits/<id>.md に書く
+export interface Wait {
+  id: string
+  purpose: string
+  phase: string
+  startedAt: string
+  // Agent ツールが返す委譲の ID。run を止めるときに委譲を止めるのに使う
+  taskId?: string
+}
+
 export interface RunState {
   version: number
   runId: string
@@ -91,6 +101,8 @@ export interface RunState {
   testLoop?: { units: Record<string, StepState> }
   // fix-loop でテストの保護を外す間だけ真(設計書 §6.13.6)。clear-test-edit でキーごと消す
   testEdit?: boolean
+  // 動いている委譲の待ち。stop-guard は 1 件以上あると止めずに通す。version は 2 のまま据え置く
+  waits?: Wait[]
   // Raguel の記録の形式(Raguel 設計書 §6.13.3)。init が 2 を記録する。
   // 持たない run(この作り直しより前に作ったもの)は pass-gate を通せない
   raguelContract?: 2
@@ -187,7 +199,13 @@ const INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/
 const INTEGRATIONS = ["github", "local"] as const
 // Raguel の判定。mark-ask --verdict と pass-gate --human-approved が受け付ける値(設計書 §6.2.2)
 const VERDICTS = ["PROCEED", "ASK", "STOP"] as const
-const BOOL_FLAGS = ["active", "human-approved", "intent-only", "final"]
+const BOOL_FLAGS = [
+  "active",
+  "human-approved",
+  "intent-only",
+  "final",
+  "abandon-waits"
+]
 
 // 触るとそのステップだけの serial グループになる lockfile(計画書 §6.3)。
 // ファイル名(最後のセグメント)の完全一致で判定し、置き場のディレクトリは問わない。
@@ -766,6 +784,11 @@ function loadRun(
   return latest
 }
 
+// 待ちの報告のファイル。try のディレクトリの waits/<id>.md
+function waitReport(latest: LatestTry, id: string): string {
+  return path.join(path.dirname(latest.statePath), "waits", `${id}.md`)
+}
+
 export function main(argv: string[], root: string = process.cwd()): undefined {
   const { pos, flags, bools } = parseArgs(argv)
   const cmd = pos[0]
@@ -885,6 +908,12 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const latest = loadRun(root, flags, true)
     if (TERMINAL.has(latest.state.status))
       fail(`すでに終端状態です: ${latest.state.status}`)
+    const waits = latest.state.waits ?? []
+    if (waits.length > 0 && !bools.has("abandon-waits"))
+      fail(
+        `待ちが残っています: ${waits.map((w) => w.id).join(", ")}。委譲を止めるか完了を待って片付けてください。止められず待てないときだけ、人に確かめてから --abandon-waits を付けます`
+      )
+    if (bools.has("abandon-waits")) delete latest.state.waits
     latest.state.status = "stopped"
     latest.state.stopReason = flags.reason ?? null
     writeState(latest.statePath, latest.state)
@@ -1143,6 +1172,62 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     latest.state.domain = null
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
+  }
+
+  // 待ちの id は報告のファイル名に使うので、パスに使えない文字を拒む
+  if (cmd === "wait-add") {
+    const id = flags.id
+    if (!id) fail("--id が必要です")
+    if (!SLUG_RE.test(id))
+      fail(`不正な --id: ${id}。英小文字と数字をハイフンでつないでください`)
+    const purpose = (flags.purpose ?? "").trim()
+    if (purpose === "") fail("--purpose が必要です")
+    const latest = loadRun(root, flags)
+    const st = latest.state
+    if (TERMINAL.has(st.status)) fail(`すでに終端状態です: ${st.status}`)
+    if ((st.waits ?? []).some((w) => w.id === id))
+      fail(`待ち ${id} はすでに残っています`)
+    if (fs.existsSync(waitReport(latest, id)))
+      fail(
+        `${waitReport(latest, id)} がすでにあります(id は try の中で使い回さない)`
+      )
+    const wait: Wait = {
+      id,
+      purpose,
+      phase: st.phase ?? "",
+      startedAt: new Date().toISOString()
+    }
+    if (flags["task-id"]) wait.taskId = flags["task-id"]
+    st.waits = [...(st.waits ?? []), wait]
+    writeState(latest.statePath, st)
+    return ok({ statePath: latest.statePath, state: st })
+  }
+
+  // 報告を書いてから消す順序を、waits/<id>.md の有無で守らせる
+  if (cmd === "wait-done") {
+    const id = flags.id
+    if (!id) fail("--id が必要です")
+    if (!SLUG_RE.test(id)) fail(`不正な --id: ${id}`)
+    const latest = loadRun(root, flags)
+    const st = latest.state
+    const waits = st.waits ?? []
+    if (!waits.some((w) => w.id === id)) fail(`待ち ${id} はありません`)
+    if (!fs.existsSync(waitReport(latest, id)))
+      fail(
+        `${waitReport(latest, id)} がありません。返答の本文を書いてから wait-done してください`
+      )
+    st.waits = waits.filter((w) => w.id !== id)
+    writeState(latest.statePath, st)
+    return ok({ statePath: latest.statePath, state: st })
+  }
+
+  // wait-clear は状態を問わず通す(clear-domain と同じ)。消した待ちを出力する
+  if (cmd === "wait-clear") {
+    const latest = loadRun(root, flags)
+    const cleared = latest.state.waits ?? []
+    latest.state.waits = []
+    writeState(latest.statePath, latest.state)
+    return ok({ statePath: latest.statePath, state: latest.state, cleared })
   }
 
   // resume 時の再判定で連携モードを変えるときに使う(計画書 §2)。

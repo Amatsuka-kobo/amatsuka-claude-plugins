@@ -339,7 +339,13 @@ var V1_RUN_RE = /^issue-\d+$/;
 var INTENT_PATH_RE = /^docs\/intents\/[^/]+\.md$/;
 var INTEGRATIONS = ["github", "local"];
 var VERDICTS = ["PROCEED", "ASK", "STOP"];
-var BOOL_FLAGS = ["active", "human-approved", "intent-only", "final"];
+var BOOL_FLAGS = [
+  "active",
+  "human-approved",
+  "intent-only",
+  "final",
+  "abandon-waits"
+];
 var LOCKFILES = /* @__PURE__ */ new Set([
   "pnpm-lock.yaml",
   "package-lock.json",
@@ -724,6 +730,9 @@ function loadRun(root, flags, allowLegacy = false) {
   if (isLegacy(latest.state) && !allowLegacy) fail(legacyMessage(latest.state));
   return latest;
 }
+function waitReport(latest, id) {
+  return path3.join(path3.dirname(latest.statePath), "waits", `${id}.md`);
+}
 function main(argv, root = process.cwd()) {
   const { pos, flags, bools } = parseArgs(argv);
   const cmd = pos[0];
@@ -820,6 +829,12 @@ function main(argv, root = process.cwd()) {
     const latest = loadRun(root, flags, true);
     if (TERMINAL.has(latest.state.status))
       fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
+    const waits = latest.state.waits ?? [];
+    if (waits.length > 0 && !bools.has("abandon-waits"))
+      fail(
+        `\u5F85\u3061\u304C\u6B8B\u3063\u3066\u3044\u307E\u3059: ${waits.map((w) => w.id).join(", ")}\u3002\u59D4\u8B72\u3092\u6B62\u3081\u308B\u304B\u5B8C\u4E86\u3092\u5F85\u3063\u3066\u7247\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002\u6B62\u3081\u3089\u308C\u305A\u5F85\u3066\u306A\u3044\u3068\u304D\u3060\u3051\u3001\u4EBA\u306B\u78BA\u304B\u3081\u3066\u304B\u3089 --abandon-waits \u3092\u4ED8\u3051\u307E\u3059`
+      );
+    if (bools.has("abandon-waits")) delete latest.state.waits;
     latest.state.status = "stopped";
     latest.state.stopReason = flags.reason ?? null;
     writeState(latest.statePath, latest.state);
@@ -1048,6 +1063,56 @@ function main(argv, root = process.cwd()) {
     latest.state.domain = null;
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
+  }
+  if (cmd === "wait-add") {
+    const id = flags.id;
+    if (!id) fail("--id \u304C\u5FC5\u8981\u3067\u3059");
+    if (!SLUG_RE.test(id))
+      fail(`\u4E0D\u6B63\u306A --id: ${id}\u3002\u82F1\u5C0F\u6587\u5B57\u3068\u6570\u5B57\u3092\u30CF\u30A4\u30D5\u30F3\u3067\u3064\u306A\u3044\u3067\u304F\u3060\u3055\u3044`);
+    const purpose = (flags.purpose ?? "").trim();
+    if (purpose === "") fail("--purpose \u304C\u5FC5\u8981\u3067\u3059");
+    const latest = loadRun(root, flags);
+    const st = latest.state;
+    if (TERMINAL.has(st.status)) fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${st.status}`);
+    if ((st.waits ?? []).some((w) => w.id === id))
+      fail(`\u5F85\u3061 ${id} \u306F\u3059\u3067\u306B\u6B8B\u3063\u3066\u3044\u307E\u3059`);
+    if (fs3.existsSync(waitReport(latest, id)))
+      fail(
+        `${waitReport(latest, id)} \u304C\u3059\u3067\u306B\u3042\u308A\u307E\u3059(id \u306F try \u306E\u4E2D\u3067\u4F7F\u3044\u56DE\u3055\u306A\u3044)`
+      );
+    const wait = {
+      id,
+      purpose,
+      phase: st.phase ?? "",
+      startedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (flags["task-id"]) wait.taskId = flags["task-id"];
+    st.waits = [...st.waits ?? [], wait];
+    writeState(latest.statePath, st);
+    return ok({ statePath: latest.statePath, state: st });
+  }
+  if (cmd === "wait-done") {
+    const id = flags.id;
+    if (!id) fail("--id \u304C\u5FC5\u8981\u3067\u3059");
+    if (!SLUG_RE.test(id)) fail(`\u4E0D\u6B63\u306A --id: ${id}`);
+    const latest = loadRun(root, flags);
+    const st = latest.state;
+    const waits = st.waits ?? [];
+    if (!waits.some((w) => w.id === id)) fail(`\u5F85\u3061 ${id} \u306F\u3042\u308A\u307E\u305B\u3093`);
+    if (!fs3.existsSync(waitReport(latest, id)))
+      fail(
+        `${waitReport(latest, id)} \u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8FD4\u7B54\u306E\u672C\u6587\u3092\u66F8\u3044\u3066\u304B\u3089 wait-done \u3057\u3066\u304F\u3060\u3055\u3044`
+      );
+    st.waits = waits.filter((w) => w.id !== id);
+    writeState(latest.statePath, st);
+    return ok({ statePath: latest.statePath, state: st });
+  }
+  if (cmd === "wait-clear") {
+    const latest = loadRun(root, flags);
+    const cleared = latest.state.waits ?? [];
+    latest.state.waits = [];
+    writeState(latest.statePath, latest.state);
+    return ok({ statePath: latest.statePath, state: latest.state, cleared });
   }
   if (cmd === "set-integration") {
     const integration = oneOf(flags, "integration", INTEGRATIONS);

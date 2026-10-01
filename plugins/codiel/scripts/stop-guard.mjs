@@ -91,7 +91,7 @@ function isLegacy(st) {
 var input = await readStdin();
 if (!input.stop_hook_active) {
   const run = findActiveRun(findMainRoot(input.cwd ?? process.cwd()));
-  if (run && run.state.status === "active") {
+  if (run && run.state.status === "active" && (run.state.waits ?? []).length === 0) {
     const { runId, try: tryN, phase } = run.state;
     const header = `Codiel run ${runId} try-${tryN} \u304C\u672A\u5B8C\u4E86\u3067\u3059(phase: ${phase})\u3002`;
     let reason;
@@ -112,7 +112,7 @@ if (!input.stop_hook_active) {
         (inProgressSibling ? `\u540C\u3058\u30B9\u30C6\u30FC\u30B8\u306E ${inProgressSibling} \u304C in_progress \u306E\u307E\u307E\u6B8B\u3063\u3066\u3044\u308B\u306A\u3089\u3001\u6B21\u306E\u30D5\u30A7\u30FC\u30BA\u3078\u9032\u3080\u524D\u306B codiel-state mark-ask ${inProgressSibling} --slug ${runId} --kind confirm \u3067\u78BA\u8A8D\u3059\u308B\u3053\u3068\u3002` : "");
       }
     } else {
-      reason = `${header}` + stopHint + `\u4EBA\u306B\u78BA\u8A8D\u3057\u3066\u6B62\u307E\u308B\u3068\u304D\u306F codiel-state mark-ask ${phase} --slug ${runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306E\u5B8C\u4E86\u3092\u5F85\u3064\u306A\u3089\u3001\u59D4\u8B72\u3092\u524D\u666F\u3067\u51FA\u3057\u76F4\u3057\u3066\u5831\u544A\u3092\u53D7\u3051\u53D6\u308B\u3053\u3068(Agent \u30C4\u30FC\u30EB\u306E run_in_background \u3092\u4F7F\u308F\u306A\u3044)\u3002`;
+      reason = `${header}` + stopHint + `\u4EBA\u306B\u78BA\u8A8D\u3057\u3066\u6B62\u307E\u308B\u3068\u304D\u306F codiel-state mark-ask ${phase} --slug ${runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002\u59D4\u8B72\u306E\u5B8C\u4E86\u3092\u5F85\u3064\u306A\u3089\u3001codiel-state wait-add \u3067\u5F85\u3061\u3092\u8A18\u9332\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`;
     }
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}
 `);

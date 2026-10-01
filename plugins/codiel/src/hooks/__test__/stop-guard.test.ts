@@ -271,12 +271,13 @@ test("stop-guard: phase が in_progress のとき mark-ask --kind confirm での
   expect(parsed.reason).toMatch(/awaiting_human/)
 })
 
-test("stop-guard: phase が in_progress のとき、サブエージェントの完了を待つなら委譲を前景で出し直す案内を添え、ほかの分岐には添えない(A6-28)", () => {
+test("stop-guard: phase が in_progress のとき、委譲の完了を待つなら wait-add で待ちを記録する案内を添え、ほかの分岐には添えない", () => {
   for (const root of [setupRunAtIntent(), setupRunAtImplement()]) {
     const reason = JSON.parse(callHook(STOP_GUARD, root).stdout).reason
     expect(reason).toMatch(
-      /サブエージェントの完了を待つなら、委譲を前景で出し直して報告を受け取ること/
+      /委譲の完了を待つなら、codiel-state wait-add で待ちを記録してから停止すること/
     )
+    expect(reason).not.toMatch(/前景/)
   }
   // phase が null の分岐と passed の分岐
   const nullPhaseRoot = newRoot()
@@ -285,8 +286,18 @@ test("stop-guard: phase が in_progress のとき、サブエージェントの�
   passGate(passedRoot, "intent")
   for (const root of [nullPhaseRoot, passedRoot])
     expect(JSON.parse(callHook(STOP_GUARD, root).stdout).reason).not.toMatch(
-      /前景で/
+      /wait-add/
     )
+})
+
+test("stop-guard: waits が 1 件以上あるときは何も出さず、空に戻すと止める", () => {
+  const root = setupRunAtIntent()
+  cli(root, ["wait-add", "--slug", SLUG, "--id", "w-1", "--purpose", "p"])
+  const held = callHook(STOP_GUARD, root)
+  expect(held.exitCode).toBe(0)
+  expect(held.stdout.trim()).toBe("")
+  cli(root, ["wait-clear", "--slug", SLUG])
+  expect(JSON.parse(callHook(STOP_GUARD, root).stdout).decision).toBe("block")
 })
 
 test("stop-guard: phase が null のとき capturing-intent の手順 5 の (6) と commit-failed での終端を案内する(M2-FX2-AR medium)", () => {

@@ -6,7 +6,12 @@ const input = await readStdin()
 if (!input.stop_hook_active) {
   // run はメインの作業ツリーで探す。cwd が worktree の中でも同じ run に届く(設計書 §6.8 の (a))
   const run = findActiveRun(findMainRoot(input.cwd ?? process.cwd()))
-  if (run && run.state.status === "active") {
+  // 待ちの記録がある間は、委譲の完了通知を待つターンの終わりなので止めない(設計書 §10.2.2)
+  if (
+    run &&
+    run.state.status === "active" &&
+    (run.state.waits ?? []).length === 0
+  ) {
     const { runId, try: tryN, phase } = run.state
     const header = `Codiel run ${runId} try-${tryN} が未完了です(phase: ${phase})。`
     let reason: string
@@ -62,8 +67,8 @@ if (!input.stop_hook_active) {
         `${header}` +
         stopHint +
         `人に確認して止まるときは codiel-state mark-ask ${phase} --slug ${runId} --kind confirm で awaiting_human にしてから停止すること。` +
-        // バックグラウンドの委譲の完了待ちでターンを終えると、ここで止められる(設計書 §6.14.2 の (10))
-        `サブエージェントの完了を待つなら、委譲を前景で出し直して報告を受け取ること(Agent ツールの run_in_background を使わない)。`
+        // 委譲の完了を待つ停止は、待ちを記録すれば通る(設計書 §10.2.2)
+        `委譲の完了を待つなら、codiel-state wait-add で待ちを記録してから停止すること。`
     }
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`)
   }

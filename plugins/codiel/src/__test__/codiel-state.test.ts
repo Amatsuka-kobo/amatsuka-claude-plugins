@@ -2040,6 +2040,9 @@ test("v1 の run には get と stop だけが通り、ほかのコマンドは 
     ["resume"],
     ["set-domain", "--domain", "web"],
     ["clear-domain"],
+    ["wait-add", "--id", "w-1", "--purpose", "p"],
+    ["wait-done", "--id", "w-1"],
+    ["wait-clear"],
     ["set-integration", "--integration", "local", "--image-upload", "none"],
     ["record-attempt", "design"],
     ["close"],
@@ -2282,6 +2285,9 @@ test("M4 より前の state の run には get と stop だけが通り、ほか
     ["resume"],
     ["set-domain", "--domain", "web"],
     ["clear-domain"],
+    ["wait-add", "--id", "w-1", "--purpose", "p"],
+    ["wait-done", "--id", "w-1"],
+    ["wait-clear"],
     ["set-integration", "--integration", "local", "--image-upload", "none"],
     ["record-attempt", "intent"],
     ["close"],
@@ -3822,3 +3828,133 @@ function fullRun(root: string, slug: string): void {
   passThrough(root, slug, UNTIL_FINALIZE)
   expect(run(root, ["finalize", "--slug", slug]).code).toBe(0)
 }
+
+// --- 待ち ---
+
+const waitReportPath = (root: string, id: string, tryN = 1): string =>
+  path.join(path.dirname(statePath(root, "demo", tryN)), "waits", `${id}.md`)
+
+function writeWaitReport(root: string, id: string): void {
+  const p = waitReportPath(root, id)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, "返答\n")
+}
+
+function waitAdd(root: string, id: string, extra: string[] = []) {
+  return run(root, [
+    "wait-add",
+    "--slug",
+    "demo",
+    "--id",
+    id,
+    "--purpose",
+    "spec を書く",
+    ...extra
+  ])
+}
+
+test("wait-add は waits に 1 件足し、phase と startedAt と taskId を記録する", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  const r = waitAdd(root, "test-spec-units-a-1", ["--task-id", "t-9"])
+  expect(r.code).toBe(0)
+  const [w] = r.out.state.waits
+  expect(w).toMatchObject({
+    id: "test-spec-units-a-1",
+    purpose: "spec を書く",
+    phase: "intent",
+    taskId: "t-9"
+  })
+  expect(Number.isNaN(Date.parse(w.startedAt))).toBe(false)
+  expect(r.out.state.version).toBe(2)
+  const second = waitAdd(root, "gate-intent-1")
+  expect(second.out.state.waits.map((x: { id: string }) => x.id)).toEqual([
+    "test-spec-units-a-1",
+    "gate-intent-1"
+  ])
+  expect("taskId" in second.out.state.waits[1]).toBe(false)
+})
+
+test("wait-add は残っている同じ id・報告のある id・不正な id・終端の run を拒否する", () => {
+  const root = tmpProject()
+  init(root)
+  waitAdd(root, "a-1")
+  const dup = waitAdd(root, "a-1")
+  expect(dup.code).toBe(1)
+  expect(dup.err).toMatch(/すでに残っています/)
+  writeWaitReport(root, "b-1")
+  const used = waitAdd(root, "b-1")
+  expect(used.code).toBe(1)
+  expect(used.err).toMatch(/使い回さない/)
+  for (const bad of ["../x", "a/b", "A", "a_b", ""]) {
+    const r = waitAdd(root, bad)
+    expect(r.code, bad).toBe(1)
+  }
+  expect(run(root, ["wait-add", "--slug", "demo", "--id", "c-1"]).err).toMatch(
+    /--purpose が必要です/
+  )
+  run(root, ["stop", "--slug", "demo", "--abandon-waits"])
+  const term = waitAdd(root, "d-1")
+  expect(term.code).toBe(1)
+  expect(term.err).toMatch(/すでに終端状態です/)
+})
+
+test("wait-done は報告のファイルがあるときだけ待ちを消し、無い id と報告の無い待ちは失敗する", () => {
+  const root = tmpProject()
+  init(root)
+  waitAdd(root, "a-1")
+  const noReport = run(root, ["wait-done", "--slug", "demo", "--id", "a-1"])
+  expect(noReport.code).toBe(1)
+  expect(noReport.err).toMatch(/waits\/a-1\.md がありません/)
+  expect(run(root, ["get", "--slug", "demo"]).out.state.waits).toHaveLength(1)
+  writeWaitReport(root, "a-1")
+  const done = run(root, ["wait-done", "--slug", "demo", "--id", "a-1"])
+  expect(done.code).toBe(0)
+  expect(done.out.state.waits).toEqual([])
+  const none = run(root, ["wait-done", "--slug", "demo", "--id", "a-1"])
+  expect(none.code).toBe(1)
+  expect(none.err).toMatch(/待ち a-1 はありません/)
+})
+
+test("wait-clear は残りを出力して空にし、終端の run でも通る", () => {
+  const root = tmpProject()
+  init(root)
+  waitAdd(root, "a-1")
+  waitAdd(root, "a-2")
+  const r = run(root, ["wait-clear", "--slug", "demo"])
+  expect(r.code).toBe(0)
+  expect(r.out.cleared.map((w: { id: string }) => w.id)).toEqual(["a-1", "a-2"])
+  expect(r.out.state.waits).toEqual([])
+  waitAdd(root, "a-3")
+  run(root, ["stop", "--slug", "demo", "--abandon-waits"])
+  expect(run(root, ["wait-clear", "--slug", "demo"]).code).toBe(0)
+})
+
+test("stop は待ちが残っていると失敗し、--abandon-waits を付けたときだけ空にして止める", () => {
+  const root = tmpProject()
+  init(root)
+  waitAdd(root, "a-1")
+  const r = run(root, ["stop", "--slug", "demo", "--reason", "x"])
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/待ちが残っています: a-1/)
+  expect(run(root, ["get", "--slug", "demo"]).out.state.status).toBe("active")
+  const ok = run(root, [
+    "stop",
+    "--slug",
+    "demo",
+    "--reason",
+    "x",
+    "--abandon-waits"
+  ])
+  expect(ok.code).toBe(0)
+  expect(ok.out.state.status).toBe("stopped")
+  expect("waits" in ok.out.state).toBe(false)
+})
+
+test("waits を持たない state でも get と stop が動く", () => {
+  const root = tmpProject()
+  init(root)
+  expect("waits" in run(root, ["get", "--slug", "demo"]).out.state).toBe(false)
+  expect(run(root, ["stop", "--slug", "demo"]).code).toBe(0)
+})
