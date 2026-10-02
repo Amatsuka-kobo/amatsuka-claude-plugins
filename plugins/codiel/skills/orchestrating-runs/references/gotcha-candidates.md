@@ -1,15 +1,15 @@
 # GOTCHAS 候補の書き残し
 
-run の中で次の契機が起きたら、GOTCHAS の台帳へ移す候補を書き残す。codiel は台帳へ書かず、metatron の CLI も呼ばない。台帳へ移すか、解決済みや対象外として扱うかは、移すときに人が判断する。
+run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候補を書き残す。codiel は台帳へ書かず、metatron の CLI も呼ばない。台帳へ移すか、解決済みや対象外として扱うかは、移すときに人が判断する。
 
-| 契機 | 書く時点 |
+| 条件 | 書く時点 |
 | --- | --- |
 | 人が Raguel の STOP を妥当と裁定した | `stop --reason raguel-stop` の直後 |
 | `record-attempt` の上限超過の後、人が中止を選んだ | `stop --reason attempts-exceeded` の直後 |
 | `record_outcome(incident)` を記録した | 記録の直後 |
 | review で、設計時に想定していなかった仕様漏れ・考慮漏れが見つかった | fix-loop の最後の pass-gate の後 |
 
-- 契機 1 回につき 1 件書き、書くかどうかを判断しない。
+- 上の条件に 1 回当たるごとに 1 件書き、書くかどうかを判断しない。
 - STOP を誤検知と裁定したときは書かない。その裁定は `record_outcome` の `false-positive` として Raguel の記録に残る。
 
 ## 手元の記録

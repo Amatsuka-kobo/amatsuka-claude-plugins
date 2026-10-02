@@ -182,7 +182,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 - test-code・implement・test-loop・fix-loop の `start-phase` は、そのフェーズの開始の HEAD を state の
   `phases.<phase>.startHead` に記録する。`baseRef` の値はこの記録であり、オーケストレーターが自分で決めない。
 
-### 手順ファイルと読む契機
+### 手順ファイルと読む時点
 
 フェーズに入った後にだけ要る手順は、このスキルの `references/` の手順ファイルにある。次の表の「読む時点」に、
 そのファイルを Read して従う。intent・discuss・design・triage は手順ファイルを持たず、フェーズ進行表の参照スキルに従う。
@@ -201,10 +201,10 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
 | `references/e2e.md` | E2E を実行する委譲を出す前 |
-| `references/gotcha-candidates.md` | GOTCHAS 候補を書く契機(STOP を妥当と裁定した・上限超過の後の中止・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
+| `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・上限超過の後の中止・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
 | `references/resume.md` | run を再開するとき |
 
-手順ファイルは次の 4 つの契機で読む。
+手順ファイルは次の 4 つの時点で読む。
 
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
@@ -219,7 +219,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    2. 続行中の run の slug を要約から取り、`codiel-state get --slug <slug>` で state を読む。要約に slug が
       無ければ `codiel-state get --active` を呼び、結果のうち `status` が `active` か `awaiting_human` の run を使う。`get --active`
       は `awaiting_outcome` の run も返すので、`status` で絞る。該当が 0 件か 2 件以上なら、人に確かめる。
-   3. 契機 3 と同じ範囲の手順ファイルを読む。
+   3. 時点 3 と同じ範囲の手順ファイルを読む。
    4. ほかのスキルは、そのスキルを使う手順に入ったときに読む。
 
 委譲の待ちが無いフェーズの境目では、ユーザーは新しいセッションへ移ってよい。待ちが無いことは、state の

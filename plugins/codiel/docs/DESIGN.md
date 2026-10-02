@@ -538,7 +538,7 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 各スキルが「なぜその規律が必要か」を述べていた記述を、指示から分離してここに残す。
 
 - `preparing-design-agendas`: agenda に挙げた論点がそのままディスカッションの議題になり、合意結果(discussion.md)は design フェーズの設計を拘束する。論点を漏らすと、その分岐はユーザーに諮られないまま architect の独断で設計されることになる。
-- `orchestrating-runs`(2026-10-02 まであった `references/failures.md` の失敗の記録): 当時は、Raguel の判例ストアを判定側の記憶、`docs/GOTCHAS.md` を生成側の記憶とし、GOTCHAS.md を全フェーズのサブエージェントが作業前に必読する共有資産とした。記録の判断・書式・採番・タグは metatron の `recording-gotchas` に委ね、codiel は記録の契機と、記録の手段が無いときの退避だけを持っていた。2026-09-27 までは codiel も同名のスキルで書式契約の写しを持っていたが、二重管理になるため削除した。K12 で契機と退避も外した(§9「ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)」)。
+- `orchestrating-runs`(2026-10-02 まであった `references/failures.md` の失敗の記録): 当時は、Raguel の判例ストアを判定側の記憶、`docs/GOTCHAS.md` を生成側の記憶とし、GOTCHAS.md を全フェーズのサブエージェントが作業前に必読する共有資産とした。記録の判断・書式・採番・タグは metatron の `recording-gotchas` に委ね、codiel は記録の条件と、記録の手段が無いときの退避だけを持っていた。2026-09-27 までは codiel も同名のスキルで書式契約の写しを持っていたが、二重管理になるため削除した。K12 で条件と退避も外した(§9「ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)」)。
 - `writing-design-docs`: design.md で設計を誤ったり影響 unit を漏らすと、その誤りはテスト仕様書の漏れ・実装漏れとしてそのまま後続フェーズに伝播する。
 - `capturing-intent`(言語の確認): intent 文書と issue 本文の言語が食い違うと、issue への転記に翻訳という加工が入り、原文をそのまま転記するという前提が崩れる。そのため、言語の確認を 1 回で取る。
 - `preparing-design-agendas`(合意済み事項の再提示): 同じ分岐を二度議論させると、前回と違う結論が出ることがある。そうなると、intent 文書と discussion.md の内容が食い違う。
@@ -677,18 +677,18 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
 - エントリ書式: 執筆当時は 日付 / 発生フェーズ / 症状 / 根本原因 / 予防策 / 関連ファイル と決めた。
   **この旧書式は廃止され、互換読みも設けない**(契約 §6)。現行の書式・挿入位置・採番・タグは
   契約 §6-1〜§6-4 が正本である
-- 記録の契機(執筆当時): Raguel STOP、ループ上限超過、record_outcome(incident)、レビューで発覚した設計漏れ
+- 記録の条件(執筆当時): Raguel STOP、ループ上限超過、record_outcome(incident)、レビューで発覚した設計漏れ
 - 執筆当時は、全フェーズのサブエージェントが作業前に必読とした(ディスパッチプロンプトで強制)
 - 執筆当時は、Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成するとした
 
-2026-09-27 から 2026-10-02 までは、codiel が上の契機で metatron の `recording-gotchas` を起動し、CLI の案内が無い環境では「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)へ退避していた(`orchestrating-runs` の `references/failures.md`)。K12 でこの手順と必読の規律を外した。理由は次の「ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)」に書く。guard-write の退避先の免除(§8)も外した。2026-10-03 からは、同じ契機で台帳へ書かずに GOTCHAS 候補を残す(次の K12 の説明の「GOTCHAS 候補を ADR 候補と同じ形で残す理由」)。
+2026-09-27 から 2026-10-02 までは、codiel が上の条件が成り立ったときに metatron の `recording-gotchas` を起動し、CLI の案内が無い環境では「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)へ退避していた(`orchestrating-runs` の `references/failures.md`)。K12 でこの手順と必読の規律を外した。理由は次の「ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)」に書く。guard-write の退避先の免除(§8)も外した。2026-10-03 からは、同じ条件で台帳へ書かずに GOTCHAS 候補を残す(次の K12 の説明の「GOTCHAS 候補を ADR 候補と同じ形で残す理由」)。
 
 ### ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)
 
 K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/design/2026-10-02-codiel-run-cost-design.md` にある。この決定で、codiel の指示層(`skills/`・`references/`・`commands/`)から 2 種類の規則を外した。1 つは ARCHITECTURE と GOTCHAS を読ませる規則で、もう 1 つはそれらに書き込ませる規則である。対象はオーケストレーターと委譲先の両方である。
 
-- ARCHITECTURE と GOTCHAS は metatron の資産である。読み方・書き方・更新の契機は metatron が SessionStart の注入と `.claude/rules/metatron/` で伝える。codiel が別に規則を持つと、同じ資産の扱いが 2 か所に分かれ、食い違ったときにどちらに従うかが決まらない。
-- 失敗の台帳への追記は metatron の担当になる。codiel は契機の判定・記録・退避の手順を持たない。
+- ARCHITECTURE と GOTCHAS は metatron の資産である。読み方・書き方・更新の時点は metatron が SessionStart の注入と `.claude/rules/metatron/` で伝える。codiel が別に規則を持つと、同じ資産の扱いが 2 か所に分かれ、食い違ったときにどちらに従うかが決まらない。
+- 失敗の台帳への追記は metatron の担当になる。codiel は条件の判定・記録・退避の手順を持たない。
 
 残したのは次の 2 つだけである。
 
@@ -704,8 +704,8 @@ K12 の直後の codiel は、run の中で起きた失敗を何も残さなか�
 - 失敗を学びに変える入力は、失敗が起きた run にしか無い。K12 は台帳への書き込みを metatron に戻したが、その入力まで捨てる理由は無かった。
 - 台帳への書き込みと、解決済みや陳腐化の判断は metatron の担当のままにする。codiel は候補を run の成果物として残し、利用者に渡すだけである。候補は `append-gotcha` の入力の 6 キーに、書いた日と run の slug・try 番号を足した形で、候補 ID とタグを持たない。
 - 書き先は ADR 候補と同じく `knowledgeTarget` で分ける。`metatron` の run は try の手元の記録(`.codiel/runs/<slug>/try-<n>/reports/gotcha-candidates.md`。git に載せない)に書いて finalize の結果レポートと stop の完了報告に一覧し、`intents` の run は同じ記録に書いた上で持続層の `## GOTCHAS 候補` へ写してコミットする。
-- 契機は旧 `failures.md` の 4 つ(STOP を妥当と裁定した・上限超過の後の中止・incident・review で見つかった設計の漏れ)である。STOP の誤検知の裁定は `record_outcome` の `false-positive` として Raguel に残るので含めない。
-- 持続層へ写すのは intent-sync と finalize の 2 時点である。コード系フェーズの中では、pass-gate から次のフェーズの `start-phase` までコミットできず、guard-write も持続層への書き込みを ask にする。そこで、どの契機でもまず手元の記録へ書き、intent-sync で前の try を含めた未写しの候補をまとめて写し、finalize で最後の intent-sync より後の候補を写す。finalize は `start-phase` を呼ばず phase が triage のままなので、guard-write は triage が passed で finalize が未完了の間も `docs/intents/domains/**` を通す。
+- 条件は旧 `failures.md` の 4 つ(STOP を妥当と裁定した・上限超過の後の中止・incident・review で見つかった設計の漏れ)である。STOP の誤検知の裁定は `record_outcome` の `false-positive` として Raguel に残るので含めない。
+- 持続層へ写すのは intent-sync と finalize の 2 時点である。コード系フェーズの中では、pass-gate から次のフェーズの `start-phase` までコミットできず、guard-write も持続層への書き込みを ask にする。そこで、どの条件でもまず手元の記録へ書き、intent-sync で前の try を含めた未写しの候補をまとめて写し、finalize で最後の intent-sync より後の候補を写す。finalize は `start-phase` を呼ばず phase が triage のままなので、guard-write は triage が passed で finalize が未完了の間も `docs/intents/domains/**` を通す。
 - incident の候補を持続層へ写す扱いは保留である(2026-10-03 ユーザー判断)。incident は finalize の後の outcome の同期で起き、書いてコミットするブランチが決まらないためである。いまは手元の記録に書いて同期の報告に一覧するだけにし、写さない印を付けておく。
 - metatron へ候補を移す機能は別に作る。候補 ID を持たせないのはそのためである。
 
