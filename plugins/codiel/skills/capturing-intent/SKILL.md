@@ -43,7 +43,12 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 1. `orchestrating-runs` の前提確認(Raguel MCP の利用可否、ハーネスの初期化の確認)に従う。
 2. 連携モード・`imageUpload`・`adrTarget` の判定は `orchestrating-runs` の §0 が正本である。§0 を経て起動されたときは、そこで得た `check-intent-env` の出力と判定結果をそのまま使い、ここで判定し直さない。§0 を経ずに起動されたときだけ、`orchestrating-runs/SKILL.md` の §0 の手順をこの場で行う。
-3. ベースブランチの名前を解決し、`git switch <ベース> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。以降、このブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
+3. ベースブランチの名前を次の順で解決する。決まらなければ AskUserQuestion で聞く。
+   - 同じ intent の最新の try の state の `baseBranch`(`codiel-state get` で読める)。
+   - `git symbolic-ref --short refs/remotes/origin/HEAD` の結果から `origin/` を除いた名前。
+   - ローカルのブランチが `main` と `master` のどちらか 1 つだけのとき、その名前。
+
+   解決したら `git switch <ベース> && git pull --ff-only` で最新化する。作業ツリーが dirty で `git switch` が失敗したときは、`-f` や自動の stash を使わず、失敗の出力を示し、コミットか退避をしてから `/codiel:run` をやり直すよう案内して終了する(この区間は run が無い)。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。以降、このブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
 4. 入口が intent パスのときは、手順 2 の前に `references/carry-over-intent.md` を Read して従う。前の try の run ブランチからの intent の持ち込みと、前の try が STOP で止まっていたときの確認を扱う。
 
 `configWarnings` が空でないときは、その項目のパス設定が拒否されて既定値に落ちているか、ドメインマップの読み取りに指摘がある。読めた文書だけで進み、警告の内容を完了報告に残す。
@@ -109,13 +114,14 @@ ASIS はユーザーに聞かず自分で読む。`## 現状調査` は AI が�
 
 ## 4. ドラフトの提示と承認ゲート
 
-- ドラフトを書く前に、intent 文書の言語と issue 本文の言語を 1 回で確認する。リポジトリの既存文書から推定した言語を推奨として添える。この確認は派生文のセクションだけに当て、原文のセクションは対象外とし、原語のまま残す。
+- ドラフトを書く前に、intent 文書の言語と issue 本文の言語を 1 回で確認する。リポジトリの既存文書から推定した言語を推奨として添える。推定できないときは、ユーザーの使用言語を推奨にする。この確認は派生文のセクションだけに当て、原文のセクションは対象外とし、原語のまま残す。
 - 書式は `intent-format.md` に従う。見出しの名称と順序を変えない。slug とファイル名の規則、日付の決め方も同じ文書の「保存先と命名」に従う。
 - 提示はメッセージ本文で行い、ドラフトの全文を示す。要約・抜粋・差分には置き換えない。先にファイルへ書いて「読んで確認してほしい」と依頼しない。保存と `docs/intents/` の作成は承認後に行う。
 - `## 実装方針` も承認対象に含める。設計書ではなく、どの層をどう変えるかの方針として書く。
 - 承認はユーザーの明示的な返答だけとする。ドラフトへの相槌や部分的な感想は、承認に当たらない。
 
 全文を提示したうえで、次の 3 項目を含む承認を同時に得る。差し戻されたら手順 3 へ戻り、指摘された観点を聞き直してからドラフトを作り直し、全文を再提示する。
+ゲートの選択肢に「中止」は無いので、AskUserQuestion の「その他」で中止が返ることがある。承認も差し戻しも得られずに中止が選ばれたら、保存・起票・`init` を行わずに終了する。何も書いていないこと(手順 1 で `git checkout` した intent があれば作業ツリーに残ること)と、同じ入口で `/codiel:run` をやり直せることを伝える。
 
 | 項目 | 選択肢 | 決めた後の動き |
 | --- | --- | --- |
@@ -133,11 +139,13 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 (1) 開始時のブランチの作業ツリーに intent 文書を Write で書く。frontmatter `run` には slug を入れる。保存先の命名規則(同日重複の扱い、git 未管理時の扱い)は `intent-format.md` の「保存先と命名」に従う。手順 1 で前の try の intent を持ち込んでいるときは、持ち込んだ intent と同じパスに書く。
 
-(2) Issue 起票を選んだときだけ、gh-utility `issue-craft` を持ち込みモードで起動して起票し、番号を intent の frontmatter `issue` に書く。固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動し、`title` / `body` / `labels`(任意)を渡す(`handoff-contract.md`)。渡す本文には `<!-- codiel:generated -->` を含める。起票は外部公開行為であり、持ち込みモード側でも全文提示と明示承認を経る。`issue-craft` が使えないときは `intent-common.md` の「自前起票」に従う。
+(2) Issue 起票を選んだときだけ、gh-utility `issue-craft` を持ち込みモードで起動して起票し、番号を intent の frontmatter `issue` に書く。固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動し、`title` / `body` / `labels`(任意)を渡す(`handoff-contract.md`)。渡す本文には `<!-- codiel:generated -->` を含める。起票は外部公開行為であり、持ち込みモード側でも全文提示と明示承認を経る。承認が得られなかったときは、起票を保留して止まり、「起票せず続行(`issue` は空のまま)」「本文を直して再提示」「中止」を AskUserQuestion で聞く。起票が失敗したときは、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲(intent は保存済みであること、起票の有無)を報告して指示を待つ。再試行する前に、Issue が既に作られていないかを確かめる。`issue-craft` が使えないときは `intent-common.md` の「自前起票」に従う。
 
 (3) intent 以外の未コミットの変更があるかを確かめる。あるときは `references/uncommitted-changes.md` を Read して従う。
 
 (4) `codiel-state init --slug <slug> --intent <パス> --integration <github|local> --scale <standard|light> --adr-target <metatron|intents> --image-upload <gh-attach|chrome|gh-attach,chrome|none> [--issue <N>] [--intent-only] [--base-branch <開始時のブランチ>] [--domain-mode <mapped|unscoped>] [--human-approved]` を実行する。`--intent` は repoRoot 相対のパスで渡す(絶対パスは拒否される)。`branch` は CLI が決める。`--intent-only` なら `null`、それ以外は `codiel/<slug>-try-<n>` である。`--human-approved` は、手順 1 で前の try の STOP(`raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズ)についてユーザーが新しい try を承認したときだけ付ける。
+
+`init` が失敗したときは run が作られず(exit 1、state は書かれない)、intent は作業ツリーに残る。引数の誤りと `--human-approved` の付け忘れは、標準エラー出力の指示どおりに直して 1 回だけ再実行する。「未完了の try があります」「Raguel の記録を読めません」やそれ以外の失敗は、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲を示して指示を待つ。同じ slug の前の try が終端していれば `init` は次の try を作るので、slug の重複それ自体は失敗ではない。
 
 (5) `git add -- <intent パス>` で intent 文書だけを stage する。未追跡のファイルでもパスを限定したコミットができる。
 

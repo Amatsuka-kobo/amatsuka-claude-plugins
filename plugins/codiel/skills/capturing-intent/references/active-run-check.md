@@ -10,7 +10,9 @@
 
 今回再開する run と決まったものは終端にせず、`orchestrating-runs` の `references/resume.md` へ進める。
 
-再開しないと答えたものと、確認の対象にならなかったものは、次のいずれかで終端にする。
+`get --active` は複数件を返しうる。再開すると決まった 1 件以外のすべてについて、1 件ずつ内容(slug・intent のパス・現在のフェーズ)を示し、終端にしてよいかを確かめる。確認文には、終端にすると `stop` で止まり、その intent が `abandoned` になることを含める。
+
+確認が済んでいない run は終端にしない。終端にしてよいと答えたものだけを、次のいずれかで終端にする。終端を拒まれた run があるときは、その run を残したまま進めてよいかをユーザーに確かめる。
 
 - `codiel-state finalize --slug <slug>`
 - 前のセッションから残った待ちを `codiel-state wait-clear --slug <slug>` で消してから、`codiel-state stop --slug <slug> --reason <理由>`
