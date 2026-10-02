@@ -119,7 +119,8 @@ def analyze_session(project_dir, sid, state):
         return None
     end = end or "9999"
     results = {b["tool_use_id"]: result_text(b) for r in rows for b in blocks(r) if b.get("type") == "tool_result"}
-    events, waits, reads = [], [], []  # events: (ts, started, done, cur) の遷移後の状態
+    waits, reads = [], []
+    spawned = {}  # Agent の tool_use id -> (フェーズ, description)。tool_use の時点のフェーズ
     started, done, cur = state  # 前のセッションからの引き継ぎ(resume した run 用)
     segs = [("", label(started, done, cur))]  # (この時刻より後の行に適用, ラベル)
     for r in rows:
@@ -129,6 +130,8 @@ def analyze_session(project_dir, sid, state):
         for b in blocks(r):
             if b.get("type") == "tool_use" and b.get("name") == "Read":
                 reads.append((ts, b["input"].get("file_path", "")))
+            if b.get("type") == "tool_use" and b.get("name") == "Agent":
+                spawned[b["id"]] = (label(started, done, cur), b["input"].get("description", ""))
             if b.get("type") != "tool_use" or b.get("name") != "Bash":
                 continue
             for m in PHASE_CMD.finditer(b["input"].get("command", "")):
@@ -161,6 +164,11 @@ def analyze_session(project_dir, sid, state):
         lst = read_by.setdefault(seg_of(ts), [])
         if p not in lst:
             lst.append(p)
+    by_agent = {}  # Agent の tool_result の agentId -> (フェーズ, description)
+    for tid, sp in spawned.items():
+        m = re.search(r"agentId:\s*(\w+)", results.get(tid, ""))
+        if m:
+            by_agent[m.group(1)] = sp
     agents = OrderedDict()
     sub_dir = os.path.join(project_dir, sid, "subagents")
     if os.path.isdir(sub_dir):
@@ -173,7 +181,7 @@ def analyze_session(project_dir, sid, state):
                 if start <= ts <= end:
                     add(u, uu)
             agents[m.group(1)] = u
-    return {"orch": by_phase, "reads": read_by, "waits": waits, "agents": agents, "state": (started, done, cur)}
+    return {"orch": by_phase, "reads": read_by, "waits": waits, "agents": agents, "by_agent": by_agent, "state": (started, done, cur)}
 
 
 def aggregate(project_dir, sessions):
@@ -195,9 +203,11 @@ def aggregate(project_dir, sessions):
         by_task = {w["taskId"]: w for w in r["waits"] if w["taskId"]}
         for aid, u in r["agents"].items():
             w = by_task.get(aid)
-            ph = w["phase"] if w else "未分類"
+            sp = r["by_agent"].get(aid)  # 主: Agent の呼び出し時点のフェーズ。無ければ wait-add の復元
+            ph = sp[0] if sp else w["phase"] if w else "未分類"
             add(phases.setdefault(ph, zero()), u)
-            deleg.append({"session": sid, "agentId": aid, "waitId": w["id"] if w else None, "phase": ph, "usage": u})
+            wid = w["id"] if w else sp[1] or None if sp else None
+            deleg.append({"session": sid, "agentId": aid, "waitId": wid, "phase": ph, "usage": u})
     for d in deleg:
         add(tot, d["usage"])
     add(tot, orch)
@@ -257,7 +267,13 @@ def self_check():
         asst("T06", "m4", u(4, 0, 400, 4), [{"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "/a.md"}}, bash("t4", cs + "pass-gate dev-plan --slug s")]),
         asst("T07", "m5", u(5, 0, 500, 5), [bash("t5", cs + "wait-done --id w-spec --slug s; " + cs + "pass-gate test-spec --slug s")]),  # wait-done 後
         asst("T08", "m6", u(6, 0, 600, 6), [bash("t6", cs + "start-phase review --slug s")]),
-        asst("T09", "m7", u(7, 0, 700, 7), [bash("t7", cs + "wait-add --slug s --id w-rev --purpose p --task-id aREV")]),
+        asst("T09", "m7", u(7, 0, 700, 7), [
+            bash("t7", cs + "wait-add --slug s --id w-rev --purpose p --task-id aREV"),
+            {"type": "tool_use", "id": "ag1", "name": "Agent", "input": {"description": "loop review"}},
+            bash("t9", 'for pair in "x aLOOP"; do set -- $pair; ' + cs + "wait-add --slug s --id review-1-$1 --purpose p --task-id $2; done"),
+        ]),
+        res("T09", "ag1", [{"type": "text", "text": "Async agent launched.\nagentId: aLOOP (internal ID)"}]),
+        res("T09", "t9", "ok"),
         res("T09", "t7", '"phase": "review", "taskId": "aREV"'),
         asst("T10", "m8", u(8, 0, 800, 8), [bash("t8", cs + "finalize --slug s")]),
         asst("T11", "m9", u(99, 99, 99, 99), []),  # 区間の外
@@ -273,6 +289,7 @@ def self_check():
         write("S/subagents/agent-aSPEC.jsonl", sub([("T03", u(10, 0, 0, 0))]))
         write("S/subagents/agent-aNONE.jsonl", sub([("T03", u(0, 20, 0, 0))]))  # 待ちが無い委譲
         write("S/subagents/agent-aREV.jsonl", sub([("T09", u(0, 0, 30, 0))]))
+        write("S/subagents/agent-aLOOP.jsonl", sub([("T09", u(0, 0, 0, 50))]))  # wait-add の引数が変数で復元できない委譲先
         write("S/subagents/agent-aNOTASK.jsonl", sub([("T05", u(0, 0, 0, 40))]))  # taskId の無い待ちの委譲先
         r = aggregate(d, ["S"])
     ph = r["phases"]
@@ -282,12 +299,14 @@ def self_check():
     assert ph["test-spec"]["cache_creation_input_tokens"] == 20, ph
     assert ph[PARALLEL]["cache_read_input_tokens"] == 300 + 400 + 500, ph  # pass-gate test-spec を呼ぶ応答までが並列区間
     assert ph["dev-plan"]["cache_read_input_tokens"] == 600, ph  # 並列の後、start-phase review を呼ぶ応答まで
-    assert ph["review"]["cache_read_input_tokens"] == 700 + 800 + 30 and r["review_delegations"] == 1, ph
+    assert ph["review"]["cache_read_input_tokens"] == 700 + 800 + 30 and r["review_delegations"] == 2, ph
+    assert ph["review"]["output_tokens"] == 7 + 8 + 50 and "aLOOP" in {x["agentId"] for x in r["delegations"] if x["phase"] == "review"}, ph
     assert ph["未分類"]["cache_creation_input_tokens"] == 20 and ph["未分類"]["output_tokens"] == 40, ph
     assert ph["review"]["input_tokens"] == 7 + 8, ph
     assert r["total"]["input_tokens"] == 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 10, r["total"]
     assert "T11" not in json.dumps(r) and 99 not in r["total"].values()
     assert {x["agentId"]: x["waitId"] for x in r["delegations"]}["aSPEC"] == "w-spec"
+    assert {x["agentId"]: x["waitId"] for x in r["delegations"]}["aLOOP"] == "loop review"
     assert r["reads"][PARALLEL] == ["/a.md"], r["reads"]
     print("self-check OK")
     print(render(r))
