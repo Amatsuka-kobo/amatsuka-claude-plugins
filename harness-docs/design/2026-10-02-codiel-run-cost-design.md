@@ -12,7 +12,7 @@
 | K2 | HARD-GATE と Red Flags は両方を削る。本文の手順と重ならない条項だけを、その操作をする手順の中へ移す(§5.1) |
 | K3 | 委譲先スキルと `orchestrating-runs` §3 の dispatch テンプレートが同じ規則を持つときは、委譲先スキルの側を正本にする。テンプレートは、読むスキルと実行時の値だけを渡す(§5.2) |
 | K4 | 特定の場面でしか使わない手順は、そのスキル配下の `references/` へ切り出し、その場面に入ったときに読ませる(§5.3) |
-| K5 | プラグインのバージョンは上げない。`.claude/rules/metatron/conventions.md` の Done の条件「バージョンを上げる」より、この決定を優先する |
+| K5 | codiel のバージョンは上げない(この改修で変更するプラグインは codiel だけである)。`.claude/rules/metatron/conventions.md` の Done の条件「バージョンを上げる」より、この決定を優先する |
 | K6 | 施策 P1(review の観点を選ぶ規則、§6.1)を採る |
 | K7 | 施策 P3(改修の前後の計測、§7)を採り、受け入れ基準にする |
 | K8 | 施策 P4(compaction の後の読み直し、§6.2)を採る |
@@ -106,7 +106,7 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
   - 場面限定の手順は、そのスキル配下の `references/` へ切り出す(§5.3)。そのスキル以外の読み手だけが使う手順は、読み手のスキルの `references/` へ移す(D24・E1)。
   - 根拠・経緯・理由・出典は、`plugins/codiel/docs/` の既存の設計書(`DESIGN.md`)へ移す。該当: B5 の理由、B22 の理由、B27、B28、D3、D14 の経緯、D27 の hooks の挙動、D35 の出典、E20、E27。移す先に同じ内容が既にあれば、移さずに消す。
   - 書き換えて重複先への参照にできる判定(B1 など)は、退避せず削除して参照にする。
-- W4: 「プラグインルート参照規約」(C1・C14・C20・E12 と、`capturing-intent` の同じセクション。評価の対象外の `initializing-harness` は変えない)は、改修後の本文に `<plugin-root>` を使う箇所が残るスキルでは残し、残らないスキルでは削る。`orchestrating-runs` の規約は残す。
+- W4: 「プラグインルート参照規約」(C1・C14・C20・E12 と、`capturing-intent` の同じセクション。評価の対象外の `initializing-harness` は変えない)は、改修後の本文(そのスキルの `references/` を含む)に `<plugin-root>` という文字列が残るスキルでは残し、残らないスキルでは削る。`orchestrating-runs` の規約は残す。
 - W5: `wait-add` の id 規則の正本は `orchestrating-runs` §3 とする(A11 は残す)。`raguel-gating` の同じ規則(C8)は §3 への参照にする。
 
 ## 5. 文書の改修
@@ -115,7 +115,7 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 
 - 各スキルの `HARD-GATE` と `Red Flags` のセクションを削る。
 - 削る条項ごとに、本文の手順に同じ内容があるかを確かめる。無い条項だけを、その操作をする手順の中へ、条件付きの 1 文として移す。
-- 移した先が分かるよう、移した条項の一覧を実装の完了報告に添える。
+- 移した先が分かるよう、移した条項の一覧を実装の完了報告に添える。一覧は「元のスキル / 元の条項 / 移した先(ファイルと手順)」の表にする。本文に同じ内容があって削っただけの条項は、移した先の欄に本文の該当箇所を書く。
 - 「HARD-GATE」「Red Flags」の語を、他のスキル・references・`commands/` が参照していないかを確かめ、参照があれば移した先の手順を指すように直す。
 
 ### 5.2 重複の正本(K3)
@@ -142,7 +142,7 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 - 軽量の経路で discuss と design を `skip-phase` で飛ばす規則(L211-212)
 - review の critical/high が 0 件のとき、`start-phase fix-loop` を呼ばずに `skip-phase fix-loop` を呼ぶ規則(L243-245。§5 の重複は A13 で削る)
 
-次を `skills/orchestrating-runs/references/` へ切り出す。ファイル名は実装で決めてよいが、フェーズ名を含める。
+次を `skills/orchestrating-runs/references/` へ切り出す。ファイル名は、フェーズの手順なら `phase-<フェーズ名>.md`、複数のフェーズで共有する手順なら内容を表す名前(`delegation-env.md`・`review-common.md`・`e2e.md`・`resume.md`・`failures.md`)にする。
 
 | 切り出す内容 | 読む時点 |
 | --- | --- |
@@ -153,14 +153,22 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 | §2.9 test-loop の運転と §5 のうち test-loop の部分 | test-loop に入ったとき |
 | §2.10 E2E のレポート(e2e-report-format への参照に縮める。E29・E30) | E2E を実行する委譲を出す前 |
 | §2.2 pr の運転 | pr に入ったとき |
-| review の運転。P1 の観点を選ぶ規則(§6.1)と、`reviewing-diffs` の「所見の統合と投稿」(E1) | review に入ったとき |
+| review の運転(`phase-review.md`) | review に入ったとき |
+| P1 の観点を選ぶ規則(§6.1)と、`reviewing-diffs` の「所見の統合と投稿」(E1)(`review-common.md`) | review に入ったとき。fix-loop で再レビューを出す前 |
 | §5 のうち fix-loop の部分(スキップ経路を除く) | fix-loop に入ったとき |
 | §2.11 intent-sync の運転 | intent-sync に入ったとき |
-| §2.3 finalize の運転 | finalize に入ったとき |
+| §2.3 finalize の運転 | triage を終えて finalize の作業を始める前(finalize は `start-phase` を呼ばない。`src/codiel-state.ts:1099-1106`) |
 | §6 再開手順 | run を再開するとき |
 | §7 失敗の記録 | 失敗の記録の契機があったとき |
 
-本文の §2 に、「`start-phase <phase>` の直後に、そのフェーズの手順ファイルを Read する」の規則と、フェーズと手順ファイルの対応表を置く。
+本文の §2 に、フェーズと手順ファイルの対応表と、手順ファイルを読む契機を置く。契機は次の 4 つである。
+
+- フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を呼ばないので、triage を終えた時点で読む。
+- 手順ファイルが別の手順ファイルを使う手順に入る前。対応表の「読む時点」に書いた共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`)が該当する。fix-loop の再レビューでは、委譲を出す前に `review-common.md` を読む。
+- run を再開するとき。`resume.md` を読み、待ちの処理や委譲の出し直しより前に、続行する run の `get --slug <slug>` で state を読む。`status` が `in_progress` か `awaiting_human` のフェーズすべての手順ファイルと、それらが使う共有の手順を読む。test-spec と dev-plan が並列のときは、両方を読む。
+- compaction が起きたとき(§6.2)。再開と同じ範囲を読む。
+
+`fixing-review-findings` が `reviewing-diffs` の「所見の統合と投稿」を参照している箇所(L96-98)は、`review-common.md` を指すように直す。
 
 #### 5.3.2 ほかのスキル
 
@@ -183,7 +191,8 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 
 - 委譲先スキルのうち、`implementing`・`fixing-failures`・`reviewing-diffs`・`running-regression-tests`・`scripting-tests`・`writing-test-specs` に、`## 完了報告` のセクションを 1 つずつ置く。返す項目を固定し、長さの上限は設けない。
 - `fixing-failures` の完了報告は `implementing` の完了報告に従う(D45)。`running-regression-tests` の委譲先の項目は `e2e-report-format.md` に従う(E16)。
-- P6: `reviewing-diffs` の所見の項目に、該当する差分の抜粋(該当行の前後数行)と根拠を含める。`implementing` と `fixing-failures` の完了報告に、変更したファイルの一覧と、各箇所を判定した検査とその結果を含める。オーケストレーターは報告をすべて読む。全文を読む規律(共通規律の「報告の突き合わせ」)は変えない。
+- 見出しは `## 完了報告` とし、返す項目を箇条書きで並べる。
+- P6: `reviewing-diffs` の所見の項目に、該当する差分の抜粋(該当行と前後 3 行)と根拠を含める。`implementing` と `fixing-failures` の完了報告に、変更したファイルの一覧と、各箇所を判定した検査とその結果を含める。オーケストレーターは報告をすべて読む。全文を読む規律(共通規律の「報告の突き合わせ」)は変えない。
 
 ### 5.5 そのほかの削除と書き換え
 
@@ -216,31 +225,32 @@ D47(`backend.md`・`frontend.md` の「注意する」だけの項目の削除)�
 
 ### 6.1 review の観点を選ぶ規則(P1)
 
-review に入ったときの手順ファイル(§5.3.1)に、次の規則を書く。
+`skills/orchestrating-runs/references/review-common.md`(§5.3.1)に、次の規則を書く。
 
 - `git diff --name-only <base>...<branch>` の変更パスと内容から、frontend・backend・data・infra のうち当たる観点を選ぶ。
 - doc と security は、変更の内容によらず毎回選ぶ。コードだけが変わり文書が追随しないと、両者が乖離する。doc はこの乖離を見る観点だからである。
-- frontend・backend・data・infra のどれにも当たらない変更パスがあるときは、generic を選ぶ。
-- 選んだ観点と、その観点を選んだ理由(当たった変更パス)を、`review-<m>.md` の先頭の段落に 1 行ずつ書く。所見の一覧の外に置く。`review-<m>.md` を読むコードは無い(`src/` を `review-` で検索して確かめた)。読むのは `fixing-review-findings` と `filing-followup-issues` で、どちらも critical/high・medium/low の所見を読む。
+- frontend・backend・data・infra のどれにも当たらず、doc の担当でもない変更パスがあるときだけ、generic を選ぶ。Markdown などの文書と、run の成果物(`docs/intents/` の intent 文書、agenda・discussion・design・dev-plan)は doc の担当であり、generic を選ぶ理由にしない。
+- 選んだ観点ごとに 1 行、観点の名前とその観点を選んだ理由(当たった変更パス)を、`review-<m>.md` の先頭の段落に書く。所見の一覧の外に置く。`review-<m>.md` を読むコードは無い(`src/` を `review-` で検索して確かめた)。読むのは `fixing-review-findings` と `filing-followup-issues` で、どちらも critical/high・medium/low の所見を読む。
 - fix-loop の再レビューも同じ規則で選び直す(K11 により、所見が出た観点だけに絞ることはしない)。
 
-あわせて、`plugins/codiel/docs/DESIGN.md:130-132` と README の review の説明に、infra と generic を加える。
+規則の正本は `review-common.md` とする。`plugins/codiel/docs/DESIGN.md:130-132` と `plugins/codiel/README.md` の review の説明は、この規則と食い違わないように書き換える(infra と generic を加え、doc と security を毎回選ぶことを残す)。
 
 ### 6.2 compaction の後の読み直し(P4)
 
 `orchestrating-runs` の本文に次を書く。
 
-- 会話の先頭が、前の会話の要約で始まっているときは、compaction が起きている。このときは、`orchestrating-runs` と今のフェーズの手順ファイルだけを Read し直す。
-- 今のフェーズは `codiel-state.mjs get --active` で確かめる。
+- 会話の先頭が、前の会話の要約で始まっているときは、compaction が起きている。このときは、`orchestrating-runs` の本文を Read し直す。
+- 続行中の run の slug を要約から取り、`codiel-state.mjs get --slug <slug>` で state を読む。`get --active` は複数の run(`awaiting_outcome` を含む)を返すので、slug の特定には使わない。
+- §5.3.1 の再開と同じ範囲(`in_progress` か `awaiting_human` のフェーズすべての手順ファイルと、それらが使う共有の手順)を読む。
 - ほかのスキルは、そのスキルを使う手順に入ったときに読む。
 
-フェーズの境目では §5.3.1 の規則で手順ファイルを読むので、境目の後の compaction は特別な手当てなしに直る。
+フェーズの境目では §5.3.1 の契機で手順ファイルを読むので、境目の後の compaction は特別な手当てなしに直る。
 
 ### 6.3 フェーズの境目でのセッションの切り替え(P7)
 
 `orchestrating-runs` の本文に次を書く。新しい再開手順は作らず、既存の §6 を使う。
 
-- 委譲の待ちが無いフェーズの境目では、ユーザーは新しいセッションへ移ってよい。
+- 委譲の待ちが無いフェーズの境目では、ユーザーは新しいセッションへ移ってよい。待ちが無いことは、state の `waits` が空であることで確かめる。
 - 移った先では `/codiel:run` で再開し、§6 の再開手順に従う。
 
 README の利用者向けの説明に、この使い方を 1 段落で書く。
@@ -250,9 +260,12 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 ### 7.1 計測の方法
 
 - 計測の道具は `tools/` に Python で置く(CLAUDE.md の規約)。
-- 道具は、セッションの transcript(`~/.claude/projects/<project>/<session>.jsonl`)と、委譲先の transcript(同じ場所の `<session>/subagents/` 配下)の各行の `message.usage` を合計する。合計する値は `input_tokens`・`cache_creation_input_tokens`・`cache_read_input_tokens`・`output_tokens` である。
-- フェーズ別の内訳は、transcript の各行の時刻と、`codiel-state` が記録するフェーズの開始時刻で割り振る。`codiel-state` がフェーズの開始時刻を記録しているかは【要確認】。記録していなければ、`start-phase` を呼んだ Bash の行の時刻で割り振る。
-- 委譲別の内訳は、`subagents/` の transcript ごとに出す。
+- 道具の入力は、run に属するすべてのセッションの transcript(`~/.claude/projects/<project>/<session>.jsonl`)と、それぞれの委譲先の transcript(`<session>/subagents/` 配下)である。集計の区間は、`/codiel:run` を起動した行から `finalize` を呼んだ行までとする。
+- 合計する値は `message.usage` の `input_tokens`・`cache_creation_input_tokens`・`cache_read_input_tokens`・`output_tokens` である。
+- 同じ応答が thinking・本文・tool_use の行に分かれて記録され、同じ usage を持つ。そのため `message.id` で重複を除き、同じ id の最後の行の usage を採る。
+- 委譲先のトークンは、state の待ちの記録(`waits` の `phase` と `taskId`)で委譲先の transcript とフェーズを対応づけて割り振る。
+- オーケストレーターのトークンは、`start-phase`・`complete-phase`・`pass-gate`・`skip-phase` を呼んだ Bash の行の時刻で区間を切って割り振る。`start-phase` はフェーズの開始時刻を state に記録しない(`src/codiel-state.ts:923-959` で確かめた)。test-spec と dev-plan が並列に進む区間は「test-spec+dev-plan」の 1 区分にまとめる。
+- 委譲別の内訳は、委譲先の transcript ごとに出す。
 
 ### 7.2 計測の条件
 
@@ -261,6 +274,7 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 - 同じリポジトリの同じコミットから始める。
 - 同じ確定済みの intent 文書を入口にする(`/codiel:run <intentパス>`)。
 - 同じモデル・同じ運用方針のセッションで回す。
+- 計測の run では、P7 のセッションの切り替えをしない。1 つのセッションで finalize まで回す。自動の compaction は止めない。
 
 計測に使うリポジトリと intent 文書は未決である(§11)。
 
@@ -301,7 +315,8 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 数値は評価の担当の概算を足したもので、【推定】である。
 
 - どの run でも減る量: 削除と書き換えで約 71KB。うち `orchestrating-runs` で約 14KB、`raguel-gating` で約 8.5KB が、run の開始からオーケストレーターに載る量から減る。
-- review 1 回あたりで減る量: `reviewing-diffs` の削減(E1〜E8、約 5KB)が担当の人数分効く。P1 で観点が 7 から 4(doc・security と、当たる観点 2 つ)になる前提では、1 回のレビューで約 92KB から約 30KB になる。
+- review 1 回あたりで減る量: `reviewing-diffs` の削減(E1〜E8、約 5KB)が担当の人数分効く。P1 で観点が 7 から 4(doc・security と、frontend・backend のように当たる観点 2 つ。run の成果物は doc の担当なので generic は増えない)になる前提では、1 回のレビューで約 92KB から約 30KB になる。改修前の run が実際に何観点を出しているかは記録が無く、§7 の計測で確かめる。
+- P6 の効果(オーケストレーターが diff を全文開く回数の減少)は事前に見積もれない。§7 の計測で確かめる。
 - 一部のフェーズに入らない run でだけ減る量: §5.3 の切り出しで約 50〜60KB。そのフェーズに入る run では、入った時点で載るので減らない。減るのは、入らなかったフェーズの分と、入るまでの毎ターンのキャッシュ読み出しである。
 - compaction の後に読み直す量: P4 により、95KB の `orchestrating-runs` 全体ではなく、残した本文と今のフェーズの手順ファイルだけになる。
 
@@ -309,7 +324,7 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 
 ## 10. 記録と付随する作業
 
-- ARCHITECTURE は変えない。`skills/<skill>/references/` は既存の配置で、ARCHITECTURE の「ディレクトリ構成と責務」の範囲に入る。
+- ARCHITECTURE は変えない。`skills/<skill>/references/` は `reviewing-diffs` と `implementing` が既に使っている配置で、ARCHITECTURE の「ディレクトリ構成と責務」の `skills/`(AI が読む手順を置く)の範囲に入る。
 - ADR は追加しない。委譲先の指定(ADR-004)と run の構造(ADR-006)を変えない。
 - `plugins/codiel/docs/DESIGN.md` に、§6.1 の観点の規則、§4 W3 で退避する根拠と経緯、K2 で HARD-GATE と Red Flags を廃止した理由を足す。
 - `plugins/codiel/README.md` に §6.1 の観点と §6.3 のセッションの切り替えを反映する。ルートの `README.md` に codiel の run の説明があれば、同じ内容をそろえる。
@@ -320,4 +335,3 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 ## 11. 未決事項
 
 - 計測に使うリポジトリと intent 文書(§7.2)。`.codiel/` を書き換えてよく、run の全フェーズ(E2E を含む)に到達する小さな題材が要る。
-- `codiel-state` がフェーズの開始時刻を記録しているか(§7.1)。実装計画の最初の Task で確かめる。
