@@ -30,7 +30,8 @@
 | 項目 | 決定 |
 | --- | --- |
 | 計測の run の連携モード | local に固定する。PR の作成とコメントの投稿という外部への副作用を避け、前後の条件をそろえる |
-| 計測の開始状態 | 毎回、題材のリポジトリを同じ開始コミットに戻し、`.codiel/` の run の記録を消してから始める。finalize が intent を更新してコミットするので、前の回の状態から続けない |
+| 計測の開始状態 | 毎回、題材のリポジトリを同じ開始コミットに戻してから始める。finalize が intent を更新してコミットするので、前の回の状態から続けない。開始コミットには承認済みの intent 文書を含める(`/codiel:run <intentパス>` で始めるため)。`.codiel/` のうち run の state と報告(try のディレクトリ)だけを消し、`config.json`・`raguel.config.yaml`・`specs/` は開始コミットのまま残す。Raguel の記録(`~/.raguel` の題材の projectId の配下)も、毎回の開始前に同じ手順で消す |
+| 委譲先の transcript の対応づけ | 委譲先の transcript は `<session>/subagents/agent-<agentId>.jsonl` に置かれる(2026-10-02 にこのリポジトリのセッションで確かめた)。`agentId` は Agent ツールが返す ID で、`wait-add --task-id` に渡す値と同じである |
 | 計測の記録項目 | 各回について、前後の別・回次・開始コミット・intent 文書のパスと内容のハッシュ・モデル・運用方針(`AMATSUKA_AGENT_AUTO_INJECTION` の値)・連携モード・`TYPESAFE_API_KEY` の有無・セッション ID を記録する |
 | 計測の道具の名前と置き場 | `tools/codiel_run_usage.py`。`tools/` はまだ無いので Task 1 で作る |
 | 計測の run の特定 | 道具の入力は、サンドボックスの project ディレクトリと、計測の回ごとに記録したセッション ID の並びである。区間は、各セッションのうち `/codiel:run` を含むユーザー行から、`codiel-state.mjs finalize --slug <slug>` を含む Bash の行までとする |
@@ -72,7 +73,7 @@
 - Modify: この計画書(「Task 1 の結果」)
 
 - [ ] ステップ 1: 題材を決める。既存のサンドボックス(`~/codiel-speedup`〜`~/codiel-speedup3`)の題材が、E2E を含む全フェーズに到達するかを確かめる。到達しなければ、小さなリポジトリと確定済みの intent 文書を新しく用意する。どちらにするかをユーザーに確かめる(設計書 §11)。題材の開始コミットを決めて記録する。
-- [ ] ステップ 2: サンドボックスが読む codiel のパスを確かめる。既存のサンドボックスの `.claude/` には settings が無く、codiel をどの経路(`--plugin-dir` かマーケットプレイスか)で読んでいるかを計画の時点で確かめられなかった。改修前の run が `d53db58` の codiel を読むように固定する。改修前と改修後を並行して回す場合は、`d53db58` を別の worktree に checkout して改修前の codiel にする。
+- [ ] ステップ 2: サンドボックスが読む codiel のパスを確かめる。`~/codiel-speedup3` の transcript では、codiel のスキルをこの worktree(`/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins-intent-driven-development/plugins/codiel/`)から読んでいた(2026-10-02 に確かめた)。改修前の計測は Task 2 より前に行うので、この worktree の codiel がそのまま改修前の codiel になる。計測の前に、この worktree の `C/skills/`・`C/references/`・`C/commands/` が `d53db58` と同じであることを `git diff d53db58 -- plugins/codiel/skills plugins/codiel/references plugins/codiel/commands` で確かめる。
 - [ ] ステップ 3: 計測の記録項目(細目の決定)を記録する表を「Task 1 の結果」に用意する。
 - [ ] ステップ 4: `tools/codiel_run_usage.py` を作る。仕様は設計書 §7.1 と細目の決定(計測の run の特定・待ちの履歴の復元・手順ファイルの Read の確認・自己検証)のとおりで、要点は次のとおりである。
   - 入力: project ディレクトリとセッション ID の並び。各セッションの transcript と `<session>/subagents/` の transcript を読む。
@@ -80,7 +81,7 @@
   - 割り振り: 委譲先は、transcript から復元した待ちの履歴(`phase`・`taskId`)で割り振り、`taskId` の無いものは「未分類」。オーケストレーターは `start-phase`・`complete-phase`・`pass-gate`・`skip-phase` を呼んだ Bash の行の時刻で区間を切る。test-spec と dev-plan の並列の区間は「test-spec+dev-plan」。
   - 出力: フェーズ別・委譲別・合計の 4 種類の usage、review フェーズの委譲の数、フェーズの区間ごとに Read したファイルの一覧を、JSON と表で出す。
   - 完了報告に、`--self-check` の結果と、このリポジトリの transcript に当てた出力の抜粋を添える。
-- [ ] ステップ 5: 題材を開始コミットに戻し、`.codiel/` の run の記録を消してから、改修前の codiel で run を回す。1 つのセッションで finalize まで回し、セッションを切り替えない。これを 2 回行い、各回の記録項目を書く。
+- [ ] ステップ 5: 細目の決定「計測の開始状態」の手順で題材を戻してから、改修前の codiel で run を回す。1 つのセッションで finalize まで回し、セッションを切り替えない。これを 2 回行い、各回の記録項目を書く。
 - [ ] ステップ 6: 改修前の codiel で `/codiel:test` を、引数なしと引数ありの 2 通りで実行し、レポートの置き場と項目を記録する。
 - [ ] ステップ 7: 道具で 2 回分を集計し、review に出た観点の数と名前も記録する(設計書 §9 の「改修前の run が何観点を出すか」)。
 - [ ] ステップ 8: 結果を「Task 1 の結果」に書いてコミットする。道具(ステップ 4)と結果は別のコミットにする。
@@ -209,7 +210,7 @@
 
 役割: オーケストレーターがユーザーと行う。Task 9 の後に行う。
 
-- [ ] ステップ 1: Task 1 と同じ題材・開始コミット・intent 文書・モデル・運用方針・連携モード(local)・`TYPESAFE_API_KEY` の有無で、改修後の codiel(この worktree の HEAD)を読ませる。毎回、題材を開始コミットに戻して `.codiel/` の run の記録を消し、1 つのセッションで finalize まで回す。これを 2 回行い、各回の記録項目を書く。
+- [ ] ステップ 1: Task 1 と同じ題材・開始コミット・intent 文書・モデル・運用方針・連携モード(local)・`TYPESAFE_API_KEY` の有無で、改修後の codiel(この worktree の HEAD)を読ませる。毎回、細目の決定「計測の開始状態」の手順で題材を戻し、1 つのセッションで finalize まで回す。これを 2 回行い、各回の記録項目を書く。
 - [ ] ステップ 2: 改修後の codiel で `/codiel:test` を Task 1 のステップ 6 と同じ 2 通りで実行し、レポートの置き場と項目を Task 1 の記録と比べる。
 - [ ] ステップ 3: 道具で集計し、設計書 §7.3 の受け入れ基準を判定する。各回の記録項目が Task 1 とそろっていることも確かめる。
 - [ ] ステップ 4: 道具が出力する Read したファイルの一覧で、各フェーズで対応する手順ファイルが Read されたことを確かめる。compaction が起きていれば、その後に `ORS` と手順ファイルが読み直されたことも確かめる。
@@ -230,7 +231,7 @@
 
 ## 未決事項
 
-- 計測の題材(Task 1 のステップ 1)と、サンドボックスが codiel を読む経路(Task 1 のステップ 2)。
+- 計測の題材(Task 1 のステップ 1)。
 - `plugins/metatron/docs/format-change-checklist.md:37` の付け替え。metatron の開発時のチェックリストが、codiel の「7. 失敗の記録」を指している。付け替えると metatron のファイルを変えることになり、設計書 K5 の「変更するプラグインは codiel だけ」に当たる。直すかどうかと、直すときに metatron のバージョンを上げるかをユーザーに確かめる。
 
 ## Task 1 の結果
