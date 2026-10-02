@@ -13,6 +13,8 @@ git reset -q --hard "$start_commit"
 git for-each-ref --format='%(refname:short)' refs/heads | grep -vx main | xargs -r git branch -q -D
 # 追跡外のファイルを消す。node_modules は残す
 git clean -q -fdx -e node_modules
+# codiel の初期化が作る空のディレクトリは git に載らないので作り直す
+mkdir -p .codiel/runs .codiel/reports
 # Raguel の記録(この題材の projectId のもの)を消す
 rm -rf "$HOME"/.raguel/cases/codiel-cost-bench-* "$HOME"/.raguel/precedents/codiel-cost-bench-*
 
