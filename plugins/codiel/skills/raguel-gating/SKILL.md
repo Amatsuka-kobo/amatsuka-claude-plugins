@@ -44,6 +44,9 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 4. フェーズ→ツール対応表(下記)に従い evaluate ツールを呼ぶ。`runId`・`phase`・`objective` は全呼び出しで必須である。
    evaluate を呼ばない限り `evaluationId` は存在せず、`pass-gate` は失敗する。
    evaluate はフェーズごとに呼ぶ。前のフェーズが PROCEED だったことや diff が小さいことを理由に省かず、`pass-gate` へは Raguel がその場で返した `evaluationId` だけを渡す。
+   evaluate や `record_outcome` が接続断・タイムアウトで失敗したら、先に評価が記録済みでないか(`evaluationId` が返っていないか)を確かめ、同じ呼び出しを 1 回だけ呼び直す。呼び直しが重なると `common/resubmission-loop` の ASK を誘発しうる。
+   それでも失敗するなら、`mark-ask <phase> --slug <slug> --kind confirm` で待ち、AskUserQuestion で「再試行」「時間を置いて続行」「中止」を聞く。中止は、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason raguel-unavailable` で止める。
+   成果物は動かさず、ASK や as-is の裁定で代用しない。Raguel の記録なしにゲートを通す手段は無い。
 5. verdict で分岐する(下記「verdict 別ハンドリング」)。
 6. PROCEED なら次フェーズのディスパッチプロンプトに前フェーズの findings 要約を含める
    (「findings の引き継ぎ」参照)。
@@ -96,6 +99,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 1. `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <evaluationId> --verdict PROCEED`
 2. state の `phases.<phase>.status` が `passed` になったことを確認し、次フェーズへ自動遷移する。
 
+`pass-gate` が検査で拒否したときは、終了コード 1 で標準エラー出力に理由が出る。state は書かれず、フェーズは `in_progress` のままである。理由で対処を分ける。
+
+- 評価の記録が無い・別の run やフェーズのもの・verdict の不一致、最新の評価でない、code 系で評価した HEAD や起点が現在と違う、`paths` で範囲が絞られている、文書系で評価後に内容が変わった、期待する文書が `paths` に無い、のいずれかなら、原因を直して evaluate を呼び直し、返った新しい `evaluationId` で `pass-gate` する。`--human-approved` で迂回しない。
+- `raguelContract` の不一致なら、理由文の指示に従う。
+- Raguel の記録を読めないなら、理由を人に示して指示を待つ。
+- 同じ拒否が 2 回続いたら、`mark-ask <phase> --slug <slug> --kind confirm` で人に確かめる。
+
 ### ASK
 
 `judgeStatus` が `degraded` の ASK は、下の「degraded の ASK」に従う。それ以外の ASK は次のとおりである。
@@ -131,7 +141,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "as-is"`、`evaluationId` は ASK を出した
    evaluate の evaluationId)で、人が as-is 承認した裁定を記録する。この記録を飛ばして次に進まない。
-   `record_outcome` が失敗したら `pass-gate` に進まず、失敗内容を人に示して裁定を仰ぐ。
+   `record_outcome` が接続断・タイムアウトで失敗したら、手順 4 の不通時の手順で呼び直す。それでも、または別の理由で失敗したら `pass-gate` に進まず、失敗内容を人に示して裁定を仰ぐ。
 2. `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` で `in_progress` に戻す。
 3. `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <ASK の evaluationId> --verdict ASK --human-approved`
    でゲートを通す。`state.phases[<phase>].verdict` は `"ASK"` のまま、`humanApproved: true` が
@@ -172,9 +182,11 @@ verdict を上書きしない。
 
 ### ループ上限超過
 
-`codiel-state record-attempt` が上限超過(exit 3)を返した場合は ASK と同じ扱いにする
-(`awaiting_human` は `record-attempt` 内部で既にセットされるため、findings 提示 → 人の裁定 → resume/stop の
-流れに合流する)。
+`codiel-state record-attempt` は上限(既定 5)を超えると run を `awaiting_human` にして exit 3 を返す。CLI に上限のリセットや引き上げの手段は無い。上限超過には `evaluationId` が無いので、ASK の裁定 A・B は使えない。
+
+1. findings と試行の経過を示し、AskUserQuestion で「続行」か「中止」かを聞く。
+2. 中止なら、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason attempts-exceeded` で止める。
+3. 続行なら、`resume --slug <slug>` で戻して修正の往復を続ける。上限超過の後は往復ごとに `record-attempt` が再び exit 3 を返すので、そのたびに人に確かめてから続ける。
 
 ## findings の引き継ぎ
 
