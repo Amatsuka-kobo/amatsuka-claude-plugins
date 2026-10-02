@@ -332,6 +332,16 @@
 - E27(`scripting-tests`): guard-write hook は、`<testsDir>/**/spec.md` と `<testsDir>/**/cases.md` への書き込みを implement・test-loop・fix-loop で ask にし、test-code は通す。hook は呼び出し元の委譲先を識別できないため、これ以外の境界は委譲先の規律で守る。
 - Task 2: `docs/DESIGN.md:498・673`、`docs/skill-flowcharts.md:448・542・645` が、HARD-GATE・失敗の記録・fix-loop のスキップの切り出し前の置き場を指している。
 
+## 別の Issue にする事項(Task 9・9b のレビューから)
+
+- A23・A24(設計書 §8.1 の K-X1): `gh pr create` が失敗したときの扱い、worktree を作るコマンドの例。
+- prompt-smith の再評価の充足度の欠落 S1〜S17(委譲先の異常終了、`codiel-state init` の失敗など)。改修前から無かった規則。
+- `C/src/check-intent-env.ts` の `contextDocs` とコメントが ARCHITECTURE・GOTCHAS を含む。`C/src/hooks/guard-write.ts` の `unrecorded-gotchas.md` の免除が使われなくなった(K12 の `src/` 側の追随)。
+- `harness-docs/ARCHITECTURE.md:403` の退避先の記述が古くなった(`/metatron:update` で直す)。
+- `phase-finalize.md` で `finalize` を呼んで run が `awaiting_outcome` になった後の手順(ADR 候補・結果レポート)の間に compaction が起きると、読み直しの対象(`active`・`awaiting_human`)から外れる。改修前からある順序の問題。
+- `facilitating-design-discussions` が `<plugin-root>` を使うのに、プラグインルート参照規約を持たない(改修前から)。`initializing-harness` L198 の「ARCHITECTURE の承認なしの書き込みは HARD-GATE 違反」が L49 と食い違う。
+- `reviewing-diffs` の description が「`review-<m>.md` にまとめる」と書き、本文(テキストで返す)と食い違う(改修前から)。
+
 ## Task 10 の結果
 
 (Task 10 のステップ 5 で書く)
