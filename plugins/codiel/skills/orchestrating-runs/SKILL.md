@@ -201,13 +201,14 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
 | `references/e2e.md` | E2E を実行する委譲を出す前 |
+| `references/gotcha-candidates.md` | GOTCHAS 候補を書く契機(STOP を妥当と裁定した・上限超過の後の中止・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
 | `references/resume.md` | run を再開するとき |
 
 手順ファイルは次の 4 つの契機で読む。
 
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
-2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`)を使う手順に入る前。読む時点は
+2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`gotcha-candidates.md`)を使う手順に入る前。読む時点は
    上の表に従う。fix-loop の再レビューでは、委譲を出す前に `review-common.md` を読む。
 3. run を再開するとき。`resume.md` を読み、待ちの処理や委譲の出し直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の

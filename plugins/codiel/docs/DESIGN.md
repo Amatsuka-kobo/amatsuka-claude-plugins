@@ -333,7 +333,8 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
 intent にだけ残す。
 
 書式は `# <領域名>` の下に `## 目的` / `## 意図的な制約` / `## 非ゴール` / `## 由来` / `## 出典` の
-5 セクションを持つ(正本は `references/intent-format.md`)。`## 意図的な制約` の小見出しは、制約・理由・
+5 セクションを持つ(正本は `references/intent-format.md`)。`intents` の run が GOTCHAS 候補を書いた領域ファイルだけは、
+`## 非ゴール` と `## 由来` の間に `## GOTCHAS 候補` を持つ。`## 意図的な制約` の小見出しは、制約・理由・
 出典 intent・関連 ADR を持つ。`knowledgeTarget` が `intents` のとき、ADR の 3 条件(覆すコストが大きい・
 選択肢が実在した・理由が自明でない)を満たす判断は、小見出しの末尾に `[ADR 候補: <領域名>-<連番>]` の
 印を付けて全文を書く。3 条件を満たさない設計理由と制約は、`knowledgeTarget` の値によらず持続層に書く。
@@ -345,7 +346,8 @@ intent にだけ残す。
 | intent | 読む。関係する領域の制約をユーザーに示す |
 | design(標準)/ test-spec・dev-plan(軽量) | 読む。制約を設計・仕様・手順の前提にする |
 | review | 読む。制約への違反は severity high の所見にする |
-| intent-sync | 書く。取り込みと `[ADR 候補]` の採番を行う唯一のフェーズ |
+| intent-sync | 書く。取り込みと `[ADR 候補]` の採番を行う唯一のフェーズ。`intents` の run では、まだ写していない GOTCHAS 候補も写す |
+| finalize | `intents` の run だけ、最後の intent-sync より後に出た GOTCHAS 候補を `## GOTCHAS 候補` に書き足す。ほかのセクションは書き換えない |
 
 `knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値で、intent フェーズの承認ゲートで決め、state.json に記録する。`metatron` の run は ADR 級の
 判断を持続層に全文で残さず、metatron の ADR に直接任せる(持続層には `関連 ADR` の番号だけを書く)。
@@ -616,7 +618,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 | PreToolUse | Bash(危険コマンド) | `rm -rf`(作業ツリー外)、`curl \| sh`、`git push --force` 等を deny。Raguel の `code/dangerous-patterns` はコード成果物を見るが、こちらは実行コマンドそのものを見る。追補(決定 96): state.json へのシェル経由の書き込みも deny する。対象は、クォートの外のリダイレクトの行き先と、同じコマンドの区切りの中の `tee`・`sed -i` の引数が state.json のパスのとき。コミットの trailer の `>` から後ろのコマンドのパスへ誤って当たらないよう、判定を区切りの中に限る |
 | PreToolUse | GitHub MCP の本文を書き込むツール(`issue_write`・`create_pull_request` 等。新設 `guard-github-mcp`) | 本文の引数(`body`)に `<!-- codiel:generated -->` マーカーが無ければ **deny**(active run が無ければ通す)。guard-bash と同じマーカーの規律を GitHub MCP 経由の投稿にも及ぼす |
 | PreToolUse | Edit / Write(`.codiel/runs/**/state.json`) | **deny**。state 遷移は `codiel-state` スクリプト経由のみ(§3)。Bash からの書き込みの判定は Bash の行に書く |
-| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(intent/discuss/design/test-spec/dev-plan/intent-sync)中の `src/**` への書き込み、コードフェーズ(**test-code**/implement/test-loop/fix-loop)のうち implement・test-loop・fix-loop 中の `<testsDir>/**` の spec.md / cases.md(期待値)と、`spec.md` の `tests` に記録されたテストコードへの書き込み(test-spec と test-code は通す。fix-loop は `set-test-edit` を立てている間だけ通す。§4)。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。worktree(`.codiel/worktrees/<slug>/<名前>`)の中への書き込みは、そのメインの作業ツリーと worktree のルートを基準に同じ規則を当てる。**ドメイン単位の制御は、worktree の中では `step-add --domain` で記録した値、メインの作業ツリーでは state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が決まるとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない。追補(決定 106。K12 で退避先 `unrecorded-gotchas.md` の免除を外した): 判定の順序は state.json の deny → active run → `state.intent`(どのフェーズでも通す)→ config.json を 1 回読む(不正なら「読めない」として扱う)→ `docs/intents/**` → 文書フェーズ(`.codiel/`・`docs/`・`<testsDir>/`・`<runsDir>/` を通す)→ コード系フェーズ(テストの保護 → `<runsDir>/` の下への書き込みは実行モードと `domain` によらず ask → ドメイン境界。境界から `<testsDir>/**/reports/**` の E2E のレポートを免除する)→ pr・review・triage・finalize(`.codiel/` の外は ask。変更なし)。config.json が不正なときは、コード系フェーズの書き込みに ask を返し、文書フェーズの `<testsDir>/`・`<runsDir>/` の免除を外す。理由文は「run の文書(<パス>)は文書フェーズで書きます(<フェーズ> 中の変更は想定外)」と、「.codiel/config.json が不正なため、<フェーズ> 中の書き込みが run の文書(runsDir)に当たるか判定できません(<理由>)」である |
+| PreToolUse | Edit / Write(フェーズ別書き込み制御) | アクティブ run の現在フェーズを参照し、フェーズと不整合な書き込みを **ask**(人間に確認)。例: 文書フェーズ(intent/discuss/design/test-spec/dev-plan/intent-sync)中の `src/**` への書き込み、コードフェーズ(**test-code**/implement/test-loop/fix-loop)のうち implement・test-loop・fix-loop 中の `<testsDir>/**` の spec.md / cases.md(期待値)と、`spec.md` の `tests` に記録されたテストコードへの書き込み(test-spec と test-code は通す。fix-loop は `set-test-edit` を立てている間だけ通す。§4)。deny にしない(ask)のは、正当な例外書き込みでの誤爆に備えるため。worktree(`.codiel/worktrees/<slug>/<名前>`)の中への書き込みは、そのメインの作業ツリーと worktree のルートを基準に同じ規則を当てる。**ドメイン単位の制御は、worktree の中では `step-add --domain` で記録した値、メインの作業ツリーでは state.json の `domain`(`codiel-state` の `set-domain` / `clear-domain` で設定・解除する)を根拠に行う** — hooks はツール呼び出しの発行元エージェントを識別できないため、エージェント名ではなく**宣言された domain** を境界の根拠にする。コードフェーズ中に `domain` が決まるとき、ARCHITECTURE のドメインマップにあるそのドメインの glob に一致しない書き込みは **ask**(ドメイン名がマップに無いときも ask)。`domain` が無いとき・ドメインマップが読めないときは境界を課さない。追補(決定 106。K12 で退避先 `unrecorded-gotchas.md` の免除を外した): 判定の順序は state.json の deny → active run → `state.intent`(どのフェーズでも通す)→ config.json を 1 回読む(不正なら「読めない」として扱う)→ `docs/intents/**`(`domains/**` は intent-sync のほか、triage が passed で finalize が未完了の間も通す。GOTCHAS 候補の写しのため)→ 文書フェーズ(`.codiel/`・`docs/`・`<testsDir>/`・`<runsDir>/` を通す)→ コード系フェーズ(テストの保護 → `<runsDir>/` の下への書き込みは実行モードと `domain` によらず ask → ドメイン境界。境界から `<testsDir>/**/reports/**` の E2E のレポートを免除する)→ pr・review・triage・finalize(`.codiel/` の外は ask。変更なし)。config.json が不正なときは、コード系フェーズの書き込みに ask を返し、文書フェーズの `<testsDir>/`・`<runsDir>/` の免除を外す。理由文は「run の文書(<パス>)は文書フェーズで書きます(<フェーズ> 中の変更は想定外)」と、「.codiel/config.json が不正なため、<フェーズ> 中の書き込みが run の文書(runsDir)に当たるか判定できません(<理由>)」である |
 | Stop | メインセッション | アクティブ run が `completed` / `stopped` / `awaiting_human` / `awaiting_outcome` 以外の状態で停止しようとしたら block し「run が未完了。継続するか、明示的に中止せよ」と通知(尻切れ完了宣言の防止)。委譲は常にバックグラウンドで動くので、待ちが 1 件以上記録されている間は止めずに通す。待ちが無く `in_progress` のときは、委譲の完了を待つなら `codiel-state wait-add` で待ちを記録してから停止するよう案内する(設計書 2026-10-01-codiel-run-speedup-design.md §10.2) |
 
 投稿の本文のマーカーは、スキルの規律で付け、hook で強制する。付け忘れた投稿は deny され、付けて投稿し直す。run が active なセッションの本文は、人のアカウントから投稿されても AI が生成した文として扱い、読む側は原文から除ける。intent の承認時の任意の起票は run の作成前なので hook は掛からないが、規律でマーカーを付ける。
@@ -679,7 +681,7 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
 - 執筆当時は、全フェーズのサブエージェントが作業前に必読とした(ディスパッチプロンプトで強制)
 - 執筆当時は、Raguel の判例ストア(判定側の記憶)と GOTCHAS(生成側の記憶)で両輪の成長ループを構成するとした
 
-2026-09-27 から 2026-10-02 までは、codiel が上の契機で metatron の `recording-gotchas` を起動し、CLI の案内が無い環境では「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)へ退避していた(`orchestrating-runs` の `references/failures.md`)。K12 でこの手順と必読の規律を外した。理由は次の「ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)」に書く。guard-write の退避先の免除(§8)も外した。
+2026-09-27 から 2026-10-02 までは、codiel が上の契機で metatron の `recording-gotchas` を起動し、CLI の案内が無い環境では「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)へ退避していた(`orchestrating-runs` の `references/failures.md`)。K12 でこの手順と必読の規律を外した。理由は次の「ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)」に書く。guard-write の退避先の免除(§8)も外した。2026-10-03 からは、同じ契機で台帳へ書かずに GOTCHAS 候補を残す(次の K12 の説明の「GOTCHAS 候補を ADR 候補と同じ形で残す理由」)。
 
 ### ARCHITECTURE と GOTCHAS を codiel の指示層から外した理由(K12)
 
@@ -695,6 +697,18 @@ K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/d
 
 外した規則は、各フェーズの入力列の ARCHITECTURE・GOTCHAS、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、finalize の乖離の一覧化、`references/failures.md` とそれを指す参照(Raguel の STOP・誤検知の退避・incident・fix-loop の設計漏れ)である。
 
+#### GOTCHAS 候補を ADR 候補と同じ形で残す理由
+
+K12 の直後の codiel は、run の中で起きた失敗を何も残さなかった。2026-10-03 のユーザー決定で、失敗を台帳ではなく候補として残すことにした。手順の正本は `orchestrating-runs` の `references/gotcha-candidates.md`、書式の正本は `references/intent-format.md` の「GOTCHAS 候補」である。
+
+- 失敗を学びに変える入力は、失敗が起きた run にしか無い。K12 は台帳への書き込みを metatron に戻したが、その入力まで捨てる理由は無かった。
+- 台帳への書き込みと、解決済みや陳腐化の判断は metatron の担当のままにする。codiel は候補を run の成果物として残し、利用者に渡すだけである。候補は `append-gotcha` の入力の 6 キーに、書いた日と run の slug・try 番号を足した形で、候補 ID とタグを持たない。
+- 書き先は ADR 候補と同じく `knowledgeTarget` で分ける。`metatron` の run は try の手元の記録(`.codiel/runs/<slug>/try-<n>/reports/gotcha-candidates.md`。git に載せない)に書いて finalize の結果レポートと stop の完了報告に一覧し、`intents` の run は同じ記録に書いた上で持続層の `## GOTCHAS 候補` へ写してコミットする。
+- 契機は旧 `failures.md` の 4 つ(STOP を妥当と裁定した・上限超過の後の中止・incident・review で見つかった設計の漏れ)である。STOP の誤検知の裁定は `record_outcome` の `false-positive` として Raguel に残るので含めない。
+- 持続層へ写すのは intent-sync と finalize の 2 時点である。コード系フェーズの中では、pass-gate から次のフェーズの `start-phase` までコミットできず、guard-write も持続層への書き込みを ask にする。そこで、どの契機でもまず手元の記録へ書き、intent-sync で前の try を含めた未写しの候補をまとめて写し、finalize で最後の intent-sync より後の候補を写す。finalize は `start-phase` を呼ばず phase が triage のままなので、guard-write は triage が passed で finalize が未完了の間も `docs/intents/domains/**` を通す。
+- incident の候補を持続層へ写す扱いは保留である(2026-10-03 ユーザー判断)。incident は finalize の後の outcome の同期で起き、書いてコミットするブランチが決まらないためである。いまは手元の記録に書いて同期の報告に一覧するだけにし、写さない印を付けておく。
+- metatron へ候補を移す機能は別に作る。候補 ID を持たせないのはそのためである。
+
 ### `.claude/rules/codiel.md`(← `assets/rules/codiel.md`)
 
 Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
@@ -705,7 +719,7 @@ codiel はこの 2 つに触れないので、rules にも書かない。metatro
 
 - intent 文書(`docs/intents/`)の原文のセクション(`## ASIS` / `## TOBE`)はユーザーの言葉のまま
   にし、要約・書き換えをせず、日付・話者・出所つきで末尾に追記する
-- 持続層(`docs/intents/domains/`)を書き換えるのは intent-sync フェーズだけにし、`[ADR 候補]`
+- 持続層(`docs/intents/domains/`)を書き換えるのは intent-sync フェーズだけにし(例外は finalize での GOTCHAS 候補の書き足し)、`[ADR 候補]`
   の印が付いたエントリを参照形へ縮める作業も intent-sync フェーズの外で行う
 - テスト仕様書(`<testsDir>/`)は機能の一部。機能を変えたら仕様書とケースも更新する
 
@@ -717,7 +731,8 @@ codiel はこの 2 つに触れないので、rules にも書かない。metatro
 - PROCEED した変更が原因で実害(障害・リグレッション)が出たら、必ず incident として申告し
   `record_outcome(incident)` を記録させる(自動検知できない唯一の結末であり、最も価値の高い失敗判例)
 
-ARCHITECTURE / GOTCHAS を読む規律と、失敗を記録する手順は、codiel のどこにも置かない(K12)。
+ARCHITECTURE / GOTCHAS を読む規律と、失敗を台帳へ記録する手順は、codiel のどこにも置かない(K12)。
+失敗は GOTCHAS 候補として run の成果物に残すだけである(「GOTCHAS 候補を ADR 候補と同じ形で残す理由」)。
 `orchestrating-runs` に残るのは、§0 のドメインマップの抽出と、review の委譲へ ARCHITECTURE のパスを渡す
 依頼文テンプレートの行だけである。
 

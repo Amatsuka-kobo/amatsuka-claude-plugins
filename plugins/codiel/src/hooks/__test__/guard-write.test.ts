@@ -311,6 +311,18 @@ test("docs/intents/domains/** は intent・phase null・triage で ask になる
   ).toBe("ask")
 })
 
+test("docs/intents/domains/** は triage が passed の後(finalize の作業中)に通る", () => {
+  const domainFile = "docs/intents/domains/frontend.md"
+  const root = setupRun()
+  advanceRunTo(root, "triage")
+  // finalize は start-phase を呼ばないので、phase は triage のまま triage だけが passed になる
+  const p = statePathFor(root, SLUG)
+  const state = readState(p)
+  state.phases.triage.status = "passed"
+  writeState(p, state)
+  expect(hook(root, "Write", path.join(root, domainFile))).toBe(null)
+})
+
 test("phase null で docs/intents/*.md 以外(.codiel 外のソース)への書き込みは従来どおり ask になる", () => {
   const root = initOnly()
   const r = hook(root, "Write", path.join(root, "src/app.ts"))

@@ -688,6 +688,7 @@ try {
   }
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass();
+    if (run.state.phases.triage?.status === "passed") pass();
     emit(
       "ask",
       `\u6301\u7D9A\u5C64(${repoRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F intent-sync \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`

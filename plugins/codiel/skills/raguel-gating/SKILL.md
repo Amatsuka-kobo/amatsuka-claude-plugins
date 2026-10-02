@@ -117,7 +117,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    応答の本文だけに書いて質問文を短くしない。所見の原文(`message` や `evidence` の全文)は質問文に添えない。
    選択肢は「修正して再提出」「このまま承認」「中止」である。
 4. 裁定はオーケストレーターが選ばない。「多分大丈夫」の代理判断は自己承認なので、選択肢の回答を待つ。
-   「中止」なら、STOP の「妥当として止める」と同じ手順で終了させる。
+   「中止」なら、STOP の「妥当として止める」と同じ手順で終了させる。ただし GOTCHAS 候補は書かない。
 
 #### 裁定 A: 修正して再提出
 
@@ -178,14 +178,14 @@ verdict を上書きしない。
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    3. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
-4. 妥当として止めるときは、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。
+4. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書き、完了報告に一覧する。
 
 ### ループ上限超過
 
 `codiel-state record-attempt` は上限(既定 5)を超えると run を `awaiting_human` にして exit 3 を返す。CLI に上限のリセットや引き上げの手段は無い。上限超過には `evaluationId` が無いので、ASK の裁定 A・B は使えない。
 
 1. findings と試行の経過を示し、AskUserQuestion で「続行」か「中止」かを聞く。
-2. 中止なら、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason attempts-exceeded` で止める。
+2. 中止なら、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason attempts-exceeded` で止める。止めたら、その手順で GOTCHAS 候補を書き、完了報告に一覧する。
 3. 続行なら、`resume --slug <slug>` で戻して修正の往復を続ける。上限超過の後は往復ごとに `record-attempt` が再び exit 3 を返すので、そのたびに人に確かめてから続ける。
 
 ## findings の引き継ぎ

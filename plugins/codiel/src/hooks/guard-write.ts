@@ -318,6 +318,10 @@ try {
   // 通してしまうため、domains/** への書き込みはそれより先に判定する。
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass()
+    // finalize の作業中(triage が passed で、finalize がまだ status を awaiting_outcome にしていない間)は、
+    // 最後の intent-sync より後に出た GOTCHAS 候補を持続層へ写す。finalize は start-phase を呼ばないので、
+    // この間の phase は triage のままである。
+    if (run.state.phases.triage?.status === "passed") pass()
     emit(
       "ask",
       `持続層(${repoRel})への書き込みは intent-sync フェーズの担当です(現在のフェーズ: ${phase})`

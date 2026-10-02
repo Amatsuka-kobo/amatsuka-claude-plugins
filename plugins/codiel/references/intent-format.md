@@ -251,10 +251,13 @@ Issue を入口にしたときの扱いは、本文のマーカーで決める�
 - 出典 intent: docs/intents/YYYY-MM-DD-<slug>.md
 - 関連 ADR: ADR-NNN(無ければ「なし」)
 ## 非ゴール
+## GOTCHAS 候補
 ## 由来
 - docs/intents/YYYY-MM-DD-<slug>.md(取り込み日 YYYY-MM-DD)
 ## 出典
 ```
+
+`## GOTCHAS 候補` は、候補を初めて書くときに作る。候補の無い領域ファイルには置かない。
 
 `出典 intent` が複数あるときは、1 行 1 パスで `- 出典 intent: <パス>` の行を繰り返す。1 行に複数のパスを並べない。
 
@@ -315,6 +318,28 @@ ADR にする判断は次の 3 条件をすべて満たすものである。
 
 - `[ADR 候補]` を ADR へ移すのは metatron の init と update である。codiel は移送の手順を持たない。
 - `knowledgeTarget` が `metatron` の run は `[ADR 候補]` を作らない。
+
+### GOTCHAS 候補
+
+GOTCHAS 候補は、run の中で起きた失敗を、metatron の GOTCHAS の台帳へ移す前の形で残すエントリである。`knowledgeTarget` が `intents` の run は持続層の `## GOTCHAS 候補` に書き、`metatron` の run は run の手元の記録にだけ書く。どちらも同じ形で書く。値は例であり、実際の内容に置き換える。
+
+```markdown
+### <失敗のタイトル> [GOTCHAS 候補]
+- date: YYYY-MM-DD
+- run: <slug> try-<n>
+- task: <何をしようとしていたか>
+- mistake: <具体的に何を間違えたか>
+- cause: <なぜそうなったか(推測)>
+- countermeasure: <次のエージェントがそのまま実行できる行動>
+- promotionCandidate: Yes
+```
+
+- 印は `[GOTCHAS 候補]` の 1 形だけとし、全角・半角の揺れや別の語を使わない。
+- 見出しから印を除いた文字列が `title` になる。`title`・`date`・`task`・`mistake`・`cause`・`countermeasure`・`promotionCandidate` は、metatron の `append-gotcha` の入力のキーと同じ名前である。
+- `promotionCandidate` は `Yes` か `No` にする。
+- `date` は書いた日を、実行する機械のローカルのタイムゾーンで付ける。
+- 候補 ID は付けない。`[解決済み]`・`[対象外]` のタグも付けない。
+- エントリの範囲は、印付きの `###` 見出しから、次の `###` 見出しか `##` 見出しの直前までとする。
 
 ## バージョニング
 

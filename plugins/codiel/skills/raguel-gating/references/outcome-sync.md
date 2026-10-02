@@ -25,6 +25,7 @@
    `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "incident"`、`evaluationId` は下記の選定順)+
    `codiel-state record-outcome --slug <slug> --outcome incident` を記録する。最も価値の高い失敗判例
    なので、申告を勝手に補ったり省略したりしない。
+   記録の前に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。記録したら、その手順で GOTCHAS 候補を書き、この同期の報告に一覧する。
 
 run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `evaluationId` は、
 「最後にコードを検査した evaluate」の evaluationId を使う。優先順は次のとおり:
