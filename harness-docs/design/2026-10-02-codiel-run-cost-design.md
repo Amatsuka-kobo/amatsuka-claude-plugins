@@ -20,7 +20,7 @@
 | K10 | 施策 P7(フェーズの境目でのセッションの切り替え、§6.3)を採る |
 | K11 | 施策 P2(再レビューを、所見が出た観点と修正差分に絞る)は採らない |
 
-K2 は、評価の担当とオーケストレーターが推奨した「HARD-GATE は縮めて残す」を採らない決定である。K4 の切り出し先は `references/` であり、`plugins/codiel/docs/` ではない。ARCHITECTURE は `docs/` を「読まない」場所と定めている。
+K2 は、評価の担当とオーケストレーターが推奨した「HARD-GATE は縮めて残す」を採らない決定である。直前の設計書 `2026-10-01-codiel-run-speedup-design.md` §5.4 は `orchestrating-runs` の HARD-GATE の中身(オーケストレーターはコード・spec.md / cases.md・レビューの所見を自分で書かない。自分で書く文書と自分で実行するコマンド)を定めた。K2 はこの置き場を HARD-GATE から本文の手順へ移す。中身は変えない。K4 の切り出し先は `references/` であり、`plugins/codiel/docs/` ではない。ARCHITECTURE は `docs/` を「読まない」場所と定めている。
 
 ## 2. 背景と目的
 
@@ -31,7 +31,12 @@ codiel の run は、オーケストレーターと委譲先が読む指示書�
 - `orchestrating-runs` と `raguel-gating`(26,204B)は run の開始から載る。オーケストレーターの毎ターンのキャッシュ読み出しに入る。
 - `reviewing-diffs`(12,131B)は、review の観点ごとに担当 1 人が読む。7 観点なら 1 回のレビューで約 92KB になる。再レビューのたびに同じ量が載る。
 
-この改修の目的は、run 1 回あたりのトークン消費を減らすことである。run の手順と成果物は変えない。例外は P1 で、観点を選ぶ規則が実行側のスキルに無いという欠落を直す。
+この改修の目的は、run 1 回あたりのトークン消費を減らすことである。run のフェーズ、state の遷移、Raguel のゲートは変えない。変わるのは次の 4 点である。
+
+- P1 で、review に出す観点を規則で選ぶ。観点を選ぶ規則が実行側のスキルに無いという欠落も、これで直す。
+- P1 で、`review-<m>.md` の先頭に選んだ観点の行が増える。
+- P5・P6 で、委譲先が返す完了報告の項目が決まる。
+- P4・P7 で、オーケストレーターが手順を読み直す時点と、セッションを切り替える使い方が加わる。
 
 ## 3. 前提
 
@@ -101,7 +106,7 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
   - 場面限定の手順は、そのスキル配下の `references/` へ切り出す(§5.3)。そのスキル以外の読み手だけが使う手順は、読み手のスキルの `references/` へ移す(D24・E1)。
   - 根拠・経緯・理由・出典は、`plugins/codiel/docs/` の既存の設計書(`DESIGN.md`)へ移す。該当: B5 の理由、B22 の理由、B27、B28、D3、D14 の経緯、D27 の hooks の挙動、D35 の出典、E20、E27。移す先に同じ内容が既にあれば、移さずに消す。
   - 書き換えて重複先への参照にできる判定(B1 など)は、退避せず削除して参照にする。
-- W4: 「プラグインルート参照規約」(C1・C14・C20・E12 と、`capturing-intent`・`initializing-harness` の同じセクション)は、改修後の本文に `<plugin-root>` を使う箇所が残るスキルでは残し、残らないスキルでは削る。`orchestrating-runs` の規約は残す。
+- W4: 「プラグインルート参照規約」(C1・C14・C20・E12 と、`capturing-intent` の同じセクション。評価の対象外の `initializing-harness` は変えない)は、改修後の本文に `<plugin-root>` を使う箇所が残るスキルでは残し、残らないスキルでは削る。`orchestrating-runs` の規約は残す。
 - W5: `wait-add` の id 規則の正本は `orchestrating-runs` §3 とする(A11 は残す)。`raguel-gating` の同じ規則(C8)は §3 への参照にする。
 
 ## 5. 文書の改修
@@ -132,11 +137,16 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 
 本文には、run の開始から必要な部分だけを残す。残すのは、概要、チェックリスト、§0 前提確認、§1 run の解決、§2 フェーズ進行表と §2.1 成果物コミット規約と §2.4 共通、§3 ディスパッチプロンプトの規約、§4 ドメインディスパッチ、の 7 つである。
 
+手順ファイルへ切り出せるのは、そのフェーズに入った後にだけ要る手順に限る。フェーズに入るかどうかを決める規則は本文の §2 に残す。該当するのは次の 2 つである。
+
+- 軽量の経路で discuss と design を `skip-phase` で飛ばす規則(L211-212)
+- review の critical/high が 0 件のとき、`start-phase fix-loop` を呼ばずに `skip-phase fix-loop` を呼ぶ規則(L243-245。§5 の重複は A13 で削る)
+
 次を `skills/orchestrating-runs/references/` へ切り出す。ファイル名は実装で決めてよいが、フェーズ名を含める。
 
 | 切り出す内容 | 読む時点 |
 | --- | --- |
-| §2 の軽量経路と、test-spec・dev-plan の並列手順(L211-240)、`writing-test-specs` の「軽量の run での同定」(D24) | test-spec または dev-plan に入ったとき |
+| 軽量の経路の入力の置き換え(L213-214)、test-spec・dev-plan の並列手順と再開(L215-240)、`writing-test-specs` の「軽量の run での同定」(D24) | `start-phase test-spec` の直後 |
 | §2.5 worktree と §2.6 テストを実行する委譲の並べ方と環境の失敗 | test-code・implement・test-loop・fix-loop に入ったとき |
 | §2.7 test-code の運転 | test-code に入ったとき |
 | §2.8 implement の運転 | implement に入ったとき |
@@ -144,7 +154,7 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 | §2.10 E2E のレポート(e2e-report-format への参照に縮める。E29・E30) | E2E を実行する委譲を出す前 |
 | §2.2 pr の運転 | pr に入ったとき |
 | review の運転。P1 の観点を選ぶ規則(§6.1)と、`reviewing-diffs` の「所見の統合と投稿」(E1) | review に入ったとき |
-| §5 のうち fix-loop の部分とスキップ経路 | fix-loop に入ったとき |
+| §5 のうち fix-loop の部分(スキップ経路を除く) | fix-loop に入ったとき |
 | §2.11 intent-sync の運転 | intent-sync に入ったとき |
 | §2.3 finalize の運転 | finalize に入ったとき |
 | §6 再開手順 | run を再開するとき |
@@ -211,7 +221,7 @@ review に入ったときの手順ファイル(§5.3.1)に、次の規則を書�
 - `git diff --name-only <base>...<branch>` の変更パスと内容から、frontend・backend・data・infra のうち当たる観点を選ぶ。
 - doc と security は、変更の内容によらず毎回選ぶ。コードだけが変わり文書が追随しないと、両者が乖離する。doc はこの乖離を見る観点だからである。
 - frontend・backend・data・infra のどれにも当たらない変更パスがあるときは、generic を選ぶ。
-- 選んだ観点と、その観点を選んだ理由(当たった変更パス)を、`review-<m>.md` に 1 行ずつ書く。
+- 選んだ観点と、その観点を選んだ理由(当たった変更パス)を、`review-<m>.md` の先頭の段落に 1 行ずつ書く。所見の一覧の外に置く。`review-<m>.md` を読むコードは無い(`src/` を `review-` で検索して確かめた)。読むのは `fixing-review-findings` と `filing-followup-issues` で、どちらも critical/high・medium/low の所見を読む。
 - fix-loop の再レビューも同じ規則で選び直す(K11 により、所見が出た観点だけに絞ることはしない)。
 
 あわせて、`plugins/codiel/docs/DESIGN.md:130-132` と README の review の説明に、infra と generic を加える。
@@ -220,7 +230,7 @@ review に入ったときの手順ファイル(§5.3.1)に、次の規則を書�
 
 `orchestrating-runs` の本文に次を書く。
 
-- 会話が要約されて、`orchestrating-runs` か今のフェーズの手順ファイルの手順を辿れなくなったときは、`orchestrating-runs` と今のフェーズの手順ファイルだけを Read し直す。
+- 会話の先頭が、前の会話の要約で始まっているときは、compaction が起きている。このときは、`orchestrating-runs` と今のフェーズの手順ファイルだけを Read し直す。
 - 今のフェーズは `codiel-state.mjs get --active` で確かめる。
 - ほかのスキルは、そのスキルを使う手順に入ったときに読む。
 
@@ -246,7 +256,7 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 
 ### 7.2 計測の条件
 
-改修の前と後で、同じ条件で run を 1 回ずつ回す。
+改修の前と後で、同じ条件で run を 2 回ずつ回し、各値の平均で比べる。1 回ずつの比較は、モデルの出力の揺らぎで逆転しうる。
 
 - 同じリポジトリの同じコミットから始める。
 - 同じ確定済みの intent 文書を入口にする(`/codiel:run <intentパス>`)。
@@ -256,8 +266,9 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 
 ### 7.3 受け入れ基準
 
-- 改修後の run の合計トークン(4 種類の合計)が、改修前より少ない。
-- オーケストレーターの `cache_read_input_tokens` の合計が、改修前より少ない。
+- 改修後の run の合計トークン(4 種類の合計)の平均が、改修前の平均より 10% 以上少ない。
+- オーケストレーターの `cache_read_input_tokens` の合計の平均が、改修前の平均より少ない。
+- `/codiel:test` の単独実行が、改修前と同じレポートの置き場と項目で結果を出す(E13 で `running-regression-tests` の単独実行モードの記述を縮めるため)。
 - review フェーズの委譲の数が、§6.1 の規則で選んだ観点の数と一致する。
 - 改修前の run が通ったフェーズを、改修後の run もすべて通る。
 - `pnpm run lint`・`pnpm run typecheck`・`pnpm run test` が通る。
