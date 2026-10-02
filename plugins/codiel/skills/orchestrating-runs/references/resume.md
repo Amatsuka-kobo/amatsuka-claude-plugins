@@ -8,7 +8,8 @@ run を再開するときに読む。
    ```
    node <plugin-root>/scripts/codiel-state.mjs get --slug <slug>
    ```
-   - `phases` に `test-code` を持たない state(M4 より前に作った run)は、どのフェーズにあっても続行しない。`stop --slug <slug> --reason migrate` で止め、止めたことと理由をユーザーに示し、同じ intent パスを入口に新しい try を始める(本文 §1)。intent は `abandoned` にしない。
+   - `phases` に `test-code` を持たない state(M4 より前に作った run)は、どのフェーズにあっても続行しない。`waits` が残っていれば、本文 §2.4 の手順で `wait-clear` してから `stop --slug <slug> --reason migrate` で止め、止めたことと理由をユーザーに示し、同じ intent パスを入口に新しい try を始める(本文 §1)。intent は `abandoned` にしない。
+   - `state.status` が `awaiting_outcome` の run は再開しない。outcome の同期に任せ、ここで終える。
 2. 本文 §2「手順ファイルと読む時点」の再開の範囲の手順ファイルを Read する。
 3. `state.branch` が `null` でなければ、`git switch <state.branch>` で run のブランチに切り替える。
    - 切り替える先のブランチがまだ無いとき(`init` の後、`git switch -c` の前で止まった run)は、`capturing-intent` の手順 5 の (6) の続きから行い、`git switch -c <state.branch>` でブランチを作ってから続ける。
