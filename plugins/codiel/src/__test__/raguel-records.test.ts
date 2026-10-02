@@ -472,7 +472,7 @@ describe("Raguel が書いた記録を codiel が読む", () => {
         "local",
         "--scale",
         "standard",
-        "--adr-target",
+        "--knowledge-target",
         "intents",
         "--image-upload",
         "none"

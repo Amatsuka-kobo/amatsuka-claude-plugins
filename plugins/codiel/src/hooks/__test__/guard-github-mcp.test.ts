@@ -72,7 +72,7 @@ function setupRun(slug = "ghmcp-test"): string {
     "local",
     "--scale",
     "standard",
-    "--adr-target",
+    "--knowledge-target",
     "intents",
     "--image-upload",
     "none"
@@ -200,7 +200,7 @@ function setupRunWithWorktree(): string {
     "local",
     "--scale",
     "standard",
-    "--adr-target",
+    "--knowledge-target",
     "intents",
     "--image-upload",
     "none"

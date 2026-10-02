@@ -49,7 +49,7 @@ const INIT_DEFAULTS: Record<string, string> = {
   intent: "docs/intents/2026-09-27-demo.md",
   integration: "github",
   scale: "standard",
-  "adr-target": "metatron",
+  "knowledge-target": "metatron",
   "image-upload": "gh-attach,chrome"
 }
 

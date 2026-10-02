@@ -19,7 +19,7 @@ const INIT_FLAGS = [
   "github",
   "--scale",
   "standard",
-  "--adr-target",
+  "--knowledge-target",
   "metatron",
   "--image-upload",
   "gh-attach,chrome"
@@ -32,7 +32,7 @@ const INIT_FLAGS_LIGHT = [
   "github",
   "--scale",
   "light",
-  "--adr-target",
+  "--knowledge-target",
   "metatron",
   "--image-upload",
   "gh-attach,chrome"

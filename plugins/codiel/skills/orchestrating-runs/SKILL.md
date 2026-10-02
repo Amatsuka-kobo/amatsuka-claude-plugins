@@ -58,7 +58,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    ```
 
 2. 続けて次の 3 つを実行する。
-   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`adrTarget` の判定材料を得る。
+   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget` の判定材料を得る。
    - `codiel-state.mjs config`: テストの仕様の置き場(testsDir)と run の文書の置き場(runsDir)を得る。
    - `codiel-state.mjs gitignore`: `.gitignore` に足りない行(出力の `missing`)を得る。判定 D に使う。
 
@@ -80,10 +80,10 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | 連携モード | `repoSlug` が null でなく、かつ `ghAuthenticated` が true なら `github`。それ以外は `local`(GHES を含む) |
    | `imageUpload.ghAttach` | 連携モードが `local` なら `false`。`github` では `ghAttachSupported` が true のとき `true` |
    | `imageUpload.chrome` | 連携モードが `local` なら `false`。`github` ではセッションで `mcp__claude-in-chrome__*` のツールが使えるとき `true` |
-   | `adrTarget` | `projectDocs.architecture` が null なら `intents`、それ以外は `metatron` |
+   | `knowledgeTarget` | `projectDocs.architecture` が null なら `intents`、それ以外は `metatron` |
 
    これらの値と手順 6 で決めた実行モードは run の開始時に決めて固定し、intent フェーズ(`capturing-intent`)が
-   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--adr-target` / `--domain-mode` の値になる。
+   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--domain-mode` の値になる。
    再開時の再判定は `references/resume.md` に従う。
 4. 初期化の外形は B + C + D の 3 点で確認する。
 

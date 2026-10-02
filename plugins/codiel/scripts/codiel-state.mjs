@@ -760,7 +760,7 @@ function main(argv, root = process.cwd()) {
       fail(`\u4E0D\u6B63\u306A --issue: ${flags.issue}`);
     const integration = oneOf(flags, "integration", INTEGRATIONS);
     const scale = oneOf(flags, "scale", ["standard", "light"]);
-    const adrTarget = oneOf(flags, "adr-target", [
+    const knowledgeTarget = oneOf(flags, "knowledge-target", [
       "metatron",
       "intents"
     ]);
@@ -801,7 +801,7 @@ function main(argv, root = process.cwd()) {
       integration,
       scale,
       imageUpload: upload,
-      adrTarget
+      knowledgeTarget
     });
     if (flags["base-branch"]) state.baseBranch = flags["base-branch"];
     if (domainMode) state.domainMode = domainMode;

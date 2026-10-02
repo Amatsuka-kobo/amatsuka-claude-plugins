@@ -39,7 +39,7 @@ const INIT_DEFAULTS: Record<string, string> = {
   intent: "docs/intents/2026-09-27-demo.md",
   integration: "github",
   scale: "standard",
-  "adr-target": "metatron",
+  "knowledge-target": "metatron",
   "image-upload": "gh-attach,chrome"
 }
 
@@ -160,7 +160,7 @@ test("init は slug から識別子を作り、version 2 の state を書く", (
   expect(st.issue).toBeNull()
   expect(st.integration).toBe("github")
   expect(st.scale).toBe("standard")
-  expect(st.adrTarget).toBe("metatron")
+  expect(st.knowledgeTarget).toBe("metatron")
   expect(st.imageUpload).toStrictEqual({ ghAttach: true, chrome: true })
   expect(st.baseBranch).toBe("main")
   expect(st.status).toBe("active")
@@ -197,7 +197,7 @@ test("init は --slug と --intent を必須とする", () => {
     "github",
     "--scale",
     "standard",
-    "--adr-target",
+    "--knowledge-target",
     "metatron",
     "--image-upload",
     "none"
@@ -294,25 +294,27 @@ test("init は --integration と --scale を必須とし、値域の外を拒否
   expect(local.out.state.scale).toBe("light")
 })
 
-// --- adrTarget ---
+// --- knowledgeTarget ---
 
-test("init は --adr-target を必須とし、metatron と intents だけを記録する", () => {
+test("init は --knowledge-target を必須とし、metatron と intents だけを記録する", () => {
   const root = tmpProject()
-  const missing = init(root, "demo", { "adr-target": null })
+  const missing = init(root, "demo", { "knowledge-target": null })
   expect(missing.code).toBe(1)
-  expect(missing.err).toMatch(/--adr-target が必要です/)
-  const bad = init(root, "demo", { "adr-target": "adr" })
+  expect(missing.err).toMatch(/--knowledge-target が必要です/)
+  const bad = init(root, "demo", { "knowledge-target": "adr" })
   expect(bad.code).toBe(1)
-  expect(bad.err).toMatch(/不正な --adr-target: adr/)
+  expect(bad.err).toMatch(/不正な --knowledge-target: adr/)
   expect(fs.existsSync(statePath(root, "demo"))).toBe(false)
   expect(
-    init(root, "one", { "adr-target": "metatron" }).out.state.adrTarget
+    init(root, "one", { "knowledge-target": "metatron" }).out.state
+      .knowledgeTarget
   ).toBe("metatron")
   expect(
-    init(root, "two", { "adr-target": "intents" }).out.state.adrTarget
+    init(root, "two", { "knowledge-target": "intents" }).out.state
+      .knowledgeTarget
   ).toBe("intents")
   const saved = JSON.parse(fs.readFileSync(statePath(root, "two"), "utf8"))
-  expect(saved.adrTarget).toBe("intents")
+  expect(saved.knowledgeTarget).toBe("intents")
 })
 
 // --- imageUpload ---
@@ -2776,7 +2778,7 @@ test("set-domain 後も既存サブコマンドが正常に動き、他フィー
     "integration",
     "scale",
     "imageUpload",
-    "adrTarget",
+    "knowledgeTarget",
     "status",
     "phase",
     "phases",

@@ -42,7 +42,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ## 1. 前提確認とベースブランチの最新化
 
 1. `orchestrating-runs` の前提確認(Raguel MCP の利用可否、ハーネスの初期化の確認)に従う。
-2. 連携モード・`imageUpload`・`adrTarget` の判定は `orchestrating-runs` の §0 が正本である。§0 を経て起動されたときは、そこで得た `check-intent-env` の出力と判定結果をそのまま使い、ここで判定し直さない。§0 を経ずに起動されたときだけ、`orchestrating-runs/SKILL.md` の §0 の手順をこの場で行う。
+2. 連携モード・`imageUpload`・`knowledgeTarget` の判定は `orchestrating-runs` の §0 が正本である。§0 を経て起動されたときは、そこで得た `check-intent-env` の出力と判定結果をそのまま使い、ここで判定し直さない。§0 を経ずに起動されたときだけ、`orchestrating-runs/SKILL.md` の §0 の手順をこの場で行う。
 3. ベースブランチの名前を次の順で解決する。決まらなければ AskUserQuestion で聞く。
    - 同じ intent の最新の try の state の `baseBranch`(`codiel-state get` で読める)。
    - `git symbolic-ref --short refs/remotes/origin/HEAD` の結果から `origin/` を除いた名前。
@@ -143,7 +143,7 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 (3) intent 以外の未コミットの変更があるかを確かめる。あるときは `references/uncommitted-changes.md` を Read して従う。
 
-(4) `codiel-state init --slug <slug> --intent <パス> --integration <github|local> --scale <standard|light> --adr-target <metatron|intents> --image-upload <gh-attach|chrome|gh-attach,chrome|none> [--issue <N>] [--intent-only] [--base-branch <開始時のブランチ>] [--domain-mode <mapped|unscoped>] [--human-approved]` を実行する。`--intent` は repoRoot 相対のパスで渡す(絶対パスは拒否される)。`branch` は CLI が決める。`--intent-only` なら `null`、それ以外は `codiel/<slug>-try-<n>` である。`--human-approved` は、手順 1 で前の try の STOP(`raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズ)についてユーザーが新しい try を承認したときだけ付ける。
+(4) `codiel-state init --slug <slug> --intent <パス> --integration <github|local> --scale <standard|light> --knowledge-target <metatron|intents> --image-upload <gh-attach|chrome|gh-attach,chrome|none> [--issue <N>] [--intent-only] [--base-branch <開始時のブランチ>] [--domain-mode <mapped|unscoped>] [--human-approved]` を実行する。`--intent` は repoRoot 相対のパスで渡す(絶対パスは拒否される)。`branch` は CLI が決める。`--intent-only` なら `null`、それ以外は `codiel/<slug>-try-<n>` である。`--human-approved` は、手順 1 で前の try の STOP(`raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズ)についてユーザーが新しい try を承認したときだけ付ける。
 
 `init` が失敗したときは run が作られず(exit 1、state は書かれない)、intent は作業ツリーに残る。引数の誤りと `--human-approved` の付け忘れは、標準エラー出力の指示どおりに直して 1 回だけ再実行する。「未完了の try があります」「Raguel の記録を読めません」やそれ以外の失敗は、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲を示して指示を待つ。同じ slug の前の try が終端していれば `init` は次の try を作るので、slug の重複それ自体は失敗ではない。
 

@@ -73,7 +73,7 @@ export interface RunState {
   // 画像を GitHub に載せる手段が使えるか。integration が local なら両方 false
   imageUpload: { ghAttach: boolean; chrome: boolean }
   // ADR の 3 条件を満たす判断の書き先
-  adrTarget: "metatron" | "intents"
+  knowledgeTarget: "metatron" | "intents"
   status: RunStatus
   phase: string | null
   phases: Record<string, PhaseState>
@@ -666,7 +666,7 @@ function newState(
     | "integration"
     | "scale"
     | "imageUpload"
-    | "adrTarget"
+    | "knowledgeTarget"
   >
 ): RunState {
   const phases: Record<string, PhaseState> = {}
@@ -820,7 +820,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(`不正な --issue: ${flags.issue}`)
     const integration = oneOf(flags, "integration", INTEGRATIONS)
     const scale = oneOf(flags, "scale", ["standard", "light"] as const)
-    const adrTarget = oneOf(flags, "adr-target", [
+    const knowledgeTarget = oneOf(flags, "knowledge-target", [
       "metatron",
       "intents"
     ] as const)
@@ -877,7 +877,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       integration,
       scale,
       imageUpload: upload,
-      adrTarget
+      knowledgeTarget
     })
     if (flags["base-branch"]) state.baseBranch = flags["base-branch"]
     if (domainMode) state.domainMode = domainMode

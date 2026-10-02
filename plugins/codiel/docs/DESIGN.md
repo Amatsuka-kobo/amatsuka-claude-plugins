@@ -287,7 +287,7 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
   "integration": "github",                // "github" | "local"。§0 で判定し run の間固定
   "scale": "standard",                    // "standard" | "light"
   "imageUpload": { "ghAttach": true, "chrome": false },
-  "adrTarget": "metatron",                // "metatron" | "intents"
+  "knowledgeTarget": "metatron",          // "metatron" | "intents"。ADR 候補と GOTCHAS 候補の書き先
   "phase": "implement",            // 現在フェーズ
   "phases": {
     "intent":    { "status": "passed", "evaluationId": "...", "verdict": "PROCEED" },
@@ -334,9 +334,9 @@ intent にだけ残す。
 
 書式は `# <領域名>` の下に `## 目的` / `## 意図的な制約` / `## 非ゴール` / `## 由来` / `## 出典` の
 5 セクションを持つ(正本は `references/intent-format.md`)。`## 意図的な制約` の小見出しは、制約・理由・
-出典 intent・関連 ADR を持つ。`adrTarget` が `intents` のとき、ADR の 3 条件(覆すコストが大きい・
+出典 intent・関連 ADR を持つ。`knowledgeTarget` が `intents` のとき、ADR の 3 条件(覆すコストが大きい・
 選択肢が実在した・理由が自明でない)を満たす判断は、小見出しの末尾に `[ADR 候補: <領域名>-<連番>]` の
-印を付けて全文を書く。3 条件を満たさない設計理由と制約は、`adrTarget` の値によらず持続層に書く。
+印を付けて全文を書く。3 条件を満たさない設計理由と制約は、`knowledgeTarget` の値によらず持続層に書く。
 
 読み手と書き手は次のとおりである。
 
@@ -347,7 +347,7 @@ intent にだけ残す。
 | review | 読む。制約への違反は severity high の所見にする |
 | intent-sync | 書く。取り込みと `[ADR 候補]` の採番を行う唯一のフェーズ |
 
-`adrTarget` は intent フェーズの承認ゲートで決め、state.json に記録する。`metatron` の run は ADR 級の
+`knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値で、intent フェーズの承認ゲートで決め、state.json に記録する。`metatron` の run は ADR 級の
 判断を持続層に全文で残さず、metatron の ADR に直接任せる(持続層には `関連 ADR` の番号だけを書く)。
 `intents` の run は metatron が無い、または ARCHITECTURE が見つからない環境で使う値で、ADR 級の判断も
 `[ADR 候補]` として持続層に全文を残す。
@@ -690,7 +690,7 @@ K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/d
 
 残したのは次の 2 つだけである。
 
-1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`adrTarget` の判定では ARCHITECTURE の有無だけを使い、読まない。
+1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`knowledgeTarget` の判定では ARCHITECTURE の有無だけを使い、読まない。
 2. review の委譲に ARCHITECTURE のパスを渡すこと。`reviewing-diffs/references/doc.md` の観点が、ARCHITECTURE と実装の乖離を見るためである。依頼文テンプレートの「前提」の ARCHITECTURE の行は、review と再レビューの委譲のときだけ書く。
 
 外した規則は、各フェーズの入力列の ARCHITECTURE・GOTCHAS、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、finalize の乖離の一覧化、`references/failures.md` とそれを指す参照(Raguel の STOP・誤検知の退避・incident・fix-loop の設計漏れ)である。

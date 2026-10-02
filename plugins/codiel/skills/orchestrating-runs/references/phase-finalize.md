@@ -19,7 +19,7 @@ triage を終えて finalize の作業を始める前に読む。finalize は `s
    - 消したら `codiel(finalize): 途中の E2E のレポートを消す (<slug> try-<n>)` でコミットする。消すものが無ければコミットしない。
 6. github モードでは `git push` し、PR に反映させる。local モードでは push しない。
 7. 残っている worktree とそのブランチをすべて削除する。
-8. ADR 候補を結果レポートに挙げる。一覧の出どころは `adrTarget` で分ける。
+8. ADR 候補を結果レポートに挙げる。一覧の出どころは `knowledgeTarget` で分ける。
     - `metatron`: `steps/intent-sync/report.md` に書き残した ADR 候補の一覧
     - `intents`: 今回取り込んだ持続層のファイルにある `[ADR 候補: <候補 ID>]` の見出しの一覧
     - 候補が無いときは、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのかを書く。
