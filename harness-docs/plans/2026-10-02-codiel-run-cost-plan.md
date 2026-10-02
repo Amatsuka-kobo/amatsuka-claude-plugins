@@ -236,7 +236,21 @@
 
 ## Task 1 の結果
 
-(Task 1 のステップ 8 で書く)
+### 題材(ステップ 1・2、2026-10-02)
+
+- 題材: `~/codiel-cost-bench`。既存のサンドボックスは `e2e/` を持たないので、新しく作った(ユーザー決定)。todo の一覧を表示する Node のサーバー(`node:http`)と、`node --test` の単体テスト 1 件、Playwright の E2E 1 件を持つ。
+- 開始コミット: `0f23d8d`(`bcc7601` 初期構成 → `d2e8b4e` codiel の初期化 → `0f23d8d` intent)。
+- intent: `docs/intents/2026-10-02-todo-title-search.md`(sha256 の先頭 12 桁 `95c2b8d34bfb`)。`status: approved`、`domains: [todo]`。
+- 聞き取りで run の規模が `scale: light` になった。計測の run では discuss と design が skip され、design の手順ファイルは読まれない。改修の前後で同じ規模にそろうので、比較には影響しない。
+- 起動: `cd ~/codiel-cost-bench && claude --plugin-dir /home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins-intent-driven-development/plugins/codiel`。この worktree の codiel を読む。
+- 開始状態への戻し方: `scripts/reset-cost-bench.sh`(ユーザーが実行する)。`0f23d8d` に戻し、main 以外のブランチ・追跡外のファイル(`node_modules/` を除く。`.codiel/runs/` を含む)・Raguel の記録(`~/.raguel/cases/codiel-cost-bench-*` と `~/.raguel/precedents/codiel-cost-bench-*`)を消す。
+
+### 計測の記録(ステップ 5・6)
+
+| 前後 | 回 | 開始コミット | モデル | 運用方針 | 連携 | Jev の鍵 | セッション ID |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 前 | 1 | `0f23d8d` | | | local | | |
+| 前 | 2 | `0f23d8d` | | | local | | |
 
 ## Task 10 の結果
 
