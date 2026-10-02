@@ -264,6 +264,20 @@
 
 無効にした計測: セッション `44ce4f52-af03-4b9a-9d6c-5bb9a24766af`(Sonnet 5.5、合計 38,652,932)。`reset-cost-bench.sh` が `set -o pipefail` の下で、main 以外のブランチが無いときに `grep -vx main` の終了コード 1 で止まり、`git clean` と Raguel の記録の削除が実行されなかった。intent だけを作った run の `try-1` が残ったまま始まり、run は `try-2` になった。開始状態がそろわないので比較に使わない(2026-10-02 ユーザー決定)。スクリプトは `4d83336` で直した。
 
+## Task 7・8 への引き継ぎ(Task 2〜6 の完了報告から)
+
+### Task 7(ORS 側と横断)
+
+- Task 2: `review-common.md` は `github-writing.md` の「画像の載せ方」を、`phase-pr.md` は「PR 本文」と画像の縮退の順序を指す。Task 4 で C30・C31 を切り出したら付け替える。
+- Task 2: ARCHITECTURE への言及を `references/` へ移すと、`plugins/metatron/src/__test__/section-reference-inventory.test.ts` の V2 が落ちる。登録簿 `plugins/metatron/src/fixtures/section-reference-inventory.json` に行を足して直す(Task 2 で `phase-finalize.md` の 1 行を足した)。
+- Task 6: ORS 側に要る変更は無い。`running-regression-tests` が ORS §3 の `adhoc-` の記述を参照している。
+
+### Task 8(DESIGN.md へ退避する内容)
+
+- E20(`scripting-tests`): 三層構造(`spec.md` → `cases.md` → テストコード)のうち、このスキルが担当するのはテストコードの作成と実行である(DESIGN.md §4)。期待結果を書く委譲(test-spec)、テストを書く委譲(test-code)、コードを直す委譲(implement・test-loop・fix-loop)を分けるのは、役割分担による捏造防止のためである(同 §4)。
+- E27(`scripting-tests`): guard-write hook は、`<testsDir>/**/spec.md` と `<testsDir>/**/cases.md` への書き込みを implement・test-loop・fix-loop で ask にし、test-code は通す。hook は呼び出し元の委譲先を識別できないため、これ以外の境界は委譲先の規律で守る。
+- Task 2: `docs/DESIGN.md:498・673`、`docs/skill-flowcharts.md:448・542・645` が、HARD-GATE・失敗の記録・fix-loop のスキップの切り出し前の置き場を指している。
+
 ## Task 10 の結果
 
 (Task 10 のステップ 5 で書く)
