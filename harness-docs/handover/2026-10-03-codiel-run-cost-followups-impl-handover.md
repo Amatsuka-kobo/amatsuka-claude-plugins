@@ -2,7 +2,7 @@
 
 - 日付: 2026-10-03
 - 引き継ぎ元: codiel:run のコスト改修のセッション(評価・設計・計画・実装・計測まで完了)
-- 引き継ぎ先: 残りの 9 件を改修するセッション。Issue は起票しない
+- 引き継ぎ先: 残りの 9 件を改修するセッション
 - 作業場所: worktree `/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins-intent-driven-development`、ブランチ `intent-driven-development`。PR は作らない
 
 ## 現在地
@@ -125,7 +125,7 @@ description は「`review-<m>.md` にまとめる」と書き、本文は「所�
 ## スコープ外
 
 - run のターン数を減らす改修(ASK の誤検知、委譲の待ちの間の往復)。
-- Issue の起票、PR の作成とブランチの統合。
+- PR の作成とブランチの統合。
 
 ## 参照
 
