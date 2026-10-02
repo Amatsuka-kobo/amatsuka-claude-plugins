@@ -314,15 +314,6 @@ try {
     configError = (e as Error).message
   }
 
-  // 未記録の GOTCHAS の退避先(設計書 §6.15.4・§6.17.6)は、どのフェーズでも通す。
-  // 追記だけの失敗の記録で、書くたびに確認を出すほどの危険が無い。
-  if (
-    config &&
-    repoRel ===
-      path.posix.join(config.runsDir, run.state.runId, "unrecorded-gotchas.md")
-  )
-    pass()
-
   // 次に docs/intents/** の規則を当てる。DOC_PHASES の分岐(直後)は docs/ 全体を
   // 通してしまうため、domains/** への書き込みはそれより先に判定する。
   if (INTENT_DOMAIN_RE.test(repoRel)) {

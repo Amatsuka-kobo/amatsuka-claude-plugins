@@ -440,9 +440,6 @@ test("ケース 16b: metatron.config.json で文書パスを変更できる", ()
   expect(out.projectDocs.architecture).toBe(path.join(dir, "arch/MAIN.md"))
   expect(out.projectDocs.gotchas).toBe(path.join(dir, "arch/TRAPS.md"))
   expect(out.projectDocs.domainsReadable).toBe(true)
-  expect(out.contextDocs).toContain(path.join(dir, "arch/MAIN.md"))
-  expect(out.contextDocs).toContain(path.join(dir, "arch/TRAPS.md"))
-  expect(out.contextDocs).not.toContain(path.join(dir, "docs/ARCHITECTURE.md"))
   expect(out.configWarnings).toEqual([])
 })
 
@@ -662,8 +659,8 @@ test("ケース 21: contextDocs は存在するものだけを列挙する", () 
   write(dir, "CLAUDE.md", "# CLAUDE\n")
   write(dir, "README.md", "# README\n")
   const out = runScript(dir)
+  // ARCHITECTURE は projectDocs.architecture で返し、contextDocs には含めない
   expect(out.contextDocs).toEqual([
-    path.join(dir, "docs/ARCHITECTURE.md"),
     path.join(dir, "CLAUDE.md"),
     path.join(dir, "README.md")
   ])

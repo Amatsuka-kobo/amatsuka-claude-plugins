@@ -1347,35 +1347,21 @@ test("R-12: test-code で config.json が JSON として読めなければ、テ
   )
 })
 
-test("R-13: fix-loop・mapped・domain x で、<runsDir>/demo/unrecorded-gotchas.md は通す", () => {
+test("R-13: unrecorded-gotchas.md への書き込みは免除されず、ほかの run の文書と同じ判定になる", () => {
   const root = setupMappedRun("fix-loop")
-  expect(decision(root, RUN_DOC("unrecorded-gotchas.md"))).toBe(null)
-  // 同じディレクトリのほかのファイルと、ほかの slug の退避先は通さない
-  expect(decision(root, RUN_DOC("dev-plan.md"))).toBe("ask")
-  expect(decision(root, "docs/codiel/runs/other/unrecorded-gotchas.md")).toBe(
-    "ask"
-  )
-})
-
-test("未記録の GOTCHAS の退避先は、phase null・review・finalize と runsDir を変えた run でも通す", () => {
-  const rootNull = initOnly()
-  expect(decision(rootNull, RUN_DOC("unrecorded-gotchas.md"))).toBe(null)
-  for (const phase of ["review", "triage", "finalize", "implement"]) {
-    const root = setupRun()
-    advanceRunTo(root, phase)
-    expect(decision(root, RUN_DOC("unrecorded-gotchas.md")), phase).toBe(null)
-  }
-  const root = setupRun()
-  advanceRunTo(root, "finalize")
-  writeConfig(root, JSON.stringify({ runsDir: "notes/runs" }))
-  expect(decision(root, "notes/runs/demo/unrecorded-gotchas.md")).toBe(null)
-})
-
-test("config.json が不正なら、未記録の GOTCHAS の退避先の免除を外す", () => {
-  const root = setupRun()
-  advanceRunTo(root, "review")
-  writeConfig(root, "{ runsDir: ")
   expect(decision(root, RUN_DOC("unrecorded-gotchas.md"))).toBe("ask")
+  expect(decision(root, RUN_DOC("unrecorded-gotchas.md"))).toBe(
+    decision(root, RUN_DOC("dev-plan.md"))
+  )
+  for (const phase of ["review", "triage", "finalize", "implement"]) {
+    const r = setupRun()
+    advanceRunTo(r, phase)
+    expect(decision(r, RUN_DOC("unrecorded-gotchas.md")), phase).toBe("ask")
+  }
+  const r = setupRun()
+  advanceRunTo(r, "finalize")
+  writeConfig(r, JSON.stringify({ runsDir: "notes/runs" }))
+  expect(decision(r, "notes/runs/demo/unrecorded-gotchas.md")).toBe("ask")
 })
 
 // --- Raguel の設定と記録の保護(Raguel 設計書 §6.13.4。所見 G8・R12) ---

@@ -15,7 +15,7 @@
 //
 // 基準は 2 つあり、どちらか一方に寄せない。
 //   - intent 文書(docs/intents/)と Issue テンプレート : repoRoot(git ルート)
-//   - ARCHITECTURE / GOTCHAS と contextDocs            : docRoot(契約 §3 規則 1)
+//   - ARCHITECTURE / GOTCHAS のパスと contextDocs      : docRoot(契約 §3 規則 1)
 // 2 つが別のディレクトリを指すのは正常な状態であり、フィールド名で区別する。
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -301,16 +301,14 @@ if (intentsDir) {
 }
 
 // ---------------------------------------------------------------------------
-// ASIS 探索の初期材料(ARCHITECTURE / GOTCHAS は解決結果、CLAUDE.md / README.md は docRoot 直下)
+// ASIS 探索の初期材料(docRoot 直下の CLAUDE.md / README.md。ARCHITECTURE / GOTCHAS は含めない)
 // ---------------------------------------------------------------------------
 
-// 並びは capturing-intent の読む順(ARCHITECTURE → CLAUDE.md → GOTCHAS → README.md)に合わせる。
+// 並びは capturing-intent の読む順(CLAUDE.md → README.md)に合わせる。
 const contextDocs = [
-  architecturePath,
   path.join(docRoot, "CLAUDE.md"),
-  gotchasPath,
   path.join(docRoot, "README.md")
-].filter((p): p is string => p !== null && isFile(p))
+].filter((p) => isFile(p))
 
 // ---------------------------------------------------------------------------
 // 出力(事実だけを返す。判断はスキルが行う)

@@ -438,11 +438,9 @@ if (intentsDir) {
   }
 }
 var contextDocs = [
-  architecturePath,
   path2.join(docRoot, "CLAUDE.md"),
-  gotchasPath,
   path2.join(docRoot, "README.md")
-].filter((p) => p !== null && isFile(p));
+].filter((p) => isFile(p));
 console.log(
   JSON.stringify(
     {

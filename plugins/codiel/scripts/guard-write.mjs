@@ -686,8 +686,6 @@ try {
   } catch (e) {
     configError = e.message;
   }
-  if (config && repoRel === path4.posix.join(config.runsDir, run.state.runId, "unrecorded-gotchas.md"))
-    pass();
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass();
     emit(
