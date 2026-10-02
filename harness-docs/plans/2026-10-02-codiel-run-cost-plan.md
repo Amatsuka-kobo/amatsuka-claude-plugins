@@ -250,7 +250,9 @@
 | 前後 | 回 | 開始コミット | モデル | 運用方針 | 連携 | Jev の鍵 | セッション ID |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 前 | 1 | `0f23d8d` | Sonnet 5.5 | custom | local | あり | `a3d6adc5-f78a-4504-af58-fcc4517049b2`(try-1。intent-sync で ASK、人の裁定で通過。合計 33,916,969) |
-| 前 | 2 | `0f23d8d` | | | local | | |
+| 前 | 2 | `0f23d8d` | Sonnet 5.5 | custom | local | あり | `c147ab30-27df-4cfc-9049-c3db3be34649`(try-1。intent-sync で ASK、人の裁定で通過。合計 37,160,513) |
+
+改修前の平均(ステップ 7): 合計 35,538,741、オーケストレーターの分 31,977,742、オーケストレーターの `cache_read_input_tokens` 31,110,005。2 回とも review の観点は backend・frontend・security・generic の 4 つで、doc は選ばれなかった。2 回とも intent-sync で ASK が出た。
 
 無効にした計測: セッション `44ce4f52-af03-4b9a-9d6c-5bb9a24766af`(Sonnet 5.5、合計 38,652,932)。`reset-cost-bench.sh` が `set -o pipefail` の下で、main 以外のブランチが無いときに `grep -vx main` の終了コード 1 で止まり、`git clean` と Raguel の記録の削除が実行されなかった。intent だけを作った run の `try-1` が残ったまま始まり、run は `try-2` になった。開始状態がそろわないので比較に使わない(2026-10-02 ユーザー決定)。スクリプトは `4d83336` で直した。
 
