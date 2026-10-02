@@ -89,39 +89,9 @@ critical/high と medium/low で下流の扱いが完全に分かれるため、
 security 観点の指摘は原則 medium 以上を検討する(セキュリティ上の懸念は
 「好み」に分類されにくいため)。持続層の意図的な制約に反する変更は severity high とする。
 
-## 所見の統合と投稿(オーケストレーターの職務)
+## 所見の統合と投稿
 
-レビュー担当自身はここから先を行わない。オーケストレーターが各レビュー担当の
-所見テキストを受け取ったあと:
-
-1. severity 順(critical → high → medium → low)に並べ替えて `reports/review-<m>.md` に記録する。
-   `<m>` はレビューの回の番号で、review フェーズが 1、fix-loop の再レビューごとに 1 つ増える。
-   `try-<n>` の `<n>` とは別の番号である。
-   同一の対象・内容の所見が複数観点から出た場合は、最も高い severity で 1 件に
-   統合し、観点を併記する。
-2. local モードでは、この先の投稿を行わない。`reports/review-<m>.md` の記録だけを review フェーズの
-   成果物とする。
-3. github モードでは、`github-writing.md` の執筆規則に従ってレビュー本文を組み立てる。概要
-   (件数・severity 内訳・fix-loop 対象の有無)に `<!-- codiel:generated -->` を含め、テストの結果
-   得たスクリーンショットなど関連する画像があれば、レビュー本文の縮退の順序(`github-writing.md`
-   の画像の載せ方)で載せる。組み立てた本文を Write ツールで
-   `.codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md` に書く。このファイルはコミットしない。
-   書いたら、別の Bash 呼び出しで
-   `gh pr review <PR番号> --comment --body-file .codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md`
-   を実行し、PR 本文コメントとして投稿する。
-4. github モードでは、各所見の「対象」(`src/...:42`)に対応する行コメントを投稿する。本文に
-   `<!-- codiel:generated -->` を含め、所見ごとに別名で Write ツールで
-   `.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` に書く。このファイルもコミットしない。
-   行コメントの `commit_id` には PR の head を使う。値は `gh pr view <PR番号> --json headRefOid` で取る。
-   review では push しない(手元のコミットを `commit_id` に使うために push すると、guard-bash が止める)。
-   書いたら、別の Bash 呼び出しで `gh api` を
-   `-F body=@.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` のように
-   `-F body=@<パス>` で呼び、行コメントを投稿する。`review-comment-<連番>.md` の連番は同じ try の
-   中で通し番号とし、レビューの回をまたいでも振り直さない。
-5. critical/high があれば fix-loop へ、ゼロなら triage へ進む(`orchestrating-runs` の
-   フェーズ進行表のとおり)。
-
-レビューの委譲先はこの投稿作業を代行してはならない(Bash で `gh pr review` 等を叩かない)。
+統合と投稿はオーケストレーターが行う。担当は所見を返すだけで `gh pr review` を実行しない。
 
 ## 観点別の焦点
 

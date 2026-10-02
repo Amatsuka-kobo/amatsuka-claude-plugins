@@ -5,7 +5,5 @@ argument-hint: "[<Issue番号> | <intentパス>](省略時は聞き取りから�
 
 引数: $ARGUMENTS
 
-codiel プラグインの orchestrating-runs スキルを Skill ツールで起動し、その手順に厳密に従って
-run を開始(未完了の run があれば再開)してください。引数が Issue 番号か intent 文書のパスか
-省略かの判定と、それぞれの扱いは orchestrating-runs と capturing-intent の手順に従ってください。
-スキルを読まずにフェーズを進めることは禁止です。
+codiel プラグインの orchestrating-runs スキルを Skill ツールで起動して読み、その内容に従って
+run を開始(未完了の run があれば再開)してください。

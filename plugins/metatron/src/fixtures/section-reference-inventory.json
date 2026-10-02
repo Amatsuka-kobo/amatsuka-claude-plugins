@@ -43,6 +43,12 @@
       "note": "パスを解決してディスパッチプロンプトへ渡すだけ"
     },
     {
+      "path": "plugins/codiel/skills/orchestrating-runs/references/phase-finalize.md",
+      "reference": "(ARCHITECTURE への言及)",
+      "classification": "C",
+      "note": "乖離を結果レポートに挙げて /metatron:update へ引き渡すだけ"
+    },
+    {
       "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
       "reference": "ドメインマップ",
       "classification": "B",
