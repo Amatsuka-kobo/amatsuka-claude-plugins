@@ -359,7 +359,9 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 - implement・test-loop・fix-loop: テストと `<testsDir>/**` の仕様(`spec.md`・`cases.md`)は書き換えない。
 - すべての委譲: intent 文書は書き換えず、原文の追加が要るときはオーケストレーターへ報告する。
 
-観点ファイルは次の規則で依頼文に足す。観点ファイルの存在はオーケストレーターが `Glob` か `ls` で確かめ、委譲先に探させない。
+委譲先だけが使うスキル(`writing-test-specs`・`scripting-tests`・`implementing`・`fixing-failures`・`reviewing-diffs`)の本文は、オーケストレーターが Read や `cat` で読まない。依頼文の「読むスキル」にスキル名を書き、委譲先に読ませる。オーケストレーター自身の作業に使うスキルは、従来どおり読む。
+
+観点ファイルは次の規則で依頼文に足す。観点ファイルは、ファイル名を `Glob` か `ls` で確かめて選び、本文は読まずに依頼文へパスを書く。委譲先に探させない。
 
 - 実装の委譲(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。`worktree.md`・`e2e.md`・`fix-mode.md` は手順ファイルで観点ファイルではないので、選ばない。
 - review と再レビューの観点は、`references/review-common.md` の規則で選ぶ。
