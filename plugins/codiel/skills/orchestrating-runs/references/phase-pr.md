@@ -23,7 +23,11 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    ```
    gh pr create --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md
    ```
-5. 作成後に次を実行する。
+   `gh pr create` が失敗したときは、エラーの文言で原因を分ける。
+   - 同じブランチの PR が既にあるとき(文言に `already exists` と URL が出る)は、`gh pr view <state.branch> --json url,state` で `state` が `OPEN` の PR の URL を得て、手順 5 の `--pr-url` に使う。作り直さない。
+   - 認証切れなど人の操作が要るときは、`node <plugin-root>/scripts/codiel-state.mjs mark-ask pr --slug <slug> --kind confirm` で待ち、`gh auth login` などの対応を人に頼む。答えを得たら `resume` し、手順 4 の `gh pr create` からやり直す。
+   - 原因が分からないときは、エラーの文言を示して同じ `mark-ask` で待ち、人の指示を得る。
+5. 作成後(または既存の PR の URL を得た後)に次を実行する。
    ```
    node <plugin-root>/scripts/codiel-state.mjs complete-phase pr --slug <slug> --pr-url <URL>
    ```

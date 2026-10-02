@@ -9,6 +9,7 @@ test-code・implement・test-loop の並列の委譲は、1 ステップまた�
 - パスは `.codiel/worktrees/<slug>/<名前>`、ブランチは `codiel/<slug>-try-<n>-<名前>` とする。
 - 名前は、implement のステップが `step-<k>`、test-code が `test-code-<k>`、test-loop の修正が `test-loop-<k>` である。k は、その表(`implement.steps` / `testCode.units` / `testLoop.units`)に登録した順の番号(1 から)で、test-loop の登録し直しでも変わらない。
 - 起点は、そのグループ・仕様のディレクトリを始める時点の run ブランチの HEAD とする。
+- 作成は `git worktree add -b codiel/<slug>-try-<n>-<名前> .codiel/worktrees/<slug>/<名前> <run ブランチ>` で行う。
 - worktree のパスは run の中で一意にする。`step-update --worktree` は、ほかの要素がすでに記録したパスを拒否する。
 - run の最初の worktree を作るときに、`.codiel/worktrees/` を `.git/info/exclude` へ加える。
 - worktree の開始時に、dev-plan の `## 環境準備` のコマンドで依存をインストールする。「なし」のときは lockfile の種類から既定を選び、lockfile が無ければ省く。
