@@ -1,6 +1,6 @@
 ---
 name: reviewing-diffs
-description: Codiel の review フェーズと fix-loop の再レビューで、レビューを担うサブエージェントが git diff と intent・design.md・記録されたテストから指定された観点の所見一覧を review-<m>.md にまとめるときに使う。orchestrating-runs が名指しで起動する。
+description: Codiel の review フェーズと fix-loop の再レビューで、レビューを担うサブエージェントが git diff と intent・design.md・記録されたテストから指定された観点の所見一覧をテキストで返すときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # diff レビュー規約
