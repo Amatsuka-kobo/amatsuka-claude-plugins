@@ -277,6 +277,16 @@
 - Task 5: `ORS` の観点ファイルを選ぶ箇条(「`implementing/references/` の中で合う観点ファイルを選んで足す」)に、新設の手順ファイル `worktree.md`・`e2e.md`・`fix-mode.md` は観点ファイルではないので選ばない、と足す。観点ファイルは `backend.md`・`data.md`・`frontend.md`・`infra.md` である。
 - Task 5: `writing-test-specs` の frontmatter の description に「軽量な run でオーケストレーターが仕様のディレクトリを同定するとき」が残っている。D24 で本文は移したので、description を直す(description の改修は `prompt-smith:skill-creator` の担当)。
 
+- Task 4: outcome の自動同期は `C/skills/raguel-gating/references/outcome-sync.md` に移った。`ORS` のチェックリスト 1 の「`raguel-gating` の『outcome の自動同期』」と `C/commands/test.md:25` の同じ参照を、このファイルを指すように直す。
+- Task 4: github-writing の「画像の載せ方」は `C/references/github-writing-images.md`、「PR 本文」は `C/references/github-writing-pr.md` に移った。`orchestrating-runs/references/review-common.md` の画像の参照と、`orchestrating-runs/references/phase-pr.md:13` の PR 本文の参照を付け替える。
+
+### Task 8(Task 4 の分)
+
+- `C/docs/format-change-checklist.md:22-30` の `github-writing.md` の項目(縮退の順序の表・`--attach` の条件)を、新しい 2 ファイルに合わせる。`plugins/gh-utility/docs/format-change-checklist.md:8` にも同種の記述がある(gh-utility のファイルを変えるかはユーザーに確かめる)。
+- `C/docs/DESIGN.md:715` の github-writing.md の画像の載せ方の参照を、`github-writing-images.md` に直す。
+- `filing-followup-issues` の HARD-GATE から削った出典「`docs/DESIGN.md` §8 の PreToolUse(Bash)の行と §2 の [triage]」の内容が DESIGN.md にあることを確かめる。
+- C18(fixing-review-findings 手順 8)の根拠: push は再レビューの diff に影響しない。guard-bash は fix-loop と test-loop が passed の条件で push を許可する。
+
 ### Task 8(Task 5 の退避の内容)
 
 - D3(preparing-design-agendas): 合意済み事項を再提示しない理由。同じ分岐を二度議論させると、前回と違う結論が出ることがある。そうなると、intent 文書と discussion.md の内容が食い違う。
