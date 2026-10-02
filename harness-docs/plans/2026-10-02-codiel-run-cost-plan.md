@@ -206,6 +206,17 @@
 - [ ] ステップ 2: 改修後の `ORS`・`raguel-gating`・`reviewing-diffs`・`capturing-intent` に、prompt-smith の評価をもう一度当てる。冗長度の評点が改修前(設計書 §3.2)以上であることを確かめる。
 - [ ] ステップ 3: 所見の採否を決め、採った所見を直してコミットする。
 
+### Task 9b: ARCHITECTURE・GOTCHAS の扱いを外し、レビューの所見を直す(設計書 K12)
+
+役割: 複雑または重要な実装。`prompt-smith:prompt-smith` を起動してから書く。Task 9 のレビューの後に追加した(2026-10-02 ユーザー決定)。
+
+- [ ] ステップ 1: 設計書 K12 に従い、codiel の指示層(`C/skills`・`C/references`・`C/commands`)から、ARCHITECTURE と GOTCHAS を読ませる規則・書き込ませる規則を外す。対象は、`ORS` のフェーズ進行表の入力列と §3 のテンプレートの前提(review の委譲を除く)、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、`phase-finalize.md` の乖離の一覧化、`failures.md` と、それを指す参照(`ORS` の表・`raguel-gating`・`fixing-review-findings` など)である。§0 のドメインマップの抽出は変えない。review の委譲には ARCHITECTURE のパスを渡し続け、`reviewing-diffs/references/doc.md` の乖離の観点は残す。
+- [ ] ステップ 2: Task 9 の code-reviewer の採った所見を直す。#1(compaction の後は `status` が `active` か `awaiting_human` の run を使う。設計書 §6.2 も同じく直す)、#2(再開と compaction の読み直しに、triage を終えて未完了の finalize の `phase-finalize.md` を含める)、#4(`intent-format.md` に「`[ADR 候補]` の書式と参照形は codiel と metatron の共有ファイル契約で、正本はこのファイルに置く」の 1 文を戻す)、#5(`phase-pr.md` の手順 2 に `github-writing.md` の執筆規則にも従うことを足す)、#6(`writing-test-specs` に、受け入れ基準に無いケースを足さない 1 文を足す)、`raguel-gating` の ASK の手順 2 に `references/parallel-gates.md` を読む参照を足す。
+- [ ] ステップ 3: metatron の登録簿 `plugins/metatron/src/fixtures/section-reference-inventory.json` を、外した言及に合わせて直す(無くなった言及の行を削る。残す言及の行は残す)。`plugins/metatron/docs/format-change-checklist.md` の `failures.md` を指す行を、K12 に合わせて直す(バージョンは上げない)。
+- [ ] ステップ 4: `C/docs/DESIGN.md` に K12 の理由を書き、ARCHITECTURE・GOTCHAS を委譲先が読む・失敗を記録する、という既存の記述を直す。`C/docs/skill-flowcharts.md`・`C/README.md`・`.serena/memories/codiel/core.md` の同種の記述も直す。
+- [ ] ステップ 5: `grep -rnE 'ARCHITECTURE|GOTCHAS'` を `C/skills`・`C/references`・`C/commands` に当て、残った箇所がドメインマップの抽出と review の委譲の 2 つだけであることを確かめる。`pnpm run lint`・`pnpm run typecheck`・`pnpm run test` を実行する。
+- [ ] ステップ 6: 差分を code-reviewer に再レビューさせ、所見の採否を決めて直す。コミットする。
+
 ### Task 10: 改修後を計測し、受け入れを判定する
 
 役割: オーケストレーターがユーザーと行う。Task 9 の後に行う。
