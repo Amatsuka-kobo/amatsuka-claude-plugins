@@ -274,6 +274,17 @@
 - Task 3: B27 で `intent-format.md` から ARCHITECTURE への言及(検知の理由の行)が無くなり、登録簿の `plugins/codiel/references/intent-format.md → (ARCHITECTURE への言及)` の行が「参照が無い」で V2 を落とす。言及は根拠として DESIGN.md へ退避したので、登録簿のその行を削る。
 - Task 3: B24・B40 は適用しなかった(B24 は独自の挙動、B40 は `readable-writing.md` と循環する)。
 
+- Task 5: `ORS` の観点ファイルを選ぶ箇条(「`implementing/references/` の中で合う観点ファイルを選んで足す」)に、新設の手順ファイル `worktree.md`・`e2e.md`・`fix-mode.md` は観点ファイルではないので選ばない、と足す。観点ファイルは `backend.md`・`data.md`・`frontend.md`・`infra.md` である。
+- Task 5: `writing-test-specs` の frontmatter の description に「軽量な run でオーケストレーターが仕様のディレクトリを同定するとき」が残っている。D24 で本文は移したので、description を直す(description の改修は `prompt-smith:skill-creator` の担当)。
+
+### Task 8(Task 5 の退避の内容)
+
+- D3(preparing-design-agendas): 合意済み事項を再提示しない理由。同じ分岐を二度議論させると、前回と違う結論が出ることがある。そうなると、intent 文書と discussion.md の内容が食い違う。
+- D14(writing-dev-plans): `dev-plan.md` は implement が読む唯一の実行手順書である。`[domain: ...]` タグは orchestrating-runs がドメイン別に委譲するときの入力で、実装の委譲先の「担当ドメインのパスにだけ書く」規律の判定基準になる。hooks はエージェント個体を識別できないので、ドメイン規律は委譲先の規律で担保する。
+- D27(writing-test-specs): hooks は `<testsDir>/` 配下への文書フェーズの書き込みを止めない。呼び出し元の委譲先を識別できないので、境界は委譲先自身の規律で守る。
+- D35(implementing): 期待値を書く委譲と直す委譲を分ける設計(DESIGN.md §4)を、実装の側で崩さない。
+- `docs/skill-flowcharts.md` の `implementing` と `fixing-failures` の旧構成の記述を確かめる(`fixing-failures` の手順番号が 1 つずつずれた)。
+
 ### Task 8(Task 3 の退避の内容)
 
 - B5(言語確認の理由): 両者が食い違うと、issue への転記に翻訳という加工が入り、原文をそのまま転記するという前提が崩れる。
