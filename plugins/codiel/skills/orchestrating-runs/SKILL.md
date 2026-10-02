@@ -53,7 +53,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ resolveDocPaths, readDomainsResult }) => {
      const p = resolveDocPaths(process.cwd());
      const d = readDomainsResult(process.cwd());
-     console.log(JSON.stringify({ architecture: p.architecture, gotchas: p.gotchas, domains: d.domains, unreadable: d.unreadable, warnings: [...p.warnings, ...d.warnings] }));
+     console.log(JSON.stringify({ architecture: p.architecture, domains: d.domains, unreadable: d.unreadable, warnings: [...p.warnings, ...d.warnings] }));
    })'
    ```
 
@@ -99,8 +99,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 
    | # | 条件 | 判断 |
    | --- | --- | --- |
-   | 1 | Raguel MCP(`mcp__plugin_codiel_raguel__*`)が使えない | 止める。ARCHITECTURE の欠落とは別の理由を示す |
-   | 2 | B / C / D のいずれかが欠けている | 止める。欠けている項目を名指しし(C は config.json の `raguel`、D は足りない `.gitignore` の行)、`/codiel:init` を案内する。ARCHITECTURE には言及しない |
+   | 1 | Raguel MCP(`mcp__plugin_codiel_raguel__*`)が使えない | 止める |
+   | 2 | B / C / D のいずれかが欠けている | 止める。欠けている項目を名指しし(C は config.json の `raguel`、D は足りない `.gitignore` の行)、`/codiel:init` を案内する |
    | 3 | `unreadable === null`(マップが読める) | `mapped` で開始する。担当は §4 のルーティングで決まるので、ここで追加の確認はしない |
    | 4 | `unreadable` が `architecture_missing` または `block_missing`、かつ state に `domainMode` の記録がある | 記録された値で開始する。再確認しない |
    | 5 | `unreadable` が `architecture_missing` または `block_missing`、かつ記録が無い | ユーザーに「ドメイン別の境界を設けずに実行してよいか」を確認し、許可後に `unscoped` で開始する。恒久ファイルは生成しない。記録先は run の state だけである |
@@ -161,7 +161,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) |
 | [pr] | オーケストレーター本体が、github では PR を作り、local では state に記録する | なし | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ | complete-phase(github のときだけ `--pr-url` 必須) |
 | [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
-| [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) |
+| [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、ARCHITECTURE(再レビューの委譲のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) |
 | [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) |
 | [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | なし | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(`complete-phase` ではない) |
 

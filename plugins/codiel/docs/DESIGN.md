@@ -690,7 +690,7 @@ K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/d
 
 残したのは次の 2 つだけである。
 
-1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。
+1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`adrTarget` の判定では ARCHITECTURE の有無だけを使い、読まない。
 2. review の委譲に ARCHITECTURE のパスを渡すこと。`reviewing-diffs/references/doc.md` の観点が、ARCHITECTURE と実装の乖離を見るためである。依頼文テンプレートの「前提」の ARCHITECTURE の行は、review と再レビューの委譲のときだけ書く。
 
 外した規則は、各フェーズの入力列の ARCHITECTURE・GOTCHAS、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、finalize の乖離の一覧化、`references/failures.md` とそれを指す参照(Raguel の STOP・誤検知の退避・incident・fix-loop の設計漏れ)である。

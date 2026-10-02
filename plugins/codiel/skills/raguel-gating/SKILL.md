@@ -77,7 +77,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - `evaluate_code` が未コミットの変更を理由に入力の誤りを返したら、`references/uncommitted-changes.md` を Read して従う。
 - test-spec と dev-plan は同じステージで並列に進めるフェーズで、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
-- 片方が ASK・STOP(degraded の ASK を含む)になったら、`references/parallel-gates.md` を Read して従う。
+- 片方が ASK・STOP(degraded の ASK を含む)になったら、`mark-ask` を呼ぶ前に `references/parallel-gates.md` を Read して従う。
 - 同一 runId で呼び続けるからこそ `common/resubmission-loop`(暴走的な再提出の検知)が効く。
   フェーズが変わっても try が同じなら `raguelRunId` は変えない。
 - evaluate の呼び出しが 120 秒を超えて Claude Code にバックグラウンドへ移されたら、`orchestrating-runs` §3 に従い、`gate-<フェーズ>-<回>` の `id` で待ちを記録して完了の通知を待つ。結果が届いたら §3 の手順で扱う。待つ間は evaluate を呼び直さない。
@@ -102,8 +102,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 1. 所見(`ruleId`・`severity`・`message`)と `decisionPoint`・`reasons`・`casePath` を読み、何がどこで引っかかったかを要約する。
 2. `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind raguel --evaluation-id <evaluationId>`
-   で run を `awaiting_human` にして停止する。test-spec と dev-plan の並列のゲートで片方が ASK になったときは、
-   `references/parallel-gates.md` を Read して従う。
+   で run を `awaiting_human` にして停止する。
 3. AskUserQuestion で人の裁定を聞く。質問文の中に、懸念の要約(何が、どこで)と `decisionPoint` を入れる。
    応答の本文だけに書いて質問文を短くしない。所見の原文(`message` や `evidence` の全文)は質問文に添えない。
    選択肢は「修正して再提出」「このまま承認」「中止」である。
