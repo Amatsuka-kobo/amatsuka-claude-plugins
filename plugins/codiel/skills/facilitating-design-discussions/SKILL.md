@@ -13,6 +13,18 @@ description: Codiel の discuss フェーズで、オーケストレーター本
 
 オーケストレーターが書いてよい文書と、書かずに委譲するものの分担は、`orchestrating-runs` §3 冒頭に従う。
 
+## プラグインルート参照規約
+
+このスキル起動時に通知される「Base directory for this skill」は `<plugin-root>/skills/facilitating-design-discussions`
+である。`<plugin-root>` はそのベースディレクトリの 2 階層上である。`codiel-state` は対象プロジェクトの
+ルートで次の形で呼ぶ。
+
+```
+node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
+```
+
+このスキルの `references/<file>.md` は、ベースディレクトリからの相対パスである。
+
 ## チェックリスト(discuss フェーズ)
 
 1. `agenda.md` を読み、論点の一覧と各推奨案の 1 行要約をユーザーに提示する。
