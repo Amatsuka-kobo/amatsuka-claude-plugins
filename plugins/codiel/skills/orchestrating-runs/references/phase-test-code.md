@@ -8,7 +8,7 @@
 4. 所見があれば修正ループを回す。ラウンドは `testCode.units[<ID>].attempts` で数え、上限は 5 ラウンドとする。
    - 1〜3 ラウンド: 同じ委譲先を、文脈を保ったまま続投させる。
    - 4〜5 ラウンド: 作業内容を「行き詰まりの打開」と明記した新しい委譲として出す。委譲先の選択はセッションの規律に委ね、役割名もモデル名も書かない。
-   - 5 ラウンドで通らなければ、run を `awaiting_human` にする。
+   - 5 ラウンドで通らなければ、`mark-ask test-code --slug <slug> --kind confirm` で待ち、人に続行か中止かを裁定してもらう。続行は `resume --slug <slug>`、中止は `stop --slug <slug> --reason attempts-exceeded` で行う。`stop` の前に、本文 §2.4 の手順で待ちを片付ける。
 5. レビューを通ったディレクトリから、run ブランチへ順にマージする。
 6. 委譲先が「cases.md の誤り」を報告したディレクトリは、マージせずに要素を `failed` にして worktree を後始末する。続けて、`writing-test-specs` に従う成果物を書く委譲で、run ブランチ上の `cases.md` を直させる。
    - 期待結果を変える必要が無いと直す委譲が報告したら、`mark-ask test-code --kind confirm` の後に人に確かめる。

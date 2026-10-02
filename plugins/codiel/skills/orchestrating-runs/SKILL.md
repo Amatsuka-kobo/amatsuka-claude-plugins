@@ -68,8 +68,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    node <plugin-root>/scripts/codiel-state.mjs gitignore
    ```
 
-   `config` と `gitignore` のどちらかが失敗したとき(`.codiel/config.json` が不正なときは、標準エラー出力に
-   理由を出して終了コード 1 になる)は、C・D を揃っていないものとして扱う。手順 6 の表の行 2 で止めるときに、
+   手順 1・2 のコマンドのどれかが非ゼロで終わったとき、または出力が JSON として読めないときは、続行せず、標準エラー出力を示して止める。プラグインの再インストールか再ビルドを案内し、run は作らない。
+   ただし `config` と `gitignore` の失敗(`.codiel/config.json` が不正なときは、標準エラー出力に理由を出して終了コード 1 になる)は、C・D を揃っていないものとして扱う。手順 6 の表の行 2 で止めるときに、
    標準エラー出力の理由を添え、`.codiel/config.json` を直すか `/codiel:init` をやり直すよう案内する。
 
 3. 手順 2 の出力にある事実(`repoSlug`・`ghAuthenticated`・`ghAttachSupported`・`projectDocs.architecture`
@@ -103,7 +103,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | 2 | B / C / D のいずれかが欠けている | 止める。欠けている項目を名指しし(C は config.json の `raguel`、D は足りない `.gitignore` の行)、`/codiel:init` を案内する |
    | 3 | `unreadable === null`(マップが読める) | `mapped` で開始する。担当は §4 のルーティングで決まるので、ここで追加の確認はしない |
    | 4 | `unreadable` が `architecture_missing` または `block_missing`、かつ state に `domainMode` の記録がある | 記録された値で開始する。再確認しない |
-   | 5 | `unreadable` が `architecture_missing` または `block_missing`、かつ記録が無い | ユーザーに「ドメイン別の境界を設けずに実行してよいか」を確認し、許可後に `unscoped` で開始する。恒久ファイルは生成しない。記録先は run の state だけである |
+   | 5 | `unreadable` が `architecture_missing` または `block_missing`、かつ記録が無い | ユーザーに「ドメイン別の境界を設けずに実行してよいか」を確認し、許可後に `unscoped` で開始する。恒久ファイルは生成しない。記録先は run の state だけである。許可されなければ、run を開始せずに終了する。`architecture_missing` か `block_missing` のどちらかを示し、ARCHITECTURE にドメインマップを用意してから `/codiel:run` をやり直すよう案内する。この時点では run が無いので、state の後始末は要らない |
    | 6 | `unreadable` が `invalid_json` / `invalid_shape` / `read_error` | 一旦止めて確認する。読めない理由と `warnings` の全文を提示し、(a) マップを修復して再実行する、(b) この run に限り境界なしで進むため `unscoped` へ切り替える、のどちらかをユーザーに選ばせる。(b) を選んだ事実は完了報告に残す |
    | 7 | 記録が `mapped` なのに再開時に `unreadable !== null` | 止めて確認する。run 中のマップ消失を暗黙のモード変更にしない |
 
@@ -160,8 +160,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の委譲の返答を合わせてオーケストレーターが書く)、修正 diff | pass-gate(`evaluate_code`) |
 | [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) |
 | [pr] | オーケストレーター本体が、github では PR を作り、local では state に記録する | なし | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ | complete-phase(github のときだけ `--pr-url` 必須) |
-| [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
-| [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、ARCHITECTURE(再レビューの委譲のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) |
+| [review] | 読み取りだけの委譲(観点ごと)。依頼文の前提「diff の範囲」の `git diff <範囲>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <範囲>`(依頼文の前提「diff の範囲」の値)、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
+| [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、再レビューの diff の範囲(依頼文の前提「diff の範囲」の値)、ARCHITECTURE(再レビューの委譲のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) |
 | [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) |
 | [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | なし | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(`complete-phase` ではない) |
 
@@ -283,9 +283,10 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   ```
   node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason intent-updated
   ```
+- 追記が intent-sync より後で、この run に含めないと決めたときは、run を止めず現在のフェーズを続ける。該当の原文の記録の直後に、`<plugin-root>/references/intent-format.md` の持ち越しの注記を足す。finalize が結果レポートに「持ち越し」として載せる(`references/phase-finalize.md` の手順 1)。含めるかを人に確かめるときは、この §2.4 冒頭の `mark-ask --kind confirm` の後に確かめ、答えを得たら `resume` する。
 - run を止めるとき(人が中止を選んだとき、`intent-updated` で止めるとき、別の try を始めるとき)は、`stop` の前に、
   `codiel-state get` の `waits` に残っている委譲を、出どころで分けて片付ける。
-  - 今のセッションで出した委譲: `taskId` があれば `TaskStop` で止め、`wait-clear` で待ちを消す(返答が無いので `wait-done` は使えない)。`taskId` が無ければ完了通知を待ち、返答を書いて `wait-done` する。
+  - 今のセッションで出した委譲: `taskId` があれば `TaskStop` で止め、待ちを消す(返答が無いので `wait-done` は使えない)。待ちが 1 件だけなら `wait-clear` で消す。ほかの待ちが残るなら、止めた委譲の旨を `waits/<id>.md` に書いて `wait-done --id <id>` で 1 件ずつ消し、`wait-clear` は使わない。`taskId` が無ければ完了通知を待ち、返答を書いて `wait-done` する。
   - 前のセッションから残った待ち: 通知は来ないので待たず、`wait-clear` で消す。
   `stop` は待ちが残っていると失敗する。`--abandon-waits` は、今のセッションの委譲を止めず完了も待たずに止めると人が決めたときだけ付ける。
   E2E のレポートが残っていれば、`stop` の前に `references/e2e.md` のコミットの手順に従う。
@@ -313,6 +314,9 @@ dev-plan.md・discussion.md・intent 文書(持続層を含む)である。自�
 - 完了通知を受けたら、state の更新や次の委譲より先に、返答の本文を要約せずに `.codiel/runs/<slug>/try-<n>/waits/<id>.md` へ書き、続けて報告の置き場(`references/delegation-env.md` の表)へ書く。その後で `codiel-state wait-done --slug <slug> --id <id>` を呼び、次の委譲やゲートへ進む。
 - 複数の返答をまとめる報告(review と再レビューの `review-<m>.md` など)は、返答ごとに `waits/<id>.md` を書いて `wait-done` を呼び、グループの待ちがすべて消えてから書く。
 - 委譲を出し直すときは、新しい回の `id` で記録する。
+- 委譲先が異常終了した、返答が空だった、または成果物が空か不在だったときは、新しい回の `id` で 1 回だけ出し直す。2 回目も同じなら、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
+  - 返答が無い待ちは、返答が無かった旨を `waits/<id>.md` に書き、`wait-done --id <id>` で消す。`wait-clear` は `--id` を取らずその run の待ちを全部消すので、並列の待ちが残るときは使わない。
+  - 返答はあるが成果物が空か不在のときは、返答を `waits/<id>.md` に書いて `wait-done` した後で出し直す。
 
 run が無いときの委譲(`capturing-intent` の現状調査、`/codiel:test` の単独実行)は、待ちを記録しない。stop-guard も run が無ければ止めない。
 active な run があるときの `/codiel:test` の単独実行は、`adhoc-` で始まる `id` で待ちを記録する。
@@ -338,6 +342,7 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 - <出力ファイルのパス>
 
 ## 前提
+- diff の範囲: <review と再レビューの委譲のときだけこの行を書く。`<baseBranch>...<branch>` の形で、値は `codiel-state get --slug <slug>` の出力の `baseBranch` と `branch`。state に `baseBranch` が無いときは、`capturing-intent` の手順 1 のベースブランチの解決規則で解決した値>
 - ARCHITECTURE: <review と再レビューの委譲のときだけこの行を書く。§0 で解決した絶対パス。存在しなければ「なし」>
 - 実行モード: <mapped | unscoped>
 - ドメインマップ: <mapped のときは §0 で読み取った JSON の全文。unscoped のときは「なし」>
@@ -366,7 +371,7 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 - 実装の委譲(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。`worktree.md`・`e2e.md`・`fix-mode.md` は手順ファイルで観点ファイルではないので、選ばない。
 - review と再レビューの観点は、`references/review-common.md` の規則で選ぶ。
 
-ディスパッチの後、成果物のファイルが実際に存在し空でないことを確かめてから、raguel-gating のゲート手順に進む。サブエージェントの報告だけで完了としない。
+ディスパッチの後、成果物のファイルが実際に存在し空でないことを確かめてから、raguel-gating のゲート手順に進む。サブエージェントの報告だけで完了としない。存在しないか空のときは、待ちの扱いの異常時の出し直しに従う。
 
 ## 4. ドメインディスパッチ
 
