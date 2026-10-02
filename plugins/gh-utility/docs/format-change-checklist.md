@@ -5,7 +5,7 @@ gh-utility が定める書式と規則を変更したときに、同じコミッ
 
 ## GitHub の執筆規則と画像の載せ方(`references/github-issue-common.md`)
 
-- [ ] 同じ Marketplace で、GitHub の Issue・PR・コメントの執筆規則を独立に持つ別プラグインの参照文書(`references/github-writing.md`)。3 文・縮退の順序の表・`--attach` の条件・可視性の記述を揃える
+- [ ] 同じ Marketplace で、GitHub の Issue・PR・コメントの執筆規則を独立に持つ別プラグインの参照文書(`references/github-writing.md` の 3 文と、`references/github-writing-images.md` の縮退の順序の表・`--attach` の条件・可視性の記述。PR 本文の `references/github-writing-pr.md` は写さない)。両方を揃える
 - [ ] 同じ Marketplace で、人が読む文書の共通の執筆規則を独立に持つ別プラグインの参照文書(`references/readable-writing.md`)。根拠の置き場・言語を問わない書き方・翻訳・環境に固有の値の 4 つの規則の文言を揃える
 - [ ] `src/check-issue-env.ts` の `remoteHost` の判定条件(`github.com` と `<名前>.ghe.com`)。ホストの判定条件を変えたら両方直す
 - [ ] `README.md` の「画像の載せ方」セクション。前提と縮退の要点を利用者向けに合わせる

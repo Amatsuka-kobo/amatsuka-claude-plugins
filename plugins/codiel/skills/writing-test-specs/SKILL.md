@@ -1,6 +1,6 @@
 ---
 name: writing-test-specs
-description: Codiel の test-spec フェーズで、テスト仕様を書く委譲先が design.md の「影響を受ける機能単位」と intent の受け入れ基準から仕様のディレクトリごとの spec.md と cases.md を作成・更新するとき、および軽量な run でオーケストレーターが仕様のディレクトリを同定するときに使う。orchestrating-runs が名指しで起動する。
+description: Codiel の test-spec フェーズで、テスト仕様を書く委譲先が design.md の「影響を受ける機能単位」と intent の受け入れ基準から仕様のディレクトリごとの spec.md と cases.md を作成・更新するときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # テスト仕様書執筆規約

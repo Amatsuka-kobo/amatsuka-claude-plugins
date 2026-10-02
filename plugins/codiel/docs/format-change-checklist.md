@@ -19,9 +19,13 @@ codiel が定める書式を変更したときに、同じコミットで追随�
 - [ ] ADR の 3 条件の写しを、metatron の `references/writing-discipline.md` の「何を ADR にするか」に揃える
 - [ ] `[ADR 候補]` の書式(印・候補 ID・エントリの範囲・参照形)を、metatron の `references/architecture-format.md` の写しのセクションに揃える
 
-## GitHub の執筆規則(`references/github-writing.md`)
+## GitHub の執筆規則(`references/github-writing.md`・`github-writing-images.md`・`github-writing-pr.md`)
 
-- [ ] gh-utility: `references/github-issue-common.md` の「## 執筆規則」。3 文・縮退の順序の表・`--attach` の条件・可視性の記述を揃える(codiel 固有のマーカー・本文ファイルの書き方・テンプレートの扱い・PR 本文は写さない)
+`github-writing.md` が執筆規則の本体で、画像の載せ方を `github-writing-images.md`、PR 本文を `github-writing-pr.md` へ切り出している。
+
+- [ ] gh-utility: `references/github-issue-common.md` の「## 執筆規則」。`github-writing.md` の 3 文を揃える
+- [ ] gh-utility: `references/github-issue-common.md` の画像の載せ方。`github-writing-images.md` の縮退の順序の表・`--attach` の条件・可視性の記述を揃える
+- [ ] codiel 固有のマーカー・本文ファイルの書き方・テンプレートの扱いと、`github-writing-pr.md` の PR 本文は、gh-utility に写さない
 
 ## 人が読む文書の共通の執筆規則(`references/readable-writing.md`)
 

@@ -65,7 +65,8 @@ run(試行)があれば自動的に再開します。内部では `orchestrating
 [intent-sync]    承認済みの受け入れ基準の変更と、途中で追記された原文を派生文へ反映。持続層を更新
                                                                 ▶ Raguel: evaluate_design
 [pr]             github: PR 作成(テスト green かつコード PROCEED を hooks が検証) / local: 記録だけで終える
-[review]         ドメイン別レビューアー + doc/security レビューアーを並列ディスパッチ、所見を統合
+[review]         変更パスと内容に当たる観点(frontend/backend/data/infra)+ 毎回選ぶ doc/security を並列
+                 ディスパッチ(どれにも当たらない変更パスがあるときだけ generic を足す)、所見を統合
                  (github は PR にも投稿、local は投稿しない)
 [fix-loop]       critical/high を修正 → 回帰テスト → 再レビュー、ゼロになるまで反復(所見が無ければ skip)
                                                                 ▶ Raguel: evaluate_code(修正の都度)
@@ -84,6 +85,8 @@ Issue は本文を原文としてそのまま記録します。
 に分けて並列に進めます。ステップはレビューを終えたものから run ブランチへマージされ、
 `.codiel/worktrees/` の中身はマージ後または run の終了時に削除されます(`.git/info/exclude` に
 追加されるため、通常の `git status` には現れません)。
+
+委譲の待ちが無いフェーズの境目(state の `waits` が空のとき)では、新しいセッションへ移って構いません。移った先で `/codiel:run` を実行すると、未完了の run が再開手順に従って続きます。長い run でセッションの文脈が膨らんだときに、この切り替えで消費を抑えられます。
 
 テストの仕様(`spec.md`・`cases.md`)は、`.codiel/config.json` の `testsDir`(既定は `docs/codiel/tests`)配下に
 機能単位で永続します。テストコードの置き場はプロジェクトの規約に従って決まり、置いたパスは各 `spec.md`

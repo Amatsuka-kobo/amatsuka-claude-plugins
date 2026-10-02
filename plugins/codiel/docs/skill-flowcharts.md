@@ -213,7 +213,7 @@ digraph implementing {
   receive_b [label="(b)fix-loop のレビュー所見由来:\n所見(severity/対象/内容/根拠/提案)\n+対象ファイル", shape=box];
   reproduce [label="再現する\n(fixing-failures スキルの手順)", shape=box];
   root_cause [label="根本原因を特定する", shape=box];
-  spec_wrong [label="テストの方が\n間違っていると判断?", shape=diamond];
+  spec_wrong [label="テストの方が\n間違っていると判断?\n(implementing の\nreferences/fix-mode.md の規律)", shape=diamond];
   escalate [label="修正せず報告(ASKへ)", shape=box, style=filled, fillcolor="#ffe0b3"];
   minimal_fix [label="最小修正を実装する\n(テストコードには触れない)", shape=box];
   verify_fix [label="通すテストを再実行し\n通るか確認", shape=diamond];
@@ -223,7 +223,7 @@ digraph implementing {
 
   read_plan -> read_arch -> mode;
   mode -> install [label="通常モード(worktree で並列)"];
-  mode -> receive_a [label="修正モード(a)\ntest-loop"];
+  mode -> receive_a [label="修正モード(a)\ntest-loop\n(references/fix-mode.md)"];
   mode -> receive_b [label="修正モード(b)\nfix-loop"];
 
   install -> next_step -> implement_code -> run_tests -> env_check;
@@ -347,7 +347,7 @@ digraph fixing_failures {
   hypothesize [label="根本原因を1文で言語化", shape=box];
   verify_cause [label="言語化した原因で\n再現結果を説明できるか裏取り", shape=diamond];
 
-  spec_wrong [label="テストの方が\n間違っていると判断?", shape=diamond];
+  spec_wrong [label="テストの方が\n間違っていると判断?\n(implementing の\nreferences/fix-mode.md の規律)", shape=diamond];
   escalate [label="修正せず報告(ASKへ)", shape=box, style=filled, fillcolor="#ffe0b3"];
 
   minimal_fix [label="最小修正を実装\n(原因と1対1で対応する変更のみ)", shape=box];
@@ -440,12 +440,12 @@ digraph fixing_review_findings {
   verdict [label="verdict?", shape=diamond];
   stop_ask [label="STOP/ASKハンドリング\n(raguel-gating)", shape=box, style=filled, fillcolor="#fff2cc"];
   regress [label="running-regression-tests で\n回帰全体を再実行", shape=box];
-  push [label="git push で\nPRブランチを最新化\n(レビューの委譲先の stale diff 防止)", shape=box, style=filled, fillcolor="#d9e8ff"];
+  push [label="git push で\nPRブランチを最新化\n(再レビューの diff には影響しない)", shape=box, style=filled, fillcolor="#d9e8ff"];
   rereview [label="該当観点のレビューの委譲先を再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
   remaining [label="反論済み一覧を除いて\ncritical/highが残っているか?\n(新根拠の再主張は未決に戻す)", shape=diamond];
   passgate [label="pass-gate fix-loop --slug <slug>\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
   triage [label="triageフェーズへ\n(medium/lowはここで)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  skip [label="critical/high が最初から0件\n=> skip-phase fix-loop --slug <slug>\n(orchestrating-runs)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  skip [label="critical/high が最初から0件\n=> skip-phase fix-loop --slug <slug>\n(orchestrating-runs 本文の\nfix-loop をスキップする規則)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
   findings -> verify -> valid;
   valid -> dispatch [label="妥当"];
@@ -539,7 +539,7 @@ digraph raguel_gate {
   stop_misdetect [label="record_outcome(approved)\n+ 未記録の GOTCHAS へ退避\n(台帳には書かない)", shape=box];
   stop_pass [label="resume の後に\npass-gate <phase> --slug <slug>\n--verdict STOP --human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
   stop_valid [label="stop --slug <slug>\n--reason raguel-stop", shape=box, style=filled, fillcolor="#ffcccc"];
-  gotchas [label="失敗の記録\n(orchestrating-runs)", shape=box];
+  gotchas [label="失敗の記録\n(orchestrating-runs の\nreferences/failures.md)", shape=box];
   stopped [label="run 終了(stopped)", shape=ellipse];
 
   evaluate -> verdict;
@@ -642,7 +642,7 @@ digraph codiel_run {
 }
 ```
 
-## orchestrating-runs(失敗の記録)
+## orchestrating-runs(references/failures.md の失敗の記録)
 
 ```dot
 digraph recording_failures {
