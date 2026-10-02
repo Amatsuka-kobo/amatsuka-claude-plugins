@@ -25,10 +25,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ### コマンド起動時(1 回)
 
-`/codiel:run` / `/codiel:test` などの codiel コマンドが起動したら、フェーズ処理に入る前に:
-
-1. outcome 自動同期を行う(「outcome の自動同期」参照)。ゲートのたびに行うものではなく、
-   コマンド起動の冒頭で 1 回だけ行う。
+`/codiel:run` や `/codiel:test` などの codiel コマンドが起動したら、フェーズ処理に入る前に `references/outcome-sync.md` を Read し、outcome の自動同期を 1 回だけ行う。ゲートのたびには行わない。
 
 ### ゲートを 1 回通すたびに
 
@@ -46,6 +43,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    未コミットの変更が残っていると入力の誤りになる。文書のフェーズは、追跡されていない `design.md` などもそのまま読まれる。
 4. フェーズ→ツール対応表(下記)に従い evaluate ツールを呼ぶ。`runId`・`phase`・`objective` は全呼び出しで必須である。
    evaluate を呼ばない限り `evaluationId` は存在せず、`pass-gate` は失敗する。
+   evaluate はフェーズごとに呼ぶ。前のフェーズが PROCEED だったことや diff が小さいことを理由に省かず、`pass-gate` へは Raguel がその場で返した `evaluationId` だけを渡す。
 5. verdict で分岐する(下記「verdict 別ハンドリング」)。
 6. PROCEED なら次フェーズのディスパッチプロンプトに前フェーズの findings 要約を含める
    (「findings の引き継ぎ」参照)。
@@ -76,20 +74,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
   run 全体の範囲や、ほかのフェーズの起点へ替えて空の差分を避けない。空の差分は Raguel が PROCEED と
   「変更なし」の info で返す。E2E のレポートだけの差分も、Raguel が変更なしとして扱う。
 - 入力の誤り(`isError`)が返ったら、入力を直して呼び直す。入力の誤りは判定ではなく、評価の記録も残らない。
-- `evaluate_code` が、未コミットの変更を理由に入力の誤りを返したら、未コミットのパスごとに、run の成果物かどうかで扱いを分ける。
-  - このフェーズで変えたファイルなら、コミットしてから呼び直す。
-  - run と関係の無いファイル(会話記録など、ほかの仕組みが書くもの)は、run ブランチへコミットしない。
-    そのパスが `.codiel/config.json` の `raguel.subject.ignoreUncommitted` に宣言済みなら、未コミットの検査から外れているので、宣言に当たらないパスだけを直して呼び直す。
-    宣言されていなければ、`mark-ask` で run を `awaiting_human` にしてから人に知らせ、AskUserQuestion で次のどちらかを聞く。
-    宣言を足す(run の間は guard が `.codiel/config.json` への書き込みを拒むので、足すのは人の手か run の外である)、または人が自分でそのファイルを退避する。
-  - 宣言する glob は、run と関係の無いファイルの置き場だけにする。ソースのパスは宣言しない。
+- `evaluate_code` が未コミットの変更を理由に入力の誤りを返したら、`references/uncommitted-changes.md` を Read して従う。
 - test-spec と dev-plan は同じステージで並列に進めるフェーズで、Raguel へは、それぞれ独立に `evaluate_plan` を呼ぶ。
   片方が PROCEED でももう片方の結果には影響しない。
-- 片方が ASK・STOP になったときの扱いは、「並列に進めるフェーズの ASK・STOP」に従う。
+- 片方が ASK・STOP(degraded の ASK を含む)になったら、`references/parallel-gates.md` を Read して従う。
 - 同一 runId で呼び続けるからこそ `common/resubmission-loop`(暴走的な再提出の検知)が効く。
   フェーズが変わっても try が同じなら `raguelRunId` は変えない。
-- evaluate の呼び出しが 120 秒を超えて Claude Code にバックグラウンドへ移されたら、`codiel-state wait-add --slug <slug> --id gate-<フェーズ>-<回> --purpose <文>` で待ちを記録し、完了の通知を待つ。`<フェーズ>` は小文字とハイフンで書き(`test-spec` など)、`<回>` はそのフェーズの評価の回(attempt)とする。`id` は 100 文字以内で、英小文字と数字以外の文字は小文字にしてハイフンに置き換え、連続するハイフンは 1 つにする。
-  結果が届いたら、本文を `waits/<id>.md` に書いてから `wait-done` で待ちを消す。待つ間は evaluate を呼び直さない。
+- evaluate の呼び出しが 120 秒を超えて Claude Code にバックグラウンドへ移されたら、`orchestrating-runs` §3 に従い、`gate-<フェーズ>-<回>` の `id` で待ちを記録して完了の通知を待つ。結果が届いたら §3 の手順で扱う。待つ間は evaluate を呼び直さない。
   Jev の問い合わせの上限は既定で 20 秒なので、通常は移る前に返る。
 - 評価のあとに成果物を動かさない。code 系フェーズは、pass-gate までコミットを足さない(HEAD が変わると
   pass-gate が止まる)。文書のフェーズは、pass-gate まで文書を書き換えない(内容が変わると止まる)。
@@ -98,24 +89,12 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## verdict 別ハンドリング
 
+`ASK` と `STOP` は `PROCEED` として扱わず、所見を人に見せて裁定を待つ。
+
 ### PROCEED
 
 1. `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <evaluationId> --verdict PROCEED`
 2. state の `phases.<phase>.status` が `passed` になったことを確認し、次フェーズへ自動遷移する。
-
-### 並列に進めるフェーズの ASK・STOP
-
-test-spec と dev-plan のゲートでは、ASK・STOP・degraded の ASK のすべてに次の規則を当てる。
-
-- もう片方の委譲の待ちが残っている間は、`mark-ask` を呼ばない。`mark-ask` は run を `awaiting_human` にし、その間は guard-write の境界が外れるためである。
-- もう片方のゲートの結果が出てから、2 つのゲートの結果をまとめて人に示す。
-- 2 つとも ASK・STOP のときは、次の順に進める。
-  1. 両方に `mark-ask` する。
-  2. 人に聞く。
-  3. 裁定ごとに `record_outcome` を記録する。
-  4. `resume` を 1 回だけ呼ぶ。`resume` は awaiting_human のフェーズを一括で戻すので、片方の裁定だけでは呼ばない。
-  5. 裁定ごとに続きを行う(修正して再提出なら再評価、承認なら `pass-gate`)。
-- 裁定 A の「`resume` → `record_outcome`」の順は、並列に進めるフェーズでだけ、この順に読み替える。
 
 ### ASK
 
@@ -127,7 +106,7 @@ test-spec と dev-plan のゲートでは、ASK・STOP・degraded の ASK のす
 3. AskUserQuestion で人の裁定を聞く。質問文の中に、懸念の要約(何が、どこで)と `decisionPoint` を入れる。
    応答の本文だけに書いて質問文を短くしない。所見の原文(`message` や `evidence` の全文)は質問文に添えない。
    選択肢は「修正して再提出」「このまま承認」「中止」である。
-4. 裁定はオーケストレーターが選ばない。「多分大丈夫」の代理判断は、Red Flags のとおり自己承認である。
+4. 裁定はオーケストレーターが選ばない。「多分大丈夫」の代理判断は自己承認なので、選択肢の回答を待つ。
    「中止」なら、STOP の「妥当として止める」と同じ手順で終了させる。
 
 #### 裁定 A: 修正して再提出
@@ -148,7 +127,7 @@ test-spec と dev-plan のゲートでは、ASK・STOP・degraded の ASK のす
 
 成果物は修正せず、ASK の指摘を踏まえた上でそのまま先へ進めてよいと人が判断した場合である。
 この裁定では再 evaluate を呼ばず、`--human-approved` でゲートを通す。`--human-approved`
-が正規に使えるのは、この裁定 B と STOP の誤検知の裁定(「STOP」参照)だけである。
+が使えるのは、この裁定 B と STOP の誤検知の裁定(「STOP」参照)だけである。どちらも `record_outcome` に `ruling`(ASK は `as-is`、STOP は `false-positive`)を記録済みの、実在する `evaluationId` に対してだけ付ける。
 
 1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "as-is"`、`evaluationId` は ASK を出した
    evaluate の evaluationId)で、人が as-is 承認した裁定を記録する。この記録を飛ばして次に進まない。
@@ -165,8 +144,7 @@ test-spec と dev-plan のゲートでは、ASK・STOP・degraded の ASK のす
 
 1. 所見と `degradedReasons` を読み、何が失敗したかを要約する。
 2. 通常の ASK と同じく `mark-ask <phase> --slug <slug> --kind raguel --evaluation-id <evaluationId>` で run を `awaiting_human` にする。
-3. AskUserQuestion で「再評価」「そのまま承認」「止める」を聞く。質問文の中に、失敗の要約(何が、どこで)と
-   `decisionPoint` を入れる。応答の本文だけに書かず、所見の原文は添えない。
+3. 通常の ASK の手順 3 と同じ規則で質問文を書き、選択肢を「再評価」「そのまま承認」「止める」にする。
 4. 再評価が選ばれたら、`resume` してフェーズを `in_progress` に戻し、evaluate を呼び直す。
 5. そのまま承認が選ばれたら、裁定 B と同じ手順(record_outcome の `ruling: "as-is"` から pass-gate まで)で通す。
 6. 止めるが選ばれたら、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-degraded` で止める。
@@ -182,12 +160,11 @@ verdict を上書きしない。
    で run を `awaiting_human` にする。フェーズの `verdict` に `STOP` が残る。
    所見に `casefile/tampered` があるときは、記録の改竄であり覆せないので、手順 2 に進まず、AskUserQuestion を使わずに止める。
    応答の本文で、止めた理由(改竄の所見の要約と `decisionPoint`)を報告する(AskUserQuestion の選択肢は 2 件以上が要り、「止める」だけの質問にできないため)。
-2. AskUserQuestion で「誤検知として続ける」か「妥当として止める」かを聞く。質問文の中に、懸念の要約(何が、どこで)と
-   `decisionPoint` を入れる。応答の本文だけに書かず、所見の原文は添えない。オーケストレーターはどちらも選ばない。
+2. 通常の ASK の手順 3 と同じ規則で質問文を書き、AskUserQuestion で「誤検知として続ける」か「妥当として止める」かを聞く。オーケストレーターはどちらも選ばない。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "false-positive"`、STOP の `evaluationId`、
       `notes` に誤検知と裁定した所見と理由)を記録する。失敗したら `pass-gate` に進まず、失敗を人に示す。
-   2. `orchestrating-runs` の「失敗の記録」の退避の形で、`<runsDir>/<slug>/unrecorded-gotchas.md` の
+   2. `../orchestrating-runs/references/failures.md` の退避の形で、`<runsDir>/<slug>/unrecorded-gotchas.md` の
       `## 未記録の GOTCHAS` に 1 件書く。`<runsDir>` は `codiel-state config` の出力から取る。run が無いときの退避先は
       `.codiel/reports/unrecorded-gotchas.md` である。`title` は「Raguel の誤検知: <ruleId>」で始める。metatron の CLI の
       案内があっても、台帳へは書かない(誤検知は対象プロジェクトの失敗ではなく、Raguel の作り直しの材料である)。
@@ -196,7 +173,7 @@ verdict を上書きしない。
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    4. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
 4. 妥当として止めるときは、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止め、
-   続けて `orchestrating-runs` の「7. 失敗の記録」に従い、失敗の内容を GOTCHAS に記録する
+   続けて `../orchestrating-runs/references/failures.md` に従い、失敗の内容を GOTCHAS に記録する
    (STOP は最も学習価値の高い失敗)。
 
 ### ループ上限超過
@@ -213,65 +190,5 @@ verdict を上書きしない。
 無視せず踏まえられる。findings の全文(evidence.excerpt 等)は転記しない
 (`casePath` を渡し、必要なら読みに行かせる)。
 
-裁定 B(as-is 承認)で通過した場合は必ず引き継ぐ。verdict が ASK のまま進んだフェーズの findings は
-「人が承知の上で受け入れたリスク」であり、次フェーズの実行者に「承認済みだが未解消の指摘」として
-明示的に渡す(PROCEED 通過時よりも引き継ぎの価値が高い)。
+裁定 B(as-is 承認)で通過したフェーズの findings は、次フェーズの実行者に「承認済みだが未解消の指摘」として必ず渡す。
 
-## outcome の自動同期
-
-`/codiel:run` / `/codiel:test` などすべての codiel コマンドは、起動時に 1 回以下を行う。
-
-1. `node <plugin-root>/scripts/codiel-state.mjs get --active` を実行する。この実装は
-   `active` / `awaiting_human` / `awaiting_outcome` の run をすべて `runs` に含めて返す。
-   ただし codiel 0.x の run(`state.version` が 1)は、`awaiting_outcome` のものだけが含まれる。
-   同期対象はそのうち `state.status === "awaiting_outcome"` の run に絞り込む
-   (それ以外の run はここでは何もしない)。
-2. 絞り込んだ各 run を `state.integration` で分岐する。
-   - github: `state.pr.url` が null でない run だけを対象にし、`gh pr view <state.pr.url>
-     --json state,mergedAt` で PR の現況を確認する。マージ済み(`mergedAt` が非 null)なら取り込み済み、
-     マージされずクローズ(`state: "CLOSED"` かつ `mergedAt` が null)なら却下とする。オープンのまま
-     (`state: "OPEN"`)なら何もせず、次回の起動時にまた確認する。
-   - local: `git merge-base --is-ancestor <state.branch> <state.baseBranch>` を実行する。
-     終了コードが真(0)なら取り込み済みとする。偽なら、この run を取り込み済みとして扱うかを
-     ユーザーに聞く。回答が「取り込み済み」なら取り込み済み、「却下」なら却下とし、判断が
-     付かなければ何もせず次回の起動時にまた確認する。
-3. 取り込み済みと判定した run は `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、
-   `evaluationId` は下記の選定順)を呼び、続けて
-   `node <plugin-root>/scripts/codiel-state.mjs record-outcome --slug <slug> --outcome approved`。
-   却下と判定した run は同様に `outcome: "rejected"`(`evaluationId` は下記の選定順)で両方を記録する。
-   run 全体の結末には `ruling` を付けない(`ruling` はフェーズのゲートでの人の裁定を表す)。
-4. incident(PROCEED したのに実害が出た)は自動検知できない。人が明示的に申告したときのみ、
-   `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "incident"`、`evaluationId` は下記の選定順)+
-   `codiel-state record-outcome --slug <slug> --outcome incident` を記録する。最も価値の高い失敗判例
-   なので、申告を勝手に補ったり省略したりしない。記録したら `orchestrating-runs` の「7. 失敗の記録」に従う。
-
-run 全体の結末(`approved` / `rejected` / `incident`)を記録する際の `evaluationId` は、
-「最後にコードを検査した evaluate」の evaluationId を使う。優先順は次のとおり:
-`state.phases["fix-loop"].evaluationId` → なければ `state.phases["test-loop"].evaluationId` →
-なければ `state.phases["implement"].evaluationId` → なければ `state.phases["test-code"].evaluationId`。
-
-`state.version` が 1 の run は、次のとおり読む。
-
-- `state.integration` を持たないので、github として扱う。
-- `state.pr.url` と、選定順に挙げたフェーズのうち fix-loop・test-loop・implement の 3 つは version 2 と同じ名前で持つので(test-code は version 1 に無い)、そのまま読む。
-- `record-outcome` の `--slug` には `state.runId`(`issue-<N>` の形)を渡す。
-
-<HARD-GATE>
-- 実在しない `evaluationId` での `pass-gate` は許されない。`evaluationId` は、Raguel からその場で返ってきた
-  本物だけを渡す。捏造はゲートそのものの無効化である。
-- `--human-approved` の正規の例外は 2 つだけである。ASK の裁定 B(このまま承認)と、STOP の誤検知の裁定
-  (「STOP」参照)である。どちらも `record_outcome` に `ruling`(ASK は `as-is`、STOP は `false-positive`)を付けて
-  記録済みの、実在する `evaluationId` に対してのみ使う。record_outcome を経ていない `evaluationId` や、
-  AI が自己判断で作った `evaluationId` に `--human-approved` を付けて通すことは、捏造と同じくゲートの無効化である。
-- verdict が `ASK` または `STOP` のときは、`PROCEED` として扱わず、findings を人に見せてから裁定を待つ。
-  STOP 後に別の evaluate を呼び直して verdict を上書きしない。人の裁定(ASK は裁定 A / 裁定 B、STOP は
-  誤検知として続ける / 妥当として止める)を経ずに、AI が独断で `--human-approved` を付けない。
-</HARD-GATE>
-
-## Red Flags(合理化への反論)
-
-| 思考 | 現実 |
-|---|---|
-| 「前回 PROCEED だったから今回も呼ばなくていい」 | フェーズが変われば成果物も objective も別物。`resubmission-loop` 検知も呼び出しの継続があって初めて機能する。呼ばない run は判例としても蓄積されない。 |
-| 「軽微な diff だから evaluate_code は過剰」 | 危険かどうかは Raguel 側のルール層が決定論で判定する。「軽く見える危険な変更」を人間・AI の目で先に篩い落とす行為自体が、Raguel が対策している攻撃パターン。呼び出しコストを気にして省略していい理由にはならない。 |
-| 「ASK だが人間は多分承認するので進めてよい」 | 「多分」は推測であり ASK の意味そのものを無効化する。ASK は人間の判断を要求している合図であり、AI が代理で承認したことにするのは自己承認の別形態。必ず停止して裁定を待つ。 |
