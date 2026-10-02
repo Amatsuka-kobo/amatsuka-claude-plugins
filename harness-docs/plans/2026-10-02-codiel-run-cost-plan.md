@@ -271,6 +271,16 @@
 - Task 2: `review-common.md` は `github-writing.md` の「画像の載せ方」を、`phase-pr.md` は「PR 本文」と画像の縮退の順序を指す。Task 4 で C30・C31 を切り出したら付け替える。
 - Task 2: ARCHITECTURE への言及を `references/` へ移すと、`plugins/metatron/src/__test__/section-reference-inventory.test.ts` の V2 が落ちる。登録簿 `plugins/metatron/src/fixtures/section-reference-inventory.json` に行を足して直す(Task 2 で `phase-finalize.md` の 1 行を足した)。
 - Task 6: ORS 側に要る変更は無い。`running-regression-tests` が ORS §3 の `adhoc-` の記述を参照している。
+- Task 3: B27 で `intent-format.md` から ARCHITECTURE への言及(検知の理由の行)が無くなり、登録簿の `plugins/codiel/references/intent-format.md → (ARCHITECTURE への言及)` の行が「参照が無い」で V2 を落とす。言及は根拠として DESIGN.md へ退避したので、登録簿のその行を削る。
+- Task 3: B24・B40 は適用しなかった(B24 は独自の挙動、B40 は `readable-writing.md` と循環する)。
+
+### Task 8(Task 3 の退避の内容)
+
+- B5(言語確認の理由): 両者が食い違うと、issue への転記に翻訳という加工が入り、原文をそのまま転記するという前提が崩れる。
+- B22(syncing-intents の Red Flags の理由): 追記された要望の反映先が誤っていても、書いた時点で派生文のセクションに残るので、確認前に書くと確認の意味が失われる。`## 変更履歴` は承認の経路を残す記録で、省くと後から変更の正当性を追えない。要約は派生文のセクションの役割で、`## ASIS` / `## TOBE` には手を入れない。矛盾の確認は `mark-ask --kind confirm` で取り、待たずに書き換えると確認の意味が失われる。参照形は ADR へ移した後の確定済みの形で、全文を書き戻すと ADR と持続層で正が二重になる。
+- B27(マーカー検知): 位置制約を課さないのは、Issue テンプレートのヘッダが前置されてマーカーが本文の中ほどに来ることがあり、「先頭 N 行以内」の条件では intent issue を取りこぼすからである。フェンス内の例示マーカーも検知するのは、取りこぼしの損失(写像が効かず精度が落ちる)が誤検知の損失より大きいからで、ARCHITECTURE 側のフェンス除外と規律が異なるのは意図した非対称である。
+- B28: 原文の区切りの前後に空行を置くのは、空行が無いと直前の行が見出しとして描画されうるため。区切りは、どこから下を AI が書いたか、食い違えばどちらに従うかを人が分かるようにするため。`[ADR 候補]` の小見出しを metatron の ADR エントリと同じ名前と順序にするのは、metatron が ADR へ移すときに小見出しの下をそのまま写せるようにするため。参照形に候補 ID を残すのは、採番で ID を再利用しないため。`[ADR 候補]` の書式と参照形は codiel と metatron の共有ファイル契約で、正本は `intent-format.md`、metatron は最小限の写しを参照文書に置く。3 条件は metatron の執筆規律の写しである。
+- B30: マーカーはスキルの規律で付け、hook で強制する(付け忘れた投稿は deny され、付けて投稿し直す)。run が active なセッションの本文は、人のアカウントから投稿されても AI が生成した文として扱い、読む側は原文から除ける。intent の承認時の任意の起票は run の作成前なので hook は掛からないが、規律でマーカーを付ける。
 
 ### Task 8(DESIGN.md へ退避する内容)
 
