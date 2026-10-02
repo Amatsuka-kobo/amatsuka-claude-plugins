@@ -25,12 +25,10 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
 前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
-検討してください。ARCHITECTURE と GOTCHAS は metatron が管理し、Codiel は解決されたパスから
-読み取るだけです。パスは `metatron.config.json` で変更できます。run で起きた失敗(Raguel の STOP など)の
-GOTCHAS への記録は、metatron の `recording-gotchas` スキルに任せます。metatron が無い環境では、失敗の
-記録は「未記録の GOTCHAS」として `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは
-`.codiel/reports/unrecorded-gotchas.md`)と完了報告に残り、台帳へは追記されません。後で metatron を
-導入すれば、残った記録を台帳へ移せます。
+検討してください。ARCHITECTURE と GOTCHAS は metatron の資産で、読み方と記録の仕方は metatron が伝えます。
+Codiel が使うのは、ARCHITECTURE のドメインマップ(ドメインごとの境界の判定に使う)と、review で
+ARCHITECTURE と実装の食い違いを見ることの 2 つだけです。パスは `metatron.config.json` で変更できます。
+Codiel 自身は失敗を GOTCHAS へ記録しません。
 
 Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに 1 ファイルで、intent をまたいで効き続ける
 意図的な制約を蓄積します。metatron が無い環境では、ADR の条件を満たす判断も `[ADR 候補]` の印を付けて
@@ -105,7 +103,7 @@ E2E のテストは実行のたびに、仕様のディレクトリの `reports/
 共有するのは次の置き場です。
 
 - `.codiel/config.json`
-- run の文書(`<runsDir>/<slug>/`。未記録の GOTCHAS の退避を含む)
+- run の文書(`<runsDir>/<slug>/`)
 - テストの仕様とテストコード(`<testsDir>/`)
 - E2E のレポートの `results.json`・`summary.md`・`failure.md`
 
@@ -113,7 +111,7 @@ E2E のテストは実行のたびに、仕様のディレクトリの `reports/
 `.codiel/worktrees/` は run の最初の worktree の作成時に `.git/info/exclude` へ加わります。
 
 - `.codiel/runs/`(try ごとの state・委譲の brief と報告・各回のテスト結果とレビュー所見)
-- `.codiel/reports/`(`/codiel:test` の単独実行のレポートと、run が無いときの未記録の GOTCHAS の退避)
+- `.codiel/reports/`(`/codiel:test` の単独実行のレポート)
 - `.codiel/worktrees/`
 - E2E のレポートの画像とフレームワークのほかの成果物
 

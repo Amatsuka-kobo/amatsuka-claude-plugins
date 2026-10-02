@@ -18,7 +18,7 @@ local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/
   テストの仕様の置き場は config の `testsDir`(既定 `docs/codiel/tests`)の下にある。run の文書(agenda・discussion・design・dev-plan)は `<runsDir>/<slug>/` に try で分けずに置き、コミットする。
   try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/`、`/codiel:test` の報告は `.codiel/reports/` に置き、`.gitignore` で外す(2026-09-29、M4-C。ADR-009)。
   Raguel の設定は config.json の `raguel` にあり、以前の版の YAML の設定ファイルは読まれない(init が承認を得て写してから消す)。
-- GOTCHAS の記録は metatron の `metatron:recording-gotchas` に委ねる(codiel の `recording-gotchas` スキルは 2026-09-27 に削除)。codiel が持つのは記録の契機(Raguel の STOP・ループ上限超過・incident・レビューで発覚した設計漏れ)と、CLI の案内が無いときの退避(「未記録の GOTCHAS」を `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無ければ `.codiel/reports/unrecorded-gotchas.md`)と完了報告へ持ち越す)だけで、`orchestrating-runs` の `references/failures.md` にある。
+- K12(2026-10-02): codiel の指示層(skills・references・commands)は ARCHITECTURE と GOTCHAS を読ませる規則・書き込ませる規則を持たない。残すのは §0 のドメインマップの抽出(`mapped` / `unscoped` の判定と guard-write の境界)と、review の委譲に ARCHITECTURE のパスを渡すこと(doc 観点が乖離を見る)の 2 つだけ。失敗の記録の手順 `references/failures.md` と「未記録の GOTCHAS」の退避は削除済みで、台帳の追記は metatron の担当。guard-write の `unrecorded-gotchas.md` の免除は `src/` に残っている。
 
 ## `/codiel:init` — 保護パスだけを確認する
 
@@ -173,7 +173,7 @@ Skills: `capturing-intent`, `preparing-design-agendas`, `facilitating-design-dis
 (そのため evals は持たない)。
 全スキルは commit 86b9483 で prompt-smith 標準に書き直され、2026-08-16 に契約追随の改訂が入った。
 2026-10-02 のコスト改修で、`orchestrating-runs` の本文は run の開始から要る §0〜§4(前提確認と実行モード、run の解決、フェーズ進行表、ディスパッチ規約、ドメインディスパッチ)に絞り、
-フェーズ別・共有の手順を `skills/orchestrating-runs/references/`(`phase-<フェーズ名>.md`・`delegation-env.md`・`review-common.md`・`e2e.md`・`resume.md`・`failures.md`)へ切り出した。フェーズに入るときに読む。
+フェーズ別・共有の手順を `skills/orchestrating-runs/references/`(`phase-<フェーズ名>.md`・`delegation-env.md`・`review-common.md`・`e2e.md`・`resume.md`)へ切り出した。フェーズに入るときに読む。
 ほかのスキルも HARD-GATE と Red Flags を持たず(その条項は本文の手順へ統合)、場面限定の手順は各スキルの `references/` にある。
 GitHub の執筆規則は `references/github-writing.md` と、画像の載せ方の `github-writing-images.md`、PR 本文の `github-writing-pr.md` に分かれた。
 フェーズの境目で委譲の待ち(`waits`)が空なら、ユーザーは新しいセッションへ移り `/codiel:run` で再開してよい(P7)。

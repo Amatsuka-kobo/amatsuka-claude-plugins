@@ -102,7 +102,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 1. 所見(`ruleId`・`severity`・`message`)と `decisionPoint`・`reasons`・`casePath` を読み、何がどこで引っかかったかを要約する。
 2. `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind raguel --evaluation-id <evaluationId>`
-   で run を `awaiting_human` にして停止する。
+   で run を `awaiting_human` にして停止する。test-spec と dev-plan の並列のゲートで片方が ASK になったときは、
+   `references/parallel-gates.md` を Read して従う。
 3. AskUserQuestion で人の裁定を聞く。質問文の中に、懸念の要約(何が、どこで)と `decisionPoint` を入れる。
    応答の本文だけに書いて質問文を短くしない。所見の原文(`message` や `evidence` の全文)は質問文に添えない。
    選択肢は「修正して再提出」「このまま承認」「中止」である。
@@ -164,17 +165,11 @@ verdict を上書きしない。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "false-positive"`、STOP の `evaluationId`、
       `notes` に誤検知と裁定した所見と理由)を記録する。失敗したら `pass-gate` に進まず、失敗を人に示す。
-   2. `../orchestrating-runs/references/failures.md` の退避の形で、`<runsDir>/<slug>/unrecorded-gotchas.md` の
-      `## 未記録の GOTCHAS` に 1 件書く。`<runsDir>` は `codiel-state config` の出力から取る。run が無いときの退避先は
-      `.codiel/reports/unrecorded-gotchas.md` である。`title` は「Raguel の誤検知: <ruleId>」で始める。metatron の CLI の
-      案内があっても、台帳へは書かない(誤検知は対象プロジェクトの失敗ではなく、Raguel の作り直しの材料である)。
-   3. `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` の後に
+   2. `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` の後に
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
-   4. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
-4. 妥当として止めるときは、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止め、
-   続けて `../orchestrating-runs/references/failures.md` に従い、失敗の内容を GOTCHAS に記録する
-   (STOP は最も学習価値の高い失敗)。
+   3. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
+4. 妥当として止めるときは、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。
 
 ### ループ上限超過
 

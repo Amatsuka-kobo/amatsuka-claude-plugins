@@ -11,7 +11,6 @@ digraph preparing_design_agendas {
   node [fontname="sans-serif"];
 
   read_issue [label="intent を読む\n(要求/受け入れ基準/未確定事項)", shape=box];
-  read_docs [label="ARCHITECTURE.md / GOTCHAS.md を読む", shape=box];
   read_code [label="影響しそうな既存コードを Read", shape=box];
   extract [label="how の論点を抽出\n(実現方法の分岐/未確定事項)", shape=box];
   unknowns [label="intent の未確定事項を\n全件論点化したか?", shape=diamond];
@@ -21,7 +20,7 @@ digraph preparing_design_agendas {
   fix [label="根拠不明な論点を削除/修正\n漏れた分岐を追加", shape=box];
   done [label="agenda.md を書き終える\n(agenda.md パス + 論点数)\n※コミットもオーケストレーター", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
-  read_issue -> read_docs -> read_code -> extract -> unknowns;
+  read_issue -> read_code -> extract -> unknowns;
   unknowns -> extract [label="No: 落ちている不明点あり"];
   unknowns -> options [label="Yes"];
   options -> write -> selfcheck;
@@ -70,7 +69,6 @@ digraph writing_design_docs {
 
   read_issue [label="intent を読む\n(要求/受け入れ基準/未確定事項)", shape=box];
   read_discussion [label="discussion.md を読む\n(合意の決定/未決を確認)", shape=box];
-  read_docs [label="ARCHITECTURE.md / GOTCHAS.md を読む", shape=box];
   read_existing [label="変更対象の既存ファイルを Read", shape=box];
   map_criteria [label="受け入れ基準を\n方針/変更対象に対応付け", shape=box];
   check_criteria [label="満たされない基準が\n残っていないか?", shape=diamond];
@@ -86,7 +84,7 @@ digraph writing_design_docs {
   done [label="design.md を書き終える\n(design.md パス + 影響 unit 数)\n※コミットもオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ndesign ゲート(evaluate_design)\nへ引き継ぎ", shape=ellipse];
 
-  read_issue -> read_discussion -> read_docs -> read_existing -> map_criteria -> check_criteria;
+  read_issue -> read_discussion -> read_existing -> map_criteria -> check_criteria;
   check_criteria -> map_criteria [label="No: 未対応の基準あり"];
   check_criteria -> alternatives [label="Yes"];
   alternatives -> targets -> units -> yagni;
@@ -154,7 +152,7 @@ digraph writing_dev_plans {
   node [fontname="sans-serif"];
 
   read_design [label="design.md を読む\n(目的/方針/変更対象/影響unit)", shape=box];
-  read_arch [label="ARCHITECTURE.md を読む\n(ドメインマップ/コマンド定義/テスト方針)", shape=box];
+  read_arch [label="§0 で決めた実行モードと\nドメインマップを使う", shape=box];
   group [label="変更対象をドメインマップの\nglob で突き合わせグルーピング", shape=box];
   split_check [label="1件の変更が\n複数ドメインにまたがる?", shape=diamond];
   split [label="ドメインごとに変更内容を分割", shape=box];
@@ -196,7 +194,7 @@ digraph implementing {
   node [fontname="sans-serif"];
 
   read_plan [label="dev-plan.md を読み\n自ステップの通すテストを確認\n(worktree なら brief.md も Read)", shape=box];
-  read_arch [label="ARCHITECTURE.md\n(ドメインマップ/コマンド定義/テスト方針)\nGOTCHAS.md を読む", shape=box];
+  read_arch [label="渡された実行モード・\nドメインマップ・担当タグを確認", shape=box];
   mode [label="呼び出しモードは?", shape=diamond];
 
   install [label="worktree の中で\n依存をインストール\n(brief の環境準備、無ければ既定)", shape=box];
@@ -536,10 +534,9 @@ digraph raguel_gate {
 
   stop_mark [label="mark-ask <phase> --slug <slug>\n--kind raguel --verdict STOP\n--evaluation-id <STOPのevaluationId>", shape=box, style=filled, fillcolor="#ffcccc"];
   stop_ask [label="AskUserQuestion:\n誤検知として続けるか\n妥当として止めるか?", shape=diamond, style=filled, fillcolor="#ffcccc"];
-  stop_misdetect [label="record_outcome(approved)\n+ 未記録の GOTCHAS へ退避\n(台帳には書かない)", shape=box];
+  stop_misdetect [label="record_outcome(approved,\nruling: false-positive)", shape=box];
   stop_pass [label="resume の後に\npass-gate <phase> --slug <slug>\n--verdict STOP --human-approved", shape=box, style=filled, fillcolor="#ccffcc"];
   stop_valid [label="stop --slug <slug>\n--reason raguel-stop", shape=box, style=filled, fillcolor="#ffcccc"];
-  gotchas [label="失敗の記録\n(orchestrating-runs の\nreferences/failures.md)", shape=box];
   stopped [label="run 終了(stopped)", shape=ellipse];
 
   evaluate -> verdict;
@@ -568,8 +565,7 @@ digraph raguel_gate {
   stop_pass -> next [label="次フェーズへ\n(所見は引き継ぐ)"];
   stop_ask -> stop_valid [label="妥当として止める"];
 
-  stop_valid -> gotchas;
-  gotchas -> stopped;
+  stop_valid -> stopped;
 }
 ```
 
@@ -604,7 +600,7 @@ digraph codiel_run {
   finalize [label="[finalize]\n原文の要望ごとに達成/未達/要確認/\n持ち越しを判定し status を決める", shape=box];
 
   human [label="人間の裁定待ち\n(awaiting_human)", shape=box, style=filled, fillcolor="#fff2cc"];
-  stopped [label="run 停止\n失敗の記録", shape=box, style=filled, fillcolor="#ffcccc"];
+  stopped [label="run 停止", shape=box, style=filled, fillcolor="#ffcccc"];
   outcome [label="run 完了\n(awaiting_outcome)\n次回起動時に outcome 自動同期", shape=ellipse];
   intentonly [label="run 完了\n(intent-only。close --reason intent-only)", shape=ellipse];
 
@@ -639,28 +635,5 @@ digraph codiel_run {
   human -> stopped [label="裁定: 中止"];
   human -> implement [label="裁定A: 修正して再提出\n(該当フェーズへ)", style=dashed];
   human -> pr [label="裁定B: as-is承認\n(--human-approved で次へ)", style=dashed];
-}
-```
-
-## orchestrating-runs(references/failures.md の失敗の記録)
-
-```dot
-digraph recording_failures {
-  rankdir=TB;
-  node [fontname="sans-serif"];
-
-  trigger [label="契機発生\n(STOP/ループ上限超過で中止/incident/\nレビューで発覚した設計漏れ)", shape=box];
-  guide [label="metatron の CLI の案内が\nコンテキストにあるか?", shape=diamond];
-  metatron [label="metatron:recording-gotchas を起動\n(判断・書式・採番・タグはそのスキル)", shape=box];
-  shelve [label="<runsDir>/<slug>/unrecorded-gotchas.md の\n## 未記録の GOTCHAS に退避\n(run が無いときは .codiel/reports/)\n(title/task/mistake/cause/\ncountermeasure/promotionCandidate)", shape=box];
-  report [label="完了報告にも載せ、\n台帳へ入れる手段を添える\n(append-gotcha または /metatron:init)", shape=box];
-  commit [label="git commit\n\"codiel(gotchas): ... (<slug> try-<n>)\"", shape=box, style=filled, fillcolor="#ccffcc"];
-
-  trigger -> guide;
-  guide -> metatron [label="あり"];
-  guide -> shelve [label="なし\n(run は止めない)"];
-  shelve -> report;
-  metatron -> commit [label="記録した"];
-  report -> commit;
 }
 ```

@@ -46,7 +46,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 3. ベースブランチの名前を解決し、`git switch <ベース> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。以降、このブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
 4. 入口が intent パスのときは、手順 2 の前に `references/carry-over-intent.md` を Read して従う。前の try の run ブランチからの intent の持ち込みと、前の try が STOP で止まっていたときの確認を扱う。
 
-`configWarnings` が空でないときは、その項目のパス設定が拒否されて既定値に落ちているか、ARCHITECTURE の構造に指摘がある。読めた文書だけで進み、警告の内容を完了報告に残す。
+`configWarnings` が空でないときは、その項目のパス設定が拒否されて既定値に落ちているか、ドメインマップの読み取りに指摘がある。読めた文書だけで進み、警告の内容を完了報告に残す。
 
 ## 2. 入口の分岐
 
@@ -82,10 +82,9 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ASIS はユーザーに聞かず自分で読む。`## 現状調査` は AI がコードと文書を読んで書く。ユーザーに聞くのは、読んでも分からないこと(何を達成したいか、どうなったら完了か)だけである。読んで確かめられなかったことは書かない。
 
-優先順は ARCHITECTURE → `CLAUDE.md` → GOTCHAS → `README.md` とする。
+文書は `CLAUDE.md` → `README.md` の順に読む。
 
-- パスは手順 1 の解決結果を使う。固定パスで開かない。
-- セッション開始時にコンテキストへ注入済みの ARCHITECTURE や GOTCHAS 要約は、読み直さない。注入が縮退していて、全文が判断に必要なときは `contextDocs` のパスを Read する。
+- パスは手順 1 の `contextDocs` のうち、`CLAUDE.md` と `README.md` のものを使う。固定パスで開かない。
 - 探索を委譲するときは、解決済みの絶対パスを渡して委譲先に読ませる。注入はサブエージェントに継承されない。
 - 探索範囲は TOBE に登場する語から辿れる範囲に限定する。
 - Serena が利用可能なら優先して使う(`get_symbols_overview` / `find_symbol` / `find_referencing_symbols`)。利用できなければ Grep / Glob / Read で代替する。

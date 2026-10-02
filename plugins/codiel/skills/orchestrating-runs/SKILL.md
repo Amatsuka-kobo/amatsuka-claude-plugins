@@ -35,8 +35,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
       raguel-gating でゲート → pass-gate/complete-phase)を順に実行する。ドメイン別のディスパッチは
       §4 の set-domain / clear-domain を伴う。discuss は raguel-gating を経ず、facilitating-design-discussions
       に従って進行し、complete-phase で完了する
-- [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に従い、人の裁定を受けてから続ける。
-      失敗の記録の契機が起きたら `references/failures.md` に従って記録する
+- [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に従い、人の裁定を受けてから続ける
 - [ ] 5. 全フェーズが `passed` になったら、`references/phase-finalize.md` の手順で結果レポートと intent の
       `status` を確定してから `codiel-state finalize --slug <slug>` を呼び、結果レポートを出力して終了する
 
@@ -48,7 +47,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 手順 1・2 の 4 つのコマンドは run ごとに 1 回だけ実行し、以降は得た値を各所へ渡す。サブエージェントには
 解決させない。`<plugin-root>` は絶対パスに展開して実行する。
 
-1. 対象プロジェクトのルートで次を実行し、ARCHITECTURE / GOTCHAS のパスとドメインマップの状態を解決する。
+1. 対象プロジェクトのルートで次を実行し、ARCHITECTURE のパスとドメインマップの状態を解決する。
 
    ```
    node -e 'import("<plugin-root>/scripts/lib.mjs").then(({ resolveDocPaths, readDomainsResult }) => {
@@ -113,7 +112,6 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    実行するよう添える。
 7. 出力の `warnings` が空でなければ、その全文をユーザーへ提示してから次へ進む。手順 2 の出力の
    `configWarnings` が空でないときも同様に提示する。警告だけを理由に run を止めない。
-8. GOTCHAS はファイルが無くても終了せず、各所でスキップする。
 
 ## 1. run の解決
 
@@ -152,17 +150,17 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 
 | フェーズ | 委譲の種別と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 |
 |---|---|---|---|---|---|
-| [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
-| [discuss] | オーケストレーター本体がアジェンダを書き、進行する。intent → `agenda.md` | preparing-design-agendas | intent、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) |
-| [design] | オーケストレーター本体が書く。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ)、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を行い、新しい画面の名前を聞いてから evaluate する |
+| [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
+| [discuss] | オーケストレーター本体がアジェンダを書き、進行する。intent → `agenda.md` | preparing-design-agendas | intent | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) |
+| [design] | オーケストレーター本体が書く。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を行い、新しい画面の名前を聞いてから evaluate する |
 | [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、成果物を書く委譲を出して待ちを記録し、その間に dev-plan を書いてゲートする。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) |
 | [dev-plan] | オーケストレーター本体が書く。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) |
 | [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列に出す。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、`report.md`(委譲先の返答からオーケストレーターが書く) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 |
-| [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列に出す。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは実行の委譲を出す | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E)、ARCHITECTURE、GOTCHAS(§0 で解決したパス。無ければスキップ) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
+| [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列に出す。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは実行の委譲を出す | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
 | [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の委譲の返答を合わせてオーケストレーターが書く)、修正 diff | pass-gate(`evaluate_code`) |
 | [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) |
 | [pr] | オーケストレーター本体が、github では PR を作り、local では state に記録する | なし | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ | complete-phase(github のときだけ `--pr-url` 必須) |
-| [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層 | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
+| [review] | 読み取りだけの委譲(観点ごと)。`git diff <base>...<branch>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <base>...<branch>`、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
 | [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。修正の度) |
 | [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) |
 | [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | なし | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(`complete-phase` ではない) |
@@ -203,23 +201,22 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
 | `references/e2e.md` | E2E を実行する委譲を出す前 |
-| `references/failures.md` | 失敗の記録の契機が起きたとき。契機は、人が Raguel の STOP を妥当と裁定した、`record-attempt` の上限超過の後に中止が確定した、`record_outcome(incident)` を記録した、レビューで設計時に想定していなかった漏れが見つかって fix-loop を終えた、の 4 つである |
 | `references/resume.md` | run を再開するとき |
 
 手順ファイルは次の 4 つの契機で読む。
 
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
-2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`failures.md`)を使う手順に入る前。読む時点は
+2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`)を使う手順に入る前。読む時点は
    上の表に従う。fix-loop の再レビューでは、委譲を出す前に `review-common.md` を読む。
 3. run を再開するとき。`resume.md` を読み、待ちの処理や委譲の出し直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の
    フェーズすべての手順ファイルと、それらが使う共有の手順を読む。test-spec と dev-plan はどちらが該当しても
-   `phase-test-spec.md` を読む。
+   `phase-test-spec.md` を読む。triage が `passed` で finalize がまだ完了していない run では、`phase-finalize.md` も読む。
 4. compaction が起きたとき。会話の先頭が前の会話の要約で始まっていれば、compaction が起きている。次の順で読み直す。
    1. このスキルの本文を Read し直す。
    2. 続行中の run の slug を要約から取り、`codiel-state get --slug <slug>` で state を読む。要約に slug が
-      無ければ `codiel-state get --active` を呼び、結果のうち `status` が `active` の run を使う。`get --active`
+      無ければ `codiel-state get --active` を呼び、結果のうち `status` が `active` か `awaiting_human` の run を使う。`get --active`
       は `awaiting_outcome` の run も返すので、`status` で絞る。該当が 0 件か 2 件以上なら、人に確かめる。
    3. 契機 3 と同じ範囲の手順ファイルを読む。
    4. ほかのスキルは、そのスキルを使う手順に入ったときに読む。
@@ -341,8 +338,7 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 - <出力ファイルのパス>
 
 ## 前提
-- ARCHITECTURE: <§0 で解決した絶対パス。存在しなければ「なし」>
-- GOTCHAS: <§0 で解決した絶対パス。存在しなければ「なし」>
+- ARCHITECTURE: <review と再レビューの委譲のときだけこの行を書く。§0 で解決した絶対パス。存在しなければ「なし」>
 - 実行モード: <mapped | unscoped>
 - ドメインマップ: <mapped のときは §0 で読み取った JSON の全文。unscoped のときは「なし」>
 - testsDir: <§0 で得た値>

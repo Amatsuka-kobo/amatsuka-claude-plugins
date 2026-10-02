@@ -241,7 +241,7 @@ D47(`backend.md`・`frontend.md` の「注意する」だけの項目の削除)�
 `orchestrating-runs` の本文に次を書く。
 
 - 会話の先頭が、前の会話の要約で始まっているときは、compaction が起きている。このときは、`orchestrating-runs` の本文を Read し直す。
-- 続行中の run の slug を要約から取り、`codiel-state.mjs get --slug <slug>` で state を読む。要約に slug が無ければ、`get --active` の結果のうち `status` が `active` の run を使う。`get --active` は `awaiting_outcome` の run も返すので、`status` で絞る。該当が 0 件か 2 件以上なら、人に確かめる。
+- 続行中の run の slug を要約から取り、`codiel-state.mjs get --slug <slug>` で state を読む。要約に slug が無ければ、`get --active` の結果のうち `status` が `active` か `awaiting_human` の run を使う。`get --active` は `awaiting_outcome` の run も返すので、`status` で絞る。該当が 0 件か 2 件以上なら、人に確かめる。
 - §5.3.1 の再開と同じ範囲(`in_progress` か `awaiting_human` のフェーズすべての手順ファイルと、それらが使う共有の手順)を読む。
 - ほかのスキルは、そのスキルを使う手順に入ったときに読む。
 

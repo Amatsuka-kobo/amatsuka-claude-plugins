@@ -7,4 +7,3 @@
 - 所見がテストに向くと `fixing-review-findings` の検証で確かめたら、`set-test-edit --slug <slug>` を実行してからテスト側の修正を委譲する。その委譲を `wait-done` した直後に `clear-test-edit --slug <slug>` を実行し、その後でコードの修正を委譲する。
 - github モードでは、修正のコミットが済んだ後、再レビューの委譲の前に `git push` して PR ブランチを最新化する。
 - 再レビューの委譲を出す前に `references/review-common.md` を Read し、その規則で観点を選び直す。統合した報告は `review-<m+1>.md` に書く。
-- レビューで設計時に想定していなかった仕様漏れ・考慮漏れが見つかったときは、fix-loop を終えた時点で `references/failures.md` に従って記録する。

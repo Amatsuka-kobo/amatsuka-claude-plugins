@@ -34,7 +34,6 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §7
 - [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` の GOTCHAS の承認節
 - [ ] `plugins/metatron/references/cli-usage.md` の `init-gotchas` の節
-- [ ] codiel: `skills/orchestrating-runs/references/failures.md`の退避エントリのキー(`append-gotcha` の入力 JSON のキーと揃える。エントリ書式の写しは持たない)
 - [ ] `plugins/metatron/docs/GOTCHAS.example.md` の冒頭の記入ガイド
 - [ ] `plugins/metatron/skills/recording-gotchas/SKILL.md` の `description` と `## 1. 記録の可否`
 - [ ] `plugins/raphael/skills/raphael/SKILL.md` と `plugins/raphael/agents/antibody-synthesizer.md`(棲み分けの節を変えたときだけ確認する)
