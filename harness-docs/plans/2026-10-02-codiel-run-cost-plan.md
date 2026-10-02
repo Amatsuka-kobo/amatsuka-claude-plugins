@@ -50,7 +50,7 @@
 | `C/skills/raguel-gating/SKILL.md:190・199・246` | `orchestrating-runs` の「7. 失敗の記録」(L190 は番号を付けずに退避の形を指す) | `orchestrating-runs` の `references/failures.md` | Task 4 |
 | `C/skills/capturing-intent/SKILL.md:49` | `orchestrating-runs` の再開手順(§6) | `orchestrating-runs` の `references/resume.md` | Task 3 |
 | `C/docs/DESIGN.md:673` | `orchestrating-runs` の「7. 失敗の記録」 | `orchestrating-runs` の `references/failures.md` | Task 8 |
-| `plugins/metatron/docs/format-change-checklist.md:37` | codiel の `orchestrating-runs/SKILL.md` の「7. 失敗の記録」 | codiel の `skills/orchestrating-runs/references/failures.md` | Task 8(ユーザーの承認が要る。未決事項) |
+| `plugins/metatron/docs/format-change-checklist.md:37` | codiel の `orchestrating-runs/SKILL.md` の「7. 失敗の記録」 | codiel の `skills/orchestrating-runs/references/failures.md` | Task 8(metatron のバージョンは上げない。2026-10-02 ユーザー決定) |
 
 §0・§3・2.1・2.4 への参照は、本文に残るセクションを指すので変えない。`ORS` の内部の参照(「2.6 に従う」など)は Task 2 で付け替える。
 
@@ -191,7 +191,7 @@
 役割: その他のタスク。`prompt-smith:prompt-smith` を起動してから書く(メモリは AI 向けの指示書に当たる)。Task 7 の後に行う。
 
 **Files:**
-- Modify: `C/docs/DESIGN.md`、`C/README.md`、`.serena/memories/` の該当メモリ。ルートの `README.md` に codiel の run の説明があれば、それも。未決事項の承認が得られれば `plugins/metatron/docs/format-change-checklist.md`。
+- Modify: `C/docs/DESIGN.md`、`C/README.md`、`.serena/memories/` の該当メモリ。ルートの `README.md` に codiel の run の説明があれば、それも。`plugins/metatron/docs/format-change-checklist.md`(バージョンは上げない)。
 
 - [ ] ステップ 1: `C/docs/DESIGN.md:130-132` の review の説明を、`review-common.md` の規則と食い違わないように書き換える(infra と generic を加え、doc と security を毎回選ぶことを残す)。K2 で HARD-GATE と Red Flags を廃止した理由を足す。
 - [ ] ステップ 2: Task 3・5・6 の完了報告にある、DESIGN.md へ退避する内容を DESIGN.md に足す。同じ内容が既にあれば足さない。
@@ -232,7 +232,7 @@
 ## 未決事項
 
 - 計測の題材(Task 1 のステップ 1)。
-- `plugins/metatron/docs/format-change-checklist.md:37` の付け替え。metatron の開発時のチェックリストが、codiel の「7. 失敗の記録」を指している。付け替えると metatron のファイルを変えることになり、設計書 K5 の「変更するプラグインは codiel だけ」に当たる。直すかどうかと、直すときに metatron のバージョンを上げるかをユーザーに確かめる。
+2026-10-02 にユーザーが計画書を承認した。あわせて、`plugins/metatron/docs/format-change-checklist.md:37` は Task 8 で付け替え、metatron のバージョンは上げないと決めた(開発時に読む docs/ の参照だけで、利用者に影響しない)。
 
 ## Task 1 の結果
 

@@ -12,7 +12,7 @@
 | K2 | HARD-GATE と Red Flags は両方を削る。本文の手順と重ならない条項だけを、その操作をする手順の中へ移す(§5.1) |
 | K3 | 委譲先スキルと `orchestrating-runs` §3 の dispatch テンプレートが同じ規則を持つときは、委譲先スキルの側を正本にする。テンプレートは、読むスキルと実行時の値だけを渡す(§5.2) |
 | K4 | 特定の場面でしか使わない手順は、そのスキル配下の `references/` へ切り出し、その場面に入ったときに読ませる(§5.3) |
-| K5 | codiel のバージョンは上げない(この改修で変更するプラグインは codiel だけである)。`.claude/rules/metatron/conventions.md` の Done の条件「バージョンを上げる」より、この決定を優先する |
+| K5 | codiel のバージョンは上げない。codiel 以外で変えるのは、metatron の開発時のチェックリスト(`plugins/metatron/docs/format-change-checklist.md`)の参照 1 か所だけで、metatron のバージョンも上げない(実装計画書の承認時、2026-10-02 ユーザー決定)。`.claude/rules/metatron/conventions.md` の Done の条件「バージョンを上げる」より、この決定を優先する |
 | K6 | 施策 P1(review の観点を選ぶ規則、§6.1)を採る |
 | K7 | 施策 P3(改修の前後の計測、§7)を採り、受け入れ基準にする |
 | K8 | 施策 P4(compaction の後の読み直し、§6.2)を採る |
