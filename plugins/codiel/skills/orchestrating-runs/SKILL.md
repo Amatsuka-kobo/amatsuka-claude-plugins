@@ -28,7 +28,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 ## チェックリスト
 
 - [ ] 0. 前提確認・実行モード・連携モードの決定を行う(§0)。停止条件に当たればここで終了する
-- [ ] 1. outcome の自動同期を行う(`raguel-gating` の「outcome の自動同期」に従う。起動時に 1 回だけ)
+- [ ] 1. outcome の自動同期を行う(`<plugin-root>/skills/raguel-gating/references/outcome-sync.md` に従う。起動時に 1 回だけ)
 - [ ] 2. run を解決する。`codiel-state get --active` でほかの run が active でないことを確かめ、
       intent フェーズ(`capturing-intent` スキル)へつないで run を開始または再開する(§1)
 - [ ] 3. 現在のフェーズから、フェーズ進行表の定型(start-phase → 手順ファイルを読む → ディスパッチ → 成果物の検証 →
@@ -365,7 +365,7 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 
 観点ファイルは次の規則で依頼文に足す。観点ファイルの存在はオーケストレーターが `Glob` か `ls` で確かめ、委譲先に探させない。
 
-- 実装の委譲(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。
+- 実装の委譲(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。`worktree.md`・`e2e.md`・`fix-mode.md` は手順ファイルで観点ファイルではないので、選ばない。
 - review と再レビューの観点は、`references/review-common.md` の規則で選ぶ。
 
 ディスパッチの後、成果物のファイルが実際に存在し空でないことを確かめてから、raguel-gating のゲート手順に進む。サブエージェントの報告だけで完了としない。

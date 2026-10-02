@@ -10,7 +10,7 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    ```
    - 対象は、`.github/`・リポジトリのルート・`docs/` にある `pull_request_template.md` / `.txt`(大文字小文字を区別しない)だけにする。`.github/` → ルート → `docs/` の順で、最初に見つかったものを使う。
    - `PULL_REQUEST_TEMPLATE/` の下にしかヒットが無いときは使わない。
-2. 本文を組み立てる。内容は `<plugin-root>/references/github-writing.md` の「PR 本文」に従い、要望・経緯は転記せずリンクだけを置く。
+2. 本文を組み立てる。内容は `<plugin-root>/references/github-writing-pr.md` に従い、要望・経緯は転記せずリンクだけを置く。
    - テンプレートを使うときは、見出しの構成を保ち、記入の案内の HTML コメントを消す。`<!-- codiel:generated -->` などの codiel のマーカーは残す。
    - codiel が必ず書く項目(変更の説明、intent 文書へのリンク、Issue を入口にした run の `Closes #N`、テストの結果)に当たる見出しが無ければ、末尾に足す。
    - PR 本文に入れない内容(要望・受け入れ基準・原文・run の経緯)を求める見出しには、intent 文書へのリンクを書く。

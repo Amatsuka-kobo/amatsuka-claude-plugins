@@ -19,7 +19,7 @@ triage は非 GATED フェーズであり、Raguel の `evaluate_*` は経ない
 連携モードで手順が分かれる。github モードは Issue として起票し、手順は本文の「github モードのチェックリスト」に従う。
 local モードは `status: proposed` の intent 草案を `docs/intents/` に書き、`references/local-mode.md` を Read して従う。
 
-github モードで投稿する本文の文の組み立てと画像の載せ方は `../../references/github-writing.md` に従う。
+github モードで投稿する本文の文の組み立ては `../../references/github-writing.md` に、画像の載せ方は `../../references/github-writing-images.md` に従う。
 
 ## プラグインルート参照規約
 

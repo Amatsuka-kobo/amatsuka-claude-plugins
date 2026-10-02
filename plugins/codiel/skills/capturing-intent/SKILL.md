@@ -22,7 +22,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 - 経路の選択と承認、畳む経路の判断は `../../references/intent-common.md` に従う。
 - intent 文書と intent-issue の書式は `../../references/intent-format.md` に従う。
-- 変更ごとの intent の文の組み立ては `../../references/intent-writing.md` に、GitHub へ投稿する本文の文の組み立てと画像の載せ方は `../../references/github-writing.md` に従う。
+- 変更ごとの intent の文の組み立ては `../../references/intent-writing.md` に、GitHub へ投稿する本文の文の組み立ては `../../references/github-writing.md` に、画像の載せ方は `../../references/github-writing-images.md` に従う。
 - gh-utility の `issue-craft` へ委譲するときの契約は `../../references/handoff-contract.md` に従う。
 - ディスカッションの言語はユーザーの使用言語に従う。intent 文書と issue 本文の言語は手順 4 で 1 回だけ別に確認する。
 

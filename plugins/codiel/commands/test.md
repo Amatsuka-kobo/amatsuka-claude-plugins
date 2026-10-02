@@ -22,4 +22,4 @@ codiel プラグインの running-regression-tests スキルを Skill ツール�
 - E2E のレポートは `.codiel/reports/test-run-<日時>/<仕様のディレクトリの ID>/` にだけ置き、
   testsDir の `reports/` には書かないでください。`failure.md` の直し方は「なし」と理由(単独の実行は報告だけを行う)を書いてください
 - NG があってもコード修正はディスパッチせず、報告のみ行ってください
-- 起動時に raguel-gating スキルの「outcome の自動同期」を実行してください
+- 起動時に `<plugin-root>/skills/raguel-gating/references/outcome-sync.md` の手順を実行してください

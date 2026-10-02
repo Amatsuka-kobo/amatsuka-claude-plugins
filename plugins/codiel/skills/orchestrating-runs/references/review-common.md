@@ -23,7 +23,7 @@ review に入ったときと、fix-loop で再レビューの委譲を出す前�
 2. local モードでは投稿しない。`review-<m>.md` の記録だけを成果物とする。
 3. github モードでは、`<plugin-root>/references/github-writing.md` の執筆規則でレビュー本文を組み立てて投稿する。
    - 概要(件数・severity の内訳・fix-loop の対象の有無)に `<!-- codiel:generated -->` を含める。
-   - テストで得たスクリーンショットなど関連する画像があれば、`github-writing.md` の画像の載せ方にあるレビュー本文の縮退の順序で載せる。
+   - テストで得たスクリーンショットなど関連する画像があれば、`<plugin-root>/references/github-writing-images.md` にあるレビュー本文の縮退の順序で載せる。
    - 本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md` に書き、別の Bash 呼び出しで `gh pr review <PR番号> --comment --body-file .codiel/runs/<slug>/try-<n>/reports/review-body-<m>.md` を実行する。
 4. github モードでは、各所見の「対象」(`src/...:42` の形)に対応する行コメントを投稿する。
    - 本文に `<!-- codiel:generated -->` を含め、所見ごとに Write ツールで `.codiel/runs/<slug>/try-<n>/reports/review-comment-<連番>.md` に書く。連番は同じ try の中で通し番号とし、レビューの回をまたいでも振り直さない。
