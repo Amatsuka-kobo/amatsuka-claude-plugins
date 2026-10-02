@@ -72,19 +72,19 @@
 - Create: `tools/codiel_run_usage.py`
 - Modify: この計画書(「Task 1 の結果」)
 
-- [ ] ステップ 1: 題材を決める。既存のサンドボックス(`~/codiel-speedup`〜`~/codiel-speedup3`)の題材が、E2E を含む全フェーズに到達するかを確かめる。到達しなければ、小さなリポジトリと確定済みの intent 文書を新しく用意する。どちらにするかをユーザーに確かめる(設計書 §11)。題材の開始コミットを決めて記録する。
-- [ ] ステップ 2: サンドボックスが読む codiel のパスを確かめる。`~/codiel-speedup3` の transcript では、codiel のスキルをこの worktree(`/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins-intent-driven-development/plugins/codiel/`)から読んでいた(2026-10-02 に確かめた)。改修前の計測は Task 2 より前に行うので、この worktree の codiel がそのまま改修前の codiel になる。計測の前に、この worktree の `C/skills/`・`C/references/`・`C/commands/` が `d53db58` と同じであることを `git diff d53db58 -- plugins/codiel/skills plugins/codiel/references plugins/codiel/commands` で確かめる。
-- [ ] ステップ 3: 計測の記録項目(細目の決定)を記録する表を「Task 1 の結果」に用意する。
-- [ ] ステップ 4: `tools/codiel_run_usage.py` を作る。仕様は設計書 §7.1 と細目の決定(計測の run の特定・待ちの履歴の復元・手順ファイルの Read の確認・自己検証)のとおりで、要点は次のとおりである。
+- [x] ステップ 1: 題材を決める。既存のサンドボックス(`~/codiel-speedup`〜`~/codiel-speedup3`)の題材が、E2E を含む全フェーズに到達するかを確かめる。到達しなければ、小さなリポジトリと確定済みの intent 文書を新しく用意する。どちらにするかをユーザーに確かめる(設計書 §11)。題材の開始コミットを決めて記録する。
+- [x] ステップ 2: サンドボックスが読む codiel のパスを確かめる。`~/codiel-speedup3` の transcript では、codiel のスキルをこの worktree(`/home/hiro0209/amatsuka-kobo/amatsuka-claude-plugins-intent-driven-development/plugins/codiel/`)から読んでいた(2026-10-02 に確かめた)。改修前の計測は Task 2 より前に行うので、この worktree の codiel がそのまま改修前の codiel になる。計測の前に、この worktree の `C/skills/`・`C/references/`・`C/commands/` が `d53db58` と同じであることを `git diff d53db58 -- plugins/codiel/skills plugins/codiel/references plugins/codiel/commands` で確かめる。
+- [x] ステップ 3: 計測の記録項目(細目の決定)を記録する表を「Task 1 の結果」に用意する。
+- [x] ステップ 4: `tools/codiel_run_usage.py` を作る。仕様は設計書 §7.1 と細目の決定(計測の run の特定・待ちの履歴の復元・手順ファイルの Read の確認・自己検証)のとおりで、要点は次のとおりである。
   - 入力: project ディレクトリとセッション ID の並び。各セッションの transcript と `<session>/subagents/` の transcript を読む。
   - 重複除去: `message.id` ごとに最後の行の usage を採る。
   - 割り振り: 委譲先は、transcript から復元した待ちの履歴(`phase`・`taskId`)で割り振り、`taskId` の無いものは「未分類」。オーケストレーターは `start-phase`・`complete-phase`・`pass-gate`・`skip-phase` を呼んだ Bash の行の時刻で区間を切る。test-spec と dev-plan の並列の区間は「test-spec+dev-plan」。
   - 出力: フェーズ別・委譲別・合計の 4 種類の usage、review フェーズの委譲の数、フェーズの区間ごとに Read したファイルの一覧を、JSON と表で出す。
   - 完了報告に、`--self-check` の結果と、このリポジトリの transcript に当てた出力の抜粋を添える。
-- [ ] ステップ 5: 細目の決定「計測の開始状態」の手順で題材を戻してから、改修前の codiel で run を回す。1 つのセッションで finalize まで回し、セッションを切り替えない。これを 2 回行い、各回の記録項目を書く。
-- [ ] ステップ 6: 改修前の codiel で `/codiel:test` を、引数なしと引数ありの 2 通りで実行し、レポートの置き場と項目を記録する。
-- [ ] ステップ 7: 道具で 2 回分を集計し、review に出た観点の数と名前も記録する(設計書 §9 の「改修前の run が何観点を出すか」)。
-- [ ] ステップ 8: 結果を「Task 1 の結果」に書いてコミットする。道具(ステップ 4)と結果は別のコミットにする。
+- [x] ステップ 5: 細目の決定「計測の開始状態」の手順で題材を戻してから、改修前の codiel で run を回す。1 つのセッションで finalize まで回し、セッションを切り替えない。これを 2 回行い、各回の記録項目を書く。
+- [x] ステップ 6: 改修前の codiel で `/codiel:test` を、引数なしと引数ありの 2 通りで実行し、レポートの置き場と項目を記録する。
+- [x] ステップ 7: 道具で 2 回分を集計し、review に出た観点の数と名前も記録する(設計書 §9 の「改修前の run が何観点を出すか」)。
+- [x] ステップ 8: 結果を「Task 1 の結果」に書いてコミットする。道具(ステップ 4)と結果は別のコミットにする。
 
 ### Task 2: orchestrating-runs を分割し、手順ファイルを作る
 
