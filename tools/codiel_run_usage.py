@@ -9,13 +9,84 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 from collections import OrderedDict
 
 KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 PARALLEL = "test-spec+dev-plan"
-PHASE_CMD = re.compile(r"codiel-state\.mjs\s+(start-phase|complete-phase|pass-gate|skip-phase|wait-add)\b([^\n;&|]*)")
+PHASE_VERBS = r"(start-phase|complete-phase|pass-gate|skip-phase|wait-add|finalize)\b([^\n;&|]*)"
+HEREDOC = re.compile(r"(<<-?[ \t]*(['\"]?)(\w+)\2[^\n]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|$)", re.S)
+ASSIGN = re.compile(r"(?:^|[\s;&|(])(\w+)=(?:\"([^\"\n]*)\"|'([^'\n]*)'|([^\s;&|'\"]*))")
+READ_CMDS = {"cat", "head", "tail", "sed", "less", "more", "nl"}
+VALUE_OPTS = {"head": {"-n", "-c"}, "tail": {"-n", "-c"}, "sed": {"-e", "-f"}}
+
+
+def shell_text(cmd):
+    """heredoc の本文を除く。本文はファイルへ書く文章で、コマンドとしては実行されない。"""
+    return HEREDOC.sub(r"\1", cmd)
+
+
+def shell_vars(text):
+    """コマンドの中の NAME=値 の代入。引用符は外す。"""
+    return {m.group(1): next(g for g in m.groups()[1:] if g is not None) for m in ASSIGN.finditer(text)}
+
+
+def phase_cmds(cmd):
+    """codiel-state.mjs の呼び出しを、S="node .../codiel-state.mjs" と置いた変数経由($S)の分も含めて順に返す。"""
+    text = shell_text(cmd)
+    heads = [r"codiel-state\.mjs"] + [
+        r"\$%s\b|\$\{%s\}" % (k, k) for k, v in shell_vars(text).items() if "codiel-state.mjs" in v
+    ]
+    return re.finditer(r"(?:%s)\s+%s" % ("|".join(heads), PHASE_VERBS), text)
+
+
+def bash_reads(cmd):
+    """Bash の cat・head・tail・sed などが読んだファイル。同じコマンドの中の変数の代入は展開する。"""
+    text = shell_text(cmd)
+    env = shell_vars(text)
+    lex = shlex.shlex(text.replace("\n", ";"), posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    try:
+        toks = list(lex)
+    except ValueError:
+        return []
+    out, seg, skip = [], [], False
+    for t in toks + [";"]:
+        if skip:
+            skip = False
+        elif t and set(t) <= set("();<>|&"):
+            if "<" in t or ">" in t:  # リダイレクトの先(と 2>&1 の 2)は引数ではない
+                skip = True
+                if seg and seg[-1].isdigit():
+                    seg.pop()
+                continue
+            out += seg_reads(seg, env)
+            seg = []
+        else:
+            seg.append(t)
+    return out
+
+
+def seg_reads(seg, env):
+    while seg and re.match(r"\w+=", seg[0]):
+        seg = seg[1:]
+    name = os.path.basename(seg[0]) if seg else ""
+    if name not in READ_CMDS or (name == "sed" and any(t.startswith("-i") for t in seg)):
+        return []
+    files, script, it = [], name == "sed", iter(seg[1:])
+    for t in it:
+        if t in VALUE_OPTS.get(name, ()):
+            next(it, None)
+            script = script and t != "-e" and t != "-f"
+        elif t.startswith("-"):
+            continue
+        elif script:
+            script = False  # sed の最初の位置引数はスクリプト
+        else:
+            files.append(re.sub(r"\$\{?(\w+)\}?", lambda m: env.get(m.group(1), m.group(0)), t))
+    return files
 
 
 def zero():
@@ -82,8 +153,8 @@ def find_interval(rows):
             start = r.get("timestamp")
         if start and end is None:
             for b in blocks(r):
-                if b.get("type") == "tool_use" and b.get("name") == "Bash" and re.search(
-                    r"codiel-state\.mjs\s+finalize\b.*--slug", b["input"].get("command", "")
+                if b.get("type") == "tool_use" and b.get("name") == "Bash" and any(
+                    m.group(1) == "finalize" and "--slug" in m.group(2) for m in phase_cmds(b["input"].get("command", ""))
                 ):
                     end = r.get("timestamp")
     return start, end
@@ -134,7 +205,8 @@ def analyze_session(project_dir, sid, state):
                 spawned[b["id"]] = (label(started, done, cur), b["input"].get("description", ""))
             if b.get("type") != "tool_use" or b.get("name") != "Bash":
                 continue
-            for m in PHASE_CMD.finditer(b["input"].get("command", "")):
+            reads += [(ts, p + "  (Bash)") for p in bash_reads(b["input"].get("command", ""))]
+            for m in phase_cmds(b["input"].get("command", "")):
                 verb, args = m.group(1), m.group(2)
                 if verb == "wait-add":
                     waits.append(parse_wait(args, results.get(b["id"], ""), cur))
@@ -232,7 +304,7 @@ def render(res):
     out += [row(p, u) for p, u in res["phases"].items()]
     out += ["", "== 委譲別 ==", head]
     out += [row("%s [%s/%s]" % (d["agentId"], d["phase"], d["waitId"] or "-"), d["usage"]) for d in res["delegations"]]
-    out += ["", "review に割り振られた委譲の数: %d" % res["review_delegations"], "", "== フェーズ区間ごとの Read =="]
+    out += ["", "review に割り振られた委譲の数: %d" % res["review_delegations"], "", "== フェーズ区間ごとの Read((Bash) は Bash の cat・sed などで読んだ分) =="]
     for p, lst in res["reads"].items():
         out.append("[%s]" % p)
         out += ["  " + x for x in lst]
@@ -264,9 +336,15 @@ def self_check():
         res("T04", "t2", full),
         asst("T05", "m3", u(3, 0, 300, 3), [bash("t3", cs + "wait-add --slug s --id w-plan --purpose p")]),  # taskId なし、出力は欠ける
         res("T05", "t3", '        "taskId": "none"\n      }\n    ]\n  }\n}\n'),
-        asst("T06", "m4", u(4, 0, 400, 4), [{"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "/a.md"}}, bash("t4", cs + "pass-gate dev-plan --slug s")]),
+        asst("T06", "m4", u(4, 0, 400, 4), [
+            {"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "/a.md"}},
+            bash("t4", cs + "pass-gate dev-plan --slug s"),
+            # Bash で読んだファイル。パイプの先・リダイレクトの先・sed のスクリプト・heredoc で書く先は数えない
+            bash("t4b", "P=/p && cat $P/b.md 2>/dev/null | head -3 && sed -n 1,5p /d.md; tail -n 20 /f.log\ncat > /e.md <<'EOF'\ncat /no.md\nEOF"),
+        ]),
         asst("T07", "m5", u(5, 0, 500, 5), [bash("t5", cs + "wait-done --id w-spec --slug s; " + cs + "pass-gate test-spec --slug s")]),  # wait-done 後
-        asst("T08", "m6", u(6, 0, 600, 6), [bash("t6", cs + "start-phase review --slug s")]),
+        # 変数に置いた codiel-state.mjs 経由の呼び出し。heredoc の本文に書いた呼び出しは数えない
+        asst("T08", "m6", u(6, 0, 600, 6), [bash("t6", 'S="' + cs.strip() + "\" && cat > w.md <<'EOF'\n" + cs + "start-phase bogus --slug s\nEOF\n$S start-phase review --slug s")]),
         asst("T09", "m7", u(7, 0, 700, 7), [
             bash("t7", cs + "wait-add --slug s --id w-rev --purpose p --task-id aREV"),
             {"type": "tool_use", "id": "ag1", "name": "Agent", "input": {"description": "loop review"}},
@@ -275,7 +353,7 @@ def self_check():
         res("T09", "ag1", [{"type": "text", "text": "Async agent launched.\nagentId: aLOOP (internal ID)"}]),
         res("T09", "t9", "ok"),
         res("T09", "t7", '"phase": "review", "taskId": "aREV"'),
-        asst("T10", "m8", u(8, 0, 800, 8), [bash("t8", cs + "finalize --slug s")]),
+        asst("T10", "m8", u(8, 0, 800, 8), [bash("t8", 'S="' + cs.strip() + '" && $S finalize --slug s')]),
         asst("T11", "m9", u(99, 99, 99, 99), []),  # 区間の外
     ]
 
@@ -307,7 +385,8 @@ def self_check():
     assert "T11" not in json.dumps(r) and 99 not in r["total"].values()
     assert {x["agentId"]: x["waitId"] for x in r["delegations"]}["aSPEC"] == "w-spec"
     assert {x["agentId"]: x["waitId"] for x in r["delegations"]}["aLOOP"] == "loop review"
-    assert r["reads"][PARALLEL] == ["/a.md"], r["reads"]
+    assert r["reads"][PARALLEL] == ["/a.md", "/p/b.md  (Bash)", "/d.md  (Bash)", "/f.log  (Bash)"], r["reads"]
+    assert "bogus" not in ph, ph
     print("self-check OK")
     print(render(r))
 
