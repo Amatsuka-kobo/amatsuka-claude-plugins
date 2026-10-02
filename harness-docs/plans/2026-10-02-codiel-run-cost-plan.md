@@ -282,7 +282,7 @@
 
 ### Task 8(Task 4 の分)
 
-- `C/docs/format-change-checklist.md:22-30` の `github-writing.md` の項目(縮退の順序の表・`--attach` の条件)を、新しい 2 ファイルに合わせる。`plugins/gh-utility/docs/format-change-checklist.md:8` にも同種の記述がある(gh-utility のファイルを変えるかはユーザーに確かめる)。
+- `C/docs/format-change-checklist.md:22-30` の `github-writing.md` の項目(縮退の順序の表・`--attach` の条件)を、新しい 2 ファイルに合わせる。`plugins/gh-utility/docs/format-change-checklist.md:8` にも同種の記述がある(2026-10-02 ユーザー決定: 直し、gh-utility のバージョンは上げない)。
 - `C/docs/DESIGN.md:715` の github-writing.md の画像の載せ方の参照を、`github-writing-images.md` に直す。
 - `filing-followup-issues` の HARD-GATE から削った出典「`docs/DESIGN.md` §8 の PreToolUse(Bash)の行と §2 の [triage]」の内容が DESIGN.md にあることを確かめる。
 - C18(fixing-review-findings 手順 8)の根拠: push は再レビューの diff に影響しない。guard-bash は fix-loop と test-loop が passed の条件で push を許可する。
