@@ -6,7 +6,7 @@ review に入ったときと、fix-loop で再レビューの委譲を出す前�
 
 観点は、`<plugin-root>/skills/reviewing-diffs/references/` にある frontend・backend・data・doc・security・infra・generic の 7 つから選ぶ。
 
-- `git diff --name-only <base>...<branch>` の変更パスと内容から、frontend・backend・data・infra のうち当たる観点を選ぶ。
+- `git diff --name-only <base>...<branch>`(`<base>`・`<branch>` は、委譲の依頼文に書く「diff の範囲」の値と同じ)の変更パスと内容から、frontend・backend・data・infra のうち当たる観点を選ぶ。
 - doc と security は、変更の内容によらず毎回選ぶ。
 - generic は、frontend・backend・data・infra のどれにも当たらず、doc の担当でもない変更パスがあるときだけ選ぶ。Markdown などの文書と、run の成果物(`docs/intents/` の intent 文書、agenda・discussion・design・dev-plan)は doc の担当なので、generic を選ぶ理由にしない。
 - fix-loop の再レビューも、同じ規則で観点を選び直す。所見が出た観点だけに絞らない。
