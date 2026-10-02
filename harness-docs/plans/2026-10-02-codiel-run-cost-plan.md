@@ -95,22 +95,22 @@
 - Create: `C/skills/orchestrating-runs/references/` の `phase-test-spec.md`・`phase-test-code.md`・`phase-implement.md`・`phase-test-loop.md`・`phase-pr.md`・`phase-review.md`・`phase-fix-loop.md`・`phase-intent-sync.md`・`phase-finalize.md`・`delegation-env.md`・`review-common.md`・`e2e.md`・`resume.md`・`failures.md` の 14 本
 - 入力: 設計書 §1・§4・§5.1〜§5.4・§6、付録の A 群(全行)と D24・E1・E29・E30
 
-- [ ] ステップ 1: `C/commands/run.md` に A1・A2 を適用する。
-- [ ] ステップ 2: 付録の A 群のうち、本文に残るセクション(概要・チェックリスト・§0・§1・§2・§2.1・§2.4・§3・§4)に当たる行を適用する。A23・A24 は適用しない。
-- [ ] ステップ 3: 設計書 §5.3.1 の表に従い、切り出すセクションを手順ファイルへ移す。付録の A 群の各行の「該当箇所」の行番号を、設計書 §5.3.1 の表の各行の範囲と照らし、移す範囲に当たる行は移すときに適用する。A9 の `waits/<id>.md` と `wait-done` の手順は §3 に 1 か所だけ残し、手順ファイルには書かない。D24 は `writing-test-specs` から `phase-test-spec.md` へ、E1 は `reviewing-diffs` から `review-common.md` へ移し、移した元の削除も同じコミットに含める。`reviewing-diffs` には「統合と投稿はオーケストレーターが行う。担当は所見を返すだけで `gh pr review` を実行しない」の 1 文を残す。
-- [ ] ステップ 4: `review-common.md` に P1 の観点の規則(設計書 §6.1)を書く。
-- [ ] ステップ 5: 本文の §2 に、フェーズと手順ファイルの対応表と、読む 4 つの契機(設計書 §5.3.1)を書く。軽量 run の skip と fix-loop の skip の規則は本文に残す。
-- [ ] ステップ 6: 本文に P4(設計書 §6.2)と P7(設計書 §6.3)を書く。
-- [ ] ステップ 7: §3 のテンプレートを設計書 §5.2 の 6 項目に絞る(W2)。`wait-add` の id 規則は §3 を正本にする(W5)。
-- [ ] ステップ 8: HARD-GATE と Red Flags を削り、本文に無い条項を手順へ移す(K2)。直前の設計書 §5.4 の HARD-GATE の中身は、本文の手順に残す。
-- [ ] ステップ 9: `ORS` 内部の番号の参照(「2.6 に従う」など)を、手順ファイルの名前に付け替える。
-- [ ] ステップ 10: 次を確かめ、結果を完了報告に添える。
+- [x] ステップ 1: `C/commands/run.md` に A1・A2 を適用する。
+- [x] ステップ 2: 付録の A 群のうち、本文に残るセクション(概要・チェックリスト・§0・§1・§2・§2.1・§2.4・§3・§4)に当たる行を適用する。A23・A24 は適用しない。
+- [x] ステップ 3: 設計書 §5.3.1 の表に従い、切り出すセクションを手順ファイルへ移す。付録の A 群の各行の「該当箇所」の行番号を、設計書 §5.3.1 の表の各行の範囲と照らし、移す範囲に当たる行は移すときに適用する。A9 の `waits/<id>.md` と `wait-done` の手順は §3 に 1 か所だけ残し、手順ファイルには書かない。D24 は `writing-test-specs` から `phase-test-spec.md` へ、E1 は `reviewing-diffs` から `review-common.md` へ移し、移した元の削除も同じコミットに含める。`reviewing-diffs` には「統合と投稿はオーケストレーターが行う。担当は所見を返すだけで `gh pr review` を実行しない」の 1 文を残す。
+- [x] ステップ 4: `review-common.md` に P1 の観点の規則(設計書 §6.1)を書く。
+- [x] ステップ 5: 本文の §2 に、フェーズと手順ファイルの対応表と、読む 4 つの契機(設計書 §5.3.1)を書く。軽量 run の skip と fix-loop の skip の規則は本文に残す。
+- [x] ステップ 6: 本文に P4(設計書 §6.2)と P7(設計書 §6.3)を書く。
+- [x] ステップ 7: §3 のテンプレートを設計書 §5.2 の 6 項目に絞る(W2)。`wait-add` の id 規則は §3 を正本にする(W5)。
+- [x] ステップ 8: HARD-GATE と Red Flags を削り、本文に無い条項を手順へ移す(K2)。直前の設計書 §5.4 の HARD-GATE の中身は、本文の手順に残す。
+- [x] ステップ 9: `ORS` 内部の番号の参照(「2.6 に従う」など)を、手順ファイルの名前に付け替える。
+- [x] ステップ 10: 次を確かめ、結果を完了報告に添える。
   - `grep -nE 'HARD-GATE|Red Flags'` が `ORS`・手順ファイル・`C/commands/run.md` で 0 件である。
   - 本文と手順ファイルにある `references/<file>.md` の参照先が、すべて実在する。
   - 設計書 §5.3.1 の表の全行に、対応する手順ファイルがある。
   - `wc -c` で、本文と各手順ファイルのバイト数。
   - 移した条項の一覧(設計書 §5.1 の表の形。対象は `ORS` の HARD-GATE と Red Flags)。
-- [ ] ステップ 11: コミットする。本文の削減(ステップ 1〜2)、切り出し(ステップ 3〜6)、テンプレートと HARD-GATE と参照(ステップ 7〜9)の 3 つに分けてよい。
+- [x] ステップ 11: コミットする。本文の削減(ステップ 1〜2)、切り出し(ステップ 3〜6)、テンプレートと HARD-GATE と参照(ステップ 7〜9)の 3 つに分けてよい。
 
 ### Task 3: intent 系のスキルと references を改める
 
@@ -121,12 +121,12 @@
 - Create: `C/skills/capturing-intent/references/`・`C/skills/syncing-intents/references/` の手順ファイル(設計書 §5.3.2)
 - 入力: 設計書 §4・§5.1・§5.3.2・§5.6、付録の B 群(全行と末尾の切り出しの所見)
 
-- [ ] ステップ 1: 付録の B 群を、W1〜W4 を当てて適用する。W3 で `C/docs/DESIGN.md` へ退避する内容(B5・B22 の理由、B27・B28)は、DESIGN.md に書かず完了報告に書く。
-- [ ] ステップ 2: 設計書 §5.3.2 の capturing-intent と syncing-intents の行を切り出す。
-- [ ] ステップ 3: `capturing-intent/SKILL.md:49` の「`orchestrating-runs` の再開手順(§6)」を `orchestrating-runs` の `references/resume.md` に付け替える。
-- [ ] ステップ 4: `intent-format.md` の diff が、マーカー・見出し名・frontmatter のキー・持続層のセクション書式・候補 ID の採番規則の行に触れていないことを確かめ、完了報告に書く(設計書 §5.6)。
-- [ ] ステップ 5: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧、`ORS` 側に要る変更、DESIGN.md へ退避する内容を完了報告に添える。
-- [ ] ステップ 6: コミットする。
+- [x] ステップ 1: 付録の B 群を、W1〜W4 を当てて適用する。W3 で `C/docs/DESIGN.md` へ退避する内容(B5・B22 の理由、B27・B28)は、DESIGN.md に書かず完了報告に書く。
+- [x] ステップ 2: 設計書 §5.3.2 の capturing-intent と syncing-intents の行を切り出す。
+- [x] ステップ 3: `capturing-intent/SKILL.md:49` の「`orchestrating-runs` の再開手順(§6)」を `orchestrating-runs` の `references/resume.md` に付け替える。
+- [x] ステップ 4: `intent-format.md` の diff が、マーカー・見出し名・frontmatter のキー・持続層のセクション書式・候補 ID の採番規則の行に触れていないことを確かめ、完了報告に書く(設計書 §5.6)。
+- [x] ステップ 5: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧、`ORS` 側に要る変更、DESIGN.md へ退避する内容を完了報告に添える。
+- [x] ステップ 6: コミットする。
 
 ### Task 4: gate とレビュー対応の系統を改める
 
@@ -137,12 +137,12 @@
 - Create: 各スキルの `references/` と、`C/references/` 配下の切り出し先(設計書 §5.3.2・§5.7・§5.8)
 - 入力: 設計書 §4・§5.1・§5.3.2・§5.7・§5.8、付録の C 群
 
-- [ ] ステップ 1: 付録の C 群を、W1〜W5 を当てて適用する。C32・C33 は適用しない。
-- [ ] ステップ 2: 設計書 §5.3.2 の raguel-gating・filing-followup-issues・facilitating-design-discussions・github-writing の行を切り出す。github-writing の切り出しでは文言を変えない(設計書 §5.8)。
-- [ ] ステップ 3: 細目の決定の横断参照の表のうち、担当が Task 4 の行を付け替える。fix-loop の再レビューの委譲を出す前に `review-common.md` を読むことを、`fixing-review-findings` に書く。
-- [ ] ステップ 4: C8 の `wait-add` の id 規則は、`orchestrating-runs` §3 への参照にする(W5)。
-- [ ] ステップ 5: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧と `ORS` 側に要る変更を完了報告に添える。
-- [ ] ステップ 6: コミットする。
+- [x] ステップ 1: 付録の C 群を、W1〜W5 を当てて適用する。C32・C33 は適用しない。
+- [x] ステップ 2: 設計書 §5.3.2 の raguel-gating・filing-followup-issues・facilitating-design-discussions・github-writing の行を切り出す。github-writing の切り出しでは文言を変えない(設計書 §5.8)。
+- [x] ステップ 3: 細目の決定の横断参照の表のうち、担当が Task 4 の行を付け替える。fix-loop の再レビューの委譲を出す前に `review-common.md` を読むことを、`fixing-review-findings` に書く。
+- [x] ステップ 4: C8 の `wait-add` の id 規則は、`orchestrating-runs` §3 への参照にする(W5)。
+- [x] ステップ 5: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧と `ORS` 側に要る変更を完了報告に添える。
+- [x] ステップ 6: コミットする。
 
 ### Task 5: 設計・実装系のスキルを改める
 
@@ -153,11 +153,11 @@
 - Create: `C/skills/implementing/references/` の手順ファイル(設計書 §5.3.2 の implementing の行)
 - 入力: 設計書 §4・§5.1・§5.3.2・§5.4・§5.9、付録の D 群
 
-- [ ] ステップ 1: 付録の D 群を、W1〜W3 を当てて適用する。D1・D7・D31 は W2 により委譲先スキルの記述を残す。D47 は適用しない。D24 は Task 2 で移し済みなので、`writing-test-specs` に残りが無いことだけを確かめる。W3 で退避する内容(D3・D14 の経緯・D27 の hooks の挙動・D35 の出典)は、DESIGN.md に書かず完了報告に書く。
-- [ ] ステップ 2: 設計書 §5.3.2 の implementing の行を切り出す。
-- [ ] ステップ 3: `implementing`・`fixing-failures`・`writing-test-specs` に `## 完了報告` を置き、P5・P6 の項目を書く(設計書 §5.4)。
-- [ ] ステップ 4: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧、`ORS` 側に要る変更、DESIGN.md へ退避する内容を完了報告に添える。
-- [ ] ステップ 5: コミットする。
+- [x] ステップ 1: 付録の D 群を、W1〜W3 を当てて適用する。D1・D7・D31 は W2 により委譲先スキルの記述を残す。D47 は適用しない。D24 は Task 2 で移し済みなので、`writing-test-specs` に残りが無いことだけを確かめる。W3 で退避する内容(D3・D14 の経緯・D27 の hooks の挙動・D35 の出典)は、DESIGN.md に書かず完了報告に書く。
+- [x] ステップ 2: 設計書 §5.3.2 の implementing の行を切り出す。
+- [x] ステップ 3: `implementing`・`fixing-failures`・`writing-test-specs` に `## 完了報告` を置き、P5・P6 の項目を書く(設計書 §5.4)。
+- [x] ステップ 4: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧、`ORS` 側に要る変更、DESIGN.md へ退避する内容を完了報告に添える。
+- [x] ステップ 5: コミットする。
 
 ### Task 6: レビュー・テスト系を改める
 
@@ -167,24 +167,24 @@
 - Modify: `C/skills/reviewing-diffs/SKILL.md`、`C/skills/reviewing-diffs/references/*.md`、`C/skills/running-regression-tests/SKILL.md`、`C/skills/scripting-tests/SKILL.md`、`C/references/e2e-report-format.md`
 - 入力: 設計書 §4・§5.1・§5.4、付録の E 群
 
-- [ ] ステップ 1: 付録の E 群を、W1〜W4 を当てて適用する。E1 は Task 2 で移し済みなので、`reviewing-diffs` に 1 文だけが残っていることを確かめる。W3 で退避する内容(E20・E27)は、DESIGN.md に書かず完了報告に書く。
-- [ ] ステップ 2: `reviewing-diffs`・`running-regression-tests`・`scripting-tests` に `## 完了報告` を置き、P5・P6 の項目を書く。`reviewing-diffs` の所見には、該当行と前後 3 行の差分の抜粋と根拠を含める(設計書 §5.4)。
-- [ ] ステップ 3: `running-regression-tests` の単独実行モード(E13)を縮めた後も、`C/commands/test.md` の手順と食い違わないことを確かめ、完了報告に書く。
-- [ ] ステップ 4: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧、`ORS` 側に要る変更、DESIGN.md へ退避する内容を完了報告に添える。
-- [ ] ステップ 5: コミットする。
+- [x] ステップ 1: 付録の E 群を、W1〜W4 を当てて適用する。E1 は Task 2 で移し済みなので、`reviewing-diffs` に 1 文だけが残っていることを確かめる。W3 で退避する内容(E20・E27)は、DESIGN.md に書かず完了報告に書く。
+- [x] ステップ 2: `reviewing-diffs`・`running-regression-tests`・`scripting-tests` に `## 完了報告` を置き、P5・P6 の項目を書く。`reviewing-diffs` の所見には、該当行と前後 3 行の差分の抜粋と根拠を含める(設計書 §5.4)。
+- [x] ステップ 3: `running-regression-tests` の単独実行モード(E13)を縮めた後も、`C/commands/test.md` の手順と食い違わないことを確かめ、完了報告に書く。
+- [x] ステップ 4: 担当のファイルで HARD-GATE と Red Flags の残りが 0 件であることを確かめる。移した条項の一覧、`ORS` 側に要る変更、DESIGN.md へ退避する内容を完了報告に添える。
+- [x] ステップ 5: コミットする。
 
 ### Task 7: 参照の付け替えと横断の検証
 
 役割: 軽量な実装。grep による機械的な検証が中心である。Task 3〜6 の後に行う。
 
-- [ ] ステップ 1: Task 3〜6 の完了報告にある「`ORS` 側に要る変更」を、`ORS` と `C/skills/orchestrating-runs/references/` に適用する。
-- [ ] ステップ 2: `C/skills`・`C/references`・`C/commands` で次を確かめ、結果を完了報告に書く。検索から `C/skills/initializing-harness/` を除く(評価の対象外で、変えない)。
+- [x] ステップ 1: Task 3〜6 の完了報告にある「`ORS` 側に要る変更」を、`ORS` と `C/skills/orchestrating-runs/references/` に適用する。
+- [x] ステップ 2: `C/skills`・`C/references`・`C/commands` で次を確かめ、結果を完了報告に書く。検索から `C/skills/initializing-harness/` を除く(評価の対象外で、変えない)。
   - `grep -rnE 'HARD-GATE|Red Flags'` が 0 件である。
   - `grep -rnoE 'references/[A-Za-z0-9_./-]+\.md'` の参照先が、すべて実在する。
   - W4: 各スキルの本文と `references/` に `<plugin-root>` が残るかと、プラグインルート参照規約の有無が一致する。
   - 切り出したセクションの番号(§5・§6・§7・2.2・2.3・2.5〜2.11)や名前(「失敗の記録」「再開手順」「所見の統合と投稿」など)で、切り出す前の場所を指す参照が残っていない。
-- [ ] ステップ 3: `pnpm run lint`・`pnpm run typecheck`・`pnpm run test` を実行する。
-- [ ] ステップ 4: コミットする。
+- [x] ステップ 3: `pnpm run lint`・`pnpm run typecheck`・`pnpm run test` を実行する。
+- [x] ステップ 4: コミットする。
 
 ### Task 8: 文書とメモリを追随させる
 
@@ -193,12 +193,12 @@
 **Files:**
 - Modify: `C/docs/DESIGN.md`、`C/README.md`、`.serena/memories/` の該当メモリ。ルートの `README.md` に codiel の run の説明があれば、それも。`plugins/metatron/docs/format-change-checklist.md`(バージョンは上げない)。
 
-- [ ] ステップ 1: `C/docs/DESIGN.md:130-132` の review の説明を、`review-common.md` の規則と食い違わないように書き換える(infra と generic を加え、doc と security を毎回選ぶことを残す)。K2 で HARD-GATE と Red Flags を廃止した理由を足す。
-- [ ] ステップ 2: Task 3・5・6 の完了報告にある、DESIGN.md へ退避する内容を DESIGN.md に足す。同じ内容が既にあれば足さない。
-- [ ] ステップ 3: 細目の決定の横断参照の表のうち、担当が Task 8 の行を付け替える。
-- [ ] ステップ 4: `C/README.md` の review の説明を同じく書き換え、P7 のセッションの切り替えの使い方を 1 段落で足す。
-- [ ] ステップ 5: `.serena/memories/` で codiel のスキルの構成に触れるメモリを探し、切り出し後の構成に合わせる。
-- [ ] ステップ 6: コミットする。
+- [x] ステップ 1: `C/docs/DESIGN.md:130-132` の review の説明を、`review-common.md` の規則と食い違わないように書き換える(infra と generic を加え、doc と security を毎回選ぶことを残す)。K2 で HARD-GATE と Red Flags を廃止した理由を足す。
+- [x] ステップ 2: Task 3・5・6 の完了報告にある、DESIGN.md へ退避する内容を DESIGN.md に足す。同じ内容が既にあれば足さない。
+- [x] ステップ 3: 細目の決定の横断参照の表のうち、担当が Task 8 の行を付け替える。
+- [x] ステップ 4: `C/README.md` の review の説明を同じく書き換え、P7 のセッションの切り替えの使い方を 1 段落で足す。
+- [x] ステップ 5: `.serena/memories/` で codiel のスキルの構成に触れるメモリを探し、切り出し後の構成に合わせる。
+- [x] ステップ 6: コミットする。
 
 ### Task 9: レビュー
 
