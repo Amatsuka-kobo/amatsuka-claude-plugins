@@ -147,19 +147,19 @@ codiel は既に「フェーズに入ったときに読む」構造を持って�
 | 切り出す内容 | 読む時点 |
 | --- | --- |
 | 軽量の経路の入力の置き換え(L213-214)、test-spec・dev-plan の並列手順と再開(L215-240)、`writing-test-specs` の「軽量の run での同定」(D24) | `start-phase test-spec` の直後 |
-| §2.5 worktree と §2.6 テストを実行する委譲の並べ方と環境の失敗 | test-code・implement・test-loop・fix-loop に入ったとき |
+| §2.5 worktree と §2.6 テストを実行する委譲の並べ方と環境の失敗(`delegation-env.md`) | test-code・implement・test-loop・fix-loop に入ったとき |
 | §2.7 test-code の運転 | test-code に入ったとき |
 | §2.8 implement の運転 | implement に入ったとき |
 | §2.9 test-loop の運転と §5 のうち test-loop の部分 | test-loop に入ったとき |
-| §2.10 E2E のレポート(e2e-report-format への参照に縮める。E29・E30) | E2E を実行する委譲を出す前 |
+| §2.10 E2E のレポート(e2e-report-format への参照に縮める。E29・E30)(`e2e.md`) | E2E を実行する委譲を出す前 |
 | §2.2 pr の運転 | pr に入ったとき |
 | review の運転(`phase-review.md`) | review に入ったとき |
 | P1 の観点を選ぶ規則(§6.1)と、`reviewing-diffs` の「所見の統合と投稿」(E1)(`review-common.md`) | review に入ったとき。fix-loop で再レビューを出す前 |
 | §5 のうち fix-loop の部分(スキップ経路を除く) | fix-loop に入ったとき |
 | §2.11 intent-sync の運転 | intent-sync に入ったとき |
 | §2.3 finalize の運転 | triage を終えて finalize の作業を始める前(finalize は `start-phase` を呼ばない。`src/codiel-state.ts:1099-1106`) |
-| §6 再開手順 | run を再開するとき |
-| §7 失敗の記録 | 失敗の記録の契機があったとき |
+| §6 再開手順(`resume.md`) | run を再開するとき |
+| §7 失敗の記録(`failures.md`) | 失敗の記録の契機があったとき |
 
 本文の §2 に、フェーズと手順ファイルの対応表と、手順ファイルを読む契機を置く。契機は次の 4 つである。
 
@@ -240,7 +240,7 @@ D47(`backend.md`・`frontend.md` の「注意する」だけの項目の削除)�
 `orchestrating-runs` の本文に次を書く。
 
 - 会話の先頭が、前の会話の要約で始まっているときは、compaction が起きている。このときは、`orchestrating-runs` の本文を Read し直す。
-- 続行中の run の slug を要約から取り、`codiel-state.mjs get --slug <slug>` で state を読む。`get --active` は複数の run(`awaiting_outcome` を含む)を返すので、slug の特定には使わない。
+- 続行中の run の slug を要約から取り、`codiel-state.mjs get --slug <slug>` で state を読む。要約に slug が無ければ、`get --active` の結果のうち `status` が `active` の run を使う。`get --active` は `awaiting_outcome` の run も返すので、`status` で絞る。該当が 0 件か 2 件以上なら、人に確かめる。
 - §5.3.1 の再開と同じ範囲(`in_progress` か `awaiting_human` のフェーズすべての手順ファイルと、それらが使う共有の手順)を読む。
 - ほかのスキルは、そのスキルを使う手順に入ったときに読む。
 
@@ -248,10 +248,10 @@ D47(`backend.md`・`frontend.md` の「注意する」だけの項目の削除)�
 
 ### 6.3 フェーズの境目でのセッションの切り替え(P7)
 
-`orchestrating-runs` の本文に次を書く。新しい再開手順は作らず、既存の §6 を使う。
+`orchestrating-runs` の本文に次を書く。新しい再開手順は作らず、既存の再開手順(切り出し後の `resume.md`)を使う。
 
 - 委譲の待ちが無いフェーズの境目では、ユーザーは新しいセッションへ移ってよい。待ちが無いことは、state の `waits` が空であることで確かめる。
-- 移った先では `/codiel:run` で再開し、§6 の再開手順に従う。
+- 移った先では `/codiel:run` で再開し、`resume.md` の再開手順に従う。
 
 README の利用者向けの説明に、この使い方を 1 段落で書く。
 
@@ -263,7 +263,7 @@ README の利用者向けの説明に、この使い方を 1 段落で書く。
 - 道具の入力は、run に属するすべてのセッションの transcript(`~/.claude/projects/<project>/<session>.jsonl`)と、それぞれの委譲先の transcript(`<session>/subagents/` 配下)である。集計の区間は、`/codiel:run` を起動した行から `finalize` を呼んだ行までとする。
 - 合計する値は `message.usage` の `input_tokens`・`cache_creation_input_tokens`・`cache_read_input_tokens`・`output_tokens` である。
 - 同じ応答が thinking・本文・tool_use の行に分かれて記録され、同じ usage を持つ。そのため `message.id` で重複を除き、同じ id の最後の行の usage を採る。
-- 委譲先のトークンは、state の待ちの記録(`waits` の `phase` と `taskId`)で委譲先の transcript とフェーズを対応づけて割り振る。
+- 委譲先のトークンは、state の待ちの記録(`waits` の `phase` と `taskId`)で委譲先の transcript とフェーズを対応づけて割り振る。`taskId` は任意の項目なので(`src/codiel-state.ts:58`)、`taskId` の無い委譲先は「未分類」として別に合計する。
 - オーケストレーターのトークンは、`start-phase`・`complete-phase`・`pass-gate`・`skip-phase` を呼んだ Bash の行の時刻で区間を切って割り振る。`start-phase` はフェーズの開始時刻を state に記録しない(`src/codiel-state.ts:923-959` で確かめた)。test-spec と dev-plan が並列に進む区間は「test-spec+dev-plan」の 1 区分にまとめる。
 - 委譲別の内訳は、委譲先の transcript ごとに出す。
 
