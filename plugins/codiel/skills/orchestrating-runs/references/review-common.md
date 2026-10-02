@@ -20,6 +20,13 @@ review に入ったときと、fix-loop で再レビューの委譲を出す前�
    - 先頭の段落に、選んだ観点ごとに 1 行、観点の名前とその観点を選んだ理由(当たった変更パス)を書く。この段落は所見の一覧の外に置く。
    - 所見を severity 順(critical → high → medium → low)に並べる。
    - 同じ対象・内容の所見が複数の観点から出たら、最も高い severity で 1 件に統合し、観点を併記する。
+   - 委譲先は所見を 1 件ずつ、次の項目で返す。統合では、これらをそのまま保つ。
+     - severity: critical・high・medium・low のいずれか。
+     - 一行要約。
+     - 観点: 委譲した観点ファイルの名前(frontend・backend・data・doc・security・infra・generic)。
+     - 対象: `src/...:42` の形。github モードの行コメントはこの値で投稿する。
+     - 抜粋・内容・根拠・提案。
+   - 返答の確認方法に「実行できなかった」とあるテスト・型検査は、所見の一覧には入れない。観点ごとの確認結果として `review-<m>.md` に書く。
 2. local モードでは投稿しない。`review-<m>.md` の記録だけを成果物とする。
 3. github モードでは、`<plugin-root>/references/github-writing.md` の執筆規則でレビュー本文を組み立てて投稿する。
    - 概要(件数・severity の内訳・fix-loop の対象の有無)に `<!-- codiel:generated -->` を含める。
