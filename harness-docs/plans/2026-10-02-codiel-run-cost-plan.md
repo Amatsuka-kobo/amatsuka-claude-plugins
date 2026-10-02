@@ -254,6 +254,14 @@
 
 改修前の平均(ステップ 7): 合計 35,538,741、オーケストレーターの分 31,977,742、オーケストレーターの `cache_read_input_tokens` 31,110,005。2 回とも review の観点は backend・frontend・security・generic の 4 つで、doc は選ばれなかった。2 回とも intent-sync で ASK が出た。
 
+### `/codiel:test` の基準(ステップ 6、セッション `39247d27-1fd2-483b-8e62-7041f5606438`)
+
+2 回目の run が終わった状態で、改修前の codiel で実行した。
+
+- 引数なし: レポート `.codiel/reports/test-run-<日時>.md` と、E2E の出力 `.codiel/reports/test-run-<日時>/e2e/<仕様のディレクトリ>/`(`results.json`・`summary.md`・スクリーンショット)。委譲は E2E の仕様のディレクトリごとに 1 件(2 件)で、units と test コマンドはオーケストレーターが実行した。結果は OK 22 / NG 0 / broken 0 / 環境の失敗 0、test コマンド 10 pass。
+- 引数 `e2e/backend`: 同じ置き場に、`e2e/backend/api/todos` だけの結果が出た。委譲は 1 件で、test コマンドは実行していない。
+- レポートの見出し: `# テスト実行レポート(単独実行 /codiel:test)`、`## サマリ`、`## ケース別結果`、`## E2E のレポート`、`## test コマンドの結果`、`## 実行し直し`、`## 判定`。
+
 無効にした計測: セッション `44ce4f52-af03-4b9a-9d6c-5bb9a24766af`(Sonnet 5.5、合計 38,652,932)。`reset-cost-bench.sh` が `set -o pipefail` の下で、main 以外のブランチが無いときに `grep -vx main` の終了コード 1 で止まり、`git clean` と Raguel の記録の削除が実行されなかった。intent だけを作った run の `try-1` が残ったまま始まり、run は `try-2` になった。開始状態がそろわないので比較に使わない(2026-10-02 ユーザー決定)。スクリプトは `4d83336` で直した。
 
 ## Task 10 の結果
