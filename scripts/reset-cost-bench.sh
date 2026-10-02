@@ -10,7 +10,7 @@ cd "$bench"
 git checkout -q main
 git reset -q --hard "$start_commit"
 # run ブランチを消す(main 以外)
-git for-each-ref --format='%(refname:short)' refs/heads | grep -vx main | xargs -r git branch -q -D
+git for-each-ref --format='%(refname:short)' refs/heads | { grep -vx main || true; } | xargs -r git branch -q -D
 # 追跡外のファイルを消す。node_modules は残す
 git clean -q -fdx -e node_modules
 # codiel の初期化が作る空のディレクトリは git に載らないので作り直す
