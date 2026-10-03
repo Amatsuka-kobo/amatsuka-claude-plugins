@@ -1,6 +1,6 @@
 # 並列に進めるフェーズの ASK・STOP
 
-test-spec と dev-plan のゲートでは、ASK・STOP・degraded の ASK のすべてに次の規則を当てる。
+test-spec と dev-plan のゲートでは、ASK・STOP・degraded の ASK のすべてに次の規則を当てる。Raguel の不通や `pass-gate` の拒否の繰り返しで `mark-ask --kind confirm` を呼ぶときにも、同じ規則を当てる。
 
 - もう片方の委譲の待ちが残っている間は、`mark-ask` を呼ばない。`mark-ask` は run を `awaiting_human` にし、その間は guard-write の境界が外れるためである。
 - もう片方のゲートの結果が出てから、2 つのゲートの結果をまとめて人に示す。

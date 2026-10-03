@@ -45,7 +45,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    evaluate を呼ばない限り `evaluationId` は存在せず、`pass-gate` は失敗する。
    evaluate はフェーズごとに呼ぶ。前のフェーズが PROCEED だったことや diff が小さいことを理由に省かず、`pass-gate` へは Raguel がその場で返した `evaluationId` だけを渡す。
    evaluate や `record_outcome` が接続断・タイムアウトで失敗したら、先に評価が記録済みでないか(`evaluationId` が返っていないか)を確かめ、同じ呼び出しを 1 回だけ呼び直す。呼び直しが重なると `common/resubmission-loop` の ASK を誘発しうる。
-   それでも失敗するなら、`mark-ask <phase> --slug <slug> --kind confirm` で待ち、AskUserQuestion で「再試行」「時間を置いて続行」「中止」を聞く。中止は、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason raguel-unavailable` で止める。
+   それでも失敗するなら、(test-spec と dev-plan では `references/parallel-gates.md` に従い、もう片方の待ちが残る間は後回しにして)`mark-ask <phase> --slug <slug> --kind confirm` で待ち、AskUserQuestion で「再試行」「時間を置いて続行」「中止」を聞く。中止は、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason raguel-unavailable` で止める。
    成果物は動かさず、ASK や as-is の裁定で代用しない。Raguel の記録なしにゲートを通す手段は無い。
 5. verdict で分岐する(下記「verdict 別ハンドリング」)。
 6. PROCEED なら次フェーズのディスパッチプロンプトに前フェーズの findings 要約を含める
@@ -104,7 +104,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - 評価の記録が無い・別の run やフェーズのもの・verdict の不一致、最新の評価でない、code 系で評価した HEAD や起点が現在と違う、`paths` で範囲が絞られている、文書系で評価後に内容が変わった、期待する文書が `paths` に無い、のいずれかなら、原因を直して evaluate を呼び直し、返った新しい `evaluationId` で `pass-gate` する。`--human-approved` で迂回しない。
 - `raguelContract` の不一致なら、理由文の指示に従う。
 - Raguel の記録を読めないなら、理由を人に示して指示を待つ。
-- 同じ拒否が 2 回続いたら、`mark-ask <phase> --slug <slug> --kind confirm` で人に確かめる。
+- 同じ拒否が 2 回続いたら、`mark-ask <phase> --slug <slug> --kind confirm` で人に確かめる。test-spec と dev-plan では、もう片方の待ちが残る間は `references/parallel-gates.md` に従い、`mark-ask` を呼ばない。
 
 ### ASK
 
@@ -117,7 +117,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    応答の本文だけに書いて質問文を短くしない。所見の原文(`message` や `evidence` の全文)は質問文に添えない。
    選択肢は「修正して再提出」「このまま承認」「中止」である。
 4. 裁定はオーケストレーターが選ばない。「多分大丈夫」の代理判断は自己承認なので、選択肢の回答を待つ。
-   「中止」なら、STOP の「妥当として止める」と同じ手順で終了させる。ただし GOTCHAS 候補は書かない。
+   「中止」なら、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason ask-aborted` で止める。`gotcha-candidates.md` の Read も GOTCHAS 候補の記録も行わない。`raguel-stop` は次の try の `init` に `--human-approved` を要求する値なので使わない(ASK のフェーズは STOP の verdict を持たず、`init` は止まらない)。
 
 #### 裁定 A: 修正して再提出
 
@@ -141,7 +141,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "as-is"`、`evaluationId` は ASK を出した
    evaluate の evaluationId)で、人が as-is 承認した裁定を記録する。この記録を飛ばして次に進まない。
-   `record_outcome` が接続断・タイムアウトで失敗したら、手順 4 の不通時の手順で呼び直す。それでも、または別の理由で失敗したら `pass-gate` に進まず、失敗内容を人に示して裁定を仰ぐ。
+   `record_outcome` が接続断・タイムアウトで失敗したら、「ゲートを 1 回通すたびに」の手順 4 にある、接続断・タイムアウトのときの呼び直しで呼び直す。それでも、または別の理由で失敗したら `pass-gate` に進まず、失敗内容を人に示して裁定を仰ぐ。
 2. `node <plugin-root>/scripts/codiel-state.mjs resume --slug <slug>` で `in_progress` に戻す。
 3. `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <ASK の evaluationId> --verdict ASK --human-approved`
    でゲートを通す。`state.phases[<phase>].verdict` は `"ASK"` のまま、`humanApproved: true` が
@@ -170,6 +170,7 @@ verdict を上書きしない。
    で run を `awaiting_human` にする。フェーズの `verdict` に `STOP` が残る。
    所見に `casefile/tampered` があるときは、記録の改竄であり覆せないので、手順 2 に進まず、AskUserQuestion を使わずに止める。
    応答の本文で、止めた理由(改竄の所見の要約と `decisionPoint`)を報告する(AskUserQuestion の選択肢は 2 件以上が要り、「止める」だけの質問にできないため)。
+   止め方は手順 4 と違い、`waits` を片付けてから `stop --slug <slug> --reason raguel-stop` を呼ぶだけで、GOTCHAS 候補は書かない(改竄は対象プロジェクトの失敗ではない)。STOP のフェーズが残るので、次の try の `init` には人の承認が要る。
 2. 通常の ASK の手順 3 と同じ規則で質問文を書き、AskUserQuestion で「誤検知として続ける」か「妥当として止める」かを聞く。オーケストレーターはどちらも選ばない。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "false-positive"`、STOP の `evaluationId`、
