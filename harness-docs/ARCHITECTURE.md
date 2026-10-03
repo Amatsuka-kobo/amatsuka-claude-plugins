@@ -520,3 +520,33 @@ codiel の run は、Raguel のゲートがパネルの完了を待つため遅�
 - 鍵がある環境では、伏せ字を当てた後の成果物が TypeSafe AI へ送られる(ADR-005)。codex のパネルで OpenAI へ送られる経路は無くなる。
 - 内容判定の閾値は、過去に PROCEED になった成果物で較正してから確定する。
 - 設計書: harness-docs/design/2026-10-01-codiel-run-speedup-design.md
+
+---
+
+### ADR-013: [codiel] Codiel は ADR と GOTCHAS を直接記録せず、候補を出して Metatron に渡す
+
+- 状態: 採用
+- 決定日: 2026-10-03
+- 決定者: phyllis998
+
+#### 背景
+
+ARCHITECTURE と GOTCHAS の読み方・書き方・記録のタイミングについて、codiel と metatron の両方が指示を出しており、同じセッションに 2 つの指示が重なっていた。metatron は SessionStart で両文書と記録の CLI を注入する。codiel は、ARCHITECTURE と GOTCHAS をサブエージェントに読ませる規則と、run の失敗を GOTCHAS へ記録する手順(recording-gotchas の起動と、CLI の案内が無いときの <runsDir>/<slug>/unrecorded-gotchas.md への退避)を別に持っていた。2 つの指示が食い違ったとき、どちらに従うかが決まらなかった。ADR だけは、codiel が候補を書き、metatron が ADR へ移す分担になっていた(ADR-007)。
+
+#### 検討した選択肢
+
+1. codiel が metatron の CLI を呼び、GOTCHAS の台帳と ADR へ直接書く
+2. codiel は何も残さず、記録は利用者と metatron に任せる
+3. codiel は ADR 候補と GOTCHAS 候補を run の成果物に書き、state の knowledgeTarget(metatron | intents)で書き先を分けて渡す
+
+#### 採用した結論
+
+codiel の指示層は ARCHITECTURE と GOTCHAS を読ませず、書かせない。残すのは、ドメインマップの抽出と、review の委譲へ ARCHITECTURE のパスを渡すことだけとする。ADR 候補と GOTCHAS 候補は、knowledgeTarget を問わず try のローカルレポート(reports/adr-candidates.md・reports/gotcha-candidates.md)に書く。ADR 候補は intent-sync と、fix-loop で設計を変える修正を採ったときに書き、GOTCHAS 候補は発生した時点で書く。knowledgeTarget が intents のときは、intent-sync と finalize でローカルレポートの候補を持続層の領域ファイルへ全文で写してコミットする。候補は finalize の結果レポートと stop の完了報告に一覧する。
+
+#### 理由
+
+ARCHITECTURE と GOTCHAS の持ち主は metatron であり、codiel が別に規則を持つと、食い違ったときに従う側が決まらない。codiel が metatron の CLI を呼ぶと、metatron が無くても動く codiel の独立性(ADR-003)が崩れる。何も残さないと、run で起きた失敗が記録されずに消える。候補として渡せば、metatron の有無にかかわらず材料が残り、台帳へ移すかどうかは人と metatron が判断できる。
+
+#### 影響範囲
+
+ADR-009 の影響範囲にある未記録の GOTCHAS の退避先(unrecorded-gotchas.md)は使われなくなり、guard-write のその免除も外した。state の adrTarget は knowledgeTarget に改名し、互換を持たない。guard-write は、triage が passed で finalize が終わるまで、docs/intents/domains/** への書き込みを通す。持続層の GOTCHAS 候補を台帳へ移す走査は metatron に加える。
