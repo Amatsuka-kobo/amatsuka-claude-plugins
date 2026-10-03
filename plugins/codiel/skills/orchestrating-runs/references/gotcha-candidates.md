@@ -8,7 +8,7 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 | `record-attempt` の上限超過の後、人が中止を選んだ | `stop --reason attempts-exceeded` の直後 |
 | implement・test-code の修正ループが 5 ラウンドで通らず、人が中止を選んだ | `stop --reason attempts-exceeded` の直後 |
 | `record_outcome(incident)` を記録した | 記録の直後 |
-| review で、設計時に想定していなかった仕様漏れ・考慮漏れが見つかった | fix-loop の最後の pass-gate の後 |
+| review で、設計時に想定していなかった仕様漏れ・考慮漏れが見つかった | fix-loop の pass-gate の後 |
 
 - 上の条件に 1 回当たるごとに 1 件書き、書くかどうかを判断しない。
 - STOP を誤検知と裁定したときは書かない。その裁定は `record_outcome` の `false-positive` として Raguel の記録に残る。
@@ -20,6 +20,7 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 - ファイルが無ければ、先頭行を `# GOTCHAS 候補(<slug> try-<n>)` にして作る。
 - エントリの形は `<plugin-root>/references/intent-format.md` の「GOTCHAS 候補」に従う。
 - 既存のエントリは消さず、書き換えるのは次の `写し先` の行を足すときだけにする。
+- 同じ見出しのエントリが手元の記録にあれば、新しいエントリを足さない。
 - `.codiel/runs/` は git に載せないので、このファイルはコミットしない。
 
 エントリの末尾の `- 写し先:` の行は、持続層へ写したかを表す。この行の無いエントリが、まだ写していない候補である。
@@ -31,25 +32,25 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 
 `metatron` のときは写さず、手元の記録と一覧だけにする。写す時点は intent-sync と finalize の 2 つである。
 
-- intent-sync: 同じ slug のすべての try の `reports/gotcha-candidates.md` から、`写し先` の行の無いエントリを集めて写す。stop で終わった前の try の候補も対象に入る。
+- intent-sync: 同じ slug のすべての try の `reports/gotcha-candidates.md` から、`写し先` の行の無いエントリを集めて写す。stop で終わった前の try の候補も、人に確かめずに対象に入れる。
   - 写し先の領域は、`references/phase-intent-sync.md` の分岐で決めた取り込み先から選ぶ。取り込みを行わないときは写さない。
   - 写した領域ファイルは、intent-sync の評価の `paths` に含め、ゲート通過の直後の intent-sync のコミットに入れる。
 - finalize: 同じ slug のすべての try の `reports/gotcha-candidates.md` から、`写し先` の行の無いエントリを写す。最後の intent-sync より後に出た候補と、前の try で写されなかった候補が当たる。
   - 写し先の領域は、`steps/intent-sync/report.md` に記録された、この try の intent-sync が取り込んだ領域ファイルから選ぶ。
   - 取り込んだ領域ファイルが無いときは写さず、手元の記録に残す。
-  - 写した領域ファイルは、`references/phase-finalize.md` の intent をコミットする手順のコミットに入れる。
+  - 写した領域ファイルは、`references/phase-finalize.md` の intent の変更をコミットする手順のコミットに入れる。
 
 領域ファイルの選び方と書き方は次のとおりである。
 
 - 候補の `task` と `mistake` が関わる領域を 1 つ選ぶ。決められないときは、取り込み先の領域のうち intent の `domains` で最初に挙がっているものを選ぶ。
-- 領域ファイルの `## GOTCHAS 候補` の末尾に、エントリを全文で書き足す。見出しが無ければ、`intent-format.md` の持続層の書式の位置に作る。
+- 領域ファイルの `## GOTCHAS 候補` に同じ見出しのエントリがあれば、写さずに、手元の記録のエントリへ `写し先` の行だけを足す。
+- 同じ見出しのエントリが無ければ、領域ファイルの `## GOTCHAS 候補` の末尾に、エントリを全文で書き足す。見出しが無ければ、`intent-format.md` の持続層の書式の位置に作る。
 - 手元の記録のエントリの `写し先` の行は、領域ファイルへ写さない。
 
 ## 一覧
 
-- finalize の結果レポートと、stop したときの完了報告には、この try の `reports/gotcha-candidates.md` のエントリと、前の try のエントリのうち `写し先` の行が無いものを一覧する。
+- finalize の結果レポートには、この try の `reports/gotcha-candidates.md` のエントリと、前の try のエントリのうち `写し先` の行が無いものを一覧する。stop したときの完了報告の一覧は、`orchestrating-runs` 本文の 2.4 に従う。
 - 一覧には、エントリごとのタイトルと `写し先` の値(行が無ければ「未」)と、手元の記録のパスを書く。
 - `写し先` の行の無いエントリには、持続層へ写さなかった理由(`metatron` の run、または取り込んだ領域が無い)を添える。
 - 候補が無ければ「なし」と書く。
-- stop したときの完了報告には、同じ slug の `reports/adr-candidates.md` のエントリのうち `写し先` の行が無いものも、タイトルと手元の記録のパスで一覧する。
 - incident の候補は、outcome の同期の報告に、タイトルと手元の記録のパスで一覧する。

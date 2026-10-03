@@ -16,7 +16,7 @@ run を再開するときに読む。
    - `state.branch` が `null` の run(`--intent-only` の run)は、開始時のブランチの作業ツリーで intent フェーズの続きを行う。
 4. §0 の判定をやり直し、記録と違えば人に確かめる。
    - 連携モードの判断が `state.integration` と違えば、どちらで続けるかを人に確かめる。記録を変えるときは `codiel-state set-integration --slug <slug> --integration <github|local> --image-upload <値>` を実行する。
-   - 実行モードは、§0 の分岐表の行 4・行 7 のとおり `state.domainMode` の記録を使う。記録が無ければ §0 の判定をやり直す。
+   - 実行モードは、§0 の分岐表の行 3・行 4 のとおり `state.domainMode` の記録を使う。記録が無ければ行 5〜7 で判定し直す。
 5. `state.phase` から続行する前に、待ちを次の順に処理する。前のセッションの委譲は失われたものとして扱う。
    1. 最初に `codiel-state wait-clear --slug <slug>` を 1 回だけ呼び、出力の `cleared`(前のセッションで残った待ちの一覧)を控える。出し直した委譲の待ちを後から消さないよう、出し直しより先に呼ぶ。
    2. `cleared` の待ちごとに、`waits/<id>.md` が `startedAt` より後に書かれているかを確かめる。書かれていれば、返答を受け取り済みとして、報告の置き場への転記を済ませる。書かれていなければ、委譲を出し直す(新しい回の `id` で `wait-add` する)。古い報告のファイルや成果が残っていても、`waits/<id>.md` が無い委譲の成果としては使わない。

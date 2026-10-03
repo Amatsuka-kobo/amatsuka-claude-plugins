@@ -319,7 +319,7 @@ try {
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass()
     // finalize の作業中(triage が passed で、finalize がまだ status を awaiting_outcome にしていない間)は、
-    // 最後の intent-sync より後に出た GOTCHAS 候補を持続層へ写す。finalize は start-phase を呼ばないので、
+    // 最後の intent-sync より後に出た ADR 候補と GOTCHAS 候補を持続層へ写す。finalize は start-phase を呼ばないので、
     // この間の phase は triage のままである。
     if (run.state.phases.triage?.status === "passed") pass()
     emit(

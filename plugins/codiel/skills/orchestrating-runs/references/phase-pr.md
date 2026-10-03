@@ -16,7 +16,7 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    - PR 本文に入れない内容(要望・受け入れ基準・原文・run の経緯)を求める見出しには、intent 文書へのリンクを書く。
    - 同意・署名・人の確認を表すチェックボックス(行動規範への同意、CLA の署名、「テストした」など)は付けずに残し、人が確かめる項目であることを本文に書く。
    - テンプレートが見つからなければ、`github-writing.md` の執筆規則だけに従って書く。
-   - `imageUpload` に使える手段があれば、E2E のレポートの画像など関連する画像を、画像の縮退の順序で載せる。
+   - `imageUpload` に使える手段があれば、E2E のレポートの画像など関連する画像を、`<plugin-root>/references/github-writing-images.md` にある「Issue・PR・コメント全般」の縮退の順序で載せる。
    - 本文には `<!-- codiel:generated -->` を含める。
 3. 本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/pr-body.md` に書く。
 4. `git push -u origin <state.branch>` を実行してから、別の Bash 呼び出しで PR を作る。gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わず、次の形で呼ぶ。

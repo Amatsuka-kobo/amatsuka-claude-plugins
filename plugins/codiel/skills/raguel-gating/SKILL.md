@@ -72,7 +72,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
   フェーズであり、合意内容の検査は design ゲートが design.md と discussion.md の整合として担う。
 - 全呼び出し共通の必須引数は `runId`(= `state.raguelRunId`)・`phase`・`objective` である。`repoPath` は渡さない。
 - 本文・差分・要約を自分で組んで渡さず、範囲の指定だけを渡す。Raguel が範囲からファイルと差分を読む。
-- fix-loop は、fix-loop を始めたときの HEAD から現在の HEAD までを 1 回で評価する。修正ごとに範囲を切らない。
+- fix-loop は、fix-loop を始めたときの HEAD から現在の HEAD までを 1 回で評価する。修正ごとに範囲を切らない。evaluate と pass-gate を呼ぶ回数と時点は `<plugin-root>/skills/orchestrating-runs/references/phase-fix-loop.md` に従う。
 - code 系フェーズの `baseRef` には、そのフェーズで変更が無くても、そのフェーズの `startHead` を渡す。
   run 全体の範囲や、ほかのフェーズの起点へ替えて空の差分を避けない。空の差分は Raguel が PROCEED と
   「変更なし」の info で返す。E2E のレポートだけの差分も、Raguel が変更なしとして扱う。
@@ -87,8 +87,10 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
   Jev の問い合わせの上限は既定で 20 秒なので、通常は移る前に返る。
 - 評価のあとに成果物を動かさない。code 系フェーズは、pass-gate までコミットを足さない(HEAD が変わると
   pass-gate が止まる)。文書のフェーズは、pass-gate まで文書を書き換えない(内容が変わると止まる)。
-- pass-gate の後も、次のフェーズの `start-phase` までコミットを足さない。`start-phase` は、直前に通ったフェーズの
-  `passedHead` と今の HEAD が等しいことを要り、コミットがあると「評価の後にコミットがある」旨で失敗する。
+- code 系フェーズは、pass-gate の後も次のフェーズの `start-phase` までコミットを足さない。`start-phase` は、直前に通った
+  code 系フェーズの `passedHead` と今の HEAD が等しいことを要り、コミットがあると「評価の後にコミットがある」旨で失敗する。
+- 文書のフェーズは、pass-gate の直後に、評価した文書(`paths` に渡したファイル)だけをコミットしてよい(`orchestrating-runs` の 2.1)。
+  ほかのファイルのコミットがあると、次の `start-phase` が失敗する。
 
 ## verdict 別ハンドリング
 
@@ -179,14 +181,14 @@ verdict を上書きしない。
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    3. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
-4. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書き、完了報告に一覧する。
+4. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
 
 ### ループ上限超過
 
 `codiel-state record-attempt` は上限(既定 5)を超えると run を `awaiting_human` にして exit 3 を返す。CLI に上限のリセットや引き上げの手段は無い。上限超過には `evaluationId` が無いので、ASK の裁定 A・B は使えない。
 
 1. findings と試行の経過を示し、AskUserQuestion で「続行」か「中止」かを聞く。
-2. 中止なら、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason attempts-exceeded` で止める。止めたら、その手順で GOTCHAS 候補を書き、完了報告に一覧する。
+2. 中止なら、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason attempts-exceeded` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
 3. 続行なら、`resume --slug <slug>` で戻して修正の往復を続ける。上限超過の後は往復ごとに `record-attempt` が再び exit 3 を返すので、そのたびに人に確かめてから続ける。
 
 ## findings の引き継ぎ
