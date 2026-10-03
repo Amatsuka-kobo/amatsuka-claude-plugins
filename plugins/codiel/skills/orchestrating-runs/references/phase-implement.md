@@ -15,7 +15,7 @@
    - 1〜3 ラウンド: 同じ委譲先を、文脈を保ったまま続投させる。
    - 4〜5 ラウンド: 作業内容を「行き詰まりの打開」と明記した新しい委譲として出す。委譲先の選択はセッションの規律に委ね、役割名もモデル名も書かない。
    - 5 ラウンドで通らなければ、`mark-ask implement --slug <slug> --kind confirm` で待ち、人に続行か中止かを裁定してもらう。続行は `resume --slug <slug>`、中止は `stop --slug <slug> --reason attempts-exceeded` で行う。`stop` の前に、本文 §2.4 の手順で待ちを片付ける。
-   - 中止を選ばれたら、`stop` の前に `references/gotcha-candidates.md` を Read する。止めたら、その手順で GOTCHAS 候補を書き、完了報告に一覧する。
+   - 中止を選ばれたら、`stop` の前に `references/gotcha-candidates.md` を Read する。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は本文 §2.4 に従う。
 7. レビューを通ったステップから、run ブランチへ順に `git merge --no-ff` する。衝突したら `git merge --abort` し、そのステップを `failed` にする。グループの残りのマージが済んだ後、worktree を後始末してから新しい HEAD で作り直し、直列にやり直す。
 8. グループのマージが済んだら、run ブランチでそのグループの実行する通すテストを実行する。
    - プロジェクトの test コマンドと `units/` のテストは自分で実行し、`e2e/` のテストは仕様のディレクトリごとに実行の委譲を出す。

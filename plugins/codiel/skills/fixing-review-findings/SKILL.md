@@ -81,7 +81,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
     除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 11 へ。
     反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を 1 度だけ
     `restatement-<連番>.md` として「記録の投稿手順」で記録し、件数から除外する。
-11. 最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
+11. 最後の評価の後に HEAD が動いていれば(E2E のレポートのコミットなど)、評価し直す(`../orchestrating-runs/references/phase-fix-loop.md` の定義に従う)。
+    最終の修正 diff に対する `evaluate_code` の verdict が `PROCEED` であることを確認し、
     `node <plugin-root>/scripts/codiel-state.mjs pass-gate fix-loop --slug <slug> --evaluation-id <id>
     --verdict PROCEED` を呼んでフェーズを完了させる(`pass-gate` はループの最後に 1 回だけ呼ぶ。
     修正の度に呼ぶのは `record-attempt` と `evaluate_code` であり、`pass-gate` ではない)。

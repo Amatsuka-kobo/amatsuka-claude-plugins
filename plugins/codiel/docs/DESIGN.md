@@ -712,7 +712,7 @@ K12 の直後の codiel は、run の中で起きた失敗を何も残さなか�
 同じ 2026-10-03 のユーザー決定で、ADR 候補も GOTCHAS 候補と同じ流れにそろえた。手順の正本は `orchestrating-runs` の `references/adr-candidates.md` である。
 
 - それまでの ADR 候補は intent-sync の取り込みの中でしか生まれず、`intents` の run は持続層へ直接、`metatron` の run は `steps/intent-sync/report.md` へ書いていた。fix-loop で設計を変える修正を採り、そこで ADR の 3 条件を満たす判断が出ても、拾う手順が無かった。
-- そこで、ADR 候補は `knowledgeTarget` によらず try の手元の記録(`reports/adr-candidates.md`)に書く。書く時点は intent-sync の取り込みと、fix-loop で設計を変える修正を採ったとき(GOTCHAS 候補の設計の漏れと同じく、最後の pass-gate の後)である。
+- そこで、ADR 候補は `knowledgeTarget` によらず try の手元の記録(`reports/adr-candidates.md`)に書く。書く時点は intent-sync の取り込みと、fix-loop で設計を変える修正を採ったとき(GOTCHAS 候補の設計の漏れと同じく、fix-loop の pass-gate の後)である。
 - `intents` の run では、intent-sync と finalize で未写しの候補を持続層の `## 意図的な制約` へ全文で写し、そのコミットに含める。写す時点・対象の try・`写し先` の印は GOTCHAS 候補の手順を共有する。候補 ID は写すときに採番する。手元の記録は git に載らず、ID を持たせても持続層の採番と食い違うだけだからである。
 - `metatron` の run は写さず、finalize の結果レポートと stop の完了報告に一覧する。`steps/intent-sync/report.md` は、取り込んだ領域ファイルのパスと書かずに終えた矛盾だけを持つ。
 - 持続層での `[ADR 候補]` の書式と参照形(metatron との共有ファイル契約)は変えていない。手元の記録のエントリは、その書式から印を除き、`run` の行を足した形である。
