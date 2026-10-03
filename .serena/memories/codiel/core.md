@@ -18,7 +18,7 @@ local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/
   テストの仕様の置き場は config の `testsDir`(既定 `docs/codiel/tests`)の下にある。run の文書(agenda・discussion・design・dev-plan)は `<runsDir>/<slug>/` に try で分けずに置き、コミットする。
   try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/`、`/codiel:test` の報告は `.codiel/reports/` に置き、`.gitignore` で外す(2026-09-29、M4-C。ADR-009)。
   Raguel の設定は config.json の `raguel` にあり、以前の版の YAML の設定ファイルは読まれない(init が承認を得て写してから消す)。
-- K12(2026-10-02): codiel の指示層(skills・references・commands)は ARCHITECTURE と GOTCHAS を読ませる規則・書き込ませる規則を持たない。残すのは §0 のドメインマップの抽出(`mapped` / `unscoped` の判定と guard-write の境界)と、review の委譲に ARCHITECTURE のパスを渡すこと(doc 観点が乖離を見る)の 2 つだけ。失敗の記録の手順 `references/failures.md` と「未記録の GOTCHAS」の退避は削除済みで、台帳の追記は metatron の担当。guard-write の `unrecorded-gotchas.md` の免除は `src/` に残っている。
+- K12(2026-10-02): codiel の指示層(skills・references・commands)は ARCHITECTURE と GOTCHAS を読ませる規則・書き込ませる規則を持たない。残すのは §0 のドメインマップの抽出(`mapped` / `unscoped` の判定と guard-write の境界)と、review の委譲に ARCHITECTURE のパスを渡すこと(doc 観点が乖離を見る)の 2 つだけ。失敗の記録の手順 `references/failures.md` と「未記録の GOTCHAS」の退避は削除済みで、台帳の追記は metatron の担当。guard-write の `unrecorded-gotchas.md` の免除も外した。2026-10-03 から(ADR-013): codiel は ADR と GOTCHAS を直接記録せず、候補を try のローカルレポート(`reports/adr-candidates.md`・`reports/gotcha-candidates.md`)に書いて metatron に渡す。state の `adrTarget` は `knowledgeTarget` に改名した(互換なし)。`intents` のときは intent-sync と finalize で持続層へ写す。手順は `orchestrating-runs/references/adr-candidates.md`・`gotcha-candidates.md`。
 
 ## `/codiel:init` — 保護パスだけを確認する
 
