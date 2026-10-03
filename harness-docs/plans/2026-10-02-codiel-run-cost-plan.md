@@ -344,12 +344,25 @@
 ## 別の Issue にする事項(Task 9・9b のレビューから)
 
 - A23・A24(設計書 §8.1 の K-X1): `gh pr create` が失敗したときの扱い、worktree を作るコマンドの例。
+  - 直したコミット: `9469713`
 - prompt-smith の再評価の充足度の欠落 S1〜S17(委譲先の異常終了、`codiel-state init` の失敗など)。改修前から無かった規則。
+  - 直したコミット: `649fc56`(S5・S13〜S17)、`b353254`(S1〜S4・S7・S9)、`198bf37`(S9〜S12)、`574eb15`(S6〜S8)。評価とレビューの所見の修正は `fd6849d`・`d2b7b3c`・`4273d8f`・`532a932`・`2fa9ca8`・`d9cc657`・`3ff7cc3`
 - `C/src/check-intent-env.ts` の `contextDocs` とコメントが ARCHITECTURE・GOTCHAS を含む。`C/src/hooks/guard-write.ts` の `unrecorded-gotchas.md` の免除が使われなくなった(K12 の `src/` 側の追随)。
+  - 直したコミット: `a1f3fca`
 - `harness-docs/ARCHITECTURE.md:403` の退避先の記述が古くなった(`/metatron:update` で直す)。
+  - 直したコミット: `fea5e14`。ADR の本文は CLI で書き換えられないので、ADR-013 を足し、その影響範囲で ADR-009 の退避先を置き換えた
 - `phase-finalize.md` で `finalize` を呼んで run が `awaiting_outcome` になった後の手順(ADR 候補・結果レポート)の間に compaction が起きると、読み直しの対象(`active`・`awaiting_human`)から外れる。改修前からある順序の問題。
+  - 直したコミット: `3dae170`
 - `facilitating-design-discussions` が `<plugin-root>` を使うのに、プラグインルート参照規約を持たない(改修前から)。`initializing-harness` L198 の「ARCHITECTURE の承認なしの書き込みは HARD-GATE 違反」が L49 と食い違う。
+  - 直したコミット: `a4f0bef`
 - `reviewing-diffs` の description が「`review-<m>.md` にまとめる」と書き、本文(テキストで返す)と食い違う(改修前から)。
+  - 直したコミット: `1fa10ea`
+- (Task 11 の結果から)オーケストレーターが `scripting-tests` の報告の部分と `reviewing-diffs` の所見の書式を読んでいた(K13 の残り)。
+  - 直したコミット: `33d3ca7`
+- (Task 10 の結果から)計測の道具 `tools/codiel_run_usage.py` が、変数経由の `start-phase` と Bash の `cat`・`sed` の読みを数えない。
+  - 直したコミット: `baf7092`
+- (2026-10-03 ユーザー決定で追加)ADR 候補と GOTCHAS 候補を、codiel が直接記録せず候補として残して metatron に渡す。`adrTarget` は `knowledgeTarget` に改名した。
+  - 直したコミット: `a7544f0`(改名)、`6a6679c`・`fe8644f`(GOTCHAS 候補)、`4a7eddc`・`48bd327`(ADR 候補を同じ流れにそろえる)、`95b7ef3`(条件や時点を指す「契機」の書き換え)、`51ada0f`
 
 ## Task 10 の結果
 
