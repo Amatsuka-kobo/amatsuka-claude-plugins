@@ -37,7 +37,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 0. active run の確認
 
-聞き取り・書き込み・起票のどれよりも前に、`node <plugin-root>/scripts/codiel-state.mjs get --active` でほかの run が active でないことを確かめる。`active` または `awaiting_human` の run が見つかったら、`references/active-run-check.md` を Read して従う。
+聞き取り・書き込み・起票のどれよりも前に、`node <plugin-root>/scripts/codiel-state.mjs get --active` でほかの run が active でないことを確かめる。`active` または `awaiting_human` の run が見つかったら、`references/active-run-check.md` を Read して従う。再開する run があると決まったら、`orchestrating-runs` の `references/resume.md` へ進み、このスキルの以降の手順は行わない。
 
 ## 1. 前提確認とベースブランチの最新化
 
@@ -85,11 +85,11 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ### 3-3. 現状調査
 
-ASIS はユーザーに聞かず自分で読む。`## 現状調査` は AI がコードと文書を読んで書く。ユーザーに聞くのは、読んでも分からないこと(何を達成したいか、どうなったら完了か)だけである。読んで確かめられなかったことは書かない。
+`## 現状調査` の内容は、ユーザーに聞かず AI がコードと文書を読んで書く(原文の `## ASIS` の聞き取りは 3-1 に従う)。ユーザーに聞くのは、読んでも分からないこと(何を達成したいか、どうなったら完了か)だけである。読んで確かめられなかったことは書かない。
 
 文書は `CLAUDE.md` → `README.md` の順に読む。
 
-- パスは手順 1 の `contextDocs` のうち、`CLAUDE.md` と `README.md` のものを使う。固定パスで開かない。
+- パスは §0 の `check-intent-env` の出力にある `contextDocs` のうち、`CLAUDE.md` と `README.md` のものを使う。固定パスで開かない。
 - 探索を委譲するときは、解決済みの絶対パスを渡して委譲先に読ませる。注入はサブエージェントに継承されない。
 - 探索範囲は TOBE に登場する語から辿れる範囲に限定する。
 - Serena が利用可能なら優先して使う(`get_symbols_overview` / `find_symbol` / `find_referencing_symbols`)。利用できなければ Grep / Glob / Read で代替する。
@@ -135,11 +135,11 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 承認後、次の (1)〜(6) をこの順に行う。git の操作と Raguel MCP の呼び出しはこのスキルの実行者、`codiel-state` の各コマンドは CLI が行う。
 
-ユーザーへの確認は (3) までに済ませる。(1)〜(3) は run を作る前なので `mark-ask` を使わない例外である。これ以外の途中で人へ確認するときは、`codiel-state mark-ask <phase> --slug <slug> --kind confirm` で run を `awaiting_human` にしてから確認し、答えを得たら `codiel-state resume --slug <slug>` で戻す(`--evaluation-id` は無くてよい)。(4) の `codiel-state init` から (6) の `start-phase intent` までは確認を挟まず一気に進める。この区間は phase が `null` の active run になり、stop-guard が active な run でのセッションの停止を block する。ユーザーの応答を待つと止まれない。
+ユーザーへの確認は (3) までに済ませる。(1)〜(3) は run を作る前なので `mark-ask` を使わない例外である。これ以外の途中で人へ確認するときは、`codiel-state mark-ask <phase> --slug <slug> --kind confirm` で run を `awaiting_human` にしてから確認し、答えを得たら `codiel-state resume --slug <slug>` で戻す(`--evaluation-id` は無くてよい)。(4) の `codiel-state init` から (6) の `start-phase intent` までは、ユーザーへの確認を挟まず一気に進める(Raguel の ASK の裁定待ちは除く)。この区間は phase が `null` の active run になり、stop-guard が active な run でのセッションの停止を block する。ユーザーの応答を待つと止まれない。
 
 (1) 開始時のブランチの作業ツリーに intent 文書を Write で書く。frontmatter `run` には slug を入れる。保存先の命名規則(同日重複の扱い、git 未管理時の扱い)は `intent-format.md` の「保存先と命名」に従う。手順 1 で前の try の intent を持ち込んでいるときは、持ち込んだ intent と同じパスに書く。
 
-(2) Issue 起票を選んだときだけ、gh-utility `issue-craft` を持ち込みモードで起動して起票し、番号を intent の frontmatter `issue` に書く。固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動し、`title` / `body` / `labels`(任意)を渡す(`handoff-contract.md`)。渡す本文には `<!-- codiel:generated -->` を含める。起票は外部公開行為であり、持ち込みモード側でも全文提示と明示承認を経る。承認が得られなかったときは、起票を保留して止まり、「起票せず続行(`issue` は空のまま)」「本文を直して再提示」「中止」を AskUserQuestion で聞く。起票が失敗したときは、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲(intent は保存済みであること、起票の有無)を報告して指示を待つ。再試行する前に、Issue が既に作られていないかを確かめる。`issue-craft` が使えないときは `intent-common.md` の「自前起票」に従う。
+(2) Issue 起票を選んだときだけ、gh-utility `issue-craft` を持ち込みモードで起動して起票し、番号を intent の frontmatter `issue` に書く。固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動し、`title` / `body` / `labels`(任意)を渡す(`handoff-contract.md`)。渡す本文には `<!-- codiel:generated -->` を含める。起票は外部公開行為であり、持ち込みモード側でも全文提示と明示承認を経る。承認が得られなかったときは、起票を保留して止まり、「起票せず続行(`issue` は空のまま)」「本文を直して再提示」「中止」を AskUserQuestion で聞く。「中止」が選ばれたら、`init` を行わずに終了する。この時点で intent は保存済み、`issue` は空、run は無い。intent が作業ツリーに残っていることと、同じ入口で `/codiel:run` をやり直せることを伝える(手順 4 のゲートでの中止は、何も書いていない状態なので別である)。起票が失敗したときは、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲(intent は保存済みであること、起票の有無)を報告して指示を待つ。再試行する前に、Issue が既に作られていないかを確かめる。`issue-craft` が使えないときは `intent-common.md` の「自前起票」に従う。
 
 (3) intent 以外の未コミットの変更があるかを確かめる。あるときは `references/uncommitted-changes.md` を Read して従う。
 
@@ -149,14 +149,16 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 (5) `git add -- <intent パス>` で intent 文書だけを stage する。未追跡のファイルでもパスを限定したコミットができる。
 
-(6) 手順 4 で決めた「文書だけ残して終えるか」で分岐する。どちらの分岐も、ユーザーへの確認を挟まずに進める。
+(6) 手順 4 で決めた「文書だけ残して終えるか」で分岐する。どちらの分岐も、ユーザーへの確認は挟まない(Raguel の ASK の裁定待ちは除く)。
 
 - 終える(intent-only)とき: `references/intent-only.md` を Read して従う。
 - 続行するとき:
   1. `git switch -c <state.branch>` を実行する。
   2. `git commit -m "codiel(intent): <要約> (<slug> try-<n>)" -- <intent パス>` を実行する。
-  3. `codiel-state start-phase intent --slug <slug>` → `evaluate_decision` → `codiel-state pass-gate intent --slug <slug> --evaluation-id <id> --verdict PROCEED` の順に進め、以降のフェーズへ移る。
+  3. `codiel-state start-phase intent --slug <slug>` → `evaluate_decision` → `codiel-state pass-gate intent --slug <slug> --evaluation-id <id> --verdict PROCEED` の順に進め、以降のフェーズへ移る。`evaluate_decision` が ASK を返したときは `mark-ask` で `awaiting_human` にして裁定を待ち、STOP が返ったときは、どちらも `raguel-gating` の手順に従う。PROCEED になるまで `pass-gate` を呼ばない。
 
 `git switch -c` か `git commit` が失敗したときは、`references/commit-failure.md` を Read して従う。この失敗で run を `commit-failed` で終端にした後に限り、ユーザーへ確認してよい。
 
-保存に失敗したときは、intent 文書の全文をセッション内に提示したうえで保存先をユーザーに確認する。文書を失わせない。畳んだ経路があるときは、理由と使えるようにする方法を 1 行で報告する。
+(1) の Write が失敗したときは、intent 文書の全文をセッション内に提示したうえで保存先をユーザーに確認する。文書を失わせない。`init` の後(run がある)の失敗は、(6) の `git switch -c` と `git commit` なら `references/commit-failure.md` に、それ以外なら `intent-common.md` の「失敗時」に従う。
+
+畳んだ経路があるときは、`../../references/intent-common.md` の「畳んだことの報告」に従い、理由と使えるようにする方法を 1 行で報告する。
