@@ -24,7 +24,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - intent 文書と intent-issue の書式は `../../references/intent-format.md` に従う。
 - 変更ごとの intent の文の組み立ては `../../references/intent-writing.md` に、GitHub へ投稿する本文の文の組み立ては `../../references/github-writing.md` に、画像の載せ方は `../../references/github-writing-images.md` に従う。
 - gh-utility の `issue-craft` へ委譲するときの契約は `../../references/handoff-contract.md` に従う。
-- ディスカッションの言語はユーザーの使用言語に従う。intent 文書と issue 本文の言語は手順 4 で 1 回だけ別に確認する。
+- ディスカッションの言語はユーザーの使用言語に従う。intent 文書の言語は手順 4 のドラフトの前に、issue 本文の言語は起票が決まったときに、それぞれ 1 回だけ別に確認する。
 
 ## 手順
 
@@ -60,7 +60,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - Issue 番号・intent パス・intent パスで frontmatter が `intent: v1`: `references/entry-branches.md` を Read して従う。
 - 省略: 「何を達成したいか」から聞く。
 
-既存 intent 文書との重複確認は、`existingIntents` のタイトル一覧を読み、今回の TOBE と重なるものがあるかを意味で判断する。重なるものがあれば、既存を更新するか新規に起こすかをユーザーに確認する。重なりが無ければそのまま手順 3 へ進む。
+既存 intent 文書との重複確認は、§0 の `check-intent-env` の出力にある `existingIntents` のタイトル一覧を読み、今回の TOBE と重なるものがあるかを意味で判断する。重なるものがあれば、既存を更新するか新規に起こすかをユーザーに確認する。重なりが無ければそのまま手順 3 へ進む。
 
 ## 3. 聞き取りと現状調査
 
@@ -114,7 +114,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 4. ドラフトの提示と承認ゲート
 
-- ドラフトを書く前に、intent 文書の言語と issue 本文の言語を 1 回で確認する。リポジトリの既存文書から推定した言語を推奨として添える。推定できないときは、ユーザーの使用言語を推奨にする。この確認は派生文のセクションだけに当て、原文のセクションは対象外とし、原語のまま残す。
+- ドラフトを書く前に、intent 文書の言語を 1 回で確認する。リポジトリの既存文書から推定した言語を推奨として添える。推定できないときは、ユーザーの使用言語を推奨にする。この確認は派生文のセクションだけに当て、原文のセクションは対象外とし、原語のまま残す。
+- issue 本文の言語は、ゲートで Issue 起票に「する」が選ばれた後に、同じ方法で 1 回確認する。起票しないとき、local モードのときは聞かない。
 - 書式は `intent-format.md` に従う。見出しの名称と順序を変えない。slug とファイル名の規則、日付の決め方も同じ文書の「保存先と命名」に従う。
 - 提示はメッセージ本文で行い、ドラフトの全文を示す。要約・抜粋・差分には置き換えない。先にファイルへ書いて「読んで確認してほしい」と依頼しない。保存と `docs/intents/` の作成は承認後に行う。
 - `## 実装方針` も承認対象に含める。設計書ではなく、どの層をどう変えるかの方針として書く。
