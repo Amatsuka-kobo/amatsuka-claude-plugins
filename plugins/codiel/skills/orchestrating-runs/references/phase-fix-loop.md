@@ -8,3 +8,4 @@
 - github モードでは、修正のコミットが済んだ後、再レビューの委譲の前に `git push` して PR ブランチを最新化する。
 - 再レビューの委譲を出す前に `references/review-common.md` を Read し、その規則で観点を選び直す。統合した報告は `review-<m+1>.md` に書く。
 - 直した所見に、設計時に想定していなかった仕様漏れ・考慮漏れがあったときは、最後の pass-gate の前に `references/gotcha-candidates.md` を Read する。pass-gate の後に、その手順で漏れごとに GOTCHAS 候補を書く。
+- 設計を変える修正を採ったときは、最後の pass-gate の前に `references/adr-candidates.md` を Read する。pass-gate の後に、その手順で ADR の 3 条件を判定し、満たす判断ごとに ADR 候補を書く。

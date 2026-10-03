@@ -208,13 +208,14 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
 | `references/e2e.md` | E2E を実行する委譲を出す前 |
 | `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・上限超過の後の中止(raguel-gating・implement・test-code)・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
+| `references/adr-candidates.md` | intent-sync で取り込み先の分岐を決める前。fix-loop で設計を変える修正を採ったときの最後の pass-gate の前。finalize で候補を写す前と、結果レポートに一覧する前 |
 | `references/resume.md` | run を再開するとき |
 
 手順ファイルは次の 4 つの時点で読む。
 
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
-2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`gotcha-candidates.md`)を使う手順に入る前。読む時点は
+2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`gotcha-candidates.md`・`adr-candidates.md`)を使う手順に入る前。読む時点は
    上の表に従う。fix-loop の再レビューでは、委譲を出す前に `review-common.md` を読む。
 3. run を再開するとき。`resume.md` を読み、待ちの処理や委譲の出し直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の

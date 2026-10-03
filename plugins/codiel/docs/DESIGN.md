@@ -346,13 +346,13 @@ intent にだけ残す。
 | intent | 読む。関係する領域の制約をユーザーに示す |
 | design(標準)/ test-spec・dev-plan(軽量) | 読む。制約を設計・仕様・手順の前提にする |
 | review | 読む。制約への違反は severity high の所見にする |
-| intent-sync | 書く。取り込みと `[ADR 候補]` の採番を行う唯一のフェーズ。`intents` の run では、まだ写していない GOTCHAS 候補も写す |
-| finalize | `intents` の run だけ、最後の intent-sync より後に出た GOTCHAS 候補を `## GOTCHAS 候補` に書き足す。ほかのセクションは書き換えない |
+| intent-sync | 書く。取り込みを行う唯一のフェーズ。`intents` の run では、まだ写していない ADR 候補と GOTCHAS 候補を写し、ADR 候補に候補 ID を採番する |
+| finalize | `intents` の run だけ、最後の intent-sync より後に出た ADR 候補を `## 意図的な制約` に、GOTCHAS 候補を `## GOTCHAS 候補` に書き足す。ほかのエントリとセクションは書き換えない |
 
-`knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値で、intent フェーズの承認ゲートで決め、state.json に記録する。`metatron` の run は ADR 級の
+`knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値で、intent フェーズの承認ゲートで決め、state.json に記録する。どちらの値でも、ADR 級の判断はまず try の手元の記録に書く。`metatron` の run は ADR 級の
 判断を持続層に全文で残さず、metatron の ADR に直接任せる(持続層には `関連 ADR` の番号だけを書く)。
 `intents` の run は metatron が無い、または ARCHITECTURE が見つからない環境で使う値で、ADR 級の判断も
-`[ADR 候補]` として持続層に全文を残す。
+手元の記録から `[ADR 候補]` として持続層に全文で写す。
 
 metatron を導入すると、`/metatron:init` と `/metatron:update` が持続層を走査し、`[ADR 候補]` の印を
 ADR へ移してから、そのエントリだけを参照形(見出し・制約・`関連 ADR: ADR-NNN(候補 ID: ...)` の 3 行)に
@@ -709,6 +709,14 @@ K12 の直後の codiel は、run の中で起きた失敗を何も残さなか�
 - incident の候補を持続層へ写す扱いは保留である(2026-10-03 ユーザー判断)。incident は finalize の後の outcome の同期で起き、書いてコミットするブランチが決まらないためである。いまは手元の記録に書いて同期の報告に一覧するだけにし、写さない印を付けておく。
 - metatron へ候補を移す機能は別に作る。候補 ID を持たせないのはそのためである。
 
+同じ 2026-10-03 のユーザー決定で、ADR 候補も GOTCHAS 候補と同じ流れにそろえた。手順の正本は `orchestrating-runs` の `references/adr-candidates.md` である。
+
+- それまでの ADR 候補は intent-sync の取り込みの中でしか生まれず、`intents` の run は持続層へ直接、`metatron` の run は `steps/intent-sync/report.md` へ書いていた。fix-loop で設計を変える修正を採り、そこで ADR の 3 条件を満たす判断が出ても、拾う手順が無かった。
+- そこで、ADR 候補は `knowledgeTarget` によらず try の手元の記録(`reports/adr-candidates.md`)に書く。書く時点は intent-sync の取り込みと、fix-loop で設計を変える修正を採ったとき(GOTCHAS 候補の設計の漏れと同じく、最後の pass-gate の後)である。
+- `intents` の run では、intent-sync と finalize で未写しの候補を持続層の `## 意図的な制約` へ全文で写し、そのコミットに含める。写す時点・対象の try・`写し先` の印は GOTCHAS 候補の手順を共有する。候補 ID は写すときに採番する。手元の記録は git に載らず、ID を持たせても持続層の採番と食い違うだけだからである。
+- `metatron` の run は写さず、finalize の結果レポートと stop の完了報告に一覧する。`steps/intent-sync/report.md` は、取り込んだ領域ファイルのパスと書かずに終えた矛盾だけを持つ。
+- 持続層での `[ADR 候補]` の書式と参照形(metatron との共有ファイル契約)は変えていない。手元の記録のエントリは、その書式から印を除き、`run` の行を足した形である。
+
 ### `.claude/rules/codiel.md`(← `assets/rules/codiel.md`)
 
 Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
@@ -719,8 +727,9 @@ codiel はこの 2 つに触れないので、rules にも書かない。metatro
 
 - intent 文書(`docs/intents/`)の原文のセクション(`## ASIS` / `## TOBE`)はユーザーの言葉のまま
   にし、要約・書き換えをせず、日付・話者・出所つきで末尾に追記する
-- 持続層(`docs/intents/domains/`)を書き換えるのは intent-sync フェーズだけにし(例外は finalize での GOTCHAS 候補の書き足し)、`[ADR 候補]`
-  の印が付いたエントリを参照形へ縮める作業も intent-sync フェーズの外で行う
+- 持続層(`docs/intents/domains/`)は intent-sync フェーズでだけ書き換える。例外は、finalize で ADR 候補と
+  GOTCHAS 候補を書き足すことである。`[ADR 候補]` の印が付いたエントリを参照形へ縮める作業は、intent-sync
+  フェーズの外で行う
 - テスト仕様書(`<testsDir>/`)は機能の一部。機能を変えたら仕様書とケースも更新する
 
 規則:

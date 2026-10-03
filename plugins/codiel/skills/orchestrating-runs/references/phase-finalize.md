@@ -11,7 +11,7 @@ triage を終えて finalize の作業を始める前に読む。finalize は `s
    ```
    人が派生文側を直すと決めたら、intent の派生文のセクションをこのフェーズの中で直し、確認を終えたら `codiel-state resume --slug <slug>` で戻す。食い違いは結果レポートの「要確認」として示す。
 3. 持ち越しを除いて原文の要望がすべて達成のときだけ、`status: done` にする。1 件でも「未達」か「要確認」が残れば `in-progress` のままにし、結果レポートに残りを示す。
-4. `knowledgeTarget` が `intents` なら、`references/gotcha-candidates.md` を Read し、その手順で、この try のまだ写していない GOTCHAS 候補を領域ファイルへ写す。intent を更新したときと候補を写したときは、両方を 1 つのコミットにまとめて run ブランチへコミットする。
+4. `knowledgeTarget` が `intents` なら、`references/adr-candidates.md` と `references/gotcha-candidates.md` を Read し、それぞれの手順で、まだ写していない ADR 候補と GOTCHAS 候補を領域ファイルへ写す。intent を更新したときと候補を写したときは、両方を 1 つのコミットにまとめて run ブランチへコミットする。
 5. この try の E2E の途中のレポートを消してコミットする。
    - 残すのは、失敗した実行(`failure.md` を持つもの)と、仕様のディレクトリごとのこの try の最後の実行である。
    - 名前が `-<slug>-try<n>` で終わるディレクトリのうち残さないものを、リポジトリ相対のパスで `git rm -r -q -- <パス>` する。無視された画像が残れば `rm -r -- <パス>` で消す。絶対パスは guard-bash の `rm -rf` の判定に当たるので使わない。
@@ -19,11 +19,7 @@ triage を終えて finalize の作業を始める前に読む。finalize は `s
    - 消したら `codiel(finalize): 途中の E2E のレポートを消す (<slug> try-<n>)` でコミットする。消すものが無ければコミットしない。
 6. github モードでは `git push` し、PR に反映させる。local モードでは push しない。
 7. 残っている worktree とそのブランチをすべて削除する。
-8. ADR 候補を結果レポートに挙げる。一覧の出どころは `knowledgeTarget` で分ける。
-    - `metatron`: `steps/intent-sync/report.md` に書き残した ADR 候補の一覧
-    - `intents`: 今回取り込んだ持続層のファイルにある `[ADR 候補: <候補 ID>]` の見出しの一覧
-    - 候補が無いときは、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのかを書く。
-    - GOTCHAS 候補の一覧も、`knowledgeTarget` によらず結果レポートに挙げる。手順 4 で読んでいなければ、先に `references/gotcha-candidates.md` を Read し、その「一覧」に従って書く。
+8. ADR 候補と GOTCHAS 候補の一覧を、`knowledgeTarget` によらず結果レポートに挙げる。手順 4 で読んでいなければ、先に `references/adr-candidates.md` と `references/gotcha-candidates.md` を Read する。それぞれの「一覧」に従い、同じ slug の手元の記録から書く。
 9. 結果レポートを `finalize` の前に組み立てる。`finalize` の後に compaction が起きても出力だけで終えられるようにするためである。結果レポートには次を含める。
     - 原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表
     - 手順 8 の ADR 候補の一覧と GOTCHAS 候補の一覧
