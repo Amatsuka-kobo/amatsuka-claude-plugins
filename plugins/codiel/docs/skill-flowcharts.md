@@ -194,7 +194,7 @@ digraph implementing {
   node [fontname="sans-serif"];
 
   read_plan [label="dev-plan.md を読み\n自ステップの通すテストを確認\n(worktree なら brief.md も Read)", shape=box];
-  read_arch [label="渡された実行モード・\nドメインマップ・担当タグを確認", shape=box];
+  read_arch [label="渡された実行モード・\n担当タグ・担当範囲を確認", shape=box];
   mode [label="呼び出しモードは?", shape=diamond];
 
   install [label="worktree の中で\n依存をインストール\n(brief の環境準備、無ければ既定)", shape=box];

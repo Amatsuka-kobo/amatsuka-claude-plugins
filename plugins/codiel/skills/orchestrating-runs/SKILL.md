@@ -357,9 +357,9 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 - ARCHITECTURE: <review と再レビューの委譲のときだけこの行を書く。§0 で解決した絶対パス。存在しなければ「なし」>
 - 反論済み所見: <再レビューの委譲のときだけこの行を書く。`fixing-review-findings` の反論済み一覧の全件。無ければ「なし」>
 - 実行モード: <mapped | unscoped>
-- ドメインマップ: <mapped のときは §0 で読み取った JSON の全文。unscoped のときは「なし」>
 - testsDir: <§0 で得た値>
 - 担当タグ: <このディスパッチで担当するタグ。ドメインに紐づかない委譲では「なし」>
+- 担当範囲: <mapped で担当タグがドメインマップのキーにあるときは、そのキーの glob 配列。それ以外は「なし」>
 
 ## 前フェーズの申し送り(findings)
 <前フェーズの EvaluationResult.findings を ruleId + message の箇条書きで要約したもの。無ければ「なし」>
@@ -397,6 +397,7 @@ node <plugin-root>/scripts/codiel-state.mjs clear-domain --slug <slug>
 ```
 
 - `mapped` の実装と test-loop の修正では、ステップのタグの値を依頼文にそのまま渡す。汎用の実装へ送るときもタグの値を渡し、タグから別名を作らない。
+- 依頼文の担当範囲は、§0 で読み取ったドメインマップから担当タグのキーの値を引いて作る。キーが無いときは「なし」と書く。
 - worktree の中で動く委譲(implement の `parallel` グループの各ステップ、test-loop の仕様のディレクトリごとの修正)では `set-domain` を使わない。worktree の要素には `step-add --domain` で `domain` を記録してあり、guard-write は書き込み先が属する要素のその値で境界を判定する。
 - メインの作業ツリーで動く委譲(`serial` グループ、`final`、グループのマージの後の run ブランチ上の修正、test-loop のプロジェクト全体の修正、fix-loop の修正)では、委譲の直前にタグの値をそのまま `set-domain` に渡す。
 - `set-domain` を伴う委譲を `wait-done` したら、直後に `clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
