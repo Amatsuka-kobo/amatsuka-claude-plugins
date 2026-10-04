@@ -785,6 +785,7 @@ function injectContext(content, eventName) {
 
 // src/inject-context.ts
 var STAGE2_TOC_LIMIT = 50;
+var PLATFORM_MAX_CHARS = 1e4;
 var MAX_WARNING_LINES = 3;
 var STDIN_TIMEOUT_MS = 2e3;
 function pluginRoot(env) {
@@ -1121,7 +1122,10 @@ function collectWarnings(config, arch, gotchas) {
   ].slice(0, MAX_WARNING_LINES);
 }
 function fitToBudget(config, input) {
-  const budget = Math.max(1, config.injection.maxChars);
+  const budget = Math.min(
+    PLATFORM_MAX_CHARS,
+    Math.max(1, config.injection.maxChars)
+  );
   const startCount = Math.min(
     config.injection.gotchasRecentCount,
     input.gotchas?.entries.length ?? 0

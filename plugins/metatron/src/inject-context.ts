@@ -37,7 +37,9 @@
 //    下回る場合は削れない部分を優先し、maxChars を超える。
 //    不変条件 1 が maxChars より上位にあるためである(§8-3 の優先 1、§8-5 の
 //    「CLI 案内には決して手を付けない」)。破ってはならない真の上限はプラットフォームの
-//    10,000 文字であり、どちらのイベントでも常に守る。
+//    10,000 文字(PLATFORM_MAX_CHARS)であり、どちらのイベントでも常に守る。
+//    maxChars の値域は 10,000 を超える値も受け付けるので、組み立てでは maxChars と
+//    PLATFORM_MAX_CHARS の小さいほうを予算にする。削れない部分は 10,000 文字よりずっと短い。
 // 3. **セクション分解は必ず lib のパーサを使う。** 素朴な文字列処理で代替してはならない。
 //    代替すると、CLI が 1 セクションと見なす範囲と、注入が切り出す範囲が食い違う。
 //    Mermaid を含むセクションで壊れる(§8-6)。
@@ -60,6 +62,8 @@ import { type GotchaEntry, parseGotchas } from "./lib/gotchas.js"
 
 /** 設計書 §8-5 段階 2。目次をこの件数に制限する。 */
 const STAGE2_TOC_LIMIT = 50
+/** プラットフォームが additionalContext に課す上限。maxChars がこれより大きくても超えない。 */
+const PLATFORM_MAX_CHARS = 10_000
 /** 警告行の上限。予算を食わせないために切り詰める。 */
 const MAX_WARNING_LINES = 3
 /** stdin が閉じない環境で hook 自体が固まらないようにする保険。 */
@@ -591,9 +595,12 @@ function collectWarnings(
   ].slice(0, MAX_WARNING_LINES)
 }
 
-// 段階縮退を尽くして maxChars に収める(§8-5)。両イベントで同じ段階と設定を使う。
+// 段階縮退を尽くして maxChars とプラットフォームの上限に収める(§8-5)。両イベントで同じ段階と設定を使う。
 function fitToBudget(config: ResolvedConfig, input: RenderInput): string {
-  const budget = Math.max(1, config.injection.maxChars)
+  const budget = Math.min(
+    PLATFORM_MAX_CHARS,
+    Math.max(1, config.injection.maxChars)
+  )
   // 設定値が実エントリ数より大きいときに同じ出力を何度も組み立てないよう頭を揃える。
   const startCount = Math.min(
     config.injection.gotchasRecentCount,

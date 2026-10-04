@@ -1014,6 +1014,20 @@ test("S1: SubagentStart — 見出しと読むだけの 1 行の後に、ARCHITE
   expect(content).toContain("## 既知の落とし穴(docs/GOTCHAS.md: 全 7 件)")
   expect(content).toContain("### 目次(新しい順)")
   expect(content).toContain("### 直近 5 件(全文)")
+
+  // 直近の全文には新しい 5 件の見出しと本文が入り、それより古いエントリは入らない
+  const recent = recentBlock(content)
+  for (const n of [7, 6, 5, 4, 3]) {
+    expect(recent).toContain(
+      `### [2026-08-16] GOTCHA-00${n}: 失敗 ${n} のタイトル`
+    )
+    expect(recent).toContain(`**失敗内容**: 失敗 ${n} の内容`)
+    expect(recent).toContain(`**原因 (推測)**: 原因 ${n}`)
+  }
+  for (const n of [2, 1]) {
+    expect(recent).not.toContain(`GOTCHA-00${n}`)
+    expect(recent).not.toContain(`失敗 ${n} の内容`)
+  }
 })
 
 test("S2: SubagentStart で文書が無い — 何も出力しない(設定の警告があっても出さない)", () => {
@@ -1127,4 +1141,26 @@ test("S10: hook_event_name が無い・文字列でない入力は SessionStart 
     expect(result.eventName).toBe("SessionStart")
     expect(result.content.startsWith(GUIDE)).toBe(true)
   }
+})
+
+// maxChars の値域は 10,000 を超える値も受け付ける。組み立ての予算はプラットフォームの上限で頭打ちにする。
+test("I24・S11: maxChars が 10,000 を超えても、両イベントの出力は 10,000 文字以下に収まる", () => {
+  // ARCHITECTURE だけで 15,000 文字を超え、maxChars をそのまま予算にすると上限を破る入力
+  const arch = hugeArchitecture(25, 600)
+  expect(arch.length).toBeGreaterThan(15_000)
+  const root = project({
+    arch,
+    gotchas: gotchas(30, [], 100),
+    config: configWith(20_000)
+  })
+
+  const session = inject(root)
+  if (session === null) throw new Error("SessionStart で注入されなかった")
+  expect(session.startsWith(GUIDE)).toBe(true)
+  expect(session.length).toBeLessThanOrEqual(10_000)
+
+  const subagent = injectSubagent(root)
+  if (subagent === null) throw new Error("SubagentStart で注入されなかった")
+  expect(subagent.startsWith(SUBAGENT_GUIDE)).toBe(true)
+  expect(subagent.length).toBeLessThanOrEqual(10_000)
 })
