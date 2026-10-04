@@ -1,31 +1,46 @@
 #!/usr/bin/env node
-// SessionStart 注入 hook。
+// SessionStart・SubagentStart 注入 hook。
 //
 // 仕様の正本は metatron 設計書 §8(注入)と、ファイル契約
 // `harness-docs/design/2026-08-16-file-contract-freeze.md` §13(hook 出力の形式)。
+// SubagentStart の扱いは `harness-docs/design/2026-10-04-metatron-recording-timing-and-subagent-injection-design.md` の 3。
+// 入力の hook_event_name が SubagentStart ならサブエージェント向けを、それ以外(無い・読めないを含む)は
+// SessionStart 向けを組み立てる。
 //
 // この層は第 2 層(機構自身の動作)であり、**フェイルオープン**する。
 // 読めない・壊れている・例外が出た、のいずれでも**文書の内容**は出力せず exit 0 で終える。
 // 注入の失敗が「セッションを開始できない」という不釣り合いに大きな損害へ化けるためである。
 //
-// 不変条件が 4 つある。実装を変えるときはこれを壊さないこと。
+// 不変条件が 4 つある。実装を変えるときはこれを壊さないこと。イベントごとの当て方は次のとおり。
 //
-// 0. **文書が 1 つも無くても CLI 案内だけは出す(§8-7 の限定)。**
+// | 不変条件                         | SessionStart                     | SubagentStart                          |
+// | -------------------------------- | -------------------------------- | -------------------------------------- |
+// | 0. 文書が無くても案内を出す       | 当てる                           | 当てない(何も出さない)                 |
+// | 1. 削れない部分を先頭に置き残す   | CLI 案内・記録のタイミング・委譲 | 見出しと「読むだけにする」の 1 行       |
+// | 2. maxChars 以下を目標にする      | 当てる                           | 当てる                                 |
+// | 3. セクション分解は lib のパーサ  | 当てる                           | 当てる                                 |
+//
+// 0. **SessionStart では、文書が 1 つも無くても CLI 案内だけは出す(§8-7 の限定)。**
 //    `/metatron:init` はまさにその状態で使うコマンドであり、案内を落とすと
 //    AI は CLI の絶対パスを知る手段を持たず、init を開始できない。
 //    例外は 2 つだけ。`injection.enabled: false`(利用者が明示的に切っている)と、
 //    設定の解決が例外で失敗した場合(壊れた機構が誤った CLI パスを広告しないため)。
-// 1. **削れない部分(CLI 案内と記録のタイミング)は常に出力の先頭にあり、どの縮退段階でも完全な形で残る。**
+//    SubagentStart では文書が無ければ何も出さない。サブエージェントは init を始めないので、案内が要らない。
+// 1. **削れない部分は常に出力の先頭にあり、どの縮退段階でも完全な形で残る。**
+//    SessionStart では CLI 案内と記録のタイミングと委譲の注意、SubagentStart では見出しと
+//    「読むだけにする」の 1 行が削れない部分である。
 //    プラットフォームが 10,000 文字で退避に倒したとき、モデルへ渡るのは先頭のプレビューである。
 //    先頭に無ければ、最も短くて最も代替の効かない要素が最初に見えなくなる(設計書 §8-3)。
-//    記録のタイミングは文書があるときだけ載せる(文書が無いうちは記録先が無い)。
+//    記録のタイミングと委譲の注意は文書があるときだけ載せる(文書が無いうちは記録先も注入する文書も無い)。
 // 2. **出力の総文字数は maxChars(既定 9000)以下に収めることを目標とする。** 段階縮退を尽くす(§8-5)。
-//    ただし maxChars が削れない部分の長さ(約 1,000 文字。CLI の絶対パスの長さで変わる)を下回る場合は削れない部分を優先し、maxChars を超える。
+//    ただし maxChars が削れない部分の長さ(SessionStart は約 1,000 文字。CLI の絶対パスの長さで変わる)を
+//    下回る場合は削れない部分を優先し、maxChars を超える。
 //    不変条件 1 が maxChars より上位にあるためである(§8-3 の優先 1、§8-5 の
 //    「CLI 案内には決して手を付けない」)。破ってはならない真の上限はプラットフォームの
-//    10,000 文字であり、これは常に守る。
-// 3. **セクション分解は必ず lib のパーサを使う。** 素朴な文字列処理で代替すると、
-//    CLI が 1 セクションと見なす範囲と注入が切り出す範囲が食い違い、Mermaid を含む節で壊れる(§8-6)。
+//    10,000 文字であり、どちらのイベントでも常に守る。
+// 3. **セクション分解は必ず lib のパーサを使う。** 素朴な文字列処理で代替してはならない。
+//    代替すると、CLI が 1 セクションと見なす範囲と、注入が切り出す範囲が食い違う。
+//    Mermaid を含むセクションで壊れる(§8-6)。
 
 import fs from "node:fs"
 import path from "node:path"
@@ -86,8 +101,7 @@ function cliLines(cli: string): string[] {
     "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
     "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
     "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
-    "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
-    "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
+    "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
   ]
 }
 
@@ -110,7 +124,27 @@ function buildGuide(cli: string): string {
     "",
     "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
     ...cliLines(cli),
-    ...recordingLines()
+    ...recordingLines(),
+    ...delegationLines()
+  ].join("\n")
+}
+
+// サブエージェントへの委譲。SubagentStart hook が両文書を注入するので、依頼文へ写すと重複する。
+// 写した要約は原文とずれても気づけない。文書が無いうちは注入する文書も無いので、buildInitGuide には入れない。
+function delegationLines(): string[] {
+  return [
+    "サブエージェントには SubagentStart hook が ARCHITECTURE と GOTCHAS を注入する。",
+    "委譲の依頼文には、両文書の原文も要約も書き写さない。"
+  ]
+}
+
+// サブエージェント向けの削れない部分。CLI の案内・記録のタイミング・委譲の注意は載せない。
+// 記録と文書の更新はメインセッションが行うので、サブエージェントは文書を読むだけでよい。
+function buildSubagentGuide(): string {
+  return [
+    GUIDE_TITLE,
+    "",
+    "以下の文書は前提として読むだけにし、直接編集しない。"
   ].join("\n")
 }
 
@@ -295,31 +329,64 @@ function* plans(recentCount: number): Generator<Plan> {
 }
 
 // ---------------------------------------------------------------------------
+// 全文の取得先の案内
+// ---------------------------------------------------------------------------
+
+// 注入に載せなかった部分をどこから読むか。SessionStart は CLI(`node M ...`)を、
+// SubagentStart は文書のパスを Read する案内を出す。サブエージェントには CLI の案内を載せないので、
+// `node M` と書いても M が何を指すか分からない。
+interface FullTextRefs {
+  /** ADR 一覧の末尾に置く、ADR の全文の取得先。 */
+  adrFull: string
+  /** 縮退で ADR 一覧を割愛したときの案内。 */
+  adrDropped: string
+  /** GOTCHAS の目次から外れたエントリの取得先。 */
+  gotchasRest: (rest: number) => string
+  /** GOTCHAS の目次を割愛したときの案内。 */
+  gotchasList: string
+}
+
+const CLI_REFS: FullTextRefs = {
+  adrFull: "ADR の全文は `node M get adr` で取得すること(注入には載せない)。",
+  adrDropped: "ADR 一覧は割愛した。`node M get adr` で取得すること。",
+  gotchasRest: (rest) =>
+    `- ほか ${rest} 件は \`node M get gotchas\` で取得すること。`,
+  gotchasList: "一覧は `node M get gotchas` で取得すること。"
+}
+
+function pathRefs(config: ResolvedConfig): FullTextRefs {
+  const adrAt = `${config.architecturePath} の \`## ${ADR_HEADING}\``
+  return {
+    adrFull: `ADR の全文は ${adrAt} を Read すること(注入には載せない)。`,
+    adrDropped: `ADR 一覧は割愛した。${adrAt} を Read すること。`,
+    gotchasRest: (rest) =>
+      `- ほか ${rest} 件は ${config.gotchasPath} を Read すること。`,
+    gotchasList: `一覧は ${config.gotchasPath} を Read すること。`
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 組み立て
 // ---------------------------------------------------------------------------
 
 function renderAdrSummary(
   section: ArchitectureSection,
-  entries: AdrEntry[]
+  entries: AdrEntry[],
+  refs: FullTextRefs
 ): string {
   // 設計書 §8-4・§8-6: ADR は予算に余裕があっても全文で載せない。
   const lines =
     entries.length > 0
       ? entries.map((e) => `- ${e.id}: ${e.title}(${e.status ?? "状態不明"})`)
       : ["(まだ ADR は無い)"]
-  return [
-    toLf(section.headingLine),
-    "",
-    ...lines,
-    "",
-    "ADR の全文は `node M get adr` で取得すること(注入には載せない)。"
-  ].join("\n")
+  return [toLf(section.headingLine), "", ...lines, "", refs.adrFull].join("\n")
 }
 
 function renderArchitecture(
   config: ResolvedConfig,
   arch: ArchSource,
-  plan: Plan
+  plan: Plan,
+  refs: FullTextRefs
 ): string {
   const head = `## 技術的前提(${config.architectureRelative})`
   const readAll = `全文は ${config.architecturePath} を Read すること`
@@ -363,14 +430,14 @@ function renderArchitecture(
         adrDropped = true
         continue
       }
-      parts.push(renderAdrSummary(section, arch.adrEntries))
+      parts.push(renderAdrSummary(section, arch.adrEntries, refs))
       continue
     }
     const raw = trimEnd(toLf(section.raw))
     if (raw !== "") parts.push(raw)
   }
   if (adrDropped) {
-    parts.push("ADR 一覧は割愛した。`node M get adr` で取得すること。")
+    parts.push(refs.adrDropped)
   }
   return [head, ...parts].join("\n\n")
 }
@@ -396,7 +463,8 @@ function pickRecent(entries: GotchaEntry[], count: number): GotchaEntry[] {
 function renderGotchas(
   config: ResolvedConfig,
   gotchas: GotchasSource,
-  plan: Plan
+  plan: Plan,
+  refs: FullTextRefs
 ): string {
   const total = gotchas.entries.length
   const parts: string[] = [
@@ -412,11 +480,11 @@ function renderGotchas(
     else toc.push(...shown.map(tocLine))
     const rest = total - shown.length
     if (rest > 0) {
-      toc.push(`- ほか ${rest} 件は \`node M get gotchas\` で取得すること。`)
+      toc.push(refs.gotchasRest(rest))
     }
     parts.push(toc.join("\n"))
   } else if (total > 0) {
-    parts.push("一覧は `node M get gotchas` で取得すること。")
+    parts.push(refs.gotchasList)
   }
 
   const recent = pickRecent(gotchas.entries, plan.recentCount)
@@ -436,6 +504,7 @@ function renderGotchas(
 interface RenderInput {
   config: ResolvedConfig
   guide: string
+  refs: FullTextRefs
   warnings: string[]
   arch: ArchSource | null
   gotchas: GotchasSource | null
@@ -448,16 +517,16 @@ function renderWarnings(warnings: string[]): string {
 }
 
 function render(input: RenderInput, plan: Plan): string {
-  // CLI 案内は必ず先頭。退避に倒れてもプレビューへ残す(§8-3)。
+  // 削れない部分は必ず先頭。退避に倒れてもプレビューへ残す(§8-3)。
   const blocks: string[] = [input.guide]
   if (input.warnings.length > 0) {
     blocks.push(renderWarnings(input.warnings))
   }
   if (input.arch !== null) {
-    blocks.push(renderArchitecture(input.config, input.arch, plan))
+    blocks.push(renderArchitecture(input.config, input.arch, plan, input.refs))
   }
   if (input.gotchas !== null) {
-    blocks.push(renderGotchas(input.config, input.gotchas, plan))
+    blocks.push(renderGotchas(input.config, input.gotchas, plan, input.refs))
   }
   return `${blocks.join("\n\n")}\n`
 }
@@ -483,19 +552,52 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
     return `${blocks.join("\n\n")}\n`
   }
 
-  const guide = buildGuide(cli)
-  const warnings = [
+  return fitToBudget(config, {
+    config,
+    guide: buildGuide(cli),
+    refs: CLI_REFS,
+    warnings: collectWarnings(config, arch, gotchas),
+    arch,
+    gotchas
+  })
+}
+
+// サブエージェント向け(設計書 3-2)。文書が 1 つも無ければ何も出さない(null)。
+// サブエージェントは `/metatron:init` を始めないので、init の案内は要らない。
+function buildForSubagent(config: ResolvedConfig): string | null {
+  const arch = readArchitecture(config)
+  const gotchas = readGotchas(config)
+  if (arch === null && gotchas === null) return null
+
+  return fitToBudget(config, {
+    config,
+    guide: buildSubagentGuide(),
+    refs: pathRefs(config),
+    warnings: collectWarnings(config, arch, gotchas),
+    arch,
+    gotchas
+  })
+}
+
+function collectWarnings(
+  config: ResolvedConfig,
+  arch: ArchSource | null,
+  gotchas: GotchasSource | null
+): string[] {
+  return [
     ...config.warnings,
     ...(arch?.warnings ?? []),
     ...(gotchas?.warnings ?? [])
   ].slice(0, MAX_WARNING_LINES)
+}
 
-  const input: RenderInput = { config, guide, warnings, arch, gotchas }
+// 段階縮退を尽くして maxChars に収める(§8-5)。両イベントで同じ段階と設定を使う。
+function fitToBudget(config: ResolvedConfig, input: RenderInput): string {
   const budget = Math.max(1, config.injection.maxChars)
   // 設定値が実エントリ数より大きいときに同じ出力を何度も組み立てないよう頭を揃える。
   const startCount = Math.min(
     config.injection.gotchasRecentCount,
-    gotchas?.entries.length ?? 0
+    input.gotchas?.entries.length ?? 0
   )
 
   for (const plan of plans(startCount)) {
@@ -504,25 +606,27 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
   }
 
   // 段階を尽くしても収まらないのは maxChars が削れない部分より小さい場合だけである。
-  // そのときも CLI 案内と記録のタイミングは削らない(§8-5 の「CLI 案内には決して手を付けない」を上位に置く)。
-  return `${guide}\n`
+  // そのときも削れない部分は削らない(§8-5 の「CLI 案内には決して手を付けない」を上位に置く)。
+  return `${input.guide}\n`
 }
 
 // ---------------------------------------------------------------------------
 // 入口
 // ---------------------------------------------------------------------------
 
-interface SessionStartInput {
+// SessionStart と SubagentStart の入力。どちらも共通のフィールドに cwd と hook_event_name を持つ。
+interface InjectHookInput {
   cwd?: string
+  hook_event_name?: unknown
   [k: string]: unknown
 }
 
-// SessionStart の入力から cwd を取る。stdin が閉じない環境で固まらないよう時間で打ち切る。
-function readHookInput(): Promise<SessionStartInput> {
+// 入力から cwd とイベント名を取る。stdin が閉じない環境で固まらないよう時間で打ち切る。
+function readHookInput(): Promise<InjectHookInput> {
   return new Promise((resolve) => {
     let data = ""
     let settled = false
-    const finish = (value: SessionStartInput): void => {
+    const finish = (value: InjectHookInput): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -541,7 +645,7 @@ function readHookInput(): Promise<SessionStartInput> {
         const parsed: unknown = JSON.parse(data)
         finish(
           typeof parsed === "object" && parsed !== null
-            ? (parsed as SessionStartInput)
+            ? (parsed as InjectHookInput)
             : {}
         )
       } catch {
@@ -561,7 +665,13 @@ try {
   const config = loadConfig(startDir)
   // 利用者が明示的に切っているときは案内も含めて何も出さない。
   if (config.injection.enabled) {
-    injectContext(build(config, process.env))
+    // SubagentStart 以外(無い・読めないを含む)は従来どおり SessionStart として扱う。
+    if (hookInput.hook_event_name === "SubagentStart") {
+      const content = buildForSubagent(config)
+      if (content !== null) injectContext(content, "SubagentStart")
+    } else {
+      injectContext(build(config, process.env), "SessionStart")
+    }
   }
 } catch {
   // フェイルオープン(契約 §12)。何も出力せず正常終了する。

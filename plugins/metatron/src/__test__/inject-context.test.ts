@@ -1,5 +1,6 @@
-// SessionStart 注入 hook の検証。
+// SessionStart・SubagentStart 注入 hook の検証。
 // ケース ID は metatron 設計書 §13-1 の inject-context.ts の表(I1〜I21・I10b)に対応する。
+// S1〜S10 は `harness-docs/design/2026-10-04-metatron-recording-timing-and-subagent-injection-design.md` の 3 と 7 に対応する。
 // 形式の正本はファイル契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §13。
 //
 // 実行は tsx 経由の子プロセス(stdin に SessionStart の JSON を流し stdout を読む)。
@@ -31,7 +32,13 @@ const RECORDING_LINES = [
   "docs/intents/domains/ の候補は /metatron:update で取り込める。"
 ]
 
-// 実装と同じ文面を独立に持つ。CLI 案内と記録のタイミングは縮退で一切変えてはならない要素なので、
+// 委譲の注意。サブエージェントには SubagentStart hook が両文書を注入するので、依頼文へ写させない。
+const DELEGATION_LINES = [
+  "サブエージェントには SubagentStart hook が ARCHITECTURE と GOTCHAS を注入する。",
+  "委譲の依頼文には、両文書の原文も要約も書き写さない。"
+]
+
+// 実装と同じ文面を独立に持つ。CLI 案内・記録のタイミング・委譲の注意は縮退で一切変えてはならない要素なので、
 // 「完全な形で残る」を部分一致ではなく全文一致で確かめる(I13)。
 const GUIDE = [
   "# metatron: プロジェクトの前提と落とし穴",
@@ -46,12 +53,19 @@ const GUIDE = [
   "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
   "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
-  "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。",
-  ...RECORDING_LINES
+  ...RECORDING_LINES,
+  ...DELEGATION_LINES
 ].join("\n")
 
 /** 削れない部分だけの出力の長さ。これより小さい予算では、削れない部分だけが出る。 */
 const GUIDE_OUTPUT_LENGTH = `${GUIDE}\n`.length
+
+// サブエージェント向けの削れない部分。CLI の案内・記録のタイミング・委譲の注意は載せない。
+const SUBAGENT_GUIDE = [
+  "# metatron: プロジェクトの前提と落とし穴",
+  "",
+  "以下の文書は前提として読むだけにし、直接編集しない。"
+].join("\n")
 
 // 文書がまだ 1 つも無いときの案内(設計書 §8-7 の限定)。
 // `/metatron:init` はまさにこの状態で使うコマンドなので、案内を落とすと init を始められない。
@@ -69,8 +83,7 @@ const INIT_GUIDE = [
   "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
   "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
   "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
-  "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
-  "※この案内はメインセッション向け。サブエージェントには別途パスが渡される。"
+  "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
 ].join("\n")
 
 /** 設定の読み取りを必ず例外にする故障注入モジュール(I3c 用)。 */
@@ -117,25 +130,61 @@ function childEnv(): NodeJS.ProcessEnv {
   return env
 }
 
-/** 注入結果の additionalContext。何も出力しなかった場合は null。 */
-function inject(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string | null {
+/**
+ * hook を起動し、出力の hookEventName と additionalContext を返す。何も出力しなかった場合は null。
+ * input は hook の stdin に流す JSON。
+ */
+function runHook(
+  cwd: string,
+  input: Record<string, unknown>,
+  extraEnv: NodeJS.ProcessEnv = {}
+): { eventName: string; content: string } | null {
   const out = runTs(HOOK, [], {
     cwd,
     env: { ...childEnv(), ...extraEnv },
-    input: JSON.stringify({
-      session_id: "s1",
-      transcript_path: path.join(cwd, "t.jsonl"),
-      cwd,
-      hook_event_name: "SessionStart",
-      source: "startup"
-    })
+    input: JSON.stringify(input)
   })
   if (out.trim() === "") return null
   const parsed = JSON.parse(out) as {
     hookSpecificOutput: { hookEventName: string; additionalContext: string }
   }
-  expect(parsed.hookSpecificOutput.hookEventName).toBe("SessionStart")
-  return parsed.hookSpecificOutput.additionalContext
+  return {
+    eventName: parsed.hookSpecificOutput.hookEventName,
+    content: parsed.hookSpecificOutput.additionalContext
+  }
+}
+
+/** SessionStart の注入結果の additionalContext。何も出力しなかった場合は null。 */
+function inject(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string | null {
+  const result = runHook(
+    cwd,
+    {
+      session_id: "s1",
+      transcript_path: path.join(cwd, "t.jsonl"),
+      cwd,
+      hook_event_name: "SessionStart",
+      source: "startup"
+    },
+    extraEnv
+  )
+  if (result === null) return null
+  expect(result.eventName).toBe("SessionStart")
+  return result.content
+}
+
+/** SubagentStart の注入結果の additionalContext。何も出力しなかった場合は null。 */
+function injectSubagent(cwd: string): string | null {
+  const result = runHook(cwd, {
+    session_id: "s1",
+    transcript_path: path.join(cwd, "t.jsonl"),
+    cwd,
+    hook_event_name: "SubagentStart",
+    agent_id: "agent-1",
+    agent_type: "general-purpose"
+  })
+  if (result === null) return null
+  expect(result.eventName).toBe("SubagentStart")
+  return result.content
 }
 
 // --- fixtures ---------------------------------------------------------------
@@ -572,7 +621,7 @@ test("I13: 縮退の全段階で CLI 案内が完全な形で残る", () => {
   expect(seen.size).toBeGreaterThan(2)
 })
 
-test("I13b: 記録のタイミングは CLI 案内の直後にあり、縮退の最終段階でも残る", () => {
+test("I13b: 記録のタイミングと委譲の注意は CLI 案内の直後にあり、縮退の最終段階でも残る", () => {
   // 最終段階(ARCHITECTURE は Read の案内だけ、GOTCHAS は目次なし)を踏む予算を、
   // 削れない部分の長さから組み立てる。
   const root = project({
@@ -588,15 +637,17 @@ test("I13b: 記録のタイミングは CLI 案内の直後にあり、縮退の
   expect(content).not.toContain("### 目次")
   expect(content.startsWith(`${GUIDE}\n\n`)).toBe(true)
   expect(content).toContain(
-    `※この案内はメインセッション向け。サブエージェントには別途パスが渡される。\n${RECORDING_LINES.join("\n")}`
+    `※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。\n${[...RECORDING_LINES, ...DELEGATION_LINES].join("\n")}`
   )
 })
 
-test("I13c: 文書が無いときの案内には記録のタイミングを載せない", () => {
+test("I13c: 文書が無いときの案内には記録のタイミングも委譲の注意も載せない", () => {
   const root = project({})
   const content = inject(root)
   if (content === null) throw new Error("注入されなかった")
-  for (const line of RECORDING_LINES) expect(content).not.toContain(line)
+  for (const line of [...RECORDING_LINES, ...DELEGATION_LINES]) {
+    expect(content).not.toContain(line)
+  }
 })
 
 test("I13d: 記録のタイミングは合計 200 文字以内", () => {
@@ -928,4 +979,152 @@ test("I23: rules 本文は注入されない(metatron は rules を読まない)
   const out = inject(root)
   expect(out).not.toBeNull()
   expect(out).not.toContain("RULES-BODY-TOKEN")
+})
+
+// --- SubagentStart(設計書 2026-10-04 の 3)------------------------------------
+
+/** サブエージェント向けに出てはならない、SessionStart 向けの要素。 */
+function expectNoSessionOnlyParts(content: string): void {
+  expect(content).not.toContain("node M")
+  expect(content).not.toContain(CLI)
+  expect(content).not.toContain("記録・更新・全文取得は次の CLI を使う")
+  for (const line of [...RECORDING_LINES, ...DELEGATION_LINES]) {
+    expect(content).not.toContain(line)
+  }
+}
+
+test("S1: SubagentStart — 見出しと読むだけの 1 行の後に、ARCHITECTURE・ADR 一覧・GOTCHAS の目次と直近が出る", () => {
+  const root = project({ arch: architecture(2), gotchas: gotchas(7) })
+  const content = injectSubagent(root)
+  if (content === null) throw new Error("注入されなかった")
+  const archPath = path.join(root, "docs/ARCHITECTURE.md")
+
+  expect(content.startsWith(`${SUBAGENT_GUIDE}\n\n`)).toBe(true)
+  expectNoSessionOnlyParts(content)
+  expect(content).toContain("## 技術的前提(docs/ARCHITECTURE.md)")
+  expect(content).toContain(
+    "上から UI・アプリケーション・ドメインの 3 層とする。"
+  )
+  expect(content).toContain("## ADR 一覧")
+  expect(content).toContain("- ADR-001: 記録の置き場を決める 1(採用)")
+  expect(content).toContain(
+    `ADR の全文は ${archPath} の \`## ADR 一覧\` を Read すること(注入には載せない)。`
+  )
+  expect(content).not.toContain("DB に置くと差分レビューができない。")
+  expect(content).toContain("## 既知の落とし穴(docs/GOTCHAS.md: 全 7 件)")
+  expect(content).toContain("### 目次(新しい順)")
+  expect(content).toContain("### 直近 5 件(全文)")
+})
+
+test("S2: SubagentStart で文書が無い — 何も出力しない(設定の警告があっても出さない)", () => {
+  expect(injectSubagent(project({}))).toBe(null)
+  expect(injectSubagent(project({ config: '{ "version": 1, "paths": ' }))).toBe(
+    null
+  )
+})
+
+test("S3: SubagentStart で injection.enabled: false — 何も出力しない", () => {
+  const root = project({
+    arch: architecture(),
+    gotchas: gotchas(3),
+    config: { version: 1, injection: { enabled: false } }
+  })
+  expect(injectSubagent(root)).toBe(null)
+})
+
+test("S4: SubagentStart の設定の警告は SessionStart と同じく載る", () => {
+  const root = project({
+    arch: architecture(),
+    gotchas: gotchas(3),
+    config: '{ "version": 1, "paths": '
+  })
+  const content = injectSubagent(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content.startsWith(SUBAGENT_GUIDE)).toBe(true)
+  expect(content).toContain("※注意: 設定を読めなかったため既定値を使用します。")
+})
+
+test("S5: SubagentStart で目次から外れた GOTCHAS は、台帳の絶対パスを Read する案内になる", () => {
+  const root = project({
+    arch: architecture(0),
+    gotchas: gotchas(200),
+    config: configWith(4000)
+  })
+  const content = injectSubagent(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content.length).toBeLessThanOrEqual(4000)
+  expect(content).not.toContain("### 直近")
+  expect(content).toContain(
+    `- ほか 150 件は ${path.join(root, "docs/GOTCHAS.md")} を Read すること。`
+  )
+  expectNoSessionOnlyParts(content)
+})
+
+test("S6: SubagentStart で ADR 一覧を割愛したときは、ARCHITECTURE の `## ADR 一覧` を Read する案内になる", () => {
+  const root = project({
+    arch: architecture(40),
+    gotchas: gotchas(3),
+    config: configWith(1500)
+  })
+  const content = injectSubagent(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content.length).toBeLessThanOrEqual(1500)
+  expect(content).toContain(
+    `ADR 一覧は割愛した。${path.join(root, "docs/ARCHITECTURE.md")} の \`## ADR 一覧\` を Read すること。`
+  )
+  expect(content).not.toContain("- ADR-001:")
+  expect(content).toContain("```mermaid")
+  expectNoSessionOnlyParts(content)
+})
+
+test("S7: SubagentStart で目次まで割愛したときは、台帳の絶対パスを Read する案内になる", () => {
+  const root = project({
+    arch: hugeArchitecture(10, 600),
+    gotchas: gotchas(200, [], 200),
+    config: configWith(1200)
+  })
+  const content = injectSubagent(root)
+  if (content === null) throw new Error("注入されなかった")
+  expect(content.length).toBeLessThanOrEqual(1200)
+  expect(content).not.toContain("### 目次")
+  expect(content).toContain(
+    `一覧は ${path.join(root, "docs/GOTCHAS.md")} を Read すること。`
+  )
+  expectNoSessionOnlyParts(content)
+})
+
+test("S8: SubagentStart は削れない部分以上の予算で maxChars 以下に収まり、先頭に削れない部分がある", () => {
+  for (const maxChars of [...BUDGETS, 500, SUBAGENT_GUIDE.length + 1]) {
+    const root = project({
+      arch: hugeArchitecture(12, 800),
+      gotchas: gotchas(120, [], 300),
+      config: configWith(maxChars)
+    })
+    const content = injectSubagent(root)
+    if (content === null) throw new Error("注入されなかった")
+    expect(content.startsWith(SUBAGENT_GUIDE)).toBe(true)
+    expect(content.length).toBeLessThanOrEqual(maxChars)
+    expectNoSessionOnlyParts(content)
+  }
+})
+
+test("S9: SubagentStart で削れない部分より小さい予算では、削れない部分だけを出す", () => {
+  const root = project({
+    arch: architecture(),
+    gotchas: gotchas(3),
+    config: configWith(10)
+  })
+  expect(injectSubagent(root)).toBe(`${SUBAGENT_GUIDE}\n`)
+})
+
+test("S10: hook_event_name が無い・文字列でない入力は SessionStart として扱う", () => {
+  const root = project({ arch: architecture(), gotchas: gotchas(3) })
+  for (const eventName of [undefined, 123, null]) {
+    const input: Record<string, unknown> = { session_id: "s1", cwd: root }
+    if (eventName !== undefined) input.hook_event_name = eventName
+    const result = runHook(root, input)
+    if (result === null) throw new Error("注入されなかった")
+    expect(result.eventName).toBe("SessionStart")
+    expect(result.content.startsWith(GUIDE)).toBe(true)
+  }
 })
