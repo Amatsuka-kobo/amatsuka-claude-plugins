@@ -129,12 +129,27 @@ export function findRepoRoot(docRoot: string): string | null {
   }
 }
 
-function realpathOrSelf(p: string): string {
+export function realpathOrSelf(p: string): string {
   try {
     return fs.realpathSync(p)
   } catch {
     return p
   }
+}
+
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target)
+  return (
+    rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+  )
+}
+
+/**
+ * 領域ディレクトリの実パスがリポジトリの実パスの配下にあるか。
+ * ディレクトリ自体か祖先が外へ出るリンクなら false(リポジトリの中を指すリンクは true)。
+ */
+export function domainsDirStaysInRepo(repoRoot: string, dir: string): boolean {
+  return isInside(realpathOrSelf(repoRoot), realpathOrSelf(dir))
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +338,12 @@ export function scanAdrCandidates(
 
   const warnings: string[] = []
   const dir = path.join(repoRoot, DOMAINS_DIR_RELATIVE)
+  if (!domainsDirStaysInRepo(repoRoot, dir)) {
+    warnings.push(
+      `${DOMAINS_DIR_RELATIVE} の実体がリポジトリの外にあります。走査しません。`
+    )
+    return { repoRoot, candidates: [], warnings }
+  }
   let names: string[]
   try {
     names = fs
@@ -444,6 +465,8 @@ function resolveDomainFile(
     `${file} は ${dir} の直下にある .md ではありません。縮約はそこにある持続層のファイルだけを書き換えます。`
   )
   if (path.extname(target) !== ".md") throw outside
+  // 領域ディレクトリ自体か祖先が外へ出るリンクなら、実体が外にあるので拒否する。
+  if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside
   if (realpathOrSelf(path.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside
   }

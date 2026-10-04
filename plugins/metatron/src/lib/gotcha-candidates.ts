@@ -13,7 +13,12 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
-import { DOMAINS_DIR_RELATIVE, findRepoRoot } from "./adr-candidates.js"
+import {
+  DOMAINS_DIR_RELATIVE,
+  domainsDirStaysInRepo,
+  findRepoRoot,
+  realpathOrSelf
+} from "./adr-candidates.js"
 import { scanFences } from "./architecture.js"
 import { parseGotchas } from "./gotchas.js"
 import { hashContent } from "./staging.js"
@@ -204,26 +209,6 @@ function entryHash(file: DomainFile, entry: MarkedEntry): string {
   return hashContent(
     file.buf.subarray(file.offsetOf(entry.start), file.offsetOf(entry.end))
   )
-}
-
-function realpathOrSelf(p: string): string {
-  try {
-    return fs.realpathSync(p)
-  } catch {
-    return p
-  }
-}
-
-function isInside(root: string, target: string): boolean {
-  const rel = path.relative(root, target)
-  return (
-    rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
-  )
-}
-
-/** 領域ディレクトリの実パスがリポジトリの実パスの配下にあるか(外へ出るリンクを弾く)。 */
-function domainsDirStaysInRepo(repoRoot: string, dir: string): boolean {
-  return isInside(realpathOrSelf(repoRoot), realpathOrSelf(dir))
 }
 
 // ---------------------------------------------------------------------------

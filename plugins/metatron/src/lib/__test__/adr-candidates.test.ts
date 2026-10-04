@@ -756,3 +756,104 @@ test("縮約: 同じファイルの 2 候補を順に縮約しても、先の候
   )
   expect(scan(root).candidates).toStrictEqual([])
 })
+
+// 領域ディレクトリ(またはその祖先)がリポジトリの外を指すリンクのとき、
+// 走査せず、縮約は outside_domains_dir で拒否する。
+test("走査と縮約: domains 自体が外部へのリンクなら、走査せず warnings に積み、縮約は outside_domains_dir で拒否する", () => {
+  const body = durable(entry("frontend-3"))
+  const reference = repo()
+  writeDomain(reference, "frontend.md", body)
+  const hash = hashOf(reference, "frontend-3")
+
+  const root = repo()
+  writeFile(
+    root,
+    "docs/ARCHITECTURE.md",
+    architecture([adoptedAdr(12, "frontend-3")])
+  )
+  const external = mkTmp()
+  const externalFile = writeFile(external, "frontend.md", body)
+  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
+  fs.symlinkSync(external, path.join(root, "docs/intents/domains"))
+  const before = fs.readFileSync(externalFile)
+
+  const result = scan(root)
+  expect(result.candidates).toStrictEqual([])
+  expect(result.warnings).toHaveLength(1)
+
+  for (const file of [
+    path.join(root, "docs/intents/domains/frontend.md"),
+    externalFile
+  ]) {
+    expectRejected(
+      () => shrink(root, file, "frontend-3", 12, hash),
+      "outside_domains_dir"
+    )
+  }
+  expect(fs.readFileSync(externalFile).equals(before)).toBe(true)
+})
+
+test("走査と縮約: 祖先のディレクトリが外部へのリンクでも、走査せず、縮約は outside_domains_dir で拒否する", () => {
+  const body = durable(entry("frontend-3"))
+  const reference = repo()
+  writeDomain(reference, "frontend.md", body)
+  const hash = hashOf(reference, "frontend-3")
+
+  const root = repo()
+  const external = mkTmp()
+  const externalFile = writeFile(external, "intents/domains/frontend.md", body)
+  writeFile(
+    external,
+    "ARCHITECTURE.md",
+    architecture([adoptedAdr(12, "frontend-3")])
+  )
+  fs.symlinkSync(external, path.join(root, "docs"))
+  const before = fs.readFileSync(externalFile)
+
+  const result = scan(root)
+  expect(result.candidates).toStrictEqual([])
+  expect(result.warnings).toHaveLength(1)
+
+  expectRejected(
+    () =>
+      shrink(
+        root,
+        path.join(root, "docs/intents/domains/frontend.md"),
+        "frontend-3",
+        12,
+        hash
+      ),
+    "outside_domains_dir"
+  )
+  expect(fs.readFileSync(externalFile).equals(before)).toBe(true)
+})
+
+test("走査と縮約: domains がリポジトリの中を指すリンクなら、走査も縮約もできる", () => {
+  const root = repo()
+  const real = writeFile(
+    root,
+    "shared/domains/frontend.md",
+    durable(entry("frontend-3"))
+  )
+  writeFile(
+    root,
+    "docs/ARCHITECTURE.md",
+    architecture([adoptedAdr(12, "frontend-3")])
+  )
+  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
+  fs.symlinkSync(
+    path.join(root, "shared/domains"),
+    path.join(root, "docs/intents/domains")
+  )
+
+  expect(scan(root).candidates).toHaveLength(1)
+  shrink(
+    root,
+    path.join(root, "docs/intents/domains/frontend.md"),
+    "frontend-3",
+    12,
+    hashOf(root, "frontend-3")
+  )
+
+  expect(fs.readFileSync(real, "utf8")).toContain("関連 ADR: ADR-012")
+})

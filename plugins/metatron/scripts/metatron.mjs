@@ -2091,6 +2091,13 @@ function realpathOrSelf(p) {
     return p;
   }
 }
+function isInside2(root, target) {
+  const rel = path3.relative(root, target);
+  return rel !== ".." && !rel.startsWith(`..${path3.sep}`) && !path3.isAbsolute(rel);
+}
+function domainsDirStaysInRepo(repoRoot, dir) {
+  return isInside2(realpathOrSelf(repoRoot), realpathOrSelf(dir));
+}
 function trimBlankLines(lines) {
   let s = 0;
   let e = lines.length;
@@ -2211,6 +2218,12 @@ function scanAdrCandidates(docRoot, architecturePath) {
   if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
   const warnings = [];
   const dir = path3.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  if (!domainsDirStaysInRepo(repoRoot, dir)) {
+    warnings.push(
+      `${DOMAINS_DIR_RELATIVE} \u306E\u5B9F\u4F53\u304C\u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u5916\u306B\u3042\u308A\u307E\u3059\u3002\u8D70\u67FB\u3057\u307E\u305B\u3093\u3002`
+    );
+    return { repoRoot, candidates: [], warnings };
+  }
   let names;
   try {
     names = fs4.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
@@ -2292,6 +2305,7 @@ function resolveDomainFile(repoRoot, file) {
     `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u7E2E\u7D04\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
   );
   if (path3.extname(target) !== ".md") throw outside;
+  if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
   if (realpathOrSelf(path3.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside;
   }
@@ -4963,20 +4977,6 @@ function entryHash2(file, entry) {
     file.buf.subarray(file.offsetOf(entry.start), file.offsetOf(entry.end))
   );
 }
-function realpathOrSelf4(p) {
-  try {
-    return fs10.realpathSync(p);
-  } catch {
-    return p;
-  }
-}
-function isInside2(root, target) {
-  const rel = path9.relative(root, target);
-  return rel !== ".." && !rel.startsWith(`..${path9.sep}`) && !path9.isAbsolute(rel);
-}
-function domainsDirStaysInRepo(repoRoot, dir) {
-  return isInside2(realpathOrSelf4(repoRoot), realpathOrSelf4(dir));
-}
 function readTextOrNull2(filePath) {
   try {
     return fs10.readFileSync(filePath, "utf8");
@@ -5048,7 +5048,7 @@ function resolveDomainFile2(repoRoot, file) {
   );
   if (path9.extname(target) !== ".md") throw outside;
   if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
-  if (realpathOrSelf4(path9.dirname(target)) !== realpathOrSelf4(dir)) {
+  if (realpathOrSelf(path9.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside;
   }
   let stat;

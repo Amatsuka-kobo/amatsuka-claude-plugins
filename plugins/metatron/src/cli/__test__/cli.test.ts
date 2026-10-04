@@ -1274,6 +1274,32 @@ test("shrink-adr-candidate のオプションが欠けると終了コード 2 �
   expectUnchanged(before)
 })
 
+test("domains が外部へのリンクなら、scan-adr-candidates は走査せず、shrink-adr-candidate は終了コード 3 で outside_domains_dir になる", () => {
+  const root = project()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  const external = mkTmp()
+  const externalFile = writeFile(
+    external,
+    "frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
+  fs.symlinkSync(external, path.join(root, "docs/intents/domains"))
+  const before = snapshot([externalFile])
+
+  expect(scanCandidates(root)).toStrictEqual([])
+  const run = runCli(shrinkArgs(externalFile, "ADR-001", "0"), root)
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "outside_domains_dir",
+    written: false,
+    shrinkPending: { file: externalFile, candidateId: "frontend-3" }
+  })
+  expectUnchanged(before)
+})
+
 // ---------------------------------------------------------------------------
 // scan-gotcha-candidates / remove-gotcha-candidate(記録のタイミングとサブエージェントへの
 // 注入の設計書 2-1)
