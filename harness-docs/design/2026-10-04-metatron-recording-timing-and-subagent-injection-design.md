@@ -227,7 +227,7 @@ ADR は足さない(ユーザー決定、2026-10-04)。SubagentStart で注入�
 | TaskCompleted を合図にする | TaskUpdate ツールでしか発火しない |
 | PreCompact で促す | 注入ができない(`decision` しか返せない) |
 
-## 要確認
+## 確かめた事項(2026-10-04)
 
-- 【要確認】SubagentStart の `additionalContext` に、SessionStart と同じ 10,000 文字の上限が当たるか。上限が同じとみなし、`maxChars`(既定 9000)で収める。
-- 【要確認】hooks.json に足した SubagentStart が、新しいセッションでサブエージェントを起動したときに発火するか。実装後に確かめる。
+- SubagentStart の `additionalContext` の上限は公式文書に無い。SessionStart と同じ 10,000 文字とみなし、両イベントとも予算を `maxChars` と 10,000 文字(`PLATFORM_MAX_CHARS`)の小さいほうで頭打ちにする。
+- hooks.json に足した SubagentStart は、新しいセッション(`claude -p --plugin-dir plugins/metatron`)で Explore を起動したときに発火した。デバッグログに `Hook SubagentStart:Explore ... success` が出て、サブエージェントは注入文の見出しと「読むだけにする」の行を引用した。

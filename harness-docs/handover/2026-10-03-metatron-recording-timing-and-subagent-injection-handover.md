@@ -10,7 +10,7 @@
 | 工程 | 状態 |
 | --- | --- |
 | codiel 側 | 完了。codiel は ADR と GOTCHAS を直接記録せず、候補を出して metatron に渡す(ADR-013) |
-| metatron 側 | 未着手。下の 4 件をこのセッションで行う |
+| metatron 側 | 完了(2026-10-04)。設計は `harness-docs/design/2026-10-04-metatron-recording-timing-and-subagent-injection-design.md`。記録のタイミングは hook でなく SessionStart の注入文に置いた |
 
 ## 決まったこと
 
