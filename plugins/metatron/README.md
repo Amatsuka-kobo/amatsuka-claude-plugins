@@ -1,6 +1,6 @@
 # Metatron 📜
 
-プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)、失敗知識(`docs/GOTCHAS.md`)、規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は毎セッションの冒頭で AI のコンテキストへ注入し、rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。
+プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)、失敗知識(`docs/GOTCHAS.md`)、規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は、毎セッションの冒頭とサブエージェントの起動時に AI のコンテキストへ注入します。rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。
 
 名前は天の書記天使 Metatron に由来します。神の記録を司り、人の行いを書き留める役です。プロジェクトの前提と、そこで犯された失敗を書き留め続けるという、このプラグインの役割そのものを表しています。
 
@@ -8,7 +8,7 @@
 
 - **記録**: 3 種の管理対象の更新は決定的な CLI を通します。書式の検証・連番の採番・GOTCHAS が追記のみであることを機械で保証します。
 - **更新**: `/metatron:init` と `/metatron:update` が、コードベース解析から起こしたドラフトをセクション単位で確認しながら文書を育てます。
-- **注入と規律**: SessionStart hook が ARCHITECTURE の内容と GOTCHAS の要約を毎セッション渡します。rules は metatron が注入せず、Claude Code が起動時に読み込むためサブエージェントにも届きます。
+- **注入と規律**: SessionStart hook が ARCHITECTURE の内容と GOTCHAS の要約を毎セッション渡し、SubagentStart hook が同じ文書をサブエージェントへ渡します。SessionStart の注入文には、作業を終えて報告する前に ADR と GOTCHAS へ残すものを確かめるタイミングも書いてあります。rules は metatron が注入せず、Claude Code が起動時に読み込むためサブエージェントにも届きます。
 
 ## 動作要件
 
@@ -16,7 +16,7 @@
 
 Claude Code 本体はネイティブバイナリで配布され Node.js を同梱しないため、未導入の場合は別途インストールしてください。
 
-**常駐プロセスはありません。** metatron は MCP サーバーではなく、CLI も 2 つの hook もいずれも短命プロセスです。そのため「サーバーが起動していないので動かない」という故障はそもそも起こりません。MCP サーバー化を撤回した経緯は [`docs/rationale.md`](./docs/rationale.md) に残しています。
+**常駐プロセスはありません。** metatron は MCP サーバーではなく、CLI も hook のスクリプトもいずれも短命プロセスです。そのため「サーバーが起動していないので動かない」という故障はそもそも起こりません。MCP サーバー化を撤回した経緯は [`docs/rationale.md`](./docs/rationale.md) に残しています。
 
 ## コマンド
 
@@ -24,13 +24,13 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 対象プロジェクトの ARCHITECTURE と `.claude/rules/metatron/` の 3 ファイルを初回生成し、GOTCHAS の空の台帳を承認を得てから作成します。まず CLI の `scan` がコードベースの事実(パッケージマネージャ・依存・スクリプト・ディレクトリ構造など)を集め、その事実からセクションごとのドラフトを起草します。ドラフトは「こう読み取ったが合っているか」という形でセクション単位に確認し、確定後に差分を全文提示して承認を得てから書き込みます。`## ADR 一覧` は初回生成の対象外です(空の節を置き、以後 `stage-adr` で足します)。
 
-初版の ARCHITECTURE を書き込んだ後、`docs/intents/domains/` を走査して codiel が書いた `[ADR 候補]` を探します。見つかれば候補を提示し、承認を得たものを ADR にしてから持続層側のエントリを参照形に縮めます。
+初版の ARCHITECTURE を書き込んだ後、`docs/intents/domains/` を走査して codiel が書いた `[ADR 候補]` を探します。見つかれば候補を提示し、承認を得たものを ADR にしてから持続層側のエントリを参照形に縮めます。続けて `[GOTCHAS 候補]` も探し、承認を得たものを台帳へ移して持続層から消します。
 
 ### `/metatron:update`
 
 現在のコードベースと ARCHITECTURE の乖離を検出し、更新します。技術スタック・コマンド定義・ドメインマップの穴と死んだ glob・保護パス・セクションの欠落など、決定的に検出できる候補だけを一覧提示し、選ばれた分だけ差分提示と承認を経て書き込みます。
 
-`docs/intents/domains/` も併せて走査し、codiel が書いた `[ADR 候補]` を乖離の候補と並べて提示します。承認を得たものを ADR にし、その後で持続層側のエントリを参照形に縮めます。
+`docs/intents/domains/` も併せて走査し、codiel が書いた `[ADR 候補]` を乖離の候補と並べて提示します。承認を得たものを ADR にし、その後で持続層側のエントリを参照形に縮めます。続けて `[GOTCHAS 候補]` を走査し、承認を得たものを台帳へ移して持続層から消します。
 
 ## CLI
 
@@ -59,6 +59,10 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | `init-gotchas` | 書 | 内容のある既存台帳を上書きせず、空の台帳を雛形から生成する |
 | `append-gotcha --input <path>` | 書 | エントリを先頭に挿入する(採番は CLI が行う) |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 既存エントリにタグを付与する(本文は不変) |
+| `scan-adr-candidates` | 読 | `docs/intents/domains/` の `[ADR 候補]` を走査する |
+| `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <hash>` | 書 | ADR にした候補のエントリを参照形へ縮める |
+| `scan-gotcha-candidates` | 読 | `docs/intents/domains/` の `[GOTCHAS 候補]` を走査する。台帳に同じタイトルがあれば ID を添える |
+| `remove-gotcha-candidate --file <path> --hash <hash> --file-hash <fileHash>` | 書 | 台帳へ移した候補、または移さないと決めた候補のエントリを持続層から消す |
 
 ### なぜ CLI を通すのか
 
@@ -68,11 +72,12 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 
 書き込み系サブコマンドの入力 JSON は、一時ファイルに書いてパスで渡します。引数に直接埋めると引数長の上限に当たり、本文中の引用符・バッククォート・`$`・改行がシェルに解釈されて壊れるためです。ファイルへの書き込みは Write ツールが担うのでシェルを一切通らず、CLI に渡るのはパス 1 個だけになります。CLI は読み取り後に一時ファイルを削除しません(失敗時に内容を確認できるようにするためです)。出力は常に JSON を stdout へ返します。読み取り系は「読めなかった」も事実として返すため常に exit 0、書き込み系は拒否・失敗で非 0 になり、理由は JSON の `error` に入ります。
 
-## 2 つの hook
+## 3 つのイベントに掛ける 2 つのスクリプト
 
 | hook | 役割 |
 | --- | --- |
-| **SessionStart**(`scripts/inject-context.mjs`) | ARCHITECTURE の内容、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内をセッション開始時に注入します。予算を超える場合は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、CLI 案内だけは削りません |
+| **SessionStart**(`scripts/inject-context.mjs`) | ARCHITECTURE の内容、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意をセッション開始時に注入します。予算を超える場合は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、CLI 案内・記録のタイミング・委譲の注意は削りません |
+| **SubagentStart**(`scripts/inject-context.mjs`) | SessionStart と同じスクリプトが、入力のイベント名を見て、サブエージェント向けに ARCHITECTURE・ADR 一覧・GOTCHAS を注入します。CLI 案内は載せず、載せきれない部分は文書のパスを Read する案内にします。文書が 1 つも無いときは何も出しません。縮退の順と `injection` の設定は SessionStart と共通です |
 | **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS / rules 3 ファイルへの直接編集を拒否し、対象に応じた CLI の呼び出し方を絶対パス付きで案内します |
 
 ### 拒否の範囲(正直な限界)
@@ -105,7 +110,7 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
 }
 ```
 
-上の内容は既定値そのものです。`paths.architecture` と `paths.gotchas` が 2 文書の位置、`paths.rulesDir` が rules 3 ファイルの置き場、`injection.enabled` が注入の有効・無効、`injection.gotchasRecentCount` が全文で注入する直近エントリ数、`injection.maxChars` が注入全体の文字数上限です。
+上の内容は既定値そのものです。`paths.architecture` と `paths.gotchas` が 2 文書の位置、`paths.rulesDir` が rules 3 ファイルの置き場、`injection.enabled` が注入の有効・無効、`injection.gotchasRecentCount` が全文で注入する直近エントリ数、`injection.maxChars` が注入全体の文字数上限です。この 3 つは SessionStart と SubagentStart の両方に当たります。
 
 - パスは設定ファイルのある位置(git リポジトリルートにフォールバック)からの**相対パス**です。絶対パスとルート外へ出るパスは拒否され、その項目だけ既定値に戻ります。
 - 環境変数によるパス指定はありません。共有資産の位置は、リポジトリにコミットされる場所で宣言します。

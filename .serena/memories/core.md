@@ -81,8 +81,8 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.4.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮める(`scan-adr-candidates` / `shrink-adr-candidate`)。
-  共有ライブラリ + CLI + 2 hook の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
+- **metatron** (0.4.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。サブエージェントへも SubagentStart で注入する。
+  共有ライブラリ + CLI + hook(SessionStart・SubagentStart の注入と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
   .drawio + HTML. Details: `mem:basic_design/core`.

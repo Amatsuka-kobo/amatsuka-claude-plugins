@@ -706,6 +706,8 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 | `init-gotchas` | 書 |
 | `append-gotcha --input <path>` | 書 |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由> [--date <YYYY-MM-DD>]` | 書 |
+| `scan-gotcha-candidates` | 読 |
+| `remove-gotcha-candidate --file <path> --hash <hash> --file-hash <fileHash>` | 書 |
 
 ### 規約
 
@@ -715,6 +717,10 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 - **長い入力は一時ファイルに書き、`--input <path>` で渡す。** これを正式な呼び出し規約とする。
   スキル・拒否メッセージ・注入の案内はすべてこの形式で書く。
 - 一時ファイルの置き場は OS の一時ディレクトリ。CLI は読み取り後に削除しない。
+- `scan-gotcha-candidates` は `docs/intents/domains/` の `[GOTCHAS 候補]` を走査する読み取りで、常に exit 0。
+  各候補は `hash` と `fileHash` を持ち、台帳に同じタイトルのエントリがあれば `ledgerMatches` にその ID を入れる。
+- `remove-gotcha-candidate` は走査の `hash` と `fileHash` が一致するときだけ、候補のエントリを持続層から消す。
+  拒否・失敗は終了コード 3 で、`removePending` に `file` と `hash` を入れる。オプションの欠落だけは終了コード 2。
 
 ### staging の保証
 
@@ -779,6 +785,25 @@ process.stdout.write(
 )
 ```
 
+### SubagentStart
+
+SessionStart と同じ形で、`hookEventName` だけが入力のイベント名に揃う。
+`inject-context.mjs` は入力の `hook_event_name` が `SubagentStart` のときにこの出力を組み立てる。
+
+```ts
+process.stdout.write(
+  `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "SubagentStart",
+      additionalContext: content
+    }
+  })}\n`
+)
+```
+
+- ARCHITECTURE も GOTCHAS も無い(読めない場合を含む)ときは何も出力しない。SessionStart と違い、CLI 案内も出さない。
+- `content` に CLI 案内は載せない。載せきれない部分は文書のパスを Read する案内にする。
+
 ### PreToolUse
 
 ```ts
@@ -814,6 +839,7 @@ process.exit(0)
 | 対象 | 方針 |
 | --- | --- |
 | metatron の SessionStart 注入 hook | **フェイルオープン**。**文書の内容**を出力せず exit 0(CLI 案内は出す。下の限定を見よ) |
+| metatron の SubagentStart 注入 hook | **フェイルオープン**。何も出力せず exit 0 |
 | metatron の PreToolUse deny hook | **フェイルオープン**。素通しする |
 | codiel の PreToolUse hook(既存) | **フェイルクローズド**。catch で `emit("ask", ...)` |
 

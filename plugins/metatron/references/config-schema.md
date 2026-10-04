@@ -35,9 +35,9 @@
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
 | `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
 | `paths.rulesDir` | string | `.claude/rules/metatron` | metatron が管理する rules の置き場 |
-| `injection.enabled` | boolean | `true` | SessionStart 注入の有効・無効 |
-| `injection.gotchasRecentCount` | number | `5` | 全文で注入する直近エントリ数。0 以上の整数 |
-| `injection.maxChars` | number | `9000` | 注入全体の文字数上限。1 以上の整数 |
+| `injection.enabled` | boolean | `true` | SessionStart と SubagentStart の注入の有効・無効。`false` で両方を止める |
+| `injection.gotchasRecentCount` | number | `5` | SessionStart と SubagentStart のどちらでも、全文で注入する直近エントリ数。0 以上の整数 |
+| `injection.maxChars` | number | `9000` | SessionStart と SubagentStart のどちらでも、注入全体の文字数上限。1 以上の整数 |
 
 未知キーは無視する。`$schema` が書かれていても未知キーとして無視する。この規則により、`paths` にキーを足しても、そのキーを知らない他プラグインの config 実装は追随を要さない。
 

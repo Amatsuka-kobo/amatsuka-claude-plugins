@@ -9,7 +9,7 @@ SessionStart hook injects its full text rather than a summary.
 ## C1 構成 — 常駐プロセスなし
 
 共有ライブラリ + CLI + deny hook + 注入 hook の 4 点だけで構成する。**MCP サーバーではない。**
-CLI も 2 つの hook もすべて短命プロセスなので「サーバーが起動していない」故障が原理的に起きない。
+CLI も hook のスクリプト(2 本)もすべて短命プロセスなので「サーバーが起動していない」故障が原理的に起きない。
 MCP 化は設計段階で撤回済み(`docs/rationale.md`)。**MCP サーバー化を再提案しない。**
 
 ## 真の強制点は deny hook だけ
@@ -29,14 +29,19 @@ CLI が無価値という意味ではない。deny hook は「直接書かせな
 追記のみの規律・差分提示の強制は CLI が担う。位置づけは「回避を試みる AI を止める」ではなく
 「知らずに直接編集する AI を正しい窓口へ導く」。
 
-## 2 つの hook(`hooks/hooks.json`)
+## 3 イベントに掛ける 2 本のスクリプト(`hooks/hooks.json`)
 
 | hook | スクリプト | 挙動 |
 | --- | --- | --- |
-| SessionStart | `scripts/inject-context.mjs` | ARCHITECTURE 本体、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内を注入。予算超過時は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、**CLI 案内だけは削らない**。フェイルオープン |
+| SessionStart | `scripts/inject-context.mjs` | ARCHITECTURE 本体、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意を注入。予算超過時は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、**CLI 案内・記録のタイミング・委譲の注意は削らない**。フェイルオープン |
+| SubagentStart | `scripts/inject-context.mjs`(SessionStart と同じ) | 入力の `hook_event_name` が `SubagentStart` のときサブエージェント向けを出す。ARCHITECTURE・ADR 一覧・GOTCHAS を注入し、CLI 案内と記録のタイミングは載せない。載せきれない部分は文書パスを Read する案内にする。文書が無ければ何も出さない。縮退と `injection` の設定は SessionStart と共通。フェイルオープン |
 | PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | 2 文書への直接編集を拒否し、対象に応じた CLI 呼び出しを絶対パス付きで案内。フェイルオープン |
 
-**注入は文書が 1 つも無くても CLI 案内を出す**(`buildInitGuide`。契約 §12 の限定)。
+**記録のタイミングは hook でなく SessionStart の注入文に置く**(作業の完了を hook で検出できないため。`recordingLines`。不採用案は `docs/rationale.md`)。
+**委譲の依頼文には ARCHITECTURE と GOTCHAS の原文も要約も写さない**(SubagentStart が注入するので。`delegationLines`)。
+どちらも文書があるときだけ載せ、`buildInitGuide` には入れない。
+
+**SessionStart の注入は文書が 1 つも無くても CLI 案内を出す**(`buildInitGuide`。契約 §12 の限定)。
 `/metatron:init` はまさに文書が無い状態で使うため、案内を落とすと AI は CLI の絶対パスを
 知る手段を持たない。**案内まで落とすのは 2 つだけ** — `injection.enabled: false` と、
 `loadConfig` 自体が例外で失敗したとき(壊れた機構が誤った CLI パスを広告しないため)。
@@ -71,9 +76,16 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 ## CLI サブコマンド
 
 読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` / `get rules` /
-`scan` / `diff-architecture` / `scan-adr-candidates`。段階: `stage-architecture --input` / `stage-adr --input` /
+`scan` / `diff-architecture` / `scan-adr-candidates` / `scan-gotcha-candidates`。段階: `stage-architecture --input` / `stage-adr --input` /
 `stage-rules --input`。書: `commit-architecture --staging-id` / `commit-rules --staging-id` / `init-gotchas` /
-`append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate`。
+`append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate` / `remove-gotcha-candidate`。
+
+`[GOTCHAS 候補]`(`src/lib/gotcha-candidates.ts`、CLI は `src/cli/gotcha-candidate.ts`): `scan-gotcha-candidates` が候補ごとに
+`fields`・`problems`・`hash`・`fileHash`・`ledgerMatches`(台帳で `title` が一致するエントリの ID)を返す。
+`remove-gotcha-candidate --file --hash --file-hash` は台帳へ移した候補も移さないと決めた候補も、持続層からエントリごと消す
+(参照形に縮めない。失敗の全文は台帳の 1 か所に残す)。親が `## GOTCHAS 候補` で空になれば見出しも消す。
+拒否・失敗は終了コード 3 と `removePending`。候補 ID が無いので二重移行は `ledgerMatches` で人が判断する。
+取り込み手順は `recording-gotchas` スキルにある。
 
 ### `[ADR 候補]` の走査と縮約(0.4.0-dev、2026-09-28)
 
