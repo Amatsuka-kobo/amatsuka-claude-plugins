@@ -20,7 +20,11 @@
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
-import { readDomainsResult, resolveDocPaths } from "./hooks/lib.js"
+import {
+  readDomainsResult,
+  resolveDocPaths,
+  resolveRulesDir
+} from "./hooks/lib.js"
 
 const GIT_TIMEOUT_MS = 5000
 
@@ -246,6 +250,8 @@ const architecturePath = isFile(docPaths.architecture)
   ? docPaths.architecture
   : null
 const gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null
+// metatron の rules ディレクトリがあるか。knowledgeTarget の判定に使う。
+const metatronRules = isDir(resolveRulesDir(startDir).rulesDir)
 
 const domains = readDomainsResult(startDir)
 // 契約 §1: 警告は経路を問わず返す。読み取り専用のこのスクリプトも黙って落とさない。
@@ -333,6 +339,7 @@ console.log(
       projectDocs: {
         architecture: architecturePath,
         gotchas: gotchasPath,
+        metatronRules,
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0
       },

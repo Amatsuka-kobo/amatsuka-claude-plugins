@@ -142,7 +142,7 @@ function fallbackDocRoot(startDir) {
     return startDir ?? ".";
   }
 }
-function resolveDocPaths(startDir) {
+function loadPathsConfig(startDir) {
   const warnings = [];
   let docRoot;
   try {
@@ -187,6 +187,10 @@ function resolveDocPaths(startDir) {
       "paths \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u6587\u66F8\u30D1\u30B9\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
     );
   }
+  return { docRoot, paths, warnings };
+}
+function resolveDocPaths(startDir) {
+  const { docRoot, paths, warnings } = loadPathsConfig(startDir);
   return {
     docRoot,
     architecture: resolveConfiguredPath(
