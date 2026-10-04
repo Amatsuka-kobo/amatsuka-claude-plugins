@@ -165,7 +165,8 @@ function parseDomainFile(buf: Buffer): DomainFile {
       const field = FIELD_RE.exec(lines[i])
       if (field === null) continue
       const key = field[1] as CandidateKey
-      if (seen[key] === undefined) seen[key] = field[2]
+      // 全角空白など、行の書式の正規表現が落とさない空白もここで落とす。
+      if (seen[key] === undefined) seen[key] = field[2].trim()
     }
 
     const fields = {} as Record<CandidateKey, string | null>
@@ -213,6 +214,18 @@ function realpathOrSelf(p: string): string {
   }
 }
 
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target)
+  return (
+    rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+  )
+}
+
+/** 領域ディレクトリの実パスがリポジトリの実パスの配下にあるか(外へ出るリンクを弾く)。 */
+function domainsDirStaysInRepo(repoRoot: string, dir: string): boolean {
+  return isInside(realpathOrSelf(repoRoot), realpathOrSelf(dir))
+}
+
 // ---------------------------------------------------------------------------
 // 走査(scan-gotcha-candidates)
 // ---------------------------------------------------------------------------
@@ -234,6 +247,12 @@ export function scanGotchaCandidates(
 
   const warnings: string[] = []
   const dir = path.join(repoRoot, DOMAINS_DIR_RELATIVE)
+  if (!domainsDirStaysInRepo(repoRoot, dir)) {
+    warnings.push(
+      `${DOMAINS_DIR_RELATIVE} の実体がリポジトリの外にあります。走査しません。`
+    )
+    return { repoRoot, candidates: [], warnings }
+  }
   let names: string[]
   try {
     names = fs
@@ -320,6 +339,9 @@ function resolveDomainFile(
     `${file} は ${dir} の直下にある .md ではありません。削除はそこにある持続層のファイルだけを書き換えます。`
   )
   if (path.extname(target) !== ".md") throw outside
+  // 領域ディレクトリ自体か祖先が外へ出るリンクなら、実体が外にあるので拒否する。
+  // リポジトリの中を指すリンクは許す。
+  if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside
   if (realpathOrSelf(path.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside
   }

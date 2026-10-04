@@ -711,3 +711,108 @@ test("削除: 書き込みに失敗したら write_failed で拒否し、一時�
   expect(fs.readFileSync(file).equals(before)).toBe(true)
   expect(fs.readdirSync(path.dirname(file))).toStrictEqual(["frontend.md"])
 })
+
+// 領域ディレクトリ(またはその祖先)がリポジトリの外を指すリンクのとき、
+// 走査せず、削除は outside_domains_dir で拒否する。
+test("走査と削除: domains 自体が外部へのリンクなら、走査せず warnings に積み、削除は outside_domains_dir で拒否する", () => {
+  const body = durable("GOTCHAS 候補", entry("失敗 A"))
+  const reference = repo()
+  writeDomain(reference, "frontend.md", body)
+  const { hash } = find(reference, "失敗 A")
+
+  const root = repo()
+  const external = mkTmp()
+  const externalFile = writeFile(external, "frontend.md", body)
+  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
+  fs.symlinkSync(external, path.join(root, "docs/intents/domains"))
+  const before = fs.readFileSync(externalFile)
+
+  const result = scan(root)
+  expect(result.candidates).toStrictEqual([])
+  expect(result.warnings).toHaveLength(1)
+
+  const viaLink = path.join(root, "docs/intents/domains/frontend.md")
+  expectRejected(
+    () => remove(root, viaLink, hash, hashContent(before)),
+    "outside_domains_dir"
+  )
+  expectRejected(
+    () => remove(root, externalFile, hash, hashContent(before)),
+    "outside_domains_dir"
+  )
+  expect(fs.readFileSync(externalFile).equals(before)).toBe(true)
+})
+
+test("走査と削除: 祖先のディレクトリが外部へのリンクでも、走査せず、削除は outside_domains_dir で拒否する", () => {
+  const body = durable("GOTCHAS 候補", entry("失敗 A"))
+  const reference = repo()
+  writeDomain(reference, "frontend.md", body)
+  const { hash } = find(reference, "失敗 A")
+
+  const root = repo()
+  const external = mkTmp()
+  const externalFile = writeFile(external, "intents/domains/frontend.md", body)
+  fs.symlinkSync(external, path.join(root, "docs"))
+  const before = fs.readFileSync(externalFile)
+
+  const result = scan(root)
+  expect(result.candidates).toStrictEqual([])
+  expect(result.warnings).toHaveLength(1)
+
+  const viaLink = path.join(root, "docs/intents/domains/frontend.md")
+  expectRejected(
+    () => remove(root, viaLink, hash, hashContent(before)),
+    "outside_domains_dir"
+  )
+  expect(fs.readFileSync(externalFile).equals(before)).toBe(true)
+})
+
+test("走査と削除: domains がリポジトリの中を指すリンクなら、走査も削除もできる", () => {
+  const root = repo()
+  const real = writeFile(
+    root,
+    "shared/domains/frontend.md",
+    durable("GOTCHAS 候補", entry("失敗 A"))
+  )
+  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
+  fs.symlinkSync(
+    path.join(root, "shared/domains"),
+    path.join(root, "docs/intents/domains")
+  )
+
+  const target = find(root, "失敗 A")
+  remove(
+    root,
+    path.join(root, "docs/intents/domains/frontend.md"),
+    target.hash,
+    target.fileHash
+  )
+
+  expect(fs.readFileSync(real, "utf8")).not.toContain("失敗 A")
+})
+
+test("走査: 値の前後の全角空白を落とし、全角空白だけの値は空として problems に載せる", () => {
+  const root = repo()
+  writeDomain(
+    root,
+    "frontend.md",
+    durable(
+      "GOTCHAS 候補",
+      entry("全角空白つき", {
+        values: { cause: "　原因　", promotionCandidate: "　Yes　" }
+      }),
+      entry("全角空白だけ", {
+        values: { cause: "　　", promotionCandidate: "　" }
+      })
+    )
+  )
+
+  const { candidates } = scan(root)
+
+  expect(candidates[0].fields.cause).toBe("原因")
+  expect(candidates[0].fields.promotionCandidate).toBe("Yes")
+  expect(candidates[0].problems).toStrictEqual([])
+  expect(candidates[1].fields.cause).toBeNull()
+  expect(candidates[1].fields.promotionCandidate).toBeNull()
+  expect(candidates[1].problems).toHaveLength(2)
+})
