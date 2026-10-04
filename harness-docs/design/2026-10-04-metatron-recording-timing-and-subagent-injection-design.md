@@ -181,7 +181,7 @@ codiel の手元の記録は、写したかどうかを `- 写し先:` の行で
 ## 5. 文書の追随
 
 - `plugins/metatron/README.md`: 概要と「注入と規律」に、サブエージェントへも注入することを書く。「## 2 つの hook」の表に SubagentStart の行を足し、見出しを実態に合わせる。CLI の一覧に 2 つのサブコマンドを足す。
-- `plugins/metatron/docs/rationale.md`: 88〜89 行目(サブエージェントには継承の保証が無いので依頼文にパスを埋める)を、SubagentStart で注入する理由に書き換える。記録のタイミングを hook でなく注入文に置いた理由と、不採用案(下の「不採用案」)を足す。
+- `plugins/metatron/docs/rationale.md`: 88〜89 行目(サブエージェントには継承の保証が無いので依頼文にパスを埋める)を、SubagentStart で注入する理由に書き換える。記録のタイミングを hook でなく注入文に置いた理由と、不採用案(下の「不採用案」)を足す。移した GOTCHAS 候補を参照形に縮めず消す理由(失敗の全文を台帳の 1 か所だけに残し、領域ファイルに失敗の索引をためない)も足す。
 - `plugins/metatron/references/config-schema.md`: `injection.enabled`・`gotchasRecentCount`・`maxChars` の説明を、SessionStart と SubagentStart の両方に当たる書き方にする。キー・値域・既定値は変えない。説明の変更だけなので codiel の独立実装は変わらないが、規約どおり 2 者比較テストを通す。
 - `harness-docs/design/2026-08-16-file-contract-freeze.md`: §12(CLI の入出力規約)に 2 つのサブコマンドを、§13(hook 出力の形式)に SubagentStart の出力を足す。
 - ルートの `README.md`: metatron の説明に変更があれば合わせる。
@@ -189,12 +189,7 @@ codiel の手元の記録は、写したかどうかを `- 写し先:` の行で
 
 ## 6. ADR
 
-`metatron:updating-architecture` で次の 2 件を足す。
-
-- `[metatron] サブエージェントへは SubagentStart で注入し、記録のタイミングは SessionStart の注入文で知らせる`
-  - 選択肢: 依頼文にパスを埋めて読ませる(従来)/ SubagentStart で注入する(採用)。記録のタイミングは、Stop hook で決定的な合図(コミット・run の終了)を検出する / prompt 型の Stop hook で毎回判定する / 注入文で指示する(採用)。
-- `[metatron] 持続層の GOTCHAS 候補を台帳へ移し、持続層からは消す`
-  - 選択肢: 参照形に縮める / エントリを消す(採用)。ADR-007 の参照形と違い、失敗の全文は台帳の 1 か所だけに残し、領域ファイルに失敗の索引をためない。
+ADR は足さない(ユーザー決定、2026-10-04)。SubagentStart で注入する理由、記録のタイミングを注入文に置いた理由、移した GOTCHAS 候補を消す理由は、5 の `docs/rationale.md` に書く。
 
 ## 7. テスト
 
@@ -217,8 +212,7 @@ codiel の手元の記録は、写したかどうかを `- 写し先:` の行で
 2. SessionStart の記録のタイミング(1)と、そのテスト・ビルド出力
 3. SubagentStart の注入(3)と転記の禁止(4)。hooks.json・テスト・ビルド出力・README・rationale・config-schema・ファイル契約・Serena のメモリ
 4. GOTCHAS 候補の CLI(2-1)と、そのテスト・ビルド出力・cli-usage・ファイル契約
-5. GOTCHAS 候補の手順と書式の契約(2-2・2-3)。metatron のスキル・references・チェックリストと、codiel の `intent-format.md`・チェックリスト、codiel の引き継ぎ書への追記
-6. ADR 2 件(`commit-architecture` が書く ARCHITECTURE)
+5. GOTCHAS 候補の手順と書式の契約(2-2・2-3)。metatron のスキル・references・チェックリストと、codiel の `intent-format.md`・チェックリスト、codiel の引き継ぎ書への追記、`docs/rationale.md` の GOTCHAS 候補を消す理由
 
 ## 不採用案
 
