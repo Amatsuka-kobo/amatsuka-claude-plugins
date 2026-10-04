@@ -15,11 +15,12 @@
 //    AI は CLI の絶対パスを知る手段を持たず、init を開始できない。
 //    例外は 2 つだけ。`injection.enabled: false`(利用者が明示的に切っている)と、
 //    設定の解決が例外で失敗した場合(壊れた機構が誤った CLI パスを広告しないため)。
-// 1. **CLI 案内は常に出力の先頭にあり、どの縮退段階でも完全な形で残る。**
+// 1. **削れない部分(CLI 案内と記録のタイミング)は常に出力の先頭にあり、どの縮退段階でも完全な形で残る。**
 //    プラットフォームが 10,000 文字で退避に倒したとき、モデルへ渡るのは先頭のプレビューである。
 //    先頭に無ければ、最も短くて最も代替の効かない要素が最初に見えなくなる(設計書 §8-3)。
+//    記録のタイミングは文書があるときだけ載せる(文書が無いうちは記録先が無い)。
 // 2. **出力の総文字数は maxChars(既定 9000)以下に収めることを目標とする。** 段階縮退を尽くす(§8-5)。
-//    ただし maxChars が CLI 案内の長さ(約 700 文字)を下回る場合は CLI 案内を優先し、maxChars を超える。
+//    ただし maxChars が削れない部分の長さ(約 1,000 文字。CLI の絶対パスの長さで変わる)を下回る場合は削れない部分を優先し、maxChars を超える。
 //    不変条件 1 が maxChars より上位にあるためである(§8-3 の優先 1、§8-5 の
 //    「CLI 案内には決して手を付けない」)。破ってはならない真の上限はプラットフォームの
 //    10,000 文字であり、これは常に守る。
@@ -90,13 +91,26 @@ function cliLines(cli: string): string[] {
   ]
 }
 
+// 記録のタイミング。hook では作業の完了を検出できないので、注入文で確かめる時点を伝える。
+// 文書が無いうちは記録先が無いので、buildInitGuide には入れない(cliLines と分けているのはこのため)。
+// 4 行の合計を 200 文字以内に保つ。削れない部分を長くすると、縮退に回せる予算が減る。
+function recordingLines(): string[] {
+  return [
+    "依頼の完了報告の前に、判断と失敗に ADR・GOTCHAS へ残すものが無いか確かめる。",
+    "残すなら updating-architecture か recording-gotchas の承認手順で記録する。",
+    "codiel run の報告に出た候補は、run の中でなく次のターンの初めに確かめる。",
+    "docs/intents/domains/ の候補は /metatron:update で取り込める。"
+  ]
+}
+
 // 文書が 1 つ以上あるときの案内。
 function buildGuide(cli: string): string {
   return [
     GUIDE_TITLE,
     "",
     "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
-    ...cliLines(cli)
+    ...cliLines(cli),
+    ...recordingLines()
   ].join("\n")
 }
 
@@ -489,8 +503,8 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
     if (content.length <= budget) return content
   }
 
-  // 段階を尽くしても収まらないのは maxChars が CLI 案内より小さい場合だけである。
-  // そのときも CLI 案内は削らない(§8-5 の「CLI 案内には決して手を付けない」を上位に置く)。
+  // 段階を尽くしても収まらないのは maxChars が削れない部分より小さい場合だけである。
+  // そのときも CLI 案内と記録のタイミングは削らない(§8-5 の「CLI 案内には決して手を付けない」を上位に置く)。
   return `${guide}\n`
 }
 
