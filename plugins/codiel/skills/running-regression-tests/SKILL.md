@@ -62,6 +62,7 @@ broken の修正は、テストが保護されているため、オーケスト�
 ```markdown
 ## サマリ
 
+- 実行時の HEAD: <`git rev-parse HEAD` の値>
 - OK: <件数> / NG: <件数> / 異常終了(broken): <件数> / 環境の失敗: <件数>
 - test コマンド: <pass 件数> pass / <fail 件数> fail
 

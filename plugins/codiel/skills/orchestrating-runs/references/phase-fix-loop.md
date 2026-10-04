@@ -15,6 +15,6 @@
 - exit code が `3`(試行上限超過・`capExceeded`)なら、`raguel-gating` の ASK と同じ扱いにする。`awaiting_human` は `record-attempt` がセットしている。findings に当たる情報を人に示し、裁定を受けてから続ける。
 - 所見がテストに向くと `fixing-review-findings` の検証で確かめたら、`set-test-edit --slug <slug>` を実行してからテスト側の修正を委譲する。その委譲を `wait-done` した直後に `clear-test-edit --slug <slug>` を実行し、その後でコードの修正を委譲する。
 - github モードでは、修正のコミットが済んだ後、再レビューの委譲を出す前に `git push` して PR ブランチを最新化する。
-- 再レビューの委譲を出す前に `references/review-common.md` を Read し、その規則で観点を選び直す。依頼文の前提の「反論済み所見」に、`fixing-review-findings` の反論済み一覧を書く。統合した報告は `review-<m+1>.md` に書く。
+- 再レビューの委譲を出す前に `references/review-common.md` を Read し、その規則で観点を選び直し、「委譲の前の準備」を行う。依頼文の前提の「反論済み所見」に、`fixing-review-findings` の反論済み一覧を書く。統合した報告は `review-<m+1>.md` に書く。
 - 直した所見に、設計時に想定していなかった仕様漏れ・考慮漏れがあったときは、fix-loop の `pass-gate` の前に `references/gotcha-candidates.md` を Read する。`pass-gate` の後に、その手順で漏れごとに GOTCHAS 候補を書く。
 - 設計を変える修正を採ったときは、fix-loop の `pass-gate` の前に `references/adr-candidates.md` を Read する。`pass-gate` の後に、その手順で ADR の 3 条件を判定し、満たす判断ごとに ADR 候補を書く。

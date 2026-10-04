@@ -397,7 +397,7 @@ digraph reviewing_diffs {
   scope [label="自分の観点に該当する\n変更点を洗い出す", shape=box];
   check_missing [label="未達方向: 基準や intent の原文に\nあるのに実装が見当たらないか?", shape=diamond];
   check_deviation [label="逸脱方向: 基準にないのに\n実装されていないか?", shape=diamond];
-  verify [label="必要ならテスト・型検査を\n読み取り実行して裏取り", shape=box];
+  verify [label="必要なら入力の review-checks と\ntest-run を読んで裏取り(実行しない)", shape=box];
   classify [label="severity を定義表に沿って判定\n(critical/high/medium/low。\n原文の要望の未達は high)", shape=box];
   write_finding [label="所見書式で記述\n(反論済み一覧は新根拠なければ除外)", shape=box];
   more [label="未確認の観点・変更点が残っているか?", shape=diamond];
