@@ -183,7 +183,7 @@ codiel の手元の記録は、写したかどうかを `- 写し先:` の行で
 - `plugins/metatron/README.md`: 概要と「注入と規律」に、サブエージェントへも注入することを書く。「## 2 つの hook」の表に SubagentStart の行を足し、見出しを実態に合わせる。CLI の一覧に 2 つのサブコマンドを足す。
 - `plugins/metatron/docs/rationale.md`: 88〜89 行目(サブエージェントには継承の保証が無いので依頼文にパスを埋める)を、SubagentStart で注入する理由に書き換える。記録のタイミングを hook でなく注入文に置いた理由と、不採用案(下の「不採用案」)を足す。移した GOTCHAS 候補を参照形に縮めず消す理由(失敗の全文を台帳の 1 か所だけに残し、領域ファイルに失敗の索引をためない)も足す。
 - `plugins/metatron/references/config-schema.md`: `injection.enabled`・`gotchasRecentCount`・`maxChars` の説明を、SessionStart と SubagentStart の両方に当たる書き方にする。キー・値域・既定値は変えない。説明の変更だけなので codiel の独立実装は変わらないが、規約どおり 2 者比較テストを通す。
-- `harness-docs/design/2026-08-16-file-contract-freeze.md`: §12(CLI の入出力規約)に 2 つのサブコマンドを、§13(hook 出力の形式)に SubagentStart の出力を足す。
+- `harness-docs/design/2026-08-16-file-contract-freeze.md` は過去の設計記録なので追随させない(ユーザー決定、2026-10-04)。
 - ルートの `README.md`: metatron の説明に変更があれば合わせる。
 - `.serena/memories/metatron/core.md`: 「2 つの hook」の記述を、SubagentStart を含む形に `edit_memory` で直す。ほかのメモリも、hook と注入と CLI の一覧に触れていれば合わせる。
 
@@ -210,8 +210,8 @@ ADR は足さない(ユーザー決定、2026-10-04)。SubagentStart で注入�
 
 1. 設計書
 2. SessionStart の記録のタイミング(1)と、そのテスト・ビルド出力
-3. SubagentStart の注入(3)と転記の禁止(4)。hooks.json・テスト・ビルド出力・README・rationale・config-schema・ファイル契約・Serena のメモリ
-4. GOTCHAS 候補の CLI(2-1)と、そのテスト・ビルド出力・cli-usage・ファイル契約
+3. SubagentStart の注入(3)と転記の禁止(4)。hooks.json・テスト・ビルド出力・README・rationale・config-schema・Serena のメモリ
+4. GOTCHAS 候補の CLI(2-1)と、そのテスト・ビルド出力・cli-usage
 5. GOTCHAS 候補の手順と書式の契約(2-2・2-3)。metatron のスキル・references・チェックリストと、codiel の `intent-format.md`・チェックリスト、codiel の引き継ぎ書への追記、`docs/rationale.md` の GOTCHAS 候補を消す理由
 
 ## 不採用案

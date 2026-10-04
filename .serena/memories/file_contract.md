@@ -80,13 +80,12 @@
   `持ち込みモード: 以下の完成済み本文で起票`。判定は固定句の一致のみ、推測で入らない。
 - §12 metatron CLI 入出力規約と staging・ロックの保証。staging は単一ターゲットのままで、
   rules も 1 回 1 ファイルである。
-- §13 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の 3 イベントの hook(SessionStart・SubagentStart・PreToolUse)はフェイルオープン、
+- §13 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の両 hook はフェイルオープン、
   codiel の PreToolUse はフェイルクローズド(`ask`)。混同しない。
   SessionStart 注入の「何も出力しない」は 2026-08-17 に**「文書の内容を出力しない」へ限定**された。
   文書が 1 つも無くても CLI 案内は出す。案内まで落とすのは `injection.enabled: false` と
   設定読み取り自体が例外で失敗したときの 2 つだけ。**rules 本文は注入しない**(Claude Code が
-  起動時に読み、サブエージェントにも渡る)。SubagentStart は SessionStart と同じ形で `hookEventName` が `SubagentStart`、文書が無ければ何も出さない(CLI 案内も出さない)。
-  §12 に `scan-gotcha-candidates` / `remove-gotcha-candidate`(終了コード 3 と `removePending`)がある。
+  起動時に読み、サブエージェントにも渡る)。
 - `[ADR 候補]` の書式と参照形(2026-09-28)は、codiel の `references/intent-format.md` の「## 持続層」が正本の
   共有ファイル契約である。metatron は `references/architecture-format.md` の「ADR 候補の取り込み」に、読み取りと縮約に
   要る最小限(印の形、候補 ID の書式、エントリの範囲、5 つの小見出しの名前、参照形、ADR の背景に書く
