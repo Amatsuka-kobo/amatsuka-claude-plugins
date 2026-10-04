@@ -23,7 +23,8 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 5. ARCHITECTURE のセクションは `stage-architecture`、ADR は `stage-adr`、rules は `stage-rules` へ分けて渡す。
 6. 返った diff を全文提示して承認を得る。
 7. ARCHITECTURE と ADR は `commit-architecture --staging-id <id>`、rules は `commit-rules --staging-id <id>` で書き込む。
-8. 更新したセクション・ADR・rules を報告する。
+8. 下の「GOTCHAS 候補の取り込み」に従う。
+9. 更新したセクション・ADR・rules と、移した GOTCHAS 候補を報告する。
 
 ## 検出の範囲
 
@@ -66,6 +67,11 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 - ADR の確定に失敗したときは持続層に触れない。候補は全文のまま持続層に残る。
 - `commit-architecture` が成功したら `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <候補の hash>` を呼ぶ。終了コード 3 で終わったら 1 回だけやり直し、それも失敗したらユーザーに報告する。
 - 却下された候補と、ADR の作成に失敗した候補は持続層に全文のまま残す。
+
+## GOTCHAS 候補の取り込み
+
+- ADR 候補の取り込みの後に `scan-gotcha-candidates` を実行する。
+- 候補が 1 件以上あれば、`../recording-gotchas/SKILL.md` の「持続層の GOTCHAS 候補の取り込み」に従う。0 件なら何も提示しない。
 
 ## rules
 

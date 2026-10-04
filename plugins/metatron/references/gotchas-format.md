@@ -80,3 +80,14 @@
 
 - 2 の判定で GOTCHAS に記録するエントリは、このプロジェクトで実際に踏んだ失敗として書く。抽象化した一般則としては書かない。
 - Raphael を導入していない環境では 2 を判定しない。1 が Yes の知識はどちらにも記録しない。
+
+## GOTCHAS 候補の取り込み
+
+`[GOTCHAS 候補]` の書式の正本は `plugins/codiel/references/intent-format.md` の「### GOTCHAS 候補」である。ここには `scan-gotcha-candidates` の読み取りと `remove-gotcha-candidate` の削除に要る最小限だけを写す。
+
+- 印は見出し末尾の `[GOTCHAS 候補]` の 1 形だけとする。候補 ID は付かない。
+- 見出しから印を除いた文字列が `title` になる。
+- エントリの範囲は、印付きの `###` 見出しから、次の `###` 見出しか `##` 見出しの直前までとする。親の `##` 見出しは問わない。
+- 値の行は `- <キー>: <値>` の形とする。キーは `date` / `run` / `task` / `mistake` / `cause` / `countermeasure` / `promotionCandidate` の 7 つで、未知のキーの行は無視する。
+- `promotionCandidate` は `Yes` か `No` とする。
+- 削除はエントリの範囲だけを消す。親が `## GOTCHAS 候補` で、その配下に空白だけの行しか残らないときは、見出しも消す。

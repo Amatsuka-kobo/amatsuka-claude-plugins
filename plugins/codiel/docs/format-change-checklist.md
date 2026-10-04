@@ -18,6 +18,7 @@ codiel が定める書式を変更したときに、同じコミットで追随�
 
 - [ ] ADR の 3 条件の写しを、metatron の `references/writing-discipline.md` の「何を ADR にするか」に揃える
 - [ ] `[ADR 候補]` の書式(印・候補 ID・エントリの範囲・参照形)を、metatron の `references/architecture-format.md` の写しのセクションに揃える
+- [ ] `[GOTCHAS 候補]` の書式(印・エントリの範囲・キー・削除の範囲)を、metatron の `references/gotchas-format.md` の「GOTCHAS 候補の取り込み」の写しに揃える
 
 ## GitHub の執筆規則(`references/github-writing.md`・`github-writing-images.md`・`github-writing-pr.md`)
 

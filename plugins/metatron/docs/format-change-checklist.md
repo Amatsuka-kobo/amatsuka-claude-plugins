@@ -67,3 +67,11 @@ prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂�
 `[ADR 候補]` の書式と参照形の正本は codiel にある。
 
 - [ ] `plugins/codiel/references/intent-format.md` の「## 持続層」セクションと揃っているかを確かめる
+
+## GOTCHAS 候補の取り込み(`references/gotchas-format.md` の「GOTCHAS 候補の取り込み」セクション)
+
+`[GOTCHAS 候補]` の書式の正本は codiel にある。
+
+- [ ] `plugins/codiel/references/intent-format.md` の「### GOTCHAS 候補」と揃っているかを確かめる
+- [ ] `plugins/metatron/src/lib/gotcha-candidates.ts` の印・範囲・キー・削除の範囲の実装
+- [ ] `plugins/metatron/skills/recording-gotchas/SKILL.md` の「持続層の GOTCHAS 候補の取り込み」

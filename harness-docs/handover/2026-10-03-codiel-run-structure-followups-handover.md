@@ -64,6 +64,7 @@
 - `plugins/codiel/scripts/` は手で編集しない。`src/` を変えて `pnpm run build` を実行し、差分を同じコミットに入れる。
 - 指示書は `prompt-smith:prompt-smith` の規律で書く。`orchestrating-runs/SKILL.md` の §2.1・§2.4 は他のスキルから番号で参照されているので、番号を変えない。
 - `orchestrating-runs` §0 の分岐表の行番号は、本文と `references/resume.md` が参照している。行を足したら参照を合わせる。
+- GOTCHAS 候補の書き先や書式の契約(`intent-format.md` の「GOTCHAS 候補」)を変えるときは、metatron の `references/gotchas-format.md` の写しと `plugins/metatron/src/lib/gotcha-candidates.ts` を同じ改修で追随させる。改修 2 の incident の候補を持続層へ写す決定も、この追随に含める。metatron は走査で親の `##` 見出しを問わず、削除では親が `## GOTCHAS 候補` のときだけ空の見出しを消す。
 - `plugins/metatron/src/__test__/section-reference-inventory.test.ts` が落ちたら、登録簿を合わせる。
 - 文書の日本語は native-japanese の規律に従う。「節」「段」「版」「契機」(条件や時点の意味のとき)を使わない。
 
