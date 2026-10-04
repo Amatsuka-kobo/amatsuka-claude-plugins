@@ -19,7 +19,7 @@ review に入ったときと、fix-loop で再レビューの委譲を出す前�
 1. 今の HEAD を控える。
 2. テストの結果を決める。
    - 最新の `test-run-<n>.md` の「実行時の HEAD」から今の HEAD までの変更が、結果に影響しない変更だけなら、その test-run を使う。
-   - 結果に影響しない変更は、`docs/intents/**`、`.codiel/runs/<slug>/` の文書、`<testsDir>/**` の `spec.md`・`cases.md`・`reports/**` である。テストコードと製品コードの変更は影響する。
+   - 結果に影響しない変更は、`docs/intents/**`、`<runsDir>/<slug>/` の文書、`<testsDir>/**` の `spec.md`・`cases.md`・`reports/**` である。テストコードと製品コードの変更は影響する。
    - test-run が無い、HEAD の行が無い、影響する変更がある、のいずれかなら、プロジェクトの test コマンドを run ブランチ上で 1 回実行する。E2E は実行しない。
 3. 型検査のコマンドを 1 回実行する。コマンドは、コンテキストに宣言があればそれ、無ければ `package.json` の `scripts` の `typecheck` とする。どちらも無ければ「型検査なし」とする。
 4. `reports/review-checks-<m>.md` に、今の HEAD、使った test-run のパスか test コマンドの実行結果、型検査のコマンドと終了コード、失敗時の出力の抜粋を書く。
