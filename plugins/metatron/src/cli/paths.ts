@@ -80,6 +80,7 @@ export const USAGE_LINES: readonly string[] = [
   "  scan",
   "  diff-architecture",
   "  scan-adr-candidates",
+  "  scan-gotcha-candidates",
   "",
   "段階(拒否は非 0):",
   "  stage-architecture --input <path>",
@@ -92,5 +93,6 @@ export const USAGE_LINES: readonly string[] = [
   "  init-gotchas",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <解決済み|対象外> --reason <理由>",
-  "  shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>"
+  "  shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>",
+  "  remove-gotcha-candidate --file <path> --hash <走査の hash> --file-hash <走査の fileHash>"
 ]

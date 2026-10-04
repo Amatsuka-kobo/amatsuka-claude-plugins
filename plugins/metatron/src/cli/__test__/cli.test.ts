@@ -1273,3 +1273,282 @@ test("shrink-adr-candidate のオプションが欠けると終了コード 2 �
   expect((run.json as Record<string, unknown>).shrinkPending).toBeUndefined()
   expectUnchanged(before)
 })
+
+// ---------------------------------------------------------------------------
+// scan-gotcha-candidates / remove-gotcha-candidate(記録のタイミングとサブエージェントへの
+// 注入の設計書 2-1)
+// ---------------------------------------------------------------------------
+
+const GOTCHA_CANDIDATE_ENTRY = [
+  "### キャッシュを消し忘れた [GOTCHAS 候補]",
+  "- date: 2026-10-01",
+  "- run: login-rework try-2",
+  "- task: ログイン画面を直す",
+  "- mistake: ビルドのキャッシュを消さずに確認した",
+  "- cause: 古い成果物が残っていた(推測)",
+  "- countermeasure: 確認の前に pnpm run clean を実行する",
+  "- promotionCandidate: Yes"
+]
+
+function gotchaDurableDoc(parent: string): string {
+  return [
+    "# frontend",
+    "",
+    `## ${parent}`,
+    "",
+    ...GOTCHA_CANDIDATE_ENTRY,
+    "",
+    "## 出典",
+    "",
+    "なし",
+    ""
+  ].join("\n")
+}
+
+/** git リポジトリで、ARCHITECTURE と GOTCHAS 候補を持つ持続層がある。 */
+function gotchaCandidateProject(parent = "GOTCHAS 候補"): {
+  root: string
+  durable: string
+} {
+  const root = project()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  const durable = writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    gotchaDurableDoc(parent)
+  )
+  return { root, durable }
+}
+
+function scanGotchaCandidates(root: string): Record<string, unknown>[] {
+  const run = runCli(["scan-gotcha-candidates"], root)
+  expect(run.status).toBe(0)
+  const json = run.json as Record<string, unknown>
+  return json.candidates as Record<string, unknown>[]
+}
+
+function removeArgs(
+  file: string,
+  hash: string | undefined,
+  fileHash: string | undefined
+): string[] {
+  const args = ["remove-gotcha-candidate", "--file", file]
+  if (hash !== undefined) args.push("--hash", hash)
+  if (fileHash !== undefined) args.push("--file-hash", fileHash)
+  return args
+}
+
+test("scan-gotcha-candidates は git リポジトリの外では走査せず exit 0 で空を返す", () => {
+  const root = mkTmp()
+  writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    gotchaDurableDoc("GOTCHAS 候補")
+  )
+
+  const run = runCli(["scan-gotcha-candidates"], root)
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "scan-gotcha-candidates",
+    ok: true,
+    repoRoot: null,
+    candidates: []
+  })
+})
+
+test("scan-gotcha-candidates は候補を返し、台帳に同じタイトルがあれば ledgerMatches に ID が出る", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const before = snapshot([durable])
+
+  const run = runCli(["scan-gotcha-candidates"], root)
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "scan-gotcha-candidates",
+    ok: true,
+    repoRoot: root,
+    warnings: []
+  })
+  const [candidate] = (run.json as Record<string, unknown>)
+    .candidates as Record<string, unknown>[]
+  expect(candidate).toMatchObject({
+    file: durable,
+    relative: "docs/intents/domains/frontend.md",
+    heading: "### キャッシュを消し忘れた [GOTCHAS 候補]",
+    title: "キャッシュを消し忘れた",
+    fields: {
+      date: "2026-10-01",
+      run: "login-rework try-2",
+      task: "ログイン画面を直す",
+      promotionCandidate: "Yes"
+    },
+    problems: [],
+    ledgerMatches: []
+  })
+  expect(candidate.hash).toMatch(/^[0-9a-f]{64}$/)
+  expect(candidate.fileHash).toMatch(/^[0-9a-f]{64}$/)
+  expectUnchanged(before)
+
+  writeFile(
+    root,
+    "docs/GOTCHAS.md",
+    `${GOTCHAS}\n### [2026-08-11] GOTCHA-002: キャッシュを消し忘れた\n\n**タスク**: t\n**失敗内容**: m\n**原因 (推測)**: c\n**対策**: p\n**昇格候補**: No\n`
+  )
+  expect(scanGotchaCandidates(root)[0].ledgerMatches).toStrictEqual([
+    "GOTCHA-002"
+  ])
+})
+
+test("remove-gotcha-candidate は exit 0 でエントリを消し、空になった `## GOTCHAS 候補` も消す", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+
+  const run = runCli(
+    removeArgs(
+      candidate.file as string,
+      candidate.hash as string,
+      candidate.fileHash as string
+    ),
+    root
+  )
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "remove-gotcha-candidate",
+    ok: true,
+    written: true,
+    file: durable,
+    title: "キャッシュを消し忘れた"
+  })
+  expect(fs.readFileSync(durable, "utf8")).toBe(
+    "# frontend\n\n## 出典\n\nなし\n"
+  )
+  expect(scanGotchaCandidates(root)).toStrictEqual([])
+})
+
+test("remove-gotcha-candidate は親が `## GOTCHAS 候補` 以外なら見出しを残す", () => {
+  const { root, durable } = gotchaCandidateProject("意図的な制約")
+  const [candidate] = scanGotchaCandidates(root)
+
+  const run = runCli(
+    removeArgs(
+      candidate.file as string,
+      candidate.hash as string,
+      candidate.fileHash as string
+    ),
+    root
+  )
+
+  expect(run.status).toBe(0)
+  expect(fs.readFileSync(durable, "utf8")).toBe(
+    "# frontend\n\n## 意図的な制約\n\n## 出典\n\nなし\n"
+  )
+})
+
+test("remove-gotcha-candidate の拒否は終了コード 3 と removePending を返し、持続層を変えない", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+  const outside = writeFile(
+    root,
+    "docs/intents/frontend.md",
+    gotchaDurableDoc("GOTCHAS 候補")
+  )
+  const hash = candidate.hash as string
+  const fileHash = candidate.fileHash as string
+
+  const cases = [
+    { error: "file_changed", file: durable, hash, fileHash: "0" },
+    { error: "candidate_not_found", file: durable, hash: "0", fileHash },
+    { error: "outside_domains_dir", file: outside, hash, fileHash },
+    {
+      error: "file_not_found",
+      file: path.join(root, "docs/intents/domains/none.md"),
+      hash,
+      fileHash
+    }
+  ]
+  for (const c of cases) {
+    const before = snapshot([durable, outside])
+    const run = runCli(removeArgs(c.file, c.hash, c.fileHash), root)
+    expect(run.status, c.error).toBe(3)
+    expect(run.json, c.error).toMatchObject({
+      ok: false,
+      error: c.error,
+      written: false,
+      removePending: { file: c.file, hash: c.hash }
+    })
+    expectUnchanged(before)
+  }
+})
+
+test("remove-gotcha-candidate は git リポジトリの外では not_git_repository で終了コード 3", () => {
+  const root = project()
+  const durable = writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    gotchaDurableDoc("GOTCHAS 候補")
+  )
+  const before = snapshot([durable])
+
+  const run = runCli(removeArgs(durable, "0", "0"), root)
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "not_git_repository",
+    written: false
+  })
+  expectUnchanged(before)
+})
+
+test("remove-gotcha-candidate の書き込みの失敗も終了コード 3 と removePending を返す", () => {
+  if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+  const dir = path.dirname(durable)
+  const before = snapshot([durable])
+
+  fs.chmodSync(dir, 0o555)
+  let run: CliRun
+  try {
+    run = runCli(
+      removeArgs(
+        durable,
+        candidate.hash as string,
+        candidate.fileHash as string
+      ),
+      root
+    )
+  } finally {
+    fs.chmodSync(dir, 0o755)
+  }
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "write_failed",
+    written: false,
+    removePending: { file: durable, hash: candidate.hash }
+  })
+  expectUnchanged(before)
+  expect(fs.readdirSync(dir)).toStrictEqual(["frontend.md"])
+})
+
+test("remove-gotcha-candidate のオプションが欠けると終了コード 2 で、removePending を返さない", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+  const before = snapshot([durable])
+
+  for (const args of [
+    removeArgs(durable, candidate.hash as string, undefined),
+    removeArgs(durable, undefined, candidate.fileHash as string),
+    ["remove-gotcha-candidate"]
+  ]) {
+    const run = runCli(args, root)
+    expect(run.status).toBe(2)
+    expect(run.json).toMatchObject({ ok: false, error: "missing_option" })
+    expect((run.json as Record<string, unknown>).removePending).toBeUndefined()
+  }
+  expectUnchanged(before)
+})

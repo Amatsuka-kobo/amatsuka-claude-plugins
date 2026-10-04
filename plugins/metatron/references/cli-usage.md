@@ -29,6 +29,8 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
 | `scan-adr-candidates` | 読 | `docs/intents/domains/*.md` の `[ADR 候補]` を走査する。候補の配列と `warnings` を返す |
 | `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>` | 書 | 候補のエントリを参照形へ縮める。拒否・失敗は終了コード 3 で `shrinkPending` を返す |
+| `scan-gotcha-candidates` | 読 | `docs/intents/domains/*.md` の `[GOTCHAS 候補]` を走査する。候補の配列と `warnings` を返す。台帳に同じタイトルのエントリがあれば、候補の `ledgerMatches` にその ID が入る |
+| `remove-gotcha-candidate --file <path> --hash <走査の hash> --file-hash <走査の fileHash>` | 書 | 候補のエントリを持続層から消す。拒否・失敗は終了コード 3 で `removePending` を返す |
 
 ## 入出力の規約
 
@@ -36,7 +38,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 読み取り系は常に exit 0 で終わる。読めなかったことも `ok: false` と `error` を持つ JSON で返るため、exit code で読み取りの成否を判定しない。
 - 読み取り系の `error: "not_created"` は「文書が未作成」という事実であって異常ではない。
 - 書き込み系は成功で exit 0、拒否・失敗で非 0 で終わる。理由は JSON の `error` に入る。
-- 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。
+- 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。`remove-gotcha-candidate` の拒否・失敗も終了コード 3 で返り、`removePending` に `file` / `hash` を積む。
 - 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
@@ -139,6 +141,19 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 書き込み先が `<repoRoot>/docs/intents/domains/` 直下の通常ファイルであることを確かめてから書く。シンボリックリンクと下位ディレクトリは拒否する。
 - 既に参照形になっているエントリを指定したときは、何も書かずに成功で返る(冪等)。
 - 拒否・失敗は終了コード 3 で返り、対象ファイルは 1 バイトも変わらない。
+
+### remove-gotcha-candidate
+
+入力 JSON を持たない。`--file` / `--hash` / `--file-hash` の 3 つとも必須。
+
+- `--file` は `scan-gotcha-candidates` が返した候補の `file` をそのまま渡せる。相対パスは cwd 基準で解決する。
+- `--hash` と `--file-hash` には、走査で得たその候補の `hash` と `fileHash` を渡す。
+- `--file` が `<repoRoot>/docs/intents/domains/` 直下の通常ファイルでなければ `outside_domains_dir` で拒否する。シンボリックリンクと下位ディレクトリも拒否する。
+- 走査の後にファイル全体が変わっていれば `file_changed` で拒否する。書き込みの直前にも読み直して同じ照合をする。`file_changed` が返ったら走査からやり直す。
+- `--hash` に一致するエントリが無ければ `candidate_not_found` で拒否する。一致が複数あるときは先頭の 1 件を消す。
+- 消すのはエントリの範囲だけで、範囲の外は 1 バイトも変えない。消した後に親の `## GOTCHAS 候補` の配下が空白だけになれば、その見出しも消す。親が別の見出しなら残す。
+- 成功すると `written: true` と、消したエントリの `file` / `title` を返す。
+- 拒否・失敗は終了コード 3 で返り、対象ファイルは 1 バイトも変わらない。エラーコードは `not_git_repository` / `outside_domains_dir` / `file_not_found` / `file_changed` / `candidate_not_found` / `write_failed`。
 
 ## stage から commit の 2 段階
 

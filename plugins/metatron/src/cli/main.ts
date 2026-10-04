@@ -3,13 +3,13 @@
 // 経路は 2 層に分かれる(契約 §4-3、設計書 §12-1)。
 //
 // - 読み取り・注入経路(第 2 層・フェイルオープン): get / scan / diff-architecture /
-//   scan-adr-candidates。
+//   scan-adr-candidates / scan-gotcha-candidates。
 //   **常に exit 0**。読めなかったことも事実として JSON で返す。
 // - 書き込み経路(第 1 層・フェイルクローズド): stage-architecture / stage-adr /
 //   stage-rules / commit-architecture / commit-rules / init-gotchas / append-gotcha /
-//   tag-gotcha / shrink-adr-candidate。
-//   拒否・失敗は非 0 終了。shrink-adr-candidate の拒否・失敗は終了コード 3 に揃える
-//   (ハンドラが自分で例外を捕まえる)。
+//   tag-gotcha / shrink-adr-candidate / remove-gotcha-candidate。
+//   拒否・失敗は非 0 終了。shrink-adr-candidate と remove-gotcha-candidate の拒否・失敗は
+//   終了コード 3 に揃える(ハンドラが自分で例外を捕まえる)。
 //
 // この分岐を 1 箇所に集めているのは、サブコマンドを足したときに層の判断が
 // 各ファイルへ散らばらないようにするためである。
@@ -20,6 +20,10 @@ import { parseArgs } from "./args.js"
 import { runCommitArchitecture, runCommitRules } from "./commit.js"
 import { runGet } from "./get.js"
 import { runAppendGotcha, runInitGotchas, runTagGotcha } from "./gotcha.js"
+import {
+  runRemoveGotchaCandidate,
+  runScanGotchaCandidates
+} from "./gotcha-candidate.js"
 import {
   EXIT_USAGE,
   emitReadFailure,
@@ -36,7 +40,8 @@ export const READ_SUBCOMMANDS = new Set([
   "get",
   "scan",
   "diff-architecture",
-  "scan-adr-candidates"
+  "scan-adr-candidates",
+  "scan-gotcha-candidates"
 ])
 
 export const WRITE_SUBCOMMANDS = new Set([
@@ -48,7 +53,8 @@ export const WRITE_SUBCOMMANDS = new Set([
   "init-gotchas",
   "append-gotcha",
   "tag-gotcha",
-  "shrink-adr-candidate"
+  "shrink-adr-candidate",
+  "remove-gotcha-candidate"
 ])
 
 function emitUsage(command: string, message: string, exitCode: number): void {
@@ -108,6 +114,9 @@ export function main(
       case "scan-adr-candidates":
         runScanAdrCandidates(ctx)
         return
+      case "scan-gotcha-candidates":
+        runScanGotchaCandidates(ctx)
+        return
       case "stage-architecture":
         runStageArchitecture(ctx)
         return
@@ -134,6 +143,9 @@ export function main(
         return
       case "shrink-adr-candidate":
         runShrinkAdrCandidate(ctx)
+        return
+      case "remove-gotcha-candidate":
+        runRemoveGotchaCandidate(ctx)
         return
       default:
         emitUsage("metatron", `不明なサブコマンド: ${subcommand}`, EXIT_USAGE)

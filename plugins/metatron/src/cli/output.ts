@@ -15,6 +15,7 @@ export const EXIT_USAGE = 2
 /**
  * `shrink-adr-candidate` の拒否・失敗。持続層に何も書かず、`shrinkPending` を返す
  * (codiel intent 駆動化の設計書 §6.11.4)。呼び出し元はこの値で縮約のやり直しを判断する。
+ * `remove-gotcha-candidate` も同じ値を使い、`removePending` を返す。
  */
 export const EXIT_SHRINK_PENDING = 3
 

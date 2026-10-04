@@ -4313,6 +4313,7 @@ var USAGE_LINES = [
   "  scan",
   "  diff-architecture",
   "  scan-adr-candidates",
+  "  scan-gotcha-candidates",
   "",
   "\u6BB5\u968E(\u62D2\u5426\u306F\u975E 0):",
   "  stage-architecture --input <path>",
@@ -4325,7 +4326,8 @@ var USAGE_LINES = [
   "  init-gotchas",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>",
-  "  shrink-adr-candidate --file <path> --candidate-id <\u5019\u88DC ID> --adr <ADR-NNN> --hash <\u8D70\u67FB\u306E hash>"
+  "  shrink-adr-candidate --file <path> --candidate-id <\u5019\u88DC ID> --adr <ADR-NNN> --hash <\u8D70\u67FB\u306E hash>",
+  "  remove-gotcha-candidate --file <path> --hash <\u8D70\u67FB\u306E hash> --file-hash <\u8D70\u67FB\u306E fileHash>"
 ];
 
 // src/cli/get.ts
@@ -4856,6 +4858,337 @@ function runTagGotcha(ctx) {
   }
 }
 
+// src/cli/gotcha-candidate.ts
+import path10 from "node:path";
+
+// src/lib/gotcha-candidates.ts
+import crypto3 from "node:crypto";
+import fs10 from "node:fs";
+import path9 from "node:path";
+var CANDIDATE_KEYS = [
+  "date",
+  "run",
+  "task",
+  "mistake",
+  "cause",
+  "countermeasure",
+  "promotionCandidate"
+];
+var GotchaCandidateError = class extends Error {
+  code;
+  constructor(code, message) {
+    super(message);
+    this.name = "GotchaCandidateError";
+    this.code = code;
+  }
+};
+var BOUNDARY_RE2 = /^ {0,3}#{2,3}(?:[ \t]|$)/;
+var H2_RE = /^ {0,3}##[ \t]+(.*?)[ \t]*$/;
+var H3_RE2 = /^ {0,3}###[ \t]+(.*)$/;
+var MARKED_HEADING_RE2 = /^(.*?)[ \t]*\[GOTCHAS 候補\][ \t]*$/;
+var FIELD_RE2 = new RegExp(
+  `^ {0,3}-[ \\t]+(${CANDIDATE_KEYS.join("|")})[ \\t]*:[ \\t]*(.*?)[ \\t]*$`
+);
+var PARENT_HEADING = "GOTCHAS \u5019\u88DC";
+function lineOffsets2(buf) {
+  const offsets = [0];
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 10) offsets.push(i + 1);
+  }
+  return (lineIndex) => offsets[lineIndex] ?? buf.length;
+}
+function parseDomainFile2(buf) {
+  const scan2 = scanFences(buf.toString("utf8"));
+  const { insideFence } = scan2;
+  const lines = scan2.lines.map((l) => l.text);
+  const boundaries = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!insideFence[i] && BOUNDARY_RE2.test(lines[i])) boundaries.push(i);
+  }
+  const h2s = boundaries.filter((i) => H2_RE.test(lines[i]));
+  const entries = [];
+  boundaries.forEach((start, k) => {
+    const h3 = H3_RE2.exec(lines[start]);
+    if (h3 === null) return;
+    const mark = MARKED_HEADING_RE2.exec(h3[1]);
+    if (mark === null) return;
+    const end = boundaries[k + 1] ?? lines.length;
+    let parent = null;
+    const parentIndex = h2s.filter((i) => i < start).at(-1);
+    if (parentIndex !== void 0) {
+      parent = {
+        start: parentIndex,
+        end: h2s.find((i) => i > parentIndex) ?? lines.length,
+        title: H2_RE.exec(lines[parentIndex])?.[1] ?? ""
+      };
+    }
+    const seen = {};
+    for (let i = start + 1; i < end; i++) {
+      if (insideFence[i]) continue;
+      const field = FIELD_RE2.exec(lines[i]);
+      if (field === null) continue;
+      const key = field[1];
+      if (seen[key] === void 0) seen[key] = field[2];
+    }
+    const fields = {};
+    const problems = [];
+    for (const key of CANDIDATE_KEYS) {
+      const value = seen[key];
+      if (value === void 0 || value === "") {
+        fields[key] = null;
+        problems.push(`${key} \u306E\u5024\u304C\u3042\u308A\u307E\u305B\u3093`);
+        continue;
+      }
+      fields[key] = value;
+      if (key === "promotionCandidate" && value !== "Yes" && value !== "No") {
+        problems.push(
+          `promotionCandidate \u306F Yes \u304B No \u306B\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${value})`
+        );
+      }
+    }
+    entries.push({
+      heading: lines[start],
+      title: mark[1].trim(),
+      start,
+      end,
+      parent,
+      fields,
+      problems
+    });
+  });
+  return { entries, offsetOf: lineOffsets2(buf), lines, buf };
+}
+function entryHash2(file, entry) {
+  return hashContent(
+    file.buf.subarray(file.offsetOf(entry.start), file.offsetOf(entry.end))
+  );
+}
+function realpathOrSelf4(p) {
+  try {
+    return fs10.realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+function readTextOrNull2(filePath) {
+  try {
+    return fs10.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function scanGotchaCandidates(docRoot, gotchasPath) {
+  const repoRoot = findRepoRoot(docRoot);
+  if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
+  const warnings = [];
+  const dir = path9.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  let names;
+  try {
+    names = fs10.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      warnings.push(`${DOMAINS_DIR_RELATIVE} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
+    }
+    return { repoRoot, candidates: [], warnings };
+  }
+  const ledger = /* @__PURE__ */ new Map();
+  const ledgerText = readTextOrNull2(gotchasPath);
+  if (ledgerText !== null) {
+    for (const entry of parseGotchas(ledgerText).entries) {
+      ledger.set(entry.title, [...ledger.get(entry.title) ?? [], entry.id]);
+    }
+  }
+  const candidates = [];
+  for (const name of names) {
+    const filePath = path9.join(dir, name);
+    const relative = `${DOMAINS_DIR_RELATIVE}/${name}`;
+    let parsed;
+    try {
+      parsed = parseDomainFile2(fs10.readFileSync(filePath));
+    } catch {
+      warnings.push(`${relative} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
+      continue;
+    }
+    const fileHash = hashContent(parsed.buf);
+    for (const entry of parsed.entries) {
+      candidates.push({
+        file: filePath,
+        relative,
+        heading: entry.heading,
+        title: entry.title,
+        fields: entry.fields,
+        problems: entry.problems,
+        hash: entryHash2(parsed, entry),
+        fileHash,
+        ledgerMatches: ledger.get(entry.title) ?? []
+      });
+    }
+  }
+  return { repoRoot, candidates, warnings };
+}
+function resolveDomainFile2(repoRoot, file) {
+  const dir = path9.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const target = path9.resolve(file);
+  const outside = new GotchaCandidateError(
+    "outside_domains_dir",
+    `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u524A\u9664\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
+  );
+  if (path9.extname(target) !== ".md") throw outside;
+  if (realpathOrSelf4(path9.dirname(target)) !== realpathOrSelf4(dir)) {
+    throw outside;
+  }
+  let stat;
+  try {
+    stat = fs10.lstatSync(target);
+  } catch {
+    throw new GotchaCandidateError("file_not_found", `${target} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
+  }
+  if (!stat.isFile()) throw outside;
+  return { target, mode: stat.mode & 511 };
+}
+function readTarget(target) {
+  try {
+    return fs10.readFileSync(target);
+  } catch {
+    throw new GotchaCandidateError("file_not_found", `${target} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3002`);
+  }
+}
+function writeAtomically2(target, content, mode) {
+  const tmp = `${target}.tmp-${crypto3.randomUUID()}`;
+  try {
+    fs10.writeFileSync(tmp, content, { mode });
+    fs10.renameSync(tmp, target);
+  } catch (error) {
+    try {
+      fs10.rmSync(tmp, { force: true });
+    } catch {
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new GotchaCandidateError(
+      "write_failed",
+      `${target} \u3092\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${reason}`
+    );
+  }
+}
+function changedError(target) {
+  return new GotchaCandidateError(
+    "file_changed",
+    `${target} \u304C\u8D70\u67FB\u306E\u3068\u304D\u304B\u3089\u5909\u308F\u3063\u3066\u3044\u307E\u3059\u3002\u8D70\u67FB\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+  );
+}
+function removeGotchaCandidate(input) {
+  const repoRoot = findRepoRoot(input.docRoot);
+  if (repoRoot === null) {
+    throw new GotchaCandidateError(
+      "not_git_repository",
+      `${input.docRoot} \u306F git \u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u4E2D\u306B\u306A\u3044\u305F\u3081\u3001\u6301\u7D9A\u5C64\u306E\u7F6E\u304D\u5834\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3002`
+    );
+  }
+  const { target, mode } = resolveDomainFile2(repoRoot, input.file);
+  const buf = readTarget(target);
+  if (hashContent(buf) !== input.fileHash) throw changedError(target);
+  const parsed = parseDomainFile2(buf);
+  const entry = parsed.entries.find((e) => entryHash2(parsed, e) === input.hash);
+  if (entry === void 0) {
+    throw new GotchaCandidateError(
+      "candidate_not_found",
+      `${target} \u306B\u30CF\u30C3\u30B7\u30E5 ${input.hash} \u306E\u30A8\u30F3\u30C8\u30EA\u304C\u3042\u308A\u307E\u305B\u3093\u3002`
+    );
+  }
+  let from = entry.start;
+  let to = entry.end;
+  const parent = entry.parent;
+  if (parent !== null && parent.title === PARENT_HEADING) {
+    let onlyBlank = true;
+    for (let i = parent.start + 1; i < parent.end; i++) {
+      if (i >= entry.start && i < entry.end) continue;
+      if (parsed.lines[i].trim() !== "") {
+        onlyBlank = false;
+        break;
+      }
+    }
+    if (onlyBlank) {
+      from = parent.start;
+      to = parent.end;
+    }
+  }
+  const next = Buffer.concat([
+    buf.subarray(0, parsed.offsetOf(from)),
+    buf.subarray(parsed.offsetOf(to))
+  ]);
+  if (hashContent(readTarget(target)) !== input.fileHash) {
+    throw changedError(target);
+  }
+  writeAtomically2(target, next, mode);
+  return { file: target, title: entry.title };
+}
+
+// src/cli/gotcha-candidate.ts
+function runScanGotchaCandidates(ctx) {
+  const command = "scan-gotcha-candidates";
+  try {
+    const config = loadConfig(ctx.cwd);
+    const result = scanGotchaCandidates(config.docRoot, config.gotchasPath);
+    const warnings = [...config.warnings, ...result.warnings];
+    noteWarnings(warnings);
+    emitResult(command, {
+      ok: true,
+      repoRoot: result.repoRoot,
+      candidates: result.candidates,
+      warnings
+    });
+  } catch (error) {
+    emitReadFailure(command, "internal_error", messageOf(error), {
+      candidates: []
+    });
+  }
+}
+function runRemoveGotchaCandidate(ctx) {
+  const command = "remove-gotcha-candidate";
+  const file = stringFlag(ctx.flags, "file");
+  const hash = stringFlag(ctx.flags, "hash");
+  const fileHash = stringFlag(ctx.flags, "file-hash");
+  const missing = [];
+  if (file === void 0) missing.push("--file <path>");
+  if (hash === void 0) missing.push("--hash <\u8D70\u67FB\u306E hash>");
+  if (fileHash === void 0) missing.push("--file-hash <\u8D70\u67FB\u306E fileHash>");
+  if (file === void 0 || hash === void 0 || fileHash === void 0) {
+    emitWriteFailure(
+      command,
+      "missing_option",
+      `${missing.join(" / ")} \u304C\u5FC5\u8981\u3067\u3059\u3002`,
+      { written: false },
+      EXIT_USAGE
+    );
+    return;
+  }
+  try {
+    const config = loadConfig(ctx.cwd);
+    const result = removeGotchaCandidate({
+      docRoot: config.docRoot,
+      file: path10.resolve(ctx.cwd, file),
+      hash,
+      fileHash
+    });
+    noteWarnings(config.warnings);
+    emitResult(command, {
+      ok: true,
+      written: true,
+      file: result.file,
+      title: result.title,
+      warnings: config.warnings
+    });
+  } catch (error) {
+    emitWriteFailure(
+      command,
+      error instanceof GotchaCandidateError ? error.code : "internal_error",
+      messageOf(error),
+      { written: false, removePending: { file, hash } },
+      EXIT_SHRINK_PENDING
+    );
+  }
+}
+
 // src/cli/diff.ts
 var MAX_DIFF_LINES = 1500;
 var DEFAULT_CONTEXT = 3;
@@ -5314,7 +5647,8 @@ var READ_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "get",
   "scan",
   "diff-architecture",
-  "scan-adr-candidates"
+  "scan-adr-candidates",
+  "scan-gotcha-candidates"
 ]);
 var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "stage-architecture",
@@ -5325,7 +5659,8 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "init-gotchas",
   "append-gotcha",
   "tag-gotcha",
-  "shrink-adr-candidate"
+  "shrink-adr-candidate",
+  "remove-gotcha-candidate"
 ]);
 function emitUsage(command, message, exitCode) {
   emitResult(command, {
@@ -5374,6 +5709,9 @@ function main(argv, cwd = process.cwd()) {
       case "scan-adr-candidates":
         runScanAdrCandidates(ctx);
         return;
+      case "scan-gotcha-candidates":
+        runScanGotchaCandidates(ctx);
+        return;
       case "stage-architecture":
         runStageArchitecture(ctx);
         return;
@@ -5400,6 +5738,9 @@ function main(argv, cwd = process.cwd()) {
         return;
       case "shrink-adr-candidate":
         runShrinkAdrCandidate(ctx);
+        return;
+      case "remove-gotcha-candidate":
+        runRemoveGotchaCandidate(ctx);
         return;
       default:
         emitUsage("metatron", `\u4E0D\u660E\u306A\u30B5\u30D6\u30B3\u30DE\u30F3\u30C9: ${subcommand}`, EXIT_USAGE);
