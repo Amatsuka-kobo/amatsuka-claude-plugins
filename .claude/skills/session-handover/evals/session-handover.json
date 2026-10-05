@@ -18,5 +18,5 @@
   {"query": "agent-policyのバージョンいくつか確認して", "should_trigger": false},
   {"query": "goal コマンドに渡すプロンプトの文字数制限は何文字?", "should_trigger": false},
   {"query": "harness-docs/ARCHITECTURE.md 更新して", "should_trigger": false},
-  {"query": "sandalphonの設計完了の記録、メモリに書いておいて", "should_trigger": false}
+  {"query": "jevrielの設計完了の記録、メモリに書いておいて", "should_trigger": false}
 ]

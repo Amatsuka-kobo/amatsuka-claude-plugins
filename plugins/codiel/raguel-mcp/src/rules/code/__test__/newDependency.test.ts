@@ -1,102 +1,202 @@
 import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { newDependencyRule } from "../newDependency.js"
+import { fileDiff, gitlinkDiff } from "./helpers/diff.js"
 
-function fileDiff(path: string, additions: string[]): string {
+function check(content: string) {
+  return newDependencyRule.check(makeArtifact({ content }), makeCtx())
+}
+
+/** hunk にコンテキスト行を持つ package.json の diff */
+function packageJsonHunk(lines: string[]): string {
+  const old = lines.filter((l) => !l.startsWith("+")).length
+  const neu = lines.filter((l) => !l.startsWith("-")).length
   return [
-    `diff --git a/${path} b/${path}`,
-    `--- a/${path}`,
-    `+++ b/${path}`,
-    "@@ -1,1 +1,2 @@",
-    ...additions.map((l) => `+${l}`)
+    "diff --git a/package.json b/package.json",
+    "--- a/package.json",
+    "+++ b/package.json",
+    `@@ -1,${old} +1,${neu} @@`,
+    ...lines
   ].join("\n")
 }
 
-describe("newDependencyRule", () => {
-  it("package.json への dependencies 追加を検出する", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("package.json", ['"lodash": "^4.17.21",'])
-      }),
-      makeCtx()
+describe("newDependencyRule の package.json(所見 A10)", () => {
+  it("dependencies のブロックの中の追加を出す", () => {
+    const findings = check(
+      packageJsonHunk([
+        '   "dependencies": {',
+        '+    "lodash": "^4.17.21",',
+        '     "zod": "^4.0.0"',
+        "   },"
+      ])
     )
-    expect(findings.length).toBeGreaterThan(0)
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].message).toContain("lodash")
+    expect(findings[0].evidence?.line).toBe(6)
+  })
+
+  it.each([
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies"
+  ])("%s のブロックも見る", (block) => {
+    const findings = check(
+      packageJsonHunk([`   "${block}": {`, '+    "vitest": "^4.0.0"', "   }"])
+    )
+    expect(findings).toHaveLength(1)
+  })
+
+  it("scripts のブロックの追加は出さない", () => {
+    const findings = check(
+      packageJsonHunk([
+        '   "scripts": {',
+        '     "build": "tsc",',
+        '+    "lint": "biome check ."',
+        "   },"
+      ])
+    )
+    expect(findings).toEqual([])
+  })
+
+  it("版の更新(削除行と同じ名前)は出さない", () => {
+    const findings = check(
+      packageJsonHunk([
+        '   "dependencies": {',
+        '-    "zod": "^3.0.0"',
+        '+    "zod": "^4.0.0"',
+        "   }"
+      ])
+    )
+    expect(findings).toEqual([])
+  })
+
+  it("トップレベルの version の更新は出さない", () => {
+    const findings = check(
+      packageJsonHunk([
+        '   "name": "x",',
+        '-  "version": "0.1.0",',
+        '+  "version": "0.2.0",',
+        '   "private": true,'
+      ])
+    )
+    expect(findings).toEqual([])
+  })
+
+  it("見出しが hunk の外にあるときは、値が版の指定に見える行だけを出す", () => {
+    const findings = check(
+      packageJsonHunk([
+        '     "a": "^1.0.0",',
+        '+    "lodash": "^4.17.21",',
+        '+    "lint": "biome check ."'
+      ])
+    )
+    expect(findings.map((f) => f.message)).toEqual([
+      "依存パッケージの追加を検出しました: package.json(lodash)"
+    ])
+  })
+})
+
+describe("newDependencyRule のほかのマニフェスト", () => {
+  it("pnpm-lock.yaml へのパッケージの追加を出し、任意のキーは出さない", () => {
+    const findings = check(
+      fileDiff("pnpm-lock.yaml", ["  lodash@4.17.21:", "    resolution:"])
+    )
+    expect(findings).toHaveLength(1)
+  })
+
+  it("requirements.txt・Cargo.toml・go.mod への追加を出す", () => {
+    expect(
+      check(fileDiff("requirements.txt", ["requests==2.31.0"]))
+    ).toHaveLength(1)
+    expect(check(fileDiff("Cargo.toml", ['serde = "1.0"']))).toHaveLength(1)
+    expect(
+      check(fileDiff("go.mod", ["github.com/pkg/errors v0.9.1"]))
+    ).toHaveLength(1)
+  })
+
+  it("requirements.txt の版の更新は出さない", () => {
+    const findings = check(
+      fileDiff("requirements.txt", ["requests==2.32.0"], ["requests==2.31.0"])
+    )
+    expect(findings).toEqual([])
+  })
+
+  it("Cargo.toml の [package] のメタ情報の変更では出さない", () => {
+    expect(check(fileDiff("Cargo.toml", ['edition = "2021"']))).toEqual([])
+  })
+
+  it(".gitmodules に設定行を追加すると、行の数にかかわらずそのファイルで 1 件出す", () => {
+    const findings = check(
+      fileDiff(".gitmodules", [
+        '[submodule "vendor/lib"]',
+        "\tpath = vendor/lib",
+        "\turl = https://example.invalid/lib.git"
+      ])
+    )
+    expect(findings.map((f) => f.message)).toEqual([
+      "依存パッケージの追加を検出しました: .gitmodules(submodule の設定の変更)"
+    ])
+  })
+
+  it.each([
+    ["キーの大文字", ["\tURL = https://example.invalid/b.git"]],
+    ["空白の無い url=x", ["url=x"]],
+    ["タブ区切り", ["\t\turl\t=\thttps://example.invalid/b.git"]],
+    ["branch の差し替え", ["\tBranch=evil"]],
+    ["見出しの空白と大文字", ['[SubModule   "a"]']],
+    ["見出しの単引用符", ["[submodule 'a']"]],
+    ["見出しの後ろのコメント", ['[submodule "a"] ; note']],
+    ["include", ["[include]", "\tpath = other"]]
+  ])("書式を変えても ask になる(%s)", (_name, additions) => {
+    const findings = check(fileDiff(".gitmodules", additions))
+    expect(findings).toHaveLength(1)
     expect(findings[0].severity).toBe("ask")
   })
 
-  it("package.json の name/version 変更では発火しない", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("package.json", ['"version": "0.0.2-dev",'])
-      }),
-      makeCtx()
+  it(".gitmodules の既存の設定の差し替えも出す", () => {
+    const findings = check(
+      fileDiff(
+        ".gitmodules",
+        ["\turl = https://example.invalid/b.git"],
+        ["\turl = https://example.invalid/a.git"]
+      )
     )
-    expect(findings).toEqual([])
+    expect(findings).toHaveLength(1)
   })
 
-  it("pnpm-lock.yaml へのパッケージ追加を検出する", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("pnpm-lock.yaml", ["  lodash@4.17.21:"])
-      }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
+  it(".gitmodules の空行・コメントだけの追加と、削除だけの変更は出さない", () => {
+    expect(
+      check(fileDiff(".gitmodules", ["", "   ", "# note", "\t; note"]))
+    ).toEqual([])
+    expect(
+      check(fileDiff(".gitmodules", [], ['[submodule "a"]', "\turl = x"]))
+    ).toEqual([])
   })
 
-  it("requirements.txt への追加を検出する", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("requirements.txt", ["requests==2.31.0"])
-      }),
-      makeCtx()
+  it("submodule の参照先の変更を、パスを名前にして出す(同じパスを 2 回書かない)", () => {
+    const findings = check(
+      gitlinkDiff("vendor/lib", "b".repeat(40), "a".repeat(40))
     )
-    expect(findings.length).toBeGreaterThan(0)
+    expect(findings.map((f) => f.message)).toEqual([
+      "依存パッケージの追加を検出しました: vendor/lib(submodule の参照先の変更)"
+    ])
+    expect(findings[0].severity).toBe("ask")
   })
 
-  it("Cargo.toml の依存追加を検出する", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("Cargo.toml", ['serde = "1.0"'])
-      }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
+  it("gitlink の新規の追加も、パスを名前にして出す", () => {
+    const findings = check(gitlinkDiff("vendor/lib", "a".repeat(40)))
+    expect(findings).toHaveLength(1)
+    expect(findings[0].message).toContain("vendor/lib")
   })
 
-  it("Cargo.toml の [package] メタ情報変更では発火しない", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("Cargo.toml", ['edition = "2021"'])
-      }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
+  it("mode 160000 でないファイルの Subproject commit の行は出さない", () => {
+    expect(
+      check(fileDiff("docs/note.md", [`Subproject commit ${"a".repeat(40)}`]))
+    ).toEqual([])
   })
 
-  it("go.mod への require 追加を検出する", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({
-        content: fileDiff("go.mod", ["github.com/pkg/errors v0.9.1"])
-      }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
-  })
-
-  it("依存に無関係なファイルでは発火しない", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({ content: fileDiff("src/index.ts", ["const x = 1"]) }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
-  })
-
-  it("非 diff の場合は判定不能として発火しない", () => {
-    const findings = newDependencyRule.check(
-      makeArtifact({ content: '"lodash": "^4.17.21"' }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
+  it("依存に無関係なファイルでは出さない", () => {
+    expect(check(fileDiff("src/index.ts", ["const x = 1"]))).toEqual([])
   })
 })

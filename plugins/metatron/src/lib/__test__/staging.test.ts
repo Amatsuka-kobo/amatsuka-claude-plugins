@@ -5,7 +5,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { afterAll, expect, test, vi } from "vitest"
+import { afterAll, expect, test } from "vitest"
 import {
   type CommitStagingResult,
   commitStaging,
@@ -19,6 +19,7 @@ import {
   stagingRecordPath,
   stagingRootDir
 } from "../staging.js"
+import { installWriteFaults } from "./helpers/write-faults.js"
 
 const projectRoots: string[] = []
 
@@ -70,49 +71,6 @@ function writeRecordJson(
   const recordPath = stagingRecordPath(root, stagingId)
   if (recordPath === null) throw new Error("stagingId が不正です")
   fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`)
-}
-
-type WriteFileArgs = Parameters<typeof fs.writeFileSync>
-
-const realWriteFileSync = fs.writeFileSync
-
-/**
- * 故障注入: `dir` 配下へのファイル書き込みだけを失敗させ、通った書き込み先を記録する。
- *
- * ディレクトリのパーミッション剥奪では root 実行で止まらないため、
- * `src/testing/fault-config.mjs` と同じ「差し替えて壊す」方式を取る。
- * ここは同一プロセス内なので `fs` の当該関数だけを差し替える。
- */
-function installWriteFaults(dir: string): {
-  restore: () => void
-  written: string[]
-} {
-  const prefix = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`
-  const written: string[] = []
-  const spy = vi.spyOn(fs, "writeFileSync")
-  spy.mockImplementation(
-    (
-      target: WriteFileArgs[0],
-      data: WriteFileArgs[1],
-      options?: WriteFileArgs[2]
-    ): void => {
-      if (typeof target === "string" && target.startsWith(prefix)) {
-        const err: NodeJS.ErrnoException = new Error(
-          `EACCES: permission denied, open '${target}'`
-        )
-        err.code = "EACCES"
-        throw err
-      }
-      realWriteFileSync(target, data, options)
-      if (typeof target === "string") written.push(target)
-    }
-  )
-  return {
-    restore: () => {
-      spy.mockRestore()
-    },
-    written
-  }
 }
 
 test("T1: stage → commit の正常系 → 書き込まれ、staging が消費される", () => {
@@ -944,6 +902,92 @@ test("T8d: 回帰ガード — 障害の無い no-op の stage → commit は 1 
   expect(second.ok).toBe(false)
   if (second.ok) return
   expect(second.error).toBe("already_used")
+})
+
+test("T8e: 書き込みの途中で ENOSPC → 正本は元のバイト列のまま、一時ファイルも残らない", () => {
+  const root = mkProject()
+  writeDoc(root, "docs/ARCHITECTURE.md", "# ARCHITECTURE\n\n旧の本文\n")
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "# ARCHITECTURE\n\n新しい本文\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  // 先頭の 4 バイトだけ書いてディスクが尽きた状態を再現する
+  const faults = installWriteFaults(root, { partialBytes: 4 })
+  let result: CommitStagingResult
+  try {
+    result = commitStaging({ projectRoot: root, stagingId: staged.stagingId })
+  } finally {
+    faults.restore()
+  }
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error).toBe("write_failed")
+  expect(fs.readFileSync(docPath(root), "utf8")).toBe(
+    "# ARCHITECTURE\n\n旧の本文\n"
+  )
+  expect(fs.readdirSync(path.join(root, "docs"))).toStrictEqual([
+    "ARCHITECTURE.md"
+  ])
+})
+
+test("T8f: 正本が symlink → commit 後も symlink のまま、リンク先の実体が更新される", () => {
+  const root = mkProject()
+  const real = writeDoc(root, "shared/ARCHITECTURE.md", "旧\n")
+  fs.mkdirSync(path.join(root, "docs"), { recursive: true })
+  fs.symlinkSync("../shared/ARCHITECTURE.md", docPath(root))
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "新\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const result = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(result.ok).toBe(true)
+  expect(fs.lstatSync(docPath(root)).isSymbolicLink()).toBe(true)
+  expect(fs.readFileSync(real, "utf8")).toBe("新\n")
+  expect(fs.readdirSync(path.join(root, "shared"))).toStrictEqual([
+    "ARCHITECTURE.md"
+  ])
+})
+
+test("T8g: 実体が未作成の symlink → commit でリンク先にファイルが作られる", () => {
+  const root = mkProject()
+  fs.mkdirSync(path.join(root, "docs"), { recursive: true })
+  fs.mkdirSync(path.join(root, "shared"), { recursive: true })
+  fs.symlinkSync("../shared/ARCHITECTURE.md", docPath(root))
+
+  const staged = createStaging({
+    projectRoot: root,
+    kind: "architecture",
+    targetPath: docPath(root),
+    nextContent: "新規\n"
+  })
+  expect(staged.ok).toBe(true)
+  if (!staged.ok) return
+
+  const result = commitStaging({
+    projectRoot: root,
+    stagingId: staged.stagingId
+  })
+  expect(result.ok).toBe(true)
+  expect(fs.lstatSync(docPath(root)).isSymbolicLink()).toBe(true)
+  expect(
+    fs.readFileSync(path.join(root, "shared/ARCHITECTURE.md"), "utf8")
+  ).toBe("新規\n")
 })
 
 test('T9: kind: "rules" の staging が作成・読み取り・commit でき、単一ターゲットの保証が保たれる', () => {

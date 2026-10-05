@@ -1,66 +1,250 @@
 /**
- * 設定の読込・深マージ・検証・configHash 算出。
- * 解決順: 環境変数 RAGUEL_CONFIG のパス → cwd/raguel.config.yaml → 内蔵デフォルトのみ。
- * ファイルが存在するのに読めない・パースできない・zod 検証に落ちる場合は throw する
- * (フェイルクローズド。黙ってデフォルトに落ちない)。
+ * 設定の読み込み・深いマージ・検証・configHash の算出と、ファイルが変わったときの読み直し(設計書 §6.12)。
+ * 読む順: 環境変数 RAGUEL_CONFIG のパス(JSON) → プロジェクトルートの .codiel/config.json の raguel → 内蔵の既定値。
+ * testsDir は RAGUEL_CONFIG を設定したときもプロジェクトルートの .codiel/config.json から読む(config/paths.ts)。
+ * ファイルがあるのに読めない・JSON でない・検証に落ちる、のどれかは throw する
+ * (フェイルクローズド。黙って既定値に落ちない)。
  */
 
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync } from "node:fs"
-import { homedir } from "node:os"
-import { isAbsolute, resolve } from "node:path"
-import { parse as parseYaml } from "yaml"
+import { existsSync, readFileSync, statSync } from "node:fs"
+import { resolve } from "node:path"
 import { assertInvariants } from "../core/invariants"
 import { log } from "../core/log"
-import type { LoadedConfig, RaguelConfig } from "../core/types"
+import type {
+  ConfigLoadResult,
+  LoadedConfig,
+  RaguelConfig
+} from "../core/types"
+import { resolveCasesDir, resolveProjectRoot } from "../project/root"
+import {
+  DEFAULT_PROTECTED_GLOBS,
+  RETIRED_RULE_IDS,
+  RULE_SPECS
+} from "../rules/params"
 import { defaultConfig } from "./defaults"
-import { configSchema } from "./schema"
+import { resolveTestsDir } from "./paths"
+import { parseConfig } from "./schema"
 
-const CWD_CONFIG_FILENAME = "raguel.config.yaml"
+const PROJECT_CONFIG_PATH = [".codiel", "config.json"]
 
-export function loadConfig(): LoadedConfig {
-  const { raw, source } = resolveRawConfig()
-  const merged = deepMerge(defaultConfig, raw)
+/** 廃止したキー。path は raguel の値の中の位置で、`.` で区切る(ルール ID は `.` を含まない) */
+const ABOLISHED_KEYS: readonly { path: string; reason: string }[] = [
+  {
+    path: "rules.common/resubmission-loop.stopAfter",
+    reason:
+      "再提出は ask の所見だけを出し、stop へ上げない。設定から削除してください。"
+  }
+]
 
-  const result = configSchema.safeParse(merged)
-  if (!result.success) {
+/**
+ * LLM パネルと重さ判定とともに撤去したキー(ADR-012)。path の書き方は ABOLISHED_KEYS と同じ。
+ * 既存の設定ファイルで run が止まらないよう、読み込みエラーにせず取り除き、評価のたびに警告する
+ */
+const RETIRED_KEYS: readonly string[] = [
+  "judge",
+  "weight",
+  "panel",
+  "contextJudge.enabled"
+]
+
+function projectConfigPath(cwd: string): string {
+  return resolve(resolveProjectRoot(cwd), ...PROJECT_CONFIG_PATH)
+}
+
+/**
+ * 設定の出所になりうるファイル。RAGUEL_CONFIG があればそのパス、無ければプロジェクトルートの .codiel/config.json。
+ * source はファイルから読んだときの値(`env:<パス>`・`cwd:<パス>`)である
+ */
+export function configCandidate(cwd: string = process.cwd()): {
+  path: string
+  source: string
+} {
+  const envPath = process.env.RAGUEL_CONFIG
+  if (envPath) return { path: envPath, source: `env:${envPath}` }
+  const path = projectConfigPath(cwd)
+  return { path, source: `cwd:${path}` }
+}
+
+export function loadConfig(cwd: string = process.cwd()): LoadedConfig {
+  const projectRoot = resolveProjectRoot(cwd)
+  const resolved = resolveRawConfig(cwd)
+  const { source } = resolved
+  assertNoRetiredKeys(resolved.raw, source)
+  const { raw, retiredKeys } = stripRetiredKeys(resolved.raw)
+
+  const parsed = parseConfig(deepMerge(defaultConfig, raw))
+  if (!parsed.success) {
+    throw new Error(`設定の検証に失敗しました(${source}): ${parsed.error}`)
+  }
+  const config = withProtectedGlobs(withUnionParams(parsed.data), raw)
+  try {
+    assertInvariants(config)
+  } catch (err) {
+    throw new Error(`設定が不正です(${source}): ${(err as Error).message}`)
+  }
+
+  let testsDir: string
+  try {
+    testsDir = resolveTestsDir(projectRoot)
+  } catch (err) {
     throw new Error(
-      `設定の検証に失敗しました(${source}): ${result.error.message}`
+      `testsDir を読めません(${projectConfigPath(cwd)}): ${(err as Error).message}`
     )
   }
 
-  assertInvariants(result.data)
-
-  const config = withExpandedCasesDir(result.data)
-  const configHash = computeConfigHash(config)
+  const expanded: RaguelConfig = {
+    ...config,
+    storage: {
+      ...config.storage,
+      // 相対パスは、設定を探したプロジェクトルートを基準にする(cwd に依らず同じ置き場になる)
+      casesDir: resolve(projectRoot, resolveCasesDir(config.storage.casesDir))
+    }
+  }
+  const configHash = computeConfigHash(expanded)
 
   log.info("設定を読み込みました", { source, configHash })
+  if (retiredKeys.length > 0) {
+    log.warn("撤去した設定キーを無視しました", { source, retiredKeys })
+  }
 
-  return { config, configHash, source }
+  return {
+    config: expanded,
+    configHash,
+    source,
+    projectRoot,
+    testsDir,
+    retiredKeys
+  }
 }
 
-// ---- 設定ソースの解決 ----
+/**
+ * loadConfig の失敗を例外ではなく結果で返す(§6.12.4)。
+ * 起動時に設定が壊れていてもサーバーを起動し、評価と list_rules に理由を載せるために使う
+ */
+export function tryLoadConfig(cwd: string = process.cwd()): ConfigLoadResult {
+  try {
+    return { ok: true, loaded: loadConfig(cwd) }
+  } catch (err) {
+    const { path, source } = configCandidate(cwd)
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      path,
+      source
+    }
+  }
+}
 
-interface RawConfigSource {
+// ---- 設定の出所の解決 ----
+
+function resolveRawConfig(cwd: string): {
   raw: Record<string, unknown>
   source: string
+} {
+  const { path, source } = configCandidate(cwd)
+  if (process.env.RAGUEL_CONFIG) {
+    return { raw: readJsonObject(path), source }
+  }
+  if (!existsSync(path)) return { raw: {}, source: "defaults" }
+  // config.json はあるが raguel が無いときは内蔵の既定値で動く
+  const raguel = readJsonObject(path).raguel
+  if (raguel === undefined) return { raw: {}, source: "defaults" }
+  if (!isPlainObject(raguel)) {
+    throw new Error(
+      `設定ファイルの raguel はオブジェクトである必要があります: ${path}`
+    )
+  }
+  return { raw: raguel, source }
 }
 
-function resolveRawConfig(): RawConfigSource {
-  const envPath = process.env.RAGUEL_CONFIG
-  if (envPath) {
-    return { raw: readYamlFile(envPath), source: `env:${envPath}` }
+// 廃止したキーと廃止したルール ID は、後継を名指しする文言で拒む(§6.12.2)
+function assertNoRetiredKeys(
+  raw: Record<string, unknown>,
+  source: string
+): void {
+  for (const { path, reason } of ABOLISHED_KEYS) {
+    if (hasPath(raw, path.split("."))) {
+      throw new Error(`${path} は廃止した(${source})。${reason}`)
+    }
   }
-
-  const cwdPath = resolve(process.cwd(), CWD_CONFIG_FILENAME)
-  if (existsSync(cwdPath)) {
-    return { raw: readYamlFile(cwdPath), source: `cwd:${cwdPath}` }
+  const rules = raw.rules
+  if (!isPlainObject(rules)) return
+  for (const [ruleId, successors] of Object.entries(RETIRED_RULE_IDS)) {
+    if (ruleId in rules) {
+      throw new Error(
+        `ルール ID ${ruleId} は廃止した(${source})。${successors.join(" と ")} に書き分けてください。`
+      )
+    }
   }
-
-  return { raw: {}, source: "defaults" }
 }
 
-function readYamlFile(path: string): Record<string, unknown> {
+function hasPath(obj: Record<string, unknown>, keys: string[]): boolean {
+  let cur: unknown = obj
+  for (const key of keys) {
+    if (!isPlainObject(cur) || !(key in cur)) return false
+    cur = cur[key]
+  }
+  return true
+}
+
+/** RETIRED_KEYS にあるキーを取り除いた写しと、取り除いたキーの path を返す */
+function stripRetiredKeys(raw: Record<string, unknown>): {
+  raw: Record<string, unknown>
+  retiredKeys: string[]
+} {
+  const out = structuredClone(raw)
+  const retiredKeys: string[] = []
+  for (const path of RETIRED_KEYS) {
+    const keys = path.split(".")
+    const last = keys.pop() as string
+    let parent: unknown = out
+    for (const key of keys) {
+      parent = isPlainObject(parent) ? parent[key] : undefined
+    }
+    if (isPlainObject(parent) && last in parent) {
+      delete parent[last]
+      retiredKeys.push(path)
+    }
+  }
+  return { raw: out, retiredKeys }
+}
+
+// ---- 読み直し ----
+
+/**
+ * 呼ぶたびに設定の出所になりうるファイル(RAGUEL_CONFIG のファイルとプロジェクトルートの config.json)の
+ * パス・有無・mtime を前回の読み込みと比べ、違えば loadConfig で読み直して build の結果を作り直す関数を返す。
+ * 読み込みか build が失敗したら例外を投げ、前の結果には戻さない(次の呼び出しで読み直しを試す)。
+ */
+export function createConfigReloader<T>(
+  build: (loaded: LoadedConfig) => T,
+  cwd: string = process.cwd()
+): () => T {
+  let stamp: string | undefined
+  let current: T | undefined
+  return () => {
+    const next = configStamp(cwd)
+    if (current === undefined || next !== stamp) {
+      current = undefined // 失敗したら前の結果に戻さない
+      current = build(loadConfig(cwd))
+      stamp = next
+    }
+    return current
+  }
+}
+
+function configStamp(cwd: string): string {
+  const paths = [configCandidate(cwd).path, projectConfigPath(cwd)]
+  return JSON.stringify(
+    paths.map((p) => {
+      const stat = statSync(p, { throwIfNoEntry: false })
+      return [p, stat ? stat.mtimeMs : null]
+    })
+  )
+}
+
+function readJsonObject(path: string): Record<string, unknown> {
   let text: string
   try {
     text = readFileSync(path, "utf8")
@@ -72,23 +256,22 @@ function readYamlFile(path: string): Record<string, unknown> {
 
   let parsed: unknown
   try {
-    parsed = parseYaml(text)
+    parsed = JSON.parse(text)
   } catch (err) {
     throw new Error(
-      `設定ファイルの YAML パースに失敗しました: ${path} (${(err as Error).message})`
+      `設定ファイルの JSON パースに失敗しました: ${path} (${(err as Error).message})`
     )
   }
 
-  if (parsed === null || parsed === undefined) return {}
-  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isPlainObject(parsed)) {
     throw new Error(
       `設定ファイルのルートはオブジェクトである必要があります: ${path}`
     )
   }
-  return parsed as Record<string, unknown>
+  return parsed
 }
 
-// ---- 深マージ(オブジェクトは再帰マージ、配列はユーザー値で置換、undefined はデフォルト維持) ----
+// ---- 深いマージ(オブジェクトは再帰、配列は利用者の値で置換、undefined は既定値を保つ) ----
 
 function deepMerge(base: unknown, override: unknown): unknown {
   if (override === undefined) return base
@@ -109,29 +292,55 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-// ---- casesDir の ~ 展開(os.homedir() を使い絶対パス化) ----
+// ---- 和集合と保護パスの既定の除外(§6.12.2) ----
 
-function withExpandedCasesDir(config: RaguelConfig): RaguelConfig {
-  return {
-    ...config,
-    storage: {
-      ...config.storage,
-      casesDir: expandHome(config.storage.casesDir)
+/** params の表で merge: "union" と宣言したパラメータを、既定値との和集合にする */
+function withUnionParams(config: RaguelConfig): RaguelConfig {
+  const rules = { ...config.rules }
+  for (const spec of RULE_SPECS) {
+    for (const param of spec.params) {
+      const value = rules[spec.id]?.[param.name]
+      if (param.merge !== "union" || !Array.isArray(value)) continue
+      rules[spec.id] = {
+        ...rules[spec.id],
+        [param.name]: [...new Set([...(param.default as string[]), ...value])]
+      }
     }
   }
+  return { ...config, rules }
 }
 
-function expandHome(path: string): string {
-  let expanded = path
-  if (path === "~") {
-    expanded = homedir()
-  } else if (path.startsWith("~/")) {
-    expanded = resolve(homedir(), path.slice(2))
-  }
-  return isAbsolute(expanded) ? expanded : resolve(expanded)
+/**
+ * code/protected-paths の globs から、excludeDefaults に挙げた既定の glob を取り除く。
+ * 利用者が globs に自分で書いた glob は取り除かない
+ */
+function withProtectedGlobs(
+  config: RaguelConfig,
+  raw: Record<string, unknown>
+): RaguelConfig {
+  const id = "code/protected-paths"
+  const settings = config.rules[id]
+  const excluded = settings?.excludeDefaults
+  if (!settings || !Array.isArray(excluded) || excluded.length === 0)
+    return config
+  const rawRules = isPlainObject(raw.rules) ? raw.rules : {}
+  const rawSettings = rawRules[id]
+  const userGlobs =
+    isPlainObject(rawSettings) && Array.isArray(rawSettings.globs)
+      ? (rawSettings.globs as string[])
+      : []
+  const globs = (settings.globs as string[]).filter(
+    (g) =>
+      !(
+        excluded.includes(g) &&
+        DEFAULT_PROTECTED_GLOBS.includes(g) &&
+        !userGlobs.includes(g)
+      )
+  )
+  return { ...config, rules: { ...config.rules, [id]: { ...settings, globs } } }
 }
 
-// ---- configHash(マージ後設定をキーソートで正規化した JSON の sha256 hex) ----
+// ---- configHash(マージ後の設定をキーの順に正規化した JSON の sha256 hex) ----
 
 function computeConfigHash(config: RaguelConfig): string {
   const normalized = normalizeForHash(config)

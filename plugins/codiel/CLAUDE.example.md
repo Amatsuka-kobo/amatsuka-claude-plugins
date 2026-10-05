@@ -1,60 +1,23 @@
 # CLAUDE.md
 
 <!-- 記入ガイド
-このファイルは Codiel ハーネス(ARCHITECTURE・GOTCHAS・`.codiel/` 配下)を
-正しく運用するための決まりを、対象プロジェクトの CLAUDE.md に常駐させるための雛形です。
-ARCHITECTURE / GOTCHAS のパスはファイル契約(`metatron.config.json`)で解決されるため、
-本文では固定パスを断定せず既定値として示しています。
-`/codiel:init`(initializing-harness スキル)がこのファイルの「## Codiel ハーネス運用ルール」
-セクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md がなければ新規作成し、
-既にある場合は同セクションがなければ末尾に追記、あれば変更しません)。
-7 項目は DESIGN.md §9 に定義された規則そのままです。文言は変更してよいが、規則の内容
-(何を・いつ・どう扱うか)は削らないこと。
+このファイルの「## Codiel」セクションは、Codiel ハーネス(`.codiel/` 配下・run の状態管理・
+変更ごとの intent 文書)の置き場の地図と入口のコマンドを、対象プロジェクトの CLAUDE.md へ
+常駐させるための雛形です。CLAUDE.md はセッションの最初にだけ読まれるため、ここには
+最初に知っておくべき知識だけを置きます。`/codiel:init`(initializing-harness スキル)が
+このセクションを対象プロジェクトの CLAUDE.md に反映します(CLAUDE.md が無ければ新規作成し、
+既にある場合は同セクションが無ければ末尾に追記、あれば変更しません)。
+運用の規律(文書の扱いと規則)は、対応する雛形 `plugins/codiel/assets/rules/codiel.md` から
+対象プロジェクトの `.claude/rules/codiel.md`(`paths` の指定なし)に置きます。
+本文は `plugins/codiel/docs/DESIGN.md` の「9. docs」の「CLAUDE.md の `## Codiel`」セクションと
+対応させます。文言は変更してよいが、置き場の情報は削らないこと。
 -->
 
-## Codiel ハーネス運用ルール
+## Codiel
 
-### 文書の扱い
-
-- ARCHITECTURE / GOTCHAS のパスは固定ではない。指定されたパスを使い、指定が無ければ既定値
-  (`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md`)を使う。
-- 文書またはその節が存在しない場合は、その読み取りだけをスキップする。存在するものは読む。
-- サブエージェントは、存在する文書を必ず自分で読む。前提を自動注入する仕組みはメインセッション
-  にしか届かないため、注入されている前提で読み飛ばさない。
-- メインセッションは、注入で既にコンテキストにある内容を再読しなくてよい。判断に必要なら読む。
-- ARCHITECTURE は直接編集しない。更新用 CLI の案内があればその CLI を経由する。案内が無いときは
-  乖離の内容を報告に残し、所有者による更新へ引き渡す。
-- GOTCHAS は直接編集しない。更新用 CLI の案内があればその CLI を経由する。案内が無いときは
-  記録内容を報告に残し、台帳へ入れる手段を添える。
-
-### 7 つの規則
-
-1. **run から渡された前提を使う。GOTCHAS の該当エントリを確認する**
-   すべてのフェーズ(init〜finalize)の作業開始前に、run から渡された前提を使う。
-   これから触るファイル・フェーズに関連する GOTCHAS のエントリを確認してから着手する。
-2. **失敗したら recording-gotchas の基準に従い GOTCHAS に追記する**
-   Raguel の STOP、test-loop/fix-loop のループ上限超過、`record_outcome(incident)`、
-   レビューで発覚した設計漏れのいずれかが起きたら、`recording-gotchas` スキルの書式・基準に
-   従って GOTCHAS に新規エントリを追記する。既存エントリの削除・改変はしない。
-3. **`.codiel/runs/**/state.json` を直接編集しない(codiel-state 経由のみ)**
-   フェーズ遷移・試行カウンタの更新は同梱スクリプト `codiel-state` のみが行う。Edit / Write
-   ツールによる state.json への直接変更は hooks が拒否する対象であり、それを回避する目的での
-   迂回(別名でのコピー→上書き等)も禁止する。
-4. **Raguel ゲートは省略しない。ASK / STOP には従う**
-   各フェーズで定められた Raguel の evaluate ツール呼び出しを、確実に PROCEED しそうだから・
-   前回 PROCEED だったから等の理由で省略しない。ASK が出たら人間の裁定を待ち、STOP が出たら
-   run を停止して原因を記録する(2. を参照)。
-5. **ARCHITECTURE が現実と乖離したら報告する(乖離の放置は GOTCHAS 行き)**
-   実装の過程でドメインマップが ARCHITECTURE の記述と食い違っていることに気づいたら、その場で直さず、
-   乖離の内容を報告する。報告を ARCHITECTURE の所有者による更新へ引き渡す。報告せず気づかないふりをして進めた場合、
-   後で発覚した際に GOTCHAS へ記録される対象になる。
-6. **テスト仕様書(`.codiel/specs/`)は機能の一部。機能を変えたら仕様書とケースも更新する**
-   `.codiel/specs/<unit-id>/spec.md` と `cases.md` は使い捨て成果物ではなく、プロダクトコードと
-   同格の永続資産である。振る舞いを変える変更を行ったら、対応する unit の spec.md を更新し、
-   cases.md を再生成し、scripts を追随させることを実装の一部として扱う。
-7. **PROCEED した変更が原因で実害が出たら、必ず incident として申告し `record_outcome(incident)`
-   を記録させる**
-   マージ・リリース後に障害やリグレッションが発生し、その原因が Codiel が PROCEED 判定を出した
-   変更にあると判明した場合、人間(または気づいたエージェント)は必ずその旨を明示的に申告する。
-   incident は自動検知できない唯一の結末であり、最も価値の高い失敗判例として Raguel に還流される。
-   申告を怠ると、同種の失敗が判例として蓄積されず再発を防げなくなる。
+- `docs/intents/`: 変更ごとの intent 文書。`domains/` は持続層
+- `.codiel/config.json`: `testsDir`・`runsDir`・`raguel`(Raguel の保護パス)を持つ設定。git で共有する
+- `<testsDir>`(既定は `docs/codiel/tests`): 仕様のディレクトリごとのテスト仕様書
+- `<runsDir>/<slug>/`(既定は `docs/codiel/runs/<slug>/`): run の文書(`agenda.md`・`design.md` など)。git で共有する
+- `.codiel/runs/`・`.codiel/reports/`: run の状態(codiel-state が管理)とレポート。`.gitignore` で git に載せない
+- 入口: `/codiel:run`・`/codiel:init`・`/codiel:test`

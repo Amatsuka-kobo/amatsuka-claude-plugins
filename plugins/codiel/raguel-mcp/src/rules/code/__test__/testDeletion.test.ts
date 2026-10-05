@@ -1,85 +1,65 @@
 import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { testDeletionRule } from "../testDeletion.js"
+import { deletedFileDiff, fileDiff, renameDiff } from "./helpers/diff.js"
 
-function deletedFileDiff(path: string): string {
-  return [
-    `diff --git a/${path} b/${path}`,
-    "deleted file mode 100644",
-    `--- a/${path}`,
-    "+++ /dev/null",
-    "@@ -1,2 +0,0 @@",
-    "-it('works', () => {})",
-    "-expect(1).toBe(1)"
-  ].join("\n")
+function check(content: string) {
+  return testDeletionRule.check(makeArtifact({ content }), makeCtx())
 }
 
-function addedLineDiff(path: string, line: string): string {
-  return [
-    `diff --git a/${path} b/${path}`,
-    `--- a/${path}`,
-    `+++ b/${path}`,
-    "@@ -1,1 +1,2 @@",
-    `+${line}`
-  ].join("\n")
-}
-
-describe("testDeletionRule", () => {
-  it(".test. ファイルの削除を検出する", () => {
-    const findings = testDeletionRule.check(
-      makeArtifact({ content: deletedFileDiff("src/foo.test.ts") }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
+describe("testDeletionRule のファイルの削除", () => {
+  it.each([
+    "src/foo.test.ts",
+    "src/foo.spec.js",
+    "__tests__/foo.ts",
+    "pkg/store/foo_test.go",
+    "app/test_api.py",
+    "tests/helpers.py",
+    "src/test/java/com/x/FooTest.java"
+  ])("%s の削除を ask にする(所見 A11)", (path) => {
+    const findings = check(deletedFileDiff(path, ["x"]))
+    expect(findings).toHaveLength(1)
     expect(findings[0].severity).toBe("ask")
+    expect(findings[0].evidence?.path).toBe(path)
   })
 
-  it("__tests__ 配下のファイル削除を検出する", () => {
-    const findings = testDeletionRule.check(
-      makeArtifact({ content: deletedFileDiff("__tests__/foo.ts") }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
+  it("通常ファイルの削除では出さない", () => {
+    expect(check(deletedFileDiff("src/foo.ts", ["x"]))).toEqual([])
   })
 
-  it("it.skip の追加を検出する", () => {
-    const findings = testDeletionRule.check(
-      makeArtifact({
-        content: addedLineDiff("src/foo.test.ts", "it.skip('broken', () => {})")
-      }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
+  it("テストのパスから通常のパスへ移す名前の変更を削除とみなす(W4R1-01)", () => {
+    const findings = check(renameDiff("src/foo.test.ts", "src/foo.ts"))
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].evidence?.path).toBe("src/foo.test.ts")
+    expect(findings[0].message).toContain("src/foo.test.ts → src/foo.ts")
   })
 
-  it("@pytest.mark.skip の追加を検出する", () => {
-    const findings = testDeletionRule.check(
-      makeArtifact({
-        content: addedLineDiff(
-          "test_foo.py",
-          "@pytest.mark.skip(reason='flaky')"
-        )
-      }),
-      makeCtx()
-    )
-    expect(findings.length).toBeGreaterThan(0)
+  it("テストのパスの中での名前の変更と、テストのパスへ移す変更では出さない", () => {
+    expect(check(renameDiff("src/foo.test.ts", "src/bar.test.ts"))).toEqual([])
+    expect(check(renameDiff("src/foo.ts", "src/foo.test.ts"))).toEqual([])
+  })
+})
+
+describe("testDeletionRule の skip 化", () => {
+  it.each([
+    ["src/foo.test.ts", "it.skip('broken', () => {})"],
+    ["src/foo.test.ts", "xdescribe('group', () => {})"],
+    ["test_foo.py", "@pytest.mark.skip(reason='flaky')"],
+    ["test_foo.py", "@unittest.skip('later')"],
+    ["test_foo.py", "@unittest.skipIf(sys.platform == 'win32', 'x')"],
+    ["foo_test.go", '\tt.Skip("flaky")'],
+    ["foo_test.go", "\tt.SkipNow()"],
+    ["FooTest.java", "  @Disabled"]
+  ])("%s の %s を出す(所見 A11)", (path, line) => {
+    const findings = check(fileDiff(path, [line]))
+    expect(findings).toHaveLength(1)
+    expect(findings[0].evidence?.line).toBe(6)
   })
 
-  it("通常ファイルの削除では発火しない", () => {
-    const findings = testDeletionRule.check(
-      makeArtifact({ content: deletedFileDiff("src/foo.ts") }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
-  })
-
-  it("通常の追加行では発火しない", () => {
-    const findings = testDeletionRule.check(
-      makeArtifact({
-        content: addedLineDiff("src/foo.test.ts", "it('works', () => {})")
-      }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
+  it("通常の追加行では出さない", () => {
+    expect(
+      check(fileDiff("src/foo.test.ts", ["it('works', () => {})"]))
+    ).toEqual([])
   })
 })

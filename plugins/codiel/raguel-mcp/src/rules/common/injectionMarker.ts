@@ -1,10 +1,11 @@
 /**
- * common/injection-marker — プロンプトインジェクション徴候の検出(sealed, 既定 ask)。
- * 成果物本文に埋め込まれた「これまでの指示を無視して」等の日英徴候パターンを検出する。
+ * common/injection-marker — プロンプトインジェクションの徴候の検出(sealed, 既定 ask)。設計書 §6.4.2。
+ * 成果物の本文に埋め込まれた「これまでの指示を無視して」などの日英の徴候を検出する。
  */
 
 import type { Finding, Rule } from "../../core/types.js"
 import { getSeverity, truncateExcerpt } from "../util.js"
+import { maskSecrets } from "./secrets.js"
 
 const RULE_ID = "common/injection-marker"
 
@@ -12,6 +13,10 @@ interface MarkerPattern {
   name: string
   regex: RegExp
 }
+
+/** system prompt と同じ行にあるときだけ偽装とみなす命令の語(所見 A12) */
+const COMMAND_WORD_RE =
+  /\b(?:ignore|disregard|forget|override|obey)\b|無視|従え|忘れ/i
 
 const PATTERNS: MarkerPattern[] = [
   {
@@ -27,7 +32,6 @@ const PATTERNS: MarkerPattern[] = [
     name: "disregard-instructions-en",
     regex: /disregard\s+(all\s+)?(previous|prior|above)\s+(instructions|rules)/i
   },
-  { name: "system-prompt-forgery", regex: /system\s*prompt/i },
   { name: "system-tag-forgery", regex: /<\s*\/?\s*system\s*>/i },
   { name: "role-hijack-ja", regex: /あなたは(今から|これから)/ },
   { name: "role-hijack-en", regex: /you are now\s+/i },
@@ -37,32 +41,37 @@ const PATTERNS: MarkerPattern[] = [
   }
 ]
 
+function matchedPatterns(line: string): string[] {
+  const names = PATTERNS.filter((p) => p.regex.test(line)).map((p) => p.name)
+  if (/system\s*prompt/i.test(line) && COMMAND_WORD_RE.test(line)) {
+    names.push("system-prompt-forgery")
+  }
+  return names
+}
+
 export const injectionMarkerRule: Rule = {
   id: RULE_ID,
   appliesTo: "all",
   sealed: true,
   defaultSeverity: "ask",
   check(artifact, ctx): Finding[] {
-    const settings = ctx.config.rules[RULE_ID]
-    const severity = getSeverity(settings, "ask")
+    const severity = getSeverity(ctx.config.rules[RULE_ID], "ask")
 
     const findings: Finding[] = []
     const lines = artifact.content.split("\n")
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      for (const pattern of PATTERNS) {
-        if (pattern.regex.test(line)) {
-          findings.push({
-            ruleId: RULE_ID,
-            severity,
-            message: `プロンプトインジェクションの徴候(${pattern.name})を検出しました`,
-            evidence: {
-              location: `${i + 1} 行目`,
-              excerpt: truncateExcerpt(line)
-            }
-          })
-        }
+      for (const name of matchedPatterns(lines[i])) {
+        findings.push({
+          ruleId: RULE_ID,
+          severity,
+          message: `プロンプトインジェクションの徴候(${name})を検出しました`,
+          evidence: {
+            location: `${i + 1} 行目`,
+            line: i + 1,
+            excerpt: truncateExcerpt(maskSecrets(lines[i]))
+          }
+        })
       }
     }
 

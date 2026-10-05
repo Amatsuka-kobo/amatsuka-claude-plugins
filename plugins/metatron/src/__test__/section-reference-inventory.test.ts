@@ -95,10 +95,10 @@ function termsIn(text: string): string[] {
   for (const term of TERMS) {
     const escaped = escapeRe(term)
     const patterns = [
-      new RegExp("`## " + escaped + "`"), // (a)
-      new RegExp("^## " + escaped + "\\s*$", "m"), // (b)
-      new RegExp("「?" + escaped + "」? *節"), // (c)
-      new RegExp("ARCHITECTURE[^\\n]{0,40}" + escaped) // (d)
+      new RegExp(`\`## ${escaped}\``), // (a)
+      new RegExp(`^## ${escaped}\\s*$`, "m"), // (b)
+      new RegExp(`「?${escaped}」? *節`), // (c)
+      new RegExp(`ARCHITECTURE[^\\n]{0,40}${escaped}`) // (d)
     ]
     if (patterns.some((pattern) => pattern.test(text))) found.add(term)
   }

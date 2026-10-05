@@ -771,11 +771,11 @@ function loadConfig(startDir) {
 }
 
 // src/lib/emit.ts
-function injectContext(content) {
+function injectContext(content, eventName) {
   process.stdout.write(
     `${JSON.stringify({
       hookSpecificOutput: {
-        hookEventName: "SessionStart",
+        hookEventName: eventName,
         additionalContext: content
       }
     })}
@@ -785,6 +785,7 @@ function injectContext(content) {
 
 // src/inject-context.ts
 var STAGE2_TOC_LIMIT = 50;
+var PLATFORM_MAX_CHARS = 1e4;
 var MAX_WARNING_LINES = 3;
 var STDIN_TIMEOUT_MS = 2e3;
 function pluginRoot(env) {
@@ -807,8 +808,15 @@ function cliLines(cli) {
     "  ADR:     node M stage-adr --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>",
     "  \u898F\u5F8B:     node M get rules [--name conventions|protected-paths|testing-policy]",
     "  \u898F\u5F8B\u66F4\u65B0: node M stage-rules --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-rules --staging-id <id>",
-    "\u203B\u9577\u3044\u5165\u529B\u306F\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u3078\u66F8\u304D\u3001--input <path> \u3067\u6E21\u3059(CLI \u306E\u547C\u3073\u51FA\u3057\u898F\u7D04)\u3002",
-    "\u203B\u3053\u306E\u6848\u5185\u306F\u30E1\u30A4\u30F3\u30BB\u30C3\u30B7\u30E7\u30F3\u5411\u3051\u3002\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306B\u306F\u5225\u9014\u30D1\u30B9\u304C\u6E21\u3055\u308C\u308B\u3002"
+    "\u203B\u9577\u3044\u5165\u529B\u306F\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u3078\u66F8\u304D\u3001--input <path> \u3067\u6E21\u3059(CLI \u306E\u547C\u3073\u51FA\u3057\u898F\u7D04)\u3002"
+  ];
+}
+function recordingLines() {
+  return [
+    "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5224\u65AD\u3068\u5931\u6557\u306B ADR\u30FBGOTCHAS \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
+    "\u6B8B\u3059\u306A\u3089 updating-architecture \u304B recording-gotchas \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002",
+    "codiel run \u306E\u5831\u544A\u306B\u51FA\u305F\u5019\u88DC\u306F\u3001run \u306E\u4E2D\u3067\u306A\u304F\u6B21\u306E\u30BF\u30FC\u30F3\u306E\u521D\u3081\u306B\u78BA\u304B\u3081\u308B\u3002",
+    "docs/intents/domains/ \u306E\u5019\u88DC\u306F /metatron:update \u3067\u53D6\u308A\u8FBC\u3081\u308B\u3002"
   ];
 }
 function buildGuide(cli) {
@@ -816,7 +824,22 @@ function buildGuide(cli) {
     GUIDE_TITLE,
     "",
     "\u3053\u308C\u3089\u306E\u6587\u66F8\u3068 `.claude/rules/metatron/` \u306E 3 \u30D5\u30A1\u30A4\u30EB\u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308B\u3002**\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002**",
-    ...cliLines(cli)
+    ...cliLines(cli),
+    ...recordingLines(),
+    ...delegationLines()
+  ].join("\n");
+}
+function delegationLines() {
+  return [
+    "\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306B\u306F SubagentStart hook \u304C ARCHITECTURE \u3068 GOTCHAS \u3092\u6CE8\u5165\u3059\u308B\u3002",
+    "\u59D4\u8B72\u306E\u4F9D\u983C\u6587\u306B\u306F\u3001\u4E21\u6587\u66F8\u306E\u539F\u6587\u3082\u8981\u7D04\u3082\u66F8\u304D\u5199\u3055\u306A\u3044\u3002"
+  ];
+}
+function buildSubagentGuide() {
+  return [
+    GUIDE_TITLE,
+    "",
+    "\u4EE5\u4E0B\u306E\u6587\u66F8\u306F\u524D\u63D0\u3068\u3057\u3066\u8AAD\u3080\u3060\u3051\u306B\u3057\u3001\u76F4\u63A5\u7DE8\u96C6\u3057\u306A\u3044\u3002"
   ].join("\n");
 }
 function buildInitGuide(cli) {
@@ -928,17 +951,26 @@ function* plans(recentCount) {
   yield stage6;
   yield { ...stage6, archMode: "none" };
 }
-function renderAdrSummary(section, entries) {
-  const lines = entries.length > 0 ? entries.map((e) => `- ${e.id}: ${e.title}(${e.status ?? "\u72B6\u614B\u4E0D\u660E"})`) : ["(\u307E\u3060 ADR \u306F\u7121\u3044)"];
-  return [
-    toLf(section.headingLine),
-    "",
-    ...lines,
-    "",
-    "ADR \u306E\u5168\u6587\u306F `node M get adr` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068(\u6CE8\u5165\u306B\u306F\u8F09\u305B\u306A\u3044)\u3002"
-  ].join("\n");
+var CLI_REFS = {
+  adrFull: "ADR \u306E\u5168\u6587\u306F `node M get adr` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068(\u6CE8\u5165\u306B\u306F\u8F09\u305B\u306A\u3044)\u3002",
+  adrDropped: "ADR \u4E00\u89A7\u306F\u5272\u611B\u3057\u305F\u3002`node M get adr` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068\u3002",
+  gotchasRest: (rest) => `- \u307B\u304B ${rest} \u4EF6\u306F \`node M get gotchas\` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068\u3002`,
+  gotchasList: "\u4E00\u89A7\u306F `node M get gotchas` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068\u3002"
+};
+function pathRefs(config) {
+  const adrAt = `${config.architecturePath} \u306E \`## ${ADR_HEADING}\``;
+  return {
+    adrFull: `ADR \u306E\u5168\u6587\u306F ${adrAt} \u3092 Read \u3059\u308B\u3053\u3068(\u6CE8\u5165\u306B\u306F\u8F09\u305B\u306A\u3044)\u3002`,
+    adrDropped: `ADR \u4E00\u89A7\u306F\u5272\u611B\u3057\u305F\u3002${adrAt} \u3092 Read \u3059\u308B\u3053\u3068\u3002`,
+    gotchasRest: (rest) => `- \u307B\u304B ${rest} \u4EF6\u306F ${config.gotchasPath} \u3092 Read \u3059\u308B\u3053\u3068\u3002`,
+    gotchasList: `\u4E00\u89A7\u306F ${config.gotchasPath} \u3092 Read \u3059\u308B\u3053\u3068\u3002`
+  };
 }
-function renderArchitecture(config, arch, plan) {
+function renderAdrSummary(section, entries, refs) {
+  const lines = entries.length > 0 ? entries.map((e) => `- ${e.id}: ${e.title}(${e.status ?? "\u72B6\u614B\u4E0D\u660E"})`) : ["(\u307E\u3060 ADR \u306F\u7121\u3044)"];
+  return [toLf(section.headingLine), "", ...lines, "", refs.adrFull].join("\n");
+}
+function renderArchitecture(config, arch, plan, refs) {
   const head = `## \u6280\u8853\u7684\u524D\u63D0(${config.architectureRelative})`;
   const readAll = `\u5168\u6587\u306F ${config.architecturePath} \u3092 Read \u3059\u308B\u3053\u3068`;
   if (plan.archMode === "none") {
@@ -976,14 +1008,14 @@ ${readAll}\u3002`;
         adrDropped = true;
         continue;
       }
-      parts.push(renderAdrSummary(section, arch.adrEntries));
+      parts.push(renderAdrSummary(section, arch.adrEntries, refs));
       continue;
     }
     const raw = trimEnd(toLf(section.raw));
     if (raw !== "") parts.push(raw);
   }
   if (adrDropped) {
-    parts.push("ADR \u4E00\u89A7\u306F\u5272\u611B\u3057\u305F\u3002`node M get adr` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068\u3002");
+    parts.push(refs.adrDropped);
   }
   return [head, ...parts].join("\n\n");
 }
@@ -1001,7 +1033,7 @@ function pickRecent(entries, count) {
   }
   return picked;
 }
-function renderGotchas(config, gotchas, plan) {
+function renderGotchas(config, gotchas, plan, refs) {
   const total = gotchas.entries.length;
   const parts = [
     `## \u65E2\u77E5\u306E\u843D\u3068\u3057\u7A74(${config.gotchasRelative}: \u5168 ${total} \u4EF6)`
@@ -1014,11 +1046,11 @@ function renderGotchas(config, gotchas, plan) {
     else toc.push(...shown.map(tocLine));
     const rest = total - shown.length;
     if (rest > 0) {
-      toc.push(`- \u307B\u304B ${rest} \u4EF6\u306F \`node M get gotchas\` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068\u3002`);
+      toc.push(refs.gotchasRest(rest));
     }
     parts.push(toc.join("\n"));
   } else if (total > 0) {
-    parts.push("\u4E00\u89A7\u306F `node M get gotchas` \u3067\u53D6\u5F97\u3059\u308B\u3053\u3068\u3002");
+    parts.push(refs.gotchasList);
   }
   const recent = pickRecent(gotchas.entries, plan.recentCount);
   if (recent.length > 0) {
@@ -1041,10 +1073,10 @@ function render(input, plan) {
     blocks.push(renderWarnings(input.warnings));
   }
   if (input.arch !== null) {
-    blocks.push(renderArchitecture(input.config, input.arch, plan));
+    blocks.push(renderArchitecture(input.config, input.arch, plan, input.refs));
   }
   if (input.gotchas !== null) {
-    blocks.push(renderGotchas(input.config, input.gotchas, plan));
+    blocks.push(renderGotchas(input.config, input.gotchas, plan, input.refs));
   }
   return `${blocks.join("\n\n")}
 `;
@@ -1060,23 +1092,49 @@ function build(config, env) {
     return `${blocks.join("\n\n")}
 `;
   }
-  const guide = buildGuide(cli);
-  const warnings = [
+  return fitToBudget(config, {
+    config,
+    guide: buildGuide(cli),
+    refs: CLI_REFS,
+    warnings: collectWarnings(config, arch, gotchas),
+    arch,
+    gotchas
+  });
+}
+function buildForSubagent(config) {
+  const arch = readArchitecture(config);
+  const gotchas = readGotchas(config);
+  if (arch === null && gotchas === null) return null;
+  return fitToBudget(config, {
+    config,
+    guide: buildSubagentGuide(),
+    refs: pathRefs(config),
+    warnings: collectWarnings(config, arch, gotchas),
+    arch,
+    gotchas
+  });
+}
+function collectWarnings(config, arch, gotchas) {
+  return [
     ...config.warnings,
     ...arch?.warnings ?? [],
     ...gotchas?.warnings ?? []
   ].slice(0, MAX_WARNING_LINES);
-  const input = { config, guide, warnings, arch, gotchas };
-  const budget = Math.max(1, config.injection.maxChars);
+}
+function fitToBudget(config, input) {
+  const budget = Math.min(
+    PLATFORM_MAX_CHARS,
+    Math.max(1, config.injection.maxChars)
+  );
   const startCount = Math.min(
     config.injection.gotchasRecentCount,
-    gotchas?.entries.length ?? 0
+    input.gotchas?.entries.length ?? 0
   );
   for (const plan of plans(startCount)) {
     const content = render(input, plan);
     if (content.length <= budget) return content;
   }
-  return `${guide}
+  return `${input.guide}
 `;
 }
 function readHookInput() {
@@ -1115,7 +1173,12 @@ try {
   const startDir = typeof hookInput.cwd === "string" && hookInput.cwd !== "" ? hookInput.cwd : process.cwd();
   const config = loadConfig(startDir);
   if (config.injection.enabled) {
-    injectContext(build(config, process.env));
+    if (hookInput.hook_event_name === "SubagentStart") {
+      const content = buildForSubagent(config);
+      if (content !== null) injectContext(content, "SubagentStart");
+    } else {
+      injectContext(build(config, process.env), "SessionStart");
+    }
   }
 } catch {
 }

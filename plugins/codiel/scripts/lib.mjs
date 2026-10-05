@@ -23,6 +23,27 @@ function emit(decision, reason) {
 function pass() {
   process.exit(0);
 }
+function ghPostPhaseProblem(kind, state) {
+  const phase = state.phase;
+  if (kind === "issue")
+    return phase === "triage" ? null : `Issue \u306E\u4F5C\u6210\u306F triage \u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`;
+  const testLoopPassed = state.phases["test-loop"]?.status === "passed";
+  return phase === "pr" && testLoopPassed ? null : `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`;
+}
+function resolvePhysicalPath(base, p) {
+  const joined = path.isAbsolute(p) ? p : `${base}${path.sep}${p}`;
+  let cur = path.parse(path.resolve(base)).root;
+  for (const seg of joined.split(/[/\\]+/)) {
+    if (seg === "" || seg === ".") continue;
+    const next = seg === ".." ? path.dirname(cur) : path.join(cur, seg);
+    try {
+      cur = fs.realpathSync(next);
+    } catch {
+      cur = next;
+    }
+  }
+  return cur;
+}
 function globToRegExp(glob) {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
@@ -42,6 +63,7 @@ var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
+var DEFAULT_RULES_DIR = ".claude/rules/metatron";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -88,6 +110,10 @@ function findDocRoot(startDir) {
   if (top) return top;
   return start;
 }
+function findRepoRoot(startDir) {
+  const start = realpathOrSelf(path.resolve(startDir));
+  return gitToplevel(start) ?? start;
+}
 function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
 }
@@ -128,7 +154,7 @@ function fallbackDocRoot(startDir) {
     return startDir ?? ".";
   }
 }
-function resolveDocPaths(startDir) {
+function loadPathsConfig(startDir) {
   const warnings = [];
   let docRoot;
   try {
@@ -173,6 +199,10 @@ function resolveDocPaths(startDir) {
       "paths \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u6587\u66F8\u30D1\u30B9\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
     );
   }
+  return { docRoot, paths, warnings };
+}
+function resolveDocPaths(startDir) {
+  const { docRoot, paths, warnings } = loadPathsConfig(startDir);
   return {
     docRoot,
     architecture: resolveConfiguredPath(
@@ -187,6 +217,20 @@ function resolveDocPaths(startDir) {
       paths?.gotchas,
       DEFAULT_GOTCHAS_PATH,
       "gotchas",
+      warnings
+    ),
+    warnings
+  };
+}
+function resolveRulesDir(startDir) {
+  const { docRoot, paths, warnings } = loadPathsConfig(startDir);
+  return {
+    docRoot,
+    rulesDir: resolveConfiguredPath(
+      docRoot,
+      paths?.rulesDir,
+      DEFAULT_RULES_DIR,
+      "rulesDir",
       warnings
     ),
     warnings
@@ -299,19 +343,31 @@ function findProjectRoot(startDir) {
     dir = parent;
   }
 }
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
+function findMainRoot(startDir) {
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
+  return findProjectRoot(startDir);
+}
 export {
   DEFAULT_ARCHITECTURE_PATH,
   DEFAULT_GOTCHAS_PATH,
+  DEFAULT_RULES_DIR,
   DOC_CONFIG_FILENAME,
   DOC_CONFIG_SUPPORTED_VERSION,
   DOMAINS_MARKER,
   emit,
   findDocRoot,
+  findMainRoot,
   findProjectRoot,
+  findRepoRoot,
+  ghPostPhaseProblem,
   globToRegExp,
   pass,
   readDomains,
   readDomainsResult,
   readStdin,
-  resolveDocPaths
+  resolveDocPaths,
+  resolvePhysicalPath,
+  resolveRulesDir
 };

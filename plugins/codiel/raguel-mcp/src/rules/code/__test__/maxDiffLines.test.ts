@@ -1,30 +1,27 @@
 import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { maxDiffLinesRule } from "../maxDiffLines.js"
+import { fileDiff } from "./helpers/diff.js"
 
 function diffWithNAdditions(n: number): string {
-  const lines = Array.from({ length: n }, (_, i) => `+line${i}`)
-  return [
-    "diff --git a/big.ts b/big.ts",
-    "--- a/big.ts",
-    "+++ b/big.ts",
-    "@@ -1,1 +1,1 @@",
-    ...lines
-  ].join("\n")
+  return fileDiff(
+    "big.ts",
+    Array.from({ length: n }, (_, i) => `line${i}`)
+  )
 }
 
 describe("maxDiffLinesRule", () => {
   it("上限以下では発火しない", () => {
     const findings = maxDiffLinesRule.check(
-      makeArtifact({ content: diffWithNAdditions(10) }),
-      makeCtx({ rules: { "code/max-diff-lines": { limit: 500 } } })
+      makeArtifact({ content: diffWithNAdditions(500) }),
+      makeCtx()
     )
     expect(findings).toEqual([])
   })
 
   it("上限超過で ask 発火する", () => {
     const findings = maxDiffLinesRule.check(
-      makeArtifact({ content: diffWithNAdditions(600) }),
+      makeArtifact({ content: diffWithNAdditions(501) }),
       makeCtx()
     )
     expect(findings).toHaveLength(1)
@@ -37,5 +34,19 @@ describe("maxDiffLinesRule", () => {
       makeCtx({ rules: { "code/max-diff-lines": { limit: 5 } } })
     )
     expect(findings).toHaveLength(1)
+  })
+
+  it("NUL を含むファイルは数えず、ほかのファイルは数える", () => {
+    const lines = (n: number, tail = "") =>
+      Array.from({ length: n }, (_, i) => `b${i}${tail}`)
+    const binary = fileDiff("logo.png", lines(1000, "\0"))
+    expect(
+      maxDiffLinesRule.check(makeArtifact({ content: binary }), makeCtx())
+    ).toEqual([])
+    const mixed = [diffWithNAdditions(501), binary].join("\n")
+    expect(
+      maxDiffLinesRule.check(makeArtifact({ content: mixed }), makeCtx())[0]
+        .message
+    ).toContain("実際: 501 行")
   })
 })

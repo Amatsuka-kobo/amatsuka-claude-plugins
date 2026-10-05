@@ -1,120 +1,189 @@
 import { describe, expect, it } from "vitest"
+import { computeDigest, digestSimilarity } from "../../../casefile/digest.js"
+import type { Finding, PriorAttempt } from "../../../core/types.js"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import {
-  computeSubmissionDigest,
-  resubmissionLoopRule,
-  similarity
+  findAddressedButSimilar,
+  resubmissionFindings,
+  resubmissionLoopRule
 } from "../resubmissionLoop.js"
 
-describe("computeSubmissionDigest / similarity", () => {
-  it("完全一致は sha256 が一致し類似度 1", () => {
-    const a = computeSubmissionDigest("Hello   World", 1, "ASK")
-    const b = computeSubmissionDigest("hello world", 2, "ASK")
-    expect(a.sha256).toBe(b.sha256) // 空白圧縮 + 小文字化で正規化一致
-    expect(similarity(a.shingleHashes, b.shingleHashes)).toBe(1)
+const CONTENT =
+  "デプロイスクリプトを更新してタイムアウトを180秒に延長する変更です"
+
+function prior(overrides: Partial<PriorAttempt> = {}): PriorAttempt {
+  return {
+    attempt: 1,
+    verdict: "ASK",
+    judgeStatus: "ok",
+    hasRuling: false,
+    askRuleIds: [],
+    digest: computeDigest(CONTENT),
+    ...overrides
+  }
+}
+
+function askFinding(
+  ruleId: string,
+  severity: Finding["severity"] = "ask"
+): Finding {
+  return { ruleId, severity, message: "m" }
+}
+
+function run(priors: PriorAttempt[], current: Finding[] | null = []) {
+  return resubmissionFindings(
+    makeArtifact({ content: CONTENT }),
+    makeCtx({}, priors),
+    current
+  )
+}
+
+describe("resubmission-loop 比べる相手", () => {
+  it("過去の attempt が無ければ出ない", () => {
+    expect(run([])).toEqual([])
   })
 
-  it("語順の入れ替え程度は近似(高い Jaccard 類似度)になる", () => {
-    const a = computeSubmissionDigest(
-      "デプロイスクリプトを更新してタイムアウトを180秒に延長する",
-      1,
-      "ASK"
+  it("同じ本文の再提出は ask で出し、何回続いても stop に上げない", () => {
+    const priors = [1, 2, 3, 4].map((attempt) =>
+      prior({ attempt, verdict: attempt === 4 ? "STOP" : "ASK" })
     )
-    const b = computeSubmissionDigest(
-      "タイムアウトを180秒に延長するためデプロイスクリプトを更新する",
-      2,
-      "ASK"
-    )
-    const sim = similarity(a.shingleHashes, b.shingleHashes)
-    expect(sim).toBeGreaterThan(0.5)
+    const findings = run(priors)
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].message).toContain("試行 1")
+    expect(findings[0].message).toContain("試行 4")
   })
 
-  it("全く異なる内容は非近似", () => {
-    const a = computeSubmissionDigest(
-      "認証まわりのバグを修正しました",
-      1,
-      "ASK"
-    )
-    const b = computeSubmissionDigest(
-      "料金プランのドキュメントを更新しました",
-      2,
-      "ASK"
-    )
-    const sim = similarity(a.shingleHashes, b.shingleHashes)
-    expect(sim).toBeLessThan(0.3)
+  it.each([
+    ["PROCEED の attempt", prior({ verdict: "PROCEED" })],
+    ["degraded の attempt", prior({ judgeStatus: "degraded" })],
+    ["裁定の記録を持つ attempt", prior({ hasRuling: true })],
+    ["ダイジェストの読めない attempt", prior({ digest: null })]
+  ])("%s とは比べない(所見 D5)", (_name, p) => {
+    expect(run([p])).toEqual([])
+  })
+
+  it("似ていない本文とは比べても出ない", () => {
+    const p = prior({
+      digest: computeDigest("料金プランのドキュメントを書き直した")
+    })
+    expect(run([p])).toEqual([])
+  })
+
+  it("ダイジェストの版が違う attempt は比べない", () => {
+    const p = prior({
+      digest: { ...computeDigest(CONTENT), schemaVersion: 99 }
+    })
+    expect(run([p])).toEqual([])
   })
 })
 
-describe("resubmissionLoopRule", () => {
-  it("過去提出がなければ発火しない", () => {
-    const findings = resubmissionLoopRule.check(
-      makeArtifact({ content: "新しい成果物です" }),
-      makeCtx()
-    )
-    expect(findings).toEqual([])
+describe("resubmission-loop 修正ありの判定(所見 D5)", () => {
+  const p = prior({ askRuleIds: ["code/max-diff-lines"] })
+
+  it("前回の ruleId が今回出ていなければ、修正ありとみなして比べない", () => {
+    expect(run([p], [])).toEqual([])
   })
 
-  it("完全一致の再提出は ask で発火する", () => {
-    const prior = computeSubmissionDigest("危険な変更です", 1, "ASK")
+  it("前回の ruleId が今回 info で出ているだけなら、修正ありとみなす", () => {
+    expect(run([p], [askFinding("code/max-diff-lines", "info")])).toEqual([])
+  })
+
+  it("前回の ruleId が今回も ask 以上で出ていれば比べる", () => {
+    expect(run([p], [askFinding("code/max-diff-lines")])).toHaveLength(1)
+  })
+
+  it("前回の ask 以上の ruleId が空なら比べる", () => {
+    expect(run([prior({ askRuleIds: [] })], [])).toHaveLength(1)
+  })
+
+  it("前回このルールだけが出ていた attempt は、修正ありとみなさない", () => {
+    expect(
+      run([prior({ askRuleIds: ["common/resubmission-loop"] })], [])
+    ).toHaveLength(1)
+  })
+
+  it("前回の ask が judge/* だけなら、決定論の所見を持たない前回と同じく比べる", () => {
+    expect(
+      run([prior({ askRuleIds: ["judge/code-security"] })], [])
+    ).toHaveLength(1)
+  })
+
+  it("前回の ask に judge/* と決定論の ruleId があれば、決定論のほうだけで修正ありを判定する", () => {
+    const p = prior({
+      askRuleIds: ["judge/code-security", "code/max-diff-lines"]
+    })
+    expect(run([p], [])).toEqual([])
+    expect(run([p], [askFinding("code/max-diff-lines")])).toHaveLength(1)
+  })
+
+  it("今回の所見を渡さない Rule.check は、比べられる相手をすべて比べる", () => {
     const findings = resubmissionLoopRule.check(
-      makeArtifact({ content: "危険な変更です" }),
-      makeCtx({}, [prior])
+      makeArtifact({ content: CONTENT }),
+      makeCtx({}, [p])
     )
     expect(findings).toHaveLength(1)
-    expect(findings[0].severity).toBe("ask")
   })
+})
 
-  it("PROCEED 済みの過去提出とは比較しない", () => {
-    const prior = computeSubmissionDigest("承認済みの内容です", 1, "PROCEED")
-    const findings = resubmissionLoopRule.check(
-      makeArtifact({ content: "承認済みの内容です" }),
-      makeCtx({}, [prior])
-    )
-    expect(findings).toEqual([])
-  })
-
-  it("stopAfter 回数に到達すると severity が stop に昇格する", () => {
-    const content = "同じ危険な変更を何度も出す"
+describe("findAddressedButSimilar", () => {
+  it("修正ありとみなした相手のうち、閾値以上に似たものを attempt と類似度で返す", () => {
     const priors = [
-      computeSubmissionDigest(content, 1, "ASK"),
-      computeSubmissionDigest(content, 2, "ASK"),
-      computeSubmissionDigest(content, 3, "STOP")
+      prior({ attempt: 1, askRuleIds: ["code/max-diff-lines"] }),
+      prior({ attempt: 2, askRuleIds: ["code/test-deletion"] }),
+      prior({
+        attempt: 3,
+        askRuleIds: ["code/max-diff-lines"],
+        digest: computeDigest("まったく別の内容の成果物を出した")
+      }),
+      prior({ attempt: 4, askRuleIds: [] }),
+      prior({
+        attempt: 5,
+        askRuleIds: ["code/max-diff-lines"],
+        hasRuling: true
+      })
     ]
-    const findings = resubmissionLoopRule.check(
-      makeArtifact({ content }),
-      makeCtx({}, priors)
-    )
-    expect(findings).toHaveLength(1)
-    expect(findings[0].severity).toBe("stop")
+    expect(
+      findAddressedButSimilar(
+        CONTENT,
+        priors,
+        [askFinding("code/test-deletion")],
+        0.85
+      )
+    ).toEqual([{ attempt: 1, similarity: 1 }])
   })
 
-  it("similarityThreshold は 0.95 を超えて緩和できない(実測 Jaccard 約0.97のペアで検証)", () => {
-    // このペアの Jaccard 類似度は約 0.968。設定通り 0.999 が採用されれば発火しないはずだが、
-    // sealed ルールの緩和上限 0.95 にクランプされるため発火する
-    const content =
-      "The quick brown fox jumps over the lazy dog near the riverbank every single morning without failing"
-    const priorContent =
-      "The quick brown fox jumps over the lazy dog near the riverbank every single morning without fail"
-    const prior = computeSubmissionDigest(priorContent, 1, "ASK")
-
-    const sim = similarity(
-      computeSubmissionDigest(content, 0, "ASK").shingleHashes,
-      prior.shingleHashes
+  it("閾値は 0.95 を超えて緩められない", () => {
+    // 20 行の本文の末尾の 1 語だけを直した再提出。類似度は 0.95 以上 0.999 未満になる
+    const body = Array.from(
+      { length: 20 },
+      (_, i) => `手順 ${i}: 設定 ${i} を確かめる`
+    ).join("\n")
+    const content = `${body}\n末尾を直した`
+    const priorContent = `${body}\n末尾を変えた`
+    const sim = digestSimilarity(
+      computeDigest(content),
+      computeDigest(priorContent)
     )
-    expect(sim).toBeGreaterThan(0.95)
+    expect(sim).not.toBeNull()
+    expect(sim).toBeGreaterThanOrEqual(0.95)
     expect(sim).toBeLessThan(0.999)
 
-    const findings = resubmissionLoopRule.check(
+    const p = prior({
+      digest: computeDigest(priorContent),
+      askRuleIds: ["x/y"]
+    })
+    expect(findAddressedButSimilar(content, [p], [], 0.999)).toHaveLength(1)
+    const findings = resubmissionFindings(
       makeArtifact({ content }),
       makeCtx(
         {
-          rules: {
-            "common/resubmission-loop": { similarityThreshold: 0.999 }
-          }
+          rules: { "common/resubmission-loop": { similarityThreshold: 0.999 } }
         },
-        [prior]
-      )
+        [{ ...p, askRuleIds: [] }]
+      ),
+      []
     )
-    expect(findings.length).toBeGreaterThan(0)
+    expect(findings).toHaveLength(1)
   })
 })

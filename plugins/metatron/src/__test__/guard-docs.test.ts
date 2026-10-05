@@ -286,6 +286,58 @@ test("D7d: symlink が循環していても例外を投げず素通しする(フ
   ).toBe("deny")
 })
 
+// `alias/..` の `..` は、OS 上ではリンク先の親を指す。字句で先に畳むと
+// `<root>/ARCHITECTURE.md` に化け、正本への Write が別パスに見えて素通りしていた。
+test("D7g: symlink の後ろの `..` はリンク先の親として解決し deny する", () => {
+  const root = project()
+  fs.mkdirSync(path.join(root, "docs/inner"), { recursive: true })
+  // alias は docs/inner を指すので、alias/.. は docs になる。
+  fs.symlinkSync(path.join(root, "docs/inner"), path.join(root, "alias"), "dir")
+
+  expect(
+    write(root, `${root}/alias/../ARCHITECTURE.md`)?.permissionDecision
+  ).toBe("deny")
+  expect(write(root, "alias/../GOTCHAS.md")?.permissionDecision).toBe("deny")
+  // 字句で畳んだ先(<root>/ARCHITECTURE.md)は正本ではないので素通しのまま。
+  expect(write(root, path.join(root, "ARCHITECTURE.md"))).toBe(null)
+})
+
+// 字句で畳んだパスと実体で辿ったパスが別の場所を指すときは、どちらかが正本に当たれば拒否する。
+test("D7g2: 字句では正本に当たり、実体では当たらない `alias/..` も deny する", () => {
+  const root = project()
+  fs.mkdirSync(path.join(root, "other/inner"), { recursive: true })
+  // alias は other/inner を指す。実体では alias/.. は other、字句では root になる。
+  fs.symlinkSync(
+    path.join(root, "other/inner"),
+    path.join(root, "alias"),
+    "dir"
+  )
+
+  expect(
+    write(root, `${root}/alias/../docs/ARCHITECTURE.md`)?.permissionDecision
+  ).toBe("deny")
+  expect(write(root, "alias/../docs/GOTCHAS.md")?.permissionDecision).toBe(
+    "deny"
+  )
+  // どちらの解釈でも正本に当たらなければ素通しする。
+  expect(write(root, "alias/../docs/OTHER.md")).toBe(null)
+})
+
+test("D7h: 親ディレクトリが未作成の正本へ、symlink を通した Write も deny する", () => {
+  const root = project(
+    '{"version":1,"paths":{"architecture":"docs/new/ARCHITECTURE.md"}}'
+  )
+  fs.symlinkSync(path.join(root, "docs"), path.join(root, "link-docs"), "dir")
+  // 前提: 正本の親 docs/new は未作成。
+  expect(fs.existsSync(path.join(root, "docs/new"))).toBe(false)
+
+  expect(
+    write(root, path.join(root, "link-docs/new/ARCHITECTURE.md"))
+      ?.permissionDecision
+  ).toBe("deny")
+  expect(write(root, path.join(root, "link-docs/new/OTHER.md"))).toBe(null)
+})
+
 // 段数の境界。docs/GOTCHAS.md -> chain/n1.md -> ... -> chain/n<hops-1>.md -> real/GOTCHAS.md
 // と張り、symlink がちょうど hops 本になるチェーンを作る。最終リンク先は未作成のまま
 // (存在すると realpath が効いてしまい dangling の検証にならない)。

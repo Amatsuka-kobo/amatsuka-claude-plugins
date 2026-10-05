@@ -19,11 +19,11 @@
 | 型定義 | @types/node ^26.0.0 |
 
 - Node.js と pnpm のバージョンは volta で固定する。Node は 26.3.1、pnpm は 11.8.0 とする。
-- TypeScript は `strict` と `noEmit` を有効にする。
-- esbuild の `target` は node22 に揃える。出力は ESM とし、拡張子は `.mjs` とする。
-- 共通の開発依存はルートの `package.json` に置く。
-- プラグイン固有のランタイム依存は、そのプラグインの `package.json` に置く。
-- 初回に取得するネイティブコードと辞書は `package.json` に置かず、取得元の URL と sha256 をコードに固定する。
+- TypeScript は strict と `noEmit` を有効にする。
+- esbuild の target は node22 に揃える。出力は ESM とし、拡張子は `.mjs` とする。
+- 共通の開発依存はルートの package.json に置く。
+- プラグイン固有のランタイム依存は、そのプラグインの package.json に置く。
+- 初回に取得するネイティブコードと辞書は package.json に置かず、取得元の URL と sha256 をコードに固定する。
 
 ## レイヤー構造
 
@@ -48,7 +48,7 @@
 
 - 実装層は他プラグインの `src/` を import しない。同じ規則が複数のプラグインに要るときは、各プラグインで独立に実装し、規則を変えたときは同じ規則を持つ全プラグインの実装を追随させる。
 - 配布物層を手で編集しない。実装層を変更し、`pnpm run build` で再生成する。
-- 指示層と参照層に、リポジトリルート固有のパスや他プラグインの名前を書かない。参照が要る内容は、プラグイン内に閉じた表現へ書き換える。例外は、プラグイン間の連携を前提に設計された `sandalphon` `codiel` `metatron` `gh-utility` の 4 プラグイン同士の言及のみ。
+- 指示層と参照層に、リポジトリルート固有のパスや他プラグインの名前を書かない。参照が要る内容は、プラグイン内に閉じた表現へ書き換える。例外は、プラグイン間の連携を前提に設計された `codiel` `metatron` `gh-utility` の 3 プラグイン同士の言及のみ。
 
 ## ディレクトリ構成と責務
 
@@ -95,7 +95,7 @@
 ```json metatron:domains
 {
   "impl": ["plugins/*/src/**", "plugins/*/build.ts", "plugins/codiel/raguel-mcp/src/**", "plugins/codiel/raguel-mcp/build.ts"],
-  "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**"],
+  "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**", ".claude/**"],
   "bundle": ["plugins/*/scripts/**", "plugins/*/dist/**", "plugins/codiel/raguel-mcp/dist/**"],
   "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**"],
   "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".raphael/**", ".serena/**"]
@@ -103,7 +103,7 @@
 ```
 
 - `impl` は TypeScript の実装を指す。
-- `prompt` は AI が読む指示書と、そこへ合成される素材を指す。
+- `prompt` は AI が読む指示書と、そこへ合成される素材を指す。`.claude/` の output style・rules・skills を含む。
 - `bundle` は手で編集しない。
 - `manifest` は配布宣言・ワークスペース設定・環境構築スクリプトを指す。
 - `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリ、raphael の抗体を含む。
@@ -283,6 +283,127 @@ codiel は委譲先を名指しでも役割名でも指定せず、作業内容�
 
 ---
 
+### ADR-006: [codiel] run の起点を intent 文書に替え、sandalphon を吸収し、同梱 Agent を持たない
+
+- 状態: 採用
+- 決定日: 2026-09-27
+- 決定者: phyllis998
+
+#### 背景
+
+sandalphon には intent の聞き取りと書式があるが、intent を起点に設計・実装・テスト・レビューまで進める機能が無く、単独では intent 駆動開発をフルサポートできなかった。codiel の GitHub Issue 起点のワークフローには特別な需要が無く、革新的なプラグインとして確立するには弱かった。ADR-004 で残した同梱 Agent 2 体(`codiel-analyst` と `codiel-test-designer`)は、特別な理由がない限りサブエージェントにはプロジェクトに最適化されたユーザー定義の Agent を使うべきという考えに反していた。
+
+#### 検討した選択肢
+
+1. Issue 起点を保ち、sandalphon を codiel の前段のプラグインとして残す
+2. sandalphon を codiel に吸収して run の起点を intent 文書にし、同梱 Agent は `codiel-test-designer` だけを残す
+3. 2 と同じだが、同梱 Agent を持たない(採用)
+
+#### 採用した結論
+
+sandalphon を codiel に吸収し、codiel を intent 駆動開発をフルサポートするプラグインとして確立する。run の起点は `docs/intents/` の intent 文書、入口は Issue 番号・intent パス・省略の 3 つとし、Issue は転記先も兼ねる。GitHub を使えない環境では local モードで run を進める。codiel は同梱 Agent を持たない。ADR-004 のうち上書きするのは「同梱 Agent を 2 体に絞る」部分だけで、それ以外(委譲先を作業内容で表す)は保つ。
+
+#### 理由
+
+sandalphon と codiel を統合すると、intent の聞き取りから設計・実装・テスト・レビュー・完了の判定までを 1 つのワークフローで支えられ、sandalphon の不足と codiel の弱さを解消できる。intent 文書を正本にすると、ユーザーの言葉(原文)と要件の由来が run の外に残り、完了を原文に照らして判定できる。同梱 Agent は背景の考えに反するため、ADR-004 で残した 2 体も残す価値が薄いと判断した。
+
+#### 影響範囲
+
+run state は slug で識別する version 2 になり、version 1 の run は `get`・`stop` と、`awaiting_outcome` の run の outcome の記録だけを受け付ける。sandalphon はマーケットプレイスから消える。codiel は変更ごとの intent 文書と持続層 `docs/intents/domains/` を持つ。test-spec の書き込み範囲の制限は、依頼文とスキルの HARD-GATE が担う。ADR-003 の影響範囲にある「初期化済みの判定は CLAUDE.md の運用ルール節」は、`.claude/rules/codiel.md` と CLAUDE.md の `## Codiel` による判定に置き換わる。
+
+---
+
+### ADR-007: [metatron] codiel の持続層の ADR 候補を metatron が ADR へ移し、参照形に縮める
+
+- 状態: 採用
+- 決定日: 2026-09-27
+- 決定者: phyllis998
+
+#### 背景
+
+codiel は metatron が無くても動くよう(ADR-003)、ADR にすべき判断を持続層 `docs/intents/domains/` に `[ADR 候補]` として全文で書く。後から metatron を入れると、同じ判断が ADR と持続層の 2 か所に全文で残り、食い違っていく。プラグインは自分の資産だけを書く分担で、ほかのプラグインの資産を書き換える経路は無かった。
+
+#### 検討した選択肢
+
+1. 利用者が手で ADR へ移し、持続層を直す
+2. codiel が metatron の CLI を呼んで ADR を足し、自分の持続層を縮める
+3. metatron が持続層を走査して ADR へ移し、そのエントリを参照形に縮める(採用)
+
+#### 採用した結論
+
+`/metatron:init` と `/metatron:update` は `scan-adr-candidates` で `[ADR 候補]` を提示し、承認された候補を ADR にしてから `shrink-adr-candidate` でそのエントリを参照形に縮める。metatron が codiel の資産に書くのはこの縮約だけで、範囲は `docs/intents/domains/*.md` のうち候補 ID で特定したエントリに限る。書式は codiel の `intent-format.md` を正本とする共有ファイル契約とし、metatron は読み取りと縮約に要る最小限だけを写す。
+
+#### 理由
+
+ARCHITECTURE の持ち主である metatron が ADR の確定と縮約を同じ手順で行えば、判断の全文は ADR の 1 か所だけに残る。codiel が metatron を呼ぶと、metatron が無くても動くという codiel の独立性が崩れる。手で移すと、候補の取りこぼしと写し間違いを防げない。書き込みを候補 ID で特定したエントリに限り、走査時のハッシュと照合すれば、ほかのプラグインの資産でも範囲外を壊さない。
+
+#### 影響範囲
+
+metatron は codiel の持続層の書式に依存し、書式を変えたときは両プラグインの `format-change-checklist.md` に沿って追随させる。metatron に `scan-adr-candidates` と `shrink-adr-candidate` が加わり、縮約の失敗は終了コード 3 と `shrinkPending` で返る。codiel は ADR の確定に関わらず、`[ADR 候補]` を持続層に全文で書くことだけを担う。
+
+---
+
+### ADR-008: [codiel] テストを実装の前に別の委譲で書いて保護し、仕様を testsDir に置く
+
+- 状態: 採用
+- 決定日: 2026-09-28
+- 決定者: phyllis998
+
+#### 背景
+
+codiel 0.x では、implement の委譲がコードと一緒にテストを書き、test-loop も implement の後に書いていた。どちらのテストも実装に合わせて書かれるおそれがあった。テストは `.codiel/specs/` の下にあり、プロジェクトのテストの置き場にも実行の対象にも入らなかった。
+
+#### 検討した選択肢
+
+1. implement の委譲がコードと一緒にテストを書く形を保つ
+2. test-loop が implement の後にテストを書く形を保つ
+3. test-code フェーズを implement の前に置いてテストを別の委譲で書き、implement 以降はテストの書き換えを hook で止める(採用)
+
+#### 採用した結論
+
+test-code フェーズを (test-spec ∥ dev-plan) と implement の間に置く。test-code は仕様からユニットテストと E2E を書き、それらが実装の前に失敗することを確かめる。implement はそのテストを通し、test-loop は全テストの回帰を確かめて直す。テストの仕様は `.codiel/config.json` の `testsDir`(既定は `docs/tests`)の下に置く。テストコードはプロジェクトの規約の場所に置き、置いたパスを `spec.md` に記録する。implement・test-loop・fix-loop の間は、仕様と、`spec.md` に記録したテストコードへの書き込みを guard-write が ask にする。
+
+#### 理由
+
+実装の前に別の委譲でテストを確定させると、テストが実装を追認しなくなる。書き込みを ask にすれば、コードを直すフェーズでテストが実装に合わせて書き換えられるのを人が止められる。テストコードをプロジェクトの規約の場所に置くと、run の外でもプロジェクトのテストとして走る。保護の対象は `spec.md` の記録 1 か所で決まる。
+
+#### 影響範囲
+
+run state の `phases` に `test-code` が加わる。ADR-006 が version 1 の run に定めた扱いは、`phases` に `test-code` を持たない version 2 の run にも当たる。ADR-003 の初期化済みの判定にある `.codiel/` の 3 ディレクトリは、`.codiel/runs` と `.codiel/reports` の 2 つになり、`/codiel:init` の判定だけは `.codiel/config.json` も見る。codiel 0.x の `.codiel/specs/` は読まれず、移されず、報告もされない。fix-loop では、オーケストレーターが `set-test-edit` を立てている間だけテストの保護が外れる。
+
+---
+
+### ADR-009: [codiel] 設定を .codiel/config.json に集め、run の文書を git で共有し、state と報告を手元に残す
+
+- 状態: 採用
+- 決定日: 2026-09-29
+- 決定者: phyllis998
+
+#### 背景
+
+Raguel は codiel と組にして使うのに、codiel 1.0.0 の初版では設定が `.codiel/config.json` と `raguel.config.yaml` に分かれ、2 つの置き場を別々に用意して管理する手間があった。また、run の文書(agenda・discussion・design・dev-plan)と state・報告が `.codiel/runs/<slug>/try-<n>/` にまとまり、run ブランチへコミットされていた。手動確認では `.codiel/` の中身が `git status` に残り、オーケストレーターが run と関係の無い変更や `state.json` をコミットした。
+
+#### 検討した選択肢
+
+1. `.codiel/` をまるごと git から外す
+2. run の文書を try ごとに分けて `.codiel/runs/<slug>/try-<n>/` に置き、コミットする形を保つ
+3. Raguel の設定を `raguel.config.yaml` に残し、codiel の設定と分ける
+4. 設定を `.codiel/config.json` に集めて共有し、run の文書を `runsDir` に置いて共有し、try ごとの state と報告を `.codiel/runs/` に置いて git から外す(採用)
+
+#### 採用した結論
+
+`.codiel/config.json` に `testsDir`(既定は `docs/codiel/tests`)・`runsDir`(既定は `docs/codiel/runs`)・`raguel` を置き、git で共有する。Raguel は `RAGUEL_CONFIG` か cwd の `.codiel/config.json` の `raguel` を読み、YAML を読まない。discuss・design・dev-plan の文書は `<runsDir>/<slug>/` に置き、try で分けずにコミットする。try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/` に、`/codiel:test` の報告は `.codiel/reports/` に置き、どちらも `.gitignore` で外す。E2E のレポートは `<testsDir>/e2e/` の下の `reports/` に置き、json と md だけを共有する。`/codiel:init` が `.gitignore` の行を足し、`/codiel:run` はその行が揃うまで始めない。
+
+#### 理由
+
+run の文書は後から設計の経緯を読む材料になるので、コードと同じ場所で共有する。state と報告は実行ごとの作業記録で、共有すると差分とコミットの誤りを生む。組で使う 2 つの設定を 1 ファイルに集めると、用意と管理が 1 か所で済み、init の判定と Raguel の読み込み先も 1 か所で決まる。新しい try は前の try の文書を置き換え、前のバージョンは前の try のブランチから読めるので、try で分けない。
+
+#### 影響範囲
+
+`raguel.config.yaml` は読まれず、`/codiel:init` が承認を得て中身を `raguel` へ写してから消す。raguel-mcp は yaml の依存を持たない。未記録の GOTCHAS の退避先は `<runsDir>/<slug>/unrecorded-gotchas.md`(run が無いときは `.codiel/reports/unrecorded-gotchas.md`)になる。PR・レビュー・Issue の本文ファイルは `reports/` に書き、コミットしない。`.codiel` は git のルートに置く。ADR-002 の影響範囲にある退避の置き場「`.codiel/runs/<runId>/try-<n>/reports/` または `.codiel/reports/`」は、上の退避先に置き換わる。ADR-003 の影響範囲にある初期化済みの判定の `raguel.config.yaml` は、`.codiel/config.json` の `raguel` に置き換わる。ADR-008 の結論にある testsDir の既定 `docs/tests` は、`docs/codiel/tests` に置き換わる。ADR-008 の影響範囲にある「`/codiel:init` の判定だけは `.codiel/config.json` も見る」は、`/codiel:init` と `/codiel:run` の両方が `.codiel/config.json` の `raguel` と `.gitignore` の行を見る判定に置き換わる。
+
+---
+
 ### ADR-010: [native-japanese] 形態素解析の実行物と辞書は初回に取得し、git に同梱しない
 
 - 状態: 採用
@@ -311,3 +432,151 @@ native-japanese は、文の長さ・文末の連続・連体修飾の重なり�
 #### 影響範囲
 
 システム概要にバンドルと git の例外を、技術スタックに `package.json` の例外を足す。利用者の環境は、初回のセッションで約 13MB を取得する。
+
+---
+
+### ADR-011: [codiel] Raguel を層ごとに作り直し、評価対象を自分で読み、STOP を 4 種に絞る
+
+- 状態: 採用
+- 決定日: 2026-09-29
+- 決定者: phyllis998
+
+#### 背景
+
+codiel 1.0.0 の手動確認で、Raguel は run を止めるか素通しさせるかに偏った。25 件の評価のうち STOP 3 件はすべて codiel が作るパスへの秘密情報の誤検知、PROCEED 19 件はすべてパネルを通らない trivial、パネルの起動 12 回はすべて `claude` が `--json-schema` を拒んで失敗した。呼び出し側が渡す要約をそのまま検査していたので、PROCEED は成果物の実物を検査した結果になっていなかった。基盤の障害(タイムアウトなど)も内容の懸念と同じ ASK になり、判例を汚した。
+
+#### 検討した選択肢
+
+1. 全面的に書き直し、MCP ツール面と層の構成も新しく決める
+2. ルールだけに縮小し、LLM のパネルを外す
+3. MCP ツール面と層の構成(ルール・重さ・パネル・ケースファイル・判例)を残し、層ごとに改修する(採用)
+
+#### 採用した結論
+
+層の構成を残して改修する。
+- Raguel は評価対象を自分で読む。evaluate_code は baseRef から git diff を固定の書式で作る。evaluate_plan・evaluate_design は paths のファイルを読む。どちらも読んだ内容の sha256 と HEAD を記録し、呼び出し側が本文を渡す旧入力は廃止する。
+- codiel の pass-gate は Raguel の記録(評価の索引・verdict.json・裁定の記録)を照合する。code 系フェーズでは HEAD・起点・範囲の絞り込みの無さを、文書のフェーズではファイルの sha256 と期待するファイルを確かめる。
+- pass-gate と Raguel は同じファイル契約(plugins/codiel/docs/raguel-contract.md)を独立に実装し、2 者比較テストで突き合わせる。
+- STOP は秘密情報・保護パス・破壊操作・改竄の 4 種だけに出す。改竄以外は、人が誤検知と裁定すれば record_outcome を経て通せる。
+- ほかのルールは最大 ASK にする。語彙のルールは info にしてパネルの入力にする。
+- パネルのプロバイダーは claude と codex から選べ、既定は claude とする。
+- ルール層と重さ判定の一部は、任意で Jev(TypeSafe AI)に文脈判定させられる。既定は無効とする。Jev が動かせる向きは stop → ask と、語彙のルールの info → ask などに限る。
+- 基盤の障害は judgeStatus: degraded の ASK にし、判例と再提出の比較から外す。
+
+#### 理由
+
+要約を渡せば PROCEED を取れる入力が残る限り、ゲートの結果は実物の検査にならない。STOP を確かな危険に絞ると、誤検知で run が止まる回数が減り、それ以外の懸念はパネルと人の裁定に回せる。層の構成と MCP ツール面は codiel のスキルと hook が前提にしているので、残すと codiel 側の変更を入力と記録の形に限れる。ルールだけに縮小すると、文書の欠陥や設計の穴のように正規表現で拾えない懸念を検査できない。
+
+#### 影響範囲
+
+- codiel 1.0.0-dev と raguel-mcp 0.0.2-dev を同じリリースで出す。
+- ツールの入力が互換でないので、それより前に作った run は pass-gate が migrate で止める。旧 projectId のケースファイルと判例は引き継がない。
+- 旧 DESIGN の原則「STOP は覆せない」は、改竄以外について上書きする。
+- codex と Jev は ADR-005 の外部 API にあたり、選んだときだけ成果物が外部へ送られる。
+- 既定の claude のパネリストは --setting-sources project で利用者の hooks・CLAUDE.md・プラグインを読まない。codex は止められず $CODEX_HOME/AGENTS.md を読む。
+- Raguel は ADR-009 が集めた .codiel/config.json から raguel と testsDir を読み、設定の置き場を増やさない。
+- E2E のレポート(<testsDir>/**/reports/**)は生成物と同じに扱い、評価から外す。
+- run が active か awaiting_human の間、codiel の guard は .codiel/config.json・RAGUEL_CONFIG のファイル・ケースファイルの置き場への書き込みを拒む。
+
+---
+
+### ADR-012: [codiel] Raguel の LLM パネルを廃止し、Jev を推奨依存として内容を判定する
+
+- 状態: 採用
+- 決定日: 2026-10-01
+- 決定者: phyllis998
+
+#### 背景
+
+codiel の run は、Raguel のゲートがパネルの完了を待つため遅い。パネルは claude -p を 2〜4 体、2〜3 回の待ちに分けて起動し、1 回の上限は 180 秒、ゲートの締切は 600 秒である。2026-09-28〜10-01 の判定 106 件のうち ASK は 28 件で、ルール層だけの ASK は 2 件、残りはパネルの所見(crosscheck 26 件など)と起動失敗・タイムアウト(22 件)だった。
+
+#### 検討した選択肢
+
+1. パネルを残す(ADR-011 のまま)
+2. パネルを 1 体に減らして残す
+3. パネルを廃止し、ルール層だけで判定する
+4. パネルを廃止し、Jev が使える環境では Jev に成果物の内容を固定の問いで判定させ、使えない環境ではルール層だけで判定する(採用)
+
+#### 採用した結論
+
+- パネル(adversarial・steelman・crosscheck・meta)、claude と codex のプロバイダー、重さ判定(tier)を撤去する。
+- 環境変数 TYPESAFE_API_KEY があれば Jev を使う。contextJudge.enabled は廃止する。
+- Jev の内容判定は、評価の種別(code・plan・design・decision)ごとの固定の問いで行う。plan は test-spec とそれ以外で問いを分ける。閾値を外れた問いは定型文の ASK にする。
+- Jev によるルール層の文脈判定補正は残す。
+- Jev が無いとき、または失敗したときは、内容判定を行わずルール層だけで判定し、ASK にも degraded にもしない。
+- 判例検索は tier に関係なく毎回行う。
+- verdict は、ルールの stop → STOP、パイプラインの例外 → ASK(degraded)、ルールか Jev の ask → ASK、それ以外 → PROCEED の順に合成する。
+- codiel は Jev を推奨依存とする。
+
+#### 理由
+
+パネルは遅さと誤検知の ASK の発生源だった。現行のモデルと Claude Code の権限機構は codiel を最初に設計した当時より精密になり、内容の水準の検査力を手放しても run の速さを取る(ユーザー判断)。Jev の内容判定は本文の問い合わせ 1 回に入り、リクエスト本数は文脈判定だけのときと変わらない。パネルを 1 体に減らしても claude -p の起動と応答の待ちは残る。ルール層の補正をやめると、決定論の引き下げ規則が拾わないソースコード中の文字列リテラルなどで、destructive-ops の誤検知が STOP のまま残る。
+
+#### 影響範囲
+
+- ADR-011 のうち、パネル・プロバイダー・重さ判定・Jev を既定で無効にする決定を置き換える。評価対象を自分で読むこと、pass-gate との照合、STOP の 4 種、ケースファイル、判例は ADR-011 のまま残す。
+- 設定の judge.*・panel.*・weight.*・contextJudge.enabled を撤去する。残っていても読み込みエラーにせず、警告を残して無視する。
+- 既知のケースファイル名から撤去したファイル名を消さない。消すと変更前のケースファイルが改竄扱いになる。
+- 鍵がある環境では、伏せ字を当てた後の成果物が TypeSafe AI へ送られる(ADR-005)。codex のパネルで OpenAI へ送られる経路は無くなる。
+- 内容判定の閾値は、過去に PROCEED になった成果物で較正してから確定する。
+- 設計書: harness-docs/design/2026-10-01-codiel-run-speedup-design.md
+
+---
+
+### ADR-013: [codiel] Codiel は ADR と GOTCHAS を直接記録せず、候補を出して Metatron に渡す
+
+- 状態: 採用
+- 決定日: 2026-10-03
+- 決定者: phyllis998
+
+#### 背景
+
+ARCHITECTURE と GOTCHAS の読み方・書き方・記録のタイミングについて、codiel と metatron の両方が指示を出しており、同じセッションに 2 つの指示が重なっていた。metatron は SessionStart で両文書と記録の CLI を注入する。codiel は、ARCHITECTURE と GOTCHAS をサブエージェントに読ませる規則と、run の失敗を GOTCHAS へ記録する手順(recording-gotchas の起動と、CLI の案内が無いときの <runsDir>/<slug>/unrecorded-gotchas.md への退避)を別に持っていた。2 つの指示が食い違ったとき、どちらに従うかが決まらなかった。ADR だけは、codiel が候補を書き、metatron が ADR へ移す分担になっていた(ADR-007)。
+
+#### 検討した選択肢
+
+1. codiel が metatron の CLI を呼び、GOTCHAS の台帳と ADR へ直接書く
+2. codiel は何も残さず、記録は利用者と metatron に任せる
+3. codiel は ADR 候補と GOTCHAS 候補を run の成果物に書き、state の knowledgeTarget(metatron | intents)で書き先を分けて渡す
+
+#### 採用した結論
+
+codiel の指示層は ARCHITECTURE と GOTCHAS を読ませず、書かせない。残すのは、ドメインマップの抽出と、review の委譲へ ARCHITECTURE のパスを渡すことだけとする。ADR 候補と GOTCHAS 候補は、knowledgeTarget を問わず try のローカルレポート(reports/adr-candidates.md・reports/gotcha-candidates.md)に書く。ADR 候補は intent-sync と、fix-loop で設計を変える修正を採ったときに書き、GOTCHAS 候補は発生した時点で書く。knowledgeTarget が intents のときは、intent-sync と finalize でローカルレポートの候補を持続層の領域ファイルへ全文で写してコミットする。候補は finalize の結果レポートと stop の完了報告に一覧する。
+
+#### 理由
+
+ARCHITECTURE と GOTCHAS の持ち主は metatron であり、codiel が別に規則を持つと、食い違ったときに従う側が決まらない。codiel が metatron の CLI を呼ぶと、metatron が無くても動く codiel の独立性(ADR-003)が崩れる。何も残さないと、run で起きた失敗が記録されずに消える。候補として渡せば、metatron の有無にかかわらず材料が残り、台帳へ移すかどうかは人と metatron が判断できる。
+
+#### 影響範囲
+
+ADR-009 の影響範囲にある未記録の GOTCHAS の退避先(unrecorded-gotchas.md)は使われなくなり、guard-write のその免除も外した。state の adrTarget は knowledgeTarget に改名し、互換を持たない。guard-write は、triage が passed で finalize が終わるまで、docs/intents/domains/** への書き込みを通す。持続層の GOTCHAS 候補を台帳へ移す走査は metatron に加える。
+
+---
+
+### ADR-014: [codiel] run のブランチを slug ごとに 1 本にし、新しい try は続きから進めて、引き継いだコードを carry-over で評価する
+
+- 状態: 採用
+- 決定日: 2026-10-05
+- 決定者: phyllis998
+
+#### 背景
+
+codiel の run は try ごとに codiel/<slug>-try-<n> のブランチを作り、新しい try はベースブランチから切っていた。STOP を受けた前の try の成果物を、新しい try のゲートを通さずに持ち込まないためである。その結果、stop した try のブランチのコミットは、次の try にもベースにも届かなかった。intent-sync で GOTCHAS 候補を領域ファイルへ写してコミットし、手元の記録に写し先の行を付けた後に STOP すると、次の try は候補を写し済みとみなして写さず、候補が消えた。
+
+#### 検討した選択肢
+
+1. try ごとのブランチを保ち、前の try のブランチから知識系のパスを git checkout で持ち込む
+2. run で 1 本のブランチにし、新しい try の最初に知識系以外をベースの状態へ戻すコミットを置く
+3. run で 1 本のブランチにし、新しい try は続きから進め、引き継いだコードを新しいゲート付きフェーズ carry-over で評価する(採用)
+
+#### 採用した結論
+
+run のブランチは codiel/<slug> の 1 本にする。新しい try は同じブランチで前の try の続きから進め、状態を戻さない。STAGES の intent の直後に code 系のゲート付きフェーズ carry-over を置く。carry-over は git merge-base <baseBranch> HEAD を起点に、前の try から引き継いだ差分全体を evaluate_code で評価する。try-1 では init が carry-over を SKIPPED で通す。carry-over だけは、妥当の STOP の後もその場で直して評価し直せる。init は try-2 以降で前の try の baseBranch を引き継ぐ。
+
+#### 理由
+
+持ち込むパスを列挙する方式は、届けたいパスが増えるたびに一覧を直す必要があり、ベースへ届かない点も残る。戻しコミットは、前の try の作業を捨てて作り直させる。1 本のブランチなら、知識系のコミットは同じ履歴に残って次の try とベースへ届く。分岐点を起点に評価すれば、STOP を受けたコードもゲートの外に残らない。直す必要のあるコードは、carry-over の裁定か後のフェーズで直せる。
+
+#### 影響範囲
+
+init の branch は codiel/<slug> になり、raguelRunId・state の置き場・コミットの件名・worktree のブランチ名の try 番号は残る。run state version 2 の phases に carry-over が加わり、改修前の state は読み込み時に SKIPPED で補う。Raguel のフェーズ表は carry-over を stage 1 に置き、後ろの stage が 1 つずつずれる。ADR-009 の理由にある「前のバージョンは前の try のブランチから読める」は、同じブランチの履歴(git log -p)から読む形に置き換わる。同じブランチに前の try の PR が開いていれば、本文を更新して使う。改修前に -try-<n> 付きのブランチへ写し、写し先を付けた候補は回収しない。設計書: harness-docs/design/2026-10-05-codiel-run-structure-followups-design.md

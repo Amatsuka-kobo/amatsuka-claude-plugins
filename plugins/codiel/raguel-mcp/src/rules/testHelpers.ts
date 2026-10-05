@@ -1,65 +1,55 @@
 /**
- * ルール単体テスト用の共通フィクスチャ生成ヘルパー。
- * プロダクションコードからは参照しない(テスト専用)。
+ * ルールの単体テスト用の共通フィクスチャを作るヘルパー。
+ * プロダクションのコードからは参照しない(テスト専用)。
  */
 
+import { defaultConfig } from "../config/defaults.js"
+import { DEFAULT_TESTS_DIR } from "../config/paths.js"
 import type {
   Artifact,
+  PriorAttempt,
   RaguelConfig,
-  RuleContext,
-  SubmissionDigest
+  RuleContext
 } from "../core/types.js"
 
 export function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
   return {
     kind: "code",
+    phase: "implement",
     runId: "run-1",
     objective: "テスト用の目的",
     content: "",
+    headingLines: [],
+    subject: { repoPath: "/tmp/raguel-repo", head: null, files: [] },
     changedPaths: [],
-    steps: [],
     context: {},
     ...overrides
   }
 }
 
+/**
+ * 内蔵の既定の設定(ルールのパラメータの既定値を含む)に overrides を浅く重ねて返す。
+ * 置き場は /tmp にする
+ */
 export function makeConfig(
   overrides: Partial<RaguelConfig> = {}
 ): RaguelConfig {
+  const base = structuredClone(defaultConfig)
   return {
-    version: 1,
-    onError: "ASK",
-    storage: {
-      casesDir: "/tmp/raguel-cases",
-      retention: { maxRuns: 200, maxDays: 90 }
-    },
-    judge: {
-      provider: "none",
-      model: "haiku",
-      timeoutMs: 60000,
-      canStop: false,
-      maxConcurrency: 4,
-      thresholds: { proceed: 80, confidence: 60, maxVariance: 30 }
-    },
-    weight: { tiers: { standard: 30, critical: 70 } },
-    panel: {
-      trivial: [],
-      standard: [],
-      critical: [],
-      perPanelist: {}
-    },
-    precedent: { seedCatalog: true, topN: 5 },
-    rules: {},
+    ...base,
+    storage: { ...base.storage, casesDir: "/tmp/raguel-cases" },
     ...overrides
   }
 }
 
 export function makeCtx(
   configOverrides: Partial<RaguelConfig> = {},
-  priorSubmissions: SubmissionDigest[] = []
+  priorAttempts: PriorAttempt[] = [],
+  testsDir: string = DEFAULT_TESTS_DIR
 ): RuleContext {
   return {
     config: makeConfig(configOverrides),
-    priorSubmissions
+    testsDir,
+    priorAttempts
   }
 }

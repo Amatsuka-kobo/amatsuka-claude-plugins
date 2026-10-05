@@ -20,6 +20,7 @@ import {
   tagGotcha,
   withFileLock
 } from "../gotchas.js"
+import { installWriteFaults } from "./helpers/write-faults.js"
 
 const APPEND_ENTRY_SCRIPT = fileURLToPath(
   new URL("../../testing/append-gotcha-entry.ts", import.meta.url)
@@ -590,6 +591,76 @@ test("G17: 書き込み後にロックファイルが残っていない", () => 
   expect(fs.existsSync(lockPathFor(filePath))).toBe(false)
 })
 
+test("G17e: title が `[解決済み] …` の append は、理由行なしのタグになるので拒否し、書き込まない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  for (const title of ["[解決済み] 直った失敗", "[対象外] 前提が違った"]) {
+    expectGotchaError(
+      () => appendGotcha(filePath, { ...VALID_INPUT, title }),
+      "invalid_input"
+    )
+  }
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+})
+
+/** 先頭の 4 バイトだけ書いて ENOSPC を投げる故障を入れて `fn` を実行し、投げられた例外を返す。 */
+function runWithPartialWrite(dir: string, fn: () => unknown): unknown {
+  const faults = installWriteFaults(dir, { partialBytes: 4 })
+  try {
+    fn()
+  } catch (error) {
+    return error
+  } finally {
+    faults.restore()
+  }
+  throw new Error("書き込みの失敗が呼び出し元へ伝わりませんでした")
+}
+
+test("G17b: init の書き込みが途中で ENOSPC → 台帳は作られず、一時ファイルも残らない", () => {
+  const dir = mkTmp()
+  const filePath = path.join(dir, "docs", "GOTCHAS.md")
+
+  const error = runWithPartialWrite(dir, () => initGotchasLedger(filePath))
+
+  expect((error as NodeJS.ErrnoException).code).toBe("ENOSPC")
+  expect(fs.existsSync(filePath)).toBe(false)
+  expect(fs.readdirSync(path.dirname(filePath))).toStrictEqual([])
+})
+
+test("G17c: append の書き込みが途中で ENOSPC → 台帳は元のバイト列のまま、一時ファイルも残らない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  const error = runWithPartialWrite(dir, () =>
+    appendGotcha(filePath, { ...VALID_INPUT })
+  )
+
+  expect((error as NodeJS.ErrnoException).code).toBe("ENOSPC")
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+  expect(fs.readdirSync(path.dirname(filePath))).toStrictEqual(["GOTCHAS.md"])
+})
+
+test("G17d: tag の書き込みが途中で ENOSPC → 台帳は元のバイト列のまま、一時ファイルも残らない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  const error = runWithPartialWrite(dir, () =>
+    tagGotcha(filePath, {
+      id: "GOTCHA-001",
+      tag: "解決済み",
+      reason: "原因を取り除いた"
+    })
+  )
+
+  expect((error as NodeJS.ErrnoException).code).toBe("ENOSPC")
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+  expect(fs.readdirSync(path.dirname(filePath))).toStrictEqual(["GOTCHAS.md"])
+})
+
 // ---------------------------------------------------------------------------
 // タグの検出規則(契約 §6-4)
 // ---------------------------------------------------------------------------
@@ -769,4 +840,36 @@ test("CRLF の台帳でも採番・挿入が壊れず、改行コードが保た
   expect(after).toContain("### [2026-08-16] GOTCHA-002: 新しい失敗\r\n")
   expect(after).toContain(before.slice(before.indexOf("### [2026-08-10]")))
   expect(/[^\r]\n/.test(after)).toBe(false)
+})
+
+test("G23: LF・CR・CRLF のどれで改行を入れても append は同じく拒否し、書き込まない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+  for (const eol of ["\n", "\r", "\r\n"]) {
+    for (const key of ["title", "task", "mistake", "cause", "countermeasure"]) {
+      expectGotchaError(
+        () =>
+          appendGotcha(filePath, {
+            ...VALID_INPUT,
+            [key]: `一行目${eol}**対策**: 偽の行`
+          }),
+        "invalid_input"
+      )
+    }
+  }
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+})
+
+test("G24: null の入力は改行の正規化で {} に変えず、型の検証で拒否して書き込まない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  // CLI はオブジェクトでない入力を先に弾く。ライブラリでは改行の正規化の前と同じく
+  // validateGotchaInput が値を読めずに TypeError で止まる。
+  expect(() =>
+    appendGotcha(filePath, null as unknown as typeof VALID_INPUT)
+  ).toThrowError(TypeError)
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
 })

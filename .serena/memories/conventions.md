@@ -57,7 +57,7 @@ both; all 11 pairs were in sync as of 2026-08-16. A plugin change must also be r
   「明示的な依頼があったときのみ使い、自律的には発動しない」.
 - Bodies are written to the `prompt-smith:prompt-smith` standard (see `mem:agent_policy/core`):
   discipline only — rationale, background and provenance belong in `docs/`.
-- Written in superpowers' style (checklists, flowcharts, Red-Flags tables, HARD-GATE sections), but
+- Written in superpowers' style (checklists, flowcharts, Red-Flags tables, HARD-GATE sections; codiel dropped the last two on 2026-10-02), but
   no plugin here has a runtime dependency on the superpowers plugin — each is self-contained.
 - Common skill invariants: discuss in the user's language; never generate/save without explicit
   approval; on STOP always state reason + user's next action; report raw errors rather than

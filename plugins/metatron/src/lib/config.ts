@@ -5,8 +5,7 @@
 // §3(ルート解決とパス解決の規則)。このファイルはその契約の**正本の実装**である。
 //
 // 同じ規則の写しを codiel(`plugins/codiel/src/hooks/lib.ts` の findDocRoot /
-// resolveDocPaths)と sandalphon(`plugins/sandalphon/src/check-intent-env.ts`)が
-// 独立に持つ。ここを変えたら両方を追随させ、契約 §13 の 3 者比較テストを通すこと。
+// resolveDocPaths)が独立に持つ。ここを変えたら追随させ、契約 §14 の 2 者比較テストを通すこと。
 //
 // この層は第 2 層(機構自身の動作)であり、フェイルオープンする。
 // どんな異常環境でも例外を投げず、既定値へ落として warnings に理由を積む。

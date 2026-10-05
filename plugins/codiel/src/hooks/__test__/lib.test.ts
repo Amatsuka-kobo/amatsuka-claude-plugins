@@ -3,12 +3,13 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, expect, test } from "vitest"
-// 契約 §13 の実装間一致検証(R4)のためだけの相対 import。
+// 契約 §14 の実装間一致検証(R4)のためだけの相対 import。
 // codiel の実行時に metatron を参照することはない(テストコード限定)。
 import { extractDomains } from "../../../../metatron/src/lib/architecture.js"
 import { loadConfig } from "../../../../metatron/src/lib/config.js"
 import {
   findDocRoot,
+  findMainRoot,
   findProjectRoot,
   globToRegExp,
   readDomains,
@@ -66,7 +67,7 @@ function insideGitRepo(dir: string): boolean {
   )
 }
 
-// 契約 §13: 同一構成に対して metatron の config.ts と codiel の resolveDocPaths が
+// 契約 §14: 同一構成に対して metatron の config.ts と codiel の resolveDocPaths が
 // docRoot と解決パスの**両方**で一致することを検証する。
 function expectSameResolution(startDir: string, label: string): void {
   const mine = resolveDocPaths(startDir)
@@ -76,7 +77,7 @@ function expectSameResolution(startDir: string, label: string): void {
     theirs.architecturePath
   )
   expect(mine.gotchas, `${label}: gotchas`).toBe(theirs.gotchasPath)
-  // 既定値へ落とした理由も揃える。文言の完全一致は求めず(3 実装の同期コストが上がる)、
+  // 既定値へ落とした理由も揃える。文言の完全一致は求めず(2 実装の同期コストが上がる)、
   // 警告が出るか出ないかと件数を見る(契約 §3 規則 3)。
   expect(mine.warnings.length > 0, `${label}: 警告の有無`).toBe(
     theirs.warnings.length > 0
@@ -203,7 +204,7 @@ test("R8: 最小 ARCHITECTURE(ドメインマップだけ)を readDomains が読
 //
 // 正規表現でブロックを切り出す実装は CRLF 改行の文書を読めず、チルダのフェンスにも
 // 対応できず、「開始と同じ文字を開始と同数以上」という終了条件も表現できない。
-// 同じ ARCHITECTURE を metatron / sandalphon が読めて codiel だけ読めない状態を防ぐ。
+// 同じ ARCHITECTURE を metatron が読めて codiel だけ読めない状態を防ぐ。
 // ---------------------------------------------------------------------------
 
 function writeArchitecture(root: string, lines: string[], eol = "\n"): void {
@@ -331,8 +332,8 @@ test("R9: 最初のブロックがチルダでもそれを採る", () => {
 // R11: 契約 §1 の検証 4 項目を読み取り時にも適用する
 //
 // JSON として parse できただけの値を「読めた」として返すと、metatron
-// (`extractDomains`)と sandalphon(`readDomains`)が「読めない」とする同じ入力を
-// codiel だけが受け入れ、3 実装の契約が割れる。各ケースで metatron の判定とも
+// (`extractDomains`)が「読めない」とする同じ入力を
+// codiel だけが受け入れ、2 実装の契約が割れる。各ケースで metatron の判定とも
 // 突き合わせ、割れていないことを機械的に確かめる。
 // ---------------------------------------------------------------------------
 
@@ -674,7 +675,7 @@ test("DomainsRead.unreadable の追加前後で R11 の domains と warnings は
 // ---------------------------------------------------------------------------
 // R10: 契約 §3 規則 3 — 拒否した理由を呼び出し元へ返す(黙って既定値に落とさない)
 //
-// metatron は ResolvedConfig.warnings、sandalphon は出力 JSON の configWarnings で
+// metatron は ResolvedConfig.warnings で
 // 同じ理由を返す。codiel だけが理由を落とすと、利用者は設定が効いていないことに
 // 気づけない。
 // ---------------------------------------------------------------------------
@@ -909,4 +910,86 @@ test("findProjectRoot: .codiel が見つからなければ startDir をそのま
   const root = mkTmp("lib-noroot-")
   const sub = mkSub(root, "a", "b")
   expect(findProjectRoot(sub)).toBe(sub)
+})
+
+test("findMainRoot: codiel の worktree の外では findProjectRoot と同じ値を返し、worktree の形のパスでは git 管理外でもメインのルートを返す", () => {
+  const root = mkTmp("lib-main-")
+  fs.mkdirSync(path.join(root, ".codiel"))
+  const src = mkSub(root, "src")
+  expect(findMainRoot(src)).toBe(findProjectRoot(src))
+  expect(findMainRoot(root)).toBe(root)
+  // checkout に .codiel/ があると findProjectRoot は worktree で止まるが、パスの形でメインへ届く
+  const wt = mkSub(root, ".codiel", "worktrees", "demo", "step-1")
+  fs.mkdirSync(path.join(wt, ".codiel"))
+  expect(findProjectRoot(wt)).toBe(wt)
+  expect(findMainRoot(wt)).toBe(root)
+  expect(findMainRoot(mkSub(wt, "src", "a"))).toBe(root)
+  // 最初に現れる .codiel/worktrees/ の前を返す。区切りは / と \ の両方を受ける
+  expect(
+    findMainRoot(`${root}/.codiel/worktrees/demo/step-1/.codiel/worktrees/x/y`)
+  ).toBe(root)
+  expect(findMainRoot("C:\\work\\app\\.codiel\\worktrees\\demo\\step-1")).toBe(
+    "C:\\work\\app"
+  )
+  expect(findMainRoot("/.codiel/worktrees/demo/step-1")).toBe("/")
+})
+
+function git(cwd: string, args: string[]): void {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=codiel-test",
+      "-c",
+      "user.email=codiel-test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      ...args
+    ],
+    { cwd, stdio: "ignore" }
+  )
+}
+
+// primary の checkout と、`git worktree add` で作った linked worktree L を持つ一時リポジトリ。
+// L の中に codiel の worktree を作り、primary の checkout ではなく L を返すことを確かめる。
+test("findMainRoot: git の linked worktree に置いた .codiel/worktrees/<slug>/<名前>/ の中から、その linked worktree のルートを返す", () => {
+  const primary = mkTmp("lib-main-primary-")
+  git(primary, ["init", "-q"])
+  fs.writeFileSync(path.join(primary, "README.md"), "")
+  git(primary, ["add", "-A"])
+  git(primary, ["commit", "-q", "-m", "init"])
+  // primary にも .codiel/ を置き、git から primary を引く実装なら取り違えるようにする
+  fs.mkdirSync(path.join(primary, ".codiel"))
+  const linked = path.join(mkTmp("lib-main-linked-"), "L")
+  git(primary, ["worktree", "add", "-q", "-b", "linked", linked])
+  fs.mkdirSync(path.join(linked, ".codiel"))
+  const wt = path.join(linked, ".codiel", "worktrees", "demo", "step-1")
+  git(linked, ["worktree", "add", "-q", "-b", "codiel/demo-try-1-step-1", wt])
+  // codiel の worktree の checkout には .codiel/ が無い(findProjectRoot も L を返す)構成と、
+  // .codiel/ の一部がある構成の両方で L を返す
+  expect(findMainRoot(wt)).toBe(linked)
+  fs.mkdirSync(path.join(wt, ".codiel"))
+  expect(findMainRoot(wt)).toBe(linked)
+  expect(findMainRoot(mkSub(wt, "src"))).toBe(linked)
+  // codiel の worktree の外では findProjectRoot と同じ値
+  const linkedSrc = mkSub(linked, "src")
+  expect(findMainRoot(linkedSrc)).toBe(findProjectRoot(linkedSrc))
+  expect(findMainRoot(linkedSrc)).toBe(linked)
+})
+
+test("findMainRoot: .codiel を git のルートの下に置いた構成(repo/app/.codiel)では repo/app を返す", () => {
+  const repo = mkTmp("lib-main-nested-")
+  git(repo, ["init", "-q"])
+  const app = mkSub(repo, "app")
+  fs.mkdirSync(path.join(app, ".codiel"))
+  fs.writeFileSync(path.join(app, "index.ts"), "")
+  git(repo, ["add", "-A"])
+  git(repo, ["commit", "-q", "-m", "init"])
+  const wt = path.join(app, ".codiel", "worktrees", "demo", "step-1")
+  git(repo, ["worktree", "add", "-q", "-b", "codiel/demo-try-1-step-1", wt])
+  expect(findMainRoot(wt)).toBe(app)
+  expect(findMainRoot(path.join(wt, "app"))).toBe(app)
+  expect(findMainRoot(mkSub(app, "src"))).toBe(app)
 })

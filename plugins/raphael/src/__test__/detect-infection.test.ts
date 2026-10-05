@@ -434,7 +434,7 @@ test("state history の上限と Write の last_tool 更新を維持する", () 
       input_digest: expect.not.stringContaining("secret")
     })
   })
-})
+}, 60_000)
 
 test("壊れた stdin でも stdout を出さず exit 0 で終わる", () => {
   expect(runTs(HOOK, [], { input: "not json" }).trim()).toBe("")

@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import type { RunState } from "../codiel-state.js"
 
 export interface HookInput {
   session_id?: string
@@ -39,6 +40,44 @@ export function pass(): never {
   process.exit(0)
 }
 
+// Issue と PR の作成を許すフェーズの検査。guard-bash(gh)と guard-github-mcp(GitHub MCP)が
+// 同じ規則で判定するために共有する。マーカーの検査は共有せず、各 hook に置く。
+// 許すときは null、拒むときは理由を返す。
+export function ghPostPhaseProblem(
+  kind: "pr" | "issue",
+  state: Pick<RunState, "phase" | "phases">
+): string | null {
+  const phase = state.phase
+  if (kind === "issue")
+    return phase === "triage"
+      ? null
+      : `Issue の作成は triage フェーズでのみ実行できます(現在: ${phase})`
+  const testLoopPassed = state.phases["test-loop"]?.status === "passed"
+  return phase === "pr" && testLoopPassed
+    ? null
+    : `PR 作成は pr フェーズかつ test-loop 合格後のみ可能です(現在: ${phase}, test-loop passed: ${testLoopPassed})`
+}
+
+// base と p を結合したパスを、OS が開くときと同じ順で実体へ辿る。`..` を字句で先に畳まず、
+// セグメントを前から読み、存在するところまでは realpath で実体にしてから次のセグメントを付ける。
+// `alias/../state.json`(alias は別の場所への symlink)を、alias の実体の親の state.json に解く。
+// 存在しないセグメントは字句で付け、後ろのセグメントでも(`..` で存在する場所へ戻った後を含め)
+// realpath を試し直して最後まで辿る。metatron の同種の関数とは独立に持つ。
+export function resolvePhysicalPath(base: string, p: string): string {
+  const joined = path.isAbsolute(p) ? p : `${base}${path.sep}${p}`
+  let cur = path.parse(path.resolve(base)).root
+  for (const seg of joined.split(/[/\\]+/)) {
+    if (seg === "" || seg === ".") continue
+    const next = seg === ".." ? path.dirname(cur) : path.join(cur, seg)
+    try {
+      cur = fs.realpathSync(next)
+    } catch {
+      cur = next
+    }
+  }
+  return cur
+}
+
 export function globToRegExp(glob: string): RegExp {
   let re = ""
   for (let i = 0; i < glob.length; i++) {
@@ -59,8 +98,8 @@ export function globToRegExp(glob: string): RegExp {
 // 文書パスの解決(ファイル契約 §2・§3 の独立実装)
 //
 // 規則の正本は `harness-docs/design/2026-08-16-file-contract-freeze.md` の
-// §2(設定スキーマ)と §3(ルート解決とパス解決の規則)。metatron と sandalphon が
-// 同じ規則の写しを独立に持つ。3 プラグインは互いのインストールパスを解決できないため、
+// §2(設定スキーマ)と §3(ルート解決とパス解決の規則)。metatron が
+// 同じ規則の写しを独立に持つ。2 プラグインは互いのインストールパスを解決できないため、
 // ソースを共有せず同じ規則を独立に実装する。ここを変えたら契約 §14 の実装間一致テストを通す。
 //
 // codiel は基準の異なる 2 つのルート概念を持つ。関数名で区別し、混同しない。
@@ -74,6 +113,7 @@ export const DOC_CONFIG_FILENAME = "metatron.config.json"
 export const DOC_CONFIG_SUPPORTED_VERSION = 1
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
 export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
+export const DEFAULT_RULES_DIR = ".claude/rules/metatron"
 
 export interface DocPaths {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -85,8 +125,8 @@ export interface DocPaths {
   /**
    * 既定値へ落とした理由・設定を読めなかった理由(契約 §2・§3 規則 3)。
    * 空配列が正常。「設定ファイルが無い」は正常な状態なので警告にしない。
-   * metatron は ResolvedConfig.warnings、sandalphon は出力 JSON の configWarnings で
-   * 同じ理由を返す。3 実装で「警告が出るか出ないか」と件数を揃える。
+   * metatron は ResolvedConfig.warnings で同じ理由を返す。
+   * 2 実装で「警告が出るか出ないか」と件数を揃える。
    */
   warnings: string[]
 }
@@ -168,6 +208,19 @@ export function findDocRoot(startDir?: string): string {
   return start
 }
 
+/**
+ * intent 文書(`docs/intents/`)の基準になる repoRoot を返す(設計書 §6.3.1。設定を持たない)。
+ *
+ * `git rev-parse --show-toplevel` を使い、git が無い・git 管理外なら開始ディレクトリを返す
+ * (findDocRoot の、設定ファイルが無いときの解決と同じ扱い)。git が実体パスを返すので、
+ * 開始ディレクトリも実体パスにしてから使う。文書ルート(findDocRoot)と codiel 資産のルート
+ * (findProjectRoot)とは基準が異なる。
+ */
+export function findRepoRoot(startDir: string): string {
+  const start = realpathOrSelf(path.resolve(startDir))
+  return gitToplevel(start) ?? start
+}
+
 // Windows で書かれた設定を POSIX 上でも同じに解釈するため、区切りを "/" に寄せてから判定する。
 function normalizeSeparators(value: string): string {
   return value.replace(/\\/g, "/")
@@ -238,17 +291,13 @@ function fallbackDocRoot(startDir?: string): string {
   }
 }
 
-/**
- * 契約 §2・§3: 文書パスの解決。
- *
- * 内部で findDocRoot を呼び、`metatron.config.json` の `paths` を解釈して
- * ARCHITECTURE / GOTCHAS の絶対パスを返す。設定が無ければ既定値。
- * 解決結果はキャッシュしない(契約 §3 規則 4)。
- * 例外を投げない。読めない設定・壊れた設定はすべて既定値へ落とす。
- * 既定値へ落としたときは**理由を warnings で返す**(契約 §3 規則 3)。
- * 「設定ファイルが無い」は正常な状態なので警告にしない。
- */
-export function resolveDocPaths(startDir?: string): DocPaths {
+// 設定の読み込みと検証(トップレベルの型・未知の version・paths の型)。
+// resolveDocPaths と resolveRulesDir が共有する。例外を投げない。
+function loadPathsConfig(startDir?: string): {
+  docRoot: string
+  paths: Record<string, unknown> | undefined
+  warnings: string[]
+} {
   const warnings: string[] = []
 
   let docRoot: string
@@ -303,7 +352,21 @@ export function resolveDocPaths(startDir?: string): DocPaths {
       "paths がオブジェクトでないため、文書パスに既定値を使用します。"
     )
   }
+  return { docRoot, paths, warnings }
+}
 
+/**
+ * 契約 §2・§3: 文書パスの解決。
+ *
+ * 内部で findDocRoot を呼び、`metatron.config.json` の `paths` を解釈して
+ * ARCHITECTURE / GOTCHAS の絶対パスを返す。設定が無ければ既定値。
+ * 解決結果はキャッシュしない(契約 §3 規則 4)。
+ * 例外を投げない。読めない設定・壊れた設定はすべて既定値へ落とす。
+ * 既定値へ落としたときは**理由を warnings で返す**(契約 §3 規則 3)。
+ * 「設定ファイルが無い」は正常な状態なので警告にしない。
+ */
+export function resolveDocPaths(startDir?: string): DocPaths {
+  const { docRoot, paths, warnings } = loadPathsConfig(startDir)
   return {
     docRoot,
     architecture: resolveConfiguredPath(
@@ -324,20 +387,48 @@ export function resolveDocPaths(startDir?: string): DocPaths {
   }
 }
 
+export interface RulesDir {
+  /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
+  docRoot: string
+  /** metatron の rules ディレクトリの絶対パス。 */
+  rulesDir: string
+  /** resolveDocPaths と同じ規則で積む既定値へ落とした理由。 */
+  warnings: string[]
+}
+
+/**
+ * metatron の rules ディレクトリ(`paths.rulesDir`。既定は `.claude/rules/metatron`)の解決。
+ * 設定の読み込みと検証は resolveDocPaths と同じ経路を通る。
+ * metatron の `src/lib/config.ts` と同じく、未知の version・壊れた設定では既定の場所を返す。
+ */
+export function resolveRulesDir(startDir?: string): RulesDir {
+  const { docRoot, paths, warnings } = loadPathsConfig(startDir)
+  return {
+    docRoot,
+    rulesDir: resolveConfiguredPath(
+      docRoot,
+      paths?.rulesDir,
+      DEFAULT_RULES_DIR,
+      "rulesDir",
+      warnings
+    ),
+    warnings
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ドメインマップの抽出(契約 §1・§4-2 の独立実装)
 //
 // 契約 §1 の**検証 4 項目**(有効な JSON / トップレベルがオブジェクトで配列でない /
 // 各値が 1 要素以上の文字列配列 / キーが 1 個以上)を読み取り時にも適用する。
 // JSON として parse できただけの値を「読めた」として返してはならない。metatron の
-// `validateDomainsValue` と sandalphon の `readDomains` が同じ判定を持っており、
-// ここだけ緩いと同じ ARCHITECTURE に対する 3 実装の答えが割れる。
+// `validateDomainsValue` が同じ判定を持っており、ここだけ緩いと同じ ARCHITECTURE に
+// 対する 2 実装の答えが割れる。
 //
 // 終了フェンスの判定は契約 §4-2 の規則 2 と同一とし、開始行・終了行の認識も
 // §4-2 の正規化(インデント許容・改行コード・末尾空白の扱い)に従う。
-// **独自のフェンス判定を書かない**(契約 §1)。metatron の `src/lib/architecture.ts` と
-// sandalphon の `src/check-intent-env.ts` が同じ規則の写しを独立に持つ。
-// ここを変えたら契約 §13 の 3 者比較テストを通す。
+// **独自のフェンス判定を書かない**(契約 §1)。metatron の `src/lib/architecture.ts` が
+// 同じ規則の写しを独立に持つ。ここを変えたら契約 §14 の 2 者比較テストを通す。
 //
 // 正規表現でブロックを切り出す実装に戻してはならない。CRLF 改行の文書を読めず
 // (開始行が `\r` で終わるため一致しない)、チルダのフェンスにも対応できず、
@@ -445,7 +536,7 @@ function findDomainsBlocks(text: string): DomainsBlockLookup {
 
 /**
  * 契約 §1 の検証 4 項目のうち 2〜4(値の形)。1(有効な JSON)は呼び出し元が担う。
- * metatron の `validateDomainsValue`、sandalphon の `readDomains` と**同じ判定**にする。
+ * metatron の `validateDomainsValue` と**同じ判定**にする。
  * ここを緩めると、同じ ARCHITECTURE を codiel だけが「読めた」と扱う契約の割れになる。
  */
 function validateDomainsValue(value: unknown): Record<string, string[]> | null {
@@ -544,4 +635,25 @@ export function findProjectRoot(startDir: string): string {
     if (parent === dir) return startDir
     dir = parent
   }
+}
+
+// codiel の worktree の置き場(`.codiel/worktrees/`。設計書 §6.6.3)。区切りは `/` と `\` の両方を受ける。
+const CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/
+
+/**
+ * hook が run を探すルート(メインの作業ツリー)を返す(設計書 §6.8 の (a))。
+ *
+ * cwd のパスが `/.codiel/worktrees/` を含むなら、最初に現れるその位置より前を返す。
+ * worktree の checkout に `.codiel/` の一部がコミットされていると、
+ * findProjectRoot は worktree のルートで止まり、メインの run を見つけられないためである。
+ * 含まなければ findProjectRoot と同じ値を返す。
+ * git は呼ばない。run を始めた作業ツリーが git の linked worktree だと、
+ * `git worktree list --porcelain` の先頭のエントリは primary の checkout を指すためである。
+ * 返すのはパスの形から切り出した論理パスで、実体化しない。
+ */
+export function findMainRoot(startDir: string): string {
+  const m = CODIEL_WORKTREES_RE.exec(startDir)
+  // ルート直下(`/.codiel/worktrees/…`)では空文字列にせず、区切りの 1 文字を返す
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1)
+  return findProjectRoot(startDir)
 }

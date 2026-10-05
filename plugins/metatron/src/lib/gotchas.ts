@@ -15,6 +15,8 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { normalizeInputNewlines } from "./architecture.js"
+import { writeFileAtomic } from "./atomic-write.js"
 
 /** タグの値域(契約 §6-4)。この 2 リテラル以外はタグとして認識も付与もしない。 */
 export const GOTCHA_TAGS = ["解決済み", "対象外"] as const
@@ -655,10 +657,27 @@ export function buildAppendedText(
 
   const lines = [...doc.lines]
   lines.splice(insertAt, 0, ...applyEol(block, doc.crlf))
+  const text = lines.join("\n")
+
+  // 追記した全文を読み直す。title が `[解決済み] …` だと、理由行の無いタグとして読まれる。
+  const id = formatGotchaId(num)
+  const added = parseGotchas(text).entries.find((e) => e.id === id)
+  if (added === undefined || added.tag !== null) {
+    throw new GotchaError(
+      "invalid_input",
+      `title「${input.title.trim()}」は見出しのタグ(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})として読まれます。タグは tag-gotcha で付けてください。`
+    )
+  }
+  if (added.title !== input.title.trim()) {
+    throw new GotchaError(
+      "invalid_input",
+      `追記した見出しのタイトルが入力と一致しません(読み直し: ${JSON.stringify(added.title)})。`
+    )
+  }
 
   return {
-    text: lines.join("\n"),
-    id: formatGotchaId(num),
+    text,
+    id,
     number: num,
     created,
     sectionCreated,
@@ -910,8 +929,7 @@ export function initGotchasLedger(gotchasPath: string): InitGotchasResult {
       )
     }
     const text = renderGotchasTemplate()
-    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true })
-    fs.writeFileSync(gotchasPath, text)
+    writeFileAtomic(gotchasPath, text)
     return {
       path: gotchasPath,
       created: true,
@@ -922,9 +940,11 @@ export function initGotchasLedger(gotchasPath: string): InitGotchasResult {
 
 export function appendGotcha(
   gotchasPath: string,
-  input: GotchaInput,
+  rawInput: GotchaInput,
   options: WriteOptions = {}
 ): AppendGotchaResult {
+  // 改行を LF に揃えた写しだけを検証と組み立てに使う。
+  const input = normalizeInputNewlines(rawInput)
   const validation = validateGotchaInput(input)
   if (validation.errors.length > 0) {
     throw new GotchaError(
@@ -939,8 +959,7 @@ export function appendGotcha(
   return withFileLock(gotchasPath, () => {
     const existing = readTextIfExists(gotchasPath)
     const built = buildAppendedText(existing, input, date)
-    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true })
-    fs.writeFileSync(gotchasPath, built.text)
+    writeFileAtomic(gotchasPath, built.text)
     return {
       id: built.id,
       number: built.number,
@@ -1028,7 +1047,7 @@ export function tagGotcha(
       throw new GotchaError("not_found", `${gotchasPath} が存在しません。`)
     }
     const built = buildTaggedText(existing, num, tag, reason, date)
-    fs.writeFileSync(gotchasPath, built.text)
+    writeFileAtomic(gotchasPath, built.text)
     return {
       id: built.id,
       path: gotchasPath,

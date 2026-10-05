@@ -1,4 +1,4 @@
-`plugins/metatron` (0.3.7-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.4.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -9,7 +9,7 @@ SessionStart hook injects its full text rather than a summary.
 ## C1 構成 — 常駐プロセスなし
 
 共有ライブラリ + CLI + deny hook + 注入 hook の 4 点だけで構成する。**MCP サーバーではない。**
-CLI も 2 つの hook もすべて短命プロセスなので「サーバーが起動していない」故障が原理的に起きない。
+CLI も hook のスクリプト(2 本)もすべて短命プロセスなので「サーバーが起動していない」故障が原理的に起きない。
 MCP 化は設計段階で撤回済み(`docs/rationale.md`)。**MCP サーバー化を再提案しない。**
 
 ## 真の強制点は deny hook だけ
@@ -29,14 +29,19 @@ CLI が無価値という意味ではない。deny hook は「直接書かせな
 追記のみの規律・差分提示の強制は CLI が担う。位置づけは「回避を試みる AI を止める」ではなく
 「知らずに直接編集する AI を正しい窓口へ導く」。
 
-## 2 つの hook(`hooks/hooks.json`)
+## 3 イベントに掛ける 2 本のスクリプト(`hooks/hooks.json`)
 
 | hook | スクリプト | 挙動 |
 | --- | --- | --- |
-| SessionStart | `scripts/inject-context.mjs` | ARCHITECTURE 本体、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内を注入。予算超過時は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、**CLI 案内だけは削らない**。フェイルオープン |
+| SessionStart | `scripts/inject-context.mjs` | ARCHITECTURE 本体、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意を注入。予算超過時は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、**CLI 案内・記録のタイミング・委譲の注意は削らない**。フェイルオープン |
+| SubagentStart | `scripts/inject-context.mjs`(SessionStart と同じ) | 入力の `hook_event_name` が `SubagentStart` のときサブエージェント向けを出す。ARCHITECTURE・ADR 一覧・GOTCHAS を注入し、CLI 案内と記録のタイミングは載せない。載せきれない部分は文書パスを Read する案内にする。文書が無ければ何も出さない。縮退と `injection` の設定は SessionStart と共通。フェイルオープン |
 | PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | 2 文書への直接編集を拒否し、対象に応じた CLI 呼び出しを絶対パス付きで案内。フェイルオープン |
 
-**注入は文書が 1 つも無くても CLI 案内を出す**(`buildInitGuide`。契約 §12 の限定)。
+**記録のタイミングは hook でなく SessionStart の注入文に置く**(作業の完了を hook で検出できないため。`recordingLines`。不採用案は `docs/rationale.md`)。
+**委譲の依頼文には ARCHITECTURE と GOTCHAS の原文も要約も写さない**(SubagentStart が注入するので。`delegationLines`)。
+どちらも文書があるときだけ載せ、`buildInitGuide` には入れない。
+
+**SessionStart の注入は文書が 1 つも無くても CLI 案内を出す**(`buildInitGuide`。契約 §12 の限定)。
 `/metatron:init` はまさに文書が無い状態で使うため、案内を落とすと AI は CLI の絶対パスを
 知る手段を持たない。**案内まで落とすのは 2 つだけ** — `injection.enabled: false` と、
 `loadConfig` 自体が例外で失敗したとき(壊れた機構が誤った CLI パスを広告しないため)。
@@ -68,11 +73,38 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
   test is `src/cli/__test__/cli.test.ts`; `guard-docs` and `inject-context` tests remain in
   `src/__test__/` because their targets are directly under `src/`.
 
-## CLI 12 サブコマンド
+## CLI サブコマンド
 
-読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` /
-`scan` / `diff-architecture`。段階: `stage-architecture --input` / `stage-adr --input`。
-書: `commit-architecture --staging-id` / `append-gotcha --input` / `tag-gotcha`。
+読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` / `get rules` /
+`scan` / `diff-architecture` / `scan-adr-candidates` / `scan-gotcha-candidates`。段階: `stage-architecture --input` / `stage-adr --input` /
+`stage-rules --input`。書: `commit-architecture --staging-id` / `commit-rules --staging-id` / `init-gotchas` /
+`append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate` / `remove-gotcha-candidate`。
+
+`[GOTCHAS 候補]`(`src/lib/gotcha-candidates.ts`、CLI は `src/cli/gotcha-candidate.ts`): `scan-gotcha-candidates` が候補ごとに
+`fields`・`problems`・`hash`・`fileHash`・`ledgerMatches`(台帳で `title` が一致するエントリの ID)を返す。
+`remove-gotcha-candidate --file --hash --file-hash` は台帳へ移した候補も移さないと決めた候補も、持続層からエントリごと消す
+(参照形に縮めない。失敗の全文は台帳の 1 か所に残す)。親が `## GOTCHAS 候補` で空になれば見出しも消す。
+拒否・失敗は終了コード 3 と `removePending`。候補 ID が無いので二重移行は `ledgerMatches` で人が判断する。
+取り込み手順は `recording-gotchas` スキルにある。
+
+### `[ADR 候補]` の走査と縮約(0.4.0-dev、2026-09-28)
+
+codiel の持続層 `<repoRoot>/docs/intents/domains/*.md` にある `[ADR 候補: <候補 ID>]` の印付きエントリを ADR へ移し、
+持続層を参照形に縮める。書式の正本は codiel の `references/intent-format.md` の「## 持続層」で、metatron は
+`references/architecture-format.md` の「ADR 候補の取り込み」に読み取りと縮約に要る最小限だけを写す(共有ファイル契約。
+採番の規則は写さない)。実装は `src/lib/adr-candidates.ts`、CLI は `src/cli/adr-candidate.ts`。
+
+- `scan-adr-candidates`(読み取り、常に exit 0): 候補ごとに file・candidateId・title・5 つの小見出しの本文・
+  エントリの範囲のバイト列の sha256 `hash`・`adoptedAs` を返す。`adoptedAs` は、ADR の本文に
+  「ADR 候補 ID: <候補 ID>」と行全体が一致する行を持つ ADR の番号(無ければ null)。タイトルの一致では判定しない。コードフェンスの中の行は数えない(2026-10-05、B5-02)。縮約は書き込みの直前に領域ファイルを読み直し、変わっていれば `file_changed` で拒否する(B5-01)。
+- 2026-10-05: 正本への書き込みは `src/lib/atomic-write.ts` の一時ファイルと rename にそろえた(M1-01)。stage と append は改行を LF にそろえてから、組み上げた全文を既存の parser で読み直して保存する(M1-02・M1-03・M1-06)。guard-docs は `..` を畳む前に存在する最深の祖先を実体化し、字句と実体の両方で照合する(M1-04)。
+  候補 ID は完全一致のトークンとして比べる(`frontend-1` と `frontend-10` を混同しない)。
+- `shrink-adr-candidate --file --candidate-id --adr --hash`(書き込み): 候補 ID で特定したエントリの範囲だけを
+  参照形に置き換え、範囲の外はバイト列のまま残す。`--hash` は走査の値で、ずれていれば書かない。
+  書き込み先は `docs/intents/domains/` 直下の `.md` だけ。成功と「既に参照形」は 0、拒否と失敗は終了コード 3 と
+  `shrinkPending`。`stage-adr` と `commit-architecture` は持続層に触れない(ADR の確定と縮約は別コマンド)。
+- `/metatron:init` と `/metatron:update`(`capturing-architecture` / `updating-architecture`)が候補を提示し、
+  承認した候補を `stage-adr` → `commit-architecture` で ADR にしてから縮約する。
 
 - 出力は**常に JSON を stdout**。読み取り系は「読めなかった」も事実として返すため**常に exit 0**、
   書き込み系は拒否・失敗で非 0 かつ理由は JSON の `error`。
@@ -129,5 +161,5 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 - **codiel は metatron 無しで動く。** `/codiel:init` は ARCHITECTURE を生成・修復せず、保護パスだけを確認する。
   ARCHITECTURE の作成と更新は metatron が担う。codiel は ARCHITECTURE にあるドメインマップを
   実行時に読み取るが、そこへ書き込まない。
-- sandalphon は ASIS 探索の材料として 2 文書を直読するだけ。
+- codiel の `capturing-intent` は ASIS 探索の材料として 2 文書を読むだけで、パスは `check-intent-env` の `projectDocs` から得る。
 - **どちらも metatron のインストール位置を参照しない。** 共有するのはファイルの書式だけ。

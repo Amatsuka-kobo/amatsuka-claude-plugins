@@ -36,12 +36,18 @@ export function pass(): never {
   process.exit(0)
 }
 
-// SessionStart 用の注入出力。
-export function injectContext(content: string): void {
+/** 注入を出力する hook のイベント名。 */
+export type InjectEventName = "SessionStart" | "SubagentStart"
+
+// SessionStart・SubagentStart 用の注入出力。hookEventName は入力のイベント名に揃える。
+export function injectContext(
+  content: string,
+  eventName: InjectEventName
+): void {
   process.stdout.write(
     `${JSON.stringify({
       hookSpecificOutput: {
-        hookEventName: "SessionStart",
+        hookEventName: eventName,
         additionalContext: content
       }
     })}\n`

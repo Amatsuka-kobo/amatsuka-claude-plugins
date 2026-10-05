@@ -77,6 +77,34 @@ export interface ArchitectureLine {
 
 type Line = ArchitectureLine
 
+/**
+ * 入力の文字列の改行(CRLF と単独の CR)を LF に揃える。
+ * splitLines は LF でしか行を分けないので、揃えずに検証すると、保存のときに
+ * 単独の CR が LF になって初めて現れる行(閉じフェンスや状態行)を見逃す。
+ * 検証と保存の両方に、この関数を通した同じ文字列を使う。
+ */
+export function normalizeNewlines(value: string): string {
+  return value.replace(/\r\n?/g, "\n")
+}
+
+/**
+ * 入力オブジェクトの文字列の値と、配列の中の文字列の改行を LF に揃えた写しを返す。
+ * オブジェクトでない入力(null や文字列)はそのまま返し、呼び出し側の型の検証に任せる。
+ */
+export function normalizeInputNewlines<T extends object>(input: T): T {
+  if (input === null || typeof input !== "object") return input
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input)) {
+    out[key] =
+      typeof value === "string"
+        ? normalizeNewlines(value)
+        : Array.isArray(value)
+          ? value.map((v) => (typeof v === "string" ? normalizeNewlines(v) : v))
+          : value
+  }
+  return out as T
+}
+
 // 改行の直後で分割する。`raw` を連結すると元の文字列に戻る(バイト単位の再結合)。
 function splitLines(text: string): Line[] {
   if (text === "") return []
@@ -756,18 +784,21 @@ export function applySectionChanges(
   const eol = detectEol(text)
 
   if (text.trim() === "") {
-    return {
-      ok: true,
-      text: createArchitecture(
-        changes.filter((c) => c.remove !== true),
-        eol
-      ),
-      created: true,
-      applied: changes
-        .filter((c) => c.remove !== true)
-        .map((c) => ({ heading: c.heading, mode: "added" as const })),
-      warnings
-    }
+    const created = createArchitecture(
+      changes.filter((c) => c.remove !== true),
+      eol
+    )
+    return (
+      rejectBrokenResult(text, created, warnings) ?? {
+        ok: true,
+        text: created,
+        created: true,
+        applied: changes
+          .filter((c) => c.remove !== true)
+          .map((c) => ({ heading: c.heading, mode: "added" as const })),
+        warnings
+      }
+    )
   }
 
   const parsed = parseArchitectureForWrite(text)
@@ -845,7 +876,60 @@ export function applySectionChanges(
   ops.sort((a, b) => b.start - a.start || b.order - a.order)
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text)
 
-  return { ok: true, text: chunks.join(""), created: false, applied, warnings }
+  const next = chunks.join("")
+  return (
+    rejectBrokenResult(text, next, warnings) ?? {
+      ok: true,
+      text: next,
+      created: false,
+      applied,
+      warnings
+    }
+  )
+}
+
+// 組み上げた全文を読み直す。本文に入れた閉じていないフェンスや不正なドメインマップは、
+// 差し込む前の本文だけを見ても分からない。壊れた文書を保存すると、閉じていないフェンスの
+// 後ろは CLI 自身も書き換えられなくなる。
+// ドメインマップは、変更前に読めていた(またはブロックが無かった)ときだけ見る。
+// 変更前から壊れている文書で他のセクションの更新や stage-adr を止めると、直す手段まで塞ぐ。
+function rejectBrokenResult(
+  before: string,
+  text: string,
+  warnings: string[]
+): Extract<ArchitectureUpdate, { ok: false }> | null {
+  if (parseArchitecture(text).error === "unclosed_fence") {
+    return {
+      ok: false,
+      error: "unclosed_fence",
+      message:
+        "差し替えた後の文書に閉じていないコードフェンスがあります。body のフェンスを閉じてください。",
+      warnings
+    }
+  }
+  const isBroken = (result: DomainsResult): boolean =>
+    !result.ok && result.reason !== "block_not_found"
+  const domains = extractDomains(text)
+  if (isBroken(domains) && !isBroken(extractDomains(before))) {
+    return {
+      ok: false,
+      error: "invalid_domains",
+      message: `差し替えた後の文書の \`${DOMAINS_MARKER}\` ブロックを読めません: ${domains.message}`,
+      warnings
+    }
+  }
+  return null
+}
+
+// `## ADR 一覧` のセクションの数と、最初のセクションの原文(末尾の空白を除く)を返す。
+// 無ければ数は 0、原文は空文字列。数も比べるので、原文は最初の 1 つを見れば足りる。
+function adrSectionSnapshot(text: string): { count: number; raw: string } {
+  const doc = parseArchitecture(text)
+  const section = findSection(doc, ADR_HEADING)
+  return {
+    count: doc.sections.filter((s) => s.heading === ADR_HEADING).length,
+    raw: section === undefined ? "" : section.raw.replace(/\s+$/, "")
+  }
 }
 
 /**
@@ -924,7 +1008,18 @@ export function prepareArchitectureUpdate(
         warnings
       }
     }
-    normalizedChanges.push({ heading: validated.heading, body: change.body })
+    // body の中で閉じていないフェンスは、後ろのセクションのフェンスで閉じられることがある。
+    // そのとき全文の読み直しは通るが、間の見出しはフェンスに飲まれて消える。
+    const body = normalizeNewlines(change.body)
+    if (scanFences(body).unclosed) {
+      return {
+        ok: false,
+        error: "unclosed_fence",
+        message: `「${validated.heading}」の body に閉じていないコードフェンスがあります。body の中でフェンスを閉じてください。`,
+        warnings
+      }
+    }
+    normalizedChanges.push({ heading: validated.heading, body })
   }
 
   // 削除は「対象ファイルに当該セクションが存在するか」で検証する(設計書 §6-2)。
@@ -978,6 +1073,21 @@ export function prepareArchitectureUpdate(
   }
 
   const result = applySectionChanges(current, normalizedChanges)
+  if (result.ok) {
+    // `## ADR 一覧` は stage-architecture の対象にできない。body に見出しや ADR を
+    // 書き込んで、stage-adr の採番と状態の値域を迂回させない。正当な更新で ADR 一覧の
+    // バイト列が変わるのは末尾の空行だけなので、末尾の空白を除いて比べる。
+    const before = adrSectionSnapshot(current ?? "")
+    const after = adrSectionSnapshot(result.text)
+    if (before.count !== after.count || before.raw !== after.raw) {
+      return {
+        ok: false,
+        error: "invalid_body",
+        message: `body から \`## ${ADR_HEADING}\` を変えることはできません。body に \`## ${ADR_HEADING}\` の見出しや ADR を書かず、ADR の追加・状態変更は stage-adr を使ってください。`,
+        warnings: [...warnings, ...result.warnings]
+      }
+    }
+  }
   return { ...result, warnings: [...warnings, ...result.warnings] }
 }
 

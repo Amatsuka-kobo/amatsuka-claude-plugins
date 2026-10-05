@@ -1649,7 +1649,7 @@ function diffArchitectureInner(
 
   // 決定的に検出できないため、この関数では扱わない項目(設計書 §9-3)。
   skipped.push(
-    "保護パスの不整合: raguel.config.yaml の解析を伴うため、この関数では検出しません。"
+    "保護パスの不整合: Raguel の設定の解析を伴うため、この関数では検出しません。"
   )
   skipped.push(
     "ADR の状態の陳腐化: ADR の解析(adr.ts)を伴うため、この関数では検出しません。"

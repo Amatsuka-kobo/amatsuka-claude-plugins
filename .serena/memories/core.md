@@ -9,8 +9,8 @@ its full text at the start of each session in this repository; the root `CLAUDE.
 only the repository overview and that pointer.
 
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
-  listed here (name/source/description). 14 entries since jevriel was added 2026-09-25 (13 before), matching the root `README.md` table 1:1
-  (verified 2026-08-17; metatron + sandalphon added 2026-08-16).
+  listed here (name/source/description). 13 entries since the former upstream intent plugin was absorbed into
+  codiel on 2026-09-27, matching the root `README.md` table 1:1.
 - `plugins/<name>/` — one dir per plugin. All 13 are pnpm workspace packages. Layout + bundle
   conventions: `mem:conventions`. Toolchain: `mem:tech_stack`.
 - **mdbase / typed-markdown frontmatter checking is gone** (commit 9ed55dd, 2026-08): `mdbase.yaml`,
@@ -47,7 +47,8 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
   holds `design/` (25 files), `plans/` (14), `handover/`, and `superpowers/{specs,plans}` — every
   design specification and implementation plan. Its documentation-operation facts supersede the
   former root `CLAUDE.md` text. `design/2026-08-16-file-contract-freeze.md` は設計書ではなく
-  metatron / codiel / sandalphon / gh-utility が実装中に直接読む**凍結された契約**である
+  metatron / codiel / gh-utility が実装中に直接読む**凍結された契約**である(2026-09-27 の codiel への統合に伴う上書きは
+  `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.5 に記録)
   (`mem:file_contract`)。
 - Consequence: any doc citing `docs/design/…`, `docs/plans/…`, `docs/superpowers/…` for a *repo*
   design spec is stale. Two look-alikes that must NOT be rewritten: basic-design's skills write
@@ -65,27 +66,24 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 Only **pitcrew (0.10.2)** and **chat-history (0.7.0)** are released; every other plugin is `-dev`.
 Manifest and sibling `package.json` versions were all in sync as of 2026-08-24.
 
-**metatron / sandalphon / codiel の連携** — 願い → intent → issue → 実装という一続きの流れを
-分担するが、**互いに独立して動く。**
+**metatron / codiel の連携** — 願い → intent → 実装という一続きの流れは codiel が受け持ち
+(2026-09-27 に上流の intent 用プラグインを吸収)、metatron がプロジェクトの前提と失敗知識を供給する。**互いに独立して動く。**
 codiel は metatron が無くても単体で完結し、ドメインマップが無い場合も `unscoped` モードで run を
-開始できる。sandalphon は codiel が無くても intent 文書と自前実行まで行き、metatron は単体で記録・注入として価値がある。
+開始できる。metatron は単体で記録・注入として価値がある。
 
 **連携手段はファイル契約(ARCHITECTURE / GOTCHAS / intent 文書の書式)とモデルコンテキストの
 2 つだけ。** プラグイン間の依存宣言も、互いのインストール位置の参照も一切無い。したがって同じ規則が
-3 実装に独立に写されており、一致の担保はテスト 1 本しかない — 詳細は `mem:file_contract`。
+2 実装に独立に写されており、一致の担保は 2 者比較テストしかない — 詳細は `mem:file_contract`。
 2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
 パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (0.8.0-dev) — GitHub-issue-driven orchestrator gated by the bundled `raguel` MCP
-  server. Largest/most complex. 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
+- **codiel** (1.0.0) — intent-driven orchestrator gated by the bundled `raguel` MCP
+  server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.3.7-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。
-  共有ライブラリ + CLI + 2 hook の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
+- **metatron** (0.4.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。サブエージェントへも SubagentStart で注入する。
+  共有ライブラリ + CLI + hook(SessionStart・SubagentStart の注入と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
-- **sandalphon** (0.2.0-dev) — Issue が生まれる前の上流区間(願い → intent 文書 → 起票 →
-  実行系への引き渡し)を担うオーケストレーター。codiel の前段。状態永続機構を持たない。
-  Details: `mem:sandalphon/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
   .drawio + HTML. Details: `mem:basic_design/core`.
 - **pitcrew** (0.10.2) — hooks-driven parallel-review layer: captures orchestration artifacts to
@@ -99,7 +97,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 - **chat-history** (0.7.0) — chat logging / recall / resume skills + chat-recorder & chat-reader
   agents. The record format flipped from summary to **verbatim** on 2026-08-16, so records are
   bimodal and readers must branch on the date. Details: `mem:chat_history/core`.
-- **gh-utility** (0.5.2-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
+- **gh-utility** (0.5.3-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
   sharing `references/github-issue-common.md`; scripts (`check-issue-env`, `list-issues`,
   `link-sub-issue`) wrap `gh`/REST, skills own the judgement. `issue-craft` は 2026-08-16 に
   **持ち込みモード**を得た: 固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動されたときだけ
@@ -147,7 +145,7 @@ Never add an Anthropic API client, and never design a flow that requires the use
 CLI/script by hand — the user-facing surface is Claude Code skills/commands only. Documented as
 「最重要」 in `plugins/codiel/docs/DESIGN.md` §0 and `harness-docs/ARCHITECTURE.md`; it binds every
 plugin here.
-(raguel-mcp's panel and prompt-smith's eval loop both shell out to `claude -p` for this reason.)
+(prompt-smith's eval loop shells out to `claude -p` for this reason. raguel-mcp's LLM panel used to as well, but was removed on 2026-10-01 in favor of Jev, an external non-Anthropic API allowed by ADR-005.)
 This bans the Anthropic API only. Since ADR-005 (2026-09-26) a plugin may take a non-Anthropic
 external API that needs the user's API key as a required dependency: key via env var, only the
 features needing it error when unset, no fallback path. **jevriel** (Jev, `TYPESAFE_API_KEY`) is the

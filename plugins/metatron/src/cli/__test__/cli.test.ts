@@ -6,6 +6,7 @@
 //
 // 加えて stage → commit の正常系を CLI 経由で通しで検証する。
 
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -1032,4 +1033,548 @@ test("S11: 移行後の ARCHITECTURE(3 節なし)で diff-architecture が secti
   for (const moved of ["テスト方針", "保護パス", "規約"]) {
     expect(missing, moved).not.toContain(moved)
   }
+})
+
+// ---------------------------------------------------------------------------
+// scan-adr-candidates / shrink-adr-candidate(codiel intent 駆動化の設計書 §6.11)
+// ---------------------------------------------------------------------------
+
+const CANDIDATE_ENTRY = [
+  "### 認証トークンはサーバーでだけ保持する [ADR 候補: frontend-3]",
+  "- 制約: ブラウザの保存領域に認証トークンを置かない",
+  "- 決定日: 2026-10-01",
+  "- 出典 intent: docs/intents/2026-09-30-login-rework.md",
+  "- 関連 ADR: なし(ADR 候補)",
+  "#### 背景",
+  "XSS でトークンが漏れた。",
+  "#### 検討した選択肢",
+  "1. localStorage",
+  "2. HttpOnly Cookie",
+  "#### 採用した結論",
+  "HttpOnly Cookie にする。",
+  "#### 理由",
+  "スクリプトから読めない。",
+  "#### 影響範囲",
+  "src/app/auth"
+]
+
+const CANDIDATE_REFERENCE = [
+  "### 認証トークンはサーバーでだけ保持する",
+  "- 制約: ブラウザの保存領域に認証トークンを置かない",
+  "- 関連 ADR: ADR-001(候補 ID: frontend-3)"
+]
+
+function durableDoc(entryLines: readonly string[]): string {
+  return [
+    "# frontend",
+    "",
+    "## 意図的な制約",
+    "",
+    ...entryLines,
+    "",
+    "## 出典",
+    "",
+    "なし",
+    ""
+  ].join("\n")
+}
+
+/** git リポジトリで、ARCHITECTURE と候補 frontend-3 を持つ持続層がある。 */
+function candidateProject(): { root: string; durable: string } {
+  const root = project()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  const durable = writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+  return { root, durable }
+}
+
+function scanCandidates(root: string): Record<string, unknown>[] {
+  const run = runCli(["scan-adr-candidates"], root)
+  expect(run.status).toBe(0)
+  const json = run.json as Record<string, unknown>
+  return json.candidates as Record<string, unknown>[]
+}
+
+/** 候補 frontend-3 を stage-adr → commit-architecture で ADR-001 にする。 */
+function adoptCandidate(root: string): void {
+  const inputPath = writeFile(
+    root,
+    "adr-input.json",
+    JSON.stringify({
+      mode: "add",
+      title: "認証トークンはサーバーでだけ保持する",
+      decidedBy: "team",
+      background: [
+        "XSS でトークンが漏れた。",
+        "- 出典 intent: docs/intents/2026-09-30-login-rework.md",
+        "ADR 候補 ID: frontend-3"
+      ].join("\n"),
+      options: ["localStorage", "HttpOnly Cookie"],
+      conclusion: "HttpOnly Cookie にする。",
+      rationale: "スクリプトから読めない。",
+      impact: "src/app/auth"
+    })
+  )
+  const staged = runCli(["stage-adr", "--input", inputPath], root)
+  expect(staged.status).toBe(0)
+  const stagingId = (staged.json as Record<string, unknown>).stagingId
+  const committed = runCli(
+    ["commit-architecture", "--staging-id", stagingId as string],
+    root
+  )
+  expect(committed.status).toBe(0)
+}
+
+function shrinkArgs(
+  file: string,
+  adr: string,
+  hash: string | undefined
+): string[] {
+  const args = [
+    "shrink-adr-candidate",
+    "--file",
+    file,
+    "--candidate-id",
+    "frontend-3",
+    "--adr",
+    adr
+  ]
+  return hash === undefined ? args : [...args, "--hash", hash]
+}
+
+test("scan-adr-candidates は git リポジトリの外では走査せず exit 0 で空を返す", () => {
+  const root = mkTmp()
+  writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+
+  const run = runCli(["scan-adr-candidates"], root)
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "scan-adr-candidates",
+    ok: true,
+    repoRoot: null,
+    candidates: []
+  })
+})
+
+test("stage-adr と commit-architecture は持続層に触れず、確定した ADR を adoptedAs が指し、shrink-adr-candidate が exit 0 で縮める", () => {
+  const { root, durable } = candidateProject()
+  const [candidate] = scanCandidates(root)
+  expect(candidate.candidateId).toBe("frontend-3")
+  expect(candidate.adoptedAs).toBeNull()
+
+  const beforeAdr = snapshot([durable])
+  adoptCandidate(root)
+  expectUnchanged(beforeAdr)
+  expect(scanCandidates(root)[0].adoptedAs).toBe("ADR-001")
+
+  const args = shrinkArgs(
+    candidate.file as string,
+    "ADR-001",
+    candidate.hash as string
+  )
+  const shrunk = runCli(args, root)
+  expect(shrunk.status).toBe(0)
+  expect(shrunk.json).toMatchObject({
+    command: "shrink-adr-candidate",
+    ok: true,
+    written: true,
+    alreadyShrunk: false,
+    file: durable,
+    candidateId: "frontend-3",
+    adr: "ADR-001"
+  })
+  expect(fs.readFileSync(durable, "utf8")).toBe(durableDoc(CANDIDATE_REFERENCE))
+  expect(scanCandidates(root)).toStrictEqual([])
+
+  // 既に参照形なら何もせず exit 0。
+  const beforeRetry = snapshot([durable])
+  const again = runCli(args, root)
+  expect(again.status).toBe(0)
+  expect(again.json).toMatchObject({
+    ok: true,
+    written: false,
+    alreadyShrunk: true
+  })
+  expectUnchanged(beforeRetry)
+})
+
+test("shrink-adr-candidate の拒否は終了コード 3 と shrinkPending を返し、持続層を変えない", () => {
+  const { root, durable } = candidateProject()
+  const [candidate] = scanCandidates(root)
+  adoptCandidate(root)
+  const outside = writeFile(
+    root,
+    "docs/intents/frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+  const hash = candidate.hash as string
+
+  const cases = [
+    { error: "hash_mismatch", file: durable, adr: "ADR-001", hash: "0" },
+    { error: "adr_not_found", file: durable, adr: "ADR-009", hash },
+    { error: "outside_domains_dir", file: outside, adr: "ADR-001", hash }
+  ]
+  for (const c of cases) {
+    const before = snapshot([durable, outside])
+    const run = runCli(shrinkArgs(c.file, c.adr, c.hash), root)
+    expect(run.status, c.error).toBe(3)
+    expect(run.json, c.error).toMatchObject({
+      ok: false,
+      error: c.error,
+      written: false,
+      shrinkPending: { file: c.file, candidateId: "frontend-3", adr: c.adr }
+    })
+    expectUnchanged(before)
+  }
+})
+
+test("shrink-adr-candidate の書き込みの失敗も終了コード 3 と shrinkPending を返す", () => {
+  if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
+  const { root, durable } = candidateProject()
+  const [candidate] = scanCandidates(root)
+  adoptCandidate(root)
+  const dir = path.dirname(durable)
+  const before = snapshot([durable])
+
+  fs.chmodSync(dir, 0o555)
+  let run: CliRun
+  try {
+    run = runCli(shrinkArgs(durable, "ADR-001", candidate.hash as string), root)
+  } finally {
+    fs.chmodSync(dir, 0o755)
+  }
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "write_failed",
+    shrinkPending: { file: durable, candidateId: "frontend-3", adr: "ADR-001" }
+  })
+  expectUnchanged(before)
+  expect(fs.readdirSync(dir)).toStrictEqual(["frontend.md"])
+})
+
+test("shrink-adr-candidate のオプションが欠けると終了コード 2 で、shrinkPending を返さない", () => {
+  const { root, durable } = candidateProject()
+  const before = snapshot([durable])
+
+  const run = runCli(shrinkArgs(durable, "ADR-001", undefined), root)
+
+  expect(run.status).toBe(2)
+  expect(run.json).toMatchObject({ ok: false, error: "missing_option" })
+  expect((run.json as Record<string, unknown>).shrinkPending).toBeUndefined()
+  expectUnchanged(before)
+})
+
+test("domains が外部へのリンクなら、scan-adr-candidates は走査せず、shrink-adr-candidate は終了コード 3 で outside_domains_dir になる", () => {
+  const root = project()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  const external = mkTmp()
+  const externalFile = writeFile(
+    external,
+    "frontend.md",
+    durableDoc(CANDIDATE_ENTRY)
+  )
+  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
+  fs.symlinkSync(external, path.join(root, "docs/intents/domains"))
+  const before = snapshot([externalFile])
+
+  expect(scanCandidates(root)).toStrictEqual([])
+  const run = runCli(shrinkArgs(externalFile, "ADR-001", "0"), root)
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "outside_domains_dir",
+    written: false,
+    shrinkPending: { file: externalFile, candidateId: "frontend-3" }
+  })
+  expectUnchanged(before)
+})
+
+// ---------------------------------------------------------------------------
+// scan-gotcha-candidates / remove-gotcha-candidate(記録のタイミングとサブエージェントへの
+// 注入の設計書 2-1)
+// ---------------------------------------------------------------------------
+
+const GOTCHA_CANDIDATE_ENTRY = [
+  "### キャッシュを消し忘れた [GOTCHAS 候補]",
+  "- date: 2026-10-01",
+  "- run: login-rework try-2",
+  "- task: ログイン画面を直す",
+  "- mistake: ビルドのキャッシュを消さずに確認した",
+  "- cause: 古い成果物が残っていた(推測)",
+  "- countermeasure: 確認の前に pnpm run clean を実行する",
+  "- promotionCandidate: Yes"
+]
+
+function gotchaDurableDoc(parent: string): string {
+  return [
+    "# frontend",
+    "",
+    `## ${parent}`,
+    "",
+    ...GOTCHA_CANDIDATE_ENTRY,
+    "",
+    "## 出典",
+    "",
+    "なし",
+    ""
+  ].join("\n")
+}
+
+/** git リポジトリで、ARCHITECTURE と GOTCHAS 候補を持つ持続層がある。 */
+function gotchaCandidateProject(parent = "GOTCHAS 候補"): {
+  root: string
+  durable: string
+} {
+  const root = project()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  const durable = writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    gotchaDurableDoc(parent)
+  )
+  return { root, durable }
+}
+
+function scanGotchaCandidates(root: string): Record<string, unknown>[] {
+  const run = runCli(["scan-gotcha-candidates"], root)
+  expect(run.status).toBe(0)
+  const json = run.json as Record<string, unknown>
+  return json.candidates as Record<string, unknown>[]
+}
+
+function removeArgs(
+  file: string,
+  hash: string | undefined,
+  fileHash: string | undefined
+): string[] {
+  const args = ["remove-gotcha-candidate", "--file", file]
+  if (hash !== undefined) args.push("--hash", hash)
+  if (fileHash !== undefined) args.push("--file-hash", fileHash)
+  return args
+}
+
+test("scan-gotcha-candidates は git リポジトリの外では走査せず exit 0 で空を返す", () => {
+  const root = mkTmp()
+  writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    gotchaDurableDoc("GOTCHAS 候補")
+  )
+
+  const run = runCli(["scan-gotcha-candidates"], root)
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "scan-gotcha-candidates",
+    ok: true,
+    repoRoot: null,
+    candidates: []
+  })
+})
+
+test("scan-gotcha-candidates は候補を返し、台帳に同じタイトルがあれば ledgerMatches に ID が出る", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const before = snapshot([durable])
+
+  const run = runCli(["scan-gotcha-candidates"], root)
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "scan-gotcha-candidates",
+    ok: true,
+    repoRoot: root,
+    warnings: []
+  })
+  const [candidate] = (run.json as Record<string, unknown>)
+    .candidates as Record<string, unknown>[]
+  expect(candidate).toMatchObject({
+    file: durable,
+    relative: "docs/intents/domains/frontend.md",
+    heading: "### キャッシュを消し忘れた [GOTCHAS 候補]",
+    title: "キャッシュを消し忘れた",
+    fields: {
+      date: "2026-10-01",
+      run: "login-rework try-2",
+      task: "ログイン画面を直す",
+      promotionCandidate: "Yes"
+    },
+    problems: [],
+    ledgerMatches: []
+  })
+  expect(candidate.hash).toMatch(/^[0-9a-f]{64}$/)
+  expect(candidate.fileHash).toMatch(/^[0-9a-f]{64}$/)
+  expectUnchanged(before)
+
+  writeFile(
+    root,
+    "docs/GOTCHAS.md",
+    `${GOTCHAS}\n### [2026-08-11] GOTCHA-002: キャッシュを消し忘れた\n\n**タスク**: t\n**失敗内容**: m\n**原因 (推測)**: c\n**対策**: p\n**昇格候補**: No\n`
+  )
+  expect(scanGotchaCandidates(root)[0].ledgerMatches).toStrictEqual([
+    "GOTCHA-002"
+  ])
+})
+
+test("remove-gotcha-candidate は exit 0 でエントリを消し、空になった `## GOTCHAS 候補` も消す", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+
+  const run = runCli(
+    removeArgs(
+      candidate.file as string,
+      candidate.hash as string,
+      candidate.fileHash as string
+    ),
+    root
+  )
+
+  expect(run.status).toBe(0)
+  expect(run.json).toMatchObject({
+    command: "remove-gotcha-candidate",
+    ok: true,
+    written: true,
+    file: durable,
+    title: "キャッシュを消し忘れた"
+  })
+  expect(fs.readFileSync(durable, "utf8")).toBe(
+    "# frontend\n\n## 出典\n\nなし\n"
+  )
+  expect(scanGotchaCandidates(root)).toStrictEqual([])
+})
+
+test("remove-gotcha-candidate は親が `## GOTCHAS 候補` 以外なら見出しを残す", () => {
+  const { root, durable } = gotchaCandidateProject("意図的な制約")
+  const [candidate] = scanGotchaCandidates(root)
+
+  const run = runCli(
+    removeArgs(
+      candidate.file as string,
+      candidate.hash as string,
+      candidate.fileHash as string
+    ),
+    root
+  )
+
+  expect(run.status).toBe(0)
+  expect(fs.readFileSync(durable, "utf8")).toBe(
+    "# frontend\n\n## 意図的な制約\n\n## 出典\n\nなし\n"
+  )
+})
+
+test("remove-gotcha-candidate の拒否は終了コード 3 と removePending を返し、持続層を変えない", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+  const outside = writeFile(
+    root,
+    "docs/intents/frontend.md",
+    gotchaDurableDoc("GOTCHAS 候補")
+  )
+  const hash = candidate.hash as string
+  const fileHash = candidate.fileHash as string
+
+  const cases = [
+    { error: "file_changed", file: durable, hash, fileHash: "0" },
+    { error: "candidate_not_found", file: durable, hash: "0", fileHash },
+    { error: "outside_domains_dir", file: outside, hash, fileHash },
+    {
+      error: "file_not_found",
+      file: path.join(root, "docs/intents/domains/none.md"),
+      hash,
+      fileHash
+    }
+  ]
+  for (const c of cases) {
+    const before = snapshot([durable, outside])
+    const run = runCli(removeArgs(c.file, c.hash, c.fileHash), root)
+    expect(run.status, c.error).toBe(3)
+    expect(run.json, c.error).toMatchObject({
+      ok: false,
+      error: c.error,
+      written: false,
+      removePending: { file: c.file, hash: c.hash }
+    })
+    expectUnchanged(before)
+  }
+})
+
+test("remove-gotcha-candidate は git リポジトリの外では not_git_repository で終了コード 3", () => {
+  const root = project()
+  const durable = writeFile(
+    root,
+    "docs/intents/domains/frontend.md",
+    gotchaDurableDoc("GOTCHAS 候補")
+  )
+  const before = snapshot([durable])
+
+  const run = runCli(removeArgs(durable, "0", "0"), root)
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "not_git_repository",
+    written: false
+  })
+  expectUnchanged(before)
+})
+
+test("remove-gotcha-candidate の書き込みの失敗も終了コード 3 と removePending を返す", () => {
+  if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+  const dir = path.dirname(durable)
+  const before = snapshot([durable])
+
+  fs.chmodSync(dir, 0o555)
+  let run: CliRun
+  try {
+    run = runCli(
+      removeArgs(
+        durable,
+        candidate.hash as string,
+        candidate.fileHash as string
+      ),
+      root
+    )
+  } finally {
+    fs.chmodSync(dir, 0o755)
+  }
+
+  expect(run.status).toBe(3)
+  expect(run.json).toMatchObject({
+    ok: false,
+    error: "write_failed",
+    written: false,
+    removePending: { file: durable, hash: candidate.hash }
+  })
+  expectUnchanged(before)
+  expect(fs.readdirSync(dir)).toStrictEqual(["frontend.md"])
+})
+
+test("remove-gotcha-candidate のオプションが欠けると終了コード 2 で、removePending を返さない", () => {
+  const { root, durable } = gotchaCandidateProject()
+  const [candidate] = scanGotchaCandidates(root)
+  const before = snapshot([durable])
+
+  for (const args of [
+    removeArgs(durable, candidate.hash as string, undefined),
+    removeArgs(durable, undefined, candidate.fileHash as string),
+    ["remove-gotcha-candidate"]
+  ]) {
+    const run = runCli(args, root)
+    expect(run.status).toBe(2)
+    expect(run.json).toMatchObject({ ok: false, error: "missing_option" })
+    expect((run.json as Record<string, unknown>).removePending).toBeUndefined()
+  }
+  expectUnchanged(before)
 })

@@ -11,11 +11,15 @@ function git(...args) {
 }
 var isGitRepo = git("rev-parse", "--is-inside-work-tree") === "true";
 var remoteUrl = isGitRepo ? git("remote", "get-url", "origin") : null;
-var repoSlug = remoteUrl?.match(
-  /^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
-)?.[1] ?? null;
+var remoteMatch = remoteUrl?.match(
+  /^(?:git@|ssh:\/\/git@|https?:\/\/)([^/:]+)[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
+);
+var remoteHost = remoteMatch?.[1] ?? null;
+var isGithubHost = remoteHost !== null && /^(?:github\.com|[^./]+\.ghe\.com)$/.test(remoteHost);
+var repoSlug = isGithubHost ? remoteMatch?.[2] ?? null : null;
 var ghInstalled = spawnSync("gh", ["--version"], { encoding: "utf8" }).status === 0;
-var ghAuthenticated = ghInstalled && spawnSync("gh", ["auth", "status"], { encoding: "utf8" }).status === 0;
+var ghAuthArgs = remoteHost ? ["auth", "status", "--hostname", remoteHost] : ["auth", "status"];
+var ghAuthenticated = ghInstalled && spawnSync("gh", ghAuthArgs, { encoding: "utf8" }).status === 0;
 var repoRoot = isGitRepo ? git("rev-parse", "--show-toplevel") : null;
 var tplDir = repoRoot ? path.join(repoRoot, ".github", "ISSUE_TEMPLATE") : null;
 var unquote = (v) => v.replace(/^(["'])(.*)\1$/, "$2");
@@ -83,6 +87,7 @@ console.log(
     {
       isGitRepo,
       remoteUrl,
+      remoteHost,
       repoSlug,
       ghInstalled,
       ghAuthenticated,

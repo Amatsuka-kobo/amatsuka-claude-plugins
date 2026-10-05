@@ -17,19 +17,26 @@ function git(...args: string[]): string | null {
 const isGitRepo = git("rev-parse", "--is-inside-work-tree") === "true"
 const remoteUrl = isGitRepo ? git("remote", "get-url", "origin") : null
 
-// SSH (git@github.com:owner/repo.git) と HTTPS (https://github.com/owner/repo) の両形式に対応。
-// ホスト名は github.com 完全一致(notgithub.com 等の部分一致を弾く)
-const repoSlug =
-  remoteUrl?.match(
-    /^(?:git@|ssh:\/\/git@|https?:\/\/)github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
-  )?.[1] ?? null
+// SSH (git@host:owner/repo.git) と HTTPS (https://host/owner/repo) の両形式からホストと owner/repo を抽出する。
+// repoSlug を返すのは github.com と <名前>.ghe.com のホストだけ(notgithub.com 等の部分一致、
+// GHES の独自ドメインは弾く)。remoteHost にはリモートの種類を問わず抽出したホスト名を入れる。
+const remoteMatch = remoteUrl?.match(
+  /^(?:git@|ssh:\/\/git@|https?:\/\/)([^/:]+)[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/
+)
+const remoteHost = remoteMatch?.[1] ?? null
+const isGithubHost =
+  remoteHost !== null && /^(?:github\.com|[^./]+\.ghe\.com)$/.test(remoteHost)
+const repoSlug = isGithubHost ? (remoteMatch?.[2] ?? null) : null
 
 // gh 未インストール時、spawnSync は ENOENT で status: null を返す(例外は投げない)
 const ghInstalled =
   spawnSync("gh", ["--version"], { encoding: "utf8" }).status === 0
+// リモートのホストが分かれば --hostname でその対象だけを確かめ、無ければ現行どおりホスト指定なしで確かめる
+const ghAuthArgs = remoteHost
+  ? ["auth", "status", "--hostname", remoteHost]
+  : ["auth", "status"]
 const ghAuthenticated =
-  ghInstalled &&
-  spawnSync("gh", ["auth", "status"], { encoding: "utf8" }).status === 0
+  ghInstalled && spawnSync("gh", ghAuthArgs, { encoding: "utf8" }).status === 0
 
 // テンプレートはリポジトリルート直下の .github/ISSUE_TEMPLATE/ から検出する
 const repoRoot = isGitRepo ? git("rev-parse", "--show-toplevel") : null
@@ -116,6 +123,7 @@ console.log(
     {
       isGitRepo,
       remoteUrl,
+      remoteHost,
       repoSlug,
       ghInstalled,
       ghAuthenticated,

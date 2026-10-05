@@ -1245,3 +1245,118 @@ describe("stageAdr", () => {
     expect(result.assignedId).toBe("ADR-004")
   })
 })
+
+describe("散文の入力検査と、組み上げた後の全文の読み直し", () => {
+  const rejected: [string, Partial<AdrAddInput>, string][] = [
+    [
+      "散文に改行と `### ADR-001:` を入れる",
+      {
+        background: "背景。\n### ADR-001: 同じ ID の偽エントリ\n\n- 状態: 採用"
+      },
+      "invalid_input"
+    ],
+    [
+      "背景に閉じていないフェンスを入れる",
+      { background: "背景。\n\n```ts\nconst a = 1" },
+      "unclosed_fence"
+    ],
+    [
+      "正規の状態行の後ろの散文に `- 状態: 値域外` を入れる",
+      { rationale: "理由。\n- 状態: 値域外" },
+      "invalid_input"
+    ],
+    [
+      "散文に `## ` の見出しを入れて ADR 一覧を切る",
+      { impact: "影響。\n\n## 技術スタック\n\n乗っ取った本文" },
+      "invalid_input"
+    ]
+  ]
+
+  for (const [label, patch, code] of rejected) {
+    test(`${label} → ${code} で拒否する`, () => {
+      expect(() =>
+        buildAdrAddition(THREE_ADRS, { ...BASE_ADD, ...patch }, "2026-08-16")
+      ).toThrowError(expect.objectContaining({ name: "AdrError", code }))
+    })
+  }
+
+  test("回帰: フェンスの中の `### ADR-001:` と `- 状態:` は書式の例として通す", () => {
+    const result = buildAdrAddition(
+      THREE_ADRS,
+      {
+        ...BASE_ADD,
+        background: "例:\n\n```markdown\n### ADR-001: 例\n\n- 状態: 採用\n```"
+      },
+      "2026-08-16"
+    )
+    expect(parseAdrDocument(result.text).entries).toHaveLength(4)
+  })
+})
+
+test("回帰: 変更前からドメインマップが壊れた文書にも stage-adr で追加できる", () => {
+  const broken = doc(
+    "# ARCHITECTURE",
+    "",
+    "## ドメインマップ",
+    "",
+    "```json metatron:domains",
+    "{ 壊れた JSON",
+    "```",
+    "",
+    THREE_ADRS.slice(THREE_ADRS.indexOf("## ADR 一覧"))
+  )
+  const result = buildAdrAddition(broken, BASE_ADD, "2026-08-16")
+  expect(parseAdrDocument(result.text).entries).toHaveLength(4)
+})
+
+describe("単独の CR と CRLF は検証の前に LF へ揃える", () => {
+  test("再現: rationale の CR の後ろの `- 状態: 値域外` を拒否する", () => {
+    expect(() =>
+      buildAdrAddition(
+        THREE_ADRS,
+        { ...BASE_ADD, rationale: "reason\r- 状態: 値域外" },
+        "2026-08-16"
+      )
+    ).toThrowError(
+      expect.objectContaining({ name: "AdrError", code: "invalid_input" })
+    )
+  })
+
+  test("LF・CR・CRLF で同じ判定になる(追加と状態変更)", () => {
+    for (const eol of ["\n", "\r", "\r\n"]) {
+      const label = JSON.stringify(eol)
+      expect(
+        () =>
+          buildAdrAddition(
+            THREE_ADRS,
+            { ...BASE_ADD, background: `背景${eol}### ADR-001: 偽` },
+            "2026-08-16"
+          ),
+        label
+      ).toThrowError(expect.objectContaining({ code: "invalid_input" }))
+
+      const ok = buildAdrAddition(
+        THREE_ADRS,
+        { ...BASE_ADD, background: `一行目${eol}二行目` },
+        "2026-08-16"
+      )
+      expect(ok.text, label).toContain("一行目\n二行目")
+      expect(ok.text, label).not.toContain("\r")
+
+      expect(
+        () =>
+          buildAdrStatusChange(
+            THREE_ADRS,
+            {
+              mode: "status",
+              id: "ADR-001",
+              status: "廃止",
+              reason: `理由${eol}- 状態: 採用`
+            },
+            "2026-08-20"
+          ),
+        label
+      ).toThrowError(expect.objectContaining({ code: "invalid_input" }))
+    }
+  })
+})

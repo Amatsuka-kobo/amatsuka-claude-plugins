@@ -1,10 +1,11 @@
 /**
- * plan/scope-keywords — スコープ逸脱ヒューリスティック(既定 ask)。
+ * plan/scope-keywords — スコープ逸脱ヒューリスティック(既定 info)。設計書 §6.4.2(A7)。
  * 成果物本文に登場する「領域ワード」のうち objective に一切現れないものが
- * 2 つ以上あれば発火する。過検知しやすいため message は控えめにする。
+ * 2 つ以上あれば発火する。過検知しやすいため info とし、判定を動かさない。
  */
 
 import type { Finding, Rule } from "../../core/types.js"
+import { ruleParam } from "../params.js"
 import { escapeRegExp, getSeverity, isAsciiWord } from "../util.js"
 
 const RULE_ID = "plan/scope-keywords"
@@ -32,13 +33,10 @@ export const scopeKeywordsRule: Rule = {
   id: RULE_ID,
   appliesTo: ["plan", "design"],
   sealed: false,
-  defaultSeverity: "ask",
+  defaultSeverity: "info",
   check(artifact, ctx): Finding[] {
-    const settings = ctx.config.rules[RULE_ID]
-    const severity = getSeverity(settings, "ask")
-    const extraDomains = Array.isArray(settings?.domains)
-      ? (settings.domains as string[])
-      : []
+    const severity = getSeverity(ctx.config.rules[RULE_ID], "info")
+    const extraDomains = ruleParam<string[]>(ctx.config, RULE_ID, "domains")
 
     const domains: Record<string, RegExp> = { ...BUILTIN_DOMAINS }
     for (const name of extraDomains) {

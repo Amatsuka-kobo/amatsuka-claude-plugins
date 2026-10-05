@@ -1,63 +1,12 @@
 #!/usr/bin/env node
 
 // src/codiel-state.ts
-import fs from "node:fs";
-import path from "node:path";
-var STAGES = [
-  ["init"],
-  ["discuss"],
-  ["design"],
-  ["test-spec", "dev-plan"],
-  ["implement"],
-  ["test-loop"],
-  ["pr"],
-  ["review"],
-  ["fix-loop"],
-  ["triage"],
-  ["finalize"]
-];
-var PHASES = STAGES.flat();
-function readState(p) {
-  return JSON.parse(fs.readFileSync(p, "utf8"));
-}
-function runDir(root, issue) {
-  return path.join(root, ".codiel", "runs", `issue-${issue}`);
-}
-function tries(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
-}
-function latestTry(root, issue) {
-  const dir = runDir(root, issue);
-  const ts = tries(dir);
-  if (ts.length === 0) return null;
-  const n = ts[ts.length - 1];
-  const p = path.join(dir, `try-${n}`, "state.json");
-  return { tryN: n, statePath: p, state: readState(p) };
-}
-function findActiveRun(root) {
-  const runsRoot = path.join(root, ".codiel", "runs");
-  if (!fs.existsSync(runsRoot)) return null;
-  let best = null;
-  for (const r of fs.readdirSync(runsRoot).filter((d) => /^issue-\d+$/.test(d))) {
-    const latest = latestTry(root, Number(r.slice(6)));
-    if (!latest) continue;
-    if (latest.state.status === "active" || latest.state.status === "awaiting_human") {
-      if (!best || latest.state.updatedAt > best.state.updatedAt) {
-        best = {
-          dir: path.dirname(latest.statePath),
-          statePath: latest.statePath,
-          state: latest.state
-        };
-      }
-    }
-  }
-  return best;
-}
-
-// src/hooks/lib.ts
 import fs2 from "node:fs";
 import path2 from "node:path";
+
+// src/hooks/lib.ts
+import fs from "node:fs";
+import path from "node:path";
 async function readStdin() {
   let data = "";
   for await (const chunk of process.stdin) data += chunk;
@@ -66,25 +15,148 @@ async function readStdin() {
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (true) {
-    if (fs2.existsSync(path2.join(dir, ".codiel"))) return dir;
-    const parent = path2.dirname(dir);
+    if (fs.existsSync(path.join(dir, ".codiel"))) return dir;
+    const parent = path.dirname(dir);
     if (parent === dir) return startDir;
     dir = parent;
   }
 }
+var CODIEL_WORKTREES_RE = /[/\\]\.codiel[/\\]worktrees[/\\]/;
+function findMainRoot(startDir) {
+  const m = CODIEL_WORKTREES_RE.exec(startDir);
+  if (m) return startDir.slice(0, m.index) || startDir.slice(0, 1);
+  return findProjectRoot(startDir);
+}
+
+// src/codiel-state.ts
+var STAGES = [
+  ["intent"],
+  ["carry-over"],
+  ["discuss"],
+  ["design"],
+  ["test-spec", "dev-plan"],
+  ["test-code"],
+  ["implement"],
+  ["test-loop"],
+  ["intent-sync"],
+  ["pr"],
+  ["review"],
+  ["fix-loop"],
+  ["triage"],
+  ["finalize"]
+];
+var PHASES = STAGES.flat();
+function readState(p) {
+  const st = JSON.parse(fs2.readFileSync(p, "utf8"));
+  if (st.version === 2 && st.phases && !("carry-over" in st.phases)) {
+    const { intent, ...rest } = st.phases;
+    st.phases = {
+      intent,
+      "carry-over": {
+        status: "passed",
+        attempts: 0,
+        evaluationId: null,
+        verdict: "SKIPPED",
+        note: "carry-over \u306E\u5C0E\u5165\u524D\u306E run"
+      },
+      ...rest
+    };
+  }
+  return st;
+}
+function runDir(root, slug) {
+  return path2.join(root, ".codiel", "runs", slug);
+}
+function tries(dir) {
+  if (!fs2.existsSync(dir)) return [];
+  return fs2.readdirSync(dir).filter((d) => /^try-\d+$/.test(d)).map((d) => Number(d.slice(4))).sort((a, b) => a - b);
+}
+function latestTry(root, slug) {
+  const dir = runDir(root, slug);
+  for (const n of tries(dir).reverse()) {
+    const p = path2.join(dir, `try-${n}`, "state.json");
+    if (fs2.existsSync(p)) return { tryN: n, statePath: p, state: readState(p) };
+  }
+  return null;
+}
+function latestTries(root) {
+  const runsRoot = path2.join(root, ".codiel", "runs");
+  if (!fs2.existsSync(runsRoot)) return [];
+  const found = [];
+  for (const d of fs2.readdirSync(runsRoot, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    let t = null;
+    let broken = false;
+    try {
+      t = latestTry(root, d.name);
+      broken = t !== null && (typeof t.state.phases !== "object" || !t.state.phases);
+    } catch {
+      broken = true;
+    }
+    if (broken) {
+      process.stderr.write(
+        `codiel: \u58CA\u308C\u305F state \u306E run \u3092\u98DB\u3070\u3057\u307E\u3057\u305F: ${d.name}
+`
+      );
+      continue;
+    }
+    if (t) found.push(t);
+  }
+  return found;
+}
+function findActiveRun(root) {
+  let best = null;
+  for (const latest of latestTries(root)) {
+    const st = latest.state;
+    if (isLegacy(st)) continue;
+    if (st.status !== "active" && st.status !== "awaiting_human") continue;
+    if (!best || st.updatedAt > best.state.updatedAt)
+      best = {
+        dir: path2.dirname(latest.statePath),
+        statePath: latest.statePath,
+        state: st
+      };
+  }
+  return best;
+}
+function isLegacy(st) {
+  return st.version !== 2 || !("test-code" in st.phases);
+}
 
 // src/hooks/stop-guard.ts
-var input = await readStdin();
-if (!input.stop_hook_active) {
-  const run = findActiveRun(findProjectRoot(input.cwd ?? process.cwd()));
-  if (run && run.state.status === "active") {
-    process.stdout.write(
-      `${JSON.stringify({
-        decision: "block",
-        reason: `Codiel run ${run.state.runId} try-${run.state.try} \u304C\u672A\u5B8C\u4E86\u3067\u3059(phase: ${run.state.phase})\u3002\u30D5\u30A7\u30FC\u30BA\u3092\u7D9A\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u4E2D\u6B62\u3059\u308B\u5834\u5408\u306F codiel-state stop --reason \u3067\u660E\u793A\u7684\u306B\u505C\u6B62\u3057\u307E\u3059\u3002triage\u30FBdiscuss(\u8AD6\u70B9\u306E\u56DE\u7B54\u5F85\u3061)\u30FBdesign \u306E\u30A6\u30A9\u30FC\u30AF\u30B9\u30EB\u30FC\u7B49\u3067\u30E6\u30FC\u30B6\u30FC\u306E\u56DE\u7B54\u3092\u5F85\u3063\u3066\u505C\u6B62\u3059\u308B\u5834\u5408\u306F\u6B63\u5F53\u306A\u505C\u6B62\u3067\u3042\u308A\u3001\u305D\u306E\u65E8\u3092\u6700\u7D42\u30E1\u30C3\u30BB\u30FC\u30B8\u3067\u660E\u793A\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`
-      })}
-`
-    );
+try {
+  const input = await readStdin();
+  if (!input.stop_hook_active) {
+    const run = findActiveRun(findMainRoot(input.cwd ?? process.cwd()));
+    if (run && run.state.status === "active" && (run.state.waits ?? []).length === 0) {
+      const { runId, try: tryN, phase } = run.state;
+      const header = `Codiel run ${runId} try-${tryN} \u304C\u672A\u5B8C\u4E86\u3067\u3059(phase: ${phase})\u3002`;
+      let reason;
+      const stopHint = `\u4E2D\u6B62\u3059\u308B\u306A\u3089 codiel-state stop --slug ${runId} --reason <\u7406\u7531> \u3067\u660E\u793A\u7684\u306B\u6B62\u3081\u308B\u3053\u3068\u3002`;
+      if (phase === null) {
+        reason = `${header}` + stopHint + `capturing-intent \u306E\u624B\u9806 5 \u306E (6) \u3092\u6700\u5F8C\u307E\u3067\u9032\u3081\u308B\u3053\u3068\u3002git switch -c \u304B git commit \u304C\u5931\u6557\u3057\u305F\u3068\u304D\u306F\u3001codiel-state stop --slug ${runId} --reason commit-failed \u3067 run \u3092\u7D42\u7AEF\u306B\u3057\u3066\u304B\u3089\u78BA\u304B\u3081\u308B\u3053\u3068\u3002`;
+      } else if (run.state.phases[phase].status === "passed") {
+        if (run.state.branch === null && run.state.phases.intent.status === "passed") {
+          reason = `${header}` + stopHint + `intent-only \u306E run(branch \u304C null)\u306A\u306E\u3067\u3001codiel-state close --slug ${runId} --reason intent-only \u3067 run \u3092\u7D42\u3048\u308B\u3053\u3068\u3002`;
+        } else if (phase === "finalize") {
+          reason = `${header}` + stopHint + `finalize \u306F\u5B8C\u4E86\u6E08\u307F\u3060\u304C run \u304C active \u306E\u307E\u307E\u6B8B\u3063\u3066\u3044\u308B\u3002codiel-state finalize --slug ${runId} \u3092\u5B9F\u884C\u3057\u76F4\u3057\u3066 awaiting_outcome \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`;
+        } else {
+          const stage = STAGES.find((s) => s.includes(phase)) ?? [];
+          const inProgressSibling = stage.find(
+            (p) => p !== phase && run.state.phases[p].status === "in_progress"
+          );
+          reason = `${header}` + stopHint + `\u6B21\u306B\u9032\u3081\u308B\u30D5\u30A7\u30FC\u30BA\u3092 codiel-state start-phase <\u30D5\u30A7\u30FC\u30BA> --slug ${runId} \u3067\u958B\u59CB\u3057\u3066\u304B\u3089(\u30B9\u30AD\u30C3\u30D7\u3059\u308B\u30D5\u30A7\u30FC\u30BA\u306A\u3089\u5148\u306B codiel-state skip-phase <\u30D5\u30A7\u30FC\u30BA> --slug ${runId} --reason "<\u7406\u7531>" \u3067\u98DB\u3070\u3057\u3066\u304B\u3089)\u3001codiel-state mark-ask <\u30D5\u30A7\u30FC\u30BA> --slug ${runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002finalize \u3078\u9032\u3080\u3068\u304D\u306F start-phase \u3092\u4F7F\u308F\u305A\u3001codiel-state mark-ask finalize --slug ${runId} --kind confirm \u3067\u76F4\u63A5 awaiting_human \u306B\u3059\u308B\u3053\u3068\u3002` + // 並列ステージの in_progress のきょうだいへの確認案内(M2-FX5-B b)。
+          (inProgressSibling ? `\u540C\u3058\u30B9\u30C6\u30FC\u30B8\u306E ${inProgressSibling} \u304C in_progress \u306E\u307E\u307E\u6B8B\u3063\u3066\u3044\u308B\u306A\u3089\u3001\u6B21\u306E\u30D5\u30A7\u30FC\u30BA\u3078\u9032\u3080\u524D\u306B codiel-state mark-ask ${inProgressSibling} --slug ${runId} --kind confirm \u3067\u78BA\u8A8D\u3059\u308B\u3053\u3068\u3002` : "");
+        }
+      } else {
+        reason = `${header}` + stopHint + `\u4EBA\u306B\u78BA\u8A8D\u3057\u3066\u6B62\u307E\u308B\u3068\u304D\u306F codiel-state mark-ask ${phase} --slug ${runId} --kind confirm \u3067 awaiting_human \u306B\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002\u59D4\u8B72\u306E\u5B8C\u4E86\u3092\u5F85\u3064\u306A\u3089\u3001codiel-state wait-add \u3067\u5F85\u3061\u3092\u8A18\u9332\u3057\u3066\u304B\u3089\u505C\u6B62\u3059\u308B\u3053\u3068\u3002`;
+      }
+      process.stdout.write(`${JSON.stringify({ decision: "block", reason })}
+`);
+    }
   }
+} catch (e) {
+  process.stderr.write(`codiel stop-guard: ${e.message}
+`);
 }
 process.exit(0);

@@ -3,7 +3,7 @@ import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { scopeKeywordsRule } from "../scopeKeywords.js"
 
 describe("scopeKeywordsRule", () => {
-  it("objective に現れない領域が2つ以上あれば発火する", () => {
+  it("objective に現れない領域が2つ以上あれば info の所見を出す(所見 A7)", () => {
     const findings = scopeKeywordsRule.check(
       makeArtifact({
         kind: "plan",
@@ -14,7 +14,7 @@ describe("scopeKeywordsRule", () => {
       makeCtx()
     )
     expect(findings).toHaveLength(1)
-    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].severity).toBe("info")
   })
 
   it("領域ワードが objective に含まれていれば発火しない", () => {

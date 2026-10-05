@@ -7,34 +7,10 @@
       "note": "生成するテンプレート自身の見出し。ARCHITECTURE の節ではない"
     },
     {
-      "path": "plugins/codiel/CLAUDE.example.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "D",
-      "note": "ハーネスの構成要素としての言及"
-    },
-    {
-      "path": "plugins/codiel/agents/codiel-analyst.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
       "path": "plugins/codiel/commands/init.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",
       "note": "description の案内文"
-    },
-    {
-      "path": "plugins/codiel/skills/implementing/SKILL.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "ドメイン glob を読んで担当範囲を決める"
-    },
-    {
-      "path": "plugins/codiel/skills/implementing/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
     },
     {
       "path": "plugins/codiel/skills/initializing-harness/SKILL.md",
@@ -52,19 +28,7 @@
       "path": "plugins/codiel/skills/orchestrating-runs/SKILL.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
-      "note": "パスを解決してディスパッチプロンプトへ渡すだけ"
-    },
-    {
-      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "ドメインマップを論点の入力に使う"
-    },
-    {
-      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
+      "note": "パスを解決して review の委譲へ渡すだけ"
     },
     {
       "path": "plugins/codiel/skills/reviewing-diffs/references/doc.md",
@@ -77,90 +41,6 @@
       "reference": "(ARCHITECTURE への言及)",
       "classification": "C",
       "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
-      "reference": "ドメインマップ",
-      "classification": "B",
-      "note": "ドメインマップを設計の入力に使う"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-dev-plans/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "ディスパッチプロンプトで指定されたパスを読むだけ"
-    },
-    {
-      "path": "plugins/codiel/skills/implementing/SKILL.md",
-      "reference": "システム概要",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/implementing/SKILL.md",
-      "reference": "レイヤー構造",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
-      "reference": "システム概要",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
-      "reference": "技術スタック",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/preparing-design-agendas/SKILL.md",
-      "reference": "レイヤー構造",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
-      "reference": "システム概要",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
-      "reference": "技術スタック",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/codiel/skills/writing-design-docs/SKILL.md",
-      "reference": "レイヤー構造",
-      "classification": "D",
-      "note": "ARCHITECTURE を読み物として参照する案内"
-    },
-    {
-      "path": "plugins/sandalphon/references/intent-format.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "D",
-      "note": "マーカー検知の説明で例として触れているだけ"
-    },
-    {
-      "path": "plugins/sandalphon/references/sandalphon-common.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "projectDocs の解決結果からパスを取るだけ"
-    },
-    {
-      "path": "plugins/sandalphon/skills/capturing-intent/SKILL.md",
-      "reference": "(ARCHITECTURE への言及)",
-      "classification": "C",
-      "note": "projectDocs / contextDocs の解決結果からパスを取るだけ"
     }
   ]
 }

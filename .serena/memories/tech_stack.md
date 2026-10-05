@@ -3,9 +3,10 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
 - Runtime: Node >= 26 (Volta-pinned: node 26.3.1, pnpm 11.8.0 — root `package.json`).
   Plugin READMEs state a lower **consumer** floor (Node >= 22); prompt-smith's bundles moved from
   node26 to the common node22 target in 0.3.2-dev. The >= 26 requirement is for building this repo.
-- Package manager: **pnpm** only. `pnpm-workspace.yaml` now lists **13 members** — every plugin
+- Package manager: **pnpm** only. `pnpm-workspace.yaml` now lists **14 members** — every plugin
   (`agent-policy`, `basic-design`, `codiel`, `chat-history`, `gh-utility`, `pitcrew`,
-  `raphael`, `prefetch`, `guidepost`, `prompt-smith`, `metatron`, `sandalphon`) plus the nested `plugins/codiel/raguel-mcp`.
+  `raphael`, `prefetch`, `guidepost`, `prompt-smith`, `metatron`, `jevriel`, `native-japanese`) plus the nested
+  `plugins/codiel/raguel-mcp`. The former upstream intent plugin was removed on 2026-09-27 (absorbed into codiel).
   `allowBuilds: esbuild`. The old "agent-policy / prompt-smith are markdown-only non-members" rule
   is gone as of 2026-08.
 - Root devDeps: `typescript ^6.0.3`, `vitest ^4.1.10`, `@biomejs/biome ^2.5.0`, `esbuild ^0.28.1`,
@@ -28,7 +29,7 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
 - Frontmatter schema check: **none**. mdbase (`mdbase.yaml` + `_types/`) and the `mdbase-lsp` LSP
   were retired in 2026-08 (commit 9ed55dd) and archived to `docs/old/mdbase-record/`; nothing
   validates `agents/`, `commands/`, `skills/` or antibody frontmatter any more.
-- Only non-dev runtime deps: raguel-mcp (`@modelcontextprotocol/sdk`, `zod` v4, `picomatch`, `yaml`)
+- Only non-dev runtime deps: raguel-mcp (`@modelcontextprotocol/sdk`, `zod` v4, `picomatch`; `yaml` removed in codiel 1.0.0 M4-C — config is JSON in `.codiel/config.json`)
   and basic-design (`elkjs`, pinned exact at 0.11.1). Every other plugin is Node stdlib
   (+ `git`/`gh`/`claude` CLI).
 
