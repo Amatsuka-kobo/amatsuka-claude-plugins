@@ -22,7 +22,7 @@
 | --- | --- | --- | --- |
 | R1 | 作り直しの形 | MCP ツール面と、rules・weight・panel・casefile・precedent の層構成を残し、層ごとに改修する。M4 の応急処置 11 件を土台にする | §3、§5、§6 |
 | R2 | 評価対象の真正性 | Raguel が評価対象を自分で読む。evaluate_code は `baseRef` と任意の `paths` から git diff を自分で作り、diff の書式を固定する。evaluate_plan・evaluate_design はファイルパスを受けて読む。読んだ内容の sha256 と HEAD を記録する。evaluate_decision は判断文のまま | §6.2.2〜§6.2.4、§6.9 |
-| R3 | STOP と人の裁定 | 改竄検知以外のルール由来の STOP は、人が誤検知と裁定すれば record_outcome を経て通せる。裁定は判例に残す。resubmission-loop は、前回の ruleId が消えた再提出と、人の裁定を経た attempt を比較から外す | §6.2.7、§6.4.2、§6.13.1 |
+| R3 | STOP と人の裁定 | 改竄検知以外のルール由来の STOP は、人が誤検知と裁定すれば record_outcome を経て通せる。裁定は判例に残す。resubmission-loop は、前回の ruleId が消えた再提出と、`as-is`・`false-positive` の裁定を経た attempt を比較から外す(`revise` は残す) | §6.2.7、§6.4.2、§6.13.1 |
 | R4 | ルールと LLM の分担・重さ | design・plan・decision は常に standard 以上。trivial は code の小さな差分だけ。不可逆キーワードの重さの加点は廃止。語彙ヒューリスティックのルールは info に下げてパネルの入力にする。STOP は秘密情報・保護パス・破壊操作・改竄の 4 種だけで、ほかは最大 ASK | §6.4、§6.5 |
 | R5 | パネル構成 | standard は adversarial と steelman で、合成は決定論(meta なし)。critical は adversarial・steelman・crosscheck・meta。assumption と precedent のパネリストは撤去する。軸は「100 = 問題なし」に揃えてプロンプトに書く。スコアの乖離は同じ立場のパネリスト同士で測る | §6.6 |
 | R6 | 基盤の障害と内容の懸念 | 応答に `judgeStatus: ok \| degraded` を足す。nonzero-exit とタイムアウトは 1 回だけ再試行し、なお失敗なら ASK。degraded の ASK は resubmission-loop と判例から外す。codiel は degraded の ASK で「再評価 / そのまま承認 / 止める」を人に聞く。ゲート全体に締切を置き(第 5 版で R21 により既定 600 秒へ改めた)、`extra.signal` で子プロセスを止め、進捗を通知する | §6.8、§6.13.1 |
@@ -450,7 +450,7 @@ diff の書式が固定されるので、`--no-prefix`・`quotePath`・外部 di
 | `code/dangerous-patterns` | 廃止 | | 上の 2 つに分ける | A4 |
 | `code/max-diff-lines` | ask | | 変えない | |
 | `code/test-deletion` | ask | | `*_test.go`・`test_*.py`・`tests/`・`*Test.java` と、`@unittest.skip`・`@pytest.mark.skip`・`t.Skip(`・`@Disabled` を足す | A11 |
-| `code/new-dependency` | ask | | package.json は `dependencies`・`devDependencies`・`peerDependencies`・`optionalDependencies` のブロックの内側だけを見る。削除行と突き合わせ、新しい名前だけを数える。`.gitmodules` の `[submodule "<名前>"]` の追加と、`Subproject commit` 行の追加(参照先の変更と gitlink の新規の追加。名前は submodule のパス)と、`.gitmodules` の `url =`・`branch =` の行の追加(差し替えを含む。取り込み元の変更)も数える。追加した見出しの下の `url`・`branch` は見出しの 1 件に含める。diff には `diff.submodule=short`・`diff.ignoreSubmodules=none` を固定して渡す | A10 |
+| `code/new-dependency` | ask | | package.json は `dependencies`・`devDependencies`・`peerDependencies`・`optionalDependencies` のブロックの内側だけを見る。削除行と突き合わせ、新しい名前だけを数える。`.gitmodules` は、空行とコメント(`#`・`;` で始まる行)以外の追加行が 1 行でもあれば、そのファイルで 1 件出す(git の設定ファイルの書式の揺れでパーサーとずれないよう、見出し・url・branch を解析しない)。`Subproject commit` 行の追加(参照先の変更と gitlink の新規の追加。名前は submodule のパス)も数える。diff には `diff.submodule=short`・`diff.ignoreSubmodules=none` を固定して渡す | A10 |
 | `plan/irreversible-ops` | info | | 語幹一致にする(`deploy\w*`・`migrations?`・`force[-\s]push`)。デプロイ・マイグレーション・リリース・破棄・上書きを既定の語に足す。Jev が有効なら文脈判定で ask に上げうる(§6.4.4) | A8、B1 |
 | `plan/max-steps` | info | | plan だけに当てる。`^#+\s*Step\s*\d+` の見出しを優先して数え、無ければ番号付きリストを数える | A9 |
 | `plan/scope-keywords` | info | | info に下げる。Jev が有効なら文脈判定で ask に上げうる(§6.4.4) | A7 |
@@ -519,8 +519,8 @@ E2E のレポート(R24)は、利用者の設定なしに生成物と同じに�
 
 再提出の判定(`common/resubmission-loop`)は次のとおりにする。
 
-- 比べる相手は、同じ run・同じフェーズの過去の attempt のうち、verdict が ASK か STOP で、judgeStatus が ok で、裁定の記録を持たないものである。
-- 相手の attempt のルール層の ask 以上の ruleId の集合が空でなく、そのどれも今回のルール層で出ていなければ、修正ありとみなして比べない。Jev が有効なら、修正ありとみなした相手のうち類似度が閾値以上のものについて、文脈判定で前回の指摘への対処を問う(§6.4.4)。
+- 比べる相手は、同じ run・同じフェーズの過去の attempt のうち、verdict が ASK か STOP で、judgeStatus が ok で、`as-is`・`false-positive` の裁定を持たないものである。`revise` は人が「直して再提出せよ」と指示した記録なので、比較の相手に残す(2026-10-05、R2-03)。
+- 相手の attempt のルール層の ask 以上の ruleId の集合は、`01-rules.json` の `askRuleIdsBeforeJudge`(Jev の調整の前の列)から読む。今回側が Jev の前に計算するので、基準をそろえるためである。キーが無い変更前のケースファイルは `findings` の ask 以上を読む(R2-04)。その集合が空でなく、そのどれも今回のルール層で出ていなければ、修正ありとみなして比べない。Jev が有効なら、修正ありとみなした相手のうち類似度が閾値以上のものについて、文脈判定で前回の指摘への対処を問う(§6.4.4)。
 - 残った相手と、今回の本文の類似度(§6.9.3 の固定長ダイジェストで推定する Jaccard)が閾値(既定 0.85、上限 0.95)以上なら ask の所見を出す。stop には上げない。
 - パラメータ `stopAfter` は廃止する。設定にあれば読み込みエラーにする(§6.12.2)。
 

@@ -54,11 +54,10 @@
 ### 4.2 R2-02: submodule の追加と参照先の変更を依存として扱う
 
 - 変更: `rules/code/newDependency.ts`
-  - `manifestKind` に `.gitmodules` を足し、`[submodule "<名前>"]` の追加行から名前を取る。
+  - `.gitmodules` は解析しない。空行とコメント(`#`・`;` で始まる行)以外の追加行が 1 行でもあれば、そのファイルで 1 件の ask を出す。キーの大小・空白・タブ・見出しの変形・include などの書式の揺れで、パーサーとの差による抜けを作らないためである。
   - mode 160000 のファイルの `Subproject commit` 行の追加(参照先の変更と、`.gitmodules` を変えない gitlink の新規の追加)も新しい依存と同じ重さ(ask)にする。名前は submodule のパスとする。`.gitmodules` の追加と同じ submodule で二重に出ても ask が 1 つ増えるだけなので、重複は除かない。
-  - `.gitmodules` の `url =`・`branch =` の行の追加(既存の submodule の差し替えを含む)も取り込み元の変更として同じ重さにする。名前は行そのものとする。追加した見出し(`[submodule "<名前>"]`)の下の `url`・`branch` は、見出しの 1 件に含める。
   - `subject/code.ts` の `FIXED_CONFIG` に `diff.submodule=short` と `diff.ignoreSubmodules=none` を足す。利用者の git 設定(`log` 形式や無視の設定)で `Subproject commit` の行が消えたり形が変わったりしないようにする。
-- テスト: `rules/code/__test__/newDependency.test.ts` に `.gitmodules` の追加と `Subproject commit` の変更の 2 件。ヘルパーは `rules/code/__test__/helpers/diff.ts`。`subject/__test__/code.test.ts` に、リポジトリの設定を `diff.submodule=log` と `diff.ignoreSubmodules=all` にしても、gitlink の更新が `Subproject commit` の行で diff に入ることを 2 件。
+- テスト: `rules/code/__test__/newDependency.test.ts` に `.gitmodules`(設定行の追加、書式の揺れ 8 件、空行・コメントと削除だけでは出さない)と `Subproject commit` の追加・変更。ヘルパーは `rules/code/__test__/helpers/diff.ts`。`subject/__test__/code.test.ts` に、リポジトリの設定を `diff.submodule=log` と `diff.ignoreSubmodules=all` にしても、gitlink の更新が `Subproject commit` の行で diff に入ることを 2 件。
 - 文書: raguel-redesign 設計書 :453 の `code/new-dependency` の行。
 - コミット: 1 つ。
 

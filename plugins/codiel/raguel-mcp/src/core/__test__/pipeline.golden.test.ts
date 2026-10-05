@@ -957,6 +957,22 @@ describe("再提出の判定のつなぎ込み(所見 D5)", () => {
     expect(ids(second)).not.toContain("common/resubmission-loop")
   })
 
+  it("Jev が info から上げた ask は、Jev の効かない再評価でも同じ基準で比べ、同じ本文の再提出に ask を出す(所見 R2-04)", async () => {
+    const answers: { body: Record<string, number> } = {
+      body: { injection: 0.9 }
+    }
+    const jev = fakeJev(answers)
+    const h = harness({ jevCall: jev.call, jevApiKey: "k" })
+    const first = await decision(h, "小さな方針を決める")
+    expect(first.verdict).toBe("ASK")
+    expect(ids(first)).toContain("common/injection-marker")
+
+    // 2 回目は Jev が ask に上げない(ルール層は同じ本文で何も出さない)
+    answers.body = { injection: 0.6 }
+    const again = await decision(h, "小さな方針を決める")
+    expect(ids(again)).toContain("common/resubmission-loop")
+  })
+
   it("前回の指摘が残ったままの似た再提出には ask を出す", async () => {
     const h = harness()
     h.commit({ "src/big.ts": `${body}export const r = eval(input)\n` })

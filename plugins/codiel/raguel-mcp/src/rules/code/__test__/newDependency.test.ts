@@ -126,7 +126,7 @@ describe("newDependencyRule のほかのマニフェスト", () => {
     expect(check(fileDiff("Cargo.toml", ['edition = "2021"']))).toEqual([])
   })
 
-  it(".gitmodules への submodule の追加を出し、既存の名前の再掲は出さない", () => {
+  it(".gitmodules に設定行を追加すると、行の数にかかわらずそのファイルで 1 件出す", () => {
     const findings = check(
       fileDiff(".gitmodules", [
         '[submodule "vendor/lib"]',
@@ -135,16 +135,42 @@ describe("newDependencyRule のほかのマニフェスト", () => {
       ])
     )
     expect(findings.map((f) => f.message)).toEqual([
-      "依存パッケージの追加を検出しました: .gitmodules(vendor/lib)"
+      "依存パッケージの追加を検出しました: .gitmodules(submodule の設定の変更)"
     ])
-    expect(
-      check(
-        fileDiff(
-          ".gitmodules",
-          ['[submodule "vendor/lib"]', "\turl = https://example.invalid/b.git"],
-          ['[submodule "vendor/lib"]', "\turl = https://example.invalid/a.git"]
-        )
+  })
+
+  it.each([
+    ["キーの大文字", ["\tURL = https://example.invalid/b.git"]],
+    ["空白の無い url=x", ["url=x"]],
+    ["タブ区切り", ["\t\turl\t=\thttps://example.invalid/b.git"]],
+    ["branch の差し替え", ["\tBranch=evil"]],
+    ["見出しの空白と大文字", ['[SubModule   "a"]']],
+    ["見出しの単引用符", ["[submodule 'a']"]],
+    ["見出しの後ろのコメント", ['[submodule "a"] ; note']],
+    ["include", ["[include]", "\tpath = other"]]
+  ])("書式を変えても ask になる(%s)", (_name, additions) => {
+    const findings = check(fileDiff(".gitmodules", additions))
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+  })
+
+  it(".gitmodules の既存の設定の差し替えも出す", () => {
+    const findings = check(
+      fileDiff(
+        ".gitmodules",
+        ["\turl = https://example.invalid/b.git"],
+        ["\turl = https://example.invalid/a.git"]
       )
+    )
+    expect(findings).toHaveLength(1)
+  })
+
+  it(".gitmodules の空行・コメントだけの追加と、削除だけの変更は出さない", () => {
+    expect(
+      check(fileDiff(".gitmodules", ["", "   ", "# note", "\t; note"]))
+    ).toEqual([])
+    expect(
+      check(fileDiff(".gitmodules", [], ['[submodule "a"]', "\turl = x"]))
     ).toEqual([])
   })
 
@@ -167,30 +193,6 @@ describe("newDependencyRule のほかのマニフェスト", () => {
     )
     expect(findings).toHaveLength(1)
     expect(findings[0].message).toContain("vendor/lib")
-  })
-
-  it(".gitmodules の既存の submodule の url と branch の差し替えを出す", () => {
-    const findings = check(
-      fileDiff(
-        ".gitmodules",
-        ["\turl = https://example.invalid/b.git", "\tbranch = evil"],
-        ["\turl = https://example.invalid/a.git", "\tbranch = main"]
-      )
-    )
-    expect(findings).toHaveLength(2)
-    expect(findings[0].message).toContain("url = https://example.invalid/b.git")
-    expect(findings[1].message).toContain("branch = evil")
-  })
-
-  it("新しい submodule の url は、見出しの 1 件に含めて重ねて出さない", () => {
-    const findings = check(
-      fileDiff(".gitmodules", [
-        '[submodule "x"]',
-        "\tpath = x",
-        "\turl = https://example.invalid/x.git"
-      ])
-    )
-    expect(findings).toHaveLength(1)
   })
 
   it("依存に無関係なファイルでは出さない", () => {

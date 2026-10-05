@@ -39207,7 +39207,7 @@ var CaseStore = class {
       const v = this.readVerdict(dir);
       if (!v) continue;
       const rules = readJsonOrWarn(path3.join(dir, RULES_FILE));
-      const askRuleIds = [
+      const askRuleIds = Array.isArray(rules?.askRuleIdsBeforeJudge) ? rules.askRuleIdsBeforeJudge : [
         ...new Set(
           (Array.isArray(rules?.findings) ? rules.findings : []).filter((f) => f.severity === "ask" || f.severity === "stop").map((f) => f.ruleId)
         )
@@ -39222,7 +39222,10 @@ var CaseStore = class {
         attempt,
         verdict: v.verdict,
         judgeStatus: v.judgeStatus,
-        hasRuling: (outcomes.get(v.evaluationId)?.ruling ?? null) !== null,
+        // revise は「直して再提出せよ」の指示なので、比較の相手に残す
+        hasRuling: ["as-is", "false-positive"].includes(
+          outcomes.get(v.evaluationId)?.ruling ?? ""
+        ),
         askRuleIds,
         digest: isDigest(rawDigest) ? rawDigest : null
       });
@@ -41526,7 +41529,6 @@ function manifestKind(path10) {
   if (base === "requirements.txt") return "requirements";
   if (base === "Cargo.toml") return "cargo";
   if (base === "go.mod") return "gomod";
-  if (base === ".gitmodules") return "gitmodules";
   return null;
 }
 var CARGO_NON_DEPENDENCY_KEYS = /* @__PURE__ */ new Set([
@@ -41564,8 +41566,6 @@ function dependencyName(kind, line) {
     }
     case "gomod":
       return line.match(/^\s*(?:require\s+)?([\w.\-/]+)\s+v\d+\.\d+\.\d+/)?.[1] ?? null;
-    case "gitmodules":
-      return line.match(/^\s*\[submodule\s+"([^"]+)"\]/)?.[1] ?? null;
     default:
       return null;
   }
@@ -41619,32 +41619,8 @@ function npmAdded(file2) {
   }
   return added;
 }
-var GITMODULES_SOURCE_RE = /^\s*(?:url|branch)\s*=\s*\S/;
-function gitmodulesAdded(file2) {
-  const added = [];
-  let addIndex = 0;
-  for (const hunk of file2.hunks) {
-    let inAddedSection = false;
-    for (const raw of hunk) {
-      const mark = raw[0];
-      if (mark === "-" || mark === "\\") continue;
-      const text = raw.slice(1);
-      const name = dependencyName("gitmodules", text);
-      if (name !== null) inAddedSection = mark === "+";
-      if (mark === "+") {
-        if (name !== null) added.push({ name, index: addIndex });
-        else if (!inAddedSection && GITMODULES_SOURCE_RE.test(text)) {
-          added.push({ name: text.trim(), index: addIndex });
-        }
-        addIndex++;
-      }
-    }
-  }
-  return added;
-}
 function addedNames(kind, file2) {
   if (kind === "npm-package") return npmAdded(file2);
-  if (kind === "gitmodules") return gitmodulesAdded(file2);
   const added = [];
   file2.additions.forEach((line, index) => {
     const name = dependencyName(kind, line);
@@ -41660,6 +41636,9 @@ function deletedNames(kind, file2) {
   );
 }
 var SUBPROJECT_RE = /^Subproject commit [0-9a-f]+$/;
+function gitmodulesAdditionIndex(file2) {
+  return file2.additions.findIndex((l) => !/^\s*([#;]|$)/.test(l));
+}
 function isSubmodulePointer(file2) {
   return file2.additions.some((l) => SUBPROJECT_RE.test(l));
 }
@@ -41685,6 +41664,23 @@ var newDependencyRule = {
             excerpt: truncateExcerpt(file2.additions[index])
           }
         });
+        continue;
+      }
+      if (file2.path.slice(file2.path.lastIndexOf("/") + 1) === ".gitmodules") {
+        const index = gitmodulesAdditionIndex(file2);
+        if (index >= 0) {
+          findings.push({
+            ruleId: RULE_ID6,
+            severity,
+            message: `\u4F9D\u5B58\u30D1\u30C3\u30B1\u30FC\u30B8\u306E\u8FFD\u52A0\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${file2.path}(submodule \u306E\u8A2D\u5B9A\u306E\u5909\u66F4)`,
+            evidence: {
+              location: file2.path,
+              path: file2.path,
+              line: file2.additionLines[index],
+              excerpt: truncateExcerpt(file2.additions[index])
+            }
+          });
+        }
         continue;
       }
       const kind = manifestKind(file2.path);
@@ -42823,6 +42819,11 @@ async function judge(input2) {
     ...others,
     ...resubmissionFindings({ ...artifact, content: compared }, ruleCtx, others)
   ];
+  const askRuleIdsBeforeJudge = [
+    ...new Set(
+      ruleFindings.filter((f) => f.severity !== "info").map((f) => f.ruleId)
+    )
+  ];
   const extraReasons = [];
   ctl.progress?.("Jev \u306E\u6587\u8108\u5224\u5B9A");
   const context = await runContextJudge(
@@ -42894,7 +42895,8 @@ async function judge(input2) {
     decisionPoint: synthesis.decisionPoint,
     precedents,
     contextRecord: context.record,
-    contextSummary
+    contextSummary,
+    askRuleIdsBeforeJudge
   });
 }
 function skippedJevSummary(apiKey) {
@@ -43131,7 +43133,16 @@ function record2(input2, store, o) {
   store.writeEvidence(
     dir,
     "01-rules.json",
-    JSON.stringify({ findings: o.ruleFindings.map(maskFinding) }, null, 2)
+    JSON.stringify(
+      {
+        findings: o.ruleFindings.map(maskFinding),
+        ...o.askRuleIdsBeforeJudge && {
+          askRuleIdsBeforeJudge: o.askRuleIdsBeforeJudge
+        }
+      },
+      null,
+      2
+    )
   );
   if (o.precedents) {
     store.writeEvidence(

@@ -44,6 +44,8 @@ Raguel は codiel のゲート付きフェーズを定数として持つ(`R/codi
     <id>.json
 ```
 
+`01-rules.json` は `findings` に加えて、Jev の調整の前の ask 以上の ruleId の列を `askRuleIdsBeforeJudge` として持つ。再提出の比較で今回側(Jev の前)と前回側を同じ基準にそろえるためのキーで、変更前のケースファイルには無い(無ければ `findings` の ask 以上を読む)。pass-gate は `01-rules.json` を読まない。
+
 既知の証拠ファイルの名前は 12 件に固定される(`R/casefile/store.ts` の `EVIDENCE_FILES`)。`02-weight.json`・`03-adversarial.md`・`04-steelman.md`・`05-crosscheck.md`・`08-meta.md` は新しい評価では書かないが、改竄の検査では既知として扱う。変更前に通したフェーズのケースファイルが、改竄とみなされないようにするためである。`verdict.json` は証拠の 12 件に含まれず、その `evidence` の列と `chainHead` が、書かれた証拠を束ねる。attempt の番号は run とフェーズの組ごとに 1 から振り、ディレクトリ名の `NN` は 2 桁で、並べるときは数値で比べる。
 
 ### 置き場の解決
@@ -168,6 +170,7 @@ Raguel はこの判定を `classifyPath(repoRel, config, testsDir)` で使い、
 
 - 裁定はすべて `outcomes.jsonl` に書く。判例を作らない組み合わせも記録は残り、pass-gate がそれを読む。
 - `casefile/tampered` の STOP は覆せない。改竄は成果物の懸念ではなく、記録の信頼の問題だからである。
+- 再提出の比較(`common/resubmission-loop`)から外れるのは、`as-is` と `false-positive` の裁定を持つ attempt だけである。`revise` は「直して再提出せよ」の指示なので、比較の相手に残る。
 - 応答は `{ recorded, precedentId, reason? }` で、判例を作らなければ `precedentId` は `null` である。
 - 判例の id は `prec-<evaluationId の先頭 8 文字>-<ruling か run>-<outcome>` である。
 

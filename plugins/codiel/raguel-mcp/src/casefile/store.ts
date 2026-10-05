@@ -393,15 +393,19 @@ export class CaseStore {
       const v = this.readVerdict(dir)
       if (!v) continue
       const rules = readJsonOrWarn(path.join(dir, RULES_FILE)) as
-        | { findings?: Finding[] }
+        | { findings?: Finding[]; askRuleIdsBeforeJudge?: string[] }
         | undefined
-      const askRuleIds = [
-        ...new Set(
-          (Array.isArray(rules?.findings) ? rules.findings : [])
-            .filter((f) => f.severity === "ask" || f.severity === "stop")
-            .map((f) => f.ruleId)
-        )
-      ]
+      // 今回側の比較は Jev の調整の前で行うので、前回側も調整の前の列で読む。
+      // キーが無い変更前のケースファイルは、今の findings(調整の後)を読む
+      const askRuleIds = Array.isArray(rules?.askRuleIdsBeforeJudge)
+        ? rules.askRuleIdsBeforeJudge
+        : [
+            ...new Set(
+              (Array.isArray(rules?.findings) ? rules.findings : [])
+                .filter((f) => f.severity === "ask" || f.severity === "stop")
+                .map((f) => f.ruleId)
+            )
+          ]
       const rawDigest = readJsonOrWarn(path.join(dir, SUBMISSION_DIGEST_FILE))
       if (rawDigest !== undefined && !isDigest(rawDigest)) {
         log.warn("ダイジェストの形が違います", {
@@ -412,7 +416,10 @@ export class CaseStore {
         attempt,
         verdict: v.verdict,
         judgeStatus: v.judgeStatus,
-        hasRuling: (outcomes.get(v.evaluationId)?.ruling ?? null) !== null,
+        // revise は「直して再提出せよ」の指示なので、比較の相手に残す
+        hasRuling: ["as-is", "false-positive"].includes(
+          outcomes.get(v.evaluationId)?.ruling ?? ""
+        ),
         askRuleIds,
         digest: isDigest(rawDigest) ? rawDigest : null
       })

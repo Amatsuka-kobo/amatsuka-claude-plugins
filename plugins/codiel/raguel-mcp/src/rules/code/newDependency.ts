@@ -2,7 +2,7 @@
  * code/new-dependency — 依存パッケージの追加の検出(既定 ask)。設計書 §6.4.2(A10)。
  * package.json は dependencies・devDependencies・peerDependencies・optionalDependencies の
  * ブロックの内側だけを見る。どのマニフェストも削除行と名前を突き合わせ、新しい名前だけを数える。
- * .gitmodules の追加と url・branch の差し替え、submodule(mode 160000)の参照先の追加と変更も依存として数える。
+ * .gitmodules は空行とコメント以外の追加行があれば 1 件、submodule(mode 160000)の参照先の追加と変更も依存として数える。
  */
 
 import type { Finding, Rule } from "../../core/types.js"
@@ -17,7 +17,6 @@ type ManifestKind =
   | "requirements"
   | "cargo"
   | "gomod"
-  | "gitmodules"
 
 function manifestKind(path: string): ManifestKind | null {
   const base = path.slice(path.lastIndexOf("/") + 1)
@@ -32,7 +31,6 @@ function manifestKind(path: string): ManifestKind | null {
   if (base === "requirements.txt") return "requirements"
   if (base === "Cargo.toml") return "cargo"
   if (base === "go.mod") return "gomod"
-  if (base === ".gitmodules") return "gitmodules"
   return null
 }
 
@@ -78,8 +76,6 @@ function dependencyName(kind: ManifestKind, line: string): string | null {
         line.match(/^\s*(?:require\s+)?([\w.\-/]+)\s+v\d+\.\d+\.\d+/)?.[1] ??
         null
       )
-    case "gitmodules":
-      return line.match(/^\s*\[submodule\s+"([^"]+)"\]/)?.[1] ?? null
     default:
       return null
   }
@@ -156,39 +152,8 @@ function npmAdded(file: DetailedDiffFile): Added[] {
   return added
 }
 
-const GITMODULES_SOURCE_RE = /^\s*(?:url|branch)\s*=\s*\S/
-
-/**
- * .gitmodules の追加を読む。見出し(`[submodule "名前"]`)は名前で、既存の submodule の
- * `url =`・`branch =` の追加(差し替えを含む)は取り込み元の変更として行そのものを名前にする。
- * 追加した見出しの下の url・branch は、見出しの 1 件に含める
- */
-function gitmodulesAdded(file: DetailedDiffFile): Added[] {
-  const added: Added[] = []
-  let addIndex = 0
-  for (const hunk of file.hunks) {
-    let inAddedSection = false
-    for (const raw of hunk) {
-      const mark = raw[0]
-      if (mark === "-" || mark === "\\") continue
-      const text = raw.slice(1)
-      const name = dependencyName("gitmodules", text)
-      if (name !== null) inAddedSection = mark === "+"
-      if (mark === "+") {
-        if (name !== null) added.push({ name, index: addIndex })
-        else if (!inAddedSection && GITMODULES_SOURCE_RE.test(text)) {
-          added.push({ name: text.trim(), index: addIndex })
-        }
-        addIndex++
-      }
-    }
-  }
-  return added
-}
-
 function addedNames(kind: ManifestKind, file: DetailedDiffFile): Added[] {
   if (kind === "npm-package") return npmAdded(file)
-  if (kind === "gitmodules") return gitmodulesAdded(file)
   const added: Added[] = []
   file.additions.forEach((line, index) => {
     const name = dependencyName(kind, line)
@@ -212,6 +177,14 @@ function deletedNames(kind: ManifestKind, file: DetailedDiffFile): Set<string> {
 const SUBPROJECT_RE = /^Subproject commit [0-9a-f]+$/
 
 /** mode 160000 のパスの参照先の追加と変更(Subproject commit 行の追加)か */
+/**
+ * .gitmodules は書式の揺れ(キーの大小・空白・タブ・見出しの変形・include)で
+ * パーサーとずれないよう解析しない。空行とコメント以外の追加行が 1 行でもあれば取り込み元の変更とみなす
+ */
+function gitmodulesAdditionIndex(file: DetailedDiffFile): number {
+  return file.additions.findIndex((l) => !/^\s*([#;]|$)/.test(l))
+}
+
 function isSubmodulePointer(file: DetailedDiffFile): boolean {
   return file.additions.some((l) => SUBPROJECT_RE.test(l))
 }
@@ -239,6 +212,23 @@ export const newDependencyRule: Rule = {
             excerpt: truncateExcerpt(file.additions[index])
           }
         })
+        continue
+      }
+      if (file.path.slice(file.path.lastIndexOf("/") + 1) === ".gitmodules") {
+        const index = gitmodulesAdditionIndex(file)
+        if (index >= 0) {
+          findings.push({
+            ruleId: RULE_ID,
+            severity,
+            message: `依存パッケージの追加を検出しました: ${file.path}(submodule の設定の変更)`,
+            evidence: {
+              location: file.path,
+              path: file.path,
+              line: file.additionLines[index],
+              excerpt: truncateExcerpt(file.additions[index])
+            }
+          })
+        }
         continue
       }
       const kind = manifestKind(file.path)

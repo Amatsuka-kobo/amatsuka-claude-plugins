@@ -537,7 +537,7 @@ describe("CaseStore", () => {
           runId: "run-1",
           phase: "design",
           outcome: "rejected",
-          ruling: "revise"
+          ruling: "as-is"
         })
       )
 
@@ -575,6 +575,55 @@ describe("CaseStore", () => {
         }
       ])
       expect(store.readPriorAttempts("run-1", "implement")).toEqual([])
+    })
+
+    it.each([
+      ["as-is", true],
+      ["false-positive", true],
+      ["revise", false]
+    ] as const)("裁定が %s の attempt は hasRuling が %s", (ruling, expected) => {
+      const { verdict } = evaluate("run-1", "implement")
+      store.appendOutcome(
+        outcome({
+          evaluationId: verdict.evaluationId,
+          runId: "run-1",
+          outcome: "rejected",
+          ruling
+        })
+      )
+      expect(store.readPriorAttempts("run-1", "implement")[0].hasRuling).toBe(
+        expected
+      )
+    })
+
+    it("askRuleIdsBeforeJudge があればそれを、無ければ findings を読む", () => {
+      const findings = [
+        { ruleId: "code/unsafe-exec", severity: "ask", message: "" },
+        { ruleId: "plan/vague-terms", severity: "info", message: "" }
+      ]
+      const withKey = store.openAttempt("run-1", "design")
+      store.writeEvidence(
+        withKey.dir,
+        "01-rules.json",
+        JSON.stringify({ findings, askRuleIdsBeforeJudge: ["common/secrets"] })
+      )
+      store.finalizeVerdict(
+        withKey.dir,
+        record({ runId: "run-1", phase: "design", attempt: 1, kind: "design" })
+      )
+      const without = store.openAttempt("run-1", "design")
+      store.writeEvidence(
+        without.dir,
+        "01-rules.json",
+        JSON.stringify({ findings })
+      )
+      store.finalizeVerdict(
+        without.dir,
+        record({ runId: "run-1", phase: "design", attempt: 2, kind: "design" })
+      )
+      expect(
+        store.readPriorAttempts("run-1", "design").map((p) => p.askRuleIds)
+      ).toEqual([["common/secrets"], ["code/unsafe-exec"]])
     })
 
     it("run 全体の結末(ruling が null)は裁定に数えない", () => {

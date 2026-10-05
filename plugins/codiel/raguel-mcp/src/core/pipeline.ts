@@ -382,6 +382,12 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
     ...resubmissionFindings({ ...artifact, content: compared }, ruleCtx, others)
   ]
 
+  const askRuleIdsBeforeJudge = [
+    ...new Set(
+      ruleFindings.filter((f) => f.severity !== "info").map((f) => f.ruleId)
+    )
+  ]
+
   // 手順 6: Jev の文脈判定。鍵が無ければ runContextJudge が contextJudge/unavailable を足して返す
   const extraReasons: string[] = []
   ctl.progress?.("Jev の文脈判定")
@@ -467,7 +473,8 @@ async function judge(input: JudgeInput): Promise<EvaluationResult> {
     decisionPoint: synthesis.decisionPoint,
     precedents,
     contextRecord: context.record,
-    contextSummary
+    contextSummary,
+    askRuleIdsBeforeJudge
   })
 }
 
@@ -728,6 +735,8 @@ interface Outcome {
   precedents?: PrecedentMatch[]
   contextRecord: ContextJudgeResult["record"]
   contextSummary: ContextJudgeSummary
+  /** Jev の調整の前の ask 以上の ruleId。再提出の比較で今回側と同じ基準にそろえる(R2-04) */
+  askRuleIdsBeforeJudge?: string[]
 }
 
 /** 撤去した設定キーが残っているときの警告(評価のたびに 1 件) */
@@ -832,7 +841,16 @@ function record(
   store.writeEvidence(
     dir,
     "01-rules.json",
-    JSON.stringify({ findings: o.ruleFindings.map(maskFinding) }, null, 2)
+    JSON.stringify(
+      {
+        findings: o.ruleFindings.map(maskFinding),
+        ...(o.askRuleIdsBeforeJudge && {
+          askRuleIdsBeforeJudge: o.askRuleIdsBeforeJudge
+        })
+      },
+      null,
+      2
+    )
   )
   if (o.precedents) {
     store.writeEvidence(
