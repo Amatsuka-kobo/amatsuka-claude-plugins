@@ -12,7 +12,7 @@ import {
   gitHead,
   gitMergeBase,
   isAncestor,
-  phaseStops,
+  openPhaseStops,
   type RaguelStore,
   readEvaluationIndex,
   readVerdictRecord,
@@ -900,10 +900,13 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     if (latest && !bools.has("human-approved")) {
       let stops: string[] = []
       try {
+        // 再提出で通した STOP は、carry-over が passed になった評価の ID と索引の順序で外す。
+        // note の文型は人が読む記録で、判定には使わない
+        const carryOver = latest.state.phases["carry-over"]
         stops = unresolvedStops(
           raguelStore(root),
           latest.state.raguelRunId,
-          Object.values(latest.state.phases).map((p) => p.note)
+          carryOver?.status === "passed" ? carryOver.evaluationId : null
         )
       } catch (e) {
         fail(`Raguel の記録を読めません: ${(e as Error).message}`)
@@ -1091,22 +1094,33 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     if (!flags["evaluation-id"]) fail("--evaluation-id が必要です")
     const humanApproved = bools.has("human-approved")
     // STOP を記録したフェーズの verdict は、人の裁定なしに上書きさせない(設計書 §6.2.2、決定 83)。
+    // STOP の有無は state の verdict ではなく Raguel の索引で決める。STOP が返ってから mark-ask
+    // までの間に中断した run も、ここで止めるためである。
     // 例外は carry-over で、妥当の STOP の後に直して評価し直した PROCEED を通す。
     // その評価がフェーズの最新の評価で PROCEED であることは、下の checkGate の検査 3・4 が照らす
+    let stops: ReturnType<typeof openPhaseStops> = []
+    try {
+      stops = openPhaseStops(raguelStore(root), latest.state.raguelRunId, phase)
+    } catch (e) {
+      fail(`Raguel の記録を読めません: ${(e as Error).message}`)
+    }
+    // 再提出で記録する、このフェーズの STOP の evaluationId(通す評価より前のもの)
+    const stopIds = stops.map((e) => e.evaluationId)
     const resubmitAfterStop =
       phase === "carry-over" &&
-      ph.verdict === "STOP" &&
+      stops.length > 0 &&
       !ph.humanApproved &&
       !humanApproved &&
       flags.verdict === "PROCEED" &&
-      !!flags["evaluation-id"] &&
-      flags["evaluation-id"] !== ph.evaluationId
-    // 再提出で記録する、このフェーズの STOP の evaluationId(通す評価より前のもの)
-    let stopIds: string[] = []
-    if (ph.verdict === "STOP" && !humanApproved && !resubmitAfterStop)
-      fail(
-        `フェーズ ${phase} には Raguel の STOP が記録されています。人が誤検知と裁定したときだけ --verdict STOP --human-approved で通してください`
-      )
+      !stopIds.includes(flags["evaluation-id"])
+    // state の verdict が STOP のものに加え、索引にだけある STOP(mark-ask の前に中断したもの)も止める。
+    // state の STOP は --verdict の検査より先に、索引にだけある STOP はその後に知らせる
+    const blockedByStop =
+      (stops.length > 0 || ph.verdict === "STOP") &&
+      !humanApproved &&
+      !resubmitAfterStop
+    const stopMessage = `フェーズ ${phase} には Raguel の STOP が記録されています。人が誤検知と裁定したときだけ --verdict STOP --human-approved で通してください`
+    if (blockedByStop && ph.verdict === "STOP") fail(stopMessage)
     if (humanApproved) {
       if (!(VERDICTS as readonly string[]).includes(flags.verdict))
         fail(
@@ -1116,6 +1130,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(
         `verdict が PROCEED ではありません: ${flags.verdict}。ASK と STOP は mark-ask(STOP は --verdict STOP を付ける)で人の裁定にかけてください`
       )
+    if (blockedByStop) fail(stopMessage)
     // 自己申告の --verdict を Raguel の記録で照らす(Raguel 設計書 §6.13.3 の検査 1〜5・7〜9)
     // 検査 9 の期待するファイルの置き場
     let dirs = { testsDir: "", runsDir: "" }
@@ -1141,22 +1156,24 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     } catch (e) {
       problem = `Raguel の記録を読めません: ${(e as Error).message}`
     }
-    // 再提出は、STOP を受けた評価の後に HEAD が進んでいること(直したこと)を条件にする
+    // 再提出は、STOP を受けた評価の後に HEAD が進んでいること(直したこと)を条件にする。
+    // 進んだとは、STOP の HEAD の子孫で、STOP の HEAD からの差分があることを指す。
+    // 内容を変えない amend、reset、別ブランチへの switch はここで落ちる
     if (!problem && resubmitAfterStop) {
       try {
-        const store = raguelStore(root)
         // ph.evaluationId は最初の STOP を指すので、HEAD は索引の最後の STOP と比べる
-        const stops = phaseStops(
-          readEvaluationIndex(store),
-          latest.state.raguelRunId,
-          phase
-        )
-        stopIds = stops.map((e) => e.evaluationId)
         const stopRow = stops.at(-1)
         const stopHead = stopRow
           ? readVerdictRecord(stopRow.casePath)?.subject?.head
           : undefined
-        if (!stopHead || stopHead === gitHead(root))
+        const head = gitHead(root)
+        const advanced =
+          !!stopHead &&
+          !!head &&
+          stopHead !== head &&
+          isAncestor(root, stopHead, head) &&
+          (changedPathsSince(root, stopHead) ?? []).length > 0
+        if (!advanced)
           problem = `STOP の評価(${stopRow?.evaluationId})の後に HEAD が進んでいません(評価した HEAD: ${stopHead ?? "記録なし"})。所見を直してコミットしてから評価し直してください`
       } catch (e) {
         problem = `Raguel の記録を読めません: ${(e as Error).message}`

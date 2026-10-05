@@ -316,20 +316,28 @@ function checkGate(input) {
 function resubmitNote(stopEvaluationIds) {
   return `STOP(evaluationId: ${stopEvaluationIds.join(", ")})\u306E\u5F8C\u306E\u518D\u63D0\u51FA\u3067\u901A\u3057\u305F`;
 }
-function resubmittedIds(note) {
-  const m = note?.match(/^STOP\(evaluationId: (.+)\)の後の再提出で通した$/);
-  return m ? m[1].split(", ") : [];
-}
 function phaseStops(index, runId, phase) {
   return index.filter(
     (e) => e.runId === runId && e.phase === phase && e.verdict === "STOP"
   );
 }
-function unresolvedStops(store, runId, resubmitNotes = []) {
+function isOpenStop(e, outcomes) {
+  return e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive";
+}
+function openPhaseStops(store, runId, phase) {
   const outcomes = readOutcomes(store);
-  const resubmitted = new Set(resubmitNotes.flatMap(resubmittedIds));
-  return readEvaluationIndex(store).filter(
-    (e) => e.runId === runId && e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive" && !resubmitted.has(e.evaluationId)
+  return phaseStops(readEvaluationIndex(store), runId, phase).filter(
+    (e) => isOpenStop(e, outcomes)
+  );
+}
+function unresolvedStops(store, runId, carryOverPassedId = null) {
+  const outcomes = readOutcomes(store);
+  const index = readEvaluationIndex(store);
+  const passedAt = carryOverPassedId === null ? -1 : index.findLastIndex(
+    (e) => e.evaluationId === carryOverPassedId && e.runId === runId && e.phase === "carry-over" && e.verdict === "PROCEED"
+  );
+  return index.filter(
+    (e, i) => e.runId === runId && isOpenStop(e, outcomes) && !(e.phase === "carry-over" && i < passedAt)
   ).map((e) => e.evaluationId);
 }
 
@@ -855,10 +863,11 @@ function main(argv, root = process.cwd()) {
     if (latest && !bools.has("human-approved")) {
       let stops = [];
       try {
+        const carryOver = latest.state.phases["carry-over"];
         stops = unresolvedStops(
           raguelStore(root),
           latest.state.raguelRunId,
-          Object.values(latest.state.phases).map((p2) => p2.note)
+          carryOver?.status === "passed" ? carryOver.evaluationId : null
         );
       } catch (e) {
         fail(`Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
@@ -1028,12 +1037,17 @@ function main(argv, root = process.cwd()) {
       fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
     if (!flags["evaluation-id"]) fail("--evaluation-id \u304C\u5FC5\u8981\u3067\u3059");
     const humanApproved = bools.has("human-approved");
-    const resubmitAfterStop = phase === "carry-over" && ph.verdict === "STOP" && !ph.humanApproved && !humanApproved && flags.verdict === "PROCEED" && !!flags["evaluation-id"] && flags["evaluation-id"] !== ph.evaluationId;
-    let stopIds = [];
-    if (ph.verdict === "STOP" && !humanApproved && !resubmitAfterStop)
-      fail(
-        `\u30D5\u30A7\u30FC\u30BA ${phase} \u306B\u306F Raguel \u306E STOP \u304C\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u4EBA\u304C\u8AA4\u691C\u77E5\u3068\u88C1\u5B9A\u3057\u305F\u3068\u304D\u3060\u3051 --verdict STOP --human-approved \u3067\u901A\u3057\u3066\u304F\u3060\u3055\u3044`
-      );
+    let stops = [];
+    try {
+      stops = openPhaseStops(raguelStore(root), latest.state.raguelRunId, phase);
+    } catch (e) {
+      fail(`Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
+    }
+    const stopIds = stops.map((e) => e.evaluationId);
+    const resubmitAfterStop = phase === "carry-over" && stops.length > 0 && !ph.humanApproved && !humanApproved && flags.verdict === "PROCEED" && !stopIds.includes(flags["evaluation-id"]);
+    const blockedByStop = (stops.length > 0 || ph.verdict === "STOP") && !humanApproved && !resubmitAfterStop;
+    const stopMessage = `\u30D5\u30A7\u30FC\u30BA ${phase} \u306B\u306F Raguel \u306E STOP \u304C\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u4EBA\u304C\u8AA4\u691C\u77E5\u3068\u88C1\u5B9A\u3057\u305F\u3068\u304D\u3060\u3051 --verdict STOP --human-approved \u3067\u901A\u3057\u3066\u304F\u3060\u3055\u3044`;
+    if (blockedByStop && ph.verdict === "STOP") fail(stopMessage);
     if (humanApproved) {
       if (!VERDICTS.includes(flags.verdict))
         fail(
@@ -1043,6 +1057,7 @@ function main(argv, root = process.cwd()) {
       fail(
         `verdict \u304C PROCEED \u3067\u306F\u3042\u308A\u307E\u305B\u3093: ${flags.verdict}\u3002ASK \u3068 STOP \u306F mark-ask(STOP \u306F --verdict STOP \u3092\u4ED8\u3051\u308B)\u3067\u4EBA\u306E\u88C1\u5B9A\u306B\u304B\u3051\u3066\u304F\u3060\u3055\u3044`
       );
+    if (blockedByStop) fail(stopMessage);
     let dirs = { testsDir: "", runsDir: "" };
     try {
       dirs = readCodielConfig(root);
@@ -1068,16 +1083,11 @@ function main(argv, root = process.cwd()) {
     }
     if (!problem && resubmitAfterStop) {
       try {
-        const store = raguelStore(root);
-        const stops = phaseStops(
-          readEvaluationIndex(store),
-          latest.state.raguelRunId,
-          phase
-        );
-        stopIds = stops.map((e) => e.evaluationId);
         const stopRow = stops.at(-1);
         const stopHead = stopRow ? readVerdictRecord(stopRow.casePath)?.subject?.head : void 0;
-        if (!stopHead || stopHead === gitHead(root))
+        const head = gitHead(root);
+        const advanced = !!stopHead && !!head && stopHead !== head && isAncestor(root, stopHead, head) && (changedPathsSince(root, stopHead) ?? []).length > 0;
+        if (!advanced)
           problem = `STOP \u306E\u8A55\u4FA1(${stopRow?.evaluationId})\u306E\u5F8C\u306B HEAD \u304C\u9032\u3093\u3067\u3044\u307E\u305B\u3093(\u8A55\u4FA1\u3057\u305F HEAD: ${stopHead ?? "\u8A18\u9332\u306A\u3057"})\u3002\u6240\u898B\u3092\u76F4\u3057\u3066\u30B3\u30DF\u30C3\u30C8\u3057\u3066\u304B\u3089\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
       } catch (e) {
         problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;

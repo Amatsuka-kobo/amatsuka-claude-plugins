@@ -167,6 +167,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 STOP は人が裁定する。STOP はルール層の専権であり、Jev の内容判定は STOP を出さない
 (Raguel 側の不変条件)。Codiel 側でこれを覆す操作は行わない。STOP の後に evaluate を呼び直して
 verdict を上書きしない。carry-over は手順 4 の例外とする。
+`mark-ask` の前に中断した STOP も、`pass-gate` は Raguel の記録から見つけて拒否する。再開して拒否されたときは、その STOP の `evaluationId` で手順 1 から進める。
 
 1. 所見(`ruleId`・`severity`・`message`・`evidence`)と `decisionPoint`・`reasons`・`casePath` を読み、
    `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind raguel --verdict STOP --evaluation-id <STOP の evaluationId>`

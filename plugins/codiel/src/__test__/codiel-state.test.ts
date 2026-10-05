@@ -791,6 +791,64 @@ test("carry-over の STOP の後に HEAD が進んでいなければ、評価し
   expect(st.verdict).toBe("STOP")
 })
 
+// 内容を変えない amend、reset、別ブランチへの switch では「直した」と見なさない(C3-08)
+for (const [label, move] of [
+  [
+    "内容を変えない amend",
+    (root: string) => git(root, "commit", "-q", "--amend", "--no-edit")
+  ],
+  ["reset", (root: string) => git(root, "reset", "-q", "--hard", "HEAD~")],
+  [
+    "別ブランチへの switch",
+    (root: string) => {
+      git(root, "switch", "-q", "-c", "other", "HEAD~")
+      commitFiles(root, ["src/other.ts"], "別ブランチのコミット")
+    }
+  ]
+] as const)
+  test(`carry-over の STOP の後に ${label} で HEAD を動かしても、評価し直した PROCEED で pass-gate が失敗する`, () => {
+    const root = carryOverRun()
+    stopAndResume(root, "carry-over", "ev-stop")
+    move(root)
+    recordEvaluation(root, "demo", "carry-over", "PROCEED", "ev-moved")
+    const r = gateWith(root, "carry-over", "ev-moved")
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/後に HEAD が進んでいません/)
+  })
+
+test("complete-phase の note に再提出の文型を書いても、次の init は --human-approved を求める(C3-03)", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", ["intent"])
+  recordEvaluation(root, "demo", "intent", "STOP", "ev-x")
+  expect(run(root, ["start-phase", "discuss", "--slug", "demo"]).code).toBe(0)
+  const done = run(root, [
+    "complete-phase",
+    "discuss",
+    "--slug",
+    "demo",
+    "--note",
+    "STOP(evaluationId: ev-x)の後の再提出で通した"
+  ])
+  expect(done.code).toBe(0)
+  expect(run(root, ["stop", "--slug", "demo", "--reason", "test"]).code).toBe(0)
+  const r = init(root)
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/Raguel の STOP/)
+})
+
+test("mark-ask を経ずに STOP を記録した後の PROCEED では、implement の pass-gate が失敗する(C3-04)", () => {
+  const root = tmpProject()
+  init(root)
+  passThrough(root, "demo", UNTIL_PR.slice(0, 6))
+  expect(run(root, ["start-phase", "implement", "--slug", "demo"]).code).toBe(0)
+  recordEvaluation(root, "demo", "implement", "STOP", "ev-stop")
+  recordEvaluation(root, "demo", "implement", "PROCEED", "ev-fixed")
+  const r = gateWith(root, "implement", "ev-fixed")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/Raguel の STOP が記録されています/)
+})
+
 test("再提出で通した carry-over の STOP は、その try を stop した後の init で --human-approved を求めない", () => {
   const root = carryOverRun()
   stopAndResume(root, "carry-over", "ev-stop")

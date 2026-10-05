@@ -5,7 +5,7 @@
 1. `raguel-gating` の対応表に従い、`evaluate_code`(`phase: carry-over`、`baseRef` は carry-over の `startHead`)を呼ぶ。`startHead` は `start-phase` が記録したベースブランチとの分岐点なので、intent の評価の後のコミットも差分に入る。
 2. PROCEED なら `pass-gate carry-over` する。返った findings は、design(軽量では dev-plan)の入力と、依頼文の「前フェーズの申し送り」にする。
 3. ASK なら `raguel-gating` の手順で人に確かめる。選択肢は「承認して続ける(findings を後のフェーズへ申し送る)」「修正して再提出」「stop」とする。
-4. STOP は、誤検知の裁定なら `raguel-gating` の手順で通す。妥当の裁定なら、「修正して再提出」と「stop」を人に選ばせる。carry-over だけは、妥当の STOP の後も修正して再評価できる。
+4. STOP は、誤検知の裁定なら `raguel-gating` の手順で通す。妥当の裁定なら、「修正して再提出」と「stop」を人に選ばせる。carry-over だけは、妥当の STOP の後も修正して再評価できる。修正は、STOP を受けた HEAD の上に新しいコミットとして足し、その HEAD で再評価する。amend で内容を変えずに HEAD を替えたとき、reset で戻したとき、別ブランチへ switch したときは、`pass-gate` が通らない。
 5. 「修正して再提出」が選ばれたら、次の順に進める。ASK から選んだときも同じである。ASK から選んだときは、手順 1 の前に `raguel-gating` の裁定 A の手順 1〜2(`resume` と、`record_outcome` の `outcome: "rejected"`・`ruling: "revise"`・`notes` に人の指示・`evaluationId` は ASK を出した evaluate のもの)に従って記録する。
    1. `codiel-state resume --slug <slug>` でフェーズを `in_progress` に戻す。STOP の後は `awaiting_human` のままで、`pass-gate` が失敗する。ASK から選んだときは、裁定 A の手順 1 で済んでいるので重ねない。
    2. 先に `references/delegation-env.md` を Read し、所見を直す委譲(`implementing` の修正モード)を出す。worktree は使わず、run ブランチ上で直接コミットさせる。依頼文には、carry-over の所見(severity・対象・内容・根拠・提案)と対象ファイル、担当タグ、担当範囲を載せる。この try の `dev-plan.md` はまだ無いので、依頼文に載せず、範囲は担当範囲と所見のパスに限らせる。コミットの件名は `codiel(carry-over): <修正内容> (<slug> try-<n>)` とさせる。報告は `delegation-env.md` の置き場の表に従う。

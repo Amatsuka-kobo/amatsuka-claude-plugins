@@ -469,15 +469,9 @@ export function checkGate(input: GateInput): string | null {
 }
 
 // carry-over で STOP の後の再提出で通したことを state の note に残す文。
-// pass-gate が書き、unresolvedStops が未解決から外す照合に使う
+// pass-gate が書く。人が読む記録で、判定には使わない
 export function resubmitNote(stopEvaluationIds: readonly string[]): string {
   return `STOP(evaluationId: ${stopEvaluationIds.join(", ")})の後の再提出で通した`
-}
-
-// resubmitNote が書いた note から、再提出で通した STOP の evaluationId を取り出す
-function resubmittedIds(note: string | null): string[] {
-  const m = note?.match(/^STOP\(evaluationId: (.+)\)の後の再提出で通した$/)
-  return m ? m[1].split(", ") : []
 }
 
 // run のフェーズの STOP の評価を、索引の順に返す
@@ -491,24 +485,59 @@ export function phaseStops(
   )
 }
 
-// run の STOP のうち、判定が確かで(judgeStatus: ok)、誤検知の裁定(ruling: false-positive)を
-// 持たないものの evaluationId を返す。init は新しい try を作る前に、これらへ人の承認を求める。
-// resubmitNotes は前の try の各フェーズの note で、再提出で通した STOP は数えない
+// 索引の行のうち、判定が確かで(judgeStatus: ok)、誤検知の裁定(ruling: false-positive)を
+// 持たない STOP か。pass-gate と init が同じ条件で STOP を数える
+function isOpenStop(
+  e: EvaluationIndexEntry,
+  outcomes: ReturnType<typeof readOutcomes>
+): boolean {
+  return (
+    e.verdict === "STOP" &&
+    e.judgeStatus === "ok" &&
+    outcomes.get(e.evaluationId)?.ruling !== "false-positive"
+  )
+}
+
+// run のフェーズの、人の裁定の無い STOP を索引の順に返す。pass-gate が state の verdict ではなく
+// この結果で STOP の有無を決める(mark-ask の前に中断した STOP も数えるため)
+export function openPhaseStops(
+  store: RaguelStore,
+  runId: string,
+  phase: string
+): EvaluationIndexEntry[] {
+  const outcomes = readOutcomes(store)
+  return phaseStops(readEvaluationIndex(store), runId, phase).filter((e) =>
+    isOpenStop(e, outcomes)
+  )
+}
+
+// run の STOP のうち、人の裁定の無いものの evaluationId を返す。init は新しい try を作る前に、
+// これらへ人の承認を求める。carryOverPassedId は前の try の carry-over が passed のときの
+// evaluationId で、索引でそれより前にある carry-over の STOP は、再提出で通したものとして数えない。
+// その評価が同じ run の carry-over の PROCEED の行でなければ、どの STOP も外さない
 export function unresolvedStops(
   store: RaguelStore,
   runId: string,
-  resubmitNotes: readonly (string | null)[] = []
+  carryOverPassedId: string | null = null
 ): string[] {
   const outcomes = readOutcomes(store)
-  const resubmitted = new Set(resubmitNotes.flatMap(resubmittedIds))
-  return readEvaluationIndex(store)
+  const index = readEvaluationIndex(store)
+  const passedAt =
+    carryOverPassedId === null
+      ? -1
+      : index.findLastIndex(
+          (e) =>
+            e.evaluationId === carryOverPassedId &&
+            e.runId === runId &&
+            e.phase === "carry-over" &&
+            e.verdict === "PROCEED"
+        )
+  return index
     .filter(
-      (e) =>
+      (e, i) =>
         e.runId === runId &&
-        e.verdict === "STOP" &&
-        e.judgeStatus === "ok" &&
-        outcomes.get(e.evaluationId)?.ruling !== "false-positive" &&
-        !resubmitted.has(e.evaluationId)
+        isOpenStop(e, outcomes) &&
+        !(e.phase === "carry-over" && i < passedAt)
     )
     .map((e) => e.evaluationId)
 }
