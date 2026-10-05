@@ -4,7 +4,7 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 
 | 条件 | 書く時点 |
 | --- | --- |
-| 人が Raguel の STOP を妥当と裁定した | `stop --reason raguel-stop` の直後 |
+| 人が Raguel の STOP を妥当と裁定した | `stop --reason raguel-stop` の直後。carry-over で「修正して再提出」を選んだときは、その選択の直後(`phase-carry-over.md` の手順 5 の 6) |
 | `record-attempt` の上限超過の後、人が中止を選んだ | `stop --reason attempts-exceeded` の直後 |
 | implement・test-code の修正ループが 5 ラウンドで通らず、人が中止を選んだ | `stop --reason attempts-exceeded` の直後 |
 | `record_outcome(incident)` を記録した | 記録の直後 |

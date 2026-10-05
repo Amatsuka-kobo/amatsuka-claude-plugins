@@ -12,6 +12,7 @@
    3. `mapped` では、所見のパスから担当タグを決め、§4 の規則(`set-domain`・担当範囲)に従う。`unscoped` では担当範囲を「なし」にする。
    4. 委譲先のコミットを待ってから、`evaluate_code` をやり直す。`startHead` は変えない。
    5. 再評価の verdict は手順 2〜4 で扱う。ASK や STOP が返るたびに人が選ぶので、回数の上限は置かない。
+   6. STOP 由来で選んだときだけ、`gotcha-candidates.md` を Read し、その手順で GOTCHAS 候補を 1 件書く。実行は、番号に関わらず手順 1 の `resume` の直後、手順 2 の委譲を出す前に行う。ASK 由来のときは書かない。
 6. 「stop」が選ばれたら、由来で分ける。
    - STOP 由来: `raguel-gating` の STOP の手順 5 に従う。`stop --reason raguel-stop` で止め、`gotcha-candidates.md` の手順で GOTCHAS 候補を書く。
    - ASK 由来: `raguel-gating` の ASK の中止の手順に従う。`waits` を片付けてから `stop --reason ask-aborted` で止め、GOTCHAS 候補は書かない。
