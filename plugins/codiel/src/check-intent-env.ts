@@ -290,10 +290,23 @@ interface IntentSummary {
 // 行単位で抽出する。値は前後の空白を除いた文字列で、引用符は剥がさない。
 // frontmatter を切り出せない・`intent` キーが無いファイルは intent 文書として解釈できない
 // ものとして existingIntents から落として続行する。
+// intent 用の読み取りは、リスト(`  - item`)を項目値として読まず、閉じ区切りを
+// `---` だけの行(末尾の空白は許す)に限る(`intent-format.md` の frontmatter の規則)。
+function parseIntentTopLevel(block: string): Record<string, string> {
+  const top: Record<string, string> = {}
+  for (const line of block.split("\n")) {
+    const m = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/)
+    if (m) top[m[1]] = m[2].trim()
+  }
+  return top
+}
+
 function parseIntentDoc(file: string, content: string): IntentSummary | null {
-  const block = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1]
+  const block = content.match(
+    /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
+  )?.[1]
   if (block === undefined) return null
-  const top = parseTopLevel(block.replace(/\r/g, ""))
+  const top = parseIntentTopLevel(block.replace(/\r/g, ""))
   if (top.intent === undefined) return null
   const title = content.match(/^# intent:\s*(.*)$/m)?.[1]?.trim() ?? null
   return {

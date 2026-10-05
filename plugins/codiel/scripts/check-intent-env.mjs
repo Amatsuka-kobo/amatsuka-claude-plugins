@@ -441,10 +441,20 @@ var domains = readDomainsResult(startDir);
 var configWarnings = [...docPaths.warnings, ...domains.warnings];
 var intentsDirPath = repoRoot ? path2.join(repoRoot, "docs", "intents") : null;
 var intentsDir = intentsDirPath && isDir(intentsDirPath) ? intentsDirPath : null;
+function parseIntentTopLevel(block) {
+  const top = {};
+  for (const line of block.split("\n")) {
+    const m = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (m) top[m[1]] = m[2].trim();
+  }
+  return top;
+}
 function parseIntentDoc(file, content) {
-  const block = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1];
+  const block = content.match(
+    /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
+  )?.[1];
   if (block === void 0) return null;
-  const top = parseTopLevel(block.replace(/\r/g, ""));
+  const top = parseIntentTopLevel(block.replace(/\r/g, ""));
   if (top.intent === void 0) return null;
   const title = content.match(/^# intent:\s*(.*)$/m)?.[1]?.trim() ?? null;
   return {

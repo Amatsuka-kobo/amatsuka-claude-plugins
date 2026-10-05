@@ -596,6 +596,52 @@ test("intent 書式 v2: v1 と v2 の intent 文書をどちらも列挙し、�
   ])
 })
 
+test("intent 書式 v2: リスト形式の値は項目値として読まない", () => {
+  const dir = gitRepo()
+  write(
+    dir,
+    "docs/intents/2026-09-21-list-value.md",
+    [
+      "---",
+      "intent: v2",
+      "slug: list-value",
+      "status:",
+      "  - approved",
+      "issue: 7",
+      "---",
+      "",
+      "# intent: リスト",
+      ""
+    ].join("\n")
+  )
+
+  const out = runScript(dir)
+  expect(out.existingIntents[0].status).toBe("")
+  expect(out.existingIntents[0].issue).toBe("7")
+})
+
+test("intent 書式 v2: ---x の行は frontmatter の閉じ区切りにならない", () => {
+  const dir = gitRepo()
+  write(
+    dir,
+    "docs/intents/2026-09-21-fake-close.md",
+    [
+      "---",
+      "intent: v2",
+      "slug: fake-close",
+      "----x",
+      "status: approved",
+      "---",
+      "",
+      "# intent: 偽の閉じ",
+      ""
+    ].join("\n")
+  )
+
+  const out = runScript(dir)
+  expect(out.existingIntents[0].status).toBe("approved")
+})
+
 // ---------------------------------------------------------------------------
 // ケース 20: 読み取り専用の担保
 // ---------------------------------------------------------------------------
