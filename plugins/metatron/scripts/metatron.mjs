@@ -30,6 +30,14 @@ var UNCLOSED_FENCE_WARNING = "\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u
 function normalizeNewlines(value) {
   return value.replace(/\r\n?/g, "\n");
 }
+function normalizeInputNewlines(input) {
+  if (input === null || typeof input !== "object") return input;
+  const out = {};
+  for (const [key, value] of Object.entries(input)) {
+    out[key] = typeof value === "string" ? normalizeNewlines(value) : Array.isArray(value) ? value.map((v) => typeof v === "string" ? normalizeNewlines(v) : v) : value;
+  }
+  return out;
+}
 function splitLines(text) {
   if (text === "") return [];
   return text.split(/(?<=\n)/).map((raw) => ({
@@ -1238,12 +1246,7 @@ function initGotchasLedger(gotchasPath) {
   });
 }
 function appendGotcha(gotchasPath, rawInput, options = {}) {
-  const input = Object.fromEntries(
-    Object.entries(rawInput ?? {}).map(([key, value]) => [
-      key,
-      typeof value === "string" ? normalizeNewlines(value) : value
-    ])
-  );
+  const input = normalizeInputNewlines(rawInput);
   const validation = validateGotchaInput(input);
   if (validation.errors.length > 0) {
     throw new GotchaError(
@@ -1647,14 +1650,6 @@ function validateAdrStatusInput(input) {
   }
   return { errors, warnings };
 }
-function newlinesNormalized(input) {
-  if (input === null || typeof input !== "object") return input;
-  const out = {};
-  for (const [key, value] of Object.entries(input)) {
-    out[key] = typeof value === "string" ? normalizeNewlines(value) : Array.isArray(value) ? value.map((v) => typeof v === "string" ? normalizeNewlines(v) : v) : value;
-  }
-  return out;
-}
 function throwOnErrors(result) {
   if (result.errors.length === 0) return;
   const status = result.errors.some((e) => e.startsWith("status \u306F"));
@@ -1751,7 +1746,7 @@ function verifyAdrResult(before, text, expected) {
   }
 }
 function buildAdrAddition(current, rawInput, date) {
-  const input = newlinesNormalized(rawInput);
+  const input = normalizeInputNewlines(rawInput);
   const validation = validateAdrAddInput(input);
   throwOnErrors(validation);
   const status = isAdrStatus(input.status) ? input.status : DEFAULT_ADR_STATUS;
@@ -1786,7 +1781,7 @@ ${rendered}`;
   };
 }
 function buildAdrStatusChange(current, rawInput, date) {
-  const input = newlinesNormalized(rawInput);
+  const input = normalizeInputNewlines(rawInput);
   const validation = validateAdrStatusInput(input);
   throwOnErrors(validation);
   const to = input.status;

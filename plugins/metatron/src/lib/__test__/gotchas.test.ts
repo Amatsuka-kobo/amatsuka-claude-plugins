@@ -860,3 +860,16 @@ test("G23: LF・CR・CRLF のどれで改行を入れても append は同じく�
   }
   expect(fs.readFileSync(filePath).equals(before)).toBe(true)
 })
+
+test("G24: null の入力は改行の正規化で {} に変えず、型の検証で拒否して書き込まない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  // CLI はオブジェクトでない入力を先に弾く。ライブラリでは改行の正規化の前と同じく
+  // validateGotchaInput が値を読めずに TypeError で止まる。
+  expect(() =>
+    appendGotcha(filePath, null as unknown as typeof VALID_INPUT)
+  ).toThrowError(TypeError)
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+})

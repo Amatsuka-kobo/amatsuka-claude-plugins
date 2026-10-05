@@ -77,7 +77,6 @@ export interface ArchitectureLine {
 
 type Line = ArchitectureLine
 
-// 改行の直後で分割する。`raw` を連結すると元の文字列に戻る(バイト単位の再結合)。
 /**
  * 入力の文字列の改行(CRLF と単独の CR)を LF に揃える。
  * splitLines は LF でしか行を分けないので、揃えずに検証すると、保存のときに
@@ -88,6 +87,25 @@ export function normalizeNewlines(value: string): string {
   return value.replace(/\r\n?/g, "\n")
 }
 
+/**
+ * 入力オブジェクトの文字列の値と、配列の中の文字列の改行を LF に揃えた写しを返す。
+ * オブジェクトでない入力(null や文字列)はそのまま返し、呼び出し側の型の検証に任せる。
+ */
+export function normalizeInputNewlines<T extends object>(input: T): T {
+  if (input === null || typeof input !== "object") return input
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input)) {
+    out[key] =
+      typeof value === "string"
+        ? normalizeNewlines(value)
+        : Array.isArray(value)
+          ? value.map((v) => (typeof v === "string" ? normalizeNewlines(v) : v))
+          : value
+  }
+  return out as T
+}
+
+// 改行の直後で分割する。`raw` を連結すると元の文字列に戻る(バイト単位の再結合)。
 function splitLines(text: string): Line[] {
   if (text === "") return []
   return text.split(/(?<=\n)/).map((raw) => ({
