@@ -11,6 +11,7 @@ import {
   gitHead,
   gitMergeBase,
   isAncestor,
+  phaseStops,
   type RaguelStore,
   readEvaluationIndex,
   readVerdictRecord,
@@ -1075,7 +1076,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       flags.verdict === "PROCEED" &&
       !!flags["evaluation-id"] &&
       flags["evaluation-id"] !== ph.evaluationId
-    const stopEvaluationId = ph.evaluationId
+    // 再提出で記録する、このフェーズの STOP の evaluationId(通す評価より前のもの)
+    let stopIds: string[] = []
     if (ph.verdict === "STOP" && !humanApproved && !resubmitAfterStop)
       fail(
         `フェーズ ${phase} には Raguel の STOP が記録されています。人が誤検知と裁定したときだけ --verdict STOP --human-approved で通してください`
@@ -1118,15 +1120,19 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     if (!problem && resubmitAfterStop) {
       try {
         const store = raguelStore(root)
-        const stopRow = findEvaluation(
+        // ph.evaluationId は最初の STOP を指すので、HEAD は索引の最後の STOP と比べる
+        const stops = phaseStops(
           readEvaluationIndex(store),
-          stopEvaluationId ?? ""
+          latest.state.raguelRunId,
+          phase
         )
+        stopIds = stops.map((e) => e.evaluationId)
+        const stopRow = stops.at(-1)
         const stopHead = stopRow
           ? readVerdictRecord(stopRow.casePath)?.subject?.head
           : undefined
         if (!stopHead || stopHead === gitHead(root))
-          problem = `STOP の評価(${stopEvaluationId})の後に HEAD が進んでいません(評価した HEAD: ${stopHead ?? "記録なし"})。所見を直してコミットしてから評価し直してください`
+          problem = `STOP の評価(${stopRow?.evaluationId})の後に HEAD が進んでいません(評価した HEAD: ${stopHead ?? "記録なし"})。所見を直してコミットしてから評価し直してください`
       } catch (e) {
         problem = `Raguel の記録を読めません: ${(e as Error).message}`
       }
@@ -1137,8 +1143,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     ph.verdict = flags.verdict
     if (humanApproved) ph.humanApproved = true
     // 監査で追えるよう、STOP を受けた評価を note に残す
-    if (resubmitAfterStop && stopEvaluationId)
-      ph.note = resubmitNote(stopEvaluationId)
+    if (resubmitAfterStop && stopIds.length > 0) ph.note = resubmitNote(stopIds)
     const passedHead = gitHead(root)
     if (passedHead) ph.passedHead = passedHead
     writeState(latest.statePath, latest.state)

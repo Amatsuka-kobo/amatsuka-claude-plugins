@@ -781,6 +781,29 @@ test("再提出で通した carry-over の STOP は、その try を stop した
   expect(run(root, ["stop", "--slug", "demo", "--reason", "test"]).code).toBe(0)
   const r = init(root)
   expect(r.err).not.toMatch(/Raguel の STOP/)
+  expect(r.code).toBe(0)
+})
+
+test("carry-over の STOP が複数あるときは、最後の STOP の後に HEAD が進んだ PROCEED だけを通し、すべての STOP を note に残す", () => {
+  const root = carryOverRun()
+  stopAndResume(root, "carry-over", "ev1")
+  commitFiles(root, ["src/fix1.ts"], "1 回目の所見を直す")
+  stopAndResume(root, "carry-over", "ev2")
+  recordEvaluation(root, "demo", "carry-over", "PROCEED", "ev-same-head")
+  const same = gateWith(root, "carry-over", "ev-same-head")
+  expect(same.code).toBe(1)
+  expect(same.err).toMatch(/後に HEAD が進んでいません/)
+  commitFiles(root, ["src/fix2.ts"], "2 回目の所見を直す")
+  recordEvaluation(root, "demo", "carry-over", "PROCEED", "ev-fixed")
+  const r = gateWith(root, "carry-over", "ev-fixed")
+  expect(r.err).toBe("")
+  expect(r.out.state.phases["carry-over"].note).toBe(
+    "STOP(evaluationId: ev1, ev2)の後の再提出で通した"
+  )
+  expect(run(root, ["stop", "--slug", "demo", "--reason", "test"]).code).toBe(0)
+  const next = init(root)
+  expect(next.err).not.toMatch(/Raguel の STOP/)
+  expect(next.code).toBe(0)
 })
 
 test("再提出で通していない STOP は、次の try の init が --human-approved を求める", () => {

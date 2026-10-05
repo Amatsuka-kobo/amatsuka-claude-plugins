@@ -37,8 +37,9 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
   - 写し先の領域は、`references/phase-intent-sync.md` の分岐で決めた取り込み先から選ぶ。取り込みを行わないときは写さない。
   - 写した領域ファイルは、intent-sync の評価の `paths` に含め、ゲート通過の直後の intent-sync のコミットに入れる。
   - 加えて、incident の候補を次のとおり集める。`metatron` の run は incident の候補を集めない。走査は Glob と Read で行う。
-    - `.codiel/runs/*/try-*/reports/gotcha-candidates.md` のうち、`由来: incident` を持つエントリを対象にする。
+    - `.codiel/runs/*/try-*/reports/gotcha-candidates.md` のうち、`由来: incident` の行か、改修前の `写し先: 写さない(incident)` の行を持つエントリを対象にする。
     - 対象は、`写し先` の行が無いエントリ、または `写し先` の slug の run の最新の try が `completed` でも `awaiting_outcome` でもなく、今の run の slug とも違うエントリである。後者は写したブランチがベースへ届いていないので、集め直す。
+    - `写し先` の値 `<path>(<slug>)` の末尾の括弧から slug を取り、`codiel-state get --slug <slug>` でその run の最新の try の status を引く。run が無いとき、または読めないときは、集め直す側に倒す。
     - 写し先の領域は、エントリの `task` と `mistake` から既存の `docs/intents/domains/*.md` の 1 つを選ぶ。今の run の取り込み先でなくてよい。選べないときは写さず、手元に残し、結果レポートに理由を添えて一覧する。
     - 写した領域ファイルは、同じく intent-sync の評価の `paths` に含め、ゲート通過の直後のコミットに入れる。コミットの後に、元の手元の記録のエントリへ `写し先` の行を書く。
 - finalize: 同じ slug のすべての try の `reports/gotcha-candidates.md` から、`写し先` の行の無いエントリを写す。最後の intent-sync より後に出た候補と、前の try で写されなかった候補が当たる。
@@ -59,4 +60,4 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 - 一覧には、エントリごとのタイトルと `写し先` の値(行が無ければ「未」)と、手元の記録のパスを書く。
 - `写し先` の行の無いエントリには、持続層へ写さなかった理由(`metatron` の run、または取り込んだ領域が無い)を添える。
 - 候補が無ければ「なし」と書く。
-- incident の候補は、outcome の同期の報告に、タイトルと手元の記録のパスで一覧する。持続層へは次の `intents` の run の intent-sync が写すので、一覧には「次の intent-sync で写す」と添える。
+- incident の候補は、outcome の同期の報告に、タイトルと手元の記録のパスで一覧する。`knowledgeTarget` が `intents` のときは、持続層へ次の run の intent-sync が写すので、一覧に「次の intent-sync で写す」と添える。`metatron` のときは写さないので、一覧に「手元に残る」と添える。

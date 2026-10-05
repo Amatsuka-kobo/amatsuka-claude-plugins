@@ -12,7 +12,7 @@ description: Codiel の implement フェーズ、および test-loop・fix-loop 
 呼び出しには 2 つのモードがある。
 
 - 通常モード(implement フェーズ): `mapped` では、ディスパッチプロンプトで指定された担当タグが付いたステップを順に実施する。`unscoped` では、担当タグによる絞り込みをせず、`dev-plan.md` の全ステップを順に実施する。
-- 修正モード(test-loop の修正 / fix-loop): `references/fix-mode.md` を Read して従う。
+- 修正モード(test-loop の修正 / fix-loop / carry-over の修正): `references/fix-mode.md` を Read して従う。carry-over の修正は、この try の `dev-plan.md` がまだ無いので、入力を carry-over の所見と対象ファイルとし、範囲を担当範囲と所見のパスに限る。
 
 「通すテスト」は、そのステップと前提ステップが終わった時点で通る仕様のディレクトリ(`<testsDir>/<ID>/`)の一覧であり、`dev-plan.md` に記載されている。実装はテストと仕様を書き換えず、通すテストをそのまま通す(パスさせる)。テストの実行方法は dev-plan の検証コマンドに従う。
 
@@ -30,7 +30,7 @@ description: Codiel の implement フェーズ、および test-loop・fix-loop 
    `mapped` で担当範囲が glob 配列のときは、その glob だけを対象とする。担当範囲外のパスへは、1 行でも書き込まない。担当範囲外の変更が要るときは、書き込まず報告する。担当範囲が「なし」のときと `unscoped` では、glob による境界を設けず、担当タグでステップを選ぶ。
    ドメインタグの付いた共有コードのステップ(`writing-dev-plans` が「主たる利用側のドメインタグを 1 つ付ける」と定めたもの)は、そのタグが担当タグと一致すれば担当してよい。共有コード自体がどの glob に属すかではなく、ステップに付いたタグで判断する。
    依頼文でドメイン別の注意のパスが渡されたときは、それを読み、実装中の注意として従う。
-3. 呼び出しモードを判定する(通常の dev-plan 実行か、test-loop/fix-loop からの修正依頼か)。修正モードなら `references/fix-mode.md` に従う。
+3. 呼び出しモードを判定する(通常の dev-plan 実行か、test-loop/fix-loop/carry-over からの修正依頼か)。修正モードなら `references/fix-mode.md` に従う。carry-over の修正では、手順 1 の `dev-plan.md` の読み込みを行わない。
 4. 通常モード: 自ドメインの未完了ステップを 1 つ選び、次を行う。
    1. 実装を書く。`dev-plan.md` のステップの「触るファイル」に無いファイルは変更しない。他ファイルの変更が要ると判明したときは、無断で広げず、実施済み範囲までを報告して差し戻す。`<testsDir>/**`(spec.md・cases.md・テストコード)には書き込まない。
    2. ステップの「検証コマンド」で、brief(`serial` グループと `final` では依頼文)が挙げた通すテストを実行する。実行しなかった通すテストは完了報告に挙げる。通すテストを skip 化・削除して通過を装わない。実装で通すか、テスト自体の妥当性を報告する。「このテストの方が間違っている」と判断したときは、cases.md やテストコードを書き換えず、修正せずに報告する(ASK の材料にする)。
@@ -50,6 +50,7 @@ description: Codiel の implement フェーズ、および test-loop・fix-loop 
 codiel(implement): <ステップ名> (<slug> try-<n>)           # 通常モード
 codiel(test-loop): <修正内容> (<slug> try-<n>)              # test-loop の修正モード
 codiel(fix-loop): <修正内容> (<slug> try-<n>)               # fix-loop の修正モード
+codiel(carry-over): <修正内容> (<slug> try-<n>)             # carry-over の修正モード
 ```
 
 `<slug> try-<n>` は現在の runId/try(例: `add-user-auth try-1`)をそのまま使う。この形式は `orchestrating-runs` が diff を辿る際の識別子になるため変更しない。

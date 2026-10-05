@@ -301,13 +301,23 @@ function checkGate(input) {
   }
   return null;
 }
-function resubmitNote(stopEvaluationId) {
-  return `STOP(evaluationId: ${stopEvaluationId})\u306E\u5F8C\u306E\u518D\u63D0\u51FA\u3067\u901A\u3057\u305F`;
+function resubmitNote(stopEvaluationIds) {
+  return `STOP(evaluationId: ${stopEvaluationIds.join(", ")})\u306E\u5F8C\u306E\u518D\u63D0\u51FA\u3067\u901A\u3057\u305F`;
+}
+function resubmittedIds(note) {
+  const m = note?.match(/^STOP\(evaluationId: (.+)\)の後の再提出で通した$/);
+  return m ? m[1].split(", ") : [];
+}
+function phaseStops(index, runId, phase) {
+  return index.filter(
+    (e) => e.runId === runId && e.phase === phase && e.verdict === "STOP"
+  );
 }
 function unresolvedStops(store, runId, resubmitNotes = []) {
   const outcomes = readOutcomes(store);
+  const resubmitted = new Set(resubmitNotes.flatMap(resubmittedIds));
   return readEvaluationIndex(store).filter(
-    (e) => e.runId === runId && e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive" && !resubmitNotes.some((n) => n?.includes(resubmitNote(e.evaluationId)))
+    (e) => e.runId === runId && e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive" && !resubmitted.has(e.evaluationId)
   ).map((e) => e.evaluationId);
 }
 
@@ -983,7 +993,7 @@ function main(argv, root = process.cwd()) {
     if (!flags["evaluation-id"]) fail("--evaluation-id \u304C\u5FC5\u8981\u3067\u3059");
     const humanApproved = bools.has("human-approved");
     const resubmitAfterStop = phase === "carry-over" && ph.verdict === "STOP" && !ph.humanApproved && !humanApproved && flags.verdict === "PROCEED" && !!flags["evaluation-id"] && flags["evaluation-id"] !== ph.evaluationId;
-    const stopEvaluationId = ph.evaluationId;
+    let stopIds = [];
     if (ph.verdict === "STOP" && !humanApproved && !resubmitAfterStop)
       fail(
         `\u30D5\u30A7\u30FC\u30BA ${phase} \u306B\u306F Raguel \u306E STOP \u304C\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u4EBA\u304C\u8AA4\u691C\u77E5\u3068\u88C1\u5B9A\u3057\u305F\u3068\u304D\u3060\u3051 --verdict STOP --human-approved \u3067\u901A\u3057\u3066\u304F\u3060\u3055\u3044`
@@ -1023,13 +1033,16 @@ function main(argv, root = process.cwd()) {
     if (!problem && resubmitAfterStop) {
       try {
         const store = raguelStore(root);
-        const stopRow = findEvaluation(
+        const stops = phaseStops(
           readEvaluationIndex(store),
-          stopEvaluationId ?? ""
+          latest.state.raguelRunId,
+          phase
         );
+        stopIds = stops.map((e) => e.evaluationId);
+        const stopRow = stops.at(-1);
         const stopHead = stopRow ? readVerdictRecord(stopRow.casePath)?.subject?.head : void 0;
         if (!stopHead || stopHead === gitHead(root))
-          problem = `STOP \u306E\u8A55\u4FA1(${stopEvaluationId})\u306E\u5F8C\u306B HEAD \u304C\u9032\u3093\u3067\u3044\u307E\u305B\u3093(\u8A55\u4FA1\u3057\u305F HEAD: ${stopHead ?? "\u8A18\u9332\u306A\u3057"})\u3002\u6240\u898B\u3092\u76F4\u3057\u3066\u30B3\u30DF\u30C3\u30C8\u3057\u3066\u304B\u3089\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+          problem = `STOP \u306E\u8A55\u4FA1(${stopRow?.evaluationId})\u306E\u5F8C\u306B HEAD \u304C\u9032\u3093\u3067\u3044\u307E\u305B\u3093(\u8A55\u4FA1\u3057\u305F HEAD: ${stopHead ?? "\u8A18\u9332\u306A\u3057"})\u3002\u6240\u898B\u3092\u76F4\u3057\u3066\u30B3\u30DF\u30C3\u30C8\u3057\u3066\u304B\u3089\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
       } catch (e) {
         problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;
       }
@@ -1039,8 +1052,7 @@ function main(argv, root = process.cwd()) {
     ph.evaluationId = flags["evaluation-id"];
     ph.verdict = flags.verdict;
     if (humanApproved) ph.humanApproved = true;
-    if (resubmitAfterStop && stopEvaluationId)
-      ph.note = resubmitNote(stopEvaluationId);
+    if (resubmitAfterStop && stopIds.length > 0) ph.note = resubmitNote(stopIds);
     const passedHead = gitHead(root);
     if (passedHead) ph.passedHead = passedHead;
     writeState(latest.statePath, latest.state);

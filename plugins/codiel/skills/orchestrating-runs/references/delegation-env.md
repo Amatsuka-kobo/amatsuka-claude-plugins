@@ -1,6 +1,6 @@
 # worktree とテストを実行する委譲
 
-test-code・implement・test-loop・fix-loop に入ったときに読む。
+test-code・implement・test-loop・fix-loop に入ったとき、および carry-over の所見の修正の委譲を出すときに読む。
 
 ## worktree
 
@@ -54,7 +54,8 @@ test-code と test-loop の修正は、担当する仕様のディレクトリ�
 | グループのマージの後の修正 | `steps/merge-fix-<g>/report.md` |
 | グループのマージの後のテストの実行(自分の実行結果と `e2e/` の実行の委譲の返答を合わせる) | `steps/merge-test-<g>/report.md` |
 | test-loop のどの仕様のディレクトリにも属さない失敗の修正 | `steps/test-loop-project/report.md` |
+| carry-over の所見の修正(run ブランチ上の委譲) | `steps/carry-over-fix-<m>/report.md` |
 | test-loop の回帰(自分の実行結果と `e2e/` の委譲の返答を合わせる) | `reports/test-run-<n>.md` |
 | fix-loop の回帰 | `reports/test-run-<n+1>.md` |
 
-g は、そのグループのステップの state の `group.index`(0 から)に 1 を足した値である。
+g は、そのグループのステップの state の `group.index`(0 から)に 1 を足した値である。m は、その try で carry-over の修正の委譲を出した順の番号(1 から)である。

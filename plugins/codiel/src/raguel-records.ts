@@ -456,8 +456,25 @@ export function checkGate(input: GateInput): string | null {
 
 // carry-over で STOP の後の再提出で通したことを state の note に残す文。
 // pass-gate が書き、unresolvedStops が未解決から外す照合に使う
-export function resubmitNote(stopEvaluationId: string): string {
-  return `STOP(evaluationId: ${stopEvaluationId})の後の再提出で通した`
+export function resubmitNote(stopEvaluationIds: readonly string[]): string {
+  return `STOP(evaluationId: ${stopEvaluationIds.join(", ")})の後の再提出で通した`
+}
+
+// resubmitNote が書いた note から、再提出で通した STOP の evaluationId を取り出す
+function resubmittedIds(note: string | null): string[] {
+  const m = note?.match(/^STOP\(evaluationId: (.+)\)の後の再提出で通した$/)
+  return m ? m[1].split(", ") : []
+}
+
+// run のフェーズの STOP の評価を、索引の順に返す
+export function phaseStops(
+  index: readonly EvaluationIndexEntry[],
+  runId: string,
+  phase: string
+): EvaluationIndexEntry[] {
+  return index.filter(
+    (e) => e.runId === runId && e.phase === phase && e.verdict === "STOP"
+  )
 }
 
 // run の STOP のうち、判定が確かで(judgeStatus: ok)、誤検知の裁定(ruling: false-positive)を
@@ -469,6 +486,7 @@ export function unresolvedStops(
   resubmitNotes: readonly (string | null)[] = []
 ): string[] {
   const outcomes = readOutcomes(store)
+  const resubmitted = new Set(resubmitNotes.flatMap(resubmittedIds))
   return readEvaluationIndex(store)
     .filter(
       (e) =>
@@ -476,7 +494,7 @@ export function unresolvedStops(
         e.verdict === "STOP" &&
         e.judgeStatus === "ok" &&
         outcomes.get(e.evaluationId)?.ruling !== "false-positive" &&
-        !resubmitNotes.some((n) => n?.includes(resubmitNote(e.evaluationId)))
+        !resubmitted.has(e.evaluationId)
     )
     .map((e) => e.evaluationId)
 }
