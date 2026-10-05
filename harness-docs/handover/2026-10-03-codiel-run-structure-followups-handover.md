@@ -10,7 +10,7 @@
 | 工程 | 状態 |
 | --- | --- |
 | ADR 候補と GOTCHAS 候補の扱い | 完了(ADR-013、コミット `4a7eddc`・`6a6679c` ほか) |
-| 下の 5 件 | 未着手。1 と 2 は検討から始める |
+| 下の 5 件 | 完了(2026-10-05。設計書 `harness-docs/design/2026-10-05-codiel-run-structure-followups-design.md`、ADR-014、コミット `0c8d2c3`〜`16a54b5`) |
 
 ## 決まったこと
 

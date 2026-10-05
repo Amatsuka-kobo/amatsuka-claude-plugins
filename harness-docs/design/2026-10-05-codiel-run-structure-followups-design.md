@@ -226,3 +226,27 @@ review と fix-loop の再レビューの委譲を出す前に、オーケスト
 - Raguel の前フェーズの改竄検証(`pipeline.ts` の `tamperedPriorPhases`)は、ケースファイルの無い前フェーズを飛ばすので、SKIPPED の carry-over で失敗しない。
 - オーケストレーターは型検査のコマンドを解決していない。解決規則は `reviewing-diffs/SKILL.md:36-37` にだけあり、改修 5 でオーケストレーターへ移す。`test-run` に型検査の結果は無い。
 - stop で PR を閉じる記述は codiel に無い。
+
+## 8. 実装時に決めた事項
+
+承認の後、実装とコードレビューの中で次を決めた。
+
+- pass-gate の carry-over の再提出は、次の条件をすべて満たすときだけ通す。
+  - 渡された評価が STOP と別の evaluationId で、そのフェーズの最新の評価で、verdict が PROCEED である。
+  - 今の HEAD が、そのフェーズの最後の STOP の評価の HEAD から進んでいる。
+- 通したときは、そのフェーズの STOP の evaluationId をすべて state の note に残す。次の try の `init` は、その STOP を未解決に数えない。
+- `init` は、前の try に `baseBranch` が無いとき(改修前の run)は、どの `--base-branch` も受け付ける。
+- `close` は、SKIPPED の carry-over を進めたフェーズに数えない。
+- capturing-intent は、slug が手順 1 の後に決まった入口で `codiel/<slug>` が既にあれば、`git switch -c` ではなく `git switch` で切り替える。
+- try-2 以降の intent-only は、intent を `.codiel/runs/<slug>/intent-backup.md` へ退避する。続けて run ブランチ側を `git restore` で戻し、ベースブランチへ切り替えてから書き戻してコミットする。
+- carry-over の修正の委譲は、`implementing` の修正モード(入力 (c))で行う。範囲は担当範囲と所見のパスに限る。報告は `steps/carry-over-fix-<m>/report.md`、コミットの件名は `codiel(carry-over): …` とする。
+- carry-over の stop は、STOP から選んだときは `raguel-stop` とし、ASK から選んだときは `ask-aborted` とする。再提出の回数に上限は置かない。
+- PR は `gh pr list --head <branch> --state all` で確かめる。`OPEN` があれば `gh pr edit` で更新し、無ければ作る。
+- 改修前の `写し先: 写さない(incident)` は、他の slug の走査で `由来: incident` と同じに扱う。写し先の run が無い・読めないときは集め直す。
+
+既知の限界:
+
+- スカッシュマージ済みの `codiel/<slug>` を同じ slug で使い直すと、分岐点が古くなり、carry-over の差分が広がる。
+- 改修前に `-try-<n>` 付きのブランチへ写し、`写し先` を付けた候補は回収しない。
+- metatron の run の incident の候補は手元に残る。
+- carry-over 中のテストの保護は手順の文だけで担保し、guard-write の保護の対象にはしない。
