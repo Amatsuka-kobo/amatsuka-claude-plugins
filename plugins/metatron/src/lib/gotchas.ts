@@ -656,10 +656,27 @@ export function buildAppendedText(
 
   const lines = [...doc.lines]
   lines.splice(insertAt, 0, ...applyEol(block, doc.crlf))
+  const text = lines.join("\n")
+
+  // 追記した全文を読み直す。title が `[解決済み] …` だと、理由行の無いタグとして読まれる。
+  const id = formatGotchaId(num)
+  const added = parseGotchas(text).entries.find((e) => e.id === id)
+  if (added === undefined || added.tag !== null) {
+    throw new GotchaError(
+      "invalid_input",
+      `title「${input.title.trim()}」は見出しのタグ(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})として読まれます。タグは tag-gotcha で付けてください。`
+    )
+  }
+  if (added.title !== input.title.trim()) {
+    throw new GotchaError(
+      "invalid_input",
+      `追記した見出しのタイトルが入力と一致しません(読み直し: ${JSON.stringify(added.title)})。`
+    )
+  }
 
   return {
-    text: lines.join("\n"),
-    id: formatGotchaId(num),
+    text,
+    id,
     number: num,
     created,
     sectionCreated,

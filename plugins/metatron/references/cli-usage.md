@@ -63,6 +63,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - `heading` は ARCHITECTURE の見出しキーのいずれか。一覧は `get config` の `inputSchemas["stage-architecture"].headings` から取る。未知の見出しは拒否される。
 - `heading` に `ADR 一覧` を指定すると拒否される。ADR の追加と状態変更は `stage-adr` を使う。
 - `body` は見出し行を含まない本文。同じ `heading` を 2 回書くと拒否される。
+- 差し替えた後の全文に閉じていないフェンスがあれば `unclosed_fence`、読めない `metatron:domains` ブロックがあれば `invalid_domains`(変更前から読めない文書では拒否しない)、`## ADR 一覧` の数か中身が変われば `invalid_body` で拒否される。
 - `reason` は任意。
 
 節を消すときは `body` の代わりに `remove: true` を書く。
@@ -86,6 +87,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - `decidedOn` は省略時に当日日付。
 - `options` が 1 件だけのときは警告が返る。拒否はされない。
 - 採番は CLI が行う。`ADR-NNN` を入力に書かない。
+- 散文の項目(`background` / `conclusion` / `rationale` / `impact`)に、フェンスの外で `### ADR-`・`- 状態:`・`#### ` で始まる行があると `invalid_input`、閉じていないフェンスがあると `unclosed_fence` で拒否される。組み上げた後の全文で `##` 見出しの並びか ADR の ID と状態が意図と違うときも `invalid_input` で拒否される。
 
 ### stage-adr(状態変更)
 
@@ -127,6 +129,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - `date` は省略時に当日日付。
 - `promotionCandidate` は `Yes` / `No` のみを受け付ける。他の値は拒否される。
 - `countermeasure` が「気をつける」などの定型句だけのときは警告が返る。拒否はされない。
+- `title` を `[解決済み]` / `[対象外]` で始めると、見出しのタグとして読まれるので `invalid_input` で拒否される。タグは `tag-gotcha` で付ける。
 
 ### tag-gotcha
 

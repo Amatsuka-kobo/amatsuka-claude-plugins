@@ -269,6 +269,11 @@
   - `src/lib/__test__/architecture.test.ts`: body に `## ADR 一覧`、閉じていないフェンス、不正なドメインマップを入れると stage が拒否される 3 件。ADR 一覧の無い新規作成(既存の A7、:296-320)と、ADR 一覧の無い既存文書の更新が通る回帰を確かめる。
   - `src/lib/__test__/adr.test.ts`: 散文に改行と `### ADR-001:` を入れた入力、背景に閉じていないフェンスを入れた入力、正規の状態行の後ろの散文に `- 状態: 値域外` を入れた入力が拒否される 3 件。
   - `src/lib/__test__/gotchas.test.ts`: title が `[解決済み] …` の append が拒否される 1 件。
+- 実装時に決めた事項
+  - ADR 一覧の照合は adr.ts を import せずに行う(adr.ts が architecture.ts を import しており、逆向きは循環になる)。`## ADR 一覧` の数と、最初の ADR 一覧の原文(末尾の空白を除く)のバイト一致で判定する。stage-architecture は ADR 一覧を対象にできないので、ID と状態の組より強い条件でも正当な更新を拒否しない。
+  - stage-architecture の body に閉じていないフェンスがあれば、body の単位で `unclosed_fence` として拒否する。後ろのセクションのフェンスで閉じられると、全文の読み直しは通るが間の見出しがフェンスに飲まれるためである。stage-adr の散文の項目も同じ理由で、項目の単位で拒否する。
+  - ドメインマップの検査は、変更前の文書のブロックが読めていたか、ブロックが無かったときだけ拒否する。変更前から壊れている文書では、stage-adr も他のセクションの stage-architecture も今までどおり通し、ドメインマップを正しい body に差し替える更新も通す。
+  - stage-adr の読み直しでは、ADR 一覧以外の `##` 見出しの並びと ADR 一覧の数が変わらないことも確かめる。散文の `## ` 行で ADR 一覧が切れても、エントリ数・ID・状態の 3 条件は通るためである。
 - 文書: `references/architecture-format.md`(stage の拒否の記述)、`references/gotchas-format.md`(§6-2 の入力制約)、`references/cli-usage.md` の stage-architecture・stage-adr・append-gotcha のエラーコード。`docs/format-change-checklist.md` の ARCHITECTURE・ADR・GOTCHAS の書式のセクションを追随させる。拒否が増えるだけで書式は変わらないので、固定データ(`THREE_ADRS` など)は変えない。
 - コミット: 1 つ。
 

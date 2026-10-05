@@ -498,6 +498,43 @@ function requireText(value: unknown, label: string, errors: string[]): string {
   return value
 }
 
+// 散文の中で、エントリの構造として読まれる行。parser は最初の状態行だけを採るので、
+// 正規の状態行の後ろに入れた `- 状態:` は全文の読み直しでは見つからない。
+const SUBHEADING_RE = /^ {0,3}####[ \t]/
+
+// throwOnErrors がエラーコードを unclosed_fence に分けるための目印。
+const UNCLOSED_FIELD_SUFFIX = "に閉じていないコードフェンスがあります。"
+
+/**
+ * 散文のフィールドに、エントリの見出し・状態行・小見出しに当たる行や、
+ * 閉じていないフェンスがあれば拒否する。フェンスの中の行は書式の例として通す。
+ */
+function rejectStructuralLines(
+  value: unknown,
+  label: string,
+  errors: string[]
+): void {
+  if (typeof value !== "string") return
+  const scan = scanFences(value)
+  if (scan.unclosed) {
+    errors.push(`${label} ${UNCLOSED_FIELD_SUFFIX}`)
+    return
+  }
+  for (let i = 0; i < scan.lines.length; i++) {
+    if (scan.insideFence[i]) continue
+    const text = scan.lines[i].text
+    if (
+      ENTRY_HEADING_RE.test(text) ||
+      STATUS_LINE_RE.test(text) ||
+      SUBHEADING_RE.test(text)
+    ) {
+      errors.push(
+        `${label} の ${i + 1} 行目「${text.trim()}」は ADR の見出し・状態行・小見出しとして読まれます。コードフェンスに入れるか書き換えてください。`
+      )
+    }
+  }
+}
+
 function validateStatusValue(
   value: unknown,
   label: string,
@@ -520,6 +557,15 @@ export function validateAdrAddInput(input: AdrAddInput): AdrValidationResult {
   requireText(input?.conclusion, "conclusion", errors)
   requireText(input?.rationale, "rationale", errors)
   requireText(input?.impact, "impact", errors)
+
+  for (const key of [
+    "background",
+    "conclusion",
+    "rationale",
+    "impact"
+  ] as const) {
+    rejectStructuralLines(input?.[key], key, errors)
+  }
 
   if (input?.status !== undefined) {
     validateStatusValue(input.status, "status", errors)
@@ -573,6 +619,8 @@ export function validateAdrStatusInput(
     if (reasonErrors.length > 0) {
       errors.push(...reasonErrors)
       errors.push("状態変更の理由は必須です。")
+    } else {
+      rejectStructuralLines(input.reason, "reason", errors)
     }
   }
 
@@ -588,8 +636,9 @@ export function validateAdrStatusInput(
 function throwOnErrors(result: AdrValidationResult): void {
   if (result.errors.length === 0) return
   const status = result.errors.some((e) => e.startsWith("status は"))
+  const unclosed = result.errors.some((e) => e.endsWith(UNCLOSED_FIELD_SUFFIX))
   throw new AdrError(
-    status ? "invalid_status" : "invalid_input",
+    status ? "invalid_status" : unclosed ? "unclosed_fence" : "invalid_input",
     `入力が書式を満たしていません: ${result.errors.join(" / ")}`,
     result.errors
   )
@@ -707,6 +756,48 @@ function applyAdrSection(
 }
 
 /**
+ * 組み上げた全文を読み直し、意図した変更だけが起きたことを確かめる。
+ *
+ * - 閉じていないフェンスが無い。
+ * - `## ADR 一覧` 以外の `##` 見出しの並びが変わらず、`## ADR 一覧` の数も変わらない
+ *   (無かったときだけ 1 つ増える)。散文の `## ` 行で ADR 一覧が切れていないこと。
+ * - エントリの ID と `- 状態:` の値の並びが `expected` と一致する。
+ */
+function verifyAdrResult(
+  before: AdrDocument,
+  text: string,
+  expected: { id: string; status: string | null }[]
+): void {
+  const after = parseAdrDocument(text)
+  if (after.unclosedFence) {
+    throw new AdrError(
+      "unclosed_fence",
+      "組み上げた後の文書に閉じていないコードフェンスがあります。散文のフェンスを閉じてください。"
+    )
+  }
+  const outline = (source: string) => {
+    const headings = parseArchitecture(source).sections.map((s) => s.heading)
+    return {
+      others: headings.filter((h) => h !== ADR_HEADING).join("\n"),
+      adr: headings.filter((h) => h === ADR_HEADING).length
+    }
+  }
+  const was = outline(before.text)
+  const now = outline(text)
+  const actual = after.entries.map((e) => ({ id: e.id, status: e.statusRaw }))
+  if (
+    was.others !== now.others ||
+    now.adr !== Math.max(was.adr, 1) ||
+    JSON.stringify(actual) !== JSON.stringify(expected)
+  ) {
+    throw new AdrError(
+      "invalid_input",
+      "組み上げた後の文書で、ADR の見出し・状態・セクションの並びが意図と違います。散文に `## ` の見出しや ADR の構造に当たる行を書かないでください。"
+    )
+  }
+}
+
+/**
  * 新しい ADR を `## ADR 一覧` 節の**末尾**へ追加した全文を返す(純関数)。
  *
  * GOTCHAS の先頭挿入と逆向きである。ADR は番号順に読まれる記録であり、
@@ -737,6 +828,10 @@ export function buildAdrAddition(
   const body = existing === "" ? rendered : `${existing}\n\n${rendered}`
 
   const applied = applyAdrSection(current, body)
+  verifyAdrResult(doc, applied.text, [
+    ...doc.entries.map((e) => ({ id: e.id, status: e.statusRaw })),
+    { id: formatAdrId(num), status }
+  ])
   return {
     text: applied.text,
     id: formatAdrId(num),
@@ -847,6 +942,14 @@ export function buildAdrStatusChange(
   )
 
   const applied = applyAdrSection(current, chunks.join(""))
+  verifyAdrResult(
+    doc,
+    applied.text,
+    doc.entries.map((e) => ({
+      id: e.id,
+      status: e === entry ? to : e.statusRaw
+    }))
+  )
   return {
     text: applied.text,
     id: entry.id,

@@ -378,12 +378,13 @@ function applySectionChanges(current, changes) {
   const text = current ?? "";
   const eol = detectEol(text);
   if (text.trim() === "") {
-    return {
+    const created = createArchitecture(
+      changes.filter((c) => c.remove !== true),
+      eol
+    );
+    return rejectBrokenResult(text, created, warnings) ?? {
       ok: true,
-      text: createArchitecture(
-        changes.filter((c) => c.remove !== true),
-        eol
-      ),
+      text: created,
       created: true,
       applied: changes.filter((c) => c.remove !== true).map((c) => ({ heading: c.heading, mode: "added" })),
       warnings
@@ -453,7 +454,43 @@ function applySectionChanges(current, changes) {
   }
   ops.sort((a, b) => b.start - a.start || b.order - a.order);
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text);
-  return { ok: true, text: chunks.join(""), created: false, applied, warnings };
+  const next = chunks.join("");
+  return rejectBrokenResult(text, next, warnings) ?? {
+    ok: true,
+    text: next,
+    created: false,
+    applied,
+    warnings
+  };
+}
+function rejectBrokenResult(before, text, warnings) {
+  if (parseArchitecture(text).error === "unclosed_fence") {
+    return {
+      ok: false,
+      error: "unclosed_fence",
+      message: "\u5DEE\u3057\u66FF\u3048\u305F\u5F8C\u306E\u6587\u66F8\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002body \u306E\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304F\u3060\u3055\u3044\u3002",
+      warnings
+    };
+  }
+  const isBroken = (result) => !result.ok && result.reason !== "block_not_found";
+  const domains = extractDomains(text);
+  if (isBroken(domains) && !isBroken(extractDomains(before))) {
+    return {
+      ok: false,
+      error: "invalid_domains",
+      message: `\u5DEE\u3057\u66FF\u3048\u305F\u5F8C\u306E\u6587\u66F8\u306E \`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u3092\u8AAD\u3081\u307E\u305B\u3093: ${domains.message}`,
+      warnings
+    };
+  }
+  return null;
+}
+function adrSectionSnapshot(text) {
+  const doc = parseArchitecture(text);
+  const section = findSection(doc, ADR_HEADING);
+  return {
+    count: doc.sections.filter((s) => s.heading === ADR_HEADING).length,
+    raw: section === void 0 ? "" : section.raw.replace(/\s+$/, "")
+  };
 }
 function prepareArchitectureUpdate(current, changes) {
   const warnings = [];
@@ -518,6 +555,14 @@ function prepareArchitectureUpdate(current, changes) {
         warnings
       };
     }
+    if (scanFences(change.body).unclosed) {
+      return {
+        ok: false,
+        error: "unclosed_fence",
+        message: `\u300C${validated.heading}\u300D\u306E body \u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002body \u306E\u4E2D\u3067\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304F\u3060\u3055\u3044\u3002`,
+        warnings
+      };
+    }
     normalizedChanges.push({ heading: validated.heading, body: change.body });
   }
   const removals = normalizedChanges.filter((c) => c.remove === true);
@@ -565,6 +610,18 @@ function prepareArchitectureUpdate(current, changes) {
     }
   }
   const result = applySectionChanges(current, normalizedChanges);
+  if (result.ok) {
+    const before = adrSectionSnapshot(current ?? "");
+    const after = adrSectionSnapshot(result.text);
+    if (before.count !== after.count || before.raw !== after.raw) {
+      return {
+        ok: false,
+        error: "invalid_body",
+        message: `body \u304B\u3089 \`## ${ADR_HEADING}\` \u3092\u5909\u3048\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093\u3002body \u306B \`## ${ADR_HEADING}\` \u306E\u898B\u51FA\u3057\u3084 ADR \u3092\u66F8\u304B\u305A\u3001ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002`,
+        warnings: [...warnings, ...result.warnings]
+      };
+    }
+  }
   return { ...result, warnings: [...warnings, ...result.warnings] };
 }
 
@@ -1004,9 +1061,24 @@ function buildAppendedText(existing, input, date) {
   }
   const lines = [...doc.lines];
   lines.splice(insertAt, 0, ...applyEol(block, doc.crlf));
+  const text = lines.join("\n");
+  const id = formatGotchaId(num);
+  const added = parseGotchas(text).entries.find((e) => e.id === id);
+  if (added === void 0 || added.tag !== null) {
+    throw new GotchaError(
+      "invalid_input",
+      `title\u300C${input.title.trim()}\u300D\u306F\u898B\u51FA\u3057\u306E\u30BF\u30B0(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})\u3068\u3057\u3066\u8AAD\u307E\u308C\u307E\u3059\u3002\u30BF\u30B0\u306F tag-gotcha \u3067\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+  }
+  if (added.title !== input.title.trim()) {
+    throw new GotchaError(
+      "invalid_input",
+      `\u8FFD\u8A18\u3057\u305F\u898B\u51FA\u3057\u306E\u30BF\u30A4\u30C8\u30EB\u304C\u5165\u529B\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093(\u8AAD\u307F\u76F4\u3057: ${JSON.stringify(added.title)})\u3002`
+    );
+  }
   return {
-    text: lines.join("\n"),
-    id: formatGotchaId(num),
+    text,
+    id,
     number: num,
     created,
     sectionCreated,
@@ -1470,6 +1542,25 @@ function requireText(value, label, errors) {
   }
   return value;
 }
+var SUBHEADING_RE = /^ {0,3}####[ \t]/;
+var UNCLOSED_FIELD_SUFFIX = "\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002";
+function rejectStructuralLines(value, label, errors) {
+  if (typeof value !== "string") return;
+  const scan2 = scanFences(value);
+  if (scan2.unclosed) {
+    errors.push(`${label} ${UNCLOSED_FIELD_SUFFIX}`);
+    return;
+  }
+  for (let i = 0; i < scan2.lines.length; i++) {
+    if (scan2.insideFence[i]) continue;
+    const text = scan2.lines[i].text;
+    if (ENTRY_HEADING_RE2.test(text) || STATUS_LINE_RE.test(text) || SUBHEADING_RE.test(text)) {
+      errors.push(
+        `${label} \u306E ${i + 1} \u884C\u76EE\u300C${text.trim()}\u300D\u306F ADR \u306E\u898B\u51FA\u3057\u30FB\u72B6\u614B\u884C\u30FB\u5C0F\u898B\u51FA\u3057\u3068\u3057\u3066\u8AAD\u307E\u308C\u307E\u3059\u3002\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u306B\u5165\u308C\u308B\u304B\u66F8\u304D\u63DB\u3048\u3066\u304F\u3060\u3055\u3044\u3002`
+      );
+    }
+  }
+}
 function validateStatusValue(value, label, errors) {
   if (!isAdrStatus(value)) {
     errors.push(
@@ -1486,6 +1577,14 @@ function validateAdrAddInput(input) {
   requireText(input?.conclusion, "conclusion", errors);
   requireText(input?.rationale, "rationale", errors);
   requireText(input?.impact, "impact", errors);
+  for (const key of [
+    "background",
+    "conclusion",
+    "rationale",
+    "impact"
+  ]) {
+    rejectStructuralLines(input?.[key], key, errors);
+  }
   if (input?.status !== void 0) {
     validateStatusValue(input.status, "status", errors);
   }
@@ -1527,6 +1626,8 @@ function validateAdrStatusInput(input) {
     if (reasonErrors.length > 0) {
       errors.push(...reasonErrors);
       errors.push("\u72B6\u614B\u5909\u66F4\u306E\u7406\u7531\u306F\u5FC5\u9808\u3067\u3059\u3002");
+    } else {
+      rejectStructuralLines(input.reason, "reason", errors);
     }
   }
   if (input?.changedOn !== void 0) {
@@ -1539,8 +1640,9 @@ function validateAdrStatusInput(input) {
 function throwOnErrors(result) {
   if (result.errors.length === 0) return;
   const status = result.errors.some((e) => e.startsWith("status \u306F"));
+  const unclosed = result.errors.some((e) => e.endsWith(UNCLOSED_FIELD_SUFFIX));
   throw new AdrError(
-    status ? "invalid_status" : "invalid_input",
+    status ? "invalid_status" : unclosed ? "unclosed_fence" : "invalid_input",
     `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${result.errors.join(" / ")}`,
     result.errors
   );
@@ -1605,6 +1707,31 @@ function applyAdrSection(current, body) {
     warnings: result.warnings
   };
 }
+function verifyAdrResult(before, text, expected) {
+  const after = parseAdrDocument(text);
+  if (after.unclosedFence) {
+    throw new AdrError(
+      "unclosed_fence",
+      "\u7D44\u307F\u4E0A\u3052\u305F\u5F8C\u306E\u6587\u66F8\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002\u6563\u6587\u306E\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304F\u3060\u3055\u3044\u3002"
+    );
+  }
+  const outline = (source) => {
+    const headings = parseArchitecture(source).sections.map((s) => s.heading);
+    return {
+      others: headings.filter((h) => h !== ADR_HEADING).join("\n"),
+      adr: headings.filter((h) => h === ADR_HEADING).length
+    };
+  };
+  const was = outline(before.text);
+  const now = outline(text);
+  const actual = after.entries.map((e) => ({ id: e.id, status: e.statusRaw }));
+  if (was.others !== now.others || now.adr !== Math.max(was.adr, 1) || JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new AdrError(
+      "invalid_input",
+      "\u7D44\u307F\u4E0A\u3052\u305F\u5F8C\u306E\u6587\u66F8\u3067\u3001ADR \u306E\u898B\u51FA\u3057\u30FB\u72B6\u614B\u30FB\u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u4E26\u3073\u304C\u610F\u56F3\u3068\u9055\u3044\u307E\u3059\u3002\u6563\u6587\u306B `## ` \u306E\u898B\u51FA\u3057\u3084 ADR \u306E\u69CB\u9020\u306B\u5F53\u305F\u308B\u884C\u3092\u66F8\u304B\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002"
+    );
+  }
+}
 function buildAdrAddition(current, input, date) {
   const validation = validateAdrAddInput(input);
   throwOnErrors(validation);
@@ -1624,6 +1751,10 @@ function buildAdrAddition(current, input, date) {
 
 ${rendered}`;
   const applied = applyAdrSection(current, body);
+  verifyAdrResult(doc, applied.text, [
+    ...doc.entries.map((e) => ({ id: e.id, status: e.statusRaw })),
+    { id: formatAdrId(num), status }
+  ]);
   return {
     text: applied.text,
     id: formatAdrId(num),
@@ -1697,6 +1828,14 @@ ${history}
 `
   );
   const applied = applyAdrSection(current, chunks.join(""));
+  verifyAdrResult(
+    doc,
+    applied.text,
+    doc.entries.map((e) => ({
+      id: e.id,
+      status: e === entry ? to : e.statusRaw
+    }))
+  );
   return {
     text: applied.text,
     id: entry.id,
@@ -2119,7 +2258,7 @@ var AdrCandidateError = class extends Error {
 };
 var BOUNDARY_RE = /^ {0,3}#{2,3}(?:[ \t]|$)/;
 var H3_RE = /^ {0,3}###[ \t]+(.*)$/;
-var SUBHEADING_RE = /^ {0,3}####[ \t]+(.*?)[ \t]*$/;
+var SUBHEADING_RE2 = /^ {0,3}####[ \t]+(.*?)[ \t]*$/;
 var FIELD_RE = /^ {0,3}-[ \t]+(制約|決定日|出典 intent)[ \t]*:[ \t]*(.*?)[ \t]*$/;
 var MARK_PREFIX = "[ADR \u5019\u88DC";
 var MARKED_HEADING_RE = /^(.*?)[ \t]*\[ADR 候補: ([^\]\s]+-\d+)\][ \t]*$/;
@@ -2213,7 +2352,7 @@ function parseDomainFile(buf) {
     for (let i = start + 1; i < end; i++) {
       const text = lines[i].text;
       if (!insideFence[i]) {
-        const sub = SUBHEADING_RE.exec(text);
+        const sub = SUBHEADING_RE2.exec(text);
         const def = sub && CANDIDATE_SECTIONS.find((s) => s.heading === sub[1]);
         if (def && bodies[def.key] === void 0) {
           current = def.key;

@@ -591,6 +591,20 @@ test("G17: 書き込み後にロックファイルが残っていない", () => 
   expect(fs.existsSync(lockPathFor(filePath))).toBe(false)
 })
 
+test("G17e: title が `[解決済み] …` の append は、理由行なしのタグになるので拒否し、書き込まない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  for (const title of ["[解決済み] 直った失敗", "[対象外] 前提が違った"]) {
+    expectGotchaError(
+      () => appendGotcha(filePath, { ...VALID_INPUT, title }),
+      "invalid_input"
+    )
+  }
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+})
+
 /** 先頭の 4 バイトだけ書いて ENOSPC を投げる故障を入れて `fn` を実行し、投げられた例外を返す。 */
 function runWithPartialWrite(dir: string, fn: () => unknown): unknown {
   const faults = installWriteFaults(dir, { partialBytes: 4 })

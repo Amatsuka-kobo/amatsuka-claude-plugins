@@ -1002,3 +1002,92 @@ test("A30: remove に true 以外の値を渡すと invalid_input で拒否す�
     expect(result.error, String(bad)).toBe("invalid_input")
   }
 })
+
+describe("A31: 組み上げた後の全文を読み直し、壊れた文書を stage しない", () => {
+  test("body に `## ADR 一覧` を入れると invalid_body で拒否する", () => {
+    for (const current of [SEVEN_SECTIONS, MINIMAL_DOMAINS_ONLY, null]) {
+      const result = prepareArchitectureUpdate(current, [
+        {
+          heading: "システム概要",
+          body: "概要。\n\n## ADR 一覧\n\n### ADR-001: 偽の判断\n\n- 状態: 採用"
+        }
+      ])
+      expect(result.ok, String(current?.length)).toBe(false)
+      if (result.ok) continue
+      expect(result.error).toBe("invalid_body")
+    }
+  })
+
+  test("body に閉じていないフェンスを入れると unclosed_fence で拒否する", () => {
+    for (const current of [SEVEN_SECTIONS, null]) {
+      const result = prepareArchitectureUpdate(current, [
+        { heading: "技術スタック", body: "```ts\nconst a = 1" }
+      ])
+      expect(result.ok, String(current?.length)).toBe(false)
+      if (result.ok) continue
+      expect(result.error).toBe("unclosed_fence")
+    }
+  })
+
+  test("ドメインマップ以外の body に不正なドメインマップを入れると invalid_domains で拒否する", () => {
+    // ドメインマップのセクションより前に置くと、文書の最初のブロックになる。
+    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      {
+        heading: "技術スタック",
+        body: "```json metatron:domains\n{ 壊れた JSON\n```"
+      }
+    ])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toBe("invalid_domains")
+  })
+
+  test("回帰: ADR 一覧の無い既存文書の更新と、ADR 一覧の後ろへの追加は通る", () => {
+    const minimal = expectOk(
+      prepareArchitectureUpdate(MINIMAL_DOMAINS_ONLY, [
+        { heading: "システム概要", body: "概要。" },
+        { heading: "コマンド定義", body: "- test" }
+      ])
+    )
+    expect(headings(minimal.text)).toEqual([
+      "システム概要",
+      "ドメインマップ",
+      "コマンド定義"
+    ])
+
+    // ADR 一覧が末尾にある文書へ、順序の外の見出しを足す経路は ADR 一覧の末尾に空行を足す。
+    const seven = expectOk(
+      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+        { heading: "技術スタック", body: "| 言語 | Go |" }
+      ])
+    )
+    expect(sectionRaw(seven.text, "ADR 一覧")).toBe(
+      sectionRaw(SEVEN_SECTIONS, "ADR 一覧")
+    )
+  })
+})
+
+test("A32: 回帰: 変更前からドメインマップが壊れた文書でも、他のセクションの更新と、ドメインマップの差し替えは通る", () => {
+  const broken = SEVEN_SECTIONS.replace(
+    '  "backend": ["src/server/**"]',
+    '  "backend": []'
+  )
+  expect(extractDomains(broken).ok).toBe(false)
+
+  const other = expectOk(
+    prepareArchitectureUpdate(broken, [
+      { heading: "技術スタック", body: "| 言語 | Go |" }
+    ])
+  )
+  expect(other.text).toContain('"backend": []')
+
+  const fixed = expectOk(
+    prepareArchitectureUpdate(broken, [
+      {
+        heading: "ドメインマップ",
+        body: '```json metatron:domains\n{ "generic": ["**"] }\n```'
+      }
+    ])
+  )
+  expect(extractDomains(fixed.text).ok).toBe(true)
+})

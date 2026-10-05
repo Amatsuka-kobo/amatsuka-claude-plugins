@@ -9,6 +9,7 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4
 - [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`、`src/check-intent-env.ts`、`references/handoff-contract.md`
 - [ ] ADR エントリの書式はこの節ではなく「ADR の書式」の節を見る(正本は契約 §4 ではなく §6)
+- [ ] `plugins/metatron/src/lib/architecture.ts` の全文の読み直し(`rejectBrokenResult` と、`prepareArchitectureUpdate` の `## ADR 一覧` の照合)と、`references/cli-usage.md` の `stage-architecture` のエラーコード
 
 ## ADR の書式(`references/architecture-format.md` の `## ADR 一覧`)
 
@@ -18,6 +19,7 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] `plugins/metatron/docs/ARCHITECTURE.example.md` の `## ADR 一覧`(記入例は 2 件以上を保ち、区切りの見本を含める)
 - [ ] metatron 設計書 `harness-docs/design/2026-08-16-metatron-design.md` §6-6 の書式の写し
 - [ ] `plugins/metatron/src/lib/__test__/adr.test.ts` の固定データ(`THREE_ADRS` / `THREE_ADRS_SEPARATED`)
+- [ ] `plugins/metatron/src/lib/adr.ts` の散文の検査(`rejectStructuralLines`)と全文の読み直し(`verifyAdrResult`)、`references/cli-usage.md` の `stage-adr` のエラーコード
 - [ ] `plugins/metatron/scripts/` を `pnpm run build` で再生成する
 
 ## rules の書式(`references/rules-format.md`)
@@ -33,7 +35,8 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §7
 - [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` の GOTCHAS の承認節
-- [ ] `plugins/metatron/references/cli-usage.md` の `init-gotchas` の節
+- [ ] `plugins/metatron/references/cli-usage.md` の `init-gotchas` と `append-gotcha` の項目
+- [ ] `plugins/metatron/src/lib/gotchas.ts` の `buildAppendedText` の読み直し(追記したエントリのタグとタイトル)
 - [ ] `plugins/metatron/docs/GOTCHAS.example.md` の冒頭の記入ガイド
 - [ ] `plugins/metatron/skills/recording-gotchas/SKILL.md` の `description` と `## 1. 記録の可否`
 - [ ] `plugins/raphael/skills/raphael/SKILL.md` と `plugins/raphael/agents/antibody-synthesizer.md`(棲み分けの節を変えたときだけ確認する)
