@@ -433,6 +433,28 @@ test.each([
   expect(hook(root, command)?.permissionDecision).toBe("deny")
 })
 
+test("--parents で ~ から始まる元は、~ を展開した実際の配置先でも照合して deny", () => {
+  const root = rootsProject()
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "gb-home-"))
+  const placed = path.join(root, "output", home.replace(/^\/+/, ""))
+  fs.mkdirSync(placed, { recursive: true })
+  fs.symlinkSync(
+    path.join(root, ".codiel/runs/demo/try-1"),
+    path.join(placed, "src"),
+    "dir"
+  )
+  for (const command of [
+    "cp --parents ~/src/a.txt output",
+    "cp -a --parents ~/src/a.txt output",
+    "cp --pa ~/src/a.txt output",
+    "cp --parents -t output ~/src/a.txt"
+  ])
+    expect(
+      hook(root, command, { HOME: home })?.permissionDecision,
+      command
+    ).toBe("deny")
+})
+
 // 元が別ディレクトリへの symlink の .codiel、元の runs が切れた symlink、--parents の配置先
 test.each([
   "cp -a linked/.codiel .",

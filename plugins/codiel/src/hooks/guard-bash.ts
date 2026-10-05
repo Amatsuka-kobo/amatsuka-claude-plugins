@@ -945,7 +945,13 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
       for (const src of sources) {
         if (touchesRuns(noTargetDir ? dest : `${dest}/${path.basename(src)}`))
           return true
-        if (parents && touchesRuns(`${dest}/${src.replace(/^\/+/, "")}`))
+        // `~` から始まる元は、展開した後のパスでもつなぐ(`$HOME` などの変数は範囲外)
+        if (
+          parents &&
+          [src, expandHome(src)].some((s) =>
+            touchesRuns(`${dest}/${s.replace(/^\/+/, "")}`)
+          )
+        )
           return true
       }
     }

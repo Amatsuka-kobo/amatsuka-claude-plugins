@@ -793,7 +793,9 @@ function stateJsonProblem(cmd, cwd) {
       for (const src of sources) {
         if (touchesRuns(noTargetDir ? dest : `${dest}/${path4.basename(src)}`))
           return true;
-        if (parents && touchesRuns(`${dest}/${src.replace(/^\/+/, "")}`))
+        if (parents && [src, expandHome(src)].some(
+          (s) => touchesRuns(`${dest}/${s.replace(/^\/+/, "")}`)
+        ))
           return true;
       }
     }
