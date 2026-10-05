@@ -44,7 +44,8 @@
 - 変更: `raguel-mcp/src/subject/code.ts:278-296` の本文の diff の引数に `--text` を足す。パス名だけを読む name-status の diff(:305-316)には足さない。`FIXED_CONFIG` は `-c` の設定の列で、`--text` は diff のオプションなのでそこには置かない。
 - `--text` は git が読むすべての attributes の源(作業ツリーの `.gitattributes`・`.git/info/attributes`・system・global)と NUL の判定より優先して本文を出す(2026-10-05 に git 2.43 で確かめた)。
 - guard 層(guard-write・guard-bash が `.gitattributes` と `.git/info/` を見ない点)は直さない。`--text` の後は attributes が diff の本文に影響しないので、guard で守る対象が無くなる。`diff=<driver>` は既存の `--no-ext-diff --no-textconv` が無効にしている。
-- 副作用: `--text` でバイナリも偽の `+` 行になる。`code/max-diff-lines` は、NUL を含むファイルを変更行数に数えない(attributes に頼らず `--text` の diff の行で判定する)。`patternScan` と `common/secrets` はバイナリを除かない(除くと attributes や NUL で検査を外せる経路に戻る)。既知の限界として、`MAX_DIFF_BYTES`(20 MB)を超える大きなバイナリを含むコミットは `SubjectInputError` になる(raguel-redesign 設計書 §13 に記載)。
+- 副作用: `--text` でバイナリも偽の `+` 行になる。`code/max-diff-lines` は、NUL を含むファイルを変更行数に数えない(attributes に頼らず `--text` の diff の行で判定する)。`patternScan` と `common/secrets` はバイナリを除かない。除くと、attributes や NUL で検査を外せる経路に戻る。既知の限界として、`MAX_DIFF_BYTES`(20 MB)を超える大きなバイナリを含むコミットは `SubjectInputError` になる(raguel-redesign 設計書 §13 に記載)。
+- テキストのファイルに NUL を 1 バイト入れると、そのファイルは max-diff-lines の行数から外れる。max-diff-lines は差分の大きさを知らせる ask の目安で、検査を外す経路にはならない(NUL を含むファイルも secrets・destructive-ops・unsafe-exec は全行を見る)。そのため、この差は受け入れる。
 - `Binary files` の行が残った場合の追加の検査は足さない。`--text` を付けた diff はこの行を出さない。
 - テスト(先に足す)
   - `subject/__test__/code.test.ts` の `describe("collectCodeSubject")`: 未追跡の `.gitattributes`(`* -diff`)、`.git/info/attributes`(`* -diff`)、NUL を含むファイルの 3 経路で、diff に追加行の本文が入る。ヘルパーは `subject/__test__/helpers/gitRepo.ts`。
@@ -57,7 +58,7 @@
 - 変更: `rules/code/newDependency.ts`
   - `.gitmodules` は解析しない。空行とコメント(`#`・`;` で始まる行)以外の追加行が 1 行でもあれば、そのファイルで 1 件の ask を出す。キーの大小・空白・タブ・見出しの変形・include などの書式の揺れで、パーサーとの差による抜けを作らないためである。
   - mode 160000 のファイルの `Subproject commit` 行の追加(参照先の変更と、`.gitmodules` を変えない gitlink の新規の追加)も新しい依存と同じ重さ(ask)にする。名前は submodule のパスとする。`.gitmodules` の追加と同じ submodule で二重に出ても ask が 1 つ増えるだけなので、重複は除かない。
-  - `subject/code.ts` の `FIXED_CONFIG` に `diff.submodule=short` と `diff.ignoreSubmodules=none` を足す。利用者の git 設定(`log` 形式や無視の設定)で `Subproject commit` の行が消えたり形が変わったりしないようにする。
+  - `subject/code.ts` の `FIXED_CONFIG` に `diff.submodule=short` と `diff.ignoreSubmodules=none` を足す。利用者の git 設定(`log` 形式や無視の設定)で `Subproject commit` の行が消えたり形が変わったりしないようにする。`git config submodule.<名前>.ignore all` は `-c diff.ignoreSubmodules=none` で上書きできないので、本文の diff と name-status の diff の両方に `--ignore-submodules=none` も付ける。
 - テスト: `rules/code/__test__/newDependency.test.ts` に `.gitmodules`(設定行の追加、書式の揺れ 8 件、空行・コメントと削除だけでは出さない)と `Subproject commit` の追加・変更。ヘルパーは `rules/code/__test__/helpers/diff.ts`。`subject/__test__/code.test.ts` に、リポジトリの設定を `diff.submodule=log` と `diff.ignoreSubmodules=all` にしても、gitlink の更新が `Subproject commit` の行で diff に入ることを 2 件。
 - 文書: raguel-redesign 設計書 :453 の `code/new-dependency` の行。
 - コミット: 1 つ。

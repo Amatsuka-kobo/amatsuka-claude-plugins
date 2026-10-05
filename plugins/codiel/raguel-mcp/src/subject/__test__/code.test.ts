@@ -127,7 +127,8 @@ describe("collectCodeSubject", () => {
 
   describe.each([
     ["diff.submodule", "log"],
-    ["diff.ignoreSubmodules", "all"]
+    ["diff.ignoreSubmodules", "all"],
+    ["submodule.vendor/lib.ignore", "all"]
   ])("リポジトリの設定が %s=%s でも、gitlink の更新が Subproject commit の行で入る", (key, value) => {
     it("gitlink の更新を diff の本文に載せる", () => {
       const sub = track(makeRepo({ "s.txt": "1\n" }))
@@ -155,6 +156,7 @@ describe("collectCodeSubject", () => {
       const r = collectCodeSubject({ projectRoot: repo, baseRef: base })
       expect(r.diff).toContain(`-Subproject commit ${subOld}`)
       expect(r.diff).toContain(`+Subproject commit ${subNew}`)
+      expect(r.subject.files.map((f) => f.path)).toContain("vendor/lib")
     })
   })
 
