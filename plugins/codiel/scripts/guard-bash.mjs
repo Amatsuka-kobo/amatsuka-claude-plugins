@@ -706,12 +706,16 @@ function teeOrSedWrites(words, hit) {
 var STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/;
 var STATE_FILE_COMMANDS = ["rm", "mv", "cp", "ln", "install", "dd"];
 var MAX_CWD_CANDIDATES = 64;
-function cwdCandidates(commands, cwd) {
-  const out = /* @__PURE__ */ new Set([cwd]);
-  for (const words of commands) {
-    if (!["cd", "pushd"].includes(words[0])) continue;
+function cdTargets(commands) {
+  return commands.flatMap((words) => {
+    if (!["cd", "pushd"].includes(words[0])) return [];
     const dir = words.slice(1).find((w) => !w.startsWith("-"));
-    if (dir === void 0) continue;
+    return dir === void 0 ? [] : [dir];
+  });
+}
+function cwdCandidatesOf(commands, cwd) {
+  const out = /* @__PURE__ */ new Set([cwd]);
+  for (const dir of cdTargets(commands)) {
     for (const c of [...out]) {
       out.add(path4.resolve(c, expandHome(dir)));
       if (out.size > MAX_CWD_CANDIDATES) return null;
@@ -719,17 +723,24 @@ function cwdCandidates(commands, cwd) {
   }
   return [...out];
 }
-function writesStateJson(cmd, cwd) {
-  const tokenCommands = parseCommands(cmd) ?? splitLoosely(cmd);
-  const lineCommands = gitCommandsByLines(cmd);
+function cwdCandidates(tokenCommands, lineCommands, cwd) {
+  const a = cwdCandidatesOf(tokenCommands, cwd);
+  const b = cwdCandidatesOf(lineCommands, cwd);
+  return a && b ? [.../* @__PURE__ */ new Set([...a, ...b])] : null;
+}
+function stateJsonProblem(cmd, cwd) {
+  const tokenCommands = (parseCommands(cmd) ?? splitLoosely(cmd)).map(
+    withoutMessageValues
+  );
+  const lineCommands = gitCommandsByLines(withoutInertBodies(cmd));
   const root = findMainRoot(cwd);
   const runsDirs = [
     path4.join(root, ".codiel", "runs"),
     resolvePhysicalPath(root, path4.join(".codiel", "runs"))
   ];
   const underRuns = (p) => runsDirs.some((d) => isUnder(p, d));
-  const cwds = cwdCandidates([...tokenCommands, ...lineCommands], cwd);
-  if (cwds === null) return true;
+  const cwds = cwdCandidates(tokenCommands, lineCommands, cwd);
+  if (cwds === null) return "cd \u304C\u591A\u3059\u304E\u3066\u66F8\u304D\u8FBC\u307F\u5148\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044";
   const resolved = (word) => cwds.flatMap((c) => {
     const lexical = path4.resolve(c, expandHome(word));
     return [
@@ -773,7 +784,61 @@ function writesStateJson(cmd, cwd) {
       (_, k) => (k === 0 || words[k - 1] === "<<<" || /^-\w*c$/.test(words[k - 1]) && words.slice(0, k - 1).some((w) => SHELLS.includes(path4.basename(w)))) && fileOpWrites(words, k)
     )
   );
-  return byTokens || byLines;
+  return byTokens || byLines ? "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F\u304B\u524A\u9664" : void 0;
+}
+var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_]\w*))/g;
+function isInertHeredoc(line, before, after, next) {
+  if (/[;&|]/.test(line) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+    return false;
+  const B = "(?:^|\\s)";
+  if (new RegExp(
+    `${B}git\\s+(?:\\S+\\s+)*?commit\\b.*\\s(?:-F|--file)(?:\\s+|=)(?:-|/dev/stdin)(?=\\s|$)`
+  ).test(line))
+    return true;
+  if (new RegExp(
+    `${B}(?:git\\s+(?:\\S+\\s+)*?(?:commit|tag)|gh\\s+\\S+\\s+\\S+)\\b.*\\s(?:-m|--message|--body)(?:\\s+|=)"?\\$\\(\\s*cat\\s+$`
+  ).test(before))
+    return after.trim() === "" && /^\s*\)"?\s*$/.test(next ?? "");
+  return false;
+}
+function withoutMessageValues(words) {
+  const at = words.findIndex(
+    (w, k) => w === "git" && ["commit", "tag"].includes(words[k + 1] ?? "") || w === "gh"
+  );
+  if (at === -1) return words;
+  return words.filter((w, k) => {
+    if (k <= at || !w.includes("\n")) return true;
+    const prev = words[k - 1];
+    const inline = /^(?:--message|--body)=/.test(w) || /^-m./.test(w);
+    return !(["-m", "--message", "--body"].includes(prev) || inline);
+  });
+}
+function withoutInertBodies(cmd) {
+  const lines = cmd.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const ms = [...lines[i].matchAll(ANY_HEREDOC_RE)];
+    if (ms.length === 0) continue;
+    let k = i;
+    for (const m2 of ms) {
+      const word = m2[2] ?? m2[3] ?? m2[4];
+      const from = k;
+      k = lines.findIndex(
+        (l, j) => j > from && (m2[1] === "-" ? l.replace(/^\t+/, "") : l) === word
+      );
+      if (k === -1) return lines.join("\n");
+    }
+    const m = ms[0];
+    const at = m.index ?? 0;
+    if (ms.length === 1 && isInertHeredoc(
+      lines[i],
+      lines[i].slice(0, at),
+      lines[i].slice(at + m[0].length),
+      lines[k + 1]
+    ))
+      for (let j = i + 1; j < k; j++) lines[j] = "";
+    i = k;
+  }
+  return lines.join("\n");
 }
 function isRegularFile(p) {
   try {
@@ -852,6 +917,7 @@ try {
   ];
   const isGitPush = pushCandidates.some((inv) => inv.subcommand === "push");
   const cwd = input.cwd ?? process.cwd();
+  const stateProblem = stateJsonProblem(cmd, cwd);
   const ALWAYS_DENY = [
     [
       /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+(\/(?!tmp)|~)/.test(
@@ -868,7 +934,7 @@ try {
       pushesToProtectedBranch(pushCandidates),
       "\u4FDD\u8B77\u30D6\u30E9\u30F3\u30C1(main/master)\u3078\u306E push"
     ],
-    [writesStateJson(cmd, cwd), "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F\u304B\u524A\u9664"]
+    [stateProblem !== void 0, stateProblem ?? ""]
   ];
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `\u7981\u6B62\u30B3\u30DE\u30F3\u30C9: ${why}`);

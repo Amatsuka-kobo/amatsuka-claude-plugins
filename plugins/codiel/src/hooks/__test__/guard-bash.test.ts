@@ -376,12 +376,107 @@ test("symlink を通した alias/../state.json への書き込みは deny", () =
   expect(r?.permissionDecision).toBe("deny")
 })
 
-test("cwd の候補が上限を超えるほど cd を重ねたコマンドは、打ち切らずに deny", () => {
+// cwd の候補は、cd の行き先の組み合わせで増える。入れ子の cd が 6 個(候補 64)までは判定し、
+// 7 個(候補 128)で上限を超える
+test("入れ子の cd が 6 個までは素通し、7 個で cd が多すぎるとして deny", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
-  const cds = ["a", "b", "c", "d", "e", "f", "g"].map((d) => `cd ${d}`)
-  const r = hook(root, [...cds, "echo hi"].join("; "))
+  const nested = (n: number) =>
+    [..."abcdefg".slice(0, n)].map((d) => `cd ${d}`).join(" && ")
+  expect(hook(root, `${nested(4)} && ls`)).toBe(null)
+  expect(hook(root, `${nested(6)} && ls`)).toBe(null)
+  const r = hook(root, `${nested(7)} && ls`)
   expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).toContain("state.json")
+  expect(r?.permissionDecisionReason).toContain(
+    "cd が多すぎて書き込み先を判定できない"
+  )
+})
+
+test("monorepo の 8 パッケージを cd で巡回するコマンドは素通し", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const pkgs = ["a", "b", "c", "d", "e", "f", "g", "h"]
+  const command = pkgs
+    .map((p, i) => `${i === 0 ? "cd packages/" : "cd ../"}${p} && npm test`)
+    .join(" && ")
+  expect(hook(root, command)).toBe(null)
+})
+
+test("受け手を問わず heredoc の本文の state.json の削除は deny(パイプでシェルへ渡す形と、引用符で囲んだシェル名を含む)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const head of ["bash <<EOF", "cat <<EOF | bash", '"bash" <<EOF'])
+    expect(
+      hook(root, [head, "rm .codiel/runs/x/try-1/state.json", "EOF"].join("\n"))
+        ?.permissionDecision,
+      head
+    ).toBe("deny")
+})
+
+test("fd 番号付きの heredoc でシェルへ渡した state.json の削除は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const command of [
+    ["bash 0<<EOF", "rm .codiel/runs/x/try-1/state.json", "EOF"].join("\n"),
+    ["sh 0<<-EOF", "\trm .codiel/runs/x/try-1/state.json", "\tEOF"].join("\n")
+  ])
+    expect(hook(root, command)?.permissionDecision, command).toBe("deny")
+})
+
+test("コミットメッセージの heredoc と同じ行に 2 つ目の heredoc があれば、2 つ目の本文の書き込みは deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const command = [
+    "git commit -F - <<'EOF' ; bash <<'X'",
+    "メッセージ",
+    "EOF",
+    "echo '{}' > .codiel/runs/x/try-1/state.json",
+    "X"
+  ].join("\n")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("実行される heredoc の本文の中に除外に当たる heredoc の開始行があっても、後ろの行の削除は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const command = [
+    "bash <<'X'",
+    "git commit -F - <<'Y'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "Y",
+    "X"
+  ].join("\n")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("cat のプロセス置換へ渡した heredoc の本文と、改行を含む語の中の state.json の削除は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const command of [
+    ["cat > >(bash) <<'EOF'", "rm .codiel/runs/x/try-1/state.json", "EOF"].join(
+      "\n"
+    ),
+    "bash -c $'rm .codiel/runs/x/try-1/state.json\\necho'"
+  ])
+    expect(hook(root, command)?.permissionDecision, command).toBe("deny")
+})
+
+test("heredoc の本文の中の cd も cwd の候補に入れ、その先の state.json の書き込みは deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const command = [
+    "cd .codiel/runs/x/try-1 && ls",
+    "bash <<'EOF'",
+    "cd .codiel/runs/x/try-1",
+    "echo '{}' > state.json",
+    "EOF"
+  ].join("\n")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("コミットメッセージの heredoc の本文にある state.json への書き込みと削除の文字列は、起動と見なさず素通し", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const body = [
+    "echo '{}' > .codiel/runs/x/try-1/state.json",
+    "rm .codiel/runs/x/try-1/state.json"
+  ]
+  for (const command of [
+    ["git commit -m \"$(cat <<'EOF'", ...body, "EOF", ')"'].join("\n"),
+    ["git commit -F - <<'EOF'", ...body, "EOF"].join("\n")
+  ])
+    expect(hook(root, command), command).toBe(null)
 })
 
 test("同じコマンドで run の配下への symlink を作ってから書く形は deny", () => {

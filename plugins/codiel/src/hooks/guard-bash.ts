@@ -792,16 +792,21 @@ const STATE_FILE_COMMANDS = ["rm", "mv", "cp", "ln", "install", "dd"]
 // cwd の候補の上限。cd が多いコマンドで候補が増えすぎないようにする
 const MAX_CWD_CANDIDATES = 64
 
-// cmd の中の cd・pushd の行き先をすべて集め、元の cwd と合わせて cwd の候補にする。
-// サブシェル・パイプ・{ } の区別はせず、cd の効く範囲は追わない(拒否が広がる向きに倒す)。
-// 候補が MAX_CWD_CANDIDATES を超えたら null を返し、呼び出し元は拒否する。
-// ponytail: 上限を超えるほど cd を重ねたコマンドは、書き込み先を見ずに拒否する
-function cwdCandidates(commands: string[][], cwd: string): string[] | null {
-  const out = new Set([cwd])
-  for (const words of commands) {
-    if (!["cd", "pushd"].includes(words[0])) continue
+// 語の列の cd・pushd の行き先を、現れた順に返す
+function cdTargets(commands: string[][]): string[] {
+  return commands.flatMap((words) => {
+    if (!["cd", "pushd"].includes(words[0])) return []
     const dir = words.slice(1).find((w) => !w.startsWith("-"))
-    if (dir === undefined) continue
+    return dir === undefined ? [] : [dir]
+  })
+}
+
+// 語の列の cd・pushd の行き先を元の順にたどり、元の cwd と合わせて cwd の候補にする。
+// サブシェル・パイプ・{ } の区別はせず、cd の効く範囲は追わない(拒否が広がる向きに倒す)。
+// 候補が MAX_CWD_CANDIDATES を超えたら null を返す。
+function cwdCandidatesOf(commands: string[][], cwd: string): string[] | null {
+  const out = new Set([cwd])
+  for (const dir of cdTargets(commands)) {
     for (const c of [...out]) {
       out.add(path.resolve(c, expandHome(dir)))
       if (out.size > MAX_CWD_CANDIDATES) return null
@@ -810,25 +815,46 @@ function cwdCandidates(commands: string[][], cwd: string): string[] | null {
   return [...out]
 }
 
+// 字句解析の語の列と行の走査の語の列から、それぞれ cwd の候補を作って和集合にする。
+// 2 つの列は同じ cd を両方に持つが、列をまたいで相殺すると heredoc の本文の中の cd を落とす
+// ので、列ごとに数える。どちらかが上限を超えたら null を返し、呼び出し元は拒否する。
+// ponytail: 上限を超えるほど cd を重ねたコマンドは、書き込み先を見ずに拒否する
+function cwdCandidates(
+  tokenCommands: string[][],
+  lineCommands: string[][],
+  cwd: string
+): string[] | null {
+  const a = cwdCandidatesOf(tokenCommands, cwd)
+  const b = cwdCandidatesOf(lineCommands, cwd)
+  return a && b ? [...new Set([...a, ...b])] : null
+}
+
 // cmd が root の run の state.json へ書き込むか、state.json を含む run のディレクトリを
 // 消すか動かすか。見るのはリダイレクト・tee・sed -i と、rm・mv・cp・ln・install・dd の引数で
 // ある。語は、`.codiel/runs/…state.json` の文字列を含むかの字句の検査と、cwd の候補ごとに
 // 字句で畳んだパスと symlink を実体で辿ったパスの照合を当て、どれかが当たれば止める。
 // 字句解析は gh の起動を探すものと同じ(閉じていないクォートが残れば splitLoosely で厳しい側に
-// 読み直す)。heredoc と here-string でシェルへ渡したコマンドも見るため、git と同じく行の走査
-// (gitCommandsByLines)で作った語の列にも同じ判定を当て、どちらかで当たれば止める。
-// `.codiel/runs/` を含まない変数で渡したパスは見えない(既知の限界)。
-function writesStateJson(cmd: string, cwd: string): boolean {
-  const tokenCommands = parseCommands(cmd) ?? splitLoosely(cmd)
-  const lineCommands = gitCommandsByLines(cmd)
+// 読み直す)。heredoc と here-string でシェルへ渡したコマンドも見るため、コマンドの全行を行の
+// 走査(gitCommandsByLines)でも読む。差し引くのは、受け手が本文を実行しないと確かに分かる
+// heredoc の本文の行だけである(isInertHeredoc)。`.codiel/runs/` を含まない変数で渡したパスは
+// 見えない(既知の限界)。
+// 止めるときは理由の文を返し、止めないときは undefined を返す。
+function stateJsonProblem(cmd: string, cwd: string): string | undefined {
+  // git commit・git tag・gh の `-m`・`--message`・`--body` の値で改行を含む語は、コミット
+  // メッセージや本文である。中の `>` やパスを書き込みと読まないために外す。置換の中のコマンドは
+  // 字句解析が別のコマンドとして読む。それ以外の改行を含む語は判定に残す
+  const tokenCommands = (parseCommands(cmd) ?? splitLoosely(cmd)).map(
+    withoutMessageValues
+  )
+  const lineCommands = gitCommandsByLines(withoutInertBodies(cmd))
   const root = findMainRoot(cwd)
   const runsDirs = [
     path.join(root, ".codiel", "runs"),
     resolvePhysicalPath(root, path.join(".codiel", "runs"))
   ]
   const underRuns = (p: string) => runsDirs.some((d) => isUnder(p, d))
-  const cwds = cwdCandidates([...tokenCommands, ...lineCommands], cwd)
-  if (cwds === null) return true
+  const cwds = cwdCandidates(tokenCommands, lineCommands, cwd)
+  if (cwds === null) return "cd が多すぎて書き込み先を判定できない"
   // 字句で畳んだパス・生の結合パスを実体で辿ったパス・字句で畳んだパスを実体で辿ったパス
   const resolved = (word: string): string[] =>
     cwds.flatMap((c) => {
@@ -903,8 +929,8 @@ function writesStateJson(cmd: string, cwd: string): boolean {
         words.findIndex((w) => STATE_FILE_COMMANDS.includes(path.basename(w)))
       )
   )
-  // 行の走査では、コマンド名を区切りの先頭の語・`<<<` の直後の語・シェルの `-c` の直後の語でだけ
-  // 認める。printf などのデータの中の `cp …` をコマンドと読まないためである。
+  // 行の走査では、コマンド名を区切りの先頭の語・`<<<` の直後の語・シェルの `-c` の直後の
+  // 語でだけ認める。printf などのデータの中の `cp …` をコマンドと読まないためである。
   // sudo・env などが前に付く形は、字句解析の側が拾う。
   const byLines = lineCommands.some(
     (words, ci) =>
@@ -922,6 +948,102 @@ function writesStateJson(cmd: string, cwd: string): boolean {
       )
   )
   return byTokens || byLines
+    ? "state.json へのシェル経由の書き込みか削除"
+    : undefined
+}
+
+// heredoc の開始(`<<<` の here-string は除く)。fd 番号の付いた形(`0<<EOF`)も受ける。
+// 算術の `<<` も開始と読むが、本文を差し引かない向きにだけ働くので区別しない
+const ANY_HEREDOC_RE =
+  /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_]\w*))/g
+
+// heredoc の受け手が本文を実行しないと確かに分かるか。line は開始の行、before はそのうち `<<`
+// より前、after は区切り語より後ろ、next は終端の行の次の行である。次をすべて満たすときに限る。
+// - 開始の行に `;`・`&`・`|` が無く、heredoc が 1 つだけである
+// - 受け手が次のどれかである。受け手のコマンド名を引用符・エスケープ・置換で書いた形は、
+//   前の文字が区切りでなくなるので当たらない
+//   - git commit の `-F -`・`-F /dev/stdin`
+//   - git commit・git tag・gh の `-m`・`--message`・`--body` の引数の `$(cat <<…)`。区切り語の
+//     後ろに何も無く、終端の次の行が `)` か `)"` だけである
+// `cat > <ファイル>`・`tee <ファイル>` は、プロセス置換や /dev/ の先で実行や書き込みに化けるので外さない
+function isInertHeredoc(
+  line: string,
+  before: string,
+  after: string,
+  next: string | undefined
+): boolean {
+  if (/[;&|]/.test(line) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+    return false
+  const B = "(?:^|\\s)"
+  if (
+    new RegExp(
+      `${B}git\\s+(?:\\S+\\s+)*?commit\\b.*\\s(?:-F|--file)(?:\\s+|=)(?:-|/dev/stdin)(?=\\s|$)`
+    ).test(line)
+  )
+    return true
+  if (
+    new RegExp(
+      `${B}(?:git\\s+(?:\\S+\\s+)*?(?:commit|tag)|gh\\s+\\S+\\s+\\S+)\\b.*\\s(?:-m|--message|--body)(?:\\s+|=)"?\\$\\(\\s*cat\\s+$`
+    ).test(before)
+  )
+    return after.trim() === "" && /^\s*\)"?\s*$/.test(next ?? "")
+  return false
+}
+
+// git commit・git tag・gh のコマンドで、`-m`・`--message`・`--body` の値になっている改行を含む語を
+// 外した語の列を返す。ほかのコマンドと、ほかの語はそのまま残す
+function withoutMessageValues(words: string[]): string[] {
+  const at = words.findIndex(
+    (w, k) =>
+      (w === "git" && ["commit", "tag"].includes(words[k + 1] ?? "")) ||
+      w === "gh"
+  )
+  if (at === -1) return words
+  return words.filter((w, k) => {
+    if (k <= at || !w.includes("\n")) return true
+    const prev = words[k - 1]
+    const inline = /^(?:--message|--body)=/.test(w) || /^-m./.test(w)
+    return !(["-m", "--message", "--body"].includes(prev) || inline)
+  })
+}
+
+// cmd から、受け手が本文を実行しないと確かに分かる heredoc(isInertHeredoc)の本文の行を
+// 空行に置き換えて返す。開始の行と終端の行は残す。終端の行が見つからない heredoc と、開始を
+// 読めない heredoc は差し引かない(全行の走査を残す)。
+function withoutInertBodies(cmd: string): string {
+  const lines = cmd.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    const ms = [...lines[i].matchAll(ANY_HEREDOC_RE)]
+    if (ms.length === 0) continue
+    // 開始の行の heredoc の本文は、開始の順に続く。各本文の終端の行を順に探す
+    let k = i
+    for (const m of ms) {
+      const word = m[2] ?? m[3] ?? m[4]
+      const from = k
+      k = lines.findIndex(
+        (l, j) =>
+          j > from && (m[1] === "-" ? l.replace(/^\t+/, "") : l) === word
+      )
+      // 終端が見つからなければ、ここから後ろは何も差し引かない
+      if (k === -1) return lines.join("\n")
+    }
+    const m = ms[0]
+    const at = m.index ?? 0
+    // 除外に当たる heredoc だけ本文を空にする。当たらないものは本文を残し、終端の行まで飛ばす。
+    // 実行される本文の中の開始の行を、除外の判定にかけないためである
+    if (
+      ms.length === 1 &&
+      isInertHeredoc(
+        lines[i],
+        lines[i].slice(0, at),
+        lines[i].slice(at + m[0].length),
+        lines[k + 1]
+      )
+    )
+      for (let j = i + 1; j < k; j++) lines[j] = ""
+    i = k
+  }
+  return lines.join("\n")
 }
 
 function isRegularFile(p: string): boolean {
@@ -1064,6 +1186,7 @@ try {
   const isGitPush = pushCandidates.some((inv) => inv.subcommand === "push")
 
   const cwd = input.cwd ?? process.cwd()
+  const stateProblem = stateJsonProblem(cmd, cwd)
   const ALWAYS_DENY: [boolean, string][] = [
     [
       /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+(\/(?!tmp)|~)/.test(
@@ -1080,7 +1203,7 @@ try {
       pushesToProtectedBranch(pushCandidates),
       "保護ブランチ(main/master)への push"
     ],
-    [writesStateJson(cmd, cwd), "state.json へのシェル経由の書き込みか削除"]
+    [stateProblem !== undefined, stateProblem ?? ""]
   ]
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `禁止コマンド: ${why}`)
