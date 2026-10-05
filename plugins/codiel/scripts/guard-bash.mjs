@@ -262,6 +262,62 @@ function isLegacy(st) {
   return st.version !== 2 || !("test-code" in st.phases);
 }
 
+// src/hooks/heredoc.ts
+var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|(\\)?([A-Za-z_]\w*))/g;
+function isInertHeredoc(line, before, after, next) {
+  if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+    return false;
+  if (/\\\s*$/.test(line) || /\\\s*$/.test(next ?? "")) return false;
+  const m = before.match(/^\s*(?:git\s+add(?:\s+[\w./-]+)*\s*&&\s*)?(.*)$/s);
+  const receiver = m?.[1] ?? "";
+  const core = receiver.replace(
+    /\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/,
+    " "
+  );
+  if (/[;&|#\\'"`]|\$\(/.test(core)) return false;
+  const head = receiver.trim().split(/\s+/);
+  if (!(head[0] === "git" && ["commit", "tag"].includes(head[1] ?? "") || head[0] === "gh"))
+    return false;
+  if (/^\s*git\s+commit\b.*\s(?:-F|--file)(?:\s+|=)(?:-|\/dev\/stdin)(?=\s|$)/.test(
+    receiver
+  ))
+    return after.trim() === "";
+  if (/^\s*(?:git\s+(?:commit|tag)\b|gh\s).*\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/.test(
+    receiver
+  ))
+    return after.trim() === "" && /^\s*\)"?\s*(?:$|(?:&&|;|\|\|)[^)"'`]*$)/.test(next ?? "");
+  return false;
+}
+function withoutInertBodies(cmd) {
+  const lines = cmd.split("\n");
+  const firstLine = lines.findIndex((l) => l.trim() !== "");
+  for (let i = 0; i < lines.length; i++) {
+    const ms = [...lines[i].matchAll(ANY_HEREDOC_RE)];
+    if (ms.length === 0) continue;
+    let k = i;
+    for (const m2 of ms) {
+      const word = m2[2] ?? m2[3] ?? m2[5];
+      const from = k;
+      k = lines.findIndex(
+        (l, j) => j > from && (m2[1] === "-" ? l.replace(/^\t+/, "") : l) === word
+      );
+      if (k === -1) return lines.join("\n");
+    }
+    const m = ms[0];
+    const at = m.index ?? 0;
+    const quoted = (m[2] !== void 0 || m[3] !== void 0 || m[4] !== void 0) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(m[2] ?? m[3] ?? m[5] ?? "");
+    if (i === firstLine && quoted && ms.length === 1 && isInertHeredoc(
+      lines[i],
+      lines[i].slice(0, at),
+      lines[i].slice(at + m[0].length),
+      lines[k + 1]
+    ))
+      for (let j = i + 1; j < k; j++) lines[j] = "";
+    i = k;
+  }
+  return lines.join("\n");
+}
+
 // src/hooks/guard-bash.ts
 var SEGMENT_SPLIT_RE = /;|&&|&|\|\||\||\n/;
 function joinContinuedLines(cmd) {
@@ -815,31 +871,6 @@ function stateJsonProblem(cmd, cwd) {
   );
   return byTokens || byLines ? "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F\u304B\u524A\u9664" : void 0;
 }
-var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|(\\)?([A-Za-z_]\w*))/g;
-function isInertHeredoc(line, before, after, next) {
-  if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
-    return false;
-  if (/\\\s*$/.test(line) || /\\\s*$/.test(next ?? "")) return false;
-  const m = before.match(/^\s*(?:git\s+add(?:\s+[\w./-]+)*\s*&&\s*)?(.*)$/s);
-  const receiver = m?.[1] ?? "";
-  const core = receiver.replace(
-    /\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/,
-    " "
-  );
-  if (/[;&|#\\'"`]|\$\(/.test(core)) return false;
-  const head = receiver.trim().split(/\s+/);
-  if (!(head[0] === "git" && ["commit", "tag"].includes(head[1] ?? "") || head[0] === "gh"))
-    return false;
-  if (/^\s*git\s+commit\b.*\s(?:-F|--file)(?:\s+|=)(?:-|\/dev\/stdin)(?=\s|$)/.test(
-    receiver
-  ))
-    return after.trim() === "";
-  if (/^\s*(?:git\s+(?:commit|tag)\b|gh\s).*\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/.test(
-    receiver
-  ))
-    return after.trim() === "" && /^\s*\)"?\s*(?:$|(?:&&|;|\|\|)[^)"'`]*$)/.test(next ?? "");
-  return false;
-}
 function withoutMessageValues(words) {
   const at = words.findIndex((w) => !/^[A-Za-z_]\w*=/.test(w));
   const head = words[at];
@@ -851,35 +882,6 @@ function withoutMessageValues(words) {
     const inline = /^(?:--message|--body)=/.test(w) || /^-m./.test(w);
     return !(["-m", "--message", "--body"].includes(prev) || inline);
   });
-}
-function withoutInertBodies(cmd) {
-  const lines = cmd.split("\n");
-  const firstLine = lines.findIndex((l) => l.trim() !== "");
-  for (let i = 0; i < lines.length; i++) {
-    const ms = [...lines[i].matchAll(ANY_HEREDOC_RE)];
-    if (ms.length === 0) continue;
-    let k = i;
-    for (const m2 of ms) {
-      const word = m2[2] ?? m2[3] ?? m2[5];
-      const from = k;
-      k = lines.findIndex(
-        (l, j) => j > from && (m2[1] === "-" ? l.replace(/^\t+/, "") : l) === word
-      );
-      if (k === -1) return lines.join("\n");
-    }
-    const m = ms[0];
-    const at = m.index ?? 0;
-    const quoted = m[2] !== void 0 || m[3] !== void 0 || m[4] !== void 0;
-    if (i === firstLine && quoted && ms.length === 1 && isInertHeredoc(
-      lines[i],
-      lines[i].slice(0, at),
-      lines[i].slice(at + m[0].length),
-      lines[k + 1]
-    ))
-      for (let j = i + 1; j < k; j++) lines[j] = "";
-    i = k;
-  }
-  return lines.join("\n");
 }
 function isTargetDirectoryOption(a) {
   const name = a.split("=")[0];
