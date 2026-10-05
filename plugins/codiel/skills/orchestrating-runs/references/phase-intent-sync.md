@@ -6,7 +6,7 @@ intent-sync を書く前に、intent の frontmatter `domains` と `## 意図的
 
 分岐を決める前に `references/adr-candidates.md` を Read する。取り込みで ADR の 3 条件を満たす判断を見つけたら、その手順で手元の記録に ADR 候補を書く。
 
-`knowledgeTarget` が `intents` のときは、分岐を決める前に `references/gotcha-candidates.md` も Read し、同じ slug の手元の記録に、まだ写していない ADR 候補と GOTCHAS 候補があるかを確かめる。候補があれば、下の分岐では `## 意図的な制約` に行があるときと同じに扱う。取り込みを行うときは、取り込みで書いた ADR 候補とあわせて、それぞれの手順で候補を領域ファイルへ写す。
+`knowledgeTarget` が `intents` のときは、分岐を決める前に `references/gotcha-candidates.md` も Read し、同じ slug の手元の記録に、まだ写していない ADR 候補と GOTCHAS 候補があるかを確かめる。`gotcha-candidates.md` の範囲で他の slug の incident の候補を集めたときも、同じ扱いにする。候補があれば、下の分岐では `## 意図的な制約` に行があるときと同じに扱う。取り込みを行うときは、取り込みで書いた ADR 候補とあわせて、それぞれの手順で候補を領域ファイルへ写す。
 
 - `domains` が空で、`## 意図的な制約` の表に 1 行以上ある(「なし」でない)ときは、次の順に進める。
   1. `mark-ask intent-sync --slug <slug> --kind confirm` で `awaiting_human` にする。
