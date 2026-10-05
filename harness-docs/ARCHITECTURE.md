@@ -396,7 +396,7 @@ Raguel は codiel と組にして使うのに、codiel 1.0.0 の初版では設�
 
 #### 理由
 
-run の文書は後から設計の経緯を読む材料になるので、コードと同じ場所で共有する。state と報告は実行ごとの作業記録で、共有すると差分とコミットの誤りを生む。組で使う 2 つの設定を 1 ファイルに集めると、用意と管理が 1 か所で済み、init の判定と Raguel の読み込み先も 1 か所で決まる。新しい try は前の try の文書を置き換え、前の版は前の try のブランチから読めるので、try で分けない。
+run の文書は後から設計の経緯を読む材料になるので、コードと同じ場所で共有する。state と報告は実行ごとの作業記録で、共有すると差分とコミットの誤りを生む。組で使う 2 つの設定を 1 ファイルに集めると、用意と管理が 1 か所で済み、init の判定と Raguel の読み込み先も 1 か所で決まる。新しい try は前の try の文書を置き換え、前のバージョンは前の try のブランチから読めるので、try で分けない。
 
 #### 影響範囲
 
@@ -550,3 +550,33 @@ ARCHITECTURE と GOTCHAS の持ち主は metatron であり、codiel が別に�
 #### 影響範囲
 
 ADR-009 の影響範囲にある未記録の GOTCHAS の退避先(unrecorded-gotchas.md)は使われなくなり、guard-write のその免除も外した。state の adrTarget は knowledgeTarget に改名し、互換を持たない。guard-write は、triage が passed で finalize が終わるまで、docs/intents/domains/** への書き込みを通す。持続層の GOTCHAS 候補を台帳へ移す走査は metatron に加える。
+
+---
+
+### ADR-014: [codiel] run のブランチを slug ごとに 1 本にし、新しい try は続きから進めて、引き継いだコードを carry-over で評価する
+
+- 状態: 採用
+- 決定日: 2026-10-05
+- 決定者: phyllis998
+
+#### 背景
+
+codiel の run は try ごとに codiel/<slug>-try-<n> のブランチを作り、新しい try はベースブランチから切っていた。STOP を受けた前の try の成果物を、新しい try のゲートを通さずに持ち込まないためである。その結果、stop した try のブランチのコミットは、次の try にもベースにも届かなかった。intent-sync で GOTCHAS 候補を領域ファイルへ写してコミットし、手元の記録に写し先の行を付けた後に STOP すると、次の try は候補を写し済みとみなして写さず、候補が消えた。
+
+#### 検討した選択肢
+
+1. try ごとのブランチを保ち、前の try のブランチから知識系のパスを git checkout で持ち込む
+2. run で 1 本のブランチにし、新しい try の最初に知識系以外をベースの状態へ戻すコミットを置く
+3. run で 1 本のブランチにし、新しい try は続きから進め、引き継いだコードを新しいゲート付きフェーズ carry-over で評価する(採用)
+
+#### 採用した結論
+
+run のブランチは codiel/<slug> の 1 本にする。新しい try は同じブランチで前の try の続きから進め、状態を戻さない。STAGES の intent の直後に code 系のゲート付きフェーズ carry-over を置く。carry-over は git merge-base <baseBranch> HEAD を起点に、前の try から引き継いだ差分全体を evaluate_code で評価する。try-1 では init が carry-over を SKIPPED で通す。carry-over だけは、妥当の STOP の後もその場で直して評価し直せる。init は try-2 以降で前の try の baseBranch を引き継ぐ。
+
+#### 理由
+
+持ち込むパスを列挙する方式は、届けたいパスが増えるたびに一覧を直す必要があり、ベースへ届かない点も残る。戻しコミットは、前の try の作業を捨てて作り直させる。1 本のブランチなら、知識系のコミットは同じ履歴に残って次の try とベースへ届く。分岐点を起点に評価すれば、STOP を受けたコードもゲートの外に残らない。直す必要のあるコードは、carry-over の裁定か後のフェーズで直せる。
+
+#### 影響範囲
+
+init の branch は codiel/<slug> になり、raguelRunId・state の置き場・コミットの件名・worktree のブランチ名の try 番号は残る。run state version 2 の phases に carry-over が加わり、改修前の state は読み込み時に SKIPPED で補う。Raguel のフェーズ表は carry-over を stage 1 に置き、後ろの stage が 1 つずつずれる。ADR-009 の理由にある「前のバージョンは前の try のブランチから読める」は、同じブランチの履歴(git log -p)から読む形に置き換わる。同じブランチに前の try の PR が開いていれば、本文を更新して使う。改修前に -try-<n> 付きのブランチへ写し、写し先を付けた候補は回収しない。設計書: harness-docs/design/2026-10-05-codiel-run-structure-followups-design.md

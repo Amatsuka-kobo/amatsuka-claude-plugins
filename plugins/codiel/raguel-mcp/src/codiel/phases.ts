@@ -6,6 +6,7 @@
 
 export type GatedPhase =
   | "intent"
+  | "carry-over"
   | "design"
   | "test-spec"
   | "dev-plan"
@@ -33,14 +34,15 @@ export interface PhaseEntry {
 
 export const GATED_PHASES: readonly PhaseEntry[] = [
   { phase: "intent", stage: 0, kind: "decision", tool: "evaluate_decision" },
-  { phase: "design", stage: 2, kind: "design", tool: "evaluate_design" },
-  { phase: "test-spec", stage: 3, kind: "plan", tool: "evaluate_plan" },
-  { phase: "dev-plan", stage: 3, kind: "plan", tool: "evaluate_plan" },
-  { phase: "test-code", stage: 4, kind: "code", tool: "evaluate_code" },
-  { phase: "implement", stage: 5, kind: "code", tool: "evaluate_code" },
-  { phase: "test-loop", stage: 6, kind: "code", tool: "evaluate_code" },
-  { phase: "intent-sync", stage: 7, kind: "design", tool: "evaluate_design" },
-  { phase: "fix-loop", stage: 10, kind: "code", tool: "evaluate_code" }
+  { phase: "carry-over", stage: 1, kind: "code", tool: "evaluate_code" },
+  { phase: "design", stage: 3, kind: "design", tool: "evaluate_design" },
+  { phase: "test-spec", stage: 4, kind: "plan", tool: "evaluate_plan" },
+  { phase: "dev-plan", stage: 4, kind: "plan", tool: "evaluate_plan" },
+  { phase: "test-code", stage: 5, kind: "code", tool: "evaluate_code" },
+  { phase: "implement", stage: 6, kind: "code", tool: "evaluate_code" },
+  { phase: "test-loop", stage: 7, kind: "code", tool: "evaluate_code" },
+  { phase: "intent-sync", stage: 8, kind: "design", tool: "evaluate_design" },
+  { phase: "fix-loop", stage: 11, kind: "code", tool: "evaluate_code" }
 ]
 
 /** 表にあるフェーズの表引き。表に無ければ undefined。 */

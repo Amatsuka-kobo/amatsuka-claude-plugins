@@ -16,6 +16,7 @@ const VERDICT_FILE = "verdict.json"
 
 // 検査 8 の対象(code 系フェーズ)と検査 9 の対象(文書のフェーズ)
 export const CODE_PHASES = new Set([
+  "carry-over",
   "test-code",
   "implement",
   "test-loop",
@@ -257,6 +258,18 @@ export function findEvaluation(
 export function gitHead(dir: string): string | null {
   try {
     return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim()
+  } catch {
+    return null
+  }
+}
+
+// a と b の分岐点のコミット。読めなければ null
+export function gitMergeBase(dir: string, a: string, b: string): string | null {
+  try {
+    return execFileSync("git", ["-C", dir, "merge-base", a, b], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim()

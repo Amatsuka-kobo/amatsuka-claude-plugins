@@ -359,6 +359,10 @@ describe("本文の問い合わせ", () => {
 describe("phaseScope(設計書 §10.1)", () => {
   const scopes: [GatedPhase, string][] = [
     ["intent", "This phase records the intent of the whole change."],
+    [
+      "carry-over",
+      "This phase evaluates the whole diff of the run branch. The diff was carried over from an earlier try and may contain both test code and product code."
+    ],
     ["design", "This phase designs the whole change."],
     [
       "dev-plan",

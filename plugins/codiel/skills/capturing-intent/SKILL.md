@@ -48,8 +48,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    - `git symbolic-ref --short refs/remotes/origin/HEAD` の結果から `origin/` を除いた名前。
    - ローカルのブランチが `main` と `master` のどちらか 1 つだけのとき、その名前。
 
-   解決したら `git switch <ベース> && git pull --ff-only` で最新化する。作業ツリーが dirty で `git switch` が失敗したときは、`-f` や自動の stash を使わず、失敗の出力を示し、コミットか退避をしてから `/codiel:run` をやり直すよう案内して終了する(この区間は run が無い)。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。以降、このブランチを「開始時のブランチ」と呼ぶ。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
-4. 入口が intent パスのときは、手順 2 の前に `references/carry-over-intent.md` を Read して従う。前の try の run ブランチからの intent の持ち込みと、前の try が STOP で止まっていたときの確認を扱う。
+   解決した名前を「ベースブランチ」と呼び、`init` の `--base-branch` に渡す。
+4. intent を書くブランチ(「開始時のブランチ」)を決める。slug が分かっているとき(intent パスの入口)は、`git rev-parse --verify --quiet refs/heads/codiel/<slug>` で run ブランチの有無を確かめる。
+   - 成功したら、`git switch codiel/<slug>` で切り替える。`git pull` は行わず、ベースの更新を取り込むかは利用者に任せる。
+   - 失敗したとき、または slug がまだ無いときは、`git switch <ベースブランチ> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。
+
+   run ブランチが無いのは、初めての run、前の try が `--intent-only`、利用者がブランチを消した、改修の前に作った run(ブランチ名が `-try-<n>` 付き)のどれかである。作業ツリーが dirty で `git switch` が失敗したときは、`-f` や自動の stash を使わず、失敗の出力を示し、コミットか退避をしてから `/codiel:run` をやり直すよう案内して終了する(この区間は run が無い)。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
+5. 入口が intent パスのときは、手順 2 の前に `references/carry-over-intent.md` を Read して従う。前の try の intent の扱いと、前の try が STOP で止まっていたときの確認を扱う。
 
 `configWarnings` が空でないときは、その項目のパス設定が拒否されて既定値に落ちているか、ドメインマップの読み取りに指摘がある。読めた文書だけで進み、警告の内容を完了報告に残す。
 
@@ -122,7 +127,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 - 承認はユーザーの明示的な返答だけとする。ドラフトへの相槌や部分的な感想は、承認に当たらない。
 
 全文を提示したうえで、次の 3 項目を含む承認を同時に得る。差し戻されたら手順 3 へ戻り、指摘された観点を聞き直してからドラフトを作り直し、全文を再提示する。
-ゲートの選択肢に「中止」は無いので、AskUserQuestion の「その他」で中止が返ることがある。承認も差し戻しも得られずに中止が選ばれたら、保存・起票・`init` を行わずに終了する。何も書いていないこと(手順 1 で `git checkout` した intent があれば作業ツリーに残ること)と、同じ入口で `/codiel:run` をやり直せることを伝える。
+ゲートの選択肢に「中止」は無いので、AskUserQuestion の「その他」で中止が返ることがある。承認も差し戻しも得られずに中止が選ばれたら、保存・起票・`init` を行わずに終了する。何も書いていないことと、同じ入口で `/codiel:run` をやり直せることを伝える。
 
 | 項目 | 選択肢 | 決めた後の動き |
 | --- | --- | --- |
@@ -138,13 +143,13 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 ユーザーへの確認は (3) までに済ませる。(1)〜(3) は run を作る前なので `mark-ask` を使わない例外である。これ以外の途中で人へ確認するときは、`codiel-state mark-ask <phase> --slug <slug> --kind confirm` で run を `awaiting_human` にしてから確認し、答えを得たら `codiel-state resume --slug <slug>` で戻す(`--evaluation-id` は無くてよい)。(4) の `codiel-state init` から (6) の `start-phase intent` までは、ユーザーへの確認を挟まず一気に進める(Raguel の ASK の裁定待ちは除く)。この区間は phase が `null` の active run になり、stop-guard が active な run でのセッションの停止を block する。ユーザーの応答を待つと止まれない。
 
-(1) 開始時のブランチの作業ツリーに intent 文書を Write で書く。frontmatter `run` には slug を入れる。保存先の命名規則(同日重複の扱い、git 未管理時の扱い)は `intent-format.md` の「保存先と命名」に従う。手順 1 で前の try の intent を持ち込んでいるときは、持ち込んだ intent と同じパスに書く。
+(1) 開始時のブランチの作業ツリーに intent 文書を Write で書く。frontmatter `run` には slug を入れる。保存先の命名規則(同日重複の扱い、git 未管理時の扱い)は `intent-format.md` の「保存先と命名」に従う。前の try の intent を更新するときは、その intent と同じパスに書く。
 
 (2) Issue 起票を選んだときだけ、gh-utility `issue-craft` を持ち込みモードで起動して起票し、番号を intent の frontmatter `issue` に書く。固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動し、`title` / `body` / `labels`(任意)を渡す(`handoff-contract.md`)。渡す本文には `<!-- codiel:generated -->` を含める。起票は外部公開行為であり、持ち込みモード側でも全文提示と明示承認を経る。承認が得られなかったときは、起票を保留して止まり、「起票せず続行(`issue` は空のまま)」「本文を直して再提示」「中止」を AskUserQuestion で聞く。「中止」が選ばれたら、`init` を行わずに終了する。この時点で intent は保存済み、`issue` は空、run は無い。intent が作業ツリーに残っていることと、同じ入口で `/codiel:run` をやり直せることを伝える(手順 4 のゲートでの中止は、何も書いていない状態なので別である)。起票が失敗したときは、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲(intent は保存済みであること、起票の有無)を報告して指示を待つ。再試行する前に、Issue が既に作られていないかを確かめる。`issue-craft` が使えないときは `intent-common.md` の「自前起票」に従う。
 
 (3) intent 以外の未コミットの変更があるかを確かめる。あるときは `references/uncommitted-changes.md` を Read して従う。
 
-(4) `codiel-state init --slug <slug> --intent <パス> --integration <github|local> --scale <standard|light> --knowledge-target <metatron|intents> --image-upload <gh-attach|chrome|gh-attach,chrome|none> [--issue <N>] [--intent-only] [--base-branch <開始時のブランチ>] [--domain-mode <mapped|unscoped>] [--human-approved]` を実行する。`--intent` は repoRoot 相対のパスで渡す(絶対パスは拒否される)。`branch` は CLI が決める。`--intent-only` なら `null`、それ以外は `codiel/<slug>-try-<n>` である。`--human-approved` は、手順 1 で前の try の STOP(`raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズ)についてユーザーが新しい try を承認したときだけ付ける。
+(4) `codiel-state init --slug <slug> --intent <パス> --integration <github|local> --scale <standard|light> --knowledge-target <metatron|intents> --image-upload <gh-attach|chrome|gh-attach,chrome|none> [--issue <N>] [--intent-only] [--base-branch <ベースブランチ>] [--domain-mode <mapped|unscoped>] [--human-approved]` を実行する。`--intent` は repoRoot 相対のパスで渡す(絶対パスは拒否される)。`branch` は CLI が決める。`--intent-only` なら `null`、それ以外は try によらず `codiel/<slug>` である。`--human-approved` は、手順 1 で前の try の STOP(`raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズ)についてユーザーが新しい try を承認したときだけ付ける。
 
 `init` が失敗したときは run が作られず(exit 1、state は書かれない)、intent は作業ツリーに残る。引数の誤りと `--human-approved` の付け忘れは、標準エラー出力の指示どおりに直して 1 回だけ再実行する。「未完了の try があります」「Raguel の記録を読めません」やそれ以外の失敗は、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲を示して指示を待つ。同じ slug の前の try が終端していれば `init` は次の try を作るので、slug の重複それ自体は失敗ではない。
 
@@ -154,7 +159,7 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 - 終える(intent-only)とき: `references/intent-only.md` を Read して従う。
 - 続行するとき:
-  1. `git switch -c <state.branch>` を実行する。
+  1. 開始時のブランチが `state.branch`(`codiel/<slug>`)なら、切り替えずにそのブランチでコミットする。開始時のブランチが別で、`state.branch` が既にあるとき(slug が手順 1 の後に決まった入口)は、`git switch <state.branch>` で切り替える。`state.branch` が無ければ `git switch -c <state.branch>` を実行する。切り替えが失敗したら、下の失敗時の手順に従う。
   2. `git commit -m "codiel(intent): <要約> (<slug> try-<n>)" -- <intent パス>` を実行する。
   3. `codiel-state start-phase intent --slug <slug>` → `evaluate_decision` → `codiel-state pass-gate intent --slug <slug> --evaluation-id <id> --verdict PROCEED` の順に進め、以降のフェーズへ移る。`evaluate_decision` が ASK を返したときは `mark-ask` で `awaiting_human` にして裁定を待ち、STOP が返ったときは、どちらも `raguel-gating` の手順に従う。PROCEED になるまで `pass-gate` を呼ばない。
 

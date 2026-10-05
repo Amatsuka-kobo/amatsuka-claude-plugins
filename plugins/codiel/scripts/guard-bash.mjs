@@ -149,6 +149,7 @@ function resolveRaguelStore(mainRoot) {
 // src/codiel-state.ts
 var STAGES = [
   ["intent"],
+  ["carry-over"],
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
@@ -164,7 +165,22 @@ var STAGES = [
 ];
 var PHASES = STAGES.flat();
 function readState(p) {
-  return JSON.parse(fs3.readFileSync(p, "utf8"));
+  const st = JSON.parse(fs3.readFileSync(p, "utf8"));
+  if (st.version === 2 && st.phases && !("carry-over" in st.phases)) {
+    const { intent, ...rest } = st.phases;
+    st.phases = {
+      intent,
+      "carry-over": {
+        status: "passed",
+        attempts: 0,
+        evaluationId: null,
+        verdict: "SKIPPED",
+        note: "carry-over \u306E\u5C0E\u5165\u524D\u306E run"
+      },
+      ...rest
+    };
+  }
+  return st;
 }
 function runDir(root, slug) {
   return path3.join(root, ".codiel", "runs", slug);

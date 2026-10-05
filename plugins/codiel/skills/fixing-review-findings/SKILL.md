@@ -7,7 +7,7 @@ description: Codiel の fix-loop フェーズで、オーケストレーター�
 
 ## 概要
 
-`orchestrating-runs` の [11] fix-loop フェーズでオーケストレーター自身が使うスキルである。
+`orchestrating-runs` の [12] fix-loop フェーズでオーケストレーター自身が使うスキルである。
 修正は実装の委譲先へのディスパッチで行う。オーケストレーターは、`orchestrating-runs` §3 冒頭の分担のとおり、自分でコードを直さない。
 
 入力は `reports/review-<m>.md` の所見のうち critical / high だけである。medium/low は修正せず、

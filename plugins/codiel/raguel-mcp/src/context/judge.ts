@@ -129,6 +129,8 @@ const GUARD =
 /** 本文の問い合わせの state に入れる、フェーズごとの担当範囲(設計書 §10.1) */
 const PHASE_SCOPE: Record<GatedPhase, string> = {
   intent: "This phase records the intent of the whole change.",
+  "carry-over":
+    "This phase evaluates the whole diff of the run branch. The diff was carried over from an earlier try and may contain both test code and product code.",
   design: "This phase designs the whole change.",
   "dev-plan":
     "This phase plans the implementation steps of product code. Test specifications and test code are produced in the separate test-spec and test-code phases, not in this plan.",

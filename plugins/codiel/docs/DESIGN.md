@@ -54,7 +54,7 @@
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
 
-コード上の `STAGES`(正本 `plugins/codiel/src/codiel-state.ts`)は次の 13 ステージである。テスト駆動の
+コード上の `STAGES`(正本 `plugins/codiel/src/codiel-state.ts`)は次の 14 ステージである。テスト駆動の
 順序(決定 73)により、test-code フェーズが test-spec / dev-plan と implement の間に入る。
 
 ```
@@ -66,6 +66,11 @@
                手順)。連携モード(github / local)は §0 でこのフェーズより前に判定し、run の間
                固定する。
                ▶ Raguel: evaluate_decision(承認ゲートで規模・終え方・Issue 起票の 3 項目も決める)
+   ▼
+[carry-over]   前の try から run ブランチ(`codiel/<slug>`)に残るコードを、ベースブランチとの
+               分岐点からの差分で評価する。try-1 は init が SKIPPED にする。妥当の STOP の後も
+               修正して再評価できる(ほかのフェーズとの違い)
+               ▶ Raguel: evaluate_code
    ▼
 [discuss]      オーケストレーターが論点リスト agenda.md を作成(選択肢・トレードオフ・推奨案。
                intent の不明点は全件論点化)→ ユーザーとディスカッション
@@ -258,8 +263,9 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
 - **try の運用**: `/codiel:run` 実行時、最新 try が未完了なら**その try を再開**、
   終了状態(stopped / awaiting_outcome / completed / rejected)なら **try-<n+1> を新規作成**して開始する。
   新 try のサブエージェントは過去 try の成果物・レビュー所見を参照できる(前回の失敗を繰り返さないための入力)。
-  run の文書は try で分けず同じパスへ書き直すので、前の try の run ブランチにある文書は
-  `git show <前の try の branch>:<runsDir>/<slug>/<ファイル名>` で読む。
+  run のブランチは slug ごとに 1 本(`codiel/<slug>`)で、新しい try は同じブランチの続きから進める。
+  run の文書は try で分けず同じパスへ書き直すので、前の try の文書は同じブランチの履歴
+  (`git log -p -- <runsDir>/<slug>/<ファイル名>`)で読む。前の try から引き継いだコードは carry-over のゲートで評価する。
 - Raguel へ渡す `raguelRunId` は `<slug>-try-2` の形式(try 毎に独立したケースファイル・resubmission-loop カウンタを持つ)。
 - テストの仕様の置き場(`testsDir`)と run の文書の置き場(`runsDir`)は `.codiel/config.json` で設定する。
   既定は `docs/codiel/tests` と `docs/codiel/runs`。ファイルが無い、またはキーが無ければ既定値を使う。
@@ -283,7 +289,7 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
   "try": 1,
   "issue": null,                          // Issue が無い run では null
   "intent": "docs/intents/2026-09-27-add-dark-mode-toggle.md",
-  "branch": "codiel/add-dark-mode-toggle-try-1",   // ブランチは try 毎(旧 try のブランチ・PR と衝突させない)
+  "branch": "codiel/add-dark-mode-toggle",   // ブランチは slug ごとに 1 本。新しい try は同じブランチを使う
   "integration": "github",                // "github" | "local"。§0 で判定し run の間固定
   "scale": "standard",                    // "standard" | "light"
   "imageUpload": { "ghAttach": true, "chrome": false },
@@ -291,6 +297,7 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
   "phase": "implement",            // 現在フェーズ
   "phases": {
     "intent":    { "status": "passed", "evaluationId": "...", "verdict": "PROCEED" },
+    "carry-over": { "status": "passed", "verdict": "SKIPPED", "note": "try-1" },
     "design":    { "status": "passed", "evaluationId": "...", "verdict": "PROCEED" },
     "test-spec": { "status": "passed", "evaluationId": "...", "verdict": "PROCEED" },
     "dev-plan":  { "status": "passed", "evaluationId": "...", "verdict": "PROCEED" },
@@ -313,7 +320,7 @@ docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非�
 - **state.json は AI が直接書けない**。フェーズ遷移は同梱スクリプト `codiel-state`(Bash 経由で実行)
   だけが行い、スクリプトが遷移の正当性を機械的に検証する:
   - ゲート必須フェーズは Raguel の `evaluationId` + `verdict: PROCEED`(または人の裁定つき ASK/STOP)なしに `passed` にできない
-  - フェーズ順序のスキップ不可(intent → discuss → design → … の順序を強制)
+  - フェーズ順序のスキップ不可(intent → carry-over → discuss → design → … の順序を強制)
   - 試行カウンタはインクリメントのみ(リセット不可)
 - **並列実装・test-code・test-loop のステップ**は `step-add --kind step|test-code|test-loop` で登録し、
   `pending → running → reviewing → merged / failed` の順でのみ遷移する(test-loop は `merged` の要素を

@@ -35,13 +35,15 @@ describe("priorPhasesOf", () => {
 
   it("ステージ番号がより小さいゲート付きフェーズをすべて返す", () => {
     expect(priorPhasesOf("intent")).toEqual([])
+    expect(priorPhasesOf("carry-over")).toEqual(["intent"])
     expect(priorPhasesOf("test-code")).toEqual([
       "intent",
+      "carry-over",
       "design",
       "test-spec",
       "dev-plan"
     ])
-    expect(priorPhasesOf("fix-loop")).toHaveLength(8)
+    expect(priorPhasesOf("fix-loop")).toHaveLength(9)
   })
 
   it("ゲートの無いフェーズは表に無く、空配列を返す", () => {

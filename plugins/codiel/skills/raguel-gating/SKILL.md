@@ -56,6 +56,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 | フェーズ | 呼び出すツール | `phase` | 渡すもの |
 |---|---|---|---|
 | intent | `mcp__plugin_codiel_raguel__evaluate_decision` | `intent` | 判断文(`decision`)。検討した代替案と切り戻し計画があれば `optionsConsidered`・`rollbackPlan` にも入れる |
+| carry-over | `mcp__plugin_codiel_raguel__evaluate_code` | `carry-over` | `baseRef`: carry-over の `startHead`(ベースブランチとの分岐点) |
 | design | `mcp__plugin_codiel_raguel__evaluate_design` | `design` | `paths: [<design.md のパス>]` |
 | test-spec | `mcp__plugin_codiel_raguel__evaluate_plan` | `test-spec` | `paths`: 作成・更新した `spec.md` と `cases.md`(dev-plan とは独立にゲートする) |
 | dev-plan | `mcp__plugin_codiel_raguel__evaluate_plan` | `dev-plan` | `paths: [<dev-plan.md のパス>]`(test-spec とは独立にゲートする) |
@@ -66,7 +67,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 | intent-sync | `mcp__plugin_codiel_raguel__evaluate_design` | `intent-sync` | `paths`: intent-sync で書き換えた intent と持続層のファイル |
 
 - `paths` はプロジェクトルートからの相対パスで、1〜20 件である。
-- code 系フェーズ(test-code・implement・test-loop・fix-loop)の evaluate_code には `baseRef` だけを渡し、`paths` を渡さない。`paths` で範囲を絞った評価は pass-gate の検査 8 が拒む。
+- code 系フェーズ(carry-over・test-code・implement・test-loop・fix-loop)の evaluate_code には `baseRef` だけを渡し、`paths` を渡さない。`paths` で範囲を絞った評価は pass-gate の検査 8 が拒む。
 - 文書のフェーズで渡すファイルは、pass-gate の検査 9 が照合する。design は `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` を、`paths` に含める。intent-sync は、書き換えたファイルをすべて渡す(書き換えるべきファイルがすべて含まれるかは照合されない)。
 - `discuss` は Raguel ゲート対象外(`pr / review / triage` と同様)。人間が直接参加する
   フェーズであり、合意内容の検査は design ゲートが design.md と discussion.md の整合として担う。
@@ -172,7 +173,7 @@ verdict を上書きしない。
    で run を `awaiting_human` にする。フェーズの `verdict` に `STOP` が残る。
    所見に `casefile/tampered` があるときは、記録の改竄であり覆せないので、手順 2 に進まず、AskUserQuestion を使わずに止める。
    応答の本文で、止めた理由(改竄の所見の要約と `decisionPoint`)を報告する(AskUserQuestion の選択肢は 2 件以上が要り、「止める」だけの質問にできないため)。
-   止め方は手順 4 と違い、`waits` を片付けてから `stop --slug <slug> --reason raguel-stop` を呼ぶだけで、GOTCHAS 候補は書かない(改竄は対象プロジェクトの失敗ではない)。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。STOP のフェーズが残るので、次の try の `init` には人の承認が要る。
+   止め方は手順 5 と違い、`waits` を片付けてから `stop --slug <slug> --reason raguel-stop` を呼ぶだけで、GOTCHAS 候補は書かない(改竄は対象プロジェクトの失敗ではない)。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。STOP のフェーズが残るので、次の try の `init` には人の承認が要る。
 2. 通常の ASK の手順 3 と同じ規則で質問文を書き、AskUserQuestion で「誤検知として続ける」か「妥当として止める」かを聞く。オーケストレーターはどちらも選ばない。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "false-positive"`、STOP の `evaluationId`、
@@ -181,7 +182,8 @@ verdict を上書きしない。
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    3. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
-4. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
+4. carry-over で妥当と裁定されたときだけ、「修正して再提出」と「止める」を人に選ばせる。「修正して再提出」は `<plugin-root>/skills/orchestrating-runs/references/phase-carry-over.md` の手順 5 に従い、止めない。ほかのフェーズは手順 5 へ進む。
+5. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
 
 ### ループ上限超過
 

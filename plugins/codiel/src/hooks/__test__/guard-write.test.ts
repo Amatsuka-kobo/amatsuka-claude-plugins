@@ -927,6 +927,13 @@ test("P-4: test-code では cases.md も記録されたテストも通す", () =
   expect(decision(root, RECORDED)).toBe(null)
 })
 
+test("P-4b: carry-over ではコードへの書き込みを通し、cases.md と記録されたテストはテストの保護に当てない", () => {
+  const root = setupProtectedRun("carry-over")
+  expect(decision(root, "src/a.ts")).toBe(null)
+  expect(decision(root, CASES)).toBe(null)
+  expect(decision(root, RECORDED)).toBe(null)
+})
+
 test("P-5: fix-loop で testEdit が無ければ cases.md は ask", () => {
   const root = setupProtectedRun("fix-loop")
   expect(decision(root, CASES)).toBe("ask")

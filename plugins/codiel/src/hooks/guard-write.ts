@@ -28,6 +28,7 @@ const DOC_PHASES = new Set<string | null>([
   "intent-sync"
 ])
 const CODE_PHASES = new Set<string | null>([
+  "carry-over",
   "test-code",
   "implement",
   "test-loop",

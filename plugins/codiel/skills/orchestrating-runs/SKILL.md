@@ -9,7 +9,7 @@ description: Codiel の run で、メインセッション自身がオーケス�
 
 `/codiel:run [<Issue番号> | <intent パス> | 省略]` はメインセッション自身がオーケストレーターとなり、
 intent を起点に
-intent → discuss → design → test-spec/dev-plan → test-code → implement → test-loop → intent-sync → pr → review → fix-loop → triage → finalize
+intent → carry-over → discuss → design → test-spec/dev-plan → test-code → implement → test-loop → intent-sync → pr → review → fix-loop → triage → finalize
 の全フェーズを進行させる。intent フェーズの聞き取りと合意形成は `capturing-intent` を通じてオーケストレーター
 本体が担う。
 
@@ -138,19 +138,19 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   続ける前に slug・intent のパス・現在のフェーズを示してユーザーに確かめる。
 - 前の try が `stopped` で、`stopReason` が `raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` の
   フェーズを持つときは、`capturing-intent` の手順 1 の承認を経てから新しい try を作る
-  (`init --human-approved`)。前の try の成果物(intent 以外。STOP を受けたファイルを含む)を新しい try
-  で使うときは、それを作るフェーズを新しい try で進めて新しい try のゲートを通してから、run ブランチへ持ち込む。
+  (`init --human-approved`)。引き継いだコード(STOP を受けたファイルを含む)は carry-over のゲートで評価する。
+  文書は各フェーズで書き直して評価する。
 - `capturing-intent` の承認ゲートで「文書だけ残して終える(intent-only)」が選ばれたら、run は `close`
-  で `completed` になり、以降のフェーズ進行表(discuss 以降)は実行しない。「続行する」が選ばれたら、
-  intent フェーズが `passed` になった run ブランチから、フェーズ進行表の discuss 以降を続ける。
+  で `completed` になり、以降のフェーズ進行表(carry-over 以降)は実行しない。「続行する」が選ばれたら、
+  intent フェーズが `passed` になった run ブランチから、フェーズ進行表の carry-over 以降を続ける。
 
 ## 2. フェーズ進行表
 
 各フェーズはチェックリスト 3 の定型で進行する。
-ゲート種別と完了コマンドはフェーズ進行表の「ゲート種別」列に従う。`STAGES` は次の 13 ステージである。
+ゲート種別と完了コマンドはフェーズ進行表の「ゲート種別」列に従う。`STAGES` は次の 14 ステージである。
 
 ```ts
-[["intent"], ["discuss"], ["design"], ["test-spec", "dev-plan"], ["test-code"], ["implement"],
+[["intent"], ["carry-over"], ["discuss"], ["design"], ["test-spec", "dev-plan"], ["test-code"], ["implement"],
  ["test-loop"], ["intent-sync"], ["pr"], ["review"], ["fix-loop"], ["triage"], ["finalize"]]
 ```
 
@@ -159,6 +159,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | フェーズ | 委譲の種別と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 |
 |---|---|---|---|---|---|
 | [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
+| [carry-over] | 前の try から run ブランチに残るコードを、分岐点からの差分としてゲートで評価する。所見の修正は実装の委譲に出す。try-1 は `init` が `SKIPPED` にするので進めない | implementing(修正モード) | run ブランチの分岐点からの差分(`startHead` が分岐点) | 所見の修正 diff(所見があるときだけ) | pass-gate(`evaluate_code`) |
 | [discuss] | オーケストレーター本体がアジェンダを書き、進行する。intent → `agenda.md` | preparing-design-agendas | intent | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) |
 | [design] | オーケストレーター本体が書く。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を行い、新しい画面の名前を聞いてから evaluate する |
 | [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、成果物を書く委譲を出して待ちを記録し、その間に dev-plan を書いてゲートする。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) |
@@ -187,8 +188,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   そのフェーズで `evaluate_*` が返した `evaluationId` を渡す。
 - フェーズの遷移と state の変更は `codiel-state` のコマンドで行う。`.codiel/runs/**/state.json` は Edit / Write
   で書き換えない。
-- test-code・implement・test-loop・fix-loop の `start-phase` は、そのフェーズの開始の HEAD を state の
-  `phases.<phase>.startHead` に記録する。`baseRef` の値はこの記録であり、オーケストレーターが自分で決めない。
+- carry-over・test-code・implement・test-loop・fix-loop の `start-phase` は、そのフェーズの開始の HEAD を state の
+  `phases.<phase>.startHead` に記録する。carry-over の記録は、ベースブランチとの分岐点(`git merge-base`)である。`baseRef` の値はこの記録であり、オーケストレーターが自分で決めない。
 
 ### 手順ファイルと読む時点
 
@@ -197,6 +198,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 
 | 手順ファイル | 読む時点 |
 | --- | --- |
+| `references/phase-carry-over.md` | `start-phase carry-over` の直後 |
 | `references/phase-test-spec.md` | `start-phase test-spec` の直後。dev-plan もこの手順で進める |
 | `references/phase-test-code.md` | `start-phase test-code` の直後 |
 | `references/phase-implement.md` | `start-phase implement` の直後 |
@@ -221,7 +223,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    上の表に従う。fix-loop の再レビューでは、委譲を出す前に `review-common.md` を読む。
 3. run を再開するとき。`resume.md` を読み、待ちの処理や委譲の出し直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の
-   フェーズすべての手順ファイルと、それらが使う共有の手順を読む。test-spec と dev-plan はどちらが該当しても
+   フェーズすべての手順ファイルと、それらが使う共有の手順を読む。carry-over が該当するときは `phase-carry-over.md` を読む。test-spec と dev-plan はどちらが該当しても
    `phase-test-spec.md` を読む。triage が `passed` で finalize がまだ完了していない run では、`phase-finalize.md` も読む。
 4. compaction が起きたとき。会話の先頭が前の会話の要約で始まっていれば、compaction が起きている。次の順で読み直す。
    1. このスキルの本文を Read し直す。
@@ -250,7 +252,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   - コミットするのは、そのゲートで評価した文書(`paths` に渡したファイル)だけにする。ほかのファイルを同じ
     コミットや、次のコード系フェーズの `start-phase` より前のコミットに入れると、`start-phase` がそのパスを
     挙げて失敗する。test-spec と dev-plan は、それぞれの通過の直後に、評価した文書をコミットしてよい。
-- コード系フェーズ(test-code / implement / test-loop / fix-loop)では、委譲先が自分の変更を自分でコミットする。
+- コード系フェーズ(carry-over / test-code / implement / test-loop / fix-loop)では、委譲先が自分の変更を自分でコミットする。
   オーケストレーターがこれらのフェーズで行うコミットは、worktree のブランチの `git merge --no-ff` と、E2E の
   レポートのコミット(`references/e2e.md`)だけである。コード系フェーズの pass-gate の後は、次のフェーズの
   `start-phase` までコミットしない(`start-phase` が、直前に通ったフェーズの `passedHead` と今の HEAD の一致を要る)。
@@ -258,7 +260,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   `dev-plan.md` は `<repoRoot>/<runsDir>/<slug>/` に置き、try で分けない。依頼文の出力先には
   `<repoRoot>/<runsDir>/<slug>/<ファイル名>` の絶対パスを書き、後のフェーズの入力にも同じパスを渡す。
   新しい try は同じパスに書き直し、前の try の文書は
-  `git show <前の try のブランチ>:<runsDir>/<slug>/<ファイル名>` で読む。
+  同じブランチの履歴(`git log -p -- <runsDir>/<slug>/<ファイル名>`)で読む。
 - `.codiel/runs/` の下のファイルはコミットしない。`state.json`・`steps/`・`reports/` は `.gitignore` で
   git から外れている。`pr-body.md` や `review-body-<m>.md` などの本文ファイルは Write ツールで `reports/` に
   書き、コミットせずに投稿する。

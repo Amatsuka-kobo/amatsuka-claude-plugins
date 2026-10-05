@@ -18,6 +18,7 @@ import {
   isE2eReport as raguelIsE2eReport,
   resolveTestsDir
 } from "../../raguel-mcp/src/config/paths"
+import type { JevCall } from "../../raguel-mcp/src/context/jev"
 import type { Subject, Verdict } from "../../raguel-mcp/src/core/types"
 import {
   resolveProjectId as raguelProjectId,
@@ -34,6 +35,7 @@ import {
   checkEvaluationRow,
   checkGate,
   findEvaluation,
+  gitMergeBase,
   readEvaluationIndex,
   resolveRaguelStore,
   unresolvedStops
@@ -542,5 +544,85 @@ describe("Raguel のパイプラインが書いた空の差分の記録(R22)", (
     const { r, problem } = await emptyDiffGate({ paths: ["README.md"] })
     expect(r.verdict).toBe("PROCEED")
     expect(problem).toMatch(/paths\(\["README.md"\]\)で絞られています/)
+  })
+})
+
+describe("carry-over の評価の記録(分岐点から run ブランチの HEAD までの差分)", () => {
+  let h: Harness
+  let fork: string
+  let tip: string
+  afterEach(() => h.cleanup())
+
+  // run ブランチに前の try のテストと製品コードを積み、ベースブランチも進めて、
+  // 分岐点・ベースブランチの先端・run ブランチの HEAD がすべて違う状態にする
+  beforeEach(() => {
+    // 所見の出ない確率をすべての問いに返す Jev
+    const jevCall: JevCall = async (req) => ({
+      answers: Object.fromEntries(
+        Object.keys(req.questions).map((id) => [
+          id,
+          { type: "noul" as const, noul: /^c\d+$/.test(id) ? 0.9 : 0.6 }
+        ])
+      )
+    })
+    h = makeHarness({ jevCall, jevApiKey: "k" })
+    const baseBranch = git(h.repo, "rev-parse", "--abbrev-ref", "HEAD")
+    git(h.repo, "switch", "-q", "-c", "codiel/demo")
+    h.commit({
+      "src/add.ts": "export const add = (a: number, b: number) => a + b\n",
+      "src/__test__/add.test.ts":
+        'import { add } from "../add"\nif (add(1, 2) !== 3) throw new Error("add")\n'
+    })
+    git(h.repo, "switch", "-q", baseBranch)
+    tip = h.commit({ "CHANGELOG.md": "# 変更履歴\n" })
+    git(h.repo, "switch", "-q", "codiel/demo")
+    fork = gitMergeBase(h.repo, baseBranch, "HEAD") as string
+  })
+
+  async function carryOverGate(baseRef: string, extra = {}) {
+    const r = await h.evaluate({
+      tool: "evaluate_code",
+      runId: "run-1",
+      phase: "carry-over",
+      objective: "前の try から引き継いだ加算の関数とテストを評価する",
+      baseRef,
+      ...extra
+    })
+    const problem = checkGate({
+      store: resolveRaguelStore(findMainRoot(h.repo)),
+      root: h.repo,
+      runId: "run-1",
+      phase: "carry-over",
+      evaluationId: r.evaluationId,
+      verdict: r.verdict,
+      humanApproved: false,
+      startHead: fork,
+      runDocsDir: "docs/codiel/runs/demo",
+      testsDir: "docs/codiel/tests"
+    })
+    return { r, problem }
+  }
+
+  test("分岐点を baseRef にした評価で、carry-over の pass-gate(検査 8)が通る", async () => {
+    expect(fork).toBe(h.base)
+    expect(fork).not.toBe(git(h.repo, "rev-parse", "HEAD"))
+    expect(fork).not.toBe(tip)
+    const { r, problem } = await carryOverGate(fork)
+    expect(r.verdict).toBe("PROCEED")
+    expect(r.subject).toMatchObject({ base: fork })
+    expect((r.subject.files ?? []).map((f) => f.path).sort()).toStrictEqual([
+      "src/__test__/add.test.ts",
+      "src/add.ts"
+    ])
+    expect(problem).toBeNull()
+  })
+
+  test("分岐点でない baseRef の評価と paths で絞った評価は、検査 8 が通さない", async () => {
+    const wrong = await carryOverGate(tip)
+    expect(wrong.problem).toMatch(/評価の起点\(.+\)がフェーズの開始の HEAD/)
+    const narrowed = await carryOverGate(fork, { paths: ["src/add.ts"] })
+    expect(narrowed.problem).toMatch(
+      /paths\(\["src\/add.ts"\]\)で絞られています/
+    )
   })
 })

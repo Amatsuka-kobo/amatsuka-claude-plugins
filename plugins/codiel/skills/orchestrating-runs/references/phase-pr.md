@@ -19,15 +19,17 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    - `imageUpload` に使える手段があれば、E2E のレポートの画像など関連する画像を、`<plugin-root>/references/github-writing-images.md` にある「Issue・PR・コメント全般」の縮退の順序で載せる。
    - 本文には `<!-- codiel:generated -->` を含める。
 3. 本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/pr-body.md` に書く。
-4. `git push -u origin <state.branch>` を実行してから、別の Bash 呼び出しで PR を作る。gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わず、次の形で呼ぶ。
+4. `git push -u origin <state.branch>` を実行する。続けて、別の Bash 呼び出しで `gh pr list --head <state.branch> --state all --json url,state` を実行し、同じブランチの PR を確かめる。
+   - `state` が `OPEN` の PR があれば、作り直さず、`gh pr edit <URL> --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md` で今の try の本文に更新する。その URL を手順 5 の `--pr-url` に使う。
+   - PR が無いとき、または `CLOSED` か `MERGED` だけのときは、`gh pr create` で新しく作る。gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わず、次の形で呼ぶ。
    ```
    gh pr create --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md
    ```
    `gh pr create` が失敗したときは、エラーの文言で原因を分ける。
-   - 同じブランチの PR が既にあるとき(文言に `already exists` と URL が出る)は、`gh pr view <state.branch> --json url,state` で `state` が `OPEN` の PR の URL を得て、手順 5 の `--pr-url` に使う。作り直さない。
+   - 同じブランチの `OPEN` の PR が既にあるとき(文言に `already exists` と URL が出る)は、その URL に `gh pr edit` で同じ更新を行い、手順 5 の `--pr-url` に使う。
    - 認証切れなど人の操作が要るときは、`node <plugin-root>/scripts/codiel-state.mjs mark-ask pr --slug <slug> --kind confirm` で待ち、`gh auth login` などの対応を人に頼む。答えを得たら `resume` し、手順 4 の `gh pr create` からやり直す。
    - 原因が分からないときは、エラーの文言を示して同じ `mark-ask` で待ち、人の指示を得る。
-5. 作成後(または既存の PR の URL を得た後)に次を実行する。
+5. 作成後(または既存の PR を更新した後)に次を実行する。
    ```
    node <plugin-root>/scripts/codiel-state.mjs complete-phase pr --slug <slug> --pr-url <URL>
    ```

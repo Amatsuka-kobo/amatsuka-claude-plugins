@@ -46,6 +46,8 @@ run(試行)があれば自動的に再開します。内部では `orchestrating
 [intent]        TOBE を聞き取り ASIS(現状調査)と突き合わせ、intent 文書
                  docs/intents/<slug>.md に確定(連携モード github/local は
                  このフェーズより前に判定) ▶ Raguel: evaluate_decision
+[carry-over]     前の try から run ブランチ(codiel/<slug>)に残るコードを、ベースブランチとの
+                 分岐点からの差分で評価(try-1 は skip)                ▶ Raguel: evaluate_code
 [discuss]        論点リストを基にユーザーとディスカッションし、設計方針・スコープを合意
                  (合意は discussion.md に記録。軽量な run では skip。Raguel ゲートなし)
 [design]         設計書 design.md を執筆し、ユーザーとウォークスルー(軽量な run では skip。

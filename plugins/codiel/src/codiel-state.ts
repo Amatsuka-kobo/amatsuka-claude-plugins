@@ -9,6 +9,7 @@ import {
   evaluatedFiles,
   findEvaluation,
   gitHead,
+  gitMergeBase,
   isAncestor,
   type RaguelStore,
   readEvaluationIndex,
@@ -40,8 +41,9 @@ export interface PhaseState {
   // mark-ask の確認の種類。raguel は Raguel の ASK、confirm は人への確認。
   // resume の後も消さず、ゲートの記録と区別できるように残す。
   askKind?: AskKind
-  // code 系フェーズ(test-code・implement・test-loop・fix-loop)を始めたときの HEAD
-  // (Raguel 設計書 §6.13.3)。pass-gate の検査 8 が評価の起点と照らす
+  // code 系フェーズ(carry-over・test-code・implement・test-loop・fix-loop)を始めたときの HEAD
+  // (Raguel 設計書 §6.13.3)。carry-over だけはベースブランチとの分岐点を持つ。
+  // pass-gate の検査 8 が評価の起点と照らす
   startHead?: string
   // ゲート付きフェーズの pass-gate を通したときの HEAD(Raguel 設計書 §6.13.3)。git の管理外では持たない。
   // 次の code 系フェーズの start-phase が、評価の後にコミットが足されていないかを照らす
@@ -154,6 +156,7 @@ export interface ActiveRun {
 
 export const STAGES: string[][] = [
   ["intent"],
+  ["carry-over"],
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
@@ -170,6 +173,7 @@ export const STAGES: string[][] = [
 export const PHASES: string[] = STAGES.flat()
 export const GATED = new Set([
   "intent",
+  "carry-over",
   "design",
   "test-spec",
   "dev-plan",
@@ -263,8 +267,25 @@ const ok = (obj: unknown): undefined => {
   return undefined
 }
 
+// carry-over の導入前に作った version 2 の state は、carry-over を SKIPPED で通した扱いに補う。
+// 全コマンドと hooks はここを通って state を読む。isLegacy の判定には関わらない
 export function readState(p: string): RunState {
-  return JSON.parse(fs.readFileSync(p, "utf8")) as RunState
+  const st = JSON.parse(fs.readFileSync(p, "utf8")) as RunState
+  if (st.version === 2 && st.phases && !("carry-over" in st.phases)) {
+    const { intent, ...rest } = st.phases
+    st.phases = {
+      intent,
+      "carry-over": {
+        status: "passed",
+        attempts: 0,
+        evaluationId: null,
+        verdict: "SKIPPED",
+        note: "carry-over の導入前の run"
+      },
+      ...rest
+    }
+  }
+  return st
 }
 export function writeState(p: string, state: RunState): void {
   state.updatedAt = new Date().toISOString()
@@ -867,19 +888,33 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
             `(evaluationId: ${stops.join(", ")})。新しい try を作ってよいか人に確かめ、承認されたら --human-approved を付けて init し直してください`
         )
     }
+    // run ブランチは slug ごとに 1 本なので、try-2 以降のベースブランチは前の try と同じにする
+    const prevBase = latest?.state.baseBranch
+    const baseBranch = flags["base-branch"] || prevBase
+    if (prevBase && baseBranch !== prevBase)
+      fail(
+        `--base-branch(${baseBranch})が前の try のベースブランチ(${prevBase})と違います。同じ run ブランチの try はベースブランチを変えられません`
+      )
     const tryN = latest ? latest.tryN + 1 : 1
     const dir = path.join(runDir(root, slug), `try-${tryN}`)
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
     const state = newState(slug, tryN, {
       issue: "issue" in flags ? Number(flags.issue) : null,
       intent,
-      branch: bools.has("intent-only") ? null : `codiel/${slug}-try-${tryN}`,
+      branch: bools.has("intent-only") ? null : `codiel/${slug}`,
       integration,
       scale,
       imageUpload: upload,
       knowledgeTarget
     })
-    if (flags["base-branch"]) state.baseBranch = flags["base-branch"]
+    if (baseBranch) state.baseBranch = baseBranch
+    // try-1 には引き継ぐコードが無いので、carry-over を通した扱いにする
+    if (tryN === 1)
+      Object.assign(state.phases["carry-over"], {
+        status: "passed",
+        verdict: "SKIPPED",
+        note: "try-1"
+      })
     if (domainMode) state.domainMode = domainMode
     const p = path.join(dir, "state.json")
     writeState(p, state)
@@ -943,7 +978,20 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       )
     // code 系フェーズは開始の HEAD を記録する(Raguel 設計書 §6.13.3)。in_progress のフェーズを
     // 開始し直しても書き換えない。起点を後ろへずらして差分の一部だけを評価させないため
-    if (CODE_PHASES.has(phase) && !st.phases[phase].startHead) {
+    // carry-over は前の try から引き継いだ差分の全体を評価するので、起点をベースブランチとの
+    // 分岐点にする。intent の評価の後のコミットも差分に入るので、連続性は照らさない
+    if (phase === "carry-over" && !st.phases[phase].startHead) {
+      if (!st.baseBranch)
+        fail(
+          "carry-over を開始できません。state に baseBranch がありません(init で --base-branch を渡してください)"
+        )
+      const base = gitMergeBase(root, st.baseBranch as string, "HEAD")
+      if (!base)
+        fail(
+          `carry-over の起点を読めません(git merge-base ${st.baseBranch} HEAD が失敗した): ${root}`
+        )
+      st.phases[phase].startHead = base as string
+    } else if (CODE_PHASES.has(phase) && !st.phases[phase].startHead) {
       const head = gitHead(root)
       if (!head)
         fail(
@@ -1010,8 +1058,19 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       fail(`フェーズ ${phase} は in_progress ではありません(${ph.status})`)
     if (!flags["evaluation-id"]) fail("--evaluation-id が必要です")
     const humanApproved = bools.has("human-approved")
-    // STOP を記録したフェーズの verdict は、人の裁定なしに上書きさせない(設計書 §6.2.2、決定 83)
-    if (ph.verdict === "STOP" && !humanApproved)
+    // STOP を記録したフェーズの verdict は、人の裁定なしに上書きさせない(設計書 §6.2.2、決定 83)。
+    // 例外は carry-over で、妥当の STOP の後に直して評価し直した PROCEED を通す。
+    // その評価がフェーズの最新の評価で PROCEED であることは、下の checkGate の検査 3・4 が照らす
+    const resubmitAfterStop =
+      phase === "carry-over" &&
+      ph.verdict === "STOP" &&
+      !ph.humanApproved &&
+      !humanApproved &&
+      flags.verdict === "PROCEED" &&
+      !!flags["evaluation-id"] &&
+      flags["evaluation-id"] !== ph.evaluationId
+    const stopEvaluationId = ph.evaluationId
+    if (ph.verdict === "STOP" && !humanApproved && !resubmitAfterStop)
       fail(
         `フェーズ ${phase} には Raguel の STOP が記録されています。人が誤検知と裁定したときだけ --verdict STOP --human-approved で通してください`
       )
@@ -1054,6 +1113,9 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     ph.evaluationId = flags["evaluation-id"]
     ph.verdict = flags.verdict
     if (humanApproved) ph.humanApproved = true
+    // 監査で追えるよう、STOP を受けた評価を note に残す
+    if (resubmitAfterStop)
+      ph.note = `STOP(evaluationId: ${stopEvaluationId})の後の再提出で通した`
     const passedHead = gitHead(root)
     if (passedHead) ph.passedHead = passedHead
     writeState(latest.statePath, latest.state)
@@ -1283,8 +1345,13 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       )
     if (st.phases.intent.status !== "passed")
       fail(`intent が passed ではありません(${st.phases.intent.status})`)
+    // init が SKIPPED で通した carry-over(try-1 と導入前の run)は、進めたフェーズに数えない
     for (const [name, ph] of Object.entries(st.phases))
-      if (name !== "intent" && ph.status !== "pending")
+      if (
+        name !== "intent" &&
+        ph.status !== "pending" &&
+        !(name === "carry-over" && ph.verdict === "SKIPPED")
+      )
         fail(`フェーズ ${name} が pending ではありません(${ph.status})`)
     st.status = "completed"
     st.stopReason = flags.reason ?? null

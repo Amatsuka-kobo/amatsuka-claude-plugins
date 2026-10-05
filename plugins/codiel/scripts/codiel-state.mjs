@@ -34,6 +34,7 @@ var EVALUATIONS_FILE = "evaluations.jsonl";
 var OUTCOMES_FILE = "outcomes.jsonl";
 var VERDICT_FILE = "verdict.json";
 var CODE_PHASES = /* @__PURE__ */ new Set([
+  "carry-over",
   "test-code",
   "implement",
   "test-loop",
@@ -181,6 +182,16 @@ function gitHead(dir) {
     return null;
   }
 }
+function gitMergeBase(dir, a, b) {
+  try {
+    return execFileSync("git", ["-C", dir, "merge-base", a, b], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return null;
+  }
+}
 function isAncestor(dir, ancestor, descendant) {
   try {
     execFileSync(
@@ -300,6 +311,7 @@ function unresolvedStops(store, runId) {
 // src/codiel-state.ts
 var STAGES = [
   ["intent"],
+  ["carry-over"],
   ["discuss"],
   ["design"],
   ["test-spec", "dev-plan"],
@@ -316,6 +328,7 @@ var STAGES = [
 var PHASES = STAGES.flat();
 var GATED = /* @__PURE__ */ new Set([
   "intent",
+  "carry-over",
   "design",
   "test-spec",
   "dev-plan",
@@ -393,7 +406,22 @@ var ok = (obj) => {
   return void 0;
 };
 function readState(p) {
-  return JSON.parse(fs3.readFileSync(p, "utf8"));
+  const st = JSON.parse(fs3.readFileSync(p, "utf8"));
+  if (st.version === 2 && st.phases && !("carry-over" in st.phases)) {
+    const { intent, ...rest } = st.phases;
+    st.phases = {
+      intent,
+      "carry-over": {
+        status: "passed",
+        attempts: 0,
+        evaluationId: null,
+        verdict: "SKIPPED",
+        note: "carry-over \u306E\u5C0E\u5165\u524D\u306E run"
+      },
+      ...rest
+    };
+  }
+  return st;
 }
 function writeState(p, state) {
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -791,19 +819,31 @@ function main(argv, root = process.cwd()) {
           `\u524D\u306E try(${latest.statePath})\u306B\u306F\u3001\u8AA4\u691C\u77E5\u306E\u88C1\u5B9A\u306E\u7121\u3044 Raguel \u306E STOP \u304C\u3042\u308A\u307E\u3059(evaluationId: ${stops.join(", ")})\u3002\u65B0\u3057\u3044 try \u3092\u4F5C\u3063\u3066\u3088\u3044\u304B\u4EBA\u306B\u78BA\u304B\u3081\u3001\u627F\u8A8D\u3055\u308C\u305F\u3089 --human-approved \u3092\u4ED8\u3051\u3066 init \u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`
         );
     }
+    const prevBase = latest?.state.baseBranch;
+    const baseBranch = flags["base-branch"] || prevBase;
+    if (prevBase && baseBranch !== prevBase)
+      fail(
+        `--base-branch(${baseBranch})\u304C\u524D\u306E try \u306E\u30D9\u30FC\u30B9\u30D6\u30E9\u30F3\u30C1(${prevBase})\u3068\u9055\u3044\u307E\u3059\u3002\u540C\u3058 run \u30D6\u30E9\u30F3\u30C1\u306E try \u306F\u30D9\u30FC\u30B9\u30D6\u30E9\u30F3\u30C1\u3092\u5909\u3048\u3089\u308C\u307E\u305B\u3093`
+      );
     const tryN = latest ? latest.tryN + 1 : 1;
     const dir = path3.join(runDir(root, slug), `try-${tryN}`);
     fs3.mkdirSync(path3.join(dir, "reports"), { recursive: true });
     const state = newState(slug, tryN, {
       issue: "issue" in flags ? Number(flags.issue) : null,
       intent,
-      branch: bools.has("intent-only") ? null : `codiel/${slug}-try-${tryN}`,
+      branch: bools.has("intent-only") ? null : `codiel/${slug}`,
       integration,
       scale,
       imageUpload: upload,
       knowledgeTarget
     });
-    if (flags["base-branch"]) state.baseBranch = flags["base-branch"];
+    if (baseBranch) state.baseBranch = baseBranch;
+    if (tryN === 1)
+      Object.assign(state.phases["carry-over"], {
+        status: "passed",
+        verdict: "SKIPPED",
+        note: "try-1"
+      });
     if (domainMode) state.domainMode = domainMode;
     const p = path3.join(dir, "state.json");
     writeState(p, state);
@@ -860,7 +900,18 @@ function main(argv, root = process.cwd()) {
       fail(
         `\u30D5\u30A7\u30FC\u30BA ${phase} \u306F ${st.phases[phase].status} \u306E\u305F\u3081\u958B\u59CB\u3067\u304D\u307E\u305B\u3093`
       );
-    if (CODE_PHASES.has(phase) && !st.phases[phase].startHead) {
+    if (phase === "carry-over" && !st.phases[phase].startHead) {
+      if (!st.baseBranch)
+        fail(
+          "carry-over \u3092\u958B\u59CB\u3067\u304D\u307E\u305B\u3093\u3002state \u306B baseBranch \u304C\u3042\u308A\u307E\u305B\u3093(init \u3067 --base-branch \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044)"
+        );
+      const base = gitMergeBase(root, st.baseBranch, "HEAD");
+      if (!base)
+        fail(
+          `carry-over \u306E\u8D77\u70B9\u3092\u8AAD\u3081\u307E\u305B\u3093(git merge-base ${st.baseBranch} HEAD \u304C\u5931\u6557\u3057\u305F): ${root}`
+        );
+      st.phases[phase].startHead = base;
+    } else if (CODE_PHASES.has(phase) && !st.phases[phase].startHead) {
       const head = gitHead(root);
       if (!head)
         fail(
@@ -924,7 +975,9 @@ function main(argv, root = process.cwd()) {
       fail(`\u30D5\u30A7\u30FC\u30BA ${phase} \u306F in_progress \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
     if (!flags["evaluation-id"]) fail("--evaluation-id \u304C\u5FC5\u8981\u3067\u3059");
     const humanApproved = bools.has("human-approved");
-    if (ph.verdict === "STOP" && !humanApproved)
+    const resubmitAfterStop = phase === "carry-over" && ph.verdict === "STOP" && !ph.humanApproved && !humanApproved && flags.verdict === "PROCEED" && !!flags["evaluation-id"] && flags["evaluation-id"] !== ph.evaluationId;
+    const stopEvaluationId = ph.evaluationId;
+    if (ph.verdict === "STOP" && !humanApproved && !resubmitAfterStop)
       fail(
         `\u30D5\u30A7\u30FC\u30BA ${phase} \u306B\u306F Raguel \u306E STOP \u304C\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u4EBA\u304C\u8AA4\u691C\u77E5\u3068\u88C1\u5B9A\u3057\u305F\u3068\u304D\u3060\u3051 --verdict STOP --human-approved \u3067\u901A\u3057\u3066\u304F\u3060\u3055\u3044`
       );
@@ -965,6 +1018,8 @@ function main(argv, root = process.cwd()) {
     ph.evaluationId = flags["evaluation-id"];
     ph.verdict = flags.verdict;
     if (humanApproved) ph.humanApproved = true;
+    if (resubmitAfterStop)
+      ph.note = `STOP(evaluationId: ${stopEvaluationId})\u306E\u5F8C\u306E\u518D\u63D0\u51FA\u3067\u901A\u3057\u305F`;
     const passedHead = gitHead(root);
     if (passedHead) ph.passedHead = passedHead;
     writeState(latest.statePath, latest.state);
@@ -1161,7 +1216,7 @@ function main(argv, root = process.cwd()) {
     if (st.phases.intent.status !== "passed")
       fail(`intent \u304C passed \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${st.phases.intent.status})`);
     for (const [name, ph] of Object.entries(st.phases))
-      if (name !== "intent" && ph.status !== "pending")
+      if (name !== "intent" && ph.status !== "pending" && !(name === "carry-over" && ph.verdict === "SKIPPED"))
         fail(`\u30D5\u30A7\u30FC\u30BA ${name} \u304C pending \u3067\u306F\u3042\u308A\u307E\u305B\u3093(${ph.status})`);
     st.status = "completed";
     st.stopReason = flags.reason ?? null;

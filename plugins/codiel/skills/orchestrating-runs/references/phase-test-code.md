@@ -3,9 +3,9 @@
 `start-phase test-code` の直後に読む。worktree と委譲の並べ方は `references/delegation-env.md` に従う。
 
 1. test-spec が作成・更新した仕様のディレクトリを、`step-add --slug <slug> --kind test-code --id <ID>` で `testCode.units` に登録する。test-code はドメイン境界を課さないので、`--files`・`--deps`・`--final`・`--domain` は渡さない。
-2. 仕様のディレクトリごとに、worktree(名前は `test-code-<k>`)で成果物を書く委譲を出す。brief には testsDir の値、仕様のディレクトリの ID、入力のパスを書く。E2E の仕様のディレクトリでは、`references/e2e.md` に従ってレポートの出力先を渡す。
+2. 仕様のディレクトリごとに、worktree(名前は `test-code-<k>`)で成果物を書く委譲を出す。brief には testsDir の値、仕様のディレクトリの ID、入力のパスを書く。carry-over が `SKIPPED` でない try では、依頼文の前提に「引き継いだ実装あり」と書く。E2E の仕様のディレクトリでは、`references/e2e.md` に従ってレポートの出力先を渡す。
 3. 委譲先の完了通知を受けたら、返答を `steps/test-code-<k>/report.md` に書く。返答に入っている次の項目を転記する。
-   - ケースごとの結果(Red・通過・環境の失敗・cases.md の誤り)と理由
+   - ケースごとの結果(Red・通過・環境の失敗・cases.md の誤り・引き継いだ実装で通る)と理由。「引き継いだ実装で通る」の報告はマージを止めず、`report.md` にケース ID を一覧する
    - 置いたテストファイルのパスと、`spec.md` の `tests` に足した値
    - 置き場の根拠(フレームワークの既定の置き場で決めたとき、推定で決めたとき)
    - 実行したコマンドと出力の抜粋
@@ -24,5 +24,5 @@
 7. 全ディレクトリのマージの後、`references/e2e.md` に従って E2E のレポートをコミットしてから `evaluate_code` を呼ぶ。
    - 渡すものは `raguel-gating` の対応表の test-code の行に従う。
    - `testResults` は、各 report.md の Red の確認の要約とする。
-   - objective は、本体の後に「実装の前なので、Red の対象のテストが失敗するのは期待どおりである」の 1 文を足す。
+   - objective は、本体の後に「実装の前なので、Red の対象のテストが失敗するのは期待どおりである」の 1 文を足す。carry-over が `SKIPPED` でない try では、「実装の前に失敗するか、引き継いだ実装で通る」に直す。
 8. `pass-gate test-code` する。

@@ -11,14 +11,15 @@ Raguel は codiel のゲート付きフェーズを定数として持つ(`R/codi
 | フェーズ | ステージ番号 | kind | ツール |
 | --- | --- | --- | --- |
 | intent | 0 | decision | evaluate_decision |
-| design | 2 | design | evaluate_design |
-| test-spec | 3 | plan | evaluate_plan |
-| dev-plan | 3 | plan | evaluate_plan |
-| test-code | 4 | code | evaluate_code |
-| implement | 5 | code | evaluate_code |
-| test-loop | 6 | code | evaluate_code |
-| intent-sync | 7 | design | evaluate_design |
-| fix-loop | 10 | code | evaluate_code |
+| carry-over | 1 | code | evaluate_code |
+| design | 3 | design | evaluate_design |
+| test-spec | 4 | plan | evaluate_plan |
+| dev-plan | 4 | plan | evaluate_plan |
+| test-code | 5 | code | evaluate_code |
+| implement | 6 | code | evaluate_code |
+| test-loop | 7 | code | evaluate_code |
+| intent-sync | 8 | design | evaluate_design |
+| fix-loop | 11 | code | evaluate_code |
 
 - ステージ番号は `STAGES` の添字で、ゲートの無いステージ(discuss・pr・review・triage・finalize)も数える。
 - evaluate_* は `phase` を必須で受ける。表の kind とツールが合わなければ入力の誤り(isError)になる。
@@ -181,7 +182,7 @@ Raguel はこの判定を `classifyPath(repoRel, config, testsDir)` で使い、
 5. 行の `casePath` の `verdict.json` が読め、`evaluationId`・`runId`・`phase`・`verdict` が索引の行と等しい。
 6. `--human-approved` が無ければ、verdict が PROCEED である。
 7. `--human-approved` があれば、裁定の記録に同じ evaluationId の行があり、verdict が ASK なら `ruling` が `as-is`、STOP なら `false-positive` である。
-8. code 系フェーズ(test-code・implement・test-loop・fix-loop)では、`verdict.json` の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。`startHead` は `start-phase` が 4 フェーズで記録する。さらに `subject.paths` が無いことを要り、`paths` で範囲を絞った評価では通さない。空の配列も絞った評価として扱う。
+8. code 系フェーズ(carry-over・test-code・implement・test-loop・fix-loop)では、`verdict.json` の `subject.head` が現在の `git rev-parse HEAD` と等しく、`subject.base` がフェーズの `startHead` と等しい。`startHead` は `start-phase` が 5 フェーズで記録する。carry-over では `git merge-base <baseBranch> HEAD`、ほかの 4 フェーズでは開始時の HEAD である。さらに `subject.paths` が無いことを要り、`paths` で範囲を絞った評価では通さない。空の配列も絞った評価として扱う。
 9. 文書のフェーズ(design・test-spec・dev-plan・intent-sync)では、`subject.files` の各ファイルの現在の sha256 が記録と等しい。加えて、フェーズごとに期待するファイルが `subject.files` に含まれる。design は run の文書の置き場の `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` が 1 件以上である。intent-sync は書き換えるファイルが run ごとに違うので、期待するファイルを照合しない。
 10. state に `raguelContract: 2` が無い run(この作り直しより前に作った run)では、検査の代わりに次の文言で失敗する。
 
@@ -191,6 +192,8 @@ codiel: この run は Raguel の記録の形式が古い(raguelContract なし)
 
 `<slug>` と `<intent パス>` は state の値に置き換えて出す。
 
+STOP を記録したフェーズの `--human-approved` の無い pass-gate は、検査の前に codiel 側で拒否する。carry-over だけは、STOP の評価と別の evaluationId の PROCEED で、検査 3〜5 を通るもの(直してから評価し直した、そのフェーズの最新の評価)を受け付け、STOP の evaluationId を state の `note` に残す。Raguel の側の検査は変わらない。
+
 検査 8 の `subject.base` の照合と `paths` の拒否は、範囲を絞ってフェーズの差分の一部だけを評価させる抜け道を塞ぐ。検査 9 の sha256 の照合は、ゲートの後で文書を書き換える抜け道を塞ぎ、期待するファイルの照合は、無関係なファイルを評価させて通す抜け道を塞ぐ。
 
 pass-gate は、通したときの HEAD を `phases.<phase>.passedHead` に記録する(すべてのゲート付きフェーズ。git の管理外では記録しない)。`start-phase` は、`startHead` を記録するときに、直前に passed になったゲート付きフェーズの `passedHead` と今の HEAD を照らす(フェーズの間の連続性)。照らし方は直前のフェーズの種類で変わる。
@@ -199,7 +202,7 @@ pass-gate は、通したときの HEAD を `phases.<phase>.passedHead` に記�
 - 文書のフェーズ(design・test-spec・dev-plan・intent-sync): `git diff --name-only --no-renames <passedHead> HEAD` の変更が、すべてそのフェーズの `verdict.json` の `subject.files` にあることを要る。名前の変更は移動元と移動先の両方を照らす。外れたら、許されないファイルのパスを挙げて失敗する。評価した文書だけは、ゲート通過の直後にコミットしてよい。
 - 同じステージの test-spec と dev-plan は、両方の `subject.files` を合わせて許す。起点は、2 つの `passedHead` のうち、もう一方の祖先であるほう(先に通したほう)にする。
 
-`skip-phase` で通したフェーズは `passedHead` を持たないので、照合しない。
+`skip-phase` で通したフェーズは `passedHead` を持たないので、照合しない。carry-over の `start-phase` も照合しない。起点がベースブランチとの分岐点なので、intent の評価の後のコミットも carry-over の評価の差分に入る。
 
 Raguel の側では、`head` が `null` になる場合がある。プロジェクトルートが git の管理外のとき、または最初のコミットが無いリポジトリで文書と判断を評価したときで、索引の `head` と `subject.head` が `null` になる。evaluate_code は HEAD を解決できなければ入力の誤りにするので、code 系フェーズの `subject.head` は `null` にならない。
 
