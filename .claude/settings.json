@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
+    "CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "0",
     "CLAUDE_CODE_THRIFTY_SONIC": "false",
     "GENSHIJIN_DEFAULT_MODE": "normal",
     "PONYTAIL_DEFAULT_MODE": "full"
@@ -101,5 +102,20 @@
       "effortLevel": "high"
     }
   },
-  "outputStyle": "EnhancedClaude5"
+  "availableModels": [
+    "claude-fable-5-1",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-sonnet-5",
+    "haiku",
+    "claude-gpt-6-astra",
+    "claude-gpt-6-1-sol",
+    "claude-gpt-5-6-terra",
+    "claude-gpt-6-luna",
+    "claude-grok-4-7",
+    "claude-gemini-3-8-flash",
+    "claude-gemini-3-1-pro"
+  ],
+  "outputStyle": "EnhancedClaude5",
+  "advisorModel": "fable"
 }

@@ -21,7 +21,9 @@ disallowed-tools: Write
 
 - `Edit` を使ってよいのは、CLI が作成した `.claude/agent-policy/roles/<lang>/` 配下の翻訳断片だけである。それ以外のファイルを編集しない。
 - 各 CLI 応答の `ok` が `false` なら、`error` を報告してその処理を止める。
-- 例外はステップ 1b と非対話モード手順 3 の `--prune-tools` / `--rewrite-roles` だけである。この 2 つが `ok: false` を返しても、定義名と `error` を控えてウィザードを続ける。控えた内容は、対話モードではステップ 7、非対話モードでは手順 5 で報告する。
+- 例外は次の 2 つだけである。どちらも `ok: false` を返したら、定義名と `error` を控えてウィザードを続ける。控えた内容は、対話モードではステップ 7、非対話モードでは手順 5 で報告する。
+  - ステップ 1b と非対話モード手順 3 の `--prune-tools` / `--rewrite-roles`
+  - ステップ 5n と 6 の 1 定義ごとの `--write`(失敗した定義を飛ばし、残りの定義の生成を続ける)
 - `--scope` / `--lang` は、各コマンド例に書かれたコマンドにだけ渡す。
 - `AskUserQuestion` は 1 回ずつ呼び、前の回答を受け取ってから次を呼ぶ。1 つのメッセージで複数回呼ばない。
 - 生成・差分確認の応答は、単一モデルでも必ず `results` 配列で読む。生成・差分確認では `warnings` も読む。
@@ -32,9 +34,10 @@ disallowed-tools: Write
   | 0 件 | 質問せず、候補がないことを報告して次へ進む。 |
   | 1 件 | `AskUserQuestion` を使わず、「これを使うか」を通常の確認文で尋ねる。 |
   | 2〜4 件 | 1 回の `AskUserQuestion` で尋ねる。 |
-  | 5 件以上 | 配列の並び順のままページに分け、各ページを 2〜4 件にする(5 件なら 3 件と 2 件)。各質問に `(1/2)` のような通し番号を付ける。 |
+  | 5 件以上(複数選択) | 配列の並び順のままページに分け、各ページを候補 1〜3 件にする(5 件なら 3 件と 2 件)。各ページの末尾に「このページでは選ばない」を置く。各質問に `(1/2)` のような通し番号を付ける。 |
+  | 5 件以上(単一選択) | ページに分けない。モデル ID の選択は、5n の手順 1 の 2 問の手順で絞る。 |
 
-この規則は特にモデル、役割、MCP サーバーの選択で守る。
+単一選択の `AskUserQuestion` は 1 ページ目で選んだ時点で終わり、次のページへ進めないため、ページ分けは複数選択にだけ当てる。
 
 - 表の候補数は、ページに分ける前の数で引く。分けた後のページは 1 件の行に当てず、どのページも `AskUserQuestion` で出す。
 - ページに分けたときは、すべてのページを順に出す。Other で残りを選ばせない。
@@ -47,8 +50,12 @@ disallowed-tools: Write
 
 - 選択の結果が空になりうるときは、「付与しない」「作らない」「再生成しない」に相当する選択肢を明示して置く。`AskUserQuestion` は空の選択を受け付けないため、この選択肢が無いと、何も選ばないという意思を利用者が表せない。
   - 推奨や既定の候補を先頭に置く。
-  - 空の選択に当たる選択肢は、候補の最後に必ず置く。ページを分けるときは、最後のページの末尾に置く。
-  - 空の選択に当たる選択肢が選ばれたら、その質問の回答は空とし、前のページで選んだものも取り消す。
+  - 空の選択に当たる選択肢は、候補の最後に必ず置く。
+  - 候補数には、空の選択肢も含めて数える。
+  - ステップ 5 の調整する定義の選択、5n と 5c の MCP のように、複数選択の前に単一選択で空の選択を聞けるときは、複数選択に空の選択肢を置かない。
+- 複数選択をページに分けるときは、全体を空にする選択肢を置かず、各ページの末尾に「このページでは選ばない」を置く。
+  - 「このページでは選ばない」はそのページだけに効き、前のページの選択を取り消さない。質問文にもそう書く。
+  - すべてのページで「このページでは選ばない」が選ばれたら、その質問の回答は空とする。空の回答の扱いは各ステップに従う。
 
 ## 非対話モード
 
@@ -56,7 +63,7 @@ disallowed-tools: Write
 
 `$ARGUMENTS` に `--scope claude` または `--scope custom` があればそれを使う。無ければ `AMATSUKA_AGENT_AUTO_INJECTION` から決める(`custom` 系なら `custom`、それ以外は `claude`)。
 
-1. live models を照会する。応答の `ok`、`reason`、`models`、`claudeEnums` を保持する。
+1. live models を照会する。応答の `ok` と `reason` を保持する。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope <claude|custom> --dir "$PWD"
@@ -68,7 +75,7 @@ disallowed-tools: Write
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check-fragments --lang <lang> --dir "$PWD"
    ```
 
-3. 既存定義を点検し、役割に許されていないツールを外す。
+3. 既存定義を点検し、役割に許可されていないツールを外す。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
@@ -88,26 +95,33 @@ disallowed-tools: Write
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --recommended --scope <claude|custom> --lang <lang> --dir "$PWD"
    ```
 
-   custom の照会成功時は、各役割の推奨候補を順に調べ、実在する最初のモデルを採る。先頭の既定エイリアスが存在しない役割は次の候補へ進む。Claude のモデルは必ず実在するため、最初の Claude モデルで採用を止める。照会に失敗したときは各役割の先頭候補を採り、`warnings` に実在検証なしの警告が入る。
+   custom の照会成功時は、各役割の推奨候補を順に調べ、live にエイリアスがある最初のモデルを採る。エイリアスは CLI が部分一致で判定するので、既定エイリアスと名前が違っても当たる。Claude のモデルは必ず実在するため、最初の Claude モデルで採用を止める。照会に失敗したときは各役割の先頭候補を採り、`warnings` に実在検証なしの警告が入る。
+
+   1 つのモデル ID に live のエイリアスが複数当たったときは、CLI が推奨の印の付いた 1 つを `model` に使い、選ばなかったエイリアスを `warnings` に載せる。
 
    `--scope claude` では Claude の役割モデルを使い、live models の照会は生成時に行わない。
 
-   その構成で役割を被覆する既存定義がちょうど 1 件あれば、CLI はその定義を作成先にして再生成する。被覆する定義が 2 件以上ある役割、`model` からモデル ID を引けない定義、廃止済みか未知の役割 ID を持つ定義は生成せず、`warnings` に載る。生成しなかった定義の役割は、既定名でも作らない。`--replace` は渡さず、既存の description と前置きはすべて保持する。
+   その構成で役割を被覆する既存定義がちょうど 1 件あれば、CLI はその定義を作成先にして再生成する。被覆する定義が 2 件以上ある役割、`model` からモデル ID を引けない定義、廃止済みか未知の役割 ID を持つ定義、`agent-policy-vendor` が未知の値の定義は生成せず、`warnings` に載る。生成しなかった定義の役割は、既定名でも作らない。`--replace` は渡さず、既存の description と前置きはすべて保持する。
 
    `--mcp-servers` は渡さない。既存定義を作成先にする定義は、既存の MCP サーバーと `disallowedTools` を CLI が引き継ぐ。新規生成の定義には MCP を付けない。
 
 5. 結果を報告する。全文の差分は載せない。手順 4 の `results` から、再生成した定義ごとに次を並べる。
 
-   - `tools` 行の変更前と変更後(`toolsBefore` と `toolsAfter`)
+   - `tools` 行の変更前と変更後。手順 3 で `--prune-tools` を実行した定義は 2 行に分け、1 行にまとめない。
+     - 1 行目: `--prune-tools` の応答の `toolsBefore` → `toolsAfter`
+     - 2 行目: 手順 4 の再生成の `toolsBefore` → `toolsAfter`
+   - `--prune-tools` を実行しなかった定義は、手順 4 の `toolsBefore` → `toolsAfter` を 1 行で書く。
    - 再生成で外れた MCP サーバー。接続の再検証で落ちたもの(`mcpDropped`)
    - `description` と `preamble` の状態。`templateChanged` の定義には、対話モードで再実行すればテンプレートに置き換えられると案内する。
 
    手順 3 と 4 について次を並べ、対話モードでの再実行を案内する。
 
    - 外したツールと定義名
-   - 変更しなかった定義と、その理由(全ツール継承・未対応の `tools` 書式・廃止済みか未知の役割 ID を持つ・操作に失敗・同じ役割を 2 件以上の定義が被覆する・モデル ID を引けない)
+   - 変更しなかった定義と、その理由(全ツール継承・未対応の `tools` 書式・廃止済みか未知の役割 ID を持つ・操作に失敗・同じ役割を 2 件以上の定義が被覆する・モデル ID を引けない・`agent-policy-vendor` が未知の値)
    - 廃止済み役割と後継
+   - 複数のエイリアスが当たったモデル ID と、使ったエイリアス・選ばなかったエイリアス(手順 4 の `warnings`)
    - `ok: false` になった操作の定義名と `error`
+   - live models の照会が失敗したときは、その `reason` と、外部モデルの定義に実在の保証が無いこと
 
 ## 対話モード
 
@@ -119,7 +133,9 @@ disallowed-tools: Write
 
 ### ステップ 0b: 構成の選択
 
-`AskUserQuestion` を 1 回だけ使い、次の 2 択で構成を決める。選んだ値は `--scope <claude|custom>` として渡す。
+`$ARGUMENTS` に `--scope claude` または `--scope custom` があれば、この質問を省いてその値を使う。
+
+無ければ、`AskUserQuestion` を 1 回だけ使い、次の 2 択で構成を決める。選んだ値は `--scope <claude|custom>` として渡す。
 
 - **Claude のみ**(`--scope claude`)—— Claude のモデル(`sonnet` / `opus` / `haiku` / `fable`)だけを候補にする。プロキシは要らない。
 - **カスタム**(`--scope custom`)—— 外部ベンダーのモデルも候補に含める。ローカルプロキシの `/v1/models` に実在するモデルから選ぶ。
@@ -129,14 +145,14 @@ disallowed-tools: Write
 質問を組み立てる前に、既存の役割マーカー付き定義を取得する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope custom --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope claude --dir "$PWD"
 ```
 
 応答の `modelBreakdown` の `claude` と `external` の合計が 1 以上なら、その値をそのまま「Claude のモデル <claude> 件、外部ベンダー <external> 件」の形で質問文に書く。<> の中は実際の値に置き換える。定義を自分で数え直さない。合計が 0 なら、内訳は書かない。
 
 ### ステップ 1: live models の照会
 
-`--scope claude` のときは `--list-live-models` を実行しない(実行しても `models` は空で返る)。候補は `sonnet` / `opus` / `haiku` / `fable` の 4 値に固定し、ステップ 3 を飛ばしてステップ 4 へ進む。以下は `--scope custom` の手順である。
+`--scope claude` のときは `--list-live-models` を実行しない。ステップ 1b と 2 は通常どおり進め、ステップ 3 だけを飛ばす。以下は `--scope custom` の手順である。
 
 live models を取得する。
 
@@ -144,10 +160,9 @@ live models を取得する。
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope <claude|custom> --dir "$PWD"
 ```
 
-応答の `models` は `id`、`vendor`、`recommendedFor` を持つ。`claudeEnums` はプロキシ照会の成否にかかわらず常に返る Claude enum である。以後のために、この応答と `ok` / `reason` を保持する。
+この応答の `ok` / `reason` を保持し、照会が成功したかどうかだけを決める。モデル候補はここで組み立てない。候補は 5n と 5b で、`--list-coverage` の `candidates` を使う。
 
-- `ok: true` のときは、`models` にある実在エイリアスと `claudeEnums` の両方をモデル候補にする。各実在エイリアスには `vendor` と `recommendedFor` を添え、`recommendedFor` が空でないものには推奨役割を明示する。
-- `ok: false` のときは、`claudeEnums` と、推奨モデル ID の既定エイリアスを候補にする。推奨モデル ID と既定エイリアスは、`gpt-sol` = `claude-gpt-6-sol`、`gpt-terra` = `claude-gpt-5-6-terra`、`gpt-luna` = `claude-gpt-6-luna`、`gpt-astra` = `claude-gpt-6-astra`、`grok` = `claude-grok-4-7`、`haiku` = `haiku`、`sonnet` = `sonnet`、`fable` = `fable`、`opus` = `opus` である。「プロキシ未検出または照会失敗(`<reason>`)のため実在の確認ができない。定義は作れるが実在は保証されない」と明示して続行する。
+- `ok: false` のときは、「プロキシ未検出または照会失敗(`<reason>`)のため実在の確認ができない。定義は作れるが実在は保証されない」と明示して続行する。
 
 ### ステップ 1b: 既存定義の点検と被覆確認
 
@@ -159,15 +174,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
 ```
 
-この応答の `roles` は `RECOMMENDED` の全 RoleId を対象にし、各要素は `id`、`label`、`kind`(`impl` / `readonly`)、`defaultName`、推奨の `models`、`coveredBy` を返す。`uncovered` は `coveredBy` が空の役割だけである。
+この応答の `roles` は `RECOMMENDED` の全 RoleId を対象にし、各要素は `id`、`label`、`kind`(`impl` / `readonly`)、`defaultName`、`candidates`(`modelId`・`model`・`recommended`)、`coveredBy` を返す。`uncovered` は `coveredBy` が空の役割だけである。
 
 `definitions` は、`agent-policy-role` を持つ全定義の点検結果である。`--scope` では絞られない。各要素は次を持つ。
 
 - `name`、`file`(プロジェクトルート相対)、`model`、`vendor`
+- `modelId`: `model` から引いたモデル ID。引けないときは `null`
 - `roles`: マーカーのうち、役割として解決できる ID
 - `retiredRoles`: マーカーのうち廃止済みの ID と、書き換え先の組 `{ id, replacement }`。`replacement` が `null` なら後継は無い。
 - `unknownRoles`: マーカーのうち、廃止済みでも役割として解決できるものでもない ID
-- `disallowedTools`: 役割に許されていない組み込みツール。`*` は `tools` 欄が無く、全ツールを継承していることを表す。
+- `disallowedTools`: 役割に許可されていない組み込みツール。`*` は `tools` 欄が無く、全ツールを継承していることを表す。
 - `toolsFormat`: `csv`(1 行のカンマ区切り)、`other`(1 行に特定できない・block 配列・flow 配列・引用符や括弧や `#` を含む)、`none`(欄が無い)
 
 #### 点検
@@ -176,7 +192,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 1. 扱う定義を、`file` のファイル名の昇順に並べる。
 2. 定義ごとに、`retiredRoles` → `disallowedTools` の順で別々の質問を出す。質問は 1 で並べた定義の順に出す。1 回の `AskUserQuestion` には 4 問まで入るので、質問を 4 問ずつまとめてよい。
-   - 各質問には、その質問が扱う定義の 1 行を「定義 / 廃止済み役割と後継 / 許されていないツール」の表にして入れる。
+   - 各質問には、その質問が扱う定義の 1 行を「定義 / 廃止済み役割と後継 / 許可されていないツール」の表にして入れる。
    - `retiredRoles` は定義ごとに 1 問とし、「廃止 ID を外す(推奨)」「このまま残す」の 2 択で聞く。質問文には後継の役割を書く。後継が未カバーなら、被覆確認の後に新規生成で作ると添える。後継が無い ID は、後継が無いと書く。`unknownRoles` があれば、それもマーカーから落ちると質問文に書く。
    - `disallowedTools` はツールごとに 1 問とし、「削除する(推奨)」「残す」の 2 択で聞く。`*` のときは「役割の既定ツールに絞る(推奨)」「全ツール継承のまま残す」の 2 択にする。
    - `toolsFormat` が `other` の定義には、ツールの質問を出さない。
@@ -217,7 +233,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 「未カバーの役割だけ作る」を選ばれたときは、以降の対象役割を `uncovered` に絞る。ステップ 4 の `--check` に `--roles <uncovered…>` を付け、以降のステップはその役割だけを扱う。
 
-「すべての役割の定義を確認し直す」を選ばれたときは、全 RoleId を対象にステップ 2 へ進む。「中止する」を選ばれたときは、生成せずに終える。
+「すべての役割の定義を確認し直す」を選ばれたときは、全 RoleId を対象にステップ 2 へ進む。「中止する」を選ばれたときは、生成せずに終える。ステップ 1b の点検で操作を実行していれば、その結果だけをステップ 7 の形式で報告する。
 
 ### ステップ 2: 翻訳断片の準備
 
@@ -229,7 +245,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check-fragments --lang <lang> --dir "$PWD"
    ```
 
-2. `missing` と `stale` がともに空なら次へ進む。どちらかがあれば、`--scaffold-fragments` を実行する前に `stale` の既存訳の内容を確認し、必要なら退避するよう促す。scaffold は stale のファイルを英語ソースで上書きするため、既存の訳は失われる。
+2. `missing` と `stale` がともに空なら次へ進む。どちらかがあれば、`--scaffold-fragments` を実行する前に、`stale` の既存訳があれば退避するよう促す。scaffold は stale のファイルを英語ソースで上書きするため、既存の訳は失われる。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --scaffold-fragments --lang <lang> --dir "$PWD"
@@ -242,7 +258,6 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
 
 ステップ 1 の `--list-live-models` がプロキシ前提確認を兼ねる。別の検証コマンドの実行は求めない。
 
-- `ok: true` のときは、`models` の各 `id` だけを外部モデルの実在する候補として扱う。
 - `ok: false` のときは、`reason` を示し、外部モデルの生成物は実在保証を持たないことを再度伝える。後続の `--write` / `--check` は、照会失敗を `warnings` に入れて検証なしで続行する。
 
 ### ステップ 4: 推奨定義の確認
@@ -264,12 +279,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 
 - 1 つの役割を 2 件以上の定義が被覆する: どの定義を再生成するか、または再生成しないかを `AskUserQuestion` で聞く。選択肢は被覆する定義と「再生成しない」とする。候補の定義の表(名前・`model`・`roles`)を質問の中に入れる。
 - `modelId` が `null`: ステップ 5b でモデル ID を聞いてから再生成する。
-- `--scope custom` で live 照会が成功し、`model` が live に無い: 再生成せず、ステップ 7 で報告する。
+- `--scope custom` で live 照会が成功し、`model` が live に無い: 再生成せず、ステップ 7 で報告する。`warnings` に同じモデルの live のエイリアスが載っていれば、書き換え先の候補として報告に添える。
 - `retiredRoles` か `unknownRoles` が残っている: 作り直すとそれらの ID がマーカーから落ちるため、再生成せず、ステップ 7 で報告する。その定義が被覆する役割は、新規生成もしない。ステップ 1b で「廃止 ID を外す」を選んで外し終えた定義は、ここに当たらず再生成してよい。
+- `agent-policy-vendor` が未知の値: 再生成せず、ステップ 7 で報告する。
 
 生成する定義の frontmatter には、役割とモデルの組に応じた `effort` が入り、組に対応する値が無いときは入らない。値は CLI が決めるので、表には書かない。
-
-照会成功時に候補先頭の既定エイリアスが存在しない役割は次の候補へ進む。Claude のモデルは必ず存在するため、最初の Claude のモデルで採用を止める。照会失敗時は先頭候補を採用する。
 
 再生成の対象は、振り分けで決まった定義をすべて含む。description と前置きが既存とテンプレートで違うことは、対象から外す理由にせず、ステップ 5 の質問で扱う。対象から外せるのは、次の場合に限る。
 
@@ -277,6 +291,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 - 廃止済みか未知の役割 ID が残っている定義
 - `modelId` が `null` で、5b で「再生成しない」が選ばれた定義
 - `model` が live に無い定義
+- `agent-policy-vendor` が未知の値の定義
 
 新規生成の役割はステップ 5n、再生成の定義はステップ 5〜6 で扱う。ステップ 4b の後、5n、5、5b、5c、6 の順に進む。
 
@@ -288,11 +303,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --recommended --sc
 node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 ```
 
-`--list-mcp` が失敗した場合、または `servers` が 0 件なら、何も質問せず、以降のステップの MCP の質問をすべて省く。成功したときは、次を順に行う。
+`--list-mcp` が失敗した場合、または `servers` が 0 件なら、何も質問せず、ステップ 5n の MCP の質問を省く。成功したときは、次を順に行う。
 
 1. ステップ 4 の `mcpCurrent` を、既存定義から読み戻した既定値として扱う。既存定義がなければ空である。
-2. `usable: true` のサーバーだけを、名前と status を添えて選択肢にする。プラグイン側の既定は「付けない」だが、`mcpCurrent` があればそれを既定にする。サーバーの選択には候補数の共通規則を適用し、「どのサーバーも使わない」を最後の選択肢に置く。
-3. 「どのサーバーも使わない」が選ばれたら、以降のステップの MCP の質問をすべて省く。
+2. `usable: true` のサーバーだけを、名前と status を添えて選択肢にする。プラグイン側の既定は「付けない」だが、`mcpCurrent` があればそれを既定にする。サーバーの選択には候補数の共通規則を適用し、「どのサーバーも使わない」を最後の選択肢に置く。ページに分けるときは「どのサーバーも使わない」を置かず、回答が空になったときを「どのサーバーも使わない」として扱う。
+3. 「どのサーバーも使わない」が選ばれたら、ステップ 5n の MCP の質問を省く。この選択は新規生成にだけ効く。再生成する定義は、5c の既定(その定義の `mcpCurrent`)で既存の MCP を残す。
 
 ### ステップ 5n: 新規生成
 
@@ -300,25 +315,28 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 役割を 1 つずつ、次の 1〜4 を最後まで処理してから、次の役割へ進む。モデル ID・定義名・MCP は、それぞれ別の `AskUserQuestion` 呼び出しで、前の回答を受け取ってから聞く。複数の役割をまとめて決める選択肢(「推奨をそのまま使う」「既定で全部作る」「全役割に付与」など)は出さない。`--recommended` と `--merge` は使わない。役割の kind(`impl` / `readonly`)は、`--list-coverage` の `roles[].kind` で判定する。
 
-1. モデル ID を聞く。候補は次の表で決める。推奨の印は、その役割の `--list-coverage` の `models` に含まれる候補に付ける。
-
-   | 条件 | 候補 |
-   | --- | --- |
-   | `--scope claude` | `sonnet` / `opus` / `haiku` / `fable` の 4 値 |
-   | `--scope custom` で live 照会が成功した | その役割の `models` のうち、既定エイリアスが live にある ID に、`claudeEnums`(`sonnet` / `opus` / `haiku` / `fable`)を加えたもの。重複は除く。 |
-   | `--scope custom` で live 照会が失敗した | その役割の `models` すべてに、`claudeEnums` を加えたもの。重複は除く。 |
-
-   - 推奨の候補を先頭に置く。「この役割は作らない」は、候補の最後(ページを分けるときは最後のページの末尾)に必ず置く。選ばれたら、この役割の 2〜4 を聞かずに次の役割へ進み、ステップ 7 で報告する。
-   - 選択肢は「この役割は作らない」と候補を合わせて数え、候補数の共通規則に従って出す。質問はこの役割だけを対象にし、他の役割の確認を同じ質問に入れない。
-   - 候補が無いときは質問せず、報告して止める。
+1. モデル ID を聞く。候補は、ステップ 1b で最後に取った `--list-coverage` の、その役割の `candidates` をそのまま使う。
+   - 候補を自分で組み立てず、足したり除いたりせず、並び順も変えない。
+   - `recommended` が `true` の候補に推奨の印を付ける。
+   - 各選択肢には `modelId` とエイリアス名(`model`)を示す。同じ `modelId` の候補が複数あっても 1 つにまとめない。選ばれた候補の `model` を、手順 4 の `--model` にそのまま渡す。
+   - 選択肢の数は「この役割は作らない」と候補を合わせて数える。
+   - 4 件以内なら、1 問で聞く。推奨の候補を先頭に、「この役割は作らない」を最後に置く。
+   - 4 件を超えるときは、2 問に分ける。2 問は別々の `AskUserQuestion` 呼び出しにし、1 問目の回答を受け取ってから 2 問目を出す。
+     - 1 問目: 推奨の候補(推奨の順に最大 2 件)/「その他のモデル」/「この役割は作らない」の順に並べる。
+     - 2 問目: 1 問目で「その他のモデル」が選ばれたときだけ出す。1 問目に出さなかった残りの候補を、推奨のものを先にして並べる。
+     - 2 問目の候補が 4 件を超えるときは、先に「Claude のモデル」「外部ベンダーのモデル」の 2 択を聞き、選ばれた側の候補から選ばせる。
+   - 選択肢は、この手順で決めたものだけを出す。「次ページ」「このページからは選ばない」のような選択肢を足さず、Other で次へ進ませず、この手順の 2 問目で残りを聞く。
+   - 「この役割は作らない」が選ばれたら、この役割の 2〜4 を聞かずに次の役割へ進み、ステップ 7 で報告する。
+   - 質問はこの役割だけを対象にし、他の役割の確認を同じ質問に入れない。
 
 2. 定義名を「既定名を使う」「別の名前を指定する」の 2 択で必ず尋ね、後者は自由入力で受ける。既定名は `<model-id>-<defaultName>` である。自由入力が `^[a-z0-9]+(?:-[a-z0-9]+)*$` に合わなければ聞き直す。
 
 3. MCP サーバーを聞く。ステップ 4b で `servers` が 1 つ以上あり、「どのサーバーも使わない」が選ばれていないときだけ行う。
 
-   - 付与するサーバーを複数選択で聞く。選択肢は 4b で選んだサーバーに限り、「この役割には付与しない」を最後に置く。既定は、kind を問わず 4b で選んだ全サーバーとし、既定のサーバーの選択肢は説明の先頭に「(既定)」と書く。
+   - 先に単一選択で「既定のサーバーを付ける(推奨)」「選ぶ」「付与しない」の 3 択を聞く。既定のサーバーは、kind を問わず 4b で選んだ全サーバーである。質問文に既定のサーバー名を書く。
+   - 「選ぶ」が選ばれたときだけ、続けて別の呼び出しで、付与するサーバーを複数選択で聞く。選択肢は 4b で選んだサーバーに限り、候補数の共通規則(複数選択のページ分け)に従う。空の選択肢は置かない。ページ分けで回答が空になったら、「付与しない」と同じに扱う。
    - 選んだサーバーが、適用される `_common.md` の制約と矛盾しないことを確認する。プロジェクト側の `_common.md` があれば優先し、同梱版だけを根拠にしない。
-   - readonly の役割にサーバーが付くときは、書き込み系ツールの denylist を確定させる。書き込み系ツールは、ファイル・リポジトリ・外部サービスの状態を変えるツールを指す。実行中の Agent 自身のツール一覧から、付与するサーバーの書き込み系ツールを列挙する。読み取り・検索・解析のツールは含めない。`disallowedTools` に入れる案を質問に入れて確認を取る。同じサーバー集合で確定済みの denylist があれば、聞き直さずに使う。
+   - readonly の役割にサーバーが付くときは、書き込み系ツールの denylist を確定させる。書き込み系ツールは、ファイル・リポジトリ・外部サービスの状態を変えるツールを指す。実行中の Agent 自身のツール一覧から、付与するサーバーの書き込み系ツールを列挙する。読み取り・検索・解析のツールは含めない。サーバーの選択の回答を受け取った後に、`disallowedTools` に入れる案を、サーバーの選択とは別の `AskUserQuestion` 呼び出しで確認する。同じサーバー集合で確定済みの denylist があれば、聞き直さずに使う。
    - denylist は列挙漏れを許可する方式である。確認の質問文には、次の文をそのまま入れる。
 
      > 一覧に無い書き込み系ツールは、読み取り専用の役割からも使えます。
@@ -327,7 +345,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 4. この 1 役割だけを対象にした個別コマンドで生成する。`--recommended` と `--merge` は付けない。
 
-   - モデル値が既定エイリアスと違う場合、またはベンダーが `unknown` の場合は、ベンダーを確定する。候補は `gpt` / `grok` / `claude` / 「どれでもない」(`none`) の 4 値とする。既知ベンダーは推定値を示して確認し、変更を望む場合に 4 値から選ばせる。ベンダーが `none` なら `--vendor none` を渡す。`--vendor` は、ここでベンダーを確定したときだけ渡す。
+   - モデル値が `candidates` の `model` に無い場合、またはベンダーが `unknown` の場合は、ベンダーを確定する。候補は `gpt` / `grok` / `claude` / 「どれでもない」(`none`) の 4 値とする。既知ベンダーは推定値を示して確認し、変更を望む場合に 4 値から選ばせる。ベンダーが `none` なら `--vendor none` を渡す。`--vendor` は、ここでベンダーを確定したときだけ渡す。
    - MCP の引数は、impl の役割にサーバーが付くときは `--mcp-servers` だけを渡す。readonly の役割にサーバーが付くときは、`--mcp-servers` と `--mcp-deny` の両方を渡す。
 
    まず生成対象を確認する。
@@ -352,7 +370,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 2. 一部の定義を調整する
 3. 中止する
 
-一部調整を選んだ場合は、調整する定義を候補数の共通規則に従って選ばせ、選んだ定義をステップ 5b の対象にする。
+一部調整を選んだ場合は、調整する定義を候補数の共通規則に従って選ばせ、選んだ定義をステップ 5b の対象にする。3 択で調整を選んでいるので、空の選択肢は置かない。ページ分けで回答が空になったら、「このまま全部作る」と同じに扱う。
+
+「中止する」を選んだ場合は、再生成しない。ステップ 5n で生成した定義は残る(CLI に取り消しの操作は無い)。ステップ 7 へ進み、生成した定義と再生成しなかった定義を報告する。
 
 「中止する」以外が選ばれたら、再生成する定義ごとに description と前置きの扱いを状態で決める。この質問は 3 択の直後に出し、すべて聞き終えてからステップ 5b、5c へ進む。決めた置き換えは、ステップ 6 の `--replace` に渡す。
 
@@ -361,31 +381,42 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 - `unknown`: 既存とテンプレートの両方を選択肢の preview に示し、「保持する」「テンプレートに置き換える」の 2 択で聞く。推奨は付けない。description の両方の値は `frontmatter.changed` の `description` から、前置きの両方の本文は `preambleTexts` から読み取る。
 - `userEdited`: 質問せずに保持し、ステップ 7 で報告する。
 
+どの経路で再生成する定義も、再生成の前に状態を確かめて上の質問を出す。
+
+- ステップ 4 の `results` にある定義は、3 択の直後に聞く。
+- 5b だけで再生成する定義(`modelId` が `null` の定義)は、5b でモデル ID を選んだ後に、選んだモデルで `--check` を実行し、その結果で状態を確かめてから聞く。モデル ID を選ぶ前に `--check` を実行しない。
+
 ### ステップ 5b: 再生成の定義の個別調整
 
 ステップ 5 で調整を選んだ定義と、`modelId` が `null` の定義が 0 件なら、このステップを飛ばす。
 
 定義を 1 つずつ、次の順で処理する。定義名は既存のファイル名のまま変えない。
 
-1. モデル ID を、5n の 1 の手順と候補で尋ねる。
-   - `modelId` が `null` の定義(推奨表に無いエイリアス、`inherit`、`model` 欄なし)では、選択肢の最後に「再生成しない」を置く。選ばれたら、その定義をステップ 7 で報告する。
-   - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだモデル ID の既定の model 値> に変わる」と書く。<> の中は実際の値に置き換える。
+1. モデル ID を、5n の 1 の手順と候補で尋ねる。1 問か 2 問かの分け方も 5n の 1 に従う。
+   - `modelId` が `null` の定義(どのモデル ID にも当たらないエイリアス、`inherit`、`model` 欄なし)では、5n の「この役割は作らない」の位置に「再生成しない」を置き、選択肢の数に含める。選ばれたら、その定義をステップ 7 で報告する。
+   - `modelId` が `null` でない定義では、空の選択肢を置かない。
+   - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだ候補の `model`> に変わる」と書く。<> の中は実際の値に置き換える。
 2. ベンダーを、5n の 4 の条件で確定する。
 3. 差分方針を、保持マージ、選択した項目の保持、完全上書き、スキップから尋ねる。保持対象を選ぶ場合は `--keep` を個別コマンドに渡す。`modelId` が `null` だけが理由の定義では、差分方針を尋ねず保持マージにする。
 
 調整する定義の役割に impl と readonly の両方が含まれる場合だけ、kind 混在を警告して続行確認を取る。既定は続行しない。
 
-確認は、ステップ 6 のコマンドの `--write` を `--check` に替えて行う。
+確認は、ステップ 6 のコマンドの `--write` を `--check` に替え、`--merge` と `--replace` を外して行う。`--check` に `--merge` を付けると `merge: requires --write` で、`--replace` を付けると `replace: requires --merge` で CLI が止まる。`--keep` は `--check` でも使えるので外さない。
 
 ### ステップ 5c: 再生成の定義への MCP の付与
 
-再生成の定義が 0 件のとき、またはステップ 4b で MCP の質問を省くと決めたときは、このステップを飛ばす。ステップ 4b で選んだサーバーを使い、次を順に行う。
+再生成の定義が 0 件のときは、このステップを飛ばす。ステップ 4b で MCP の質問を省いたとき(「どのサーバーも使わない」が選ばれた、またはサーバーが取れなかった)は、`mcpCurrent` を持つ定義にだけ聞き、1 件も無ければ飛ばす。
 
-1. 再生成の定義について、既定の配分を計算する。既定は、その定義の `mcpCurrent` のサーバーとする(既存定義の MCP は既定で残す)。MCP の無い定義の既定は「付与しない」である。`mcpCurrent` はステップ 4 の `results` から読み、`results` に無い定義は 5b の `--check` の結果から読む。新規生成(5n)の既定とは異なり、4b で選んだ全サーバーを既定にしない。
-2. 既定の配分を「定義 → 付与するサーバー」の表にし、「この配分で進む」か「定義ごとに調整する」かを 1 回だけ質問する。付与先が 0 件の定義も表に載せる。
-3. 「定義ごとに調整する」が選ばれたときは、定義ごとに付与するサーバーを複数選択で聞く。選択肢は 4b で選んだサーバーとその定義の `mcpCurrent` のサーバーとし、「この定義には付与しない」を最後に置く。既定は 1 の配分とし、既定のサーバーの選択肢は説明の先頭に「(既定)」と書く。既定で付与先が 0 件の定義も同じ質問をする。
-4. 各サーバーが `_common.md` の制約と矛盾しないことを、5n の 3 の手順で確認する。
-5. readonly の役割を 1 つでも持つ定義にサーバーが付くときは、5n の 3 の手順で denylist を確定させる。denylist は該当する定義間で 1 回にまとめて聞く。
+各定義の `mcpCurrent` はステップ 4 の `results` から読み、`results` に無い定義は 5b の `--check` の結果から読む。
+
+1. 定義ごとに 1 回ずつ、別の `AskUserQuestion` 呼び出しで、単一選択の「既存のまま(推奨)」「変更する」「付与しない」の 3 択を聞く。質問文に、その定義の `mcpCurrent` のサーバー名(無ければ「MCP なし」)を書く。
+   - 役割の kind や `mcpCurrent` の有無にかかわらず、選択肢は常にこの 3 つにする。
+   - この質問は MCP の付与だけを対象にし、denylist などほかの確認は 4 で別に聞く。
+   - 「既存のまま」: `mcpCurrent` のサーバーを付ける。MCP の無い定義は MCP なしのままにする。
+   - 「付与しない」: サーバーを付けない。
+2. 「変更する」が選ばれたときだけ、続けて別の呼び出しで、付与するサーバーを複数選択で聞く。選択肢は 4b で選んだサーバーとその定義の `mcpCurrent` のサーバーとし、候補数の共通規則(複数選択のページ分け)に従う。空の選択肢は置かない。ページ分けで回答が空になったら、「付与しない」と同じに扱う。
+3. 各サーバーが `_common.md` の制約と矛盾しないことを、5n の 3 の手順で確認する。
+4. readonly の役割を 1 つでも持つ定義にサーバーが付くときは、1〜3 の回答を受け取った後に、別の `AskUserQuestion` 呼び出しで、5n の 3 の手順で denylist を確定させる。denylist は該当する定義間で 1 回にまとめて聞く。
 
 ### ステップ 6: 再生成の生成
 
@@ -399,23 +430,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id
 
 - `--model-id` には、定義の `modelId` か、ステップ 5b で決めたモデル ID を渡す。
 - `--replace` には、ステップ 5 でテンプレートに置き換えると決めたもの(`description` / `preamble`)だけを渡す。渡さなかったものは、`same` 以外なら既存のまま保持される。
-- `--model` には、定義の `model` を渡す。ステップ 5b でモデル ID を選んだ定義では、定義の元の値ではなく、選んだモデル ID の既定の model 値(ステップ 1 の対応)を渡す。
+- `--model` には、定義の `model` を渡す。ステップ 5b でモデル ID を選んだ定義では、定義の元の値ではなく、選んだ候補の `model`(5n の 1)を渡す。
 - `--name` には、`file` のファイル名から `.md` を除いた値を渡す。
 - `--vendor` には、ステップ 5b でベンダーを確定したときはその値を渡す。確定していないときは、定義の `vendor` があればその値を、無ければ `none` を渡す。
 - ステップ 5b で差分方針を決めた定義は、`--merge` と `--keep` をその方針に合わせる。
 - MCP の引数は次に従う。保持マージは `disallowedTools` を保持しないため、再生成のたびに渡す。
   - impl の役割だけを持つ定義: サーバーが付くときは `--mcp-servers` だけを渡し、`--mcp-deny` は渡さない。
   - readonly の役割を 1 つでも持つ定義: サーバーが付くときは `--mcp-servers` と `--mcp-deny` を必ず両方渡す。
-
-### ステップ 6b: 未カバー役割の生成
-
-被覆を必ず取り直す。
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <lang> --scope <claude|custom> --dir "$PWD"
-```
-
-`uncovered` から、この実行で作らないと決めた役割を除く。残りが空なら質問せずにステップ 7 へ進む。空でなければ、残った役割ごとに作るかどうかを尋ねる。作る役割は、ステップ 5n の 1〜4 の手順で 1 役割ずつ生成する。
 
 ### ステップ 7: 報告
 
@@ -429,8 +450,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-coverage --lang <la
   - `ok: false` になった操作の定義名と `error`
   - 操作の応答にあった `warnings`
 - 保持した description と前置き。`userEdited` で質問せずに保持したものは、そのことを書く。
-- ステップ 4 と 5b で再生成しなかった定義と、その理由(再生成しないと選ばれた・`model` が live に無い・廃止済みか未知の役割 ID が残っている)
-- ステップ 5n と 6b で「作らない」と決めた役割があれば、その一覧と、次に setup-agents を実行したときに再び尋ねられること
+- ステップ 4 と 5b で再生成しなかった定義と、その理由(再生成しないと選ばれた・`model` が live に無い・廃止済みか未知の役割 ID が残っている・`agent-policy-vendor` が未知の値・ステップ 5 で中止した)
+- ステップ 5n で「作らない」と決めた役割があれば、その一覧と、次に setup-agents を実行したときに再び尋ねられること。この実行の中では聞き直さない。
+- ステップ 5n と 6 の生成で `ok: false` になった役割と定義、その `error`
 - 各定義の `action`、`kept`、`discarded`、`keptNeedsReview`
 - `mcpDropped`。再検証で落としたサーバーがあれば、tools へ入らなかったこと
 - 各応答の `warnings`

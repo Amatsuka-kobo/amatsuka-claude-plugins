@@ -500,6 +500,38 @@ describe("custom 構成の検証", () => {
     expect(output).not.toContain("次の Agent は役割マーカーを宣言している")
   })
 
+  it("定義の model が live にあれば、既定エイリアスと違っても custom が成立する", async () => {
+    const server = await startServer(["claude-gpt-6.1-sol", "claude-grok5"])
+    place("sol", [
+      "model: claude-gpt-6.1-sol",
+      "agent-policy-role: complex-impl"
+    ])
+    place("grok", ["model: claude-grok5", "agent-policy-role: explore"])
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:custom-policy")
+    expect(output).not.toContain("/v1/models に存在しない")
+  })
+
+  it("定義の model が live に無ければ、同じモデルの別エイリアスがあっても不在とし、そのエイリアスを示す", async () => {
+    const server = await startServer(["claude-gpt-6-1-sol"])
+    place("sol", ["model: claude-gpt-6-sol", "agent-policy-role: complex-impl"])
+
+    const output = await contextAsync({
+      AMATSUKA_AGENT_AUTO_INJECTION: "custom",
+      ANTHROPIC_BASE_URL: server.baseUrl
+    })
+
+    expect(output).toContain("agent-policy:claude-model-policy")
+    expect(output).toContain("定義 `sol` の model `claude-gpt-6-sol`")
+    expect(output).toContain("/v1/models に存在しない")
+    expect(output).toContain("`claude-gpt-6-1-sol`")
+  })
+
   it("不在定義を最大 10 件まで列挙して残りをまとめる", async () => {
     const server = await startServer([])
     for (let index = 1; index <= 12; index += 1) {

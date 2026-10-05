@@ -24,7 +24,7 @@ kind: impl
 
 ## Constraints
 
-- Do not modify persistent data in the target system. Skip steps that cannot avoid such changes and report them as unverified.
+- Skip steps that cannot avoid changing persistent data in the target system, and report them as unverified.
 - If the required browser or GUI mechanism is unavailable, report the affected scope as unverified.
 
 ## Output Format

@@ -26,9 +26,8 @@ kind: impl
 
 ## Constraints
 
-- **When invoked for lightweight implementation**, stop instead of deciding how to handle a target that does not match the pattern. Do not make changes outside the supplied pattern.
-- **When invoked for lightweight implementation**, do not take on work requiring judgment, design, or complex interpretation. If you are uncertain, report the uncertainty and send the task back.
-- **When invoked for lightweight implementation**, do not take on work that falls under any of the following. Send it back.
+- **When invoked for lightweight implementation**, do not change a target that does not match the pattern; report it as pending judgment. Do not make changes outside the supplied pattern.
+- **When invoked for lightweight implementation**, do not take on work requiring judgment, design, or complex interpretation.- **When invoked for lightweight implementation**, do not take on work that falls under any of the following. Send it back.
   - Changing settings that affect every session, such as hooks.
   - Changing a path that project conventions (CLAUDE.md or rules) forbid editing directly or for which they define a change procedure, such as generated output or convention files.
   - Data migration.

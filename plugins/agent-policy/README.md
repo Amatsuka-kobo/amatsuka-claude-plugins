@@ -103,7 +103,7 @@ MCP は既定で全役割に付与します。読み取り役割には、書き�
 
 ### 既存定義の点検
 
-setup-agents を再実行すると、生成の前に役割マーカー付きの既存定義を点検します。役割に許されていない組み込みツール(`Agent` など)と、廃止済みの役割 ID を宣言する定義を一覧にし、定義ごとに直すかどうかを確認します。新規に作る役割では、役割ごとにモデル・定義名・MCP サーバーを尋ねます。
+setup-agents を再実行すると、生成の前に役割マーカー付きの既存定義を点検します。役割に許可されていない組み込みツール(`Agent` など)と、廃止済みの役割 ID を宣言する定義を一覧にし、定義ごとに直すかどうかを確認します。新規に作る役割では、役割ごとにモデル・定義名・MCP サーバーを尋ねます。
 
 既存定義が担っている役割は、既定名とは違うファイル名でも、その定義を作成先にして再生成します。同じ役割を 2 件以上の定義が担っているときは、どれを再生成するかを尋ねます(`--yes` では再生成せず報告します)。
 
@@ -122,7 +122,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <�
 
 `AMATSUKA_AGENT_AUTO_INJECTION=custom` で定義の検証が成立したセッションでは、生成後に CLAUDE.md へ方針の読み込みを追記する必要はありません。未設定・`none`・未知の値では自動注入されないため、必要に応じて「[プロファイル](#プロファイル)」の例を CLAUDE.md へ書けます。`claude` で生成した custom 定義を役割マーカーから使いたい場合は、環境変数を `custom` に変更してください。
 
-`--yes` を渡す非対話モードでは、既存定義から役割に許されていないツールを確認なしで外してから、`--recommended` により役割ごとに 1 定義ずつ保持マージ生成します。全ツール継承の定義、`tools` の書式が 1 行のカンマ区切りでない定義、廃止済みの役割 ID を持つ定義は変更せず、報告に載せます。既存定義の MCP サーバーと `disallowedTools` は、接続を再検証したうえで引き継ぎます。新規に作る定義には MCP ツールを付けません。照会に失敗した場合は各役割の先頭候補を使い、実在確認を行わなかった警告とともに生成します。
+`--yes` を渡す非対話モードでは、既存定義から役割に許可されていないツールを確認なしで外してから、`--recommended` により役割ごとに 1 定義ずつ保持マージ生成します。全ツール継承の定義、`tools` の書式が 1 行のカンマ区切りでない定義、廃止済みの役割 ID を持つ定義は変更せず、報告に載せます。既存定義の MCP サーバーと `disallowedTools` は、接続を再検証したうえで引き継ぎます。新規に作る定義には MCP ツールを付けません。照会に失敗した場合は各役割の先頭候補を使い、実在確認を行わなかった警告とともに生成します。
 
 組み込みの役割 ID は次の 13 種です。
 
@@ -144,17 +144,31 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --rewrite-roles --name <�
 
 setup-agents が扱う推奨モデル ID は次の 9 種です。
 
-| モデル ID | 表示名 | 既定の `model` 値 |
-| --- | --- | --- |
-| `opus` | Opus | `opus` |
-| `sonnet` | Sonnet | `sonnet` |
-| `haiku` | Haiku | `haiku` |
-| `fable` | Fable | `fable` |
-| `gpt-sol` | GPT Sol | `claude-gpt-6-sol` |
-| `gpt-terra` | GPT Terra | `claude-gpt-5-6-terra` |
-| `gpt-luna` | GPT Luna | `claude-gpt-6-luna` |
-| `gpt-astra` | GPT Astra | `claude-gpt-6-astra` |
-| `grok` | Grok | `claude-grok-4-7` |
+| モデル ID | 表示名 |
+| --- | --- |
+| `opus` | Opus |
+| `sonnet` | Sonnet |
+| `haiku` | Haiku |
+| `fable` | Fable |
+| `gpt-sol` | GPT Sol |
+| `gpt-terra` | GPT Terra |
+| `gpt-luna` | GPT Luna |
+| `gpt-astra` | GPT Astra |
+| `grok` | Grok |
+
+実際に使うエイリアスは、プロキシの `/v1/models` と、次に書く部分一致の規則で決まります。現在の既定値と、live のエイリアスとの一致は、次のコマンドで確かめられます。
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-live-models --scope custom --dir "$PWD"
+```
+
+外部モデルは、プロキシの `/v1/models` にあるエイリアスを部分一致で認識します。既定の `model` 値と名前が違っていても(`claude-gpt6-sol`、`claude-gpt-6.1-sol-pro` など)同じモデルとして扱います。
+
+- エイリアスは `claude-` で始まる必要があります。大文字と小文字は区別しません。
+- `gpt` と `grok` は名前のどこに含まれていても当たります。
+- GPT の系統名(`sol` / `terra` / `luna` / `astra`)は、名前を `-` `.` `_` で区切った語と完全一致したときだけ当たります。GPT は `gpt` と系統名の両方がそろったときに認識します。
+- 同じモデルに複数のエイリアスが当たったときは、既定の `model` 値と同じもの、短いもの、辞書順で先のものの順に推奨します。
+- 定義に書く `model` 値はエイリアスそのものです。SessionStart の実在検証は、その値が `/v1/models` にあるかを完全一致で確かめます。
 
 ベンダーは `gpt` / `grok` / `claude` / `none` の 4 値です。
 生成した定義の frontmatter には、選んだ役割を記録する `agent-policy-role` マーカーが入ります。
@@ -180,7 +194,7 @@ SessionStart フックはプロジェクトの `.claude/agents/` を走査し、
 3. 「その他のタスク」(`general`)の役割の定義。選び方は 1 と 2 と同じです
 4. ビルトインの `Explore`(読み取り専用の役割)または `general-purpose`
 
-担当の限定を書かない定義は汎用定義として扱われます。どの定義にも当たらない作業を受けさせたい定義は、担当を限らずに書いてください。「設計書・実装計画書のレビュー」だけは 3 と 4 へ進まず、該当が無ければレビューを省略します。
+担当の限定を書かない定義は汎用定義として扱われます。どの定義にも当たらない作業を受けさせたい定義は、担当を限らずに書いてください。
 
 プロジェクト固有の役割断片は `.claude/agent-policy/roles/` に Markdown ファイルとして置けます。断片の frontmatter には `id`、`label`、`description`、`default-name`、`tools`、`kind` を指定します。`default-name` は未カバーの役割を個別に作るときの既定名 `<model-id>-<default-name>` に使われます。`kind` は `impl` または `readonly` です。独自の `id` は setup の選択肢に追加され、既存の役割と同じ `id` を指定すると組み込み断片を置き換えます。
 
@@ -223,7 +237,7 @@ Delegation gate は、メインセッションから保護対象を直接編集�
 
 1. `design-plan` / `advisor` / `final-review` / `gate-review` を廃止し、`complex-review` を追加しました。旧 ID のマーカーは組み込み役割として認識されず、対応表に出ません。SessionStart が廃止として通知します。定義を削除するか、`agent-policy-role` を書き換えるか、再生成してください。
 2. サブエージェントは相談せず、オーケストレーターへ差し戻すようになりました。
-3. 全役割で Agent Tool を付与しなくなりました。生成する定義の tools に `Agent` が入りません。setup-agents の再実行で、役割に許されていないツールの削除を確認します。
+3. 全役割で Agent Tool を付与しなくなりました。生成する定義の tools に `Agent` が入りません。setup-agents の再実行で、役割に許可されていないツールの削除を確認します。
 4. 保持マージで再生成すると、既存の定義に `## アドバイザーへの相談` と `## Agent tool の制約` の節が残ります。手で削除するか、差分方針で「完全上書き」を選んでください。
 5. 生成する定義に `effort` を付けるようになりました。役割とモデルの表に無い組には付きません。テンプレートに無く既存定義にだけある `effort` は、保持マージで残ります。`effort` は、名指しで起動したときに合成するかどうかの判定を変えません。合成したときは、ホスト定義の `effort` で動きます。
 6. 推奨モデル(`RECOMMENDED`)と Claude 割当を変更しました。custom で採用されるモデルが変わる場合があります。
@@ -232,6 +246,7 @@ Delegation gate は、メインセッションから保護対象を直接編集�
 9. `--check` / `--write` の応答の `roles` から `agentTool` を削除しました。
 10. `ja` / `en` 以外の翻訳断片を使う場合は、`_common.md` の更新に合わせて再翻訳してください。削除した役割の翻訳断片(`design-plan.md` / `advisor.md` / `final-review.md` / `gate-review.md`)は削除してください。残っていても、廃止済みの ID は役割として扱いません。
 11. SubagentStart フックと並列促しフックを廃止しました。delegation gate の一時解除(`--direct`)も廃止しました。
+12. 「設計書・実装計画書のレビュー」の定義が対応表に無いとき、構成を問わずレビューを省略せず、他の役割と同じ順でフォールバックするようになりました。0.18 で入れた省略を取り消しました。
 
 0.19 系から 0.20 系へ移行する場合は、次を確認してください。
 

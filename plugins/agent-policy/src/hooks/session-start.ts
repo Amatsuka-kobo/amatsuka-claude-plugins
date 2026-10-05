@@ -6,7 +6,9 @@
 import { fetchLiveModels } from "../agents/live-models"
 import {
   isCustomInjection,
+  modelIdForAlias,
   type PolicyName,
+  rankAliases,
   runsOnClaude
 } from "../agents/policies"
 import { RETIRED_ROLE_REPLACEMENTS } from "../agents/roles"
@@ -75,15 +77,25 @@ function markerlessFallbackBlock(): string {
   return "役割マーカー付き定義が見つからない(未作成、または読み取れない)ため、claude プロファイルで動作する。agent-policy:setup-agents で構成を作る。"
 }
 
+// 同じモデルの別エイリアスが live にあれば、書き換え先の候補として添える。
+// Claude Code は定義の model 値そのものを呼ぶため、別エイリアスがあっても不在のまま扱う。
+function liveAliasHint(model: string, liveIds: readonly string[]): string {
+  const modelId = modelIdForAlias(model)
+  const aliases = modelId === undefined ? [] : rankAliases(modelId, liveIds)
+  if (aliases.length === 0) return ""
+  return `(同じモデルの live のエイリアス: ${aliases.map((alias) => `\`${alias}\``).join(", ")})`
+}
+
 function missingModelsBlock(
-  missing: Array<MarkedAgent & { model: string }>
+  missing: Array<MarkedAgent & { model: string }>,
+  liveIds: readonly string[]
 ): string {
   const limit = 10
   const lines = missing
     .slice(0, limit)
     .map(
       (entry) =>
-        `- 定義 \`${entry.name}\` の model \`${entry.model}\` がプロキシの /v1/models に存在しない`
+        `- 定義 \`${entry.name}\` の model \`${entry.model}\` がプロキシの /v1/models に存在しない${liveAliasHint(entry.model, liveIds)}`
     )
   const remaining = missing.length - limit
   if (remaining > 0) lines.push(`- 他 ${remaining} 件`)
@@ -175,7 +187,7 @@ async function customBlocks(
       env,
       marked,
       legacyValue,
-      missingModelsBlock(missing),
+      missingModelsBlock(missing, live.ids),
       REPAIR_BLOCK
     )
   }

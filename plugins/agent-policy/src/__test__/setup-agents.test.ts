@@ -130,10 +130,12 @@ interface CoverageResult {
     kind: "impl" | "readonly"
     defaultName: string
     models: string[]
+    candidates: { modelId: string; model: string; recommended: boolean }[]
     coveredBy: string[]
   }[]
   uncovered: string[]
   definitions: CoverageDefinition[]
+  liveOk: boolean
 }
 
 interface CoverageDefinition {
@@ -435,7 +437,7 @@ describe("--scope", () => {
       "--model-id",
       "sonnet",
       "--model",
-      "claude-gpt-6-sol",
+      "claude-gpt-6-1-sol",
       "--name",
       "external-model",
       "--roles",
@@ -446,7 +448,7 @@ describe("--scope", () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toBe(
-      "model: claude-gpt-6-sol is not available with --scope claude"
+      "model: claude-gpt-6-1-sol is not available with --scope claude"
     )
   })
 
@@ -484,7 +486,7 @@ describe("--list-live-models", () => {
     const proxy = await startModelsServer({
       body: JSON.stringify({
         data: [
-          { id: "claude-gpt-6-sol", owned_by: "openai" },
+          { id: "claude-gpt-6-1-sol", owned_by: "openai" },
           { id: "claude-gpt-6-astra", owned_by: "openai" },
           { id: "custom-unknown", owned_by: "other" }
         ]
@@ -502,7 +504,7 @@ describe("--list-live-models", () => {
       ok: true,
       models: [
         {
-          id: "claude-gpt-6-sol",
+          id: "claude-gpt-6-1-sol",
           vendor: "gpt",
           recommendedFor: [
             "complex-impl",
@@ -664,7 +666,7 @@ describe("--list-coverage", () => {
       [
         "---",
         "name: external-complex",
-        "model: claude-gpt-6-sol",
+        "model: claude-gpt-6-1-sol",
         "agent-policy-vendor: gpt",
         "agent-policy-role: complex-impl",
         "---",
@@ -785,6 +787,306 @@ function definitionOf(
   return result.definitions.find((definition) => definition.name === name)
 }
 
+describe("--list-coverage の candidates", () => {
+  type CandidatesResult = CoverageResult
+
+  function candidatesOf(result: CandidatesResult, role: string) {
+    return result.roles
+      .find((entry) => entry.id === role)
+      ?.candidates.map((candidate) =>
+        candidate.recommended ? `${candidate.modelId}*` : candidate.modelId
+      )
+  }
+
+  it("--scope claude は Claude の 4 値で、推奨を先頭に並べ、live を照会しない", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({ data: [{ id: "claude-grok-4-7" }] })
+    })
+
+    const result = await runAsync<CandidatesResult>(
+      ["--list-coverage", "--scope", "claude", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.liveOk).toBe(true)
+    expect(proxy.requests).toHaveLength(0)
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "opus*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+    expect(
+      result.roles
+        .find((entry) => entry.id === "complex-impl")
+        ?.candidates.find((candidate) => candidate.modelId === "opus")?.model
+    ).toBe("opus")
+  })
+
+  it("custom で live が取れたら、live にある推奨と Claude の 4 値を返し、推奨に無いモデルは入れない", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [
+          { id: "claude-gpt-6-1-sol", owned_by: "openai" },
+          { id: "claude-grok-4-7", owned_by: "xai" }
+        ]
+      })
+    })
+
+    const result = await runAsync<CandidatesResult>(
+      ["--list-coverage", "--scope", "custom", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.liveOk).toBe(true)
+    expect(candidatesOf(result, "e2e-verify")).toEqual([
+      "gpt-sol*",
+      "sonnet*",
+      "opus",
+      "haiku",
+      "fable"
+    ])
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "gpt-sol*",
+      "opus*",
+      "grok*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+
+  it("custom で live に無い推奨の外部モデルは候補から外す", async () => {
+    const proxy = await startModelsServer({
+      body: JSON.stringify({
+        data: [{ id: "claude-gpt-6-1-sol", owned_by: "openai" }]
+      })
+    })
+
+    const result = await runAsync<CandidatesResult>(
+      ["--list-coverage", "--scope", "custom", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "gpt-sol*",
+      "opus*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+
+  it("custom で live が取れなければ liveOk: false とし、推奨すべてと Claude の 4 値を返す", () => {
+    const result = run<CandidatesResult>([
+      "--list-coverage",
+      "--scope",
+      "custom",
+      "--dir",
+      project
+    ])
+
+    expect(result.liveOk).toBe(false)
+    expect(candidatesOf(result, "e2e-verify")).toEqual([
+      "gpt-sol*",
+      "sonnet*",
+      "opus",
+      "haiku",
+      "fable"
+    ])
+    expect(candidatesOf(result, "complex-impl")).toEqual([
+      "gpt-sol*",
+      "opus*",
+      "grok*",
+      "sonnet",
+      "haiku",
+      "fable"
+    ])
+  })
+})
+
+describe("エイリアスの部分一致", () => {
+  const RENAMED = [
+    { id: "claude-gpt-6.1-sol-pro", owned_by: "other" },
+    { id: "claude-gpt6-sol", owned_by: "other" },
+    { id: "claude-grok5", owned_by: "other" }
+  ]
+
+  async function renamedProxy(): Promise<FakeModelsServer> {
+    return startModelsServer({ body: JSON.stringify({ data: RENAMED }) })
+  }
+
+  it("--list-live-models は既定と違うエイリアスにも vendor と推奨役割を付ける", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<LiveModelsResult>(
+      ["--list-live-models", "--scope", "custom"],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(
+      result.models.map((model) => [
+        model.id,
+        model.vendor,
+        model.recommendedFor.includes("complex-impl")
+      ])
+    ).toEqual([
+      ["claude-gpt-6.1-sol-pro", "gpt", true],
+      ["claude-gpt6-sol", "gpt", true],
+      ["claude-grok5", "grok", true]
+    ])
+  })
+
+  it("candidates は当たったエイリアスを別々の要素で返し、推奨の印を 1 つだけ付ける", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<CoverageResult>(
+      ["--list-coverage", "--scope", "custom", "--dir", project],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(
+      result.roles.find((role) => role.id === "complex-impl")?.candidates
+    ).toEqual([
+      { modelId: "gpt-sol", model: "claude-gpt6-sol", recommended: true },
+      { modelId: "opus", model: "opus", recommended: true },
+      { modelId: "grok", model: "claude-grok5", recommended: true },
+      {
+        modelId: "gpt-sol",
+        model: "claude-gpt-6.1-sol-pro",
+        recommended: false
+      },
+      { modelId: "sonnet", model: "sonnet", recommended: false },
+      { modelId: "haiku", model: "haiku", recommended: false },
+      { modelId: "fable", model: "fable", recommended: false }
+    ])
+  })
+
+  it("definitions の modelId を既定と違うエイリアスからも逆引きする", () => {
+    writeAgent("renamed.md", [
+      "---",
+      "name: renamed",
+      "model: claude-gpt-6.1-sol",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: explore",
+      "---",
+      ""
+    ])
+
+    expect(definitionOf(coverage(), "renamed")?.modelId).toBe("gpt-sol")
+  })
+
+  it("--recommended は live にある推奨のエイリアスを model にし、選ばなかったエイリアスを warnings に載せる", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--write",
+        "--recommended",
+        "--scope",
+        "custom",
+        "--roles",
+        "complex-impl",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.results[0]?.modelId).toBe("gpt-sol")
+    const content = fs.readFileSync(
+      path.join(project, result.results[0]?.target ?? ""),
+      "utf8"
+    )
+    expect(content).toMatch(/^model: claude-gpt6-sol$/m)
+    expect(content).toMatch(/^agent-policy-vendor: gpt$/m)
+    expect(
+      result.warnings.some(
+        (warning) =>
+          warning.includes("claude-gpt6-sol") &&
+          warning.includes("claude-gpt-6.1-sol-pro")
+      )
+    ).toBe(true)
+  })
+
+  it("--model-id だけを渡すと live にあるエイリアスを model の既定値にし、vendor を判定で補う", async () => {
+    const proxy = await renamedProxy()
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--write",
+        "--model-id",
+        "grok",
+        "--name",
+        "grok-explorer",
+        "--roles",
+        "realtime-research",
+        "--scope",
+        "custom",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(
+      path.join(project, ".claude", "agents", "grok-explorer.md"),
+      "utf8"
+    )
+    expect(content).toMatch(/^model: claude-grok5$/m)
+    expect(content).toMatch(/^agent-policy-vendor: grok$/m)
+  })
+
+  it("--recommended は live にある既定外エイリアスの被覆定義を再生成し、live に無いものは同じモデルのエイリアスを添えて warnings に載せる", async () => {
+    const proxy = await renamedProxy()
+    writeAgent("present.md", [
+      "---",
+      "name: present",
+      "model: claude-gpt-6.1-sol-pro",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: complex-impl",
+      "---",
+      ""
+    ])
+    writeAgent("absent.md", [
+      "---",
+      "name: absent",
+      "model: claude-gpt-6-1-sol",
+      "agent-policy-vendor: gpt",
+      "agent-policy-role: code-review",
+      "---",
+      ""
+    ])
+
+    const result = await runAsync<WriteResults>(
+      [
+        "--check",
+        "--recommended",
+        "--scope",
+        "custom",
+        "--roles",
+        "complex-impl,code-review",
+        "--dir",
+        project
+      ],
+      { ANTHROPIC_BASE_URL: proxy.baseUrl }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.results.map((entry) => entry.target)).toEqual([
+      ".claude/agents/present.md"
+    ])
+    expect(
+      result.warnings.some(
+        (warning) =>
+          warning.includes("absent") && warning.includes("claude-gpt6-sol")
+      )
+    ).toBe(true)
+  })
+})
+
 describe("--list-coverage の点検結果", () => {
   it("modelBreakdown はマーカー付き定義を Claude で動くものと外部ベンダーに分けて数える", () => {
     const marker = "agent-policy-role: explore"
@@ -808,7 +1110,7 @@ describe("--list-coverage の点検結果", () => {
     writeAgent("external.md", [
       "---",
       "name: external",
-      "model: claude-gpt-6-sol",
+      "model: claude-gpt-6-1-sol",
       "agent-policy-vendor: gpt",
       marker,
       "---",
@@ -817,7 +1119,7 @@ describe("--list-coverage の点検結果", () => {
     writeAgent("plain.md", [
       "---",
       "name: plain",
-      "model: claude-gpt-6-sol",
+      "model: claude-gpt-6-1-sol",
       "---",
       ""
     ])
@@ -993,7 +1295,7 @@ describe("--list-coverage の点検結果", () => {
     writeAgent("external.md", [
       "---",
       "name: external",
-      "model: claude-gpt-6-sol",
+      "model: claude-gpt-6-1-sol",
       "agent-policy-vendor: gpt",
       "tools: Read, Agent",
       "agent-policy-role: complex-impl",
@@ -1005,7 +1307,7 @@ describe("--list-coverage の点検結果", () => {
     const result = coverage(["--scope", "claude"])
 
     expect(definitionOf(result, "external")).toMatchObject({
-      model: "claude-gpt-6-sol",
+      model: "claude-gpt-6-1-sol",
       vendor: "gpt",
       roles: ["complex-impl"],
       disallowedTools: ["Agent"]
@@ -1088,6 +1390,25 @@ describe("--prune-tools", () => {
         "tools: Read, Grep, WebFetch"
       )
     )
+  })
+
+  it("応答に tools 行の変更前と変更後を返す", () => {
+    writeAgent("target.md", [EDIT_SOURCE])
+
+    const result = run<
+      EditResult & { toolsBefore: string[]; toolsAfter: string[] }
+    >([
+      "--prune-tools",
+      "--name",
+      "target",
+      "--tools",
+      "Agent",
+      "--dir",
+      project
+    ])
+
+    expect(result.toolsBefore).toEqual(["Read", "Agent", "Grep", "WebFetch"])
+    expect(result.toolsAfter).toEqual(["Read", "Grep", "WebFetch"])
   })
 
   it("行に無いツールだけを指定したときは書き換えない", () => {
@@ -1650,7 +1971,7 @@ describe("再生成の作成先は被覆する定義で決める", () => {
 
   it("definitions の modelId を Claude enum・MODELS の model・該当なしの 3 通りで返す", () => {
     marked("enum.md", "opus", "explore")
-    marked("alias.md", "claude-gpt-6-sol", "explore", "gpt")
+    marked("alias.md", "claude-gpt-6-1-sol", "explore", "gpt")
     marked("unknown.md", "my-model", "explore")
 
     const result = coverage()
@@ -1762,7 +2083,7 @@ describe("再生成の作成先は被覆する定義で決める", () => {
   })
 
   it("claude-only で外部ベンダーの定義しか被覆しない役割は既定名で新規生成する", () => {
-    marked("external.md", "claude-gpt-6-sol", "code-review", "gpt")
+    marked("external.md", "claude-gpt-6-1-sol", "code-review", "gpt")
     const external = readAgent("external.md")
 
     const result = recommend("claude", "code-review")
@@ -2143,7 +2464,7 @@ describe("--check", () => {
       (item) => item.key === "model"
     )
     expect(entry?.existing).toBe("my-own-alias")
-    expect(entry?.template).toBe("claude-gpt-6-sol")
+    expect(entry?.template).toBe("claude-gpt-6-1-sol")
   })
 
   it("既存にしかない節を sectionsOnlyInExisting に出す", () => {
@@ -2700,7 +3021,7 @@ describe("--write", () => {
     expect(content).toMatch(/^tools:.*CustomTool/m)
     expect(content).toContain("permissionMode: plan")
     expect(content).toContain("## 独自運用")
-    expect(content).toContain("model: claude-gpt-6-sol")
+    expect(content).toContain("model: claude-gpt-6-1-sol")
     expect(content).toContain("あなたは私が書き換えた冒頭である。")
     expect(content).not.toContain("私が書き換えた制約")
   })

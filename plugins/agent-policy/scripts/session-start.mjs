@@ -188,6 +188,99 @@ function sortRoleIds(ids) {
 }
 
 // src/agents/policies.ts
+var MODELS = [
+  {
+    id: "opus",
+    vendor: "claude",
+    label: "Opus",
+    defaultName: "claude-opus",
+    model: "opus",
+    color: "blue"
+  },
+  {
+    id: "sonnet",
+    vendor: "claude",
+    label: "Sonnet",
+    defaultName: "claude-sonnet",
+    model: "sonnet",
+    color: "purple"
+  },
+  {
+    id: "haiku",
+    vendor: "claude",
+    label: "Haiku",
+    defaultName: "claude-haiku",
+    model: "haiku",
+    color: "pink"
+  },
+  {
+    id: "fable",
+    vendor: "claude",
+    label: "Fable",
+    defaultName: "claude-fable",
+    model: "fable",
+    color: "orange"
+  },
+  {
+    id: "gpt-sol",
+    vendor: "gpt",
+    label: "GPT Sol",
+    defaultName: "gpt-sol",
+    model: "claude-gpt-6-1-sol",
+    color: "yellow"
+  },
+  {
+    id: "gpt-terra",
+    vendor: "gpt",
+    label: "GPT Terra",
+    defaultName: "gpt-terra",
+    model: "claude-gpt-5-6-terra",
+    color: "green"
+  },
+  {
+    id: "gpt-luna",
+    vendor: "gpt",
+    label: "GPT Luna",
+    defaultName: "gpt-luna",
+    model: "claude-gpt-6-luna",
+    color: "cyan"
+  },
+  {
+    id: "gpt-astra",
+    vendor: "gpt",
+    label: "GPT Astra",
+    defaultName: "gpt-astra",
+    model: "claude-gpt-6-astra",
+    color: "yellow"
+  },
+  {
+    id: "grok",
+    vendor: "grok",
+    label: "Grok",
+    defaultName: "grok",
+    model: "claude-grok-4-7",
+    color: "red"
+  }
+];
+function modelById(id) {
+  return MODELS.find((model) => model.id === id);
+}
+function modelIdForAlias(alias) {
+  const lower = alias.toLowerCase();
+  if (!lower.startsWith("claude-")) return void 0;
+  const tokens = lower.split(/[-._]/);
+  return MODELS.find((spec) => {
+    if (spec.vendor === "claude" || !lower.includes(spec.vendor)) return false;
+    const family = spec.id.slice(spec.vendor.length + 1);
+    return family === "" || tokens.includes(family);
+  })?.id;
+}
+function rankAliases(modelId, aliases) {
+  const preset = modelById(modelId)?.model;
+  return aliases.filter((alias) => modelIdForAlias(alias) === modelId).sort(
+    (a, b) => Number(b === preset) - Number(a === preset) || a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)
+  );
+}
 var CUSTOM_INJECTION_VALUES = [
   "custom",
   "with-codex",
@@ -449,10 +542,16 @@ function retiredRoleBlock(marked) {
 function markerlessFallbackBlock() {
   return "\u5F79\u5272\u30DE\u30FC\u30AB\u30FC\u4ED8\u304D\u5B9A\u7FA9\u304C\u898B\u3064\u304B\u3089\u306A\u3044(\u672A\u4F5C\u6210\u3001\u307E\u305F\u306F\u8AAD\u307F\u53D6\u308C\u306A\u3044)\u305F\u3081\u3001claude \u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u3067\u52D5\u4F5C\u3059\u308B\u3002agent-policy:setup-agents \u3067\u69CB\u6210\u3092\u4F5C\u308B\u3002";
 }
-function missingModelsBlock(missing) {
+function liveAliasHint(model, liveIds) {
+  const modelId = modelIdForAlias(model);
+  const aliases = modelId === void 0 ? [] : rankAliases(modelId, liveIds);
+  if (aliases.length === 0) return "";
+  return `(\u540C\u3058\u30E2\u30C7\u30EB\u306E live \u306E\u30A8\u30A4\u30EA\u30A2\u30B9: ${aliases.map((alias) => `\`${alias}\``).join(", ")})`;
+}
+function missingModelsBlock(missing, liveIds) {
   const limit = 10;
   const lines = missing.slice(0, limit).map(
-    (entry) => `- \u5B9A\u7FA9 \`${entry.name}\` \u306E model \`${entry.model}\` \u304C\u30D7\u30ED\u30AD\u30B7\u306E /v1/models \u306B\u5B58\u5728\u3057\u306A\u3044`
+    (entry) => `- \u5B9A\u7FA9 \`${entry.name}\` \u306E model \`${entry.model}\` \u304C\u30D7\u30ED\u30AD\u30B7\u306E /v1/models \u306B\u5B58\u5728\u3057\u306A\u3044${liveAliasHint(entry.model, liveIds)}`
   );
   const remaining = missing.length - limit;
   if (remaining > 0) lines.push(`- \u4ED6 ${remaining} \u4EF6`);
@@ -518,7 +617,7 @@ async function customBlocks(env, marked, injection) {
       env,
       marked,
       legacyValue,
-      missingModelsBlock(missing),
+      missingModelsBlock(missing, live.ids),
       REPAIR_BLOCK
     );
   }

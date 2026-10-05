@@ -14,13 +14,12 @@ kind: readonly
 ## Core Responsibilities
 
 - Challenge premises stated in the document and present evidence-backed counterarguments.
-- Do not decide whether findings should be accepted. Leave that decision to the orchestrator.
 
 ## Procedure
 
 - Read only the original target document.
 - Do not read findings from other reviews. Report that they were provided.
-- Before raising a finding, use Read, Grep, or Glob to verify, for the code and files mentioned by the document whose description would change a decision if wrong, that they exist and that the description matches them.
+- Among the code and files the document mentions, check those whose description, if wrong, would change a decision. Before raising a finding, use Read, Grep, or Glob to verify that they exist and match the description.
 
 ## Constraints
 
