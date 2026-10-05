@@ -994,8 +994,9 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
 
 // heredoc の開始(`<<<` の here-string は除く)。fd 番号の付いた形(`0<<EOF`)も受ける。
 // 算術の `<<` も開始と読むが、本文を差し引かない向きにだけ働くので区別しない
+// 区切り語は、2 番目が単一引用符、3 番目が二重引用符、4 番目がバックスラッシュ、5 番目が語である
 const ANY_HEREDOC_RE =
-  /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_]\w*))/g
+  /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|(\\)?([A-Za-z_]\w*))/g
 
 // heredoc の受け手が本文を実行しないと確かに分かるか。line は開始の行、before はそのうち `<<`
 // より前、after は区切り語より後ろ、next は終端の行の次の行である。次をすべて満たすときに限る。
@@ -1097,7 +1098,7 @@ function withoutInertBodies(cmd: string): string {
     // 開始の行の heredoc の本文は、開始の順に続く。各本文の終端の行を順に探す
     let k = i
     for (const m of ms) {
-      const word = m[2] ?? m[3] ?? m[4]
+      const word = m[2] ?? m[3] ?? m[5]
       const from = k
       k = lines.findIndex(
         (l, j) =>
@@ -1110,8 +1111,13 @@ function withoutInertBodies(cmd: string): string {
     const at = m.index ?? 0
     // 除外に当たる heredoc だけ本文を空にする。当たらないものは本文を残し、終端の行まで飛ばす。
     // 実行される本文の中の開始の行を、除外の判定にかけないためである
+    // 区切り語が引用されていない heredoc(`<<EOF`)は外さない。bash が本文の行末のバックスラッシュと
+    // 改行を結合して終端を認識するので、物理行で探す終端と食い違いうるためである
+    const quoted =
+      m[2] !== undefined || m[3] !== undefined || m[4] !== undefined
     if (
       i === firstLine &&
+      quoted &&
       ms.length === 1 &&
       isInertHeredoc(
         lines[i],

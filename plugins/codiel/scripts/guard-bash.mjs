@@ -815,7 +815,7 @@ function stateJsonProblem(cmd, cwd) {
   );
   return byTokens || byLines ? "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F\u304B\u524A\u9664" : void 0;
 }
-var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_]\w*))/g;
+var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|(\\)?([A-Za-z_]\w*))/g;
 function isInertHeredoc(line, before, after, next) {
   if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
     return false;
@@ -860,7 +860,7 @@ function withoutInertBodies(cmd) {
     if (ms.length === 0) continue;
     let k = i;
     for (const m2 of ms) {
-      const word = m2[2] ?? m2[3] ?? m2[4];
+      const word = m2[2] ?? m2[3] ?? m2[5];
       const from = k;
       k = lines.findIndex(
         (l, j) => j > from && (m2[1] === "-" ? l.replace(/^\t+/, "") : l) === word
@@ -869,7 +869,8 @@ function withoutInertBodies(cmd) {
     }
     const m = ms[0];
     const at = m.index ?? 0;
-    if (i === firstLine && ms.length === 1 && isInertHeredoc(
+    const quoted = m[2] !== void 0 || m[3] !== void 0 || m[4] !== void 0;
+    if (i === firstLine && quoted && ms.length === 1 && isInertHeredoc(
       lines[i],
       lines[i].slice(0, at),
       lines[i].slice(at + m[0].length),
