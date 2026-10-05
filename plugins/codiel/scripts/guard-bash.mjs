@@ -713,21 +713,23 @@ function cwdCandidates(commands, cwd) {
     const dir = words.slice(1).find((w) => !w.startsWith("-"));
     if (dir === void 0) continue;
     for (const c of [...out]) {
-      if (out.size >= MAX_CWD_CANDIDATES) break;
       out.add(path4.resolve(c, expandHome(dir)));
+      if (out.size > MAX_CWD_CANDIDATES) return null;
     }
   }
   return [...out];
 }
 function writesStateJson(cmd, cwd) {
-  const commands = parseCommands(cmd) ?? splitLoosely(cmd);
+  const tokenCommands = parseCommands(cmd) ?? splitLoosely(cmd);
+  const lineCommands = gitCommandsByLines(cmd);
   const root = findMainRoot(cwd);
   const runsDirs = [
     path4.join(root, ".codiel", "runs"),
     resolvePhysicalPath(root, path4.join(".codiel", "runs"))
   ];
   const underRuns = (p) => runsDirs.some((d) => isUnder(p, d));
-  const cwds = cwdCandidates(commands, cwd);
+  const cwds = cwdCandidates([...tokenCommands, ...lineCommands], cwd);
+  if (cwds === null) return true;
   const resolved = (word) => cwds.flatMap((c) => {
     const lexical = path4.resolve(c, expandHome(word));
     return [
@@ -742,24 +744,36 @@ function writesStateJson(cmd, cwd) {
   const holdsState = (word) => resolved(word).some(
     (p) => runsDirs.some((d) => isUnder(d, p)) || underRuns(p) && !isRegularFile(p)
   );
-  return commands.some((words, ci) => {
-    if (redirectsTo(commands, ci, isStateFile) || teeOrSedWrites(words, isStateFile))
-      return true;
-    const at = words.findIndex(
-      (w) => STATE_FILE_COMMANDS.includes(path4.basename(w))
-    );
-    if (at === -1) return false;
+  const touchesRuns = (word) => resolved(word).some(
+    (p) => underRuns(p) || runsDirs.some((d) => isUnder(d, p))
+  );
+  const fileOpWrites = (words, at) => {
+    if (at < 0 || at >= words.length) return false;
     const name = path4.basename(words[at]);
+    if (!STATE_FILE_COMMANDS.includes(name)) return false;
     const args = words.slice(at + 1).flatMap(
       (a) => name === "dd" ? a.startsWith("of=") ? [a.slice(3)] : [] : a.startsWith("-") || a === "" ? [] : [a]
     );
     if (args.some(isStateFile)) return true;
+    if (name === "ln" && args.some(touchesRuns)) return true;
     const sources = name === "rm" ? args : args.slice(0, -1);
     if ((name === "rm" || name === "mv") && sources.some(holdsState))
       return true;
     const dest = args.at(-1);
     return name !== "rm" && name !== "dd" && dest !== void 0 && sources.some((a) => path4.basename(a) === "state.json") && resolved(dest).some(underRuns);
-  });
+  };
+  const byTokens = tokenCommands.some(
+    (words, ci) => redirectsTo(tokenCommands, ci, isStateFile) || teeOrSedWrites(words, isStateFile) || fileOpWrites(
+      words,
+      words.findIndex((w) => STATE_FILE_COMMANDS.includes(path4.basename(w)))
+    )
+  );
+  const byLines = lineCommands.some(
+    (words, ci) => redirectsTo(lineCommands, ci, isStateFile) || teeOrSedWrites(words, isStateFile) || words.some(
+      (_, k) => (k === 0 || words[k - 1] === "<<<" || /^-\w*c$/.test(words[k - 1]) && words.slice(0, k - 1).some((w) => SHELLS.includes(path4.basename(w)))) && fileOpWrites(words, k)
+    )
+  );
+  return byTokens || byLines;
 }
 function isRegularFile(p) {
   try {

@@ -189,6 +189,10 @@
     - 語に `.codiel/runs/…state.json` を含むかの字句の検査も残し、解決したパスの判定と両方を当てる。`$PWD/.codiel/runs/…/state.json` のようにシェルの展開を含む語は、解決したパスでは当たらないためである。字句の検査は語ごとに当てるので、C3-15 の誤検知は戻らない。
     - 照合の候補は 3 つにする。字句で畳んだパス、生の結合パスを実体で辿ったパス、字句で畳んだパスを実体で辿ったパスである。Bash と Write の両方に当てる。
     - 解決関数は、途中に存在しないセグメントがあっても早く返さず、後ろのセグメントで realpath を試し直して最後まで辿る(`nodir/../alias/state.json`)。
+  - 続くセキュリティレビューの指摘で、さらに次の 3 つを足した。
+    - cwd の候補が上限(64)を超えたら、打ち切って素通しせず拒否する。
+    - `ln` の引数(リンク先と作るリンクの名前)のどれかが runs の配下か runs を含む祖先に解決されれば拒否する。同じコマンドで symlink を作ってから書く形(`ln -s .codiel/runs/x/try-1 a && echo '{}' > a/state.json`)を止めるためである。
+    - heredoc と here-string でシェルへ渡したコマンドの中の書き込みと削除を止めるため、4.12.2 と同じ行の走査で作った語の列にも同じ判定を当てる。行の走査では、ファイル操作のコマンド名を、区切りの先頭の語・`<<<` の直後の語・シェルの `-c` の直後の語でだけ認める。printf などのデータの中の `cp …` をコマンドと読むと、C3-15 の誤検知が戻るためである。`sudo`・`env` などが前に付く形は、字句解析の側が拾う。
 - 変更(Write/Edit): `guard-write.ts:241` で、論理パスに加えて、`path.resolve` の前の生の結合パスを上の解決関数に通した結果にも同じ判定を当てる。
 - テスト: `hooks/__test__/guard-bash.test.ts` の state.json の群(:299、:490)に、`rm <state.json>`、`cd .codiel/runs/x/try-1 && echo > state.json`、`rm -rf .codiel/runs/x` の拒否と、/tmp のパスに `state.json` を含む printf の許可を足す。`hooks/__test__/guard-write.test.ts` に symlink を通した Write の拒否を足す。Bash と Write の両方に `alias/../state.json` の拒否を 1 件ずつ足す。
 - 文書: 設計書 2026-09-27 §6.16.2(決定 96)の既知の限界の記述と、`guard-bash.ts:761-763` のコメント。

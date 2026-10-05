@@ -376,6 +376,33 @@ test("symlink を通した alias/../state.json への書き込みは deny", () =
   expect(r?.permissionDecision).toBe("deny")
 })
 
+test("cwd の候補が上限を超えるほど cd を重ねたコマンドは、打ち切らずに deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const cds = ["a", "b", "c", "d", "e", "f", "g"].map((d) => `cd ${d}`)
+  const r = hook(root, [...cds, "echo hi"].join("; "))
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("state.json")
+})
+
+test("同じコマンドで run の配下への symlink を作ってから書く形は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  fs.mkdirSync(path.join(root, ".codiel/runs/x/try-1"), { recursive: true })
+  const r = hook(
+    root,
+    "ln -s .codiel/runs/x/try-1 a && echo '{}' > a/state.json"
+  )
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("heredoc と here-string でシェルへ渡した state.json の削除と書き込みは deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const command of [
+    ["bash <<EOF", "rm .codiel/runs/x/try-1/state.json", "EOF"].join("\n"),
+    `bash <<< "echo x > .codiel/runs/x/try-1/state.json"`
+  ])
+    expect(hook(root, command)?.permissionDecision, command).toBe("deny")
+})
+
 test("$PWD を使った state.json への書き込みは、字句の検査で deny", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   const r = hook(root, "echo '{}' > $PWD/.codiel/runs/x/try-1/state.json")

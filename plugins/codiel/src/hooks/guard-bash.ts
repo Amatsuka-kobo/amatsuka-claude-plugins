@@ -794,16 +794,17 @@ const MAX_CWD_CANDIDATES = 64
 
 // cmd の中の cd・pushd の行き先をすべて集め、元の cwd と合わせて cwd の候補にする。
 // サブシェル・パイプ・{ } の区別はせず、cd の効く範囲は追わない(拒否が広がる向きに倒す)。
-// ponytail: 候補は MAX_CWD_CANDIDATES で打ち切る。超えるほど cd を重ねたコマンドは見逃しうる
-function cwdCandidates(commands: string[][], cwd: string): string[] {
+// 候補が MAX_CWD_CANDIDATES を超えたら null を返し、呼び出し元は拒否する。
+// ponytail: 上限を超えるほど cd を重ねたコマンドは、書き込み先を見ずに拒否する
+function cwdCandidates(commands: string[][], cwd: string): string[] | null {
   const out = new Set([cwd])
   for (const words of commands) {
     if (!["cd", "pushd"].includes(words[0])) continue
     const dir = words.slice(1).find((w) => !w.startsWith("-"))
     if (dir === undefined) continue
     for (const c of [...out]) {
-      if (out.size >= MAX_CWD_CANDIDATES) break
       out.add(path.resolve(c, expandHome(dir)))
+      if (out.size > MAX_CWD_CANDIDATES) return null
     }
   }
   return [...out]
@@ -814,16 +815,20 @@ function cwdCandidates(commands: string[][], cwd: string): string[] {
 // ある。語は、`.codiel/runs/…state.json` の文字列を含むかの字句の検査と、cwd の候補ごとに
 // 字句で畳んだパスと symlink を実体で辿ったパスの照合を当て、どれかが当たれば止める。
 // 字句解析は gh の起動を探すものと同じ(閉じていないクォートが残れば splitLoosely で厳しい側に
-// 読み直す)。`.codiel/runs/` を含まない変数で渡したパスは見えない(既知の限界)。
+// 読み直す)。heredoc と here-string でシェルへ渡したコマンドも見るため、git と同じく行の走査
+// (gitCommandsByLines)で作った語の列にも同じ判定を当て、どちらかで当たれば止める。
+// `.codiel/runs/` を含まない変数で渡したパスは見えない(既知の限界)。
 function writesStateJson(cmd: string, cwd: string): boolean {
-  const commands = parseCommands(cmd) ?? splitLoosely(cmd)
+  const tokenCommands = parseCommands(cmd) ?? splitLoosely(cmd)
+  const lineCommands = gitCommandsByLines(cmd)
   const root = findMainRoot(cwd)
   const runsDirs = [
     path.join(root, ".codiel", "runs"),
     resolvePhysicalPath(root, path.join(".codiel", "runs"))
   ]
   const underRuns = (p: string) => runsDirs.some((d) => isUnder(p, d))
-  const cwds = cwdCandidates(commands, cwd)
+  const cwds = cwdCandidates([...tokenCommands, ...lineCommands], cwd)
+  if (cwds === null) return true
   // 字句で畳んだパス・生の結合パスを実体で辿ったパス・字句で畳んだパスを実体で辿ったパス
   const resolved = (word: string): string[] =>
     cwds.flatMap((c) => {
@@ -851,17 +856,16 @@ function writesStateJson(cmd: string, cwd: string): boolean {
         runsDirs.some((d) => isUnder(d, p)) ||
         (underRuns(p) && !isRegularFile(p))
     )
-  return commands.some((words, ci) => {
-    if (
-      redirectsTo(commands, ci, isStateFile) ||
-      teeOrSedWrites(words, isStateFile)
+  // runs の配下か、runs を含む祖先(ln のリンク先と、作るリンクの名前の判定に使う)
+  const touchesRuns = (word: string): boolean =>
+    resolved(word).some(
+      (p) => underRuns(p) || runsDirs.some((d) => isUnder(d, p))
     )
-      return true
-    const at = words.findIndex((w) =>
-      STATE_FILE_COMMANDS.includes(path.basename(w))
-    )
-    if (at === -1) return false
+  // words[at] の rm・mv・cp・ln・install・dd が state.json を書き換えるか消すか
+  const fileOpWrites = (words: string[], at: number): boolean => {
+    if (at < 0 || at >= words.length) return false
     const name = path.basename(words[at])
+    if (!STATE_FILE_COMMANDS.includes(name)) return false
     const args = words
       .slice(at + 1)
       .flatMap((a) =>
@@ -874,6 +878,8 @@ function writesStateJson(cmd: string, cwd: string): boolean {
             : [a]
       )
     if (args.some(isStateFile)) return true
+    // 同じコマンドで run の配下への symlink を作ってから書く形(`ln -s <runs の配下> a && … > a/state.json`)
+    if (name === "ln" && args.some(touchesRuns)) return true
     const sources = name === "rm" ? args : args.slice(0, -1)
     if ((name === "rm" || name === "mv") && sources.some(holdsState))
       return true
@@ -886,7 +892,36 @@ function writesStateJson(cmd: string, cwd: string): boolean {
       sources.some((a) => path.basename(a) === "state.json") &&
       resolved(dest).some(underRuns)
     )
-  })
+  }
+  // 字句解析の語の列では、コマンドの中の最初のファイル操作の語をコマンド名とする
+  const byTokens = tokenCommands.some(
+    (words, ci) =>
+      redirectsTo(tokenCommands, ci, isStateFile) ||
+      teeOrSedWrites(words, isStateFile) ||
+      fileOpWrites(
+        words,
+        words.findIndex((w) => STATE_FILE_COMMANDS.includes(path.basename(w)))
+      )
+  )
+  // 行の走査では、コマンド名を区切りの先頭の語・`<<<` の直後の語・シェルの `-c` の直後の語でだけ
+  // 認める。printf などのデータの中の `cp …` をコマンドと読まないためである。
+  // sudo・env などが前に付く形は、字句解析の側が拾う。
+  const byLines = lineCommands.some(
+    (words, ci) =>
+      redirectsTo(lineCommands, ci, isStateFile) ||
+      teeOrSedWrites(words, isStateFile) ||
+      words.some(
+        (_, k) =>
+          (k === 0 ||
+            words[k - 1] === "<<<" ||
+            (/^-\w*c$/.test(words[k - 1]) &&
+              words
+                .slice(0, k - 1)
+                .some((w) => SHELLS.includes(path.basename(w))))) &&
+          fileOpWrites(words, k)
+      )
+  )
+  return byTokens || byLines
 }
 
 function isRegularFile(p: string): boolean {
