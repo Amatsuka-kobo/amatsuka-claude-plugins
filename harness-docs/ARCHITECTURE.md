@@ -19,11 +19,11 @@
 | 型定義 | @types/node ^26.0.0 |
 
 - Node.js と pnpm のバージョンは volta で固定する。Node は 26.3.1、pnpm は 11.8.0 とする。
-- TypeScript は `strict` と `noEmit` を有効にする。
-- esbuild の `target` は node22 に揃える。出力は ESM とし、拡張子は `.mjs` とする。
-- 共通の開発依存はルートの `package.json` に置く。
-- プラグイン固有のランタイム依存は、そのプラグインの `package.json` に置く。
-- 初回に取得するネイティブコードと辞書は `package.json` に置かず、取得元の URL と sha256 をコードに固定する。
+- TypeScript は strict と `noEmit` を有効にする。
+- esbuild の target は node22 に揃える。出力は ESM とし、拡張子は `.mjs` とする。
+- 共通の開発依存はルートの package.json に置く。
+- プラグイン固有のランタイム依存は、そのプラグインの package.json に置く。
+- 初回に取得するネイティブコードと辞書は package.json に置かず、取得元の URL と sha256 をコードに固定する。
 
 ## レイヤー構造
 
@@ -95,7 +95,7 @@
 ```json metatron:domains
 {
   "impl": ["plugins/*/src/**", "plugins/*/build.ts", "plugins/codiel/raguel-mcp/src/**", "plugins/codiel/raguel-mcp/build.ts"],
-  "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**"],
+  "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**", ".claude/**"],
   "bundle": ["plugins/*/scripts/**", "plugins/*/dist/**", "plugins/codiel/raguel-mcp/dist/**"],
   "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**"],
   "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".raphael/**", ".serena/**"]
@@ -103,7 +103,7 @@
 ```
 
 - `impl` は TypeScript の実装を指す。
-- `prompt` は AI が読む指示書と、そこへ合成される素材を指す。
+- `prompt` は AI が読む指示書と、そこへ合成される素材を指す。`.claude/` の output style・rules・skills を含む。
 - `bundle` は手で編集しない。
 - `manifest` は配布宣言・ワークスペース設定・環境構築スクリプトを指す。
 - `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリ、raphael の抗体を含む。
