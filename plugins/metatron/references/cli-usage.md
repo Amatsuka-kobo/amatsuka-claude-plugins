@@ -139,9 +139,10 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - `--file` は `scan-adr-candidates` が返した候補の `file` をそのまま渡せる。相対パスは cwd 基準で解決する。
 - `--adr` は `ADR-12` と `12` のどちらの形も受け付ける。
 - `--hash` には走査で得たその候補の `hash` を渡す。エントリの内容が走査時から変わっていれば `hash_mismatch` で拒否される。
+- 書き込みの直前に対象を読み直し、縮約の始めに読んだ内容とバイト列で比べる。エントリの外を含めて変わっていれば `file_changed` で拒否する。
 - 書き込み先が `<repoRoot>/docs/intents/domains/` 直下の通常ファイルであることを確かめてから書く。シンボリックリンクと下位ディレクトリは拒否する。
 - 既に参照形になっているエントリを指定したときは、何も書かずに成功で返る(冪等)。
-- 拒否・失敗は終了コード 3 で返り、対象ファイルは 1 バイトも変わらない。
+- 拒否・失敗は終了コード 3 で返り、対象ファイルは 1 バイトも変わらない。エラーコードは `not_git_repository` / `outside_domains_dir` / `file_not_found` / `file_changed` / `candidate_not_found` / `duplicate_candidate` / `adr_not_found` / `candidate_id_line_missing` / `hash_mismatch` / `write_failed`。
 
 ### remove-gotcha-candidate
 

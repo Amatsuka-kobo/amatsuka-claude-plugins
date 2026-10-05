@@ -630,6 +630,38 @@ test("縮約: 書き込みに失敗したら、何も書かずに拒否し一時
   expect(fs.readdirSync(path.dirname(file))).toStrictEqual(["frontend.md"])
 })
 
+test("縮約: 読み込みの後で候補の外の行が書き換わったら、file_changed で拒否し書き換えた内容を残す", () => {
+  const { root, file } = adoptedRepo()
+  const hash = hashOf(root, "frontend-3")
+  const edited = fs
+    .readFileSync(file, "utf8")
+    .replace("画面を提供する。", "画面と API を提供する。")
+  // 縮約が対象を読んだ後、書き込みの前に別の編集が入った状態を再現する。
+  // 2 回目に読まれる時点でファイルを書き換え、書き換えた内容を返す。
+  const realReadFileSync = fs.readFileSync
+  let reads = 0
+  const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((
+    target: Parameters<typeof fs.readFileSync>[0],
+    options?: Parameters<typeof fs.readFileSync>[1]
+  ) => {
+    if (target === file) {
+      reads++
+      if (reads === 2) fs.writeFileSync(file, edited)
+    }
+    return realReadFileSync(target, options)
+  }) as typeof fs.readFileSync)
+  try {
+    expectRejected(
+      () => shrink(root, file, "frontend-3", 12, hash),
+      "file_changed"
+    )
+  } finally {
+    spy.mockRestore()
+  }
+  expect(fs.readFileSync(file, "utf8")).toBe(edited)
+  expect(fs.readdirSync(path.dirname(file))).toStrictEqual(["frontend.md"])
+})
+
 test("縮約: 書き込み先が repoRoot の docs/intents/domains/*.md 以外なら拒否する", () => {
   const { root } = adoptedRepo()
   const body = durable(entry("frontend-3"))

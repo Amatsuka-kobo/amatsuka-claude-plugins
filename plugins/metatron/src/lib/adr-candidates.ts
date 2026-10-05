@@ -68,6 +68,7 @@ export type AdrCandidateErrorCode =
   | "not_git_repository"
   | "outside_domains_dir"
   | "file_not_found"
+  | "file_changed"
   | "candidate_not_found"
   | "duplicate_candidate"
   | "adr_not_found"
@@ -597,6 +598,21 @@ export function shrinkAdrCandidate(
     Buffer.from(`${replacement}${terminator}`, "utf8"),
     parsed.buf.subarray(parsed.offsetOf(entry.contentEnd))
   ])
+
+  // 6. 読んでから書くまでに、候補の外を含めてファイルが変わっていないこと。
+  // ロックは取らないので、ここから rename までの短い間の編集は防げない。
+  let current: Buffer | null
+  try {
+    current = fs.readFileSync(target)
+  } catch {
+    current = null
+  }
+  if (current === null || !current.equals(parsed.buf)) {
+    throw new AdrCandidateError(
+      "file_changed",
+      `${target} が縮約の途中で変わりました。走査し直してください。`
+    )
+  }
   writeAtomically(target, next, mode)
   return { file: target, candidateId, adr, written: true }
 }

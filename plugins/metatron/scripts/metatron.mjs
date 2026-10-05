@@ -2464,6 +2464,18 @@ function shrinkAdrCandidate(input) {
     Buffer.from(`${replacement}${terminator}`, "utf8"),
     parsed.buf.subarray(parsed.offsetOf(entry.contentEnd))
   ]);
+  let current;
+  try {
+    current = fs5.readFileSync(target);
+  } catch {
+    current = null;
+  }
+  if (current === null || !current.equals(parsed.buf)) {
+    throw new AdrCandidateError(
+      "file_changed",
+      `${target} \u304C\u7E2E\u7D04\u306E\u9014\u4E2D\u3067\u5909\u308F\u308A\u307E\u3057\u305F\u3002\u8D70\u67FB\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+  }
   writeAtomically(target, next, mode);
   return { file: target, candidateId, adr, written: true };
 }
