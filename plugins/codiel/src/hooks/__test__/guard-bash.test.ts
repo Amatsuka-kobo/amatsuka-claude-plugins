@@ -616,6 +616,18 @@ test("heredoc の本文の中の cd も cwd の候補に入れ、その先の st
   expect(hook(root, command)?.permissionDecision).toBe("deny")
 })
 
+// 許可リストに当たるコミットメッセージの形は、本文の行頭に rm があっても素通し
+test.each([
+  ["git commit -m \"$(cat <<'EOF'", ')"'],
+  ["git commit -F - <<'EOF'", ""],
+  ["gh pr create --title t --body \"$(cat <<'EOF'", ')"']
+])("コミットメッセージ %s は素通し", (head, tail) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const lines = [head, "rm .codiel/runs/x/try-1/state.json", "EOF"]
+  if (tail) lines.push(tail)
+  expect(hook(root, lines.join("\n"))).toBe(null)
+})
+
 // 開始の行の前段に && があるコミットメッセージと、終端の次の行に続くコマンドがある形
 test.each([
   [
@@ -666,7 +678,11 @@ test("引用の中の && の後ろに git commit -F - を置いた heredoc の�
   for (const head of [
     "bash -c 'x && ' git commit -F - <<'EOF'",
     // 受け手の区間は git commit だが、区切りより前に引用符がある形
-    "bash -c \"true && git commit -F - <<'EOF'\""
+    "bash -c \"true && git commit -F - <<'EOF'\"",
+    // バックスラッシュで区切りをエスケープした形(`;` は区切りでなく bash の引数)
+    "bash -s \\; git commit -F - <<'EOF'",
+    // `#` のコメントで区切りを隠した形
+    "true #; git commit -F - <<'EOF'"
   ]) {
     const command = [head, "rm .codiel/runs/x/try-1/state.json", "EOF"].join(
       "\n"

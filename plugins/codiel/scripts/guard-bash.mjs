@@ -819,9 +819,13 @@ var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Z
 function isInertHeredoc(line, before, after, next) {
   if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
     return false;
-  const parts = before.split(/;|&&|\|\||\|/);
-  const receiver = parts.at(-1) ?? "";
-  if (/['"`]|\$\(/.test(parts.slice(0, -1).join(" "))) return false;
+  const m = before.match(/^\s*(?:git\s+add(?:\s+[\w./-]+)*\s*&&\s*)?(.*)$/s);
+  const receiver = m?.[1] ?? "";
+  const core = receiver.replace(
+    /\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/,
+    " "
+  );
+  if (/[;&|#\\'"`]|\$\(/.test(core)) return false;
   const head = receiver.trim().split(/\s+/);
   if (!(head[0] === "git" && ["commit", "tag"].includes(head[1] ?? "") || head[0] === "gh"))
     return false;

@@ -1014,12 +1014,18 @@ function isInertHeredoc(
 ): boolean {
   if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
     return false
-  // 受け手は、`<<` より前で最後の `;`・`&&`・`||`・`|` より後ろの部分だけで判定する
-  // (`git add -A && git commit -m "$(cat <<'EOF'`)。区切りより前に引用符・バッククォート・`$(` が
-  // あると、引用の中の区切りを読み違えうるので差し引かない。受け手の最初の語は git か gh に限る
-  const parts = before.split(/;|&&|\|\||\|/)
-  const receiver = parts.at(-1) ?? ""
-  if (/['"`]|\$\(/.test(parts.slice(0, -1).join(" "))) return false
+  // `<<` より前は許可リストで読む。認めるのは、前段に `git add <パス…> &&` を 1 つだけ置いてよく、
+  // 続けて受け手の区間(git commit・git tag・gh)が来る形だけである。記号を足して塞ぐ方式では、
+  // `#` のコメントやバックスラッシュで区切りを隠す形が抜けるためである
+  const m = before.match(/^\s*(?:git\s+add(?:\s+[\w./-]+)*\s*&&\s*)?(.*)$/s)
+  const receiver = m?.[1] ?? ""
+  // 受け手の区間の中に、`-m "$(cat` の部分の外で区切り・コメント・エスケープ・引用・置換があれば
+  // 差し引かない
+  const core = receiver.replace(
+    /\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/,
+    " "
+  )
+  if (/[;&|#\\'"`]|\$\(/.test(core)) return false
   const head = receiver.trim().split(/\s+/)
   if (
     !(
