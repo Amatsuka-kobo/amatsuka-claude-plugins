@@ -42389,6 +42389,7 @@ function collectCodeSubject(input2) {
       "diff",
       "--no-ext-diff",
       "--no-textconv",
+      "--text",
       "--no-color",
       "--src-prefix=a/",
       "--dst-prefix=b/",

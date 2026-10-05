@@ -537,6 +537,15 @@ describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
     ).not.toContain(token)
   })
 
+  it("未追跡の .gitattributes で -diff にしても、秘密情報の追加行を見て STOP にする(所見 R2-01)", async () => {
+    const h = harness()
+    h.commit({ "src/a.ts": `export const t = "${GHP_TOKEN}"\n` })
+    fs.writeFileSync(path.join(h.repo, ".gitattributes"), "* -diff\n")
+    const r = await code(h)
+    expect(r.verdict).toBe("STOP")
+    expect(ids(r)).toContain("common/secrets")
+  })
+
   it("destructive-ops の stop を、実行されない候補なら ask に下げる", async () => {
     const jev = fakeJev({ candidate: 0.05 })
     const h = harness({ jevCall: jev.call, jevApiKey: "k" })

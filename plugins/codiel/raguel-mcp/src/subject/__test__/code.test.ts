@@ -89,6 +89,42 @@ describe("collectCodeSubject", () => {
     expect(r.subject.files.map((f) => f.path)).toEqual(["x.txt", "日本語.md"])
   })
 
+  describe("attributes と NUL があっても diff に追加行の本文が入る", () => {
+    function changed(): { repo: string; base: string } {
+      const repo = track(makeRepo({ "x.txt": "x\n" }))
+      return { repo, base: git(repo, "rev-parse", "HEAD") }
+    }
+
+    it("未追跡の .gitattributes で -diff にしても本文が入る", () => {
+      const { repo, base } = changed()
+      writeFile(repo, "a.txt", "ADDED_BODY\n")
+      commitAll(repo)
+      writeFile(repo, ".gitattributes", "* -diff\n")
+      const r = collectCodeSubject({ projectRoot: repo, baseRef: base })
+      expect(r.diff).toContain("+ADDED_BODY")
+      expect(r.diff).not.toContain("Binary files")
+    })
+
+    it(".git/info/attributes で -diff にしても本文が入る", () => {
+      const { repo, base } = changed()
+      writeFile(repo, "a.txt", "ADDED_BODY\n")
+      commitAll(repo)
+      writeFile(repo, ".git/info/attributes", "* -diff\n")
+      const r = collectCodeSubject({ projectRoot: repo, baseRef: base })
+      expect(r.diff).toContain("+ADDED_BODY")
+      expect(r.diff).not.toContain("Binary files")
+    })
+
+    it("NUL を含むファイルでも本文が入る", () => {
+      const { repo, base } = changed()
+      writeFile(repo, "a.bin", Buffer.from("ADDED_BODY\0tail\n"))
+      commitAll(repo)
+      const r = collectCodeSubject({ projectRoot: repo, baseRef: base })
+      expect(r.diff).toContain("+ADDED_BODY")
+      expect(r.diff).not.toContain("Binary files")
+    })
+  })
+
   it("paths で範囲を絞り、パス指定を文字どおりに解釈する", () => {
     const repo = track(makeRepo({ "a.md": "a\n", "b.md": "b\n" }))
     const base = git(repo, "rev-parse", "HEAD")

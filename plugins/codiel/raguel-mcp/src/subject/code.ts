@@ -282,6 +282,7 @@ export function collectCodeSubject(input: CodeSubjectInput): CodeSubject {
       "diff",
       "--no-ext-diff",
       "--no-textconv",
+      "--text",
       "--no-color",
       "--src-prefix=a/",
       "--dst-prefix=b/",

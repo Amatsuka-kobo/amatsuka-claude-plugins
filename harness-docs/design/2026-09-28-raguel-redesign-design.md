@@ -293,7 +293,7 @@ Raguel は次の手順で差分を作る。
 ```
 git -C <repoPath> -c core.quotePath=false -c diff.noprefix=false -c diff.mnemonicPrefix=false
     -c diff.relative=false -c color.ui=never
-    diff --no-ext-diff --no-textconv --no-color --src-prefix=a/ --dst-prefix=b/
+    diff --no-ext-diff --no-textconv --text --no-color --src-prefix=a/ --dst-prefix=b/
     --find-renames --unified=3 <base> <head> -- <paths...>
 ```
 
