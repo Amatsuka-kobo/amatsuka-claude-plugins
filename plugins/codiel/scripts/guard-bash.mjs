@@ -705,7 +705,7 @@ function teeOrSedWrites(words, hit) {
 }
 var STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/;
 var STATE_FILE_COMMANDS = ["rm", "mv", "cp", "ln", "install", "dd"];
-var MAX_CWD_CANDIDATES = 64;
+var MAX_CWD_CANDIDATES = 256;
 function cdTargets(commands) {
   return commands.flatMap((words) => {
     if (!["cd", "pushd"].includes(words[0])) return [];
@@ -817,17 +817,23 @@ function stateJsonProblem(cmd, cwd) {
 }
 var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_]\w*))/g;
 function isInertHeredoc(line, before, after, next) {
-  if (/[;&|]/.test(line) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+  if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+    return false;
+  const parts = before.split(/;|&&|\|\||\|/);
+  const receiver = parts.at(-1) ?? "";
+  if (/['"`]|\$\(/.test(parts.slice(0, -1).join(" "))) return false;
+  const head = receiver.trim().split(/\s+/);
+  if (!(head[0] === "git" && ["commit", "tag"].includes(head[1] ?? "") || head[0] === "gh"))
     return false;
   const B = "(?:^|\\s)";
   if (new RegExp(
     `${B}git\\s+(?:\\S+\\s+)*?commit\\b.*\\s(?:-F|--file)(?:\\s+|=)(?:-|/dev/stdin)(?=\\s|$)`
-  ).test(line))
+  ).test(receiver))
     return true;
   if (new RegExp(
     `${B}(?:git\\s+(?:\\S+\\s+)*?(?:commit|tag)|gh\\s+\\S+\\s+\\S+)\\b.*\\s(?:-m|--message|--body)(?:\\s+|=)"?\\$\\(\\s*cat\\s+$`
-  ).test(before))
-    return after.trim() === "" && /^\s*\)"?\s*$/.test(next ?? "");
+  ).test(receiver))
+    return after.trim() === "" && /^\s*\)"?\s*(?:$|(?:&&|;|\|\|)[^)"'`]*$)/.test(next ?? "");
   return false;
 }
 function withoutMessageValues(words) {

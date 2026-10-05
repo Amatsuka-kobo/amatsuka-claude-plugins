@@ -528,13 +528,13 @@ test("symlink を通した alias/../state.json への書き込みは deny", () =
 
 // cwd の候補は、cd の行き先の組み合わせで増える。入れ子の cd が 6 個(候補 64)までは判定し、
 // 7 個(候補 128)で上限を超える
-test("入れ子の cd が 6 個までは素通し、7 個で cd が多すぎるとして deny", () => {
+test("別々の相対ディレクトリへの cd が 8 個までは素通し、9 個で cd が多すぎるとして deny", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   const nested = (n: number) =>
-    [..."abcdefg".slice(0, n)].map((d) => `cd ${d}`).join(" && ")
+    [..."abcdefghi".slice(0, n)].map((d) => `cd ${d}`).join(" && ")
   expect(hook(root, `${nested(4)} && ls`)).toBe(null)
-  expect(hook(root, `${nested(6)} && ls`)).toBe(null)
-  const r = hook(root, `${nested(7)} && ls`)
+  expect(hook(root, `${nested(8)} && ls`)).toBe(null)
+  const r = hook(root, `${nested(9)} && ls`)
   expect(r?.permissionDecision).toBe("deny")
   expect(r?.permissionDecisionReason).toContain(
     "cd が多すぎて書き込み先を判定できない"
@@ -614,6 +614,79 @@ test("heredoc の本文の中の cd も cwd の候補に入れ、その先の st
     "EOF"
   ].join("\n")
   expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+// 開始の行の前段に && があるコミットメッセージと、終端の次の行に続くコマンドがある形
+test.each([
+  [
+    "git add -A && git commit -m \"$(cat <<'EOF'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF",
+    ')"'
+  ],
+  [
+    "git commit -m \"$(cat <<'EOF'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF",
+    ')" && git push'
+  ]
+])("コミットメッセージ %s … は素通し", (...lines) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, lines.join("\n"))).toBe(null)
+})
+
+test.each([
+  [
+    "git commit -F - <<'EOF' | bash",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF"
+  ],
+  [
+    "git commit -m \"$(cat <<'EOF'",
+    "メッセージ",
+    "EOF",
+    ')" && rm .codiel/runs/x/try-1/state.json'
+  ]
+])("コミットメッセージの形でも、本文をシェルへ渡す %s … と続きの書き込みは deny", (...lines) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, lines.join("\n"))?.permissionDecision).toBe("deny")
+})
+
+// 包みのコマンド(nohup・timeout)の後ろの削除も拒否する
+test.each([
+  "nohup rm .codiel/runs/x/try-1/state.json",
+  "timeout 5 rm .codiel/runs/x/try-1/state.json"
+])("%s は deny", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("引用の中の && の後ろに git commit -F - を置いた heredoc の本文は差し引かず deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const head of [
+    "bash -c 'x && ' git commit -F - <<'EOF'",
+    // 受け手の区間は git commit だが、区切りより前に引用符がある形
+    "bash -c \"true && git commit -F - <<'EOF'\""
+  ]) {
+    const command = [head, "rm .codiel/runs/x/try-1/state.json", "EOF"].join(
+      "\n"
+    )
+    expect(hook(root, command)?.permissionDecision, head).toBe("deny")
+  }
+})
+
+// cp・ln・install などの通常のコマンドと、install を引数に持つコマンドは素通し
+test.each([
+  "cp a b",
+  "cp -r src dist",
+  "ln -s ../x link",
+  "install -m 755 a.sh /usr/local/bin/",
+  "npm install -D foo bar",
+  "pnpm install",
+  "grep -r install src"
+])("通常のコマンド %s は素通し", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, command)).toBe(null)
 })
 
 test("コミットメッセージの heredoc の本文にある state.json への書き込みと削除の文字列は、起動と見なさず素通し", () => {

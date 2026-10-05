@@ -790,7 +790,7 @@ const STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/
 
 const STATE_FILE_COMMANDS = ["rm", "mv", "cp", "ln", "install", "dd"]
 // cwd の候補の上限。cd が多いコマンドで候補が増えすぎないようにする
-const MAX_CWD_CANDIDATES = 64
+const MAX_CWD_CANDIDATES = 256
 
 // 語の列の cd・pushd の行き先を、現れた順に返す
 function cdTargets(commands: string[][]): string[] {
@@ -1012,21 +1012,41 @@ function isInertHeredoc(
   after: string,
   next: string | undefined
 ): boolean {
-  if (/[;&|]/.test(line) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+  if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
+    return false
+  // 受け手は、`<<` より前で最後の `;`・`&&`・`||`・`|` より後ろの部分だけで判定する
+  // (`git add -A && git commit -m "$(cat <<'EOF'`)。区切りより前に引用符・バッククォート・`$(` が
+  // あると、引用の中の区切りを読み違えうるので差し引かない。受け手の最初の語は git か gh に限る
+  const parts = before.split(/;|&&|\|\||\|/)
+  const receiver = parts.at(-1) ?? ""
+  if (/['"`]|\$\(/.test(parts.slice(0, -1).join(" "))) return false
+  const head = receiver.trim().split(/\s+/)
+  if (
+    !(
+      (head[0] === "git" && ["commit", "tag"].includes(head[1] ?? "")) ||
+      head[0] === "gh"
+    )
+  )
     return false
   const B = "(?:^|\\s)"
   if (
     new RegExp(
       `${B}git\\s+(?:\\S+\\s+)*?commit\\b.*\\s(?:-F|--file)(?:\\s+|=)(?:-|/dev/stdin)(?=\\s|$)`
-    ).test(line)
+    ).test(receiver)
   )
     return true
   if (
     new RegExp(
       `${B}(?:git\\s+(?:\\S+\\s+)*?(?:commit|tag)|gh\\s+\\S+\\s+\\S+)\\b.*\\s(?:-m|--message|--body)(?:\\s+|=)"?\\$\\(\\s*cat\\s+$`
-    ).test(before)
+    ).test(receiver)
   )
-    return after.trim() === "" && /^\s*\)"?\s*$/.test(next ?? "")
+    // 終端の次の行は `)` か `)"` で始まり、後ろに `&&`・`;`・`||` で続くコマンドがあってよい。
+    // 続きの部分は差し引かず、通常の走査に残る。続きの中に `)`・`"`・`'`・バッククォートがあると、
+    // 外側の置換や引用を閉じて別の受け手につなぐ形になりうるので差し引かない
+    return (
+      after.trim() === "" &&
+      /^\s*\)"?\s*(?:$|(?:&&|;|\|\|)[^)"'`]*$)/.test(next ?? "")
+    )
   return false
 }
 
