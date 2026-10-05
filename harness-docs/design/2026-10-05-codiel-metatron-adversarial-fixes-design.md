@@ -20,7 +20,7 @@
 - codiel と metatron の README に、hook のガードの保証範囲を書く。
   - 止めるもの: AI がツール(Write・Edit・Bash・GitHub MCP)で通常の書き方をしたときの、保護対象への変更と、フェーズに合わない外部への投稿。
   - 止めないもの: 引数の組み立てを意図的に変えた回避(heredoc・`eval` の中の投稿、設定ファイルの書き換えによる保護対象の付け替えなど)と、hook の matcher が対象にしないツール。
-- この方針は codiel と metatron にまたがる判断なので ADR にする。追加は `metatron:updating-architecture` を起動して行う。タイトルは `[codiel] [metatron]` を併記せず、主に影響するプラグイン名 1 つ(codiel)を付ける。
+- この方針は ADR にしない(2026-10-05 にユーザーが判断した)。保証範囲は README とこの設計書に書く。
 - metatron の README:115 のパスの規則は、`config-schema.md:77-82` に合わせて「字句で判定し、symlink の実体は見ない」と書く(M1-05)。`config-schema.md` は変えない。2 実装の追随は発生しない。
 
 ## 3. 進め方は「失敗するテスト → 修正 → build」を組ごとに回す
@@ -197,12 +197,11 @@
 
 #### 4.12.5 文書の保証範囲(M1-05 ほか)
 
-- 第 2 セクションの README の記述と ADR を、この組のコミットに入れる。
-- ADR は `metatron:updating-architecture` の手順で ARCHITECTURE へ書き込む(CLI の commit-architecture が正本を書く)。その結果の ARCHITECTURE の差分と README を、手で 1 つの git コミットにする。
+- 第 2 セクションの README の記述を、この組のコミットに入れる。ADR は作らない。
 
 #### 4.12.6 コミット
 
-- C3-01・C3-06・C3-02 は guard の根(文字列とツール名の一致)が同じだが、触る hook が別なので、hook ごとに 3 コミットに分ける。M1-04 は metatron で 1 コミット。README と ADR は 1 コミット。
+- C3-01・C3-06・C3-02 は guard の根(文字列とツール名の一致)が同じだが、触る hook が別なので、hook ごとに 3 コミットに分ける。M1-04 は metatron で 1 コミット。README は 1 コミット。
 
 ### 4.13 C3-03・C3-04・C3-08: STOP の再提出は Raguel の記録と state の構造化した値で判定する
 
@@ -369,7 +368,7 @@
 13. C3-06(4.12.2)
 14. C3-02(4.12.3)
 15. M1-04(4.12.4)
-16. 保証範囲の README と ADR(4.12.5)
+16. 保証範囲の README(4.12.5)
 17. C3-03・C3-04・C3-08(4.13)
 18. C3-10(4.14)
 19. R2-03・R2-04(4.15)
@@ -386,7 +385,7 @@
 30. 所見一覧の採否の更新
 
 - `docs/chat/` の未コミットの変更は、どのコミットにも入れない。
-- ARCHITECTURE に影響する変更(ADR の追加)は `metatron:updating-architecture` で行う。
+- ARCHITECTURE に影響する変更は `metatron:updating-architecture` で行う。
 
 ## 6. 完了の確かめ方
 

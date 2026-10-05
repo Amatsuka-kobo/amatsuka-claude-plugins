@@ -144,6 +144,15 @@ run が active な間は、gh-utility のスキル(`issue-craft` など)から G
 投稿する本文に codiel のマーカー `<!-- codiel:generated -->` が付かないため、codiel の hook に
 deny されます。intent 承認時の任意の Issue 起票は run の作成前に行うため、この制限の対象外です。
 
+#### hook のガードが止めるもの・止めないもの
+
+codiel の hook(guard-bash・guard-write・guard-github-mcp)は、AI の誤操作を止める安全網です。意図的な回避は防ぎません。
+
+- 止めるもの: AI が Write・Edit・Bash・GitHub MCP を通常の書き方で使ったときの、保護対象(`state.json`・Raguel の設定と記録・ドメインの外のパスなど)への変更と、フェーズに合わない GitHub への投稿や push です。`rm`、`cd` の後の相対パス、引用符で囲んだ引数、symlink を通したパスも対象です。
+- 止めないもの: 引数の組み立てを意図的に変えた回避(heredoc や `eval` の中の投稿など)と、hook の matcher が対象にしないツールです。たとえば、名前に `github` を含まない MCP サーバーには guard-github-mcp が掛かりません。
+- パスの解釈が割れるとき(字句で畳んだパスと、symlink を辿った実体のパス)は、どちらかで保護対象に当たれば拒否します。
+- Raguel のコードゲートはこの範囲の外です。Raguel は評価対象を自分で読みます。
+
 ### `/codiel:test [<testsDir> からの相対パス>]`
 
 `.codiel/config.json` の `testsDir`(既定 `docs/codiel/tests`)配下のテスト仕様に基づく回帰テストを、run とは
