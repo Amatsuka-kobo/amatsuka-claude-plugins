@@ -790,9 +790,12 @@ function stateJsonProblem(cmd, cwd) {
     const sources = targetDir !== void 0 || lnImplicit ? args : args.slice(0, Math.max(args.length - 1, 0));
     if (dest !== void 0) {
       if (parents && touchesRuns(dest)) return true;
-      for (const src of sources)
+      for (const src of sources) {
         if (touchesRuns(noTargetDir ? dest : `${dest}/${path4.basename(src)}`))
           return true;
+        if (parents && touchesRuns(`${dest}/${src.replace(/^\/+/, "")}`))
+          return true;
+      }
     }
     if (name === "mv" && sources.some(holdsState)) return true;
     return name === "ln" && args.some(touchesRuns);

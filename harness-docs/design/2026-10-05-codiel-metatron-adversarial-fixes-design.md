@@ -208,7 +208,7 @@
       2. コピー元ごとに、書かれる根 W を求める。`-T`・`--no-target-directory`(`--no-t` 以上の省略形を含む)のときは W = D とし、それ以外は D に元の basename を生の文字列でつないだものとする。元が `/.` で終わる中身のコピーは basename が `.` なので、W = D になる。
       3. W を字句で畳んだパスか実体で辿ったパスのどちらかが、runs の配下か runs そのものに当たれば拒否する。
       4. W が runs の祖先なら、コピー元や単純なコマンドかどうかを問わず拒否する。元の中身や symlink を見て通す許可は持たない。許可を細かくするほど抜けが増えたためである(元が symlink の `.codiel`、切れた symlink の `runs`、改行や `;` による単純なコマンドの判定の崩れ)。
-      5. `--parents`(`--pa` 以上の省略形を含む)のときは配置先を計算しない。D が runs の配下か runs そのものか runs の祖先なら拒否する。
+      5. `--parents`(`--pa` 以上の省略形を含む)のときは、D と実際の配置先の両方を判定する。実際の配置先は、D にコピー元の語をそのまま生の文字列でつないだもので、絶対パスの元は先頭の `/` を外してつなぐ。どちらかを字句で畳んだパスか実体で辿ったパスが runs の配下か runs そのものか runs の祖先に当たれば拒否する(`cp --parents src/state.json output` で output/src が try のディレクトリへの symlink の形)。
       6. mv の元と ln の引数についての判定と、state.json の名前の判定は残す。
       - 拒否する例は `cp -a backup/try-1 .codiel/runs/demo`・`cp -aT backup .codiel`・`cp -t alias/.. data.json`・リンク名を省略した `ln -sf …/state.json`・`cd backup && cp -a --parents .codiel/runs ..` である。通す例は `cp .codiel/runs/x/try-1/reports/a.md /tmp`・`mv a.txt .` である。
       - 受け入れる誤拒否: プロジェクトのルートなど runs の祖先への中身のコピー(`cp -a src/. .`・`cp -a .codiel/runs/demo/try-1/reports/. .`)も拒否する。ファイルを指定してコピーすれば避けられる。

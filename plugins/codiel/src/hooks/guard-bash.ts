@@ -925,7 +925,8 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
     //    つないだもの(元が `/.` で終わる中身のコピーは basename が `.` なので D になる)
     // 3. W が runs の配下か runs そのものか runs の祖先なら、元を問わず拒否する。祖先への中身の
     //    コピー(`cp -a src/. .`)も止める(受け入れる誤拒否。ファイルを指定してコピーすれば避けられる)
-    // 4. `--parents` のときは配置先を計算せず、D が runs の配下か runs そのものか runs の祖先なら拒否する
+    // 4. `--parents` のときは、D と実際の配置先(D に元の語をそのままつないだもの)の両方を照合し、
+    //    どちらかが runs の配下か runs そのものか runs の祖先なら拒否する
     // 元の中身や symlink を見て通す許可は持たない。許可を細かくするほど抜けが増えるためである。
     // 指示書に runs の下へこれらで書く手順は無い
     const lnImplicit =
@@ -939,10 +940,14 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
         : args.slice(0, Math.max(args.length - 1, 0))
     if (dest !== undefined) {
       if (parents && touchesRuns(dest)) return true
-      // path.join は `alias/..` を字句で畳むので、生の文字列でつなぐ
-      for (const src of sources)
+      // path.join は `alias/..` を字句で畳むので、生の文字列でつなぐ。--parents の配置先は、元の
+      // 語をそのまま(絶対パスは先頭の / を外して)つないだもの
+      for (const src of sources) {
         if (touchesRuns(noTargetDir ? dest : `${dest}/${path.basename(src)}`))
           return true
+        if (parents && touchesRuns(`${dest}/${src.replace(/^\/+/, "")}`))
+          return true
+      }
     }
     if (name === "mv" && sources.some(holdsState)) return true
     // 同じコマンドで run の配下への symlink を作ってから書く形(`ln -s <runs の配下> a && … > a/state.json`)

@@ -416,6 +416,23 @@ test.each([
   expect(hook(rootsProject(), command)?.permissionDecision).toBe("deny")
 })
 
+// --parents の実際の配置先(output/src が try のディレクトリへの symlink)
+test.each([
+  "cp --parents src/state.json output",
+  "cp -a --parents src/state.json output",
+  "cp --pa src/state.json output",
+  "cp --parents -t output src/state.json"
+])("%s は deny", (command) => {
+  const root = rootsProject()
+  fs.mkdirSync(path.join(root, "output"))
+  fs.symlinkSync(
+    path.join(root, ".codiel/runs/demo/try-1"),
+    path.join(root, "output/src"),
+    "dir"
+  )
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
 // 元が別ディレクトリへの symlink の .codiel、元の runs が切れた symlink、--parents の配置先
 test.each([
   "cp -a linked/.codiel .",
