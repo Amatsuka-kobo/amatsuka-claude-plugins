@@ -166,7 +166,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 STOP は人が裁定する。STOP はルール層の専権であり、Jev の内容判定は STOP を出さない
 (Raguel 側の不変条件)。Codiel 側でこれを覆す操作は行わない。STOP の後に evaluate を呼び直して
-verdict を上書きしない。
+verdict を上書きしない。carry-over は手順 4 の例外とする。
 
 1. 所見(`ruleId`・`severity`・`message`・`evidence`)と `decisionPoint`・`reasons`・`casePath` を読み、
    `node <plugin-root>/scripts/codiel-state.mjs mark-ask <phase> --slug <slug> --kind raguel --verdict STOP --evaluation-id <STOP の evaluationId>`
@@ -182,7 +182,7 @@ verdict を上書きしない。
       `node <plugin-root>/scripts/codiel-state.mjs pass-gate <phase> --slug <slug> --evaluation-id <STOP の evaluationId> --verdict STOP --human-approved`
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    3. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
-4. carry-over で妥当と裁定されたときだけ、「修正して再提出」と「止める」を人に選ばせる。「修正して再提出」は `<plugin-root>/skills/orchestrating-runs/references/phase-carry-over.md` の手順 5 に従い、止めない。ほかのフェーズは手順 5 へ進む。
+4. carry-over で妥当と裁定されたときだけ、「修正して再提出」と「止める」を人に選ばせる。「修正して再提出」は、修正の前に `resume` してから `<plugin-root>/skills/orchestrating-runs/references/phase-carry-over.md` の手順 5 に従い、止めない。ほかのフェーズは手順 5 へ進む。
 5. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
 
 ### ループ上限超過

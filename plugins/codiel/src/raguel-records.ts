@@ -454,9 +454,20 @@ export function checkGate(input: GateInput): string | null {
   return null
 }
 
+// carry-over で STOP の後の再提出で通したことを state の note に残す文。
+// pass-gate が書き、unresolvedStops が未解決から外す照合に使う
+export function resubmitNote(stopEvaluationId: string): string {
+  return `STOP(evaluationId: ${stopEvaluationId})の後の再提出で通した`
+}
+
 // run の STOP のうち、判定が確かで(judgeStatus: ok)、誤検知の裁定(ruling: false-positive)を
-// 持たないものの evaluationId を返す。init が次の try の前に人の承認を求めるのに使う
-export function unresolvedStops(store: RaguelStore, runId: string): string[] {
+// 持たないものの evaluationId を返す。init は新しい try を作る前に、これらへ人の承認を求める。
+// resubmitNotes は前の try の各フェーズの note で、再提出で通した STOP は数えない
+export function unresolvedStops(
+  store: RaguelStore,
+  runId: string,
+  resubmitNotes: readonly (string | null)[] = []
+): string[] {
   const outcomes = readOutcomes(store)
   return readEvaluationIndex(store)
     .filter(
@@ -464,7 +475,8 @@ export function unresolvedStops(store: RaguelStore, runId: string): string[] {
         e.runId === runId &&
         e.verdict === "STOP" &&
         e.judgeStatus === "ok" &&
-        outcomes.get(e.evaluationId)?.ruling !== "false-positive"
+        outcomes.get(e.evaluationId)?.ruling !== "false-positive" &&
+        !resubmitNotes.some((n) => n?.includes(resubmitNote(e.evaluationId)))
     )
     .map((e) => e.evaluationId)
 }

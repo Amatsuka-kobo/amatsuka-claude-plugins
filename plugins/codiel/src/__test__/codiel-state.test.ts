@@ -760,6 +760,38 @@ test("carry-over の STOP の後でも、同じ evaluationId・STOP より前の
   expect(st.verdict).toBe("STOP")
 })
 
+test("carry-over の STOP の後に HEAD が進んでいなければ、評価し直した PROCEED でも pass-gate が失敗する", () => {
+  const root = carryOverRun()
+  stopAndResume(root, "carry-over", "ev-stop")
+  recordEvaluation(root, "demo", "carry-over", "PROCEED", "ev-same-head")
+  const r = gateWith(root, "carry-over", "ev-same-head")
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/後に HEAD が進んでいません/)
+  const st = latestState(root, "demo").phases["carry-over"]
+  expect(st.status).toBe("in_progress")
+  expect(st.verdict).toBe("STOP")
+})
+
+test("再提出で通した carry-over の STOP は、その try を stop した後の init で --human-approved を求めない", () => {
+  const root = carryOverRun()
+  stopAndResume(root, "carry-over", "ev-stop")
+  commitFiles(root, ["src/fix.ts"], "所見を直す")
+  recordEvaluation(root, "demo", "carry-over", "PROCEED", "ev-fixed")
+  expect(gateWith(root, "carry-over", "ev-fixed").err).toBe("")
+  expect(run(root, ["stop", "--slug", "demo", "--reason", "test"]).code).toBe(0)
+  const r = init(root)
+  expect(r.err).not.toMatch(/Raguel の STOP/)
+})
+
+test("再提出で通していない STOP は、次の try の init が --human-approved を求める", () => {
+  const root = carryOverRun()
+  stopAndResume(root, "carry-over", "ev-stop")
+  expect(run(root, ["stop", "--slug", "demo", "--reason", "test"]).code).toBe(0)
+  const r = init(root)
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/Raguel の STOP/)
+})
+
 test("carry-over 以外のフェーズ(implement)では、STOP の後の新しい PROCEED でも pass-gate が失敗する", () => {
   const root = tmpProject()
   init(root)

@@ -301,10 +301,13 @@ function checkGate(input) {
   }
   return null;
 }
-function unresolvedStops(store, runId) {
+function resubmitNote(stopEvaluationId) {
+  return `STOP(evaluationId: ${stopEvaluationId})\u306E\u5F8C\u306E\u518D\u63D0\u51FA\u3067\u901A\u3057\u305F`;
+}
+function unresolvedStops(store, runId, resubmitNotes = []) {
   const outcomes = readOutcomes(store);
   return readEvaluationIndex(store).filter(
-    (e) => e.runId === runId && e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive"
+    (e) => e.runId === runId && e.verdict === "STOP" && e.judgeStatus === "ok" && outcomes.get(e.evaluationId)?.ruling !== "false-positive" && !resubmitNotes.some((n) => n?.includes(resubmitNote(e.evaluationId)))
   ).map((e) => e.evaluationId);
 }
 
@@ -810,7 +813,11 @@ function main(argv, root = process.cwd()) {
     if (latest && !bools.has("human-approved")) {
       let stops = [];
       try {
-        stops = unresolvedStops(raguelStore(root), latest.state.raguelRunId);
+        stops = unresolvedStops(
+          raguelStore(root),
+          latest.state.raguelRunId,
+          Object.values(latest.state.phases).map((p2) => p2.note)
+        );
       } catch (e) {
         fail(`Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
       }
@@ -1013,13 +1020,27 @@ function main(argv, root = process.cwd()) {
     } catch (e) {
       problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;
     }
+    if (!problem && resubmitAfterStop) {
+      try {
+        const store = raguelStore(root);
+        const stopRow = findEvaluation(
+          readEvaluationIndex(store),
+          stopEvaluationId ?? ""
+        );
+        const stopHead = stopRow ? readVerdictRecord(stopRow.casePath)?.subject?.head : void 0;
+        if (!stopHead || stopHead === gitHead(root))
+          problem = `STOP \u306E\u8A55\u4FA1(${stopEvaluationId})\u306E\u5F8C\u306B HEAD \u304C\u9032\u3093\u3067\u3044\u307E\u305B\u3093(\u8A55\u4FA1\u3057\u305F HEAD: ${stopHead ?? "\u8A18\u9332\u306A\u3057"})\u3002\u6240\u898B\u3092\u76F4\u3057\u3066\u30B3\u30DF\u30C3\u30C8\u3057\u3066\u304B\u3089\u8A55\u4FA1\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044`;
+      } catch (e) {
+        problem = `Raguel \u306E\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`;
+      }
+    }
     if (problem) fail(problem);
     ph.status = "passed";
     ph.evaluationId = flags["evaluation-id"];
     ph.verdict = flags.verdict;
     if (humanApproved) ph.humanApproved = true;
-    if (resubmitAfterStop)
-      ph.note = `STOP(evaluationId: ${stopEvaluationId})\u306E\u5F8C\u306E\u518D\u63D0\u51FA\u3067\u901A\u3057\u305F`;
+    if (resubmitAfterStop && stopEvaluationId)
+      ph.note = resubmitNote(stopEvaluationId);
     const passedHead = gitHead(root);
     if (passedHead) ph.passedHead = passedHead;
     writeState(latest.statePath, latest.state);

@@ -90,7 +90,7 @@ codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を
 
 ### 4.1 共通の入力とフェーズ
 
-`phase` は必須で、codiel のゲート付き 9 フェーズ(intent・design・test-spec・dev-plan・test-code・implement・test-loop・intent-sync・fix-loop)のどれかである。フェーズの表は `src/codiel/phases.ts` にあり、表の kind とツールが合わなければ入力の誤りになる。`repoPath`(任意)は、プロジェクトルートと git の共通ディレクトリが同じ作業ツリーだけを受ける。省略時はプロジェクトルートである。
+`phase` は必須で、codiel のゲート付き 10 フェーズ(intent・carry-over・design・test-spec・dev-plan・test-code・implement・test-loop・intent-sync・fix-loop)のどれかである。フェーズの表は `src/codiel/phases.ts` にあり、表の kind とツールが合わなければ入力の誤りになる。`repoPath`(任意)は、プロジェクトルートと git の共通ディレクトリが同じ作業ツリーだけを受ける。省略時はプロジェクトルートである。
 
 ### 4.2 evaluate_code の差分の作り方と空の差分
 

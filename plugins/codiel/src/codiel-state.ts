@@ -13,7 +13,9 @@ import {
   isAncestor,
   type RaguelStore,
   readEvaluationIndex,
+  readVerdictRecord,
   resolveRaguelStore,
+  resubmitNote,
   unresolvedStops
 } from "./raguel-records.js"
 
@@ -878,7 +880,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     if (latest && !bools.has("human-approved")) {
       let stops: string[] = []
       try {
-        stops = unresolvedStops(raguelStore(root), latest.state.raguelRunId)
+        stops = unresolvedStops(
+          raguelStore(root),
+          latest.state.raguelRunId,
+          Object.values(latest.state.phases).map((p) => p.note)
+        )
       } catch (e) {
         fail(`Raguel の記録を読めません: ${(e as Error).message}`)
       }
@@ -1108,14 +1114,31 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     } catch (e) {
       problem = `Raguel の記録を読めません: ${(e as Error).message}`
     }
+    // 再提出は、STOP を受けた評価の後に HEAD が進んでいること(直したこと)を条件にする
+    if (!problem && resubmitAfterStop) {
+      try {
+        const store = raguelStore(root)
+        const stopRow = findEvaluation(
+          readEvaluationIndex(store),
+          stopEvaluationId ?? ""
+        )
+        const stopHead = stopRow
+          ? readVerdictRecord(stopRow.casePath)?.subject?.head
+          : undefined
+        if (!stopHead || stopHead === gitHead(root))
+          problem = `STOP の評価(${stopEvaluationId})の後に HEAD が進んでいません(評価した HEAD: ${stopHead ?? "記録なし"})。所見を直してコミットしてから評価し直してください`
+      } catch (e) {
+        problem = `Raguel の記録を読めません: ${(e as Error).message}`
+      }
+    }
     if (problem) fail(problem)
     ph.status = "passed"
     ph.evaluationId = flags["evaluation-id"]
     ph.verdict = flags.verdict
     if (humanApproved) ph.humanApproved = true
     // 監査で追えるよう、STOP を受けた評価を note に残す
-    if (resubmitAfterStop)
-      ph.note = `STOP(evaluationId: ${stopEvaluationId})の後の再提出で通した`
+    if (resubmitAfterStop && stopEvaluationId)
+      ph.note = resubmitNote(stopEvaluationId)
     const passedHead = gitHead(root)
     if (passedHead) ph.passedHead = passedHead
     writeState(latest.statePath, latest.state)

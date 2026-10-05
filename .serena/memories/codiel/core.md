@@ -20,6 +20,10 @@ local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/
   Raguel の設定は config.json の `raguel` にあり、以前の版の YAML の設定ファイルは読まれない(init が承認を得て写してから消す)。
 - K12(2026-10-02): codiel の指示層(skills・references・commands)は ARCHITECTURE と GOTCHAS を読ませる規則・書き込ませる規則を持たない。残すのは §0 のドメインマップの抽出(`mapped` / `unscoped` の判定と guard-write の境界)と、review の委譲に ARCHITECTURE のパスを渡すこと(doc 観点が乖離を見る)の 2 つだけ。失敗の記録の手順 `references/failures.md` と「未記録の GOTCHAS」の退避は削除済みで、台帳の追記は metatron の担当。guard-write の `unrecorded-gotchas.md` の免除も外した。2026-10-03 から(ADR-013): codiel は ADR と GOTCHAS を直接記録せず、候補を try のローカルレポート(`reports/adr-candidates.md`・`reports/gotcha-candidates.md`)に書いて metatron に渡す。state の `adrTarget` は `knowledgeTarget` に改名した(互換なし)。`intents` のときは intent-sync と finalize で持続層へ写す。手順は `orchestrating-runs/references/adr-candidates.md`・`gotcha-candidates.md`。
 
+## run のブランチは `codiel/<slug>` の 1 本(2026-10-05)
+
+run のブランチは slug ごとに `codiel/<slug>` の 1 本で、try ごとには切らない。新しい try は前の try の続きから進め、引き継いだコードは carry-over(intent の直後のゲート付き code フェーズ)で評価する。try-1 では `init` が carry-over を `SKIPPED` にする。妥当な STOP の後も、carry-over だけは `resume` してから修正して再評価できる。手順は `orchestrating-runs/references/phase-carry-over.md`。
+
 ## `/codiel:init` — 保護パスだけを確認する
 
 `/codiel:init` は ARCHITECTURE を生成・修復しない。簡易な ARCHITECTURE の生成と JSON 修復を

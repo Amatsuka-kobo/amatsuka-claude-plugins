@@ -7,6 +7,7 @@
 - 入口のパスのファイル名の slug で `node <plugin-root>/scripts/codiel-state.mjs get --slug <slug>` を実行し、最新の try の state を読む。run が無いとき、state の `intent` が入口のパスと違うとき、終端でないとき(手順 0 で扱う)は、以降を行わない。
 - 最新の try の `stopReason` が `commit-failed` なら、作業ツリーに残した intent をそのまま使う。承認済みの新しいバージョンは作業ツリーにしか無い。
 - 最新の try の `branch` が `null`(文書だけで終えた try)なら、intent は開始時のブランチにコミット済みである。
+- 最新の try の `branch` が `null` でなく、入口の intent パスが作業ツリーに無いとき(run ブランチを消した場合など)は、出力を示して、どう進めるかをユーザーに確かめる。この時点では active run が無いので、応答を待って止まる。
 
 最新の try が `stopped` で、`stopReason` が `raguel-stop` か、`humanApproved` の無い `verdict: "STOP"` のフェーズを持つときは、STOP を受けたフェーズとその `evaluationId` を示し、新しい try を作ってよいかをユーザーに確かめる。
 

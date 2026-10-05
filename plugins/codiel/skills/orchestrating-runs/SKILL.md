@@ -208,7 +208,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/phase-review.md` | `start-phase review` の直後 |
 | `references/phase-fix-loop.md` | `start-phase fix-loop` の直後 |
 | `references/phase-finalize.md` | triage を終えて、finalize の作業を始める前 |
-| `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき |
+| `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき。carry-over で修正の委譲を出す前 |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
 | `references/e2e.md` | E2E を実行する委譲を出す前 |
 | `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・上限超過の後の中止(raguel-gating・implement・test-code)・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
