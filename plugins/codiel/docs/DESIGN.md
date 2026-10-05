@@ -357,7 +357,7 @@ intent にだけ残す。
 | finalize | `intents` の run だけ、最後の intent-sync より後に出た ADR 候補を `## 意図的な制約` に、GOTCHAS 候補を `## GOTCHAS 候補` に書き足す。ほかのエントリとセクションは書き換えない |
 
 `knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値で、intent フェーズの承認ゲートで決め、state.json に記録する。どちらの値でも、ADR 級の判断はまず try の手元の記録に書く。`metatron` の run は ADR 級の
-判断を持続層に全文で残さず、metatron の ADR に直接任せる(持続層には `関連 ADR` の番号だけを書く)。
+判断を持続層に全文で残さず、metatron の ADR に直接任せる(持続層には書かず、metatron が ADR にした後で `関連 ADR` に番号が入る)。
 `intents` の run は metatron が無い環境(ARCHITECTURE が見つからない、または metatron の rules ディレクトリが無いか読めない)で使う値で、ADR 級の判断も
 手元の記録から `[ADR 候補]` として持続層に全文で写す。
 
