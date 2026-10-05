@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import { findActiveRun } from "../codiel-state.js"
-import { emit, findMainRoot, pass, readStdin } from "./lib.js"
+import {
+  emit,
+  findMainRoot,
+  ghPostPhaseProblem,
+  pass,
+  readStdin
+} from "./lib.js"
 
 const MARKER = "<!-- codiel:generated -->"
 
@@ -25,6 +31,19 @@ try {
   // findActiveRun は active / awaiting_human の run しか返さない。
   // guard-bash と同じく、人間の判断待ち中も投稿を防ぐため status では分岐しない。
   if (!run) pass()
+
+  // 作成の 3 ツールには gh と同じフェーズの検査を当てる。コメント・更新・レビューは gh と同じく掛けない。
+  // issue_write は github-mcp-server の仕様で method が create か update を取り、create だけが作成である。
+  const tool = (input.tool_name ?? "").replace(/^.*__/, "")
+  const kind =
+    tool === "create_pull_request"
+      ? "pr"
+      : tool === "create_issue" ||
+          (tool === "issue_write" && input.tool_input?.method === "create")
+        ? "issue"
+        : null
+  const problem = kind && ghPostPhaseProblem(kind, run.state)
+  if (problem) emit("deny", problem)
 
   const body = input.tool_input?.body
   // 本文の引数を持たない呼び出し(reaction だけの add_issue_comment など)は通す。

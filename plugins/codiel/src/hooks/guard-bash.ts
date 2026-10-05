@@ -4,7 +4,13 @@ import os from "node:os"
 import path from "node:path"
 import { findActiveRun } from "../codiel-state.js"
 import { resolveRaguelStore } from "../raguel-records.js"
-import { emit, findMainRoot, pass, readStdin } from "./lib.js"
+import {
+  emit,
+  findMainRoot,
+  ghPostPhaseProblem,
+  pass,
+  readStdin
+} from "./lib.js"
 
 interface GitInvocation {
   tokens: string[]
@@ -940,16 +946,13 @@ try {
     const ghInvocations = findGhInvocations(cmd)
     const invokes = (command: string) =>
       ghInvocations.some((inv) => inv.command === command)
-    if (invokes("issue create") && phase !== "triage")
-      emit(
-        "deny",
-        `gh issue create は triage フェーズでのみ実行できます(現在: ${phase})`
-      )
-    if (invokes("pr create") && (phase !== "pr" || !testLoopPassed))
-      emit(
-        "deny",
-        `PR 作成は pr フェーズかつ test-loop 合格後のみ可能です(現在: ${phase}, test-loop passed: ${testLoopPassed})`
-      )
+    for (const [command, kind] of [
+      ["issue create", "issue"],
+      ["pr create", "pr"]
+    ] as const) {
+      const problem = invokes(command) && ghPostPhaseProblem(kind, run.state)
+      if (problem) emit("deny", problem)
+    }
     if (
       isGitPush &&
       (!["pr", "fix-loop", "triage", "finalize"].includes(phase as string) ||

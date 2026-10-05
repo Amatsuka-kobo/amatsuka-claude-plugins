@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import type { RunState } from "../codiel-state.js"
 
 export interface HookInput {
   session_id?: string
@@ -37,6 +38,24 @@ export function emit(decision: "deny" | "ask", reason: string): never {
 // 自動実行になってしまうため、素通しでは何も出力せずに終了する。
 export function pass(): never {
   process.exit(0)
+}
+
+// Issue と PR の作成を許すフェーズの検査。guard-bash(gh)と guard-github-mcp(GitHub MCP)が
+// 同じ規則で判定するために共有する。マーカーの検査は共有せず、各 hook に置く。
+// 許すときは null、拒むときは理由を返す。
+export function ghPostPhaseProblem(
+  kind: "pr" | "issue",
+  state: Pick<RunState, "phase" | "phases">
+): string | null {
+  const phase = state.phase
+  if (kind === "issue")
+    return phase === "triage"
+      ? null
+      : `Issue の作成は triage フェーズでのみ実行できます(現在: ${phase})`
+  const testLoopPassed = state.phases["test-loop"]?.status === "passed"
+  return phase === "pr" && testLoopPassed
+    ? null
+    : `PR 作成は pr フェーズかつ test-loop 合格後のみ可能です(現在: ${phase}, test-loop passed: ${testLoopPassed})`
 }
 
 export function globToRegExp(glob: string): RegExp {

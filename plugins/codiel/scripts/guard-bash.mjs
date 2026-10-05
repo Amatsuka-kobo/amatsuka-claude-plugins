@@ -33,6 +33,13 @@ function emit(decision, reason) {
 function pass() {
   process.exit(0);
 }
+function ghPostPhaseProblem(kind, state) {
+  const phase = state.phase;
+  if (kind === "issue")
+    return phase === "triage" ? null : `Issue \u306E\u4F5C\u6210\u306F triage \u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`;
+  const testLoopPassed = state.phases["test-loop"]?.status === "passed";
+  return phase === "pr" && testLoopPassed ? null : `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`;
+}
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (true) {
@@ -787,16 +794,13 @@ try {
     const testLoopPassed = run.state.phases["test-loop"]?.status === "passed";
     const ghInvocations = findGhInvocations(cmd);
     const invokes = (command) => ghInvocations.some((inv) => inv.command === command);
-    if (invokes("issue create") && phase !== "triage")
-      emit(
-        "deny",
-        `gh issue create \u306F triage \u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`
-      );
-    if (invokes("pr create") && (phase !== "pr" || !testLoopPassed))
-      emit(
-        "deny",
-        `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`
-      );
+    for (const [command, kind] of [
+      ["issue create", "issue"],
+      ["pr create", "pr"]
+    ]) {
+      const problem = invokes(command) && ghPostPhaseProblem(kind, run.state);
+      if (problem) emit("deny", problem);
+    }
     if (isGitPush && (!["pr", "fix-loop", "triage", "finalize"].includes(phase) || !testLoopPassed))
       emit(
         "deny",

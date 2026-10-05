@@ -23,6 +23,13 @@ function emit(decision, reason) {
 function pass() {
   process.exit(0);
 }
+function ghPostPhaseProblem(kind, state) {
+  const phase = state.phase;
+  if (kind === "issue")
+    return phase === "triage" ? null : `Issue \u306E\u4F5C\u6210\u306F triage \u30D5\u30A7\u30FC\u30BA\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`;
+  const testLoopPassed = state.phases["test-loop"]?.status === "passed";
+  return phase === "pr" && testLoopPassed ? null : `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`;
+}
 function globToRegExp(glob) {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
@@ -340,6 +347,7 @@ export {
   findMainRoot,
   findProjectRoot,
   findRepoRoot,
+  ghPostPhaseProblem,
   globToRegExp,
   pass,
   readDomains,

@@ -5,6 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
 import { runTs } from "../../testing/run-ts.js"
+import { setupRunAtPr, setupRunAtTriage } from "./helpers/run-setup.js"
 
 const HOOK = fileURLToPath(new URL("../guard-github-mcp.ts", import.meta.url))
 const CLI = fileURLToPath(new URL("../../codiel-state-cli.ts", import.meta.url))
@@ -80,21 +81,85 @@ function setupRun(slug = "ghmcp-test"): string {
   return root
 }
 
-for (const tool of TARGET_TOOLS) {
-  test(`run あり・mcp__github__${tool} でマーカー付きの body は素通し(無出力)`, () => {
+// 作成の 3 ツールの入力。issue_write は method が create のときだけ作成になる
+const CREATE_CALLS: [string, Record<string, unknown>][] = [
+  ["create_issue", {}],
+  ["issue_write", { method: "create" }],
+  ["create_pull_request", {}]
+]
+const CREATE_TOOLS = new Set(["create_issue", "create_pull_request"])
+
+// 作成でない呼び出しは、フェーズによらずマーカーだけで決まる
+for (const tool of TARGET_TOOLS.filter((t) => !CREATE_TOOLS.has(t))) {
+  const extra = tool === "issue_write" ? { method: "update" } : {}
+  test(`run あり・mcp__github__${tool}(作成以外)でマーカー付きの body は素通し(無出力)`, () => {
     const root = setupRun()
     const r = hook(root, `mcp__github__${tool}`, {
+      ...extra,
       body: `内容\n\n${MARKER}`
     })
     expect(r).toBe(null)
   })
 
-  test(`run あり・mcp__github__${tool} でマーカー無しの body は deny`, () => {
+  test(`run あり・mcp__github__${tool}(作成以外)でマーカー無しの body は deny`, () => {
     const root = setupRun()
-    const r = hook(root, `mcp__github__${tool}`, { body: "マーカーが無い本文" })
+    const r = hook(root, `mcp__github__${tool}`, {
+      ...extra,
+      body: "マーカーが無い本文"
+    })
     expect(r?.permissionDecision).toBe("deny")
   })
 }
+
+// 作成は gh と同じフェーズの検査を受ける。init 直後(phase が null)は、マーカー付きでも deny
+for (const [tool, extra] of CREATE_CALLS) {
+  test(`run あり・init 直後の mcp__github__${tool}(作成)はマーカー付きでも deny`, () => {
+    const root = setupRun()
+    const r = hook(root, `mcp__github__${tool}`, {
+      ...extra,
+      body: `内容\n\n${MARKER}`
+    })
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toMatch(/フェーズ/)
+  })
+}
+
+test("triage の run では Issue の作成(create_issue・issue_write の create)をマーカー付きで許し、PR の作成は deny", () => {
+  const root = setupRunAtTriage()
+  for (const [tool, extra] of CREATE_CALLS) {
+    const marked = hook(root, `mcp__github__${tool}`, {
+      ...extra,
+      body: `内容\n\n${MARKER}`
+    })
+    if (tool === "create_pull_request")
+      expect(marked?.permissionDecision, tool).toBe("deny")
+    else {
+      expect(marked, tool).toBe(null)
+      const bare = hook(root, `mcp__github__${tool}`, {
+        ...extra,
+        body: "マーカーが無い本文"
+      })
+      expect(bare?.permissionDecision, tool).toBe("deny")
+    }
+  }
+})
+
+test("pr フェーズ(test-loop 合格後)の run では PR の作成をマーカー付きで許し、Issue の作成は deny", () => {
+  const root = setupRunAtPr()
+  for (const [tool, extra] of CREATE_CALLS) {
+    const marked = hook(root, `mcp__github__${tool}`, {
+      ...extra,
+      body: `内容\n\n${MARKER}`
+    })
+    if (tool === "create_pull_request") {
+      expect(marked, tool).toBe(null)
+      const bare = hook(root, `mcp__github__${tool}`, {
+        body: "マーカーが無い本文"
+      })
+      expect(bare?.permissionDecision, tool).toBe("deny")
+    } else expect(marked?.permissionDecision, tool).toBe("deny")
+  }
+})
 
 test("run あり・body 引数を持たない呼び出し(add_issue_comment の reaction だけ)は素通し(無出力)", () => {
   const root = setupRun()

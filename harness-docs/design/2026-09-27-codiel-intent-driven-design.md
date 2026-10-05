@@ -299,7 +299,7 @@ gh-utility には sandalphon への言及が無い(`grep -rn sandalphon plugins/
 - A2-19: `plugins/codiel/skills/capturing-intent/SKILL.md` が次の固定文字列をすべて含む(grep)。「`## 現状調査`」「1 問だけ」「要約しない」「書き換えない」「原文にしない」「今回やらないことも `## TOBE` に記録する」「翻訳しない」「<!-- codiel:generated -->」。同じファイルが、「ASIS はユーザーに聞かず自分で読む」を `## 現状調査` の規律として持つ。
 - A2-20: `codiel-state finalize` の後に intent の `status` が、持ち越しを除く原文の要望がすべて達成のときだけ `done` になり、未達か要確認が残れば `in-progress` のままである(スキルの手順の grep と §8.4 の手動確認)。intent-sync は `status` を `done` にしない(grep)。
 - A2-21: guard-bash が、active run があるとき、`gh issue create|comment|edit` と `gh pr create|comment|edit|review` のうち本文を持つ呼び出しで、本文(`--body` / `-b` の値、`--body-file` / `-F` のファイルの中身)に `<!-- codiel:generated -->` が無ければ deny する。本文を持たない呼び出し(`gh pr review --approve` だけ、`gh issue edit --add-label` だけ)は通す。ただし、本文を自動で作る呼び出し(決定 64)と、`gh pr create` / `gh issue create` の `--web` は deny する。`--body-file -` と `-F -` は deny する。active run が無ければ、どれも通す(テスト)。
-- A2-22: GitHub MCP の本文を書き込むツールに掛ける hook が、active run があるとき、本文の引数(`body` など)に `<!-- codiel:generated -->` が無ければ deny し、active run が無ければ通す(テスト)。`plugins/codiel/hooks/hooks.json` に、そのツール名に当たる matcher がある(grep)。
+- A2-22: GitHub MCP の本文を書き込むツールに掛ける hook が、active run があるとき、本文の引数(`body` など)に `<!-- codiel:generated -->` が無ければ deny し、active run が無ければ通す。作成の 3 ツール(`create_pull_request`・`create_issue`・`method` が `create` の `issue_write`)は、gh の `pr create`・`issue create` と同じフェーズの外では deny する(テスト)。`plugins/codiel/hooks/hooks.json` に、そのツール名に当たる matcher がある(grep)。
 - A2-23: `plugins/codiel/references/github-writing.md` が「`<!-- codiel:generated -->` を本文に含める」の文を含む。`plugins/gh-utility/references/` の GitHub の執筆規則のファイルに `codiel:generated` の語が無い(grep)。
 
 ### 4.3 持続層(目的 3)
@@ -1297,6 +1297,7 @@ GitHub MCP の hook の規則は次のとおりである。
 - 新しい PreToolUse の hook(`src/hooks/guard-github-mcp.ts`)を足し、`build.ts` のエントリと `hooks/hooks.json` に登録する。
 - matcher は GitHub MCP の本文を書き込むツールに当てる。Claude Code は MCP のツールを `mcp__<サーバー名>__<ツール名>` の名前で渡すので、サーバー名の違い(プラグイン経由の接続を含む)を吸収できるよう、正規表現で書く。対象のツールは `issue_write`・`add_issue_comment`・`update_issue_comment`・`create_pull_request`・`update_pull_request`・`update_pull_request_body`・`create_pull_request_review`・`add_comment_to_pending_review`・`pull_request_review_write`・`add_reply_to_pull_request_comment`・`submit_pending_pull_request_review`・`add_pull_request_review_comment`・`create_issue`・`update_issue_body`・`update_issue` の 15 個である(実装時に確定。実装計画書 §9.3)。サーバー名の `github` は大文字小文字を区別せずに照合する。
 - 本文にあたる引数(`body` など)を、guard-bash と同じ条件で検査する。本文の引数を持たない呼び出しは通す。マーカーが無ければ deny する。
+- 作成の 3 ツールには、gh と同じフェーズの検査を当てる。`create_pull_request` は PR の作成、`create_issue` と `method` が `create` の `issue_write` は Issue の作成として扱う。検査は `hooks/lib.ts` の `ghPostPhaseProblem` を guard-bash と共有し、マーカーの検査は各 hook に残す。コメント・更新・レビューのツールは、gh と同じくフェーズの検査に掛けない(2026-10-05 の敵対的レビューの C3-01 で足した)。
 - ツールの一覧と、ツールごとの本文の引数の名前は、実装時に GitHub MCP の現行のツール定義で確かめて確定する(§10 の引き継ぎ)。
 
 `hooks/hooks.json` の変更は全セッションの挙動を変える(`.claude/rules/metatron/protected-paths.md` の「変更に慎重を要するパス」)。変更後に新しいセッションで hook が発火することを確かめる(§8.4)。
