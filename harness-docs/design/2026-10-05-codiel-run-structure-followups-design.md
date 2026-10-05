@@ -238,7 +238,7 @@ review と fix-loop の再レビューの委譲を出す前に、オーケスト
 - `init` は、前の try に `baseBranch` が無いとき(改修前の run)は、どの `--base-branch` も受け付ける。
 - `close` は、SKIPPED の carry-over を進めたフェーズに数えない。
 - capturing-intent は、slug が手順 1 の後に決まった入口で `codiel/<slug>` が既にあれば、`git switch -c` ではなく `git switch` で切り替える。
-- try-2 以降の intent-only は、intent を `.codiel/runs/<slug>/intent-backup.md` へ退避する。続けて run ブランチ側を `git restore` で戻し、ベースブランチへ切り替えてから書き戻してコミットする。
+- try-2 以降の intent-only は、intent を `.codiel/runs/<slug>/intent-backup.md` へ退避する。続けて run ブランチ側を `git restore --source=HEAD --staged --worktree` で index と作業ツリーごと戻し、ベースブランチへ切り替える。書き戻した後は `git add --` で追跡に載せてからコミットする。ベースブランチに intent が無いと、書き戻したファイルは未追跡になり、パスを指定したコミットの対象にならない(2026-10-05 の敵対的レビューの I4-01 で直した)。
 - carry-over の修正の委譲は、`implementing` の修正モード(入力 (c))で行う。範囲は担当範囲と所見のパスに限る。報告は `steps/carry-over-fix-<m>/report.md`、コミットの件名は `codiel(carry-over): …` とする。
 - carry-over の stop は、STOP から選んだときは `raguel-stop` とし、ASK から選んだときは `ask-aborted` とする。再提出の回数に上限は置かない。
 - PR は `gh pr list --head <branch> --state all` で確かめる。`OPEN` があれば `gh pr edit` で更新し、無ければ作る。

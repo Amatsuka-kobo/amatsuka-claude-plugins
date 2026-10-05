@@ -1,6 +1,6 @@
 # intent フェーズのコミットの失敗
 
-手順 5 の (6) で `git switch -c` か `git commit` が失敗したとき、および `intent-only.md` の手順 1 のベースブランチへの切り替え(退避・`git restore`・`git switch`・書き戻し)が失敗したときに読む。
+手順 5 の (6) で `git switch -c` か `git commit` が失敗したとき、および `intent-only.md` の手順 1 のベースブランチへの切り替え(退避・`git restore`・`git switch`・書き戻し・`git add`)が失敗したときに読む。
 
 - `git commit` が「変更なし」で失敗したとき(前の try からパスだけを渡して続行する場合など)は、そのコミットを飛ばして次へ進む。
 - `git switch -c` が失敗したとき、`intent-only.md` の手順 1 の切り替えが失敗したとき、またはそれ以外の理由で `git commit` が失敗したときは、この区間では `mark-ask` できない(intent フェーズは `start-phase` 前の `pending` である)。次の順に進める。
