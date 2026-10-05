@@ -839,7 +839,7 @@ function cwdCandidates(
 // 字句解析は gh の起動を探すものと同じ(閉じていないクォートが残れば splitLoosely で厳しい側に
 // 読み直す)。heredoc と here-string でシェルへ渡したコマンドも見るため、コマンドの全行を行の
 // 走査(gitCommandsByLines)でも読む。差し引くのは、受け手が本文を実行しないと確かに分かる
-// heredoc の本文の行だけである(isInertHeredoc)。`.codiel/runs/` を含まない変数で渡したパスは
+// heredoc の本文の行だけである(heredoc.ts の isInertHeredoc)。`.codiel/runs/` を含まない変数で渡したパスは
 // 見えない(既知の限界)。
 // 止めるときは理由の文を返し、止めないときは undefined を返す。
 function stateJsonProblem(cmd: string, cwd: string): string | undefined {
