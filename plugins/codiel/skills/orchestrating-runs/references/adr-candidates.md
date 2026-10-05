@@ -5,9 +5,13 @@ ADR の 3 条件(`<plugin-root>/references/intent-format.md` の「持続層」)
 | 判定する判断 | 判定して書く時点 |
 | --- | --- |
 | intent-sync で持続層へ取り込む intent の `## 意図的な制約` の行 | 取り込みの手順(`syncing-intents` の `references/persistent-layer.md`)の中 |
+| intent-sync で持続層へ取り込む intent の `## 合意済み事項` の表の行 | 同上 |
+| この try の `design.md` の `## 方針` で採用した案(軽量の経路では `design.md` が無いので対象外) | 同上 |
+| carry-over で「修正して再提出」を選んだ後に、run ブランチへ入った修正(`startHead` からの `codiel(carry-over):` のコミット)で採った判断 | 同上 |
 | fix-loop で採った、設計を変える修正 | fix-loop の pass-gate の後 |
 
 - 3 条件をすべて満たす判断 1 件につき 1 件書く。満たさない判断は書かない。
+- intent-sync の 4 種の対象は、持続層への取り込みの手順の中で判定するので、取り込みを行わない run では判定しない。判定の主体は intent-sync で、capturing-intent と carry-over の手順には判定を足さない。
 - fix-loop では、直した所見ごとに、修正が設計を変えたかを確かめてから 3 条件を判定する。
 
 ## 手元の記録

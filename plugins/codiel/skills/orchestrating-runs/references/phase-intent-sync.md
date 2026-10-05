@@ -4,7 +4,7 @@
 
 intent-sync を書く前に、intent の frontmatter `domains` と `## 意図的な制約` を読み、取り込み先を次の分岐で決める。人の確認で止まった後に再開するときは、書く直前に intent をもう一度読み、`domains` をこの時点の値に置き換えてから分岐を決める。
 
-分岐を決める前に `references/adr-candidates.md` を Read する。取り込みで ADR の 3 条件を満たす判断を見つけたら、その手順で手元の記録に ADR 候補を書く。
+分岐を決める前に `references/adr-candidates.md` を Read する。取り込みで ADR の 3 条件を満たす判断を見つけたら(`## 意図的な制約` の行に加え、`## 合意済み事項` の行・`design.md` の採用案・carry-over の修正判断も対象になる。手順は `persistent-layer.md` の手順 8)、その手順で手元の記録に ADR 候補を書く。
 
 `knowledgeTarget` が `intents` のときは、分岐を決める前に `references/gotcha-candidates.md` も Read し、同じ slug の手元の記録に、まだ写していない ADR 候補と GOTCHAS 候補があるかを確かめる。`gotcha-candidates.md` の範囲で他の slug の incident の候補を集めたときも、同じ扱いにする。候補があれば、下の分岐では `## 意図的な制約` に行があるときと同じに扱う。取り込みを行うときは、取り込みで書いた ADR 候補とあわせて、それぞれの手順で候補を領域ファイルへ写す。
 
