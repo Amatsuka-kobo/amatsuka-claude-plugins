@@ -832,12 +832,11 @@ function writesRaguelFiles(cmd, cwd, t) {
 try {
   const input = await readStdin();
   const cmd = input.tool_input?.command ?? "";
-  const gitInvocations = findGitInvocations(gitCommandsByTokens(cmd));
-  const isGitPush = gitInvocations.some((inv) => inv.subcommand === "push");
   const pushCandidates = [
-    ...gitInvocations,
+    ...findGitInvocations(gitCommandsByTokens(cmd)),
     ...findGitInvocations(gitCommandsByLines(cmd))
   ];
+  const isGitPush = pushCandidates.some((inv) => inv.subcommand === "push");
   const cwd = input.cwd ?? process.cwd();
   const ALWAYS_DENY = [
     [

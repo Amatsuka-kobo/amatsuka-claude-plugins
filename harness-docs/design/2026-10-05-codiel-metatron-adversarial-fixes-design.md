@@ -174,7 +174,7 @@
 - 変更
   - `guard-bash.ts` の `findGitInvocations`(:49)の入力を、gh 側と同じ `parseCommands(cmd) ?? splitLoosely(cmd)` の語の列にする。引用符が外れ、`git "push"` と `git push origin "main"` を判定できる。
   - `isForceToken`(:90)を、`-` で始まる短いオプションの結合に `f` を含むもの(`-vf` など)と、`+` で始まる refspec も force に数える形に広げる。
-- force と保護ブランチの判定には、字句解析の読み方と、以前の行の走査(`joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)` で区切り、語の前後のクォートと括弧を外したもの)の両方を当てる。どちらかで当たれば拒否する。字句解析だけにすると、heredoc と here-string でシェルへ渡した本文(`bash <<EOF` … `git push -f`、`bash <<< "git push -f"`)の push を見落とす。フェーズの検査に使う push の有無は、字句解析の読み方だけで決める。
+- force と保護ブランチの判定には、字句解析の読み方と、以前の行の走査(`joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)` で区切り、語の前後のクォートと括弧を外したもの)の両方を当てる。どちらかで当たれば拒否する。字句解析だけにすると、heredoc と here-string でシェルへ渡した本文(`bash <<EOF` … `git push -f`、`bash <<< "git push -f"`)の push を見落とす。フェーズの検査に使う push の有無も、同じく両方の読み方のどちらかで push と判定すれば検査を掛ける(セキュリティレビューの指摘で、字句解析だけにした形から戻した)。コミットメッセージの heredoc に `git push` と書いただけのコマンドも、フェーズの外では拒否する。以前と同じ挙動である。
 - 副作用: `bash -c "git push -f"` が新しく見えるようになる。heredoc の本文に書いた `git push --force`(コミットメッセージの中のものを含む)は、行の走査で今までどおり拒否する。誤検知の側に倒している。
 - テスト: `hooks/__test__/guard-bash.test.ts` の push の群に、`git "push" --force`、`git push origin "main"`、`git push -vf`、`git push origin +feature` の 4 件と、`bash -c "git push -f"`、heredoc と here-string でシェルへ渡した `git push -f` を足す。既存の heredoc のテスト(git commit メッセージの中の gh)が回帰を見る。
 

@@ -1020,13 +1020,13 @@ function writesRaguelFiles(
 try {
   const input = await readStdin()
   const cmd = input.tool_input?.command ?? ""
-  const gitInvocations = findGitInvocations(gitCommandsByTokens(cmd))
-  const isGitPush = gitInvocations.some((inv) => inv.subcommand === "push")
-  // force と保護ブランチは、字句解析と行の走査のどちらかで当たれば拒む
+  // push の有無・force・保護ブランチは、字句解析と行の走査のどちらかで当たれば当たりとする。
+  // 行の走査は heredoc と here-string でシェルへ渡した本文の push も拾う(誤検知の側に倒す)
   const pushCandidates = [
-    ...gitInvocations,
+    ...findGitInvocations(gitCommandsByTokens(cmd)),
     ...findGitInvocations(gitCommandsByLines(cmd))
   ]
+  const isGitPush = pushCandidates.some((inv) => inv.subcommand === "push")
 
   const cwd = input.cwd ?? process.cwd()
   const ALWAYS_DENY: [boolean, string][] = [

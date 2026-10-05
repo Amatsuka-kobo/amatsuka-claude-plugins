@@ -170,6 +170,19 @@ test("run あり(phase=implement)で git push origin codiel/demo-try-1 は deny"
   expect(r?.permissionDecision).toBe("deny")
 })
 
+test("run あり(phase=implement)で heredoc と here-string でシェルへ渡した force でない push も deny", () => {
+  const root = setupRun()
+  setupRunAtImplement(root)
+  for (const command of [
+    ["bash <<EOF", "git push origin codiel/demo-try-1", "EOF"].join("\n"),
+    'bash <<< "git push origin codiel/demo-try-1"'
+  ]) {
+    const r = hook(root, command)
+    expect(r?.permissionDecision, command).toBe("deny")
+    expect(r?.permissionDecisionReason, command).toContain("push")
+  }
+})
+
 test("run あり(phase=intent-sync)で git push は deny(push を許すフェーズに intent-sync を含めない)", () => {
   const root = setupRunAtIntentSync()
   const r = hook(root, "git push origin codiel/demo-try-1")
