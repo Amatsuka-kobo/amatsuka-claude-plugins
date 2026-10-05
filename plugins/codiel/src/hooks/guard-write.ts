@@ -16,7 +16,8 @@ import {
   globToRegExp,
   pass,
   readDomainsResult,
-  readStdin
+  readStdin,
+  resolvePhysicalPath
 } from "./lib.js"
 
 const DOC_PHASES = new Set<string | null>([
@@ -237,7 +238,16 @@ try {
   // cwd がプロジェクトルートのサブディレクトリであっても、絶対パス指定での
   // 書き込みが state.json 保護をすり抜けないよう、絶対パス自体を検査する
   // (cwd 非依存)。ケース非依存 FS でのすり抜けも防ぐため大文字小文字を無視する。
-  if (/[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i.test(abs))
+  // symlink を通した別名(`link/state.json`・`alias/../state.json`)も止めるため、字句で畳んだ
+  // パス・生の結合パスを実体で辿ったパス・字句で畳んだパスを実体で辿ったパスの 3 つに同じ判定を当てる。
+  const STATE_JSON_PATH_RE = /[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i
+  if (
+    [
+      abs,
+      resolvePhysicalPath(cwd, filePath),
+      resolvePhysicalPath(cwd, abs)
+    ].some((p) => STATE_JSON_PATH_RE.test(p))
+  )
     emit(
       "deny",
       "state.json は codiel-state スクリプト経由でのみ変更できます(フェーズ飛ばし・ゲート偽装の防止)"

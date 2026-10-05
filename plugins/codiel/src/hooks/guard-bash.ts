@@ -9,7 +9,8 @@ import {
   findMainRoot,
   ghPostPhaseProblem,
   pass,
-  readStdin
+  readStdin,
+  resolvePhysicalPath
 } from "./lib.js"
 
 interface GitInvocation {
@@ -718,16 +719,14 @@ function checkGeneratedMarker(
 }
 
 // ---------------------------------------------------------------------------
-// state.json へのシェル経由の書き込み(設計書 §6.16.2。決定 96)
+// state.json へのシェル経由の書き込みと削除(設計書 §6.16.2。決定 96)
 //
 // 判定は parseCommands の語の列に当てる。クォートの中の `>` を演算子と読まず、
 // `&&` などの区切りをまたいで後ろのコマンドのパスに当てないためである。
+// 語は文字列ではなく解決したパスで判定し、`<root>/.codiel/runs/` の配下の state.json か、
+// その配下のディレクトリ(削除と移動の元)かを見る。/tmp のテストデータのように、別の場所の
+// state.json は止めない。
 // ---------------------------------------------------------------------------
-
-const STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/
-
-const isStateJson = (word: string | undefined): boolean =>
-  word !== undefined && STATE_JSON_RE.test(word)
 
 // リダイレクトの行き先が hit を満たすか(state.json の判定と Raguel の設定と記録の判定で共有する)。
 // readWord は `>` で語を区切らないので、
@@ -787,16 +786,115 @@ function teeOrSedWrites(
   )
 }
 
-// cmd が state.json へリダイレクトか tee・sed -i で書き込むか。字句解析は gh の起動を
-// 探すものと同じ(閉じていないクォートが残れば splitLoosely で厳しい側に読み直す)。
-// 変数で渡したパスは見えない(既知の限界)。
-function writesStateJson(cmd: string): boolean {
+const STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/
+
+const STATE_FILE_COMMANDS = ["rm", "mv", "cp", "ln", "install", "dd"]
+// cwd の候補の上限。cd が多いコマンドで候補が増えすぎないようにする
+const MAX_CWD_CANDIDATES = 64
+
+// cmd の中の cd・pushd の行き先をすべて集め、元の cwd と合わせて cwd の候補にする。
+// サブシェル・パイプ・{ } の区別はせず、cd の効く範囲は追わない(拒否が広がる向きに倒す)。
+// ponytail: 候補は MAX_CWD_CANDIDATES で打ち切る。超えるほど cd を重ねたコマンドは見逃しうる
+function cwdCandidates(commands: string[][], cwd: string): string[] {
+  const out = new Set([cwd])
+  for (const words of commands) {
+    if (!["cd", "pushd"].includes(words[0])) continue
+    const dir = words.slice(1).find((w) => !w.startsWith("-"))
+    if (dir === undefined) continue
+    for (const c of [...out]) {
+      if (out.size >= MAX_CWD_CANDIDATES) break
+      out.add(path.resolve(c, expandHome(dir)))
+    }
+  }
+  return [...out]
+}
+
+// cmd が root の run の state.json へ書き込むか、state.json を含む run のディレクトリを
+// 消すか動かすか。見るのはリダイレクト・tee・sed -i と、rm・mv・cp・ln・install・dd の引数で
+// ある。語は、`.codiel/runs/…state.json` の文字列を含むかの字句の検査と、cwd の候補ごとに
+// 字句で畳んだパスと symlink を実体で辿ったパスの照合を当て、どれかが当たれば止める。
+// 字句解析は gh の起動を探すものと同じ(閉じていないクォートが残れば splitLoosely で厳しい側に
+// 読み直す)。`.codiel/runs/` を含まない変数で渡したパスは見えない(既知の限界)。
+function writesStateJson(cmd: string, cwd: string): boolean {
   const commands = parseCommands(cmd) ?? splitLoosely(cmd)
-  return commands.some(
-    (words, ci) =>
-      redirectsTo(commands, ci, isStateJson) ||
-      teeOrSedWrites(words, isStateJson)
-  )
+  const root = findMainRoot(cwd)
+  const runsDirs = [
+    path.join(root, ".codiel", "runs"),
+    resolvePhysicalPath(root, path.join(".codiel", "runs"))
+  ]
+  const underRuns = (p: string) => runsDirs.some((d) => isUnder(p, d))
+  const cwds = cwdCandidates(commands, cwd)
+  // 字句で畳んだパス・生の結合パスを実体で辿ったパス・字句で畳んだパスを実体で辿ったパス
+  const resolved = (word: string): string[] =>
+    cwds.flatMap((c) => {
+      const lexical = path.resolve(c, expandHome(word))
+      return [
+        lexical,
+        resolvePhysicalPath(c, expandHome(word)),
+        resolvePhysicalPath(c, lexical)
+      ]
+    })
+  // 字句の検査(語に `.codiel/runs/…state.json` を含む)も残す。`$PWD/…` や `` `pwd`/… `` の
+  // ようにシェルの展開を含む語は、解決したパスでは当たらないためである
+  const isStateFile = (word: string | undefined): boolean =>
+    word !== undefined &&
+    word !== "" &&
+    (STATE_JSON_RE.test(word) ||
+      resolved(word).some(
+        (p) => path.basename(p) === "state.json" && underRuns(p)
+      ))
+  // 消すか動かすと state.json が失われるパス。runs の配下のディレクトリ(存在しないものを
+  // 含む)か、runs を含む祖先
+  const holdsState = (word: string): boolean =>
+    resolved(word).some(
+      (p) =>
+        runsDirs.some((d) => isUnder(d, p)) ||
+        (underRuns(p) && !isRegularFile(p))
+    )
+  return commands.some((words, ci) => {
+    if (
+      redirectsTo(commands, ci, isStateFile) ||
+      teeOrSedWrites(words, isStateFile)
+    )
+      return true
+    const at = words.findIndex((w) =>
+      STATE_FILE_COMMANDS.includes(path.basename(w))
+    )
+    if (at === -1) return false
+    const name = path.basename(words[at])
+    const args = words
+      .slice(at + 1)
+      .flatMap((a) =>
+        name === "dd"
+          ? a.startsWith("of=")
+            ? [a.slice(3)]
+            : []
+          : a.startsWith("-") || a === ""
+            ? []
+            : [a]
+      )
+    if (args.some(isStateFile)) return true
+    const sources = name === "rm" ? args : args.slice(0, -1)
+    if ((name === "rm" || name === "mv") && sources.some(holdsState))
+      return true
+    // cp・mv・ln・install で、state.json という名前のファイルを run の配下のディレクトリへ写す
+    const dest = args.at(-1)
+    return (
+      name !== "rm" &&
+      name !== "dd" &&
+      dest !== undefined &&
+      sources.some((a) => path.basename(a) === "state.json") &&
+      resolved(dest).some(underRuns)
+    )
+  })
+}
+
+function isRegularFile(p: string): boolean {
+  try {
+    return fs.statSync(p).isFile()
+  } catch {
+    return false
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -849,10 +947,14 @@ function raguelTargets(root: string): RaguelTargets {
   return { files, casesDir }
 }
 
-// 語をパスとして読む。`~`・`$HOME`・`${HOME}` の先頭だけをホームディレクトリへ展開する
+// `~`・`$HOME`・`${HOME}` の先頭だけをホームディレクトリへ展開する
+function expandHome(word: string): string {
+  return word.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os.homedir())
+}
+
+// 語をパスとして読む
 function wordPath(word: string, cwd: string): string {
-  const w = word.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os.homedir())
-  return path.resolve(cwd, w)
+  return path.resolve(cwd, expandHome(word))
 }
 
 // cmd が Raguel の設定か記録を書き換えるか。書き換えるなら、その語を返す。
@@ -926,6 +1028,7 @@ try {
     ...findGitInvocations(gitCommandsByLines(cmd))
   ]
 
+  const cwd = input.cwd ?? process.cwd()
   const ALWAYS_DENY: [boolean, string][] = [
     [
       /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+(\/(?!tmp)|~)/.test(
@@ -942,18 +1045,11 @@ try {
       pushesToProtectedBranch(pushCandidates),
       "保護ブランチ(main/master)への push"
     ],
-    [writesStateJson(cmd), "state.json へのシェル経由の書き込み"],
-    [
-      /\b(cp|mv|dd|install)\b[^\n;|&]*\.codiel\/runs\/[^\s]*state\.json/.test(
-        cmd
-      ),
-      "state.json への cp/mv/dd/install 経由の書き込み"
-    ]
+    [writesStateJson(cmd, cwd), "state.json へのシェル経由の書き込みか削除"]
   ]
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `禁止コマンド: ${why}`)
 
-  const cwd = input.cwd ?? process.cwd()
   // run はメインの作業ツリーで探す。cwd が worktree の中でも同じ run に届く(設計書 §6.8 の (a))
   const root = findMainRoot(cwd)
   const run = findActiveRun(root)

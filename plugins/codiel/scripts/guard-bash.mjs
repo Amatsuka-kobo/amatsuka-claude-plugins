@@ -40,6 +40,20 @@ function ghPostPhaseProblem(kind, state) {
   const testLoopPassed = state.phases["test-loop"]?.status === "passed";
   return phase === "pr" && testLoopPassed ? null : `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`;
 }
+function resolvePhysicalPath(base, p) {
+  const joined = path.isAbsolute(p) ? p : `${base}${path.sep}${p}`;
+  let cur = path.parse(path.resolve(base)).root;
+  for (const seg of joined.split(/[/\\]+/)) {
+    if (seg === "" || seg === ".") continue;
+    const next = seg === ".." ? path.dirname(cur) : path.join(cur, seg);
+    try {
+      cur = fs.realpathSync(next);
+    } catch {
+      cur = next;
+    }
+  }
+  return cur;
+}
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (true) {
@@ -660,8 +674,6 @@ function checkGeneratedMarker(invocations, cmd, cwd) {
     }
   }
 }
-var STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/;
-var isStateJson = (word) => word !== void 0 && STATE_JSON_RE.test(word);
 function redirectsTo(commands, ci, hit) {
   const words = commands[ci];
   for (let wi = 0; wi < words.length; wi++) {
@@ -691,11 +703,70 @@ function teeOrSedWrites(words, hit) {
   const sedArgs = after("sed");
   return after("tee").some(hit) || sedArgs.some((a) => /^(-[A-Za-z]*i|--in-place)/.test(a)) && sedArgs.some(hit);
 }
-function writesStateJson(cmd) {
+var STATE_JSON_RE = /\.codiel\/runs\/\S*state\.json/;
+var STATE_FILE_COMMANDS = ["rm", "mv", "cp", "ln", "install", "dd"];
+var MAX_CWD_CANDIDATES = 64;
+function cwdCandidates(commands, cwd) {
+  const out = /* @__PURE__ */ new Set([cwd]);
+  for (const words of commands) {
+    if (!["cd", "pushd"].includes(words[0])) continue;
+    const dir = words.slice(1).find((w) => !w.startsWith("-"));
+    if (dir === void 0) continue;
+    for (const c of [...out]) {
+      if (out.size >= MAX_CWD_CANDIDATES) break;
+      out.add(path4.resolve(c, expandHome(dir)));
+    }
+  }
+  return [...out];
+}
+function writesStateJson(cmd, cwd) {
   const commands = parseCommands(cmd) ?? splitLoosely(cmd);
-  return commands.some(
-    (words, ci) => redirectsTo(commands, ci, isStateJson) || teeOrSedWrites(words, isStateJson)
+  const root = findMainRoot(cwd);
+  const runsDirs = [
+    path4.join(root, ".codiel", "runs"),
+    resolvePhysicalPath(root, path4.join(".codiel", "runs"))
+  ];
+  const underRuns = (p) => runsDirs.some((d) => isUnder(p, d));
+  const cwds = cwdCandidates(commands, cwd);
+  const resolved = (word) => cwds.flatMap((c) => {
+    const lexical = path4.resolve(c, expandHome(word));
+    return [
+      lexical,
+      resolvePhysicalPath(c, expandHome(word)),
+      resolvePhysicalPath(c, lexical)
+    ];
+  });
+  const isStateFile = (word) => word !== void 0 && word !== "" && (STATE_JSON_RE.test(word) || resolved(word).some(
+    (p) => path4.basename(p) === "state.json" && underRuns(p)
+  ));
+  const holdsState = (word) => resolved(word).some(
+    (p) => runsDirs.some((d) => isUnder(d, p)) || underRuns(p) && !isRegularFile(p)
   );
+  return commands.some((words, ci) => {
+    if (redirectsTo(commands, ci, isStateFile) || teeOrSedWrites(words, isStateFile))
+      return true;
+    const at = words.findIndex(
+      (w) => STATE_FILE_COMMANDS.includes(path4.basename(w))
+    );
+    if (at === -1) return false;
+    const name = path4.basename(words[at]);
+    const args = words.slice(at + 1).flatMap(
+      (a) => name === "dd" ? a.startsWith("of=") ? [a.slice(3)] : [] : a.startsWith("-") || a === "" ? [] : [a]
+    );
+    if (args.some(isStateFile)) return true;
+    const sources = name === "rm" ? args : args.slice(0, -1);
+    if ((name === "rm" || name === "mv") && sources.some(holdsState))
+      return true;
+    const dest = args.at(-1);
+    return name !== "rm" && name !== "dd" && dest !== void 0 && sources.some((a) => path4.basename(a) === "state.json") && resolved(dest).some(underRuns);
+  });
+}
+function isRegularFile(p) {
+  try {
+    return fs4.statSync(p).isFile();
+  } catch {
+    return false;
+  }
 }
 var FILE_COMMANDS = ["cp", "mv", "rm", "dd", "install"];
 var CODIEL_CONFIG_RE = /[/\\]\.codiel[/\\]config\.json$/i;
@@ -714,9 +785,11 @@ function raguelTargets(root) {
   }
   return { files, casesDir };
 }
+function expandHome(word) {
+  return word.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os2.homedir());
+}
 function wordPath(word, cwd) {
-  const w = word.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, os2.homedir());
-  return path4.resolve(cwd, w);
+  return path4.resolve(cwd, expandHome(word));
 }
 function writesRaguelFiles(cmd, cwd, t) {
   const isTarget = (abs) => CODIEL_CONFIG_RE.test(abs) || t.files.includes(abs) || t.casesDir !== null && isUnder(abs, t.casesDir);
@@ -765,6 +838,7 @@ try {
     ...gitInvocations,
     ...findGitInvocations(gitCommandsByLines(cmd))
   ];
+  const cwd = input.cwd ?? process.cwd();
   const ALWAYS_DENY = [
     [
       /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+(\/(?!tmp)|~)/.test(
@@ -781,17 +855,10 @@ try {
       pushesToProtectedBranch(pushCandidates),
       "\u4FDD\u8B77\u30D6\u30E9\u30F3\u30C1(main/master)\u3078\u306E push"
     ],
-    [writesStateJson(cmd), "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F"],
-    [
-      /\b(cp|mv|dd|install)\b[^\n;|&]*\.codiel\/runs\/[^\s]*state\.json/.test(
-        cmd
-      ),
-      "state.json \u3078\u306E cp/mv/dd/install \u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F"
-    ]
+    [writesStateJson(cmd, cwd), "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F\u304B\u524A\u9664"]
   ];
   for (const [triggered, why] of ALWAYS_DENY)
     if (triggered) emit("deny", `\u7981\u6B62\u30B3\u30DE\u30F3\u30C9: ${why}`);
-  const cwd = input.cwd ?? process.cwd();
   const root = findMainRoot(cwd);
   const run = findActiveRun(root);
   if (run) {

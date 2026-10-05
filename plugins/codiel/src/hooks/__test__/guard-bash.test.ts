@@ -339,6 +339,46 @@ test("cp で state.json への書き込みは deny", () => {
   expect(r?.permissionDecision).toBe("deny")
 })
 
+// --- state.json の保護は cd を追った解決後のパスで判定する(C3-02・C3-15) ---
+
+test.each([
+  "rm .codiel/runs/x/try-1/state.json",
+  "cd .codiel/runs/x/try-1 && echo '{}' > state.json",
+  "rm -rf .codiel/runs/x",
+  "ln -sf /tmp/fake.json .codiel/runs/x/try-1/state.json"
+])("%s は deny", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  fs.mkdirSync(path.join(root, ".codiel/runs/x/try-1"), { recursive: true })
+  const r = hook(root, command)
+  expect(r?.permissionDecision).toBe("deny")
+  expect(r?.permissionDecisionReason).toContain("state.json")
+})
+
+test("symlink を通した alias/../state.json への書き込みは deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const reports = path.join(root, ".codiel/runs/x/try-1/reports")
+  fs.mkdirSync(reports, { recursive: true })
+  fs.symlinkSync(reports, path.join(root, "alias"), "dir")
+  const r = hook(root, "echo '{}' > alias/../state.json")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("$PWD を使った state.json への書き込みは、字句の検査で deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const r = hook(root, "echo '{}' > $PWD/.codiel/runs/x/try-1/state.json")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("/tmp のテストデータに state.json 宛ての文字列を含むだけのコマンドは素通し(C3-15)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), "gb-data-"))
+  const r = hook(
+    root,
+    `printf '%s\\n' 'cp x .codiel/runs/a/try-1/state.json' > ${data}/state.json`
+  )
+  expect(r).toBe(null)
+})
+
 test("mv (state.json と無関係)は素通し(無出力)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   const r = hook(root, "mv a b")

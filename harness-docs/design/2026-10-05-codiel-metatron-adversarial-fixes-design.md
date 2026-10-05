@@ -185,6 +185,10 @@
   - 語を各候補の cwd と字句で結合し、`..` を畳む前に、存在する最深の祖先まで前から `realpathSync` で実体化してから残りを付ける(4.12.4 と同じ順序)。`path.resolve` で先に `..` を畳むと、`alias/../state.json`(alias は try のディレクトリの下を指す symlink)が別のパスに化ける。この解決関数は codiel の `hooks/lib.ts` に置き、metatron の実装とは独立に持つ(ARCHITECTURE の「他プラグインの src を import しない」)。その結果が`<root>/.codiel/runs/` の配下の `state.json` か、`runs/` 配下のディレクトリかで判定する。
   - 対象の操作に `rm`・`mv`・`cp`・`ln` を足し、親ディレクトリの削除(`rm -rf .codiel/runs/<slug>`)も拒否する。
   - 判定をパスの解決に替えると、/tmp のテストデータに `state.json` の文字列が入っているだけのコマンドは拒否されなくなる(所見一覧 4 章の C3-15 の誤検知が消える)。active run が無くても拒否する性質(ALWAYS_DENY)は残す。
+  - 実装時に足した事項(セキュリティレビューの指摘による)は次の 3 つである。
+    - 語に `.codiel/runs/…state.json` を含むかの字句の検査も残し、解決したパスの判定と両方を当てる。`$PWD/.codiel/runs/…/state.json` のようにシェルの展開を含む語は、解決したパスでは当たらないためである。字句の検査は語ごとに当てるので、C3-15 の誤検知は戻らない。
+    - 照合の候補は 3 つにする。字句で畳んだパス、生の結合パスを実体で辿ったパス、字句で畳んだパスを実体で辿ったパスである。Bash と Write の両方に当てる。
+    - 解決関数は、途中に存在しないセグメントがあっても早く返さず、後ろのセグメントで realpath を試し直して最後まで辿る(`nodir/../alias/state.json`)。
 - 変更(Write/Edit): `guard-write.ts:241` で、論理パスに加えて、`path.resolve` の前の生の結合パスを上の解決関数に通した結果にも同じ判定を当てる。
 - テスト: `hooks/__test__/guard-bash.test.ts` の state.json の群(:299、:490)に、`rm <state.json>`、`cd .codiel/runs/x/try-1 && echo > state.json`、`rm -rf .codiel/runs/x` の拒否と、/tmp のパスに `state.json` を含む printf の許可を足す。`hooks/__test__/guard-write.test.ts` に symlink を通した Write の拒否を足す。Bash と Write の両方に `alias/../state.json` の拒否を 1 件ずつ足す。
 - 文書: 設計書 2026-09-27 §6.16.2(決定 96)の既知の限界の記述と、`guard-bash.ts:761-763` のコメント。

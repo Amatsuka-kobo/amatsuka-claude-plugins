@@ -33,6 +33,20 @@ function emit(decision, reason) {
 function pass() {
   process.exit(0);
 }
+function resolvePhysicalPath(base, p) {
+  const joined = path.isAbsolute(p) ? p : `${base}${path.sep}${p}`;
+  let cur = path.parse(path.resolve(base)).root;
+  for (const seg of joined.split(/[/\\]+/)) {
+    if (seg === "" || seg === ".") continue;
+    const next = seg === ".." ? path.dirname(cur) : path.join(cur, seg);
+    try {
+      cur = fs.realpathSync(next);
+    } catch {
+      cur = next;
+    }
+  }
+  return cur;
+}
 function globToRegExp(glob) {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
@@ -695,7 +709,12 @@ try {
   const filePath = input.tool_input?.file_path;
   if (!filePath) pass();
   const abs = path4.resolve(cwd, filePath);
-  if (/[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i.test(abs))
+  const STATE_JSON_PATH_RE = /[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i;
+  if ([
+    abs,
+    resolvePhysicalPath(cwd, filePath),
+    resolvePhysicalPath(cwd, abs)
+  ].some((p) => STATE_JSON_PATH_RE.test(p)))
     emit(
       "deny",
       "state.json \u306F codiel-state \u30B9\u30AF\u30EA\u30D7\u30C8\u7D4C\u7531\u3067\u306E\u307F\u5909\u66F4\u3067\u304D\u307E\u3059(\u30D5\u30A7\u30FC\u30BA\u98DB\u3070\u3057\u30FB\u30B2\u30FC\u30C8\u507D\u88C5\u306E\u9632\u6B62)"

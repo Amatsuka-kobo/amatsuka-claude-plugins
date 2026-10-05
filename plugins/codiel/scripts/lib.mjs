@@ -30,6 +30,20 @@ function ghPostPhaseProblem(kind, state) {
   const testLoopPassed = state.phases["test-loop"]?.status === "passed";
   return phase === "pr" && testLoopPassed ? null : `PR \u4F5C\u6210\u306F pr \u30D5\u30A7\u30FC\u30BA\u304B\u3064 test-loop \u5408\u683C\u5F8C\u306E\u307F\u53EF\u80FD\u3067\u3059(\u73FE\u5728: ${phase}, test-loop passed: ${testLoopPassed})`;
 }
+function resolvePhysicalPath(base, p) {
+  const joined = path.isAbsolute(p) ? p : `${base}${path.sep}${p}`;
+  let cur = path.parse(path.resolve(base)).root;
+  for (const seg of joined.split(/[/\\]+/)) {
+    if (seg === "" || seg === ".") continue;
+    const next = seg === ".." ? path.dirname(cur) : path.join(cur, seg);
+    try {
+      cur = fs.realpathSync(next);
+    } catch {
+      cur = next;
+    }
+  }
+  return cur;
+}
 function globToRegExp(glob) {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
@@ -354,5 +368,6 @@ export {
   readDomainsResult,
   readStdin,
   resolveDocPaths,
+  resolvePhysicalPath,
   resolveRulesDir
 };

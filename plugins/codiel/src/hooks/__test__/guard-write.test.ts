@@ -172,6 +172,34 @@ test("cwd がサブディレクトリでも state.json への絶対パス書き�
   expect(r?.permissionDecision).toBe("deny")
 })
 
+test("symlink を通した state.json への Write は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
+  const tryDir = path.join(root, ".codiel/runs/demo/try-1")
+  fs.mkdirSync(tryDir, { recursive: true })
+  fs.symlinkSync(tryDir, path.join(root, "link"), "dir")
+  const r = hook(root, "Write", path.join(root, "link", "state.json"))
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("symlink を通した alias/../state.json への Write は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
+  const reports = path.join(root, ".codiel/runs/demo/try-1/reports")
+  fs.mkdirSync(reports, { recursive: true })
+  fs.symlinkSync(reports, path.join(root, "alias"), "dir")
+  // path.join は .. を畳むので、生の文字列で渡す
+  const r = hook(root, "Write", `${root}/alias/../state.json`)
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("存在しない中間ディレクトリを挟んだ nodir/../alias/state.json への Write は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
+  const tryDir = path.join(root, ".codiel/runs/demo/try-1")
+  fs.mkdirSync(tryDir, { recursive: true })
+  fs.symlinkSync(tryDir, path.join(root, "alias"), "dir")
+  const r = hook(root, "Write", `${root}/nodir/../alias/state.json`)
+  expect(r?.permissionDecision).toBe("deny")
+})
+
 test("state.json 保護は大文字パスでもバイパスされない(ケース非依存)", () => {
   const root = setupRun()
   const abs = path.join(root, ".CODIEL/RUNS/demo/try-1/state.json")

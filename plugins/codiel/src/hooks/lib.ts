@@ -58,6 +58,26 @@ export function ghPostPhaseProblem(
     : `PR 作成は pr フェーズかつ test-loop 合格後のみ可能です(現在: ${phase}, test-loop passed: ${testLoopPassed})`
 }
 
+// base と p を結合したパスを、OS が開くときと同じ順で実体へ辿る。`..` を字句で先に畳まず、
+// セグメントを前から読み、存在するところまでは realpath で実体にしてから次のセグメントを付ける。
+// `alias/../state.json`(alias は別の場所への symlink)を、alias の実体の親の state.json に解く。
+// 存在しないセグメントは字句で付け、後ろのセグメントでも(`..` で存在する場所へ戻った後を含め)
+// realpath を試し直して最後まで辿る。metatron の同種の関数とは独立に持つ。
+export function resolvePhysicalPath(base: string, p: string): string {
+  const joined = path.isAbsolute(p) ? p : `${base}${path.sep}${p}`
+  let cur = path.parse(path.resolve(base)).root
+  for (const seg of joined.split(/[/\\]+/)) {
+    if (seg === "" || seg === ".") continue
+    const next = seg === ".." ? path.dirname(cur) : path.join(cur, seg)
+    try {
+      cur = fs.realpathSync(next)
+    } catch {
+      cur = next
+    }
+  }
+  return cur
+}
+
 export function globToRegExp(glob: string): RegExp {
   let re = ""
   for (let i = 0; i < glob.length; i++) {
