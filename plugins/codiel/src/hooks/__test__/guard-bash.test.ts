@@ -618,6 +618,19 @@ test("heredoc の本文の中の cd も cwd の候補に入れ、その先の st
 
 // 行末のバックスラッシュで次の行の `| bash` へ続く形と、終端の次の行の続きに引用符がある形は差し引かない
 test.each([
+  // 前の行の継続で、受け手が別のコマンド(sh)になる形
+  [
+    "sh -s \\",
+    "git commit -F - <<'EOF'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF"
+  ],
+  // `-F -` の区切り語の後ろが空でない形(受け入れる誤拒否)
+  [
+    "git commit --amend -F - <<'EOF' --no-verify",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF"
+  ],
   [
     "git add -A && git commit -F - <<'EOF' \\",
     "| bash",
@@ -630,7 +643,8 @@ test.each([
     "EOF",
     ')" && echo "x"'
   ],
-  // gh と名前の似た別のコマンド
+  // gh と名前の似た別のコマンド。受け手の最初の語の完全一致の判定(head)の回帰テストである。
+  // 正規表現の先頭への固定は多重防御で、この形の挙動は変えない
   [
     "gh-x pr create --body \"$(cat <<'EOF'",
     "rm .codiel/runs/x/try-1/state.json",

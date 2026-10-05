@@ -854,6 +854,7 @@ function withoutMessageValues(words) {
 }
 function withoutInertBodies(cmd) {
   const lines = cmd.split("\n");
+  const firstLine = lines.findIndex((l) => l.trim() !== "");
   for (let i = 0; i < lines.length; i++) {
     const ms = [...lines[i].matchAll(ANY_HEREDOC_RE)];
     if (ms.length === 0) continue;
@@ -868,7 +869,7 @@ function withoutInertBodies(cmd) {
     }
     const m = ms[0];
     const at = m.index ?? 0;
-    if (ms.length === 1 && isInertHeredoc(
+    if (i === firstLine && ms.length === 1 && isInertHeredoc(
       lines[i],
       lines[i].slice(0, at),
       lines[i].slice(at + m[0].length),

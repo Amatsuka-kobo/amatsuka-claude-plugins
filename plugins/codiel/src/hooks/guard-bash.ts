@@ -1087,6 +1087,10 @@ function withoutMessageValues(words: string[]): string[] {
 // 読めない heredoc は差し引かない(全行の走査を残す)。
 function withoutInertBodies(cmd: string): string {
   const lines = cmd.split("\n")
+  // 本文を外すのは、heredoc の開始の行がコマンド全体の 1 行目(先頭の空行を除く)のときに限る。
+  // 前の行の継続(`sh -s \`)・行頭の `(`・閉じていない引用符などで、受け手が別のコマンドに
+  // なる形を外さないためである
+  const firstLine = lines.findIndex((l) => l.trim() !== "")
   for (let i = 0; i < lines.length; i++) {
     const ms = [...lines[i].matchAll(ANY_HEREDOC_RE)]
     if (ms.length === 0) continue
@@ -1107,6 +1111,7 @@ function withoutInertBodies(cmd: string): string {
     // 除外に当たる heredoc だけ本文を空にする。当たらないものは本文を残し、終端の行まで飛ばす。
     // 実行される本文の中の開始の行を、除外の判定にかけないためである
     if (
+      i === firstLine &&
       ms.length === 1 &&
       isInertHeredoc(
         lines[i],
