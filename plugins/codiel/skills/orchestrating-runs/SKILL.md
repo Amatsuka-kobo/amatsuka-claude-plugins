@@ -303,7 +303,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   `stop` は待ちが残っていると失敗する。`--abandon-waits` は、今のセッションの委譲を止めず完了も待たずに止めると人が決めたときだけ付ける。
   E2E のレポートが残っていれば、`stop` の前に `references/e2e.md` のコミットの手順に従う。
   `waits` が空になってから、残っている worktree とブランチをすべて削除する。委譲が止まる前に、書き込み中の worktree を消さないためである。
-  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち `写し先` の行が無いものを、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書く。
+  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち未写しのもの(`references/gotcha-candidates.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書く。
 
 ## 3. ディスパッチプロンプトの規約
 
