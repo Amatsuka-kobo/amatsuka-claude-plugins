@@ -453,6 +453,33 @@ test("走査: 候補 frontend-1 に対し「ADR 候補 ID: frontend-10」だけ�
   expect(scan(root).candidates[0].adoptedAs).toBeNull()
 })
 
+/** コードフェンスの中だけに「ADR 候補 ID: <id>」の行を持つ ADR。書式の例を引いた本文を想定する。 */
+function fencedOnlyAdr(num: number, id: string): AdrFixture {
+  return {
+    num,
+    title: `判断 ${id}`,
+    background: [
+      "背景に書き写す行の例:",
+      "",
+      "```markdown",
+      `ADR 候補 ID: ${id}`,
+      "```"
+    ]
+  }
+}
+
+test("走査: コードフェンスの中にだけ「ADR 候補 ID:」の行を持つ ADR では adoptedAs は null", () => {
+  const root = repo()
+  writeDomain(root, "frontend.md", durable(entry("frontend-3")))
+  writeFile(
+    root,
+    "docs/ARCHITECTURE.md",
+    architecture([fencedOnlyAdr(12, "frontend-3")])
+  )
+
+  expect(scan(root).candidates[0].adoptedAs).toBeNull()
+})
+
 // ---------------------------------------------------------------------------
 // 縮約
 // ---------------------------------------------------------------------------
@@ -604,6 +631,23 @@ test("縮約: ADR の本文に「ADR 候補 ID:」の行が無ければ、何も
   )
   expectRejected(
     () => shrink(root, file, "frontend-3", 13, hashOf(root, "frontend-3")),
+    "candidate_id_line_missing"
+  )
+  expect(fs.readFileSync(file).equals(before)).toBe(true)
+})
+
+test("縮約: 「ADR 候補 ID:」の行がコードフェンスの中にしか無ければ、何も書かずに拒否する", () => {
+  const root = repo()
+  const file = writeDomain(root, "frontend.md", durable(entry("frontend-3")))
+  writeFile(
+    root,
+    "docs/ARCHITECTURE.md",
+    architecture([fencedOnlyAdr(12, "frontend-3")])
+  )
+  const before = fs.readFileSync(file)
+
+  expectRejected(
+    () => shrink(root, file, "frontend-3", 12, hashOf(root, "frontend-3")),
     "candidate_id_line_missing"
   )
   expect(fs.readFileSync(file).equals(before)).toBe(true)

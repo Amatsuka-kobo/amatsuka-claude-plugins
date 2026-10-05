@@ -2257,8 +2257,10 @@ function entryHash(file, entry) {
 }
 function candidateIdsIn(entry) {
   const ids = [];
-  for (const line of entry.raw.split("\n")) {
-    const m = ADR_CANDIDATE_LINE_RE.exec(line.trim());
+  const { lines, insideFence } = scanFences(entry.raw);
+  for (let i = 0; i < lines.length; i++) {
+    if (insideFence[i]) continue;
+    const m = ADR_CANDIDATE_LINE_RE.exec(lines[i].text.trim());
     if (m !== null) ids.push(m[1]);
   }
   return ids;

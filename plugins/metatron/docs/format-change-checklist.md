@@ -67,7 +67,7 @@ prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂�
 `[ADR 候補]` の書式と参照形の正本は codiel にある。
 
 - [ ] `plugins/codiel/references/intent-format.md` の「## 持続層」セクションと揃っているかを確かめる
-- [ ] `plugins/metatron/src/lib/adr-candidates.ts` の印・範囲・参照形・縮約の照合(`hash` と書き込み直前の読み直し)の実装
+- [ ] `plugins/metatron/src/lib/adr-candidates.ts` の印・範囲・参照形・縮約の照合(`hash` と書き込み直前の読み直し)・`ADR 候補 ID:` の行の数え方(コードフェンスの外だけ)の実装
 - [ ] `plugins/metatron/references/cli-usage.md` の `### shrink-adr-candidate` に並べたエラーコード
 
 ## GOTCHAS 候補の取り込み(`references/gotchas-format.md` の「GOTCHAS 候補の取り込み」セクション)

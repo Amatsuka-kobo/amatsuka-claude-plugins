@@ -309,10 +309,13 @@ function entryHash(file: DomainFile, entry: MarkedEntry): string {
 // ---------------------------------------------------------------------------
 
 // 行の完全一致で読む。前後の空白だけは除く。部分文字列やタイトルでは判定しない。
+// コードフェンスの中の行は書式の例なので数えない。
 function candidateIdsIn(entry: AdrEntry): string[] {
   const ids: string[] = []
-  for (const line of entry.raw.split("\n")) {
-    const m = ADR_CANDIDATE_LINE_RE.exec(line.trim())
+  const { lines, insideFence } = scanFences(entry.raw)
+  for (let i = 0; i < lines.length; i++) {
+    if (insideFence[i]) continue
+    const m = ADR_CANDIDATE_LINE_RE.exec(lines[i].text.trim())
     if (m !== null) ids.push(m[1])
   }
   return ids
