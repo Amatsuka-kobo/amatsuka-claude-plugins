@@ -17,6 +17,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { writeFileAtomic } from "./atomic-write.js"
 
 export const STAGING_DIR_NAME = "metatron-staging"
 // 2: レコードへ recordHash を追加した(改竄検知。computeRecordHash のコメントを見よ)。
@@ -538,8 +539,7 @@ export function commitStaging(input: CommitStagingInput): CommitStagingResult {
 
   const buf = Buffer.from(record.nextContent, "utf8")
   try {
-    fs.mkdirSync(path.dirname(record.targetPath), { recursive: true })
-    fs.writeFileSync(record.targetPath, buf)
+    writeFileAtomic(record.targetPath, buf)
   } catch (err) {
     return {
       ok: false,

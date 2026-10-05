@@ -20,6 +20,7 @@ import {
   tagGotcha,
   withFileLock
 } from "../gotchas.js"
+import { installWriteFaults } from "./helpers/write-faults.js"
 
 const APPEND_ENTRY_SCRIPT = fileURLToPath(
   new URL("../../testing/append-gotcha-entry.ts", import.meta.url)
@@ -588,6 +589,62 @@ test("G17: 書き込み後にロックファイルが残っていない", () => 
     reason: "原因を取り除いた"
   })
   expect(fs.existsSync(lockPathFor(filePath))).toBe(false)
+})
+
+/** 先頭の 4 バイトだけ書いて ENOSPC を投げる故障を入れて `fn` を実行し、投げられた例外を返す。 */
+function runWithPartialWrite(dir: string, fn: () => unknown): unknown {
+  const faults = installWriteFaults(dir, { partialBytes: 4 })
+  try {
+    fn()
+  } catch (error) {
+    return error
+  } finally {
+    faults.restore()
+  }
+  throw new Error("書き込みの失敗が呼び出し元へ伝わりませんでした")
+}
+
+test("G17b: init の書き込みが途中で ENOSPC → 台帳は作られず、一時ファイルも残らない", () => {
+  const dir = mkTmp()
+  const filePath = path.join(dir, "docs", "GOTCHAS.md")
+
+  const error = runWithPartialWrite(dir, () => initGotchasLedger(filePath))
+
+  expect((error as NodeJS.ErrnoException).code).toBe("ENOSPC")
+  expect(fs.existsSync(filePath)).toBe(false)
+  expect(fs.readdirSync(path.dirname(filePath))).toStrictEqual([])
+})
+
+test("G17c: append の書き込みが途中で ENOSPC → 台帳は元のバイト列のまま、一時ファイルも残らない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  const error = runWithPartialWrite(dir, () =>
+    appendGotcha(filePath, { ...VALID_INPUT })
+  )
+
+  expect((error as NodeJS.ErrnoException).code).toBe("ENOSPC")
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+  expect(fs.readdirSync(path.dirname(filePath))).toStrictEqual(["GOTCHAS.md"])
+})
+
+test("G17d: tag の書き込みが途中で ENOSPC → 台帳は元のバイト列のまま、一時ファイルも残らない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+
+  const error = runWithPartialWrite(dir, () =>
+    tagGotcha(filePath, {
+      id: "GOTCHA-001",
+      tag: "解決済み",
+      reason: "原因を取り除いた"
+    })
+  )
+
+  expect((error as NodeJS.ErrnoException).code).toBe("ENOSPC")
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+  expect(fs.readdirSync(path.dirname(filePath))).toStrictEqual(["GOTCHAS.md"])
 })
 
 // ---------------------------------------------------------------------------

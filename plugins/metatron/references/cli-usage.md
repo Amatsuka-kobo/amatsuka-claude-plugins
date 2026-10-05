@@ -39,7 +39,8 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 読み取り系の `error: "not_created"` は「文書が未作成」という事実であって異常ではない。
 - 書き込み系は成功で exit 0、拒否・失敗で非 0 で終わる。理由は JSON の `error` に入る。
 - 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。`remove-gotcha-candidate` の拒否・失敗も終了コード 3 で返り、`removePending` に `file` / `hash` を積む。
-- 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。
+- 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。書き込みの途中で失敗しても同じである。
+- ただし `commit-architecture` と `commit-rules` が `write_failed` で終わったとき、その staging は消費済みになっている。`stage-*` からやり直す。
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
 ## 長い入力の渡し方

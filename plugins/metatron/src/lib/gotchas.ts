@@ -15,6 +15,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { writeFileAtomic } from "./atomic-write.js"
 
 /** タグの値域(契約 §6-4)。この 2 リテラル以外はタグとして認識も付与もしない。 */
 export const GOTCHA_TAGS = ["解決済み", "対象外"] as const
@@ -910,8 +911,7 @@ export function initGotchasLedger(gotchasPath: string): InitGotchasResult {
       )
     }
     const text = renderGotchasTemplate()
-    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true })
-    fs.writeFileSync(gotchasPath, text)
+    writeFileAtomic(gotchasPath, text)
     return {
       path: gotchasPath,
       created: true,
@@ -939,8 +939,7 @@ export function appendGotcha(
   return withFileLock(gotchasPath, () => {
     const existing = readTextIfExists(gotchasPath)
     const built = buildAppendedText(existing, input, date)
-    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true })
-    fs.writeFileSync(gotchasPath, built.text)
+    writeFileAtomic(gotchasPath, built.text)
     return {
       id: built.id,
       number: built.number,
@@ -1028,7 +1027,7 @@ export function tagGotcha(
       throw new GotchaError("not_found", `${gotchasPath} が存在しません。`)
     }
     const built = buildTaggedText(existing, num, tag, reason, date)
-    fs.writeFileSync(gotchasPath, built.text)
+    writeFileAtomic(gotchasPath, built.text)
     return {
       id: built.id,
       path: gotchasPath,

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 // src/cli/adr-candidate.ts
-import path5 from "node:path";
+import path6 from "node:path";
 
 // src/lib/adr.ts
-import fs2 from "node:fs";
+import fs3 from "node:fs";
 
 // src/lib/architecture.ts
 var ARCHITECTURE_TITLE = "# ARCHITECTURE";
@@ -569,8 +569,68 @@ function prepareArchitectureUpdate(current, changes) {
 }
 
 // src/lib/gotchas.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+
+// src/lib/atomic-write.ts
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+var MAX_LINK_HOPS = 40;
+function errnoCode(error) {
+  return error?.code;
+}
+function resolveWriteTarget(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch (error) {
+    if (errnoCode(error) !== "ENOENT") throw error;
+  }
+  let current = path.resolve(target);
+  for (let hop = 0; hop < MAX_LINK_HOPS; hop++) {
+    let link;
+    try {
+      link = fs.readlinkSync(current);
+    } catch (error) {
+      const code = errnoCode(error);
+      if (code === "ENOENT" || code === "EINVAL") return current;
+      throw error;
+    }
+    current = path.resolve(path.dirname(current), link);
+  }
+  const err = new Error(
+    `ELOOP: too many symbolic links encountered, '${target}'`
+  );
+  err.code = "ELOOP";
+  throw err;
+}
+function existingMode(filePath) {
+  try {
+    return fs.statSync(filePath).mode & 4095;
+  } catch (error) {
+    if (errnoCode(error) === "ENOENT") return null;
+    throw error;
+  }
+}
+function writeFileAtomic(target, data) {
+  const dest = resolveWriteTarget(target);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const mode = existingMode(dest);
+  const tmp = `${dest}.tmp-${crypto.randomUUID()}`;
+  try {
+    fs.writeFileSync(tmp, data);
+    if (mode !== null) fs.chmodSync(tmp, mode);
+    fs.renameSync(tmp, dest);
+  } catch (error) {
+    try {
+      fs.rmSync(tmp, { force: true });
+    } catch {
+    }
+    throw error;
+  }
+}
+
+// src/lib/gotchas.ts
 var GOTCHA_TAGS = ["\u89E3\u6C7A\u6E08\u307F", "\u5BFE\u8C61\u5916"];
 var LIST_SECTION_TITLE = "\u5931\u6557\u30D1\u30BF\u30FC\u30F3\u4E00\u89A7";
 var GotchaError = class extends Error {
@@ -1002,27 +1062,27 @@ function sleepSync(ms) {
   const shared = new Int32Array(new SharedArrayBuffer(4));
   Atomics.wait(shared, 0, 0, ms);
 }
-function errnoCode(error) {
+function errnoCode2(error) {
   return error?.code;
 }
 function tryCreateLock(lockPath) {
   try {
-    const fd = fs.openSync(lockPath, "wx");
+    const fd = fs2.openSync(lockPath, "wx");
     try {
-      fs.writeSync(fd, `${process.pid} ${(/* @__PURE__ */ new Date()).toISOString()}
+      fs2.writeSync(fd, `${process.pid} ${(/* @__PURE__ */ new Date()).toISOString()}
 `);
     } finally {
-      fs.closeSync(fd);
+      fs2.closeSync(fd);
     }
     return true;
   } catch (error) {
-    if (errnoCode(error) === "EEXIST") return false;
+    if (errnoCode2(error) === "EEXIST") return false;
     throw error;
   }
 }
 function statMtimeMs(lockPath) {
   try {
-    return fs.statSync(lockPath).mtimeMs;
+    return fs2.statSync(lockPath).mtimeMs;
   } catch {
     return null;
   }
@@ -1032,16 +1092,16 @@ function tryStealStaleLock(lockPath) {
   if (mtimeMs === null) return tryCreateLock(lockPath);
   if (Date.now() - mtimeMs <= LOCK_STALE_MS) return false;
   try {
-    fs.unlinkSync(lockPath);
+    fs2.unlinkSync(lockPath);
   } catch (error) {
-    if (errnoCode(error) !== "ENOENT") return false;
+    if (errnoCode2(error) !== "ENOENT") return false;
   }
   return tryCreateLock(lockPath);
 }
 function withFileLock(targetPath, fn) {
   const lockPath = lockPathFor(targetPath);
   try {
-    fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+    fs2.mkdirSync(path2.dirname(lockPath), { recursive: true });
   } catch {
   }
   let acquired = tryCreateLock(lockPath);
@@ -1064,16 +1124,16 @@ function withFileLock(targetPath, fn) {
     return fn();
   } finally {
     try {
-      fs.rmSync(lockPath, { force: true });
+      fs2.rmSync(lockPath, { force: true });
     } catch {
     }
   }
 }
 function readTextIfExists(filePath) {
   try {
-    return fs.readFileSync(filePath, "utf8");
+    return fs2.readFileSync(filePath, "utf8");
   } catch (error) {
-    if (errnoCode(error) === "ENOENT") return null;
+    if (errnoCode2(error) === "ENOENT") return null;
     throw error;
   }
 }
@@ -1093,8 +1153,7 @@ function initGotchasLedger(gotchasPath) {
       );
     }
     const text = renderGotchasTemplate();
-    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true });
-    fs.writeFileSync(gotchasPath, text);
+    writeFileAtomic(gotchasPath, text);
     return {
       path: gotchasPath,
       created: true,
@@ -1115,8 +1174,7 @@ function appendGotcha(gotchasPath, input, options = {}) {
   return withFileLock(gotchasPath, () => {
     const existing = readTextIfExists(gotchasPath);
     const built = buildAppendedText(existing, input, date);
-    fs.mkdirSync(path.dirname(gotchasPath), { recursive: true });
-    fs.writeFileSync(gotchasPath, built.text);
+    writeFileAtomic(gotchasPath, built.text);
     return {
       id: built.id,
       number: built.number,
@@ -1170,7 +1228,7 @@ function tagGotcha(gotchasPath, params, options = {}) {
       throw new GotchaError("not_found", `${gotchasPath} \u304C\u5B58\u5728\u3057\u307E\u305B\u3093\u3002`);
     }
     const built = buildTaggedText(existing, num, tag, reason, date);
-    fs.writeFileSync(gotchasPath, built.text);
+    writeFileAtomic(gotchasPath, built.text);
     return {
       id: built.id,
       path: gotchasPath,
@@ -1657,7 +1715,7 @@ function formatToday2(now) {
 }
 function readTextIfExists2(filePath) {
   try {
-    return fs2.readFileSync(filePath, "utf8");
+    return fs3.readFileSync(filePath, "utf8");
   } catch (error) {
     const code = error?.code;
     if (code === "ENOENT") return null;
@@ -1742,20 +1800,20 @@ function stageAdr(architecturePath, input, options = {}) {
 
 // src/lib/adr-candidates.ts
 import { spawnSync } from "node:child_process";
-import crypto2 from "node:crypto";
-import fs4 from "node:fs";
-import path3 from "node:path";
+import crypto3 from "node:crypto";
+import fs5 from "node:fs";
+import path4 from "node:path";
 
 // src/lib/staging.ts
-import crypto from "node:crypto";
-import fs3 from "node:fs";
+import crypto2 from "node:crypto";
+import fs4 from "node:fs";
 import os from "node:os";
-import path2 from "node:path";
+import path3 from "node:path";
 var STAGING_DIR_NAME = "metatron-staging";
 var STAGING_RECORD_VERSION = 2;
 var DEFAULT_STAGING_TTL_MS = 30 * 60 * 1e3;
 function hashBuffer(buf) {
-  return crypto.createHash("sha256").update(buf).digest("hex");
+  return crypto2.createHash("sha256").update(buf).digest("hex");
 }
 function hashContent(content) {
   const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
@@ -1763,7 +1821,7 @@ function hashContent(content) {
 }
 function hashFileOrNull(filePath) {
   try {
-    return hashBuffer(fs3.readFileSync(filePath));
+    return hashBuffer(fs4.readFileSync(filePath));
   } catch {
     return null;
   }
@@ -1771,22 +1829,22 @@ function hashFileOrNull(filePath) {
 function projectKey(projectRoot) {
   let resolved;
   try {
-    resolved = path2.resolve(projectRoot);
+    resolved = path3.resolve(projectRoot);
   } catch {
     resolved = projectRoot;
   }
   let real = resolved;
   try {
-    real = fs3.realpathSync(resolved);
+    real = fs4.realpathSync(resolved);
   } catch {
   }
-  return hashContent(real.split(path2.sep).join("/")).slice(0, 16);
+  return hashContent(real.split(path3.sep).join("/")).slice(0, 16);
 }
 function stagingRootDir() {
-  return path2.join(os.tmpdir(), STAGING_DIR_NAME);
+  return path3.join(os.tmpdir(), STAGING_DIR_NAME);
 }
 function stagingDirFor(projectRoot) {
-  return path2.join(stagingRootDir(), projectKey(projectRoot));
+  return path3.join(stagingRootDir(), projectKey(projectRoot));
 }
 var STAGING_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 function isSafeStagingId(stagingId) {
@@ -1794,12 +1852,12 @@ function isSafeStagingId(stagingId) {
 }
 function stagingRecordPath(projectRoot, stagingId) {
   if (!isSafeStagingId(stagingId)) return null;
-  return path2.join(stagingDirFor(projectRoot), `${stagingId}.json`);
+  return path3.join(stagingDirFor(projectRoot), `${stagingId}.json`);
 }
 function isInside(root, target) {
-  const rel = path2.relative(root, target);
+  const rel = path3.relative(root, target);
   if (rel === "" || rel === "..") return false;
-  return !rel.startsWith(`..${path2.sep}`) && !path2.isAbsolute(rel);
+  return !rel.startsWith(`..${path3.sep}`) && !path3.isAbsolute(rel);
 }
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1861,24 +1919,24 @@ function loadRecord(projectRoot, stagingId) {
   const recordPath = stagingRecordPath(projectRoot, stagingId);
   if (recordPath === null) return null;
   try {
-    const text = fs3.readFileSync(recordPath, "utf8");
+    const text = fs4.readFileSync(recordPath, "utf8");
     return parseRecord(JSON.parse(text), stagingId);
   } catch {
     return null;
   }
 }
 function writeRecord(recordPath, record) {
-  const dir = path2.dirname(recordPath);
-  fs3.mkdirSync(dir, { recursive: true });
-  const tmpPath = `${recordPath}.tmp-${crypto.randomUUID()}`;
+  const dir = path3.dirname(recordPath);
+  fs4.mkdirSync(dir, { recursive: true });
+  const tmpPath = `${recordPath}.tmp-${crypto2.randomUUID()}`;
   const body = `${JSON.stringify(record, null, 2)}
 `;
-  fs3.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 384 });
+  fs4.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 384 });
   try {
-    fs3.renameSync(tmpPath, recordPath);
+    fs4.renameSync(tmpPath, recordPath);
   } catch (err) {
     try {
-      fs3.rmSync(tmpPath, { force: true });
+      fs4.rmSync(tmpPath, { force: true });
     } catch {
     }
     throw err;
@@ -1889,8 +1947,8 @@ function createStaging(input) {
   if (errors.length > 0) {
     return { ok: false, error: "invalid", reasons: [...errors] };
   }
-  const projectRoot = path2.resolve(input.projectRoot);
-  const targetPath = path2.resolve(projectRoot, input.targetPath);
+  const projectRoot = path3.resolve(input.projectRoot);
+  const targetPath = path3.resolve(projectRoot, input.targetPath);
   if (!isInside(projectRoot, targetPath)) {
     return {
       ok: false,
@@ -1903,7 +1961,7 @@ function createStaging(input) {
   const now = input.now ?? Date.now();
   const ttlMs = typeof input.ttlMs === "number" && Number.isFinite(input.ttlMs) && input.ttlMs > 0 ? input.ttlMs : DEFAULT_STAGING_TTL_MS;
   const baseHash = input.baseHash === void 0 ? hashFileOrNull(targetPath) : input.baseHash;
-  const stagingId = crypto.randomUUID();
+  const stagingId = crypto2.randomUUID();
   const draft = {
     version: STAGING_RECORD_VERSION,
     stagingId,
@@ -1916,7 +1974,7 @@ function createStaging(input) {
     usedAt: null,
     meta: input.meta ?? {}
   };
-  const recordPath = path2.join(stagingDirFor(projectRoot), `${stagingId}.json`);
+  const recordPath = path3.join(stagingDirFor(projectRoot), `${stagingId}.json`);
   try {
     writeRecord(recordPath, { ...draft, recordHash: computeRecordHash(draft) });
   } catch (err) {
@@ -1955,7 +2013,7 @@ function readStaging(projectRoot, stagingId) {
   return { ok: true, record };
 }
 function commitStaging(input) {
-  const projectRoot = path2.resolve(input.projectRoot);
+  const projectRoot = path3.resolve(input.projectRoot);
   const now = input.now ?? Date.now();
   const record = loadRecord(projectRoot, input.stagingId);
   if (record === null) {
@@ -2023,8 +2081,7 @@ function commitStaging(input) {
   }
   const buf = Buffer.from(record.nextContent, "utf8");
   try {
-    fs3.mkdirSync(path2.dirname(record.targetPath), { recursive: true });
-    fs3.writeFileSync(record.targetPath, buf);
+    writeFileAtomic(record.targetPath, buf);
   } catch (err) {
     return {
       ok: false,
@@ -2079,21 +2136,21 @@ function findRepoRoot(docRoot) {
     });
     if (res.status !== 0) return null;
     const out = res.stdout?.trim();
-    return out ? path3.resolve(out) : null;
+    return out ? path4.resolve(out) : null;
   } catch {
     return null;
   }
 }
 function realpathOrSelf(p) {
   try {
-    return fs4.realpathSync(p);
+    return fs5.realpathSync(p);
   } catch {
     return p;
   }
 }
 function isInside2(root, target) {
-  const rel = path3.relative(root, target);
-  return rel !== ".." && !rel.startsWith(`..${path3.sep}`) && !path3.isAbsolute(rel);
+  const rel = path4.relative(root, target);
+  return rel !== ".." && !rel.startsWith(`..${path4.sep}`) && !path4.isAbsolute(rel);
 }
 function domainsDirStaysInRepo(repoRoot, dir) {
   return isInside2(realpathOrSelf(repoRoot), realpathOrSelf(dir));
@@ -2208,7 +2265,7 @@ function candidateIdsIn(entry) {
 }
 function readTextOrNull(filePath) {
   try {
-    return fs4.readFileSync(filePath, "utf8");
+    return fs5.readFileSync(filePath, "utf8");
   } catch {
     return null;
   }
@@ -2217,7 +2274,7 @@ function scanAdrCandidates(docRoot, architecturePath) {
   const repoRoot = findRepoRoot(docRoot);
   if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
   const warnings = [];
-  const dir = path3.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const dir = path4.join(repoRoot, DOMAINS_DIR_RELATIVE);
   if (!domainsDirStaysInRepo(repoRoot, dir)) {
     warnings.push(
       `${DOMAINS_DIR_RELATIVE} \u306E\u5B9F\u4F53\u304C\u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u5916\u306B\u3042\u308A\u307E\u3059\u3002\u8D70\u67FB\u3057\u307E\u305B\u3093\u3002`
@@ -2226,7 +2283,7 @@ function scanAdrCandidates(docRoot, architecturePath) {
   }
   let names;
   try {
-    names = fs4.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
+    names = fs5.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
   } catch (error) {
     if (error.code !== "ENOENT") {
       warnings.push(`${DOMAINS_DIR_RELATIVE} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
@@ -2242,11 +2299,11 @@ function scanAdrCandidates(docRoot, architecturePath) {
   }
   const candidates = [];
   for (const name of names) {
-    const filePath = path3.join(dir, name);
+    const filePath = path4.join(dir, name);
     const relative = `${DOMAINS_DIR_RELATIVE}/${name}`;
     let parsed;
     try {
-      parsed = parseDomainFile(fs4.readFileSync(filePath));
+      parsed = parseDomainFile(fs5.readFileSync(filePath));
     } catch {
       warnings.push(`${relative} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
       continue;
@@ -2298,20 +2355,20 @@ function scanAdrCandidates(docRoot, architecturePath) {
   return { repoRoot, candidates, warnings };
 }
 function resolveDomainFile(repoRoot, file) {
-  const dir = path3.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  const target = path3.resolve(file);
+  const dir = path4.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const target = path4.resolve(file);
   const outside = new AdrCandidateError(
     "outside_domains_dir",
     `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u7E2E\u7D04\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
   );
-  if (path3.extname(target) !== ".md") throw outside;
+  if (path4.extname(target) !== ".md") throw outside;
   if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
-  if (realpathOrSelf(path3.dirname(target)) !== realpathOrSelf(dir)) {
+  if (realpathOrSelf(path4.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside;
   }
   let stat;
   try {
-    stat = fs4.lstatSync(target);
+    stat = fs5.lstatSync(target);
   } catch {
     throw new AdrCandidateError("file_not_found", `${target} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
   }
@@ -2319,13 +2376,13 @@ function resolveDomainFile(repoRoot, file) {
   return { target, mode: stat.mode & 511 };
 }
 function writeAtomically(target, content, mode) {
-  const tmp = `${target}.tmp-${crypto2.randomUUID()}`;
+  const tmp = `${target}.tmp-${crypto3.randomUUID()}`;
   try {
-    fs4.writeFileSync(tmp, content, { mode });
-    fs4.renameSync(tmp, target);
+    fs5.writeFileSync(tmp, content, { mode });
+    fs5.renameSync(tmp, target);
   } catch (error) {
     try {
-      fs4.rmSync(tmp, { force: true });
+      fs5.rmSync(tmp, { force: true });
     } catch {
     }
     const reason = error instanceof Error ? error.message : String(error);
@@ -2346,7 +2403,7 @@ function shrinkAdrCandidate(input) {
     );
   }
   const { target, mode } = resolveDomainFile(repoRoot, input.file);
-  const parsed = parseDomainFile(fs4.readFileSync(target));
+  const parsed = parseDomainFile(fs5.readFileSync(target));
   const marked = parsed.entries.filter((e) => e.candidateId === candidateId);
   const references = parsed.referenceIds.filter((id) => id === candidateId);
   if (marked.length === 0) {
@@ -2413,8 +2470,8 @@ function shrinkAdrCandidate(input) {
 
 // src/lib/config.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
-import fs5 from "node:fs";
-import path4 from "node:path";
+import fs6 from "node:fs";
+import path5 from "node:path";
 var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
@@ -2428,14 +2485,14 @@ function isPlainObject2(value) {
 }
 function realpathOrSelf2(dir) {
   try {
-    return fs5.realpathSync(dir);
+    return fs6.realpathSync(dir);
   } catch {
     return dir;
   }
 }
 function hasConfigFile(dir) {
   try {
-    return fs5.existsSync(path4.join(dir, CONFIG_FILENAME));
+    return fs6.existsSync(path5.join(dir, CONFIG_FILENAME));
   } catch {
     return false;
   }
@@ -2451,17 +2508,17 @@ function gitToplevel(cwd) {
     if (res.status !== 0) return null;
     const out = res.stdout?.trim();
     if (!out) return null;
-    return path4.resolve(out);
+    return path5.resolve(out);
   } catch {
     return null;
   }
 }
 function findDocRoot(startDir) {
-  const start = realpathOrSelf2(path4.resolve(startDir ?? process.cwd()));
+  const start = realpathOrSelf2(path5.resolve(startDir ?? process.cwd()));
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    const parent = path4.dirname(dir);
+    const parent = path5.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -2473,15 +2530,15 @@ function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
 }
 function looksAbsolute(value) {
-  return path4.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+  return path5.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
 }
 function toPosix(value) {
-  return value.split(path4.sep).join("/");
+  return value.split(path5.sep).join("/");
 }
 function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   const useFallback = () => ({
     relative: fallback,
-    absolute: path4.resolve(docRoot, fallback)
+    absolute: path5.resolve(docRoot, fallback)
   });
   if (raw === void 0) return useFallback();
   if (typeof raw !== "string" || raw.trim() === "") {
@@ -2497,9 +2554,9 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
     );
     return useFallback();
   }
-  const absolute = path4.resolve(docRoot, value);
-  const relative = path4.relative(docRoot, absolute);
-  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path4.sep}`) || path4.isAbsolute(relative);
+  const absolute = path5.resolve(docRoot, value);
+  const relative = path5.relative(docRoot, absolute);
+  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path5.sep}`) || path5.isAbsolute(relative);
   if (escapes) {
     warnings.push(
       `paths.${label} \u304C\u30EB\u30FC\u30C8\u5916(${raw})\u3092\u6307\u3059\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
@@ -2531,13 +2588,13 @@ function resolveNumber(raw, fallback, label, min, warnings) {
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
-    configPath: path4.join(docRoot, CONFIG_FILENAME),
+    configPath: path5.join(docRoot, CONFIG_FILENAME),
     configExists: false,
-    architecturePath: path4.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path4.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
+    architecturePath: path5.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
+    gotchasPath: path5.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
-    rulesDirPath: path4.resolve(docRoot, DEFAULT_RULES_DIR),
+    rulesDirPath: path5.resolve(docRoot, DEFAULT_RULES_DIR),
     rulesDirRelative: DEFAULT_RULES_DIR,
     injection: {
       enabled: DEFAULT_INJECTION_ENABLED,
@@ -2550,14 +2607,14 @@ function defaultsFor(docRoot, warnings) {
 function loadConfigInner(startDir) {
   const warnings = [];
   const docRoot = findDocRoot(startDir);
-  const configPath = path4.join(docRoot, CONFIG_FILENAME);
+  const configPath = path5.join(docRoot, CONFIG_FILENAME);
   let configExists = false;
   let parsed;
   let parseOk = false;
   try {
-    if (fs5.existsSync(configPath)) {
+    if (fs6.existsSync(configPath)) {
       configExists = true;
-      parsed = JSON.parse(fs5.readFileSync(configPath, "utf8"));
+      parsed = JSON.parse(fs6.readFileSync(configPath, "utf8"));
       parseOk = true;
     }
   } catch {
@@ -2656,7 +2713,7 @@ function loadConfig(startDir) {
   } catch {
     let docRoot;
     try {
-      docRoot = path4.resolve(startDir ?? process.cwd());
+      docRoot = path5.resolve(startDir ?? process.cwd());
     } catch {
       docRoot = startDir ?? ".";
     }
@@ -2818,7 +2875,7 @@ function runShrinkAdrCandidate(ctx) {
     const result = shrinkAdrCandidate({
       docRoot: config.docRoot,
       architecturePath: config.architecturePath,
-      file: path5.resolve(ctx.cwd, file),
+      file: path6.resolve(ctx.cwd, file),
       candidateId,
       adrNumber,
       hash
@@ -2845,8 +2902,8 @@ function runShrinkAdrCandidate(ctx) {
 }
 
 // src/lib/scan.ts
-import fs6 from "node:fs";
-import path6 from "node:path";
+import fs7 from "node:fs";
+import path7 from "node:path";
 var ARCHITECTURE_SECTIONS = [
   "\u30B7\u30B9\u30C6\u30E0\u6982\u8981",
   "\u6280\u8853\u30B9\u30BF\u30C3\u30AF",
@@ -3060,14 +3117,14 @@ function compareStrings(a, b) {
 }
 function readTextFile(file) {
   try {
-    return fs6.readFileSync(file, "utf8");
+    return fs7.readFileSync(file, "utf8");
   } catch {
     return null;
   }
 }
 function fileExists(file) {
   try {
-    return fs6.statSync(file).isFile();
+    return fs7.statSync(file).isFile();
   } catch {
     return false;
   }
@@ -3259,7 +3316,7 @@ function walkDirectory(state, dir, rel, depth) {
   if (state.truncation.walk) return;
   let dirents;
   try {
-    dirents = fs6.readdirSync(dir, { withFileTypes: true });
+    dirents = fs7.readdirSync(dir, { withFileTypes: true });
   } catch {
     state.unreadable.push(rel === "" ? "." : rel);
     return;
@@ -3276,7 +3333,7 @@ function walkDirectory(state, dir, rel, depth) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       if (depth + 1 <= 2) state.dirs.add(childRel);
       pushTree(state, childRel, depth + 1, "directory");
-      walkDirectory(state, path6.join(dir, dirent.name), childRel, depth + 1);
+      walkDirectory(state, path7.join(dir, dirent.name), childRel, depth + 1);
     } else if (dirent.isFile()) {
       recordFile(state, childRel);
       pushTree(state, childRel, depth + 1, "file");
@@ -3310,7 +3367,7 @@ function scanPackageManager(root, packageJson, warnings) {
   const lockfiles = [];
   let name = null;
   for (const entry of LOCKFILES) {
-    if (!fileExists(path6.join(root, entry.file))) continue;
+    if (!fileExists(path7.join(root, entry.file))) continue;
     lockfiles.push(entry.file);
     if (name === null) name = entry.name;
   }
@@ -3343,7 +3400,7 @@ function scanLanguages(root, packageJson) {
     if (typeof packageJson.type === "string") details.type = packageJson.type;
     out.push({ name: "Node.js", source: "package.json", details });
   }
-  const tsconfigPath = path6.join(root, "tsconfig.json");
+  const tsconfigPath = path7.join(root, "tsconfig.json");
   if (fileExists(tsconfigPath)) {
     const details = {};
     const parsed = readJsoncFile(tsconfigPath);
@@ -3360,7 +3417,7 @@ function scanLanguages(root, packageJson) {
     }
     out.push({ name: "TypeScript", source: "tsconfig.json", details });
   }
-  const pyproject = readTextFile(path6.join(root, "pyproject.toml"));
+  const pyproject = readTextFile(path7.join(root, "pyproject.toml"));
   if (pyproject !== null) {
     const details = {};
     const requires = tomlValue(pyproject, "requires-python");
@@ -3369,7 +3426,7 @@ function scanLanguages(root, packageJson) {
     if (name !== void 0) details.name = name;
     out.push({ name: "Python", source: "pyproject.toml", details });
   }
-  const goMod = readTextFile(path6.join(root, "go.mod"));
+  const goMod = readTextFile(path7.join(root, "go.mod"));
   if (goMod !== null) {
     const details = {};
     const moduleName = /^module\s+(\S+)\s*$/m.exec(goMod)?.[1];
@@ -3378,7 +3435,7 @@ function scanLanguages(root, packageJson) {
     if (goVersion !== void 0) details.go = goVersion;
     out.push({ name: "Go", source: "go.mod", details });
   }
-  const cargo = readTextFile(path6.join(root, "Cargo.toml"));
+  const cargo = readTextFile(path7.join(root, "Cargo.toml"));
   if (cargo !== null) {
     const details = {};
     const edition = tomlValue(cargo, "edition");
@@ -3462,7 +3519,7 @@ function scanTestFrameworks(root, state, dependencies) {
     seenConfigs.add(key);
     configs.push({ framework, path: entry.path });
   }
-  const pyproject = readTextFile(path6.join(root, "pyproject.toml"));
+  const pyproject = readTextFile(path7.join(root, "pyproject.toml"));
   if (pyproject !== null && /^\s*\[tool\.pytest/m.test(pyproject)) {
     configs.push({ framework: "pytest", path: "pyproject.toml" });
   }
@@ -3523,7 +3580,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit) {
   if (depth > maxDepth || out.length >= limit) return;
   let dirents;
   try {
-    dirents = fs6.readdirSync(dir, { withFileTypes: true });
+    dirents = fs7.readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
@@ -3534,7 +3591,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit) {
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       collectMarkdownFiles(
-        path6.join(dir, dirent.name),
+        path7.join(dir, dirent.name),
         childRel,
         depth + 1,
         maxDepth,
@@ -3550,7 +3607,7 @@ function scanDocuments(root, limits, truncation) {
   const targets = [];
   let rootEntries = [];
   try {
-    rootEntries = fs6.readdirSync(root, { withFileTypes: true });
+    rootEntries = fs7.readdirSync(root, { withFileTypes: true });
   } catch {
     rootEntries = [];
   }
@@ -3561,7 +3618,7 @@ function scanDocuments(root, limits, truncation) {
     if (lower === "readme.md" || lower === "claude.md")
       targets.push(dirent.name);
   }
-  const docsDir = path6.join(root, "docs");
+  const docsDir = path7.join(root, "docs");
   const docsFiles = [];
   collectMarkdownFiles(docsDir, "docs", 1, 3, docsFiles, limits.maxDocuments);
   for (const file of docsFiles) targets.push(file);
@@ -3571,7 +3628,7 @@ function scanDocuments(root, limits, truncation) {
       truncation.documents = true;
       break;
     }
-    const text = readTextFile(path6.join(root, rel));
+    const text = readTextFile(path7.join(root, rel));
     if (text === null) continue;
     const { headings, truncated } = extractHeadings(
       text,
@@ -3583,7 +3640,7 @@ function scanDocuments(root, limits, truncation) {
 }
 function scanInner(startDir, options) {
   const limits = { ...DEFAULT_SCAN_LIMITS, ...options.limits };
-  const root = options.root !== void 0 ? path6.resolve(options.root) : findDocRoot(startDir);
+  const root = options.root !== void 0 ? path7.resolve(options.root) : findDocRoot(startDir);
   const warnings = [];
   const truncation = {
     walk: false,
@@ -3613,8 +3670,8 @@ function scanInner(startDir, options) {
       `\u8AAD\u3081\u306A\u304B\u3063\u305F\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092 ${String(state.unreadable.length)} \u4EF6\u30B9\u30AD\u30C3\u30D7\u3057\u307E\u3057\u305F(${shown})\u3002`
     );
   }
-  const packageJsonRaw = readJsonFile(path6.join(root, "package.json"));
-  const packageJsonExists = fileExists(path6.join(root, "package.json"));
+  const packageJsonRaw = readJsonFile(path7.join(root, "package.json"));
+  const packageJsonExists = fileExists(path7.join(root, "package.json"));
   const packageJson = isPlainObject3(packageJsonRaw) ? packageJsonRaw : null;
   if (packageJsonExists && packageJson === null) {
     warnings.push(
@@ -3680,7 +3737,7 @@ function scan(startDir, options = {}) {
   } catch (error) {
     let root;
     try {
-      root = options.root ?? path6.resolve(startDir ?? process.cwd());
+      root = options.root ?? path7.resolve(startDir ?? process.cwd());
     } catch {
       root = options.root ?? startDir ?? ".";
     }
@@ -3948,11 +4005,11 @@ function diffArchitecture(input) {
 }
 
 // src/cli/input.ts
-import fs7 from "node:fs";
+import fs8 from "node:fs";
 function readStdinSync() {
   if (process.stdin.isTTY === true) return null;
   try {
-    return fs7.readFileSync(0, "utf8");
+    return fs8.readFileSync(0, "utf8");
   } catch {
     return null;
   }
@@ -3964,7 +4021,7 @@ function loadInputJson(flags) {
   if (inputPath !== void 0) {
     source = inputPath;
     try {
-      raw = fs7.readFileSync(inputPath, "utf8");
+      raw = fs8.readFileSync(inputPath, "utf8");
     } catch (error) {
       return {
         ok: false,
@@ -3999,7 +4056,7 @@ function isPlainObject4(value) {
 }
 function readDocument(filePath) {
   try {
-    const buf = fs7.readFileSync(filePath);
+    const buf = fs8.readFileSync(filePath);
     return {
       path: filePath,
       exists: true,
@@ -4175,11 +4232,11 @@ function runCommitRules(ctx) {
 }
 
 // src/cli/get.ts
-import fs9 from "node:fs";
+import fs10 from "node:fs";
 
 // src/lib/rules.ts
-import fs8 from "node:fs";
-import path7 from "node:path";
+import fs9 from "node:fs";
+import path8 from "node:path";
 var RULES_FILES = [
   "conventions",
   "protected-paths",
@@ -4192,7 +4249,7 @@ function isRulesName(value) {
   return typeof value === "string" && RULES_FILES.includes(value);
 }
 function rulesFilePath(config, name) {
-  return path7.join(config.rulesDirPath, `${name}.md`);
+  return path8.join(config.rulesDirPath, `${name}.md`);
 }
 function rulesFileRelative(config, name) {
   return `${config.rulesDirRelative}/${name}.md`;
@@ -4205,7 +4262,7 @@ function readRulesFile(config, name) {
     relative: rulesFileRelative(config, name)
   };
   try {
-    return { ...base, exists: true, text: fs8.readFileSync(filePath, "utf8") };
+    return { ...base, exists: true, text: fs9.readFileSync(filePath, "utf8") };
   } catch {
     return { ...base, exists: false, text: null };
   }
@@ -4273,13 +4330,13 @@ function prepareRulesUpdate(current, input) {
 }
 
 // src/cli/paths.ts
-import path8 from "node:path";
+import path9 from "node:path";
 import { fileURLToPath } from "node:url";
 function metatronCliPath() {
   const here = fileURLToPath(import.meta.url);
-  if (path8.basename(here) === "metatron.mjs") return here;
-  const pluginRoot = path8.resolve(path8.dirname(here), "..", "..");
-  return path8.join(pluginRoot, "scripts", "metatron.mjs");
+  if (path9.basename(here) === "metatron.mjs") return here;
+  const pluginRoot = path9.resolve(path9.dirname(here), "..", "..");
+  return path9.join(pluginRoot, "scripts", "metatron.mjs");
 }
 function commandLine(args) {
   return `node ${metatronCliPath()} ${args}`;
@@ -4350,7 +4407,7 @@ function configOf(cwd) {
 }
 function realpathOrSelf3(dir) {
   try {
-    return fs9.realpathSync(dir);
+    return fs10.realpathSync(dir);
   } catch {
     return dir;
   }
@@ -4873,12 +4930,12 @@ function runTagGotcha(ctx) {
 }
 
 // src/cli/gotcha-candidate.ts
-import path10 from "node:path";
+import path11 from "node:path";
 
 // src/lib/gotcha-candidates.ts
-import crypto3 from "node:crypto";
-import fs10 from "node:fs";
-import path9 from "node:path";
+import crypto4 from "node:crypto";
+import fs11 from "node:fs";
+import path10 from "node:path";
 var CANDIDATE_KEYS = [
   "date",
   "run",
@@ -4979,7 +5036,7 @@ function entryHash2(file, entry) {
 }
 function readTextOrNull2(filePath) {
   try {
-    return fs10.readFileSync(filePath, "utf8");
+    return fs11.readFileSync(filePath, "utf8");
   } catch {
     return null;
   }
@@ -4988,7 +5045,7 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   const repoRoot = findRepoRoot(docRoot);
   if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
   const warnings = [];
-  const dir = path9.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const dir = path10.join(repoRoot, DOMAINS_DIR_RELATIVE);
   if (!domainsDirStaysInRepo(repoRoot, dir)) {
     warnings.push(
       `${DOMAINS_DIR_RELATIVE} \u306E\u5B9F\u4F53\u304C\u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u5916\u306B\u3042\u308A\u307E\u3059\u3002\u8D70\u67FB\u3057\u307E\u305B\u3093\u3002`
@@ -4997,7 +5054,7 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   }
   let names;
   try {
-    names = fs10.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
+    names = fs11.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
   } catch (error) {
     if (error.code !== "ENOENT") {
       warnings.push(`${DOMAINS_DIR_RELATIVE} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
@@ -5013,11 +5070,11 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   }
   const candidates = [];
   for (const name of names) {
-    const filePath = path9.join(dir, name);
+    const filePath = path10.join(dir, name);
     const relative = `${DOMAINS_DIR_RELATIVE}/${name}`;
     let parsed;
     try {
-      parsed = parseDomainFile2(fs10.readFileSync(filePath));
+      parsed = parseDomainFile2(fs11.readFileSync(filePath));
     } catch {
       warnings.push(`${relative} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
       continue;
@@ -5040,20 +5097,20 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   return { repoRoot, candidates, warnings };
 }
 function resolveDomainFile2(repoRoot, file) {
-  const dir = path9.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  const target = path9.resolve(file);
+  const dir = path10.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const target = path10.resolve(file);
   const outside = new GotchaCandidateError(
     "outside_domains_dir",
     `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u524A\u9664\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
   );
-  if (path9.extname(target) !== ".md") throw outside;
+  if (path10.extname(target) !== ".md") throw outside;
   if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
-  if (realpathOrSelf(path9.dirname(target)) !== realpathOrSelf(dir)) {
+  if (realpathOrSelf(path10.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside;
   }
   let stat;
   try {
-    stat = fs10.lstatSync(target);
+    stat = fs11.lstatSync(target);
   } catch {
     throw new GotchaCandidateError("file_not_found", `${target} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
   }
@@ -5062,19 +5119,19 @@ function resolveDomainFile2(repoRoot, file) {
 }
 function readTarget(target) {
   try {
-    return fs10.readFileSync(target);
+    return fs11.readFileSync(target);
   } catch {
     throw new GotchaCandidateError("file_not_found", `${target} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3002`);
   }
 }
 function writeAtomically2(target, content, mode) {
-  const tmp = `${target}.tmp-${crypto3.randomUUID()}`;
+  const tmp = `${target}.tmp-${crypto4.randomUUID()}`;
   try {
-    fs10.writeFileSync(tmp, content, { mode });
-    fs10.renameSync(tmp, target);
+    fs11.writeFileSync(tmp, content, { mode });
+    fs11.renameSync(tmp, target);
   } catch (error) {
     try {
-      fs10.rmSync(tmp, { force: true });
+      fs11.rmSync(tmp, { force: true });
     } catch {
     }
     const reason = error instanceof Error ? error.message : String(error);
@@ -5180,7 +5237,7 @@ function runRemoveGotchaCandidate(ctx) {
     const config = loadConfig(ctx.cwd);
     const result = removeGotchaCandidate({
       docRoot: config.docRoot,
-      file: path10.resolve(ctx.cwd, file),
+      file: path11.resolve(ctx.cwd, file),
       hash,
       fileHash
     });
