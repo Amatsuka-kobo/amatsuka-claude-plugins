@@ -302,6 +302,35 @@ test("git push --force-with-lease origin feature は force push として deny",
   expect(r?.permissionDecision).toBe("deny")
 })
 
+// --- git の起動を gh と同じ字句解析で読み、force の判定を広げる(C3-06) ---
+
+// 引用符で囲んだサブコマンド・宛先、短いオプションの結合、+ の refspec
+for (const command of [
+  'git "push" --force origin feature',
+  'git push origin "main"',
+  "git push -vf origin feature",
+  "git push origin +feature"
+])
+  test(`${command} は force push か保護ブランチ宛として deny`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+    expect(hook(root, command)?.permissionDecision).toBe("deny")
+  })
+
+test('bash -c "git push -f origin feature" も force push として deny', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const r = hook(root, 'bash -c "git push -f origin feature"')
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("heredoc と here-string でシェルへ渡した git push -f も force push として deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const command of [
+    ["bash <<EOF", "git push -f origin feature", "EOF"].join("\n"),
+    'bash <<< "git push -f origin feature"'
+  ])
+    expect(hook(root, command)?.permissionDecision, command).toBe("deny")
+})
+
 // --- 修正: state.json への cp/mv/dd/install 経由の書き込みを捕捉 ---
 
 test("cp で state.json への書き込みは deny", () => {

@@ -258,10 +258,17 @@ function isGitToken(tok) {
   const stripped = tok.replace(/^\(+/, "");
   return stripped === "git" || stripped.endsWith("/git");
 }
-function findGitInvocations(cmd) {
+function gitCommandsByTokens(cmd) {
+  return parseCommands(cmd) ?? splitLoosely(cmd);
+}
+function gitCommandsByLines(cmd) {
+  return joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE).map(
+    (segment) => segment.split(/\s+/).map((tok) => tok.replace(/^[("'`$]+|["'`)]+$/g, "")).filter(Boolean)
+  );
+}
+function findGitInvocations(commands) {
   const invocations = [];
-  for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
-    const tokens = segment.trim().split(/\s+/).filter(Boolean);
+  for (const tokens of commands) {
     let gitIdx = tokens.findIndex((tok) => isGitToken(tok));
     while (gitIdx !== -1) {
       let idx = gitIdx + 1;
@@ -291,7 +298,7 @@ var FORCE_TOKENS = [
   "--force-if-includes"
 ];
 function isForceToken(tok) {
-  return FORCE_TOKENS.includes(tok) || tok.startsWith("--force-with-lease=");
+  return FORCE_TOKENS.includes(tok) || tok.startsWith("--force-with-lease=") || /^-[A-Za-z]*f[A-Za-z]*$/.test(tok) || tok.startsWith("+");
 }
 function hasForcePush(invocations) {
   return invocations.some(
@@ -752,8 +759,12 @@ function writesRaguelFiles(cmd, cwd, t) {
 try {
   const input = await readStdin();
   const cmd = input.tool_input?.command ?? "";
-  const gitInvocations = findGitInvocations(cmd);
+  const gitInvocations = findGitInvocations(gitCommandsByTokens(cmd));
   const isGitPush = gitInvocations.some((inv) => inv.subcommand === "push");
+  const pushCandidates = [
+    ...gitInvocations,
+    ...findGitInvocations(gitCommandsByLines(cmd))
+  ];
   const ALWAYS_DENY = [
     [
       /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+(\/(?!tmp)|~)/.test(
@@ -765,9 +776,9 @@ try {
       /\b(curl|wget)\b[^|;&]*\|\s*(ba|z)?sh\b/.test(cmd),
       "\u30C0\u30A6\u30F3\u30ED\u30FC\u30C9\u3057\u305F\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u76F4\u63A5\u5B9F\u884C(curl | sh)"
     ],
-    [hasForcePush(gitInvocations), "force push"],
+    [hasForcePush(pushCandidates), "force push"],
     [
-      pushesToProtectedBranch(gitInvocations),
+      pushesToProtectedBranch(pushCandidates),
       "\u4FDD\u8B77\u30D6\u30E9\u30F3\u30C1(main/master)\u3078\u306E push"
     ],
     [writesStateJson(cmd), "state.json \u3078\u306E\u30B7\u30A7\u30EB\u7D4C\u7531\u306E\u66F8\u304D\u8FBC\u307F"],

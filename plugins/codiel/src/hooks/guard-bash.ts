@@ -46,16 +46,33 @@ function isGitToken(tok: string): boolean {
   return stripped === "git" || stripped.endsWith("/git")
 }
 
-// cmd の行の継続を 1 行へ戻し(joinContinuedLines)、`;` `&&` `&` `||` `|` 改行で
-// 区切ったセグメントごとに、`git`(env 等の前置後や
-// 絶対パス・サブシェルの `(` 付きでも可)トークンを探し、その直後のオプション列を
-// 読み飛ばして最初の非オプショントークンをサブコマンドとして返す。
-// セグメント内に複数の git 起動が残っている場合(区切り文字が全て捕捉しきれない場合)
-// に備え、最初の1つだけでなく全ての git トークンを走査する。
-function findGitInvocations(cmd: string): GitInvocation[] {
+// cmd を gh と同じ字句解析でコマンドの語の列に分ける(parseCommands。閉じていないクォートか
+// コマンド置換が残れば splitLoosely)。クォートを外した語で読むので `git "push"` も push と
+// 読み、`bash -c "…"` の中の git も起動と見なす。heredoc の本文は読み飛ばす。
+function gitCommandsByTokens(cmd: string): string[][] {
+  return parseCommands(cmd) ?? splitLoosely(cmd)
+}
+
+// cmd の行の継続を 1 行へ戻し、`;` `&&` `&` `||` `|` 改行で区切って空白で分ける(字句解析の前の
+// 読み方)。語の前後のクォート・括弧は外す。heredoc と here-string でシェルへ渡した本文の
+// git も起動と読むので、force と保護ブランチの判定ではこの読み方も併せて当てる(誤検知の側に倒す)。
+function gitCommandsByLines(cmd: string): string[][] {
+  return joinContinuedLines(cmd)
+    .split(SEGMENT_SPLIT_RE)
+    .map((segment) =>
+      segment
+        .split(/\s+/)
+        .map((tok) => tok.replace(/^[("'`$]+|["'`)]+$/g, ""))
+        .filter(Boolean)
+    )
+}
+
+// 語の列ごとに `git`(env 等の前置後や絶対パス・サブシェルの `(` 付きでも可)の語を探し、
+// その直後のオプション列を読み飛ばして最初の非オプションの語をサブコマンドとして返す。
+// 1 つのコマンドに複数の git の語が残る場合に備え、全ての git の語を走査する。
+function findGitInvocations(commands: string[][]): GitInvocation[] {
   const invocations: GitInvocation[] = []
-  for (const segment of joinContinuedLines(cmd).split(SEGMENT_SPLIT_RE)) {
-    const tokens = segment.trim().split(/\s+/).filter(Boolean)
+  for (const tokens of commands) {
     let gitIdx = tokens.findIndex((tok) => isGitToken(tok))
     while (gitIdx !== -1) {
       let idx = gitIdx + 1
@@ -93,8 +110,14 @@ const FORCE_TOKENS = [
   "--force-if-includes"
 ]
 
+// 短いオプションの結合に f を含むもの(`-vf`)と、+ で始まる refspec(`+feature`)も force に数える。
 function isForceToken(tok: string): boolean {
-  return FORCE_TOKENS.includes(tok) || tok.startsWith("--force-with-lease=")
+  return (
+    FORCE_TOKENS.includes(tok) ||
+    tok.startsWith("--force-with-lease=") ||
+    /^-[A-Za-z]*f[A-Za-z]*$/.test(tok) ||
+    tok.startsWith("+")
+  )
 }
 
 // force push(--force / -f / --force-with-lease[=...] / --force-if-includes)を
@@ -895,8 +918,13 @@ function writesRaguelFiles(
 try {
   const input = await readStdin()
   const cmd = input.tool_input?.command ?? ""
-  const gitInvocations = findGitInvocations(cmd)
+  const gitInvocations = findGitInvocations(gitCommandsByTokens(cmd))
   const isGitPush = gitInvocations.some((inv) => inv.subcommand === "push")
+  // force と保護ブランチは、字句解析と行の走査のどちらかで当たれば拒む
+  const pushCandidates = [
+    ...gitInvocations,
+    ...findGitInvocations(gitCommandsByLines(cmd))
+  ]
 
   const ALWAYS_DENY: [boolean, string][] = [
     [
@@ -909,9 +937,9 @@ try {
       /\b(curl|wget)\b[^|;&]*\|\s*(ba|z)?sh\b/.test(cmd),
       "ダウンロードしたスクリプトの直接実行(curl | sh)"
     ],
-    [hasForcePush(gitInvocations), "force push"],
+    [hasForcePush(pushCandidates), "force push"],
     [
-      pushesToProtectedBranch(gitInvocations),
+      pushesToProtectedBranch(pushCandidates),
       "保護ブランチ(main/master)への push"
     ],
     [writesStateJson(cmd), "state.json へのシェル経由の書き込み"],
