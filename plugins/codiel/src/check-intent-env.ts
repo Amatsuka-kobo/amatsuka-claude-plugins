@@ -48,6 +48,16 @@ function isDir(target: string): boolean {
   }
 }
 
+function isReadableDir(target: string): boolean {
+  if (!isDir(target)) return false
+  try {
+    fs.accessSync(target, fs.constants.R_OK | fs.constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function readFileSafe(target: string): string | null {
   try {
     return fs.readFileSync(target, "utf8")
@@ -250,8 +260,9 @@ const architecturePath = isFile(docPaths.architecture)
   ? docPaths.architecture
   : null
 const gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null
-// metatron の rules ディレクトリがあるか。knowledgeTarget の判定に使う。
-const metatronRules = isDir(resolveRulesDir(startDir).rulesDir)
+// metatron の rules ディレクトリがあり、中を読めるか。knowledgeTarget の判定に使う。
+// 読めないディレクトリを true にすると、metatron へ写すと決めた後に写せない。
+const metatronRules = isReadableDir(resolveRulesDir(startDir).rulesDir)
 
 const domains = readDomainsResult(startDir)
 // 契約 §1: 警告は経路を問わず返す。読み取り専用のこのスクリプトも黙って落とさない。

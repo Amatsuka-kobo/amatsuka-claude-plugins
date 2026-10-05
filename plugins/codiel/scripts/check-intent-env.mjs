@@ -294,6 +294,15 @@ function isDir(target) {
     return false;
   }
 }
+function isReadableDir(target) {
+  if (!isDir(target)) return false;
+  try {
+    fs2.accessSync(target, fs2.constants.R_OK | fs2.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function readFileSafe(target) {
   try {
     return fs2.readFileSync(target, "utf8");
@@ -427,7 +436,7 @@ var docPaths = resolveDocPaths(startDir);
 var docRoot = docPaths.docRoot;
 var architecturePath = isFile(docPaths.architecture) ? docPaths.architecture : null;
 var gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null;
-var metatronRules = isDir(resolveRulesDir(startDir).rulesDir);
+var metatronRules = isReadableDir(resolveRulesDir(startDir).rulesDir);
 var domains = readDomainsResult(startDir);
 var configWarnings = [...docPaths.warnings, ...domains.warnings];
 var intentsDirPath = repoRoot ? path2.join(repoRoot, "docs", "intents") : null;

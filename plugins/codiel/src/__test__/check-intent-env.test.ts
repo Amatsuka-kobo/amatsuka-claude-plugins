@@ -1228,6 +1228,21 @@ test("metatronRules: rules ディレクトリの有無と paths.rulesDir・既�
   }
 })
 
+// root は権限を外しても読めるので、権限での判定を確かめられない(ケース 24 と同じ)
+test.skipIf(isRoot)(
+  "metatronRules: 読み取り権限の無い rules ディレクトリは false",
+  () => {
+    const dir = gitRepo()
+    const rulesDir = mkdir(dir, ".claude/rules/metatron")
+    fs.chmodSync(rulesDir, 0o000)
+    try {
+      expect(runScript(dir).projectDocs.metatronRules).toBe(false)
+    } finally {
+      fs.chmodSync(rulesDir, 0o755)
+    }
+  }
+)
+
 // ---------------------------------------------------------------------------
 // 契約 §1 / §4-3: 独立レビューが挙げた欠陥の回帰テスト
 // ---------------------------------------------------------------------------

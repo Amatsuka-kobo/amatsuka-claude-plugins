@@ -156,7 +156,7 @@ ADR-014「[codiel] run のブランチを slug ごとに 1 本にし、新しい
 
 - `hooks/lib.ts` に `resolveRulesDir(startDir)` を足し、export する。`resolveDocPaths` と同じ経路で `metatron.config.json` を探し、同じ検証(トップレベルの型・未知の version・`paths` の型)を経て、`paths.rulesDir` を `resolveConfiguredPath` で docRoot を基準に解決する。既定は `.claude/rules/metatron` とする。未知の version と壊れた設定では、metatron と同じく既定の場所を返す。
 - `DocPaths` と `resolveDocPaths` の戻り値は変えない(契約 §14 の 2 者比較の対象を広げない)。
-- `check-intent-env` の出力の `projectDocs` に `metatronRules`(真偽値)を足す。`resolveRulesDir` の場所がディレクトリとして存在するときに `true` とする。存在しない・読めないときは `false` とする。
+- `check-intent-env` の出力の `projectDocs` に `metatronRules`(真偽値)を足す。`resolveRulesDir` の場所がディレクトリとして存在し、読み取りと走査の権限(`R_OK | X_OK`)があるときに `true` とする。存在しない・読めないときは `false` とする(読めるかの検査は 2026-10-05 の敵対的レビューの I4-10 で足した)。
 - `orchestrating-runs/SKILL.md:83` の表の判断を「`projectDocs.architecture` が null でなく、かつ `projectDocs.metatronRules` が true なら `metatron`、それ以外は `intents`」に直す。
 - `resume.md` の再判定の記述が判定式を写していれば合わせる。
 - `docs/DESIGN.md:352-354`・`:695` の判定の記述を直す。

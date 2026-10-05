@@ -358,7 +358,7 @@ intent にだけ残す。
 
 `knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値で、intent フェーズの承認ゲートで決め、state.json に記録する。どちらの値でも、ADR 級の判断はまず try の手元の記録に書く。`metatron` の run は ADR 級の
 判断を持続層に全文で残さず、metatron の ADR に直接任せる(持続層には `関連 ADR` の番号だけを書く)。
-`intents` の run は metatron が無い環境(ARCHITECTURE が見つからない、または metatron の rules ディレクトリが無い)で使う値で、ADR 級の判断も
+`intents` の run は metatron が無い環境(ARCHITECTURE が見つからない、または metatron の rules ディレクトリが無いか読めない)で使う値で、ADR 級の判断も
 手元の記録から `[ADR 候補]` として持続層に全文で写す。
 
 metatron を導入すると、`/metatron:init` と `/metatron:update` が持続層を走査し、`[ADR 候補]` の印を
@@ -699,7 +699,7 @@ K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/d
 
 残したのは次の 2 つだけである。
 
-1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`knowledgeTarget` の判定では ARCHITECTURE の有無と metatron の rules ディレクトリの有無(`projectDocs.metatronRules`)だけを使い、ARCHITECTURE の中身は読まない。
+1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`knowledgeTarget` の判定では ARCHITECTURE の有無と metatron の rules ディレクトリがあって読めるか(`projectDocs.metatronRules`)だけを使い、ARCHITECTURE の中身は読まない。
 2. review の委譲に ARCHITECTURE のパスを渡すこと。`reviewing-diffs/references/doc.md` の観点が、ARCHITECTURE と実装の乖離を見るためである。依頼文テンプレートの「前提」の ARCHITECTURE の行は、review と再レビューの委譲のときだけ書く。
 
 外した規則は、各フェーズの入力列の ARCHITECTURE・GOTCHAS、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、finalize の乖離の一覧化、`references/failures.md` とそれを指す参照(Raguel の STOP・誤検知の退避・incident・fix-loop の設計漏れ)である。
