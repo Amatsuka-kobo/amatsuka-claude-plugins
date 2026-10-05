@@ -852,6 +852,13 @@ function main(argv, root = process.cwd()) {
       fail(
         isLegacy(latest.state) ? legacyMessage(latest.state) : `\u672A\u5B8C\u4E86\u306E try \u304C\u3042\u308A\u307E\u3059: ${latest.statePath}(status: ${latest.state.status})\u3002resume \u3059\u308B\u304B stop \u3057\u3066\u304F\u3060\u3055\u3044`
       );
+    const others = latestTries(root).filter(
+      (t) => t.state.runId !== slug && !isLegacy(t.state) && (t.state.status === "active" || t.state.status === "awaiting_human")
+    );
+    if (others.length > 0)
+      fail(
+        `\u5225\u306E slug \u306B\u672A\u5B8C\u4E86\u306E run \u304C\u3042\u308A\u307E\u3059: ${others.map((t) => `${t.state.runId}(status: ${t.state.status})`).join(", ")}\u3002\u540C\u6642\u306B\u9032\u3081\u3089\u308C\u308B run \u306F 1 \u3064\u3060\u3051\u3067\u3059\u3002\u518D\u958B\u3057\u306A\u3044 run \u3092 finalize \u304B codiel-state stop --slug <slug> --reason <\u7406\u7531> \u3067\u7D42\u7AEF\u306B\u3057\u3066\u304B\u3089 init \u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044(orchestrating-runs \u306E \xA71)`
+      );
     if (latest?.state.status === "stopped" && !bools.has("human-approved")) {
       const st = latest.state;
       const stopPhases = Object.entries(st.phases).filter(([, ph]) => ph.verdict === "STOP" && !ph.humanApproved).map(([name, ph]) => `${name}(evaluationId: ${ph.evaluationId})`);

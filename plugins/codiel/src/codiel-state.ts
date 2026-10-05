@@ -879,6 +879,19 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
           ? legacyMessage(latest.state)
           : `未完了の try があります: ${latest.statePath}(status: ${latest.state.status})。resume するか stop してください`
       )
+    // hooks は active run を 1 つだけ選ぶので、別の slug に未完了の run が残ると、その run のガードが外れる。
+    // awaiting_outcome は終端に含まれ、hook のガードも掛からないので数えない
+    const others = latestTries(root).filter(
+      (t) =>
+        t.state.runId !== slug &&
+        !isLegacy(t.state) &&
+        (t.state.status === "active" || t.state.status === "awaiting_human")
+    )
+    if (others.length > 0)
+      fail(
+        `別の slug に未完了の run があります: ${others.map((t) => `${t.state.runId}(status: ${t.state.status})`).join(", ")}。` +
+          "同時に進められる run は 1 つだけです。再開しない run を finalize か codiel-state stop --slug <slug> --reason <理由> で終端にしてから init し直してください(orchestrating-runs の §1)"
+      )
     // Raguel の STOP を記録したまま止めた try の次の try は、人の承認の後にだけ作る(設計書 §6.2.2、決定 83)。
     // raguel-stop 以外の理由で止めた try も、humanApproved の無い STOP のフェーズを持てば当たる。
     if (latest?.state.status === "stopped" && !bools.has("human-approved")) {

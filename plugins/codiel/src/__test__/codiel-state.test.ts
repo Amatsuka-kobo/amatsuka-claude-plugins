@@ -248,7 +248,9 @@ test("init は --intent を正規化して記録し、docs/intents/ 直下の .m
 test("init は slug の書式と 40 文字の上限を守る", () => {
   const root = tmpProject()
   const max = "a".repeat(40)
+  // 同時に進められる run は 1 つだけなので、次の init の前に止める(C3-09)
   expect(init(root, max).code).toBe(0)
+  run(root, ["stop", "--slug", max, "--reason", "test"])
   expect(init(root, "a1-b2-c3").code).toBe(0)
   for (const bad of [
     "a".repeat(41),
@@ -314,6 +316,7 @@ test("init は --knowledge-target を必須とし、metatron と intents だけ�
     init(root, "one", { "knowledge-target": "metatron" }).out.state
       .knowledgeTarget
   ).toBe("metatron")
+  run(root, ["stop", "--slug", "one", "--reason", "test"])
   expect(
     init(root, "two", { "knowledge-target": "intents" }).out.state
       .knowledgeTarget
@@ -336,6 +339,7 @@ test("init は --image-upload の 4 つの値を imageUpload に記録する", (
     const r = init(root, `img-${i}`, { "image-upload": value })
     expect(r.code).toBe(0)
     expect(r.out.state.imageUpload).toStrictEqual(expected)
+    run(root, ["stop", "--slug", `img-${i}`, "--reason", "test"])
   })
 })
 
@@ -368,6 +372,7 @@ test("integration が local の run は --image-upload にかかわらず imageU
       ghAttach: false,
       chrome: false
     })
+    run(root, ["stop", "--slug", `local-${i}`, "--reason", "test"])
   }
   // local でも値域の外は拒否する
   const bad = init(root, "local-bad", {
@@ -451,7 +456,9 @@ test("set-integration は引数の省略・値域の外・終端の run を拒�
 test("init --domain-mode はモードを記録し、未指定ならキーを持たせない", () => {
   const root = tmpProject()
   const mapped = init(root, "one", {}, ["--domain-mode", "mapped"])
+  run(root, ["stop", "--slug", "one", "--reason", "test"])
   const unscoped = init(root, "two", {}, ["--domain-mode", "unscoped"])
+  run(root, ["stop", "--slug", "two", "--reason", "test"])
   const unspecified = init(root, "three")
   expect(mapped.out.state.domainMode).toBe("mapped")
   expect(unscoped.out.state.domainMode).toBe("unscoped")
@@ -492,6 +499,19 @@ test("終端状態(stopped)なら init が try-2 を作成する", () => {
   expect(r.out.state.branch).toBe("codiel/demo")
   expect(r.out.state.raguelRunId).toBe("demo-try-2")
   expect(fs.existsSync(statePath(root, "demo", 2))).toBe(true)
+})
+
+test("別の slug に未完了の run があると init が失敗し、その run を終端にした後は通る(C3-09)", () => {
+  const root = tmpProject()
+  expect(init(root, "first").code).toBe(0)
+  const blocked = init(root, "second")
+  expect(blocked.code).toBe(1)
+  expect(blocked.err).toMatch(/first/)
+  expect(fs.existsSync(statePath(root, "second"))).toBe(false)
+  expect(run(root, ["stop", "--slug", "first", "--reason", "test"]).code).toBe(
+    0
+  )
+  expect(init(root, "second").code).toBe(0)
 })
 
 // --- get / stop と --slug ---
@@ -1768,6 +1788,7 @@ test("init は、最新の try が raguel-stop で止まったか humanApproved 
     const r = init(root, slug, {}, ["--human-approved"])
     expect(r.code, slug).toBe(0)
     expect(r.out.state.try, slug).toBe(2)
+    run(root, ["stop", "--slug", slug, "--reason", "test"])
   }
 
   // 人が誤検知と裁定した STOP(humanApproved あり)と、ASK のまま止めた try には当たらない
@@ -1806,6 +1827,7 @@ test("init は、最新の try が raguel-stop で止まったか humanApproved 
     const r = init(root, slug)
     expect(r.code, slug).toBe(0)
     expect(r.out.state.try, slug).toBe(2)
+    run(root, ["stop", "--slug", slug, "--reason", "test"])
   }
 })
 
@@ -2813,10 +2835,18 @@ test("get --active は M4 より前の state の active と awaiting_human の r
 
 test("findActiveRun は M4 より前の state の run を返さない", () => {
   const root = tmpProject()
+  // M4 より前の run は init の検査(C3-09)に数えないので、先に置いてから demo を作る
+  const olds = [
+    writePreM4(root, "old", "active"),
+    writePreM4(root, "asked", "awaiting_human")
+  ]
   init(root)
   // demo より後に更新された M4 より前の run があっても、demo を返す
-  writePreM4(root, "old", "active")
-  writePreM4(root, "asked", "awaiting_human")
+  for (const p of olds) {
+    const raw = JSON.parse(fs.readFileSync(p, "utf8"))
+    raw.updatedAt = "9999-01-01T00:00:00.000Z"
+    fs.writeFileSync(p, `${JSON.stringify(raw, null, 2)}\n`)
+  }
   expect(findActiveRun(root)?.state.runId).toBe("demo")
   run(root, ["stop", "--slug", "demo", "--reason", "test"])
   expect(findActiveRun(root)).toBeNull()
