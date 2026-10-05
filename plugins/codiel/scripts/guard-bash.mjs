@@ -819,6 +819,7 @@ var ANY_HEREDOC_RE = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Z
 function isInertHeredoc(line, before, after, next) {
   if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
     return false;
+  if (/\\\s*$/.test(line) || /\\\s*$/.test(next ?? "")) return false;
   const m = before.match(/^\s*(?:git\s+add(?:\s+[\w./-]+)*\s*&&\s*)?(.*)$/s);
   const receiver = m?.[1] ?? "";
   const core = receiver.replace(
@@ -829,14 +830,13 @@ function isInertHeredoc(line, before, after, next) {
   const head = receiver.trim().split(/\s+/);
   if (!(head[0] === "git" && ["commit", "tag"].includes(head[1] ?? "") || head[0] === "gh"))
     return false;
-  const B = "(?:^|\\s)";
-  if (new RegExp(
-    `${B}git\\s+(?:\\S+\\s+)*?commit\\b.*\\s(?:-F|--file)(?:\\s+|=)(?:-|/dev/stdin)(?=\\s|$)`
-  ).test(receiver))
-    return true;
-  if (new RegExp(
-    `${B}(?:git\\s+(?:\\S+\\s+)*?(?:commit|tag)|gh\\s+\\S+\\s+\\S+)\\b.*\\s(?:-m|--message|--body)(?:\\s+|=)"?\\$\\(\\s*cat\\s+$`
-  ).test(receiver))
+  if (/^\s*git\s+commit\b.*\s(?:-F|--file)(?:\s+|=)(?:-|\/dev\/stdin)(?=\s|$)/.test(
+    receiver
+  ))
+    return after.trim() === "";
+  if (/^\s*(?:git\s+(?:commit|tag)\b|gh\s).*\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/.test(
+    receiver
+  ))
     return after.trim() === "" && /^\s*\)"?\s*(?:$|(?:&&|;|\|\|)[^)"'`]*$)/.test(next ?? "");
   return false;
 }

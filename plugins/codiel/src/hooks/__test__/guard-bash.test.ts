@@ -526,8 +526,8 @@ test("symlink を通した alias/../state.json への書き込みは deny", () =
   expect(r?.permissionDecision).toBe("deny")
 })
 
-// cwd の候補は、cd の行き先の組み合わせで増える。入れ子の cd が 6 個(候補 64)までは判定し、
-// 7 個(候補 128)で上限を超える
+// cwd の候補は、cd の行き先の組み合わせで増える。別々の相対ディレクトリへの cd が 8 個(候補 256)
+// まで判定し、9 個(候補 512)で上限を超える
 test("別々の相対ディレクトリへの cd が 8 個までは素通し、9 個で cd が多すぎるとして deny", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   const nested = (n: number) =>
@@ -614,6 +614,43 @@ test("heredoc の本文の中の cd も cwd の候補に入れ、その先の st
     "EOF"
   ].join("\n")
   expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+// 行末のバックスラッシュで次の行の `| bash` へ続く形と、終端の次の行の続きに引用符がある形は差し引かない
+test.each([
+  [
+    "git add -A && git commit -F - <<'EOF' \\",
+    "| bash",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF"
+  ],
+  [
+    "git commit -m \"$(cat <<'EOF'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF",
+    ')" && echo "x"'
+  ],
+  // gh と名前の似た別のコマンド
+  [
+    "gh-x pr create --body \"$(cat <<'EOF'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF",
+    ')"'
+  ]
+])("%s … は deny", (...lines) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, lines.join("\n"))?.permissionDecision).toBe("deny")
+})
+
+test("前段の git add にパスを並べたコミットメッセージは素通し", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const command = [
+    "git add a b && git commit -m \"$(cat <<'EOF'",
+    "rm .codiel/runs/x/try-1/state.json",
+    "EOF",
+    ')"'
+  ].join("\n")
+  expect(hook(root, command)).toBe(null)
 })
 
 // 許可リストに当たるコミットメッセージの形は、本文の行頭に rm があっても素通し

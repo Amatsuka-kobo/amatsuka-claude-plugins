@@ -1014,6 +1014,9 @@ function isInertHeredoc(
 ): boolean {
   if (/[;&|]/.test(after) || [...line.matchAll(ANY_HEREDOC_RE)].length !== 1)
     return false
+  // 開始の行か終端の次の行が行末のバックスラッシュで終わると、次の行(`| bash` など)へ続くので
+  // どの形でも差し引かない
+  if (/\\\s*$/.test(line) || /\\\s*$/.test(next ?? "")) return false
   // `<<` より前は許可リストで読む。認めるのは、前段に `git add <パス…> &&` を 1 つだけ置いてよく、
   // 続けて受け手の区間(git commit・git tag・gh)が来る形だけである。記号を足して塞ぐ方式では、
   // `#` のコメントやバックスラッシュで区切りを隠す形が抜けるためである
@@ -1034,17 +1037,17 @@ function isInertHeredoc(
     )
   )
     return false
-  const B = "(?:^|\\s)"
+  // 受け手の区間の先頭に固定して読む。`-F -` の形も、区切り語の後ろが空のときに限る
   if (
-    new RegExp(
-      `${B}git\\s+(?:\\S+\\s+)*?commit\\b.*\\s(?:-F|--file)(?:\\s+|=)(?:-|/dev/stdin)(?=\\s|$)`
-    ).test(receiver)
+    /^\s*git\s+commit\b.*\s(?:-F|--file)(?:\s+|=)(?:-|\/dev\/stdin)(?=\s|$)/.test(
+      receiver
+    )
   )
-    return true
+    return after.trim() === ""
   if (
-    new RegExp(
-      `${B}(?:git\\s+(?:\\S+\\s+)*?(?:commit|tag)|gh\\s+\\S+\\s+\\S+)\\b.*\\s(?:-m|--message|--body)(?:\\s+|=)"?\\$\\(\\s*cat\\s+$`
-    ).test(receiver)
+    /^\s*(?:git\s+(?:commit|tag)\b|gh\s).*\s(?:-m|--message|--body)(?:\s+|=)"?\$\(\s*cat\s+$/.test(
+      receiver
+    )
   )
     // 終端の次の行は `)` か `)"` で始まり、後ろに `&&`・`;`・`||` で続くコマンドがあってよい。
     // 続きの部分は差し引かず、通常の走査に残る。続きの中に `)`・`"`・`'`・バッククォートがあると、
