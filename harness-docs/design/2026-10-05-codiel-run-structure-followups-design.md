@@ -30,14 +30,18 @@
 ### 1.2 ブランチとベースブランチ
 
 - `codiel-state init` が作る `branch` は `codiel/<slug>` とする(`--intent-only` では従来どおり `null`)。`codiel-state.ts:876`
+- `init` は、try-1 を作るときに `codiel/<slug>` が既にあれば失敗させる。run の無い slug のブランチは、利用者が作ったか、別の slug の worktree ブランチと名前が重なったものなので、この run のものとして使わない(2026-10-05 の敵対的レビューの C3-05 で足した)。
 - `init` は、try-2 以降で `--base-branch` が渡されないとき、最新の try の state の `baseBranch` を引き継ぐ。try-2 以降で最新の try の `baseBranch` と違う値が渡されたときは失敗させる。
 - `raguelRunId`(`<slug>-try-<n>`)、`.codiel/runs/<slug>/try-<n>/`、コミットの件名の `(<slug> try-<n>)`、E2E のレポートのディレクトリは try ごとのまま変えない。
 - worktree のブランチ `codiel/<slug>-try-<n>-<名前>` は変えない。`codiel/<slug>` と ref 名が衝突しない(`codiel/<slug>/…` の形ではない)。
 - `capturing-intent` の手順 1 は、ベースブランチの解決(既存の順)と「開始時のブランチ」を分ける。
   - ベースブランチ: 従来の解決順で決める。try-2 以降は最新の try の state の `baseBranch` になる。`init` の `--base-branch` にはこの値を渡す。
-  - 開始時のブランチ(intent を書くブランチ): `git rev-parse --verify --quiet refs/heads/codiel/<slug>` が成功すれば `codiel/<slug>` へ `git switch` し、`git pull` はしない。失敗すれば従来どおりベースブランチへ切り替えて `git pull --ff-only` する。
-  - ブランチ `codiel/<slug>` が無いのは、初めての run、前の try が `--intent-only`、利用者が消した、改修の前に作った run(名前が `-try-<n>` 付き)のときである。
-- 手順 5 の (6) は、開始時のブランチが `codiel/<slug>` ならそのままコミットし、`git switch -c` を行わない。
+  - 開始時のブランチ(intent を書くブランチ): `codiel-state get --slug` で最新の try を読み、`git rev-parse --verify --quiet refs/heads/codiel/<slug>` で `codiel/<slug>` の有無を確かめて、次の順に決める(2026-10-05 の敵対的レビューの C3-05・I4-02 で改めた)。
+    - run が無いのに `codiel/<slug>` があれば、切り替えずに人に確かめて止まる。
+    - 最新の try の `branch` が `null`(intent-only)なら、`codiel/<slug>` があっても切り替えず、ベースブランチを開始時のブランチにする。intent-only は新しい intent をベースブランチに残すので、run ブランチの古い intent を読まないためである。
+    - それ以外で `codiel/<slug>` があれば `git switch` し、`git pull` はしない。無ければ従来どおりベースブランチへ切り替えて `git pull --ff-only` する。
+  - ブランチ `codiel/<slug>` が無いのは、初めての run、それまでの try がすべて `--intent-only`、利用者が消した、改修の前に作った run(名前が `-try-<n>` 付き)のときである。
+- 手順 5 の (6) は、開始時のブランチが `codiel/<slug>` ならそのままコミットし、`git switch -c` を行わない。開始時のブランチが別で `codiel/<slug>` が既にあるときは、intent-only と同じく intent を退避し、`git restore --source=HEAD --staged --worktree` → `git switch` → 書き戻し → `git add --` の順で移ってからコミットする。run ブランチの古い intent は新しい本文で置き換わる。
 - ベースの更新を run ブランチへ取り込むかは利用者に任せる。
 
 ### 1.3 carry-over フェーズ
@@ -237,7 +241,7 @@ review と fix-loop の再レビューの委譲を出す前に、オーケスト
 - 通したときは、そのフェーズの STOP の evaluationId をすべて state の note に残す。次の try の `init` は、その STOP を未解決に数えない。
 - `init` は、前の try に `baseBranch` が無いとき(改修前の run)は、どの `--base-branch` も受け付ける。
 - `close` は、SKIPPED の carry-over を進めたフェーズに数えない。
-- capturing-intent は、slug が手順 1 の後に決まった入口で `codiel/<slug>` が既にあれば、`git switch -c` ではなく `git switch` で切り替える。
+- capturing-intent は、slug が手順 1 の後に決まった入口と、最新の try が intent-only の入口で `codiel/<slug>` が既にあれば、`git switch -c` ではなく、intent を退避してから `git switch` で切り替える(手順は §1.2)。
 - try-2 以降の intent-only は、intent を `.codiel/runs/<slug>/intent-backup.md` へ退避する。続けて run ブランチ側を `git restore --source=HEAD --staged --worktree` で index と作業ツリーごと戻し、ベースブランチへ切り替える。書き戻した後は `git add --` で追跡に載せてからコミットする。ベースブランチに intent が無いと、書き戻したファイルは未追跡になり、パスを指定したコミットの対象にならない(2026-10-05 の敵対的レビューの I4-01 で直した)。
 - carry-over の修正の委譲は、`implementing` の修正モード(入力 (c))で行う。範囲は担当範囲と所見のパスに限る。報告は `steps/carry-over-fix-<m>/report.md`、コミットの件名は `codiel(carry-over): …` とする。
 - carry-over の stop は、STOP から選んだときは `raguel-stop` とし、ASK から選んだときは `ask-aborted` とする。再提出の回数に上限は置かない。

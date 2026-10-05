@@ -49,11 +49,13 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    - ローカルのブランチが `main` と `master` のどちらか 1 つだけのとき、その名前。
 
    解決した名前を「ベースブランチ」と呼び、`init` の `--base-branch` に渡す。
-4. intent を書くブランチ(「開始時のブランチ」)を決める。slug が分かっているとき(intent パスの入口)は、`git rev-parse --verify --quiet refs/heads/codiel/<slug>` で run ブランチの有無を確かめる。
-   - 成功したら、`git switch codiel/<slug>` で切り替える。`git pull` は行わず、ベースの更新を取り込むかは利用者に任せる。
-   - 失敗したとき、または slug がまだ無いときは、`git switch <ベースブランチ> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。
+4. intent を書くブランチ(「開始時のブランチ」)を決める。slug が分かっているとき(intent パスの入口)は、`codiel-state get --slug <slug>` で最新の try を読み、`git rev-parse --verify --quiet refs/heads/codiel/<slug>` で run ブランチの有無を確かめる。上の項目から順に当てはめる。
+   - run が無いのに run ブランチがあるときは、切り替えずに止まる。このブランチはこの slug の run が作ったものではない。ブランチを消すか、別の slug を選ぶかを人に確かめる。
+   - 最新の try の `branch` が `null`(文書だけで終えた try)のときは、run ブランチがあっても切り替えず、最後の項目のとおりベースブランチを開始時のブランチにする。最新の intent はベースブランチにある。
+   - run ブランチがあれば、`git switch codiel/<slug>` で切り替える。`git pull` は行わず、ベースの更新を取り込むかは利用者に任せる。
+   - それ以外のとき、または slug がまだ無いときは、`git switch <ベースブランチ> && git pull --ff-only` で最新化する。`pull --ff-only` が失敗したら、その旨を人に確認してから続ける。
 
-   run ブランチが無いのは、初めての run、前の try が `--intent-only`、利用者がブランチを消した、改修の前に作った run(ブランチ名が `-try-<n>` 付き)のどれかである。作業ツリーが dirty で `git switch` が失敗したときは、`-f` や自動の stash を使わず、失敗の出力を示し、コミットか退避をしてから `/codiel:run` をやり直すよう案内して終了する(この区間は run が無い)。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
+   run ブランチが無いのは、初めての run、それまでの try がすべて `--intent-only`、利用者がブランチを消した、改修の前に作った run(ブランチ名が `-try-<n>` 付き)のどれかである。作業ツリーが dirty で `git switch` が失敗したときは、`-f` や自動の stash を使わず、失敗の出力を示し、コミットか退避をしてから `/codiel:run` をやり直すよう案内して終了する(この区間は run が無い)。intent フェーズの間は、開始時のブランチの作業ツリーで intent 文書を書く。
 5. 入口が intent パスのときは、手順 2 の前に `references/carry-over-intent.md` を Read して従う。前の try の intent の扱いと、前の try が STOP で止まっていたときの確認を扱う。
 
 `configWarnings` が空でないときは、その項目のパス設定が拒否されて既定値に落ちているか、ドメインマップの読み取りに指摘がある。読めた文書だけで進み、警告の内容を完了報告に残す。
@@ -159,12 +161,20 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 
 - 終える(intent-only)とき: `references/intent-only.md` を Read して従う。
 - 続行するとき:
-  1. 開始時のブランチが `state.branch`(`codiel/<slug>`)なら、切り替えずにそのブランチでコミットする。開始時のブランチが別で、`state.branch` が既にあるとき(slug が手順 1 の後に決まった入口)は、`git switch <state.branch>` で切り替える。`state.branch` が無ければ `git switch -c <state.branch>` を実行する。切り替えが失敗したら、下の失敗時の手順に従う。
+  1. コミットするブランチへ移る。切り替えが失敗したら、下の失敗時の手順に従う。
+     - 開始時のブランチが `state.branch`(`codiel/<slug>`)なら、切り替えずにそのブランチでコミットする。
+     - `state.branch` が無ければ `git switch -c <state.branch>` を実行する。
+     - 開始時のブランチが別で、`state.branch` が既にあるとき(slug が手順 1 の後に決まった入口と、最新の try が文書だけで終えた入口)は、次の順で切り替える。run ブランチの古い intent は、新しい本文で置き換わる。
+       1. 書き直した intent の本文を、`.codiel/runs/<slug>/intent-backup.md` へ退避する。ディレクトリが無ければ作る。
+       2. `git restore --source=HEAD --staged --worktree <intent パス>` で、intent の index と作業ツリーを開始時のブランチのコミットの内容へ戻す。戻さないと `git switch` が拒否される。
+       3. `git switch <state.branch>` を実行する。`git stash` は使わない。
+       4. 退避した本文を、同じ intent パスへ書き戻す。
+       5. `git add -- <intent パス>` を実行してから、退避ファイルを消す。失敗したときは退避ファイルを消さずに残す。
   2. `git commit -m "codiel(intent): <要約> (<slug> try-<n>)" -- <intent パス>` を実行する。
   3. `codiel-state start-phase intent --slug <slug>` → `evaluate_decision` → `codiel-state pass-gate intent --slug <slug> --evaluation-id <id> --verdict PROCEED` の順に進め、以降のフェーズへ移る。`evaluate_decision` が ASK を返したときは `mark-ask` で `awaiting_human` にして裁定を待ち、STOP が返ったときは、どちらも `raguel-gating` の手順に従う。PROCEED になるまで `pass-gate` を呼ばない。
 
-`git switch -c` か `git commit` が失敗したときは、`references/commit-failure.md` を Read して従う。この失敗で run を `commit-failed` で終端にした後に限り、ユーザーへ確認してよい。
+1 の切り替えか `git commit` が失敗したときは、`references/commit-failure.md` を Read して従う。この失敗で run を `commit-failed` で終端にした後に限り、ユーザーへ確認してよい。
 
-(1) の Write が失敗したときは、intent 文書の全文をセッション内に提示したうえで保存先をユーザーに確認する。文書を失わせない。`init` の後(run がある)の失敗は、(6) の `git switch -c` と `git commit` なら `references/commit-failure.md` に、それ以外なら `intent-common.md` の「失敗時」に従う。
+(1) の Write が失敗したときは、intent 文書の全文をセッション内に提示したうえで保存先をユーザーに確認する。文書を失わせない。`init` の後(run がある)の失敗は、(6) の切り替えと `git commit` なら `references/commit-failure.md` に、それ以外なら `intent-common.md` の「失敗時」に従う。
 
 畳んだ経路があるときは、`../../references/intent-common.md` の「畳んだことの報告」に従い、理由と使えるようにする方法を 1 行で報告する。

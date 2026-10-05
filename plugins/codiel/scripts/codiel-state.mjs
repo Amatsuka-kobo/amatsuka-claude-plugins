@@ -182,6 +182,18 @@ function gitHead(dir) {
     return null;
   }
 }
+function gitBranchExists(dir, name) {
+  try {
+    execFileSync(
+      "git",
+      ["-C", dir, "show-ref", "--verify", "--quiet", `refs/heads/${name}`],
+      { stdio: "ignore" }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
 function gitMergeBase(dir, a, b) {
   try {
     return execFileSync("git", ["-C", dir, "merge-base", a, b], {
@@ -843,6 +855,10 @@ function main(argv, root = process.cwd()) {
         `--base-branch(${baseBranch})\u304C\u524D\u306E try \u306E\u30D9\u30FC\u30B9\u30D6\u30E9\u30F3\u30C1(${prevBase})\u3068\u9055\u3044\u307E\u3059\u3002\u540C\u3058 run \u30D6\u30E9\u30F3\u30C1\u306E try \u306F\u30D9\u30FC\u30B9\u30D6\u30E9\u30F3\u30C1\u3092\u5909\u3048\u3089\u308C\u307E\u305B\u3093`
       );
     const tryN = latest ? latest.tryN + 1 : 1;
+    if (tryN === 1 && gitBranchExists(root, `codiel/${slug}`))
+      fail(
+        `\u30D6\u30E9\u30F3\u30C1 codiel/${slug} \u304C\u65E2\u306B\u3042\u308A\u307E\u3059\u304C\u3001slug ${slug} \u306E run \u306F\u3042\u308A\u307E\u305B\u3093\u3002\u30D6\u30E9\u30F3\u30C1\u3092\u6D88\u3059\u304B\u3001\u5225\u306E slug \u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044`
+      );
     const dir = path3.join(runDir(root, slug), `try-${tryN}`);
     fs3.mkdirSync(path3.join(dir, "reports"), { recursive: true });
     const state = newState(slug, tryN, {

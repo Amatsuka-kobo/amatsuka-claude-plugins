@@ -266,6 +266,20 @@ export function gitHead(dir: string): string | null {
   }
 }
 
+// dir にローカルブランチ name があるか。git が失敗したら false
+export function gitBranchExists(dir: string, name: string): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["-C", dir, "show-ref", "--verify", "--quiet", `refs/heads/${name}`],
+      { stdio: "ignore" }
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
 // a と b の分岐点のコミット。読めなければ null
 export function gitMergeBase(dir: string, a: string, b: string): string | null {
   try {

@@ -8,6 +8,7 @@ import {
   checkGate,
   evaluatedFiles,
   findEvaluation,
+  gitBranchExists,
   gitHead,
   gitMergeBase,
   isAncestor,
@@ -903,6 +904,12 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
         `--base-branch(${baseBranch})が前の try のベースブランチ(${prevBase})と違います。同じ run ブランチの try はベースブランチを変えられません`
       )
     const tryN = latest ? latest.tryN + 1 : 1
+    // run の無い slug の run ブランチは、利用者が作ったか、別の slug の worktree ブランチと名前が
+    // 重なったものなので、この run のものとして使わない
+    if (tryN === 1 && gitBranchExists(root, `codiel/${slug}`))
+      fail(
+        `ブランチ codiel/${slug} が既にありますが、slug ${slug} の run はありません。ブランチを消すか、別の slug を選んでください`
+      )
     const dir = path.join(runDir(root, slug), `try-${tryN}`)
     fs.mkdirSync(path.join(dir, "reports"), { recursive: true })
     const state = newState(slug, tryN, {

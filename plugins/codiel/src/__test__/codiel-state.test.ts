@@ -620,6 +620,25 @@ test("try-1 の init は carry-over を SKIPPED で通し、skip-phase carry-ove
   expect(skip.err).toMatch(/carry-over はスキップできません/)
 })
 
+test("try-1 の init は codiel/<slug> が既にあれば失敗し、state を書かない", () => {
+  const root = tmpProject()
+  git(root, "branch", "codiel/demo")
+  const r = init(root)
+  expect(r.code).toBe(1)
+  expect(r.err).toMatch(/codiel\/demo が既にあります/)
+  expect(fs.existsSync(statePath(root, "demo"))).toBe(false)
+})
+
+test("try-2 以降の init は codiel/<slug> があっても通る", () => {
+  const root = tmpProject()
+  init(root)
+  git(root, "branch", "codiel/demo")
+  run(root, ["stop", "--slug", "demo", "--reason", "test"])
+  const r = init(root)
+  expect(r.code).toBe(0)
+  expect(r.out.state.try).toBe(2)
+})
+
 test("try-2 の init は前の try の baseBranch を引き継ぎ、違う --base-branch で失敗する", () => {
   const root = tmpProject()
   init(root, "demo", {}, ["--base-branch", "main"])
