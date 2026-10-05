@@ -78,6 +78,16 @@ export interface ArchitectureLine {
 type Line = ArchitectureLine
 
 // 改行の直後で分割する。`raw` を連結すると元の文字列に戻る(バイト単位の再結合)。
+/**
+ * 入力の文字列の改行(CRLF と単独の CR)を LF に揃える。
+ * splitLines は LF でしか行を分けないので、揃えずに検証すると、保存のときに
+ * 単独の CR が LF になって初めて現れる行(閉じフェンスや状態行)を見逃す。
+ * 検証と保存の両方に、この関数を通した同じ文字列を使う。
+ */
+export function normalizeNewlines(value: string): string {
+  return value.replace(/\r\n?/g, "\n")
+}
+
 function splitLines(text: string): Line[] {
   if (text === "") return []
   return text.split(/(?<=\n)/).map((raw) => ({
@@ -982,7 +992,8 @@ export function prepareArchitectureUpdate(
     }
     // body の中で閉じていないフェンスは、後ろのセクションのフェンスで閉じられることがある。
     // そのとき全文の読み直しは通るが、間の見出しはフェンスに飲まれて消える。
-    if (scanFences(change.body).unclosed) {
+    const body = normalizeNewlines(change.body)
+    if (scanFences(body).unclosed) {
       return {
         ok: false,
         error: "unclosed_fence",
@@ -990,7 +1001,7 @@ export function prepareArchitectureUpdate(
         warnings
       }
     }
-    normalizedChanges.push({ heading: validated.heading, body: change.body })
+    normalizedChanges.push({ heading: validated.heading, body })
   }
 
   // 削除は「対象ファイルに当該セクションが存在するか」で検証する(設計書 §6-2)。

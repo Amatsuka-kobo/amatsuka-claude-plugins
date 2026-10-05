@@ -283,6 +283,7 @@
   - ADR 一覧の照合は adr.ts を import せずに行う(adr.ts が architecture.ts を import しており、逆向きは循環になる)。`## ADR 一覧` の数と、最初の ADR 一覧の原文(末尾の空白を除く)のバイト一致で判定する。stage-architecture は ADR 一覧を対象にできないので、ID と状態の組より強い条件でも正当な更新を拒否しない。
   - stage-architecture の body に閉じていないフェンスがあれば、body の単位で `unclosed_fence` として拒否する。後ろのセクションのフェンスで閉じられると、全文の読み直しは通るが間の見出しがフェンスに飲まれるためである。stage-adr の散文の項目も同じ理由で、項目の単位で拒否する。
   - ドメインマップの検査は、変更前の文書のブロックが読めていたか、ブロックが無かったときだけ拒否する。変更前から壊れている文書では、stage-adr も他のセクションの stage-architecture も今までどおり通し、ドメインマップを正しい body に差し替える更新も通す。
+  - stage-architecture の body、stage-adr の入力(追加と状態変更)、append-gotcha の入力の文字列は、検証の前に CRLF と単独の CR を LF に揃え、その文字列を検証と保存の両方に使う。検証は LF でしか行を分けないので、揃えないと保存のときに初めて現れる行(閉じフェンスや状態行)を見逃す。
   - stage-adr の読み直しでは、ADR 一覧以外の `##` 見出しの並びと ADR 一覧の数が変わらないことも確かめる。散文の `## ` 行で ADR 一覧が切れても、エントリ数・ID・状態の 3 条件は通るためである。
 - 文書: `references/architecture-format.md`(stage の拒否の記述)、`references/gotchas-format.md`(§6-2 の入力制約)、`references/cli-usage.md` の stage-architecture・stage-adr・append-gotcha のエラーコード。`docs/format-change-checklist.md` の ARCHITECTURE・ADR・GOTCHAS の書式のセクションを追随させる。拒否が増えるだけで書式は変わらないので、固定データ(`THREE_ADRS` など)は変えない。
 - コミット: 1 つ。

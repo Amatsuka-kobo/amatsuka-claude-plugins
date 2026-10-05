@@ -15,6 +15,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { normalizeNewlines } from "./architecture.js"
 import { writeFileAtomic } from "./atomic-write.js"
 
 /** タグの値域(契約 §6-4)。この 2 リテラル以外はタグとして認識も付与もしない。 */
@@ -939,9 +940,16 @@ export function initGotchasLedger(gotchasPath: string): InitGotchasResult {
 
 export function appendGotcha(
   gotchasPath: string,
-  input: GotchaInput,
+  rawInput: GotchaInput,
   options: WriteOptions = {}
 ): AppendGotchaResult {
+  // 改行を LF に揃えた写しだけを検証と組み立てに使う(architecture.ts の normalizeNewlines)。
+  const input = Object.fromEntries(
+    Object.entries(rawInput ?? {}).map(([key, value]) => [
+      key,
+      typeof value === "string" ? normalizeNewlines(value) : value
+    ])
+  ) as unknown as GotchaInput
   const validation = validateGotchaInput(input)
   if (validation.errors.length > 0) {
     throw new GotchaError(

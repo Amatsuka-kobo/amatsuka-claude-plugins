@@ -23,6 +23,7 @@ import {
   type ArchitectureLine,
   applySectionChanges,
   findSection,
+  normalizeNewlines,
   parseArchitecture,
   scanFences
 } from "./architecture.js"
@@ -633,6 +634,22 @@ export function validateAdrStatusInput(
   return { errors, warnings }
 }
 
+// 入力の文字列の改行を LF に揃えた写しを返す。検証も組み立ても、この写しだけを使う。
+// 文字列でない値はそのまま残し、型の検証に任せる。
+function newlinesNormalized<T extends object>(input: T): T {
+  if (input === null || typeof input !== "object") return input
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input)) {
+    out[key] =
+      typeof value === "string"
+        ? normalizeNewlines(value)
+        : Array.isArray(value)
+          ? value.map((v) => (typeof v === "string" ? normalizeNewlines(v) : v))
+          : value
+  }
+  return out as T
+}
+
 function throwOnErrors(result: AdrValidationResult): void {
   if (result.errors.length === 0) return
   const status = result.errors.some((e) => e.startsWith("status は"))
@@ -806,9 +823,10 @@ function verifyAdrResult(
  */
 export function buildAdrAddition(
   current: string | null | undefined,
-  input: AdrAddInput,
+  rawInput: AdrAddInput,
   date: string
 ): BuildAdrAddResult {
+  const input = newlinesNormalized(rawInput)
   const validation = validateAdrAddInput(input)
   throwOnErrors(validation)
 
@@ -867,9 +885,10 @@ export interface BuildAdrStatusResult {
  */
 export function buildAdrStatusChange(
   current: string | null | undefined,
-  input: AdrStatusInput,
+  rawInput: AdrStatusInput,
   date: string
 ): BuildAdrStatusResult {
+  const input = newlinesNormalized(rawInput)
   const validation = validateAdrStatusInput(input)
   throwOnErrors(validation)
 

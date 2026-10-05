@@ -1308,3 +1308,55 @@ test("回帰: 変更前からドメインマップが壊れた文書にも stage
   const result = buildAdrAddition(broken, BASE_ADD, "2026-08-16")
   expect(parseAdrDocument(result.text).entries).toHaveLength(4)
 })
+
+describe("単独の CR と CRLF は検証の前に LF へ揃える", () => {
+  test("再現: rationale の CR の後ろの `- 状態: 値域外` を拒否する", () => {
+    expect(() =>
+      buildAdrAddition(
+        THREE_ADRS,
+        { ...BASE_ADD, rationale: "reason\r- 状態: 値域外" },
+        "2026-08-16"
+      )
+    ).toThrowError(
+      expect.objectContaining({ name: "AdrError", code: "invalid_input" })
+    )
+  })
+
+  test("LF・CR・CRLF で同じ判定になる(追加と状態変更)", () => {
+    for (const eol of ["\n", "\r", "\r\n"]) {
+      const label = JSON.stringify(eol)
+      expect(
+        () =>
+          buildAdrAddition(
+            THREE_ADRS,
+            { ...BASE_ADD, background: `背景${eol}### ADR-001: 偽` },
+            "2026-08-16"
+          ),
+        label
+      ).toThrowError(expect.objectContaining({ code: "invalid_input" }))
+
+      const ok = buildAdrAddition(
+        THREE_ADRS,
+        { ...BASE_ADD, background: `一行目${eol}二行目` },
+        "2026-08-16"
+      )
+      expect(ok.text, label).toContain("一行目\n二行目")
+      expect(ok.text, label).not.toContain("\r")
+
+      expect(
+        () =>
+          buildAdrStatusChange(
+            THREE_ADRS,
+            {
+              mode: "status",
+              id: "ADR-001",
+              status: "廃止",
+              reason: `理由${eol}- 状態: 採用`
+            },
+            "2026-08-20"
+          ),
+        label
+      ).toThrowError(expect.objectContaining({ code: "invalid_input" }))
+    }
+  })
+})

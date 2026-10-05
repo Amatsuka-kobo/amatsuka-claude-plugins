@@ -1091,3 +1091,32 @@ test("A32: 回帰: 変更前からドメインマップが壊れた文書でも�
   )
   expect(extractDomains(fixed.text).ok).toBe(true)
 })
+
+describe("A33: 単独の CR と CRLF は検証の前に LF へ揃え、検証と保存で同じ行の構造を使う", () => {
+  test("再現: CR で区切った閉じフェンスは、検証でも開いたフェンスとして拒否する", () => {
+    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      { heading: "システム概要", body: "overview\r```" },
+      { heading: "技術スタック", body: "stack\r```" }
+    ])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toBe("unclosed_fence")
+  })
+
+  test("LF・CR・CRLF で同じ判定になる", () => {
+    for (const eol of ["\n", "\r", "\r\n"]) {
+      const bad = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+        { heading: "システム概要", body: `overview${eol}\`\`\`` }
+      ])
+      expect(bad.ok, JSON.stringify(eol)).toBe(false)
+
+      const good = expectOk(
+        prepareArchitectureUpdate(SEVEN_SECTIONS, [
+          { heading: "システム概要", body: `一行目${eol}二行目` }
+        ])
+      )
+      expect(good.text, JSON.stringify(eol)).toContain("一行目\n二行目")
+      expect(headings(good.text)).toEqual(headings(SEVEN_SECTIONS))
+    }
+  })
+})

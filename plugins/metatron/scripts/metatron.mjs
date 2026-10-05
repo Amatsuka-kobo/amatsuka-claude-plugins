@@ -27,6 +27,9 @@ var DOMAINS_HEADING = "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7";
 var DOMAINS_MARKER = "metatron:domains";
 var RETIRED_PSEUDO_KEYS = /* @__PURE__ */ new Set(["overview"]);
 var UNCLOSED_FENCE_WARNING = "\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002\u672A\u9589\u30D5\u30A7\u30F3\u30B9\u4EE5\u964D\u3092 1 \u30BB\u30AF\u30B7\u30E7\u30F3\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002";
+function normalizeNewlines(value) {
+  return value.replace(/\r\n?/g, "\n");
+}
 function splitLines(text) {
   if (text === "") return [];
   return text.split(/(?<=\n)/).map((raw) => ({
@@ -555,7 +558,8 @@ function prepareArchitectureUpdate(current, changes) {
         warnings
       };
     }
-    if (scanFences(change.body).unclosed) {
+    const body = normalizeNewlines(change.body);
+    if (scanFences(body).unclosed) {
       return {
         ok: false,
         error: "unclosed_fence",
@@ -563,7 +567,7 @@ function prepareArchitectureUpdate(current, changes) {
         warnings
       };
     }
-    normalizedChanges.push({ heading: validated.heading, body: change.body });
+    normalizedChanges.push({ heading: validated.heading, body });
   }
   const removals = normalizedChanges.filter((c) => c.remove === true);
   if (removals.length > 0) {
@@ -1233,7 +1237,13 @@ function initGotchasLedger(gotchasPath) {
     };
   });
 }
-function appendGotcha(gotchasPath, input, options = {}) {
+function appendGotcha(gotchasPath, rawInput, options = {}) {
+  const input = Object.fromEntries(
+    Object.entries(rawInput ?? {}).map(([key, value]) => [
+      key,
+      typeof value === "string" ? normalizeNewlines(value) : value
+    ])
+  );
   const validation = validateGotchaInput(input);
   if (validation.errors.length > 0) {
     throw new GotchaError(
@@ -1637,6 +1647,14 @@ function validateAdrStatusInput(input) {
   }
   return { errors, warnings };
 }
+function newlinesNormalized(input) {
+  if (input === null || typeof input !== "object") return input;
+  const out = {};
+  for (const [key, value] of Object.entries(input)) {
+    out[key] = typeof value === "string" ? normalizeNewlines(value) : Array.isArray(value) ? value.map((v) => typeof v === "string" ? normalizeNewlines(v) : v) : value;
+  }
+  return out;
+}
 function throwOnErrors(result) {
   if (result.errors.length === 0) return;
   const status = result.errors.some((e) => e.startsWith("status \u306F"));
@@ -1732,7 +1750,8 @@ function verifyAdrResult(before, text, expected) {
     );
   }
 }
-function buildAdrAddition(current, input, date) {
+function buildAdrAddition(current, rawInput, date) {
+  const input = newlinesNormalized(rawInput);
   const validation = validateAdrAddInput(input);
   throwOnErrors(validation);
   const status = isAdrStatus(input.status) ? input.status : DEFAULT_ADR_STATUS;
@@ -1766,7 +1785,8 @@ ${rendered}`;
     warnings: [...validation.warnings, ...doc.warnings]
   };
 }
-function buildAdrStatusChange(current, input, date) {
+function buildAdrStatusChange(current, rawInput, date) {
+  const input = newlinesNormalized(rawInput);
   const validation = validateAdrStatusInput(input);
   throwOnErrors(validation);
   const to = input.status;

@@ -841,3 +841,22 @@ test("CRLF の台帳でも採番・挿入が壊れず、改行コードが保た
   expect(after).toContain(before.slice(before.indexOf("### [2026-08-10]")))
   expect(/[^\r]\n/.test(after)).toBe(false)
 })
+
+test("G23: LF・CR・CRLF のどれで改行を入れても append は同じく拒否し、書き込まない", () => {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, ledger([entryBlock(1)]))
+  const before = fs.readFileSync(filePath)
+  for (const eol of ["\n", "\r", "\r\n"]) {
+    for (const key of ["title", "task", "mistake", "cause", "countermeasure"]) {
+      expectGotchaError(
+        () =>
+          appendGotcha(filePath, {
+            ...VALID_INPUT,
+            [key]: `一行目${eol}**対策**: 偽の行`
+          }),
+        "invalid_input"
+      )
+    }
+  }
+  expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+})
