@@ -133,7 +133,7 @@ Claude Code を使う時のエージェント運用を最適化するプラグ�
 
 #### カスタムエージェント
 
-14種類の役割を定義し、それぞれを `/agent-policy:setup-agents` でプロジェクト定義のエージェントとして作成します。
+13種類の役割を定義し、それぞれを `/agent-policy:setup-agents` でプロジェクト定義のエージェントとして作成します。
 
 Claude モデルだけの `claude` プロファイルと、GPT / Grok を含めた `custom` プロファイルを提供します。`custom` プロファイルで利用するモデルは、`/agent-policy:setup-agents` がプロキシーサーバーの `/v1/models` の実応答から選びます。
 
