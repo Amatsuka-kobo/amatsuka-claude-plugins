@@ -2536,6 +2536,28 @@ test("findActiveRun は version 2 の run だけを返し、runs 直下のファ
   expect(found?.dir).toBe(path.join(root, ".codiel/runs/demo/try-1"))
 })
 
+test("findActiveRun と get --active は、別 slug の壊れた state を飛ばして正常な run を返す", () => {
+  const root = tmpProject()
+  expect(init(root, "good").code).toBe(0)
+  const broken = path.join(root, ".codiel/runs/broken/try-1")
+  fs.mkdirSync(broken, { recursive: true })
+  fs.writeFileSync(path.join(broken, "state.json"), "{ not json")
+  const noPhases = path.join(root, ".codiel/runs/no-phases/try-1")
+  fs.mkdirSync(noPhases, { recursive: true })
+  fs.writeFileSync(
+    path.join(noPhases, "state.json"),
+    JSON.stringify({ version: 2, runId: "no-phases", status: "active" })
+  )
+  expect(findActiveRun(root)?.state.runId).toBe("good")
+  const r = run(root, ["get", "--active"])
+  expect(r.code).toBe(0)
+  expect(
+    r.out.runs.map((x: { state: { runId: string } }) => x.state.runId)
+  ).toEqual(["good"])
+  expect(r.err).toMatch(/broken/)
+  expect(r.err).toMatch(/no-phases/)
+})
+
 // --- M4 より前の state(設計書 §6.6 の冒頭、A6-18) ---
 
 // M4 より前に作った v2 の state(phases に test-code を持たない)を置く

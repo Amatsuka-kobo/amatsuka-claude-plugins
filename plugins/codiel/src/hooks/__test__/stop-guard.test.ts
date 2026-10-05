@@ -229,6 +229,28 @@ test("stop-guard: run なし → 出力なし(空 stdout)で exit 0", () => {
   expect(result.stdout.trim()).toBe("")
 })
 
+test("stop-guard: 壊れた state があっても停止を block せず exit 0", () => {
+  const root = newRoot()
+  const broken = path.join(root, ".codiel", "runs", "broken", "try-1")
+  fs.mkdirSync(broken, { recursive: true })
+  fs.writeFileSync(path.join(broken, "state.json"), "{ not json")
+  const result = callHook(STOP_GUARD, root)
+  expect(result.exitCode).toBe(0)
+  expect(result.stdout.trim()).toBe("")
+})
+
+test("stop-guard: 判定の途中で例外が出ても停止を block せず exit 0", () => {
+  const root = setupRunAtIntent()
+  const p = path.join(root, ".codiel", "runs", SLUG, "try-1", "state.json")
+  const st = readState(p)
+  // phases に無いフェーズを指す state。phases[phase].status の読み取りで例外になる
+  st.phase = "no-such-phase" as typeof st.phase
+  writeState(p, st)
+  const result = callHook(STOP_GUARD, root)
+  expect(result.exitCode).toBe(0)
+  expect(result.stdout.trim()).toBe("")
+})
+
 test("stop-guard: run active(phase=intent)→ {decision:block, reason に slug と phase を含む}", () => {
   const root = setupRunAtIntent()
   const result = callHook(STOP_GUARD, root)

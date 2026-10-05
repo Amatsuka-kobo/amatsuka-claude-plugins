@@ -474,7 +474,27 @@ function latestTry(root, slug) {
 function latestTries(root) {
   const runsRoot = path3.join(root, ".codiel", "runs");
   if (!fs3.existsSync(runsRoot)) return [];
-  return fs3.readdirSync(runsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => latestTry(root, d.name)).filter((t) => t !== null);
+  const found = [];
+  for (const d of fs3.readdirSync(runsRoot, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    let t = null;
+    let broken = false;
+    try {
+      t = latestTry(root, d.name);
+      broken = t !== null && (typeof t.state.phases !== "object" || !t.state.phases);
+    } catch {
+      broken = true;
+    }
+    if (broken) {
+      process.stderr.write(
+        `codiel: \u58CA\u308C\u305F state \u306E run \u3092\u98DB\u3070\u3057\u307E\u3057\u305F: ${d.name}
+`
+      );
+      continue;
+    }
+    if (t) found.push(t);
+  }
+  return found;
 }
 function findActiveRun(root) {
   let best = null;

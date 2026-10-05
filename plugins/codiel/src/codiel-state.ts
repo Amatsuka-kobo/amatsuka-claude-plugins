@@ -324,14 +324,32 @@ export function latestTry(root: string, slug: string): LatestTry | null {
 
 // runs/ 直下のディレクトリをすべて走査し、各 run の最新 try を返す。
 // ディレクトリ名では絞らない。v1 と v2 は呼び出し元が state の version で分ける。
+// 読めない state と phases の無い state の run は、run が無いものとして飛ばし、slug を標準エラー出力に出す。
+// 1 つの壊れた run で、ほかの run の検索と hooks を止めないため
 function latestTries(root: string): LatestTry[] {
   const runsRoot = path.join(root, ".codiel", "runs")
   if (!fs.existsSync(runsRoot)) return []
-  return fs
-    .readdirSync(runsRoot, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => latestTry(root, d.name))
-    .filter((t) => t !== null)
+  const found: LatestTry[] = []
+  for (const d of fs.readdirSync(runsRoot, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue
+    let t: LatestTry | null = null
+    let broken = false
+    try {
+      t = latestTry(root, d.name)
+      broken =
+        t !== null && (typeof t.state.phases !== "object" || !t.state.phases)
+    } catch {
+      broken = true
+    }
+    if (broken) {
+      process.stderr.write(
+        `codiel: 壊れた state の run を飛ばしました: ${d.name}\n`
+      )
+      continue
+    }
+    if (t) found.push(t)
+  }
+  return found
 }
 
 // hooks が使う active run の検索。この版で続けられる state だけを run として扱い、
