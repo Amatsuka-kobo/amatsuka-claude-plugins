@@ -1265,6 +1265,8 @@ function main(argv, root = process.cwd()) {
     const phase = pos[1];
     if (!PHASES.includes(phase)) fail(`\u4E0D\u6B63\u306A\u30D5\u30A7\u30FC\u30BA: ${phase}`);
     const latest = loadRun(root, flags);
+    if (TERMINAL.has(latest.state.status))
+      fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
     const ph = latest.state.phases[phase];
     ph.attempts = (ph.attempts ?? 0) + 1;
     if (ph.attempts > latest.state.limits.maxFixAttempts) {

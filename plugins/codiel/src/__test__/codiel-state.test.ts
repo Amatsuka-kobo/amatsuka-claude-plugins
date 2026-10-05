@@ -1377,6 +1377,21 @@ test("record-attempt は上限超過で exit 3 + awaiting_human", () => {
   )
 })
 
+test("record-attempt は stop の後の終端の run を拒否し、run は stopped のまま残る(C3-10)", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  expect(run(root, ["stop", "--slug", "demo", "--reason", "test"]).code).toBe(0)
+  for (let i = 0; i < 7; i++) {
+    const r = run(root, ["record-attempt", "intent", "--slug", "demo"])
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/終端状態/)
+  }
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.status).toBe("stopped")
+  expect(st.phases.intent.attempts).toBe(0)
+})
+
 // --- mark-ask --kind ---
 
 test("mark-ask は --kind を省くと askKind を raguel にし、resume の後も残す", () => {

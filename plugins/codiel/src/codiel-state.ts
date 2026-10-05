@@ -1382,6 +1382,9 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const phase = pos[1]
     if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`)
     const latest = loadRun(root, flags)
+    // 終端の run を上限超過で awaiting_human へ戻さない。上限超過の後の awaiting_human → resume は残す
+    if (TERMINAL.has(latest.state.status))
+      fail(`すでに終端状態です: ${latest.state.status}`)
     const ph = latest.state.phases[phase]
     ph.attempts = (ph.attempts ?? 0) + 1
     if (ph.attempts > latest.state.limits.maxFixAttempts) {
