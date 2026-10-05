@@ -1171,7 +1171,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     }
     // 再提出は、STOP を受けた評価の後に HEAD が進んでいること(直したこと)を条件にする。
     // 進んだとは、STOP の HEAD の子孫で、STOP の HEAD からの差分があることを指す。
-    // 内容を変えない amend、reset、別ブランチへの switch はここで落ちる
+    // 内容を変えない amend、reset、STOP の HEAD を祖先に持たない switch はここで落ちる
     if (!problem && resubmitAfterStop) {
       try {
         // ph.evaluationId は最初の STOP を指すので、HEAD は索引の最後の STOP と比べる

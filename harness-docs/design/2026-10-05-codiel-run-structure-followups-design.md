@@ -237,7 +237,7 @@ review と fix-loop の再レビューの委譲を出す前に、オーケスト
 
 - pass-gate の carry-over の再提出は、次の条件をすべて満たすときだけ通す。
   - 渡された評価が STOP と別の evaluationId で、そのフェーズの最新の評価で、verdict が PROCEED である。
-  - 今の HEAD が、そのフェーズの最後の STOP の評価の HEAD から進んでいる。進んだとは、STOP の HEAD と違い、その子孫で、STOP の HEAD からの差分があることを指す(2026-10-05 の敵対的レビューの C3-08 で足した)。amend で内容を変えずに HEAD を替えたとき、reset で戻したとき、別ブランチへ switch したときは満たさない。
+  - 今の HEAD が、そのフェーズの最後の STOP の評価の HEAD から進んでいる。進んだとは、STOP の HEAD と違い、その子孫で、STOP の HEAD からの差分があることを指す(2026-10-05 の敵対的レビューの C3-08 で足した)。amend で内容を変えずに HEAD を替えたとき、reset で戻したとき、STOP の HEAD を祖先に持たない switch をしたときは満たさない。見るのは祖先関係と内容の変化で、ブランチ名ではない。
 - pass-gate は、フェーズの STOP の有無を state の verdict ではなく Raguel の索引で決める。数えるのは `judgeStatus` が `ok` で、誤検知の裁定の無い STOP である。mark-ask の前に中断した STOP も、人の裁定なしには通さない(C3-04)。
 - 通したときは、そのフェーズの STOP の evaluationId をすべて state の note に残す。note は人が読む記録で、判定には使わない。次の try の `init` は、前の try の carry-over が passed のときの `evaluationId` が同じ run の carry-over の PROCEED の行を指す場合に限り、索引でその行より前にある carry-over の STOP を未解決に数えない(C3-03。以前は note の文型で照合していた)。
 - `init` は、前の try に `baseBranch` が無いとき(改修前の run)は、どの `--base-branch` も受け付ける。
