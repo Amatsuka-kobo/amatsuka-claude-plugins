@@ -195,6 +195,8 @@ codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。meta
 - 制限は**フェーズ単位でエージェント単位ではない**。フェーズ不一致は `ask`(偽陽性を許容)。
   無条件 `deny` は `rm -rf`、`curl | sh`、force push、main/master への push、
   shell からの `state.json` 書き込み、条件外の PR/issue 作成。
+- 2026-10-05(敵対的レビューの修正、設計書 `harness-docs/design/2026-10-05-codiel-metatron-adversarial-fixes-design.md` 4.12): hook のガードは AI の誤操作を止める安全網で、意図的な回避は防がない(README の「hook のガードが止めるもの・止めないもの」。ADR にはしない)。判定が割れるときは拒否に倒し、字句で畳んだパスと実体で辿ったパスのどちらかが保護対象に当たれば拒否する。state.json の保護は cd を追い、heredoc の本文も既定で読み(git commit のメッセージだけ除く)、cp・mv・install・ln は書き込み先が runs かその祖先なら拒否する。GitHub MCP の作成 3 ツールにも gh と同じフェーズの検査(`ghPostPhaseProblem`)を当てる。
+- STOP の再提出は Raguel の索引と carry-over の通過評価と HEAD の祖先関係で判定し、note の文型は使わない(C3-03・C3-04・C3-08)。init は try-1 で `codiel/<slug>` が既にあれば失敗し、他の slug に未完了の run があっても失敗する。
 - `guard-write` は `intent`/`discuss`/`design`/`test-spec`/`dev-plan` などを文書フェーズとして扱う。`docs/intents/**` は
   直下の intent 文書と `domains/`(持続層)で許すフェーズを分け、active な run の `state.intent` は repoRoot 基準の
   パスで照合してどのフェーズでも通す。

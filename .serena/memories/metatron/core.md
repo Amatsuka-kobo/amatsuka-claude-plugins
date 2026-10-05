@@ -1,4 +1,4 @@
-`plugins/metatron` (0.4.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.4.1-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -96,7 +96,8 @@ codiel の持続層 `<repoRoot>/docs/intents/domains/*.md` にある `[ADR 候�
 
 - `scan-adr-candidates`(読み取り、常に exit 0): 候補ごとに file・candidateId・title・5 つの小見出しの本文・
   エントリの範囲のバイト列の sha256 `hash`・`adoptedAs` を返す。`adoptedAs` は、ADR の本文に
-  「ADR 候補 ID: <候補 ID>」と行全体が一致する行を持つ ADR の番号(無ければ null)。タイトルの一致では判定しない。
+  「ADR 候補 ID: <候補 ID>」と行全体が一致する行を持つ ADR の番号(無ければ null)。タイトルの一致では判定しない。コードフェンスの中の行は数えない(2026-10-05、B5-02)。縮約は書き込みの直前に領域ファイルを読み直し、変わっていれば `file_changed` で拒否する(B5-01)。
+- 2026-10-05(0.4.1-dev): 正本への書き込みは `src/lib/atomic-write.ts` の一時ファイルと rename にそろえた(M1-01)。stage と append は改行を LF にそろえてから、組み上げた全文を既存の parser で読み直して保存する(M1-02・M1-03・M1-06)。guard-docs は `..` を畳む前に存在する最深の祖先を実体化し、字句と実体の両方で照合する(M1-04)。
   候補 ID は完全一致のトークンとして比べる(`frontend-1` と `frontend-10` を混同しない)。
 - `shrink-adr-candidate --file --candidate-id --adr --hash`(書き込み): 候補 ID で特定したエントリの範囲だけを
   参照形に置き換え、範囲の外はバイト列のまま残す。`--hash` は走査の値で、ずれていれば書かない。
