@@ -305,16 +305,28 @@ function metatronCliPath() {
 function toSlash(value) {
   return value.replace(/\\/g, "/");
 }
-function realpathOrParent(abs) {
+function realpathDeepest(raw) {
+  const { root } = path3.parse(raw);
+  let current;
   try {
-    return fs2.realpathSync(abs);
+    current = fs2.realpathSync(root);
   } catch {
+    return path3.resolve(raw);
+  }
+  const segments = raw.slice(root.length).split(/[\\/]/).filter((s) => s !== "" && s !== ".");
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i] === "..") {
+      current = path3.dirname(current);
+      continue;
+    }
+    const next = path3.join(current, segments[i]);
     try {
-      return path3.join(fs2.realpathSync(path3.dirname(abs)), path3.basename(abs));
+      current = fs2.realpathSync(next);
     } catch {
-      return abs;
+      return path3.join(next, ...segments.slice(i + 1));
     }
   }
+  return current;
 }
 var MAX_SYMLINK_HOPS = 40;
 function followDanglingLink(abs) {
@@ -334,7 +346,9 @@ function followDanglingLink(abs) {
     } catch {
       return current;
     }
-    current = realpathOrParent(path3.resolve(path3.dirname(current), target));
+    current = realpathDeepest(
+      path3.isAbsolute(target) ? target : `${path3.dirname(current)}${path3.sep}${target}`
+    );
   }
   return abs;
 }
@@ -374,7 +388,7 @@ function isCaseInsensitiveFs(probe) {
   return false;
 }
 function comparisonKey(abs, caseInsensitive) {
-  const resolved = followDanglingLink(realpathOrParent(abs));
+  const resolved = followDanglingLink(realpathDeepest(abs));
   const key = toSlash(resolved).normalize("NFC");
   return caseInsensitive ? key.toLowerCase() : key;
 }
@@ -438,10 +452,17 @@ try {
   let hitGotchas = false;
   let hitRules;
   for (const raw of candidates) {
-    const key = comparisonKey(path3.resolve(cwd, toSlash(raw)), caseInsensitive);
-    if (key === architectureKey) hitArchitecture = true;
-    if (key === gotchasKey) hitGotchas = true;
-    hitRules ??= rulesTargets.find((target) => target.key === key);
+    const slashed = toSlash(raw);
+    const joined = path3.isAbsolute(slashed) ? slashed : `${cwd}/${slashed}`;
+    const keys = [
+      comparisonKey(joined, caseInsensitive),
+      comparisonKey(path3.resolve(cwd, slashed), caseInsensitive)
+    ];
+    for (const key of keys) {
+      if (key === architectureKey) hitArchitecture = true;
+      if (key === gotchasKey) hitGotchas = true;
+      hitRules ??= rulesTargets.find((target) => target.key === key);
+    }
   }
   if (hitArchitecture)
     emit("deny", architectureReason(config.architectureRelative, cli));

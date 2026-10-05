@@ -39,27 +39,46 @@ function toSlash(value: string): string {
   return value.replace(/\\/g, "/")
 }
 
-// シンボリックリンク経由のすり抜けを塞ぐ。未作成のファイルは realpath できないため、
-// 親ディレクトリを実体へ解決してファイル名を付け直す(Write による新規作成でも効かせる)。
+// シンボリックリンク経由のすり抜けを塞ぐ。入力を字句で畳まずにセグメントを前から辿り、
+// 存在する最深の祖先まで realpath で実体化して、残りのセグメントを付ける。
+// 未作成のファイルやディレクトリ(Write による新規作成)は、実体化した祖先の下に付け直す。
+// `..` は実体化した後のパスで親へ上がる。alias が別のディレクトリを指す symlink なら、
+// OS は `alias/..` をリンク先の親として扱う。字句で先に畳むと、このパスと食い違う。
 // **末端がそれ自身 symlink の場合はここでは辿れない。** その分は followDanglingLink が担う。
-function realpathOrParent(abs: string): string {
+function realpathDeepest(raw: string): string {
+  const { root } = path.parse(raw)
+  let current: string
   try {
-    return fs.realpathSync(abs)
+    current = fs.realpathSync(root)
   } catch {
+    return path.resolve(raw)
+  }
+  const segments = raw
+    .slice(root.length)
+    .split(/[\\/]/)
+    .filter((s) => s !== "" && s !== ".")
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i] === "..") {
+      current = path.dirname(current)
+      continue
+    }
+    const next = path.join(current, segments[i])
     try {
-      return path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs))
+      current = fs.realpathSync(next)
     } catch {
-      return abs
+      // ここから先は存在しない。OS もこの先の `..` を辿れないので字句で付けてよい。
+      return path.join(next, ...segments.slice(i + 1))
     }
   }
+  return current
 }
 
 // 辿る symlink の段数の上限。循環(a -> b -> a)は realpath でも ELOOP になるだけで
 // リンク先が得られないため、自前で辿る側にも打ち切りが要る。
 const MAX_SYMLINK_HOPS = 40
 
-// realpathOrParent だけでは **dangling symlink**(リンク先がまだ存在しない symlink)を
-// 解決できない。realpathSync は ENOENT で失敗し、親ディレクトリだけを実体化した結果は
+// realpathDeepest だけでは **dangling symlink**(リンク先がまだ存在しない symlink)を
+// 解決できない。realpathSync は ENOENT で失敗し、祖先だけを実体化した結果は
 // リンク自身のパスに留まるため、リンク先への直接 Write が別パスに見えて素通りする。
 // lstat と readlink はリンク先が存在しなくても辿れるので、ここで自前で辿り切る
 // (設計書 §7-5 の「シンボリックリンク経由は realpath で実体パスに解決する」の実装)。
@@ -97,7 +116,11 @@ function followDanglingLink(abs: string): string {
     }
     // 相対リンクはリンク自身のディレクトリ基準で解決する。
     // リンク先の親ディレクトリ側にも symlink がありうるので、都度実体化し直す。
-    current = realpathOrParent(path.resolve(path.dirname(current), target))
+    current = realpathDeepest(
+      path.isAbsolute(target)
+        ? target
+        : `${path.dirname(current)}${path.sep}${target}`
+    )
   }
   return abs
 }
@@ -154,7 +177,7 @@ function isCaseInsensitiveFs(probe: string): boolean {
 // 生文字列同士の比較になる。NFC と NFD は視覚的に同一でも byte 列が異なるため、
 // 正規化しないとすり抜ける(設計書 §7-5 の「正規化のうえ一致」の範囲内の措置)。
 function comparisonKey(abs: string, caseInsensitive: boolean): string {
-  const resolved = followDanglingLink(realpathOrParent(abs))
+  const resolved = followDanglingLink(realpathDeepest(abs))
   const key = toSlash(resolved).normalize("NFC")
   return caseInsensitive ? key.toLowerCase() : key
 }
@@ -233,10 +256,20 @@ try {
   let hitGotchas = false
   let hitRules: (typeof rulesTargets)[number] | undefined
   for (const raw of candidates) {
-    const key = comparisonKey(path.resolve(cwd, toSlash(raw)), caseInsensitive)
-    if (key === architectureKey) hitArchitecture = true
-    if (key === gotchasKey) hitGotchas = true
-    hitRules ??= rulesTargets.find((target) => target.key === key)
+    // キーを 2 つ作り、どちらかが正本に当たれば拒否する。1 つは生の結合パスを実体で辿り、
+    // `..` をリンク先の親で畳む(OS が書き込む先)。もう 1 つは path.resolve で字句で畳む。
+    // 2 つの解釈が別の場所を指す入力でも、正本に当たる側を見逃さない。
+    const slashed = toSlash(raw)
+    const joined = path.isAbsolute(slashed) ? slashed : `${cwd}/${slashed}`
+    const keys = [
+      comparisonKey(joined, caseInsensitive),
+      comparisonKey(path.resolve(cwd, slashed), caseInsensitive)
+    ]
+    for (const key of keys) {
+      if (key === architectureKey) hitArchitecture = true
+      if (key === gotchasKey) hitGotchas = true
+      hitRules ??= rulesTargets.find((target) => target.key === key)
+    }
   }
 
   // 2 つのフィールドが別々の正本に当たったときは ARCHITECTURE の案内を出す。
