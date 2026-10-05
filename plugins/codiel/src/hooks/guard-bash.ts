@@ -912,36 +912,27 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
       else if (!a.startsWith("-") && a !== "") args.push(a)
     }
     if (args.some(isStateFile)) return true
-    if (targetDir !== undefined) {
-      const dir = targetDir
-      if (isStateFile(dir)) return true
-      if (
-        args.some(
-          (a) =>
-            isStateFile(path.join(dir, path.basename(a))) ||
-            (path.basename(a) === "state.json" && resolved(dir).some(underRuns))
-        )
-      )
+    if (name === "rm") return args.some(holdsState)
+    if (name === "dd") return false
+    // cp・mv・install・ln の書き込み先(-t などの値か、位置引数の最後の語)が runs の配下か runs
+    // そのものなら、コピー元を問わず拒否する。ディレクトリごとの置き換え
+    // (`cp -a backup/try-1 .codiel/runs/demo`)と、symlink の別名を通した書き込みを止めるためである。
+    // 書き込み先が runs を含む祖先のときは、そこへ置くパス(元の basename をつないだもの)が runs の
+    // 配下か runs を含む祖先なら拒否する(`cp -a backup/.codiel .`)。`cp a.md /tmp`・`mv a.txt .`
+    // は通す。指示書に runs の下へこれらで書く手順は無い
+    const dest = targetDir ?? (args.length >= 2 ? args.at(-1) : undefined)
+    const sources =
+      targetDir !== undefined
+        ? args
+        : args.slice(0, Math.max(args.length - 1, 0))
+    if (dest !== undefined) {
+      if (resolved(dest).some(underRuns)) return true
+      if (sources.some((a) => touchesRuns(path.join(dest, path.basename(a)))))
         return true
-      return (
-        (name === "mv" && args.some(holdsState)) ||
-        (name === "ln" && [dir, ...args].some(touchesRuns))
-      )
     }
+    if (name === "mv" && sources.some(holdsState)) return true
     // 同じコマンドで run の配下への symlink を作ってから書く形(`ln -s <runs の配下> a && … > a/state.json`)
-    if (name === "ln" && args.some(touchesRuns)) return true
-    const sources = name === "rm" ? args : args.slice(0, -1)
-    if ((name === "rm" || name === "mv") && sources.some(holdsState))
-      return true
-    // cp・mv・ln・install で、state.json という名前のファイルを run の配下のディレクトリへ写す
-    const dest = args.at(-1)
-    return (
-      name !== "rm" &&
-      name !== "dd" &&
-      dest !== undefined &&
-      sources.some((a) => path.basename(a) === "state.json") &&
-      resolved(dest).some(underRuns)
-    )
+    return name === "ln" && args.some(touchesRuns)
   }
   // 字句解析の語の列では、コマンドの中の最初のファイル操作の語をコマンド名とする
   const byTokens = tokenCommands.some(

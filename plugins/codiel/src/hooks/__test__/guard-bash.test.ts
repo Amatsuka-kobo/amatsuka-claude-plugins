@@ -367,6 +367,34 @@ test.each([
   expect(r?.permissionDecisionReason).toContain("state.json")
 })
 
+// cp・mv・install・ln の書き込み先が runs の配下・runs そのもの・runs を含む祖先なら、コピー元を問わず拒否する
+test.each([
+  "cp -a backup/try-1 .codiel/runs/demo",
+  "cp -r -t .codiel/runs/demo backup/try-1",
+  "cp -t alias/.. data.json",
+  "cp data.json .codiel/runs/demo/try-1",
+  "cp -a backup/.codiel ."
+])("%s は deny", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const tryDir = path.join(root, ".codiel/runs/demo/try-1")
+  fs.mkdirSync(path.join(tryDir, "child"), { recursive: true })
+  fs.writeFileSync(path.join(tryDir, "state.json"), "{}")
+  fs.symlinkSync(
+    path.join(tryDir, "state.json"),
+    path.join(tryDir, "data.json")
+  )
+  fs.symlinkSync(path.join(tryDir, "child"), path.join(root, "alias"), "dir")
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("runs の下から外へのコピーは素通し", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  fs.mkdirSync(path.join(root, ".codiel/runs/x/try-1/reports"), {
+    recursive: true
+  })
+  expect(hook(root, "cp .codiel/runs/x/try-1/reports/a.md /tmp")).toBe(null)
+})
+
 // 書き込み先のディレクトリをオプションで渡す形(H1)
 test.each([
   "cp -t .codiel/runs/x/try-1 /tmp/state.json",

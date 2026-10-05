@@ -202,8 +202,13 @@
     - 字句解析の語の列からは、`git commit`・`git tag`・`gh` の `-m`・`--message`・`--body` の値で改行を含む語だけを外す。コミットメッセージの中の `>` やパスを書き込みと読まないためである。
     - cwd の候補は、字句解析の語の列と行の走査の語の列のそれぞれから元の順で作り、和集合にする。同じ cd を 2 つの列で二重に数えて候補が膨らむことはなく、通常の cd(入れ子 6 個まで、monorepo の 8 パッケージの巡回)は通る。どちらかの列で上限を超えたら、「cd が多すぎて書き込み先を判定できない」として拒否する。
   - 敵対的レビューの high 3 件で、さらに次のとおりにした。
-    - 書き込み先のディレクトリをオプションで渡す形も判定する。対象は `cp`・`mv`・`ln`・`install` の `-t <dir>`・`-t<dir>`・`--target-directory <dir>`・`--target-directory=<dir>` と、GNU の長いオプションの省略形(`--target-dir`・`--target-d=` など、3 文字以上の前方一致)である。その値を書き込み先とし、元の basename をつないだパスが state.json か、state.json という名前のファイルを runs の配下へ写すかで判定する(H1)。
-    - cwd の候補には、cd の行き先ごとに、字句で畳んだパスと symlink を実体で辿ったパスの両方を残す。`cd -P alias/..`(alias は try のディレクトリの下への symlink)の先を見落とさないためである(H2)。
+    - 書き込み先のディレクトリをオプションで渡す形も判定する。対象は `cp`・`mv`・`ln`・`install` の `-t <dir>`・`-t<dir>`・`--target-directory <dir>`・`--target-directory=<dir>` と、GNU の長いオプションの省略形(`--target-dir`・`--target-d=` など、3 文字以上の前方一致)である。その値を書き込み先とする(H1)。
+    - 敵対的レビューの再実行の high 2 件(ディレクトリごとの置き換えと、symlink の別名を通した書き込み)を受けて、cp・mv・install・ln の書き込み先の規則を次の単純な形に置き換えた。指示書に runs の下へこれらで書く手順は無いので、コピー元は問わない。
+      - 書き込み先は、`-t` などの値か、位置引数の最後の語である。`-t` を見つけても判定を打ち切らない。
+      - 書き込み先が、字句で畳んだパスか実体で辿ったパスのどちらかで runs の配下か runs そのものに当たれば拒否する(`cp -a backup/try-1 .codiel/runs/demo`、`cp -t alias/.. data.json`、`cp data.json .codiel/runs/demo/try-1`)。
+      - 書き込み先が runs を含む祖先のときは、そこへ置くパス(書き込み先に元の basename をつないだもの)が runs の配下か runs を含む祖先に当たれば拒否する(`cp -a backup/.codiel .`)。祖先そのものを書き込み先として一律に拒否すると、`cp a.md /tmp` や `mv a.txt .` まで止まるためである。
+      - runs の下から外へのコピー(`cp .codiel/runs/x/try-1/reports/a.md /tmp`)は通す。mv の元と ln の引数についての判定は残す。
+    - cd の行き先ごとに、字句で畳んだパスと symlink を実体で辿ったパスの両方を cwd の候補に残す。alias が try のディレクトリの下への symlink のとき、`cd -P alias/..` の先を見落とさないためである(H2)。
     - guard-write も、メインの作業ツリーの `.codiel/runs` の字句パスと実体パスを求め、その配下の state.json かで判定する。`.codiel/runs` 自体が外のディレクトリへの symlink でも、別名(`.codiel/alias/state.json`)を通した Write を止めるためである。名前の照合(`.codiel/runs/…/state.json` の正規表現)は、大文字小文字を区別しない FS でのすり抜けを防ぐために残す(H3)。
     - 字句解析の語の列からメッセージの値を外すのは、先頭のコマンド(`VAR=値` の代入だけを飛ばした最初の語)が `git commit`・`git tag`・`gh` のときに限る。`env`・シェル・`sudo` などの後ろの囮の `gh -m` で外し始めないためである。
 - 変更(Write/Edit): `guard-write.ts:241` で、論理パスに加えて、`path.resolve` の前の生の結合パスを上の解決関数に通した結果にも同じ判定を当てる。
@@ -242,7 +247,7 @@
   - `stopHead !== head`
   - `isAncestor(root, stopHead, head)`
   - `changedPathsSince(root, stopHead)` が空でない
-  - 内容を変えない amend、reset、別ブランチへの switch はここで落ちる。
+  - 内容を変えない amend、reset、STOP の HEAD を祖先に持たない switch はここで落ちる。見るのは祖先関係と内容の変化で、ブランチ名は見ない。
 - state の形は変えない。
 - テスト(`src/__test__/codiel-state.test.ts`)
   - C3-04: implement の STOP 拒否のテスト(:818)に倣い、mark-ask を経ずに STOP を記録してから PROCEED を記録し、pass-gate が失敗する。

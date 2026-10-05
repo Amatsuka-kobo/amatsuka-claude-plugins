@@ -778,21 +778,17 @@ function stateJsonProblem(cmd, cwd) {
       else if (!a.startsWith("-") && a !== "") args.push(a);
     }
     if (args.some(isStateFile)) return true;
-    if (targetDir !== void 0) {
-      const dir = targetDir;
-      if (isStateFile(dir)) return true;
-      if (args.some(
-        (a) => isStateFile(path4.join(dir, path4.basename(a))) || path4.basename(a) === "state.json" && resolved(dir).some(underRuns)
-      ))
+    if (name === "rm") return args.some(holdsState);
+    if (name === "dd") return false;
+    const dest = targetDir ?? (args.length >= 2 ? args.at(-1) : void 0);
+    const sources = targetDir !== void 0 ? args : args.slice(0, Math.max(args.length - 1, 0));
+    if (dest !== void 0) {
+      if (resolved(dest).some(underRuns)) return true;
+      if (sources.some((a) => touchesRuns(path4.join(dest, path4.basename(a)))))
         return true;
-      return name === "mv" && args.some(holdsState) || name === "ln" && [dir, ...args].some(touchesRuns);
     }
-    if (name === "ln" && args.some(touchesRuns)) return true;
-    const sources = name === "rm" ? args : args.slice(0, -1);
-    if ((name === "rm" || name === "mv") && sources.some(holdsState))
-      return true;
-    const dest = args.at(-1);
-    return name !== "rm" && name !== "dd" && dest !== void 0 && sources.some((a) => path4.basename(a) === "state.json") && resolved(dest).some(underRuns);
+    if (name === "mv" && sources.some(holdsState)) return true;
+    return name === "ln" && args.some(touchesRuns);
   };
   const byTokens = tokenCommands.some(
     (words, ci) => redirectsTo(tokenCommands, ci, isStateFile) || teeOrSedWrites(words, isStateFile) || fileOpWrites(
