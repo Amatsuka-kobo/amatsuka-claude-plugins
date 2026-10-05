@@ -176,7 +176,6 @@ function deletedNames(kind: ManifestKind, file: DetailedDiffFile): Set<string> {
 
 const SUBPROJECT_RE = /^Subproject commit [0-9a-f]+$/
 
-/** mode 160000 のパスの参照先の追加と変更(Subproject commit 行の追加)か */
 /**
  * .gitmodules は書式の揺れ(キーの大小・空白・タブ・見出しの変形・include)で
  * パーサーとずれないよう解析しない。空行とコメント以外の追加行が 1 行でもあれば取り込み元の変更とみなす
@@ -185,8 +184,9 @@ function gitmodulesAdditionIndex(file: DetailedDiffFile): number {
   return file.additions.findIndex((l) => !/^\s*([#;]|$)/.test(l))
 }
 
+/** mode 160000 のパスの参照先の追加と変更(Subproject commit 行の追加)か */
 function isSubmodulePointer(file: DetailedDiffFile): boolean {
-  return file.additions.some((l) => SUBPROJECT_RE.test(l))
+  return file.isGitlink && file.additions.some((l) => SUBPROJECT_RE.test(l))
 }
 
 export const newDependencyRule: Rule = {
@@ -204,7 +204,7 @@ export const newDependencyRule: Rule = {
         findings.push({
           ruleId: RULE_ID,
           severity,
-          message: `依存パッケージの追加を検出しました: ${file.path}(${file.path})`,
+          message: `依存パッケージの追加を検出しました: ${file.path}(submodule の参照先の変更)`,
           evidence: {
             location: file.path,
             path: file.path,

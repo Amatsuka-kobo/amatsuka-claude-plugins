@@ -495,6 +495,9 @@ describe("testResults(§6.2.2、所見 W4R1-05)", () => {
   })
 })
 
+// 2000 行・約 300 KB。NUL を含むので git はバイナリとみなす
+const BINARY_300KB = `\0${"a".repeat(148)}\n`.repeat(2000)
+
 describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
   it("common/secrets が stop を出したら Jev を呼ばない", async () => {
     const jev = fakeJev()
@@ -544,6 +547,34 @@ describe("Jev の文脈判定のつなぎ込み(R19、所見 F6)", () => {
     const r = await code(h)
     expect(r.verdict).toBe("STOP")
     expect(ids(r)).toContain("common/secrets")
+  })
+
+  it("大きなバイナリは変更行数に数えず、同じコミットの本文の秘密情報は STOP にする(R2-01 の副作用)", async () => {
+    const h = harness()
+    h.commit({
+      "logo.png": BINARY_300KB,
+      "src/a.ts": "export const a = 1\n"
+    })
+    const r = await code(h)
+    expect(ids(r)).not.toContain("code/max-diff-lines")
+
+    const h2 = harness()
+    h2.commit({
+      "logo.png": BINARY_300KB,
+      "src/a.ts": `export const t = "${GHP_TOKEN}"\n`
+    })
+    const r2 = await code(h2)
+    expect(ids(r2)).not.toContain("code/max-diff-lines")
+    expect(r2.verdict).toBe("STOP")
+    expect(ids(r2)).toContain("common/secrets")
+  })
+
+  it(".gitattributes で * -diff を付けたテキストの大きな変更も、max-diff-lines を出す", async () => {
+    const h = harness()
+    h.commit({ "src/big.ts": lines(600, (i) => `export const v${i} = ${i}`) })
+    fs.writeFileSync(path.join(h.repo, ".gitattributes"), "* -diff\n")
+    const r = await code(h)
+    expect(ids(r)).toContain("code/max-diff-lines")
   })
 
   it("destructive-ops の stop を、実行されない候補なら ask に下げる", async () => {

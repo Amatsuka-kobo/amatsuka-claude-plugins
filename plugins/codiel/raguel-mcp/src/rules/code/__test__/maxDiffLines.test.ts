@@ -35,4 +35,18 @@ describe("maxDiffLinesRule", () => {
     )
     expect(findings).toHaveLength(1)
   })
+
+  it("NUL を含むファイルは数えず、ほかのファイルは数える", () => {
+    const lines = (n: number, tail = "") =>
+      Array.from({ length: n }, (_, i) => `b${i}${tail}`)
+    const binary = fileDiff("logo.png", lines(1000, "\0"))
+    expect(
+      maxDiffLinesRule.check(makeArtifact({ content: binary }), makeCtx())
+    ).toEqual([])
+    const mixed = [diffWithNAdditions(501), binary].join("\n")
+    expect(
+      maxDiffLinesRule.check(makeArtifact({ content: mixed }), makeCtx())[0]
+        .message
+    ).toContain("実際: 501 行")
+  })
 })

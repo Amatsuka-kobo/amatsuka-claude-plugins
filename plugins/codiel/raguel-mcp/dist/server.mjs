@@ -40980,6 +40980,7 @@ function emptyFile(start) {
     isDeleted: false,
     isRename: false,
     isBinary: false,
+    isGitlink: false,
     additionLines: [],
     hunks: [],
     start,
@@ -41045,6 +41046,9 @@ function parseDiff(diff) {
       return;
     }
     headingLines.push(i);
+    if (/^(?:\w+ (?:file )?mode|index \S+) 160000$/.test(line)) {
+      current.isGitlink = true;
+    }
     if (line.startsWith("new file mode")) current.isNew = true;
     else if (line.startsWith("deleted file mode")) current.isDeleted = true;
     else if (line.startsWith("Binary files ")) current.isBinary = true;
@@ -41501,6 +41505,9 @@ var destructiveOpsRule = {
 
 // src/rules/code/maxDiffLines.ts
 var RULE_ID5 = "code/max-diff-lines";
+function isBinaryContent(f) {
+  return [...f.additions, ...f.deletions].some((l) => l.includes("\0"));
+}
 var maxDiffLinesRule = {
   id: RULE_ID5,
   appliesTo: ["code"],
@@ -41509,7 +41516,7 @@ var maxDiffLinesRule = {
   check(artifact, ctx) {
     const severity = getSeverity(ctx.config.rules[RULE_ID5], "ask");
     const limit = ruleParam(ctx.config, RULE_ID5, "limit");
-    const total = parseDiff(artifact.content).totalChangedLines;
+    const total = parseDiff(artifact.content).files.filter((f) => !isBinaryContent(f)).reduce((sum, f) => sum + f.additions.length + f.deletions.length, 0);
     if (total <= limit) return [];
     return [
       {
@@ -41643,7 +41650,7 @@ function gitmodulesAdditionIndex(file2) {
   return file2.additions.findIndex((l) => !/^\s*([#;]|$)/.test(l));
 }
 function isSubmodulePointer(file2) {
-  return file2.additions.some((l) => SUBPROJECT_RE.test(l));
+  return file2.isGitlink && file2.additions.some((l) => SUBPROJECT_RE.test(l));
 }
 var newDependencyRule = {
   id: RULE_ID6,
@@ -41659,7 +41666,7 @@ var newDependencyRule = {
         findings.push({
           ruleId: RULE_ID6,
           severity,
-          message: `\u4F9D\u5B58\u30D1\u30C3\u30B1\u30FC\u30B8\u306E\u8FFD\u52A0\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${file2.path}(${file2.path})`,
+          message: `\u4F9D\u5B58\u30D1\u30C3\u30B1\u30FC\u30B8\u306E\u8FFD\u52A0\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${file2.path}(submodule \u306E\u53C2\u7167\u5148\u306E\u5909\u66F4)`,
           evidence: {
             location: file2.path,
             path: file2.path,

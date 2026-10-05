@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { makeArtifact, makeCtx } from "../../testHelpers.js"
 import { newDependencyRule } from "../newDependency.js"
-import { fileDiff } from "./helpers/diff.js"
+import { fileDiff, gitlinkDiff } from "./helpers/diff.js"
 
 function check(content: string) {
   return newDependencyRule.check(makeArtifact({ content }), makeCtx())
@@ -174,25 +174,26 @@ describe("newDependencyRule のほかのマニフェスト", () => {
     ).toEqual([])
   })
 
-  it("submodule の参照先の変更(Subproject commit の更新)を、パスを名前にして出す", () => {
+  it("submodule の参照先の変更を、パスを名前にして出す(同じパスを 2 回書かない)", () => {
     const findings = check(
-      fileDiff(
-        "vendor/lib",
-        [`Subproject commit ${"b".repeat(40)}`],
-        [`Subproject commit ${"a".repeat(40)}`]
-      )
+      gitlinkDiff("vendor/lib", "b".repeat(40), "a".repeat(40))
     )
-    expect(findings).toHaveLength(1)
+    expect(findings.map((f) => f.message)).toEqual([
+      "依存パッケージの追加を検出しました: vendor/lib(submodule の参照先の変更)"
+    ])
     expect(findings[0].severity).toBe("ask")
+  })
+
+  it("gitlink の新規の追加も、パスを名前にして出す", () => {
+    const findings = check(gitlinkDiff("vendor/lib", "a".repeat(40)))
+    expect(findings).toHaveLength(1)
     expect(findings[0].message).toContain("vendor/lib")
   })
 
-  it("gitlink の新規の追加(Subproject commit の追加だけ)も、パスを名前にして出す", () => {
-    const findings = check(
-      fileDiff("vendor/lib", [`Subproject commit ${"a".repeat(40)}`])
-    )
-    expect(findings).toHaveLength(1)
-    expect(findings[0].message).toContain("vendor/lib")
+  it("mode 160000 でないファイルの Subproject commit の行は出さない", () => {
+    expect(
+      check(fileDiff("docs/note.md", [`Subproject commit ${"a".repeat(40)}`]))
+    ).toEqual([])
   })
 
   it("依存に無関係なファイルでは出さない", () => {

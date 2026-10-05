@@ -52,3 +52,24 @@ export function deletedFileDiff(path: string, lines: string[]): string {
     ...lines.map((l) => `-${l}`)
   ].join("\n")
 }
+
+/** mode 160000(gitlink)のパスの diff。新規なら before が null */
+export function gitlinkDiff(
+  path: string,
+  after: string,
+  before: string | null = null
+): string {
+  const lines =
+    before === null
+      ? ["new file mode 160000", `index 0000000..${after.slice(0, 7)}`]
+      : [`index ${before.slice(0, 7)}..${after.slice(0, 7)} 160000`]
+  return [
+    `diff --git a/${path} b/${path}`,
+    ...lines,
+    `--- ${before === null ? "/dev/null" : `a/${path}`}`,
+    `+++ b/${path}`,
+    `@@ -${before === null ? "0,0" : "1"} +1 @@`,
+    ...(before === null ? [] : [`-Subproject commit ${before}`]),
+    `+Subproject commit ${after}`
+  ].join("\n")
+}

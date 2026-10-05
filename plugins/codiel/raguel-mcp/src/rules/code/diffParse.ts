@@ -7,6 +7,8 @@
 import type { DiffFile, ParsedDiff } from "../../core/types.js"
 
 export interface DetailedDiffFile extends DiffFile {
+  /** 見出しに mode 160000(gitlink。submodule の参照先)がある */
+  isGitlink: boolean
   /** additions と同じ並びの、diff の本文での 1 始まりの行番号 */
   additionLines: number[]
   /** hunk ごとの行。先頭の 1 文字(" "・"+"・"-"・"\")を付けたまま持つ */
@@ -144,6 +146,7 @@ function emptyFile(start: number): DetailedDiffFile {
     isDeleted: false,
     isRename: false,
     isBinary: false,
+    isGitlink: false,
     additionLines: [],
     hunks: [],
     start,
@@ -217,6 +220,9 @@ export function parseDiff(diff: string): DetailedParsedDiff {
     }
 
     headingLines.push(i)
+    if (/^(?:\w+ (?:file )?mode|index \S+) 160000$/.test(line)) {
+      current.isGitlink = true
+    }
     if (line.startsWith("new file mode")) current.isNew = true
     else if (line.startsWith("deleted file mode")) current.isDeleted = true
     else if (line.startsWith("Binary files ")) current.isBinary = true
