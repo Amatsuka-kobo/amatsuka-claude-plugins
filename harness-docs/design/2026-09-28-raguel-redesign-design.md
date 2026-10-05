@@ -450,7 +450,7 @@ diff の書式が固定されるので、`--no-prefix`・`quotePath`・外部 di
 | `code/dangerous-patterns` | 廃止 | | 上の 2 つに分ける | A4 |
 | `code/max-diff-lines` | ask | | 変えない | |
 | `code/test-deletion` | ask | | `*_test.go`・`test_*.py`・`tests/`・`*Test.java` と、`@unittest.skip`・`@pytest.mark.skip`・`t.Skip(`・`@Disabled` を足す | A11 |
-| `code/new-dependency` | ask | | package.json は `dependencies`・`devDependencies`・`peerDependencies`・`optionalDependencies` のブロックの内側だけを見る。削除行と突き合わせ、新しい名前だけを数える。`.gitmodules` の `[submodule "<名前>"]` の追加と、`Subproject commit` 行の変更(参照先の変更。名前は submodule のパス)も数える。diff には `diff.submodule=short`・`diff.ignoreSubmodules=none` を固定して渡す | A10 |
+| `code/new-dependency` | ask | | package.json は `dependencies`・`devDependencies`・`peerDependencies`・`optionalDependencies` のブロックの内側だけを見る。削除行と突き合わせ、新しい名前だけを数える。`.gitmodules` の `[submodule "<名前>"]` の追加と、`Subproject commit` 行の追加(参照先の変更と gitlink の新規の追加。名前は submodule のパス)と、`.gitmodules` の `url =`・`branch =` の行の追加(差し替えを含む。取り込み元の変更)も数える。追加した見出しの下の `url`・`branch` は見出しの 1 件に含める。diff には `diff.submodule=short`・`diff.ignoreSubmodules=none` を固定して渡す | A10 |
 | `plan/irreversible-ops` | info | | 語幹一致にする(`deploy\w*`・`migrations?`・`force[-\s]push`)。デプロイ・マイグレーション・リリース・破棄・上書きを既定の語に足す。Jev が有効なら文脈判定で ask に上げうる(§6.4.4) | A8、B1 |
 | `plan/max-steps` | info | | plan だけに当てる。`^#+\s*Step\s*\d+` の見出しを優先して数え、無ければ番号付きリストを数える | A9 |
 | `plan/scope-keywords` | info | | info に下げる。Jev が有効なら文脈判定で ask に上げうる(§6.4.4) | A7 |
@@ -462,7 +462,7 @@ info の所見は判定を動かさず、adversarial・steelman・crosscheck・m
 
 秘密情報の検出は、応急処置 (2) を土台に次を足す。
 
-- 検査の対象は評価対象の本文だけである。diff のファイル見出し(`diff --git`・`index`・`---`・`+++`・`rename`・`similarity`)とファイルの見出し行は、Raguel が位置を持って外す。文字列の形で判定しない。
+- 検査の対象は評価対象の本文だけである。code の diff は追加行(`+`)だけを見る。削除行と文脈行の秘密情報は、今回の変更が持ち込んだものではないので STOP の対象にしない(`maskSecrets` は全行を伏せたままにする。2026-10-05、R2-05)。diff のファイル見出し(`diff --git`・`index`・`---`・`+++`・`rename`・`similarity`)とファイルの見出し行は、Raguel が位置を持って外す。文字列の形で判定しない。
 - エントロピーの判定は、語を `/` と `.` で区切った各部分に当てる。部分が 20 文字以上で、英大文字・英小文字・数字のうち 3 種を含むときだけ測る。閾値は 4.0 のまま据える。パスや slug は小文字と数字と `-` で書かれることが多く、3 種の条件で外れる。`://` を含む行もエントロピーの判定の対象にする(URL のクエリに埋めた鍵を拾うため。ホスト名とパスの部分は区切りと 3 種の条件で外れる)。lockfile と `node_modules` の行の除外は残す(2026-09-29、W4 のレビューを受けたユーザー決定)。
 - `user:pass@` の形(`[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s@/]+@`)を既知パターンに足す(所見 A2)。
 - 所見の抜粋は一致した行の前後 1 行と行番号とし、一致したトークンは先頭 4 文字だけを残して `*` で伏せる。`01-rules.json`・verdict.json・応答・`submission.txt` のすべてで伏せる(所見 H1)。record_outcome の `notes` も、`outcomes.jsonl` と判例の `lesson` に保存する前に同じ規則で伏せる。誤検知の裁定の理由に、オーケストレーターが検出値を書き写すためである。偽の鍵の run(2026-10-01)で、`outcomes.jsonl` に平文が残ったのを受けて足した(ユーザー決定)。

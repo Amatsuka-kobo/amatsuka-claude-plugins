@@ -41185,6 +41185,12 @@ var secretsRule = {
     );
     const skip = new Set(artifact.headingLines);
     const lines = artifact.content.split("\n");
+    if (artifact.kind === "code") {
+      const added = new Set(
+        parseDiff(artifact.content).files.flatMap((f) => f.additionLines)
+      );
+      for (let i = 0; i < lines.length; i++) if (!added.has(i + 1)) skip.add(i);
+    }
     let maskedLines = null;
     const findings = [];
     for (let i = 0; i < lines.length; i++) {
@@ -41613,8 +41619,32 @@ function npmAdded(file2) {
   }
   return added;
 }
+var GITMODULES_SOURCE_RE = /^\s*(?:url|branch)\s*=\s*\S/;
+function gitmodulesAdded(file2) {
+  const added = [];
+  let addIndex = 0;
+  for (const hunk of file2.hunks) {
+    let inAddedSection = false;
+    for (const raw of hunk) {
+      const mark = raw[0];
+      if (mark === "-" || mark === "\\") continue;
+      const text = raw.slice(1);
+      const name = dependencyName("gitmodules", text);
+      if (name !== null) inAddedSection = mark === "+";
+      if (mark === "+") {
+        if (name !== null) added.push({ name, index: addIndex });
+        else if (!inAddedSection && GITMODULES_SOURCE_RE.test(text)) {
+          added.push({ name: text.trim(), index: addIndex });
+        }
+        addIndex++;
+      }
+    }
+  }
+  return added;
+}
 function addedNames(kind, file2) {
   if (kind === "npm-package") return npmAdded(file2);
+  if (kind === "gitmodules") return gitmodulesAdded(file2);
   const added = [];
   file2.additions.forEach((line, index) => {
     const name = dependencyName(kind, line);
@@ -41630,8 +41660,8 @@ function deletedNames(kind, file2) {
   );
 }
 var SUBPROJECT_RE = /^Subproject commit [0-9a-f]+$/;
-function isSubmoduleUpdate(file2) {
-  return file2.additions.some((l) => SUBPROJECT_RE.test(l)) && file2.deletions.some((l) => SUBPROJECT_RE.test(l));
+function isSubmodulePointer(file2) {
+  return file2.additions.some((l) => SUBPROJECT_RE.test(l));
 }
 var newDependencyRule = {
   id: RULE_ID6,
@@ -41642,7 +41672,7 @@ var newDependencyRule = {
     const severity = getSeverity(ctx.config.rules[RULE_ID6], "ask");
     const findings = [];
     for (const file2 of parseDiff(artifact.content).files) {
-      if (isSubmoduleUpdate(file2)) {
+      if (isSubmodulePointer(file2)) {
         const index = file2.additions.findIndex((l) => SUBPROJECT_RE.test(l));
         findings.push({
           ruleId: RULE_ID6,
@@ -42925,7 +42955,12 @@ function tamperedPriorPhases(store, runId, phase) {
 function testResultsFindings(artifact, ctx) {
   const text = artifact.context.testResults;
   if (!text) return [];
-  const view = { ...artifact, content: text, headingLines: [] };
+  const view = {
+    ...artifact,
+    kind: "plan",
+    content: text,
+    headingLines: []
+  };
   return [
     ...secretsRule.check(view, ctx),
     ...injectionMarkerRule.check(view, ctx)

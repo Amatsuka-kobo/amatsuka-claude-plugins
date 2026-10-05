@@ -5,6 +5,7 @@
  */
 
 import type { Finding, Rule } from "../../core/types.js"
+import { parseDiff } from "../code/diffParse.js"
 import { ruleParam } from "../params.js"
 import { getSeverity, truncateExcerpt } from "../util.js"
 
@@ -173,6 +174,13 @@ export const secretsRule: Rule = {
     )
     const skip = new Set(artifact.headingLines)
     const lines = artifact.content.split("\n")
+    // code は追加行だけを見る。削除行と文脈行の秘密はこの変更より前からあり、持ち込んだものではない
+    if (artifact.kind === "code") {
+      const added = new Set(
+        parseDiff(artifact.content).files.flatMap((f) => f.additionLines)
+      )
+      for (let i = 0; i < lines.length; i++) if (!added.has(i + 1)) skip.add(i)
+    }
     let maskedLines: string[] | null = null
 
     const findings: Finding[] = []

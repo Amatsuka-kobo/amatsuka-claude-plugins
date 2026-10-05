@@ -560,7 +560,13 @@ function tamperedPriorPhases(
 function testResultsFindings(artifact: Artifact, ctx: RuleContext): Finding[] {
   const text = artifact.context.testResults
   if (!text) return []
-  const view: Artifact = { ...artifact, content: text, headingLines: [] }
+  // diff ではないので、code の追加行だけを見る扱いに入れず全行を見る(kind を plan にする)
+  const view: Artifact = {
+    ...artifact,
+    kind: "plan",
+    content: text,
+    headingLines: []
+  }
   return [
     ...secretsRule.check(view, ctx),
     ...injectionMarkerRule.check(view, ctx)

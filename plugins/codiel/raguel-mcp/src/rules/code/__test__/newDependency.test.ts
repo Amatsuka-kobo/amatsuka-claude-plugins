@@ -161,6 +161,38 @@ describe("newDependencyRule のほかのマニフェスト", () => {
     expect(findings[0].message).toContain("vendor/lib")
   })
 
+  it("gitlink の新規の追加(Subproject commit の追加だけ)も、パスを名前にして出す", () => {
+    const findings = check(
+      fileDiff("vendor/lib", [`Subproject commit ${"a".repeat(40)}`])
+    )
+    expect(findings).toHaveLength(1)
+    expect(findings[0].message).toContain("vendor/lib")
+  })
+
+  it(".gitmodules の既存の submodule の url と branch の差し替えを出す", () => {
+    const findings = check(
+      fileDiff(
+        ".gitmodules",
+        ["\turl = https://example.invalid/b.git", "\tbranch = evil"],
+        ["\turl = https://example.invalid/a.git", "\tbranch = main"]
+      )
+    )
+    expect(findings).toHaveLength(2)
+    expect(findings[0].message).toContain("url = https://example.invalid/b.git")
+    expect(findings[1].message).toContain("branch = evil")
+  })
+
+  it("新しい submodule の url は、見出しの 1 件に含めて重ねて出さない", () => {
+    const findings = check(
+      fileDiff(".gitmodules", [
+        '[submodule "x"]',
+        "\tpath = x",
+        "\turl = https://example.invalid/x.git"
+      ])
+    )
+    expect(findings).toHaveLength(1)
+  })
+
   it("依存に無関係なファイルでは出さない", () => {
     expect(check(fileDiff("src/index.ts", ["const x = 1"]))).toEqual([])
   })

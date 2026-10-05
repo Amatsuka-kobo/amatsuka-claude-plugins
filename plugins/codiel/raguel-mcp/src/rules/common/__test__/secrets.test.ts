@@ -6,7 +6,10 @@ const AWS_KEY = "AKIAABCDEFGHIJKLMNOP"
 const HIGH_ENTROPY = "Zq8xK2mP9vL4nR7tW3yB6cD1fG5hJ0sA"
 
 function check(content: string, headingLines: number[] = [], ctx = makeCtx()) {
-  return secretsRule.check(makeArtifact({ content, headingLines }), ctx)
+  return secretsRule.check(
+    makeArtifact({ kind: "plan", content, headingLines }),
+    ctx
+  )
 }
 
 describe("secretsRule 既知の形", () => {
@@ -229,6 +232,58 @@ describe("secretsRule 抜粋と伏せ字(所見 G1・H1)", () => {
       expect(f.message).not.toContain(AWS_KEY)
       expect(f.message).not.toContain(HIGH_ENTROPY)
     }
+  })
+})
+
+describe("secretsRule code の diff は追加行だけを見る(所見 R2-05)", () => {
+  function diffWith(lines: string[]): string {
+    return [
+      "diff --git a/a.ts b/a.ts",
+      "index 1111111..2222222 100644",
+      "--- a/a.ts",
+      "+++ b/a.ts",
+      "@@ -1,3 +1,3 @@",
+      ...lines
+    ].join("\n")
+  }
+  const run = (lines: string[]) => {
+    const content = diffWith(lines)
+    const headingLines = [0, 1, 2, 3, 4]
+    return secretsRule.check(
+      makeArtifact({ kind: "code", content, headingLines }),
+      makeCtx()
+    )
+  }
+
+  it("削除行だけにある秘密情報では出さない", () => {
+    expect(
+      run([`-const k = '${AWS_KEY}'`, "+const k = process.env.K"])
+    ).toEqual([])
+  })
+
+  it("文脈行だけにある秘密情報では出さない", () => {
+    expect(run([` const k = '${AWS_KEY}'`, "+const x = 1"])).toEqual([])
+  })
+
+  it("追加行にあれば出し、位置は diff の本文の行番号を指す", () => {
+    const findings = run([` const a = 1`, `+const k = '${AWS_KEY}'`])
+    expect(findings).toHaveLength(1)
+    expect(findings[0].evidence?.line).toBe(7)
+  })
+
+  it("plan など code 以外の本文は全行を見る", () => {
+    const findings = secretsRule.check(
+      makeArtifact({ kind: "plan", content: `-const k = '${AWS_KEY}'` }),
+      makeCtx()
+    )
+    expect(findings).toHaveLength(1)
+  })
+
+  it("maskSecrets は削除行と文脈行の秘密情報も伏せる", () => {
+    const masked = maskSecrets(
+      diffWith([`-const k = '${AWS_KEY}'`, ` const c = '${AWS_KEY}'`])
+    )
+    expect(masked).not.toContain(AWS_KEY)
   })
 })
 
