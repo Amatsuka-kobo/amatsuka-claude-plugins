@@ -710,16 +710,22 @@ try {
   if (!filePath) pass();
   const abs = path4.resolve(cwd, filePath);
   const STATE_JSON_PATH_RE = /[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i;
+  const mainRoot = findMainRoot(cwd);
+  const runsDirs = [
+    path4.join(mainRoot, ".codiel", "runs"),
+    resolvePhysicalPath(mainRoot, path4.join(".codiel", "runs"))
+  ];
   if ([
     abs,
     resolvePhysicalPath(cwd, filePath),
     resolvePhysicalPath(cwd, abs)
-  ].some((p) => STATE_JSON_PATH_RE.test(p)))
+  ].some(
+    (p) => STATE_JSON_PATH_RE.test(p) || path4.basename(p) === "state.json" && runsDirs.some((d) => p !== d && isUnder(p, d))
+  ))
     emit(
       "deny",
       "state.json \u306F codiel-state \u30B9\u30AF\u30EA\u30D7\u30C8\u7D4C\u7531\u3067\u306E\u307F\u5909\u66F4\u3067\u304D\u307E\u3059(\u30D5\u30A7\u30FC\u30BA\u98DB\u3070\u3057\u30FB\u30B2\u30FC\u30C8\u507D\u88C5\u306E\u9632\u6B62)"
     );
-  const mainRoot = findMainRoot(cwd);
   const run = findActiveRun(mainRoot);
   if (run) {
     const target = raguelTarget(abs, mainRoot);

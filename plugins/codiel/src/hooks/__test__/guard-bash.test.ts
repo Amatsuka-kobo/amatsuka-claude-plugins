@@ -367,6 +367,35 @@ test.each([
   expect(r?.permissionDecisionReason).toContain("state.json")
 })
 
+// 書き込み先のディレクトリをオプションで渡す形(H1)
+test.each([
+  "cp -t .codiel/runs/x/try-1 /tmp/state.json",
+  "install -t .codiel/runs/x/try-1 /tmp/state.json",
+  "cp --target-directory .codiel/runs/x/try-1 /tmp/state.json",
+  "cp --target-directory=.codiel/runs/x/try-1 /tmp/state.json",
+  "cp --target-dir .codiel/runs/x/try-1 /tmp/state.json",
+  "install --target-d=.codiel/runs/x/try-1 /tmp/state.json"
+])("%s は deny", (command) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  fs.mkdirSync(path.join(root, ".codiel/runs/x/try-1"), { recursive: true })
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
+})
+
+test("先頭が git・gh でないコマンドでは、囮の gh -m の後ろの改行を含む語も判定に残し、state.json の削除は deny", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const r = hook(root, "env rm gh -m '.codiel/runs/x/try-1/state.json\nx'")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
+test("cd -P で symlink の .. を実体で辿った先の state.json への書き込みは deny(H2)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  const child = path.join(root, ".codiel/runs/x/try-1/child")
+  fs.mkdirSync(child, { recursive: true })
+  fs.symlinkSync(child, path.join(root, "alias"), "dir")
+  const r = hook(root, "cd -P alias/.. && printf '{}' > state.json")
+  expect(r?.permissionDecision).toBe("deny")
+})
+
 test("symlink を通した alias/../state.json への書き込みは deny", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   const reports = path.join(root, ".codiel/runs/x/try-1/reports")

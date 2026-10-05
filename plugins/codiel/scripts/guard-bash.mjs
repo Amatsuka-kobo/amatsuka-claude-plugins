@@ -718,6 +718,7 @@ function cwdCandidatesOf(commands, cwd) {
   for (const dir of cdTargets(commands)) {
     for (const c of [...out]) {
       out.add(path4.resolve(c, expandHome(dir)));
+      out.add(resolvePhysicalPath(c, expandHome(dir)));
       if (out.size > MAX_CWD_CANDIDATES) return null;
     }
   }
@@ -762,10 +763,30 @@ function stateJsonProblem(cmd, cwd) {
     if (at < 0 || at >= words.length) return false;
     const name = path4.basename(words[at]);
     if (!STATE_FILE_COMMANDS.includes(name)) return false;
-    const args = words.slice(at + 1).flatMap(
-      (a) => name === "dd" ? a.startsWith("of=") ? [a.slice(3)] : [] : a.startsWith("-") || a === "" ? [] : [a]
-    );
+    const args = [];
+    let targetDir;
+    const rest = words.slice(at + 1);
+    for (let k = 0; k < rest.length; k++) {
+      const a = rest[k];
+      if (name === "dd") {
+        if (a.startsWith("of=")) args.push(a.slice(3));
+      } else if (isTargetDirectoryOption(a))
+        targetDir = a.includes("=") ? a.slice(a.indexOf("=") + 1) : rest[++k];
+      else if (/^-[A-Za-z]*t$/.test(a)) targetDir = rest[++k];
+      else if (/^-[A-Za-z]*t./.test(a) && !a.startsWith("--"))
+        targetDir = a.slice(a.indexOf("t") + 1);
+      else if (!a.startsWith("-") && a !== "") args.push(a);
+    }
     if (args.some(isStateFile)) return true;
+    if (targetDir !== void 0) {
+      const dir = targetDir;
+      if (isStateFile(dir)) return true;
+      if (args.some(
+        (a) => isStateFile(path4.join(dir, path4.basename(a))) || path4.basename(a) === "state.json" && resolved(dir).some(underRuns)
+      ))
+        return true;
+      return name === "mv" && args.some(holdsState) || name === "ln" && [dir, ...args].some(touchesRuns);
+    }
     if (name === "ln" && args.some(touchesRuns)) return true;
     const sources = name === "rm" ? args : args.slice(0, -1);
     if ((name === "rm" || name === "mv") && sources.some(holdsState))
@@ -802,10 +823,10 @@ function isInertHeredoc(line, before, after, next) {
   return false;
 }
 function withoutMessageValues(words) {
-  const at = words.findIndex(
-    (w, k) => w === "git" && ["commit", "tag"].includes(words[k + 1] ?? "") || w === "gh"
-  );
-  if (at === -1) return words;
+  const at = words.findIndex((w) => !/^[A-Za-z_]\w*=/.test(w));
+  const head = words[at];
+  if (at === -1 || !(head === "git" && ["commit", "tag"].includes(words[at + 1] ?? "") || head === "gh"))
+    return words;
   return words.filter((w, k) => {
     if (k <= at || !w.includes("\n")) return true;
     const prev = words[k - 1];
@@ -839,6 +860,10 @@ function withoutInertBodies(cmd) {
     i = k;
   }
   return lines.join("\n");
+}
+function isTargetDirectoryOption(a) {
+  const name = a.split("=")[0];
+  return name.length >= 3 && "--target-directory".startsWith(name);
 }
 function isRegularFile(p) {
   try {

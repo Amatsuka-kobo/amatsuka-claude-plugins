@@ -201,6 +201,11 @@
     - heredoc の開始と区切り語を読めないとき(終端の行が無いときを含む)は、何も差し引かない。fd 番号付きの開始(`0<<EOF`)も開始として読む。差し引かない heredoc は、本文を残したまま終端の行まで飛ばし、本文の中の開始の行を差し引きの判定にかけない。
     - 字句解析の語の列からは、`git commit`・`git tag`・`gh` の `-m`・`--message`・`--body` の値で改行を含む語だけを外す。コミットメッセージの中の `>` やパスを書き込みと読まないためである。
     - cwd の候補は、字句解析の語の列と行の走査の語の列のそれぞれから元の順で作り、和集合にする。同じ cd を 2 つの列で二重に数えて候補が膨らむことはなく、通常の cd(入れ子 6 個まで、monorepo の 8 パッケージの巡回)は通る。どちらかの列で上限を超えたら、「cd が多すぎて書き込み先を判定できない」として拒否する。
+  - 敵対的レビューの high 3 件で、さらに次のとおりにした。
+    - 書き込み先のディレクトリをオプションで渡す形も判定する。対象は `cp`・`mv`・`ln`・`install` の `-t <dir>`・`-t<dir>`・`--target-directory <dir>`・`--target-directory=<dir>` と、GNU の長いオプションの省略形(`--target-dir`・`--target-d=` など、3 文字以上の前方一致)である。その値を書き込み先とし、元の basename をつないだパスが state.json か、state.json という名前のファイルを runs の配下へ写すかで判定する(H1)。
+    - cwd の候補には、cd の行き先ごとに、字句で畳んだパスと symlink を実体で辿ったパスの両方を残す。`cd -P alias/..`(alias は try のディレクトリの下への symlink)の先を見落とさないためである(H2)。
+    - guard-write も、メインの作業ツリーの `.codiel/runs` の字句パスと実体パスを求め、その配下の state.json かで判定する。`.codiel/runs` 自体が外のディレクトリへの symlink でも、別名(`.codiel/alias/state.json`)を通した Write を止めるためである。名前の照合(`.codiel/runs/…/state.json` の正規表現)は、大文字小文字を区別しない FS でのすり抜けを防ぐために残す(H3)。
+    - 字句解析の語の列からメッセージの値を外すのは、先頭のコマンド(`VAR=値` の代入だけを飛ばした最初の語)が `git commit`・`git tag`・`gh` のときに限る。`env`・シェル・`sudo` などの後ろの囮の `gh -m` で外し始めないためである。
 - 変更(Write/Edit): `guard-write.ts:241` で、論理パスに加えて、`path.resolve` の前の生の結合パスを上の解決関数に通した結果にも同じ判定を当てる。
 - テスト: `hooks/__test__/guard-bash.test.ts` の state.json の群(:299、:490)に、`rm <state.json>`、`cd .codiel/runs/x/try-1 && echo > state.json`、`rm -rf .codiel/runs/x` の拒否と、/tmp のパスに `state.json` を含む printf の許可を足す。`hooks/__test__/guard-write.test.ts` に symlink を通した Write の拒否を足す。Bash と Write の両方に `alias/../state.json` の拒否を 1 件ずつ足す。
 - 文書: 設計書 2026-09-27 §6.16.2(決定 96)の既知の限界の記述と、`guard-bash.ts:761-763` のコメント。

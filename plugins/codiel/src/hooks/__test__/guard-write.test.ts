@@ -191,6 +191,21 @@ test("symlink を通した alias/../state.json への Write は deny", () => {
   expect(r?.permissionDecision).toBe("deny")
 })
 
+test(".codiel/runs 自体が外のディレクトリへの symlink のとき、別名を通した state.json への Write は deny(H3)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "gw-runs-"))
+  fs.mkdirSync(path.join(outside, "x/try-1"), { recursive: true })
+  fs.mkdirSync(path.join(root, ".codiel"))
+  fs.symlinkSync(outside, path.join(root, ".codiel/runs"), "dir")
+  fs.symlinkSync(
+    path.join(outside, "x/try-1"),
+    path.join(root, ".codiel/alias"),
+    "dir"
+  )
+  const r = hook(root, "Write", path.join(root, ".codiel/alias/state.json"))
+  expect(r?.permissionDecision).toBe("deny")
+})
+
 test("存在しない中間ディレクトリを挟んだ nodir/../alias/state.json への Write は deny", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gw-"))
   const tryDir = path.join(root, ".codiel/runs/demo/try-1")

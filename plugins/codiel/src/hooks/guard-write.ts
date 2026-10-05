@@ -240,13 +240,26 @@ try {
   // (cwd 非依存)。ケース非依存 FS でのすり抜けも防ぐため大文字小文字を無視する。
   // symlink を通した別名(`link/state.json`・`alias/../state.json`)も止めるため、字句で畳んだ
   // パス・生の結合パスを実体で辿ったパス・字句で畳んだパスを実体で辿ったパスの 3 つに同じ判定を当てる。
+  // `.codiel/runs` 自体が外への symlink でも止めるため、メインの作業ツリーの runs の字句パスと
+  // 実体パスを求め、その配下の state.json かでも判定する(guard-bash と同じ考え方)。
+  // 名前の照合(STATE_JSON_PATH_RE)は、大文字小文字を区別しない FS でのすり抜けを防ぐために残す
   const STATE_JSON_PATH_RE = /[/\\]\.codiel[/\\]runs[/\\].+[/\\]state\.json$/i
+  const mainRoot = findMainRoot(cwd)
+  const runsDirs = [
+    path.join(mainRoot, ".codiel", "runs"),
+    resolvePhysicalPath(mainRoot, path.join(".codiel", "runs"))
+  ]
   if (
     [
       abs,
       resolvePhysicalPath(cwd, filePath),
       resolvePhysicalPath(cwd, abs)
-    ].some((p) => STATE_JSON_PATH_RE.test(p))
+    ].some(
+      (p) =>
+        STATE_JSON_PATH_RE.test(p) ||
+        (path.basename(p) === "state.json" &&
+          runsDirs.some((d) => p !== d && isUnder(p, d)))
+    )
   )
     emit(
       "deny",
@@ -277,8 +290,7 @@ try {
   //
   // 書き込み先が worktree の中なら、3 つとも worktree の中へ写した基準で取る(下記)。
   // run は常にメインの作業ツリーで探す(設計書 §6.8 の (a))。cwd が worktree の中でも
-  // findMainRoot がメインのルートを返す。
-  const mainRoot = findMainRoot(cwd)
+  // findMainRoot がメインのルートを返す(mainRoot は state.json の判定の前に求めてある)。
   const run = findActiveRun(mainRoot)
   // Raguel の設定と記録(Raguel 設計書 §6.13.4)。awaiting_human の run でも効かせるため、
   // status で通す分岐より前に置く。state.intent・config の読み込み・退避先の判定より前なので、
