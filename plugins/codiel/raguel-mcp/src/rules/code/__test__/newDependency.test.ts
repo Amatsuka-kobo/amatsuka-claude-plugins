@@ -126,6 +126,41 @@ describe("newDependencyRule のほかのマニフェスト", () => {
     expect(check(fileDiff("Cargo.toml", ['edition = "2021"']))).toEqual([])
   })
 
+  it(".gitmodules への submodule の追加を出し、既存の名前の再掲は出さない", () => {
+    const findings = check(
+      fileDiff(".gitmodules", [
+        '[submodule "vendor/lib"]',
+        "\tpath = vendor/lib",
+        "\turl = https://example.invalid/lib.git"
+      ])
+    )
+    expect(findings.map((f) => f.message)).toEqual([
+      "依存パッケージの追加を検出しました: .gitmodules(vendor/lib)"
+    ])
+    expect(
+      check(
+        fileDiff(
+          ".gitmodules",
+          ['[submodule "vendor/lib"]', "\turl = https://example.invalid/b.git"],
+          ['[submodule "vendor/lib"]', "\turl = https://example.invalid/a.git"]
+        )
+      )
+    ).toEqual([])
+  })
+
+  it("submodule の参照先の変更(Subproject commit の更新)を、パスを名前にして出す", () => {
+    const findings = check(
+      fileDiff(
+        "vendor/lib",
+        [`Subproject commit ${"b".repeat(40)}`],
+        [`Subproject commit ${"a".repeat(40)}`]
+      )
+    )
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe("ask")
+    expect(findings[0].message).toContain("vendor/lib")
+  })
+
   it("依存に無関係なファイルでは出さない", () => {
     expect(check(fileDiff("src/index.ts", ["const x = 1"]))).toEqual([])
   })

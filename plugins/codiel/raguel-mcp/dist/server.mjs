@@ -41520,6 +41520,7 @@ function manifestKind(path10) {
   if (base === "requirements.txt") return "requirements";
   if (base === "Cargo.toml") return "cargo";
   if (base === "go.mod") return "gomod";
+  if (base === ".gitmodules") return "gitmodules";
   return null;
 }
 var CARGO_NON_DEPENDENCY_KEYS = /* @__PURE__ */ new Set([
@@ -41557,6 +41558,8 @@ function dependencyName(kind, line) {
     }
     case "gomod":
       return line.match(/^\s*(?:require\s+)?([\w.\-/]+)\s+v\d+\.\d+\.\d+/)?.[1] ?? null;
+    case "gitmodules":
+      return line.match(/^\s*\[submodule\s+"([^"]+)"\]/)?.[1] ?? null;
     default:
       return null;
   }
@@ -41626,6 +41629,10 @@ function deletedNames(kind, file2) {
     ).filter((n) => n !== null)
   );
 }
+var SUBPROJECT_RE = /^Subproject commit [0-9a-f]+$/;
+function isSubmoduleUpdate(file2) {
+  return file2.additions.some((l) => SUBPROJECT_RE.test(l)) && file2.deletions.some((l) => SUBPROJECT_RE.test(l));
+}
 var newDependencyRule = {
   id: RULE_ID6,
   appliesTo: ["code"],
@@ -41635,6 +41642,21 @@ var newDependencyRule = {
     const severity = getSeverity(ctx.config.rules[RULE_ID6], "ask");
     const findings = [];
     for (const file2 of parseDiff(artifact.content).files) {
+      if (isSubmoduleUpdate(file2)) {
+        const index = file2.additions.findIndex((l) => SUBPROJECT_RE.test(l));
+        findings.push({
+          ruleId: RULE_ID6,
+          severity,
+          message: `\u4F9D\u5B58\u30D1\u30C3\u30B1\u30FC\u30B8\u306E\u8FFD\u52A0\u3092\u691C\u51FA\u3057\u307E\u3057\u305F: ${file2.path}(${file2.path})`,
+          evidence: {
+            location: file2.path,
+            path: file2.path,
+            line: file2.additionLines[index],
+            excerpt: truncateExcerpt(file2.additions[index])
+          }
+        });
+        continue;
+      }
       const kind = manifestKind(file2.path);
       if (!kind) continue;
       const deleted = deletedNames(kind, file2);
@@ -42223,7 +42245,11 @@ var FIXED_CONFIG = [
   "-c",
   "diff.relative=false",
   "-c",
-  "color.ui=never"
+  "color.ui=never",
+  "-c",
+  "diff.submodule=short",
+  "-c",
+  "diff.ignoreSubmodules=none"
 ];
 function runGit(cwd, args, maxBuffer = 64 * 1024 * 1024) {
   const res = spawnSync("git", ["-C", cwd, ...args], {

@@ -450,7 +450,7 @@ diff の書式が固定されるので、`--no-prefix`・`quotePath`・外部 di
 | `code/dangerous-patterns` | 廃止 | | 上の 2 つに分ける | A4 |
 | `code/max-diff-lines` | ask | | 変えない | |
 | `code/test-deletion` | ask | | `*_test.go`・`test_*.py`・`tests/`・`*Test.java` と、`@unittest.skip`・`@pytest.mark.skip`・`t.Skip(`・`@Disabled` を足す | A11 |
-| `code/new-dependency` | ask | | package.json は `dependencies`・`devDependencies`・`peerDependencies`・`optionalDependencies` のブロックの内側だけを見る。削除行と突き合わせ、新しい名前だけを数える | A10 |
+| `code/new-dependency` | ask | | package.json は `dependencies`・`devDependencies`・`peerDependencies`・`optionalDependencies` のブロックの内側だけを見る。削除行と突き合わせ、新しい名前だけを数える。`.gitmodules` の `[submodule "<名前>"]` の追加と、`Subproject commit` 行の変更(参照先の変更。名前は submodule のパス)も数える。diff には `diff.submodule=short`・`diff.ignoreSubmodules=none` を固定して渡す | A10 |
 | `plan/irreversible-ops` | info | | 語幹一致にする(`deploy\w*`・`migrations?`・`force[-\s]push`)。デプロイ・マイグレーション・リリース・破棄・上書きを既定の語に足す。Jev が有効なら文脈判定で ask に上げうる(§6.4.4) | A8、B1 |
 | `plan/max-steps` | info | | plan だけに当てる。`^#+\s*Step\s*\d+` の見出しを優先して数え、無ければ番号付きリストを数える | A9 |
 | `plan/scope-keywords` | info | | info に下げる。Jev が有効なら文脈判定で ask に上げうる(§6.4.4) | A7 |

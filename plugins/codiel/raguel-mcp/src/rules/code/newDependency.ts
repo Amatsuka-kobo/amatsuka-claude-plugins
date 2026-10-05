@@ -2,6 +2,7 @@
  * code/new-dependency — 依存パッケージの追加の検出(既定 ask)。設計書 §6.4.2(A10)。
  * package.json は dependencies・devDependencies・peerDependencies・optionalDependencies の
  * ブロックの内側だけを見る。どのマニフェストも削除行と名前を突き合わせ、新しい名前だけを数える。
+ * .gitmodules の追加と、submodule(mode 160000)の参照先の変更も依存として数える。
  */
 
 import type { Finding, Rule } from "../../core/types.js"
@@ -16,6 +17,7 @@ type ManifestKind =
   | "requirements"
   | "cargo"
   | "gomod"
+  | "gitmodules"
 
 function manifestKind(path: string): ManifestKind | null {
   const base = path.slice(path.lastIndexOf("/") + 1)
@@ -30,6 +32,7 @@ function manifestKind(path: string): ManifestKind | null {
   if (base === "requirements.txt") return "requirements"
   if (base === "Cargo.toml") return "cargo"
   if (base === "go.mod") return "gomod"
+  if (base === ".gitmodules") return "gitmodules"
   return null
 }
 
@@ -75,6 +78,8 @@ function dependencyName(kind: ManifestKind, line: string): string | null {
         line.match(/^\s*(?:require\s+)?([\w.\-/]+)\s+v\d+\.\d+\.\d+/)?.[1] ??
         null
       )
+    case "gitmodules":
+      return line.match(/^\s*\[submodule\s+"([^"]+)"\]/)?.[1] ?? null
     default:
       return null
   }
@@ -173,6 +178,16 @@ function deletedNames(kind: ManifestKind, file: DetailedDiffFile): Set<string> {
   )
 }
 
+const SUBPROJECT_RE = /^Subproject commit [0-9a-f]+$/
+
+/** mode 160000 のパスの参照先の変更(Subproject commit 行の置き換え)か。追加だけの行は .gitmodules 側で数える */
+function isSubmoduleUpdate(file: DetailedDiffFile): boolean {
+  return (
+    file.additions.some((l) => SUBPROJECT_RE.test(l)) &&
+    file.deletions.some((l) => SUBPROJECT_RE.test(l))
+  )
+}
+
 export const newDependencyRule: Rule = {
   id: RULE_ID,
   appliesTo: ["code"],
@@ -183,6 +198,21 @@ export const newDependencyRule: Rule = {
     const findings: Finding[] = []
 
     for (const file of parseDiff(artifact.content).files) {
+      if (isSubmoduleUpdate(file)) {
+        const index = file.additions.findIndex((l) => SUBPROJECT_RE.test(l))
+        findings.push({
+          ruleId: RULE_ID,
+          severity,
+          message: `依存パッケージの追加を検出しました: ${file.path}(${file.path})`,
+          evidence: {
+            location: file.path,
+            path: file.path,
+            line: file.additionLines[index],
+            excerpt: truncateExcerpt(file.additions[index])
+          }
+        })
+        continue
+      }
       const kind = manifestKind(file.path)
       if (!kind) continue
       const deleted = deletedNames(kind, file)

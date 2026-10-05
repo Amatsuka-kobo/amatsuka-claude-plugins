@@ -125,6 +125,39 @@ describe("collectCodeSubject", () => {
     })
   })
 
+  describe.each([
+    ["diff.submodule", "log"],
+    ["diff.ignoreSubmodules", "all"]
+  ])("リポジトリの設定が %s=%s でも、gitlink の更新が Subproject commit の行で入る", (key, value) => {
+    it("gitlink の更新を diff の本文に載せる", () => {
+      const sub = track(makeRepo({ "s.txt": "1\n" }))
+      const subOld = git(sub, "rev-parse", "HEAD")
+      const repo = track(makeRepo({ "x.txt": "x\n" }))
+      git(
+        repo,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        sub,
+        "vendor/lib"
+      )
+      commitAll(repo)
+      const base = git(repo, "rev-parse", "HEAD")
+      writeFile(sub, "s.txt", "2\n")
+      const subNew = commitAll(sub)
+      git(path.join(repo, "vendor/lib"), "fetch", "-q")
+      git(path.join(repo, "vendor/lib"), "checkout", "-q", subNew)
+      commitAll(repo)
+      git(repo, "config", key, value)
+
+      const r = collectCodeSubject({ projectRoot: repo, baseRef: base })
+      expect(r.diff).toContain(`-Subproject commit ${subOld}`)
+      expect(r.diff).toContain(`+Subproject commit ${subNew}`)
+    })
+  })
+
   it("paths で範囲を絞り、パス指定を文字どおりに解釈する", () => {
     const repo = track(makeRepo({ "a.md": "a\n", "b.md": "b\n" }))
     const base = git(repo, "rev-parse", "HEAD")

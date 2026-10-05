@@ -23,7 +23,11 @@ const FIXED_CONFIG = [
   "-c",
   "diff.relative=false",
   "-c",
-  "color.ui=never"
+  "color.ui=never",
+  "-c",
+  "diff.submodule=short",
+  "-c",
+  "diff.ignoreSubmodules=none"
 ]
 
 interface GitResult {
