@@ -75,8 +75,17 @@ export interface VerifyAttemptResult {
   mismatches: string[]
 }
 
-function sanitizeRunId(runId: string): string {
-  if (!RUN_ID_PATTERN.test(runId) || runId.includes("..")) {
+/** projectDir の直下の子になる名前か。`.` は正規表現を通るが projectDir 自身を指す */
+function isRunDirName(runId: string, projectDir: string): boolean {
+  return (
+    RUN_ID_PATTERN.test(runId) &&
+    !runId.includes("..") &&
+    path.dirname(path.resolve(projectDir, runId)) === path.resolve(projectDir)
+  )
+}
+
+export function sanitizeRunId(runId: string, projectDir: string): string {
+  if (!isRunDirName(runId, projectDir)) {
     throw new Error(`不正な runId です: ${runId}`)
   }
   return runId
@@ -177,7 +186,7 @@ export class CaseStore {
   private phaseDir(runId: string, phase: GatedPhase): string {
     return path.join(
       this.projectDir,
-      sanitizeRunId(runId),
+      sanitizeRunId(runId, this.projectDir),
       sanitizePhase(phase)
     )
   }
@@ -515,7 +524,7 @@ export class CaseStore {
     if (fs.existsSync(evalFile)) writeFileAtomic(evalFile, keep(evaluations))
     if (fs.existsSync(outFile)) writeFileAtomic(outFile, keep(outcomes))
     for (const runId of removed) {
-      if (!RUN_ID_PATTERN.test(runId) || runId.includes("..")) continue
+      if (!isRunDirName(runId, this.projectDir)) continue
       fs.rmSync(path.join(this.projectDir, runId), {
         recursive: true,
         force: true

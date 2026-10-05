@@ -2984,7 +2984,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3011,7 +3011,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3642,7 +3642,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3900,7 +3900,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -17323,7 +17323,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve3) {
+function isRecursive(inst, stack, resolve4) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -17333,7 +17333,7 @@ function isRecursive(inst, stack, resolve3) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve3);
+      const answer = isRecursive(child, stack, resolve4);
       if (answer > result)
         result = answer;
     }
@@ -17344,7 +17344,7 @@ function isRecursive(inst, stack, resolve3) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve3) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve4) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -17408,7 +17408,7 @@ function isRecursive(inst, stack, resolve3) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve3 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve4 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -35816,7 +35816,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error62) {
@@ -35833,7 +35833,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -35911,7 +35911,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error62) {
           reject(error62);
@@ -36172,12 +36172,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -37268,7 +37268,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -37932,12 +37932,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -38951,8 +38951,11 @@ var EVIDENCE_FILES = [
 ];
 var KNOWN = new Set(EVIDENCE_FILES);
 var NO_EVALUATION_RECORD = "\u8A55\u4FA1\u306E\u8A18\u9332\u304C\u7121\u3044(\u6383\u9664\u6E08\u307F\u304B\u3001\u5B58\u5728\u3057\u306A\u3044)";
-function sanitizeRunId(runId) {
-  if (!RUN_ID_PATTERN.test(runId) || runId.includes("..")) {
+function isRunDirName(runId, projectDir) {
+  return RUN_ID_PATTERN.test(runId) && !runId.includes("..") && path3.dirname(path3.resolve(projectDir, runId)) === path3.resolve(projectDir);
+}
+function sanitizeRunId(runId, projectDir) {
+  if (!isRunDirName(runId, projectDir)) {
     throw new Error(`\u4E0D\u6B63\u306A runId \u3067\u3059: ${runId}`);
   }
   return runId;
@@ -39029,7 +39032,7 @@ var CaseStore = class {
   phaseDir(runId, phase) {
     return path3.join(
       this.projectDir,
-      sanitizeRunId(runId),
+      sanitizeRunId(runId, this.projectDir),
       sanitizePhase(phase)
     );
   }
@@ -39306,7 +39309,7 @@ var CaseStore = class {
     if (fs3.existsSync(evalFile)) writeFileAtomic(evalFile, keep(evaluations));
     if (fs3.existsSync(outFile)) writeFileAtomic(outFile, keep(outcomes));
     for (const runId of removed) {
-      if (!RUN_ID_PATTERN.test(runId) || runId.includes("..")) continue;
+      if (!isRunDirName(runId, this.projectDir)) continue;
       fs3.rmSync(path3.join(this.projectDir, runId), {
         recursive: true,
         force: true
@@ -39323,7 +39326,7 @@ var APIPromise = class APIPromise2 extends Promise {
   #parseResponse;
   #parsed;
   constructor(responsePromise, parseResponse) {
-    super((resolve3) => resolve3(void 0));
+    super((resolve4) => resolve4(void 0));
     this.#responsePromise = responsePromise;
     this.#parseResponse = parseResponse;
   }
@@ -39415,7 +39418,7 @@ var retryDelayMs = (attempt, headers, policy = DEFAULT_RETRY_POLICY, random = Ma
   const exponential = Math.min(policy.backoffInitialMs * 2 ** attempt, policy.backoffMaxMs);
   return Math.round(exponential * (1 - random() * policy.backoffJitter));
 };
-var sleep = (ms, signal) => new Promise((resolve3, reject) => {
+var sleep = (ms, signal) => new Promise((resolve4, reject) => {
   if (signal?.aborted) return reject(signal.reason);
   const onAbort = () => {
     clearTimeout(timer);
@@ -39423,7 +39426,7 @@ var sleep = (ms, signal) => new Promise((resolve3, reject) => {
   };
   const timer = setTimeout(() => {
     signal?.removeEventListener("abort", onAbort);
-    resolve3();
+    resolve4();
   }, ms);
   signal?.addEventListener("abort", onAbort, { once: true });
 });

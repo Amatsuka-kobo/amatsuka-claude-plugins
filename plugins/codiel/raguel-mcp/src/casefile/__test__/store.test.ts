@@ -16,6 +16,7 @@ import { computeDigest } from "../digest"
 import {
   CaseStore,
   NO_EVALUATION_RECORD,
+  sanitizeRunId,
   type VerdictRecordInput
 } from "../store"
 
@@ -498,6 +499,27 @@ describe("CaseStore", () => {
         store.lookupEvaluation("eval-run-stale-implement-1")
       ).toBeUndefined()
       expect(store.lookupEvaluation("eval-run-fresh-implement-1")).toBeDefined()
+    })
+
+    it('runId "." の索引の行があっても、掃除で projectDir を消さない(R2-06)', () => {
+      const now = Date.now()
+      evaluateAt("run-1", now, now)
+      store.appendEvaluationIndex(
+        indexEntry({
+          evaluationId: "eval-dot",
+          runId: ".",
+          at: new Date(now - 91 * DAY).toISOString()
+        })
+      )
+      store.sweepRetention(now)
+      expect(fs.existsSync(store.projectDir)).toBe(true)
+      expect(fs.existsSync(path.join(store.projectDir, "run-1"))).toBe(true)
+    })
+
+    it('sanitizeRunId は "." を拒否する(R2-06)', () => {
+      expect(() => sanitizeRunId(".", store.projectDir)).toThrow("不正な runId")
+      expect(() => store.openAttempt(".", "implement")).toThrow("不正な runId")
+      expect(sanitizeRunId("run-1.v2", store.projectDir)).toBe("run-1.v2")
     })
 
     it("上限の内側なら何も消さず、索引も書き直さない", () => {
