@@ -32,7 +32,7 @@
   - 判定規則の変更は、変更後の手順を所見の経路に当てて読み、経路が閉じることを書く。
 - 指示書(`plugins/codiel/skills/**`・`references/**`)は `prompt-smith:prompt-smith` の規律で書く。`orchestrating-runs/SKILL.md` の §2.1・§2.4 の番号を変えない。
 - `intent-format.md` に触れる組(I4-05・I4-08・I4-11)は、各コミットで `plugins/codiel/docs/format-change-checklist.md` の該当セクションの項目を追随させる。3 件を 1 コミットに束ねない(組ごと 1 変更の合意に従う)。
-- バージョン: codiel は 1.0.0-dev のまま上げない。metatron は 0.4.0-dev → 0.4.1-dev とし、最初の metatron の変更のコミットで `plugin.json` と `package.json` を揃えて上げる。
+- バージョン: codiel は 1.0.0-dev のまま上げない。metatron も 0.4.0-dev のまま上げない。
 - ルートの README は、metatron のバージョンが README に載っていれば追随させる。
 
 ## 4. 組ごとの変更
@@ -386,7 +386,7 @@
 
 1. R2-01(4.1)
 2. R2-02(4.2)
-3. M1-01(4.3、metatron 0.4.1-dev)
+3. M1-01(4.3)
 4. B5-01(4.4)
 5. B5-02(4.5)
 6. R2-05(4.6)
