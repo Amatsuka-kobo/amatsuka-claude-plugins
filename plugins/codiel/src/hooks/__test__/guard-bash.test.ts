@@ -408,11 +408,27 @@ test.each([
   expect(hook(rootsProject(), command)?.permissionDecision).toBe("deny")
 })
 
+// runs の祖先への中身のコピーは、元を問わず拒否する(受け入れる誤拒否。ファイルを指定してコピーすれば避けられる)
 test.each([
   "cp -a .codiel/runs/demo/try-1/reports/. .",
   "cp -a src/. ."
-])("中身のコピー %s は、元に runs への道が無ければ素通し", (command) => {
-  expect(hook(rootsProject(), command)).toBe(null)
+])("runs の祖先への中身のコピー %s は deny", (command) => {
+  expect(hook(rootsProject(), command)?.permissionDecision).toBe("deny")
+})
+
+// 元が別ディレクトリへの symlink の .codiel、元の runs が切れた symlink、--parents の配置先
+test.each([
+  "cp -a linked/.codiel .",
+  "cp -a broken/. .codiel",
+  "cd backup && cp -a --parents .codiel/runs .."
+])("%s は deny", (command) => {
+  const root = rootsProject()
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), "gb-other-"))
+  fs.mkdirSync(path.join(root, "linked"))
+  fs.symlinkSync(other, path.join(root, "linked/.codiel"), "dir")
+  fs.mkdirSync(path.join(root, "broken"))
+  fs.symlinkSync(path.join(root, "nowhere"), path.join(root, "broken/runs"))
+  expect(hook(root, command)?.permissionDecision).toBe("deny")
 })
 
 test("前段で元に runs の道を作ってから中身を祖先へコピーする複合コマンドは deny", () => {

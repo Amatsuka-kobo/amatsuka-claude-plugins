@@ -207,9 +207,11 @@
       1. 書き込み先 D は、`-t`・`--target-directory`(省略形を含む)の値か、位置引数の最後の語とする。ln で位置引数が 1 個なら、D は cwd(暗黙の `.`)とする。`-t` を見つけても判定を打ち切らない。
       2. コピー元ごとに、書かれる根 W を求める。`-T`・`--no-target-directory`(`--no-t` 以上の省略形を含む)のときは W = D とし、それ以外は D に元の basename を生の文字列でつないだものとする。元が `/.` で終わる中身のコピーは basename が `.` なので、W = D になる。
       3. W を字句で畳んだパスか実体で辿ったパスのどちらかが、runs の配下か runs そのものに当たれば拒否する。
-      4. W が runs の祖先なら、W から runs への相対パスの最初の部分 S(`.codiel` か `runs`)を求める。元の中に S があるか、元が見つからなければ拒否する。元の中の有無は hook の時点の状態なので、これで通すのは 1 つの単純なコマンド(字句の語の列が 1 つ、行の走査でも 1 行、置換を含まない)のときだけとする。複合コマンドでは、W が runs の祖先なら拒否する。
-      5. mv の元と ln の引数についての判定と、state.json の名前の判定は残す。
-      - 拒否する例は `cp -a backup/try-1 .codiel/runs/demo`・`cp -aT backup .codiel`・`cp -t alias/.. data.json`・リンク名を省略した `ln -sf …/state.json` である。通す例は `cp .codiel/runs/x/try-1/reports/a.md /tmp`・`mv a.txt .`・単独の `cp -a src/. .` である。
+      4. W が runs の祖先なら、コピー元や単純なコマンドかどうかを問わず拒否する。元の中身や symlink を見て通す許可は持たない。許可を細かくするほど抜けが増えたためである(元が symlink の `.codiel`、切れた symlink の `runs`、改行や `;` による単純なコマンドの判定の崩れ)。
+      5. `--parents`(`--pa` 以上の省略形を含む)のときは配置先を計算しない。D が runs の配下か runs そのものか runs の祖先なら拒否する。
+      6. mv の元と ln の引数についての判定と、state.json の名前の判定は残す。
+      - 拒否する例は `cp -a backup/try-1 .codiel/runs/demo`・`cp -aT backup .codiel`・`cp -t alias/.. data.json`・リンク名を省略した `ln -sf …/state.json`・`cd backup && cp -a --parents .codiel/runs ..` である。通す例は `cp .codiel/runs/x/try-1/reports/a.md /tmp`・`mv a.txt .` である。
+      - 受け入れる誤拒否: プロジェクトのルートなど runs の祖先への中身のコピー(`cp -a src/. .`・`cp -a .codiel/runs/demo/try-1/reports/. .`)も拒否する。ファイルを指定してコピーすれば避けられる。
     - cd の行き先ごとに、字句で畳んだパスと symlink を実体で辿ったパスの両方を cwd の候補に残す。alias が try のディレクトリの下への symlink のとき、`cd -P alias/..` の先を見落とさないためである(H2)。
     - guard-write も、メインの作業ツリーの `.codiel/runs` の字句パスと実体パスを求め、その配下の state.json かで判定する。`.codiel/runs` 自体が外のディレクトリへの symlink でも、別名(`.codiel/alias/state.json`)を通した Write を止めるためである。名前の照合(`.codiel/runs/…/state.json` の正規表現)は、大文字小文字を区別しない FS でのすり抜けを防ぐために残す(H3)。
     - 字句解析の語の列からメッセージの値を外すのは、先頭のコマンド(`VAR=値` の代入だけを飛ばした最初の語)が `git commit`・`git tag`・`gh` のときに限る。`env`・シェル・`sudo` などの後ろの囮の `gh -m` で外し始めないためである。
