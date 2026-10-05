@@ -890,6 +890,11 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
       (p) => underRuns(p) || runsDirs.some((d) => isUnder(d, p))
     )
   // words[at] の rm・mv・cp・ln・install・dd が state.json を書き換えるか消すか
+  // 1 つの単純なコマンドか(字句の語の列が 1 つで、行の走査でも 1 行だけで、置換を含まない)
+  const simpleCommand =
+    tokenCommands.length === 1 &&
+    lineCommands.length === 1 &&
+    !/\$\(|`/.test(cmd)
   const fileOpWrites = (words: string[], at: number): boolean => {
     if (at < 0 || at >= words.length) return false
     const name = path.basename(words[at])
@@ -898,6 +903,7 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
     // `--target-directory=<dir>`)の値は、引数から分けて書き込み先とする
     const args: string[] = []
     let targetDir: string | undefined
+    let noTargetDir = false
     const rest = words.slice(at + 1)
     for (let k = 0; k < rest.length; k++) {
       const a = rest[k]
@@ -909,27 +915,51 @@ function stateJsonProblem(cmd: string, cwd: string): string | undefined {
       else if (/^-[A-Za-z]*t$/.test(a)) targetDir = rest[++k]
       else if (/^-[A-Za-z]*t./.test(a) && !a.startsWith("--"))
         targetDir = a.slice(a.indexOf("t") + 1)
+      else if (isNoTargetDirectoryOption(a) || /^-[A-Za-z]*T[A-Za-z]*$/.test(a))
+        noTargetDir = true
       else if (!a.startsWith("-") && a !== "") args.push(a)
     }
     if (args.some(isStateFile)) return true
     if (name === "rm") return args.some(holdsState)
     if (name === "dd") return false
-    // cp・mv・install・ln の書き込み先(-t などの値か、位置引数の最後の語)が runs の配下か runs
-    // そのものなら、コピー元を問わず拒否する。ディレクトリごとの置き換え
-    // (`cp -a backup/try-1 .codiel/runs/demo`)と、symlink の別名を通した書き込みを止めるためである。
-    // 書き込み先が runs を含む祖先のときは、そこへ置くパス(元の basename をつないだもの)が runs の
-    // 配下か runs を含む祖先なら拒否する(`cp -a backup/.codiel .`)。`cp a.md /tmp`・`mv a.txt .`
-    // は通す。指示書に runs の下へこれらで書く手順は無い
-    const dest = targetDir ?? (args.length >= 2 ? args.at(-1) : undefined)
+    // cp・mv・install・ln は「書かれるパスの根」で判定する。
+    // 1. 書き込み先 D は -t などの値か位置引数の最後の語。ln で位置引数が 1 個なら D は `.`(cwd)
+    // 2. 元ごとの書かれる根 W は、-T・--no-target-directory のとき D、それ以外は D に元の basename を
+    //    つないだもの(元が `/.` で終わる中身のコピーは basename が `.` なので D になる)
+    // 3. W が runs の配下か runs そのものなら拒否する
+    // 4. W が runs の祖先なら、W から runs への最初の部分 S(`.codiel`・`runs`)を求め、元の中に S が
+    //    あるか、元が見つからないときに拒否する(元の中身で runs を置き換える形)。元の中の有無で
+    //    通すのは 1 つの単純なコマンドのときだけで、複合コマンドでは W が runs の祖先なら拒否する
+    // 指示書に runs の下へこれらで書く手順は無い
+    const lnImplicit =
+      name === "ln" && targetDir === undefined && args.length === 1
+    const dest =
+      targetDir ??
+      (lnImplicit ? "." : args.length >= 2 ? args.at(-1) : undefined)
     const sources =
-      targetDir !== undefined
+      targetDir !== undefined || lnImplicit
         ? args
         : args.slice(0, Math.max(args.length - 1, 0))
-    if (dest !== undefined) {
-      if (resolved(dest).some(underRuns)) return true
-      if (sources.some((a) => touchesRuns(path.join(dest, path.basename(a)))))
-        return true
-    }
+    if (dest !== undefined)
+      for (const src of sources) {
+        // path.join は `alias/..` を字句で畳むので、生の文字列でつなぐ
+        const w = noTargetDir ? dest : `${dest}/${path.basename(src)}`
+        const ws = resolved(w)
+        if (ws.some(underRuns)) return true
+        for (const p of ws)
+          for (const d of runsDirs) {
+            if (!isUnder(d, p) || d === p) continue
+            // 元の中の有無は hook の時点の状態なので、前段で元を作れる複合コマンドでは見ない
+            if (!simpleCommand) return true
+            const first = path.relative(p, d).split(path.sep)[0]
+            const srcs = resolved(src)
+            if (
+              !srcs.some((v) => fs.existsSync(v)) ||
+              srcs.some((v) => fs.existsSync(path.join(v, first)))
+            )
+              return true
+          }
+      }
     if (name === "mv" && sources.some(holdsState)) return true
     // 同じコマンドで run の配下への symlink を作ってから書く形(`ln -s <runs の配下> a && … > a/state.json`)
     return name === "ln" && args.some(touchesRuns)
@@ -1071,6 +1101,12 @@ function withoutInertBodies(cmd: string): string {
 function isTargetDirectoryOption(a: string): boolean {
   const name = a.split("=")[0]
   return name.length >= 3 && "--target-directory".startsWith(name)
+}
+
+// `--no-target-directory` か、その GNU の省略形(`--no-clobber` などと区別できる `--no-t` 以上の
+// 前方一致)か
+function isNoTargetDirectoryOption(a: string): boolean {
+  return a.length >= 6 && "--no-target-directory".startsWith(a)
 }
 
 function isRegularFile(p: string): boolean {

@@ -759,12 +759,14 @@ function stateJsonProblem(cmd, cwd) {
   const touchesRuns = (word) => resolved(word).some(
     (p) => underRuns(p) || runsDirs.some((d) => isUnder(d, p))
   );
+  const simpleCommand = tokenCommands.length === 1 && lineCommands.length === 1 && !/\$\(|`/.test(cmd);
   const fileOpWrites = (words, at) => {
     if (at < 0 || at >= words.length) return false;
     const name = path4.basename(words[at]);
     if (!STATE_FILE_COMMANDS.includes(name)) return false;
     const args = [];
     let targetDir;
+    let noTargetDir = false;
     const rest = words.slice(at + 1);
     for (let k = 0; k < rest.length; k++) {
       const a = rest[k];
@@ -775,18 +777,31 @@ function stateJsonProblem(cmd, cwd) {
       else if (/^-[A-Za-z]*t$/.test(a)) targetDir = rest[++k];
       else if (/^-[A-Za-z]*t./.test(a) && !a.startsWith("--"))
         targetDir = a.slice(a.indexOf("t") + 1);
+      else if (isNoTargetDirectoryOption(a) || /^-[A-Za-z]*T[A-Za-z]*$/.test(a))
+        noTargetDir = true;
       else if (!a.startsWith("-") && a !== "") args.push(a);
     }
     if (args.some(isStateFile)) return true;
     if (name === "rm") return args.some(holdsState);
     if (name === "dd") return false;
-    const dest = targetDir ?? (args.length >= 2 ? args.at(-1) : void 0);
-    const sources = targetDir !== void 0 ? args : args.slice(0, Math.max(args.length - 1, 0));
-    if (dest !== void 0) {
-      if (resolved(dest).some(underRuns)) return true;
-      if (sources.some((a) => touchesRuns(path4.join(dest, path4.basename(a)))))
-        return true;
-    }
+    const lnImplicit = name === "ln" && targetDir === void 0 && args.length === 1;
+    const dest = targetDir ?? (lnImplicit ? "." : args.length >= 2 ? args.at(-1) : void 0);
+    const sources = targetDir !== void 0 || lnImplicit ? args : args.slice(0, Math.max(args.length - 1, 0));
+    if (dest !== void 0)
+      for (const src of sources) {
+        const w = noTargetDir ? dest : `${dest}/${path4.basename(src)}`;
+        const ws = resolved(w);
+        if (ws.some(underRuns)) return true;
+        for (const p of ws)
+          for (const d of runsDirs) {
+            if (!isUnder(d, p) || d === p) continue;
+            if (!simpleCommand) return true;
+            const first = path4.relative(p, d).split(path4.sep)[0];
+            const srcs = resolved(src);
+            if (!srcs.some((v) => fs4.existsSync(v)) || srcs.some((v) => fs4.existsSync(path4.join(v, first))))
+              return true;
+          }
+      }
     if (name === "mv" && sources.some(holdsState)) return true;
     return name === "ln" && args.some(touchesRuns);
   };
@@ -860,6 +875,9 @@ function withoutInertBodies(cmd) {
 function isTargetDirectoryOption(a) {
   const name = a.split("=")[0];
   return name.length >= 3 && "--target-directory".startsWith(name);
+}
+function isNoTargetDirectoryOption(a) {
+  return a.length >= 6 && "--no-target-directory".startsWith(a);
 }
 function isRegularFile(p) {
   try {

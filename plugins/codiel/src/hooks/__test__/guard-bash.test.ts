@@ -387,6 +387,44 @@ test.each([
   expect(hook(root, command)?.permissionDecision).toBe("deny")
 })
 
+// 書かれるパスの根で判定する(-T、中身のコピー、リンク名を省略した ln)
+function rootsProject(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  for (const d of [
+    ".codiel/runs/demo/try-1/reports",
+    "backup/runs/demo/try-1",
+    "backup/.codiel/runs/demo/try-1",
+    "src"
+  ])
+    fs.mkdirSync(path.join(root, d), { recursive: true })
+  return root
+}
+
+test.each([
+  "cp -aT backup .codiel",
+  "cp -a --no-target-directory backup .",
+  "cd .codiel/runs/demo/try-1 && ln -sf ../../../../backup/runs/demo/try-1/state.json"
+])("%s は deny", (command) => {
+  expect(hook(rootsProject(), command)?.permissionDecision).toBe("deny")
+})
+
+test.each([
+  "cp -a .codiel/runs/demo/try-1/reports/. .",
+  "cp -a src/. ."
+])("中身のコピー %s は、元に runs への道が無ければ素通し", (command) => {
+  expect(hook(rootsProject(), command)).toBe(null)
+})
+
+test("前段で元に runs の道を作ってから中身を祖先へコピーする複合コマンドは deny", () => {
+  const command =
+    "mkdir -p x/.codiel/runs/demo/try-1 && cp s.json x/.codiel/runs/demo/try-1/state.json && cp -a x/. ."
+  expect(hook(rootsProject(), command)?.permissionDecision).toBe("deny")
+  // hook の時点では元(src)に .codiel が無く、字句の検査にも当たらない形
+  const later =
+    "mkdir -p src/.codiel/runs/demo/try-1 && touch src/.codiel/runs/demo/try-1/data.json && cp -a src/. ."
+  expect(hook(rootsProject(), later)?.permissionDecision).toBe("deny")
+})
+
 test("runs の下から外へのコピーは素通し", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
   fs.mkdirSync(path.join(root, ".codiel/runs/x/try-1/reports"), {
