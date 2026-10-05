@@ -42396,6 +42396,7 @@ function assertNoUncommitted(repoPath, paths, ignore = []) {
     "status",
     "--porcelain",
     "-z",
+    "--ignore-submodules=none",
     "--untracked-files=no",
     "--",
     ...paths ?? []

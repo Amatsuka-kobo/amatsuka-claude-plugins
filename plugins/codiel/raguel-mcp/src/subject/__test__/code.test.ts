@@ -160,6 +160,31 @@ describe("collectCodeSubject", () => {
     })
   })
 
+  it("submodule.<名前>.ignore=all でも、親にコミットしていない gitlink の変更を未コミットの入力の誤りにする", () => {
+    const sub = track(makeRepo({ "s.txt": "1\n" }))
+    const repo = track(makeRepo({ "x.txt": "x\n" }))
+    git(
+      repo,
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      "-q",
+      sub,
+      "vendor/lib"
+    )
+    commitAll(repo)
+    writeFile(sub, "s.txt", "2\n")
+    const subNew = commitAll(sub)
+    git(path.join(repo, "vendor/lib"), "fetch", "-q")
+    git(path.join(repo, "vendor/lib"), "checkout", "-q", subNew)
+    git(repo, "config", "submodule.vendor/lib.ignore", "all")
+
+    expect(() =>
+      collectCodeSubject({ projectRoot: repo, baseRef: "HEAD" })
+    ).toThrow(SubjectInputError)
+  })
+
   it("paths で範囲を絞り、パス指定を文字どおりに解釈する", () => {
     const repo = track(makeRepo({ "a.md": "a\n", "b.md": "b\n" }))
     const base = git(repo, "rev-parse", "HEAD")

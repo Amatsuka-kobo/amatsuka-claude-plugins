@@ -193,6 +193,7 @@ export function assertNoUncommitted(
     "status",
     "--porcelain",
     "-z",
+    "--ignore-submodules=none",
     "--untracked-files=no",
     "--",
     ...(paths ?? [])
