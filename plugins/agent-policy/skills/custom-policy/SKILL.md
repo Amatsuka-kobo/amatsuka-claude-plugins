@@ -1,6 +1,6 @@
 ---
 name: custom-policy
-description: 委譲先をプロジェクトの Agent 定義に付いた役割マーカー(role-id)で解決する構成でのエージェント運用方針。ベンダーを問わず、役割ごとに対応する定義へ委譲する。`AMATSUKA_AGENT_AUTO_INJECTION` が `custom`(または旧値の `with-codex` / `with-grok` / `with-codex-grok`)で、SessionStart がモデルの実在検証に成功したときに使う。CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: 委譲先をプロジェクトの Agent 定義に付いた役割マーカー(role-id)で解決する構成でのエージェント運用方針。ベンダーを問わず、役割ごとに対応する定義へ委譲する。`AMATSUKA_AGENT_AUTO_INJECTION` が `custom`(または旧値の `with-codex` / `with-grok` / `with-codex-grok`)で、SessionStart がモデルの実在検証に成功したとき、CLAUDE.md 等でこの方針に従うよう指示されている場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 ---
 
 # エージェント運用方針(カスタム構成)
