@@ -1,0 +1,6 @@
+{
+  "env": {
+    "AMATSUKA_AGENT_AUTO_INJECTION": "<claude or custom>",
+    "TYPESAFE_API_KEY": "<TypesafeAIのAPIキー(任意)>"
+  }
+}
