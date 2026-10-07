@@ -144,7 +144,7 @@ export const ASSIGNMENTS: Record<
     explore: ["sonnet"],
     "realtime-research": ["sonnet"],
     "e2e-verify": ["sonnet"],
-    "design-review": ["sonnet"],
+    "design-review": ["opus"],
     "knowledge-elicitation": ["haiku"],
     "code-review": ["sonnet"],
     "complex-review": ["fable"],
@@ -154,16 +154,16 @@ export const ASSIGNMENTS: Record<
 
 // custom プロファイル向けの推奨。setup-agents の提示だけに使う。方針スキルは推奨列を持たない。
 export const RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "complex-impl": ["gpt-sol", "opus"],
   "normal-impl": ["gpt-sol", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku"],
+  "light-impl": ["gpt-luna", "haiku", "grok"],
   escalation: ["gpt-astra", "fable"],
   general: ["gpt-luna", "sonnet"],
   explore: ["gpt-sol", "sonnet"],
   "realtime-research": ["grok", "sonnet"],
   "e2e-verify": ["gpt-sol", "sonnet"],
-  "design-review": ["gpt-sol", "sonnet"],
-  "knowledge-elicitation": ["haiku"],
+  "design-review": ["gpt-sol", "opus"],
+  "knowledge-elicitation": ["haiku", "gpt-luna"],
   "code-review": ["gpt-sol", "sonnet"],
   "complex-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"]
@@ -171,15 +171,15 @@ export const RECOMMENDED: Record<RoleId, ModelId[]> = {
 
 export const EFFORT: Record<RoleId, Partial<Record<ModelId, Effort>>> = {
   escalation: { fable: "high", "gpt-astra": "high" },
-  "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+  "complex-impl": { opus: "medium", "gpt-sol": "high" },
   "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
-  "light-impl": { "gpt-luna": "low" },
+  "light-impl": { haiku: "medium", "gpt-luna": "low", grok: "medium" },
   general: { sonnet: "medium", "gpt-luna": "medium" },
-  explore: { sonnet: "medium", "gpt-sol": "medium" },
-  "realtime-research": { grok: "low", sonnet: "low" },
-  "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
-  "design-review": { sonnet: "medium", "gpt-sol": "medium" },
-  "knowledge-elicitation": {},
+  explore: { sonnet: "high", "gpt-sol": "medium" },
+  "realtime-research": { grok: "high", sonnet: "high" },
+  "e2e-verify": { sonnet: "high", "gpt-sol": "medium" },
+  "design-review": { opus: "high", "gpt-sol": "high" },
+  "knowledge-elicitation": { haiku: "low", "gpt-luna": "low" },
   "code-review": { sonnet: "high", "gpt-sol": "high" },
   "complex-review": { "gpt-astra": "high", fable: "high" },
   "adversarial-review": { opus: "high", "gpt-sol": "high" }

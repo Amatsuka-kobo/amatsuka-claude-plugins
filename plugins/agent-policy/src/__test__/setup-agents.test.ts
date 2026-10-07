@@ -651,7 +651,7 @@ describe("--list-coverage", () => {
     expect(result.roles).toHaveLength(13)
     expect(
       result.roles.find((role) => role.id === "complex-impl")?.models
-    ).toEqual(["gpt-sol", "opus", "grok"])
+    ).toEqual(["gpt-sol", "opus"])
     expect(
       result.roles.find((role) => role.id === "escalation")?.models
     ).toEqual(["gpt-astra", "fable"])
@@ -849,7 +849,6 @@ describe("--list-coverage の candidates", () => {
     expect(candidatesOf(result, "complex-impl")).toEqual([
       "gpt-sol*",
       "opus*",
-      "grok*",
       "sonnet",
       "haiku",
       "fable"
@@ -897,7 +896,6 @@ describe("--list-coverage の candidates", () => {
     expect(candidatesOf(result, "complex-impl")).toEqual([
       "gpt-sol*",
       "opus*",
-      "grok*",
       "sonnet",
       "haiku",
       "fable"
@@ -933,7 +931,7 @@ describe("エイリアスの部分一致", () => {
     ).toEqual([
       ["claude-gpt-6.1-sol-pro", "gpt", true],
       ["claude-gpt6-sol", "gpt", true],
-      ["claude-grok5", "grok", true]
+      ["claude-grok5", "grok", false]
     ])
   })
 
@@ -950,7 +948,6 @@ describe("エイリアスの部分一致", () => {
     ).toEqual([
       { modelId: "gpt-sol", model: "claude-gpt6-sol", recommended: true },
       { modelId: "opus", model: "opus", recommended: true },
-      { modelId: "grok", model: "claude-grok5", recommended: true },
       {
         modelId: "gpt-sol",
         model: "claude-gpt-6.1-sol-pro",
@@ -3452,7 +3449,7 @@ describe("--recommended", () => {
     }
     expect(
       result.results.find((entry) => entry.roleId === "design-review")?.target
-    ).toBe(".claude/agents/sonnet-docs-reviewer.md")
+    ).toBe(".claude/agents/opus-docs-reviewer.md")
     expect(
       result.results.find((entry) => entry.roleId === "knowledge-elicitation")
         ?.target
@@ -3478,14 +3475,14 @@ describe("--recommended", () => {
     const expected: Record<string, string | undefined> = {
       "complex-impl": "medium",
       "normal-impl": "medium",
-      "light-impl": undefined,
+      "light-impl": "medium",
       escalation: "high",
       general: "medium",
-      explore: "medium",
-      "realtime-research": "low",
-      "e2e-verify": "medium",
-      "design-review": "medium",
-      "knowledge-elicitation": undefined,
+      explore: "high",
+      "realtime-research": "high",
+      "e2e-verify": "high",
+      "design-review": "high",
+      "knowledge-elicitation": "low",
       "code-review": "high",
       "complex-review": "high",
       "adversarial-review": "high"
@@ -3561,7 +3558,7 @@ describe("--recommended", () => {
       ],
       { ANTHROPIC_BASE_URL: proxy.baseUrl }
     )
-    expect(result.results.map((entry) => entry.modelId)).toEqual(["sonnet"])
+    expect(result.results.map((entry) => entry.modelId)).toEqual(["opus"])
   })
 
   it("live の照会失敗時は推奨先頭を採り警告を返す", () => {
@@ -3608,7 +3605,7 @@ describe("--recommended", () => {
       path.join(project, result.results[0]?.target ?? ""),
       "utf8"
     )
-    expect(result.results[0]?.modelId).toBe("sonnet")
+    expect(result.results[0]?.modelId).toBe("opus")
     expect(content).toMatch(/^agent-policy-vendor: claude$/m)
     expect(content).toMatch(/^color: blue$/m)
   })

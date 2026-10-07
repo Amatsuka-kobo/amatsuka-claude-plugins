@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { ASSIGNMENTS, type ModelId } from "../policies"
+import { ASSIGNMENTS, EFFORT, type ModelId } from "../policies"
 import { ROLES, type RoleId } from "../roles"
 
 const DISCIPLINE_PATH = fileURLToPath(
@@ -26,7 +26,7 @@ const MODEL_IDS = {
   Grok: "grok"
 } as const satisfies Record<string, ModelId>
 
-const TABLE_HEADER = ["役割名", "RoleId", "種別", "Claude モデル"]
+const TABLE_HEADER = ["役割名", "RoleId", "種別", "Claude モデル", "effort"]
 
 interface ParsedRoleRow {
   label: string
@@ -34,6 +34,7 @@ interface ParsedRoleRow {
   roleId: RoleId
   kind: string
   models: ModelId[]
+  effort: string
 }
 
 function extractRoleBandSection(content: string): string {
@@ -52,8 +53,8 @@ function splitTableCells(line: string): string[] {
     .split("|")
     .slice(1, -1)
     .map((cell) => cell.trim())
-  if (cells.length !== 4) {
-    throw new Error(`担当表は 4 セルでなければならない: ${line}`)
+  if (cells.length !== 5) {
+    throw new Error(`担当表は 5 セルでなければならない: ${line}`)
   }
   return cells
 }
@@ -100,13 +101,15 @@ function parseRoleBandTable(section: string): ParsedRoleRow[] {
       }
       return modelId
     })
+    const effort = extractSingleBacktickToken(cells[4], "effort")
 
     return {
       label,
       resolvedRoleId: role.id,
       roleId,
       kind,
-      models
+      models,
+      effort
     }
   })
 }
@@ -133,7 +136,7 @@ function readDisciplineRows(): ParsedRoleRow[] {
   return parseRoleBandTable(extractRoleBandSection(content))
 }
 
-const SYNTHETIC_HEADER = `| ${TABLE_HEADER.join(" | ")} |\n| --- | --- | --- | --- |`
+const SYNTHETIC_HEADER = `| ${TABLE_HEADER.join(" | ")} |\n| --- | --- | --- | --- | --- |`
 
 // 規律の役割表が、実装側の役割定義と方針割り当てを漏れなく反映することを守る。
 describe("規律の役割", () => {
@@ -178,33 +181,40 @@ describe("規律の役割", () => {
       )
     }
   })
+
+  it("effort が EFFORT の Claude モデルの値と一致する", () => {
+    for (const row of readDisciplineRows()) {
+      expect(row.effort).toBe(EFFORT[row.resolvedRoleId][row.models[0]])
+    }
+  })
 })
 
-// 表の解析が未知の語を見逃さず、正しい 4 列の行だけを受理することを守る。
+// 表の解析が未知の語を見逃さず、正しい 5 列の行だけを受理することを守る。
 describe("役割の表解析", () => {
   it("未知のモデル語で例外を投げる", () => {
-    const section = `${SYNTHETIC_HEADER}\n| コードレビュー | \`code-review\` | \`readonly\` | \`Claude 5\` |`
+    const section = `${SYNTHETIC_HEADER}\n| コードレビュー | \`code-review\` | \`readonly\` | \`Claude 5\` | \`high\` |`
     expect(() => parseRoleBandTable(section)).toThrow(
       /未知のモデル「Claude 5」/
     )
   })
 
   it("未知の役割名で例外を投げる", () => {
-    const section = `${SYNTHETIC_HEADER}\n| 未知の役割 | \`code-review\` | \`readonly\` | \`Sonnet\` |`
+    const section = `${SYNTHETIC_HEADER}\n| 未知の役割 | \`code-review\` | \`readonly\` | \`Sonnet\` | \`high\` |`
     expect(() => parseRoleBandTable(section)).toThrow(
       /役割名「未知の役割」を解決できない/
     )
   })
 
   it("既知の役割名とモデル語を解析する", () => {
-    const section = `${SYNTHETIC_HEADER}\n| コードレビュー | \`code-review\` | \`readonly\` | \`Sonnet\` |`
+    const section = `${SYNTHETIC_HEADER}\n| コードレビュー | \`code-review\` | \`readonly\` | \`Sonnet\` | \`high\` |`
     expect(parseRoleBandTable(section)).toEqual([
       {
         label: "コードレビュー",
         resolvedRoleId: "code-review",
         roleId: "code-review",
         kind: "readonly",
-        models: ["sonnet"]
+        models: ["sonnet"],
+        effort: "high"
       }
     ])
   })

@@ -247,6 +247,8 @@ Delegation gate は、メインセッションから保護対象を直接編集�
 10. `ja` / `en` 以外の翻訳断片を使う場合は、`_common.md` の更新に合わせて再翻訳してください。削除した役割の翻訳断片(`design-plan.md` / `advisor.md` / `final-review.md` / `gate-review.md`)は削除してください。残っていても、廃止済みの ID は役割として扱いません。
 11. SubagentStart フックと並列促しフックを廃止しました。delegation gate の一時解除(`--direct`)も廃止しました。
 12. 「設計書・実装計画書のレビュー」の定義が対応表に無いとき、構成を問わずレビューを省略せず、他の役割と同じ順でフォールバックするようになりました。0.18 で入れた省略を取り消しました。
+13. Haiku の定義にも `effort` を付けるようになりました。あわせて、「設計書・実装計画書のレビュー」の Claude モデルを Opus に変え、役割ごとの `effort` と推奨モデルを見直しました。生成済みの定義へ反映するには `agent-policy:setup-agents` を再実行してください。
+14. 役割の定義が無く、ビルトインの `Explore` / `general-purpose` へ委譲するとき、オーケストレーターが役割断片の本文を依頼文へ転記し、Agent tool の `effort` を役割ごとの値で指定するようになりました。この機能には、Agent tool が `effort` を受け付ける Claude Code が必要です。プロジェクトの `.claude/agent-policy/roles/` に同じ ID の断片があれば、そちらを使います。
 
 0.19 系から 0.20 系へ移行する場合は、次を確認してください。
 

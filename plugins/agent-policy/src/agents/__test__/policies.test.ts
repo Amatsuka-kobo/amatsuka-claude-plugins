@@ -30,7 +30,7 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
   explore: ["sonnet"],
   "realtime-research": ["sonnet"],
   "e2e-verify": ["sonnet"],
-  "design-review": ["sonnet"],
+  "design-review": ["opus"],
   "knowledge-elicitation": ["haiku"],
   "code-review": ["sonnet"],
   "complex-review": ["fable"],
@@ -38,16 +38,16 @@ const EXPECTED_CLAUDE_ASSIGNMENTS: Record<RoleId, ModelId[]> = {
 }
 
 const EXPECTED_RECOMMENDED: Record<RoleId, ModelId[]> = {
-  "complex-impl": ["gpt-sol", "opus", "grok"],
+  "complex-impl": ["gpt-sol", "opus"],
   "normal-impl": ["gpt-sol", "sonnet", "grok"],
-  "light-impl": ["gpt-luna", "haiku"],
+  "light-impl": ["gpt-luna", "haiku", "grok"],
   escalation: ["gpt-astra", "fable"],
   general: ["gpt-luna", "sonnet"],
   explore: ["gpt-sol", "sonnet"],
   "realtime-research": ["grok", "sonnet"],
   "e2e-verify": ["gpt-sol", "sonnet"],
-  "design-review": ["gpt-sol", "sonnet"],
-  "knowledge-elicitation": ["haiku"],
+  "design-review": ["gpt-sol", "opus"],
+  "knowledge-elicitation": ["haiku", "gpt-luna"],
   "code-review": ["gpt-sol", "sonnet"],
   "complex-review": ["gpt-astra", "fable"],
   "adversarial-review": ["opus", "gpt-sol"]
@@ -99,21 +99,20 @@ describe("EFFORT", () => {
   it("役割とモデルごとの effort 表を固定する", () => {
     expect(EFFORT).toEqual({
       escalation: { fable: "high", "gpt-astra": "high" },
-      "complex-impl": { opus: "medium", "gpt-sol": "high", grok: "xhigh" },
+      "complex-impl": { opus: "medium", "gpt-sol": "high" },
       "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
-      "light-impl": { "gpt-luna": "low" },
+      "light-impl": { haiku: "medium", "gpt-luna": "low", grok: "medium" },
       general: { sonnet: "medium", "gpt-luna": "medium" },
-      explore: { sonnet: "medium", "gpt-sol": "medium" },
-      "realtime-research": { grok: "low", sonnet: "low" },
-      "e2e-verify": { sonnet: "medium", "gpt-sol": "medium" },
-      "design-review": { sonnet: "medium", "gpt-sol": "medium" },
-      "knowledge-elicitation": {},
+      explore: { sonnet: "high", "gpt-sol": "medium" },
+      "realtime-research": { grok: "high", sonnet: "high" },
+      "e2e-verify": { sonnet: "high", "gpt-sol": "medium" },
+      "design-review": { opus: "high", "gpt-sol": "high" },
+      "knowledge-elicitation": { haiku: "low", "gpt-luna": "low" },
       "code-review": { sonnet: "high", "gpt-sol": "high" },
       "complex-review": { "gpt-astra": "high", fable: "high" },
       "adversarial-review": { opus: "high", "gpt-sol": "high" }
     })
     expect(EFFORT_ORDER).toEqual(["low", "medium", "high", "xhigh", "max"])
-    expect(Object.values(EFFORT).flatMap(Object.keys)).not.toContain("haiku")
   })
 
   it("複数役割では最も高い effort を選び、未定義の組は省く", () => {
@@ -121,7 +120,7 @@ describe("EFFORT", () => {
     expect(effortFor(["light-impl"], "gpt-luna")).toBe("low")
     expect(effortFor(["normal-impl", "light-impl"], "gpt-luna")).toBe("low")
     expect(effortFor(["general", "code-review"], "sonnet")).toBe("high")
-    expect(effortFor(["knowledge-elicitation"], "haiku")).toBeUndefined()
+    expect(effortFor(["knowledge-elicitation"], "haiku")).toBe("low")
     expect(() =>
       effortFor(["unregistered-role" as RoleId], "sonnet")
     ).not.toThrow()
@@ -208,14 +207,13 @@ describe("modelsFor", () => {
 })
 
 describe("rolesFor", () => {
-  it("sonnet が claude-model-policy で担う 7 役割を返す", () => {
+  it("sonnet が claude-model-policy で担う 6 役割を返す", () => {
     expect(rolesFor("sonnet")).toEqual([
       "normal-impl",
       "general",
       "explore",
       "realtime-research",
       "e2e-verify",
-      "design-review",
       "code-review"
     ])
   })

@@ -25,6 +25,9 @@ kind: readonly
 
 - **When invoked for implicit knowledge and understanding review**, do not create deliverable files. Return a report only.
 - **When invoked for implicit knowledge and understanding review**, return the information needed to decide whether findings should be accepted, and leave that decision to others.
+- **When invoked for implicit knowledge and understanding review**, do not fill in anything the deliverable does not state. Cite the part of the deliverable each finding is based on.
+- **When invoked for implicit knowledge and understanding review**, list the sentences you cannot get past without guessing.
+- **When invoked for implicit knowledge and understanding review**, do not propose fixes. Leave fix decisions to the orchestrator.
 
 ## Output Format
 

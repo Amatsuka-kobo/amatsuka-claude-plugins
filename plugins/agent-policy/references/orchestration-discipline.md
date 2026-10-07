@@ -3,25 +3,26 @@
 
 ## 担当表
 
-| 役割名                                   | RoleId                  | 種別       | Claude モデル |
-| ---------------------------------------- | ----------------------- | ---------- | ------------- |
-| 複雑または重要な実装                     | `complex-impl`          | `impl`     | `Opus`        |
-| 通常の実装                               | `normal-impl`           | `impl`     | `Sonnet`      |
-| 軽量な実装                               | `light-impl`            | `impl`     | `Haiku`       |
-| 行き詰まり時のエスカレーション           | `escalation`            | `impl`     | `Fable`       |
-| その他のタスク                           | `general`               | `impl`     | `Sonnet`      |
-| コードベース探索                         | `explore`               | `readonly` | `Sonnet`      |
-| リアルタイム情報調査                     | `realtime-research`     | `readonly` | `Sonnet`      |
-| E2E 動作検証・ブラウザ/GUI 操作          | `e2e-verify`            | `impl`     | `Sonnet`      |
-| 設計書・実装計画書のレビュー             | `design-review`         | `readonly` | `Sonnet`      |
-| 暗黙知の抽出・理解レビュー               | `knowledge-elicitation` | `readonly` | `Haiku`       |
-| コードレビュー                           | `code-review`           | `readonly` | `Sonnet`      |
-| 重要な実装・高リスク設計書の最終レビュー | `complex-review`        | `readonly` | `Fable`       |
-| 敵対的レビュー                           | `adversarial-review`    | `readonly` | `Opus`        |
+| 役割名                                   | RoleId                  | 種別       | Claude モデル | effort    |
+| ---------------------------------------- | ----------------------- | ---------- | ------------- | --------- |
+| 複雑または重要な実装                     | `complex-impl`          | `impl`     | `Opus`        | `medium`  |
+| 通常の実装                               | `normal-impl`           | `impl`     | `Sonnet`      | `medium`  |
+| 軽量な実装                               | `light-impl`            | `impl`     | `Haiku`       | `medium`  |
+| 行き詰まり時のエスカレーション           | `escalation`            | `impl`     | `Fable`       | `high`    |
+| その他のタスク                           | `general`               | `impl`     | `Sonnet`      | `medium`  |
+| コードベース探索                         | `explore`               | `readonly` | `Sonnet`      | `high`    |
+| リアルタイム情報調査                     | `realtime-research`     | `readonly` | `Sonnet`      | `high`    |
+| E2E 動作検証・ブラウザ/GUI 操作          | `e2e-verify`            | `impl`     | `Sonnet`      | `high`    |
+| 設計書・実装計画書のレビュー             | `design-review`         | `readonly` | `Opus`        | `high`    |
+| 暗黙知の抽出・理解レビュー               | `knowledge-elicitation` | `readonly` | `Haiku`       | `low`     |
+| コードレビュー                           | `code-review`           | `readonly` | `Sonnet`      | `high`    |
+| 重要な実装・高リスク設計書の最終レビュー | `complex-review`        | `readonly` | `Fable`       | `high`    |
+| 敵対的レビュー                           | `adversarial-review`    | `readonly` | `Opus`        | `high`    |
 
 - 「RoleId」は Agent 定義の `agent-policy-role` マーカーに書く値であり、役割マーカーの対応表の各行にも `[general]` の形で載る。担当表の行と対応表の行は RoleId で対応づく。
 - 「種別」は `impl` が成果物ファイルを書く役割、`readonly` が読み取りと報告だけの役割である。
 - 「Claude モデル」は、その役割を Claude のモデルだけで実行するときのモデルである。`claude-model-policy` の運用では役割モデルそのものであり、`custom-policy` の運用では委譲先が決まらない役割の読み替え先である。
+- 「effort」は、その役割を「Claude モデル」列のモデルで実行するときの effort である。
 
 ## 委譲先の解決
 
@@ -66,6 +67,14 @@
 - ステップ 3 で回した作業は、起動形態の判定でも「その他のタスク」の役割として扱う。
 - 元の役割の種別が `readonly` で、ステップ 3 の委譲先が `Write` / `Edit` を持つときは、§モデル別役割の運用 の `readonly` の明記を依頼文に入れる。
 - ステップ 4 のビルトインへ注入するモデルは、担当表の「Claude モデル」列で元の役割に当たる値とする。
+
+### ビルトイン Agents へ委譲するとき
+
+§解決順 の 3 行目、または §同じ役割の候補から選ぶ のステップ 4 でビルトイン Agents へ委譲するときは、元の役割の役割断片の本文(frontmatter より後の全文)を、その作業の役割定義として依頼文へ転記する。
+
+- 役割断片は、プロジェクトの `.claude/agent-policy/roles/<RoleId>.md` があればそれを使い、無ければこの文書から見て `../assets/roles/<言語>/<RoleId>.md` を使う。
+- `<言語>` は、会話の使用言語が日本語なら `ja`、それ以外なら `en` とする。
+- Agent tool の `effort` param に、担当表の「effort」列で元の役割に当たる値を指定する。
 
 ## オーケストレーターが自ら担う作業
 
