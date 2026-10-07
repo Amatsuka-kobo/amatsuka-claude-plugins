@@ -26,7 +26,7 @@ cliproxyapi.config.yaml
 # ローカルファイル
 private/
 *.local.*
-!CLAUDE.local.example.md
+!.claude/settings.local.example.json
 
 # 会話記録
 docs/chat/

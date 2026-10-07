@@ -18,26 +18,26 @@ Codex／CLIProxyAPI は任意設定です。Codex のアカウント(ChatGPT/Ope
 
 ## 必須ツール
 
-### Volta と Node.js
+### Mise と Node.js
 
-このプロジェクトでは、Node.js のバージョン管理に Volta を推奨しています。Node.js は、各プラグインの `.mjs` スクリプト、テストの実行(vitest)、LSP のインストール、Context7 のセットアップに必要です。
+このプロジェクトでは、Node.js のバージョン管理に Mise を推奨しています。Node.js は、各プラグインの `.mjs` スクリプト、テストの実行(vitest)に必要です。
 
-WSL2/Linux では、Volta の公式インストーラーを実行します。
+WSL2/Linux では、Mise の公式インストーラーを実行します。
 
 ```bash
-curl https://get.volta.sh | bash
+curl https://mise.run | sh
 ```
 
-インストーラーは Volta の保存先を `PATH` へ追加します。完了後は新しいターミナルを開き、次のコマンドで Volta が利用できることを確認してください。
+インストーラーは Volta の保存先を `PATH` へ追加します。完了後は新しいターミナルを開き、次のコマンドで Mise が利用できることを確認してください。
 
 ```bash
-volta --version
+mise --version
 ```
 
-Volta で最新の LTS 版 Node.js をインストールします。Volta では、バージョンを省略した `node` が最新の LTS を表します。
+Mise で Node.js をインストールします。
 
 ```bash
-volta install node
+mise install node
 ```
 
 Node.js と、同時に利用可能になる npm、npx を確認します。
@@ -50,10 +50,10 @@ npx --version
 
 ### pnpm と依存関係
 
-このリポジトリは pnpm workspace として構成されており、パッケージマネージャーには pnpm のみを使用します(npm/yarn は使いません)。pnpm も Volta で導入します。
+このリポジトリは pnpm workspace として構成されており、パッケージマネージャーには pnpm のみを使用します。pnpm も Mise で導入します。
 
 ```bash
-volta install pnpm
+mise install pnpm
 ```
 
 インストールできたことを確認します。
@@ -62,7 +62,7 @@ volta install pnpm
 pnpm --version
 ```
 
-ルート `package.json` の `volta` フィールドには node 26.3.1 / pnpm 11.8.0 がピン留めされており、このリポジトリ内で作業するときは Volta が自動でそのバージョンに切り替えます。上で最新の LTS 版を導入していても問題ありません。
+ルート `mise.toml`の `tools` フィールドには node 26.10.0 / pnpm 12.9.1 がピン留めされており、このリポジトリ内で作業するときは Mise が自動でそのバージョンに切り替えます。
 
 続けて、リポジトリのルートで依存関係をインストールします。
 
@@ -87,25 +87,13 @@ VSCode を使用する場合、コード保守の観点から Biome 拡張機能
 
 ## Claude Code の共通ツール
 
-### CLAUDE.md
+### .claude/settings.local.json
 
-`CLAUDE.md` と `CLAUDE.local.md` は、セッションを起動したときに毎回注入されるプロンプトです。
-主にこのプロジェクト内の概要や、運用方針などを記載しています。
+Claude Code のローカル設定ファイルです。agent-policy プラグインの環境変数と jevriel プラグインの環境変数を用意しています。
 
-`CLAUDE.local.example.md` には、エージェント運用方針が記載されています。
-コピーして、自分の環境に合った記述に書き換えてください。
-共通設定ではない、独自の指示などはこちらに記載してください。
-
-```bash
-cp CLAUDE.local.example.md CLAUDE.local.md
 ```
-
-Codex との併用、Grok との併用、Codex & Grok との併用、Claude のみの利用者でエージェントの運用方針を変えるため、agent-policy プラグインの Skills として分割しています。利用状況によって設定を変えてください。詳しい設定プロンプトは CLAUDE.local.example.md に記述してあります。
-
-- Codex 併用 -&gt; `agent-policy:with-codex-policy`
-- Grok 併用 -&gt; `agent-policy:with-grok-policy`
-- Codex & Grok 併用 -&gt; `agent-policy:codex-grok-policy`
-- Claude のみ -&gt; `agent-policy:claude-model-policy`
+cp .claude/settings.local.example.json .claude/settings.local.json
+```
 
 ### uv と Serena
 
@@ -164,66 +152,6 @@ claude mcp logs context7
 
 プロジェクト単位で設定したい場合は `--project` を追加できますが、工房の標準環境ではグローバル設定を使用します。
 
-### LSP
-
-Claude Code で効率よく開発を行うため、以下の LSP プラグインを有効化しています。
-
-- pyright (Python)
-- vtsls (TypeScript/JavaScript)
-- bash-language-server (ShellScript)
-- mdbase-lsp (Markdown)
-
-これらを使用するには、各言語を扱う言語サーバーをインストールする必要があります。
-
-#### pyright (Python)
-
-Python 用の言語サーバーインストール手順です。
-
-```bash
-npm install -g pyright
-pyright --version
-```
-
-#### TypeScript／JavaScript: vtsls
-
-```bash
-npm install -g @vtsls/language-server
-vtsls --version
-```
-
-#### Shell Script: bash-language-server
-
-```bash
-npm install -g bash-language-server
-bash-language-server --version
-```
-
-各コマンドでバージョンが表示されれば完了です。
-
-#### Markdown: mdbase-lsp
-
-`mdbase-lsp` は、このリポジトリのインストールスクリプトを使って導入します。このスクリプトは Debian／Ubuntu 系の WSL2/Linux を前提とし、次の処理を行います。
-
-- `apt` と `sudo` を使って不足パッケージをインストールする
-- `git`、C言語のビルド環境、Rust を準備する
-- 外部リポジトリを `$HOME/third-party` へ clone する
-- Rust で `mdbase-lsp` をビルドする
-- `$HOME/.local/bin/mdbase-lsp` にシンボリックリンクを作る
-
-内容を確認したうえで、リポジトリのルートから実行してください。
-
-```bash
-scripts/install-mdbase.sh
-```
-
-導入後、次のコマンドで確認します。
-
-```bash
-mdbase-lsp --help
-```
-
-コマンドが見つからない場合は、`$HOME/.local/bin` が `PATH` に含まれているか確認してください。
-
 ## セットアップ確認
 
 最後に、必要なコマンドをまとめて確認します。
@@ -238,13 +166,7 @@ uv --version
 uvx --version
 claude --version
 claude mcp list
-pyright --version
-vtsls --version
-bash-language-server --version
-mdbase-lsp --help
 ```
-
-担当しない言語の LSP は未導入でも構いません。Context7 と、担当するファイルに必要な LSP が確認できればセットアップ完了です。
 
 ## 任意設定
 
@@ -258,5 +180,4 @@ Claude Code を CLIProxyAPI 経由で利用する場合は、[CLIProxyAPI のセ
 4. `claude mcp list` で `plugin:serena:serena` と `context7` の接続状態を確認する
 5. グローバルにインストールしたコマンドの保存先が `PATH` に含まれているか確認する
 6. Context7 は `claude mcp logs context7` でログを確認する
-7. `mdbase-lsp` は `$HOME/.local/bin/mdbase-lsp` が存在するか確認する
 
