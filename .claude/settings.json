@@ -4,7 +4,9 @@
     "CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "0",
     "CLAUDE_CODE_THRIFTY_SONIC": "false",
     "GENSHIJIN_DEFAULT_MODE": "normal",
-    "PONYTAIL_DEFAULT_MODE": "full"
+    "PONYTAIL_DEFAULT_MODE": "full",
+    "AMATSUKA_METATRON_ENABLE_ADR": "1",
+    "AMATSUKA_METATRON_ENABLE_GOTCHAS": "1"
   },
   "permissions": {
     "allow": [

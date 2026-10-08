@@ -580,3 +580,33 @@ run のブランチは codiel/<slug> の 1 本にする。新しい try は同�
 #### 影響範囲
 
 init の branch は codiel/<slug> になり、raguelRunId・state の置き場・コミットの件名・worktree のブランチ名の try 番号は残る。run state version 2 の phases に carry-over が加わり、改修前の state は読み込み時に SKIPPED で補う。Raguel のフェーズ表は carry-over を stage 1 に置き、後ろの stage が 1 つずつずれる。ADR-009 の理由にある「前のバージョンは前の try のブランチから読める」は、同じブランチの履歴(git log -p)から読む形に置き換わる。同じブランチに前の try の PR が開いていれば、本文を更新して使う。改修前に -try-<n> 付きのブランチへ写し、写し先を付けた候補は回収しない。設計書: harness-docs/design/2026-10-05-codiel-run-structure-followups-design.md
+
+---
+
+### ADR-015: [metatron] ADR と GOTCHAS の記録を環境変数でオプトインにし、Codiel の候補も同じ変数に従わせる
+
+- 状態: 採用
+- 決定日: 2026-10-08
+- 決定者: phyllis998
+
+#### 背景
+
+metatron は ADR と GOTCHAS を常に管理し、SessionStart と SubagentStart で ADR 一覧と GOTCHAS の目次・直近のエントリを注入して記録を促していた。codiel は ADR-013 に従い、ADR 候補と GOTCHAS 候補を run ごとに必ず手元のレポートへ書いていた。ADR や GOTCHAS を使わないプロジェクトでも、注入文と記録の手順がコンテキストと作業時間を使っていた。
+
+#### 検討した選択肢
+
+1. metatron.config.json に有効化の設定項目を足す
+2. 環境変数 AMATSUKA_METATRON_ENABLE_ADR と AMATSUKA_METATRON_ENABLE_GOTCHAS で、種別ごとにオプトインにする
+3. 常に有効のまま残す
+
+#### 採用した結論
+
+ADR の記録は AMATSUKA_METATRON_ENABLE_ADR、GOTCHAS の記録は AMATSUKA_METATRON_ENABLE_GOTCHAS が有効なときだけ行う。1 / true / on なら有効、既定は無効とする。無効であれば注入から外し、書き込み CLI を入力を読む前に終了コード 1 の feature_disabled で拒否する。get adr・get gotchas と guard-docs による直接編集の拒否は残す。codiel は check-intent-env が判定を出し、codiel-state init の必須引数で run の state の candidates に固定する。ADR-013 の「knowledgeTarget を問わず候補を手元のレポートに書く」範囲は、変数が有効な種別に狭める。ADR 候補が無効の run では、ADR の 3 条件を満たす判断を持続層への取り込みから従来どおり除外し、どこにも残さない。
+
+#### 理由
+
+ADR と GOTCHAS を使うかはプロジェクトごとに分かれ、片方だけを使う運用もあるので、種別ごとに切り替える。metatron.config.json は codiel と 2 者独立実装で読む契約なので、項目を足すと両プラグインの実装と比較テストに変更が及ぶ。環境変数は .claude/settings.json の env に書いてコミットでき、hook と CLI の子プロセスへそのまま渡る。docs/rationale.md がパスを環境変数で設定しない理由に挙げた「設定の食い違いが見えない」は、.claude/settings.json で共有すれば避けられる。codiel が同じ変数に従うのは、使わないプロジェクトに候補だけが溜まるのを避けるためである。3 条件を満たす判断を残さない扱いは利用者の判断で採った。元の記述は intent 文書と design.md に残る。
+
+#### 影響範囲
+
+変数を設定していないプロジェクトでは、ADR 一覧・GOTCHAS の注入と記録の促しが消え、codiel は候補を書かなくなる。このリポジトリは .claude/settings.json の env で両方を有効にした。codiel-state init に --adr-candidates と --gotcha-candidates の必須引数が増え、candidates を持たない既存 run の state は両方無効として読む。metatron は 0.5.0-dev、codiel は 1.0.1 に上げた。

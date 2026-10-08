@@ -41,6 +41,12 @@ CLI が無価値という意味ではない。deny hook は「直接書かせな
 **委譲の依頼文には ARCHITECTURE と GOTCHAS の原文も要約も写さない**(SubagentStart が注入するので。`delegationLines`)。
 どちらも文書があるときだけ載せ、`buildInitGuide` には入れない。
 
+**ADR と GOTCHAS はオプトイン**(2026-10-08、ADR-015)。`src/lib/features.ts` の `readFeatures(env)` が
+`AMATSUKA_METATRON_ENABLE_ADR` / `AMATSUKA_METATRON_ENABLE_GOTCHAS` を読む(値は `1`/`true`/`on` で有効)。
+無効な側は注入(ADR 一覧・GOTCHAS・記録の促し)から外れ、書き込み CLI は `feature_disabled`(終了コード 1)で
+入力を読む前に拒否する。`get adr`/`get gotchas` と guard-docs の拒否は残る。`get config` の `features` に判定が載る。
+両方有効の注入文は改修前とバイト単位で一致する。テストのヘルパは継承 env から 2 変数を消し、既定で両方有効を渡す。
+
 **SessionStart の注入は文書が 1 つも無くても CLI 案内を出す**(`buildInitGuide`。契約 §12 の限定)。
 `/metatron:init` はまさに文書が無い状態で使うため、案内を落とすと AI は CLI の絶対パスを
 知る手段を持たない。**案内まで落とすのは 2 つだけ** — `injection.enabled: false` と、
