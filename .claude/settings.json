@@ -51,7 +51,6 @@
     "agent-policy@amatsuka-claude-plugins": true,
     "chat-history@amatsuka-claude-plugins": true,
     "prompt-smith@amatsuka-claude-plugins": true,
-    "raphael@amatsuka-claude-plugins": true,
     "context7@context7-marketplace": true,
     "claude-security@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
