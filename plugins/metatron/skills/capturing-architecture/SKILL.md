@@ -27,6 +27,15 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - ARCHITECTURE と rules の書き込みは CLI 経由だけで行う。Edit / Write で直接書き換えない。
 - GOTCHAS の雛形の生成は `init-gotchas` だけで行う。Write / Edit で書かない。
 
+## 記録の有効・無効
+
+ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `AMATSUKA_METATRON_ENABLE_GOTCHAS` がそれぞれ有効なときだけ行う。
+
+- 手順 1 の `get config` の `features.adr` と `features.gotchas` で、スキルの先頭に 1 回だけ確かめる。拒否された CLI を実行してから分岐しない。
+- `features.adr` が `false` のときは手順 8 を飛ばす。
+- `features.gotchas` が `false` のときは、台帳の生成(承認 1 回分)と手順 9 を飛ばす。
+- 無効な側の記録を求められたときは、手順を進めず、有効にする変数の設定を案内して止める。
+
 ## 手順
 
 - [ ] 1. 現状確認
@@ -34,22 +43,22 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - [ ] 3. ドラフトの起草
 - [ ] 4. 対話ウォークスルー
 - [ ] 5. stage(`stage-architecture` 1 回・`stage-rules` 3 回)
-- [ ] 6. 提示と承認(合計 5 回。ARCHITECTURE 1・rules 3・GOTCHAS 1)
-- [ ] 7. 書き込み(`commit-architecture` 1 回・`commit-rules` 3 回・`init-gotchas` 1 回)
-- [ ] 8. ADR 候補の取り込み(`scan-adr-candidates`)
-- [ ] 9. GOTCHAS 候補の取り込み(`scan-gotcha-candidates`)
+- [ ] 6. 提示と承認(合計 5 回。ARCHITECTURE 1・rules 3・GOTCHAS 1。GOTCHAS 無効なら 4 回)
+- [ ] 7. 書き込み(`commit-architecture` 1 回・`commit-rules` 3 回・`init-gotchas` 1 回。GOTCHAS 無効なら `init-gotchas` なし)
+- [ ] 8. ADR 候補の取り込み(`scan-adr-candidates`。ADR 無効なら飛ばす)
+- [ ] 9. GOTCHAS 候補の取り込み(`scan-gotcha-candidates`。GOTCHAS 無効なら飛ばす)
 - [ ] 10. 完了報告
 
 ## 1. 現状確認
 
-- `get config` で ARCHITECTURE の解決先パスと存在の有無、`rules.dir` と 3 ファイルそれぞれの `exists`、GOTCHAS の解決先パスと `exists` を確認する。
+- `get config` で ARCHITECTURE の解決先パスと存在の有無、`rules.dir` と 3 ファイルそれぞれの `exists`、GOTCHAS の解決先パスと `exists`、`features` を確認する。
 - `get config` の `warnings` に docRoot と起動ディレクトリのずれが載っているときは、rules を書く前にユーザーへ伝える。
 - ARCHITECTURE があれば `get architecture` で既存セクションの見出しと本文を取得する。
 - rules があれば `get rules` で既存の本文を取得する。
 - 既存の内容は「既存の内容」としてウォークスルーに載せ、残りの単位を埋める。
 - 既存の内容を勝手に上書きしない。書き換えが要ると判断したときは、変更案を提示してその単位単独で承認を得る。
 - 対象の 9 単位(下記)がすべて埋まっており、かつ GOTCHAS の台帳に内容があるときは初回生成ではない。`/metatron:update` を案内して終了する。
-- 9 単位が埋まっていて GOTCHAS の台帳だけが無い(または空である)ときは、手順 2 から 5 を飛ばし、手順 6 と 7 の GOTCHAS の分だけを行う。
+- 9 単位が埋まっていて GOTCHAS の台帳だけが無い(または空である)ときは、`features.gotchas` が `true` なら手順 2 から 5 を飛ばし、手順 6 と 7 の GOTCHAS の分だけを行う。`false` なら `/metatron:update` を案内して終了する。
 
 ## 2. 事実の収集
 
@@ -74,7 +83,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 | rules `protected-paths.md` | `../../docs/RULES.example.md` の記入例と既存の設定ファイル |
 | rules `testing-policy.md` | `../../docs/RULES.example.md` の記入例と既存の文書 |
 
-- GOTCHAS の台帳はこの 9 単位に含めない。手順 6 で承認対象として扱う。
+- GOTCHAS の台帳はこの 9 単位に含めない。`features.gotchas` が `true` のとき、手順 6 で承認対象として扱う。
 - rules の 3 単位を `scan` の事実から起草しない。`../../docs/RULES.example.md` の記入例を既定のドラフトとして提示し、指摘を受けて直す。
 - rules の各ファイルは `# 見出し` から始まる完全な本文として起草し、見出しの直後に管理者表示行を置く。文言は `../../references/rules-format.md` にある。
 - `## ADR 一覧` は初回生成で扱わない。ドラフトも空の節も作らず、次の単位へ進む。
@@ -135,7 +144,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 
 ## 6. diff の全文提示と承認
 
-- 承認は対象ごとに得る。ARCHITECTURE 1 回と rules 3 回と GOTCHAS 1 回で合計 5 回になる。
+- 承認は対象ごとに得る。ARCHITECTURE 1 回と rules 3 回と GOTCHAS 1 回で合計 5 回になる。`features.gotchas` が `false` のときは GOTCHAS の分を除いた 4 回とする。
 - 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
 - `diff.truncated` が `false` のときは `diff.unified` を**全文**提示する。要約・抜粋・変更行数の報告に置き換えない。
 - `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わず、`diff.sections` の `before` / `after` をセクション単位で全文提示してから承認を得る。
@@ -147,6 +156,8 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - 否認されたら該当単位のウォークスルーへ戻る。`stagingId` は使い回さない。stage からやり直す。
 
 ### GOTCHAS の台帳
+
+`features.gotchas` が `false` のときは、この小節を飛ばす。
 
 - `get gotchas-template` を実行する。分岐は `hasContent` で行う。`exists` では分岐しない(空のファイルがあるときに判断を誤る)。
 - `hasContent` が `true` のときは、提示も承認も行わない。既存の台帳がある旨を手順 10 で報告し、手順 7 の `init-gotchas` を実行しない。
@@ -166,11 +177,13 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - ARCHITECTURE の `stagingId` は `commit-architecture` へ、rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で拒否される。
 - `expired` で失敗したときは有効期限切れである。その対象について手順 5 からやり直す。
 - `file_changed` で失敗したときは stage 後に対象ファイルが変化している。現行内容を読み直し、手順 5 からやり直す。
-- GOTCHAS の承認を得た後に `init-gotchas` を実行する。`--staging-id` も `--input` も取らない。
+- `features.gotchas` が `true` のとき、GOTCHAS の承認を得た後に `init-gotchas` を実行する。`--staging-id` も `--input` も取らない。
 - `already_exists` で拒否されたときは、承認を得てから実行するまでの間に台帳が作られている。**再実行しない。** 既存の台帳があることを手順 10 で報告する。
 - `lock_timeout` で拒否されたときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
 ## 8. ADR 候補の取り込み
+
+`features.adr` が `false` のときは、この手順を飛ばして手順 9 へ進む。
 
 - 初版の ARCHITECTURE を `commit-architecture` で書き込んだ後に `scan-adr-candidates` を実行する。ARCHITECTURE が確定する前には呼ばない。
 - 候補が 0 件のときは何も提示せず、手順 9 へ進む。ADR 候補が却下されたときと、ADR の作成に失敗したときも、手順 9 へ進む。
@@ -179,6 +192,8 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - 却下された候補と、ADR の作成に失敗した候補は持続層に全文のまま残す。
 
 ## 9. GOTCHAS 候補の取り込み
+
+`features.gotchas` が `false` のときは、この手順を飛ばして手順 10 へ進む。
 
 - ADR 候補の取り込みが終わった後に `scan-gotcha-candidates` を実行する。
 - 候補が 0 件のときは何も提示せず、手順 10 へ進む。
@@ -189,6 +204,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 
 - 書き込んだファイルのパスと、確定した単位の一覧を報告する。ARCHITECTURE のセクションと rules の 3 ファイルを分けて示す。
 - 未記入のまま残した単位があれば一覧で報告する。
+- 無効な側の記録を飛ばしたときは、飛ばした記録の種別と、有効にする変数名を報告する。
 - GOTCHAS の台帳を作ったときは、そのパスを報告する。
 - GOTCHAS 候補を移さなかったときに限り、台帳は空であり、失敗を記録するときに `append-gotcha` でエントリが入ると報告する。
 - GOTCHAS 候補を移したときは、移した件数、付けたタグ、削除を保留した候補を報告する。

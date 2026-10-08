@@ -10,7 +10,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 
 | サブコマンド | 種別 | 返すもの |
 | --- | --- | --- |
-| `get config` | 読 | `docRoot`・文書の絶対パス・既定値を適用した理由・CLI の絶対パス・入力書式 |
+| `get config` | 読 | `docRoot`・文書の絶対パス・既定値を適用した理由・CLI の絶対パス・入力書式・`features`(ADR と GOTCHAS の記録が有効か) |
 | `get architecture [--section <見出し>]` | 読 | 全文と見出し一覧、または指定セクションの本文 |
 | `get domains` | 読 | `metatron:domains` を構造化したもの。読めないときは理由 |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 | GOTCHAS のエントリ配列・総数・昇格候補数 |
@@ -18,7 +18,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR のエントリ配列と次の採番 |
 | `get rules [--name <名前>]` | 読 | rules 3 ファイルの本文と存在状況、または指定した 1 ファイル |
 | `scan` | 読 | コードベース解析の事実 |
-| `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補 |
+| `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補。ADR 無効なら `## ADR 一覧` の欠落を乖離にしない |
 | `stage-architecture --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `stage-adr --input <path>` | 段階 | diff と `stagingId`、追加時は `assignedId`。書き込みはしない |
 | `stage-rules --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
@@ -39,9 +39,20 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 読み取り系の `error: "not_created"` は「文書が未作成」という事実であって異常ではない。
 - 書き込み系は成功で exit 0、拒否・失敗で非 0 で終わる。理由は JSON の `error` に入る。
 - 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。`remove-gotcha-candidate` の拒否・失敗も終了コード 3 で返り、`removePending` に `file` / `hash` を積む。
+- 記録が無効なときの拒否は、`shrink-adr-candidate` と `remove-gotcha-candidate` を含めて終了コード 1 で返る。終了コード 3 は「やり直せば通りうる拒否」の契約なので、この拒否には使わない。
 - 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。書き込みの途中で失敗しても同じである。
 - ただし `commit-architecture` と `commit-rules` が `write_failed` で終わったとき、その staging は消費済みになっている。`stage-*` からやり直す。
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
+
+## 記録の有効・無効
+
+ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `AMATSUKA_METATRON_ENABLE_GOTCHAS` がそれぞれ有効なときだけ行う。値を trim して小文字にし、`1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外は無効である。有効かどうかは `get config` の `features.adr` と `features.gotchas` で確かめる。
+
+- ADR 無効のとき、`stage-adr`・種別が ADR の staging を受ける `commit-architecture`・`shrink-adr-candidate` は `error: "feature_disabled"` で拒否される。
+- GOTCHAS 無効のとき、`init-gotchas`・`append-gotcha`・`tag-gotcha`・`remove-gotcha-candidate` は `error: "feature_disabled"` で拒否される。
+- 拒否は入力を読む前に行われ、対象ファイルは変わらない。メッセージに変数名と有効にする値が載る。
+- 読み取り系(`get adr`・`get gotchas`・`get gotchas-template`・`scan-adr-candidates`・`scan-gotcha-candidates`)は無効でも使える。
+- `stage-architecture` の `## ADR 一覧` の保護は、ADR 無効でも変わらない。
 
 ## 長い入力の渡し方
 

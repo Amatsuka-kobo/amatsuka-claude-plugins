@@ -14,21 +14,29 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 - 引数へ本文を直接埋め込まず、一時ファイルのパスだけを渡す。
 - ARCHITECTURE と rules の更新は CLI だけで行う。Edit / Write で直接書き換えない。
 
+## 記録の有効・無効
+
+ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `AMATSUKA_METATRON_ENABLE_GOTCHAS` がそれぞれ有効なときだけ行う。
+
+- 手順の先頭で `get config` を 1 回呼び、`features.adr` と `features.gotchas` を確かめる。拒否された CLI を実行してから分岐しない。
+- `features.adr` が `false` のときは、「## ADR」と「## ADR 候補の取り込み」を飛ばす。ADR を求められたときは、手順を進めず、`AMATSUKA_METATRON_ENABLE_ADR` の設定を案内して止める。
+- `features.gotchas` が `false` のときは、手順 8 と「## GOTCHAS 候補の取り込み」を飛ばす。
+
 ## 手順
 
-1. `diff-architecture` と `scan-adr-candidates` を実行し、`findings` と `skipped`、ADR 候補の配列を取る。
+1. `diff-architecture` を実行し、`findings` と `skipped` を取る。`features.adr` が `true` のときは `scan-adr-candidates` も実行し、ADR 候補の配列を取る。
 2. `get rules` を実行し、`exists` が `false` のファイルを候補に加える。
 3. 候補を一覧提示し、1 件ごとに更新するかしないかを選ばせる。
 4. 選ばれた分の本文を起草し、確認してほしい点を添えて提示する。
-5. ARCHITECTURE のセクションは `stage-architecture`、ADR は `stage-adr`、rules は `stage-rules` へ分けて渡す。
+5. ARCHITECTURE のセクションは `stage-architecture`、ADR は `stage-adr`(`features.adr` が `true` のときだけ)、rules は `stage-rules` へ分けて渡す。
 6. 返った diff を全文提示して承認を得る。
 7. ARCHITECTURE と ADR は `commit-architecture --staging-id <id>`、rules は `commit-rules --staging-id <id>` で書き込む。
-8. 下の「GOTCHAS 候補の取り込み」に従う。
+8. 下の「GOTCHAS 候補の取り込み」に従う(`features.gotchas` が `false` なら飛ばす)。
 9. 更新したセクション・ADR・rules と、移した GOTCHAS 候補を報告する。
 
 ## 検出の範囲
 
-- `diff-architecture` が返すのは決定的に検出できる乖離だけである。対象は技術スタックの追加・削除、コマンドの変更、ドメインマップの穴、死んだ glob、ディレクトリ構成の変化、セクションの欠落、ADR の状態の陳腐化とする。
+- `diff-architecture` が返すのは決定的に検出できる乖離だけである。対象は技術スタックの追加・削除、コマンドの変更、ドメインマップの穴、死んだ glob、ディレクトリ構成の変化、セクションの欠落、ADR の状態の陳腐化とする。`features.adr` が `false` のときは、`## ADR 一覧` の欠落を扱わない。
 - rules の未作成は `diff-architecture` では検出されない。`get rules` の `exists` が `false` のファイルを候補一覧に並べ、`stage-rules` での作成を案内する。
 - `skipped` に理由付きで返った項目は、その実行では検出していない。判断が要るときは該当ファイルを読んで自分で確かめ、結果を候補として同じ一覧に並べる。
 - 散文の内容が実装と食い違うといった意味的な乖離は検出されない。実装 diff を見て気づいた点は、候補一覧に無くても `stage-architecture` に直接載せて更新する。

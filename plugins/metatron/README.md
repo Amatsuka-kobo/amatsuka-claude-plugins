@@ -118,6 +118,43 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
 - 環境変数によるパス指定はありません。共有資産の位置は、リポジトリにコミットされる場所で宣言します。
 - 壊れた JSON や未知の `version` でも停止せず、既定値で動作します。
 
+## 環境変数
+
+ADR と GOTCHAS の記録は、既定では無効です。使うには次の環境変数を有効にします。
+
+| 変数名 | 用途 | 既定値 |
+| --- | --- | --- |
+| `AMATSUKA_METATRON_ENABLE_ADR` | ADR の記録(注入・`stage-adr`・ADR 候補の取り込み)の有効化 | 未設定(無効) |
+| `AMATSUKA_METATRON_ENABLE_GOTCHAS` | GOTCHAS の記録(注入・台帳の生成と追記・GOTCHAS 候補の取り込み)の有効化 | 未設定(無効) |
+
+値は前後の空白を除き、大文字小文字を区別せずに読みます。`1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外の値は無効です。
+
+設定場所は、プロジェクトの `.claude/settings.json` の `env` を推奨します。コミットすればチーム全員に同じ値が届きます。
+
+```json
+{
+  "env": {
+    "AMATSUKA_METATRON_ENABLE_ADR": "1",
+    "AMATSUKA_METATRON_ENABLE_GOTCHAS": "1"
+  }
+}
+```
+
+変数はセッションの起動時に決まります。値を変えたら、新しいセッションを始めてください。
+
+無効な側では、次が止まります。
+
+- SessionStart と SubagentStart の注入から、ADR 一覧(ADR)または GOTCHAS の目次と本文(GOTCHAS)と、記録を促す文面が消えます。
+- 書き込みの CLI が `feature_disabled`(終了コード 1)で拒否されます。対象は、ADR では `stage-adr`・ADR を書く `commit-architecture`・`shrink-adr-candidate`、GOTCHAS では `init-gotchas`・`append-gotcha`・`tag-gotcha`・`remove-gotcha-candidate` です。
+- 各スキルが、無効な側の手順を飛ばします。無効な側の記録を求めると、変数の設定を案内して止まります。
+- codiel が出す候補も、同じ変数に従って無効な側は残しません。
+
+無効でも残るものは次のとおりです。
+
+- 読み取り(`get adr`・`get gotchas`・`get gotchas-template`・`scan-adr-candidates`・`scan-gotcha-candidates`)は従来どおり使えます。
+- 既存のファイルは変更しません。
+- 直接編集の拒否(PreToolUse hook)は残ります。拒否の理由文は、CLI の案内の代わりに変数の設定を案内します。
+
 ## 他プラグインとの関係
 
 ### Codiel

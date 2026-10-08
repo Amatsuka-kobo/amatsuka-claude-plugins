@@ -20,6 +20,13 @@ description: このプロジェクトで踏んだ失敗を GOTCHAS の台帳へ�
 - ヒアドキュメントで stdin へ流さず、`--input` でパスを渡す。
 - GOTCHAS の書き込みは CLI 経由だけで行う。Edit / Write で直接書き換えない。
 
+## 記録の有効・無効
+
+GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効なときだけ行う。
+
+- スキルの先頭で `get config` を 1 回呼び、`features.gotchas` を確かめる。拒否された CLI を実行してから分岐しない。
+- `false` のときは、以降の手順(持続層の GOTCHAS 候補の取り込みを含む)を進めず、`AMATSUKA_METATRON_ENABLE_GOTCHAS` の設定を案内して止める。
+
 ## 手順
 
 - [ ] 1. 記録の可否を判断する
