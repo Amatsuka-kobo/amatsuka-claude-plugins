@@ -1,5 +1,20 @@
 #!/usr/bin/env node
 
+// src/lib/features.ts
+var ADR_ENV = "AMATSUKA_METATRON_ENABLE_ADR";
+var GOTCHAS_ENV = "AMATSUKA_METATRON_ENABLE_GOTCHAS";
+var FEATURE_ENV = {
+  adr: ADR_ENV,
+  gotchas: GOTCHAS_ENV
+};
+function enabled(value) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
+function readFeatures(env) {
+  return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
+}
+
 // src/cli/adr-candidate.ts
 import path6 from "node:path";
 
@@ -2981,6 +2996,20 @@ function emitWriteFailure(command, error, message, extra = {}, exitCode = EXIT_R
   note(message);
   process.exitCode = exitCode;
 }
+var FEATURE_LABEL = {
+  adr: "ADR",
+  gotchas: "GOTCHAS"
+};
+function emitFeatureDisabled(command, feature) {
+  const env = FEATURE_ENV[feature];
+  emitWriteFailure(
+    command,
+    "feature_disabled",
+    `${FEATURE_LABEL[feature]} \u306E\u8A18\u9332\u306F\u7121\u52B9\u3067\u3059\u3002\u6709\u52B9\u306B\u3059\u308B\u306B\u306F\u74B0\u5883\u5909\u6570 ${env} \u3092 1(true / on \u3082\u53EF)\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002CLI \u306F\u5B9F\u884C\u6642\u306E\u5024\u3092\u8AAD\u307F\u307E\u3059(\u6CE8\u5165\u306F\u30BB\u30C3\u30B7\u30E7\u30F3\u958B\u59CB\u6642\u306E\u5024\u3092\u4F7F\u3046\u306E\u3067\u3001\u6CE8\u5165\u306B\u53CD\u6620\u3059\u308B\u306B\u306F\u65B0\u3057\u3044\u30BB\u30C3\u30B7\u30E7\u30F3\u304C\u5FC5\u8981\u3067\u3059)\u3002`,
+    { written: false, feature, env },
+    EXIT_REJECTED
+  );
+}
 function messageOf(error) {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -4130,6 +4159,7 @@ function diffArchitectureInner(input) {
   const sections = normalizeSections(input.sections);
   const exists = input.architectureExists ?? sections.size > 0;
   for (const heading of ARCHITECTURE_SECTIONS) {
+    if (heading === "ADR \u4E00\u89A7" && input.adrEnabled === false) continue;
     if (exists && sections.has(heading)) continue;
     findings.push({
       kind: "section_missing",
@@ -4268,7 +4298,8 @@ function runDiffArchitecture(ctx) {
       scan: scanned,
       sections,
       architectureExists: file.exists,
-      domains: domains.ok ? domains.domains : null
+      domains: domains.ok ? domains.domains : null,
+      adrEnabled: ctx.features.adr
     });
     const warnings = [
       ...config.warnings,
@@ -4336,6 +4367,10 @@ function runCommit(ctx, spec) {
         acceptedKinds: [...spec.acceptedKinds]
       }
     );
+    return;
+  }
+  if (found.record.kind === "adr" && !ctx.features.adr) {
+    emitFeatureDisabled(command, "adr");
     return;
   }
   const targetPath = found.record.targetPath;
@@ -4623,6 +4658,8 @@ function runGetConfig(ctx) {
       }))
     },
     injection: config.injection,
+    // 記録の有効・無効。metatron.config.json ではなく環境変数から決まる(設計書 2026-10-08 の 2)。
+    features: ctx.features,
     cli: {
       path: metatronCliPath(),
       stageArchitecture: commandLine("stage-architecture --input <path>"),
@@ -5901,6 +5938,14 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "shrink-adr-candidate",
   "remove-gotcha-candidate"
 ]);
+var FEATURE_GATES = /* @__PURE__ */ new Map([
+  ["stage-adr", "adr"],
+  ["shrink-adr-candidate", "adr"],
+  ["init-gotchas", "gotchas"],
+  ["append-gotcha", "gotchas"],
+  ["tag-gotcha", "gotchas"],
+  ["remove-gotcha-candidate", "gotchas"]
+]);
 function emitUsage(command, message, exitCode) {
   emitResult(command, {
     ok: false,
@@ -5911,7 +5956,7 @@ function emitUsage(command, message, exitCode) {
   for (const line of USAGE_LINES) note(line);
   process.exitCode = exitCode;
 }
-function main(argv, cwd = process.cwd()) {
+function main(argv, cwd = process.cwd(), env = process.env) {
   const { positionals, flags, errors } = parseArgs(argv);
   const subcommand = positionals[0];
   const isRead = subcommand !== void 0 && READ_SUBCOMMANDS.has(subcommand);
@@ -5933,7 +5978,13 @@ function main(argv, cwd = process.cwd()) {
     }
     return;
   }
-  const ctx = { flags, cwd };
+  const features = readFeatures(env);
+  const gate = FEATURE_GATES.get(subcommand);
+  if (gate !== void 0 && !features[gate]) {
+    emitFeatureDisabled(subcommand, gate);
+    return;
+  }
+  const ctx = { flags, cwd, features };
   try {
     switch (subcommand) {
       case "get":

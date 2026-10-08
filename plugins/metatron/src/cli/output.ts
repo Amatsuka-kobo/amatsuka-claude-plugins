@@ -7,6 +7,8 @@
 // 終了は `process.exitCode` で表す。`process.exit()` は stdout がパイプのとき
 // 書き込みを取りこぼしうるため使わない。
 
+import { FEATURE_ENV, type Feature } from "../lib/features.js"
+
 export const EXIT_OK = 0
 /** 内容の拒否(検証失敗・ロック失敗・対象が無い)。 */
 export const EXIT_REJECTED = 1
@@ -56,6 +58,26 @@ export function emitWriteFailure(
   emitResult(command, { ok: false, error, message, ...extra })
   note(message)
   process.exitCode = exitCode
+}
+
+const FEATURE_LABEL: Readonly<Record<Feature, string>> = {
+  adr: "ADR",
+  gotchas: "GOTCHAS"
+}
+
+/**
+ * 記録が無効な機能への書き込みの拒否。終了コードは 1 に固定する(main.ts の冒頭コメント)。
+ * 有効にする方法を文面に載せ、呼び出し元が変数名と値をそのまま読めるよう JSON にも入れる。
+ */
+export function emitFeatureDisabled(command: string, feature: Feature): void {
+  const env = FEATURE_ENV[feature]
+  emitWriteFailure(
+    command,
+    "feature_disabled",
+    `${FEATURE_LABEL[feature]} の記録は無効です。有効にするには環境変数 ${env} を 1(true / on も可)にしてください。CLI は実行時の値を読みます(注入はセッション開始時の値を使うので、注入に反映するには新しいセッションが必要です)。`,
+    { written: false, feature, env },
+    EXIT_REJECTED
+  )
 }
 
 export function messageOf(error: unknown): string {

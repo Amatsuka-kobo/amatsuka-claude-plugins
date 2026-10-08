@@ -13,6 +13,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
 import { findSection, parseArchitecture } from "../../lib/architecture.js"
+import { ADR_ENV, type Features, GOTCHAS_ENV } from "../../lib/features.js"
 import { RULES_ADMIN_NOTICE } from "../../lib/rules.js"
 import { stagingDirFor } from "../../lib/staging.js"
 import { runTs } from "../../testing/run-ts.js"
@@ -56,14 +57,32 @@ interface CliRun {
   json: Record<string, unknown> | null
 }
 
+const BOTH_ON: Features = { adr: true, gotchas: true }
+
+// 2 変数はテストを起動したシェルから継承せず、呼び出し側が features で明示する。
+// 無効な側は未設定にする。既存の ADR・GOTCHAS の書き込みは両方有効の既定で走らせる。
+function cliEnv(features: Features): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env[ADR_ENV]
+  delete env[GOTCHAS_ENV]
+  if (features.adr) env[ADR_ENV] = "1"
+  if (features.gotchas) env[GOTCHAS_ENV] = "1"
+  return env
+}
+
 // execFileSync は非 0 終了で例外を投げる。CLI の契約は「非 0 でも stdout に JSON」なので、
 // 例外に載ってくる stdout / status を取り出して同じ形で返す。
-function runCli(args: string[], cwd: string): CliRun {
+function runCli(
+  args: string[],
+  cwd: string,
+  features: Features = BOTH_ON
+): CliRun {
   let status = 0
   let stdout = ""
   try {
     stdout = runTs(CLI, args, {
       cwd,
+      env: cliEnv(features),
       stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf8"
     })
@@ -1577,4 +1596,250 @@ test("remove-gotcha-candidate のオプションが欠けると終了コード 2
     expect((run.json as Record<string, unknown>).removePending).toBeUndefined()
   }
   expectUnchanged(before)
+})
+
+// ---------------------------------------------------------------------------
+// 2 変数による書き込みのゲート(設計書 2026-10-08 の 3-2・受け入れ基準 A4〜A6)
+// ---------------------------------------------------------------------------
+
+const NONE: Features = { adr: false, gotchas: false }
+
+interface GatedInvocation {
+  feature: "adr" | "gotchas"
+  args: string[]
+}
+
+// --input と --file には存在しないパスを渡す。ゲートが入力を読む前に拒否するなら、
+// 読めない入力の拒否(終了コード 2)ではなく、無効の拒否(終了コード 1)になる。
+function gatedInvocations(root: string): GatedInvocation[] {
+  const missing = path.join(root, "does-not-exist.json")
+  return [
+    { feature: "adr", args: ["stage-adr", "--input", missing] },
+    {
+      feature: "adr",
+      args: [
+        "shrink-adr-candidate",
+        "--file",
+        missing,
+        "--candidate-id",
+        "frontend-3",
+        "--adr",
+        "ADR-001",
+        "--hash",
+        "0"
+      ]
+    },
+    { feature: "gotchas", args: ["init-gotchas"] },
+    { feature: "gotchas", args: ["append-gotcha", "--input", missing] },
+    {
+      feature: "gotchas",
+      args: [
+        "tag-gotcha",
+        "--id",
+        "GOTCHA-001",
+        "--tag",
+        "解決済み",
+        "--reason",
+        "直した"
+      ]
+    },
+    {
+      feature: "gotchas",
+      args: [
+        "remove-gotcha-candidate",
+        "--file",
+        missing,
+        "--hash",
+        "0",
+        "--file-hash",
+        "0"
+      ]
+    }
+  ]
+}
+
+function gateProject(): string {
+  const root = project()
+  writeFile(root, "docs/GOTCHAS.md", GOTCHAS)
+  return root
+}
+
+function expectFeatureDisabled(
+  run: CliRun,
+  feature: "adr" | "gotchas",
+  where: string
+): void {
+  const env = feature === "adr" ? ADR_ENV : GOTCHAS_ENV
+  expect(run.status, where).toBe(1)
+  const json = run.json as Record<string, unknown>
+  expect(json, `${where}: stdout が JSON ではない`).not.toBeNull()
+  expect(json.ok, where).toBe(false)
+  expect(json.error, where).toBe("feature_disabled")
+  expect(json.written, where).toBe(false)
+  expect(json.env, where).toBe(env)
+  expect(json.message, where).toContain(env)
+  expect(json.message, where).toContain("1")
+  // 終了コード 3 の契約(やり直しの合図)は返さない
+  expect(json.shrinkPending, where).toBeUndefined()
+  expect(json.removePending, where).toBeUndefined()
+}
+
+test("FG1: 無効な側の書き込みは入力を読む前に終了コード 1 で拒否し、ファイルを変えない(A4)", () => {
+  const root = gateProject()
+  const { architecture, gotchas } = docs(root)
+  for (const invocation of gatedInvocations(root)) {
+    const only: Features = {
+      adr: invocation.feature !== "adr",
+      gotchas: invocation.feature !== "gotchas"
+    }
+    for (const features of [only, NONE]) {
+      const where = `${invocation.args[0]}(ADR ${features.adr} / GOTCHAS ${features.gotchas})`
+      const before = snapshot([architecture, gotchas])
+      const run = runCli(invocation.args, root, features)
+      expectFeatureDisabled(run, invocation.feature, where)
+      expectUnchanged(before)
+    }
+  }
+  // staging も作られていない
+  expect(fs.existsSync(stagingDirFor(root))).toBe(false)
+})
+
+test("FG2: 有効な側のサブコマンドはもう一方の変数に左右されない", () => {
+  const root = gateProject()
+  for (const invocation of gatedInvocations(root)) {
+    const features: Features = {
+      adr: invocation.feature === "adr",
+      gotchas: invocation.feature === "gotchas"
+    }
+    const run = runCli(invocation.args, root, features)
+    expect(
+      (run.json as Record<string, unknown>).error,
+      invocation.args[0]
+    ).not.toBe("feature_disabled")
+  }
+})
+
+test("FG3: ADR が無効なら adr の staging の commit-architecture を拒否し、staging を消費しない", () => {
+  const root = project()
+  const { architecture } = docs(root)
+  const inputPath = writeFile(
+    root,
+    "adr-input.json",
+    JSON.stringify({
+      mode: "add",
+      title: "ゲートの検証",
+      decidedBy: "team",
+      background: "背景",
+      options: ["A", "B"],
+      conclusion: "A にする。",
+      rationale: "理由",
+      impact: "影響"
+    })
+  )
+  const staged = runCli(["stage-adr", "--input", inputPath], root, BOTH_ON)
+  expect(staged.status).toBe(0)
+  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
+
+  const before = snapshot([architecture])
+  for (const features of [{ adr: false, gotchas: true }, NONE]) {
+    const rejected = runCli(
+      ["commit-architecture", "--staging-id", stagingId],
+      root,
+      features
+    )
+    expectFeatureDisabled(rejected, "adr", "commit-architecture")
+    expectUnchanged(before)
+  }
+
+  // staging が残っているので、有効にすれば同じ id で commit できる
+  const committed = runCli(
+    ["commit-architecture", "--staging-id", stagingId],
+    root,
+    { adr: true, gotchas: false }
+  )
+  expect(committed.status).toBe(0)
+  expect(fs.readFileSync(architecture, "utf8")).toContain("ゲートの検証")
+})
+
+test("FG4: ADR が無効でも architecture の staging は commit-architecture で反映できる", () => {
+  const root = project()
+  const inputPath = writeFile(
+    root,
+    "arch-input.json",
+    JSON.stringify({
+      sections: [{ heading: "技術スタック", body: "- TypeScript\n- Rust" }]
+    })
+  )
+  const staged = runCli(
+    ["stage-architecture", "--input", inputPath],
+    root,
+    NONE
+  )
+  expect(staged.status).toBe(0)
+  const committed = runCli(
+    [
+      "commit-architecture",
+      "--staging-id",
+      (staged.json as Record<string, unknown>).stagingId as string
+    ],
+    root,
+    NONE
+  )
+  expect(committed.status).toBe(0)
+  expect(fs.readFileSync(docs(root).architecture, "utf8")).toContain("- Rust")
+})
+
+test("FG5: 2 変数が無効でも読み取り系は従来どおり exit 0 で返る(A5)", () => {
+  const root = gateProject()
+  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
+  for (const args of [
+    ...READ_INVOCATIONS,
+    ["scan-adr-candidates"],
+    ["scan-gotcha-candidates"]
+  ]) {
+    const where = args.join(" ")
+    const both = runCli(args, root, BOTH_ON)
+    const none = runCli(args, root, NONE)
+    expect(none.status, where).toBe(0)
+    expect((none.json as Record<string, unknown>).ok, where).toBe(
+      (both.json as Record<string, unknown>).ok
+    )
+  }
+  const gotchas = runCli(["get", "gotchas"], root, NONE)
+  expect(JSON.stringify(gotchas.json)).toContain("GOTCHA-001")
+})
+
+test("FG6: get config の features に 2 変数の判定結果が載る(A6)", () => {
+  const root = project()
+  for (const features of [
+    BOTH_ON,
+    { adr: true, gotchas: false },
+    { adr: false, gotchas: true },
+    NONE
+  ]) {
+    const run = runCli(["get", "config"], root, features)
+    expect(run.status).toBe(0)
+    expect((run.json as Record<string, unknown>).features).toEqual(features)
+  }
+})
+
+test("FG7: ADR が無効なら diff-architecture は ## ADR 一覧 の欠落を section_missing にしない", () => {
+  const root = project()
+  const missingSections = (features: Features): unknown[] => {
+    const run = runCli(["diff-architecture"], root, features)
+    expect(run.status).toBe(0)
+    return (
+      (run.json as Record<string, unknown>).findings as {
+        kind: string
+        section?: string
+      }[]
+    )
+      .filter((f) => f.kind === "section_missing")
+      .map((f) => f.section)
+  }
+  expect(missingSections(BOTH_ON)).toContain("ADR 一覧")
+  const disabled = missingSections({ adr: false, gotchas: true })
+  expect(disabled).not.toContain("ADR 一覧")
+  // ほかの節の欠落は従来どおり出る
+  expect(disabled).toContain("レイヤー構造")
 })

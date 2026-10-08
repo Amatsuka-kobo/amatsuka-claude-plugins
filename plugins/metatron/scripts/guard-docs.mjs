@@ -283,6 +283,17 @@ function pass() {
   process.exit(0);
 }
 
+// src/lib/features.ts
+var ADR_ENV = "AMATSUKA_METATRON_ENABLE_ADR";
+var GOTCHAS_ENV = "AMATSUKA_METATRON_ENABLE_GOTCHAS";
+function enabled(value) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
+function readFeatures(env) {
+  return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
+}
+
 // src/lib/rules.ts
 import path2 from "node:path";
 var RULES_FILES = [
@@ -392,20 +403,29 @@ function comparisonKey(abs, caseInsensitive) {
   const key = toSlash(resolved).normalize("NFC");
   return caseInsensitive ? key.toLowerCase() : key;
 }
-function architectureReason(relative, cli) {
+function disabledLine(label, env) {
+  return `${label} \u306E\u8A18\u9332\u306F\u7121\u52B9\u3067\u3059(\u6709\u52B9\u306B\u3059\u308B\u306B\u306F ${env}=1)\u3002`;
+}
+function architectureReason(relative, cli, adrEnabled) {
   return [
     `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u30BB\u30AF\u30B7\u30E7\u30F3\u5358\u4F4D\u306E\u5DEE\u5206\u78BA\u8A8D\u3068\u66F8\u5F0F\u691C\u8A3C\u306E\u305F\u3081)\u3002`,
     "\u66F4\u65B0\u3059\u308B\u30BB\u30AF\u30B7\u30E7\u30F3\u306E JSON \u3092\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u6B21\u306E 2 \u6BB5\u968E\u3067\u53CD\u6620\u3057\u3066\u304F\u3060\u3055\u3044:",
     `  node ${cli} stage-architecture --input /tmp/metatron-architecture.json`,
     `  node ${cli} commit-architecture --staging-id <stage-architecture \u304C\u767A\u884C\u3057\u305F id>`,
-    "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044(stage-architecture \u3067\u306F\u62D2\u5426\u3055\u308C\u307E\u3059):",
-    `  node ${cli} stage-adr --input /tmp/metatron-adr.json`,
+    ...adrEnabled ? [
+      "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044(stage-architecture \u3067\u306F\u62D2\u5426\u3055\u308C\u307E\u3059):",
+      `  node ${cli} stage-adr --input /tmp/metatron-adr.json`
+    ] : [disabledLine("ADR", ADR_ENV)],
     `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
   ].join("\n");
 }
-function gotchasReason(relative, cli) {
+function gotchasReason(relative, cli, gotchasEnabled) {
+  const head = `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u8FFD\u8A18\u306E\u307F\u30FB\u63A1\u756A\u30FB\u66F8\u5F0F\u691C\u8A3C\u306E\u305F\u3081)\u3002`;
+  if (!gotchasEnabled) {
+    return [head, disabledLine("GOTCHAS", GOTCHAS_ENV)].join("\n");
+  }
   return [
-    `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u8FFD\u8A18\u306E\u307F\u30FB\u63A1\u756A\u30FB\u66F8\u5F0F\u691C\u8A3C\u306E\u305F\u3081)\u3002`,
+    head,
     "\u30A8\u30F3\u30C8\u30EA\u306E JSON \u3092\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u6B21\u306E\u30B3\u30DE\u30F3\u30C9\u3067\u8FFD\u8A18\u3057\u3066\u304F\u3060\u3055\u3044:",
     `  node ${cli} append-gotcha --input /tmp/metatron-gotcha.json`,
     "\u53F0\u5E33\u304C\u307E\u3060\u7121\u3044\u3068\u304D\u306F\u3001\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u3066\u304B\u3089\u65B0\u898F\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044:",
@@ -464,9 +484,14 @@ try {
       hitRules ??= rulesTargets.find((target) => target.key === key);
     }
   }
+  const features = readFeatures(process.env);
   if (hitArchitecture)
-    emit("deny", architectureReason(config.architectureRelative, cli));
-  if (hitGotchas) emit("deny", gotchasReason(config.gotchasRelative, cli));
+    emit(
+      "deny",
+      architectureReason(config.architectureRelative, cli, features.adr)
+    );
+  if (hitGotchas)
+    emit("deny", gotchasReason(config.gotchasRelative, cli, features.gotchas));
   if (hitRules !== void 0) emit("deny", rulesReason(hitRules.relative, cli));
   pass();
 } catch {

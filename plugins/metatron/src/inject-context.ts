@@ -7,6 +7,12 @@
 // 入力の hook_event_name が SubagentStart ならサブエージェント向けを、それ以外(無い・読めないを含む)は
 // SessionStart 向けを組み立てる。
 //
+// ADR と GOTCHAS の注入は、AMATSUKA_METATRON_ENABLE_ADR と AMATSUKA_METATRON_ENABLE_GOTCHAS が
+// 有効なときだけ行う(`harness-docs/design/2026-10-08-metatron-adr-gotchas-opt-in-design.md` の 3)。
+// 無効な側は文書の内容も、その記録を促す行も出さない。削れない部分の文面もこの 2 変数で変わるが、
+// どの組み合わせでも下の不変条件は同じように当てる。GOTCHAS が無効なら台帳を読まず、
+// GOTCHAS.md だけがある状態は不変条件 0 の「文書が無い」に当たる。
+//
 // この層は第 2 層(機構自身の動作)であり、**フェイルオープン**する。
 // 読めない・壊れている・例外が出た、のいずれでも**文書の内容**は出力せず exit 0 で終える。
 // 注入の失敗が「セッションを開始できない」という不釣り合いに大きな損害へ化けるためである。
@@ -58,6 +64,7 @@ import {
 } from "./lib/architecture.js"
 import { loadConfig, type ResolvedConfig } from "./lib/config.js"
 import { injectContext } from "./lib/emit.js"
+import { type Features, readFeatures } from "./lib/features.js"
 import { type GotchaEntry, parseGotchas } from "./lib/gotchas.js"
 
 /** 設計書 §8-5 段階 2。目次をこの件数に制限する。 */
@@ -91,18 +98,37 @@ function metatronCliPath(env: NodeJS.ProcessEnv): string {
 // CLI 案内(優先 1・不可欠。縮退で決して手を付けない)
 // ---------------------------------------------------------------------------
 
-const GUIDE_TITLE = "# metatron: プロジェクトの前提と落とし穴"
+// GOTCHAS の記録が無効なら、落とし穴を注入しないので見出しからも外す。
+function guideTitle(features: Features): string {
+  return features.gotchas
+    ? "# metatron: プロジェクトの前提と落とし穴"
+    : "# metatron: プロジェクトの前提"
+}
 
 // 呼び出し規約は契約 §11。長い入力は一時ファイルへ書き `--input <path>` で渡す形に統一する。
 // 2 つの文面が同じ呼び出し規約を広告するよう、この部分だけは共有する。
-function cliLines(cli: string): string[] {
+// 無効な側の CLI は拒否されるので案内しない(設計書 2026-10-08 の 3-1)。
+function cliLines(cli: string, features: Features): string[] {
+  const reads = [
+    features.gotchas ? "node M get gotchas --query <語>" : null,
+    features.adr ? "node M get adr" : null,
+    "node M get architecture"
+  ].filter((part) => part !== null)
   return [
     `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${cli}):`,
-    "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
-    "  記録:     node M append-gotcha --input <一時ファイル>",
-    '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
+    `  読む:     ${reads.join(" / ")}`,
+    ...(features.gotchas
+      ? [
+          "  記録:     node M append-gotcha --input <一時ファイル>",
+          '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."'
+        ]
+      : []),
     "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
-    "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+    ...(features.adr
+      ? [
+          "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>"
+        ]
+      : []),
     "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
     "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
     "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
@@ -111,42 +137,63 @@ function cliLines(cli: string): string[] {
 
 // 記録のタイミング。hook では作業の完了を検出できないので、注入文で確かめる時点を伝える。
 // 文書が無いうちは記録先が無いので、buildInitGuide には入れない(cliLines と分けているのはこのため)。
-// 4 行の合計を 200 文字以内に保つ。削れない部分を長くすると、縮退に回せる予算が減る。
-function recordingLines(): string[] {
+// どの組み合わせでも 4 行の合計を 200 文字以内に保つ。削れない部分を長くすると、縮退に回せる予算が減る。
+// 両方無効なら記録するものが無いので、4 行とも出さない。
+function recordingLines(features: Features): string[] {
+  if (!features.adr && !features.gotchas) return []
+  const head = features.adr
+    ? features.gotchas
+      ? [
+          "依頼の完了報告の前に、判断と失敗に ADR・GOTCHAS へ残すものが無いか確かめる。",
+          "残すなら updating-architecture か recording-gotchas の承認手順で記録する。"
+        ]
+      : [
+          "依頼の完了報告の前に、判断に ADR へ残すものが無いか確かめる。",
+          "残すなら updating-architecture の承認手順で記録する。"
+        ]
+    : [
+        "依頼の完了報告の前に、失敗に GOTCHAS へ残すものが無いか確かめる。",
+        "残すなら recording-gotchas の承認手順で記録する。"
+      ]
   return [
-    "依頼の完了報告の前に、判断と失敗に ADR・GOTCHAS へ残すものが無いか確かめる。",
-    "残すなら updating-architecture か recording-gotchas の承認手順で記録する。",
+    ...head,
     "codiel run の報告に出た候補は、run の中でなく次のターンの初めに確かめる。",
     "docs/intents/domains/ の候補は /metatron:update で取り込める。"
   ]
 }
 
 // 文書が 1 つ以上あるときの案内。
-function buildGuide(cli: string): string {
+function buildGuide(cli: string, features: Features): string {
   return [
-    GUIDE_TITLE,
+    guideTitle(features),
     "",
     "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
-    ...cliLines(cli),
-    ...recordingLines(),
-    ...delegationLines()
+    ...cliLines(cli, features),
+    ...recordingLines(features),
+    ...delegationLines(features)
   ].join("\n")
 }
 
 // サブエージェントへの委譲。SubagentStart hook が両文書を注入するので、依頼文へ写すと重複する。
 // 写した要約は原文とずれても気づけない。文書が無いうちは注入する文書も無いので、buildInitGuide には入れない。
-function delegationLines(): string[] {
-  return [
-    "サブエージェントには SubagentStart hook が ARCHITECTURE と GOTCHAS を注入する。",
-    "委譲の依頼文には、両文書の原文も要約も書き写さない。"
-  ]
+// GOTCHAS が無効なら注入するのは ARCHITECTURE だけになる。
+function delegationLines(features: Features): string[] {
+  return features.gotchas
+    ? [
+        "サブエージェントには SubagentStart hook が ARCHITECTURE と GOTCHAS を注入する。",
+        "委譲の依頼文には、両文書の原文も要約も書き写さない。"
+      ]
+    : [
+        "サブエージェントには SubagentStart hook が ARCHITECTURE を注入する。",
+        "委譲の依頼文には、ARCHITECTURE の原文も要約も書き写さない。"
+      ]
 }
 
 // サブエージェント向けの削れない部分。CLI の案内・記録のタイミング・委譲の注意は載せない。
 // 記録と文書の更新はメインセッションが行うので、サブエージェントは文書を読むだけでよい。
-function buildSubagentGuide(): string {
+function buildSubagentGuide(features: Features): string {
   return [
-    GUIDE_TITLE,
+    guideTitle(features),
     "",
     "以下の文書は前提として読むだけにし、直接編集しない。"
   ].join("\n")
@@ -155,14 +202,16 @@ function buildSubagentGuide(): string {
 // 文書がまだ 1 つも無いときの案内(設計書 §8-7 の限定)。
 // 「metatron の管理下にある」という前提の文は事実に合わないので、
 // **まだ文書が無く `/metatron:init` で作れる**ことが分かる文面に差し替える。
-function buildInitGuide(cli: string): string {
+function buildInitGuide(cli: string, features: Features): string {
   return [
-    GUIDE_TITLE,
+    guideTitle(features),
     "",
-    "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**",
+    features.gotchas
+      ? "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**"
+      : "このプロジェクトにはまだ ARCHITECTURE が無い。**`/metatron:init` で作成する。**",
     "init は `.claude/rules/metatron/` の 3 ファイル(規約・保護パス・テスト方針)も併せて作る。",
     "作成後はこれらが metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
-    ...cliLines(cli)
+    ...cliLines(cli, features)
   ].join("\n")
 }
 
@@ -390,7 +439,8 @@ function renderArchitecture(
   config: ResolvedConfig,
   arch: ArchSource,
   plan: Plan,
-  refs: FullTextRefs
+  refs: FullTextRefs,
+  adrEnabled: boolean
 ): string {
   const head = `## 技術的前提(${config.architectureRelative})`
   const readAll = `全文は ${config.architecturePath} を Read すること`
@@ -430,6 +480,8 @@ function renderArchitecture(
   let adrDropped = false
   for (const section of arch.doc.sections) {
     if (section.heading === ADR_HEADING) {
+      // ADR の記録が無効なら一覧も割愛の案内も出さない(設計書 2026-10-08 の 3)。
+      if (!adrEnabled) continue
       if (!plan.includeAdr) {
         adrDropped = true
         continue
@@ -507,6 +559,7 @@ function renderGotchas(
 
 interface RenderInput {
   config: ResolvedConfig
+  features: Features
   guide: string
   refs: FullTextRefs
   warnings: string[]
@@ -527,7 +580,15 @@ function render(input: RenderInput, plan: Plan): string {
     blocks.push(renderWarnings(input.warnings))
   }
   if (input.arch !== null) {
-    blocks.push(renderArchitecture(input.config, input.arch, plan, input.refs))
+    blocks.push(
+      renderArchitecture(
+        input.config,
+        input.arch,
+        plan,
+        input.refs,
+        input.features.adr
+      )
+    )
   }
   if (input.gotchas !== null) {
     blocks.push(renderGotchas(input.config, input.gotchas, plan, input.refs))
@@ -535,9 +596,20 @@ function render(input: RenderInput, plan: Plan): string {
   return `${blocks.join("\n\n")}\n`
 }
 
+// GOTCHAS の記録が無効なら台帳を読まない。GOTCHAS.md だけがあるときは文書ゼロとして扱われる。
+function readSources(
+  config: ResolvedConfig,
+  features: Features
+): { arch: ArchSource | null; gotchas: GotchasSource | null } {
+  return {
+    arch: readArchitecture(config),
+    gotchas: features.gotchas ? readGotchas(config) : null
+  }
+}
+
 function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
-  const arch = readArchitecture(config)
-  const gotchas = readGotchas(config)
+  const features = readFeatures(env)
+  const { arch, gotchas } = readSources(config, features)
   const cli = metatronCliPath(env)
 
   // どちらも無くても CLI 案内だけは出す(設計書 §8-7・契約 §12・§13-1 の I3)。
@@ -551,14 +623,15 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
     // 見失った原因が分からず、既定パスへ重複して文書を作りかねない。
     // 設定ファイルが無いのは正常な状態なので、警告が無いときは何も足さない。
     const configWarnings = config.warnings.slice(0, MAX_WARNING_LINES)
-    const blocks = [buildInitGuide(cli)]
+    const blocks = [buildInitGuide(cli, features)]
     if (configWarnings.length > 0) blocks.push(renderWarnings(configWarnings))
     return `${blocks.join("\n\n")}\n`
   }
 
   return fitToBudget(config, {
     config,
-    guide: buildGuide(cli),
+    features,
+    guide: buildGuide(cli, features),
     refs: CLI_REFS,
     warnings: collectWarnings(config, arch, gotchas),
     arch,
@@ -568,14 +641,19 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
 
 // サブエージェント向け(設計書 3-2)。文書が 1 つも無ければ何も出さない(null)。
 // サブエージェントは `/metatron:init` を始めないので、init の案内は要らない。
-function buildForSubagent(config: ResolvedConfig): string | null {
-  const arch = readArchitecture(config)
-  const gotchas = readGotchas(config)
+// 2 変数の扱いは SessionStart と同じ規則に従う。
+function buildForSubagent(
+  config: ResolvedConfig,
+  env: NodeJS.ProcessEnv
+): string | null {
+  const features = readFeatures(env)
+  const { arch, gotchas } = readSources(config, features)
   if (arch === null && gotchas === null) return null
 
   return fitToBudget(config, {
     config,
-    guide: buildSubagentGuide(),
+    features,
+    guide: buildSubagentGuide(features),
     refs: pathRefs(config),
     warnings: collectWarnings(config, arch, gotchas),
     arch,
@@ -674,7 +752,7 @@ try {
   if (config.injection.enabled) {
     // SubagentStart 以外(無い・読めないを含む)は従来どおり SessionStart として扱う。
     if (hookInput.hook_event_name === "SubagentStart") {
-      const content = buildForSubagent(config)
+      const content = buildForSubagent(config, process.env)
       if (content !== null) injectContext(content, "SubagentStart")
     } else {
       injectContext(build(config, process.env), "SessionStart")

@@ -783,6 +783,17 @@ function injectContext(content, eventName) {
   );
 }
 
+// src/lib/features.ts
+var ADR_ENV = "AMATSUKA_METATRON_ENABLE_ADR";
+var GOTCHAS_ENV = "AMATSUKA_METATRON_ENABLE_GOTCHAS";
+function enabled(value) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
+function readFeatures(env) {
+  return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
+}
+
 // src/inject-context.ts
 var STAGE2_TOC_LIMIT = 50;
 var PLATFORM_MAX_CHARS = 1e4;
@@ -797,59 +808,83 @@ function pluginRoot(env) {
 function metatronCliPath(env) {
   return path2.join(pluginRoot(env), "scripts", "metatron.mjs");
 }
-var GUIDE_TITLE = "# metatron: \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u524D\u63D0\u3068\u843D\u3068\u3057\u7A74";
-function cliLines(cli) {
+function guideTitle(features) {
+  return features.gotchas ? "# metatron: \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u524D\u63D0\u3068\u843D\u3068\u3057\u7A74" : "# metatron: \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u524D\u63D0";
+}
+function cliLines(cli, features) {
+  const reads = [
+    features.gotchas ? "node M get gotchas --query <\u8A9E>" : null,
+    features.adr ? "node M get adr" : null,
+    "node M get architecture"
+  ].filter((part) => part !== null);
   return [
     `\u8A18\u9332\u30FB\u66F4\u65B0\u30FB\u5168\u6587\u53D6\u5F97\u306F\u6B21\u306E CLI \u3092\u4F7F\u3046(\u7D76\u5BFE\u30D1\u30B9\u3002M = ${cli}):`,
-    "  \u8AAD\u3080:     node M get gotchas --query <\u8A9E> / node M get adr / node M get architecture",
-    "  \u8A18\u9332:     node M append-gotcha --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB>",
-    '  \u30BF\u30B0:     node M tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F --reason "..."',
+    `  \u8AAD\u3080:     ${reads.join(" / ")}`,
+    ...features.gotchas ? [
+      "  \u8A18\u9332:     node M append-gotcha --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB>",
+      '  \u30BF\u30B0:     node M tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F --reason "..."'
+    ] : [],
     "  \u6587\u66F8\u66F4\u65B0: node M stage-architecture --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>",
-    "  ADR:     node M stage-adr --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>",
+    ...features.adr ? [
+      "  ADR:     node M stage-adr --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>"
+    ] : [],
     "  \u898F\u5F8B:     node M get rules [--name conventions|protected-paths|testing-policy]",
     "  \u898F\u5F8B\u66F4\u65B0: node M stage-rules --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-rules --staging-id <id>",
     "\u203B\u9577\u3044\u5165\u529B\u306F\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u3078\u66F8\u304D\u3001--input <path> \u3067\u6E21\u3059(CLI \u306E\u547C\u3073\u51FA\u3057\u898F\u7D04)\u3002"
   ];
 }
-function recordingLines() {
-  return [
+function recordingLines(features) {
+  if (!features.adr && !features.gotchas) return [];
+  const head = features.adr ? features.gotchas ? [
     "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5224\u65AD\u3068\u5931\u6557\u306B ADR\u30FBGOTCHAS \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
-    "\u6B8B\u3059\u306A\u3089 updating-architecture \u304B recording-gotchas \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002",
+    "\u6B8B\u3059\u306A\u3089 updating-architecture \u304B recording-gotchas \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002"
+  ] : [
+    "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5224\u65AD\u306B ADR \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
+    "\u6B8B\u3059\u306A\u3089 updating-architecture \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002"
+  ] : [
+    "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5931\u6557\u306B GOTCHAS \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
+    "\u6B8B\u3059\u306A\u3089 recording-gotchas \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002"
+  ];
+  return [
+    ...head,
     "codiel run \u306E\u5831\u544A\u306B\u51FA\u305F\u5019\u88DC\u306F\u3001run \u306E\u4E2D\u3067\u306A\u304F\u6B21\u306E\u30BF\u30FC\u30F3\u306E\u521D\u3081\u306B\u78BA\u304B\u3081\u308B\u3002",
     "docs/intents/domains/ \u306E\u5019\u88DC\u306F /metatron:update \u3067\u53D6\u308A\u8FBC\u3081\u308B\u3002"
   ];
 }
-function buildGuide(cli) {
+function buildGuide(cli, features) {
   return [
-    GUIDE_TITLE,
+    guideTitle(features),
     "",
     "\u3053\u308C\u3089\u306E\u6587\u66F8\u3068 `.claude/rules/metatron/` \u306E 3 \u30D5\u30A1\u30A4\u30EB\u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308B\u3002**\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002**",
-    ...cliLines(cli),
-    ...recordingLines(),
-    ...delegationLines()
+    ...cliLines(cli, features),
+    ...recordingLines(features),
+    ...delegationLines(features)
   ].join("\n");
 }
-function delegationLines() {
-  return [
+function delegationLines(features) {
+  return features.gotchas ? [
     "\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306B\u306F SubagentStart hook \u304C ARCHITECTURE \u3068 GOTCHAS \u3092\u6CE8\u5165\u3059\u308B\u3002",
     "\u59D4\u8B72\u306E\u4F9D\u983C\u6587\u306B\u306F\u3001\u4E21\u6587\u66F8\u306E\u539F\u6587\u3082\u8981\u7D04\u3082\u66F8\u304D\u5199\u3055\u306A\u3044\u3002"
+  ] : [
+    "\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306B\u306F SubagentStart hook \u304C ARCHITECTURE \u3092\u6CE8\u5165\u3059\u308B\u3002",
+    "\u59D4\u8B72\u306E\u4F9D\u983C\u6587\u306B\u306F\u3001ARCHITECTURE \u306E\u539F\u6587\u3082\u8981\u7D04\u3082\u66F8\u304D\u5199\u3055\u306A\u3044\u3002"
   ];
 }
-function buildSubagentGuide() {
+function buildSubagentGuide(features) {
   return [
-    GUIDE_TITLE,
+    guideTitle(features),
     "",
     "\u4EE5\u4E0B\u306E\u6587\u66F8\u306F\u524D\u63D0\u3068\u3057\u3066\u8AAD\u3080\u3060\u3051\u306B\u3057\u3001\u76F4\u63A5\u7DE8\u96C6\u3057\u306A\u3044\u3002"
   ].join("\n");
 }
-function buildInitGuide(cli) {
+function buildInitGuide(cli, features) {
   return [
-    GUIDE_TITLE,
+    guideTitle(features),
     "",
-    "\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u306F\u307E\u3060 ARCHITECTURE \u3082 GOTCHAS \u3082\u7121\u3044\u3002**`/metatron:init` \u3067\u4F5C\u6210\u3059\u308B\u3002**",
+    features.gotchas ? "\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u306F\u307E\u3060 ARCHITECTURE \u3082 GOTCHAS \u3082\u7121\u3044\u3002**`/metatron:init` \u3067\u4F5C\u6210\u3059\u308B\u3002**" : "\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u306F\u307E\u3060 ARCHITECTURE \u304C\u7121\u3044\u3002**`/metatron:init` \u3067\u4F5C\u6210\u3059\u308B\u3002**",
     "init \u306F `.claude/rules/metatron/` \u306E 3 \u30D5\u30A1\u30A4\u30EB(\u898F\u7D04\u30FB\u4FDD\u8B77\u30D1\u30B9\u30FB\u30C6\u30B9\u30C8\u65B9\u91DD)\u3082\u4F75\u305B\u3066\u4F5C\u308B\u3002",
     "\u4F5C\u6210\u5F8C\u306F\u3053\u308C\u3089\u304C metatron \u306E\u7BA1\u7406\u4E0B\u306B\u5165\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002",
-    ...cliLines(cli)
+    ...cliLines(cli, features)
   ].join("\n");
 }
 function toLf(text) {
@@ -970,7 +1005,7 @@ function renderAdrSummary(section, entries, refs) {
   const lines = entries.length > 0 ? entries.map((e) => `- ${e.id}: ${e.title}(${e.status ?? "\u72B6\u614B\u4E0D\u660E"})`) : ["(\u307E\u3060 ADR \u306F\u7121\u3044)"];
   return [toLf(section.headingLine), "", ...lines, "", refs.adrFull].join("\n");
 }
-function renderArchitecture(config, arch, plan, refs) {
+function renderArchitecture(config, arch, plan, refs, adrEnabled) {
   const head = `## \u6280\u8853\u7684\u524D\u63D0(${config.architectureRelative})`;
   const readAll = `\u5168\u6587\u306F ${config.architecturePath} \u3092 Read \u3059\u308B\u3053\u3068`;
   if (plan.archMode === "none") {
@@ -1004,6 +1039,7 @@ ${readAll}\u3002`;
   let adrDropped = false;
   for (const section of arch.doc.sections) {
     if (section.heading === ADR_HEADING) {
+      if (!adrEnabled) continue;
       if (!plan.includeAdr) {
         adrDropped = true;
         continue;
@@ -1073,7 +1109,15 @@ function render(input, plan) {
     blocks.push(renderWarnings(input.warnings));
   }
   if (input.arch !== null) {
-    blocks.push(renderArchitecture(input.config, input.arch, plan, input.refs));
+    blocks.push(
+      renderArchitecture(
+        input.config,
+        input.arch,
+        plan,
+        input.refs,
+        input.features.adr
+      )
+    );
   }
   if (input.gotchas !== null) {
     blocks.push(renderGotchas(input.config, input.gotchas, plan, input.refs));
@@ -1081,33 +1125,41 @@ function render(input, plan) {
   return `${blocks.join("\n\n")}
 `;
 }
+function readSources(config, features) {
+  return {
+    arch: readArchitecture(config),
+    gotchas: features.gotchas ? readGotchas(config) : null
+  };
+}
 function build(config, env) {
-  const arch = readArchitecture(config);
-  const gotchas = readGotchas(config);
+  const features = readFeatures(env);
+  const { arch, gotchas } = readSources(config, features);
   const cli = metatronCliPath(env);
   if (arch === null && gotchas === null) {
     const configWarnings = config.warnings.slice(0, MAX_WARNING_LINES);
-    const blocks = [buildInitGuide(cli)];
+    const blocks = [buildInitGuide(cli, features)];
     if (configWarnings.length > 0) blocks.push(renderWarnings(configWarnings));
     return `${blocks.join("\n\n")}
 `;
   }
   return fitToBudget(config, {
     config,
-    guide: buildGuide(cli),
+    features,
+    guide: buildGuide(cli, features),
     refs: CLI_REFS,
     warnings: collectWarnings(config, arch, gotchas),
     arch,
     gotchas
   });
 }
-function buildForSubagent(config) {
-  const arch = readArchitecture(config);
-  const gotchas = readGotchas(config);
+function buildForSubagent(config, env) {
+  const features = readFeatures(env);
+  const { arch, gotchas } = readSources(config, features);
   if (arch === null && gotchas === null) return null;
   return fitToBudget(config, {
     config,
-    guide: buildSubagentGuide(),
+    features,
+    guide: buildSubagentGuide(features),
     refs: pathRefs(config),
     warnings: collectWarnings(config, arch, gotchas),
     arch,
@@ -1174,7 +1226,7 @@ try {
   const config = loadConfig(startDir);
   if (config.injection.enabled) {
     if (hookInput.hook_event_name === "SubagentStart") {
-      const content = buildForSubagent(config);
+      const content = buildForSubagent(config, process.env);
       if (content !== null) injectContext(content, "SubagentStart");
     } else {
       injectContext(build(config, process.env), "SessionStart");

@@ -492,6 +492,11 @@ export interface DiffArchitectureInput {
    * どちらもドメイン関連の検出を行わない。
    */
   domains?: Record<string, string[]> | null
+  /**
+   * ADR の記録が有効か。既定は `true`。`false` のときは `## ADR 一覧` が無くても
+   * `section_missing` にしない(ADR を記録しないプロジェクトでは欠落が正常な姿である)。
+   */
+  adrEnabled?: boolean
 }
 
 export interface DiffArchitectureResult {
@@ -1624,6 +1629,7 @@ function diffArchitectureInner(
   const exists = input.architectureExists ?? sections.size > 0
 
   for (const heading of ARCHITECTURE_SECTIONS) {
+    if (heading === "ADR 一覧" && input.adrEnabled === false) continue
     if (exists && sections.has(heading)) continue
     findings.push({
       kind: "section_missing",

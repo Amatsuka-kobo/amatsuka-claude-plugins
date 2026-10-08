@@ -11,6 +11,7 @@
 // 無くすことが、この 2 段階の目的である。
 
 import { loadConfig } from "../lib/config.js"
+import type { Features } from "../lib/features.js"
 import { GotchaError, withFileLock } from "../lib/gotchas.js"
 import {
   type CommitStagingResult,
@@ -21,6 +22,7 @@ import {
 import { stringFlag } from "./args.js"
 import {
   EXIT_USAGE,
+  emitFeatureDisabled,
   emitResult,
   emitWriteFailure,
   messageOf,
@@ -30,6 +32,8 @@ import {
 export interface CommitContext {
   flags: Record<string, string | true>
   cwd: string
+  /** 2 変数の判定結果。main.ts が実行ごとに 1 回読んで渡す。 */
+  features: Features
 }
 
 interface CommitSpec {
@@ -78,6 +82,13 @@ function runCommit(ctx: CommitContext, spec: CommitSpec): void {
         acceptedKinds: [...spec.acceptedKinds]
       }
     )
+    return
+  }
+
+  // ADR の記録が無効なら、stage-adr の staging は消費せずに拒否する。
+  // staging は残るので、変数を有効にしてから同じ id で commit できる。
+  if (found.record.kind === "adr" && !ctx.features.adr) {
+    emitFeatureDisabled(command, "adr")
     return
   }
 

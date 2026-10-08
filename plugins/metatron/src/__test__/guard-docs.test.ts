@@ -7,6 +7,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
+import { ADR_ENV, type Features, GOTCHAS_ENV } from "../lib/features.js"
 import { runTs } from "../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../guard-docs.ts", import.meta.url))
@@ -19,9 +20,27 @@ interface HookOutput {
   permissionDecisionReason: string
 }
 
+const BOTH_ON: Features = { adr: true, gotchas: true }
+
+// 2 変数はテストを起動したシェルから継承せず、呼び出し側が features で明示する。無効な側は未設定にする。
+function hookEnv(features: Features): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env[ADR_ENV]
+  delete env[GOTCHAS_ENV]
+  if (features.adr) env[ADR_ENV] = "1"
+  if (features.gotchas) env[GOTCHAS_ENV] = "1"
+  return env
+}
+
 // stdout が空 = 素通し。deny のときだけ hookSpecificOutput を返す。
-function hook(payload: unknown): HookOutput | null {
-  const out = runTs(HOOK, [], { input: JSON.stringify(payload) })
+function hook(
+  payload: unknown,
+  features: Features = BOTH_ON
+): HookOutput | null {
+  const out = runTs(HOOK, [], {
+    input: JSON.stringify(payload),
+    env: hookEnv(features)
+  })
   if (out.trim() === "") return null
   return (JSON.parse(out) as { hookSpecificOutput: HookOutput })
     .hookSpecificOutput
@@ -589,4 +608,79 @@ test("D20: NotebookEdit の notebook_path に rules を渡しても deny する"
   )
   expect(r?.permissionDecision).toBe("deny")
   expect(r?.permissionDecisionReason).toContain("stage-rules --input")
+})
+
+// --- 2 変数が無効なときの理由文(設計書 2026-10-08 の 3-3)-----------------------
+
+test("D21: ADR が無効でも ARCHITECTURE への Write は deny。理由は stage-adr へ誘導せず、有効にする変数を示す", () => {
+  const root = project()
+  const target = path.join(root, "docs/ARCHITECTURE.md")
+  for (const features of [
+    { adr: false, gotchas: true },
+    { adr: false, gotchas: false }
+  ]) {
+    const r = hook(
+      { cwd: root, tool_name: "Write", tool_input: { file_path: target } },
+      features
+    )
+    expect(r?.permissionDecision).toBe("deny")
+    const reason = r?.permissionDecisionReason ?? ""
+    expect(reason).toContain(`node ${CLI} stage-architecture --input`)
+    expect(reason).toContain(`node ${CLI} commit-architecture --staging-id`)
+    expect(reason).not.toContain("stage-adr")
+    expect(reason).toContain(`${ADR_ENV}=1`)
+  }
+})
+
+test("D22: GOTCHAS が無効でも GOTCHAS への Edit は deny。理由は書き込み CLI へ誘導せず、有効にする変数を示す", () => {
+  const root = project()
+  const target = path.join(root, "docs/GOTCHAS.md")
+  for (const features of [
+    { adr: true, gotchas: false },
+    { adr: false, gotchas: false }
+  ]) {
+    const r = hook(
+      { cwd: root, tool_name: "Edit", tool_input: { file_path: target } },
+      features
+    )
+    expect(r?.permissionDecision).toBe("deny")
+    const reason = r?.permissionDecisionReason ?? ""
+    expect(reason).toContain("docs/GOTCHAS.md")
+    expect(reason).toContain(`${GOTCHAS_ENV}=1`)
+    for (const command of ["append-gotcha", "init-gotchas", "tag-gotcha"]) {
+      expect(reason).not.toContain(command)
+    }
+  }
+})
+
+test("D23: 無効なのが他方だけなら、理由文は従来どおり", () => {
+  const root = project()
+  const arch = hook(
+    {
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: path.join(root, "docs/ARCHITECTURE.md") }
+    },
+    { adr: true, gotchas: false }
+  )
+  expect(arch?.permissionDecisionReason).toBe(
+    hook({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: path.join(root, "docs/ARCHITECTURE.md") }
+    })?.permissionDecisionReason
+  )
+  expect(arch?.permissionDecisionReason).toContain("stage-adr")
+  const gotchas = hook(
+    {
+      cwd: root,
+      tool_name: "Edit",
+      tool_input: { file_path: path.join(root, "docs/GOTCHAS.md") }
+    },
+    { adr: false, gotchas: true }
+  )
+  expect(gotchas?.permissionDecisionReason).toContain(
+    `node ${CLI} append-gotcha --input`
+  )
+  expect(gotchas?.permissionDecisionReason).not.toContain(ADR_ENV)
 })

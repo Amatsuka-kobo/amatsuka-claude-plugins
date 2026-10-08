@@ -11,9 +11,17 @@
 //   拒否・失敗は非 0 終了。shrink-adr-candidate と remove-gotcha-candidate の拒否・失敗は
 //   終了コード 3 に揃える(ハンドラが自分で例外を捕まえる)。
 //
+// ADR と GOTCHAS の書き込みは、対応する環境変数が有効なときだけ受け付ける
+// (`harness-docs/design/2026-10-08-metatron-adr-gotchas-opt-in-design.md` の 3-2)。
+// サブコマンドと変数の対応は FEATURE_GATES の 1 か所に置き、入力を読む前に拒否する。
+// commit-architecture だけは staging の種別が分かるまで判定できないので commit.ts で拒否する。
+// この拒否の終了コードは shrink-adr-candidate と remove-gotcha-candidate を含めてすべて 1 とする。
+// 終了コード 3 は「やり直せば通りうる拒否」の契約であり、変数を変えない限り通らないこの拒否には使わない。
+//
 // この分岐を 1 箇所に集めているのは、サブコマンドを足したときに層の判断が
 // 各ファイルへ散らばらないようにするためである。
 
+import { type Feature, readFeatures } from "../lib/features.js"
 import { runScanAdrCandidates, runShrinkAdrCandidate } from "./adr-candidate.js"
 import { runDiffArchitecture, runScan } from "./analysis.js"
 import { parseArgs } from "./args.js"
@@ -26,6 +34,7 @@ import {
 } from "./gotcha-candidate.js"
 import {
   EXIT_USAGE,
+  emitFeatureDisabled,
   emitReadFailure,
   emitResult,
   emitWriteFailure,
@@ -57,6 +66,16 @@ export const WRITE_SUBCOMMANDS = new Set([
   "remove-gotcha-candidate"
 ])
 
+/** 環境変数が無効なら拒否する書き込み系サブコマンドと、対応する機能。 */
+export const FEATURE_GATES: ReadonlyMap<string, Feature> = new Map([
+  ["stage-adr", "adr"],
+  ["shrink-adr-candidate", "adr"],
+  ["init-gotchas", "gotchas"],
+  ["append-gotcha", "gotchas"],
+  ["tag-gotcha", "gotchas"],
+  ["remove-gotcha-candidate", "gotchas"]
+])
+
 function emitUsage(command: string, message: string, exitCode: number): void {
   emitResult(command, {
     ok: false,
@@ -70,7 +89,8 @@ function emitUsage(command: string, message: string, exitCode: number): void {
 
 export function main(
   argv: readonly string[],
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  env: NodeJS.ProcessEnv = process.env
 ): void {
   const { positionals, flags, errors } = parseArgs(argv)
   const subcommand = positionals[0]
@@ -98,7 +118,14 @@ export function main(
     return
   }
 
-  const ctx = { flags, cwd }
+  const features = readFeatures(env)
+  const gate = FEATURE_GATES.get(subcommand)
+  if (gate !== undefined && !features[gate]) {
+    emitFeatureDisabled(subcommand, gate)
+    return
+  }
+
+  const ctx = { flags, cwd, features }
 
   try {
     switch (subcommand) {

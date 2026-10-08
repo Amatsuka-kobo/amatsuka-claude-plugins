@@ -20,6 +20,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { loadConfig } from "./lib/config.js"
 import { emit, pass, readStdin } from "./lib/emit.js"
+import { ADR_ENV, GOTCHAS_ENV, readFeatures } from "./lib/features.js"
 import { RULES_FILES, rulesFilePath, rulesFileRelative } from "./lib/rules.js"
 
 // hook 自身の位置(import.meta.url)からプラグインルートを求め、
@@ -182,21 +183,44 @@ function comparisonKey(abs: string, caseInsensitive: boolean): string {
   return caseInsensitive ? key.toLowerCase() : key
 }
 
-function architectureReason(relative: string, cli: string): string {
+// 記録が無効な側は、拒否される CLI へ誘導せず、有効にする方法を書く
+// (`harness-docs/design/2026-10-08-metatron-adr-gotchas-opt-in-design.md` の 3-3)。
+// 直接編集の拒否そのものは変数によらず続ける。
+function disabledLine(label: string, env: string): string {
+  return `${label} の記録は無効です(有効にするには ${env}=1)。`
+}
+
+function architectureReason(
+  relative: string,
+  cli: string,
+  adrEnabled: boolean
+): string {
   return [
     `${relative} は metatron の管理下にあり、直接編集できません(セクション単位の差分確認と書式検証のため)。`,
     "更新するセクションの JSON を一時ファイルに書き、次の 2 段階で反映してください:",
     `  node ${cli} stage-architecture --input /tmp/metatron-architecture.json`,
     `  node ${cli} commit-architecture --staging-id <stage-architecture が発行した id>`,
-    "ADR の追加・状態変更は stage-adr を使ってください(stage-architecture では拒否されます):",
-    `  node ${cli} stage-adr --input /tmp/metatron-adr.json`,
+    ...(adrEnabled
+      ? [
+          "ADR の追加・状態変更は stage-adr を使ってください(stage-architecture では拒否されます):",
+          `  node ${cli} stage-adr --input /tmp/metatron-adr.json`
+        ]
+      : [disabledLine("ADR", ADR_ENV)]),
     `入力の書式: node ${cli} get config`
   ].join("\n")
 }
 
-function gotchasReason(relative: string, cli: string): string {
+function gotchasReason(
+  relative: string,
+  cli: string,
+  gotchasEnabled: boolean
+): string {
+  const head = `${relative} は metatron の管理下にあり、直接編集できません(追記のみ・採番・書式検証のため)。`
+  if (!gotchasEnabled) {
+    return [head, disabledLine("GOTCHAS", GOTCHAS_ENV)].join("\n")
+  }
   return [
-    `${relative} は metatron の管理下にあり、直接編集できません(追記のみ・採番・書式検証のため)。`,
+    head,
     "エントリの JSON を一時ファイルに書き、次のコマンドで追記してください:",
     `  node ${cli} append-gotcha --input /tmp/metatron-gotcha.json`,
     "台帳がまだ無いときは、ユーザーの承認を得てから新規作成してください:",
@@ -274,10 +298,15 @@ try {
 
   // 2 つのフィールドが別々の正本に当たったときは ARCHITECTURE の案内を出す。
   // 案内が長く 2 段階コミットと ADR の誘導まで含む側を残すほうが、取りこぼす情報が少ない。
+  const features = readFeatures(process.env)
   if (hitArchitecture)
-    emit("deny", architectureReason(config.architectureRelative, cli))
+    emit(
+      "deny",
+      architectureReason(config.architectureRelative, cli, features.adr)
+    )
 
-  if (hitGotchas) emit("deny", gotchasReason(config.gotchasRelative, cli))
+  if (hitGotchas)
+    emit("deny", gotchasReason(config.gotchasRelative, cli, features.gotchas))
 
   if (hitRules !== undefined) emit("deny", rulesReason(hitRules.relative, cli))
 

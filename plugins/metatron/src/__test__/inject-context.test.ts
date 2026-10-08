@@ -16,6 +16,7 @@ import {
   parseArchitecture,
   UNCLOSED_FENCE_WARNING
 } from "../lib/architecture.js"
+import { ADR_ENV, type Features, GOTCHAS_ENV } from "../lib/features.js"
 import { runTs } from "../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../inject-context.ts", import.meta.url))
@@ -86,6 +87,110 @@ const INIT_GUIDE = [
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
 ].join("\n")
 
+// --- 2 変数の組み合わせごとの文面(設計書 2026-10-08 の 3-1)-------------------
+// 両方有効の変種は上の固定文字列と一致することを V0 で確かめ、改修前とのバイト一致の根拠にする。
+
+function titleFor(f: Features): string {
+  return f.gotchas
+    ? "# metatron: プロジェクトの前提と落とし穴"
+    : "# metatron: プロジェクトの前提"
+}
+
+function cliLinesFor(f: Features): string[] {
+  const reads = f.adr
+    ? f.gotchas
+      ? "node M get gotchas --query <語> / node M get adr / node M get architecture"
+      : "node M get adr / node M get architecture"
+    : f.gotchas
+      ? "node M get gotchas --query <語> / node M get architecture"
+      : "node M get architecture"
+  return [
+    `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
+    `  読む:     ${reads}`,
+    ...(f.gotchas
+      ? [
+          "  記録:     node M append-gotcha --input <一時ファイル>",
+          '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."'
+        ]
+      : []),
+    "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
+    ...(f.adr
+      ? [
+          "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>"
+        ]
+      : []),
+    "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
+    "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
+    "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
+  ]
+}
+
+function recordingLinesFor(f: Features): string[] {
+  if (f.adr && f.gotchas) return RECORDING_LINES
+  if (f.adr)
+    return [
+      "依頼の完了報告の前に、判断に ADR へ残すものが無いか確かめる。",
+      "残すなら updating-architecture の承認手順で記録する。",
+      ...RECORDING_LINES.slice(2)
+    ]
+  if (f.gotchas)
+    return [
+      "依頼の完了報告の前に、失敗に GOTCHAS へ残すものが無いか確かめる。",
+      "残すなら recording-gotchas の承認手順で記録する。",
+      ...RECORDING_LINES.slice(2)
+    ]
+  return []
+}
+
+function delegationLinesFor(f: Features): string[] {
+  return f.gotchas
+    ? DELEGATION_LINES
+    : [
+        "サブエージェントには SubagentStart hook が ARCHITECTURE を注入する。",
+        "委譲の依頼文には、ARCHITECTURE の原文も要約も書き写さない。"
+      ]
+}
+
+function guideFor(f: Features): string {
+  return [
+    titleFor(f),
+    "",
+    "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
+    ...cliLinesFor(f),
+    ...recordingLinesFor(f),
+    ...delegationLinesFor(f)
+  ].join("\n")
+}
+
+function subagentGuideFor(f: Features): string {
+  return [
+    titleFor(f),
+    "",
+    "以下の文書は前提として読むだけにし、直接編集しない。"
+  ].join("\n")
+}
+
+function initGuideFor(f: Features): string {
+  return [
+    titleFor(f),
+    "",
+    f.gotchas
+      ? "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**"
+      : "このプロジェクトにはまだ ARCHITECTURE が無い。**`/metatron:init` で作成する。**",
+    "init は `.claude/rules/metatron/` の 3 ファイル(規約・保護パス・テスト方針)も併せて作る。",
+    "作成後はこれらが metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
+    ...cliLinesFor(f)
+  ].join("\n")
+}
+
+/** 4 通りすべての記録のタイミングと委譲の注意の行。漏れの検査に使う。 */
+const ALL_SESSION_ONLY_LINES = [
+  { adr: true, gotchas: true },
+  { adr: true, gotchas: false },
+  { adr: false, gotchas: true },
+  { adr: false, gotchas: false }
+].flatMap((f) => [...recordingLinesFor(f), ...delegationLinesFor(f)])
+
 /** 設定の読み取りを必ず例外にする故障注入モジュール(I3c 用)。 */
 const FAULT_CONFIG = fileURLToPath(
   new URL("../testing/fault-config.mjs", import.meta.url)
@@ -127,7 +232,32 @@ function childEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
   // hook 自身の位置からプラグインルートを組み立てる規則を検証したいので、環境変数の上書きを外す。
   delete env.CLAUDE_PLUGIN_ROOT
+  // 2 変数はテストを起動したシェルから継承せず、呼び出し側が features で明示する。
+  delete env[ADR_ENV]
+  delete env[GOTCHAS_ENV]
   return env
+}
+
+/** 2 変数を有効にした値だけを入れ、無効な側は未設定のままにする。 */
+function featureEnv(features: Features): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  if (features.adr) env[ADR_ENV] = "1"
+  if (features.gotchas) env[GOTCHAS_ENV] = "1"
+  return env
+}
+
+const BOTH_ON: Features = { adr: true, gotchas: true }
+
+/** 4 通りの組み合わせ。先頭は両方有効。 */
+const COMBOS: Features[] = [
+  BOTH_ON,
+  { adr: true, gotchas: false },
+  { adr: false, gotchas: true },
+  { adr: false, gotchas: false }
+]
+
+function label(features: Features): string {
+  return `ADR ${features.adr ? "有効" : "無効"} / GOTCHAS ${features.gotchas ? "有効" : "無効"}`
 }
 
 /**
@@ -137,11 +267,12 @@ function childEnv(): NodeJS.ProcessEnv {
 function runHook(
   cwd: string,
   input: Record<string, unknown>,
+  features: Features,
   extraEnv: NodeJS.ProcessEnv = {}
 ): { eventName: string; content: string } | null {
   const out = runTs(HOOK, [], {
     cwd,
-    env: { ...childEnv(), ...extraEnv },
+    env: { ...childEnv(), ...featureEnv(features), ...extraEnv },
     input: JSON.stringify(input)
   })
   if (out.trim() === "") return null
@@ -155,7 +286,11 @@ function runHook(
 }
 
 /** SessionStart の注入結果の additionalContext。何も出力しなかった場合は null。 */
-function inject(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string | null {
+function inject(
+  cwd: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+  features: Features = BOTH_ON
+): string | null {
   const result = runHook(
     cwd,
     {
@@ -165,6 +300,7 @@ function inject(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string | null {
       hook_event_name: "SessionStart",
       source: "startup"
     },
+    features,
     extraEnv
   )
   if (result === null) return null
@@ -173,15 +309,22 @@ function inject(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string | null {
 }
 
 /** SubagentStart の注入結果の additionalContext。何も出力しなかった場合は null。 */
-function injectSubagent(cwd: string): string | null {
-  const result = runHook(cwd, {
-    session_id: "s1",
-    transcript_path: path.join(cwd, "t.jsonl"),
+function injectSubagent(
+  cwd: string,
+  features: Features = BOTH_ON
+): string | null {
+  const result = runHook(
     cwd,
-    hook_event_name: "SubagentStart",
-    agent_id: "agent-1",
-    agent_type: "general-purpose"
-  })
+    {
+      session_id: "s1",
+      transcript_path: path.join(cwd, "t.jsonl"),
+      cwd,
+      hook_event_name: "SubagentStart",
+      agent_id: "agent-1",
+      agent_type: "general-purpose"
+    },
+    features
+  )
   if (result === null) return null
   expect(result.eventName).toBe("SubagentStart")
   return result.content
@@ -643,15 +786,25 @@ test("I13b: 記録のタイミングと委譲の注意は CLI 案内の直後に
 
 test("I13c: 文書が無いときの案内には記録のタイミングも委譲の注意も載せない", () => {
   const root = project({})
-  const content = inject(root)
-  if (content === null) throw new Error("注入されなかった")
-  for (const line of [...RECORDING_LINES, ...DELEGATION_LINES]) {
-    expect(content).not.toContain(line)
+  for (const features of COMBOS) {
+    const content = inject(root, {}, features)
+    if (content === null)
+      throw new Error(`${label(features)}: 注入されなかった`)
+    for (const line of ALL_SESSION_ONLY_LINES) {
+      expect(content, label(features)).not.toContain(line)
+    }
   }
 })
 
-test("I13d: 記録のタイミングは合計 200 文字以内", () => {
-  expect(RECORDING_LINES.join("\n").length).toBeLessThanOrEqual(200)
+test("I13d: 記録のタイミングは 4 通りの組み合わせのどれでも合計 200 文字以内", () => {
+  for (const features of COMBOS) {
+    expect(
+      recordingLinesFor(features).join("\n").length,
+      label(features)
+    ).toBeLessThanOrEqual(200)
+  }
+  // 両方無効では 1 行も出さない
+  expect(recordingLinesFor({ adr: false, gotchas: false })).toEqual([])
 })
 
 // 出力が maxChars を超えるが、これは仕様であって不具合ではない。CLI 案内は縮退の対象外であり
@@ -988,7 +1141,7 @@ function expectNoSessionOnlyParts(content: string): void {
   expect(content).not.toContain("node M")
   expect(content).not.toContain(CLI)
   expect(content).not.toContain("記録・更新・全文取得は次の CLI を使う")
-  for (const line of [...RECORDING_LINES, ...DELEGATION_LINES]) {
+  for (const line of ALL_SESSION_ONLY_LINES) {
     expect(content).not.toContain(line)
   }
 }
@@ -1136,7 +1289,7 @@ test("S10: hook_event_name が無い・文字列でない入力は SessionStart 
   for (const eventName of [undefined, 123, null]) {
     const input: Record<string, unknown> = { session_id: "s1", cwd: root }
     if (eventName !== undefined) input.hook_event_name = eventName
-    const result = runHook(root, input)
+    const result = runHook(root, input, BOTH_ON)
     if (result === null) throw new Error("注入されなかった")
     expect(result.eventName).toBe("SessionStart")
     expect(result.content.startsWith(GUIDE)).toBe(true)
@@ -1163,4 +1316,138 @@ test("I24・S11: maxChars が 10,000 を超えても、両イベントの出力�
   if (subagent === null) throw new Error("SubagentStart で注入されなかった")
   expect(subagent.startsWith(SUBAGENT_GUIDE)).toBe(true)
   expect(subagent.length).toBeLessThanOrEqual(10_000)
+})
+
+// --- 2 変数による注入の切り替え(設計書 2026-10-08 の 3・受け入れ基準 A1〜A3)--------
+
+/** 無効な側の内容と記録を促す行が 1 つも出ていないこと(A1)。 */
+function expectDisabledPartsAbsent(content: string, features: Features): void {
+  const where = label(features)
+  if (!features.adr) expect(content, where).not.toMatch(/ADR/)
+  if (!features.gotchas) expect(content, where).not.toMatch(/gotcha/i)
+}
+
+test("V0: 両方有効の変種は改修前の固定文字列と一致する(A2)", () => {
+  expect(guideFor(BOTH_ON)).toBe(GUIDE)
+  expect(subagentGuideFor(BOTH_ON)).toBe(SUBAGENT_GUIDE)
+  expect(initGuideFor(BOTH_ON)).toBe(INIT_GUIDE)
+})
+
+test("V1: SessionStart — 4 通りの組み合わせで削れない部分が 3-1 の文面になり、無効な側の内容が出ない", () => {
+  const root = project({ arch: architecture(2), gotchas: gotchas(7) })
+  for (const features of COMBOS) {
+    const where = label(features)
+    const content = inject(root, {}, features)
+    if (content === null) throw new Error(`${where}: 注入されなかった`)
+    expect(content.startsWith(`${guideFor(features)}\n\n`), where).toBe(true)
+    expect(content, where).toContain("## 技術的前提(docs/ARCHITECTURE.md)")
+    expectDisabledPartsAbsent(content, features)
+    if (features.adr) {
+      expect(content, where).toContain(
+        "- ADR-001: 記録の置き場を決める 1(採用)"
+      )
+    }
+    if (features.gotchas) {
+      expect(content, where).toContain(
+        "## 既知の落とし穴(docs/GOTCHAS.md: 全 7 件)"
+      )
+      expect(content, where).toContain("### 直近 5 件(全文)")
+    }
+  }
+})
+
+test("V2: SubagentStart — 4 通りの組み合わせで SessionStart と同じ規則に従う", () => {
+  const root = project({ arch: architecture(2), gotchas: gotchas(7) })
+  for (const features of COMBOS) {
+    const where = label(features)
+    const content = injectSubagent(root, features)
+    if (content === null) throw new Error(`${where}: 注入されなかった`)
+    expect(content.startsWith(`${subagentGuideFor(features)}\n\n`), where).toBe(
+      true
+    )
+    expectNoSessionOnlyParts(content)
+    expectDisabledPartsAbsent(content, features)
+    expect(content, where).toContain(
+      "上から UI・アプリケーション・ドメインの 3 層とする。"
+    )
+    if (features.adr) expect(content, where).toContain("## ADR 一覧")
+    if (features.gotchas)
+      expect(content, where).toContain("### 直近 5 件(全文)")
+  }
+})
+
+test("V3: 文書が無いときの案内は 4 通りの組み合わせで 3-1 の文面になる", () => {
+  const root = project({})
+  for (const features of COMBOS) {
+    expect(inject(root, {}, features), label(features)).toBe(
+      `${initGuideFor(features)}\n`
+    )
+  }
+})
+
+test("V4: GOTCHAS.md だけがあり GOTCHAS が無効なら文書ゼロとして扱う", () => {
+  const root = project({ gotchas: gotchas(3) })
+  for (const features of COMBOS) {
+    const where = label(features)
+    const session = inject(root, {}, features)
+    const subagent = injectSubagent(root, features)
+    if (features.gotchas) {
+      expect(session?.startsWith(`${guideFor(features)}\n\n`), where).toBe(true)
+      expect(subagent, where).toContain("### 直近 3 件(全文)")
+    } else {
+      expect(session, where).toBe(`${initGuideFor(features)}\n`)
+      expect(subagent, where).toBe(null)
+    }
+  }
+})
+
+test("V5: ADR が無効なら、縮退で ADR 一覧を割愛する予算でも割愛の案内を出さない", () => {
+  const root = project({
+    arch: architecture(40),
+    gotchas: gotchas(3),
+    config: configWith(2000)
+  })
+  for (const features of COMBOS.filter((f) => !f.adr)) {
+    const session = inject(root, {}, features)
+    const subagent = injectSubagent(root, features)
+    if (session === null || subagent === null)
+      throw new Error(`${label(features)}: 注入されなかった`)
+    for (const content of [session, subagent]) {
+      expect(content.length).toBeLessThanOrEqual(2000)
+      expect(content).not.toContain("割愛した")
+      expectDisabledPartsAbsent(content, features)
+      // ADR 一覧を出さない分、ARCHITECTURE の本文は全文で残る
+      expect(content).toContain("```mermaid")
+    }
+  }
+})
+
+test("V6: どの組み合わせでも、予算が足りなければ削れない部分だけが完全な形で残る", () => {
+  const root = project({
+    arch: architecture(),
+    gotchas: gotchas(3),
+    config: configWith(10)
+  })
+  for (const features of COMBOS) {
+    expect(inject(root, {}, features), label(features)).toBe(
+      `${guideFor(features)}\n`
+    )
+    expect(injectSubagent(root, features), label(features)).toBe(
+      `${subagentGuideFor(features)}\n`
+    )
+  }
+})
+
+test("V7: 2 変数が未設定の環境では ADR・GOTCHAS の内容も記録を促す行も出ない(A1)", () => {
+  const root = project({ arch: architecture(3), gotchas: gotchas(5) })
+  const none = { adr: false, gotchas: false }
+  const session = inject(root, {}, none)
+  const subagent = injectSubagent(root, none)
+  if (session === null || subagent === null) throw new Error("注入されなかった")
+  for (const content of [session, subagent]) {
+    expect(content).not.toMatch(/ADR/)
+    expect(content).not.toMatch(/gotcha/i)
+    expect(content).not.toContain("依頼の完了報告の前に")
+    expect(content).not.toContain("既知の落とし穴")
+  }
 })

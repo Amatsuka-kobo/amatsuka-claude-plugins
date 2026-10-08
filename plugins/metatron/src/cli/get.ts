@@ -15,6 +15,7 @@ import {
   parseArchitectureForRead
 } from "../lib/architecture.js"
 import { loadConfig, type ResolvedConfig } from "../lib/config.js"
+import type { Features } from "../lib/features.js"
 import {
   filterGotchas,
   type GotchaEntry,
@@ -40,6 +41,8 @@ import { commandLine, INPUT_SCHEMAS, metatronCliPath } from "./paths.js"
 export interface GetContext {
   flags: Record<string, string | true>
   cwd: string
+  /** 2 変数の判定結果。main.ts が実行ごとに 1 回読んで渡す。 */
+  features: Features
 }
 
 function configOf(cwd: string): ResolvedConfig {
@@ -113,6 +116,8 @@ export function runGetConfig(ctx: GetContext): void {
       }))
     },
     injection: config.injection,
+    // 記録の有効・無効。metatron.config.json ではなく環境変数から決まる(設計書 2026-10-08 の 2)。
+    features: ctx.features,
     cli: {
       path: metatronCliPath(),
       stageArchitecture: commandLine("stage-architecture --input <path>"),
