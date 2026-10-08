@@ -575,9 +575,9 @@ function parseMcpList(output) {
     if (at === -1) continue;
     const status = line.slice(at + 3).trim();
     if (!STATUSES.some((known) => status.startsWith(known))) continue;
-    const head = line.slice(0, at);
-    const space = head.indexOf(" ");
-    const name = (space === -1 ? head : head.slice(0, space)).replace(/:$/, "");
+    const head = line.slice(0, at).trim();
+    const sep = head.indexOf(": ");
+    const name = sep === -1 ? head.replace(/:$/, "").trim() : head.slice(0, sep).trim();
     if (name === "") continue;
     servers.push({
       name,

@@ -357,7 +357,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
    確認後に生成する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --model-id <model-id> --name <name> --model <model-value> --roles <この 1 役割> [--vendor <gpt|grok|claude|none>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] --scope <claude|custom> --lang <lang> --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --model-id <model-id> --name <name> --model <model-value> --roles <この 1 役割> [--vendor <gpt|grok|claude|none>] [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] --scope <claude|custom> --lang <lang> --dir "$PWD"
    ```
 
 ### ステップ 5: 再生成の生成範囲の確認
@@ -425,7 +425,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 定義ごとに次の個別コマンドで保持マージ生成する。`--recommended` は使わない。複数の役割を持つ定義も 1 回だけ実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers <server,...>] [--mcp-deny <tool,...>] [--replace <description,preamble>] --scope <claude|custom> --lang <lang> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] [--replace <description,preamble>] --scope <claude|custom> --lang <lang> --dir "$PWD"
 ```
 
 - `--model-id` には、定義の `modelId` か、ステップ 5b で決めたモデル ID を渡す。

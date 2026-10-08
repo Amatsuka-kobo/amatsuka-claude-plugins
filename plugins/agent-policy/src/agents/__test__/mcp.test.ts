@@ -7,6 +7,8 @@ const SAMPLE = [
   "Checking MCP server health…",
   "",
   "plugin:context7:context7: https://mcp.context7.com/mcp (HTTP) - ✔ Connected",
+  "claude.ai Claude Docs: https://api.anthropic.com/v1/pages/mcp - ✔ Connected",
+  "claude.ai Google Drive: https://drivemcp.googleapis.com/mcp/v1 - ✔ Connected",
   "serena: uvx --from git+https://github.com/oraios/serena serena start - ✔ Connected",
   "broken: node /tmp/broken.mjs - ✘ Failed to connect",
   "needsauth: https://example.com/mcp (HTTP) - ! Needs authentication",
@@ -25,6 +27,8 @@ describe("parseMcpList", () => {
   it("警告行とヘルスチェック行を無視する", () => {
     expect(parseMcpList(SAMPLE).map((s) => s.name)).toEqual([
       "plugin:context7:context7",
+      "claude.ai Claude Docs",
+      "claude.ai Google Drive",
       "serena",
       "broken",
       "needsauth",
@@ -37,12 +41,26 @@ describe("parseMcpList", () => {
     expect(parseMcpList(SAMPLE)[0]?.name).toBe("plugin:context7:context7")
   })
 
+  it("空白を含む名前を最初の空白で切らない", () => {
+    expect(
+      parseMcpList(SAMPLE)
+        .filter((s) => s.name.startsWith("claude.ai"))
+        .map((s) => s.name)
+    ).toEqual(["claude.ai Claude Docs", "claude.ai Google Drive"])
+  })
+
   it("Connected と cached だけを usable とする", () => {
     expect(
       parseMcpList(SAMPLE)
         .filter((s) => s.usable)
         .map((s) => s.name)
-    ).toEqual(["plugin:context7:context7", "serena", "lazy"])
+    ).toEqual([
+      "plugin:context7:context7",
+      "claude.ai Claude Docs",
+      "claude.ai Google Drive",
+      "serena",
+      "lazy"
+    ])
   })
 
   it("空の出力では空配列を返す", () => {
@@ -54,6 +72,12 @@ describe("toolPrefix", () => {
   it("英数字とアンダースコアとハイフン以外を _ に置き換える", () => {
     expect(toolPrefix("plugin:context7:context7")).toBe(
       "mcp__plugin_context7_context7"
+    )
+  })
+
+  it("空白を _ に置き換える", () => {
+    expect(toolPrefix("claude.ai Claude Docs")).toBe(
+      "mcp__claude_ai_Claude_Docs"
     )
   })
 

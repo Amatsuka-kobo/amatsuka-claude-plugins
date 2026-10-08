@@ -24,9 +24,10 @@ const STATUSES = [
   "cached"
 ]
 
-// 名前自体がコロンを含みうる(plugin:<plugin>:<server>)ため、最初のコロンで
-// 切ってはならない。行末のステータスを切り落としてから、先頭の空白までを
-// 名前として採り、末尾のコロンを除く。
+// 名前は空白もコロンも含みうる(`claude.ai Claude Docs`、`plugin:<plugin>:<server>`)。
+// 名前とコマンドの区切りは最初の ": "(コロン+空白)である。行末のステータスを
+// 切り落とし、最初の ": " より前を名前とする。": " が無い行は、末尾のコロンを
+// 除いた全体を名前とする。
 export function parseMcpList(output: string): McpServer[] {
   const servers: McpServer[] = []
 
@@ -40,9 +41,10 @@ export function parseMcpList(output: string): McpServer[] {
     const status = line.slice(at + 3).trim()
     if (!STATUSES.some((known) => status.startsWith(known))) continue
 
-    const head = line.slice(0, at)
-    const space = head.indexOf(" ")
-    const name = (space === -1 ? head : head.slice(0, space)).replace(/:$/, "")
+    const head = line.slice(0, at).trim()
+    const sep = head.indexOf(": ")
+    const name =
+      sep === -1 ? head.replace(/:$/, "").trim() : head.slice(0, sep).trim()
     if (name === "") continue
 
     servers.push({
