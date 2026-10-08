@@ -267,7 +267,7 @@ Issue を入口にしたときの扱いは、本文のマーカーで決める�
 
 `## 出典` は最後のセクションとし、`## 意図的な制約` などが引いた引用・出典をまとめる。無ければ「なし」と書く。`[ADR 候補]` のエントリが引いた出典もここに置く。metatron が縮約してもこのセクションは書き換えないので、ADR へ移した後も出典は持続層に残る。
 
-`knowledgeTarget` が `intents` のとき、ADR の 3 条件(後述)を満たす判断は、run の手元の記録から `## 意図的な制約` の中へ次の形で写す。見出しの末尾に候補 ID つきの印 `[ADR 候補: <領域名>-<連番>]` を付け、小見出しは metatron の ADR エントリと同じ名前と順序にする。
+`knowledgeTarget` が `intents` で `state.candidates.adr` が true のとき、ADR の 3 条件(後述)を満たす判断は、run の手元の記録から `## 意図的な制約` の中へ次の形で写す。見出しの末尾に候補 ID つきの印 `[ADR 候補: <領域名>-<連番>]` を付け、小見出しは metatron の ADR エントリと同じ名前と順序にする。
 
 ```markdown
 ### <判断のタイトル> [ADR 候補: <領域名>-<連番>]
@@ -311,7 +311,7 @@ ADR にする判断は次の 3 条件をすべて満たすものである。
 - 選択肢が実在した。比較した代替を具体的に挙げられる。
 - 理由が自明でない。コードや設定を読んだだけでは、なぜそうしたかが分からない。
 
-`knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値である。3 条件を満たす判断は、`knowledgeTarget` の値によらず、まず run の手元の記録(`orchestrating-runs` の `references/adr-candidates.md`)に書く。その後の分担は次のとおりである。
+`knowledgeTarget` は ADR 候補と GOTCHAS 候補の書き先を決める値である。`state.candidates.adr` が true の run だけが、3 条件を満たす判断を、`knowledgeTarget` の値によらず、まず run の手元の記録(`orchestrating-runs` の `references/adr-candidates.md`)に書く。false の run は書かない。書いた後の分担は次のとおりである。
 
 | `knowledgeTarget` | 3 条件を満たす判断 | 3 条件を満たさない設計理由と制約 |
 | --- | --- | --- |
@@ -323,7 +323,7 @@ ADR にする判断は次の 3 条件をすべて満たすものである。
 
 ### GOTCHAS 候補
 
-GOTCHAS 候補は、run の中で起きた失敗を、metatron の GOTCHAS の台帳へ移す前の形で残すエントリである。`knowledgeTarget` が `intents` の run は持続層の `## GOTCHAS 候補` に書き、`metatron` の run は run の手元の記録にだけ書く。どちらも同じ形で書く。値は例であり、実際の内容に置き換える。
+GOTCHAS 候補は、run の中で起きた失敗を、metatron の GOTCHAS の台帳へ移す前の形で残すエントリである。`state.candidates.gotchas` が true の run だけが書く。`knowledgeTarget` が `intents` の run は持続層の `## GOTCHAS 候補` に書き、`metatron` の run は run の手元の記録にだけ書く。どちらも同じ形で書く。値は例であり、実際の内容に置き換える。
 
 ```markdown
 ### <失敗のタイトル> [GOTCHAS 候補]

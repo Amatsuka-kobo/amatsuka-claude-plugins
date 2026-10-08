@@ -1,5 +1,7 @@
 # ADR 候補の書き残し
 
+`state.candidates.adr` が false の run は、ADR 候補を判定も記録も写しもしない。前の try が残した候補も写さない。この値は、`AMATSUKA_METATRON_ENABLE_ADR` が有効かどうかを run の開始時に保存したものである。以下は true の run の手順である。
+
 ADR の 3 条件(`<plugin-root>/references/intent-format.md` の「持続層」)を満たす判断を、ADR 候補として run の手元の記録に書き残す。書くかどうかは `knowledgeTarget` の値によらない。ADR へ移すのは metatron で、codiel は ADR を書かない。
 
 | 判定する判断 | 判定して書く時点 |
@@ -71,4 +73,4 @@ ADR の 3 条件(`<plugin-root>/references/intent-format.md` の「持続層」)
 - finalize の結果レポートには、この try の `reports/adr-candidates.md` のエントリと、前の try のエントリのうち未写しのものを一覧する。stop したときの完了報告の一覧は、`orchestrating-runs` 本文の 2.4 に従う。
 - 一覧には、エントリごとのタイトルと `写し先` の値(未写しなら「未」)と、手元の記録のパスを書く。
 - 未写しのエントリには、持続層へ写さなかった理由(`metatron` の run、または取り込んだ領域が無い)を添える。
-- 候補が無ければ「なし」と書き、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのかを添える。
+- 候補が無ければ「なし」と書き、3 条件を満たす判断が無かったのか、取り込みを飛ばしたのか、無効(環境変数が有効な値でない)なのかを添える。

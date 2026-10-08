@@ -35,6 +35,13 @@ Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに
 持続層に全文を残します。metatron を導入すると、`/metatron:init` と `/metatron:update` がこの印を ADR へ移し、
 持続層を参照形に縮めます。
 
+ADR 候補と GOTCHAS 候補は、環境変数が有効な種別だけ残します。ADR 候補は `AMATSUKA_METATRON_ENABLE_ADR`、
+GOTCHAS 候補は `AMATSUKA_METATRON_ENABLE_GOTCHAS` に従い、metatron と同じ変数です。値は前後の空白を除いて小文字にし、
+`1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外の値は無効です。run の開始時に値を決めて state に保存するので、
+変数を変えたら新しい run を始めてください。ADR 候補が無効の run では、ADR の 3 条件を満たす判断を
+持続層へ取り込まないまま、手元の記録にも書きません。その判断はどこにも残らず、元の記述が intent 文書と
+`design.md` に残るだけです。
+
 ### `/codiel:run [<Issue番号> | <intentパス>]`
 
 引数を省略するとユーザーへの聞き取りから、Issue 番号を渡すと Issue の内容を intent の原文の

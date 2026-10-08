@@ -58,7 +58,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    ```
 
 2. 続けて次の 3 つを実行する。
-   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget` の判定材料を得る。
+   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget`・候補の有効無効の判定材料を得る。
    - `codiel-state.mjs config`: テストの仕様の置き場(testsDir)と run の文書の置き場(runsDir)を得る。
    - `codiel-state.mjs gitignore`: `.gitignore` に足りない行(出力の `missing`)を得る。判定 D に使う。
 
@@ -81,9 +81,11 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | `imageUpload.ghAttach` | 連携モードが `local` なら `false`。`github` では `ghAttachSupported` が true のとき `true` |
    | `imageUpload.chrome` | 連携モードが `local` なら `false`。`github` ではセッションで `mcp__claude-in-chrome__*` のツールが使えるとき `true` |
    | `knowledgeTarget` | `projectDocs.architecture` が null でなく、かつ `projectDocs.metatronRules` が true なら `metatron`、それ以外は `intents` |
+   | ADR 候補 | `knowledgeRecording.adr` が true なら `on`、false なら `off` |
+   | GOTCHAS 候補 | `knowledgeRecording.gotchas` が true なら `on`、false なら `off` |
 
    これらの値と手順 6 で決めた実行モードは run の開始時に決めて固定し、intent フェーズ(`capturing-intent`)が
-   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--domain-mode` の値になる。
+   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--adr-candidates` / `--gotcha-candidates` / `--domain-mode` の値になる。
    再開時の再判定は `references/resume.md` に従う。
 4. 初期化の外形は B + C + D の 3 点で確認する。
 
@@ -303,7 +305,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   `stop` は待ちが残っていると失敗する。`--abandon-waits` は、今のセッションの委譲を止めず完了も待たずに止めると人が決めたときだけ付ける。
   E2E のレポートが残っていれば、`stop` の前に `references/e2e.md` のコミットの手順に従う。
   `waits` が空になってから、残っている worktree とブランチをすべて削除する。委譲が止まる前に、書き込み中の worktree を消さないためである。
-  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち未写しのもの(`references/gotcha-candidates.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書く。
+  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち未写しのもの(`references/gotcha-candidates.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書き、候補の種別が無効(環境変数が有効な値でない)のときはその旨を添える。
 
 ## 3. ディスパッチプロンプトの規約
 

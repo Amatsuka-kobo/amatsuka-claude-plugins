@@ -24,7 +24,8 @@
 
 ## ADR 候補の扱い
 
-ADR の 3 条件を満たす判断は、`state.knowledgeTarget` の値によらず、`<plugin-root>/skills/orchestrating-runs/references/adr-candidates.md` の手順で run の手元の記録に ADR 候補として書く。
+`state.candidates.adr` が true の run では、ADR の 3 条件を満たす判断を、`state.knowledgeTarget` の値によらず、`<plugin-root>/skills/orchestrating-runs/references/adr-candidates.md` の手順で run の手元の記録に ADR 候補として書く。
 
+- `state.candidates.adr` が false のとき: 手順 4 と 8 の除外は従来どおりで、除外した判断を手元の記録にも書かず、領域ファイルへも写さない。
 - `metatron` のとき: 領域ファイルへは何も書かない。`[ADR 候補]` のエントリも `関連 ADR` の行も作らず、判断は手元の記録にだけ残る。
 - `intents` のとき: 同じ手順で、手元の記録から領域ファイルの `## 意図的な制約` へ `[ADR 候補: <候補 ID>]` の形で写す。

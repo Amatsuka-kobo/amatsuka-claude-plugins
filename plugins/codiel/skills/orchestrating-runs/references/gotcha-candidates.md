@@ -1,5 +1,7 @@
 # GOTCHAS 候補の書き残し
 
+`state.candidates.gotchas` が false の run は、GOTCHAS 候補を判定も記録も写しもしない。前の try が残した候補も写さない。この値は、`AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効かどうかを run の開始時に保存したものである。incident の候補は、記録する run の state(下の `codiel-state get --slug <slug>` の出力)の値で決める。以下は true の run の手順である。
+
 run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候補を書き残す。codiel は台帳へ書かず、metatron の CLI も呼ばない。台帳へ移すか、解決済みや対象外として扱うかは、移すときに人が判断する。
 
 | 条件 | 書く時点 |
@@ -15,7 +17,7 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 
 ## 手元の記録
 
-- 候補は `knowledgeTarget` の値によらず、まず `.codiel/runs/<slug>/try-<n>/reports/gotcha-candidates.md` に追記する。
+- 候補は、`knowledgeTarget` の値によらず、まず `.codiel/runs/<slug>/try-<n>/reports/gotcha-candidates.md` に追記する。
 - incident では、incident を記録する run の slug(`record-outcome` に渡すものと同じ)で `codiel-state get --slug <slug>` を呼び、返った `statePath` と同じディレクトリの `reports/gotcha-candidates.md` に追記する。completed・rejected の run は `get --active` に出ないので、`get --active` は使わない。
 - ファイルが無ければ、先頭行を `# GOTCHAS 候補(<slug> try-<n>)` にして作る。
 - エントリの形は `<plugin-root>/references/intent-format.md` の「GOTCHAS 候補」に従う。エントリは、`### <タイトル> [GOTCHAS 候補]` の見出しから次の見出しまでとする。
@@ -66,5 +68,5 @@ run の中で次のいずれかが起きたら、GOTCHAS の台帳へ移す候�
 - finalize の結果レポートには、この try の `reports/gotcha-candidates.md` のエントリと、前の try のエントリのうち未写しのものを一覧する。stop したときの完了報告の一覧は、`orchestrating-runs` 本文の 2.4 に従う。
 - 一覧には、エントリごとのタイトルと `写し先` の値(未写しなら「未」)と、手元の記録のパスを書く。
 - 未写しのエントリには、持続層へ写さなかった理由(`metatron` の run、または取り込んだ領域が無い)を添える。
-- 候補が無ければ「なし」と書く。
+- 候補が無ければ「なし」と書く。無効(環境変数が有効な値でない)のときは、その旨を添える。
 - incident の候補は、outcome の同期の報告に、タイトルと手元の記録のパスで一覧する。`knowledgeTarget` が `intents` のときは、持続層へ次の run の intent-sync が写すので、一覧に「次の intent-sync で写す」と添える。`metatron` のときは写さないので、一覧に「手元に残る」と添える。

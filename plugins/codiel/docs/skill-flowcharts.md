@@ -583,7 +583,7 @@ digraph codiel_run {
   resume [label="未完了 try を再開\n(state.phase から続行。\n連携モードを再判定し set-integration)", shape=box];
 
   intent [label="[intent]\nオーケストレーター本体(対話)\n+capturing-intent の手順\n(承認ゲートで規模・終え方・\nIssue 起票を決定)", shape=box];
-  intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n(続行で run ブランチが無ければ git switch -c codiel/<slug>)", shape=box];
+  intent_init [label="codiel-state init --slug <slug>\n--intent <パス> --integration <github|local>\n--scale <standard|light> ...\n--adr-candidates <on|off> --gotcha-candidates <on|off>\n(続行で run ブランチが無ければ git switch -c codiel/<slug>)", shape=box];
   carryover [label="[carry-over]\n前の try から引き継いだコードを\n分岐点からの差分でゲートする\n(try-1 は SKIPPED。妥当の STOP でも修正して再評価できる)", shape=box];
   discuss [label="[discuss]\nオーケストレーターが agenda.md を書き、\n進行する+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
   design [label="[design]\nオーケストレーターが design.md を書く\n+ウォークスルー(ユーザー承認)", shape=box];
