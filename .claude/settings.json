@@ -70,7 +70,8 @@
       "source": {
         "source": "directory",
         "path": "./"
-      }
+      },
+      "autoUpdate": true
     },
     "context7-marketplace": {
       "source": {
@@ -91,6 +92,7 @@
       }
     }
   },
+  "outputStyle": "EnhancedClaude5",
   "modelSettings": {
     "fable": {
       "effortLevel": "medium"
@@ -105,6 +107,5 @@
       "effortLevel": "high"
     }
   },
-  "outputStyle": "EnhancedClaude5",
   "advisorModel": "fable"
 }
