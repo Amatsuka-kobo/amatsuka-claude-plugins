@@ -17,8 +17,7 @@
         "start-mcp-server",
         "--context",
         "claude-code",
-        "--project",
-        ".",
+        "--project-from-cwd",
         "--enable-web-dashboard=false"
       ]
     }
