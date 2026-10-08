@@ -21,6 +21,10 @@ export const INIT_FLAGS = [
   "standard",
   "--knowledge-target",
   "metatron",
+  "--adr-candidates",
+  "on",
+  "--gotcha-candidates",
+  "on",
   "--image-upload",
   "gh-attach,chrome"
 ]

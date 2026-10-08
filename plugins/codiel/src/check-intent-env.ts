@@ -28,6 +28,22 @@ import {
 
 const GIT_TIMEOUT_MS = 5000
 
+// ADR と GOTCHAS の記録を有効にする環境変数。値を trim して小文字にし、1 / true / on のどれかなら有効。
+// metatron の src/lib/features.ts と同じ規則を独立に持つ(値域のずれは 2 者比較テストが確かめる)。
+const ENABLE_VALUES = new Set(["1", "true", "on"])
+function featureEnabled(env: NodeJS.ProcessEnv, name: string): boolean {
+  return ENABLE_VALUES.has((env[name] ?? "").trim().toLowerCase())
+}
+function readKnowledgeRecording(env: NodeJS.ProcessEnv): {
+  adr: boolean
+  gotchas: boolean
+} {
+  return {
+    adr: featureEnabled(env, "AMATSUKA_METATRON_ENABLE_ADR"),
+    gotchas: featureEnabled(env, "AMATSUKA_METATRON_ENABLE_GOTCHAS")
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ファイルシステムの安全なラッパ(失敗は既定値へ落とし、例外を外へ出さない)
 // ---------------------------------------------------------------------------
@@ -367,6 +383,7 @@ console.log(
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0
       },
+      knowledgeRecording: readKnowledgeRecording(process.env),
       intentsDir,
       existingIntents,
       contextDocs

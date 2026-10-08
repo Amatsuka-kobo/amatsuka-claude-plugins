@@ -50,6 +50,8 @@ const INIT_DEFAULTS: Record<string, string> = {
   integration: "github",
   scale: "standard",
   "knowledge-target": "metatron",
+  "adr-candidates": "on",
+  "gotcha-candidates": "on",
   "image-upload": "gh-attach,chrome"
 }
 

@@ -80,6 +80,8 @@ export interface RunState {
   imageUpload: { ghAttach: boolean; chrome: boolean }
   // ADR の 3 条件を満たす判断の書き先
   knowledgeTarget: "metatron" | "intents"
+  // ADR 候補と GOTCHAS 候補を書くか。run の開始時に決めて固定する
+  candidates: { adr: boolean; gotchas: boolean }
   status: RunStatus
   phase: string | null
   phases: Record<string, PhaseState>
@@ -289,6 +291,8 @@ export function readState(p: string): RunState {
       ...rest
     }
   }
+  // candidates の導入前に作った state は、両方 false(候補を書かない)として扱う
+  st.candidates ??= { adr: false, gotchas: false }
   return st
 }
 export function writeState(p: string, state: RunState): void {
@@ -710,6 +714,7 @@ function newState(
     | "scale"
     | "imageUpload"
     | "knowledgeTarget"
+    | "candidates"
   >
 ): RunState {
   const phases: Record<string, PhaseState> = {}
@@ -867,6 +872,11 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       "metatron",
       "intents"
     ] as const)
+    const candidates = {
+      adr: oneOf(flags, "adr-candidates", ["on", "off"] as const) === "on",
+      gotchas:
+        oneOf(flags, "gotcha-candidates", ["on", "off"] as const) === "on"
+    }
     const upload = imageUpload(flags, integration)
     const domainMode =
       "domain-mode" in flags
@@ -953,7 +963,8 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       integration,
       scale,
       imageUpload: upload,
-      knowledgeTarget
+      knowledgeTarget,
+      candidates
     })
     if (baseBranch) state.baseBranch = baseBranch
     // try-1 には引き継ぐコードが無いので、carry-over を通した扱いにする

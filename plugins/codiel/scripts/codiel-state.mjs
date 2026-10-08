@@ -454,6 +454,7 @@ function readState(p) {
       ...rest
     };
   }
+  st.candidates ??= { adr: false, gotchas: false };
   return st;
 }
 function writeState(p, state) {
@@ -845,6 +846,10 @@ function main(argv, root = process.cwd()) {
       "metatron",
       "intents"
     ]);
+    const candidates = {
+      adr: oneOf(flags, "adr-candidates", ["on", "off"]) === "on",
+      gotchas: oneOf(flags, "gotcha-candidates", ["on", "off"]) === "on"
+    };
     const upload = imageUpload(flags, integration);
     const domainMode = "domain-mode" in flags ? oneOf(flags, "domain-mode", ["mapped", "unscoped"]) : void 0;
     const latest = latestTry(root, slug);
@@ -904,7 +909,8 @@ function main(argv, root = process.cwd()) {
       integration,
       scale,
       imageUpload: upload,
-      knowledgeTarget
+      knowledgeTarget,
+      candidates
     });
     if (baseBranch) state.baseBranch = baseBranch;
     if (tryN === 1)

@@ -40,6 +40,8 @@ const INIT_DEFAULTS: Record<string, string> = {
   integration: "github",
   scale: "standard",
   "knowledge-target": "metatron",
+  "adr-candidates": "on",
+  "gotcha-candidates": "on",
   "image-upload": "gh-attach,chrome"
 }
 
@@ -204,6 +206,10 @@ test("init は --slug と --intent を必須とする", () => {
     "standard",
     "--knowledge-target",
     "metatron",
+    "--adr-candidates",
+    "on",
+    "--gotcha-candidates",
+    "on",
     "--image-upload",
     "none"
   ])
@@ -323,6 +329,51 @@ test("init は --knowledge-target を必須とし、metatron と intents だけ�
   ).toBe("intents")
   const saved = JSON.parse(fs.readFileSync(statePath(root, "two"), "utf8"))
   expect(saved.knowledgeTarget).toBe("intents")
+})
+
+// --- candidates ---
+
+test("init は --adr-candidates と --gotcha-candidates を必須とし、on と off だけを記録する", () => {
+  const root = tmpProject()
+  for (const [flag, key] of [
+    ["adr-candidates", "--adr-candidates"],
+    ["gotcha-candidates", "--gotcha-candidates"]
+  ]) {
+    const missing = init(root, "demo", { [flag]: null })
+    expect(missing.code).toBe(1)
+    expect(missing.err).toMatch(new RegExp(`${key} が必要です`))
+    const bad = init(root, "demo", { [flag]: "true" })
+    expect(bad.code).toBe(1)
+    expect(bad.err).toMatch(new RegExp(`不正な ${key}: true`))
+  }
+  expect(fs.existsSync(statePath(root, "demo"))).toBe(false)
+  const mixed = init(root, "one", {
+    "adr-candidates": "on",
+    "gotcha-candidates": "off"
+  })
+  expect(mixed.out.state.candidates).toStrictEqual({
+    adr: true,
+    gotchas: false
+  })
+  run(root, ["stop", "--slug", "one", "--reason", "test"])
+  init(root, "two", { "adr-candidates": "off", "gotcha-candidates": "on" })
+  const saved = JSON.parse(fs.readFileSync(statePath(root, "two"), "utf8"))
+  expect(saved.candidates).toStrictEqual({ adr: false, gotchas: true })
+})
+
+test("candidates を持たない state は、両方 false として読む", () => {
+  const root = tmpProject()
+  init(root, "demo")
+  const p = statePath(root, "demo")
+  const saved = JSON.parse(fs.readFileSync(p, "utf8"))
+  delete saved.candidates
+  fs.writeFileSync(p, JSON.stringify(saved))
+  const got = run(root, ["get", "--slug", "demo"])
+  expect(got.code).toBe(0)
+  expect(got.out.state.candidates).toStrictEqual({
+    adr: false,
+    gotchas: false
+  })
 })
 
 // --- imageUpload ---
@@ -3187,6 +3238,7 @@ test("set-domain 後も既存サブコマンドが正常に動き、他フィー
     "scale",
     "imageUpload",
     "knowledgeTarget",
+    "candidates",
     "status",
     "phase",
     "phases",

@@ -476,6 +476,10 @@ describe("Raguel が書いた記録を codiel が読む", () => {
         "standard",
         "--knowledge-target",
         "intents",
+        "--adr-candidates",
+        "on",
+        "--gotcha-candidates",
+        "on",
         "--image-upload",
         "none"
       ]).status

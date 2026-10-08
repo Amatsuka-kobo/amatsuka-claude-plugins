@@ -280,6 +280,16 @@ function readDomainsResult(startDir2) {
 
 // src/check-intent-env.ts
 var GIT_TIMEOUT_MS = 5e3;
+var ENABLE_VALUES = /* @__PURE__ */ new Set(["1", "true", "on"]);
+function featureEnabled(env, name) {
+  return ENABLE_VALUES.has((env[name] ?? "").trim().toLowerCase());
+}
+function readKnowledgeRecording(env) {
+  return {
+    adr: featureEnabled(env, "AMATSUKA_METATRON_ENABLE_ADR"),
+    gotchas: featureEnabled(env, "AMATSUKA_METATRON_ENABLE_GOTCHAS")
+  };
+}
 function isFile(target) {
   try {
     return fs2.statSync(target).isFile();
@@ -503,6 +513,7 @@ console.log(
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0
       },
+      knowledgeRecording: readKnowledgeRecording(process.env),
       intentsDir,
       existingIntents,
       contextDocs
