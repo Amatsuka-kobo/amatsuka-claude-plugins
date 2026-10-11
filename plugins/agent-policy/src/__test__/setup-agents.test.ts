@@ -509,6 +509,7 @@ describe("--list-live-models", () => {
           recommendedFor: [
             "complex-impl",
             "normal-impl",
+            "general",
             "explore",
             "e2e-verify",
             "design-review",
