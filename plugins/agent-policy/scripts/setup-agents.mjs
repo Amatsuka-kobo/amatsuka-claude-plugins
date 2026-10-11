@@ -745,7 +745,7 @@ var EFFORT = {
   "complex-impl": { opus: "medium", "gpt-sol": "high" },
   "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
   "light-impl": { haiku: "medium", "gpt-luna": "low", grok: "medium" },
-  general: { sonnet: "medium", "gpt-luna": "medium" },
+  general: { sonnet: "high", "gpt-luna": "high" },
   explore: { sonnet: "high", "gpt-sol": "medium" },
   "realtime-research": { grok: "high", sonnet: "high" },
   "e2e-verify": { sonnet: "high", "gpt-sol": "medium" },
@@ -897,7 +897,21 @@ function parseDocument(content) {
   const meta = /* @__PURE__ */ new Map();
   const order = [];
   if (hasFrontmatter) {
+    let blockKey;
     for (const line of lines.slice(1, close)) {
+      if (blockKey !== void 0 && /^(\s|-)/.test(line)) {
+        meta.set(blockKey, `${meta.get(blockKey)}
+${line}`);
+        continue;
+      }
+      blockKey = void 0;
+      const block = /^([^\s:#][^:]*):$/.exec(line.trimEnd());
+      if (block !== null) {
+        blockKey = block[1];
+        meta.set(blockKey, "");
+        order.push(blockKey);
+        continue;
+      }
       const at = line.indexOf(": ");
       if (at <= 0) continue;
       const key = line.slice(0, at);
@@ -924,7 +938,7 @@ function parseDocument(content) {
 }
 function splitTools(value) {
   if (value === void 0) return [];
-  return value.split(",").map((tool) => tool.trim()).filter((tool) => tool !== "");
+  return value.split(/[,\n]/).map((tool) => tool.trim().replace(/^-\s*/, "")).filter((tool) => tool !== "");
 }
 function only(left, right) {
   return left.filter((item) => !right.includes(item));
@@ -1259,7 +1273,8 @@ function parseKeep(selectors) {
 function render(document) {
   const head = ["---"];
   for (const key of document.order) {
-    head.push(`${key}: ${document.meta.get(key) ?? ""}`);
+    const value = document.meta.get(key) ?? "";
+    head.push(value.startsWith("\n") ? `${key}:${value}` : `${key}: ${value}`);
   }
   head.push("---", "");
   const body = [];

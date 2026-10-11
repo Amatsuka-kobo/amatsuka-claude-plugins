@@ -2743,9 +2743,7 @@ describe("--write", () => {
 
     const result = run<WriteResults>(["--write", "--merge", ...args])
     expect(result.ok).toBe(true)
-    expect(fs.readFileSync(file, "utf8")).toMatch(
-      /^model: .+\neffort: medium$/m
-    )
+    expect(fs.readFileSync(file, "utf8")).toMatch(/^model: .+\neffort: high$/m)
   })
 
   it("--merge はテンプレートに無い既存 effort を保持する", () => {
@@ -2771,6 +2769,40 @@ describe("--write", () => {
     const result = run<WriteResults>(["--write", "--merge", ...args])
     expect(result.ok).toBe(true)
     expect(fs.readFileSync(file, "utf8")).toMatch(/^effort: low$/m)
+  })
+
+  it("--merge はテンプレートに無い既存 hooks をブロックごと保持する", () => {
+    const args = [
+      "--scope",
+      "claude",
+      "--model-id",
+      "haiku",
+      "--name",
+      "hooks-keep",
+      "--roles",
+      "knowledge-elicitation",
+      "--dir",
+      project
+    ]
+    run(["--write", ...args])
+    const file = path.join(project, ".claude", "agents", "hooks-keep.md")
+    const hooks = [
+      "hooks:",
+      "  PreToolUse:",
+      '    - matcher: "Bash"',
+      "      hooks:",
+      "        - type: command",
+      '          command: "./check.sh"'
+    ].join("\n")
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace(/^(model: .+)$/m, `$1\n${hooks}`)
+    )
+
+    const result = run<WriteResults>(["--write", "--merge", ...args])
+    expect(result.ok).toBe(true)
+    const content = fs.readFileSync(file, "utf8")
+    expect(content).toContain(`\n${hooks}\n`)
   })
 
   it("既存が無いときテンプレートどおりに書く", () => {
@@ -3477,7 +3509,7 @@ describe("--recommended", () => {
       "normal-impl": "medium",
       "light-impl": "medium",
       escalation: "high",
-      general: "medium",
+      general: "high",
       explore: "high",
       "realtime-research": "high",
       "e2e-verify": "high",

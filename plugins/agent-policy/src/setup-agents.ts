@@ -153,7 +153,21 @@ function parseDocument(content: string): Document {
   const order: string[] = []
 
   if (hasFrontmatter) {
+    let blockKey: string | undefined
     for (const line of lines.slice(1, close)) {
+      // hooks のようなブロック値は、字下げされた後続行を改行付きで値に含めて丸ごと保つ。
+      if (blockKey !== undefined && /^(\s|-)/.test(line)) {
+        meta.set(blockKey, `${meta.get(blockKey)}\n${line}`)
+        continue
+      }
+      blockKey = undefined
+      const block = /^([^\s:#][^:]*):$/.exec(line.trimEnd())
+      if (block !== null) {
+        blockKey = block[1]
+        meta.set(blockKey, "")
+        order.push(blockKey)
+        continue
+      }
       const at = line.indexOf(": ")
       if (at <= 0) continue
       const key = line.slice(0, at)
@@ -184,9 +198,10 @@ function parseDocument(content: string): Document {
 
 function splitTools(value: string | undefined): string[] {
   if (value === undefined) return []
+  // ブロック形式の YAML リスト(`- Read`)も読む。
   return value
-    .split(",")
-    .map((tool) => tool.trim())
+    .split(/[,\n]/)
+    .map((tool) => tool.trim().replace(/^-\s*/, ""))
     .filter((tool) => tool !== "")
 }
 
@@ -630,7 +645,8 @@ function parseKeep(selectors: string[]): Keep {
 function render(document: Document): string {
   const head = ["---"]
   for (const key of document.order) {
-    head.push(`${key}: ${document.meta.get(key) ?? ""}`)
+    const value = document.meta.get(key) ?? ""
+    head.push(value.startsWith("\n") ? `${key}:${value}` : `${key}: ${value}`)
   }
   head.push("---", "")
 
