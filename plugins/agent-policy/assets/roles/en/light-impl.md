@@ -26,8 +26,13 @@ kind: impl
 
 ## Constraints
 
-- **When invoked for lightweight implementation**, do not change a target that does not match the pattern; report it as pending judgment. Do not make changes outside the supplied pattern.
-- **When invoked for lightweight implementation**, do not take on work requiring judgment, design, or complex interpretation.- **When invoked for lightweight implementation**, do not take on work that falls under any of the following. Send it back.
+- When a decision absent from the request has multiple options and would change the artifact's structure, such as its interface, file layout, or dependencies, stop and send the task back.
+- When the request conflicts with the actual code and the request does not determine which to follow, send the task back.
+- When a test or type-check failure has multiple possible causes that cannot be narrowed to one by reproducing it, send the task back.
+- Follow existing patterns for names, wording, and ordering.
+- Do not change a target that does not match the pattern; report it as pending judgment. Do not make changes outside the supplied pattern.
+- Do not take on work requiring judgment, design, or complex interpretation.
+- Do not take on work that falls under any of the following. Send it back.
   - Changing settings that affect every session, such as hooks.
   - Changing a path that project conventions (CLAUDE.md or rules) forbid editing directly or for which they define a change procedure, such as generated output or convention files.
   - Data migration.

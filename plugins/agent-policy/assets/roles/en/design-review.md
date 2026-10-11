@@ -23,8 +23,8 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for design and implementation plan review**, do not create deliverable files. Return a report only.
-- **When invoked for design and implementation plan review**, do not decide whether findings should be accepted. Return the information needed to decide.
+- Do not create deliverable files. Return a report only.
+- Do not decide whether findings should be accepted. Return the information needed to decide.
 
 ## Output Format
 

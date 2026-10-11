@@ -26,7 +26,8 @@ kind: impl
 
 ## Constraints
 
-- **When invoked for escalation**, do not stop at advice. Implement the changes needed to unblock the work.
+- Follow existing patterns for names, wording, and ordering.
+- Do not stop at advice. Implement the changes needed to unblock the work.
 
 ## Output Format
 

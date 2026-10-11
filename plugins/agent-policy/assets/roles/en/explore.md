@@ -23,7 +23,7 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for codebase exploration**, do not create deliverable files. Return a report only.
+- Do not create deliverable files. Return a report only.
 
 ## Output Format
 

@@ -387,12 +387,13 @@ function compose(input) {
     if (items.length === 0) continue;
     body.push(heading, "", ...items, "");
   }
-  const constraints = [
-    ...common.get(vocabulary.constraintHeading) ?? [],
-    ...selected.flatMap(
-      (fragment) => fragment.sections.get(vocabulary.constraintHeading) ?? []
-    )
-  ];
+  const constraints = [...common.get(vocabulary.constraintHeading) ?? []];
+  for (const fragment of selected) {
+    const items = fragment.sections.get(vocabulary.constraintHeading);
+    if (items === void 0 || items.length === 0) continue;
+    if (selected.length === 1) constraints.push(...items);
+    else constraints.push("", `### ${fragment.label}`, "", ...items);
+  }
   if (constraints.length > 0)
     body.push(vocabulary.constraintHeading, "", ...constraints, "");
   body.push(vocabulary.outputFormatHeading, "");

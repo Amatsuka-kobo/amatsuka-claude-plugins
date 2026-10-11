@@ -24,7 +24,7 @@ kind: impl
 
 ## Constraints
 
-- Skip steps that cannot avoid changing persistent data in the target system, and report them as unverified.
+- Limit browser and GUI operation to viewing and verification. Skip steps that cannot avoid changing data in the target system, and report them as unverified.
 - If the required browser or GUI mechanism is unavailable, report the affected scope as unverified.
 
 ## Output Format

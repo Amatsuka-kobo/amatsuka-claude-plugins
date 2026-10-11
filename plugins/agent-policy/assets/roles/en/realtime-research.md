@@ -25,8 +25,8 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for real-time research**, do not create deliverable files. Return a report only.
-- **When invoked for real-time research**, do not decide whether to adopt the findings. Return the information needed for the orchestrator to decide.
+- Do not create deliverable files. Return a report only.
+- Do not decide whether to adopt the findings. Return the information needed for the orchestrator to decide.
 
 ## Output Format
 

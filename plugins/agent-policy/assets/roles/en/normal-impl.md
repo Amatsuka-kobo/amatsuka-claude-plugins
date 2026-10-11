@@ -24,7 +24,10 @@ kind: impl
 
 ## Constraints
 
-- **When invoked for routine implementation**, keep work within the stated scope.
+- When a decision absent from the request has multiple options and would change the artifact's structure, such as its interface, file layout, or dependencies, stop and send the task back.
+- When the request conflicts with the actual code and the request does not determine which to follow, send the task back.
+- When a test or type-check failure has multiple possible causes that cannot be narrowed to one by reproducing it, send the task back.
+- Follow existing patterns for names, wording, and ordering.
 
 ## Output Format
 

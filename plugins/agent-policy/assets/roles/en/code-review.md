@@ -21,7 +21,7 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for code review**, do not create deliverable files. Return a report only and do not apply findings.
+- Do not create deliverable files. Return a report only and do not apply findings.
 
 ## Output Format
 

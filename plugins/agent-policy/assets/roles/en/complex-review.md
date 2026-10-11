@@ -29,8 +29,8 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for final review**, do not create deliverable files. Return a report only.
-- **When invoked for final review**, do not modify the target. Report proposed fixes for an implementation, or the revisions required before implementation for a design document.
+- Do not create deliverable files. Return a report only.
+- Do not modify the target. Report proposed fixes for an implementation, or the revisions required before implementation for a design document.
 
 ## Output Format
 

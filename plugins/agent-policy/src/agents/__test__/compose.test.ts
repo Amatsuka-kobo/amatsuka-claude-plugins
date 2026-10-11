@@ -291,10 +291,26 @@ describe("本文", () => {
     expect(section).toContain("### コードベース探索")
   })
 
-  it("読み取り役割の制約が役割スコープ付きで出る", () => {
-    expect(build(["design-review"])).toContain(
-      "**設計書・実装計画書のレビューとして依頼されたときは**"
+  it("単一役割では制約に小見出しを立てない", () => {
+    const body = build(["design-review"])
+    const section = body.slice(
+      body.indexOf("## 制約"),
+      body.indexOf("## Output Format")
     )
+    expect(section).not.toContain("### ")
+    expect(section).not.toContain("として依頼されたときは")
+  })
+
+  it("複数役割では役割の制約を役割ごとの h3 の下に出す", () => {
+    const body = build(["complex-impl", "explore"])
+    const section = body.slice(
+      body.indexOf("## 制約"),
+      body.indexOf("## Output Format")
+    )
+    const heading = section.indexOf("### コードベース探索")
+    expect(section).toContain("### 複雑または重要な実装")
+    expect(heading).toBeGreaterThan(-1)
+    expect(section.indexOf("報告のみを返す")).toBeGreaterThan(heading)
   })
 
   it("冒頭宣言に定義名と役割名が入る", () => {

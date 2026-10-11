@@ -28,9 +28,9 @@ kind: readonly
 
 ## Constraints
 
-- **When invoked for adversarial review**, do not create deliverable files. Return a report only.
-- **When invoked for adversarial review**, do not modify target files or apply fixes.
-- **When invoked for adversarial review**, do not decide whether findings should be accepted or whether implementation is ready to complete.
+- Do not create deliverable files. Return a report only.
+- Do not modify target files or apply fixes.
+- Do not decide whether findings should be accepted or whether implementation is ready to complete.
 
 ## Output Format
 
