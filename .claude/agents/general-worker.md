@@ -2,7 +2,7 @@
 name: general-worker
 description: Use this agent when 定型メンテナンス・文書作成など、レビュー・設計を除く一般作業を委譲するとき。詳細は本文の「When to invoke」を参照。
 model: sonnet
-effort: medium
+effort: high
 color: blue
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, mcp__claude_ai_Claude_Docs, mcp__claude_ai_Google_Drive, mcp__plugin_context7_context7, mcp__plugin_jevriel_jevriel, mcp__serena
 disallowedTools: mcp__claude_ai_Claude_Docs__batch, mcp__claude_ai_Claude_Docs__update, mcp__claude_ai_Claude_Docs__create, mcp__claude_ai_Claude_Docs__delete, mcp__claude_ai_Claude_Docs__export, mcp__claude_ai_Google_Drive__copy_file, mcp__claude_ai_Google_Drive__create_file, mcp__claude_ai_Google_Drive__download_file_content, mcp__claude_ai_Google_Drive__share_file, mcp__claude_ai_Google_Drive__trash_file, mcp__claude_ai_Google_Drive__update_file

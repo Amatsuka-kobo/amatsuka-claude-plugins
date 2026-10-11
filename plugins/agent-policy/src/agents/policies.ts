@@ -174,7 +174,7 @@ export const EFFORT: Record<RoleId, Partial<Record<ModelId, Effort>>> = {
   "complex-impl": { opus: "medium", "gpt-sol": "high" },
   "normal-impl": { sonnet: "medium", "gpt-sol": "medium", grok: "high" },
   "light-impl": { haiku: "medium", "gpt-luna": "low", grok: "medium" },
-  general: { sonnet: "medium", "gpt-luna": "medium" },
+  general: { sonnet: "high", "gpt-luna": "high" },
   explore: { sonnet: "high", "gpt-sol": "medium" },
   "realtime-research": { grok: "high", sonnet: "high" },
   "e2e-verify": { sonnet: "high", "gpt-sol": "medium" },

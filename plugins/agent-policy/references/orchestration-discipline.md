@@ -9,7 +9,7 @@
 | 通常の実装                               | `normal-impl`           | `impl`     | `Sonnet`      | `medium`  |
 | 軽量な実装                               | `light-impl`            | `impl`     | `Haiku`       | `medium`  |
 | 行き詰まり時のエスカレーション           | `escalation`            | `impl`     | `Fable`       | `high`    |
-| その他のタスク                           | `general`               | `impl`     | `Sonnet`      | `medium`  |
+| その他のタスク                           | `general`               | `impl`     | `Sonnet`      | `high`    |
 | コードベース探索                         | `explore`               | `readonly` | `Sonnet`      | `high`    |
 | リアルタイム情報調査                     | `realtime-research`     | `readonly` | `Sonnet`      | `high`    |
 | E2E 動作検証・ブラウザ/GUI 操作          | `e2e-verify`            | `impl`     | `Sonnet`      | `high`    |
