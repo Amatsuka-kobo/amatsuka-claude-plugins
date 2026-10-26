@@ -2,7 +2,10 @@ import esbuild from "esbuild"
 
 await esbuild.build({
   bundle: true,
-  entryPoints: {},
+  entryPoints: {
+    "session-start": "./src/hooks/session-start.ts",
+    "subagent-start": "./src/hooks/subagent-start.ts"
+  },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
   platform: "node",

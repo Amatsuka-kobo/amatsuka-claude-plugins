@@ -1,0 +1,27 @@
+{
+  "description": "better-agentics: SessionStart でオーケストレーターの規律の使用指示を注入し、SubagentStart で better-agentics の定義にサブエージェントの規律を注入する。どちらも AMATSUKA_AGENT_ENABLE_ORCHESTRATION が有効なときだけ働く",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/subagent-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
