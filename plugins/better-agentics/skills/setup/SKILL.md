@@ -123,6 +123,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --list-coverage --lang <lang> --d
 
 3. 応答の `written` の各ファイルを `Edit` で翻訳する。
    - 翻訳するのは、本文と frontmatter の `label` / `description` だけである。
+   - `_common.md` の `{{NAME}}` と `{{ROLE_LABEL}}` は置換子なので、訳さずにそのまま残す。
    - `## When to invoke` の本文は翻訳せず、英語のまま残す。
    - `id` / `kind` / `tools` / `default-name` / `source-lang` / `source-hash` と、セクションの見出しは変えない。
 4. 状態確認を再実行し、`missing` と `stale` が空になったことを確かめる。空でなければ生成へ進まない。
@@ -169,7 +170,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --list-mcp --dir "$PWD"
    - `adopt` が `true`(同じ名前のファイルがあり、`better-agentics-role` を持たない)なら、ファイルごとに 1 回、「本文をまとめてテンプレートに置き換える(推奨)」「セクションごとに選ぶ」の 2 択で聞く。質問文に、既存のファイルの frontmatter(MCP・`disallowedTools`・その他のキー)は引き継がれることを書く。「セクションごとに選ぶ」のときだけ、`sections` のうち `state` が `unknown` のセクションごとに、既存(`existing`)とテンプレート(`template`)を選択肢の `preview` に入れて、「保持する」「テンプレートに置き換える」を聞く。推奨は付けない。
    - `adopt` が `false` で `exists` が `true` のときは、ステップ 7 の 4 と同じ規則でセクションを扱う。
    - 保持すると決めたセクションを、6 の `--keep` に渡す。
-6. 生成する。MCP の引数は、impl の役割にサーバーが付くときは `--mcp-servers` だけを渡す。readonly の役割にサーバーが付くときは `--mcp-servers` と `--mcp-deny` の両方を渡す。サーバーを付けないときは `--mcp-servers ""` を渡す。
+6. 生成する。MCP の引数は、impl の役割にサーバーが付くときは `--mcp-servers` だけを渡す。readonly の役割にサーバーが付くときは `--mcp-servers` と `--mcp-deny` の両方を渡す。サーバーを付けないときは `--mcp-servers` を渡さない。既存のファイルが無ければ MCP 無しで生成され、取り込みのときは CLI が既存の MCP と `disallowedTools` を引き継ぐ。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --write --role <RoleId> --model <model> [--effort <effort|none>] --name <name> [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] [--keep <section,...>] --lang <lang> --dir "$PWD"
@@ -183,11 +184,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --list-mcp --dir "$PWD"
 
 1. モデル。定義の `model` が `sonnet` / `opus` / `haiku` / `fable` のどれかなら、その値を使い、質問しない。それ以外(`inherit`・外部のモデル・未設定)なら、ステップ 6 の 1 の 2 問で聞く。「この役割は作らない」の位置には「再生成しない」を置く。質問文には、「この定義の model は <元の値、または未設定> から <選んだモデル> に変わる」と書く。<> の中は実際の値に置き換える。
 2. effort。モデルが役割の推奨と同じなら `--effort` を渡さない。違うなら、定義の `effort` があればその値を渡し、無ければ `--effort none` を渡す。1 でモデルを選び直したときは、ステップ 6 の 2 で聞く。
-3. MCP。定義ごとに 1 回、単一選択の「既存のまま(推奨)」「変更する」「付与しない」の 3 択を聞く。質問文に、ステップ 4 の `--check` の `mcpCurrent` のサーバー名(無ければ「MCP なし」)を書く。
+3. MCP。先に 4 のコマンドで `--check` を実行する。そのうえで定義ごとに 1 回、単一選択の「既存のまま(推奨)」「変更する」「付与しない」の 3 択を聞く。質問文には、`--check` の応答の `mcpCurrent` のサーバー名(無ければ「MCP なし」)を書く。
    - 「既存のまま」: `--mcp-servers` と `--mcp-deny` を渡さない(CLI が既存の値を引き継ぐ)。
    - 「付与しない」: `--mcp-servers ""` と `--mcp-deny ""` を渡す。
    - 「変更する」: 続けて別の呼び出しで、付与するサーバーを複数選択で聞く。選択肢は `--list-mcp` の `usable: true` のサーバーとし、候補数の共通規則に従う。空の選択肢は置かない。readonly の役割なら、ステップ 6 の 4 の手順で denylist を確定させる。
-4. セクション。`--check` を実行し、`sections` を `state` で扱う。
+4. セクション。3 で実行した `--check` の応答の `sections` を、`state` で扱う。`--check` のコマンドは次のとおりである。
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --check --role <RoleId> --model <model> [--effort <effort|none>] --name <file> --lang <lang> --dir "$PWD"

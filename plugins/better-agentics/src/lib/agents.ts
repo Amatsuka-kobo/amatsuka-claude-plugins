@@ -167,7 +167,7 @@ export function scanDefinitions(projectDir: string): Definition[] {
     const file = name.replace(/\.md$/, "")
     found.push({
       file,
-      name: stringOf(meta.get("name")) ?? file,
+      name: unquote(stringOf(meta.get("name")) ?? file),
       role,
       model: stringOf(meta.get("model")),
       effort: stringOf(meta.get("effort")),

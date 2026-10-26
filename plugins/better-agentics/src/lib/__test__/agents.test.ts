@@ -84,6 +84,29 @@ describe("scanDefinitions", () => {
   })
 })
 
+describe("引用符付きの name", () => {
+  it("name の引用符を外して読む", () => {
+    place("q", [
+      "---",
+      'name: "quoted"',
+      "better-agentics-role: explore",
+      "---",
+      ""
+    ])
+    place("s", [
+      "---",
+      "name: 'single'",
+      "better-agentics-role: code-review",
+      "---",
+      ""
+    ])
+    expect(scanDefinitions(project).map((entry) => entry.name)).toEqual([
+      "quoted",
+      "single"
+    ])
+  })
+})
+
 describe("inspect", () => {
   it("役割表に無い role-id を unknownRoles に入れ、known に入れない", () => {
     const result = inspect(scanDefinitions(FIXTURE))
