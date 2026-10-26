@@ -135,6 +135,13 @@ function readFragment(file: string): Fragment {
   }
 }
 
+// lang は翻訳断片の置き場のパスに使うため、言語コードの形だけを受け付ける。
+export function assertLang(lang: string): void {
+  if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(lang)) {
+    throw new Error(`lang: invalid language code: "${lang}"`)
+  }
+}
+
 function bundledLang(lang: string): "ja" | "en" {
   return lang === "ja" ? "ja" : "en"
 }
@@ -144,6 +151,7 @@ function bundledDir(root: string, lang: string): string {
 }
 
 function translationDir(projectDir: string, lang: string): string {
+  assertLang(lang)
   return path.join(projectDir, ".claude", "better-agentics", "roles", lang)
 }
 
@@ -165,6 +173,7 @@ export function loadFragments(
   projectDir: string,
   lang: string
 ): Map<RoleId, Fragment> {
+  assertLang(lang)
   const dir = bundledDir(root, lang)
   const fragments = new Map<RoleId, Fragment>()
   for (const name of roleFiles(dir)) {
@@ -227,6 +236,7 @@ export function checkFragments(
   projectDir: string,
   lang: string
 ): FragmentStatus {
+  assertLang(lang)
   if (!needsTranslation(lang)) {
     return { lang, targetDir: null, missing: [], stale: [], ready: [] }
   }
@@ -263,6 +273,7 @@ export function scaffoldFragments(
   projectDir: string,
   lang: string
 ): string[] {
+  assertLang(lang)
   if (!needsTranslation(lang)) return []
   const sourceDir = bundledDir(root, lang)
   const targetDir = translationDir(projectDir, lang)

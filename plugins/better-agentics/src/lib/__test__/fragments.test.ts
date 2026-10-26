@@ -125,6 +125,21 @@ describe("loadPreamble", () => {
   })
 })
 
+describe("言語コードの検査", () => {
+  it("パスを含む言語コードは読み書きの前に拒む", () => {
+    for (const lang of ["../x", "fr/../../etc", ""]) {
+      expect(() => checkFragments(ROOT, project, lang)).toThrow(/lang/)
+      expect(() => scaffoldFragments(ROOT, project, lang)).toThrow(/lang/)
+      expect(() => loadFragments(ROOT, project, lang)).toThrow(/lang/)
+    }
+    expect(fs.existsSync(path.join(project, ".claude"))).toBe(false)
+  })
+
+  it("地域付きの言語コードは受け付ける", () => {
+    expect(checkFragments(ROOT, project, "pt-BR").missing).toHaveLength(14)
+  })
+})
+
 describe("checkFragments / scaffoldFragments", () => {
   it("ja は翻訳断片を要しない", () => {
     expect(checkFragments(ROOT, project, "ja")).toMatchObject({
