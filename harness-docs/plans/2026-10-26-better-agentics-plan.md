@@ -197,7 +197,7 @@ export function loadPreamble(pluginRoot: string, projectDir: string, lang: strin
 export interface FragmentStatus { lang: string; targetDir: string | null; missing: string[]; stale: string[]; ready: string[] }
 export function checkFragments(pluginRoot: string, projectDir: string, lang: string): FragmentStatus
 export function scaffoldFragments(pluginRoot: string, projectDir: string, lang: string): string[]  // 書いたファイルの絶対パス
-export function pluginRoot(): string  // CLAUDE_PLUGIN_ROOT があればそれ、無ければこのファイルの 1 つ上のディレクトリ
+export function pluginRoot(): string  // CLAUDE_PLUGIN_ROOT があればそれ。無ければ、このファイルのディレクトリから親へたどり、.claude-plugin/plugin.json を持つ最初のディレクトリ
 ```
 
 - `lang` が `ja` / `en` のときは、同梱の `assets/roles/<lang>/` だけを読む。
@@ -354,6 +354,17 @@ interface WriteResult {
   toolsAfter: string[]
   mcpDropped: string[]       // --mcp-servers のうち使えなかったサーバー
 }
+// --list-mcp
+interface McpListResult { ok: true; servers: { name: string; status: string; usable: boolean }[] }
+// --check-fragments
+interface FragmentCheckResult { ok: true; lang: string; targetDir: string | null; missing: string[]; stale: string[]; ready: string[] }
+// --scaffold-fragments
+interface ScaffoldResult { ok: true; lang: string; written: string[] }   // プロジェクトルートからの相対パス
+// --prune-tools
+interface PruneResult { ok: true; target: string; changed: boolean; warnings: string[]; toolsBefore: string[]; toolsAfter: string[] }
+// --rewrite-roles
+interface RewriteResult { ok: true; target: string; changed: boolean; before: string | null; after: string | null }  // マーカーの値。行を消したら after は null
+
 // 失敗はすべて { ok: false, error: string }。終了コードは 1
 ```
 
@@ -463,7 +474,7 @@ describe("ROLES", () => {
 
 - [ ] **Step 5: `roles.ts` を §3-1 の型で実装する。13 行の値は設計書 §4-1 の表から写す**
 
-- [ ] **Step 6: テスト・`pnpm run typecheck`・`pnpm run lint` を通す。`pnpm --filter better-agentics-scripts build` がエラーなく終わることも確かめる**
+- [ ] **Step 6: テスト・`pnpm run typecheck`・`pnpm run lint` を通す。`pnpm --filter better-agentics-scripts build` がエラーなく終わることも確かめる**(esbuild 0.28 は空の `entryPoints` で正常に終わることを計画立案時に確かめてある)
 
 - [ ] **Step 7: コミットする**
 
@@ -529,7 +540,7 @@ git commit -m "feat(better-agentics): パッケージの骨組みと役割表を
 
 - [ ] **Step 2: 断片を書く**
 
-agent-policy の `assets/roles/{ja,en}/<RoleId>.md` を写し、次の変更を当てる。`realtime-research.grok.md` は写さない。frontmatter(`id`・`label`・`description`・`default-name`・`tools`・`kind`)は変えない。
+agent-policy の `assets/roles/{ja,en}/<RoleId>.md` を写し、次の変更を当てる。`realtime-research.grok.md` は写さない。frontmatter は、(5) の `description` の書き換えを除き、`id`・`label`・`description`・`default-name`・`tools`・`kind` を変えない。
 
 (1) `_common.md`(ja・en)。`## 制約` / `## Constraints` を消し(T6 の subagent-policy へ移る)、`## Preamble` を次にする。
 
@@ -570,11 +581,23 @@ knowledge-elicitation の「理解した内容」と「暗黙知」には重大�
 
 (4) 上記以外のセクション(Core Responsibilities・作業手順・制約・Output Format の残り)は agent-policy の内容のまま写す。
 
+(5) 選択基準を含む `description` を、基準を含まない短い句に書き換える(設計書 §10)。description は Agent 一覧に載り、オーケストレーターの文脈に入るためである。次の 6 役割だけを変え、残りの 7 役割は agent-policy の値のまま使う。
+
+| RoleId | ja | en |
+| --- | --- | --- |
+| complex-impl | 複雑または重要な実装 | complex or critical implementation |
+| normal-impl | 通常の実装 | standard implementation |
+| light-impl | 軽量な実装 | lightweight implementation |
+| general | 実装・レビュー以外の一般作業 | general work other than implementation and review |
+| escalation | 行き詰まりの原因の特定と打開 | identifying and resolving the cause of a blockage |
+| realtime-research | 外部の最新情報の調査 | research on current external information |
+
 - [ ] **Step 3: 失敗するテストを書く。次のケースを入れる**
 
 - `loadFragments(root, project, "ja")` と `"en"` が 13 役割を返し、各 `tools` と `kind` が agent-policy の値(T1 の表と同じ種別)と一致する。
 - ja・en の全断片で `## When to invoke` の配下が ASCII だけで書かれている(`/^[\x00-\x7F]*$/`)。
-- レビュー 5 役割の Output Format に `critical` が含まれ、それ以外の 8 役割には含まれない。
+- レビュー 5 役割の `## Output Format` の配下に `critical` が含まれ、それ以外の 8 役割の `## Output Format` の配下には含まれない(ファイル全体ではなく、このセクションだけを見る)。
+- 全断片の frontmatter の `description` が、(5) の表の値か agent-policy の値のどちらかと一致する。
 - `_common.md` に `## 制約` / `## Constraints` が無い。
 - 翻訳断片: 一時プロジェクトに `.claude/better-agentics/roles/fr/code-review.md` を置き、`## When to invoke` を別の文に書き換えても、`loadFragments(root, project, "fr")` の `code-review` の When to invoke は同梱 `en` の値になる。`## Core Responsibilities` は翻訳断片の値になる。
 - `checkFragments(root, project, "ja")` は `targetDir: null` で `missing` が空。
@@ -590,7 +613,8 @@ agent-policy の `src/agents/fragments.ts` を出発点にし、次の点を変�
 - ベンダー別断片の重ね合わせ(`vendor` 引数・`.grok.md` の読み込み)を外す。
 - 廃止 ID の扱い(`isRetiredRole`)を外す。廃止済みの ID はまだ無い(設計書 §2-2)。
 - 探索の層は同梱と翻訳の 2 つにする(§3-3)。翻訳の層で置き換えるとき、`## When to invoke` だけは同梱 `en` の値を残す。
-- `pluginRoot()` は agent-policy の `setup-agents.ts:212-217` と同じ形にする。
+- `pluginRoot()` は §3-3 のとおり、`.claude-plugin/plugin.json` を持つディレクトリまで親をたどる。ソースの `src/lib/`・`src/hooks/` から呼んでも、バンドル後の `scripts/` から呼んでも、プラグインのルートを返すためである。
+- `scaffoldFragments` は、同梱 `en` の断片を写し、frontmatter の閉じる `---` の直前に `source-lang: en` と `source-hash: <同梱 en の bodyHash>` の 2 行を足す。`source-hash` が一致するファイルは上書きせず、一致しない(stale の)ファイルは英語で上書きする。上書きで既存の訳が失われることは、T10 の setup スキルで利用者に退避を促して扱う(agent-policy と同じ)。
 
 - [ ] **Step 6: テスト・typecheck・lint を通す**
 
@@ -611,7 +635,7 @@ agent-policy の `src/agents/fragments.ts` を出発点にし、次の点を変�
 合成の規則:
 
 - frontmatter は次の順で書く。`name` → `description`(断片の `description` をそのまま。agent-policy の「Use this agent when …」の包みは付けない)→ `model` → `effort`(`undefined` なら書かない)→ `tools`(断片の `tools` に `mcpTools` を足す)→ `disallowedTools`(`denyTools` が空なら書かない)→ `better-agentics-role` → `better-agentics-hash`。`color` は書かない。
-- 前置きは `_common.md` の Preamble の `{{NAME}}` を `name` に、`{{ROLE_LABEL}}` を断片の `label` に置き換えたもの。ja では label を「」で囲む(`担う役割は「コードレビュー」である。`)、en では `"` で囲む。
+- 前置きは `_common.md` の Preamble の `{{NAME}}` を `name` に、`{{ROLE_LABEL}}` を断片の `label` に置き換えたもの。label は括弧で囲まない(設計書 §10 の例 `あなたは code-reviewer。担う役割はコードレビューである。`)。
 - 本文のセクションは `vocabularyFor(lang).bodyOrder` の順に、断片にあるものだけを書く。
 - `better-agentics-hash` には、`description`・前置き・各セクションの本文の `textHash` を `HashRecord` として書く。キーは `"description"`・`"preamble"`・見出し行である。
 
@@ -801,7 +825,7 @@ SessionStart の警告文は次のとおりにする(本文に載せる)。
 - 重複: `次の役割を 2 件以上の定義が持つ。委譲先を決められないため、better-agentics:setup で 1 件に絞る。` の後に `- <label> [<role>]: <name>, <name>` を役割ごとに並べる。
 - 未知の role-id: `次の定義は役割表に無い role-id を持つため、委譲先の候補にならない。` の後に `- <name>: <role>` を並べる。
 
-hook 2 本とも、処理全体を `try` で囲み、例外は `better-agentics <hook 名>: <message>` を標準エラーに 1 行書いて終了コード 0 で終える。SessionStart は定義の走査が例外を投げても、規律の使用指示を出す(設計書 §8-1)。SubagentStart の `subagent-policy.md` のパスは `path.join(pluginRoot(), "references", "subagent-policy.md")` とする。
+hook 2 本とも、処理全体を `try` で囲み、例外は `better-agentics <hook 名>: <message>` を標準エラーに 1 行書いて終了コード 0 で終える。SessionStart は定義の走査が例外を投げても、規律の使用指示を出す(設計書 §8-1)。SubagentStart の `subagent-policy.md` のパスは `path.join(pluginRoot(), "references", "subagent-policy.md")` とする。SubagentStart の出力は `{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":<全文>}}` の 1 行とする。
 
 - [ ] **Step 6: テスト・typecheck・lint を通し、`pnpm --filter better-agentics-scripts build` で `scripts/session-start.mjs` と `scripts/subagent-start.mjs` を出力する**
 
@@ -865,6 +889,10 @@ export function createJevAsk(apiKey: string): JevAsk {
     })
 }
 ```
+
+SDK 0.6.0 の型(`dist/index.d.cts`)で、次を計画立案時に確かめてある。`RequestOptions` は `signal?: AbortSignal`・`timeout?: number`・`retry?: Partial<RetryPolicy>` を持ち、`RetryPolicy` は `maxRetries`・`maxRetryAfterMs` を持つ。`TypeSafeClientConfig` は `apiKey`・`logLevel` を持つ。応答の `answers[<質問名>]` は、`noul` の質問では `{ type: "noul", noul: number }`、`choice` の質問では `{ type: "choice", choice: string, confidence: number, probabilities: Record<string, number> }` である。`choice(instructions, criteria)` の `criteria` は `Record<ラベル, 説明の文字列 | null>` を受け付ける。
+
+`pick.ts` は、`review` の `p` を `answers["candidate_<i>"].noul` から、`split` の `agent` と `p` を `answers["task_<i>"].choice` と `answers["task_<i>"].probabilities[choice]` から読む。答えが欠けているか形が違えば `jev-failed` にする。
 
 `pick.ts` の問いの組み立て(設計書 §7-3):
 
@@ -968,6 +996,8 @@ function splitQuestions(tasks: { id: string; summary: string }[], candidates: De
 ```ts
 // regenerate.ts
 export type SectionState = "same" | "unknown" | "templateChanged" | "userEdited"
+// record は既存の better-agentics-hash を decodeRecord した HashRecord のうち、そのキーの値
+// ("description" なら record.description、見出し行なら record.sections[見出し行])。記録が無ければ undefined
 export function classify(existing: string, template: string, record: string | undefined): SectionState {
   if (textHash(existing) === textHash(template)) return "same"
   if (record === undefined) return "unknown"
@@ -992,6 +1022,7 @@ export function merge(input: MergeInput): MergeOutput
   - `model`・`effort`・`tools`・`better-agentics-role`・`better-agentics-hash` はテンプレートの値を使う。`effort` を書かない指定では、既存に `effort` があっても消す。
   - `name` はテンプレートの値、`description` は `keep` にあれば既存の値を使う。
   - 上記と `disallowedTools` 以外の既存のキー(`color`・`agent-policy-role`・`hooks` など)は、既存での順でテンプレートのキーの後に残し、`keysKept` に載せる。
+  - キーの並びは、テンプレートのキー(T4 の順。`disallowedTools` を書くときは `tools` の直後)を先に置き、残したキーを後に続ける。
 - `merge` の記録: 置き換えたキーにはテンプレートの `textHash` を、保持したキーには既存の記録の値を書く。既存の記録が無い保持したキーは、記録から外す(次の再生成でも `unknown` として聞く)。
 - MCP: `--mcp-servers` を渡したときは、`listMcpServers` で usable なサーバーだけを `toolPrefix` で `mcp__<name>` にして `tools` の末尾に足し、使えなかった名前を `mcpDropped` に載せる。渡さないときは、既存の `tools` の `mcp__` で始まる項目をそのまま引き継ぐ。`--mcp-servers ""` は MCP を付けない指定とする。
 - `disallowedTools`: `--mcp-deny` を渡したときはその値を書き(`""` なら書かない)、渡さないときは既存の値を引き継ぐ。
@@ -1066,7 +1097,7 @@ export function merge(input: MergeInput): MergeOutput
     1. モデル。選択肢は推奨のモデル(先頭、推奨の印)、残りの Claude の 3 モデル、「この役割は作らない」の 5 件になる。単一選択で 4 件を超えるので、1 問目を「推奨のモデル」「その他のモデル」「この役割は作らない」の 3 択にし、「その他のモデル」のときだけ 2 問目で残りの 3 モデルから選ばせる。
     2. effort。推奨と違うモデルを選んだときだけ聞く。設計書 §4-1 の 2 問の形(1 問目「推奨の値」「その他の値」「書かない」、2 問目は残りの 4 値)にする。選んだ値を `--effort` に、「書かない」は `--effort none` にする。
     3. 定義名。「既定名を使う」「別の名前を指定する」の 2 択で必ず聞く。既定名は `roles[].defaultName` で、モデル名を前に付けない。
-    4. MCP。agent-policy のステップ 5n の 3 を写す(readonly の役割の denylist の確定と、そのまま入れる 1 文を含む)。
+    4. MCP。agent-policy のステップ 5n の 3 を写す(readonly の役割の denylist の確定と、そのまま入れる 1 文を含む)。「`_common.md` の制約と矛盾しないことを確認する」箇条は写さない(better-agentics の `_common.md` は制約を持たない)。
     5. `--check` を実行し、`adopt: true` なら、ファイルごとに 1 回「本文をまとめてテンプレートに置き換える(推奨)」「セクションごとに選ぶ」を聞く。後者のときだけ、`unknown` のセクションごとに既存とテンプレートを preview に示して「保持する」「テンプレートに置き換える」を聞く(推奨は付けない)。保持すると決めたものを `--keep` に渡す。
     6. `--write` を実行する。
   - ステップ 7(再生成): ステップ 3 で「すべての役割を確認し直す」を選んだとき、`coveredBy` のある役割の定義ごとに行う。
@@ -1074,7 +1105,7 @@ export function merge(input: MergeInput): MergeOutput
     - effort は、モデルが推奨と同じなら `--effort` を渡さない。違うなら既存の `effort` を渡し、既存に無ければ `--effort none` を渡す。
     - MCP は「既存のまま(推奨)」「変更する」「付与しない」の 3 択で聞く(agent-policy のステップ 5c を写す)。「既存のまま」では `--mcp-servers` と `--mcp-deny` を渡さない。
     - `--check` の `sections` を状態で扱う。`same`・`new`・`extra` は聞かない。`templateChanged` は「テンプレートに置き換える(推奨)」「保持する」、`userEdited` は「保持する(推奨)」「テンプレートに置き換える」、`unknown` は推奨なしの 2 択で、どれも既存とテンプレートを preview に示す。保持するものを `--keep` に渡して `--write` する。
-  - ステップ 8(報告): 設計書 §9-2 ステップ 8 の項目に加え、点検で手で外すツール、`keysKept`、`mcpDropped`、`ok: false` になった操作を並べる。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` の設定方法を示す。`.claude/agents/` を新規に作った初回は Claude Code の再起動が要ることを伝える。
+  - ステップ 8(報告): 設計書 §9-2 ステップ 8 の項目に加え、点検で手で外すツール、`keysKept`、`mcpDropped`、`ok: false` になった操作を並べる。取り込んだ定義の `keysKept` に `agent-policy-role` があれば、その定義は本文を better-agentics の形にしたまま agent-policy の委譲先にもなると伝え、マーカーを残すかを利用者に委ねる。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` の設定方法を示す。`.claude/agents/` を新規に作った初回は Claude Code の再起動が要ることを伝える。
 
 - [ ] **Step 4: 2 本の本文を `wc -c` で測り、orchestration が 30KB 以下であることを確かめる**(設計書 §5-5 の基準を自分にも当てる)
 
@@ -1112,7 +1143,9 @@ git status --short plugins/*/scripts plugins/*/dist
 
 Expected: 4 つのコマンドがパスし、`pnpm run build` の後に `plugins/better-agentics/scripts/` 以外のビルド出力に差分が無い。
 
-- [ ] **Step 5: コミットする**(`docs(better-agentics): README と登録を追加する`)
+- [ ] **Step 5: 規約の Done の条件のうち、文書の追随を確かめる**。`node plugins/metatron/scripts/metatron.mjs get architecture` の本文に、better-agentics の追加で古くなる記述が無いかを読む。`.serena/memories/` に agent-policy の構成を前提にした記述があり、better-agentics と食い違うかを確かめる。どちらも、変更が要るときは編集せずオーケストレーターへ報告する。
+
+- [ ] **Step 6: コミットする**(`docs(better-agentics): README と登録を追加する`)
 
 ### T12: 実機の確認(手動)
 
