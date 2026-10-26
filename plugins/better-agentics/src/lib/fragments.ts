@@ -187,9 +187,17 @@ export function loadFragments(
   for (const name of roleFiles(target)) {
     const translated = readFragment(path.join(target, name))
     const bundled = fragments.get(translated.id)
-    const when = bundled?.sections.get(WHEN_TO_INVOKE)
+    if (bundled === undefined) continue
+    // 翻訳で変えてよいのは label・description と本文だけである。権限に効く tools・kind と、
+    // 定義名の既定値は同梱の値を使い、プロジェクトのファイルで広げさせない。
+    const when = bundled.sections.get(WHEN_TO_INVOKE)
     if (when !== undefined) translated.sections.set(WHEN_TO_INVOKE, when)
-    fragments.set(translated.id, translated)
+    fragments.set(translated.id, {
+      ...translated,
+      tools: bundled.tools,
+      kind: bundled.kind,
+      defaultName: bundled.defaultName
+    })
   }
   return fragments
 }

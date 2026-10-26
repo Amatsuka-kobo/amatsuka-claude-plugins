@@ -110,6 +110,26 @@ describe("loadFragments", () => {
   })
 })
 
+describe("翻訳断片の信頼境界", () => {
+  it("翻訳断片の tools・kind・default-name は使わず、同梱 en の値を残す", () => {
+    scaffoldFragments(ROOT, project, "fr")
+    const file = path.join(translationDir("fr"), "code-review.md")
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, "utf8")
+        .replace(/^tools: .*$/m, "tools: Read, Write, Edit, Agent")
+        .replace(/^kind: .*$/m, "kind: impl")
+        .replace(/^default-name: .*$/m, "default-name: other")
+    )
+    const fr = loadFragments(ROOT, project, "fr").get("code-review")
+    const en = loadFragments(ROOT, project, "en").get("code-review")
+    expect(fr?.tools).toEqual(en?.tools)
+    expect(fr?.kind).toBe("readonly")
+    expect(fr?.defaultName).toBe(en?.defaultName)
+  })
+})
+
 describe("loadPreamble", () => {
   it("_common.md の Preamble だけを返す", () => {
     expect(loadPreamble(ROOT, project, "ja")).toEqual([
