@@ -1179,4 +1179,21 @@ Expected: 4 つのコマンドがパスし、`pnpm run build` の後に `plugins
 
 ## 5. 実施記録
 
-(実装中に、設計書との食い違い・判断・実機の確認の結果をここへ書く)
+実装中の判断は `.superpowers/sdd/2026-10-26-better-agentics-plan/progress.md` に記録し、要点を最終報告でユーザーへ示した。
+
+### T12 Step 1: setup の実行(2026-10-27)
+
+- `ba-` の名前で別に作る予定だったが、ユーザーの選択で 13 役割すべてを既存の agent-policy の定義へ取り込んだ(コミット `b2a230a0`)。
+- 本文はすべて「まとめて置き換える」を選び、MCP と `disallowedTools` は既存の値を引き継いだ。`agent-policy-role` などのキーも残っている。
+
+### T12 Step 4: 実際の Jev での pick-delegate(2026-10-27)
+
+| 入力 | 返った委譲先(p) |
+| --- | --- |
+| review: 設計書のレビュー(英語の summary、artifacts に設計書のパス) | docs-reviewer(0.96)、knowledge-elicitor(0.91) |
+| review: コード差分のレビュー | code-reviewer(0.88) |
+| split: 呼び出し元の探索 / 設計済みの関数のテスト作成 / Web での最新情報の調査 | general-explorer(1)/ general-implementer(1)/ realtime-researcher(1) |
+| stuck | technical-leader(Jev は呼ばない) |
+
+- review では、complex-review と adversarial-review の候補が yes にならなかった。計画レビューの指摘(全員 yes になる懸念)は、基準の書き分けで避けられている。
+- Step 2(SessionStart の注入)と Step 3(SubagentStart の注入)は、新しいセッションで確かめる。
