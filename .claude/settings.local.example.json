@@ -1,7 +1,9 @@
 {
+  "__comment": "AMATSUKA_AGENT_ENABLE_ORCHESTRATIONとAMATSUKA_AGENT_AUTO_INJECTIONは二者択一",
   "env": {
-    "AMATSUKA_AGENT_AUTO_INJECTION": "<claude or custom>",
-    "TYPESAFE_API_KEY": "<TypesafeAIのAPIキー(任意)>"
+    "AMATSUKA_AGENT_ENABLE_ORCHESTRATION": "1",
+    "AMATSUKA_AGENT_AUTO_INJECTION": "claude",
+    "TYPESAFE_API_KEY": "<TypesafeAIのAPIキー(任意・better-agenticsを使う場合は必須)>"
   },
   "_comment": "availableModels: 使用許可モデルの設定。AnthropicのA/Bテストで過去モデルがモデルピッカーに表示されてしまう人向け。※注意: auto modeのローカル安全分類器が作動しているときはSonnet5を無効化するとauto modeが使えなくなります。CLIProxyAPIを使っている場合などが該当します。",
   "availableModels": [
