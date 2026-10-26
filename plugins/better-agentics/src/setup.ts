@@ -11,7 +11,8 @@ import {
   keyLinesOf,
   scanDefinitions
 } from "./lib/agents"
-import { ROLE_KEY } from "./lib/compose"
+import { compose, ROLE_KEY } from "./lib/compose"
+import { duplicateHeadings, parseDocument } from "./lib/document"
 import {
   assertLang,
   checkFragments,
@@ -19,8 +20,17 @@ import {
   pluginRoot,
   scaffoldFragments
 } from "./lib/fragments"
-import { listMcpServers } from "./lib/mcp"
-import { ROLES, roleById } from "./lib/roles"
+import { listMcpServers, mcpCurrentOf, toolPrefix } from "./lib/mcp"
+import { compare, merge } from "./lib/regenerate"
+import {
+  type ClaudeModel,
+  type Effort,
+  isClaudeModel,
+  isEffort,
+  ROLES,
+  type Role,
+  roleById
+} from "./lib/roles"
 
 export interface Options {
   command:
@@ -342,6 +352,202 @@ function rewriteRoles(options: Options): unknown {
   }
 }
 
+interface Generation {
+  file: string
+  target: string
+  role: Role
+  existingRaw: string | undefined
+  template: string
+  effort: Effort | undefined
+  mcpCurrent: { servers: string[]; denyTools: string[] }
+  mcpDropped: string[]
+}
+
+function effortOf(options: Options, role: Role): Effort | undefined {
+  if (options.effort === undefined) return role.effort
+  if (options.effort === "none") return undefined
+  if (!isEffort(options.effort)) {
+    throw new Error(
+      `effort: ${options.effort} is not one of low, medium, high, xhigh, max, none`
+    )
+  }
+  return options.effort
+}
+
+function existingMcpTools(existingRaw: string | undefined): string[] {
+  if (existingRaw === undefined) return []
+  const tools = parseDocument(existingRaw).meta.get("tools") ?? ""
+  return splitList(tools.replace(/\n\s*-\s*/g, ",")).filter((tool) =>
+    tool.startsWith("mcp__")
+  )
+}
+
+// --mcp-servers と --mcp-deny を省いたときは、既存の定義の MCP と disallowedTools を引き継ぐ。
+function resolveMcp(
+  options: Options,
+  existingRaw: string | undefined
+): { tools: string[]; dropped: string[] } {
+  if (options.mcpServers === undefined) {
+    return { tools: existingMcpTools(existingRaw), dropped: [] }
+  }
+  if (options.mcpServers.length === 0) return { tools: [], dropped: [] }
+  const usable = new Set(
+    listMcpServers(process.env)
+      .filter((server) => server.usable)
+      .map((server) => toolPrefix(server.name))
+  )
+  const tools: string[] = []
+  const dropped: string[] = []
+  for (const name of options.mcpServers) {
+    const prefixed = toolPrefix(name)
+    if (usable.has(prefixed)) tools.push(prefixed)
+    else dropped.push(name)
+  }
+  return { tools, dropped }
+}
+
+function prepare(options: Options): Generation {
+  const role = roleById(options.role)
+  if (role === undefined)
+    throw new Error(`role: ${options.role} is not a role id`)
+  if (!isClaudeModel(options.model)) {
+    throw new Error(
+      `model: ${options.model} is not one of sonnet, opus, haiku, fable`
+    )
+  }
+  const status = checkFragments(pluginRoot(), options.dir, options.lang)
+  if (status.missing.length > 0 || status.stale.length > 0) {
+    throw new Error(
+      `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.join(", ")}. Run --scaffold-fragments and translate them first`
+    )
+  }
+
+  const file = definitionPath(options)
+  const target = relative(options, file)
+  const existingRaw = fs.existsSync(file)
+    ? fs.readFileSync(file, "utf8")
+    : undefined
+  if (existingRaw !== undefined) {
+    // parseDocument は同じ見出しを 1 つにまとめるため、再生成で最初の見出しの本文が失われうる。
+    const duplicated = duplicateHeadings(existingRaw)
+    if (duplicated.length > 0) {
+      throw new Error(
+        `target: ${target} has duplicated headings (${duplicated.join(", ")}); merge them by hand first`
+      )
+    }
+  }
+
+  const effort = effortOf(options, role)
+  const mcp = resolveMcp(options, existingRaw)
+  const mcpCurrent =
+    existingRaw === undefined
+      ? { servers: [], denyTools: [] }
+      : mcpCurrentOf(existingRaw)
+  const template = compose({
+    name: options.name,
+    roleId: role.id,
+    model: options.model as ClaudeModel,
+    effort,
+    lang: options.lang,
+    pluginRoot: pluginRoot(),
+    projectDir: options.dir,
+    mcpTools: mcp.tools,
+    denyTools: options.mcpDeny ?? mcpCurrent.denyTools
+  })
+  return {
+    file,
+    target,
+    role,
+    existingRaw,
+    template,
+    effort,
+    mcpCurrent,
+    mcpDropped: mcp.dropped
+  }
+}
+
+function keepKeys(
+  options: Options,
+  existingRaw: string | undefined
+): Set<string> {
+  if (options.keep.length === 0) return new Set()
+  if (existingRaw === undefined)
+    throw new Error("keep: there is no existing file to keep from")
+  const existing = parseDocument(existingRaw)
+  const keys = options.keep.map((name) =>
+    name === "description" || name === "preamble" ? name : `## ${name}`
+  )
+  const missing = keys.filter(
+    (key) => key.startsWith("## ") && !existing.sections.has(key)
+  )
+  if (missing.length > 0) {
+    throw new Error(
+      `keep: not found in the existing file: ${missing.join(", ")}`
+    )
+  }
+  return new Set(keys)
+}
+
+function adopting(existingRaw: string | undefined): boolean {
+  return (
+    existingRaw !== undefined && !parseDocument(existingRaw).meta.has(ROLE_KEY)
+  )
+}
+
+function check(options: Options): unknown {
+  const generation = prepare(options)
+  const { existingRaw } = generation
+  return {
+    ok: true,
+    target: generation.target,
+    exists: existingRaw !== undefined,
+    adopt: adopting(existingRaw),
+    sections:
+      existingRaw === undefined
+        ? []
+        : compare(existingRaw, generation.template),
+    keysKept:
+      existingRaw === undefined
+        ? []
+        : merge({
+            existingRaw,
+            templateRaw: generation.template,
+            keep: new Set()
+          }).keysKept,
+    mcpCurrent: generation.mcpCurrent,
+    effort: generation.effort ?? null
+  }
+}
+
+function write(options: Options): unknown {
+  const generation = prepare(options)
+  const { existingRaw } = generation
+  const keep = keepKeys(options, existingRaw)
+  const result =
+    existingRaw === undefined
+      ? { content: generation.template, kept: [], replaced: [], keysKept: [] }
+      : merge({ existingRaw, templateRaw: generation.template, keep })
+  fs.mkdirSync(path.dirname(generation.file), { recursive: true })
+  fs.writeFileSync(generation.file, result.content)
+  return {
+    ok: true,
+    target: generation.target,
+    action:
+      existingRaw === undefined
+        ? "written"
+        : adopting(existingRaw)
+          ? "adopted"
+          : "regenerated",
+    kept: result.kept,
+    replaced: result.replaced,
+    keysKept: result.keysKept,
+    toolsAfter: splitList(
+      parseDocument(result.content).meta.get("tools") ?? ""
+    ),
+    mcpDropped: generation.mcpDropped
+  }
+}
+
 function run(options: Options): unknown {
   switch (options.command) {
     case "list-coverage":
@@ -366,8 +572,9 @@ function run(options: Options): unknown {
     case "rewrite-roles":
       return rewriteRoles(options)
     case "check":
+      return check(options)
     case "write":
-      throw new Error("not implemented")
+      return write(options)
   }
 }
 

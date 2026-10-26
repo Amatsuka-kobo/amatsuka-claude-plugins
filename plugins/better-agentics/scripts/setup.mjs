@@ -16,6 +16,69 @@ function frontmatterClose(lines) {
   return lines.indexOf("---", 1);
 }
 __name(frontmatterClose, "frontmatterClose");
+function parseDocument(content) {
+  const lines = content.split("\n");
+  const close = frontmatterClose(lines);
+  const meta = /* @__PURE__ */ new Map();
+  const order = [];
+  if (close !== -1) {
+    let blockKey;
+    for (const line of lines.slice(1, close)) {
+      if (blockKey !== void 0 && /^(\s|-)/.test(line)) {
+        meta.set(blockKey, `${meta.get(blockKey)}
+${line}`);
+        continue;
+      }
+      blockKey = void 0;
+      const block = /^([^\s:#][^:]*):$/.exec(line.trimEnd());
+      if (block?.[1] !== void 0) {
+        blockKey = block[1];
+        meta.set(blockKey, "");
+        order.push(blockKey);
+        continue;
+      }
+      const at = line.indexOf(": ");
+      if (at <= 0) continue;
+      const key = line.slice(0, at);
+      meta.set(key, line.slice(at + 2));
+      order.push(key);
+    }
+  }
+  const preamble = [];
+  const sections = /* @__PURE__ */ new Map();
+  let heading;
+  let buffer = [];
+  for (const line of lines.slice(close === -1 ? 0 : close + 1)) {
+    if (line.startsWith("## ")) {
+      if (heading !== void 0) sections.set(heading, buffer.join("\n").trim());
+      heading = line.trim();
+      buffer = [];
+      continue;
+    }
+    if (heading === void 0) preamble.push(line);
+    else buffer.push(line);
+  }
+  if (heading !== void 0) sections.set(heading, buffer.join("\n").trim());
+  return { order, meta, preamble: preamble.join("\n").trim(), sections };
+}
+__name(parseDocument, "parseDocument");
+function render(document) {
+  const head = ["---"];
+  for (const key of document.order) {
+    const value = document.meta.get(key) ?? "";
+    head.push(value.startsWith("\n") ? `${key}:${value}` : `${key}: ${value}`);
+  }
+  head.push("---", "");
+  const body = [];
+  if (document.preamble !== "") body.push(document.preamble, "");
+  for (const [heading, content] of document.sections) {
+    body.push(heading, "");
+    if (content !== "") body.push(content, "");
+  }
+  return `${[...head, ...body].join("\n").trimEnd()}
+`;
+}
+__name(render, "render");
 function bodyLines(content) {
   const lines = content.split("\n");
   const close = frontmatterClose(lines);
@@ -31,6 +94,18 @@ function sectionBody(body, heading) {
   return (end === -1 ? rest : rest.slice(0, end)).join("\n").trim();
 }
 __name(sectionBody, "sectionBody");
+function duplicateHeadings(content) {
+  const seen = /* @__PURE__ */ new Set();
+  const duplicated = /* @__PURE__ */ new Set();
+  for (const line of bodyLines(content)) {
+    if (!line.startsWith("## ")) continue;
+    const heading = line.trim();
+    if (seen.has(heading)) duplicated.add(heading);
+    seen.add(heading);
+  }
+  return [...duplicated];
+}
+__name(duplicateHeadings, "duplicateHeadings");
 
 // src/lib/fragments.ts
 import fs from "node:fs";
@@ -53,6 +128,26 @@ function bodyHash(content) {
   return textHash(body.join("\n"));
 }
 __name(bodyHash, "bodyHash");
+function encodeRecord(record) {
+  return Buffer.from(JSON.stringify(record), "utf8").toString("base64url");
+}
+__name(encodeRecord, "encodeRecord");
+function decodeRecord(value) {
+  if (value === void 0 || value.trim() === "") return void 0;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value.trim(), "base64url").toString("utf8")
+    );
+    if (typeof parsed !== "object" || parsed === null) return void 0;
+    if (typeof parsed.sections !== "object" || parsed.sections === null) {
+      return void 0;
+    }
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+__name(decodeRecord, "decodeRecord");
 
 // src/lib/roles.ts
 var ROLES = [
@@ -161,13 +256,56 @@ var ROLES = [
     reason: "review"
   }
 ];
+var CLAUDE_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
+var EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+];
 function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
 __name(roleById, "roleById");
+function isClaudeModel(value) {
+  return CLAUDE_MODELS.includes(value);
+}
+__name(isClaudeModel, "isClaudeModel");
+function isEffort(value) {
+  return EFFORTS.includes(value);
+}
+__name(isEffort, "isEffort");
 
 // src/lib/fragments.ts
+var JA = {
+  bodyOrder: [
+    "## When to invoke",
+    "## Core Responsibilities",
+    "## \u4F5C\u696D\u624B\u9806",
+    "## \u5236\u7D04",
+    "## Output Format"
+  ]
+};
+var EN = {
+  bodyOrder: [
+    "## When to invoke",
+    "## Core Responsibilities",
+    "## Procedure",
+    "## Constraints",
+    "## Output Format"
+  ]
+};
 var WHEN_TO_INVOKE = "## When to invoke";
+function vocabularyFor(lang) {
+  return lang === "ja" ? JA : EN;
+}
+__name(vocabularyFor, "vocabularyFor");
 function pluginRoot() {
   const fromEnv = process.env.CLAUDE_PLUGIN_ROOT;
   if (fromEnv !== void 0 && fromEnv !== "") return fromEnv;
@@ -295,6 +433,23 @@ function loadFragments(root, projectDir, lang) {
   return fragments;
 }
 __name(loadFragments, "loadFragments");
+function loadPreamble(root, projectDir, lang) {
+  const candidates = [path.join(bundledDir(root, lang), "_common.md")];
+  if (needsTranslation(lang)) {
+    candidates.unshift(
+      path.join(translationDir(projectDir, lang), "_common.md")
+    );
+  }
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    const preamble = parse(fs.readFileSync(file, "utf8")).sections.get(
+      "## Preamble"
+    );
+    if (preamble !== void 0) return preamble;
+  }
+  throw new Error("_common.md not found");
+}
+__name(loadPreamble, "loadPreamble");
 function bundledFiles(dir) {
   return fs.readdirSync(dir).filter((name) => name.endsWith(".md")).sort((left, right) => left.localeCompare(right));
 }
@@ -360,6 +515,55 @@ __name(scaffoldFragments, "scaffoldFragments");
 
 // src/lib/compose.ts
 var ROLE_KEY = "better-agentics-role";
+var HASH_KEY = "better-agentics-hash";
+function compose(input) {
+  const fragment = loadFragments(
+    input.pluginRoot,
+    input.projectDir,
+    input.lang
+  ).get(input.roleId);
+  if (fragment === void 0)
+    throw new Error(`Unknown role id: ${input.roleId}`);
+  const tools = [...fragment.tools];
+  for (const tool of input.mcpTools) if (!tools.includes(tool)) tools.push(tool);
+  const preamble = loadPreamble(input.pluginRoot, input.projectDir, input.lang).map(
+    (line) => line.replace("{{NAME}}", input.name).replace("{{ROLE_LABEL}}", fragment.label)
+  ).join("\n").trim();
+  const body = [preamble, ""];
+  for (const heading of vocabularyFor(input.lang).bodyOrder) {
+    const lines = fragment.sections.get(heading);
+    if (lines === void 0 || lines.length === 0) continue;
+    body.push(heading, "", ...lines, "");
+  }
+  const bodyText = body.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  const parsed = parseDocument(`---
+---
+${bodyText}
+`);
+  const record = {
+    description: textHash(fragment.description),
+    preamble: textHash(parsed.preamble),
+    sections: Object.fromEntries(
+      [...parsed.sections].map(([heading, text]) => [heading, textHash(text)])
+    )
+  };
+  const head = [
+    "---",
+    `name: ${input.name}`,
+    `description: ${fragment.description}`,
+    `model: ${input.model}`,
+    ...input.effort === void 0 ? [] : [`effort: ${input.effort}`],
+    `tools: ${tools.join(", ")}`,
+    ...input.denyTools.length > 0 ? [`disallowedTools: ${input.denyTools.join(", ")}`] : [],
+    `${ROLE_KEY}: ${input.roleId}`,
+    `${HASH_KEY}: ${encodeRecord(record)}`,
+    "---",
+    ""
+  ];
+  return `${[...head, bodyText].join("\n")}
+`;
+}
+__name(compose, "compose");
 
 // src/lib/agents.ts
 function frontmatter(lines) {
@@ -536,6 +740,10 @@ function parseMcpList(output) {
   return servers;
 }
 __name(parseMcpList, "parseMcpList");
+function toolPrefix(name) {
+  return `mcp__${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+__name(toolPrefix, "toolPrefix");
 function listMcpServers(env) {
   const bin = env.BETTER_AGENTICS_CLAUDE_BIN;
   const options = {
@@ -554,6 +762,151 @@ function listMcpServers(env) {
   }
 }
 __name(listMcpServers, "listMcpServers");
+function mcpCurrentOf(content) {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() !== "---") return { servers: [], denyTools: [] };
+  const close = lines.indexOf("---", 1);
+  if (close === -1) return { servers: [], denyTools: [] };
+  const meta = /* @__PURE__ */ new Map();
+  for (const line of lines.slice(1, close)) {
+    const at = line.indexOf(": ");
+    if (at <= 0) continue;
+    meta.set(line.slice(0, at).trim(), line.slice(at + 2).trim());
+  }
+  const split = /* @__PURE__ */ __name((value) => value === void 0 ? [] : value.split(",").map((entry) => entry.trim()).filter((entry) => entry !== ""), "split");
+  return {
+    servers: split(meta.get("tools")).filter((tool) => tool.startsWith("mcp__")).map((tool) => tool.slice("mcp__".length)),
+    denyTools: split(meta.get("disallowedTools"))
+  };
+}
+__name(mcpCurrentOf, "mcpCurrentOf");
+
+// src/lib/regenerate.ts
+var GENERATED_KEYS = [
+  "name",
+  "description",
+  "model",
+  "effort",
+  "tools",
+  "disallowedTools",
+  ROLE_KEY,
+  HASH_KEY
+];
+function classify(existing, template, record) {
+  if (textHash(existing) === textHash(template)) return "same";
+  if (record === void 0) return "unknown";
+  if (textHash(existing) === record) return "templateChanged";
+  return "userEdited";
+}
+__name(classify, "classify");
+function recordValue(record, key) {
+  if (record === void 0) return void 0;
+  if (key === "description") return record.description;
+  if (key === "preamble") return record.preamble;
+  return record.sections[key];
+}
+__name(recordValue, "recordValue");
+function textOf(document, key) {
+  if (key === "description") return document.meta.get("description") ?? "";
+  if (key === "preamble") return document.preamble;
+  return document.sections.get(key);
+}
+__name(textOf, "textOf");
+function report(key, existing, template, record) {
+  const state = classify(existing, template, recordValue(record, key));
+  return state === "same" ? { key, state } : { key, state, existing, template };
+}
+__name(report, "report");
+function compare(existingRaw, templateRaw) {
+  const existing = parseDocument(existingRaw);
+  const template = parseDocument(templateRaw);
+  const record = decodeRecord(existing.meta.get(HASH_KEY));
+  const reports = [];
+  for (const key of ["description", "preamble"]) {
+    reports.push(
+      report(
+        key,
+        textOf(existing, key) ?? "",
+        textOf(template, key) ?? "",
+        record
+      )
+    );
+  }
+  for (const [heading, body] of template.sections) {
+    const current = existing.sections.get(heading);
+    reports.push(
+      current === void 0 ? { key: heading, state: "new" } : report(heading, current, body, record)
+    );
+  }
+  for (const heading of existing.sections.keys()) {
+    if (!template.sections.has(heading)) {
+      reports.push({ key: heading, state: "extra" });
+    }
+  }
+  return reports;
+}
+__name(compare, "compare");
+function merge(input) {
+  const existing = parseDocument(input.existingRaw);
+  const template = parseDocument(input.templateRaw);
+  const existingRecord = decodeRecord(existing.meta.get(HASH_KEY));
+  const record = decodeRecord(template.meta.get(HASH_KEY)) ?? { sections: {} };
+  const reports = compare(input.existingRaw, input.templateRaw);
+  const kept = [];
+  const replaced = [];
+  const keepRecord = /* @__PURE__ */ __name((key) => {
+    const value = recordValue(existingRecord, key);
+    if (key === "description" || key === "preamble") {
+      if (value === void 0) delete record[key];
+      else record[key] = value;
+    } else if (value === void 0) {
+      delete record.sections[key];
+    } else {
+      record.sections[key] = value;
+    }
+  }, "keepRecord");
+  const merged = {
+    order: [...template.order],
+    meta: new Map(template.meta),
+    preamble: template.preamble,
+    sections: new Map(template.sections)
+  };
+  merged.meta.set(
+    "name",
+    existing.meta.get("name") ?? template.meta.get("name") ?? ""
+  );
+  for (const entry of reports) {
+    if (entry.state === "extra") {
+      merged.sections.set(entry.key, existing.sections.get(entry.key) ?? "");
+      kept.push(entry.key);
+      continue;
+    }
+    if (input.keep.has(entry.key)) {
+      if (entry.key === "description") {
+        merged.meta.set("description", existing.meta.get("description") ?? "");
+      } else if (entry.key === "preamble") {
+        merged.preamble = existing.preamble;
+      } else {
+        merged.sections.set(entry.key, existing.sections.get(entry.key) ?? "");
+      }
+      keepRecord(entry.key);
+      kept.push(entry.key);
+      continue;
+    }
+    if (entry.state !== "same" && entry.state !== "new")
+      replaced.push(entry.key);
+  }
+  const keysKept = existing.order.filter(
+    (key) => !GENERATED_KEYS.includes(key) && !merged.meta.has(key)
+  );
+  for (const key of keysKept) {
+    merged.order.push(key);
+    merged.meta.set(key, existing.meta.get(key) ?? "");
+  }
+  merged.meta.set(HASH_KEY, encodeRecord(record));
+  return { content: render(merged), kept, replaced, keysKept };
+}
+__name(merge, "merge");
 
 // src/setup.ts
 var NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -815,6 +1168,158 @@ function rewriteRoles(options) {
   };
 }
 __name(rewriteRoles, "rewriteRoles");
+function effortOf(options, role) {
+  if (options.effort === void 0) return role.effort;
+  if (options.effort === "none") return void 0;
+  if (!isEffort(options.effort)) {
+    throw new Error(
+      `effort: ${options.effort} is not one of low, medium, high, xhigh, max, none`
+    );
+  }
+  return options.effort;
+}
+__name(effortOf, "effortOf");
+function existingMcpTools(existingRaw) {
+  if (existingRaw === void 0) return [];
+  const tools = parseDocument(existingRaw).meta.get("tools") ?? "";
+  return splitList(tools.replace(/\n\s*-\s*/g, ",")).filter(
+    (tool) => tool.startsWith("mcp__")
+  );
+}
+__name(existingMcpTools, "existingMcpTools");
+function resolveMcp(options, existingRaw) {
+  if (options.mcpServers === void 0) {
+    return { tools: existingMcpTools(existingRaw), dropped: [] };
+  }
+  if (options.mcpServers.length === 0) return { tools: [], dropped: [] };
+  const usable = new Set(
+    listMcpServers(process.env).filter((server) => server.usable).map((server) => toolPrefix(server.name))
+  );
+  const tools = [];
+  const dropped = [];
+  for (const name of options.mcpServers) {
+    const prefixed = toolPrefix(name);
+    if (usable.has(prefixed)) tools.push(prefixed);
+    else dropped.push(name);
+  }
+  return { tools, dropped };
+}
+__name(resolveMcp, "resolveMcp");
+function prepare(options) {
+  const role = roleById(options.role);
+  if (role === void 0)
+    throw new Error(`role: ${options.role} is not a role id`);
+  if (!isClaudeModel(options.model)) {
+    throw new Error(
+      `model: ${options.model} is not one of sonnet, opus, haiku, fable`
+    );
+  }
+  const status = checkFragments(pluginRoot(), options.dir, options.lang);
+  if (status.missing.length > 0 || status.stale.length > 0) {
+    throw new Error(
+      `fragments: translation for "${options.lang}" is incomplete. missing=${status.missing.join(", ")} stale=${status.stale.join(", ")}. Run --scaffold-fragments and translate them first`
+    );
+  }
+  const file = definitionPath(options);
+  const target = relative(options, file);
+  const existingRaw = fs3.existsSync(file) ? fs3.readFileSync(file, "utf8") : void 0;
+  if (existingRaw !== void 0) {
+    const duplicated = duplicateHeadings(existingRaw);
+    if (duplicated.length > 0) {
+      throw new Error(
+        `target: ${target} has duplicated headings (${duplicated.join(", ")}); merge them by hand first`
+      );
+    }
+  }
+  const effort = effortOf(options, role);
+  const mcp = resolveMcp(options, existingRaw);
+  const mcpCurrent = existingRaw === void 0 ? { servers: [], denyTools: [] } : mcpCurrentOf(existingRaw);
+  const template = compose({
+    name: options.name,
+    roleId: role.id,
+    model: options.model,
+    effort,
+    lang: options.lang,
+    pluginRoot: pluginRoot(),
+    projectDir: options.dir,
+    mcpTools: mcp.tools,
+    denyTools: options.mcpDeny ?? mcpCurrent.denyTools
+  });
+  return {
+    file,
+    target,
+    role,
+    existingRaw,
+    template,
+    effort,
+    mcpCurrent,
+    mcpDropped: mcp.dropped
+  };
+}
+__name(prepare, "prepare");
+function keepKeys(options, existingRaw) {
+  if (options.keep.length === 0) return /* @__PURE__ */ new Set();
+  if (existingRaw === void 0)
+    throw new Error("keep: there is no existing file to keep from");
+  const existing = parseDocument(existingRaw);
+  const keys = options.keep.map(
+    (name) => name === "description" || name === "preamble" ? name : `## ${name}`
+  );
+  const missing = keys.filter(
+    (key) => key.startsWith("## ") && !existing.sections.has(key)
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `keep: not found in the existing file: ${missing.join(", ")}`
+    );
+  }
+  return new Set(keys);
+}
+__name(keepKeys, "keepKeys");
+function adopting(existingRaw) {
+  return existingRaw !== void 0 && !parseDocument(existingRaw).meta.has(ROLE_KEY);
+}
+__name(adopting, "adopting");
+function check(options) {
+  const generation = prepare(options);
+  const { existingRaw } = generation;
+  return {
+    ok: true,
+    target: generation.target,
+    exists: existingRaw !== void 0,
+    adopt: adopting(existingRaw),
+    sections: existingRaw === void 0 ? [] : compare(existingRaw, generation.template),
+    keysKept: existingRaw === void 0 ? [] : merge({
+      existingRaw,
+      templateRaw: generation.template,
+      keep: /* @__PURE__ */ new Set()
+    }).keysKept,
+    mcpCurrent: generation.mcpCurrent,
+    effort: generation.effort ?? null
+  };
+}
+__name(check, "check");
+function write(options) {
+  const generation = prepare(options);
+  const { existingRaw } = generation;
+  const keep = keepKeys(options, existingRaw);
+  const result = existingRaw === void 0 ? { content: generation.template, kept: [], replaced: [], keysKept: [] } : merge({ existingRaw, templateRaw: generation.template, keep });
+  fs3.mkdirSync(path3.dirname(generation.file), { recursive: true });
+  fs3.writeFileSync(generation.file, result.content);
+  return {
+    ok: true,
+    target: generation.target,
+    action: existingRaw === void 0 ? "written" : adopting(existingRaw) ? "adopted" : "regenerated",
+    kept: result.kept,
+    replaced: result.replaced,
+    keysKept: result.keysKept,
+    toolsAfter: splitList(
+      parseDocument(result.content).meta.get("tools") ?? ""
+    ),
+    mcpDropped: generation.mcpDropped
+  };
+}
+__name(write, "write");
 function run(options) {
   switch (options.command) {
     case "list-coverage":
@@ -839,8 +1344,9 @@ function run(options) {
     case "rewrite-roles":
       return rewriteRoles(options);
     case "check":
+      return check(options);
     case "write":
-      throw new Error("not implemented");
+      return write(options);
   }
 }
 __name(run, "run");
