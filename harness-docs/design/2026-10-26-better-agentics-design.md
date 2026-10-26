@@ -132,7 +132,7 @@ RoleId・種別・モデル・effort は agent-policy の担当表の Claude モ
 - 役割表は `src/lib/roles.ts` に 1 か所で持つ。setup・`pick-delegate`・hook はここを参照する。
 - setup では、役割ごとのモデルを Claude の 4 モデル(`sonnet` / `opus` / `haiku` / `fable`)から選べる。表の model 列はその推奨である。
 - effort は、選んだモデルが表の model 列と同じときは表の値を書き、質問しない。
-- 違うモデルを選んだときは、effort を聞く。選択肢は `low` / `medium` / `high` / `xhigh` / `max` と「書かない(モデルの既定に任せる)」の 6 件で、表の effort 列の値を推奨にする。4 件を超えるため、§9-1 のページ分けで聞く。agent-policy の `src/agents/policies.ts` の `EFFORT` 表のうち、Claude のモデルの値はこの表と同じである。
+- 違うモデルを選んだときは、effort を聞く。候補は `low` / `medium` / `high` / `xhigh` / `max` と「書かない(モデルの既定に任せる)」の 6 件で、表の effort 列の値を推奨にする。単一選択はページに分けられないため、2 問に分けて聞く。1 問目は「推奨の値」「その他の値」「書かない」の 3 択とし、「その他の値」が選ばれたときだけ、2 問目で残りの 4 値から選ばせる。agent-policy の `src/agents/policies.ts` の `EFFORT` 表のうち、Claude のモデルの値はこの表と同じである。
 - 役割に許可するツールは、役割断片の frontmatter の `tools` とする。値は agent-policy の断片と同じにする。
 
 ### 4-2. 役割断片
