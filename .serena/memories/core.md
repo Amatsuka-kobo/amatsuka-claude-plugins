@@ -9,9 +9,9 @@ its full text at the start of each session in this repository; the root `CLAUDE.
 only the repository overview and that pointer.
 
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
-  listed here (name/source/description). 13 entries since the former upstream intent plugin was absorbed into
-  codiel on 2026-09-27, matching the root `README.md` table 1:1.
-- `plugins/<name>/` — one dir per plugin. All 13 are pnpm workspace packages. Layout + bundle
+  listed here (name/source/description). 14 entries (better-agentics added 2026-10-26; the former upstream intent
+  plugin was absorbed into codiel on 2026-09-27), matching the root `README.md` table 1:1.
+- `plugins/<name>/` — one dir per plugin. All 14 are pnpm workspace packages (better-agentics added 2026-10-26). Layout + bundle
   conventions: `mem:conventions`. Toolchain: `mem:tech_stack`.
 - **mdbase / typed-markdown frontmatter checking is gone** (commit 9ed55dd, 2026-08): `mdbase.yaml`,
   `_types/{agent,command,skill,antibody}.md` and `scripts/install-mdbase.sh` were deleted from their
@@ -61,7 +61,7 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 - `TERMS.md` — Japanese ToS; notably forbids using this service to generate illustration/Live2D/
   3D-model assets.
 
-## Distributed plugins (14 incl. jevriel since 2026-09-25, see `.claude-plugin/marketplace.json`)
+## Distributed plugins (14 incl. better-agentics since 2026-10-26, see `.claude-plugin/marketplace.json`)
 
 Only **pitcrew (0.10.2)** and **chat-history (0.7.0)** are released; every other plugin is `-dev`.
 Manifest and sibling `package.json` versions were all in sync as of 2026-08-24.
@@ -117,6 +117,14 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   tools (Playwright resolved at runtime, never bundled), 2 API tools, plus skill `judging`.
   Requires `TYPESAFE_API_KEY` (a paid external API allowed by ADR-005 — see the invariant section). Details:
   `mem:jevriel/core`.
+- **better-agentics** (0.0.1-dev, added 2026-10-26) — lightweight claude-only alternative to
+  agent-policy: the orchestrator does research/design/implementation itself and delegates only for
+  review / split / stuck. `scripts/pick-delegate.mjs` asks Jev (`@typesafe-ai/sdk` 0.6.0, own client,
+  no jevriel import) to choose among `.claude/agents/*.md` carrying `better-agentics-role`, using
+  each body's `## When to invoke` (the orchestrator never reads the criteria). Hooks: SessionStart
+  (enabled by `AMATSUKA_AGENT_ENABLE_ORCHESTRATION`; refuses and warns when `AMATSUKA_AGENT_AUTO_INJECTION`
+  or the delegation gate is on, or `TYPESAFE_API_KEY` is missing) and SubagentStart (injects
+  `references/subagent-policy.md`). Design: `harness-docs/design/2026-10-26-better-agentics-design.md`.
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
   `UserPromptSubmit` hook (`check-prefetch-manifest.mjs`) nagging only when `.prefetch/` holds
   uncollected results.
