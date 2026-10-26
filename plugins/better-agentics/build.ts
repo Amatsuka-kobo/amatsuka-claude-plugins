@@ -5,7 +5,8 @@ await esbuild.build({
   entryPoints: {
     "session-start": "./src/hooks/session-start.ts",
     "subagent-start": "./src/hooks/subagent-start.ts",
-    "pick-delegate": "./src/pick-delegate.ts"
+    "pick-delegate": "./src/pick-delegate.ts",
+    setup: "./src/setup.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
