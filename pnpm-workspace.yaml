@@ -13,5 +13,6 @@ packages:
   - plugins/metatron
   - plugins/jevriel
   - plugins/native-japanese
+  - plugins/better-agentics
 allowBuilds:
   esbuild: true
