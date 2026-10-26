@@ -1196,4 +1196,8 @@ Expected: 4 つのコマンドがパスし、`pnpm run build` の後に `plugins
 | stuck | technical-leader(Jev は呼ばない) |
 
 - review では、complex-review と adversarial-review の候補が yes にならなかった。計画レビューの指摘(全員 yes になる懸念)は、基準の書き分けで避けられている。
-- Step 2(SessionStart の注入)と Step 3(SubagentStart の注入)は、新しいセッションで確かめる。
+### T12 Step 2・3: 新しいセッションでの hook の発火(2026-10-27)
+
+- Step 2: SessionStart が `最初に better-agentics:orchestration スキルを使用する。スキルの規律に従う。` を注入し、セッションは最初の作業の前にスキルを読み込んだ。`allowed-tools` の `pick-delegate.mjs` も許可に登録された。
+- Step 3: general-explorer の起動時に、SubagentStart が `references/subagent-policy.md` の全文を注入した。他のプラグインの SubagentStart の注入と並んで届いた。effort は定義どおり `high` だった。
+- 観察: プラグイン 14 件の README を読む探索を、オーケストレーターは委譲せず自分で始めかけ、ユーザーの指示で general-explorer へ委譲した。「grep/read の反復が 3 ターン以上見込まれる探索は split で委譲する」の見積もりが働かなかった例として残す。
