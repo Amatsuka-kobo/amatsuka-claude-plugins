@@ -4,7 +4,8 @@ await esbuild.build({
   bundle: true,
   entryPoints: {
     "session-start": "./src/hooks/session-start.ts",
-    "subagent-start": "./src/hooks/subagent-start.ts"
+    "subagent-start": "./src/hooks/subagent-start.ts",
+    "pick-delegate": "./src/pick-delegate.ts"
   },
   outdir: "./scripts",
   outExtension: { ".js": ".mjs" },
