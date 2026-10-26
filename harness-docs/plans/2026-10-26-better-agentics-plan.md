@@ -55,7 +55,7 @@
 ## 1. 共通の進め方
 
 - 各タスクは TDD で進める。失敗するテストを書く → 失敗を確かめる → 実装する → パスを確かめる → コミットする。
-- 1 タスクの完了条件は、そのタスクのテストと `pnpm run typecheck`・`pnpm run lint` が通ること。最後のタスク(T11)で `pnpm run test` 全体と `pnpm run build` を通す。
+- 1 タスクの完了条件は、そのタスクのテストと `pnpm run typecheck`・`pnpm run lint` が通ること。計画書のコード例は 80 文字の行幅に収めていないので、lint の前に `pnpm run lint:fix` で整形する。最後のタスク(T11)で `pnpm run test` 全体と `pnpm run build` を通す。
 - AI が読む Markdown(`skills/**/SKILL.md`・`references/*.md`・`assets/**/*.md`・`harness-docs/**/*.md`)を書く前に、`prompt-smith:prompt-smith` を起動して規律に従う。SKILL.md の frontmatter と description は `prompt-smith:skill-creator` で書く。
 - テストの定義ファイルは一時ディレクトリ(`fs.mkdtempSync(path.join(os.tmpdir(), "better-agentics-"))`)に作り、`afterEach` で消す。
 - hook と CLI のテストは `src/testing/run-ts.ts` の `runTs` で子プロセスとして起動する。環境変数は `process.env` から `AMATSUKA_AGENT_` で始まるキーと `TYPESAFE_API_KEY`・`CLAUDE_PROJECT_DIR` を消した上で、テストごとに足す。
@@ -88,7 +88,7 @@ plugins/better-agentics/
 │   ├── hooks/subagent-start.ts       T6
 │   ├── pick-delegate.ts              T7
 │   ├── setup.ts                      T8・T9
-│   ├── fixtures/agents/              T5
+│   ├── fixtures/project/.claude/agents/   T5
 │   └── testing/run-ts.ts, fake-claude.mjs   T1・T8
 ├── scripts/                          ビルド出力
 ├── docs/rationale.md                 T11
@@ -142,6 +142,7 @@ export interface Document {
 export function parseDocument(content: string): Document
 export function render(document: Document): string
 export function sectionBody(body: string, heading: string): string | undefined  // 最初に現れた見出しの配下
+export function duplicateHeadings(content: string): string[]  // 本文に 2 回以上現れる "## " 見出し行
 
 // hash.ts
 export function textHash(text: string): string    // sha256(text.trim()) の先頭 16 桁の hex
@@ -426,7 +427,9 @@ await esbuild.build({
   platform: "node",
   format: "esm",
   sourcemap: false,
-  target: "node22"
+  target: "node22",
+  // SDK は例外の名前を new.target.name で決めるため、クラス名の改名を防ぐ
+  keepNames: true
 })
 ```
 
@@ -474,7 +477,7 @@ describe("ROLES", () => {
 
 - [ ] **Step 5: `roles.ts` を §3-1 の型で実装する。13 行の値は設計書 §4-1 の表から写す**
 
-- [ ] **Step 6: テスト・`pnpm run typecheck`・`pnpm run lint` を通す。`pnpm --filter better-agentics-scripts build` がエラーなく終わることも確かめる**(esbuild 0.28 は空の `entryPoints` で正常に終わることを計画立案時に確かめてある)
+- [ ] **Step 6: テスト・`pnpm run typecheck`・`pnpm run lint` を通す。`pnpm-workspace.yaml` を変えたので、protected-paths の手順どおり `pnpm run build`(全体)が通ることも確かめる**(esbuild 0.28 は空の `entryPoints` で正常に終わることを計画立案時に確かめてある)
 
 - [ ] **Step 7: コミットする**
 
@@ -503,6 +506,7 @@ git commit -m "feat(better-agentics): パッケージの骨組みと役割表を
 - 前置き(最初の `## ` 見出しの前)と各セクションの本文を trim して読む。
 - `render(parseDocument(x))` は、frontmatter・前置き・セクションの順と本文を保つ(空行の数は正規化してよい)。
 - `sectionBody` は同じ見出しが 2 回あるとき最初の配下だけを返し、見出しが無ければ `undefined` を返す(Review Focus 2)。
+- `duplicateHeadings` は、`## When to invoke` が 2 回ある本文で `["## When to invoke"]` を返し、重複が無ければ `[]` を返す。
 
 `hash.test.ts`:
 - `textHash(" a \n")` と `textHash("a")` が等しく、16 桁の hex である。
@@ -559,11 +563,11 @@ agent-policy の `assets/roles/{ja,en}/<RoleId>.md` を写し、次の変更を�
 | realtime-research | `- Use when the primary purpose is to access current external information about developments, releases, or external ecosystems.` |
 | e2e-verify | `- Use when the task requires starting the application and verifying behavior through browser or GUI operation.` |
 | escalation | `- Use when the same failure reproduces after two different fixes.` / `- Use when the cause cannot be narrowed down to one candidate.` / `- Use when a design premise has collapsed and redesign is needed.` |
-| design-review | `- Use to test the premises, implicit assumptions, and optimistic estimates in a design document or implementation plan and present counterevidence.` |
-| knowledge-elicitation | `- Use to articulate understanding and identify implicit knowledge and contradictions in any deliverable, including documents, instructions, specifications, and code.` |
-| code-review | `- Use when reading a change diff and identifying defects, convention violations, or design concerns.` |
-| complex-review | `- Use after a critical implementation is complete to make a final check of the diff against the design intent.` / `- Use to decide whether implementation may begin for a high-risk design document.` |
-| adversarial-review | `- Use when a design, implementation plan, code, instruction, test, or other deliverable needs a deliberate search for failure paths and reproducible counterexamples.` / `- Reports counterexamples without deciding whether the deliverable is ready.` |
+| design-review | `- Use to test the premises, implicit assumptions, and optimistic estimates in a design document or implementation plan and present counterevidence.` / `- Do not use for code diffs.` |
+| knowledge-elicitation | `- Use when a document, instruction, or specification will be read and followed by someone else, to restate it and surface implicit knowledge, contradictions, and gaps.` / `- Does not judge whether the content is correct.` |
+| code-review | `- Use when reading a change diff and identifying defects, convention violations, or design concerns.` / `- Do not use for documents that contain no code changes.` |
+| complex-review | `- Use only for critical implementations or high-risk design documents.` / `- Use after a critical implementation is complete to make a final check of the diff against the design intent.` / `- Use to decide whether implementation may begin for a high-risk design document.` |
+| adversarial-review | `- Use only when a failure of the deliverable would be costly and it needs a deliberate search for failure paths and reproducible counterexamples.` / `- Unlike design review, which tests the premises of design documents, it targets any deliverable and focuses on how it can fail.` / `- Unlike complex review, it reports counterexamples without deciding whether the deliverable is ready.` |
 
 表の ` / ` は箇条書きの区切りで、1 項目を 1 行に書く。
 
@@ -658,7 +662,7 @@ agent-policy の `src/agents/fragments.ts` を出発点にし、次の点を変�
 
 **Files:**
 - Create: `plugins/better-agentics/src/lib/agents.ts`
-- Create: `plugins/better-agentics/src/fixtures/agents/` 配下の定義ファイル(次のステップで列挙)
+- Create: `plugins/better-agentics/src/fixtures/project/.claude/agents/` 配下の定義ファイル(次のステップで列挙)
 - Test: `plugins/better-agentics/src/lib/__test__/agents.test.ts`
 
 **Interfaces:**
@@ -667,7 +671,7 @@ agent-policy の `src/agents/fragments.ts` を出発点にし、次の点を変�
 
 - [ ] **Step 1: fixtures を作る**
 
-`src/fixtures/agents/` に次の 7 ファイルを置く。
+`src/fixtures/project/.claude/agents/` に次の 8 ファイルを置く。テストは `scanDefinitions` に `src/fixtures/project` を渡す。
 
 | ファイル | 内容 |
 | --- | --- |
@@ -677,14 +681,15 @@ agent-policy の `src/agents/fragments.ts` を出発点にし、次の点を変�
 | `twice.md` | `better-agentics-role: adversarial-review`、When to invoke 見出しが 2 回(1 回目は `- first`、2 回目は `- second`) |
 | `block-tools.md` | `better-agentics-role: explore`、`tools:` の次行から `  - Read` `  - Grep` の block 配列 |
 | `unknown-role.md` | `better-agentics-role: final-review` |
+| `no-tools.md` | `better-agentics-role: general`、tools 行なし |
 | `agent-policy-only.md` | `agent-policy-role: code-review` だけ(better-agentics のマーカーなし) |
 
 - [ ] **Step 2: 失敗するテストを書く。次のケースを入れる**
 
-- `scanDefinitions` は fixtures のうち `agent-policy-only` を除く 6 件を、`file` の昇順で返す。
+- `scanDefinitions` は fixtures のうち `agent-policy-only` を除く 7 件を、`file` の昇順で返す。
 - `docs-check` の `name` は `docs-reviewer`、`file` は `docs-check`(Review Focus 3)。
 - `no-criteria` の `whenToInvoke` は `""`、`twice` は `- first`(Review Focus 2)。
-- `block-tools` の `tools` は `["Read", "Grep"]`、`toolsFormat` は `"other"`。`code-reviewer` は `"csv"`(Review Focus 5)。tools 行の無い定義は `"none"` で `tools` が `undefined`。
+- `block-tools` の `tools` は `["Read", "Grep"]`、`toolsFormat` は `"other"`。`code-reviewer` は `"csv"`(Review Focus 5)。`no-tools` は `"none"` で `tools` が `undefined`。
 - `inspect` は `unknown-role` を `unknownRoles` に入れ、`known` に入れない。
 - 一時ディレクトリに `code-review` の定義を 2 件置くと、`duplicates` に `{ role: "code-review", names: [...] }` が入る。
 - `.claude/agents` が無いプロジェクトでは `[]` を返し、例外を投げない。
@@ -864,6 +869,7 @@ hook 2 本とも、処理全体を `try` で囲み、例外は `better-agentics 
   - `no-api-key`: 候補 2 件の `review` で `apiKey` が `undefined`。
   - `jev-failed`: 偽の関数が例外を投げる。`noul` が範囲外(1.2)。`choice` が候補に無いラベルを返す。`message` に原因を含む。
 - 役割表に無い role-id の定義は候補にならない。
+- `split` の候補に、役割が違い `name` が同じ定義が 2 件あれば `duplicate-role` を返し、`message` にその `name` を含む。
 
 `pick-delegate.test.ts`(`runTs` で起動):
 - stdin に `{"reason":"stuck","task":{"summary":"x"}}` を渡し、`--dir <project>` の `.claude/agents` に escalation の定義があれば、標準出力の 1 行が `{"ok":true,"reason":"stuck","agents":[...]}` で、終了コードが 0。
@@ -892,7 +898,7 @@ export function createJevAsk(apiKey: string): JevAsk {
 
 SDK 0.6.0 の型(`dist/index.d.cts`)で、次を計画立案時に確かめてある。`RequestOptions` は `signal?: AbortSignal`・`timeout?: number`・`retry?: Partial<RetryPolicy>` を持ち、`RetryPolicy` は `maxRetries`・`maxRetryAfterMs` を持つ。`TypeSafeClientConfig` は `apiKey`・`logLevel` を持つ。応答の `answers[<質問名>]` は、`noul` の質問では `{ type: "noul", noul: number }`、`choice` の質問では `{ type: "choice", choice: string, confidence: number, probabilities: Record<string, number> }` である。`choice(instructions, criteria)` の `criteria` は `Record<ラベル, 説明の文字列 | null>` を受け付ける。
 
-`pick.ts` は、`review` の `p` を `answers["candidate_<i>"].noul` から、`split` の `agent` と `p` を `answers["task_<i>"].choice` と `answers["task_<i>"].probabilities[choice]` から読む。答えが欠けているか形が違えば `jev-failed` にする。
+`pick.ts` は、`review` の `p` を `answers["candidate_<i>"].noul` から、`split` の `agent` と `p` を `answers["task_<i>"].choice` と `answers["task_<i>"].probabilities[choice]` から読む。答えが欠けているか形が違えば `jev-failed` にする。形の検査には、`noul` と `probabilities[choice]` が 0 以上 1 以下の有限の数であること、`choice` が候補の `name` のどれかであることを含める。
 
 `pick.ts` の問いの組み立て(設計書 §7-3):
 
@@ -906,6 +912,7 @@ function reviewQuestions(candidates: Definition[]): Questions {
       noul(
         [
           "Decide whether the reviewer below should review the work described in the state.",
+          "Answer yes only when the reviewer's criteria clearly match the work. Other reviewers are judged separately.",
           `Reviewer: ${candidate.name}`,
           "When to invoke:",
           candidate.whenToInvoke === "" ? "(no criteria)" : candidate.whenToInvoke
@@ -929,7 +936,7 @@ function splitQuestions(tasks: { id: string; summary: string }[], candidates: De
 ```
 
 - 候補は `deps.definitions` のうち、`roleById(role)?.reason === input.reason` の定義とする。並びは `deps.definitions` の順(`file` の昇順)を保つ。
-- 重複の判定は候補の中だけで行う。
+- 重複の判定は候補の中だけで行う。同じ役割を 2 件以上が持つときに加え、別の役割の候補同士で `name` が重なるときも `duplicate-role` を返し、`message` に重なった `name` を書く(`choice` の選択肢と `subagent_type` が `name` を鍵にするため)。
 - `review` の `state` は `{ summary, artifacts }`、`split` の `state` は `{ tasks }` とする。
 - `pickDelegate` は全体を `try` で囲み、`PickFailure` は `{ ok: false, error, message }` に、それ以外の例外は `jev-failed` に変える。
 
@@ -967,12 +974,16 @@ function splitQuestions(tasks: { id: string; summary: string }[], candidates: De
 - `--check-fragments --lang fr` と `--scaffold-fragments --lang fr` は T3 の関数の結果を `{ ok: true, ... }` で返す。`written` はプロジェクトルートからの相対パス。
 - `--list-mcp` は `BETTER_AGENTICS_FAKE_MCP` の内容を解析した `servers` を返す。
 - 未知のオプションは `ok: false` で、終了コードは 1。
+- tools 行の無い定義は `definitions[].disallowedTools` が `["*"]`、`toolsFormat` が `"none"`。
+- `--prune-tools --name ../x --tools Write` は `ok: false` で、プロジェクトの外のファイルを読み書きしない。
 
 - [ ] **Step 2: 失敗を確かめる**
 
 - [ ] **Step 3: 実装する**
 
 - `setup.ts` の引数の解析と各コマンドは、agent-policy の `src/setup-agents.ts` の `parseArgs`・`listCoverage`・`inspectDefinitions`・`pruneTools`・`rewriteRoles`・`readDefinition`・`keyLineIndex` を出発点にする。`--scope`・`--vendor`・`--list-live-models`・`--recommended`・`--merge`・`--replace`・`--model-id`・`--list-roles` と、tools 欄の無い定義へ tools 行を足す `--tools "*"` は持たない(設計書 §9-4)。
+- `toolsFormat` が `"none"` の定義(tools 行が無く、全ツールを継承する)は、`disallowedTools` に `["*"]` を返す。CLI では直さず、T10 の setup スキルが手で tools 行を足すよう報告する。
+- `--name` は Global Constraints の正規表現で検査し、合わなければ `ok: false` で止める。作成先のパスに使うため、`../` を含む値で `.claude/agents/` の外へ書き込ませない。
 - 書き換え対象のマーカー行は `better-agentics-role` とする。
 - `--check` / `--write` の引数は解析だけをここで受け付け、処理は T9 で書く。T8 の時点では `ok: false`・`error: "not implemented"` を返してよい。
 
@@ -995,10 +1006,11 @@ function splitQuestions(tasks: { id: string; summary: string }[], candidates: De
 
 ```ts
 // regenerate.ts
-export type SectionState = "same" | "unknown" | "templateChanged" | "userEdited"
+// classify の戻り値。compare が返す SectionReport.state(§3-8 の SectionState)は、これに "new" と "extra" を足した 6 値
+export type TextState = "same" | "unknown" | "templateChanged" | "userEdited"
 // record は既存の better-agentics-hash を decodeRecord した HashRecord のうち、そのキーの値
 // ("description" なら record.description、見出し行なら record.sections[見出し行])。記録が無ければ undefined
-export function classify(existing: string, template: string, record: string | undefined): SectionState {
+export function classify(existing: string, template: string, record: string | undefined): TextState {
   if (textHash(existing) === textHash(template)) return "same"
   if (record === undefined) return "unknown"
   if (textHash(existing) === record) return "templateChanged"
@@ -1014,13 +1026,15 @@ export function merge(input: MergeInput): MergeOutput
 
 - `--effort` を省いたときは役割表の `effort` を書く。`--effort none` なら書かない。それ以外は `EFFORTS` の値だけを受け付ける。
 - `--model` は `CLAUDE_MODELS` の値だけを受け付ける。
+- 既存のファイルに同じ `## ` 見出しが 2 回以上あれば、`--check` も `--write` も `ok: false` で止め、`error` に見出しを書く。`parseDocument` は同じ見出しを 1 つにまとめるため、再生成すると `pick-delegate` が読んでいた本文(最初の見出しの配下)が失われうる。利用者が手で 1 つにまとめてから再実行する。
 - `lang` が `ja` / `en` 以外で翻訳断片に `missing` か `stale` があれば、`ok: false` で止める(agent-policy の `validateFragments` と同じ)。
 - `--keep` の値はカンマ区切りで、`description`・`preamble`・見出しから `## ` を除いた名前(`When to invoke`、`作業手順`)を受け付ける。既存のファイルに無いものを指定したら `ok: false`。`setup.ts` は見出しの名前に `## ` を付けた見出し行に直してから `merge` の `keep` に渡す。
 - `compare` は、テンプレートの各セクションに `classify` を当てる。既存だけにあるセクションは `extra`、テンプレートだけにあるセクションは `new` とする。`description` と `preamble` も同じ規則で分類する。`record` は既存の `better-agentics-hash` を `decodeRecord` した値から引く。
 - `merge` は、テンプレートを土台にし、`keep` にあるセクションと `extra` のセクションを既存の本文で置き換える(`extra` はテンプレートのセクションの後に、既存での順で置く)。
 - `merge` の frontmatter:
   - `model`・`effort`・`tools`・`better-agentics-role`・`better-agentics-hash` はテンプレートの値を使う。`effort` を書かない指定では、既存に `effort` があっても消す。
-  - `name` はテンプレートの値、`description` は `keep` にあれば既存の値を使う。
+  - `name` は既存の値を使う(設計書 §9-3 は `name` を書き直すキーに含めない)。`--name` は作成先のファイル名だけを決める。既存のファイルが無いときは `--name` の値を `name` に書く。
+  - `description` は `keep` にあれば既存の値を使う。
   - 上記と `disallowedTools` 以外の既存のキー(`color`・`agent-policy-role`・`hooks` など)は、既存での順でテンプレートのキーの後に残し、`keysKept` に載せる。
   - キーの並びは、テンプレートのキー(T4 の順。`disallowedTools` を書くときは `tools` の直後)を先に置き、残したキーを後に続ける。
 - `merge` の記録: 置き換えたキーにはテンプレートの `textHash` を、保持したキーには既存の記録の値を書く。既存の記録が無い保持したキーは、記録から外す(次の再生成でも `unknown` として聞く)。
@@ -1046,6 +1060,8 @@ export function merge(input: MergeInput): MergeOutput
 - 取り込み: `better-agentics-role` の無い同名のファイル(`agent-policy-role: code-review`、`color: blue`、`disallowedTools: mcp__serena__replace_content`、`tools` に `mcp__serena`)に `--check` → `adopt: true`、本文のセクションはすべて `unknown` か `same` か `extra`。`--write`(`--keep` なし)→ `action: "adopted"`、本文はテンプレート、`agent-policy-role`・`color` が残り `keysKept` に載り、`disallowedTools` と `mcp__serena` が残る。
 - `--mcp-servers serena`(偽の `claude mcp list` で `serena` が `✔ Connected`)→ `tools` の末尾に `mcp__serena`。`--mcp-servers ghost`(一覧に無い)→ `mcpDropped: ["ghost"]`。
 - 翻訳断片の無い `--lang fr` の `--write` は `ok: false`。
+- ファイル名と `name` が違う既存の定義(`docs-check.md` に `name: docs-reviewer`)を `--name docs-check` で再生成すると、作成先は `docs-check.md` のままで、`name: docs-reviewer` が残る。
+- `## 作業手順` が 2 回ある既存の定義への `--check` は `ok: false`。
 
 - [ ] **Step 2〜4: 失敗を確かめ、実装し、テスト・typecheck・lint を通す。ビルドで `scripts/setup.mjs` を更新する**
 
@@ -1105,7 +1121,7 @@ export function merge(input: MergeInput): MergeOutput
     - effort は、モデルが推奨と同じなら `--effort` を渡さない。違うなら既存の `effort` を渡し、既存に無ければ `--effort none` を渡す。
     - MCP は「既存のまま(推奨)」「変更する」「付与しない」の 3 択で聞く(agent-policy のステップ 5c を写す)。「既存のまま」では `--mcp-servers` と `--mcp-deny` を渡さない。
     - `--check` の `sections` を状態で扱う。`same`・`new`・`extra` は聞かない。`templateChanged` は「テンプレートに置き換える(推奨)」「保持する」、`userEdited` は「保持する(推奨)」「テンプレートに置き換える」、`unknown` は推奨なしの 2 択で、どれも既存とテンプレートを preview に示す。保持するものを `--keep` に渡して `--write` する。
-  - ステップ 8(報告): 設計書 §9-2 ステップ 8 の項目に加え、点検で手で外すツール、`keysKept`、`mcpDropped`、`ok: false` になった操作を並べる。取り込んだ定義の `keysKept` に `agent-policy-role` があれば、その定義は本文を better-agentics の形にしたまま agent-policy の委譲先にもなると伝え、マーカーを残すかを利用者に委ねる。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` の設定方法を示す。`.claude/agents/` を新規に作った初回は Claude Code の再起動が要ることを伝える。
+  - ステップ 8(報告): 設計書 §9-2 ステップ 8 の項目に加え、点検で手で外すツール、`keysKept`、`mcpDropped`、`ok: false` になった操作を並べる。取り込んだ定義の `keysKept` に、他のマーカーのキー(末尾が `-role`)が残ることがある。その定義は、そのマーカーを読む仕組みからも委譲先として使われうる。このことを伝え、マーカーを残すかを利用者に委ねる。スキル本文には他プラグインの名前とキー名を書かない(ARCHITECTURE の依存の禁止)。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` の設定方法を示す。`.claude/agents/` を新規に作った初回は Claude Code の再起動が要ることを伝える。
 
 - [ ] **Step 4: 2 本の本文を `wc -c` で測り、orchestration が 30KB 以下であることを確かめる**(設計書 §5-5 の基準を自分にも当てる)
 
@@ -1151,11 +1167,11 @@ Expected: 4 つのコマンドがパスし、`pnpm run build` の後に `plugins
 
 設計書 §12 の最後の箇条、§15。オーケストレーターがユーザーと行う。
 
-- [ ] **Step 1: このリポジトリで `/better-agentics:setup` を実行し、`code-review` と `escalation` の 2 役割を作る**。既存の agent-policy の定義(`code-reviewer.md` など)と名前が重なるときは、取り込みの質問が出ることを確かめる。取り込んだ場合は、元の内容を `git diff` で確かめ、残すかをユーザーに聞く。
+- [ ] **Step 1: このリポジトリで `/better-agentics:setup` を実行し、`code-review`・`design-review`・`knowledge-elicitation`・`normal-impl`・`explore`・`escalation` の 6 役割を作る**。このリポジトリの `.claude/agents/` には agent-policy の定義が git 管理下にあり、既定名(`code-reviewer` など)が重なる。既存の定義を書き換えないため、定義名は「別の名前を指定する」で `ba-` を前に付けた名前にする。取り込みの経路は T9 のテストで確かめてあるので、ここでは通らない。確認を終えたら、作った 6 定義を消すかをユーザーに聞く(消すときはユーザーが手で消す)。
 
-- [ ] **Step 2: `AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` を設定し、`AMATSUKA_AGENT_AUTO_INJECTION` を外した新しいセッションを起動する**。SessionStart の注入文に `better-agentics:orchestration` が出ることを確かめる。
+- [ ] **Step 2: 新しいセッションを起動する**。このリポジトリの `.claude/settings.local.json` の `env` には `AMATSUKA_AGENT_AUTO_INJECTION` が入っており、シェルで外しても残る。ユーザーに、`env` から `AMATSUKA_AGENT_AUTO_INJECTION` を外し、`AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "1"` を足すよう依頼する(設定ファイルは自分で編集しない)。`TYPESAFE_API_KEY` が `env` にあることも確かめてもらう。新しいセッションの SessionStart の注入文に `better-agentics:orchestration` が出ることを確かめる。確認を終えたら、元の設定に戻すよう依頼する。
 
-- [ ] **Step 3: subagent-policy が届いたことを確かめる**。同じセッションで better-agentics の定義を 1 つ起動する。サブエージェントには、受け取った追加の文脈の先頭 1 行を返させる。
+- [ ] **Step 3: subagent-policy が届いたことを確かめる**。同じセッションで `ba-` の定義を 1 つ起動する。サブエージェントには、追加の文脈に `# サブエージェントの規律` の見出しを含む文があるかを答えさせる。このリポジトリでは他のプラグインも SubagentStart で文脈を足すため、先頭の行では判定しない。
 
 - [ ] **Step 4: `pick-delegate` を実際の Jev で呼ぶ**。日本語の会話中に、英語の `summary` で `review`(設計書と実装計画書のパスを `artifacts` に入れる)と `split`(作業 2 件)を 1 回ずつ実行し、返った委譲先と `p` をユーザーに示して妥当かを聞く。
 
