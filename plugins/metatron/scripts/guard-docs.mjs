@@ -406,17 +406,14 @@ function comparisonKey(abs, caseInsensitive) {
 function disabledLine(label, env) {
   return `${label} \u306E\u8A18\u9332\u306F\u7121\u52B9\u3067\u3059(\u6709\u52B9\u306B\u3059\u308B\u306B\u306F ${env}=1)\u3002`;
 }
+var SKILL_LINE = "\u66F4\u65B0\u306F Skill \u30C4\u30FC\u30EB\u3067 metatron:updating-architecture \u3092\u8D77\u52D5\u3057\u3001\u305D\u306E\u624B\u9806\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002";
 function architectureReason(relative, cli, adrEnabled) {
   return [
     `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u30BB\u30AF\u30B7\u30E7\u30F3\u5358\u4F4D\u306E\u5DEE\u5206\u78BA\u8A8D\u3068\u66F8\u5F0F\u691C\u8A3C\u306E\u305F\u3081)\u3002`,
-    "\u66F4\u65B0\u3059\u308B\u30BB\u30AF\u30B7\u30E7\u30F3\u306E JSON \u3092\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u6B21\u306E 2 \u6BB5\u968E\u3067\u53CD\u6620\u3057\u3066\u304F\u3060\u3055\u3044:",
-    `  node ${cli} stage-architecture --input /tmp/metatron-architecture.json`,
-    `  node ${cli} commit-architecture --staging-id <stage-architecture \u304C\u767A\u884C\u3057\u305F id>`,
-    ...adrEnabled ? [
-      "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044(stage-architecture \u3067\u306F\u62D2\u5426\u3055\u308C\u307E\u3059):",
-      `  node ${cli} stage-adr --input /tmp/metatron-adr.json`
-    ] : [disabledLine("ADR", ADR_ENV)],
-    `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
+    "ARCHITECTURE \u304C\u307E\u3060\u7121\u3044\u3068\u304D\u306F /metatron:init \u3067\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    SKILL_LINE,
+    adrEnabled ? "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u3082\u540C\u3058\u30B9\u30AD\u30EB\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002" : disabledLine("ADR", ADR_ENV),
+    `CLI \u306E\u7D76\u5BFE\u30D1\u30B9\u3068\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
   ].join("\n");
 }
 function gotchasReason(relative, cli, gotchasEnabled) {
@@ -438,12 +435,10 @@ function gotchasReason(relative, cli, gotchasEnabled) {
 function rulesReason(relative, cli) {
   return [
     `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u66F8\u5F0F\u691C\u8A3C\u3068\u5DEE\u5206\u78BA\u8A8D\u306E\u305F\u3081)\u3002`,
-    "\u30D5\u30A1\u30A4\u30EB\u5168\u6587\u306E JSON \u3092\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u6B21\u306E 2 \u6BB5\u968E\u3067\u53CD\u6620\u3057\u3066\u304F\u3060\u3055\u3044:",
-    `  node ${cli} stage-rules --input /tmp/metatron-rules.json`,
-    `  node ${cli} commit-rules --staging-id <stage-rules \u304C\u767A\u884C\u3057\u305F id>`,
+    SKILL_LINE,
     "\u73FE\u5728\u306E\u5185\u5BB9\u306E\u78BA\u8A8D:",
     `  node ${cli} get rules`,
-    `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
+    `CLI \u306E\u7D76\u5BFE\u30D1\u30B9\u3068\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
   ].join("\n");
 }
 try {

@@ -818,19 +818,23 @@ function cliLines(cli, features) {
     "node M get architecture"
   ].filter((part) => part !== null);
   return [
-    `\u8A18\u9332\u30FB\u66F4\u65B0\u30FB\u5168\u6587\u53D6\u5F97\u306F\u6B21\u306E CLI \u3092\u4F7F\u3046(\u7D76\u5BFE\u30D1\u30B9\u3002M = ${cli}):`,
+    `\u8A18\u9332\u30FB\u5168\u6587\u53D6\u5F97\u306F\u6B21\u306E CLI \u3092\u4F7F\u3046(\u7D76\u5BFE\u30D1\u30B9\u3002M = ${cli}):`,
     `  \u8AAD\u3080:     ${reads.join(" / ")}`,
     ...features.gotchas ? [
       "  \u8A18\u9332:     node M append-gotcha --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB>",
       '  \u30BF\u30B0:     node M tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F --reason "..."'
     ] : [],
-    "  \u6587\u66F8\u66F4\u65B0: node M stage-architecture --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>",
-    ...features.adr ? [
-      "  ADR:     node M stage-adr --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-architecture --staging-id <id>"
-    ] : [],
     "  \u898F\u5F8B:     node M get rules [--name conventions|protected-paths|testing-policy]",
-    "  \u898F\u5F8B\u66F4\u65B0: node M stage-rules --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB> \u2192 node M commit-rules --staging-id <id>",
     "\u203B\u9577\u3044\u5165\u529B\u306F\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u3078\u66F8\u304D\u3001--input <path> \u3067\u6E21\u3059(CLI \u306E\u547C\u3073\u51FA\u3057\u898F\u7D04)\u3002"
+  ];
+}
+function updateLines(features, hasArchitecture) {
+  if (!hasArchitecture)
+    return ["ARCHITECTURE \u306F\u307E\u3060\u7121\u3044\u3002`/metatron:init` \u3067\u4F5C\u6210\u3059\u308B\u3002"];
+  const targets = features.adr ? "ARCHITECTURE\u30FBADR\u30FBrules" : "ARCHITECTURE\u30FBrules";
+  return [
+    `${targets} \u306E\u66F4\u65B0\u306F\u3001Skill \u30C4\u30FC\u30EB\u3067 metatron:updating-architecture \u3092\u8D77\u52D5\u3057\u3066\u884C\u3046\u3002`,
+    "\u8A08\u753B\u66F8\u306B stage-* \u306E\u624B\u9806\u304C\u66F8\u304B\u308C\u3066\u3044\u3066\u3082\u3001\u5148\u306B\u30B9\u30AD\u30EB\u3092\u8D77\u52D5\u3059\u308B\u3002"
   ];
 }
 function recordingLines(features) {
@@ -851,12 +855,13 @@ function recordingLines(features) {
     "docs/intents/domains/ \u306E\u5019\u88DC\u306F /metatron:update \u3067\u53D6\u308A\u8FBC\u3081\u308B\u3002"
   ];
 }
-function buildGuide(cli, features) {
+function buildGuide(cli, features, hasArchitecture) {
   return [
     guideTitle(features),
     "",
     "\u3053\u308C\u3089\u306E\u6587\u66F8\u3068 `.claude/rules/metatron/` \u306E 3 \u30D5\u30A1\u30A4\u30EB\u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308B\u3002**\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002**",
     ...cliLines(cli, features),
+    ...updateLines(features, hasArchitecture),
     ...recordingLines(features),
     ...delegationLines(features)
   ].join("\n");
@@ -1145,7 +1150,7 @@ function build(config, env) {
   return fitToBudget(config, {
     config,
     features,
-    guide: buildGuide(cli, features),
+    guide: buildGuide(cli, features, arch !== null),
     refs: CLI_REFS,
     warnings: collectWarnings(config, arch, gotchas),
     arch,

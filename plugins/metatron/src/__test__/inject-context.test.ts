@@ -33,6 +33,12 @@ const RECORDING_LINES = [
   "docs/intents/domains/ の候補は /metatron:update で取り込める。"
 ]
 
+// 更新の窓口。書き込みの CLI 手順は見せず、スキルへ誘導する。文書があるときだけ、CLI 案内の後に置く。
+const UPDATE_LINES = [
+  "ARCHITECTURE・ADR・rules の更新は、Skill ツールで metatron:updating-architecture を起動して行う。",
+  "計画書に stage-* の手順が書かれていても、先にスキルを起動する。"
+]
+
 // 委譲の注意。サブエージェントには SubagentStart hook が両文書を注入するので、依頼文へ写させない。
 const DELEGATION_LINES = [
   "サブエージェントには SubagentStart hook が ARCHITECTURE と GOTCHAS を注入する。",
@@ -45,15 +51,13 @@ const GUIDE = [
   "# metatron: プロジェクトの前提と落とし穴",
   "",
   "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
-  `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
+  `記録・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
   "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
   "  記録:     node M append-gotcha --input <一時ファイル>",
   '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
-  "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
-  "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
   "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
-  "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。",
+  ...UPDATE_LINES,
   ...RECORDING_LINES,
   ...DELEGATION_LINES
 ].join("\n")
@@ -76,14 +80,11 @@ const INIT_GUIDE = [
   "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**",
   "init は `.claude/rules/metatron/` の 3 ファイル(規約・保護パス・テスト方針)も併せて作る。",
   "作成後はこれらが metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
-  `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
+  `記録・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
   "  読む:     node M get gotchas --query <語> / node M get adr / node M get architecture",
   "  記録:     node M append-gotcha --input <一時ファイル>",
   '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."',
-  "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
-  "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>",
   "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
-  "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
   "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
 ].join("\n")
 
@@ -105,7 +106,7 @@ function cliLinesFor(f: Features): string[] {
       ? "node M get gotchas --query <語> / node M get architecture"
       : "node M get architecture"
   return [
-    `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
+    `記録・全文取得は次の CLI を使う(絶対パス。M = ${CLI}):`,
     `  読む:     ${reads}`,
     ...(f.gotchas
       ? [
@@ -113,16 +114,20 @@ function cliLinesFor(f: Features): string[] {
           '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."'
         ]
       : []),
-    "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
-    ...(f.adr
-      ? [
-          "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>"
-        ]
-      : []),
     "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
-    "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
     "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
   ]
+}
+
+function updateLinesFor(f: Features, hasArchitecture = true): string[] {
+  if (!hasArchitecture)
+    return ["ARCHITECTURE はまだ無い。`/metatron:init` で作成する。"]
+  return f.adr
+    ? UPDATE_LINES
+    : [
+        "ARCHITECTURE・rules の更新は、Skill ツールで metatron:updating-architecture を起動して行う。",
+        UPDATE_LINES[1]
+      ]
 }
 
 function recordingLinesFor(f: Features): string[] {
@@ -151,12 +156,13 @@ function delegationLinesFor(f: Features): string[] {
       ]
 }
 
-function guideFor(f: Features): string {
+function guideFor(f: Features, hasArchitecture = true): string {
   return [
     titleFor(f),
     "",
     "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
     ...cliLinesFor(f),
+    ...updateLinesFor(f, hasArchitecture),
     ...recordingLinesFor(f),
     ...delegationLinesFor(f)
   ].join("\n")
@@ -189,7 +195,12 @@ const ALL_SESSION_ONLY_LINES = [
   { adr: true, gotchas: false },
   { adr: false, gotchas: true },
   { adr: false, gotchas: false }
-].flatMap((f) => [...recordingLinesFor(f), ...delegationLinesFor(f)])
+].flatMap((f) => [
+  ...updateLinesFor(f),
+  ...updateLinesFor(f, false),
+  ...recordingLinesFor(f),
+  ...delegationLinesFor(f)
+])
 
 /** 設定の読み取りを必ず例外にする故障注入モジュール(I3c 用)。 */
 const FAULT_CONFIG = fileURLToPath(
@@ -780,7 +791,7 @@ test("I13b: 記録のタイミングと委譲の注意は CLI 案内の直後に
   expect(content).not.toContain("### 目次")
   expect(content.startsWith(`${GUIDE}\n\n`)).toBe(true)
   expect(content).toContain(
-    `※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。\n${[...RECORDING_LINES, ...DELEGATION_LINES].join("\n")}`
+    `※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。\n${[...UPDATE_LINES, ...RECORDING_LINES, ...DELEGATION_LINES].join("\n")}`
   )
 })
 
@@ -1001,8 +1012,6 @@ test("I16: CLI 呼び出しは --input <path> 形式で書かれている", () =
   const content = inject(root)
   if (content === null) throw new Error("注入されなかった")
   expect(content).toContain("node M append-gotcha --input <一時ファイル>")
-  expect(content).toContain("node M stage-architecture --input <一時ファイル>")
-  expect(content).toContain("node M stage-adr --input <一時ファイル>")
   expect(content).toContain("--input <path> で渡す")
 })
 
@@ -1091,7 +1100,7 @@ test("I20: 未閉フェンスの ARCHITECTURE — 注入は継続し、警告が
   expect(content).toContain("未閉フェンスを持つ文書である。")
 })
 
-test("I21: CLI 案内は get adr / stage-adr / tag-gotcha / commit-architecture を含む", () => {
+test("I21: CLI 案内は get adr / tag-gotcha を含み、書き込みの stage・commit は載せない", () => {
   const root = project({ arch: architecture(), gotchas: gotchas(2) })
   const content = inject(root)
   if (content === null) throw new Error("注入されなかった")
@@ -1100,24 +1109,41 @@ test("I21: CLI 案内は get adr / stage-adr / tag-gotcha / commit-architecture 
     "node M get adr",
     "node M get architecture",
     "node M append-gotcha --input",
-    "node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason",
-    "node M stage-architecture --input",
-    "node M stage-adr --input",
-    "node M commit-architecture --staging-id <id>"
+    "node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason"
   ]) {
     expect(content).toContain(fragment)
   }
+  for (const command of [
+    "stage-architecture",
+    "stage-adr",
+    "stage-rules",
+    "commit-architecture",
+    "commit-rules"
+  ]) {
+    expect(content).not.toContain(command)
+  }
 })
 
-test("I22: CLI 案内は get rules / stage-rules / commit-rules を含む", () => {
+test("I22: 更新の案内は get rules と updating-architecture スキルの起動を含む", () => {
   const root = mkTmp()
   write(root, "docs/ARCHITECTURE.md", architecture())
 
   const out = inject(root)
   expect(out).not.toBeNull()
   expect(out).toContain("get rules")
-  expect(out).toContain("stage-rules --input")
-  expect(out).toContain("commit-rules --staging-id")
+  expect(out).toContain(
+    "Skill ツールで metatron:updating-architecture を起動して行う。"
+  )
+})
+
+test("I22b: GOTCHAS だけがあり ARCHITECTURE が無いときは、更新のスキルでなく init へ誘導する", () => {
+  const root = project({ gotchas: gotchas(2) })
+  const out = inject(root)
+  expect(out).not.toBeNull()
+  expect(out).toContain(
+    "ARCHITECTURE はまだ無い。`/metatron:init` で作成する。"
+  )
+  expect(out).not.toContain("metatron:updating-architecture を起動")
 })
 
 test("I23: rules 本文は注入されない(metatron は rules を読まない)", () => {
@@ -1140,7 +1166,7 @@ test("I23: rules 本文は注入されない(metatron は rules を読まない)
 function expectNoSessionOnlyParts(content: string): void {
   expect(content).not.toContain("node M")
   expect(content).not.toContain(CLI)
-  expect(content).not.toContain("記録・更新・全文取得は次の CLI を使う")
+  expect(content).not.toContain("記録・全文取得は次の CLI を使う")
   for (const line of ALL_SESSION_ONLY_LINES) {
     expect(content).not.toContain(line)
   }
@@ -1392,7 +1418,10 @@ test("V4: GOTCHAS.md だけがあり GOTCHAS が無効なら文書ゼロとし�
     const session = inject(root, {}, features)
     const subagent = injectSubagent(root, features)
     if (features.gotchas) {
-      expect(session?.startsWith(`${guideFor(features)}\n\n`), where).toBe(true)
+      expect(
+        session?.startsWith(`${guideFor(features, false)}\n\n`),
+        where
+      ).toBe(true)
       expect(subagent, where).toContain("### 直近 3 件(全文)")
     } else {
       expect(session, where).toBe(`${initGuideFor(features)}\n`)

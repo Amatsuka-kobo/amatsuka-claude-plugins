@@ -76,9 +76,9 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 
 | hook | 役割 |
 | --- | --- |
-| **SessionStart**(`scripts/inject-context.mjs`) | ARCHITECTURE の内容、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意をセッション開始時に注入します。予算を超える場合は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、CLI 案内・記録のタイミング・委譲の注意は削りません |
+| **SessionStart**(`scripts/inject-context.mjs`) | ARCHITECTURE の内容、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意をセッション開始時に注入します。ARCHITECTURE・ADR・rules の更新は、CLI の書き込み手順を示さず `updating-architecture` スキルの起動へ誘導します。予算を超える場合は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、CLI 案内・記録のタイミング・委譲の注意は削りません |
 | **SubagentStart**(`scripts/inject-context.mjs`) | SessionStart と同じスクリプトが、入力のイベント名を見て、サブエージェント向けに ARCHITECTURE・ADR 一覧・GOTCHAS を注入します。CLI 案内は載せず、載せきれない部分は文書のパスを Read する案内にします。文書が 1 つも無いときは何も出しません。縮退の順と `injection` の設定は SessionStart と共通です |
-| **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS / rules 3 ファイルへの直接編集を拒否し、対象に応じた CLI の呼び出し方を絶対パス付きで案内します |
+| **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS / rules 3 ファイルへの直接編集を拒否します。ARCHITECTURE と rules は `updating-architecture` スキルの起動へ誘導し、GOTCHAS は CLI の呼び出し方を案内します。どの拒否にも CLI の絶対パスが載ります |
 
 ### 拒否の範囲(正直な限界)
 

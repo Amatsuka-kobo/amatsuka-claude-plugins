@@ -175,6 +175,8 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 ARCHITECTURE と ADR と rules の書き込みは 2 段階で行う。
 
+`stage-*` と `commit-*` は、`updating-architecture` か `capturing-architecture` のスキルの手順の中で実行する。スキルの外で更新が要るときは、Skill ツールで `updating-architecture` を起動してから実行する。
+
 GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append-gotcha`)は 2 段階を取らない。前者は書き込む内容が雛形に固定されており差分が定数であるため、後者は既存を壊さない追記であるためである。
 
 1. `stage-architecture` / `stage-adr` / `stage-rules` のいずれかを実行し、`stagingId` と diff を得る。

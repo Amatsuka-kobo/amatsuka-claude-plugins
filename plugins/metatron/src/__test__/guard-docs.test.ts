@@ -13,6 +13,10 @@ import { runTs } from "../testing/run-ts.js"
 const HOOK = fileURLToPath(new URL("../guard-docs.ts", import.meta.url))
 const PLUGIN_ROOT = fileURLToPath(new URL("../..", import.meta.url))
 const CLI = path.join(PLUGIN_ROOT, "scripts", "metatron.mjs")
+// 実装と同じ文面を独立に持つ。書き込みの CLI 手順の代わりに、スキルへ誘導する。
+const SKILL_LINE =
+  "更新は Skill ツールで metatron:updating-architecture を起動し、その手順で行ってください。"
+const ADR_SKILL_LINE = "ADR の追加・状態変更も同じスキルで行ってください。"
 
 interface HookOutput {
   hookEventName: string
@@ -84,18 +88,21 @@ function fsIsCaseInsensitive(root: string): boolean {
   }
 }
 
-test("D1: ARCHITECTURE への Write は deny。理由に stage-architecture --input と CLI 絶対パスを含む", () => {
+test("D1: ARCHITECTURE への Write は deny。理由はスキルへ誘導し、CLI 絶対パスを含む", () => {
   const root = project()
   const r = write(root, path.join(root, "docs/ARCHITECTURE.md"))
   expect(r?.hookEventName).toBe("PreToolUse")
   expect(r?.permissionDecision).toBe("deny")
   const reason = r?.permissionDecisionReason ?? ""
-  expect(reason).toContain(`node ${CLI} stage-architecture --input`)
+  expect(reason).toContain(SKILL_LINE)
   expect(path.isAbsolute(CLI)).toBe(true)
-  expect(reason).toContain(`node ${CLI} commit-architecture --staging-id`)
+  expect(reason).toContain(`node ${CLI} get config`)
+  // 書き込みの CLI 手順を見せると、スキルを起動せずに直行する。
+  expect(reason).not.toContain("stage-architecture")
+  expect(reason).not.toContain("commit-architecture")
   // ADR の誘導を必ず添える(これが無いと二度目の拒否に当たる)。
-  expect(reason).toContain("stage-adr")
-  expect(reason).toContain("stage-architecture では拒否されます")
+  expect(reason).toContain(ADR_SKILL_LINE)
+  expect(reason).toContain("/metatron:init")
   expect(reason).toContain("docs/ARCHITECTURE.md")
 })
 
@@ -170,7 +177,8 @@ test("D3d: file_path が正本で notebook_path が無関係でも deny(逆方�
     path.join(root, "scratch.ipynb")
   )
   expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).toContain("stage-architecture --input")
+  expect(r?.permissionDecisionReason).toContain(SKILL_LINE)
+  expect(r?.permissionDecisionReason).toContain(ADR_SKILL_LINE)
 
   // 2 つのフィールドが別々の正本に当たる場合は ARCHITECTURE の案内を出す
   // (実装側のコメントに選択理由を残してある)。
@@ -180,7 +188,7 @@ test("D3d: file_path が正本で notebook_path が無関係でも deny(逆方�
     path.join(root, "docs/GOTCHAS.md")
   )
   expect(both?.permissionDecision).toBe("deny")
-  expect(both?.permissionDecisionReason).toContain("stage-architecture --input")
+  expect(both?.permissionDecisionReason).toContain(ADR_SKILL_LINE)
 })
 
 test("D4: 無関係なファイルへの Write は素通し(permissionDecision を出さない)", () => {
@@ -546,16 +554,16 @@ test("フェイルオープンの exit code は常に 0(拒否時も含む)", ()
   expect(() => runTs(HOOK, [], { input: "壊れた入力" })).not.toThrow()
 })
 
-test("D15: rules 3 ファイルへの Write は deny。理由に stage-rules と commit-rules を含む", () => {
+test("D15: rules 3 ファイルへの Write は deny。理由はスキルへ誘導し、stage-rules と commit-rules を載せない", () => {
   const root = project()
   for (const name of ["conventions", "protected-paths", "testing-policy"]) {
     const target = path.join(root, ".claude/rules/metatron", `${name}.md`)
     const r = write(root, target)
     expect(r?.permissionDecision, name).toBe("deny")
-    expect(r?.permissionDecisionReason, name).toContain("stage-rules --input")
-    expect(r?.permissionDecisionReason, name).toContain(
-      "commit-rules --staging-id"
-    )
+    expect(r?.permissionDecisionReason, name).toContain(SKILL_LINE)
+    expect(r?.permissionDecisionReason, name).toContain(`node ${CLI} get rules`)
+    expect(r?.permissionDecisionReason, name).not.toContain("stage-rules")
+    expect(r?.permissionDecisionReason, name).not.toContain("commit-rules")
     expect(r?.permissionDecisionReason, name).toContain(
       `.claude/rules/metatron/${name}.md`
     )
@@ -607,12 +615,12 @@ test("D20: NotebookEdit の notebook_path に rules を渡しても deny する"
     path.join(root, ".claude/rules/metatron/testing-policy.md")
   )
   expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).toContain("stage-rules --input")
+  expect(r?.permissionDecisionReason).toContain(SKILL_LINE)
 })
 
 // --- 2 変数が無効なときの理由文(設計書 2026-10-08 の 3-3)-----------------------
 
-test("D21: ADR が無効でも ARCHITECTURE への Write は deny。理由は stage-adr へ誘導せず、有効にする変数を示す", () => {
+test("D21: ADR が無効でも ARCHITECTURE への Write は deny。理由は ADR へ誘導せず、有効にする変数を示す", () => {
   const root = project()
   const target = path.join(root, "docs/ARCHITECTURE.md")
   for (const features of [
@@ -625,8 +633,8 @@ test("D21: ADR が無効でも ARCHITECTURE への Write は deny。理由は st
     )
     expect(r?.permissionDecision).toBe("deny")
     const reason = r?.permissionDecisionReason ?? ""
-    expect(reason).toContain(`node ${CLI} stage-architecture --input`)
-    expect(reason).toContain(`node ${CLI} commit-architecture --staging-id`)
+    expect(reason).toContain(SKILL_LINE)
+    expect(reason).not.toContain(ADR_SKILL_LINE)
     expect(reason).not.toContain("stage-adr")
     expect(reason).toContain(`${ADR_ENV}=1`)
   }
@@ -670,7 +678,7 @@ test("D23: 無効なのが他方だけなら、理由文は従来どおり", () 
       tool_input: { file_path: path.join(root, "docs/ARCHITECTURE.md") }
     })?.permissionDecisionReason
   )
-  expect(arch?.permissionDecisionReason).toContain("stage-adr")
+  expect(arch?.permissionDecisionReason).toContain(ADR_SKILL_LINE)
   const gotchas = hook(
     {
       cwd: root,

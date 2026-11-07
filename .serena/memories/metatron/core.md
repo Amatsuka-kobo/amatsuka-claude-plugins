@@ -1,4 +1,4 @@
-`plugins/metatron` (0.4.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
+`plugins/metatron` (0.5.2-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
 毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
@@ -35,11 +35,16 @@ CLI が無価値という意味ではない。deny hook は「直接書かせな
 | --- | --- | --- |
 | SessionStart | `scripts/inject-context.mjs` | ARCHITECTURE 本体、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意を注入。予算超過時は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、**CLI 案内・記録のタイミング・委譲の注意は削らない**。フェイルオープン |
 | SubagentStart | `scripts/inject-context.mjs`(SessionStart と同じ) | 入力の `hook_event_name` が `SubagentStart` のときサブエージェント向けを出す。ARCHITECTURE・ADR 一覧・GOTCHAS を注入し、CLI 案内と記録のタイミングは載せない。載せきれない部分は文書パスを Read する案内にする。文書が無ければ何も出さない。縮退と `injection` の設定は SessionStart と共通。フェイルオープン |
-| PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | 2 文書への直接編集を拒否し、対象に応じた CLI 呼び出しを絶対パス付きで案内。フェイルオープン |
+| PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | 2 文書と rules 3 ファイルへの直接編集を拒否する。ARCHITECTURE と rules は `updating-architecture` スキルへ誘導し、GOTCHAS は書き込み CLI を案内する。どれも CLI の絶対パスを載せる。フェイルオープン |
 
 **記録のタイミングは hook でなく SessionStart の注入文に置く**(作業の完了を hook で検出できないため。`recordingLines`。不採用案は `docs/rationale.md`)。
 **委譲の依頼文には ARCHITECTURE と GOTCHAS の原文も要約も写さない**(SubagentStart が注入するので。`delegationLines`)。
 どちらも文書があるときだけ載せ、`buildInitGuide` には入れない。
+
+**注入文と deny の理由文は、ARCHITECTURE・ADR・rules の書き込み手順(stage → commit)を載せず、`updating-architecture` スキルの起動へ誘導する**(2026-11-07、0.5.2-dev。`updateLines` と guard-docs の `SKILL_LINE`)。
+CLI の手順が完結した形で見えていると、AI はスキルを起動せずに CLI へ直行し、`diff-architecture`・`get rules`・草案のサブエージェント検査を飛ばしていた。
+description を直しても、この経路は変わらなかった。CLI の絶対パスは、読み取り系の行と `get config` の行に残す。
+GOTCHAS の書き込み案内(`append-gotcha` など)は従来どおり CLI を示す。
 
 **ADR と GOTCHAS はオプトイン**(2026-10-08、ADR-015)。`src/lib/features.ts` の `readFeatures(env)` が
 `AMATSUKA_METATRON_ENABLE_ADR` / `AMATSUKA_METATRON_ENABLE_GOTCHAS` を読む(値は `1`/`true`/`on` で有効)。

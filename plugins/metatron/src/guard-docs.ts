@@ -190,6 +190,11 @@ function disabledLine(label: string, env: string): string {
   return `${label} の記録は無効です(有効にするには ${env}=1)。`
 }
 
+// 書き込みの CLI 手順は載せず、スキルへ誘導する。stage → commit が完結した形で見えると、
+// スキルを起動せずに CLI へ直行し、乖離の検出・草案の検査・承認の手順を飛ばす。
+const SKILL_LINE =
+  "更新は Skill ツールで metatron:updating-architecture を起動し、その手順で行ってください。"
+
 function architectureReason(
   relative: string,
   cli: string,
@@ -197,16 +202,12 @@ function architectureReason(
 ): string {
   return [
     `${relative} は metatron の管理下にあり、直接編集できません(セクション単位の差分確認と書式検証のため)。`,
-    "更新するセクションの JSON を一時ファイルに書き、次の 2 段階で反映してください:",
-    `  node ${cli} stage-architecture --input /tmp/metatron-architecture.json`,
-    `  node ${cli} commit-architecture --staging-id <stage-architecture が発行した id>`,
-    ...(adrEnabled
-      ? [
-          "ADR の追加・状態変更は stage-adr を使ってください(stage-architecture では拒否されます):",
-          `  node ${cli} stage-adr --input /tmp/metatron-adr.json`
-        ]
-      : [disabledLine("ADR", ADR_ENV)]),
-    `入力の書式: node ${cli} get config`
+    "ARCHITECTURE がまだ無いときは /metatron:init で作成してください。",
+    SKILL_LINE,
+    adrEnabled
+      ? "ADR の追加・状態変更も同じスキルで行ってください。"
+      : disabledLine("ADR", ADR_ENV),
+    `CLI の絶対パスと入力の書式: node ${cli} get config`
   ].join("\n")
 }
 
@@ -234,12 +235,10 @@ function gotchasReason(
 function rulesReason(relative: string, cli: string): string {
   return [
     `${relative} は metatron の管理下にあり、直接編集できません(書式検証と差分確認のため)。`,
-    "ファイル全文の JSON を一時ファイルに書き、次の 2 段階で反映してください:",
-    `  node ${cli} stage-rules --input /tmp/metatron-rules.json`,
-    `  node ${cli} commit-rules --staging-id <stage-rules が発行した id>`,
+    SKILL_LINE,
     "現在の内容の確認:",
     `  node ${cli} get rules`,
-    `入力の書式: node ${cli} get config`
+    `CLI の絶対パスと入力の書式: node ${cli} get config`
   ].join("\n")
 }
 
@@ -297,7 +296,7 @@ try {
   }
 
   // 2 つのフィールドが別々の正本に当たったときは ARCHITECTURE の案内を出す。
-  // 案内が長く 2 段階コミットと ADR の誘導まで含む側を残すほうが、取りこぼす情報が少ない。
+  // スキルへの誘導に加えて init と ADR の案内まで含む側を残すほうが、取りこぼす情報が少ない。
   const features = readFeatures(process.env)
   if (hitArchitecture)
     emit(

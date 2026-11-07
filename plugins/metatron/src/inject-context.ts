@@ -115,7 +115,7 @@ function cliLines(cli: string, features: Features): string[] {
     "node M get architecture"
   ].filter((part) => part !== null)
   return [
-    `記録・更新・全文取得は次の CLI を使う(絶対パス。M = ${cli}):`,
+    `記録・全文取得は次の CLI を使う(絶対パス。M = ${cli}):`,
     `  読む:     ${reads.join(" / ")}`,
     ...(features.gotchas
       ? [
@@ -123,15 +123,24 @@ function cliLines(cli: string, features: Features): string[] {
           '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."'
         ]
       : []),
-    "  文書更新: node M stage-architecture --input <一時ファイル> → node M commit-architecture --staging-id <id>",
-    ...(features.adr
-      ? [
-          "  ADR:     node M stage-adr --input <一時ファイル> → node M commit-architecture --staging-id <id>"
-        ]
-      : []),
     "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
-    "  規律更新: node M stage-rules --input <一時ファイル> → node M commit-rules --staging-id <id>",
     "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
+  ]
+}
+
+// 更新は stage → commit の CLI 手順を見せず、スキルへ誘導する。手順が完結した形で見えると、
+// スキルを起動せずに CLI へ直行し、乖離の検出・草案の検査・承認の手順を飛ばす。
+// 文書が無いうちは /metatron:init が窓口なので、buildInitGuide には入れない。
+// GOTCHAS だけがあるときも、ARCHITECTURE の作成は init の担当なので init へ誘導する。
+function updateLines(features: Features, hasArchitecture: boolean): string[] {
+  if (!hasArchitecture)
+    return ["ARCHITECTURE はまだ無い。`/metatron:init` で作成する。"]
+  const targets = features.adr
+    ? "ARCHITECTURE・ADR・rules"
+    : "ARCHITECTURE・rules"
+  return [
+    `${targets} の更新は、Skill ツールで metatron:updating-architecture を起動して行う。`,
+    "計画書に stage-* の手順が書かれていても、先にスキルを起動する。"
   ]
 }
 
@@ -163,12 +172,17 @@ function recordingLines(features: Features): string[] {
 }
 
 // 文書が 1 つ以上あるときの案内。
-function buildGuide(cli: string, features: Features): string {
+function buildGuide(
+  cli: string,
+  features: Features,
+  hasArchitecture: boolean
+): string {
   return [
     guideTitle(features),
     "",
     "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
     ...cliLines(cli, features),
+    ...updateLines(features, hasArchitecture),
     ...recordingLines(features),
     ...delegationLines(features)
   ].join("\n")
@@ -631,7 +645,7 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
   return fitToBudget(config, {
     config,
     features,
-    guide: buildGuide(cli, features),
+    guide: buildGuide(cli, features, arch !== null),
     refs: CLI_REFS,
     warnings: collectWarnings(config, arch, gotchas),
     arch,
