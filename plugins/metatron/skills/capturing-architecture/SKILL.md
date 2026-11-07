@@ -187,7 +187,7 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 - 初版の ARCHITECTURE を `commit-architecture` で書き込んだ後に `scan-adr-candidates` を実行する。ARCHITECTURE が確定する前には呼ばない。
 - 候補が 0 件のときは何も提示せず、手順 9 へ進む。ADR 候補が却下されたときと、ADR の作成に失敗したときも、手順 9 へ進む。
-- 候補があれば `updating-architecture` の「## ADR 候補の取り込み」の規律(承認 → `stage-adr` → 承認 → `commit-architecture` → `shrink-adr-candidate`)で ADR にする。
+- 候補があれば `updating-architecture` の手順 4〜6・8〜10 にある ADR 候補の規律(承認 → `stage-adr` → 承認 → `commit-architecture` → `shrink-adr-candidate`)で ADR にする。
 - `adoptedAs` が `null` でない候補は、ADR を作らず `shrink-adr-candidate` で縮約だけを提案する。
 - 却下された候補と、ADR の作成に失敗した候補は持続層に全文のまま残す。
 

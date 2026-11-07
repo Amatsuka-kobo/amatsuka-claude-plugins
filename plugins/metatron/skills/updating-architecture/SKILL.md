@@ -5,7 +5,7 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 
 # ARCHITECTURE と rules の更新
 
-## 前提
+## 共通規律
 
 - CLI の絶対パスは、セッションに注入された案内、または直接編集の拒否メッセージに現れたものを使う。
 - 案内が無いときはユーザーに絶対パスを尋ねる。インストール先を推測して組み立てない。
@@ -14,96 +14,146 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 - 引数へ本文を直接埋め込まず、一時ファイルのパスだけを渡す。
 - ARCHITECTURE と rules の更新は CLI だけで行う。Edit / Write で直接書き換えない。
 
+## 起点と手順の省略
+
+更新のきっかけが何であっても、手順 1 から順に進める。
+
+- きっかけには、乖離の検出の依頼、ADR の追加、1 セクションの修正、実装計画書に書かれた CLI の手順、自分の作業で気づいた変更を含む。
+- ユーザーが依頼した変更は、手順 4 の一覧に「依頼された変更」として並べる。承認済みの計画書に書かれた変更も含む。
+- 依頼された変更は、依頼の時点で更新が選ばれたものとして扱う。更新するかどうかを手順 4 で選び直させない。
+- 依頼された変更と同じ内容の候補が手順 2 と 3 で見つかったときは、依頼された変更として 1 件にまとめる。
+- まとめた相手が ADR 候補なら、手順 5 の書き写しと手順 10 の縮約では、ADR 候補から起こしたものとして扱う。
+- 依頼や計画書の承認は、手順 9 の diff の承認に代えない。
+- 自分の作業で気づいた変更は、手順 2 と 3 の候補と同じく手順 4 で選ばせる。
+- 対象が 1 件だけ・数行だけのときも、手順を省かない。
+- 手順を飛ばすのは「記録の有効・無効」が定める場合だけとする。
+
 ## 記録の有効・無効
 
 ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `AMATSUKA_METATRON_ENABLE_GOTCHAS` がそれぞれ有効なときだけ行う。
 
-- 手順の先頭で `get config` を 1 回呼び、`features.adr` と `features.gotchas` を確かめる。拒否された CLI を実行してから分岐しない。
-- `features.adr` が `false` のときは、「## ADR」と「## ADR 候補の取り込み」を飛ばす。ADR を求められたときは、手順を進めず、`AMATSUKA_METATRON_ENABLE_ADR` の設定を案内して止める。
-- `features.gotchas` が `false` のときは、手順 8 と「## GOTCHAS 候補の取り込み」を飛ばす。
+- 手順 1 の `get config` の `features.adr` と `features.gotchas` で確かめる。拒否された CLI を実行してから分岐しない。
+- `features.adr` が `false` のときは、`scan-adr-candidates`・`stage-adr`・`shrink-adr-candidate` を飛ばす。
+- `features.adr` が `false` で ADR を求められたときは、手順を進めず、`AMATSUKA_METATRON_ENABLE_ADR` の設定を案内して止める。
+- `features.gotchas` が `false` のときは、手順 11 を飛ばす。
 
 ## 手順
 
-1. `diff-architecture` を実行し、`findings` と `skipped` を取る。`features.adr` が `true` のときは `scan-adr-candidates` も実行し、ADR 候補の配列を取る。
-2. `get rules` を実行し、`exists` が `false` のファイルを候補に加える。
-3. 候補を一覧提示し、1 件ごとに更新するかしないかを選ばせる。
-4. 選ばれた分の本文を起草し、確認してほしい点を添えて提示する。
-5. ARCHITECTURE のセクションは `stage-architecture`、ADR は `stage-adr`(`features.adr` が `true` のときだけ)、rules は `stage-rules` へ分けて渡す。
-6. 返った diff を全文提示して承認を得る。
-7. ARCHITECTURE と ADR は `commit-architecture --staging-id <id>`、rules は `commit-rules --staging-id <id>` で書き込む。
-8. 下の「GOTCHAS 候補の取り込み」に従う(`features.gotchas` が `false` なら飛ばす)。
-9. 更新したセクション・ADR・rules と、移した GOTCHAS 候補を報告する。
+- [ ] 1. 設定の確認(`get config`)
+- [ ] 2. 乖離と ADR 候補の検出(`diff-architecture`・`get architecture`・ADR 有効時は `scan-adr-candidates`)
+- [ ] 3. rules の確認(`get rules`)
+- [ ] 4. 候補の提示と選択
+- [ ] 5. 起草(セクションを足すときは `scan`)
+- [ ] 6. サブエージェントによる簡潔化
+- [ ] 7. 草案の提示
+- [ ] 8. stage(`stage-architecture`・`stage-adr`・`stage-rules`)
+- [ ] 9. diff の提示と承認
+- [ ] 10. 書き込み(`commit-architecture`・`commit-rules`・`shrink-adr-candidate`)
+- [ ] 11. GOTCHAS 候補の取り込み(`scan-gotcha-candidates`)
+- [ ] 12. 報告
 
-## 検出の範囲
+## 1. 設定の確認
 
-- `diff-architecture` が返すのは決定的に検出できる乖離だけである。対象は技術スタックの追加・削除、コマンドの変更、ドメインマップの穴、死んだ glob、ディレクトリ構成の変化、セクションの欠落、ADR の状態の陳腐化とする。`features.adr` が `false` のときは、`## ADR 一覧` の欠落を扱わない。
-- rules の未作成は `diff-architecture` では検出されない。`get rules` の `exists` が `false` のファイルを候補一覧に並べ、`stage-rules` での作成を案内する。
-- `skipped` に理由付きで返った項目は、その実行では検出していない。判断が要るときは該当ファイルを読んで自分で確かめ、結果を候補として同じ一覧に並べる。
-- 散文の内容が実装と食い違うといった意味的な乖離は検出されない。実装 diff を見て気づいた点は、候補一覧に無くても `stage-architecture` に直接載せて更新する。
-- `findings` が 0 件でも、気づいた意味的な乖離があれば候補として提示する。「乖離なし」で終えない。
+`get config` を 1 回実行し、`features.adr` と `features.gotchas` を確かめる。
 
-## 候補の提示
+## 2. 乖離と ADR 候補の検出
 
+- `diff-architecture` を実行し、`findings` と `skipped` を取る。
+- `features.adr` が `true` のときは `scan-adr-candidates` も実行し、ADR 候補の配列を取る。
+- `get architecture` で現行の本文を取る。手順 4 で候補に併記する「現行の記述」にも使う。
+- この結果と現行の本文で、依頼された変更が ARCHITECTURE の他の部分を古くしていないかを確かめる。
+- `diff-architecture` が返すのは決定的に検出できる乖離だけである。対象は技術スタックの追加・削除、コマンドの変更、ドメインマップの穴、死んだ glob、ディレクトリ構成の変化、セクションの欠落とする。ADR の状態の陳腐化は `skipped` で返る。
+- `features.adr` が `false` のときは、`## ADR 一覧` の欠落と ADR の状態の陳腐化を、`skipped` から確かめたものも含めて候補にしない。どちらも ADR が無効な間は書き込めない。
+- `skipped` に理由付きで返った項目は、その実行では検出していない。判断が要るときは該当ファイルを読んで自分で確かめ、結果を候補に加える。
+- 散文の内容が実装と食い違うといった意味的な乖離は検出されない。実装 diff を見て気づいた点は、`findings` に無くても候補に加える。
+- `findings` が 0 件でも、気づいた意味的な乖離があれば候補に加える。「乖離なし」で終えない。
+
+## 3. rules の確認
+
+- `get rules` を実行し、`exists` が `false` のファイルを候補に加える。
+- rules の未作成は `diff-architecture` では検出されない。未作成のファイルは `stage-rules` で作る。
+
+## 4. 候補の提示と選択
+
+- 依頼された変更、手順 2 と 3 の候補、ADR 候補を 1 つの一覧に並べる。
 - 候補は種別ごとにまとめ、1 件を 1 行で示す。
 - 各候補に、現行の記述と実装側の事実を併記する。
-- 更新するかしないかは 1 件ずつ選ばせる。全件を一括で更新に倒さない。
-- 更新しないと選ばれた候補は、その回では扱わない。次の候補へ進む。
+- 依頼された変更のほかに候補が無いときも、乖離と rules の候補が 0 件だったことを一覧に書く。
+- 依頼された変更を除く候補は、更新するかしないかを 1 件ずつ選ばせる。全件を一括で更新に倒さない。
+- 更新しないと選ばれた候補は、その回では扱わない。
+- ADR 候補が 0 件なら、ADR 候補の欄を設けない。
+- ADR 候補のうち `adoptedAs` が `null` でないものは、ADR を作らず、手順 10 の `shrink-adr-candidate` による縮約だけを提案する(前回の縮約が失敗して残ったエントリである)。
+- 却下された ADR 候補は、持続層に全文のまま残す。
 
-## 起草
+## 5. 起草
 
-- 更新する文面は `../../references/writing-discipline.md` の執筆規律に従い草案を書いたのち、サブエージェントに同じ規律を守った上でより簡潔にさせる。
+- 文面は `../../references/writing-discipline.md` の執筆規律に従って書く。
 - セクションごとに書く内容は `../../references/architecture-format.md` に合わせる。
 - rules の 3 ファイルに書く内容は `../../references/rules-format.md` に合わせる。
-- 欠けているセクションを足すときは、`scan` の事実で埋まる範囲だけを草案にする。埋まらない箇所は推測せずユーザーに聞く。
-- rules の草案を `scan` の事実から起こさない。未作成のファイルは `../../docs/RULES.example.md` の記入例を既定の草案として提示する。
+- 欠けているセクションを足すときは `scan` を実行し、その事実で埋まる範囲だけを草案にする。埋まらない箇所は推測せずユーザーに聞く。
+- rules の草案を `scan` の事実から起こさない。未作成のファイルは `../../docs/RULES.example.md` の記入例を既定の草案にする。
+- ADR にするかどうかは `writing-discipline.md` の「何を ADR にするか」の条件で判断する。満たさないものは該当セクションの本文へ書く。
+- ユーザーが ADR を求めた変更が条件を満たさないときは、本文へ書く案とその理由を示し、ADR と本文のどちらで残すかを聞く。
+- ADR 候補から起こす草案の `#### 背景` には、候補の `sourceIntents`(出典 intent)の各行と「ADR 候補 ID: <候補 ID>」の 1 行を文言を変えずに書き写す。
+- `決定者` など ADR の必須項目のうち、依頼・候補・事実で埋まらないものは推測せずユーザーに聞く。必須項目は `../../references/cli-usage.md` の「stage-adr(追加)」にある。
+- ADR の状態を変えるときは理由を必須とする。理由が定まらないまま手順 8 へ進まない。
+
+## 6. サブエージェントによる簡潔化
+
+- 手順 5 の草案をすべてサブエージェントに渡し、`writing-discipline.md` の規律を守った上でより簡潔にさせる。
+- 次の部分は、簡潔化の対象から外すよう依頼文に書く。
+  - コードフェンスの中身(`metatron:domains` のブロックなど)
+  - `#### 背景` に書き写した `sourceIntents` の各行と「ADR 候補 ID」の行
+  - rules の `# 見出し` の行と管理者表示行
+- 返った文面で、事実と決定が変わっていないことと、対象から外した部分が手順 5 の草案と一字一句同じことを確かめてから、手順 7 で使う。
+
+## 7. 草案の提示
+
 - 1 セクションにつき、草案と確認してほしい点 1〜3 個を 1 メッセージで示す。
 - 残す部分と差し替える部分を、提示の時点で分けて示す。
 
-## ADR
+## 8. stage
 
-- ADR 一覧の変更は `stage-adr` を使う。`stage-architecture` には渡さない。
-- 追加と状態変更はどちらも承認を要する。状態変更は過去の判断を覆す行為であり、承認を省かない。
-- 状態を変えるときは理由を必須とする。理由が定まらないまま `stage-adr` を呼ばない。
-- エントリを削除しない。覆した判断は `廃止` の状態で残す。
-- ADR にするかどうかは `../../references/writing-discipline.md` の 3 条件で判断する。満たさないものは該当セクションの本文へ書く。
-
-## ADR 候補の取り込み
-
-- `scan-adr-candidates` が返した候補を、乖離の候補と並べて一覧提示する。候補が 0 件なら提示しない。
-- 見つかった候補のうち `adoptedAs` が `null` でないものは、ADR を作らず `shrink-adr-candidate` で縮約だけを提案する(前回の縮約が失敗して残ったエントリである)。
-- 承認された候補は、`## ADR` の規律(`stage-adr` → 承認 → `commit-architecture`)で ADR の草案にする。草案の `#### 背景` には、候補の `sourceIntents`(出典 intent)の各行と「ADR 候補 ID: <候補 ID>」の 1 行を文言を変えずに書き写す。候補には無い `決定者` はユーザーに聞く。
-- ADR の確定に失敗したときは持続層に触れない。候補は全文のまま持続層に残る。
-- `commit-architecture` が成功したら `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <候補の hash>` を呼ぶ。終了コード 3 で終わったら 1 回だけやり直し、それも失敗したらユーザーに報告する。
-- 却下された候補と、ADR の作成に失敗した候補は持続層に全文のまま残す。
-
-## GOTCHAS 候補の取り込み
-
-- ADR 候補の取り込みの後に `scan-gotcha-candidates` を実行する。
-- 候補が 1 件以上あれば、`../recording-gotchas/SKILL.md` の「持続層の GOTCHAS 候補の取り込み」に従う。0 件なら何も提示しない。
-
-## rules
-
-- rules の変更は `stage-rules` を使う。1 回の staging で扱えるのは `conventions` / `protected-paths` / `testing-policy` のうち 1 ファイルである。
-- `body` はファイル全体とする。`# 見出し` の行と、その直後の管理者表示行を含める。
-- `body` に frontmatter を書かない。
-- rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で返る。
+- ARCHITECTURE のセクションは `stage-architecture`、ADR は `stage-adr`、rules は `stage-rules` へ分けて渡す。
+- ADR 一覧の追加と状態変更は `stage-adr` で行う。`stage-architecture` には渡さない。
+- ADR のエントリを削除しない。覆した判断は `廃止` の状態で残す。
+- `stage-rules` の 1 回で扱えるのは `conventions` / `protected-paths` / `testing-policy` のうち 1 ファイルである。
+- `stage-rules` の `body` はファイル全体とする。`# 見出し` の行と、その直後の管理者表示行を含める。
+- `stage-rules` の `body` に frontmatter を書かない。
 - `stage-architecture` に `テスト方針` / `保護パス` / `規約` の見出しを渡さない。指定すると `unknown_heading` で返る。
 - `stage-rules` の diff は `sections` を持たない。`truncated` になったときは本文を短くしてから stage をやり直す。
 
-## 承認
+## 9. diff の提示と承認
 
-- 提示したうえで、書き込んでよいかの明示的な承認を得てから `commit-architecture` / `commit-rules` を実行する。
+- 返った diff を提示し、書き込んでよいかの明示的な承認を得る。
+- ADR の追加と状態変更はどちらも承認を要する。状態変更は過去の判断を覆す行為であり、承認を省かない。
 - `stage-architecture` / `stage-adr` / `stage-rules` が exit 0 で返ったことを承認と読み替えない。
 - 承認は stage 1 回につき 1 回得る。複数の stage を 1 回の承認でまとめない。
 - 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
 - `diff.truncated` が `false` のときは `diff.unified` を要約せず全文提示する。長いときは分割して提示する。
-- `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わず、`diff.sections` の `before` / `after` をセクション単位で全文提示してから承認を得る。
+- `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わず、`diff.sections` の `before` / `after` をセクション単位で全文提示する。
 - セクション単位でも一度に提示しきれないときは、`diff.sections` の `heading` を一覧で示し、どのセクションから見るかをユーザーに尋ねる。
-- 承認の後に文面を足さない。足すときは stage からやり直して承認を取り直す。
-- staging の期限切れや `file_changed` で commit が失敗したときは、現行を読み直して stage からやり直す。
+- 承認の後に文面を足さない。足すときは手順 8 からやり直して承認を取り直す。
 
-## 報告
+## 10. 書き込み
+
+- 手順 9 で承認を得た staging だけを書き込む。
+- ARCHITECTURE と ADR は `commit-architecture --staging-id <id>`、rules は `commit-rules --staging-id <id>` で書き込む。
+- rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で返る。
+- staging の期限切れや `file_changed` で commit が失敗したときは、現行を読み直して手順 8 からやり直す。
+- ADR 候補から起こした ADR の `commit-architecture` が成功したら、`shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <候補の hash>` を呼ぶ。`--adr` には `stage-adr` が返した `assignedId` を渡す。
+- 手順 4 で縮約だけを選ばれた候補は、stage と commit を経ずに `shrink-adr-candidate` を呼ぶ。`--adr` には候補の `adoptedAs` を渡す。
+- `shrink-adr-candidate` が終了コード 3 で終わったら 1 回だけやり直す。それも失敗したらユーザーに報告する。
+- ADR の確定に失敗したときは持続層に触れない。候補は全文のまま持続層に残る。
+
+## 11. GOTCHAS 候補の取り込み
+
+- `scan-gotcha-candidates` を実行する。
+- 候補が 1 件以上あれば、`../recording-gotchas/SKILL.md` の「持続層の GOTCHAS 候補の取り込み」に従う。0 件なら何も提示しない。
+
+## 12. 報告
 
 - 更新したセクション名・ADR の番号・rules のファイル名を列挙する。
+- 手順 11 で台帳へ移した GOTCHAS 候補も列挙する。
 - 「<更新したファイルのパス> を更新した(未コミット)。コミットするか」を 1 行添える。
 - run の文脈から呼ばれたときは、この確認を添えない。呼び出し元のコミット規約が働く。
