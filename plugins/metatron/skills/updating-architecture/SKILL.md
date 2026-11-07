@@ -23,10 +23,14 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)と rules(規�
 - 依頼された変更は、依頼の時点で更新が選ばれたものとして扱う。更新するかどうかを手順 4 で選び直させない。
 - 依頼された変更と同じ内容の候補が手順 2 と 3 で見つかったときは、依頼された変更として 1 件にまとめる。
 - まとめた相手が ADR 候補なら、手順 5 の書き写しと手順 10 の縮約では、ADR 候補から起こしたものとして扱う。
+- まとめた相手の ADR 候補の `adoptedAs` が `null` でないときは、ADR が既にあるので新しく作らず、縮約だけを行う。
 - 依頼や計画書の承認は、手順 9 の diff の承認に代えない。
 - 自分の作業で気づいた変更は、手順 2 と 3 の候補と同じく手順 4 で選ばせる。
 - 対象が 1 件だけ・数行だけのときも、手順を省かない。
-- 手順を飛ばすのは「記録の有効・無効」が定める場合だけとする。
+- 手順を飛ばすのは次の場合だけとする。
+  - 「記録の有効・無効」が定める場合
+  - 手順 4 で選ばれた対象が無く、手順 5〜10 で扱うものが無い場合
+  - 縮約だけを選ばれた ADR 候補が、手順 5〜9 を経ずに手順 10 で縮約される場合
 
 ## 記録の有効・無効
 
@@ -61,10 +65,10 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - `diff-architecture` を実行し、`findings` と `skipped` を取る。
 - `features.adr` が `true` のときは `scan-adr-candidates` も実行し、ADR 候補の配列を取る。
 - `get architecture` で現行の本文を取る。手順 4 で候補に併記する「現行の記述」にも使う。
-- この結果と現行の本文で、依頼された変更が ARCHITECTURE の他の部分を古くしていないかを確かめる。
+- この結果と現行の本文で、依頼された変更と自分で気づいた変更が ARCHITECTURE の他の部分を古くしていないかを確かめる。
 - `diff-architecture` が返すのは決定的に検出できる乖離だけである。対象は技術スタックの追加・削除、コマンドの変更、ドメインマップの穴、死んだ glob、ディレクトリ構成の変化、セクションの欠落とする。ADR の状態の陳腐化は `skipped` で返る。
-- `features.adr` が `false` のときは、`## ADR 一覧` の欠落と ADR の状態の陳腐化を、`skipped` から確かめたものも含めて候補にしない。どちらも ADR が無効な間は書き込めない。
 - `skipped` に理由付きで返った項目は、その実行では検出していない。判断が要るときは該当ファイルを読んで自分で確かめ、結果を候補に加える。
+- `features.adr` が `false` のときは、`## ADR 一覧` の欠落と ADR の状態の陳腐化を、`skipped` から確かめたものも含めて候補にしない。どちらも ADR が無効な間は書き込めない。
 - 散文の内容が実装と食い違うといった意味的な乖離は検出されない。実装 diff を見て気づいた点は、`findings` に無くても候補に加える。
 - `findings` が 0 件でも、気づいた意味的な乖離があれば候補に加える。「乖離なし」で終えない。
 
@@ -92,11 +96,11 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - rules の 3 ファイルに書く内容は `../../references/rules-format.md` に合わせる。
 - 欠けているセクションを足すときは `scan` を実行し、その事実で埋まる範囲だけを草案にする。埋まらない箇所は推測せずユーザーに聞く。
 - rules の草案を `scan` の事実から起こさない。未作成のファイルは `../../docs/RULES.example.md` の記入例を既定の草案にする。
-- ADR にするかどうかは `writing-discipline.md` の「何を ADR にするか」の条件で判断する。満たさないものは該当セクションの本文へ書く。
+- ADR にするかどうかは `writing-discipline.md` の「何を ADR にするか」の条件で判断する。満たさない変更は、ユーザーが ADR を求めていなければ該当セクションの本文へ書く。
 - ユーザーが ADR を求めた変更が条件を満たさないときは、本文へ書く案とその理由を示し、ADR と本文のどちらで残すかを聞く。
 - ADR 候補から起こす草案の `#### 背景` には、候補の `sourceIntents`(出典 intent)の各行と「ADR 候補 ID: <候補 ID>」の 1 行を文言を変えずに書き写す。
 - `決定者` など ADR の必須項目のうち、依頼・候補・事実で埋まらないものは推測せずユーザーに聞く。必須項目は `../../references/cli-usage.md` の「stage-adr(追加)」にある。
-- ADR の状態を変えるときは理由を必須とする。理由が定まらないまま手順 8 へ進まない。
+- ADR の状態を変えるときは理由を必須とする。理由が定まらない状態変更は、手順 8 の `stage-adr` に渡さない。
 
 ## 6. サブエージェントによる簡潔化
 
@@ -142,7 +146,8 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で返る。
 - staging の期限切れや `file_changed` で commit が失敗したときは、現行を読み直して手順 8 からやり直す。
 - ADR 候補から起こした ADR の `commit-architecture` が成功したら、`shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <候補の hash>` を呼ぶ。`--adr` には `stage-adr` が返した `assignedId` を渡す。
-- 手順 4 で縮約だけを選ばれた候補は、stage と commit を経ずに `shrink-adr-candidate` を呼ぶ。`--adr` には候補の `adoptedAs` を渡す。
+- 手順 4 で縮約だけを選ばれた候補は、stage と commit を経ずに `shrink-adr-candidate` を呼ぶ。手順 4 で縮約を選ばれたことを、その縮約の承認とする。`--adr` には候補の `adoptedAs` を渡す。
+- どちらの縮約でも、`--file`・`--candidate-id`・`--hash` には、手順 2 の `scan-adr-candidates` が返したその候補の `file`・`candidateId`・`hash` を渡す。
 - `shrink-adr-candidate` が終了コード 3 で終わったら 1 回だけやり直す。それも失敗したらユーザーに報告する。
 - ADR の確定に失敗したときは持続層に触れない。候補は全文のまま持続層に残る。
 

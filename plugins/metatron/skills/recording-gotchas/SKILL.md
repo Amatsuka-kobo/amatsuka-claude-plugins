@@ -95,7 +95,7 @@ GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効
 
 ## 持続層の GOTCHAS 候補の取り込み
 
-`docs/intents/domains/*.md` の `[GOTCHAS 候補]` を台帳へ移す手順である。`updating-architecture` と `capturing-architecture` が、ADR 候補の取り込みの後に呼ぶ。候補の書式は `../../references/gotchas-format.md` の「GOTCHAS 候補の取り込み」に従う。
+`docs/intents/domains/*.md` の `[GOTCHAS 候補]` を台帳へ移す手順である。`updating-architecture` は手順 11、`capturing-architecture` は手順 9 で、ADR 候補の処理を終えた後に呼ぶ。候補の書式は `../../references/gotchas-format.md` の「GOTCHAS 候補の取り込み」に従う。
 
 - [ ] 1. `scan-gotcha-candidates` を実行する。0 件なら何もせず戻る
 - [ ] 2. 候補を 1 件ずつ提示する
