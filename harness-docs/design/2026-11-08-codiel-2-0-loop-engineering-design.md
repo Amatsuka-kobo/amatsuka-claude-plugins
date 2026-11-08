@@ -14,11 +14,11 @@
 | D1 | Loop | ユーザーの実現したいこと(Epic)を起点にユーザーストーリーマッピングを行い、ストーリーごとに Workflow Intents を起票する。各 intent と Issue の状態を管理し、必要なら新しいストーリーやタスクを起票しながら、全ストーリーを完結させる |
 | D2 | Loop | 既定で止まる場面は 7 つとする。新しい画面名が決まるとき、金銭が絡む実装や判断、法的判断、取り消せない操作、セキュリティと個人情報、ユーザーの意図を変える判断、新しい外部依存の追加。この 7 つは Auto Ask が有効でも人に回す |
 | D3 | Loop | ユーザーは起動時と Loop の途中で次を行える。その Loop だけの止まる条件を足す。個別のストーリーやタスクに状態を付け、Loop にその項目を飛ばさせるか、そこで止まらせる。別の Epic を足す。対応中の Epic にストーリーを足す |
-| D4 | Loop | Epic の範囲外のストーリーが要ると AI が判断したときは、自分では足さず、別 Epic として起票するかをユーザーに仰ぐ |
-| D5 | Loop | Loop のセッションを経ずに人が直接行った変化も取り込む。対象は、ストーリーの追加、対応中のストーリーへのタスクの追加、優先度の変更、非対応の指定である。これらへの対応では止まらない |
+| D4 | Loop | Epic の範囲外のストーリーが必要だと AI が判断したときは、自分では足さず、別 Epic として起票するかをユーザーに仰ぐ |
+| D5 | Loop | Loop のセッションを経ずに人が直接加えた変化も取り込む。対象は、ストーリーの追加、対応中のストーリーへのタスクの追加、優先度の変更、非対応の指定である。これらへの対応では止まらない |
 | D6 | Loop | ストーリーの親 PR はベースブランチへ出し、人がマージする |
 | D7 | Loop | 各ストーリーの intent の承認と discuss は、起動時のストーリーマッピングの合意で代える。discuss の論点は ASK として扱い、Auto Ask が有効なら Jev が選び、無効ならそこで止まってユーザーに聞く |
-| D8 | Loop | 1 つのセッションで扱う Epic は 1 つとし、Epic 全体を 1 つの run にする。ストーリーとサブ intent は run の中の state として持ち、run の単位を持たない |
+| D8 | Loop | 1 つのセッションで扱う Epic は 1 つとし、Epic 全体を 1 つの run にする。ストーリーとサブ intent は run 内の state として管理し、個別の run にはしない |
 | D9 | Loop | Epic のセッションは Workflow を起動し、ストーリーを入れ子にして、1.2 の Workflow を子として呼ぶ |
 | D10 | Loop | 別の Epic は別のセッションで扱う。そのセッションは人の手ではなく自動で起動する |
 | D11 | Loop | Epic のセッションが人に聞く内容は、全体を見るセッションに集める。全体を見るセッションがユーザーに聞き、答えを返す |
@@ -79,7 +79,7 @@ Epic のセッション(バックグラウンド。Epic ごとに 1 つ。Epic �
 ```
 
 - 全体のセッションは、ユーザーが `/codiel:loop`(新設のコマンド)で始める。
-- 全体のセッションは run を持たない。
+- 全体のセッションでは run を作らない。
 
 ## 3. 全体のセッション
 
@@ -103,7 +103,7 @@ Epic のセッション(バックグラウンド。Epic ごとに 1 つ。Epic �
 - 人が作った既存の Epic Issue から始めるときは、その番号を `/codiel:loop <Epic Issue の番号>` で渡す(github モードだけ)。
   - Epic Issue に `codiel` と `epic` が無ければ、聞かずに足す。
   - 配下のサブ Issue をストーリーの案として取り込み、ストーリーマッピングの材料にする。既定はすべてを取り込み、ユーザーが外すものを選べる。
-  - 取り込むものに `codiel` と `story` が無ければ、マップの承認の後に足す。外したものにはラベルを付けない。
+  - 取り込むものに `codiel` と `story` が無ければ、マップの承認後に足す。外したものにはラベルを付けない。
 
 ### 3.3 Epic の worktree を作ってから Epic のセッションを起動する
 
@@ -116,7 +116,7 @@ Epic のセッション(バックグラウンド。Epic ごとに 1 つ。Epic �
 ```
 
 - Epic の worktree は `.codiel/worktrees/<a>/<b>` の形の外に置く。hook がストーリーやサブの worktree と取り違えないためである(現行の `WORKTREE_REL_RE`。`guard-write.ts:47`)。メインのチェックアウトへの解決は 4.1 のとおり `findMainRoot` を広げて行う。
-- Epic のセッションがストーリーやサブの worktree を作るときは、メインのチェックアウトを基準にした絶対パス(`<メイン>/.codiel/worktrees/<Epic>/<ストーリー>` など)を使う。Epic のセッションの `cwd` は Epic の worktree なので、相対パスで作ると Epic の worktree の中に入れ子で作られる。試験では、Epic の worktree の中で起動したセッションが、メインの下の `.codiel/worktrees/` に worktree を作って書き込めた(1.1)。
+- Epic のセッションがストーリーやサブの worktree を作るときは、メインのチェックアウトを基準にした絶対パス(`<メイン>/.codiel/worktrees/<Epic>/<ストーリー>` など)を使う。Epic のセッションの `cwd` は Epic の worktree なので、相対パスを指定すると、Epic の worktree の中に入れ子で作られてしまう。試験では、Epic の worktree の中で起動したセッションが、メインの下の `.codiel/worktrees/` に worktree を作って書き込めた(1.1)。
 - `--auto-ask` は `/codiel:loop --auto-ask` で受け、起動の引数で Epic のセッションへ渡す。
 - 許可モードは `auto` に固定する(D12)。
 
@@ -147,47 +147,47 @@ Epic のセッション(バックグラウンド。Epic ごとに 1 つ。Epic �
 ### 4.1 run を作業ツリーに結びつけ、作業ツリーごとに active な run を 1 つにする
 
 - `codiel-state` のルートは、1.1 のとおり全コマンドで `findMainRoot` で解決する。`.codiel/runs/` はメインのチェックアウトにだけ置く。
-- ただし現行の `findMainRoot`(`src/hooks/lib.ts:641,654-659`)は、パスが `/.codiel/worktrees/` を含むときだけ、その手前をメインとして返す。含まなければ `findProjectRoot`(`:630-638`)に回り、`.codiel/` を持つ最も近い祖先で止まる。`.codiel/config.json` は git で共有されるので、Epic の worktree の checkout にも `.codiel/` があり、探索は Epic の worktree 自身で止まる。そこで次を改める。
+- ただし現行の `findMainRoot`(`src/hooks/lib.ts:641,654-659`)は、パスが `/.codiel/worktrees/` を含むときだけ、その手前をメインとして返す。含まなければ `findProjectRoot`(`:630-638`)に回り、`.codiel/` がある最も近い祖先で止まる。`.codiel/config.json` は git で共有されるので、Epic の worktree の checkout にも `.codiel/` があり、探索は Epic の worktree 自身で止まる。そこで次を改める。
   - `findMainRoot` の正規表現を、`/.codiel/worktrees/` に加えて `/.codiel/epics/` も含むときに、その手前を返す形にする。
-  - Raguel の `resolveProjectRoot`(`raguel-mcp/src/project/root.ts:14,27-38`。同じ規則の独立の実装)も同じコミットで追随させ、2 つの実装の結果を比べるテストを持つ。
+  - Raguel の `resolveProjectRoot`(`raguel-mcp/src/project/root.ts:14,27-38`。同じ規則の独立の実装)も同じコミットで追随させ、2 つの実装の結果を比べるテストを置く。
   - guard-write は、`.codiel/epics/<slug>/` の下への書き込みを、Epic の worktree のルートを基準に判定する。`WORKTREE_REL_RE` とは別の正規表現を足し、Epic の worktree の中の相対パスを取り直す。現行の worktree の扱い(`guard-write.ts:47,320`)と同じく、`.codiel/` の免除(`:362,452,509`)で素通りさせない。一方、メインの `.codiel/runs/<Epic>/try-<n>/` の下(`questions/`・`waits/`)への書き込みは、従来どおり `:509` の免除で通す。
-- 文脈の圧縮の後の読み直しの手順(`skills/orchestrating-runs/SKILL.md:232-234`)は、要約に slug が無いとき `get --active` を呼び、2 件以上なら人に確かめる。Loop では Epic が複数動くので、`get --active` に作業ツリーで絞る引数を足し、Epic のセッションは自分の `cwd` の作業ツリーに結びついた run を読む。人には確かめない。
+- 文脈が圧縮された後に読み直す手順(`skills/orchestrating-runs/SKILL.md:232-234`)では、要約に slug が無いときに `get --active` を呼び、2 件以上なら人に確かめている。Loop では Epic が複数動くので、`get --active` に作業ツリーで絞る引数を足し、Epic のセッションは自分の `cwd` の作業ツリーに結びついた run を読む。人には確かめない。
 - 別の Epic は別のセッションで同時に動くので、「リポジトリ全体で active な run は 1 つ」の制限(`src/codiel-state.ts:892-903`)を、「作業ツリーごとに active な run は 1 つ」に改める。
   - state に、run を始めた作業ツリーのルートのパス(`worktreeRoot`)を記録する。
   - `init` は、同じ作業ツリーに active な run があるときだけ断る。
 - hook は、次の順で判定に使う state を選ぶ。
   1. 書き込み先のパスか、コマンドの作業ディレクトリの候補(`cd` の行き先・サブシェルの `cd`・`git -C`)を見る。それが、ある run の進みの表に記録した worktree の下なら、そのストーリーかサブの state を使う。
-  2. それ以外は、hook の入力の `cwd` から作業ツリーのルートを求める。そのルートを `worktreeRoot` に持つ run を使う。Epic のセッションでは、Epic の worktree が `worktreeRoot` である。
+  2. それ以外は、hook の入力の `cwd` から作業ツリーのルートを求め、`worktreeRoot` がそのルートと一致する run を使う。Epic のセッションでは、Epic の worktree が `worktreeRoot` である。
   3. どれにも当たらなければ、run は無いものとして扱う。
 - 作業ツリーの照合は実体パスで行う。`init` は `worktreeRoot` を実体パスで記録し、hook も `cwd` を `realpathOrAncestor` で実体にしてから照合する(guard-write の worktree の照合と同じ。`guard-write.ts:312-321`)。symlink を含む作業ディレクトリで照合が外れ、run が無いものとして扱われるのを防ぐ。
 - `CODIEL_LOOP_SESSION=1` か、`cwd` が `.codiel/epics/` の下なのに 3 に落ちたときは、run が無いものとして通さず、4.8 と同じく `deny` と理由にする。
-- Raguel の設定と記録の保護(`guard-write.ts:294-305` の `raguelTarget`、`guard-bash.ts:1204-1210` の `writesRaguelFiles`)だけは、作業ツリーによらず、リポジトリの中に active か awaiting_human の run が 1 つでもあれば当てる。保護する 2 つ(`.codiel/config.json` と `~/.raguel/cases/<projectId>`)は、作業ツリーをまたいで共有される。全体のセッションは run を持たないが、そこからの書き換えも止める必要がある。
+- Raguel の設定と記録の保護(`guard-write.ts:294-305` の `raguelTarget`、`guard-bash.ts:1204-1210` の `writesRaguelFiles`)だけは、作業ツリーによらず、リポジトリの中に active か awaiting_human の run が 1 つでもあれば当てる。保護する 2 つ(`.codiel/config.json` と `~/.raguel/cases/<projectId>`)は、作業ツリーをまたいで共有される。全体のセッションには run が無いが、そこからの書き換えも止める必要がある。
 - stop-guard も、入力の `cwd` が属する作業ツリーの run だけを見る。メインセッションでは `cwd` が `cd` に追随するので、Epic のセッションは自分の worktree の外へ単独の `cd` をしない(サブシェルか `git -C` を使う)。
-- 1.2 までの run は、メインのチェックアウトを `worktreeRoot` に持つ run として、そのまま動く。`worktreeRoot` の無い state は、メインのチェックアウトの run と見なす。
+- 1.2 までの run は、`worktreeRoot` がメインのチェックアウトである run として、そのまま動く。`worktreeRoot` の無い state は、メインのチェックアウトの run と見なす。
 
 ### 4.2 Epic の run の形
 
-- Epic の run は、`init --epic <Epic 文書のパス> --slug <Epic の slug>` で作る。intent を持たない run とする。
+- Epic の run は、`init --epic <Epic 文書のパス> --slug <Epic の slug>` で作る。intent の無い run とする。
   - `mode` は `loop`、`branch` は `codiel/epic-<Epic の slug>`、`worktreeRoot` は Epic の worktree とする。
   - Epic 文書のパスは `docs/intents/epics/<slug>.md` で、現行の `--intent` の形の検査(`codiel-state.ts:862-866`)は当てない。
   - 現行の `init` は、try-1 で `codiel/<slug>` のブランチが既にあれば失敗する(`codiel-state.ts:953-956`)。Epic のブランチは全体のセッションが先に作る(3.3)ので、`--epic` のときはこの検査を反転させ、`codiel/epic-<slug>` が存在することを求める。
 - Epic の run は、ステージ表に足す新しいゲート無しのフェーズ `loop` だけを使い、ほかのフェーズは `SKIPPED` で作る。
   - `loop` は discuss と `workflow` の間に足す。`loop` の `stage` は 3、`workflow` は 4 となり、design 以降はさらに 1 ずつ大きくなる。Raguel の表(`raguel-mcp/src/codiel/phases.ts`)と 2 者比較のテストを同じコミットで追随させる。Raguel の表にはゲート付きのフェーズの行だけがあるので、`loop` の行は足さず、後ろの `stage` だけを直す。
   - 標準の run と Workflow モードの親 run では、`loop` を `SKIPPED` で作る。`readState` は、欠けた `loop` のキーを `SKIPPED` で補う。
-- Epic の run は PR を持たない。全ストーリーが終わったら(4.9)、`complete-phase loop` の後に `close --reason loop-complete` で `completed` にする。`awaiting_outcome` を経ない。
+- Epic の run は PR を作らない。全ストーリーが終わったら(4.9)、`complete-phase loop` の後に `close --reason loop-complete` で `completed` にする。`awaiting_outcome` は経ない。
   - 現行の `close` は、`branch` が null、intent が passed、それ以外のフェーズが pending であることを求める(`codiel-state.ts:1439-1452`)。`mode: loop` の run では、これらの代わりに `loop` が passed であることを求める分岐を足す。
-- Epic の state は、ストーリーごとの進みの表と、問いの一覧(4.6)と、チェックポイントの写し(4.5)を持つ。
+- Epic の state には、ストーリーごとの進みの表、問いの一覧(4.6)、チェックポイントの写し(4.5)を置く。
 
 ### 4.3 ストーリーとサブ intent は Epic の run の中の state として持つ
 
 | 単位 | state の置き場 | Raguel の run ID |
 | --- | --- | --- |
-| Epic | `.codiel/runs/<Epic>/try-<n>/state.json` | 持たない(Epic 自体はゲートを通らない) |
+| Epic | `.codiel/runs/<Epic>/try-<n>/state.json` | 無し(Epic 自体はゲートを通らない) |
 | ストーリー | `.../stories/<ストーリー>/state.json` | `<Epic>-try-<n>-t<j>`。やり直すと `-r<m>` を付ける |
 | サブ intent | `.../stories/<ストーリー>/subs/<サブ>/state.json` | `<Epic>-try-<n>-t<j>-s<k>`。やり直すと `-r<m>` を付ける |
 
 - `j` と `k` は登録順の番号である。slug は 40 文字までなので、run ID は 64 文字の上限に収まる。
-- ストーリーの state は、1.2 の Workflow モードの親 run と同じフェーズを持つ。サブの state は 1.2 のサブの state と同じである。
+- ストーリーの state のフェーズ構成は、1.2 の Workflow モードの親 run と同じにする。サブの state は 1.2 のサブの state と同じである。
 - `codiel-state` に `--story <ストーリーの slug>` を足し、1.2 の `--sub` と組み合わせて使う。基準は次のとおりとする。
 
 | 基準 | `--story` | `--story --sub` |
@@ -201,7 +201,7 @@ Epic のセッション(バックグラウンド。Epic ごとに 1 つ。Epic �
   - ストーリー: worktree `.codiel/worktrees/<Epic>/<ストーリー>`、ブランチ `codiel/<ストーリー>`(ベースブランチから。D6)
   - サブ: worktree `.codiel/worktrees/<Epic>/<ストーリー>--<サブ>`、ブランチ `codiel/<ストーリー>--<サブ>`
   - ストーリーの slug は、既存の `codiel/<slug>` のブランチと重ならないものにする。作るときに確かめる。
-- Epic の state の進みの表に、ストーリーごとの番号・slug・worktree・ブランチ・run ID・PR の URL・進みを持つ。進みは、未着手 / 実行中 / マージ待ち / マージ済み / 人の判断待ち / 保留 / 非対応 / 中止 のどれかとする。サブの進みはストーリーの state の表に持つ(1.2 の 3.2)。
+- Epic の state の進みの表には、ストーリーごとの番号・slug・worktree・ブランチ・run ID・PR の URL・進みを記録する。進みは、未着手 / 実行中 / マージ待ち / マージ済み / 人の判断待ち / 保留 / 非対応 / 中止 のどれかとする。サブの進みはストーリーの state の表に置く(1.2 の 3.2)。
 - 書き手は、表ごとに 1 体に限る。
   - Epic の state(ストーリーの進みの表・問いの一覧・チェックポイントの写し)を書くのは、Epic のセッションだけである。
   - ストーリーの state とサブの進みの表を書くのは、そのストーリーの Workflow が動いている間は、Workflow の中のストーリーの担当エージェントだけである。1.2 で「Workflow の外のオーケストレーター」が書く表を、Loop ではストーリーの担当エージェントが書く。
@@ -226,7 +226,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
 
 | 工程 | 内容 |
 | --- | --- |
-| intent の起票 | ストーリーの担当エージェントが、分解の聞き取りを行わない Workflow Intents で、ストーリーの親 intent とサブ intent を作る。入力はストーリーマップと Epic の原文である。サブの規模もここで決める。Epic Issue から取り込んだストーリーに、`codiel` と `subtask` を持つサブ Issue があれば、その分け方を使い、無ければ分解する。github モードではサブ Issue を `codiel` と `subtask` を付けて起票し、つなぐ(1.2 の 2.5)。ストーリーのブランチにコミットする |
+| intent の起票 | ストーリーの担当エージェントが、分解の聞き取りを行わない Workflow Intents で、ストーリーの親 intent とサブ intent を作る。入力はストーリーマップと Epic の原文である。サブの規模もここで決める。Epic Issue から取り込んだストーリーに、`codiel` と `subtask` が付いたサブ Issue があれば、その分け方を使い、無ければ分解する。github モードではサブ Issue を `codiel` と `subtask` を付けて起票し、つなぐ(1.2 の 2.5)。ストーリーのブランチにコミットする |
 | discuss | 論点を ASK として扱う(D7)。Auto Ask が有効なら Jev が選ぶ。無効なら、論点を問いとして記録し(4.6)、このストーリーの Workflow を `awaiting-human` で終える |
 | workflow | 1.2 の 3.5〜3.8 のサイクルを、スクリプトの中で回す。実装とレビューと修正は、1.2 の Workflow を `workflow()` の子として呼ぶ。1.2 でオーケストレーターが行う仕事(マージ・`sub-reset`・進みの表の更新)は、スクリプトが起動するストーリーの担当エージェントが行う。サブが人の判断を待つときは、そのサブを問いとして記録し、独立したサブは進める。進められるサブが無くなったら、Workflow を `awaiting-human` で終える |
 | 後工程 | ストーリーの担当エージェントが、test-loop → intent-sync → pr → review → fix-loop → triage → finalize を進める。review の観点ごとのレビュアーは、スクリプトが並列に起動する |
@@ -238,9 +238,9 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
   - ラベルの検査: `ghPostPhaseProblem` はコマンドの引数を見ない(`lib.ts:43-46`)ので、1.1 の 3.2 と同じく各 hook に置く(guard-bash は `gh` の引数、guard-github-mcp は `labels` の引数)。Loop の run(`mode: loop`)では `gh issue create` にも `codiel` を求め、標準の run の triage では求めない。
 - 子の Workflow と親の Workflow は、同時 16 エージェントの上限を共有する。
 - ストーリーの state を書くのは、ある時点でそのストーリーを担当する 1 体だけとする。
-- ストーリーの親 intent の `## ASIS` と `## TOBE` には、Epic 文書の原文を要約せずに写し、出所の行(「出所: Epic 文書 `<パス>` の原文」と日付・話者)を添える。マッピングの会話にそのストーリーについてのユーザーの言葉があれば、それも話者と日付を添えて記録する。ストーリーのブランチはベースブランチから作り、Epic 文書を持たないので、原文をストーリーの intent の中で閉じさせる。サブ intent は 1.2 のとおり親(ストーリー)を参照する。
+- ストーリーの親 intent の `## ASIS` と `## TOBE` には、Epic 文書の原文を要約せずに写し、出所の行(「出所: Epic 文書 `<パス>` の原文」と日付・話者)を添える。マッピングの会話にそのストーリーについてのユーザーの言葉があれば、それも話者と日付を添えて記録する。ストーリーのブランチはベースブランチから作り、Epic 文書が含まれないため、原文をストーリーの intent の中で完結させる。サブ intent は 1.2 のとおり親(ストーリー)を参照する。
 - triage では、medium と low の所見を、そのストーリーの配下のタスクとして起票する(github では `codiel` と `subtask` を付けたサブ Issue、local では intent の草案)。Loop が対応するタスクなので、1.1 の triage と違い `codiel` を付ける。Loop の run の中の `gh issue create` に `codiel` が無ければ、hook が拒否する。マップの承認を起票の承認として扱う(3.2)。AI が起票したことが分かる印を付け、人が非対応にできるようにする。
-- AI が Epic の範囲内で新しいストーリーが要ると判断したときも、同じくマップの承認で足し、印を付ける。範囲外なら 4.6 の問いにする(D4)。
+- AI が Epic の範囲内で新しいストーリーが必要だと判断したときも、同じくマップの承認で足し、印を付ける。範囲外なら 4.6 の問いにする(D4)。
 - ストーリーの finalize の後、進みを「マージ待ち」にする。
 
 ### 4.5 チェックポイントで人の変化とマージを取り込み、止まらずに反映する
@@ -250,10 +250,10 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
   1. Epic の worktree に、人が直接書き換えた未コミットの Epic 文書があれば、「人の変更」としてコミットする。
   2. github モードでは、リモートの Epic のブランチを fetch してマージする。Epic 文書が衝突したら、人の変更を正とせずに問い(4.6)にして、その回の取り込みを見送る。
   3. 全体のセッションから受けた指示(3.5)を Epic 文書に書く。
-  4. Epic 文書と、github モードでは Epic Issue 配下の Issue とラベルを読み、Epic の state の写しと比べて変化を見つける。Loop 自身が加えた変更は state に記録しておき、人の変化と区別する。github モードで読む Issue は、`codiel` ラベルを持つものだけに限る。
-     - ストーリーの追加: Epic Issue のサブ Issue で、`codiel` と `story` を持つもの。
-     - タスクの追加: ストーリー Issue のサブ Issue で、`codiel` と `subtask` を持つもの。
-     - `codiel` を持たない Issue は、Epic Issue の配下にあっても取り込まない。全体のセッションの進み具合の報告で、取り込まなかった Issue の番号だけを示す。
+  4. Epic 文書と、github モードでは Epic Issue 配下の Issue とラベルを読み、Epic の state の写しと比べて変化を見つける。Loop 自身が加えた変更は state に記録しておき、人の変化と区別する。github モードで読む Issue は、`codiel` ラベルが付いたものだけに限る。
+     - ストーリーの追加: Epic Issue のサブ Issue で、`codiel` と `story` が付いたもの。
+     - タスクの追加: ストーリー Issue のサブ Issue で、`codiel` と `subtask` が付いたもの。
+     - `codiel` が付いていない Issue は、Epic Issue の配下にあっても取り込まない。全体のセッションで進み具合を報告するときに、取り込まなかった Issue の番号だけを示す。
   5. マージ待ちのストーリーのマージを確かめる。github モードでは `gh pr view`、local モードでは `git merge-base --is-ancestor <ストーリーのブランチ> <ベースブランチ>` で確かめる。マージされていれば進みを「マージ済み」にし、ストーリーとそのサブの run ID に結末(approved)を記録する。PR が閉じられていれば、問い(4.6)にする。
   6. Epic 文書の変更をコミットし、github モードでは Epic のブランチを push する。
 - 変化ごとの扱いは次のとおりである。D5 の 4 種類(ストーリーの追加・タスクの追加・優先度の変更・非対応)では止まらない。D3 の「そこで止まらせる」状態だけが、意図して止まる。
@@ -273,7 +273,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
 
 ### 4.6 人に聞く内容は問いの一覧に記録し、手すきになって待つ
 
-- Epic の state に、問いの一覧を持つ。問いごとに ID・対象(Epic / ストーリー / サブ)・種類・状態(未回答 / 回答済み)を持ち、問いの全文(問い・選択肢と帰結・評価 ID)を `.codiel/runs/<Epic>/try-<n>/questions/<ID>.md` に書く。
+- Epic の state に、問いの一覧を置く。一覧には問いごとの ID・対象(Epic / ストーリー / サブ)・種類・状態(未回答 / 回答済み)を記録し、問いの全文(問い・選択肢と帰結・評価 ID)は `.codiel/runs/<Epic>/try-<n>/questions/<ID>.md` に書く。
 - 対象がストーリーかサブなら、その state を `mark-ask` で `awaiting_human` にする。対象が Epic(範囲外のストーリーなど)なら、Epic の run は active のままにする。
 - 人に聞く場面:
   - D2 の 7 つの場面と、その Loop だけの止まる条件(4.8)
@@ -292,7 +292,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
 - 待ちから戻る手段:
   - 全体のセッションからの SendMessage(答え・指示・再確認の依頼)。
   - ストーリーの Workflow の完了の通知。
-- マージ待ちだけが残ったときの再確認は、ユーザーが全体のセッションで求めたときに、全体のセッションが Epic のセッションへ依頼する。定期的に確かめる仕組みは持たない。
+- マージ待ちだけが残ったときの再確認は、ユーザーが全体のセッションで求めたときに、全体のセッションから Epic のセッションへ依頼する。定期的に確かめる仕組みは設けない。
 - セッションのプロセスが止まるか再起動すると、動いていた Workflow は続かない(agent-view.md・workflows.md)。Epic のセッションは、起こされるたびに、`workflow` の種類の待ちに対応する Workflow がまだ動いているかを、自分のセッションのタスクの一覧で確かめる。動いていなければ、ストーリーとサブの state から続きの Workflow を起動し直す(同じセッションの中なら `resumeFromRunId` を使う)。全体のセッションは、Epic のセッションが手すきなのに `workflow` の待ちが残っていると知ったら、立て直しを SendMessage で依頼する。
 - バックグラウンドセッションでは、利用上限に当たったとき Workflow は待たず、当たったエージェントが失敗する(workflows.md の「When a run hits your usage limit」)。1 回のストーリーの Workflow で、複数のサブが同時に `failed`(`agent()` が null)になったときは、利用上限を疑う。1.2 の `failed` のやり直しの回数に数えず、そのストーリーを人の判断待ちにして「利用上限で止まった可能性がある。再開するか」を問いにする。
 
@@ -301,7 +301,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
 **Loop の run では、hook は `ask` を出さず、`deny` と理由を返す**。auto モードでも hook の `ask` は許可の確認に送られ(1.2 の表)、人のいない Epic のセッションが止まるためである。
 
 - 対象は、判定に使う state の `mode` が `loop` の run(Epic・ストーリー・サブ)である。1.1 と 1.2 の run の `ask` は変えない。
-- 理由の文には、「この操作は人の判断が要る。問いを記録して(4.6)、次の作業へ進む」旨を書く。Claude は `deny` の理由を読めるので、問いを記録できる。
+- 理由の文には、「この操作には人の判断が必要である。問いを記録して(4.6)、次の作業へ進む」旨を書く。Claude は `deny` の理由を読めるので、問いを記録できる。
 - 1.2 の「テストのファイルへの書き込みは ask」「`workflow-` の待ちの間はメインの `.codiel/` の外を ask」も、Loop では同じく `deny` と理由になる。
 - hook の入力の JSON を読めなかったときは `cwd` も分からないので、環境変数だけで Loop かどうかを決める。
 - hook が state を読めなかったときや `.codiel/config.json` が不正なときの安全側の `ask`(`guard-write.ts:384-388,407-411,511-516`、`guard-bash.ts:1237-1242`、`guard-github-mcp.ts:58-63`)は、`mode` を読む前に出る。そこで Loop かどうかを state に依らずに決める。全体のセッションが Epic のセッションを起動するときに環境変数 `CODIEL_LOOP_SESSION=1` を渡し(hook はセッションの子プロセスとして環境変数を受け継ぐ)、加えて `cwd` が `.codiel/epics/` の下かを見る。どちらかに当たれば、これらの経路でも `deny` にする。
@@ -317,7 +317,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
   - 担い手が design と dev-plan を書くとき、作業の契約(1.1)の求めに応じて、止まる場面に当たる箇所を理由付きで列挙する。1.1 の作業の契約に、この項目を足す。
   - Raguel が、止まる場面ごとの問いを内容判定に足す。Jev が有効なら Jev で判定し、無効なら語彙のルールで判定する。
 - その Loop だけの止まる条件(Epic 文書の該当のセクション)は、上の 2 つと同じ経路で判定する。条件の文を、作業の契約と Raguel の内容判定の入力に渡す。
-- 止まる場面に当たる所見は、Raguel の ruleId を変えずに、Auto Ask のツールが持つ対応表(ruleId → 止まる場面の種類)で見分ける。対応表は重大度によらず当てる。`plan/irreversible-ops` のように既定が info のルールも、Loop では当たれば止まる場面として扱う。
+- 止まる場面に当たる所見は、Raguel の ruleId を変えずに、Auto Ask のツールにある対応表(ruleId → 止まる場面の種類)で見分ける。対応表は重大度によらず当てる。`plan/irreversible-ops` のように既定が info のルールも、Loop では当たれば止まる場面として扱う。
 
 ### 4.9 Loop の完了
 
@@ -374,7 +374,7 @@ D13 の「LLM の主観が入らない聞き方」は、次の 3 点で担保す
 - 問いはコードが組み立てる。
   - Raguel MCP に、確認を Jev に裁定させる新しいツールを足す。
   - Raguel の ASK では、評価の記録(所見の ruleId と message、`decisionPoint`、objective、評価対象の抜粋)から問いを作る。
-  - 評価を持たない確認では、確認の種類ごとの固定の型に、Claude が渡した事実を当てはめる。Claude が渡すのは、出典付きの引用だけである。
+  - 評価を伴わない確認では、確認の種類ごとの固定の型に、Claude が渡した事実を当てはめる。Claude が渡すのは、出典付きの引用だけである。
 - 判断の基準は、ユーザーの原文と、持続層の意図的な制約と、ADR に限る。原文の当たらない確認(run の外のファイル・triage・領域名)では、確認の種類ごとの型が定める事実(run の intent の範囲・プロジェクトの規約)を基準にする。原文と制約は、要約せずに引用して渡す。
 - 選択肢は対称に並べる。
   - 各選択肢に帰結を同じ形式で添える。
@@ -383,7 +383,7 @@ D13 の「LLM の主観が入らない聞き方」は、次の 3 点で担保す
 - Raguel の Jev の呼び出し(`raguel-mcp/src/context/jev.ts:22-33`)は、現行では noul と score の問いだけを扱う。`choice` の問いを足す。
 - 自信度は、Jev の `choice` の答えの `confidence` で判定する。SDK の答えには選択肢ごとの `probabilities` もある(`@typesafe-ai/sdk` 0.6.0 の `ChoiceResponse`)ので、最上位と次点の差を補助に使ってよい。
 - 問いの全文、Jev の答え、自信度、採った選択肢を Raguel のケースファイルに残し、後から人が監査できるようにする。
-- `.codiel/config.json` の `raguel` に、Auto Ask のしきい値のキーを足す。スキーマは未知のキーを読み込みエラーにする(`raguel-mcp/src/config/schema.ts`)ので、スキーマを変える。
+- `.codiel/config.json` の `raguel` に、Auto Ask のしきい値のキーを足す。未知のキーがあると読み込みエラーになる(`raguel-mcp/src/config/schema.ts`)ため、スキーマも更新する。
 
 ### 5.4 選択肢の作者が LLM である点は残る
 
@@ -404,14 +404,14 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 
 | 対象 | 現行の挙動 | 2.0 での変更 |
 | --- | --- | --- |
-| `src/codiel-state.ts` の `init`(`:855-962`) | `--intent` が必須で `docs/intents/` 直下に限る。`branch` は `codiel/<slug>` で、try-1 で既にあれば失敗する。リポジトリ全体で active な run は 1 つ | `--epic` で intent を持たない Epic の run を作る。`branch` は `codiel/epic-<slug>` で、既にあることを求める。作業ツリーごとに 1 つにする。`worktreeRoot` を実体パスで記録する |
+| `src/codiel-state.ts` の `init`(`:855-962`) | `--intent` が必須で `docs/intents/` 直下に限る。`branch` は `codiel/<slug>` で、try-1 で既にあれば失敗する。リポジトリ全体で active な run は 1 つ | `--epic` で intent の無い Epic の run を作る。`branch` は `codiel/epic-<slug>` で、既にあることを求める。作業ツリーごとに 1 つにする。`worktreeRoot` を実体パスで記録する |
 | `guard-write.ts:294-305` の `raguelTarget`、`guard-bash.ts:1204-1210` の `writesRaguelFiles` | run があるときだけ Raguel の設定と記録の書き換えを拒否する | 作業ツリーによらず、リポジトリの中に active か awaiting_human の run があれば当てる(4.1) |
 | `STAGES`・`readState` | 1.2 で `workflow` を足した表 | `loop` を `workflow` の前に足す。欠けたキーを `SKIPPED` で補う |
 | `findActiveRun`(`:363-377`) | updatedAt が最新の 1 件 | `cwd` の作業ツリーに結びついた run を返す(4.1) |
 | `close`(`:1439-1452`) | `branch` が null、intent が passed、ほかのフェーズが pending のときだけ終える | `mode: loop` では `loop` が passed であることを求める分岐を足し、`--reason loop-complete` で `completed` にする |
 | `get --active` と読み直しの手順(`skills/orchestrating-runs/SKILL.md:232-234`) | 2 件以上なら人に確かめる | 作業ツリーで絞る引数を足し、Epic のセッションは自分の作業ツリーの run を読む |
 | `src/hooks/lib.ts` の `findMainRoot`(`:641,654-659`)と `findProjectRoot`(`:630-638`) | `/.codiel/worktrees/` を含むときだけ手前をメインとする | `/.codiel/epics/` も含める(4.1) |
-| `raguel-mcp/src/project/root.ts` の `resolveProjectRoot`(`:14,27-38`) | `findMainRoot` と同じ規則の独立の実装 | 同じコミットで追随させ、2 つの実装を比べるテストを持つ |
+| `raguel-mcp/src/project/root.ts` の `resolveProjectRoot`(`:14,27-38`) | `findMainRoot` と同じ規則の独立の実装 | 同じコミットで追随させ、2 つの実装を比べるテストを置く |
 | `src/hooks/lib.ts` の `ghPostPhaseProblem`(`:46-59`) | Issue の作成は triage だけ | ストーリーの intent フェーズと、Epic の `loop` フェーズでも許し、`codiel` ラベルを求める(4.4) |
 | hook の安全側の `ask`(`guard-write.ts:384-388,407-411,511-516`、`guard-bash.ts:1237-1242`、`guard-github-mcp.ts:58-63`) | state を読めないときに `ask` | `CODIEL_LOOP_SESSION=1` か `cwd` が `.codiel/epics/` の下なら `deny`(4.8) |
 | `mark-ask`・`resume`・`set-domain`・`wait-*` | run 全体 | `--story`(と `--sub`)で対象を絞る。`wait-add` に種類を足す |
@@ -420,7 +420,7 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 | `src/raguel-records.ts`(`:433-444,488-497`) | ruling `as-is` を検査する | `jev-as-is` を受ける |
 | `src/hooks/stop-guard.ts`・`guard-write.ts`・`guard-bash.ts`・`guard-github-mcp.ts`・`lib.ts` | run を 1 つ選んで判定する。`ask` を返す | 4.1 の順で state を選ぶ。`mode: loop` では `ask` を `deny` と理由に変える(4.8)。`loop` フェーズでの Epic のブランチの push と Epic 文書への書き込みを許す。ストーリーのブランチの PR を進みの表から引く |
 | `raguel-mcp/src/codiel/phases.ts` と 2 者比較のテスト | 1.2 で `workflow` を足した表 | `loop` の分だけ後ろの `stage` を 1 ずつ大きくする |
-| `raguel-mcp/src/tools/recordOutcome.ts`(`:22-25,56-80,150-170`)と `core/types.ts:200` の `Ruling` | ruling は `as-is`・`false-positive`・`revise`。判例は `false-positive` か内容判定が ok のときに作る | `jev-as-is`・`jev-revise` を足す。`jev-as-is` からは判例を作らない |
+| `raguel-mcp/src/tools/recordOutcome.ts`(`:22-25,56-80,150-170`)と `core/types.ts:200` の `Ruling` | ruling は `as-is`・`false-positive`・`revise`。判例は `false-positive` か内容判定が ok のときに作る | `jev-as-is`・`jev-revise` を足す。`jev-as-is` と `jev-revise` からは判例を作らない |
 | `raguel-mcp/src/casefile/store.ts:429` の `hasRuling` | `as-is`・`false-positive` を裁定済みとする | `jev-as-is` も裁定済みとする |
 | `raguel-mcp/src/context/jev.ts`(`:22-33`) | noul と score の問い | `choice` の問いを足す |
 | Raguel の新しいツール | — | 確認を Jev に裁定させるツール、STOP の推奨を選ばせるツール、止まる場面の対応表、止まる場面の内容判定の問い |
@@ -435,15 +435,15 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 
 | 番号 | 判断 | 判断の軸 |
 | --- | --- | --- |
-| J1 | 全体のセッションは run を持たず、Epic の一覧は `.codiel/runs/` の `mode: loop` を正とする | `claude agents --json` の既定の出力には、終わったセッションが出ない |
+| J1 | 全体のセッションでは run を作らず、Epic の一覧は `.codiel/runs/` の `mode: loop` を正とする | `claude agents --json` の既定の出力には、終わったセッションが出ない |
 | J2 | Epic の worktree を `.codiel/epics/<slug>` に置き、その中で Epic のセッションを起動する | 試験で、`git worktree add` の worktree の中で起動したセッションは、別の worktree とメインの操作を拒否されなかった。`.codiel/worktrees/<a>/<b>` の形の外に置けば、hook が取り違えない |
 | J3 | 「active な run は 1 つ」を作業ツリーごとに改め、hook は 4.1 の順で state を選ぶ | D10 で、別の Epic のセッションが同じリポジトリで同時に動く |
 | J4 | Epic のセッションから全体のセッションへメッセージを送らず、全体のセッションが手すきの知らせを受けて state を読む | Epic のセッションが全体のセッションの名前を知る必要が無くなる。全体のセッションを始め直しても、宛先が古くならない |
-| J5 | 問いの正本は Epic の state の問いの一覧と `questions/` のファイルに置く | `mark-ask` は問いの全文を持てない。Epic に当たる問いでは、Epic の run を `awaiting_human` にしたくない |
+| J5 | 問いの正本は Epic の state の問いの一覧と `questions/` のファイルに置く | `mark-ask` には問いの全文を入れられない。Epic に当たる問いでは、Epic の run を `awaiting_human` にしたくない |
 | J6 | Loop の run では hook の `ask` を `deny` と理由に変える | auto モードでも hook の `ask` は許可の確認に送られ、人のいないセッションが止まる。`deny` の理由は Claude に見えるので、問いの記録へ回せる |
 | J7 | ストーリーごとに Workflow を起動し、同時に動かす数を設定で抑える | 1 つの Workflow で全ストーリーを回すと、1 つのストーリーの問いが Workflow の終わりまで全体のセッションへ届かない |
-| J8 | ストーリーの intent に Epic の原文を写す | ストーリーのブランチはベースブランチから作り、Epic 文書を持たない。原文を参照のマーカーにすると、ストーリーのブランチの上で照合できない |
-| J9 | Loop の状態は Epic 文書の一覧(と github のラベル)で持ち、intent の frontmatter には書かない | ストーリーの intent はストーリーのブランチにしか無く、着手前のストーリーには intent が無い |
+| J8 | ストーリーの intent に Epic の原文を写す | ストーリーのブランチはベースブランチから作り、Epic 文書を含まない。原文を参照のマーカーにすると、ストーリーのブランチの上で照合できない |
+| J9 | Loop の状態は Epic 文書の一覧(と github のラベル)で管理し、intent の frontmatter には書かない | ストーリーの intent はストーリーのブランチにしか無く、着手前のストーリーには intent が無い |
 | J10 | 全体のセッションは Epic 文書を書かず、指示を Epic のセッションへ伝える | Epic 文書を書くのを Epic のセッションだけにして、書き換えの衝突を避ける |
 | J11 | ストーリーの中止は、そのストーリーだけを止め、再開はユーザーの指示で `story-reset` する | 1 つのストーリーの中止で、独立した他のストーリーまで止めない。STOP の後の再開に人の承認を通す |
 | J12 | Jev の「このまま承認」は `--jev-approved` と `jev-as-is` で通し、人の承認と分けて記録する | 非 PROCEED のゲートを人の承認なしに通すことを、記録の上で区別して監査できるようにする |
@@ -451,7 +451,7 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 | J14 | 止まる場面は、ruleId を変えず、Auto Ask のツールの対応表で見分ける | ruleId を変えると、設定と判例の照合が外れる |
 | J15 | 非対応にしたストーリーのブランチは残し、worktree だけを片付ける | ラベル 1 つで未マージの作業を消さない |
 | J16 | `/codiel:loop` は、bypassPermissions のときと、メインのチェックアウトに active な run があるときは始めない | 答えのメッセージが保留される。メインの run のガードが全体のセッションに当たる |
-| J17 | `codiel` を持たない Issue は取り込まず、番号だけを報告する | D17 のラベルで codiel の対象を区切った。ラベルの付け忘れは、報告を見た人が直せる |
+| J17 | `codiel` が付いていない Issue は取り込まず、番号だけを報告する | D17 のラベルで codiel の対象を区切った。ラベルの付け忘れは、報告を見た人が直せる |
 
 ## 9. 採らなかった案
 
@@ -498,7 +498,7 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 | 2.0-S4 | `auto` の許可モードで、codiel の操作(`git push`・`gh pr create`・`gh pr merge`・`gh issue create`・Raguel MCP)が自動判定で通るか | 拒否されるものがあれば、プロジェクトの許可の設定に足す手順を `codiel:init` に加える |
 | 2.0-S5 | バックグラウンドセッションと、その中の Raguel MCP に、全体のセッションの環境変数(`TYPESAFE_API_KEY`)が引き継がれるか | 引き継がれないなら、`--auto-ask` の起動時の検査を Epic のセッションの中でも行い、無ければ問いにして止める |
 | 2.0-S6 | 複数の Epic のセッションの Raguel MCP(別プロセス)が、同じケースファイルの置き場に同時に追記したときの挙動(1.2 の S3 をプロセス間へ広げる) | 壊れるなら、ケースファイルの置き場を Epic ごとに分ける |
-| 2.0-S7 | Jev の `choice` の `confidence` が、拮抗の判定に使える値の幅を持つか | 使えなければ、`probabilities` の差を主にする |
+| 2.0-S7 | Jev の `choice` の `confidence` に、拮抗の判定に使える値の幅があるか | 使えなければ、`probabilities` の差を主にする |
 | 2.0-S8 | GitHub で、Issue の closed の理由(not planned)とラベルを `gh` で読めるか | 読めなければ、非対応はラベルだけで表す |
 | 2.0-S9 | Epic の worktree の中で起動したセッションが、メインの下の `.codiel/worktrees/` に作った worktree へ書き込めるか(1.1 の試験では通った。公式ドキュメントは「セッションを始めたディレクトリの下に `git worktree add` で作った worktree」を通すと書く) | 拒否されるなら、プロジェクトの設定の `worktree.bgIsolation: "none"` を `codiel:init` で足す手順にする |
 | 2.0-S10 | `CODIEL_LOOP_SESSION=1` を付けて起動したバックグラウンドセッションで、hook の子プロセスがこの環境変数を受け取るか | 受け取らないなら、`cwd` が `.codiel/epics/` の下かだけで判定する |
@@ -521,7 +521,7 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 - Loop の状態(保留・要確認・優先度)を表すラベルの名前と色。どれも `codiel` と併記する。
 - 問いのファイルの書式と、問いの ID の付け方。
 - Auto Ask の問いの型(確認の種類ごと)と、しきい値の既定値。
-- STOP の直し方の案の生成の手順。
+- STOP で直し方の案を生成する手順。
 - `loop.maxParallelStories` の既定値の見直し。
 
 ## 出典

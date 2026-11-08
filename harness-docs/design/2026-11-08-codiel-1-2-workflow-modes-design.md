@@ -2,7 +2,7 @@
 
 - 日付: 2026-11-08
 - 対象: plugins/codiel(raguel-mcp を含む)
-- バージョン: 1.1.0 → 1.2.0(マイナー。ユーザーの予定表で 1.2 と名付けられた)。実装中は 1.2.0-dev とする。1.1 が未リリースなら 1.1.0-dev から上げる
+- バージョン: 1.1.0 → 1.2.0(マイナー。ユーザーの予定表の表記は 1.2)。実装中は 1.2.0-dev とする。1.1 が未リリースなら 1.1.0-dev から上げる
 - 前提: 1.1 の設計書(`harness-docs/design/2026-11-08-codiel-1-1-executor-neutral-and-design-layer-design.md`)。ADR-006・ADR-009・ADR-011・ADR-014
 - 後続: 2.0(`harness-docs/design/2026-11-08-codiel-2-0-loop-engineering-design.md`)は、このモードの Workflow を子として呼ぶ
 
@@ -26,7 +26,7 @@
 | D12 | Workflow Intents | gh-utility の機能(サブ Issue の作成とつなぎ)を codiel に取り込む。gh-utility は単体のプラグインとして残す |
 | D13 | Workflow Intents | codiel が対応する親 Issue にはラベル `story` を、サブ Issue にはラベル `subtask` を、1.1 の `codiel` と併記する。人が作った既存の Issue にも付ける |
 
-予定表の原文は Dynamic Workflow モードを「implフェーズ」と書くが、ユーザーとの合意(D7)で、サブ intent の design から test-loop までを各エージェントが行う形になった。
+予定表の原文では Dynamic Workflow モードを「implフェーズ」としていたが、ユーザーとの合意(D7)により、サブ intent の design から test-loop までを各エージェントが進める形になった。
 
 ## 1. 前提: Claude Code の性質と codiel 1.1 の制約
 
@@ -39,30 +39,30 @@
 | 呼び出しの返り方 | Workflow ツールは受け付けた直後に `taskId` を返し、完了は後からタスクの完了として届く | agent-sdk/typescript の `WorkflowOutput` |
 | 実行中の人の入力 | エージェントがユーザーに質問する手段は無い(「No mid-run user input」)。Workflow が自分から止まるのは、エージェントの許可の確認と、利用上限の待ちのときだけである(「A run pauses on its own only for agent permission prompts and a usage-limit wait」)。判断を求める質問は、Workflow が終わってメインセッションへ戻った後に行う | workflows |
 | サブエージェントのツール | 全サブエージェントから `AskUserQuestion` と `Workflow` が外される。Skill ツールは使える。Agent ツールはメイン会話の下 3 階層まで使え、サブエージェントからの呼び出しは既定で完了を待つ | sub-agents、agent-sdk |
-| Workflow のエージェントのツール | Agent ツールを持つかは記述が無い【要確認: S1】 | — |
+| Workflow のエージェントのツール | Agent ツールが使えるかは記述が無い【要確認: S1】 | — |
 | 入れ子の Workflow | スクリプトの `workflow()` で別の Workflow を子として呼べる。子の中からさらに呼ぶことはできない | 2.1.319 のツール説明文 |
 | 上限 | 同時 16 エージェント(設定で変更可)、1 回の Workflow で合計 1,000 エージェント。止まったか失敗したエージェントの `agent()` は null を返す | workflows |
 | 再開 | `resumeFromRunId` で、完了済みの `agent()` の結果を再利用して再開できる。同じセッションの中だけ | workflows |
 | `isolation: 'worktree'` | 起点は既定でリポジトリの既定ブランチ。利用者の設定 `worktree.baseRef: "head"` でだけ現在の HEAD に変わり、呼び出しごとには指定できない。置き場は `.claude/worktrees/` | sub-agents・worktrees |
-| hook | PreToolUse はサブエージェントの tool 呼び出しでも発火し、入力に `agent_id`・`agent_type`・`cwd` を持つ。Bash の `cd` はメインセッションでだけ次の呼び出しに引き継がれる。サブエージェントの終了では Stop ではなく SubagentStop が発火する | hooks、Bash ツールの説明文 |
+| hook | PreToolUse はサブエージェントの tool 呼び出しでも発火し、入力に `agent_id`・`agent_type`・`cwd` が入る。Bash の `cd` はメインセッションでだけ次の呼び出しに引き継がれる。サブエージェントの終了では Stop ではなく SubagentStop が発火する | hooks、Bash ツールの説明文 |
 | 無効化 | 利用者の設定(/config の Dynamic workflows)で Workflow ツールが無効にされうる | claude-security プラグインの手順書 |
-| 同梱 | プラグインは `workflows/<名前>.js` に `meta.name` を持つスクリプトを同梱でき、`Workflow({ name: "<プラグイン>:<名前>", args })` で呼べる | claude-security 0.12.0 |
+| 同梱 | プラグインは `workflows/<名前>.js` に `meta.name` を付けたスクリプトを同梱でき、`Workflow({ name: "<プラグイン>:<名前>", args })` で呼べる | claude-security 0.12.0 |
 
-サブ intent の worktree は、`isolation` ではなく codiel が作る(3.4)。`isolation` の worktree は起点を呼び出しごとに親ブランチへ合わせられず、置き場も hook の判定の形(`.codiel/worktrees/<a>/<b>`)に当たらないためである。
+サブ intent の worktree は、`isolation` を使わずに codiel 側で作る(3.4)。`isolation` の worktree では起点を呼び出しごとに親ブランチへ合わせられず、置き場も hook の判定形式(`.codiel/worktrees/<a>/<b>`)に当たらないためである。
 
-Claude Code の Ultracode(セッション単位で、作業ごとに Workflow を書いて回す設定)は、1.1 の D1 でいう運用方針の一種として扱う。`--workflow` は Ultracode の有無に関係なく動く。Ultracode が有効なセッションで通常の run を回したとき、セッションが自分で Workflow を書くかどうかは、codiel ではなくその設定が決める。
+Claude Code の Ultracode(セッション単位で、作業ごとに Workflow を書いて回す設定)は、1.1 の D1 でいう運用方針の一種として扱う。`--workflow` は Ultracode の有無に関係なく動く。Ultracode が有効なセッションで通常の run を回したとき、セッションが自分で Workflow を書くかどうかは、codiel ではなくその設定に従う。
 
 ### 1.2 codiel 1.1 のまま並列に動かすと壊れる箇所がある
 
-- 同時に進められる run は 1 つだけである(`src/codiel-state.ts:892-903`)。hook が active な run を 1 つしか選ばないためである(`findActiveRun`、`:363`)。
+- 同時に進められる run は 1 つだけである(`src/codiel-state.ts:892-903`)。hook で active な run を 1 つしか選ばないためである(`findActiveRun`、`:363`)。
 - `codiel-state` の state の読み書きにはロックが無い。並列に呼ぶと更新が失われる(`skills/orchestrating-runs/SKILL.md:325`)。
-- `mark-ask` は run 全体を `awaiting_human` にする。1 つのサブ intent の ASK が、他のサブ intent の hook の判定まで変えてしまう。
-- guard-bash と guard-github-mcp は、PR の作成を pr フェーズでだけ、push を pr・fix-loop・triage・finalize でだけ許し、どちらも test-loop の合格を求める。`gh issue create` は triage でだけ許す(`src/hooks/lib.ts:46-59`、`guard-bash.ts:1218-1233`、`guard-github-mcp.ts:30-46`)。親 run の現在のフェーズでサブ intent の push と PR 作成を判定すると、すべて拒否される。
+- `mark-ask` を呼ぶと run 全体が `awaiting_human` になり、1 つのサブ intent の ASK で他のサブ intent の hook 判定まで変わってしまう。
+- guard-bash と guard-github-mcp では、PR 作成を pr フェーズだけに、push を pr・fix-loop・triage・finalize だけに限り、どちらも test-loop の合格を求めている。また `gh issue create` は triage でだけ許している(`src/hooks/lib.ts:46-59`、`guard-bash.ts:1218-1233`、`guard-github-mcp.ts:30-46`)。そのため、親 run の現在のフェーズでサブ intent の push や PR 作成を判定すると、すべて拒否される。
 - `start-phase` は前のステージがすべて passed であることを求め、`skip-phase` で飛ばせるのは discuss・design・fix-loop だけである(`codiel-state.ts:163-194,1029-1033,1072-1089`)。
-- `isLegacy` は `phases` に `test-code` のキーが無い state を旧形式と見なし、`findActiveRun` と `loadRun` が扱わない(`codiel-state.ts:382-384,363-377,821-833`)。
-- Raguel はフェーズの表(`GATED_PHASES`)に無いフェーズの評価を拒み、run ID を `/^[A-Za-z0-9._-]{1,64}$/` で検査する(`raguel-mcp/src/core/pipeline.ts:164-169`、`raguel-mcp/src/casefile/store.ts:32,87-95`)。Raguel のフェーズの表は 1 本で、各行の `stage` は codiel の `STAGES` の添字である。2 者比較のテストが一致を強制している(`raguel-mcp/src/codiel/phases.ts:35-62`、`raguel-mcp/src/codiel/__test__/phases.test.ts:6-24`)。
+- `isLegacy` では `phases` に `test-code` のキーが無い state を旧形式と見なし、`findActiveRun` と `loadRun` の対象から外している(`codiel-state.ts:382-384,363-377,821-833`)。
+- Raguel はフェーズの表(`GATED_PHASES`)に無いフェーズの評価を拒み、run ID を `/^[A-Za-z0-9._-]{1,64}$/` で検査する(`raguel-mcp/src/core/pipeline.ts:164-169`、`raguel-mcp/src/casefile/store.ts:32,87-95`)。Raguel のフェーズの表は 1 本で、各行の `stage` は codiel の `STAGES` の添字であり、2 者比較のテストで両者の一致を検査している(`raguel-mcp/src/codiel/phases.ts:35-62`、`raguel-mcp/src/codiel/__test__/phases.test.ts:6-24`)。
 - `pass-gate` は、HEAD の照合と成果物のハッシュの照合をメインの作業ツリーで行い、文書の置き場を `<runsDir>/<runId>/<フェーズ>.md` に固定して検査する(`codiel-state.ts:1159-1200`、`src/raguel-records.ts:376-384,449-466`)。
-- テストの保護は、メインの作業ツリーの `spec.md` だけを読んで記録されたテストを決める(`guard-write.ts:152-169`)。
+- テストの保護では、メインの作業ツリーの `spec.md` だけを読んで、記録済みのテストを特定している(`guard-write.ts:152-169`)。
 
 ## 2. Workflow Intents モード: 親 intent とサブ intent を起票する
 
@@ -71,13 +71,13 @@ Claude Code の Ultracode(セッション単位で、作業ごとに Workflow �
 | 呼び出し | 動き |
 | --- | --- |
 | `/codiel:run --workflow`(引数なし) | Workflow Intents モードで親 intent とサブ intent を作り、承認後に Dynamic Workflow へ進む |
-| `/codiel:run --workflow <親 intent のパス>` | 既存の親 intent と、その `parent` を持つサブ intent から Dynamic Workflow を始める |
+| `/codiel:run --workflow <親 intent のパス>` | 既存の親 intent と、それを `parent` に指定したサブ intent から Dynamic Workflow を始める |
 | `/codiel:run --workflow <親 Issue の番号>` | 親 Issue とサブ Issue を取り込んで親 intent とサブ intent を作り、Dynamic Workflow を始める(2.6) |
 
 - `--workflow` の run を始める前に、オーケストレーターが自分の使えるツールの一覧に Workflow があるかを見る。手順書に名前があることは数えない。無ければ、利用者の設定で無効になっている可能性を添えて報告し、run を始めない。この判定は指示層で行う。Node のスクリプトからはツールの一覧が見えないためである。
-- 親 intent のパスを渡され、その親を `parent` に持つサブ intent が 1 件も無いときは、2.2 の分解案の提示へ進む。
+- 親 intent のパスを渡されたとき、その親を `parent` に指定したサブ intent が 1 件も無ければ、2.2 の分解案の提示へ進む。
 - 親とサブの intent がすべて `status: approved` のときは、承認ゲート(2.3)を省く。それ以外は承認ゲートを通す。
-- `--workflow` の無い呼び出しは、1.1 の run と同じに動く。
+- `--workflow` の無い呼び出しは、1.1 の run と同じように動く。
 
 ### 2.2 親 intent の聞き取りは現行と同じで、その後に分解の案を示す
 
@@ -95,7 +95,7 @@ Claude Code の Ultracode(セッション単位で、作業ごとに Workflow �
 
 - 親 intent とサブ intent の全ドラフトを一覧で示し、まとめて承認を得る。
 - github モードでは、起票する親 Issue とサブ Issue の本文の全文も同じゲートで示す(D11 により github モードでは必ず起票する)。
-- 承認ゲートで選ぶのは、続行(Dynamic Workflow へ進む)か、intent だけ残して終えるか、の 1 項目である。
+- 承認ゲートで選ぶのは、続行(Dynamic Workflow へ進む)か、intent だけ残して終えるかの 1 項目である。
 - 差し戻されたら、聞き取りか分解案の提示に戻る。
 
 ### 2.4 サブ intent は通常の intent 文書に `parent` と `depends` を足して書く
@@ -106,12 +106,12 @@ Claude Code の Ultracode(セッション単位で、作業ごとに Workflow �
   - `scale`: サブの規模(`standard` / `light`)
   - `depends`: 依存先のサブ intent の slug の配列(1 行のフロー形式)。依存先は、このサブ intent より先に親ブランチへマージされている必要がある。frontmatter の配列は現行では `domains` だけなので、その規則を広げる
 - サブ intent の `run` は親 run の slug(親 intent の slug)にする。
-- `/codiel:run <サブ intent のパス>`(`--workflow` 無し)で呼ばれたときは、`parent` を見て、親の run の再開として扱うかをユーザーに確かめる。現行の入口は frontmatter の `run` で当たった run を確かめずに再開する(`skills/orchestrating-runs/SKILL.md:136-140`)が、サブ intent ではそうしない。サブ intent を単独の run としては始めない。
-- `status` の `in-progress` にする時点を、現行の「implement の開始時」から、Workflow モードでは「`workflow` フェーズの開始時」に改める。親とすべてのサブを同時に `in-progress` にし、親 run の finalize で一緒に `done` にする。書くのはオーケストレーターである。
+- `/codiel:run <サブ intent のパス>`(`--workflow` 無し)で呼ばれたときは、`parent` を見て、親 run の再開として扱うかをユーザーに確かめる。現行の入口では frontmatter の `run` に一致した run を確認なしに再開する(`skills/orchestrating-runs/SKILL.md:136-140`)が、サブ intent では必ず確認する。サブ intent を単独の run としては始めない。
+- `status` を `in-progress` にする時点は、現行の「implement の開始時」から、Workflow モードでは「`workflow` フェーズの開始時」に改める。親とすべてのサブを同時に `in-progress` にし、親 run の finalize でまとめて `done` にする。更新はオーケストレーターが行う。
 - 原文の扱いは、サブ intent の作られ方で分ける。
-  - 分解で作ったサブ intent は、ユーザーの原文を親 intent に置く。サブの `## ASIS` と `## TOBE` には、親を参照する新しいマーカーだけを置く(現行の `<!-- codiel:unrecorded -->` と同じ置き方)。
+  - 分解で作ったサブ intent では、ユーザーの原文を親 intent に置く。サブの `## ASIS` と `## TOBE` には、親を参照する新しいマーカーだけを置く(現行の `<!-- codiel:unrecorded -->` と同じ置き方)。
   - サブ Issue から取り込んだサブ intent は、現行の Issue 起点の規則(`references/intent-format.md:224-233`)に従い、人が書いた本文を原文に記録する。
-  - 原文と派生文の照合(review と finalize)は、親の原文を必ず基準にする。原文を持つサブは、その原文も基準に加える。
+  - 原文と派生文の照合(review と finalize)では、親の原文を必ず基準にする。原文があるサブは、その原文も基準に加える。
 - `references/intent-format.md` は書式の契約なので、変更時は `docs/format-change-checklist.md` の項目をすべて追随させる。
 
 ### 2.5 github モードでは親 Issue とサブ Issue を起票し、Sub-issues API でつなぐ
@@ -119,14 +119,14 @@ Claude Code の Ultracode(セッション単位で、作業ごとに Workflow �
 - 現行の intent フェーズの起票は、gh-utility の issue-craft を持ち込みモードで呼び、使えないときだけ codiel 自身が起票する(`skills/capturing-intent/SKILL.md:150`、`references/intent-common.md:26`)。Workflow Intents モードでは、この経路を変え、親 Issue とサブ Issue を codiel 自身が起票する。issue-craft の承認は、2.3 の承認ゲートで全文を示すことで代える。
 - 親 Issue を起票した後、サブ Issue を 1 件ずつ起票して親につなぐ。
 - ラベルは、親 Issue に `codiel` と `story`、サブ Issue に `codiel` と `subtask` を付ける(D13)。
-  - `story` と `subtask` のラベルが無ければ、`codiel:init` が `codiel` と一緒に作るかを聞く。init の後に足りないと分かったときは、起票の前に承認ゲートで作るかを聞く。
+  - `story` と `subtask` のラベルが無ければ、`codiel:init` で `codiel` と一緒に作るかを聞く。init の後に不足が分かったときは、起票前の承認ゲートで作るかを聞く。
   - サブ PR(3.4)と親 PR(3.9)には、1.1 のとおり `codiel` を付ける。
 - つなぐ手順は gh-utility の `link-sub-issue`(`plugins/gh-utility/src/link-sub-issue.ts:50-73`)と同じにし、codiel の同梱スクリプトとして独立に実装する。
   1. `gh api repos/<owner/repo>/issues/<子の番号>` で、子の内部 ID を得る。
   2. `gh api -X POST repos/<owner/repo>/issues/<親の番号>/sub_issues -F sub_issue_id=<内部 ID>` でつなぐ。内部 ID は数値型で送るので `-F` を使う。
-- 起票は、intent 承認時の現行の起票と同じく run の作成前に行う。run の作成前は hook の対象外なので、`gh issue create` を triage に限る規則とぶつからない。
+- 起票は、現行の intent 承認時と同じく run を作る前に行う。run を作る前は hook の対象外なので、`gh issue create` を triage に限る規則とはぶつからない。
 - 依存関係は、サブ intent の `depends` を正とする。Issue の本文の末尾にも依存先の番号を書く。
-- 途中で起票かつなぎが失敗したら、作成済みとつなぎ済みの状況を報告して止まる。
+- 起票やつなぎが途中で失敗したら、作成済み・つなぎ済みの分を報告して止まる。
 
 ### 2.6 親 Issue の番号から始めるときは、既存のサブ Issue の分け方を使う
 
@@ -135,11 +135,11 @@ Claude Code の Ultracode(セッション単位で、作業ごとに Workflow �
 - ラベルは、codiel が対応する Issue の印として付ける(1.1 の D9)。人が作った既存の Issue にも付ける。
   - 親 Issue に `codiel` と `story` が無ければ、聞かずに足す。
   - 承認ゲートで、取り込むサブ Issue の一覧を示す。既定はすべてを取り込み、ユーザーが外すものを選べる。
-  - 取り込むサブ Issue に `codiel` と `subtask` が無ければ、承認の後に足す。外したサブ Issue にはラベルを付けない。
+  - 取り込むサブ Issue に `codiel` と `subtask` が無ければ、承認後に足す。外したサブ Issue にはラベルを付けない。
 - 親 Issue は親 intent に、取り込む各サブ Issue はサブ intent になる。本文のマーカーごとの扱いは、現行の Issue 起点の規則(`skills/capturing-intent/references/entry-branches.md`、`references/intent-format.md:224-233`)に従う。
 - 分解の聞き取りは行わない。
 - サブ Issue 同士の依存関係は、GitHub の Issue の依存関係から読む【要確認: S4】。読めないか、依存関係が無いときは、AI が依存の案を示し、承認ゲートでユーザーが確かめる。
-- サブ Issue が 1 件も無い親 Issue は、`--workflow` を外した通常の run を案内して止まる。
+- サブ Issue が 1 件も無い親 Issue では、`--workflow` を外した通常の run を案内して止まる。
 
 ## 3. Dynamic Workflow モード: 親 run 1 つでサブ intent を並列に片付ける
 
@@ -152,7 +152,7 @@ intent → carry-over → discuss → workflow → design → (test-spec ∥ dev
 ```
 
 - state に `mode`(`standard` / `workflow`)を足し、`init` で固定する。`mode` の無い state は `standard` と見なす。
-- `init` が、モードに合わないフェーズを `SKIPPED` で作る。
+- `init` の時点で、モードに合わないフェーズを `SKIPPED` として作る。
 
 | state | `SKIPPED` で作るフェーズ |
 | --- | --- |
@@ -160,8 +160,8 @@ intent → carry-over → discuss → workflow → design → (test-spec ∥ dev
 | Workflow モードの親 run(`mode: workflow`) | design・test-spec・dev-plan・test-code・implement |
 | サブの state(3.2) | intent・carry-over・discuss・workflow・intent-sync・triage・finalize。軽量のサブは design も |
 
-- `phases` は全キーを持ち続けるので、`isLegacy` の判定(`test-code` のキーの有無)は変わらない。
-- 1.1 で作られた進行中の state は `workflow` のキーを持たない。`readState` で、無いキーを `SKIPPED` として補う。carry-over の欠けを補う現行の前例(`codiel-state.ts:276-293`)と同じ場所で行う。`start-phase`・`skip-phase`・`continuityProblem` は `phases[<名前>]` を直接参照するためである。
+- `phases` には全キーが揃うため、`isLegacy` の判定(`test-code` のキーの有無)は変わらない。
+- 1.1 で作られた進行中の state には `workflow` のキーが無い。そこで `readState` の中で、欠けたキーを `SKIPPED` として補う。carry-over の欠落を補う現行の処理(`codiel-state.ts:276-293`)と同じ場所で行う。`start-phase`・`skip-phase`・`continuityProblem` が `phases[<名前>]` を直接参照するためである。
 - `SKIPPED` は、現行どおり passed の一種(verdict が `SKIPPED`)として扱う。try-1 の carry-over や、軽量の run の design と同じである。
 - `close`(intent だけ残して終える)は、intent 以外のフェーズが pending であることを求め、例外は carry-over の `SKIPPED` だけである(`codiel-state.ts:1445-1452`)。モードに合わないために `SKIPPED` で作ったフェーズも、例外に加える。
 - `workflow` は、`evaluate_code` で評価するコード系フェーズとして扱う。次の集合に足す。
@@ -172,7 +172,7 @@ intent → carry-over → discuss → workflow → design → (test-spec ∥ dev
   - 親の test-loop の直前は `workflow` になる。
 - `workflow` の `start-phase` の連続性の検査は、次の形にする。
   - 直前のゲート付きステージの `passedHead` が HEAD の祖先であることを求める。
-  - その間のコミットが `<runsDir>/<親 slug>/agenda.md` と `discussion.md` だけを変えていることを求める。discuss の文書は、直前のゲートの通過の後に必ずコミットされるためである。
+  - その間のコミットが `<runsDir>/<親 slug>/agenda.md` と `discussion.md` だけを変更していることを求める。discuss の文書は、直前のゲートを通過した後に必ずコミットされるためである。
   - サブ intent の文書は intent フェーズで作り、intent のゲートの前に親ブランチへコミットする(現行の intent のコミットと同じ時点。`skills/capturing-intent/SKILL.md:173-174`)。このため、この検査には掛からない。
 - `start-phase workflow` の直後に、オーケストレーターが親とサブの intent の `status` を `in-progress` にしてコミットする。github モードでは、続けて親ブランチを push する。最初のサイクルのサブの worktree は、その後で作る。サブの worktree に、サブ intent の文書と最新の `status` が入るようにするためである。
 - `workflow` の評価は、全サイクルのマージが済んだ後、最後のマージコミットで 1 回だけ行う。評価の後は、test-loop を始めるまでコミットを足さない。
@@ -187,14 +187,14 @@ intent → carry-over → discuss → workflow → design → (test-spec ∥ dev
 - `codiel-state` のルートは、1.1 で全コマンド共通に `findMainRoot` で解決する形になっている(1.1 の 1.3)。worktree の中から呼んでも同じ state に届く。
 - 親の state は `.codiel/runs/<親 slug>/try-<n>/state.json` に置く。
 - Workflow の実行中にオーケストレーターが親の state に書くのは、待ちの記録(`wait-add` / `wait-done`)だけとする。
-- 親の state に、サブごとの進みの表を持つ。
+- 親の state に、サブごとの進みの表を置く。
   - 項目は、番号 `k`・サブ slug・worktree のパス・ブランチ・分岐点(`base`。worktree を作った時点の親ブランチの HEAD)・Raguel の run ID・進み・PR の URL である。
   - 進みは、未着手 / 実行中 / PR 済み / マージ済み / 人の判断待ち / failed のどれかとする。
-  - 書くのは Workflow の外のオーケストレーターだけとする。着手の判定・再開・結末の記録は、この表を正にする。サブの state は終端の status を持たない。
+  - 書き手は Workflow の外のオーケストレーターだけとする。着手の判定・再開・結末の記録は、この表を正にする。サブの state には終端の status を置かない。
 - サブの報告(`review-<m>.md`・`report.md`・`test-run-<n>.md`)は、`subs/<サブ slug>/reports/` に置く。
 - サブの state は `.codiel/runs/<親 slug>/try-<n>/subs/<サブ slug>/state.json` に置く。
   - `latestTries` は `try-<n>` の直下だけを読むので、`findActiveRun` の検索には混ざらない(`codiel-state.ts:332-355`)。
-  - 同じパスは、guard-write の state の直接編集の拒否(`guard-write.ts:246`)にも当たる。
+  - このパスも、guard-write による state 直接編集の拒否(`guard-write.ts:246`)の対象になる。
 - サブの state のステージ表は 3.1 の 1 本の表で、使うのは次のフェーズである。
 
 ```
@@ -213,12 +213,12 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 
 - サブの state を書くのは、ある時点でそのサブを担当する 1 体だけとする。1 つのファイルを 1 体だけが書くので、ロックが無くても更新は失われない。
   - 実装の Workflow では、サブの担当エージェント。
-  - レビューと修正の Workflow では、サブごとの修正の担当エージェント(3.7)。観点のレビュアーは `codiel-state` を呼ばない。
-  - Workflow の外では、オーケストレーター(人への確認の後の `resume`、マージなど)。
+  - レビューと修正の Workflow では、サブごとの修正担当のエージェント(3.7)。観点ごとのレビュアーは `codiel-state` を呼ばない。
+  - Workflow の外では、オーケストレーター(人に確認した後の `resume`、マージなど)。
 - 「同時に進められる run は 1 つ」の制限は親の run で数える。サブの state は数えない。
 - サブの ASK は、サブの state だけを `awaiting_human` にする。親は `workflow` フェーズのまま変わらない。
 - Raguel の run ID は、サブごとに `<親 slug>-try-<n>-s<k>` とする。
-  - `k` はサブの登録順の番号で、進みの表に持つ。
+  - `k` はサブの登録順の番号で、進みの表に記録する。
   - slug は 40 文字まで(`references/intent-format.md:7`、`codiel-state.ts:204-205`)なので、最長でも 64 文字の上限に収まる。
   - 親自身のゲートは、現行どおり `<親 slug>-try-<n>` を使う。
 - サブを前のフェーズからやり直すときは、新設の `codiel-state sub-reset --sub <サブ slug> --from <フェーズ>` でサブの state を作り直す。マージ後のテストの失敗(3.8)、解消できないコンフリクト(3.8)、壊れた state(3.6)で使う。
@@ -232,14 +232,14 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 ### 3.3 hook はパスとコマンドの `cd` の行き先からサブを見分ける
 
 - guard-write は、書き込み先のパスがサブの worktree の下にあるとき、サブの state で判定する。それ以外は親の state で判定する。サブの見分けは、パスから slug を読み取らず、進みの表に記録した worktree のパスと照らして行う(guard-write の現行の方針。`guard-write.ts:171-172`)。
-- ドメイン境界: サブの worktree への書き込みには、サブの state の `domain` を当てる。サブの担当エージェントは、ドメインに紐づくステップの間、`set-domain --sub` で担当タグを持たせる。現行の判定は、worktree の下への書き込みには `step-add --domain` の記録を使う(`guard-write.ts:435-446`)。サブの worktree ではサブの state を読む分岐を足す。
+- ドメイン境界: サブの worktree への書き込みには、サブの state の `domain` を当てる。サブの担当エージェントは、ドメインに紐づくステップの間、`set-domain --sub` で担当タグを設定する。現行の判定は、worktree の下への書き込みには `step-add --domain` の記録を使う(`guard-write.ts:435-446`)。サブの worktree ではサブの state を読む分岐を足す。
 - guard-bash は、コマンドの文字列から作業ディレクトリの候補を拾う既存の仕組み(`cd`・`pushd` の行き先。`guard-bash.ts:793-831`)でサブを見分ける。候補に `git -C <パス>` の値も加える。hook の入力の `cwd` には頼らない。PreToolUse はコマンドの実行前に発火し、サブエージェントでは `cd` が次の呼び出しに引き継がれないためである。
 - このため、サブの担当エージェントの作業の契約に、Bash のコマンドを必ず `cd <サブの worktree の絶対パス> &&` で始めることを書く。
-- guard-github-mcp は、PR の作成の引数の head ブランチが `codiel/<親 slug>--<サブ slug>` の形なら、そのサブの state で判定する。
+- guard-github-mcp は、PR 作成の引数の head ブランチが `codiel/<親 slug>--<サブ slug>` の形なら、そのサブの state で判定する。
 - サブの state で判定するときの規則:
-  - テストの保護は、サブの worktree の `<testsDir>/**/spec.md` を読んで記録されたテストを決める。サブの test-code で記録したテストは、マージ前はサブの worktree にしか無いためである。
+  - テストの保護では、サブの worktree の `<testsDir>/**/spec.md` を読んで記録済みのテストを特定する。サブの test-code で記録したテストは、マージ前はサブの worktree にしか無いためである。
   - サブの test-loop が passed の後は、そのサブのブランチの push と、親ブランチを base にした PR の作成を許す。
-  - サブの fix-loop が passed の後は、マージのためのコンフリクトの解消の書き込み(3.8)を許す。
+  - サブの fix-loop が passed になった後は、マージ時のコンフリクトを解消する書き込み(3.8)を許す。
   - 保護ブランチへの push は、現行どおり常に拒否する。
   - refspec の無い `git push` は、サブの文脈では拒否する。push には refspec を明示させる。
 - オーケストレーターはメインセッションで動き、`cd` が次の呼び出しに引き継がれる。サブの worktree を操作するときは `cd` を単独で使わず、`git -C <パス>` か、`( cd <パス> && <コマンド> )` のサブシェルを使う(1.1 の 1.3)。
@@ -265,13 +265,13 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
   - 起点: その時点のローカルの親ブランチの HEAD。前のサイクルで止まり、再開するサブの worktree は作り直さない。
 - 1 体のエージェントが、担当するサブ intent を design → test-spec ∥ dev-plan → test-code → implement → test-loop と進め、サブ PR を出す。軽量のサブ intent は design を飛ばす。
 - サブの design では、ユーザーとのウォークスルー(`skills/facilitating-design-discussions/references/design-walkthrough.md`)を行わない。D7 で design 以降をエージェントに任せたためである。新しい画面名だけは D8 で止まる(3.6)。
-- サブの文書(design.md・spec.md・cases.md・dev-plan.md)は、ゲートの通過の直後にサブの担当エージェントがサブのブランチにコミットする。
+- サブの文書(design.md・spec.md・cases.md・dev-plan.md)は、ゲートを通過した直後にサブの担当エージェントがサブのブランチへコミットする。
 - サブ intent の中のステップは、1 体のエージェントがサブのブランチの上で直列に進める。サブの中で worktree は作らない。
-  - Workflow のエージェントが Agent ツールを持つと分かった場合(S1)、ステップの作業を委譲するかは 1.1 の規則どおり運用方針に任せる。委譲は完了を待つ形に限り、同じ worktree の中で行う。
+  - Workflow のエージェントで Agent ツールが使えると分かった場合(S1)、ステップの作業を委譲するかは 1.1 の規則どおり運用方針に任せる。委譲は完了を待つ形に限り、同じ worktree の中で行う。
 - エージェントへの指示は、1.1 の「作業の契約」の形で書く。読むスキル、入力(intent・`discussion.md`・持続層の位置)、出力、書いてよい範囲、Bash の `cd` の規則を含める。
 - 各フェーズの Raguel のゲートは、エージェントがサブの run ID で通す。Workflow のエージェントが Raguel MCP を呼べないと分かった場合(S1)は、エージェントは評価の手前で `gate-pending` を返し、オーケストレーターが Workflow の後に評価してゲートを通す。
 - `agent()` には `model` と `agentType` を渡さず、セッションのモデルと既定の定義を引き継ぐ。
-- 戻り値はスキーマで固定する。少なくとも次を持つ。
+- 戻り値はスキーマで固定し、少なくとも次の項目を含める。
   - サブ intent の slug
   - 結果(`pr-created` / `awaiting-human` / `gate-pending` / `failed`)
   - PR の URL(local モードではブランチ名)
@@ -296,14 +296,14 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 
 - 次の場面では、エージェントはサブの state に `mark-ask` を記録し、`awaiting-human` を返して終わる。他のサブ intent は進める。
   - Raguel の ASK と STOP
-  - 新しい画面名が要るとき(D8)。標準のサブでは design で、軽量のサブでは test-spec で、仕様のディレクトリを決めるときに出る(現行の `references/phase-test-spec.md:14` と同じ時点)。名前の候補を返す
+  - 新しい画面名が必要なとき(D8)。標準のサブでは design で、軽量のサブでは test-spec で、仕様のディレクトリを決めるときに生じる(現行の `references/phase-test-spec.md:14` と同じ時点)。名前の候補を返す
   - 試行回数の上限を超えたとき
   - 現行の手順が、サブのフェーズの中で人に確認を求める場面(broken のテストの修正の承認など)。design のウォークスルーは除く(3.4)
 - `evaluate_*` が Claude Code にバックグラウンドへ移され、エージェントが verdict を受け取れなかったときは、`gate-pending` と評価の手がかりを返して終わる【要確認: S6】。オーケストレーターは Workflow の後に Raguel の記録から verdict を読み、次のサイクルで続きから再開させる。
 - Workflow が終わったら、オーケストレーターは次の順で扱う。
   1. Workflow の戻り値を要約せずに `waits/workflow-<サイクル>-<回>.md` に書き、待ちを `wait-done` で消す。`wait-done` はこのファイルが無いと失敗する(`codiel-state.ts:1373-1376`)。
   2. 人に聞くサブがあれば、親を `mark-ask workflow --kind confirm` で `awaiting_human` にする。待ちが空になると stop-guard が停止を止めるためである。
-  3. `awaiting-human` のサブごとに、現行と同じ選択肢で AskUserQuestion で聞く。
+  3. `awaiting-human` のサブごとに、現行と同じ選択肢を使って AskUserQuestion で聞く。
 - 答えに応じて、次のように扱う。
 
 | 答え | 扱い |
@@ -324,7 +324,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - スクリプトは `workflows/review-fix-subs.js` として同梱する。各サイクルで、そのサイクルに PR を出したサブを対象にする。
 - サブ PR ごとに、次の順で進める。
   1. 現行の review の観点(`references/review-common.md` の規則で選ぶ)ごとに、レビュアーのエージェントを並列に起動する。レビュアーはサブの worktree を読むだけで、`codiel-state` を呼ばない。
-  2. サブごとに 1 体の修正の担当エージェントが、所見をまとめて `review-<m>.md` を書き、review と fix-loop の state の遷移とゲートを持つ。
+  2. サブごとに 1 体の修正担当エージェントが、所見をまとめて `review-<m>.md` を書き、review と fix-loop の state 遷移およびゲートを担う。
   3. critical と high の所見が残る間、再レビューと修正を繰り返す。上限は現行の `maxFixAttempts` に従う。上限を超えたら `awaiting-human` を返す(3.6)。
 - Workflow モードはユーザーが複数のエージェントによる進め方を選んだモードで、このエージェントの構成はモードの定義に含まれる(1.1 の D1 の注記)。定義名とモデルは指定しない。
 - github モードでは、所見を現行どおりサブ PR に投稿する。local モードでは `review-<m>.md` に残す。
@@ -343,7 +343,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 5. 進みの表のそのサブを「マージ済み」にし、サブの worktree とブランチを片付ける。サブの結末は親 PR と一緒に記録する(4 章)ので、ブランチは残さなくてよい。
 
 - 解消できないコンフリクトは、親を `mark-ask` して人に聞く。選択肢は「サブを親の新しい HEAD から implement でやり直す」と「中止」である。やり直すときは `sub-reset --from implement` で作り直す(3.2。test-code までのコミットを新しいブランチへ cherry-pick する)。
-- 2 で解消したコードはサブのゲートを通らないが、`workflow` フェーズの評価(全サブのマージの後の `evaluate_code`)で親ブランチの全体として評価する。
+- 手順 2 で解消したコードはサブのゲートを通らないが、`workflow` フェーズの評価(全サブをマージした後の `evaluate_code`)で親ブランチ全体として評価する。
 - 全サブのマージが済んだら、`workflow` フェーズを `evaluate_code` で評価する(3.1)。
 
 ### 3.9 親ブランチでの後工程は通常の run と同じ
@@ -354,7 +354,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
   - 受け入れ基準の変更などの書き戻しは、親 intent と、該当するサブ intent に行う。
   - `evaluate_design` に渡すパスの上限は、1.1 で 50 件に上げてある。サブが多く 50 件を超えるときは、intent-sync で変えたファイルだけを渡す。
 - pr: github モードでは、親ブランチからベースブランチへ PR を出し、本文に各サブ PR へのリンクを含める。local モードでは現行どおり PR を作らない。
-- review・fix-loop: 親ブランチの全体の差分で行う。サブ PR では見えない結合の問題を拾うためである。
+- review・fix-loop: 親ブランチ全体の差分に対して行う。サブ PR では見えない結合の問題を拾うためである。
 - triage: 親 PR の所見と、サブ PR の medium・low の所見を扱う。
 - finalize: 親 intent と全サブ intent の `status` を `done` にし、残った worktree とブランチを片付ける。`workflow` フェーズを抜ける時点で全サブはマージ済みなので、未マージのサブは残らない。
 
@@ -395,7 +395,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - 結末の同期(`skills/raguel-gating/references/outcome-sync.md`)を改める。
   - Workflow モードの親の評価の選び順を、fix-loop → test-loop → workflow の順にする。
   - 親の結末を記録したら、親の state の対応表を読み、各サブの run ID にも同じ結末を記録する。サブの評価の選び順は fix-loop → test-loop → implement → test-code とする。
-  - サブ PR の親ブランチへのマージは最終の結末ではない。サブの結末は、親 PR がベースブランチにマージされたとき(approved)か、閉じられたとき(rejected)に記録する。
+  - サブ PR から親ブランチへのマージは最終の結末ではない。サブの結末は、親 PR がベースブランチにマージされたとき(approved)か、閉じられたとき(rejected)に記録する。
   - local モードでは、現行の判定(親ブランチがベースブランチに入ったか。`outcome-sync.md:10-18`)で親の結末を決め、サブにも同じ結末を記録する。
 - 契約の変更点を `docs/raguel-contract.md` に反映する。`raguelContract` の値は上げない(3.1)。
 - ケースファイルは一時ファイルからの rename と追記で書くので、run ID が分かれていれば並列の評価で壊れにくい(`raguel-mcp/src/casefile/store.ts:99-103,440-451`)。1 つの MCP サーバーのプロセスが同時の呼び出しをどう扱うかは確かめる【要確認: S3】。
@@ -406,7 +406,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 
 | 番号 | 判断 | 判断の軸 |
 | --- | --- | --- |
-| J1 | サブ intent ごとに state を分ける(3.2)。親の state を 1 つにして Workflow の間だけ hook を緩める案は採らない | サブ intent ごとの再開と ASK の切り分けができるか。緩める案は hook の改修が小さいが、1 つの ASK が全体を止め、サブ intent 単位でやり直せない |
+| J1 | サブ intent ごとに state を分ける(3.2)。親の state を 1 つにして Workflow の間だけ hook を緩める案は採らない | サブ intent ごとの再開と ASK の切り分けができるか。緩める案は hook の改修が小さいものの、1 つの ASK で全体が止まり、サブ intent 単位でやり直せない |
 | J2 | ステージ表を 1 本のまま `workflow` を足し、モードに合わないフェーズを `SKIPPED` で作る | Raguel の表と 2 者比較のテストを 1 本のまま保てる。`isLegacy` を変えずに済む。モード別の表にすると、codiel-state・hook・Raguel の構造が二重になる |
 | J3 | `workflow` の開始の連続性は、discuss の文書のコミットだけを許す形にする | try-2 以降で discuss のコミットが必ず入る。検査を外すと、引き継いだコードの評価(carry-over)の後に別の変更が紛れ込める |
 | J4 | サブの worktree は codiel が作り、ブランチ名を `codiel/<親>--<サブ>` にする | `isolation` の worktree は起点を呼び出しごとに合わせられず、置き場が hook の判定の形に当たらない。git の ref の衝突を避ける |
@@ -419,7 +419,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 | J11 | local モードでは PR の代わりにサブのブランチを使う | 現行の local モードは PR を作らず、記録をファイルに残す |
 | J12 | サブ intent の規模は分解案で決め、親 run の規模は常に標準にする | discuss を親でまとめるので、design を飛ばしてよいかはサブ intent ごとに違う |
 | J13 | Workflow のスクリプトは名前付きで同梱し、`args` と戻り値だけで完結させる | スクリプトを毎回生成すると run ごとに構成がぶれる。2.0 の Loop から子として呼べる |
-| J14 | 親 Issue とサブ Issue の起票は codiel が行い、issue-craft を呼ばない | issue-craft はサブ Issue のつなぎを持たない。全文の承認は codiel の承認ゲートで取れる |
+| J14 | 親 Issue とサブ Issue の起票は codiel が行い、issue-craft を呼ばない | issue-craft にはサブ Issue をつなぐ機能が無い。全文の承認は codiel の承認ゲートで取れる |
 | J15 | 親 Issue 起点は github モードだけで受け付ける | local モードには Sub-issues の構造が無い |
 | J19 | 親 Issue から始めるときは、サブ Issue をすべて取り込むのを既定にし、外すものを承認ゲートで選ばせる | 親を指定したのはユーザーなので、配下のサブ Issue は対応の対象と見なせる。関係の無いサブ Issue だけを外せるようにする |
 | J16 | サブの結末は親 PR の結末と一緒に記録する | サブ PR のマージは親ブランチへの取り込みで、ベースブランチに入るかは親 PR で決まる |
@@ -444,7 +444,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 | 指示層 | `commands/run.md`(`--workflow`)、`skills/orchestrating-runs/`(Workflow の有無の判定・`workflow` フェーズ・サイクル・人への確認・中止・マージ・再開)、`skills/capturing-intent/`(分解と一括承認・親 Issue 起点・起票の経路)、`skills/raguel-gating/`(サブの run ID・`repoPath` の対応表)と `references/outcome-sync.md`、`skills/syncing-intents/`(複数の design.md)、`skills/filing-followup-issues/`(サブ PR の所見)、`skills/reviewing-diffs/` と `skills/fixing-review-findings/`(レビューと修正の Workflow での分担)、`skills/facilitating-design-discussions/`(サブではウォークスルーを行わない旨) |
 | 同梱スクリプト | `workflows/implement-subs.js`・`workflows/review-fix-subs.js`(新設、手で書く)。スキルが Workflow を呼ぶ許可の宣言 |
 | 参照層 | `references/intent-format.md`(`parent`・`depends`・`run`・`status` の `in-progress` の時点・親を参照するマーカー。`docs/format-change-checklist.md` を追随させる)、`references/intent-common.md`(起票の経路とサブ Issue のつなぎ) |
-| 実装層 | `src/codiel-state.ts`(`mode`・`workflow` フェーズ・`init` の `SKIPPED`・連続性の検査・`--sub`・サブの run ID の対応表・pass-gate の基準・親の `init` のサブの STOP の検査)、`src/raguel-records.ts`(`CODE_PHASES`)、`src/hooks/guard-write.ts`・`guard-bash.ts`・`guard-github-mcp.ts`・`lib.ts`(3.3)、サブ Issue のつなぎの新しいスクリプト |
+| 実装層 | `src/codiel-state.ts`(`mode`・`workflow` フェーズ・`init` の `SKIPPED`・連続性の検査・`--sub`・サブの run ID の対応表・pass-gate の基準・親の `init` のサブの STOP の検査)、`src/raguel-records.ts`(`CODE_PHASES`)、`src/hooks/guard-write.ts`・`guard-bash.ts`・`guard-github-mcp.ts`・`lib.ts`(3.3)、サブ Issue をつなぐ新しいスクリプト |
 | テスト | `workflows/*.js` の構文の検査(スクリプトの本文を非同期関数として組み立てて構文エラーを検出し、`meta.name` を確かめる vitest のテスト) |
 | ワークスペースの設定 | `biome.json` の対象から `plugins/*/workflows/**` を外す。Workflow のスクリプトはトップレベルの `return` と大域名(`agent`・`args` など)を使うためである。変更後に `pnpm run typecheck`・`pnpm run lint`・`pnpm run test` をすべて通す |
 | Raguel | `raguel-mcp/src/codiel/phases.ts`(`workflow` フェーズ。`phaseSchema` は `tools/shared.ts:29-30` で表から導出されるので追随する)、2 者比較のテスト、`docs/raguel-contract.md` |

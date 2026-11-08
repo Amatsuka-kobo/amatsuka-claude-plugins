@@ -8,7 +8,7 @@
   - 2.0: `harness-docs/design/2026-11-08-codiel-2-0-loop-engineering-design.md`
 - 決まったこと: ユーザーが 2026-11-08 に次を決めた。
   - コミットと worktree の扱いは codiel が定める。
-  - agent-policy と better-agentics の規律が妨げるなら、両プラグインの規律を変更する。変更は codiel の run の中に限らない。
+  - agent-policy や better-agentics の規律とぶつかるなら、両プラグインの規律を変更する。変更の範囲は codiel の run の中に限らない。
 - この文書の役割: 両プラグインの改修の入力にする。何が食い違い、どの場面で問題になるかを並べる。直し方の文言は、両プラグインの改修の設計で決める。
 
 ## 0. 必ず直す食い違いは 6 件、方向を決める食い違いは 5 件ある
@@ -19,7 +19,7 @@
 | G2 | 並列の作業に worktree を使わない | better-agentics | 必ず直す | 1.1 |
 | G3 | Workflow のスクリプトが起動するエージェントに、委譲先の選び方・依頼文の規律を当てる | 両方 | 必ず直す | 1.2 |
 | G4 | 人の手が届かないセッションで、ユーザーへの質問や報告を前提にする | 両方 | 必ず直す | 2.0 |
-| G9 | 委譲先の選定の失敗で、作業を止めてユーザーの指示を待つ | better-agentics | 必ず直す | 2.0 |
+| G9 | 委譲先の選定に失敗したとき、作業を止めてユーザーの指示を待つ | better-agentics | 必ず直す | 2.0 |
 | G11 | メインセッションの書き込みを拒否する delegation gate | agent-policy | 必ず直す(有効にしている場合) | 1.1 |
 | G5 | 設計書・実装のコミット・rules の変更の前ごとに、レビューを必須にする | better-agentics | 方向を決める | 1.1 |
 | G6 | 設計書をオーケストレーターが書き、2 つのレビューとユーザーの承認を経る | agent-policy | 方向を決める | 1.1 |
@@ -49,7 +49,7 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
 - better-agentics: 「ビルド出力・lockfile・lint の自動修正・git commit は、手順 5 で自分だけが行う」(`plugins/better-agentics/skills/orchestration/SKILL.md:128`)
 - 問題になる場面:
   - codiel の implement で、並列の単位を委譲すると、worktree のブランチにコミットが残らない。オーケストレーターがマージするものが無くなる。
-  - 単位ごとのゲート(タスクレビュー、test-code・implement の評価)が、コミットされていない変更を評価できない。
+  - 単位ごとのゲート(タスクレビュー、test-code・implement の評価)では、コミットされていない変更を評価できない。
   - バッチの最後にまとめてコミットすると、単位ごとの `passedHead` と連続性の検査(`plugins/codiel/src/codiel-state.ts:770-815`)が成り立たない。
 - 直す方向: 委譲先が自分の変更をコミットする作業の流れを認める。少なくとも、スキルや手順がコミットの主体を定めているときは、それに従う。
 
@@ -57,9 +57,9 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
 
 - better-agentics: split は、書き込むファイルの集合が重ならない作業を、同じ作業ツリーで並列に委譲する(`plugins/better-agentics/skills/orchestration/SKILL.md:113-128`)。worktree の記述は無い。
 - 問題になる場面:
-  - codiel の並列の単位は、テストを実行し、コミットし、ブランチをマージする。同じ作業ツリーでは、テストの実行の結果やコミットが互いに混ざる。
+  - codiel の並列の単位では、テストを実行し、コミットしてブランチをマージする。同じ作業ツリーを使うと、テストの実行結果やコミットが互いに混ざる。
   - Raguel は単位ごとの差分を評価するので、作業ツリーを分けないと差分が分けられない。
-- 直す方向: 並列の作業の隔離の方法(同じ作業ツリーか worktree か)を、スキルや手順が定めているときはそれに従う。
+- 直す方向: 並列作業の隔離方法(同じ作業ツリーか worktree か)を、スキルや手順が定めているときはそれに従う。
 
 ### G3 Workflow のエージェントに委譲の規律を当てる(両方)
 
@@ -79,7 +79,7 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
   - 指摘が対立したときは `AskUserQuestion` で聞く(`:79`)。
 - 問題になる場面:
   - 2.0 の Epic のセッションは、人のいないバックグラウンドで動く。`AskUserQuestion` を呼ぶと、誰も答えないまま止まる。
-  - Workflow のエージェントは、実行中にユーザーへ質問する手段を持たない(workflows.md の「No mid-run user input」)。Agent ツールのサブエージェントからは `AskUserQuestion` が外される(sub-agents.md)。Workflow のエージェントのツールの一覧そのものは、codiel 1.2 の S1 で確かめる。
+  - Workflow のエージェントには、実行中にユーザーへ質問する手段が無い(workflows.md の「No mid-run user input」)。Agent ツールのサブエージェントからは `AskUserQuestion` が外される(sub-agents.md)。Workflow のエージェントで使えるツールの一覧そのものは、codiel 1.2 の S1 で確かめる。
 - 直す方向: 人に聞く手段を、スキルや手順が定めているときはそれに従う。codiel の Loop では、問いを state に記録して全体のセッションへ回す(2.0 の 4.6)。
 
 ### G5 設計書・実装のコミット・rules の変更の前ごとに、レビューを必須にする(better-agentics)
@@ -96,7 +96,7 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
 
 ### G6 設計書の書き方とレビューの順序(agent-policy)
 
-- agent-policy: 設計書・実装計画書は、オーケストレーターが書く。書いた後、暗黙知の抽出の役割 → 設計書のレビューの役割の順にレビューし、ユーザーの承認を得る(`orchestration-discipline.md:224-229`)。
+- agent-policy: 設計書・実装計画書は、オーケストレーターが書く。書いた後、暗黙知を抽出する役割 → 設計書をレビューする役割の順にレビューし、ユーザーの承認を得る(`orchestration-discipline.md:224-229`)。
 - 問題になる場面:
   - codiel の run の design.md・dev-plan.md も設計書に当たる。codiel は Raguel のゲートと design のウォークスルーで確かめるので、agent-policy のレビューと重なる。
   - 1.2 では、サブの design.md をエージェントが書き、ユーザーとのウォークスルーも行わない(1.2 の D7)。agent-policy の「オーケストレーターが書く」「ユーザーの承認を得る」と食い違う。
@@ -105,7 +105,7 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
 ### G7 サブエージェントに Agent ツールを許可しない(agent-policy)
 
 - agent-policy: 「サブエージェントに Agent Tool を許可しない」(`orchestration-discipline.md:138`)。
-- 問題になる場面: 1.2 では、Workflow のエージェントが Agent ツールを持つと分かった場合、サブ intent の中の作業を委譲するかを運用方針に任せる(1.2 の 3.4)。agent-policy の下では、サブ intent の中は常に直列になる。codiel はそれでも動く。
+- 問題になる場面: 1.2 では、Workflow のエージェントで Agent ツールが使えると分かった場合、サブ intent の中の作業を委譲するかを運用方針に任せる(1.2 の 3.4)。agent-policy の下では、サブ intent の中は常に直列になる。codiel はそれでも動く。
 - 決める方向: 現状のままでよいか。Workflow のエージェントを G3 で規律の外に出すなら、この条項もその範囲では当たらない。
 
 ### G8 オーケストレーターは担当表の役割を自ら実行しない(agent-policy)
@@ -123,7 +123,7 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
 ### G10 並列化の条件に、スキルが定める並列の制約を含めない(両方)
 
 - better-agentics の split は、並列のグループの条件を「書き込むファイルが重ならない」「相手の成果を入力にしない」の 2 つだけにし、グループの全員を同時に起動する(`SKILL.md:114-118`)。agent-policy は「独立したタスクが複数あるとき、それらを並列に起動する」(`orchestration-discipline.md:137`)。
-- 問題になる場面: codiel は、テストを実行する単位を、仕様のディレクトリが `parallel: true` を持つものだけに限り、同時に 4 件までとする(`plugins/codiel/skills/orchestrating-runs/references/delegation-env.md:19-35`)。テストがポートや DB を取り合うためである。1.1 はこの条件を、運用方針が並列化を判断する材料として作業の契約に書くが、両方針には材料を読む条項が無い。
+- 問題になる場面: codiel では、テストを実行する単位を、仕様のディレクトリに `parallel: true` があるものだけに限り、同時に 4 件までとしている(`plugins/codiel/skills/orchestrating-runs/references/delegation-env.md:19-35`)。テストがポートや DB を取り合うためである。1.1 ではこの条件を、運用方針で並列化を判断する材料として作業の契約に書くが、両方針にはその材料を読む条項が無い。
 - 決める方向: スキルや手順が並列の制約を定めているときは、それに従う条項を足すか。
 
 ### G11 メインセッションの書き込みを拒否する delegation gate(agent-policy)
@@ -132,12 +132,12 @@ agent-policy には、既に「コマンドで起動したスキルの手順(ス
 - 問題になる場面:
   - 1.1 で、運用方針が委譲を選ばずにオーケストレーターが自分で作業する経路が、拒否される。
   - 2.0 で、Epic のセッション自身の書き込み(Epic 文書、マージのコンフリクトの解消)が拒否される。
-  - Workflow のエージェントの hook の入力に `agent_id` が入らなければ(codiel 1.2 の S2)、Workflow のエージェントの書き込みも拒否される。
+  - Workflow のエージェントによる tool 呼び出しで hook の入力に `agent_id` が入らなければ(codiel 1.2 の S2)、その書き込みも拒否される。
 - 直す方向: codiel の run の中(codiel の hook が見つける active な run がある間)は、gate を当てない。または、スキル駆動のワークフローの手順を優先する条項(`:81`)を gate にも当てる。
 
 ## 3. codiel 側で解消したもの
 
-次の食い違いは、codiel 1.1 の設計で codiel 側を改めたので、両プラグインの改修は要らない。
+次の食い違いは、codiel 1.1 の設計で codiel 側を改めたので、両プラグインの改修は不要である。
 
 | 食い違い | 両プラグインの規律 | codiel 1.1 での扱い |
 | --- | --- | --- |
