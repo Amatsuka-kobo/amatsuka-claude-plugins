@@ -24,7 +24,7 @@
 
 ユーザーは、委譲の指示が運用方針とぶつかって困った場面は無かったと述べている。改修 1 の動機は実害ではなく、責務の分け方である。誰が・どのモデルで・いつ作業するかはプロジェクトの運用方針に任せ、codiel は何をするかだけを書く。
 
-D1 は、codiel の手順書が定める作業に当てる。1.2 の Workflow モードでは、ユーザーが「Workflow が起動したエージェントがサブ intent ごとに作業する」「レビューと修正の Workflow を回す」と決めた(1.2 の D4・D6)。Workflow のスクリプトで起動するエージェントの構成は、そのモードの定義であり、D1 の対象から外れる。
+1.2 の Workflow モードと 2.0 の Loop では、どの作業を別のエージェントで動かすかをモードが決める(1.2 の D4・D6)。D1 のうち「誰に委譲するか」は、スクリプトが起動するエージェントにも当て、各エージェントにどの定義を使うかは運用方針に任せる。スクリプトは、定義名・モデル・effort・依頼文の前置きを `args` で受け取る(1.2 の 3.4、2.0 の 4.4)。
 
 ## 1. 改修 1: 作業の担い手を書かない
 
@@ -257,7 +257,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 | ラベル | `references/handoff-contract.md`(`labels` に `codiel`)、`skills/capturing-intent/`(Issue 起点のラベルの付与)・`skills/orchestrating-runs/references/phase-pr.md`(3.1)、`skills/initializing-harness/`(ラベルの作成) |
 | 文書 | `README.md`(移行手順を含む)、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md` |
 | 配布宣言 | `.claude-plugin/plugin.json` と `package.json` を 1.1.0-dev にし、リリース時に 1.1.0 にする |
-| 他のプラグイン(別の改修) | agent-policy の `references/orchestration-discipline.md` と better-agentics の `skills/orchestration/SKILL.md` を改める(D8)。何を改めるかは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` の G1・G3〜G11 にある。どちらも改修したプラグインのバージョンを上げる |
+| 他のプラグイン(別の改修) | agent-policy の `references/orchestration-discipline.md` と better-agentics の `skills/orchestration/SKILL.md` を改める(D8)。何を改めるかは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` の G1・G3〜G12 にある。どちらも改修したプラグインのバージョンを上げる |
 | ARCHITECTURE | ADR-004 の決定のうち「方針が無い環境では general-purpose / Explore へ縮退する」(`harness-docs/ARCHITECTURE.md:252`)を改める ADR が必要になる。ADR-006 の影響範囲の「持続層 `docs/intents/domains/`」(`:312`)にも `docs/intents/design/` を足す。どちらも `metatron:updating-architecture` を起動して扱う |
 
 ## 7. 既知の限界

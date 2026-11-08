@@ -228,7 +228,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
 | --- | --- |
 | intent の起票 | ストーリーの担当エージェントが、分解の聞き取りを行わない Workflow Intents で、ストーリーの親 intent とサブ intent を作る。入力はストーリーマップと Epic の原文である。サブの規模もここで決める。Epic Issue から取り込んだストーリーに、`codiel` と `subtask` が付いたサブ Issue があれば、その分け方を使い、無ければ分解する。github モードではサブ Issue を `codiel` と `subtask` を付けて起票し、つなぐ(1.2 の 2.5)。ストーリーのブランチにコミットする |
 | discuss | 論点を ASK として扱う(D7)。Auto Ask が有効なら Jev が選ぶ。無効なら、論点を問いとして記録し(4.6)、このストーリーの Workflow を `awaiting-human` で終える |
-| workflow | 1.2 の 3.5〜3.8 のサイクルを、スクリプトの中で回す。実装とレビューと修正は、1.2 の Workflow を `workflow()` の子として呼ぶ。1.2 でオーケストレーターが行う仕事(マージ・`sub-reset`・進みの表の更新)は、スクリプトが起動するストーリーの担当エージェントが行う。サブが人の判断を待つときは、そのサブを問いとして記録し、独立したサブは進める。進められるサブが無くなったら、Workflow を `awaiting-human` で終える |
+| workflow | 1.2 の 3.5〜3.8 のサイクルを、スクリプトの中で回す。実装とレビューと修正は、1.2 の Workflow を `workflow()` の子として呼ぶ。1.2 でオーケストレーターが行う仕事(マージ・`sub-reset`・進みの表の更新・`gate-pending` のゲートの評価)は、スクリプトが起動するストーリーの担当エージェントが行う。サブが人の判断を待つときは、そのサブを問いとして記録し、独立したサブは進める。進められるサブが無くなったら、Workflow を `awaiting-human` で終える |
 | 後工程 | ストーリーの担当エージェントが、test-loop → intent-sync → pr → review → fix-loop → triage → finalize を進める。review の観点ごとのレビュアーは、スクリプトが並列に起動する |
 
 - 1.2 の Workflow は子からさらに子を呼ばないので、子としてそのまま使える。Workflow の子の中からは、さらに子を呼べない。
@@ -237,6 +237,9 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
   - フェーズの許可: `ghPostPhaseProblem` に `mode` を渡し、判定に使う state がストーリーの intent フェーズか、Epic の run の `loop` フェーズのときも許す。guard-bash と guard-github-mcp は同じ関数を使うので、フェーズの許可は 1 箇所の変更で両方に効く。
   - ラベルの検査: `ghPostPhaseProblem` はコマンドの引数を見ない(`lib.ts:43-46`)ので、1.1 の 3.2 と同じく各 hook に置く(guard-bash は `gh` の引数、guard-github-mcp は `labels` の引数)。Loop の run(`mode: loop`)では `gh issue create` にも `codiel` を求め、標準の run の triage では求めない。
 - 子の Workflow と親の Workflow は、同時 16 エージェントの上限を共有する。
+- ストーリーの Workflow も、1.2 の 3.4 と同じ委譲の指定を `args` で受け取る。役割は、1.2 の 3 つ(サブの担当・レビュー・修正)にストーリーの担当を足した 4 つとする。子の 1.2 の Workflow には、1.2 の 3 つの役割の分をそのまま渡す。サブはストーリーの Workflow の中で作るので、サブごとの上書きは渡さない。
+  - ストーリーの担当の指定は、intent の起票・マージと、ストーリーの親 PR の後工程(test-loop〜finalize)を担うエージェントに当てる。後工程の観点ごとのレビュアーには、レビューの指定を当てる。サブの review と fix-loop は、子の 1.2 の Workflow がレビューと修正の指定で進める。
+  - ストーリーの担当が Raguel MCP のツールを持たないときは、ストーリーの Workflow を `gate-pending` で終える。Epic のセッションが戻りの後にゲートを評価し、次のサイクルで続きから再開させる。
 - ストーリーの state を書くのは、ある時点でそのストーリーを担当する 1 体だけとする。
 - ストーリーの親 intent の `## ASIS` と `## TOBE` には、Epic 文書の原文を要約せずに写し、出所の行(「出所: Epic 文書 `<パス>` の原文」と日付・話者)を添える。マッピングの会話にそのストーリーについてのユーザーの言葉があれば、それも話者と日付を添えて記録する。ストーリーのブランチはベースブランチから作り、Epic 文書が含まれないため、原文をストーリーの intent の中で完結させる。サブ intent は 1.2 のとおり親(ストーリー)を参照する。
 - triage では、medium と low の所見を、そのストーリーの配下のタスクとして起票する(github では `codiel` と `subtask` を付けたサブ Issue、local では intent の草案)。Loop が対応するタスクなので、1.1 の triage と違い `codiel` を付ける。Loop の run の中の `gh issue create` に `codiel` が無ければ、hook が拒否する。マップの承認を起票の承認として扱う(3.2)。AI が起票したことが分かる印を付け、人が非対応にできるようにする。
@@ -294,7 +297,7 @@ Epic のセッションは、次のサイクルを、全ストーリーが終わ
   - ストーリーの Workflow の完了の通知。
 - マージ待ちだけが残ったときの再確認は、ユーザーが全体のセッションで求めたときに、全体のセッションから Epic のセッションへ依頼する。定期的に確かめる仕組みは設けない。
 - セッションのプロセスが止まるか再起動すると、動いていた Workflow は続かない(agent-view.md・workflows.md)。Epic のセッションは、起こされるたびに、`workflow` の種類の待ちに対応する Workflow がまだ動いているかを、自分のセッションのタスクの一覧で確かめる。動いていなければ、ストーリーとサブの state から続きの Workflow を起動し直す(同じセッションの中なら `resumeFromRunId` を使う)。全体のセッションは、Epic のセッションが手すきなのに `workflow` の待ちが残っていると知ったら、立て直しを SendMessage で依頼する。
-- バックグラウンドセッションでは、利用上限に当たったとき Workflow は待たず、当たったエージェントが失敗する(workflows.md の「When a run hits your usage limit」)。1 回のストーリーの Workflow で、複数のサブが同時に `failed`(`agent()` が null)になったときは、利用上限を疑う。1.2 の `failed` のやり直しの回数に数えず、そのストーリーを人の判断待ちにして「利用上限で止まった可能性がある。再開するか」を問いにする。
+- バックグラウンドセッションでは、利用上限に当たったとき Workflow は待たず、当たったエージェントが失敗する(workflows.md の「When a run hits your usage limit」)。1 回のストーリーの Workflow で、複数のサブが同時に `failed`(`agent()` が null)になったときは、利用上限を疑う。1.2 の `failed` のやり直しの回数に数えず、そのストーリーを人の判断待ちにして「利用上限で止まった可能性がある。再開するか」を問いにする。この問いの後の再開でも複数のサブが同時に `failed` になったら、利用上限ではなく委譲の指定を疑い、1.2 の 2 回目の `failed` として扱う。
 
 ### 4.8 止まる場面の検知と、Loop の hook は `ask` を出さないこと
 
@@ -483,7 +486,7 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 | ワークスペースの設定 | `.codiel/config.json` の `loop.maxParallelStories`(新しいキー) |
 | 文書 | `README.md`、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md` |
 | 配布宣言 | `.claude-plugin/plugin.json` と `package.json` を 2.0.0-dev にし、リリース時に 2.0.0 にする |
-| 他のプラグイン(別の改修) | agent-policy と better-agentics の G3・G4・G9・G11(両プラグインとの食い違いの文書) |
+| 他のプラグイン(別の改修) | agent-policy と better-agentics の G3・G4・G9・G11・G12(両プラグインとの食い違いの文書) |
 | ARCHITECTURE | 全体のセッションと Epic のセッションの構成、run を作業ツリーに結びつけること、Loop の hook が `ask` を出さないこと、Auto Ask の問いの組み立て方は ADR の候補になる。`metatron:updating-architecture` を起動して扱う |
 
 ## 11. 確かめる事項
@@ -512,6 +515,7 @@ Loop の discuss の論点では、選択肢そのものを `agenda.md` を書�
 - 複数の Epic が同じファイルを変えたときの衝突は、マージの時点まで見えない。同じ Epic の中でも、並列のストーリーがそれぞれの intent-sync で同じ持続層のファイル(`docs/intents/design/<種別>.md`・`domains/<領域>.md`)を書くので、後からマージする PR で衝突する。解消はマージする人が行う。
 - バックグラウンドセッションは利用上限に当たっても待たないので、上限に当たるとストーリーが人の判断待ちに溜まる(4.7)。
 - ストーリーを中止すると、再開は `story-reset` によるやり直しになる。
+- Loop では委譲の指定をサブごとに変えられず、役割ごとの指定がすべてのサブに当たる(4.4)。役割の定義が書き込みか Bash を持たないと、全サブが同時に `failed` になり、4.7 の判定が 1 回目は利用上限と取り違える。
 - 全体のセッションが開かれていない間は、問いに答える人がいないので、該当するストーリーは待ち続ける。
 
 ## 13. ビルダーに任せること
