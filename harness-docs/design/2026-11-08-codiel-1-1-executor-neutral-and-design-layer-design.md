@@ -46,7 +46,7 @@ B〜F は、運用方針の規律と理屈の上で食い違う。
 
 - better-agentics は、調査・設計・実装を自分で行い、委譲を review・split・stuck に限る(B・E と食い違う)。
 - better-agentics では、C の冒頭の一文を起動時に自動注入するため、依頼文には書かないと定めている。
-- agent-policy は「サブエージェントに毎タスクの git commit はさせない。バッチの最後にオーケストレーター側で行う」と定める(`plugins/agent-policy/references/orchestration-discipline.md:221`)。better-agentics の split も、git commit を自分だけが行うと定める(`plugins/better-agentics/skills/orchestration/SKILL.md:113-128`)。どちらも F の「委譲先が自分の変更をコミットする」と食い違う。
+- 改修前の agent-policy は「サブエージェントに毎タスクの git commit はさせない。バッチの最後にオーケストレーター側で行う」と定めていた(改修前の `plugins/agent-policy/references/orchestration-discipline.md:221`)。better-agentics の split も、git commit を自分だけが行うと定めていた(`plugins/better-agentics/skills/orchestration/SKILL.md:113-128`)。どちらも F の「委譲先が自分の変更をコミットする」と食い違っていたが、2026-11-10 の両プラグインの改修で解消した(食い違いの文書の G1)。
 - better-agentics は、レビュアーに原本と満たすべき要件だけを渡し、自分の結論を渡さないと定める(`plugins/better-agentics/skills/orchestration/SKILL.md:73`)。現行の再レビューでは、依頼文で「反論済み所見」の全件を渡している(`skills/orchestrating-runs/SKILL.md:362`)。
 
 担い手(B・C・E)は運用方針に任せる(D1)。コミットと worktree(F、および並列作業での worktree)は codiel が定め、食い違う点については運用方針の規律を改める(D8)。
@@ -83,7 +83,7 @@ B〜F は、運用方針の規律と理屈の上で食い違う。
   - コード系フェーズでは、担い手が自分の変更を、作業しているブランチ(並列の単位は worktree のブランチ、直列の単位は run ブランチ)にコミットする。オーケストレーター自身が担い手のときも同じである。
   - worktree のブランチから run ブランチへのマージと、E2E レポートのコミットは、現行どおりオーケストレーターが行う。
   - 文書系フェーズの文書は、現行どおりゲートを通過した直後にオーケストレーターがコミットする。
-  - agent-policy(`references/orchestration-discipline.md:221`)は委譲先にコミットさせない。better-agentics(`skills/orchestration/SKILL.md:113-128`)も委譲先にコミットさせない。どちらの規律も改める(D8)。この変更は両プラグインの改修として別に行う。
+  - 委譲先にコミットさせない両方針の条項は、2026-11-10 の両プラグインの改修で削った(D8、食い違いの文書の G1)。better-agentics のサブエージェント側の規律は「git commit は、依頼文で指示されたときだけ実行する」(`references/subagent-policy.md:25`)なので、契約でコミットを指示する。
 
 ### 1.3 委譲の有無で分かれる仕組みは、委譲したときだけ働かせる
 
@@ -265,7 +265,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 | ラベル | `references/handoff-contract.md`(`labels` に `codiel`)、`skills/capturing-intent/`(Issue 起点のラベルの付与)・`skills/orchestrating-runs/references/phase-pr.md`(3.1)、`skills/initializing-harness/`(ラベルの作成) |
 | 文書 | `README.md`(移行手順を含む)、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md` |
 | 配布宣言 | `.claude-plugin/plugin.json` と `package.json` を 1.1.0-dev にし、リリース時に 1.1.0 にする |
-| 他のプラグイン(別の改修) | agent-policy の `references/orchestration-discipline.md` と better-agentics の `skills/orchestration/SKILL.md` などを改める(D8)。何を改めるかは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` の G1・G3〜G12 にある。どちらも改修したプラグインのバージョンを上げる |
+| 他のプラグイン(別の改修) | agent-policy の `references/orchestration-discipline.md` と better-agentics の `skills/orchestration/SKILL.md` などを改める(D8)。何を改めるかは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` の G3〜G12 にある。G1 は 2026-11-10 の改修で済んだ。どちらも改修したプラグインのバージョンを上げる |
 | ARCHITECTURE | ADR-004 の決定のうち「方針が無い環境では general-purpose / Explore へ縮退する」(`harness-docs/ARCHITECTURE.md:252`)を改める ADR が必要になる。ADR-006 の影響範囲の「持続層 `docs/intents/domains/`」(`:312`)にも `docs/intents/design/` を足す。どちらも `metatron:updating-architecture` を起動して扱う |
 
 ## 7. 既知の限界
