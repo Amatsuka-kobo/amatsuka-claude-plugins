@@ -1,6 +1,6 @@
 {
   "name": "better-agentics-scripts",
-  "version": "0.0.1-dev",
+  "version": "0.0.2-dev",
   "private": true,
   "type": "module",
   "scripts": { "build": "tsx build.ts" },
