@@ -21,6 +21,7 @@
 | D7 | 2 | 軽量 run でも設計資料を更新する |
 | D8 | 1 | コミットと worktree の扱いは codiel が定める。agent-policy や better-agentics の規律とぶつかるなら、両プラグインの規律を改める。改める範囲は codiel の run の中に限らない。食い違いは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` にまとめる |
 | D9 | 3 | codiel が対応する GitHub の Issue と PR には、ラベル `codiel` を付ける。人が作った既存の Issue でも、codiel が対応するなら付ける。GitHub には codiel と関係の無い Issue もあるので、codiel が拾う範囲をこのラベルで区切る |
+| D10 | 1 | 運用方針の規律とぶつかる点のうち、依頼文で条件が外れるもの(構造が変わる判断の差し戻し)は、委譲を義務づけずに「委譲する場合」の規律として指示層と作業の契約に書き、codiel 側で解く。条件が実際に外れるかは、1.2 の S7 で確かめる。委譲するかは D1 のとおり運用方針に任せる。それ以外のぶつかる点は、D8 のとおり両方針の規律を改める。並列の範囲も「並列に進める場合」の条件として書くが、方針の並列の規律は手順で外れる形になっていないので、食い違いの文書の G10 に残る |
 
 ユーザーは、委譲の指示が運用方針とぶつかって困った場面は無かったと述べている。改修 1 の動機は実害ではなく、責務の分け方である。誰が・どのモデルで・いつ作業するかはプロジェクトの運用方針に任せ、codiel は何をするかだけを書く。
 
@@ -55,7 +56,7 @@ B〜F は、運用方針の規律と理屈の上で食い違う。
 - A を削り、方針が無いときの既定の委譲先は設けない。codiel は運用方針の有無を検出せず、セッションに注入された規律(または Claude Code の既定の判断)に従って担い手を決める。
 - B のフェーズ表の列を「作業の単位と作業内容」に改める。
   - 各フェーズの作業を単位(仕様のディレクトリ・dev-plan のステップ・タスクレビュー・review の観点など)に分けて示す。
-  - 単位同士を並列に進めてよい条件を書き、運用方針で並列化を判断する材料にする。条件は次の 3 つである。
+  - 単位同士を並列に進めてよい条件を書く。並列にするかは運用方針に任せ、指示層には「並列に進める場合は、次の 3 つの条件を満たす単位に限る」と書く。
     - 書き込むファイルが重ならない。
     - 互いの成果を入力にしない。
     - テストを実行する単位は、仕様のディレクトリに `parallel: true` があるものだけとし、同時に 4 件まで並べる(現行の `references/delegation-env.md:19-35`。テストがポートや DB を取り合うため)。
@@ -64,6 +65,13 @@ B〜F は、運用方針の規律と理屈の上で食い違う。
 - C のテンプレートを「作業の契約」に改める。
   - 冒頭の一文と「セッションの規律の転記」のセクションを削る。
   - 契約には現行テンプレートの項目を引き継ぐ。含める項目は、作業内容、読むスキル、観点ファイル、入力ファイル、出力ファイル、前提(diff の範囲・ARCHITECTURE・実行モード・testsDir・担当タグ・担当範囲)、前フェーズの申し送り、書いてよい範囲と使ってよい tools、完了の条件(単位の変更が run ブランチに入っていること)である。
+  - 担い手に判断を任せる単位では、任せる判断とその材料を契約に明記する(D10)。委譲する場合に、運用方針のサブエージェントの規律が差し戻しの条件にする「依頼文に無い判断」に当たらないようにするためである。
+    - 任せた判断の中の不明点は、担い手が材料から決める。
+    - 次のときは、決めずに返す形を書く。
+      - 任せない判断が要るとき
+      - 任せた範囲の外の判断が要るとき
+      - 担い手が作業を引き受けないとき
+      - 担い手が作業を進められないとき。依頼文と実コードの食い違い、原因を 1 つに絞れない失敗、任せた判断の外の不明点(依頼文と Read・Grep で決まらないもの)、書いてよい範囲の外の変更が要るとき、名指しされていないスキルが要るときを含む
   - 再レビューの契約からは「反論済み所見」を外す。反論済み所見と同じ指摘が再び出たときは、オーケストレーターが再レビューの結果を受け取った後に除外する。
   - 委譲するときは、契約を依頼文にする。運用方針が依頼文に求める項目(役割・冒頭の一文・規律の転記・出力の形式など。agent-policy の `references/orchestration-discipline.md:136-145`)は、契約の前後に足してよい。codiel が定めるのは契約の中身である。自分で作業するときは、同じ契約を自分への作業指示として使う。
   - 委譲の種類に応じた条項(`:375-381` の使ってよい tools と書き込み先)は、単位の契約として残す。自分で作業するときも同じ範囲を守る。
@@ -257,7 +265,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 | ラベル | `references/handoff-contract.md`(`labels` に `codiel`)、`skills/capturing-intent/`(Issue 起点のラベルの付与)・`skills/orchestrating-runs/references/phase-pr.md`(3.1)、`skills/initializing-harness/`(ラベルの作成) |
 | 文書 | `README.md`(移行手順を含む)、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md` |
 | 配布宣言 | `.claude-plugin/plugin.json` と `package.json` を 1.1.0-dev にし、リリース時に 1.1.0 にする |
-| 他のプラグイン(別の改修) | agent-policy の `references/orchestration-discipline.md` と better-agentics の `skills/orchestration/SKILL.md` を改める(D8)。何を改めるかは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` の G1・G3〜G12 にある。どちらも改修したプラグインのバージョンを上げる |
+| 他のプラグイン(別の改修) | agent-policy の `references/orchestration-discipline.md` と better-agentics の `skills/orchestration/SKILL.md` などを改める(D8)。何を改めるかは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` の G1・G3〜G12 にある。どちらも改修したプラグインのバージョンを上げる |
 | ARCHITECTURE | ADR-004 の決定のうち「方針が無い環境では general-purpose / Explore へ縮退する」(`harness-docs/ARCHITECTURE.md:252`)を改める ADR が必要になる。ADR-006 の影響範囲の「持続層 `docs/intents/domains/`」(`:312`)にも `docs/intents/design/` を足す。どちらも `metatron:updating-architecture` を起動して扱う |
 
 ## 7. 既知の限界
@@ -276,7 +284,14 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 - 種別ごとの Mermaid の図の種類の最終的な選択。
 - `codiel:init` の差分の示し方。
 
+## 9. 実装計画で詰める事項
+
+2026-11-09 の再レビューで残った所見である。実装計画で現行のスキルに当てて詰める。
+
+- 標準の run で、担い手が「決めずに返した」ときのオーケストレーターの扱い。1.2 の C が定めるのは返す形だけで、受け方(人に聞くか、委譲の指定を変えて出し直すか)が無い。`undecided`・`declined` は 1.2 の 3.6 と 2.0 の 4.4 にしか無い。現行の `skills/orchestrating-runs/SKILL.md` で差し戻しを扱う箇所は、コミットの催促(`:274`)だけである。
+
 ## 出典
 
 - ユーザーの予定表(2026-11-08 の会話で貼り付け): 「単体でのサブエージェント起動指示を廃止(プロジェクト運用に任せる方針) Amatsukaの中だとbetter-agenticsやagent-policy」「basic-designを吸収。持続層としてそのRunで決まった設計を整理して残すようにする。」
+- ユーザーの提案(2026-11-09、D10): 「Codielの指示層に、サブエージェントに委譲する指示書かずとも、"サブエージェントに委譲する場合"という名目で規律を書くようにすれば解決できる部分があるのでは」
 - 会話記録: `docs/chat/2026/1107/phyllis998/2356-codiel-1-1-to-2-0-design-kickoff.md`

@@ -190,7 +190,7 @@ intent → carry-over → discuss → workflow → design → (test-spec ∥ dev
 - 親の state は `.codiel/runs/<親 slug>/try-<n>/state.json` に置く。
 - Workflow の実行中にオーケストレーターが親の state に書くのは、待ちの記録(`wait-add` / `wait-done`)だけとする。
 - 親の state に、サブごとの進みの表を置く。
-  - 項目は、番号 `k`・サブ slug・worktree のパス・ブランチ・分岐点(`base`。worktree を作った時点の親ブランチの HEAD)・Raguel の run ID・進み・PR の URL である。
+  - 項目は、番号 `k`・サブ slug・worktree のパス・ブランチ・分岐点(`base`。worktree を作った時点の親ブランチの HEAD)・Raguel の run ID・進み・PR の URL・置き換えた委譲の指定(3.6)である。
   - 進みは、未着手 / 実行中 / PR 済み / マージ済み / 人の判断待ち / failed のどれかとする。
   - 書き手は Workflow の外のオーケストレーターだけとする。着手の判定・再開・結末の記録は、この表を正にする。サブの state には終端の status を置かない。
 - サブの報告(`review-<m>.md`・`report.md`・`test-run-<n>.md`)は、`subs/<サブ slug>/reports/` に置く。
@@ -269,8 +269,12 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - サブの design では、ユーザーとのウォークスルー(`skills/facilitating-design-discussions/references/design-walkthrough.md`)を行わない。D7 で design 以降をエージェントに任せたためである。新しい画面名だけは D8 で止まる(3.6)。
 - サブの文書(design.md・spec.md・cases.md・dev-plan.md)は、ゲートを通過した直後にサブの担当エージェントがサブのブランチへコミットする。
 - サブ intent の中のステップは、1 体のエージェントがサブのブランチの上で直列に進める。サブの中で worktree は作らない。
-  - エージェントが Agent ツールを持つ場合、ステップの作業を委譲するかは 1.1 の規則どおり運用方針に任せる。委譲は完了を待つ形に限り、同じ worktree の中で行う。
+  - エージェントが Agent ツールを持つ場合、ステップの作業を委譲するかは 1.1 の規則どおり運用方針に任せる。委譲する場合は、サブの worktree の中で 1 件ずつ完了を待つ形に限り、並列には起動しない。1.2 には、サブの中の並列の単位の worktree を state に対応づける設計が無いためである(hook は、進みの表に記録した worktree だけをサブに対応づける。3.3)。
 - エージェントへの指示は、1.1 の「作業の契約」の形で書く。読むスキル、入力(intent・`discussion.md`・持続層の位置)、出力、書いてよい範囲、Bash の `cd` の規則を含める。
+- 契約には、任せる判断とその材料を明記する(1.1 の D10)。サブの design・test-spec・dev-plan の判断は担い手が行い、材料は intent・`discussion.md`・持続層とする。test-code・implement・test-loop で、design.md と dev-plan.md の範囲に収まる構造の選択(インターフェース・ファイル配置・依存関係)も担い手が行う。範囲を超える変更は決めずに返し(3.6)、新しい画面名は `awaiting-human` で返す。次の外部への操作も、契約の作業に含める。
+  - サブのブランチの push、サブ PR の作成、既存の PR の本文の更新(`gh pr edit`。現行の `references/phase-pr.md:23,29`)
+  - 画像のアップロード。PR の本文の画像と E2E の証拠の添付で、`gh --attach` かブラウザから行う(現行の `references/github-writing-images.md:17`、`phase-pr.md:19`、`e2e.md:11`)
+  - Raguel のゲートの評価。`TYPESAFE_API_KEY` があれば、Raguel が成果物について Jev へ問い合わせる(`raguel-mcp/src/context/judge.ts:3,489-492`)。MCP 経由の評価を方針の規律が「送信」と見なすかは【要確認: S7】
 - 読むスキルは、名前と SKILL.md の絶対パスで示す。Skill ツールを持たないエージェントは、パスから読む。プラグインのルートは `args` で受け取る。
 - 各フェーズの Raguel のゲートは、エージェントがサブの run ID で通す。エージェントが Raguel MCP のツールを持たないときは、評価の手前で `gate-pending` を返し、オーケストレーターが Workflow の後に評価してゲートを通す。Workflow のエージェント全体で使えない場合(S1)と、渡された定義の tools に無い場合のどちらも、この経路になる。
 - 委譲の指定は、Agent ツールで起動するときと同じ `agentType`・`model`・`effort` に、依頼文の前置きの文を加えたものである。どれも任意である(D14)。
@@ -282,7 +286,8 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - 渡された定義が、作業に要るツール(書き込み・Bash・Skill・Raguel MCP)を持つかは確かめない(9 章)。
 - 戻り値はスキーマで固定し、少なくとも次の項目を含める。
   - サブ intent の slug
-  - 結果(`pr-created` / `awaiting-human` / `gate-pending` / `failed`)
+  - 結果を返した役割(サブの担当・レビュー・修正)。`agent()` が null のときは、スクリプトが起動した役割を入れる
+  - 結果(`pr-created` / `awaiting-human` / `gate-pending` / `undecided` / `declined` / `failed`)。`undecided` は契約の「決めずに返す」で返したこと、`declined` は担い手が作業を引き受けなかったことを表し、どちらも理由を添える(3.6)
   - PR の URL(local モードではブランチ名)
   - 人への確認の内容(種類・問い・選択肢の材料・評価 ID)
 - `agent()` が null を返したサブは `failed` として扱う。
@@ -294,7 +299,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 
 1. 着手できるサブを集める。条件は、依存先がすべて親ブランチへマージ済みで、人の確認を待っていないことである。
 2. 着手できるサブを、実装の Workflow で並列に進める。同時に動くエージェントの上限を超えた分は、Workflow が順に待たせる。
-3. Workflow が戻ったら、`awaiting-human`・`gate-pending`・`failed` のサブを扱う(3.6)。
+3. Workflow が戻ったら、`awaiting-human`・`gate-pending`・`undecided`・`declined`・`failed` のサブを扱う(3.6)。
 4. このサイクルで PR を出したサブを、レビューと修正の Workflow に回す(3.7)。
 5. レビューと修正が済んだサブから、オーケストレーターが親ブランチへマージする(3.8)。
 
@@ -313,15 +318,24 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - Workflow が終わったら、オーケストレーターは次の順で扱う。
   1. Workflow の戻り値を要約せずに `waits/workflow-<サイクル>-<回>.md` に書き、待ちを `wait-done` で消す。`wait-done` はこのファイルが無いと失敗する(`codiel-state.ts:1373-1376`)。
   2. 人に聞くサブがあれば、親を `mark-ask workflow --kind confirm` で `awaiting_human` にする。待ちが空になると stop-guard が停止を止めるためである。
-  3. `awaiting-human` のサブごとに、現行と同じ選択肢を使って AskUserQuestion で聞く。
+  3. `awaiting-human` のサブごとに、AskUserQuestion で聞く。選択肢は現行と同じものを使い、現行に無い場面(上の一覧で選択肢を決めた場面)はその選択肢を使う。
 - 答えに応じて、次のように扱う。
 
 | 答え | 扱い |
 | --- | --- |
 | 続行(修正して再提出・このまま承認・誤検知として続ける・画面名の決定・上限超過の続行) | サブの state を `resume` し、次のサイクルの実装の Workflow で、止まった場所から再開させる。worktree とコミットは残してある。「このまま承認」と「誤検知として続ける」は、オーケストレーターが Workflow の外で `record_outcome` と `pass-gate --human-approved` をサブに対して済ませてから再開させる。「修正して再提出」と画面名は、裁定の内容を次のサイクルの `args` でエージェントへ渡す |
-| 中止(ASK の中止・STOP を妥当として止める・上限超過の中止) | 実行中の Workflow が無いことを確かめ、親 run を現行と同じ理由(`ask-aborted`・`raguel-stop`・`attempts-exceeded`)で `stop` する |
+| 続行(`undecided`・`declined`・`failed` からの、判断を示して続ける・委譲の指定を変えて続ける・再試行) | サブの state は `awaiting_human` でないので `resume` しない。進みの表のそのサブを「実行中」に戻し、次のサイクルで止まった場所から着手させる(下の箇条)。示した判断は次のサイクルの `args` で渡し、委譲の指定を変えるときは `args` でその役割の指定を置き換える |
+| 中止(ASK の中止・STOP を妥当として止める・上限超過の中止・決めずに返した場面の中止) | 実行中の Workflow が無いことを確かめ、親 run を現行と同じ理由(`ask-aborted`・`raguel-stop`・`attempts-exceeded`)で `stop` する。決めずに返した場面の中止は `ask-aborted` にする |
 
-- `failed` のサブは、worktree とサブの state を残したまま、次のサイクルで新しいエージェントに、止まったフェーズから 1 回だけやり直させる。state が壊れているときは `sub-reset` で作り直す。2 回目も `failed` なら、親を `mark-ask` して「再試行」か「中止」を聞く。中止は親 run の `stop` にする。
+- 契約の「決めずに返す」場面(1.1 の 1.2 の C)では、エージェントはサブの state に触れずに返す。フェーズが pending か passed の時点では、サブの state に `mark-ask` を記録できない(`codiel-state.ts:1259-1262`)ためである。上の一覧の場面(Raguel の ASK と STOP、新しい画面名、試行回数の上限超過、現行の手順が求める確認)は、フェーズの中で生じるので、従来どおり `mark-ask` して `awaiting-human` で返す。一覧に無い任せない判断は `undecided` で返す。
+  - 任せた範囲の外の判断が要るとき、または作業を進められないときは、`undecided` に理由と、判断が要るなら問いと選択肢の材料を添えて返す。
+  - 作業を引き受けないときは、`declined` と理由を返す。
+  - オーケストレーターは Workflow の後に、進みの表のそのサブを「人の判断待ち」にし、親を `mark-ask workflow --kind confirm` で人の判断待ちにして聞く。答えを受けたら、親を `resume` して `workflow` フェーズを `in_progress` に戻す。親を `mark-ask` する他の場面(`failed` の 2 回目、解消できないコンフリクト)も同じである。
+  - 選択肢は、判断を示して続ける・委譲の指定を変えて続ける・中止とする。「判断を示して続ける」は、担い手が問いを返したときだけ出す。
+  - 続けるときは、サブの state を `resume` しない(`awaiting_human` ではないため。`codiel-state.ts:1299-1302`)。進みの表のそのサブを「実行中」に戻し、次のサイクルで新しいエージェントに、止まった場所から着手させる。
+- 「判断を示して続ける」が選ばれたら、担い手が返した問いと選択肢の材料で 2 問目を聞く。
+- 「委譲の指定を変えて続ける」が選ばれたら、オーケストレーターが運用方針に従って指定を選び直す。人が指定を示したときはそれを使う。置き換えるのは、断ったか失敗した役割の指定だけとする。置き換えた指定は進みの表のそのサブの項目に役割ごとに記録し、以後のサイクルと、その役割を使うレビューと修正の Workflow でも使う。
+- `failed` のサブは、worktree とサブの state を残したまま、次のサイクルで新しいエージェントに、止まったフェーズから 1 回だけやり直させる。state が壊れているときは `sub-reset` で作り直す。2 回目も `failed` なら、親を `mark-ask` して「再試行」か「委譲の指定を変えて続ける」か「中止」を聞く。スキーマに沿わない返答(`agent()` が null)には、担い手が断った場合も含まれるためである。中止は親 run の `stop` にする。
 - 親 run を止めた後の新しい try(ADR-014 の続きの try)は、次のように扱う。
   - 親ブランチへマージ済みのサブは済んだものとし、そのコードは現行どおり carry-over で評価する。
   - 未マージのサブは、stop の後のオーケストレーターの後始末(現行の `skills/orchestrating-runs/SKILL.md:301-307`)で worktree とブランチが消えるので、design からやり直す。CLI の `stop` は片付けを行わない。
@@ -338,6 +352,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
   3. critical と high の所見が残る間、再レビューと修正を繰り返す。上限は現行の `maxFixAttempts` に従う。上限を超えたら `awaiting-human` を返す(3.6)。
 - レビュアーと修正担当には、3.4 の委譲の指定のうち、レビューと修正の役割の分を使う。
 - スキルの読み方、Raguel MCP のツールが無いときの `gate-pending` の経路、戻り値の形は、3.4 と同じにする。
+- 修正担当の契約には、任せる判断(所見の採否と直し方。材料は所見・intent・サブの設計書)と、修正の push、github モードでの所見と返信の投稿(画像のアップロードを含む)、Raguel のゲートの評価を作業として明記する(1.1 の D10)。
 - github モードでは、所見を現行どおりサブ PR に投稿する。local モードでは `review-<m>.md` に残す。
 - medium と low の所見は、親 run の triage でまとめて扱う。
 
@@ -476,6 +491,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 | S4 | GitHub の Issue の依存関係(blocked by)を `gh` で読み書きできるか | 読めなければ、2.6 の AI の依存の案に頼る |
 | S5 | プラグインの名前付き Workflow を、スキルから呼ぶときの許可の宣言と確認の出方。`workflow()` の子として呼べるか | 子として呼べなければ、2.0 の Loop は子を呼ばずに同じ処理をスクリプトに書く |
 | S6 | Workflow のエージェントの中で `evaluate_*` がバックグラウンドへ移されるか | 移されるなら、3.6 の `gate-pending` の経路を使う |
+| S7 | 運用方針の定義を渡したエージェントが、契約で任せた判断で差し戻さないか。契約に明示した外部への操作(push・PR・投稿・画像のアップロード・Raguel の評価)を拒まないか | G3 の改修は、S7 の結果によらず 1.2 のリリースの前提である(食い違いの文書の 4 章)。任せた判断で差し戻すなら、構造が変わる判断の差し戻しも 3 章から G3 に戻す。codiel 側の対処は書かない(1.1 の D1)。agent-policy は役割断片の制約も定義の本文に入るので、生成した定義で試す |
 
 ## 9. 既知の限界
 
@@ -488,6 +504,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - 1.2 のままでは、別のセッションで別の親 run を同時に動かせない。
 - 委譲の指定で渡された定義が書き込みか Bash を持たないと、そのサブは `failed` になる。指定を変えずにやり直すと再び失敗し、親の人の判断待ちに至る(3.6)。Raguel MCP と Skill が無い定義では、3.4 の経路で続く。
 - Raguel MCP の無い定義では、ゲートのたびに Workflow が終わるので、1 つのサブに 6 回前後のサイクルがかかる。
+- 依存しないサブは同時に進むので、サブをまたいでテストが同時に走る。1.1 の「`parallel: true` の仕様のディレクトリだけを同時 4 件まで」はサブの間には当たらず、テストがポートや DB を取り合いうる。
 - レビューの指定は観点によらず 1 つなので、観点ごとに定義を変えることも、1 回のレビューに複数の定義を当てることもできない。
 
 ## 10. ビルダーに任せること
@@ -496,6 +513,15 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - Workflow のスクリプトの戻り値のスキーマの細目と、サイクルの組み立ての細部。
 - 親を参照するマーカーの文字列。
 - サブ Issue の本文の依存の書き方。
+
+## 11. 実装計画で詰める事項
+
+2026-11-09 の再レビューで残った所見である。設計書の水準では閉じず、実装計画で現行のコードとスキルに当てて詰める。
+
+- 修正担当が `undecided`・`declined`・`failed` で止めたサブの戻し先。止まる前は「PR 済み」で、3.6 のとおり「実行中」に戻すと、3.5 の手順 2 で実装の Workflow に乗る。レビューと修正の Workflow に戻す経路が要る。
+- 観点ごとに並列に起動したレビュアーのうち、一部だけが `undecided`・`declined`・`failed` になったときの扱い。サブの結果のまとめ方(修正担当へ進むか、サブを止めるか)と、`review-fix-subs.js` の戻り値の形。レビューの指定は観点によらず 1 つなので、置き換えると全観点に当たる。
+- 軽量のサブで、任せる構造の選択の材料。軽量のサブは design を飛ばし(3.4)、設計は intent の `## 実装方針` にある。3.4 の材料(design.md・dev-plan.md)に、これを加えるか。
+- S7 を G3 の改修の前に走らせること。改修の後の定義で試しても、「依頼文に無い判断」の読み方だけで差し戻しが外れたことの確認にならない。
 
 ## 出典
 
