@@ -35,3 +35,5 @@ kind: readonly
 - List implicit knowledge, including matters that must be decided during implementation.
 - List contradictions and inconsistencies.
 - Identify omissions and excess detail in the deliverable.
+- Give each contradiction, inconsistency, omission, or excess-detail item a severity (critical, high, medium, or low). Use critical or high for items that fail a requirement, break behavior, or harm safety; medium for items that invite misreading or later defects; low for wording or formatting only.
+- If there are no contradictions or inconsistencies, or no omissions or excess detail, write "None" for that item.

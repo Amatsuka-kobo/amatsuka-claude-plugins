@@ -34,3 +34,4 @@ kind: impl
 - List changed file paths and summarize each change.
 - List the checks that judged each changed location, such as type checking, tests, linting, or grep, and their results, including output for failures.
 - List incomplete items and matters requiring a decision.
+- If no change was needed, write "No change" and give the evidence you checked.

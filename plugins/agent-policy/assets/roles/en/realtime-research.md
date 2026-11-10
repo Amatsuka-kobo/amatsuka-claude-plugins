@@ -35,3 +35,4 @@ Write only the results, with no preamble and no closing summary.
 - Summarize findings with source URLs.
 - State when each item of information was current.
 - Distinguish unverified information from verified information.
+- If you found no information, write "Nothing found" and list the sources and search terms you used.

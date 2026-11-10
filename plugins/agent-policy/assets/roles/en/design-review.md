@@ -33,3 +33,6 @@ Write only the findings, with no preamble and no closing summary. For each findi
 - Target location, including section and line.
 - The questioned assumption and counterevidence, citing a file path and line number or an information source.
 - The affected scope if the counterevidence is correct.
+- The severity (critical, high, medium, or low). Use critical or high for findings that fail a requirement, break behavior, or harm safety; medium for findings that invite misreading or later defects; low for wording or formatting only.
+
+If you found no counterevidence, write "No counterevidence" and list the assumptions you questioned and checked.

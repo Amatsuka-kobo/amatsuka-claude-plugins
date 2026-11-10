@@ -38,3 +38,5 @@ kind: readonly
 - List matters that could not be verified.
 - When the target is an implementation: state the decision (accept or reject) with the reasons for rejection, and list inconsistencies with the design intent or acceptance criteria.
 - When the target is a design document: state the decision (proceed or do not proceed) with conditions, list blockers and the revisions required, and list matters that can be handled after implementation starts.
+- The severity of each finding (critical, high, medium, or low). Use critical or high for findings that fail a requirement, break behavior, or harm safety; medium for findings that invite misreading or later defects; low for wording or formatting only.
+- If there are no findings, write "No findings" with the decision and the scope you checked.

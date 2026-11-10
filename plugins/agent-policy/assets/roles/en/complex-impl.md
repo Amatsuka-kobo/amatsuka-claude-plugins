@@ -37,3 +37,4 @@ kind: impl
 - Cite supporting file paths and line numbers.
 - Describe the deliverable and its validation method and results.
 - List unresolved concerns and matters that require human judgment.
+- If no change was needed, write "No change" and give the evidence you checked.

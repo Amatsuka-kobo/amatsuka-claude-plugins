@@ -35,3 +35,4 @@ kind: impl
 - List implemented changes with file paths and line numbers.
 - State the validation method and results.
 - List remaining constraints and the next available actions.
+- If you could not identify the cause, write "Cause not identified" and list the hypotheses you tested and their results.

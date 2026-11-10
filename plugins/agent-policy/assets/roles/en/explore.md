@@ -29,3 +29,4 @@ kind: readonly
 
 - Report findings with supporting file paths and line numbers.
 - State the scanned scope and observations noticed outside it.
+- If no matching facts exist, write "None found" and state the scope you scanned.

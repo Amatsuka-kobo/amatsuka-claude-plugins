@@ -33,3 +33,4 @@ kind: impl
 
 - List changed file paths and summarize each change.
 - List incomplete items and matters requiring a decision.
+- If no change was needed, write "No change" and give the reason.

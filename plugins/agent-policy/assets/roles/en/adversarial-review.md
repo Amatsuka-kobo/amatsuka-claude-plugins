@@ -39,3 +39,5 @@ kind: readonly
 - Counterexample and reproduction steps
 - Impact if the counterexample holds
 - Matters that could not be verified
+- The severity of each finding (critical, high, medium, or low). Use critical or high for findings that fail a requirement, break behavior, or harm safety; medium for findings that invite misreading or later defects; low for wording or formatting only.
+- If you could not build a counterexample, write "No counterexample" and list the assumptions and paths you tried to break.

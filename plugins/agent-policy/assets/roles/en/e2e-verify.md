@@ -34,3 +34,4 @@ kind: impl
 - List the expected and observed result for each operation.
 - Provide reproduction steps and relevant logs for failures.
 - List unverified scope and reasons.
+- If nothing failed, write "No failures" and state the range of operations you verified.
