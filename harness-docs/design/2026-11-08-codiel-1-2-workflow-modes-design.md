@@ -476,7 +476,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 | テスト | `workflows/*.js` の構文の検査(スクリプトの本文を非同期関数として組み立てて構文エラーを検出し、`meta.name` を確かめる vitest のテスト) |
 | ワークスペースの設定 | `biome.json` の対象から `plugins/*/workflows/**` を外す。Workflow のスクリプトはトップレベルの `return` と大域名(`agent`・`args` など)を使うためである。変更後に `pnpm run typecheck`・`pnpm run lint`・`pnpm run test` をすべて通す |
 | Raguel | `raguel-mcp/src/codiel/phases.ts`(`workflow` フェーズ。`phaseSchema` は `tools/shared.ts:29-30` で表から導出されるので追随する)、2 者比較のテスト、`docs/raguel-contract.md` |
-| 文書 | `README.md`、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md` |
+| 文書 | `README.md`、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md`。`README.md` の 1.2 の案内には、agent-policy を使うプロジェクトでは agent-policy の setup-agents を再実行するよう書く。生成済みの定義の本文は、再実行するまで改修前の制約(外部への副作用の禁止など)のままで、Workflow のエージェントが push・PR を断りうるためである(agent-policy の 2026-11-10 の改修設計書の 9 章の申し送り) |
 | 配布宣言 | `.claude-plugin/plugin.json` と `package.json` を 1.2.0-dev にし、リリース時に 1.2.0 にする |
 | ARCHITECTURE | ディレクトリ構成に `workflows/` を足す。「run は親 intent に 1 つ、サブ intent は state を分けて Workflow で並列に進める」は ADR の候補になる。どちらも `metatron:updating-architecture` を起動して扱う |
 
