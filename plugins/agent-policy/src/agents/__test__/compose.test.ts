@@ -198,6 +198,33 @@ describe("describeRoles", () => {
   })
 })
 
+describe("前置きの役割 ID", () => {
+  it("ja の 1 役割の定義で、ラベルの後に ID を括弧で添える", () => {
+    const body = build(["code-review"])
+    expect(body).toContain("担う役割は「コードレビュー」(code-review)である。")
+  })
+
+  it("ja の 2 役割の定義で、全役割のラベルと ID を並べる", () => {
+    const body = build(["code-review", "design-review"])
+    expect(body).toContain(
+      "担う役割は「設計書・実装計画書のレビュー」(design-review)、「コードレビュー」(code-review)である。"
+    )
+  })
+
+  it("en の 1 役割と 2 役割の定義で、括弧の前に空白を 1 つ置く", () => {
+    const one = build(["code-review"], { fragmentDirs: [EN], lang: "en" })
+    expect(one).toContain('Your roles are "Code Review" (code-review).')
+    const two = build(["code-review", "design-review"], {
+      fragmentDirs: [EN],
+      lang: "en"
+    })
+    expect(two).toMatch(
+      /Your roles are "[^"]+" \(design-review\), "[^"]+" \(code-review\)\./
+    )
+    expect(two).not.toMatch(/[぀-ゟ゠-ヿ一-龯、。「」]/)
+  })
+})
+
 describe("本文", () => {
   it("節の順序が仕様どおりになる", () => {
     const body = build(["complex-impl"])

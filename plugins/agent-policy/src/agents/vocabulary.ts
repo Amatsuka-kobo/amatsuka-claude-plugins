@@ -5,7 +5,8 @@ export interface Vocabulary {
   constraintHeading: string
   outputFormatHeading: string
   listSeparator: string
-  quote: (value: string) => string
+  // 前置きの役割の表記。引用したラベルに役割 ID を括弧で添える。
+  roleWithId: (label: string, id: string) => string
   describe: (roles: string) => string
 }
 
@@ -14,7 +15,7 @@ const JA: Vocabulary = {
   constraintHeading: "## 制約",
   outputFormatHeading: "## Output Format",
   listSeparator: "、",
-  quote: (value) => `「${value}」`,
+  roleWithId: (label, id) => `「${label}」(${id})`,
   describe: (roles) =>
     `Use this agent when ${roles}を委譲するとき。詳細は本文の「When to invoke」を参照。`
 }
@@ -24,7 +25,7 @@ const EN: Vocabulary = {
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",
-  quote: (value) => `"${value}"`,
+  roleWithId: (label, id) => `"${label}" (${id})`,
   describe: (roles) =>
     `Use this agent when delegating ${roles}. See "When to invoke" below for details.`
 }

@@ -189,7 +189,7 @@ function preamble(
   vocabulary: Vocabulary
 ): string[] {
   const labels = selected
-    .map((fragment) => vocabulary.quote(fragment.label))
+    .map((fragment) => vocabulary.roleWithId(fragment.label, fragment.id))
     .join(vocabulary.listSeparator)
   return (common.get("## Preamble") ?? []).map((line) =>
     line.replace("{{NAME}}", name).replace("{{ROLE_LABELS}}", labels)

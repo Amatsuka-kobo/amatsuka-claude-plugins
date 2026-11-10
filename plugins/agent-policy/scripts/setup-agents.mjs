@@ -335,7 +335,7 @@ var JA = {
   constraintHeading: "## \u5236\u7D04",
   outputFormatHeading: "## Output Format",
   listSeparator: "\u3001",
-  quote: (value) => `\u300C${value}\u300D`,
+  roleWithId: (label, id) => `\u300C${label}\u300D(${id})`,
   describe: (roles) => `Use this agent when ${roles}\u3092\u59D4\u8B72\u3059\u308B\u3068\u304D\u3002\u8A73\u7D30\u306F\u672C\u6587\u306E\u300CWhen to invoke\u300D\u3092\u53C2\u7167\u3002`
 };
 var EN = {
@@ -343,7 +343,7 @@ var EN = {
   constraintHeading: "## Constraints",
   outputFormatHeading: "## Output Format",
   listSeparator: ", ",
-  quote: (value) => `"${value}"`,
+  roleWithId: (label, id) => `"${label}" (${id})`,
   describe: (roles) => `Use this agent when delegating ${roles}. See "When to invoke" below for details.`
 };
 function vocabularyFor(lang) {
@@ -465,7 +465,7 @@ function describe(selected, vocabulary) {
   return vocabulary.describe(list);
 }
 function preamble(common, name, selected, vocabulary) {
-  const labels = selected.map((fragment) => vocabulary.quote(fragment.label)).join(vocabulary.listSeparator);
+  const labels = selected.map((fragment) => vocabulary.roleWithId(fragment.label, fragment.id)).join(vocabulary.listSeparator);
   return (common.get("## Preamble") ?? []).map(
     (line) => line.replace("{{NAME}}", name).replace("{{ROLE_LABELS}}", labels)
   );

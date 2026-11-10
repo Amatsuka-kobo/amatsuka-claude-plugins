@@ -7,7 +7,7 @@ describe("vocabularyFor", () => {
     expect(vocabulary.bodyOrder).toContain("## 作業手順")
     expect(vocabulary.constraintHeading).toBe("## 制約")
     expect(vocabulary.listSeparator).toBe("、")
-    expect(vocabulary.quote("実装")).toBe("「実装」")
+    expect(vocabulary.roleWithId("実装", "impl")).toBe("「実装」(impl)")
     expect(vocabulary.describe("実装")).toBe(
       "Use this agent when 実装を委譲するとき。詳細は本文の「When to invoke」を参照。"
     )
@@ -18,7 +18,9 @@ describe("vocabularyFor", () => {
     expect(vocabulary.bodyOrder).toContain("## Procedure")
     expect(vocabulary.constraintHeading).toBe("## Constraints")
     expect(vocabulary.listSeparator).toBe(", ")
-    expect(vocabulary.quote("implementation")).toBe('"implementation"')
+    expect(vocabulary.roleWithId("implementation", "impl")).toBe(
+      '"implementation" (impl)'
+    )
     expect(vocabulary.describe("implementation")).toBe(
       'Use this agent when delegating implementation. See "When to invoke" below for details.'
     )
