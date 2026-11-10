@@ -1232,10 +1232,18 @@ function textState(existing, template, record) {
 }
 function diff(options, target, mcpServers) {
   const input = composeInputFor(options, target, mcpServers);
-  const rendered = templateFor(input);
   const file = targetPath(options, target);
   const existingRaw = fs3.existsSync(file) ? fs3.readFileSync(file, "utf8") : void 0;
-  return compare(options, target, input, rendered, existingRaw);
+  const { content, twoKeys } = applyTwoKeys(
+    templateFor(input),
+    existingRaw,
+    target,
+    options.omitClaudeMd
+  );
+  return {
+    ...compare(options, target, input, content, existingRaw),
+    twoKeys
+  };
 }
 function parseKeep(selectors) {
   const keep = {
@@ -1385,8 +1393,14 @@ function write(options, target, mcpServers) {
   const keep = parseKeep(selectors);
   const shouldMerge = existingRaw !== void 0 && (options.merge || options.keep.length > 0);
   const retain = shouldMerge ? retainFor(options, difference, keep) : RETAIN_NONE;
-  const content = shouldMerge ? merge(existingRaw, rendered, keep, retain) : rendered;
+  const { content, twoKeys } = applyTwoKeys(
+    shouldMerge ? merge(existingRaw, rendered, keep, retain) : rendered,
+    existingRaw,
+    target,
+    options.omitClaudeMd
+  );
   const kept = shouldMerge ? selectors : [];
+  const lost = discarded(difference, shouldMerge ? keep : parseKeep([]), retain);
   fs3.mkdirSync(path2.dirname(file), { recursive: true });
   fs3.writeFileSync(file, content);
   return {
@@ -1395,11 +1409,14 @@ function write(options, target, mcpServers) {
     action: exists ? options.merge ? "merged" : "overwritten" : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(
-      difference,
-      shouldMerge ? keep : parseKeep([]),
-      retain
-    ),
+    // 2 キーは applyTwoKeys が書き戻すので、捨てたキーに数えない。
+    discarded: {
+      ...lost,
+      frontmatterKeys: lost.frontmatterKeys.filter(
+        (key) => key !== "omitClaudeMd" && key !== "experimental"
+      )
+    },
+    twoKeys,
     roles: difference.roles,
     description: difference.description,
     preamble: difference.preamble,
@@ -1820,6 +1837,126 @@ function lineValue(line) {
 function writeDefinition(definition) {
   fs3.writeFileSync(definition.file, definition.lines.join("\n"));
 }
+var CACHE_TTL_ROLES = [
+  "design-review",
+  "knowledge-elicitation",
+  "code-review",
+  "complex-review",
+  "adversarial-review"
+];
+function topLevelBlock(lines, close, key) {
+  const start = lines.findIndex(
+    (line, index) => index > 0 && index < close && new RegExp(`^${key}:`).test(line)
+  );
+  if (start < 0) return void 0;
+  let end = start + 1;
+  while (end < close && /^\s/.test(lines[end] ?? "")) end += 1;
+  return { start, end };
+}
+function frontmatterLines(text) {
+  const lines = text.split("\n");
+  if (lines[0]?.trim() !== "---") return { lines, close: -1 };
+  return {
+    lines,
+    close: lines.findIndex((line, i) => i > 0 && line.trim() === "---")
+  };
+}
+function scalarOf(line) {
+  return line.slice(line.indexOf(":") + 1).replace(/\s#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2");
+}
+var EXPERIMENTAL_BLOCK = /^experimental:\s*(#.*)?$/;
+function ttlIndex(block) {
+  const indent = /^(\s+)/.exec(block[1] ?? "")?.[1];
+  if (indent === void 0) return -1;
+  return block.findIndex(
+    (line, i) => i > 0 && line.startsWith(indent) && /^cacheTtl:/.test(line.slice(indent.length))
+  );
+}
+function readTwoKeys(existingRaw) {
+  const empty = {
+    omitLines: [],
+    omit: null,
+    experimentalLines: [],
+    experimentalBlock: false,
+    cacheTtl: null
+  };
+  if (existingRaw === void 0) return empty;
+  const { lines, close } = frontmatterLines(existingRaw);
+  if (close < 0) return empty;
+  const omitRange = topLevelBlock(lines, close, "omitClaudeMd");
+  const omitLines = omitRange === void 0 ? [] : lines.slice(omitRange.start, omitRange.end);
+  const omitValue = omitLines[0] === void 0 ? "" : scalarOf(omitLines[0]);
+  const experimentalRange = topLevelBlock(lines, close, "experimental");
+  const experimentalLines = experimentalRange === void 0 ? [] : lines.slice(experimentalRange.start, experimentalRange.end);
+  const head = experimentalLines[0] ?? "";
+  const experimentalBlock = EXPERIMENTAL_BLOCK.test(head);
+  const ttlLine = experimentalBlock ? experimentalLines[ttlIndex(experimentalLines)] : void 0;
+  const flowTtl = experimentalBlock ? void 0 : /cacheTtl:\s*["']?([^,}"'\s]+)/.exec(head)?.[1];
+  return {
+    omitLines,
+    omit: omitValue === "true" ? true : omitValue === "false" ? false : null,
+    experimentalLines,
+    experimentalBlock,
+    cacheTtl: ttlLine !== void 0 ? scalarOf(ttlLine) : flowTtl ?? null
+  };
+}
+function applyTwoKeys(content, existingRaw, target, answer) {
+  const existing = readTwoKeys(existingRaw);
+  let omitLines;
+  if (answer === true) omitLines = ["omitClaudeMd: true"];
+  else if (answer === false) omitLines = [];
+  else if (existingRaw !== void 0) omitLines = existing.omitLines;
+  else
+    omitLines = target.roles.every((role) => role === "knowledge-elicitation") ? ["omitClaudeMd: true"] : [];
+  const omitAfter = omitLines[0] === void 0 ? null : scalarOf(omitLines[0]) === "true" ? true : scalarOf(omitLines[0]) === "false" ? false : null;
+  const reviews = target.roles.some((role) => CACHE_TTL_ROLES.includes(role));
+  const onClaude = runsOnClaude(target.model) && (target.vendor === "claude" || target.vendor === "none");
+  let experimentalLines = existing.experimentalLines;
+  let ttlAfter = existing.cacheTtl;
+  if (reviews && (existing.experimentalBlock || experimentalLines.length === 0)) {
+    const at = ttlIndex(experimentalLines);
+    const sub = experimentalLines.slice(1).filter((_, i) => i + 1 !== at);
+    const indent = /^(\s+)/.exec(experimentalLines[1] ?? "")?.[1] ?? "  ";
+    const head = experimentalLines[0] ?? "experimental:";
+    if (onClaude) {
+      if (at > 0) {
+        experimentalLines = [...experimentalLines];
+        experimentalLines[at] = `${indent}cacheTtl: 1h`;
+      } else experimentalLines = [head, ...sub, `${indent}cacheTtl: 1h`];
+      ttlAfter = "1h";
+    } else {
+      experimentalLines = sub.length === 0 ? [] : [head, ...sub];
+      ttlAfter = null;
+    }
+  }
+  const { lines, close } = frontmatterLines(content);
+  let next = lines;
+  if (close > 0) {
+    const body = lines.slice(close);
+    let head = lines.slice(0, close);
+    for (const key of ["omitClaudeMd", "experimental"]) {
+      const range = topLevelBlock(head, head.length, key);
+      if (range !== void 0)
+        head = [...head.slice(0, range.start), ...head.slice(range.end)];
+    }
+    const record = head.findIndex((line) => line.startsWith("agent-policy-"));
+    const at = record < 0 ? head.length : record;
+    head = [
+      ...head.slice(0, at),
+      ...omitLines,
+      ...experimentalLines,
+      ...head.slice(at)
+    ];
+    next = [...head, ...body];
+  }
+  return {
+    content: next.join("\n"),
+    twoKeys: {
+      omitClaudeMd: { before: existing.omit, after: omitAfter },
+      cacheTtl: { before: existing.cacheTtl, after: ttlAfter }
+    }
+  };
+}
 function definitionFragments(options, ids) {
   const fragments = loadFragments(
     fragmentDirsFor(pluginRoot(), options.dir, options.lang)
@@ -1948,7 +2085,8 @@ function parseArgs(argv) {
     pruneTools: false,
     rewriteRoles: false,
     tools: [],
-    replace: []
+    replace: [],
+    omitClaudeMd: void 0
   };
   const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < argv.length; index += 1) {
@@ -2055,6 +2193,13 @@ function parseArgs(argv) {
         options.tools = splitList(requireValue(value, "tools"));
         index += 1;
         break;
+      case "--omit-claude-md":
+        if (value !== "true" && value !== "false") {
+          throw new Error("omit-claude-md: must be true or false");
+        }
+        options.omitClaudeMd = value === "true";
+        index += 1;
+        break;
       case "--replace":
         options.replace = splitList(requireValue(value, "replace"));
         for (const entry of options.replace) {
@@ -2075,7 +2220,8 @@ function parseArgs(argv) {
       ["--model", options.model !== ""],
       ["--vendor", options.vendor !== ""],
       ["--keep", options.keep.length > 0],
-      ["--replace", options.replace.length > 0]
+      ["--replace", options.replace.length > 0],
+      ["--omit-claude-md", options.omitClaudeMd !== void 0]
     ]) {
       if (supplied)
         throw new Error(`${flag}: cannot be used with --recommended`);

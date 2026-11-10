@@ -113,6 +113,7 @@ disallowed-tools: Write
    - `--prune-tools` を実行しなかった定義は、手順 4 の `toolsBefore` → `toolsAfter` を 1 行で書く。
    - 再生成で外れた MCP サーバー。接続の再検証で落ちたもの(`mcpDropped`)
    - `description` と `preamble` の状態。`templateChanged` の定義には、対話モードで再実行すればテンプレートに置き換えられると案内する。
+   - `twoKeys` の `before` と `after` が違う定義と、その変化(書き込んだ・書き換えた・消した)。決め方は対話モードのステップ 7 と同じである。`kept` の `key:omitClaudeMd` と `key:experimental` は、保持した項目として載せない。
 
    手順 3 と 4 について次を並べ、対話モードでの再実行を案内する。
 
@@ -313,7 +314,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 対象は、ステップ 4 で新規生成に振り分けた役割である。0 件なら、このステップを飛ばす。
 
-役割を 1 つずつ、次の 1〜4 を最後まで処理してから、次の役割へ進む。モデル ID・定義名・MCP は、それぞれ別の `AskUserQuestion` 呼び出しで、前の回答を受け取ってから聞く。複数の役割をまとめて決める選択肢(「推奨をそのまま使う」「既定で全部作る」「全役割に付与」など)は出さない。`--recommended` と `--merge` は使わない。役割の kind(`impl` / `readonly`)は、`--list-coverage` の `roles[].kind` で判定する。
+役割を 1 つずつ、次の 1〜4 を最後まで処理してから、次の役割へ進む。モデル ID・定義名・MCP・`omitClaudeMd` は、それぞれ別の `AskUserQuestion` 呼び出しで、前の回答を受け取ってから聞く。複数の役割をまとめて決める選択肢(「推奨をそのまま使う」「既定で全部作る」「全役割に付与」など)は出さない。`--recommended` と `--merge` は使わない。役割の kind(`impl` / `readonly`)は、`--list-coverage` の `roles[].kind` で判定する。
 
 1. モデル ID を聞く。候補は、ステップ 1b で最後に取った `--list-coverage` の、その役割の `candidates` をそのまま使う。
    - 候補を自分で組み立てず、足したり除いたりせず、並び順も変えない。
@@ -345,19 +346,24 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 
 4. この 1 役割だけを対象にした個別コマンドで生成する。`--recommended` と `--merge` は付けない。
 
+   - 生成の前に、`omitClaudeMd` を付けるかを「付けない」「付ける」の 2 択で聞く。
+     - 推奨は、役割が knowledge-elicitation なら「付ける」、それ以外なら「付けない」とする。推奨の側に「(推奨)」を付けて先頭に置く。
+     - 各選択肢の説明に、付けるとプロジェクトの CLAUDE.md・`.claude/rules/`(規約や保護パスの指定を含む)・ユーザーの rules がこの定義の委譲先に届かなくなることを書く。
+     - 回答を、下の `--check` と `--write` に `--omit-claude-md <true|false>` で渡す。
+
    - モデル値が `candidates` の `model` に無い場合、またはベンダーが `unknown` の場合は、ベンダーを確定する。候補は `gpt` / `grok` / `claude` / 「どれでもない」(`none`) の 4 値とする。既知ベンダーは推定値を示して確認し、変更を望む場合に 4 値から選ばせる。ベンダーが `none` なら `--vendor none` を渡す。`--vendor` は、ここでベンダーを確定したときだけ渡す。
    - MCP の引数は、impl の役割にサーバーが付くときは `--mcp-servers` だけを渡す。readonly の役割にサーバーが付くときは、`--mcp-servers` と `--mcp-deny` の両方を渡す。
 
    まず生成対象を確認する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <この 1 役割> [--vendor <gpt|grok|claude|none>] --scope <claude|custom> --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --check --model-id <model-id> --lang <lang> --name <name> --model <model-value> --roles <この 1 役割> [--vendor <gpt|grok|claude|none>] --omit-claude-md <true|false> --scope <claude|custom> --dir "$PWD"
    ```
 
    確認後に生成する。
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --model-id <model-id> --name <name> --model <model-value> --roles <この 1 役割> [--vendor <gpt|grok|claude|none>] [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] --scope <claude|custom> --lang <lang> --dir "$PWD"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --model-id <model-id> --name <name> --model <model-value> --roles <この 1 役割> [--vendor <gpt|grok|claude|none>] [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] --omit-claude-md <true|false> --scope <claude|custom> --lang <lang> --dir "$PWD"
    ```
 
 ### ステップ 5: 再生成の生成範囲の確認
@@ -398,6 +404,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
    - `modelId` が `null` の定義の質問文には、「この定義の model は <元の値、または未設定> から <選んだ候補の `model`> に変わる」と書く。<> の中は実際の値に置き換える。
 2. ベンダーを、5n の 4 の条件で確定する。
 3. 差分方針を、保持マージ、選択した項目の保持、完全上書き、スキップから尋ねる。保持対象を選ぶ場合は `--keep` を個別コマンドに渡す。`modelId` が `null` だけが理由の定義では、差分方針を尋ねず保持マージにする。
+4. 差分方針で「スキップ」を選んだ定義と、1 で「再生成しない」を選んだ定義を除き、`omitClaudeMd` を 5n の 4 の 2 択と説明で聞く。
+   - 既存の値は、ステップ 4 の `results` のその定義の `twoKeys.omitClaudeMd.before` で得る。`results` に無い定義は、ステップ 5 で状態を確かめた `--check` の応答から得る。
+   - `before` が `true` なら「付ける」、`false` なら「付けない」の側を先頭に置く。`null` なら推奨の側を先頭に置く。
+   - 推奨は、定義の全役割が knowledge-elicitation のときだけ「付ける」とする。
+   - 回答を、下の確認の `--check` とステップ 6 に `--omit-claude-md <true|false>` で渡す。
 
 調整する定義の役割に impl と readonly の両方が含まれる場合だけ、kind 混在を警告して続行確認を取る。既定は続行しない。
 
@@ -425,7 +436,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --list-mcp --dir "$PWD"
 定義ごとに次の個別コマンドで保持マージ生成する。`--recommended` は使わない。複数の役割を持つ定義も 1 回だけ実行する。
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] [--replace <description,preamble>] --scope <claude|custom> --lang <lang> --dir "$PWD"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id <modelId> --name <file の名前> --model <model 値> --roles <定義の roles> [--vendor <vendor>] [--mcp-servers "<server,...>"] [--mcp-deny <tool,...>] [--replace <description,preamble>] [--omit-claude-md <true|false>] --scope <claude|custom> --lang <lang> --dir "$PWD"
 ```
 
 - `--model-id` には、定義の `modelId` か、ステップ 5b で決めたモデル ID を渡す。
@@ -434,6 +445,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id
 - `--name` には、`file` のファイル名から `.md` を除いた値を渡す。
 - `--vendor` には、ステップ 5b でベンダーを確定したときはその値を渡す。確定していないときは、定義の `vendor` があればその値を、無ければ `none` を渡す。
 - ステップ 5b で差分方針を決めた定義は、`--merge` と `--keep` をその方針に合わせる。
+- `--omit-claude-md` は、ステップ 5b で聞いた定義にだけ渡す。渡さない定義では、CLI が既存の値を保つ。
 - MCP の引数は次に従う。保持マージは `disallowedTools` を保持しないため、再生成のたびに渡す。
   - impl の役割だけを持つ定義: サーバーが付くときは `--mcp-servers` だけを渡し、`--mcp-deny` は渡さない。
   - readonly の役割を 1 つでも持つ定義: サーバーが付くときは `--mcp-servers` と `--mcp-deny` を必ず両方渡す。
@@ -453,7 +465,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup-agents.mjs" --write --merge --model-id
 - ステップ 4 と 5b で再生成しなかった定義と、その理由(再生成しないと選ばれた・`model` が live に無い・廃止済みか未知の役割 ID が残っている・`agent-policy-vendor` が未知の値・ステップ 5 で中止した)
 - ステップ 5n で「作らない」と決めた役割があれば、その一覧と、次に setup-agents を実行したときに再び尋ねられること。この実行の中では聞き直さない。
 - ステップ 5n と 6 の生成で `ok: false` になった役割と定義、その `error`
-- 各定義の `action`、`kept`、`discarded`、`keptNeedsReview`
+- 各定義の `action`、`kept`、`discarded`、`keptNeedsReview`。`kept` の `key:omitClaudeMd` と `key:experimental` は、保持した項目として載せない。
+- `twoKeys` の `before` と `after` が違う定義と、その変化。`before` が `null` なら「書き込んだ」、`after` が `null` なら「消した」、どちらも値なら「書き換えた」と書く。`omitClaudeMd` を書き込んだ定義には、CLAUDE.md と rules が委譲先に届かないことを添える。`cacheTtl` はレビューの役割を持つ定義の委譲先のキャッシュの寿命であることを添える。
 - `mcpDropped`。再検証で落としたサーバーがあれば、tools へ入らなかったこと
 - 各応答の `warnings`
 - モデル値とベンダーの確定方法。`agent-policy-vendor` を出力しない `none` の定義では、ベンダー断片を付けず色が blue になること

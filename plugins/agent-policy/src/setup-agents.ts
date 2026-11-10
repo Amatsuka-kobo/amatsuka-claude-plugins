@@ -82,6 +82,8 @@ interface Options {
   rewriteRoles: boolean
   tools: string[]
   replace: string[]
+  // ステップ 5n・5b の質問に答えた定義にだけ渡る。undefined は質問しなかったことを表す。
+  omitClaudeMd: boolean | undefined
 }
 
 interface Target {
@@ -588,14 +590,27 @@ function textState(
   return textHash(existing) === record ? "templateChanged" : "userEdited"
 }
 
-function diff(options: Options, target: Target, mcpServers: string[]): Diff {
+function diff(
+  options: Options,
+  target: Target,
+  mcpServers: string[]
+): Diff & { twoKeys: TwoKeys } {
   const input = composeInputFor(options, target, mcpServers)
-  const rendered = templateFor(input)
   const file = targetPath(options, target)
   const existingRaw = fs.existsSync(file)
     ? fs.readFileSync(file, "utf8")
     : undefined
-  return compare(options, target, input, rendered, existingRaw)
+  // --write と同じ 2 キーの処理を通した結果と既存を比べる。
+  const { content, twoKeys } = applyTwoKeys(
+    templateFor(input),
+    existingRaw,
+    target,
+    options.omitClaudeMd
+  )
+  return {
+    ...compare(options, target, input, content, existingRaw),
+    twoKeys
+  }
 }
 
 interface Keep {
@@ -806,10 +821,14 @@ function write(options: Options, target: Target, mcpServers: string[]) {
   const retain = shouldMerge
     ? retainFor(options, difference, keep)
     : RETAIN_NONE
-  const content = shouldMerge
-    ? merge(existingRaw, rendered, keep, retain)
-    : rendered
+  const { content, twoKeys } = applyTwoKeys(
+    shouldMerge ? merge(existingRaw, rendered, keep, retain) : rendered,
+    existingRaw,
+    target,
+    options.omitClaudeMd
+  )
   const kept = shouldMerge ? selectors : []
+  const lost = discarded(difference, shouldMerge ? keep : parseKeep([]), retain)
 
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, content)
@@ -820,11 +839,14 @@ function write(options: Options, target: Target, mcpServers: string[]) {
     action: exists ? (options.merge ? "merged" : "overwritten") : "written",
     kept,
     keptNeedsReview: needsReview(kept),
-    discarded: discarded(
-      difference,
-      shouldMerge ? keep : parseKeep([]),
-      retain
-    ),
+    // 2 キーは applyTwoKeys が書き戻すので、捨てたキーに数えない。
+    discarded: {
+      ...lost,
+      frontmatterKeys: lost.frontmatterKeys.filter(
+        (key) => key !== "omitClaudeMd" && key !== "experimental"
+      )
+    },
+    twoKeys,
     roles: difference.roles,
     description: difference.description,
     preamble: difference.preamble,
@@ -1438,6 +1460,193 @@ function writeDefinition(definition: DefinitionLines): void {
   fs.writeFileSync(definition.file, definition.lines.join("\n"))
 }
 
+// 1 時間のキャッシュを書くレビューの役割。
+const CACHE_TTL_ROLES: readonly RoleId[] = [
+  "design-review",
+  "knowledge-elicitation",
+  "code-review",
+  "complex-review",
+  "adversarial-review"
+]
+
+interface TwoKeys {
+  omitClaudeMd: { before: boolean | null; after: boolean | null }
+  cacheTtl: { before: string | null; after: string | null }
+}
+
+// frontmatter の最上位キーの行範囲。ブロックの値(字下げした行)を含む。
+function topLevelBlock(
+  lines: string[],
+  close: number,
+  key: string
+): { start: number; end: number } | undefined {
+  const start = lines.findIndex(
+    (line, index) =>
+      index > 0 && index < close && new RegExp(`^${key}:`).test(line)
+  )
+  if (start < 0) return undefined
+  let end = start + 1
+  while (end < close && /^\s/.test(lines[end] ?? "")) end += 1
+  return { start, end }
+}
+
+function frontmatterLines(text: string): { lines: string[]; close: number } {
+  const lines = text.split("\n")
+  if (lines[0]?.trim() !== "---") return { lines, close: -1 }
+  return {
+    lines,
+    close: lines.findIndex((line, i) => i > 0 && line.trim() === "---")
+  }
+}
+
+function scalarOf(line: string): string {
+  return line
+    .slice(line.indexOf(":") + 1)
+    .replace(/\s#.*$/, "")
+    .trim()
+    .replace(/^(["'])(.*)\1$/, "$2")
+}
+
+const EXPERIMENTAL_BLOCK = /^experimental:\s*(#.*)?$/
+
+// experimental のブロックの直下(最初の下位キーと同じ字下げ)にある cacheTtl の行。入れ子の同名キーは見ない。
+function ttlIndex(block: string[]): number {
+  const indent = /^(\s+)/.exec(block[1] ?? "")?.[1]
+  if (indent === undefined) return -1
+  return block.findIndex(
+    (line, i) =>
+      i > 0 &&
+      line.startsWith(indent) &&
+      /^cacheTtl:/.test(line.slice(indent.length))
+  )
+}
+
+// 既存の 2 キーを読む。experimental はブロックの形のときだけ下位キーを扱う。
+function readTwoKeys(existingRaw: string | undefined): {
+  omitLines: string[]
+  omit: boolean | null
+  experimentalLines: string[]
+  experimentalBlock: boolean
+  cacheTtl: string | null
+} {
+  const empty = {
+    omitLines: [],
+    omit: null,
+    experimentalLines: [],
+    experimentalBlock: false,
+    cacheTtl: null
+  }
+  if (existingRaw === undefined) return empty
+  const { lines, close } = frontmatterLines(existingRaw)
+  if (close < 0) return empty
+  const omitRange = topLevelBlock(lines, close, "omitClaudeMd")
+  const omitLines =
+    omitRange === undefined ? [] : lines.slice(omitRange.start, omitRange.end)
+  const omitValue = omitLines[0] === undefined ? "" : scalarOf(omitLines[0])
+  const experimentalRange = topLevelBlock(lines, close, "experimental")
+  const experimentalLines =
+    experimentalRange === undefined
+      ? []
+      : lines.slice(experimentalRange.start, experimentalRange.end)
+  const head = experimentalLines[0] ?? ""
+  const experimentalBlock = EXPERIMENTAL_BLOCK.test(head)
+  const ttlLine = experimentalBlock
+    ? experimentalLines[ttlIndex(experimentalLines)]
+    : undefined
+  const flowTtl = experimentalBlock
+    ? undefined
+    : /cacheTtl:\s*["']?([^,}"'\s]+)/.exec(head)?.[1]
+  return {
+    omitLines,
+    omit: omitValue === "true" ? true : omitValue === "false" ? false : null,
+    experimentalLines,
+    experimentalBlock,
+    cacheTtl: ttlLine !== undefined ? scalarOf(ttlLine) : (flowTtl ?? null)
+  }
+}
+
+// omitClaudeMd と experimental.cacheTtl を、生成と保持マージの後に行単位で決める。
+// テンプレートはこの 2 キーを出さないので、既存の値は生成の前に読んだ existingRaw から戻す。
+function applyTwoKeys(
+  content: string,
+  existingRaw: string | undefined,
+  target: Target,
+  answer: boolean | undefined
+): { content: string; twoKeys: TwoKeys } {
+  const existing = readTwoKeys(existingRaw)
+
+  let omitLines: string[]
+  if (answer === true) omitLines = ["omitClaudeMd: true"]
+  else if (answer === false) omitLines = []
+  else if (existingRaw !== undefined) omitLines = existing.omitLines
+  else
+    omitLines = target.roles.every((role) => role === "knowledge-elicitation")
+      ? ["omitClaudeMd: true"]
+      : []
+  const omitAfter =
+    omitLines[0] === undefined
+      ? null
+      : scalarOf(omitLines[0]) === "true"
+        ? true
+        : scalarOf(omitLines[0]) === "false"
+          ? false
+          : null
+
+  const reviews = target.roles.some((role) => CACHE_TTL_ROLES.includes(role))
+  const onClaude =
+    runsOnClaude(target.model) &&
+    (target.vendor === "claude" || target.vendor === "none")
+  let experimentalLines = existing.experimentalLines
+  let ttlAfter = existing.cacheTtl
+  if (
+    reviews &&
+    (existing.experimentalBlock || experimentalLines.length === 0)
+  ) {
+    const at = ttlIndex(experimentalLines)
+    const sub = experimentalLines.slice(1).filter((_, i) => i + 1 !== at)
+    const indent = /^(\s+)/.exec(experimentalLines[1] ?? "")?.[1] ?? "  "
+    const head = experimentalLines[0] ?? "experimental:"
+    if (onClaude) {
+      if (at > 0) {
+        experimentalLines = [...experimentalLines]
+        experimentalLines[at] = `${indent}cacheTtl: 1h`
+      } else experimentalLines = [head, ...sub, `${indent}cacheTtl: 1h`]
+      ttlAfter = "1h"
+    } else {
+      experimentalLines = sub.length === 0 ? [] : [head, ...sub]
+      ttlAfter = null
+    }
+  }
+
+  const { lines, close } = frontmatterLines(content)
+  let next = lines
+  if (close > 0) {
+    const body = lines.slice(close)
+    let head = lines.slice(0, close)
+    for (const key of ["omitClaudeMd", "experimental"]) {
+      const range = topLevelBlock(head, head.length, key)
+      if (range !== undefined)
+        head = [...head.slice(0, range.start), ...head.slice(range.end)]
+    }
+    const record = head.findIndex((line) => line.startsWith("agent-policy-"))
+    const at = record < 0 ? head.length : record
+    head = [
+      ...head.slice(0, at),
+      ...omitLines,
+      ...experimentalLines,
+      ...head.slice(at)
+    ]
+    next = [...head, ...body]
+  }
+  return {
+    content: next.join("\n"),
+    twoKeys: {
+      omitClaudeMd: { before: existing.omit, after: omitAfter },
+      cacheTtl: { before: existing.cacheTtl, after: ttlAfter }
+    }
+  }
+}
+
 function definitionFragments(
   options: Options,
   ids: string[]
@@ -1586,7 +1795,8 @@ function parseArgs(argv: string[]): Options {
     pruneTools: false,
     rewriteRoles: false,
     tools: [],
-    replace: []
+    replace: [],
+    omitClaudeMd: undefined
   }
   const seen = new Set<string>()
 
@@ -1700,6 +1910,13 @@ function parseArgs(argv: string[]): Options {
         options.tools = splitList(requireValue(value, "tools"))
         index += 1
         break
+      case "--omit-claude-md":
+        if (value !== "true" && value !== "false") {
+          throw new Error("omit-claude-md: must be true or false")
+        }
+        options.omitClaudeMd = value === "true"
+        index += 1
+        break
       case "--replace":
         options.replace = splitList(requireValue(value, "replace"))
         for (const entry of options.replace) {
@@ -1721,7 +1938,8 @@ function parseArgs(argv: string[]): Options {
       ["--model", options.model !== ""],
       ["--vendor", options.vendor !== ""],
       ["--keep", options.keep.length > 0],
-      ["--replace", options.replace.length > 0]
+      ["--replace", options.replace.length > 0],
+      ["--omit-claude-md", options.omitClaudeMd !== undefined]
     ] as const) {
       if (supplied)
         throw new Error(`${flag}: cannot be used with --recommended`)

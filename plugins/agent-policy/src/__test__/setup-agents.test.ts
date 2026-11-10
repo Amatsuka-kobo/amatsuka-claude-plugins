@@ -4029,3 +4029,266 @@ describe("vendor color の配線", () => {
     expect(written).toMatch(/^color: blue$/m)
   })
 })
+
+describe("2 キー(omitClaudeMd と experimental.cacheTtl)", () => {
+  interface TwoKeys {
+    omitClaudeMd: { before: boolean | null; after: boolean | null }
+    cacheTtl: { before: string | null; after: string | null }
+  }
+  type WithTwoKeys = CheckResult & { twoKeys: TwoKeys }
+
+  const agentFile = (name: string) =>
+    path.join(project, ".claude", "agents", `${name}.md`)
+  const read = (name: string) => fs.readFileSync(agentFile(name), "utf8")
+  const frontmatterOf = (name: string) => read(name).split("\n---\n")[0] ?? ""
+  const edit = (name: string, change: (text: string) => string) =>
+    fs.writeFileSync(agentFile(name), change(read(name)))
+
+  function individual(
+    name: string,
+    roles: string,
+    extra: string[] = [],
+    model: {
+      scope: string
+      modelId: string
+      model?: string
+      vendor?: string
+    } = {
+      scope: "claude",
+      modelId: "sonnet"
+    }
+  ): string[] {
+    return [
+      "--scope",
+      model.scope,
+      "--model-id",
+      model.modelId,
+      ...(model.model === undefined ? [] : ["--model", model.model]),
+      ...(model.vendor === undefined ? [] : ["--vendor", model.vendor]),
+      "--name",
+      name,
+      "--roles",
+      roles,
+      "--dir",
+      project,
+      ...extra
+    ]
+  }
+  const write = (args: string[]) =>
+    singleResult(["--write", ...args]) as unknown as WithTwoKeys
+  const checkOf = (args: string[]) =>
+    singleResult(args) as unknown as WithTwoKeys
+
+  it("レビューの役割を持ち Claude のモデルで動く定義に cacheTtl: 1h を書く", () => {
+    const result = write(individual("reviewer", "code-review"))
+    expect(frontmatterOf("reviewer")).toMatch(
+      /^experimental:\n {2}cacheTtl: 1h$/m
+    )
+    expect(result.twoKeys.cacheTtl).toEqual({ before: null, after: "1h" })
+  })
+
+  it("既存の cacheTtl: 5m を 1h に書き換え、experimental の他の下位キーを残す", () => {
+    write(individual("reviewer", "code-review"))
+    edit("reviewer", (text) =>
+      text.replace("  cacheTtl: 1h", "  other: keep\n  cacheTtl: 5m")
+    )
+    const result = write(individual("reviewer", "code-review", ["--merge"]))
+    expect(frontmatterOf("reviewer")).toMatch(
+      /^experimental:\n {2}other: keep\n {2}cacheTtl: 1h$/m
+    )
+    expect(result.twoKeys.cacheTtl).toEqual({ before: "5m", after: "1h" })
+  })
+
+  it("model が Claude の別名でも vendor が外部ベンダーなら cacheTtl を書かない", () => {
+    write(
+      individual("gpt-alias", "code-review", [], {
+        scope: "custom",
+        modelId: "sonnet",
+        model: "sonnet",
+        vendor: "gpt"
+      })
+    )
+    expect(frontmatterOf("gpt-alias")).not.toContain("experimental")
+  })
+
+  it("外部ベンダーのモデルに変えた定義から cacheTtl だけを消す", () => {
+    write(individual("switched", "code-review"))
+    edit("switched", (text) =>
+      text.replace("  cacheTtl: 1h", "  other: keep\n  cacheTtl: 1h")
+    )
+    const external = {
+      scope: "custom",
+      modelId: "sonnet",
+      model: "test-alias",
+      vendor: "gpt"
+    }
+    const result = write(
+      individual("switched", "code-review", ["--merge"], external)
+    )
+    expect(frontmatterOf("switched")).toMatch(
+      /^experimental:\n {2}other: keep$/m
+    )
+    expect(frontmatterOf("switched")).not.toContain("cacheTtl")
+    expect(result.twoKeys.cacheTtl).toEqual({ before: "1h", after: null })
+
+    write(individual("only-ttl", "code-review"))
+    write(individual("only-ttl", "code-review", ["--merge"], external))
+    expect(frontmatterOf("only-ttl")).not.toContain("experimental")
+  })
+
+  it("レビューの役割を持たない定義とフロー形式の experimental は変えない", () => {
+    write(individual("impl", "normal-impl"))
+    expect(frontmatterOf("impl")).not.toContain("experimental")
+    edit("impl", (text) =>
+      text.replace("\neffort:", "\nexperimental:\n  other: keep\neffort:")
+    )
+    write(individual("impl", "normal-impl", ["--merge"]))
+    expect(frontmatterOf("impl")).toMatch(/^experimental:\n {2}other: keep$/m)
+
+    write(individual("flow", "code-review"))
+    edit("flow", (text) =>
+      text.replace(
+        "experimental:\n  cacheTtl: 1h",
+        "experimental: { cacheTtl: 5m }"
+      )
+    )
+    const result = write(individual("flow", "code-review", ["--merge"]))
+    expect(frontmatterOf("flow")).toContain("experimental: { cacheTtl: 5m }")
+    expect(result.twoKeys.cacheTtl.after).toBe(result.twoKeys.cacheTtl.before)
+  })
+
+  it("新しく作る knowledge-elicitation だけの定義に推奨どおり omitClaudeMd: true を付ける", () => {
+    const result = write(individual("elicitor", "knowledge-elicitation"))
+    expect(frontmatterOf("elicitor")).toMatch(/^omitClaudeMd: true$/m)
+    expect(result.twoKeys.omitClaudeMd).toEqual({ before: null, after: true })
+    write(individual("mixed", "knowledge-elicitation,code-review"))
+    expect(frontmatterOf("mixed")).not.toContain("omitClaudeMd")
+  })
+
+  it("質問しない経路では既にある定義の omitClaudeMd を保つ", () => {
+    write(individual("keeper", "code-review"))
+    edit("keeper", (text) =>
+      text.replace("\neffort:", "\nomitClaudeMd: true\neffort:")
+    )
+    write(individual("keeper", "code-review", ["--merge"]))
+    expect(frontmatterOf("keeper")).toMatch(/^omitClaudeMd: true$/m)
+    write(individual("keeper", "code-review"))
+    expect(frontmatterOf("keeper")).toMatch(/^omitClaudeMd: true$/m)
+
+    write(individual("dropper", "knowledge-elicitation"))
+    edit("dropper", (text) => text.replace("omitClaudeMd: true\n", ""))
+    write(individual("dropper", "knowledge-elicitation", ["--merge"]))
+    expect(frontmatterOf("dropper")).not.toContain("omitClaudeMd")
+  })
+
+  it("--omit-claude-md false の回答で行を消し、true で書く", () => {
+    write(individual("answered", "knowledge-elicitation"))
+    const removed = write(
+      individual("answered", "knowledge-elicitation", [
+        "--merge",
+        "--omit-claude-md",
+        "false"
+      ])
+    )
+    expect(frontmatterOf("answered")).not.toContain("omitClaudeMd")
+    expect(removed.twoKeys.omitClaudeMd).toEqual({ before: true, after: null })
+    write(
+      individual("answered", "knowledge-elicitation", [
+        "--omit-claude-md",
+        "true"
+      ])
+    )
+    expect(frontmatterOf("answered")).toMatch(/^omitClaudeMd: true$/m)
+  })
+
+  it("完全上書きでも答えていない omitClaudeMd と experimental の他の下位キーを書き戻す", () => {
+    write(individual("full", "code-review"))
+    edit("full", (text) =>
+      text
+        .replace("  cacheTtl: 1h", "  other: keep\n  cacheTtl: 1h")
+        .replace("\neffort:", "\nomitClaudeMd: true\neffort:")
+    )
+    write(individual("full", "code-review"))
+    expect(frontmatterOf("full")).toMatch(/^omitClaudeMd: true$/m)
+    expect(frontmatterOf("full")).toMatch(
+      /^experimental:\n {2}other: keep\n {2}cacheTtl: 1h$/m
+    )
+  })
+
+  it("2 キーを持つ定義を変えずに --check すると identical になり、2 キーを差分に出さない", () => {
+    write(
+      individual("stable", "knowledge-elicitation,code-review", [
+        "--omit-claude-md",
+        "true"
+      ])
+    )
+    const result = checkOf(
+      individual("stable", "knowledge-elicitation,code-review")
+    )
+    expect(result.identical).toBe(true)
+    expect(result.frontmatter.keysOnlyInExisting).not.toContain("omitClaudeMd")
+    expect(result.frontmatter.keysOnlyInExisting).not.toContain("experimental")
+    expect(result.twoKeys).toEqual({
+      omitClaudeMd: { before: true, after: true },
+      cacheTtl: { before: "1h", after: "1h" }
+    })
+  })
+
+  it("入れ子の同名キーを書き換えず、experimental の直下の cacheTtl だけを扱う", () => {
+    write(individual("nested", "code-review"))
+    edit("nested", (text) =>
+      text.replace(
+        "experimental:\n  cacheTtl: 1h",
+        'experimental:\n    other:\n      cacheTtl: x\n    cacheTtl: "5m"'
+      )
+    )
+    const result = write(individual("nested", "code-review", ["--merge"]))
+    expect(frontmatterOf("nested")).toContain(
+      "experimental:\n    other:\n      cacheTtl: x\n    cacheTtl: 1h"
+    )
+    expect(result.twoKeys.cacheTtl).toEqual({ before: "5m", after: "1h" })
+  })
+
+  it("omitClaudeMd: false と行末のコメントを保ち、値を読む", () => {
+    write(individual("commented", "code-review"))
+    edit("commented", (text) =>
+      text
+        .replace("\neffort:", "\nomitClaudeMd: false # why\neffort:")
+        .replace("experimental:\n", "experimental: # note\n")
+    )
+    const result = write(individual("commented", "code-review", ["--merge"]))
+    expect(frontmatterOf("commented")).toMatch(/^omitClaudeMd: false # why$/m)
+    expect(frontmatterOf("commented")).toMatch(
+      /^experimental: # note\n {2}cacheTtl: 1h$/m
+    )
+    expect(result.twoKeys.omitClaudeMd).toEqual({ before: false, after: false })
+  })
+
+  it("--omit-claude-md は --recommended と併用できない", () => {
+    const result = run([
+      "--write",
+      "--recommended",
+      "--scope",
+      "claude",
+      "--omit-claude-md",
+      "true",
+      "--dir",
+      project
+    ])
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain("--omit-claude-md")
+  })
+
+  it("--check は --omit-claude-md を受け付け、書き込む値を after に返す", () => {
+    write(individual("asked", "knowledge-elicitation"))
+    const result = checkOf(
+      individual("asked", "knowledge-elicitation", [
+        "--omit-claude-md",
+        "false"
+      ])
+    )
+    expect(result.ok).toBe(true)
+    expect(result.twoKeys.omitClaudeMd).toEqual({ before: true, after: null })
+    expect(frontmatterOf("asked")).toMatch(/^omitClaudeMd: true$/m)
+  })
+})
