@@ -22,6 +22,7 @@
 | D8 | 1 | コミットと worktree の扱いは codiel が定める。agent-policy や better-agentics の規律とぶつかるなら、両プラグインの規律を改める。改める範囲は codiel の run の中に限らない。食い違いは `harness-docs/design/2026-11-08-agent-policy-better-agentics-gaps-for-codiel.md` にまとめる |
 | D9 | 3 | codiel が対応する GitHub の Issue と PR には、ラベル `codiel` を付ける。人が作った既存の Issue でも、codiel が対応するなら付ける。GitHub には codiel と関係の無い Issue もあるので、codiel が拾う範囲をこのラベルで区切る |
 | D10 | 1 | 運用方針の規律とぶつかる点のうち、依頼文で条件が外れるもの(構造が変わる判断の差し戻し)は、委譲を義務づけずに「委譲する場合」の規律として指示層と作業の契約に書き、codiel 側で解く。条件が実際に外れるかは、1.2 の S7 で確かめる。委譲するかは D1 のとおり運用方針に任せる。それ以外のぶつかる点は、D8 のとおり両方針の規律を改める。並列の範囲も「並列に進める場合」の条件として書くが、方針の並列の規律は手順で外れる形になっていないので、食い違いの文書の G10 に残る |
+| D11 | 1 | 修正のループ(implement と test-code のステップの修正、test-loop、fix-loop)に上限を置かない。1〜3 ラウンドは同じ文脈で続ける。4 ラウンド以上は、2 ラウンドごとに、契約に「行き詰まりの打開」と書いた新しい単位にする(4・5 ラウンドは同じ単位、6・7 ラウンドは次の単位、以降も同じ)。この規則は修正する担い手に当て、レビューの担い手の扱いは変えない。人のいないセッションで止める仕組みは足さない(2026-11-11。better-agentics と agent-policy の回し方とそろえる) |
 
 ユーザーは、委譲の指示が運用方針とぶつかって困った場面は無かったと述べている。改修 1 の動機は実害ではなく、責務の分け方である。誰が・どのモデルで・いつ作業するかはプロジェクトの運用方針に任せ、codiel は何をするかだけを書く。
 
@@ -96,7 +97,8 @@ B〜F は、運用方針の規律と理屈の上で食い違う。
 | worktree(`references/delegation-env.md`) | 並列に進める単位は、担い手によらず、現行と同じ置き場・命名(`.codiel/worktrees/<slug>/<名前>`)の worktree で作業し、現行の後始末の手順に従う。オーケストレーターが自分で 1 つずつ処理するときも、並列の単位として登録したなら worktree を使う。直列の単位は run ブランチ上で作業する(現行の `serial` グループ)。`codiel-state waves` の計算は変えない |
 | `set-domain` / `clear-domain` | 担い手によらず、ドメインに紐づく単位の作業の間は巻く |
 | implement と test-code のタスクレビュー(`references/phase-implement.md:13`) | 作業の単位として残す。委譲するかは運用方針に任せる |
-| 修正ループの続投(`references/phase-implement.md:14-16`) | 1〜3 ラウンドは同じ文脈で続ける。4〜5 ラウンドは、契約に「行き詰まりの打開」と書いた新しい単位にする。委譲するかは運用方針に任せる。自分で作業するときは、それまでの修正の方針を捨て、原因の調べ直しから始める |
+| 修正ループの続投(`references/phase-implement.md:14-17`・`phase-test-code.md:15-18`。test-loop と fix-loop にも当てる。D11) | 上限を置かない。1〜3 ラウンドは同じ文脈で続ける。4 ラウンド以上は、2 ラウンドごとに、契約に「行き詰まりの打開」と書いた新しい単位にする(4・5、6・7、… をそれぞれ 1 つの単位で続ける)。委譲するかは運用方針に任せる。自分で作業するときは、新しい単位に移るたびに、それまでの修正の方針を捨て、原因の調べ直しから始める |
+| 試行の上限(`record-attempt` の `maxFixAttempts: 5` と exit 3。`src/codiel-state.ts:740`・`:1414`) | 外す(D11)。`record-attempt` は回数を数えるだけにし、上限で `awaiting_human` にしない。新しい run の state に `limits.maxFixAttempts` を書かず、既存の state にあっても読まない。上限超過を前提にした手順を削る。対象は `phase-implement.md`・`phase-test-code.md` の「5 ラウンドで通らなければ人に裁定を仰ぐ」、`phase-test-loop.md`・`phase-fix-loop.md`・`fixing-review-findings` の exit 3 の扱い、`gotcha-candidates.md` の上限超過の後の中止の 2 行である。`fixing-failures` の「回帰を 3 巡しても収束しなければ差し戻す」は、1 つの単位の中の回帰のやり直しなので変えない。差し戻しは、修正のループの 1 ラウンドとして数える |
 | 報告のファイル(`report.md`・`test-run-<n>.md`・`steps/merge-fix-<g>/report.md`・e2e の `failure.md`) | 委譲したときは、現行どおり委譲先の返答からオーケストレーターが書く。自分で作業したときは、オーケストレーターが自分の結果から直接書く |
 | `evaluate_*` がバックグラウンド化されたときの `gate-<フェーズ>-<回>` の待ち | 変えない(担い手と関係しない) |
 | `codiel-state` のルート | 現行は cwd をそのままルートにする(`src/codiel-state.ts:840`)。オーケストレーターが自分で worktree 内の単位を作業し、メインセッションで `cd` が引き継がれると、run を見失う。そこで全コマンドのルートを `findMainRoot`(`src/hooks/lib.ts:654-659`)で解決する形に改め、`.codiel/runs/` はメインの作業ツリーにだけ置く |
@@ -261,7 +263,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 | 指示層 | `skills/orchestrating-runs/SKILL.md`(§0・2.1・§3 の委譲・テンプレート・§4・pr の前の確認)と `references/`(`phase-*.md`・`delegation-env.md`・`review-common.md`・`resume.md`・`e2e.md`)、`skills/capturing-intent/SKILL.md`(現状調査の委譲)、`skills/facilitating-design-discussions/SKILL.md`、`skills/writing-dev-plans/SKILL.md`(test-spec の委譲と並行して書く記述)、`skills/fixing-review-findings/SKILL.md`、`skills/filing-followup-issues/SKILL.md`、`skills/running-regression-tests/SKILL.md`、`skills/raguel-gating/SKILL.md` と `references/parallel-gates.md`、`skills/syncing-intents/`、`skills/initializing-harness/SKILL.md`(2.5)、`commands/test.md`、5 スキル(`writing-test-specs`・`scripting-tests`・`implementing`(`references/e2e.md`・`references/worktree.md` を含む)・`fixing-failures`・`reviewing-diffs`) |
 | 参照層 | `references/intent-format.md`(書式の契約。`docs/format-change-checklist.md` を追随させる)、`references/e2e-report-format.md`、`references/handoff-contract.md` |
 | 素材 | `assets/rules/codiel.md` |
-| 実装層 | `src/hooks/guard-write.ts` とそのテスト(2.6)。`src/hooks/guard-bash.ts`・`guard-github-mcp.ts` とそのテスト(3.2 のラベルの検査)。`src/codiel-state.ts` のルートの解決(1.3)。stop-guard は変えない |
+| 実装層 | `src/hooks/guard-write.ts` とそのテスト(2.6)。`src/hooks/guard-bash.ts`・`guard-github-mcp.ts` とそのテスト(3.2 のラベルの検査)。`src/codiel-state.ts` のルートの解決(1.3)と、`record-attempt` の上限の撤去・`init` の `limits`(D11)。stop-guard は変えない |
 | ラベル | `references/handoff-contract.md`(`labels` に `codiel`)、`skills/capturing-intent/`(Issue 起点のラベルの付与)・`skills/orchestrating-runs/references/phase-pr.md`(3.1)、`skills/initializing-harness/`(ラベルの作成) |
 | 文書 | `README.md`(移行手順を含む)、`docs/DESIGN.md`、`docs/skill-flowcharts.md`、ルートの `README.md` |
 | 配布宣言 | `.claude-plugin/plugin.json` と `package.json` を 1.1.0-dev にし、リリース時に 1.1.0 にする |
@@ -274,6 +276,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 - run の外で行った変更は設計資料に反映されない。持続層は intent-sync の外で書き換えないからである。
 - 種別の判定(2.4)はオーケストレーターの読解に頼るため、該当する変更を見落とすことがある。
 - fix-loop は intent-sync の後にあるので、fix-loop で設計を変える修正は、次の run の intent-sync まで設計資料に載らない。
+- 修正のループに上限が無いので、critical・high の所見や NG のケースが出続けると、ループは止まらない(D11)。対話のセッションでは人が止められる。止める手がかりとして残るのは、Raguel の再提出のループの検知(`common/resubmission-loop`)による ASK である。
 
 ## 8. ビルダーに任せること
 
@@ -293,5 +296,6 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 ## 出典
 
 - ユーザーの予定表(2026-11-08 の会話で貼り付け): 「単体でのサブエージェント起動指示を廃止(プロジェクト運用に任せる方針) Amatsukaの中だとbetter-agenticsやagent-policy」「basic-designを吸収。持続層としてそのRunで決まった設計を整理して残すようにする。」
+- ユーザーの決定(2026-11-11、D11): better-agentics の設計書を書いたセッションを通じて受けた。修正のループに上限を置かない。1〜3 ラウンドは同じ文脈、4 ラウンド以上は 2 ラウンドごとに「行き詰まりの打開」の新しい単位にする。人のいないセッションで止める仕組みは足さない
 - ユーザーの提案(2026-11-09、D10): 「Codielの指示層に、サブエージェントに委譲する指示書かずとも、"サブエージェントに委譲する場合"という名目で規律を書くようにすれば解決できる部分があるのでは」
 - 会話記録: `docs/chat/2026/1107/phyllis998/2356-codiel-1-1-to-2-0-design-kickoff.md`

@@ -312,7 +312,6 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - 次の場面では、エージェントはサブの state に `mark-ask` を記録し、`awaiting-human` を返して終わる。他のサブ intent は進める。
   - Raguel の ASK と STOP
   - 新しい画面名が必要なとき(D8)。標準のサブでは design で、軽量のサブでは test-spec で、仕様のディレクトリを決めるときに生じる(現行の `references/phase-test-spec.md:14` と同じ時点)。名前の候補を返す
-  - 試行回数の上限を超えたとき
   - 現行の手順が、サブのフェーズの中で人に確認を求める場面(broken のテストの修正の承認など)。design のウォークスルーは除く(3.4)
 - `evaluate_*` が Claude Code にバックグラウンドへ移され、エージェントが verdict を受け取れなかったときは、`gate-pending` と評価の手がかりを返して終わる【要確認: S6】。オーケストレーターは Workflow の後に Raguel の記録から verdict を読み、次のサイクルで続きから再開させる。
 - エージェントが Raguel MCP のツールを持たずに `gate-pending` を返したとき(3.4)は、オーケストレーターが Workflow の後にそのゲートを評価し、次のサイクルで続きから再開させる。
@@ -324,11 +323,11 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 
 | 答え | 扱い |
 | --- | --- |
-| 続行(修正して再提出・このまま承認・誤検知として続ける・画面名の決定・上限超過の続行) | サブの state を `resume` し、次のサイクルの実装の Workflow で、止まった場所から再開させる。worktree とコミットは残してある。「このまま承認」と「誤検知として続ける」は、オーケストレーターが Workflow の外で `record_outcome` と `pass-gate --human-approved` をサブに対して済ませてから再開させる。「修正して再提出」と画面名は、裁定の内容を次のサイクルの `args` でエージェントへ渡す |
+| 続行(修正して再提出・このまま承認・誤検知として続ける・画面名の決定) | サブの state を `resume` し、次のサイクルの実装の Workflow で、止まった場所から再開させる。worktree とコミットは残してある。「このまま承認」と「誤検知として続ける」は、オーケストレーターが Workflow の外で `record_outcome` と `pass-gate --human-approved` をサブに対して済ませてから再開させる。「修正して再提出」と画面名は、裁定の内容を次のサイクルの `args` でエージェントへ渡す |
 | 続行(`undecided`・`declined`・`failed` からの、判断を示して続ける・委譲の指定を変えて続ける・再試行) | サブの state は `awaiting_human` でないので `resume` しない。進みの表のそのサブを「実行中」に戻し、次のサイクルで止まった場所から着手させる(下の箇条)。示した判断は次のサイクルの `args` で渡し、委譲の指定を変えるときは `args` でその役割の指定を置き換える |
-| 中止(ASK の中止・STOP を妥当として止める・上限超過の中止・決めずに返した場面の中止) | 実行中の Workflow が無いことを確かめ、親 run を現行と同じ理由(`ask-aborted`・`raguel-stop`・`attempts-exceeded`)で `stop` する。決めずに返した場面の中止は `ask-aborted` にする |
+| 中止(ASK の中止・STOP を妥当として止める・`failed` の 2 回目の中止・決めずに返した場面の中止) | 実行中の Workflow が無いことを確かめ、親 run を現行と同じ理由(`ask-aborted`・`raguel-stop`)で `stop` する。`failed` の 2 回目の中止は `attempts-exceeded`、決めずに返した場面の中止は `ask-aborted` にする。修正のループには上限が無い(1.1 の D11)ので、上限超過による中止は無い |
 
-- 契約の「決めずに返す」場面(1.1 の 1.2 の C)では、エージェントはサブの state に触れずに返す。フェーズが pending か passed の時点では、サブの state に `mark-ask` を記録できない(`codiel-state.ts:1259-1262`)ためである。上の一覧の場面(Raguel の ASK と STOP、新しい画面名、試行回数の上限超過、現行の手順が求める確認)は、フェーズの中で生じるので、従来どおり `mark-ask` して `awaiting-human` で返す。一覧に無い任せない判断は `undecided` で返す。
+- 契約の「決めずに返す」場面(1.1 の 1.2 の C)では、エージェントはサブの state に触れずに返す。フェーズが pending か passed の時点では、サブの state に `mark-ask` を記録できない(`codiel-state.ts:1259-1262`)ためである。上の一覧の場面(Raguel の ASK と STOP、新しい画面名、現行の手順が求める確認)は、フェーズの中で生じるので、従来どおり `mark-ask` して `awaiting-human` で返す。一覧に無い任せない判断は `undecided` で返す。
   - 任せた範囲の外の判断が要るとき、または作業を進められないときは、`undecided` に理由と、判断が要るなら問いと選択肢の材料を添えて返す。
   - 作業を引き受けないときは、`declined` と理由を返す。
   - オーケストレーターは Workflow の後に、進みの表のそのサブを「人の判断待ち」にし、親を `mark-ask workflow --kind confirm` で人の判断待ちにして聞く。答えを受けたら、親を `resume` して `workflow` フェーズを `in_progress` に戻す。親を `mark-ask` する他の場面(`failed` の 2 回目、解消できないコンフリクト)も同じである。
@@ -350,7 +349,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - サブ PR ごとに、次の順で進める。
   1. 現行の review の観点(`references/review-common.md` の規則で選ぶ)ごとに、レビュアーのエージェントを並列に起動する。レビュアーはサブの worktree を読むだけで、`codiel-state` を呼ばない。
   2. サブごとに 1 体の修正担当エージェントが、所見をまとめて `review-<m>.md` を書き、review と fix-loop の state 遷移およびゲートを担う。
-  3. critical と high の所見が残る間、再レビューと修正を繰り返す。上限は現行の `maxFixAttempts` に従う。上限を超えたら `awaiting-human` を返す(3.6)。
+  3. critical と high の所見が残る間、再レビューと修正を繰り返す。上限は置かない(1.1 の D11)。修正担当は、1〜3 ラウンドを同じ文脈で続け、4 ラウンド以上は 2 ラウンドごとに「行き詰まりの打開」として修正の方針を捨て、原因の調べ直しから始める。
 - レビュアーと修正担当には、3.4 の委譲の指定のうち、レビューと修正の役割の分を使う。
 - スキルの読み方、Raguel MCP のツールが無いときの `gate-pending` の経路、戻り値の形は、3.4 と同じにする。
 - 修正担当の契約には、任せる判断(所見の採否と直し方。材料は所見・intent・サブの設計書)と、修正の push、github モードでの所見と返信の投稿(画像のアップロードを含む)、Raguel のゲートの評価を作業として明記する(1.1 の D10)。
@@ -507,6 +506,7 @@ design → (test-spec ∥ dev-plan) → test-code → implement → test-loop �
 - Raguel MCP の無い定義では、ゲートのたびに Workflow が終わるので、1 つのサブに 6 回前後のサイクルがかかる。
 - 依存しないサブは同時に進むので、サブをまたいでテストが同時に走る。1.1 の「`parallel: true` の仕様のディレクトリだけを同時 4 件まで」はサブの間には当たらず、テストがポートや DB を取り合いうる。
 - レビューの指定は観点によらず 1 つなので、観点ごとに定義を変えることも、1 回のレビューに複数の定義を当てることもできない。
+- 修正のループに上限が無い(1.1 の D11)ので、あるサブで critical・high の所見や NG のケースが出続けると、そのサブの担当は戻らず、実装やレビューと修正の Workflow が終わらない。親 run は待ち続け、人が止めるまで次のサイクルに進まない。
 
 ## 10. ビルダーに任せること
 
