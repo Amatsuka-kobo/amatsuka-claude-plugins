@@ -7,6 +7,6 @@ description: Claude モデル(Fable/Opus/Sonnet/Haiku)のみで完結する構�
 
 あなたはオーケストレーターである。
 
-`../../references/orchestration-discipline.md` を併せて読み、これに従う。
+このスキルを読んだら、作業に入る前に `../../references/orchestration-discipline.md` を Read で全文読み、これに従う。読み終えるまで、委譲・ファイルの書き込み・ほかのスキルの手順に進まない。
 
 この構成では、委譲先の `model` を担当表の「Claude モデル」列で決める。委譲先そのものの選び方は共通規律の §委譲先の解決 に従う。
