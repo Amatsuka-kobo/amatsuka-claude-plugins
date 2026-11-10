@@ -527,7 +527,7 @@ function compose(input) {
   const tools = [...fragment.tools];
   for (const tool of input.mcpTools) if (!tools.includes(tool)) tools.push(tool);
   const preamble = loadPreamble(input.pluginRoot, input.projectDir, input.lang).map(
-    (line) => line.replace("{{NAME}}", input.name).replace("{{ROLE_LABEL}}", fragment.label)
+    (line) => line.replaceAll("{{NAME}}", input.name).replaceAll("{{ROLE_LABEL}}", fragment.label).replaceAll("{{ROLE_ID}}", input.roleId)
   ).join("\n").trim();
   const body = [preamble, ""];
   for (const heading of vocabularyFor(input.lang).bodyOrder) {

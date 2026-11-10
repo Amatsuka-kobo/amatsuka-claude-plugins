@@ -28,3 +28,4 @@ kind: readonly
 
 - For each finding, provide the severity (one of critical, high, medium, or low), the file path, line number, problem, and proposed fix.
 - Separately list improvement suggestions and observations outside the diff scope.
+- If there is nothing to report, write "No findings" and state the scope you checked.

@@ -34,3 +34,4 @@ kind: impl
 - List implemented changes with file paths and line numbers.
 - State the validation method and results.
 - List remaining constraints and the next available actions.
+- If there is nothing that resolves the blockage, write "Unresolved" and list what you tried and the results.

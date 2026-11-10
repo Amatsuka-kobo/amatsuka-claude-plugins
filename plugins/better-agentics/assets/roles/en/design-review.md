@@ -35,3 +35,4 @@ Write only the findings, with no preamble and no closing summary. For each findi
 - Target location, including section and line.
 - The questioned assumption and counterevidence, citing a file path and line number or an information source.
 - The affected scope if the counterevidence is correct.
+- If there is nothing to report, write "No counterevidence" and list the assumptions you questioned and checked.

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { type ComposeInput, compose } from "../compose"
 import { parseDocument } from "../document"
+import { scaffoldFragments } from "../fragments"
 import { decodeRecord, textHash } from "../hash"
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url))
@@ -80,12 +81,36 @@ describe("compose", () => {
     )
   })
 
-  it("前置きに名前と役割名を、括弧で囲まずに書く", () => {
+  it("前置きに名前と役割名と役割 ID を、括弧で囲まずに書く", () => {
     expect(parseDocument(compose(input())).preamble).toBe(
-      "あなたは code-reviewer。担う役割はコードレビューである。"
+      "あなたは code-reviewer。担う役割はコードレビューである。役割 ID: code-review"
     )
     expect(parseDocument(compose(input({ lang: "en" }))).preamble).toBe(
-      "You are code-reviewer. Your role is Code Review."
+      "You are code-reviewer. Your role is Code Review. Role ID: code-review"
+    )
+  })
+
+  it("1 行に同じ置換子が 2 回あっても両方を置換する", () => {
+    scaffoldFragments(ROOT, project, "fr")
+    const file = path.join(
+      project,
+      ".claude",
+      "better-agentics",
+      "roles",
+      "fr",
+      "_common.md"
+    )
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, "utf8")
+        .replace(
+          /^You are .*$/m,
+          "{{NAME}} {{NAME}} {{ROLE_LABEL}} {{ROLE_LABEL}} {{ROLE_ID}} {{ROLE_ID}}"
+        )
+    )
+    expect(parseDocument(compose(input({ lang: "fr" }))).preamble).toBe(
+      "code-reviewer code-reviewer Code Review Code Review code-review code-review"
     )
   })
 

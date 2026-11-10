@@ -36,8 +36,9 @@ export function compose(input: ComposeInput): string {
   const preamble = loadPreamble(input.pluginRoot, input.projectDir, input.lang)
     .map((line) =>
       line
-        .replace("{{NAME}}", input.name)
-        .replace("{{ROLE_LABEL}}", fragment.label)
+        .replaceAll("{{NAME}}", input.name)
+        .replaceAll("{{ROLE_LABEL}}", fragment.label)
+        .replaceAll("{{ROLE_ID}}", input.roleId)
     )
     .join("\n")
     .trim()

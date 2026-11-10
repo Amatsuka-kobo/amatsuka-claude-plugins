@@ -39,3 +39,4 @@ kind: readonly
 - List matters that could not be verified.
 - When the target is an implementation: state the decision (accept or reject) with the reasons for rejection, and list inconsistencies with the design intent or acceptance criteria.
 - When the target is a design document: state the decision (proceed or do not proceed) with conditions, list blockers and the revisions required, and list matters that can be handled after implementation starts.
+- If there is nothing to report, write "No findings" and state the decision and the scope you checked.

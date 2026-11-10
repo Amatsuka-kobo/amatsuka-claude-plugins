@@ -40,3 +40,4 @@ kind: readonly
 - Counterexample and reproduction steps
 - Impact if the counterexample holds
 - Matters that could not be verified
+- If there is nothing to report, write "No counterexamples" and list the assumptions you tried to break.

@@ -36,3 +36,4 @@ kind: readonly
 - List implicit knowledge, including matters that must be decided during implementation.
 - List contradictions and inconsistencies, each with a severity of critical, high, medium, or low.
 - Identify omissions and excess detail, each with a severity of critical, high, medium, or low.
+- If there is nothing to report for contradictions or for omissions and excess detail, write "None" for each.

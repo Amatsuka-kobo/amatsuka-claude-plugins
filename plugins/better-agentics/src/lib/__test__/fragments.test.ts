@@ -72,6 +72,33 @@ describe("loadFragments", () => {
         expect(output.includes("critical")).toBe(REVIEW_ROLES.includes(id))
       }
     })
+
+    it(`${lang} の全役割の Output Format に結果が無いときの書き方がある`, () => {
+      const marker = lang === "ja" ? "無いとき" : "If there is nothing"
+      const roles = loadFragments(ROOT, project, lang)
+      expect(roles.size).toBe(13)
+      for (const [id, fragment] of roles) {
+        const output = (fragment.sections.get("## Output Format") ?? []).join(
+          "\n"
+        )
+        expect(output, id).toContain(marker)
+      }
+    })
+
+    it(`${lang} の light-impl は全セッションの設定の変更を断らない`, () => {
+      const constraints = (
+        loadFragments(ROOT, project, lang)
+          .get("light-impl")
+          ?.sections.get(lang === "ja" ? "## 制約" : "## Constraints") ?? []
+      ).join("\n")
+      expect(constraints).not.toContain(
+        lang === "ja"
+          ? "全セッションに作用する設定"
+          : "settings that affect every session"
+      )
+      expect(constraints).toContain(lang === "ja" ? "データ移行" : "migration")
+      expect(constraints).toContain(lang === "ja" ? "rules" : "rules")
+    })
   }
 
   it("基準を含んでいた description を短い句に書き換えてある", () => {
@@ -133,7 +160,7 @@ describe("翻訳断片の信頼境界", () => {
 describe("loadPreamble", () => {
   it("_common.md の Preamble だけを返す", () => {
     expect(loadPreamble(ROOT, project, "ja")).toEqual([
-      "あなたは {{NAME}}。担う役割は{{ROLE_LABEL}}である。"
+      "あなたは {{NAME}}。担う役割は{{ROLE_LABEL}}である。役割 ID: {{ROLE_ID}}"
     ])
     for (const lang of ["ja", "en"]) {
       const common = fs.readFileSync(

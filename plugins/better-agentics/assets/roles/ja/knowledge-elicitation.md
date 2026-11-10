@@ -35,3 +35,4 @@ kind: readonly
 - 暗黙知(実装時に決める必要がある事項)
 - 矛盾・不整合(項目ごとに重大度 critical / high / medium / low を付ける)
 - 記述の過不足(項目ごとに重大度 critical / high / medium / low を付ける)
+- 矛盾・不整合と記述の過不足が無いときは、それぞれ「なし」と書く。
