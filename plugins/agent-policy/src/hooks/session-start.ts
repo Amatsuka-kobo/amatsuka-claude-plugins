@@ -34,6 +34,36 @@ function policyBlock(policy: PolicyName, legacyValue?: string): string {
   return `${instruction}\n旧互換値 \`${legacyValue}\` を使用している。\`AMATSUKA_AGENT_AUTO_INJECTION\` を \`custom\` へ変更する。`
 }
 
+// 役割の model・effort・キャッシュの寿命を黙って上書きする環境変数を知らせる。注入は止めない。
+function overrideBlock(
+  env: NodeJS.ProcessEnv,
+  marked: MarkedAgent[]
+): string | undefined {
+  const value = (key: string) => env[key]?.trim().toLowerCase() ?? ""
+  const cached = marked.some((agent) => agent.cacheTtl1h)
+  const lines: string[] = []
+  const force = value("CLAUDE_CODE_SUBAGENT_MODEL_FORCE")
+  if (force !== "" && force !== "0" && force !== "false")
+    lines.push(
+      "- `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`: すべてのサブエージェントが同じモデルで動き、役割ごとのモデル(外部ベンダーの定義を含む)が使われない。"
+    )
+  if (value("CLAUDE_CODE_EFFORT_LEVEL") !== "")
+    lines.push("- `CLAUDE_CODE_EFFORT_LEVEL`: 役割ごとの effort が使われない。")
+  if (cached && value("FORCE_PROMPT_CACHING_5M") !== "")
+    lines.push(
+      "- `FORCE_PROMPT_CACHING_5M`: `experimental.cacheTtl: 1h` を書いた定義の 1 時間のキャッシュが効かない。"
+    )
+  if (cached && value("CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL") === "5m")
+    lines.push(
+      "- `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m`: `experimental.cacheTtl: 1h` を書いた定義の 1 時間のキャッシュが効かない。"
+    )
+  if (lines.length === 0) return undefined
+  return [
+    "次の環境変数が、Agent 定義の役割の設定を上書きしている。意図しない設定なら外してセッションを再起動する:",
+    ...lines
+  ].join("\n")
+}
+
 function unknownInjectionBlock(value: string): string {
   return `AMATSUKA_AGENT_AUTO_INJECTION の値 "${value}" は未知のため、agent-policy の方針注入をスキップした。`
 }
@@ -214,9 +244,12 @@ async function build(env: NodeJS.ProcessEnv): Promise<string | undefined> {
   if (injection === "" || injection === "none") {
     profileBlocks = []
   } else if (injection === "claude") {
-    profileBlocks = claudeBlocks(env, marked)
+    profileBlocks = [...claudeBlocks(env, marked), overrideBlock(env, marked)]
   } else if (isCustomInjection(injection)) {
-    profileBlocks = await customBlocks(env, marked, injection)
+    profileBlocks = [
+      ...(await customBlocks(env, marked, injection)),
+      overrideBlock(env, marked)
+    ]
   } else {
     profileBlocks = [unknownInjectionBlock(injection)]
   }

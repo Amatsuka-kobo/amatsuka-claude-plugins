@@ -184,7 +184,8 @@ describe("frontmatter", () => {
         roles: [],
         tools: undefined,
         vendor: undefined,
-        description: undefined
+        description: undefined,
+        cacheTtl1h: false
       }
     ])
   })
@@ -209,7 +210,8 @@ describe("scanAgents", () => {
         roles: ["complex-impl", "explore"],
         tools: undefined,
         vendor: undefined,
-        description: undefined
+        description: undefined,
+        cacheTtl1h: false
       },
       {
         name: "fallback-name",
@@ -217,7 +219,8 @@ describe("scanAgents", () => {
         roles: ["normal-impl"],
         tools: undefined,
         vendor: undefined,
-        description: undefined
+        description: undefined,
+        cacheTtl1h: false
       }
     ])
   })
@@ -237,7 +240,8 @@ describe("scanAgents", () => {
         roles: ["normal-impl"],
         tools: undefined,
         vendor: "gpt",
-        description: undefined
+        description: undefined,
+        cacheTtl1h: false
       }
     ])
   })
@@ -273,7 +277,8 @@ describe("scanAgents", () => {
         roles: ["explore"],
         tools: undefined,
         vendor: undefined,
-        description: undefined
+        description: undefined,
+        cacheTtl1h: false
       }
     ])
   })
@@ -394,7 +399,8 @@ describe("roleLabel", () => {
             roles: ["final-review"],
             tools: undefined,
             vendor: undefined,
-            description: undefined
+            description: undefined,
+            cacheTtl1h: false
           }
         ],
         "with-external"
@@ -465,7 +471,8 @@ describe("candidateAgents", () => {
       roles: ["normal-impl"],
       tools: undefined,
       vendor: "claude",
-      description: undefined
+      description: undefined,
+      cacheTtl1h: false
     },
     {
       name: "sonnet-gpt-vendor",
@@ -473,7 +480,8 @@ describe("candidateAgents", () => {
       roles: ["normal-impl"],
       tools: undefined,
       vendor: "gpt",
-      description: undefined
+      description: undefined,
+      cacheTtl1h: false
     },
     {
       name: "implicit",
@@ -481,7 +489,8 @@ describe("candidateAgents", () => {
       roles: ["normal-impl"],
       tools: undefined,
       vendor: undefined,
-      description: undefined
+      description: undefined,
+      cacheTtl1h: false
     },
     {
       name: "inherit",
@@ -489,7 +498,8 @@ describe("candidateAgents", () => {
       roles: ["normal-impl"],
       tools: undefined,
       vendor: undefined,
-      description: undefined
+      description: undefined,
+      cacheTtl1h: false
     },
     {
       name: "vendor-none",
@@ -497,7 +507,8 @@ describe("candidateAgents", () => {
       roles: ["normal-impl"],
       tools: undefined,
       vendor: "none",
-      description: undefined
+      description: undefined,
+      cacheTtl1h: false
     },
     {
       name: "external-model",
@@ -505,7 +516,8 @@ describe("candidateAgents", () => {
       roles: ["normal-impl"],
       tools: undefined,
       vendor: "claude",
-      description: undefined
+      description: undefined,
+      cacheTtl1h: false
     }
   ]
 
@@ -531,7 +543,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: "gpt",
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         },
         {
           name: "grok-worker",
@@ -539,7 +552,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: "grok",
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         },
         {
           name: "local-implementer",
@@ -547,7 +561,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: undefined,
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         },
         {
           name: "sonnet-code-reviewer",
@@ -555,7 +570,8 @@ describe("markerTable", () => {
           roles: ["code-review"],
           tools: undefined,
           vendor: undefined,
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         }
       ],
       "with-external"
@@ -584,7 +600,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: "gpt",
-          description: "backend の実装を担当する。"
+          description: "backend の実装を担当する。",
+          cacheTtl1h: false
         },
         {
           name: "ui-impl",
@@ -592,7 +609,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: undefined,
-          description: "frontend の実装を担当する。"
+          description: "frontend の実装を担当する。",
+          cacheTtl1h: false
         }
       ],
       "with-external"
@@ -615,7 +633,8 @@ describe("markerTable", () => {
           roles: ["code-review"],
           tools: undefined,
           vendor: undefined,
-          description: "差分をレビューする。"
+          description: "差分をレビューする。",
+          cacheTtl1h: false
         }
       ],
       "with-external"
@@ -636,7 +655,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: undefined,
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         },
         {
           name: "b-impl",
@@ -644,7 +664,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: undefined,
-          description: "b の説明"
+          description: "b の説明",
+          cacheTtl1h: false
         }
       ],
       "with-external"
@@ -668,7 +689,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: undefined,
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         },
         {
           name: "project-worker",
@@ -676,7 +698,8 @@ describe("markerTable", () => {
           roles: ["my_role"],
           tools: undefined,
           vendor: undefined,
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         }
       ],
       "with-external"
@@ -704,7 +727,8 @@ describe("markerTable", () => {
           roles: ["normal-impl"],
           tools: undefined,
           vendor: undefined,
-          description: undefined
+          description: undefined,
+          cacheTtl1h: false
         }
       ],
       scope
@@ -743,5 +767,36 @@ describe("markerTable", () => {
 
     expect(expected).toBeDefined()
     expect(tableBlock(hookContext(project, injection))).toBe(expected)
+  })
+})
+
+describe("scanAgents の cacheTtl1h", () => {
+  it("experimental のブロックの下に cacheTtl: 1h があるときだけ真にする", () => {
+    const project = temporaryProject()
+    writeDefinition(project, "a.md", [
+      "name: a",
+      "experimental:",
+      "  cacheTtl: 1h"
+    ])
+    writeDefinition(project, "b.md", [
+      "name: b",
+      "experimental:",
+      "  cacheTtl: 5m"
+    ])
+    writeDefinition(project, "c.md", ["name: c", "other:", "  cacheTtl: 1h"])
+    writeDefinition(project, "d.md", ["name: d", "cacheTtl: 1h"])
+    writeDefinition(project, "e.md", [
+      "name: e",
+      "experimental:",
+      "  other: x",
+      '  cacheTtl: "1h"'
+    ])
+    const flags = Object.fromEntries(
+      scanAgents(agentsDir(project)).map((agent) => [
+        agent.name,
+        agent.cacheTtl1h
+      ])
+    )
+    expect(flags).toEqual({ a: true, b: false, c: false, d: false, e: true })
   })
 })

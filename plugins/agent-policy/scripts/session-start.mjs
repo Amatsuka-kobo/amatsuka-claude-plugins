@@ -305,6 +305,21 @@ function runsOnClaude(model) {
 // src/hooks/marker-scan.ts
 import fs from "node:fs";
 import path from "node:path";
+function hasCacheTtl1h(file) {
+  const lines = fs.readFileSync(file, "utf8").split("\n");
+  if (lines[0]?.trim() !== "---") return false;
+  const close = lines.indexOf("---", 1);
+  let inExperimental = false;
+  for (const line of lines.slice(1, close === -1 ? 0 : close)) {
+    if (!/^\s/.test(line)) {
+      inExperimental = /^experimental:\s*$/.test(line);
+      continue;
+    }
+    if (inExperimental && /^\s+cacheTtl:\s*["']?1h["']?\s*$/.test(line))
+      return true;
+  }
+  return false;
+}
 function frontmatter(file) {
   const lines = fs.readFileSync(file, "utf8").split("\n");
   const meta = /* @__PURE__ */ new Map();
@@ -413,7 +428,8 @@ function scanAgents(dir) {
       roles: typeof marker === "string" ? marker.split(",").map((role) => role.trim()).filter((role) => role !== "") : [],
       tools: parseToolsField(meta.get("tools")),
       vendor: typeof vendor === "string" ? vendor : void 0,
-      description
+      description,
+      cacheTtl1h: hasCacheTtl1h(path.join(dir, file))
     });
   }
   return found;
@@ -507,6 +523,31 @@ function policyBlock(policy, legacyValue) {
   if (legacyValue === void 0) return instruction;
   return `${instruction}
 \u65E7\u4E92\u63DB\u5024 \`${legacyValue}\` \u3092\u4F7F\u7528\u3057\u3066\u3044\u308B\u3002\`AMATSUKA_AGENT_AUTO_INJECTION\` \u3092 \`custom\` \u3078\u5909\u66F4\u3059\u308B\u3002`;
+}
+function overrideBlock(env, marked) {
+  const value = (key) => env[key]?.trim().toLowerCase() ?? "";
+  const cached = marked.some((agent) => agent.cacheTtl1h);
+  const lines = [];
+  const force = value("CLAUDE_CODE_SUBAGENT_MODEL_FORCE");
+  if (force !== "" && force !== "0" && force !== "false")
+    lines.push(
+      "- `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`: \u3059\u3079\u3066\u306E\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u304C\u540C\u3058\u30E2\u30C7\u30EB\u3067\u52D5\u304D\u3001\u5F79\u5272\u3054\u3068\u306E\u30E2\u30C7\u30EB(\u5916\u90E8\u30D9\u30F3\u30C0\u30FC\u306E\u5B9A\u7FA9\u3092\u542B\u3080)\u304C\u4F7F\u308F\u308C\u306A\u3044\u3002"
+    );
+  if (value("CLAUDE_CODE_EFFORT_LEVEL") !== "")
+    lines.push("- `CLAUDE_CODE_EFFORT_LEVEL`: \u5F79\u5272\u3054\u3068\u306E effort \u304C\u4F7F\u308F\u308C\u306A\u3044\u3002");
+  if (cached && value("FORCE_PROMPT_CACHING_5M") !== "")
+    lines.push(
+      "- `FORCE_PROMPT_CACHING_5M`: `experimental.cacheTtl: 1h` \u3092\u66F8\u3044\u305F\u5B9A\u7FA9\u306E 1 \u6642\u9593\u306E\u30AD\u30E3\u30C3\u30B7\u30E5\u304C\u52B9\u304B\u306A\u3044\u3002"
+    );
+  if (cached && value("CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL") === "5m")
+    lines.push(
+      "- `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m`: `experimental.cacheTtl: 1h` \u3092\u66F8\u3044\u305F\u5B9A\u7FA9\u306E 1 \u6642\u9593\u306E\u30AD\u30E3\u30C3\u30B7\u30E5\u304C\u52B9\u304B\u306A\u3044\u3002"
+    );
+  if (lines.length === 0) return void 0;
+  return [
+    "\u6B21\u306E\u74B0\u5883\u5909\u6570\u304C\u3001Agent \u5B9A\u7FA9\u306E\u5F79\u5272\u306E\u8A2D\u5B9A\u3092\u4E0A\u66F8\u304D\u3057\u3066\u3044\u308B\u3002\u610F\u56F3\u3057\u306A\u3044\u8A2D\u5B9A\u306A\u3089\u5916\u3057\u3066\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B:",
+    ...lines
+  ].join("\n");
 }
 function unknownInjectionBlock(value) {
   return `AMATSUKA_AGENT_AUTO_INJECTION \u306E\u5024 "${value}" \u306F\u672A\u77E5\u306E\u305F\u3081\u3001agent-policy \u306E\u65B9\u91DD\u6CE8\u5165\u3092\u30B9\u30AD\u30C3\u30D7\u3057\u305F\u3002`;
@@ -637,9 +678,12 @@ async function build(env) {
   if (injection === "" || injection === "none") {
     profileBlocks = [];
   } else if (injection === "claude") {
-    profileBlocks = claudeBlocks(env, marked);
+    profileBlocks = [...claudeBlocks(env, marked), overrideBlock(env, marked)];
   } else if (isCustomInjection(injection)) {
-    profileBlocks = await customBlocks(env, marked, injection);
+    profileBlocks = [
+      ...await customBlocks(env, marked, injection),
+      overrideBlock(env, marked)
+    ];
   } else {
     profileBlocks = [unknownInjectionBlock(injection)];
   }

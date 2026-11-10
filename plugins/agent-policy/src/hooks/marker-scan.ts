@@ -11,6 +11,25 @@ export interface MarkedAgent {
   tools: string[] | undefined
   vendor: string | undefined
   description: string | undefined
+  /** experimental のブロックの下に cacheTtl: 1h があるときだけ真 */
+  cacheTtl1h: boolean
+}
+
+// frontmatter() は字下げ行を親のキーと無関係に読むので、experimental のブロックを行で見る。
+function hasCacheTtl1h(file: string): boolean {
+  const lines = fs.readFileSync(file, "utf8").split("\n")
+  if (lines[0]?.trim() !== "---") return false
+  const close = lines.indexOf("---", 1)
+  let inExperimental = false
+  for (const line of lines.slice(1, close === -1 ? 0 : close)) {
+    if (!/^\s/.test(line)) {
+      inExperimental = /^experimental:\s*$/.test(line)
+      continue
+    }
+    if (inExperimental && /^\s+cacheTtl:\s*["']?1h["']?\s*$/.test(line))
+      return true
+  }
+  return false
 }
 
 /** frontmatter の解析結果。tools が block 配列で書かれていたときだけ値が string[] になる。 */
@@ -154,7 +173,8 @@ export function scanAgents(dir: string | undefined): MarkedAgent[] {
           : [],
       tools: parseToolsField(meta.get("tools")),
       vendor: typeof vendor === "string" ? vendor : undefined,
-      description
+      description,
+      cacheTtl1h: hasCacheTtl1h(path.join(dir, file))
     })
   }
 

@@ -798,3 +798,79 @@ describe("フェイルオープン", () => {
     expect(output).toContain("コードベース探索")
   })
 })
+
+describe("役割の設定を上書きする環境変数の警告", () => {
+  const FORCE = "CLAUDE_CODE_SUBAGENT_MODEL_FORCE"
+  const EFFORT = "CLAUDE_CODE_EFFORT_LEVEL"
+  const CACHE_5M = "FORCE_PROMPT_CACHING_5M"
+  const SUBAGENT_TTL = "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL"
+  const withCache = () =>
+    place("reviewer", [
+      "model: sonnet",
+      "experimental:",
+      "  cacheTtl: 1h",
+      "agent-policy-role: code-review"
+    ])
+
+  it("claude と custom の旧値で、モデルの強制と effort の上書きを警告する", () => {
+    for (const injection of ["claude", "with-codex"]) {
+      const text = context({
+        AMATSUKA_AGENT_AUTO_INJECTION: injection,
+        [FORCE]: "1",
+        [EFFORT]: "high"
+      })
+      expect(text, injection).toContain(FORCE)
+      expect(text, injection).toContain(EFFORT)
+    }
+  })
+
+  it("none と未設定では警告しない", () => {
+    for (const env of [{ AMATSUKA_AGENT_AUTO_INJECTION: "none" }, {}] as Record<
+      string,
+      string
+    >[]) {
+      const text = context({ ...env, [FORCE]: "1", [EFFORT]: "high" })
+      expect(text).not.toContain(FORCE)
+      expect(text).not.toContain(EFFORT)
+    }
+  })
+
+  it("モデルの強制が 0・false・空のときと、CLAUDE_CODE_SUBAGENT_MODEL だけのときは警告しない", () => {
+    for (const value of ["0", "false", " FALSE ", ""]) {
+      expect(
+        context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude", [FORCE]: value }),
+        value
+      ).not.toContain(FORCE)
+    }
+    const text = context({
+      AMATSUKA_AGENT_AUTO_INJECTION: "claude",
+      CLAUDE_CODE_SUBAGENT_MODEL: "haiku"
+    })
+    expect(text).not.toContain("CLAUDE_CODE_SUBAGENT_MODEL")
+  })
+
+  it("キャッシュの 2 つの変数は、cacheTtl: 1h の定義があるときだけ警告する", () => {
+    const env = {
+      AMATSUKA_AGENT_AUTO_INJECTION: "claude",
+      [CACHE_5M]: "1",
+      [SUBAGENT_TTL]: "5m"
+    }
+    let text = context(env)
+    expect(text).not.toContain(CACHE_5M)
+    expect(text).not.toContain(SUBAGENT_TTL)
+    withCache()
+    text = context(env)
+    expect(text).toContain(CACHE_5M)
+    expect(text).toContain(SUBAGENT_TTL)
+  })
+
+  it("CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL は 5m のときだけ当たる", () => {
+    withCache()
+    expect(
+      context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude", [SUBAGENT_TTL]: "1h" })
+    ).not.toContain(SUBAGENT_TTL)
+    expect(
+      context({ AMATSUKA_AGENT_AUTO_INJECTION: "claude", [CACHE_5M]: "" })
+    ).not.toContain(CACHE_5M)
+  })
+})
