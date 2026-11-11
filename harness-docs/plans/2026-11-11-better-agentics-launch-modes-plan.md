@@ -1177,3 +1177,20 @@ review の結果は次のとおりである。
 計画から外れた判断:
 
 - 委譲先が断ったときの扱い(J26・J35・D23・J33・J39)は、設計書 5.1 では外側の手順の中の話として書かれている。断りは外側の手順の外でも起き、「修正の担い手」からも参照するため、独立のセクション「委譲先が断ったとき」に置いた。
+
+### T15: 実機の確認(2026-11-11、Claude Code 2.1.322)
+
+スクラッチの git リポジトリで、`claude -p --plugin-dir <リポジトリ>/plugins/better-agentics --model sonnet` を 2 セッション走らせた。どちらも、`math.ts` に関数を足したコミットのレビューを頼んだ。review の候補を 1 つに絞るため、`--write-config` で code-review 以外のレビューの 4 役割を外した。
+
+| 確かめた事項 | 結果 | 根拠 |
+| --- | --- | --- |
+| SessionStart の使用指示と、定義 0 件の知らせ | 使用指示の後に「定義の無い役割は Standard Agent モードで委譲する。…」が出た | stream-json の SessionStart の `hook_response` |
+| `review` の委譲で、Standard Agent モードのレビュアーが前置きつきで起動する | `pick-delegate` は `{role: code-review, mode: standard, agentType: general-purpose, model: sonnet, effort: high}` を返した。オーケストレーターは前置きを依頼文の冒頭に置き、`run_in_background: true` で起動した。差分は `git diff <base>..<head>` で渡した | Agent の呼び出しの引数と `prompt` の先頭行 |
+| 再レビューで、そのレビュアーが SendMessage で再開する | 2 巡目は同じ `agentId` へ SendMessage で頼み、`pick-delegate` を呼ばなかった。レビュアーは前の巡を踏まえて返した | SendMessage の呼び出しと、委譲先の `parent_tool_use_id` が 1 つだけであること |
+| setup で 1 役割の定義を作り、その役割が Custom Agent モードで起動する | `setup.mjs --write --role code-review` は `experimental.cacheTtl: 1h` を書いた(`extraKeys.cacheTtl: written`)。次のセッションで `pick-delegate` は `{mode: custom, agentType: code-reviewer}` を返し、Agent は `model`・`effort` 無しで起動した | setup の応答と Agent の呼び出しの引数 |
+| その委譲先に SubagentStart の役割 ID が届く | 委譲先の記録に「役割 ID: code-review」と空行に続く規律の全文があった | `~/.claude/projects/<スクラッチ>/<セッション>/subagents/agent-*.jsonl` |
+
+計画から外れた判断と、分かった制約:
+
+- `--permission-mode default` の `-p` では、SKILL.md の例どおり heredoc で JSON を渡す `pick-delegate` の呼び出しが、Bash の安全検査(「Contains brace with quote character (expansion obfuscation)」)で 3 回とも拒否された。呼び出しの形は改修前から同じで、この改修の範囲の外の制約である。確認を続けるため、`--permission-mode acceptEdits` と `--allowedTools "Skill" "Bash(node:*)" "Bash(git:*)" "SendMessage"` を付け、入力の JSON をプロジェクトの中のファイルに書いてリダイレクトで渡すよう依頼文で指示した。`bypassPermissions` は使わなかった。T16 で README の限界に書く。
+- スクラッチは、キーの値が含まれないことを `grep -F` で確かめてから消した。
