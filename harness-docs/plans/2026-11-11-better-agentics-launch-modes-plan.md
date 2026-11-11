@@ -1067,3 +1067,51 @@ G3・G4・G5・G9・G10・G12 の better-agentics 側を解消済みにする。
 試作の途中で分かった、分岐の表に無い事項:
 
 - `-p` の `default` の許可モードでは、SessionStart が指示した `better-agentics:orchestration` の Skill の呼び出しも `permission_denials` に載る。`-p` で better-agentics の規律を使う利用者は、Skill を許可しておく必要がある。T16 で README の限界に書く。
+
+### T8: 全役割を候補にしたときの Jev の選び方(2026-11-11)
+
+定義の無いスクラッチのプロジェクトで、T7 までの `scripts/pick-delegate.mjs` を実際の Jev に 2 回ずつ通した。split は 18 件を 1 回の呼び出しで、review は 8 件を 1 件ずつ問うた。
+
+split の結果は、2 回とも同じ役割を選んだ。p は 1 回目の値である。
+
+| 作業 | 選ばれた役割(p) | 2026-11-10 の判定 |
+| --- | --- | --- |
+| s01 | light-impl(1.00) | |
+| s02 | normal-impl(0.90) | |
+| s03 | complex-impl(1.00) | |
+| s04 | explore(1.00) | |
+| s05 | realtime-research(1.00) | |
+| s06 | e2e-verify(1.00) | |
+| s07 | general(1.00) | |
+| s08 | normal-impl(0.74) | normal-impl(一致) |
+| s09 | light-impl(0.98) | |
+| s10 | normal-impl(0.59) | |
+| s11 | explore(0.87) | explore(一致) |
+| s12 | general(0.97) | |
+| s13 | light-impl(0.72) | light-impl(一致) |
+| s14 | normal-impl(0.40) | normal-impl(一致) |
+| s15 | realtime-research(0.78) | |
+| s16 | light-impl(0.51、2 回目 0.54) | general(**2 回とも不一致**) |
+| u01 | complex-impl(0.88) | |
+| u02 | general(0.96) | |
+
+review の結果は次のとおりである。
+
+| 作業 | 1 回目 | 2 回目 | 2026-11-10 の判定 |
+| --- | --- | --- | --- |
+| r01 | code-review | code-review | |
+| r02 | design-review・knowledge-elicitation | 同じ | knowledge-elicitation を含む(一致) |
+| r03 | complex-review | complex-review | |
+| r04 | adversarial-review | adversarial-review | |
+| r05 | design-review・knowledge-elicitation | 同じ | knowledge-elicitation を含む(一致) |
+| r06 | code-review(0.49、`fallback: true`) | code-review・adversarial-review(0.51・0.51) | adversarial-review と code-review を含む(1 回目だけ不一致) |
+| r07 | knowledge-elicitation | knowledge-elicitation | |
+| r08 | knowledge-elicitation・adversarial-review | 同じ | adversarial-review と knowledge-elicitation を含む(一致) |
+
+判定:
+
+- 2 回とも判定と違ったのは s16(Japanese から English への 13 ファイルの翻訳)だけである。Jev は general ではなく light-impl を選んだ。計画の判定の 1 つ目に当たるので「偏る」とし、T8b を行う。
+- r06 は 1 回目だけ判定と違い、2 回目は判定どおりだった。偏りに数えず、揺れとして記録する。adversarial-review の p は 2 回とも 0.5 の前後だった。
+- split で同じ 1 役割に割り当てられた作業は、最多で light-impl と normal-impl の 4 件ずつだった。8 件に届かない。
+- review で 5 役割すべてが選ばれた作業は無かった。
+- u01 は complex-impl、u02 は general で、どちらも読み取りだけの役割ではない。T8c は行わない。
