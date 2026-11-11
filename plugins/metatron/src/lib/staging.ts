@@ -29,9 +29,10 @@ export const DEFAULT_STAGING_TTL_MS = 30 * 60 * 1000
 /**
  * stage の対象。`architecture` と `adr` は ARCHITECTURE ファイルを、
  * `rules` は `.claude/rules/metatron/` の 1 ファイルを書き換える経路である。
+ * `gotchas` は GOTCHAS 台帳の既存エントリのフィールドを書き換える経路である。
  * いずれも 1 つの staging が書き換えるファイルは 1 本だけである(契約 §11)。
  */
-export type StagingKind = "architecture" | "adr" | "rules"
+export type StagingKind = "architecture" | "adr" | "rules" | "gotchas"
 
 export interface StagingRecord {
   version: number
@@ -218,7 +219,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isStagingKind(value: unknown): value is StagingKind {
-  return value === "architecture" || value === "adr" || value === "rules"
+  return (
+    value === "architecture" ||
+    value === "adr" ||
+    value === "rules" ||
+    value === "gotchas"
+  )
 }
 
 // キー順に依存しない表現へ落とす。オブジェクトのキーを再帰的に並べ替える。

@@ -296,7 +296,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 | 経路 | 該当するもの |
 | --- | --- |
-| 書き込み経路(第 1 層・フェイルクローズド) | `stage-architecture` / `stage-adr` / `commit-architecture` / `stage-rules` / `commit-rules` / `append-gotcha` / `tag-gotcha` |
+| 書き込み経路(第 1 層・フェイルクローズド) | `stage-architecture` / `stage-adr` / `commit-architecture` / `stage-rules` / `commit-rules` / `append-gotcha` / `tag-gotcha` / `stage-gotcha` / `commit-gotchas` |
 | 読み取り・注入経路(第 2 層・フェイルオープン) | `get config` / `get architecture` / `get domains` / `get gotchas` / `get adr` / `scan` / `diff-architecture` / SessionStart 注入 hook / PreToolUse deny hook |
 
 ### 4-4. `## システム概要` と `## レイヤー構造` の要件
@@ -490,7 +490,9 @@ metatron が管理する rules は次の 3 ファイルに固定する。ファ�
 
 ### 7-5. タグ付与の方法
 
-次の 2 箇所への追記とする。**エントリ本文は書き換えない。**
+次の 2 箇所への追記とする。**タグ付与ではエントリ本文を書き換えない。**
+
+本文の書き換えは、書式と執筆規律に合わせる監査のときだけ `stage-gotcha` → `commit-gotchas` の 2 段階で行う(2026-11-12 追加)。書き換えるのはタイトルと 5 フィールドの値だけで、日付・`GOTCHA-NNN`・タグ・理由行は保つ。事実が誤っていたときは書き換えず、新しいエントリを追記して古いエントリへ `[対象外]` を付ける。
 
 1. 見出し行のタイトル直前にタグを挿入する。
 2. エントリ末尾に理由を 1 行追記する(`**[解決済み] (2026-08-20)**: <理由>`)。
@@ -706,6 +708,8 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 | `init-gotchas` | 書 |
 | `append-gotcha --input <path>` | 書 |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由> [--date <YYYY-MM-DD>]` | 書 |
+| `stage-gotcha --input <path>` | 段階 |
+| `commit-gotchas --staging-id <id>` | 書 |
 
 ### 規約
 
@@ -755,7 +759,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 
 | ロック | 取得するサブコマンド |
 | --- | --- |
-| `<gotchas パス>.lock` | `init-gotchas` / `append-gotcha` / `tag-gotcha` |
+| `<gotchas パス>.lock` | `init-gotchas` / `append-gotcha` / `tag-gotcha` / `commit-gotchas` |
 | `<architecture パス>.lock` | `stage-adr`(採番の読み取り) / `commit-architecture`(書き込み) |
 
 2 文書のロックは独立しており、互いをブロックしない。

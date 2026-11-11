@@ -1629,6 +1629,8 @@ function gatedInvocations(root: string): GatedInvocation[] {
         "0"
       ]
     },
+    { feature: "gotchas", args: ["stage-gotcha", "--input", missing] },
+    { feature: "gotchas", args: ["commit-gotchas", "--staging-id", "unknown"] },
     { feature: "gotchas", args: ["init-gotchas"] },
     { feature: "gotchas", args: ["append-gotcha", "--input", missing] },
     {
@@ -1842,4 +1844,137 @@ test("FG7: ADR が無効なら diff-architecture は ## ADR 一覧 の欠落を 
   expect(disabled).not.toContain("ADR 一覧")
   // ほかの節の欠落は従来どおり出る
   expect(disabled).toContain("レイヤー構造")
+})
+
+// ---------------------------------------------------------------------------
+// stage-gotcha → commit-gotchas(既存エントリのフィールドの書き換え)
+// ---------------------------------------------------------------------------
+
+function stageGotcha(root: string, input: unknown): CliRun {
+  const inputPath = writeFile(
+    root,
+    "gotcha-rewrite.json",
+    JSON.stringify(input)
+  )
+  return runCli(["stage-gotcha", "--input", inputPath], root)
+}
+
+test("GS1: stage-gotcha は書かずに diff を返し、commit-gotchas で書き込む。再 commit は already_used", () => {
+  const root = gateProject()
+  const { gotchas } = docs(root)
+  const before = fs.readFileSync(gotchas, "utf8")
+
+  const staged = stageGotcha(root, {
+    id: "GOTCHA-001",
+    mistake: "書き換えた失敗内容",
+    reason: "表現を直す"
+  })
+  expect(staged.status, staged.stdout).toBe(0)
+  const json = staged.json as Record<string, unknown>
+  expect(json).toMatchObject({
+    ok: true,
+    valid: true,
+    id: "GOTCHA-001",
+    changed: ["mistake"]
+  })
+  const diff = json.diff as Record<string, unknown>
+  expect(diff.truncated).toBe(false)
+  expect(diff.unified as string).toContain("+**失敗内容**: 書き換えた失敗内容")
+  expect(typeof json.next).toBe("string")
+  // stage は書かない。
+  expect(fs.readFileSync(gotchas, "utf8")).toBe(before)
+
+  const stagingId = json.stagingId as string
+  const committed = runCli(["commit-gotchas", "--staging-id", stagingId], root)
+  expect(committed.status, committed.stdout).toBe(0)
+  expect(fs.readFileSync(gotchas, "utf8")).toBe(
+    before.replace("**失敗内容**: 間違えた", "**失敗内容**: 書き換えた失敗内容")
+  )
+
+  const again = runCli(["commit-gotchas", "--staging-id", stagingId], root)
+  expect(again.status).not.toBe(0)
+  expect(again.json).toMatchObject({ error: "already_used" })
+})
+
+test("GS2: kind の取り違えは staging_kind_mismatch で拒否され、staging は消費されない", () => {
+  const root = gateProject()
+  const { gotchas } = docs(root)
+  const before = fs.readFileSync(gotchas, "utf8")
+
+  const gotchaStaged = stageGotcha(root, {
+    id: "GOTCHA-001",
+    task: "別のタスク"
+  })
+  const gotchaId = (gotchaStaged.json as Record<string, unknown>)
+    .stagingId as string
+  for (const command of ["commit-rules", "commit-architecture"]) {
+    const wrong = runCli([command, "--staging-id", gotchaId], root)
+    expect(wrong.status, command).not.toBe(0)
+    expect(wrong.json, command).toMatchObject({
+      error: "staging_kind_mismatch"
+    })
+  }
+  expect(fs.readFileSync(gotchas, "utf8")).toBe(before)
+
+  const rulesInput = writeFile(
+    root,
+    "r.json",
+    JSON.stringify({ name: "conventions", body: RULES_BODY })
+  )
+  const rulesStaged = runCli(["stage-rules", "--input", rulesInput], root)
+  const wrong = runCli(
+    [
+      "commit-gotchas",
+      "--staging-id",
+      (rulesStaged.json as Record<string, unknown>).stagingId as string
+    ],
+    root
+  )
+  expect(wrong.status).not.toBe(0)
+  expect(wrong.json).toMatchObject({ error: "staging_kind_mismatch" })
+
+  // 拒否された gotchas の staging は、正しいコマンドなら通る。
+  const ok = runCli(["commit-gotchas", "--staging-id", gotchaId], root)
+  expect(ok.status, ok.stdout).toBe(0)
+  expect(fs.readFileSync(gotchas, "utf8")).toContain("**タスク**: 別のタスク")
+})
+
+test("GS3: stage 後に台帳が変わると commit-gotchas は file_changed で拒否し、書かない", () => {
+  const root = gateProject()
+  const { gotchas } = docs(root)
+
+  const staged = stageGotcha(root, {
+    id: "GOTCHA-001",
+    cause: "書き換えた原因"
+  })
+  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
+  fs.appendFileSync(gotchas, "\n手で足した行\n")
+  const changed = fs.readFileSync(gotchas)
+
+  const run = runCli(["commit-gotchas", "--staging-id", stagingId], root)
+  expect(run.status).not.toBe(0)
+  expect(run.json).toMatchObject({ error: "file_changed", written: false })
+  expect(fs.readFileSync(gotchas).equals(changed)).toBe(true)
+})
+
+test("GS4: 台帳が無い・ID が無い・変更が無い入力は拒否し、stagingId を発行しない", () => {
+  const noLedger = project()
+  const missing = stageGotcha(noLedger, { id: "GOTCHA-001", task: "x" })
+  expect(missing.status).not.toBe(0)
+  expect(missing.json).toMatchObject({ error: "not_found", stagingId: null })
+
+  const root = gateProject()
+  for (const [input, error] of [
+    [{ id: "GOTCHA-099", task: "x" }, "not_found"],
+    [{ id: "GOTCHA-001" }, "invalid_input"],
+    [{ id: "GOTCHA-001", title: "[解決済み] 題" }, "invalid_input"]
+  ] as const) {
+    const run = stageGotcha(root, input)
+    expect(run.status, JSON.stringify(input)).not.toBe(0)
+    expect(run.json, JSON.stringify(input)).toMatchObject({
+      error,
+      stagingId: null
+    })
+  }
+  expect(fs.existsSync(stagingDirFor(root))).toBe(false)
 })

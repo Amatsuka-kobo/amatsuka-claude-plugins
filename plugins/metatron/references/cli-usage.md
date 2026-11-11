@@ -18,7 +18,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR のエントリ配列と次の採番 |
 | `get rules [--name <名前>]` | 読 | rules 3 ファイルの本文と存在状況、または指定した 1 ファイル |
 | `scan` | 読 | コードベース解析の事実 |
-| `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補。ADR 無効なら `## ADR 一覧` の欠落を乖離にしない |
+| `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補(`findings`)と、技術スタックとコマンドの定義が置かれうるファイルの一覧(`sources`)。ADR 無効なら `## ADR 一覧` の欠落を乖離にしない |
 | `stage-architecture --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `stage-adr --input <path>` | 段階 | diff と `stagingId`、追加時は `assignedId`。書き込みはしない |
 | `stage-rules --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
@@ -27,6 +27,8 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `init-gotchas` | 書 | 承認後に雛形だけの GOTCHAS 台帳を新規作成する |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
+| `stage-gotcha --input <path>` | 段階 | 既存エントリのフィールドを書き換えた diff と `stagingId`。書き込みはしない |
+| `commit-gotchas --staging-id <id>` | 書 | `stagingId` を消費して GOTCHAS の台帳へ書き込む |
 | `scan-adr-candidates` | 読 | `docs/intents/domains/*.md` の `[ADR 候補]` を走査する。候補の配列と `warnings` を返す |
 | `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>` | 書 | 候補のエントリを参照形へ縮める。拒否・失敗は終了コード 3 で `shrinkPending` を返す |
 | `scan-gotcha-candidates` | 読 | `docs/intents/domains/*.md` の `[GOTCHAS 候補]` を走査する。候補の配列と `warnings` を返す。台帳に同じタイトルのエントリがあれば、候補の `ledgerMatches` にその ID が入る |
@@ -41,7 +43,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。`remove-gotcha-candidate` の拒否・失敗も終了コード 3 で返り、`removePending` に `file` / `hash` を積む。
 - 記録が無効なときの拒否は、`shrink-adr-candidate` と `remove-gotcha-candidate` を含めて終了コード 1 で返る。終了コード 3 は「やり直せば通りうる拒否」の契約なので、この拒否には使わない。
 - 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。書き込みの途中で失敗しても同じである。
-- ただし `commit-architecture` と `commit-rules` が `write_failed` で終わったとき、その staging は消費済みになっている。`stage-*` からやり直す。
+- ただし `commit-architecture` と `commit-rules` と `commit-gotchas` が `write_failed` で終わったとき、その staging は消費済みになっている。`stage-*` からやり直す。
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
 ## 記録の有効・無効
@@ -49,7 +51,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `AMATSUKA_METATRON_ENABLE_GOTCHAS` がそれぞれ有効なときだけ行う。値を trim して小文字にし、`1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外は無効である。有効かどうかは `get config` の `features.adr` と `features.gotchas` で確かめる。
 
 - ADR 無効のとき、`stage-adr`・種別が ADR の staging を受ける `commit-architecture`・`shrink-adr-candidate` は `error: "feature_disabled"` で拒否される。
-- GOTCHAS 無効のとき、`init-gotchas`・`append-gotcha`・`tag-gotcha`・`remove-gotcha-candidate` は `error: "feature_disabled"` で拒否される。
+- GOTCHAS 無効のとき、`init-gotchas`・`append-gotcha`・`tag-gotcha`・`stage-gotcha`・`commit-gotchas`・`remove-gotcha-candidate` は `error: "feature_disabled"` で拒否される。
 - 拒否は入力を読む前に行われ、対象ファイルは変わらない。メッセージに変数名と有効にする値が載る。
 - 読み取り系(`get adr`・`get gotchas`・`get gotchas-template`・`scan-adr-candidates`・`scan-gotcha-candidates`)は無効でも使える。
 - `stage-architecture` の `## ADR 一覧` の保護は、ADR 無効でも変わらない。
@@ -146,6 +148,21 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 入力 JSON を持たない。`--id` / `--tag` / `--reason` が必須で、`--date` は任意(省略時は当日日付)。
 
+### stage-gotcha
+
+```json
+{ "id": "GOTCHA-003", "title": "...", "task": "...", "mistake": "...", "cause": "...", "countermeasure": "...", "promotionCandidate": "No", "reason": "書き換えの理由" }
+```
+
+- 必須は `id` だけである。`GOTCHA-3` と `3` のどちらの形も受け付ける。
+- `title` から `promotionCandidate` までの 6 つは、省略すると現行の値を保つ。1 つも変わらない入力は `invalid_input` で拒否される。
+- 値の検証は `append-gotcha` と同じである。`title` を `[解決済み]` / `[対象外]` で始めると `invalid_input` で拒否される。
+- エントリに行が無いフィールドは書き換えられず、`invalid_input` で拒否される。
+- 保たれるもの: 見出しの日付・`GOTCHA-NNN`・タグ、タグの理由行、エントリの範囲の外の全バイト、改行コード。
+- 書き換えた全文を読み直し、対象エントリが入力どおりで他のエントリが変わっていないことを確かめてから staging に保存する。
+- ID が台帳に無いとき、台帳が無いときは `not_found` で拒否される。
+- `reason` は台帳に書かれず、staging の `meta` にだけ残る。
+
 ### shrink-adr-candidate
 
 入力 JSON を持たない。`--file` / `--candidate-id` / `--adr` / `--hash` の 4 つとも必須。
@@ -173,17 +190,17 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 ## stage から commit の 2 段階
 
-ARCHITECTURE と ADR と rules の書き込みは 2 段階で行う。
+ARCHITECTURE と ADR と rules の書き込みと、GOTCHAS のエントリの書き換えは 2 段階で行う。
 
 `stage-*` と `commit-*` は、`updating-architecture` か `capturing-architecture` のスキルの手順の中で実行する。スキルの外で更新が要るときは、Skill ツールで `updating-architecture` を起動してから実行する。
 
 GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append-gotcha`)は 2 段階を取らない。前者は書き込む内容が雛形に固定されており差分が定数であるため、後者は既存を壊さない追記であるためである。
 
-1. `stage-architecture` / `stage-adr` / `stage-rules` のいずれかを実行し、`stagingId` と diff を得る。
+1. `stage-architecture` / `stage-adr` / `stage-rules` / `stage-gotcha` のいずれかを実行し、`stagingId` と diff を得る。
 2. diff を全文提示してユーザーの承認を得る。
-3. `commit-architecture --staging-id <id>`(rules なら `commit-rules --staging-id <id>`)を実行して書き込む。
+3. `commit-architecture --staging-id <id>`(rules なら `commit-rules`、GOTCHAS なら `commit-gotchas`)を実行して書き込む。
 
-`commit-architecture` が受けるのは `stage-architecture` / `stage-adr` の staging、`commit-rules` が受けるのは `stage-rules` の staging である。取り違えると `staging_kind_mismatch` で拒否され、その staging は消費されないまま残る。
+`commit-architecture` が受けるのは `stage-architecture` / `stage-adr` の staging、`commit-rules` が受けるのは `stage-rules` の staging、`commit-gotchas` が受けるのは `stage-gotcha` の staging である。取り違えると `staging_kind_mismatch` で拒否され、その staging は消費されないまま残る。
 
 ### stage が返す diff
 
@@ -206,7 +223,7 @@ GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append
 
 機械的に保証されるのは次の 5 点だけである。
 
-1. diff を計算せずに書き込むことはできない。`commit-architecture` と `commit-rules` は `stagingId` 無しでは失敗する。
+1. diff を計算せずに書き込むことはできない。`commit-architecture` と `commit-rules` と `commit-gotchas` は `stagingId` 無しでは失敗する。
 2. staging は単回使用かつ有効期限つき(既定 30 分)である。使い回しと古い案の遅延適用ができない。
 3. stage 後に対象ファイルが変化していたら、commit は `file_changed` で失敗する。
 4. staging レコードを書き換えて commit すると `tampered` で失敗する。レコードは自身の内容ハッシュ(`recordHash`)を持ち、commit の前に再計算して照合する。`nextContent` だけ・`targetPath` だけ・`expiresAt` だけの差し替えは、いずれも書き込みに至らない。
@@ -216,7 +233,7 @@ GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append
 
 保証されないのは次の 3 点である。
 
-1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` と `commit-rules` を実行しない。
+1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` と `commit-rules` と `commit-gotchas` を実行しない。
 2. **`recordHash` まで整合的に打ち直した改変。** 同じユーザー権限で動くプロセスは正しい `recordHash` を計算できるため、検知できない。`recordHash` の照合が捕まえるのは、偶発的な破損と CLI を経由しない書き換えまでである。staging の内容を変えるときは、保存されたレコードを直接編集せず `stage-*` からやり直す。
 3. **commit が失敗した staging を再実行できること。** 消費の印を付けた後に書き込みが失敗すると、その staging は消費済みのまま残る。`write_failed` で失敗した `stagingId` を再実行しない。`stage-*` からやり直す。
 

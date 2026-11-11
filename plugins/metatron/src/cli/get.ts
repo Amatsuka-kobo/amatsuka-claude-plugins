@@ -130,7 +130,9 @@ export function runGetConfig(ctx: GetContext): void {
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
         "tag-gotcha --id <GOTCHA-NNN> --tag <解決済み|対象外> --reason <理由>"
-      )
+      ),
+      stageGotcha: commandLine("stage-gotcha --input <path>"),
+      commitGotchas: commandLine("commit-gotchas --staging-id <id>")
     },
     inputSchemas: INPUT_SCHEMAS,
     warnings

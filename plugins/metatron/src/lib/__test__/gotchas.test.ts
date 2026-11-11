@@ -9,6 +9,7 @@ import { afterAll, expect, test } from "vitest"
 import { runTsAsync } from "../../testing/run-ts.js"
 import {
   appendGotcha,
+  buildRewrittenText,
   filterGotchas,
   GotchaError,
   type GotchaErrorCode,
@@ -872,4 +873,163 @@ test("G24: null の入力は改行の正規化で {} に変えず、型の検証
     appendGotcha(filePath, null as unknown as typeof VALID_INPUT)
   ).toThrowError(TypeError)
   expect(fs.readFileSync(filePath).equals(before)).toBe(true)
+})
+
+// ---------------------------------------------------------------------------
+// フィールドの書き換え(buildRewrittenText)
+// ---------------------------------------------------------------------------
+
+const REWRITE_BEFORE = ledger([entryBlock(2), entryBlock(1)])
+
+test("GR1: フィールドを書き換えても、範囲外・他のエントリ・見出しの日付と番号は不変", () => {
+  const result = buildRewrittenText(REWRITE_BEFORE, {
+    id: "GOTCHA-001",
+    title: "新しい題",
+    mistake: "書き換えた失敗内容",
+    promotionCandidate: "Yes"
+  })
+
+  expect(result.id).toBe("GOTCHA-001")
+  expect(result.changed).toStrictEqual([
+    "title",
+    "mistake",
+    "promotionCandidate"
+  ])
+
+  // 変更した 3 行だけを元の行に戻すと、元の全文と一致する(他の行は 1 バイトも変わっていない)。
+  const restored = result.text
+    .replace(
+      "### [2026-08-10] GOTCHA-001: 新しい題",
+      "### [2026-08-10] GOTCHA-001: 失敗 1"
+    )
+    .replace("**失敗内容**: 書き換えた失敗内容", "**失敗内容**: 失敗内容 1")
+    .replace("**昇格候補**: Yes\n", "**昇格候補**: No\n")
+  expect(restored).toBe(REWRITE_BEFORE)
+
+  const entry = parseGotchas(result.text).entries.find(
+    (e) => e.id === "GOTCHA-001"
+  )
+  expect(entry).toMatchObject({
+    title: "新しい題",
+    task: "タスク 1",
+    mistake: "書き換えた失敗内容",
+    promotionCandidate: "Yes",
+    date: "2026-08-10",
+    tag: null
+  })
+})
+
+test("GR2: タグとタグの理由行を保ったまま書き換える", () => {
+  const tagged = tagGotchaText(REWRITE_BEFORE, 1)
+  const result = buildRewrittenText(tagged, {
+    id: "1",
+    title: "題を直した",
+    countermeasure: "実行する前に対象を Read して確認し直す"
+  })
+
+  const entry = parseGotchas(result.text).entries.find(
+    (e) => e.id === "GOTCHA-001"
+  )
+  expect(entry?.tag).toBe("解決済み")
+  expect(entry?.title).toBe("題を直した")
+  expect(result.text).toContain(
+    "### [2026-08-10] GOTCHA-001: [解決済み] 題を直した"
+  )
+  expect(result.text).toContain("**[解決済み] (2026-08-20)**: 原因を取り除いた")
+})
+
+function tagGotchaText(text: string, num: number): string {
+  const dir = mkTmp()
+  const filePath = writeLedger(dir, text)
+  tagGotcha(filePath, {
+    id: `GOTCHA-${String(num).padStart(3, "0")}`,
+    tag: "解決済み",
+    reason: "原因を取り除いた",
+    date: "2026-08-20"
+  })
+  return fs.readFileSync(filePath, "utf8")
+}
+
+test("GR3: CRLF の台帳は CRLF のまま書き換わり、LF が混ざらない", () => {
+  const before = REWRITE_BEFORE.replace(/\n/g, "\r\n")
+  const result = buildRewrittenText(before, {
+    id: "GOTCHA-002",
+    title: "CRLF の題",
+    cause: "書き換えた原因"
+  })
+
+  expect(/[^\r]\n/.test(result.text)).toBe(false)
+  expect(result.text).toContain("### [2026-08-10] GOTCHA-002: CRLF の題\r\n")
+  expect(result.text).toContain("**原因 (推測)**: 書き換えた原因\r\n")
+  const entry = parseGotchas(result.text).entries.find(
+    (e) => e.id === "GOTCHA-002"
+  )
+  expect(entry?.cause).toBe("書き換えた原因")
+})
+
+test("GR4: 1 つも変わらない入力(省略・同じ値)は invalid_input で拒否する", () => {
+  expectGotchaError(
+    () => buildRewrittenText(REWRITE_BEFORE, { id: "GOTCHA-001" }),
+    "invalid_input"
+  )
+  expectGotchaError(
+    () =>
+      buildRewrittenText(REWRITE_BEFORE, {
+        id: "GOTCHA-001",
+        title: "失敗 1",
+        task: "タスク 1",
+        promotionCandidate: "No"
+      }),
+    "invalid_input"
+  )
+})
+
+test("GR5: タグで始まる title は invalid_input で拒否する", () => {
+  for (const title of ["[解決済み] 題", "[対象外]題"]) {
+    expectGotchaError(
+      () => buildRewrittenText(REWRITE_BEFORE, { id: "GOTCHA-001", title }),
+      "invalid_input"
+    )
+  }
+})
+
+test("GR6: 存在しない ID は not_found、書式違いの ID は invalid_input", () => {
+  expectGotchaError(
+    () => buildRewrittenText(REWRITE_BEFORE, { id: "GOTCHA-099", task: "x" }),
+    "not_found"
+  )
+  expectGotchaError(
+    () => buildRewrittenText(REWRITE_BEFORE, { id: "abc", task: "x" }),
+    "invalid_input"
+  )
+})
+
+test("GR7: 検証に通らない値(改行・値域外・型違い)は invalid_input で拒否する", () => {
+  for (const patch of [
+    { task: "一行目\n**対策**: 偽の行" },
+    { promotionCandidate: "Maybe" },
+    { title: "" },
+    { cause: 1 as unknown as string }
+  ]) {
+    expectGotchaError(
+      () => buildRewrittenText(REWRITE_BEFORE, { id: "GOTCHA-001", ...patch }),
+      "invalid_input"
+    )
+  }
+})
+
+test("GR8: フィールド行が無いエントリの、その行の書き換えは invalid_input で拒否する", () => {
+  const withoutLine = REWRITE_BEFORE.replace(
+    "**対策**: 対策 1 を実行する前に対象を Read して確認する\n",
+    ""
+  )
+  expect(withoutLine).not.toBe(REWRITE_BEFORE)
+  expectGotchaError(
+    () =>
+      buildRewrittenText(withoutLine, {
+        id: "GOTCHA-001",
+        countermeasure: "対象を Read して確認する"
+      }),
+    "invalid_input"
+  )
 })

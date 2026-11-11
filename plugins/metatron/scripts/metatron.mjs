@@ -1151,6 +1151,182 @@ function buildTaggedText(existing, num, tag, reason, date) {
     warnings: doc.warnings
   };
 }
+var REWRITE_KEYS = [
+  "title",
+  "task",
+  "mistake",
+  "cause",
+  "countermeasure",
+  "promotionCandidate"
+];
+function locateFieldLines(lines, entry) {
+  const found = {};
+  for (let i = entry.startIndex + 1; i < entry.endIndex; i++) {
+    const m = FIELD_LINE_RE.exec(stripCr(lines[i]));
+    if (m === null) continue;
+    const key = FIELD_KEYS[normalizeFieldName(m[1].trim())];
+    if (key === void 0) continue;
+    const value = m[2].trim();
+    const usable = key === "promotionCandidate" ? value === "Yes" || value === "No" : value !== "";
+    const current = found[key];
+    if (current === void 0) found[key] = { index: i, settled: usable };
+    else if (!current.settled && usable)
+      found[key] = { index: i, settled: true };
+  }
+  const out = {};
+  for (const [key, hit] of Object.entries(found)) {
+    out[key] = hit.index;
+  }
+  return out;
+}
+function replaceFieldValue(line, value) {
+  const bare = stripCr(line);
+  const m = FIELD_LINE_RE.exec(bare);
+  let head = bare.slice(0, bare.length - m[2].length);
+  if (head.endsWith(":")) head += " ";
+  return `${head}${value}${line.endsWith("\r") ? "\r" : ""}`;
+}
+function rewriteRejected(message, details = []) {
+  throw new GotchaError("invalid_input", message, details);
+}
+function buildRewrittenText(existing, rawInput) {
+  const input = normalizeInputNewlines(rawInput);
+  const errors = [];
+  for (const key of [...REWRITE_KEYS, "reason"]) {
+    if (input[key] !== void 0 && typeof input[key] !== "string") {
+      errors.push(`${key} \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`);
+    }
+  }
+  if (typeof input.id !== "string") errors.push("id \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002");
+  if (errors.length > 0) {
+    rewriteRejected(
+      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${errors.join(" / ")}`,
+      errors
+    );
+  }
+  const num = parseGotchaId(input.id);
+  if (num === null) {
+    rewriteRejected(
+      `id \u306F GOTCHA-NNN \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${JSON.stringify(input.id)})\u3002`
+    );
+  }
+  const doc = parseGotchas(existing);
+  const entry = findGotchaByNumber(doc, num);
+  if (entry === null) {
+    throw new GotchaError(
+      "not_found",
+      `${formatGotchaId(num)} \u304C \`## ${LIST_SECTION_TITLE}\` \u914D\u4E0B\u306B\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002`
+    );
+  }
+  const current = {
+    title: entry.title,
+    task: entry.task,
+    mistake: entry.mistake,
+    cause: entry.cause,
+    countermeasure: entry.countermeasure,
+    promotionCandidate: entry.promotionCandidate ?? ""
+  };
+  const next = { ...current };
+  for (const key of REWRITE_KEYS) {
+    const value = input[key];
+    if (value === void 0) continue;
+    next[key] = key === "promotionCandidate" ? value : value.trim();
+  }
+  const validation = validateGotchaInput(next);
+  if (validation.errors.length > 0) {
+    rewriteRejected(
+      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${validation.errors.join(" / ")}`,
+      validation.errors
+    );
+  }
+  if (input.title !== void 0 && GOTCHA_TAGS.some((tag) => next.title.startsWith(`[${tag}]`))) {
+    rewriteRejected(
+      `title\u300C${next.title}\u300D\u306F\u30BF\u30B0(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})\u3067\u59CB\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30BF\u30B0\u306F tag-gotcha \u3067\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+  }
+  const changed = REWRITE_KEYS.filter((key) => next[key] !== current[key]);
+  if (changed.length === 0) {
+    rewriteRejected(
+      `${entry.id} \u306F\u73FE\u884C\u306E\u5024\u3068\u540C\u3058\u3067\u3001\u66F8\u304D\u63DB\u3048\u308B\u9805\u76EE\u304C\u3042\u308A\u307E\u305B\u3093\u3002`
+    );
+  }
+  const lines = [...doc.lines];
+  if (changed.includes("title")) {
+    const m = ENTRY_HEADING_RE.exec(stripCr(lines[entry.startIndex]));
+    if (m === null) {
+      rewriteRejected(`${entry.id} \u306E\u898B\u51FA\u3057\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
+    }
+    const tagPart = entry.tag === null ? "" : ` [${entry.tag}]`;
+    const rebuilt = `${m[1]}${tagPart} ${next.title}`;
+    lines[entry.startIndex] = lines[entry.startIndex].endsWith("\r") ? `${rebuilt}\r` : rebuilt;
+  }
+  const fieldLines = locateFieldLines(doc.lines, entry);
+  for (const key of changed) {
+    if (key === "title") continue;
+    const index = fieldLines[key];
+    if (index === void 0) {
+      rewriteRejected(
+        `${entry.id} \u306B ${key} \u306E\u30D5\u30A3\u30FC\u30EB\u30C9\u884C\u304C\u7121\u3044\u305F\u3081\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u305B\u3093\u3002`
+      );
+    }
+    lines[index] = replaceFieldValue(lines[index], next[key]);
+  }
+  const text = lines.join("\n");
+  const after = parseGotchas(text);
+  const problems = [];
+  const entryIndex = doc.entries.indexOf(entry);
+  if (after.entries.length !== doc.entries.length) {
+    problems.push(
+      `\u30A8\u30F3\u30C8\u30EA\u6570\u304C\u5909\u308F\u308A\u307E\u3057\u305F(${doc.entries.length} \u2192 ${after.entries.length})\u3002`
+    );
+  } else {
+    doc.entries.forEach((before, i) => {
+      const reread = after.entries[i];
+      if (i !== entryIndex) {
+        if (reread.raw !== before.raw) {
+          problems.push(`${before.id} \u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
+        }
+        return;
+      }
+      if (reread.id !== before.id || reread.date !== before.date) {
+        problems.push(`${before.id} \u306E\u898B\u51FA\u3057\u306E ID \u307E\u305F\u306F\u65E5\u4ED8\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
+      }
+      if (reread.tag !== before.tag) {
+        problems.push(`${before.id} \u306E\u898B\u51FA\u3057\u306E\u30BF\u30B0\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
+      }
+      for (const key of REWRITE_KEYS) {
+        const got = key === "promotionCandidate" ? reread[key] ?? "" : reread[key];
+        if (got !== next[key]) {
+          problems.push(
+            `${key} \u304C\u5165\u529B\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093(\u8AAD\u307F\u76F4\u3057: ${JSON.stringify(got)})\u3002`
+          );
+        }
+      }
+    });
+  }
+  if (lines.length !== doc.lines.length) {
+    problems.push("\u884C\u6570\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002");
+  }
+  for (let i = 0; i < doc.lines.length; i++) {
+    if (i >= entry.startIndex && i < entry.endIndex) continue;
+    if (lines[i] !== doc.lines[i]) {
+      problems.push(`\u30A8\u30F3\u30C8\u30EA\u306E\u7BC4\u56F2\u306E\u5916(${i + 1} \u884C\u76EE)\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
+      break;
+    }
+  }
+  if (problems.length > 0) {
+    rewriteRejected(
+      `\u66F8\u304D\u63DB\u3048\u305F\u5168\u6587\u3092\u8AAD\u307F\u76F4\u3057\u305F\u7D50\u679C\u304C\u5165\u529B\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093: ${problems.join(" / ")}`,
+      problems
+    );
+  }
+  return {
+    text,
+    id: entry.id,
+    changed,
+    warnings: [...doc.warnings, ...validation.warnings]
+  };
+}
 var LOCK_RETRY_INTERVAL_MS = 50;
 var LOCK_MAX_RETRIES = 20;
 var LOCK_STALE_MS = 6e4;
@@ -2032,7 +2208,7 @@ function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isStagingKind(value) {
-  return value === "architecture" || value === "adr" || value === "rules";
+  return value === "architecture" || value === "adr" || value === "rules" || value === "gotchas";
 }
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -4304,6 +4480,13 @@ function runCommitRules(ctx) {
     stageHint: "stage-rules \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
   });
 }
+function runCommitGotchas(ctx) {
+  runCommit(ctx, {
+    command: "commit-gotchas",
+    acceptedKinds: ["gotchas"],
+    stageHint: "stage-gotcha \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+  });
+}
 
 // src/cli/get.ts
 import fs10 from "node:fs";
@@ -4439,6 +4622,10 @@ var INPUT_SCHEMAS = {
     usage: "init-gotchas",
     note: "\u5165\u529B\u3092\u53D6\u3089\u306A\u3044\u3002\u96DB\u5F62\u3060\u3051\u306E\u53F0\u5E33\u3092\u65B0\u898F\u4F5C\u6210\u3059\u308B\u3002\u5185\u5BB9\u306E\u3042\u308B\u53F0\u5E33\u304C\u3042\u308B\u3068\u304D\u306F already_exists \u3067\u62D2\u5426\u3059\u308B\u3002\u5B9F\u884C\u306E\u524D\u306B\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u3053\u3068\u3002"
   },
+  "stage-gotcha": {
+    input: '{ id: "GOTCHA-003", title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?: "Yes" | "No", reason? }',
+    note: "\u65E2\u5B58\u30A8\u30F3\u30C8\u30EA\u306E\u30D5\u30A3\u30FC\u30EB\u30C9\u3092\u66F8\u304D\u63DB\u3048\u308B\u5DEE\u5206\u3092\u4F5C\u308B\u3002id \u4EE5\u5916\u306F\u7701\u7565\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u306E\u73FE\u884C\u306E\u5024\u3092\u4FDD\u3061\u30011 \u3064\u3082\u5909\u308F\u3089\u306A\u3044\u5165\u529B\u306F\u62D2\u5426\u3059\u308B\u3002\u898B\u51FA\u3057\u306E\u65E5\u4ED8\u30FB\u756A\u53F7\u30FB\u30BF\u30B0\u3001\u30BF\u30B0\u306E\u7406\u7531\u884C\u306F\u4FDD\u3064\u3002title \u3092\u30BF\u30B0\u3067\u59CB\u3081\u3089\u308C\u306A\u3044\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-gotchas --staging-id <id>\u3002"
+  },
   "tag-gotcha": {
     usage: "tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916 --reason <\u7406\u7531>",
     note: "\u898B\u51FA\u3057\u3078\u306E\u30BF\u30B0\u633F\u5165\u3068\u672B\u5C3E\u306E\u7406\u7531\u884C\u306E\u8FFD\u8A18\u3060\u3051\u3092\u884C\u3046\u3002\u672C\u6587\u306F\u66F8\u304D\u63DB\u3048\u306A\u3044\u3002"
@@ -4464,10 +4651,12 @@ var USAGE_LINES = [
   "  stage-architecture --input <path>",
   "  stage-adr --input <path>",
   "  stage-rules --input <path>",
+  "  stage-gotcha --input <path>",
   "",
   "\u66F8\u304D\u8FBC\u307F(\u62D2\u5426\u30FB\u5931\u6557\u306F\u975E 0):",
   "  commit-architecture --staging-id <id>",
   "  commit-rules --staging-id <id>",
+  "  commit-gotchas --staging-id <id>",
   "  init-gotchas",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>",
@@ -4543,7 +4732,9 @@ function runGetConfig(ctx) {
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
         "tag-gotcha --id <GOTCHA-NNN> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>"
-      )
+      ),
+      stageGotcha: commandLine("stage-gotcha --input <path>"),
+      commitGotchas: commandLine("commit-gotchas --staging-id <id>")
     },
     inputSchemas: INPUT_SCHEMAS,
     warnings
@@ -5788,6 +5979,94 @@ function runStageRules(ctx) {
     )
   });
 }
+function runStageGotcha(ctx) {
+  const command = "stage-gotcha";
+  const input = loadInputJson(ctx.flags);
+  if (!input.ok) {
+    emitWriteFailure(
+      command,
+      input.error,
+      input.message,
+      { valid: false },
+      EXIT_USAGE
+    );
+    return;
+  }
+  if (!isPlainObject4(input.value)) {
+    emitWriteFailure(
+      command,
+      "invalid_input",
+      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { id, title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?, reason? } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`,
+      { valid: false },
+      EXIT_USAGE
+    );
+    return;
+  }
+  const config = loadConfig(ctx.cwd);
+  const file = readDocument(config.gotchasPath);
+  const failure = (error, message, extra = {}) => emitWriteFailure(command, error, message, {
+    valid: false,
+    stagingId: null,
+    path: config.gotchasPath,
+    warnings: config.warnings,
+    ...extra
+  });
+  if (!file.exists) {
+    failure("not_found", `${config.gotchasPath} \u304C\u5B58\u5728\u3057\u307E\u305B\u3093\u3002`);
+    return;
+  }
+  const rewrite = input.value;
+  let built;
+  try {
+    built = buildRewrittenText(file.text, rewrite);
+  } catch (error) {
+    if (error instanceof GotchaError) {
+      failure(error.code, error.message, { details: error.details });
+      return;
+    }
+    failure("internal_error", messageOf(error));
+    return;
+  }
+  const warnings = [...config.warnings, ...file.warnings, ...built.warnings];
+  noteWarnings(warnings);
+  const staged = createStaging({
+    projectRoot: config.docRoot,
+    kind: "gotchas",
+    targetPath: config.gotchasPath,
+    nextContent: built.text,
+    baseHash: file.hash,
+    meta: {
+      id: built.id,
+      changed: built.changed,
+      reason: typeof rewrite.reason === "string" ? rewrite.reason : null
+    }
+  });
+  if (!staged.ok) {
+    failure(staged.error, staged.reasons.join(" / "), { warnings });
+    return;
+  }
+  const diff = unifiedDiff(file.text, built.text, {
+    fromLabel: `${config.gotchasRelative} (\u73FE\u884C)`,
+    toLabel: `${config.gotchasRelative} (stage)`
+  });
+  emitResult(command, {
+    ok: true,
+    valid: true,
+    stagingId: staged.stagingId,
+    id: built.id,
+    changed: built.changed,
+    path: config.gotchasPath,
+    relative: config.gotchasRelative,
+    diff: diffPayload(diff, []),
+    expiresAt: new Date(staged.expiresAt).toISOString(),
+    warnings,
+    next: commandLine(`commit-gotchas --staging-id ${staged.stagingId}`),
+    reminder: withTruncationNote(
+      diff,
+      "diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-gotchas \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002CLI \u306F\u627F\u8A8D\u306E\u6709\u7121\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002"
+    )
+  });
+}
 
 // src/cli/main.ts
 var READ_SUBCOMMANDS = /* @__PURE__ */ new Set([
@@ -5803,6 +6082,8 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "stage-rules",
   "commit-architecture",
   "commit-rules",
+  "stage-gotcha",
+  "commit-gotchas",
   "init-gotchas",
   "append-gotcha",
   "tag-gotcha",
@@ -5812,6 +6093,8 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
 var FEATURE_GATES = /* @__PURE__ */ new Map([
   ["stage-adr", "adr"],
   ["shrink-adr-candidate", "adr"],
+  ["stage-gotcha", "gotchas"],
+  ["commit-gotchas", "gotchas"],
   ["init-gotchas", "gotchas"],
   ["append-gotcha", "gotchas"],
   ["tag-gotcha", "gotchas"],
@@ -5887,6 +6170,12 @@ function main(argv, cwd = process.cwd(), env = process.env) {
         return;
       case "commit-rules":
         runCommitRules(ctx);
+        return;
+      case "stage-gotcha":
+        runStageGotcha(ctx);
+        return;
+      case "commit-gotchas":
+        runCommitGotchas(ctx);
         return;
       case "init-gotchas":
         runInitGotchas(ctx);

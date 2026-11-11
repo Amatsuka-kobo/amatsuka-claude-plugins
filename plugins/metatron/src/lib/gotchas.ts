@@ -756,6 +756,252 @@ export function buildTaggedText(
 }
 
 // ---------------------------------------------------------------------------
+// フィールドの書き換え(stage-gotcha / commit-gotchas)
+// ---------------------------------------------------------------------------
+
+/** 書き換えられるフィールド。`id` は対象の指定であり、書き換えの対象ではない。 */
+export const REWRITE_KEYS = [
+  "title",
+  "task",
+  "mistake",
+  "cause",
+  "countermeasure",
+  "promotionCandidate"
+] as const
+export type RewriteKey = (typeof REWRITE_KEYS)[number]
+
+export interface RewriteGotchaInput {
+  /** `GOTCHA-003` の形。数値だけでも受け付ける。 */
+  id: string
+  /** 省略したフィールドは現行の値を保つ。 */
+  title?: string
+  task?: string
+  mistake?: string
+  cause?: string
+  countermeasure?: string
+  promotionCandidate?: string
+  /** 書き換えの理由。台帳には書かず、staging の meta に残す。 */
+  reason?: string
+}
+
+export interface BuildRewriteResult {
+  text: string
+  id: string
+  /** 値が変わったフィールド。 */
+  changed: RewriteKey[]
+  warnings: string[]
+}
+
+// parseEntryFields が採る行と同じ行を探す。テキストのフィールドは最初の空でない値、
+// 昇格候補は最初の Yes / No の行。採れる行が無ければ最初の行を返す。
+function locateFieldLines(
+  lines: string[],
+  entry: GotchaEntry
+): Partial<Record<keyof GotchaFields, number>> {
+  const found: Partial<
+    Record<keyof GotchaFields, { index: number; settled: boolean }>
+  > = {}
+  for (let i = entry.startIndex + 1; i < entry.endIndex; i++) {
+    const m = FIELD_LINE_RE.exec(stripCr(lines[i]))
+    if (m === null) continue
+    const key = FIELD_KEYS[normalizeFieldName(m[1].trim())]
+    if (key === undefined) continue
+    const value = m[2].trim()
+    const usable =
+      key === "promotionCandidate"
+        ? value === "Yes" || value === "No"
+        : value !== ""
+    const current = found[key]
+    if (current === undefined) found[key] = { index: i, settled: usable }
+    else if (!current.settled && usable)
+      found[key] = { index: i, settled: true }
+  }
+  const out: Partial<Record<keyof GotchaFields, number>> = {}
+  for (const [key, hit] of Object.entries(found)) {
+    out[key as keyof GotchaFields] = hit.index
+  }
+  return out
+}
+
+// `**名前**:` までの接頭辞(名前の表記と空白)を残し、値だけを差し替える。
+function replaceFieldValue(line: string, value: string): string {
+  const bare = stripCr(line)
+  const m = FIELD_LINE_RE.exec(bare) as RegExpExecArray
+  let head = bare.slice(0, bare.length - m[2].length)
+  if (head.endsWith(":")) head += " "
+  return `${head}${value}${line.endsWith("\r") ? "\r" : ""}`
+}
+
+function rewriteRejected(message: string, details: string[] = []): never {
+  throw new GotchaError("invalid_input", message, details)
+}
+
+/**
+ * 既存エントリの見出しタイトルと 5 つのフィールド行を書き換えた全文を返す(純関数)。
+ *
+ * 書き換える行はタイトル(変わるときだけ見出し行)と、値が変わるフィールド行だけで、
+ * 見出しの日付・番号・タグ、タグの理由行、エントリの範囲の外、改行コードは保つ。
+ * 組み立てた全文を読み直し、対象エントリが入力どおりで他のエントリが変わっていないことを確かめる。
+ */
+export function buildRewrittenText(
+  existing: string,
+  rawInput: RewriteGotchaInput
+): BuildRewriteResult {
+  const input = normalizeInputNewlines(rawInput)
+
+  const errors: string[] = []
+  for (const key of [...REWRITE_KEYS, "reason"] as const) {
+    if (input[key] !== undefined && typeof input[key] !== "string") {
+      errors.push(`${key} が文字列ではありません。`)
+    }
+  }
+  if (typeof input.id !== "string") errors.push("id が文字列ではありません。")
+  if (errors.length > 0) {
+    rewriteRejected(
+      `入力が書式を満たしていません: ${errors.join(" / ")}`,
+      errors
+    )
+  }
+
+  const num = parseGotchaId(input.id)
+  if (num === null) {
+    rewriteRejected(
+      `id は GOTCHA-NNN の形式で指定してください(受領: ${JSON.stringify(input.id)})。`
+    )
+  }
+
+  const doc = parseGotchas(existing)
+  const entry = findGotchaByNumber(doc, num)
+  if (entry === null) {
+    throw new GotchaError(
+      "not_found",
+      `${formatGotchaId(num)} が \`## ${LIST_SECTION_TITLE}\` 配下に見つかりません。`
+    )
+  }
+
+  const current: Record<RewriteKey, string> = {
+    title: entry.title,
+    task: entry.task,
+    mistake: entry.mistake,
+    cause: entry.cause,
+    countermeasure: entry.countermeasure,
+    promotionCandidate: entry.promotionCandidate ?? ""
+  }
+  const next: Record<RewriteKey, string> = { ...current }
+  for (const key of REWRITE_KEYS) {
+    const value = input[key]
+    if (value === undefined) continue
+    next[key] = key === "promotionCandidate" ? value : value.trim()
+  }
+
+  const validation = validateGotchaInput(next)
+  if (validation.errors.length > 0) {
+    rewriteRejected(
+      `入力が書式を満たしていません: ${validation.errors.join(" / ")}`,
+      validation.errors
+    )
+  }
+  if (
+    input.title !== undefined &&
+    GOTCHA_TAGS.some((tag) => next.title.startsWith(`[${tag}]`))
+  ) {
+    rewriteRejected(
+      `title「${next.title}」はタグ(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})で始められません。タグは tag-gotcha で付けてください。`
+    )
+  }
+
+  const changed = REWRITE_KEYS.filter((key) => next[key] !== current[key])
+  if (changed.length === 0) {
+    rewriteRejected(
+      `${entry.id} は現行の値と同じで、書き換える項目がありません。`
+    )
+  }
+
+  const lines = [...doc.lines]
+  if (changed.includes("title")) {
+    const m = ENTRY_HEADING_RE.exec(stripCr(lines[entry.startIndex]))
+    if (m === null) {
+      rewriteRejected(`${entry.id} の見出しを解析できませんでした。`)
+    }
+    const tagPart = entry.tag === null ? "" : ` [${entry.tag}]`
+    const rebuilt = `${m[1]}${tagPart} ${next.title}`
+    lines[entry.startIndex] = lines[entry.startIndex].endsWith("\r")
+      ? `${rebuilt}\r`
+      : rebuilt
+  }
+  const fieldLines = locateFieldLines(doc.lines, entry)
+  for (const key of changed) {
+    if (key === "title") continue
+    const index = fieldLines[key]
+    if (index === undefined) {
+      rewriteRejected(
+        `${entry.id} に ${key} のフィールド行が無いため書き換えられません。`
+      )
+    }
+    lines[index] = replaceFieldValue(lines[index], next[key])
+  }
+  const text = lines.join("\n")
+
+  // 組み立てた全文を読み直して確かめる。
+  const after = parseGotchas(text)
+  const problems: string[] = []
+  const entryIndex = doc.entries.indexOf(entry)
+  if (after.entries.length !== doc.entries.length) {
+    problems.push(
+      `エントリ数が変わりました(${doc.entries.length} → ${after.entries.length})。`
+    )
+  } else {
+    doc.entries.forEach((before, i) => {
+      const reread = after.entries[i]
+      if (i !== entryIndex) {
+        if (reread.raw !== before.raw) {
+          problems.push(`${before.id} が変わりました。`)
+        }
+        return
+      }
+      if (reread.id !== before.id || reread.date !== before.date) {
+        problems.push(`${before.id} の見出しの ID または日付が変わりました。`)
+      }
+      if (reread.tag !== before.tag) {
+        problems.push(`${before.id} の見出しのタグが変わりました。`)
+      }
+      for (const key of REWRITE_KEYS) {
+        const got =
+          key === "promotionCandidate" ? (reread[key] ?? "") : reread[key]
+        if (got !== next[key]) {
+          problems.push(
+            `${key} が入力と一致しません(読み直し: ${JSON.stringify(got)})。`
+          )
+        }
+      }
+    })
+  }
+  if (lines.length !== doc.lines.length) {
+    problems.push("行数が変わりました。")
+  }
+  for (let i = 0; i < doc.lines.length; i++) {
+    if (i >= entry.startIndex && i < entry.endIndex) continue
+    if (lines[i] !== doc.lines[i]) {
+      problems.push(`エントリの範囲の外(${i + 1} 行目)が変わりました。`)
+      break
+    }
+  }
+  if (problems.length > 0) {
+    rewriteRejected(
+      `書き換えた全文を読み直した結果が入力と一致しません: ${problems.join(" / ")}`,
+      problems
+    )
+  }
+
+  return {
+    text,
+    id: entry.id,
+    changed,
+    warnings: [...doc.warnings, ...validation.warnings]
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ロック(契約 §11「採番と挿入の原子性」)
 // ---------------------------------------------------------------------------
 

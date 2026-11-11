@@ -60,6 +60,11 @@ export const INPUT_SCHEMAS = {
     usage: "init-gotchas",
     note: "入力を取らない。雛形だけの台帳を新規作成する。内容のある台帳があるときは already_exists で拒否する。実行の前にユーザーの承認を得ること。"
   },
+  "stage-gotcha": {
+    input:
+      '{ id: "GOTCHA-003", title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?: "Yes" | "No", reason? }',
+    note: "既存エントリのフィールドを書き換える差分を作る。id 以外は省略したフィールドの現行の値を保ち、1 つも変わらない入力は拒否する。見出しの日付・番号・タグ、タグの理由行は保つ。title をタグで始められない。書き込みは commit-gotchas --staging-id <id>。"
+  },
   "tag-gotcha": {
     usage: "tag-gotcha --id GOTCHA-003 --tag 解決済み|対象外 --reason <理由>",
     note: "見出しへのタグ挿入と末尾の理由行の追記だけを行う。本文は書き換えない。"
@@ -86,10 +91,12 @@ export const USAGE_LINES: readonly string[] = [
   "  stage-architecture --input <path>",
   "  stage-adr --input <path>",
   "  stage-rules --input <path>",
+  "  stage-gotcha --input <path>",
   "",
   "書き込み(拒否・失敗は非 0):",
   "  commit-architecture --staging-id <id>",
   "  commit-rules --staging-id <id>",
+  "  commit-gotchas --staging-id <id>",
   "  init-gotchas",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <解決済み|対象外> --reason <理由>",
