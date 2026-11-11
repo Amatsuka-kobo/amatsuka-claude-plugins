@@ -1386,19 +1386,28 @@ function collectSources(result: ScanResult, skipped: string[]): string[] {
  * root からの相対パスが、各階層の名前の大文字小文字まで一致して実在するか。
  * 大文字小文字を区別しないファイルシステムでも、区別するものと同じ結果を返す。
  */
-function existsWithExactCase(root: string, relative: string): boolean {
+function existsWithExactCase(
+  root: string,
+  relative: string
+): "exists" | "missing" | "link" {
   let current = root
   for (const segment of relative.split("/")) {
     let names: string[]
     try {
       names = fs.readdirSync(current)
     } catch {
-      return false
+      return "missing"
     }
-    if (!names.includes(segment)) return false
+    if (!names.includes(segment)) return "missing"
     current = path.join(current, segment)
+    // リンクの先はプロジェクトの外でありうるため、たどらずに保留する。
+    try {
+      if (fs.lstatSync(current).isSymbolicLink()) return "link"
+    } catch {
+      return "missing"
+    }
   }
-  return true
+  return "exists"
 }
 
 function diffDirectories(
@@ -1431,6 +1440,7 @@ function diffDirectories(
     if (entry.type === "directory") existing.add(entry.path)
   }
   const seen = new Set<string>()
+  const pending: string[] = []
   for (const raw of extractInlineCode(body)) {
     const token = raw.replace(/\/+$/, "")
     if (token === "" || seen.has(token)) continue
@@ -1446,23 +1456,41 @@ function diffDirectories(
     // ツリーは除外ディレクトリ(ビルド出力・node_modules・.git など)と maxDepth より
     // 深い階層を持たないため、ツリーに無いものはファイルシステムで実在を確かめる。
     // ファイルとして実在するものも対象外。
-    if (existsWithExactCase(result.root, token)) continue
-    // パッケージからの相対パス(`web/src` の実体が `packages/web/src`)として実在するもの。
+    const state = existsWithExactCase(result.root, token)
+    if (state === "exists") continue
+    // ここから先は、ルートからのパスとしては実在しないもの。消えたと断定できないものは
+    // findings に出さず、AI が確かめるよう保留に回す。
+    if (state === "link") {
+      pending.push(`${token}(シンボリックリンクを含む)`)
+      continue
+    }
     const suffix = `/${token}`
     if (
       result.tree.some((entry) => entry.path.endsWith(suffix)) ||
       result.files.some((file) => file.includes(`${suffix}/`))
     ) {
+      pending.push(`${token}(同じ名前の階層が別の場所にある)`)
       continue
     }
-    // 走査が打ち切られていると、相対パスとしての不在を断定できない。
-    if (result.truncation.files || result.truncation.walk) continue
+    if (token.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
+      pending.push(`${token}(走査が除外するディレクトリを含む)`)
+      continue
+    }
+    if (result.truncation.files || result.truncation.walk) {
+      pending.push(`${token}(走査が打ち切られた)`)
+      continue
+    }
     findings.push({
       kind: "directory_stale",
       section,
       subject: token,
       detail: `## ${section} に書かれた ${token} が実在しません。`
     })
+  }
+  if (pending.length > 0) {
+    skipped.push(
+      `ディレクトリの消失の保留: ## ${section} に書かれた次のパスはルートからは実在しませんが、消えたと断定できないため判定しませんでした。どこを指すかを確かめてください: ${pending.join(", ")}`
+    )
   }
 }
 

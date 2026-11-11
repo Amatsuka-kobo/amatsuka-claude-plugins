@@ -668,6 +668,31 @@ test("ディレクトリ構成: `..` を含むパスは見ず、大文字小文�
   ])
 })
 
+test("ディレクトリ構成: 消えたと断定できないパスは findings に出さず skipped に保留として返す", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "src/app/page.ts", "")
+  write(dir, "packages/b/src/lib/index.ts", "")
+  write(dir, "packages/web/dist/index.js", "")
+  fs.symlinkSync(os.tmpdir(), path.join(dir, "outlink"))
+
+  const diff = diffArchitecture({
+    scan: scan(dir, { root: dir }),
+    sections: {
+      ディレクトリ構成と責務:
+        "- `src/lib/`\n- `web/dist/`\n- `outlink/x/`\n- `src/gone/`\n"
+    }
+  })
+
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual(["src/gone"])
+  const line = diff.skipped.find((s) =>
+    s.startsWith("ディレクトリの消失の保留")
+  )
+  expect(line).toContain("src/lib(同じ名前の階層が別の場所にある)")
+  expect(line).toContain("web/dist(走査が除外するディレクトリを含む)")
+  expect(line).toContain("outlink/x(シンボリックリンクを含む)")
+})
+
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {
   const { result } = scanFixture()
 

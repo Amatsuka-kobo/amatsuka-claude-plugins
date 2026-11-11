@@ -4180,12 +4180,17 @@ function existsWithExactCase(root, relative) {
     try {
       names = fs7.readdirSync(current);
     } catch {
-      return false;
+      return "missing";
     }
-    if (!names.includes(segment)) return false;
+    if (!names.includes(segment)) return "missing";
     current = path7.join(current, segment);
+    try {
+      if (fs7.lstatSync(current).isSymbolicLink()) return "link";
+    } catch {
+      return "missing";
+    }
   }
-  return true;
+  return "exists";
 }
 function diffDirectories(result, body, findings, skipped) {
   const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
@@ -4203,6 +4208,7 @@ function diffDirectories(result, body, findings, skipped) {
     if (entry.type === "directory") existing.add(entry.path);
   }
   const seen = /* @__PURE__ */ new Set();
+  const pending = [];
   for (const raw of extractInlineCode(body)) {
     const token = raw.replace(/\/+$/, "");
     if (token === "" || seen.has(token)) continue;
@@ -4212,18 +4218,36 @@ function diffDirectories(result, body, findings, skipped) {
     if (!token.includes("/")) continue;
     if (token.split("/").some((seg) => seg === "." || seg === "..")) continue;
     if (existing.has(token)) continue;
-    if (existsWithExactCase(result.root, token)) continue;
-    const suffix = `/${token}`;
-    if (result.tree.some((entry) => entry.path.endsWith(suffix)) || result.files.some((file) => file.includes(`${suffix}/`))) {
+    const state = existsWithExactCase(result.root, token);
+    if (state === "exists") continue;
+    if (state === "link") {
+      pending.push(`${token}(\u30B7\u30F3\u30DC\u30EA\u30C3\u30AF\u30EA\u30F3\u30AF\u3092\u542B\u3080)`);
       continue;
     }
-    if (result.truncation.files || result.truncation.walk) continue;
+    const suffix = `/${token}`;
+    if (result.tree.some((entry) => entry.path.endsWith(suffix)) || result.files.some((file) => file.includes(`${suffix}/`))) {
+      pending.push(`${token}(\u540C\u3058\u540D\u524D\u306E\u968E\u5C64\u304C\u5225\u306E\u5834\u6240\u306B\u3042\u308B)`);
+      continue;
+    }
+    if (token.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
+      pending.push(`${token}(\u8D70\u67FB\u304C\u9664\u5916\u3059\u308B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u542B\u3080)`);
+      continue;
+    }
+    if (result.truncation.files || result.truncation.walk) {
+      pending.push(`${token}(\u8D70\u67FB\u304C\u6253\u3061\u5207\u3089\u308C\u305F)`);
+      continue;
+    }
     findings.push({
       kind: "directory_stale",
       section,
       subject: token,
       detail: `## ${section} \u306B\u66F8\u304B\u308C\u305F ${token} \u304C\u5B9F\u5728\u3057\u307E\u305B\u3093\u3002`
     });
+  }
+  if (pending.length > 0) {
+    skipped.push(
+      `\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306E\u6D88\u5931\u306E\u4FDD\u7559: ## ${section} \u306B\u66F8\u304B\u308C\u305F\u6B21\u306E\u30D1\u30B9\u306F\u30EB\u30FC\u30C8\u304B\u3089\u306F\u5B9F\u5728\u3057\u307E\u305B\u3093\u304C\u3001\u6D88\u3048\u305F\u3068\u65AD\u5B9A\u3067\u304D\u306A\u3044\u305F\u3081\u5224\u5B9A\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3069\u3053\u3092\u6307\u3059\u304B\u3092\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044: ${pending.join(", ")}`
+    );
   }
 }
 function diffDomains(result, domains, findings, skipped) {
