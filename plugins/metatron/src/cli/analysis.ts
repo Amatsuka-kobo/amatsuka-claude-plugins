@@ -86,6 +86,7 @@ export function runDiffArchitecture(ctx: AnalysisContext): void {
         reason: domains.reason
       },
       findings: result.findings,
+      sources: result.sources,
       skipped: result.skipped,
       truncation: scanned.truncation,
       warnings

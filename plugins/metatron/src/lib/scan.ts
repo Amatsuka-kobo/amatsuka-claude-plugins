@@ -152,104 +152,6 @@ const TEST_DEPENDENCY_NAMES: ReadonlySet<string> = new Set([
   "node-tap"
 ])
 
-/** `<pm> run` の後ろに来てもスクリプト名でないサブコマンド。 */
-const PACKAGE_MANAGER_SUBCOMMANDS: ReadonlySet<string> = new Set([
-  "install",
-  "i",
-  "ci",
-  "add",
-  "remove",
-  "rm",
-  "un",
-  "uninstall",
-  "exec",
-  "dlx",
-  "x",
-  "create",
-  "init",
-  "update",
-  "up",
-  "upgrade",
-  "outdated",
-  "audit",
-  "publish",
-  "pack",
-  "link",
-  "unlink",
-  "why",
-  "list",
-  "ls",
-  "run",
-  "workspace",
-  "recursive",
-  "config",
-  "store",
-  "dedupe",
-  "licenses",
-  "info",
-  "version"
-])
-
-/**
- * `## 技術スタック` の inline code から依存名を拾うときに無視する語。
- * npm のパッケージ名の文法には合致するが、依存ライブラリを指していないもの。
- */
-const NON_PACKAGE_TOKENS: ReadonlySet<string> = new Set([
-  "node",
-  "npm",
-  "pnpm",
-  "yarn",
-  "bun",
-  "deno",
-  "git",
-  "docker",
-  "make",
-  "python",
-  "python3",
-  "pip",
-  "uv",
-  "poetry",
-  "go",
-  "rust",
-  "cargo",
-  "java",
-  "kotlin",
-  "swift",
-  "ruby",
-  "php",
-  "sh",
-  "bash",
-  "zsh",
-  "json",
-  "jsonc",
-  "yaml",
-  "yml",
-  "toml",
-  "md",
-  "markdown",
-  "ts",
-  "tsx",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "mts",
-  "cts",
-  "esm",
-  "cjs-only",
-  "src",
-  "dist",
-  "scripts",
-  "main",
-  "dev",
-  "prod",
-  "latest",
-  "workspace",
-  "true",
-  "false",
-  "null"
-])
-
 // ---------------------------------------------------------------------------
 // 型
 // ---------------------------------------------------------------------------
@@ -439,10 +341,6 @@ export interface ScanResult {
 
 export type DiffFindingKind =
   | "section_missing"
-  | "tech_stack_added"
-  | "tech_stack_removed"
-  | "command_added"
-  | "command_removed"
   | "directory_undocumented"
   | "directory_stale"
   | "domain_gap"
@@ -501,6 +399,8 @@ export interface DiffArchitectureInput {
 
 export interface DiffArchitectureResult {
   findings: DiffFinding[]
+  /** 技術スタックとコマンドの定義が置かれうるファイル(root からの相対パス)。 */
+  sources: string[]
   /** 決定的に検出できないため実施しなかった項目の理由。 */
   skipped: string[]
   warnings: string[]
@@ -723,11 +623,6 @@ function extractInlineCode(text: string): string[] {
     m = re.exec(body)
   }
   return out
-}
-
-/** npm のパッケージ名の文法に合致するか。 */
-function looksLikePackageName(token: string): boolean {
-  return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(token)
 }
 
 // ---------------------------------------------------------------------------
@@ -1393,10 +1288,6 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
 
 const FINDING_ORDER: Record<DiffFindingKind, number> = {
   section_missing: 0,
-  tech_stack_added: 1,
-  tech_stack_removed: 2,
-  command_added: 3,
-  command_removed: 4,
   directory_undocumented: 5,
   directory_stale: 6,
   domain_gap: 7,
@@ -1429,88 +1320,49 @@ function normalizeSections(
   return map
 }
 
-function diffTechStack(
-  result: ScanResult,
-  body: string | undefined,
-  findings: DiffFinding[]
-): void {
-  const section = "技術スタック"
-  if (body === undefined) return
+/**
+ * 技術スタックとコマンドの定義が置かれうるファイルの名前。
+ * `## 技術スタック` と `## コマンド定義` は要約であり、マニフェストの写しではないため
+ * 機械的に突き合わせない。突き合わせる AI が読む先として、ありかだけを返す。
+ */
+const SOURCE_FILE_RES: readonly RegExp[] = [
+  // マニフェスト
+  /^package\.json$/,
+  /^deno\.jsonc?$/,
+  /^pyproject\.toml$/,
+  /^requirements[^/]*\.txt$/,
+  /^Pipfile$/,
+  /^go\.mod$/,
+  /^Cargo\.toml$/,
+  /^Gemfile$/,
+  /^composer\.json$/,
+  /^pom\.xml$/,
+  /^build\.gradle(\.kts)?$/,
+  /^mix\.exs$/,
+  /\.csproj$/,
+  // タスクランナー
+  /^Makefile$/,
+  /^[Jj]ustfile$/,
+  /^Taskfile\.ya?ml$/,
+  // コンテナ
+  /^Dockerfile(\..+)?$/,
+  /\.Dockerfile$/,
+  /^(docker-)?compose[^/]*\.ya?ml$/,
+  /^devcontainer\.json$/
+]
 
-  const declared = new Set<string>()
-  for (const dep of [
-    ...result.dependencies.dependencies,
-    ...result.dependencies.devDependencies
-  ]) {
-    declared.add(dep.name)
-    // 依存名が本文のどこかに現れていれば「記載あり」とみなす。
-    if (!body.includes(dep.name)) {
-      findings.push({
-        kind: "tech_stack_added",
-        section,
-        subject: dep.name,
-        detail: `package.json の依存 ${dep.name} が ## ${section} に記載されていません。`
-      })
-    }
+function collectSources(result: ScanResult, skipped: string[]): string[] {
+  if (result.truncation.files || result.truncation.walk) {
+    skipped.push(
+      "技術スタック / コマンドの定義のありか: ファイル走査が打ち切り上限に達したため、sources は一部だけです。"
+    )
   }
-
-  // 逆向き。inline code の中で npm のパッケージ名の形をしたものだけを対象にする。
-  // 散文の中の名前は決定的に取り出せないため見ない(意味的な突き合わせをしない)。
-  const seen = new Set<string>()
-  for (const token of extractInlineCode(body)) {
-    if (seen.has(token)) continue
-    seen.add(token)
-    if (!looksLikePackageName(token)) continue
-    if (NON_PACKAGE_TOKENS.has(token)) continue
-    if (declared.has(token)) continue
-    findings.push({
-      kind: "tech_stack_removed",
-      section,
-      subject: token,
-      detail: `## ${section} に書かれた ${token} が package.json の依存にありません。`
+  return result.files
+    .filter((file) => {
+      const base = file.slice(file.lastIndexOf("/") + 1)
+      return SOURCE_FILE_RES.some((re) => re.test(base))
     })
-  }
-}
-
-function diffCommands(
-  result: ScanResult,
-  body: string | undefined,
-  findings: DiffFinding[]
-): void {
-  const section = "コマンド定義"
-  if (body === undefined) return
-
-  const scriptNames = new Set(result.scripts.map((s) => s.name))
-
-  for (const command of result.commands) {
-    const mentioned =
-      body.includes(command.script) || body.includes(command.command)
-    if (mentioned) continue
-    findings.push({
-      kind: "command_added",
-      section,
-      subject: command.script,
-      detail: `package.json の scripts.${command.script}(${command.kind})が ## ${section} に記載されていません。`
-    })
-  }
-
-  const re = /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?([A-Za-z0-9:_.-]+)/g
-  const seen = new Set<string>()
-  let m = re.exec(body)
-  while (m !== null) {
-    const name = m[1] ?? ""
-    m = re.exec(body)
-    if (name === "" || seen.has(name)) continue
-    seen.add(name)
-    if (PACKAGE_MANAGER_SUBCOMMANDS.has(name)) continue
-    if (scriptNames.has(name)) continue
-    findings.push({
-      kind: "command_removed",
-      section,
-      subject: name,
-      detail: `## ${section} に書かれたコマンド ${name} が package.json の scripts にありません。`
-    })
-  }
+    .sort(compareStrings)
 }
 
 function diffDirectories(
@@ -1641,14 +1493,10 @@ function diffArchitectureInner(
     })
   }
 
-  if (input.scan.dependencies.source === null) {
-    skipped.push(
-      "技術スタック / コマンドの突き合わせ: package.json を読めなかったため検出しませんでした。"
-    )
-  } else {
-    diffTechStack(input.scan, sections.get("技術スタック"), findings)
-    diffCommands(input.scan, sections.get("コマンド定義"), findings)
-  }
+  const sources = collectSources(input.scan, skipped)
+  skipped.push(
+    "技術スタック / コマンド定義の突き合わせ: 要約として書く節のため機械的には検出しません。書かれた技術とコマンドが sources に残っているかを読んで確かめてください。"
+  )
 
   diffDirectories(input.scan, sections.get("ディレクトリ構成と責務"), findings)
   diffDomains(input.scan, input.domains, findings, skipped)
@@ -1667,7 +1515,7 @@ function diffArchitectureInner(
       compareStrings(a.subject, b.subject)
   )
 
-  return { findings, skipped, warnings }
+  return { findings, sources, skipped, warnings }
 }
 
 /**
@@ -1689,6 +1537,7 @@ export function diffArchitecture(
     const reason = error instanceof Error ? error.message : String(error)
     return {
       findings: [],
+      sources: [],
       skipped: [],
       warnings: [`乖離候補の算出に失敗しました: ${reason}`]
     }

@@ -3203,97 +3203,6 @@ var TEST_DEPENDENCY_NAMES = /* @__PURE__ */ new Set([
   "@testing-library/react",
   "node-tap"
 ]);
-var PACKAGE_MANAGER_SUBCOMMANDS = /* @__PURE__ */ new Set([
-  "install",
-  "i",
-  "ci",
-  "add",
-  "remove",
-  "rm",
-  "un",
-  "uninstall",
-  "exec",
-  "dlx",
-  "x",
-  "create",
-  "init",
-  "update",
-  "up",
-  "upgrade",
-  "outdated",
-  "audit",
-  "publish",
-  "pack",
-  "link",
-  "unlink",
-  "why",
-  "list",
-  "ls",
-  "run",
-  "workspace",
-  "recursive",
-  "config",
-  "store",
-  "dedupe",
-  "licenses",
-  "info",
-  "version"
-]);
-var NON_PACKAGE_TOKENS = /* @__PURE__ */ new Set([
-  "node",
-  "npm",
-  "pnpm",
-  "yarn",
-  "bun",
-  "deno",
-  "git",
-  "docker",
-  "make",
-  "python",
-  "python3",
-  "pip",
-  "uv",
-  "poetry",
-  "go",
-  "rust",
-  "cargo",
-  "java",
-  "kotlin",
-  "swift",
-  "ruby",
-  "php",
-  "sh",
-  "bash",
-  "zsh",
-  "json",
-  "jsonc",
-  "yaml",
-  "yml",
-  "toml",
-  "md",
-  "markdown",
-  "ts",
-  "tsx",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "mts",
-  "cts",
-  "esm",
-  "cjs-only",
-  "src",
-  "dist",
-  "scripts",
-  "main",
-  "dev",
-  "prod",
-  "latest",
-  "workspace",
-  "true",
-  "false",
-  "null"
-]);
 var DEFAULT_SCAN_LIMITS = {
   maxDepth: 3,
   maxEntries: 2e4,
@@ -3477,9 +3386,6 @@ function extractInlineCode(text) {
     m = re.exec(body);
   }
   return out;
-}
-function looksLikePackageName(token) {
-  return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(token);
 }
 function recordFile(state, rel) {
   state.fileCount += 1;
@@ -3975,10 +3881,6 @@ function scan(startDir, options = {}) {
 }
 var FINDING_ORDER = {
   section_missing: 0,
-  tech_stack_added: 1,
-  tech_stack_removed: 2,
-  command_added: 3,
-  command_removed: 4,
   directory_undocumented: 5,
   directory_stale: 6,
   domain_gap: 7,
@@ -4006,70 +3908,41 @@ function normalizeSections(sections) {
   }
   return map;
 }
-function diffTechStack(result, body, findings) {
-  const section = "\u6280\u8853\u30B9\u30BF\u30C3\u30AF";
-  if (body === void 0) return;
-  const declared = /* @__PURE__ */ new Set();
-  for (const dep of [
-    ...result.dependencies.dependencies,
-    ...result.dependencies.devDependencies
-  ]) {
-    declared.add(dep.name);
-    if (!body.includes(dep.name)) {
-      findings.push({
-        kind: "tech_stack_added",
-        section,
-        subject: dep.name,
-        detail: `package.json \u306E\u4F9D\u5B58 ${dep.name} \u304C ## ${section} \u306B\u8A18\u8F09\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002`
-      });
-    }
+var SOURCE_FILE_RES = [
+  // マニフェスト
+  /^package\.json$/,
+  /^deno\.jsonc?$/,
+  /^pyproject\.toml$/,
+  /^requirements[^/]*\.txt$/,
+  /^Pipfile$/,
+  /^go\.mod$/,
+  /^Cargo\.toml$/,
+  /^Gemfile$/,
+  /^composer\.json$/,
+  /^pom\.xml$/,
+  /^build\.gradle(\.kts)?$/,
+  /^mix\.exs$/,
+  /\.csproj$/,
+  // タスクランナー
+  /^Makefile$/,
+  /^[Jj]ustfile$/,
+  /^Taskfile\.ya?ml$/,
+  // コンテナ
+  /^Dockerfile(\..+)?$/,
+  /\.Dockerfile$/,
+  /^(docker-)?compose[^/]*\.ya?ml$/,
+  /^devcontainer\.json$/
+];
+function collectSources(result, skipped) {
+  if (result.truncation.files || result.truncation.walk) {
+    skipped.push(
+      "\u6280\u8853\u30B9\u30BF\u30C3\u30AF / \u30B3\u30DE\u30F3\u30C9\u306E\u5B9A\u7FA9\u306E\u3042\u308A\u304B: \u30D5\u30A1\u30A4\u30EB\u8D70\u67FB\u304C\u6253\u3061\u5207\u308A\u4E0A\u9650\u306B\u9054\u3057\u305F\u305F\u3081\u3001sources \u306F\u4E00\u90E8\u3060\u3051\u3067\u3059\u3002"
+    );
   }
-  const seen = /* @__PURE__ */ new Set();
-  for (const token of extractInlineCode(body)) {
-    if (seen.has(token)) continue;
-    seen.add(token);
-    if (!looksLikePackageName(token)) continue;
-    if (NON_PACKAGE_TOKENS.has(token)) continue;
-    if (declared.has(token)) continue;
-    findings.push({
-      kind: "tech_stack_removed",
-      section,
-      subject: token,
-      detail: `## ${section} \u306B\u66F8\u304B\u308C\u305F ${token} \u304C package.json \u306E\u4F9D\u5B58\u306B\u3042\u308A\u307E\u305B\u3093\u3002`
-    });
-  }
-}
-function diffCommands(result, body, findings) {
-  const section = "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9";
-  if (body === void 0) return;
-  const scriptNames = new Set(result.scripts.map((s) => s.name));
-  for (const command of result.commands) {
-    const mentioned = body.includes(command.script) || body.includes(command.command);
-    if (mentioned) continue;
-    findings.push({
-      kind: "command_added",
-      section,
-      subject: command.script,
-      detail: `package.json \u306E scripts.${command.script}(${command.kind})\u304C ## ${section} \u306B\u8A18\u8F09\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002`
-    });
-  }
-  const re = /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?([A-Za-z0-9:_.-]+)/g;
-  const seen = /* @__PURE__ */ new Set();
-  let m = re.exec(body);
-  while (m !== null) {
-    const name = m[1] ?? "";
-    m = re.exec(body);
-    if (name === "" || seen.has(name)) continue;
-    seen.add(name);
-    if (PACKAGE_MANAGER_SUBCOMMANDS.has(name)) continue;
-    if (scriptNames.has(name)) continue;
-    findings.push({
-      kind: "command_removed",
-      section,
-      subject: name,
-      detail: `## ${section} \u306B\u66F8\u304B\u308C\u305F\u30B3\u30DE\u30F3\u30C9 ${name} \u304C package.json \u306E scripts \u306B\u3042\u308A\u307E\u305B\u3093\u3002`
-    });
-  }
+  return result.files.filter((file) => {
+    const base = file.slice(file.lastIndexOf("/") + 1);
+    return SOURCE_FILE_RES.some((re) => re.test(base));
+  }).sort(compareStrings);
 }
 function diffDirectories(result, body, findings) {
   const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
@@ -4168,14 +4041,10 @@ function diffArchitectureInner(input) {
       detail: exists ? `## ${heading} \u304C ARCHITECTURE \u306B\u3042\u308A\u307E\u305B\u3093\u3002` : `ARCHITECTURE \u304C\u7121\u3044\u305F\u3081 ## ${heading} \u3082\u3042\u308A\u307E\u305B\u3093\u3002`
     });
   }
-  if (input.scan.dependencies.source === null) {
-    skipped.push(
-      "\u6280\u8853\u30B9\u30BF\u30C3\u30AF / \u30B3\u30DE\u30F3\u30C9\u306E\u7A81\u304D\u5408\u308F\u305B: package.json \u3092\u8AAD\u3081\u306A\u304B\u3063\u305F\u305F\u3081\u691C\u51FA\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002"
-    );
-  } else {
-    diffTechStack(input.scan, sections.get("\u6280\u8853\u30B9\u30BF\u30C3\u30AF"), findings);
-    diffCommands(input.scan, sections.get("\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9"), findings);
-  }
+  const sources = collectSources(input.scan, skipped);
+  skipped.push(
+    "\u6280\u8853\u30B9\u30BF\u30C3\u30AF / \u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9\u306E\u7A81\u304D\u5408\u308F\u305B: \u8981\u7D04\u3068\u3057\u3066\u66F8\u304F\u7BC0\u306E\u305F\u3081\u6A5F\u68B0\u7684\u306B\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002\u66F8\u304B\u308C\u305F\u6280\u8853\u3068\u30B3\u30DE\u30F3\u30C9\u304C sources \u306B\u6B8B\u3063\u3066\u3044\u308B\u304B\u3092\u8AAD\u3093\u3067\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002"
+  );
   diffDirectories(input.scan, sections.get("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9"), findings);
   diffDomains(input.scan, input.domains, findings, skipped);
   skipped.push(
@@ -4187,7 +4056,7 @@ function diffArchitectureInner(input) {
   findings.sort(
     (a, b) => FINDING_ORDER[a.kind] - FINDING_ORDER[b.kind] || compareStrings(a.subject, b.subject)
   );
-  return { findings, skipped, warnings };
+  return { findings, sources, skipped, warnings };
 }
 function diffArchitecture(input) {
   try {
@@ -4196,6 +4065,7 @@ function diffArchitecture(input) {
     const reason = error instanceof Error ? error.message : String(error);
     return {
       findings: [],
+      sources: [],
       skipped: [],
       warnings: [`\u4E56\u96E2\u5019\u88DC\u306E\u7B97\u51FA\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${reason}`]
     };
@@ -4323,6 +4193,7 @@ function runDiffArchitecture(ctx) {
         reason: domains.reason
       },
       findings: result.findings,
+      sources: result.sources,
       skipped: result.skipped,
       truncation: scanned.truncation,
       warnings

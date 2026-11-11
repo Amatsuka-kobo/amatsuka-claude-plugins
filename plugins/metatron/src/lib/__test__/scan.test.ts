@@ -451,80 +451,61 @@ function scanFixture(): { dir: string; result: ScanResult } {
   return { dir, result: scan(dir, { root: dir }) }
 }
 
-test("技術スタックの追加: package.json の依存が節に無い", () => {
-  const { result } = scanFixture()
-
-  const diff = diffArchitecture({
-    scan: result,
-    sections: { 技術スタック: "| 名前 | 用途 |\n| `zod` | 検証 |\n" }
-  })
-
-  const added = subjectsOf(diff.findings, "tech_stack_added")
-  expect(added).toContain("vitest")
-  expect(added).toContain("esbuild")
-  expect(added).not.toContain("zod")
-})
-
-test("技術スタックの削除: 節に書かれた依存が package.json に無い", () => {
-  const { result } = scanFixture()
-
-  const diff = diffArchitecture({
-    scan: result,
-    sections: [
-      {
-        heading: "技術スタック",
-        body: "`zod` / `vitest` / `esbuild` / `left-pad` を使う。\n"
-      }
-    ]
-  })
-
-  const removed = subjectsOf(diff.findings, "tech_stack_removed")
-  expect(removed).toEqual(["left-pad"])
-  expect(subjectsOf(diff.findings, "tech_stack_added")).toEqual([])
-})
-
-test("技術スタック: フェンス内の inline code は削除候補にしない", () => {
+test("技術スタック・コマンド: 節の中身によらず findings にせず、理由を skipped に返す", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({
     scan: result,
     sections: {
-      技術スタック: "`zod` `vitest` `esbuild`\n\n```\n`left-pad`\n```\n"
+      技術スタック: "| 言語 | TypeScript |\n`left-pad`\n",
+      コマンド定義: "`pnpm run typecheck`\n`pnpm --filter x build`\n"
     }
   })
 
-  expect(subjectsOf(diff.findings, "tech_stack_removed")).toEqual([])
+  const sectionsOfFindings = diff.findings.map((f) => f.section)
+  expect(sectionsOfFindings).not.toContain("技術スタック")
+  expect(sectionsOfFindings).not.toContain("コマンド定義")
+  expect(
+    diff.skipped.some((s) =>
+      s.startsWith("技術スタック / コマンド定義の突き合わせ")
+    )
+  ).toBe(true)
 })
 
-test("コマンドの変更: 節に無い scripts と、scripts に無いコマンドの両方を返す", () => {
-  const { result } = scanFixture()
+test("sources: マニフェスト・タスクランナー・コンテナ定義を階層を問わず返す", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "services/api/pyproject.toml", "")
+  write(dir, "services/api/requirements-dev.txt", "")
+  write(dir, "go/go.mod", "")
+  write(dir, "Makefile", "")
+  write(dir, "justfile", "")
+  write(dir, "Dockerfile", "")
+  write(dir, "docker/app.Dockerfile", "")
+  write(dir, "compose.dev.yaml", "")
+  write(dir, ".devcontainer/devcontainer.json", "{}")
+  write(dir, "src/index.ts", "")
+  write(dir, "docs/makefile-notes.md", "")
 
   const diff = diffArchitecture({
-    scan: result,
-    sections: {
-      コマンド定義:
-        "| 用途 | コマンド |\n| test | `pnpm run test` |\n| 型 | `pnpm run typecheck` |\n"
-    }
+    scan: scan(dir, { root: dir }),
+    sections: {}
   })
 
-  const added = subjectsOf(diff.findings, "command_added")
-  expect(added).toEqual(["build", "lint"])
-  expect(subjectsOf(diff.findings, "command_removed")).toEqual(["typecheck"])
-})
-
-test("コマンドの変更: パッケージマネージャのサブコマンドは削除候補にしない", () => {
-  const { result } = scanFixture()
-
-  const diff = diffArchitecture({
-    scan: result,
-    sections: {
-      コマンド定義:
-        "`pnpm install` / `pnpm run test` / `pnpm run lint` / `pnpm run build`\n"
-    }
-  })
-
-  expect(subjectsOf(diff.findings, "command_removed")).toEqual([])
-  expect(subjectsOf(diff.findings, "command_added")).toEqual([])
+  expect(diff.sources).toEqual(
+    [
+      ".devcontainer/devcontainer.json",
+      "Dockerfile",
+      "Makefile",
+      "compose.dev.yaml",
+      "docker/app.Dockerfile",
+      "go/go.mod",
+      "justfile",
+      "package.json",
+      "services/api/pyproject.toml",
+      "services/api/requirements-dev.txt"
+    ].sort()
+  )
 })
 
 test("ドメインマップの穴: どの glob にも一致しないソースディレクトリ", () => {
