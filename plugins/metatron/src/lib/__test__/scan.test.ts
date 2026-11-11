@@ -13,6 +13,7 @@ import {
   type DiffFinding,
   type DiffFindingKind,
   diffArchitecture,
+  GIT_REPOSITORY_ENV_KEYS,
   type ScanResult,
   scan
 } from "../scan.js"
@@ -219,9 +220,7 @@ test("S3: node_modules / .git / ビルド出力がツリーから除外される
 // 継承した GIT_DIR 等が別のリポジトリを指さないよう外して git を呼ぶ。
 function git(dir: string, args: string[]): void {
   const env = { ...process.env }
-  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) {
-    delete env[key]
-  }
+  for (const key of GIT_REPOSITORY_ENV_KEYS) delete env[key]
   execFileSync("git", args, { cwd: dir, env })
 }
 
@@ -280,7 +279,42 @@ test("S3: git 管理外では .gitignore があっても全体を走査する", 
 
   const result = scan(dir, { root: dir })
 
+  expect(result.gitIgnoreApplied).toBe(false)
   expect(result.files).toContain("private/secret.txt")
+
+  const diff = diffArchitecture({
+    scan: result,
+    sections: { ドメインマップ: "" },
+    domains: { impl: ["private/**"], gone: ["gone/*.ts"] }
+  })
+  const dead = diff.findings.filter((f) => f.kind === "domain_dead_glob")
+  expect(dead.map((f) => f.detail)).toEqual([
+    "ドメイン gone の glob gone/*.ts がどのファイルにも一致しません。"
+  ])
+})
+
+test("S3: 継承した GIT_DIR が別のリポジトリを指していても root のリポジトリの ignore を使う", () => {
+  const other = mkTmp()
+  git(other, ["init", "-q"])
+  // GIT_DIR だけを継ぐと git は cwd を作業ツリーの最上位とみなし、上の階層の
+  // .gitignore を読まない。差が出るよう、ignore をリポジトリの最上位にだけ置く。
+  const repo = mkTmp()
+  git(repo, ["init", "-q"])
+  write(repo, ".gitignore", "pkg/private/\n")
+  write(repo, "pkg/private/secret.txt", "")
+  write(repo, "pkg/src/index.ts", "")
+  const dir = path.join(repo, "pkg")
+
+  const saved = process.env.GIT_DIR
+  process.env.GIT_DIR = path.join(other, ".git")
+  try {
+    const result = scan(dir, { root: dir })
+    expect(result.gitIgnoreApplied).toBe(true)
+    expect(result.files).not.toContain("private/secret.txt")
+  } finally {
+    if (saved === undefined) delete process.env.GIT_DIR
+    else process.env.GIT_DIR = saved
+  }
 })
 
 test("ドメインマップ: ignore 済みのパスは穴に出ず、それにしか一致しない glob は死んだ glob になる", () => {

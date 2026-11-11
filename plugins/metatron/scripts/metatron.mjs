@@ -3599,11 +3599,18 @@ function extractInlineCode(text) {
   }
   return out;
 }
+var GIT_REPOSITORY_ENV_KEYS = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE"
+];
 function gitIgnoredPaths(root) {
   const env = { ...process.env };
-  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) {
-    delete env[key];
-  }
+  for (const key of GIT_REPOSITORY_ENV_KEYS) delete env[key];
   try {
     const res = spawnSync3(
       "git",
@@ -3625,10 +3632,10 @@ function gitIgnoredPaths(root) {
         windowsHide: true
       }
     );
-    if (res.status !== 0 || typeof res.stdout !== "string") return /* @__PURE__ */ new Set();
+    if (res.status !== 0 || typeof res.stdout !== "string") return null;
     return new Set(res.stdout.split("\0").filter((p) => p !== ""));
   } catch {
-    return /* @__PURE__ */ new Set();
+    return null;
   }
 }
 function isIgnored(ignored, rel, isDirectory) {
@@ -4015,6 +4022,7 @@ function scanInner(startDir, options) {
     documents: false,
     notes: []
   };
+  const ignored = gitIgnoredPaths(root);
   const state = {
     limits,
     tree: [],
@@ -4028,7 +4036,7 @@ function scanInner(startDir, options) {
     visited: 0,
     truncation,
     unreadable: [],
-    ignored: gitIgnoredPaths(root)
+    ignored: ignored ?? /* @__PURE__ */ new Set()
   };
   walkDirectory(state, root, "", 0);
   if (state.unreadable.length > 0) {
@@ -4091,6 +4099,7 @@ function scanInner(startDir, options) {
     tree: state.tree,
     files: state.files,
     symlinks: state.symlinks,
+    gitIgnoreApplied: ignored !== null,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -4124,6 +4133,7 @@ function scan(startDir, options = {}) {
       tree: [],
       files: [],
       symlinks: [],
+      gitIgnoreApplied: false,
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -4349,7 +4359,7 @@ function diffDomains(result, domains, findings, skipped) {
       kind: "domain_dead_glob",
       section,
       subject: g.glob,
-      detail: `\u30C9\u30E1\u30A4\u30F3 ${g.domain} \u306E glob ${g.glob} \u304C\u3001gitignore \u3092\u9664\u304F\u8D70\u67FB\u5BFE\u8C61\u306E\u3069\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u3082\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002`
+      detail: result.gitIgnoreApplied ? `\u30C9\u30E1\u30A4\u30F3 ${g.domain} \u306E glob ${g.glob} \u304C\u3001gitignore \u3092\u9664\u304F\u8D70\u67FB\u5BFE\u8C61\u306E\u3069\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u3082\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002` : `\u30C9\u30E1\u30A4\u30F3 ${g.domain} \u306E glob ${g.glob} \u304C\u3069\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u3082\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002`
     });
   }
   if (unconfirmedGlobs.length > 0) {

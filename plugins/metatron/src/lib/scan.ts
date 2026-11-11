@@ -332,6 +332,8 @@ export interface ScanResult {
   files: string[]
   /** 走査がたどらなかったシンボリックリンク(root からの相対パス)。リンク先は見ない。 */
   symlinks: string[]
+  /** git の ignore に当たるパスを走査から外したか。git が使えないときは `false`。 */
+  gitIgnoreApplied: boolean
   /** 除外ディレクトリを除いたファイルの総数。 */
   fileCount: number
   testFrameworks: TestFrameworkFacts
@@ -650,17 +652,29 @@ interface WalkState {
 }
 
 /**
+ * git フックの中などで継承すると、root と別のリポジトリやインデックスを
+ * 参照させうる環境変数。GIT_CEILING_DIRECTORIES はリポジトリの探索範囲を
+ * 狭めるだけで別のリポジトリを指さず、config.ts のルート解決も従うので外さない。
+ */
+export const GIT_REPOSITORY_ENV_KEYS: readonly string[] = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE"
+]
+
+/**
  * root から見て git の ignore に当たるパス。ディレクトリは末尾に `/` を付けて持つ。
- * git 未インストール・git 管理外・失敗のときは空集合を返し、除外しない。
+ * git 未インストール・git 管理外・失敗のときは `null` を返し、呼び出し元は除外しない。
  * add 前の未追跡ファイルは ignore に当たらない限り走査に残す。
  * `--directory` は、中身がすべて ignore 済みのディレクトリも `dir/` の 1 件にまとめる。
  */
-function gitIgnoredPaths(root: string): ReadonlySet<string> {
-  // git フックの中などで継承した GIT_DIR 等は、root と別のリポジトリを指しうるので外す。
+function gitIgnoredPaths(root: string): ReadonlySet<string> | null {
   const env = { ...process.env }
-  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) {
-    delete env[key]
-  }
+  for (const key of GIT_REPOSITORY_ENV_KEYS) delete env[key]
   try {
     const res = spawnSync(
       "git",
@@ -682,10 +696,10 @@ function gitIgnoredPaths(root: string): ReadonlySet<string> {
         windowsHide: true
       }
     )
-    if (res.status !== 0 || typeof res.stdout !== "string") return new Set()
+    if (res.status !== 0 || typeof res.stdout !== "string") return null
     return new Set(res.stdout.split("\0").filter((p) => p !== ""))
   } catch {
-    return new Set()
+    return null
   }
 }
 
@@ -1211,6 +1225,7 @@ function scanInner(
     notes: []
   }
 
+  const ignored = gitIgnoredPaths(root)
   const state: WalkState = {
     limits,
     tree: [],
@@ -1224,7 +1239,7 @@ function scanInner(
     visited: 0,
     truncation,
     unreadable: [],
-    ignored: gitIgnoredPaths(root)
+    ignored: ignored ?? new Set()
   }
   walkDirectory(state, root, "", 0)
 
@@ -1292,6 +1307,7 @@ function scanInner(
     tree: state.tree,
     files: state.files,
     symlinks: state.symlinks,
+    gitIgnoreApplied: ignored !== null,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -1333,6 +1349,7 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
       tree: [],
       files: [],
       symlinks: [],
+      gitIgnoreApplied: false,
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -1639,7 +1656,9 @@ function diffDomains(
       kind: "domain_dead_glob",
       section,
       subject: g.glob,
-      detail: `ドメイン ${g.domain} の glob ${g.glob} が、gitignore を除く走査対象のどのファイルにも一致しません。`
+      detail: result.gitIgnoreApplied
+        ? `ドメイン ${g.domain} の glob ${g.glob} が、gitignore を除く走査対象のどのファイルにも一致しません。`
+        : `ドメイン ${g.domain} の glob ${g.glob} がどのファイルにも一致しません。`
     })
   }
   if (unconfirmedGlobs.length > 0) {
