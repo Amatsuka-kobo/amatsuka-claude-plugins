@@ -41,7 +41,9 @@ flowchart TD
 | バックエンド | Express 4.21 |
 | ORM / データ層 | Prisma 5.22 |
 | パッケージマネージャ | pnpm 9.12 |
-| 主要ライブラリ | React 18.3 / Zod 3.23 / TanStack Query 5.59 |
+| UI | React 18.3 |
+| 入力検証 | Zod 3.23 |
+| データ取得 | TanStack Query 5.59 |
 
 - Next.js のメジャー更新は手動でのみ行う。
 - Prisma のスキーマ変更は `prisma migrate` で行い、SQL を直接当てない。

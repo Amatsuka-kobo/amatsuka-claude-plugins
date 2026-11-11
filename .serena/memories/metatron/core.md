@@ -26,7 +26,7 @@ deny hook の保証範囲は限定的で、次は**対象外**(「破りよう�
 - hook 自身の失敗。metatron の不具合で全編集が止まる損害のほうが大きいためフェイルオープン。
 
 CLI が無価値という意味ではない。deny hook は「直接書かせない」しかできず、書式検証・採番・
-追記のみの規律・差分提示の強制は CLI が担う。位置づけは「回避を試みる AI を止める」ではなく
+追記と承認つきの書き換えの規律・差分提示の強制は CLI が担う。位置づけは「回避を試みる AI を止める」ではなく
 「知らずに直接編集する AI を正しい窓口へ導く」。
 
 ## 3 イベントに掛ける 2 本のスクリプト(`hooks/hooks.json`)
@@ -88,8 +88,13 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` / `get rules` /
 `scan` / `diff-architecture` / `scan-adr-candidates` / `scan-gotcha-candidates`。段階: `stage-architecture --input` / `stage-adr --input` /
-`stage-rules --input`。書: `commit-architecture --staging-id` / `commit-rules --staging-id` / `init-gotchas` /
-`append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate` / `remove-gotcha-candidate`。
+`stage-rules --input` / `stage-gotcha --input`。書: `commit-architecture --staging-id` / `commit-rules --staging-id` /
+`commit-gotchas --staging-id` / `init-gotchas` / `append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate` /
+`remove-gotcha-candidate`。
+
+2026-11-12 から: GOTCHAS は追記のみではない。`stage-gotcha` → `commit-gotchas` で、監査(`/metatron:audit`)に限り
+エントリのタイトルと 5 フィールドの値を書き換えられる(日付・ID・タグ・理由行は保つ)。`diff-architecture` は技術スタックと
+コマンドを機械的に照合せず、定義のありかを `sources` で返す。ディレクトリは書かれたものの実在だけを判定する。
 
 `[GOTCHAS 候補]`(`src/lib/gotcha-candidates.ts`、CLI は `src/cli/gotcha-candidate.ts`): `scan-gotcha-candidates` が候補ごとに
 `fields`・`problems`・`hash`・`fileHash`・`ledgerMatches`(台帳で `title` が一致するエントリの ID)を返す。

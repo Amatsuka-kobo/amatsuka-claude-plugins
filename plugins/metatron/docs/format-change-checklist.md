@@ -10,6 +10,8 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`、`src/check-intent-env.ts`、`references/handoff-contract.md`
 - [ ] ADR エントリの書式はこの節ではなく「ADR の書式」の節を見る(正本は契約 §4 ではなく §6)
 - [ ] `plugins/metatron/src/lib/architecture.ts` の全文の読み直し(`rejectBrokenResult` と、`prepareArchitectureUpdate` の `## ADR 一覧` の照合)と、`references/cli-usage.md` の `stage-architecture` のエラーコード
+- [ ] `## 技術スタック` と `## コマンド定義` の規定を変えたら、`src/lib/scan.ts` の `SOURCE_FILE_RES`(`diff-architecture` の `sources`)、`src/lib/__test__/scan.test.ts` の sources のテスト、`skills/updating-architecture/SKILL.md` の手順 2 の sources の読み方、`skills/capturing-architecture/SKILL.md` の起草の材料、`docs/ARCHITECTURE.example.md` を揃える
+- [ ] 書式や執筆規律を変えたら、利用者の既存の文書は `/metatron:audit` で追随させる。README の `/metatron:audit` の説明が変更後の規定と食い違わないかを確かめる
 
 ## ADR の書式(`references/architecture-format.md` の `## ADR 一覧`)
 

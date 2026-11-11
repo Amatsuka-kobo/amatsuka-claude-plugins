@@ -74,11 +74,11 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 | ドラフト単位 | ドラフトの主な材料 |
 | --- | --- |
 | ARCHITECTURE `## システム概要` | `documents` と `tree` と `dependencies`。散文 1 段落と、必要な場合は Mermaid 図 |
-| ARCHITECTURE `## 技術スタック` | `languages` / `packageManager` / `dependencies` |
+| ARCHITECTURE `## 技術スタック` | `languages` / `packageManager` / `dependencies`。依存の全件を載せず、役割ごとの技術に絞る |
 | ARCHITECTURE `## レイヤー構造` | `tree` / `domainCandidates` |
 | ARCHITECTURE `## ディレクトリ構成と責務` | `tree` / `fileCount` |
 | ARCHITECTURE `## ドメインマップ` | `domainCandidates` |
-| ARCHITECTURE `## コマンド定義` | `commands` / `scripts` |
+| ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。全件を載せず、よく使うものと使い分けの答えに絞る |
 | rules `conventions.md` | `../../docs/RULES.example.md` の記入例と既存の CLAUDE.md |
 | rules `protected-paths.md` | `../../docs/RULES.example.md` の記入例と既存の設定ファイル |
 | rules `testing-policy.md` | `../../docs/RULES.example.md` の記入例と既存の文書 |
