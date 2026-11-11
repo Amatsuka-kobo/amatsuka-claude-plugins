@@ -16,6 +16,16 @@ afterEach(() => {
   fs.rmSync(project, { recursive: true, force: true })
 })
 
+function writeConfig(dir: string): void {
+  fs.mkdirSync(path.join(dir, ".claude", "better-agentics"), {
+    recursive: true
+  })
+  fs.writeFileSync(
+    path.join(dir, ".claude", "better-agentics", "config.json"),
+    '{"disabledRoles":[]}'
+  )
+}
+
 function run(env: NodeJS.ProcessEnv): string {
   return runHook("session-start", JSON.stringify({ cwd: project }), env)
 }
@@ -46,10 +56,22 @@ describe("session-start", () => {
     })
   })
 
-  it("inject では使用指示を先頭に置き、定義が無ければ setup を案内する", () => {
+  it("inject では使用指示を先頭に置き、定義が無ければ Standard Agent モードを案内する", () => {
     const context = contextOf(run(ENABLED)) ?? ""
     expect(context.startsWith(INSTRUCTION)).toBe(true)
-    expect(context).toContain("better-agentics:setup で定義を作る")
+    expect(context).toContain(
+      "定義の無い役割は Standard Agent モードで委譲する。調整したい役割の定義と、外す役割は better-agentics:setup で決める。"
+    )
+  })
+
+  it("警告と知らせを使用指示の後に並べる", () => {
+    place(project, "a", definition("a", "code-review"))
+    const context =
+      contextOf(run({ ...ENABLED, CLAUDE_CODE_EFFORT_LEVEL: "high" })) ?? ""
+    const parts = context.split("\n\n")
+    expect(parts[0]).toBe(INSTRUCTION)
+    expect(parts[1]).toContain("Standard Agent モード")
+    expect(parts.at(-1)).toContain("CLAUDE_CODE_EFFORT_LEVEL")
   })
 
   it("同じ役割の定義が 2 件あれば役割名と定義名を並べる", () => {
@@ -57,7 +79,9 @@ describe("session-start", () => {
     place(project, "b", definition("b", "code-review"))
     const context = contextOf(run(ENABLED)) ?? ""
     expect(context).toContain("- コードレビュー [code-review]: a, b")
-    expect(context).not.toContain("定義を作る")
+    expect(context).not.toContain(
+      "定義の無い役割は Standard Agent モードで委譲する。調整"
+    )
   })
 
   it("役割表に無い role-id の定義を並べる", () => {
@@ -67,6 +91,7 @@ describe("session-start", () => {
 
   it("定義がそろっていれば使用指示だけを注入する", () => {
     place(project, "a", definition("a", "code-review"))
+    writeConfig(project)
     expect(contextOf(run(ENABLED))).toBe(INSTRUCTION)
   })
 
@@ -74,6 +99,7 @@ describe("session-start", () => {
     const other = fs.mkdtempSync(path.join(os.tmpdir(), "better-agentics-"))
     try {
       place(other, "a", definition("a", "code-review"))
+      writeConfig(other)
       expect(contextOf(run({ ...ENABLED, CLAUDE_PROJECT_DIR: other }))).toBe(
         INSTRUCTION
       )

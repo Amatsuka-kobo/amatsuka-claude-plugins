@@ -2,7 +2,14 @@
 // SessionStart フック: 環境変数の状態に応じて、オーケストレーターの規律の使用指示か警告を注入する。
 // 失敗しても Claude Code の起動を妨げないよう、例外は標準エラーに書いて終了コード 0 で終わる。
 
-import { inspect, projectDirOf, scanDefinitions } from "../lib/agents"
+import {
+  type Definition,
+  inspect,
+  projectDirOf,
+  scanDefinitions
+} from "../lib/agents"
+import { readConfig } from "../lib/config"
+import { envWarnings, hasReviewDefinition, setupNotices } from "../lib/notices"
 import { roleById } from "../lib/roles"
 import { type OrchestrationState, orchestrationState } from "../lib/state"
 import { readStdin } from "./stdin"
@@ -25,19 +32,7 @@ function warning(state: OrchestrationState): string | undefined {
   }
 }
 
-function definitionNotes(projectDir: string): string[] {
-  let definitions: ReturnType<typeof scanDefinitions>
-  try {
-    definitions = scanDefinitions(projectDir)
-  } catch {
-    // 走査に失敗しても、使用指示の注入は続ける。
-    return []
-  }
-  if (definitions.length === 0) {
-    return [
-      "better-agentics-role を持つ Agent 定義が無い。委譲を使うには better-agentics:setup で定義を作る。"
-    ]
-  }
+function definitionNotes(definitions: Definition[]): string[] {
   const { duplicates, unknownRoles } = inspect(definitions)
   const notes: string[] = []
   if (duplicates.length > 0) {
@@ -66,7 +61,20 @@ function build(env: NodeJS.ProcessEnv, cwd: string): string | undefined {
   const state = orchestrationState(env)
   if (state.kind === "off") return undefined
   if (state.kind !== "inject") return warning(state)
-  return [INSTRUCTION, ...definitionNotes(projectDirOf(env, cwd))].join("\n\n")
+  const projectDir = projectDirOf(env, cwd)
+  let definitions: Definition[]
+  try {
+    definitions = scanDefinitions(projectDir)
+  } catch {
+    // 走査に失敗しても、使用指示の注入は続ける。
+    return INSTRUCTION
+  }
+  return [
+    INSTRUCTION,
+    ...setupNotices({ definitions, config: readConfig(projectDir) }),
+    ...definitionNotes(definitions),
+    ...envWarnings(env, hasReviewDefinition(definitions))
+  ].join("\n\n")
 }
 
 try {

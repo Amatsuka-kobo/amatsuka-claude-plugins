@@ -139,6 +139,10 @@ function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
 __name(roleById, "roleById");
+function rolesFor(reason) {
+  return ROLES.filter((role) => role.reason === reason);
+}
+__name(rolesFor, "rolesFor");
 
 // src/lib/compose.ts
 var ROLE_KEY = "better-agentics-role";
@@ -289,6 +293,156 @@ function inspect(definitions) {
 }
 __name(inspect, "inspect");
 
+// src/lib/config.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+var CONFIG_FILE = ".claude/better-agentics/config.json";
+function validate(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "the top level must be an object";
+  }
+  const roles = value.disabledRoles;
+  if (!Array.isArray(roles) || !roles.every((role) => typeof role === "string")) {
+    return "disabledRoles must be an array of role IDs";
+  }
+  const unknown = roles.filter((role) => roleById(role) === void 0);
+  if (unknown.length > 0) {
+    return `disabledRoles contains unknown role IDs: ${unknown.join(", ")}`;
+  }
+  return { disabledRoles: roles };
+}
+__name(validate, "validate");
+function readConfig(projectDir) {
+  const file = path2.join(projectDir, CONFIG_FILE);
+  if (!fs2.existsSync(file)) return { kind: "absent" };
+  let raw;
+  try {
+    raw = fs2.readFileSync(file, "utf8");
+  } catch (error) {
+    return {
+      kind: "invalid",
+      message: `${CONFIG_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      raw: null
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { kind: "invalid", message: `${CONFIG_FILE} is not valid JSON`, raw };
+  }
+  const result = validate(parsed);
+  return typeof result === "string" ? { kind: "invalid", message: `${CONFIG_FILE}: ${result}`, raw } : { kind: "ok", config: result };
+}
+__name(readConfig, "readConfig");
+function disabledRolesOf(state) {
+  return state.kind === "ok" ? state.config.disabledRoles : [];
+}
+__name(disabledRolesOf, "disabledRolesOf");
+
+// src/lib/extra-keys.ts
+var CACHE_TTL_ROLES = [
+  "code-review",
+  "design-review",
+  "complex-review",
+  "adversarial-review",
+  "knowledge-elicitation"
+];
+
+// src/lib/notices.ts
+var CACHE_LOST = "\u30EC\u30D3\u30E5\u30FC\u306E\u5B9A\u7FA9\u306B\u66F8\u3044\u305F 1 \u6642\u9593\u306E\u30D7\u30ED\u30F3\u30D7\u30C8\u30AD\u30E3\u30C3\u30B7\u30E5\u304C\u52B9\u304B\u305A\u30015 \u5206\u306B\u306A\u308B\u3002";
+function isSet(value) {
+  return (value?.trim() ?? "") !== "";
+}
+__name(isSet, "isSet");
+function hasReviewDefinition(definitions) {
+  return definitions.some(
+    (entry) => CACHE_TTL_ROLES.includes(entry.role)
+  );
+}
+__name(hasReviewDefinition, "hasReviewDefinition");
+function envWarnings(env, hasReviewDefinition2) {
+  const warnings = [];
+  const effort = env.CLAUDE_CODE_EFFORT_LEVEL?.trim() ?? "";
+  if (effort !== "") {
+    warnings.push(
+      `CLAUDE_CODE_EFFORT_LEVEL \u304C "${effort}" \u306B\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u308B\u305F\u3081\u3001\u59D4\u8B72\u5148\u306B\u6E21\u3059\u5F79\u5272\u3054\u3068\u306E effort \u304C\u4F7F\u308F\u308C\u306A\u3044\u3002`
+    );
+  }
+  const force = env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE?.trim().toLowerCase() ?? "";
+  if (force !== "" && force !== "0" && force !== "false") {
+    warnings.push(
+      "CLAUDE_CODE_SUBAGENT_MODEL_FORCE \u304C\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u308B\u305F\u3081\u3001\u59D4\u8B72\u5148\u306E\u30E2\u30C7\u30EB\u304C\u5F79\u5272\u3054\u3068\u306E\u30E2\u30C7\u30EB\u306B\u306A\u3089\u305A\u3001\u4E00\u5F8B\u306B\u306A\u308B\u3002"
+    );
+  }
+  if (hasReviewDefinition2 && isSet(env.FORCE_PROMPT_CACHING_5M)) {
+    warnings.push(`FORCE_PROMPT_CACHING_5M \u304C\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u308B\u305F\u3081\u3001${CACHE_LOST}`);
+  }
+  if (hasReviewDefinition2 && env.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL?.trim() === "5m") {
+    warnings.push(
+      `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL \u304C 5m \u306E\u305F\u3081\u3001${CACHE_LOST}`
+    );
+  }
+  return warnings;
+}
+__name(envWarnings, "envWarnings");
+function setupNotices(input) {
+  const { definitions, config } = input;
+  const known = definitions.filter(
+    (entry) => roleById(entry.role) !== void 0
+  );
+  const disabled = disabledRolesOf(config);
+  const notices = [];
+  if (known.length === 0) {
+    notices.push(
+      "\u5B9A\u7FA9\u306E\u7121\u3044\u5F79\u5272\u306F Standard Agent \u30E2\u30FC\u30C9\u3067\u59D4\u8B72\u3059\u308B\u3002\u8ABF\u6574\u3057\u305F\u3044\u5F79\u5272\u306E\u5B9A\u7FA9\u3068\u3001\u5916\u3059\u5F79\u5272\u306F better-agentics:setup \u3067\u6C7A\u3081\u308B\u3002"
+    );
+  } else if (config.kind === "absent") {
+    const uncovered = ROLES.filter(
+      (role) => !known.some((entry) => entry.role === role.id)
+    );
+    if (uncovered.length > 0) {
+      notices.push(
+        [
+          `${CONFIG_FILE} \u304C\u307E\u3060\u7121\u3044\u3002\u5B9A\u7FA9\u306E\u7121\u3044\u6B21\u306E\u5F79\u5272\u306F\u3001Standard Agent \u30E2\u30FC\u30C9\u3067\u59D4\u8B72\u3059\u308B\u3002\u4F7F\u308F\u306A\u3044\u5F79\u5272\u306F better-agentics:setup \u3067\u5916\u3059\u3002`,
+          ...uncovered.map((role) => `- ${role.id}`)
+        ].join("\n")
+      );
+    }
+  }
+  const disabledWithDefinition = known.filter(
+    (entry) => disabled.includes(entry.role)
+  );
+  if (disabledWithDefinition.length > 0) {
+    notices.push(
+      [
+        "\u6B21\u306E\u5F79\u5272\u306F\u8A2D\u5B9A\u3067\u5916\u3057\u3066\u3044\u308B\u304C\u3001\u5B9A\u7FA9\u304C\u3042\u308B\u3002\u5916\u3059\u8A2D\u5B9A\u3092\u512A\u5148\u3057\u3001\u3053\u306E\u5B9A\u7FA9\u3078\u306F\u59D4\u8B72\u3057\u306A\u3044\u3002",
+        ...disabledWithDefinition.map(
+          (entry) => `- ${entry.role}: ${entry.name}`
+        )
+      ].join("\n")
+    );
+  }
+  const stopped = [
+    { reason: "review", what: "\u30EC\u30D3\u30E5\u30FC" },
+    { reason: "split", what: "\u4F5C\u696D\u306E\u5206\u62C5" }
+  ].filter(
+    ({ reason }) => rolesFor(reason).every((role) => disabled.includes(role.id))
+  );
+  for (const { reason, what } of stopped) {
+    notices.push(
+      `${reason} \u306E\u5F79\u5272\u3092\u3059\u3079\u3066\u5916\u3057\u3066\u3044\u308B\u305F\u3081\u3001${what}\u306E\u59D4\u8B72\u304C\u6B62\u307E\u308B\u3002better-agentics:setup \u3067\u5916\u3059\u5F79\u5272\u3092\u898B\u76F4\u305B\u308B\u3002`
+    );
+  }
+  if (config.kind === "invalid") {
+    notices.push(
+      `${CONFIG_FILE} \u306E\u5F62\u304C\u9055\u3046(${config.message})\u3002\u5916\u3059\u5F79\u5272\u304C\u5206\u304B\u3089\u306A\u3044\u305F\u3081\u3001\u59D4\u8B72\u304C\u6B62\u307E\u308B\u3002better-agentics:setup \u3067\u4F5C\u308A\u76F4\u3059\u3002`
+    );
+  }
+  return notices;
+}
+__name(setupNotices, "setupNotices");
+
 // src/lib/state.ts
 var ON = /* @__PURE__ */ new Set(["1", "true", "on"]);
 var OFF = /* @__PURE__ */ new Set(["", "0", "false", "off"]);
@@ -342,18 +496,7 @@ function warning(state) {
   }
 }
 __name(warning, "warning");
-function definitionNotes(projectDir) {
-  let definitions;
-  try {
-    definitions = scanDefinitions(projectDir);
-  } catch {
-    return [];
-  }
-  if (definitions.length === 0) {
-    return [
-      "better-agentics-role \u3092\u6301\u3064 Agent \u5B9A\u7FA9\u304C\u7121\u3044\u3002\u59D4\u8B72\u3092\u4F7F\u3046\u306B\u306F better-agentics:setup \u3067\u5B9A\u7FA9\u3092\u4F5C\u308B\u3002"
-    ];
-  }
+function definitionNotes(definitions) {
   const { duplicates, unknownRoles } = inspect(definitions);
   const notes = [];
   if (duplicates.length > 0) {
@@ -381,7 +524,19 @@ function build(env, cwd) {
   const state = orchestrationState(env);
   if (state.kind === "off") return void 0;
   if (state.kind !== "inject") return warning(state);
-  return [INSTRUCTION, ...definitionNotes(projectDirOf(env, cwd))].join("\n\n");
+  const projectDir = projectDirOf(env, cwd);
+  let definitions;
+  try {
+    definitions = scanDefinitions(projectDir);
+  } catch {
+    return INSTRUCTION;
+  }
+  return [
+    INSTRUCTION,
+    ...setupNotices({ definitions, config: readConfig(projectDir) }),
+    ...definitionNotes(definitions),
+    ...envWarnings(env, hasReviewDefinition(definitions))
+  ].join("\n\n");
 }
 __name(build, "build");
 try {
