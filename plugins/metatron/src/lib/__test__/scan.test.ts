@@ -617,13 +617,11 @@ test("ディレクトリ構成: 実在しない記述は findings、未記載の
     }
   })
 
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
-    "gone",
-    "src/legacy"
-  ])
+  // `gone/` のような 1 語は判定しない(相対パスや除外ディレクトリと区別できない)。
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual(["src/legacy"])
   expect(
     diff.findings.filter((f) => f.section === "ディレクトリ構成と責務")
-  ).toHaveLength(2)
+  ).toHaveLength(1)
   const line = diff.skipped.find((s) =>
     s.startsWith("ディレクトリ構成の未記載")
   )

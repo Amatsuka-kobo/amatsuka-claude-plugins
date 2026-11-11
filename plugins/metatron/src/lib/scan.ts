@@ -1419,8 +1419,8 @@ function diffDirectories(
     // ワイルドカードを含むものは保護パス等の glob なので見ない。
     if (/[*?[\]{}]/.test(token)) continue
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue
-    // `/` を含まない語は、末尾の `/` でディレクトリと明示したもの(`legacy/`)だけを見る。
-    if (!token.includes("/") && !raw.endsWith("/")) continue
+    // `/` を含まない 1 語は、相対パスやビルド出力(除外ディレクトリ)と区別できないため見ない。
+    if (!token.includes("/")) continue
     if (existing.has(token)) continue
     // ツリーは maxDepth までしか持たない。それより深いパスは「実在しない」と
     // 断定できないため候補にしない(決定的でない検出をしない)。
