@@ -1033,3 +1033,65 @@ test("GR8: フィールド行が無いエントリの、その行の書き換え
     "invalid_input"
   )
 })
+
+test("GR9: 閉じていないコードフェンスがある台帳は、後続エントリを書き換えず invalid_input で拒否する", () => {
+  const before = ledger([
+    entryBlock(2).replace("**原因 (推測)**: 原因 2", "**原因 (推測)**: "),
+    ["```", "閉じないフェンス", entryBlock(1)].join("\n")
+  ])
+  expect(parseGotchas(before).unclosedFence).toBe(true)
+  expectGotchaError(
+    () => buildRewrittenText(before, { id: "GOTCHA-002", cause: "rewritten" }),
+    "invalid_input"
+  )
+})
+
+test("GR10: 空(空白だけを含む)にする書き換えは invalid_input で拒否する", () => {
+  for (const key of [
+    "title",
+    "task",
+    "mistake",
+    "cause",
+    "countermeasure"
+  ] as const) {
+    for (const value of ["", "  "]) {
+      expectGotchaError(
+        () =>
+          buildRewrittenText(REWRITE_BEFORE, {
+            id: "GOTCHA-001",
+            [key]: value
+          }),
+        "invalid_input"
+      )
+    }
+  }
+})
+
+test("GR11: エントリ内のコードフェンスにあるフィールド風の行は書き換えない", () => {
+  const fenced = REWRITE_BEFORE.replace(
+    "**対策**: 対策 1 を実行する前に対象を Read して確認する",
+    [
+      "```",
+      "**対策**: フェンスの中の例",
+      "```",
+      "**対策**: 対策 1 を実行する前に対象を Read して確認する"
+    ].join("\n")
+  )
+  expect(fenced).not.toBe(REWRITE_BEFORE)
+  // パーサはフェンスの中の行を先に採るため、読み直しが食い違って拒否される。
+  // フェンスの中の行を書き換えて通ることはない。
+  expectGotchaError(
+    () =>
+      buildRewrittenText(fenced, {
+        id: "GOTCHA-001",
+        countermeasure: "書き換えた対策を Read で確認する"
+      }),
+    "invalid_input"
+  )
+  // フェンスの外の別フィールドは書き換えられ、フェンスの中の行は不変。
+  const result = buildRewrittenText(fenced, {
+    id: "GOTCHA-001",
+    task: "新しいタスク"
+  })
+  expect(result.text).toContain("**対策**: フェンスの中の例")
+})

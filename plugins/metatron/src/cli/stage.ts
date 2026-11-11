@@ -1,6 +1,6 @@
 // `stage-architecture` / `stage-adr` / `stage-rules` / `stage-gotcha`(設計書 §7-3・§7-4・§6-1)。
 //
-// どちらも**書き込みを行わない**。diff と stagingId を返すだけで、確定は
+// いずれも**書き込みを行わない**。diff と stagingId を返すだけで、確定は
 // `commit-architecture` / `commit-rules` / `commit-gotchas --staging-id <id>` が行う。契約 §4-3 の分類では
 // 書き込み経路(第 1 層・フェイルクローズド)であり、拒否は非 0 終了で返す。
 

@@ -1978,3 +1978,22 @@ test("GS4: 台帳が無い・ID が無い・変更が無い入力は拒否し、
   }
   expect(fs.existsSync(stagingDirFor(root))).toBe(false)
 })
+
+test("GS5: 閉じていないフェンスのある台帳と、空にする入力は拒否し、台帳は不変", () => {
+  const root = gateProject()
+  const { gotchas } = docs(root)
+  fs.appendFileSync(gotchas, "\n```\n閉じないフェンス\n")
+  const before = snapshot([gotchas])
+  const unclosed = stageGotcha(root, { id: "GOTCHA-001", cause: "rewritten" })
+  expect(unclosed.status).not.toBe(0)
+  expect(unclosed.json).toMatchObject({
+    error: "invalid_input",
+    stagingId: null
+  })
+  expectUnchanged(before)
+
+  const clean = gateProject()
+  const empty = stageGotcha(clean, { id: "GOTCHA-001", cause: " " })
+  expect(empty.status).not.toBe(0)
+  expect(empty.json).toMatchObject({ error: "invalid_input", stagingId: null })
+})

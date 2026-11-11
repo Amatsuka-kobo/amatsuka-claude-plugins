@@ -9,9 +9,10 @@
 // - 解析(parseGotchas)は読み取り経路からも使うため例外を投げず、warnings に理由を積む。
 //
 // CLI・hook・テストがこのファイルだけを窓口にする。ファイルへの書き込み経路は
-// initGotchasLedger / appendGotcha / tagGotcha の 3 つしか無く、「削除・改変禁止」が
-// 指示ではなく構造として成立する。initGotchasLedger は内容のある台帳を必ず拒否するため、
-// 既存エントリを消しうる経路は 3 つのどれにも無い。
+// initGotchasLedger / appendGotcha / tagGotcha と、stage-gotcha → commit-gotchas の
+// 書き換え(buildRewrittenText)に限られる。initGotchasLedger は内容のある台帳を必ず拒否し、
+// 書き換えは 2 段階で承認を挟み、読み直しで「対象エントリの指定フィールド以外の事実が
+// 変わっていない」ことを確かめてから staging に載せる。エントリを消す経路は無い。
 
 import fs from "node:fs"
 import path from "node:path"
@@ -801,7 +802,11 @@ function locateFieldLines(
   const found: Partial<
     Record<keyof GotchaFields, { index: number; settled: boolean }>
   > = {}
+  // コードフェンスの中の行は書き換え先にしない。パーサがフェンスの中の行を先に採ると、
+  // 読み直しの検査が不一致として拒否する。
+  const { blocked } = scanFences(lines, false)
   for (let i = entry.startIndex + 1; i < entry.endIndex; i++) {
+    if (blocked[i]) continue
     const m = FIELD_LINE_RE.exec(stripCr(lines[i]))
     if (m === null) continue
     const key = FIELD_KEYS[normalizeFieldName(m[1].trim())]
@@ -863,6 +868,19 @@ export function buildRewrittenText(
     )
   }
 
+  for (const key of REWRITE_KEYS) {
+    const value = input[key]
+    if (value !== undefined && value.trim() === "") {
+      errors.push(`${key} が空です。空にする書き換えは受け付けません。`)
+    }
+  }
+  if (errors.length > 0) {
+    rewriteRejected(
+      `入力が書式を満たしていません: ${errors.join(" / ")}`,
+      errors
+    )
+  }
+
   const num = parseGotchaId(input.id)
   if (num === null) {
     rewriteRejected(
@@ -871,6 +889,12 @@ export function buildRewrittenText(
   }
 
   const doc = parseGotchas(existing)
+  // 閉じていないフェンスの後ろでは、`###` が区切りとして働かずエントリの範囲が延びる。
+  if (doc.unclosedFence) {
+    rewriteRejected(
+      "台帳に閉じていないコードフェンスがあるため、エントリの範囲を確定できず書き換えられません。フェンスを閉じてから実行してください。"
+    )
+  }
   const entry = findGotchaByNumber(doc, num)
   if (entry === null) {
     throw new GotchaError(

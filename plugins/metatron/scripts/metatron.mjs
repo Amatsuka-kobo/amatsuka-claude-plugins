@@ -1161,7 +1161,9 @@ var REWRITE_KEYS = [
 ];
 function locateFieldLines(lines, entry) {
   const found = {};
+  const { blocked } = scanFences2(lines, false);
   for (let i = entry.startIndex + 1; i < entry.endIndex; i++) {
+    if (blocked[i]) continue;
     const m = FIELD_LINE_RE.exec(stripCr(lines[i]));
     if (m === null) continue;
     const key = FIELD_KEYS[normalizeFieldName(m[1].trim())];
@@ -1204,6 +1206,18 @@ function buildRewrittenText(existing, rawInput) {
       errors
     );
   }
+  for (const key of REWRITE_KEYS) {
+    const value = input[key];
+    if (value !== void 0 && value.trim() === "") {
+      errors.push(`${key} \u304C\u7A7A\u3067\u3059\u3002\u7A7A\u306B\u3059\u308B\u66F8\u304D\u63DB\u3048\u306F\u53D7\u3051\u4ED8\u3051\u307E\u305B\u3093\u3002`);
+    }
+  }
+  if (errors.length > 0) {
+    rewriteRejected(
+      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${errors.join(" / ")}`,
+      errors
+    );
+  }
   const num = parseGotchaId(input.id);
   if (num === null) {
     rewriteRejected(
@@ -1211,6 +1225,11 @@ function buildRewrittenText(existing, rawInput) {
     );
   }
   const doc = parseGotchas(existing);
+  if (doc.unclosedFence) {
+    rewriteRejected(
+      "\u53F0\u5E33\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308B\u305F\u3081\u3001\u30A8\u30F3\u30C8\u30EA\u306E\u7BC4\u56F2\u3092\u78BA\u5B9A\u3067\u304D\u305A\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u305B\u3093\u3002\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304B\u3089\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+    );
+  }
   const entry = findGotchaByNumber(doc, num);
   if (entry === null) {
     throw new GotchaError(
