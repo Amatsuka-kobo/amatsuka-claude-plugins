@@ -14,6 +14,15 @@ export function environment(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   }
   delete base.TYPESAFE_API_KEY
   delete base.CLAUDE_PROJECT_DIR
+  // 役割の model・effort・キャッシュ・fork を上書きする変数。開発者の環境で結果が変わらないよう消す。
+  for (const key of [
+    "CLAUDE_CODE_EFFORT_LEVEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL_FORCE",
+    "FORCE_PROMPT_CACHING_5M",
+    "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL",
+    "CLAUDE_CODE_FORK_SUBAGENT"
+  ])
+    delete base[key]
   base.CLAUDE_PLUGIN_ROOT = PLUGIN_ROOT
   return { ...base, ...overrides }
 }

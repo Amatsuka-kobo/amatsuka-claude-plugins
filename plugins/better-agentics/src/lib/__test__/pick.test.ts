@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Definition } from "../agents"
 import type { JevAsk, JevRequest } from "../jev"
-import { type PickDeps, pickDelegate } from "../pick"
+import { type PickDeps, parseInput, pickDelegate } from "../pick"
 
 function def(
   name: string,
@@ -51,8 +51,91 @@ function deps(
   ask: JevAsk,
   apiKey: string | null = "k"
 ): PickDeps {
-  return { definitions, apiKey: apiKey ?? undefined, createAsk: () => ask }
+  return {
+    definitions,
+    config: { kind: "absent" },
+    apiKey: apiKey ?? undefined,
+    createAsk: () => ask,
+    forkEnabled: true,
+    standardCriteria: (roleId) => `- standard ${roleId}`,
+    preambles: {
+      standard: (roleId, lang) => `standard:${roleId}:${lang}`,
+      fork: (roleId, lang) => `fork:${roleId}:${lang}`
+    }
+  }
 }
+
+describe("入力", () => {
+  const review = { reason: "review", task: { summary: "x", artifacts: [] } }
+
+  it("parentModel・lang・excludeRoles を省くと既定値になる", () => {
+    expect(parseInput(JSON.stringify(review))).toMatchObject({
+      parentModel: undefined,
+      lang: "en",
+      excludeRoles: []
+    })
+  })
+
+  it("値を渡せばそのまま読む", () => {
+    expect(
+      parseInput(
+        JSON.stringify({
+          ...review,
+          parentModel: "sonnet",
+          lang: "ja",
+          excludeRoles: ["code-review"]
+        })
+      )
+    ).toMatchObject({
+      parentModel: "sonnet",
+      lang: "ja",
+      excludeRoles: ["code-review"]
+    })
+  })
+
+  it("split の needsContext は省くと false になる", () => {
+    const input = parseInput(
+      JSON.stringify({
+        reason: "split",
+        tasks: [
+          { id: "a", summary: "x" },
+          { id: "b", summary: "y", needsContext: true }
+        ]
+      })
+    )
+    expect(input.reason === "split" && input.tasks).toEqual([
+      { id: "a", summary: "x", needsContext: false },
+      { id: "b", summary: "y", needsContext: true }
+    ])
+  })
+
+  it("excludeRoles: [] は省いたのと同じになる", () => {
+    expect(parseInput(JSON.stringify({ ...review, excludeRoles: [] }))).toEqual(
+      parseInput(JSON.stringify(review))
+    )
+  })
+
+  it.each([
+    ["parentModel が別名でない", { ...review, parentModel: "gpt" }],
+    ["lang がパスを含む", { ...review, lang: "../x" }],
+    [
+      "excludeRoles に役割表に無い ID",
+      { ...review, excludeRoles: ["no-such-role"] }
+    ],
+    ["excludeRoles が配列でない", { ...review, excludeRoles: "escalation" }],
+    [
+      "needsContext が真偽値でない",
+      {
+        reason: "split",
+        tasks: [{ id: "a", summary: "x", needsContext: "yes" }]
+      }
+    ]
+  ])("%s は invalid-input", async (_label, value) => {
+    expect(
+      await pickDelegate(JSON.stringify(value), deps([], fakeJev({}).ask))
+    ).toMatchObject({ ok: false, error: "invalid-input" })
+  })
+})
 
 const REVIEWERS = [
   def("docs-reviewer", "design-review"),

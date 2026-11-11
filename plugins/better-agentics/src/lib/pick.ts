@@ -1,12 +1,32 @@
 import { choice, noul, type Questions } from "@typesafe-ai/sdk"
 import type { Definition } from "./agents"
+import type { ConfigState } from "./config"
+import { assertLang } from "./fragments"
 import type { JevAsk } from "./jev"
-import { type Reason, type RoleId, roleById } from "./roles"
+import {
+  type ClaudeModel,
+  isClaudeModel,
+  type Reason,
+  type RoleId,
+  roleById
+} from "./roles"
+
+export interface PickCommon {
+  parentModel: ClaudeModel | undefined
+  lang: string
+  excludeRoles: RoleId[]
+}
 
 export type PickInput =
-  | { reason: "review"; task: { summary: string; artifacts: string[] } }
-  | { reason: "split"; tasks: { id: string; summary: string }[] }
-  | { reason: "stuck"; task: { summary: string } }
+  | ({
+      reason: "review"
+      task: { summary: string; artifacts: string[] }
+    } & PickCommon)
+  | ({
+      reason: "split"
+      tasks: { id: string; summary: string; needsContext: boolean }[]
+    } & PickCommon)
+  | ({ reason: "stuck"; task: { summary: string } } & PickCommon)
 
 /** p は Jev を呼んだときだけ付く */
 export interface Pick {
@@ -30,9 +50,18 @@ export type PickOutput =
 
 export interface PickDeps {
   definitions: Definition[]
+  config: ConfigState
   /** trim 済みで空なら undefined */
   apiKey: string | undefined
   createAsk: (apiKey: string) => JevAsk
+  /** CLAUDE_CODE_FORK_SUBAGENT が "0" でない */
+  forkEnabled: boolean
+  /** 同梱 en の断片の ## When to invoke */
+  standardCriteria: (roleId: RoleId) => string
+  preambles: {
+    standard: (roleId: RoleId, lang: string) => string
+    fork: (roleId: RoleId, lang: string) => string
+  }
 }
 
 export class PickFailure extends Error {
@@ -63,6 +92,42 @@ function summaryOf(value: unknown, field: string): string {
   return summary
 }
 
+function commonOf(parsed: Record<string, unknown>): PickCommon {
+  const { parentModel, lang, excludeRoles } = parsed
+  if (
+    parentModel !== undefined &&
+    (typeof parentModel !== "string" || !isClaudeModel(parentModel))
+  ) {
+    invalid("parentModel must be one of fable, opus, sonnet, haiku")
+  }
+  if (lang !== undefined) {
+    if (typeof lang !== "string") invalid("lang must be a string")
+    try {
+      assertLang(lang)
+    } catch (error) {
+      invalid(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (
+    excludeRoles !== undefined &&
+    (!Array.isArray(excludeRoles) ||
+      !excludeRoles.every((role) => typeof role === "string"))
+  ) {
+    invalid("excludeRoles must be an array of role IDs")
+  }
+  const unknown = ((excludeRoles as string[] | undefined) ?? []).filter(
+    (role) => roleById(role) === undefined
+  )
+  if (unknown.length > 0) {
+    invalid(`excludeRoles contains unknown role IDs: ${unknown.join(", ")}`)
+  }
+  return {
+    parentModel: parentModel as ClaudeModel | undefined,
+    lang: (lang as string | undefined) ?? "en",
+    excludeRoles: (excludeRoles as RoleId[] | undefined) ?? []
+  }
+}
+
 export function parseInput(raw: string): PickInput {
   let parsed: unknown
   try {
@@ -71,7 +136,16 @@ export function parseInput(raw: string): PickInput {
     invalid("input is not valid JSON")
   }
   if (!isRecord(parsed)) invalid("input must be a JSON object")
+  return { ...parseTask(parsed), ...commonOf(parsed) } as PickInput
+}
 
+function parseTask(parsed: Record<string, unknown>):
+  | { reason: "review"; task: { summary: string; artifacts: string[] } }
+  | {
+      reason: "split"
+      tasks: { id: string; summary: string; needsContext: boolean }[]
+    }
+  | { reason: "stuck"; task: { summary: string } } {
   switch (parsed.reason) {
     case "review": {
       const summary = summaryOf(parsed.task, "task")
@@ -95,7 +169,11 @@ export function parseInput(raw: string): PickInput {
         if (typeof id !== "string" || id === "") {
           invalid(`tasks[${index}].id must be a non-empty string`)
         }
-        return { id, summary }
+        const needsContext = (task as Record<string, unknown>).needsContext
+        if (needsContext !== undefined && typeof needsContext !== "boolean") {
+          invalid(`tasks[${index}].needsContext must be a boolean`)
+        }
+        return { id, summary, needsContext: needsContext ?? false }
       })
       const ids = result.map((task) => task.id)
       const duplicated = ids.find((id, index) => ids.indexOf(id) !== index)

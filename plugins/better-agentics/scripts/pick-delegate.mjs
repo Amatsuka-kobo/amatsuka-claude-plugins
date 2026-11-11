@@ -3,8 +3,8 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // src/lib/agents.ts
-import fs from "node:fs";
-import path from "node:path";
+import fs2 from "node:fs";
+import path2 from "node:path";
 
 // src/lib/document.ts
 function frontmatterClose(lines) {
@@ -27,6 +27,28 @@ function sectionBody(body, heading) {
   return (end === -1 ? rest : rest.slice(0, end)).join("\n").trim();
 }
 __name(sectionBody, "sectionBody");
+
+// src/lib/fragments.ts
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/lib/hash.ts
+import crypto from "node:crypto";
+function textHash(text) {
+  return crypto.createHash("sha256").update(text.trim()).digest("hex").slice(0, 16);
+}
+__name(textHash, "textHash");
+function bodyHash(content) {
+  const lines = content.split("\n");
+  let body = lines;
+  if (lines[0]?.trim() === "---") {
+    const close = lines.indexOf("---", 1);
+    if (close !== -1) body = lines.slice(close + 1);
+  }
+  return textHash(body.join("\n"));
+}
+__name(bodyHash, "bodyHash");
 
 // src/lib/roles.ts
 var ROLES = [
@@ -135,10 +157,224 @@ var ROLES = [
     reason: "review"
   }
 ];
+var CLAUDE_MODELS = [
+  "sonnet",
+  "opus",
+  "haiku",
+  "fable"
+];
 function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
 __name(roleById, "roleById");
+function isClaudeModel(value) {
+  return CLAUDE_MODELS.includes(value);
+}
+__name(isClaudeModel, "isClaudeModel");
+
+// src/lib/fragments.ts
+var JA = {
+  bodyOrder: [
+    "## When to invoke",
+    "## Core Responsibilities",
+    "## \u4F5C\u696D\u624B\u9806",
+    "## \u5236\u7D04",
+    "## Output Format"
+  ]
+};
+var EN = {
+  bodyOrder: [
+    "## When to invoke",
+    "## Core Responsibilities",
+    "## Procedure",
+    "## Constraints",
+    "## Output Format"
+  ]
+};
+var WHEN_TO_INVOKE = "## When to invoke";
+function vocabularyFor(lang) {
+  return lang === "ja" ? JA : EN;
+}
+__name(vocabularyFor, "vocabularyFor");
+function pluginRoot() {
+  const fromEnv = process.env.CLAUDE_PLUGIN_ROOT;
+  if (fromEnv !== void 0 && fromEnv !== "") return fromEnv;
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  while (!fs.existsSync(path.join(dir, ".claude-plugin", "plugin.json"))) {
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error("plugin root not found");
+    dir = parent;
+  }
+  return dir;
+}
+__name(pluginRoot, "pluginRoot");
+function trim(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start]?.trim() === "") start += 1;
+  while (end > start && lines[end - 1]?.trim() === "") end -= 1;
+  return lines.slice(start, end);
+}
+__name(trim, "trim");
+function parse(content) {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() !== "---") throw new Error("Fragment has no frontmatter");
+  const close = lines.indexOf("---", 1);
+  if (close === -1) throw new Error("Fragment frontmatter is not closed");
+  const meta = {};
+  for (const line of lines.slice(1, close)) {
+    const at = line.indexOf(":");
+    if (at <= 0) continue;
+    meta[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+  }
+  const sections = /* @__PURE__ */ new Map();
+  let heading;
+  for (const line of lines.slice(close + 1)) {
+    if (line.startsWith("## ")) {
+      heading = line.trim();
+      if (!sections.has(heading)) sections.set(heading, []);
+      continue;
+    }
+    if (heading !== void 0) sections.get(heading)?.push(line);
+  }
+  for (const [key, body] of sections) sections.set(key, trim(body));
+  return { meta, sections };
+}
+__name(parse, "parse");
+function requireMeta(meta, key, file) {
+  const value = meta[key];
+  if (value === void 0 || value === "") {
+    throw new Error(`Fragment is missing "${key}": ${file}`);
+  }
+  return value;
+}
+__name(requireMeta, "requireMeta");
+function readFragment(file) {
+  const { meta, sections } = parse(fs.readFileSync(file, "utf8"));
+  const id = requireMeta(meta, "id", file);
+  const role = roleById(id);
+  if (role === void 0) throw new Error(`Unknown role id: ${id} (${file})`);
+  const kind = requireMeta(meta, "kind", file);
+  if (kind !== "impl" && kind !== "readonly") {
+    throw new Error(`Fragment "kind" must be impl or readonly: ${file}`);
+  }
+  return {
+    id: role.id,
+    label: requireMeta(meta, "label", file),
+    description: requireMeta(meta, "description", file),
+    defaultName: requireMeta(meta, "default-name", file),
+    tools: requireMeta(meta, "tools", file).split(",").map((tool) => tool.trim()).filter((tool) => tool !== ""),
+    kind,
+    sections
+  };
+}
+__name(readFragment, "readFragment");
+function assertLang(lang) {
+  if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(lang)) {
+    throw new Error(`lang: invalid language code: "${lang}"`);
+  }
+}
+__name(assertLang, "assertLang");
+function bundledLang(lang) {
+  return lang === "ja" ? "ja" : "en";
+}
+__name(bundledLang, "bundledLang");
+function bundledDir(root, lang) {
+  return path.join(root, "assets", "roles", bundledLang(lang));
+}
+__name(bundledDir, "bundledDir");
+function translationDir(projectDir, lang) {
+  assertLang(lang);
+  return path.join(projectDir, ".claude", "better-agentics", "roles", lang);
+}
+__name(translationDir, "translationDir");
+function needsTranslation(lang) {
+  return lang !== "ja" && lang !== "en";
+}
+__name(needsTranslation, "needsTranslation");
+function roleFiles(dir) {
+  return fs.readdirSync(dir).filter((name) => name.endsWith(".md") && !name.startsWith("_")).sort((left, right) => left.localeCompare(right));
+}
+__name(roleFiles, "roleFiles");
+function loadFragments(root, projectDir, lang) {
+  assertLang(lang);
+  const dir = bundledDir(root, lang);
+  const fragments = /* @__PURE__ */ new Map();
+  for (const name of roleFiles(dir)) {
+    const fragment = readFragment(path.join(dir, name));
+    fragments.set(fragment.id, fragment);
+  }
+  if (!needsTranslation(lang)) return fragments;
+  const target = translationDir(projectDir, lang);
+  if (!fs.existsSync(target)) return fragments;
+  for (const name of roleFiles(target)) {
+    const translated = readFragment(path.join(target, name));
+    const bundled = fragments.get(translated.id);
+    if (bundled === void 0) continue;
+    const when = bundled.sections.get(WHEN_TO_INVOKE);
+    if (when !== void 0) translated.sections.set(WHEN_TO_INVOKE, when);
+    fragments.set(translated.id, {
+      ...translated,
+      tools: bundled.tools,
+      kind: bundled.kind,
+      defaultName: bundled.defaultName
+    });
+  }
+  return fragments;
+}
+__name(loadFragments, "loadFragments");
+function loadPreamble(root, projectDir, lang) {
+  const candidates = [path.join(bundledDir(root, lang), "_common.md")];
+  if (needsTranslation(lang)) {
+    candidates.unshift(
+      path.join(translationDir(projectDir, lang), "_common.md")
+    );
+  }
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    const preamble = parse(fs.readFileSync(file, "utf8")).sections.get(
+      "## Preamble"
+    );
+    if (preamble !== void 0) return preamble;
+  }
+  throw new Error("_common.md not found");
+}
+__name(loadPreamble, "loadPreamble");
+function bundledFiles(dir) {
+  return fs.readdirSync(dir).filter((name) => name.endsWith(".md")).sort((left, right) => left.localeCompare(right));
+}
+__name(bundledFiles, "bundledFiles");
+function checkFragments(root, projectDir, lang) {
+  assertLang(lang);
+  if (!needsTranslation(lang)) {
+    return { lang, targetDir: null, missing: [], stale: [], ready: [] };
+  }
+  const sourceDir = bundledDir(root, lang);
+  const targetDir = translationDir(projectDir, lang);
+  const status = {
+    lang,
+    targetDir,
+    missing: [],
+    stale: [],
+    ready: []
+  };
+  for (const name of bundledFiles(sourceDir)) {
+    const id = name.replace(/\.md$/, "");
+    const target = path.join(targetDir, name);
+    if (!fs.existsSync(target)) {
+      status.missing.push(id);
+      continue;
+    }
+    const expected = bodyHash(
+      fs.readFileSync(path.join(sourceDir, name), "utf8")
+    );
+    const actual = parse(fs.readFileSync(target, "utf8")).meta["source-hash"];
+    if (actual === expected) status.ready.push(id);
+    else status.stale.push(id);
+  }
+  return status;
+}
+__name(checkFragments, "checkFragments");
 
 // src/lib/compose.ts
 var ROLE_KEY = "better-agentics-role";
@@ -230,10 +466,10 @@ function stringOf(value) {
 }
 __name(stringOf, "stringOf");
 function scanDefinitions(projectDir) {
-  const dir = path.join(projectDir, ".claude", "agents");
+  const dir = path2.join(projectDir, ".claude", "agents");
   let files;
   try {
-    files = fs.readdirSync(dir).sort();
+    files = fs2.readdirSync(dir).sort();
   } catch {
     return [];
   }
@@ -242,7 +478,7 @@ function scanDefinitions(projectDir) {
     if (!name.endsWith(".md")) continue;
     let content;
     try {
-      content = fs.readFileSync(path.join(dir, name), "utf8");
+      content = fs2.readFileSync(path2.join(dir, name), "utf8");
     } catch {
       continue;
     }
@@ -267,6 +503,49 @@ function scanDefinitions(projectDir) {
   return found;
 }
 __name(scanDefinitions, "scanDefinitions");
+
+// src/lib/config.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
+var CONFIG_FILE = ".claude/better-agentics/config.json";
+function validate(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "the top level must be an object";
+  }
+  const roles = value.disabledRoles;
+  if (!Array.isArray(roles) || !roles.every((role) => typeof role === "string")) {
+    return "disabledRoles must be an array of role IDs";
+  }
+  const unknown = roles.filter((role) => roleById(role) === void 0);
+  if (unknown.length > 0) {
+    return `disabledRoles contains unknown role IDs: ${unknown.join(", ")}`;
+  }
+  return { disabledRoles: roles };
+}
+__name(validate, "validate");
+function readConfig(projectDir) {
+  const file = path3.join(projectDir, CONFIG_FILE);
+  if (!fs3.existsSync(file)) return { kind: "absent" };
+  let raw;
+  try {
+    raw = fs3.readFileSync(file, "utf8");
+  } catch (error) {
+    return {
+      kind: "invalid",
+      message: `${CONFIG_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      raw: null
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { kind: "invalid", message: `${CONFIG_FILE} is not valid JSON`, raw };
+  }
+  const result = validate(parsed);
+  return typeof result === "string" ? { kind: "invalid", message: `${CONFIG_FILE}: ${result}`, raw } : { kind: "ok", config: result };
+}
+__name(readConfig, "readConfig");
 
 // ../../node_modules/.pnpm/@typesafe-ai+sdk@0.6.0/node_modules/@typesafe-ai/sdk/dist/index.mjs
 var requestIdFrom = /* @__PURE__ */ __name((headers) => headers.get("x-typesafe-request-id") ?? void 0, "requestIdFrom");
@@ -351,7 +630,7 @@ var DEFAULT_RETRY_POLICY = {
   apiTimeoutError: true
 };
 DEFAULT_RETRY_POLICY.maxRetries;
-var isRetryableStatus = /* @__PURE__ */ __name((status, policy = DEFAULT_RETRY_POLICY) => policy.httpStatuses.has(status), "isRetryableStatus");
+var isRetryableStatus = /* @__PURE__ */ __name((status, policy2 = DEFAULT_RETRY_POLICY) => policy2.httpStatuses.has(status), "isRetryableStatus");
 var parseRetryAfter = /* @__PURE__ */ __name((headers, now = Date.now()) => {
   const ms = Number(headers.get("retry-after-ms"));
   if (headers.has("retry-after-ms") && Number.isFinite(ms) && ms >= 0) return ms;
@@ -362,13 +641,13 @@ var parseRetryAfter = /* @__PURE__ */ __name((headers, now = Date.now()) => {
   const date = Date.parse(raw);
   if (!Number.isNaN(date)) return Math.max(0, date - now);
 }, "parseRetryAfter");
-var retryDelayMs = /* @__PURE__ */ __name((attempt, headers, policy = DEFAULT_RETRY_POLICY, random = Math.random) => {
-  if (policy.respectRetryAfter && headers !== void 0) {
+var retryDelayMs = /* @__PURE__ */ __name((attempt, headers, policy2 = DEFAULT_RETRY_POLICY, random = Math.random) => {
+  if (policy2.respectRetryAfter && headers !== void 0) {
     const retryAfter = parseRetryAfter(headers);
-    if (retryAfter !== void 0 && retryAfter <= policy.maxRetryAfterMs) return retryAfter;
+    if (retryAfter !== void 0 && retryAfter <= policy2.maxRetryAfterMs) return retryAfter;
   }
-  const exponential = Math.min(policy.backoffInitialMs * 2 ** attempt, policy.backoffMaxMs);
-  return Math.round(exponential * (1 - random() * policy.backoffJitter));
+  const exponential = Math.min(policy2.backoffInitialMs * 2 ** attempt, policy2.backoffMaxMs);
+  return Math.round(exponential * (1 - random() * policy2.backoffJitter));
 }, "retryDelayMs");
 var sleep = /* @__PURE__ */ __name((ms, signal) => new Promise((resolve, reject) => {
   if (signal?.aborted) return reject(signal.reason);
@@ -665,9 +944,9 @@ var resolveRetryPolicy = /* @__PURE__ */ __name((base, overrides) => {
     apiTimeoutError: o.apiTimeoutError ?? base.apiTimeoutError
   };
 }, "resolveRetryPolicy");
-var isRetryableError = /* @__PURE__ */ __name((err, policy) => {
-  if (err instanceof APITimeoutError) return policy.apiTimeoutError;
-  if (err instanceof APIConnectionError) return policy.apiConnectionError;
+var isRetryableError = /* @__PURE__ */ __name((err, policy2) => {
+  if (err instanceof APITimeoutError) return policy2.apiTimeoutError;
+  if (err instanceof APIConnectionError) return policy2.apiConnectionError;
   return false;
 }, "isRetryableError");
 var resolveLogLevel = /* @__PURE__ */ __name((fromCode) => {
@@ -750,7 +1029,7 @@ var TypeSafeClient = class {
     if (config.fetch === void 0 && typeof globalThis.fetch !== "function") missingFetch();
     this.fetch = config.fetch ?? defaultFetch;
     const transport = {
-      request: /* @__PURE__ */ __name((method, path2, options) => this.#request(method, path2, options), "request"),
+      request: /* @__PURE__ */ __name((method, path5, options) => this.#request(method, path5, options), "request"),
       defaultModel: this.defaultModel
     };
     this.models = new Models(transport);
@@ -787,17 +1066,17 @@ var TypeSafeClient = class {
     });
   }
   /** Send a request and parse its response body. */
-  #request(method, path2, options = {}) {
+  #request(method, path5, options = {}) {
     const resolved = {
       method,
-      path: path2,
+      path: path5,
       body: options.body,
       headers: mergeHeaders(this.defaultHeaders, options.headers ?? {}),
       signal: options.signal,
       timeout: options.timeout === void 0 ? this.timeout : assertPositiveMs("timeout", options.timeout),
       retry: resolveRetryPolicy(this.retry, options.retry)
     };
-    const tag = `#${++this.#requestCount} ${method} ${path2}`;
+    const tag = `#${++this.#requestCount} ${method} ${path5}`;
     return new APIPromise(this.fetchWithRetries(tag, resolved), async (res) => {
       const parsed = await parseBody(res);
       this.logger.debug(`${tag} <- body`, parsed);
@@ -958,6 +1237,35 @@ function summaryOf(value, field) {
   return summary;
 }
 __name(summaryOf, "summaryOf");
+function commonOf(parsed) {
+  const { parentModel, lang, excludeRoles } = parsed;
+  if (parentModel !== void 0 && (typeof parentModel !== "string" || !isClaudeModel(parentModel))) {
+    invalid("parentModel must be one of fable, opus, sonnet, haiku");
+  }
+  if (lang !== void 0) {
+    if (typeof lang !== "string") invalid("lang must be a string");
+    try {
+      assertLang(lang);
+    } catch (error) {
+      invalid(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (excludeRoles !== void 0 && (!Array.isArray(excludeRoles) || !excludeRoles.every((role) => typeof role === "string"))) {
+    invalid("excludeRoles must be an array of role IDs");
+  }
+  const unknown = (excludeRoles ?? []).filter(
+    (role) => roleById(role) === void 0
+  );
+  if (unknown.length > 0) {
+    invalid(`excludeRoles contains unknown role IDs: ${unknown.join(", ")}`);
+  }
+  return {
+    parentModel,
+    lang: lang ?? "en",
+    excludeRoles: excludeRoles ?? []
+  };
+}
+__name(commonOf, "commonOf");
 function parseInput(raw) {
   let parsed;
   try {
@@ -966,6 +1274,10 @@ function parseInput(raw) {
     invalid("input is not valid JSON");
   }
   if (!isRecord2(parsed)) invalid("input must be a JSON object");
+  return { ...parseTask(parsed), ...commonOf(parsed) };
+}
+__name(parseInput, "parseInput");
+function parseTask(parsed) {
   switch (parsed.reason) {
     case "review": {
       const summary = summaryOf(parsed.task, "task");
@@ -986,7 +1298,11 @@ function parseInput(raw) {
         if (typeof id !== "string" || id === "") {
           invalid(`tasks[${index}].id must be a non-empty string`);
         }
-        return { id, summary };
+        const needsContext = task.needsContext;
+        if (needsContext !== void 0 && typeof needsContext !== "boolean") {
+          invalid(`tasks[${index}].needsContext must be a boolean`);
+        }
+        return { id, summary, needsContext: needsContext ?? false };
       });
       const ids = result.map((task) => task.id);
       const duplicated = ids.find((id, index) => ids.indexOf(id) !== index);
@@ -1003,7 +1319,7 @@ function parseInput(raw) {
       invalid('reason must be "review", "split" or "stuck"');
   }
 }
-__name(parseInput, "parseInput");
+__name(parseTask, "parseTask");
 function candidatesFor(reason, definitions) {
   const candidates = definitions.filter(
     (entry) => roleById(entry.role)?.reason === reason
@@ -1222,6 +1538,74 @@ async function pickDelegate(raw, deps) {
 }
 __name(pickDelegate, "pickDelegate");
 
+// src/lib/preamble.ts
+import fs4 from "node:fs";
+import path4 from "node:path";
+var WHEN_TO_INVOKE2 = "## When to invoke";
+var OUTPUT_FORMAT = "## Output Format";
+var FORK_INSTRUCTION = {
+  ja: /* @__PURE__ */ __name((roleId) => `split \u306E\u5206\u62C5\u3092\u62C5\u3046\u62C5\u3044\u624B\u3068\u3057\u3066\u3001\u4F9D\u983C\u6587\u306E\u4F5C\u696D\u3060\u3051\u3092\u884C\u3046\u3002\u4F1A\u8A71\u306E\u5C65\u6B74\u306B\u3042\u308B\u30AA\u30FC\u30B1\u30B9\u30C8\u30EC\u30FC\u30BF\u30FC\u306E\u898F\u5F8B\u306E\u3046\u3061\u3001\u59D4\u8B72\u3068 pick-delegate \u306B\u95A2\u3059\u308B\u3082\u306E\u306F\u5F53\u3066\u306A\u3044\u3002\u4F9D\u983C\u6587\u304C\u6307\u793A\u3057\u305F\u3068\u304D\u3092\u9664\u304D\u3001Agent \u30C4\u30FC\u30EB\u3067\u3055\u3089\u306B\u59D4\u8B72\u3057\u306A\u3044\u3002
+\u5F79\u5272 ID: ${roleId}`, "ja"),
+  en: /* @__PURE__ */ __name((roleId) => `As the worker for a split assignment, do only the work in the request. Do not apply the orchestrator rules in the conversation history that concern delegation and pick-delegate. Do not delegate further with the Agent tool unless the request tells you to.
+Role ID: ${roleId}`, "en")
+};
+function languageFor(roleId, context) {
+  const { lang } = context;
+  if (lang === "ja" || lang === "en") return lang;
+  const status = checkFragments(context.pluginRoot, context.projectDir, lang);
+  return status.ready.includes(roleId) && status.ready.includes("_common") ? lang : "en";
+}
+__name(languageFor, "languageFor");
+function policy(pluginRoot2) {
+  return fs4.readFileSync(
+    path4.join(pluginRoot2, "references", "subagent-policy.md"),
+    "utf8"
+  ).trim();
+}
+__name(policy, "policy");
+function section(heading, lines) {
+  return [heading, "", ...lines].join("\n");
+}
+__name(section, "section");
+function standardPreamble(roleId, context) {
+  const lang = languageFor(roleId, context);
+  const fragment = loadFragments(
+    context.pluginRoot,
+    context.projectDir,
+    lang
+  ).get(roleId);
+  if (fragment === void 0) throw new Error(`Unknown role id: ${roleId}`);
+  const head = loadPreamble(context.pluginRoot, context.projectDir, lang).map(
+    (line) => line.replaceAll("{{NAME}}", fragment.defaultName).replaceAll("{{ROLE_LABEL}}", fragment.label).replaceAll("{{ROLE_ID}}", roleId)
+  ).join("\n").trim();
+  const parts = [head];
+  for (const heading of vocabularyFor(lang).bodyOrder) {
+    if (heading === WHEN_TO_INVOKE2) continue;
+    const lines = fragment.sections.get(heading);
+    if (lines !== void 0 && lines.length > 0)
+      parts.push(section(heading, lines));
+  }
+  parts.push(policy(context.pluginRoot));
+  return parts.join("\n\n");
+}
+__name(standardPreamble, "standardPreamble");
+function forkPreamble(roleId, context) {
+  const lang = context.lang === "ja" ? "ja" : "en";
+  const fragment = loadFragments(
+    context.pluginRoot,
+    context.projectDir,
+    lang
+  ).get(roleId);
+  if (fragment === void 0) throw new Error(`Unknown role id: ${roleId}`);
+  const parts = [FORK_INSTRUCTION[lang](roleId)];
+  const output = fragment.sections.get(OUTPUT_FORMAT);
+  if (output !== void 0 && output.length > 0)
+    parts.push(section(OUTPUT_FORMAT, output));
+  parts.push(policy(context.pluginRoot));
+  return parts.join("\n\n");
+}
+__name(forkPreamble, "forkPreamble");
+
 // src/pick-delegate.ts
 function dirArg(argv) {
   const index = argv.indexOf("--dir");
@@ -1239,10 +1623,19 @@ try {
   const raw = await readStdin();
   const projectDir = projectDirOf(process.env, dirArg(process.argv.slice(2)));
   const key = process.env.TYPESAFE_API_KEY?.trim() ?? "";
+  const root = pluginRoot();
+  const bundled = loadFragments(root, projectDir, "en");
   const output = await pickDelegate(raw, {
     definitions: scanDefinitions(projectDir),
+    config: readConfig(projectDir),
     apiKey: key === "" ? void 0 : key,
-    createAsk: createJevAsk
+    createAsk: createJevAsk,
+    forkEnabled: process.env.CLAUDE_CODE_FORK_SUBAGENT !== "0",
+    standardCriteria: /* @__PURE__ */ __name((roleId) => (bundled.get(roleId)?.sections.get("## When to invoke") ?? []).join("\n"), "standardCriteria"),
+    preambles: {
+      standard: /* @__PURE__ */ __name((roleId, lang) => standardPreamble(roleId, { pluginRoot: root, projectDir, lang }), "standard"),
+      fork: /* @__PURE__ */ __name((roleId, lang) => forkPreamble(roleId, { pluginRoot: root, projectDir, lang }), "fork")
+    }
   });
   process.stdout.write(`${JSON.stringify(output)}
 `);

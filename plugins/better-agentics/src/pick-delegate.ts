@@ -3,8 +3,11 @@
 // 終了コードは常に 0 とし、成否は ok で表す。
 
 import { projectDirOf, scanDefinitions } from "./lib/agents"
+import { readConfig } from "./lib/config"
+import { loadFragments, pluginRoot } from "./lib/fragments"
 import { createJevAsk } from "./lib/jev"
 import { pickDelegate } from "./lib/pick"
+import { forkPreamble, standardPreamble } from "./lib/preamble"
 
 function dirArg(argv: string[]): string {
   const index = argv.indexOf("--dir")
@@ -22,10 +25,22 @@ try {
   const raw = await readStdin()
   const projectDir = projectDirOf(process.env, dirArg(process.argv.slice(2)))
   const key = process.env.TYPESAFE_API_KEY?.trim() ?? ""
+  const root = pluginRoot()
+  const bundled = loadFragments(root, projectDir, "en")
   const output = await pickDelegate(raw, {
     definitions: scanDefinitions(projectDir),
+    config: readConfig(projectDir),
     apiKey: key === "" ? undefined : key,
-    createAsk: createJevAsk
+    createAsk: createJevAsk,
+    forkEnabled: process.env.CLAUDE_CODE_FORK_SUBAGENT !== "0",
+    standardCriteria: (roleId) =>
+      (bundled.get(roleId)?.sections.get("## When to invoke") ?? []).join("\n"),
+    preambles: {
+      standard: (roleId, lang) =>
+        standardPreamble(roleId, { pluginRoot: root, projectDir, lang }),
+      fork: (roleId, lang) =>
+        forkPreamble(roleId, { pluginRoot: root, projectDir, lang })
+    }
   })
   process.stdout.write(`${JSON.stringify(output)}\n`)
 } catch (error) {
