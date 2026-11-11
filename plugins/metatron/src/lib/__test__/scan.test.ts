@@ -612,14 +612,18 @@ test("ディレクトリ構成: 実在しない記述は findings、未記載の
   const diff = diffArchitecture({
     scan: result,
     sections: {
-      ディレクトリ構成と責務: "- src: 実装\n- `src/legacy`: 旧実装\n"
+      ディレクトリ構成と責務:
+        "- src: 実装\n- `src/legacy`: 旧実装\n- `gone/`: 消えた\n- `README`: ファイル\n"
     }
   })
 
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual(["src/legacy"])
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
+    "gone",
+    "src/legacy"
+  ])
   expect(
     diff.findings.filter((f) => f.section === "ディレクトリ構成と責務")
-  ).toHaveLength(1)
+  ).toHaveLength(2)
   const line = diff.skipped.find((s) =>
     s.startsWith("ディレクトリ構成の未記載")
   )

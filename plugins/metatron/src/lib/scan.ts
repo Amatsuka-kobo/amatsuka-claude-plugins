@@ -1349,7 +1349,11 @@ const SOURCE_FILE_RES: readonly RegExp[] = [
   /^(turbo|nx)\.json$/,
   /^bunfig\.toml$/,
   /^\.(nvmrc|node-version|python-version|ruby-version|tool-versions)$/,
-  /^mise\.toml$/,
+  /^\.?mise\.toml$/,
+  /^flake\.nix$/,
+  /^CMakeLists\.txt$/,
+  /^Earthfile$/,
+  /^Procfile$/,
   /^rust-toolchain(\.toml)?$/,
   // タスクランナー
   /^(GNU)?[Mm]akefile$/,
@@ -1358,10 +1362,10 @@ const SOURCE_FILE_RES: readonly RegExp[] = [
   /^Rakefile$/,
   /^tox\.ini$/,
   // コンテナ
-  /^(Dockerfile|Containerfile)(\..+)?$/,
+  /^([Dd]ockerfile|Containerfile)(\..+)?$/,
   /\.(Dockerfile|Containerfile)$/,
-  /^(docker-)?compose[^/]*\.ya?ml$/,
-  /^devcontainer\.json$/
+  /^\.?devcontainer\.json$/,
+  /^(docker-)?compose[^/]*\.ya?ml$/
 ]
 
 function collectSources(result: ScanResult, skipped: string[]): string[] {
@@ -1415,7 +1419,8 @@ function diffDirectories(
     // ワイルドカードを含むものは保護パス等の glob なので見ない。
     if (/[*?[\]{}]/.test(token)) continue
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue
-    if (!token.includes("/")) continue
+    // `/` を含まない語は、末尾の `/` でディレクトリと明示したもの(`legacy/`)だけを見る。
+    if (!token.includes("/") && !raw.endsWith("/")) continue
     if (existing.has(token)) continue
     // ツリーは maxDepth までしか持たない。それより深いパスは「実在しない」と
     // 断定できないため候補にしない(決定的でない検出をしない)。

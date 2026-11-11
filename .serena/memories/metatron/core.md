@@ -94,7 +94,7 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 2026-11-12 から: GOTCHAS は追記のみではない。`stage-gotcha` → `commit-gotchas` で、監査(`/metatron:audit`)に限り
 エントリのタイトルと 5 フィールドの値を書き換えられる(日付・ID・タグ・理由行は保つ)。`diff-architecture` は技術スタックと
-コマンドを機械的に照合せず、定義のありかを `sources` で返す。ディレクトリは書かれたものの実在だけを判定する。
+コマンドを機械的に照合せず、定義のありかを `sources` で返す。ディレクトリはインラインコードで書かれたパスの実在だけを判定し、ツリーの中は判定しない。
 
 `[GOTCHAS 候補]`(`src/lib/gotcha-candidates.ts`、CLI は `src/cli/gotcha-candidate.ts`): `scan-gotcha-candidates` が候補ごとに
 `fields`・`problems`・`hash`・`fileHash`・`ledgerMatches`(台帳で `title` が一致するエントリの ID)を返す。
