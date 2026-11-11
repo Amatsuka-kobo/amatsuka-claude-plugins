@@ -28,7 +28,11 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 ### `/metatron:update`
 
-現在のコードベースと ARCHITECTURE の乖離を検出し、更新します。技術スタック・コマンド定義・ドメインマップの穴と死んだ glob・保護パス・セクションの欠落など、決定的に検出できる候補だけを一覧提示し、選ばれた分だけ差分提示と承認を経て書き込みます。
+現在のコードベースと ARCHITECTURE の乖離を検出し、更新します。ドメインマップの穴と死んだ glob・ディレクトリ構成・セクションの欠落は CLI が決定的に検出します。技術スタックとコマンド定義は、要約として書くセクションです。CLI はこの 2 つを照合せず、定義のありか(マニフェスト・タスクランナー・コンテナ定義のパス)だけを返します。書かれた技術やコマンドが今も残っているかは、AI がそれらのファイルを読んで確かめます。候補を一覧提示し、選ばれた分だけ差分提示と承認を経て書き込みます。
+
+### `/metatron:audit`
+
+既存の ARCHITECTURE・rules・GOTCHAS を、書式と執筆規律の現行の規定に照らして監査します。metatron の更新で書式や規律が変わったときに、既存の文書を追随させるためのコマンドです。合わない箇所を当たった規定と一緒に一覧提示し、選ばれた分だけ書き直します。書き直すのは書き方だけで、書かれた事実は変えません。GOTCHAS のエントリは `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効なときだけ対象にします。ADR のエントリは書き換えられないため、合わない箇所を報告するだけです。
 
 `docs/intents/domains/` も併せて走査し、codiel が書いた `[ADR 候補]` を乖離の候補と並べて提示します。承認を得たものを ADR にし、その後で持続層側のエントリを参照形に縮めます。続けて `[GOTCHAS 候補]` を走査し、承認を得たものを台帳へ移して持続層から消します。
 
@@ -50,7 +54,7 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | `get gotchas-template` | 読 | 台帳の雛形と既存台帳の状態を取得 |
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR の取得・状態での絞り込み |
 | `scan` | 読 | コードベース解析の事実を返す(書き込みなし) |
-| `diff-architecture` | 読 | 現行 ARCHITECTURE との乖離候補を返す |
+| `diff-architecture` | 読 | 現行 ARCHITECTURE との乖離候補と、技術スタック・コマンドの定義のありかを返す |
 | `stage-architecture --input <path>` | 段階 | セクション更新案を受け取り、書かずに差分と `stagingId` を返す |
 | `stage-rules --input <path>` | 段階 | rules 1 ファイルの更新案を受け取り、書かずに差分と `stagingId` を返す |
 | `stage-adr --input <path>` | 段階 | ADR の追加・状態変更を段階化する(採番は CLI が行う) |
@@ -59,6 +63,8 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | `init-gotchas` | 書 | 内容のある既存台帳を上書きせず、空の台帳を雛形から生成する |
 | `append-gotcha --input <path>` | 書 | エントリを先頭に挿入する(採番は CLI が行う) |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 既存エントリにタグを付与する(本文は不変) |
+| `stage-gotcha --input <path>` | 段階 | 既存エントリの書き換え案を受け取り、書かずに差分と `stagingId` を返す(監査で使う) |
+| `commit-gotchas --staging-id <id>` | 書 | `stagingId` を消費して GOTCHAS の台帳へ書き込む |
 | `scan-adr-candidates` | 読 | `docs/intents/domains/` の `[ADR 候補]` を走査する |
 | `shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <hash>` | 書 | ADR にした候補のエントリを参照形へ縮める |
 | `scan-gotcha-candidates` | 読 | `docs/intents/domains/` の `[GOTCHAS 候補]` を走査する。台帳に同じタイトルがあれば ID を添える |
@@ -66,7 +72,7 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 
 ### なぜ CLI を通すのか
 
-書式検証・採番・追記のみという規律を、AI への指示ではなく機械で保証するためです。指示は合理化して破られますが、CLI しか書き込み口が無ければ、壊れたドメインマップは書けず、連番は衝突せず、GOTCHAS の既存エントリは消えません。ARCHITECTURE と rules の更新にそれぞれ `stage-*` → `commit-*` の 2 段階を課しているのも同じ理由で、両者には差分を計算せずに書き込む経路がコマンド体系上存在しません(`stagingId` は単回使用、既定 30 分で失効し、その間にファイルが変化していれば commit は失敗します)。
+書式検証・採番・追記のみという規律を、AI への指示ではなく機械で保証するためです。指示は合理化して破られますが、CLI しか書き込み口が無ければ、壊れたドメインマップは書けず、連番は衝突せず、GOTCHAS の既存エントリは消えません。ARCHITECTURE と rules の更新、GOTCHAS のエントリの書き換えにそれぞれ `stage-*` → `commit-*` の 2 段階を課しているのも同じ理由で、これらには差分を計算せずに書き込む経路がコマンド体系上存在しません(`stagingId` は単回使用、既定 30 分で失効し、その間にファイルが変化していれば commit は失敗します)。
 
 ### 長い入力は `--input <path>` で渡す
 
