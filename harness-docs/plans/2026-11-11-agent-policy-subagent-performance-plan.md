@@ -557,6 +557,14 @@
 | S6c | Opus・Fable・Sonnet | rules が名前を挙げた執筆のスキルの自己点検があっても、2 つのレビューを並列に回した | 想定どおり |
 | S6d | Opus・Fable・Sonnet | 自分から読み込んだスキルの「レビューに回さない」より規律を優先し、2 つのレビューを並列に回した | 想定どおり。T0 で失敗した Sonnet も通った |
 
+| S1(fork) | Opus | complex-impl を fork で起動し、指摘の修正 2 回は同じ fork を SendMessage で再開した。fork の中で追加の委譲は無かった。依頼文の冒頭に役割名と RoleId・規律を当てないこと・tools・定義の本文があった。定義の本文は全文でなく要約で載せた | fork と再開は想定どおり。本文の全文の転記は守られなかった(T0 と同じ)。fork は会話の文脈を持ち、制約の箇条は要約にも残っていたので、文面は変えない |
+| S1(fork) | Sonnet | モデルの系統が違うので fork せず、通常の起動にした | 想定どおり |
+| S1(外側の手順) | Opus | `/ext-flow` の下で、fork の他の 2 条件を満たしても fork せず、通常の起動にした | 想定どおり |
+| 再開の形態 | Sonnet | モデル注入起動の `general-purpose` を SendMessage で再開でき、モデルが保たれた | 想定どおり |
+| custom 構成 | Sonnet | GPT の実装の定義が依頼文の push を行い、GPT のレビュアーを SendMessage で再開できた | 想定どおり |
+
 - 規律の文面を直してから確かめ直した箇所は無い。
+- 観測していない項目: 差し戻しで escalation に届いたときの 2 ラウンドの受け持ち、合成で起動した定義の再開、T8 の Fable の S2 の文書の側(設計メモのレビューが走らなかった)。
+- T4 は、SessionStart の注入文を変えるので、コミットの後にコードレビューを依頼した。medium 2 件(空行・コメント・末尾コメントで判定が途切れる)を直し、`73b71216` でコミットした。
 - `pnpm run lint`(既存の codiel の警告 1 件のみ)・`typecheck`・`test`(4,248 件パス)・`build` が通り、build の後に `plugins/` の差分は無い。
 - `plugin.json` と `package.json` は `0.21.8-dev` のままである。
