@@ -102,6 +102,14 @@ describe("applyExtraKeys", () => {
     expect(content).toContain("experimental:\n    other: x\n    cacheTtl: 1h\n")
   })
 
+  it("コメント行の字下げは子の字下げとして採らない", () => {
+    const { content } = applyExtraKeys(
+      doc(["experimental:", "      # note", "  other: x"]),
+      { roleId: "code-review", omitClaudeMd: undefined }
+    )
+    expect(content).toContain("  other: x\n  cacheTtl: 1h\n")
+  })
+
   it("入れ子の cacheTtl は書き換えず、直下に cacheTtl を足す", () => {
     const { content, changes } = applyExtraKeys(
       doc(["experimental:", "  foo:", "    cacheTtl: 5m"]),

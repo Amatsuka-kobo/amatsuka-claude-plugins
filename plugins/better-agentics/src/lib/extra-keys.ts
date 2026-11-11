@@ -27,7 +27,9 @@ const CACHE_TTL = "1h"
 
 // ブロックの直下の子の字下げ。子が無ければ 2 空白とする。
 function childIndent(block: string): string {
-  const first = block.split("\n").find((line) => line.trim() !== "")
+  const first = block
+    .split("\n")
+    .find((line) => line.trim() !== "" && !line.trim().startsWith("#"))
   return first === undefined ? "  " : (/^\s*/.exec(first)?.[0] ?? "  ")
 }
 

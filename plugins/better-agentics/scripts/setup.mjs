@@ -772,7 +772,7 @@ var CACHE_TTL_ROLES = [
 ];
 var CACHE_TTL = "1h";
 function childIndent(block) {
-  const first = block.split("\n").find((line) => line.trim() !== "");
+  const first = block.split("\n").find((line) => line.trim() !== "" && !line.trim().startsWith("#"));
   return first === void 0 ? "  " : /^\s*/.exec(first)?.[0] ?? "  ";
 }
 __name(childIndent, "childIndent");
