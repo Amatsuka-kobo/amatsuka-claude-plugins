@@ -3641,6 +3641,13 @@ function gitIgnoredPaths(root) {
 function isIgnored(ignored, rel, isDirectory) {
   return ignored.has(isDirectory ? `${rel}/` : rel);
 }
+function rootFile(root, ignored, rel) {
+  return ignored.has(rel) ? null : path7.join(root, rel);
+}
+function readRootText(root, ignored, rel) {
+  const file = rootFile(root, ignored, rel);
+  return file === null ? null : readTextFile(file);
+}
 function recordFile(state, rel) {
   state.fileCount += 1;
   if (state.files.length < state.limits.maxFiles) state.files.push(rel);
@@ -3723,11 +3730,12 @@ function testFilePattern(rel) {
   }
   return null;
 }
-function scanPackageManager(root, packageJson, warnings) {
+function scanPackageManager(root, ignored, packageJson, warnings) {
   const lockfiles = [];
   let name = null;
   for (const entry of LOCKFILES) {
-    if (!fileExists(path7.join(root, entry.file))) continue;
+    const file = rootFile(root, ignored, entry.file);
+    if (file === null || !fileExists(file)) continue;
     lockfiles.push(entry.file);
     if (name === null) name = entry.name;
   }
@@ -3747,7 +3755,7 @@ function tomlValue(text, key) {
   const re = new RegExp(`^\\s*${key}\\s*=\\s*["']([^"']*)["']\\s*$`, "m");
   return re.exec(text)?.[1];
 }
-function scanLanguages(root, packageJson) {
+function scanLanguages(root, ignored, packageJson) {
   const out = [];
   if (packageJson !== null) {
     const details = {};
@@ -3760,8 +3768,8 @@ function scanLanguages(root, packageJson) {
     if (typeof packageJson.type === "string") details.type = packageJson.type;
     out.push({ name: "Node.js", source: "package.json", details });
   }
-  const tsconfigPath = path7.join(root, "tsconfig.json");
-  if (fileExists(tsconfigPath)) {
+  const tsconfigPath = rootFile(root, ignored, "tsconfig.json");
+  if (tsconfigPath !== null && fileExists(tsconfigPath)) {
     const details = {};
     const parsed = readJsoncFile(tsconfigPath);
     if (isPlainObject3(parsed)) {
@@ -3777,7 +3785,7 @@ function scanLanguages(root, packageJson) {
     }
     out.push({ name: "TypeScript", source: "tsconfig.json", details });
   }
-  const pyproject = readTextFile(path7.join(root, "pyproject.toml"));
+  const pyproject = readRootText(root, ignored, "pyproject.toml");
   if (pyproject !== null) {
     const details = {};
     const requires = tomlValue(pyproject, "requires-python");
@@ -3786,7 +3794,7 @@ function scanLanguages(root, packageJson) {
     if (name !== void 0) details.name = name;
     out.push({ name: "Python", source: "pyproject.toml", details });
   }
-  const goMod = readTextFile(path7.join(root, "go.mod"));
+  const goMod = readRootText(root, ignored, "go.mod");
   if (goMod !== null) {
     const details = {};
     const moduleName = /^module\s+(\S+)\s*$/m.exec(goMod)?.[1];
@@ -3795,7 +3803,7 @@ function scanLanguages(root, packageJson) {
     if (goVersion !== void 0) details.go = goVersion;
     out.push({ name: "Go", source: "go.mod", details });
   }
-  const cargo = readTextFile(path7.join(root, "Cargo.toml"));
+  const cargo = readRootText(root, ignored, "Cargo.toml");
   if (cargo !== null) {
     const details = {};
     const edition = tomlValue(cargo, "edition");
@@ -3879,7 +3887,7 @@ function scanTestFrameworks(root, state, dependencies) {
     seenConfigs.add(key);
     configs.push({ framework, path: entry.path });
   }
-  const pyproject = readTextFile(path7.join(root, "pyproject.toml"));
+  const pyproject = readRootText(root, state.ignored, "pyproject.toml");
   if (pyproject !== null && /^\s*\[tool\.pytest/m.test(pyproject)) {
     configs.push({ framework: "pytest", path: "pyproject.toml" });
   }
@@ -4045,16 +4053,22 @@ function scanInner(startDir, options) {
       `\u8AAD\u3081\u306A\u304B\u3063\u305F\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092 ${String(state.unreadable.length)} \u4EF6\u30B9\u30AD\u30C3\u30D7\u3057\u307E\u3057\u305F(${shown})\u3002`
     );
   }
-  const packageJsonRaw = readJsonFile(path7.join(root, "package.json"));
-  const packageJsonExists = fileExists(path7.join(root, "package.json"));
+  const packageJsonPath = rootFile(root, state.ignored, "package.json");
+  const packageJsonRaw = packageJsonPath === null ? null : readJsonFile(packageJsonPath);
+  const packageJsonExists = packageJsonPath !== null && fileExists(packageJsonPath);
   const packageJson = isPlainObject3(packageJsonRaw) ? packageJsonRaw : null;
   if (packageJsonExists && packageJson === null) {
     warnings.push(
       "package.json \u3092 JSON \u3068\u3057\u3066\u8AAD\u3081\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u4F9D\u5B58\u3068\u30B3\u30DE\u30F3\u30C9\u3092\u53CE\u96C6\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"
     );
   }
-  const packageManager = scanPackageManager(root, packageJson, warnings);
-  const languages = scanLanguages(root, packageJson);
+  const packageManager = scanPackageManager(
+    root,
+    state.ignored,
+    packageJson,
+    warnings
+  );
+  const languages = scanLanguages(root, state.ignored, packageJson);
   const dependencies = {
     source: packageJson === null ? null : "package.json",
     dependencies: toDependencyEntries(packageJson?.dependencies),

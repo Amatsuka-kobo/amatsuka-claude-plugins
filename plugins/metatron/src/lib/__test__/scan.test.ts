@@ -247,6 +247,36 @@ test("S3: git の ignore に当たるファイルとディレクトリを走査�
   expect(result.documents.map((d) => d.path)).toEqual(["docs/a.md"])
 })
 
+test("S3: ignore 済みの lockfile と設定ファイルを判定に使わない", () => {
+  const dir = mkTmp()
+  git(dir, ["init", "-q"])
+  write(
+    dir,
+    ".gitignore",
+    "package.json\npnpm-lock.yaml\ntsconfig.json\npyproject.toml\ngo.mod\nCargo.toml\n"
+  )
+  writeJson(dir, "package.json", {
+    scripts: { test: "vitest" },
+    devDependencies: { vitest: "^4.0.0" }
+  })
+  write(dir, "pnpm-lock.yaml", "")
+  writeJson(dir, "tsconfig.json", { compilerOptions: { strict: true } })
+  write(dir, "pyproject.toml", '[project]\nname = "x"\n[tool.pytest.ini_options]\n')
+  write(dir, "go.mod", "module x\n\ngo 1.22\n")
+  write(dir, "Cargo.toml", '[package]\nname = "x"\n')
+  write(dir, "yarn.lock", "")
+
+  const result = scan(dir, { root: dir })
+
+  expect(result.packageManager.lockfiles).toEqual(["yarn.lock"])
+  expect(result.packageManager.name).toBe("yarn")
+  expect(result.languages).toEqual([])
+  expect(result.dependencies.source).toBeNull()
+  expect(result.scripts).toEqual([])
+  expect(result.testFrameworks.configs).toEqual([])
+  expect(result.warnings).toEqual([])
+})
+
 test("S3: 追跡済みのファイルは ignore のパターンに当たっても走査に残す", () => {
   const dir = mkTmp()
   git(dir, ["init", "-q"])

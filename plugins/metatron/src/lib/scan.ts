@@ -711,6 +711,24 @@ function isIgnored(
   return ignored.has(isDirectory ? `${rel}/` : rel)
 }
 
+/** ルート直下のファイルの絶対パス。git の ignore に当たるなら `null`。 */
+function rootFile(
+  root: string,
+  ignored: ReadonlySet<string>,
+  rel: string
+): string | null {
+  return ignored.has(rel) ? null : path.join(root, rel)
+}
+
+function readRootText(
+  root: string,
+  ignored: ReadonlySet<string>,
+  rel: string
+): string | null {
+  const file = rootFile(root, ignored, rel)
+  return file === null ? null : readTextFile(file)
+}
+
 function recordFile(state: WalkState, rel: string): void {
   state.fileCount += 1
   if (state.files.length < state.limits.maxFiles) state.files.push(rel)
@@ -833,13 +851,15 @@ export function testFilePattern(rel: string): string | null {
 
 function scanPackageManager(
   root: string,
+  ignored: ReadonlySet<string>,
   packageJson: Record<string, unknown> | null,
   warnings: string[]
 ): PackageManagerFact {
   const lockfiles: string[] = []
   let name: string | null = null
   for (const entry of LOCKFILES) {
-    if (!fileExists(path.join(root, entry.file))) continue
+    const file = rootFile(root, ignored, entry.file)
+    if (file === null || !fileExists(file)) continue
     lockfiles.push(entry.file)
     if (name === null) name = entry.name
   }
@@ -864,6 +884,7 @@ function tomlValue(text: string, key: string): string | undefined {
 
 function scanLanguages(
   root: string,
+  ignored: ReadonlySet<string>,
   packageJson: Record<string, unknown> | null
 ): LanguageFact[] {
   const out: LanguageFact[] = []
@@ -880,8 +901,8 @@ function scanLanguages(
     out.push({ name: "Node.js", source: "package.json", details })
   }
 
-  const tsconfigPath = path.join(root, "tsconfig.json")
-  if (fileExists(tsconfigPath)) {
+  const tsconfigPath = rootFile(root, ignored, "tsconfig.json")
+  if (tsconfigPath !== null && fileExists(tsconfigPath)) {
     const details: Record<string, string> = {}
     const parsed = readJsoncFile(tsconfigPath)
     if (isPlainObject(parsed)) {
@@ -898,7 +919,7 @@ function scanLanguages(
     out.push({ name: "TypeScript", source: "tsconfig.json", details })
   }
 
-  const pyproject = readTextFile(path.join(root, "pyproject.toml"))
+  const pyproject = readRootText(root, ignored, "pyproject.toml")
   if (pyproject !== null) {
     const details: Record<string, string> = {}
     const requires = tomlValue(pyproject, "requires-python")
@@ -908,7 +929,7 @@ function scanLanguages(
     out.push({ name: "Python", source: "pyproject.toml", details })
   }
 
-  const goMod = readTextFile(path.join(root, "go.mod"))
+  const goMod = readRootText(root, ignored, "go.mod")
   if (goMod !== null) {
     const details: Record<string, string> = {}
     const moduleName = /^module\s+(\S+)\s*$/m.exec(goMod)?.[1]
@@ -918,7 +939,7 @@ function scanLanguages(
     out.push({ name: "Go", source: "go.mod", details })
   }
 
-  const cargo = readTextFile(path.join(root, "Cargo.toml"))
+  const cargo = readRootText(root, ignored, "Cargo.toml")
   if (cargo !== null) {
     const details: Record<string, string> = {}
     const edition = tomlValue(cargo, "edition")
@@ -1041,7 +1062,7 @@ function scanTestFrameworks(
   }
 
   // pyproject.toml の [tool.pytest] は設定ファイルと同じ強さの決定的な signal。
-  const pyproject = readTextFile(path.join(root, "pyproject.toml"))
+  const pyproject = readRootText(root, state.ignored, "pyproject.toml")
   if (pyproject !== null && /^\s*\[tool\.pytest/m.test(pyproject)) {
     configs.push({ framework: "pytest", path: "pyproject.toml" })
   }
@@ -1250,8 +1271,11 @@ function scanInner(
     )
   }
 
-  const packageJsonRaw = readJsonFile(path.join(root, "package.json"))
-  const packageJsonExists = fileExists(path.join(root, "package.json"))
+  const packageJsonPath = rootFile(root, state.ignored, "package.json")
+  const packageJsonRaw =
+    packageJsonPath === null ? null : readJsonFile(packageJsonPath)
+  const packageJsonExists =
+    packageJsonPath !== null && fileExists(packageJsonPath)
   const packageJson = isPlainObject(packageJsonRaw) ? packageJsonRaw : null
   if (packageJsonExists && packageJson === null) {
     warnings.push(
@@ -1259,8 +1283,13 @@ function scanInner(
     )
   }
 
-  const packageManager = scanPackageManager(root, packageJson, warnings)
-  const languages = scanLanguages(root, packageJson)
+  const packageManager = scanPackageManager(
+    root,
+    state.ignored,
+    packageJson,
+    warnings
+  )
+  const languages = scanLanguages(root, state.ignored, packageJson)
   const dependencies: DependencyFacts = {
     source: packageJson === null ? null : "package.json",
     dependencies: toDependencyEntries(packageJson?.dependencies),
