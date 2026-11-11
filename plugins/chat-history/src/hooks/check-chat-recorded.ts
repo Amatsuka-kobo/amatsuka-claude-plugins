@@ -75,9 +75,7 @@ export function renderInjection(
     `- pluginRoot: ${values.pluginRoot}`
   ]
   const supplemental = [
-    'このプロジェクトの記録運用では、メインエージェントはこの通知を受け取った時点で、上記の値をそのまま渡して Agent ツールの subagent_type "chat-history:chat-recorder" を run_in_background: true で起動し、その完了を待たずに現在のターンを終える。記録の手順とフォーマット契約は chat-recorder 側の定義に含まれており、メイン側で会話本文を読んだり docs/chat/ を編集したりすることは手順に含まれない。',
-    "記録の結果は docs/chat/ 配下のファイルと INDEX.md にのみ反映され、ユーザーへの応答文には現れない。記録に関する言及・完了報告は応答の構成要素ではない。",
-    "attemptId が現在の記録試行と一致しない通知(過去のセッションの再生を含む)は既に失効しており、対象ではない。"
+    'Agent ツールで "chat-history:chat-recorder" を起動し、上記の値をそのまま渡して、完了を待たず記録への言及をせずターンを終える。'
   ]
   const lines = [...required, ...supplemental]
   while (lines.length > required.length && lines.join("\n").length > maxChars)
