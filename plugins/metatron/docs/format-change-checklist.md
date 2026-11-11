@@ -57,6 +57,8 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 
 prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂したら、このセクションに沿って `writing-discipline.md` を見直す。
 
+最後に追随した prompt-smith のコミット: `e12d5736`(2026-11-12)。次の見直しでは、`git log e12d5736..HEAD -- plugins/prompt-smith/skills/prompt-smith/SKILL.md` で差分を確かめる。
+
 - [ ] 削る基準・残す基準・書き方の基準・引くための記述の例外を、prompt-smith の現行規律に追随させる
 - [ ] ARCHITECTURE・GOTCHAS・ADR 向けの特化(適用の強さ、例外の範囲、GOTCHAS エントリを 1〜3 文に収めること、ADR の 3 条件、図の基準)は変えない
 - [ ] 引くための記述の例外は ARCHITECTURE と rules の値を引く先のブロックにだけ当て、GOTCHAS エントリには当てない
