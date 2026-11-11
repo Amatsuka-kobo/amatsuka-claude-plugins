@@ -6,6 +6,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { projectDirOf, scanDefinitions } from "../lib/agents"
 import { pluginRoot } from "../lib/fragments"
+import { roleById } from "../lib/roles"
 import { orchestrationState, subagentPolicyApplies } from "../lib/state"
 import { readStdin } from "./stdin"
 
@@ -18,14 +19,19 @@ try {
   ) {
     const projectDir = projectDirOf(process.env, input.cwd ?? process.cwd())
     // agent_type は定義の name と突き合わせる。ファイル名とは突き合わせない。
-    const matched = scanDefinitions(projectDir).some(
+    const matched = scanDefinitions(projectDir).find(
       (entry) => entry.name === agentType
     )
-    if (matched) {
-      const policy = fs.readFileSync(
+    if (matched !== undefined) {
+      const text = fs.readFileSync(
         path.join(pluginRoot(), "references", "subagent-policy.md"),
         "utf8"
       )
+      // 委譲先が作業を断るときに役割 ID を報告できるよう、役割表にある役割だけ 1 行目に添える。
+      const policy =
+        roleById(matched.role) === undefined
+          ? text
+          : `役割 ID: ${matched.role}\n\n${text}`
       process.stdout.write(
         `${JSON.stringify({
           hookSpecificOutput: {

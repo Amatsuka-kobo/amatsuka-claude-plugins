@@ -36,6 +36,120 @@ __name(sectionBody, "sectionBody");
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+// src/lib/roles.ts
+var ROLES = [
+  {
+    id: "complex-impl",
+    label: "\u8907\u96D1\u307E\u305F\u306F\u91CD\u8981\u306A\u5B9F\u88C5",
+    kind: "impl",
+    model: "opus",
+    effort: "medium",
+    reason: "split"
+  },
+  {
+    id: "normal-impl",
+    label: "\u901A\u5E38\u306E\u5B9F\u88C5",
+    kind: "impl",
+    model: "sonnet",
+    effort: "medium",
+    reason: "split"
+  },
+  {
+    id: "light-impl",
+    label: "\u8EFD\u91CF\u306A\u5B9F\u88C5",
+    kind: "impl",
+    model: "haiku",
+    effort: "medium",
+    reason: "split"
+  },
+  {
+    id: "general",
+    label: "\u305D\u306E\u4ED6\u306E\u30BF\u30B9\u30AF",
+    kind: "impl",
+    model: "sonnet",
+    effort: "high",
+    reason: "split"
+  },
+  {
+    id: "explore",
+    label: "\u30B3\u30FC\u30C9\u30D9\u30FC\u30B9\u63A2\u7D22",
+    kind: "readonly",
+    model: "sonnet",
+    effort: "high",
+    reason: "split"
+  },
+  {
+    id: "realtime-research",
+    label: "\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u60C5\u5831\u8ABF\u67FB",
+    kind: "readonly",
+    model: "sonnet",
+    effort: "high",
+    reason: "split"
+  },
+  {
+    id: "e2e-verify",
+    label: "E2E \u52D5\u4F5C\u691C\u8A3C\u30FB\u30D6\u30E9\u30A6\u30B6/GUI \u64CD\u4F5C",
+    kind: "impl",
+    model: "sonnet",
+    effort: "high",
+    reason: "split"
+  },
+  {
+    id: "escalation",
+    label: "\u884C\u304D\u8A70\u307E\u308A\u6642\u306E\u30A8\u30B9\u30AB\u30EC\u30FC\u30B7\u30E7\u30F3",
+    kind: "impl",
+    model: "fable",
+    effort: "high",
+    reason: "stuck"
+  },
+  {
+    id: "design-review",
+    label: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    model: "opus",
+    effort: "high",
+    reason: "review"
+  },
+  {
+    id: "knowledge-elicitation",
+    label: "\u6697\u9ED9\u77E5\u306E\u62BD\u51FA\u30FB\u7406\u89E3\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    model: "haiku",
+    effort: "low",
+    reason: "review"
+  },
+  {
+    id: "code-review",
+    label: "\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    model: "sonnet",
+    effort: "high",
+    reason: "review"
+  },
+  {
+    id: "complex-review",
+    label: "\u91CD\u8981\u306A\u5B9F\u88C5\u30FB\u9AD8\u30EA\u30B9\u30AF\u8A2D\u8A08\u66F8\u306E\u6700\u7D42\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    model: "fable",
+    effort: "high",
+    reason: "review"
+  },
+  {
+    id: "adversarial-review",
+    label: "\u6575\u5BFE\u7684\u30EC\u30D3\u30E5\u30FC",
+    kind: "readonly",
+    model: "opus",
+    effort: "high",
+    reason: "review"
+  }
+];
+function roleById(id) {
+  return ROLES.find((role) => role.id === id);
+}
+__name(roleById, "roleById");
+
+// src/lib/fragments.ts
 function pluginRoot() {
   const fromEnv = process.env.CLAUDE_PLUGIN_ROOT;
   if (fromEnv !== void 0 && fromEnv !== "") return fromEnv;
@@ -223,14 +337,17 @@ try {
   const agentType = input.agent_type;
   if (agentType !== void 0 && subagentPolicyApplies(orchestrationState(process.env))) {
     const projectDir = projectDirOf(process.env, input.cwd ?? process.cwd());
-    const matched = scanDefinitions(projectDir).some(
+    const matched = scanDefinitions(projectDir).find(
       (entry) => entry.name === agentType
     );
-    if (matched) {
-      const policy = fs3.readFileSync(
+    if (matched !== void 0) {
+      const text = fs3.readFileSync(
         path3.join(pluginRoot(), "references", "subagent-policy.md"),
         "utf8"
       );
+      const policy = roleById(matched.role) === void 0 ? text : `\u5F79\u5272 ID: ${matched.role}
+
+${text}`;
       process.stdout.write(
         `${JSON.stringify({
           hookSpecificOutput: {

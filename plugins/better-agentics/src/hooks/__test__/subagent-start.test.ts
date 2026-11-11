@@ -41,7 +41,7 @@ describe("subagent-start", () => {
   it("name が一致する better-agentics の定義に規律の全文を注入する", () => {
     place(project, "docs-check", definition("docs-reviewer", "design-review"))
     const output = run("docs-reviewer", ENABLED)
-    expect(contextOf(output)).toBe(POLICY)
+    expect(contextOf(output)).toBe(`役割 ID: design-review\n\n${POLICY}`)
     expect(JSON.parse(output).hookSpecificOutput.hookEventName).toBe(
       "SubagentStart"
     )
@@ -51,7 +51,12 @@ describe("subagent-start", () => {
     place(project, "a", definition("a", "explore"))
     expect(
       contextOf(run("a", { AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "1" }))
-    ).toBe(POLICY)
+    ).toBe(`役割 ID: explore\n\n${POLICY}`)
+  })
+
+  it("役割表に無い role-id の定義には役割 ID を添えず全文だけを注入する", () => {
+    place(project, "x", definition("x", "final-review"))
+    expect(contextOf(run("x", ENABLED))).toBe(POLICY)
   })
 
   it("規律を注入しない状態では何も出力しない", () => {
@@ -88,7 +93,10 @@ describe("subagent-start", () => {
     expect(result).toBe("")
   })
 
-  it("規律の文字数は additionalContext の上限 10,000 未満である", () => {
-    expect([...POLICY].length).toBeLessThan(10_000)
+  it("注入の文字数は additionalContext の上限 10,000 未満である", () => {
+    place(project, "a", definition("a", "knowledge-elicitation"))
+    expect([...(contextOf(run("a", ENABLED)) ?? "")].length).toBeLessThan(
+      10_000
+    )
   })
 })
