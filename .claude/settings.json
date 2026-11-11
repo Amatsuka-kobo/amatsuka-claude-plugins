@@ -9,6 +9,26 @@
   },
   "permissions": {
     "allow": [
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(gh * *list *)",
+      "Bash(gh * *view *)",
+      "Bash(gh * *status *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr reopen *)",
+      "Bash(gh pr ready *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue close *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue develop *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue reopen *)",
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git pull *)",
@@ -18,6 +38,9 @@
       "Bash(git status*)",
       "Bash(git rm *)",
       "Bash(git rm -r *)",
+      "Bash(git switch *)",
+      "Bash(git checkout *)",
+      "Bash(git push *)",
       "Bash(pnpm install*)",
       "Bash(pnpm run build)",
       "Bash(pnpm run test)",
@@ -26,6 +49,7 @@
       "Bash(pnpm dlx *)",
       "Bash(mkdir -p *)",
       "Bash(rm /tmp/**/*)",
+      "Workflow",
       "mcp__serena__find_symbol",
       "mcp__serena__read_memory",
       "mcp__serena__list_memories",
@@ -34,17 +58,19 @@
       "mcp__plugin_context7_context7__resolve-library-id"
     ],
     "deny": [
+      "Read(*.env)",
+      "Read(.claude/settings.local.json)",
       "Bash(rm -rf ./)",
       "Bash(rm -rf /)",
+      "Bash(gh * *delete *)",
+      "Bash(gh project copy *)",
+      "Bash(gh project *delete *)",
+      "Bash(gh project edit *)",
+      "Bash(gh repo *)",
       "Bash(git rm -rf *)",
       "Bash(git rm -f *)",
       "Bash(git push --force *)",
       "Bash(sudo *)"
-    ],
-    "ask": [
-      "Bash(git checkout *)",
-      "Bash(git push *)",
-      "Bash(rm *)"
     ]
   },
   "model": "opus",
@@ -96,13 +122,13 @@
   "outputStyle": "EnhancedClaude5",
   "modelSettings": {
     "fable": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
     "opus": {
-      "effortLevel": "xhigh"
+      "effortLevel": "medium"
     },
     "sonnet": {
-      "effortLevel": "medium"
+      "effortLevel": "high"
     },
     "haiku": {
       "effortLevel": "medium"
