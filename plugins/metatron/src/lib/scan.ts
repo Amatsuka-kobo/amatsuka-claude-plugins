@@ -1438,6 +1438,8 @@ function globLiteralPrefix(glob: string): string {
 /** glob の 1 区間が、走査の除外ディレクトリの名前に一致しうるか。 */
 function segmentMayMatchExcluded(segment: string): boolean {
   if (segment === "**") return true
+  // 波かっこ・角かっこの区間は、展開の解釈をせず一致しうるものとして扱う。
+  if (/[[\]{}]/.test(segment)) return true
   if (!/[*?]/.test(segment)) return EXCLUDED_DIRECTORY_NAMES.has(segment)
   const re = new RegExp(
     `^${segment

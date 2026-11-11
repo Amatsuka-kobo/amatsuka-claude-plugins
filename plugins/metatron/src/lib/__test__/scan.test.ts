@@ -721,6 +721,7 @@ test("ドメインマップ: 除外名に一致しうるワイルドカードと
       impl: ["src/**"],
       bundle: ["pkg/dist*/**"],
       prompt: [".claude/skills/**", ".claude/*/x/**"],
+      brace: ["{src,dist}/x.js"],
       gone: ["src/old/**", "src/*.vue"]
     }
   })
@@ -736,6 +737,7 @@ test("ドメインマップ: 除外名に一致しうるワイルドカードと
   expect(line).toContain("pkg/dist*/**")
   expect(line).toContain(".claude/skills/**")
   expect(line).toContain(".claude/*/x/**")
+  expect(line).toContain("{src,dist}/x.js")
 })
 
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {

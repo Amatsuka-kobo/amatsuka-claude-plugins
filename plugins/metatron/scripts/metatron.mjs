@@ -4209,6 +4209,7 @@ function globLiteralPrefix(glob) {
 }
 function segmentMayMatchExcluded(segment) {
   if (segment === "**") return true;
+  if (/[[\]{}]/.test(segment)) return true;
   if (!/[*?]/.test(segment)) return EXCLUDED_DIRECTORY_NAMES.has(segment);
   const re = new RegExp(
     `^${segment.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")}$`
