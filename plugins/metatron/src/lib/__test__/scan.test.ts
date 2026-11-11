@@ -702,6 +702,42 @@ test("ドメインマップ: 除外ディレクトリを含む glob は死んだ
   expect(line).toContain("plugins/*/dist/**")
 })
 
+test("ドメインマップ: 除外名に一致しうるワイルドカードとリンクの中を指す glob は断定しない", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "src/a.ts", "")
+  write(dir, "pkg/dist/a.js", "")
+  write(dir, "real/skills/s.md", "")
+  fs.mkdirSync(path.join(dir, ".claude"))
+  fs.symlinkSync(
+    path.join(dir, "real/skills"),
+    path.join(dir, ".claude/skills")
+  )
+
+  const diff = diffArchitecture({
+    scan: scan(dir, { root: dir }),
+    sections: {},
+    domains: {
+      impl: ["src/**"],
+      bundle: ["pkg/dist*/**"],
+      prompt: [".claude/skills/**", ".claude/*/x/**"],
+      gone: ["src/old/**", "src/*.vue"]
+    }
+  })
+
+  // リテラル部分が実在しない `src/old/**` と、除外名もリンクも関わらない `src/*.vue` は断定する。
+  expect(subjectsOf(diff.findings, "domain_dead_glob")).toEqual([
+    "src/*.vue",
+    "src/old/**"
+  ])
+  const line = diff.skipped.find((s) =>
+    s.startsWith("ドメインマップの死んだ glob の未確認")
+  )
+  expect(line).toContain("pkg/dist*/**")
+  expect(line).toContain(".claude/skills/**")
+  expect(line).toContain(".claude/*/x/**")
+})
+
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {
   const { result } = scanFixture()
 

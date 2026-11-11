@@ -329,6 +329,8 @@ export interface ScanResult {
   tree: TreeEntry[]
   /** 走査したファイル(root からの相対パス)。`maxFiles` で打ち切る。 */
   files: string[]
+  /** 走査がたどらなかったシンボリックリンク(root からの相対パス)。リンク先は見ない。 */
+  symlinks: string[]
   /** 除外ディレクトリを除いたファイルの総数。 */
   fileCount: number
   testFrameworks: TestFrameworkFacts
@@ -631,6 +633,7 @@ interface WalkState {
   limits: ScanLimits
   tree: TreeEntry[]
   files: string[]
+  symlinks: string[]
   fileCount: number
   testFiles: string[]
   /** 深さ 1・2 のディレクトリ → 配下のファイル数。 */
@@ -717,6 +720,9 @@ function walkDirectory(
     } else if (dirent.isFile()) {
       recordFile(state, childRel)
       pushTree(state, childRel, depth + 1, "file")
+    } else if (dirent.isSymbolicLink()) {
+      // リンクの先は見ず、位置だけを記録する(死んだ glob を断定しない材料)。
+      state.symlinks.push(childRel)
     }
   }
 }
@@ -1144,6 +1150,7 @@ function scanInner(
     limits,
     tree: [],
     files: [],
+    symlinks: [],
     fileCount: 0,
     testFiles: [],
     dirFileCounts: new Map(),
@@ -1218,6 +1225,7 @@ function scanInner(
     commands,
     tree: state.tree,
     files: state.files,
+    symlinks: state.symlinks,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -1258,6 +1266,7 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
       commands: [],
       tree: [],
       files: [],
+      symlinks: [],
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -1386,24 +1395,57 @@ function collectSources(result: ScanResult, skipped: string[]): string[] {
  * シンボリックリンクを含むパスはたどらず `false` を返す。
  */
 function existsFromRoot(root: string, relative: string): boolean {
+  return pathStateFromRoot(root, relative) === "exists"
+}
+
+/**
+ * root からの相対パスの状態。各階層の名前は大文字小文字まで完全一致で比べる。
+ * 途中にシンボリックリンクがあれば、その先をたどらず `"link"` を返す。
+ */
+function pathStateFromRoot(
+  root: string,
+  relative: string
+): "exists" | "missing" | "link" {
   let current = root
   for (const segment of relative.split("/")) {
     let names: string[]
     try {
       names = fs.readdirSync(current)
     } catch {
-      return false
+      return "missing"
     }
-    if (!names.includes(segment)) return false
+    if (!names.includes(segment)) return "missing"
     current = path.join(current, segment)
-    // リンクの先はプロジェクトの外でありうるため、たどらずに未確認とする。
     try {
-      if (fs.lstatSync(current).isSymbolicLink()) return false
+      if (fs.lstatSync(current).isSymbolicLink()) return "link"
     } catch {
-      return false
+      return "missing"
     }
   }
-  return true
+  return "exists"
+}
+
+/** glob の先頭から、ワイルドカードを含まない区間だけをつないだもの。 */
+function globLiteralPrefix(glob: string): string {
+  const literal: string[] = []
+  for (const segment of glob.split("/")) {
+    if (/[*?[\]{}]/.test(segment)) break
+    literal.push(segment)
+  }
+  return literal.join("/")
+}
+
+/** glob の 1 区間が、走査の除外ディレクトリの名前に一致しうるか。 */
+function segmentMayMatchExcluded(segment: string): boolean {
+  if (segment === "**") return true
+  if (!/[*?]/.test(segment)) return EXCLUDED_DIRECTORY_NAMES.has(segment)
+  const re = new RegExp(
+    `^${segment
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, "[^/]*")
+      .replace(/\?/g, "[^/]")}$`
+  )
+  return [...EXCLUDED_DIRECTORY_NAMES].some((name) => re.test(name))
 }
 
 function diffDirectories(
@@ -1506,11 +1548,24 @@ function diffDomains(
   const unconfirmedGlobs: string[] = []
   for (const g of globs) {
     if (result.files.some((file) => g.re.test(file))) continue
-    // 走査は除外ディレクトリ(dist・build など)の中に入らないため、その中を指す glob は
-    // 一致するファイルが無いことを断定できない。
-    if (g.glob.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
-      unconfirmedGlobs.push(g.glob)
-      continue
+    // 先頭のリテラル部分(`src/old/**` の `src/old`)がルートから実在しなければ断定できる。
+    // 実在する場合でも、走査は除外ディレクトリとシンボリックリンクの中に入らないため、
+    // そこに一致しうる glob は一致するファイルが無いことを断定できない。
+    const prefix = globLiteralPrefix(g.glob)
+    const state =
+      prefix === "" ? "exists" : pathStateFromRoot(result.root, prefix)
+    if (state !== "missing") {
+      const mayHide =
+        state === "link" ||
+        g.glob.split("/").some(segmentMayMatchExcluded) ||
+        result.symlinks.some(
+          (link) =>
+            prefix === "" || link === prefix || link.startsWith(`${prefix}/`)
+        )
+      if (mayHide) {
+        unconfirmedGlobs.push(g.glob)
+        continue
+      }
     }
     findings.push({
       kind: "domain_dead_glob",
@@ -1521,7 +1576,7 @@ function diffDomains(
   }
   if (unconfirmedGlobs.length > 0) {
     skipped.push(
-      `ドメインマップの死んだ glob の未確認: 走査が除外するディレクトリを含む glob(${unconfirmedGlobs.join(", ")})は、一致するファイルの有無を確かめられないため判定しませんでした。`
+      `ドメインマップの死んだ glob の未確認: 走査が入らない除外ディレクトリやシンボリックリンクの中に一致しうる glob(${unconfirmedGlobs.join(", ")})は、一致するファイルの有無を確かめられないため判定しませんでした。`
     )
   }
 }

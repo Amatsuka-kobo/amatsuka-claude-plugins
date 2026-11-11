@@ -3651,6 +3651,8 @@ function walkDirectory(state, dir, rel, depth) {
     } else if (dirent.isFile()) {
       recordFile(state, childRel);
       pushTree(state, childRel, depth + 1, "file");
+    } else if (dirent.isSymbolicLink()) {
+      state.symlinks.push(childRel);
     }
   }
 }
@@ -3968,6 +3970,7 @@ function scanInner(startDir, options) {
     limits,
     tree: [],
     files: [],
+    symlinks: [],
     fileCount: 0,
     testFiles: [],
     dirFileCounts: /* @__PURE__ */ new Map(),
@@ -4037,6 +4040,7 @@ function scanInner(startDir, options) {
     commands,
     tree: state.tree,
     files: state.files,
+    symlinks: state.symlinks,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -4069,6 +4073,7 @@ function scan(startDir, options = {}) {
       commands: [],
       tree: [],
       files: [],
+      symlinks: [],
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -4173,23 +4178,42 @@ function collectSources(result, skipped) {
   }).sort(compareStrings);
 }
 function existsFromRoot(root, relative) {
+  return pathStateFromRoot(root, relative) === "exists";
+}
+function pathStateFromRoot(root, relative) {
   let current = root;
   for (const segment of relative.split("/")) {
     let names;
     try {
       names = fs7.readdirSync(current);
     } catch {
-      return false;
+      return "missing";
     }
-    if (!names.includes(segment)) return false;
+    if (!names.includes(segment)) return "missing";
     current = path7.join(current, segment);
     try {
-      if (fs7.lstatSync(current).isSymbolicLink()) return false;
+      if (fs7.lstatSync(current).isSymbolicLink()) return "link";
     } catch {
-      return false;
+      return "missing";
     }
   }
-  return true;
+  return "exists";
+}
+function globLiteralPrefix(glob) {
+  const literal = [];
+  for (const segment of glob.split("/")) {
+    if (/[*?[\]{}]/.test(segment)) break;
+    literal.push(segment);
+  }
+  return literal.join("/");
+}
+function segmentMayMatchExcluded(segment) {
+  if (segment === "**") return true;
+  if (!/[*?]/.test(segment)) return EXCLUDED_DIRECTORY_NAMES.has(segment);
+  const re = new RegExp(
+    `^${segment.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")}$`
+  );
+  return [...EXCLUDED_DIRECTORY_NAMES].some((name) => re.test(name));
 }
 function diffDirectories(result, body, skipped) {
   const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
@@ -4259,9 +4283,16 @@ function diffDomains(result, domains, findings, skipped) {
   const unconfirmedGlobs = [];
   for (const g of globs) {
     if (result.files.some((file) => g.re.test(file))) continue;
-    if (g.glob.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
-      unconfirmedGlobs.push(g.glob);
-      continue;
+    const prefix = globLiteralPrefix(g.glob);
+    const state = prefix === "" ? "exists" : pathStateFromRoot(result.root, prefix);
+    if (state !== "missing") {
+      const mayHide = state === "link" || g.glob.split("/").some(segmentMayMatchExcluded) || result.symlinks.some(
+        (link) => prefix === "" || link === prefix || link.startsWith(`${prefix}/`)
+      );
+      if (mayHide) {
+        unconfirmedGlobs.push(g.glob);
+        continue;
+      }
     }
     findings.push({
       kind: "domain_dead_glob",
@@ -4272,7 +4303,7 @@ function diffDomains(result, domains, findings, skipped) {
   }
   if (unconfirmedGlobs.length > 0) {
     skipped.push(
-      `\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u6B7B\u3093\u3060 glob \u306E\u672A\u78BA\u8A8D: \u8D70\u67FB\u304C\u9664\u5916\u3059\u308B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u542B\u3080 glob(${unconfirmedGlobs.join(", ")})\u306F\u3001\u4E00\u81F4\u3059\u308B\u30D5\u30A1\u30A4\u30EB\u306E\u6709\u7121\u3092\u78BA\u304B\u3081\u3089\u308C\u306A\u3044\u305F\u3081\u5224\u5B9A\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
+      `\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u6B7B\u3093\u3060 glob \u306E\u672A\u78BA\u8A8D: \u8D70\u67FB\u304C\u5165\u3089\u306A\u3044\u9664\u5916\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3084\u30B7\u30F3\u30DC\u30EA\u30C3\u30AF\u30EA\u30F3\u30AF\u306E\u4E2D\u306B\u4E00\u81F4\u3057\u3046\u308B glob(${unconfirmedGlobs.join(", ")})\u306F\u3001\u4E00\u81F4\u3059\u308B\u30D5\u30A1\u30A4\u30EB\u306E\u6709\u7121\u3092\u78BA\u304B\u3081\u3089\u308C\u306A\u3044\u305F\u3081\u5224\u5B9A\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
     );
   }
 }
