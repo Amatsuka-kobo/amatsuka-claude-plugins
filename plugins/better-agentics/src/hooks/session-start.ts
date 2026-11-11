@@ -66,8 +66,8 @@ function build(env: NodeJS.ProcessEnv, cwd: string): string | undefined {
   try {
     definitions = scanDefinitions(projectDir)
   } catch {
-    // 走査に失敗しても、使用指示の注入は続ける。
-    return INSTRUCTION
+    // 走査に失敗しても、定義 0 件として知らせと警告の注入は続ける。
+    definitions = []
   }
   return [
     INSTRUCTION,

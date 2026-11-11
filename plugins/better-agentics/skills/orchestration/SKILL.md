@@ -20,7 +20,8 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 - 委譲先は自分で選ばず、`pick-delegate` が返した委譲先で起動する。
 - 並列化やコストのために分担する `split` では、委譲している間も自分の分担を進める。自分の分担が無く待つだけになる委譲は、長く機械的な作業(多数のファイルへの一括変更など)に限る。
 - `review`・`stuck` と、文脈の保護のための探索の `split` は、待つだけになってもよい。
-- `pick-delegate` が `ok: false` を返したら、理由を問わず委譲も作業の続行もせず、`error` の種別と `message` をユーザーへ報告して指示を待つ。外側の手順に従っている間の扱いは「外側の手順」のセクションによる。
+- `pick-delegate` が `ok: false` を返したら、理由を問わず委譲も作業の続行もせず、`error` の種別と `message` をユーザーへ報告して指示を待つ。
+- 例外は 2 つある。「委譲先が断ったとき」のセクションが自分で行うと定める `no-candidates` は、報告せずにそのセクションに従う。外側の手順に従っている間の扱いは、「外側の手順」のセクションによる。
 - 必須のレビューの前に `ok: false` が返ったときは、ユーザーへの提示・完了の報告・push にも進まない。
 - `pick-delegate` に渡す作業内容(`summary`)は英語で書く。
 
@@ -67,7 +68,7 @@ EOF
 | --- | --- |
 | `invalid-input` | 入力が JSON として読めない、必須の項目が欠ける、`split` の `id` が重複する、任意の項目の値が不正 |
 | `invalid-config` | `.claude/better-agentics/config.json` が読めないか、形が違う |
-| `no-candidates` | 理由に当たる役割を、設定ですべて外しているか、`excludeRoles` で候補がすべて外れた |
+| `no-candidates` | 理由に当たる役割を、設定ですべて外しているか、`excludeRoles` で候補がすべて外れた。扱いは「委譲先が断ったとき」のセクションによる |
 | `duplicate-role` | 同じ役割を 2 件以上の定義が持つ、または候補の定義の名前が重なる |
 | `no-api-key` | Jev を呼ぶ必要があるのに `TYPESAFE_API_KEY` が無い |
 | `jev-failed` | Jev の呼び出しが失敗した、または応答の形が想定外だった |
@@ -199,7 +200,7 @@ critical・high のある巡の指摘を直して再レビューに回すまで�
 2. Custom Agent モードなら、`.claude/agents/` の定義から frontmatter の `name:` の行でファイルを特定し、そのファイルの `better-agentics-role` の行だけを grep で取る。本文は読まない。
 3. それでも分からなければ、役割を外さずに `pick-delegate` を呼び直す。
 
-- 断った役割を `excludeRoles` に入れて `pick-delegate` を呼び直す。ユーザーが委譲先を示したときは、それを使う。
+- その作業でこれまでに断った役割をすべて `excludeRoles` に入れて、`pick-delegate` を呼び直す。ユーザーが委譲先を示したときは、それを使う。
 - 同じ委譲先が続けて 2 回断ったら、候補が尽きたものとして扱う。呼び直しで前と違う委譲先が返ったら、回数を数え直す。
 - `excludeRoles` を付けた呼び出しで `no-candidates` が返ったときも、候補が尽きたものとして扱う。
 - 候補が尽きたら、Jev にもユーザーにも判断を求めず、委譲しない。

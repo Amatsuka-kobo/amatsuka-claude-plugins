@@ -771,14 +771,23 @@ var CACHE_TTL_ROLES = [
   "knowledge-elicitation"
 ];
 var CACHE_TTL = "1h";
-var CACHE_LINE = /^\s+cacheTtl:\s*(.*)$/;
+function childIndent(block) {
+  const first = block.split("\n").find((line) => line.trim() !== "");
+  return first === void 0 ? "  " : /^\s*/.exec(first)?.[0] ?? "  ";
+}
+__name(childIndent, "childIndent");
+function cacheTtlIndex(lines, indent) {
+  return lines.findIndex(
+    (line) => line.startsWith(indent) && !/^\s/.test(line.slice(indent.length)) && line.slice(indent.length).startsWith("cacheTtl:")
+  );
+}
+__name(cacheTtlIndex, "cacheTtlIndex");
 function cacheTtlOf(block) {
   if (block === void 0) return null;
-  for (const line of block.split("\n")) {
-    const match = CACHE_LINE.exec(line);
-    if (match?.[1] !== void 0) return match[1].trim();
-  }
-  return null;
+  const lines = block.split("\n");
+  const line = lines[cacheTtlIndex(lines, childIndent(block))];
+  if (line === void 0) return null;
+  return line.slice(line.indexOf(":") + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
 }
 __name(cacheTtlOf, "cacheTtlOf");
 function readExtraKeys(content) {
@@ -820,18 +829,16 @@ function applyExtraKeys(content, options) {
         "experimental: write it as a block of indented keys to add cacheTtl"
       );
     } else {
+      const indent = childIndent(block);
       const current = cacheTtlOf(block);
       if (current === null) {
         meta.set("experimental", `${block}
-  cacheTtl: ${CACHE_TTL}`);
+${indent}cacheTtl: ${CACHE_TTL}`);
         changes.cacheTtl = "written";
       } else if (current !== CACHE_TTL) {
-        meta.set(
-          "experimental",
-          block.split("\n").map(
-            (line) => CACHE_LINE.test(line) ? line.replace(/cacheTtl:.*$/, `cacheTtl: ${CACHE_TTL}`) : line
-          ).join("\n")
-        );
+        const lines2 = block.split("\n");
+        lines2[cacheTtlIndex(lines2, indent)] = `${indent}cacheTtl: ${CACHE_TTL}`;
+        meta.set("experimental", lines2.join("\n"));
         changes.cacheTtl = "rewritten";
       }
     }

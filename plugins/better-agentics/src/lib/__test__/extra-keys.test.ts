@@ -94,6 +94,34 @@ describe("applyExtraKeys", () => {
     expect(same.content).toBe(doc(["experimental:", "  cacheTtl: 1h"]))
   })
 
+  it("既存の experimental の字下げに合わせて cacheTtl を足す", () => {
+    const { content } = applyExtraKeys(doc(["experimental:", "    other: x"]), {
+      roleId: "code-review",
+      omitClaudeMd: undefined
+    })
+    expect(content).toContain("experimental:\n    other: x\n    cacheTtl: 1h\n")
+  })
+
+  it("入れ子の cacheTtl は書き換えず、直下に cacheTtl を足す", () => {
+    const { content, changes } = applyExtraKeys(
+      doc(["experimental:", "  foo:", "    cacheTtl: 5m"]),
+      { roleId: "code-review", omitClaudeMd: undefined }
+    )
+    expect(content).toContain(
+      "experimental:\n  foo:\n    cacheTtl: 5m\n  cacheTtl: 1h\n"
+    )
+    expect(changes.cacheTtl).toBe("written")
+  })
+
+  it("引用符付きの 1h は unchanged とみなす", () => {
+    expect(
+      applyExtraKeys(doc(["experimental:", '  cacheTtl: "1h"']), {
+        roleId: "code-review",
+        omitClaudeMd: undefined
+      }).changes.cacheTtl
+    ).toBe("unchanged")
+  })
+
   it("レビュー以外の役割では experimental に触れない", () => {
     const original = doc(["experimental:", "  cacheTtl: 5m"])
     const { content, changes } = applyExtraKeys(original, {

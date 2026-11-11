@@ -529,7 +529,7 @@ function build(env, cwd) {
   try {
     definitions = scanDefinitions(projectDir);
   } catch {
-    return INSTRUCTION;
+    definitions = [];
   }
   return [
     INSTRUCTION,

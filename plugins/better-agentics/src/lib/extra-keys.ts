@@ -24,15 +24,32 @@ export interface ExtraKeyChanges {
 }
 
 const CACHE_TTL = "1h"
-const CACHE_LINE = /^\s+cacheTtl:\s*(.*)$/
+
+// ブロックの直下の子の字下げ。子が無ければ 2 空白とする。
+function childIndent(block: string): string {
+  const first = block.split("\n").find((line) => line.trim() !== "")
+  return first === undefined ? "  " : (/^\s*/.exec(first)?.[0] ?? "  ")
+}
+
+// 直下の cacheTtl の行の位置。入れ子の同名のキーは見ない。
+function cacheTtlIndex(lines: string[], indent: string): number {
+  return lines.findIndex(
+    (line) =>
+      line.startsWith(indent) &&
+      !/^\s/.test(line.slice(indent.length)) &&
+      line.slice(indent.length).startsWith("cacheTtl:")
+  )
+}
 
 function cacheTtlOf(block: string | undefined): string | null {
   if (block === undefined) return null
-  for (const line of block.split("\n")) {
-    const match = CACHE_LINE.exec(line)
-    if (match?.[1] !== undefined) return match[1].trim()
-  }
-  return null
+  const lines = block.split("\n")
+  const line = lines[cacheTtlIndex(lines, childIndent(block))]
+  if (line === undefined) return null
+  return line
+    .slice(line.indexOf(":") + 1)
+    .trim()
+    .replace(/^(["'])(.*)\1$/, "$2")
 }
 
 export function readExtraKeys(content: string): {
@@ -81,22 +98,15 @@ export function applyExtraKeys(
         "experimental: write it as a block of indented keys to add cacheTtl"
       )
     } else {
+      const indent = childIndent(block)
       const current = cacheTtlOf(block)
       if (current === null) {
-        meta.set("experimental", `${block}\n  cacheTtl: ${CACHE_TTL}`)
+        meta.set("experimental", `${block}\n${indent}cacheTtl: ${CACHE_TTL}`)
         changes.cacheTtl = "written"
       } else if (current !== CACHE_TTL) {
-        meta.set(
-          "experimental",
-          block
-            .split("\n")
-            .map((line) =>
-              CACHE_LINE.test(line)
-                ? line.replace(/cacheTtl:.*$/, `cacheTtl: ${CACHE_TTL}`)
-                : line
-            )
-            .join("\n")
-        )
+        const lines = block.split("\n")
+        lines[cacheTtlIndex(lines, indent)] = `${indent}cacheTtl: ${CACHE_TTL}`
+        meta.set("experimental", lines.join("\n"))
         changes.cacheTtl = "rewritten"
       }
     }
