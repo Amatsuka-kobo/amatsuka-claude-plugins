@@ -1422,11 +1422,10 @@ function diffDirectories(
     // `/` を含まない 1 語は、相対パスやビルド出力(除外ディレクトリ)と区別できないため見ない。
     if (!token.includes("/")) continue
     if (existing.has(token)) continue
-    // ツリーは maxDepth までしか持たない。それより深いパスは「実在しない」と
-    // 断定できないため候補にしない(決定的でない検出をしない)。
-    if (token.split("/").length > DEFAULT_SCAN_LIMITS.maxDepth) continue
-    // ファイルとして実在するものは対象外。
-    if (result.files.includes(token)) continue
+    // ツリーは除外ディレクトリ(ビルド出力・node_modules・.git など)と maxDepth より
+    // 深い階層を持たないため、ツリーに無いものはファイルシステムで実在を確かめる。
+    // ファイルとして実在するものも対象外。
+    if (fs.existsSync(path.join(result.root, token))) continue
     findings.push({
       kind: "directory_stale",
       section,

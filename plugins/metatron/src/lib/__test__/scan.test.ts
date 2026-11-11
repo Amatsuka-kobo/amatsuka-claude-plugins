@@ -629,6 +629,26 @@ test("ディレクトリ構成: 実在しない記述は findings、未記載の
   expect(line).not.toContain("src,")
 })
 
+test("ディレクトリ構成: 走査が除外するディレクトリと深い階層は、実在すれば消失にしない", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "packages/web/dist/index.js", "")
+  write(dir, "node_modules/.bin/tool", "")
+  write(dir, "a/b/c/d/e/f/g/h/i/j/file.txt", "")
+
+  const diff = diffArchitecture({
+    scan: scan(dir, { root: dir }),
+    sections: {
+      ディレクトリ構成と責務:
+        "- `packages/web/dist/`\n- `node_modules/.bin/`\n- `a/b/c/d/e/f/g/h/i/j`\n- `packages/gone/`\n"
+    }
+  })
+
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
+    "packages/gone"
+  ])
+})
+
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {
   const { result } = scanFixture()
 

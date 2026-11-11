@@ -4197,8 +4197,7 @@ function diffDirectories(result, body, findings, skipped) {
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue;
     if (!token.includes("/")) continue;
     if (existing.has(token)) continue;
-    if (token.split("/").length > DEFAULT_SCAN_LIMITS.maxDepth) continue;
-    if (result.files.includes(token)) continue;
+    if (fs7.existsSync(path7.join(result.root, token))) continue;
     findings.push({
       kind: "directory_stale",
       section,
