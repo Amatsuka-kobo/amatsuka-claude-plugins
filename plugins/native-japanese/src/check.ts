@@ -7,7 +7,12 @@ import { createHash, randomUUID } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { hasIgnoreMarker, isHtml, type Source } from "./lib/extract.js"
+import {
+  hasIgnoreMarker,
+  isDisciplineFile,
+  isHtml,
+  type Source
+} from "./lib/extract.js"
 import {
   type Analyzer,
   findEditRanges,
@@ -67,12 +72,12 @@ function main(): void {
       ? (bodies[0] as string)
       : fs.readFileSync(file, "utf8")
   const whole: Source = { path: file, text: wholeText, cellType }
-  if (hasIgnoreMarker(whole)) return
+  if (hasIgnoreMarker(whole) || isDisciplineFile(whole)) return
 
   // 実行のたびに読み、規則を組み立て直す(キャッシュしない)
   const rules = buildRules(
     fs.readFileSync(
-      new URL("../references/discipline.md", import.meta.url),
+      new URL("../skills/japanese-writing/SKILL.md", import.meta.url),
       "utf8"
     )
   )

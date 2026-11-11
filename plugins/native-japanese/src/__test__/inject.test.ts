@@ -8,8 +8,11 @@ import { expect, test } from "vitest"
 import { runTs } from "../testing/run-ts.js"
 
 const SCRIPT = fileURLToPath(new URL("../inject.ts", import.meta.url))
-const DISCIPLINE = fileURLToPath(
-  new URL("../../references/discipline.md", import.meta.url)
+const SESSION_START_MD = fileURLToPath(
+  new URL("../../references/session-start.md", import.meta.url)
+)
+const SKILL = fileURLToPath(
+  new URL("../../skills/japanese-writing/SKILL.md", import.meta.url)
 )
 const REMINDER = fileURLToPath(
   new URL("../../references/reminder.md", import.meta.url)
@@ -34,7 +37,8 @@ function inject(input: string, script = SCRIPT): string {
 // src/inject.ts と、それが読み込む morph-runtime.ts と lib/archive.ts を複製した
 // プラグインルートを一時ディレクトリに作り、inject.ts のパスを返す。
 // 取得の起動先 scripts/fetch-morph.mjs は、目印のファイルを書くだけの差し替えにする。
-// discipline が null なら references/ を置かない。置くときは reminder.md にも同じ本文を書く。
+// discipline が null なら references/ と skills/ を置かない。置くときは session-start.md と
+// reminder.md に同じ本文を書き、SKILL.md には frontmatter を付けて同じ本文を書く。
 function makePluginRoot(discipline: string | null): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-"))
   fs.writeFileSync(path.join(root, "package.json"), '{"type":"module"}\n')
@@ -47,8 +51,18 @@ function makePluginRoot(discipline: string | null): string {
   fs.copyFileSync(STUB, path.join(root, "scripts", "fetch-morph.mjs"))
   if (discipline !== null) {
     fs.mkdirSync(path.join(root, "references"))
-    fs.writeFileSync(path.join(root, "references", "discipline.md"), discipline)
+    fs.writeFileSync(
+      path.join(root, "references", "session-start.md"),
+      discipline
+    )
     fs.writeFileSync(path.join(root, "references", "reminder.md"), discipline)
+    fs.mkdirSync(path.join(root, "skills", "japanese-writing"), {
+      recursive: true
+    })
+    fs.writeFileSync(
+      path.join(root, "skills", "japanese-writing", "SKILL.md"),
+      `---\nname: japanese-writing\ndescription: 説明\n---\n\n${discipline}`
+    )
   }
   return script
 }
@@ -72,20 +86,38 @@ function withPluginRoot(
   }
 }
 
-test.each([
-  "SessionStart",
-  "SubagentStart"
-])("%s で discipline.md を目印の行を除いて 1 行の JSON で注入する", (event) => {
+function additionalContext(event: string): string {
   const out = inject(JSON.stringify({ hook_event_name: event }))
   expect(out.endsWith("\n")).toBe(true)
   expect(out.slice(0, -1)).not.toContain("\n")
-  expect(JSON.parse(out)).toEqual({
-    hookSpecificOutput: {
-      hookEventName: event,
-      additionalContext: fs
-        .readFileSync(DISCIPLINE, "utf8")
-        .replace("<!-- native-japanese: ignore-file -->\n\n", "")
-    }
+  const json = JSON.parse(out)
+  expect(json.hookSpecificOutput.hookEventName).toBe(event)
+  return json.hookSpecificOutput.additionalContext
+}
+
+test("SessionStart で session-start.md を目印の行を除いて 1 行の JSON で注入する", () => {
+  expect(additionalContext("SessionStart")).toBe(
+    fs
+      .readFileSync(SESSION_START_MD, "utf8")
+      .replace("<!-- native-japanese: ignore-file -->\n\n", "")
+  )
+})
+
+test("SubagentStart で SKILL.md の frontmatter を除いた本文を注入する", () => {
+  const body = additionalContext("SubagentStart")
+  expect(body).not.toContain("name: japanese-writing")
+  expect(body.startsWith("# 日本語の書き方")).toBe(true)
+  expect(body.length).toBeLessThanOrEqual(9000)
+  expect(fs.readFileSync(SKILL, "utf8").endsWith(body)).toBe(true)
+})
+
+test("SubagentStart では差し替えた SKILL.md の frontmatter と直後の空行を除く", () => {
+  withPluginRoot("# 見出し\n\n- 本文\n", (script) => {
+    expect(
+      JSON.parse(
+        inject(JSON.stringify({ hook_event_name: "SubagentStart" }), script)
+      ).hookSpecificOutput.additionalContext
+    ).toBe("# 見出し\n\n- 本文\n")
   })
 })
 
@@ -153,7 +185,7 @@ test("前後に空白のある目印の行も取り除く", () => {
   )
 })
 
-test("discipline.md が無ければ何も出力しない", () => {
+test("注入元のファイルが無ければ何も出力しない", () => {
   withPluginRoot(null, (script) => {
     expect(inject(SESSION_START, script)).toBe("")
   })
@@ -183,8 +215,8 @@ test("失敗しても stderr に書かない", () => {
   })
 })
 
-test("discipline.md は 9,000 文字以内", () => {
-  expect(fs.readFileSync(DISCIPLINE, "utf8").length).toBeLessThanOrEqual(9000)
+test("SKILL.md の本文は 9,000 文字以内", () => {
+  expect(additionalContext("SubagentStart").length).toBeLessThanOrEqual(9000)
 })
 
 // --- SessionStart からの取得の起動

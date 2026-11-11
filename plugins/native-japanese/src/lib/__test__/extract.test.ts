@@ -4,6 +4,7 @@ import {
   extractBlocks,
   extractLines,
   hasIgnoreMarker,
+  isDisciplineFile,
   isHtml,
   type Source
 } from "../extract.js"
@@ -347,6 +348,26 @@ describe("extractBlocks: HTML", () => {
     for (const p of ["a.vue", "a.jsx", "a.tsx", "a.md", "html"]) {
       expect(isHtml(p)).toBe(false)
     }
+  })
+})
+
+describe("isDisciplineFile", () => {
+  test.each([
+    "plugins/native-japanese/skills/japanese-writing/SKILL.md",
+    "/home/u/.claude/plugins/cache/m/native-japanese/0.2.7-dev/skills/japanese-writing/SKILL.md",
+    "skills/japanese-writing/SKILL.md",
+    "C:\\plugins\\native-japanese\\skills\\japanese-writing\\SKILL.md"
+  ])("%s は真", (path) => {
+    expect(isDisciplineFile({ path, text: "" })).toBe(true)
+  })
+
+  test.each([
+    "plugins/native-japanese/skills/other/SKILL.md",
+    "skills/japanese-writing/README.md",
+    "xskills/japanese-writing/SKILL.md",
+    "skills/japanese-writing/SKILL.md.bak"
+  ])("%s は偽", (path) => {
+    expect(isDisciplineFile({ path, text: "" })).toBe(false)
   })
 })
 

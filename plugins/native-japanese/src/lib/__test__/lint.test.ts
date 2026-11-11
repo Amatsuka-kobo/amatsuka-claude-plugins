@@ -12,7 +12,7 @@ import { buildRules } from "../rules.js"
 
 const RULES = buildRules(
   fs.readFileSync(
-    new URL("../../../references/discipline.md", import.meta.url),
+    new URL("../../../skills/japanese-writing/SKILL.md", import.meta.url),
     "utf8"
   )
 )
@@ -29,29 +29,10 @@ describe("lint: 翻訳調の型", () => {
   test.each([
     ["koto-dekiru", "この設定で時間を短縮することができる。"],
     ["koto-dekiru", "この設定で時間を短縮することが可能だ。"],
-    ["kanten", "コストという観点から見ると妥当だ。"],
-    ["kanten", "コストという観点で比べる。"],
-    ["ni-totte-juyo", "この計画にとって重要な合意だ。"],
-    ["ni-totte-juyo", "利用者にとって大切な画面だ。"],
-    ["wo-motsu", "この決定は大きな意味を持つ。"],
-    ["wo-motsu", "この決定は大きな価値を持つ"],
-    ["wo-motsu", "設定は全体に影響を持つ。"],
-    ["koto-ni-yotte", "情報を整理することによって判断が速くなる。"],
-    ["hoka-naranai", "これは変化の表れに他ならない。"],
-    ["hoka-naranai", "これは変化の表れにほかならない。"],
     ["dash-insert", "収束するまで——つまり指摘が出なくなるまで——繰り返す。"],
     ["dash-insert", "収束するまで――つまり指摘が出なくなるまで繰り返す。"]
   ])("%s が「%s」に当たる", (id, text) => {
     expect(ids("a.md", text)).toContain(id)
-  })
-
-  test.each([
-    "この箱は鍵を持つ。",
-    "役割を持つ定義を並べる。",
-    "意味を持つ定義を並べる。",
-    "各自が責任を持って進める。"
-  ])("wo-motsu が「%s」に当たらない", (text) => {
-    expect(ids("a.md", text)).not.toContain("wo-motsu")
   })
 
   test("違反は行番号・該当部分・分類・advice を持つ", () => {
@@ -61,7 +42,7 @@ describe("lint: 翻訳調の型", () => {
       line: 2,
       endLine: 2,
       text: "短縮することができる。",
-      category: "翻訳調",
+      category: "冗長",
       match: "ことができ"
     })
     expect(v?.advice).not.toBe("")
@@ -73,7 +54,7 @@ describe("lint: 翻訳調の型", () => {
   })
 
   test("避ける語にも当たり、規則 id が avoid:<語> になる", () => {
-    expect(ids("a.md", "様々な設定がある。")).toContain("avoid:様々な")
+    expect(ids("a.md", "大切なのは設定だ。")).toContain("avoid:大切なのは")
   })
 
   test("コードのコメントだけを検査し、コードの文字列は見ない", () => {
@@ -100,10 +81,10 @@ describe("lint: 翻訳調の型", () => {
     expect(ids("a.md", "「短縮することができる」のような癖を直す。")).toEqual(
       []
     )
-    expect(ids("a.md", "『様々な』を使わない。")).toEqual([])
+    expect(ids("a.md", "『大切なのは』を使わない。")).toEqual([])
     // 入れ子の内側と、閉じた内側の括弧の後も外側の括弧の中とみなす
     expect(
-      ids("a.md", "「型は『することができる』で、ことによって も同じ」と書く。")
+      ids("a.md", "「型は『することができる』で、ことが可能 も同じ」と書く。")
     ).toEqual([])
     // 閉じていない括弧は行の終わりまでを中とみなす
     expect(ids("a.md", "「短縮することができる")).toEqual([])
@@ -111,10 +92,8 @@ describe("lint: 翻訳調の型", () => {
 
   test("「〜」を前に置いて型の名前として示した一致は違反にしない", () => {
     expect(ids("a.md", "〜することができる")).toEqual([])
-    expect(
-      ids("a.md", "型: 〜という観点から / 〜に他ならない / 〜にとって重要")
-    ).toEqual([])
-    expect(ids("a.md", "| 〜することによって |")).toEqual([])
+    expect(ids("a.md", "型: 〜することができる / 〜ことが可能")).toEqual([])
+    expect(ids("a.md", "| 〜することが可能 |")).toEqual([])
   })
 
   test("「〜」との間に空白や区切りがあれば違反にする", () => {
@@ -125,9 +104,11 @@ describe("lint: 翻訳調の型", () => {
     expect(ids("a.md", "〜を短縮することができる")).toContain("koto-dekiru")
   })
 
-  test("避ける語の先頭の「〜」で、一致が「」の外へ広がらない", () => {
-    expect(ids("a.md", "「〜なんですよね」「興味深いことに」")).toEqual([])
-    expect(ids("a.md", "そうなんですよね。")).toContain("avoid:〜なんですよね")
+  test("避ける語の「〜」で、一致が「」の外へ広がらない", () => {
+    expect(ids("a.md", "「今回は〜紹介します」「大切なのは」")).toEqual([])
+    expect(ids("a.md", "今回は新機能を紹介します。")).toContain(
+      "avoid:今回は〜紹介します"
+    )
   })
 
   test("括弧の外の一致は違反にする", () => {
@@ -152,7 +133,7 @@ describe("lint: 翻訳調の型", () => {
   })
 
   test("Markdown の > で始まる行(引用)は違反にしない", () => {
-    expect(ids("a.md", "> 様々な判断を行うことができれば")).toEqual([])
+    expect(ids("a.md", "> 大切なのは判断を行うことができれば")).toEqual([])
   })
 
   test("対象外の拡張子は何も返さない", () => {
@@ -162,9 +143,12 @@ describe("lint: 翻訳調の型", () => {
 
 describe("lint: 解析器と ignore-file", () => {
   test("解析器を渡さないと、正規表現の層の規則の違反だけを返す", () => {
-    const text = "時間を短縮することができる。\n\nこれは表れにほかならない。"
+    const text = "時間を短縮することができる。\n\n大切なのは表れだ。"
     const got = lint({ path: "a.md", text }, { rules: RULES })
-    expect(got.map((v) => v.ruleId)).toEqual(["koto-dekiru", "hoka-naranai"])
+    expect(got.map((v) => v.ruleId)).toEqual([
+      "koto-dekiru",
+      "avoid:大切なのは"
+    ])
     expect(
       lint({ path: "a.md", text }, { rules: RULES, analyzer: null })
     ).toEqual(got)
@@ -195,7 +179,7 @@ describe("lint: 解析器と ignore-file", () => {
   test("HTML 以外では、正規表現の層を書き込み後のファイルではなく渡した本文に当てる", () => {
     const whole = {
       path: "a.md",
-      text: "既存のことによって決まる。\n短縮することができる。"
+      text: "既存のことが可能だ。\n短縮することができる。"
     }
     expect(
       run("a.md", "短縮することができる。", whole).map((v) => [
@@ -233,8 +217,8 @@ describe("lint: HTML", () => {
 
   test("実体参照を戻してから当てる", () => {
     const text =
-      "<p>A&nbsp;&amp;&nbsp;B は、情報を整理すること&#12395;よって決まる。</p>"
-    expect(ids("a.html", text)).toEqual(["koto-ni-yotte"])
+      "<p>A&nbsp;&amp;&nbsp;B は、設定を変えるこ&#12392;が可能だ。</p>"
+    expect(ids("a.html", text)).toEqual(["koto-dekiru"])
   })
 
   test("wholeFile があれば、そのブロックに当てる", () => {
@@ -263,34 +247,36 @@ describe("lint: 形態素解析の層", () => {
   const sentence = (n: number) => (FIXTURE[n - 1] as { text: string }).text
 
   test("形態素解析の違反が line と endLine を持ち、正規表現の層の違反と並ぶ", () => {
-    const text = `${sentence(9)}\n\n${sentence(1)}\n`
+    const text = `${sentence(9)}\n\n${sentence(11)}\n`
     const got = lint({ path: "a.md", text }, { rules: RULES, analyzer: fake })
     expect(got.map((v) => [v.ruleId, v.line, v.endLine])).toEqual([
       ["koto-dekiru", 1, 1],
-      ["muse-shugo", 3, 3]
+      ["bunmatsu-renzoku", 3, 3]
     ])
   })
 
   test("形態素解析の層は書き込み後のファイル全体の段落に当てる", () => {
-    const whole = { path: "a.md", text: `${sentence(1)}\n\n${sentence(3)}\n` }
+    const whole = { path: "a.md", text: `${sentence(11)}\n\n${sentence(12)}\n` }
     const got = lint(
-      { path: "a.md", text: sentence(3) },
+      { path: "a.md", text: sentence(12) },
       { rules: RULES, analyzer: fake, wholeFile: whole }
     )
     expect(got.map((v) => [v.ruleId, v.line])).toEqual([
-      ["muse-shugo", 1],
-      ["muse-shugo", 3]
+      ["bunmatsu-renzoku", 1],
+      ["bunmatsu-renzoku", 3]
     ])
   })
 
   test("編集範囲の外の文の違反は overlaps で落ちる", () => {
-    const whole = { path: "a.md", text: `${sentence(1)}\n\n${sentence(3)}\n` }
-    const [range] = findEditRanges(whole.text, [sentence(3)])
+    const whole = { path: "a.md", text: `${sentence(11)}\n\n${sentence(12)}\n` }
+    const [range] = findEditRanges(whole.text, [sentence(12)])
     const got = lint(
-      { path: "a.md", text: sentence(3) },
+      { path: "a.md", text: sentence(12) },
       { rules: RULES, analyzer: fake, wholeFile: whole }
     ).filter((v) => overlaps(v, [range as { start: number; end: number }]))
-    expect(got.map((v) => [v.ruleId, v.line])).toEqual([["muse-shugo", 3]])
+    expect(got.map((v) => [v.ruleId, v.line])).toEqual([
+      ["bunmatsu-renzoku", 3]
+    ])
   })
 
   test("HTML でもブロックに形態素解析の規則を当てる", () => {

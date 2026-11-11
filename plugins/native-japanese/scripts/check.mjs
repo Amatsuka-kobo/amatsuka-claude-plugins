@@ -320,6 +320,9 @@ function htmlBlocks(text) {
   flush();
   return blocks;
 }
+function isDisciplineFile(src) {
+  return /(^|[\\/])skills[\\/]japanese-writing[\\/]SKILL\.md$/.test(src.path);
+}
 function hasIgnoreMarker(src) {
   const lang = langOf(src);
   if (lang === null) return false;
@@ -333,14 +336,6 @@ function hasIgnoreMarker(src) {
 }
 
 // src/lib/morph.ts
-var MUSE_PREDICATES = /* @__PURE__ */ new Set([
-  "\u793A\u3059",
-  "\u610F\u5473\u3059\u308B",
-  "\u7269\u8A9E\u308B",
-  "\u88CF\u4ED8\u3051\u308B",
-  "\u793A\u5506\u3059\u308B"
-]);
-var PRONOUNS = /* @__PURE__ */ new Set(["\u79C1", "\u50D5", "\u6211\u3005", "\u5F7C", "\u5F7C\u5973", "\u3042\u306A\u305F"]);
 var RUN_LENGTH = 4;
 var MIN_ENDING_LENGTH = 2;
 var POLITE_ENDINGS = /* @__PURE__ */ new Set(["\u307E\u3059", "\u3067\u3059", "\u307E\u3057\u305F", "\u3067\u3057\u305F"]);
@@ -358,10 +353,6 @@ var SEGMENT_CUT = /^[()（）[\]「」『』【】:：]+$/;
 var MATCH_LENGTH = 20;
 var TERMINATORS = /* @__PURE__ */ new Set(["\u3002", "\uFF01", "\uFF1F"]);
 var RULES = {
-  "muse-shugo": {
-    category: "\u7FFB\u8A33\u8ABF",
-    advice: "\u300C\u301C\u304B\u3089\u3001\u301C\u3068\u5206\u304B\u308B\u300D\u306E\u3088\u3046\u306B\u3001\u8AAD\u307F\u624B\u304C\u8AAD\u307F\u53D6\u308B\u5F62\u306B\u8A00\u3044\u63DB\u3048\u308B\u3002\u5143\u306E\u6587\u306E\u78BA\u4FE1\u5EA6\u306F\u5909\u3048\u306A\u3044"
-  },
   "bunmatsu-renzoku": {
     category: "\u6587",
     advice: "4 \u6587\u76EE\u306E\u6587\u672B\u306E\u5F62\u3092\u5909\u3048\u308B\u304B\u3001\u96A3\u306E\u6587\u3068\u3064\u306A\u3050"
@@ -436,37 +427,6 @@ function endingOf(ts) {
   return ts.slice(stop, last).map((t) => t.surface).join("");
 }
 var len = (s) => [...s.replace(/\s/g, "")].length;
-function museShugo(ts) {
-  const core = endingStart(ts).stop - 1;
-  const verb = ts[core];
-  if (verb?.pos !== "\u52D5\u8A5E" || verb.pos1 !== "\u81EA\u7ACB") return false;
-  const noun = ts[core - 1];
-  const sahen = verb.base === "\u3059\u308B" && noun?.pos1 === "\u30B5\u5909\u63A5\u7D9A";
-  const base = sahen ? `${noun.surface}\u3059\u308B` : verb.base;
-  const head = sahen ? core - 1 : core;
-  if (!MUSE_PREDICATES.has(base)) return false;
-  const wo = ts[head - 1];
-  const koto = ts[head - 2];
-  if (wo?.surface !== "\u3092" || wo.pos1 !== "\u683C\u52A9\u8A5E") return false;
-  if (!koto || koto.surface !== "\u3053\u3068" && koto.surface !== "\u306E" || koto.pos !== "\u540D\u8A5E" || koto.pos1 !== "\u975E\u81EA\u7ACB")
-    return false;
-  const topicAt = (j) => {
-    const t = ts[j];
-    return (t.surface === "\u306F" || t.surface === "\u304C") && t.pos === "\u52A9\u8A5E" && (t.pos1 === "\u4FC2\u52A9\u8A5E" || t.pos1 === "\u683C\u52A9\u8A5E") && ts[j - 1]?.pos === "\u540D\u8A5E";
-  };
-  let hasSubject = false;
-  let nearestWa = -1;
-  for (let j = 1; j < head - 2; j++) {
-    if (!topicAt(j)) continue;
-    hasSubject = true;
-    if (ts[j].surface === "\u306F") nearestWa = j;
-  }
-  if (!hasSubject) return false;
-  if (nearestWa < 0) return true;
-  const subj = ts[nearestWa - 1];
-  const person = subj.pos1 === "\u4EE3\u540D\u8A5E" || PRONOUNS.has(subj.surface) || subj.pos1 === "\u56FA\u6709\u540D\u8A5E" && subj.pos2 === "\u4EBA\u540D";
-  return !person;
-}
 function clauseCuts(ts) {
   let n = 0;
   for (let k = 1; k < ts.length; k++) {
@@ -541,7 +501,6 @@ function checkBlocks(blocks, analyzer) {
         ...RULES[id],
         match: [...text].slice(0, MATCH_LENGTH).join("")
       });
-      if (museShugo(s.tokens)) hit("muse-shugo");
       if (runs.has(i)) hit("bunmatsu-renzoku");
       const body = TERMINATORS.has(text.at(-1)) ? text.slice(0, -1) : text;
       if (len(body) >= LONG_SENTENCE && clauseCuts(s.tokens) >= MIN_CLAUSE_CUTS)
@@ -651,41 +610,17 @@ var AVOID_ADVICE = "\u8A9E\u3092\u6D88\u3057\u3066\u5177\u4F53\u7684\u306A\u4E8B
 var TRANSLATION = [
   {
     id: "koto-dekiru",
+    category: "\u5197\u9577",
     pattern: /ことが(でき|可能)/u,
     advice: "\u300C\u3059\u308B\u3053\u3068\u304C\u3067\u304D\u300D\u306F\u300C\u3067\u304D\u300D\u306B\u3001\u300C\u301C\u3053\u3068\u304C\u3067\u304D\u300D\u306F\u53EF\u80FD\u5F62\u306B\u7E2E\u3081\u308B\u3002\u5426\u5B9A\u3084\u904E\u53BB\u306E\u6D3B\u7528(\u3067\u304D\u306A\u3044\u30FB\u3067\u304D\u305F)\u306F\u4FDD\u3064"
   },
   {
-    id: "kanten",
-    pattern: /という観点(から|で)/u,
-    advice: "\u300C\u301C\u3067\u898B\u308C\u3070\u300D\u300C\u301C\u3067\u306F\u300D\u306B\u8A00\u3044\u63DB\u3048\u308B"
-  },
-  {
-    id: "ni-totte-juyo",
-    pattern: /にとって(重要|大切)/u,
-    advice: "\u4F55\u304C\u4F55\u3092\u6C7A\u3081\u308B\u306E\u304B\u3092\u3001\u5143\u306E\u6587\u306E\u5F37\u3055\u3092\u5909\u3048\u305A\u306B\u66F8\u304F"
-  },
-  {
-    // 具体物や連体修飾(鍵を持つ、意味を持つ定義)を拾わないよう、3 語と文末に限る
-    id: "wo-motsu",
-    pattern: /(意味|価値|影響)を持つ(?=。|$)/mu,
-    advice: "\u300C\u301C\u304C\u3042\u308B\u300D\u306B\u8A00\u3044\u63DB\u3048\u308B"
-  },
-  {
-    id: "koto-ni-yotte",
-    pattern: /ことによって/u,
-    advice: "\u300C\u301C\u3059\u308B\u3068\u300D\u300C\u301C\u3057\u3066\u300D\u306B\u8A00\u3044\u63DB\u3048\u308B"
-  },
-  {
-    id: "hoka-naranai",
-    pattern: /に(他|ほか)ならない/u,
-    advice: "\u8A00\u3044\u5207\u308A\u306B\u76F4\u3059\u3002\u5143\u306E\u6587\u306B\u7121\u3044\u56E0\u679C\u3092\u8DB3\u3055\u306A\u3044"
-  },
-  {
     id: "dash-insert",
+    category: "\u7FFB\u8A33\u8ABF",
     pattern: /——|――/u,
     advice: "\u62EC\u5F27\u306B\u5165\u308C\u308B\u304B\u3001\u6587\u3092\u5206\u3051\u308B"
   }
-].map((r) => ({ ...r, category: "\u7FFB\u8A33\u8ABF" }));
+];
 var KATAKANA_OR_KANJI = "[\\u30A0-\\u30FF\\p{sc=Han}]";
 function wordPattern(entry) {
   const word = entry.replace(/^〜+|〜+$/g, "");
@@ -713,6 +648,30 @@ function avoidRules(discipline) {
   }
   return rules;
 }
+var LITERAL_EXCEPTIONS = {
+  \u6839: {
+    before: "(?<!\u6728\u306E)",
+    after: "(?!\u3063\u3053|\u3092\u5F35|\u3092\u4E0B\u308D|\u304C\u6DF1|\u3053\u305D\u304E|\u3056|\u306B\u6301|\u3082\u8449\u3082|\u3065)"
+  },
+  \u7BC0: {
+    // 数字(間の空白 1 つを許す)の後の「1 節」と、「お節」「かつお節」
+    before: "(?<![0-9\uFF10-\uFF19] ?)(?<!\u304A)",
+    after: "(?!\u3005|(?<=\u305D\u306E\u7BC0)(?:\u306F|\u306B\u306F)|(?<=[\u308B\u305F\u3044\u306A]\u7BC0)(?:\u304C\u3042\u308B|\u3082\u3042\u308B))"
+  }
+};
+function literalRule(id, word) {
+  const ex = LITERAL_EXCEPTIONS[word];
+  const tail = word === "\u6BB5" ? `(?=\u76EE|(?!${KATAKANA_OR_KANJI}))` : `(?!${KATAKANA_OR_KANJI})`;
+  return {
+    id,
+    category: "\u76F4\u8A33\u8A9E",
+    pattern: new RegExp(
+      `(?<!${KATAKANA_OR_KANJI})${ex?.before ?? ""}${word}${ex?.after ?? ""}${tail}`,
+      "u"
+    ),
+    advice: ""
+  };
+}
 function literalRules(discipline) {
   const lines = discipline.split("\n");
   const headerIndex = lines.findIndex((line) => {
@@ -724,7 +683,8 @@ function literalRules(discipline) {
   const avoidIndex = header.indexOf("\u907F\u3051\u308B\u8A33");
   const useIndex = header.indexOf("\u4F7F\u3046\u8A33");
   if (avoidIndex === -1 || useIndex === -1) return [];
-  const rules = [];
+  const rules = /* @__PURE__ */ new Map();
+  const uses = /* @__PURE__ */ new Map();
   for (const line of lines.slice(headerIndex + 1)) {
     if (!line.startsWith("|")) break;
     const cells = line.split("|").map((cell) => cell.trim());
@@ -736,19 +696,17 @@ function literalRules(discipline) {
     const words = quotedWords.length > 0 ? quotedWords : avoid.split(/[・、]/).map((cell) => cell.trim());
     for (const word of words) {
       if (!/^[゠-ヿ\p{sc=Han}]+$/u.test(word)) continue;
-      rules.push({
-        id: `literal:${word}`,
-        category: "\u76F4\u8A33\u8A9E",
-        // 「2 段目」のように、助数表現として続く「目」を許す。
-        pattern: new RegExp(
-          `(?<!${KATAKANA_OR_KANJI})${word}(?=\u76EE|(?!${KATAKANA_OR_KANJI}))`,
-          "u"
-        ),
-        advice: `\u300C\u4F7F\u3046\u8A33\u300D\u306E\u5217\u306E\u300C${used}\u300D\u3092\u53C2\u8003\u306B\u3001\u6587\u8108\u306B\u5408\u3046\u8A9E\u3067\u66F8\u304F`
-      });
+      const id = `literal:${word}`;
+      const prior = uses.get(id);
+      if (prior) prior.push(used);
+      else uses.set(id, [used]);
+      if (!rules.has(id)) rules.set(id, literalRule(id, word));
     }
   }
-  return rules;
+  return [...rules.values()].map((rule) => ({
+    ...rule,
+    advice: `\u300C\u4F7F\u3046\u8A33\u300D\u306E\u5217\u306E\u300C${(uses.get(rule.id) ?? []).join(" / ")}\u300D\u3092\u53C2\u8003\u306B\u3001\u6587\u8108\u306B\u5408\u3046\u8A9E\u3067\u66F8\u304F`
+  }));
 }
 function buildRules(discipline) {
   return [
@@ -843,10 +801,10 @@ function main() {
   const cellType = input.cell_type === "markdown" || input.cell_type === "code" ? input.cell_type : input.notebook_path !== void 0 ? cellTypeOf(file, input.cell_id) : void 0;
   const wholeText = input.notebook_path !== void 0 ? bodies[0] : fs2.readFileSync(file, "utf8");
   const whole = { path: file, text: wholeText, cellType };
-  if (hasIgnoreMarker(whole)) return;
+  if (hasIgnoreMarker(whole) || isDisciplineFile(whole)) return;
   const rules = buildRules(
     fs2.readFileSync(
-      new URL("../references/discipline.md", import.meta.url),
+      new URL("../skills/japanese-writing/SKILL.md", import.meta.url),
       "utf8"
     )
   );

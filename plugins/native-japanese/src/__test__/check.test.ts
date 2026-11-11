@@ -113,7 +113,7 @@ test("Write の違反を block で差し戻し、差し戻し文に行・該当�
   expect(reason).toContain(
     `[native-japanese] ${p} に書いた日本語に、書き方の規律の違反が 1 件ある。該当箇所を書き直す。`
   )
-  expect(reason).toMatch(/^- L3: 「ことができ」\(翻訳調\)→ .+$/m)
+  expect(reason).toMatch(/^- L3: 「ことができ」\(冗長\)→ .+$/m)
   expect(reason).toContain(
     "列挙した箇所のほかにも、編集した範囲に英語を直訳した語(規律の表に無い語を含む)が無いか読み直し、あれば直す。"
   )
@@ -130,20 +130,20 @@ test("違反が無ければ何も出さない", () => {
 test("Edit で、ファイルに元からある違反を差し戻さず、new_string の違反だけを差し戻す", () => {
   const p = write(
     "a.md",
-    "既存の行で作業時間を短縮することができる。\n\n情報を整理することによって判断が速くなる。\n"
+    "既存の行で作業時間を短縮することができる。\n\n大切なのは判断の速さだ。\n"
   )
   const reason = block(
     run(
       hookInput("Edit", {
         file_path: p,
         old_string: "x",
-        new_string: "情報を整理することによって判断が速くなる。"
+        new_string: "大切なのは判断の速さだ。"
       })
     )
   )
   expect(reason).toContain("違反が 1 件ある")
   // 行番号はファイルの中での位置に直す
-  expect(reason).toContain("- L3: 「ことによって」")
+  expect(reason).toContain("- L3: 「大切なのは」")
   expect(reason).not.toContain("することができ")
 })
 
@@ -160,23 +160,20 @@ test("MultiEdit の edits[] を 1 件ずつ別の本文として扱う", () => {
       })
     )
   ).toBe("")
-  const q = write(
-    "b.md",
-    "時間を短縮することができる。\nこれは変化に他ならない。\n"
-  )
+  const q = write("b.md", "時間を短縮することができる。\n大切なのは変化だ。\n")
   const reason = block(
     run(
       hookInput("MultiEdit", {
         file_path: q,
         edits: [
           { old_string: "a", new_string: "時間を短縮することができる。" },
-          { old_string: "b", new_string: "これは変化に他ならない。" }
+          { old_string: "b", new_string: "大切なのは変化だ。" }
         ]
       })
     )
   )
   expect(reason).toContain("- L1: 「ことができ」")
-  expect(reason).toContain("- L2: 「に他ならない」")
+  expect(reason).toContain("- L2: 「大切なのは」")
 })
 
 test("NotebookEdit の code セルでコメントの違反を差し戻す", () => {
@@ -275,6 +272,19 @@ test("ignore-file の目印を持つファイルでは何も出さない", () =>
   ).toBe("")
 })
 
+test("skills/japanese-writing/SKILL.md への書き込みは、違反があっても差し戻さない", () => {
+  const text = "時間を短縮することができる。大切なのは速さだ。\n"
+  fs.mkdirSync(path.join(work, "skills", "japanese-writing"), {
+    recursive: true
+  })
+  const p = write(path.join("skills", "japanese-writing", "SKILL.md"), text)
+  expect(run(writeInput(p, text))).toBe("")
+  // 対照: 別のスキルの SKILL.md は検査する
+  fs.mkdirSync(path.join(work, "skills", "other"), { recursive: true })
+  const q = write(path.join("skills", "other", "SKILL.md"), text)
+  block(run(writeInput(q, text)))
+})
+
 test("AMATSUKA_NATIVE_JAPANESE_CHECK=off で何も出さない", () => {
   const text = "時間を短縮することができる。\n"
   const p = write("a.md", text)
@@ -368,19 +378,19 @@ test("差し戻し文には 10 件までを載せ、残りは件数だけを書�
 test("HTML で、編集範囲の外のブロックの違反を差し戻さない", () => {
   const p = write(
     "a.html",
-    "<p>設定を変えることが<em>できる</em>。</p>\n<p>情報を整理することによって決まる。</p>\n"
+    "<p>設定を変えることが<em>できる</em>。</p>\n<p>大切なのは合意だ。</p>\n"
   )
   const reason = block(
     run(
       hookInput("Edit", {
         file_path: p,
         old_string: "x",
-        new_string: "<p>情報を整理することによって決まる。</p>"
+        new_string: "<p>大切なのは合意だ。</p>"
       })
     )
   )
   expect(reason).toContain("違反が 1 件ある")
-  expect(reason).toContain("- L2: 「ことによって」")
+  expect(reason).toContain("- L2: 「大切なのは」")
   // 本文がファイルに見つからなければ、HTML では正規表現の層も当てない
   expect(
     run(
@@ -467,11 +477,11 @@ test("AMATSUKA_NATIVE_JAPANESE_MORPH=off で解析器を読み込まない", () 
   ).toBe("")
 })
 
-test("バンドル後の scripts/check.mjs が discipline.md を読み、違反のある入力で block を返す", () => {
-  const text = "この事態は様々な要因で起きた。\n"
+test("バンドル後の scripts/check.mjs が SKILL.md を読み、違反のある入力で block を返す", () => {
+  const text = "この事態で大切なのは要因だ。\n"
   const p = write("a.md", text)
-  // 避ける語の規則は discipline.md から作るので、これが当たれば discipline.md を読めている
-  expect(block(run(writeInput(p, text), {}, BUNDLE))).toContain("様々な")
+  // 避ける語の規則は SKILL.md から作るので、これが当たれば SKILL.md を読めている
+  expect(block(run(writeInput(p, text), {}, BUNDLE))).toContain("大切なのは")
 })
 
 test("バンドル後の scripts/check.mjs が解析器を読み込み、形態素解析の違反を返す", () => {

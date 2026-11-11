@@ -11,6 +11,7 @@ import {
   extractBlocks,
   extractLines,
   hasIgnoreMarker,
+  isDisciplineFile,
   isHtml,
   type Source
 } from "./lib/extract.js"
@@ -116,7 +117,7 @@ function measureGit(
     }
     const whole: Source = { path: file.path, text }
     // 先頭に目印を持つファイルは、違反だけでなく行数にも入れない
-    if (hasIgnoreMarker(whole)) continue
+    if (hasIgnoreMarker(whole) || isDisciplineFile(whole)) continue
     const ranges: Range[] = file.hunks
       .filter((h) => h.lines.length > 0)
       .map((h) => ({ start: h.start, end: h.start + h.lines.length - 1 }))
@@ -243,7 +244,7 @@ function measureTranscripts(
         if (!TOOL.test(c.name) || typeof c.input !== "object" || !c.input)
           continue
         for (const src of sourcesOf(c.input as Input)) {
-          if (hasIgnoreMarker(src)) continue
+          if (hasIgnoreMarker(src) || isDisciplineFile(src)) continue
           // 書き込み後のファイルが無いので、どちらの層も本文そのものに当て、全体を編集範囲とする
           tally.lines += isHtml(src.path)
             ? new Set(extractBlocks(src).flatMap((b) => b.lineOf)).size
@@ -409,7 +410,7 @@ if (values.since !== undefined && values.transcripts === undefined)
 // 実行のたびに読み、規則を組み立て直す(キャッシュしない)
 const rules = buildRules(
   fs.readFileSync(
-    new URL("../references/discipline.md", import.meta.url),
+    new URL("../skills/japanese-writing/SKILL.md", import.meta.url),
     "utf8"
   )
 )

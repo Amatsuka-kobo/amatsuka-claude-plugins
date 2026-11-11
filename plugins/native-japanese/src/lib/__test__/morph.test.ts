@@ -35,9 +35,9 @@ function ruleIds(n: number, kind: Block["kind"] = "prose"): string[] {
 
 // sentences.txt の各行に当たる規則。空の配列はどの規則にも当たらない行
 const EXPECTED: Record<number, string[]> = {
-  1: ["muse-shugo"],
-  2: ["muse-shugo"], // 人を指す普通名詞の主語。誤検知として残ると設計書が認めた例
-  3: ["muse-shugo"],
+  1: [],
+  2: [],
+  3: [],
   4: [],
   5: [],
   6: [],
@@ -125,61 +125,6 @@ describe("checkBlocks: 固定データの例文ごとの判定", () => {
     Object.entries(EXPECTED).map(([n, ids]) => [Number(n), ids] as const)
   )("%i 行目に当たる規則は %j", (n, ids) => {
     expect(ruleIds(n)).toEqual(ids)
-  })
-})
-
-describe("checkBlocks: muse-shugo", () => {
-  test("「こと」の節を目的語にとる「示す」系の述語に当たる", () => {
-    expect(ruleIds(1)).toContain("muse-shugo")
-    expect(ruleIds(3)).toContain("muse-shugo") // サ変接続の名詞と「する」を合わせた「意味する」
-  })
-
-  test("「こと」の節でない目的語と、述部の中心が別の動詞の文に当たらない", () => {
-    expect(ruleIds(4)).toEqual([])
-    expect(ruleIds(5)).toEqual([])
-    expect(ruleIds(6)).toEqual([]) // 述部の中心は「ある」
-  })
-
-  test("例外は述語に最も近い「は」の直前の名詞だけで判定する", () => {
-    expect(ruleIds(7)).toEqual([]) // 人名
-    // 「この事実は」を持つが、述語に最も近い「は」の直前は代名詞の「彼」
-    expect(ruleIds(8)).toEqual([])
-  })
-
-  // 1 行目の形態素の列の、先頭の「この事実は」を差し替えて判定する
-  function museWith(subject: Raw[]): string[] {
-    const tokens = [
-      ...subject,
-      ...(FIXTURE[0] as { tokens: Raw[] }).tokens.slice(3)
-    ]
-    const text = tokens.map((t) => t.surface).join("")
-    return checkBlocks([block(text)], { tokenize: () => tokens }).map(
-      (v) => v.ruleId
-    )
-  }
-  const noun = (surface: string, pos1 = "一般"): Raw => ({
-    surface,
-    details: ["名詞", pos1, "*", "*", "*", "*", surface]
-  })
-  const particle = (surface: string, pos1: string): Raw => ({
-    surface,
-    details: ["助詞", pos1, "*", "*", "*", "*", surface]
-  })
-
-  test("「は」が無く「が」で受けた名詞だけでも当たる", () => {
-    expect(museWith([noun("事実"), particle("が", "格助詞")])).toEqual([
-      "muse-shugo"
-    ])
-  })
-
-  test("代名詞に分類されない語でも、一覧の表層なら当てない", () => {
-    expect(museWith([noun("私"), particle("は", "係助詞")])).toEqual([])
-  })
-
-  test("category と advice は設計書のとおり", () => {
-    const [v] = checkBlocks([block(sentence(1))], fake)
-    expect(v).toMatchObject({ category: "翻訳調" })
-    expect(v?.advice).toContain("と分かる")
   })
 })
 
@@ -291,8 +236,7 @@ describe("checkBlocks: ブロックの種類と位置", () => {
     expect(ruleIds(17, "table")).toEqual([])
   })
 
-  test("コメントには 4 規則すべてを当てる", () => {
-    expect(ruleIds(1, "comment")).toEqual(["muse-shugo"])
+  test("コメントにも形態素解析の規則を当てる", () => {
     expect(ruleIds(11, "comment")).toEqual(["bunmatsu-renzoku"])
   })
 

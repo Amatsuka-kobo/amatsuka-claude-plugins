@@ -70,7 +70,7 @@ test("--since より前の記録を数えない", () => {
     { writer: "main", lines: 3, violations: 2 },
     { writer: "general-implementer", lines: 3, violations: 2 }
   ])
-  expect(r.byRule.find((b) => b.ruleId === "avoid:様々な")?.count).toBe(1)
+  expect(r.byRule.find((b) => b.ruleId === "avoid:大切なのは")?.count).toBe(1)
 })
 
 test("--format json の出力が契約の形をすべて持つ", () => {
@@ -116,12 +116,12 @@ const write = (p: string, text: string) =>
 beforeAll(() => {
   repo = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-measure-"))
   git("init", "-q")
-  write("a.md", "既存の行で、様々な案がある。\n")
-  write("c.md", "消すファイルで、様々な案がある。\n")
+  write("a.md", "既存の行で、大切なのは案だ。\n")
+  write("c.md", "消すファイルで、大切なのは案だ。\n")
   write("x.html", "<p>既存で、ことが可能だ。</p>\n<p>空</p>\n")
   git("add", ".")
   git("commit", "-q", "-m", "1")
-  write("a.md", "既存の行で、様々な案がある。\n新しい行で、ことが可能だ。\n")
+  write("a.md", "既存の行で、大切なのは案だ。\n新しい行で、ことが可能だ。\n")
   write(
     "b.md",
     "<!-- native-japanese: ignore-file -->\n\n目印のあるファイルで、ことが可能だ。\n"
@@ -180,13 +180,13 @@ describe("形態素解析の層", () => {
     )
     repo2 = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-morph-"))
     git2("init", "-q")
-    write2("a.md", `${sentence(1)}\n`)
-    write2("x.html", `<p>${sentence(1)}</p>\n`)
+    write2("a.md", `${sentence(17)}\n`)
+    write2("x.html", `<p>${sentence(17)}</p>\n`)
     git2("add", ".")
     git2("commit", "-q", "-m", "1")
     // 既存の文の違反は数えず、加わった文の違反だけを数える
-    write2("a.md", `${sentence(1)}\n\n${sentence(3)}\n`)
-    write2("x.html", `<p>${sentence(1)}</p>\n<p>${sentence(3)}</p>\n`)
+    write2("a.md", `${sentence(17)}\n\n${sentence(19)}\n`)
+    write2("x.html", `<p>${sentence(17)}</p>\n<p>${sentence(19)}</p>\n`)
     git2("add", "-A")
     git2("commit", "-q", "-m", "2")
 
@@ -209,7 +209,7 @@ describe("形態素解析の層", () => {
     fs.writeFileSync(
       path.join(logs, "s.jsonl"),
       [
-        rec("2026-09-25T00:00:00.000Z", "/r/old.md", `${sentence(1)}\n`),
+        rec("2026-09-25T00:00:00.000Z", "/r/old.md", `${sentence(17)}\n`),
         rec("2026-09-26T00:00:00.000Z", "/r/new.md", `${sentence(11)}\n`)
       ].join("\n")
     )
@@ -241,10 +241,10 @@ describe("形態素解析の層", () => {
   test("--git で、加わった行と重なる形態素解析の違反と文だけを数える", () => {
     const r = measure(["--git", "HEAD~1..HEAD", "--data-dir", data], repo2)
     expect(r.byRule).toEqual([
-      { ruleId: "muse-shugo", layer: "morph", count: 2 }
+      { ruleId: "bun-nagasa", layer: "morph", count: 2 }
     ])
     // a.md も x.html も、3 行目・2 行目に加わった文の違反だけが残る
-    expect(r.examples["muse-shugo"]).toEqual([
+    expect(r.examples["bun-nagasa"]).toEqual([
       expect.objectContaining({ path: "a.md", line: 3, endLine: 3 }),
       expect.objectContaining({ path: "x.html", line: 2, endLine: 2 })
     ])
@@ -254,8 +254,8 @@ describe("形態素解析の層", () => {
   test("--transcripts と --since で、その日以降の本文の違反と文だけを数える", () => {
     const all = measure(["--transcripts", logs, "--data-dir", data])
     expect(all.byRule.map((b) => [b.ruleId, b.count])).toEqual([
-      ["bunmatsu-renzoku", 1],
-      ["muse-shugo", 1]
+      ["bun-nagasa", 1],
+      ["bunmatsu-renzoku", 1]
     ])
     expect(all.sentences).toBe(5)
     const since = measure([

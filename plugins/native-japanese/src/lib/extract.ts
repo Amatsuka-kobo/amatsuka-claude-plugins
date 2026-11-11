@@ -378,6 +378,12 @@ function htmlBlocks(text: string): Block[] {
   return blocks
 }
 
+// 規律の本文である skills/japanese-writing/SKILL.md は、避ける語や翻訳調の例を載せるため検査しない。
+// 導入先のパス(…/native-japanese/<バージョン>/skills/…)でも真になるよう、末尾で判定する
+export function isDisciplineFile(src: Source): boolean {
+  return /(^|[\\/])skills[\\/]japanese-writing[\\/]SKILL\.md$/.test(src.path)
+}
+
 export function hasIgnoreMarker(src: Source): boolean {
   const lang = langOf(src)
   if (lang === null) return false

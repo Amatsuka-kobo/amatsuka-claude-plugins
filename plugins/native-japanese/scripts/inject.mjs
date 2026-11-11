@@ -72,12 +72,23 @@ if (event === "SessionStart") {
   } catch {
   }
 }
-var file = event === "UserPromptSubmit" ? "../references/reminder.md" : "../references/discipline.md";
+var FILES = {
+  SessionStart: "../references/session-start.md",
+  SubagentStart: "../skills/japanese-writing/SKILL.md",
+  UserPromptSubmit: "../references/reminder.md"
+};
+var file = FILES[event];
 var body;
 try {
   body = fs2.readFileSync(new URL(file, import.meta.url), "utf8");
 } catch {
   process.exit(0);
+}
+if (event === "SubagentStart") {
+  body = body.replace(
+    /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)(?:[ \t]*\r?\n)?/,
+    ""
+  );
 }
 body = body.replace(
   /^[ \t]*<!-- native-japanese: ignore-file -->[ \t]*(?:\r?\n|$)(?:[ \t]*\r?\n)?/gm,

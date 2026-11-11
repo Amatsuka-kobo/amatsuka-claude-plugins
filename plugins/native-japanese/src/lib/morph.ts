@@ -7,16 +7,6 @@ import type { Analyzer, Violation } from "./lint.js"
 
 // --- 閾値と語の一覧。基準値(設計書のセクション 6-3)を見て調整する ---
 
-// muse-shugo: 命題を目的語にとる述語の原形
-const MUSE_PREDICATES = new Set([
-  "示す",
-  "意味する",
-  "物語る",
-  "裏付ける",
-  "示唆する"
-])
-// muse-shugo: 主語がこれらなら当てない代名詞の表層
-const PRONOUNS = new Set(["私", "僕", "我々", "彼", "彼女", "あなた"])
 // bunmatsu-renzoku: 同じ文末表現がこの文数だけ続いたら、その文で 1 件を出す
 const RUN_LENGTH = 4
 // bunmatsu-renzoku: これより短い文末表現は連続を切る
@@ -47,11 +37,6 @@ const MATCH_LENGTH = 20
 const TERMINATORS = new Set(["。", "！", "？"])
 
 const RULES = {
-  "muse-shugo": {
-    category: "翻訳調",
-    advice:
-      "「〜から、〜と分かる」のように、読み手が読み取る形に言い換える。元の文の確信度は変えない"
-  },
   "bunmatsu-renzoku": {
     category: "文",
     advice: "4 文目の文末の形を変えるか、隣の文とつなぐ"
@@ -164,54 +149,6 @@ function endingOf(ts: Token[]): string {
 }
 
 const len = (s: string) => [...s.replace(/\s/g, "")].length
-
-// 係助詞か格助詞の「は」「が」で受けた名詞がある、「こと」「の」を「を」で受けた「示す」系の述語で終わる文。
-// 述語に最も近い「は」の直前が代名詞か人名なら当てない
-function museShugo(ts: Token[]): boolean {
-  const core = endingStart(ts).stop - 1
-  const verb = ts[core]
-  if (verb?.pos !== "動詞" || verb.pos1 !== "自立") return false
-  // サ変接続の名詞の直後の「する」は、2 つを合わせて 1 語の述語とみなす
-  const noun = ts[core - 1]
-  const sahen = verb.base === "する" && noun?.pos1 === "サ変接続"
-  const base = sahen ? `${noun.surface}する` : verb.base
-  const head = sahen ? core - 1 : core
-  if (!MUSE_PREDICATES.has(base)) return false
-  const wo = ts[head - 1]
-  const koto = ts[head - 2]
-  if (wo?.surface !== "を" || wo.pos1 !== "格助詞") return false
-  if (
-    !koto ||
-    (koto.surface !== "こと" && koto.surface !== "の") ||
-    koto.pos !== "名詞" ||
-    koto.pos1 !== "非自立"
-  )
-    return false
-  const topicAt = (j: number) => {
-    const t = ts[j] as Token
-    return (
-      (t.surface === "は" || t.surface === "が") &&
-      t.pos === "助詞" &&
-      (t.pos1 === "係助詞" || t.pos1 === "格助詞") &&
-      ts[j - 1]?.pos === "名詞"
-    )
-  }
-  let hasSubject = false
-  let nearestWa = -1
-  for (let j = 1; j < head - 2; j++) {
-    if (!topicAt(j)) continue
-    hasSubject = true
-    if ((ts[j] as Token).surface === "は") nearestWa = j
-  }
-  if (!hasSubject) return false
-  if (nearestWa < 0) return true
-  const subj = ts[nearestWa - 1] as Token
-  const person =
-    subj.pos1 === "代名詞" ||
-    PRONOUNS.has(subj.surface) ||
-    (subj.pos1 === "固有名詞" && subj.pos2 === "人名")
-  return !person
-}
 
 // 読点の直前が接続助詞か、動詞・形容詞・助動詞の連用形である箇所を数える
 function clauseCuts(ts: Token[]): number {
@@ -328,7 +265,6 @@ export function checkBlocks(blocks: Block[], analyzer: Analyzer): Violation[] {
           ...RULES[id],
           match: [...text].slice(0, MATCH_LENGTH).join("")
         })
-      if (museShugo(s.tokens)) hit("muse-shugo")
       if (runs.has(i)) hit("bunmatsu-renzoku")
       const body = TERMINATORS.has(text.at(-1) as string)
         ? text.slice(0, -1)
