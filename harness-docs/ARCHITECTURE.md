@@ -41,6 +41,7 @@
 - 指示層は参照層を読む。
 - 指示層とフック層は配布物層を実行する。
 - 配布物層は参照層を実行時に読む。
+- 配布物層は同じプラグインの指示層の本文を実行時に読む。
 - 実装層はビルドを通じて配布物層を生成する。
 - 配布宣言層は他のどの層にも依存しない。
 
@@ -61,7 +62,6 @@
 ├── tools/                           AI が使用する Python スクリプトツールを置く
 ├── docs/                            人間向けの文書と会話記録を置く
 │   └── prompts/                     別セッションの起動プロンプトを置く
-├── .raphael/                        raphael の抗体を置く
 ├── .serena/                         Serena のプロジェクト設定とメモリを置く
 └── plugins/<plugin>/
     ├── .claude-plugin/plugin.json   プラグイン名とバージョンを宣言する
@@ -97,16 +97,16 @@
   "impl": ["plugins/*/src/**", "plugins/*/build.ts", "plugins/codiel/raguel-mcp/src/**", "plugins/codiel/raguel-mcp/build.ts"],
   "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**", ".claude/**"],
   "bundle": ["plugins/*/scripts/**", "plugins/*/dist/**", "plugins/codiel/raguel-mcp/dist/**"],
-  "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**"],
-  "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".raphael/**", ".serena/**"]
+  "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**", ".vscode/**"],
+  "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".serena/**"]
 }
 ```
 
 - `impl` は TypeScript の実装を指す。
 - `prompt` は AI が読む指示書と、そこへ合成される素材を指す。`.claude/` の output style・rules・skills を含む。
 - `bundle` は手で編集しない。
-- `manifest` は配布宣言・ワークスペース設定・環境構築スクリプトを指す。
-- `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリ、raphael の抗体を含む。
+- `manifest` は配布宣言・ワークスペース設定・エディタ設定・環境構築スクリプトを指す。
+- `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリを含む。
 
 ## コマンド定義
 
