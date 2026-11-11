@@ -550,6 +550,106 @@ describe("--check / --write", () => {
   })
 })
 
+describe("外す役割と追加のキー", () => {
+  function configFile(): string {
+    return path.join(project, ".claude", "better-agentics", "config.json")
+  }
+
+  it("--write-config は設定ファイルを書き、前の値を返す", () => {
+    expect(
+      setup(["--write-config", "--roles", "escalation,complex-review"]).body
+    ).toEqual({
+      ok: true,
+      target: ".claude/better-agentics/config.json",
+      disabledRoles: ["escalation", "complex-review"],
+      before: null
+    })
+    expect(setup(["--write-config", "--roles", ""]).body).toEqual({
+      ok: true,
+      target: ".claude/better-agentics/config.json",
+      disabledRoles: [],
+      before: ["escalation", "complex-review"]
+    })
+    expect(JSON.parse(fs.readFileSync(configFile(), "utf8"))).toEqual({
+      disabledRoles: []
+    })
+  })
+
+  it("--write-config は役割表に無い ID を拒む", () => {
+    const result = setup(["--write-config", "--roles", "no-such-role"])
+    expect(result.status).toBe(1)
+    expect(result.body.ok).toBe(false)
+    expect(result.body.error).toContain("no-such-role")
+    expect(fs.existsSync(configFile())).toBe(false)
+  })
+
+  it("--list-coverage は外した役割を disabled に入れ、uncovered から除く", () => {
+    setup(["--write-config", "--roles", "escalation"])
+    const body = setup(["--list-coverage"]).body
+    expect(body.disabled).toEqual(["escalation"])
+    expect(body.uncovered).not.toContain("escalation")
+    expect(body.uncovered).toHaveLength(12)
+    expect(body.config).toBe("ok")
+  })
+
+  it("--list-coverage は設定ファイルが無ければ absent、壊れていれば invalid と中身を返す", () => {
+    expect(setup(["--list-coverage"]).body).toMatchObject({
+      config: "absent",
+      disabled: []
+    })
+    fs.mkdirSync(path.dirname(configFile()), { recursive: true })
+    fs.writeFileSync(configFile(), "[]")
+    const body = setup(["--list-coverage"]).body
+    expect(body.config).toBe("invalid")
+    expect(body.configRaw).toBe("[]")
+    expect(body.configError).toContain("config.json")
+    expect(body.disabled).toEqual([])
+  })
+
+  it("新規の --write は omitClaudeMd と cacheTtl を書き、extraKeys を返す", () => {
+    const result = setup([
+      "--write",
+      "--role",
+      "knowledge-elicitation",
+      "--model",
+      "haiku",
+      "--name",
+      "knowledge-elicitor",
+      "--lang",
+      "ja",
+      "--omit-claude-md",
+      "true"
+    ])
+    expect(result.body.extraKeys).toEqual({
+      omitClaudeMd: "written",
+      cacheTtl: "written"
+    })
+    const content = read("knowledge-elicitor")
+    expect(content).toContain("\nomitClaudeMd: true\n")
+    expect(content).toContain("\nexperimental:\n  cacheTtl: 1h\n")
+  })
+
+  it("再生成の --write で --omit-claude-md を省くと既存の値を保つ", () => {
+    write(["--omit-claude-md", "true"])
+    const result = write()
+    expect(result.body.extraKeys).toEqual({
+      omitClaudeMd: "unchanged",
+      cacheTtl: "unchanged"
+    })
+    expect(read("code-reviewer")).toContain("omitClaudeMd: true")
+  })
+
+  it("--omit-claude-md は true と false だけを受ける", () => {
+    expect(write(["--omit-claude-md", "yes"]).body.ok).toBe(false)
+  })
+
+  it("--check は既存の定義の omitClaudeMd と cacheTtl を返す", () => {
+    expect(check().body).toMatchObject({ omitClaudeMd: false, cacheTtl: null })
+    write(["--omit-claude-md", "true"])
+    expect(check().body).toMatchObject({ omitClaudeMd: true, cacheTtl: "1h" })
+  })
+})
+
 describe("引数", () => {
   it("未知のオプションは終了コード 1 で ok: false を返す", () => {
     expect(setup(["--scope", "claude"])).toMatchObject({

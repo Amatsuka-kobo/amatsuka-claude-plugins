@@ -12,7 +12,9 @@ import {
   scanDefinitions
 } from "./lib/agents"
 import { compose, ROLE_KEY } from "./lib/compose"
+import { readConfig, writeConfig } from "./lib/config"
 import { duplicateHeadings, parseDocument } from "./lib/document"
+import { applyExtraKeys, readExtraKeys } from "./lib/extra-keys"
 import {
   assertLang,
   checkFragments,
@@ -29,6 +31,7 @@ import {
   isEffort,
   ROLES,
   type Role,
+  type RoleId,
   roleById
 } from "./lib/roles"
 
@@ -42,6 +45,7 @@ export interface Options {
     | "rewrite-roles"
     | "check"
     | "write"
+    | "write-config"
   dir: string
   lang: string
   name: string
@@ -55,8 +59,10 @@ export interface Options {
   mcpDeny: string[] | undefined
   keep: string[]
   tools: string[]
-  /** --rewrite-roles の値。"" はマーカー行を消す */
+  /** --rewrite-roles と --write-config の値。"" はマーカー行を消す、または外す役割なし */
   roles: string | undefined
+  /** undefined は省略(既存の値を保つ) */
+  omitClaudeMd: boolean | undefined
 }
 
 const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -69,7 +75,8 @@ const COMMANDS: Record<string, Options["command"]> = {
   "--prune-tools": "prune-tools",
   "--rewrite-roles": "rewrite-roles",
   "--check": "check",
-  "--write": "write"
+  "--write": "write",
+  "--write-config": "write-config"
 }
 
 export function splitList(value: string): string[] {
@@ -103,7 +110,8 @@ function parseArgs(argv: string[]): Options {
     mcpDeny: undefined,
     keep: [],
     tools: [],
-    roles: undefined
+    roles: undefined,
+    omitClaudeMd: undefined
   }
   let command: Options["command"] | undefined
 
@@ -151,6 +159,14 @@ function parseArgs(argv: string[]): Options {
       case "--roles":
         options.roles = requireValue(value, "roles").trim()
         break
+      case "--omit-claude-md": {
+        const flag = requireValue(value, "omit-claude-md")
+        if (flag !== "true" && flag !== "false") {
+          throw new Error("omit-claude-md: must be true or false")
+        }
+        options.omitClaudeMd = flag === "true"
+        break
+      }
       default:
         throw new Error(`Unsupported option: ${arg}`)
     }
@@ -173,7 +189,10 @@ function parseArgs(argv: string[]): Options {
   if (command === "prune-tools" && options.tools.length === 0) {
     throw new Error("tools: is required")
   }
-  if (command === "rewrite-roles" && options.roles === undefined) {
+  if (
+    (command === "rewrite-roles" || command === "write-config") &&
+    options.roles === undefined
+  ) {
     throw new Error("roles: is required")
   }
   return options
@@ -202,6 +221,8 @@ function listCoverage(options: Options): unknown {
   const fragments = loadFragments(pluginRoot(), options.dir, options.lang)
   const definitions = scanDefinitions(options.dir)
   const { duplicates, unknownRoles } = inspect(definitions)
+  const config = readConfig(options.dir)
+  const disabled = config.kind === "ok" ? config.config.disabledRoles : []
 
   const roles = ROLES.map((role) => {
     const fragment = fragments.get(role.id)
@@ -223,8 +244,15 @@ function listCoverage(options: Options): unknown {
     ok: true,
     roles,
     uncovered: roles
-      .filter((role) => role.coveredBy.length === 0)
+      .filter(
+        (role) => role.coveredBy.length === 0 && !disabled.includes(role.id)
+      )
       .map((role) => role.id),
+    disabled,
+    config: config.kind,
+    ...(config.kind === "invalid"
+      ? { configError: config.message, configRaw: config.raw }
+      : {}),
     definitions: definitions.map((entry) => {
       const role = roleById(entry.role)
       return {
@@ -515,7 +543,10 @@ function check(options: Options): unknown {
             keep: new Set()
           }).keysKept,
     mcpCurrent: generation.mcpCurrent,
-    effort: generation.effort ?? null
+    effort: generation.effort ?? null,
+    ...(existingRaw === undefined
+      ? { omitClaudeMd: false, cacheTtl: null }
+      : readExtraKeys(existingRaw))
   }
 }
 
@@ -527,8 +558,12 @@ function write(options: Options): unknown {
     existingRaw === undefined
       ? { content: generation.template, kept: [], replaced: [], keysKept: [] }
       : merge({ existingRaw, templateRaw: generation.template, keep })
+  const extra = applyExtraKeys(result.content, {
+    roleId: generation.role.id,
+    omitClaudeMd: options.omitClaudeMd
+  })
   fs.mkdirSync(path.dirname(generation.file), { recursive: true })
-  fs.writeFileSync(generation.file, result.content)
+  fs.writeFileSync(generation.file, extra.content)
   return {
     ok: true,
     target: generation.target,
@@ -544,7 +579,20 @@ function write(options: Options): unknown {
     toolsAfter: splitList(
       parseDocument(result.content).meta.get("tools") ?? ""
     ),
-    mcpDropped: generation.mcpDropped
+    mcpDropped: generation.mcpDropped,
+    extraKeys: extra.changes
+  }
+}
+
+function writeConfigCommand(options: Options): unknown {
+  const before = readConfig(options.dir)
+  const disabledRoles = splitList(options.roles ?? "") as RoleId[]
+  const target = writeConfig(options.dir, { disabledRoles })
+  return {
+    ok: true,
+    target,
+    disabledRoles,
+    before: before.kind === "ok" ? before.config.disabledRoles : null
   }
 }
 
@@ -575,6 +623,8 @@ function run(options: Options): unknown {
       return check(options)
     case "write":
       return write(options)
+    case "write-config":
+      return writeConfigCommand(options)
   }
 }
 

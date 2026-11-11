@@ -3,8 +3,8 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // src/setup.ts
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs4 from "node:fs";
+import path4 from "node:path";
 
 // src/lib/agents.ts
 import fs2 from "node:fs";
@@ -706,6 +706,150 @@ function inspect(definitions) {
 }
 __name(inspect, "inspect");
 
+// src/lib/config.ts
+import fs3 from "node:fs";
+import path3 from "node:path";
+var CONFIG_FILE = ".claude/better-agentics/config.json";
+function validate(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "the top level must be an object";
+  }
+  const roles = value.disabledRoles;
+  if (!Array.isArray(roles) || !roles.every((role) => typeof role === "string")) {
+    return "disabledRoles must be an array of role IDs";
+  }
+  const unknown = roles.filter((role) => roleById(role) === void 0);
+  if (unknown.length > 0) {
+    return `disabledRoles contains unknown role IDs: ${unknown.join(", ")}`;
+  }
+  return { disabledRoles: roles };
+}
+__name(validate, "validate");
+function readConfig(projectDir) {
+  const file = path3.join(projectDir, CONFIG_FILE);
+  if (!fs3.existsSync(file)) return { kind: "absent" };
+  let raw;
+  try {
+    raw = fs3.readFileSync(file, "utf8");
+  } catch (error) {
+    return {
+      kind: "invalid",
+      message: `${CONFIG_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      raw: null
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { kind: "invalid", message: `${CONFIG_FILE} is not valid JSON`, raw };
+  }
+  const result = validate(parsed);
+  return typeof result === "string" ? { kind: "invalid", message: `${CONFIG_FILE}: ${result}`, raw } : { kind: "ok", config: result };
+}
+__name(readConfig, "readConfig");
+function writeConfig(projectDir, config) {
+  const result = validate(config);
+  if (typeof result === "string") throw new Error(result);
+  const file = path3.join(projectDir, CONFIG_FILE);
+  fs3.mkdirSync(path3.dirname(file), { recursive: true });
+  fs3.writeFileSync(
+    file,
+    `${JSON.stringify({ disabledRoles: result.disabledRoles }, null, 2)}
+`
+  );
+  return CONFIG_FILE;
+}
+__name(writeConfig, "writeConfig");
+
+// src/lib/extra-keys.ts
+var CACHE_TTL_ROLES = [
+  "code-review",
+  "design-review",
+  "complex-review",
+  "adversarial-review",
+  "knowledge-elicitation"
+];
+var CACHE_TTL = "1h";
+var CACHE_LINE = /^\s+cacheTtl:\s*(.*)$/;
+function cacheTtlOf(block) {
+  if (block === void 0) return null;
+  for (const line of block.split("\n")) {
+    const match = CACHE_LINE.exec(line);
+    if (match?.[1] !== void 0) return match[1].trim();
+  }
+  return null;
+}
+__name(cacheTtlOf, "cacheTtlOf");
+function readExtraKeys(content) {
+  const { meta } = parseDocument(content);
+  return {
+    omitClaudeMd: meta.get("omitClaudeMd")?.trim() === "true",
+    cacheTtl: cacheTtlOf(meta.get("experimental"))
+  };
+}
+__name(readExtraKeys, "readExtraKeys");
+function applyExtraKeys(content, options) {
+  const lines = content.split("\n");
+  const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1;
+  if (close === -1) throw new Error("definition has no frontmatter");
+  const { order, meta } = parseDocument(content);
+  const changes = {
+    omitClaudeMd: "unchanged",
+    cacheTtl: "unchanged"
+  };
+  if (options.omitClaudeMd === true && meta.get("omitClaudeMd") !== "true") {
+    if (!meta.has("omitClaudeMd")) order.push("omitClaudeMd");
+    meta.set("omitClaudeMd", "true");
+    changes.omitClaudeMd = "written";
+  }
+  if (options.omitClaudeMd === false && meta.has("omitClaudeMd")) {
+    order.splice(order.indexOf("omitClaudeMd"), 1);
+    meta.delete("omitClaudeMd");
+    changes.omitClaudeMd = "removed";
+  }
+  if (CACHE_TTL_ROLES.includes(options.roleId)) {
+    const block = meta.get("experimental");
+    if (block === void 0) {
+      order.push("experimental");
+      meta.set("experimental", `
+  cacheTtl: ${CACHE_TTL}`);
+      changes.cacheTtl = "written";
+    } else if (block !== "" && !block.startsWith("\n")) {
+      throw new Error(
+        "experimental: write it as a block of indented keys to add cacheTtl"
+      );
+    } else {
+      const current = cacheTtlOf(block);
+      if (current === null) {
+        meta.set("experimental", `${block}
+  cacheTtl: ${CACHE_TTL}`);
+        changes.cacheTtl = "written";
+      } else if (current !== CACHE_TTL) {
+        meta.set(
+          "experimental",
+          block.split("\n").map(
+            (line) => CACHE_LINE.test(line) ? line.replace(/cacheTtl:.*$/, `cacheTtl: ${CACHE_TTL}`) : line
+          ).join("\n")
+        );
+        changes.cacheTtl = "rewritten";
+      }
+    }
+  }
+  if (changes.omitClaudeMd === "unchanged" && changes.cacheTtl === "unchanged") {
+    return { content, changes };
+  }
+  const head = order.map((key) => {
+    const value = meta.get(key) ?? "";
+    return value.startsWith("\n") ? `${key}:${value}` : `${key}: ${value}`;
+  });
+  return {
+    content: ["---", ...head, ...lines.slice(close)].join("\n"),
+    changes
+  };
+}
+__name(applyExtraKeys, "applyExtraKeys");
+
 // src/lib/mcp.ts
 import { execFileSync } from "node:child_process";
 var USABLE = ["\u2714 Connected", "cached"];
@@ -918,7 +1062,8 @@ var COMMANDS = {
   "--prune-tools": "prune-tools",
   "--rewrite-roles": "rewrite-roles",
   "--check": "check",
-  "--write": "write"
+  "--write": "write",
+  "--write-config": "write-config"
 };
 function splitList(value) {
   return [
@@ -948,7 +1093,8 @@ function parseArgs(argv) {
     mcpDeny: void 0,
     keep: [],
     tools: [],
-    roles: void 0
+    roles: void 0,
+    omitClaudeMd: void 0
   };
   let command;
   for (let index = 0; index < argv.length; index += 1) {
@@ -963,7 +1109,7 @@ function parseArgs(argv) {
     }
     switch (arg) {
       case "--dir":
-        options.dir = path3.resolve(requireValue(value, "dir"));
+        options.dir = path4.resolve(requireValue(value, "dir"));
         break;
       case "--lang":
         options.lang = requireValue(value, "lang");
@@ -995,6 +1141,14 @@ function parseArgs(argv) {
       case "--roles":
         options.roles = requireValue(value, "roles").trim();
         break;
+      case "--omit-claude-md": {
+        const flag = requireValue(value, "omit-claude-md");
+        if (flag !== "true" && flag !== "false") {
+          throw new Error("omit-claude-md: must be true or false");
+        }
+        options.omitClaudeMd = flag === "true";
+        break;
+      }
       default:
         throw new Error(`Unsupported option: ${arg}`);
     }
@@ -1012,18 +1166,18 @@ function parseArgs(argv) {
   if (command === "prune-tools" && options.tools.length === 0) {
     throw new Error("tools: is required");
   }
-  if (command === "rewrite-roles" && options.roles === void 0) {
+  if ((command === "rewrite-roles" || command === "write-config") && options.roles === void 0) {
     throw new Error("roles: is required");
   }
   return options;
 }
 __name(parseArgs, "parseArgs");
 function relative(options, file) {
-  return path3.relative(options.dir, file).split(path3.sep).join("/");
+  return path4.relative(options.dir, file).split(path4.sep).join("/");
 }
 __name(relative, "relative");
 function definitionPath(options) {
-  return path3.join(options.dir, ".claude", "agents", `${options.name}.md`);
+  return path4.join(options.dir, ".claude", "agents", `${options.name}.md`);
 }
 __name(definitionPath, "definitionPath");
 function disallowedToolsOf(entry, allowed) {
@@ -1038,6 +1192,8 @@ function listCoverage(options) {
   const fragments = loadFragments(pluginRoot(), options.dir, options.lang);
   const definitions = scanDefinitions(options.dir);
   const { duplicates, unknownRoles } = inspect(definitions);
+  const config = readConfig(options.dir);
+  const disabled = config.kind === "ok" ? config.config.disabledRoles : [];
   const roles = ROLES.map((role) => {
     const fragment = fragments.get(role.id);
     return {
@@ -1054,7 +1210,12 @@ function listCoverage(options) {
   return {
     ok: true,
     roles,
-    uncovered: roles.filter((role) => role.coveredBy.length === 0).map((role) => role.id),
+    uncovered: roles.filter(
+      (role) => role.coveredBy.length === 0 && !disabled.includes(role.id)
+    ).map((role) => role.id),
+    disabled,
+    config: config.kind,
+    ...config.kind === "invalid" ? { configError: config.message, configRaw: config.raw } : {},
     definitions: definitions.map((entry) => {
       const role = roleById(entry.role);
       return {
@@ -1085,8 +1246,8 @@ __name(listCoverage, "listCoverage");
 function readDefinition(options) {
   const file = definitionPath(options);
   const target = relative(options, file);
-  if (!fs3.existsSync(file)) throw new Error(`target: ${target} does not exist`);
-  const lines = fs3.readFileSync(file, "utf8").split("\n");
+  if (!fs4.existsSync(file)) throw new Error(`target: ${target} does not exist`);
+  const lines = fs4.readFileSync(file, "utf8").split("\n");
   const close = lines[0]?.trim() === "---" ? lines.indexOf("---", 1) : -1;
   if (close === -1) throw new Error(`target: ${target} has no frontmatter`);
   return { file, target, lines, close };
@@ -1132,7 +1293,7 @@ function pruneTools(options) {
     );
   }
   definition.lines[index] = `tools: ${remaining.join(", ")}`;
-  fs3.writeFileSync(definition.file, definition.lines.join("\n"));
+  fs4.writeFileSync(definition.file, definition.lines.join("\n"));
   return {
     ok: true,
     target: definition.target,
@@ -1158,7 +1319,7 @@ function rewriteRoles(options) {
   if (roles === "") definition.lines.splice(index, 1);
   else definition.lines[index] = `${ROLE_KEY}: ${roles}`;
   const changed = roles !== before;
-  if (changed) fs3.writeFileSync(definition.file, definition.lines.join("\n"));
+  if (changed) fs4.writeFileSync(definition.file, definition.lines.join("\n"));
   return {
     ok: true,
     target: definition.target,
@@ -1222,7 +1383,7 @@ function prepare(options) {
   }
   const file = definitionPath(options);
   const target = relative(options, file);
-  const existingRaw = fs3.existsSync(file) ? fs3.readFileSync(file, "utf8") : void 0;
+  const existingRaw = fs4.existsSync(file) ? fs4.readFileSync(file, "utf8") : void 0;
   if (existingRaw !== void 0) {
     const duplicated = duplicateHeadings(existingRaw);
     if (duplicated.length > 0) {
@@ -1295,7 +1456,8 @@ function check(options) {
       keep: /* @__PURE__ */ new Set()
     }).keysKept,
     mcpCurrent: generation.mcpCurrent,
-    effort: generation.effort ?? null
+    effort: generation.effort ?? null,
+    ...existingRaw === void 0 ? { omitClaudeMd: false, cacheTtl: null } : readExtraKeys(existingRaw)
   };
 }
 __name(check, "check");
@@ -1304,8 +1466,12 @@ function write(options) {
   const { existingRaw } = generation;
   const keep = keepKeys(options, existingRaw);
   const result = existingRaw === void 0 ? { content: generation.template, kept: [], replaced: [], keysKept: [] } : merge({ existingRaw, templateRaw: generation.template, keep });
-  fs3.mkdirSync(path3.dirname(generation.file), { recursive: true });
-  fs3.writeFileSync(generation.file, result.content);
+  const extra = applyExtraKeys(result.content, {
+    roleId: generation.role.id,
+    omitClaudeMd: options.omitClaudeMd
+  });
+  fs4.mkdirSync(path4.dirname(generation.file), { recursive: true });
+  fs4.writeFileSync(generation.file, extra.content);
   return {
     ok: true,
     target: generation.target,
@@ -1316,10 +1482,23 @@ function write(options) {
     toolsAfter: splitList(
       parseDocument(result.content).meta.get("tools") ?? ""
     ),
-    mcpDropped: generation.mcpDropped
+    mcpDropped: generation.mcpDropped,
+    extraKeys: extra.changes
   };
 }
 __name(write, "write");
+function writeConfigCommand(options) {
+  const before = readConfig(options.dir);
+  const disabledRoles = splitList(options.roles ?? "");
+  const target = writeConfig(options.dir, { disabledRoles });
+  return {
+    ok: true,
+    target,
+    disabledRoles,
+    before: before.kind === "ok" ? before.config.disabledRoles : null
+  };
+}
+__name(writeConfigCommand, "writeConfigCommand");
 function run(options) {
   switch (options.command) {
     case "list-coverage":
@@ -1347,6 +1526,8 @@ function run(options) {
       return check(options);
     case "write":
       return write(options);
+    case "write-config":
+      return writeConfigCommand(options);
   }
 }
 __name(run, "run");
