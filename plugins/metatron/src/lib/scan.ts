@@ -329,6 +329,8 @@ export interface ScanResult {
   tree: TreeEntry[]
   /** 走査したファイル(root からの相対パス)。`maxFiles` で打ち切る。 */
   files: string[]
+  /** 走査がたどらなかった、ディレクトリを指すシンボリックリンク(root からの相対パス)。 */
+  symlinks: string[]
   /** 除外ディレクトリを除いたファイルの総数。 */
   fileCount: number
   testFrameworks: TestFrameworkFacts
@@ -632,6 +634,7 @@ interface WalkState {
   limits: ScanLimits
   tree: TreeEntry[]
   files: string[]
+  symlinks: string[]
   fileCount: number
   testFiles: string[]
   /** 深さ 1・2 のディレクトリ → 配下のファイル数。 */
@@ -718,6 +721,15 @@ function walkDirectory(
     } else if (dirent.isFile()) {
       recordFile(state, childRel)
       pushTree(state, childRel, depth + 1, "file")
+    } else if (dirent.isSymbolicLink()) {
+      // ディレクトリを指すリンクだけを記録する(ファイルへのリンクは階層を隠さない)。
+      try {
+        if (fs.statSync(path.join(dir, dirent.name)).isDirectory()) {
+          state.symlinks.push(childRel)
+        }
+      } catch {
+        // 壊れたリンクは階層を隠さないので記録しない。
+      }
     }
   }
 }
@@ -1145,6 +1157,7 @@ function scanInner(
     limits,
     tree: [],
     files: [],
+    symlinks: [],
     fileCount: 0,
     testFiles: [],
     dirFileCounts: new Map(),
@@ -1219,6 +1232,7 @@ function scanInner(
     commands,
     tree: state.tree,
     files: state.files,
+    symlinks: state.symlinks,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -1259,6 +1273,7 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
       commands: [],
       tree: [],
       files: [],
+      symlinks: [],
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -1472,8 +1487,24 @@ function diffDirectories(
       pending.push(`${token}(同じ名前の階層が別の場所にある)`)
       continue
     }
-    if (token.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
+    // 除外ディレクトリの中は走査結果に無い。ただし先頭がルート直下に実在する
+    // 除外ディレクトリ(`build/old` の `build`)なら、上のファイルシステムの確認で
+    // 不在が確定しているので断定してよい。
+    const segments = token.split("/")
+    const excludedAt = segments.findIndex((seg) =>
+      EXCLUDED_DIRECTORY_NAMES.has(seg)
+    )
+    const rootedInExcluded =
+      excludedAt === 0 &&
+      existsWithExactCase(result.root, segments[0] ?? "") === "exists"
+    if (excludedAt >= 0 && !rootedInExcluded) {
       pending.push(`${token}(走査が除外するディレクトリを含む)`)
+      continue
+    }
+    if (!rootedInExcluded && result.symlinks.length > 0) {
+      // 走査はリンクの先へ入らないため、リンクでつないだパッケージの中の
+      // 相対パスとして実在するかを確かめられない。
+      pending.push(`${token}(走査がたどらないシンボリックリンクがある)`)
       continue
     }
     if (result.truncation.files || result.truncation.walk) {

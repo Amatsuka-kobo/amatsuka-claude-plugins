@@ -3651,6 +3651,13 @@ function walkDirectory(state, dir, rel, depth) {
     } else if (dirent.isFile()) {
       recordFile(state, childRel);
       pushTree(state, childRel, depth + 1, "file");
+    } else if (dirent.isSymbolicLink()) {
+      try {
+        if (fs7.statSync(path7.join(dir, dirent.name)).isDirectory()) {
+          state.symlinks.push(childRel);
+        }
+      } catch {
+      }
     }
   }
 }
@@ -3968,6 +3975,7 @@ function scanInner(startDir, options) {
     limits,
     tree: [],
     files: [],
+    symlinks: [],
     fileCount: 0,
     testFiles: [],
     dirFileCounts: /* @__PURE__ */ new Map(),
@@ -4037,6 +4045,7 @@ function scanInner(startDir, options) {
     commands,
     tree: state.tree,
     files: state.files,
+    symlinks: state.symlinks,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -4069,6 +4078,7 @@ function scan(startDir, options = {}) {
       commands: [],
       tree: [],
       files: [],
+      symlinks: [],
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -4229,8 +4239,17 @@ function diffDirectories(result, body, findings, skipped) {
       pending.push(`${token}(\u540C\u3058\u540D\u524D\u306E\u968E\u5C64\u304C\u5225\u306E\u5834\u6240\u306B\u3042\u308B)`);
       continue;
     }
-    if (token.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
+    const segments = token.split("/");
+    const excludedAt = segments.findIndex(
+      (seg) => EXCLUDED_DIRECTORY_NAMES.has(seg)
+    );
+    const rootedInExcluded = excludedAt === 0 && existsWithExactCase(result.root, segments[0] ?? "") === "exists";
+    if (excludedAt >= 0 && !rootedInExcluded) {
       pending.push(`${token}(\u8D70\u67FB\u304C\u9664\u5916\u3059\u308B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u542B\u3080)`);
+      continue;
+    }
+    if (!rootedInExcluded && result.symlinks.length > 0) {
+      pending.push(`${token}(\u8D70\u67FB\u304C\u305F\u3069\u3089\u306A\u3044\u30B7\u30F3\u30DC\u30EA\u30C3\u30AF\u30EA\u30F3\u30AF\u304C\u3042\u308B)`);
       continue;
     }
     if (result.truncation.files || result.truncation.walk) {

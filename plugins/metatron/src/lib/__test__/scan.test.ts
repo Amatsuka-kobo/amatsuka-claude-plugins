@@ -674,23 +674,49 @@ test("ディレクトリ構成: 消えたと断定できないパスは findings
   write(dir, "src/app/page.ts", "")
   write(dir, "packages/b/src/lib/index.ts", "")
   write(dir, "packages/web/dist/index.js", "")
-  fs.symlinkSync(os.tmpdir(), path.join(dir, "outlink"))
+  write(dir, "build/current/out.js", "")
 
   const diff = diffArchitecture({
     scan: scan(dir, { root: dir }),
     sections: {
       ディレクトリ構成と責務:
-        "- `src/lib/`\n- `web/dist/`\n- `outlink/x/`\n- `src/gone/`\n"
+        "- `src/lib/`\n- `web/dist/`\n- `src/gone/`\n- `build/old/`\n- `build/current/`\n"
     }
   })
 
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual(["src/gone"])
+  // `build/old` は先頭がルート直下に実在する除外ディレクトリなので、不在を断定できる。
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
+    "build/old",
+    "src/gone"
+  ])
   const line = diff.skipped.find((s) =>
     s.startsWith("ディレクトリの消失の保留")
   )
   expect(line).toContain("src/lib(同じ名前の階層が別の場所にある)")
   expect(line).toContain("web/dist(走査が除外するディレクトリを含む)")
+})
+
+test("ディレクトリ構成: シンボリックリンクはたどらず、リンクでつないだパッケージがあれば不在を保留する", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "real/webimpl/src/x.ts", "")
+  fs.mkdirSync(path.join(dir, "packages"))
+  fs.symlinkSync(path.join(dir, "real/webimpl"), path.join(dir, "packages/web"))
+  fs.symlinkSync(os.tmpdir(), path.join(dir, "outlink"))
+
+  const diff = diffArchitecture({
+    scan: scan(dir, { root: dir }),
+    sections: {
+      ディレクトリ構成と責務: "- `web/src/`\n- `outlink/x/`\n"
+    }
+  })
+
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([])
+  const line = diff.skipped.find((s) =>
+    s.startsWith("ディレクトリの消失の保留")
+  )
   expect(line).toContain("outlink/x(シンボリックリンクを含む)")
+  expect(line).toContain("web/src(走査がたどらないシンボリックリンクがある)")
 })
 
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {
