@@ -443,34 +443,80 @@ async function review(
   }
 }
 
+export const FORK_ROLES: readonly RoleId[] = [
+  "complex-impl",
+  "normal-impl",
+  "general"
+]
+
+// Custom Agent モードでは、定義の model が 4 つの別名のどれかのときだけ比べられる。
+function modelOf(candidate: Candidate): ClaudeModel | undefined {
+  if (candidate.definition === undefined) return candidate.role.model
+  const model = candidate.definition.model
+  return model !== undefined && isClaudeModel(model) ? model : undefined
+}
+
+type Assignment = (Delegate & { id: string }) | SelfAssignment
+
+function assignmentOf(
+  task: { id: string; needsContext: boolean },
+  candidate: Candidate,
+  input: Extract<PickInput, { reason: "split" }>,
+  deps: PickDeps,
+  p?: number
+): Assignment {
+  if (!task.needsContext) {
+    return { id: task.id, ...delegateOf(candidate, input.lang, deps, p) }
+  }
+  const { role } = candidate
+  if (
+    !FORK_ROLES.includes(role.id) ||
+    input.parentModel === undefined ||
+    modelOf(candidate) !== input.parentModel
+  ) {
+    return { id: task.id, mode: "self" }
+  }
+  return {
+    id: task.id,
+    ...withP(
+      {
+        role: role.id,
+        mode: "fork" as const,
+        agentType: "fork" as const,
+        preamble: deps.preambles.fork(role.id, input.lang)
+      },
+      p
+    )
+  }
+}
+
 async function split(
   input: Extract<PickInput, { reason: "split" }>,
   deps: PickDeps
 ): Promise<PickOutput> {
   const candidates = candidatesFor(input, deps)
+  // fork を返せない作業は、Jev に問う前に self と決まる。
+  const forkable = deps.forkEnabled && input.parentModel !== undefined
+  const asked = input.tasks.filter((task) => !task.needsContext || forkable)
+  const chosen = new Map<string, { candidate: Candidate; p?: number }>()
+
   const [only] = candidates
   if (candidates.length === 1 && only !== undefined) {
-    return {
-      ok: true,
-      reason: "split",
-      assignments: input.tasks.map((task) => ({
-        id: task.id,
-        ...delegateOf(only, input.lang, deps)
-      }))
-    }
-  }
-  const tasks = input.tasks.map(({ id, summary }) => ({ id, summary }))
-  const answers = await ask(deps, { tasks }, splitQuestions(tasks, candidates))
-  return {
-    ok: true,
-    reason: "split",
-    assignments: tasks.map((task, index) => {
+    for (const task of asked) chosen.set(task.id, { candidate: only })
+  } else if (asked.length > 0) {
+    const tasks = asked.map(({ id, summary }) => ({ id, summary }))
+    const answers = await ask(
+      deps,
+      { tasks },
+      splitQuestions(tasks, candidates)
+    )
+    tasks.forEach((task, index) => {
       const key = `task_${index}`
       const answer = answerOf(answers, key)
-      const chosen = candidates.find(
-        (candidate) => candidate.role.id === answer.choice
+      const candidate = candidates.find(
+        (entry) => entry.role.id === answer.choice
       )
-      if (chosen === undefined) {
+      if (candidate === undefined) {
         throw new PickFailure(
           "jev-failed",
           `Jev chose an unknown role for ${key}: ${String(answer.choice)}`
@@ -478,10 +524,21 @@ async function split(
       }
       const probabilities = answer.probabilities
       const p = probability(
-        isRecord(probabilities) ? probabilities[chosen.role.id] : undefined,
+        isRecord(probabilities) ? probabilities[candidate.role.id] : undefined,
         `${key}.probabilities`
       )
-      return { id: task.id, ...delegateOf(chosen, input.lang, deps, p) }
+      chosen.set(task.id, { candidate, p })
+    })
+  }
+
+  return {
+    ok: true,
+    reason: "split",
+    assignments: input.tasks.map((task) => {
+      const pick = chosen.get(task.id)
+      return pick === undefined
+        ? { id: task.id, mode: "self" }
+        : assignmentOf(task, pick.candidate, input, deps, pick.p)
     })
   }
 }

@@ -641,3 +641,131 @@ describe("エラー", () => {
     ).toBe("jev-failed")
   })
 })
+
+describe("fork", () => {
+  function input(
+    tasks: { id: string; summary: string; needsContext?: boolean }[],
+    parentModel: string | null = "sonnet"
+  ): string {
+    return JSON.stringify({
+      reason: "split",
+      tasks,
+      parentModel: parentModel ?? undefined
+    })
+  }
+  const CONTEXT = [{ id: "a", summary: "x", needsContext: true }]
+
+  it("文脈の要る作業で、Jev が親と同じモデルの fork の役割を選べば fork を返す", async () => {
+    const result = await pickDelegate(
+      input(CONTEXT),
+      deps([], fakeJev({ task_0: chose("normal-impl", 0.8) }).ask)
+    )
+    expect(result).toEqual({
+      ok: true,
+      reason: "split",
+      assignments: [
+        {
+          id: "a",
+          role: "normal-impl",
+          mode: "fork",
+          agentType: "fork",
+          preamble: "fork:normal-impl:en",
+          p: 0.8
+        }
+      ]
+    })
+  })
+
+  it.each([
+    ["fork の対象外の役割", "light-impl"],
+    ["モデルが親と違う役割", "complex-impl"]
+  ])("%s が選ばれたら self を返す", async (_label, role) => {
+    expect(
+      await pickDelegate(
+        input(CONTEXT),
+        deps([], fakeJev({ task_0: chose(role, 0.8) }).ask)
+      )
+    ).toEqual({
+      ok: true,
+      reason: "split",
+      assignments: [{ id: "a", mode: "self" }]
+    })
+  })
+
+  it.each([
+    ["inherit", "inherit"],
+    ["未設定", undefined],
+    ["完全なモデル ID", "claude-sonnet-5-5"]
+  ])("定義の model が %s なら self を返す", async (_label, model) => {
+    const definition = { ...def("impl", "normal-impl"), model }
+    expect(
+      await pickDelegate(
+        input(CONTEXT),
+        deps([definition], fakeJev({ task_0: chose("normal-impl", 0.8) }).ask)
+      )
+    ).toMatchObject({ assignments: [{ id: "a", mode: "self" }] })
+  })
+
+  it("定義の model が親と同じ別名なら fork を返す", async () => {
+    const definition = { ...def("impl", "normal-impl"), model: "sonnet" }
+    expect(
+      await pickDelegate(
+        input(CONTEXT),
+        deps([definition], fakeJev({ task_0: chose("normal-impl", 0.8) }).ask)
+      )
+    ).toMatchObject({
+      assignments: [{ id: "a", mode: "fork", role: "normal-impl" }]
+    })
+  })
+
+  it.each([
+    ["parentModel が無い", null, true],
+    ["fork モードが無効", "sonnet", false]
+  ])("%s とき、文脈の要る作業は問いから外して self にし、他は通常どおり返す", async (_label, parentModel, forkEnabled) => {
+    const jev = fakeJev({ task_0: chose("explore", 0.9) })
+    const result = await pickDelegate(
+      input(
+        [
+          { id: "a", summary: "needs context", needsContext: true },
+          { id: "b", summary: "find callers" }
+        ],
+        parentModel
+      ),
+      { ...deps([], jev.ask), forkEnabled }
+    )
+    expect(result).toMatchObject({
+      assignments: [
+        { id: "a", mode: "self" },
+        { id: "b", role: "explore", mode: "standard" }
+      ]
+    })
+    expect(jev.requests[0]?.state).toEqual({
+      tasks: [{ id: "b", summary: "find callers" }]
+    })
+    expect(Object.keys(jev.requests[0]?.questions ?? {})).toEqual(["task_0"])
+    expect(
+      JSON.parse(JSON.stringify(jev.requests[0]?.questions)).task_0.instructions
+    ).toContain('"b"')
+  })
+
+  it("全作業が self になったときは Jev を呼ばない", async () => {
+    const jev = fakeJev({})
+    expect(
+      await pickDelegate(input(CONTEXT, null), deps([], jev.ask, null))
+    ).toEqual({
+      ok: true,
+      reason: "split",
+      assignments: [{ id: "a", mode: "self" }]
+    })
+    expect(jev.requests).toHaveLength(0)
+  })
+
+  it("文脈の要らない作業は fork にしない", async () => {
+    expect(
+      await pickDelegate(
+        input([{ id: "a", summary: "x" }]),
+        deps([], fakeJev({ task_0: chose("normal-impl", 0.8) }).ask)
+      )
+    ).toMatchObject({ assignments: [{ id: "a", mode: "standard" }] })
+  })
+})

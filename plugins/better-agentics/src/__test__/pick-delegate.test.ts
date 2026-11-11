@@ -87,6 +87,23 @@ describe("pick-delegate", () => {
     ).toMatchObject({ ok: false, error: "invalid-config" })
   })
 
+  it("CLAUDE_CODE_FORK_SUBAGENT=0 なら文脈の要る作業は self になる", () => {
+    expect(
+      run(
+        JSON.stringify({
+          reason: "split",
+          parentModel: "sonnet",
+          tasks: [{ id: "a", summary: "x", needsContext: true }]
+        }),
+        { CLAUDE_CODE_FORK_SUBAGENT: "0" }
+      )
+    ).toEqual({
+      ok: true,
+      reason: "split",
+      assignments: [{ id: "a", mode: "self" }]
+    })
+  })
+
   it("不正な JSON でも終了コード 0 で invalid-input を返す", () => {
     expect(run("{")).toMatchObject({ ok: false, error: "invalid-input" })
   })

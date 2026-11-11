@@ -35,7 +35,7 @@ EOF
 | reason | 入力 |
 | --- | --- |
 | `review` | `{"reason": "review", "task": {"summary": string, "artifacts": string[]}}` |
-| `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string}]}`。`id` は配列内で一意にする |
+| `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string, "needsContext"?: boolean}]}`。`id` は配列内で一意にする。会話の文脈が無いと仕様を書き切れない作業にだけ `needsContext: true` を付ける。このスキルの外のスキルやコマンドの手順に従って作業している間は付けない |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
 
 どの理由にも、最上位に次の項目を付けられる。
@@ -54,6 +54,8 @@ EOF
 | --- | --- |
 | `custom` | `agentType` を `subagent_type` に渡す。`model` と `effort` は渡さない |
 | `standard` | `agentType` を `subagent_type` に、`model`・`effort` を同名の引数に渡す。`preamble` を依頼文の冒頭にそのまま置く |
+| `fork` | `subagent_type: "fork"` で起動し、`preamble` を依頼文の冒頭にそのまま置く。起動が拒否されたら、その作業を自分で行う |
+| `self` | `split` だけで返る。その作業は委譲せず、自分で行う |
 
 | `error` | 意味 |
 | --- | --- |

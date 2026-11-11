@@ -1521,31 +1521,61 @@ async function review(input, deps) {
   };
 }
 __name(review, "review");
+var FORK_ROLES = [
+  "complex-impl",
+  "normal-impl",
+  "general"
+];
+function modelOf(candidate) {
+  if (candidate.definition === void 0) return candidate.role.model;
+  const model = candidate.definition.model;
+  return model !== void 0 && isClaudeModel(model) ? model : void 0;
+}
+__name(modelOf, "modelOf");
+function assignmentOf(task, candidate, input, deps, p) {
+  if (!task.needsContext) {
+    return { id: task.id, ...delegateOf(candidate, input.lang, deps, p) };
+  }
+  const { role } = candidate;
+  if (!FORK_ROLES.includes(role.id) || input.parentModel === void 0 || modelOf(candidate) !== input.parentModel) {
+    return { id: task.id, mode: "self" };
+  }
+  return {
+    id: task.id,
+    ...withP(
+      {
+        role: role.id,
+        mode: "fork",
+        agentType: "fork",
+        preamble: deps.preambles.fork(role.id, input.lang)
+      },
+      p
+    )
+  };
+}
+__name(assignmentOf, "assignmentOf");
 async function split(input, deps) {
   const candidates = candidatesFor(input, deps);
+  const forkable = deps.forkEnabled && input.parentModel !== void 0;
+  const asked = input.tasks.filter((task) => !task.needsContext || forkable);
+  const chosen = /* @__PURE__ */ new Map();
   const [only] = candidates;
   if (candidates.length === 1 && only !== void 0) {
-    return {
-      ok: true,
-      reason: "split",
-      assignments: input.tasks.map((task) => ({
-        id: task.id,
-        ...delegateOf(only, input.lang, deps)
-      }))
-    };
-  }
-  const tasks = input.tasks.map(({ id, summary }) => ({ id, summary }));
-  const answers = await ask(deps, { tasks }, splitQuestions(tasks, candidates));
-  return {
-    ok: true,
-    reason: "split",
-    assignments: tasks.map((task, index) => {
+    for (const task of asked) chosen.set(task.id, { candidate: only });
+  } else if (asked.length > 0) {
+    const tasks = asked.map(({ id, summary }) => ({ id, summary }));
+    const answers = await ask(
+      deps,
+      { tasks },
+      splitQuestions(tasks, candidates)
+    );
+    tasks.forEach((task, index) => {
       const key = `task_${index}`;
       const answer = answerOf(answers, key);
-      const chosen = candidates.find(
-        (candidate) => candidate.role.id === answer.choice
+      const candidate = candidates.find(
+        (entry) => entry.role.id === answer.choice
       );
-      if (chosen === void 0) {
+      if (candidate === void 0) {
         throw new PickFailure(
           "jev-failed",
           `Jev chose an unknown role for ${key}: ${String(answer.choice)}`
@@ -1553,10 +1583,18 @@ async function split(input, deps) {
       }
       const probabilities = answer.probabilities;
       const p = probability(
-        isRecord2(probabilities) ? probabilities[chosen.role.id] : void 0,
+        isRecord2(probabilities) ? probabilities[candidate.role.id] : void 0,
         `${key}.probabilities`
       );
-      return { id: task.id, ...delegateOf(chosen, input.lang, deps, p) };
+      chosen.set(task.id, { candidate, p });
+    });
+  }
+  return {
+    ok: true,
+    reason: "split",
+    assignments: input.tasks.map((task) => {
+      const pick = chosen.get(task.id);
+      return pick === void 0 ? { id: task.id, mode: "self" } : assignmentOf(task, pick.candidate, input, deps, pick.p);
     })
   };
 }
