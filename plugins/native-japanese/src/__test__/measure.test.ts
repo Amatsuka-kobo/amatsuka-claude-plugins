@@ -161,6 +161,77 @@ test("--git で先頭に目印を持つファイルを数えない", () => {
   expect(r.violations).toBe(2)
 })
 
+test("--git で skills/japanese-writing/SKILL.md を数えない", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-skill-"))
+  try {
+    const g = (...args: string[]) =>
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", ...args],
+        { cwd: dir, encoding: "utf8" }
+      )
+    g("init", "-q")
+    fs.writeFileSync(path.join(dir, "a.md"), "空\n")
+    g("add", ".")
+    g("commit", "-q", "-m", "1")
+    fs.mkdirSync(path.join(dir, "skills", "japanese-writing"), {
+      recursive: true
+    })
+    fs.writeFileSync(
+      path.join(dir, "skills", "japanese-writing", "SKILL.md"),
+      "新しい行で、ことが可能だ。\n"
+    )
+    g("add", "-A")
+    g("commit", "-q", "-m", "2")
+    const r = measure(["--git", "HEAD~1..HEAD"], dir)
+    expect(r.examples).toEqual({})
+    expect(r.lines).toBe(0)
+    expect(r.violations).toBe(0)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("--transcripts で skills/japanese-writing/SKILL.md への書き込みを数えない", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "native-japanese-skill-"))
+  try {
+    const rec = (file: string) =>
+      JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-09-26T00:00:00.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              name: "Write",
+              input: {
+                file_path: file,
+                content: "新しい行で、ことが可能だ。\n"
+              }
+            }
+          ]
+        }
+      })
+    fs.writeFileSync(
+      path.join(dir, "s.jsonl"),
+      `${rec("/r/skills/japanese-writing/SKILL.md")}\n`
+    )
+    const r = measure(["--transcripts", dir])
+    expect(r.examples).toEqual({})
+    expect(r.lines).toBe(0)
+    expect(r.violations).toBe(0)
+    // 対照: 別のパスなら数える
+    fs.writeFileSync(
+      path.join(dir, "s.jsonl"),
+      `${rec("/r/skills/other/SKILL.md")}\n`
+    )
+    expect(measure(["--transcripts", dir]).violations).toBe(1)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 describe("形態素解析の層", () => {
   let data: string
   let repo2: string

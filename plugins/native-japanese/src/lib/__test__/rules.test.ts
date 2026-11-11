@@ -61,9 +61,10 @@ describe("直訳語", () => {
     expect(hitIds(literalRules, text)).toContain(id)
   })
 
-  test("表は 11 行で、規則の id は重複しない", () => {
+  test("直訳語の規則は 9 本で、規則の id は重複しない", () => {
     const ids = rules.map((r) => r.id)
     expect(new Set(ids).size).toBe(ids.length)
+    expect(literalRules).toHaveLength(9)
     expect(literalRules.map((r) => r.id)).toEqual(
       expect.arrayContaining(["literal:段", "literal:契機", "literal:節"])
     )

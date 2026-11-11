@@ -33,6 +33,7 @@ function ruleIds(n: number, kind: Block["kind"] = "prose"): string[] {
   return checkBlocks([block(sentence(n), kind)], fake).map((v) => v.ruleId)
 }
 
+// 1〜8 行目は、消した規則 muse-shugo 用の文を、規則が当たらないことを見る例として残している。
 // sentences.txt の各行に当たる規則。空の配列はどの規則にも当たらない行
 const EXPECTED: Record<number, string[]> = {
   1: [],
