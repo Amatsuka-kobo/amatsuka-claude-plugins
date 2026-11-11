@@ -277,6 +277,32 @@ test("S3: ignore 済みの lockfile と設定ファイルを判定に使わな�
   expect(result.warnings).toEqual([])
 })
 
+test("S3: 追跡済みのルート直下の設定ファイルは ignore のパターンに当たっても判定に使う", () => {
+  const dir = mkTmp()
+  git(dir, ["init", "-q"])
+  writeJson(dir, "package.json", { scripts: { test: "vitest" } })
+  git(dir, ["add", "package.json"])
+  write(dir, ".gitignore", "package.json\n")
+
+  const result = scan(dir, { root: dir })
+
+  expect(result.dependencies.source).toBe("package.json")
+  expect(result.scripts.map((s) => s.name)).toEqual(["test"])
+})
+
+test("S3: git 管理外では .gitignore にある設定ファイルも判定に使う", () => {
+  const dir = mkTmp()
+  write(dir, ".gitignore", "package.json\npnpm-lock.yaml\n")
+  writeJson(dir, "package.json", { scripts: { test: "vitest" } })
+  write(dir, "pnpm-lock.yaml", "")
+
+  const result = scan(dir, { root: dir })
+
+  expect(result.gitIgnoreApplied).toBe(false)
+  expect(result.packageManager.lockfiles).toEqual(["pnpm-lock.yaml"])
+  expect(result.scripts.map((s) => s.name)).toEqual(["test"])
+})
+
 test("S3: 追跡済みのファイルは ignore のパターンに当たっても走査に残す", () => {
   const dir = mkTmp()
   git(dir, ["init", "-q"])
