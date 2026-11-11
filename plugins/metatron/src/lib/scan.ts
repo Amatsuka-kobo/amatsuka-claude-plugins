@@ -1382,6 +1382,25 @@ function collectSources(result: ScanResult, skipped: string[]): string[] {
     .sort(compareStrings)
 }
 
+/**
+ * root からの相対パスが、各階層の名前の大文字小文字まで一致して実在するか。
+ * 大文字小文字を区別しないファイルシステムでも、区別するものと同じ結果を返す。
+ */
+function existsWithExactCase(root: string, relative: string): boolean {
+  let current = root
+  for (const segment of relative.split("/")) {
+    let names: string[]
+    try {
+      names = fs.readdirSync(current)
+    } catch {
+      return false
+    }
+    if (!names.includes(segment)) return false
+    current = path.join(current, segment)
+  }
+  return true
+}
+
 function diffDirectories(
   result: ScanResult,
   body: string | undefined,
@@ -1421,11 +1440,23 @@ function diffDirectories(
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue
     // `/` を含まない 1 語は、相対パスやビルド出力(除外ディレクトリ)と区別できないため見ない。
     if (!token.includes("/")) continue
+    // `.` と `..` の区間を含むパスは、プロジェクトの外や別の位置を指しうるため見ない。
+    if (token.split("/").some((seg) => seg === "." || seg === "..")) continue
     if (existing.has(token)) continue
     // ツリーは除外ディレクトリ(ビルド出力・node_modules・.git など)と maxDepth より
     // 深い階層を持たないため、ツリーに無いものはファイルシステムで実在を確かめる。
     // ファイルとして実在するものも対象外。
-    if (fs.existsSync(path.join(result.root, token))) continue
+    if (existsWithExactCase(result.root, token)) continue
+    // パッケージからの相対パス(`web/src` の実体が `packages/web/src`)として実在するもの。
+    const suffix = `/${token}`
+    if (
+      result.tree.some((entry) => entry.path.endsWith(suffix)) ||
+      result.files.some((file) => file.includes(`${suffix}/`))
+    ) {
+      continue
+    }
+    // 走査が打ち切られていると、相対パスとしての不在を断定できない。
+    if (result.truncation.files || result.truncation.walk) continue
     findings.push({
       kind: "directory_stale",
       section,

@@ -649,6 +649,25 @@ test("ディレクトリ構成: 走査が除外するディレクトリと深い
   ])
 })
 
+test("ディレクトリ構成: `..` を含むパスは見ず、大文字小文字の違いは消失、パッケージ内の相対パスは実在とみなす", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "packages/web/src/index.ts", "")
+
+  const diff = diffArchitecture({
+    scan: scan(dir, { root: dir }),
+    sections: {
+      ディレクトリ構成と責務:
+        "- `../outside/x/`\n- `Packages/Web/src/`\n- `web/src/`\n- `web/gone/`\n"
+    }
+  })
+
+  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
+    "Packages/Web/src",
+    "web/gone"
+  ])
+})
+
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {
   const { result } = scanFixture()
 

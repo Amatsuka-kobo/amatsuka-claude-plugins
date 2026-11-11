@@ -4173,6 +4173,20 @@ function collectSources(result, skipped) {
     return SOURCE_FILE_RES.some((re) => re.test(base));
   }).sort(compareStrings);
 }
+function existsWithExactCase(root, relative) {
+  let current = root;
+  for (const segment of relative.split("/")) {
+    let names;
+    try {
+      names = fs7.readdirSync(current);
+    } catch {
+      return false;
+    }
+    if (!names.includes(segment)) return false;
+    current = path7.join(current, segment);
+  }
+  return true;
+}
 function diffDirectories(result, body, findings, skipped) {
   const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
   if (body === void 0) return;
@@ -4196,8 +4210,14 @@ function diffDirectories(result, body, findings, skipped) {
     if (/[*?[\]{}]/.test(token)) continue;
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue;
     if (!token.includes("/")) continue;
+    if (token.split("/").some((seg) => seg === "." || seg === "..")) continue;
     if (existing.has(token)) continue;
-    if (fs7.existsSync(path7.join(result.root, token))) continue;
+    if (existsWithExactCase(result.root, token)) continue;
+    const suffix = `/${token}`;
+    if (result.tree.some((entry) => entry.path.endsWith(suffix)) || result.files.some((file) => file.includes(`${suffix}/`))) {
+      continue;
+    }
+    if (result.truncation.files || result.truncation.walk) continue;
     findings.push({
       kind: "directory_stale",
       section,
