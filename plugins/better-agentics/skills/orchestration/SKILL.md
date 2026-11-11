@@ -38,14 +38,28 @@ EOF
 | `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string}]}`。`id` は配列内で一意にする |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
 
+どの理由にも、最上位に次の項目を付けられる。
+
+| 項目 | 値 |
+| --- | --- |
+| `parentModel` | 自分のモデルの別名(`fable` / `opus` / `sonnet` / `haiku`)。システムプロンプトの環境の欄にあるモデル名から書く |
+| `lang` | 会話の言語のコード(`ja`・`en` など)。省くと `en` |
+| `excludeRoles` | その呼び出しだけ候補から外す役割 ID の配列。断られた作業の委譲先を選び直すときに、断った役割を入れる |
+
 - `review` と `stuck` の出力は `agents`、`split` の出力は `assignments` に委譲先を持つ。
-- 各要素の `agent` を、Agent ツールの `subagent_type` にそのまま渡す。
 - `split` の `assignments` は、入力の `id` ごとに委譲先を 1 つ持つ。
+- 委譲先は `role`・`mode`・`agentType` を持ち、`mode` で Agent ツールへの渡し方が決まる。
+
+| `mode` | Agent ツールへの渡し方 |
+| --- | --- |
+| `custom` | `agentType` を `subagent_type` に渡す。`model` と `effort` は渡さない |
+| `standard` | `agentType` を `subagent_type` に、`model`・`effort` を同名の引数に渡す。`preamble` を依頼文の冒頭にそのまま置く |
 
 | `error` | 意味 |
 | --- | --- |
-| `invalid-input` | 入力が JSON として読めない、必須の項目が欠ける、`split` の `id` が重複する |
-| `no-candidates` | 理由に対応する役割の定義が 1 つも無い |
+| `invalid-input` | 入力が JSON として読めない、必須の項目が欠ける、`split` の `id` が重複する、任意の項目の値が不正 |
+| `invalid-config` | `.claude/better-agentics/config.json` が読めないか、形が違う |
+| `no-candidates` | 理由に当たる役割を、設定ですべて外しているか、`excludeRoles` で候補がすべて外れた |
 | `duplicate-role` | 同じ役割を 2 件以上の定義が持つ、または候補の定義の名前が重なる |
 | `no-api-key` | Jev を呼ぶ必要があるのに `TYPESAFE_API_KEY` が無い |
 | `jev-failed` | Jev の呼び出しが失敗した、または応答の形が想定外だった |

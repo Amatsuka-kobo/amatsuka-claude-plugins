@@ -167,6 +167,10 @@ function roleById(id) {
   return ROLES.find((role) => role.id === id);
 }
 __name(roleById, "roleById");
+function rolesFor(reason) {
+  return ROLES.filter((role) => role.reason === reason);
+}
+__name(rolesFor, "rolesFor");
 function isClaudeModel(value) {
   return CLAUDE_MODELS.includes(value);
 }
@@ -546,6 +550,10 @@ function readConfig(projectDir) {
   return typeof result === "string" ? { kind: "invalid", message: `${CONFIG_FILE}: ${result}`, raw } : { kind: "ok", config: result };
 }
 __name(readConfig, "readConfig");
+function disabledRolesOf(state) {
+  return state.kind === "ok" ? state.config.disabledRoles : [];
+}
+__name(disabledRolesOf, "disabledRolesOf");
 
 // ../../node_modules/.pnpm/@typesafe-ai+sdk@0.6.0/node_modules/@typesafe-ai/sdk/dist/index.mjs
 var requestIdFrom = /* @__PURE__ */ __name((headers) => headers.get("x-typesafe-request-id") ?? void 0, "requestIdFrom");
@@ -1320,29 +1328,53 @@ function parseTask(parsed) {
   }
 }
 __name(parseTask, "parseTask");
-function candidatesFor(reason, definitions) {
-  const candidates = definitions.filter(
-    (entry) => roleById(entry.role)?.reason === reason
+function candidatesFor(input, deps) {
+  if (deps.config.kind === "invalid") {
+    throw new PickFailure(
+      "invalid-config",
+      `${deps.config.message}. Run better-agentics:setup to rewrite ${CONFIG_FILE}.`
+    );
+  }
+  const disabled = disabledRolesOf(deps.config);
+  const enabled = rolesFor(input.reason).filter(
+    (role) => !disabled.includes(role.id)
   );
-  if (candidates.length === 0) {
+  if (enabled.length === 0) {
     throw new PickFailure(
       "no-candidates",
-      `No agent definition has a role for "${reason}". ${SETUP_HINT}`
+      `Every role for "${input.reason}" is disabled in ${CONFIG_FILE}. Run better-agentics:setup to change the disabled roles.`
+    );
+  }
+  const roles = enabled.filter((role) => !input.excludeRoles.includes(role.id));
+  if (roles.length === 0) {
+    throw new PickFailure(
+      "no-candidates",
+      `Every remaining role for "${input.reason}" was removed by excludeRoles.`
     );
   }
   const problems = [];
-  const roles = [...new Set(candidates.map((entry) => entry.role))];
-  for (const role of roles) {
-    const names2 = candidates.filter((entry) => entry.role === role).map((entry) => entry.name);
-    if (names2.length >= 2) problems.push(`role ${role}: ${names2.join(", ")}`);
-  }
-  const names = candidates.map((entry) => entry.name);
-  for (const name of new Set(names)) {
-    const owners = candidates.filter((entry) => entry.name === name);
-    const distinctRoles = new Set(owners.map((entry) => entry.role));
-    if (owners.length >= 2 && distinctRoles.size >= 2) {
+  const candidates = roles.map((role) => {
+    const owners = deps.definitions.filter((entry) => entry.role === role.id);
+    if (owners.length >= 2) {
       problems.push(
-        `name ${name} is shared by roles ${[...distinctRoles].join(", ")}`
+        `role ${role.id}: ${owners.map((entry) => entry.name).join(", ")}`
+      );
+    }
+    const [definition] = owners;
+    return {
+      role,
+      definition,
+      criteria: definition === void 0 ? deps.standardCriteria(role.id) : definition.whenToInvoke
+    };
+  });
+  const custom = candidates.flatMap(
+    (candidate) => candidate.definition === void 0 ? [] : [candidate.definition]
+  );
+  for (const name of new Set(custom.map((entry) => entry.name))) {
+    const owners = custom.filter((entry) => entry.name === name);
+    if (owners.length >= 2) {
+      problems.push(
+        `name ${name} is shared by roles ${owners.map((entry) => entry.role).join(", ")}`
       );
     }
   }
@@ -1355,15 +1387,31 @@ function candidatesFor(reason, definitions) {
   return candidates;
 }
 __name(candidatesFor, "candidatesFor");
-function pickOf(candidate, p) {
-  const role = roleById(candidate.role)?.id;
-  return p === void 0 ? { agent: candidate.name, role } : { agent: candidate.name, role, p };
+function withP(delegate, p) {
+  return p === void 0 ? delegate : { ...delegate, p };
 }
-__name(pickOf, "pickOf");
-function criteriaText(candidate) {
-  return candidate.whenToInvoke === "" ? "(no criteria)" : candidate.whenToInvoke;
+__name(withP, "withP");
+function delegateOf(candidate, lang, deps, p) {
+  const { role, definition } = candidate;
+  if (definition !== void 0) {
+    return withP(
+      { role: role.id, mode: "custom", agentType: definition.name },
+      p
+    );
+  }
+  return withP(
+    {
+      role: role.id,
+      mode: "standard",
+      agentType: "general-purpose",
+      model: role.model,
+      effort: role.effort,
+      preamble: deps.preambles.standard(role.id, lang)
+    },
+    p
+  );
 }
-__name(criteriaText, "criteriaText");
+__name(delegateOf, "delegateOf");
 function reviewQuestions(candidates) {
   return Object.fromEntries(
     candidates.map((candidate, index) => [
@@ -1372,9 +1420,9 @@ function reviewQuestions(candidates) {
         [
           "Decide whether the reviewer below should review the work described in the state.",
           "Answer yes only when the reviewer's criteria clearly match the work. Other reviewers are judged separately.",
-          `Reviewer: ${candidate.name}`,
+          `Reviewer: ${candidate.role.id}`,
           "When to invoke:",
-          criteriaText(candidate)
+          candidate.criteria === "" ? "(no criteria)" : candidate.criteria
         ].join("\n")
       )
     ])
@@ -1384,8 +1432,8 @@ __name(reviewQuestions, "reviewQuestions");
 function splitQuestions(tasks, candidates) {
   const options = Object.fromEntries(
     candidates.map((candidate) => [
-      candidate.name,
-      candidate.whenToInvoke === "" ? null : candidate.whenToInvoke
+      candidate.role.id,
+      candidate.criteria === "" ? null : candidate.criteria
     ])
   );
   return Object.fromEntries(
@@ -1433,10 +1481,14 @@ async function ask(deps, state, questions) {
 }
 __name(ask, "ask");
 async function review(input, deps) {
-  const candidates = candidatesFor("review", deps.definitions);
+  const candidates = candidatesFor(input, deps);
   const [only] = candidates;
   if (candidates.length === 1 && only !== void 0) {
-    return { ok: true, reason: "review", agents: [pickOf(only)] };
+    return {
+      ok: true,
+      reason: "review",
+      agents: [delegateOf(only, input.lang, deps)]
+    };
   }
   const answers = await ask(
     deps,
@@ -1455,62 +1507,67 @@ async function review(input, deps) {
     return {
       ok: true,
       reason: "review",
-      agents: yes.map((entry) => pickOf(entry.candidate, entry.p))
+      agents: yes.map(
+        (entry) => delegateOf(entry.candidate, input.lang, deps, entry.p)
+      )
     };
   }
   const best = scored.reduce((top, entry) => entry.p > top.p ? entry : top);
   return {
     ok: true,
     reason: "review",
-    agents: [pickOf(best.candidate, best.p)],
+    agents: [delegateOf(best.candidate, input.lang, deps, best.p)],
     fallback: true
   };
 }
 __name(review, "review");
 async function split(input, deps) {
-  const candidates = candidatesFor("split", deps.definitions);
+  const candidates = candidatesFor(input, deps);
   const [only] = candidates;
   if (candidates.length === 1 && only !== void 0) {
     return {
       ok: true,
       reason: "split",
-      assignments: input.tasks.map((task) => ({ id: task.id, ...pickOf(only) }))
+      assignments: input.tasks.map((task) => ({
+        id: task.id,
+        ...delegateOf(only, input.lang, deps)
+      }))
     };
   }
-  const answers = await ask(
-    deps,
-    { tasks: input.tasks },
-    splitQuestions(input.tasks, candidates)
-  );
+  const tasks = input.tasks.map(({ id, summary }) => ({ id, summary }));
+  const answers = await ask(deps, { tasks }, splitQuestions(tasks, candidates));
   return {
     ok: true,
     reason: "split",
-    assignments: input.tasks.map((task, index) => {
+    assignments: tasks.map((task, index) => {
       const key = `task_${index}`;
       const answer = answerOf(answers, key);
-      const chosen = candidates.find((entry) => entry.name === answer.choice);
+      const chosen = candidates.find(
+        (candidate) => candidate.role.id === answer.choice
+      );
       if (chosen === void 0) {
         throw new PickFailure(
           "jev-failed",
-          `Jev chose an unknown agent for ${key}: ${String(answer.choice)}`
+          `Jev chose an unknown role for ${key}: ${String(answer.choice)}`
         );
       }
       const probabilities = answer.probabilities;
       const p = probability(
-        isRecord2(probabilities) ? probabilities[chosen.name] : void 0,
+        isRecord2(probabilities) ? probabilities[chosen.role.id] : void 0,
         `${key}.probabilities`
       );
-      return { id: task.id, ...pickOf(chosen, p) };
+      return { id: task.id, ...delegateOf(chosen, input.lang, deps, p) };
     })
   };
 }
 __name(split, "split");
-function stuck(deps) {
-  const candidates = candidatesFor("stuck", deps.definitions);
+function stuck(input, deps) {
   return {
     ok: true,
     reason: "stuck",
-    agents: candidates.map((entry) => pickOf(entry))
+    agents: candidatesFor(input, deps).map(
+      (candidate) => delegateOf(candidate, input.lang, deps)
+    )
   };
 }
 __name(stuck, "stuck");
@@ -1523,7 +1580,7 @@ async function pickDelegate(raw, deps) {
       case "split":
         return await split(input, deps);
       case "stuck":
-        return stuck(deps);
+        return stuck(input, deps);
     }
   } catch (error) {
     if (error instanceof PickFailure) {

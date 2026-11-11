@@ -1,14 +1,16 @@
 import { choice, noul, type Questions } from "@typesafe-ai/sdk"
 import type { Definition } from "./agents"
-import type { ConfigState } from "./config"
+import { CONFIG_FILE, type ConfigState, disabledRolesOf } from "./config"
 import { assertLang } from "./fragments"
 import type { JevAsk } from "./jev"
 import {
   type ClaudeModel,
+  type Effort,
   isClaudeModel,
-  type Reason,
+  type Role,
   type RoleId,
-  roleById
+  roleById,
+  rolesFor
 } from "./roles"
 
 export interface PickCommon {
@@ -28,25 +30,56 @@ export type PickInput =
     } & PickCommon)
   | ({ reason: "stuck"; task: { summary: string } } & PickCommon)
 
+export type Mode = "custom" | "standard" | "fork" | "self"
+
 /** p は Jev を呼んだときだけ付く */
-export interface Pick {
-  agent: string
-  role: RoleId
-  p?: number
+export type Delegate =
+  | { role: RoleId; mode: "custom"; agentType: string; p?: number }
+  | {
+      role: RoleId
+      mode: "standard"
+      agentType: "general-purpose"
+      model: ClaudeModel
+      effort: Effort
+      preamble: string
+      p?: number
+    }
+  | {
+      role: RoleId
+      mode: "fork"
+      agentType: "fork"
+      preamble: string
+      p?: number
+    }
+
+export interface SelfAssignment {
+  id: string
+  mode: "self"
 }
 
 export type PickError =
   | "invalid-input"
   | "no-candidates"
   | "duplicate-role"
+  | "invalid-config"
   | "no-api-key"
   | "jev-failed"
 
 export type PickOutput =
-  | { ok: true; reason: "review"; agents: Pick[]; fallback?: true }
-  | { ok: true; reason: "split"; assignments: (Pick & { id: string })[] }
-  | { ok: true; reason: "stuck"; agents: Pick[] }
+  | { ok: true; reason: "review"; agents: Delegate[]; fallback?: true }
+  | {
+      ok: true
+      reason: "split"
+      assignments: ((Delegate & { id: string }) | SelfAssignment)[]
+    }
+  | { ok: true; reason: "stuck"; agents: Delegate[] }
   | { ok: false; error: PickError; message: string }
+
+export interface Candidate {
+  role: Role
+  definition: Definition | undefined
+  criteria: string
+}
 
 export interface PickDeps {
   definitions: Definition[]
@@ -191,36 +224,59 @@ function parseTask(parsed: Record<string, unknown>):
   }
 }
 
-function candidatesFor(
-  reason: Reason,
-  definitions: Definition[]
-): Definition[] {
-  const candidates = definitions.filter(
-    (entry) => roleById(entry.role)?.reason === reason
+// 理由に当たる役割のうち、設定と excludeRoles で外していない役割を ROLES の順に候補にする。
+export function candidatesFor(input: PickInput, deps: PickDeps): Candidate[] {
+  if (deps.config.kind === "invalid") {
+    throw new PickFailure(
+      "invalid-config",
+      `${deps.config.message}. Run better-agentics:setup to rewrite ${CONFIG_FILE}.`
+    )
+  }
+  const disabled = disabledRolesOf(deps.config)
+  const enabled = rolesFor(input.reason).filter(
+    (role) => !disabled.includes(role.id)
   )
-  if (candidates.length === 0) {
+  if (enabled.length === 0) {
     throw new PickFailure(
       "no-candidates",
-      `No agent definition has a role for "${reason}". ${SETUP_HINT}`
+      `Every role for "${input.reason}" is disabled in ${CONFIG_FILE}. Run better-agentics:setup to change the disabled roles.`
+    )
+  }
+  const roles = enabled.filter((role) => !input.excludeRoles.includes(role.id))
+  if (roles.length === 0) {
+    throw new PickFailure(
+      "no-candidates",
+      `Every remaining role for "${input.reason}" was removed by excludeRoles.`
     )
   }
 
   const problems: string[] = []
-  const roles = [...new Set(candidates.map((entry) => entry.role))]
-  for (const role of roles) {
-    const names = candidates
-      .filter((entry) => entry.role === role)
-      .map((entry) => entry.name)
-    if (names.length >= 2) problems.push(`role ${role}: ${names.join(", ")}`)
-  }
-  // choice の選択肢と subagent_type は name を鍵にするため、役割が違っても name の重なりは許さない。
-  const names = candidates.map((entry) => entry.name)
-  for (const name of new Set(names)) {
-    const owners = candidates.filter((entry) => entry.name === name)
-    const distinctRoles = new Set(owners.map((entry) => entry.role))
-    if (owners.length >= 2 && distinctRoles.size >= 2) {
+  const candidates = roles.map((role): Candidate => {
+    const owners = deps.definitions.filter((entry) => entry.role === role.id)
+    if (owners.length >= 2) {
       problems.push(
-        `name ${name} is shared by roles ${[...distinctRoles].join(", ")}`
+        `role ${role.id}: ${owners.map((entry) => entry.name).join(", ")}`
+      )
+    }
+    const [definition] = owners
+    return {
+      role,
+      definition,
+      criteria:
+        definition === undefined
+          ? deps.standardCriteria(role.id)
+          : definition.whenToInvoke
+    }
+  })
+  // subagent_type は name を使うため、役割が違っても name の重なりは許さない。
+  const custom = candidates.flatMap((candidate) =>
+    candidate.definition === undefined ? [] : [candidate.definition]
+  )
+  for (const name of new Set(custom.map((entry) => entry.name))) {
+    const owners = custom.filter((entry) => entry.name === name)
+    if (owners.length >= 2) {
+      problems.push(
+        `name ${name} is shared by roles ${owners.map((entry) => entry.role).join(", ")}`
       )
     }
   }
@@ -233,20 +289,37 @@ function candidatesFor(
   return candidates
 }
 
-function pickOf(candidate: Definition, p?: number): Pick {
-  const role = roleById(candidate.role)?.id as RoleId
-  return p === undefined
-    ? { agent: candidate.name, role }
-    : { agent: candidate.name, role, p }
+function withP<T extends object>(delegate: T, p: number | undefined): T {
+  return p === undefined ? delegate : { ...delegate, p }
 }
 
-function criteriaText(candidate: Definition): string {
-  return candidate.whenToInvoke === ""
-    ? "(no criteria)"
-    : candidate.whenToInvoke
+function delegateOf(
+  candidate: Candidate,
+  lang: string,
+  deps: PickDeps,
+  p?: number
+): Delegate {
+  const { role, definition } = candidate
+  if (definition !== undefined) {
+    return withP(
+      { role: role.id, mode: "custom", agentType: definition.name },
+      p
+    )
+  }
+  return withP(
+    {
+      role: role.id,
+      mode: "standard",
+      agentType: "general-purpose",
+      model: role.model,
+      effort: role.effort,
+      preamble: deps.preambles.standard(role.id, lang)
+    },
+    p
+  )
 }
 
-function reviewQuestions(candidates: Definition[]): Questions {
+function reviewQuestions(candidates: Candidate[]): Questions {
   return Object.fromEntries(
     candidates.map((candidate, index) => [
       `candidate_${index}`,
@@ -254,9 +327,9 @@ function reviewQuestions(candidates: Definition[]): Questions {
         [
           "Decide whether the reviewer below should review the work described in the state.",
           "Answer yes only when the reviewer's criteria clearly match the work. Other reviewers are judged separately.",
-          `Reviewer: ${candidate.name}`,
+          `Reviewer: ${candidate.role.id}`,
           "When to invoke:",
-          criteriaText(candidate)
+          candidate.criteria === "" ? "(no criteria)" : candidate.criteria
         ].join("\n")
       )
     ])
@@ -265,12 +338,12 @@ function reviewQuestions(candidates: Definition[]): Questions {
 
 function splitQuestions(
   tasks: { id: string; summary: string }[],
-  candidates: Definition[]
+  candidates: Candidate[]
 ): Questions {
   const options = Object.fromEntries(
     candidates.map((candidate) => [
-      candidate.name,
-      candidate.whenToInvoke === "" ? null : candidate.whenToInvoke
+      candidate.role.id,
+      candidate.criteria === "" ? null : candidate.criteria
     ])
   )
   return Object.fromEntries(
@@ -330,10 +403,14 @@ async function review(
   input: Extract<PickInput, { reason: "review" }>,
   deps: PickDeps
 ): Promise<PickOutput> {
-  const candidates = candidatesFor("review", deps.definitions)
+  const candidates = candidatesFor(input, deps)
   const [only] = candidates
   if (candidates.length === 1 && only !== undefined) {
-    return { ok: true, reason: "review", agents: [pickOf(only)] }
+    return {
+      ok: true,
+      reason: "review",
+      agents: [delegateOf(only, input.lang, deps)]
+    }
   }
   const answers = await ask(
     deps,
@@ -352,14 +429,16 @@ async function review(
     return {
       ok: true,
       reason: "review",
-      agents: yes.map((entry) => pickOf(entry.candidate, entry.p))
+      agents: yes.map((entry) =>
+        delegateOf(entry.candidate, input.lang, deps, entry.p)
+      )
     }
   }
   const best = scored.reduce((top, entry) => (entry.p > top.p ? entry : top))
   return {
     ok: true,
     reason: "review",
-    agents: [pickOf(best.candidate, best.p)],
+    agents: [delegateOf(best.candidate, input.lang, deps, best.p)],
     fallback: true
   }
 }
@@ -368,49 +447,55 @@ async function split(
   input: Extract<PickInput, { reason: "split" }>,
   deps: PickDeps
 ): Promise<PickOutput> {
-  const candidates = candidatesFor("split", deps.definitions)
+  const candidates = candidatesFor(input, deps)
   const [only] = candidates
   if (candidates.length === 1 && only !== undefined) {
     return {
       ok: true,
       reason: "split",
-      assignments: input.tasks.map((task) => ({ id: task.id, ...pickOf(only) }))
+      assignments: input.tasks.map((task) => ({
+        id: task.id,
+        ...delegateOf(only, input.lang, deps)
+      }))
     }
   }
-  const answers = await ask(
-    deps,
-    { tasks: input.tasks },
-    splitQuestions(input.tasks, candidates)
-  )
+  const tasks = input.tasks.map(({ id, summary }) => ({ id, summary }))
+  const answers = await ask(deps, { tasks }, splitQuestions(tasks, candidates))
   return {
     ok: true,
     reason: "split",
-    assignments: input.tasks.map((task, index) => {
+    assignments: tasks.map((task, index) => {
       const key = `task_${index}`
       const answer = answerOf(answers, key)
-      const chosen = candidates.find((entry) => entry.name === answer.choice)
+      const chosen = candidates.find(
+        (candidate) => candidate.role.id === answer.choice
+      )
       if (chosen === undefined) {
         throw new PickFailure(
           "jev-failed",
-          `Jev chose an unknown agent for ${key}: ${String(answer.choice)}`
+          `Jev chose an unknown role for ${key}: ${String(answer.choice)}`
         )
       }
       const probabilities = answer.probabilities
       const p = probability(
-        isRecord(probabilities) ? probabilities[chosen.name] : undefined,
+        isRecord(probabilities) ? probabilities[chosen.role.id] : undefined,
         `${key}.probabilities`
       )
-      return { id: task.id, ...pickOf(chosen, p) }
+      return { id: task.id, ...delegateOf(chosen, input.lang, deps, p) }
     })
   }
 }
 
-function stuck(deps: PickDeps): PickOutput {
-  const candidates = candidatesFor("stuck", deps.definitions)
+function stuck(
+  input: Extract<PickInput, { reason: "stuck" }>,
+  deps: PickDeps
+): PickOutput {
   return {
     ok: true,
     reason: "stuck",
-    agents: candidates.map((entry) => pickOf(entry))
+    agents: candidatesFor(input, deps).map((candidate) =>
+      delegateOf(candidate, input.lang, deps)
+    )
   }
 }
 
@@ -426,7 +511,7 @@ export async function pickDelegate(
       case "split":
         return await split(input, deps)
       case "stuck":
-        return stuck(deps)
+        return stuck(input, deps)
     }
   } catch (error) {
     if (error instanceof PickFailure) {

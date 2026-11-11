@@ -35,7 +35,7 @@ describe("pick-delegate", () => {
     ).toEqual({
       ok: true,
       reason: "stuck",
-      agents: [{ agent: "lead", role: "escalation" }]
+      agents: [{ role: "escalation", mode: "custom", agentType: "lead" }]
     })
   })
 
@@ -48,10 +48,43 @@ describe("pick-delegate", () => {
         run(JSON.stringify({ reason: "stuck", task: { summary: "x" } }), {
           CLAUDE_PROJECT_DIR: other
         })
-      ).toMatchObject({ agents: [{ agent: "other-lead" }] })
+      ).toMatchObject({ agents: [{ agentType: "other-lead" }] })
     } finally {
       fs.rmSync(other, { recursive: true, force: true })
     }
+  })
+
+  it("定義が無ければ Standard Agent モードで、同梱の前置きを付けて返す", () => {
+    const output = run(
+      JSON.stringify({ reason: "stuck", task: { summary: "x" }, lang: "ja" })
+    ) as { agents: { preamble: string }[] }
+    expect(output).toMatchObject({
+      ok: true,
+      agents: [
+        {
+          role: "escalation",
+          mode: "standard",
+          agentType: "general-purpose",
+          model: "fable",
+          effort: "high"
+        }
+      ]
+    })
+    expect(output.agents[0]?.preamble).toContain("役割 ID: escalation")
+    expect(output.agents[0]?.preamble).toContain("# サブエージェントの規律")
+  })
+
+  it("壊れた設定ファイルなら invalid-config を返す", () => {
+    fs.mkdirSync(path.join(project, ".claude", "better-agentics"), {
+      recursive: true
+    })
+    fs.writeFileSync(
+      path.join(project, ".claude", "better-agentics", "config.json"),
+      "{"
+    )
+    expect(
+      run(JSON.stringify({ reason: "stuck", task: { summary: "x" } }))
+    ).toMatchObject({ ok: false, error: "invalid-config" })
   })
 
   it("不正な JSON でも終了コード 0 で invalid-input を返す", () => {
