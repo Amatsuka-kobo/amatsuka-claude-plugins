@@ -606,30 +606,37 @@ test("セクションの欠落: ARCHITECTURE が無ければ 7 セクション�
   )
 })
 
-test("ディレクトリ構成: 実在しない記述は findings、未記載のトップレベルは skipped に返す", () => {
+function unconfirmedLine(skipped: string[]): string | undefined {
+  return skipped.find((s) => s.startsWith("ディレクトリの実在の未確認"))
+}
+
+test("ディレクトリ構成: findings には出さず、未記載のトップレベルと実在を確かめられないパスを skipped に返す", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({
     scan: result,
     sections: {
       ディレクトリ構成と責務:
-        "- src: 実装\n- `src/legacy`: 旧実装\n- `gone/`: 消えた\n- `README`: ファイル\n"
+        "- src: 実装\n- `src/legacy`: 旧実装\n- `gone/`: 消えた\n- `src/app/`: 画面\n"
     }
   })
 
-  // `gone/` のような 1 語は判定しない(相対パスや除外ディレクトリと区別できない)。
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual(["src/legacy"])
   expect(
     diff.findings.filter((f) => f.section === "ディレクトリ構成と責務")
-  ).toHaveLength(1)
-  const line = diff.skipped.find((s) =>
+  ).toEqual([])
+  const unlisted = diff.skipped.find((s) =>
     s.startsWith("ディレクトリ構成の未記載")
   )
-  expect(line).toContain("prisma")
-  expect(line).not.toContain("src,")
+  expect(unlisted).toContain("prisma")
+  expect(unlisted).not.toContain("src,")
+  const line = unconfirmedLine(diff.skipped)
+  expect(line).toContain("src/legacy")
+  // `/` を含まない 1 語と、実在するパスは並べない。
+  expect(line).not.toContain("gone")
+  expect(line).not.toContain("src/app")
 })
 
-test("ディレクトリ構成: 走査が除外するディレクトリと深い階層は、実在すれば消失にしない", () => {
+test("ディレクトリ構成: 除外ディレクトリの中・深い階層も、ルートから実在すれば並べない", () => {
   const dir = mkTmp()
   writeJson(dir, "package.json", {})
   write(dir, "packages/web/dist/index.js", "")
@@ -644,79 +651,32 @@ test("ディレクトリ構成: 走査が除外するディレクトリと深い
     }
   })
 
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
-    "packages/gone"
-  ])
+  const line = unconfirmedLine(diff.skipped)
+  expect(line).toContain("packages/gone")
+  expect(line).not.toContain("packages/web/dist")
+  expect(line).not.toContain("node_modules")
+  expect(line).not.toContain("a/b/c")
 })
 
-test("ディレクトリ構成: `..` を含むパスは見ず、大文字小文字の違いは消失、パッケージ内の相対パスは実在とみなす", () => {
+test("ディレクトリ構成: `..` は見ず、大文字小文字の違いとリンクを含むパスは未確認に並べる", () => {
   const dir = mkTmp()
   writeJson(dir, "package.json", {})
   write(dir, "packages/web/src/index.ts", "")
-
-  const diff = diffArchitecture({
-    scan: scan(dir, { root: dir }),
-    sections: {
-      ディレクトリ構成と責務:
-        "- `../outside/x/`\n- `Packages/Web/src/`\n- `web/src/`\n- `web/gone/`\n"
-    }
-  })
-
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
-    "Packages/Web/src",
-    "web/gone"
-  ])
-})
-
-test("ディレクトリ構成: 消えたと断定できないパスは findings に出さず skipped に保留として返す", () => {
-  const dir = mkTmp()
-  writeJson(dir, "package.json", {})
-  write(dir, "src/app/page.ts", "")
-  write(dir, "packages/b/src/lib/index.ts", "")
-  write(dir, "packages/web/dist/index.js", "")
-  write(dir, "build/current/out.js", "")
-
-  const diff = diffArchitecture({
-    scan: scan(dir, { root: dir }),
-    sections: {
-      ディレクトリ構成と責務:
-        "- `src/lib/`\n- `web/dist/`\n- `src/gone/`\n- `build/old/`\n- `build/current/`\n"
-    }
-  })
-
-  // `build/old` は先頭がルート直下に実在する除外ディレクトリなので、不在を断定できる。
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([
-    "build/old",
-    "src/gone"
-  ])
-  const line = diff.skipped.find((s) =>
-    s.startsWith("ディレクトリの消失の保留")
-  )
-  expect(line).toContain("src/lib(同じ名前の階層が別の場所にある)")
-  expect(line).toContain("web/dist(走査が除外するディレクトリを含む)")
-})
-
-test("ディレクトリ構成: シンボリックリンクはたどらず、リンクでつないだパッケージがあれば不在を保留する", () => {
-  const dir = mkTmp()
-  writeJson(dir, "package.json", {})
-  write(dir, "real/webimpl/src/x.ts", "")
-  fs.mkdirSync(path.join(dir, "packages"))
-  fs.symlinkSync(path.join(dir, "real/webimpl"), path.join(dir, "packages/web"))
   fs.symlinkSync(os.tmpdir(), path.join(dir, "outlink"))
 
   const diff = diffArchitecture({
     scan: scan(dir, { root: dir }),
     sections: {
-      ディレクトリ構成と責務: "- `web/src/`\n- `outlink/x/`\n"
+      ディレクトリ構成と責務:
+        "- `../outside/x/`\n- `Packages/Web/src/`\n- `web/src/`\n- `outlink/x/`\n"
     }
   })
 
-  expect(subjectsOf(diff.findings, "directory_stale")).toEqual([])
-  const line = diff.skipped.find((s) =>
-    s.startsWith("ディレクトリの消失の保留")
-  )
-  expect(line).toContain("outlink/x(シンボリックリンクを含む)")
-  expect(line).toContain("web/src(走査がたどらないシンボリックリンクがある)")
+  const line = unconfirmedLine(diff.skipped)
+  expect(line).not.toContain("outside")
+  expect(line).toContain("Packages/Web/src")
+  expect(line).toContain("web/src")
+  expect(line).toContain("outlink/x")
 })
 
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {

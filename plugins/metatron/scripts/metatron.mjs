@@ -3651,13 +3651,6 @@ function walkDirectory(state, dir, rel, depth) {
     } else if (dirent.isFile()) {
       recordFile(state, childRel);
       pushTree(state, childRel, depth + 1, "file");
-    } else if (dirent.isSymbolicLink()) {
-      try {
-        if (fs7.statSync(path7.join(dir, dirent.name)).isDirectory()) {
-          state.symlinks.push(childRel);
-        }
-      } catch {
-      }
     }
   }
 }
@@ -3975,7 +3968,6 @@ function scanInner(startDir, options) {
     limits,
     tree: [],
     files: [],
-    symlinks: [],
     fileCount: 0,
     testFiles: [],
     dirFileCounts: /* @__PURE__ */ new Map(),
@@ -4045,7 +4037,6 @@ function scanInner(startDir, options) {
     commands,
     tree: state.tree,
     files: state.files,
-    symlinks: state.symlinks,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -4078,7 +4069,6 @@ function scan(startDir, options = {}) {
       commands: [],
       tree: [],
       files: [],
-      symlinks: [],
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -4102,7 +4092,6 @@ function scan(startDir, options = {}) {
 }
 var FINDING_ORDER = {
   section_missing: 0,
-  directory_stale: 6,
   domain_gap: 7,
   domain_dead_glob: 8
 };
@@ -4183,26 +4172,26 @@ function collectSources(result, skipped) {
     return SOURCE_FILE_RES.some((re) => re.test(base));
   }).sort(compareStrings);
 }
-function existsWithExactCase(root, relative) {
+function existsFromRoot(root, relative) {
   let current = root;
   for (const segment of relative.split("/")) {
     let names;
     try {
       names = fs7.readdirSync(current);
     } catch {
-      return "missing";
+      return false;
     }
-    if (!names.includes(segment)) return "missing";
+    if (!names.includes(segment)) return false;
     current = path7.join(current, segment);
     try {
-      if (fs7.lstatSync(current).isSymbolicLink()) return "link";
+      if (fs7.lstatSync(current).isSymbolicLink()) return false;
     } catch {
-      return "missing";
+      return false;
     }
   }
-  return "exists";
+  return true;
 }
-function diffDirectories(result, body, findings, skipped) {
+function diffDirectories(result, body, skipped) {
   const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
   if (body === void 0) return;
   const unlisted = result.tree.filter(
@@ -4213,12 +4202,8 @@ function diffDirectories(result, body, findings, skipped) {
       `\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u306E\u672A\u8A18\u8F09: ## ${section} \u306B\u540D\u524D\u306E\u7121\u3044\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306E\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA(${unlisted.join(", ")})\u306F\u3001\u5168\u4EF6\u3092\u66F8\u304B\u306A\u3044\u898F\u5B9A\u306E\u305F\u3081\u4E56\u96E2\u3068\u3057\u3066\u6271\u3044\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
     );
   }
-  const existing = /* @__PURE__ */ new Set();
-  for (const entry of result.tree) {
-    if (entry.type === "directory") existing.add(entry.path);
-  }
   const seen = /* @__PURE__ */ new Set();
-  const pending = [];
+  const unconfirmed = [];
   for (const raw of extractInlineCode(body)) {
     const token = raw.replace(/\/+$/, "");
     if (token === "" || seen.has(token)) continue;
@@ -4227,45 +4212,12 @@ function diffDirectories(result, body, findings, skipped) {
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue;
     if (!token.includes("/")) continue;
     if (token.split("/").some((seg) => seg === "." || seg === "..")) continue;
-    if (existing.has(token)) continue;
-    const state = existsWithExactCase(result.root, token);
-    if (state === "exists") continue;
-    if (state === "link") {
-      pending.push(`${token}(\u30B7\u30F3\u30DC\u30EA\u30C3\u30AF\u30EA\u30F3\u30AF\u3092\u542B\u3080)`);
-      continue;
-    }
-    const suffix = `/${token}`;
-    if (result.tree.some((entry) => entry.path.endsWith(suffix)) || result.files.some((file) => file.includes(`${suffix}/`))) {
-      pending.push(`${token}(\u540C\u3058\u540D\u524D\u306E\u968E\u5C64\u304C\u5225\u306E\u5834\u6240\u306B\u3042\u308B)`);
-      continue;
-    }
-    const segments = token.split("/");
-    const excludedAt = segments.findIndex(
-      (seg) => EXCLUDED_DIRECTORY_NAMES.has(seg)
-    );
-    const rootedInExcluded = excludedAt === 0 && existsWithExactCase(result.root, segments[0] ?? "") === "exists";
-    if (excludedAt >= 0 && !rootedInExcluded) {
-      pending.push(`${token}(\u8D70\u67FB\u304C\u9664\u5916\u3059\u308B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u542B\u3080)`);
-      continue;
-    }
-    if (!rootedInExcluded && result.symlinks.length > 0) {
-      pending.push(`${token}(\u8D70\u67FB\u304C\u305F\u3069\u3089\u306A\u3044\u30B7\u30F3\u30DC\u30EA\u30C3\u30AF\u30EA\u30F3\u30AF\u304C\u3042\u308B)`);
-      continue;
-    }
-    if (result.truncation.files || result.truncation.walk) {
-      pending.push(`${token}(\u8D70\u67FB\u304C\u6253\u3061\u5207\u3089\u308C\u305F)`);
-      continue;
-    }
-    findings.push({
-      kind: "directory_stale",
-      section,
-      subject: token,
-      detail: `## ${section} \u306B\u66F8\u304B\u308C\u305F ${token} \u304C\u5B9F\u5728\u3057\u307E\u305B\u3093\u3002`
-    });
+    if (existsFromRoot(result.root, token)) continue;
+    unconfirmed.push(token);
   }
-  if (pending.length > 0) {
+  if (unconfirmed.length > 0) {
     skipped.push(
-      `\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306E\u6D88\u5931\u306E\u4FDD\u7559: ## ${section} \u306B\u66F8\u304B\u308C\u305F\u6B21\u306E\u30D1\u30B9\u306F\u30EB\u30FC\u30C8\u304B\u3089\u306F\u5B9F\u5728\u3057\u307E\u305B\u3093\u304C\u3001\u6D88\u3048\u305F\u3068\u65AD\u5B9A\u3067\u304D\u306A\u3044\u305F\u3081\u5224\u5B9A\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3069\u3053\u3092\u6307\u3059\u304B\u3092\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044: ${pending.join(", ")}`
+      `\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306E\u5B9F\u5728\u306E\u672A\u78BA\u8A8D: ## ${section} \u306B\u66F8\u304B\u308C\u305F\u6B21\u306E\u30D1\u30B9\u306F\u3001\u30EB\u30FC\u30C8\u304B\u3089\u306F\u5B9F\u5728\u3092\u78BA\u304B\u3081\u3089\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30D1\u30C3\u30B1\u30FC\u30B8\u5185\u306E\u76F8\u5BFE\u30D1\u30B9\u3084\u30EA\u30F3\u30AF\u306E\u5148\u3067\u3042\u308A\u3046\u308B\u305F\u3081\u3001\u6D88\u3048\u305F\u3068\u306F\u65AD\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093\u3002\u3069\u3053\u3092\u6307\u3059\u304B\u3092\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044: ${unconfirmed.join(", ")}`
     );
   }
 }
@@ -4334,12 +4286,7 @@ function diffArchitectureInner(input) {
   skipped.push(
     "\u6280\u8853\u30B9\u30BF\u30C3\u30AF / \u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9\u306E\u7A81\u304D\u5408\u308F\u305B: \u8981\u7D04\u3068\u3057\u3066\u66F8\u304F\u7BC0\u306E\u305F\u3081\u6A5F\u68B0\u7684\u306B\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002\u66F8\u304B\u308C\u305F\u6280\u8853\u3068\u30B3\u30DE\u30F3\u30C9\u304C sources \u306B\u6B8B\u3063\u3066\u3044\u308B\u304B\u3092\u8AAD\u3093\u3067\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002"
   );
-  diffDirectories(
-    input.scan,
-    sections.get("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9"),
-    findings,
-    skipped
-  );
+  diffDirectories(input.scan, sections.get("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9"), skipped);
   diffDomains(input.scan, input.domains, findings, skipped);
   skipped.push(
     "\u4FDD\u8B77\u30D1\u30B9\u306E\u4E0D\u6574\u5408: Raguel \u306E\u8A2D\u5B9A\u306E\u89E3\u6790\u3092\u4F34\u3046\u305F\u3081\u3001\u3053\u306E\u95A2\u6570\u3067\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002"

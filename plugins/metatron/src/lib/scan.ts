@@ -329,8 +329,6 @@ export interface ScanResult {
   tree: TreeEntry[]
   /** 走査したファイル(root からの相対パス)。`maxFiles` で打ち切る。 */
   files: string[]
-  /** 走査がたどらなかった、ディレクトリを指すシンボリックリンク(root からの相対パス)。 */
-  symlinks: string[]
   /** 除外ディレクトリを除いたファイルの総数。 */
   fileCount: number
   testFrameworks: TestFrameworkFacts
@@ -343,7 +341,6 @@ export interface ScanResult {
 
 export type DiffFindingKind =
   | "section_missing"
-  | "directory_stale"
   | "domain_gap"
   | "domain_dead_glob"
 
@@ -634,7 +631,6 @@ interface WalkState {
   limits: ScanLimits
   tree: TreeEntry[]
   files: string[]
-  symlinks: string[]
   fileCount: number
   testFiles: string[]
   /** 深さ 1・2 のディレクトリ → 配下のファイル数。 */
@@ -721,15 +717,6 @@ function walkDirectory(
     } else if (dirent.isFile()) {
       recordFile(state, childRel)
       pushTree(state, childRel, depth + 1, "file")
-    } else if (dirent.isSymbolicLink()) {
-      // ディレクトリを指すリンクだけを記録する(ファイルへのリンクは階層を隠さない)。
-      try {
-        if (fs.statSync(path.join(dir, dirent.name)).isDirectory()) {
-          state.symlinks.push(childRel)
-        }
-      } catch {
-        // 壊れたリンクは階層を隠さないので記録しない。
-      }
     }
   }
 }
@@ -1157,7 +1144,6 @@ function scanInner(
     limits,
     tree: [],
     files: [],
-    symlinks: [],
     fileCount: 0,
     testFiles: [],
     dirFileCounts: new Map(),
@@ -1232,7 +1218,6 @@ function scanInner(
     commands,
     tree: state.tree,
     files: state.files,
-    symlinks: state.symlinks,
     fileCount: state.fileCount,
     testFrameworks,
     domainCandidates,
@@ -1273,7 +1258,6 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
       commands: [],
       tree: [],
       files: [],
-      symlinks: [],
       fileCount: 0,
       testFrameworks: {
         configs: [],
@@ -1302,7 +1286,6 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
 
 const FINDING_ORDER: Record<DiffFindingKind, number> = {
   section_missing: 0,
-  directory_stale: 6,
   domain_gap: 7,
   domain_dead_glob: 8
 }
@@ -1400,35 +1383,32 @@ function collectSources(result: ScanResult, skipped: string[]): string[] {
 /**
  * root からの相対パスが、各階層の名前の大文字小文字まで一致して実在するか。
  * 大文字小文字を区別しないファイルシステムでも、区別するものと同じ結果を返す。
+ * シンボリックリンクを含むパスはたどらず `false` を返す。
  */
-function existsWithExactCase(
-  root: string,
-  relative: string
-): "exists" | "missing" | "link" {
+function existsFromRoot(root: string, relative: string): boolean {
   let current = root
   for (const segment of relative.split("/")) {
     let names: string[]
     try {
       names = fs.readdirSync(current)
     } catch {
-      return "missing"
+      return false
     }
-    if (!names.includes(segment)) return "missing"
+    if (!names.includes(segment)) return false
     current = path.join(current, segment)
-    // リンクの先はプロジェクトの外でありうるため、たどらずに保留する。
+    // リンクの先はプロジェクトの外でありうるため、たどらずに未確認とする。
     try {
-      if (fs.lstatSync(current).isSymbolicLink()) return "link"
+      if (fs.lstatSync(current).isSymbolicLink()) return false
     } catch {
-      return "missing"
+      return false
     }
   }
-  return "exists"
+  return true
 }
 
 function diffDirectories(
   result: ScanResult,
   body: string | undefined,
-  findings: DiffFinding[],
   skipped: string[]
 ): void {
   const section = "ディレクトリ構成と責務"
@@ -1450,12 +1430,11 @@ function diffDirectories(
     )
   }
 
-  const existing = new Set<string>()
-  for (const entry of result.tree) {
-    if (entry.type === "directory") existing.add(entry.path)
-  }
+  // 書かれたパスがどこを基準にした相対パスか(ルートか、パッケージか、リンクの先か)は
+  // 決められないため、消失は断定しない。ルートから実在を確かめられないパスを並べ、
+  // AI が確かめる材料として返す。
   const seen = new Set<string>()
-  const pending: string[] = []
+  const unconfirmed: string[] = []
   for (const raw of extractInlineCode(body)) {
     const token = raw.replace(/\/+$/, "")
     if (token === "" || seen.has(token)) continue
@@ -1463,64 +1442,16 @@ function diffDirectories(
     // ワイルドカードを含むものは保護パス等の glob なので見ない。
     if (/[*?[\]{}]/.test(token)) continue
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue
-    // `/` を含まない 1 語は、相対パスやビルド出力(除外ディレクトリ)と区別できないため見ない。
+    // `/` を含まない 1 語はパスかどうかを区別できないため見ない。
     if (!token.includes("/")) continue
-    // `.` と `..` の区間を含むパスは、プロジェクトの外や別の位置を指しうるため見ない。
+    // `.` と `..` の区間を含むパスは、プロジェクトの外を確かめないよう見ない。
     if (token.split("/").some((seg) => seg === "." || seg === "..")) continue
-    if (existing.has(token)) continue
-    // ツリーは除外ディレクトリ(ビルド出力・node_modules・.git など)と maxDepth より
-    // 深い階層を持たないため、ツリーに無いものはファイルシステムで実在を確かめる。
-    // ファイルとして実在するものも対象外。
-    const state = existsWithExactCase(result.root, token)
-    if (state === "exists") continue
-    // ここから先は、ルートからのパスとしては実在しないもの。消えたと断定できないものは
-    // findings に出さず、AI が確かめるよう保留に回す。
-    if (state === "link") {
-      pending.push(`${token}(シンボリックリンクを含む)`)
-      continue
-    }
-    const suffix = `/${token}`
-    if (
-      result.tree.some((entry) => entry.path.endsWith(suffix)) ||
-      result.files.some((file) => file.includes(`${suffix}/`))
-    ) {
-      pending.push(`${token}(同じ名前の階層が別の場所にある)`)
-      continue
-    }
-    // 除外ディレクトリの中は走査結果に無い。ただし先頭がルート直下に実在する
-    // 除外ディレクトリ(`build/old` の `build`)なら、上のファイルシステムの確認で
-    // 不在が確定しているので断定してよい。
-    const segments = token.split("/")
-    const excludedAt = segments.findIndex((seg) =>
-      EXCLUDED_DIRECTORY_NAMES.has(seg)
-    )
-    const rootedInExcluded =
-      excludedAt === 0 &&
-      existsWithExactCase(result.root, segments[0] ?? "") === "exists"
-    if (excludedAt >= 0 && !rootedInExcluded) {
-      pending.push(`${token}(走査が除外するディレクトリを含む)`)
-      continue
-    }
-    if (!rootedInExcluded && result.symlinks.length > 0) {
-      // 走査はリンクの先へ入らないため、リンクでつないだパッケージの中の
-      // 相対パスとして実在するかを確かめられない。
-      pending.push(`${token}(走査がたどらないシンボリックリンクがある)`)
-      continue
-    }
-    if (result.truncation.files || result.truncation.walk) {
-      pending.push(`${token}(走査が打ち切られた)`)
-      continue
-    }
-    findings.push({
-      kind: "directory_stale",
-      section,
-      subject: token,
-      detail: `## ${section} に書かれた ${token} が実在しません。`
-    })
+    if (existsFromRoot(result.root, token)) continue
+    unconfirmed.push(token)
   }
-  if (pending.length > 0) {
+  if (unconfirmed.length > 0) {
     skipped.push(
-      `ディレクトリの消失の保留: ## ${section} に書かれた次のパスはルートからは実在しませんが、消えたと断定できないため判定しませんでした。どこを指すかを確かめてください: ${pending.join(", ")}`
+      `ディレクトリの実在の未確認: ## ${section} に書かれた次のパスは、ルートからは実在を確かめられませんでした。パッケージ内の相対パスやリンクの先でありうるため、消えたとは断定していません。どこを指すかを確かめてください: ${unconfirmed.join(", ")}`
     )
   }
 }
@@ -1611,12 +1542,7 @@ function diffArchitectureInner(
     "技術スタック / コマンド定義の突き合わせ: 要約として書く節のため機械的には検出しません。書かれた技術とコマンドが sources に残っているかを読んで確かめてください。"
   )
 
-  diffDirectories(
-    input.scan,
-    sections.get("ディレクトリ構成と責務"),
-    findings,
-    skipped
-  )
+  diffDirectories(input.scan, sections.get("ディレクトリ構成と責務"), skipped)
   diffDomains(input.scan, input.domains, findings, skipped)
 
   // 決定的に検出できないため、この関数では扱わない項目(設計書 §9-3)。
