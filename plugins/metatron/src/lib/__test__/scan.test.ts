@@ -3,6 +3,7 @@
 // S5 / S6 は CLI 統合テストのため、このファイルでは扱わない。
 // 後半は §9-3 の乖離候補(diffArchitecture)の検証。
 
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -213,6 +214,29 @@ test("S3: node_modules / .git / ビルド出力がツリーから除外される
   }
   expect(result.files.some((f) => f.startsWith("node_modules/"))).toBe(false)
   expect(result.fileCount).toBe(2)
+})
+
+test("S3: git の ignore に当たるファイルとディレクトリを走査しない", () => {
+  const dir = mkTmp()
+  execFileSync("git", ["init", "-q"], { cwd: dir })
+  write(dir, ".gitignore", "private/\n*.local.md\n")
+  write(dir, "private/secret.txt", "")
+  write(dir, "src/index.ts", "")
+  write(dir, "src/notes.local.md", "")
+  write(dir, "docs/a.md", "# a\n")
+  write(dir, "docs/b.local.md", "# b\n")
+  write(dir, "new/untracked.ts", "")
+
+  const result = scan(dir, { root: dir })
+  const paths = treePaths(result)
+
+  expect(paths).not.toContain("private")
+  expect(paths).not.toContain("src/notes.local.md")
+  expect(result.files).not.toContain("private/secret.txt")
+  // ignore に当たらない未追跡ファイルは走査に残す。
+  expect(result.files).toContain("new/untracked.ts")
+  expect(result.domainCandidates.map((c) => c.path)).not.toContain("private")
+  expect(result.documents.map((d) => d.path)).toEqual(["docs/a.md"])
 })
 
 test("S3: ツリーの深さは 3 まで(既定)", () => {

@@ -3310,6 +3310,7 @@ function runShrinkAdrCandidate(ctx) {
 }
 
 // src/lib/scan.ts
+import { spawnSync as spawnSync3 } from "node:child_process";
 import fs7 from "node:fs";
 import path7 from "node:path";
 var ARCHITECTURE_SECTIONS = [
@@ -3598,6 +3599,29 @@ function extractInlineCode(text) {
   }
   return out;
 }
+function gitIgnoredPaths(root) {
+  try {
+    const res = spawnSync3(
+      "git",
+      [
+        "ls-files",
+        "-z",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory"
+      ],
+      { cwd: root, encoding: "utf8", timeout: 1e4, windowsHide: true }
+    );
+    if (res.status !== 0 || typeof res.stdout !== "string") return /* @__PURE__ */ new Set();
+    return new Set(res.stdout.split("\0").filter((p) => p !== ""));
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
+}
+function isIgnored(ignored, rel, isDirectory) {
+  return ignored.has(isDirectory ? `${rel}/` : rel);
+}
 function recordFile(state, rel) {
   state.fileCount += 1;
   if (state.files.length < state.limits.maxFiles) state.files.push(rel);
@@ -3643,6 +3667,7 @@ function walkDirectory(state, dir, rel, depth) {
     }
     state.visited += 1;
     const childRel = rel === "" ? dirent.name : `${rel}/${dirent.name}`;
+    if (isIgnored(state.ignored, childRel, dirent.isDirectory())) continue;
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       if (depth + 1 <= 2) state.dirs.add(childRel);
@@ -3892,7 +3917,7 @@ function scanDomainCandidates(state) {
   out.sort((a, b) => compareStrings(a.path, b.path));
   return out;
 }
-function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit) {
+function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit, ignored) {
   if (depth > maxDepth || out.length >= limit) return;
   let dirents;
   try {
@@ -3904,6 +3929,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit) {
   for (const dirent of dirents) {
     if (out.length >= limit) return;
     const childRel = rel === "" ? dirent.name : `${rel}/${dirent.name}`;
+    if (isIgnored(ignored, childRel, dirent.isDirectory())) continue;
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       collectMarkdownFiles(
@@ -3912,14 +3938,15 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit) {
         depth + 1,
         maxDepth,
         out,
-        limit
+        limit,
+        ignored
       );
     } else if (dirent.isFile() && /\.md$/i.test(dirent.name)) {
       out.push(childRel);
     }
   }
 }
-function scanDocuments(root, limits, truncation) {
+function scanDocuments(root, limits, truncation, ignored) {
   const targets = [];
   let rootEntries = [];
   try {
@@ -3929,14 +3956,24 @@ function scanDocuments(root, limits, truncation) {
   }
   rootEntries.sort((a, b) => compareStrings(a.name, b.name));
   for (const dirent of rootEntries) {
-    if (!dirent.isFile()) continue;
+    if (!dirent.isFile() || ignored.has(dirent.name)) continue;
     const lower = dirent.name.toLowerCase();
     if (lower === "readme.md" || lower === "claude.md")
       targets.push(dirent.name);
   }
   const docsDir = path7.join(root, "docs");
   const docsFiles = [];
-  collectMarkdownFiles(docsDir, "docs", 1, 3, docsFiles, limits.maxDocuments);
+  if (!isIgnored(ignored, "docs", true)) {
+    collectMarkdownFiles(
+      docsDir,
+      "docs",
+      1,
+      3,
+      docsFiles,
+      limits.maxDocuments,
+      ignored
+    );
+  }
   for (const file of docsFiles) targets.push(file);
   const documents = [];
   for (const rel of targets) {
@@ -3978,7 +4015,8 @@ function scanInner(startDir, options) {
     dirs: /* @__PURE__ */ new Set(),
     visited: 0,
     truncation,
-    unreadable: []
+    unreadable: [],
+    ignored: gitIgnoredPaths(root)
   };
   walkDirectory(state, root, "", 0);
   if (state.unreadable.length > 0) {
@@ -4005,7 +4043,7 @@ function scanInner(startDir, options) {
   const { scripts, commands } = scanScripts(packageJson, packageManager.name);
   const testFrameworks = scanTestFrameworks(root, state, dependencies);
   const domainCandidates = scanDomainCandidates(state);
-  const documents = scanDocuments(root, limits, truncation);
+  const documents = scanDocuments(root, limits, truncation, state.ignored);
   if (truncation.walk) {
     truncation.notes.push(
       `\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u8D70\u67FB\u3092 ${String(limits.maxEntries)} \u30A8\u30F3\u30C8\u30EA\u3067\u6253\u3061\u5207\u308A\u307E\u3057\u305F\u3002`

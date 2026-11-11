@@ -13,6 +13,7 @@
 // diffArchitecture も同様に、決定的に検出できる乖離だけを候補に出す。
 // 「散文の内容が実装と食い違う」といった意味的な乖離は候補に出さない(設計書 §9-3)。
 
+import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { findDocRoot } from "./config.js"
@@ -645,6 +646,41 @@ interface WalkState {
   visited: number
   truncation: ScanTruncation
   unreadable: string[]
+  ignored: ReadonlySet<string>
+}
+
+/**
+ * root から見て git の ignore に当たるパス。ディレクトリは末尾に `/` を付けて持つ。
+ * git 未インストール・git 管理外・失敗のときは空集合を返し、除外しない。
+ * add 前の未追跡ファイルは ignore に当たらない限り走査に残す。
+ */
+function gitIgnoredPaths(root: string): ReadonlySet<string> {
+  try {
+    const res = spawnSync(
+      "git",
+      [
+        "ls-files",
+        "-z",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory"
+      ],
+      { cwd: root, encoding: "utf8", timeout: 10000, windowsHide: true }
+    )
+    if (res.status !== 0 || typeof res.stdout !== "string") return new Set()
+    return new Set(res.stdout.split("\0").filter((p) => p !== ""))
+  } catch {
+    return new Set()
+  }
+}
+
+function isIgnored(
+  ignored: ReadonlySet<string>,
+  rel: string,
+  isDirectory: boolean
+): boolean {
+  return ignored.has(isDirectory ? `${rel}/` : rel)
 }
 
 function recordFile(state: WalkState, rel: string): void {
@@ -712,6 +748,7 @@ function walkDirectory(
     const childRel = rel === "" ? dirent.name : `${rel}/${dirent.name}`
     // シンボリックリンクは isDirectory / isFile のいずれでもないため、
     // ここで自然に読み飛ばされる。循環を踏まないための意図的な扱い。
+    if (isIgnored(state.ignored, childRel, dirent.isDirectory())) continue
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue
       if (depth + 1 <= 2) state.dirs.add(childRel)
@@ -1048,7 +1085,8 @@ function collectMarkdownFiles(
   depth: number,
   maxDepth: number,
   out: string[],
-  limit: number
+  limit: number,
+  ignored: ReadonlySet<string>
 ): void {
   if (depth > maxDepth || out.length >= limit) return
   let dirents: fs.Dirent[]
@@ -1061,6 +1099,7 @@ function collectMarkdownFiles(
   for (const dirent of dirents) {
     if (out.length >= limit) return
     const childRel = rel === "" ? dirent.name : `${rel}/${dirent.name}`
+    if (isIgnored(ignored, childRel, dirent.isDirectory())) continue
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue
       collectMarkdownFiles(
@@ -1069,7 +1108,8 @@ function collectMarkdownFiles(
         depth + 1,
         maxDepth,
         out,
-        limit
+        limit,
+        ignored
       )
     } else if (dirent.isFile() && /\.md$/i.test(dirent.name)) {
       out.push(childRel)
@@ -1080,7 +1120,8 @@ function collectMarkdownFiles(
 function scanDocuments(
   root: string,
   limits: ScanLimits,
-  truncation: ScanTruncation
+  truncation: ScanTruncation,
+  ignored: ReadonlySet<string>
 ): DocumentFact[] {
   const targets: string[] = []
 
@@ -1093,7 +1134,7 @@ function scanDocuments(
   }
   rootEntries.sort((a, b) => compareStrings(a.name, b.name))
   for (const dirent of rootEntries) {
-    if (!dirent.isFile()) continue
+    if (!dirent.isFile() || ignored.has(dirent.name)) continue
     const lower = dirent.name.toLowerCase()
     if (lower === "readme.md" || lower === "claude.md")
       targets.push(dirent.name)
@@ -1102,7 +1143,17 @@ function scanDocuments(
   // docs/ 配下の md(深さ 3 まで)。
   const docsDir = path.join(root, "docs")
   const docsFiles: string[] = []
-  collectMarkdownFiles(docsDir, "docs", 1, 3, docsFiles, limits.maxDocuments)
+  if (!isIgnored(ignored, "docs", true)) {
+    collectMarkdownFiles(
+      docsDir,
+      "docs",
+      1,
+      3,
+      docsFiles,
+      limits.maxDocuments,
+      ignored
+    )
+  }
   for (const file of docsFiles) targets.push(file)
 
   const documents: DocumentFact[] = []
@@ -1158,7 +1209,8 @@ function scanInner(
     dirs: new Set(),
     visited: 0,
     truncation,
-    unreadable: []
+    unreadable: [],
+    ignored: gitIgnoredPaths(root)
   }
   walkDirectory(state, root, "", 0)
 
@@ -1188,7 +1240,7 @@ function scanInner(
   const { scripts, commands } = scanScripts(packageJson, packageManager.name)
   const testFrameworks = scanTestFrameworks(root, state, dependencies)
   const domainCandidates = scanDomainCandidates(state)
-  const documents = scanDocuments(root, limits, truncation)
+  const documents = scanDocuments(root, limits, truncation, state.ignored)
 
   if (truncation.walk) {
     truncation.notes.push(
