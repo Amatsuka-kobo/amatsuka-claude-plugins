@@ -261,7 +261,11 @@ test("S3: ignore 済みの lockfile と設定ファイルを判定に使わな�
   })
   write(dir, "pnpm-lock.yaml", "")
   writeJson(dir, "tsconfig.json", { compilerOptions: { strict: true } })
-  write(dir, "pyproject.toml", '[project]\nname = "x"\n[tool.pytest.ini_options]\n')
+  write(
+    dir,
+    "pyproject.toml",
+    '[project]\nname = "x"\n[tool.pytest.ini_options]\n'
+  )
   write(dir, "go.mod", "module x\n\ngo 1.22\n")
   write(dir, "Cargo.toml", '[package]\nname = "x"\n')
   write(dir, "yarn.lock", "")
