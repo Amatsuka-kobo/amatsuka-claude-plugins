@@ -17,16 +17,31 @@ export interface MarkedAgent {
 
 // frontmatter() は字下げ行を親のキーと無関係に読むので、experimental のブロックを行で見る。
 function hasCacheTtl1h(file: string): boolean {
-  const lines = fs.readFileSync(file, "utf8").split("\n")
+  let lines: string[]
+  try {
+    lines = fs.readFileSync(file, "utf8").split(/\r?\n/)
+  } catch {
+    return false
+  }
   if (lines[0]?.trim() !== "---") return false
-  const close = lines.indexOf("---", 1)
+  const close = lines.findIndex((line, i) => i > 0 && line.trim() === "---")
   let inExperimental = false
+  // experimental の直下の字下げ。入れ子の同名キーは見ない。
+  let childIndent: string | undefined
   for (const line of lines.slice(1, close === -1 ? 0 : close)) {
+    if (line.trim() === "" || /^\s*#/.test(line)) continue
     if (!/^\s/.test(line)) {
-      inExperimental = /^experimental:\s*$/.test(line)
+      inExperimental = /^experimental:\s*(#.*)?$/.test(line)
+      childIndent = undefined
       continue
     }
-    if (inExperimental && /^\s+cacheTtl:\s*["']?1h["']?\s*$/.test(line))
+    if (!inExperimental) continue
+    const indent = /^(\s+)/.exec(line)?.[1] ?? ""
+    childIndent ??= indent
+    if (
+      indent === childIndent &&
+      /^\s+cacheTtl:\s*["']?1h["']?\s*(#.*)?$/.test(line)
+    )
       return true
   }
   return false

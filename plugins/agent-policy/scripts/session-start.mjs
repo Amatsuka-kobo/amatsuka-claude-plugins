@@ -306,16 +306,27 @@ function runsOnClaude(model) {
 import fs from "node:fs";
 import path from "node:path";
 function hasCacheTtl1h(file) {
-  const lines = fs.readFileSync(file, "utf8").split("\n");
+  let lines;
+  try {
+    lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+  } catch {
+    return false;
+  }
   if (lines[0]?.trim() !== "---") return false;
-  const close = lines.indexOf("---", 1);
+  const close = lines.findIndex((line, i) => i > 0 && line.trim() === "---");
   let inExperimental = false;
+  let childIndent;
   for (const line of lines.slice(1, close === -1 ? 0 : close)) {
+    if (line.trim() === "" || /^\s*#/.test(line)) continue;
     if (!/^\s/.test(line)) {
-      inExperimental = /^experimental:\s*$/.test(line);
+      inExperimental = /^experimental:\s*(#.*)?$/.test(line);
+      childIndent = void 0;
       continue;
     }
-    if (inExperimental && /^\s+cacheTtl:\s*["']?1h["']?\s*$/.test(line))
+    if (!inExperimental) continue;
+    const indent = /^(\s+)/.exec(line)?.[1] ?? "";
+    childIndent ??= indent;
+    if (indent === childIndent && /^\s+cacheTtl:\s*["']?1h["']?\s*(#.*)?$/.test(line))
       return true;
   }
   return false;
@@ -545,7 +556,7 @@ function overrideBlock(env, marked) {
     );
   if (lines.length === 0) return void 0;
   return [
-    "\u6B21\u306E\u74B0\u5883\u5909\u6570\u304C\u3001Agent \u5B9A\u7FA9\u306E\u5F79\u5272\u306E\u8A2D\u5B9A\u3092\u4E0A\u66F8\u304D\u3057\u3066\u3044\u308B\u3002\u610F\u56F3\u3057\u306A\u3044\u8A2D\u5B9A\u306A\u3089\u5916\u3057\u3066\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B:",
+    "\u6B21\u306E\u74B0\u5883\u5909\u6570\u304C\u3001Agent \u5B9A\u7FA9\u306E\u5F79\u5272\u306E\u8A2D\u5B9A\u3092\u4E0A\u66F8\u304D\u3057\u3066\u3044\u308B\u3002\u610F\u56F3\u3057\u306A\u3044\u8A2D\u5B9A\u306A\u3089\u3001\u5916\u3057\u3066\u30BB\u30C3\u30B7\u30E7\u30F3\u3092\u518D\u8D77\u52D5\u3059\u308B\u3088\u3046\u5229\u7528\u8005\u306B\u4F1D\u3048\u308B:",
     ...lines
   ].join("\n");
 }

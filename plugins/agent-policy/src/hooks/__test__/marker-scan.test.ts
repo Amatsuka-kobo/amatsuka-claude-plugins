@@ -799,4 +799,33 @@ describe("scanAgents の cacheTtl1h", () => {
     )
     expect(flags).toEqual({ a: true, b: false, c: false, d: false, e: true })
   })
+
+  it("空行・コメント・末尾コメントを挟んでも読み、入れ子の同名キーは数えない", () => {
+    const project = temporaryProject()
+    writeDefinition(project, "blank.md", [
+      "name: blank",
+      "experimental:",
+      "",
+      "  # note",
+      "  cacheTtl: 1h"
+    ])
+    writeDefinition(project, "comment.md", [
+      "name: comment",
+      "experimental: # c",
+      "  cacheTtl: 1h # why"
+    ])
+    writeDefinition(project, "nested.md", [
+      "name: nested",
+      "experimental:",
+      "  foo:",
+      "    cacheTtl: 1h"
+    ])
+    const flags = Object.fromEntries(
+      scanAgents(agentsDir(project)).map((agent) => [
+        agent.name,
+        agent.cacheTtl1h
+      ])
+    )
+    expect(flags).toEqual({ blank: true, comment: true, nested: false })
+  })
 })

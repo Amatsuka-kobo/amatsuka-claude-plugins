@@ -59,7 +59,7 @@ function overrideBlock(
     )
   if (lines.length === 0) return undefined
   return [
-    "次の環境変数が、Agent 定義の役割の設定を上書きしている。意図しない設定なら外してセッションを再起動する:",
+    "次の環境変数が、Agent 定義の役割の設定を上書きしている。意図しない設定なら、外してセッションを再起動するよう利用者に伝える:",
     ...lines
   ].join("\n")
 }
