@@ -4076,7 +4076,6 @@ function scan(startDir, options = {}) {
 }
 var FINDING_ORDER = {
   section_missing: 0,
-  directory_undocumented: 5,
   directory_stale: 6,
   domain_gap: 7,
   domain_dead_glob: 8
@@ -4117,14 +4116,29 @@ var SOURCE_FILE_RES = [
   /^pom\.xml$/,
   /^build\.gradle(\.kts)?$/,
   /^mix\.exs$/,
-  /\.csproj$/,
+  /\.(cs|fs|vb)proj$/,
+  /^setup\.(py|cfg)$/,
+  /^environment\.ya?ml$/,
+  /^pubspec\.yaml$/,
+  /^Package\.swift$/,
+  /^build\.sbt$/,
+  /^settings\.gradle(\.kts)?$/,
+  // ワークスペース・ランタイムのバージョン定義
+  /^pnpm-workspace\.yaml$/,
+  /^(turbo|nx)\.json$/,
+  /^bunfig\.toml$/,
+  /^\.(nvmrc|node-version|python-version|ruby-version|tool-versions)$/,
+  /^mise\.toml$/,
+  /^rust-toolchain(\.toml)?$/,
   // タスクランナー
-  /^Makefile$/,
-  /^[Jj]ustfile$/,
-  /^Taskfile\.ya?ml$/,
+  /^(GNU)?[Mm]akefile$/,
+  /^\.?[Jj]ustfile$/,
+  /^Taskfile(\.dist)?\.ya?ml$/,
+  /^Rakefile$/,
+  /^tox\.ini$/,
   // コンテナ
-  /^Dockerfile(\..+)?$/,
-  /\.Dockerfile$/,
+  /^(Dockerfile|Containerfile)(\..+)?$/,
+  /\.(Dockerfile|Containerfile)$/,
   /^(docker-)?compose[^/]*\.ya?ml$/,
   /^devcontainer\.json$/
 ];
@@ -4139,18 +4153,16 @@ function collectSources(result, skipped) {
     return SOURCE_FILE_RES.some((re) => re.test(base));
   }).sort(compareStrings);
 }
-function diffDirectories(result, body, findings) {
+function diffDirectories(result, body, findings, skipped) {
   const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
   if (body === void 0) return;
-  for (const entry of result.tree) {
-    if (entry.type !== "directory" || entry.depth !== 1) continue;
-    if (body.includes(entry.path)) continue;
-    findings.push({
-      kind: "directory_undocumented",
-      section,
-      subject: entry.path,
-      detail: `\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306E\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA ${entry.path} \u304C ## ${section} \u306B\u8A18\u8F09\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002`
-    });
+  const unlisted = result.tree.filter(
+    (entry) => entry.type === "directory" && entry.depth === 1 && !body.includes(entry.path)
+  ).map((entry) => entry.path);
+  if (unlisted.length > 0) {
+    skipped.push(
+      `\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u306E\u672A\u8A18\u8F09: ## ${section} \u306B\u540D\u524D\u306E\u7121\u3044\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306E\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA(${unlisted.join(", ")})\u306F\u3001\u5168\u4EF6\u3092\u66F8\u304B\u306A\u3044\u898F\u5B9A\u306E\u305F\u3081\u4E56\u96E2\u3068\u3057\u3066\u6271\u3044\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
+    );
   }
   const existing = /* @__PURE__ */ new Set();
   for (const entry of result.tree) {
@@ -4240,7 +4252,12 @@ function diffArchitectureInner(input) {
   skipped.push(
     "\u6280\u8853\u30B9\u30BF\u30C3\u30AF / \u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9\u306E\u7A81\u304D\u5408\u308F\u305B: \u8981\u7D04\u3068\u3057\u3066\u66F8\u304F\u7BC0\u306E\u305F\u3081\u6A5F\u68B0\u7684\u306B\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002\u66F8\u304B\u308C\u305F\u6280\u8853\u3068\u30B3\u30DE\u30F3\u30C9\u304C sources \u306B\u6B8B\u3063\u3066\u3044\u308B\u304B\u3092\u8AAD\u3093\u3067\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002"
   );
-  diffDirectories(input.scan, sections.get("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9"), findings);
+  diffDirectories(
+    input.scan,
+    sections.get("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9"),
+    findings,
+    skipped
+  );
   diffDomains(input.scan, input.domains, findings, skipped);
   skipped.push(
     "\u4FDD\u8B77\u30D1\u30B9\u306E\u4E0D\u6574\u5408: Raguel \u306E\u8A2D\u5B9A\u306E\u89E3\u6790\u3092\u4F34\u3046\u305F\u3081\u3001\u3053\u306E\u95A2\u6570\u3067\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002"

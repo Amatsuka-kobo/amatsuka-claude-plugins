@@ -486,6 +486,9 @@ test("sources: マニフェスト・タスクランナー・コンテナ定義�
   write(dir, ".devcontainer/devcontainer.json", "{}")
   write(dir, "src/index.ts", "")
   write(dir, "docs/makefile-notes.md", "")
+  write(dir, "Containerfile", "")
+  write(dir, ".nvmrc", "")
+  write(dir, "pnpm-workspace.yaml", "")
 
   const diff = diffArchitecture({
     scan: scan(dir, { root: dir }),
@@ -495,6 +498,9 @@ test("sources: マニフェスト・タスクランナー・コンテナ定義�
   expect(diff.sources).toEqual(
     [
       ".devcontainer/devcontainer.json",
+      ".nvmrc",
+      "Containerfile",
+      "pnpm-workspace.yaml",
       "Dockerfile",
       "Makefile",
       "compose.dev.yaml",
@@ -600,7 +606,7 @@ test("セクションの欠落: ARCHITECTURE が無ければ 7 セクション�
   )
 })
 
-test("ディレクトリ構成: 未記載のトップレベルと実在しない記述を返す", () => {
+test("ディレクトリ構成: 実在しない記述は findings、未記載のトップレベルは skipped に返す", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({
@@ -610,10 +616,15 @@ test("ディレクトリ構成: 未記載のトップレベルと実在しない
     }
   })
 
-  expect(subjectsOf(diff.findings, "directory_undocumented")).toEqual([
-    "prisma"
-  ])
   expect(subjectsOf(diff.findings, "directory_stale")).toEqual(["src/legacy"])
+  expect(
+    diff.findings.filter((f) => f.section === "ディレクトリ構成と責務")
+  ).toHaveLength(1)
+  const line = diff.skipped.find((s) =>
+    s.startsWith("ディレクトリ構成の未記載")
+  )
+  expect(line).toContain("prisma")
+  expect(line).not.toContain("src,")
 })
 
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {

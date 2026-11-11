@@ -216,7 +216,7 @@ function gotchasReason(
   cli: string,
   gotchasEnabled: boolean
 ): string {
-  const head = `${relative} は metatron の管理下にあり、直接編集できません(追記のみ・採番・書式検証のため)。`
+  const head = `${relative} は metatron の管理下にあり、直接編集できません(追記・採番・書式検証と、書き換えの差分承認のため)。既存エントリの書き換えは updating-architecture スキルの監査の手順で行います。`
   if (!gotchasEnabled) {
     return [head, disabledLine("GOTCHAS", GOTCHAS_ENV)].join("\n")
   }

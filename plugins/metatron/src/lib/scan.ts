@@ -341,7 +341,6 @@ export interface ScanResult {
 
 export type DiffFindingKind =
   | "section_missing"
-  | "directory_undocumented"
   | "directory_stale"
   | "domain_gap"
   | "domain_dead_glob"
@@ -1288,7 +1287,6 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
 
 const FINDING_ORDER: Record<DiffFindingKind, number> = {
   section_missing: 0,
-  directory_undocumented: 5,
   directory_stale: 6,
   domain_gap: 7,
   domain_dead_glob: 8
@@ -1339,14 +1337,29 @@ const SOURCE_FILE_RES: readonly RegExp[] = [
   /^pom\.xml$/,
   /^build\.gradle(\.kts)?$/,
   /^mix\.exs$/,
-  /\.csproj$/,
+  /\.(cs|fs|vb)proj$/,
+  /^setup\.(py|cfg)$/,
+  /^environment\.ya?ml$/,
+  /^pubspec\.yaml$/,
+  /^Package\.swift$/,
+  /^build\.sbt$/,
+  /^settings\.gradle(\.kts)?$/,
+  // ワークスペース・ランタイムのバージョン定義
+  /^pnpm-workspace\.yaml$/,
+  /^(turbo|nx)\.json$/,
+  /^bunfig\.toml$/,
+  /^\.(nvmrc|node-version|python-version|ruby-version|tool-versions)$/,
+  /^mise\.toml$/,
+  /^rust-toolchain(\.toml)?$/,
   // タスクランナー
-  /^Makefile$/,
-  /^[Jj]ustfile$/,
-  /^Taskfile\.ya?ml$/,
+  /^(GNU)?[Mm]akefile$/,
+  /^\.?[Jj]ustfile$/,
+  /^Taskfile(\.dist)?\.ya?ml$/,
+  /^Rakefile$/,
+  /^tox\.ini$/,
   // コンテナ
-  /^Dockerfile(\..+)?$/,
-  /\.Dockerfile$/,
+  /^(Dockerfile|Containerfile)(\..+)?$/,
+  /\.(Dockerfile|Containerfile)$/,
   /^(docker-)?compose[^/]*\.ya?ml$/,
   /^devcontainer\.json$/
 ]
@@ -1368,20 +1381,26 @@ function collectSources(result: ScanResult, skipped: string[]): string[] {
 function diffDirectories(
   result: ScanResult,
   body: string | undefined,
-  findings: DiffFinding[]
+  findings: DiffFinding[],
+  skipped: string[]
 ): void {
   const section = "ディレクトリ構成と責務"
   if (body === undefined) return
 
-  for (const entry of result.tree) {
-    if (entry.type !== "directory" || entry.depth !== 1) continue
-    if (body.includes(entry.path)) continue
-    findings.push({
-      kind: "directory_undocumented",
-      section,
-      subject: entry.path,
-      detail: `トップレベルのディレクトリ ${entry.path} が ## ${section} に記載されていません。`
-    })
+  // 書式は全ディレクトリの網羅を求めない。書かれていないディレクトリは乖離にせず、
+  // 置き場を迷うものが無いかを確かめる材料として 1 行だけ返す。
+  const unlisted = result.tree
+    .filter(
+      (entry) =>
+        entry.type === "directory" &&
+        entry.depth === 1 &&
+        !body.includes(entry.path)
+    )
+    .map((entry) => entry.path)
+  if (unlisted.length > 0) {
+    skipped.push(
+      `ディレクトリ構成の未記載: ## ${section} に名前の無いトップレベルのディレクトリ(${unlisted.join(", ")})は、全件を書かない規定のため乖離として扱いませんでした。`
+    )
   }
 
   const existing = new Set<string>()
@@ -1498,7 +1517,12 @@ function diffArchitectureInner(
     "技術スタック / コマンド定義の突き合わせ: 要約として書く節のため機械的には検出しません。書かれた技術とコマンドが sources に残っているかを読んで確かめてください。"
   )
 
-  diffDirectories(input.scan, sections.get("ディレクトリ構成と責務"), findings)
+  diffDirectories(
+    input.scan,
+    sections.get("ディレクトリ構成と責務"),
+    findings,
+    skipped
+  )
   diffDomains(input.scan, input.domains, findings, skipped)
 
   // 決定的に検出できないため、この関数では扱わない項目(設計書 §9-3)。
