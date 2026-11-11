@@ -653,8 +653,14 @@ interface WalkState {
  * root から見て git の ignore に当たるパス。ディレクトリは末尾に `/` を付けて持つ。
  * git 未インストール・git 管理外・失敗のときは空集合を返し、除外しない。
  * add 前の未追跡ファイルは ignore に当たらない限り走査に残す。
+ * `--directory` は、中身がすべて ignore 済みのディレクトリも `dir/` の 1 件にまとめる。
  */
 function gitIgnoredPaths(root: string): ReadonlySet<string> {
+  // git フックの中などで継承した GIT_DIR 等は、root と別のリポジトリを指しうるので外す。
+  const env = { ...process.env }
+  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) {
+    delete env[key]
+  }
   try {
     const res = spawnSync(
       "git",
@@ -666,7 +672,15 @@ function gitIgnoredPaths(root: string): ReadonlySet<string> {
         "--exclude-standard",
         "--directory"
       ],
-      { cwd: root, encoding: "utf8", timeout: 10000, windowsHide: true }
+      {
+        cwd: root,
+        env,
+        encoding: "utf8",
+        timeout: 10000,
+        // 既定の 1MB では ignore 済みのファイルが多いと ENOBUFS で失敗する。
+        maxBuffer: 64 * 1024 * 1024,
+        windowsHide: true
+      }
     )
     if (res.status !== 0 || typeof res.stdout !== "string") return new Set()
     return new Set(res.stdout.split("\0").filter((p) => p !== ""))
@@ -1625,7 +1639,7 @@ function diffDomains(
       kind: "domain_dead_glob",
       section,
       subject: g.glob,
-      detail: `ドメイン ${g.domain} の glob ${g.glob} がどのファイルにも一致しません。`
+      detail: `ドメイン ${g.domain} の glob ${g.glob} が、gitignore を除く走査対象のどのファイルにも一致しません。`
     })
   }
   if (unconfirmedGlobs.length > 0) {

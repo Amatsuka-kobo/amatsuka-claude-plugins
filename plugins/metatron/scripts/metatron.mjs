@@ -3600,6 +3600,10 @@ function extractInlineCode(text) {
   return out;
 }
 function gitIgnoredPaths(root) {
+  const env = { ...process.env };
+  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) {
+    delete env[key];
+  }
   try {
     const res = spawnSync3(
       "git",
@@ -3611,7 +3615,15 @@ function gitIgnoredPaths(root) {
         "--exclude-standard",
         "--directory"
       ],
-      { cwd: root, encoding: "utf8", timeout: 1e4, windowsHide: true }
+      {
+        cwd: root,
+        env,
+        encoding: "utf8",
+        timeout: 1e4,
+        // 既定の 1MB では ignore 済みのファイルが多いと ENOBUFS で失敗する。
+        maxBuffer: 64 * 1024 * 1024,
+        windowsHide: true
+      }
     );
     if (res.status !== 0 || typeof res.stdout !== "string") return /* @__PURE__ */ new Set();
     return new Set(res.stdout.split("\0").filter((p) => p !== ""));
@@ -4337,7 +4349,7 @@ function diffDomains(result, domains, findings, skipped) {
       kind: "domain_dead_glob",
       section,
       subject: g.glob,
-      detail: `\u30C9\u30E1\u30A4\u30F3 ${g.domain} \u306E glob ${g.glob} \u304C\u3069\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u3082\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002`
+      detail: `\u30C9\u30E1\u30A4\u30F3 ${g.domain} \u306E glob ${g.glob} \u304C\u3001gitignore \u3092\u9664\u304F\u8D70\u67FB\u5BFE\u8C61\u306E\u3069\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u3082\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002`
     });
   }
   if (unconfirmedGlobs.length > 0) {

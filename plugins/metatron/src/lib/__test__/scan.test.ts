@@ -216,9 +216,18 @@ test("S3: node_modules / .git / ビルド出力がツリーから除外される
   expect(result.fileCount).toBe(2)
 })
 
+// 継承した GIT_DIR 等が別のリポジトリを指さないよう外して git を呼ぶ。
+function git(dir: string, args: string[]): void {
+  const env = { ...process.env }
+  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) {
+    delete env[key]
+  }
+  execFileSync("git", args, { cwd: dir, env })
+}
+
 test("S3: git の ignore に当たるファイルとディレクトリを走査しない", () => {
   const dir = mkTmp()
-  execFileSync("git", ["init", "-q"], { cwd: dir })
+  git(dir, ["init", "-q"])
   write(dir, ".gitignore", "private/\n*.local.md\n")
   write(dir, "private/secret.txt", "")
   write(dir, "src/index.ts", "")
@@ -237,6 +246,64 @@ test("S3: git の ignore に当たるファイルとディレクトリを走査�
   expect(result.files).toContain("new/untracked.ts")
   expect(result.domainCandidates.map((c) => c.path)).not.toContain("private")
   expect(result.documents.map((d) => d.path)).toEqual(["docs/a.md"])
+})
+
+test("S3: 追跡済みのファイルは ignore のパターンに当たっても走査に残す", () => {
+  const dir = mkTmp()
+  git(dir, ["init", "-q"])
+  write(dir, "src/kept.local.md", "")
+  git(dir, ["add", "src/kept.local.md"])
+  write(dir, ".gitignore", "*.local.md\n")
+
+  const result = scan(dir, { root: dir })
+
+  expect(result.files).toContain("src/kept.local.md")
+})
+
+test("S3: root が git リポジトリのサブディレクトリでも ignore 済みのパスを外す", () => {
+  const repo = mkTmp()
+  git(repo, ["init", "-q"])
+  write(repo, ".gitignore", "pkg/private/\n")
+  write(repo, "pkg/private/secret.txt", "")
+  write(repo, "pkg/src/index.ts", "")
+  const dir = path.join(repo, "pkg")
+
+  const result = scan(dir, { root: dir })
+
+  expect(result.files).toEqual(["src/index.ts"])
+})
+
+test("S3: git 管理外では .gitignore があっても全体を走査する", () => {
+  const dir = mkTmp()
+  write(dir, ".gitignore", "private/\n")
+  write(dir, "private/secret.txt", "")
+
+  const result = scan(dir, { root: dir })
+
+  expect(result.files).toContain("private/secret.txt")
+})
+
+test("ドメインマップ: ignore 済みのパスは穴に出ず、それにしか一致しない glob は死んだ glob になる", () => {
+  const dir = mkTmp()
+  git(dir, ["init", "-q"])
+  write(dir, ".gitignore", "private/\ngenerated/*.ts\n")
+  write(dir, "private/secret.ts", "")
+  write(dir, "generated/a.ts", "")
+  write(dir, "src/index.ts", "")
+  const result = scan(dir, { root: dir })
+
+  const diff = diffArchitecture({
+    scan: result,
+    sections: { ドメインマップ: "" },
+    domains: { impl: ["src/**"], gen: ["generated/*.ts"] }
+  })
+
+  expect(subjectsOf(diff.findings, "domain_gap")).toEqual([])
+  const dead = diff.findings.filter((f) => f.kind === "domain_dead_glob")
+  expect(dead.map((f) => f.subject)).toEqual(["generated/*.ts"])
+  expect(dead[0]?.detail).toBe(
+    "ドメイン gen の glob generated/*.ts が、gitignore を除く走査対象のどのファイルにも一致しません。"
+  )
 })
 
 test("S3: ツリーの深さは 3 まで(既定)", () => {
