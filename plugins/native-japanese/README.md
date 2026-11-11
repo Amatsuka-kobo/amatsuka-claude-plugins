@@ -35,7 +35,7 @@ Marketplace から `native-japanese` をインストールします。
 
 規律の本文は `skills/japanese-writing/SKILL.md` にあります。スキルの ID は `native-japanese:japanese-writing` です。渡し方はメインセッションとサブエージェントで違います。
 
-- メインセッションには、セッションの開始時に `references/session-start.md` の 2 文を注入します。内容は、日本語を書く前にスキルを使うことと、スキルの規律に従って書くことです。
+- メインセッションには、セッションの開始時に `references/session-start.md` を注入します。内容は、日本語を書く前にスキルを使うことと、スキルの規律に従って書くことです。
 - サブエージェントには、起動時に SKILL.md の本文(frontmatter を除いたもの)をそのまま注入します。Skill ツールを持たないサブエージェントにも同じ規律が届きます。
 - プロンプトを送信するたびに、`references/reminder.md` の要約(300 文字以内)を注入します。口調と文体は別の指示に任せたまま、読み込んだ規律に従って書くよう促します。
 
