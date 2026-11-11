@@ -50,6 +50,21 @@ agent-policy の改修(設計書 `2026-11-10-agent-policy-subagent-performance-a
 
 codiel への申し送り: 生成済みの定義を作り直さないと、codiel 1.2 の Workflow で push・PR が断られうる。codiel 1.2 のリリースの案内(codiel の README)に、agent-policy の setup-agents の再実行を書く。
 
+## 0-2. better-agentics 側の扱い(2026-11-11 の改修で解消)
+
+better-agentics の改修(設計書 `2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md`、計画書 `harness-docs/plans/2026-11-11-better-agentics-launch-modes-plan.md`、`0.0.2-dev` のまま)で、better-agentics 側の項目を次のように扱った。agent-policy 側の項目は、この表の対象外である。
+
+| 番号 | better-agentics 側の扱い |
+| --- | --- |
+| G3 | 解消済み。`references/subagent-policy.md` に、依頼文が明示した外部への操作を副作用の禁止の例外にする条項、依頼文の列挙を役割の範囲より優先する条項(作業範囲の拡大の差し戻しは残す)、出力の形は依頼文に従う条項、断るときに役割 ID を報告する条項、依頼文の役割の指定が無いときの決め方を足した。役割断片の「引き受けない」「差し戻す」は残した。スキルは名前と SKILL.md のパスで渡す形にそろえた |
+| G4 | 解消済み。名前で起動した外側の手順が人への聞き方や人の判断の代わりの仕組みを定めていれば、それに従う。採否の軸を言葉にできないときの `AskUserQuestion` の条項は外した |
+| G5 | 解消済み。外側の手順と規律の両方に従い、同じ目的の手順が重なるとき(同じ変更を両方がレビューするときなど)は、名前で起動した外側の手順を優先する。実装のレビューはコミットの後に移した |
+| G9 | 解消済み。外側の手順が人の判断の代わりの仕組みを定めていれば `ok: false` の扱いもそれに従う。ただし `no-api-key`・`jev-failed` は、その仕組みに回さず人に回す |
+| G10 | 解消済み。並列の 2 条件は現行どおりで、外側の手順が並列の条件を定めていれば、原則により両方の条件を満たすときだけ並列にする |
+| G12 | 解消済み。split の理由から規模の条件を外した。外側の手順が委譲の単位と任せる判断を定めるときは、両方に従えないので外側の手順を優先する。外側の手順のスクリプトへは、作業の種類で `reason` を選んで委譲先の指定を渡し、1 件だけ受け取るときは `p` の最も高いものを渡す |
+
+前置きの項目名 `preamble` は、codiel 1.2 の設計書に伝達済みである(コミット `eb0d8c85` で、`args` の委譲の指定の項目名として足された)。委譲先 1 件の項目は、`agentType`・`model`・`effort`・`preamble` で codiel の委譲の指定とそろう。
+
 ## 1. codiel 側の規約
 
 - 担い手(委譲するか、誰に委譲するか)は運用方針に任せる(1.1 の D1)。
@@ -110,7 +125,7 @@ codiel への申し送り: 生成済みの定義を作り直さないと、codie
   - 2.0 の Epic のセッションは、人のいないバックグラウンドで動く。`AskUserQuestion` を呼ぶと、誰も答えないまま止まる。
   - Workflow のエージェントには、実行中にユーザーへ質問する手段が無い(workflows.md の「No mid-run user input」)。Agent ツールのサブエージェントからは `AskUserQuestion` が外される(sub-agents.md)。Workflow のエージェントで使えるツールの一覧そのものは、codiel 1.2 の S1 で確かめる。
 - 直す方向: 人に聞く手段を、スキルや手順が定めているときはそれに従う。codiel の Loop では、問いを state に記録して全体のセッションへ回す(2.0 の 4.6)。2.0 の 4.6 は、運用方針が人の判断を求めたときも人に聞く場面に含める。
-- better-agentics 側の直し方は、better-agentics の改修設計書(`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 5.1)で決めた。実装はまだである。
+- better-agentics 側の直し方は、better-agentics の改修設計書(`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 5.1)で決め、2026-11-11 に実装した(0-2 章)。
 
 ### G5 設計書・実装のコミット・rules の変更の前ごとに、レビューを必須にする(better-agentics)
 

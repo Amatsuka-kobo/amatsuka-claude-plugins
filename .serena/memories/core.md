@@ -117,14 +117,24 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   tools (Playwright resolved at runtime, never bundled), 2 API tools, plus skill `judging`.
   Requires `TYPESAFE_API_KEY` (a paid external API allowed by ADR-005 — see the invariant section). Details:
   `mem:jevriel/core`.
-- **better-agentics** (0.0.1-dev, added 2026-10-26) — lightweight claude-only alternative to
-  agent-policy: the orchestrator does research/design/implementation itself and delegates only for
-  review / split / stuck. `scripts/pick-delegate.mjs` asks Jev (`@typesafe-ai/sdk` 0.6.0, own client,
-  no jevriel import) to choose among `.claude/agents/*.md` carrying `better-agentics-role`, using
-  each body's `## When to invoke` (the orchestrator never reads the criteria). Hooks: SessionStart
-  (enabled by `AMATSUKA_AGENT_ENABLE_ORCHESTRATION`; refuses and warns when `AMATSUKA_AGENT_AUTO_INJECTION`
-  or the delegation gate is on, or `TYPESAFE_API_KEY` is missing) and SubagentStart (injects
-  `references/subagent-policy.md`). Design: `harness-docs/design/2026-10-26-better-agentics-design.md`.
+- **better-agentics** (0.0.2-dev, added 2026-10-26; launch-mode rework 2026-11-11) — lightweight
+  claude-only alternative to agent-policy: the orchestrator does research/design/implementation itself
+  and delegates only for review / split / stuck. `scripts/pick-delegate.mjs` asks Jev
+  (`@typesafe-ai/sdk` 0.6.0, own client, no jevriel import) to choose among every role of the reason
+  that is not disabled in `.claude/better-agentics/config.json` (`disabledRoles`, written only by the
+  setup CLI `--write-config`) or by the call's `excludeRoles`. Choice keys are role IDs. A role with a
+  `.claude/agents/*.md` carrying `better-agentics-role` uses that body's `## When to invoke` and
+  returns `mode: custom` (`agentType` = definition name); a role without one uses the bundled en
+  fragment's criteria and returns `mode: standard` (`general-purpose` + `roles.ts` model/effort +
+  `preamble` built by `src/lib/preamble.ts`). Split tasks with `needsContext` return `mode: fork`
+  (complex-impl/normal-impl/general when the role model equals `parentModel`) or `mode: self`.
+  The orchestrator never reads the criteria. Hooks: SessionStart (enabled by
+  `AMATSUKA_AGENT_ENABLE_ORCHESTRATION`; refuses and warns when `AMATSUKA_AGENT_AUTO_INJECTION` or the
+  delegation gate is on, or `TYPESAFE_API_KEY` is missing; adds setup/migration notices and warnings
+  for env vars overriding role model/effort/cache TTL) and SubagentStart (injects
+  `references/subagent-policy.md` prefixed with the definition's role ID). Designs:
+  `harness-docs/design/2026-10-26-better-agentics-design.md`,
+  `harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md`.
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
   `UserPromptSubmit` hook (`check-prefetch-manifest.mjs`) nagging only when `.prefetch/` holds
   uncollected results.

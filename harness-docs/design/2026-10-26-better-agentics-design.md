@@ -33,6 +33,8 @@ agent-policy の規律では、オーケストレーターは担当表のどの�
 
 ### 1-3. agent-policy の claude プロファイルだけを抜き出して軽くする
 
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 4 章と 12.1 を見る。
+
 外部ベンダーのモデル、ローカルプロキシの live models 照会、1 つの役割に複数の定義(特化定義)、起動形態の判定(モデル注入・合成)を持たない。定義は 1 役割に 1 つで、`model` と `effort` を frontmatter に固定する。役割の種類(RoleId 13 種)は agent-policy と同じにする。
 
 ---
@@ -50,6 +52,8 @@ agent-policy の規律では、オーケストレーターは担当表のどの�
 - README、`docs/`、ルート README・marketplace・workspace への登録
 
 ### 2-2. 非スコープ
+
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 2.1 と 12.1 を見る。
 
 - 外部ベンダーのモデル、プロキシ、live models の照会、ベンダーの確定
 - 1 つの役割に複数の定義を置くこと(特化定義)
@@ -136,6 +140,8 @@ RoleId・種別・モデル・effort は agent-policy の担当表の Claude モ
 - 役割に許可するツールは、役割断片の frontmatter の `tools` とする。値は agent-policy の断片と同じにする。
 
 ### 4-2. 役割断片
+
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 9.1 を見る。
 
 - 置き場所は `assets/roles/<lang>/<RoleId>.md` と `_common.md`。agent-policy の断片を出発点にし、次の点を変える。
 - `## When to invoke` は ja/en のどちらの断片でも英語で書く。`pick-delegate` が Jev に渡す基準になる。
@@ -255,6 +261,8 @@ RoleId・種別・モデル・effort は agent-policy の担当表の Claude モ
 
 ## 6. サブエージェントの規律(`references/subagent-policy.md`)
 
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 5.2 を見る。
+
 SubagentStart が全文を注入する。内容は次の 2 つを統合したもの。
 
 - agent-policy の `orchestration-discipline.md` の「サブエージェントの規律」
@@ -271,6 +279,8 @@ SubagentStart の `additionalContext` は、10,000 文字を超えると本文�
 ---
 
 ## 7. `pick-delegate` の契約
+
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 4 章 を見る。
 
 ### 7-1. 呼び出し
 
@@ -344,6 +354,8 @@ Jev は、1 回のリクエストで `state`(判断の材料)を 1 回読み、�
 
 ## 8. hook
 
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 8 章 を見る。
+
 ### 8-1. SessionStart
 
 `AMATSUKA_AGENT_ENABLE_ORCHESTRATION` は trim と小文字化の後で判定する。上から順に評価し、最初に当たった行で決める。
@@ -377,6 +389,8 @@ hook 2 本とも、例外は捕まえて標準エラーに 1 行の理由を書�
 ---
 
 ## 9. setup(`better-agentics:setup`)
+
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 7 章 を見る。
 
 agent-policy の setup-agents の対話モードを出発点にし、§2-2 の非スコープを外す。
 
@@ -431,6 +445,8 @@ setup-agents の CLI から、次のコマンドを引き継ぐ。`--scope`・`-
 ---
 
 ## 10. 生成する定義の形
+
+> 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 7.2 を見る。
 
 値は例示であり、実際の内容に置き換える。
 

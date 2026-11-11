@@ -191,9 +191,9 @@ TypeSafe AI の判断モデル Jev を Claude Code から使う MCP プラグイ
 
 オーケストレーターが調査・設計・実装を自分で進め、レビュー・作業の分担・行き詰まりの 3 つの場面でだけサブエージェントへ委譲するプラグインです。
 
-委譲先は TypeSafe AI の判断モデル Jev が、各 Agent 定義に書いた選択基準をもとに選びます。オーケストレーターは「いつ委譲するか」だけを判断し、選択基準を持ちません。
+委譲先は TypeSafe AI の判断モデル Jev が、13 の役割の選択基準をもとに選びます。オーケストレーターは「いつ委譲するか」だけを判断し、選択基準を持ちません。
 
-`/better-agentics:setup` で 13 の役割の Agent 定義を 1 役割に 1 つずつ作り、環境変数 `AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` を設定して使います。agent-policy の自動注入(`AMATSUKA_AGENT_AUTO_INJECTION`)とは同時に使えません。
+環境変数 `AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` を設定すれば、定義を作らなくても、役割ごとのモデルと effort で `general-purpose` に委譲します(Standard Agent モード)。定義を調整したい役割と、使わない役割は `/better-agentics:setup` で決めます。定義を作った役割は、その定義で起動します(Custom Agent モード)。会話の文脈が要る分担は、fork か自分で行います。agent-policy の自動注入(`AMATSUKA_AGENT_AUTO_INJECTION`)とは同時に使えません。
 
 ---
 
