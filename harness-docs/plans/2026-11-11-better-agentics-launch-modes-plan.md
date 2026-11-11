@@ -1115,3 +1115,21 @@ review の結果は次のとおりである。
 - split で同じ 1 役割に割り当てられた作業は、最多で light-impl と normal-impl の 4 件ずつだった。8 件に届かない。
 - review で 5 役割すべてが選ばれた作業は無かった。
 - u01 は complex-impl、u02 は general で、どちらも読み取りだけの役割ではない。T8c は行わない。
+
+### T8b: When to invoke の見直し(2026-11-11)
+
+ユーザーに案を示し、次の 2 件を決めてもらった。どちらも、案を一時のコピーに入れて実際の Jev に通した結果を添えて示した。
+
+1. s16 の偏りへの対処として、ja・en の断片に 1 行ずつ足した。
+   - general: 「- Use to translate documents or other prose, including many files at once.」
+   - light-impl: 「- Do not use for translating or writing prose.」
+   - general だけに足す案は、試験で s14 が 1 回 light-impl に揺れたので採らなかった。
+2. 1 を入れて通し直すと、r06 が 2 回とも code-review だけになり、計画の判定に当たった。review の断片は変えていない。r06 の adversarial-review の p は 0.5 の前後で、それまでの 4 回では 1 回だけ選ばれていた。そこで adversarial-review の ja・en の断片に 1 行足した。
+   - adversarial-review: 「- A failure is costly when it affects every session or stored data, such as changes to hooks, permissions, or data migrations.」
+
+2 件を入れた後、T8 の Step 1〜2 を通し直した結果は次のとおりである。
+
+- split の 18 件は、2 回とも 2026-11-10 の判定どおりだった(s16 は general)。s14 は 2 回目だけ light-impl になった。1 回だけなので揺れとして記録する。
+- review の 8 件は、2 回とも判定どおりだった。r06 は 2 回とも adversarial-review を選んだ(p 0.94)。code-review は 1 回目だけ選ばれ(p 0.53)、2 回目は 0.5 を下回った。判定の役割をすべて含んだのは 1 回目だけなので、揺れとして記録する。
+- r08 の adversarial-review の p は 0.72 から 0.92 に上がった。r01・r07 など他の 6 件の選び方は変わらなかった。
+- 2 回とも判定と違う作業は無く、偏りの判定には当たらない。

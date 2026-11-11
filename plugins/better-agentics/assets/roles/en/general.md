@@ -12,6 +12,7 @@ kind: impl
 - Use for work that is not implementation, review, exploration, or research and needs no specialized expertise.
 - Use to write documents within the requested scope.
 - Use for routine repository maintenance.
+- Use to translate documents or other prose, including many files at once.
 
 ## Core Responsibilities
 

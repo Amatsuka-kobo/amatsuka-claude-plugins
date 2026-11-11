@@ -13,6 +13,7 @@ kind: impl
 - Use for bulk mechanical changes across many files.
 - Use for clear minor changes.
 - Use when the result can be verified mechanically.
+- Do not use for translating or writing prose.
 
 ## Core Responsibilities
 

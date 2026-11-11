@@ -10,6 +10,7 @@ kind: readonly
 ## When to invoke
 
 - Use only when a failure of the deliverable would be costly and it needs a deliberate search for failure paths and reproducible counterexamples.
+- A failure is costly when it affects every session or stored data, such as changes to hooks, permissions, or data migrations.
 - Unlike design review, which tests the premises of design documents, it targets any deliverable and focuses on how it can fail.
 - Unlike complex review, it reports counterexamples without deciding whether the deliverable is ready.
 
