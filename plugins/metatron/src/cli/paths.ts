@@ -63,7 +63,7 @@ export const INPUT_SCHEMAS = {
   "stage-gotcha": {
     input:
       '{ id: "GOTCHA-003", title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?: "Yes" | "No", reason? }',
-    note: "既存エントリのフィールドを書き換える差分を作る。id 以外は省略したフィールドの現行の値を保ち、1 つも変わらない入力は拒否する。見出しの日付・番号・タグ、タグの理由行は保つ。title をタグで始められない。書き込みは commit-gotchas --staging-id <id>。"
+    note: "既存エントリのフィールドを書き換える差分を作る。id 以外は省略したフィールドの現行の値を保ち、1 つも変わらない入力は拒否する。見出しの日付・番号・タグ、タグの理由行は保つ。title をタグで始められない。書き換える値と title に文字か数字が 1 つも無い(空・記号だけ・ゼロ幅スペースだけ)入力は拒否する。台帳の構造が崩れている(閉じていないコードフェンス、フェンスが複数のエントリにまたがる、崩れて飲み込まれた見出し)ときも拒否する。書き込みは commit-gotchas --staging-id <id>。"
   },
   "tag-gotcha": {
     usage: "tag-gotcha --id GOTCHA-003 --tag 解決済み|対象外 --reason <理由>",

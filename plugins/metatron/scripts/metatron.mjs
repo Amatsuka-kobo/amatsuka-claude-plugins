@@ -1188,6 +1188,8 @@ function replaceFieldValue(line, value) {
   if (head.endsWith(":")) head += " ";
   return `${head}${value}${line.endsWith("\r") ? "\r" : ""}`;
 }
+var MEANINGFUL_RE = /[\p{L}\p{N}]/u;
+var LOOSE_HEADING_RE = /^\s{0,3}#{1,6}\s*\[\d{4}-\d{2}-\d{2}\]\s*GOTCHA-\d+/;
 function rewriteRejected(message, details = []) {
   throw new GotchaError("invalid_input", message, details);
 }
@@ -1208,8 +1210,11 @@ function buildRewrittenText(existing, rawInput) {
   }
   for (const key of REWRITE_KEYS) {
     const value = input[key];
-    if (value !== void 0 && value.trim() === "") {
-      errors.push(`${key} \u304C\u7A7A\u3067\u3059\u3002\u7A7A\u306B\u3059\u308B\u66F8\u304D\u63DB\u3048\u306F\u53D7\u3051\u4ED8\u3051\u307E\u305B\u3093\u3002`);
+    if (value === void 0 || key === "promotionCandidate") continue;
+    if (!MEANINGFUL_RE.test(value)) {
+      errors.push(
+        `${key} \u306B\u6587\u5B57\u307E\u305F\u306F\u6570\u5B57\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u7A7A\u3084\u610F\u5473\u306E\u7121\u3044\u5024\u3078\u306E\u66F8\u304D\u63DB\u3048\u306F\u53D7\u3051\u4ED8\u3051\u307E\u305B\u3093\u3002`
+      );
     }
   }
   if (errors.length > 0) {
@@ -1229,6 +1234,17 @@ function buildRewrittenText(existing, rawInput) {
     rewriteRejected(
       "\u53F0\u5E33\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308B\u305F\u3081\u3001\u30A8\u30F3\u30C8\u30EA\u306E\u7BC4\u56F2\u3092\u78BA\u5B9A\u3067\u304D\u305A\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u305B\u3093\u3002\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304B\u3089\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
     );
+  }
+  if (doc.listSection !== null) {
+    let headingLike = 0;
+    for (let i = doc.listSection.headingIndex + 1; i < doc.listSection.endIndex; i++) {
+      if (LOOSE_HEADING_RE.test(stripCr(doc.lines[i]))) headingLike++;
+    }
+    if (headingLike !== doc.entries.length) {
+      rewriteRejected(
+        `\u53F0\u5E33\u306E\u69CB\u9020\u304C\u5D29\u308C\u3066\u3044\u307E\u3059(\u30A8\u30F3\u30C8\u30EA\u306E\u898B\u51FA\u3057\u306B\u898B\u3048\u308B\u884C\u304C ${headingLike} \u500B\u3001\u89E3\u6790\u3067\u304D\u305F\u30A8\u30F3\u30C8\u30EA\u304C ${doc.entries.length} \u500B)\u3002\u5D29\u308C\u305F\u898B\u51FA\u3057\u307E\u305F\u306F\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u76F4\u3057\u3066\u304B\u3089\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+      );
+    }
   }
   const entry = findGotchaByNumber(doc, num);
   if (entry === null) {
@@ -4128,7 +4144,11 @@ var SOURCE_FILE_RES = [
   /^(turbo|nx)\.json$/,
   /^bunfig\.toml$/,
   /^\.(nvmrc|node-version|python-version|ruby-version|tool-versions)$/,
-  /^mise\.toml$/,
+  /^\.?mise\.toml$/,
+  /^flake\.nix$/,
+  /^CMakeLists\.txt$/,
+  /^Earthfile$/,
+  /^Procfile$/,
   /^rust-toolchain(\.toml)?$/,
   // タスクランナー
   /^(GNU)?[Mm]akefile$/,
@@ -4137,10 +4157,10 @@ var SOURCE_FILE_RES = [
   /^Rakefile$/,
   /^tox\.ini$/,
   // コンテナ
-  /^(Dockerfile|Containerfile)(\..+)?$/,
+  /^([Dd]ockerfile|Containerfile)(\..+)?$/,
   /\.(Dockerfile|Containerfile)$/,
-  /^(docker-)?compose[^/]*\.ya?ml$/,
-  /^devcontainer\.json$/
+  /^\.?devcontainer\.json$/,
+  /^(docker-)?compose[^/]*\.ya?ml$/
 ];
 function collectSources(result, skipped) {
   if (result.truncation.files || result.truncation.walk) {
@@ -4175,7 +4195,7 @@ function diffDirectories(result, body, findings, skipped) {
     seen.add(token);
     if (/[*?[\]{}]/.test(token)) continue;
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue;
-    if (!token.includes("/")) continue;
+    if (!token.includes("/") && !raw.endsWith("/")) continue;
     if (existing.has(token)) continue;
     if (token.split("/").length > DEFAULT_SCAN_LIMITS.maxDepth) continue;
     if (result.files.includes(token)) continue;
@@ -4660,7 +4680,7 @@ var INPUT_SCHEMAS = {
   },
   "stage-gotcha": {
     input: '{ id: "GOTCHA-003", title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?: "Yes" | "No", reason? }',
-    note: "\u65E2\u5B58\u30A8\u30F3\u30C8\u30EA\u306E\u30D5\u30A3\u30FC\u30EB\u30C9\u3092\u66F8\u304D\u63DB\u3048\u308B\u5DEE\u5206\u3092\u4F5C\u308B\u3002id \u4EE5\u5916\u306F\u7701\u7565\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u306E\u73FE\u884C\u306E\u5024\u3092\u4FDD\u3061\u30011 \u3064\u3082\u5909\u308F\u3089\u306A\u3044\u5165\u529B\u306F\u62D2\u5426\u3059\u308B\u3002\u898B\u51FA\u3057\u306E\u65E5\u4ED8\u30FB\u756A\u53F7\u30FB\u30BF\u30B0\u3001\u30BF\u30B0\u306E\u7406\u7531\u884C\u306F\u4FDD\u3064\u3002title \u3092\u30BF\u30B0\u3067\u59CB\u3081\u3089\u308C\u306A\u3044\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-gotchas --staging-id <id>\u3002"
+    note: "\u65E2\u5B58\u30A8\u30F3\u30C8\u30EA\u306E\u30D5\u30A3\u30FC\u30EB\u30C9\u3092\u66F8\u304D\u63DB\u3048\u308B\u5DEE\u5206\u3092\u4F5C\u308B\u3002id \u4EE5\u5916\u306F\u7701\u7565\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u306E\u73FE\u884C\u306E\u5024\u3092\u4FDD\u3061\u30011 \u3064\u3082\u5909\u308F\u3089\u306A\u3044\u5165\u529B\u306F\u62D2\u5426\u3059\u308B\u3002\u898B\u51FA\u3057\u306E\u65E5\u4ED8\u30FB\u756A\u53F7\u30FB\u30BF\u30B0\u3001\u30BF\u30B0\u306E\u7406\u7531\u884C\u306F\u4FDD\u3064\u3002title \u3092\u30BF\u30B0\u3067\u59CB\u3081\u3089\u308C\u306A\u3044\u3002\u66F8\u304D\u63DB\u3048\u308B\u5024\u3068 title \u306B\u6587\u5B57\u304B\u6570\u5B57\u304C 1 \u3064\u3082\u7121\u3044(\u7A7A\u30FB\u8A18\u53F7\u3060\u3051\u30FB\u30BC\u30ED\u5E45\u30B9\u30DA\u30FC\u30B9\u3060\u3051)\u5165\u529B\u306F\u62D2\u5426\u3059\u308B\u3002\u53F0\u5E33\u306E\u69CB\u9020\u304C\u5D29\u308C\u3066\u3044\u308B(\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3001\u30D5\u30A7\u30F3\u30B9\u304C\u8907\u6570\u306E\u30A8\u30F3\u30C8\u30EA\u306B\u307E\u305F\u304C\u308B\u3001\u5D29\u308C\u3066\u98F2\u307F\u8FBC\u307E\u308C\u305F\u898B\u51FA\u3057)\u3068\u304D\u3082\u62D2\u5426\u3059\u308B\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-gotchas --staging-id <id>\u3002"
   },
   "tag-gotcha": {
     usage: "tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916 --reason <\u7406\u7531>",

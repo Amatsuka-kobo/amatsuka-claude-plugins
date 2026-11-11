@@ -1095,3 +1095,48 @@ test("GR11: エントリ内のコードフェンスにあるフィールド風�
   })
   expect(result.text).toContain("**対策**: フェンスの中の例")
 })
+
+test("GR12: フェンスが 2 つのエントリにまたがる台帳は拒否する", () => {
+  const before = ledger([
+    entryBlock(2).replace("**原因 (推測)**: 原因 2", "```\n**原因 (推測)**: "),
+    `${entryBlock(1)}\n\`\`\``
+  ])
+  expect(parseGotchas(before).unclosedFence).toBe(false)
+  expectGotchaError(
+    () => buildRewrittenText(before, { id: "GOTCHA-002", cause: "rewritten" }),
+    "invalid_input"
+  )
+})
+
+test("GR13: 見出しが崩れて前のエントリに飲み込まれた台帳は拒否する", () => {
+  for (const broken of [
+    "#### [2026-08-10] GOTCHA-1:",
+    "###\t[2026-08-10] GOTCHA-1:",
+    "###[2026-08-10] GOTCHA-1:"
+  ]) {
+    const before = ledger([
+      entryBlock(2),
+      entryBlock(1).replace("### [2026-08-10] GOTCHA-001:", broken)
+    ])
+    expectGotchaError(
+      () => buildRewrittenText(before, { id: "GOTCHA-002", task: "書き換え" }),
+      "invalid_input"
+    )
+  }
+})
+
+test("GR14: 記入テンプレートの見本の見出しは構造の検査に数えない", () => {
+  expect(() =>
+    buildRewrittenText(REWRITE_BEFORE, { id: "GOTCHA-001", task: "書き換え" })
+  ).not.toThrow()
+})
+
+test("GR15: 記号だけ・ゼロ幅スペースだけの値は拒否する", () => {
+  for (const value of ["-", "—", "\u200b", "。。。"]) {
+    expectGotchaError(
+      () =>
+        buildRewrittenText(REWRITE_BEFORE, { id: "GOTCHA-001", cause: value }),
+      "invalid_input"
+    )
+  }
+})

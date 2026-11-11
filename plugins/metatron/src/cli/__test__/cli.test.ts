@@ -1997,3 +1997,23 @@ test("GS5: 閉じていないフェンスのある台帳と、空にする入力
   expect(empty.status).not.toBe(0)
   expect(empty.json).toMatchObject({ error: "invalid_input", stagingId: null })
 })
+
+test("GS6: 飲み込まれた見出しのある台帳と、意味の無い値は拒否し、台帳は不変", () => {
+  const root = gateProject()
+  const { gotchas } = docs(root)
+  fs.appendFileSync(gotchas, "\n#### [2026-08-11] GOTCHA-002: 崩れた見出し\n")
+  const before = snapshot([gotchas])
+  const broken = stageGotcha(root, { id: "GOTCHA-001", cause: "rewritten" })
+  expect(broken.status).not.toBe(0)
+  expect(broken.json).toMatchObject({ error: "invalid_input", stagingId: null })
+  expectUnchanged(before)
+
+  const meaningless = stageGotcha(gateProject(), {
+    id: "GOTCHA-001",
+    cause: "-"
+  })
+  expect(meaningless.json).toMatchObject({
+    error: "invalid_input",
+    stagingId: null
+  })
+})

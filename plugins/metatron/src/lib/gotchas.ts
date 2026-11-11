@@ -837,6 +837,11 @@ function replaceFieldValue(line: string, value: string): string {
   return `${head}${value}${line.endsWith("\r") ? "\r" : ""}`
 }
 
+const MEANINGFUL_RE = /[\p{L}\p{N}]/u
+
+// エントリ見出しに見える行(崩れた形を含む)。解析したエントリ数との照合に使う。
+const LOOSE_HEADING_RE = /^\s{0,3}#{1,6}\s*\[\d{4}-\d{2}-\d{2}\]\s*GOTCHA-\d+/
+
 function rewriteRejected(message: string, details: string[] = []): never {
   throw new GotchaError("invalid_input", message, details)
 }
@@ -870,8 +875,12 @@ export function buildRewrittenText(
 
   for (const key of REWRITE_KEYS) {
     const value = input[key]
-    if (value !== undefined && value.trim() === "") {
-      errors.push(`${key} が空です。空にする書き換えは受け付けません。`)
+    if (value === undefined || key === "promotionCandidate") continue
+    // 文字か数字が 1 つも無い値(空・記号だけ・ゼロ幅スペースだけ)は、内容を消す書き換えになる。
+    if (!MEANINGFUL_RE.test(value)) {
+      errors.push(
+        `${key} に文字または数字がありません。空や意味の無い値への書き換えは受け付けません。`
+      )
     }
   }
   if (errors.length > 0) {
@@ -894,6 +903,23 @@ export function buildRewrittenText(
     rewriteRejected(
       "台帳に閉じていないコードフェンスがあるため、エントリの範囲を確定できず書き換えられません。フェンスを閉じてから実行してください。"
     )
+  }
+  // 見出しに見える行の数(フェンスの中も数える)が解析したエントリ数と合わないときは、
+  // 崩れた見出しやまたがるフェンスでエントリの範囲が別のエントリを飲み込んでいる。
+  if (doc.listSection !== null) {
+    let headingLike = 0
+    for (
+      let i = doc.listSection.headingIndex + 1;
+      i < doc.listSection.endIndex;
+      i++
+    ) {
+      if (LOOSE_HEADING_RE.test(stripCr(doc.lines[i]))) headingLike++
+    }
+    if (headingLike !== doc.entries.length) {
+      rewriteRejected(
+        `台帳の構造が崩れています(エントリの見出しに見える行が ${headingLike} 個、解析できたエントリが ${doc.entries.length} 個)。崩れた見出しまたはコードフェンスを直してから実行してください。`
+      )
+    }
   }
   const entry = findGotchaByNumber(doc, num)
   if (entry === null) {
