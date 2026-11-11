@@ -32,6 +32,37 @@ Its §11 lists 15 rejected alternatives — read it before re-proposing anything
 distribution, per-hook scope predicates, or `--policy`.
 Accumulated rationale: `docs/old/optimize-agents-record/`.
 
+## 2026-11-11 subagent-performance change (still 0.21.8-dev)
+
+Design `harness-docs/design/2026-11-10-agent-policy-subagent-performance-and-codiel-gaps-design.md`,
+plan `harness-docs/plans/2026-11-11-agent-policy-subagent-performance-plan.md` (trial results in §5).
+These supersede older bullets below wherever they disagree.
+
+- **Discipline (`orchestration-discipline.md`, ~48 KB)** gained: §外側の手順 (follow both the
+  external procedure — a skill/command outside this plugin — and the discipline; prefer the
+  external one only when they conflict, and only if it was started by name; a self-loaded skill
+  never removes reviews/delegation), §再レビュー (repeat until no critical/high; leftover medium or
+  lower → ask, do not fix), §委譲先の再開 (re-review and fixes resume the previous delegate via
+  SendMessage), §修正のループ (rounds 1–3 resume the writer, 4+ go to escalation relaunched every
+  2 rounds; documents never go to escalation, the orchestrator fixes them from round 4),
+  §fork (complex-impl only, same model family, not under an external procedure), §断られた作業の選び直し,
+  §外側の手順のスクリプトに渡す起動の指定, and 3 subagent clauses (output form, RoleId on decline,
+  no further Agent delegation). The `AskUserQuestion` clause for conflicting findings is **gone**;
+  the two design-doc reviews now run **in parallel**. Both policy SKILL.md files tell the
+  orchestrator to Read the whole discipline before any work (Sonnet skipped it otherwise).
+- **`_common.md`** now lets the request's list override role scope (but role constraints still
+  apply), allows external ops the request names, adds output-form and RoleId-on-decline clauses,
+  skills are passed by name + absolute SKILL.md path. Preamble shows `「ラベル」(id)` /
+  `"Label" (id)` via `vocabulary.roleWithId` (`quote` was removed).
+- **Role fragments**: every Output Format has a "no result" line; the 5 review roles add severity.
+  light-impl no longer refuses hooks changes.
+- **setup-agents**: `omitClaudeMd` (asked per definition; recommended only for knowledge-elicitation)
+  and `experimental.cacheTtl: 1h` (review roles on Claude models) are written line-by-line after
+  generation by `applyTwoKeys`; `--omit-claude-md <true|false>`; responses carry `twoKeys`.
+- **SessionStart** warns about `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, `CLAUDE_CODE_EFFORT_LEVEL`, and
+  (only when a `cacheTtl1h` definition exists) `FORCE_PROMPT_CACHING_5M` /
+  `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m`. `MarkedAgent.cacheTtl1h` added.
+
 ## Current shape (2026-09-04, the two-profile reorganisation)
 
 Three earlier generations are recorded in git but **must not be cited as current**: the 2026-08-16
@@ -111,8 +142,8 @@ bullets below wherever the two disagree):
   writes design docs and WBS itself.
 - **No consultation.** Subagents hand work back instead; the old 3 advisor triggers are now hand-back
   conditions in `_common.md` §制約. `_common.md` lost `## アドバイザーへの相談` and
-  `## Agent tool の制約`; `vocabulary.ts` lost `advisorHeading` / `agentConstraintHeading`. When the
-  orchestrator cannot state a decision axis it asks the user with `AskUserQuestion`.
+  `## Agent tool の制約`; `vocabulary.ts` lost `advisorHeading` / `agentConstraintHeading`. (The
+  `AskUserQuestion` clause for undecidable axes was removed on 2026-11-11.)
 - **Agent Tool is denied to every role** (user decision). `SOLO_DENIED_ROLES` / `allowsAgentTool` /
   `RolesSummary.agentTool` are deleted; `compose()` never emits `Agent` (it still strips `Agent`
   written in a fragment). The discipline dropped the subagent re-delegation clauses.
@@ -467,8 +498,9 @@ Rules that bite:
 
 - Agent tool is denied to every role since 0.21; subagents do not re-delegate.
 - Upstream flow since 0.21: orchestrator dispatches exploration to `explore`, fixes requirements
-  from the findings → the orchestrator writes design/WBS itself → knowledge-elicitation (Haiku) →
-  design-review (original only) → orchestrator adopts/rejects → user approval → Approve.
+  from the findings → the orchestrator writes design/WBS itself → knowledge-elicitation (Haiku) and
+  design-review (original only) **in parallel** (since 2026-11-11) → orchestrator adopts/rejects →
+  re-review loop → user approval → Approve.
   adversarial-review is outside this flow.
 - **Execution-tier resolution is profile-independent since 0.18.0-dev** and lives in the discipline's
   §委譲先の解決 (see above). Both profiles use the same three steps; only the *candidate set* differs,
@@ -493,10 +525,10 @@ Rules that bite:
   when per-definition models matter.
 - An agent whose frontmatter pins a concrete `model` is honoured as-is; only `inherit`/unset agents
   (incl. built-ins `Explore`/`Plan`/`general-purpose`) get retiered.
-- Cost discipline: never load a skill whose body+references exceed 30KB into a subagent — transcribe
-  the needed clauses instead; batch ≥3-turn exploration into one dispatch; no per-task commits or
-  repo-wide grep verification in subagents.
-- Subagents load **only** the skills named in their request; if none are named, they load none.
+- The cost discipline (30 KB skill rule, no per-task commits) was deleted on 2026-11-10. Since
+  2026-11-11 delegates commit the changes sent to review with `git commit -- <paths>`.
+- Subagents load **only** the skills the request gives by name and absolute SKILL.md path (Read the
+  path when the Skill tool is absent); if none are given, they load none.
 
 ## prompt-smith — how the instructions are written
 
