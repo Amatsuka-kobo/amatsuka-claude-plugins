@@ -1028,3 +1028,42 @@ G3・G4・G5・G9・G10・G12 の better-agentics 側を解消済みにする。
 ## 5. 実施記録
 
 試作の結果と、計画から外れた判断を、タスクごとにここへ書く。
+
+### T1: 試作(2026-11-11、Claude Code 2.1.322)
+
+確かめ方:
+
+- 自動の項目は、スクラッチの git リポジトリで `claude -p --permission-mode default --plugin-dir <プラグインの複製> --output-format stream-json --verbose` を実行し、記録で判定した。
+- 記録用の hook は複製の `hooks/hooks.json` にだけ足し、`agent_type`・`model`・`CLAUDE_CODE_EFFORT_LEVEL` などの値だけを書き出した。
+- 委譲先のモデルは、`parent_tool_use_id` を持つ assistant の記録の `message.model` で見た。
+- S1 の effort・auto と S4 の effort は、ユーザーが対話のセッションの `/tasks` で確かめた。
+
+計画から外れた判断:
+
+- `TYPESAFE_API_KEY` と `AMATSUKA_AGENT_ENABLE_ORCHESTRATION` は、スクラッチの `settings.local.json` へ写さなかった。リポジトリの `settings.local.json` の読み取りは deny ルールで拒否される。両方とも実行中のシェルの環境変数にあり、子の `claude -p` はそれを継承した。キーをファイルに書かずに済むので、この形を採った。
+- S3 の `parentModel` の照合先は、SessionStart の入力ではなく stream-json の init の `model` にした。2.1.322 の SessionStart の入力には `model` が無かった(記録用の hook で 5 セッションとも空)。
+- S2 の切り替えの条件 2・3(1 行の指示に従って読み、規律に従うか)は確かめていない。条件 1 が通らず、T7c を行わないことがこの時点で決まったためである。
+- スクラッチのプロジェクト・プラグインの複製・記録は、キーの値が含まれないことを `grep -F` で確かめてから消した。
+
+| 試作 | 結果 | 判定の根拠 | 後のタスクへの影響 |
+| --- | --- | --- | --- |
+| Step 1 | `-p` では、許可の確認が要る操作は `result` の `permission_denials` に残る | `.claude/probe.txt` への Write が `permission_denials` に載った | 許可の確認の判定は `-p` の記録で行えた |
+| S1 | `general-purpose` に渡した `model: haiku`・`effort: low` は、`/tasks` に haiku・low で出る | ユーザーの確認 | 分岐なし |
+| S1(auto) | `CLAUDE_CODE_EFFORT_LEVEL=auto` では、渡した effort が捨てられる | ユーザーの確認(`/tasks` に effort が出ない) | 分岐なし。T10 の警告に `auto`・`unset` を残す |
+| S1(FORCE) | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` が `1`・`true` のとき、渡した `model: haiku` は黙って `CLAUDE_CODE_SUBAGENT_MODEL` の sonnet に置き換わる。エラーは出ない | 委譲先の `message.model` が `claude-sonnet-5-5`。Agent ツールの結果にエラーなし | 分岐なし。T7 で `model` を返さない扱いは入れない |
+| S2(条件 1) | 委譲先が、プラグインのキャッシュの中のファイルを Read すると、許可の確認で拒否される | `general-purpose` が `~/.claude/plugins/cache/.../references/subagent-policy.md` を Read して `permission_denials` に載った | T7c を行わない。前置きは全文の形のままにする |
+| S2(写し) | opus のオーケストレーターは、3,266B の前置きを省略せずに依頼文の冒頭へ写した。委譲先は規律に従い、報告の先頭に目印を書いた | Agent の `prompt` が前置きの全文を含む。委譲先の報告の 1 行目が PREAMBLE-READ | 分岐なし |
+| S2(D26) | Skill ツールの無い定義の委譲先が、プラグインのキャッシュの中の SKILL.md をパスから Read すると、許可の確認で拒否される | `tools: Read` の定義が superpowers の SKILL.md を Read して `permission_denials` に載った | T13 のスキルの渡し方に、確認が出ることを書く |
+| S2(Workflow) | Workflow の `agent()` のエージェントも、プラグインのキャッシュの中のファイルを Read すると拒否される | Custom Agent モードの定義と `general-purpose` の両方が DENIED を返した | T7c を行わないので、T7a は行わない |
+| S3 | fork は前置きに従い、さらに委譲せず、`pick-delegate` も Skill も呼ばなかった。SubagentStart の `agent_type` は `fork`。オーケストレーターの申告した `parentModel: opus` は init の `claude-opus-5-5` と一致した | fork のツール呼び出しは Bash(`git ls-files` など)だけ。記録用の hook の `agent_type` | 分岐なし。SubagentStart は `fork` の名前の定義と一致しないので規律を注入せず、二重にならない |
+| S4 | Custom Agent モードの定義・`general-purpose`・fork の 3 つとも、完了の後に SendMessage で再開できた。再開後のモデルは保たれ(haiku は haiku のまま)、effort も low のまま保たれた | 再開後の `message.model`。effort はユーザーの確認 | 分岐なし |
+| S5 | `experimental.cacheTtl: 1h` を書いた定義は 1 時間のキャッシュで書き込み、約 8 分後の再開で 14,849 トークンをキャッシュから読んだ。対照の `general-purpose` は 5 分のキャッシュで書き込み、再開時の読み出しは 0 だった | usage の `cache_creation.ephemeral_1h_input_tokens` と `cache_read_input_tokens` | 分岐なし。T9 で `CACHE_TTL_ROLES` を 5 役割のままにする |
+| S6 | Workflow の `agent()` でも SubagentStart は発火し、`agent_type` は定義の `name`(`code-reviewer`)と `general-purpose` になった。`agent()` は `agentType: "general-purpose"` と `model`・`effort` を受けた | 記録用の hook | T7a・T7b を行わない |
+| S8 | `setup.mjs --scaffold-fragments --lang fr` を Bash から実行しても、`.claude/better-agentics/` への書き込みで確認は出なかった | `permission_denials` が空で、ファイルが作られた | 分岐なし。T14 に確認の記述を足さない |
+| S9 | `settings.local.json` の `env` に置いた `CLAUDE_CODE_EFFORT_LEVEL=high` は、SessionStart の hook のプロセスに見える | 記録用の hook の値が `high` | 分岐なし |
+| S10 | `-p` で委譲先をバックグラウンドに残してターンを終えると、完了の通知で次のターンが始まる | `result` が 2 回記録され、2 回目に委譲先の返答がある | 分岐なし。T13 に完了を待つ起動の記述を足さない |
+| S10(availableModels) | `availableModels: ["sonnet","haiku"]` の下で `model: opus` を渡すと、`-p` では警告なしに置き換わった | Agent ツールの結果と記録に警告が無い。委譲先は自分を Sonnet と答えた | T16 で README の限界の記述を「`-p` では警告が出ない」と確かめた形に改める |
+
+試作の途中で分かった、分岐の表に無い事項:
+
+- `-p` の `default` の許可モードでは、SessionStart が指示した `better-agentics:orchestration` の Skill の呼び出しも `permission_denials` に載る。`-p` で better-agentics の規律を使う利用者は、Skill を許可しておく必要がある。T16 で README の限界に書く。
