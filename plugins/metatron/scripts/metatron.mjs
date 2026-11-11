@@ -4256,14 +4256,24 @@ function diffDomains(result, domains, findings, skipped) {
     );
     return;
   }
+  const unconfirmedGlobs = [];
   for (const g of globs) {
     if (result.files.some((file) => g.re.test(file))) continue;
+    if (g.glob.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
+      unconfirmedGlobs.push(g.glob);
+      continue;
+    }
     findings.push({
       kind: "domain_dead_glob",
       section,
       subject: g.glob,
       detail: `\u30C9\u30E1\u30A4\u30F3 ${g.domain} \u306E glob ${g.glob} \u304C\u3069\u306E\u30D5\u30A1\u30A4\u30EB\u306B\u3082\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002`
     });
+  }
+  if (unconfirmedGlobs.length > 0) {
+    skipped.push(
+      `\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7\u306E\u6B7B\u3093\u3060 glob \u306E\u672A\u78BA\u8A8D: \u8D70\u67FB\u304C\u9664\u5916\u3059\u308B\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u542B\u3080 glob(${unconfirmedGlobs.join(", ")})\u306F\u3001\u4E00\u81F4\u3059\u308B\u30D5\u30A1\u30A4\u30EB\u306E\u6709\u7121\u3092\u78BA\u304B\u3081\u3089\u308C\u306A\u3044\u305F\u3081\u5224\u5B9A\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
+    );
   }
 }
 function diffArchitectureInner(input) {

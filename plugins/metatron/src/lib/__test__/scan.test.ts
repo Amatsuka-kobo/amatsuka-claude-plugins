@@ -679,6 +679,29 @@ test("ディレクトリ構成: `..` は見ず、大文字小文字の違いと�
   expect(line).toContain("outlink/x")
 })
 
+test("ドメインマップ: 除外ディレクトリを含む glob は死んだ glob と断定せず skipped に返す", () => {
+  const dir = mkTmp()
+  writeJson(dir, "package.json", {})
+  write(dir, "src/a.ts", "")
+  write(dir, "plugins/x/dist/a.mjs", "")
+
+  const diff = diffArchitecture({
+    scan: scan(dir, { root: dir }),
+    sections: {},
+    domains: {
+      impl: ["src/**"],
+      bundle: ["plugins/*/dist/**"],
+      gone: ["legacy/**"]
+    }
+  })
+
+  expect(subjectsOf(diff.findings, "domain_dead_glob")).toEqual(["legacy/**"])
+  const line = diff.skipped.find((s) =>
+    s.startsWith("ドメインマップの死んだ glob の未確認")
+  )
+  expect(line).toContain("plugins/*/dist/**")
+})
+
 test("決定的に検出できない項目は理由つきで skipped に入る", () => {
   const { result } = scanFixture()
 

@@ -1503,14 +1503,26 @@ function diffDomains(
     )
     return
   }
+  const unconfirmedGlobs: string[] = []
   for (const g of globs) {
     if (result.files.some((file) => g.re.test(file))) continue
+    // 走査は除外ディレクトリ(dist・build など)の中に入らないため、その中を指す glob は
+    // 一致するファイルが無いことを断定できない。
+    if (g.glob.split("/").some((seg) => EXCLUDED_DIRECTORY_NAMES.has(seg))) {
+      unconfirmedGlobs.push(g.glob)
+      continue
+    }
     findings.push({
       kind: "domain_dead_glob",
       section,
       subject: g.glob,
       detail: `ドメイン ${g.domain} の glob ${g.glob} がどのファイルにも一致しません。`
     })
+  }
+  if (unconfirmedGlobs.length > 0) {
+    skipped.push(
+      `ドメインマップの死んだ glob の未確認: 走査が除外するディレクトリを含む glob(${unconfirmedGlobs.join(", ")})は、一致するファイルの有無を確かめられないため判定しませんでした。`
+    )
   }
 }
 
