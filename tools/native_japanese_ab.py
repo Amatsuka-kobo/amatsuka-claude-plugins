@@ -234,8 +234,12 @@ def load(out, label):
 
 
 def check_patterns(patterns):
+    if any("id" not in item or "regex" not in item for item in patterns):
+        sys.exit("型には id と regex を書く")
     ids = check_ids(patterns, "型")
     for item in patterns:
+        if not isinstance(item.get("prompts", []), list):
+            sys.exit(f"型の prompts は題材の id の配列にする: {item['id']}")
         if item.get("unit", "text") not in UNITS:
             sys.exit(f"型の unit は {UNITS} のどれかにする: {item['id']}")
         re.compile(item["regex"])
@@ -249,6 +253,10 @@ def report(args):
     meta = json.loads((out / META).read_text())
     patterns = json.loads(Path(args.patterns).read_text())
     ids = check_patterns(patterns)
+    for item in patterns:
+        unknown = [i for i in item.get("prompts", []) if i not in meta["prompts"]]
+        if unknown:
+            sys.exit(f"型 {item['id']} の prompts に、採取した題材に無い id がある: {unknown}")
     data = {label: load(out, label) for label in LABELS}
     show = getattr(args, "show", None)
     if show:
@@ -273,12 +281,11 @@ def report(args):
         )
         for label, (texts, skills) in data.items()
     }
-    print("| 項目 | before | after |")
+    print("| 項目、型は「件数 / 含む本数 / 対象の本数」 | before | after |")
     print("| --- | --- | --- |")
     names = ("時点", "応答の本数", "採れなかった本数", "文字数", "Skill を起動した本数", "文の数", "読点(100 字あたり)")
     for i, name in enumerate(names):
         print(f"| {name} | {cells['before'][i]} | {cells['after'][i]} |")
-    print("| 型(件数 / 含む本数 / 対象の本数) | | |")
     counted = {label: count(data[label][0], patterns) for label in LABELS}
     for item, before, after in zip(patterns, counted["before"], counted["after"]):
         want = f"・{item['want']}" if item.get("want") else ""
