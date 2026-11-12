@@ -9,7 +9,7 @@
 
 run は採取の後に report も出す。保存済みの応答は採り直さないので、中断した採取は同じ引数で続けられる。
 時点・題材・モデル・回数が初回と違う run は、同じ --out では受け付けない。
---targets を渡すと、目安ごとに前後の値と、after が目安に届いたかを出す。
+--targets を渡すと、目安ごとに前後の値と合否、基準までの差、合否が変わったときは後退か改善かを出す。
 report は応答の本文を <out>/text/<before|after>/<モデル>/<題材>-<回>.txt にも書き出す。
 """
 import argparse
@@ -120,7 +120,7 @@ def run(args):
         if [i for i in item.get("prompts", []) if i not in prompt_ids]:
             sys.exit(f"型 {item['id']} の prompts に、台帳の題材に無い id がある")
     if args.targets:
-        check_targets(json.loads(Path(args.targets).read_text()), pattern_ids, prompt_ids)
+        check_targets(json.loads(Path(args.targets).read_text()), patterns, prompt_ids)
     if out.exists() and not out.is_dir():
         sys.exit(f"--out はディレクトリにする: {out}")
     meta = {
@@ -283,25 +283,55 @@ def measure(target, texts, skills, by_id):
     return 100 * sum(1 for row in per_doc if low <= sum(row) <= high) / len(mine) if mine else None
 
 
+def margin(target, value):
+    """目安までの差を返す。0 以上なら届いている。"""
+    return target["value"] - value if target["op"] == "以下" else value - target["value"]
+
+
 def verdict(target, value):
     """目安に届いたかと、目安までの差を返す。"""
     if value is None:
         return "測れない"
-    margin = target["value"] - value if target["op"] == "以下" else value - target["value"]
-    return f"届いた(余裕 {margin:.2f})" if margin >= 0 else f"届かない(不足 {-margin:.2f})"
+    m = margin(target, value)
+    return f"届いた(余裕 {m:.2f})" if m >= 0 else f"届かない(不足 {-m:.2f})"
 
 
-def check_targets(targets, pattern_ids, prompt_ids):
+def change(target, before, after):
+    """before と after で合否が変わった目安に、後退か改善かを付ける。"""
+    if before is None or after is None:
+        return ""
+    was, now = margin(target, before) >= 0, margin(target, after) >= 0
+    return "" if was == now else ("改善" if now else "後退")
+
+
+def check_targets(targets, patterns, prompt_ids):
     if any(not {"id", "metric", "op", "value"} <= set(t) for t in targets):
         sys.exit("目安には id・metric・op・value を書く")
     check_ids(targets, "目安")
+    units = {item["id"]: item.get("unit", "text") for item in patterns}
     for t in targets:
-        unknown = [i for i in t.get("patterns", []) if i not in pattern_ids]
-        unknown += [i for i in t.get("prompts", []) if i not in prompt_ids]
-        need = {"ratio": 2, "mixed": 2, "skill": 0, "touten": 0}.get(t["metric"], 1)
-        ok = t["metric"] in METRICS and t["op"] in ("以下", "以上") and len(t.get("patterns", [])) >= need
-        if unknown or not ok:
-            sys.exit(f"目安 {t['id']} の metric・op・patterns・prompts を確かめる: {unknown}")
+        kind, used = t["metric"], t.get("patterns", [])
+        bad = [i for i in used if i not in units] + [i for i in t.get("prompts", []) if i not in prompt_ids]
+        if kind not in METRICS or t["op"] not in ("以下", "以上"):
+            bad.append("metric か op")
+        elif kind in ("skill", "touten"):
+            if used or (kind == "skill" and t.get("prompts")):
+                bad.append("この metric は patterns を取らない。skill は prompts も取らない")
+        elif kind in ("ratio", "mixed"):
+            if len(used) != 2:
+                bad.append("patterns は 2 つ")
+        elif not used:
+            bad.append("patterns が無い")
+        if kind == "share" and any(units.get(i) != "sentence" for i in used):
+            bad.append("share の型は unit が sentence のもの")
+        if kind == "in_range" and "min" not in t and "max" not in t:
+            bad.append("in_range は min か max が要る")
+        if any(not isinstance(t[k], (int, float)) or isinstance(t[k], bool) for k in ("value", "limit", "min", "max") if k in t):
+            bad.append("value・limit・min・max は数で書く")
+        elif t.get("min", 0) > t.get("max", float("inf")):
+            bad.append("min は max 以下にする")
+        if bad:
+            sys.exit(f"目安 {t['id']} を確かめる: {bad}")
 
 
 def check_patterns(patterns):
@@ -328,6 +358,9 @@ def report(args):
         unknown = [i for i in item.get("prompts", []) if i not in meta["prompts"]]
         if unknown:
             sys.exit(f"型 {item['id']} の prompts に、採取した題材に無い id がある: {unknown}")
+    targets = json.loads(Path(args.targets).read_text()) if getattr(args, "targets", None) else None
+    if targets is not None:
+        check_targets(targets, patterns, meta["prompts"])
     data = {label: load(out, label) for label in LABELS}
     show = getattr(args, "show", None)
     if show:
@@ -361,18 +394,17 @@ def report(args):
     for item, before, after in zip(patterns, counted["before"], counted["after"]):
         want = f"・{item['want']}" if item.get("want") else ""
         print(f"| {item['id']}{want} | {cell(before)} | {cell(after)} |")
-    if not getattr(args, "targets", None):
+    if targets is None:
         return
-    targets = json.loads(Path(args.targets).read_text())
-    check_targets(targets, ids, meta["prompts"])
     by_id = dict(zip(ids, patterns))
     print()
-    print("| 目安 | before | after | 基準 | after の判定 |")
-    print("| --- | --- | --- | --- | --- |")
+    print("| 目安 | since | 基準 | before | after | 変化 |")
+    print("| --- | --- | --- | --- | --- | --- |")
     for t in targets:
         values = [measure(t, *data[label], by_id) for label in LABELS]
-        shown = ["-" if v is None else f"{v:.2f}" for v in values]
-        print(f"| {t['id']} | {shown[0]} | {shown[1]} | {t['value']} {t['op']} | {verdict(t, values[1])} |")
+        shown = ["測れない" if v is None else f"{v:.2f}、{verdict(t, v)}" for v in values]
+        base = f"{t['value']} {t['op']}"
+        print(f"| {t['id']} | {t.get('since', '')} | {base} | {shown[0]} | {shown[1]} | {change(t, *values)} |")
 
 
 def self_check():
@@ -416,12 +448,24 @@ def self_check():
     assert measure({"metric": "share", "patterns": ["h"], "prompts": ["none"]}, doc, 0, by_id) is None
     assert verdict({"op": "以下", "value": 5}, 4.3) == "届いた(余裕 0.70)"
     assert verdict({"op": "以上", "value": 80}, 70) == "届かない(不足 10.00)"
+    low = {"op": "以下", "value": 5}
+    assert [change(low, 4, 6), change(low, 6, 4), change(low, 6, 7), change(low, None, 4)] == ["後退", "改善", "", ""]
     ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets"
     types = {item["id"]: item for item in json.loads((ledger / "patterns.json").read_text())}
     check_patterns(list(types.values()))
     prompt_ids = check_ids(json.loads((ledger / "prompts.json").read_text()), "題材")
-    check_targets(json.loads((ledger / "targets.json").read_text()), list(types), prompt_ids)
-    for kei in ("できますか。", "合っていますよね。", "ご覧くださいませ。", "ですが。"):
+    check_targets(json.loads((ledger / "targets.json").read_text()), list(types.values()), prompt_ids)
+    for bad in (
+        {"metric": "share", "patterns": ["kakko-no-bun"]}, {"metric": "ratio", "patterns": ["keitai"]},
+        {"metric": "in_range", "patterns": ["keitai"]}, {"metric": "skill", "prompts": ["p07-article"]},
+        {"metric": "per100", "patterns": ["keitai"], "value": "5"}, {"metric": "in_range", "patterns": ["keitai"], "min": 3, "max": 1},
+    ):
+        try:
+            check_targets([dict({"id": "t", "op": "以下", "value": 0}, **bad)], list(types.values()), prompt_ids)
+        except SystemExit:
+            continue
+        raise AssertionError(bad)
+    for kei in ("できますか。", "合っていますよね。", "ご覧くださいませ。", "ですが。", "確認しますけどね。", "遅いですし。"):
         assert matches(types["keitai"], "これは敬体の文で" + kei) and not matches(types["jotai"], "これは敬体の文で" + kei)
     assert matches(types["jotai"], "値が上がると動作は遅い。") and not matches(types["jotai"], "始業と終業の手順を決める")
     assert matches(types["kakko-no-bun"], "設定（再起動の後に反映される既定の値を使う）")
