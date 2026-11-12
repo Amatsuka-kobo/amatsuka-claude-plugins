@@ -3,14 +3,14 @@
 
 使い方:
   native_japanese_ab.py run --before <ref> --after <ref|WORKTREE> --prompts <json> --patterns <json> --out <dir>
-                            [--targets <json>] [--bare] [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
+                            [--targets <json>] [--before-only] [--bare] [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
   native_japanese_ab.py report --patterns <json> --out <dir> [--targets <json>] [--before-only] [--show <型の id>]
   native_japanese_ab.py --self-check
 
 run は採取の後に report も出す。保存済みの応答は採り直さないので、中断した採取は同じ引数で続けられる。
 時点・題材・モデル・回数が初回と違う run は、同じ --out では受け付けない。
 --targets を渡すと、指標・目安・改修前・改修後・判定の表を出す。判定には目安までの差と、合否が変わったときの後退か改善かが付く。
-report に --before-only を渡すと、改修後の列と判定を出さない。目安の値を決める前に、改修前の値だけを見るために使う。
+--before-only を渡すと、run と report は改修後の列と判定を出さない。目安の値を決める前に、改修前の値だけを見るために使う。
 --bare を渡すと、プラグインを読み込まず hook も切った素の出力も採り、表に「素」の列を足す。
 report は応答の本文を <out>/text/<before|after>/<モデル>/<題材>-<回>.txt にも書き出す。
 """
@@ -530,9 +530,9 @@ def main():
         p.add_argument("--patterns", required=True)
         p.add_argument("--out", required=True)
         p.add_argument("--targets")
+        p.add_argument("--before-only", action="store_true")
         if name == "report":
             p.add_argument("--show")
-            p.add_argument("--before-only", action="store_true")
         else:
             p.add_argument("--before", required=True)
             p.add_argument("--after", required=True)
