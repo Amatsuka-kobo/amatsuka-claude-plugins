@@ -1,0 +1,12 @@
+[
+  {"id": "kamoshirenai", "regex": "かもしれ(ません|ない)"},
+  {"id": "baai-ga-aru", "regex": "場合があ(り|る)"},
+  {"id": "kanousei-ga-aru", "regex": "(可能性|おそれ|恐れ)があ(り|る)"},
+  {"id": "eru-kanji", "regex": "[ぁ-ん]得(る|ます|ない|ません)"},
+  {"id": "uru-kana", "regex": "[りしえじ]う(る|べ)|(あり|なり|起こり|生じ|超え)え(る|ます|ない|ません)"},
+  {"id": "ni-naru", "regex": "にな(ります|る|り、|って|った)"},
+  {"id": "de-chuushi", "regex": "[0-9０-９%％分円個本人件倍日][ぁ-ん]{0,2}で、"},
+  {"id": "gawa", "regex": "側(では|で|に|の|は|を)"},
+  {"id": "kakushindo-label", "regex": "【推定】|【要確認】|と推定"},
+  {"id": "eigo-no-ku", "regex": "[A-Za-z]{3,}(?: [A-Za-z]{2,})+"}
+]
