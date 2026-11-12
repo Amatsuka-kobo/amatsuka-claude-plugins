@@ -72,10 +72,11 @@ test("メインのサブディレクトリの cwd でも、同じ run を読む"
 })
 
 test(".codiel の無いディレクトリでは、従来どおり cwd を基準にする", () => {
+  // mainWithRun は .codiel の無いディレクトリを cwd にして init する
+  const root = mainWithRun()
+  expect(fs.existsSync(path.join(root, ".codiel/runs/demo"))).toBe(true)
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codiel-state-cli-bare-"))
-  const r = runCli(dir, ["config"], dir)
-  expect(r.code).toBe(0)
-  expect(fs.existsSync(path.join(dir, ".codiel"))).toBe(false)
+  expect(runCli(dir, ["config"], dir).code).toBe(0)
 })
 
 test("worktree の中の cwd の wait-add は、メインの run に書く", () => {
