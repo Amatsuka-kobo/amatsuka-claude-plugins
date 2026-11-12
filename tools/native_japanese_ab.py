@@ -3,13 +3,14 @@
 
 使い方:
   native_japanese_ab.py run --before <ref> --after <ref|WORKTREE> --prompts <json> --patterns <json> --out <dir>
-                            [--targets <json>] [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
+                            [--targets <json>] [--bare] [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
   native_japanese_ab.py report --patterns <json> --out <dir> [--targets <json>] [--show <型の id>]
   native_japanese_ab.py --self-check
 
 run は採取の後に report も出す。保存済みの応答は採り直さないので、中断した採取は同じ引数で続けられる。
 時点・題材・モデル・回数が初回と違う run は、同じ --out では受け付けない。
---targets を渡すと、目安ごとに前後の値と合否、基準までの差、合否が変わったときは後退か改善かを出す。
+--targets を渡すと、指標・目安・改修前・改修後・判定の表を出す。判定には目安までの差と、合否が変わったときの後退か改善かが付く。
+--bare を渡すと、プラグインを読み込まず hook も切った素の出力も採り、表に「素」の列を足す。
 report は応答の本文を <out>/text/<before|after>/<モデル>/<題材>-<回>.txt にも書き出す。
 """
 import argparse
@@ -23,6 +24,7 @@ from pathlib import Path
 
 PLUGIN = "plugins/native-japanese"
 LABELS = ("before", "after")
+NAMES = {"bare": "素", "before": "改修前", "after": "改修後"}
 META = "meta.json"
 MARK = ".native-japanese-ab"
 
@@ -80,9 +82,10 @@ def sample(job):
     path, plugin_dir, cwd, model, prompt, timeout = job
     if path.exists() and parse_stream(path.read_text())[0]:
         return "skip"
+    # plugin_dir が無いのは素の採取で、プラグインを読み込まず hook も切る
+    source = ["--plugin-dir", str(plugin_dir)] if plugin_dir else ["--settings", '{"disableAllHooks":true}']
     cmd = [
-        "claude", "-p", prompt,
-        "--plugin-dir", str(plugin_dir),
+        "claude", "-p", prompt, *source,
         "--setting-sources", "project",
         "--strict-mcp-config",
         "--output-format", "stream-json", "--verbose",
@@ -95,6 +98,11 @@ def sample(job):
         return "timeout"
     path.write_text(proc.stdout)
     return "ok" if parse_stream(proc.stdout)[0] else "error"
+
+
+def labels(meta):
+    """採取した構成を、表に出す順で返す。素は --bare で採ったときだけ入る。"""
+    return (["bare"] if meta.get("bare") else []) + list(LABELS)
 
 
 def check_ids(items, what):
@@ -129,7 +137,8 @@ def run(args):
         "models": models,
         "runs": args.runs,
     }
-    check_ids(prompts, "題材")
+    if args.bare:
+        meta["bare"] = True
     if (out / META).exists():
         if json.loads((out / META).read_text()) != meta:
             sys.exit(f"時点・題材・モデル・回数が {out / META} と違う。新しい --out を使う")
@@ -147,13 +156,14 @@ def run(args):
         (out / "cwd").mkdir()
         (out / META).write_text(json.dumps(meta, ensure_ascii=False))
     jobs = []
-    for label in LABELS:
+    for label in labels(meta):
         for model in models:
             for item in prompts:
                 for n in range(1, args.runs + 1):
                     path = out / "raw" / label / model / f"{item['id']}-{n}.jsonl"
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    jobs.append((path, out / "plugin" / label, out / "cwd", model, item["prompt"], args.timeout))
+                    plugin_dir = None if label == "bare" else out / "plugin" / label
+                    jobs.append((path, plugin_dir, out / "cwd", model, item["prompt"], args.timeout))
     with ThreadPoolExecutor(args.workers) as pool:
         states = list(pool.map(sample, jobs))
     for state in sorted(set(states)):
@@ -205,7 +215,7 @@ def prompt_id(path):
     return path.stem.rsplit("-", 1)[0]
 
 
-def targets(item, texts):
+def targets_of(item, texts):
     """型が prompts で題材を絞っていれば、その題材の応答だけを返す。"""
     only = item.get("prompts")
     return [(p, t) for p, t in texts if not only or prompt_id(p) in only]
@@ -215,7 +225,7 @@ def count(texts, patterns):
     """型ごとに、一致の件数、一致を含む応答の本数、対象の応答の本数、対象の文の数を返す。"""
     rows = []
     for item in patterns:
-        mine = targets(item, texts)
+        mine = targets_of(item, texts)
         hits = [len(matches(item, text)) for _, text in mine]
         n_sent = sum(len(sentences(t)) for _, t in mine) if item.get("unit") == "sentence" else 0
         rows.append((sum(hits), sum(1 for h in hits if h), len(mine), n_sent))
@@ -249,38 +259,52 @@ METRICS = ("skill", "touten", "share", "ratio", "mixed", "per10k", "per100", "in
 
 
 def measure(target, texts, skills, by_id):
-    """目安の 1 行の値を出す。分母が 0 のときは None を返す。"""
+    """目安の 1 行の値と、表に出す文字列を返す。分母が 0 のときは (None, "測れない") を返す。"""
     kind = target["metric"]
+    none = (None, "測れない")
     if kind == "skill":
-        return 100 * skills / len(texts) if texts else None
+        return (100 * skills / len(texts), f"{skills}/{len(texts)}") if texts else none
     only = target.get("prompts")
     mine = [(p, t) for p, t in texts if not only or prompt_id(p) in only]
     if kind == "touten":
         body = "".join(prose(t) for _, t in mine)
         chars = len(re.sub(r"\s", "", body))
-        return 100 * body.count("、") / chars if chars else None
+        value = 100 * body.count("、") / chars if chars else None
+        return (value, f"{value:.2f}") if chars else none
     # 題材の絞り込みは目安の prompts で決めるので、型の prompts は外して当てる
     types = [{k: v for k, v in by_id[i].items() if k != "prompts"} for i in target["patterns"]]
     per_doc = [[len(matches(item, text)) for item in types] for _, text in mine]
     totals = [sum(col) for col in zip(*per_doc)] if per_doc else [0] * len(types)
-    if kind == "share":
-        n = sum(len(sentences(t)) for _, t in mine)
-        return 100 * sum(totals) / n if n else None
-    if kind == "ratio":
-        both = totals[0] + totals[1]
-        return 100 * totals[0] / both if both else None
-    if kind == "mixed":
-        # 1 本の中で 2 つの型が混ざる応答の割合。少ない側が limit(%)を超える応答を数える
-        limit = target.get("limit", 10)
-        mixed = sum(1 for a, b, *_ in per_doc if a + b and 100 * min(a, b) / (a + b) > limit)
-        return 100 * mixed / len(mine) if mine else None
+    if kind in ("share", "ratio"):
+        n = sum(len(sentences(t)) for _, t in mine) if kind == "share" else totals[0] + totals[1]
+        value = 100 * (sum(totals) if kind == "share" else totals[0]) / n if n else None
+        return (value, f"{value:.1f}%") if n else none
     if kind == "per10k":
         chars = sum(len(re.sub(r"\s", "", t)) for _, t in mine)
-        return 10000 * sum(totals) / chars if chars else None
+        value = 10000 * sum(totals) / chars if chars else None
+        return (value, f"{value:.1f}") if chars else none
+    if not mine:
+        return none
     if kind == "per100":
-        return 100 * sum(totals) / len(mine) if mine else None
-    low, high = target.get("min", 0), target.get("max", float("inf"))
-    return 100 * sum(1 for row in per_doc if low <= sum(row) <= high) / len(mine) if mine else None
+        return 100 * sum(totals) / len(mine), f"{sum(totals)} 件({len(mine)} 本)"
+    if kind == "mixed":
+        # 少ない側の型の件数が、2 つの型の件数の合計に占める割合が limit(%)を超える応答を数える
+        limit = target.get("limit", 10)
+        hit = sum(1 for a, b, *_ in per_doc if a + b and 100 * min(a, b) / (a + b) > limit)
+    else:
+        low, high = target.get("min", 0), target.get("max", float("inf"))
+        hit = sum(1 for row in per_doc if low <= sum(row) <= high)
+    return 100 * hit / len(mine), f"{hit} 本({len(mine)} 本)"
+
+
+def goal(target):
+    """目安を表に出す形にする。"""
+    kind, value, op = target["metric"], target["value"], target["op"]
+    if kind in ("mixed", "in_range") and value == 0 and op == "以下":
+        return "無い"
+    if kind == "per100":
+        return f"100 本に {value} 件{op}"
+    return f"{value}{'' if kind in ('touten', 'per10k') else '%'} {op}"
 
 
 def margin(target, value):
@@ -288,20 +312,17 @@ def margin(target, value):
     return target["value"] - value if target["op"] == "以下" else value - target["value"]
 
 
-def verdict(target, value):
-    """目安に届いたかと、目安までの差を返す。"""
-    if value is None:
+def verdict(target, before, after):
+    """改修後が目安に届いたかを、目安までの差と、改修前から合否が変わったかを添えて返す。"""
+    if after is None:
         return "測れない"
-    m = margin(target, value)
-    return f"届いた(余裕 {m:.2f})" if m >= 0 else f"届かない(不足 {-m:.2f})"
-
-
-def change(target, before, after):
-    """before と after で合否が変わった目安に、後退か改善かを付ける。"""
-    if before is None or after is None:
-        return ""
-    was, now = margin(target, before) >= 0, margin(target, after) >= 0
-    return "" if was == now else ("改善" if now else "後退")
+    m = margin(target, after)
+    text = f"届いた(余裕 {m:.2f})" if m >= 0 else f"届かない(不足 {-m:.2f})"
+    if before is not None and (margin(target, before) >= 0) != (m >= 0):
+        text += "、改善" if m >= 0 else "、後退"
+    if m < 0 and target.get("note"):
+        text += f"。{target['note']}"
+    return text
 
 
 def check_targets(targets, patterns, prompt_ids):
@@ -361,50 +382,54 @@ def report(args):
     targets = json.loads(Path(args.targets).read_text()) if getattr(args, "targets", None) else None
     if targets is not None:
         check_targets(targets, patterns, meta["prompts"])
-    data = {label: load(out, label) for label in LABELS}
+    cols = labels(meta)
+    data = {label: load(out, label) for label in cols}
     show = getattr(args, "show", None)
     if show:
         if show not in ids:
             sys.exit(f"型の id が無い: {show}")
         item = patterns[ids.index(show)]
-        for label in LABELS:
-            for path, text in targets(item, data[label][0]):
+        for label in cols:
+            for path, text in targets_of(item, data[label][0]):
                 for line in dict.fromkeys(matches(item, text)):
                     print(f"{label}\t{path.parent.name}/{path.stem}\t{line}")
         return
-    for label in LABELS:
+    for label in cols:
         for path, text in data[label][0]:
             dest = out / "text" / label / path.parent.name / f"{path.stem}.txt"
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text)
     expected = len(meta["prompts"]) * len(meta["models"]) * meta["runs"]
+    refs = dict(meta["refs"], bare="プラグイン無し")
     cells = {
         label: (
-            meta["refs"][label][:8], len(texts), expected - len(texts), sum(len(t[1]) for t in texts), skills,
+            refs[label][:8], len(texts), expected - len(texts), sum(len(t[1]) for t in texts), skills,
             sum(len(sentences(t[1])) for t in texts), touten(texts),
         )
         for label, (texts, skills) in data.items()
     }
-    print("| 項目、型は「件数 / 含む本数 / 対象の本数」 | before | after |")
-    print("| --- | --- | --- |")
+
+    def row(first, values):
+        print("| " + " | ".join([first, *map(str, values)]) + " |")
+
+    row("項目、型は「件数 / 含む本数 / 対象の本数」", [NAMES[c] for c in cols])
+    row("---", ["---"] * len(cols))
     names = ("時点", "応答の本数", "採れなかった本数", "文字数", "Skill を起動した本数", "文の数", "読点(100 字あたり)")
     for i, name in enumerate(names):
-        print(f"| {name} | {cells['before'][i]} | {cells['after'][i]} |")
-    counted = {label: count(data[label][0], patterns) for label in LABELS}
-    for item, before, after in zip(patterns, counted["before"], counted["after"]):
+        row(name, [cells[c][i] for c in cols])
+    counted = {label: count(data[label][0], patterns) for label in cols}
+    for i, item in enumerate(patterns):
         want = f"・{item['want']}" if item.get("want") else ""
-        print(f"| {item['id']}{want} | {cell(before)} | {cell(after)} |")
+        row(f"{item['id']}{want}", [cell(counted[c][i]) for c in cols])
     if targets is None:
         return
     by_id = dict(zip(ids, patterns))
     print()
-    print("| 目安 | since | 基準 | before | after | 変化 |")
-    print("| --- | --- | --- | --- | --- | --- |")
+    row("指標", ["目安", *[NAMES[c] for c in cols], "判定"])
+    row("---", ["---"] * (len(cols) + 2))
     for t in targets:
-        values = [measure(t, *data[label], by_id) for label in LABELS]
-        shown = ["測れない" if v is None else f"{v:.2f}、{verdict(t, v)}" for v in values]
-        base = f"{t['value']} {t['op']}"
-        print(f"| {t['id']} | {t.get('since', '')} | {base} | {shown[0]} | {shown[1]} | {change(t, *values)} |")
+        got = {c: measure(t, *data[c], by_id) for c in cols}
+        row(t.get("item", t["id"]), [goal(t), *[got[c][1] for c in cols], verdict(t, got["before"][0], got["after"][0])])
 
 
 def self_check():
@@ -437,19 +462,22 @@ def self_check():
 
     doc = [(a, "設定は、変更しました。結果を確認します。見れるし、食べれるし、出れる。")]
     by_id = {"h": head, "ra": {"id": "ra", "unit": "prose", "regex": "(見|食べ|出)れ"}, "r": raw}
-    assert measure({"metric": "skill"}, doc, 1, by_id) == 100
-    assert round(measure({"metric": "share", "patterns": ["h"]}, doc, 0, by_id), 1) == 33.3
-    assert measure({"metric": "ratio", "patterns": ["h", "ra"]}, doc, 0, by_id) == 25
-    assert measure({"metric": "mixed", "patterns": ["ra", "h"]}, doc, 0, by_id) == 100
-    assert measure({"metric": "mixed", "patterns": ["ra", "h"], "limit": 25}, doc, 0, by_id) == 0
-    assert measure({"metric": "per100", "patterns": ["ra"]}, doc, 0, by_id) == 300
-    assert measure({"metric": "in_range", "patterns": ["ra"], "min": 3}, doc, 0, by_id) == 100
-    assert measure({"metric": "in_range", "patterns": ["ra"], "min": 1, "max": 2}, doc, 0, by_id) == 0
-    assert measure({"metric": "share", "patterns": ["h"], "prompts": ["none"]}, doc, 0, by_id) is None
-    assert verdict({"op": "以下", "value": 5}, 4.3) == "届いた(余裕 0.70)"
-    assert verdict({"op": "以上", "value": 80}, 70) == "届かない(不足 10.00)"
-    low = {"op": "以下", "value": 5}
-    assert [change(low, 4, 6), change(low, 6, 4), change(low, 6, 7), change(low, None, 4)] == ["後退", "改善", "", ""]
+    assert measure({"metric": "skill"}, doc, 1, by_id) == (100, "1/1")
+    assert measure({"metric": "share", "patterns": ["h"]}, doc, 0, by_id)[1] == "33.3%"
+    assert measure({"metric": "ratio", "patterns": ["h", "ra"]}, doc, 0, by_id) == (25, "25.0%")
+    assert measure({"metric": "mixed", "patterns": ["ra", "h"]}, doc, 0, by_id) == (100, "1 本(1 本)")
+    assert measure({"metric": "mixed", "patterns": ["ra", "h"], "limit": 25}, doc, 0, by_id)[0] == 0
+    assert measure({"metric": "per100", "patterns": ["ra"]}, doc, 0, by_id) == (300, "3 件(1 本)")
+    assert measure({"metric": "in_range", "patterns": ["ra"], "min": 3}, doc, 0, by_id)[0] == 100
+    assert measure({"metric": "in_range", "patterns": ["ra"], "min": 1, "max": 2}, doc, 0, by_id)[0] == 0
+    assert measure({"metric": "share", "patterns": ["h"], "prompts": ["none"]}, doc, 0, by_id) == (None, "測れない")
+    low = {"metric": "share", "op": "以下", "value": 5, "note": "現状のままと決定済み"}
+    assert verdict(low, 4, 4.3) == "届いた(余裕 0.70)"
+    assert verdict(low, 4, 6) == "届かない(不足 1.00)、後退。現状のままと決定済み"
+    assert verdict(low, 6, 4) == "届いた(余裕 1.00)、改善" and verdict(low, None, None) == "測れない"
+    assert [goal(low), goal({"metric": "in_range", "op": "以下", "value": 0}), goal({"metric": "touten", "op": "以下", "value": 2.44}),
+            goal({"metric": "per100", "op": "以下", "value": 5})] == ["5% 以下", "無い", "2.44 以下", "100 本に 5 件以下"]
+    assert labels({"bare": True}) == ["bare", "before", "after"] and labels({}) == ["before", "after"]
     ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets"
     types = {item["id"]: item for item in json.loads((ledger / "patterns.json").read_text())}
     check_patterns(list(types.values()))
@@ -495,6 +523,7 @@ def main():
             p.add_argument("--before", required=True)
             p.add_argument("--after", required=True)
             p.add_argument("--prompts", required=True)
+            p.add_argument("--bare", action="store_true")
             p.add_argument("--models", default="opus,sonnet")
             p.add_argument("--runs", type=int, default=2)
             p.add_argument("--workers", type=int, default=6)
