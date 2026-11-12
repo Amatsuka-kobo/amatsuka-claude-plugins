@@ -152,7 +152,8 @@ def run(args):
     report(args)
 
 
-FENCE = re.compile(r"```.*?```", re.S)
+# 閉じていないフェンスは本文の末尾までをコードとして除く
+FENCE = re.compile(r"```.*?(?:```|\Z)", re.S)
 INLINE = re.compile(r"`[^`\n]*`")
 UNITS = ("text", "prose", "sentence")
 
@@ -167,8 +168,10 @@ def sentences(text):
     """prose の結果を文に分ける。ひらがなを含む 8 字以上のものだけを文とする。"""
     out = []
     for ln in prose(text).splitlines():
-        ln = re.sub(r"^\s*(#+|[-*]|\d+\.)\s*", "", ln).replace("**", "").strip()
-        for s in re.split("(?<=[。!?！？])", ln):
+        # ** を先に落とす。行頭の箇条書きの記号と取り違えないためである。番号は後ろに空白があるものだけを落とす
+        ln = re.sub(r"^\s*(#+|[-*]|\d+\.(?=\s))\s*", "", ln.replace("**", "")).strip()
+        # 閉じ括弧の直前では切らない(「確認します。」と言いました。)
+        for s in re.split("(?<=[。!?\uff01\uff1f])(?![」)\uff09])", ln):
             s = s.strip()
             if len(s) >= 8 and re.search(r"[ぁ-ん]", s):
                 out.append(s)
@@ -308,6 +311,9 @@ def self_check():
 
     text = "結果を確認します。\n設定は、変更しました。\n```\n設定は、コードの中です。\n```\n| 設定は、表の中です。 |\n"
     assert sentences(text) == ["結果を確認します。", "設定は、変更しました。"]
+    assert sentences("**注意**: 設定は再起動の後に反映されます。\n10.5GB を超えると止まります。") == [
+        "注意: 設定は再起動の後に反映されます。", "10.5GB を超えると止まります。"]
+    assert sentences("「確認します。」と言いました。\n```\n閉じていないコードの中の文です。") == ["「確認します。」と言いました。"]
     head = {"id": "h", "unit": "sentence", "regex": "^[^、。]{1,6}(は|が)、"}
     raw = {"id": "r", "regex": "設定は、"}
     a, b = Path("m/p01-x-1.jsonl"), Path("m/p02-1.jsonl")
