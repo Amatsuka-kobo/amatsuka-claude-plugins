@@ -1,0 +1,82 @@
+[
+  {
+    "query": "うん、規律の前後比較もやっておいて",
+    "should_trigger": true
+  },
+  {
+    "query": "native-japanese の変更が効いたか、測るほうでお願い",
+    "should_trigger": true
+  },
+  {
+    "query": "はい。直す前と後の出力の差を見たいです",
+    "should_trigger": true
+  },
+  {
+    "query": "ab のほう回して。opus と sonnet でいい",
+    "should_trigger": true
+  },
+  {
+    "query": "お願いします。台帳の目安に届いたかも表で出して",
+    "should_trigger": true
+  },
+  {
+    "query": "そうして。前回の指標が後退してないかだけ分かればいい",
+    "should_trigger": true
+  },
+  {
+    "query": "規律を直したぶん、効果の測定までやっちゃって",
+    "should_trigger": true
+  },
+  {
+    "query": "やって。題材は今回の項目のぶんを足してから採ってね",
+    "should_trigger": true
+  },
+  {
+    "query": "前後で比べるほうで。素の列も付けて",
+    "should_trigger": true
+  },
+  {
+    "query": "OK、SKILL.md の読点の項目の変更、同じ題材で書かせて確かめて",
+    "should_trigger": true
+  },
+  {
+    "query": "うん、lint の違反のほうを数えておいて。直近 20 コミットで",
+    "should_trigger": false
+  },
+  {
+    "query": "お願い。会話記録の違反を measure.mjs で先週から集計して",
+    "should_trigger": false
+  },
+  {
+    "query": "はい、その README の翻訳調を直すほうで",
+    "should_trigger": false
+  },
+  {
+    "query": "そうして。規律に「〜のほう」を避ける行を足しておいて",
+    "should_trigger": false
+  },
+  {
+    "query": "orchestration スキルのほうも、直す前後で委譲の回数を比べておいて",
+    "should_trigger": false
+  },
+  {
+    "query": "やって。前後比較スキルの description が発火するか測るやつ",
+    "should_trigger": false
+  },
+  {
+    "query": "お願いします。japanese-writing の本文を prompt-smith の基準で評価して",
+    "should_trigger": false
+  },
+  {
+    "query": "うん、check.ts の変更前後でテストが通るかだけ見て",
+    "should_trigger": false
+  },
+  {
+    "query": "前後比較のツールの report に CSV 出力を足すほうで",
+    "should_trigger": false
+  },
+  {
+    "query": "はい。設計書の付録 D の測定結果を要約して",
+    "should_trigger": false
+  }
+]
