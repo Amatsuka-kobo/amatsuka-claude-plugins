@@ -26,7 +26,9 @@ META = "meta.json"
 
 
 def repo_root():
-    out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True)
+    out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if out.returncode:
+        sys.exit("リポジトリの中で実行する")
     return Path(out.stdout.strip())
 
 
@@ -93,7 +95,7 @@ def sample(job):
 
 def check_ids(items, what):
     ids = [item["id"] for item in items]
-    bad = [i for i in ids if not re.fullmatch(r"[\w-]+", i)]
+    bad = [i for i in ids if not re.fullmatch(r"[A-Za-z0-9_-]+", i)]
     if bad or len(set(ids)) != len(ids):
         sys.exit(f"{what}の id は英数字・_・- だけで書き、重ならないようにする: {bad or ids}")
     return ids
@@ -105,6 +107,8 @@ def run(args):
         sys.exit("--out はリポジトリの外に置く。中に置くと、採取がリポジトリの CLAUDE.md と設定を読む")
     prompts = json.loads(Path(args.prompts).read_text())
     models = args.models.split(",")
+    check_ids([{"id": m} for m in models], "モデル")
+    check_ids(json.loads(Path(args.patterns).read_text()), "型")
     meta = {
         "refs": {"before": resolve(args.before), "after": resolve(args.after)},
         "prompts": {item["id"]: item["prompt"] for item in prompts},
@@ -116,6 +120,9 @@ def run(args):
         if json.loads((out / META).read_text()) != meta:
             sys.exit(f"時点・題材・モデル・回数が {out / META} と違う。新しい --out を使う")
     else:
+        # meta.json が無いのは初回か、初回の複製が途中で止まった後である。作りかけを消してやり直す
+        for name in ("plugin", "cwd"):
+            shutil.rmtree(out / name, ignore_errors=True)
         for label in LABELS:
             export_plugin(meta["refs"][label], out / "plugin" / label)
         (out / "cwd").mkdir()
@@ -171,9 +178,10 @@ def report(args):
         regex = re.compile(patterns[ids.index(show)]["regex"])
         for label in LABELS:
             for path, text in data[label][0]:
-                for sentence in re.split(r"(?<=[。\n])", text):
-                    if regex.search(sentence):
-                        print(f"{label}\t{path.parent.name}/{path.stem}\t{sentence.strip()}")
+                # 集計と同じく本文の全体に当て、一致を含む行を出す
+                for m in regex.finditer(text):
+                    line = text[text.rfind("\n", 0, m.start()) + 1:].split("\n", 1)[0]
+                    print(f"{label}\t{path.parent.name}/{path.stem}\t{line.strip()}")
         return
     for label in LABELS:
         for path, text in data[label][0]:
@@ -209,6 +217,12 @@ def self_check():
     rows = count(["超えるかもしれません。遅れるかもしれない。", "言い切ります。"], [{"id": "k", "regex": "かもしれ"}])
     assert rows == [(2, 1)]
     assert check_ids([{"id": "a-1"}, {"id": "b_2"}], "型") == ["a-1", "b_2"]
+    for bad in ([{"id": "a/b"}], [{"id": "型"}], [{"id": "a"}, {"id": "a"}]):
+        try:
+            check_ids(bad, "型")
+        except SystemExit:
+            continue
+        raise AssertionError(bad)
     print("ok")
 
 
