@@ -55,7 +55,7 @@ def export_plugin(ref, dest):
 
 
 def parse_stream(text):
-    """stream-json の出力から、最後の応答の本文と Skill ツールの起動の有無を取り出す。空の本文は None にする。"""
+    """stream-json の出力から、最後の応答の本文と、Skill ツールで japanese-writing を起動したかを取り出す。空の本文は None にする。"""
     result, skill = None, False
     for line in text.splitlines():
         try:
@@ -68,7 +68,9 @@ def parse_stream(text):
             result = event.get("result") or None
         message = event.get("message")
         for block in (message.get("content") if isinstance(message, dict) else None) or []:
-            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
+            if not (isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill"):
+                continue
+            if "japanese-writing" in json.dumps(block.get("input")):
                 skill = True
     return result, skill
 
@@ -109,7 +111,9 @@ def run(args):
     prompts = json.loads(Path(args.prompts).read_text())
     models = args.models.split(",")
     check_ids([{"id": m} for m in models], "モデル")
-    check_ids(json.loads(Path(args.patterns).read_text()), "型")
+    check_patterns(json.loads(Path(args.patterns).read_text()))
+    if out.exists() and not out.is_dir():
+        sys.exit(f"--out はディレクトリにする: {out}")
     meta = {
         "refs": {"before": resolve(args.before), "after": resolve(args.after)},
         "prompts": {item["id"]: item["prompt"] for item in prompts},
@@ -148,25 +152,74 @@ def run(args):
     report(args)
 
 
+FENCE = re.compile(r"```.*?```", re.S)
+INLINE = re.compile(r"`[^`\n]*`")
+UNITS = ("text", "prose", "sentence")
+
+
+def prose(text):
+    """コードフェンスと表の行を除き、インラインコードを 1 字に置き換える。"""
+    text = INLINE.sub("甲", FENCE.sub("", text))
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("|"))
+
+
+def sentences(text):
+    """prose の結果を文に分ける。ひらがなを含む 8 字以上のものだけを文とする。"""
+    out = []
+    for ln in prose(text).splitlines():
+        ln = re.sub(r"^\s*(#+|[-*]|\d+\.)\s*", "", ln).replace("**", "").strip()
+        for s in re.split("(?<=[。!?！？])", ln):
+            s = s.strip()
+            if len(s) >= 8 and re.search(r"[ぁ-ん]", s):
+                out.append(s)
+    return out
+
+
+def matches(item, text):
+    """型の unit に従って本文に当て、一致した箇所を返す。sentence は当たった文を、ほかは一致の末尾がある行を返す。"""
+    regex = re.compile(item["regex"])
+    unit = item.get("unit", "text")
+    if unit == "sentence":
+        return [s for s in sentences(text) if regex.search(s)]
+    body = prose(text) if unit == "prose" else text
+    found = []
+    for m in regex.finditer(body):
+        at = max(m.start(), m.start() + len(m.group(0).rstrip()) - 1)
+        found.append(body[body.rfind("\n", 0, at) + 1:].split("\n", 1)[0].strip())
+    return found
+
+
+def prompt_id(path):
+    return path.stem.rsplit("-", 1)[0]
+
+
+def targets(item, texts):
+    """型が prompts で題材を絞っていれば、その題材の応答だけを返す。"""
+    only = item.get("prompts")
+    return [(p, t) for p, t in texts if not only or prompt_id(p) in only]
+
+
 def count(texts, patterns):
-    """型ごとに、一致の件数と、一致を 1 件以上含む応答の本数を返す。"""
+    """型ごとに、一致の件数、一致を含む応答の本数、対象の応答の本数、対象の文の数を返す。"""
     rows = []
     for item in patterns:
-        regex = re.compile(item["regex"])
-        hits = [len(regex.findall(text)) for text in texts]
-        rows.append((sum(hits), sum(1 for h in hits if h)))
+        mine = targets(item, texts)
+        hits = [len(matches(item, text)) for _, text in mine]
+        n_sent = sum(len(sentences(t)) for _, t in mine) if item.get("unit") == "sentence" else 0
+        rows.append((sum(hits), sum(1 for h in hits if h), len(mine), n_sent))
     return rows
 
 
-def matched_lines(regex, text):
-    """集計と同じく本文の全体に当て、一致の末尾がある行を重複なく返す。型の先頭は前の行の句点や改行を含みうる。"""
-    lines = []
-    for m in regex.finditer(text):
-        at = max(m.end() - 1, m.start())
-        line = text[text.rfind("\n", 0, at) + 1:].split("\n", 1)[0].strip()
-        if line not in lines:
-            lines.append(line)
-    return lines
+def cell(row):
+    hits, docs, n, n_sent = row
+    share = f"、文の {100 * hits / n_sent:.1f}%" if n_sent else ""
+    return f"{hits} / {docs} / {n}{share}"
+
+
+def touten(texts):
+    body = "".join(prose(t) for _, t in texts)
+    chars = len(re.sub(r"\s", "", body))
+    return f"{100 * body.count('、') / chars:.2f}" if chars else "-"
 
 
 def load(out, label):
@@ -180,22 +233,31 @@ def load(out, label):
     return texts, skills
 
 
+def check_patterns(patterns):
+    ids = check_ids(patterns, "型")
+    for item in patterns:
+        if item.get("unit", "text") not in UNITS:
+            sys.exit(f"型の unit は {UNITS} のどれかにする: {item['id']}")
+        re.compile(item["regex"])
+    return ids
+
+
 def report(args):
     out = Path(args.out).resolve()
     if not (out / META).exists():
         sys.exit(f"{out / META} が無い。--out を確かめる")
     meta = json.loads((out / META).read_text())
     patterns = json.loads(Path(args.patterns).read_text())
-    ids = check_ids(patterns, "型")
+    ids = check_patterns(patterns)
     data = {label: load(out, label) for label in LABELS}
     show = getattr(args, "show", None)
     if show:
         if show not in ids:
             sys.exit(f"型の id が無い: {show}")
-        regex = re.compile(patterns[ids.index(show)]["regex"])
+        item = patterns[ids.index(show)]
         for label in LABELS:
-            for path, text in data[label][0]:
-                for line in matched_lines(regex, text):
+            for path, text in targets(item, data[label][0]):
+                for line in dict.fromkeys(matches(item, text)):
                     print(f"{label}\t{path.parent.name}/{path.stem}\t{line}")
         return
     for label in LABELS:
@@ -205,39 +267,55 @@ def report(args):
             dest.write_text(text)
     expected = len(meta["prompts"]) * len(meta["models"]) * meta["runs"]
     cells = {
-        label: (meta["refs"][label][:8], len(texts), expected - len(texts), sum(len(t[1]) for t in texts), skills)
+        label: (
+            meta["refs"][label][:8], len(texts), expected - len(texts), sum(len(t[1]) for t in texts), skills,
+            sum(len(sentences(t[1])) for t in texts), touten(texts),
+        )
         for label, (texts, skills) in data.items()
     }
     print("| 項目 | before | after |")
     print("| --- | --- | --- |")
-    names = ("時点", "応答の本数", "採れなかった本数", "文字数", "Skill を起動した本数")
+    names = ("時点", "応答の本数", "採れなかった本数", "文字数", "Skill を起動した本数", "文の数", "読点(100 字あたり)")
     for i, name in enumerate(names):
         print(f"| {name} | {cells['before'][i]} | {cells['after'][i]} |")
-    counted = {label: count([t[1] for t in data[label][0]], patterns) for label in LABELS}
-    for item, (b_hits, b_docs), (a_hits, a_docs) in zip(patterns, counted["before"], counted["after"]):
+    print("| 型(件数 / 含む本数 / 対象の本数) | | |")
+    counted = {label: count(data[label][0], patterns) for label in LABELS}
+    for item, before, after in zip(patterns, counted["before"], counted["after"]):
         want = f"・{item['want']}" if item.get("want") else ""
-        print(f"| {item['id']}{want}(件数 / 含む本数) | {b_hits} / {b_docs} | {a_hits} / {a_docs} |")
+        print(f"| {item['id']}{want} | {cell(before)} | {cell(after)} |")
 
 
 def self_check():
+    skill = {"type": "tool_use", "name": "Skill", "input": {"skill": "native-japanese:japanese-writing"}}
     stream = "\n".join([
-        json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill"}]}}),
+        json.dumps({"type": "assistant", "message": {"content": [skill]}}),
         "壊れた行",
         "123",
         json.dumps({"type": "result", "is_error": False, "result": "超えるかもしれません。"}),
     ])
     assert parse_stream(stream) == ("超えるかもしれません。", True)
+    other = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", "input": {"skill": "x"}}]}}
+    assert parse_stream(json.dumps(other)) == (None, False)
     assert parse_stream(json.dumps({"type": "result", "is_error": True, "result": "x"})) == (None, False)
     assert parse_stream(json.dumps({"type": "result", "result": ""})) == (None, False)
-    rows = count(["超えるかもしれません。遅れるかもしれない。", "言い切ります。"], [{"id": "k", "regex": "かもしれ"}])
-    assert rows == [(2, 1)]
-    assert check_ids([{"id": "a-1"}, {"id": "b_2"}], "型") == ["a-1", "b_2"]
-    head = re.compile(r"(?:^|[。\n])[^、。\n]{1,6}は、", re.M)
-    assert matched_lines(head, "結果を確認します。\n設定は、変更しました。\n設定は、変更しました。") == ["設定は、変更しました。"]
-    ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets/patterns.json"
-    types = {item["id"]: re.compile(item["regex"]) for item in json.loads(ledger.read_text())}
-    assert types["kakko-no-bun"].search("設定\uff08再起動の後に反映される既定の値を使う\uff09")
-    assert types["futoji-label"].search("- **原因**\uff1a キャッシュ")
+
+    text = "結果を確認します。\n設定は、変更しました。\n```\n設定は、コードの中です。\n```\n| 設定は、表の中です。 |\n"
+    assert sentences(text) == ["結果を確認します。", "設定は、変更しました。"]
+    head = {"id": "h", "unit": "sentence", "regex": "^[^、。]{1,6}(は|が)、"}
+    raw = {"id": "r", "regex": "設定は、"}
+    a, b = Path("m/p01-x-1.jsonl"), Path("m/p02-1.jsonl")
+    assert prompt_id(a) == "p01-x"
+    rows = count([(a, text), (b, "言い切ります。")], [head, raw, dict(raw, prompts=["p02"])])
+    assert rows == [(1, 1, 2, 2), (3, 1, 2, 0), (0, 0, 1, 0)], rows
+    assert cell(rows[0]) == "1 / 1 / 2、文の 50.0%"
+    assert matches(raw, "お手伝いします。\n\n") == [] and matches({"regex": r"お手伝い[^。\n]*。?\s*\Z"}, "a\nお手伝いします。\n\n") == ["お手伝いします。"]
+
+    ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets"
+    types = {item["id"]: item for item in json.loads((ledger / "patterns.json").read_text())}
+    check_patterns(list(types.values()))
+    check_ids(json.loads((ledger / "prompts.json").read_text()), "題材")
+    assert matches(types["kakko-no-bun"], "設定（再起動の後に反映される既定の値を使う）")
+    assert matches(types["futoji-label"], "- **原因**： キャッシュ")
     for bad in ([{"id": "a/b"}], [{"id": ".."}], [{"id": "型"}], [{"id": "a"}, {"id": "a"}]):
         try:
             check_ids(bad, "型")
