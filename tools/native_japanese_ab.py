@@ -8,6 +8,7 @@
   native_japanese_ab.py --self-check
 
 run は採取の後に report も出す。保存済みの応答は採り直さないので、中断した採取は同じ引数で続けられる。
+時点・題材・モデル・回数が初回と違う run は、同じ --out では受け付けない。
 report は応答の本文を <out>/text/<before|after>/<モデル>/<題材>-<回>.txt にも書き出す。
 """
 import argparse
@@ -21,6 +22,7 @@ from pathlib import Path
 
 PLUGIN = "plugins/native-japanese"
 LABELS = ("before", "after")
+META = "meta.json"
 
 
 def repo_root():
@@ -28,10 +30,18 @@ def repo_root():
     return Path(out.stdout.strip())
 
 
+def resolve(ref):
+    """ブランチ名や HEAD を、再実行しても動かないコミットに直す。"""
+    if ref == "WORKTREE":
+        return ref
+    out = subprocess.run(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"], capture_output=True, text=True)
+    if out.returncode:
+        sys.exit(f"コミットを解決できない: {ref}")
+    return out.stdout.strip()
+
+
 def export_plugin(ref, dest):
     """ref の時点のプラグインを dest に複製する。WORKTREE は作業ツリーをそのまま写す。"""
-    if dest.exists():
-        shutil.rmtree(dest)
     dest.mkdir(parents=True)
     root = repo_root()
     if ref == "WORKTREE":
@@ -42,16 +52,19 @@ def export_plugin(ref, dest):
 
 
 def parse_stream(text):
-    """stream-json の出力から、最後の応答の本文と Skill ツールの起動の有無を取り出す。"""
+    """stream-json の出力から、最後の応答の本文と Skill ツールの起動の有無を取り出す。空の本文は None にする。"""
     result, skill = None, False
     for line in text.splitlines():
         try:
             event = json.loads(line)
         except ValueError:
             continue
+        if not isinstance(event, dict):
+            continue
         if event.get("type") == "result" and not event.get("is_error"):
-            result = event.get("result")
-        for block in (event.get("message") or {}).get("content") or []:
+            result = event.get("result") or None
+        message = event.get("message")
+        for block in (message.get("content") if isinstance(message, dict) else None) or []:
             if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
                 skill = True
     return result, skill
@@ -78,22 +91,43 @@ def sample(job):
     return "ok" if parse_stream(proc.stdout)[0] else "error"
 
 
+def check_ids(items, what):
+    ids = [item["id"] for item in items]
+    bad = [i for i in ids if not re.fullmatch(r"[\w-]+", i)]
+    if bad or len(set(ids)) != len(ids):
+        sys.exit(f"{what}の id は英数字・_・- だけで書き、重ならないようにする: {bad or ids}")
+    return ids
+
+
 def run(args):
     out = Path(args.out).resolve()
+    if out.is_relative_to(repo_root()):
+        sys.exit("--out はリポジトリの外に置く。中に置くと、採取がリポジトリの CLAUDE.md と設定を読む")
     prompts = json.loads(Path(args.prompts).read_text())
-    cwd = out / "cwd"
-    cwd.mkdir(parents=True, exist_ok=True)
-    refs = {"before": args.before, "after": args.after}
+    models = args.models.split(",")
+    meta = {
+        "refs": {"before": resolve(args.before), "after": resolve(args.after)},
+        "prompts": {item["id"]: item["prompt"] for item in prompts},
+        "models": models,
+        "runs": args.runs,
+    }
+    check_ids(prompts, "題材")
+    if (out / META).exists():
+        if json.loads((out / META).read_text()) != meta:
+            sys.exit(f"時点・題材・モデル・回数が {out / META} と違う。新しい --out を使う")
+    else:
+        for label in LABELS:
+            export_plugin(meta["refs"][label], out / "plugin" / label)
+        (out / "cwd").mkdir()
+        (out / META).write_text(json.dumps(meta, ensure_ascii=False))
     jobs = []
     for label in LABELS:
-        export_plugin(refs[label], out / "plugin" / label)
-        for model in args.models.split(","):
+        for model in models:
             for item in prompts:
                 for n in range(1, args.runs + 1):
                     path = out / "raw" / label / model / f"{item['id']}-{n}.jsonl"
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    jobs.append((path, out / "plugin" / label, cwd, model, item["prompt"], args.timeout))
-    (out / "refs.json").write_text(json.dumps(refs))
+                    jobs.append((path, out / "plugin" / label, out / "cwd", model, item["prompt"], args.timeout))
     with ThreadPoolExecutor(args.workers) as pool:
         states = list(pool.map(sample, jobs))
     for state in sorted(set(states)):
@@ -107,28 +141,34 @@ def count(texts, patterns):
     for item in patterns:
         regex = re.compile(item["regex"])
         hits = [len(regex.findall(text)) for text in texts]
-        rows.append((item["id"], sum(hits), sum(1 for h in hits if h)))
+        rows.append((sum(hits), sum(1 for h in hits if h)))
     return rows
 
 
 def load(out, label):
-    texts, skills, failed = [], 0, 0
+    texts, skills = [], 0
     for path in sorted((out / "raw" / label).glob("*/*.jsonl")):
         text, skill = parse_stream(path.read_text())
         if text is None:
-            failed += 1
             continue
         texts.append((path, text))
         skills += skill
-    return texts, skills, failed
+    return texts, skills
 
 
 def report(args):
     out = Path(args.out).resolve()
+    if not (out / META).exists():
+        sys.exit(f"{out / META} が無い。--out を確かめる")
+    meta = json.loads((out / META).read_text())
     patterns = json.loads(Path(args.patterns).read_text())
+    ids = check_ids(patterns, "型")
     data = {label: load(out, label) for label in LABELS}
-    if args.show:
-        regex = re.compile(next(p["regex"] for p in patterns if p["id"] == args.show))
+    show = getattr(args, "show", None)
+    if show:
+        if show not in ids:
+            sys.exit(f"型の id が無い: {show}")
+        regex = re.compile(patterns[ids.index(show)]["regex"])
         for label in LABELS:
             for path, text in data[label][0]:
                 for sentence in re.split(r"(?<=[。\n])", text):
@@ -140,28 +180,35 @@ def report(args):
             dest = out / "text" / label / path.parent.name / f"{path.stem}.txt"
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text)
-    refs = json.loads((out / "refs.json").read_text()) if (out / "refs.json").exists() else {}
+    expected = len(meta["prompts"]) * len(meta["models"]) * meta["runs"]
+    cells = {
+        label: (meta["refs"][label][:8], len(texts), expected - len(texts), sum(len(t[1]) for t in texts), skills)
+        for label, (texts, skills) in data.items()
+    }
     print("| 項目 | before | after |")
     print("| --- | --- | --- |")
-    print(f"| 時点 | {refs.get('before', '?')} | {refs.get('after', '?')} |")
-    cells = {label: (len(t), sum(len(x[1]) for x in t), s, f) for label, (t, s, f) in data.items()}
-    for i, name in enumerate(("応答の本数", "文字数", "Skill を起動した本数", "失敗した本数")):
+    names = ("時点", "応答の本数", "採れなかった本数", "文字数", "Skill を起動した本数")
+    for i, name in enumerate(names):
         print(f"| {name} | {cells['before'][i]} | {cells['after'][i]} |")
-    counted = {label: count([x[1] for x in data[label][0]], patterns) for label in LABELS}
-    for (pid, b_hits, b_docs), (_, a_hits, a_docs) in zip(counted["before"], counted["after"]):
-        print(f"| {pid}(件数 / 含む本数) | {b_hits} / {b_docs} | {a_hits} / {a_docs} |")
+    counted = {label: count([t[1] for t in data[label][0]], patterns) for label in LABELS}
+    for item, (b_hits, b_docs), (a_hits, a_docs) in zip(patterns, counted["before"], counted["after"]):
+        want = f"・{item['want']}" if item.get("want") else ""
+        print(f"| {item['id']}{want}(件数 / 含む本数) | {b_hits} / {b_docs} | {a_hits} / {a_docs} |")
 
 
 def self_check():
     stream = "\n".join([
         json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill"}]}}),
         "壊れた行",
+        "123",
         json.dumps({"type": "result", "is_error": False, "result": "超えるかもしれません。"}),
     ])
     assert parse_stream(stream) == ("超えるかもしれません。", True)
     assert parse_stream(json.dumps({"type": "result", "is_error": True, "result": "x"})) == (None, False)
+    assert parse_stream(json.dumps({"type": "result", "result": ""})) == (None, False)
     rows = count(["超えるかもしれません。遅れるかもしれない。", "言い切ります。"], [{"id": "k", "regex": "かもしれ"}])
-    assert rows == [("k", 2, 1)]
+    assert rows == [(2, 1)]
+    assert check_ids([{"id": "a-1"}, {"id": "b_2"}], "型") == ["a-1", "b_2"]
     print("ok")
 
 
@@ -174,8 +221,9 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("--patterns", required=True)
         p.add_argument("--out", required=True)
-        p.add_argument("--show")
-        if name == "run":
+        if name == "report":
+            p.add_argument("--show")
+        else:
             p.add_argument("--before", required=True)
             p.add_argument("--after", required=True)
             p.add_argument("--prompts", required=True)
