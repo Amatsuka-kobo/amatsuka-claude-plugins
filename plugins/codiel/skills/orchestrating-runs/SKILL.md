@@ -1,6 +1,6 @@
 ---
 name: orchestrating-runs
-description: Codiel の run で、メインセッション自身がオーケストレーターとして Issue 番号・intent 文書のパス・省略のいずれかから intent フェーズから finalize フェーズまでの全フェーズを進行させ、サブエージェントへのディスパッチと Raguel ゲートの運転を担うときに使う。/codiel:run が名指しで起動する。
+description: Codiel の run で、メインセッション自身がオーケストレーターとして Issue 番号・intent 文書のパス・省略のいずれかから intent フェーズから finalize フェーズまでの全フェーズを進行させ、作業の単位の進行と Raguel ゲートの運転を担うときに使う。/codiel:run が名指しで起動する。
 ---
 
 # Codiel run オーケストレーション
@@ -25,14 +25,16 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 このスキルの `references/<file>.md` は、ベースディレクトリからの相対パスである。
 
+`cd` は次の呼び出しに引き継がれる。worktree を操作するときは単独の `cd` を使わず、`git -C <パス>` か `( cd <パス> && <コマンド> )` のサブシェルを使う。
+
 ## チェックリスト
 
 - [ ] 0. 前提確認・実行モード・連携モードの決定を行う(§0)。停止条件に当たればここで終了する
 - [ ] 1. outcome の自動同期を行う(`<plugin-root>/skills/raguel-gating/references/outcome-sync.md` に従う。起動時に 1 回だけ)
 - [ ] 2. run を解決する。`codiel-state get --active` でほかの run が active でないことを確かめ、
       intent フェーズ(`capturing-intent` スキル)へつないで run を開始または再開する(§1)
-- [ ] 3. 現在のフェーズから、フェーズ進行表の定型(start-phase → 手順ファイルを読む → ディスパッチ → 成果物の検証 →
-      raguel-gating でゲート → pass-gate/complete-phase)を順に実行する。ドメイン別のディスパッチは
+- [ ] 3. 現在のフェーズから、フェーズ進行表の定型(start-phase → 手順ファイルを読む → 単位の作業 → 成果物の検証 →
+      raguel-gating でゲート → pass-gate/complete-phase)を順に実行する。ドメインに紐づく単位の作業は
       §4 の set-domain / clear-domain を伴う。discuss は raguel-gating を経ず、facilitating-design-discussions
       に従って進行し、complete-phase で完了する
 - [ ] 4. ASK / STOP が返ったフェーズは `raguel-gating` の手順に従い、人の裁定を受けてから続ける
@@ -44,8 +46,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決め、連携モードと画像添付・ADR の
 書き先を判定する。ドメインマップの不在それ自体は初期化の欠落に当たらない。
 
-手順 1・2 の 4 つのコマンドは run ごとに 1 回だけ実行し、以降は得た値を各所へ渡す。サブエージェントには
-解決させない。`<plugin-root>` は絶対パスに展開して実行する。
+手順 1・2 の 4 つのコマンドは run ごとに 1 回だけ実行し、以降は得た値を各所へ渡す。解決した値は作業の
+契約で渡し、作業者に解決させない。`<plugin-root>` は絶対パスに展開して実行する。
 
 1. 対象プロジェクトのルートで次を実行し、ARCHITECTURE のパスとドメインマップの状態を解決する。
 
@@ -158,29 +160,30 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 
 表の `<n>` は try と test-loop の回の番号、`<m>` はレビューの回の番号(review フェーズが 1、fix-loop の再レビューごとに 1 つ増える)である。コミットは 2.1 に従う。
 
-| フェーズ | 委譲の種別と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 |
+| フェーズ | 作業の単位と作業内容 | 参照スキル | 入力ファイル | 出力ファイル | ゲート種別 |
 |---|---|---|---|---|---|
-| [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの委譲 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
-| [carry-over] | 前の try から run ブランチに残るコードを、分岐点からの差分としてゲートで評価する。所見の修正は実装の委譲に出す。try-1 は `init` が `SKIPPED` にするので進めない | implementing(修正モード) | run ブランチの分岐点からの差分(`startHead` が分岐点) | 所見の修正 diff(所見があるときだけ) | pass-gate(`evaluate_code`) |
+| [intent] | オーケストレーター本体が対話で聞き取り、ドラフトを書く。現状調査は読み取りだけの単位 | capturing-intent | Issue 本文(任意。`gh issue view` または GitHub MCP)、既存 intent(任意)、持続層 | `docs/intents/YYYY-MM-DD-<slug>.md` | ユーザー承認の後に pass-gate(`evaluate_decision`) |
+| [carry-over] | 前の try から run ブランチに残るコードを、分岐点からの差分としてゲートで評価する。所見の修正は成果物を書く単位にする。try-1 は `init` が `SKIPPED` にするので進めない | implementing(修正モード) | run ブランチの分岐点からの差分(`startHead` が分岐点) | 所見の修正 diff(所見があるときだけ) | pass-gate(`evaluate_code`) |
 | [discuss] | オーケストレーター本体がアジェンダを書き、進行する。intent → `agenda.md` | preparing-design-agendas | intent | `agenda.md`、`discussion.md` | complete-phase(Raguel ゲートなし。人間が直接参加) |
 | [design] | オーケストレーター本体が書く。intent + `discussion.md` → `design.md` | writing-design-docs | intent、`discussion.md`、持続層 | `design.md`(`## 影響を受ける機能単位` に仕様のディレクトリの ID。新しい画面は名前の候補) | pass-gate(`evaluate_design`)。ゲートの前に `facilitating-design-discussions` の「設計ウォークスルー」を行い、新しい画面の名前を聞いてから evaluate する |
-| [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、成果物を書く委譲を出して待ちを記録し、その間に dev-plan を書いてゲートする。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) |
+| [test-spec] | オーケストレーター本体が仕様のディレクトリを同定し(ファイルは書かない)、仕様のディレクトリごとの成果物を書く単位を始め、その間に dev-plan を書いてゲートする。`design.md`(軽量では intent と持続層、同定した一覧) → `spec.md` / `cases.md` | writing-test-specs | `design.md`(`## 影響を受ける機能単位`。軽量では intent の `## 受け入れ基準` と `## 実装方針`、名前の候補を含む一覧) | `<testsDir>/<仕様のディレクトリ>/spec.md` / `cases.md`(新規 or 更新) | pass-gate(`evaluate_plan`。dev-plan とは独立) |
 | [dev-plan] | オーケストレーター本体が書く。`design.md`(軽量では intent と持続層、test-spec と同じ一覧) → `dev-plan.md` | writing-dev-plans | `design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`、test-spec と同じ一覧) | `dev-plan.md`(ステップ毎にドメインタグ・触るファイル・前提ステップ・通すテスト、`## 環境準備`・`## 生成物`) | pass-gate(`evaluate_plan`。test-spec とは独立。`codiel-state waves` の成功を確かめた後) |
-| [test-code] | 成果物を書く委譲を仕様のディレクトリごとに worktree で並列に出す。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、`report.md`(委譲先の返答からオーケストレーターが書く) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 |
-| [implement] | 成果物を書く委譲を `codiel-state waves` の順で worktree に並列に出す。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは実行の委譲を出す | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
-| [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)と、NG の修正の委譲(仕様のディレクトリごとに worktree で並列) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の委譲の返答を合わせてオーケストレーターが書く)、修正 diff | pass-gate(`evaluate_code`) |
+| [test-code] | 仕様のディレクトリごとの成果物を書く単位(worktree で作業し、並列に進めてよい)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、`report.md`(作業者の報告からオーケストレーターが書く) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 |
+| [implement] | dev-plan のステップごとの成果物を書く単位(`codiel-state waves` の順。`parallel` グループは worktree で作業し、並列に進めてよい)と、ステップごとのタスクレビューの単位。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは仕様のディレクトリごとの実行の単位にする | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
+| [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は仕様のディレクトリごとの実行の単位)と、仕様のディレクトリごとの NG の修正の単位(worktree で作業し、並列に進めてよい) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の単位の報告を合わせてオーケストレーターが書く)、修正 diff | pass-gate(`evaluate_code`) |
 | [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) |
 | [pr] | オーケストレーター本体が、github では PR を作り、local では state に記録する | なし | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ | complete-phase(github のときだけ `--pr-url` 必須) |
-| [review] | 読み取りだけの委譲(観点ごと)。依頼文の前提「diff の範囲」の `git diff <範囲>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <範囲>`(依頼文の前提「diff の範囲」の値)、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
-| [fix-loop] | 成果物を書く委譲(修正)、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は委譲)、読み取りだけの委譲(再レビュー)。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、再レビューの diff の範囲(依頼文の前提「diff の範囲」の値)、ARCHITECTURE(再レビューの委譲のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。回数と通過の時点は `references/phase-fix-loop.md`) |
+| [review] | 観点ごとの読み取りだけの単位(並列に進めてよい)。契約の前提「diff の範囲」の `git diff <範囲>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <範囲>`(契約の前提「diff の範囲」の値)、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
+| [fix-loop] | 修正の成果物を書く単位、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は実行の単位)、観点ごとの再レビューの読み取りだけの単位。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、再レビューの diff の範囲(契約の前提「diff の範囲」の値)、ARCHITECTURE(再レビューの単位のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。回数と通過の時点は `references/phase-fix-loop.md`) |
 | [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) |
 | [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | なし | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(`complete-phase` ではない) |
 
+- 単位同士を並列に進めるかは運用方針に任せる。並列に進める場合は、`references/delegation-env.md` の「並列に進める場合」の条件を満たす単位に限る。
 - 軽量の経路(`scale: light`)では discuss と design を `skip-phase` で飛ばす。`SKIPPABLE` はこの 2 フェーズと
   fix-loop に限られ、discuss と design の `skip-phase` は `state.scale === "light"` のときだけ成功する。
   ほかのフェーズは、規模によらず定型どおりに進める。
 - review の所見に critical/high が 1 件も無ければ、fix-loop を `start-phase` せず、次のコマンドでスキップする。
-  critical/high が 1 件でもあれば、このコマンドを使わず、fix-loop で修正を委譲する。
+  critical/high が 1 件でもあれば、このコマンドを使わず、fix-loop で修正の単位を進める。
   ```
   node <plugin-root>/scripts/codiel-state.mjs skip-phase fix-loop --slug <slug> --reason "review で critical/high 0 件"
   ```
@@ -210,9 +213,9 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/phase-review.md` | `start-phase review` の直後 |
 | `references/phase-fix-loop.md` | `start-phase fix-loop` の直後 |
 | `references/phase-finalize.md` | triage を終えて、finalize の作業を始める前 |
-| `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき。carry-over で修正の委譲を出す前 |
-| `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
-| `references/e2e.md` | E2E を実行する委譲を出す前 |
+| `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき。carry-over で修正の単位を始める前 |
+| `references/review-common.md` | review に入ったとき。fix-loop で再レビューの単位を始める前 |
+| `references/e2e.md` | E2E を実行する単位を始める前 |
 | `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
 | `references/adr-candidates.md` | intent-sync で取り込み先の分岐を決める前。fix-loop で設計を変える修正を採ったときの fix-loop の pass-gate の前。finalize で候補を写す前と、結果レポートに一覧する前 |
 | `references/resume.md` | run を再開するとき |
@@ -222,8 +225,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
 2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`gotcha-candidates.md`・`adr-candidates.md`)を使う手順に入る前。読む時点は
-   上の表に従う。fix-loop の再レビューでは、委譲を出す前に `review-common.md` を読む。
-3. run を再開するとき。`resume.md` を読み、待ちの処理や委譲の出し直しより前に、続行する run の slug で
+   上の表に従う。fix-loop の再レビューでは、単位を始める前に `review-common.md` を読む。
+3. run を再開するとき。`resume.md` を読み、待ちの処理や単位のやり直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の
    フェーズすべての手順ファイルと、それらが使う共有の手順を読む。carry-over が該当するときは `phase-carry-over.md` を読む。test-spec と dev-plan はどちらが該当しても
    `phase-test-spec.md` を読む。triage が `passed` で finalize がまだ完了していない run では、`phase-finalize.md` も読む。
@@ -243,7 +246,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 - 文書系フェーズ(intent / discuss / design / test-spec / dev-plan / intent-sync)の成果物(intent 文書 /
   `agenda.md`・`discussion.md` / `design.md` / `spec.md`・`cases.md` / `dev-plan.md` / intent の派生文の
   セクションと `## 変更履歴`)は、ゲート通過の直後にオーケストレーターが次の形でコミットする。文書系フェーズの
-  委譲先は git 操作をしない。
+  単位では git 操作をしない。
   ```
   git add <成果物パス>
   git commit -m "codiel(<phase>): <要約> (<slug> try-<n>)"
@@ -254,24 +257,25 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   - コミットするのは、そのゲートで評価した文書(`paths` に渡したファイル)だけにする。ほかのファイルを同じ
     コミットや、次のコード系フェーズの `start-phase` より前のコミットに入れると、`start-phase` がそのパスを
     挙げて失敗する。test-spec と dev-plan は、それぞれの通過の直後に、評価した文書をコミットしてよい。
-- コード系フェーズ(carry-over / test-code / implement / test-loop / fix-loop)では、委譲先が自分の変更を自分でコミットする。
-  オーケストレーターがこれらのフェーズで行うコミットは、worktree のブランチの `git merge --no-ff` と、E2E の
+- コード系フェーズ(carry-over / test-code / implement / test-loop / fix-loop)では、作業者が自分の変更を、作業しているブランチ
+  (並列の単位は worktree のブランチ、直列の単位は run ブランチ)にコミットする。オーケストレーター自身が作業者のときも同じである。
+  これとは別にオーケストレーターがこれらのフェーズで行うコミットは、worktree のブランチの `git merge --no-ff` と、E2E の
   レポートのコミット(`references/e2e.md`)だけである。コード系フェーズの pass-gate の後は、次のフェーズの
   `start-phase` までコミットしない(`start-phase` が、直前に通ったフェーズの `passedHead` と今の HEAD の一致を要る)。
 - run の文書の置き場: オーケストレーターが書く `agenda.md`・`discussion.md`・`design.md`・
-  `dev-plan.md` は `<repoRoot>/<runsDir>/<slug>/` に置き、try で分けない。依頼文の出力先には
+  `dev-plan.md` は `<repoRoot>/<runsDir>/<slug>/` に置き、try で分けない。契約の出力ファイルには
   `<repoRoot>/<runsDir>/<slug>/<ファイル名>` の絶対パスを書き、後のフェーズの入力にも同じパスを渡す。
   新しい try は同じパスに書き直し、前の try の文書は
   同じブランチの履歴(`git log -p -- <runsDir>/<slug>/<ファイル名>`)で読む。
 - `.codiel/runs/` の下のファイルはコミットしない。`state.json`・`steps/`・`reports/` は `.gitignore` で
   git から外れている。`pr-body.md` や `review-body-<m>.md` などの本文ファイルは Write ツールで `reports/` に
   書き、コミットせずに投稿する。
-- 報告のファイル(`report.md`・`test-run-<n>.md` など)は、委譲先の返答と自分の実行結果からオーケストレーターが
-  §3 の手順で書く。置き場は `references/delegation-env.md` の表に従う。
+- 報告のファイル(`report.md`・`test-run-<n>.md` など)は、作業者の報告(委譲したときは返答)と自分の実行結果から
+  オーケストレーターが §3 の手順で書く。置き場は `references/delegation-env.md` の表に従う。
 - 確認義務: `pr` フェーズを開始する前に `git status --short` を実行し、残ったファイルを次のとおり分ける。
-  - run の成果物(委譲先の変更、run の文書、intent、E2E のレポートの `results.json` と md)が残っていれば、
-    `pr` を開始しない。E2E のレポートはオーケストレーターがコミットし、ほかは担当のサブエージェントに
-    「変更をコミットしてください」と差し戻す。
+  - run の成果物(作業者の変更、run の文書、intent、E2E のレポートの `results.json` と md)が残っていれば、
+    `pr` を開始しない。E2E のレポートはオーケストレーターがコミットする。ほかは、その単位を
+    委譲していれば委譲先にコミットを求め、自分で作業した単位なら自分でコミットする。
   - それ以外は run の外のファイルとして扱う。`/codiel:init` の成果物(`.codiel/config.json`・`.gitignore`・
     `.claude/rules/codiel.md`・`CLAUDE.md`)、利用者のファイル、run に関係の無い記録が当たり、判定が付か
     ないものも含める。run の外のファイルはコミットも退避もしない。`start-phase pr` の後に
@@ -307,42 +311,22 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   `waits` が空になってから、残っている worktree とブランチをすべて削除する。委譲が止まる前に、書き込み中の worktree を消さないためである。
   止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち未写しのもの(`references/gotcha-candidates.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書き、候補の種別が無効(環境変数が有効な値でない)のときはその旨を添える。
 
-## 3. ディスパッチプロンプトの規約
+## 3. 作業の単位と契約
 
-オーケストレーターは、コード(テストコードを含む)・spec.md / cases.md・タスクレビューと review の所見を
-自分で書かず、委譲する。委譲先の返答の本文を `waits/<id>.md` や `review-<m>.md` などの報告のファイルへ
-転記することは、所見を書くことに当たらない。オーケストレーターが自分で書くのは、agenda.md・design.md・
-dev-plan.md・discussion.md・intent 文書(持続層を含む)である。自分で実行するのは、プロジェクトの test
-コマンドと、ID が `units/` で始まる仕様のディレクトリのテストである。ID が `e2e/` で始まる仕様の
-ディレクトリの実行は委譲する。
+各フェーズの作業は、フェーズ進行表と手順ファイルが定める単位に分けて進める。単位ごとに、下の作業の契約を作る。委譲するかと委譲先は、セッションの運用方針に従って決める。
 
-委譲は Agent ツールで行う。委譲先は名指しせず、作業内容を渡して委譲する。委譲先の決め方は §4 に従う。
+- 委譲するときは、契約を依頼文にする。運用方針が依頼文に求める項目は、契約の前後に足してよい。
+- 自分で作業するときは、契約を自分への作業指示として使い、書いてよい範囲と tools も同じものを守る。
+- 作業者は契約が名指しするスキルを読む。オーケストレーター自身が作業者のときも、そのスキルを読んで従う。
+- 自分で実行するのは、プロジェクトの test コマンドと、ID が `units/` で始まる仕様のディレクトリのテストである。ID が `e2e/` で始まる仕様のディレクトリの実行は、仕様のディレクトリごとの単位にする。
 
-委譲はバックグラウンドで動く。完了は後のターンに通知として届く。run があるときの委譲は、次の順で扱う。
+### 作業の契約
 
-- Agent ツールの結果で起動を確かめてから、`codiel-state wait-add --slug <slug> --id <id> --purpose <文> --task-id <返った ID>` で待ちを記録する。起動に失敗した委譲は記録しない。
-- `id` は `<フェーズ>-<要素>-<回>` の形で委譲ごとに付け、try の中で使い回さない。要素の部分は、仕様のディレクトリの ID やステップの名前から作る。英小文字と数字以外の文字(`/`・`_`・`.`・大文字など)は、小文字にしてハイフンに置き換え、連続するハイフンは 1 つにする。100 文字を超える `id` は `wait-add` が拒否する。修正ラウンド・回帰の巡・実行し直しは回を上げて別の待ちにする。`purpose` は何の委譲かを書く 1 文にする。
-- 並列にする委譲は同じ応答からまとめて出し(review の観点ごとの委譲を含む)、`wait-add` は 1 件ずつ順に呼ぶ。`codiel-state` の呼び出しは並列の Bash にしない。state の読み書きにロックが無く、並列に呼ぶと更新が失われる。
-- `evaluate_*` が Claude Code にバックグラウンドへ移されたときも、`gate-<フェーズ>-<回>` の `id` で `wait-add` する。`<回>` は、そのフェーズの評価の回(attempt)である。
-- 待つ間にできる作業(自分が書く文書・自分が実行するテスト)があれば進める。自分でテストを実行してよい条件は `references/delegation-env.md` の「テストを実行する委譲の並べ方」に従う。作業が無ければターンを終えて完了通知を待つ。
-- 並列に出した委譲のグループ(同じ応答で出した委譲、implement の同じグループ、観点ごとの review)は、そのグループの待ちがすべて消えてから、マージ・まとめての実行・`evaluate_*` へ進む。要素ごとに進めてよいのは、タスクレビューのような要素単位の作業だけである。
-- 完了通知を受けたら、state の更新や次の委譲より先に、返答の本文を要約せずに `.codiel/runs/<slug>/try-<n>/waits/<id>.md` へ書き、続けて報告の置き場(`references/delegation-env.md` の表)へ書く。その後で `codiel-state wait-done --slug <slug> --id <id>` を呼び、次の委譲やゲートへ進む。
-- 複数の返答をまとめる報告(review と再レビューの `review-<m>.md` など)は、返答ごとに `waits/<id>.md` を書いて `wait-done` を呼び、グループの待ちがすべて消えてから書く。
-- 委譲を出し直すときは、新しい回の `id` で記録する。
-- Agent ツールの起動に失敗した、委譲先が異常終了した、返答が空だった、または成果物が空か不在だったときは、新しい回の `id` で 1 回だけ出し直す。2 回目も同じなら、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
-  - 返答が無い待ちは、返答が無かった旨を `waits/<id>.md` に書き、`wait-done --id <id>` で消す。`wait-clear` は `--id` を取らずその run の待ちを全部消すので、並列の待ちが残るときは使わない。
-  - 返答はあるが成果物が空か不在のときは、返答を `waits/<id>.md` に書いて `wait-done` した後で出し直す。
-
-run が無いときの委譲(`capturing-intent` の現状調査、`/codiel:test` の単独実行)は、待ちを記録しない。stop-guard も run が無ければ止めない。
-active な run があるときの `/codiel:test` の単独実行は、`adhoc-` で始まる `id` で待ちを記録する。
-
-待ちの記録が残っている間、stop-guard は停止を止めない。消し忘れた待ちがあると、その run では未完了の停止を検出できなくなるので、報告を書いたら `wait-done` を呼ぶ。
-
-依頼文は次のテンプレートで書く。`<>` の値は実際の内容に置き換え、パスは解決済みの絶対パスで書く。
+契約は次の形で書く。`<>` の値は実際の内容に置き換え、パスは解決済みの絶対パスで書く。
 
 ```
-あなたはサブエージェントである。次の作業を担当する。
-- 作業内容: <このフェーズの作業内容>
+- 作業内容: <この単位の作業内容>
+- 任せる判断: <作業者が材料から決めてよい判断と、その材料のパス。無ければ「なし」>
 
 ## 読むスキル
 - <plugin-root>/skills/<スキル名>/SKILL.md
@@ -357,58 +341,111 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 - <出力ファイルのパス>
 
 ## 前提
-- diff の範囲: <review と再レビューの委譲のときだけこの行を書く。`<baseBranch>...<branch>` の形で、値は `codiel-state get --slug <slug>` の出力の `baseBranch` と `branch`。state に `baseBranch` が無いときは、`capturing-intent` の手順 1 のベースブランチの解決規則で解決した値>
-- ARCHITECTURE: <review と再レビューの委譲のときだけこの行を書く。§0 で解決した絶対パス。存在しなければ「なし」>
-- 反論済み所見: <再レビューの委譲のときだけこの行を書く。`fixing-review-findings` の反論済み一覧の全件。無ければ「なし」>
+- diff の範囲: <review と再レビューの単位のときだけこの行を書く。`<baseBranch>...<branch>` の形で、値は `codiel-state get --slug <slug>` の出力の `baseBranch` と `branch`。state に `baseBranch` が無いときは、`capturing-intent` の手順 1 のベースブランチの解決規則で解決した値>
+- ARCHITECTURE: <review と再レビューの単位のときだけこの行を書く。§0 で解決した絶対パス。存在しなければ「なし」>
 - 実行モード: <mapped | unscoped>
 - testsDir: <§0 で得た値>
-- 担当タグ: <このディスパッチで担当するタグ。ドメインに紐づかない委譲では「なし」>
+- 担当タグ: <この単位で担当するタグ。ドメインに紐づかない単位では「なし」>
 - 担当範囲: <mapped で担当タグがドメインマップのキーにあるときは、そのキーの glob 配列。それ以外は「なし」>
 
 ## 前フェーズの申し送り(findings)
 <前フェーズの EvaluationResult.findings を ruleId + message の箇条書きで要約したもの。無ければ「なし」>
 
-## セッションの規律の転記
-<セッションの規律が依頼文への転記を求める条項。無ければ「なし」>
+## 書いてよい範囲と使ってよい tools
+<単位の種類ごとの条項(下の一覧)>
+
+## 完了の条件
+<コード系フェーズの単位: 単位の変更を、作業しているブランチ(並列の単位は worktree のブランチ、直列の単位は run ブランチ)にコミットしてある。文書系フェーズの単位と読み取りだけの単位: git 操作をしない>
+
+## 返し方
+- 報告の 1 行目に `result: done`・`result: undecided`・`result: declined` のどれかを書く。
+- `undecided` には理由を添え、判断が要るなら問いと選択肢の材料を添える。`declined` には理由を添える。
+- 修正の単位で回帰が収束せずに修正を止めたときは `result: done` とし、残った失敗を報告に書く。
 ```
 
-依頼文には、委譲の種類に応じて次の条項を足す。
+書いてよい範囲と使ってよい tools は、単位の種類ごとに次の条項を書く。
 
-- 読み取りだけの委譲: 使ってよい tools を `Read` / `Grep` / `Glob` と読み取りに限った `Bash` に限り、ファイルを変更せず、報告だけを返す。
+- 読み取りだけの単位: 使ってよい tools を `Read` / `Grep` / `Glob` と読み取りに限った `Bash` に限り、ファイルを変更せず、報告だけを返す。
 - test-spec: 使ってよい tools を `Read` / `Grep` / `Glob` / `Write` / `Edit` と Context7 に限り、`Bash` は使わない。書き込み先は `<testsDir>/<仕様のディレクトリ>/` の `spec.md` と `cases.md` に限る。
 - test-code: 担当する仕様のディレクトリの ID と、`<testsDir>/<仕様のディレクトリ>/` の `spec.md` / `cases.md` のパスを書く。テストコードは規約の場所に置き、`spec.md` の frontmatter `tests` にパスを足すだけにして、`spec.md` の本文と `parallel`・`cases.md`・プロダクトコードは書き換えない。
 - implement・test-loop・fix-loop: テストと `<testsDir>/**` の仕様(`spec.md`・`cases.md`)は書き換えない。
-- すべての委譲: intent 文書は書き換えず、原文の追加が要るときはオーケストレーターへ報告する。
+- すべての単位: intent 文書は書き換えず、原文の追加が要るときはオーケストレーターへ報告する。
 
-委譲先だけが使うスキル(`writing-test-specs`・`scripting-tests`・`implementing`・`fixing-failures`・`reviewing-diffs`)の本文は、オーケストレーターが Read や `cat` で読まない。依頼文の「読むスキル」にスキル名を書き、委譲先に読ませる。オーケストレーター自身の作業に使うスキルは、従来どおり読む。
+作業者が `undecided` で返す場面は次の 3 つである。
 
-観点ファイルは次の規則で依頼文に足す。観点ファイルは、ファイル名を `Glob` か `ls` で確かめて選び、本文は読まずに依頼文へパスを書く。委譲先に探させない。
+- 任せない判断が要る。
+- 任せた判断の範囲の外の判断が要る。
+- 作業を進められない。依頼と実コードの食い違い、原因を 1 つに絞れない失敗、任せた判断の外の不明点(契約と Read・Grep で決まらないもの)、書いてよい範囲の外の変更、名指しされていないスキル、契約の必須の項目(観点ファイル・diff の範囲・testsDir など)の欠けが当たる。
 
-- 実装の委譲(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。`worktree.md`・`e2e.md`・`fix-mode.md` は手順ファイルで観点ファイルではないので、選ばない。
+レビューの所見と NG のテストは `undecided` にせず、`result: done` の報告に書く。作業を引き受けないときは `declined` で返す。
+
+観点ファイルは次の規則で契約に足す。観点ファイルは、ファイル名を `Glob` か `ls` で確かめて選び、本文は読まずに契約へパスを書く。作業者に探させない。
+
+- 実装の単位(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。`worktree.md`・`e2e.md`・`fix-mode.md` は手順ファイルで観点ファイルではないので、選ばない。
 - review と再レビューの観点は、`references/review-common.md` の規則で選ぶ。
 
-ディスパッチの後、成果物のファイルが実際に存在し空でないことを確かめてから、raguel-gating のゲート手順に進む。サブエージェントの報告だけで完了としない。存在しないか空のときは、待ちの扱いの異常時の出し直しに従う。
+再レビューの単位で返った所見のうち、`fixing-review-findings` の反論済み一覧と同じ指摘は、`review-<m>.md` に書く前にオーケストレーターが除く。
 
-## 4. ドメインディスパッチ
+単位の作業の後、作業者によらず、成果物のファイルが実際に存在し空でないことを確かめてから、raguel-gating のゲート手順に進む。報告だけで完了としない。委譲していて成果物が存在しないか空のときは、下の「委譲したときの扱い」の出し直しに従う。
 
-委譲先は、セッションに注入されているエージェント運用の規律に従って決める。そのような規律が無いときは、成果物を書く委譲は `general-purpose`、読み取りだけの委譲は `Explore` へ送る。
+### 待ちの記録
 
-実行モードが `mapped` のときだけ、ドメインに紐づく実装の委譲の間、run の `domain` に担当タグを持たせる。guard-write はこの値とドメインマップで境界を判定する。判定が働くのは implement / test-loop / fix-loop の 3 フェーズである。
+- `evaluate_*` が Claude Code にバックグラウンドへ移されたときは、`gate-<フェーズ>-<回>` の `id` で `wait-add` する。`<回>` は、そのフェーズの評価の回(attempt)である。
+- 待ちの記録が残っている間、stop-guard は停止を止めない。消し忘れた待ちがあると、その run では未完了の停止を検出できなくなるので、報告を書いたら `wait-done` を呼ぶ。
+
+### 委譲したときの扱い
+
+委譲はバックグラウンドで動く。完了は後のターンに通知として届く。run があるときの委譲は、次の順で扱う。
+
+- Agent ツールの結果で起動を確かめてから、`codiel-state wait-add --slug <slug> --id <id> --purpose <文> --task-id <返った ID>` で待ちを記録する。起動に失敗した委譲は記録しない。
+- `id` は `<フェーズ>-<要素>-<回>` の形で委譲ごとに付け、try の中で使い回さない。要素の部分は、仕様のディレクトリの ID やステップの名前から作る。英小文字と数字以外の文字(`/`・`_`・`.`・大文字など)は、小文字にしてハイフンに置き換え、連続するハイフンは 1 つにする。100 文字を超える `id` は `wait-add` が拒否する。修正ラウンド・回帰の巡・実行し直しは回を上げて別の待ちにする。`purpose` は何の委譲かを書く 1 文にする。
+- 並列にする委譲は同じ応答からまとめて出し(review の観点ごとの委譲を含む)、`wait-add` は 1 件ずつ順に呼ぶ。`codiel-state` の呼び出しは並列の Bash にしない。state の読み書きにロックが無く、並列に呼ぶと更新が失われる。
+- 待つ間にできる作業(自分が書く文書・自分が実行するテスト)があれば進める。自分でテストを実行してよい条件は `references/delegation-env.md` に従う。作業が無ければターンを終えて完了通知を待つ。
+- 並列に出した委譲のグループ(同じ応答で出した委譲、implement の同じグループ、観点ごとの review)は、そのグループの待ちがすべて消えてから、マージ・まとめての実行・`evaluate_*` へ進む。要素ごとに進めてよいのは、タスクレビューのような要素単位の作業だけである。
+- 完了通知を受けたら、state の更新や次の委譲より先に、返答の本文を要約せずに `.codiel/runs/<slug>/try-<n>/waits/<id>.md` へ書き、続けて報告の置き場(`references/delegation-env.md` の表)へ書く。その後で `codiel-state wait-done --slug <slug> --id <id>` を呼び、次の単位やゲートへ進む。
+- 複数の返答をまとめる報告(review と再レビューの `review-<m>.md` など)は、返答ごとに `waits/<id>.md` を書いて `wait-done` を呼び、グループの待ちがすべて消えてから書く。
+- 委譲を出し直すときは、新しい回の `id` で記録する。
+- Agent ツールの起動に失敗した、委譲先が異常終了した、返答が空だった、または成果物が空か不在だったときは、新しい回の `id` で 1 回だけ出し直す。2 回目も同じなら、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
+  - 返答が無い待ちは、返答が無かった旨を `waits/<id>.md` に書き、`wait-done --id <id>` で消す。`wait-clear` は `--id` を取らずその run の待ちを全部消すので、並列の待ちが残るときは使わない。
+  - 返答はあるが成果物が空か不在のときは、返答を `waits/<id>.md` に書いて `wait-done` した後で出し直す。
+
+run が無いときの委譲(`capturing-intent` の現状調査、`/codiel:test` の単独実行)は、待ちを記録しない。stop-guard も run が無ければ止めない。
+active な run があるときの `/codiel:test` の単独実行は、`adhoc-` で始まる `id` で待ちを記録する。
+
+### 委譲先が決めずに返したとき
+
+委譲先が `result: undecided` か `result: declined` で返したら、次の順で扱う。
+
+1. 返答を `waits/<id>.md` に書いて `wait-done` する。
+2. 理由が契約の不備(必須の項目の欠け、観点ファイルの数の誤りなど)なら、人に聞かず、契約を直して新しい回の `id` でその単位をやり直す。直した契約でも契約の不備で返ったら、手順 3 へ進む。
+3. 同じフェーズの待ちがすべて消えてから、`mark-ask <phase> --slug <slug> --kind confirm` を実行し、AskUserQuestion で聞く。待ちが残る間は `mark-ask` しない。
+   - 選択肢は「判断を示して続ける」「委譲先を変えて続ける」「中止」の 3 つとする。「判断を示して続ける」は、返答に問いがあるときだけ出す。
+   - 答えを得たら `resume` する。
+4. 続けるときは、新しい回の `id` で単位をやり直す。示された判断は、契約の「任せる判断」に足す。委譲先を変えるときの選び直しは運用方針に従い、人が委譲先を示したときはそれを使う。
+5. 中止なら、§2.4 の手順で待ちを片付けてから `stop --slug <slug> --reason ask-aborted` で止める。
+
+やり直しは修正のループのラウンドに数えない。
+
+自分で作業していて任せない判断が要るときは、`mark-ask <phase> --slug <slug> --kind confirm` の後に判断を人に聞く。選択肢は「判断を示して続ける」「中止」とする。
+
+## 4. ドメインに紐づく単位
+
+実行モードが `mapped` のときだけ、ドメインに紐づく単位の作業の間、作業者によらず run の `domain` に担当タグを持たせる。guard-write はこの値とドメインマップで境界を判定する。判定が働くのは implement / test-loop / fix-loop の 3 フェーズである。
 
 ```
 node <plugin-root>/scripts/codiel-state.mjs set-domain --slug <slug> --domain <タグ>
 node <plugin-root>/scripts/codiel-state.mjs clear-domain --slug <slug>
 ```
 
-- `mapped` の実装と test-loop の修正では、ステップのタグの値を依頼文にそのまま渡す。汎用の実装へ送るときもタグの値を渡し、タグから別名を作らない。
-- 依頼文の担当範囲は、§0 で読み取ったドメインマップから担当タグのキーの値を引いて作る。キーが無いときは「なし」と書く。
-- worktree の中で動く委譲(implement の `parallel` グループの各ステップ、test-loop の仕様のディレクトリごとの修正)では `set-domain` を使わない。worktree の要素には `step-add --domain` で `domain` を記録してあり、guard-write は書き込み先が属する要素のその値で境界を判定する。
-- メインの作業ツリーで動く委譲(`serial` グループ、`final`、グループのマージの後の run ブランチ上の修正、test-loop のプロジェクト全体の修正、fix-loop の修正)では、委譲の直前にタグの値をそのまま `set-domain` に渡す。
-- `set-domain` を伴う委譲を `wait-done` したら、直後に `clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
-- `set-domain` を伴う委譲の待ちが残っている間は、メインの作業ツリーで動くほかの委譲を出さない(`domain` は 1 値しか持てない)。worktree の中で動く委譲には当てない。
-- 複数の委譲を同じ応答で出すとき(review の観点ごとの委譲など)は、先に `clear-domain` を実行し、`set-domain` は実行しない。このときのドメインの規律は依頼文で伝える。review と再レビューでは `set-domain` を実行しない。
-- `unscoped` では `set-domain` を呼ばず、各ディスパッチの前に `clear-domain` を実行する。
-- ドメインに紐づかない委譲へ移る前に、`domain` が残っている可能性があれば `clear-domain` を実行する。
-- 実装と test-loop の修正の委譲の並べ方は `references/delegation-env.md` に従う。
+- `mapped` の実装と test-loop の修正では、ステップのタグの値を契約の担当タグにそのまま書く。タグから別名を作らない。
+- 契約の担当範囲は、§0 で読み取ったドメインマップから担当タグのキーの値を引いて作る。キーが無いときは「なし」と書く。
+- worktree の中で作業する単位(implement の `parallel` グループの各ステップ、test-loop の仕様のディレクトリごとの修正)では `set-domain` を使わない。worktree の要素には `step-add --domain` で `domain` を記録してあり、guard-write は書き込み先が属する要素のその値で境界を判定する。
+- メインの作業ツリーで作業する単位(`serial` グループ、`final`、グループのマージの後の run ブランチ上の修正、test-loop のプロジェクト全体の修正、fix-loop の修正)では、単位の作業を始める直前にタグの値をそのまま `set-domain` に渡す。
+- `set-domain` を伴う単位の作業を終えたら(委譲したときは `wait-done` の直後に)、`clear-domain` を実行する。解除しないと、次に `set-domain` するまで前の境界が効き続ける。
+- `set-domain` を伴う単位の作業が終わるまでは、メインの作業ツリーで作業するほかの単位を始めない(`domain` は 1 値しか持てない)。worktree の中で作業する単位には当てない。
+- 複数の単位を並列に進めるとき(review の観点ごとの単位など)は、先に `clear-domain` を実行し、`set-domain` は実行しない。このときのドメインの規律は契約で伝える。review と再レビューでは `set-domain` を実行しない。
+- `unscoped` では `set-domain` を呼ばず、各単位の作業を始める前に `clear-domain` を実行する。
+- ドメインに紐づかない単位へ移る前に、`domain` が残っている可能性があれば `clear-domain` を実行する。
+- 実装と test-loop の修正の単位の並べ方は `references/delegation-env.md` に従う。
 
-境界違反は `deny` ではなく `ask` で返る。止まったら、`set-domain` した値と `dev-plan.md` の該当ステップのドメインタグを照合する。値が誤っていれば正しい値で `set-domain` し直して続行する。値が正しければ越境であり、その書き込みを認めず、該当ドメインの実装の委譲をやり直す。
+境界違反は `deny` ではなく `ask` で返る。止まったら、`set-domain` した値と `dev-plan.md` の該当ステップのドメインタグを照合する。値が誤っていれば正しい値で `set-domain` し直して続行する。値が正しければ越境であり、その書き込みを認めず、該当ドメインの実装の単位をやり直す。
