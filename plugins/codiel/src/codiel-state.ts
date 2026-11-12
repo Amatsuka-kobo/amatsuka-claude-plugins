@@ -86,7 +86,8 @@ export interface RunState {
   phase: string | null
   phases: Record<string, PhaseState>
   pr: { url: string | null }
-  limits: { maxFixAttempts: number }
+  // 1.0.x の run が書いた修正の上限。1.1 からは書かず、読まない
+  limits?: { maxFixAttempts: number }
   stopReason: string | null
   incidents: { at: string; note: string | null }[]
   createdAt: string
@@ -737,7 +738,6 @@ function newState(
     phase: null,
     phases,
     pr: { url: null },
-    limits: { maxFixAttempts: 5 },
     stopReason: null,
     incidents: [],
     createdAt: now,
@@ -1406,27 +1406,13 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
     const phase = pos[1]
     if (!PHASES.includes(phase)) fail(`不正なフェーズ: ${phase}`)
     const latest = loadRun(root, flags)
-    // 終端の run を上限超過で awaiting_human へ戻さない。上限超過の後の awaiting_human → resume は残す
+    // 回数を数えるだけで、上限は持たない。1.0.x の state に残る limits も読まない
     if (TERMINAL.has(latest.state.status))
       fail(`すでに終端状態です: ${latest.state.status}`)
     const ph = latest.state.phases[phase]
     ph.attempts = (ph.attempts ?? 0) + 1
-    if (ph.attempts > latest.state.limits.maxFixAttempts) {
-      latest.state.status = "awaiting_human"
-      writeState(latest.statePath, latest.state)
-      ok({
-        statePath: latest.statePath,
-        state: latest.state,
-        capExceeded: true
-      })
-      process.exit(3)
-    }
     writeState(latest.statePath, latest.state)
-    return ok({
-      statePath: latest.statePath,
-      state: latest.state,
-      capExceeded: false
-    })
+    return ok({ statePath: latest.statePath, state: latest.state })
   }
 
   // init --intent-only の run を、intent の pass-gate の後に終える(設計書 §6.1.3)。

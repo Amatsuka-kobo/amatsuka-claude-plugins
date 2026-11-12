@@ -186,14 +186,6 @@ verdict を上書きしない。carry-over は手順 4 の例外とする。
 4. carry-over で妥当と裁定されたときだけ、「修正して再提出」と「止める」を人に選ばせる。「修正して再提出」は、修正の前に `resume` してから `<plugin-root>/skills/orchestrating-runs/references/phase-carry-over.md` の手順 5 に従い、止めない。ほかのフェーズは手順 5 へ進む。
 5. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
 
-### ループ上限超過
-
-`codiel-state record-attempt` は上限(既定 5)を超えると run を `awaiting_human` にして exit 3 を返す。CLI に上限のリセットや引き上げの手段は無い。上限超過には `evaluationId` が無いので、ASK の裁定 A・B は使えない。
-
-1. findings と試行の経過を示し、AskUserQuestion で「続行」か「中止」かを聞く。
-2. 中止なら、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason attempts-exceeded` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
-3. 続行なら、`resume --slug <slug>` で戻して修正の往復を続ける。上限超過の後は往復ごとに `record-attempt` が再び exit 3 を返すので、そのたびに人に確かめてから続ける。
-
 ## findings の引き継ぎ
 
 次フェーズのサブエージェントをディスパッチする際、前フェーズの `EvaluationResult.findings` のうち

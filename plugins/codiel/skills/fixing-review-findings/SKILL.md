@@ -62,8 +62,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    local モードでは `rebuttal-<連番>.md` のパス)を「反論済み一覧」に追記する。
 5. ディスパッチ 1 往復(実装の委譲先への修正依頼 → 完了報告)ごとに
    `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を呼ぶ。
-   exit code が `3`(`capExceeded`)なら、それ以上ディスパッチせず `raguel-gating` の ASK
-   ハンドリングに合流する(「あと 1 回だけ」と自己判断で続行しない)。
+   `record-attempt` は回数を数えるだけで、上限は無い。
 6. 実装の委譲先が返した修正 diff を `mcp__plugin_codiel_raguel__evaluate_code` に通す(`raguel-gating` の
    フェーズ→ツール対応表のとおり)。`STOP`/`ASK` が返れば `raguel-gating` の該当ハンドリングに
    従う(自己判断で握り潰さない)。

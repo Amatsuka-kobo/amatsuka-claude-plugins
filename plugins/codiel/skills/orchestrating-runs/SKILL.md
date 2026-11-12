@@ -213,7 +213,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき。carry-over で修正の委譲を出す前 |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの委譲を出す前 |
 | `references/e2e.md` | E2E を実行する委譲を出す前 |
-| `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・上限超過の後の中止(raguel-gating・implement・test-code)・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
+| `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
 | `references/adr-candidates.md` | intent-sync で取り込み先の分岐を決める前。fix-loop で設計を変える修正を採ったときの fix-loop の pass-gate の前。finalize で候補を写す前と、結果レポートに一覧する前 |
 | `references/resume.md` | run を再開するとき |
 

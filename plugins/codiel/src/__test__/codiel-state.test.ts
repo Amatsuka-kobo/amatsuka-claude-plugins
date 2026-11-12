@@ -1415,19 +1415,40 @@ test("record-outcome approved は completed にする", () => {
   expect(r.out.state.status).toBe("completed")
 })
 
-test("record-attempt は上限超過で exit 3 + awaiting_human", () => {
+test("record-attempt は上限を持たず、6 回目以降も回数だけを増やす", () => {
   const root = tmpProject()
   init(root)
   run(root, ["start-phase", "intent", "--slug", "demo"])
-  for (let i = 0; i < 5; i++)
+  for (let i = 0; i < 7; i++) {
+    const r = run(root, ["record-attempt", "intent", "--slug", "demo"])
+    expect(r.code).toBe(0)
+    expect(Object.keys(r.out).sort()).toEqual(["state", "statePath"])
+  }
+  const st = run(root, ["get", "--slug", "demo"]).out.state
+  expect(st.status).toBe("active")
+  expect(st.phases.intent.attempts).toBe(7)
+})
+
+test("init が書く state に limits は無い", () => {
+  const root = tmpProject()
+  init(root)
+  const st = JSON.parse(fs.readFileSync(statePath(root, "demo"), "utf8"))
+  expect("limits" in st).toBe(false)
+})
+
+test("1.0.x の state に limits が残っていても、record-attempt は上限で止めない", () => {
+  const root = tmpProject()
+  init(root)
+  run(root, ["start-phase", "intent", "--slug", "demo"])
+  const p = statePath(root, "demo")
+  const st = JSON.parse(fs.readFileSync(p, "utf8"))
+  st.limits = { maxFixAttempts: 5 }
+  fs.writeFileSync(p, JSON.stringify(st, null, 2))
+  for (let i = 0; i < 6; i++)
     expect(run(root, ["record-attempt", "intent", "--slug", "demo"]).code).toBe(
       0
     )
-  const r = run(root, ["record-attempt", "intent", "--slug", "demo"])
-  expect(r.code).toBe(3)
-  expect(run(root, ["get", "--slug", "demo"]).out.state.status).toBe(
-    "awaiting_human"
-  )
+  expect(run(root, ["get", "--slug", "demo"]).out.state.status).toBe("active")
 })
 
 test("record-attempt は stop の後の終端の run を拒否し、run は stopped のまま残る(C3-10)", () => {
@@ -3225,7 +3246,6 @@ test("set-domain 後も既存サブコマンドが正常に動き、他フィー
     "phase",
     "phases",
     "pr",
-    "limits",
     "stopReason",
     "incidents",
     "createdAt",

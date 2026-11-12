@@ -749,7 +749,6 @@ function newState(slug, tryN, fields) {
     phase: null,
     phases,
     pr: { url: null },
-    limits: { maxFixAttempts: 5 },
     stopReason: null,
     incidents: [],
     createdAt: now,
@@ -1282,22 +1281,8 @@ function main(argv, root = process.cwd()) {
       fail(`\u3059\u3067\u306B\u7D42\u7AEF\u72B6\u614B\u3067\u3059: ${latest.state.status}`);
     const ph = latest.state.phases[phase];
     ph.attempts = (ph.attempts ?? 0) + 1;
-    if (ph.attempts > latest.state.limits.maxFixAttempts) {
-      latest.state.status = "awaiting_human";
-      writeState(latest.statePath, latest.state);
-      ok({
-        statePath: latest.statePath,
-        state: latest.state,
-        capExceeded: true
-      });
-      process.exit(3);
-    }
     writeState(latest.statePath, latest.state);
-    return ok({
-      statePath: latest.statePath,
-      state: latest.state,
-      capExceeded: false
-    });
+    return ok({ statePath: latest.statePath, state: latest.state });
   }
   if (cmd === "close") {
     const latest = loadRun(root, flags);

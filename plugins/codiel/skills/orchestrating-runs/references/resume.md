@@ -31,4 +31,5 @@ run を再開するときに読む。
    - intent-sync では `steps/intent-sync/report.md`。このファイルがあれば、取り込みと ADR 候補の書き残しは済んでいる。
 
    discuss で中断していたときの再開位置(アジェンダ作成から/未決論点から/最終確認から)は、`facilitating-design-discussions` の「中断再開」に従う。design で `design.md` が既にあるときは、ウォークスルーの再提示から再開する。
-7. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。
+7. `state.status` が `awaiting_human` で、`awaiting_human` のフェーズが 1 つも無いなら、以前のバージョンが修正の回数の上限で止めた run である。`resume --slug <slug>` して修正のループを続ける。
+8. それ以外で `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。

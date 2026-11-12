@@ -12,7 +12,8 @@
 ## 手順
 
 - 修正の委譲の 1 往復(1 attempt)ごとに、`record-attempt fix-loop --slug <slug>` を呼ぶ。`record-attempt` はオーケストレーターだけが呼び、委譲先には呼ばせない。
-- exit code が `3`(試行上限超過・`capExceeded`)なら、`raguel-gating` の ASK と同じ扱いにする。`awaiting_human` は `record-attempt` がセットしている。findings に当たる情報を人に示し、裁定を受けてから続ける。
+- `record-attempt` は回数を数えるためだけに呼び、修正のループに上限は無い。1 往復を 1 ラウンドと数える。
+- 修正の 1〜3 ラウンドは、同じ委譲先を文脈を保ったまま続投させる。4 ラウンド以上は、2 ラウンドごとに(4・5、6・7、…)、作業内容を「行き詰まりの打開」と明記した新しい修正の委譲として出し、新しい回の待ちの `id` で始める。自分で作業するときは、新しい単位に移るたびに、それまでの修正の方針を捨てて原因の調べ直しから始める。再レビューの扱いは変えない。
 - 所見がテストに向くと `fixing-review-findings` の検証で確かめたら、`set-test-edit --slug <slug>` を実行してからテスト側の修正を委譲する。その委譲を `wait-done` した直後に `clear-test-edit --slug <slug>` を実行し、その後でコードの修正を委譲する。
 - github モードでは、修正のコミットが済んだ後、再レビューの委譲を出す前に `git push` して PR ブランチを最新化する。
 - 再レビューの委譲を出す前に `references/review-common.md` を Read し、その規則で観点を選び直し、「委譲の前の準備」を行う。依頼文の前提の「反論済み所見」に、`fixing-review-findings` の反論済み一覧を書く。統合した報告は `review-<m+1>.md` に書く。
