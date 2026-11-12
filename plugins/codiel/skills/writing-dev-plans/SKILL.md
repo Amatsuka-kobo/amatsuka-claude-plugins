@@ -11,7 +11,7 @@ description: Codiel の dev-plan フェーズで、オーケストレーター�
 機能単位)と、orchestrating-runs の §0 の実行モード・ドメインマップを入力に、
 `design.md` の変更対象をドメイン単位の実行可能なステップ列へ分解し `dev-plan.md` として構造化する。
 
-dev-plan は test-spec の委譲が動いている間に書きゲートするので、test-spec の出力(`cases.md`)を入力にしない。
+dev-plan は test-spec の単位が進んでいる間に書きゲートするので、test-spec の出力(`cases.md`)を入力にしない。
 
 本スキルの責務は「`design.md` の変更対象を、ドメイン単位に分割された実行可能なステップへ分解すること」
 にある。コードを書くことではない。

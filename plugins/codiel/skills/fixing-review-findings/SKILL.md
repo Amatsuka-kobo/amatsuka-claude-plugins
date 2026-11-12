@@ -1,6 +1,6 @@
 ---
 name: fixing-review-findings
-description: Codiel の fix-loop フェーズで、オーケストレーター本体が review-<m>.md の critical・high 所見を検証し、実装への修正委譲と反論の記録までを運転するときに使う。orchestrating-runs が名指しで起動する。
+description: Codiel の fix-loop フェーズで、オーケストレーター本体が review-<m>.md の critical・high 所見を検証し、実装への修正の単位と反論の記録までを運転するときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # fix-loop 運転規約
@@ -8,7 +8,7 @@ description: Codiel の fix-loop フェーズで、オーケストレーター�
 ## 概要
 
 `orchestrating-runs` の [12] fix-loop フェーズでオーケストレーター自身が使うスキルである。
-修正は実装の委譲先へのディスパッチで行う。オーケストレーターは、`orchestrating-runs` §3 冒頭の分担のとおり、自分でコードを直さない。
+修正は実装の単位の作業として始める。委譲する場合は、運用方針に従う。
 
 入力は `reports/review-<m>.md` の所見のうち critical / high だけである。medium/low は修正せず、
 `triage` フェーズ(`filing-followup-issues`)へそのまま持ち越す(`reviewing-diffs` の severity 定義表のとおり下流の扱いが分かれる)。
@@ -46,37 +46,32 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    として除外する。除外した件数も後で triage へ引き継ぐため覚えておく)。
 2. 所見ごとに、対象ファイル・行・intent(`docs/intents/**`)/design.md/spec.md の根拠を突き合わせて
    技術的に検証する。所見の severity や書き方が断定的でも、検証が済むまでは妥当と決めず、
-   実装の委譲先へディスパッチしない。必要なら読み取り専用サブエージェントへ調査を委譲するが、
+   実装の修正の単位を始めない。必要なら読み取りだけの単位で調査するが、
    妥当性の最終判断は自分で行う。
 3. 所見がテスト・`spec.md`・`cases.md` の誤りや不足に向くときは、
    `node <plugin-root>/scripts/codiel-state.mjs set-test-edit --slug <slug>` を実行してから、
    `writing-test-specs`(`spec.md`・`cases.md` の直し)と `scripting-tests`(テストコードの直し)に
-   従う委譲でテスト側を先に直させる。振る舞いを変える修正なら、コードの修正の前にテストが失敗することを確かめさせる。
-   報告を `waits/<id>.md` に書いて `wait-done` した直後に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
+   従う作業でテスト側を先に直す。振る舞いを変える修正なら、コードの修正の前にテストが失敗することを確かめる。
+   委譲したときは、報告を `waits/<id>.md` に書いて `wait-done` した直後に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
    実行する。妥当と判断したそれ以外の所見(テスト側の修正の後にコードの修正が要る所見を含む)は、
-   該当ドメインの実装の委譲先へ `implementing` の契約 (b) レビュー所見由来
-   の形式(所見: severity・対象・内容・根拠・提案 + 対象ファイル)でディスパッチする(1 所見ずつ
-   でも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分けてディスパッチする)。
+   該当ドメインの実装の修正の単位で、`implementing` の `references/fix-mode.md` の (b) レビュー所見由来の入力(所見: severity・対象・内容・根拠・提案 + 対象ファイル)を使って直す(1 所見ずつでも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分ける)。
 4. 不当と判断した所見は、下記「PR 反論記録書式」の内容で `rebuttal-<連番>.md` を作り、「記録の投稿手順」で記録する。
    修正はしない。反論後は所見の要約・反論根拠・(github モードでは投稿した PR コメント URL、
    local モードでは `rebuttal-<連番>.md` のパス)を「反論済み一覧」に追記する。
 5. 1 つの `review-<m>.md` の所見を直す 1 サイクル(テスト側・コード側・ドメインごとの修正をすべて含む)の
    修正がすべて返った時点で、`node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を 1 回呼ぶ。
    `record-attempt` は回数を数えるだけで、上限は無い。修正を 1 件も出さなかったサイクルは数えない。
-6. 実装の委譲先が返した修正 diff を `mcp__plugin_codiel_raguel__evaluate_code` に通す(`raguel-gating` の
+6. 修正の単位で得た修正 diff を `mcp__plugin_codiel_raguel__evaluate_code` に通す(`raguel-gating` の
    フェーズ→ツール対応表のとおり)。`STOP`/`ASK` が返れば `raguel-gating` の該当ハンドリングに
    従う(自己判断で握り潰さない)。
 7. 修正が反映されたら `running-regression-tests` の手順で回帰全体(影響 unit + 既存全 unit +
    プロジェクトの test コマンド)を再実行する(修正対象のケースだけの再実行にしない)。プロジェクトの
-   test コマンドと `units/` のテストはオーケストレーターが実行し、`e2e/` のテストは実行を委譲する。
+   test コマンドと `units/` のテストはオーケストレーターが実行し、`e2e/` のテストは仕様のディレクトリごとの実行の単位にする。
 8. github モードでは、回帰がパスしたらオーケストレーターが `git push` して PR ブランチ
    (`state.branch`)をリモートへ最新化する。local モードでは push しない。
-9. 回帰がパスしたら(github モードでは push の後)、再レビューの委譲を出す前に
-   `../orchestrating-runs/references/review-common.md` を Read し、その規則で観点を選んで担当を
-   再ディスパッチし、`reviewing-diffs` の手順で `review-<m+1>.md` を作る。ディスパッチ時の
-   申し送りに「反論済み一覧」を含め、レビューの委譲先が新たな根拠なしに同一所見を再報告しないようにする。
+9. 回帰がパスしたら(github モードでは push の後)、再レビューの単位を始める前に `../orchestrating-runs/references/review-common.md` を Read し、その規則で観点を選んで、`reviewing-diffs` の手順で `review-<m+1>.md` を作る。レビューの契約には「反論済み一覧」を載せない。
 10. `review-<m+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
-    除外する(ただしレビューの委譲先が新たな根拠を伴って再主張したものは未決に戻し件数に含める)。
+    除外する(ただし反論を覆す新たな根拠を伴う所見は未決に戻し件数に含める)。
     除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 11 へ。
     反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を 1 度だけ
     `restatement-<連番>.md` として「記録の投稿手順」で記録し、件数から除外する。
@@ -102,7 +97,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 再現を試みた結果どうだったか、といった技術的根拠>
 ```
 
-妥当と判断し修正が完了した所見には、修正を行った委譲先のコミットハッシュを添えて次の形式で
+妥当と判断し修正が完了した所見には、修正を行った単位のコミットハッシュを添えて次の形式で
 対応済みを `resolution-<連番>.md` として「記録の投稿手順」で記録する。
 
 ```markdown

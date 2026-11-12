@@ -8,8 +8,7 @@ description: Codiel の triage フェーズで、オーケストレーター本�
 ## 概要
 
 `orchestrating-runs` の [13] triage フェーズでオーケストレーター自身が使うスキルである。
-`fixing-review-findings` と同様にオーケストレーターの進行規約であり、サブエージェントへの
-ディスパッチは発生しない(起票作業そのものをオーケストレーターが行う)。
+`fixing-review-findings` と同様にオーケストレーターの進行規約であり、作業者への作業の受け渡しは発生しない(起票作業そのものをオーケストレーターが行う)。
 
 triage は非 GATED フェーズであり、Raguel の `evaluate_*` は経ない。`complete-phase triage` の
 前提として人間の明示的な指示を必須とする。起票対象・まとめ方・見送りは常にユーザーが決める。

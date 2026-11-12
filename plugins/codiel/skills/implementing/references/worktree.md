@@ -1,6 +1,6 @@
 # worktree 内での作業
 
-`implement.steps` の `parallel` グループのステップでは、依頼文が絶対パスで渡す brief ファイル(`.codiel/runs/<slug>/try-<n>/steps/step-<k>/brief.md`)を Read する。そこに書かれた次の値を確認する。
+`implement.steps` の `parallel` グループのステップでは、契約が絶対パスで渡す brief ファイル(`.codiel/runs/<slug>/try-<n>/steps/step-<k>/brief.md`)を Read する。そこに書かれた次の値を確認する。
 
 - 実行モード
 - 担当タグ
@@ -9,7 +9,7 @@
 - 触るファイル
 - 前提ステップ
 - 環境準備のコマンド
-- 委譲の種類
+- 単位の種類(並列可・単独)
 - 実行する通すテスト
 
 `serial` グループのステップと、方式 b の最終ステップは worktree を作らず、run ブランチ上で直接作業する。

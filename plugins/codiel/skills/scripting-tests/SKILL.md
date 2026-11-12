@@ -1,19 +1,19 @@
 ---
 name: scripting-tests
-description: Codiel の test-code フェーズで、仕様のディレクトリごとの委譲先が cases.md から実装より先にテストコードを書いて実行し、失敗(Red)を確かめるときに使う。orchestrating-runs が名指しで起動する。
+description: Codiel の test-code フェーズで、仕様のディレクトリごとの作業者が cases.md から実装より先にテストコードを書いて実行し、失敗(Red)を確かめるときに使う。orchestrating-runs が名指しで起動する。
 ---
 
 # テストコード作成規約
 
 ## 概要
 
-test-code フェーズの委譲先が、仕様のディレクトリ(`<testsDir>/<ID>/`)ごとに使うスキル。`cases.md` から実装より先にテストコード(ユニットテストと E2E)を書いて実行し、実装がまだ無いために失敗すること(Red)を確かめる。このスキルが書くのはテストコードだけで、`spec.md` と `cases.md` は書き換えない。
+test-code フェーズの作業者が、仕様のディレクトリ(`<testsDir>/<ID>/`)ごとに使うスキル。`cases.md` から実装より先にテストコード(ユニットテストと E2E)を書いて実行し、実装がまだ無いために失敗すること(Red)を確かめる。このスキルが書くのはテストコードだけで、`spec.md` と `cases.md` は書き換えない。
 
 最初に、担当する仕様のディレクトリの `spec.md`・`cases.md`・`design.md`(軽量では intent の `## 受け入れ基準` と `## 実装方針`)・`dev-plan.md` を読む。
 
 ## worktree での作業
 
-test-code の委譲は worktree(`.codiel/worktrees/<slug>/test-code-<k>`)で行う。依頼文が渡す brief ファイル(`.codiel/runs/<slug>/try-<n>/steps/test-code-<k>/brief.md`)の絶対パスを Read し、testsDir の値・担当する仕様のディレクトリの ID・入力のパスを、そこに書かれた値として確認する。委譲を出す順序と同時実行数は `../orchestrating-runs/references/delegation-env.md` の規律に従う。
+test-code の単位は worktree(`.codiel/worktrees/<slug>/test-code-<k>`)で作業する。契約が渡す brief ファイル(`.codiel/runs/<slug>/try-<n>/steps/test-code-<k>/brief.md`)の絶対パスを Read し、testsDir の値・担当する仕様のディレクトリの ID・入力のパスを、そこに書かれた値として確認する。並列に進めるときの順序と同時実行数は `../orchestrating-runs/references/delegation-env.md` の規律に従う。
 
 worktree の中では、実装に入る前に依存をインストールする。コマンドは brief の `## 環境準備` の値を使う。「なし」のときは、その worktree の lockfile の種類から選ぶ既定のコマンドを使う。
 
@@ -42,7 +42,7 @@ Red の対象は、この run で追加・変更したケースであり、`git 
 - 失敗の理由が環境にある(下記「テストの実行環境と環境の失敗」)なら Red にせず、理由と出力の抜粋を報告に挙げる。
 - テストの記述の誤り(構文、テスト自身の import、フレームワークの設定)で失敗したら、テストを直して再実行する。
 - Red かテストの誤りか判断がつかないときは、書き換えず「cases.md の誤り」として報告する。
-- 依頼文の実行モードの前提に「引き継いだ実装あり」と書かれているときは、追加・変更したケースが実装の前に通っても、cases.md の誤りとして報告しない。「引き継いだ実装で通る」として、ケース ID を報告に挙げる。
+- 契約の前提の実行モードに「引き継いだ実装あり」と書かれているときは、追加・変更したケースが実装の前に通っても、cases.md の誤りとして報告しない。「引き継いだ実装で通る」として、ケース ID を報告に挙げる。
 - 上の前提が無いとき、Red の対象のテストが通ったら、cases.md かテストの誤りを疑う。テストが期待結果を検出していない(アサーションの誤り、対象の取り違え)なら、テストを直して再実行する。テストが期待結果を検出していてなお通るなら、cases.md がこの run で変わる振る舞いを表していない。「cases.md の誤り」として報告に挙げ、cases.md は書き換えない。
 - Red の対象でないケースのテストは、現行のコードで通ることを確かめる。失敗したら報告に挙げる。
 

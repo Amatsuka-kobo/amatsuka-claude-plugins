@@ -48,7 +48,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    それでも失敗するなら、(test-spec と dev-plan では `references/parallel-gates.md` に従い、もう片方の待ちが残る間は後回しにして)`mark-ask <phase> --slug <slug> --kind confirm` で待ち、AskUserQuestion で「再試行」「時間を置いて続行」「中止」を聞く。中止は、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason raguel-unavailable` で止める。
    成果物は動かさず、ASK や as-is の裁定で代用しない。Raguel の記録なしにゲートを通す手段は無い。
 5. verdict で分岐する(下記「verdict 別ハンドリング」)。
-6. PROCEED なら次フェーズのディスパッチプロンプトに前フェーズの findings 要約を含める
+6. PROCEED なら次フェーズの契約に前フェーズの findings 要約を含める
    (「findings の引き継ぎ」参照)。
 
 ## フェーズ→ツール対応表
@@ -188,9 +188,9 @@ verdict を上書きしない。carry-over は手順 4 の例外とする。
 
 ## findings の引き継ぎ
 
-次フェーズのサブエージェントをディスパッチする際、前フェーズの `EvaluationResult.findings` のうち
+次フェーズの単位を始めるときは、前フェーズの `EvaluationResult.findings` のうち
 残っているもの(severity: info 含む)を `ruleId` + `message` の短い箇条書きで渡す。
-これにより、たとえば design フェーズで指摘された懸念を implement フェーズの実装の委譲先が
+これにより、たとえば design フェーズで指摘された懸念を implement フェーズの作業者が
 無視せず踏まえられる。findings の全文(evidence.excerpt 等)は転記しない
 (`casePath` を渡し、必要なら読みに行かせる)。
 

@@ -97,7 +97,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 文書は `CLAUDE.md` → `README.md` の順に読む。
 
 - パスは §0 の `check-intent-env` の出力にある `contextDocs` のうち、`CLAUDE.md` と `README.md` のものを使う。固定パスで開かない。
-- 探索を委譲するときは、解決済みの絶対パスを渡して委譲先に読ませる。注入はサブエージェントに継承されない。
+- 探索を委譲するときは、解決済みの絶対パスを渡して委譲先に読ませる。注入は委譲先に継承されない。
 - 探索範囲は TOBE に登場する語から辿れる範囲に限定する。
 - Serena が利用可能なら優先して使う(`get_symbols_overview` / `find_symbol` / `find_referencing_symbols`)。利用できなければ Grep / Glob / Read で代替する。
 - `projectDocs.domainsReadable` が `true` で、TOBE が特定のドメインに閉じると判断できるときは、そのドメインの glob に絞ってよい。
