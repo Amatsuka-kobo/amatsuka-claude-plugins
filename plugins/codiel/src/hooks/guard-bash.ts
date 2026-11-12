@@ -543,6 +543,13 @@ function flagValues(tokens: string[], names: string[]): string[] {
   return values
 }
 
+// gh pr create の --label・-l の値(繰り返しとカンマ区切り)に codiel があるか
+function hasCodielLabel({ tokens }: GhInvocation): boolean {
+  return flagValues(tokens, ["--label", "-l"])
+    .flatMap((v) => v.split(","))
+    .some((v) => v.trim() === "codiel")
+}
+
 // 本文のファイルを cwd 基準で読む。`-`(標準入力)は中身を検査できないので deny し、
 // 読めないファイルも deny する(emit は never を返すので、戻り値は常に読めた中身)。
 function readBodyFile(flag: string, file: string, cwd: string): string {
@@ -1232,6 +1239,13 @@ try {
         `push は pr・fix-loop・triage・finalize のフェーズで、test-loop の合格の後にだけ実行できます(現在: ${phase})`
       )
     checkGeneratedMarker(ghInvocations, cmd, cwd)
+    // codiel が対応する PR の印。フェーズとマーカーの検査の後に置き、既存の拒否の理由を変えない
+    if (
+      ghInvocations.some(
+        (inv) => inv.command === "pr create" && !hasCodielLabel(inv)
+      )
+    )
+      emit("deny", "run 中の PR には `--label codiel` を付けてください")
   }
   pass()
 } catch (e) {

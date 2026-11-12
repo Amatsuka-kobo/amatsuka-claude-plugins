@@ -148,20 +148,18 @@ test("triage の run では Issue の作成(create_issue・issue_write の creat
   }
 })
 
-test("pr フェーズ(test-loop 合格後)の run では PR の作成をマーカー付きで許し、Issue の作成は deny", () => {
+test("pr フェーズ(test-loop 合格後)の run でも、MCP の PR の作成はラベルを渡せないので deny し、Issue の作成も deny", () => {
   const root = setupRunAtPr()
   for (const [tool, extra] of CREATE_CALLS) {
     const marked = hook(root, `mcp__github__${tool}`, {
       ...extra,
       body: `内容\n\n${MARKER}`
     })
-    if (tool === "create_pull_request") {
-      expect(marked, tool).toBe(null)
-      const bare = hook(root, `mcp__github__${tool}`, {
-        body: "マーカーが無い本文"
-      })
-      expect(bare?.permissionDecision, tool).toBe("deny")
-    } else expect(marked?.permissionDecision, tool).toBe("deny")
+    expect(marked?.permissionDecision, tool).toBe("deny")
+    if (tool === "create_pull_request")
+      expect(marked?.permissionDecisionReason, tool).toContain(
+        "gh pr create --label codiel"
+      )
   }
 })
 

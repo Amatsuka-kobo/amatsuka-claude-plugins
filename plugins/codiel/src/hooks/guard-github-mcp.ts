@@ -44,6 +44,12 @@ try {
         : null
   const problem = kind && ghPostPhaseProblem(kind, run.state)
   if (problem) emit("deny", problem)
+  // run 中の PR には codiel ラベルを求めるが、create_pull_request はラベルを受け取らない
+  if (kind === "pr")
+    emit(
+      "deny",
+      "GitHub MCP の PR の作成はラベルを付けられません。run 中の PR は `gh pr create --label codiel` で作成してください"
+    )
 
   const body = input.tool_input?.body
   // 本文の引数を持たない呼び出し(reaction だけの add_issue_comment など)は通す。

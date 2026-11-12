@@ -159,6 +159,11 @@ try {
   const kind = tool === "create_pull_request" ? "pr" : tool === "create_issue" || tool === "issue_write" && input.tool_input?.method === "create" ? "issue" : null;
   const problem = kind && ghPostPhaseProblem(kind, run.state);
   if (problem) emit("deny", problem);
+  if (kind === "pr")
+    emit(
+      "deny",
+      "GitHub MCP \u306E PR \u306E\u4F5C\u6210\u306F\u30E9\u30D9\u30EB\u3092\u4ED8\u3051\u3089\u308C\u307E\u305B\u3093\u3002run \u4E2D\u306E PR \u306F `gh pr create --label codiel` \u3067\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044"
+    );
   const body = input.tool_input?.body;
   if (typeof body !== "string") pass();
   if (!body.includes(MARKER))

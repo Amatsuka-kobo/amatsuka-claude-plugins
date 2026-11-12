@@ -626,6 +626,9 @@ function flagValues(tokens, names) {
   }
   return values;
 }
+function hasCodielLabel({ tokens }) {
+  return flagValues(tokens, ["--label", "-l"]).flatMap((v) => v.split(",")).some((v) => v.trim() === "codiel");
+}
 function readBodyFile(flag, file, cwd) {
   if (file === "-")
     emit(
@@ -1018,6 +1021,10 @@ try {
         `push \u306F pr\u30FBfix-loop\u30FBtriage\u30FBfinalize \u306E\u30D5\u30A7\u30FC\u30BA\u3067\u3001test-loop \u306E\u5408\u683C\u306E\u5F8C\u306B\u3060\u3051\u5B9F\u884C\u3067\u304D\u307E\u3059(\u73FE\u5728: ${phase})`
       );
     checkGeneratedMarker(ghInvocations, cmd, cwd);
+    if (ghInvocations.some(
+      (inv) => inv.command === "pr create" && !hasCodielLabel(inv)
+    ))
+      emit("deny", "run \u4E2D\u306E PR \u306B\u306F `--label codiel` \u3092\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044");
   }
   pass();
 } catch (e) {

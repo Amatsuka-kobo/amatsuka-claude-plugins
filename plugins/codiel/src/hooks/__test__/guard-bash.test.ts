@@ -146,8 +146,47 @@ test("issue を持たない run でも、guard-bash が gh issue create を phas
 
 test("run あり(phase=pr, test-loop passed)で gh pr create は素通し(無出力)", () => {
   const root = setupRunAtPr()
-  const r = hook(root, "gh pr create")
+  const r = hook(root, "gh pr create --label codiel")
   expect(r).toBe(null)
+})
+
+// --- run 中の PR には codiel ラベルを求める ---
+
+const LABEL_REASON = "run 中の PR には `--label codiel` を付けてください"
+
+for (const command of [
+  "gh pr create --label codiel",
+  "gh pr create --label=codiel",
+  "gh pr create -l codiel",
+  "gh pr create -lcodiel",
+  'gh pr create --label "codiel"',
+  "gh pr create --label bug,codiel",
+  "gh pr create --label bug --label codiel"
+])
+  test(`pr フェーズの ${command} は通る`, () => {
+    expect(hook(setupRunAtPr(), command)).toBe(null)
+  })
+
+for (const command of [
+  "gh pr create",
+  "gh pr create --label codiel-x",
+  "gh pr create --label bug",
+  'gh pr create --title "--label codiel"'
+])
+  test(`pr フェーズの ${command} はラベルが無いので deny`, () => {
+    const r = hook(setupRunAtPr(), command)
+    expect(r?.permissionDecision).toBe("deny")
+    expect(r?.permissionDecisionReason).toBe(LABEL_REASON)
+  })
+
+test("run が無いときの gh pr create はラベルを問わず通る", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gb-"))
+  expect(hook(root, "gh pr create")).toBe(null)
+})
+
+test("gh pr edit と gh issue create はラベルを検査しない", () => {
+  expect(hook(setupRun(), "gh pr edit 1 --add-label bug")).toBe(null)
+  expect(hook(setupRunAtTriage(), "gh issue create -t x")).toBe(null)
 })
 
 test("run あり(phase=implement)で gh pr create は deny", () => {
@@ -906,7 +945,7 @@ const MARKED_COMMAND_SETUPS: Record<string, () => string> = {
   "gh issue create -t x": setupRunAtTriage,
   "gh issue comment 1": setupRun,
   "gh issue edit 1": setupRun,
-  "gh pr create": setupRunAtPr,
+  "gh pr create --label codiel": setupRunAtPr,
   "gh pr comment 1": setupRun,
   "gh pr edit 1": setupRun,
   "gh pr review 1": setupRun
@@ -1231,7 +1270,10 @@ test("gh issue create --fill は pr create 専用のフラグなので、本文�
 
 test("gh pr create --fill --body はマーカーがあれば通る(本文のフラグを持つ呼び出しは従来どおり本文を検査する)", () => {
   const root = setupRunAtPr()
-  const r = hook(root, `gh pr create --fill --body "本文 ${MARKER}"`)
+  const r = hook(
+    root,
+    `gh pr create --label codiel --fill --body "本文 ${MARKER}"`
+  )
   expect(r).toBe(null)
 })
 
@@ -1336,11 +1378,11 @@ test("短いフラグの結合(-df・-dT・-dTfile.md)に含まれる -f・-T �
 
 test("値を取る短いフラグの後ろの文字は結合と読まない(-tf は --title f)。結合した -db の本文は検査する", () => {
   const root = setupRunAtPr()
-  expect(hook(root, "gh pr create -tf")).toBe(null)
+  expect(hook(root, "gh pr create -l codiel -tf")).toBe(null)
   expect(hook(root, 'gh pr create -db "no marker"')?.permissionDecision).toBe(
     "deny"
   )
-  expect(hook(root, `gh pr create -db "本文 ${MARKER}"`)).toBe(null)
+  expect(hook(root, `gh pr create -l codiel -db "本文 ${MARKER}"`)).toBe(null)
 })
 
 // --- 行末の \ による行の継続を 1 行へ戻す(M2-FX2-AR の high) ---
@@ -1523,7 +1565,10 @@ test("クォートの中の --web・-w・-webkit- はフラグと読まず、手
     "docs: use -b flag"
   ])
     expect(
-      hook(root, `gh pr create --title "${title}" --body-file pr-body.md`)
+      hook(
+        root,
+        `gh pr create --label codiel --title "${title}" --body-file pr-body.md`
+      )
     ).toBe(null)
 })
 
