@@ -19,7 +19,7 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    - `imageUpload` に使える手段があれば、E2E のレポートの画像など関連する画像を、`<plugin-root>/references/github-writing-images.md` にある「Issue・PR・コメント全般」の縮退の順序で載せる。
    - 本文には `<!-- codiel:generated -->` を含める。
 3. 本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/pr-body.md` に書く。
-4. push の前に、リポジトリに `codiel` ラベルがあるかを `gh label list --search codiel --json name` で確かめる。結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがあれば、ラベルがあるとする。
+4. push の前に、リポジトリに `codiel` ラベルがあるかを `gh label list --search codiel --json name` で確かめる。このコマンドが失敗したときは、下の `gh pr create` の失敗と同じ分け方で人に頼む。結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがあれば、ラベルがあるとする。
    - 無ければ、`node <plugin-root>/scripts/codiel-state.mjs mark-ask pr --slug <slug> --kind confirm` で待ち、AskUserQuestion で「作る(推奨)」「自分で用意してから続ける」「中止」のどれかを聞く。run の中の PR はラベルが無いと作れない(hook が拒否する)ので、ラベル無しで続ける選択肢は無い。
    - 「作る」なら `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` で作る。失敗したら、エラーの文言を示して同じ質問をし直す。
    - 「作る」か「自分で用意してから続ける」の後は、`resume` してからラベルの有無を確かめ直す。まだ無ければ、もう一度 `mark-ask` して同じ質問をする。

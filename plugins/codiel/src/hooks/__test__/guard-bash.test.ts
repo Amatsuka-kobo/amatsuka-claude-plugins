@@ -182,7 +182,9 @@ for (const command of [
 test("マーカーもラベルも無い gh pr create は、マーカーの理由で deny する(ラベルの検査はマーカーの後)", () => {
   const r = hook(setupRunAtPr(), 'gh pr create --body "本文だけ"')
   expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).not.toBe(LABEL_REASON)
+  expect(r?.permissionDecisionReason).toContain(
+    "gh pr create の本文に `<!-- codiel:generated -->` を含めて"
+  )
 })
 
 test("run が無いときの gh pr create はラベルを問わず通る", () => {

@@ -44,7 +44,7 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 | L | GitHub の `codiel` ラベル | `gh repo view` が失敗する(GitHub のリポジトリでない、`gh` が無い、未認証)か、`gh label list --search codiel --json name` の結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがある |
 
 - 4 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
-- L だけが欠けていて、手順 4(d) で作らないと答えたときは、ラベルが無いことを初期化の欠落として扱わない。完了報告に「初期化済み。`codiel` ラベルは作らなかった」と書き、run の pr フェーズと次の `/codiel:init` で再び聞くことを添える。
+- 手順 4(d) で作らないと答えたとき、または作成が失敗したときは、ラベルが無いことを初期化の欠落として扱わない。ほかの 3 点が揃っていれば「初期化済み」と報告する。完了報告には、ラベルを作らなかったこと(失敗したときはエラーの文言)と、run の pr フェーズと次の `/codiel:init` で再び聞くことを書く。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
 - `codiel-state gitignore` が失敗したとき(config.json が不正なとき)は、標準エラー出力の理由を控え、D は揃っていないものとして扱う。
 - GOTCHAS は確認対象に含めない。台帳の生成は metatron が行う(`/metatron:init`)。codiel は台帳を作らない。
@@ -161,7 +161,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
   と同じ内容であることを確認する。
 - 手順 4(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 6 行の内容が
   追記されていることを確認する。
-- 手順 4(d) でラベルを作ったときは、`gh label list --search codiel --json name` でラベルがあることを確認する。
+- 手順 4(d) でラベルの作成が成功したときは、`gh label list --search codiel --json name` でラベルがあることを確認する。作成が失敗したときは検証の対象にせず、完了報告に書く。
 - 環境変数 `TYPESAFE_API_KEY` の有無を `test -n "$TYPESAFE_API_KEY"` で確かめる。値は表示しない。無くても初期化は失敗にせず、完了報告で伝える。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 
@@ -177,7 +177,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - ユーザーが不明と答えて未記入のまま残した項目
 - 手順 2 で `raguel.config.yaml` を消す承認が得られず残ったときは、Raguel が読まないファイルであること
 - 手順 4(c) の旧セクションの取り除きが承認されず残った場合はその旨
-- 手順 4(d) で `codiel` ラベルを作ったか、断られて作らなかったか
+- 手順 4(d) で `codiel` ラベルを作ったか、断られて作らなかったか、作成が失敗したか(エラーの文言)
 - `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルである。コミットしたか、断られて利用者に任せたかを書く
 - `TYPESAFE_API_KEY` が無いときは、Raguel が Jev による内容の判定と文脈の補正をせず、ルール層だけで判定すること。有効にするには、キーをシェルの環境変数 `TYPESAFE_API_KEY` に設定して Claude Code を起動し直す(手順は `jevriel` プラグインの README に従う)
 - 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
