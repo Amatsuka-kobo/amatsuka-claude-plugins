@@ -15,11 +15,11 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 
 ## チェックリスト
 
-- [ ] 0. **現状調査**。3 点すべて揃っていれば「初期化済み」と報告して終了する
+- [ ] 0. **現状調査**。4 点すべて揃っていれば「初期化済み」と報告して終了する
 - [ ] 1. **`.codiel/` の配置**
 - [ ] 2. **`.codiel/config.json` の `raguel` の生成**(保護パス)
 - [ ] 3. **`.gitignore` の整備**
-- [ ] 4. **`.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記**
+- [ ] 4. **`.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記**、`codiel` ラベルの作成
 - [ ] 5. **検証**
 - [ ] 6. **完了報告**
 
@@ -34,15 +34,16 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 
 ## 0. 現状調査
 
-次の 3 点を確認し、**不足しているものだけ**を以降の手順の対象にする。
+次の 4 点を確認し、**不足しているものだけ**を以降の手順の対象にする。
 
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
 | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
 | C | `.codiel/config.json` | JSON のオブジェクトとして読め、`raguel` がオブジェクトである(空のオブジェクトでよい)。`raguel.config.yaml` は見ない |
 | D | `.codiel/runs` / `.codiel/reports` / `.gitignore` | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在し、`node <plugin-root>/scripts/codiel-state.mjs gitignore` が返す `missing` が空である |
+| L | GitHub の `codiel` ラベル | `gh repo view` が失敗する(GitHub のリポジトリでない、`gh` が無い、未認証)か、`gh label list --search codiel --json name` の結果に名前が `codiel` に一致するものがある。この実行でラベルを作らないと答えたときも揃っているものとする |
 
-- 3 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
+- 4 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
 - `codiel-state gitignore` が失敗したとき(config.json が不正なとき)は、標準エラー出力の理由を控え、D は揃っていないものとして扱う。
 - GOTCHAS は確認対象に含めない。台帳の生成は metatron が行う(`/metatron:init`)。codiel は台帳を作らない。
@@ -115,7 +116,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 
 `<runsDir>/` は git で共有するので、`.gitignore` に行を置かない。
 
-## 4. `.claude/rules/codiel.md` の配置と `CLAUDE.md` への `## Codiel` の追記
+## 4. `.claude/rules/codiel.md` の配置、`CLAUDE.md` への `## Codiel` の追記、`codiel` ラベルの作成
 
 ### (a) `.claude/rules/codiel.md` の配置
 
@@ -140,6 +141,11 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - `CLAUDE.md` に旧セクション `## Codiel ハーネス運用ルール` があれば、それを取り除く差分を
   提示し、承認を得てから取り除く。
 - 承認されなければ残し、完了報告にその旨を書く。
+
+### (d) `codiel` ラベルの作成
+
+- 手順 0 で L が欠けていたら、作るコマンド `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` を応答の本文に出し、作るかを AskUserQuestion で聞く。
+- 承認を得てから実行する。断られたら作らず、完了報告に、run の pr フェーズで再び聞くことを書く。
 
 (a)(b)(c) のいずれも、既存の他セクションは一切変更しない。例外は (c) の旧セクション
 「## Codiel ハーネス運用ルール」の取り除きだけであり、承認を得た場合に限る。
@@ -168,6 +174,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - ユーザーが不明と答えて未記入のまま残した項目
 - 手順 2 で `raguel.config.yaml` を消す承認が得られず残ったときは、Raguel が読まないファイルであること
 - 手順 4(c) の旧セクションの取り除きが承認されず残った場合はその旨
+- 手順 4(d) で `codiel` ラベルを作ったか、断られて作らなかったか
 - `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルである。コミットしたか、断られて利用者に任せたかを書く
 - `TYPESAFE_API_KEY` が無いときは、Raguel が Jev による内容の判定と文脈の補正をせず、ルール層だけで判定すること。有効にするには、キーをシェルの環境変数 `TYPESAFE_API_KEY` に設定して Claude Code を起動し直す(手順は `jevriel` プラグインの README に従う)
 - 次のアクション: `/codiel:run [<Issue番号> | <intent パス> | 省略]` で run を開始できること
@@ -181,7 +188,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 
 <HARD-GATE>
 - **承認なしに書き込まない**。ドラフト全文(新規ファイル)または追記差分(既存ファイル)の
-  提示と承認の取得を省略しない。提示は応答の本文に出すことであり、承認を聞くより前に行う。
+  提示と承認の取得を省略しない。手順 4(d) の `codiel` ラベルの作成も、承認を得てから行う。提示は応答の本文に出すことであり、承認を聞くより前に行う。
 - **既存記述を削除・改変しない**。変更は不足分の追記だけにする
   (「修復の例外」で明示承認を得た置換と、手順 4(c) で承認を得た旧セクション
   「## Codiel ハーネス運用ルール」の取り除きと、手順 2 で承認を得た `raguel.config.yaml` の削除を除く)。
