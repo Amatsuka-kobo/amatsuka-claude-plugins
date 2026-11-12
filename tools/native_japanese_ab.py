@@ -23,6 +23,7 @@ from pathlib import Path
 PLUGIN = "plugins/native-japanese"
 LABELS = ("before", "after")
 META = "meta.json"
+MARK = ".native-japanese-ab"
 
 
 def repo_root():
@@ -95,9 +96,9 @@ def sample(job):
 
 def check_ids(items, what):
     ids = [item["id"] for item in items]
-    bad = [i for i in ids if not re.fullmatch(r"[A-Za-z0-9_-]+", i)]
+    bad = [i for i in ids if not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*", i)]
     if bad or len(set(ids)) != len(ids):
-        sys.exit(f"{what}の id は英数字・_・- だけで書き、重ならないようにする: {bad or ids}")
+        sys.exit(f"{what}の id は英数字・_・-・. だけで書き、重ならないようにする: {bad or ids}")
     return ids
 
 
@@ -121,6 +122,11 @@ def run(args):
             sys.exit(f"時点・題材・モデル・回数が {out / META} と違う。新しい --out を使う")
     else:
         # meta.json が無いのは初回か、初回の複製が途中で止まった後である。作りかけを消してやり直す
+        # 印の無い、空でないディレクトリは他の用途のものなので触らない
+        if out.exists() and any(out.iterdir()) and not (out / MARK).exists():
+            sys.exit(f"--out は空か、まだ無いディレクトリにする: {out}")
+        out.mkdir(parents=True, exist_ok=True)
+        (out / MARK).touch()
         for name in ("plugin", "cwd"):
             shutil.rmtree(out / name, ignore_errors=True)
         for label in LABELS:
@@ -152,6 +158,17 @@ def count(texts, patterns):
     return rows
 
 
+def matched_lines(regex, text):
+    """集計と同じく本文の全体に当て、一致の末尾がある行を重複なく返す。型の先頭は前の行の句点や改行を含みうる。"""
+    lines = []
+    for m in regex.finditer(text):
+        at = max(m.end() - 1, m.start())
+        line = text[text.rfind("\n", 0, at) + 1:].split("\n", 1)[0].strip()
+        if line not in lines:
+            lines.append(line)
+    return lines
+
+
 def load(out, label):
     texts, skills = [], 0
     for path in sorted((out / "raw" / label).glob("*/*.jsonl")):
@@ -178,10 +195,8 @@ def report(args):
         regex = re.compile(patterns[ids.index(show)]["regex"])
         for label in LABELS:
             for path, text in data[label][0]:
-                # 集計と同じく本文の全体に当て、一致を含む行を出す
-                for m in regex.finditer(text):
-                    line = text[text.rfind("\n", 0, m.start()) + 1:].split("\n", 1)[0]
-                    print(f"{label}\t{path.parent.name}/{path.stem}\t{line.strip()}")
+                for line in matched_lines(regex, text):
+                    print(f"{label}\t{path.parent.name}/{path.stem}\t{line}")
         return
     for label in LABELS:
         for path, text in data[label][0]:
@@ -217,7 +232,13 @@ def self_check():
     rows = count(["超えるかもしれません。遅れるかもしれない。", "言い切ります。"], [{"id": "k", "regex": "かもしれ"}])
     assert rows == [(2, 1)]
     assert check_ids([{"id": "a-1"}, {"id": "b_2"}], "型") == ["a-1", "b_2"]
-    for bad in ([{"id": "a/b"}], [{"id": "型"}], [{"id": "a"}, {"id": "a"}]):
+    head = re.compile(r"(?:^|[。\n])[^、。\n]{1,6}は、", re.M)
+    assert matched_lines(head, "結果を確認します。\n設定は、変更しました。\n設定は、変更しました。") == ["設定は、変更しました。"]
+    ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets/patterns.json"
+    types = {item["id"]: re.compile(item["regex"]) for item in json.loads(ledger.read_text())}
+    assert types["kakko-no-bun"].search("設定\uff08再起動の後に反映される既定の値を使う\uff09")
+    assert types["futoji-label"].search("- **原因**\uff1a キャッシュ")
+    for bad in ([{"id": "a/b"}], [{"id": ".."}], [{"id": "型"}], [{"id": "a"}, {"id": "a"}]):
         try:
             check_ids(bad, "型")
         except SystemExit:
