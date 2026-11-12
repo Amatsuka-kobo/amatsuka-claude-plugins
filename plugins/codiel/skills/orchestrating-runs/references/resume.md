@@ -19,17 +19,17 @@ run を再開するときに読む。
    - 連携モードの判断が `state.integration` と違えば、どちらで続けるかを人に確かめる。記録を変えるときは `codiel-state set-integration --slug <slug> --integration <github|local> --image-upload <値>` を実行する。
    - ADR 候補と GOTCHAS 候補の有効無効は、run の開始時に固定した `state.candidates` を使い、判定し直さない。
    - 実行モードは、§0 の分岐表の行 3・行 4 のとおり `state.domainMode` の記録を使う。記録が無ければ行 5〜7 で判定し直す。
-5. `state.phase` から続行する前に、待ちを次の順に処理する。前のセッションの委譲は失われたものとして扱う。この手順は委譲していた単位だけに当てる。自分で作業していた単位は、state と作業ツリーから続きを判断する。
+5. `state.phase` から続行する前に、待ちを次の順に処理する。前のセッションの委譲は失われたものとして扱う。この手順は委譲していた単位だけに当てる。自分で作業していた単位は、worktree とブランチを消さず、その単位のコミットと未コミットの変更から続きを判断する。委譲していたか自分で作業していたかは、前のセッションの会話の要約と報告のファイルで決める。決まらない単位は、worktree とブランチを消す前に、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
    1. 最初に `codiel-state wait-clear --slug <slug>` を 1 回だけ呼び、出力の `cleared`(前のセッションで残った待ちの一覧)を控える。出し直した委譲の待ちを後から消さないよう、出し直しより先に呼ぶ。
    2. `cleared` の待ちごとに、`waits/<id>.md` が `startedAt` より後に書かれているかを確かめる。書かれていれば、返答を受け取り済みとして、報告の置き場への転記を済ませる。書かれていなければ、委譲を出し直す(新しい回の `id` で `wait-add` する)。古い報告のファイルや成果が残っていても、`waits/<id>.md` が無い委譲の成果としては使わない。
-   3. `cleared` に無くても、state の要素(`implement.steps`・`testCode.units`・`testLoop.units`)が `running` か `reviewing` のままで、その要素の `waits/*.md` が無いものは、起動から `wait-add` までの間に失われた委譲として出し直す。続投していた修正ラウンドも、新しい委譲に切り替える。
+   3. `cleared` に無くても、委譲していた単位のうち、state の要素(`implement.steps`・`testCode.units`・`testLoop.units`)が `running` か `reviewing` のままで、その要素の `waits/*.md` が無いものは、起動から `wait-add` までの間に失われた委譲として出し直す。続投していた修正ラウンドも、新しい委譲に切り替える。
    4. worktree の中の委譲を出し直すときは、`references/delegation-env.md` の worktree の規則どおり、残っている worktree とそのブランチを削除し、新しい HEAD で作り直す。
    5. 委譲を出し直す判断はこの手順に一本化する。フェーズごとの再開の分岐(test-spec など)は、この手順の後に、受け取り済みの返答でゲートへ進むかだけを決める。
 6. `state.phase` から続行する。すでに `passed` のフェーズはやり直さず、`in_progress` のフェーズから再開する。中断していた単位があれば、次の報告の末尾の `## 実行し直し` のセクションの有無で、環境の失敗の実行し直しが済んだかを判断する。済んでいれば実行し直さない。
    - `steps/` の下の、状態が `running` か `reviewing` の要素の `report.md`
    - implement では全グループの `steps/merge-test-<g>/report.md` と `steps/merge-fix-<g>/report.md`、test-loop では `steps/test-loop-project/report.md`
    - test-loop では最新の `test-run-<n>.md`、fix-loop では最新の `test-run-<n+1>.md`
-   - intent-sync では `steps/intent-sync/report.md`。このファイルに設計資料の更新の結果の行があれば、取り込み・ADR 候補の書き残し・設計資料の更新は済んでいる。
+   - intent-sync では `steps/intent-sync/report.md`。このファイルに `設計資料:` で始まる行があれば、取り込み・ADR 候補の書き残し・設計資料の更新は済んでいる。ファイルがあってその行が無ければ、領域ファイルへの取り込みは済んでいるので、設計資料の更新(`syncing-intents` の手順 7)から続ける。
 
    discuss で中断していたときの再開位置(アジェンダ作成から/未決論点から/最終確認から)は、`facilitating-design-discussions` の「中断再開」に従う。design で `design.md` が既にあるときは、ウォークスルーの再提示から再開する。
 7. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。

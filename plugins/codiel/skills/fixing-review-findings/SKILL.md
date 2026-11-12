@@ -52,7 +52,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    `node <plugin-root>/scripts/codiel-state.mjs set-test-edit --slug <slug>` を実行してから、
    `writing-test-specs`(`spec.md`・`cases.md` の直し)と `scripting-tests`(テストコードの直し)に
    従う作業でテスト側を先に直す。振る舞いを変える修正なら、コードの修正の前にテストが失敗することを確かめる。
-   委譲したときは、報告を `waits/<id>.md` に書いて `wait-done` した直後に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
+   テスト側の修正の単位が終わった直後(委譲したときは、報告を `waits/<id>.md` に書いて `wait-done` した直後)に `node <plugin-root>/scripts/codiel-state.mjs clear-test-edit --slug <slug>` を
    実行する。妥当と判断したそれ以外の所見(テスト側の修正の後にコードの修正が要る所見を含む)は、
    該当ドメインの実装の修正の単位で、`implementing` の `references/fix-mode.md` の (b) レビュー所見由来の入力(所見: severity・対象・内容・根拠・提案 + 対象ファイル)を使って直す(1 所見ずつでも複数所見まとめてでもよいが、ドメインが混在する場合はドメインごとに分ける)。
 4. 不当と判断した所見は、下記「PR 反論記録書式」の内容で `rebuttal-<連番>.md` を作り、「記録の投稿手順」で記録する。
@@ -70,8 +70,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 8. github モードでは、回帰がパスしたらオーケストレーターが `git push` して PR ブランチ
    (`state.branch`)をリモートへ最新化する。local モードでは push しない。
 9. 回帰がパスしたら(github モードでは push の後)、再レビューの単位を始める前に `../orchestrating-runs/references/review-common.md` を Read し、その規則で観点を選んで、`reviewing-diffs` の手順で `review-<m+1>.md` を作る。レビューの契約には「反論済み一覧」を載せない。
-10. `review-<m+1>.md` の critical/high 件数を確認する。件数からは「反論済み一覧」に載る所見を
-    除外する(ただし反論を覆す新たな根拠を伴う所見は未決に戻し件数に含める)。
+10. `review-<m+1>.md` の critical/high 件数を確認する。「反論済み一覧」と同じ所見は、反論を覆す新たな根拠を
+    伴わない限り、統合の時点で除いてある(新たな根拠を伴う所見は未決に戻し件数に含める)。
     除外後に 1 件でも残っていれば手順 2 に戻る。ゼロになったら手順 11 へ。
     反論済み所見が新根拠なしに再報告された場合は再反論せず、その事実を 1 度だけ
     `restatement-<連番>.md` として「記録の投稿手順」で記録し、件数から除外する。

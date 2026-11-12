@@ -38,7 +38,7 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
-| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在して内容が `<plugin-root>/assets/rules/codiel.md` と一致し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
+| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在して内容が `<plugin-root>/assets/rules/codiel.md` と一致し(`cmp -s` が成功する)、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
 | C | `.codiel/config.json` | JSON のオブジェクトとして読め、`raguel` がオブジェクトである(空のオブジェクトでよい)。`raguel.config.yaml` は見ない |
 | D | `.codiel/runs` / `.codiel/reports` / `.gitignore` | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在し、`node <plugin-root>/scripts/codiel-state.mjs gitignore` が返す `missing` が空である |
 | L | GitHub の `codiel` ラベル | `gh repo view` が失敗する(GitHub のリポジトリでない、`gh` が無い、未認証)か、`gh label list --search codiel --json name` の結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがある |
@@ -124,7 +124,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - `.claude/rules/codiel.md` が無ければ、`<plugin-root>/assets/rules/codiel.md` を
   **固定文言のまま** Write で置く(置く前に必ず Read する)。
 - 既にあり、内容が `<plugin-root>/assets/rules/codiel.md` と同じなら触らない。
-- 既にあり、内容が違うときは、既存のファイルから同梱のファイルへの差分を提示し、置き換えるかを AskUserQuestion で聞く。承認を得たら同梱のファイルの内容で置き換える。断られたら置き換えず、内容の違いを初期化の欠落として扱わない(ほかの項目が揃っていれば「初期化済み」と報告する)。完了報告に、置き換えなかったことを書く。
+- 既にあり、内容が違うときは、既存のファイルから同梱のファイルへの差分を提示し、置き換えるかを AskUserQuestion で聞く。承認を得たら同梱のファイルの内容で置き換える。断られたら置き換えず、内容の違いを初期化の欠落として扱わない(ほかの項目が揃っていれば「初期化済み」と報告する)。完了報告に、置き換えなかったことと、次の `/codiel:init` で再び聞くことを書く。
 - 新規ファイルの全文を提示して承認を得てから書き込む。
 
 ### (b) `CLAUDE.md` への `## Codiel` の追記
