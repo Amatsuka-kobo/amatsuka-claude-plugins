@@ -10,7 +10,7 @@ run を再開するときに読む。
    ```
    - `phases` に `test-code` を持たない state(M4 より前に作った run)は、どのフェーズにあっても続行しない。`waits` が残っていれば、本文 §2.4 の手順で `wait-clear` してから `stop --slug <slug> --reason migrate` で止め、止めたことと理由をユーザーに示し、同じ intent パスを入口に新しい try を始める(本文 §1)。intent は `abandoned` にしない。
    - `state.status` が `awaiting_outcome` の run は再開しない。outcome の同期に任せ、ここで終える。
-   - `state.status` が `awaiting_human` で、`awaiting_human` のフェーズが 1 つも無い run は、以前のバージョンが修正の回数の上限で止めたものである。手順 2 へ進む前に `resume --slug <slug>` し、修正のループを続ける。ラウンドは各フェーズの手順の数え方(implement・test-code は要素の `attempts`、test-loop・fix-loop は `record-attempt` の回数)で、記録された回数から続けて数える。手順 5 で出し直す修正は、次のラウンドが 4 以上なら新しい単位として始める。
+   - `state.status` が `awaiting_human` で、`awaiting_human` のフェーズが 1 つも無い run は、以前のバージョンが修正の回数の上限で止めたものである。手順 2 へ進む前に `resume --slug <slug>` し、修正のループを続ける。ラウンドは各フェーズの手順の数え方(implement・test-code は要素の `attempts`、test-loop・fix-loop は `record-attempt` の回数)で、記録された回数から続けて数える。手順 5 の出し直しはラウンドに数えず、中断したラウンドの続きとして出す。
 2. 本文 §2「手順ファイルと読む時点」の再開の範囲の手順ファイルを Read する。carry-over が `in_progress` か `awaiting_human` なら、`references/phase-carry-over.md` も読む。
 3. `state.branch` が `null` でなければ、`git switch <state.branch>` で run のブランチ(`codiel/<slug>`。改修の前に作った run は `-try-<n>` 付きの名前)に切り替える。
    - 切り替える先のブランチがまだ無いとき(`init` の後、`git switch -c` の前で止まった run)は、`capturing-intent` の手順 5 の (6) の続きから行い、`git switch -c <state.branch>` でブランチを作ってから続ける。

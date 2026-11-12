@@ -4,7 +4,7 @@
 
 ## ゲートの回数と通過の時点
 
-- `evaluate_code` は修正の往復ごとに呼ぶ。範囲はいつも fix-loop の `startHead` から今の HEAD までである。
+- `evaluate_code` は修正が 1 件返るごとに呼ぶ。範囲はいつも fix-loop の `startHead` から今の HEAD までである。
 - `pass-gate fix-loop` は fix-loop の中で 1 回だけ呼ぶ。`pass-gate` は `in_progress` のフェーズにしか効かず、通すとフェーズが `passed` になって以後の修正を受け付けない。
 - `pass-gate` を呼ぶのは、再レビューの critical/high(反論済みの所見を除く)が 0 件になった後である。今の HEAD で評価した PROCEED の `evaluationId` を渡す。最後の評価の後に HEAD が動いていれば(E2E のレポートのコミットなど)、評価し直してから渡す。
 - fix-loop が `passed` になるのは、この `pass-gate` が成功した時点である。
