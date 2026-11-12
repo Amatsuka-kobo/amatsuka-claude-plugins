@@ -4,12 +4,13 @@
 使い方:
   native_japanese_ab.py run --before <ref> --after <ref|WORKTREE> --prompts <json> --patterns <json> --out <dir>
                             [--targets <json>] [--bare] [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
-  native_japanese_ab.py report --patterns <json> --out <dir> [--targets <json>] [--show <型の id>]
+  native_japanese_ab.py report --patterns <json> --out <dir> [--targets <json>] [--before-only] [--show <型の id>]
   native_japanese_ab.py --self-check
 
 run は採取の後に report も出す。保存済みの応答は採り直さないので、中断した採取は同じ引数で続けられる。
 時点・題材・モデル・回数が初回と違う run は、同じ --out では受け付けない。
 --targets を渡すと、指標・目安・改修前・改修後・判定の表を出す。判定には目安までの差と、合否が変わったときの後退か改善かが付く。
+report に --before-only を渡すと、改修後の列と判定を出さない。目安の値を決める前に、改修前の値だけを見るために使う。
 --bare を渡すと、プラグインを読み込まず hook も切った素の出力も採り、表に「素」の列を足す。
 report は応答の本文を <out>/text/<before|after>/<モデル>/<題材>-<回>.txt にも書き出す。
 """
@@ -299,6 +300,8 @@ def measure(target, texts, skills, by_id):
 
 def goal(target):
     """目安を表に出す形にする。"""
+    if "value" not in target:
+        return "未定"
     kind, value, op = target["metric"], target["value"], target["op"]
     if kind in ("mixed", "in_range") and value == 0 and op == "以下":
         return "無い"
@@ -314,6 +317,8 @@ def margin(target, value):
 
 def verdict(target, before, after):
     """改修後が目安に届いたかを、目安までの差と、改修前から合否が変わったかを添えて返す。"""
+    if "value" not in target:
+        return "目安が未定"
     if after is None:
         return "測れない"
     m = margin(target, after)
@@ -326,14 +331,15 @@ def verdict(target, before, after):
 
 
 def check_targets(targets, patterns, prompt_ids):
-    if any(not {"id", "metric", "op", "value"} <= set(t) for t in targets):
-        sys.exit("目安には id・metric・op・value を書く")
+    # value と op の無い目安は、値を決める前の行として受け付ける
+    if any(not {"id", "metric"} <= set(t) or ("value" in t) != ("op" in t) for t in targets):
+        sys.exit("目安には id・metric を書く。op と value は 2 つとも書くか、2 つとも省く")
     check_ids(targets, "目安")
     units = {item["id"]: item.get("unit", "text") for item in patterns}
     for t in targets:
         kind, used = t["metric"], t.get("patterns", [])
         bad = [i for i in used if i not in units] + [i for i in t.get("prompts", []) if i not in prompt_ids]
-        if kind not in METRICS or t["op"] not in ("以下", "以上"):
+        if kind not in METRICS or t.get("op", "以下") not in ("以下", "以上"):
             bad.append("metric か op")
         elif kind in ("skill", "touten"):
             if used or (kind == "skill" and t.get("prompts")):
@@ -383,6 +389,9 @@ def report(args):
     if targets is not None:
         check_targets(targets, patterns, meta["prompts"])
     cols = labels(meta)
+    hide = getattr(args, "before_only", False)
+    if hide:
+        cols.remove("after")
     data = {label: load(out, label) for label in cols}
     show = getattr(args, "show", None)
     if show:
@@ -425,11 +434,12 @@ def report(args):
         return
     by_id = dict(zip(ids, patterns))
     print()
-    row("指標", ["目安", *[NAMES[c] for c in cols], "判定"])
-    row("---", ["---"] * (len(cols) + 2))
+    row("指標", ["目安", *[NAMES[c] for c in cols], *([] if hide else ["判定"])])
+    row("---", ["---"] * (len(cols) + (1 if hide else 2)))
     for t in targets:
         got = {c: measure(t, *data[c], by_id) for c in cols}
-        row(t.get("item", t["id"]), [goal(t), *[got[c][1] for c in cols], verdict(t, got["before"][0], got["after"][0])])
+        judged = [] if hide else [verdict(t, got["before"][0], got["after"][0])]
+        row(t.get("item", t["id"]), [goal(t), *[got[c][1] for c in cols], *judged])
 
 
 def self_check():
@@ -477,6 +487,9 @@ def self_check():
     assert verdict(low, 6, 4) == "届いた(余裕 1.00)、改善" and verdict(low, None, None) == "測れない"
     assert [goal(low), goal({"metric": "in_range", "op": "以下", "value": 0}), goal({"metric": "touten", "op": "以下", "value": 2.44}),
             goal({"metric": "per100", "op": "以下", "value": 5})] == ["5% 以下", "無い", "2.44 以下", "100 本に 5 件以下"]
+    pending = {"id": "t", "metric": "touten"}
+    assert goal(pending) == "未定" and verdict(pending, 1, 2) == "目安が未定"
+    check_targets([pending], [], [])
     assert labels({"bare": True}) == ["bare", "before", "after"] and labels({}) == ["before", "after"]
     ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets"
     types = {item["id"]: item for item in json.loads((ledger / "patterns.json").read_text())}
@@ -519,6 +532,7 @@ def main():
         p.add_argument("--targets")
         if name == "report":
             p.add_argument("--show")
+            p.add_argument("--before-only", action="store_true")
         else:
             p.add_argument("--before", required=True)
             p.add_argument("--after", required=True)
