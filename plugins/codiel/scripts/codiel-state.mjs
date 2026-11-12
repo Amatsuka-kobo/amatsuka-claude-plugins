@@ -1540,4 +1540,4 @@ function main(argv, root = process.cwd()) {
 }
 
 // src/codiel-state-cli.ts
-main(process.argv.slice(2));
+main(process.argv.slice(2), findMainRoot(process.cwd()));

@@ -1,10 +1,8 @@
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import fs from "node:fs"
-import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
 import {
   expandBraces,
@@ -17,9 +15,7 @@ import {
   STAGES,
   type StepState
 } from "../codiel-state.js"
-
-const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
-const CLI = fileURLToPath(new URL("../codiel-state-cli.ts", import.meta.url))
+import { raguelConfigPath, runCli } from "./helpers/run-cli.js"
 
 const UNTIL_PR = [
   "intent",
@@ -71,22 +67,8 @@ function tmpProject(): string {
   return root
 }
 
-function raguelConfigPath(root: string): string {
-  return path.join(root, ".raguel", "config.json")
-}
-
-// 終了コードにかかわらず stdout と stderr を返す(get --active は成功時にも stderr に書く)
 function run(cwd: string, args: string[]) {
-  const r = spawnSync(process.execPath, [TSX_CLI, CLI, ...args], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, RAGUEL_CONFIG: raguelConfigPath(cwd) }
-  })
-  return {
-    code: r.status,
-    out: r.status === 0 ? JSON.parse(r.stdout) : undefined,
-    err: r.stderr
-  }
+  return runCli(cwd, args)
 }
 
 // init の必須フラグを既定値で埋める。over で値を替え、null を渡すとそのフラグを省く
