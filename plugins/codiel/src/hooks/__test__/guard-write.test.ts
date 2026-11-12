@@ -397,6 +397,66 @@ test("docs/intents/** の規則は大文字小文字の違う綴りでもすり�
     )
 })
 
+const DESIGN_DOC = "docs/intents/design/api.md"
+
+test("docs/intents/design/** は intent-sync で通る", () => {
+  const root = setupRun()
+  advanceRunTo(root, "intent-sync")
+  expect(hook(root, "Write", path.join(root, DESIGN_DOC))).toBe(null)
+})
+
+test("docs/intents/design/** は文書フェーズとコード系フェーズで ask になる", () => {
+  for (const phase of [
+    "intent",
+    "discuss",
+    "design",
+    "test-spec",
+    "dev-plan",
+    "carry-over",
+    "test-code",
+    "implement",
+    "test-loop",
+    "fix-loop"
+  ]) {
+    const root = setupRun()
+    advanceRunTo(root, phase)
+    const r = hook(root, "Write", path.join(root, DESIGN_DOC))
+    expect(r?.permissionDecision, phase).toBe("ask")
+    expect(r?.permissionDecisionReason, phase).toBe(
+      `設計資料(${DESIGN_DOC})への書き込みは intent-sync フェーズの担当です(現在のフェーズ: ${phase})`
+    )
+  }
+})
+
+test("docs/intents/design/** は triage が passed の後(finalize の作業中)も ask になる", () => {
+  const root = setupRun()
+  advanceRunTo(root, "triage")
+  const p = statePathFor(root, SLUG)
+  const state = readState(p)
+  state.phases.triage.status = "passed"
+  writeState(p, state)
+  expect(
+    hook(root, "Write", path.join(root, DESIGN_DOC))?.permissionDecision
+  ).toBe("ask")
+})
+
+test("docs/intents/design/** は大文字小文字の違う綴りでも、symlink 経由でもすり抜けない", () => {
+  const real = fs.realpathSync(setupRun())
+  advanceRunTo(real, "design")
+  expect(
+    hook(real, "Write", path.join(real, "docs/Intents/Design/api.md"))
+      ?.permissionDecision
+  ).toBe("ask")
+  const link = path.join(
+    fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gw-link-"))),
+    "repo-link"
+  )
+  fs.symlinkSync(real, link, "dir")
+  expect(
+    hook(link, "Write", path.join(link, DESIGN_DOC))?.permissionDecision
+  ).toBe("ask")
+})
+
 // ---------------------------------------------------------------------------
 // intent 文書の基準は repoRoot(git ルート)である(設計書 §6.2.1・§6.3.1・§6.8)。
 // `.codiel` を git ルートの下のディレクトリに作った構成では codielRoot と一致しない。

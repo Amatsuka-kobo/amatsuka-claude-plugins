@@ -592,6 +592,7 @@ var INTENT_DOC_PHASES = /* @__PURE__ */ new Set([
   "triage"
 ]);
 var INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/i;
+var INTENT_DESIGN_RE = /^docs\/intents\/design\/.+/i;
 function toDomainMap(value) {
   if (value === null) return null;
   const map = /* @__PURE__ */ Object.create(null);
@@ -752,6 +753,13 @@ try {
     config = readCodielConfig(mainRoot);
   } catch (e) {
     configError = e.message;
+  }
+  if (INTENT_DESIGN_RE.test(repoRel)) {
+    if (phase === "intent-sync") pass();
+    emit(
+      "ask",
+      `\u8A2D\u8A08\u8CC7\u6599(${repoRel})\u3078\u306E\u66F8\u304D\u8FBC\u307F\u306F intent-sync \u30D5\u30A7\u30FC\u30BA\u306E\u62C5\u5F53\u3067\u3059(\u73FE\u5728\u306E\u30D5\u30A7\u30FC\u30BA: ${phase})`
+    );
   }
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass();

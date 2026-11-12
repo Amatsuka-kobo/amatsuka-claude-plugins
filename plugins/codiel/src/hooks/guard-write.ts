@@ -58,6 +58,8 @@ const INTENT_DOC_PHASES = new Set<string | null>([
   "triage"
 ])
 const INTENT_DOMAIN_RE = /^docs\/intents\/domains\/.+/i
+// 持続層の設計資料。書くのは intent-sync だけで、finalize の例外は付けない
+const INTENT_DESIGN_RE = /^docs\/intents\/design\/.+/i
 
 // 契約 §1 の検証 4 項目は `readDomains` 側で行う(2 実装で同じ判定にするため)。
 // ここが担うのは**プロトタイプなしのマップへの詰め替え**だけである。`toString` のような
@@ -338,7 +340,14 @@ try {
   }
 
   // 次に docs/intents/** の規則を当てる。DOC_PHASES の分岐(直後)は docs/ 全体を
-  // 通してしまうため、domains/** への書き込みはそれより先に判定する。
+  // 通してしまうため、design/** と domains/** への書き込みはそれより先に判定する。
+  if (INTENT_DESIGN_RE.test(repoRel)) {
+    if (phase === "intent-sync") pass()
+    emit(
+      "ask",
+      `設計資料(${repoRel})への書き込みは intent-sync フェーズの担当です(現在のフェーズ: ${phase})`
+    )
+  }
   if (INTENT_DOMAIN_RE.test(repoRel)) {
     if (phase === "intent-sync") pass()
     // finalize の作業中(triage が passed で、finalize がまだ status を awaiting_outcome にしていない間)は、
