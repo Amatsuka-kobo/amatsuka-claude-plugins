@@ -148,8 +148,10 @@ Issue から取り込んだ原文の記録(本文と人のコメント)のうち
 (1) 開始時のブランチの作業ツリーに intent 文書を Write で書く。frontmatter `run` には slug を入れる。保存先の命名規則(同日重複の扱い、git 未管理時の扱い)は `intent-format.md` の「保存先と命名」に従う。前の try の intent を更新するときは、その intent と同じパスに書く。
 
 (2) github モードで Issue を扱うとき(Issue 番号から始めた run と、Issue 起票を選んだとき)は、先に `codiel` ラベルを用意する。
-- `gh label list --search codiel --json name` の結果に、名前が `codiel` に一致するものが無ければ、作るかを AskUserQuestion で聞く。「作る」なら `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` で作る。作らないと答えたら、pr フェーズで再び聞くことを伝え、ラベルの付与を飛ばして続ける。
-- Issue 番号から始めた run では、ラベルがあれば、Issue に `codiel` が無いときに聞かずに `gh issue edit <番号> --add-label codiel` で足す。
+- `gh label list --search codiel --json name` の結果に、名前が大文字小文字を区別せずに `codiel` と一致するものが無ければ、「作る(推奨)」か「作らない」かを AskUserQuestion で聞く。
+- 「作る」なら `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` で作る。作れなかったとき(コマンドの失敗)と「作らない」のときは、pr フェーズで再び聞くことを伝え、ラベルの付与を飛ばして続ける。
+- 以降の「ラベルがあれば」は、この時点でラベルがある(元からあったか、作れた)ことを指す。
+- Issue 番号から始めた run では、ラベルがあれば、`gh issue view <番号> --json labels` に `codiel` が無いときに、聞かずに `gh issue edit <番号> --add-label codiel` で足す。失敗したら、エラーの文言を伝えて付与を飛ばして続ける。
 
 Issue 起票を選んだときだけ、gh-utility `issue-craft` を持ち込みモードで起動して起票し、番号を intent の frontmatter `issue` に書く。固定開始句「持ち込みモード: 以下の完成済み本文で起票」で起動し、`title` / `body` / `labels` を渡す(`handoff-contract.md`)。リポジトリに `codiel` ラベルがあれば、`labels` に `codiel` を必ず含める。渡す本文には `<!-- codiel:generated -->` を含める。起票は外部公開行為であり、持ち込みモード側でも全文提示と明示承認を経る。承認が得られなかったときは、起票を保留して止まり、「起票せず続行(`issue` は空のまま)」「本文を直して再提示」「中止」を AskUserQuestion で聞く。「中止」が選ばれたら、`init` を行わずに終了する。この時点で intent は保存済み、`issue` は空、run は無い。intent が作業ツリーに残っていることと、同じ入口で `/codiel:run` をやり直せることを伝える(手順 4 のゲートでの中止は、何も書いていない状態なので別である)。起票が失敗したときは、`intent-common.md` の「失敗時」に従い、生のエラーと処理済みの範囲(intent は保存済みであること、起票の有無)を報告して指示を待つ。再試行する前に、Issue が既に作られていないかを確かめる。`issue-craft` が使えないときは `intent-common.md` の「自前起票」に従う。
 

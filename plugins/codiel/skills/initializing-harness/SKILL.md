@@ -41,9 +41,10 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 | B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
 | C | `.codiel/config.json` | JSON のオブジェクトとして読め、`raguel` がオブジェクトである(空のオブジェクトでよい)。`raguel.config.yaml` は見ない |
 | D | `.codiel/runs` / `.codiel/reports` / `.gitignore` | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在し、`node <plugin-root>/scripts/codiel-state.mjs gitignore` が返す `missing` が空である |
-| L | GitHub の `codiel` ラベル | `gh repo view` が失敗する(GitHub のリポジトリでない、`gh` が無い、未認証)か、`gh label list --search codiel --json name` の結果に名前が `codiel` に一致するものがある。この実行でラベルを作らないと答えたときも揃っているものとする |
+| L | GitHub の `codiel` ラベル | `gh repo view` が失敗する(GitHub のリポジトリでない、`gh` が無い、未認証)か、`gh label list --search codiel --json name` の結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがある |
 
 - 4 点すべて揃っていれば「初期化済み。作業なし」と報告して**終了する**(何も書き込まない)。
+- L だけが欠けていて、手順 4(d) で作らないと答えたときは、ラベルが無いことを初期化の欠落として扱わない。完了報告に「初期化済み。`codiel` ラベルは作らなかった」と書き、run の pr フェーズと次の `/codiel:init` で再び聞くことを添える。
 - 一部が欠けていれば、欠けている項目に対応する手順だけを実施する。
 - `codiel-state gitignore` が失敗したとき(config.json が不正なとき)は、標準エラー出力の理由を控え、D は揃っていないものとして扱う。
 - GOTCHAS は確認対象に含めない。台帳の生成は metatron が行う(`/metatron:init`)。codiel は台帳を作らない。
@@ -146,8 +147,9 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 
 - 手順 0 で L が欠けていたら、作るコマンド `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` を応答の本文に出し、作るかを AskUserQuestion で聞く。
 - 承認を得てから実行する。断られたら作らず、完了報告に、run の pr フェーズで再び聞くことを書く。
+- コマンドが失敗したら、エラーの文言を完了報告に書き、ほかの手順を続ける。
 
-(a)(b)(c) のいずれも、既存の他セクションは一切変更しない。例外は (c) の旧セクション
+(a)(b)(c)(d) のいずれも、既存の他セクションは一切変更しない。例外は (c) の旧セクション
 「## Codiel ハーネス運用ルール」の取り除きだけであり、承認を得た場合に限る。
 
 ## 5. 検証
@@ -159,6 +161,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
   と同じ内容であることを確認する。
 - 手順 4(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 6 行の内容が
   追記されていることを確認する。
+- 手順 4(d) でラベルを作ったときは、`gh label list --search codiel --json name` でラベルがあることを確認する。
 - 環境変数 `TYPESAFE_API_KEY` の有無を `test -n "$TYPESAFE_API_KEY"` で確かめる。値は表示しない。無くても初期化は失敗にせず、完了報告で伝える。
 - 検証に失敗したら該当ファイルを修正して再検証する。**失敗のまま完了報告しない**。
 

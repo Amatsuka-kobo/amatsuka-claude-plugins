@@ -19,17 +19,19 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    - `imageUpload` に使える手段があれば、E2E のレポートの画像など関連する画像を、`<plugin-root>/references/github-writing-images.md` にある「Issue・PR・コメント全般」の縮退の順序で載せる。
    - 本文には `<!-- codiel:generated -->` を含める。
 3. 本文を Write ツールで `.codiel/runs/<slug>/try-<n>/reports/pr-body.md` に書く。
-4. push の前に、リポジトリに `codiel` ラベルがあるかを `gh label list --search codiel --json name` で確かめる。結果に名前が `codiel` に一致するものが無ければ、`node <plugin-root>/scripts/codiel-state.mjs mark-ask pr --slug <slug> --kind confirm` で待ち、AskUserQuestion で「作る(推奨)」か「自分で用意してから続ける」かを聞く。
-   - 「作る」なら `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` で作る。
-   - どちらでも、答えを得たら `resume` してから続ける。
-   
-   `git push -u origin <state.branch>` を実行する。続けて、別の Bash 呼び出しで `gh pr list --head <state.branch> --state all --json url,state` を実行し、同じブランチの PR を確かめる。
+4. push の前に、リポジトリに `codiel` ラベルがあるかを `gh label list --search codiel --json name` で確かめる。結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがあれば、ラベルがあるとする。
+   - 無ければ、`node <plugin-root>/scripts/codiel-state.mjs mark-ask pr --slug <slug> --kind confirm` で待ち、AskUserQuestion で「作る(推奨)」「自分で用意してから続ける」「中止」のどれかを聞く。run の中の PR はラベルが無いと作れない(hook が拒否する)ので、ラベル無しで続ける選択肢は無い。
+   - 「作る」なら `gh label create codiel --color 1D76DB --description "codiel が対応する Issue と PR"` で作る。失敗したら、エラーの文言を示して同じ質問をし直す。
+   - 「作る」か「自分で用意してから続ける」の後は、`resume` してからラベルの有無を確かめ直す。まだ無ければ、もう一度 `mark-ask` して同じ質問をする。
+   - 「中止」なら、本文 §2.4 の手順で待ちを片付けてから `stop --slug <slug> --reason ask-aborted` で止める。
+
+   ラベルがあることを確かめたら、`git push -u origin <state.branch>` を実行する。続けて、別の Bash 呼び出しで `gh pr list --head <state.branch> --state all --json url,state` を実行し、同じブランチの PR を確かめる。
    - `state` が `OPEN` の PR があれば、作り直さず、`gh pr edit <URL> --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md --add-label codiel` で今の try の本文に更新する。その URL を手順 5 の `--pr-url` に使う。
    - PR が無いとき、または `CLOSED` か `MERGED` だけのときは、`gh pr create` で新しく作る。gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わず、次の形で呼ぶ。
    ```
    gh pr create --title "<タイトル>" --label codiel --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md
    ```
-   run の中の PR は `gh pr create` で作り、GitHub MCP の PR を作成するツールは使わない。どちらもラベルの無い PR の作成は hook が拒否する。
+   run の中の PR は `gh pr create --label codiel` で作る。GitHub MCP の PR を作成するツールはラベルを渡せないので、hook が常に拒否する。`--label codiel` の無い `gh pr create` も hook が拒否する。
    `gh pr create` が失敗したときは、エラーの文言で原因を分ける。
    - 同じブランチの `OPEN` の PR が既にあるとき(文言に `already exists` と URL が出る)は、その URL に `gh pr edit` で同じ更新を行い、手順 5 の `--pr-url` に使う。
    - 認証切れなど人の操作が要るときは、`node <plugin-root>/scripts/codiel-state.mjs mark-ask pr --slug <slug> --kind confirm` で待ち、`gh auth login` などの対応を人に頼む。答えを得たら `resume` し、手順 4 の `gh pr create` からやり直す。

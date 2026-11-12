@@ -34,7 +34,7 @@
 
 ## 自前起票
 
-- Issue 本文は一時ファイルに書き、`gh issue create --title <title> --body-file <一時ファイル>` で渡す。リポジトリに `codiel` ラベルがあれば `--label codiel` も付ける。
+- Issue 本文は一時ファイルに書き、`gh issue create --title <title> --body-file <一時ファイル>` で渡す。`codiel` ラベルがあれば(`capturing-intent` の手順 5 の (2) で確かめた結果)、`--label codiel` も付ける。
 
 ## 失敗時
 
