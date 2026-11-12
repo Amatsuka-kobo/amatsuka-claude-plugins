@@ -1,6 +1,6 @@
 ---
 name: native-japanese-ab
-description: native-japanese の規律(skills/japanese-writing/SKILL.md、references/reminder.md、references/session-start.md)を変えた前後で、同じ題材を claude -p に書かせて出力を比べるときに必ず使用する。「前後比較して」「規律の変更が効いたか測って」「直す前と後で出力を比べて」のような依頼が該当する。書き込み後の検査の違反を数えるだけの依頼と、他のプラグインの測定には使わない。
+description: native-japanese の規律(japanese-writing の SKILL.md、reminder.md、session-start.md)を変更したとき、同じ題材を claude -p で書かせて改修前後の出力を比べ、効果を測り、台帳の目安に届いたかを表で判定するために使う。「前後比較して」「変更が効いたか測って」「目安に届いたか出して」などが該当する。違反を数えるだけの検査、他のプラグインの測定、このスキル自体の発火の確認には使わない。
 ---
 
 # native-japanese の前後比較
