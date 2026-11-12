@@ -62,7 +62,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    local モードでは `rebuttal-<連番>.md` のパス)を「反論済み一覧」に追記する。
 5. 1 つの `review-<m>.md` の所見を直す 1 サイクル(テスト側・コード側・ドメインごとの修正をすべて含む)の
    修正がすべて返った時点で、`node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を 1 回呼ぶ。
-   `record-attempt` は回数を数えるだけで、上限は無い。
+   `record-attempt` は回数を数えるだけで、上限は無い。修正を 1 件も出さなかったサイクルは数えない。
 6. 実装の委譲先が返した修正 diff を `mcp__plugin_codiel_raguel__evaluate_code` に通す(`raguel-gating` の
    フェーズ→ツール対応表のとおり)。`STOP`/`ASK` が返れば `raguel-gating` の該当ハンドリングに
    従う(自己判断で握り潰さない)。
