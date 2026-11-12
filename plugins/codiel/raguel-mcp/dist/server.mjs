@@ -39978,7 +39978,7 @@ var PHASE_SCOPE = {
   implement: "This phase writes product code only. Test specifications and test code were already written in the earlier test-spec and test-code phases.",
   "test-loop": "This phase only fixes failures found by running the existing tests; the diff may be small or empty.",
   "fix-loop": "This phase only fixes review findings; the diff may be small.",
-  "intent-sync": "This phase writes the agreed changes back to the intent documents."
+  "intent-sync": "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents."
 };
 var LEXICAL = [
   {
@@ -42544,7 +42544,7 @@ function collectDecisionSubject(input2) {
 import * as fs6 from "node:fs";
 import * as path7 from "node:path";
 var MAX_FILE_BYTES = 1024 * 1024;
-var MAX_PATHS = 20;
+var MAX_PATHS = 50;
 function isInside(root, target) {
   const rel = path7.relative(root, target);
   return rel !== "" && !rel.startsWith("..") && !path7.isAbsolute(rel);

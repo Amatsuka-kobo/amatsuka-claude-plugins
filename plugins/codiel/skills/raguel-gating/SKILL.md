@@ -66,7 +66,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 | fix-loop | `mcp__plugin_codiel_raguel__evaluate_code` | `fix-loop` | `baseRef`: fix-loop の `startHead` |
 | intent-sync | `mcp__plugin_codiel_raguel__evaluate_design` | `intent-sync` | `paths`: intent-sync で書き換えた intent と持続層のファイル |
 
-- `paths` はプロジェクトルートからの相対パスで、1〜20 件である。
+- `paths` はプロジェクトルートからの相対パスで、1〜50 件である。
 - code 系フェーズ(carry-over・test-code・implement・test-loop・fix-loop)の evaluate_code には `baseRef` だけを渡し、`paths` を渡さない。`paths` で範囲を絞った評価は pass-gate の検査 8 が拒む。
 - 文書のフェーズで渡すファイルは、pass-gate の検査 9 が照合する。design は `design.md`、dev-plan は `dev-plan.md`、test-spec は `testsDir` 配下の `spec.md` か `cases.md` を、`paths` に含める。intent-sync は、書き換えたファイルをすべて渡す(書き換えるべきファイルがすべて含まれるかは照合されない)。
 - `discuss` は Raguel ゲート対象外(`pr / review / triage` と同様)。人間が直接参加する

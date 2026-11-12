@@ -143,7 +143,7 @@ const PHASE_SCOPE: Record<GatedPhase, string> = {
     "This phase only fixes failures found by running the existing tests; the diff may be small or empty.",
   "fix-loop": "This phase only fixes review findings; the diff may be small.",
   "intent-sync":
-    "This phase writes the agreed changes back to the intent documents."
+    "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents."
 }
 
 /** 語彙系の 4 ルール。info → ask の上げる向きだけに使う */

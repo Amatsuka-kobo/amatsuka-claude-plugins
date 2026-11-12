@@ -387,7 +387,7 @@ describe("phaseScope(設計書 §10.1)", () => {
     ],
     [
       "intent-sync",
-      "This phase writes the agreed changes back to the intent documents."
+      "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents."
     ]
   ]
   const bodyOf = (jev: FakeJev) => jev.calls.find((c) => "artifact" in c.state)

@@ -94,7 +94,7 @@ describe("collectFilesSubject", () => {
     ).toThrow(/無い/)
   })
 
-  it("paths は 1〜20 件に限る", () => {
+  it("paths は 1〜50 件に限る", () => {
     const repo = track(makeRepo({ "a.md": "a\n" }))
     expect(() => collectFilesSubject({ projectRoot: repo, paths: [] })).toThrow(
       SubjectInputError
@@ -102,9 +102,15 @@ describe("collectFilesSubject", () => {
     expect(() =>
       collectFilesSubject({
         projectRoot: repo,
-        paths: Array.from({ length: 21 }, () => "a.md")
+        paths: Array.from({ length: 51 }, () => "a.md")
       })
     ).toThrow(SubjectInputError)
+    expect(
+      collectFilesSubject({
+        projectRoot: repo,
+        paths: Array.from({ length: 50 }, () => "a.md")
+      }).subject.files
+    ).toHaveLength(50)
   })
 
   it("git の管理外のプロジェクトでは HEAD を null にして読む", () => {

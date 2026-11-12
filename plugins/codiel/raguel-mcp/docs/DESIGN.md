@@ -78,8 +78,8 @@ codiel-state pass-gate ── 索引・verdict.json・裁定の記録・HEAD を
 | ツール | 入力(主要フィールド) | 用途 |
 | --- | --- | --- |
 | `evaluate_decision` | `runId`, `phase`, `objective`, `decision`, `optionsConsidered?`, `rollbackPlan?` | AI が下した判断の検査 |
-| `evaluate_plan` | `runId`, `phase`, `objective`, `paths`(1〜20 件) | 仕様・作業計画のファイルの検査 |
-| `evaluate_design` | `runId`, `phase`, `objective`, `paths`(1〜20 件) | 設計文書のファイルの検査 |
+| `evaluate_plan` | `runId`, `phase`, `objective`, `paths`(1〜50 件) | 仕様・作業計画のファイルの検査 |
+| `evaluate_design` | `runId`, `phase`, `objective`, `paths`(1〜50 件) | 設計文書のファイルの検査 |
 | `evaluate_code` | `runId`, `phase`, `objective`, `baseRef`, `paths?`, `testResults?` | HEAD までの git 差分の検査 |
 | `record_outcome` | `evaluationId`, `outcome`, `ruling?`, `notes?` | 判定の結末と人の裁定の記録 |
 | `list_rules` | `kind?` | 有効なルール・設定できるパラメータ・プロバイダーの解決結果・設定の出所 |
