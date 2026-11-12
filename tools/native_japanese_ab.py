@@ -3,12 +3,13 @@
 
 使い方:
   native_japanese_ab.py run --before <ref> --after <ref|WORKTREE> --prompts <json> --patterns <json> --out <dir>
-                            [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
-  native_japanese_ab.py report --patterns <json> --out <dir> [--show <型の id>]
+                            [--targets <json>] [--models opus,sonnet] [--runs 2] [--workers 6] [--timeout 300]
+  native_japanese_ab.py report --patterns <json> --out <dir> [--targets <json>] [--show <型の id>]
   native_japanese_ab.py --self-check
 
 run は採取の後に report も出す。保存済みの応答は採り直さないので、中断した採取は同じ引数で続けられる。
 時点・題材・モデル・回数が初回と違う run は、同じ --out では受け付けない。
+--targets を渡すと、目安ごとに前後の値と、after が目安に届いたかを出す。
 report は応答の本文を <out>/text/<before|after>/<モデル>/<題材>-<回>.txt にも書き出す。
 """
 import argparse
@@ -111,7 +112,15 @@ def run(args):
     prompts = json.loads(Path(args.prompts).read_text())
     models = args.models.split(",")
     check_ids([{"id": m} for m in models], "モデル")
-    check_patterns(json.loads(Path(args.patterns).read_text()))
+    patterns = json.loads(Path(args.patterns).read_text())
+    pattern_ids = check_patterns(patterns)
+    prompt_ids = check_ids(prompts, "題材")
+    # 採取の後で止まらないように、型と目安が指す題材の id を先に確かめる
+    for item in patterns:
+        if [i for i in item.get("prompts", []) if i not in prompt_ids]:
+            sys.exit(f"型 {item['id']} の prompts に、台帳の題材に無い id がある")
+    if args.targets:
+        check_targets(json.loads(Path(args.targets).read_text()), pattern_ids, prompt_ids)
     if out.exists() and not out.is_dir():
         sys.exit(f"--out はディレクトリにする: {out}")
     meta = {
@@ -236,6 +245,65 @@ def load(out, label):
     return texts, skills
 
 
+METRICS = ("skill", "touten", "share", "ratio", "mixed", "per10k", "per100", "in_range")
+
+
+def measure(target, texts, skills, by_id):
+    """目安の 1 行の値を出す。分母が 0 のときは None を返す。"""
+    kind = target["metric"]
+    if kind == "skill":
+        return 100 * skills / len(texts) if texts else None
+    only = target.get("prompts")
+    mine = [(p, t) for p, t in texts if not only or prompt_id(p) in only]
+    if kind == "touten":
+        body = "".join(prose(t) for _, t in mine)
+        chars = len(re.sub(r"\s", "", body))
+        return 100 * body.count("、") / chars if chars else None
+    # 題材の絞り込みは目安の prompts で決めるので、型の prompts は外して当てる
+    types = [{k: v for k, v in by_id[i].items() if k != "prompts"} for i in target["patterns"]]
+    per_doc = [[len(matches(item, text)) for item in types] for _, text in mine]
+    totals = [sum(col) for col in zip(*per_doc)] if per_doc else [0] * len(types)
+    if kind == "share":
+        n = sum(len(sentences(t)) for _, t in mine)
+        return 100 * sum(totals) / n if n else None
+    if kind == "ratio":
+        both = totals[0] + totals[1]
+        return 100 * totals[0] / both if both else None
+    if kind == "mixed":
+        # 1 本の中で 2 つの型が混ざる応答の割合。少ない側が limit(%)を超える応答を数える
+        limit = target.get("limit", 10)
+        mixed = sum(1 for a, b, *_ in per_doc if a + b and 100 * min(a, b) / (a + b) > limit)
+        return 100 * mixed / len(mine) if mine else None
+    if kind == "per10k":
+        chars = sum(len(re.sub(r"\s", "", t)) for _, t in mine)
+        return 10000 * sum(totals) / chars if chars else None
+    if kind == "per100":
+        return 100 * sum(totals) / len(mine) if mine else None
+    low, high = target.get("min", 0), target.get("max", float("inf"))
+    return 100 * sum(1 for row in per_doc if low <= sum(row) <= high) / len(mine) if mine else None
+
+
+def verdict(target, value):
+    """目安に届いたかと、目安までの差を返す。"""
+    if value is None:
+        return "測れない"
+    margin = target["value"] - value if target["op"] == "以下" else value - target["value"]
+    return f"届いた(余裕 {margin:.2f})" if margin >= 0 else f"届かない(不足 {-margin:.2f})"
+
+
+def check_targets(targets, pattern_ids, prompt_ids):
+    if any(not {"id", "metric", "op", "value"} <= set(t) for t in targets):
+        sys.exit("目安には id・metric・op・value を書く")
+    check_ids(targets, "目安")
+    for t in targets:
+        unknown = [i for i in t.get("patterns", []) if i not in pattern_ids]
+        unknown += [i for i in t.get("prompts", []) if i not in prompt_ids]
+        need = {"ratio": 2, "mixed": 2, "skill": 0, "touten": 0}.get(t["metric"], 1)
+        ok = t["metric"] in METRICS and t["op"] in ("以下", "以上") and len(t.get("patterns", [])) >= need
+        if unknown or not ok:
+            sys.exit(f"目安 {t['id']} の metric・op・patterns・prompts を確かめる: {unknown}")
+
+
 def check_patterns(patterns):
     if any("id" not in item or "regex" not in item for item in patterns):
         sys.exit("型には id と regex を書く")
@@ -293,6 +361,18 @@ def report(args):
     for item, before, after in zip(patterns, counted["before"], counted["after"]):
         want = f"・{item['want']}" if item.get("want") else ""
         print(f"| {item['id']}{want} | {cell(before)} | {cell(after)} |")
+    if not getattr(args, "targets", None):
+        return
+    targets = json.loads(Path(args.targets).read_text())
+    check_targets(targets, ids, meta["prompts"])
+    by_id = dict(zip(ids, patterns))
+    print()
+    print("| 目安 | before | after | 基準 | after の判定 |")
+    print("| --- | --- | --- | --- | --- |")
+    for t in targets:
+        values = [measure(t, *data[label], by_id) for label in LABELS]
+        shown = ["-" if v is None else f"{v:.2f}" for v in values]
+        print(f"| {t['id']} | {shown[0]} | {shown[1]} | {t['value']} {t['op']} | {verdict(t, values[1])} |")
 
 
 def self_check():
@@ -323,10 +403,27 @@ def self_check():
     assert cell(rows[0]) == "1 / 1 / 2、文の 50.0%"
     assert matches(raw, "お手伝いします。\n\n") == [] and matches({"regex": r"お手伝い[^。\n]*。?\s*\Z"}, "a\nお手伝いします。\n\n") == ["お手伝いします。"]
 
+    doc = [(a, "設定は、変更しました。結果を確認します。見れるし、食べれるし、出れる。")]
+    by_id = {"h": head, "ra": {"id": "ra", "unit": "prose", "regex": "(見|食べ|出)れ"}, "r": raw}
+    assert measure({"metric": "skill"}, doc, 1, by_id) == 100
+    assert round(measure({"metric": "share", "patterns": ["h"]}, doc, 0, by_id), 1) == 33.3
+    assert measure({"metric": "ratio", "patterns": ["h", "ra"]}, doc, 0, by_id) == 25
+    assert measure({"metric": "mixed", "patterns": ["ra", "h"]}, doc, 0, by_id) == 100
+    assert measure({"metric": "mixed", "patterns": ["ra", "h"], "limit": 25}, doc, 0, by_id) == 0
+    assert measure({"metric": "per100", "patterns": ["ra"]}, doc, 0, by_id) == 300
+    assert measure({"metric": "in_range", "patterns": ["ra"], "min": 3}, doc, 0, by_id) == 100
+    assert measure({"metric": "in_range", "patterns": ["ra"], "min": 1, "max": 2}, doc, 0, by_id) == 0
+    assert measure({"metric": "share", "patterns": ["h"], "prompts": ["none"]}, doc, 0, by_id) is None
+    assert verdict({"op": "以下", "value": 5}, 4.3) == "届いた(余裕 0.70)"
+    assert verdict({"op": "以上", "value": 80}, 70) == "届かない(不足 10.00)"
     ledger = Path(__file__).resolve().parent.parent / ".claude/skills/native-japanese-ab/assets"
     types = {item["id"]: item for item in json.loads((ledger / "patterns.json").read_text())}
     check_patterns(list(types.values()))
-    check_ids(json.loads((ledger / "prompts.json").read_text()), "題材")
+    prompt_ids = check_ids(json.loads((ledger / "prompts.json").read_text()), "題材")
+    check_targets(json.loads((ledger / "targets.json").read_text()), list(types), prompt_ids)
+    for kei in ("できますか。", "合っていますよね。", "ご覧くださいませ。", "ですが。"):
+        assert matches(types["keitai"], "これは敬体の文で" + kei) and not matches(types["jotai"], "これは敬体の文で" + kei)
+    assert matches(types["jotai"], "値が上がると動作は遅い。") and not matches(types["jotai"], "始業と終業の手順を決める")
     assert matches(types["kakko-no-bun"], "設定（再起動の後に反映される既定の値を使う）")
     assert matches(types["futoji-label"], "- **原因**： キャッシュ")
     for bad in ([{"id": "a/b"}], [{"id": ".."}], [{"id": "型"}], [{"id": "a"}, {"id": "a"}]):
@@ -347,6 +444,7 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("--patterns", required=True)
         p.add_argument("--out", required=True)
+        p.add_argument("--targets")
         if name == "report":
             p.add_argument("--show")
         else:

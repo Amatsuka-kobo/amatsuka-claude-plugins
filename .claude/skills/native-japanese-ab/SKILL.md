@@ -5,11 +5,11 @@ description: native-japanese の規律(skills/japanese-writing/SKILL.md、refere
 
 # native-japanese の前後比較
 
-規律を変える前と後のプラグインで同じ題材を書かせ、台帳にある型の件数と本文を比べる。
+規律を変える前と後のプラグインで同じ題材を書かせ、台帳にある型の件数と本文を比べ、目安に届いたかを判定する。
 
 ## 台帳に今回の題材と型を足す
 
-`assets/prompts.json` と `assets/patterns.json` は、これまでの改修で測った題材と型をためた台帳である。採取と集計は、台帳の全部を対象に行う。
+`assets/prompts.json`・`assets/patterns.json`・`assets/targets.json` は、これまでの改修で測った題材・型・目安をためた台帳である。採取と集計は、台帳の全部を対象に行う。
 
 - 今回変えた項目の題材と型を、台帳の末尾に足す。
 - 台帳にある題材と型は消さない。型が誤って拾うときは、その型の正規表現だけを直す。
@@ -32,6 +32,27 @@ description: native-japanese の規律(skills/japanese-writing/SKILL.md、refere
 - 正規表現で書けない項目(語の選び方など)は型にせず、「結果を読む」の手順で本文を読んで比べる。
 - 変えた項目が台帳の題材と型で既に測れるときは、足さない。
 
+### 目安を足す
+
+目安は、項目ごとに「この値に届けば合格」とする基準である。今回変えた項目には、目安を 1 つ以上足す。
+
+- 目安の値は、採取の前にユーザーと決める。決める材料として、変更前の時点だけを採った値を示す。
+- 目安には `id`・`since`・`item`・`metric`・`op`(「以上」か「以下」)・`value` を書く。`item` には、何の値かを単位まで書く。
+- `metric` は次の表から選ぶ。`patterns` には型の id を、`prompts` には対象を絞る題材の id を書く。
+
+| `metric` | 値 | 要る欄 |
+| --- | --- | --- |
+| `skill` | japanese-writing を起動した応答の割合(%) | なし |
+| `touten` | 読点の 100 字あたりの数 | なし |
+| `share` | `sentence` の型に当たった文が、対象の文に占める割合(%) | `patterns` |
+| `ratio` | 1 つ目の型の件数が、1 つ目と 2 つ目の合計に占める割合(%) | `patterns` に 2 つ |
+| `mixed` | 1 本の中で 2 つの型が混ざる応答の割合(%)。少ない側が `limit`(%)を超える応答を数える | `patterns` に 2 つ、`limit` |
+| `per10k` | 型の件数の、1 万字あたりの数 | `patterns` |
+| `per100` | 型の件数の、応答 100 本あたりの数 | `patterns` |
+| `in_range` | 型の件数の合計が `min` 以上 `max` 以下の応答の割合(%) | `patterns`、`min` か `max` |
+
+- 目安が題材を絞るときは、目安の `prompts` で絞る。型の `prompts` は目安の計算に使われない。
+
 ## 採取する
 
 リポジトリのルートで実行する。次は例示であり、値は実際の内容に置き換える。
@@ -41,6 +62,7 @@ python3 tools/native_japanese_ab.py run \
   --before <変更前のコミット> --after <変更後のコミット> \
   --prompts .claude/skills/native-japanese-ab/assets/prompts.json \
   --patterns .claude/skills/native-japanese-ab/assets/patterns.json \
+  --targets .claude/skills/native-japanese-ab/assets/targets.json \
   --out <scratchpad のディレクトリ> --models opus,sonnet --runs 3
 ```
 
@@ -72,6 +94,13 @@ python3 tools/native_japanese_ab.py run \
 | 逆に動いた | 差が `want` と逆の向きで、10 ポイントを超える |
 | 差は確かめられなかった | 上のどちらでもない |
 
+表の下に、目安ごとの行が出る。前後の値、基準、after が届いたかと、基準までの差(余裕か不足)が並ぶ。
+
+- 今回足した目安は、変えた項目の合否として報告する。
+- 以前の改修で足した目安は、before で届いていて after で届かなくなったものを、今回の変更による後退として報告する。before から届いていない目安は、後退とせず、値を添えて報告する。
+- 「測れない」と出た目安は、台帳の題材にその目安の型が当たる場面が無い。目安の名前を報告に書く。
+- 目安の無い型は、次の表の判定で読む。
+
 - 今回足した型(`since` が今回の値の型)は、変えた項目が効いたかの判定に使う。1 つの項目に型が複数あるときは、型ごとの判定を並べて報告する。
 - 以前の改修で足した型のうち `want` を書いたものは、今回の変更で「逆に動いた」ものが無いかの確認に使う。
 
@@ -80,6 +109,8 @@ python3 tools/native_japanese_ab.py run \
 報告には次を書く。
 
 - 前後のコミット、モデル、題材の数、回数、採れなかった本数
+- 目安ごとの前後の値・基準・判定・差の表
+- 以前の目安のうち、今回の変更で届かなくなったもの
 - 型ごとの前後の件数の表
 - 差が出た型ごとに、一致した行の実例を前後 1〜2 行ずつ
 - 除いた誤検出の件数と理由
@@ -89,4 +120,4 @@ python3 tools/native_japanese_ab.py run \
 
 ## 台帳をコミットする
 
-題材と型を足すか直したときは、報告の後に台帳の 2 つのファイルをコミットする。
+題材・型・目安を足すか直したときは、報告の後に台帳の 3 つのファイルをコミットする。

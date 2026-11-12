@@ -1,0 +1,13 @@
+[
+  {"id": "skill-kidou", "since": "2026-11-12 規律のスキル化と見直し", "item": "japanese-writing を起動した応答の割合(%)", "metric": "skill", "op": "以上", "value": 90},
+  {"id": "yomiten-mijikai-shudai", "since": "2026-11-12 規律のスキル化と見直し", "item": "6 字以内の主題の直後に読点を打つ文の割合(%)", "metric": "share", "patterns": ["yomiten-mijikai-shudai"], "op": "以下", "value": 5},
+  {"id": "touten", "since": "2026-11-12 規律のスキル化と見直し", "item": "読点(100 字あたり)", "metric": "touten", "op": "以下", "value": 2.44},
+  {"id": "blog-keitai", "since": "2026-11-12 規律のスキル化と見直し", "item": "ブログ記事の題材の敬体の文の割合(%)", "metric": "ratio", "patterns": ["keitai", "jotai"], "prompts": ["p07-article"], "op": "以上", "value": 80},
+  {"id": "sekkeisho-konzai", "since": "2026-11-12 規律のスキル化と見直し", "item": "設計書の題材で、敬体と常体が混ざる応答の割合(%)。少ない側が 10% を超える応答を数える", "metric": "mixed", "patterns": ["keitai", "jotai"], "prompts": ["p09-design"], "op": "以下", "value": 0, "limit": 10},
+  {"id": "futoji-label", "since": "2026-11-12 規律のスキル化と見直し", "item": "太字のラベルとコロン(1 万字あたり)", "metric": "per10k", "patterns": ["futoji-label"], "op": "以下", "value": 7.2},
+  {"id": "shime-no-moushide", "since": "2026-11-12 規律のスキル化と見直し", "item": "締めの申し出(応答 100 本あたりの件数。前回の目安は 80 本に 4 件)", "metric": "per100", "patterns": ["shime-no-moushide-1", "shime-no-moushide-2"], "op": "以下", "value": 5},
+  {"id": "kudaketa-soudan", "since": "2026-11-12 規律のスキル化と見直し", "item": "相談への返事で、くだけた形が 1〜2 箇所ある応答の割合(%)", "metric": "in_range", "patterns": ["kudaketa-inuki", "kudaketa-ranuki", "kudaketa-sugoi"], "prompts": ["p10-casual"], "min": 1, "max": 2, "op": "以上", "value": 50},
+  {"id": "kudaketa-soudan-3", "since": "2026-11-12 規律のスキル化と見直し", "item": "相談への返事で、くだけた形が 3 箇所以上ある応答の割合(%)", "metric": "in_range", "patterns": ["kudaketa-inuki", "kudaketa-ranuki", "kudaketa-sugoi"], "prompts": ["p10-casual"], "min": 3, "op": "以下", "value": 0},
+  {"id": "kudaketa-comment-commit-3", "since": "2026-11-12 規律のスキル化と見直し", "item": "コメントとコミットメッセージの題材で、くだけた形が 3 箇所以上ある応答の割合(%)", "metric": "in_range", "patterns": ["kudaketa-inuki", "kudaketa-ranuki", "kudaketa-sugoi"], "prompts": ["p05-comment", "p06-commit"], "min": 3, "op": "以下", "value": 0},
+  {"id": "kudaketa-bunsho", "since": "2026-11-12 規律のスキル化と見直し", "item": "README と設計書の題材で、くだけた形がある応答の割合(%)", "metric": "in_range", "patterns": ["kudaketa-inuki", "kudaketa-ranuki", "kudaketa-sugoi"], "prompts": ["p04-readme", "p09-design"], "min": 1, "op": "以下", "value": 0}
+]
