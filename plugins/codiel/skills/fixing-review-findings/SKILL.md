@@ -60,8 +60,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 4. 不当と判断した所見は、下記「PR 反論記録書式」の内容で `rebuttal-<連番>.md` を作り、「記録の投稿手順」で記録する。
    修正はしない。反論後は所見の要約・反論根拠・(github モードでは投稿した PR コメント URL、
    local モードでは `rebuttal-<連番>.md` のパス)を「反論済み一覧」に追記する。
-5. ディスパッチ 1 往復(実装の委譲先への修正依頼 → 完了報告)ごとに
-   `node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を呼ぶ。
+5. 1 つの `review-<m>.md` の所見を直す 1 サイクル(テスト側・コード側・ドメインごとの修正をすべて含む)の
+   修正がすべて返った時点で、`node <plugin-root>/scripts/codiel-state.mjs record-attempt fix-loop --slug <slug>` を 1 回呼ぶ。
    `record-attempt` は回数を数えるだけで、上限は無い。
 6. 実装の委譲先が返した修正 diff を `mcp__plugin_codiel_raguel__evaluate_code` に通す(`raguel-gating` の
    フェーズ→ツール対応表のとおり)。`STOP`/`ASK` が返れば `raguel-gating` の該当ハンドリングに

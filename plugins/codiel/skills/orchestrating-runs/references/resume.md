@@ -10,6 +10,7 @@ run を再開するときに読む。
    ```
    - `phases` に `test-code` を持たない state(M4 より前に作った run)は、どのフェーズにあっても続行しない。`waits` が残っていれば、本文 §2.4 の手順で `wait-clear` してから `stop --slug <slug> --reason migrate` で止め、止めたことと理由をユーザーに示し、同じ intent パスを入口に新しい try を始める(本文 §1)。intent は `abandoned` にしない。
    - `state.status` が `awaiting_outcome` の run は再開しない。outcome の同期に任せ、ここで終える。
+   - `state.status` が `awaiting_human` で、`awaiting_human` のフェーズが 1 つも無い run は、以前のバージョンが修正の回数の上限で止めたものである。手順 2 へ進む前に `resume --slug <slug>` し、修正のループを続ける。ラウンドは state に記録された回数から続けて数える。
 2. 本文 §2「手順ファイルと読む時点」の再開の範囲の手順ファイルを Read する。carry-over が `in_progress` か `awaiting_human` なら、`references/phase-carry-over.md` も読む。
 3. `state.branch` が `null` でなければ、`git switch <state.branch>` で run のブランチ(`codiel/<slug>`。改修の前に作った run は `-try-<n>` 付きの名前)に切り替える。
    - 切り替える先のブランチがまだ無いとき(`init` の後、`git switch -c` の前で止まった run)は、`capturing-intent` の手順 5 の (6) の続きから行い、`git switch -c <state.branch>` でブランチを作ってから続ける。
@@ -31,5 +32,4 @@ run を再開するときに読む。
    - intent-sync では `steps/intent-sync/report.md`。このファイルがあれば、取り込みと ADR 候補の書き残しは済んでいる。
 
    discuss で中断していたときの再開位置(アジェンダ作成から/未決論点から/最終確認から)は、`facilitating-design-discussions` の「中断再開」に従う。design で `design.md` が既にあるときは、ウォークスルーの再提示から再開する。
-7. `state.status` が `awaiting_human` で、`awaiting_human` のフェーズが 1 つも無いなら、以前のバージョンが修正の回数の上限で止めた run である。`resume --slug <slug>` して修正のループを続ける。
-8. それ以外で `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。
+7. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。
