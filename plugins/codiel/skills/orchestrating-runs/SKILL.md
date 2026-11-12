@@ -171,7 +171,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | [test-code] | 仕様のディレクトリごとの成果物を書く単位(worktree で作業し、並列に進めてよい)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、`report.md`(作業者の報告からオーケストレーターが書く) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 |
 | [implement] | dev-plan のステップごとの成果物を書く単位(`codiel-state waves` の順。`parallel` グループは worktree で作業し、並列に進めてよい)と、ステップごとのタスクレビューの単位。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは仕様のディレクトリごとの実行の単位にする | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
 | [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は仕様のディレクトリごとの実行の単位)と、仕様のディレクトリごとの NG の修正の単位(worktree で作業し、並列に進めてよい) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の単位の報告を合わせてオーケストレーターが書く)、修正 diff | pass-gate(`evaluate_code`) |
-| [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md` | pass-gate(`evaluate_design`) |
+| [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み、run の変更の設計資料への書き込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md`、`docs/intents/design/<種別>.md` | pass-gate(`evaluate_design`) |
 | [pr] | オーケストレーター本体が、github では PR を作り、local では state に記録する | なし | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ | complete-phase(github のときだけ `--pr-url` 必須) |
 | [review] | 観点ごとの読み取りだけの単位(並列に進めてよい)。契約の前提「diff の範囲」の `git diff <範囲>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <範囲>`(契約の前提「diff の範囲」の値)、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
 | [fix-loop] | 修正の成果物を書く単位、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は実行の単位)、観点ごとの再レビューの読み取りだけの単位。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、再レビューの diff の範囲(契約の前提「diff の範囲」の値)、ARCHITECTURE(再レビューの単位のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。回数と通過の時点は `references/phase-fix-loop.md`) |
@@ -384,7 +384,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 - 実装の単位(implement / test-loop の修正 / fix-loop の修正)では、変更の中身(dev-plan の触るファイルと内容、直す所見や失敗)から、`<plugin-root>/skills/implementing/references/` の中で合う観点ファイルを選んで足す。`mapped` でタグ名と同じ名前のファイルがあれば含める。`unscoped` でも、変更の中身に合うものを渡す。`worktree.md`・`e2e.md`・`fix-mode.md` は手順ファイルで観点ファイルではないので、選ばない。
 - review と再レビューの観点は、`references/review-common.md` の規則で選ぶ。
 
-再レビューの単位で返った所見のうち、`fixing-review-findings` の反論済み一覧と同じ指摘は、`review-<m>.md` に書く前にオーケストレーターが除く。
+再レビューの単位の契約には、反論済みの所見を載せない。返った所見のうち反論済み一覧と同じ指摘は、オーケストレーターが `fixing-review-findings` の手順 10 で件数から除く。
 
 単位の作業の後、作業者によらず、成果物のファイルが実際に存在し空でないことを確かめてから、raguel-gating のゲート手順に進む。報告だけで完了としない。委譲していて成果物が存在しないか空のときは、下の「委譲したときの扱い」の出し直しに従う。
 

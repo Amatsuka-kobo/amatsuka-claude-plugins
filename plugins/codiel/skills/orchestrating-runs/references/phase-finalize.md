@@ -25,6 +25,7 @@ triage を終えて finalize の作業を始める前に読む。finalize は `s
     - 原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」の表
     - 手順 9 の ADR 候補の一覧と GOTCHAS 候補の一覧
     - 持続層への取り込みの結果。取り込んだ領域ファイルのパスを書く。取り込みを飛ばしたときは「対象外」とだけ書かず、飛ばした理由(`domains` が空で `## 意図的な制約` が「なし」だった、または intent-sync の確認でユーザーが領域を決めなかった)を書く。
+    - 設計資料の更新の結果。更新した `docs/intents/design/<種別>.md` のパスを書く。更新しなかったときは、当たる種別が無かったと書く。
 11. 次を呼ぶ。全フェーズが `passed` であることを検証し、`status` を `awaiting_outcome` にする唯一のコマンドで、`complete-phase` ではない。呼んだ後は、手順 10 で組み立てた結果レポートを出力して終了し、ほかの作業はしない。
     ```
     node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>

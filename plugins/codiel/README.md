@@ -134,6 +134,8 @@ Raguel の設定が `.codiel/config.json` の `raguel` に無く、`.gitignore` 
 移した元のファイルは承認を得て消します。`.gitignore` に足りない行も同じ機会に足されます。
 `/codiel:init` の成果物は run の外のファイルなので、コミットは利用者が行ってください。
 
+1.1 へ上げたら、`/codiel:init` をやり直してください。`.claude/rules/codiel.md` が同梱の内容と違えば差分を示して置き換えるかを聞き、GitHub のリポジトリで `codiel` ラベルが無ければ作るかを聞きます。置き換えないと、新しい run に設計資料の置き場(`docs/intents/design/`)が伝わりません。
+
 ### 既知の限界
 
 `.codiel` は git のルートに置いてください。git のルートの下のディレクトリ(たとえば `app/.codiel`)に置くと、

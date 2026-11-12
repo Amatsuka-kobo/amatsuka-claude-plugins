@@ -64,7 +64,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 | implement | `mcp__plugin_codiel_raguel__evaluate_code` | `implement` | `baseRef`: implement の `startHead` |
 | test-loop | `mcp__plugin_codiel_raguel__evaluate_code` | `test-loop` | `baseRef`: test-loop の `startHead` |
 | fix-loop | `mcp__plugin_codiel_raguel__evaluate_code` | `fix-loop` | `baseRef`: fix-loop の `startHead` |
-| intent-sync | `mcp__plugin_codiel_raguel__evaluate_design` | `intent-sync` | `paths`: intent-sync で書き換えた intent と持続層のファイル |
+| intent-sync | `mcp__plugin_codiel_raguel__evaluate_design` | `intent-sync` | `paths`: intent-sync で書き換えた intent と持続層のファイル(領域ファイルと、更新した設計資料 `docs/intents/design/<種別>.md`) |
 
 - `paths` はプロジェクトルートからの相対パスで、1〜50 件である。
 - code 系フェーズ(carry-over・test-code・implement・test-loop・fix-loop)の evaluate_code には `baseRef` だけを渡し、`paths` を渡さない。`paths` で範囲を絞った評価は pass-gate の検査 8 が拒む。

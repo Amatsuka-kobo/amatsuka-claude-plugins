@@ -5,8 +5,8 @@
 - intent 文書(`docs/intents/`)の原文のセクション(`## ASIS` / `## TOBE`)は、ユーザーが自分で
   書いた・語った言葉の記録である。記録は要約も言い換えもせず、原文のまま残す。言葉を足すときは、
   日付・話者・出所の行を添えて末尾に追記する。
-- 持続層(`docs/intents/domains/`)は要件と意図的な制約を長く残す資産であり、intent-sync フェーズの
-  外では書き換えない。例外は次の作業だけである。
+- 持続層(要件と意図的な制約の `docs/intents/domains/`、システムの今の姿の `docs/intents/design/`)は
+  長く残す資産であり、intent-sync フェーズの外では書き換えない。例外は `docs/intents/domains/` への次の作業だけである。
   - finalize の作業中に、ADR 候補を `## 意図的な制約` へ、GOTCHAS 候補を `## GOTCHAS 候補` へ書き足す。
   - metatron が、ADR にした `[ADR 候補]` のエントリを参照形へ縮め、台帳へ移した `[GOTCHAS 候補]` の
     エントリを消す。

@@ -38,7 +38,7 @@ description: Codiel のハーネス初期化で、セッション本体が保護
 
 | # | 確認対象 | 「揃っている」の判定 |
 |---|---|---|
-| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
+| B | `.claude/rules/codiel.md` / `CLAUDE.md` | `.claude/rules/codiel.md` が存在して内容が `<plugin-root>/assets/rules/codiel.md` と一致し、かつ `CLAUDE.md` に、行全体が(前後の空白を除き)`## Codiel` と一致する行がある |
 | C | `.codiel/config.json` | JSON のオブジェクトとして読め、`raguel` がオブジェクトである(空のオブジェクトでよい)。`raguel.config.yaml` は見ない |
 | D | `.codiel/runs` / `.codiel/reports` / `.gitignore` | `.codiel/runs` と `.codiel/reports` の 2 ディレクトリが存在し、`node <plugin-root>/scripts/codiel-state.mjs gitignore` が返す `missing` が空である |
 | L | GitHub の `codiel` ラベル | `gh repo view` が失敗する(GitHub のリポジトリでない、`gh` が無い、未認証)か、`gh label list --search codiel --json name` の結果に、名前が大文字小文字を区別せずに `codiel` と一致するものがある |
@@ -123,7 +123,8 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 
 - `.claude/rules/codiel.md` が無ければ、`<plugin-root>/assets/rules/codiel.md` を
   **固定文言のまま** Write で置く(置く前に必ず Read する)。
-- 既にあれば触らない。
+- 既にあり、内容が `<plugin-root>/assets/rules/codiel.md` と同じなら触らない。
+- 既にあり、内容が違うときは、既存のファイルから同梱のファイルへの差分を提示し、置き換えるかを AskUserQuestion で聞く。承認を得たら同梱のファイルの内容で置き換える。断られたら置き換えず、内容の違いを初期化の欠落として扱わない(ほかの項目が揃っていれば「初期化済み」と報告する)。完了報告に、置き換えなかったことを書く。
 - 新規ファイルの全文を提示して承認を得てから書き込む。
 
 ### (b) `CLAUDE.md` への `## Codiel` の追記
@@ -149,15 +150,15 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - 承認を得てから実行する。断られたら作らず、完了報告に、run の pr フェーズで再び聞くことを書く。
 - コマンドが失敗したら、エラーの文言を完了報告に書き、ほかの手順を続ける。
 
-(a)(b)(c)(d) のいずれも、既存の他セクションは一切変更しない。例外は (c) の旧セクション
-「## Codiel ハーネス運用ルール」の取り除きだけであり、承認を得た場合に限る。
+(a)(b)(c)(d) のいずれも、既存の他セクションは一切変更しない。例外は (a) の `.claude/rules/codiel.md` の置き換えと、
+(c) の旧セクション「## Codiel ハーネス運用ルール」の取り除きだけであり、承認を得た場合に限る。
 
 ## 5. 検証
 
 - 手順 2 を実行したときは `.codiel/config.json` を Read し、`raguel` に承認された内容
   (保護パスの glob、または YAML から写した中身)がそのまま入っていて、既存のキーが変わっていないことを確認する。
 - 手順 3 を実行したときは `codiel-state gitignore` をもう一度実行し、`missing` が空であることを確認する。
-- 手順 4(a) を実行したときは `.claude/rules/codiel.md` を Read し、`<plugin-root>/assets/rules/codiel.md`
+- 手順 4(a) で置いたか置き換えたときは `.claude/rules/codiel.md` を Read し、`<plugin-root>/assets/rules/codiel.md`
   と同じ内容であることを確認する。
 - 手順 4(b) を実行したときは `CLAUDE.md` を Read し、`## Codiel` 見出しと 6 行の内容が
   追記されていることを確認する。
@@ -176,6 +177,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - 配置・生成・追記したファイルの一覧(skip したものは skip と明記)
 - ユーザーが不明と答えて未記入のまま残した項目
 - 手順 2 で `raguel.config.yaml` を消す承認が得られず残ったときは、Raguel が読まないファイルであること
+- 手順 4(a) の `.claude/rules/codiel.md` の置き換えが承認されず、同梱の内容と違うまま残った場合はその旨
 - 手順 4(c) の旧セクションの取り除きが承認されず残った場合はその旨
 - 手順 4(d) で `codiel` ラベルを作ったか、断られて作らなかったか、作成が失敗したか(エラーの文言)
 - `.codiel/config.json`・`.gitignore`・`.claude/rules/codiel.md`・`CLAUDE.md` は run の外のファイルである。コミットしたか、断られて利用者に任せたかを書く
@@ -193,7 +195,7 @@ git に載せない置き場(`.codiel/runs/`・`.codiel/reports/`・E2E のレ�
 - **承認なしに書き込まない**。ドラフト全文(新規ファイル)または追記差分(既存ファイル)の
   提示と承認の取得を省略しない。手順 4(d) の `codiel` ラベルの作成も、承認を得てから行う。提示は応答の本文に出すことであり、承認を聞くより前に行う。
 - **既存記述を削除・改変しない**。変更は不足分の追記だけにする
-  (「修復の例外」で明示承認を得た置換と、手順 4(c) で承認を得た旧セクション
+  (「修復の例外」で明示承認を得た置換と、手順 4(a) で承認を得た `.claude/rules/codiel.md` の置き換えと、手順 4(c) で承認を得た旧セクション
   「## Codiel ハーネス運用ルール」の取り除きと、手順 2 で承認を得た `raguel.config.yaml` の削除を除く)。
 - **検証(手順 5)を省略して完了報告しない**。
 - **聞いた保護パスをコードベースの解析結果で置き換えない**。保護パスはユーザーの回答からのみ
