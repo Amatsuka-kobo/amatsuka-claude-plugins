@@ -1,20 +1,20 @@
 # review の観点と所見の統合
 
-review に入ったときと、fix-loop で再レビューの委譲を出す前に読む。
+review に入ったときと、fix-loop で再レビューの単位を始める前に読む。
 
 ## 観点を選ぶ規則
 
 観点は、`<plugin-root>/skills/reviewing-diffs/references/` にある frontend・backend・data・doc・security・infra・generic の 7 つから選ぶ。
 
-- `git diff --name-only <base>...<branch>`(`<base>`・`<branch>` は、委譲の依頼文に書く「diff の範囲」の値と同じ)の変更パスと内容から、frontend・backend・data・infra のうち当たる観点を選ぶ。
+- `git diff --name-only <base>...<branch>`(`<base>`・`<branch>` は、契約に書く「diff の範囲」の値と同じ)の変更パスと内容から、frontend・backend・data・infra のうち当たる観点を選ぶ。
 - doc と security は、変更の内容によらず毎回選ぶ。
 - generic は、frontend・backend・data・infra のどれにも当たらず、doc の担当でもない変更パスがあるときだけ選ぶ。Markdown などの文書と、run の成果物(`docs/intents/` の intent 文書、agenda・discussion・design・dev-plan)は doc の担当なので、generic を選ぶ理由にしない。
 - fix-loop の再レビューも、同じ規則で観点を選び直す。所見が出た観点だけに絞らない。
-- 観点ごとに読み取りだけの委譲を 1 つ出し、その依頼文に `<plugin-root>/skills/reviewing-diffs/references/<観点>.md` を足す。観点ファイルの存在は `Glob` か `ls` で確かめる。
+- 観点ごとに読み取りだけの単位を 1 つ作り、その契約の「観点ファイル」に `<plugin-root>/skills/reviewing-diffs/references/<観点>.md` を足す。観点ファイルの存在は `Glob` か `ls` で確かめる。
 
-## 委譲の前の準備
+## レビューの単位の前の準備
 
-委譲の依頼文を書く前に、オーケストレーターが次を行う。委譲先はテストと型検査を実行せず、ここで用意した結果を読む。待ちが残っている間は実行しない(`delegation-env.md` の自分で実行するテストの条件に従う)。
+レビューの単位の契約を書く前に、オーケストレーターが次を行う。レビューの作業者はテストと型検査を実行せず、ここで用意した結果を読む。動いている単位がある間は実行しない(`delegation-env.md` の自分で実行するテストの条件に従う)。
 
 1. 今の HEAD を控える。
 2. テストの結果を決める。
@@ -23,20 +23,20 @@ review に入ったときと、fix-loop で再レビューの委譲を出す前�
    - test-run が無い、HEAD の行が無い、影響する変更がある、のいずれかなら、プロジェクトの test コマンドを run ブランチ上で 1 回実行する。E2E は実行しない。
 3. 型検査のコマンドを 1 回実行する。コマンドは、コンテキストに宣言があればそれ、無ければ `package.json` の `scripts` の `typecheck` とする。どちらも無ければ「型検査なし」とする。
 4. `reports/review-checks-<m>.md` に、今の HEAD、使った test-run のパスか test コマンドの実行結果、型検査のコマンドと終了コード、失敗時の出力の抜粋を書く。
-5. 観点の委譲の依頼文の「入力ファイル」に、`review-checks-<m>.md` の絶対パスと、使った test-run のパス(あれば)を足す。
+5. 観点の単位の契約の「入力ファイル」に、`review-checks-<m>.md` の絶対パスと、使った test-run のパス(あれば)を足す。
 
 ## 所見の統合と投稿
 
-観点ごとの返答を本文 §3 の手順で `waits/<id>.md` に書き、グループの待ちがすべて消えてから行う。
+観点ごとの単位がすべて終わってから行う。委譲したときは、返答を本文 §3 の手順で `waits/<id>.md` に書き、グループの待ちがすべて消えてから行う。
 
 1. `reports/review-<m>.md` を書く。`<m>` はレビューの回の番号で、review フェーズが 1、fix-loop の再レビューごとに 1 つ増える。
    - 先頭の段落に、選んだ観点ごとに 1 行、観点の名前とその観点を選んだ理由(当たった変更パス)を書く。この段落は所見の一覧の外に置く。
    - 所見を severity 順(critical → high → medium → low)に並べる。
    - 同じ対象・内容の所見が複数の観点から出たら、最も高い severity で 1 件に統合し、観点を併記する。
-   - 委譲先は所見を 1 件ずつ、次の項目で返す。統合では、これらをそのまま保つ。
+   - 作業者は所見を 1 件ずつ、次の項目で返す。統合では、これらをそのまま保つ。
      - severity: critical・high・medium・low のいずれか。
      - 一行要約。
-     - 観点: 委譲した観点ファイルの名前(frontend・backend・data・doc・security・infra・generic)。
+     - 観点: 契約で渡した観点ファイルの名前(frontend・backend・data・doc・security・infra・generic)。
      - 対象: `src/...:42` の形。github モードの行コメントはこの値で投稿する。
      - 抜粋・内容・根拠・提案。
    - 返答の確認方法に「結果が無かった」とあるテスト・型検査は、所見の一覧には入れない。観点ごとの確認結果として `review-<m>.md` に書く。
