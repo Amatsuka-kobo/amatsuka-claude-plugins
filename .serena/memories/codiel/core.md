@@ -1,4 +1,4 @@
-`plugins/codiel` (1.0.1) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+`plugins/codiel` (1.1.0-dev) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
 design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
 ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
 local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
@@ -147,23 +147,35 @@ intent-sync フェーズは `skills/syncing-intents/` が、承認済みの受�
 - Issue を入口にしたときは capturing-intent が本文を読み、マーカー(`<!-- intent:v1 -->`・`<!-- codiel:generated -->`)で
   原文か派生かを決める。`analyzing-issues` と `issue.md` は廃止した。
 
-## Agents — 同梱しない。作業内容で委譲する
+## Agents — 同梱しない。作業の単位と契約だけを書く(1.1、2026-11-13)
 
-codiel は同梱 Agent を持たない(2026-09-27。`codiel-analyst` と `codiel-test-designer` を廃止し、ADR-004 の
-「2 体に絞る」部分を上書きした)。test-spec の書き込み範囲の制限は、依頼文と `writing-test-specs` 本文の規律が担う。
-すべてのフェーズは Agent 名や役割名を指定せず、「成果物を書く委譲」「読み取りだけの委譲」など作業内容と
-委譲の種別でサブエージェントへ委譲する。委譲先はセッションに注入された運用規律が選び、
-規律が無い環境では読み取りだけの委譲を `Explore`、それ以外を `general-purpose` へ縮退する。
-
-**委譲の線引き(2026-10-01、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` §5)**:
-オーケストレーターは agenda.md・design.md・dev-plan.md・discussion.md・intent 文書(持続層を含む)を自分で書き、
-プロジェクトの test コマンドと `units/` の仕様のディレクトリのテストを run ブランチで自分で直列に実行する。
-spec.md / cases.md・テストコード・実装と修正・タスクレビュー・review・`e2e/` の実行は委譲を続ける。
-コード(テストコードを含む)・spec.md / cases.md・レビューの所見をオーケストレーターが書かないという規律は、`orchestrating-runs` の本文に書く(2026-10-02 に HARD-GATE と Red Flags のセクションを廃止し、本文の手順へ移した。理由は DESIGN.md §6)。
+codiel は同梱 Agent を持たず(2026-09-27)、1.1 からは作業の担い手(委譲するか、誰に委譲するか)も書かない。
+`orchestrating-runs` §3「作業の単位と契約」が各単位の契約(作業内容・任せる判断・読むスキル・観点ファイル・入出力・前提・
+書いてよい範囲と tools・完了の条件・返し方)を定め、委譲するときは契約を依頼文にし、自分で作業するときは自分への指示にする。
+委譲するかと委譲先はセッションの運用方針に任せ、方針が無いときの既定の委譲先(旧 `general-purpose` / `Explore`)は持たない。
+作業者は報告の 1 行目に `result: done|undecided|declined` を書く。委譲先が決めずに返したら、契約の不備なら直してやり直し、
+それ以外は同じフェーズの待ちがすべて消えてから `mark-ask --kind confirm` で人に聞く(判断を示して続ける・委譲先を変えて続ける・中止)。
+`wait-add` と出し直しは委譲したときだけ使う。worktree は並列の単位として登録したら作業者によらず使う。
+コード系フェーズでは作業者が自分の変更を作業しているブランチにコミットする。再レビューの契約に反論済み所見は載せず、
+オーケストレーターが `fixing-review-findings` の手順 10 で件数から除く。
+修正のループ(implement・test-code の要素の修正、test-loop、fix-loop)に上限は無い。1〜3 ラウンドは同じ文脈、4 ラウンド以上は
+2 ラウンドごとに「行き詰まりの打開」の新しい単位にする。`record-attempt` は回数を数えるだけ(`limits` は書かず読まない)。
+`codiel-state` の CLI はルートを `findMainRoot(cwd)` で解決する。
 ドメイン固有の観点は
 `plugins/codiel/skills/implementing/references/{frontend,backend,data,infra}.md` と
 `plugins/codiel/skills/reviewing-diffs/references/{frontend,backend,data,infra,doc,security,generic}.md`
 に置く。review の観点は変更パスと内容から選び、doc と security は毎回、generic はどれにも当たらない変更パスがあるときだけ足す(規則は `orchestrating-runs/references/review-common.md`)。
+
+## 設計資料と codiel ラベル(1.1、2026-11-13)
+
+- 持続層は `docs/intents/domains/`(領域ファイル)と `docs/intents/design/`(設計資料)の 2 つ。設計資料は種別ごとに 1 ファイル
+  (`data-model`・`api`・`screen-flow`・`architecture`・`sequence`・`nfr`)で、intent-sync が run の差分から今の姿を書き、末尾に `## 由来` を置く。
+  書式は `references/intent-format.md` の「設計資料」、判定と手順は `skills/syncing-intents/references/design-docs.md`。`domains` が空でも更新する。
+  guard-write は `docs/intents/design/**` を intent-sync だけで通す(finalize の例外なし)。Raguel の `paths` の上限は 50 件。
+- github モードでは codiel が対応する Issue と PR にラベル `codiel` を付ける。init・intent・pr でラベルが無ければ承認を得て作る。
+  guard-bash は run 中の `--label codiel` の無い `gh pr create` を拒否し、guard-github-mcp は run 中の MCP の PR 作成を常に拒否する。
+  triage の起票には付けない。
+- init は同梱と違う `.claude/rules/codiel.md` を差分を示して置き換えるかを聞く。1.1 へ上げたら `/codiel:init` をやり直す。
 
 ## Skills (17) and commands (3)
 

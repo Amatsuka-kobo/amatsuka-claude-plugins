@@ -35,6 +35,10 @@ Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに
 持続層に全文を残します。metatron を導入すると、`/metatron:init` と `/metatron:update` がこの印を ADR へ移し、
 持続層を参照形に縮めます。
 
+Codiel は `docs/intents/design/` にも持続層を持ちます。run で決まった設計を、データモデル(`data-model.md`)・API 一覧(`api.md`)・画面遷移(`screen-flow.md`)・システム構成(`architecture.md`)・シーケンス(`sequence.md`)・非機能要件(`nfr.md`)の種別ごとに 1 ファイルで残します。intent-sync で run の差分から今の姿を書き、図は Mermaid で描きます。ファイルは、その種別に当たる変更を初めて含んだ run で作られます。
+
+GitHub と連携する run では、Codiel が対応する Issue と PR にラベル `codiel` を付けます。ラベルは `/codiel:init` か run の途中で、承認を得て作ります。run の中の PR は `gh pr create --label codiel` で作り、ラベルの無い PR の作成と GitHub MCP での PR の作成は hooks が拒否します。後続の作業として triage で起票する Issue には付けません。
+
 ADR 候補と GOTCHAS 候補は、環境変数が有効な種別だけ残します。ADR 候補は `AMATSUKA_METATRON_ENABLE_ADR`、
 GOTCHAS 候補は `AMATSUKA_METATRON_ENABLE_GOTCHAS` に従い、metatron と同じ変数です。値は前後の空白を除いて小文字にし、
 `1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外の値は無効です。run の開始時に値を決めて state に保存するので、
@@ -69,11 +73,11 @@ run(試行)があれば自動的に再開します。内部では `orchestrating
 [test-loop]      記録された全テストと test コマンドの回帰を確認し、NG を修正、全件 green まで反復
                  (broken の疑いがあるテストは人の確認後に直す)
                                                                 ▶ Raguel: evaluate_code(修正の都度)
-[intent-sync]    承認済みの受け入れ基準の変更と、途中で追記された原文を派生文へ反映。持続層を更新
+[intent-sync]    承認済みの受け入れ基準の変更と、途中で追記された原文を派生文へ反映。持続層と設計資料を更新
                                                                 ▶ Raguel: evaluate_design
-[pr]             github: PR 作成(テスト green かつコード PROCEED を hooks が検証) / local: 記録だけで終える
+[pr]             github: `codiel` ラベル付きで PR 作成(テスト green かつコード PROCEED を hooks が検証) / local: 記録だけで終える
 [review]         変更パスと内容に当たる観点(frontend/backend/data/infra)+ 毎回選ぶ doc/security を並列
-                 ディスパッチ(どれにも当たらない変更パスがあるときだけ generic を足す)、所見を統合
+                 にレビュー(どれにも当たらない変更パスがあるときだけ generic を足す)、所見を統合
                  (github は PR にも投稿、local は投稿しない)
 [fix-loop]       critical/high を修正 → 回帰テスト → 再レビュー、ゼロになるまで反復(所見が無ければ skip)
                                                                 ▶ Raguel: evaluate_code(修正の都度)
@@ -99,7 +103,7 @@ Issue は本文を原文としてそのまま記録します。
 機能単位で永続します。テストコードの置き場はプロジェクトの規約に従って決まり、置いたパスは各 `spec.md`
 の `tests` に記録されます。run の文書(`agenda.md`・`discussion.md`・`design.md`・`dev-plan.md`)は
 `runsDir`(既定は `docs/codiel/runs`)の `<slug>/` に置きます。`testsDir` と `runsDir` を書き換えるのは
-run が active でないときにしてください(run の途中で変えると、進行中のディスパッチが使う値と食い違います)。
+run が active でないときにしてください(run の途中で変えると、進行中の作業の単位が使う値と食い違います)。
 値を書き換えると `.gitignore` の E2E の行が合わなくなり、`/codiel:run` が止まります。そのときは
 `/codiel:init` をやり直すと新しい行が足されます。古い行は残るので、消すかどうかは利用者が決めてください。
 
@@ -119,12 +123,12 @@ E2E のテストは実行のたびに、仕様のディレクトリの `reports/
 共有しないのは次の置き場です。`.gitignore` の行で外すのは `.codiel/runs/`・`.codiel/reports/` と E2E のレポートの画像などで、
 `.codiel/worktrees/` は run の最初の worktree の作成時に `.git/info/exclude` へ加わります。
 
-- `.codiel/runs/`(try ごとの state・委譲の brief と報告・各回のテスト結果とレビュー所見)
+- `.codiel/runs/`(try ごとの state・作業の単位の brief と報告・各回のテスト結果とレビュー所見)
 - `.codiel/reports/`(`/codiel:test` の単独実行のレポート)
 - `.codiel/worktrees/`
 - E2E のレポートの画像とフレームワークのほかの成果物
 
-委譲はバックグラウンドで動き、完了は通知で届きます。委譲先は報告を最終の返答で返し、オーケストレーターが返答を `.codiel/runs/<slug>/try-<n>/waits/<id>.md` と報告のファイルへ書きます。委譲を出すたびに待ちを state に記録するので、待つ間は stop hook が止めません。セッションを途中で終えて再開すると、`waits/<id>.md` が書かれていない委譲は失われたものとして出し直します。
+各フェーズの作業は単位に分かれ、単位ごとに委譲するかどうかはセッションの運用方針で決まります。委譲したときは、委譲はバックグラウンドで動き、完了は通知で届きます。委譲先は報告を最終の返答で返し、オーケストレーターが返答を `.codiel/runs/<slug>/try-<n>/waits/<id>.md` と報告のファイルへ書きます。委譲を出すたびに待ちを state に記録するので、待つ間は stop hook が止めません。セッションを途中で終えて再開すると、`waits/<id>.md` が書かれていない委譲は失われたものとして出し直します。
 
 ### 以前の版からの移行
 
@@ -145,9 +149,10 @@ Raguel の設定が `.codiel/config.json` の `raguel` に無く、`.gitignore` 
 `[` などを含めると、行が意図どおりに当たりません。testsDir にはこれらを含まない名前を使ってください。
 
 詳細は [`docs/DESIGN.md`](./docs/DESIGN.md) を参照してください(§2 に全体フロー、§3-9 に state・テスト資産モデル・
-test-loop の詳細・スキル・作業内容による委譲構成・hooks 仕様などを記載)。Codiel は Agent 定義を同梱しません。
-各フェーズの作業は作業内容を渡して委譲し、委譲先はプロジェクトの Agent 定義やセッションの運用方針で
-決まります(方針が無ければ Claude Code の組み込みのサブエージェントへ送ります)。
+test-loop の詳細・スキル・作業の単位と契約・hooks 仕様などを記載)。Codiel は Agent 定義を同梱しません。
+Codiel が決めるのは、各フェーズの作業の単位・入出力・書いてよい範囲の契約だけです。単位を委譲するか、
+どの定義に委譲するかは、プロジェクトの Agent 定義やセッションの運用方針に任せます。方針が無ければ Claude Code の判断に任せ、
+Codiel は既定の委譲先を持ちません。
 
 run が active な間は、gh-utility のスキル(`issue-craft` など)から GitHub へ投稿しないでください。
 投稿する本文に codiel のマーカー `<!-- codiel:generated -->` が付かないため、codiel の hook に
@@ -166,7 +171,7 @@ codiel の hook(guard-bash・guard-write・guard-github-mcp)は、AI の誤操�
 
 `.codiel/config.json` の `testsDir`(既定 `docs/codiel/tests`)配下のテスト仕様に基づく回帰テストを、run とは
 独立に単体実行します。引数を省略すると testsDir 全体、指定するとその配下の仕様のディレクトリだけが
-対象です。NG があってもコード修正はディスパッチせず、結果を `.codiel/reports/` にレポートするだけに
+対象です。NG があってもコード修正の単位は始めず、結果を `.codiel/reports/` にレポートするだけに
 留めます(state 遷移や record_outcome は行いません)。
 
 ## セットアップ
@@ -180,7 +185,7 @@ codiel の hook(guard-bash・guard-write・guard-github-mcp)は、AI の誤操�
 
 ## 推奨 MCP サーバー(任意)
 
-`context7`、`github`、`playwright` を MCP サーバーとして登録すると、仕様確認や GitHub 情報の参照を行う委譲先が利用できます。テスト・実装・レビューの作業を受ける委譲先は、Playwright が付与されていれば画面挙動の確認にも活用できます。委譲先にどの MCP が付与されるかはプロジェクト側の定義によります。未接続でもエラーにはならず、利用可能な他のツールで作業を継続します。GitHub は読み取り系ツールだけを許可しています。
+`context7`、`github`、`playwright` を MCP サーバーとして登録すると、仕様確認や GitHub 情報の参照を行う作業者が利用できます。テスト・実装・レビューの作業者は、Playwright が付与されていれば画面挙動の確認にも活用できます。委譲先にどの MCP が付与されるかはプロジェクト側の定義によります。未接続でもエラーにはならず、利用可能な他のツールで作業を継続します。GitHub は読み取り系ツールだけを許可しています。
 
 ## Raguel の運用
 

@@ -122,7 +122,7 @@ digraph writing_test_specs {
   selfcheck [label="各期待結果の根拠を\n受け入れ基準上で即答できるか?", shape=diamond];
   fix [label="実装詳細混入のケースを\n振る舞い記述に書き直す", shape=box];
   more_units [label="未処理の仕様のディレクトリが\n残っているか?", shape=diamond];
-  done [label="委譲先の報告\n(仕様のディレクトリごとの\nspec.md / cases.md のパス・\n新しい画面の名前の候補)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  done [label="作業者の報告\n(仕様のディレクトリごとの\nspec.md / cases.md のパス・\n新しい画面の名前の候補)\n※コミットはオーケストレーターが行う", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ntest-spec ゲートへ引き継ぎ", shape=ellipse];
 
   read_design -> read_criteria -> for_each_unit -> exists;
@@ -270,7 +270,7 @@ digraph scripting_tests {
   record_tests [label="spec.md の frontmatter tests に\nテストファイルのパスを Edit で追記", shape=box];
   commit [label="worktree の中で\ncodiel(test-code): ... とコミット", shape=box];
   report [label="結果・理由・置き場の根拠・\n出力抜粋を最終の返答に挙げる\n(report.md はオーケストレーターが書く)", shape=box];
-  done [label="委譲先の報告\n(テストコードのパス・tests の記録・\nRed の確認・コミットハッシュ)\n※オーケストレーターがタスクレビュー後に\nrun ブランチへマージ", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  done [label="作業者の報告\n(テストコードのパス・tests の記録・\nRed の確認・コミットハッシュ)\n※オーケストレーターがタスクレビュー後に\nrun ブランチへマージ", shape=ellipse, style=filled, fillcolor="#ccffcc"];
   gate [label="raguel-gating:\ntest-code ゲート\n(全ディレクトリのマージ後に1回)", shape=ellipse];
 
   read_inputs -> decide_place -> install -> exists;
@@ -301,15 +301,15 @@ digraph running_regression_tests {
   mode [label="起動モードは?\n(run 経由 test-loop / 単独 /codiel:test)", shape=diamond];
   scope [label="回帰範囲を決定\n(<testsDir>/**/spec.md の tests\n+ プロジェクトの test コマンド)", shape=box];
   split [label="spec.md の frontmatter parallel で\n並列可否を仕分ける", shape=box];
-  run_tests [label="自分で実行するテスト(test コマンドと units/)は直列、\ne2e/ の委譲は parallel: true だけ同時実行(上限4)", shape=box];
+  run_tests [label="自分で実行するテスト(test コマンドと units/)は直列、\ne2e/ の実行の単位は parallel: true だけ同時実行(4 件まで)", shape=box];
   judge [label="ケースごとに判定\n(OK / NG / broken / 環境の失敗)", shape=box];
   env_fail [label="環境の失敗は broken にも\nNG にも数えない", shape=box, style=filled, fillcolor="#fff2cc"];
-  retry_env [label="自分で実行したものは、動いている委譲が\n無いとき 1 回だけ自分で実行し直す\n(e2e/ の実行し直しは委譲先が行う。単独実行は自分で行う)", shape=box];
+  retry_env [label="自分で実行したものは、動いている単位が\n無いとき 1 回だけ自分で実行し直す\n(e2e/ の実行し直しは実行の単位で行う。単独実行は自分で行う)", shape=box];
   run_cmd [label="プロジェクトの test コマンドを実行", shape=box];
   verdict [label="判定を決める\n(green / red / broken)", shape=box];
   report [label="レポート作成\n(実行出力の抜粋・NG は4項目)", shape=box];
-  standalone_end [label="単独実行(/codiel:test):\nNG があってもディスパッチせず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
-  report_ng [label="run 経由: NG を仕様のディレクトリ\nごとにまとめてオーケストレーターへ報告\n(修正のディスパッチはオーケストレーターが行う)", shape=box];
+  standalone_end [label="単独実行(/codiel:test):\nNG があっても修正の単位を始めず\n報告のみで終了", shape=ellipse, style=filled, fillcolor="#ccffcc"];
+  report_ng [label="run 経由: NG を仕様のディレクトリ\nごとにまとめてオーケストレーターへ報告\n(修正の単位はオーケストレーターが始める)", shape=box];
   broken_gate [label="broken はテストが保護されているため\nmark-ask test-loop --kind confirm の後に\n人が承認してから直す", shape=box, style=filled, fillcolor="#fff2cc"];
   done [label="最終の返答で報告\n(レポート本文 / 実行したテストの件数 /\nOK・NG・broken・環境の失敗の内訳)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
 
@@ -427,19 +427,17 @@ digraph fixing_review_findings {
   node [fontname="sans-serif"];
 
   findings [label="review-<n>.md の\ncritical/high 所見を一覧化", shape=box];
-  verify [label="技術的に検証する\n(必要なら読み取り調査を委譲)", shape=box];
+  verify [label="技術的に検証する\n(必要なら読み取り調査の単位にする)", shape=box];
   valid [label="妥当か?", shape=diamond];
-  dispatch [label="実装の委譲先へディスパッチ\n(契約(b): 所見+根拠+提案+対象ファイル)", shape=box];
+  dispatch [label="修正の単位を始める\n(fix-mode の (b): 所見+根拠+提案+対象ファイル)", shape=box];
   rebut [label="PRコメントで反論\n(修正しない)\n反論済み一覧に追記", shape=box, style=filled, fillcolor="#ffe0b3"];
-  record_attempt [label="record-attempt fix-loop --slug <slug>\n(ディスパッチ1往復ごと)", shape=box];
-  cap [label="exit 3\n(capExceeded)?", shape=diamond];
-  ask [label="ASK相当で停止\n(raguel-gatingへ合流)", shape=box, style=filled, fillcolor="#fff2cc"];
+  record_attempt [label="record-attempt fix-loop --slug <slug>\n(1 サイクルの修正がすべて返った時点で 1 回。\n上限なし。4 ラウンド以上は 2 ラウンドごとに\n「行き詰まりの打開」の新しい単位)", shape=box];
   evaluate [label="evaluate_code で\n修正diffを検査", shape=box];
   verdict [label="verdict?", shape=diamond];
   stop_ask [label="STOP/ASKハンドリング\n(raguel-gating)", shape=box, style=filled, fillcolor="#fff2cc"];
   regress [label="running-regression-tests で\n回帰全体を再実行", shape=box];
   push [label="git push で\nPRブランチを最新化\n(再レビューの diff には影響しない)", shape=box, style=filled, fillcolor="#d9e8ff"];
-  rereview [label="該当観点のレビューの委譲先を再ディスパッチ\n(reviewing-diffs)\n反論済み一覧を申し送り\nreview-<n+1>.md 作成", shape=box];
+  rereview [label="観点を選び直して再レビューの単位を始める\n(reviewing-diffs)\n反論済み一覧は契約に載せない\nreview-<n+1>.md 作成", shape=box];
   remaining [label="反論済み一覧を除いて\ncritical/highが残っているか?\n(新根拠の再主張は未決に戻す)", shape=diamond];
   passgate [label="pass-gate fix-loop --slug <slug>\n--verdict PROCEED\n(ループの最後に1回)", shape=box, style=filled, fillcolor="#ccffcc"];
   triage [label="triageフェーズへ\n(medium/lowはここで)", shape=ellipse, style=filled, fillcolor="#ccffcc"];
@@ -449,9 +447,7 @@ digraph fixing_review_findings {
   valid -> dispatch [label="妥当"];
   valid -> rebut [label="不当"];
   dispatch -> record_attempt;
-  record_attempt -> cap;
-  cap -> ask [label="Yes"];
-  cap -> evaluate [label="No"];
+  record_attempt -> evaluate;
   evaluate -> verdict;
   verdict -> stop_ask [label="STOP/ASK"];
   verdict -> regress [label="PROCEED"];
@@ -587,16 +583,16 @@ digraph codiel_run {
   carryover [label="[carry-over]\n前の try から引き継いだコードを\n分岐点からの差分でゲートする\n(try-1 は SKIPPED。妥当の STOP でも修正して再評価できる)", shape=box];
   discuss [label="[discuss]\nオーケストレーターが agenda.md を書き、\n進行する+ユーザー", shape=box, style=filled, fillcolor="#e6f2ff"];
   design [label="[design]\nオーケストレーターが design.md を書く\n+ウォークスルー(ユーザー承認)", shape=box];
-  testspec [label="[test-spec]\n仕様のディレクトリの同定は自分で行い、\nspec.md / cases.md を書く委譲を出して待ちを記録する\n(新しい画面は名前の候補)。待つ間に dev-plan を書く", shape=box];
+  testspec [label="[test-spec]\n仕様のディレクトリの同定は自分で行い、\nspec.md / cases.md を書く単位を始める\n(委譲したら待ちを記録し、待つ間に dev-plan を書く。\n新しい画面は名前の候補)", shape=box];
   devplan [label="[dev-plan]\nオーケストレーターが書く\n(dev-plan.md。触るファイル・前提ステップ・\n通すテスト・環境準備・生成物)", shape=box];
   testcode [label="[test-code]\n仕様のディレクトリごとに worktree で\nテストコードを書き Red を確認\n(タスクレビュー後に順にマージ)", shape=box];
   waves [label="codiel-state waves で\nwave(依存の無いステップの最大4件の\n並列グループ)に分ける", shape=note];
   implement [label="[implement]\nwave ごとに worktree で並列実装\n(通すテストを Green にする。\nE2E も含む。wave のマージ後に\nrun ブランチで通すテストを実行)", shape=box];
-  testloop [label="[test-loop]\n記録された全テストと test コマンドの回帰を確認\n(units/ と test コマンドは自分で、e2e/ は委譲)\nNG は worktree で修正(broken は人の確認後に直す)", shape=box];
-  intentsync [label="[intent-sync]\nオーケストレーターが書く\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層を更新)", shape=box];
-  pr [label="[pr]\ngithub: git push + gh pr create\nlocal: state に記録するだけ", shape=box];
-  review [label="[review]\nドメイン別+doc/security の観点で\nレビューを委譲\n(github は PR にも投稿)", shape=box];
-  fixloop [label="[fix-loop]\n修正・再レビューは委譲、回帰は\nunits/ を自分で・e2e/ を委譲", shape=box];
+  testloop [label="[test-loop]\n記録された全テストと test コマンドの回帰を確認\n(units/ と test コマンドは自分で、e2e/ は実行の単位)\nNG は worktree で修正(broken は人の確認後に直す)", shape=box];
+  intentsync [label="[intent-sync]\nオーケストレーターが書く\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層と\n設計資料 docs/intents/design/ を更新)", shape=box];
+  pr [label="[pr]\ngithub: codiel ラベルを確かめ、push して\ngh pr create --label codiel\nlocal: state に記録するだけ", shape=box];
+  review [label="[review]\nドメイン別+doc/security の観点で\nレビューの単位(並列に進めてよい)\n(github は PR にも投稿)", shape=box];
+  fixloop [label="[fix-loop]\n修正・再レビューは作業の単位、回帰は\nunits/ を自分で・e2e/ は実行の単位", shape=box];
   triage [label="[triage]\nユーザー指示+filing-followup-issues\n(github: Issue 起票 / local: intent 草案)", shape=box];
   finalize [label="[finalize]\n原文の要望ごとに達成/未達/要確認/\n持ち越しを判定し status を決める", shape=box];
 
@@ -633,7 +629,7 @@ digraph codiel_run {
   triage -> finalize;
   finalize -> outcome;
 
-  { intent design testspec devplan testcode implement testloop intentsync fixloop } -> human [label="ASK / 上限超過", style=dashed];
+  { intent design testspec devplan testcode implement testloop intentsync fixloop } -> human [label="ASK / 決めずに返った単位", style=dashed];
   { intent design testspec devplan testcode implement testloop intentsync fixloop } -> stopped [label="STOP(誤検知として続けるか\n妥当として止めるかを人が裁定)", style=dashed];
   human -> stopped [label="裁定: 中止"];
   human -> implement [label="裁定A: 修正して再提出\n(該当フェーズへ)", style=dashed];
