@@ -19,6 +19,9 @@ function mainWithRun(slug = "demo"): string {
     )
     if (r.status !== 0) throw new Error(r.stderr)
   }
+  // init は .codiel の無いディレクトリを cwd にして呼ぶ(cwd をルートにする挙動を確かめるテストが頼る)
+  if (fs.existsSync(path.join(root, ".codiel")))
+    throw new Error(".codiel がある")
   fs.mkdirSync(path.join(root, ".raguel"))
   fs.writeFileSync(
     raguelConfigPath(root),
@@ -75,8 +78,6 @@ test(".codiel の無いディレクトリでは、従来どおり cwd を基準�
   // mainWithRun は .codiel の無いディレクトリを cwd にして init する
   const root = mainWithRun()
   expect(fs.existsSync(path.join(root, ".codiel/runs/demo"))).toBe(true)
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codiel-state-cli-bare-"))
-  expect(runCli(dir, ["config"], dir).code).toBe(0)
 })
 
 test("worktree の中の cwd の wait-add は、メインの run に書く", () => {

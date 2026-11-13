@@ -17,7 +17,7 @@
    - 1〜3 ラウンド: 同じ作業者が文脈を保ったまま続ける。委譲したときは同じ委譲先を続投させる。
    - 4 ラウンド以上: 2 ラウンドごとに(4・5、6・7、…)、作業内容に「行き詰まりの打開」と明記した新しい単位にする。委譲するときの委譲先の選び方は運用方針に任せる。state に新しい記録は足さない。
    - 自分で作業するときは、新しい単位に移るたびに、それまでの修正の方針を捨てて原因の調べ直しから始める。
-5. レビューを通ったディレクトリから、run ブランチへ順にマージし、`step-update --slug <slug> --kind test-code --id <ID> --status merged --head <worktree のブランチの HEAD>` で記録する。
+5. レビューを通ったディレクトリから、run ブランチへ順にマージし、`step-update --slug <slug> --kind test-code --id <ID> --status merged --head <worktree のブランチの HEAD>` で記録する。衝突したら `git merge --abort` し、`--status failed` にする。残りのマージが済んだ後、worktree を後始末し、`--status pending` で戻してから新しい HEAD で作り直し、手順 2 からやり直す。
 6. 作業者が「cases.md の誤り」を報告したディレクトリは、マージせずに `--status failed` で要素を `failed` にして worktree を後始末する。続けて、`writing-test-specs` に従う成果物を書く単位で、run ブランチ上の `cases.md` を直す。
    - 期待結果を変える必要が無いと直す単位の作業者が報告したら、`mark-ask test-code --kind confirm` の後に人に確かめる。
    - 直したら `--status pending` で要素を戻し、そのディレクトリの test-code をやり直す。やり直しのラウンドは、要素の `attempts` の続きから数える。

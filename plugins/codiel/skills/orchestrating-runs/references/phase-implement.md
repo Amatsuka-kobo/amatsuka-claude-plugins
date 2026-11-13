@@ -3,7 +3,7 @@
 `start-phase implement` の直後に読む。worktree と単位の並べ方は `references/delegation-env.md` に従う。
 
 1. dev-plan のステップを `step-add --slug <slug> --id <ID> --files '<JSON 配列>' --deps '<JSON 配列>' [--final] [--domain <名前>]` で登録し、`codiel-state waves --slug <slug>` で実行順を得る。非ゼロで終わったら dev-plan を差し戻し、`evaluate_plan` を呼ばない(循環依存は dev-plan のゲートで検出する)。
-2. `waves` の `groups` を先頭から順に処理する。`parallel` グループは手順 3〜8 で進める。`serial` グループと `final` は、run ブランチ上で 1 ステップずつ、`set-domain` を使って単位の作業を進める(本文 §4)。
+2. `waves` の `groups` を先頭から順に処理する。`parallel` グループは手順 3〜8 で進める。手順 4〜7 の `step-update` は `parallel` グループのステップにだけ使う。`serial` グループと `final` は、run ブランチ上で 1 ステップずつ、`set-domain` を使って単位の作業を進める(本文 §4)。
 3. `parallel` グループの各ステップに brief ファイル `.codiel/runs/<slug>/try-<n>/steps/step-<k>/brief.md` を書く。内容は本文 §3 の作業の契約に、次を加えたものである。
    - worktree の絶対パス・触るファイル・前提ステップ・環境準備のコマンド
    - 選んだ単位の種類(`delegation-env.md` の並列可・単独)と、実行する通すテスト(そのステップの `spec.md` の `tests` を写す)
@@ -16,7 +16,7 @@
    - 1〜3 ラウンド: 同じ作業者が文脈を保ったまま続ける。委譲したときは同じ委譲先を続投させる。
    - 4 ラウンド以上: 2 ラウンドごとに(4・5、6・7、…)、作業内容に「行き詰まりの打開」と明記した新しい単位にする。委譲するときの委譲先の選び方は運用方針に任せる。state に新しい記録は足さない。
    - 自分で作業するときは、新しい単位に移るたびに、それまでの修正の方針を捨てて原因の調べ直しから始める。
-7. レビューを通ったステップから、run ブランチへ順に `git merge --no-ff` する。マージしたステップは `step-update --slug <slug> --id <ステップ> --status merged --head <ステップのブランチの HEAD>` で記録する。衝突したら `git merge --abort` し、`--status failed` でそのステップを `failed` にする。グループの残りのマージが済んだ後、worktree を後始末してから新しい HEAD で作り直し、直列にやり直す。
+7. レビューを通ったステップから、run ブランチへ順に `git merge --no-ff` する。マージしたステップは `step-update --slug <slug> --id <ステップ> --status merged --head <ステップのブランチの HEAD>` で記録する。衝突したら `git merge --abort` し、`--status failed` でそのステップを `failed` にする。グループの残りのマージが済んだ後、worktree を後始末し、`--status pending` でそのステップを戻してから、新しい HEAD で作り直して手順 4 から直列にやり直す。
 8. グループのマージが済んだら、run ブランチでそのグループの実行する通すテストを実行する。
    - プロジェクトの test コマンドと `units/` のテストは自分で実行し、`e2e/` のテストは仕様のディレクトリごとの実行の単位にする。
    - 作業者が実行しなかったと報告した通すテストも、ここで含めて実行する。
