@@ -167,7 +167,7 @@ const LEXICAL: {
     ruleId: "plan/scope-keywords",
     kinds: ["plan", "design"],
     instructions:
-      "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective? Treat the work that state.phaseScope assigns to this phase as within the goal.",
+      "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective? Content beyond the goal in state.objective is still beyond it, unless state.phaseScope explicitly says such content is expected in this phase.",
     label: "成果物の変更や計画が objective の外へ及ぶ"
   },
   {

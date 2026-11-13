@@ -392,11 +392,18 @@ describe("phaseScope(設計書 §10.1)", () => {
   ]
   const bodyOf = (jev: FakeJev) => jev.calls.find((c) => "artifact" in c.state)
 
-  it("語彙系の scope の問いは phaseScope が割り当てた作業を objective の内側として扱う", async () => {
-    const jev = fakeJev()
-    await run(input({ kind: "design", phase: "intent-sync" }), jev)
-    const q = bodyOf(jev)?.questions.scope
-    expect(q?.instructions).toContain("state.phaseScope")
+  it("語彙系の scope の問いは、phaseScope が期待どおりと明示した内容だけを objective の外と数えない", async () => {
+    for (const phase of ["design", "intent-sync"] as const) {
+      const jev = fakeJev()
+      await run(input({ kind: "design", phase }), jev)
+      const q = bodyOf(jev)?.questions.scope
+      expect(q?.instructions, phase).toContain(
+        "unless state.phaseScope explicitly says such content is expected in this phase"
+      )
+    }
+    // 緩和を起動する文を持つのは intent-sync だけ
+    for (const [phase, scope] of scopes)
+      expect(scope.includes("is expected"), phase).toBe(phase === "intent-sync")
   })
 
   it.each(scopes)("%s の phaseScope が state に入る", async (phase, scope) => {

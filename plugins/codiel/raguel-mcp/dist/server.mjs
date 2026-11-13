@@ -39992,7 +39992,7 @@ var LEXICAL = [
     id: "scope",
     ruleId: "plan/scope-keywords",
     kinds: ["plan", "design"],
-    instructions: "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective? Treat the work that state.phaseScope assigns to this phase as within the goal.",
+    instructions: "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective? Content beyond the goal in state.objective is still beyond it, unless state.phaseScope explicitly says such content is expected in this phase.",
     label: "\u6210\u679C\u7269\u306E\u5909\u66F4\u3084\u8A08\u753B\u304C objective \u306E\u5916\u3078\u53CA\u3076"
   },
   {
