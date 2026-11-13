@@ -10,7 +10,7 @@
    - 選んだ単位の種類(`delegation-env.md` の並列可・単独)と、実行する通すテスト(そのステップの `spec.md` の `tests` を写す)
    - 選んだ観点ファイル
    - 通すテストに E2E があるときは、レポートの出力先(`references/e2e.md`)
-4. 実装の単位を始める。契約では brief の絶対パスを読ませる。始める前に `delegation-env.md` の規則で worktree を作り、その後で `step-update --slug <slug> --id <ステップ> --status running --worktree <repoRoot 相対のパス> --branch <ブランチ名> --base <worktree を作った HEAD>` を 1 回だけ実行する。この記録のフラグを付けない `running` を先に呼ぶと、後から記録を足せない(`running` から `running` へは遷移できない)。
+4. 実装の単位を始める。契約では brief の絶対パスを読ませる。始める前に `delegation-env.md` の規則で worktree を作り、その後で `step-update --slug <slug> --id <ステップ> --status running --worktree <repoRoot 相対のパス> --branch <ブランチ名> --base <worktree を作った HEAD>` を 1 回だけ実行する。この記録のフラグを付けない `running` を先に呼ぶと、後から記録を足せない(`running` から `running` へは遷移できない)。呼んでしまったときは、`--status failed`、`--status pending` の順に戻してから、記録付きの `running` を呼び直す。
 5. 報告の環境の失敗を実行し直してから、ステップごとに読み取りだけのタスクレビューの単位を始める(並列に進めてよい)。観点は、仕様適合(dev-plan のステップと受け入れ基準に合うか)と品質である。
    修正の後の再レビューを含め、タスクレビューの単位を始める前に毎回 `step-update --slug <slug> --id <ステップ> --status reviewing` を実行する。
 6. 所見があれば修正ループを回す。ループに上限は無い。所見を直す前に `step-update --slug <slug> --id <ステップ> --status running` を実行する。この遷移(`reviewing` から `running`)で `implement.steps[k].attempts` が 1 増え、その値をラウンドの番号とする。手順 4 の最初の `running` では増えない。
