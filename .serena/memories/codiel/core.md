@@ -85,12 +85,12 @@ run は常にメインの作業ツリーで探す: `findMainRoot(cwd)` は git �
 ## Flow — 13 stages / 14 named phases
 
 `intent → discuss → design → (test-spec, dev-plan) → test-code → implement → test-loop → intent-sync → pr →
-review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ(仕様のディレクトリを同定 → spec.md / cases.md の委譲を出して wait-add →
-待つ間に dev-plan.md をオーケストレーターが書いてゲート → spec の完了通知で wait-done してゲート)。片方の委譲の待ちが残る間は mark-ask を
+review → fix-loop → triage → finalize`. `test-spec` と `dev-plan` は 1 つの並列ステージ(仕様のディレクトリを同定 → spec.md / cases.md の単位を始める(委譲したら wait-add)→
+dev-plan.md をオーケストレーターが書いてゲート → spec の単位が終わったらゲート)。spec の委譲の待ちが残る間は mark-ask を
 呼ばず、2 つとも ASK・STOP なら両方の裁定を記録してから resume する。
 
 **委譲はバックグラウンド前提(2026-10-02、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` §10.2)**:
-Claude Code の対話セッションでは Agent の委譲が常にバックグラウンドで起動し、完了は後のターンに通知で届く。委譲を出したら
+Claude Code の対話セッションでは Agent の委譲が常にバックグラウンドで起動し、完了は後のターンに通知で届く。委譲したときは(1.1 から委譲するかは運用方針に任せる)
 `codiel-state wait-add`(id は try の中で一意、英小文字と数字のハイフン区切り)で待ちを記録し、通知を受けたら返答を
 `.codiel/runs/<slug>/try-<n>/waits/<id>.md` と既存の報告に書いて `wait-done`(報告が無いと失敗する)。stop-guard は待ちが
 1 件以上あれば止めない。再開時は `startedAt` より後の `waits/<id>.md` の有無で出し直しを決め、`wait-clear` する。`stop` は
@@ -109,7 +109,7 @@ Raguel gates(`GATED` の 9 フェーズ)`intent`, `design`, `test-spec`, `dev-pl
   dev-plan の `## 生成物` は方式 a(各 Step が生成物をコミット)か方式 b(既定。最後の生成だけの Step)を規約で選ぶ。
 - `.codiel/config.json` の `testsDir`(既定 `docs/codiel/tests`)と `runsDir`(既定 `docs/codiel/runs`)は `readCodielConfig(codielRoot)` で読み、`codiel-state config` でも出る。`codiel-state gitignore` は必要な `.gitignore` の 6 行と欠けている行(`missing`)を出す。
 - E2E のレポートは `<testsDir>/e2e/{frontend,backend,cli}/<名前>/reports/<YYYYMMDD-HHMMSS>-<slug>-try<n>/`(ローカルのタイムゾーン)に置き、`results.json` と `summary.md`/`failure.md` だけをコミットする。書式は `references/e2e-report-format.md`。
-- 報告のファイル(`report.md`・`test-run-<n>.md`)は委譲先が最終の返答で返し、オーケストレーターが書く。
+- 報告のファイル(`report.md`・`test-run-<n>.md`)はオーケストレーターが書く。委譲したときは委譲先の最終の返答から、自分で作業したときは自分の結果から書く。
   オーケストレーター自身が実行したテストの結果と実行し直しも同じ報告に書く(implement のマージ後は `steps/merge-test-<g>/report.md`、
   intent-sync の控えと ADR 候補は `steps/intent-sync/report.md`)。
 - step-add / step-update は `--kind step|test-code|test-loop` を取り、`implement.steps`・`testCode.units`・`testLoop.units` に分けて記録する。
@@ -188,7 +188,7 @@ Skills: `capturing-intent`, `preparing-design-agendas`, `facilitating-design-dis
 どのスキルも description の照合では起動されず、コマンド・`orchestrating-runs` の手順・依頼文から名前かパスで起動される
 (そのため evals は持たない)。
 全スキルは commit 86b9483 で prompt-smith 標準に書き直され、2026-08-16 に契約追随の改訂が入った。
-2026-10-02 のコスト改修で、`orchestrating-runs` の本文は run の開始から要る §0〜§4(前提確認と実行モード、run の解決、フェーズ進行表、ディスパッチ規約、ドメインディスパッチ)に絞り、
+2026-10-02 のコスト改修で、`orchestrating-runs` の本文は run の開始から要る §0〜§4(前提確認と実行モード、run の解決、フェーズ進行表、作業の単位と契約、ドメインに紐づく単位。1.1 で改名)に絞り、
 フェーズ別・共有の手順を `skills/orchestrating-runs/references/`(`phase-<フェーズ名>.md`・`delegation-env.md`・`review-common.md`・`e2e.md`・`resume.md`)へ切り出した。フェーズに入るときに読む。
 ほかのスキルも HARD-GATE と Red Flags を持たず(その条項は本文の手順へ統合)、場面限定の手順は各スキルの `references/` にある。
 GitHub の執筆規則は `references/github-writing.md` と、画像の載せ方の `github-writing-images.md`、PR 本文の `github-writing-pr.md` に分かれた。

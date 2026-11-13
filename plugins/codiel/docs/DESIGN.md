@@ -43,10 +43,10 @@
 | 連携モード | `github`(gh / GitHub MCP で起票・PR・投稿する)と `local`(投稿せず記録だけで終える)の 2 択。§0 で判定し run の間固定する(§2) |
 | 実行モデル | メインセッション=オーケストレーター。文書(agenda.md・design.md・dev-plan.md・discussion.md・intent 文書)の執筆と、テストコマンドの実行は、オーケストレーターが自分で行う。spec.md / cases.md・テストコード・実装・レビュー・E2E の実行は作業の単位とし、委譲するかは運用方針に任せる(1.1。§7) |
 | テスト仕様書 | run 使い捨てではなく**機能単位の永続資産**。機能更新時に仕様書を更新しテストケースを再生成する |
-| テスト体系 | 仕様書駆動テストは **Playwright 等の E2E**。ユニットテストは別レイヤーで、実装の委譲先が TDD の中で作成する |
-| 実装の委譲先 | frontend / backend / data のドメイン別に分ける |
-| レビューの委譲先 | frontend / backend / data / infra / doc / security / generic の観点別に分ける |
-| ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、実装とレビューの委譲先も汎用の 1 つで回す |
+| テスト体系 | 仕様書駆動テストは **Playwright 等の E2E**。ユニットテストは別レイヤーで、実装の作業者が TDD の中で作成する |
+| 実装の単位 | frontend / backend / data のドメイン別に分ける |
+| レビューの単位 | frontend / backend / data / infra / doc / security / generic の観点別に分ける |
+| ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、実装とレビューの単位も汎用の 1 つで回す |
 | runId / 再挑戦 | runId は intent フェーズで決めた **slug**(英小文字ケバブケース)。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 run の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
 | 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
@@ -89,22 +89,22 @@
                1. オーケストレーターが仕様のディレクトリを同定する(軽量でなければ design.md の
                   一覧を使い、軽量な run では新しい画面があれば名前を聞いてから同定する)
                2. test-spec: 影響を受ける機能単位ごとにテスト仕様書 spec.md を新規作成 or 更新し、
-                  続けて ID 付きテストケース表 cases.md を(再)生成する委譲を出し、待ちを記録する
-                  (§4)。新しい画面の名前の候補は委譲の報告で受け取る
-               3. dev-plan: 委譲が動いている間に、オーケストレーターが開発手順書 dev-plan.md を
+                  続けて ID 付きテストケース表 cases.md を(再)生成する単位を始める(委譲したら待ちを記録する)
+                  (§4)。新しい画面の名前の候補は単位の報告で受け取る
+               3. dev-plan: test-spec の単位を委譲したらその間に、オーケストレーターが開発手順書 dev-plan.md を
                   書く。各ステップにドメイン(frontend/backend/data)タグ・触るファイル・前提
                   ステップ・通すテスト(仕様のディレクトリの ID)を書く。文書の先頭に
                   `## 環境準備`(worktree で依存をインストールするコマンド)と `## 生成物`
                   (ビルド生成物を各ステップでコミットする方式 a か、全 wave の後の最終ステップで
                   まとめる方式 b か)を置く
-               4. spec の委譲の完了通知を受けたら、報告を書いて待ちを消す
+               4. spec の単位が終わったら(委譲したときは完了通知を受けたら)、報告を書いて待ちを消す
                ▶ Raguel: evaluate_plan ×2(dev-plan と test-spec をそれぞれ独立にゲート)
    ▼
 [test-code]    仕様のディレクトリごとに worktree を作り、cases.md からテストコード(ユニットと
                E2E)を実装より先に並列で書いて実行し、失敗すること(Red)を確かめる。テストを
                通すコードはまだ書かない。置いたテストファイルのパスを spec.md の frontmatter
                `tests` に記録し、タスクレビューを通ったディレクトリから run ブランチへ順に
-               マージする。cases.md の誤りを見つけたら、直す委譲を挟んでからやり直す
+               マージする。cases.md の誤りを見つけたら、直す単位を挟んでからやり直す
                ▶ Raguel: evaluate_code(全ディレクトリのマージ後に 1 回。diff はテストコードと
                  spec.md の `git diff`)
    ▼
@@ -113,7 +113,7 @@
                worktree に並列実装する。各ステップは、そのステップまでで通る仕様のディレクトリ
                (ユニットと E2E の両方。E2E も除外しない。決定 80)を「通すテスト」として通す
                (Green)。wave のマージの後、そのグループの通すテストを run ブランチで実行して確かめる
-               (プロジェクトの test コマンドと `units/` はオーケストレーターが自分で、`e2e/` は委譲で実行する)
+               (プロジェクトの test コマンドと `units/` はオーケストレーターが自分で、`e2e/` は実行の単位にする)
                ▶ Raguel: evaluate_code(全 wave の後に 1 回。diff + testResults)
    ▼
 [test-loop]    記録された全テスト(各 spec.md の `tests`)とプロジェクトの test コマンドで回帰を
@@ -133,14 +133,14 @@
                ▶ hooks が「テスト green + code PROCEED」を state で検証してから許可
    ▼
 [review]       diff(`git diff <base>...<branch>`)の変更パスと内容に当たる観点
-               (frontend/backend/data/infra)+ 毎回選ぶ観点(doc/security)を並列
-               ディスパッチする。frontend・backend・data・infra のどれにも当たらず、
+               (frontend/backend/data/infra)+ 毎回選ぶ観点(doc/security)ごとに
+               レビューの単位を作る(並列に進めてよい)。frontend・backend・data・infra のどれにも当たらず、
                doc の担当でもない変更パスがあるときだけ generic を足す。intent の原文(`## ASIS` / `## TOBE`)の要望が未達なら
                severity high、持続層の制約に反していても high とする。所見を統合し、
                github では PR コメントに投稿し(local では投稿しない)、
                severity(critical / high / medium / low)を付ける
    ▼
-[fix-loop]     critical & high を該当ドメインの実装の委譲先が修正 → 回帰テスト再実行
+[fix-loop]     critical & high を該当ドメインの実装の単位で修正 → 回帰テスト再実行
                → 再レビュー → critical/high ゼロ & テスト合格まで反復(上限は置かない。4 ラウンド以上は 2 ラウンドごとに「行き詰まりの打開」の新しい単位にする)
                medium 以下の指摘は修正せず triage へ持ち越す
                レビューで critical/high がゼロなら fix-loop は開始せず
@@ -237,8 +237,8 @@ docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファ�
       state.json            # フェーズ進捗・ゲート記録・試行カウンタ(直接編集は hooks で禁止)
       steps/                # ステップ・仕様のディレクトリ毎の brief.md / report.md(§6.6.4)
         step-<k>/            # implement の直列グループ・最終ステップ・run ブランチ上の修正
-        test-code-<k>/       # test-code の仕様のディレクトリごとの委譲
-        test-loop-<k>/       # test-loop の NG 修正の委譲
+        test-code-<k>/       # test-code の仕様のディレクトリごとの単位
+        test-loop-<k>/       # test-loop の NG 修正の単位
         merge-fix-<g>/       # implement の wave のマージ後の run ブランチ上の修正
         test-loop-project/   # test-loop のどの仕様のディレクトリにも属さない修正
       reports/
@@ -251,8 +251,8 @@ docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファ�
   pr の前の確認で run の外のファイルが残っていたら、コミットも退避もせずにユーザーに聞く。
 - intent 文書は run の文書の外、`docs/intents/` に置く。state の `intent` フィールド
   (repoRoot 相対パス)が指す。
-- **報告は返答で受ける**: 委譲先は報告の本文を最終の返答で返し、報告のファイル(`report.md`・
-  `test-run-<n>.md` など)は、委譲の完了通知を受けた直後にオーケストレーターが `waits/<id>.md` と一緒に `.codiel/runs/` の下へそのまま書く。
+- **報告はオーケストレーターが書く**: 報告のファイル(`report.md`・`test-run-<n>.md` など)はオーケストレーターが書く。委譲したときは、委譲先が報告の本文を最終の返答で返し、
+  完了通知を受けた直後にオーケストレーターが `waits/<id>.md` と一緒に `.codiel/runs/` の下へそのまま書く。自分で作業したときは自分の結果から書く。
   Claude Code 本体がサブエージェントによる報告ファイルの Write を拒否するためである(決定 95)。
 - **E2E のレポート**: 仕様のディレクトリごとに 1 回の実行を、メインの作業ツリーの `reports/<日時>-<slug>-try<n>/`
   に置く。日時は実行する機械のローカルのタイムゾーンで `YYYYMMDD-HHMMSS` とする。`results.json` はテスト
@@ -272,7 +272,7 @@ docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファ�
   既定は `docs/codiel/tests` と `docs/codiel/runs`。ファイルが無い、またはキーが無ければ既定値を使う。
   値は repoRoot 相対で、run が active な間は書き換えない(§4)。Raguel の設定も同じファイルの `raguel` に
   置き、Raguel は YAML を読まない。
-- 並列実装・test-code・test-loop の委譲は 1 ステップ(または 1 仕様のディレクトリ)につき 1 worktree
+- 並列実装・test-code・test-loop の並列の単位は 1 ステップ(または 1 仕様のディレクトリ)につき 1 worktree
   (`.codiel/worktrees/<slug>/<名前>`)で行い、タスクレビューを通ったものから run ブランチへ
   `git merge --no-ff` する。worktree はマージ後、または run の終了時(finalize / stop)に削除する(§6.6)。
 
@@ -401,7 +401,7 @@ intent issue を検知するときは、マーカーの位置制約を課さず�
 
 - **画面名の決め方(決定 81)**: `<testsDir>/e2e/frontend/` に既にある画面の仕様を更新するときは
   その名前を使い、ユーザーには聞かない。まだ仕様のディレクトリが無い画面には、仕様のディレクトリを
-  同定する委譲が英小文字のケバブケースの**名前の候補を 2〜3 個**出す。標準の run では design の
+  同定する単位が英小文字のケバブケースの**名前の候補を 2〜3 個**出す。標準の run では design の
   ウォークスルーで、軽量の run では test-spec の開始時にオーケストレーターが
   `mark-ask --kind confirm` の後に AskUserQuestion でユーザーに聞き、決まった名前を ID にする。
   候補の外の答えはケバブケースの 1 セグメントに直した形を示して確かめる。コマンド名と API の
@@ -418,12 +418,12 @@ intent issue を検知するときは、マーカーの位置制約を課さず�
   変換などのロジックを持つ追加・変更ファイルにだけ作る。設定・型定義・表示だけのファイルには
   作らない。
 
-- **テストコードの置き場(決定 76)**: codiel は場所を決めず、test-code フェーズの委譲先が
+- **テストコードの置き場(決定 76)**: codiel は場所を決めず、test-code フェーズの作業者が
   「`CLAUDE.md`・`.claude/rules/**/*.md` の定め → 同じ種類の既存のテストの配置 → フレームワークの
   既定」の順で決める。置いたパスは `spec.md` の frontmatter `tests` に記録する。`tests` の各行は
   repoRoot 相対のファイルパスを 1 つ持ち、glob は使わない。
 
-- **更新フロー**: 機能に更新が入る run では、design(標準)または test-spec 開始時の同定の委譲
+- **更新フロー**: 機能に更新が入る run では、design(標準)または test-spec 開始時の同定の単位
   (軽量)が対象の仕様のディレクトリを列挙し、test-spec が該当ディレクトリの `spec.md` を更新
   (なければ新規作成)して `cases.md` を再生成し、test-code フェーズがテストコードを追随させる。
 
@@ -442,7 +442,7 @@ intent issue を検知するときは、マーカーの位置制約を課さず�
 - **テストの保護(決定 77)**: implement・test-loop・fix-loop の間、`<testsDir>/**/{spec,cases}.md`
   と `spec.md` の `tests` に載ったファイルへの書き込みは guard-write が ask にする。test-spec と
   test-code は通す。fix-loop では、所見がテストに向くときだけ `set-test-edit` を立てている間、
-  保護を外す(§8)。guard-write hook は `<testsDir>/**/spec.md` と `<testsDir>/**/cases.md` への書き込みを implement・test-loop・fix-loop で ask にし、test-code は通す。hooks は文書フェーズの `<testsDir>/` 配下への書き込みを止めず、呼び出し元の委譲先も識別できないので、これ以外の境界は委譲先自身の規律で守る。
+  保護を外す(§8)。guard-write hook は `<testsDir>/**/spec.md` と `<testsDir>/**/cases.md` への書き込みを implement・test-loop・fix-loop で ask にし、test-code は通す。hooks は文書フェーズの `<testsDir>/` 配下への書き込みを止めず、呼び出し元の作業者も識別できないので、これ以外の境界は作業者自身の規律で守る。
 
 ## 5. test-loop の詳細と `/codiel:test`
 
@@ -463,26 +463,25 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
   テストだけを同時に実行し(上限 4 件)、持たないもの(ポート・データベースなど共有資源を使う
   テスト)は直列に実行する。frontmatter やキーが無ければ直列とする。この規則は test-loop・
   `/codiel:test`・implement の wave のマージ後の実行に共通で当てる。
-- **テストを実行する委譲の並べ方(§6.13.1)**: 中でテストを実行する委譲(test-code・implement・
-  test-loop の委譲、run ブランチ上の修正の委譲、環境の失敗の実行し直しの委譲)を、`parallel: true`
-  の仕様のディレクトリだけを実行する「並列可の委譲」と、それ以外の「単独の委譲」に分ける。
-  「動いている委譲」は待ちの記録が残っている委譲を指す。並列可の委譲は、動いている委譲が無いか
-  並列可の委譲だけのときに、上限 4 件の範囲でまとめて出す。単独の委譲は、待ちが空のときだけ出し、
-  その待ちが残っている間は同じフェーズのほかの委譲を出さない。メインの作業ツリーで `set-domain` を
-  伴う委譲の待ちが残る間は、メインの作業ツリーのほかの委譲も出さない。
+- **並列に進める場合(§6.13.1。1.1 で単位の語に改めた)**: 単位を並列に進めるかは運用方針に任せ、並列に進めるときは、書き込むファイルが重ならず、互いの成果を入力にしない単位に限る。中でテストを実行する単位(test-code・implement・
+  test-loop の単位、run ブランチ上の修正の単位、環境の失敗の実行し直しの単位)は、`parallel: true`
+  の仕様のディレクトリだけを実行する「並列可の単位」と、それ以外の「単独の単位」に分ける。
+  並列可の単位は、動いている単位が無いか並列可の単位だけのときに、4 件まで同時に進める。単独の単位は、
+  動いている単位が無いときだけ始め、終わるまで同じフェーズのほかの単位を始めない。メインの作業ツリーで `set-domain` を
+  伴う単位が終わるまでは、メインの作業ツリーのほかの単位も始めない。
 - **テストの実行環境と環境の失敗**: E2E の実行に要る準備(サーバー起動・データベースの用意など)
   はプロジェクトの規約とテストの設定に従い、codiel は準備の手順を持たない。サーバーが起動しない・
   接続が拒否される・ポートが使用中・必要なサービスが無い、といった理由の失敗は「環境の失敗」とし、
-  未実装による失敗にもプロダクトの失敗にも数えない。委譲先は理由と出力の抜粋を報告に挙げ、
-  オーケストレーターは動いている委譲が無いときに 1 回だけ単独で実行し直させる(この扱いは
+  未実装による失敗にもプロダクトの失敗にも数えない。作業者は理由と出力の抜粋を報告に挙げ、
+  動いている単位が無いときに 1 回だけ単独で実行し直す(この扱いは
   test-code・implement・test-loop・`/codiel:test` に共通)。実行し直しても環境の失敗なら、人に
-  確かめる。委譲先の報告は最終の返答で返り、報告のファイルはオーケストレーターが書く(§3)。
+  確かめる。報告のファイルはオーケストレーターが書く(§3)。
 - **E2E のレポート(決定 103〜105)**: E2E は仕様のディレクトリごとに 1 回の実行にし、`results.json` と
-  スクリーンショットを、オーケストレーターが依頼文に書いた `<testsDir>/e2e/…/reports/<日時>-<slug>-try<n>/`
+  スクリーンショットを、オーケストレーターが契約に書いた `<testsDir>/e2e/…/reports/<日時>-<slug>-try<n>/`
   へ出す(worktree の中で実行しても、出力はメインの作業ツリーに出す)。実行の結果から
   オーケストレーターが `summary.md` か `failure.md` を書く。test-code の Red の確認の実行は、結果に
-  かかわらず失敗した実行に数えず、`summary.md` を置く。NG を直す委譲には、失敗した仕様のディレクトリの
-  最新のレポートの絶対パスを渡し、委譲先が `failure.md`・`results.json`・画像から直し方を決める。
+  かかわらず失敗した実行に数えず、`summary.md` を置く。NG を直す単位の契約には、失敗した仕様のディレクトリの
+  最新のレポートの絶対パスを渡し、作業者が `failure.md`・`results.json`・画像から直し方を決める。
   PR などの証拠の画像とログにも、このレポートを使う。
 - テストコードの diff も Raguel の `evaluate_code` に通す(期待値の骨抜き・ケースの無断削除は
   `code/test-deletion` 系ルール + レビューの検査対象)。
@@ -498,9 +497,9 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
   報告からリンクする。`tests` を持たない仕様の
   ディレクトリは「テストコードなし」と報告し、テストは書かない。
 - run 中でなくても使える(手動回帰・CI 前チェック用)。state を遷移させないので、NG があっても
-  コード修正はディスパッチせず(報告のみ)、broken の確認も `mark-ask` を使わずユーザーに直接
+  コード修正の単位は始めず(報告のみ)、broken の確認も `mark-ask` を使わずユーザーに直接
   示す。環境の失敗は、実行し直しても残れば報告に挙げてユーザーに示す。
-- 単独実行中も hooks の書き込み制御は有効(アクティブ run がない場合も、テスト作業を担う委譲先の
+- 単独実行中も hooks の書き込み制御は有効(アクティブ run がない場合も、テスト作業の
   書き込み先は `<testsDir>/**` の `spec.md`・`cases.md` とテストコード、`.codiel/reports/` に
   限られる)。
 
@@ -532,9 +531,9 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 | `writing-design-docs` | brainstorming(設計部) | intent + discussion.md + 持続層(意図的な制約)を入力に設計書を執筆。YAGNI、既存パターン踏襲、変更対象ファイルの明示、**影響を受ける機能単位(仕様のディレクトリの ID)の列挙**(新しい画面は決定 81 の名前の候補を書く)、代替案の検討記録 |
 | `writing-test-specs` | (独自) | 仕様のディレクトリの同定・命名規則(§4)、`<testsDir>/<ID>/` の spec.md → cases.md の新規作成・**更新と再生成**の手順。実装詳細ではなく振る舞いをテストする。期待結果は受け入れ基準から導出する。新しい画面の名前の候補を出す(決定 81)。テストコードには触れない(test-code フェーズの `scripting-tests` が書く)。軽量な run では design.md の代わりに intent の `## 受け入れ基準` と持続層を入力にする。本文の規律:「書き込みは `<testsDir>/<ID>/` の spec.md と cases.md だけ」「テストコードに触れない」「Bash を使わない」 |
 | `writing-dev-plans` | writing-plans | 設計書を工程分解した開発手順書。各ステップに「触るファイル・前提ステップ・内容・**通すテスト(仕様のディレクトリの ID)**・完了条件・検証コマンド・**ドメインタグ(frontend/backend/data)**」を書き、文書の先頭に `## 環境準備`(worktree での依存インストール)と `## 生成物`(ビルド生成物を方式 a/b のどちらで扱うか)を置く。オーケストレーターはこの手順書を `codiel-state waves` で wave に分割する。軽量な run では design.md の代わりに intent の `## 実装方針` と持続層を入力にする |
-| `implementing` | executing-plans + test-driven-development | dev-plan の対象ステップの「通すテスト」(ユニットと E2E の両方。決定 80)を通す実装。依存の無いステップは worktree で並列に進み、環境の失敗は理由と出力の抜粋を報告に挙げ、報告は最終の返答で返す(`report.md` はオーケストレーターが書く)。手順逸脱の禁止、「ついでのリファクタ」禁止。3 ドメインの実装に共通の規律 + ドメイン別の注意事項と infra の観点(`skills/implementing/references/` に記載)。観点ファイルは、オーケストレーターが変更の中身から選んで依頼文に書く |
+| `implementing` | executing-plans + test-driven-development | dev-plan の対象ステップの「通すテスト」(ユニットと E2E の両方。決定 80)を通す実装。依存の無いステップは worktree で並列に進み、環境の失敗は理由と出力の抜粋を報告に挙げ、報告は最終の返答で返す(`report.md` はオーケストレーターが書く)。手順逸脱の禁止、「ついでのリファクタ」禁止。3 ドメインの実装に共通の規律 + ドメイン別の注意事項と infra の観点(`skills/implementing/references/` に記載)。観点ファイルは、オーケストレーターが変更の中身から選んで契約に書く |
 | `scripting-tests` | (独自) | test-code フェーズで、`cases.md` から実装より先にテストコード(ユニットと E2E)を書いて実行し、失敗すること(Red)を確かめる規約。置いたパスを `spec.md` の `tests` に記録する。期待結果が変わらず通ってしまったケースは「cases.md の誤り」として報告し、cases.md 自体は書き換えない。本文の規律:「Red を消すための実装の先取り・期待値の緩和の禁止」「`cases.md`・`spec.md` の本文・プロダクトコードを変更しない」 |
-| `running-regression-tests` | verification-before-completion | 記録された全テスト(`<testsDir>/**/spec.md` の `tests`)とプロジェクトの test コマンドの回帰を確認し、判定(green/red/broken)を出す規約(§5)。テストを書く手順は持たない。NG の修正・broken の人への確認はオーケストレーターが担う。`/codiel:test` の単独実行にも使う。本文の規律:「出力を見ずに合格を主張しない」「broken と NG を混同しない」「単独実行では修正をディスパッチしない」 |
+| `running-regression-tests` | verification-before-completion | 記録された全テスト(`<testsDir>/**/spec.md` の `tests`)とプロジェクトの test コマンドの回帰を確認し、判定(green/red/broken)を出す規約(§5)。テストを書く手順は持たない。NG の修正・broken の人への確認はオーケストレーターが担う。`/codiel:test` の単独実行にも使う。本文の規律:「出力を見ずに合格を主張しない」「broken と NG を混同しない」「単独実行では修正の単位を始めない」 |
 | `fixing-failures` | systematic-debugging | test-loop の NG 修正、fix-loop のレビュー所見修正を担う。根本原因特定→最小修正。**テストコード・`spec.md`・`cases.md` を触る修正の禁止**(所見がテストに向くときは `set-test-edit` の間だけ解除される)。「テストの方が間違っている」と思ったら ASK へ |
 | `reviewing-diffs` | requesting-code-review | design.md・テスト仕様書・intent の原文(`## ASIS`/`## TOBE`)と `## 受け入れ基準` を基準に diff をレビュー。severity 定義(critical/high/medium/low、原文の要望の未達と持続層の制約違反は high)、github では `gh pr review` / `gh pr comment` での投稿(local では投稿しない)。観点(infra を含む)ごとのレビューに共通のプロセス(観点別の焦点は `skills/reviewing-diffs/references/` に記載)。軽量な run では design.md の代わりに intent と dev-plan.md を入力にする |
 | `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
@@ -552,8 +551,8 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 - `preparing-design-agendas`(合意済み事項の再提示): 同じ分岐を二度議論させると、前回と違う結論が出ることがある。そうなると、intent 文書と discussion.md の内容が食い違う。
 - `syncing-intents`: 追記された要望の反映先が誤っていても、書いた時点で派生文のセクションに残るので、確認前に書くと確認の意味が失われる。`## 変更履歴` は承認の経路を残す記録で、省くと後から変更の正当性を追えない。要約は派生文のセクションの役割で、`## ASIS` / `## TOBE` には手を入れない。矛盾の確認は `mark-ask --kind confirm` で取り、待たずに書き換えると確認の意味が失われる。参照形は ADR へ移した後の確定済みの形で、全文を書き戻すと ADR と持続層で正が二重になる。
 - `fixing-review-findings`(修正の push): push は再レビューの diff に影響しない。guard-bash は fix-loop と test-loop が passed の条件で push を許可する。
-- `implementing`: 期待値を書く委譲と直す委譲を分ける設計(§4)を、実装の側で崩さない。
-- `writing-dev-plans`: `dev-plan.md` は implement が読む唯一の実行手順書である。`[domain: ...]` タグはディスパッチ先の決定と実装のドメイン規律の 2 箇所から機械的に参照される。タグを誤るか複数ドメインを 1 ステップに混ぜると、誤ったドメインの実装が呼ばれるか、hooks が正当な書き込みを ask で止める誤爆を招く。両者ともタグを機械的にしか読まないため、曖昧・複合のタグは下流のどこかで必ず事故になる。
+- `implementing`: 期待値を書く単位と直す単位を分ける設計(§4)を、実装の側で崩さない。
+- `writing-dev-plans`: `dev-plan.md` は implement が読む唯一の実行手順書である。`[domain: ...]` タグは担当範囲の決定と実装のドメイン規律の 2 箇所から機械的に参照される。タグを誤るか複数ドメインを 1 ステップに混ぜると、誤ったドメインの実装が呼ばれるか、hooks が正当な書き込みを ask で止める誤爆を招く。両者ともタグを機械的にしか読まないため、曖昧・複合のタグは下流のどこかで必ず事故になる。
 
 ### HARD-GATE と Red Flags を廃止した理由
 
@@ -639,7 +638,7 @@ Raguel が「成果物」を検査するのに対し、hooks は「行動」を�
 
 投稿の本文のマーカーは、スキルの規律で付け、hook で強制する。付け忘れた投稿は deny され、付けて投稿し直す。run が active なセッションの本文は、人のアカウントから投稿されても AI が生成した文として扱い、読む側は原文から除ける。intent の承認時の任意の起票は run の作成前なので hook は掛からないが、規律でマーカーを付ける。
 
-dev-plan のドメインも同じ考え方である。hooks はエージェント個体を識別できないので、`[domain: ...]` タグが決める担当ドメインの規律は、委譲先自身の規律で担保する。
+dev-plan のドメインも同じ考え方である。hooks はエージェント個体を識別できないので、`[domain: ...]` タグが決める担当ドメインの規律は、作業者自身の規律で担保する。
 
 ## 9. docs(プロジェクト毎に成長するハーネス資産)
 
@@ -709,7 +708,7 @@ K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/d
 残したのは次の 2 つだけである。
 
 1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`knowledgeTarget` の判定では ARCHITECTURE の有無と metatron の rules ディレクトリがあって読めるか(`projectDocs.metatronRules`)だけを使い、ARCHITECTURE の中身は読まない。
-2. review の委譲に ARCHITECTURE のパスを渡すこと。`reviewing-diffs/references/doc.md` の観点が、ARCHITECTURE と実装の乖離を見るためである。依頼文テンプレートの「前提」の ARCHITECTURE の行は、review と再レビューの委譲のときだけ書く。
+2. review の単位に ARCHITECTURE のパスを渡すこと。`reviewing-diffs/references/doc.md` の観点が、ARCHITECTURE と実装の乖離を見るためである。作業の契約の「前提」の ARCHITECTURE の行は、review と再レビューの単位のときだけ書く。
 
 外した規則は、各フェーズの入力列の ARCHITECTURE・GOTCHAS、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、finalize の乖離の一覧化、`references/failures.md` とそれを指す参照(Raguel の STOP・誤検知の退避・incident・fix-loop の設計漏れ)である。
 
@@ -758,8 +757,8 @@ codiel はこの 2 つに触れないので、rules にも書かない。metatro
 
 ARCHITECTURE / GOTCHAS を読む規律と、失敗を台帳へ記録する手順は、codiel のどこにも置かない(K12)。
 失敗は GOTCHAS 候補として run の成果物に残すだけである(「GOTCHAS 候補を ADR 候補と同じ形で残す理由」)。
-`orchestrating-runs` に残るのは、§0 のドメインマップの抽出と、review の委譲へ ARCHITECTURE のパスを渡す
-依頼文テンプレートの行だけである。
+`orchestrating-runs` に残るのは、§0 のドメインマップの抽出と、review の単位へ ARCHITECTURE のパスを渡す
+作業の契約の行だけである。
 
 ### CLAUDE.md の `## Codiel`(← `CLAUDE.example.md`)
 
@@ -805,7 +804,7 @@ plugins/codiel/
     github-writing-pr.md      # PR 本文の書式
     handoff-contract.md       # gh-utility issue-craft への持ち込みモードの契約
     intent-common.md          # 経路選択・畳む経路の共通規律
-    e2e-report-format.md      # E2E のレポート(summary.md・failure.md)の書式と、委譲先が返答に入れる項目(§3)
+    e2e-report-format.md      # E2E のレポート(summary.md・failure.md)の書式と、作業者が返す項目(§3)
   hooks/
     hooks.json
     scripts/                  # フックスクリプト(node)
