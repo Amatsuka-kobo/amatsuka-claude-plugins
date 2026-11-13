@@ -1,0 +1,30 @@
+name: 💡 Story
+description: "実装したい機能の詳細"
+title: "[Story] "
+labels: ["story"]
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: このチケットを起票するに至った背景情報を記述してください
+      placeholder: できるだけ具体的に記述してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する結果
+      description: このチケットを通して達成を期待する結果を記述してください
+      placeholder: |
+        - 〇〇ができるようになること
+        - 〇〇が作成されていること
+    validations:
+      required: true
+
+  - type: textarea
+    id: moreinfo
+    attributes:
+      label: 追加情報
+      description: 他に書いておきたい情報があれば記述してください
