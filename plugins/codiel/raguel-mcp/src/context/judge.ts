@@ -143,7 +143,7 @@ const PHASE_SCOPE: Record<GatedPhase, string> = {
     "This phase only fixes failures found by running the existing tests; the diff may be small or empty.",
   "fix-loop": "This phase only fixes review findings; the diff may be small.",
   "intent-sync":
-    "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents."
+    "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents. The design documents describe the whole current system across runs, so content in them beyond this run's objective is expected."
 }
 
 /** 語彙系の 4 ルール。info → ask の上げる向きだけに使う */
@@ -167,7 +167,7 @@ const LEXICAL: {
     ruleId: "plan/scope-keywords",
     kinds: ["plan", "design"],
     instructions:
-      "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective?",
+      "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective? Treat the work that state.phaseScope assigns to this phase as within the goal.",
     label: "成果物の変更や計画が objective の外へ及ぶ"
   },
   {

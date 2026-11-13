@@ -39978,7 +39978,7 @@ var PHASE_SCOPE = {
   implement: "This phase writes product code only. Test specifications and test code were already written in the earlier test-spec and test-code phases.",
   "test-loop": "This phase only fixes failures found by running the existing tests; the diff may be small or empty.",
   "fix-loop": "This phase only fixes review findings; the diff may be small.",
-  "intent-sync": "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents."
+  "intent-sync": "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents. The design documents describe the whole current system across runs, so content in them beyond this run's objective is expected."
 };
 var LEXICAL = [
   {
@@ -39992,7 +39992,7 @@ var LEXICAL = [
     id: "scope",
     ruleId: "plan/scope-keywords",
     kinds: ["plan", "design"],
-    instructions: "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective?",
+    instructions: "Do the changes or plans in state.artifact reach beyond the goal stated in state.objective? Treat the work that state.phaseScope assigns to this phase as within the goal.",
     label: "\u6210\u679C\u7269\u306E\u5909\u66F4\u3084\u8A08\u753B\u304C objective \u306E\u5916\u3078\u53CA\u3076"
   },
   {

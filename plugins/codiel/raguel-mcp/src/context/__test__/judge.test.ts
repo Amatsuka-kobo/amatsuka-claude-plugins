@@ -387,10 +387,17 @@ describe("phaseScope(設計書 §10.1)", () => {
     ],
     [
       "intent-sync",
-      "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents."
+      "This phase writes the agreed changes back to the intent documents and merges them into the persistent layer: the domain files and the design documents. The design documents describe the whole current system across runs, so content in them beyond this run's objective is expected."
     ]
   ]
   const bodyOf = (jev: FakeJev) => jev.calls.find((c) => "artifact" in c.state)
+
+  it("語彙系の scope の問いは phaseScope が割り当てた作業を objective の内側として扱う", async () => {
+    const jev = fakeJev()
+    await run(input({ kind: "design", phase: "intent-sync" }), jev)
+    const q = bodyOf(jev)?.questions.scope
+    expect(q?.instructions).toContain("state.phaseScope")
+  })
 
   it.each(scopes)("%s の phaseScope が state に入る", async (phase, scope) => {
     const jev = fakeJev()
