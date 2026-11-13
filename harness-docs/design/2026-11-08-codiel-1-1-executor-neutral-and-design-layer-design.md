@@ -218,7 +218,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 - リポジトリに `codiel` ラベルが無ければ、`codiel:init`・intent の確定時(github モードで Issue を扱うとき)・pr フェーズで作るかを聞き、承認を得て作る(実装計画の P4)。pr フェーズで用意できたときは、起点の Issue にも足す。gh-utility の規律(存在しないラベルは作らない)とは別に、codiel 自身のラベルは codiel 側で用意する。
 - run 中の `gh pr create` に `codiel` ラベルが無ければ、guard-bash で拒否する。GitHub MCP の `create_pull_request` はラベルを受け取れないので、guard-github-mcp は run 中の MCP の PR 作成を常に拒否し、`gh pr create --label codiel` へ誘導する(実装計画の P3。2026-11-12 にユーザーが承認)。現行の `<!-- codiel:generated -->` マーカーの検査(`docs/DESIGN.md` の hooks の表)と同じ扱いにする。run 中の `gh issue create`(triage)には、ラベルを求めない。
 - ラベルだけを足す `gh issue edit --add-label` には本文が無いので、現行のマーカー検査には当たらない。
-- intent 承認時の起票と Issue へのラベル付与は run を作る前に行うため、hook の対象外である。指示層(`skills/capturing-intent/`)で必ず行う。
+- intent 承認時の起票と Issue へのラベル付与は run を作る前に行うため、hook の対象外である。リポジトリにラベルがあるときに、指示層(`skills/capturing-intent/`)で行う。
 
 ## 4. 私の判断
 

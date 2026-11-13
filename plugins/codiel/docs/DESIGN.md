@@ -238,12 +238,12 @@ docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファ�
     try-<n>/                # 同一 run の挑戦毎のフォルダ(再挑戦で try-2, try-3, …)
       state.json            # フェーズ進捗・ゲート記録・試行カウンタ(直接編集は hooks で禁止)
       steps/                # ステップ・仕様のディレクトリ毎の brief.md / report.md(§6.6.4)
-      waits/                # 委譲したときの待ちごとの返答(<id>.md)
         step-<k>/            # implement の直列グループ・最終ステップ・run ブランチ上の修正
         test-code-<k>/       # test-code の仕様のディレクトリごとの単位
         test-loop-<k>/       # test-loop の NG 修正の単位
         merge-fix-<g>/       # implement の wave のマージ後の run ブランチ上の修正
         test-loop-project/   # test-loop のどの仕様のディレクトリにも属さない修正
+      waits/                # 委譲したときの待ちごとの返答(<id>.md)
       reports/
         test-run-<n>.md     # 各回のテスト実行結果
         review-<n>.md       # 各回のレビュー所見
