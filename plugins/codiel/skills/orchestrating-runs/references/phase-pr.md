@@ -25,7 +25,7 @@ pr に入ったときに読む。開始前の `git status --short` の確認は�
    - 「作る」か「自分で用意してから続ける」の後は、`resume` してからラベルの有無を確かめ直す。まだ無ければ、もう一度 `mark-ask` して同じ質問をする。
    - 「中止」なら、本文 §2.4 の手順で待ちを片付けてから `stop --slug <slug> --reason ask-aborted` で止める。
 
-   ラベルがあることを確かめたら、`git push -u origin <state.branch>` を実行する。続けて、別の Bash 呼び出しで `gh pr list --head <state.branch> --state all --json url,state` を実行し、同じブランチの PR を確かめる。
+   ラベルがあることを確かめたら、state に `issue` があり、その Issue に `codiel` が無ければ(`gh issue view <番号> --json labels`)、聞かずに `gh issue edit <番号> --add-label codiel` で足す。続けて `git push -u origin <state.branch>` を実行する。続けて、別の Bash 呼び出しで `gh pr list --head <state.branch> --state all --json url,state` を実行し、同じブランチの PR を確かめる。
    - `state` が `OPEN` の PR があれば、作り直さず、`gh pr edit <URL> --title "<タイトル>" --body-file .codiel/runs/<slug>/try-<n>/reports/pr-body.md --add-label codiel` で今の try の本文に更新する。その URL を手順 5 の `--pr-url` に使う。
    - PR が無いとき、または `CLOSED` か `MERGED` だけのときは、`gh pr create` で新しく作る。gh の `-T` / `--template`・`--fill` 系・`--web` / `-w` は使わず、次の形で呼ぶ。
    ```

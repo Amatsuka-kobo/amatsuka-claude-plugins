@@ -180,6 +180,25 @@ describe("evaluate_* の入力(設計書 §6.2、所見 F1)", () => {
     expect(h.index()).toEqual([])
   })
 
+  it("evaluate_plan と evaluate_design は paths が 51 件なら入力の誤りにし、記録しない", async () => {
+    const h = harness({ files: { "a.md": "# a\n" } })
+    const client = await connect(h.deps)
+    const paths = Array.from({ length: 51 }, () => "a.md")
+    for (const [name, phase] of [
+      ["evaluate_plan", "dev-plan"],
+      ["evaluate_design", "design"]
+    ]) {
+      const res = await call(client, name, {
+        runId: "run-1",
+        phase,
+        objective: "x",
+        paths
+      })
+      expect(res.isError, name).toBe(true)
+    }
+    expect(h.index()).toEqual([])
+  })
+
   it("evaluate_plan は paths のファイルを読んで評価する", async () => {
     const h = harness({ files: { "dev-plan.md": "# 計画\n## Step 1\n作る\n" } })
     const client = await connect(h.deps)

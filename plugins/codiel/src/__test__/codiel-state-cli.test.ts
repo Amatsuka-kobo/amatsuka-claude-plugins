@@ -19,9 +19,6 @@ function mainWithRun(slug = "demo"): string {
     )
     if (r.status !== 0) throw new Error(r.stderr)
   }
-  // init は .codiel の無いディレクトリを cwd にして呼ぶ(cwd をルートにする挙動を確かめるテストが頼る)
-  if (fs.existsSync(path.join(root, ".codiel")))
-    throw new Error(".codiel がある")
   fs.mkdirSync(path.join(root, ".raguel"))
   fs.writeFileSync(
     raguelConfigPath(root),

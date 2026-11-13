@@ -206,8 +206,8 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 
 | 場面 | 現行 | 1.1 |
 | --- | --- | --- |
-| Issue 番号から始める run(`/codiel:run <番号>`)。人が作った既存の Issue を含む | ラベルを見ない | 取り込んだ Issue に `codiel` が無ければ、聞かずに足す(`gh issue edit <番号> --add-label codiel`)。run を作る前に行う |
-| intent の承認時の Issue の起票(issue-craft の持ち込みモードと自前起票) | ラベルは任意(`references/handoff-contract.md` の `labels`) | その run が対応する Issue なので、`labels` に必ず `codiel` を含める。ただし、ラベルを作らないと答えたリポジトリでは付けられないので、リポジトリにラベルがあるときに限る(実装で確定) |
+| Issue 番号から始める run(`/codiel:run <番号>`)。人が作った既存の Issue を含む | ラベルを見ない | リポジトリにラベルがあれば、取り込んだ Issue に `codiel` が無いときに聞かずに足す(`gh issue edit <番号> --add-label codiel`)。run を作る前に行う |
+| intent の承認時の Issue の起票(issue-craft の持ち込みモードと自前起票) | ラベルは任意(`references/handoff-contract.md` の `labels`) | その run が対応する Issue なので、`labels` に必ず `codiel` を含める。ただし、ラベルを作らないと答えたリポジトリでは付けられないので、リポジトリにラベルがあるときに限る(2026-11-13 にユーザーが承認) |
 | pr フェーズでの PR 作成(`references/phase-pr.md`) | ラベルの指定なし | `codiel` を付ける。既存の PR を `gh pr edit` で更新するときも、無ければ足す |
 | triage での Issue 起票(`skills/filing-followup-issues/`) | ラベルの指定なし | 付けない。後続の作業を codiel が対応するかはまだ決まっていないためである。後でその Issue から run を始めたときに、上の 1 行目で付く |
 
@@ -215,7 +215,7 @@ github モードで、codiel が対応する Issue と PR に、ラベル `codie
 
 ### 3.2 ラベルの用意と強制
 
-- リポジトリに `codiel` ラベルが無ければ、`codiel:init` で作るかを聞き、承認を得て作る。gh-utility の規律(存在しないラベルは作らない)とは別に、codiel 自身のラベルは codiel 側で用意する。
+- リポジトリに `codiel` ラベルが無ければ、`codiel:init`・intent の確定時(github モードで Issue を扱うとき)・pr フェーズで作るかを聞き、承認を得て作る(実装計画の P4)。pr フェーズで用意できたときは、起点の Issue にも足す。gh-utility の規律(存在しないラベルは作らない)とは別に、codiel 自身のラベルは codiel 側で用意する。
 - run 中の `gh pr create` に `codiel` ラベルが無ければ、guard-bash で拒否する。GitHub MCP の `create_pull_request` はラベルを受け取れないので、guard-github-mcp は run 中の MCP の PR 作成を常に拒否し、`gh pr create --label codiel` へ誘導する(実装計画の P3。2026-11-12 にユーザーが承認)。現行の `<!-- codiel:generated -->` マーカーの検査(`docs/DESIGN.md` の hooks の表)と同じ扱いにする。run 中の `gh issue create`(triage)には、ラベルを求めない。
 - ラベルだけを足す `gh issue edit --add-label` には本文が無いので、現行のマーカー検査には当たらない。
 - intent 承認時の起票と Issue へのラベル付与は run を作る前に行うため、hook の対象外である。指示層(`skills/capturing-intent/`)で必ず行う。
