@@ -124,11 +124,13 @@
    ▼
 [intent-sync]  承認済みの受け入れ基準の変更と、途中でユーザーが追記した原文を、派生文の
                セクションへ人の確認つきで反映する(原文のセクション自体は書き換えない)。
-               `docs/intents/domains/` の持続層と `docs/intents/design/` の設計資料を更新する。intent の `status` は変えない
+               `docs/intents/domains/` の持続層と、run が当たる種別の `docs/intents/design/` の設計資料を更新する
+               (当たる種別が無い run では更新しない)。どちらもオーケストレーターが書き、ゲート通過の直後にコミットする。intent の `status` は変えない
                (`done` を付けるのは finalize だけである)。
                ▶ Raguel: evaluate_design
    ▼
-[pr]           github: `git push` して `gh pr create` で PR を作成する(本文に intent パスを書く)
+[pr]           github: `codiel` ラベルの有無を確かめ(無ければ作るか、利用者が用意するか、中止するかを聞く)、
+               `git push` して `gh pr create --label codiel` で PR を作成する(本文に intent パスを書く)
                / local: push せず、run ブランチと base を state に記録するだけで終える
                ▶ hooks が「テスト green + code PROCEED」を state で検証してから許可
    ▼
@@ -611,7 +613,7 @@ Kubernetes のマニフェスト・Dockerfile・CI の定義など、インフ�
 
 コミットと worktree の扱いは codiel が定める。コード系フェーズでは、作業者が自分の変更を作業しているブランチ
 (並列の単位は worktree のブランチ、直列の単位は run ブランチ)にコミットする。オーケストレーター自身が作業者のときも同じである。
-並列の単位として登録した要素は、作業者によらず worktree で作業する。`wait-add` などの待ちの仕組みは、委譲したときだけ使う。
+並列の単位として登録した要素は、作業者によらず worktree で作業する。作業の単位の待ちの記録(`wait-add`・出し直し)は、委譲したときだけ使う。`evaluate_*` がバックグラウンドへ移されたときの `gate-*` の待ちは、作業者によらず使う。
 
 実装・テストの単位では、開発手順書のドメインタグと契約で渡す担当範囲(担当タグの glob 配列)に
 従う。`mapped` では担当範囲外を書き込まず、`unscoped` ではドメイン境界を設けない。

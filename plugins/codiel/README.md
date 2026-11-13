@@ -35,9 +35,9 @@ Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに
 持続層に全文を残します。metatron を導入すると、`/metatron:init` と `/metatron:update` がこの印を ADR へ移し、
 持続層を参照形に縮めます。
 
-Codiel は `docs/intents/design/` にも持続層を持ちます。run で決まった設計を、データモデル(`data-model.md`)・API 一覧(`api.md`)・画面遷移(`screen-flow.md`)・システム構成(`architecture.md`)・シーケンス(`sequence.md`)・非機能要件(`nfr.md`)の種別ごとに 1 ファイルで残します。intent-sync で run の差分から今の姿を書き、図は Mermaid で描きます。ファイルは、その種別に当たる変更を初めて含んだ run で作られます。
+Codiel は `docs/intents/design/` にも持続層を持ちます。run で決まった設計を、データモデル(`data-model.md`)・API 一覧(`api.md`)・画面遷移(`screen-flow.md`)・システム構成(`architecture.md`)・シーケンス(`sequence.md`)・非機能要件(`nfr.md`)の種別ごとに 1 ファイルで残します。intent-sync でオーケストレーターが run の差分から今の姿を書き、図は Mermaid で描き、ゲートを通った直後にコミットします。ファイルは、その種別に当たる変更を初めて含んだ run で作られ、当たる変更を含まない run では更新されません。
 
-GitHub と連携する run では、Codiel が対応する Issue と PR にラベル `codiel` を付けます。ラベルは `/codiel:init` か run の途中で、承認を得て作ります。run の中の PR は `gh pr create --label codiel` で作り、ラベルの無い PR の作成と GitHub MCP での PR の作成は hooks が拒否します。後続の作業として triage で起票する Issue には付けません。
+GitHub と連携する run では、Codiel が対応する Issue と PR にラベル `codiel` を付けます。ラベルは `/codiel:init`、intent の確定時、pr フェーズのどこかで、承認を得て作ります。Issue 番号から始めた run では、ラベルがあれば Issue に聞かずに付けます。run の中の PR は `gh pr create --label codiel` で作り、ラベルの無い PR の作成と GitHub MCP での PR の作成は hooks が拒否します。pr フェーズでラベルが無ければ、作るか、自分で用意してから続けるか、run を中止するかを聞きます。ラベルの無いまま PR を作る道はありません。`gh api` で PR を作る経路はラベルを検査しません。後続の作業として triage で起票する Issue には付けません。
 
 ADR 候補と GOTCHAS 候補は、環境変数が有効な種別だけ残します。ADR 候補は `AMATSUKA_METATRON_ENABLE_ADR`、
 GOTCHAS 候補は `AMATSUKA_METATRON_ENABLE_GOTCHAS` に従い、metatron と同じ変数です。値は前後の空白を除いて小文字にし、
@@ -138,7 +138,9 @@ Raguel の設定が `.codiel/config.json` の `raguel` に無く、`.gitignore` 
 移した元のファイルは承認を得て消します。`.gitignore` に足りない行も同じ機会に足されます。
 `/codiel:init` の成果物は run の外のファイルなので、コミットは利用者が行ってください。
 
-1.1 へ上げたら、`/codiel:init` をやり直してください。`.claude/rules/codiel.md` が同梱の内容と違えば差分を示して置き換えるかを聞き、GitHub のリポジトリで `codiel` ラベルが無ければ作るかを聞きます。置き換えないと、新しい run に設計資料の置き場(`docs/intents/design/`)が伝わりません。
+1.1 へ上げたら、`/codiel:init` をやり直してください。`.claude/rules/codiel.md` が同梱の内容と違えば差分を示して置き換えるかを聞き、GitHub のリポジトリで `codiel` ラベルが無ければ作るかを聞きます。置き換えなくても run は止まりませんが、新しい run に設計資料の置き場(`docs/intents/design/`)が伝わりません。
+
+1.0.x では修正のループに 5 回の上限があり、超えると run が `awaiting_human` で止まりました。1.1 では上限を外したので、そのように止まった run は `/codiel:run` で再開すると、そのまま修正を続けます。上限が無いので、修正が収束しない run は Raguel が同じ評価の繰り返しを検知して ASK を返したときか、人が止めたときに止まります。
 
 ### 既知の限界
 
