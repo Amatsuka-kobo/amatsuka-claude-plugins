@@ -3,13 +3,14 @@
 `start-phase implement` の直後に読む。worktree と単位の並べ方は `references/delegation-env.md` に従う。
 
 1. dev-plan のステップを `step-add --slug <slug> --id <ID> --files '<JSON 配列>' --deps '<JSON 配列>' [--final] [--domain <名前>]` で登録し、`codiel-state waves --slug <slug>` で実行順を得る。非ゼロで終わったら dev-plan を差し戻し、`evaluate_plan` を呼ばない(循環依存は dev-plan のゲートで検出する)。
-2. `waves` の `groups` を先頭から順に処理する。`parallel` グループは手順 3〜8 で進める。`serial` グループと `final` のステップも、単位を始める前の `running`、タスクレビューの前の `reviewing`、修正の前の `running`、レビューを通った後の `merged` を同じく `step-update` で記録する。run ブランチ上で作業するので、`--worktree`・`--branch`・`--base`・`--head` は付けない。`serial` グループと `final` は、run ブランチ上で 1 ステップずつ、`set-domain` を使って単位の作業を進める(本文 §4)。
+2. `waves` の `groups` を先頭から順に処理する。`parallel` グループは、ステップが 1 つでも手順 3〜8 で進める。`serial` グループと `final` は、run ブランチ上で 1 ステップずつ、`set-domain` を使って単位の作業を進める(本文 §4)。
+   - `serial` グループと `final` のステップだけは worktree を作らず、単位を始める前の `running`、タスクレビューの前の `reviewing`、修正の前の `running`、レビューを通った後の `merged` を、`--worktree`・`--branch`・`--base`・`--head` を付けずに `step-update` で記録する。
 3. `parallel` グループの各ステップに brief ファイル `.codiel/runs/<slug>/try-<n>/steps/step-<k>/brief.md` を書く。内容は本文 §3 の作業の契約に、次を加えたものである。
    - worktree の絶対パス・触るファイル・前提ステップ・環境準備のコマンド
    - 選んだ単位の種類(`delegation-env.md` の並列可・単独)と、実行する通すテスト(そのステップの `spec.md` の `tests` を写す)
    - 選んだ観点ファイル
    - 通すテストに E2E があるときは、レポートの出力先(`references/e2e.md`)
-4. 実装の単位を始める。契約では brief の絶対パスを読ませる。始める前に `step-update --slug <slug> --id <ステップ> --status running --worktree <repoRoot 相対のパス> --branch <ブランチ名> --base <worktree を作った HEAD>` を実行する。
+4. 実装の単位を始める。契約では brief の絶対パスを読ませる。始める前に `delegation-env.md` の規則で worktree を作り、その後で `step-update --slug <slug> --id <ステップ> --status running --worktree <repoRoot 相対のパス> --branch <ブランチ名> --base <worktree を作った HEAD>` を 1 回だけ実行する。この記録のフラグを付けない `running` を先に呼ぶと、後から記録を足せない(`running` から `running` へは遷移できない)。
 5. 報告の環境の失敗を実行し直してから、ステップごとに読み取りだけのタスクレビューの単位を始める(並列に進めてよい)。観点は、仕様適合(dev-plan のステップと受け入れ基準に合うか)と品質である。
    修正の後の再レビューを含め、タスクレビューの単位を始める前に毎回 `step-update --slug <slug> --id <ステップ> --status reviewing` を実行する。
 6. 所見があれば修正ループを回す。ループに上限は無い。所見を直す前に `step-update --slug <slug> --id <ステップ> --status running` を実行する。この遷移(`reviewing` から `running`)で `implement.steps[k].attempts` が 1 増え、その値をラウンドの番号とする。手順 4 の最初の `running` では増えない。
