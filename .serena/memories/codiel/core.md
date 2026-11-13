@@ -1,4 +1,4 @@
-`plugins/codiel` (1.1.0-dev) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+`plugins/codiel` (1.1.0) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
 design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
 ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
 local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
