@@ -393,9 +393,14 @@ describe("phaseScope(設計書 §10.1)", () => {
   const bodyOf = (jev: FakeJev) => jev.calls.find((c) => "artifact" in c.state)
 
   it("語彙系の scope の問いは、phaseScope が期待どおりと明示した内容だけを objective の外と数えない", async () => {
-    for (const phase of ["design", "intent-sync"] as const) {
+    for (const [kind, phase] of [
+      ["plan", "test-spec"],
+      ["plan", "dev-plan"],
+      ["design", "design"],
+      ["design", "intent-sync"]
+    ] as const) {
       const jev = fakeJev()
-      await run(input({ kind: "design", phase }), jev)
+      await run(input({ kind, phase }), jev)
       const q = bodyOf(jev)?.questions.scope
       expect(q?.instructions, phase).toContain(
         "unless state.phaseScope explicitly says such content is expected in this phase"
