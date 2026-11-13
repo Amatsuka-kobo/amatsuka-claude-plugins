@@ -9,7 +9,7 @@ test-loop はテストを書く手順を持たない。記録された全テス�
    - ID が `e2e/` で始まる仕様のディレクトリは、ディレクトリごとに 1 回の実行の単位にし、出力を `references/e2e.md` の置き場へ出す。
 2. 判定が出ないもの(broken)はテストの欠陥の疑いとし、判定が出て期待と違うもの(NG)はプロダクトのバグとする。理由が環境にある失敗は broken にも NG にも数えず、`references/delegation-env.md` の環境の失敗として扱う。
 3. NG は仕様のディレクトリごとにまとめ、`step-add --kind test-loop --id <ID>` で `testLoop.units` に登録し、worktree(名前は `test-loop-<k>`)で修正の単位を進める。
-   - worktree を作った後で、`step-update --slug <slug> --kind test-loop --id <ID> --status running --worktree <repoRoot 相対のパス> --branch <ブランチ名> --base <worktree を作った HEAD>` を 1 回だけ実行する。修正が返ったら `--status reviewing` にし、run ブランチへマージした後で `--status merged --head <worktree のブランチの HEAD>` で記録する。マージが衝突したら `git merge --abort` し、`--status failed` にする。
+   - worktree を作った後で、`step-update --slug <slug> --kind test-loop --id <ID> --status running --worktree <repoRoot 相対のパス> --branch <ブランチ名> --base <worktree を作った HEAD>` を 1 回だけ実行する。修正の単位が終わったら `--status reviewing` にし、run ブランチへマージした後で `--status merged --head <worktree のブランチの HEAD>` で記録する。マージが衝突したら `git merge --abort` し、`--status failed` にする。残りのマージが済んだ後、worktree を後始末し、`--status pending` で戻してから新しい HEAD で作り直してやり直す。
    - 前の巡で `merged` になった要素は、次の巡で登録し直す(k は変わらない)。
    - brief と report は `steps/test-loop-<k>/` に置き、登録し直しても同じディレクトリに書き直す。
    - 修正の単位の契約には、失敗した仕様のディレクトリの最新のレポートの絶対パスを渡す(`references/e2e.md`)。
