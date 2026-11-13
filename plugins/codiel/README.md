@@ -37,7 +37,7 @@ Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに
 
 Codiel は `docs/intents/design/` にも持続層を持ちます。run で決まった設計を、データモデル(`data-model.md`)・API 一覧(`api.md`)・画面遷移(`screen-flow.md`)・システム構成(`architecture.md`)・シーケンス(`sequence.md`)・非機能要件(`nfr.md`)の種別ごとに 1 ファイルで残します。intent-sync でオーケストレーターが run の差分から今の姿を書き、図は Mermaid で描き、ゲートを通った直後にコミットします。ファイルは、その種別に当たる変更を初めて含んだ run で作られ、当たる変更を含まない run では更新されません。
 
-GitHub と連携する run では、Codiel が対応する Issue と PR にラベル `codiel` を付けます。ラベルは `/codiel:init`、intent の確定時、pr フェーズのどこかで、承認を得て作ります。Issue 番号から始めた run では、ラベルがあれば Issue に聞かずに付けます。run の中の PR は `gh pr create --label codiel` で作り、ラベルの無い PR の作成と GitHub MCP での PR の作成は hooks が拒否します。pr フェーズでラベルが無ければ、作るか、自分で用意してから続けるか、run を中止するかを聞きます。ラベルの無いまま PR を作る道はありません。`gh api` で PR を作る経路はラベルを検査しません。後続の作業として triage で起票する Issue には付けません。
+GitHub と連携する run では、Codiel が対応する Issue と PR にラベル `codiel` を付けます。ラベルは `/codiel:init`、intent の確定時、pr フェーズの push の前のどこかで、承認を得て作ります。Issue 番号から始めた run では、ラベルがあれば Issue に聞かずに付けます。run の中の PR は `gh pr create --label codiel` で作り、ラベルの無い PR の作成と GitHub MCP での PR の作成は hooks が拒否します。pr フェーズでラベルが無ければ、作るか、自分で用意してから続けるか、run を中止するかを聞き、Codiel の手順にラベルの無いまま PR を作る道はありません。hooks の検査は `gh pr create` と GitHub MCP の PR 作成に当たり、`gh api` で PR を作る経路は検査しません(既知の抜け道)。後続の作業として triage で起票する Issue には付けません。
 
 ADR 候補と GOTCHAS 候補は、環境変数が有効な種別だけ残します。ADR 候補は `AMATSUKA_METATRON_ENABLE_ADR`、
 GOTCHAS 候補は `AMATSUKA_METATRON_ENABLE_GOTCHAS` に従い、metatron と同じ変数です。値は前後の空白を除いて小文字にし、
