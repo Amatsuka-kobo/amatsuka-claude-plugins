@@ -13,7 +13,7 @@
 - **設計工程は人間と共同で行う**: intent フェーズ(聞き取りと承認ゲート)・discuss フェーズ
   (論点の合意)・design ウォークスルー(設計書の確認)・triage(起票指示)が常設の人間参加ポイント。
   それ以外のフェーズに固定承認ポイントはなく、人間が介入するのは Raguel が ASK / STOP を
-  出したときのみ。
+  出したときと、手順が定める確認(`mark-ask --kind confirm`)のときだけである。
 - **Claude Code 上で完結するプラグインである**(下記「実行環境の制約」)。
 
 ## 0. 実行環境の制約(最重要)
@@ -37,11 +37,11 @@
 |---|---|
 | 実行環境 | Claude Code 上で完結。Anthropic API 不使用・Python 等の追加ランタイム不使用・ユーザーへの CLI 操作要求なし(§0) |
 | superpowers の扱い | スタイルのみ模倣。依存しない自前スキル群 |
-| 人間の承認ゲート | discuss フェーズ・design ウォークスルー・triage は常設の人間参加ポイント。それ以外は Raguel の ASK / STOP のみで、PROCEED が続く限り自律 |
+| 人間の承認ゲート | discuss フェーズ・design ウォークスルー・triage は常設の人間参加ポイント。それ以外は Raguel の ASK / STOP と、手順が定める確認(`mark-ask --kind confirm`。pr フェーズの `codiel` ラベルの用意、委譲先が決めずに返した単位など)だけで、PROCEED が続く限り自律 |
 | 成果物の置き場 | 対象プロジェクトの `.codiel/` 配下。feature ブランチにコミットする |
 | コマンド構成 | `/codiel:run [<Issue番号> \| <intentパス>]`(省略可。オーケストレーター)+ `/codiel:test`(単独テスト実行)。state による再開機能 |
 | 連携モード | `github`(gh / GitHub MCP で起票・PR・投稿する)と `local`(投稿せず記録だけで終える)の 2 択。§0 で判定し run の間固定する(§2) |
-| 実行モデル | メインセッション=オーケストレーター。文書(agenda.md・design.md・dev-plan.md・discussion.md・intent 文書)の執筆と、テストコマンドの実行は、オーケストレーターが自分で行う。spec.md / cases.md・テストコード・実装・レビュー・E2E の実行は作業の単位とし、委譲するかは運用方針に任せる(1.1。§7) |
+| 実行モデル | メインセッション=オーケストレーター。文書(agenda.md・design.md・dev-plan.md・discussion.md・intent 文書と、持続層の領域ファイル・設計資料)の執筆と、テストコマンドの実行は、オーケストレーターが自分で行う。spec.md / cases.md・テストコード・実装・レビュー・E2E の実行は作業の単位とし、委譲するかは運用方針に任せる(1.1。§7) |
 | テスト仕様書 | run 使い捨てではなく**機能単位の永続資産**。機能更新時に仕様書を更新しテストケースを再生成する |
 | テスト体系 | 仕様書駆動テストは **Playwright 等の E2E**。ユニットテストは別レイヤーで、実装の作業者が TDD の中で作成する |
 | 実装の単位 | frontend / backend / data のドメイン別に分ける |
@@ -49,7 +49,7 @@
 | ドメイン縮退 | ドメイン分割が馴染まないプロジェクトは、ドメインマップを `generic` 1 つに縮退させ、実装とレビューの単位も汎用の 1 つで回す |
 | runId / 再挑戦 | runId は intent フェーズで決めた **slug**(英小文字ケバブケース)。その下に **try 毎のフォルダ**(`try-<n>/`)を切り、同一 run の再挑戦を管理する |
 | record_outcome | **マージ検知を自動化**: codiel コマンド起動時に未確定 run の PR 状態を gh で走査し自動記録。incident のみ人間の明示申告 |
-| 役割別書き込み制御 | hooks の判定は deny ではなく **ask**(誤爆に備える)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
+| 役割別書き込み制御 | 書き込み制御の hooks の判定は deny ではなく **ask**(誤爆に備える。投稿系のフェーズ・マーカー・ラベルの検査と state.json の保護は deny。§8)。hooks が機械的に制御するのはフェーズ単位まで(エージェント個体を識別できないため)。ドメイン単位の規律はエージェント定義とレビューで担保 |
 | 設計ディスカッション | 常に実施・アジェンダ駆動型(論点抽出・進行・記録=オーケストレーター、決定=ユーザー)。discuss は非 GATED、ウォークスルーは design フェーズ内。詳細は `harness-docs/superpowers/specs/2026-07-10-codiel-discuss-phase-design.md` |
 
 ## 2. 全体フロー(フェーズと Raguel ゲート)
@@ -238,6 +238,7 @@ docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファ�
     try-<n>/                # 同一 run の挑戦毎のフォルダ(再挑戦で try-2, try-3, …)
       state.json            # フェーズ進捗・ゲート記録・試行カウンタ(直接編集は hooks で禁止)
       steps/                # ステップ・仕様のディレクトリ毎の brief.md / report.md(§6.6.4)
+      waits/                # 委譲したときの待ちごとの返答(<id>.md)
         step-<k>/            # implement の直列グループ・最終ステップ・run ブランチ上の修正
         test-code-<k>/       # test-code の仕様のディレクトリごとの単位
         test-loop-<k>/       # test-loop の NG 修正の単位
@@ -890,7 +891,7 @@ Claude Code のプラグイン導入状態は `~/.claude/plugins/installed_plugi
 `codielHandoffCandidate` は `.codiel/` の存在だけで判定していた。環境スクリプトの責務は、Codiel の器を
 委譲先の候補として検出した事実を返すことにあり、実行可否の判定は Codiel の preflight が担う。
 
-Codiel は ARCHITECTURE のドメイン定義を読めないときも、`unscoped` モードで汎用担当へディスパッチできる。
+Codiel は ARCHITECTURE のドメイン定義を読めないときも、`unscoped` モードで汎用担当の単位を始められる。
 そのため `projectDocs.domainsReadable: false` は、委譲が必ず失敗することを意味しない。
 ドメイン定義の可読性を委譲候補の条件に含めると、Codiel が受け入れられる正当な委譲経路まで塞ぐ。
 `codielHandoffCandidate` と `codielHarness.dirExists` の同値は、委譲判断用の事実と生の検出事実を分けるために残していた。
