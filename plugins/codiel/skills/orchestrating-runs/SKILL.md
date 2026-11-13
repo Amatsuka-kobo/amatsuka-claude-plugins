@@ -259,7 +259,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
     挙げて失敗する。test-spec と dev-plan は、それぞれの通過の直後に、評価した文書をコミットしてよい。
 - コード系フェーズ(carry-over / test-code / implement / test-loop / fix-loop)では、作業者が自分の変更を、作業しているブランチ
   (並列の単位は worktree のブランチ、直列の単位は run ブランチ)にコミットする。オーケストレーター自身が作業者のときも同じである。
-  これとは別にオーケストレーターがこれらのフェーズで行うコミットは、worktree のブランチの `git merge --no-ff` と、E2E の
+  これとは別にオーケストレーターがこれらのフェーズで行うコミットは、下の確認義務で自分でコミットする場合を除き、worktree のブランチの `git merge --no-ff` と、E2E の
   レポートのコミット(`references/e2e.md`)だけである。コード系フェーズの pass-gate の後は、次のフェーズの
   `start-phase` までコミットしない(`start-phase` が、直前に通ったフェーズの `passedHead` と今の HEAD の一致を要る)。
 - run の文書の置き場: オーケストレーターが書く `agenda.md`・`discussion.md`・`design.md`・
@@ -429,7 +429,7 @@ active な run があるときの `/codiel:test` の単独実行は、`adhoc-` �
 
 やり直しは修正のループのラウンドに数えない。
 
-自分で作業していて、上の `undecided` の場面に当たったときは、同じフェーズの待ちがすべて消えてから `mark-ask <phase> --slug <slug> --kind confirm` を実行し、人に聞く。選択肢は「判断を示して続ける」「中止」とする。答えを得たら `resume` する。続けるときは示された判断を契約の「任せる判断」に足して作業を続け、中止なら §2.4 の手順で待ちを片付けてから `stop --slug <slug> --reason ask-aborted` で止める。
+自分で作業していて、上の `undecided` の場面に当たったときは、契約の不備なら自分で契約を直して続ける。それ以外は、同じフェーズの待ちがすべて消えてから `mark-ask <phase> --slug <slug> --kind confirm` を実行し、人に聞く。選択肢は「判断を示して続ける」「中止」とする。答えを得たら `resume` する。続けるときは示された判断を契約の「任せる判断」に足して作業を続け、中止なら §2.4 の手順で待ちを片付けてから `stop --slug <slug> --reason ask-aborted` で止める。
 
 ## 4. ドメインに紐づく単位
 

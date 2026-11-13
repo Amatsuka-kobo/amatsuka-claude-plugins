@@ -8,7 +8,7 @@ intent-sync で、run の変更をシステムの今の姿として `docs/intent
 - 軽量の run(`state.scale` が `light`): run の差分と、intent の `## 実装方針`。
 - 非機能要件だけは、intent の `## 受け入れ基準` と `## 意図的な制約`、標準の run では `design.md` で決めた目標値と方針から書く。
 
-`scale`・`baseBranch`・`branch` は `codiel-state get --slug <slug>` で読む。state に `baseBranch` が無いときは、`capturing-intent` の手順 1 のベースブランチの解決規則で決める。
+`scale`・`baseBranch`・`branch` は `codiel-state get --slug <slug>` で読む。state に `baseBranch` が無いときは、`capturing-intent` の手順 1 のベースブランチの解決規則で決める。その規則で人に聞くときは、`mark-ask intent-sync --slug <slug> --kind confirm` の後に聞き、答えを得たら `resume` する。
 
 intent-sync の時点では実装が済んでいる。`design.md` や `## 実装方針` と差分が食い違うときは、差分(実装された姿)を書く。
 
@@ -31,6 +31,6 @@ intent-sync の時点では実装が済んでいる。`design.md` や `## 実装
 
 1. 上の表で、更新する種別を決める。当たる種別が無ければ、手順 5 へ進む。
 2. 種別ごとに、ファイルがあれば読み、run の差分が変えた箇所だけを今の姿に書き換える。無ければ、書式の正本どおりに新しく作る。`docs/intents/design/` が無ければ作る。
-3. 書くのは、run の差分と、差分を読むのに要る既存のコードの範囲から分かることだけにする(非機能要件は上の入力から書く)。初めて作るファイルでも、既存のシステム全体を書き起こさない。`nfr.md` で、この run で決まっていない分類は「未定」と書く。
-4. 変更の経緯は書かない。ファイルの末尾の `## 由来` に、今回の intent のパスを `- docs/intents/YYYY-MM-DD-<slug>.md(取り込み日 YYYY-MM-DD)` の形で 1 行加える。
+3. 書くのは、run の差分と、差分を読むのに要る既存のコードの範囲から分かることだけにする(非機能要件は上の入力から書く)。初めて作るファイルでも、既存のシステム全体を書き起こさない。初めて `nfr.md` を作るときは、この run で決まっていない分類を「未定」と書く。既にある `nfr.md` では、この run で決まった分類だけを書き換え、ほかの分類の値は消さない。
+4. 変更の経緯は書かない。`## 由来` に、今回の intent のパスを `- docs/intents/YYYY-MM-DD-<slug>.md(取り込み日 YYYY-MM-DD)` の形で 1 行加える。同じ intent の行が既にあれば加えない。
 5. `.codiel/runs/<slug>/try-<n>/steps/intent-sync/report.md` の末尾に、`設計資料: <更新したパスを読点で区切る>` の 1 行を書き足す。更新しなかったときは `設計資料: 該当なし` と書く。ファイルが無ければ作る。この行は、設計資料の更新が済んだ印である。
