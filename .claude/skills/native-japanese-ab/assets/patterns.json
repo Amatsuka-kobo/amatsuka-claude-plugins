@@ -20,5 +20,14 @@
   {"id": "de-chuushi", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "変化の「になる」", "want": "減らす", "regex": "[0-9０-９%％分円個本人件倍日][ぁ-ん]{0,2}で、"},
   {"id": "gawa", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "幅の端を指す「側」", "want": "減らす", "regex": "側(では|で|に|の|は|を)"},
   {"id": "kakushindo-label", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "確信度のラベル", "regex": "【推定】|【要確認】|と推定"},
-  {"id": "eigo-no-ku", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "製品の用語", "regex": "[A-Za-z]{3,}(?: [A-Za-z]{2,})+"}
+  {"id": "eigo-no-ku", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "製品の用語", "regex": "[A-Za-z]{3,}(?: [A-Za-z]{2,})+"},
+  {"id": "suuji-kuuhaku", "since": "2026-11-13 判断を求める報告・表記", "item": "数字の前後の空白", "want": "減らす", "unit": "prose", "regex": "[0-9] [ぁ-んァ-ヶ一-龥]|[ぁ-んァ-ヶ一-龥] [0-9]"},
+  {"id": "riyuu-kouchi", "since": "2026-11-13 判断を求める報告・表記", "item": "理由の後置", "want": "減らす", "unit": "sentence", "regex": "(ため|から)です[。]?$"},
+  {"id": "riyuu-zenchi", "since": "2026-11-13 判断を求める報告・表記", "item": "理由の前置", "unit": "prose", "regex": "ため、"},
+  {"id": "toi-de-owaru", "since": "2026-11-13 判断を求める報告・表記", "item": "判断を求める問い", "want": "増やす", "unit": "sentence", "prompts": ["report-i18n", "report-manual-shots", "report-customer-migration"], "regex": "(ですか|ますか|でしょうか|ませんか)[。？?]?$"},
+  {"id": "to-kangaemasu", "since": "2026-11-13 判断を求める報告・表記", "item": "判断を求める問い", "want": "減らす", "unit": "sentence", "prompts": ["report-i18n", "report-manual-shots", "report-customer-migration"], "regex": "と考えます[。]?$"},
+  {"id": "tasu", "since": "2026-11-13 判断を求める報告・表記", "item": "「追加する」", "want": "減らす", "unit": "prose", "regex": "足(す|し|さ|せ|そ)"},
+  {"id": "dake-verb", "since": "2026-11-13 判断を求める報告・表記", "item": "「だけを」", "unit": "prose", "regex": "(?<!くだ)(?<!とき)(?<!場合)(?<!時)だけ(?![をがにでのはもと、。)」ど])[ぁ-ん一-龥]"},
+  {"id": "utsushi", "since": "2026-11-13 判断を求める報告・表記", "item": "Copy の訳", "want": "減らす", "unit": "prose", "regex": "写し(?![てたま出])"},
+  {"id": "atsukai", "since": "2026-11-13 判断を求める報告・表記", "item": "「扱い」「対応」", "want": "減らす", "unit": "prose", "regex": "同じ扱い|扱いに(し|な)|対応(済み|しました|しています)"}
 ]

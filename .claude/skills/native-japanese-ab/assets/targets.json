@@ -14,5 +14,9 @@
   {"id": "kanousei-zentai", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "全題材で「かもしれない」「場合がある」を使った出力", "basis": "改修前は 120 本のうち 8 本、素は 22 本", "metric": "in_range", "patterns": ["kamoshirenai", "baai-ga-aru"], "min": 1, "op": "以上", "value": 20},
   {"id": "uru-kana", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "かな書きの「うる」", "basis": "規律は「得る」を漢字で書くと定める。改修前は 0 件、素は 120 本に 2 件", "metric": "per100", "patterns": ["uru-kana"], "op": "以下", "value": 0},
   {"id": "eru-kanji", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "漢字の「得る」を使った出力", "basis": "改修前は 120 本のうち 4 本、素は 5 本", "metric": "in_range", "patterns": ["eru-kanji"], "min": 1, "op": "以上", "value": 5},
-  {"id": "ninaru-henka", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "変化の題材で「になる」を使った出力", "basis": "改修前も素も 12 本のうち 12 本", "metric": "in_range", "patterns": ["ni-naru"], "prompts": ["workers", "plan-change"], "min": 1, "op": "以上", "value": 90}
+  {"id": "ninaru-henka", "since": "2026-11-12 可能性・になる・製品の用語・得る", "item": "変化の題材で「になる」を使った出力", "basis": "改修前も素も 12 本のうち 12 本", "metric": "in_range", "patterns": ["ni-naru"], "prompts": ["workers", "plan-change"], "min": 1, "op": "以上", "value": 90},
+  {"id": "suuji-kuuhaku", "since": "2026-11-13 判断を求める報告・表記", "item": "数字の前後に空白を入れた出力", "metric": "in_range", "patterns": ["suuji-kuuhaku"], "min": 1, "basis": "規律は空白を入れないと定める。改修前は 138 本のうち 85 本", "op": "以下", "value": 10},
+  {"id": "riyuu-kouchi", "since": "2026-11-13 判断を求める報告・表記", "item": "理由を後置した文の割合", "metric": "share", "patterns": ["riyuu-kouchi"], "basis": "改修前の 0.8% の半分", "op": "以下", "value": 0.4},
+  {"id": "toi-de-owaru", "since": "2026-11-13 判断を求める報告・表記", "item": "報告の題材で問いを含む出力", "metric": "in_range", "patterns": ["toi-de-owaru"], "prompts": ["report-i18n", "report-manual-shots", "report-customer-migration"], "min": 1, "basis": "規律は決めてもらう事柄を問いで終えると定める。改修前は 18 本のうち 6 本", "op": "以上", "value": 80},
+  {"id": "tasu", "since": "2026-11-13 判断を求める報告・表記", "item": "「足す」を使った出力", "metric": "in_range", "patterns": ["tasu"], "min": 1, "basis": "改修前は 138 本のうち 27 本", "op": "以下", "value": 10}
 ]
