@@ -9,7 +9,8 @@ kind: readonly
 
 ## When to invoke
 
-- Use when a document, instruction, or specification will be read and followed by someone else, to restate it and surface implicit knowledge, contradictions, and gaps.
+- Use for a design document or an implementation plan written before implementation, to restate it and surface implicit knowledge, contradictions, and gaps.
+- Do not use for other documents, instructions (CLAUDE.md, SKILL.md, rules, agent definitions), or code diffs.
 - Does not judge whether the content is correct.
 
 ## Core Responsibilities
