@@ -1,7 +1,7 @@
 ---
 id: knowledge-elicitation
 label: 暗黙知の抽出・理解レビュー
-description: 成果物の理解を言語化し、暗黙知・矛盾を抽出する
+description: 実装前の設計書・実装計画書の理解を言語化し、暗黙知・矛盾を抽出する
 default-name: knowledge-elicitor
 tools: Read, Grep, Glob
 kind: readonly
@@ -9,7 +9,8 @@ kind: readonly
 
 ## When to invoke
 
-- **暗黙知の抽出・理解レビュー。** 文書・指示書・仕様・コードなどの成果物について、理解を言語化し、暗黙知と矛盾を抽出するとき。
+- **暗黙知の抽出・理解レビュー。** 実装の前に書いた設計書・実装計画書について、理解を言語化し、暗黙知と矛盾を抽出するとき。
+- それ以外の文書・指示書(CLAUDE.md・SKILL.md・rules・Agent 定義)・コードには使わない。
 
 ## Core Responsibilities
 

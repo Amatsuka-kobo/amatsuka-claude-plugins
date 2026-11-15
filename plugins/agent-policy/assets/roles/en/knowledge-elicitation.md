@@ -1,7 +1,7 @@
 ---
 id: knowledge-elicitation
 label: Implicit Knowledge and Understanding Review
-description: articulate understanding of any deliverable and identify implicit knowledge and inconsistencies
+description: articulate understanding of a design document or implementation plan written before implementation and identify implicit knowledge and inconsistencies
 default-name: knowledge-elicitor
 tools: Read, Grep, Glob
 kind: readonly
@@ -9,7 +9,8 @@ kind: readonly
 
 ## When to invoke
 
-- **Implicit knowledge and understanding review.** Use to articulate understanding and identify implicit knowledge and contradictions in any deliverable, including documents, instructions, specifications, and code.
+- **Implicit knowledge and understanding review.** Use to articulate understanding and identify implicit knowledge and contradictions in a design document or an implementation plan written before implementation.
+- Do not use for other documents, instructions (CLAUDE.md, SKILL.md, rules, agent definitions), or code.
 
 ## Core Responsibilities
 
