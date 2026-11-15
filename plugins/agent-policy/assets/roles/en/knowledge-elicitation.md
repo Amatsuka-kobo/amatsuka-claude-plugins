@@ -9,8 +9,7 @@ kind: readonly
 
 ## When to invoke
 
-- **Implicit knowledge and understanding review.** Use to articulate understanding and identify implicit knowledge and contradictions in a design document or an implementation plan written before implementation.
-- Do not use for other documents, instructions (CLAUDE.md, SKILL.md, rules, agent definitions), or code.
+- **Implicit knowledge and understanding review.** Use to articulate understanding and identify implicit knowledge and contradictions in any deliverable, including documents, instructions, specifications, and code.
 
 ## Core Responsibilities
 
