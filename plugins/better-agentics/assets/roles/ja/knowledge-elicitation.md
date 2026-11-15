@@ -1,7 +1,7 @@
 ---
 id: knowledge-elicitation
 label: 暗黙知の抽出・理解レビュー
-description: 成果物の理解を言語化し、暗黙知・矛盾を抽出する
+description: 実装前の設計書・実装計画書の理解を言語化し、暗黙知・矛盾を抽出する
 default-name: knowledge-elicitor
 tools: Read, Grep, Glob
 kind: readonly
@@ -9,7 +9,8 @@ kind: readonly
 
 ## When to invoke
 
-- Use when a document, instruction, or specification will be read and followed by someone else, to restate it and surface implicit knowledge, contradictions, and gaps.
+- Use for a design document or an implementation plan written before implementation, to restate it and surface implicit knowledge, contradictions, and gaps.
+- Do not use for other documents, instructions (CLAUDE.md, SKILL.md, rules, agent definitions), or code.
 - Does not judge whether the content is correct.
 
 ## Core Responsibilities
