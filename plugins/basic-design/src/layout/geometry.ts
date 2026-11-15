@@ -1,5 +1,15 @@
 import type { Box, Layout, Point } from "../types.js"
 
+const WIDE =
+  /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/
+
+/** 12px のラベルを収める箱の幅。全角は 12、それ以外は 7 として数える。 */
+export function labelWidth(text: string, min = 48): number {
+  let width = 16
+  for (const char of text) width += WIDE.test(char) ? 12 : 7
+  return Math.max(min, width)
+}
+
 export function boxesOverlap(a: Box, b: Box): boolean {
   return (
     a.x < b.x + b.width &&
