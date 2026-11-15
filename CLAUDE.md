@@ -23,3 +23,8 @@
 - 直近で着手するSubtask: `Todo`
 - 着手中のIssue: `In Progress`
 - closeしたIssue: `Done`
+
+Subtaskに着手するときは以下の設定を行う。
+
+- Subtaskのみ、currentのiterationと、ログイン中GitHubアカウントをAssigneeに設定する。
+- 着手するSubtaskとその親StoryとEpicのstatusをIn Progressにする。
