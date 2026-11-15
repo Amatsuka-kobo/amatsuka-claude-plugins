@@ -10,6 +10,8 @@ import type {
   ScreenFlowSpec
 } from "../types.js"
 
+import { labelWidth } from "./geometry.js"
+
 const elk = new ELK()
 const BASE = {
   "elk.algorithm": "layered",
@@ -22,9 +24,7 @@ const BASE = {
 }
 
 function edgeLabel(text: string): ElkLabel[] | undefined {
-  return text
-    ? [{ text, width: Math.max(48, text.length * 7 + 16), height: 18 }]
-    : undefined
+  return text ? [{ text, width: labelWidth(text), height: 18 }] : undefined
 }
 
 function points(edge: ElkExtendedEdge) {
@@ -187,9 +187,7 @@ export async function layoutEr(spec: ErSpec): Promise<Layout> {
         id: `rel${index + 1}`,
         sources: [relation.from],
         targets: [relation.to],
-        labels: [
-          { text, width: Math.max(56, text.length * 7 + 16), height: 18 }
-        ]
+        labels: [{ text, width: labelWidth(text, 56), height: 18 }]
       }
     })
   }

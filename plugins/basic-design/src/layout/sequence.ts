@@ -1,4 +1,5 @@
 import type { Layout, LayoutEdge, LayoutNode, SequenceSpec } from "../types.js"
+import { labelWidth } from "./geometry.js"
 
 const ACTOR_WIDTH = 140
 const ACTOR_HEIGHT = 50
@@ -43,7 +44,7 @@ export async function layoutSequence(spec: SequenceSpec): Promise<Layout> {
       // biome-ignore lint/style/noNonNullAssertion: validateSpec 済みで message の actor 参照は存在する
       { x: center.get(msg.to)!, y }
     ]
-    const width = Math.max(48, (msg.label ?? "").length * 7 + 16)
+    const width = labelWidth(msg.label ?? "")
     return {
       id: `msg${i + 1}`,
       from: msg.from,

@@ -1,3 +1,4 @@
+import { labelWidth } from "../layout/geometry.js"
 import { THEME } from "../theme.js"
 import type {
   Box,
@@ -14,10 +15,6 @@ const ICON_SIZE = 24
 
 function embed(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c")
-}
-
-function labelChipWidth(text: string): number {
-  return Math.max(48, text.length * 7 + 16)
 }
 
 function sizedIcon(node: LayoutNode, x: number, y: number): string {
@@ -60,7 +57,7 @@ function extent(layout: Layout): { width: number; height: number } {
 }
 
 function zoneSvg(zone: NonNullable<Layout["zones"]>[number]): string {
-  const chipWidth = labelChipWidth(zone.label)
+  const chipWidth = labelWidth(zone.label)
   return (
     `<g class="zone">` +
     `<rect class="zone-bg" x="${zone.x}" y="${zone.y}" width="${zone.width}" height="${zone.height}" rx="${THEME.radius}"/>` +
