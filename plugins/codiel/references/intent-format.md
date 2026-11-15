@@ -349,7 +349,7 @@ GOTCHAS 候補は、run の中で起きた失敗を、metatron の GOTCHAS の�
 
 ## 設計資料
 
-設計資料は、run で決まったシステムの今の姿を、種別ごとに 1 ファイルで持つ持続層である。`docs/intents/design/<種別>.md` に置き、基準は `repoRoot` で固定する。設定による変更は持たない。
+設計資料は、run で決まったシステムの今の姿を、種別ごとに 1 ファイルで持つ持続層である。`docs/intents/design/<種別>.md` に置き、基準は `repoRoot` で固定する。basic-design の設計資料があるプロジェクトでは、この書式で書かずに basic-design 側の成果物を更新する。切り替えの条件は `skills/syncing-intents/references/design-docs.md` の「置き場の切り替え」に従う。
 
 | ファイル | 種別 | 書く観点 | 図 |
 | --- | --- | --- | --- |

@@ -23,6 +23,7 @@ codiel が定める書式を変更したときに、同じコミットで追随�
 ## 設計資料の書式(`references/intent-format.md` の「設計資料」)
 
 - [ ] `skills/syncing-intents/references/design-docs.md` の種別の判定表と書き方の手順。種別・ファイル名・`## 由来` の形を揃える
+- [ ] `skills/syncing-intents/references/design-docs.md` の「置き場の切り替え」。basic-design 側へ切り替える条件(`basicDesignDir` と既定値)を揃える
 
 ## GitHub の執筆規則(`references/github-writing.md`・`github-writing-images.md`・`github-writing-pr.md`)
 

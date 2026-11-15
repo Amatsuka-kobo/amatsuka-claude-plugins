@@ -1,4 +1,4 @@
-`plugins/codiel` (1.1.0) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+`plugins/codiel` (1.1.1) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
 design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
 ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
 local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
@@ -172,6 +172,9 @@ codiel は同梱 Agent を持たず(2026-09-27)、1.1 からは作業の担い�
   (`data-model`・`api`・`screen-flow`・`architecture`・`sequence`・`nfr`)で、intent-sync が run の差分から今の姿を書き、末尾に `## 由来` を置く。
   書式は `references/intent-format.md` の「設計資料」、判定と手順は `skills/syncing-intents/references/design-docs.md`。`domains` が空でも更新する。
   guard-write は `docs/intents/design/**` を intent-sync だけで通す(finalize の例外なし)。Raguel の `paths` の上限は 50 件。
+- 1.1.1(2026-11-15、Issue #7): `.codiel/config.json` の `basicDesignDir`(既定 `docs/design`)の下にファイルが 1 つでもあれば、
+  設計資料は basic-design のスキルで basic-design 側の成果物を更新・作成し、`docs/intents/design/` には書かない。
+  指示は design-docs.md の「置き場の切り替え」だけで、コードの変更は無い(`readCodielConfig` は知らないキーを無視する)。
 - github モードでは codiel が対応する Issue と PR にラベル `codiel` を付ける。init・intent・pr でラベルが無ければ承認を得て作る。
   guard-bash は run 中の `--label codiel` の無い `gh pr create` を拒否し、guard-github-mcp は run 中の MCP の PR 作成を常に拒否する。
   triage の起票には付けない。
