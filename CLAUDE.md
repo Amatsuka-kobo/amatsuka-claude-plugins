@@ -11,7 +11,7 @@
 
 - ユーザーからの依頼内容がプラグインの改修であったとき、まだGitHubのIssueとして作られていないときは要件を詰めてIssueを作る。
 - 要件を詰めた結果人間が作業したときに1日を超える時間がかかりそうなタスクは`Story`、そうでないものは`Subtask`と呼称し、Storyはタスク分解を行い子IssueとしてSubtaskを起票する。
-- mainからブランチを切って作業する。複数のSubtaskを対応するときはworktreeで作業する。
+- mainブランチから切ったworktreeで作業する。
 
 ## GitHub Issueの運用
 
