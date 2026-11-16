@@ -589,7 +589,7 @@ digraph codiel_run {
   waves [label="codiel-state waves で\nwave(依存の無いステップの最大4件の\n並列グループ)に分ける", shape=note];
   implement [label="[implement]\nwave ごとに worktree で並列実装\n(通すテストを Green にする。\nE2E も含む。wave のマージ後に\nrun ブランチで通すテストを実行)", shape=box];
   testloop [label="[test-loop]\n記録された全テストと test コマンドの回帰を確認\n(units/ と test コマンドは自分で、e2e/ は実行の単位)\nNG は worktree で修正(broken は人の確認後に直す)", shape=box];
-  intentsync [label="[intent-sync]\nオーケストレーターが書く\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層と\n設計資料 docs/intents/design/ を更新)", shape=box];
+  intentsync [label="[intent-sync]\nオーケストレーターが書く\n(受け入れ基準の変更・追記原文を\n派生文へ反映。持続層と\n設計資料 docs/intents/design/ を更新。\nbasic-design の設計資料があれば\nbasic-design 側を更新)", shape=box];
   pr [label="[pr]\ngithub: codiel ラベルを確かめ、push して\ngh pr create --label codiel\nlocal: state に記録するだけ", shape=box];
   review [label="[review]\nドメイン別+doc/security の観点で\nレビューの単位(並列に進めてよい)\n(github は PR にも投稿)", shape=box];
   fixloop [label="[fix-loop]\n修正・再レビューは作業の単位、回帰は\nunits/ を自分で・e2e/ は実行の単位", shape=box];

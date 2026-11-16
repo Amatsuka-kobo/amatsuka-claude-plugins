@@ -27,6 +27,13 @@ intent-sync の時点では実装が済んでいる。`design.md` や `## 実装
 
 どの種別にも当たらない run(内部のリファクタリングなど)では、設計資料を更新しない。
 
+## 置き場の切り替え
+
+`.codiel/config.json` の `basicDesignDir`(無ければ `docs/design`)の下にファイルが 1 つでもあれば、設計資料は basic-design 側に書き、`docs/intents/design/` には書かない。
+
+- 手順 2〜4 の代わりに、basic-design プラグインのスキルで種別ごとの成果物を更新するか、新しく作る。
+- 人に聞くときは、`mark-ask intent-sync --slug <slug> --kind confirm` の後に聞き、答えを得たら `resume` する。
+
 ## 手順
 
 1. 上の表で、更新する種別を決める。当たる種別が無ければ、手順 5 へ進む。

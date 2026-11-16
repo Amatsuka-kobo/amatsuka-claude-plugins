@@ -92149,6 +92149,16 @@ function decorateLayout(spec, layout) {
 
 // src/layout/graph.ts
 var import_elk_bundled = __toESM(require_elk_bundled(), 1);
+
+// src/layout/geometry.ts
+var WIDE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
+function labelWidth(text, min = 48) {
+  let width = 16;
+  for (const char of text) width += WIDE.test(char) ? 12 : 7;
+  return Math.max(min, width);
+}
+
+// src/layout/graph.ts
 var elk = new import_elk_bundled.default();
 var BASE = {
   "elk.algorithm": "layered",
@@ -92160,7 +92170,7 @@ var BASE = {
   "elk.padding": "[top=28,left=28,bottom=28,right=28]"
 };
 function edgeLabel(text) {
-  return text ? [{ text, width: Math.max(48, text.length * 7 + 16), height: 18 }] : void 0;
+  return text ? [{ text, width: labelWidth(text), height: 18 }] : void 0;
 }
 function points(edge) {
   const sections = edge.sections ?? [];
@@ -92290,9 +92300,7 @@ async function layoutEr(spec) {
         id: `rel${index + 1}`,
         sources: [relation.from],
         targets: [relation.to],
-        labels: [
-          { text, width: Math.max(56, text.length * 7 + 16), height: 18 }
-        ]
+        labels: [{ text, width: labelWidth(text, 56), height: 18 }]
       };
     })
   };
@@ -92475,7 +92483,7 @@ async function layoutSequence(spec) {
       // biome-ignore lint/style/noNonNullAssertion: validateSpec 済みで message の actor 参照は存在する
       { x: center.get(msg.to), y }
     ];
-    const width = Math.max(48, (msg.label ?? "").length * 7 + 16);
+    const width = labelWidth(msg.label ?? "");
     return {
       id: `msg${i + 1}`,
       from: msg.from,
@@ -92683,9 +92691,6 @@ var ICON_SIZE = 24;
 function embed(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
-function labelChipWidth(text) {
-  return Math.max(48, text.length * 7 + 16);
-}
 function sizedIcon(node, x, y) {
   const svg = iconSvg(node.kindKey).replace(
     "<svg ",
@@ -92720,7 +92725,7 @@ function extent(layout) {
   return { width, height };
 }
 function zoneSvg(zone) {
-  const chipWidth = labelChipWidth(zone.label);
+  const chipWidth = labelWidth(zone.label);
   return `<g class="zone"><rect class="zone-bg" x="${zone.x}" y="${zone.y}" width="${zone.width}" height="${zone.height}" rx="${THEME.radius}"/><g class="zone-chip" transform="translate(${zone.x + 12},${zone.y + 12})"><rect class="zone-chip-bg" width="${chipWidth}" height="22" rx="11"/><text class="zone-chip-text" x="${chipWidth / 2}" y="15" text-anchor="middle">${escapeXml(zone.label)}</text></g></g>`;
 }
 function lineSvg(line) {

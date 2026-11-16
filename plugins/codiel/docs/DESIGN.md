@@ -125,7 +125,9 @@
 [intent-sync]  承認済みの受け入れ基準の変更と、途中でユーザーが追記した原文を、派生文の
                セクションへ人の確認つきで反映する(原文のセクション自体は書き換えない)。
                `docs/intents/domains/` の持続層と、run が当たる種別の `docs/intents/design/` の設計資料を更新する
-               (当たる種別が無い run では更新しない)。どちらもオーケストレーターが書き、ゲート通過の直後にコミットする。intent の `status` は変えない
+               (当たる種別が無い run では更新しない)。`basicDesignDir`(既定 `docs/design`)の下にファイルがあれば、
+               設計資料は basic-design のスキルで basic-design 側の成果物を更新し、`docs/intents/design/` には書かない(1.1.1)。
+               どちらもオーケストレーターが書き、ゲート通過の直後にコミットする。intent の `status` は変えない
                (`done` を付けるのは finalize だけである)。
                ▶ Raguel: evaluate_design
    ▼
@@ -216,7 +218,7 @@
 ```
 docs/intents/<slug>.md      # 確定した intent 文書(原文の ASIS/TOBE・派生文・受け入れ基準。§6.3)[git で共有]
 docs/intents/domains/       # 持続層(領域ごとの意図的な制約・非ゴール)[git で共有]
-docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファイル。システムの今の姿)[git で共有]
+docs/intents/design/        # 持続層の設計資料(種別ごとに 1 ファイル。システムの今の姿。basic-design の設計資料があれば使わない)[git で共有]
 <runsDir>/<slug>/           # run の文書(既定 docs/codiel/runs)。try では分けず、新しい try は同じパスへ書き直す [git で共有]
   agenda.md                 # ディスカッション論点リスト(選択肢・トレードオフ・推奨案)
   discussion.md             # ユーザーとの合意記録(論点毎の決定・理由・却下案)
@@ -540,7 +542,7 @@ test-loop はテストを書く手順を持たない(決定 73。テストを書
 | `fixing-failures` | systematic-debugging | test-loop の NG 修正、fix-loop のレビュー所見修正を担う。根本原因特定→最小修正。**テストコード・`spec.md`・`cases.md` を触る修正の禁止**(所見がテストに向くときは `set-test-edit` の間だけ解除される)。「テストの方が間違っている」と思ったら ASK へ |
 | `reviewing-diffs` | requesting-code-review | design.md・テスト仕様書・intent の原文(`## ASIS`/`## TOBE`)と `## 受け入れ基準` を基準に diff をレビュー。severity 定義(critical/high/medium/low、原文の要望の未達と持続層の制約違反は high)、github では `gh pr review` / `gh pr comment` での投稿(local では投稿しない)。観点(infra を含む)ごとのレビューに共通のプロセス(観点別の焦点は `skills/reviewing-diffs/references/` に記載)。軽量な run では design.md の代わりに intent と dev-plan.md を入力にする |
 | `fixing-review-findings` | receiving-code-review | 指摘の技術的検証→妥当なら修正、不当なら根拠を添えて反論コメント。盲目的追従の禁止。対象は critical / high のみ(medium 以下は triage へ) |
-| `syncing-intents` | (独自) | intent-sync フェーズの運転規約。承認済みの受け入れ基準の変更と、途中でユーザーが追記した原文を、人の確認つきで派生文のセクションへ反映する。持続層(`docs/intents/domains/`)と設計資料(`docs/intents/design/`)の更新。本文の規律:「原文のセクションは書き換えない」「intent の `status` を `done` にしない(finalize だけが付ける)」 |
+| `syncing-intents` | (独自) | intent-sync フェーズの運転規約。承認済みの受け入れ基準の変更と、途中でユーザーが追記した原文を、人の確認つきで派生文のセクションへ反映する。持続層(`docs/intents/domains/`)と設計資料(`docs/intents/design/`。basic-design の設計資料があれば basic-design 側)の更新。本文の規律:「原文のセクションは書き換えない」「intent の `status` を `done` にしない(finalize だけが付ける)」 |
 | `filing-followup-issues` | (独自) | triage フェーズの運転規約。medium / low 指摘の一覧提示の形式、ユーザーへの確認の取り方。github: Issue 本文の書式(指摘内容・severity・関連ファイル・元 PR へのリンク・ラベル付け)、既存 Issue との重複確認、**ISSUE_TEMPLATE の活用**(`.github/ISSUE_TEMPLATE/` の form 形式 .yml / markdown 形式 .md や `.github/ISSUE_TEMPLATE.md` を探索し、指摘の種類に最も合うテンプレートを選択、テンプレートがない場合のみ既定書式で起票)。local: `status: proposed` の intent 草案として `docs/intents/` に書く。本文の規律:「ユーザーの指示なしに起票しない」 |
 
 ### スキル本文に置かない根拠(退避)
