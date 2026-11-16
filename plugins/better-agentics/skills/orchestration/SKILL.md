@@ -13,13 +13,13 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 
 | 理由 | 場面 |
 | --- | --- |
-| `doc-review` | 設計書・実装計画書を書き終えたとき |
+| `design-plan-review` | 設計書・実装計画書を書き終えたとき |
 | `split` | 作業の一部を委譲先に進めさせるとき |
 | `stuck` | 自分で原因を追っても解決しないとき |
 
 - 委譲先は自分で選ばず、`pick-delegate` が返した委譲先で起動する。
 - 並列化やコストのために分担する `split` では、委譲している間も自分の分担を進める。自分の分担が無く待つだけになる委譲は、長く機械的な作業(多数のファイルへの一括変更など)に限る。
-- `doc-review`・`stuck` と、文脈の保護のための探索の `split` は、待つだけになってもよい。
+- `design-plan-review`・`stuck` と、文脈の保護のための探索の `split` は、待つだけになってもよい。
 - `pick-delegate` が `ok: false` を返したら、理由を問わず委譲も作業の続行もせず、`error` の種別と `message` をユーザーへ報告して指示を待つ。
 - 「委譲先が断ったとき」のセクションが委譲しないと定める `no-candidates` は、指示を待たずにそのセクションに従う。
 - それ以外の `ok: false` も、外側の手順に従っている間は「外側の手順」のセクションに従う。
@@ -39,7 +39,7 @@ EOF
 | reason | 入力 |
 | --- | --- |
 | `review` | `{"reason": "review", "task": {"summary": string, "artifacts": string[]}}` |
-| `doc-review` | `{"reason": "doc-review", "task": {"summary": string, "artifacts": string[]}}` |
+| `design-plan-review` | `{"reason": "design-plan-review", "task": {"summary": string, "artifacts": string[]}}` |
 | `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string, "needsContext"?: boolean}]}`。`id` は配列内で一意にする。会話の文脈が無いと仕様を書き切れない作業にだけ `needsContext: true` を付ける。外側の手順に従って作業している間は付けない |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
 
@@ -51,7 +51,7 @@ EOF
 | `lang` | 会話の言語のコード(`ja`・`en` など)。省くと `en` |
 | `excludeRoles` | その呼び出しだけ候補から外す役割 ID の配列 |
 
-- `review`・`doc-review`・`stuck` の出力は `agents`、`split` の出力は `assignments` に委譲先を持つ。
+- `review`・`design-plan-review`・`stuck` の出力は `agents`、`split` の出力は `assignments` に委譲先を持つ。
 - `split` の `assignments` は、入力の `id` ごとに委譲先を 1 つ持つ。
 - 委譲先は `role`・`mode`・`agentType` を持ち、`mode` で Agent ツールへの渡し方が決まる。
 
@@ -75,11 +75,12 @@ EOF
 | `no-api-key` | Jev を呼ぶ必要があるのに `TYPESAFE_API_KEY` が無い |
 | `jev-failed` | Jev の呼び出しが失敗した、または応答の形が想定外だった |
 
-## doc-review
+## design-plan-review
 
 設計書・実装計画書を書き終えたら、ユーザーへ示す前にレビューを依頼する。
 
-- `pick-delegate` は、`reason` を `doc-review` にして呼ぶ。返った委譲先の全員に、同じ文書のレビューを依頼する。
+- `design-plan-review` は、設計・実装計画の文書ファイルのレビューにだけ使う。それ以外の文書とコードのレビューは委譲しない。
+- `pick-delegate` は、`reason` を `design-plan-review` にして呼ぶ。返った委譲先の全員に、同じ文書のレビューを依頼する。
 - レビュアーには、文書のパスと満たすべき要件だけを渡し、自分の結論は渡さない。
 - レビューが戻るまで、その文書を編集せず、ユーザーへも示さない。
 - 指摘の採否は自分で決める。
@@ -156,7 +157,7 @@ EOF
 - 候補が尽きたら、Jev にもユーザーにも判断を求めず、委譲しない。
   - 外側の手順の外では、自分で行う。
   - 外側の手順の中では、委譲先の指定を渡さず、外側の手順の既定の担い手に任せる。
-  - `doc-review` と `review` の候補が尽きたときは、自分で見直してよい。ただし必須のレビューを満たしたとはみなさず、委譲によるレビューを行えなかったことを報告に記録する。記録した後は、ユーザーへの提示・完了の報告・push に進んでよい。
+  - `design-plan-review` と `review` の候補が尽きたときは、自分で見直してよい。ただし必須のレビューを満たしたとはみなさず、委譲によるレビューを行えなかったことを報告に記録する。記録した後は、ユーザーへの提示・完了の報告・push に進んでよい。
 - `excludeRoles` を付けない呼び出しの `no-candidates` は、設定の誤りとして `ok: false` の扱いにする。ただし `stuck` の `no-candidates` は行き詰まりの役割を外す設定を表すので、委譲せずに自分で行う。
 
 ## 外側の手順
