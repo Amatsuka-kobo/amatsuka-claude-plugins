@@ -7,6 +7,7 @@ import {
   type ClaudeModel,
   type Effort,
   isClaudeModel,
+  ROLES,
   type Role,
   type RoleId,
   roleById,
@@ -21,7 +22,7 @@ export interface PickCommon {
 
 export type PickInput =
   | ({
-      reason: "review"
+      reason: "review" | "doc-review"
       task: { summary: string; artifacts: string[] }
     } & PickCommon)
   | ({
@@ -67,6 +68,7 @@ export type PickError =
 
 export type PickOutput =
   | { ok: true; reason: "review"; agents: Delegate[]; fallback?: true }
+  | { ok: true; reason: "doc-review"; agents: Delegate[] }
   | {
       ok: true
       reason: "split"
@@ -173,14 +175,18 @@ export function parseInput(raw: string): PickInput {
 }
 
 function parseTask(parsed: Record<string, unknown>):
-  | { reason: "review"; task: { summary: string; artifacts: string[] } }
+  | {
+      reason: "review" | "doc-review"
+      task: { summary: string; artifacts: string[] }
+    }
   | {
       reason: "split"
       tasks: { id: string; summary: string; needsContext: boolean }[]
     }
   | { reason: "stuck"; task: { summary: string } } {
   switch (parsed.reason) {
-    case "review": {
+    case "review":
+    case "doc-review": {
       const summary = summaryOf(parsed.task, "task")
       const artifacts = (parsed.task as Record<string, unknown>).artifacts
       if (
@@ -189,7 +195,7 @@ function parseTask(parsed: Record<string, unknown>):
       ) {
         invalid("task.artifacts must be an array of strings")
       }
-      return { reason: "review", task: { summary, artifacts } }
+      return { reason: parsed.reason, task: { summary, artifacts } }
     }
     case "split": {
       const tasks = parsed.tasks
@@ -220,8 +226,25 @@ function parseTask(parsed: Record<string, unknown>):
         task: { summary: summaryOf(parsed.task, "task") }
       }
     default:
-      invalid('reason must be "review", "split" or "stuck"')
+      invalid('reason must be "review", "doc-review", "split" or "stuck"')
   }
+}
+
+// 設計書・実装計画書のレビューは、Jev を呼ばずにこの 2 役割を返す。
+export const DOC_REVIEW_ROLES: readonly RoleId[] = [
+  "design-review",
+  "knowledge-elicitation"
+]
+
+// knowledge-elicitation は doc-review だけで返し、Jev に問う review の候補にしない。
+function rolesOf(reason: PickInput["reason"]): Role[] {
+  if (reason === "doc-review") {
+    return ROLES.filter((role) => DOC_REVIEW_ROLES.includes(role.id))
+  }
+  const roles = rolesFor(reason)
+  return reason === "review"
+    ? roles.filter((role) => role.id !== "knowledge-elicitation")
+    : roles
 }
 
 // 理由に当たる役割のうち、設定と excludeRoles で外していない役割を ROLES の順に候補にする。
@@ -233,7 +256,7 @@ export function candidatesFor(input: PickInput, deps: PickDeps): Candidate[] {
     )
   }
   const disabled = disabledRolesOf(deps.config)
-  const enabled = rolesFor(input.reason).filter(
+  const enabled = rolesOf(input.reason).filter(
     (role) => !disabled.includes(role.id)
   )
   if (enabled.length === 0) {
@@ -400,7 +423,7 @@ async function ask(
 }
 
 async function review(
-  input: Extract<PickInput, { reason: "review" }>,
+  input: Extract<PickInput, { reason: "review" | "doc-review" }>,
   deps: PickDeps
 ): Promise<PickOutput> {
   const candidates = candidatesFor(input, deps)
@@ -556,6 +579,16 @@ function stuck(
   }
 }
 
+function docReview(input: PickInput, deps: PickDeps): PickOutput {
+  return {
+    ok: true,
+    reason: "doc-review",
+    agents: candidatesFor(input, deps).map((candidate) =>
+      delegateOf(candidate, input.lang, deps)
+    )
+  }
+}
+
 export async function pickDelegate(
   raw: string,
   deps: PickDeps
@@ -565,6 +598,8 @@ export async function pickDelegate(
     switch (input.reason) {
       case "review":
         return await review(input, deps)
+      case "doc-review":
+        return docReview(input, deps)
       case "split":
         return await split(input, deps)
       case "stuck":

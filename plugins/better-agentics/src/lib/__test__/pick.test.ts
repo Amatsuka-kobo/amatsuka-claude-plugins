@@ -139,7 +139,6 @@ describe("入力", () => {
 
 const REVIEW_ROLES = [
   "design-review",
-  "knowledge-elicitation",
   "code-review",
   "complex-review",
   "adversarial-review"
@@ -183,11 +182,12 @@ function disabled(...roles: string[]): Partial<PickDeps> {
 }
 
 describe("候補", () => {
-  it("定義が 0 件の review では 5 役割すべてを候補にし、同梱の基準で問う", async () => {
-    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9, 0.9]))
+  it("定義が 0 件の review では knowledge-elicitation を除く 4 役割を候補にし、同梱の基準で問う", async () => {
+    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9]))
     await pickDelegate(REVIEW_INPUT, deps([], jev.ask))
     const questions = jev.requests[0]?.questions ?? {}
-    expect(Object.keys(questions)).toHaveLength(5)
+    expect(Object.keys(questions)).toHaveLength(4)
+    expect(JSON.stringify(questions)).not.toContain("knowledge-elicitation")
     REVIEW_ROLES.forEach((role, index) => {
       const text = JSON.stringify(questions[`candidate_${index}`])
       expect(text).toContain(`Reviewer: ${role}`)
@@ -196,14 +196,14 @@ describe("候補", () => {
   })
 
   it("定義のある役割は定義の基準を、無い役割は同梱の基準を使う", async () => {
-    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9, 0.9]))
+    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9]))
     await pickDelegate(
       REVIEW_INPUT,
       deps([def("my-reviewer", "code-review")], jev.ask)
     )
     const questions = jev.requests[0]?.questions ?? {}
-    expect(JSON.stringify(questions.candidate_2)).toContain("- my-reviewer")
-    expect(JSON.stringify(questions.candidate_2)).not.toContain("standard")
+    expect(JSON.stringify(questions.candidate_1)).toContain("- my-reviewer")
+    expect(JSON.stringify(questions.candidate_1)).not.toContain("standard")
     expect(JSON.stringify(questions.candidate_0)).toContain(
       "- standard design-review"
     )
@@ -228,7 +228,7 @@ describe("候補", () => {
   })
 
   it("設定と excludeRoles で外した役割は候補にならない", async () => {
-    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9]))
+    const jev = fakeJev(reviewAnswers([0.9, 0.9]))
     await pickDelegate(
       JSON.stringify({
         ...JSON.parse(REVIEW_INPUT),
@@ -237,7 +237,7 @@ describe("候補", () => {
       { ...deps([], jev.ask), ...disabled("complex-review") }
     )
     const text = JSON.stringify(jev.requests[0]?.questions)
-    expect(Object.keys(jev.requests[0]?.questions ?? {})).toHaveLength(3)
+    expect(Object.keys(jev.requests[0]?.questions ?? {})).toHaveLength(2)
     expect(text).not.toContain("Reviewer: complex-review")
     expect(text).not.toContain("Reviewer: adversarial-review")
   })
@@ -247,12 +247,7 @@ describe("候補", () => {
     expect(
       await pickDelegate(REVIEW_INPUT, {
         ...deps([def("code-reviewer", "code-review")], jev.ask, null),
-        ...disabled(
-          "design-review",
-          "knowledge-elicitation",
-          "complex-review",
-          "adversarial-review"
-        )
+        ...disabled("design-review", "complex-review", "adversarial-review")
       })
     ).toEqual({
       ok: true,
@@ -314,6 +309,53 @@ describe("候補", () => {
     expect(jev.requests).toHaveLength(0)
   })
 
+  it("doc-review は Jev を呼ばず design-review と knowledge-elicitation を返す", async () => {
+    const jev = fakeJev({})
+    const input = JSON.stringify({
+      reason: "doc-review",
+      task: { summary: "Review the design doc", artifacts: ["docs/x.md"] }
+    })
+    expect(
+      await pickDelegate(
+        input,
+        deps([def("docs-reviewer", "design-review")], jev.ask, null)
+      )
+    ).toEqual({
+      ok: true,
+      reason: "doc-review",
+      agents: [
+        { role: "design-review", mode: "custom", agentType: "docs-reviewer" },
+        {
+          role: "knowledge-elicitation",
+          mode: "standard",
+          agentType: "general-purpose",
+          model: "haiku",
+          effort: "low",
+          preamble: "standard:knowledge-elicitation:en"
+        }
+      ]
+    })
+    expect(
+      await pickDelegate(input, {
+        ...deps([], jev.ask, null),
+        ...disabled("design-review")
+      })
+    ).toMatchObject({
+      ok: true,
+      agents: [{ role: "knowledge-elicitation" }]
+    })
+    expect(
+      await pickDelegate(
+        JSON.stringify({
+          ...JSON.parse(input),
+          excludeRoles: ["design-review", "knowledge-elicitation"]
+        }),
+        deps([], jev.ask, null)
+      )
+    ).toMatchObject({ ok: false, error: "no-candidates" })
+    expect(jev.requests).toHaveLength(0)
+  })
+
   it.each([
     "review",
     "split",
@@ -346,7 +388,7 @@ describe("候補", () => {
       "better-agentics:setup"
     )
 
-    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9]))
+    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9]))
     const result = await pickDelegate(REVIEW_INPUT, {
       ...deps(twice, jev.ask),
       ...disabled("code-review")
@@ -367,7 +409,7 @@ describe("候補", () => {
   })
 
   it("理由と関係の無い役割を excludeRoles に入れても結果は変わらない", async () => {
-    const answers = reviewAnswers([0.9, 0.1, 0.8, 0.1, 0.1])
+    const answers = reviewAnswers([0.9, 0.8, 0.1, 0.1])
     const plain = await pickDelegate(
       REVIEW_INPUT,
       deps([], fakeJev(answers).ask)
@@ -387,7 +429,7 @@ describe("候補", () => {
       REVIEW_INPUT,
       deps(
         [def("old", "final-review")],
-        fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9, 0.9])).ask
+        fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9])).ask
       )
     )
     expect(result.ok).toBe(true)
@@ -397,7 +439,7 @@ describe("候補", () => {
 
 describe("出力", () => {
   it("review は 0.5 以上の候補を走査順に、定義の有無でモードを分けて返す", async () => {
-    const jev = fakeJev(reviewAnswers([0.91, 0.2, 0.73, 0.2, 0.2]))
+    const jev = fakeJev(reviewAnswers([0.91, 0.73, 0.2, 0.2]))
     expect(
       await pickDelegate(
         REVIEW_INPUT,
@@ -438,18 +480,18 @@ describe("出力", () => {
   })
 
   it("全員が 0.5 未満なら確率が最も高い 1 人に fallback を付けて返す", async () => {
-    const jev = fakeJev(reviewAnswers([0.3, 0.45, 0.1, 0.1, 0.1]))
+    const jev = fakeJev(reviewAnswers([0.3, 0.45, 0.1, 0.1]))
     expect(await pickDelegate(REVIEW_INPUT, deps([], jev.ask))).toEqual({
       ok: true,
       reason: "review",
       agents: [
         {
-          role: "knowledge-elicitation",
+          role: "code-review",
           mode: "standard",
           agentType: "general-purpose",
-          model: "haiku",
-          effort: "low",
-          preamble: "standard:knowledge-elicitation:en",
+          model: "sonnet",
+          effort: "high",
+          preamble: "standard:code-review:en",
           p: 0.45
         }
       ],
@@ -458,14 +500,11 @@ describe("出力", () => {
   })
 
   it("基準は質問の側にだけ置き、state には作業内容だけを入れる", async () => {
-    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9, 0.9]))
+    const jev = fakeJev(reviewAnswers([0.9, 0.9, 0.9, 0.9]))
     await pickDelegate(
       REVIEW_INPUT,
       deps(
-        [
-          def("docs-reviewer", "design-review"),
-          def("k", "knowledge-elicitation", "")
-        ],
+        [def("docs-reviewer", "design-review"), def("c", "code-review", "")],
         jev.ask
       )
     )

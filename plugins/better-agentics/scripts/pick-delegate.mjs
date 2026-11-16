@@ -1287,13 +1287,14 @@ function parseInput(raw) {
 __name(parseInput, "parseInput");
 function parseTask(parsed) {
   switch (parsed.reason) {
-    case "review": {
+    case "review":
+    case "doc-review": {
       const summary = summaryOf(parsed.task, "task");
       const artifacts = parsed.task.artifacts;
       if (!Array.isArray(artifacts) || !artifacts.every((item) => typeof item === "string")) {
         invalid("task.artifacts must be an array of strings");
       }
-      return { reason: "review", task: { summary, artifacts } };
+      return { reason: parsed.reason, task: { summary, artifacts } };
     }
     case "split": {
       const tasks = parsed.tasks;
@@ -1324,10 +1325,22 @@ function parseTask(parsed) {
         task: { summary: summaryOf(parsed.task, "task") }
       };
     default:
-      invalid('reason must be "review", "split" or "stuck"');
+      invalid('reason must be "review", "doc-review", "split" or "stuck"');
   }
 }
 __name(parseTask, "parseTask");
+var DOC_REVIEW_ROLES = [
+  "design-review",
+  "knowledge-elicitation"
+];
+function rolesOf(reason) {
+  if (reason === "doc-review") {
+    return ROLES.filter((role) => DOC_REVIEW_ROLES.includes(role.id));
+  }
+  const roles = rolesFor(reason);
+  return reason === "review" ? roles.filter((role) => role.id !== "knowledge-elicitation") : roles;
+}
+__name(rolesOf, "rolesOf");
 function candidatesFor(input, deps) {
   if (deps.config.kind === "invalid") {
     throw new PickFailure(
@@ -1336,7 +1349,7 @@ function candidatesFor(input, deps) {
     );
   }
   const disabled = disabledRolesOf(deps.config);
-  const enabled = rolesFor(input.reason).filter(
+  const enabled = rolesOf(input.reason).filter(
     (role) => !disabled.includes(role.id)
   );
   if (enabled.length === 0) {
@@ -1609,12 +1622,24 @@ function stuck(input, deps) {
   };
 }
 __name(stuck, "stuck");
+function docReview(input, deps) {
+  return {
+    ok: true,
+    reason: "doc-review",
+    agents: candidatesFor(input, deps).map(
+      (candidate) => delegateOf(candidate, input.lang, deps)
+    )
+  };
+}
+__name(docReview, "docReview");
 async function pickDelegate(raw, deps) {
   try {
     const input = parseInput(raw);
     switch (input.reason) {
       case "review":
         return await review(input, deps);
+      case "doc-review":
+        return docReview(input, deps);
       case "split":
         return await split(input, deps);
       case "stuck":
