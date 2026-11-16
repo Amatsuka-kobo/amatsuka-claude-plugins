@@ -19,6 +19,6 @@
   {"id": "riyuu-kouchi", "since": "2026-11-13 判断を求める報告・表記", "item": "理由を後置した文の割合", "metric": "share", "patterns": ["riyuu-kouchi"], "basis": "改修前の 0.8% の半分", "op": "以下", "value": 0.4},
   {"id": "toi-de-owaru", "since": "2026-11-13 判断を求める報告・表記", "item": "報告の題材で問いを含む出力", "metric": "in_range", "patterns": ["toi-de-owaru"], "prompts": ["report-i18n", "report-manual-shots", "report-customer-migration"], "min": 1, "basis": "規律は決めてもらう事柄を問いで終えると定める。改修前は 18 本のうち 6 本", "op": "以上", "value": 80},
   {"id": "tasu", "since": "2026-11-13 判断を求める報告・表記", "item": "「足す」を使った出力", "metric": "in_range", "patterns": ["tasu"], "min": 1, "basis": "改修前は 138 本のうち 27 本", "op": "以下", "value": 10},
-  {"id": "jargon-bare", "since": "2026-11-16 資料の専門用語", "item": "資料の用語を裸で使わない出力", "metric": "in_range", "patterns": ["jargon-bare"], "prompts": ["relay-insurance", "relay-accounting", "relay-sla"], "max": 0},
-  {"id": "expert-term", "since": "2026-11-16 資料の専門用語", "item": "専門家への相談文で原文の用語を使った出力", "metric": "in_range", "patterns": ["expert-term"], "prompts": ["relay-expert-sharoushi"], "min": 1}
+  {"id": "jargon-bare", "since": "2026-11-16 資料の専門用語", "item": "資料の用語を裸で使わない出力", "metric": "in_range", "patterns": ["jargon-bare"], "prompts": ["relay-insurance", "relay-accounting", "relay-sla"], "max": 0, "basis": "改修前は 18 本のうち 0 本。ユーザーが 30% と決めた", "op": "以上", "value": 30, "note": "型は初出で説明を添えた語の 2 回目以降も数えるため、値は実際より低く出る。改修後(cc83479c)は 5 本で届かないが、このままとユーザーが決めた"},
+  {"id": "expert-term", "since": "2026-11-16 資料の専門用語", "item": "専門家への相談文で原文の用語を使った出力", "metric": "in_range", "patterns": ["expert-term"], "prompts": ["relay-expert-sharoushi"], "min": 1, "basis": "改修前後とも 6 本のうち 6 本。1 本の揺れは許す", "op": "以上", "value": 80}
 ]
