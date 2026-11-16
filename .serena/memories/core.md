@@ -123,7 +123,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   (`@typesafe-ai/sdk` 0.6.0, own client, no jevriel import) to choose among every role of the reason
   that is not disabled in `.claude/better-agentics/config.json` (`disabledRoles`, written only by the
   setup CLI `--write-config`) or by the call's `excludeRoles`. `review` never offers
-  knowledge-elicitation to Jev; reason `doc-review` (design/plan document review) skips Jev and returns
+  knowledge-elicitation to Jev; reason `design-plan-review` (design/plan document files only) skips Jev and returns
   design-review + knowledge-elicitation. Choice keys are role IDs. A role with a
   `.claude/agents/*.md` carrying `better-agentics-role` uses that body's `## When to invoke` and
   returns `mode: custom` (`agentType` = definition name); a role without one uses the bundled en
