@@ -309,10 +309,10 @@ describe("候補", () => {
     expect(jev.requests).toHaveLength(0)
   })
 
-  it("doc-review は Jev を呼ばず design-review と knowledge-elicitation を返す", async () => {
+  it("design-plan-review は Jev を呼ばず design-review と knowledge-elicitation を返す", async () => {
     const jev = fakeJev({})
     const input = JSON.stringify({
-      reason: "doc-review",
+      reason: "design-plan-review",
       task: { summary: "Review the design doc", artifacts: ["docs/x.md"] }
     })
     expect(
@@ -322,7 +322,7 @@ describe("候補", () => {
       )
     ).toEqual({
       ok: true,
-      reason: "doc-review",
+      reason: "design-plan-review",
       agents: [
         { role: "design-review", mode: "custom", agentType: "docs-reviewer" },
         {

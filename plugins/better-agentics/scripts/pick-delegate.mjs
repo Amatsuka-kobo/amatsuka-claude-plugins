@@ -1288,7 +1288,7 @@ __name(parseInput, "parseInput");
 function parseTask(parsed) {
   switch (parsed.reason) {
     case "review":
-    case "doc-review": {
+    case "design-plan-review": {
       const summary = summaryOf(parsed.task, "task");
       const artifacts = parsed.task.artifacts;
       if (!Array.isArray(artifacts) || !artifacts.every((item) => typeof item === "string")) {
@@ -1325,17 +1325,19 @@ function parseTask(parsed) {
         task: { summary: summaryOf(parsed.task, "task") }
       };
     default:
-      invalid('reason must be "review", "doc-review", "split" or "stuck"');
+      invalid(
+        'reason must be "review", "design-plan-review", "split" or "stuck"'
+      );
   }
 }
 __name(parseTask, "parseTask");
-var DOC_REVIEW_ROLES = [
+var DESIGN_PLAN_REVIEW_ROLES = [
   "design-review",
   "knowledge-elicitation"
 ];
 function rolesOf(reason) {
-  if (reason === "doc-review") {
-    return ROLES.filter((role) => DOC_REVIEW_ROLES.includes(role.id));
+  if (reason === "design-plan-review") {
+    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id));
   }
   const roles = rolesFor(reason);
   return reason === "review" ? roles.filter((role) => role.id !== "knowledge-elicitation") : roles;
@@ -1622,24 +1624,24 @@ function stuck(input, deps) {
   };
 }
 __name(stuck, "stuck");
-function docReview(input, deps) {
+function designPlanReview(input, deps) {
   return {
     ok: true,
-    reason: "doc-review",
+    reason: "design-plan-review",
     agents: candidatesFor(input, deps).map(
       (candidate) => delegateOf(candidate, input.lang, deps)
     )
   };
 }
-__name(docReview, "docReview");
+__name(designPlanReview, "designPlanReview");
 async function pickDelegate(raw, deps) {
   try {
     const input = parseInput(raw);
     switch (input.reason) {
       case "review":
         return await review(input, deps);
-      case "doc-review":
-        return docReview(input, deps);
+      case "design-plan-review":
+        return designPlanReview(input, deps);
       case "split":
         return await split(input, deps);
       case "stuck":
