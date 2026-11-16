@@ -5,7 +5,7 @@ model: sonnet
 effort: high
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch, mcp__plugin_context7_context7
 better-agentics-role: realtime-research
-better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjllNGY1MzBhNDAzNDg0NTQiLCJwcmVhbWJsZSI6ImNkYmQ4Njc5ZGMzMmZmNDMiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6IjViYzI2NjZiMDFhYWRmNTUiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiI5YzE3NWNjMzE5NGU0NmQ3IiwiIyMg5L2c5qWt5omL6aCGIjoiNjc4ZjNjNDFlNGU4OWMwNSIsIiMjIOWItue0hCI6ImUxZTA3MzU4MDU0NzUyOGYiLCIjIyBPdXRwdXQgRm9ybWF0IjoiMGY2M2M2OGQzOTUwOTY0ZSJ9fQ
+better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjllNGY1MzBhNDAzNDg0NTQiLCJwcmVhbWJsZSI6ImQzYzRhM2MzYzU3MTM1NjYiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6IjViYzI2NjZiMDFhYWRmNTUiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiI5YzE3NWNjMzE5NGU0NmQ3IiwiIyMg5L2c5qWt5omL6aCGIjoiNjc4ZjNjNDFlNGU4OWMwNSIsIiMjIOWItue0hCI6ImUxZTA3MzU4MDU0NzUyOGYiLCIjIyBPdXRwdXQgRm9ybWF0IjoiZWFhZWFiMjIyYjlkOWRhNSJ9fQ
 color: blue
 agent-policy-role: realtime-research
 agent-policy-vendor: claude
@@ -13,7 +13,7 @@ agent-policy-description-hash: 1b46cb084a1b2978
 agent-policy-preamble-hash: a533de54605c02e7
 ---
 
-あなたは realtime-researcher。担う役割はリアルタイム情報調査である。
+あなたは realtime-researcher。担う役割はリアルタイム情報調査である。役割 ID: realtime-research
 
 ## When to invoke
 
@@ -42,3 +42,4 @@ agent-policy-preamble-hash: a533de54605c02e7
 - 情報源 URL 付きの要約
 - 各情報の鮮度(いつ時点の情報か)
 - 未検証情報と検証済み情報の区別
+- 該当する情報が無いときは「該当なし」と書き、調べた情報源を添える。

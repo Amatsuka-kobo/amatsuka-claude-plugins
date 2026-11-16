@@ -171,6 +171,18 @@ function rolesFor(reason) {
   return ROLES.filter((role) => role.reason === reason);
 }
 __name(rolesFor, "rolesFor");
+var DESIGN_PLAN_REVIEW_ROLES = [
+  "design-review",
+  "knowledge-elicitation"
+];
+function candidateRolesFor(reason) {
+  if (reason === "design-plan-review") {
+    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id));
+  }
+  const roles = rolesFor(reason);
+  return reason === "review" ? roles.filter((role) => role.id !== "knowledge-elicitation") : roles;
+}
+__name(candidateRolesFor, "candidateRolesFor");
 function isClaudeModel(value) {
   return CLAUDE_MODELS.includes(value);
 }
@@ -1287,13 +1299,14 @@ function parseInput(raw) {
 __name(parseInput, "parseInput");
 function parseTask(parsed) {
   switch (parsed.reason) {
-    case "review": {
+    case "review":
+    case "design-plan-review": {
       const summary = summaryOf(parsed.task, "task");
       const artifacts = parsed.task.artifacts;
       if (!Array.isArray(artifacts) || !artifacts.every((item) => typeof item === "string")) {
         invalid("task.artifacts must be an array of strings");
       }
-      return { reason: "review", task: { summary, artifacts } };
+      return { reason: parsed.reason, task: { summary, artifacts } };
     }
     case "split": {
       const tasks = parsed.tasks;
@@ -1324,7 +1337,9 @@ function parseTask(parsed) {
         task: { summary: summaryOf(parsed.task, "task") }
       };
     default:
-      invalid('reason must be "review", "split" or "stuck"');
+      invalid(
+        'reason must be "review", "design-plan-review", "split" or "stuck"'
+      );
   }
 }
 __name(parseTask, "parseTask");
@@ -1336,7 +1351,7 @@ function candidatesFor(input, deps) {
     );
   }
   const disabled = disabledRolesOf(deps.config);
-  const enabled = rolesFor(input.reason).filter(
+  const enabled = candidateRolesFor(input.reason).filter(
     (role) => !disabled.includes(role.id)
   );
   if (enabled.length === 0) {
@@ -1609,12 +1624,24 @@ function stuck(input, deps) {
   };
 }
 __name(stuck, "stuck");
+function designPlanReview(input, deps) {
+  return {
+    ok: true,
+    reason: "design-plan-review",
+    agents: candidatesFor(input, deps).map(
+      (candidate) => delegateOf(candidate, input.lang, deps)
+    )
+  };
+}
+__name(designPlanReview, "designPlanReview");
 async function pickDelegate(raw, deps) {
   try {
     const input = parseInput(raw);
     switch (input.reason) {
       case "review":
         return await review(input, deps);
+      case "design-plan-review":
+        return designPlanReview(input, deps);
       case "split":
         return await split(input, deps);
       case "stuck":

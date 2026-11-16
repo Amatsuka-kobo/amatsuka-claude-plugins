@@ -6,7 +6,7 @@ effort: high
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, mcp__claude_ai_Claude_Docs, mcp__claude_ai_Google_Drive, mcp__plugin_context7_context7, mcp__plugin_jevriel_jevriel, mcp__serena
 disallowedTools: mcp__claude_ai_Claude_Docs__batch, mcp__claude_ai_Claude_Docs__update, mcp__claude_ai_Claude_Docs__create, mcp__claude_ai_Claude_Docs__delete, mcp__claude_ai_Claude_Docs__export, mcp__claude_ai_Google_Drive__copy_file, mcp__claude_ai_Google_Drive__create_file, mcp__claude_ai_Google_Drive__download_file_content, mcp__claude_ai_Google_Drive__share_file, mcp__claude_ai_Google_Drive__trash_file, mcp__claude_ai_Google_Drive__update_file
 better-agentics-role: general
-better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjU2M2ViMjJhNzg0MmVjNTkiLCJwcmVhbWJsZSI6ImJiZmFmYjhiYjZkYWYzYTkiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6IjY3ZmY1YzM1OGY3NmIyZWQiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiJjMTAxNmM4ZjIzNzFhNjQ5IiwiIyMg5L2c5qWt5omL6aCGIjoiNGJkMTU4ZGZkZGQwZTIwNCIsIiMjIOWItue0hCI6IjYyNTE5NmRmYmQ5M2FkNTMiLCIjIyBPdXRwdXQgRm9ybWF0IjoiOTJiMzdhNjMwNjYyOTU1OCJ9fQ
+better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjU2M2ViMjJhNzg0MmVjNTkiLCJwcmVhbWJsZSI6IjcxMzliZmFjN2ZkNTRjYjYiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6ImI1MzZiODczMDliMGIzODgiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiJjMTAxNmM4ZjIzNzFhNjQ5IiwiIyMg5L2c5qWt5omL6aCGIjoiNGJkMTU4ZGZkZGQwZTIwNCIsIiMjIOWItue0hCI6IjYyNTE5NmRmYmQ5M2FkNTMiLCIjIyBPdXRwdXQgRm9ybWF0IjoiZmMyMmFhZTNlY2ZjNzFmZSJ9fQ
 color: blue
 agent-policy-role: general
 agent-policy-vendor: claude
@@ -14,13 +14,14 @@ agent-policy-description-hash: 5b748ee86aeced49
 agent-policy-preamble-hash: 7204be7bbf5789b2
 ---
 
-あなたは general-worker。担う役割はその他のタスクである。
+あなたは general-worker。担う役割はその他のタスクである。役割 ID: general
 
 ## When to invoke
 
 - Use for work that is not implementation, review, exploration, or research and needs no specialized expertise.
 - Use to write documents within the requested scope.
 - Use for routine repository maintenance.
+- Use to translate documents or other prose, including many files at once.
 
 ## Core Responsibilities
 
@@ -42,3 +43,4 @@ agent-policy-preamble-hash: 7204be7bbf5789b2
 
 - 実施した変更のファイルパス一覧と各変更の要旨
 - 未完了・要判断の事項
+- 変更が無いときは「変更なし」と書き、その理由を添える。

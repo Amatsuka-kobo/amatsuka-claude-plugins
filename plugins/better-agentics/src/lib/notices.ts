@@ -3,7 +3,7 @@
 import type { Definition } from "./agents"
 import { CONFIG_FILE, type ConfigState, disabledRolesOf } from "./config"
 import { CACHE_TTL_ROLES } from "./extra-keys"
-import { ROLES, roleById, rolesFor } from "./roles"
+import { candidateRolesFor, ROLES, roleById } from "./roles"
 
 const CACHE_LOST =
   "レビューの定義に書いた 1 時間のプロンプトキャッシュが効かず、5 分になる。"
@@ -94,10 +94,14 @@ export function setupNotices(input: {
   }
 
   const stopped = [
-    { reason: "review" as const, what: "レビュー" },
+    {
+      reason: "design-plan-review" as const,
+      what: "設計書・実装計画書のレビュー"
+    },
+    { reason: "review" as const, what: "外側の手順のレビュー" },
     { reason: "split" as const, what: "作業の分担" }
   ].filter(({ reason }) =>
-    rolesFor(reason).every((role) => disabled.includes(role.id))
+    candidateRolesFor(reason).every((role) => disabled.includes(role.id))
   )
   for (const { reason, what } of stopped) {
     notices.push(

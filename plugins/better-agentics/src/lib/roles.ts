@@ -161,6 +161,26 @@ export function rolesFor(reason: Reason): Role[] {
   return ROLES.filter((role) => role.reason === reason)
 }
 
+/** pick-delegate の reason */
+export type PickReason = Reason | "design-plan-review"
+
+// 設計書・実装計画書のレビューは、Jev を呼ばずにこの 2 役割を返す。
+export const DESIGN_PLAN_REVIEW_ROLES: readonly RoleId[] = [
+  "design-review",
+  "knowledge-elicitation"
+]
+
+// pick-delegate が reason ごとに候補にする役割。knowledge-elicitation は design-plan-review だけで返し、Jev に問う review の候補にしない。
+export function candidateRolesFor(reason: PickReason): Role[] {
+  if (reason === "design-plan-review") {
+    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id))
+  }
+  const roles = rolesFor(reason)
+  return reason === "review"
+    ? roles.filter((role) => role.id !== "knowledge-elicitation")
+    : roles
+}
+
 export function isClaudeModel(value: string): value is ClaudeModel {
   return (CLAUDE_MODELS as readonly string[]).includes(value)
 }

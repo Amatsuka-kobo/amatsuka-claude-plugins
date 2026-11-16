@@ -5,12 +5,12 @@ import { assertLang } from "./fragments"
 import type { JevAsk } from "./jev"
 import {
   type ClaudeModel,
+  candidateRolesFor,
   type Effort,
   isClaudeModel,
   type Role,
   type RoleId,
-  roleById,
-  rolesFor
+  roleById
 } from "./roles"
 
 export interface PickCommon {
@@ -22,6 +22,10 @@ export interface PickCommon {
 export type PickInput =
   | ({
       reason: "review"
+      task: { summary: string; artifacts: string[] }
+    } & PickCommon)
+  | ({
+      reason: "design-plan-review"
       task: { summary: string; artifacts: string[] }
     } & PickCommon)
   | ({
@@ -67,6 +71,7 @@ export type PickError =
 
 export type PickOutput =
   | { ok: true; reason: "review"; agents: Delegate[]; fallback?: true }
+  | { ok: true; reason: "design-plan-review"; agents: Delegate[] }
   | {
       ok: true
       reason: "split"
@@ -173,14 +178,18 @@ export function parseInput(raw: string): PickInput {
 }
 
 function parseTask(parsed: Record<string, unknown>):
-  | { reason: "review"; task: { summary: string; artifacts: string[] } }
+  | {
+      reason: "review" | "design-plan-review"
+      task: { summary: string; artifacts: string[] }
+    }
   | {
       reason: "split"
       tasks: { id: string; summary: string; needsContext: boolean }[]
     }
   | { reason: "stuck"; task: { summary: string } } {
   switch (parsed.reason) {
-    case "review": {
+    case "review":
+    case "design-plan-review": {
       const summary = summaryOf(parsed.task, "task")
       const artifacts = (parsed.task as Record<string, unknown>).artifacts
       if (
@@ -189,7 +198,7 @@ function parseTask(parsed: Record<string, unknown>):
       ) {
         invalid("task.artifacts must be an array of strings")
       }
-      return { reason: "review", task: { summary, artifacts } }
+      return { reason: parsed.reason, task: { summary, artifacts } }
     }
     case "split": {
       const tasks = parsed.tasks
@@ -220,7 +229,9 @@ function parseTask(parsed: Record<string, unknown>):
         task: { summary: summaryOf(parsed.task, "task") }
       }
     default:
-      invalid('reason must be "review", "split" or "stuck"')
+      invalid(
+        'reason must be "review", "design-plan-review", "split" or "stuck"'
+      )
   }
 }
 
@@ -233,7 +244,7 @@ export function candidatesFor(input: PickInput, deps: PickDeps): Candidate[] {
     )
   }
   const disabled = disabledRolesOf(deps.config)
-  const enabled = rolesFor(input.reason).filter(
+  const enabled = candidateRolesFor(input.reason).filter(
     (role) => !disabled.includes(role.id)
   )
   if (enabled.length === 0) {
@@ -556,6 +567,16 @@ function stuck(
   }
 }
 
+function designPlanReview(input: PickInput, deps: PickDeps): PickOutput {
+  return {
+    ok: true,
+    reason: "design-plan-review",
+    agents: candidatesFor(input, deps).map((candidate) =>
+      delegateOf(candidate, input.lang, deps)
+    )
+  }
+}
+
 export async function pickDelegate(
   raw: string,
   deps: PickDeps
@@ -565,6 +586,8 @@ export async function pickDelegate(
     switch (input.reason) {
       case "review":
         return await review(input, deps)
+      case "design-plan-review":
+        return designPlanReview(input, deps)
       case "split":
         return await split(input, deps)
       case "stuck":

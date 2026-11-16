@@ -1,7 +1,7 @@
 ---
 id: knowledge-elicitation
 label: Implicit Knowledge and Understanding Review
-description: articulate understanding of a design document or implementation plan written before implementation and identify implicit knowledge and inconsistencies
+description: articulate understanding of a design or implementation plan document file and identify implicit knowledge and inconsistencies
 default-name: knowledge-elicitor
 tools: Read, Grep, Glob
 kind: readonly
@@ -9,7 +9,7 @@ kind: readonly
 
 ## When to invoke
 
-- Use for a design document or an implementation plan written before implementation, to restate it and surface implicit knowledge, contradictions, and gaps.
+- Use for a design or implementation plan document file, to restate it and surface implicit knowledge, contradictions, and gaps.
 - Do not use for other documents, instructions (CLAUDE.md, SKILL.md, rules, agent definitions), or code.
 - Does not judge whether the content is correct.
 
