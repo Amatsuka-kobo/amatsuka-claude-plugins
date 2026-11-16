@@ -32,13 +32,13 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" --dir "$PWD" <<'EOF'
-{"reason": "review", "task": {"summary": "Review the design doc for the cache layer", "artifacts": ["docs/design/cache.md"]}, "parentModel": "opus", "lang": "ja"}
+{"reason": "design-plan-review", "task": {"summary": "Review the design doc for the cache layer", "artifacts": ["docs/design/cache.md"]}, "parentModel": "opus", "lang": "ja"}
 EOF
 ```
 
 | reason | 入力 |
 | --- | --- |
-| `review` | `{"reason": "review", "task": {"summary": string, "artifacts": string[]}}` |
+| `review` | `{"reason": "review", "task": {"summary": string, "artifacts": string[]}}`。外側の手順のレビューにだけ使う |
 | `design-plan-review` | `{"reason": "design-plan-review", "task": {"summary": string, "artifacts": string[]}}` |
 | `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string, "needsContext"?: boolean}]}`。`id` は配列内で一意にする。会話の文脈が無いと仕様を書き切れない作業にだけ `needsContext: true` を付ける。外側の手順に従って作業している間は付けない |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
