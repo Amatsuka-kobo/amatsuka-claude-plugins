@@ -5,13 +5,12 @@ import { assertLang } from "./fragments"
 import type { JevAsk } from "./jev"
 import {
   type ClaudeModel,
+  candidateRolesFor,
   type Effort,
   isClaudeModel,
-  ROLES,
   type Role,
   type RoleId,
-  roleById,
-  rolesFor
+  roleById
 } from "./roles"
 
 export interface PickCommon {
@@ -22,7 +21,11 @@ export interface PickCommon {
 
 export type PickInput =
   | ({
-      reason: "review" | "design-plan-review"
+      reason: "review"
+      task: { summary: string; artifacts: string[] }
+    } & PickCommon)
+  | ({
+      reason: "design-plan-review"
       task: { summary: string; artifacts: string[] }
     } & PickCommon)
   | ({
@@ -232,23 +235,6 @@ function parseTask(parsed: Record<string, unknown>):
   }
 }
 
-// 設計書・実装計画書のレビューは、Jev を呼ばずにこの 2 役割を返す。
-export const DESIGN_PLAN_REVIEW_ROLES: readonly RoleId[] = [
-  "design-review",
-  "knowledge-elicitation"
-]
-
-// knowledge-elicitation は design-plan-review だけで返し、Jev に問う review の候補にしない。
-function rolesOf(reason: PickInput["reason"]): Role[] {
-  if (reason === "design-plan-review") {
-    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id))
-  }
-  const roles = rolesFor(reason)
-  return reason === "review"
-    ? roles.filter((role) => role.id !== "knowledge-elicitation")
-    : roles
-}
-
 // 理由に当たる役割のうち、設定と excludeRoles で外していない役割を ROLES の順に候補にする。
 export function candidatesFor(input: PickInput, deps: PickDeps): Candidate[] {
   if (deps.config.kind === "invalid") {
@@ -258,7 +244,7 @@ export function candidatesFor(input: PickInput, deps: PickDeps): Candidate[] {
     )
   }
   const disabled = disabledRolesOf(deps.config)
-  const enabled = rolesOf(input.reason).filter(
+  const enabled = candidateRolesFor(input.reason).filter(
     (role) => !disabled.includes(role.id)
   )
   if (enabled.length === 0) {
@@ -425,7 +411,7 @@ async function ask(
 }
 
 async function review(
-  input: Extract<PickInput, { reason: "review" | "design-plan-review" }>,
+  input: Extract<PickInput, { reason: "review" }>,
   deps: PickDeps
 ): Promise<PickOutput> {
   const candidates = candidatesFor(input, deps)

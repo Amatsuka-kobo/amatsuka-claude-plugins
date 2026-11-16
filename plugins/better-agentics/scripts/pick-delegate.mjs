@@ -171,6 +171,18 @@ function rolesFor(reason) {
   return ROLES.filter((role) => role.reason === reason);
 }
 __name(rolesFor, "rolesFor");
+var DESIGN_PLAN_REVIEW_ROLES = [
+  "design-review",
+  "knowledge-elicitation"
+];
+function candidateRolesFor(reason) {
+  if (reason === "design-plan-review") {
+    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id));
+  }
+  const roles = rolesFor(reason);
+  return reason === "review" ? roles.filter((role) => role.id !== "knowledge-elicitation") : roles;
+}
+__name(candidateRolesFor, "candidateRolesFor");
 function isClaudeModel(value) {
   return CLAUDE_MODELS.includes(value);
 }
@@ -1331,18 +1343,6 @@ function parseTask(parsed) {
   }
 }
 __name(parseTask, "parseTask");
-var DESIGN_PLAN_REVIEW_ROLES = [
-  "design-review",
-  "knowledge-elicitation"
-];
-function rolesOf(reason) {
-  if (reason === "design-plan-review") {
-    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id));
-  }
-  const roles = rolesFor(reason);
-  return reason === "review" ? roles.filter((role) => role.id !== "knowledge-elicitation") : roles;
-}
-__name(rolesOf, "rolesOf");
 function candidatesFor(input, deps) {
   if (deps.config.kind === "invalid") {
     throw new PickFailure(
@@ -1351,7 +1351,7 @@ function candidatesFor(input, deps) {
     );
   }
   const disabled = disabledRolesOf(deps.config);
-  const enabled = rolesOf(input.reason).filter(
+  const enabled = candidateRolesFor(input.reason).filter(
     (role) => !disabled.includes(role.id)
   );
   if (enabled.length === 0) {

@@ -143,6 +143,18 @@ function rolesFor(reason) {
   return ROLES.filter((role) => role.reason === reason);
 }
 __name(rolesFor, "rolesFor");
+var DESIGN_PLAN_REVIEW_ROLES = [
+  "design-review",
+  "knowledge-elicitation"
+];
+function candidateRolesFor(reason) {
+  if (reason === "design-plan-review") {
+    return ROLES.filter((role) => DESIGN_PLAN_REVIEW_ROLES.includes(role.id));
+  }
+  const roles = rolesFor(reason);
+  return reason === "review" ? roles.filter((role) => role.id !== "knowledge-elicitation") : roles;
+}
+__name(candidateRolesFor, "candidateRolesFor");
 
 // src/lib/compose.ts
 var ROLE_KEY = "better-agentics-role";
@@ -424,10 +436,14 @@ function setupNotices(input) {
     );
   }
   const stopped = [
-    { reason: "review", what: "\u30EC\u30D3\u30E5\u30FC" },
+    {
+      reason: "design-plan-review",
+      what: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC"
+    },
+    { reason: "review", what: "\u5916\u5074\u306E\u624B\u9806\u306E\u30EC\u30D3\u30E5\u30FC" },
     { reason: "split", what: "\u4F5C\u696D\u306E\u5206\u62C5" }
   ].filter(
-    ({ reason }) => rolesFor(reason).every((role) => disabled.includes(role.id))
+    ({ reason }) => candidateRolesFor(reason).every((role) => disabled.includes(role.id))
   );
   for (const { reason, what } of stopped) {
     notices.push(

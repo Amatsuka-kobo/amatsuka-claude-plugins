@@ -353,6 +353,25 @@ describe("候補", () => {
         deps([], jev.ask, null)
       )
     ).toMatchObject({ ok: false, error: "no-candidates" })
+    expect(
+      await pickDelegate(
+        input,
+        deps(
+          [
+            def("a", "knowledge-elicitation"),
+            def("b", "knowledge-elicitation")
+          ],
+          jev.ask,
+          null
+        )
+      )
+    ).toMatchObject({ ok: false, error: "duplicate-role" })
+    expect(
+      await pickDelegate(input, {
+        ...deps([], jev.ask, null),
+        config: { kind: "invalid", message: "broken", raw: "{" }
+      })
+    ).toMatchObject({ ok: false, error: "invalid-config" })
     expect(jev.requests).toHaveLength(0)
   })
 
