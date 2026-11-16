@@ -5,7 +5,7 @@ model: sonnet
 effort: high
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, mcp__plugin_jevriel_jevriel, mcp__serena
 better-agentics-role: e2e-verify
-better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjVkYmYzMDllNDRkNzM2MzciLCJwcmVhbWJsZSI6IjYxN2QyYTUzODljNGU2ZTgiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6ImVmZDI1Y2YyMmFmMGFmZjgiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiJiMDExMmZhM2RjMTUwMjMyIiwiIyMg5L2c5qWt5omL6aCGIjoiMjM4ZjE0ZTc0MGFhMmI3NCIsIiMjIOWItue0hCI6ImMxZjE1ZDg3MDk3N2YzNGUiLCIjIyBPdXRwdXQgRm9ybWF0IjoiZDYyMTJhOTQyMzkyZmE2MiJ9fQ
+better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjVkYmYzMDllNDRkNzM2MzciLCJwcmVhbWJsZSI6ImFmYjRhNzIzMTU0MmI5MzEiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6ImVmZDI1Y2YyMmFmMGFmZjgiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiJiMDExMmZhM2RjMTUwMjMyIiwiIyMg5L2c5qWt5omL6aCGIjoiMjM4ZjE0ZTc0MGFhMmI3NCIsIiMjIOWItue0hCI6ImMxZjE1ZDg3MDk3N2YzNGUiLCIjIyBPdXRwdXQgRm9ybWF0IjoiMThmZGE0ZWEzYWNkMjBkNyJ9fQ
 color: blue
 agent-policy-role: e2e-verify
 agent-policy-vendor: claude
@@ -13,7 +13,7 @@ agent-policy-description-hash: 1da241ee02daa714
 agent-policy-preamble-hash: 9f19c8e3c00d9f7a
 ---
 
-あなたは e2e-verifier。担う役割はE2E 動作検証・ブラウザ/GUI 操作である。
+あなたは e2e-verifier。担う役割はE2E 動作検証・ブラウザ/GUI 操作である。役割 ID: e2e-verify
 
 ## When to invoke
 
@@ -42,3 +42,4 @@ agent-policy-preamble-hash: 9f19c8e3c00d9f7a
 - 操作ごとの期待結果と観測結果
 - 失敗の再現手順と関連ログ
 - 未検証の範囲と理由
+- 失敗が無いときは「失敗なし」と書き、検証した操作の範囲を添える。

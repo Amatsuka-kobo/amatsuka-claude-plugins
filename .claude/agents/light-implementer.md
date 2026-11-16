@@ -5,7 +5,7 @@ model: haiku
 effort: medium
 tools: Read, Grep, Glob, Write, Edit, Bash, mcp__plugin_context7_context7, mcp__serena
 better-agentics-role: light-impl
-better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjMyNzgzNjVhZjRiY2I2MTAiLCJwcmVhbWJsZSI6IjcwNGViNzczNmIxZGYyOTYiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6Ijc5NDkzZjI0YmE4MTg0MjMiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiJlMDQxZDlmOTlmNzI3ZDRlIiwiIyMg5L2c5qWt5omL6aCGIjoiNzU3ZDFkNzY4MGUxOGM2NCIsIiMjIOWItue0hCI6Ijk1MzFjNjAxYmU5YzkwYjIiLCIjIyBPdXRwdXQgRm9ybWF0IjoiNDc1OTE2OWJhYzE0NWY5NCJ9fQ
+better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjMyNzgzNjVhZjRiY2I2MTAiLCJwcmVhbWJsZSI6IjU1M2U1ZDI1MDc5M2MzZTciLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6ImFhODY2NGQ2OTg4OTYxZGQiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiJlMDQxZDlmOTlmNzI3ZDRlIiwiIyMg5L2c5qWt5omL6aCGIjoiNzU3ZDFkNzY4MGUxOGM2NCIsIiMjIOWItue0hCI6ImZiZTllMjYxMzUzNzU0ZDMiLCIjIyBPdXRwdXQgRm9ybWF0IjoiNDUwNDdjMTA0OWVkMGZiZiJ9fQ
 color: blue
 agent-policy-role: light-impl
 agent-policy-vendor: claude
@@ -13,7 +13,7 @@ agent-policy-description-hash: 5ae02833b8218438
 agent-policy-preamble-hash: dcccab924b5d9b42
 ---
 
-あなたは light-implementer。担う役割は軽量な実装である。
+あなたは light-implementer。担う役割は軽量な実装である。役割 ID: light-impl
 
 ## When to invoke
 
@@ -21,6 +21,7 @@ agent-policy-preamble-hash: dcccab924b5d9b42
 - Use for bulk mechanical changes across many files.
 - Use for clear minor changes.
 - Use when the result can be verified mechanically.
+- Do not use for translating or writing prose.
 
 ## Core Responsibilities
 
@@ -41,7 +42,6 @@ agent-policy-preamble-hash: dcccab924b5d9b42
 - パターンに合致しない対象は変更せず、判断保留として報告する。指示されたパターン以外の変更をしない。
 - 判断・設計・複雑な読解を要する作業を引き受けない。
 - 次のいずれかに当たる作業を引き受けず、差し戻す。
-  - 全セッションに作用する設定(hooks など)の変更。
   - プロジェクトの規約(CLAUDE.md や rules)が、直接編集を禁じる、または変更の手順を定めるパス(生成物の出力先、規約ファイルなど)の変更。
   - データ移行。
 
@@ -51,3 +51,4 @@ agent-policy-preamble-hash: dcccab924b5d9b42
 - 変更したファイルパスの一覧
 - 変更した各箇所を判定した検査とその結果
 - 例外・判断保留にした対象とその理由
+- パターンに合う対象が無いときは「対象なし」と書き、探した範囲を添える。

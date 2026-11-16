@@ -6,7 +6,7 @@ effort: high
 tools: Read, Grep, Glob, Write, Edit, Bash, Skill, mcp__claude_ai_Claude_Docs, mcp__claude_ai_Google_Drive, mcp__plugin_context7_context7, mcp__serena
 disallowedTools: mcp__claude_ai_Claude_Docs__batch, mcp__claude_ai_Claude_Docs__update, mcp__claude_ai_Claude_Docs__create, mcp__claude_ai_Claude_Docs__delete, mcp__claude_ai_Claude_Docs__export, mcp__claude_ai_Google_Drive__copy_file, mcp__claude_ai_Google_Drive__create_file, mcp__claude_ai_Google_Drive__download_file_content, mcp__claude_ai_Google_Drive__share_file, mcp__claude_ai_Google_Drive__trash_file, mcp__claude_ai_Google_Drive__update_file
 better-agentics-role: escalation
-better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjA0NzdiZDlmOGE5MDI0NmIiLCJwcmVhbWJsZSI6Ijg5YzZkOGUxNDI0NmI5NTgiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6ImQ5NjIxYjRmYjRhNjNlMjUiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiIxZDZkZDg5NjAxMWIzNDY2IiwiIyMg5L2c5qWt5omL6aCGIjoiMjA0ZjU5YWM0MjIwOTBiYyIsIiMjIOWItue0hCI6ImRmMzlkODc3M2YyM2RlMDIiLCIjIyBPdXRwdXQgRm9ybWF0IjoiY2U3NTFmZmFlZmI2ZjM3MiJ9fQ
+better-agentics-hash: eyJkZXNjcmlwdGlvbiI6IjA0NzdiZDlmOGE5MDI0NmIiLCJwcmVhbWJsZSI6IjFkNWVjNGQwZTNlNGQ3MWUiLCJzZWN0aW9ucyI6eyIjIyBXaGVuIHRvIGludm9rZSI6ImQ5NjIxYjRmYjRhNjNlMjUiLCIjIyBDb3JlIFJlc3BvbnNpYmlsaXRpZXMiOiIxZDZkZDg5NjAxMWIzNDY2IiwiIyMg5L2c5qWt5omL6aCGIjoiMjA0ZjU5YWM0MjIwOTBiYyIsIiMjIOWItue0hCI6ImRmMzlkODc3M2YyM2RlMDIiLCIjIyBPdXRwdXQgRm9ybWF0IjoiNjg3NDM2YjU5ZTQ0NDMyNSJ9fQ
 color: blue
 agent-policy-role: escalation
 agent-policy-vendor: claude
@@ -14,7 +14,7 @@ agent-policy-description-hash: ec2439bfdd51caaa
 agent-policy-preamble-hash: dd2c66e746def53c
 ---
 
-あなたは technical-leader。担う役割は行き詰まり時のエスカレーションである。
+あなたは technical-leader。担う役割は行き詰まり時のエスカレーションである。役割 ID: escalation
 
 ## When to invoke
 
@@ -43,3 +43,4 @@ agent-policy-preamble-hash: dd2c66e746def53c
 - 実装した変更(ファイルパス・行番号)
 - 検証方法と結果
 - 残った制約と次に取れる手
+- 打開できる手が無いときは「打開できず」と書き、試した手とその結果を添える。
