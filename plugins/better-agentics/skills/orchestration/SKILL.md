@@ -9,9 +9,9 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 ## 自分で行う作業と委譲する場面
 
 - 調査・分析・要件確定・設計書と計画書の執筆・実装・検証は、自分で行う。
-- 委譲するのは、次の 3 つの理由のどれかに当たるときだけとする。
+- 委譲するのは、次の 3 つの場面のどれかに当たるときだけとする。
 
-| 理由 | 場面 |
+| `reason` | 場面 |
 | --- | --- |
 | `design-plan-review` | 設計書・実装計画書を書き終えたとき |
 | `split` | 作業の一部を委譲先に進めさせるとき |
@@ -43,7 +43,7 @@ EOF
 | `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string, "needsContext"?: boolean}]}`。`id` は配列内で一意にする。会話の文脈が無いと仕様を書き切れない作業にだけ `needsContext: true` を付ける。外側の手順に従って作業している間は付けない |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
 
-どの理由にも、最上位に `parentModel` と `lang` を付ける。`excludeRoles` は、委譲先を選び直すときだけ付ける。
+どの `reason` にも、最上位に `parentModel` と `lang` を付ける。`excludeRoles` は、委譲先を選び直すときだけ付ける。
 
 | 項目 | 値 |
 | --- | --- |
@@ -70,7 +70,7 @@ EOF
 | --- | --- |
 | `invalid-input` | 入力が JSON として読めない、必須の項目が欠ける、`split` の `id` が重複する、任意の項目の値が不正 |
 | `invalid-config` | `.claude/better-agentics/config.json` が読めないか、形が違う |
-| `no-candidates` | 理由に当たる役割を、設定ですべて外しているか、`excludeRoles` で候補がすべて外れた。扱いは「委譲先が断ったとき」のセクションによる |
+| `no-candidates` | `reason` に当たる役割を、設定ですべて外しているか、`excludeRoles` で候補がすべて外れた。扱いは「委譲先が断ったとき」のセクションによる |
 | `duplicate-role` | 同じ役割を 2 件以上の定義が持つ、または候補の定義の名前が重なる |
 | `no-api-key` | Jev を呼ぶ必要があるのに `TYPESAFE_API_KEY` が無い |
 | `jev-failed` | Jev の呼び出しが失敗した、または応答の形が想定外だった |
