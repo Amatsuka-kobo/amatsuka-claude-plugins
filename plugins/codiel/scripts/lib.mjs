@@ -63,7 +63,6 @@ var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-var DEFAULT_RULES_DIR = ".claude/rules/metatron";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -99,14 +98,15 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir;
+    if (top && dir === top) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const top = gitToplevel(start);
   if (top) return top;
   return start;
 }
@@ -217,20 +217,6 @@ function resolveDocPaths(startDir) {
       paths?.gotchas,
       DEFAULT_GOTCHAS_PATH,
       "gotchas",
-      warnings
-    ),
-    warnings
-  };
-}
-function resolveRulesDir(startDir) {
-  const { docRoot, paths, warnings } = loadPathsConfig(startDir);
-  return {
-    docRoot,
-    rulesDir: resolveConfiguredPath(
-      docRoot,
-      paths?.rulesDir,
-      DEFAULT_RULES_DIR,
-      "rulesDir",
       warnings
     ),
     warnings
@@ -352,7 +338,6 @@ function findMainRoot(startDir) {
 export {
   DEFAULT_ARCHITECTURE_PATH,
   DEFAULT_GOTCHAS_PATH,
-  DEFAULT_RULES_DIR,
   DOC_CONFIG_FILENAME,
   DOC_CONFIG_SUPPORTED_VERSION,
   DOMAINS_MARKER,
@@ -368,6 +353,5 @@ export {
   readDomainsResult,
   readStdin,
   resolveDocPaths,
-  resolvePhysicalPath,
-  resolveRulesDir
+  resolvePhysicalPath
 };

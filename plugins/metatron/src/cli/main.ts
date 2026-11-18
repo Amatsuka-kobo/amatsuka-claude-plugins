@@ -6,8 +6,8 @@
 //   scan-adr-candidates / scan-gotcha-candidates。
 //   **常に exit 0**。読めなかったことも事実として JSON で返す。
 // - 書き込み経路(第 1 層・フェイルクローズド): stage-architecture / stage-adr /
-//   stage-rules / commit-architecture / commit-rules / stage-gotcha / commit-gotchas /
-//   init-gotchas / append-gotcha /
+//   commit-architecture / stage-gotcha / commit-gotchas /
+//   init-gotchas / append-gotcha / link-claude-md /
 //   tag-gotcha / shrink-adr-candidate / remove-gotcha-candidate。
 //   拒否・失敗は非 0 終了。shrink-adr-candidate と remove-gotcha-candidate の拒否・失敗は
 //   終了コード 3 に揃える(ハンドラが自分で例外を捕まえる)。
@@ -26,11 +26,8 @@ import { type Feature, readFeatures } from "../lib/features.js"
 import { runScanAdrCandidates, runShrinkAdrCandidate } from "./adr-candidate.js"
 import { runDiffArchitecture, runScan } from "./analysis.js"
 import { parseArgs } from "./args.js"
-import {
-  runCommitArchitecture,
-  runCommitGotchas,
-  runCommitRules
-} from "./commit.js"
+import { runLinkClaudeMd } from "./claude-md.js"
+import { runCommitArchitecture, runCommitGotchas } from "./commit.js"
 import { runGet } from "./get.js"
 import { runAppendGotcha, runInitGotchas, runTagGotcha } from "./gotcha.js"
 import {
@@ -47,12 +44,7 @@ import {
   note
 } from "./output.js"
 import { USAGE_LINES } from "./paths.js"
-import {
-  runStageAdr,
-  runStageArchitecture,
-  runStageGotcha,
-  runStageRules
-} from "./stage.js"
+import { runStageAdr, runStageArchitecture, runStageGotcha } from "./stage.js"
 
 /** 常に exit 0 で返すサブコマンド(契約 §11 の「読」)。 */
 export const READ_SUBCOMMANDS = new Set([
@@ -66,16 +58,15 @@ export const READ_SUBCOMMANDS = new Set([
 export const WRITE_SUBCOMMANDS = new Set([
   "stage-architecture",
   "stage-adr",
-  "stage-rules",
   "commit-architecture",
-  "commit-rules",
   "stage-gotcha",
   "commit-gotchas",
   "init-gotchas",
   "append-gotcha",
   "tag-gotcha",
   "shrink-adr-candidate",
-  "remove-gotcha-candidate"
+  "remove-gotcha-candidate",
+  "link-claude-md"
 ])
 
 /** 環境変数が無効なら拒否する書き込み系サブコマンドと、対応する機能。 */
@@ -158,20 +149,17 @@ export function main(
       case "scan-gotcha-candidates":
         runScanGotchaCandidates(ctx)
         return
+      case "link-claude-md":
+        runLinkClaudeMd(ctx)
+        return
       case "stage-architecture":
         runStageArchitecture(ctx)
         return
       case "stage-adr":
         runStageAdr(ctx)
         return
-      case "stage-rules":
-        runStageRules(ctx)
-        return
       case "commit-architecture":
         runCommitArchitecture(ctx)
-        return
-      case "commit-rules":
-        runCommitRules(ctx)
         return
       case "stage-gotcha":
         runStageGotcha(ctx)

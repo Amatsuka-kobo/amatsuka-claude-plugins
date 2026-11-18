@@ -1,113 +1,82 @@
 #!/usr/bin/env node
-// SessionStart・SubagentStart 注入 hook。
+// SessionStart の案内 hook。
 //
-// 仕様の正本は metatron 設計書 §8(注入)と、ファイル契約
-// `harness-docs/design/2026-08-16-file-contract-freeze.md` §13(hook 出力の形式)。
-// SubagentStart の扱いは `harness-docs/design/2026-10-04-metatron-recording-timing-and-subagent-injection-design.md` の 3。
-// 入力の hook_event_name が SubagentStart ならサブエージェント向けを、それ以外(無い・読めないを含む)は
-// SessionStart 向けを組み立てる。
+// ARCHITECTURE・GOTCHAS の本文は注入しない。本文はプロジェクトの CLAUDE.md の @メンションで
+// 読み込まれる(メインセッションもサブエージェントも同じ経路で読む)。この hook が出すのは、
+// CLAUDE.md に固定で書けない案内だけである。CLI の絶対パスはプラグインのバージョンごとに変わる。
 //
-// ADR と GOTCHAS の注入は、AMATSUKA_METATRON_ENABLE_ADR と AMATSUKA_METATRON_ENABLE_GOTCHAS が
-// 有効なときだけ行う(`harness-docs/design/2026-10-08-metatron-adr-gotchas-opt-in-design.md` の 3)。
-// 無効な側は文書の内容も、その記録を促す行も出さない。削れない部分の文面もこの 2 変数で変わるが、
-// どの組み合わせでも下の不変条件は同じように当てる。GOTCHAS が無効なら台帳を読まず、
-// GOTCHAS.md だけがある状態は不変条件 0 の「文書が無い」に当たる。
+// 出力の形式は契約 `harness-docs/design/2026-08-16-file-contract-freeze.md` §13。
+// ADR と GOTCHAS の案内は AMATSUKA_METATRON_ENABLE_ADR と AMATSUKA_METATRON_ENABLE_GOTCHAS が
+// 有効なときだけ出す(`harness-docs/design/2026-10-08-metatron-adr-gotchas-opt-in-design.md` の 3)。
 //
-// この層は第 2 層(機構自身の動作)であり、**フェイルオープン**する。
-// 読めない・壊れている・例外が出た、のいずれでも**文書の内容**は出力せず exit 0 で終える。
-// 注入の失敗が「セッションを開始できない」という不釣り合いに大きな損害へ化けるためである。
-//
-// 不変条件が 4 つある。実装を変えるときはこれを壊さないこと。イベントごとの当て方は次のとおり。
-//
-// | 不変条件                         | SessionStart                     | SubagentStart                          |
-// | -------------------------------- | -------------------------------- | -------------------------------------- |
-// | 0. 文書が無くても案内を出す       | 当てる                           | 当てない(何も出さない)                 |
-// | 1. 削れない部分を先頭に置き残す   | CLI 案内・記録のタイミング・委譲 | 見出しと「読むだけにする」の 1 行       |
-// | 2. maxChars 以下を目標にする      | 当てる                           | 当てる                                 |
-// | 3. セクション分解は lib のパーサ  | 当てる                           | 当てる                                 |
-//
-// 0. **SessionStart では、文書が 1 つも無くても CLI 案内だけは出す(§8-7 の限定)。**
-//    `/metatron:init` はまさにその状態で使うコマンドであり、案内を落とすと
-//    AI は CLI の絶対パスを知る手段を持たず、init を開始できない。
-//    例外は 2 つだけ。`injection.enabled: false`(利用者が明示的に切っている)と、
-//    設定の解決が例外で失敗した場合(壊れた機構が誤った CLI パスを広告しないため)。
-//    SubagentStart では文書が無ければ何も出さない。サブエージェントは init を始めないので、案内が要らない。
-// 1. **削れない部分は常に出力の先頭にあり、どの縮退段階でも完全な形で残る。**
-//    SessionStart では CLI 案内と記録のタイミングと委譲の注意、SubagentStart では見出しと
-//    「読むだけにする」の 1 行が削れない部分である。
-//    プラットフォームが 10,000 文字で退避に倒したとき、モデルへ渡るのは先頭のプレビューである。
-//    先頭に無ければ、最も短くて最も代替の効かない要素が最初に見えなくなる(設計書 §8-3)。
-//    記録のタイミングと委譲の注意は文書があるときだけ載せる(文書が無いうちは記録先も注入する文書も無い)。
-// 2. **出力の総文字数は maxChars(既定 9000)以下に収めることを目標とする。** 段階縮退を尽くす(§8-5)。
-//    ただし maxChars が削れない部分の長さ(SessionStart は約 1,000 文字。CLI の絶対パスの長さで変わる)を
-//    下回る場合は削れない部分を優先し、maxChars を超える。
-//    不変条件 1 が maxChars より上位にあるためである(§8-3 の優先 1、§8-5 の
-//    「CLI 案内には決して手を付けない」)。破ってはならない真の上限はプラットフォームの
-//    10,000 文字(PLATFORM_MAX_CHARS)であり、どちらのイベントでも常に守る。
-//    maxChars の値域は 10,000 を超える値も受け付けるので、組み立てでは maxChars と
-//    PLATFORM_MAX_CHARS の小さいほうを予算にする。削れない部分は 10,000 文字よりずっと短い。
-// 3. **セクション分解は必ず lib のパーサを使う。** 素朴な文字列処理で代替してはならない。
-//    代替すると、CLI が 1 セクションと見なす範囲と、注入が切り出す範囲が食い違う。
-//    Mermaid を含むセクションで壊れる(§8-6)。
+// 第 2 層(機構自身の動作)なので**フェイルオープン**する。設定の解決が例外で失敗したときは
+// 何も出さずに exit 0 で終える。誤った CLI パスを広告しないためである。
+// 文書が 1 つも無くても CLI の案内は出す。`/metatron:init` がその状態で CLI を使うからである。
 
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { type AdrEntry, parseAdrDocument } from "./lib/adr.js"
-import {
-  ADR_HEADING,
-  type ArchitectureDocument,
-  type ArchitectureSection,
-  type FenceScan,
-  readArchitectureFile,
-  scanFences
-} from "./lib/architecture.js"
+import { existingMentions, isMentionablePath } from "./lib/claude-md.js"
 import { loadConfig, type ResolvedConfig } from "./lib/config.js"
 import { injectContext } from "./lib/emit.js"
 import { type Features, readFeatures } from "./lib/features.js"
-import { type GotchaEntry, parseGotchas } from "./lib/gotchas.js"
 
-/** 設計書 §8-5 段階 2。目次をこの件数に制限する。 */
-const STAGE2_TOC_LIMIT = 50
-/** プラットフォームが additionalContext に課す上限。maxChars がこれより大きくても超えない。 */
-const PLATFORM_MAX_CHARS = 10_000
-/** 警告行の上限。予算を食わせないために切り詰める。 */
+/** 警告行の上限。 */
 const MAX_WARNING_LINES = 3
-/** stdin が閉じない環境で hook 自体が固まらないようにする保険。 */
+/** stdin を待つ上限。stdin が閉じない環境でも hook を固まらせない。 */
 const STDIN_TIMEOUT_MS = 2000
+/** 廃止した rules 3 ファイルの既定の置き場。残っていたら移行を案内する。 */
+const LEGACY_RULES_DIR = ".claude/rules/metatron"
+/** 廃止した rules のファイル名。置き場に他のファイルがあっても、これだけを旧 rules とみなす。 */
+const LEGACY_RULES_FILES = [
+  "conventions.md",
+  "protected-paths.md",
+  "testing-policy.md"
+]
 
-// ---------------------------------------------------------------------------
-// CLI の絶対パス
-// ---------------------------------------------------------------------------
+// 旧版の config は `paths.rulesDir` で rules の置き場を変えられた。現行の config の解決は
+// このキーを無視するので、移行の案内のためだけに設定ファイルを直接読む。
+function legacyRulesDir(config: ResolvedConfig): string {
+  try {
+    const raw = JSON.parse(fs.readFileSync(config.configPath, "utf8")) as {
+      paths?: { rulesDir?: unknown }
+    }
+    const dir = raw?.paths?.rulesDir
+    if (
+      typeof dir === "string" &&
+      dir !== "" &&
+      !path.isAbsolute(dir) &&
+      !dir.split(/[\\/]/).includes("..")
+    ) {
+      return dir.replace(/\/+$/, "")
+    }
+  } catch {
+    // 設定が無い・読めないときは既定の置き場を見る。
+  }
+  return LEGACY_RULES_DIR
+}
 
 // hook 自身の位置からプラグインルートを求める。ソース(src/)からもバンドル(scripts/)からも
-// 1 階層上がプラグインルートになる。これにより、AI は metatron がどこにインストールされて
-// いるかを知らなくても CLI を呼べる(契約 §12)。
-function pluginRoot(env: NodeJS.ProcessEnv): string {
-  const fromEnv = env.CLAUDE_PLUGIN_ROOT
-  if (typeof fromEnv === "string" && fromEnv !== "")
-    return path.resolve(fromEnv)
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-}
-
+// 1 階層上がプラグインルートになる(契約 §12)。
 function metatronCliPath(env: NodeJS.ProcessEnv): string {
-  return path.join(pluginRoot(env), "scripts", "metatron.mjs")
+  const fromEnv = env.CLAUDE_PLUGIN_ROOT
+  const root =
+    typeof fromEnv === "string" && fromEnv !== ""
+      ? path.resolve(fromEnv)
+      : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+  return path.join(root, "scripts", "metatron.mjs")
 }
 
-// ---------------------------------------------------------------------------
-// CLI 案内(優先 1・不可欠。縮退で決して手を付けない)
-// ---------------------------------------------------------------------------
-
-// GOTCHAS の記録が無効なら、落とし穴を注入しないので見出しからも外す。
-function guideTitle(features: Features): string {
-  return features.gotchas
-    ? "# metatron: プロジェクトの前提と落とし穴"
-    : "# metatron: プロジェクトの前提"
+// 存在しない・読めない・空白だけは、いずれも「無い」として扱う。
+function hasContent(filePath: string): boolean {
+  try {
+    return fs.readFileSync(filePath, "utf8").trim() !== ""
+  } catch {
+    return false
+  }
 }
 
-// 呼び出し規約は契約 §11。長い入力は一時ファイルへ書き `--input <path>` で渡す形に統一する。
-// 2 つの文面が同じ呼び出し規約を広告するよう、この部分だけは共有する。
-// 無効な側の CLI は拒否されるので案内しない(設計書 2026-10-08 の 3-1)。
+// 呼び出し規約は契約 §11。無効な側の CLI は拒否されるので案内しない。
 function cliLines(cli: string, features: Features): string[] {
   const reads = [
     features.gotchas ? "node M get gotchas --query <語>" : null,
@@ -123,31 +92,21 @@ function cliLines(cli: string, features: Features): string[] {
           '  タグ:     node M tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "..."'
         ]
       : []),
-    "  規律:     node M get rules [--name conventions|protected-paths|testing-policy]",
     "※長い入力は一時ファイルへ書き、--input <path> で渡す(CLI の呼び出し規約)。"
   ]
 }
 
-// 更新は stage → commit の CLI 手順を見せず、スキルへ誘導する。手順が完結した形で見えると、
+// 更新は stage → commit の CLI 手順を見せず、スキルへ誘導する。手順が見えると、
 // スキルを起動せずに CLI へ直行し、乖離の検出・草案の検査・承認の手順を飛ばす。
-// 文書が無いうちは /metatron:init が窓口なので、buildInitGuide には入れない。
-// GOTCHAS だけがあるときも、ARCHITECTURE の作成は init の担当なので init へ誘導する。
-function updateLines(features: Features, hasArchitecture: boolean): string[] {
-  if (!hasArchitecture)
-    return ["ARCHITECTURE はまだ無い。`/metatron:init` で作成する。"]
-  const targets = features.adr
-    ? "ARCHITECTURE・ADR・rules"
-    : "ARCHITECTURE・rules"
+function updateLines(features: Features): string[] {
+  const targets = features.adr ? "ARCHITECTURE・ADR" : "ARCHITECTURE"
   return [
     `${targets} の更新は、Skill ツールで metatron:updating-architecture を起動して行う。`,
     "計画書に stage-* の手順が書かれていても、先にスキルを起動する。"
   ]
 }
 
-// 記録のタイミング。hook では作業の完了を検出できないので、注入文で確かめる時点を伝える。
-// 文書が無いうちは記録先が無いので、buildInitGuide には入れない(cliLines と分けているのはこのため)。
-// どの組み合わせでも 4 行の合計を 200 文字以内に保つ。削れない部分を長くすると、縮退に回せる予算が減る。
-// 両方無効なら記録するものが無いので、4 行とも出さない。
+// 記録のタイミング。hook では作業の完了を検出できないので、案内文で確かめる時点を伝える。
 function recordingLines(features: Features): string[] {
   if (!features.adr && !features.gotchas) return []
   const head = features.adr
@@ -171,561 +130,95 @@ function recordingLines(features: Features): string[] {
   ]
 }
 
-// 文書が 1 つ以上あるときの案内。
-function buildGuide(
-  cli: string,
-  features: Features,
+// 移行が要る状態の案内。旧 rules が残っている、または CLAUDE.md に @メンションが無い。
+function migrationLines(
+  config: ResolvedConfig,
+  docs: string[],
   hasArchitecture: boolean
-): string {
-  return [
-    guideTitle(features),
-    "",
-    "これらの文書と `.claude/rules/metatron/` の 3 ファイルは metatron の管理下にある。**直接編集は PreToolUse hook が拒否する。**",
-    ...cliLines(cli, features),
-    ...updateLines(features, hasArchitecture),
-    ...recordingLines(features),
-    ...delegationLines(features)
-  ].join("\n")
-}
-
-// サブエージェントへの委譲。SubagentStart hook が両文書を注入するので、依頼文へ写すと重複する。
-// 写した要約は原文とずれても気づけない。文書が無いうちは注入する文書も無いので、buildInitGuide には入れない。
-// GOTCHAS が無効なら注入するのは ARCHITECTURE だけになる。
-function delegationLines(features: Features): string[] {
-  return features.gotchas
-    ? [
-        "サブエージェントには SubagentStart hook が ARCHITECTURE と GOTCHAS を注入する。",
-        "委譲の依頼文には、両文書の原文も要約も書き写さない。"
-      ]
-    : [
-        "サブエージェントには SubagentStart hook が ARCHITECTURE を注入する。",
-        "委譲の依頼文には、ARCHITECTURE の原文も要約も書き写さない。"
-      ]
-}
-
-// サブエージェント向けの削れない部分。CLI の案内・記録のタイミング・委譲の注意は載せない。
-// 記録と文書の更新はメインセッションが行うので、サブエージェントは文書を読むだけでよい。
-function buildSubagentGuide(features: Features): string {
-  return [
-    guideTitle(features),
-    "",
-    "以下の文書は前提として読むだけにし、直接編集しない。"
-  ].join("\n")
-}
-
-// 文書がまだ 1 つも無いときの案内(設計書 §8-7 の限定)。
-// 「metatron の管理下にある」という前提の文は事実に合わないので、
-// **まだ文書が無く `/metatron:init` で作れる**ことが分かる文面に差し替える。
-function buildInitGuide(cli: string, features: Features): string {
-  return [
-    guideTitle(features),
-    "",
-    features.gotchas
-      ? "このプロジェクトにはまだ ARCHITECTURE も GOTCHAS も無い。**`/metatron:init` で作成する。**"
-      : "このプロジェクトにはまだ ARCHITECTURE が無い。**`/metatron:init` で作成する。**",
-    "init は `.claude/rules/metatron/` の 3 ファイル(規約・保護パス・テスト方針)も併せて作る。",
-    "作成後はこれらが metatron の管理下に入り、直接編集は PreToolUse hook が拒否する。",
-    ...cliLines(cli, features)
-  ].join("\n")
-}
-
-// ---------------------------------------------------------------------------
-// 読み取り
-// ---------------------------------------------------------------------------
-
-function toLf(text: string): string {
-  return text.replace(/\r\n/g, "\n")
-}
-
-function trimEnd(text: string): string {
-  return text.replace(/\s+$/, "")
-}
-
-interface ArchSource {
-  doc: ArchitectureDocument
-  adrEntries: AdrEntry[]
-  warnings: string[]
-}
-
-interface GotchasSource {
-  entries: GotchaEntry[]
-  warnings: string[]
-}
-
-// 存在しない・読めない・中身が空白だけ、はいずれも「無い」として扱う。
-// readArchitectureFile は ENOENT を黙って、それ以外の読み取り失敗を warnings に積む。
-function readArchitecture(config: ResolvedConfig): ArchSource | null {
-  const file = readArchitectureFile(config.architecturePath)
-  if (!file.exists) return null
-  if (file.text.trim() === "") return null
-  return {
-    doc: file.doc,
-    adrEntries: parseAdrDocument(file.text).entries,
-    warnings: file.warnings
-  }
-}
-
-function readGotchas(config: ResolvedConfig): GotchasSource | null {
-  let text: string
-  try {
-    text = fs.readFileSync(config.gotchasPath, "utf8")
-  } catch {
-    return null
-  }
-  if (text.trim() === "") return null
-  const doc = parseGotchas(text)
-  return { entries: doc.entries, warnings: doc.warnings }
-}
-
-// ---------------------------------------------------------------------------
-// 要約規則(設計書 §8-4・§8-5 段階 4)
-// ---------------------------------------------------------------------------
-
-// 文の途中で切らない。句点があればそこまで、無ければ行全体を採る。
-function firstSentence(text: string): string {
-  const at = text.indexOf("。")
-  if (at >= 0) return text.slice(0, at + 1)
-  return text
-}
-
-// 表の区切り行。パイプを含み、罫線の文字(ハイフン・コロン・パイプ・空白)だけからなる。
-function isTableDelimiter(line: string): boolean {
-  return line.includes("|") && /^[-\s|:]+$/.test(line)
-}
-
-// 次の非空行の添字。フェンスに入ったら打ち切る(フェンスの開始行は表の一部になり得ない)。
-function nextNonEmptyLine(scan: FenceScan, from: number): number {
-  for (let i = from; i < scan.lines.length; i++) {
-    if (scan.insideFence[i]) return -1
-    if (scan.lines[i].text.trim() !== "") return i
-  }
-  return -1
-}
-
-// 表の本体行を読み飛ばし、最後に読み飛ばした行の添字を返す。
-// 空行・パイプを含まない行・フェンスの開始で表は終わる。
-function tableEndLine(scan: FenceScan, from: number): number {
-  let i = from
-  while (i < scan.lines.length && !scan.insideFence[i]) {
-    const text = scan.lines[i].text.trim()
-    if (text === "" || !text.includes("|")) break
-    i++
-  }
-  return i - 1
-}
-
-// 段階 4 の要約に採るのは「そのセクションのフェンス外の最初の散文行」。
-// 表・コードフェンス・Mermaid の中身・小見出しは採らない。
-// フェンスの判定は lib の scanFences をそのまま使う(§8-6 の同一パーサ規律)。
-function summarizeSection(section: ArchitectureSection): string | null {
-  const scan = scanFences(section.body)
-  for (let i = 0; i < scan.lines.length; i++) {
-    if (scan.insideFence[i]) continue
-    const line = scan.lines[i].text.trim()
-    if (line === "") continue
-    if (/^#{1,6}\s/.test(line)) continue // 小見出し
-    // 表の判定規則: パイプを含む行の次の非空行が区切り行ならヘッダー行とみなし、表を丸ごと飛ばす
-    //(GFM は行頭・行末のパイプを省略できるため、先頭パイプの有無で判定してはならない)。
-    if (line.includes("|")) {
-      const delim = nextNonEmptyLine(scan, i + 1)
-      if (delim >= 0 && isTableDelimiter(scan.lines[delim].text.trim())) {
-        i = tableEndLine(scan, delim + 1)
-        continue
-      }
-    }
-    if (line.startsWith("|")) continue // 表の断片(ヘッダーと区切りを伴わない行)
-    if (/^[-=*_\s|:]+$/.test(line)) continue // 表の区切り・水平線・箇条書きの空項目
-    if (line.startsWith("<!--")) continue // コメント
-    const prose = trimEnd(
-      line.replace(/^([-*+]|\d+[.)])\s+/, "").replace(/^>\s?/, "")
-    ).trim()
-    if (prose === "") continue
-    return firstSentence(prose)
-  }
-  return null
-}
-
-// ---------------------------------------------------------------------------
-// 縮退計画(設計書 §8-5)
-// ---------------------------------------------------------------------------
-
-type ArchMode = "full" | "outline" | "headings" | "none"
-
-interface Plan {
-  /** 全文で載せる GOTCHAS の件数。 */
-  recentCount: number
-  /** 目次を出すか。 */
-  tocEnabled: boolean
-  /** 目次の上限。null は全件。 */
-  tocLimit: number | null
-  /** ADR 一覧(タイトル + 状態)を載せるか。 */
-  includeAdr: boolean
-  archMode: ArchMode
-}
-
-// 優先順(§8-3)の逆から削る。CLI 案内には決して手を付けない。
-function* plans(recentCount: number): Generator<Plan> {
-  const base: Plan = {
-    recentCount,
-    tocEnabled: true,
-    tocLimit: null,
-    includeAdr: true,
-    archMode: "full"
-  }
-  // 段階 1: 直近 N 件を N-1, N-2 … と減らす(最小 0 件)。
-  for (let r = recentCount; r >= 1; r--) yield { ...base, recentCount: r }
-  const stage1 = { ...base, recentCount: 0 }
-  yield stage1
-  // 段階 2: 目次を直近 50 件に制限。
-  const stage2: Plan = { ...stage1, tocLimit: STAGE2_TOC_LIMIT }
-  yield stage2
-  // 段階 3: ADR 一覧を全廃(ARCHITECTURE 本体より先に削る)。
-  const stage3: Plan = { ...stage2, includeAdr: false }
-  yield stage3
-  // 段階 4: ARCHITECTURE を目次 + 各節の要約 1 行へ縮退。
-  const stage4: Plan = { ...stage3, archMode: "outline" }
-  yield stage4
-  // 段階 5: 目次を全廃。
-  const stage5: Plan = { ...stage4, tocEnabled: false }
-  yield stage5
-  // 段階 6: ARCHITECTURE を目次のみへ。
-  const stage6: Plan = { ...stage5, archMode: "headings" }
-  yield stage6
-  // 段階 6 でも収まらない場合の最終手段。全文パスの案内だけを残す。
-  yield { ...stage6, archMode: "none" }
-}
-
-// ---------------------------------------------------------------------------
-// 全文の取得先の案内
-// ---------------------------------------------------------------------------
-
-// 注入に載せなかった部分をどこから読むか。SessionStart は CLI(`node M ...`)を、
-// SubagentStart は文書のパスを Read する案内を出す。サブエージェントには CLI の案内を載せないので、
-// `node M` と書いても M が何を指すか分からない。
-interface FullTextRefs {
-  /** ADR 一覧の末尾に置く、ADR の全文の取得先。 */
-  adrFull: string
-  /** 縮退で ADR 一覧を割愛したときの案内。 */
-  adrDropped: string
-  /** GOTCHAS の目次から外れたエントリの取得先。 */
-  gotchasRest: (rest: number) => string
-  /** GOTCHAS の目次を割愛したときの案内。 */
-  gotchasList: string
-}
-
-const CLI_REFS: FullTextRefs = {
-  adrFull: "ADR の全文は `node M get adr` で取得すること(注入には載せない)。",
-  adrDropped: "ADR 一覧は割愛した。`node M get adr` で取得すること。",
-  gotchasRest: (rest) =>
-    `- ほか ${rest} 件は \`node M get gotchas\` で取得すること。`,
-  gotchasList: "一覧は `node M get gotchas` で取得すること。"
-}
-
-function pathRefs(config: ResolvedConfig): FullTextRefs {
-  const adrAt = `${config.architecturePath} の \`## ${ADR_HEADING}\``
-  return {
-    adrFull: `ADR の全文は ${adrAt} を Read すること(注入には載せない)。`,
-    adrDropped: `ADR 一覧は割愛した。${adrAt} を Read すること。`,
-    gotchasRest: (rest) =>
-      `- ほか ${rest} 件は ${config.gotchasPath} を Read すること。`,
-    gotchasList: `一覧は ${config.gotchasPath} を Read すること。`
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 組み立て
-// ---------------------------------------------------------------------------
-
-function renderAdrSummary(
-  section: ArchitectureSection,
-  entries: AdrEntry[],
-  refs: FullTextRefs
-): string {
-  // 設計書 §8-4・§8-6: ADR は予算に余裕があっても全文で載せない。
-  const lines =
-    entries.length > 0
-      ? entries.map((e) => `- ${e.id}: ${e.title}(${e.status ?? "状態不明"})`)
-      : ["(まだ ADR は無い)"]
-  return [toLf(section.headingLine), "", ...lines, "", refs.adrFull].join("\n")
-}
-
-function renderArchitecture(
-  config: ResolvedConfig,
-  arch: ArchSource,
-  plan: Plan,
-  refs: FullTextRefs,
-  adrEnabled: boolean
-): string {
-  const head = `## 技術的前提(${config.architectureRelative})`
-  const readAll = `全文は ${config.architecturePath} を Read すること`
-
-  if (plan.archMode === "none") {
-    return `${head}\n\n${readAll}。`
-  }
-
-  const listed = arch.doc.sections.filter((s) => s.heading !== ADR_HEADING)
-
-  if (plan.archMode === "headings") {
-    return [
-      head,
-      "",
-      `${readAll}(以下は節の一覧)。`,
-      "",
-      ...listed.map((s) => `- ${s.heading}`)
-    ].join("\n")
-  }
-
-  if (plan.archMode === "outline") {
-    return [
-      head,
-      "",
-      `${readAll}(以下は目次と各節の要約 1 行)。`,
-      "",
-      ...listed.map((s) => {
-        const summary = summarizeSection(s)
-        return summary === null
-          ? `- ${s.heading}`
-          : `- ${s.heading}: ${summary}`
-      })
-    ].join("\n")
-  }
-
-  const parts: string[] = []
-  let adrDropped = false
-  for (const section of arch.doc.sections) {
-    if (section.heading === ADR_HEADING) {
-      // ADR の記録が無効なら一覧も割愛の案内も出さない(設計書 2026-10-08 の 3)。
-      if (!adrEnabled) continue
-      if (!plan.includeAdr) {
-        adrDropped = true
-        continue
-      }
-      parts.push(renderAdrSummary(section, arch.adrEntries, refs))
-      continue
-    }
-    const raw = trimEnd(toLf(section.raw))
-    if (raw !== "") parts.push(raw)
-  }
-  if (adrDropped) {
-    parts.push(refs.adrDropped)
-  }
-  return [head, ...parts].join("\n\n")
-}
-
-function tocLine(entry: GotchaEntry): string {
-  const title =
-    entry.tag === null ? entry.title : `~~${entry.title}~~([${entry.tag}])`
-  return `- [${entry.date}] ${entry.id}: ${title}`
-}
-
-// 設計書 §8-4: タグ付きは全文対象から除外し、除外分だけ後続の無タグエントリで埋める。
-function pickRecent(entries: GotchaEntry[], count: number): GotchaEntry[] {
-  if (count <= 0) return []
-  const picked: GotchaEntry[] = []
-  for (const entry of entries) {
-    if (entry.tag !== null) continue
-    picked.push(entry)
-    if (picked.length >= count) break
-  }
-  return picked
-}
-
-function renderGotchas(
-  config: ResolvedConfig,
-  gotchas: GotchasSource,
-  plan: Plan,
-  refs: FullTextRefs
-): string {
-  const total = gotchas.entries.length
-  const parts: string[] = [
-    `## 既知の落とし穴(${config.gotchasRelative}: 全 ${total} 件)`
-  ]
-
-  if (plan.tocEnabled) {
-    const limit =
-      plan.tocLimit === null ? total : Math.min(plan.tocLimit, total)
-    const shown = gotchas.entries.slice(0, limit)
-    const toc = ["### 目次(新しい順)"]
-    if (shown.length === 0) toc.push("(まだ記録は無い)")
-    else toc.push(...shown.map(tocLine))
-    const rest = total - shown.length
-    if (rest > 0) {
-      toc.push(refs.gotchasRest(rest))
-    }
-    parts.push(toc.join("\n"))
-  } else if (total > 0) {
-    parts.push(refs.gotchasList)
-  }
-
-  const recent = pickRecent(gotchas.entries, plan.recentCount)
-  if (recent.length > 0) {
-    parts.push(
-      [
-        `### 直近 ${recent.length} 件(全文)`,
-        "",
-        recent.map((e) => trimEnd(toLf(e.raw))).join("\n\n")
-      ].join("\n")
+): string[] {
+  const lines: string[] = []
+  const rulesDir = legacyRulesDir(config)
+  if (
+    LEGACY_RULES_FILES.some((name) =>
+      fs.existsSync(path.join(config.docRoot, rulesDir, name))
+    )
+  ) {
+    lines.push(
+      `廃止した rules(${rulesDir}/)が残っている。/metatron:update で ARCHITECTURE と CLAUDE.md へ移行する。`
     )
   }
-
-  return parts.join("\n\n")
-}
-
-interface RenderInput {
-  config: ResolvedConfig
-  features: Features
-  guide: string
-  refs: FullTextRefs
-  warnings: string[]
-  arch: ArchSource | null
-  gotchas: GotchasSource | null
-}
-
-// 警告の書式は 1 か所に持つ。文書ありの経路と文書なしの経路で形が割れると、
-// 読み手は同じ理由を 2 通りの見た目で受け取ることになる。
-function renderWarnings(warnings: string[]): string {
-  return warnings.map((w) => `※注意: ${w}`).join("\n")
-}
-
-function render(input: RenderInput, plan: Plan): string {
-  // 削れない部分は必ず先頭。退避に倒れてもプレビューへ残す(§8-3)。
-  const blocks: string[] = [input.guide]
-  if (input.warnings.length > 0) {
-    blocks.push(renderWarnings(input.warnings))
-  }
-  if (input.arch !== null) {
-    blocks.push(
-      renderArchitecture(
-        input.config,
-        input.arch,
-        plan,
-        input.refs,
-        input.features.adr
-      )
+  if (!hasArchitecture) return lines
+  if (!fs.existsSync(config.configPath)) {
+    lines.push(
+      "metatron.config.json が無く、codiel が metatron の利用を判定できない。/metatron:update で作る。"
     )
   }
-  if (input.gotchas !== null) {
-    blocks.push(renderGotchas(input.config, input.gotchas, plan, input.refs))
+  const existing = existingMentions(config.docRoot)
+  const missing = docs.filter((rel) => !existing.has(rel))
+  const unlinkable = missing.filter((rel) => !isMentionablePath(rel))
+  const linkable = missing.filter((rel) => isMentionablePath(rel))
+  if (linkable.length > 0) {
+    lines.push(
+      `CLAUDE.md に ${linkable.map((rel) => `@${rel}`).join(" と ")} が無く、文書が読み込まれない。/metatron:update で追記する。`
+    )
   }
-  return `${blocks.join("\n\n")}\n`
+  if (unlinkable.length > 0) {
+    lines.push(
+      `${unlinkable.join(" と ")} は空白か制御文字を含むため、@メンションで読み込めない。metatron.config.json の paths を空白の無いパスに変える。`
+    )
+  }
+  return lines
 }
 
-// GOTCHAS の記録が無効なら台帳を読まない。GOTCHAS.md だけがあるときは文書ゼロとして扱われる。
-function readSources(
-  config: ResolvedConfig,
-  features: Features
-): { arch: ArchSource | null; gotchas: GotchasSource | null } {
-  return {
-    arch: readArchitecture(config),
-    gotchas: features.gotchas ? readGotchas(config) : null
-  }
-}
-
-function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
-  const features = readFeatures(env)
-  const { arch, gotchas } = readSources(config, features)
-  const cli = metatronCliPath(env)
-
-  // どちらも無くても CLI 案内だけは出す(設計書 §8-7・契約 §12・§13-1 の I3)。
-  // §8-7 の「何も出力しない」は「**文書の内容を**出力しない」の意味に限定する。
-  // `/metatron:init` はまさにこの状態で使うコマンドであり、案内まで落とすと
-  // AI は CLI の絶対パスを知る手段を持たず、init を開始できない(§3-3・§8-3)。
-  if (arch === null && gotchas === null) {
-    // 文書が無い分岐でも、設定由来の理由(壊れた設定・未知 version・パス不正)は
-    // 呼び出し元へ返す(契約 §2、設計書 §13-1 の I4)。理由を伏せたまま
-    // 「文書が無い」とだけ案内すると、独自パスへ文書を置いた利用者は
-    // 見失った原因が分からず、既定パスへ重複して文書を作りかねない。
-    // 設定ファイルが無いのは正常な状態なので、警告が無いときは何も足さない。
-    const configWarnings = config.warnings.slice(0, MAX_WARNING_LINES)
-    const blocks = [buildInitGuide(cli, features)]
-    if (configWarnings.length > 0) blocks.push(renderWarnings(configWarnings))
-    return `${blocks.join("\n\n")}\n`
-  }
-
-  return fitToBudget(config, {
-    config,
-    features,
-    guide: buildGuide(cli, features, arch !== null),
-    refs: CLI_REFS,
-    warnings: collectWarnings(config, arch, gotchas),
-    arch,
-    gotchas
-  })
-}
-
-// サブエージェント向け(設計書 3-2)。文書が 1 つも無ければ何も出さない(null)。
-// サブエージェントは `/metatron:init` を始めないので、init の案内は要らない。
-// 2 変数の扱いは SessionStart と同じ規則に従う。
-function buildForSubagent(
+function build(
   config: ResolvedConfig,
   env: NodeJS.ProcessEnv
-): string | null {
+): { content: string; systemMessage?: string } {
   const features = readFeatures(env)
-  const { arch, gotchas } = readSources(config, features)
-  if (arch === null && gotchas === null) return null
+  const cli = metatronCliPath(env)
+  const hasArchitecture = hasContent(config.architecturePath)
+  const hasGotchas = features.gotchas && hasContent(config.gotchasPath)
+  const docs = [
+    config.architectureRelative,
+    ...(hasGotchas ? [config.gotchasRelative] : [])
+  ]
 
-  return fitToBudget(config, {
-    config,
-    features,
-    guide: buildSubagentGuide(features),
-    refs: pathRefs(config),
-    warnings: collectWarnings(config, arch, gotchas),
-    arch,
-    gotchas
-  })
-}
-
-function collectWarnings(
-  config: ResolvedConfig,
-  arch: ArchSource | null,
-  gotchas: GotchasSource | null
-): string[] {
-  return [
-    ...config.warnings,
-    ...(arch?.warnings ?? []),
-    ...(gotchas?.warnings ?? [])
-  ].slice(0, MAX_WARNING_LINES)
-}
-
-// 段階縮退を尽くして maxChars とプラットフォームの上限に収める(§8-5)。両イベントで同じ段階と設定を使う。
-function fitToBudget(config: ResolvedConfig, input: RenderInput): string {
-  const budget = Math.min(
-    PLATFORM_MAX_CHARS,
-    Math.max(1, config.injection.maxChars)
-  )
-  // 設定値が実エントリ数より大きいときに同じ出力を何度も組み立てないよう頭を揃える。
-  const startCount = Math.min(
-    config.injection.gotchasRecentCount,
-    input.gotchas?.entries.length ?? 0
-  )
-
-  for (const plan of plans(startCount)) {
-    const content = render(input, plan)
-    if (content.length <= budget) return content
+  const lines = ["# metatron: 案内", ""]
+  if (!hasArchitecture) {
+    lines.push(
+      "このプロジェクトにはまだ ARCHITECTURE が無い。**`/metatron:init` で作成する。**",
+      ...cliLines(cli, features)
+    )
+  } else {
+    lines.push(
+      `${docs.join(" と ")} は metatron の管理下にあり、CLAUDE.md の @メンションで読み込まれる。**直接編集は PreToolUse hook が拒否する。**`,
+      ...cliLines(cli, features),
+      ...updateLines(features),
+      ...recordingLines(features),
+      "サブエージェントも CLAUDE.md 経由で同じ文書を読む。委譲の依頼文には、文書の原文も要約も書き写さない。"
+    )
   }
-
-  // 段階を尽くしても収まらないのは maxChars が削れない部分より小さい場合だけである。
-  // そのときも削れない部分は削らない(§8-5 の「CLI 案内には決して手を付けない」を上位に置く)。
-  return `${input.guide}\n`
+  const migration = migrationLines(config, docs, hasArchitecture)
+  lines.push(...migration)
+  // 設定由来の理由(壊れた設定・未知 version・パス不正)は伏せない(契約 §2)。
+  for (const warning of config.warnings.slice(0, MAX_WARNING_LINES)) {
+    lines.push(`※注意: ${warning}`)
+  }
+  // 移行が要る状態は文書が読み込まれない状態なので、モデル経由でなく画面にも出す。
+  return {
+    content: `${lines.join("\n")}\n`,
+    ...(migration.length === 0
+      ? {}
+      : { systemMessage: `metatron: ${migration.join(" ")}` })
+  }
 }
 
-// ---------------------------------------------------------------------------
-// 入口
-// ---------------------------------------------------------------------------
-
-// SessionStart と SubagentStart の入力。どちらも共通のフィールドに cwd と hook_event_name を持つ。
-interface InjectHookInput {
-  cwd?: string
-  hook_event_name?: unknown
-  [k: string]: unknown
-}
-
-// 入力から cwd とイベント名を取る。stdin が閉じない環境で固まらないよう時間で打ち切る。
-function readHookInput(): Promise<InjectHookInput> {
+// 入力から cwd を取る。stdin が閉じない環境で固まらないよう時間で打ち切る。
+function readHookInput(): Promise<{ cwd?: unknown }> {
   return new Promise((resolve) => {
     let data = ""
     let settled = false
-    const finish = (value: InjectHookInput): void => {
+    const finish = (value: { cwd?: unknown }): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -742,11 +235,7 @@ function readHookInput(): Promise<InjectHookInput> {
     process.stdin.on("end", () => {
       try {
         const parsed: unknown = JSON.parse(data)
-        finish(
-          typeof parsed === "object" && parsed !== null
-            ? (parsed as InjectHookInput)
-            : {}
-        )
+        finish(typeof parsed === "object" && parsed !== null ? parsed : {})
       } catch {
         finish({})
       }
@@ -761,19 +250,8 @@ try {
     typeof hookInput.cwd === "string" && hookInput.cwd !== ""
       ? hookInput.cwd
       : process.cwd()
-  const config = loadConfig(startDir)
-  // 利用者が明示的に切っているときは案内も含めて何も出さない。
-  if (config.injection.enabled) {
-    // SubagentStart 以外(無い・読めないを含む)は従来どおり SessionStart として扱う。
-    if (hookInput.hook_event_name === "SubagentStart") {
-      const content = buildForSubagent(config, process.env)
-      if (content !== null) injectContext(content, "SubagentStart")
-    } else {
-      injectContext(build(config, process.env), "SessionStart")
-    }
-  }
+  const { content, systemMessage } = build(loadConfig(startDir), process.env)
+  injectContext(content, systemMessage)
 } catch {
   // フェイルオープン(契約 §12)。何も出力せず正常終了する。
-  // **CLI 案内もここでは出さない。** 設定の解決が例外で壊れている状態で案内を出すと、
-  // 誤った CLI パスを広告しかねないためである(設計書 §8-7 の限定)。
 }

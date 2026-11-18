@@ -49,7 +49,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | 名前              | 説明                                                                                                                | ステータス |
 | --------------- | ----------------------------------------------------------------------------------------------------------------- | ----- |
 | Codiel 👀🌿     | 変更ごとの intent 文書を起点に、設計・開発・テスト・PR起票・レビューを一気通貫で行うオーケストレーター                                                          | リリース   |
-| Metatron 📜     | プロジェクトアーキテクチャ・失敗知識・規律(rules)を管理し、毎セッション AI のコンテキストへ注入するプラグイン                                                      | 開発中   |
+| Metatron 📜     | プロジェクトアーキテクチャと失敗知識を管理し、CLAUDE.md の @メンションで毎セッション AI に読ませるプラグイン                                                        | 開発中   |
 | agent-policy    | エージェント運用を最適化するプラグイン。Claude のモデル名で役割を固定する "claude" プロファイルと、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決める "custom" プロファイルを提供する | 開発中   |
 | prompt-smith    | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げるプロンプト設計・改善・最適化のためのプラグイン                                               | 開発中   |
 | jevriel         | TypeSafe AI の判断モデル Jev を利用し、分類・順位付け・主張の確認・操作の安全性評価とブラウザ・API の動作確認を行う MCP プラグイン                                    | 開発中   |
@@ -88,19 +88,18 @@ Codiel には、AI の暴走を防ぎ、セキュリティを担保するため�
 
 ### Metatron 📜
 
-プロジェクトアーキテクチャ・失敗知識・プロジェクト規律の3種を管理するプラグインです。以下の5つの文書を管理します。
+プロジェクトアーキテクチャと失敗知識の 2 つの文書を管理するプラグインです。
 
-- プロジェクトアーキテクチャ: `ARCHITECTURE.md`
+- プロジェクトアーキテクチャ: `ARCHITECTURE.md`(保護パスとテスト方針を含む)
 - 失敗知識: `GOTCHAS.md`
-- プロジェクト規律: `.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`
 
-ARCHITECTURE と GOTCHAS は毎セッションの冒頭とサブエージェントの起動時に AI のコンテキストへ注入します。rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。
+両文書はプロジェクトの `CLAUDE.md` に書いた @メンションで毎セッション読み込まれ、サブエージェントにも届きます。SessionStart hook は本文を注入せず、CLI の絶対パスと記録のタイミングだけを案内します。コーディング規約などのプロジェクトの規約は、Metatron の管理外で `CLAUDE.md` に書きます。
 
 AI による上記文書への書き込み口を CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械的に保証します。直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい書き込み口へ案内します。
 
-`/metatron:init` でコードベース解析を行い、ARCHITECTURE.md / rules / 空の GOTCHAS.md を生成します。
+`/metatron:init` でコードベース解析を行い、ARCHITECTURE.md と空の GOTCHAS.md を生成し、`CLAUDE.md` に @メンションを追記します。
 
-`/metatron:update` は現行コードとの乖離を検出して更新します。
+`/metatron:update` は現行コードとの乖離を検出して更新します。旧バージョンの rules(`.claude/rules/metatron/`)が残っていれば、ARCHITECTURE と `CLAUDE.md` への移行も行います。
 
 コードベースの解析と乖離の検出は、`.gitignore` などで git の ignore に当たるファイルとディレクトリを走査しません。
 
@@ -112,8 +111,8 @@ AI による上記文書への書き込み口を CLI に一本化し、書式の
 
 ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` のいずれかなら有効になり、未設定やそれ以外の値なら無効です。
 
-- `AMATSUKA_METATRON_ENABLE_ADR`: ADR の記録・注入と、Codiel の `[ADR 候補]` を有効にします。
-- `AMATSUKA_METATRON_ENABLE_GOTCHAS`: GOTCHAS の記録・注入と、Codiel の `[GOTCHAS 候補]` を有効にします。
+- `AMATSUKA_METATRON_ENABLE_ADR`: ADR の記録と、Codiel の `[ADR 候補]` を有効にします。
+- `AMATSUKA_METATRON_ENABLE_GOTCHAS`: GOTCHAS の記録と、Codiel の `[GOTCHAS 候補]` を有効にします。
 
 チームで設定を揃えるため、プロジェクトの `.claude/settings.json` の `env` に書いてコミットすることを推奨します。値を変えたら新しいセッションを始めてください。
 
@@ -121,7 +120,6 @@ ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` �
 
 - `paths.architecture`: `docs/ARCHITECTURE.md`
 - `paths.gotchas`: `docs/GOTCHAS.md`
-- `paths.rulesDir`: `.claude/rules/metatron`
 
 ※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
 
@@ -131,11 +129,11 @@ ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` �
 
 Codiel は、重要な技術選定や設計判断などを `[ADR 候補]` として、失敗知識は `[GOTCHAS 候補]` として、intent の持続層に全文で残します。候補を残すのは、Metatron の環境変数(`AMATSUKA_METATRON_ENABLE_ADR` / `AMATSUKA_METATRON_ENABLE_GOTCHAS`)が有効な種別だけです。後から Metatron を導入すると、`/metatron:init` と `/metatron:update` がそれを ADR と GOTCHAS へ移動させます。
 
-Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS・rules を管理するプラグインとして単体でハーネス資産を提供します。
+Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS を管理するプラグインとして単体でハーネス資産を提供します。
 
-Metatron を併用した Codiel は、システム概要・レイヤー構造・テスト方針・ADR・失敗知識を含むプロジェクト知識をもって効率的かつ安全に開発を進めることができます。
+Metatron を併用した Codiel は、システム概要・レイヤー構造・保護パス・テスト方針・ADR・失敗知識を含むプロジェクト知識をもって効率的かつ安全に開発を進めることができます。
 
-2つのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / metatron が管理する rules / intent 文書)とコンテキストで相互補完を行います。
+2つのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / intent 文書)とコンテキストで相互補完を行います。
 
 ---
 

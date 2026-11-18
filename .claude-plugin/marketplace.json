@@ -58,7 +58,7 @@
     {
       "name": "metatron",
       "source": "./plugins/metatron",
-      "description": "プロジェクトの技術的前提(ARCHITECTURE)と失敗知識(GOTCHAS)を記録・更新し、毎セッションの冒頭で AI のコンテキストへ注入する。正本への直接編集は hook が拒否し、書式検証と採番を機械で保証する CLI へ誘導する"
+      "description": "プロジェクトの技術的前提(ARCHITECTURE)と失敗知識(GOTCHAS)を記録・更新し、CLAUDE.md の @メンションで毎セッション AI に読ませる。正本への直接編集は hook が拒否し、書式検証と採番を機械で保証する CLI へ誘導する"
     },
     {
       "name": "jevriel",

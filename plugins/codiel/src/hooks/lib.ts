@@ -113,7 +113,6 @@ export const DOC_CONFIG_FILENAME = "metatron.config.json"
 export const DOC_CONFIG_SUPPORTED_VERSION = 1
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
 export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
-export const DEFAULT_RULES_DIR = ".claude/rules/metatron"
 
 export interface DocPaths {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -185,15 +184,22 @@ function gitToplevel(cwd: string): string | null {
  * 返すため、段 1 を文字列操作だけで辿るとシンボリックリンク越しの起動で両者が別の
  * ディレクトリ木を辿り、実装間で docRoot が食い違う。
  *
+ * 段 1 の探索は git の toplevel(段 2 の値)で打ち切る。親リポジトリの中に置いた
+ * worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
+ *
  * codiel 固有資産のルートを探すときは findProjectRoot を使う(基準が異なる)。
  */
 export function findDocRoot(startDir?: string): string {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()))
 
-  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。
+  const top = gitToplevel(start)
+
+  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。git の toplevel 自身も候補に含め、
+  // その先へは進まない。git 管理外ならファイルシステムのルートまで辿る。
   let dir = start
   while (true) {
     if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir
+    if (top && dir === top) break
     const parent = path.dirname(dir)
     // ファイルシステムのルートに達したら打ち切る。
     if (parent === dir) break
@@ -201,7 +207,6 @@ export function findDocRoot(startDir?: string): string {
   }
 
   // 段 2
-  const top = gitToplevel(start)
   if (top) return top
 
   // 段 3
@@ -292,7 +297,7 @@ function fallbackDocRoot(startDir?: string): string {
 }
 
 // 設定の読み込みと検証(トップレベルの型・未知の version・paths の型)。
-// resolveDocPaths と resolveRulesDir が共有する。例外を投げない。
+// resolveDocPaths が使う。例外を投げない。
 function loadPathsConfig(startDir?: string): {
   docRoot: string
   paths: Record<string, unknown> | undefined
@@ -381,35 +386,6 @@ export function resolveDocPaths(startDir?: string): DocPaths {
       paths?.gotchas,
       DEFAULT_GOTCHAS_PATH,
       "gotchas",
-      warnings
-    ),
-    warnings
-  }
-}
-
-export interface RulesDir {
-  /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
-  docRoot: string
-  /** metatron の rules ディレクトリの絶対パス。 */
-  rulesDir: string
-  /** resolveDocPaths と同じ規則で積む既定値へ落とした理由。 */
-  warnings: string[]
-}
-
-/**
- * metatron の rules ディレクトリ(`paths.rulesDir`。既定は `.claude/rules/metatron`)の解決。
- * 設定の読み込みと検証は resolveDocPaths と同じ経路を通る。
- * metatron の `src/lib/config.ts` と同じく、未知の version・壊れた設定では既定の場所を返す。
- */
-export function resolveRulesDir(startDir?: string): RulesDir {
-  const { docRoot, paths, warnings } = loadPathsConfig(startDir)
-  return {
-    docRoot,
-    rulesDir: resolveConfiguredPath(
-      docRoot,
-      paths?.rulesDir,
-      DEFAULT_RULES_DIR,
-      "rulesDir",
       warnings
     ),
     warnings

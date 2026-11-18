@@ -56,7 +56,6 @@
 ```
 .
 ├── .claude-plugin/marketplace.json  配布するプラグインの一覧を宣言する
-├── .claude/rules/metatron/          metatron が管理する規律を置く
 ├── harness-docs/                    設計書・実装計画書と ARCHITECTURE・GOTCHAS を置く
 ├── scripts/                         ターミナルで手動実行するための ShellScript を置く
 ├── tools/                           AI が使用する Python スクリプトツールを置く
@@ -97,7 +96,7 @@
   "impl": ["plugins/*/src/**", "plugins/*/build.ts", "plugins/codiel/raguel-mcp/src/**", "plugins/codiel/raguel-mcp/build.ts"],
   "prompt": ["plugins/*/skills/**", "plugins/*/agents/**", "plugins/*/commands/**", "plugins/*/references/**", "plugins/*/assets/**", ".claude/**"],
   "bundle": ["plugins/*/scripts/**", "plugins/*/dist/**", "plugins/codiel/raguel-mcp/dist/**"],
-  "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**", ".vscode/**"],
+  "manifest": [".claude-plugin/**", "plugins/*/.claude-plugin/**", "plugins/*/hooks/**", "package.json", "plugins/*/package.json", "pnpm-workspace.yaml", "tsconfig.json", "biome.json", "vitest.config.ts", "scripts/**", "tools/**", ".vscode/**", ".github/**"],
   "docs": ["harness-docs/**", "docs/**", "plugins/*/docs/**", "plugins/*/README.md", "README.md", "CLAUDE.md", ".serena/**"]
 }
 ```
@@ -105,7 +104,7 @@
 - `impl` は TypeScript の実装を指す。
 - `prompt` は AI が読む指示書と、そこへ合成される素材を指す。`.claude/` の output style・rules・skills を含む。
 - `bundle` は手で編集しない。
-- `manifest` は配布宣言・ワークスペース設定・エディタ設定・環境構築スクリプトを指す。
+- `manifest` は配布宣言・ワークスペース設定・エディタ設定・環境構築スクリプト・Issue テンプレートを指す。
 - `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリを含む。
 
 ## コマンド定義
@@ -120,6 +119,33 @@
 
 - いずれも `pnpm install` が済んでいることを前提とする。
 - 単一のプラグインだけをビルドするときは `pnpm --filter <plugin>-scripts build` を使う。
+
+## 保護パス
+
+### 触らないパス
+
+- `plugins/*/scripts/` と `plugins/*/dist/` と `plugins/codiel/raguel-mcp/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。ただし ShellScript で書かれた `plugins/codiel/scripts/install-harness.sh` は直接編集してよい。
+- `.serena/memories/` — Serena の `write_memory` / `edit_memory` で変更する。
+
+### 変更に慎重を要するパス
+
+- `.claude-plugin/marketplace.json` — プラグインを追加または削除するときだけ変更する。変更後に対応する `plugins/<plugin>/.claude-plugin/plugin.json` があることを確認する。
+- `plugins/*/.claude-plugin/plugin.json` — 改修したらバージョンを上げる。上げ方は CLAUDE.md の「プラグインのバージョン」に従う。`package.json` を持つプラグインは `version` を同じ値に揃える。
+- `plugins/*/hooks/hooks.json` — 全セッションの挙動が変わる。変更後に新しいセッションで発火することを確認する。
+- `pnpm-workspace.yaml` — スクリプトを持つプラグインを追加または削除するときだけ変更する。変更後に `pnpm install` を実行し、`pnpm run build` を通す。
+- `tsconfig.json` と `biome.json` と `vitest.config.ts` — 全プラグインに影響する。変更後に `pnpm run typecheck` と `pnpm run lint` と `pnpm run test` をすべて通す。
+- `CLAUDE.md` — 全セッションで読み込まれる。ARCHITECTURE と内容が重ならないことを確認する。
+- `plugins/metatron/references/architecture-format.md` と `gotchas-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当セクションの項目をすべて追随させる。`config-schema.md` を変更したときは、metatron と codiel の独立実装を追随させ、2者比較テストを通す。
+- `plugins/codiel/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/codiel/docs/format-change-checklist.md` の項目をすべて追随させる。
+
+## テスト方針
+
+- ユニットテストは vitest で書く。E2E テストは持たない。
+- テストは対象ソースと同じディレクトリの `__test__/` に `<対象ファイル名>.test.ts` として置く(`src/lib/adr.ts` のテストは `src/lib/__test__/adr.test.ts`)。
+- 複数のモジュールにまたがる統合テストは、入口のあるディレクトリの `__test__/` に置く。
+- 複数のテストから使うヘルパーは `__test__/helpers/` に置き、`.test.ts` を付けない。
+- 子プロセスとして起動するエントリポイントと故障注入は `src/testing/` に置く。lint と型検査の対象外にするものは拡張子を `.mjs` にする。
+- テストが読み込む固定データは `src/fixtures/` に置く。
 
 ## ADR 一覧
 

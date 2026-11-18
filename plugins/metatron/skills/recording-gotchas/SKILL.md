@@ -13,7 +13,7 @@ description: このプロジェクトで踏んだ失敗を GOTCHAS の台帳へ�
 ## CLI の呼び出し
 
 - 実行するコマンド行は `node <CLI の絶対パス> <サブコマンド>` の形にする。
-- CLI の絶対パスは、セッション開始時に注入された案内か、文書の直接編集が拒否されたときのメッセージに現れる。コンテキストに現れたものをそのまま使う。
+- CLI の絶対パスは、SessionStart の hook が出す案内文か、文書の直接編集が拒否されたときのメッセージに現れる。コンテキストに現れたものをそのまま使う。`get config` の `cli.path` も同じ値を返す。
 - 現れていないときはユーザーに絶対パスを尋ねる。インストール先を推測して組み立てない。
 - `--input <path>` に渡す JSON は Write ツールで一時ファイルへ書いてから渡す。
 - 引数へ本文を直接埋め込まず、一時ファイルのパスだけを渡す。
@@ -70,6 +70,15 @@ GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 - 非 0 で終わったときは `error` を読んで入力を直し、実行し直す。拒否を握り潰して先へ進まない。
 
+### 台帳を新しく作ったとき
+
+手順 2 で台帳が無かったときに行う。`capturing-architecture` と `updating-architecture` から「持続層の GOTCHAS 候補の取り込み」として呼ばれたときは行わない(呼び出し元が追記を扱う)。
+
+- docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` のコードの外に、`get config` の `gotchas.relative` を指す `@<相対パス>` があるかを確かめる。`.claude/CLAUDE.md` の行は `../` を付けたパスで書かれている。
+- 無ければ、`link-claude-md` で追記することを案内する。追記先は docRoot の `CLAUDE.md`、それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` である。
+- エントリの追記と違い、@メンションの追記には承認を要する。追記先のパスと追記する行を示し、承認を得てから `link-claude-md` を実行する。
+- ARCHITECTURE が無いときは `link-claude-md` が `architecture_missing` で拒否する。実行せず、`/metatron:init` を案内する。
+
 ## 5. タグ付け
 
 状態が変わったエントリには `tag-gotcha --id <ID> --tag <解決済み|対象外> --reason <理由>` でタグを付ける。タグの値域と選び分けは `../../references/gotchas-format.md` に従う。
@@ -91,6 +100,7 @@ GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効
 - 追記したエントリの ID とタイトル、書き込んだファイルのパスを報告する。
 - タグを付けたときは対象の ID とタグと理由を報告する。
 - 記録しないと判断したときは、その理由を報告する。
+- CLAUDE.md に @メンションを追記したときは、追記した行を報告する。
 - 「更新した(未コミット)。コミットするか」の確認を 1 行添える。
 - 呼び出し元のフローがコミットまでを担っているとき(ハーネスの run の一部として起動されたとき)は、この確認を添えない。
 

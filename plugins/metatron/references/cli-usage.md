@@ -4,7 +4,7 @@
 node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 ```
 
-CLI の絶対パスは `get config` の出力の `cli.path`、または deny hook の拒否メッセージから取る。インストール先を推測して組み立てない。
+CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cli.path`、または deny hook の拒否メッセージから取る。インストール先を推測して組み立てない。
 
 ## サブコマンド
 
@@ -16,15 +16,13 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 | GOTCHAS のエントリ配列・総数・昇格候補数 |
 | `get gotchas-template` | 読 | 雛形の全文・解決先パス・`exists`・`hasContent` |
 | `get adr [--id <ID> \| --status <状態>]` | 読 | ADR のエントリ配列と次の採番 |
-| `get rules [--name <名前>]` | 読 | rules 3 ファイルの本文と存在状況、または指定した 1 ファイル |
 | `scan` | 読 | コードベース解析の事実 |
 | `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補(`findings`)と、技術スタックとコマンドの定義が置かれうるファイルの一覧(`sources`)。ADR 無効なら `## ADR 一覧` の欠落を乖離にしない |
 | `stage-architecture --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `stage-adr --input <path>` | 段階 | diff と `stagingId`、追加時は `assignedId`。書き込みはしない |
-| `stage-rules --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
-| `commit-rules --staging-id <id>` | 書 | `stagingId` を消費して rules の 1 ファイルへ書き込む |
 | `init-gotchas` | 書 | 承認後に雛形だけの GOTCHAS 台帳を新規作成する |
+| `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記し、`metatron.config.json` が無ければ作る。追記したもの(`added`)・既にあったもの(`present`)・飛ばしたもの(`skipped`)・設定ファイルを作ったか(`configCreated`)を返す |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
 | `stage-gotcha --input <path>` | 段階 | 既存エントリのフィールドを書き換えた diff と `stagingId`。書き込みはしない |
@@ -43,7 +41,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 - 非 0 は 1(内容の拒否)と 2(呼び出し方の誤り。サブコマンド不明・必須オプション欠落・入力を読めない)に分かれる。`shrink-adr-candidate` の拒否・失敗はこの 2 つとは別に終了コード 3 で返り、`shrinkPending` に `file` / `candidateId` / `adr` を積む。`remove-gotcha-candidate` の拒否・失敗も終了コード 3 で返り、`removePending` に `file` / `hash` を積む。
 - 記録が無効なときの拒否は、`shrink-adr-candidate` と `remove-gotcha-candidate` を含めて終了コード 1 で返る。終了コード 3 は「やり直せば通りうる拒否」の契約なので、この拒否には使わない。
 - 書き込み系が非 0 で終わったとき、対象ファイルは 1 バイトも変わっていない。書き込みの途中で失敗しても同じである。
-- ただし `commit-architecture` と `commit-rules` と `commit-gotchas` が `write_failed` で終わったとき、その staging は消費済みになっている。`stage-*` からやり直す。
+- ただし `commit-architecture` と `commit-gotchas` が `write_failed` で終わったとき、その staging は消費済みになっている。`stage-*` からやり直す。
 - `lock_timeout` が返ったときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
 ## 記録の有効・無効
@@ -82,7 +80,7 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 節を消すときは `body` の代わりに `remove: true` を書く。
 
 ```json
-{ "sections": [{ "heading": "規約", "remove": true }], "reason": "rules へ移した" }
+{ "sections": [{ "heading": "規約", "remove": true }], "reason": "規約は CLAUDE.md へ移した" }
 ```
 
 - `remove: true` と `body` を同時に指定すると拒否される。削除では `body` を書かない。
@@ -111,19 +109,6 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - `reason` は必須。省略した状態変更は拒否される。
 - `changedOn` は省略時に当日日付。
 
-### stage-rules
-
-```json
-{ "name": "conventions", "body": "...", "reason": "更新の理由" }
-```
-
-- `name` は `conventions` / `protected-paths` / `testing-policy` のいずれか。一覧は `get config` の `inputSchemas["stage-rules"].names` から取る。未知の名前は拒否される。
-- `body` は `# 見出し` から始まる完全なファイル内容。ARCHITECTURE と違い見出し行を含む。
-- `body` の先頭 5 行に管理者表示行が無いと `missing_admin_notice` で拒否される。書式は `references/rules-format.md` にある。
-- frontmatter を書くと `frontmatter_not_allowed` で拒否される。
-- 1 回で扱えるのは 1 ファイルだけである。3 ファイルを更新するときは 3 回に分ける。
-- `reason` は任意。
-
 ### init-gotchas
 
 入力 JSON を持たない。オプションも取らない。
@@ -132,6 +117,20 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - 内容のある台帳があるときは `already_exists` で拒否され、対象ファイルは変化しない。
 - 空・空白のみのファイルは「内容なし」として扱い、雛形で作り直す。
 - **実行の前にユーザーの承認を得る。** CLI は承認の有無を判定できない。提示する材料は `get gotchas-template` で取る。
+
+### link-claude-md
+
+入力 JSON を持たない。オプションも取らない。
+
+- 追記する先は docRoot の `CLAUDE.md` である。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` に `../` 付きで書く。どちらも無ければ `CLAUDE.md` を作る。
+- 対象は ARCHITECTURE と、GOTCHAS の記録が有効で台帳に中身があるときの GOTCHAS である。
+- コードフェンス・インラインコード・HTML コメントの外に既に書かれている @メンションは足さない。行の途中・箇条書きの中・`./` 付きの書き方も、書かれているものとして数える。既存の行は書き換えない。
+- 判定の対象は docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` だけである。他のファイル経由の import・`CLAUDE.local.md`・親ディレクトリの CLAUDE.md は見ない。
+- 追記する改行コードは、既存のファイルに合わせる。
+- `metatron.config.json` が無いときは、CLAUDE.md より先に `{ "version": 1 }` で作る。既存の設定は上書きしない。codiel はこのファイルの有無で metatron の利用を判定する。
+- ARCHITECTURE が無いときは `architecture_missing` で拒否される。
+- 空白か制御文字を含むパスは @メンションにできないので、追記せずに `skipped` に載せる。残りのパスは追記する。
+- **実行の前にユーザーの承認を得る。** 追記する行と、作られる設定ファイルのパスを示してから実行する。
 
 ### append-gotcha
 
@@ -192,17 +191,17 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 ## stage から commit の 2 段階
 
-ARCHITECTURE と ADR と rules の書き込みと、GOTCHAS のエントリの書き換えは 2 段階で行う。
+ARCHITECTURE と ADR の書き込みと、GOTCHAS のエントリの書き換えは 2 段階で行う。
 
 `stage-*` と `commit-*` は、`updating-architecture` か `capturing-architecture` のスキルの手順の中で実行する。スキルの外で更新が要るときは、Skill ツールで `updating-architecture` を起動してから実行する。
 
 GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append-gotcha`)は 2 段階を取らない。前者は書き込む内容が雛形に固定されており差分が定数であるため、後者は既存を壊さない追記であるためである。
 
-1. `stage-architecture` / `stage-adr` / `stage-rules` / `stage-gotcha` のいずれかを実行し、`stagingId` と diff を得る。
+1. `stage-architecture` / `stage-adr` / `stage-gotcha` のいずれかを実行し、`stagingId` と diff を得る。
 2. diff を全文提示してユーザーの承認を得る。
-3. `commit-architecture --staging-id <id>`(rules なら `commit-rules`、GOTCHAS なら `commit-gotchas`)を実行して書き込む。
+3. `commit-architecture --staging-id <id>`(GOTCHAS なら `commit-gotchas`)を実行して書き込む。
 
-`commit-architecture` が受けるのは `stage-architecture` / `stage-adr` の staging、`commit-rules` が受けるのは `stage-rules` の staging、`commit-gotchas` が受けるのは `stage-gotcha` の staging である。取り違えると `staging_kind_mismatch` で拒否され、その staging は消費されないまま残る。
+`commit-architecture` が受けるのは `stage-architecture` / `stage-adr` の staging、`commit-gotchas` が受けるのは `stage-gotcha` の staging である。取り違えると `staging_kind_mismatch` で拒否され、その staging は消費されないまま残る。
 
 ### stage が返す diff
 
@@ -225,7 +224,7 @@ GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append
 
 機械的に保証されるのは次の 5 点だけである。
 
-1. diff を計算せずに書き込むことはできない。`commit-architecture` と `commit-rules` と `commit-gotchas` は `stagingId` 無しでは失敗する。
+1. diff を計算せずに書き込むことはできない。`commit-architecture` と `commit-gotchas` は `stagingId` 無しでは失敗する。
 2. staging は単回使用かつ有効期限つき(既定 30 分)である。使い回しと古い案の遅延適用ができない。
 3. stage 後に対象ファイルが変化していたら、commit は `file_changed` で失敗する。
 4. staging レコードを書き換えて commit すると `tampered` で失敗する。レコードは自身の内容ハッシュ(`recordHash`)を持ち、commit の前に再計算して照合する。`nextContent` だけ・`targetPath` だけ・`expiresAt` だけの差し替えは、いずれも書き込みに至らない。
@@ -235,7 +234,7 @@ GOTCHAS の台帳の新規作成(`init-gotchas`)とエントリの追記(`append
 
 保証されないのは次の 3 点である。
 
-1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` と `commit-rules` と `commit-gotchas` を実行しない。
+1. **人間が実際に diff を見て承認したか。** CLI は承認の有無を判定できない。`stage-*` が exit 0 で返ったことを承認と読み替えない。ユーザーの承認を得るまで `commit-architecture` と `commit-gotchas` を実行しない。
 2. **`recordHash` まで整合的に打ち直した改変。** 同じユーザー権限で動くプロセスは正しい `recordHash` を計算できるため、検知できない。`recordHash` の照合が捕まえるのは、偶発的な破損と CLI を経由しない書き換えまでである。staging の内容を変えるときは、保存されたレコードを直接編集せず `stage-*` からやり直す。
 3. **commit が失敗した staging を再実行できること。** 消費の印を付けた後に書き込みが失敗すると、その staging は消費済みのまま残る。`write_failed` で失敗した `stagingId` を再実行しない。`stage-*` からやり直す。
 

@@ -19,16 +19,6 @@ export const SUPPORTED_VERSION = 1
 
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
 export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
-export const DEFAULT_RULES_DIR = ".claude/rules/metatron"
-export const DEFAULT_INJECTION_ENABLED = true
-export const DEFAULT_GOTCHAS_RECENT_COUNT = 5
-export const DEFAULT_MAX_CHARS = 9000
-
-export interface InjectionConfig {
-  enabled: boolean
-  gotchasRecentCount: number
-  maxChars: number
-}
 
 export interface ResolvedConfig {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -45,11 +35,6 @@ export interface ResolvedConfig {
   architectureRelative: string
   /** GOTCHAS の docRoot からの相対パス(区切りは常に "/")。 */
   gotchasRelative: string
-  /** metatron が管理する rules の置き場(絶対パス)。 */
-  rulesDirPath: string
-  /** rules の置き場の docRoot からの相対パス(区切りは常に "/")。 */
-  rulesDirRelative: string
-  injection: InjectionConfig
   /** 既定値へ落とした理由・設定を読めなかった理由。空配列が正常。 */
   warnings: string[]
 }
@@ -109,14 +94,21 @@ function gitToplevel(cwd: string): string | null {
  * 探索の前に開始ディレクトリを `fs.realpathSync` で実体パスへ解決する。段 2 が実体パスを
  * 返すため、段 1 を文字列操作だけで辿るとシンボリックリンク越しの起動で両者が別の
  * ディレクトリ木を辿り、実装間で docRoot が食い違う。
+ *
+ * 段 1 の探索は git の toplevel(段 2 の値)で打ち切る。親リポジトリの中に置いた
+ * worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
  */
 export function findDocRoot(startDir?: string): string {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()))
 
-  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。
+  const top = gitToplevel(start)
+
+  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。git の toplevel 自身も候補に含め、
+  // その先へは進まない。git 管理外ならファイルシステムのルートまで辿る。
   let dir = start
   while (true) {
     if (hasConfigFile(dir)) return dir
+    if (top && dir === top) break
     const parent = path.dirname(dir)
     // ファイルシステムのルートに達したら打ち切る。
     if (parent === dir) break
@@ -124,7 +116,6 @@ export function findDocRoot(startDir?: string): string {
   }
 
   // 段 2
-  const top = gitToplevel(start)
   if (top) return top
 
   // 段 3
@@ -204,45 +195,6 @@ function resolveConfiguredPath(
   return { relative: toPosix(relative), absolute }
 }
 
-// 個々のキーの型不整合は「壊れた JSON」ではなく、その項目だけ既定値に落とす(契約 §2)。
-function resolveBoolean(
-  raw: unknown,
-  fallback: boolean,
-  label: string,
-  warnings: string[]
-): boolean {
-  if (raw === undefined) return fallback
-  if (typeof raw !== "boolean") {
-    warnings.push(
-      `${label} が真偽値でないため、既定値 ${String(fallback)} を使用します。`
-    )
-    return fallback
-  }
-  return raw
-}
-
-function resolveNumber(
-  raw: unknown,
-  fallback: number,
-  label: string,
-  min: number,
-  warnings: string[]
-): number {
-  if (raw === undefined) return fallback
-  if (
-    typeof raw !== "number" ||
-    !Number.isFinite(raw) ||
-    !Number.isInteger(raw) ||
-    raw < min
-  ) {
-    warnings.push(
-      `${label} が ${min} 以上の整数でないため、既定値 ${String(fallback)} を使用します。`
-    )
-    return fallback
-  }
-  return raw
-}
-
 function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
   return {
     docRoot,
@@ -252,13 +204,6 @@ function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
     gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
-    rulesDirPath: path.resolve(docRoot, DEFAULT_RULES_DIR),
-    rulesDirRelative: DEFAULT_RULES_DIR,
-    injection: {
-      enabled: DEFAULT_INJECTION_ENABLED,
-      gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
-      maxChars: DEFAULT_MAX_CHARS
-    },
     warnings
   }
 }
@@ -328,19 +273,6 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     "gotchas",
     warnings
   )
-  const rulesDir = resolveConfiguredPath(
-    docRoot,
-    paths?.rulesDir,
-    DEFAULT_RULES_DIR,
-    "rulesDir",
-    warnings
-  )
-
-  const injectionRaw = source?.injection
-  const injection = isPlainObject(injectionRaw) ? injectionRaw : undefined
-  if (injectionRaw !== undefined && injection === undefined) {
-    warnings.push("injection がオブジェクトでないため、既定値を使用します。")
-  }
 
   // 未知キー($schema を含む)は無視する。エラーにしない(契約 §2)。
   return {
@@ -351,30 +283,6 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
-    rulesDirPath: rulesDir.absolute,
-    rulesDirRelative: rulesDir.relative,
-    injection: {
-      enabled: resolveBoolean(
-        injection?.enabled,
-        DEFAULT_INJECTION_ENABLED,
-        "injection.enabled",
-        warnings
-      ),
-      gotchasRecentCount: resolveNumber(
-        injection?.gotchasRecentCount,
-        DEFAULT_GOTCHAS_RECENT_COUNT,
-        "injection.gotchasRecentCount",
-        0,
-        warnings
-      ),
-      maxChars: resolveNumber(
-        injection?.maxChars,
-        DEFAULT_MAX_CHARS,
-        "injection.maxChars",
-        1,
-        warnings
-      )
-    },
     warnings
   }
 }

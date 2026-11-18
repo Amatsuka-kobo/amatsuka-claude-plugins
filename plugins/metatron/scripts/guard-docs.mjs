@@ -2,7 +2,7 @@
 
 // src/guard-docs.ts
 import fs2 from "node:fs";
-import path3 from "node:path";
+import path2 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/lib/config.ts
@@ -13,10 +13,6 @@ var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-var DEFAULT_RULES_DIR = ".claude/rules/metatron";
-var DEFAULT_INJECTION_ENABLED = true;
-var DEFAULT_GOTCHAS_RECENT_COUNT = 5;
-var DEFAULT_MAX_CHARS = 9e3;
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -52,14 +48,15 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
+    if (top && dir === top) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const top = gitToplevel(start);
   if (top) return top;
   return start;
 }
@@ -102,26 +99,6 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   }
   return { relative: toPosix(relative), absolute };
 }
-function resolveBoolean(raw, fallback, label, warnings) {
-  if (raw === void 0) return fallback;
-  if (typeof raw !== "boolean") {
-    warnings.push(
-      `${label} \u304C\u771F\u507D\u5024\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${String(fallback)} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
-    );
-    return fallback;
-  }
-  return raw;
-}
-function resolveNumber(raw, fallback, label, min, warnings) {
-  if (raw === void 0) return fallback;
-  if (typeof raw !== "number" || !Number.isFinite(raw) || !Number.isInteger(raw) || raw < min) {
-    warnings.push(
-      `${label} \u304C ${min} \u4EE5\u4E0A\u306E\u6574\u6570\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${String(fallback)} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
-    );
-    return fallback;
-  }
-  return raw;
-}
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
@@ -131,13 +108,6 @@ function defaultsFor(docRoot, warnings) {
     gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
-    rulesDirPath: path.resolve(docRoot, DEFAULT_RULES_DIR),
-    rulesDirRelative: DEFAULT_RULES_DIR,
-    injection: {
-      enabled: DEFAULT_INJECTION_ENABLED,
-      gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
-      maxChars: DEFAULT_MAX_CHARS
-    },
     warnings
   };
 }
@@ -197,18 +167,6 @@ function loadConfigInner(startDir) {
     "gotchas",
     warnings
   );
-  const rulesDir = resolveConfiguredPath(
-    docRoot,
-    paths?.rulesDir,
-    DEFAULT_RULES_DIR,
-    "rulesDir",
-    warnings
-  );
-  const injectionRaw = source?.injection;
-  const injection = isPlainObject(injectionRaw) ? injectionRaw : void 0;
-  if (injectionRaw !== void 0 && injection === void 0) {
-    warnings.push("injection \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002");
-  }
   return {
     docRoot,
     configPath,
@@ -217,30 +175,6 @@ function loadConfigInner(startDir) {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
-    rulesDirPath: rulesDir.absolute,
-    rulesDirRelative: rulesDir.relative,
-    injection: {
-      enabled: resolveBoolean(
-        injection?.enabled,
-        DEFAULT_INJECTION_ENABLED,
-        "injection.enabled",
-        warnings
-      ),
-      gotchasRecentCount: resolveNumber(
-        injection?.gotchasRecentCount,
-        DEFAULT_GOTCHAS_RECENT_COUNT,
-        "injection.gotchasRecentCount",
-        0,
-        warnings
-      ),
-      maxChars: resolveNumber(
-        injection?.maxChars,
-        DEFAULT_MAX_CHARS,
-        "injection.maxChars",
-        1,
-        warnings
-      )
-    },
     warnings
   };
 }
@@ -294,47 +228,33 @@ function readFeatures(env) {
   return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
 }
 
-// src/lib/rules.ts
-import path2 from "node:path";
-var RULES_FILES = [
-  "conventions",
-  "protected-paths",
-  "testing-policy"
-];
-function rulesFilePath(config, name) {
-  return path2.join(config.rulesDirPath, `${name}.md`);
-}
-function rulesFileRelative(config, name) {
-  return `${config.rulesDirRelative}/${name}.md`;
-}
-
 // src/guard-docs.ts
 function metatronCliPath() {
   const self = fileURLToPath(import.meta.url);
-  return path3.join(path3.dirname(path3.dirname(self)), "scripts", "metatron.mjs");
+  return path2.join(path2.dirname(path2.dirname(self)), "scripts", "metatron.mjs");
 }
 function toSlash(value) {
   return value.replace(/\\/g, "/");
 }
 function realpathDeepest(raw) {
-  const { root } = path3.parse(raw);
+  const { root } = path2.parse(raw);
   let current;
   try {
     current = fs2.realpathSync(root);
   } catch {
-    return path3.resolve(raw);
+    return path2.resolve(raw);
   }
   const segments = raw.slice(root.length).split(/[\\/]/).filter((s) => s !== "" && s !== ".");
   for (let i = 0; i < segments.length; i++) {
     if (segments[i] === "..") {
-      current = path3.dirname(current);
+      current = path2.dirname(current);
       continue;
     }
-    const next = path3.join(current, segments[i]);
+    const next = path2.join(current, segments[i]);
     try {
       current = fs2.realpathSync(next);
     } catch {
-      return path3.join(next, ...segments.slice(i + 1));
+      return path2.join(next, ...segments.slice(i + 1));
     }
   }
   return current;
@@ -358,7 +278,7 @@ function followDanglingLink(abs) {
       return current;
     }
     current = realpathDeepest(
-      path3.isAbsolute(target) ? target : `${path3.dirname(current)}${path3.sep}${target}`
+      path2.isAbsolute(target) ? target : `${path2.dirname(current)}${path2.sep}${target}`
     );
   }
   return abs;
@@ -373,7 +293,7 @@ function deepestExisting(abs) {
   let dir = abs;
   for (; ; ) {
     if (fs2.existsSync(dir)) return dir;
-    const parent = path3.dirname(dir);
+    const parent = path2.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -382,18 +302,18 @@ function isCaseInsensitiveFs(probe) {
   if (process.platform === "win32") return true;
   let dir = deepestExisting(probe);
   while (dir !== null) {
-    const base = path3.basename(dir);
+    const base = path2.basename(dir);
     const flipped = flipCase(base);
     if (flipped !== base) {
       try {
         const a = fs2.statSync(dir);
-        const b = fs2.statSync(path3.join(path3.dirname(dir), flipped));
+        const b = fs2.statSync(path2.join(path2.dirname(dir), flipped));
         return a.ino === b.ino && a.dev === b.dev;
       } catch {
         return false;
       }
     }
-    const parent = path3.dirname(dir);
+    const parent = path2.dirname(dir);
     dir = parent === dir ? null : parent;
   }
   return false;
@@ -432,15 +352,6 @@ function gotchasReason(relative, cli, gotchasEnabled) {
     `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
   ].join("\n");
 }
-function rulesReason(relative, cli) {
-  return [
-    `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u66F8\u5F0F\u691C\u8A3C\u3068\u5DEE\u5206\u78BA\u8A8D\u306E\u305F\u3081)\u3002`,
-    SKILL_LINE,
-    "\u73FE\u5728\u306E\u5185\u5BB9\u306E\u78BA\u8A8D:",
-    `  node ${cli} get rules`,
-    `CLI \u306E\u7D76\u5BFE\u30D1\u30B9\u3068\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
-  ].join("\n");
-}
 try {
   const input = await readStdin();
   const candidates = [
@@ -458,25 +369,19 @@ try {
     caseInsensitive
   );
   const gotchasKey = comparisonKey(config.gotchasPath, caseInsensitive);
-  const rulesTargets = RULES_FILES.map((name) => ({
-    key: comparisonKey(rulesFilePath(config, name), caseInsensitive),
-    relative: rulesFileRelative(config, name)
-  }));
   const cli = metatronCliPath();
   let hitArchitecture = false;
   let hitGotchas = false;
-  let hitRules;
   for (const raw of candidates) {
     const slashed = toSlash(raw);
-    const joined = path3.isAbsolute(slashed) ? slashed : `${cwd}/${slashed}`;
+    const joined = path2.isAbsolute(slashed) ? slashed : `${cwd}/${slashed}`;
     const keys = [
       comparisonKey(joined, caseInsensitive),
-      comparisonKey(path3.resolve(cwd, slashed), caseInsensitive)
+      comparisonKey(path2.resolve(cwd, slashed), caseInsensitive)
     ];
     for (const key of keys) {
       if (key === architectureKey) hitArchitecture = true;
       if (key === gotchasKey) hitGotchas = true;
-      hitRules ??= rulesTargets.find((target) => target.key === key);
     }
   }
   const features = readFeatures(process.env);
@@ -487,7 +392,6 @@ try {
     );
   if (hitGotchas)
     emit("deny", gotchasReason(config.gotchasRelative, cli, features.gotchas));
-  if (hitRules !== void 0) emit("deny", rulesReason(hitRules.relative, cli));
   pass();
 } catch {
   pass();

@@ -1,12 +1,6 @@
 {
   "entries": [
     {
-      "path": "plugins/basic-design/skills/api-list/references/template.md",
-      "reference": "規約",
-      "classification": "D",
-      "note": "生成するテンプレート自身の見出し。ARCHITECTURE の節ではない"
-    },
-    {
       "path": "plugins/codiel/commands/init.md",
       "reference": "(ARCHITECTURE への言及)",
       "classification": "D",

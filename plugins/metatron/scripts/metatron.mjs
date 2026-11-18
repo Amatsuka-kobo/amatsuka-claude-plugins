@@ -30,13 +30,10 @@ var ARCHITECTURE_HEADINGS = [
   "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9",
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
+  "\u4FDD\u8B77\u30D1\u30B9",
+  "\u30C6\u30B9\u30C8\u65B9\u91DD",
   "ADR \u4E00\u89A7"
 ];
-var MOVED_HEADINGS = {
-  \u30C6\u30B9\u30C8\u65B9\u91DD: "testing-policy",
-  \u4FDD\u8B77\u30D1\u30B9: "protected-paths",
-  \u898F\u7D04: "conventions"
-};
 var ADR_HEADING = "ADR \u4E00\u89A7";
 var DOMAINS_HEADING = "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7";
 var DOMAINS_MARKER = "metatron:domains";
@@ -216,14 +213,6 @@ function validateHeadingKey(heading, options = {}) {
     };
   }
   if (options.allowUnlisted === true) return { ok: true, heading: value };
-  const movedTo = MOVED_HEADINGS[value];
-  if (movedTo !== void 0) {
-    return {
-      ok: false,
-      error: "unknown_heading",
-      message: `\`${value}\` \u306F ARCHITECTURE \u304B\u3089 .claude/rules/metatron/${movedTo}.md \u3078\u79FB\u3057\u307E\u3057\u305F\u3002stage-rules --input <path> \u3067\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
   if (!isArchitectureHeading(value)) {
     return {
       ok: false,
@@ -587,6 +576,18 @@ function prepareArchitectureUpdate(current, changes) {
         ok: false,
         error: "unclosed_fence",
         message: `\u300C${validated.heading}\u300D\u306E body \u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002body \u306E\u4E2D\u3067\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304F\u3060\u3055\u3044\u3002`,
+        warnings
+      };
+    }
+    const bodyScan = scanFences(body);
+    const stray = bodyScan.lines.findIndex(
+      (line, i) => !bodyScan.insideFence[i] && HEADING_RE.test(line.text)
+    );
+    if (stray >= 0) {
+      return {
+        ok: false,
+        error: "invalid_body",
+        message: `\u300C${validated.heading}\u300D\u306E body \u306B \`## \` \u306E\u898B\u51FA\u3057(${bodyScan.lines[stray].text.trim()})\u304C\u3042\u308A\u307E\u3059\u3002\u5C0F\u898B\u51FA\u3057\u306F \`### \` \u4EE5\u4E0B\u3067\u66F8\u3044\u3066\u304F\u3060\u3055\u3044\u3002`,
         warnings
       };
     }
@@ -2243,7 +2244,7 @@ function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isStagingKind(value) {
-  return value === "architecture" || value === "adr" || value === "rules" || value === "gotchas";
+  return value === "architecture" || value === "adr" || value === "gotchas";
 }
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -2870,10 +2871,6 @@ var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-var DEFAULT_RULES_DIR = ".claude/rules/metatron";
-var DEFAULT_INJECTION_ENABLED = true;
-var DEFAULT_GOTCHAS_RECENT_COUNT = 5;
-var DEFAULT_MAX_CHARS = 9e3;
 function isPlainObject2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2909,14 +2906,15 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf2(path5.resolve(startDir ?? process.cwd()));
+  const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
+    if (top && dir === top) break;
     const parent = path5.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const top = gitToplevel(start);
   if (top) return top;
   return start;
 }
@@ -2959,26 +2957,6 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   }
   return { relative: toPosix(relative), absolute };
 }
-function resolveBoolean(raw, fallback, label, warnings) {
-  if (raw === void 0) return fallback;
-  if (typeof raw !== "boolean") {
-    warnings.push(
-      `${label} \u304C\u771F\u507D\u5024\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${String(fallback)} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
-    );
-    return fallback;
-  }
-  return raw;
-}
-function resolveNumber(raw, fallback, label, min, warnings) {
-  if (raw === void 0) return fallback;
-  if (typeof raw !== "number" || !Number.isFinite(raw) || !Number.isInteger(raw) || raw < min) {
-    warnings.push(
-      `${label} \u304C ${min} \u4EE5\u4E0A\u306E\u6574\u6570\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${String(fallback)} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
-    );
-    return fallback;
-  }
-  return raw;
-}
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
@@ -2988,13 +2966,6 @@ function defaultsFor(docRoot, warnings) {
     gotchasPath: path5.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
-    rulesDirPath: path5.resolve(docRoot, DEFAULT_RULES_DIR),
-    rulesDirRelative: DEFAULT_RULES_DIR,
-    injection: {
-      enabled: DEFAULT_INJECTION_ENABLED,
-      gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
-      maxChars: DEFAULT_MAX_CHARS
-    },
     warnings
   };
 }
@@ -3054,18 +3025,6 @@ function loadConfigInner(startDir) {
     "gotchas",
     warnings
   );
-  const rulesDir = resolveConfiguredPath(
-    docRoot,
-    paths?.rulesDir,
-    DEFAULT_RULES_DIR,
-    "rulesDir",
-    warnings
-  );
-  const injectionRaw = source?.injection;
-  const injection = isPlainObject2(injectionRaw) ? injectionRaw : void 0;
-  if (injectionRaw !== void 0 && injection === void 0) {
-    warnings.push("injection \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002");
-  }
   return {
     docRoot,
     configPath,
@@ -3074,30 +3033,6 @@ function loadConfigInner(startDir) {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
-    rulesDirPath: rulesDir.absolute,
-    rulesDirRelative: rulesDir.relative,
-    injection: {
-      enabled: resolveBoolean(
-        injection?.enabled,
-        DEFAULT_INJECTION_ENABLED,
-        "injection.enabled",
-        warnings
-      ),
-      gotchasRecentCount: resolveNumber(
-        injection?.gotchasRecentCount,
-        DEFAULT_GOTCHAS_RECENT_COUNT,
-        "injection.gotchasRecentCount",
-        0,
-        warnings
-      ),
-      maxChars: resolveNumber(
-        injection?.maxChars,
-        DEFAULT_MAX_CHARS,
-        "injection.maxChars",
-        1,
-        warnings
-      )
-    },
     warnings
   };
 }
@@ -3320,6 +3255,8 @@ var ARCHITECTURE_SECTIONS = [
   "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9",
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
+  "\u4FDD\u8B77\u30D1\u30B9",
+  "\u30C6\u30B9\u30C8\u65B9\u91DD",
   "ADR \u4E00\u89A7"
 ];
 var EXCLUDED_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
@@ -4560,6 +4497,144 @@ function runDiffArchitecture(ctx) {
   }
 }
 
+// src/cli/claude-md.ts
+import fs10 from "node:fs";
+
+// src/lib/claude-md.ts
+import fs9 from "node:fs";
+import path8 from "node:path";
+var CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
+function readOrNull(filePath) {
+  try {
+    return fs9.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function isMentionablePath(rel) {
+  return rel !== "" && ![...rel].some((c) => {
+    const code = c.charCodeAt(0);
+    return /\s/.test(c) || code < 32 || code === 127;
+  });
+}
+function mentions(text) {
+  const found = /* @__PURE__ */ new Set();
+  const withoutComments = text.replace(/^\uFEFF/, "").replace(/<!--[\s\S]*?-->/g, " ");
+  let fence = null;
+  for (const line of withoutComments.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (marker) {
+      const char = marker[1][0];
+      const length = marker[1].length;
+      if (fence === null) fence = { char, length };
+      else if (char === fence.char && length >= fence.length) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    const outsideCode = line.replace(/`[^`]*`/g, " ");
+    for (const match of outsideCode.matchAll(/(?:^|\s)@(\S+)/g)) {
+      const token = match[1].replace(/[.,;:)\]、。」]+$/, "");
+      if (token !== "") found.add(path8.posix.normalize(token));
+    }
+  }
+  return found;
+}
+function existingMentions(docRoot) {
+  const existing = /* @__PURE__ */ new Set();
+  for (const rel of CLAUDE_MD_CANDIDATES) {
+    const text = readOrNull(path8.join(docRoot, rel));
+    if (text === null) continue;
+    for (const m of mentions(text)) {
+      existing.add(
+        rel === "CLAUDE.md" ? m : path8.posix.normalize(`.claude/${m}`)
+      );
+    }
+  }
+  return existing;
+}
+function linkClaudeMd(docRoot, relatives) {
+  const unsafe = relatives.find((rel) => !isMentionablePath(rel));
+  if (unsafe !== void 0) {
+    throw new Error(
+      `\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u30D1\u30B9\u306F @\u30E1\u30F3\u30B7\u30E7\u30F3\u306B\u3067\u304D\u307E\u305B\u3093: ${JSON.stringify(unsafe)}`
+    );
+  }
+  const rootText = readOrNull(path8.join(docRoot, "CLAUDE.md"));
+  const dotText = readOrNull(path8.join(docRoot, ".claude/CLAUDE.md"));
+  const useDot = rootText === null && dotText !== null;
+  const target = path8.join(docRoot, useDot ? ".claude/CLAUDE.md" : "CLAUDE.md");
+  const created = (useDot ? dotText : rootText) === null;
+  const current = (useDot ? dotText : rootText) ?? "";
+  const existing = existingMentions(docRoot);
+  const present = relatives.filter((rel) => existing.has(rel));
+  const added = relatives.filter((rel) => !existing.has(rel));
+  if (added.length === 0) {
+    return { path: target, added, present, created: false };
+  }
+  const eol = current.includes("\r\n") ? "\r\n" : "\n";
+  const lines = added.map((rel) => `@${useDot ? `../${rel}` : rel}`);
+  const body = current.replace(/\s*$/, "");
+  const separator = body === "" ? "" : `${eol}${eol}`;
+  writeFileAtomic(target, `${body}${separator}${lines.join(eol)}${eol}`);
+  return { path: target, added, present, created };
+}
+
+// src/cli/claude-md.ts
+function hasContent(filePath) {
+  try {
+    return fs10.readFileSync(filePath, "utf8").trim() !== "";
+  } catch {
+    return false;
+  }
+}
+function runLinkClaudeMd(ctx) {
+  const command = "link-claude-md";
+  const config = loadConfig(ctx.cwd);
+  noteWarnings(config.warnings);
+  if (!hasContent(config.architecturePath)) {
+    emitWriteFailure(
+      command,
+      "architecture_missing",
+      `${config.architectureRelative} \u304C\u307E\u3060\u7121\u3044\u305F\u3081\u8FFD\u8A18\u3057\u307E\u305B\u3093\u3002\u5148\u306B ARCHITECTURE \u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+    return;
+  }
+  const candidates = [
+    config.architectureRelative,
+    ...ctx.features.gotchas && hasContent(config.gotchasPath) ? [config.gotchasRelative] : []
+  ];
+  const relatives = candidates.filter(isMentionablePath);
+  const skipped = candidates.filter((rel) => !isMentionablePath(rel));
+  let configCreated = false;
+  try {
+    configCreated = createConfigIfMissing(config.configPath);
+    const result = linkClaudeMd(config.docRoot, relatives);
+    emitResult(command, {
+      ok: true,
+      written: result.added.length > 0 || configCreated,
+      ...result,
+      skipped,
+      configPath: config.configPath,
+      configCreated,
+      warnings: config.warnings
+    });
+  } catch (error) {
+    emitWriteFailure(command, "write_failed", messageOf(error), {
+      written: configCreated,
+      configCreated
+    });
+  }
+}
+function createConfigIfMissing(configPath) {
+  try {
+    fs10.writeFileSync(configPath, '{\n  "version": 1\n}\n', { flag: "wx" });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
+}
+
 // src/cli/commit.ts
 function runCommit(ctx, spec) {
   const { command } = spec;
@@ -4654,117 +4729,12 @@ function runCommitArchitecture(ctx) {
     stageHint: "stage-architecture \u307E\u305F\u306F stage-adr \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
   });
 }
-function runCommitRules(ctx) {
-  runCommit(ctx, {
-    command: "commit-rules",
-    acceptedKinds: ["rules"],
-    stageHint: "stage-rules \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
-  });
-}
 function runCommitGotchas(ctx) {
   runCommit(ctx, {
     command: "commit-gotchas",
     acceptedKinds: ["gotchas"],
     stageHint: "stage-gotcha \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
   });
-}
-
-// src/cli/get.ts
-import fs10 from "node:fs";
-
-// src/lib/rules.ts
-import fs9 from "node:fs";
-import path8 from "node:path";
-var RULES_FILES = [
-  "conventions",
-  "protected-paths",
-  "testing-policy"
-];
-var RULES_ADMIN_NOTICE = "> \u3053\u306E\u6587\u66F8\u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308B\u3002\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002\u66F4\u65B0\u306F metatron \u306E CLI(`stage-rules` \u2192 `commit-rules`)\u3067\u884C\u3046\u3002CLI \u306E\u7D76\u5BFE\u30D1\u30B9\u306F\u3001\u30BB\u30C3\u30B7\u30E7\u30F3\u5192\u982D\u306E\u6CE8\u5165\u6587\u307E\u305F\u306F hook \u306E\u62D2\u5426\u30E1\u30C3\u30BB\u30FC\u30B8\u306B\u8F09\u3063\u3066\u3044\u308B\u3002";
-var RULES_LINE_GUIDELINE = 200;
-var ADMIN_NOTICE_SCAN_LINES = 5;
-function isRulesName(value) {
-  return typeof value === "string" && RULES_FILES.includes(value);
-}
-function rulesFilePath(config, name) {
-  return path8.join(config.rulesDirPath, `${name}.md`);
-}
-function rulesFileRelative(config, name) {
-  return `${config.rulesDirRelative}/${name}.md`;
-}
-function readRulesFile(config, name) {
-  const filePath = rulesFilePath(config, name);
-  const base = {
-    name,
-    path: filePath,
-    relative: rulesFileRelative(config, name)
-  };
-  try {
-    return { ...base, exists: true, text: fs9.readFileSync(filePath, "utf8") };
-  } catch {
-    return { ...base, exists: false, text: null };
-  }
-}
-function readRulesFiles(config) {
-  return RULES_FILES.map((name) => readRulesFile(config, name));
-}
-function normalizeTrailingNewline(text) {
-  return `${text.replace(/\n+$/, "")}
-`;
-}
-function prepareRulesUpdate(current, input) {
-  const { name, body } = input;
-  if (!isRulesName(name)) {
-    return {
-      ok: false,
-      error: "unknown_rules_name",
-      message: `name \u306F ${RULES_FILES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3067\u3059(\u53D7\u9818: ${JSON.stringify(name ?? null)})\u3002`
-    };
-  }
-  if (typeof body !== "string" || body.trim() === "") {
-    return {
-      ok: false,
-      error: "invalid_input",
-      message: `body \u306F\u7A7A\u3067\u306A\u3044\u6587\u5B57\u5217\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059(${name})\u3002`
-    };
-  }
-  const lines = body.split("\n");
-  if (lines[0]?.trim() === "---") {
-    return {
-      ok: false,
-      error: "frontmatter_not_allowed",
-      message: "rules \u306B frontmatter \u306F\u66F8\u304D\u307E\u305B\u3093\u3002frontmatter \u3092\u6301\u305F\u306A\u3044\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u304C\u8D77\u52D5\u6642\u306B\u8AAD\u307F\u8FBC\u307E\u308C\u3001\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u306B\u3082\u6E21\u308A\u307E\u3059(\u8A2D\u8A08\u66F8 \xA74-3)\u3002"
-    };
-  }
-  if (!body.startsWith("# ")) {
-    return {
-      ok: false,
-      error: "invalid_input",
-      message: "body \u306F `# \u898B\u51FA\u3057` \u304B\u3089\u59CB\u307E\u308B\u5B8C\u5168\u306A\u30D5\u30A1\u30A4\u30EB\u5185\u5BB9\u3068\u3057\u307E\u3059\u3002\u30BB\u30AF\u30B7\u30E7\u30F3\u672C\u6587\u3060\u3051\u3092\u6E21\u3055\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002"
-    };
-  }
-  if (!lines.slice(0, ADMIN_NOTICE_SCAN_LINES).some((line) => line.includes(RULES_ADMIN_NOTICE))) {
-    return {
-      ok: false,
-      error: "missing_admin_notice",
-      message: `body \u306E\u5148\u982D ${ADMIN_NOTICE_SCAN_LINES} \u884C\u306B\u7BA1\u7406\u8005\u8868\u793A\u884C\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u898B\u51FA\u3057\u306E\u76F4\u5F8C\u3078\u6B21\u306E 1 \u884C\u3092\u7F6E\u3044\u3066\u304F\u3060\u3055\u3044: ${RULES_ADMIN_NOTICE}`
-    };
-  }
-  const text = normalizeTrailingNewline(body);
-  const warnings = [];
-  const lineCount = text.split("\n").length - 1;
-  if (lineCount > RULES_LINE_GUIDELINE) {
-    warnings.push(
-      `${name}.md \u304C ${lineCount} \u884C\u3067\u3059\u3002\u76EE\u5B89\u306E ${RULES_LINE_GUIDELINE} \u884C\u3092\u8D85\u3048\u3066\u3044\u307E\u3059\u3002rules \u306F\u8D77\u52D5\u6642\u306B\u8AAD\u307F\u8FBC\u307E\u308C\u3001\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u3078\u59D4\u8B72\u3059\u308B\u305F\u3073\u306B\u518D\u5EA6\u8AAD\u307F\u8FBC\u307E\u308C\u307E\u3059\u3002`
-    );
-  }
-  return {
-    ok: true,
-    name,
-    text,
-    mode: current === null || current === void 0 || current === "" ? "created" : "replaced",
-    warnings
-  };
 }
 
 // src/cli/paths.ts
@@ -4789,11 +4759,6 @@ var INPUT_SCHEMAS = {
     add: '{ mode: "add", title, status?, decidedOn?, decidedBy, background, options: [...], conclusion, rationale, impact }',
     status: '{ mode: "status", id: "ADR-003", status: "\u63A1\u7528" | "\u63D0\u6848" | "\u5EC3\u6B62", reason, changedOn? }',
     note: "\u63A1\u756A\u306F CLI \u304C\u884C\u3046\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-architecture --staging-id <id>\u3002"
-  },
-  "stage-rules": {
-    input: "{ name, body, reason? }",
-    names: [...RULES_FILES],
-    note: "body \u306F `# \u898B\u51FA\u3057` \u3092\u542B\u3080\u5B8C\u5168\u306A\u30D5\u30A1\u30A4\u30EB\u5185\u5BB9\u3002frontmatter \u306F\u66F8\u3051\u306A\u3044\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-rules --staging-id <id>\u3002"
   },
   "append-gotcha": {
     input: '{ title, date?, task, mistake, cause, countermeasure, promotionCandidate: "Yes" | "No" }',
@@ -4822,7 +4787,6 @@ var USAGE_LINES = [
   "  get gotchas [--recent N | --id <ID> | --query <\u8A9E>] [--exclude-tagged] [--promotion-candidates]",
   "  get gotchas-template",
   "  get adr [--id <ID> | --status <\u72B6\u614B>]",
-  "  get rules [--name conventions|protected-paths|testing-policy]",
   "  scan",
   "  diff-architecture",
   "  scan-adr-candidates",
@@ -4831,14 +4795,13 @@ var USAGE_LINES = [
   "\u6BB5\u968E(\u62D2\u5426\u306F\u975E 0):",
   "  stage-architecture --input <path>",
   "  stage-adr --input <path>",
-  "  stage-rules --input <path>",
   "  stage-gotcha --input <path>",
   "",
   "\u66F8\u304D\u8FBC\u307F(\u62D2\u5426\u30FB\u5931\u6557\u306F\u975E 0):",
   "  commit-architecture --staging-id <id>",
-  "  commit-rules --staging-id <id>",
   "  commit-gotchas --staging-id <id>",
   "  init-gotchas",
+  "  link-claude-md",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>",
   "  shrink-adr-candidate --file <path> --candidate-id <\u5019\u88DC ID> --adr <ADR-NNN> --hash <\u8D70\u67FB\u306E hash>",
@@ -4849,28 +4812,15 @@ var USAGE_LINES = [
 function configOf(cwd) {
   return loadConfig(cwd);
 }
-function realpathOrSelf3(dir) {
-  try {
-    return fs10.realpathSync(dir);
-  } catch {
-    return dir;
-  }
-}
 function runGetConfig(ctx) {
   const command = "get config";
   const config = configOf(ctx.cwd);
   const architecture = readDocument(config.architecturePath);
   const gotchas = readDocument(config.gotchasPath);
-  const rules = readRulesFiles(config);
-  const cwd = realpathOrSelf3(ctx.cwd);
-  const startDirWarnings = realpathOrSelf3(config.docRoot) === cwd ? [] : [
-    `docRoot(${config.docRoot})\u3068\u8D77\u52D5\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA(${cwd})\u304C\u7570\u306A\u308A\u307E\u3059\u3002.claude/rules/ \u306F\u8D77\u52D5\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u57FA\u6E96\u306B\u8AAD\u307E\u308C\u308B\u305F\u3081\u3001metatron \u304C\u66F8\u3044\u305F rules \u304C\u8AAD\u307F\u8FBC\u307E\u308C\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002`
-  ];
   const warnings = [
     ...config.warnings,
     ...architecture.warnings,
-    ...gotchas.warnings,
-    ...startDirWarnings
+    ...gotchas.warnings
   ];
   noteWarnings(warnings);
   emitResult(command, {
@@ -4888,27 +4838,15 @@ function runGetConfig(ctx) {
       relative: config.gotchasRelative,
       exists: gotchas.exists
     },
-    rules: {
-      dir: config.rulesDirPath,
-      relative: config.rulesDirRelative,
-      files: rules.map((file) => ({
-        name: file.name,
-        path: file.path,
-        relative: file.relative,
-        exists: file.exists
-      }))
-    },
-    injection: config.injection,
     // 記録の有効・無効。metatron.config.json ではなく環境変数から決まる(設計書 2026-10-08 の 2)。
     features: ctx.features,
     cli: {
       path: metatronCliPath(),
       stageArchitecture: commandLine("stage-architecture --input <path>"),
       stageAdr: commandLine("stage-adr --input <path>"),
-      stageRules: commandLine("stage-rules --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
-      commitRules: commandLine("commit-rules --staging-id <id>"),
       initGotchas: commandLine("init-gotchas"),
+      linkClaudeMd: commandLine("link-claude-md"),
       getGotchasTemplate: commandLine("get gotchas-template"),
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
@@ -5091,7 +5029,7 @@ function runGetGotchasTemplate(ctx) {
   const command = "get gotchas-template";
   const config = configOf(ctx.cwd);
   const file = readDocument(config.gotchasPath);
-  const hasContent = file.exists && file.text.trim() !== "";
+  const hasContent2 = file.exists && file.text.trim() !== "";
   const warnings = [...config.warnings, ...file.warnings];
   noteWarnings(warnings);
   emitResult(command, {
@@ -5099,9 +5037,9 @@ function runGetGotchasTemplate(ctx) {
     path: config.gotchasPath,
     relative: config.gotchasRelative,
     exists: file.exists,
-    hasContent,
+    hasContent: hasContent2,
     template: renderGotchasTemplate(),
-    next: hasContent ? null : commandLine("init-gotchas"),
+    next: hasContent2 ? null : commandLine("init-gotchas"),
     warnings
   });
 }
@@ -5166,47 +5104,13 @@ function runGetAdr(ctx) {
     warnings
   });
 }
-function runGetRules(ctx) {
-  const command = "get rules";
-  const config = configOf(ctx.cwd);
-  const warnings = [...config.warnings];
-  noteWarnings(warnings);
-  const name = stringFlag(ctx.flags, "name");
-  if (name !== void 0 && !isRulesName(name)) {
-    emitReadFailure(
-      command,
-      "unknown_rules_name",
-      `--name \u306F ${RULES_FILES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3067\u3059(\u53D7\u9818: ${JSON.stringify(name)})\u3002`,
-      { names: [...RULES_FILES], warnings }
-    );
-    return;
-  }
-  const files = name === void 0 ? readRulesFiles(config) : [readRulesFile(config, name)];
-  emitResult(command, {
-    ok: true,
-    dir: config.rulesDirPath,
-    relative: config.rulesDirRelative,
-    names: [...RULES_FILES],
-    rules: files.map((file) => ({
-      name: file.name,
-      path: file.path,
-      relative: file.relative,
-      exists: file.exists,
-      text: file.text,
-      // 未作成は異常ではない。読み取り系の規約に従い error として返すだけにする。
-      error: file.exists ? null : "not_created"
-    })),
-    warnings
-  });
-}
 var GET_TARGETS = [
   "config",
   "architecture",
   "domains",
   "gotchas",
   "gotchas-template",
-  "adr",
-  "rules"
+  "adr"
 ];
 function runGet(target, ctx) {
   const command = target === void 0 ? "get" : `get ${target}`;
@@ -5229,9 +5133,6 @@ function runGet(target, ctx) {
         return;
       case "adr":
         runGetAdr(ctx);
-        return;
-      case "rules":
-        runGetRules(ctx);
         return;
       default:
         emitReadFailure(
@@ -6065,101 +5966,6 @@ function runStageAdr(ctx) {
     )
   });
 }
-function runStageRules(ctx) {
-  const command = "stage-rules";
-  const input = loadInputJson(ctx.flags);
-  if (!input.ok) {
-    emitWriteFailure(
-      command,
-      input.error,
-      input.message,
-      { valid: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  if (!isPlainObject4(input.value)) {
-    emitWriteFailure(
-      command,
-      "invalid_input",
-      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { name, body, reason? } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002name \u306F ${RULES_FILES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3067\u3059\u3002`,
-      { valid: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  const config = loadConfig(ctx.cwd);
-  const rawName = input.value.name;
-  const rawBody = input.value.body;
-  const reason = input.value.reason;
-  const targetPath = typeof rawName === "string" && RULES_FILES.includes(rawName) ? rulesFilePath(config, rawName) : null;
-  const file = targetPath === null ? null : readDocument(targetPath);
-  const update = prepareRulesUpdate(file?.exists === true ? file.text : null, {
-    name: rawName,
-    body: rawBody
-  });
-  const warnings = [
-    ...config.warnings,
-    ...file?.warnings ?? [],
-    ...update.ok ? update.warnings : []
-  ];
-  noteWarnings(warnings);
-  if (!update.ok) {
-    emitWriteFailure(command, update.error, update.message, {
-      valid: false,
-      stagingId: null,
-      path: targetPath,
-      warnings
-    });
-    return;
-  }
-  const filePath = targetPath;
-  const relative = rulesFileRelative(config, update.name);
-  const current = file;
-  const staged = createStaging({
-    projectRoot: config.docRoot,
-    kind: "rules",
-    targetPath: filePath,
-    nextContent: update.text,
-    baseHash: current.hash,
-    meta: {
-      name: update.name,
-      mode: update.mode,
-      reason: typeof reason === "string" ? reason : null
-    }
-  });
-  if (!staged.ok) {
-    emitWriteFailure(command, staged.error, staged.reasons.join(" / "), {
-      valid: false,
-      stagingId: null,
-      path: filePath,
-      warnings
-    });
-    return;
-  }
-  const diff = unifiedDiff(current.text, update.text, {
-    fromLabel: `${relative} (\u73FE\u884C)`,
-    toLabel: `${relative} (stage)`
-  });
-  emitResult(command, {
-    ok: true,
-    valid: true,
-    stagingId: staged.stagingId,
-    name: update.name,
-    path: filePath,
-    relative,
-    baseExists: current.exists,
-    mode: update.mode,
-    diff: diffPayload(diff, []),
-    expiresAt: new Date(staged.expiresAt).toISOString(),
-    warnings,
-    next: commandLine(`commit-rules --staging-id ${staged.stagingId}`),
-    reminder: withTruncationNote(
-      diff,
-      "diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-rules \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002CLI \u306F\u627F\u8A8D\u306E\u6709\u7121\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002"
-    )
-  });
-}
 function runStageGotcha(ctx) {
   const command = "stage-gotcha";
   const input = loadInputJson(ctx.flags);
@@ -6260,16 +6066,15 @@ var READ_SUBCOMMANDS = /* @__PURE__ */ new Set([
 var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "stage-architecture",
   "stage-adr",
-  "stage-rules",
   "commit-architecture",
-  "commit-rules",
   "stage-gotcha",
   "commit-gotchas",
   "init-gotchas",
   "append-gotcha",
   "tag-gotcha",
   "shrink-adr-candidate",
-  "remove-gotcha-candidate"
+  "remove-gotcha-candidate",
+  "link-claude-md"
 ]);
 var FEATURE_GATES = /* @__PURE__ */ new Map([
   ["stage-adr", "adr"],
@@ -6337,20 +6142,17 @@ function main(argv, cwd = process.cwd(), env = process.env) {
       case "scan-gotcha-candidates":
         runScanGotchaCandidates(ctx);
         return;
+      case "link-claude-md":
+        runLinkClaudeMd(ctx);
+        return;
       case "stage-architecture":
         runStageArchitecture(ctx);
         return;
       case "stage-adr":
         runStageAdr(ctx);
         return;
-      case "stage-rules":
-        runStageRules(ctx);
-        return;
       case "commit-architecture":
         runCommitArchitecture(ctx);
-        return;
-      case "commit-rules":
-        runCommitRules(ctx);
         return;
       case "stage-gotcha":
         runStageGotcha(ctx);
