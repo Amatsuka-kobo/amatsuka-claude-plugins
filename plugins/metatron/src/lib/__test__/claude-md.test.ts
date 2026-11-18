@@ -54,6 +54,14 @@ test("L3: 本文中の言及は @メンションと数えず、行頭の 1 語�
   expect(result.present).toStrictEqual(["docs/GOTCHAS.md"])
 })
 
+test("L5: 空白・制御文字を含むパスは拒否し、CLAUDE.md を作らない", () => {
+  for (const bad of ["docs/A B.md", "docs/A.md\n# 注入", "docs/\tA.md"]) {
+    const dir = mkTmp()
+    expect(() => linkClaudeMd(dir, [bad]), bad).toThrow()
+    expect(fs.existsSync(path.join(dir, "CLAUDE.md")), bad).toBe(false)
+  }
+})
+
 test("L4: .claude/CLAUDE.md だけがあればそこへ ../ 付きで書き、既存の ../ も認める", () => {
   const dir = mkTmp({ ".claude/CLAUDE.md": "@../docs/GOTCHAS.md\n" })
   const result = linkClaudeMd(dir, DOCS)

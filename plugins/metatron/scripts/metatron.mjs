@@ -4520,6 +4520,14 @@ function existingMentions(docRoot) {
   return existing;
 }
 function linkClaudeMd(docRoot, relatives) {
+  const unsafe = relatives.find(
+    (rel) => /\s/.test(rel) || [...rel].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)
+  );
+  if (unsafe !== void 0) {
+    throw new Error(
+      `\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u30D1\u30B9\u306F @\u30E1\u30F3\u30B7\u30E7\u30F3\u306B\u3067\u304D\u307E\u305B\u3093: ${JSON.stringify(unsafe)}`
+    );
+  }
   const rootText = readOrNull(path8.join(docRoot, "CLAUDE.md"));
   const dotText = readOrNull(path8.join(docRoot, ".claude/CLAUDE.md"));
   const useDot = rootText === null && dotText !== null;

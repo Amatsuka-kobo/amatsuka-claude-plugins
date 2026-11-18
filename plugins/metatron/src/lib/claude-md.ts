@@ -66,6 +66,17 @@ export function linkClaudeMd(
   docRoot: string,
   relatives: readonly string[]
 ): LinkResult {
+  // 空白・制御文字を含むパスは 1 行の @メンションにならず、改行で任意の行を書き込めてしまう。
+  const unsafe = relatives.find(
+    (rel) =>
+      /\s/.test(rel) ||
+      [...rel].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
+  )
+  if (unsafe !== undefined) {
+    throw new Error(
+      `空白か制御文字を含むパスは @メンションにできません: ${JSON.stringify(unsafe)}`
+    )
+  }
   const rootText = readOrNull(path.join(docRoot, "CLAUDE.md"))
   const dotText = readOrNull(path.join(docRoot, ".claude/CLAUDE.md"))
   const useDot = rootText === null && dotText !== null
