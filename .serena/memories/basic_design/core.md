@@ -21,7 +21,7 @@ screen-flow / architecture) or `layout/sequence.ts` (hand-rolled) → `decorate.
 
 `basic-design` (entry orchestrator: overview brainstorm → pick deliverables → run each skill,
 passing format/destination down so sub-skills skip re-asking), `er-diagram`, `screen-flow`,
-`system-architecture`, `sequence-diagram`, `api-list`, `nfr-checklist`, `shared/drive-upload.md`.
+`system-architecture`, `sequence-diagram`, `api-list`, `nfr-checklist`, plus plugin-level `references/drive-upload.md` and `references/writing.md` (document writing discipline read by `api-list` / `nfr-checklist` before presenting drafts).
 
 Google Drive upload is opt-in: `drive_folder_id` in `.claude/basic-design.local.md`, checked by
 `scripts/check-drive-config.mjs`, uploaded through Drive MCP tools (never a bundled uploader).
