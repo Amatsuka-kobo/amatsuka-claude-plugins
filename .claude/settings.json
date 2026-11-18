@@ -49,6 +49,7 @@
       "Bash(pnpm dlx *)",
       "Bash(mkdir -p *)",
       "Bash(rm /tmp/**/*)",
+      "EnterWorktree(*/.claude/worktrees/*)",
       "Workflow",
       "mcp__serena__find_symbol",
       "mcp__serena__read_memory",
