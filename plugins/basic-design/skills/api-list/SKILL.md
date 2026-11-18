@@ -50,7 +50,7 @@ AskUserQuestion で次を確認する:
 
 承認された内容を `docs/design/api/<名前>.md` に保存する。ファイル名はケバブケース(例: `order-api.md`)。git コミットはユーザーの指示があったときのみ行う。
 
-ローカル保存の完了後、`${CLAUDE_PLUGIN_ROOT}/skills/shared/drive-upload.md` の手順で Google Drive へのアップロードを確認する(設定が無ければ何も起きない)。
+ローカル保存の完了後、`${CLAUDE_PLUGIN_ROOT}/references/drive-upload.md` の手順で Google Drive へのアップロードを確認する(設定が無ければ何も起きない)。
 
 ## 既存一覧の更新
 
