@@ -299,6 +299,58 @@ test("未 commit のまま新しい発言が来るとより大きい targetLine 
   }
 })
 
+test("トランスクリプトが worktree へ移り、また戻っても記録位置を引き継いで記録を続ける", () => {
+  const value = fixture([user("最初の質問")])
+  const worktreeDir = path.join(value.root, "projects-worktree")
+  fs.mkdirSync(worktreeDir)
+  const original = value.transcript
+  const moved = path.join(worktreeDir, "transcript.jsonl")
+  // recorder の commit が成功した状態を再現し、次の発言を足して移動する。
+  const commitAndMove = (from: string, to: string, next: string) => {
+    const paths = pathsOf(value)
+    fs.rmSync(paths.lockPath, { force: true })
+    const state = stateOf(value) as RecordingState
+    atomicWriteJson(paths.statePath, {
+      ...state,
+      recordedLine: state.attemptedLine,
+      recordedUserTurn: state.attemptedUserTurn,
+      attemptId: undefined,
+      recordPath: "docs/chat/record.md"
+    } satisfies RecordingState)
+    fs.appendFileSync(from, `${user(next)}\n`)
+    fs.renameSync(from, to)
+    value.transcript = to
+  }
+  try {
+    run(value)
+    commitAndMove(original, moved, "worktree での質問")
+    const entered = JSON.parse(run(value))
+    expect(entered.hookSpecificOutput.additionalContext).toContain(
+      `- transcriptPath: ${moved}`
+    )
+    expect(stateOf(value)).toMatchObject({
+      transcriptPath: moved,
+      recordedLine: 1,
+      attemptedLine: 2,
+      recordPath: "docs/chat/record.md"
+    })
+
+    commitAndMove(moved, original, "main に戻っての質問")
+    const exited = JSON.parse(run(value))
+    expect(exited.hookSpecificOutput.additionalContext).toContain(
+      `- transcriptPath: ${original}`
+    )
+    expect(stateOf(value)).toMatchObject({
+      transcriptPath: original,
+      recordedLine: 2,
+      attemptedLine: 3,
+      recordPath: "docs/chat/record.md"
+    })
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true })
+  }
+})
+
 test("v1 state と lock を移行し、旧 lock を stale 回収する", () => {
   const value = fixture([user("古い"), user("新しい")])
   try {

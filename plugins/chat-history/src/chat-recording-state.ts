@@ -510,6 +510,10 @@ export function migrateState(
       : fallback.attemptedLine
     return {
       ...(raw as unknown as RecordingState),
+      // EnterWorktree / ExitWorktree で Claude Code がトランスクリプトを別の
+      // プロジェクトディレクトリへ移すため、hook が今回渡したパスを正とする。
+      // 移動は rename で行われ inode が変わらないので、記録位置は引き継げる。
+      transcriptPath: fallback.transcriptPath,
       recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn)
         ? raw.recordedUserTurn
         : recordedLine,
@@ -528,9 +532,7 @@ export function migrateState(
     version: STATE_VERSION,
     projectDir: isString(raw.projectDir) ? raw.projectDir : fallback.projectDir,
     sessionId: isString(raw.sessionId) ? raw.sessionId : fallback.sessionId,
-    transcriptPath: isString(raw.transcriptPath)
-      ? raw.transcriptPath
-      : fallback.transcriptPath,
+    transcriptPath: fallback.transcriptPath,
     transcriptIdentity: identity ?? fallback.transcriptIdentity,
     recordedLine,
     attemptedLine: recordedLine,

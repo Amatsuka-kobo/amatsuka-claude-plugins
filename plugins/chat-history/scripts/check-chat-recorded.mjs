@@ -255,6 +255,10 @@ function migrateState(raw, fallback) {
     const attemptedLine = isNonNegativeInteger(raw.attemptedLine) ? raw.attemptedLine : fallback.attemptedLine;
     return {
       ...raw,
+      // EnterWorktree / ExitWorktree で Claude Code がトランスクリプトを別の
+      // プロジェクトディレクトリへ移すため、hook が今回渡したパスを正とする。
+      // 移動は rename で行われ inode が変わらないので、記録位置は引き継げる。
+      transcriptPath: fallback.transcriptPath,
       recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn) ? raw.recordedUserTurn : recordedLine2,
       attemptedUserTurn: isNonNegativeInteger(raw.attemptedUserTurn) ? raw.attemptedUserTurn : attemptedLine
     };
@@ -266,7 +270,7 @@ function migrateState(raw, fallback) {
     version: STATE_VERSION,
     projectDir: isString(raw.projectDir) ? raw.projectDir : fallback.projectDir,
     sessionId: isString(raw.sessionId) ? raw.sessionId : fallback.sessionId,
-    transcriptPath: isString(raw.transcriptPath) ? raw.transcriptPath : fallback.transcriptPath,
+    transcriptPath: fallback.transcriptPath,
     transcriptIdentity: identity ?? fallback.transcriptIdentity,
     recordedLine,
     attemptedLine: recordedLine,

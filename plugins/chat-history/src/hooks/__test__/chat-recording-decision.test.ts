@@ -397,7 +397,7 @@ test("v1 state は記録済み位置だけを安全に引き継ぐ", () => {
     version: STATE_VERSION,
     projectDir: "/old",
     sessionId: "session",
-    transcriptPath: "/old/t",
+    transcriptPath: "/new/t",
     transcriptIdentity: { dev: 1, ino: 1 },
     recordedLine: 42,
     attemptedLine: 42,
@@ -409,6 +409,20 @@ test("v1 state は記録済み位置だけを安全に引き継ぐ", () => {
   expect(migrated).not.toHaveProperty("attemptId")
   expect(migrated).not.toHaveProperty("consecutiveFailures")
   expect(migrated).not.toHaveProperty("previousGeneration")
+})
+
+test("保存済みのトランスクリプトのパスは hook が今回渡したパスで上書きする", () => {
+  const fallback = createInitialState("/p", "/moved/t", { dev: 1, ino: 1 })
+  const saved = {
+    ...createInitialState("/p", "/old/t", { dev: 1, ino: 1 }),
+    recordedLine: 7,
+    recordedUserTurn: 7
+  }
+  expect(migrateState(saved, fallback)).toMatchObject({
+    transcriptPath: "/moved/t",
+    recordedLine: 7,
+    recordedUserTurn: 7
+  })
 })
 
 test("壊れた state は fallback を返す", () => {
