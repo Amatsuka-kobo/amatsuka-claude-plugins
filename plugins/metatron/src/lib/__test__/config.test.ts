@@ -280,6 +280,19 @@ test("R4-d: ネストした git リポジトリ → 内側のリポジトリル�
   expect(findDocRoot(sub)).toBe(inner)
 })
 
+test("R4-g: 親の設定ファイルは git の境界を越えて拾わない(親の中に置いた worktree)", () => {
+  const outer = mkTmp()
+  gitInit(outer)
+  writeConfig(outer, { version: 1 })
+  const inner = mkSub(outer, "worktrees", "x")
+  gitInit(inner)
+  const sub = mkSub(outer, "worktrees", "x", "sub")
+
+  expect(findDocRoot(sub)).toBe(inner)
+  writeConfig(inner, { version: 1 })
+  expect(findDocRoot(sub)).toBe(inner)
+})
+
 test("R4-e: Windows 形式の区切りを含む paths → POSIX と同じ位置に解決される", () => {
   const dir = mkTmp()
   writeConfig(dir, {

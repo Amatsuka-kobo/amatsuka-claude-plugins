@@ -94,14 +94,21 @@ function gitToplevel(cwd: string): string | null {
  * 探索の前に開始ディレクトリを `fs.realpathSync` で実体パスへ解決する。段 2 が実体パスを
  * 返すため、段 1 を文字列操作だけで辿るとシンボリックリンク越しの起動で両者が別の
  * ディレクトリ木を辿り、実装間で docRoot が食い違う。
+ *
+ * 段 1 の探索は git の toplevel(段 2 の値)で打ち切る。親リポジトリの中に置いた
+ * worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
  */
 export function findDocRoot(startDir?: string): string {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()))
 
-  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。
+  const top = gitToplevel(start)
+
+  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。git の toplevel 自身も候補に含め、
+  // その先へは進まない。git 管理外ならファイルシステムのルートまで辿る。
   let dir = start
   while (true) {
     if (hasConfigFile(dir)) return dir
+    if (top && dir === top) break
     const parent = path.dirname(dir)
     // ファイルシステムのルートに達したら打ち切る。
     if (parent === dir) break
@@ -109,7 +116,6 @@ export function findDocRoot(startDir?: string): string {
   }
 
   // 段 2
-  const top = gitToplevel(start)
   if (top) return top
 
   // 段 3

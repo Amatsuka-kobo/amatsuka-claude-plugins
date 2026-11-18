@@ -46,17 +46,22 @@ export function isMentionablePath(rel: string): boolean {
 }
 
 // Claude Code が import として読む `@<パス>` を集める。
-// コードフェンスの中とインラインコードの中は import にならないので数えない。
-// 行の途中・箇条書きの中の `@<パス>` も import になるので数える。
+// コードフェンス・インラインコード・HTML コメントの中は import にならないので数えない。
+// 行の途中・箇条書きの中の `@<パス>` は import になるので数える。
 function mentions(text: string): Set<string> {
   const found = new Set<string>()
-  let fence: string | null = null
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/^﻿/, "")
-    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)
+  const withoutComments = text
+    .replace(/^\uFEFF/, "")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+  let fence: { char: string; length: number } | null = null
+  for (const line of withoutComments.split(/\r?\n/)) {
+    // 箇条書きの中のフェンスは 4 文字以上下がるので、字下げの深さは問わない。
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)
     if (marker) {
-      if (fence === null) fence = marker[1][0]
-      else if (marker[1][0] === fence) fence = null
+      const char = marker[1][0]
+      const length = marker[1].length
+      if (fence === null) fence = { char, length }
+      else if (char === fence.char && length >= fence.length) fence = null
       continue
     }
     if (fence !== null) continue

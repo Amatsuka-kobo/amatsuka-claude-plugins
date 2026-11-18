@@ -1931,3 +1931,23 @@ test("LC2: link-claude-md は metatron.config.json が無ければ最小の設�
     JSON.parse(fs.readFileSync(path.join(root, "metatron.config.json"), "utf8"))
   ).toStrictEqual({ version: 1 })
 })
+
+test("LC3: 空白を含むパスは飛ばして残りを追記し、既存の設定は上書きしない", () => {
+  const root = project()
+  writeFile(
+    root,
+    "metatron.config.json",
+    '{"version":1,"paths":{"gotchas":"my docs/G.md"}}'
+  )
+  writeFile(root, "my docs/G.md", GOTCHAS)
+  const linked = runCli(["link-claude-md"], root)
+  expect(linked.status).toBe(0)
+  expect(linked.json).toMatchObject({
+    added: ["docs/ARCHITECTURE.md"],
+    skipped: ["my docs/G.md"],
+    configCreated: false
+  })
+  expect(fs.readFileSync(path.join(root, "metatron.config.json"), "utf8")).toBe(
+    '{"version":1,"paths":{"gotchas":"my docs/G.md"}}'
+  )
+})

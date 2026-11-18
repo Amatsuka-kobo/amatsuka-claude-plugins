@@ -993,3 +993,14 @@ test("findMainRoot: .codiel を git のルートの下に置いた構成(repo/ap
   expect(findMainRoot(path.join(wt, "app"))).toBe(app)
   expect(findMainRoot(mkSub(app, "src"))).toBe(app)
 })
+
+test("R4: 親の設定ファイルを git の境界を越えて拾わず、metatron と一致する", () => {
+  const root = mkTmp("lib-cmp-worktree-")
+  gitInit(root)
+  fs.writeFileSync(path.join(root, "metatron.config.json"), '{"version":1}')
+  const inner = mkSub(root, "worktrees", "x")
+  gitInit(inner)
+  const sub = mkSub(inner, "sub")
+  expectSameResolution(sub, "親の中の worktree")
+  expect(resolveDocPaths(sub).docRoot).toBe(inner)
+})

@@ -90,3 +90,14 @@ test("L4: .claude/CLAUDE.md だけがあればそこへ ../ 付きで書き、�
   expect(existingMentions(dir)).toStrictEqual(new Set(DOCS))
   expect(fs.existsSync(path.join(dir, "CLAUDE.md"))).toBe(false)
 })
+
+test("L8: 長いフェンス・字下げしたフェンス・HTML コメントの中の @ は数えない", () => {
+  for (const text of [
+    "````\n```\n@docs/ARCHITECTURE.md\n```\n@docs/GOTCHAS.md\n````\n",
+    "- 例\n\n    ```\n    @docs/ARCHITECTURE.md\n    @docs/GOTCHAS.md\n    ```\n",
+    "<!--\n@docs/ARCHITECTURE.md\n-->\n<!-- @docs/GOTCHAS.md -->\n"
+  ]) {
+    const dir = mkTmp({ "CLAUDE.md": text })
+    expect(linkClaudeMd(dir, DOCS).added, text).toStrictEqual(DOCS)
+  }
+})

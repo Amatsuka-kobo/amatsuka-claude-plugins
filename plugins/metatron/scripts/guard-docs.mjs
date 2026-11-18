@@ -48,14 +48,15 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
+    if (top && dir === top) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const top = gitToplevel(start);
   if (top) return top;
   return start;
 }

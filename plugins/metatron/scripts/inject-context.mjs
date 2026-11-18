@@ -24,13 +24,15 @@ function isMentionablePath(rel) {
 }
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
+  const withoutComments = text.replace(/^\uFEFF/, "").replace(/<!--[\s\S]*?-->/g, " ");
   let fence = null;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/^﻿/, "");
-    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+  for (const line of withoutComments.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line);
     if (marker) {
-      if (fence === null) fence = marker[1][0];
-      else if (marker[1][0] === fence) fence = null;
+      const char = marker[1][0];
+      const length = marker[1].length;
+      if (fence === null) fence = { char, length };
+      else if (char === fence.char && length >= fence.length) fence = null;
       continue;
     }
     if (fence !== null) continue;
@@ -99,14 +101,15 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path2.resolve(startDir ?? process.cwd()));
+  const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
+    if (top && dir === top) break;
     const parent = path2.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const top = gitToplevel(start);
   if (top) return top;
   return start;
 }
@@ -273,6 +276,11 @@ function readFeatures(env) {
 var MAX_WARNING_LINES = 3;
 var STDIN_TIMEOUT_MS = 2e3;
 var LEGACY_RULES_DIR = ".claude/rules/metatron";
+var LEGACY_RULES_FILES = [
+  "conventions.md",
+  "protected-paths.md",
+  "testing-policy.md"
+];
 function legacyRulesDir(config) {
   try {
     const raw = JSON.parse(fs3.readFileSync(config.configPath, "utf8"));
@@ -340,12 +348,19 @@ function recordingLines(features) {
 function migrationLines(config, docs, hasArchitecture) {
   const lines = [];
   const rulesDir = legacyRulesDir(config);
-  if (fs3.existsSync(path3.join(config.docRoot, rulesDir))) {
+  if (LEGACY_RULES_FILES.some(
+    (name) => fs3.existsSync(path3.join(config.docRoot, rulesDir, name))
+  )) {
     lines.push(
       `\u5EC3\u6B62\u3057\u305F rules(${rulesDir}/)\u304C\u6B8B\u3063\u3066\u3044\u308B\u3002/metatron:update \u3067 ARCHITECTURE \u3068 CLAUDE.md \u3078\u79FB\u884C\u3059\u308B\u3002`
     );
   }
   if (!hasArchitecture) return lines;
+  if (!fs3.existsSync(config.configPath)) {
+    lines.push(
+      "metatron.config.json \u304C\u7121\u304F\u3001codiel \u304C metatron \u306E\u5229\u7528\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002/metatron:update \u3067\u4F5C\u308B\u3002"
+    );
+  }
   const existing = existingMentions(config.docRoot);
   const missing = docs.filter((rel) => !existing.has(rel));
   const unlinkable = missing.filter((rel) => !isMentionablePath(rel));

@@ -2906,14 +2906,15 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf2(path5.resolve(startDir ?? process.cwd()));
+  const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
+    if (top && dir === top) break;
     const parent = path5.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const top = gitToplevel(start);
   if (top) return top;
   return start;
 }
@@ -4518,13 +4519,15 @@ function isMentionablePath(rel) {
 }
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
+  const withoutComments = text.replace(/^\uFEFF/, "").replace(/<!--[\s\S]*?-->/g, " ");
   let fence = null;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/^﻿/, "");
-    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+  for (const line of withoutComments.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line);
     if (marker) {
-      if (fence === null) fence = marker[1][0];
-      else if (marker[1][0] === fence) fence = null;
+      const char = marker[1][0];
+      const length = marker[1].length;
+      if (fence === null) fence = { char, length };
+      else if (char === fence.char && length >= fence.length) fence = null;
       continue;
     }
     if (fence !== null) continue;
@@ -4596,27 +4599,39 @@ function runLinkClaudeMd(ctx) {
     );
     return;
   }
-  const relatives = [
+  const candidates = [
     config.architectureRelative,
     ...ctx.features.gotchas && hasContent(config.gotchasPath) ? [config.gotchasRelative] : []
   ];
+  const relatives = candidates.filter(isMentionablePath);
+  const skipped = candidates.filter((rel) => !isMentionablePath(rel));
+  let configCreated = false;
   try {
+    configCreated = createConfigIfMissing(config.configPath);
     const result = linkClaudeMd(config.docRoot, relatives);
-    const configCreated = !fs10.existsSync(config.configPath);
-    if (configCreated)
-      writeFileAtomic(config.configPath, '{\n  "version": 1\n}\n');
     emitResult(command, {
       ok: true,
       written: result.added.length > 0 || configCreated,
       ...result,
+      skipped,
       configPath: config.configPath,
       configCreated,
       warnings: config.warnings
     });
   } catch (error) {
     emitWriteFailure(command, "write_failed", messageOf(error), {
-      written: false
+      written: configCreated,
+      configCreated
     });
+  }
+}
+function createConfigIfMissing(configPath) {
+  try {
+    fs10.writeFileSync(configPath, '{\n  "version": 1\n}\n', { flag: "wx" });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
   }
 }
 

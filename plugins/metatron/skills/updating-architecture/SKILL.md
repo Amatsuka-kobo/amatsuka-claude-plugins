@@ -90,11 +90,12 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 ## 3. 旧 rules と @メンションの確認
 
-- docRoot に旧 rules の `.claude/rules/metatron/` が残っているかを確かめる。残っていれば「旧 rules の移行」を 1 件の候補に加える。
+- 旧 rules の置き場は、`metatron.config.json` に旧版の `paths.rulesDir` があればその場所、無ければ docRoot の `.claude/rules/metatron/` である。
+- 置き場に `conventions.md`・`protected-paths.md`・`testing-policy.md` のどれかが残っているかを確かめる。残っていれば「旧 rules の移行」を 1 件の候補に加える。置き場に他のファイルしか無いときは候補にしない。
 - 旧 rules が残っているときは、`diff-architecture` が返す `## 保護パス`・`## テスト方針` の欠落を移行の候補にまとめ、別の候補にしない。
 - docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` のコードの外に、`get config` の `architecture.relative` を指す `@<相対パス>` があるかを確かめる。`.claude/CLAUDE.md` の行は `../` を付けたパスで書かれている。
 - `features.gotchas` が `true` で台帳に内容があるときは、`gotchas.relative` を指す @メンションも確かめる。
-- 欠けている @メンションがあれば「@メンションの追記」を 1 件の候補に加える。旧 rules の移行を候補にしたときは、移行の中で追記するので別の候補にしない。
+- 欠けている @メンションがあるか、`get config` の `configExists` が `false` のときは、「@メンションの追記」を 1 件の候補に加える。設定ファイルは手順 13 の `link-claude-md` が作る。旧 rules の移行を候補にしたときは、移行の中で追記するので別の候補にしない。
 - どちらも `diff-architecture` では検出されない。SessionStart の案内文が移行や追記を促していても、ここで自分で確かめる。
 
 ## 監査
@@ -189,7 +190,7 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 手順 4 で旧 rules の移行が選ばれたときだけ行う。a から d の順に進め、承認は段階ごとに得る。複数の段階を 1 回の承認でまとめない。
 
-- a. `protected-paths.md` と `testing-policy.md` を Read し、1 行目の `# 見出し` と、`> この文書は metatron の管理下にある。` で始まる管理者表示の行を除いた本文を取る。
+- a. 手順 3 で確かめた旧 rules の置き場から `protected-paths.md` と `testing-policy.md` を Read し、1 行目の `# 見出し` と、`> この文書は metatron の管理下にある。` で始まる管理者表示の行を除いた本文を取る。
   - 本文を `stage-architecture` の `保護パス`・`テスト方針` の `body` に入れる。手順 5 と 6 の起草と簡潔化には回さない。
   - 本文中の `##` 以下の見出しは 1 段下げる。それ以外は書き換えない。
   - 旧ファイルが無い段階は飛ばす。
@@ -201,15 +202,16 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
   - CLAUDE.md の既存の内容と重なる行は移す文面から外す。
   - 移す文面と追記する位置を示し、承認を得てから Edit で追記する。移す文面の中の見出しは CLAUDE.md の見出しの階層に合わせる。
 - c. 手順 13 に従って `link-claude-md` で @メンションを追記する。
-- d. 旧 rules のディレクトリを削除する。
+- d. 旧 rules の 3 ファイルを削除する。
   - a と b のそれぞれで、本文を書き込んだか、移さずに捨てるとユーザーが決めた後に行う。
-  - 削除する `.claude/rules/metatron/` の絶対パスと、その中のファイルの一覧を示し、承認を得てから Bash で削除する。
-  - Bash の削除が拒否されたときは、ユーザーに `! rm -r <絶対パス>` の実行を依頼する。
+  - 削除するのは置き場の `conventions.md`・`protected-paths.md`・`testing-policy.md` だけとする。置き場の他のファイルとディレクトリそのものは消さない。ただし既定の置き場 `.claude/rules/metatron/` が 3 ファイルを消して空になったときは、そのディレクトリも消す。
+  - 削除するファイルの絶対パスの一覧を示し、承認を得てから Bash で削除する。
+  - Bash の削除が拒否されたときは、ユーザーに `! rm <絶対パス>` の実行を依頼する。
 - 否認された段階は書き込まずに次の段階へ進み、手順 14 で報告する。a か b の本文を移しておらず、捨てるとも決まっていないときは、d を行わない。
 
 ## 13. CLAUDE.md への @メンションの追記
 
-手順 4 で @メンションの追記が選ばれたとき、手順 12 の c、手順 11 で台帳が新しくできたときに行う。
+手順 4 で @メンションの追記が選ばれたとき(設定ファイルが無いときを含む)、手順 12 の c、手順 11 で台帳が新しくできたときに行う。
 
 - 追記する行は、`get config` の `architecture.relative` から `@<相対パス>` の形で組み立てる。`features.gotchas` が `true` で台帳に内容があるときは、`gotchas.relative` の行も加える。
 - 追記先は docRoot の `CLAUDE.md` とする。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` とし、各行のパスに `../` を付ける。どちらも無ければ `CLAUDE.md` が新しく作られる。

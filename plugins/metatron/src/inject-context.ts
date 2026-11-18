@@ -27,6 +27,12 @@ const MAX_WARNING_LINES = 3
 const STDIN_TIMEOUT_MS = 2000
 /** 廃止した rules 3 ファイルの既定の置き場。残っていたら移行を案内する。 */
 const LEGACY_RULES_DIR = ".claude/rules/metatron"
+/** 廃止した rules のファイル名。置き場に他のファイルがあっても、これだけを旧 rules とみなす。 */
+const LEGACY_RULES_FILES = [
+  "conventions.md",
+  "protected-paths.md",
+  "testing-policy.md"
+]
 
 // 旧版の config は `paths.rulesDir` で rules の置き場を変えられた。現行の config の解決は
 // このキーを無視するので、移行の案内のためだけに設定ファイルを直接読む。
@@ -132,12 +138,21 @@ function migrationLines(
 ): string[] {
   const lines: string[] = []
   const rulesDir = legacyRulesDir(config)
-  if (fs.existsSync(path.join(config.docRoot, rulesDir))) {
+  if (
+    LEGACY_RULES_FILES.some((name) =>
+      fs.existsSync(path.join(config.docRoot, rulesDir, name))
+    )
+  ) {
     lines.push(
       `廃止した rules(${rulesDir}/)が残っている。/metatron:update で ARCHITECTURE と CLAUDE.md へ移行する。`
     )
   }
   if (!hasArchitecture) return lines
+  if (!fs.existsSync(config.configPath)) {
+    lines.push(
+      "metatron.config.json が無く、codiel が metatron の利用を判定できない。/metatron:update で作る。"
+    )
+  }
   const existing = existingMentions(config.docRoot)
   const missing = docs.filter((rel) => !existing.has(rel))
   const unlinkable = missing.filter((rel) => !isMentionablePath(rel))

@@ -168,11 +168,13 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
 - **git の実行が失敗したときは、原因を区別せず段 3 へ進む。**
   git 未インストール(`ENOENT`)・git 管理外(exit 128)・その他の非 0 終了・タイムアウトの
   いずれも「無かった」として扱い、例外を外へ投げない。
-- 段 1 の探索は、ファイルシステムのルート(それ以上親が無いディレクトリ)に達したら打ち切る。
+- 段 1 の探索は、段 2 の git の toplevel に達したら打ち切る(toplevel 自身は候補に含める)。
+  git 管理外なら、ファイルシステムのルート(それ以上親が無いディレクトリ)に達したら打ち切る。
+  親リポジトリの中に置いた worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
 
 ### 規則 2: パスの解決
 
-`paths.architecture` / `paths.gotchas` / `paths.rulesDir` を `docRoot` からの**相対パス**として解決する。
+`paths.architecture` / `paths.gotchas` を `docRoot` からの**相対パス**として解決する。
 
 ### 規則 3: 拒否
 

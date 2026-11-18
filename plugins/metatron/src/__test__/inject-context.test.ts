@@ -193,6 +193,29 @@ test("I8: SubagentStart の入力でも本文は注入しない", () => {
   expect(content).not.toContain("ARCH-BODY")
 })
 
+test("I12: 旧 rules の置き場に 3 ファイルが無ければ、ディレクトリがあっても促さない", () => {
+  const root = project({
+    "docs/ARCHITECTURE.md": ARCH,
+    "CLAUDE.md": LINKED_CLAUDE_MD,
+    ".claude/rules/mine.md": "# 自分の規律\n"
+  })
+  write(
+    root,
+    "metatron.config.json",
+    '{"version":1,"paths":{"rulesDir":".claude/rules"}}'
+  )
+  expect(mustInject(root)).not.toContain("廃止した rules")
+  expect(systemMessageOf(root)).toBe(undefined)
+})
+
+test("I13: metatron.config.json が無ければ作るよう促す", () => {
+  const root = mkTmp()
+  fs.mkdirSync(path.join(root, ".git"))
+  write(root, "docs/ARCHITECTURE.md", ARCH)
+  write(root, "CLAUDE.md", "@docs/ARCHITECTURE.md\n")
+  expect(mustInject(root, BOTH_OFF)).toContain("metatron.config.json が無く")
+})
+
 test("I9: 旧 config の paths.rulesDir に残る rules も移行を促し、画面にも出す", () => {
   const root = project({
     "docs/ARCHITECTURE.md": ARCH,
