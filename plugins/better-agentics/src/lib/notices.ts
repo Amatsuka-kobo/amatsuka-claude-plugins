@@ -98,7 +98,7 @@ export function setupNotices(input: {
       reason: "design-plan-review" as const,
       what: "設計書・実装計画書のレビュー"
     },
-    { reason: "review" as const, what: "外側の手順のレビュー" },
+    { reason: "review" as const, what: "文書とコードのレビュー" },
     { reason: "split" as const, what: "作業の分担" }
   ].filter(({ reason }) =>
     candidateRolesFor(reason).every((role) => disabled.includes(role.id))

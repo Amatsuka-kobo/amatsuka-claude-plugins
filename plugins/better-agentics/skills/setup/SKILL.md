@@ -105,7 +105,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --list-coverage --lang <lang> --d
    - 入力に役割表に無い ID があれば、その ID を示して聞き直す。
 3. 外す役割が次のどれかを含むときは、「このまま外す」「選び直す」の 2 択で聞く。
    - `design-review` と `knowledge-elicitation` の両方。必須の設計書・実装計画書のレビューが止まる。
-   - `knowledge-elicitation` を除く、`reason` が `review` の役割すべて。外側の手順のレビューが止まる。
+   - `knowledge-elicitation` を除く、`reason` が `review` の役割すべて。設計・実装計画の文書ファイル以外の文書とコードのレビューが止まる。
    - `reason` が `split` の役割すべて。着手前の見積もりで委譲する探索などが止まる。
    - 質問文に、当たった組み合わせで止まる委譲が `no-candidates` になることを書く。
    - 「選び直す」なら 2 へ戻る。
