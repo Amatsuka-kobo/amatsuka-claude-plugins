@@ -1,0 +1,11 @@
+[
+  {"id": "scale", "when": "軽量", "pick": "{scale}"},
+  {"id": "continue-run", "when": "終える", "pick": "続行"},
+  {"id": "raguel-ask", "when": "このまま承認", "pick": "このまま承認"},
+  {"id": "raguel-degraded", "when": "そのまま承認", "pick": "そのまま承認"},
+  {"id": "raguel-stop", "when": "妥当として止める", "pick": "妥当として止める"},
+  {"id": "discuss-rest", "when": "残り.*推奨", "pick": "残り.*推奨"},
+  {"id": "triage-skip", "when": "見送", "pick": "見送"},
+  {"id": "recommended", "when": "推奨|Recommended", "pick": "推奨|Recommended"},
+  {"id": "proceed", "when": ".", "pick": "続行|続ける|進め|はい|許可|承認|よい|実行"}
+]

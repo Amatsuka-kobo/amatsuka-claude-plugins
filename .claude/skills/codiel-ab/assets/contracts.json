@@ -1,0 +1,7 @@
+[
+  {"id": "commit-message", "target": "commits", "skip": "をマージ$|^Merge ", "require": ["^codiel\\([a-z-]+\\): .+ \\(\\S+ try-\\d+\\)$"]},
+  {"id": "design-no-candidates", "target": "docs-runs/*/design.md", "forbid": ["\\(候補:"]},
+  {"id": "dev-plan-steps", "target": "docs-runs/*/dev-plan.md", "require": ["^## Step \\d+: .+ \\[domain: .+\\]"]},
+  {"id": "spec-frontmatter-tests", "target": "docs-tests/*/spec.md", "require": ["\\A---\\n[\\s\\S]*?^tests:"]},
+  {"id": "test-run-verdict", "target": "codiel-runs/*/try-*/reports/test-run-*.md", "require": ["green|red|broken"]}
+]
