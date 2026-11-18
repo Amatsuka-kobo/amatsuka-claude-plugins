@@ -999,6 +999,20 @@ export function prepareArchitectureUpdate(
         warnings
       }
     }
+    // body の中の `## ` 見出しは、全文を読み直すと別のセクションとして分かれる。
+    // 対象のセクションが空になり、許可リストに無い見出しが残る。
+    const bodyScan = scanFences(body)
+    const stray = bodyScan.lines.findIndex(
+      (line, i) => !bodyScan.insideFence[i] && HEADING_RE.test(line.text)
+    )
+    if (stray >= 0) {
+      return {
+        ok: false,
+        error: "invalid_body",
+        message: `「${validated.heading}」の body に \`## \` の見出し(${bodyScan.lines[stray].text.trim()})があります。小見出しは \`### \` 以下で書いてください。`,
+        warnings
+      }
+    }
     normalizedChanges.push({ heading: validated.heading, body })
   }
 

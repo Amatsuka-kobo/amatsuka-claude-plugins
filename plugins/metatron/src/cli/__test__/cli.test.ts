@@ -1905,6 +1905,11 @@ test("LC1: link-claude-md は ARCHITECTURE が無ければ拒否し、あれば 
   expect(fs.readFileSync(path.join(root, "CLAUDE.md"), "utf8")).toBe(
     "@docs/ARCHITECTURE.md\n@docs/GOTCHAS.md\n"
   )
+  // 設定ファイルがあるプロジェクトでは設定を書き換えない。
+  expect(linked.json).toMatchObject({ configCreated: false })
+  expect(fs.readFileSync(path.join(root, "metatron.config.json"), "utf8")).toBe(
+    "{}"
+  )
 
   // GOTCHAS の記録が無効なら GOTCHAS は足さない。
   const off = project()
@@ -1913,4 +1918,16 @@ test("LC1: link-claude-md は ARCHITECTURE が無ければ拒否し、あれば 
   expect(fs.readFileSync(path.join(off, "CLAUDE.md"), "utf8")).toBe(
     "@docs/ARCHITECTURE.md\n"
   )
+})
+
+test("LC2: link-claude-md は metatron.config.json が無ければ最小の設定を作る", () => {
+  const root = mkTmp()
+  fs.mkdirSync(path.join(root, ".git"))
+  writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
+  const linked = runCli(["link-claude-md"], root)
+  expect(linked.status).toBe(0)
+  expect(linked.json).toMatchObject({ configCreated: true, written: true })
+  expect(
+    JSON.parse(fs.readFileSync(path.join(root, "metatron.config.json"), "utf8"))
+  ).toStrictEqual({ version: 1 })
 })

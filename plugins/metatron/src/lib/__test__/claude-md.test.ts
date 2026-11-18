@@ -45,13 +45,30 @@ test("L2: 既存の本文は変えず、空行 1 行を挟んで末尾に足す�
   expect(again.present).toStrictEqual(DOCS)
 })
 
-test("L3: 本文中の言及は @メンションと数えず、行頭の 1 語だけを数える", () => {
+test("L3: 行の途中・箇条書き・./ 付きの @メンションも書かれていると数える", () => {
+  for (const text of [
+    "詳細は @docs/ARCHITECTURE.md を読む。\n- @./docs/GOTCHAS.md\n",
+    "See @docs/ARCHITECTURE.md. Also @docs/GOTCHAS.md\n"
+  ]) {
+    const dir = mkTmp({ "CLAUDE.md": text })
+    expect(linkClaudeMd(dir, DOCS).added, text).toStrictEqual([])
+  }
+})
+
+test("L6: コードフェンスとインラインコードの中の @ は import にならないので数えない", () => {
   const dir = mkTmp({
-    "CLAUDE.md": "詳細は @docs/ARCHITECTURE.md を読む。\n@docs/GOTCHAS.md\n"
+    "CLAUDE.md":
+      "# P\n\n```\n@docs/ARCHITECTURE.md\n```\n\n書き方は `@docs/GOTCHAS.md` の形。\n"
   })
-  const result = linkClaudeMd(dir, DOCS)
-  expect(result.added).toStrictEqual(["docs/ARCHITECTURE.md"])
-  expect(result.present).toStrictEqual(["docs/GOTCHAS.md"])
+  expect(linkClaudeMd(dir, DOCS).added).toStrictEqual(DOCS)
+})
+
+test("L7: CRLF の CLAUDE.md には CRLF で追記する", () => {
+  const dir = mkTmp({ "CLAUDE.md": "# P\r\n\r\nline\r\n" })
+  linkClaudeMd(dir, DOCS)
+  expect(read(dir, "CLAUDE.md")).toBe(
+    "# P\r\n\r\nline\r\n\r\n@docs/ARCHITECTURE.md\r\n@docs/GOTCHAS.md\r\n"
+  )
 })
 
 test("L5: 空白・制御文字を含むパスは拒否し、CLAUDE.md を作らない", () => {

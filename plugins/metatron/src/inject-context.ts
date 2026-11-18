@@ -16,7 +16,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { existingMentions } from "./lib/claude-md.js"
+import { existingMentions, isMentionablePath } from "./lib/claude-md.js"
 import { loadConfig, type ResolvedConfig } from "./lib/config.js"
 import { injectContext } from "./lib/emit.js"
 import { type Features, readFeatures } from "./lib/features.js"
@@ -27,6 +27,28 @@ const MAX_WARNING_LINES = 3
 const STDIN_TIMEOUT_MS = 2000
 /** 廃止した rules 3 ファイルの既定の置き場。残っていたら移行を案内する。 */
 const LEGACY_RULES_DIR = ".claude/rules/metatron"
+
+// 旧版の config は `paths.rulesDir` で rules の置き場を変えられた。現行の config の解決は
+// このキーを無視するので、移行の案内のためだけに設定ファイルを直接読む。
+function legacyRulesDir(config: ResolvedConfig): string {
+  try {
+    const raw = JSON.parse(fs.readFileSync(config.configPath, "utf8")) as {
+      paths?: { rulesDir?: unknown }
+    }
+    const dir = raw?.paths?.rulesDir
+    if (
+      typeof dir === "string" &&
+      dir !== "" &&
+      !path.isAbsolute(dir) &&
+      !dir.split(/[\\/]/).includes("..")
+    ) {
+      return dir.replace(/\/+$/, "")
+    }
+  } catch {
+    // 設定が無い・読めないときは既定の置き場を見る。
+  }
+  return LEGACY_RULES_DIR
+}
 
 // hook 自身の位置からプラグインルートを求める。ソース(src/)からもバンドル(scripts/)からも
 // 1 階層上がプラグインルートになる(契約 §12)。
@@ -109,23 +131,34 @@ function migrationLines(
   hasArchitecture: boolean
 ): string[] {
   const lines: string[] = []
-  if (fs.existsSync(path.join(config.docRoot, LEGACY_RULES_DIR))) {
+  const rulesDir = legacyRulesDir(config)
+  if (fs.existsSync(path.join(config.docRoot, rulesDir))) {
     lines.push(
-      `廃止した rules(${LEGACY_RULES_DIR}/)が残っている。/metatron:update で ARCHITECTURE と CLAUDE.md へ移行する。`
+      `廃止した rules(${rulesDir}/)が残っている。/metatron:update で ARCHITECTURE と CLAUDE.md へ移行する。`
     )
   }
   if (!hasArchitecture) return lines
   const existing = existingMentions(config.docRoot)
   const missing = docs.filter((rel) => !existing.has(rel))
-  if (missing.length > 0) {
+  const unlinkable = missing.filter((rel) => !isMentionablePath(rel))
+  const linkable = missing.filter((rel) => isMentionablePath(rel))
+  if (linkable.length > 0) {
     lines.push(
-      `CLAUDE.md に ${missing.map((rel) => `@${rel}`).join(" と ")} が無く、文書が読み込まれない。/metatron:update で追記する。`
+      `CLAUDE.md に ${linkable.map((rel) => `@${rel}`).join(" と ")} が無く、文書が読み込まれない。/metatron:update で追記する。`
+    )
+  }
+  if (unlinkable.length > 0) {
+    lines.push(
+      `${unlinkable.join(" と ")} は空白か制御文字を含むため、@メンションで読み込めない。metatron.config.json の paths を空白の無いパスに変える。`
     )
   }
   return lines
 }
 
-function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
+function build(
+  config: ResolvedConfig,
+  env: NodeJS.ProcessEnv
+): { content: string; systemMessage?: string } {
   const features = readFeatures(env)
   const cli = metatronCliPath(env)
   const hasArchitecture = hasContent(config.architecturePath)
@@ -150,12 +183,19 @@ function build(config: ResolvedConfig, env: NodeJS.ProcessEnv): string {
       "サブエージェントも CLAUDE.md 経由で同じ文書を読む。委譲の依頼文には、文書の原文も要約も書き写さない。"
     )
   }
-  lines.push(...migrationLines(config, docs, hasArchitecture))
+  const migration = migrationLines(config, docs, hasArchitecture)
+  lines.push(...migration)
   // 設定由来の理由(壊れた設定・未知 version・パス不正)は伏せない(契約 §2)。
   for (const warning of config.warnings.slice(0, MAX_WARNING_LINES)) {
     lines.push(`※注意: ${warning}`)
   }
-  return `${lines.join("\n")}\n`
+  // 移行が要る状態は文書が読み込まれない状態なので、モデル経由でなく画面にも出す。
+  return {
+    content: `${lines.join("\n")}\n`,
+    ...(migration.length === 0
+      ? {}
+      : { systemMessage: `metatron: ${migration.join(" ")}` })
+  }
 }
 
 // 入力から cwd を取る。stdin が閉じない環境で固まらないよう時間で打ち切る。
@@ -195,7 +235,8 @@ try {
     typeof hookInput.cwd === "string" && hookInput.cwd !== ""
       ? hookInput.cwd
       : process.cwd()
-  injectContext(build(loadConfig(startDir), process.env), "SessionStart")
+  const { content, systemMessage } = build(loadConfig(startDir), process.env)
+  injectContext(content, systemMessage)
 } catch {
   // フェイルオープン(契約 §12)。何も出力せず正常終了する。
 }

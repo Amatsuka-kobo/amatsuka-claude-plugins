@@ -1139,3 +1139,16 @@ describe("A33: 単独の CR と CRLF は検証の前に LF へ揃え、検証と
     }
   })
 })
+
+test("A32: body に ## の見出しがあれば invalid_body で拒否し、フェンスの中の ## は通す", () => {
+  const bad = prepareArchitectureUpdate(ALL_SECTIONS, [
+    { heading: "保護パス", body: "## 触らないパス\n\n- a" }
+  ])
+  expect(bad.ok).toBe(false)
+  if (!bad.ok) expect(bad.error).toBe("invalid_body")
+  expect(
+    prepareArchitectureUpdate(ALL_SECTIONS, [
+      { heading: "保護パス", body: "### 触らないパス\n\n```\n## 例\n```" }
+    ]).ok
+  ).toBe(true)
+})

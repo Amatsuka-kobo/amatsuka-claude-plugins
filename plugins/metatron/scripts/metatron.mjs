@@ -579,6 +579,18 @@ function prepareArchitectureUpdate(current, changes) {
         warnings
       };
     }
+    const bodyScan = scanFences(body);
+    const stray = bodyScan.lines.findIndex(
+      (line, i) => !bodyScan.insideFence[i] && HEADING_RE.test(line.text)
+    );
+    if (stray >= 0) {
+      return {
+        ok: false,
+        error: "invalid_body",
+        message: `\u300C${validated.heading}\u300D\u306E body \u306B \`## \` \u306E\u898B\u51FA\u3057(${bodyScan.lines[stray].text.trim()})\u304C\u3042\u308A\u307E\u3059\u3002\u5C0F\u898B\u51FA\u3057\u306F \`### \` \u4EE5\u4E0B\u3067\u66F8\u3044\u3066\u304F\u3060\u3055\u3044\u3002`,
+        warnings
+      };
+    }
     normalizedChanges.push({ heading: validated.heading, body });
   }
   const removals = normalizedChanges.filter((c) => c.remove === true);
@@ -4498,11 +4510,29 @@ function readOrNull(filePath) {
     return null;
   }
 }
+function isMentionablePath(rel) {
+  return rel !== "" && ![...rel].some((c) => {
+    const code = c.charCodeAt(0);
+    return /\s/.test(c) || code < 32 || code === 127;
+  });
+}
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^@(\S+)\s*$/.exec(line.trim());
-    if (match) found.add(match[1]);
+  let fence = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/^﻿/, "");
+    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (marker) {
+      if (fence === null) fence = marker[1][0];
+      else if (marker[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    const outsideCode = line.replace(/`[^`]*`/g, " ");
+    for (const match of outsideCode.matchAll(/(?:^|\s)@(\S+)/g)) {
+      const token = match[1].replace(/[.,;:)\]、。」]+$/, "");
+      if (token !== "") found.add(path8.posix.normalize(token));
+    }
   }
   return found;
 }
@@ -4520,9 +4550,7 @@ function existingMentions(docRoot) {
   return existing;
 }
 function linkClaudeMd(docRoot, relatives) {
-  const unsafe = relatives.find(
-    (rel) => /\s/.test(rel) || [...rel].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)
-  );
+  const unsafe = relatives.find((rel) => !isMentionablePath(rel));
   if (unsafe !== void 0) {
     throw new Error(
       `\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u30D1\u30B9\u306F @\u30E1\u30F3\u30B7\u30E7\u30F3\u306B\u3067\u304D\u307E\u305B\u3093: ${JSON.stringify(unsafe)}`
@@ -4540,11 +4568,11 @@ function linkClaudeMd(docRoot, relatives) {
   if (added.length === 0) {
     return { path: target, added, present, created: false };
   }
+  const eol = current.includes("\r\n") ? "\r\n" : "\n";
   const lines = added.map((rel) => `@${useDot ? `../${rel}` : rel}`);
   const body = current.replace(/\s*$/, "");
-  const separator = body === "" ? "" : "\n\n";
-  writeFileAtomic(target, `${body}${separator}${lines.join("\n")}
-`);
+  const separator = body === "" ? "" : `${eol}${eol}`;
+  writeFileAtomic(target, `${body}${separator}${lines.join(eol)}${eol}`);
   return { path: target, added, present, created };
 }
 
@@ -4574,10 +4602,15 @@ function runLinkClaudeMd(ctx) {
   ];
   try {
     const result = linkClaudeMd(config.docRoot, relatives);
+    const configCreated = !fs10.existsSync(config.configPath);
+    if (configCreated)
+      writeFileAtomic(config.configPath, '{\n  "version": 1\n}\n');
     emitResult(command, {
       ok: true,
-      written: result.added.length > 0,
+      written: result.added.length > 0 || configCreated,
       ...result,
+      configPath: config.configPath,
+      configCreated,
       warnings: config.warnings
     });
   } catch (error) {

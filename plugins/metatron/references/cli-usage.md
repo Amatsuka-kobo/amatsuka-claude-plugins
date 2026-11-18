@@ -22,7 +22,7 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 | `stage-adr --input <path>` | 段階 | diff と `stagingId`、追加時は `assignedId`。書き込みはしない |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
 | `init-gotchas` | 書 | 承認後に雛形だけの GOTCHAS 台帳を新規作成する |
-| `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記する。追記したもの(`added`)と既にあったもの(`present`)を返す |
+| `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記し、`metatron.config.json` が無ければ作る。追記したもの(`added`)・既にあったもの(`present`)・設定ファイルを作ったか(`configCreated`)を返す |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
 | `stage-gotcha --input <path>` | 段階 | 既存エントリのフィールドを書き換えた diff と `stagingId`。書き込みはしない |
@@ -124,9 +124,13 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 - 追記する先は docRoot の `CLAUDE.md` である。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` に `../` 付きで書く。どちらも無ければ `CLAUDE.md` を作る。
 - 対象は ARCHITECTURE と、GOTCHAS の記録が有効で台帳に中身があるときの GOTCHAS である。
-- 行頭に既に書かれている @メンションは足さない。既存の行は書き換えない。
+- コードフェンスとインラインコードの外に既に書かれている @メンションは足さない。行の途中・箇条書きの中・`./` 付きの書き方も、書かれているものとして数える。既存の行は書き換えない。
+- 判定の対象は docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` だけである。他のファイル経由の import・`CLAUDE.local.md`・親ディレクトリの CLAUDE.md は見ない。
+- 追記する改行コードは、既存のファイルに合わせる。
+- `metatron.config.json` が無いときは `{ "version": 1 }` で作る。codiel はこのファイルの有無で metatron の利用を判定する。
 - ARCHITECTURE が無いときは `architecture_missing` で拒否される。
-- **実行の前にユーザーの承認を得る。** 追記する行を示してから実行する。
+- 空白か制御文字を含むパスは @メンションにできないので、`write_failed` で拒否される。
+- **実行の前にユーザーの承認を得る。** 追記する行と、作られる設定ファイルのパスを示してから実行する。
 
 ### append-gotcha
 

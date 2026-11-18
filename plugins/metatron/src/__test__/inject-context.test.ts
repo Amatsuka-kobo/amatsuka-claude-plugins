@@ -150,6 +150,7 @@ test("I4: CLAUDE.md に @メンションが無ければ、足りないものを�
   expect(content).toContain(
     "CLAUDE.md に @docs/GOTCHAS.md が無く、文書が読み込まれない。"
   )
+  expect(systemMessageOf(root)).toContain("@docs/GOTCHAS.md が無く")
   expect(content).not.toContain("@docs/ARCHITECTURE.md と")
 })
 
@@ -191,3 +192,52 @@ test("I8: SubagentStart の入力でも本文は注入しない", () => {
   const content = mustInject(root, BOTH_ON, {}, "SubagentStart")
   expect(content).not.toContain("ARCH-BODY")
 })
+
+test("I9: 旧 config の paths.rulesDir に残る rules も移行を促し、画面にも出す", () => {
+  const root = project({
+    "docs/ARCHITECTURE.md": ARCH,
+    "CLAUDE.md": LINKED_CLAUDE_MD,
+    "ai/rules/conventions.md": "# 規約\n"
+  })
+  write(
+    root,
+    "metatron.config.json",
+    '{"version":1,"paths":{"rulesDir":"ai/rules"}}'
+  )
+  expect(mustInject(root)).toContain("廃止した rules(ai/rules/)が残っている。")
+  expect(systemMessageOf(root)).toContain("ai/rules/")
+})
+
+test("I10: 移行が要らなければ画面への表示は出さない", () => {
+  const root = project({
+    "docs/ARCHITECTURE.md": ARCH,
+    "docs/GOTCHAS.md": GOTCHAS,
+    "CLAUDE.md": LINKED_CLAUDE_MD
+  })
+  expect(systemMessageOf(root)).toBe(undefined)
+})
+
+test("I11: 空白を含むパスは追記を促さず、paths を変えるよう案内する", () => {
+  const root = project({ "my docs/ARCH.md": ARCH, "CLAUDE.md": "# P\n" })
+  write(
+    root,
+    "metatron.config.json",
+    '{"version":1,"paths":{"architecture":"my docs/ARCH.md"}}'
+  )
+  const content = mustInject(root, BOTH_OFF)
+  expect(content).toContain("my docs/ARCH.md は空白か制御文字を含むため")
+  expect(content).not.toContain("/metatron:update で追記する")
+})
+
+function systemMessageOf(cwd: string): string | undefined {
+  const env = { ...process.env }
+  delete env.CLAUDE_PLUGIN_ROOT
+  env[ADR_ENV] = "1"
+  env[GOTCHAS_ENV] = "1"
+  const out = runTs(HOOK, [], {
+    cwd,
+    env,
+    input: JSON.stringify({ cwd, hook_event_name: "SessionStart" })
+  })
+  return (JSON.parse(out) as { systemMessage?: string }).systemMessage
+}

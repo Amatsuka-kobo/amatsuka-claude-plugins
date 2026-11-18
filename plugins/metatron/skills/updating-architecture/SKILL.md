@@ -92,7 +92,7 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 - docRoot に旧 rules の `.claude/rules/metatron/` が残っているかを確かめる。残っていれば「旧 rules の移行」を 1 件の候補に加える。
 - 旧 rules が残っているときは、`diff-architecture` が返す `## 保護パス`・`## テスト方針` の欠落を移行の候補にまとめ、別の候補にしない。
-- docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` の行頭に、`get config` の `architecture.relative` を指す `@<相対パス>` があるかを確かめる。`.claude/CLAUDE.md` の行は `../` を付けたパスで書かれている。
+- docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` のコードの外に、`get config` の `architecture.relative` を指す `@<相対パス>` があるかを確かめる。`.claude/CLAUDE.md` の行は `../` を付けたパスで書かれている。
 - `features.gotchas` が `true` で台帳に内容があるときは、`gotchas.relative` を指す @メンションも確かめる。
 - 欠けている @メンションがあれば「@メンションの追記」を 1 件の候補に加える。旧 rules の移行を候補にしたときは、移行の中で追記するので別の候補にしない。
 - どちらも `diff-architecture` では検出されない。SessionStart の案内文が移行や追記を促していても、ここで自分で確かめる。
@@ -213,7 +213,8 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 - 追記する行は、`get config` の `architecture.relative` から `@<相対パス>` の形で組み立てる。`features.gotchas` が `true` で台帳に内容があるときは、`gotchas.relative` の行も加える。
 - 追記先は docRoot の `CLAUDE.md` とする。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` とし、各行のパスに `../` を付ける。どちらも無ければ `CLAUDE.md` が新しく作られる。
-- どちらかの CLAUDE.md の行頭に既にある @メンションは、追記する行から外す。
+- どちらかの CLAUDE.md のコードの外に既にある @メンションは、追記する行から外す。
+- `metatron.config.json` が無いときは、`link-claude-md` が `{ "version": 1 }` の設定ファイルも作る。承認を求めるときに、作られる設定ファイルのパスも併せて示す。
 - 追記先のパスと追記する行を示し、追記してよいかの明示的な承認を得る。
 - 承認を得てから `link-claude-md` を実行する。入力もオプションも取らない。
 - 返った `added` と `present` を手順 14 の報告に使う。

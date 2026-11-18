@@ -74,7 +74,7 @@ GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効
 
 手順 2 で台帳が無かったときに行う。`capturing-architecture` と `updating-architecture` から「持続層の GOTCHAS 候補の取り込み」として呼ばれたときは行わない(呼び出し元が追記を扱う)。
 
-- docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` の行頭に、`get config` の `gotchas.relative` を指す `@<相対パス>` があるかを確かめる。`.claude/CLAUDE.md` の行は `../` を付けたパスで書かれている。
+- docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` のコードの外に、`get config` の `gotchas.relative` を指す `@<相対パス>` があるかを確かめる。`.claude/CLAUDE.md` の行は `../` を付けたパスで書かれている。
 - 無ければ、`link-claude-md` で追記することを案内する。追記先は docRoot の `CLAUDE.md`、それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` である。
 - エントリの追記と違い、@メンションの追記には承認を要する。追記先のパスと追記する行を示し、承認を得てから `link-claude-md` を実行する。
 - ARCHITECTURE が無いときは `link-claude-md` が `architecture_missing` で拒否する。実行せず、`/metatron:init` を案内する。

@@ -2,12 +2,14 @@
 //
 // 両文書は CLAUDE.md の @メンションで毎セッション読み込まれる(SessionStart の hook は本文を注入しない)。
 // 既に書かれている @メンションは足さない。CLAUDE.md の他の行は書き換えない。
+// 判定の対象は docRoot の CLAUDE.md と .claude/CLAUDE.md だけである。
+// 他のファイル経由の import・CLAUDE.local.md・親ディレクトリの CLAUDE.md は見ない。
 
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "./atomic-write.js"
 
-/** @メンションを探す CLAUDE.md の置き場(docRoot からの相対パス)。inject-context.ts と揃える。 */
+/** @メンションを探す CLAUDE.md の置き場(docRoot からの相対パス)。 */
 export const CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"] as const
 
 export interface LinkResult {
@@ -29,12 +31,40 @@ function readOrNull(filePath: string): string | null {
   }
 }
 
-// 行頭の `@<パス>` だけを @メンションとして数える。本文中の言及は数えない。
+/**
+ * @メンションにできるパスか。空白・制御文字を含むパスは 1 語の @メンションにならず、
+ * 改行で任意の行を書き込めてしまう。
+ */
+export function isMentionablePath(rel: string): boolean {
+  return (
+    rel !== "" &&
+    ![...rel].some((c) => {
+      const code = c.charCodeAt(0)
+      return /\s/.test(c) || code < 0x20 || code === 0x7f
+    })
+  )
+}
+
+// Claude Code が import として読む `@<パス>` を集める。
+// コードフェンスの中とインラインコードの中は import にならないので数えない。
+// 行の途中・箇条書きの中の `@<パス>` も import になるので数える。
 function mentions(text: string): Set<string> {
   const found = new Set<string>()
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^@(\S+)\s*$/.exec(line.trim())
-    if (match) found.add(match[1])
+  let fence: string | null = null
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/^﻿/, "")
+    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)
+    if (marker) {
+      if (fence === null) fence = marker[1][0]
+      else if (marker[1][0] === fence) fence = null
+      continue
+    }
+    if (fence !== null) continue
+    const outsideCode = line.replace(/`[^`]*`/g, " ")
+    for (const match of outsideCode.matchAll(/(?:^|\s)@(\S+)/g)) {
+      const token = match[1].replace(/[.,;:)\]、。」]+$/, "")
+      if (token !== "") found.add(path.posix.normalize(token))
+    }
   }
   return found
 }
@@ -61,17 +91,13 @@ export function existingMentions(docRoot: string): Set<string> {
  * 書き込み先は docRoot の `CLAUDE.md`。それが無く `.claude/CLAUDE.md` だけがあるときは
  * `.claude/CLAUDE.md` に書く。どちらも無ければ docRoot に `CLAUDE.md` を作る。
  * `.claude/CLAUDE.md` の @メンションは CLAUDE.md からの相対で解決されるため、`../` を付ける。
+ * 改行コードは既存のファイルに合わせる。
  */
 export function linkClaudeMd(
   docRoot: string,
   relatives: readonly string[]
 ): LinkResult {
-  // 空白・制御文字を含むパスは 1 行の @メンションにならず、改行で任意の行を書き込めてしまう。
-  const unsafe = relatives.find(
-    (rel) =>
-      /\s/.test(rel) ||
-      [...rel].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
-  )
+  const unsafe = relatives.find((rel) => !isMentionablePath(rel))
   if (unsafe !== undefined) {
     throw new Error(
       `空白か制御文字を含むパスは @メンションにできません: ${JSON.stringify(unsafe)}`
@@ -91,10 +117,11 @@ export function linkClaudeMd(
     return { path: target, added, present, created: false }
   }
 
+  const eol = current.includes("\r\n") ? "\r\n" : "\n"
   const lines = added.map((rel) => `@${useDot ? `../${rel}` : rel}`)
   // 既存の本文とは空行 1 行で区切る。
   const body = current.replace(/\s*$/, "")
-  const separator = body === "" ? "" : "\n\n"
-  writeFileAtomic(target, `${body}${separator}${lines.join("\n")}\n`)
+  const separator = body === "" ? "" : `${eol}${eol}`
+  writeFileAtomic(target, `${body}${separator}${lines.join(eol)}${eol}`)
   return { path: target, added, present, created }
 }

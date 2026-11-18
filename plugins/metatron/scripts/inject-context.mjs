@@ -16,11 +16,29 @@ function readOrNull(filePath) {
     return null;
   }
 }
+function isMentionablePath(rel) {
+  return rel !== "" && ![...rel].some((c) => {
+    const code = c.charCodeAt(0);
+    return /\s/.test(c) || code < 32 || code === 127;
+  });
+}
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^@(\S+)\s*$/.exec(line.trim());
-    if (match) found.add(match[1]);
+  let fence = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/^﻿/, "");
+    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (marker) {
+      if (fence === null) fence = marker[1][0];
+      else if (marker[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    const outsideCode = line.replace(/`[^`]*`/g, " ");
+    for (const match of outsideCode.matchAll(/(?:^|\s)@(\S+)/g)) {
+      const token = match[1].replace(/[.,;:)\]、。」]+$/, "");
+      if (token !== "") found.add(path.posix.normalize(token));
+    }
   }
   return found;
 }
@@ -227,11 +245,12 @@ function loadConfig(startDir) {
 }
 
 // src/lib/emit.ts
-function injectContext(content, eventName) {
+function injectContext(content, systemMessage) {
   process.stdout.write(
     `${JSON.stringify({
+      ...systemMessage === void 0 ? {} : { systemMessage },
       hookSpecificOutput: {
-        hookEventName: eventName,
+        hookEventName: "SessionStart",
         additionalContext: content
       }
     })}
@@ -254,6 +273,17 @@ function readFeatures(env) {
 var MAX_WARNING_LINES = 3;
 var STDIN_TIMEOUT_MS = 2e3;
 var LEGACY_RULES_DIR = ".claude/rules/metatron";
+function legacyRulesDir(config) {
+  try {
+    const raw = JSON.parse(fs3.readFileSync(config.configPath, "utf8"));
+    const dir = raw?.paths?.rulesDir;
+    if (typeof dir === "string" && dir !== "" && !path3.isAbsolute(dir) && !dir.split(/[\\/]/).includes("..")) {
+      return dir.replace(/\/+$/, "");
+    }
+  } catch {
+  }
+  return LEGACY_RULES_DIR;
+}
 function metatronCliPath(env) {
   const fromEnv = env.CLAUDE_PLUGIN_ROOT;
   const root = typeof fromEnv === "string" && fromEnv !== "" ? path3.resolve(fromEnv) : path3.resolve(path3.dirname(fileURLToPath(import.meta.url)), "..");
@@ -309,17 +339,25 @@ function recordingLines(features) {
 }
 function migrationLines(config, docs, hasArchitecture) {
   const lines = [];
-  if (fs3.existsSync(path3.join(config.docRoot, LEGACY_RULES_DIR))) {
+  const rulesDir = legacyRulesDir(config);
+  if (fs3.existsSync(path3.join(config.docRoot, rulesDir))) {
     lines.push(
-      `\u5EC3\u6B62\u3057\u305F rules(${LEGACY_RULES_DIR}/)\u304C\u6B8B\u3063\u3066\u3044\u308B\u3002/metatron:update \u3067 ARCHITECTURE \u3068 CLAUDE.md \u3078\u79FB\u884C\u3059\u308B\u3002`
+      `\u5EC3\u6B62\u3057\u305F rules(${rulesDir}/)\u304C\u6B8B\u3063\u3066\u3044\u308B\u3002/metatron:update \u3067 ARCHITECTURE \u3068 CLAUDE.md \u3078\u79FB\u884C\u3059\u308B\u3002`
     );
   }
   if (!hasArchitecture) return lines;
   const existing = existingMentions(config.docRoot);
   const missing = docs.filter((rel) => !existing.has(rel));
-  if (missing.length > 0) {
+  const unlinkable = missing.filter((rel) => !isMentionablePath(rel));
+  const linkable = missing.filter((rel) => isMentionablePath(rel));
+  if (linkable.length > 0) {
     lines.push(
-      `CLAUDE.md \u306B ${missing.map((rel) => `@${rel}`).join(" \u3068 ")} \u304C\u7121\u304F\u3001\u6587\u66F8\u304C\u8AAD\u307F\u8FBC\u307E\u308C\u306A\u3044\u3002/metatron:update \u3067\u8FFD\u8A18\u3059\u308B\u3002`
+      `CLAUDE.md \u306B ${linkable.map((rel) => `@${rel}`).join(" \u3068 ")} \u304C\u7121\u304F\u3001\u6587\u66F8\u304C\u8AAD\u307F\u8FBC\u307E\u308C\u306A\u3044\u3002/metatron:update \u3067\u8FFD\u8A18\u3059\u308B\u3002`
+    );
+  }
+  if (unlinkable.length > 0) {
+    lines.push(
+      `${unlinkable.join(" \u3068 ")} \u306F\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u305F\u3081\u3001@\u30E1\u30F3\u30B7\u30E7\u30F3\u3067\u8AAD\u307F\u8FBC\u3081\u306A\u3044\u3002metatron.config.json \u306E paths \u3092\u7A7A\u767D\u306E\u7121\u3044\u30D1\u30B9\u306B\u5909\u3048\u308B\u3002`
     );
   }
   return lines;
@@ -348,12 +386,16 @@ function build(config, env) {
       "\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u3082 CLAUDE.md \u7D4C\u7531\u3067\u540C\u3058\u6587\u66F8\u3092\u8AAD\u3080\u3002\u59D4\u8B72\u306E\u4F9D\u983C\u6587\u306B\u306F\u3001\u6587\u66F8\u306E\u539F\u6587\u3082\u8981\u7D04\u3082\u66F8\u304D\u5199\u3055\u306A\u3044\u3002"
     );
   }
-  lines.push(...migrationLines(config, docs, hasArchitecture));
+  const migration = migrationLines(config, docs, hasArchitecture);
+  lines.push(...migration);
   for (const warning of config.warnings.slice(0, MAX_WARNING_LINES)) {
     lines.push(`\u203B\u6CE8\u610F: ${warning}`);
   }
-  return `${lines.join("\n")}
-`;
+  return {
+    content: `${lines.join("\n")}
+`,
+    ...migration.length === 0 ? {} : { systemMessage: `metatron: ${migration.join(" ")}` }
+  };
 }
 function readHookInput() {
   return new Promise((resolve) => {
@@ -387,6 +429,7 @@ function readHookInput() {
 try {
   const hookInput = await readHookInput();
   const startDir = typeof hookInput.cwd === "string" && hookInput.cwd !== "" ? hookInput.cwd : process.cwd();
-  injectContext(build(loadConfig(startDir), process.env), "SessionStart");
+  const { content, systemMessage } = build(loadConfig(startDir), process.env);
+  injectContext(content, systemMessage);
 } catch {
 }

@@ -48,7 +48,7 @@ flowchart TD
 - Next.js のメジャー更新は手動でのみ行う。
 - Prisma のスキーマ変更は `prisma migrate` で行い、SQL を直接当てない。
 - 依存の追加は pnpm で行う。npm / yarn を併用しない。
-- ライブラリを追加するときは `.claude/rules/metatron/conventions.md` の依存追加の条件を満たす。
+- ライブラリを追加するときは CLAUDE.md の依存追加の条件を満たす。
 
 ## レイヤー構造
 
@@ -106,7 +106,7 @@ tests/
 分割が馴染まないプロジェクトは `{ "generic": ["**"] }` に縮退させる。
 このブロックを機械的に読むのは、metatron の CLI と hook、codiel の `initializing-harness`、
 `orchestrating-runs`、`check-intent-env` である。codiel の `guard-write` hook は読まない。
-書き込みの禁止をこのブロックに期待せず、触ってほしくないパスは `.claude/rules/metatron/protected-paths.md` に書く。
+書き込みの禁止をこのブロックに期待せず、触ってほしくないパスは `## 保護パス` に書く。
 -->
 
 ```json metatron:domains

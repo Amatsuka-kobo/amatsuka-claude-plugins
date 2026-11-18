@@ -60,7 +60,7 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | `stage-adr --input <path>` | 段階 | ADR の追加・状態変更を段階化する(採番は CLI が行う) |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して書き込む |
 | `init-gotchas` | 書 | 内容のある既存台帳を上書きせず、空の台帳を雛形から生成する |
-| `link-claude-md` | 書 | `CLAUDE.md` へ ARCHITECTURE・GOTCHAS の @メンションを追記する(既にあれば何もしない) |
+| `link-claude-md` | 書 | `CLAUDE.md` へ ARCHITECTURE・GOTCHAS の @メンションを追記し(既にあれば何もしない)、`metatron.config.json` が無ければ作る |
 | `append-gotcha --input <path>` | 書 | エントリを先頭に挿入する(採番は CLI が行う) |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 既存エントリにタグを付与する(本文は不変) |
 | `stage-gotcha --input <path>` | 段階 | 既存エントリの書き換え案を受け取り、書かずに差分と `stagingId` を返す(監査で使う) |
@@ -99,7 +99,9 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
 
 ## 設定ファイル `metatron.config.json`(任意)
 
-リポジトリのルート直下に置くと、文書のパスを変えられます。**無くても構いません。** その場合は全項目が既定値で動き、警告も出ません。
+リポジトリのルート直下に置くと、文書のパスを変えられます。無くても全項目が既定値で動き、警告も出ません。`/metatron:init` と `/metatron:update` は、CLAUDE.md に @メンションを追記するときに `{ "version": 1 }` の設定ファイルを作ります。Codiel はこのファイルの有無で Metatron の利用を判定するので、消さずにコミットしてください。
+
+@メンションが書かれているかの判定は、ルートの `CLAUDE.md` と `.claude/CLAUDE.md` だけを見ます。他のファイル経由の import、`CLAUDE.local.md`、親ディレクトリの CLAUDE.md に書いた @メンションは数えません。
 
 ```json
 {

@@ -190,7 +190,8 @@ ARCHITECTURE がまだ無いとき(手順 6 で否認されたとき)は、こ�
 
 - 追記する行は、`get config` の `architecture.relative` から `@<相対パス>` の形で組み立てる。`features.gotchas` が `true` で台帳に内容があるときは、`gotchas.relative` の行も加える。
 - 追記先は docRoot の `CLAUDE.md` とする。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` とし、各行のパスに `../` を付ける。どちらも無ければ `CLAUDE.md` が新しく作られる。
-- どちらかの CLAUDE.md の行頭に同じ @メンションが既にあるときは、その行を追記する行から外す。全部が既にあるときは、承認を求めずに手順 11 へ進む。
+- どちらかの CLAUDE.md のコードの外に同じ @メンションが既にあるときは、その行を追記する行から外す。全部が既にあり、`metatron.config.json` もあるときは、承認を求めずに手順 11 へ進む。
+- `metatron.config.json` が無いときは、`link-claude-md` が `{ "version": 1 }` の設定ファイルも作る。承認を求めるときに、作られる設定ファイルのパスも併せて示す。
 - 追記先のパスと追記する行を示し、追記してよいかの明示的な承認を得る。
 - 承認を得てから `link-claude-md` を実行する。入力もオプションも取らない。
 - 返った `added` と `present` を手順 11 の報告に使う。
