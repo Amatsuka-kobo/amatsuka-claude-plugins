@@ -44,7 +44,7 @@ AskUserQuestion で次を確認する:
 
 ### 3. ドラフト提示 → 明示承認
 
-`references/template.md` の形式で一覧表の**全文**を提示し、ユーザーの承認を得る。
+`references/template.md` の形式で一覧表の**全文**を提示し、ユーザーの承認を得る。提示の前に、`${CLAUDE_PLUGIN_ROOT}/references/writing.md` の規律に従って書き、確認する。
 
 ### 4. 保存
 
