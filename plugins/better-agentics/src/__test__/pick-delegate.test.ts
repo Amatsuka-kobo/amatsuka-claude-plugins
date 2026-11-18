@@ -108,7 +108,7 @@ describe("pick-delegate", () => {
     expect(run("{")).toMatchObject({ ok: false, error: "invalid-input" })
   })
 
-  it("キーが空白だけで Jev が要るときは no-api-key を返す", () => {
+  it("キーが空白だけなら Jev を呼ばずに候補を options で返す", () => {
     place(project, "a", definition("a", "code-review"))
     place(project, "b", definition("b", "design-review"))
     expect(
@@ -119,6 +119,12 @@ describe("pick-delegate", () => {
         }),
         { TYPESAFE_API_KEY: "   " }
       )
-    ).toMatchObject({ ok: false, error: "no-api-key" })
+    ).toMatchObject({
+      ok: true,
+      reason: "review",
+      options: expect.arrayContaining([
+        { role: "code-review", criteria: expect.any(String) }
+      ])
+    })
   })
 })

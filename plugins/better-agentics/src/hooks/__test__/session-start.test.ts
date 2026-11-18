@@ -39,14 +39,12 @@ describe("session-start", () => {
     const cases: NodeJS.ProcessEnv[] = [
       { AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "yes" },
       { ...ENABLED, AMATSUKA_AGENT_AUTO_INJECTION: "claude" },
-      { ...ENABLED, AMATSUKA_AGENT_DELEGATION_GATE: "1" },
-      { AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "1" }
+      { ...ENABLED, AMATSUKA_AGENT_DELEGATION_GATE: "1" }
     ]
     const expected = [
       /AMATSUKA_AGENT_ENABLE_ORCHESTRATION の値 "yes" は未知/,
       /AMATSUKA_AGENT_AUTO_INJECTION が同時に有効/,
-      /AMATSUKA_AGENT_DELEGATION_GATE が有効/,
-      /TYPESAFE_API_KEY が設定されていない/
+      /AMATSUKA_AGENT_DELEGATION_GATE が有効/
     ]
     cases.forEach((env, index) => {
       const context = contextOf(run(env)) ?? ""
@@ -54,6 +52,12 @@ describe("session-start", () => {
       expect(context).not.toContain("better-agentics:orchestration")
       expect(context.split("\n")).toHaveLength(1)
     })
+  })
+
+  it("キーが無くても使用指示を注入する", () => {
+    const context =
+      contextOf(run({ AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "1" })) ?? ""
+    expect(context.startsWith(INSTRUCTION)).toBe(true)
   })
 
   it("inject では使用指示を先頭に置き、定義が無ければ Standard Agent モードを案内する", () => {

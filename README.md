@@ -54,7 +54,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | prompt-smith    | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げるプロンプト設計・改善・最適化のためのプラグイン                                               | 開発中   |
 | jevriel         | TypeSafe AI の判断モデル Jev を利用し、分類・順位付け・主張の確認・操作の安全性評価とブラウザ・API の動作確認を行う MCP プラグイン                                    | 開発中   |
 | native-japanese | 日本語の出力に翻訳調や決まり文句を避けて結論から書く規律をスキルで渡し、コメントと文書は書き込んだ後に検査して直させ、AIが正しい日本語を書けるようにするプラグイン                                   | 開発中   |
-| better-agentics | オーケストレーターが調査・設計・実装を自分で行い、レビュー・分担・行き詰まりのときだけ、TypeSafe AI の Jev が選んだサブエージェントへ委譲するプラグイン | 開発中   |
+| better-agentics | オーケストレーターが調査・設計・実装を自分で行い、レビュー・分担・行き詰まりのときだけ、サブエージェントへ委譲するプラグイン。委譲先は TypeSafe AI の Jev(任意)かオーケストレーターが選ぶ | 開発中   |
 | chat-history    | チャットの履歴を保存・検索するためのプラグイン                                                                                           | リリース  |
 | gh-utility      | GitHub関連のユーティリティスキル群                                                                                              | 開発中   |
 | basic-design    | 基本設計フェーズの成果物(図4種・API一覧・非機能要件)をブレインストーミングで作成するオーケストレーター付きツール群                                                      | 開発中   |
@@ -194,9 +194,9 @@ TypeSafe AI の判断モデル Jev を Claude Code から使う MCP プラグイ
 
 オーケストレーターが調査・設計・実装を自分で進め、レビュー・作業の分担・行き詰まりの 3 つの場面でだけサブエージェントへ委譲するプラグインです。
 
-委譲先は TypeSafe AI の判断モデル Jev が、13 の役割の選択基準をもとに選びます。オーケストレーターは「いつ委譲するか」だけを判断し、選択基準を持ちません。
+委譲先は 13 の役割の選択基準をもとに選びます。`TYPESAFE_API_KEY` を設定すると TypeSafe AI の判断モデル Jev が選び、オーケストレーターは「いつ委譲するか」だけを判断します。キーが無いときは、オーケストレーターが候補と選択基準を見て選びます。
 
-環境変数 `AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` と `TYPESAFE_API_KEY` を設定すれば、定義を作らなくても、役割ごとのモデルと effort で `general-purpose` に委譲します(Standard Agent モード)。定義を調整したい役割と、使わない役割は `/better-agentics:setup` で決めます。定義を作った役割は、その定義で起動します(Custom Agent モード)。会話の文脈が要る分担は、fork か自分で行います。agent-policy の自動注入(`AMATSUKA_AGENT_AUTO_INJECTION`)とは同時に使えません。
+環境変数 `AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` を設定すれば、定義を作らなくても、役割ごとのモデルと effort で `general-purpose` に委譲します(Standard Agent モード)。定義を調整したい役割と、使わない役割は `/better-agentics:setup` で決めます。定義を作った役割は、その定義で起動します(Custom Agent モード)。会話の文脈が要る分担は、fork か自分で行います。agent-policy の自動注入(`AMATSUKA_AGENT_AUTO_INJECTION`)とは同時に使えません。
 
 ---
 

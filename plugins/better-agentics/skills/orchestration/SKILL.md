@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: 調査・設計・実装を自分で進めるオーケストレーターが、レビュー・作業の分担・行き詰まりの 3 つの場面でだけサブエージェントへ委譲し、委譲先を委譲先決定スクリプトに選ばせるための規律。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION` が有効で `TYPESAFE_API_KEY` が設定されているとき、SessionStart の注入文で指示された場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
+description: 調査・設計・実装を自分で進めるオーケストレーターが、レビュー・作業の分担・行き詰まりの 3 つの場面でだけサブエージェントへ委譲し、委譲先を委譲先決定スクリプトに選ばせるための規律。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION` が有効なとき、SessionStart の注入文で指示された場合、またはユーザーが明示的に指定した場合に、セッションの最初の実務タスク(設計・実装・調査・デバッグなど一手で終わらない作業)へ着手する前に必ず読む。
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 ---
 
@@ -17,7 +17,7 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 | `split` | 作業の一部を委譲先に進めさせるとき |
 | `stuck` | 自分で原因を追っても解決しないとき |
 
-- 委譲先は自分で選ばず、`pick-delegate` が返した委譲先で起動する。
+- 委譲先は `pick-delegate` が返した委譲先で起動する。自分で選ぶのは、`pick-delegate` が候補(`options`)を返したときだけとする。
 - 並列化やコストのために分担する `split` では、委譲している間も自分の分担を進める。自分の分担が無く待つだけになる委譲は、長く機械的な作業(多数のファイルへの一括変更など)に限る。
 - `design-plan-review`・`stuck` と、文脈の保護のための探索の `split` は、待つだけになってもよい。
 - `pick-delegate` が `ok: false` を返したら、理由を問わず委譲も作業の続行もせず、`error` の種別と `message` をユーザーへ報告して指示を待つ。
@@ -43,7 +43,7 @@ EOF
 | `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string, "needsContext"?: boolean}]}`。`id` は配列内で一意にする。会話の文脈が無いと仕様を書き切れない作業にだけ `needsContext: true` を付ける。外側の手順に従って作業している間は付けない |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
 
-どの `reason` にも、最上位に `parentModel` と `lang` を付ける。`excludeRoles` は、委譲先を選び直すときだけ付ける。
+どの `reason` にも、最上位に `parentModel` と `lang` を付ける。`excludeRoles` は、委譲先を選び直すときと、候補から選んだ委譲先を引くときだけ付ける。
 
 | 項目 | 値 |
 | --- | --- |
@@ -51,7 +51,7 @@ EOF
 | `lang` | 会話の言語のコード(`ja`・`en` など)。省くと `en` |
 | `excludeRoles` | その呼び出しだけ候補から外す役割 ID の配列 |
 
-- `review`・`design-plan-review`・`stuck` の出力は `agents`、`split` の出力は `assignments` に委譲先を持つ。
+- `review`・`design-plan-review`・`stuck` の出力は `agents`、`split` の出力は `assignments` に委譲先を持つ。`review` が `agents` の代わりに `options` を返したときは、「候補から選ぶとき」のセクションに従う。
 - `split` の `assignments` は、入力の `id` ごとに委譲先を 1 つ持つ。
 - 委譲先は `role`・`mode`・`agentType` を持ち、`mode` で Agent ツールへの渡し方が決まる。
 
@@ -61,6 +61,7 @@ EOF
 | `standard` | `agentType` を `subagent_type` に、`model`・`effort` を同名の引数に渡す。`preamble` を依頼文の冒頭にそのまま置く |
 | `fork` | `subagent_type: "fork"` で起動し、`preamble` を依頼文の冒頭にそのまま置く。起動が拒否されたら、その作業を自分で行う |
 | `self` | `split` だけで返る。その作業は委譲せず、自分で行う |
+| `choose` | `split` だけで返る。「候補から選ぶとき」のセクションに従って `options` から選ぶ |
 
 - 委譲先は、`run_in_background: true` で起動する。
 - 待つだけでよい場面では、ターンを終えて完了の通知を待つ。通知で始まる次のターンで、委譲先の結果を読む。
@@ -72,8 +73,17 @@ EOF
 | `invalid-config` | `.claude/better-agentics/config.json` が読めないか、形が違う |
 | `no-candidates` | `reason` に当たる役割を、設定ですべて外しているか、`excludeRoles` で候補がすべて外れた。扱いは「委譲先が断ったとき」のセクションによる |
 | `duplicate-role` | 同じ役割を 2 件以上の定義が持つ、または候補の定義の名前が重なる |
-| `no-api-key` | Jev を呼ぶ必要があるのに `TYPESAFE_API_KEY` が無い |
 | `jev-failed` | Jev の呼び出しが失敗した、または応答の形が想定外だった |
+
+### 候補から選ぶとき
+
+`TYPESAFE_API_KEY` が無く候補が 2 件以上あると、`pick-delegate` は委譲先を決めずに候補を `options` で返す。`review` は `agents` の代わりに `options` を返し、`split` は該当する作業を `mode: "choose"` にして `options` を添える。`options` の各要素は、役割 ID(`role`)と選択基準(`criteria`)だけを持つ。
+
+- 作業内容と各候補の `criteria` を照らし、基準が作業に明らかに当たる候補を選ぶ。
+- `review` では、基準が当たる候補をすべて選ぶ。当たる候補が無ければ、最も近い 1 件を選ぶ。
+- `split` では、`choose` の作業ごとに 1 件を選ぶ。
+- 選んだ役割ごとに、同じ入力の `excludeRoles` に `options` の他の役割をすべて入れて `pick-delegate` を呼び直す。`split` では、その役割を選んだ作業だけを `tasks` に入れる。
+- 呼び直しで返った委譲先を、`mode` の表に従って起動する。
 
 ## design-plan-review
 
@@ -175,11 +185,11 @@ EOF
 - 説明文を見て自分から読み込んだスキルとの間で上の 2 つに当たるときは、このスキルの規律を優先する。
 - 外側の手順のスクリプトが作業の単位ごとに委譲先の指定を受け取るときは、作業の種類で `reason` を選んで `pick-delegate` を呼ぶ。レビューは `review`、行き詰まりの打開は `stuck`、それ以外(実装・設計・修正・テストなど)は `split` とする。
 - 行き詰まりの打開の単位が文書の修正なら、`stuck` で問わない。スクリプトへ渡す単位なら委譲先の指定を渡さず、外側の手順の既定の担い手に任せる。自分が担い手を決める単位なら、自分で行う。
-- 外側の手順が委譲先を 1 件だけ受け取るときは、返った委譲先のうち `p` が最も高いものを渡す。
+- 外側の手順が委譲先を 1 件だけ受け取るときは、返った委譲先のうち `p` が最も高いものを渡す。`options` が返ったときは、基準が作業に最も当たる 1 件を選び、「候補から選ぶとき」の呼び直しで返った委譲先を渡す。
 - 外側の手順に従って作業している間は、`needsContext` を付けない。Agent ツールで委譲する作業にも当てる。
 - `ok: false` が返ったとき、外側の手順が人への聞き方を定めていれば、それに従う。定めていなければ、ユーザーへ報告して指示を待つ。
 - 外側の手順が、人の判断の代わりに別の仕組みで判断すると定めていれば、このスキルが判断を仰ぐ場面もその仕組みに従う。
-- `no-api-key`・`jev-failed` の失敗は、外側の手順が人の判断に代わる仕組みを定めていても、その仕組みに回さずユーザーに回す。
+- `jev-failed` の失敗は、外側の手順が人の判断に代わる仕組みを定めていても、その仕組みに回さずユーザーに回す。
 
 ## 依頼文
 

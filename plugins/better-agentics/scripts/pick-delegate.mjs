@@ -1477,15 +1477,9 @@ function answerOf(answers, key) {
   return answer;
 }
 __name(answerOf, "answerOf");
-async function ask(deps, state, questions) {
-  if (deps.apiKey === void 0) {
-    throw new PickFailure(
-      "no-api-key",
-      "TYPESAFE_API_KEY is not set, so Jev cannot choose among several candidates."
-    );
-  }
+async function ask(apiKey, deps, state, questions) {
   try {
-    const result = await deps.createAsk(deps.apiKey)({ state, questions });
+    const result = await deps.createAsk(apiKey)({ state, questions });
     return result.answers;
   } catch (error) {
     throw new PickFailure(
@@ -1505,7 +1499,15 @@ async function review(input, deps) {
       agents: [delegateOf(only, input.lang, deps)]
     };
   }
+  if (deps.apiKey === void 0) {
+    return {
+      ok: true,
+      reason: "review",
+      options: candidates.map(optionOf)
+    };
+  }
   const answers = await ask(
+    deps.apiKey,
     deps,
     { summary: input.task.summary, artifacts: input.task.artifacts },
     reviewQuestions(candidates)
@@ -1569,17 +1571,33 @@ function assignmentOf(task, candidate, input, deps, p) {
   };
 }
 __name(assignmentOf, "assignmentOf");
+function optionOf(candidate) {
+  return { role: candidate.role.id, criteria: candidate.criteria };
+}
+__name(optionOf, "optionOf");
 async function split(input, deps) {
   const candidates = candidatesFor(input, deps);
   const forkable = deps.forkEnabled && input.parentModel !== void 0;
   const asked = input.tasks.filter((task) => !task.needsContext || forkable);
   const chosen = /* @__PURE__ */ new Map();
   const [only] = candidates;
+  const { apiKey } = deps;
   if (candidates.length === 1 && only !== void 0) {
     for (const task of asked) chosen.set(task.id, { candidate: only });
-  } else if (asked.length > 0) {
+  } else if (asked.length > 0 && apiKey === void 0) {
+    const choose = new Set(asked.map((task) => task.id));
+    return {
+      ok: true,
+      reason: "split",
+      assignments: input.tasks.map(
+        (task) => choose.has(task.id) ? { id: task.id, mode: "choose" } : { id: task.id, mode: "self" }
+      ),
+      options: candidates.map(optionOf)
+    };
+  } else if (apiKey !== void 0 && asked.length > 0) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }));
     const answers = await ask(
+      apiKey,
       deps,
       { tasks },
       splitQuestions(tasks, candidates)

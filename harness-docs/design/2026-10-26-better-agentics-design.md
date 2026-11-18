@@ -69,7 +69,7 @@ agent-policy の規律では、オーケストレーターは担当表のどの�
 
 - ARCHITECTURE により、指示層と参照層には他プラグインの名前を書かない。実装層は他プラグインの `src/` を import しない。agent-policy から流用するコード(断片の合成、マーカーの走査、MCP の検出)は、better-agentics の中に独立して実装し直す。Jev の呼び出しも jevriel を経由せず、`@typesafe-ai/sdk` を直接依存に持つ。
 - ADR-005 により、Anthropic 以外の外部 API(TypeSafe AI)を必須依存にしてよい。
-- TypeSafe AI は 2026-09-22 から新規サインアップを停止している。キーを持たない利用者は、委譲を使えない(§8-1)。
+- TypeSafe AI は 2026-09-22 から新規サインアップを停止している。キーを持たない利用者は、委譲を使えない(§8-1)。2026-11-18 の Jev のオプトイン化で、キーは任意になった(§7-4 の注記)。
 - Jev の主な対象は英語である。Jev に渡す文(When to invoke と作業内容)は英語で書く。
 
 ---
@@ -339,6 +339,8 @@ Jev は、1 回のリクエストで `state`(判断の材料)を 1 回読み、�
 
 ### 7-4. エラー
 
+> 2026-11-18 の Jev のオプトイン化(Issue #12)で `no-api-key` は廃止した。キーが無いときは、`review` と `split` が候補を `options` で返す。`plugins/better-agentics/docs/rationale.md` の「Jev のオプトイン化」を見る。
+
 | `error` | 条件 |
 | --- | --- |
 | `invalid-input` | JSON として読めない、必須の項目が欠ける、`split` の `id` が重複する |
@@ -355,6 +357,8 @@ Jev は、1 回のリクエストで `state`(判断の材料)を 1 回読み、�
 ## 8. hook
 
 > 2026-11-11 の改修で変わった。`harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md` の 8 章 を見る。
+
+> 2026-11-18 の Jev のオプトイン化(Issue #12)で、§8-1 の表から「`TYPESAFE_API_KEY` が無い」の行を外した。キーの有無を問わず規律を注入する。
 
 ### 8-1. SessionStart
 

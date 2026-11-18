@@ -255,8 +255,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/setup.mjs" --list-mcp --dir "$PWD"
 - ステップ 2 の点検の結果。外したツール、マーカー行を消した定義のファイルの絶対パス、手で直すツール(`toolsFormat` が `csv` でない定義と、tools 行の無い定義)、役割表に無い role-id を持つ定義
 - Standard Agent モードに任せた役割と、再生成しないと決めた定義。次に setup を実行したときに再び尋ねられること
 - `ok: false` になった操作の定義名と `error`
-- 有効にする方法。次の 2 つの環境変数を設定し、新しいセッションを起動する。
-  - `AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1`
-  - `TYPESAFE_API_KEY`(委譲先を決める TypeSafe AI の API キー)
+- 有効にする方法。`AMATSUKA_AGENT_ENABLE_ORCHESTRATION=1` を設定し、新しいセッションを起動する。
+  - 任意で `TYPESAFE_API_KEY`(TypeSafe AI の API キー)も設定すると、委譲先を Jev が選ぶ。無ければオーケストレーターが候補から選ぶ。
 - `.claude/agents/` を新しく作ったときは、Claude Code の再起動まで定義が読み込まれないこと
 - `.claude/agents/` を git で追跡するかはプロジェクトの判断であること

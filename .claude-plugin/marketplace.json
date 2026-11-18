@@ -73,7 +73,7 @@
     {
       "name": "better-agentics",
       "source": "./plugins/better-agentics",
-      "description": "オーケストレーターが調査・設計・実装を自分で行い、レビュー・分担・行き詰まりのときだけサブエージェントへ委譲するエージェント運用方針。委譲先は TypeSafe AI の判断モデル Jev が、各 Agent 定義の選択基準をもとに選ぶ。"
+      "description": "オーケストレーターが調査・設計・実装を自分で行い、レビュー・分担・行き詰まりのときだけサブエージェントへ委譲するエージェント運用方針。委譲先は各 Agent 定義の選択基準をもとに、TYPESAFE_API_KEY があれば TypeSafe AI の判断モデル Jev が、無ければオーケストレーターが選ぶ。"
     }
   ]
 }

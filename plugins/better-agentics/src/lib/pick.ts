@@ -61,21 +61,41 @@ export interface SelfAssignment {
   mode: "self"
 }
 
+/** キーが無いとき、Jev の代わりにオーケストレーターが選ぶ作業 */
+export interface ChooseAssignment {
+  id: string
+  mode: "choose"
+}
+
+/**
+ * キーが無いときに返す候補。前置きを候補の数だけ返さないよう、役割 ID と選択基準だけを持つ。
+ * 選んだ後は、他の候補を excludeRoles に入れて呼び直すと委譲先が返る。
+ */
+export interface Option {
+  role: RoleId
+  criteria: string
+}
+
 export type PickError =
   | "invalid-input"
   | "no-candidates"
   | "duplicate-role"
   | "invalid-config"
-  | "no-api-key"
   | "jev-failed"
 
 export type PickOutput =
   | { ok: true; reason: "review"; agents: Delegate[]; fallback?: true }
+  | { ok: true; reason: "review"; options: Option[] }
   | { ok: true; reason: "design-plan-review"; agents: Delegate[] }
   | {
       ok: true
       reason: "split"
-      assignments: ((Delegate & { id: string }) | SelfAssignment)[]
+      assignments: (
+        | (Delegate & { id: string })
+        | SelfAssignment
+        | ChooseAssignment
+      )[]
+      options?: Option[]
     }
   | { ok: true; reason: "stuck"; agents: Delegate[] }
   | { ok: false; error: PickError; message: string }
@@ -389,18 +409,13 @@ function answerOf(answers: unknown, key: string): Record<string, unknown> {
 }
 
 async function ask(
+  apiKey: string,
   deps: PickDeps,
   state: Parameters<JevAsk>[0]["state"],
   questions: Questions
 ): Promise<unknown> {
-  if (deps.apiKey === undefined) {
-    throw new PickFailure(
-      "no-api-key",
-      "TYPESAFE_API_KEY is not set, so Jev cannot choose among several candidates."
-    )
-  }
   try {
-    const result = await deps.createAsk(deps.apiKey)({ state, questions })
+    const result = await deps.createAsk(apiKey)({ state, questions })
     return result.answers
   } catch (error) {
     throw new PickFailure(
@@ -423,7 +438,15 @@ async function review(
       agents: [delegateOf(only, input.lang, deps)]
     }
   }
+  if (deps.apiKey === undefined) {
+    return {
+      ok: true,
+      reason: "review",
+      options: candidates.map(optionOf)
+    }
+  }
   const answers = await ask(
+    deps.apiKey,
     deps,
     { summary: input.task.summary, artifacts: input.task.artifacts },
     reviewQuestions(candidates)
@@ -501,6 +524,10 @@ function assignmentOf(
   }
 }
 
+function optionOf(candidate: Candidate): Option {
+  return { role: candidate.role.id, criteria: candidate.criteria }
+}
+
 async function split(
   input: Extract<PickInput, { reason: "split" }>,
   deps: PickDeps
@@ -512,11 +539,25 @@ async function split(
   const chosen = new Map<string, { candidate: Candidate; p?: number }>()
 
   const [only] = candidates
+  const { apiKey } = deps
   if (candidates.length === 1 && only !== undefined) {
     for (const task of asked) chosen.set(task.id, { candidate: only })
-  } else if (asked.length > 0) {
+  } else if (asked.length > 0 && apiKey === undefined) {
+    const choose = new Set(asked.map((task) => task.id))
+    return {
+      ok: true,
+      reason: "split",
+      assignments: input.tasks.map((task) =>
+        choose.has(task.id)
+          ? { id: task.id, mode: "choose" as const }
+          : { id: task.id, mode: "self" as const }
+      ),
+      options: candidates.map(optionOf)
+    }
+  } else if (apiKey !== undefined && asked.length > 0) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }))
     const answers = await ask(
+      apiKey,
       deps,
       { tasks },
       splitQuestions(tasks, candidates)

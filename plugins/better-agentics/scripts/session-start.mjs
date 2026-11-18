@@ -462,10 +462,6 @@ __name(setupNotices, "setupNotices");
 // src/lib/state.ts
 var ON = /* @__PURE__ */ new Set(["1", "true", "on"]);
 var OFF = /* @__PURE__ */ new Set(["", "0", "false", "off"]);
-function hasApiKey(env) {
-  return (env.TYPESAFE_API_KEY?.trim() ?? "") !== "";
-}
-__name(hasApiKey, "hasApiKey");
 function orchestrationState(env) {
   const value = env.AMATSUKA_AGENT_ENABLE_ORCHESTRATION?.trim().toLowerCase() ?? "";
   if (OFF.has(value)) return { kind: "off" };
@@ -476,7 +472,6 @@ function orchestrationState(env) {
   }
   const gate = env.AMATSUKA_AGENT_DELEGATION_GATE?.trim().toLowerCase() ?? "";
   if (ON.has(gate)) return { kind: "conflict-gate" };
-  if (!hasApiKey(env)) return { kind: "no-api-key" };
   return { kind: "inject" };
 }
 __name(orchestrationState, "orchestrationState");
@@ -505,8 +500,6 @@ function warning(state) {
       return "AMATSUKA_AGENT_ENABLE_ORCHESTRATION \u3068 AMATSUKA_AGENT_AUTO_INJECTION \u304C\u540C\u6642\u306B\u6709\u52B9\u306A\u305F\u3081\u3001better-agentics \u306E\u898F\u5F8B\u3092\u6CE8\u5165\u3057\u306A\u304B\u3063\u305F\u3002\u3069\u3061\u3089\u304B\u4E00\u65B9\u3060\u3051\u3092\u6709\u52B9\u306B\u3059\u308B\u3002";
     case "conflict-gate":
       return "AMATSUKA_AGENT_DELEGATION_GATE \u304C\u6709\u52B9\u3067\u3001\u30AA\u30FC\u30B1\u30B9\u30C8\u30EC\u30FC\u30BF\u30FC\u306E\u76F4\u63A5\u7DE8\u96C6\u304C\u5DEE\u3057\u6B62\u3081\u3089\u308C\u308B\u305F\u3081\u3001better-agentics \u306E\u898F\u5F8B\u3092\u6CE8\u5165\u3057\u306A\u304B\u3063\u305F\u3002better-agentics \u3067\u306F\u30AA\u30FC\u30B1\u30B9\u30C8\u30EC\u30FC\u30BF\u30FC\u304C\u81EA\u5206\u3067\u7DE8\u96C6\u3059\u308B\u306E\u3067\u3001gate \u3092\u7121\u52B9\u306B\u3059\u308B\u3002";
-    case "no-api-key":
-      return "TYPESAFE_API_KEY \u304C\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u306A\u3044\u305F\u3081\u3001better-agentics \u306E\u898F\u5F8B\u3092\u6CE8\u5165\u3057\u306A\u304B\u3063\u305F\u3002\u59D4\u8B72\u5148\u306E\u6C7A\u5B9A\u306B TypeSafe AI \u306E Jev \u3092\u4F7F\u3046\u305F\u3081\u3001\u30AD\u30FC\u304C\u5FC5\u8981\u306B\u306A\u308B\u3002";
     default:
       return void 0;
   }
