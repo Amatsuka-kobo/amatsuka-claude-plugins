@@ -440,7 +440,7 @@ function setupNotices(input) {
       reason: "design-plan-review",
       what: "\u8A2D\u8A08\u66F8\u30FB\u5B9F\u88C5\u8A08\u753B\u66F8\u306E\u30EC\u30D3\u30E5\u30FC"
     },
-    { reason: "review", what: "\u5916\u5074\u306E\u624B\u9806\u306E\u30EC\u30D3\u30E5\u30FC" },
+    { reason: "review", what: "\u6587\u66F8\u3068\u30B3\u30FC\u30C9\u306E\u30EC\u30D3\u30E5\u30FC" },
     { reason: "split", what: "\u4F5C\u696D\u306E\u5206\u62C5" }
   ].filter(
     ({ reason }) => candidateRolesFor(reason).every((role) => disabled.includes(role.id))

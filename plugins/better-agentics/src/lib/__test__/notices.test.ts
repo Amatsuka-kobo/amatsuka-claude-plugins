@@ -141,7 +141,7 @@ describe("setupNotices", () => {
     expect(split).toContain("分担")
   })
 
-  it("knowledge-elicitation だけを残しても、外側の手順のレビューが止まると書く", () => {
+  it("knowledge-elicitation だけを残しても、文書とコードのレビューが止まると書く", () => {
     const notices = setupNotices({
       definitions: [def("a", "normal-impl")],
       config: ok(
@@ -151,7 +151,7 @@ describe("setupNotices", () => {
         "adversarial-review"
       )
     }).join("\n")
-    expect(notices).toContain("外側の手順のレビュー")
+    expect(notices).toContain("文書とコードのレビュー")
     expect(notices).not.toContain("設計書・実装計画書のレビュー")
   })
 
@@ -161,7 +161,7 @@ describe("setupNotices", () => {
       config: ok("design-review", "knowledge-elicitation")
     }).join("\n")
     expect(notices).toContain("設計書・実装計画書のレビュー")
-    expect(notices).not.toContain("外側の手順のレビュー")
+    expect(notices).not.toContain("文書とコードのレビュー")
   })
 
   it("escalation だけを外しても知らせない", () => {
