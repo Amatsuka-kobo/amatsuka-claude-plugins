@@ -4484,6 +4484,101 @@ function runDiffArchitecture(ctx) {
   }
 }
 
+// src/cli/claude-md.ts
+import fs10 from "node:fs";
+
+// src/lib/claude-md.ts
+import fs9 from "node:fs";
+import path8 from "node:path";
+var CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
+function readOrNull(filePath) {
+  try {
+    return fs9.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function mentions(text) {
+  const found = /* @__PURE__ */ new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^@(\S+)\s*$/.exec(line.trim());
+    if (match) found.add(match[1]);
+  }
+  return found;
+}
+function existingMentions(docRoot) {
+  const existing = /* @__PURE__ */ new Set();
+  for (const rel of CLAUDE_MD_CANDIDATES) {
+    const text = readOrNull(path8.join(docRoot, rel));
+    if (text === null) continue;
+    for (const m of mentions(text)) {
+      existing.add(
+        rel === "CLAUDE.md" ? m : path8.posix.normalize(`.claude/${m}`)
+      );
+    }
+  }
+  return existing;
+}
+function linkClaudeMd(docRoot, relatives) {
+  const rootText = readOrNull(path8.join(docRoot, "CLAUDE.md"));
+  const dotText = readOrNull(path8.join(docRoot, ".claude/CLAUDE.md"));
+  const useDot = rootText === null && dotText !== null;
+  const target = path8.join(docRoot, useDot ? ".claude/CLAUDE.md" : "CLAUDE.md");
+  const created = (useDot ? dotText : rootText) === null;
+  const current = (useDot ? dotText : rootText) ?? "";
+  const existing = existingMentions(docRoot);
+  const present = relatives.filter((rel) => existing.has(rel));
+  const added = relatives.filter((rel) => !existing.has(rel));
+  if (added.length === 0) {
+    return { path: target, added, present, created: false };
+  }
+  const lines = added.map((rel) => `@${useDot ? `../${rel}` : rel}`);
+  const body = current.replace(/\s*$/, "");
+  const separator = body === "" ? "" : "\n\n";
+  writeFileAtomic(target, `${body}${separator}${lines.join("\n")}
+`);
+  return { path: target, added, present, created };
+}
+
+// src/cli/claude-md.ts
+function hasContent(filePath) {
+  try {
+    return fs10.readFileSync(filePath, "utf8").trim() !== "";
+  } catch {
+    return false;
+  }
+}
+function runLinkClaudeMd(ctx) {
+  const command = "link-claude-md";
+  const config = loadConfig(ctx.cwd);
+  noteWarnings(config.warnings);
+  if (!hasContent(config.architecturePath)) {
+    emitWriteFailure(
+      command,
+      "architecture_missing",
+      `${config.architectureRelative} \u304C\u307E\u3060\u7121\u3044\u305F\u3081\u8FFD\u8A18\u3057\u307E\u305B\u3093\u3002\u5148\u306B ARCHITECTURE \u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    );
+    return;
+  }
+  const relatives = [
+    config.architectureRelative,
+    ...ctx.features.gotchas && hasContent(config.gotchasPath) ? [config.gotchasRelative] : []
+  ];
+  try {
+    const result = linkClaudeMd(config.docRoot, relatives);
+    emitResult(command, {
+      ok: true,
+      written: result.added.length > 0,
+      ...result,
+      warnings: config.warnings
+    });
+  } catch (error) {
+    emitWriteFailure(command, "write_failed", messageOf(error), {
+      written: false
+    });
+  }
+}
+
 // src/cli/commit.ts
 function runCommit(ctx, spec) {
   const { command } = spec;
@@ -4587,13 +4682,13 @@ function runCommitGotchas(ctx) {
 }
 
 // src/cli/paths.ts
-import path8 from "node:path";
+import path9 from "node:path";
 import { fileURLToPath } from "node:url";
 function metatronCliPath() {
   const here = fileURLToPath(import.meta.url);
-  if (path8.basename(here) === "metatron.mjs") return here;
-  const pluginRoot = path8.resolve(path8.dirname(here), "..", "..");
-  return path8.join(pluginRoot, "scripts", "metatron.mjs");
+  if (path9.basename(here) === "metatron.mjs") return here;
+  const pluginRoot = path9.resolve(path9.dirname(here), "..", "..");
+  return path9.join(pluginRoot, "scripts", "metatron.mjs");
 }
 function commandLine(args) {
   return `node ${metatronCliPath()} ${args}`;
@@ -4650,6 +4745,7 @@ var USAGE_LINES = [
   "  commit-architecture --staging-id <id>",
   "  commit-gotchas --staging-id <id>",
   "  init-gotchas",
+  "  link-claude-md",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>",
   "  shrink-adr-candidate --file <path> --candidate-id <\u5019\u88DC ID> --adr <ADR-NNN> --hash <\u8D70\u67FB\u306E hash>",
@@ -4694,6 +4790,7 @@ function runGetConfig(ctx) {
       stageAdr: commandLine("stage-adr --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
       initGotchas: commandLine("init-gotchas"),
+      linkClaudeMd: commandLine("link-claude-md"),
       getGotchasTemplate: commandLine("get gotchas-template"),
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(
@@ -4876,7 +4973,7 @@ function runGetGotchasTemplate(ctx) {
   const command = "get gotchas-template";
   const config = configOf(ctx.cwd);
   const file = readDocument(config.gotchasPath);
-  const hasContent = file.exists && file.text.trim() !== "";
+  const hasContent2 = file.exists && file.text.trim() !== "";
   const warnings = [...config.warnings, ...file.warnings];
   noteWarnings(warnings);
   emitResult(command, {
@@ -4884,9 +4981,9 @@ function runGetGotchasTemplate(ctx) {
     path: config.gotchasPath,
     relative: config.gotchasRelative,
     exists: file.exists,
-    hasContent,
+    hasContent: hasContent2,
     template: renderGotchasTemplate(),
-    next: hasContent ? null : commandLine("init-gotchas"),
+    next: hasContent2 ? null : commandLine("init-gotchas"),
     warnings
   });
 }
@@ -5126,12 +5223,12 @@ function runTagGotcha(ctx) {
 }
 
 // src/cli/gotcha-candidate.ts
-import path10 from "node:path";
+import path11 from "node:path";
 
 // src/lib/gotcha-candidates.ts
 import crypto4 from "node:crypto";
-import fs9 from "node:fs";
-import path9 from "node:path";
+import fs11 from "node:fs";
+import path10 from "node:path";
 var CANDIDATE_KEYS = [
   "date",
   "run",
@@ -5232,7 +5329,7 @@ function entryHash2(file, entry) {
 }
 function readTextOrNull2(filePath) {
   try {
-    return fs9.readFileSync(filePath, "utf8");
+    return fs11.readFileSync(filePath, "utf8");
   } catch {
     return null;
   }
@@ -5241,7 +5338,7 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   const repoRoot = findRepoRoot(docRoot);
   if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
   const warnings = [];
-  const dir = path9.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const dir = path10.join(repoRoot, DOMAINS_DIR_RELATIVE);
   if (!domainsDirStaysInRepo(repoRoot, dir)) {
     warnings.push(
       `${DOMAINS_DIR_RELATIVE} \u306E\u5B9F\u4F53\u304C\u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u5916\u306B\u3042\u308A\u307E\u3059\u3002\u8D70\u67FB\u3057\u307E\u305B\u3093\u3002`
@@ -5250,7 +5347,7 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   }
   let names;
   try {
-    names = fs9.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
+    names = fs11.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
   } catch (error) {
     if (error.code !== "ENOENT") {
       warnings.push(`${DOMAINS_DIR_RELATIVE} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
@@ -5266,11 +5363,11 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   }
   const candidates = [];
   for (const name of names) {
-    const filePath = path9.join(dir, name);
+    const filePath = path10.join(dir, name);
     const relative = `${DOMAINS_DIR_RELATIVE}/${name}`;
     let parsed;
     try {
-      parsed = parseDomainFile2(fs9.readFileSync(filePath));
+      parsed = parseDomainFile2(fs11.readFileSync(filePath));
     } catch {
       warnings.push(`${relative} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
       continue;
@@ -5293,20 +5390,20 @@ function scanGotchaCandidates(docRoot, gotchasPath) {
   return { repoRoot, candidates, warnings };
 }
 function resolveDomainFile2(repoRoot, file) {
-  const dir = path9.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  const target = path9.resolve(file);
+  const dir = path10.join(repoRoot, DOMAINS_DIR_RELATIVE);
+  const target = path10.resolve(file);
   const outside = new GotchaCandidateError(
     "outside_domains_dir",
     `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u524A\u9664\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
   );
-  if (path9.extname(target) !== ".md") throw outside;
+  if (path10.extname(target) !== ".md") throw outside;
   if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
-  if (realpathOrSelf(path9.dirname(target)) !== realpathOrSelf(dir)) {
+  if (realpathOrSelf(path10.dirname(target)) !== realpathOrSelf(dir)) {
     throw outside;
   }
   let stat;
   try {
-    stat = fs9.lstatSync(target);
+    stat = fs11.lstatSync(target);
   } catch {
     throw new GotchaCandidateError("file_not_found", `${target} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
   }
@@ -5315,7 +5412,7 @@ function resolveDomainFile2(repoRoot, file) {
 }
 function readTarget(target) {
   try {
-    return fs9.readFileSync(target);
+    return fs11.readFileSync(target);
   } catch {
     throw new GotchaCandidateError("file_not_found", `${target} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3002`);
   }
@@ -5323,11 +5420,11 @@ function readTarget(target) {
 function writeAtomically2(target, content, mode) {
   const tmp = `${target}.tmp-${crypto4.randomUUID()}`;
   try {
-    fs9.writeFileSync(tmp, content, { mode });
-    fs9.renameSync(tmp, target);
+    fs11.writeFileSync(tmp, content, { mode });
+    fs11.renameSync(tmp, target);
   } catch (error) {
     try {
-      fs9.rmSync(tmp, { force: true });
+      fs11.rmSync(tmp, { force: true });
     } catch {
     }
     const reason = error instanceof Error ? error.message : String(error);
@@ -5433,7 +5530,7 @@ function runRemoveGotchaCandidate(ctx) {
     const config = loadConfig(ctx.cwd);
     const result = removeGotchaCandidate({
       docRoot: config.docRoot,
-      file: path10.resolve(ctx.cwd, file),
+      file: path11.resolve(ctx.cwd, file),
       hash,
       fileHash
     });
@@ -5920,7 +6017,8 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "append-gotcha",
   "tag-gotcha",
   "shrink-adr-candidate",
-  "remove-gotcha-candidate"
+  "remove-gotcha-candidate",
+  "link-claude-md"
 ]);
 var FEATURE_GATES = /* @__PURE__ */ new Map([
   ["stage-adr", "adr"],
@@ -5987,6 +6085,9 @@ function main(argv, cwd = process.cwd(), env = process.env) {
         return;
       case "scan-gotcha-candidates":
         runScanGotchaCandidates(ctx);
+        return;
+      case "link-claude-md":
+        runLinkClaudeMd(ctx);
         return;
       case "stage-architecture":
         runStageArchitecture(ctx);

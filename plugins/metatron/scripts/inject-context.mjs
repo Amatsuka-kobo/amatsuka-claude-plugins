@@ -1,14 +1,47 @@
 #!/usr/bin/env node
 
 // src/inject-context.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 import { fileURLToPath } from "node:url";
+
+// src/lib/claude-md.ts
+import fs from "node:fs";
+import path from "node:path";
+var CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
+function readOrNull(filePath) {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function mentions(text) {
+  const found = /* @__PURE__ */ new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^@(\S+)\s*$/.exec(line.trim());
+    if (match) found.add(match[1]);
+  }
+  return found;
+}
+function existingMentions(docRoot) {
+  const existing = /* @__PURE__ */ new Set();
+  for (const rel of CLAUDE_MD_CANDIDATES) {
+    const text = readOrNull(path.join(docRoot, rel));
+    if (text === null) continue;
+    for (const m of mentions(text)) {
+      existing.add(
+        rel === "CLAUDE.md" ? m : path.posix.normalize(`.claude/${m}`)
+      );
+    }
+  }
+  return existing;
+}
 
 // src/lib/config.ts
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
+import fs2 from "node:fs";
+import path2 from "node:path";
 var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
@@ -18,14 +51,14 @@ function isPlainObject(value) {
 }
 function realpathOrSelf(dir) {
   try {
-    return fs.realpathSync(dir);
+    return fs2.realpathSync(dir);
   } catch {
     return dir;
   }
 }
 function hasConfigFile(dir) {
   try {
-    return fs.existsSync(path.join(dir, CONFIG_FILENAME));
+    return fs2.existsSync(path2.join(dir, CONFIG_FILENAME));
   } catch {
     return false;
   }
@@ -41,17 +74,17 @@ function gitToplevel(cwd) {
     if (res.status !== 0) return null;
     const out = res.stdout?.trim();
     if (!out) return null;
-    return path.resolve(out);
+    return path2.resolve(out);
   } catch {
     return null;
   }
 }
 function findDocRoot(startDir) {
-  const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  const start = realpathOrSelf(path2.resolve(startDir ?? process.cwd()));
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    const parent = path.dirname(dir);
+    const parent = path2.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -63,15 +96,15 @@ function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
 }
 function looksAbsolute(value) {
-  return path.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+  return path2.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
 }
 function toPosix(value) {
-  return value.split(path.sep).join("/");
+  return value.split(path2.sep).join("/");
 }
 function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   const useFallback = () => ({
     relative: fallback,
-    absolute: path.resolve(docRoot, fallback)
+    absolute: path2.resolve(docRoot, fallback)
   });
   if (raw === void 0) return useFallback();
   if (typeof raw !== "string" || raw.trim() === "") {
@@ -87,9 +120,9 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
     );
     return useFallback();
   }
-  const absolute = path.resolve(docRoot, value);
-  const relative = path.relative(docRoot, absolute);
-  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  const absolute = path2.resolve(docRoot, value);
+  const relative = path2.relative(docRoot, absolute);
+  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative);
   if (escapes) {
     warnings.push(
       `paths.${label} \u304C\u30EB\u30FC\u30C8\u5916(${raw})\u3092\u6307\u3059\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
@@ -101,10 +134,10 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
-    configPath: path.join(docRoot, CONFIG_FILENAME),
+    configPath: path2.join(docRoot, CONFIG_FILENAME),
     configExists: false,
-    architecturePath: path.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
+    architecturePath: path2.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
+    gotchasPath: path2.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
     warnings
@@ -113,14 +146,14 @@ function defaultsFor(docRoot, warnings) {
 function loadConfigInner(startDir) {
   const warnings = [];
   const docRoot = findDocRoot(startDir);
-  const configPath = path.join(docRoot, CONFIG_FILENAME);
+  const configPath = path2.join(docRoot, CONFIG_FILENAME);
   let configExists = false;
   let parsed;
   let parseOk = false;
   try {
-    if (fs.existsSync(configPath)) {
+    if (fs2.existsSync(configPath)) {
       configExists = true;
-      parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      parsed = JSON.parse(fs2.readFileSync(configPath, "utf8"));
       parseOk = true;
     }
   } catch {
@@ -183,7 +216,7 @@ function loadConfig(startDir) {
   } catch {
     let docRoot;
     try {
-      docRoot = path.resolve(startDir ?? process.cwd());
+      docRoot = path2.resolve(startDir ?? process.cwd());
     } catch {
       docRoot = startDir ?? ".";
     }
@@ -221,27 +254,17 @@ function readFeatures(env) {
 var MAX_WARNING_LINES = 3;
 var STDIN_TIMEOUT_MS = 2e3;
 var LEGACY_RULES_DIR = ".claude/rules/metatron";
-var CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
 function metatronCliPath(env) {
   const fromEnv = env.CLAUDE_PLUGIN_ROOT;
-  const root = typeof fromEnv === "string" && fromEnv !== "" ? path2.resolve(fromEnv) : path2.resolve(path2.dirname(fileURLToPath(import.meta.url)), "..");
-  return path2.join(root, "scripts", "metatron.mjs");
+  const root = typeof fromEnv === "string" && fromEnv !== "" ? path3.resolve(fromEnv) : path3.resolve(path3.dirname(fileURLToPath(import.meta.url)), "..");
+  return path3.join(root, "scripts", "metatron.mjs");
 }
 function hasContent(filePath) {
   try {
-    return fs2.readFileSync(filePath, "utf8").trim() !== "";
+    return fs3.readFileSync(filePath, "utf8").trim() !== "";
   } catch {
     return false;
   }
-}
-function readClaudeMd(docRoot) {
-  return CLAUDE_MD_CANDIDATES.map((rel) => {
-    try {
-      return fs2.readFileSync(path2.join(docRoot, rel), "utf8");
-    } catch {
-      return "";
-    }
-  }).join("\n");
 }
 function cliLines(cli, features) {
   const reads = [
@@ -286,14 +309,14 @@ function recordingLines(features) {
 }
 function migrationLines(config, docs, hasArchitecture) {
   const lines = [];
-  if (fs2.existsSync(path2.join(config.docRoot, LEGACY_RULES_DIR))) {
+  if (fs3.existsSync(path3.join(config.docRoot, LEGACY_RULES_DIR))) {
     lines.push(
       `\u5EC3\u6B62\u3057\u305F rules(${LEGACY_RULES_DIR}/)\u304C\u6B8B\u3063\u3066\u3044\u308B\u3002/metatron:update \u3067 ARCHITECTURE \u3068 CLAUDE.md \u3078\u79FB\u884C\u3059\u308B\u3002`
     );
   }
   if (!hasArchitecture) return lines;
-  const claudeMd = readClaudeMd(config.docRoot);
-  const missing = docs.filter((rel) => !claudeMd.includes(`@${rel}`));
+  const existing = existingMentions(config.docRoot);
+  const missing = docs.filter((rel) => !existing.has(rel));
   if (missing.length > 0) {
     lines.push(
       `CLAUDE.md \u306B ${missing.map((rel) => `@${rel}`).join(" \u3068 ")} \u304C\u7121\u304F\u3001\u6587\u66F8\u304C\u8AAD\u307F\u8FBC\u307E\u308C\u306A\u3044\u3002/metatron:update \u3067\u8FFD\u8A18\u3059\u308B\u3002`

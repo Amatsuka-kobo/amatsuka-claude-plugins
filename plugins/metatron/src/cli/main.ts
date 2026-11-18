@@ -7,7 +7,7 @@
 //   **常に exit 0**。読めなかったことも事実として JSON で返す。
 // - 書き込み経路(第 1 層・フェイルクローズド): stage-architecture / stage-adr /
 //   commit-architecture / stage-gotcha / commit-gotchas /
-//   init-gotchas / append-gotcha /
+//   init-gotchas / append-gotcha / link-claude-md /
 //   tag-gotcha / shrink-adr-candidate / remove-gotcha-candidate。
 //   拒否・失敗は非 0 終了。shrink-adr-candidate と remove-gotcha-candidate の拒否・失敗は
 //   終了コード 3 に揃える(ハンドラが自分で例外を捕まえる)。
@@ -26,6 +26,7 @@ import { type Feature, readFeatures } from "../lib/features.js"
 import { runScanAdrCandidates, runShrinkAdrCandidate } from "./adr-candidate.js"
 import { runDiffArchitecture, runScan } from "./analysis.js"
 import { parseArgs } from "./args.js"
+import { runLinkClaudeMd } from "./claude-md.js"
 import { runCommitArchitecture, runCommitGotchas } from "./commit.js"
 import { runGet } from "./get.js"
 import { runAppendGotcha, runInitGotchas, runTagGotcha } from "./gotcha.js"
@@ -64,7 +65,8 @@ export const WRITE_SUBCOMMANDS = new Set([
   "append-gotcha",
   "tag-gotcha",
   "shrink-adr-candidate",
-  "remove-gotcha-candidate"
+  "remove-gotcha-candidate",
+  "link-claude-md"
 ])
 
 /** 環境変数が無効なら拒否する書き込み系サブコマンドと、対応する機能。 */
@@ -146,6 +148,9 @@ export function main(
         return
       case "scan-gotcha-candidates":
         runScanGotchaCandidates(ctx)
+        return
+      case "link-claude-md":
+        runLinkClaudeMd(ctx)
         return
       case "stage-architecture":
         runStageArchitecture(ctx)

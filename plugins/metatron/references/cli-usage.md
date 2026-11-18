@@ -22,6 +22,7 @@ CLI の絶対パスは `get config` の出力の `cli.path`、または deny hoo
 | `stage-adr --input <path>` | 段階 | diff と `stagingId`、追加時は `assignedId`。書き込みはしない |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
 | `init-gotchas` | 書 | 承認後に雛形だけの GOTCHAS 台帳を新規作成する |
+| `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記する。追記したもの(`added`)と既にあったもの(`present`)を返す |
 | `append-gotcha --input <path>` | 書 | 採番したエントリを `## 失敗パターン一覧` の直下へ挿入する |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 見出しへタグを挿入し、エントリ末尾へ理由行を追記する |
 | `stage-gotcha --input <path>` | 段階 | 既存エントリのフィールドを書き換えた diff と `stagingId`。書き込みはしない |
@@ -116,6 +117,16 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - 内容のある台帳があるときは `already_exists` で拒否され、対象ファイルは変化しない。
 - 空・空白のみのファイルは「内容なし」として扱い、雛形で作り直す。
 - **実行の前にユーザーの承認を得る。** CLI は承認の有無を判定できない。提示する材料は `get gotchas-template` で取る。
+
+### link-claude-md
+
+入力 JSON を持たない。オプションも取らない。
+
+- 追記する先は docRoot の `CLAUDE.md` である。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` に `../` 付きで書く。どちらも無ければ `CLAUDE.md` を作る。
+- 対象は ARCHITECTURE と、GOTCHAS の記録が有効で台帳に中身があるときの GOTCHAS である。
+- 行頭に既に書かれている @メンションは足さない。既存の行は書き換えない。
+- ARCHITECTURE が無いときは `architecture_missing` で拒否される。
+- **実行の前にユーザーの承認を得る。** 追記する行を示してから実行する。
 
 ### append-gotcha
 

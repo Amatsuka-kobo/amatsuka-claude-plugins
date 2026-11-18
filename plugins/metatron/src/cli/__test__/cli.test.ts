@@ -1890,3 +1890,27 @@ test("GS6: 飲み込まれた見出しのある台帳と、意味の無い値は
     stagingId: null
   })
 })
+
+test("LC1: link-claude-md は ARCHITECTURE が無ければ拒否し、あれば CLAUDE.md へ追記する", () => {
+  const empty = mkTmp()
+  writeFile(empty, "metatron.config.json", "{}")
+  const refused = runCli(["link-claude-md"], empty)
+  expect(refused.status).not.toBe(0)
+  expect(refused.json).toMatchObject({ error: "architecture_missing" })
+
+  const root = project()
+  writeFile(root, "docs/GOTCHAS.md", GOTCHAS)
+  const linked = runCli(["link-claude-md"], root)
+  expect(linked.status).toBe(0)
+  expect(fs.readFileSync(path.join(root, "CLAUDE.md"), "utf8")).toBe(
+    "@docs/ARCHITECTURE.md\n@docs/GOTCHAS.md\n"
+  )
+
+  // GOTCHAS の記録が無効なら GOTCHAS は足さない。
+  const off = project()
+  writeFile(off, "docs/GOTCHAS.md", GOTCHAS)
+  runCli(["link-claude-md"], off, { adr: false, gotchas: false })
+  expect(fs.readFileSync(path.join(off, "CLAUDE.md"), "utf8")).toBe(
+    "@docs/ARCHITECTURE.md\n"
+  )
+})

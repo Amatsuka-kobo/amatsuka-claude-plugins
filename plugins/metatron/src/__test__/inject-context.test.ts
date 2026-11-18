@@ -143,7 +143,7 @@ test("I4: CLAUDE.md に @メンションが無ければ、足りないものを�
   const root = project({
     "docs/ARCHITECTURE.md": ARCH,
     "docs/GOTCHAS.md": GOTCHAS,
-    ".claude/CLAUDE.md": "@docs/ARCHITECTURE.md\n"
+    ".claude/CLAUDE.md": "@../docs/ARCHITECTURE.md\n"
   })
   const content = mustInject(root)
 

@@ -80,6 +80,7 @@ export function runGetConfig(ctx: GetContext): void {
       stageAdr: commandLine("stage-adr --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
       initGotchas: commandLine("init-gotchas"),
+      linkClaudeMd: commandLine("link-claude-md"),
       getGotchasTemplate: commandLine("get gotchas-template"),
       appendGotcha: commandLine("append-gotcha --input <path>"),
       tagGotcha: commandLine(

@@ -89,6 +89,7 @@ export const USAGE_LINES: readonly string[] = [
   "  commit-architecture --staging-id <id>",
   "  commit-gotchas --staging-id <id>",
   "  init-gotchas",
+  "  link-claude-md",
   "  append-gotcha --input <path>",
   "  tag-gotcha --id <ID> --tag <解決済み|対象外> --reason <理由>",
   "  shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>",

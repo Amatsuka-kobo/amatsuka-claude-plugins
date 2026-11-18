@@ -16,6 +16,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { existingMentions } from "./lib/claude-md.js"
 import { loadConfig, type ResolvedConfig } from "./lib/config.js"
 import { injectContext } from "./lib/emit.js"
 import { type Features, readFeatures } from "./lib/features.js"
@@ -26,8 +27,6 @@ const MAX_WARNING_LINES = 3
 const STDIN_TIMEOUT_MS = 2000
 /** 廃止した rules 3 ファイルの既定の置き場。残っていたら移行を案内する。 */
 const LEGACY_RULES_DIR = ".claude/rules/metatron"
-/** @メンションを探す CLAUDE.md の置き場(docRoot からの相対パス)。 */
-const CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"]
 
 // hook 自身の位置からプラグインルートを求める。ソース(src/)からもバンドル(scripts/)からも
 // 1 階層上がプラグインルートになる(契約 §12)。
@@ -47,16 +46,6 @@ function hasContent(filePath: string): boolean {
   } catch {
     return false
   }
-}
-
-function readClaudeMd(docRoot: string): string {
-  return CLAUDE_MD_CANDIDATES.map((rel) => {
-    try {
-      return fs.readFileSync(path.join(docRoot, rel), "utf8")
-    } catch {
-      return ""
-    }
-  }).join("\n")
 }
 
 // 呼び出し規約は契約 §11。無効な側の CLI は拒否されるので案内しない。
@@ -126,8 +115,8 @@ function migrationLines(
     )
   }
   if (!hasArchitecture) return lines
-  const claudeMd = readClaudeMd(config.docRoot)
-  const missing = docs.filter((rel) => !claudeMd.includes(`@${rel}`))
+  const existing = existingMentions(config.docRoot)
+  const missing = docs.filter((rel) => !existing.has(rel))
   if (missing.length > 0) {
     lines.push(
       `CLAUDE.md に ${missing.map((rel) => `@${rel}`).join(" と ")} が無く、文書が読み込まれない。/metatron:update で追記する。`
