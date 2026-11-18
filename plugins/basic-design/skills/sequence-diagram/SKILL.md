@@ -73,7 +73,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/design-gen.mjs" <保存先>/<名前>.spec.js
 
 git コミットはユーザーの指示があったときのみ行う。
 
-ローカル保存の完了後、`${CLAUDE_PLUGIN_ROOT}/skills/shared/drive-upload.md` の手順で Google Drive へのアップロードを確認する(設定が無ければ何も起きない)。
+ローカル保存の完了後、`${CLAUDE_PLUGIN_ROOT}/references/drive-upload.md` の手順で Google Drive へのアップロードを確認する(設定が無ければ何も起きない)。
 
 ## 既存図の更新
 
