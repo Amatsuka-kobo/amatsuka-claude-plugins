@@ -72,7 +72,6 @@ export function runGetConfig(ctx: GetContext): void {
       relative: config.gotchasRelative,
       exists: gotchas.exists
     },
-    injection: config.injection,
     // 記録の有効・無効。metatron.config.json ではなく環境変数から決まる(設計書 2026-10-08 の 2)。
     features: ctx.features,
     cli: {

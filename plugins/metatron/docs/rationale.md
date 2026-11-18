@@ -72,6 +72,21 @@ deny hook が守るのは「**Edit / Write / NotebookEdit 経由の直接編集�
 この位置づけは「回避しようとする AI を止める設計」ではなく
 「知らずに直接編集する AI を正しい窓口へ導く設計」である。
 
+## 本文の注入をやめ、CLAUDE.md の @メンションで読ませる(0.6.0)
+
+0.6.0 で、ARCHITECTURE・GOTCHAS の本文を hook で注入するのをやめた。両文書はプロジェクトの CLAUDE.md の `@<パス>` で読み込ませ、SubagentStart の hook は撤去した。SessionStart の hook は残し、CLI の絶対パス・更新スキルの誘導・記録の確認の促しだけを出す。CLI のパスはプラグインのバージョンごとに変わるので、CLAUDE.md に固定で書けないためである。
+
+同じ改修で、rules 3 ファイル(`.claude/rules/metatron/`)も廃止した。保護パスとテスト方針は ARCHITECTURE のセクションに戻し、規約は ARCHITECTURE で扱わずに CLAUDE.md へ移す。
+
+変えた理由は 2 つある。
+
+1. 本文の注入は 10,000 文字の上限に合わせた 6 段階の縮退を持ち、Claude Code 標準の CLAUDE.md の読み込みと二重の仕組みになっていた。
+2. 管理する文書が 5 ファイルに分かれ、rules 専用の CLI・config・guard・書式を抱えていた。
+
+この変更で、ARCHITECTURE の全文(ADR を含む)と GOTCHAS の台帳の全文が毎セッション読み込まれるようになった。縮退が無くなった分、文書の長さはそのままコンテキストの消費になる。`references/writing-discipline.md` の簡潔化の基準を全文に当てる。
+
+以下の「なぜ SessionStart 注入なのか」「なぜサブエージェントにも注入するのか」は、0.5 までの経緯として残す。
+
 ## なぜ SessionStart 注入なのか
 
 現行、ARCHITECTURE / GOTCHAS は「サブエージェントが作業前に必ず読む」という**指示**で運用されている。

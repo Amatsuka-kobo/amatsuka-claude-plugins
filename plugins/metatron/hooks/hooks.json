@@ -1,18 +1,7 @@
 {
-  "description": "metatron: SessionStart と SubagentStart で ARCHITECTURE/GOTCHAS を注入し、PreToolUse で正本への直接編集を拒否する",
+  "description": "metatron: SessionStart で CLI の絶対パスと更新・記録の案内を出し、PreToolUse で ARCHITECTURE/GOTCHAS への直接編集を拒否する",
   "hooks": {
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/inject-context.mjs\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
       {
         "hooks": [
           {

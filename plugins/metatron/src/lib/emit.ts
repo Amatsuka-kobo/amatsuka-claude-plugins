@@ -39,7 +39,7 @@ export function pass(): never {
 /** 注入を出力する hook のイベント名。 */
 export type InjectEventName = "SessionStart" | "SubagentStart"
 
-// SessionStart・SubagentStart 用の注入出力。hookEventName は入力のイベント名に揃える。
+// SessionStart 用の注入出力。hookEventName は入力のイベント名に揃える。
 export function injectContext(
   content: string,
   eventName: InjectEventName

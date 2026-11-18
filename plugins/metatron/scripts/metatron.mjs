@@ -2859,9 +2859,6 @@ var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-var DEFAULT_INJECTION_ENABLED = true;
-var DEFAULT_GOTCHAS_RECENT_COUNT = 5;
-var DEFAULT_MAX_CHARS = 9e3;
 function isPlainObject2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2947,26 +2944,6 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   }
   return { relative: toPosix(relative), absolute };
 }
-function resolveBoolean(raw, fallback, label, warnings) {
-  if (raw === void 0) return fallback;
-  if (typeof raw !== "boolean") {
-    warnings.push(
-      `${label} \u304C\u771F\u507D\u5024\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${String(fallback)} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
-    );
-    return fallback;
-  }
-  return raw;
-}
-function resolveNumber(raw, fallback, label, min, warnings) {
-  if (raw === void 0) return fallback;
-  if (typeof raw !== "number" || !Number.isFinite(raw) || !Number.isInteger(raw) || raw < min) {
-    warnings.push(
-      `${label} \u304C ${min} \u4EE5\u4E0A\u306E\u6574\u6570\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${String(fallback)} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
-    );
-    return fallback;
-  }
-  return raw;
-}
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
@@ -2976,11 +2953,6 @@ function defaultsFor(docRoot, warnings) {
     gotchasPath: path5.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
-    injection: {
-      enabled: DEFAULT_INJECTION_ENABLED,
-      gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
-      maxChars: DEFAULT_MAX_CHARS
-    },
     warnings
   };
 }
@@ -3040,11 +3012,6 @@ function loadConfigInner(startDir) {
     "gotchas",
     warnings
   );
-  const injectionRaw = source?.injection;
-  const injection = isPlainObject2(injectionRaw) ? injectionRaw : void 0;
-  if (injectionRaw !== void 0 && injection === void 0) {
-    warnings.push("injection \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002");
-  }
   return {
     docRoot,
     configPath,
@@ -3053,28 +3020,6 @@ function loadConfigInner(startDir) {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
-    injection: {
-      enabled: resolveBoolean(
-        injection?.enabled,
-        DEFAULT_INJECTION_ENABLED,
-        "injection.enabled",
-        warnings
-      ),
-      gotchasRecentCount: resolveNumber(
-        injection?.gotchasRecentCount,
-        DEFAULT_GOTCHAS_RECENT_COUNT,
-        "injection.gotchasRecentCount",
-        0,
-        warnings
-      ),
-      maxChars: resolveNumber(
-        injection?.maxChars,
-        DEFAULT_MAX_CHARS,
-        "injection.maxChars",
-        1,
-        warnings
-      )
-    },
     warnings
   };
 }
@@ -4741,7 +4686,6 @@ function runGetConfig(ctx) {
       relative: config.gotchasRelative,
       exists: gotchas.exists
     },
-    injection: config.injection,
     // 記録の有効・無効。metatron.config.json ではなく環境変数から決まる(設計書 2026-10-08 の 2)。
     features: ctx.features,
     cli: {

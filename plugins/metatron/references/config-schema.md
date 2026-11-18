@@ -19,11 +19,6 @@
   "paths": {
     "architecture": "docs/ARCHITECTURE.md",
     "gotchas": "docs/GOTCHAS.md"
-  },
-  "injection": {
-    "enabled": true,
-    "gotchasRecentCount": 5,
-    "maxChars": 9000
   }
 }
 ```
@@ -33,9 +28,6 @@
 | `version` | number | `1` | スキーマバージョン |
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
 | `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
-| `injection.enabled` | boolean | `true` | SessionStart と SubagentStart の注入の有効・無効。`false` で両方を止める |
-| `injection.gotchasRecentCount` | number | `5` | SessionStart と SubagentStart のどちらでも、全文で注入する直近エントリ数。0 以上の整数 |
-| `injection.maxChars` | number | `9000` | SessionStart と SubagentStart のどちらでも、注入全体の文字数上限。1 以上の整数 |
 
 未知キーは無視する。`$schema` が書かれていても未知キーとして無視する。この規則により、`paths` にキーを足しても、そのキーを知らない他プラグインの config 実装は追随を要さない。
 
@@ -49,7 +41,7 @@
 - 壊れた JSON のときは全項目を既定値として扱い、理由を `warnings` へ積む。例外は投げない。
 - `version` が `1` 以外のときは全項目を既定値として扱い、警告を 1 行添える。
 - 個々のキーの型不整合は壊れた JSON に含めない。その項目だけを既定値へ落として理由を積む。
-- `paths` / `injection` がオブジェクトでないときは、その配下の項目だけを既定値へ落とす。
+- `paths` がオブジェクトでないときは、その配下の項目だけを既定値へ落とす。
 - 設定ファイルが存在するのに読めなかったときは、全項目を既定値として扱い理由を積む。
 
 ## ルート解決(docRoot)

@@ -19,15 +19,6 @@ export const SUPPORTED_VERSION = 1
 
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
 export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
-export const DEFAULT_INJECTION_ENABLED = true
-export const DEFAULT_GOTCHAS_RECENT_COUNT = 5
-export const DEFAULT_MAX_CHARS = 9000
-
-export interface InjectionConfig {
-  enabled: boolean
-  gotchasRecentCount: number
-  maxChars: number
-}
 
 export interface ResolvedConfig {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -44,7 +35,6 @@ export interface ResolvedConfig {
   architectureRelative: string
   /** GOTCHAS の docRoot からの相対パス(区切りは常に "/")。 */
   gotchasRelative: string
-  injection: InjectionConfig
   /** 既定値へ落とした理由・設定を読めなかった理由。空配列が正常。 */
   warnings: string[]
 }
@@ -199,45 +189,6 @@ function resolveConfiguredPath(
   return { relative: toPosix(relative), absolute }
 }
 
-// 個々のキーの型不整合は「壊れた JSON」ではなく、その項目だけ既定値に落とす(契約 §2)。
-function resolveBoolean(
-  raw: unknown,
-  fallback: boolean,
-  label: string,
-  warnings: string[]
-): boolean {
-  if (raw === undefined) return fallback
-  if (typeof raw !== "boolean") {
-    warnings.push(
-      `${label} が真偽値でないため、既定値 ${String(fallback)} を使用します。`
-    )
-    return fallback
-  }
-  return raw
-}
-
-function resolveNumber(
-  raw: unknown,
-  fallback: number,
-  label: string,
-  min: number,
-  warnings: string[]
-): number {
-  if (raw === undefined) return fallback
-  if (
-    typeof raw !== "number" ||
-    !Number.isFinite(raw) ||
-    !Number.isInteger(raw) ||
-    raw < min
-  ) {
-    warnings.push(
-      `${label} が ${min} 以上の整数でないため、既定値 ${String(fallback)} を使用します。`
-    )
-    return fallback
-  }
-  return raw
-}
-
 function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
   return {
     docRoot,
@@ -247,11 +198,6 @@ function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
     gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     gotchasRelative: DEFAULT_GOTCHAS_PATH,
-    injection: {
-      enabled: DEFAULT_INJECTION_ENABLED,
-      gotchasRecentCount: DEFAULT_GOTCHAS_RECENT_COUNT,
-      maxChars: DEFAULT_MAX_CHARS
-    },
     warnings
   }
 }
@@ -322,12 +268,6 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     warnings
   )
 
-  const injectionRaw = source?.injection
-  const injection = isPlainObject(injectionRaw) ? injectionRaw : undefined
-  if (injectionRaw !== undefined && injection === undefined) {
-    warnings.push("injection がオブジェクトでないため、既定値を使用します。")
-  }
-
   // 未知キー($schema を含む)は無視する。エラーにしない(契約 §2)。
   return {
     docRoot,
@@ -337,28 +277,6 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
     gotchasRelative: gotchas.relative,
-    injection: {
-      enabled: resolveBoolean(
-        injection?.enabled,
-        DEFAULT_INJECTION_ENABLED,
-        "injection.enabled",
-        warnings
-      ),
-      gotchasRecentCount: resolveNumber(
-        injection?.gotchasRecentCount,
-        DEFAULT_GOTCHAS_RECENT_COUNT,
-        "injection.gotchasRecentCount",
-        0,
-        warnings
-      ),
-      maxChars: resolveNumber(
-        injection?.maxChars,
-        DEFAULT_MAX_CHARS,
-        "injection.maxChars",
-        1,
-        warnings
-      )
-    },
     warnings
   }
 }

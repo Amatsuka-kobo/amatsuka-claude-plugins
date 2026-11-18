@@ -70,11 +70,6 @@ test("C1: 設定ファイル無し → 全項目が既定値", () => {
     path.join(cfg.docRoot, "docs", "ARCHITECTURE.md")
   )
   expect(cfg.gotchasPath).toBe(path.join(cfg.docRoot, "docs", "GOTCHAS.md"))
-  expect(cfg.injection).toStrictEqual({
-    enabled: true,
-    gotchasRecentCount: 5,
-    maxChars: 9000
-  })
   // 「設定ファイルが無い」は正常な状態であり、警告にしない
   expect(cfg.warnings).toStrictEqual([])
 })
@@ -92,11 +87,6 @@ test("C2: paths のみ指定 → 指定分だけ上書き、他は既定値", ()
   expect(cfg.architectureRelative).toBe("documents/ARCH.md")
   expect(cfg.architecturePath).toBe(path.join(dir, "documents", "ARCH.md"))
   expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
-  expect(cfg.injection).toStrictEqual({
-    enabled: true,
-    gotchasRecentCount: 5,
-    maxChars: 9000
-  })
   expect(cfg.warnings).toStrictEqual([])
 })
 
@@ -109,7 +99,6 @@ test("C3: 壊れた JSON → 既定値 + 警告、例外を投げない", () => 
   expect(cfg.configExists).toBe(true)
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
-  expect(cfg.injection.maxChars).toBe(9000)
   expect(cfg.warnings.length).toBeGreaterThanOrEqual(1)
 })
 
@@ -117,18 +106,12 @@ test("C4: 未知の version → 全項目既定値 + 警告", () => {
   const dir = mkTmp()
   writeConfig(dir, {
     version: 99,
-    paths: { architecture: "documents/ARCH.md", gotchas: "documents/G.md" },
-    injection: { enabled: false, maxChars: 1234 }
+    paths: { architecture: "documents/ARCH.md", gotchas: "documents/G.md" }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
-  expect(cfg.injection).toStrictEqual({
-    enabled: true,
-    gotchasRecentCount: 5,
-    maxChars: 9000
-  })
   expect(cfg.warnings.filter((w) => w.includes("version"))).toHaveLength(1)
 })
 
@@ -223,17 +206,15 @@ test("C11: $schema キーを含む設定 → 未知キーとして無視され�
   expect(cfg.warnings).toStrictEqual([])
 })
 
-test("C12: maxChars を明示指定 → 既定 9000 を上書きする", () => {
+test("C12: 旧キー injection は無視し、警告も出さない", () => {
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    injection: { maxChars: 4000 }
+    injection: { enabled: "x", maxChars: -1 }
   })
   const cfg = loadConfig(dir)
 
-  expect(cfg.injection.maxChars).toBe(4000)
-  expect(cfg.injection.enabled).toBe(true)
-  expect(cfg.injection.gotchasRecentCount).toBe(5)
+  expect(cfg).not.toHaveProperty("injection")
   expect(cfg.warnings).toStrictEqual([])
 })
 
@@ -330,7 +311,6 @@ test("トップレベルが配列の JSON も壊れた JSON として扱う", ()
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.injection.maxChars).toBe(9000)
   expect(cfg.warnings.length).toBeGreaterThanOrEqual(1)
 })
 
@@ -347,32 +327,26 @@ test("個別キーの型不整合はその項目だけ既定値に落ちる", ()
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { architecture: 42, gotchas: "docs/G.md" },
-    injection: { enabled: false, gotchasRecentCount: "3", maxChars: 4000 }
+    paths: { architecture: 42, gotchas: "docs/G.md" }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.gotchasRelative).toBe("docs/G.md")
-  expect(cfg.injection).toStrictEqual({
-    enabled: false,
-    gotchasRecentCount: 5,
-    maxChars: 4000
-  })
-  expect(cfg.warnings).toHaveLength(2)
+  expect(cfg.warnings).toHaveLength(1)
 })
 
 test("解決結果をキャッシュしない", () => {
   const dir = mkTmp()
-  writeConfig(dir, { version: 1, injection: { maxChars: 1000 } })
-  expect(loadConfig(dir).injection.maxChars).toBe(1000)
+  writeConfig(dir, { version: 1, paths: { architecture: "docs/A.md" } })
+  expect(loadConfig(dir).architectureRelative).toBe("docs/A.md")
 
-  writeConfig(dir, { version: 1, injection: { maxChars: 2000 } })
-  expect(loadConfig(dir).injection.maxChars).toBe(2000)
+  writeConfig(dir, { version: 1, paths: { architecture: "docs/B.md" } })
+  expect(loadConfig(dir).architectureRelative).toBe("docs/B.md")
 })
 
 test("存在しない開始ディレクトリでも例外を投げない", () => {
   const dir = path.join(mkTmp(), "no", "such", "dir")
   expect(() => loadConfig(dir)).not.toThrow()
-  expect(loadConfig(dir).injection.maxChars).toBe(9000)
+  expect(loadConfig(dir).architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
 })
