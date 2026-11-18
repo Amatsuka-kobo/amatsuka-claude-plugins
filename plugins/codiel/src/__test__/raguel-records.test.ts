@@ -4,7 +4,6 @@
 import { execFileSync, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import fs from "node:fs"
-import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -40,6 +39,7 @@ import {
   resolveRaguelStore,
   unresolvedStops
 } from "../raguel-records.js"
+import { bundledScript } from "../testing/run-ts.js"
 
 // guard-write.ts は読み込むとフックとして標準入力を読み、終わりに process.exit を呼ぶ。
 // isE2eReport だけを使うため、入力を空にし、終了の関数を例外と何もしない関数に替える。
@@ -52,7 +52,6 @@ vi.mock("../hooks/lib.js", async (importOriginal) => ({
   emit: () => undefined
 }))
 
-const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli")
 const CLI = fileURLToPath(new URL("../codiel-state-cli.ts", import.meta.url))
 
 const savedEnv = {
@@ -458,7 +457,7 @@ describe("Raguel が書いた記録を codiel が読む", () => {
 
   test("codiel-state pass-gate が Raguel の書いた記録で通る", () => {
     const run = (args: string[]) =>
-      spawnSync(process.execPath, [TSX_CLI, CLI, ...args], {
+      spawnSync(process.execPath, [bundledScript(CLI), ...args], {
         cwd: root,
         encoding: "utf8",
         env: { ...process.env }
