@@ -632,39 +632,27 @@ describe("キーが無いとき", () => {
     expect(result).toEqual({
       ok: true,
       reason: "review",
-      options: REVIEW_ROLES.map((role) =>
-        role === "code-review"
-          ? {
-              role,
-              mode: "custom",
-              agentType: "cr",
-              criteria: "- code"
-            }
-          : {
-              role,
-              mode: "standard",
-              agentType: "general-purpose",
-              model: expect.any(String),
-              effort: expect.any(String),
-              preamble: `standard:${role}:en`,
-              criteria: `- standard ${role}`
-            }
-      )
+      options: REVIEW_ROLES.map((role) => ({
+        role,
+        criteria: role === "code-review" ? "- code" : `- standard ${role}`
+      }))
     })
   })
 
-  it("候補が 1 件なら従来どおりその 1 件を agents で返す", async () => {
-    const result = await pickDelegate(REVIEW_INPUT, {
-      ...deps([], unused, null),
-      ...disabled("design-review", "complex-review", "adversarial-review")
+  it("選んだ候補以外を excludeRoles に入れて呼び直すと、その委譲先を agents で返す", async () => {
+    const raw = JSON.stringify({
+      reason: "review",
+      task: { summary: "x", artifacts: [] },
+      excludeRoles: ["design-review", "complex-review", "adversarial-review"]
     })
+    const result = await pickDelegate(raw, deps([], unused, null))
     expect(result).toMatchObject({
       ok: true,
-      agents: [{ role: "code-review" }]
+      agents: [{ role: "code-review", mode: "standard" }]
     })
   })
 
-  it("split は Jev に問う作業を choose にし、fork できる候補に fork を添える", async () => {
+  it("split は Jev に問う作業を choose にして候補を options で返す", async () => {
     const raw = JSON.stringify({
       reason: "split",
       parentModel: "opus",
@@ -680,24 +668,6 @@ describe("キーが無いとき", () => {
       { id: "b", mode: "choose" }
     ])
     expect(result.options?.map((option) => option.role)).toEqual(SPLIT_ROLES)
-    const forked = result.options
-      ?.filter((option) => option.fork !== undefined)
-      .map((option) => option.fork)
-    expect(forked).toEqual(
-      expect.arrayContaining([
-        {
-          role: "complex-impl",
-          mode: "fork",
-          agentType: "fork",
-          preamble: "fork:complex-impl:en"
-        }
-      ])
-    )
-    expect(
-      forked?.every((fork) =>
-        ["complex-impl", "normal-impl", "general"].includes(fork?.role ?? "")
-      )
-    ).toBe(true)
   })
 
   it("split で fork を返せない文脈の要る作業は self のままにする", async () => {
@@ -714,9 +684,20 @@ describe("キーが無いとき", () => {
       { id: "a", mode: "choose" },
       { id: "b", mode: "self" }
     ])
-    expect(result.options?.some((option) => option.fork !== undefined)).toBe(
-      false
-    )
+  })
+
+  it("split で文脈の要る作業に選んだ fork できる候補で呼び直すと fork を返す", async () => {
+    const raw = JSON.stringify({
+      reason: "split",
+      parentModel: "opus",
+      tasks: [{ id: "b", summary: "y", needsContext: true }],
+      excludeRoles: SPLIT_ROLES.filter((role) => role !== "complex-impl")
+    })
+    const result = await pickDelegate(raw, deps([], unused, null))
+    expect(result).toMatchObject({
+      ok: true,
+      assignments: [{ id: "b", role: "complex-impl", mode: "fork" }]
+    })
   })
 })
 

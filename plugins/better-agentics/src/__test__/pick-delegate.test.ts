@@ -123,7 +123,7 @@ describe("pick-delegate", () => {
       ok: true,
       reason: "review",
       options: expect.arrayContaining([
-        expect.objectContaining({ role: "code-review", agentType: "a" })
+        { role: "code-review", criteria: expect.any(String) }
       ])
     })
   })

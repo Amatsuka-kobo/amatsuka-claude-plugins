@@ -1503,7 +1503,7 @@ async function review(input, deps) {
     return {
       ok: true,
       reason: "review",
-      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+      options: candidates.map(optionOf)
     };
   }
   const answers = await ask(
@@ -1549,38 +1549,30 @@ function modelOf(candidate) {
   return model !== void 0 && isClaudeModel(model) ? model : void 0;
 }
 __name(modelOf, "modelOf");
-function forkOf(candidate, input, deps, p) {
-  const { role } = candidate;
-  if (!FORK_ROLES.includes(role.id) || input.parentModel === void 0 || modelOf(candidate) !== input.parentModel) {
-    return void 0;
-  }
-  return withP(
-    {
-      role: role.id,
-      mode: "fork",
-      agentType: "fork",
-      preamble: deps.preambles.fork(role.id, input.lang)
-    },
-    p
-  );
-}
-__name(forkOf, "forkOf");
 function assignmentOf(task, candidate, input, deps, p) {
   if (!task.needsContext) {
     return { id: task.id, ...delegateOf(candidate, input.lang, deps, p) };
   }
-  const fork = forkOf(candidate, input, deps, p);
-  return fork === void 0 ? { id: task.id, mode: "self" } : { id: task.id, ...fork };
+  const { role } = candidate;
+  if (!FORK_ROLES.includes(role.id) || input.parentModel === void 0 || modelOf(candidate) !== input.parentModel) {
+    return { id: task.id, mode: "self" };
+  }
+  return {
+    id: task.id,
+    ...withP(
+      {
+        role: role.id,
+        mode: "fork",
+        agentType: "fork",
+        preamble: deps.preambles.fork(role.id, input.lang)
+      },
+      p
+    )
+  };
 }
 __name(assignmentOf, "assignmentOf");
-function optionOf(candidate, input, deps) {
-  const option = {
-    ...delegateOf(candidate, input.lang, deps),
-    criteria: candidate.criteria
-  };
-  const wantsFork = input.reason === "split" && deps.forkEnabled && input.tasks.some((task) => task.needsContext);
-  const fork = wantsFork ? forkOf(candidate, input, deps) : void 0;
-  return fork === void 0 ? option : { ...option, fork };
+function optionOf(candidate) {
+  return { role: candidate.role.id, criteria: candidate.criteria };
 }
 __name(optionOf, "optionOf");
 async function split(input, deps) {
@@ -1599,7 +1591,7 @@ async function split(input, deps) {
       assignments: input.tasks.map(
         (task) => choose.has(task.id) ? { id: task.id, mode: "choose" } : { id: task.id, mode: "self" }
       ),
-      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+      options: candidates.map(optionOf)
     };
   } else if (asked.length > 0 && deps.apiKey !== void 0) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }));

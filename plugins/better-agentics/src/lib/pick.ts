@@ -67,10 +67,13 @@ export interface ChooseAssignment {
   mode: "choose"
 }
 
-/** キーが無いときに返す候補。fork はこの候補を文脈の要る作業に選んだときの委譲先 */
-export type Option = Delegate & {
+/**
+ * キーが無いときに返す候補。前置きを候補の数だけ返さないよう、役割 ID と選択基準だけを持つ。
+ * 選んだ後は、他の候補を excludeRoles に入れて呼び直すと委譲先が返る。
+ */
+export interface Option {
+  role: RoleId
   criteria: string
-  fork?: Extract<Delegate, { mode: "fork" }>
 }
 
 export type PickError =
@@ -439,7 +442,7 @@ async function review(
     return {
       ok: true,
       reason: "review",
-      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+      options: candidates.map(optionOf)
     }
   }
   const answers = await ask(
@@ -489,32 +492,6 @@ function modelOf(candidate: Candidate): ClaudeModel | undefined {
 
 type Assignment = (Delegate & { id: string }) | SelfAssignment
 
-// 文脈の要る作業にこの候補を選んだときの fork の委譲先。fork できなければ undefined(自分で行う)。
-function forkOf(
-  candidate: Candidate,
-  input: PickInput,
-  deps: PickDeps,
-  p?: number
-): Extract<Delegate, { mode: "fork" }> | undefined {
-  const { role } = candidate
-  if (
-    !FORK_ROLES.includes(role.id) ||
-    input.parentModel === undefined ||
-    modelOf(candidate) !== input.parentModel
-  ) {
-    return undefined
-  }
-  return withP(
-    {
-      role: role.id,
-      mode: "fork" as const,
-      agentType: "fork" as const,
-      preamble: deps.preambles.fork(role.id, input.lang)
-    },
-    p
-  )
-}
-
 function assignmentOf(
   task: { id: string; needsContext: boolean },
   candidate: Candidate,
@@ -525,28 +502,30 @@ function assignmentOf(
   if (!task.needsContext) {
     return { id: task.id, ...delegateOf(candidate, input.lang, deps, p) }
   }
-  const fork = forkOf(candidate, input, deps, p)
-  return fork === undefined
-    ? { id: task.id, mode: "self" }
-    : { id: task.id, ...fork }
+  const { role } = candidate
+  if (
+    !FORK_ROLES.includes(role.id) ||
+    input.parentModel === undefined ||
+    modelOf(candidate) !== input.parentModel
+  ) {
+    return { id: task.id, mode: "self" }
+  }
+  return {
+    id: task.id,
+    ...withP(
+      {
+        role: role.id,
+        mode: "fork" as const,
+        agentType: "fork" as const,
+        preamble: deps.preambles.fork(role.id, input.lang)
+      },
+      p
+    )
+  }
 }
 
-// キーが無いときにオーケストレーターへ渡す候補。fork は fork を返せる split にだけ付ける。
-function optionOf(
-  candidate: Candidate,
-  input: PickInput,
-  deps: PickDeps
-): Option {
-  const option: Option = {
-    ...delegateOf(candidate, input.lang, deps),
-    criteria: candidate.criteria
-  }
-  const wantsFork =
-    input.reason === "split" &&
-    deps.forkEnabled &&
-    input.tasks.some((task) => task.needsContext)
-  const fork = wantsFork ? forkOf(candidate, input, deps) : undefined
-  return fork === undefined ? option : { ...option, fork }
+function optionOf(candidate: Candidate): Option {
+  return { role: candidate.role.id, criteria: candidate.criteria }
 }
 
 async function split(
@@ -572,7 +551,7 @@ async function split(
           ? { id: task.id, mode: "choose" as const }
           : { id: task.id, mode: "self" as const }
       ),
-      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+      options: candidates.map(optionOf)
     }
   } else if (asked.length > 0 && deps.apiKey !== undefined) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }))
