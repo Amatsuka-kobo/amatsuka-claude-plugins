@@ -9,17 +9,19 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-delegate.mjs" *)
 ## 自分で行う作業と委譲する場面
 
 - 調査・分析・要件確定・設計書と計画書の執筆・実装・検証は、自分で行う。
-- 委譲するのは、次の 3 つの場面のどれかに当たるときだけとする。
+- 委譲するのは、次の 4 つの場面のどれかに当たるときだけとする。
 
 | `reason` | 場面 |
 | --- | --- |
 | `design-plan-review` | 設計書・実装計画書を書き終えたとき |
+| `review` | 設計・実装計画の文書ファイル以外の文書やコードをレビューするとき |
 | `split` | 作業の一部を委譲先に進めさせるとき |
 | `stuck` | 自分で原因を追っても解決しないとき |
 
 - 委譲先は `pick-delegate` が返した委譲先で起動する。自分で選ぶのは、`pick-delegate` が候補(`options`)を返したときだけとする。
 - 並列化やコストのために分担する `split` では、委譲している間も自分の分担を進める。自分の分担が無く待つだけになる委譲は、長く機械的な作業(多数のファイルへの一括変更など)に限る。
-- `design-plan-review`・`stuck` と、文脈の保護のための探索の `split` は、待つだけになってもよい。
+- レビューは、ユーザーに頼まれたときも自分で行うと決めたときも委譲する。
+- `design-plan-review`・`review`・`stuck` と、文脈の保護のための探索の `split` は、待つだけになってもよい。
 - `pick-delegate` が `ok: false` を返したら、理由を問わず委譲も作業の続行もせず、`error` の種別と `message` をユーザーへ報告して指示を待つ。
 - 「委譲先が断ったとき」のセクションが委譲しないと定める `no-candidates` は、指示を待たずにそのセクションに従う。
 - それ以外の `ok: false` も、外側の手順に従っている間は「外側の手順」のセクションに従う。
@@ -38,7 +40,7 @@ EOF
 
 | reason | 入力 |
 | --- | --- |
-| `review` | `{"reason": "review", "task": {"summary": string, "artifacts": string[]}}`。外側の手順のレビューにだけ使う |
+| `review` | `{"reason": "review", "task": {"summary": string, "artifacts": string[]}}` |
 | `design-plan-review` | `{"reason": "design-plan-review", "task": {"summary": string, "artifacts": string[]}}` |
 | `split` | `{"reason": "split", "tasks": [{"id": string, "summary": string, "needsContext"?: boolean}]}`。`id` は配列内で一意にする。会話の文脈が無いと仕様を書き切れない作業にだけ `needsContext: true` を付ける。外側の手順に従って作業している間は付けない |
 | `stuck` | `{"reason": "stuck", "task": {"summary": string}}` |
@@ -89,10 +91,19 @@ EOF
 
 設計書・実装計画書を書き終えたら、ユーザーへ示す前にレビューを依頼する。
 
-- `reason` に `design-plan-review` を渡すのは、設計・実装計画の文書ファイルのレビューだけとする。それ以外の文書とコードのレビューは委譲しない。
+- `reason` に `design-plan-review` を渡すのは、設計・実装計画の文書ファイルのレビューだけとする。それ以外の文書とコードのレビューは、「review」のセクションに従って委譲する。
 - `pick-delegate` は、`reason` を `design-plan-review` にして呼ぶ。返った委譲先の全員に、同じ文書のレビューを依頼する。
 - レビュアーには、文書のパスと満たすべき要件だけを渡し、自分の結論は渡さない。
 - レビューが戻るまで、その文書を編集せず、ユーザーへも示さない。
+- 指摘の採否は自分で決める。
+
+## review
+
+設計・実装計画の文書ファイル以外の文書やコードをレビューするときに当てる。レビューする時点は、ユーザーの依頼か外側の手順が決める。
+
+- `pick-delegate` は、`reason` を `review` にして呼ぶ。返った委譲先の全員に、同じ対象のレビューを依頼する。
+- レビュアーには、対象と満たすべき要件だけを渡し、自分の結論は渡さない。
+- 対象として、文書ならパスを、コードなら差分を取るコマンドを渡す。コマンドの例は `git diff <base>..<head>` であり、値は実際の範囲に置き換える。
 - 指摘の採否は自分で決める。
 
 ## split
