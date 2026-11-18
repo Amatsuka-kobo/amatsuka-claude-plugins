@@ -1581,9 +1581,10 @@ async function split(input, deps) {
   const asked = input.tasks.filter((task) => !task.needsContext || forkable);
   const chosen = /* @__PURE__ */ new Map();
   const [only] = candidates;
+  const { apiKey } = deps;
   if (candidates.length === 1 && only !== void 0) {
     for (const task of asked) chosen.set(task.id, { candidate: only });
-  } else if (asked.length > 0 && deps.apiKey === void 0) {
+  } else if (asked.length > 0 && apiKey === void 0) {
     const choose = new Set(asked.map((task) => task.id));
     return {
       ok: true,
@@ -1593,10 +1594,10 @@ async function split(input, deps) {
       ),
       options: candidates.map(optionOf)
     };
-  } else if (asked.length > 0 && deps.apiKey !== void 0) {
+  } else if (apiKey !== void 0 && asked.length > 0) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }));
     const answers = await ask(
-      deps.apiKey,
+      apiKey,
       deps,
       { tasks },
       splitQuestions(tasks, candidates)

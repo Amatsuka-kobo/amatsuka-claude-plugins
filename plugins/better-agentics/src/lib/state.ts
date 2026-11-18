@@ -8,7 +8,7 @@ export type OrchestrationState =
 const ON = new Set(["1", "true", "on"])
 const OFF = new Set(["", "0", "false", "off"])
 
-// 設計書 §8-1 の表を上から順に評価し、最初に当たった行で決める。
+// README の「環境変数」の表を上から順に評価し、最初に当たった行で決める。
 export function orchestrationState(env: NodeJS.ProcessEnv): OrchestrationState {
   const value =
     env.AMATSUKA_AGENT_ENABLE_ORCHESTRATION?.trim().toLowerCase() ?? ""

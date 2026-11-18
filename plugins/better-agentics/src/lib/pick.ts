@@ -539,9 +539,10 @@ async function split(
   const chosen = new Map<string, { candidate: Candidate; p?: number }>()
 
   const [only] = candidates
+  const { apiKey } = deps
   if (candidates.length === 1 && only !== undefined) {
     for (const task of asked) chosen.set(task.id, { candidate: only })
-  } else if (asked.length > 0 && deps.apiKey === undefined) {
+  } else if (asked.length > 0 && apiKey === undefined) {
     const choose = new Set(asked.map((task) => task.id))
     return {
       ok: true,
@@ -553,10 +554,10 @@ async function split(
       ),
       options: candidates.map(optionOf)
     }
-  } else if (asked.length > 0 && deps.apiKey !== undefined) {
+  } else if (apiKey !== undefined && asked.length > 0) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }))
     const answers = await ask(
-      deps.apiKey,
+      apiKey,
       deps,
       { tasks },
       splitQuestions(tasks, candidates)
