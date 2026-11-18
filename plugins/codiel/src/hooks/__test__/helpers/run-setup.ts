@@ -4,12 +4,7 @@ import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
-import { runTs } from "../../../testing/run-ts.js"
-
-const CLI = fileURLToPath(
-  new URL("../../../codiel-state-cli.ts", import.meta.url)
-)
+import { runStateInProcess } from "../../../__test__/helpers/state-in-process.js"
 
 export const SLUG = "demo"
 export const INIT_FLAGS = [
@@ -38,11 +33,16 @@ export function casesProjectDir(root: string): string {
   return path.join(root, ".raguel", "cases", "demo")
 }
 
+// 前提の組み立て用。子プロセスを起動せずプロセス内で実行し、失敗したら例外にする
 export function cli(root: string, args: string[]): string {
-  return runTs(CLI, args, {
-    cwd: root,
-    env: { ...process.env, RAGUEL_CONFIG: raguelConfigPath(root) }
+  const r = runStateInProcess(root, args, {
+    RAGUEL_CONFIG: raguelConfigPath(root)
   })
+  if (r.code !== 0)
+    throw new Error(
+      `codiel-state ${args.join(" ")} が ${r.code} で終了: ${r.stderr}`
+    )
+  return r.stdout
 }
 
 export function git(root: string, ...args: string[]): string {
