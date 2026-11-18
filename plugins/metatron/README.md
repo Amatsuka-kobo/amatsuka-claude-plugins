@@ -1,14 +1,14 @@
 # Metatron 📜
 
-プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)、失敗知識(`docs/GOTCHAS.md`)、規律(`.claude/rules/metatron/` 配下の `conventions.md` / `protected-paths.md` / `testing-policy.md`)の 3 種を管理するプラグインです。ARCHITECTURE と GOTCHAS は、毎セッションの冒頭とサブエージェントの起動時に AI のコンテキストへ注入します。rules は Claude Code の公式機構で起動時に読み込まれ、サブエージェントのコンテキストにも渡ります。
+プロジェクトの技術的前提(`docs/ARCHITECTURE.md`)と失敗知識(`docs/GOTCHAS.md`)の 2 種を管理するプラグインです。両文書はプロジェクトの `CLAUDE.md` に書いた @メンション(`@docs/ARCHITECTURE.md` など)で毎セッション読み込まれ、サブエージェントにも同じ経路で届きます。
 
 名前は天の書記天使 Metatron に由来します。神の記録を司り、人の行いを書き留める役です。プロジェクトの前提と、そこで犯された失敗を書き留め続けるという、このプラグインの役割そのものを表しています。
 
 ## 何をするか
 
-- **記録**: 3 種の管理対象の更新は決定的な CLI を通します。書式の検証・連番の採番と、GOTCHAS のエントリが消えないことを機械で保証します。GOTCHAS の本文を変えられるのは、差分の承認を経る監査の書き換えだけです。
+- **記録**: 2 つの文書の更新は決定的な CLI を通します。書式の検証・連番の採番と、GOTCHAS のエントリが消えないことを機械で保証します。GOTCHAS の本文を変えられるのは、差分の承認を経る監査の書き換えだけです。
 - **更新**: `/metatron:init` と `/metatron:update` が、コードベース解析から起こしたドラフトをセクション単位で確認しながら文書を育てます。
-- **注入と規律**: SessionStart hook が ARCHITECTURE の内容と GOTCHAS の要約を毎セッション渡し、SubagentStart hook が同じ文書をサブエージェントへ渡します。SessionStart の注入文には、作業を終えて報告する前に ADR と GOTCHAS へ残すものを確かめるタイミングも書いてあります。rules は metatron が注入せず、Claude Code が起動時に読み込むためサブエージェントにも届きます。
+- **読み込みと案内**: 両文書は `CLAUDE.md` の @メンションで読み込まれます。`/metatron:init` が @メンションを追記します。SessionStart hook は文書の本文を注入せず、CLI の絶対パス、更新時のスキルの起動、報告の前に ADR と GOTCHAS へ残すものを確かめるタイミングを案内します。
 
 ## 動作要件
 
@@ -22,7 +22,7 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 ### `/metatron:init`
 
-対象プロジェクトの ARCHITECTURE と `.claude/rules/metatron/` の 3 ファイルを初回生成し、GOTCHAS の空の台帳を承認を得てから作成します。まず CLI の `scan` がコードベースの事実(パッケージマネージャ・依存・スクリプト・ディレクトリ構造など)を集め、その事実からセクションごとのドラフトを起草します。ドラフトは「こう読み取ったが合っているか」という形でセクション単位に確認し、確定後に差分を全文提示して承認を得てから書き込みます。`## ADR 一覧` は初回生成の対象外です(空の節を置き、以後 `stage-adr` で足します)。
+対象プロジェクトの ARCHITECTURE を初回生成し、GOTCHAS の空の台帳を承認を得てから作成します。最後に、両文書の @メンションを `CLAUDE.md` に承認を得てから追記します。まず CLI の `scan` がコードベースの事実(パッケージマネージャ・依存・スクリプト・ディレクトリ構造など)を集め、その事実からセクションごとのドラフトを起草します。ドラフトは「こう読み取ったが合っているか」という形でセクション単位に確認し、確定後に差分を全文提示して承認を得てから書き込みます。`## ADR 一覧` は初回生成の対象外です(空の節を置き、以後 `stage-adr` で追加します)。コーディング規約・ブランチ運用・完了条件は ARCHITECTURE で扱わず、`CLAUDE.md` に書きます。init はこれらを起草しません。
 
 初版の ARCHITECTURE を書き込んだ後、`docs/intents/domains/` を走査して codiel が書いた `[ADR 候補]` を探します。見つかれば候補を提示し、承認を得たものを ADR にしてから持続層側のエントリを参照形に縮めます。続けて `[GOTCHAS 候補]` も探し、承認を得たものを台帳へ移して持続層から消します。
 
@@ -30,11 +30,13 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 現在のコードベースと ARCHITECTURE の乖離を検出し、更新します。CLI が決定的に検出するのは、ドメインマップの穴と死んだ glob、セクションの欠落です。書かれたパスがどこを基準にした相対パスかは決められないため、ディレクトリの消失は CLI が断定しません。ルートから実在を確かめられなかったパスを並べて返し、AI がどこを指すかを読んで確かめます。技術スタックとコマンド定義は、要約として書くセクションです。CLI はこの 2 つを照合せず、定義のありか(マニフェスト・タスクランナー・コンテナ定義のパス)だけを返します。書かれた技術やコマンドが今も残っているかは、AI がそれらのファイルを読んで確かめます。候補を一覧提示し、選ばれた分だけ差分提示と承認を経て書き込みます。
 
+旧バージョンの rules(`.claude/rules/metatron/`)が残っているプロジェクトでは、保護パスとテスト方針を ARCHITECTURE のセクションへ、規約を `CLAUDE.md` へ移し、旧ファイルを消す移行も行います。どの手順も承認を得てから書き込みます。
+
 `docs/intents/domains/` も併せて走査し、codiel が書いた `[ADR 候補]` を乖離の候補と並べて提示します。承認を得たものを ADR にし、その後で持続層側のエントリを参照形に縮めます。続けて `[GOTCHAS 候補]` を走査し、承認を得たものを台帳へ移して持続層から消します。
 
 ### `/metatron:audit`
 
-既存の ARCHITECTURE・rules・GOTCHAS を、書式と執筆規律の現行の規定に照らして監査します。metatron の更新で書式や規律が変わったときに、既存の文書を追随させるためのコマンドです。合わない箇所を当たった規定と一緒に一覧提示し、選ばれた分だけ書き直します。書き直すのは書き方だけで、書かれた事実は変えません。GOTCHAS のエントリは `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効なときだけ対象にします。ADR のエントリは書き換えられないため、合わない箇所を報告するだけです。
+既存の ARCHITECTURE・GOTCHAS を、書式と執筆規律の現行の規定に照らして監査します。metatron の更新で書式や規律が変わったときに、既存の文書を追随させるためのコマンドです。合わない箇所を当たった規定と一緒に一覧提示し、選ばれた分だけ書き直します。書き直すのは書き方だけで、書かれた事実は変えません。GOTCHAS のエントリは `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効なときだけ対象にします。ADR のエントリは書き換えられないため、合わない箇所を報告するだけです。
 
 ## CLI
 
@@ -42,13 +44,12 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマンド> [オプション]
 ```
 
-絶対パスは毎セッションの注入文と、直接編集を拒否したときのメッセージに載ります。インストール位置を自分で調べる必要はありません。
+絶対パスは SessionStart の案内文と、直接編集を拒否したときのメッセージに載ります。インストール位置を自分で調べる必要はありません。
 
 | サブコマンド | 種別 | 概要 |
 | --- | --- | --- |
 | `get config` | 読 | 解決済みの絶対パス、既定値が適用された項目、拒否された設定値 |
 | `get architecture [--section <見出し>]` | 読 | 全文またはセクション単位の取得 |
-| `get rules [--name <名前>]` | 読 | 3 ファイルの内容と存在状況、または指定ファイルの本文 |
 | `get domains` | 読 | ドメインマップの構造化取得(パースの成否と理由も返す) |
 | `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 | 台帳の取得・検索 |
 | `get gotchas-template` | 読 | 台帳の雛形と既存台帳の状態を取得 |
@@ -56,11 +57,10 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | `scan` | 読 | コードベース解析の事実を返す(書き込みなし) |
 | `diff-architecture` | 読 | 現行 ARCHITECTURE との乖離候補と、技術スタック・コマンドの定義のありかを返す |
 | `stage-architecture --input <path>` | 段階 | セクション更新案を受け取り、書かずに差分と `stagingId` を返す |
-| `stage-rules --input <path>` | 段階 | rules 1 ファイルの更新案を受け取り、書かずに差分と `stagingId` を返す |
 | `stage-adr --input <path>` | 段階 | ADR の追加・状態変更を段階化する(採番は CLI が行う) |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して書き込む |
-| `commit-rules --staging-id <id>` | 書 | `stagingId` を消費して rules 1 ファイルを書き込む |
 | `init-gotchas` | 書 | 内容のある既存台帳を上書きせず、空の台帳を雛形から生成する |
+| `link-claude-md` | 書 | `CLAUDE.md` へ ARCHITECTURE・GOTCHAS の @メンションを追記する(既にあれば何もしない) |
 | `append-gotcha --input <path>` | 書 | エントリを先頭に挿入する(採番は CLI が行う) |
 | `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由>` | 書 | 既存エントリにタグを付与する(本文は不変) |
 | `stage-gotcha --input <path>` | 段階 | 既存エントリの書き換え案を受け取り、書かずに差分と `stagingId` を返す(監査で使う) |
@@ -72,19 +72,18 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 
 ### なぜ CLI を通すのか
 
-書式検証・採番と、GOTCHAS を消さず差分の承認なしに書き換えないという規律を、AI への指示ではなく機械で保証するためです。指示は合理化して破られますが、CLI しか書き込み口が無ければ、壊れたドメインマップは書けず、連番は衝突せず、GOTCHAS の既存エントリは消えません。ARCHITECTURE と rules の更新、GOTCHAS のエントリの書き換えにそれぞれ `stage-*` → `commit-*` の 2 段階を課しているのも同じ理由で、これらには差分を計算せずに書き込む経路がコマンド体系上存在しません(`stagingId` は単回使用、既定 30 分で失効し、その間にファイルが変化していれば commit は失敗します)。
+書式検証・採番と、GOTCHAS を消さず差分の承認なしに書き換えないという規律を、AI への指示ではなく機械で保証するためです。指示は合理化して破られますが、CLI しか書き込み口が無ければ、壊れたドメインマップは書けず、連番は衝突せず、GOTCHAS の既存エントリは消えません。ARCHITECTURE の更新と GOTCHAS のエントリの書き換えにそれぞれ `stage-*` → `commit-*` の 2 段階を課しているのも同じ理由で、これらには差分を計算せずに書き込む経路がコマンド体系上存在しません(`stagingId` は単回使用、既定 30 分で失効し、その間にファイルが変化していれば commit は失敗します)。
 
 ### 長い入力は `--input <path>` で渡す
 
 書き込み系サブコマンドの入力 JSON は、一時ファイルに書いてパスで渡します。引数に直接埋めると引数長の上限に当たり、本文中の引用符・バッククォート・`$`・改行がシェルに解釈されて壊れるためです。ファイルへの書き込みは Write ツールが担うのでシェルを一切通らず、CLI に渡るのはパス 1 個だけになります。CLI は読み取り後に一時ファイルを削除しません(失敗時に内容を確認できるようにするためです)。出力は常に JSON を stdout へ返します。読み取り系は「読めなかった」も事実として返すため常に exit 0、書き込み系は拒否・失敗で非 0 になり、理由は JSON の `error` に入ります。
 
-## 3 つのイベントに掛ける 2 つのスクリプト
+## 2 つのイベントに掛ける 2 つのスクリプト
 
 | hook | 役割 |
 | --- | --- |
-| **SessionStart**(`scripts/inject-context.mjs`) | ARCHITECTURE の内容、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意をセッション開始時に注入します。ARCHITECTURE・ADR・rules の更新は、CLI の書き込み手順を示さず `updating-architecture` スキルの起動へ誘導します。予算を超える場合は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、CLI 案内・記録のタイミング・委譲の注意は削りません |
-| **SubagentStart**(`scripts/inject-context.mjs`) | SessionStart と同じスクリプトが、入力のイベント名を見て、サブエージェント向けに ARCHITECTURE・ADR 一覧・GOTCHAS を注入します。CLI 案内は載せず、載せきれない部分は文書のパスを Read する案内にします。文書が 1 つも無いときは何も出しません。縮退の順と `injection` の設定は SessionStart と共通です |
-| **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS / rules 3 ファイルへの直接編集を拒否します。ARCHITECTURE と rules は `updating-architecture` スキルの起動へ誘導し、GOTCHAS は CLI の呼び出し方を案内します。どの拒否にも CLI の絶対パスが載ります |
+| **SessionStart**(`scripts/inject-context.mjs`) | CLI の絶対パス、記録のタイミング、委譲の依頼文への注意を案内します。ARCHITECTURE・ADR の更新は、CLI の書き込み手順を示さず `updating-architecture` スキルの起動へ誘導します。旧 rules が残っているときと、`CLAUDE.md` に @メンションが欠けているときは、`/metatron:update` での対応を促します。文書の本文は注入しません |
+| **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE / GOTCHAS への直接編集を拒否します。ARCHITECTURE は `updating-architecture` スキルの起動へ誘導し、GOTCHAS は CLI の呼び出し方を案内します。どの拒否にも CLI の絶対パスが載ります |
 
 ### 拒否の範囲(正直な限界)
 
@@ -94,31 +93,25 @@ PreToolUse hook が拒否するのは **Edit / Write / NotebookEdit ツール経
 - **人間のエディタでの編集**。hook は AI のツール呼び出しにのみ介在します。人間が普通に読み書きできることは Markdown で保存している目的そのものであり、これは正しい挙動です。
 - **hook 自身が失敗したとき**。metatron の不具合であらゆる編集が止まる損害のほうが大きいため、素通しします(フェイルオープン)。
 - **`metatron.config.json` の書き換え**。設定ファイルは hook の対象外です。Bash などで正本のパスを別の場所へ向けると、元の場所の正本は保護されなくなります。
-- **symlink を通したパスの扱い**。hook はパスを 2 通りに解釈します。字句で畳んだパスか、symlink を辿った実体のパスのどちらかが正本に当たれば拒否します。一方、設定ファイルのパスの検査(ルートの外へ出ないか)と CLI の書き込み先・注入の読み込み先は字句で判定し、symlink の実体は見ません。
+- **symlink を通したパスの扱い**。hook はパスを 2 通りに解釈します。字句で畳んだパスか、symlink を辿った実体のパスのどちらかが正本に当たれば拒否します。一方、設定ファイルのパスの検査(ルートの外へ出ないか)と CLI の書き込み先は字句で判定し、symlink の実体は見ません。
 
 「回避を試みる AI を止める」機構ではなく、「知らずに直接編集する AI を正しい窓口へ導く」機構だと考えてください。ファイルは git 管理下にあるため、想定外の書き込みは差分で気づけます。
 
 ## 設定ファイル `metatron.config.json`(任意)
 
-リポジトリのルート直下に置くと、文書のパスと注入の挙動を変えられます。**無くても構いません。** その場合は全項目が既定値で動き、警告も出ません。
+リポジトリのルート直下に置くと、文書のパスを変えられます。**無くても構いません。** その場合は全項目が既定値で動き、警告も出ません。
 
 ```json
 {
   "version": 1,
   "paths": {
     "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md",
-    "rulesDir": ".claude/rules/metatron"
-  },
-  "injection": {
-    "enabled": true,
-    "gotchasRecentCount": 5,
-    "maxChars": 9000
+    "gotchas": "docs/GOTCHAS.md"
   }
 }
 ```
 
-上の内容は既定値そのものです。`paths.architecture` と `paths.gotchas` が 2 文書の位置、`paths.rulesDir` が rules 3 ファイルの置き場、`injection.enabled` が注入の有効・無効、`injection.gotchasRecentCount` が全文で注入する直近エントリ数、`injection.maxChars` が注入全体の文字数上限です。この 3 つは SessionStart と SubagentStart の両方に当たります。
+上の内容は既定値そのものです。`paths.architecture` と `paths.gotchas` が 2 文書の位置です。パスを変えたら、`CLAUDE.md` の @メンションも合わせて直します(`/metatron:update` が欠けを案内します)。旧バージョンの `paths.rulesDir` と `injection` は無視されます。
 
 - パスは設定ファイルのある位置(git リポジトリルートにフォールバック)からの**相対パス**です。絶対パスとルート外へ出るパスは拒否され、その項目だけ既定値に戻ります。ルートの外かどうかは字句で判定し、symlink の実体がルートの外でも拒否しません。
 - 環境変数によるパス指定はありません。共有資産の位置は、リポジトリにコミットされる場所で宣言します。
@@ -130,8 +123,8 @@ ADR と GOTCHAS の記録は、既定では無効です。使うには次の環�
 
 | 変数名 | 用途 | 既定値 |
 | --- | --- | --- |
-| `AMATSUKA_METATRON_ENABLE_ADR` | ADR の記録(注入・`stage-adr`・ADR 候補の取り込み)の有効化 | 未設定(無効) |
-| `AMATSUKA_METATRON_ENABLE_GOTCHAS` | GOTCHAS の記録(注入・台帳の生成と追記・GOTCHAS 候補の取り込み)の有効化 | 未設定(無効) |
+| `AMATSUKA_METATRON_ENABLE_ADR` | ADR の記録(`stage-adr`・ADR 候補の取り込み・案内文)の有効化 | 未設定(無効) |
+| `AMATSUKA_METATRON_ENABLE_GOTCHAS` | GOTCHAS の記録(台帳の生成と追記・GOTCHAS 候補の取り込み・@メンションの追記・案内文)の有効化 | 未設定(無効) |
 
 値は前後の空白を除き、大文字小文字を区別せずに読みます。`1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外の値は無効です。
 
@@ -150,7 +143,7 @@ ADR と GOTCHAS の記録は、既定では無効です。使うには次の環�
 
 無効な側では、次が止まります。
 
-- SessionStart と SubagentStart の注入から、ADR 一覧(ADR)または GOTCHAS の目次と本文(GOTCHAS)と、記録を促す文面が消えます。
+- SessionStart の案内文から、無効な側の CLI と記録を促す文面が消えます。GOTCHAS が無効なら、`link-claude-md` は GOTCHAS の @メンションを追記しません。
 - 書き込みの CLI が `feature_disabled`(終了コード 1)で拒否されます。対象は、ADR では `stage-adr`・ADR を書く `commit-architecture`・`shrink-adr-candidate`、GOTCHAS では `init-gotchas`・`append-gotcha`・`tag-gotcha`・`remove-gotcha-candidate` です。
 - 各スキルが、無効な側の手順を飛ばします。無効な側の記録を求めると、変数の設定を案内して止まります。
 - codiel が出す候補も、同じ変数に従って無効な側は残しません。
@@ -165,7 +158,7 @@ ADR と GOTCHAS の記録は、既定では無効です。使うには次の環�
 
 ### Codiel
 
-Codiel は **metatron が無くても動きます。** `/codiel:init` はドメイン分割だけを聞き取って最小の ARCHITECTURE を自前で生成するフォールバックを持ちます。metatron を併用すると、`/metatron:init` がシステム概要・レイヤー構造・テスト方針・ADR まで含む豊かな前提を作り、Codiel はそれをそのまま利用します。両者が共有するのはファイルの書式だけで、Codiel が metatron のインストール位置を参照することはありません。
+Codiel は **metatron が無くても動きます。** `/codiel:init` はドメイン分割だけを聞き取って最小の ARCHITECTURE を自前で生成するフォールバックを持ちます。metatron を併用すると、`/metatron:init` がシステム概要・レイヤー構造・保護パス・テスト方針まで含む前提を作り、Codiel はそれをそのまま利用します。両者が共有するのはファイルの書式だけで、Codiel が metatron のインストール位置を参照することはありません。
 
 Codiel の `capturing-intent` スキルによる ASIS 探索も、ARCHITECTURE と GOTCHAS を材料に使います。ドメインマップは探索スコープの決定にも使えます。こちらもファイルを直読するだけで、metatron の CLI には依存しません。
 
@@ -173,4 +166,4 @@ Codiel の `capturing-intent` スキルによる ASIS 探索も、ARCHITECTURE �
 
 - `README.md`(このファイル): 利用者が読まなければこのプラグインを使えない情報
 - `docs/rationale.md`: 設計根拠(MCP サーバー化を撤回した経緯を含む)
-- `references/`: AI が実行時に読む正本(ARCHITECTURE / GOTCHAS / rules の書式、設定スキーマ、CLI の使い方、執筆規律)
+- `references/`: AI が実行時に読む正本(ARCHITECTURE / GOTCHAS の書式、設定スキーマ、CLI の使い方、執筆規律)
