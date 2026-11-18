@@ -7,7 +7,6 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ARCHITECTURE_HEADINGS } from "../lib/architecture.js"
-import { RULES_FILES } from "../lib/rules.js"
 
 /**
  * バンドル済み CLI(`<plugin-root>/scripts/metatron.mjs`)の絶対パス。
@@ -46,11 +45,6 @@ export const INPUT_SCHEMAS = {
       '{ mode: "status", id: "ADR-003", status: "採用" | "提案" | "廃止", reason, changedOn? }',
     note: "採番は CLI が行う。書き込みは commit-architecture --staging-id <id>。"
   },
-  "stage-rules": {
-    input: "{ name, body, reason? }",
-    names: [...RULES_FILES],
-    note: "body は `# 見出し` を含む完全なファイル内容。frontmatter は書けない。書き込みは commit-rules --staging-id <id>。"
-  },
   "append-gotcha": {
     input:
       '{ title, date?, task, mistake, cause, countermeasure, promotionCandidate: "Yes" | "No" }',
@@ -81,7 +75,6 @@ export const USAGE_LINES: readonly string[] = [
   "  get gotchas [--recent N | --id <ID> | --query <語>] [--exclude-tagged] [--promotion-candidates]",
   "  get gotchas-template",
   "  get adr [--id <ID> | --status <状態>]",
-  "  get rules [--name conventions|protected-paths|testing-policy]",
   "  scan",
   "  diff-architecture",
   "  scan-adr-candidates",
@@ -90,12 +83,10 @@ export const USAGE_LINES: readonly string[] = [
   "段階(拒否は非 0):",
   "  stage-architecture --input <path>",
   "  stage-adr --input <path>",
-  "  stage-rules --input <path>",
   "  stage-gotcha --input <path>",
   "",
   "書き込み(拒否・失敗は非 0):",
   "  commit-architecture --staging-id <id>",
-  "  commit-rules --staging-id <id>",
   "  commit-gotchas --staging-id <id>",
   "  init-gotchas",
   "  append-gotcha --input <path>",

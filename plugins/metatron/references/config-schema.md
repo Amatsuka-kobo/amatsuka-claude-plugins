@@ -18,8 +18,7 @@
   "version": 1,
   "paths": {
     "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md",
-    "rulesDir": ".claude/rules/metatron"
+    "gotchas": "docs/GOTCHAS.md"
   },
   "injection": {
     "enabled": true,
@@ -34,7 +33,6 @@
 | `version` | number | `1` | スキーマバージョン |
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
 | `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
-| `paths.rulesDir` | string | `.claude/rules/metatron` | metatron が管理する rules の置き場 |
 | `injection.enabled` | boolean | `true` | SessionStart と SubagentStart の注入の有効・無効。`false` で両方を止める |
 | `injection.gotchasRecentCount` | number | `5` | SessionStart と SubagentStart のどちらでも、全文で注入する直近エントリ数。0 以上の整数 |
 | `injection.maxChars` | number | `9000` | SessionStart と SubagentStart のどちらでも、注入全体の文字数上限。1 以上の整数 |
@@ -74,7 +72,7 @@
 
 ## パス解決
 
-- `paths.architecture` / `paths.gotchas` / `paths.rulesDir` は `docRoot` からの相対パスとして解決する。
+- `paths.architecture` / `paths.gotchas` は `docRoot` からの相対パスとして解決する。
 - 判定の前に区切り文字を `/` へ正規化する。
 - 絶対パスは拒否する。POSIX の先頭 `/`、Windows のドライブレター、UNC のいずれも絶対パスとみなす。
 - `..` で `docRoot` の外へ出るパスは拒否する。`docRoot` 自身を指すパスも拒否する。
@@ -87,10 +85,7 @@
 | --- | --- | --- |
 | ARCHITECTURE | `docs/ARCHITECTURE.md` | `docRoot`。設定で変更できる |
 | GOTCHAS | `docs/GOTCHAS.md` | `docRoot`。設定で変更できる |
-| rules | `.claude/rules/metatron/{conventions,protected-paths,testing-policy}.md` | `docRoot`。ディレクトリだけ設定で変更でき、3 つのファイル名は固定 |
 | intent 文書 | `docs/intents/YYYY-MM-DD-<slug>.md` | `repoRoot`(git ルート)。設定を持たない |
 | 持続層 | `docs/intents/domains/<領域>.md` | `repoRoot`(git ルート)。設定を持たない。置き場の正本は codiel `references/intent-format.md` |
 
-ARCHITECTURE と GOTCHAS と rules のパスを固定と前提にしない。参照するときは `get config` の出力から取る。
-
-`.claude/rules/` は Claude Code の起動ディレクトリを基準に読まれる。`docRoot` と起動ディレクトリの実体パスがずれていると metatron が書いた rules は読み込まれず、`get config` が `warnings` にそのずれを載せる。
+ARCHITECTURE と GOTCHAS のパスを固定と前提にしない。参照するときは `get config` の出力から取る。

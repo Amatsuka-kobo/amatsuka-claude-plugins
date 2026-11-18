@@ -1,10 +1,9 @@
-// `commit-architecture --staging-id <id>` と `commit-rules --staging-id <id>` と
-// `commit-gotchas --staging-id <id>`
+// `commit-architecture --staging-id <id>` と `commit-gotchas --staging-id <id>`
 // (契約 §11、設計書 §7-3・§7-4・§6-3)。
 //
 // staging を消費して書き込む処理は 1 つで、受け入れる `kind` だけが違う。
 // `commit-architecture` は stage-architecture と stage-adr の staging を、
-// `commit-rules` は stage-rules の、`commit-gotchas` は stage-gotcha の staging を受ける。取り違えは
+// `commit-gotchas` は stage-gotcha の staging を受ける。取り違えは
 // `staging_kind_mismatch` で拒否し、**staging を消費しない**。
 //
 // 書き込みは対象ファイルの `.lock` の下で行う(契約 §11 のロック表)。
@@ -38,7 +37,7 @@ export interface CommitContext {
 }
 
 interface CommitSpec {
-  command: "commit-architecture" | "commit-rules" | "commit-gotchas"
+  command: "commit-architecture" | "commit-gotchas"
   acceptedKinds: readonly StagingKind[]
   /** missing_staging_id と staging_kind_mismatch のメッセージに載せる案内。 */
   stageHint: string
@@ -147,14 +146,6 @@ export function runCommitArchitecture(ctx: CommitContext): void {
     acceptedKinds: ["architecture", "adr"],
     stageHint:
       "stage-architecture または stage-adr が返した stagingId を渡してください。"
-  })
-}
-
-export function runCommitRules(ctx: CommitContext): void {
-  runCommit(ctx, {
-    command: "commit-rules",
-    acceptedKinds: ["rules"],
-    stageHint: "stage-rules が返した stagingId を渡してください。"
   })
 }
 

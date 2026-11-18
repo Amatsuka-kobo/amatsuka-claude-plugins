@@ -21,7 +21,6 @@ import { fileURLToPath } from "node:url"
 import { loadConfig } from "./lib/config.js"
 import { emit, pass, readStdin } from "./lib/emit.js"
 import { ADR_ENV, GOTCHAS_ENV, readFeatures } from "./lib/features.js"
-import { RULES_FILES, rulesFilePath, rulesFileRelative } from "./lib/rules.js"
 
 // hook 自身の位置(import.meta.url)からプラグインルートを求め、
 // その配下の CLI の絶対パスを組み立てる。deny hook は CLI を実行しない。
@@ -232,16 +231,6 @@ function gotchasReason(
   ].join("\n")
 }
 
-function rulesReason(relative: string, cli: string): string {
-  return [
-    `${relative} は metatron の管理下にあり、直接編集できません(書式検証と差分確認のため)。`,
-    SKILL_LINE,
-    "現在の内容の確認:",
-    `  node ${cli} get rules`,
-    `CLI の絶対パスと入力の書式: node ${cli} get config`
-  ].join("\n")
-}
-
 try {
   const input = await readStdin()
   // Edit / Write は file_path、NotebookEdit は notebook_path を持つ。
@@ -266,18 +255,10 @@ try {
     caseInsensitive
   )
   const gotchasKey = comparisonKey(config.gotchasPath, caseInsensitive)
-  // 拒否対象は固定 3 ファイルのパスに限る(設計書 §10)。判定は既存 2 件と同じ
-  // 正規化キーの**厳密等価**であり、ディレクトリの前方一致はしない。
-  // これにより .claude/rules/metatron-extra/foo.md は誤検出されない(設計書 §4-1)。
-  const rulesTargets = RULES_FILES.map((name) => ({
-    key: comparisonKey(rulesFilePath(config, name), caseInsensitive),
-    relative: rulesFileRelative(config, name)
-  }))
   const cli = metatronCliPath()
 
   let hitArchitecture = false
   let hitGotchas = false
-  let hitRules: (typeof rulesTargets)[number] | undefined
   for (const raw of candidates) {
     // キーを 2 つ作り、どちらかが正本に当たれば拒否する。1 つは生の結合パスを実体で辿り、
     // `..` をリンク先の親で畳む(OS が書き込む先)。もう 1 つは path.resolve で字句で畳む。
@@ -291,7 +272,6 @@ try {
     for (const key of keys) {
       if (key === architectureKey) hitArchitecture = true
       if (key === gotchasKey) hitGotchas = true
-      hitRules ??= rulesTargets.find((target) => target.key === key)
     }
   }
 
@@ -306,8 +286,6 @@ try {
 
   if (hitGotchas)
     emit("deny", gotchasReason(config.gotchasRelative, cli, features.gotchas))
-
-  if (hitRules !== undefined) emit("deny", rulesReason(hitRules.relative, cli))
 
   pass()
 } catch {

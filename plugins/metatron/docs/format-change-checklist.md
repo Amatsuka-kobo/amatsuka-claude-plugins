@@ -25,15 +25,6 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] `plugins/metatron/src/lib/adr.ts` の散文の検査(`rejectStructuralLines`)と全文の読み直し(`verifyAdrResult`)、`references/cli-usage.md` の `stage-adr` のエラーコード
 - [ ] `plugins/metatron/scripts/` を `pnpm run build` で再生成する
 
-## rules の書式(`references/rules-format.md`)
-
-- [ ] `plugins/metatron/src/lib/rules.ts` の `RULES_FILES` / `RULES_ADMIN_NOTICE` / `prepareRulesUpdate` の検証
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §5
-- [ ] `plugins/metatron/references/rules-format.md`
-- [ ] `plugins/metatron/docs/RULES.example.md`
-- [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` のドラフト単位
-- [ ] `plugins/metatron/src/__test__/section-reference-inventory.test.ts` の検出語(rules の 3 ファイル名を含む)
-
 ## GOTCHAS の書式(`references/gotchas-format.md`)
 
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §7
@@ -62,8 +53,8 @@ prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂�
 
 - [ ] 削る基準・残す基準・書き方の基準・引くための記述の例外を、prompt-smith の現行規律に追随させる
 - [ ] ARCHITECTURE・GOTCHAS・ADR 向けの特化(適用の強さ、例外の範囲、GOTCHAS エントリを 1〜3 文に収めること、ADR の 3 条件、図の基準)は変えない
-- [ ] 引くための記述の例外は ARCHITECTURE と rules の値を引く先のブロックにだけ当て、GOTCHAS エントリには当てない
-- [ ] `skills/{capturing-architecture,updating-architecture,recording-gotchas}/SKILL.md`、`references/{gotchas-format,rules-format}.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
+- [ ] 引くための記述の例外は ARCHITECTURE の値を引く先のブロックにだけ当て、GOTCHAS エントリには当てない
+- [ ] `skills/{capturing-architecture,updating-architecture,recording-gotchas}/SKILL.md`、`references/gotchas-format.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
 - [ ] `plugins/metatron/references/writing-discipline.md` の既存の `##` 見出しの行を変えない
 
 ## ADR の 3 条件(`references/writing-discipline.md` の「何を ADR にするか」セクション)

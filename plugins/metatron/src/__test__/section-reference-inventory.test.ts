@@ -13,7 +13,6 @@ import fs from "node:fs"
 import path from "node:path"
 import { expect, test } from "vitest"
 import { ARCHITECTURE_HEADINGS } from "../lib/architecture.js"
-import { RULES_FILES } from "../lib/rules.js"
 
 // plugins/metatron/src/__test__/ から 4 つ上がリポジトリルート。
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..")
@@ -40,7 +39,7 @@ const inventory = JSON.parse(
   )
 ) as { entries: InventoryEntry[] }
 
-const TERMS: string[] = [...ARCHITECTURE_HEADINGS, ...RULES_FILES]
+const TERMS: string[] = [...ARCHITECTURE_HEADINGS]
 
 function walkMd(dir: string, out: string[]): void {
   let entries: fs.Dirent[]

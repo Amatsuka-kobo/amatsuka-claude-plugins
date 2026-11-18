@@ -989,38 +989,3 @@ test("T8g: 実体が未作成の symlink → commit でリンク先にファイ�
     fs.readFileSync(path.join(root, "shared/ARCHITECTURE.md"), "utf8")
   ).toBe("新規\n")
 })
-
-test('T9: kind: "rules" の staging が作成・読み取り・commit でき、単一ターゲットの保証が保たれる', () => {
-  const root = mkProject()
-  const target = path.join(
-    root,
-    ".claude",
-    "rules",
-    "metatron",
-    "conventions.md"
-  )
-
-  const staged = createStaging({
-    projectRoot: root,
-    kind: "rules",
-    targetPath: target,
-    nextContent: "# 規約\n\n本文\n"
-  })
-  expect(staged.ok).toBe(true)
-  if (!staged.ok) return
-
-  const found = readStaging(root, staged.stagingId)
-  expect(found.ok).toBe(true)
-  if (!found.ok) return
-  expect(found.record.kind).toBe("rules")
-
-  const committed = commitStaging({
-    projectRoot: root,
-    stagingId: staged.stagingId
-  })
-  expect(committed.ok).toBe(true)
-  if (!committed.ok) return
-  expect(committed.kind).toBe("rules")
-  expect(committed.path).toBe(target)
-  expect(fs.readFileSync(target, "utf8")).toBe("# 規約\n\n本文\n")
-})
