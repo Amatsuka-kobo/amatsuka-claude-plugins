@@ -56,15 +56,17 @@ describe("直訳語", () => {
   test.each([
     ["literal:版", "新しい版で"],
     ["literal:段", "2 段目"],
-    ["literal:緑", "テストが緑になる"]
+    ["literal:緑", "テストが緑になる"],
+    ["literal:道具", "計測の道具を作る"],
+    ["literal:道具", "道具の異常終了を待つ"]
   ])("%s が「%s」に当たる", (id, text) => {
     expect(hitIds(literalRules, text)).toContain(id)
   })
 
-  test("直訳語の規則は 9 本で、規則の id は重複しない", () => {
+  test("直訳語の規則は 10 本で、規則の id は重複しない", () => {
     const ids = rules.map((r) => r.id)
     expect(new Set(ids).size).toBe(ids.length)
-    expect(literalRules).toHaveLength(9)
+    expect(literalRules).toHaveLength(10)
     expect(literalRules.map((r) => r.id)).toEqual(
       expect.arrayContaining(["literal:段", "literal:契機", "literal:節"])
     )
@@ -122,7 +124,16 @@ describe("直訳語", () => {
   })
 
   test("漢字が隣接する複合語の一部には当たらない", () => {
-    for (const text of ["確定版", "出版", "段階", "手段", "凍結文書群"])
+    for (const text of [
+      "確定版",
+      "出版",
+      "段階",
+      "手段",
+      "凍結文書群",
+      "道具箱",
+      "仕事道具",
+      "小道具"
+    ])
       expect(hitIds(literalRules, text), text).toEqual([])
   })
 })

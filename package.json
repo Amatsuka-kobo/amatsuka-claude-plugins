@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",
+    "test:changed": "bash scripts/test-changed.sh",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write ."
