@@ -4,7 +4,7 @@
 node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 ```
 
-CLI の絶対パスは `get config` の出力の `cli.path`、または deny hook の拒否メッセージから取る。インストール先を推測して組み立てない。
+CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cli.path`、または deny hook の拒否メッセージから取る。インストール先を推測して組み立てない。
 
 ## サブコマンド
 

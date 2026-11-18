@@ -8,7 +8,7 @@
     "should_trigger": true
   },
   {
-    "query": "AI が既存の ARCHITECTURE の古い説明を正しいものとして扱い、実装と違う場所に変更を加えようとしています。実装と rules を突き合わせて不一致を洗い出し、ARCHITECTURE と必要な rules を整合するよう更新してください。",
+    "query": "AI が既存の ARCHITECTURE の古い説明を正しいものとして扱い、実装と違う場所に変更を加えようとしています。実装と突き合わせて不一致を洗い出し、ARCHITECTURE を実装と整合するよう更新してください。",
     "should_trigger": true
   },
   {
@@ -16,11 +16,11 @@
     "should_trigger": true
   },
   {
-    "query": "`.claude/settings.json` の設定を変更する相談に見えますが、`plugins/*/dist/` を直接変更できない運用へ切り替えました。`harness-docs/ARCHITECTURE.md` の `## 保護パス` と各領域の責務を、rules と実装を突き合わせて見直し、必要な記述を更新してください。",
+    "query": "`.claude/settings.json` の設定を変更する相談に見えますが、`plugins/*/dist/` を直接変更できない運用へ切り替えました。`harness-docs/ARCHITECTURE.md` の `## 保護パス` と各領域の責務を、実装と突き合わせて見直し、必要な記述を更新してください。",
     "should_trigger": true
   },
   {
-    "query": "AI が保護すべき領域を把握できず、直接変更してはいけない場所を触ろうとしています。現行の rules と実装上の管理方法を確認し、ARCHITECTURE の `## 保護パス` と対応する rules を更新して、保護対象と変更方法を一致させてください。",
+    "query": "セッションの冒頭で `.claude/rules/metatron/` が残っていると案内されました。中の保護パスとテスト方針は ARCHITECTURE の該当セクションへ、規約は CLAUDE.md へ移して、旧ファイルは片付けたいです。",
     "should_trigger": true
   },
   {
@@ -32,7 +32,7 @@
     "should_trigger": true
   },
   {
-    "query": "`infra/terraform/` は運用上、直接変更を受け付けない範囲になったのに、ARCHITECTURE と rules の `## 保護パス` に反映されていません。実際の管理方法と他の一覧を確認し、変更を制限する領域の記述を整合させてください。",
+    "query": "`infra/terraform/` は運用上、直接変更を受け付けない範囲になったのに、ARCHITECTURE の `## 保護パス` に反映されていません。実際の管理方法と他の一覧を確認し、変更を制限する領域の記述を整合させてください。",
     "should_trigger": true
   },
   {
@@ -44,7 +44,7 @@
     "should_trigger": false
   },
   {
-    "query": "`/codiel:init` が生成した ARCHITECTURE がドメインマップ 1 節だけの最小構成です。ここから技術スタック・レイヤー構造・規約まで一気に起こして、まともなアーキ文書に育てたい。",
+    "query": "`/codiel:init` が生成した ARCHITECTURE がドメインマップ 1 節だけの最小構成です。ここから技術スタック・レイヤー構造・テスト方針まで一気に起こして、まともなアーキ文書に育てたい。",
     "should_trigger": false
   },
   {

@@ -1,9 +1,9 @@
 ---
 name: capturing-architecture
-description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジェクトで初版を作るとき、ドメインマップだけの最小構成に節を足して通常の構成へ育てるときに必ず使用する。「アーキ文書を作って」「初期化したい」「全体像の文書が無い」「この構成をドキュメントに起こして」のような依頼が該当する。規約・保護パス・テスト方針の rules 3 ファイルと失敗の台帳も併せて作る。既にある文書と実装の乖離を直す依頼は別のスキルが担当する。
+description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジェクトで初版を作るとき、ドメインマップだけの最小構成に節を足して通常の構成へ育てるときに必ず使用する。「アーキ文書を作って」「初期化したい」「全体像の文書が無い」「この構成をドキュメントに起こして」のような依頼が該当する。保護パス・テスト方針と失敗の台帳も併せて作る。既にある文書と実装の乖離を直す依頼は別のスキルが担当する。
 ---
 
-# ARCHITECTURE と rules と GOTCHAS の初回生成
+# ARCHITECTURE と GOTCHAS の初回生成
 
 ## 目的
 
@@ -13,19 +13,19 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 
 - CLI の呼び出しは `../../references/cli-usage.md` に従う。
 - ARCHITECTURE のセクション構成と書式は `../../references/architecture-format.md` に従う。
-- rules の 3 ファイルの内容と書式は `../../references/rules-format.md` に従う。
 - ドラフトの文体は `../../references/writing-discipline.md` に従い草案を書いたのち、サブエージェントに同じ規律を守った上でより簡潔にさせる。
 
 ## CLI の呼び出し
 
 - 実行するコマンド行は `node <CLI の絶対パス> <サブコマンド>` の形にする。
-- CLI の絶対パスは、セッション開始時に注入された案内か、文書の直接編集が拒否されたときのメッセージに現れる。コンテキストに現れたものをそのまま使う。
+- CLI の絶対パスは、SessionStart の hook が出す案内文か、文書の直接編集が拒否されたときのメッセージに現れる。コンテキストに現れたものをそのまま使う。`get config` の `cli.path` も同じ値を返す。
 - 現れていないときはユーザーに絶対パスを尋ねる。インストール先を推測して組み立てない。
 - `--input <path>` に渡す JSON は Write ツールで一時ファイルへ書いてから渡す。
 - 引数へ本文を直接埋め込まず、一時ファイルのパスだけを渡す。
 - ヒアドキュメントで stdin へ流さず、`--input` でパスを渡す。
-- ARCHITECTURE と rules の書き込みは CLI 経由だけで行う。Edit / Write で直接書き換えない。
+- ARCHITECTURE の書き込みは CLI 経由だけで行う。Edit / Write で直接書き換えない。
 - GOTCHAS の雛形の生成は `init-gotchas` だけで行う。Write / Edit で書かない。
+- CLAUDE.md への @メンションの追記は `link-claude-md` だけで行う。Edit / Write で書かない。
 
 ## 記録の有効・無効
 
@@ -42,23 +42,23 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - [ ] 2. 事実の収集(`scan`)
 - [ ] 3. ドラフトの起草
 - [ ] 4. 対話ウォークスルー
-- [ ] 5. stage(`stage-architecture` 1 回・`stage-rules` 3 回)
-- [ ] 6. 提示と承認(合計 5 回。ARCHITECTURE 1・rules 3・GOTCHAS 1。GOTCHAS 無効なら 4 回)
-- [ ] 7. 書き込み(`commit-architecture` 1 回・`commit-rules` 3 回・`init-gotchas` 1 回。GOTCHAS 無効なら `init-gotchas` なし)
+- [ ] 5. stage(`stage-architecture` 1 回)
+- [ ] 6. 提示と承認(合計 2 回。ARCHITECTURE 1・GOTCHAS 1。GOTCHAS 無効なら 1 回)
+- [ ] 7. 書き込み(`commit-architecture` 1 回・`init-gotchas` 1 回。GOTCHAS 無効なら `init-gotchas` なし)
 - [ ] 8. ADR 候補の取り込み(`scan-adr-candidates`。ADR 無効なら飛ばす)
 - [ ] 9. GOTCHAS 候補の取り込み(`scan-gotcha-candidates`。GOTCHAS 無効なら飛ばす)
-- [ ] 10. 完了報告
+- [ ] 10. CLAUDE.md への @メンションの追記(承認 1 回・`link-claude-md`)
+- [ ] 11. 完了報告
 
 ## 1. 現状確認
 
-- `get config` で ARCHITECTURE の解決先パスと存在の有無、`rules.dir` と 3 ファイルそれぞれの `exists`、GOTCHAS の解決先パスと `exists`、`features` を確認する。
-- `get config` の `warnings` に docRoot と起動ディレクトリのずれが載っているときは、rules を書く前にユーザーへ伝える。
+- `get config` で ARCHITECTURE の解決先パスと存在の有無、GOTCHAS の解決先パスと `exists`、`features` を確認する。
+- `get config` の `warnings` に docRoot と起動ディレクトリのずれが載っているときは、書き込みの前にユーザーへ伝える。
 - ARCHITECTURE があれば `get architecture` で既存セクションの見出しと本文を取得する。
-- rules があれば `get rules` で既存の本文を取得する。
 - 既存の内容は「既存の内容」としてウォークスルーに載せ、残りの単位を埋める。
 - 既存の内容を勝手に上書きしない。書き換えが要ると判断したときは、変更案を提示してその単位単独で承認を得る。
-- 対象の 9 単位(下記)がすべて埋まっており、かつ GOTCHAS の台帳に内容があるときは初回生成ではない。`/metatron:update` を案内して終了する。
-- 9 単位が埋まっていて GOTCHAS の台帳だけが無い(または空である)ときは、`features.gotchas` が `true` なら手順 2 から 5 を飛ばし、手順 6 と 7 の GOTCHAS の分だけを行う。`false` なら `/metatron:update` を案内して終了する。
+- 対象の 8 単位(下記)がすべて埋まっており、かつ GOTCHAS の台帳に内容があるときは初回生成ではない。`/metatron:update` を案内して終了する。
+- 8 単位が埋まっていて GOTCHAS の台帳だけが無い(または空である)ときは、`features.gotchas` が `true` なら手順 2 から 5 を飛ばし、手順 6 と 7 の GOTCHAS の分と手順 10 を行う。`false` なら `/metatron:update` を案内して終了する。
 
 ## 2. 事実の収集
 
@@ -69,7 +69,7 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 
 ## 3. ドラフトの起草
 
-対象は次の 9 単位とする。
+対象は次の 8 単位とする。
 
 | ドラフト単位 | ドラフトの主な材料 |
 | --- | --- |
@@ -79,13 +79,14 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 | ARCHITECTURE `## ディレクトリ構成と責務` | `tree` / `fileCount` |
 | ARCHITECTURE `## ドメインマップ` | `domainCandidates` |
 | ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。全件を載せず、よく使うものと使い分けの答えに絞る |
-| rules `conventions.md` | `../../docs/RULES.example.md` の記入例と既存の CLAUDE.md |
-| rules `protected-paths.md` | `../../docs/RULES.example.md` の記入例と既存の設定ファイル |
-| rules `testing-policy.md` | `../../docs/RULES.example.md` の記入例と既存の文書 |
+| ARCHITECTURE `## 保護パス` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
+| ARCHITECTURE `## テスト方針` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の文書 |
 
-- GOTCHAS の台帳はこの 9 単位に含めない。`features.gotchas` が `true` のとき、手順 6 で承認対象として扱う。
-- rules の 3 単位を `scan` の事実から起草しない。`../../docs/RULES.example.md` の記入例を既定のドラフトとして提示し、指摘を受けて直す。
-- rules の各ファイルは `# 見出し` から始まる完全な本文として起草し、見出しの直後に管理者表示行を置く。文言は `../../references/rules-format.md` にある。
+- GOTCHAS の台帳はこの 8 単位に含めない。`features.gotchas` が `true` のとき、手順 6 で承認対象として扱う。
+- `## 保護パス` と `## テスト方針` を `scan` の事実から起草しない。`../../docs/ARCHITECTURE.example.md` の該当セクションの記入例を型にして既定のドラフトを作り、指摘を受けて直す。
+- docRoot に旧 rules の `.claude/rules/metatron/` が残っているときは、その `protected-paths.md` と `testing-policy.md` の本文を `## 保護パス` と `## テスト方針` の材料にする。本文中の `##` 以下の見出しは 1 段下げて使う。
+- 旧ファイルの移行と削除はこのスキルで行わず、手順 11 で `/metatron:update` を案内する。
+- コーディング規約・ブランチ運用・DoD は起草しない。ARCHITECTURE ではなくプロジェクトの CLAUDE.md に書く内容である。
 - `## ADR 一覧` は初回生成で扱わない。ドラフトも空の節も作らず、次の単位へ進む。
 - `## システム概要` に Mermaid 図を置くかどうかを含めてウォークスルーで問う。置く場合は解析結果から起草し、粒度も問う。
 - ARCHITECTURE の各セクションの起草は `../../references/architecture-format.md` の該当節の要件を満たす形で行う。
@@ -104,13 +105,11 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - 既存の `## ドメインマップ` があるときは、既存の内容として提示し、変更の要否だけを問う。
 - ユーザーが「まとめて全部見る」を希望したときは、全単位を一度に提示してよい。手順 5 から 7 は省略しない。
 
-## 5. stage-architecture と stage-rules
+## 5. stage-architecture
 
-- 9 単位すべての確定を得てから stage を始める。
-- stage を要する対象は 4 つ(ARCHITECTURE 1・rules 3)である。GOTCHAS は stage を持たない。
-- stage を要する対象 1 つにつき、stage → 手順 6 の承認 → 手順 7 の commit を回す。4 対象分の stage をまとめて先に発行しない。
-- 確定した ARCHITECTURE の 6 セクションを 1 回の `stage-architecture --input <path>` にまとめて渡す。
-- rules は 1 ファイルにつき 1 回、合計 3 回の `stage-rules --input <path>` を発行する。1 回の staging に 2 ファイル以上は渡せない。
+- 8 単位すべての確定を得てから stage を始める。
+- stage を要する対象は ARCHITECTURE だけである。GOTCHAS は stage を持たない。
+- 確定した ARCHITECTURE の 8 セクションを 1 回の `stage-architecture --input <path>` にまとめて渡す。
 - `stage-architecture` の入力の形は次のとおり。
 
 ```json
@@ -125,34 +124,20 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - `heading` は書式のキーをそのまま書く。`##` を付けない。
 - `body` は見出し行を含まない本文だけにする。
 - `heading` に `ADR 一覧` を指定しない。
-- `heading` に `テスト方針` / `保護パス` / `規約` を指定しない。指定すると `unknown_heading` で返る。
+- `heading` に `規約` を指定しない。指定すると `unknown_heading` で返る。
 - `## ドメインマップ` の `body` には `` ```json metatron:domains `` で始まるフェンスブロックをそのまま含める。
-- `stage-rules` の入力の形は次のとおり。
-
-```json
-{
-  "name": "conventions",
-  "body": "<# 見出しから始まるファイル全体>",
-  "reason": "初回生成"
-}
-```
-
-- `name` は `conventions` / `protected-paths` / `testing-policy` のいずれかにする。
-- `body` はファイル全体とする。`# 見出し` の行と、その直後の管理者表示行を含める。
-- `body` に frontmatter を書かない。
 - 拒否されたら `error` と `message` を読み、該当の単位を直して stage をやり直す。拒否を握り潰して先へ進まない。
 
 ## 6. diff の全文提示と承認
 
-- 承認は対象ごとに得る。ARCHITECTURE 1 回と rules 3 回と GOTCHAS 1 回で合計 5 回になる。`features.gotchas` が `false` のときは GOTCHAS の分を除いた 4 回とする。
+- 承認は対象ごとに得る。ARCHITECTURE 1 回と GOTCHAS 1 回で合計 2 回になる。`features.gotchas` が `false` のときは GOTCHAS の分を除いた 1 回とする。
 - 提示の前に `diff.truncated` を見る。省略の有無を `diff.unified` の文面から判断しない。
 - `diff.truncated` が `false` のときは `diff.unified` を**全文**提示する。要約・抜粋・変更行数の報告に置き換えない。
 - `stage-architecture` の diff が `truncated` のときは `diff.unified` を提示に使わず、`diff.sections` の `before` / `after` をセクション単位で全文提示してから承認を得る。
 - セクション単位でも一度に提示しきれないときは、`diff.sections` の `heading` を一覧で示し、どのセクションから見るかをユーザーに尋ねる。
-- `stage-rules` の diff は `sections` を持たない。`truncated` になったときは本文を短くしてから手順 5 をやり直す。
 - `warnings` があれば併せて提示する。
 - 提示したうえで、書き込んでよいかの明示的な承認を得る。
-- `stage-architecture` / `stage-rules` が exit 0 で返ったことを承認と読み替えない。
+- `stage-architecture` が exit 0 で返ったことを承認と読み替えない。
 - 否認されたら該当単位のウォークスルーへ戻る。`stagingId` は使い回さない。stage からやり直す。
 
 ### GOTCHAS の台帳
@@ -160,25 +145,24 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 `features.gotchas` が `false` のときは、この小節を飛ばす。
 
 - `get gotchas-template` を実行する。分岐は `hasContent` で行う。`exists` では分岐しない(空のファイルがあるときに判断を誤る)。
-- `hasContent` が `true` のときは、提示も承認も行わない。既存の台帳がある旨を手順 10 で報告し、手順 7 の `init-gotchas` を実行しない。
+- `hasContent` が `true` のときは、提示も承認も行わない。既存の台帳がある旨を手順 11 で報告し、手順 7 の `init-gotchas` を実行しない。
 - `hasContent` が `false` のときは、返った `path` と `relative` と `template` を提示する。
 - 提示するのは次の 3 つとする。
   1. 台帳を作る絶対パスと、docRoot からの相対パス。
   2. `template` の**全文**。要約・抜粋に置き換えない。
-  3. 作成後は、この台帳への直接編集が PreToolUse hook に拒否されるようになること、および毎セッションの注入対象に入ることの 2 点。
+  3. 作成後は、この台帳への直接編集が PreToolUse hook に拒否されるようになること、および手順 10 で CLAUDE.md に @メンションを追記すると毎セッション読み込まれることの 2 点。
 - 求める承認は「この台帳をこのパスに作ってよいか」の可否 1 点とする。本文の良し悪しを問わない。
 - **本文はこの場では書き換えられないことを併せて伝える。** 雛形は書式の契約で固定されており、`init-gotchas` は本文を入力に取らない。
-- 本文の変更を求められたときは、台帳の作成を保留する。書式の契約の変更として扱い、このセッションでは作らない。保留したことを手順 10 で報告する。
+- 本文の変更を求められたときは、台帳の作成を保留する。書式の契約の変更として扱い、このセッションでは作らない。保留したことを手順 11 で報告する。
 - パスが意図と違うと指摘されたときは作成しない。`metatron.config.json` の `paths.gotchas` を直すのはユーザーの作業であり、このスキルは行わない。
 
-## 7. commit-architecture と commit-rules
+## 7. commit-architecture と init-gotchas
 
 - 承認を得た後に、その stage の出力の `next` に載っているコマンド行を実行する。
-- ARCHITECTURE の `stagingId` は `commit-architecture` へ、rules の `stagingId` は `commit-rules` へ渡す。取り違えると `staging_kind_mismatch` で拒否される。
-- `expired` で失敗したときは有効期限切れである。その対象について手順 5 からやり直す。
+- `expired` で失敗したときは有効期限切れである。手順 5 からやり直す。
 - `file_changed` で失敗したときは stage 後に対象ファイルが変化している。現行内容を読み直し、手順 5 からやり直す。
 - `features.gotchas` が `true` のとき、GOTCHAS の承認を得た後に `init-gotchas` を実行する。`--staging-id` も `--input` も取らない。
-- `already_exists` で拒否されたときは、承認を得てから実行するまでの間に台帳が作られている。**再実行しない。** 既存の台帳があることを手順 10 で報告する。
+- `already_exists` で拒否されたときは、承認を得てから実行するまでの間に台帳が作られている。**再実行しない。** 既存の台帳があることを手順 11 で報告する。
 - `lock_timeout` で拒否されたときは、同じ文書へ書く別プロセスの完了を待って再実行する。ロックファイルを手で消さない。
 
 ## 8. ADR 候補の取り込み
@@ -200,14 +184,28 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 - 候補が 1 件以上あれば、`../recording-gotchas/SKILL.md` の「持続層の GOTCHAS 候補の取り込み」に従う。台帳は手順 7 で作られているので、`append-gotcha` の追記先がある。
 - 台帳を作らなかったとき(承認が得られなかったとき、保留したとき)は、`append-gotcha` が雛形ごと台帳を作るので、候補を移す前にそのことをユーザーに伝えて可否を確かめる。
 
-## 10. 完了報告
+## 10. CLAUDE.md への @メンションの追記
 
-- 書き込んだファイルのパスと、確定した単位の一覧を報告する。ARCHITECTURE のセクションと rules の 3 ファイルを分けて示す。
+ARCHITECTURE がまだ無いとき(手順 6 で否認されたとき)は、この手順を飛ばす。`link-claude-md` が `architecture_missing` で拒否する。
+
+- 追記する行は、`get config` の `architecture.relative` から `@<相対パス>` の形で組み立てる。`features.gotchas` が `true` で台帳に内容があるときは、`gotchas.relative` の行も加える。
+- 追記先は docRoot の `CLAUDE.md` とする。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` とし、各行のパスに `../` を付ける。どちらも無ければ `CLAUDE.md` が新しく作られる。
+- どちらかの CLAUDE.md の行頭に同じ @メンションが既にあるときは、その行を追記する行から外す。全部が既にあるときは、承認を求めずに手順 11 へ進む。
+- 追記先のパスと追記する行を示し、追記してよいかの明示的な承認を得る。
+- 承認を得てから `link-claude-md` を実行する。入力もオプションも取らない。
+- 返った `added` と `present` を手順 11 の報告に使う。
+- 否認されたときは追記しない。文書が読み込まれないことと、後から `/metatron:update` で追記できることを手順 11 で伝える。
+
+## 11. 完了報告
+
+- 書き込んだファイルのパスと、確定した単位の一覧を報告する。
 - 未記入のまま残した単位があれば一覧で報告する。
 - 無効な側の記録を飛ばしたときは、飛ばした記録の種別と、有効にする変数名を報告する。
 - GOTCHAS の台帳を作ったときは、そのパスを報告する。
 - GOTCHAS 候補を移さなかったときに限り、台帳は空であり、失敗を記録するときに `append-gotcha` でエントリが入ると報告する。
 - GOTCHAS 候補を移したときは、移した件数、付けたタグ、削除を保留した候補を報告する。
 - 既に台帳があって作らなかったとき、承認が得られず作らなかったときは、その事実と理由を報告する。
+- CLAUDE.md に追記した行、既にあった行、追記しなかったときはその理由を報告する。
+- 旧 rules の `.claude/rules/metatron/` が残っているときは、`/metatron:update` で移行することを案内する。
 - 「更新した(未コミット)。コミットするか」の確認を 1 行添える。
 - 呼び出し元のフローがコミットまでを担っているとき(ハーネスの run の一部として起動されたとき)は、この確認を添えない。
