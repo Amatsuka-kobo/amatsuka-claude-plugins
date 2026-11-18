@@ -82,7 +82,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | 連携モード | `repoSlug` が null でなく、かつ `ghAuthenticated` が true なら `github`。それ以外は `local`(GHES を含む) |
    | `imageUpload.ghAttach` | 連携モードが `local` なら `false`。`github` では `ghAttachSupported` が true のとき `true` |
    | `imageUpload.chrome` | 連携モードが `local` なら `false`。`github` ではセッションで `mcp__claude-in-chrome__*` のツールが使えるとき `true` |
-   | `knowledgeTarget` | `projectDocs.architecture` が null でなく、かつ `projectDocs.metatronRules` が true なら `metatron`、それ以外は `intents` |
+   | `knowledgeTarget` | `projectDocs.architecture` が null でなく、かつ `projectDocs.metatronConfig` が true なら `metatron`、それ以外は `intents` |
    | ADR 候補 | `knowledgeRecording.adr` が true なら `on`、false なら `off` |
    | GOTCHAS 候補 | `knowledgeRecording.gotchas` が true なら `on`、false なら `off` |
 

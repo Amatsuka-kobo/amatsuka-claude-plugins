@@ -13,7 +13,6 @@ var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-var DEFAULT_RULES_DIR = ".claude/rules/metatron";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -168,20 +167,6 @@ function resolveDocPaths(startDir2) {
     warnings
   };
 }
-function resolveRulesDir(startDir2) {
-  const { docRoot: docRoot2, paths, warnings } = loadPathsConfig(startDir2);
-  return {
-    docRoot: docRoot2,
-    rulesDir: resolveConfiguredPath(
-      docRoot2,
-      paths?.rulesDir,
-      DEFAULT_RULES_DIR,
-      "rulesDir",
-      warnings
-    ),
-    warnings
-  };
-}
 var DOMAINS_MARKER = "metatron:domains";
 var FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 var FENCE_CLOSE_RE = /^ {0,3}(`+|~+)[ \t]*$/;
@@ -300,15 +285,6 @@ function isFile(target) {
 function isDir(target) {
   try {
     return fs2.statSync(target).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isReadableDir(target) {
-  if (!isDir(target)) return false;
-  try {
-    fs2.accessSync(target, fs2.constants.R_OK | fs2.constants.X_OK);
-    return true;
   } catch {
     return false;
   }
@@ -446,7 +422,7 @@ var docPaths = resolveDocPaths(startDir);
 var docRoot = docPaths.docRoot;
 var architecturePath = isFile(docPaths.architecture) ? docPaths.architecture : null;
 var gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null;
-var metatronRules = isReadableDir(resolveRulesDir(startDir).rulesDir);
+var metatronConfig = isFile(path2.join(docRoot, DOC_CONFIG_FILENAME));
 var domains = readDomainsResult(startDir);
 var configWarnings = [...docPaths.warnings, ...domains.warnings];
 var intentsDirPath = repoRoot ? path2.join(repoRoot, "docs", "intents") : null;
@@ -509,7 +485,7 @@ console.log(
       projectDocs: {
         architecture: architecturePath,
         gotchas: gotchasPath,
-        metatronRules,
+        metatronConfig,
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0
       },

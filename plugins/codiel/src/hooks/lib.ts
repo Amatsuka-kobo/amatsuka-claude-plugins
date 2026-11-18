@@ -113,7 +113,6 @@ export const DOC_CONFIG_FILENAME = "metatron.config.json"
 export const DOC_CONFIG_SUPPORTED_VERSION = 1
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
 export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
-export const DEFAULT_RULES_DIR = ".claude/rules/metatron"
 
 export interface DocPaths {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -292,7 +291,7 @@ function fallbackDocRoot(startDir?: string): string {
 }
 
 // 設定の読み込みと検証(トップレベルの型・未知の version・paths の型)。
-// resolveDocPaths と resolveRulesDir が共有する。例外を投げない。
+// resolveDocPaths が使う。例外を投げない。
 function loadPathsConfig(startDir?: string): {
   docRoot: string
   paths: Record<string, unknown> | undefined
@@ -381,35 +380,6 @@ export function resolveDocPaths(startDir?: string): DocPaths {
       paths?.gotchas,
       DEFAULT_GOTCHAS_PATH,
       "gotchas",
-      warnings
-    ),
-    warnings
-  }
-}
-
-export interface RulesDir {
-  /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
-  docRoot: string
-  /** metatron の rules ディレクトリの絶対パス。 */
-  rulesDir: string
-  /** resolveDocPaths と同じ規則で積む既定値へ落とした理由。 */
-  warnings: string[]
-}
-
-/**
- * metatron の rules ディレクトリ(`paths.rulesDir`。既定は `.claude/rules/metatron`)の解決。
- * 設定の読み込みと検証は resolveDocPaths と同じ経路を通る。
- * metatron の `src/lib/config.ts` と同じく、未知の version・壊れた設定では既定の場所を返す。
- */
-export function resolveRulesDir(startDir?: string): RulesDir {
-  const { docRoot, paths, warnings } = loadPathsConfig(startDir)
-  return {
-    docRoot,
-    rulesDir: resolveConfiguredPath(
-      docRoot,
-      paths?.rulesDir,
-      DEFAULT_RULES_DIR,
-      "rulesDir",
       warnings
     ),
     warnings

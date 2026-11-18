@@ -63,7 +63,6 @@ var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
 var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-var DEFAULT_RULES_DIR = ".claude/rules/metatron";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -222,20 +221,6 @@ function resolveDocPaths(startDir) {
     warnings
   };
 }
-function resolveRulesDir(startDir) {
-  const { docRoot, paths, warnings } = loadPathsConfig(startDir);
-  return {
-    docRoot,
-    rulesDir: resolveConfiguredPath(
-      docRoot,
-      paths?.rulesDir,
-      DEFAULT_RULES_DIR,
-      "rulesDir",
-      warnings
-    ),
-    warnings
-  };
-}
 var DOMAINS_MARKER = "metatron:domains";
 var FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 var FENCE_CLOSE_RE = /^ {0,3}(`+|~+)[ \t]*$/;
@@ -352,7 +337,6 @@ function findMainRoot(startDir) {
 export {
   DEFAULT_ARCHITECTURE_PATH,
   DEFAULT_GOTCHAS_PATH,
-  DEFAULT_RULES_DIR,
   DOC_CONFIG_FILENAME,
   DOC_CONFIG_SUPPORTED_VERSION,
   DOMAINS_MARKER,
@@ -368,6 +352,5 @@ export {
   readDomainsResult,
   readStdin,
   resolveDocPaths,
-  resolvePhysicalPath,
-  resolveRulesDir
+  resolvePhysicalPath
 };

@@ -707,12 +707,12 @@ GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron �
 
 K12 は 2026-10-02 のユーザー決定で、正本は設計書 `harness-docs/design/2026-10-02-codiel-run-cost-design.md` にある。この決定で、codiel の指示層(`skills/`・`references/`・`commands/`)から 2 種類の規則を外した。1 つは ARCHITECTURE と GOTCHAS を読ませる規則で、もう 1 つはそれらに書き込ませる規則である。対象はオーケストレーターと委譲先の両方である。
 
-- ARCHITECTURE と GOTCHAS は metatron の資産である。読み方・書き方・更新の時点は metatron が SessionStart の注入と `.claude/rules/metatron/` で伝える。codiel が別に規則を持つと、同じ資産の扱いが 2 か所に分かれ、食い違ったときにどちらに従うかが決まらない。
+- ARCHITECTURE と GOTCHAS は metatron の資産である。読み方・書き方・更新の時点は metatron が伝える。ARCHITECTURE と GOTCHAS は CLAUDE.md の @メンションで読み込まれ、メインセッションも委譲先も CLAUDE.md 経由で読む。codiel が別に規則を持つと、同じ資産の扱いが 2 か所に分かれ、食い違ったときにどちらに従うかが決まらない。
 - 失敗の台帳への追記は metatron の担当になる。codiel は条件の判定・記録・退避の手順を持たない。
 
 残したのは次の 2 つだけである。
 
-1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`knowledgeTarget` の判定では ARCHITECTURE の有無と metatron の rules ディレクトリがあって読めるか(`projectDocs.metatronRules`)だけを使い、ARCHITECTURE の中身は読まない。
+1. §0 のドメインマップの抽出。`mapped` / `unscoped` の判定と guard-write の境界に使う。抽出のために ARCHITECTURE のパスを解決する手順は、この目的に限って残す。`knowledgeTarget` の判定では ARCHITECTURE の有無と docRoot の `metatron.config.json` の有無(`projectDocs.metatronConfig`)だけを使い、ARCHITECTURE の中身は読まない。
 2. review の単位に ARCHITECTURE のパスを渡すこと。`reviewing-diffs/references/doc.md` の観点が、ARCHITECTURE と実装の乖離を見るためである。作業の契約の「前提」の ARCHITECTURE の行は、review と再レビューの単位のときだけ書く。
 
 外した規則は、各フェーズの入力列の ARCHITECTURE・GOTCHAS、`implementing`・`writing-design-docs`・`preparing-design-agendas`・`writing-dev-plans`・`capturing-intent` の読む規則、finalize の乖離の一覧化、`references/failures.md` とそれを指す参照(Raguel の STOP・誤検知の退避・incident・fix-loop の設計漏れ)である。
@@ -741,7 +741,7 @@ K12 の直後の codiel は、run の中で起きた失敗を何も残さなか�
 
 Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
 codiel はこの 2 つに触れないので、rules にも書かない。metatron が有る環境では、これらの
-存在と扱い方は SessionStart の注入と `.claude/rules/metatron/` を通して伝わる。
+存在と扱い方は CLAUDE.md の @メンションと SessionStart の案内文を通して伝わる。
 
 文書の扱い:
 

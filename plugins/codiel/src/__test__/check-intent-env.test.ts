@@ -1239,72 +1239,22 @@ test("ケース 16f: 壊れた設定・未知の version・型不整合", () => 
   expectTwoWayMatch(typed, "paths の型不整合")
 })
 
-// projectDocs.metatronRules: resolveRulesDir の場所がディレクトリとして存在するか。
-test("metatronRules: rules ディレクトリの有無と paths.rulesDir・既定への落ち方", () => {
-  const rules = (dir: string): boolean =>
-    runScript(dir).projectDocs.metatronRules
+// projectDocs.metatronConfig: docRoot に metatron.config.json がファイルとしてあるか。
+test("metatronConfig: 設定ファイルの有無", () => {
+  const has = (dir: string): boolean =>
+    runScript(dir).projectDocs.metatronConfig
 
-  const none = gitRepo()
-  expect(rules(none), "rules ディレクトリが無い").toBe(false)
+  expect(has(gitRepo()), "設定ファイルが無い").toBe(false)
 
-  const def = gitRepo()
-  mkdir(def, ".claude/rules/metatron")
-  expect(rules(def), "既定の場所にある").toBe(true)
-
-  // ファイルはディレクトリではない。
   const file = gitRepo()
-  write(file, ".claude/rules/metatron", "x")
-  expect(rules(file), "ファイル").toBe(false)
+  write(file, "metatron.config.json", JSON.stringify({ version: 1 }))
+  expect(has(file), "設定ファイルがある").toBe(true)
 
-  const moved = gitRepo()
-  write(
-    moved,
-    "metatron.config.json",
-    JSON.stringify({ version: 1, paths: { rulesDir: "ai/rules" } })
-  )
-  mkdir(moved, ".claude/rules/metatron")
-  expect(rules(moved), "設定先が無く既定にだけある").toBe(false)
-  mkdir(moved, "ai/rules")
-  expect(rules(moved), "設定先にある").toBe(true)
-
-  // 絶対パス・ルート外は既定へ落ちる。
-  for (const bad of [path.join(os.tmpdir(), "x"), "../outside"]) {
-    const dir = gitRepo()
-    write(
-      dir,
-      "metatron.config.json",
-      JSON.stringify({ version: 1, paths: { rulesDir: bad } })
-    )
-    mkdir(dir, ".claude/rules/metatron")
-    expect(rules(dir), `既定へ落ちる: ${bad}`).toBe(true)
-  }
-
-  // 未知の version・壊れた設定は既定の場所を見る。
-  for (const cfg of [
-    JSON.stringify({ version: 99, paths: { rulesDir: "ai/rules" } }),
-    "{ not json"
-  ]) {
-    const dir = gitRepo()
-    write(dir, "metatron.config.json", cfg)
-    mkdir(dir, ".claude/rules/metatron")
-    expect(rules(dir), `既定の場所: ${cfg}`).toBe(true)
-  }
+  // ディレクトリはファイルではない。
+  const dirCase = gitRepo()
+  mkdir(dirCase, "metatron.config.json")
+  expect(has(dirCase), "ディレクトリ").toBe(false)
 })
-
-// root は権限を外しても読めるので、権限での判定を確かめられない(ケース 24 と同じ)
-test.skipIf(isRoot)(
-  "metatronRules: 読み取り権限の無い rules ディレクトリは false",
-  () => {
-    const dir = gitRepo()
-    const rulesDir = mkdir(dir, ".claude/rules/metatron")
-    fs.chmodSync(rulesDir, 0o000)
-    try {
-      expect(runScript(dir).projectDocs.metatronRules).toBe(false)
-    } finally {
-      fs.chmodSync(rulesDir, 0o755)
-    }
-  }
-)
 
 // ---------------------------------------------------------------------------
 // 契約 §1 / §4-3: 独立レビューが挙げた欠陥の回帰テスト

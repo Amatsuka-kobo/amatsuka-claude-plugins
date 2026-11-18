@@ -21,9 +21,9 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import {
+  DOC_CONFIG_FILENAME,
   readDomainsResult,
-  resolveDocPaths,
-  resolveRulesDir
+  resolveDocPaths
 } from "./hooks/lib.js"
 
 const GIT_TIMEOUT_MS = 5000
@@ -59,16 +59,6 @@ function isFile(target: string): boolean {
 function isDir(target: string): boolean {
   try {
     return fs.statSync(target).isDirectory()
-  } catch {
-    return false
-  }
-}
-
-function isReadableDir(target: string): boolean {
-  if (!isDir(target)) return false
-  try {
-    fs.accessSync(target, fs.constants.R_OK | fs.constants.X_OK)
-    return true
   } catch {
     return false
   }
@@ -276,9 +266,8 @@ const architecturePath = isFile(docPaths.architecture)
   ? docPaths.architecture
   : null
 const gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null
-// metatron の rules ディレクトリがあり、中を読めるか。knowledgeTarget の判定に使う。
-// 読めないディレクトリを true にすると、metatron へ写すと決めた後に写せない。
-const metatronRules = isReadableDir(resolveRulesDir(startDir).rulesDir)
+// docRoot に metatron.config.json があるか。knowledgeTarget の判定に使う。
+const metatronConfig = isFile(path.join(docRoot, DOC_CONFIG_FILENAME))
 
 const domains = readDomainsResult(startDir)
 // 契約 §1: 警告は経路を問わず返す。読み取り専用のこのスクリプトも黙って落とさない。
@@ -379,7 +368,7 @@ console.log(
       projectDocs: {
         architecture: architecturePath,
         gotchas: gotchasPath,
-        metatronRules,
+        metatronConfig,
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0
       },
