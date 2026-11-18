@@ -69,7 +69,7 @@ Manifest and sibling `package.json` versions were all in sync as of 2026-08-24.
 **metatron / codiel の連携** — 願い → intent → 実装という一続きの流れは codiel が受け持ち
 (2026-09-27 に上流の intent 用プラグインを吸収)、metatron がプロジェクトの前提と失敗知識を供給する。**互いに独立して動く。**
 codiel は metatron が無くても単体で完結し、ドメインマップが無い場合も `unscoped` モードで run を
-開始できる。metatron は単体で記録・注入として価値がある。
+開始できる。metatron は単体で記録として価値がある。
 
 **連携手段はファイル契約(ARCHITECTURE / GOTCHAS / intent 文書の書式)とモデルコンテキストの
 2 つだけ。** プラグイン間の依存宣言も、互いのインストール位置の参照も一切無い。したがって同じ規則が
@@ -81,8 +81,8 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.4.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新し毎セッション注入する。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。サブエージェントへも SubagentStart で注入する。
-  共有ライブラリ + CLI + hook(SessionStart・SubagentStart の注入と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
+- **metatron** (0.6.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新する。両文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。
+  共有ライブラリ + CLI + hook(SessionStart の案内と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
   .drawio + HTML. Details: `mem:basic_design/core`.

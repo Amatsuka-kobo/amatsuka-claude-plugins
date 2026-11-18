@@ -1,14 +1,18 @@
-`plugins/metatron` (0.5.2-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新し、
-毎セッション冒頭に注入するプラグイン。2026-08-16 新規追加(commit 1e4508b)。
+`plugins/metatron` (0.6.0-dev) — ARCHITECTURE / GOTCHAS を**独立資産**として記録・更新するプラグイン。
+2026-08-16 新規追加(commit 1e4508b)。0.6.0(2026-11-19、PR #41)で、扱う文書を ARCHITECTURE と GOTCHAS だけにした。
+旧 rules 3 ファイル(`.claude/rules/metatron/`)と、その CLI・config(`paths.rulesDir`)・guard・書式は撤去済み。
+保護パスとテスト方針は ARCHITECTURE のセクション、規約は CLAUDE.md に書く。
+両文書は CLAUDE.md の行頭の `@<パス>` で読み込ませ、hook で本文を注入しない(SubagentStart は撤去)。
+組み込みの Explore・Plan と `omitClaudeMd` のサブエージェントには ARCHITECTURE が届かないが、対応しないと決定済み。
 codiel が持っていた `docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` の管理をここへ切り出したもの。
 書式の正本は `mem:file_contract`。設計根拠は `plugins/metatron/docs/rationale.md`。
 
-This repository's architecture asset is `harness-docs/ARCHITECTURE.md` (added 2026-08); the
-SessionStart hook injects its full text rather than a summary.
+This repository's architecture asset is `harness-docs/ARCHITECTURE.md`; the repository CLAUDE.md
+imports it with `@harness-docs/ARCHITECTURE.md`. ADR and GOTCHAS recording are disabled here.
 
 ## C1 構成 — 常駐プロセスなし
 
-共有ライブラリ + CLI + deny hook + 注入 hook の 4 点だけで構成する。**MCP サーバーではない。**
+共有ライブラリ + CLI + deny hook + 案内 hook の 4 点だけで構成する。**MCP サーバーではない。**
 CLI も hook のスクリプト(2 本)もすべて短命プロセスなので「サーバーが起動していない」故障が原理的に起きない。
 MCP 化は設計段階で撤回済み(`docs/rationale.md`)。**MCP サーバー化を再提案しない。**
 
@@ -29,33 +33,32 @@ CLI が無価値という意味ではない。deny hook は「直接書かせな
 追記と承認つきの書き換えの規律・差分提示の強制は CLI が担う。位置づけは「回避を試みる AI を止める」ではなく
 「知らずに直接編集する AI を正しい窓口へ導く」。
 
-## 3 イベントに掛ける 2 本のスクリプト(`hooks/hooks.json`)
+## 2 イベントに掛ける 2 本のスクリプト(`hooks/hooks.json`)
 
 | hook | スクリプト | 挙動 |
 | --- | --- | --- |
-| SessionStart | `scripts/inject-context.mjs` | ARCHITECTURE 本体、GOTCHAS の目次と直近エントリ、CLI の絶対パス案内、記録のタイミング、委譲の依頼文への注意を注入。予算超過時は GOTCHAS → ADR 一覧 → ARCHITECTURE の順に段階縮退し、**CLI 案内・記録のタイミング・委譲の注意は削らない**。フェイルオープン |
-| SubagentStart | `scripts/inject-context.mjs`(SessionStart と同じ) | 入力の `hook_event_name` が `SubagentStart` のときサブエージェント向けを出す。ARCHITECTURE・ADR 一覧・GOTCHAS を注入し、CLI 案内と記録のタイミングは載せない。載せきれない部分は文書パスを Read する案内にする。文書が無ければ何も出さない。縮退と `injection` の設定は SessionStart と共通。フェイルオープン |
-| PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | 2 文書と rules 3 ファイルへの直接編集を拒否する。ARCHITECTURE と rules は `updating-architecture` スキルへ誘導し、GOTCHAS は書き込み CLI を案内する。どれも CLI の絶対パスを載せる。フェイルオープン |
+| SessionStart | `scripts/inject-context.mjs` | 文書の本文は注入しない。CLI の絶対パス、更新時の `updating-architecture` スキルの起動、記録のタイミング、委譲の注意を案内する。移行が要る状態(旧 rules の 3 ファイルが残る・CLAUDE.md の @メンションの欠け・`metatron.config.json` が無い)は `systemMessage` で画面にも出す。フェイルオープン |
+| PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | 2 文書への直接編集を拒否する。ARCHITECTURE は `updating-architecture` スキルへ誘導し、GOTCHAS は書き込み CLI を案内する。どれも CLI の絶対パスを載せる。フェイルオープン |
 
-**記録のタイミングは hook でなく SessionStart の注入文に置く**(作業の完了を hook で検出できないため。`recordingLines`。不採用案は `docs/rationale.md`)。
-**委譲の依頼文には ARCHITECTURE と GOTCHAS の原文も要約も写さない**(SubagentStart が注入するので。`delegationLines`)。
-どちらも文書があるときだけ載せ、`buildInitGuide` には入れない。
+**記録のタイミングは hook でなく SessionStart の案内文に置く**(作業の完了を hook で検出できないため。`recordingLines`。不採用案は `docs/rationale.md`)。
 
-**注入文と deny の理由文は、ARCHITECTURE・ADR・rules の書き込み手順(stage → commit)を載せず、`updating-architecture` スキルの起動へ誘導する**(2026-11-07、0.5.2-dev。`updateLines` と guard-docs の `SKILL_LINE`)。
-CLI の手順が完結した形で見えていると、AI はスキルを起動せずに CLI へ直行し、`diff-architecture`・`get rules`・草案のサブエージェント検査を飛ばしていた。
-description を直しても、この経路は変わらなかった。CLI の絶対パスは、読み取り系の行と `get config` の行に残す。
+**案内文と deny の理由文は、ARCHITECTURE・ADR の書き込み手順(stage → commit)を載せず、`updating-architecture` スキルの起動へ誘導する**(2026-11-07、0.5.2-dev。`updateLines` と guard-docs の `SKILL_LINE`)。
+CLI の手順が完結した形で見えていると、AI はスキルを起動せずに CLI へ直行し、`diff-architecture`・草案のサブエージェント検査を飛ばしていた。
 GOTCHAS の書き込み案内(`append-gotcha` など)は従来どおり CLI を示す。
 
 **ADR と GOTCHAS はオプトイン**(2026-10-08、ADR-015)。`src/lib/features.ts` の `readFeatures(env)` が
 `AMATSUKA_METATRON_ENABLE_ADR` / `AMATSUKA_METATRON_ENABLE_GOTCHAS` を読む(値は `1`/`true`/`on` で有効)。
-無効な側は注入(ADR 一覧・GOTCHAS・記録の促し)から外れ、書き込み CLI は `feature_disabled`(終了コード 1)で
+無効な側は案内文(CLI・記録の促し)から外れ、書き込み CLI は `feature_disabled`(終了コード 1)で
 入力を読む前に拒否する。`get adr`/`get gotchas` と guard-docs の拒否は残る。`get config` の `features` に判定が載る。
-両方有効の注入文は改修前とバイト単位で一致する。テストのヘルパは継承 env から 2 変数を消し、既定で両方有効を渡す。
 
-**SessionStart の注入は文書が 1 つも無くても CLI 案内を出す**(`buildInitGuide`。契約 §12 の限定)。
+**`link-claude-md`**(0.6.0、`src/lib/claude-md.ts`・`src/cli/claude-md.ts`)は CLAUDE.md へ @メンションを冪等に追記し、
+`metatron.config.json` が無ければ `wx` で `{ "version": 1 }` を先に作る(codiel がこのファイルの有無で metatron の利用を判定するため)。
+判定はルートの `CLAUDE.md` と `.claude/CLAUDE.md` だけを見て、コードフェンス・インラインコード・HTML コメントの中を除く。
+空白・制御文字を含むパスは `skipped` に載せて追記しない。docRoot の探索は git の toplevel で打ち切る(親リポジトリの中の worktree が親の設定を拾わないため)。
+
+**SessionStart の案内は文書が 1 つも無くても CLI 案内を出す**(契約 §12 の限定)。
 `/metatron:init` はまさに文書が無い状態で使うため、案内を落とすと AI は CLI の絶対パスを
-知る手段を持たない。**案内まで落とすのは 2 つだけ** — `injection.enabled: false` と、
-`loadConfig` 自体が例外で失敗したとき(壊れた機構が誤った CLI パスを広告しないため)。
+知る手段を持たない。**案内まで落とすのは**、`loadConfig` 自体が例外で失敗したとき(壊れた機構が誤った CLI パスを広告しないため)。
 後者は通常の入力では再現できないので `src/testing/fault-config.mjs` が
 `NODE_OPTIONS=--import` でモジュール解決層の `loadConfig` を差し替えて検証する
 (biome / tsc の対象外にするため拡張子は `.mjs`)。
@@ -86,10 +89,10 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 ## CLI サブコマンド
 
-読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` / `get rules` /
+読: `get config` / `get architecture [--section]` / `get domains` / `get gotchas` / `get adr` /
 `scan` / `diff-architecture` / `scan-adr-candidates` / `scan-gotcha-candidates`。段階: `stage-architecture --input` / `stage-adr --input` /
-`stage-rules --input` / `stage-gotcha --input`。書: `commit-architecture --staging-id` / `commit-rules --staging-id` /
-`commit-gotchas --staging-id` / `init-gotchas` / `append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate` /
+`stage-gotcha --input`。書: `commit-architecture --staging-id` /
+`commit-gotchas --staging-id` / `init-gotchas` / `link-claude-md` / `append-gotcha --input` / `tag-gotcha` / `shrink-adr-candidate` /
 `remove-gotcha-candidate`。
 
 2026-11-12 から: GOTCHAS は追記のみではない。`stage-gotcha` → `commit-gotchas` で、監査(`/metatron:audit`)に限り
@@ -165,7 +168,7 @@ codiel の持続層 `<repoRoot>/docs/intents/domains/*.md` にある `[ADR 候�
 
 - skills 3: `capturing-architecture`(初回生成)、`updating-architecture`(乖離検出と更新)、
   `recording-gotchas`。`evals/` に 3 本の JSON。**agents は持たない。**
-- commands 2: `/metatron:init`(scan の事実からセクション単位で確認しながら ARCHITECTURE と rules 3 ファイルを初回生成し、承認後に GOTCHAS の空の台帳を作る。`## ADR 一覧` は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示)。
+- commands 2: `/metatron:init`(scan の事実からセクション単位で確認しながら ARCHITECTURE(保護パス・テスト方針を含む)を初回生成し、承認後に GOTCHAS の空の台帳を作り、`link-claude-md` で CLAUDE.md に @メンションを追記する。`## ADR 一覧` と規約は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示し、旧 rules の移行と @メンション・設定ファイルの欠けも扱う)、`/metatron:audit`。
 - `references/` 5 本(AI が実行時に読む正本): `architecture-format.md` / `gotchas-format.md` /
   `config-schema.md` / `cli-usage.md` / `writing-discipline.md`。
 - `docs/format-change-checklist.md` is the developer checklist for format changes. It was moved out

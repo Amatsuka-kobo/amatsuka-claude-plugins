@@ -66,33 +66,29 @@
 - §3 ルート解決 `docRoot` = 開始ディレクトリから上方向に (1) `metatron.config.json` を持つ最近祖先
   → (2) `git rev-parse --show-toplevel` → (3) 開始ディレクトリ。**開始ディレクトリ自身を含む
   (inclusive)**、探索前に `fs.realpathSync` で実体化、git の失敗は原因を区別せず段 3 へ。
+  段 1 の探索は git の toplevel で打ち切る(2026-11-19、PR #41。親リポジトリの中の worktree が親の設定を拾わないため)。
   `.git` の手作業探索で代替しない。解決結果はキャッシュしない。絶対パスと `..` 脱出は拒否。
-- §4-§8 ARCHITECTURE(7 節・セクション分割の規範アルゴリズム・`unclosed_fence` の 2 層扱い)、
-  rules、ADR、GOTCHAS、文書パス既定値(`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md` /
-  `.claude/rules/metatron`)。**旧 `## テスト方針` / `## 保護パス` / `## 規約` は 2026-08-24 に
-  rules(§5)へ移った。** rules は 3 ファイル固定、frontmatter を書かない、冒頭に管理者表示行。
-  `unclosed_fence` の判定は rules に適用しない。
+- §4-§8 ARCHITECTURE(9 セクション・セクション分割の規範アルゴリズム・`unclosed_fence` の 2 層扱い)、
+  ADR、GOTCHAS、文書パス既定値(`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md`)。
+  **2026-11-19(metatron 0.6.0)に rules(§5)を廃止した。** 保護パスとテスト方針は ARCHITECTURE のセクションへ戻し、
+  規約は ARCHITECTURE で扱わず CLAUDE.md に書く。body に `## ` 見出しを含む `stage-architecture` は `invalid_body`。
 - §6 に ADR エントリ間の区切り（前後を空行で挟んだ `---`）の規定が 2026-09-16 に加わり、`stage-adr` が節全体に対して毎回正規化する。
 - §9-§10 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
   完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表(`analyzing-issues` と `issue.md` は 2026-09-27 に廃止。
   intent 書式 v2 と上書きの記録は `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.5)。**要約を伴う抽出をしない。**
 - §11 gh-utility `issue-craft` 持ち込みモードの固定開始句
   `持ち込みモード: 以下の完成済み本文で起票`。判定は固定句の一致のみ、推測で入らない。
-- §12 metatron CLI 入出力規約と staging・ロックの保証。staging は単一ターゲットのままで、
-  rules も 1 回 1 ファイルである。
+- §12 metatron CLI 入出力規約と staging・ロックの保証。staging は単一ターゲットである。
 - §13 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の両 hook はフェイルオープン、
   codiel の PreToolUse はフェイルクローズド(`ask`)。混同しない。
-  SessionStart 注入の「何も出力しない」は 2026-08-17 に**「文書の内容を出力しない」へ限定**された。
-  文書が 1 つも無くても CLI 案内は出す。案内まで落とすのは `injection.enabled: false` と
-  設定読み取り自体が例外で失敗したときの 2 つだけ。**rules 本文は注入しない**(Claude Code が
-  起動時に読み、サブエージェントにも渡る)。
+  metatron の SessionStart は 0.6.0 から文書の本文を注入せず、案内文だけを出す(SubagentStart は撤去)。
+  文書は CLAUDE.md の @メンションで読み込ませる。案内を落とすのは設定読み取り自体が例外で失敗したときだけ。
 - `[ADR 候補]` の書式と参照形(2026-09-28)は、codiel の `references/intent-format.md` の「## 持続層」が正本の
   共有ファイル契約である。metatron は `references/architecture-format.md` の「ADR 候補の取り込み」に、読み取りと縮約に
   要る最小限(印の形、候補 ID の書式、エントリの範囲、5 つの小見出しの名前、参照形、ADR の背景に書く
   「ADR 候補 ID: <候補 ID>」の行)だけを写す。書式を変えたら両プラグインの `format-change-checklist.md` に沿って追随させる。
   書き込みは metatron の `scan-adr-candidates` / `shrink-adr-candidate`(`mem:metatron/core`)。
-- §14 実装間の一致検証(上記の 2 者比較)。**`paths.rulesDir` は 2 者比較に含めない**(codiel は
-  未知キーとして無視する)。
+- §14 実装間の一致検証(上記の 2 者比較)。`paths.rulesDir` と `injection` は 0.6.0 で撤去し、両実装とも未知キーとして無視する。
 
 ## 各実装の場所
 
