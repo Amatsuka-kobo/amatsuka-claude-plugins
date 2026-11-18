@@ -255,11 +255,6 @@ function migrateState(raw, fallback) {
     const attemptedLine = isNonNegativeInteger(raw.attemptedLine) ? raw.attemptedLine : fallback.attemptedLine;
     return {
       ...raw,
-      // EnterWorktree / ExitWorktree で Claude Code がトランスクリプトを別の
-      // プロジェクトディレクトリへ移すため、hook が今回渡したパスを正とする。
-      // 手元で確かめた移動では inode が変わらず、記録位置をそのまま引き継げた。
-      // inode が変わったときは reconcileGeneration が記録位置を 0 に戻す。
-      transcriptPath: fallback.transcriptPath,
       recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn) ? raw.recordedUserTurn : recordedLine2,
       attemptedUserTurn: isNonNegativeInteger(raw.attemptedUserTurn) ? raw.attemptedUserTurn : attemptedLine
     };
@@ -271,7 +266,7 @@ function migrateState(raw, fallback) {
     version: STATE_VERSION,
     projectDir: isString(raw.projectDir) ? raw.projectDir : fallback.projectDir,
     sessionId: isString(raw.sessionId) ? raw.sessionId : fallback.sessionId,
-    transcriptPath: fallback.transcriptPath,
+    transcriptPath: isString(raw.transcriptPath) ? raw.transcriptPath : fallback.transcriptPath,
     transcriptIdentity: identity ?? fallback.transcriptIdentity,
     recordedLine,
     attemptedLine: recordedLine,
@@ -284,17 +279,21 @@ function migrateState(raw, fallback) {
   };
 }
 var identityChanged = (previous, current) => previous.dev !== void 0 && previous.ino !== void 0 && current.dev !== void 0 && current.ino !== void 0 && (previous.dev !== current.dev || previous.ino !== current.ino);
-function reconcileGeneration(state, scan) {
-  const changed = identityChanged(state.transcriptIdentity, scan.identity) || scan.lineCount < state.recordedLine || scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedUserTurn;
+function reconcileGeneration(state, scan, transcriptPath) {
+  const moved = normalizePath(state.transcriptPath) !== normalizePath(transcriptPath);
+  const changed = !moved && identityChanged(state.transcriptIdentity, scan.identity) || scan.lineCount < state.recordedLine || scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedUserTurn;
   if (!changed)
     return {
-      state: { ...state, transcriptIdentity: scan.identity },
-      changed: false
+      state: { ...state, transcriptPath, transcriptIdentity: scan.identity },
+      changed: false,
+      moved
     };
   return {
     changed: true,
+    moved,
     state: {
       ...state,
+      transcriptPath,
       previousGeneration: {
         recordedLine: state.recordedLine,
         attemptedLine: state.attemptedLine,
@@ -341,6 +340,7 @@ function isStaleLock(lock, state, options = {}) {
   const heartbeat = Date.parse(lock.heartbeatAt);
   if (!Number.isFinite(created) || !Number.isFinite(heartbeat)) return true;
   if (options.recorderRunning === true) return false;
+  if (options.recorderRunning === false && options.transcriptMoved) return true;
   const maxAge = options.recorderRunning === false ? LOCK_GRACE_MS : LOCK_STALE_MS;
   return (options.now ?? Date.now()) - heartbeat > maxAge;
 }
@@ -470,7 +470,7 @@ async function main() {
     input.session_id
   );
   let state = migrateState(readJson(paths.statePath), fallback);
-  const generation = reconcileGeneration(state, fullScan);
+  const generation = reconcileGeneration(state, fullScan, transcriptPath);
   state = generation.state;
   const scan = scanTranscript(transcriptPath, state.recordedLine);
   atomicWriteJson(paths.statePath, state);
@@ -478,7 +478,10 @@ async function main() {
   let activeLock = false;
   if (fs2.existsSync(paths.lockPath)) {
     const lock2 = readJson(paths.lockPath);
-    if (isStaleLock(lock2, state, { recorderRunning })) {
+    if (isStaleLock(lock2, state, {
+      recorderRunning,
+      transcriptMoved: generation.moved
+    })) {
       appendLog(
         paths.logPath,
         `[hook] recovered stale lock: ${fs2.readFileSync(paths.lockPath, "utf8").trim()}`

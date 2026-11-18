@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     input.session_id
   )
   let state = migrateState(readJson<unknown>(paths.statePath), fallback)
-  const generation = reconcileGeneration(state, fullScan)
+  const generation = reconcileGeneration(state, fullScan, transcriptPath)
   state = generation.state
   const scan = scanTranscript(transcriptPath, state.recordedLine)
   atomicWriteJson(paths.statePath, state)
@@ -144,7 +144,12 @@ async function main(): Promise<void> {
   let activeLock = false
   if (fs.existsSync(paths.lockPath)) {
     const lock = readJson<RecordingLock>(paths.lockPath)
-    if (isStaleLock(lock, state, { recorderRunning })) {
+    if (
+      isStaleLock(lock, state, {
+        recorderRunning,
+        transcriptMoved: generation.moved
+      })
+    ) {
       appendLog(
         paths.logPath,
         `[hook] recovered stale lock: ${fs.readFileSync(paths.lockPath, "utf8").trim()}`

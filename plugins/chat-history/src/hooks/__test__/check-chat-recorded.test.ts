@@ -309,7 +309,14 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
   const original = value.transcript
   const moved = path.join(worktreeDir, "transcript.jsonl")
   // recorder の commit が成功した状態を再現し、次の発言を足して移動する。
-  const commitAndMove = (from: string, to: string, next: string) => {
+  // Claude Code は移動の後に relocated の行を足す。別デバイスへの移動は
+  // copy と削除になり inode が変わる。
+  const commitAndMove = (
+    from: string,
+    to: string,
+    next: string,
+    mode: "rename" | "copy"
+  ) => {
     const paths = pathsOf(value)
     fs.rmSync(paths.lockPath, { force: true })
     const state = stateOf(value) as RecordingState
@@ -321,7 +328,15 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
       recordPath: "docs/chat/record.md"
     } satisfies RecordingState)
     fs.appendFileSync(from, `${user(next)}\n`)
-    fs.renameSync(from, to)
+    if (mode === "rename") fs.renameSync(from, to)
+    else {
+      fs.copyFileSync(from, to)
+      fs.rmSync(from)
+    }
+    fs.appendFileSync(
+      to,
+      `${JSON.stringify({ type: "relocated", sessionId: value.sessionId, relocatedCwd: "/x" })}\n`
+    )
     value.transcript = to
   }
   // chat-recorder が最初に呼ぶ prepare の照合を、移った後のパスで通す。
@@ -352,7 +367,7 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
   try {
     run(value)
     prepare()
-    commitAndMove(original, moved, "worktree での質問")
+    commitAndMove(original, moved, "worktree での質問", "rename")
     const entered = JSON.parse(run(value))
     expect(entered.hookSpecificOutput.additionalContext).toContain(
       `- transcriptPath: ${moved}`
@@ -365,7 +380,7 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
       recordPath: "docs/chat/record.md"
     })
 
-    commitAndMove(moved, original, "main に戻っての質問")
+    commitAndMove(moved, original, "main に戻っての質問", "copy")
     const exited = JSON.parse(run(value))
     expect(exited.hookSpecificOutput.additionalContext).toContain(
       `- transcriptPath: ${original}`
@@ -373,9 +388,46 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
     prepare()
     expect(stateOf(value)).toMatchObject({
       transcriptPath: original,
+      // 3 行目は入るときの relocated の行
       recordedLine: 2,
-      attemptedLine: 3,
+      attemptedLine: 4,
       recordPath: "docs/chat/record.md"
+    })
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true })
+  }
+})
+
+test("記録の途中でトランスクリプトが移ったら、終わった recorder の lock を回収して新しいパスで dispatch し直す", () => {
+  const value = fixture([user("最初の質問")])
+  const moved = path.join(value.root, "transcript-moved.jsonl")
+  try {
+    run(value)
+    const first = stateOf(value) as RecordingState
+    // 移る前のパスで起動した recorder は prepare で失敗し、lock を残して終わる。
+    fs.appendFileSync(value.transcript, `${user("worktree での質問")}\n`)
+    fs.renameSync(value.transcript, moved)
+    value.transcript = moved
+    const out = JSON.parse(
+      run(value, {
+        backgroundTasks: [
+          {
+            type: "subagent",
+            status: "completed",
+            agent_type: "chat-history:chat-recorder"
+          }
+        ]
+      })
+    )
+    expect(out.hookSpecificOutput.additionalContext).toContain(
+      `- transcriptPath: ${moved}`
+    )
+    const state = stateOf(value) as RecordingState
+    expect(state.attemptId).not.toBe(first.attemptId)
+    expect(state).toMatchObject({
+      transcriptPath: moved,
+      recordedLine: 0,
+      attemptedLine: 2
     })
   } finally {
     fs.rmSync(value.root, { recursive: true, force: true })

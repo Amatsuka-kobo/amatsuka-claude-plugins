@@ -159,11 +159,13 @@ test("世代交代で記録先を手放し、通常追記では保持する", ()
     recordPath: "docs/chat/2026/0725/user/topic.md"
   }
   expect(
-    reconcileGeneration(state, scan(4, 20)).state.recordPath
+    reconcileGeneration(state, scan(4, 20), state.transcriptPath).state
+      .recordPath
   ).toBeUndefined()
-  expect(reconcileGeneration(state, scan(6, 20)).state.recordPath).toBe(
-    "docs/chat/2026/0725/user/topic.md"
-  )
+  expect(
+    reconcileGeneration(state, scan(6, 20), state.transcriptPath).state
+      .recordPath
+  ).toBe("docs/chat/2026/0725/user/topic.md")
 })
 
 test("tool_use ヒントは recordedLine より後だけから最大20件を集める", () => {
@@ -277,7 +279,11 @@ test.each([
     recordedUserTurn: 5,
     attemptedLine: 8
   }
-  const result = reconcileGeneration(state, scan(user, lineCount))
+  const result = reconcileGeneration(
+    state,
+    scan(user, lineCount),
+    state.transcriptPath
+  )
   expect(result.changed).toBe(true)
   expect(result.state.recordedLine).toBe(0)
 })
@@ -288,7 +294,11 @@ test("recordedLine が recordedUserTurn より大きくても lastUserTurn が�
     recordedLine: 8,
     recordedUserTurn: 6
   }
-  const result = reconcileGeneration(state, scan(6, 10, 8))
+  const result = reconcileGeneration(
+    state,
+    scan(6, 10, 8),
+    state.transcriptPath
+  )
   expect(result.changed).toBe(false)
 })
 
@@ -297,7 +307,97 @@ test("行数非減少・lastUserTurn非減少は通常追記", () => {
     ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
     recordedLine: 5
   }
-  expect(reconcileGeneration(state, scan(6, 10)).changed).toBe(false)
+  expect(
+    reconcileGeneration(state, scan(6, 10), state.transcriptPath).changed
+  ).toBe(false)
+})
+
+test("hook が渡したパスで state のパスを更新し、記録位置を引き継ぐ", () => {
+  const state = {
+    ...createInitialState("/p", "/old/t", { dev: 1, ino: 1 }),
+    recordedLine: 5,
+    recordedUserTurn: 5,
+    recordPath: "docs/chat/record.md"
+  }
+  const result = reconcileGeneration(state, scan(6, 10), "/moved/t")
+  expect(result).toMatchObject({ changed: false, moved: true })
+  expect(result.state).toMatchObject({
+    transcriptPath: "/moved/t",
+    recordedLine: 5,
+    recordPath: "docs/chat/record.md"
+  })
+})
+
+test("パスが変わった回は inode が変わっても世代を切り替えない(copy での移動)", () => {
+  const state = {
+    ...createInitialState("/p", "/old/t", { dev: 9, ino: 9 }),
+    recordedLine: 5,
+    recordedUserTurn: 5,
+    recordPath: "docs/chat/record.md"
+  }
+  const result = reconcileGeneration(state, scan(6, 10), "/moved/t")
+  expect(result.changed).toBe(false)
+  expect(result.state).toMatchObject({
+    transcriptIdentity: { dev: 1, ino: 1 },
+    recordedLine: 5,
+    recordPath: "docs/chat/record.md"
+  })
+})
+
+test("パスが同じまま inode が変わったら世代を切り替える", () => {
+  const state = {
+    ...createInitialState("/p", "/p/t", { dev: 9, ino: 9 }),
+    recordedLine: 5,
+    recordedUserTurn: 5
+  }
+  const result = reconcileGeneration(state, scan(6, 10), "/p/t")
+  expect(result).toMatchObject({ changed: true, moved: false })
+  expect(result.state.recordedLine).toBe(0)
+})
+
+test("パスが変わっても行数が記録位置より少なければ世代を切り替える", () => {
+  const state = {
+    ...createInitialState("/p", "/old/t", { dev: 1, ino: 1 }),
+    recordedLine: 50,
+    recordedUserTurn: 50
+  }
+  const result = reconcileGeneration(state, scan(6, 10), "/moved/t")
+  expect(result.changed).toBe(true)
+  expect(result.state).toMatchObject({
+    transcriptPath: "/moved/t",
+    recordedLine: 0
+  })
+})
+
+test("トランスクリプトが移った直後は、終わった recorder の lock を猶予を待たずに回収する", () => {
+  const now = Date.now()
+  const state = {
+    ...createInitialState("/p", "/p/t", { dev: 1, ino: 1 }),
+    attemptId: "a"
+  }
+  const lock: RecordingLock = {
+    version: STATE_VERSION,
+    attemptId: "a",
+    targetLine: 1,
+    createdAt: new Date(now).toISOString(),
+    heartbeatAt: new Date(now).toISOString()
+  }
+  expect(
+    isStaleLock(lock, state, {
+      now,
+      recorderRunning: false,
+      transcriptMoved: true
+    })
+  ).toBe(true)
+  expect(isStaleLock(lock, state, { now, recorderRunning: false })).toBe(false)
+  expect(
+    isStaleLock(lock, state, {
+      now,
+      recorderRunning: true,
+      transcriptMoved: true
+    })
+  ).toBe(false)
+  expect(isStaleLock(lock, state, { now, transcriptMoved: true })).toBe(false)
 })
 
 test("recorderRunning の3値に応じて stale 上限を切り替える", () => {
@@ -397,7 +497,7 @@ test("v1 state は記録済み位置だけを安全に引き継ぐ", () => {
     version: STATE_VERSION,
     projectDir: "/old",
     sessionId: "session",
-    transcriptPath: "/new/t",
+    transcriptPath: "/old/t",
     transcriptIdentity: { dev: 1, ino: 1 },
     recordedLine: 42,
     attemptedLine: 42,
@@ -409,20 +509,6 @@ test("v1 state は記録済み位置だけを安全に引き継ぐ", () => {
   expect(migrated).not.toHaveProperty("attemptId")
   expect(migrated).not.toHaveProperty("consecutiveFailures")
   expect(migrated).not.toHaveProperty("previousGeneration")
-})
-
-test("保存済みのトランスクリプトのパスは hook が今回渡したパスで上書きする", () => {
-  const fallback = createInitialState("/p", "/moved/t", { dev: 1, ino: 1 })
-  const saved = {
-    ...createInitialState("/p", "/old/t", { dev: 1, ino: 1 }),
-    recordedLine: 7,
-    recordedUserTurn: 7
-  }
-  expect(migrateState(saved, fallback)).toMatchObject({
-    transcriptPath: "/moved/t",
-    recordedLine: 7,
-    recordedUserTurn: 7
-  })
 })
 
 test("壊れた state は fallback を返す", () => {

@@ -510,11 +510,6 @@ export function migrateState(
       : fallback.attemptedLine
     return {
       ...(raw as unknown as RecordingState),
-      // EnterWorktree / ExitWorktree で Claude Code がトランスクリプトを別の
-      // プロジェクトディレクトリへ移すため、hook が今回渡したパスを正とする。
-      // 手元で確かめた移動では inode が変わらず、記録位置をそのまま引き継げた。
-      // inode が変わったときは reconcileGeneration が記録位置を 0 に戻す。
-      transcriptPath: fallback.transcriptPath,
       recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn)
         ? raw.recordedUserTurn
         : recordedLine,
@@ -533,7 +528,9 @@ export function migrateState(
     version: STATE_VERSION,
     projectDir: isString(raw.projectDir) ? raw.projectDir : fallback.projectDir,
     sessionId: isString(raw.sessionId) ? raw.sessionId : fallback.sessionId,
-    transcriptPath: fallback.transcriptPath,
+    transcriptPath: isString(raw.transcriptPath)
+      ? raw.transcriptPath
+      : fallback.transcriptPath,
     transcriptIdentity: identity ?? fallback.transcriptIdentity,
     recordedLine,
     attemptedLine: recordedLine,
@@ -558,23 +555,37 @@ const identityChanged = (
   current.ino !== undefined &&
   (previous.dev !== current.dev || previous.ino !== current.ino)
 
+/**
+ * transcriptPath は hook が今回渡したパス。EnterWorktree / ExitWorktree で
+ * Claude Code がトランスクリプトを別のプロジェクトディレクトリへ移すため、
+ * state のパスはこの値で更新する(prepare の照合はこの値と比べる)。
+ * 移動は rename が基本だが、別デバイスへは copy と削除になり inode が変わる。
+ * パスが変わった回は inode の違いを世代交代と見なさず、行数とユーザー発言の
+ * 位置だけで判定する。
+ */
 export function reconcileGeneration(
   state: RecordingState,
-  scan: ScanResult
-): { state: RecordingState; changed: boolean } {
+  scan: ScanResult,
+  transcriptPath: string
+): { state: RecordingState; changed: boolean; moved: boolean } {
+  const moved =
+    normalizePath(state.transcriptPath) !== normalizePath(transcriptPath)
   const changed =
-    identityChanged(state.transcriptIdentity, scan.identity) ||
+    (!moved && identityChanged(state.transcriptIdentity, scan.identity)) ||
     scan.lineCount < state.recordedLine ||
     (scan.lastUserTurn !== -1 && scan.lastUserTurn < state.recordedUserTurn)
   if (!changed)
     return {
-      state: { ...state, transcriptIdentity: scan.identity },
-      changed: false
+      state: { ...state, transcriptPath, transcriptIdentity: scan.identity },
+      changed: false,
+      moved
     }
   return {
     changed: true,
+    moved,
     state: {
       ...state,
+      transcriptPath,
       previousGeneration: {
         recordedLine: state.recordedLine,
         attemptedLine: state.attemptedLine,
@@ -622,7 +633,12 @@ export function hasRunningRecorder(
 export function isStaleLock(
   lock: RecordingLock | null,
   state: RecordingState,
-  options: { now?: number; recorderRunning?: boolean } = {}
+  options: {
+    now?: number
+    recorderRunning?: boolean
+    /** トランスクリプトが移った直後の hook。移る前のパスで起動した recorder は prepare で失敗する */
+    transcriptMoved?: boolean
+  } = {}
 ): boolean {
   if (
     !lock ||
@@ -635,6 +651,8 @@ export function isStaleLock(
   const heartbeat = Date.parse(lock.heartbeatAt)
   if (!Number.isFinite(created) || !Number.isFinite(heartbeat)) return true
   if (options.recorderRunning === true) return false
+  // recorder が終わっていると分かれば、猶予を待たずに新しいパスで dispatch し直す。
+  if (options.recorderRunning === false && options.transcriptMoved) return true
   const maxAge =
     options.recorderRunning === false ? LOCK_GRACE_MS : LOCK_STALE_MS
   return (options.now ?? Date.now()) - heartbeat > maxAge
