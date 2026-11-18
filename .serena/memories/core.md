@@ -117,9 +117,12 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   tools (Playwright resolved at runtime, never bundled), 2 API tools, plus skill `judging`.
   Requires `TYPESAFE_API_KEY` (a paid external API allowed by ADR-005 — see the invariant section). Details:
   `mem:jevriel/core`.
-- **better-agentics** (0.0.2-dev, added 2026-10-26; launch-mode rework 2026-11-11) — lightweight
+- **better-agentics** (0.0.5-dev, added 2026-10-26; launch-mode rework 2026-11-11; Jev opt-in 2026-11-18) — lightweight
   claude-only alternative to agent-policy: the orchestrator does research/design/implementation itself
-  and delegates only for review / split / stuck. `scripts/pick-delegate.mjs` asks Jev
+  and delegates only for review / split / stuck. `TYPESAFE_API_KEY` is optional: without it,
+  `review`/`split` with 2+ candidates skip Jev and return `options` (`{role, criteria}` only; split
+  tasks get `mode: choose`); the orchestrator picks, then re-calls with the other roles in
+  `excludeRoles` to get the delegate via the single-candidate path. With the key, `scripts/pick-delegate.mjs` asks Jev
   (`@typesafe-ai/sdk` 0.6.0, own client, no jevriel import) to choose among every role of the reason
   that is not disabled in `.claude/better-agentics/config.json` (`disabledRoles`, written only by the
   setup CLI `--write-config`) or by the call's `excludeRoles`. `review` never offers
@@ -130,9 +133,9 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   fragment's criteria and returns `mode: standard` (`general-purpose` + `roles.ts` model/effort +
   `preamble` built by `src/lib/preamble.ts`). Split tasks with `needsContext` return `mode: fork`
   (complex-impl/normal-impl/general when the role model equals `parentModel`) or `mode: self`.
-  The orchestrator never reads the criteria. Hooks: SessionStart (enabled by
+  With the key, the orchestrator never reads the criteria. Hooks: SessionStart (enabled by
   `AMATSUKA_AGENT_ENABLE_ORCHESTRATION`; refuses and warns when `AMATSUKA_AGENT_AUTO_INJECTION` or the
-  delegation gate is on, or `TYPESAFE_API_KEY` is missing; adds setup/migration notices and warnings
+  delegation gate is on; injects regardless of `TYPESAFE_API_KEY`; adds setup/migration notices and warnings
   for env vars overriding role model/effort/cache TTL) and SubagentStart (injects
   `references/subagent-policy.md` prefixed with the definition's role ID). Designs:
   `harness-docs/design/2026-10-26-better-agentics-design.md`,
