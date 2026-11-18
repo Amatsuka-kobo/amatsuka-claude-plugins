@@ -24,3 +24,6 @@ private/
 
 # 会話記録
 docs/chat/
+
+# テストが一時的に作るバンドル(plugins/*/src/testing/run-ts.ts)
+plugins/*/.test-bundle-*/
