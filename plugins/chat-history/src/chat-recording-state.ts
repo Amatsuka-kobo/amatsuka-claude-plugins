@@ -512,7 +512,8 @@ export function migrateState(
       ...(raw as unknown as RecordingState),
       // EnterWorktree / ExitWorktree で Claude Code がトランスクリプトを別の
       // プロジェクトディレクトリへ移すため、hook が今回渡したパスを正とする。
-      // 移動は rename で行われ inode が変わらないので、記録位置は引き継げる。
+      // 手元で確かめた移動では inode が変わらず、記録位置をそのまま引き継げた。
+      // inode が変わったときは reconcileGeneration が記録位置を 0 に戻す。
       transcriptPath: fallback.transcriptPath,
       recordedUserTurn: isNonNegativeInteger(raw.recordedUserTurn)
         ? raw.recordedUserTurn

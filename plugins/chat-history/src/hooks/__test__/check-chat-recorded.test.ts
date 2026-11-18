@@ -18,6 +18,9 @@ import { MAX_INJECT_CHARS, renderInjection } from "../check-chat-recorded.js"
 const HOOK = fileURLToPath(
   new URL("../check-chat-recorded.ts", import.meta.url)
 )
+const PREPARE = fileURLToPath(
+  new URL("../../prepare-chat-recording.ts", import.meta.url)
+)
 
 const user = (text: string, extra: Record<string, unknown> = {}) =>
   JSON.stringify({
@@ -321,13 +324,40 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
     fs.renameSync(from, to)
     value.transcript = to
   }
+  // chat-recorder が最初に呼ぶ prepare の照合を、移った後のパスで通す。
+  // 照合に失敗すると runTs が例外を投げる。
+  const prepare = () => {
+    const state = stateOf(value) as RecordingState
+    const { CLAUDE_PLUGIN_ROOT: _, ...env } = process.env
+    const out = JSON.parse(
+      runTs(
+        PREPARE,
+        [
+          "--project",
+          value.project,
+          "--transcript",
+          value.transcript,
+          "--session-key",
+          getSessionKey(value.sessionId, value.transcript),
+          "--attempt-id",
+          state.attemptId as string,
+          "--target-line",
+          String(state.attemptedLine)
+        ],
+        { env: { ...env, TASK_UTILITY_CHAT_STATE_DIR: value.stateRoot } }
+      )
+    )
+    expect(out.recordedLine).toBe(state.recordedLine)
+  }
   try {
     run(value)
+    prepare()
     commitAndMove(original, moved, "worktree での質問")
     const entered = JSON.parse(run(value))
     expect(entered.hookSpecificOutput.additionalContext).toContain(
       `- transcriptPath: ${moved}`
     )
+    prepare()
     expect(stateOf(value)).toMatchObject({
       transcriptPath: moved,
       recordedLine: 1,
@@ -340,6 +370,7 @@ test("トランスクリプトが worktree へ移り、また戻っても記録�
     expect(exited.hookSpecificOutput.additionalContext).toContain(
       `- transcriptPath: ${original}`
     )
+    prepare()
     expect(stateOf(value)).toMatchObject({
       transcriptPath: original,
       recordedLine: 2,
