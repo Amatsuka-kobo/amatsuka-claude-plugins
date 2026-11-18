@@ -61,21 +61,38 @@ export interface SelfAssignment {
   mode: "self"
 }
 
+/** キーが無いとき、Jev の代わりにオーケストレーターが選ぶ作業 */
+export interface ChooseAssignment {
+  id: string
+  mode: "choose"
+}
+
+/** キーが無いときに返す候補。fork はこの候補を文脈の要る作業に選んだときの委譲先 */
+export type Option = Delegate & {
+  criteria: string
+  fork?: Extract<Delegate, { mode: "fork" }>
+}
+
 export type PickError =
   | "invalid-input"
   | "no-candidates"
   | "duplicate-role"
   | "invalid-config"
-  | "no-api-key"
   | "jev-failed"
 
 export type PickOutput =
   | { ok: true; reason: "review"; agents: Delegate[]; fallback?: true }
+  | { ok: true; reason: "review"; options: Option[] }
   | { ok: true; reason: "design-plan-review"; agents: Delegate[] }
   | {
       ok: true
       reason: "split"
-      assignments: ((Delegate & { id: string }) | SelfAssignment)[]
+      assignments: (
+        | (Delegate & { id: string })
+        | SelfAssignment
+        | ChooseAssignment
+      )[]
+      options?: Option[]
     }
   | { ok: true; reason: "stuck"; agents: Delegate[] }
   | { ok: false; error: PickError; message: string }
@@ -389,18 +406,13 @@ function answerOf(answers: unknown, key: string): Record<string, unknown> {
 }
 
 async function ask(
+  apiKey: string,
   deps: PickDeps,
   state: Parameters<JevAsk>[0]["state"],
   questions: Questions
 ): Promise<unknown> {
-  if (deps.apiKey === undefined) {
-    throw new PickFailure(
-      "no-api-key",
-      "TYPESAFE_API_KEY is not set, so Jev cannot choose among several candidates."
-    )
-  }
   try {
-    const result = await deps.createAsk(deps.apiKey)({ state, questions })
+    const result = await deps.createAsk(apiKey)({ state, questions })
     return result.answers
   } catch (error) {
     throw new PickFailure(
@@ -423,7 +435,15 @@ async function review(
       agents: [delegateOf(only, input.lang, deps)]
     }
   }
+  if (deps.apiKey === undefined) {
+    return {
+      ok: true,
+      reason: "review",
+      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+    }
+  }
   const answers = await ask(
+    deps.apiKey,
     deps,
     { summary: input.task.summary, artifacts: input.task.artifacts },
     reviewQuestions(candidates)
@@ -469,6 +489,32 @@ function modelOf(candidate: Candidate): ClaudeModel | undefined {
 
 type Assignment = (Delegate & { id: string }) | SelfAssignment
 
+// 文脈の要る作業にこの候補を選んだときの fork の委譲先。fork できなければ undefined(自分で行う)。
+function forkOf(
+  candidate: Candidate,
+  input: PickInput,
+  deps: PickDeps,
+  p?: number
+): Extract<Delegate, { mode: "fork" }> | undefined {
+  const { role } = candidate
+  if (
+    !FORK_ROLES.includes(role.id) ||
+    input.parentModel === undefined ||
+    modelOf(candidate) !== input.parentModel
+  ) {
+    return undefined
+  }
+  return withP(
+    {
+      role: role.id,
+      mode: "fork" as const,
+      agentType: "fork" as const,
+      preamble: deps.preambles.fork(role.id, input.lang)
+    },
+    p
+  )
+}
+
 function assignmentOf(
   task: { id: string; needsContext: boolean },
   candidate: Candidate,
@@ -479,26 +525,28 @@ function assignmentOf(
   if (!task.needsContext) {
     return { id: task.id, ...delegateOf(candidate, input.lang, deps, p) }
   }
-  const { role } = candidate
-  if (
-    !FORK_ROLES.includes(role.id) ||
-    input.parentModel === undefined ||
-    modelOf(candidate) !== input.parentModel
-  ) {
-    return { id: task.id, mode: "self" }
+  const fork = forkOf(candidate, input, deps, p)
+  return fork === undefined
+    ? { id: task.id, mode: "self" }
+    : { id: task.id, ...fork }
+}
+
+// キーが無いときにオーケストレーターへ渡す候補。fork は fork を返せる split にだけ付ける。
+function optionOf(
+  candidate: Candidate,
+  input: PickInput,
+  deps: PickDeps
+): Option {
+  const option: Option = {
+    ...delegateOf(candidate, input.lang, deps),
+    criteria: candidate.criteria
   }
-  return {
-    id: task.id,
-    ...withP(
-      {
-        role: role.id,
-        mode: "fork" as const,
-        agentType: "fork" as const,
-        preamble: deps.preambles.fork(role.id, input.lang)
-      },
-      p
-    )
-  }
+  const wantsFork =
+    input.reason === "split" &&
+    deps.forkEnabled &&
+    input.tasks.some((task) => task.needsContext)
+  const fork = wantsFork ? forkOf(candidate, input, deps) : undefined
+  return fork === undefined ? option : { ...option, fork }
 }
 
 async function split(
@@ -514,9 +562,22 @@ async function split(
   const [only] = candidates
   if (candidates.length === 1 && only !== undefined) {
     for (const task of asked) chosen.set(task.id, { candidate: only })
-  } else if (asked.length > 0) {
+  } else if (asked.length > 0 && deps.apiKey === undefined) {
+    const choose = new Set(asked.map((task) => task.id))
+    return {
+      ok: true,
+      reason: "split",
+      assignments: input.tasks.map((task) =>
+        choose.has(task.id)
+          ? { id: task.id, mode: "choose" as const }
+          : { id: task.id, mode: "self" as const }
+      ),
+      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+    }
+  } else if (asked.length > 0 && deps.apiKey !== undefined) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }))
     const answers = await ask(
+      deps.apiKey,
       deps,
       { tasks },
       splitQuestions(tasks, candidates)

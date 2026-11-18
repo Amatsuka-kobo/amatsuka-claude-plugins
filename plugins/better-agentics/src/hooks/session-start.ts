@@ -25,8 +25,6 @@ function warning(state: OrchestrationState): string | undefined {
       return "AMATSUKA_AGENT_ENABLE_ORCHESTRATION と AMATSUKA_AGENT_AUTO_INJECTION が同時に有効なため、better-agentics の規律を注入しなかった。どちらか一方だけを有効にする。"
     case "conflict-gate":
       return "AMATSUKA_AGENT_DELEGATION_GATE が有効で、オーケストレーターの直接編集が差し止められるため、better-agentics の規律を注入しなかった。better-agentics ではオーケストレーターが自分で編集するので、gate を無効にする。"
-    case "no-api-key":
-      return "TYPESAFE_API_KEY が設定されていないため、better-agentics の規律を注入しなかった。委譲先の決定に TypeSafe AI の Jev を使うため、キーが必要になる。"
     default:
       return undefined
   }

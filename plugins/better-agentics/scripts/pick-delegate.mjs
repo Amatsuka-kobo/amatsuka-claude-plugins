@@ -1477,15 +1477,9 @@ function answerOf(answers, key) {
   return answer;
 }
 __name(answerOf, "answerOf");
-async function ask(deps, state, questions) {
-  if (deps.apiKey === void 0) {
-    throw new PickFailure(
-      "no-api-key",
-      "TYPESAFE_API_KEY is not set, so Jev cannot choose among several candidates."
-    );
-  }
+async function ask(apiKey, deps, state, questions) {
   try {
-    const result = await deps.createAsk(deps.apiKey)({ state, questions });
+    const result = await deps.createAsk(apiKey)({ state, questions });
     return result.answers;
   } catch (error) {
     throw new PickFailure(
@@ -1505,7 +1499,15 @@ async function review(input, deps) {
       agents: [delegateOf(only, input.lang, deps)]
     };
   }
+  if (deps.apiKey === void 0) {
+    return {
+      ok: true,
+      reason: "review",
+      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+    };
+  }
   const answers = await ask(
+    deps.apiKey,
     deps,
     { summary: input.task.summary, artifacts: input.task.artifacts },
     reviewQuestions(candidates)
@@ -1547,28 +1549,40 @@ function modelOf(candidate) {
   return model !== void 0 && isClaudeModel(model) ? model : void 0;
 }
 __name(modelOf, "modelOf");
+function forkOf(candidate, input, deps, p) {
+  const { role } = candidate;
+  if (!FORK_ROLES.includes(role.id) || input.parentModel === void 0 || modelOf(candidate) !== input.parentModel) {
+    return void 0;
+  }
+  return withP(
+    {
+      role: role.id,
+      mode: "fork",
+      agentType: "fork",
+      preamble: deps.preambles.fork(role.id, input.lang)
+    },
+    p
+  );
+}
+__name(forkOf, "forkOf");
 function assignmentOf(task, candidate, input, deps, p) {
   if (!task.needsContext) {
     return { id: task.id, ...delegateOf(candidate, input.lang, deps, p) };
   }
-  const { role } = candidate;
-  if (!FORK_ROLES.includes(role.id) || input.parentModel === void 0 || modelOf(candidate) !== input.parentModel) {
-    return { id: task.id, mode: "self" };
-  }
-  return {
-    id: task.id,
-    ...withP(
-      {
-        role: role.id,
-        mode: "fork",
-        agentType: "fork",
-        preamble: deps.preambles.fork(role.id, input.lang)
-      },
-      p
-    )
-  };
+  const fork = forkOf(candidate, input, deps, p);
+  return fork === void 0 ? { id: task.id, mode: "self" } : { id: task.id, ...fork };
 }
 __name(assignmentOf, "assignmentOf");
+function optionOf(candidate, input, deps) {
+  const option = {
+    ...delegateOf(candidate, input.lang, deps),
+    criteria: candidate.criteria
+  };
+  const wantsFork = input.reason === "split" && deps.forkEnabled && input.tasks.some((task) => task.needsContext);
+  const fork = wantsFork ? forkOf(candidate, input, deps) : void 0;
+  return fork === void 0 ? option : { ...option, fork };
+}
+__name(optionOf, "optionOf");
 async function split(input, deps) {
   const candidates = candidatesFor(input, deps);
   const forkable = deps.forkEnabled && input.parentModel !== void 0;
@@ -1577,9 +1591,20 @@ async function split(input, deps) {
   const [only] = candidates;
   if (candidates.length === 1 && only !== void 0) {
     for (const task of asked) chosen.set(task.id, { candidate: only });
-  } else if (asked.length > 0) {
+  } else if (asked.length > 0 && deps.apiKey === void 0) {
+    const choose = new Set(asked.map((task) => task.id));
+    return {
+      ok: true,
+      reason: "split",
+      assignments: input.tasks.map(
+        (task) => choose.has(task.id) ? { id: task.id, mode: "choose" } : { id: task.id, mode: "self" }
+      ),
+      options: candidates.map((candidate) => optionOf(candidate, input, deps))
+    };
+  } else if (asked.length > 0 && deps.apiKey !== void 0) {
     const tasks = asked.map(({ id, summary }) => ({ id, summary }));
     const answers = await ask(
+      deps.apiKey,
       deps,
       { tasks },
       splitQuestions(tasks, candidates)

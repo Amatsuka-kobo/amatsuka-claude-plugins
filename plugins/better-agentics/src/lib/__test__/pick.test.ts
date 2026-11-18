@@ -619,6 +619,107 @@ describe("出力", () => {
   })
 })
 
+describe("キーが無いとき", () => {
+  const unused: JevAsk = async () => {
+    throw new Error("Jev must not be called")
+  }
+
+  it("review は Jev を呼ばず、候補と選択基準を options で返す", async () => {
+    const result = await pickDelegate(
+      REVIEW_INPUT,
+      deps([def("cr", "code-review", "- code")], unused, null)
+    )
+    expect(result).toEqual({
+      ok: true,
+      reason: "review",
+      options: REVIEW_ROLES.map((role) =>
+        role === "code-review"
+          ? {
+              role,
+              mode: "custom",
+              agentType: "cr",
+              criteria: "- code"
+            }
+          : {
+              role,
+              mode: "standard",
+              agentType: "general-purpose",
+              model: expect.any(String),
+              effort: expect.any(String),
+              preamble: `standard:${role}:en`,
+              criteria: `- standard ${role}`
+            }
+      )
+    })
+  })
+
+  it("候補が 1 件なら従来どおりその 1 件を agents で返す", async () => {
+    const result = await pickDelegate(REVIEW_INPUT, {
+      ...deps([], unused, null),
+      ...disabled("design-review", "complex-review", "adversarial-review")
+    })
+    expect(result).toMatchObject({
+      ok: true,
+      agents: [{ role: "code-review" }]
+    })
+  })
+
+  it("split は Jev に問う作業を choose にし、fork できる候補に fork を添える", async () => {
+    const raw = JSON.stringify({
+      reason: "split",
+      parentModel: "opus",
+      tasks: [
+        { id: "a", summary: "x" },
+        { id: "b", summary: "y", needsContext: true }
+      ]
+    })
+    const result = await pickDelegate(raw, deps([], unused, null))
+    if (!result.ok || result.reason !== "split") throw new Error("unexpected")
+    expect(result.assignments).toEqual([
+      { id: "a", mode: "choose" },
+      { id: "b", mode: "choose" }
+    ])
+    expect(result.options?.map((option) => option.role)).toEqual(SPLIT_ROLES)
+    const forked = result.options
+      ?.filter((option) => option.fork !== undefined)
+      .map((option) => option.fork)
+    expect(forked).toEqual(
+      expect.arrayContaining([
+        {
+          role: "complex-impl",
+          mode: "fork",
+          agentType: "fork",
+          preamble: "fork:complex-impl:en"
+        }
+      ])
+    )
+    expect(
+      forked?.every((fork) =>
+        ["complex-impl", "normal-impl", "general"].includes(fork?.role ?? "")
+      )
+    ).toBe(true)
+  })
+
+  it("split で fork を返せない文脈の要る作業は self のままにする", async () => {
+    const raw = JSON.stringify({
+      reason: "split",
+      tasks: [
+        { id: "a", summary: "x" },
+        { id: "b", summary: "y", needsContext: true }
+      ]
+    })
+    const result = await pickDelegate(raw, deps([], unused, null))
+    if (!result.ok || result.reason !== "split") throw new Error("unexpected")
+    expect(result.assignments).toEqual([
+      { id: "a", mode: "choose" },
+      { id: "b", mode: "self" }
+    ])
+    expect(result.options?.some((option) => option.fork !== undefined)).toBe(
+      false
+    )
+  })
+})
+
 describe("エラー", () => {
   async function errorOf(
     raw: string,
@@ -654,12 +755,6 @@ describe("エラー", () => {
     ]) {
       expect((await errorOf(raw))?.error, raw).toBe("invalid-input")
     }
-  })
-
-  it("no-api-key は Jev が要るときだけ返す", async () => {
-    expect((await errorOf(REVIEW_INPUT, [], failingJev(), null))?.error).toBe(
-      "no-api-key"
-    )
   })
 
   it("jev-failed は呼び出しの失敗と想定外の応答で返す", async () => {

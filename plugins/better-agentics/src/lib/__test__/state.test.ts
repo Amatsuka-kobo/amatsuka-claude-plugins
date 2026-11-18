@@ -50,13 +50,10 @@ describe("orchestrationState", () => {
     ).toBe("conflict-gate")
   })
 
-  it("キーが空白だけなら no-api-key、あれば inject", () => {
-    expect(
-      stateOf({
-        AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "true",
-        TYPESAFE_API_KEY: "   "
-      })
-    ).toBe("no-api-key")
+  it("キーの有無によらず inject", () => {
+    expect(stateOf({ AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "true" })).toBe(
+      "inject"
+    )
     expect(
       stateOf({
         AMATSUKA_AGENT_ENABLE_ORCHESTRATION: "true",
@@ -76,9 +73,8 @@ describe("orchestrationState", () => {
 })
 
 describe("subagentPolicyApplies", () => {
-  it("inject と no-api-key のときだけ真", () => {
+  it("inject のときだけ真", () => {
     expect(subagentPolicyApplies({ kind: "inject" })).toBe(true)
-    expect(subagentPolicyApplies({ kind: "no-api-key" })).toBe(true)
     for (const kind of [
       "off",
       "conflict-injection",

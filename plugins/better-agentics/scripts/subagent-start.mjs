@@ -294,10 +294,6 @@ __name(scanDefinitions, "scanDefinitions");
 // src/lib/state.ts
 var ON = /* @__PURE__ */ new Set(["1", "true", "on"]);
 var OFF = /* @__PURE__ */ new Set(["", "0", "false", "off"]);
-function hasApiKey(env) {
-  return (env.TYPESAFE_API_KEY?.trim() ?? "") !== "";
-}
-__name(hasApiKey, "hasApiKey");
 function orchestrationState(env) {
   const value = env.AMATSUKA_AGENT_ENABLE_ORCHESTRATION?.trim().toLowerCase() ?? "";
   if (OFF.has(value)) return { kind: "off" };
@@ -308,12 +304,11 @@ function orchestrationState(env) {
   }
   const gate = env.AMATSUKA_AGENT_DELEGATION_GATE?.trim().toLowerCase() ?? "";
   if (ON.has(gate)) return { kind: "conflict-gate" };
-  if (!hasApiKey(env)) return { kind: "no-api-key" };
   return { kind: "inject" };
 }
 __name(orchestrationState, "orchestrationState");
 function subagentPolicyApplies(state) {
-  return state.kind === "inject" || state.kind === "no-api-key";
+  return state.kind === "inject";
 }
 __name(subagentPolicyApplies, "subagentPolicyApplies");
 
