@@ -30,13 +30,10 @@ var ARCHITECTURE_HEADINGS = [
   "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9",
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
+  "\u4FDD\u8B77\u30D1\u30B9",
+  "\u30C6\u30B9\u30C8\u65B9\u91DD",
   "ADR \u4E00\u89A7"
 ];
-var MOVED_HEADINGS = {
-  \u30C6\u30B9\u30C8\u65B9\u91DD: "testing-policy",
-  \u4FDD\u8B77\u30D1\u30B9: "protected-paths",
-  \u898F\u7D04: "conventions"
-};
 var ADR_HEADING = "ADR \u4E00\u89A7";
 var DOMAINS_HEADING = "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7";
 var DOMAINS_MARKER = "metatron:domains";
@@ -216,14 +213,6 @@ function validateHeadingKey(heading, options = {}) {
     };
   }
   if (options.allowUnlisted === true) return { ok: true, heading: value };
-  const movedTo = MOVED_HEADINGS[value];
-  if (movedTo !== void 0) {
-    return {
-      ok: false,
-      error: "unknown_heading",
-      message: `\`${value}\` \u306F ARCHITECTURE \u304B\u3089 .claude/rules/metatron/${movedTo}.md \u3078\u79FB\u3057\u307E\u3057\u305F\u3002stage-rules --input <path> \u3067\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
   if (!isArchitectureHeading(value)) {
     return {
       ok: false,
@@ -3320,6 +3309,8 @@ var ARCHITECTURE_SECTIONS = [
   "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9",
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
+  "\u4FDD\u8B77\u30D1\u30B9",
+  "\u30C6\u30B9\u30C8\u65B9\u91DD",
   "ADR \u4E00\u89A7"
 ];
 var EXCLUDED_DIRECTORY_NAMES = /* @__PURE__ */ new Set([

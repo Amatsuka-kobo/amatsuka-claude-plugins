@@ -21,12 +21,10 @@ import fs from "node:fs"
 export const ARCHITECTURE_TITLE = "# ARCHITECTURE"
 
 /**
- * 契約 §4-1 の 7 セクション。見出し名と順序を固定する。
+ * 契約 §4-1 の 9 セクション。見出し名と順序を固定する。
  *
- * `テスト方針` / `保護パス` / `規約` は `.claude/rules/metatron/` へ移した
- * (設計書 §9-1)。この許可リストは**書き込みの検証にしか使わない**ため、
- * 3 節を外しても既存 ARCHITECTURE の 3 節は引き続きセクションとして読める
- * (セクション分割はフェンス状態機械であり許可リストと独立している。§9-3)。
+ * `保護パス` / `テスト方針` は rules から ARCHITECTURE へ戻した。規約は ARCHITECTURE で扱わない。
+ * この許可リストは書き込みの検証と、新しいセクションを差し込む位置の決定に使う。
  */
 export const ARCHITECTURE_HEADINGS = [
   "システム概要",
@@ -35,22 +33,12 @@ export const ARCHITECTURE_HEADINGS = [
   "ディレクトリ構成と責務",
   "ドメインマップ",
   "コマンド定義",
+  "保護パス",
+  "テスト方針",
   "ADR 一覧"
 ] as const
 
 export type ArchitectureHeading = (typeof ARCHITECTURE_HEADINGS)[number]
-
-/**
- * 旧セクション名 → 移行先の rules ファイル名。
- *
- * **検証には使わない。**エラーメッセージを分かりやすくするためだけに使う
- * (設計書 §9-1)。`remove: true` の削除はこの表も許可リストも参照しない。
- */
-export const MOVED_HEADINGS = {
-  テスト方針: "testing-policy",
-  保護パス: "protected-paths",
-  規約: "conventions"
-} as const
 
 export const ADR_HEADING = "ADR 一覧"
 export const DOMAINS_HEADING = "ドメインマップ"
@@ -432,16 +420,8 @@ export function validateHeadingKey(
     }
   }
   // 削除は許可リストを参照しない(設計書 §6-2・§9-1)。内容を書くわけではないので、
-  // 許可リストに載っている必要がない。移行時に 3 節を消せるのはこのためである。
+  // 許可リストに載っている必要がない。許可リストに無い古いセクションもこれで消せる。
   if (options.allowUnlisted === true) return { ok: true, heading: value }
-  const movedTo = MOVED_HEADINGS[value as keyof typeof MOVED_HEADINGS]
-  if (movedTo !== undefined) {
-    return {
-      ok: false,
-      error: "unknown_heading",
-      message: `\`${value}\` は ARCHITECTURE から .claude/rules/metatron/${movedTo}.md へ移しました。stage-rules --input <path> で更新してください。`
-    }
-  }
   if (!isArchitectureHeading(value)) {
     return {
       ok: false,

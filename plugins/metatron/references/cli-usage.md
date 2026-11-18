@@ -82,7 +82,7 @@ ADR と GOTCHAS の記録は、環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `
 節を消すときは `body` の代わりに `remove: true` を書く。
 
 ```json
-{ "sections": [{ "heading": "規約", "remove": true }], "reason": "rules へ移した" }
+{ "sections": [{ "heading": "規約", "remove": true }], "reason": "規約は CLAUDE.md へ移した" }
 ```
 
 - `remove: true` と `body` を同時に指定すると拒否される。削除では `body` を書かない。

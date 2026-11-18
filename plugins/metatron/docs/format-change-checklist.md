@@ -6,6 +6,7 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 ## ARCHITECTURE の書式(`references/architecture-format.md`)
 
 - [ ] 見出し許可リストは `src/lib/architecture.ts` の `ARCHITECTURE_HEADINGS` と `src/lib/scan.ts` の `ARCHITECTURE_SECTIONS` の 2 箇所にある。同じコミットで直す
+- [ ] セクションを追加・削除したら、`docs/ARCHITECTURE.example.md` に記入例と記入ガイドを置き、`skills/capturing-architecture/SKILL.md` の起草の単位を揃える
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4
 - [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`、`src/check-intent-env.ts`、`references/handoff-contract.md`
 - [ ] ADR エントリの書式はこの節ではなく「ADR の書式」の節を見る(正本は契約 §4 ではなく §6)

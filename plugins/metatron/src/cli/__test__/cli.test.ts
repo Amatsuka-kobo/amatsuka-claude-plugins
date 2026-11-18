@@ -1031,8 +1031,7 @@ test("S10: docRoot と起動ディレクトリがずれていると get config �
   expect(warnings.some((w) => w.includes(".claude/rules/"))).toBe(true)
 })
 
-test("S11: 移行後の ARCHITECTURE(3 節なし)で diff-architecture が section_missing を出さない", () => {
-  // 移行後の姿。テスト方針 / 保護パス / 規約 を持たない ARCHITECTURE。
+test("S11: 保護パス・テスト方針が無い ARCHITECTURE で diff-architecture が section_missing を出し、規約は出さない", () => {
   const root = project()
   writeFile(
     root,
@@ -1049,9 +1048,9 @@ test("S11: 移行後の ARCHITECTURE(3 節なし)で diff-architecture が secti
   const missing = findings
     .filter((f) => f.kind === "section_missing")
     .map((f) => f.section)
-  for (const moved of ["テスト方針", "保護パス", "規約"]) {
-    expect(missing, moved).not.toContain(moved)
-  }
+  expect(missing).toContain("保護パス")
+  expect(missing).toContain("テスト方針")
+  expect(missing).not.toContain("規約")
 })
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,6 @@ import {
   applySectionChanges,
   extractDomains,
   findSection,
-  MOVED_HEADINGS,
   parseArchitecture,
   parseArchitectureForRead,
   parseArchitectureForWrite,
@@ -23,7 +22,7 @@ function doc(...lines: string[]): string {
   return lines.join("\n")
 }
 
-const SEVEN_SECTIONS = doc(
+const ALL_SECTIONS = doc(
   "# ARCHITECTURE",
   "",
   "## システム概要",
@@ -65,12 +64,30 @@ const SEVEN_SECTIONS = doc(
   "| --- | --- |",
   "| test | pnpm test |",
   "",
+  "## 保護パス",
+  "",
+  "- `dist/` を手で編集しない。",
+  "",
+  "## テスト方針",
+  "",
+  "- ユニットテストは vitest で書く。",
+  "",
   "## ADR 一覧",
   "",
   "### ADR-001: 最初の判断",
   "",
   "- 状態: 採用",
   "- 決定日: 2026-08-16",
+  ""
+)
+
+// ALL_SECTIONS の末尾へ、許可リストに無い古いセクションを足したフィクスチャ。
+const WITH_UNLISTED = doc(
+  ALL_SECTIONS.replace(/\n$/, ""),
+  "",
+  "## 旧メモ",
+  "",
+  "- 以前の書式で書いた本文。",
   ""
 )
 
@@ -130,8 +147,8 @@ function expectOk(
   return result
 }
 
-test("A1: 7 セクションの分解 — 見出し単位に正しく分割される", () => {
-  const parsed = parseArchitecture(SEVEN_SECTIONS)
+test("A1: 9 セクションの分解 — 見出し単位に正しく分割される", () => {
+  const parsed = parseArchitecture(ALL_SECTIONS)
 
   expect(parsed.error).toBeNull()
   expect(parsed.warnings).toEqual([])
@@ -140,7 +157,7 @@ test("A1: 7 セクションの分解 — 見出し単位に正しく分割され
   ])
   // 分解は可逆であること(前置き + 全セクションの原文 = 元テキスト)。
   expect(parsed.preamble + parsed.sections.map((s) => s.raw).join("")).toBe(
-    SEVEN_SECTIONS
+    ALL_SECTIONS
   )
   expect(parsed.preamble).toBe("# ARCHITECTURE\n\n")
   expect(findSection(parsed, "ディレクトリ構成と責務")?.body).toBe(
@@ -151,13 +168,13 @@ test("A1: 7 セクションの分解 — 見出し単位に正しく分割され
 describe("A2: セクション置換 — 対象セクション以外がバイト単位で不変", () => {
   test("既存セクションの差し替え", () => {
     const result = expectOk(
-      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "技術スタック", body: "- 言語: Rust\n- ランタイム: なし" }
       ])
     )
 
     expect(untouchedBytes(result.text, "技術スタック")).toBe(
-      untouchedBytes(SEVEN_SECTIONS, "技術スタック")
+      untouchedBytes(ALL_SECTIONS, "技術スタック")
     )
     expect(headings(result.text)).toEqual([...ARCHITECTURE_HEADINGS])
     expect(
@@ -171,25 +188,25 @@ describe("A2: セクション置換 — 対象セクション以外がバイト�
   test("先頭セクションと末尾セクションでも成り立つ", () => {
     for (const heading of ["システム概要", "コマンド定義"]) {
       const result = expectOk(
-        prepareArchitectureUpdate(SEVEN_SECTIONS, [
+        prepareArchitectureUpdate(ALL_SECTIONS, [
           { heading, body: `差し替え後の ${heading}` }
         ])
       )
       expect(untouchedBytes(result.text, heading)).toBe(
-        untouchedBytes(SEVEN_SECTIONS, heading)
+        untouchedBytes(ALL_SECTIONS, heading)
       )
     }
   })
 
   test("複数セクションの同時差し替えでも他は不変", () => {
     const result = expectOk(
-      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "ディレクトリ構成と責務", body: "- 変更後" },
         { heading: "技術スタック", body: "- 変更後" }
       ])
     )
     const skip = new Set(["ディレクトリ構成と責務", "技術スタック"])
-    const before = parseArchitecture(SEVEN_SECTIONS)
+    const before = parseArchitecture(ALL_SECTIONS)
     const after = parseArchitecture(result.text)
     expect(after.preamble).toBe(before.preamble)
     for (const section of before.sections) {
@@ -200,7 +217,7 @@ describe("A2: セクション置換 — 対象セクション以外がバイト�
 })
 
 test("A3: metatron:domains の抽出 — 正しい JSON を返す", () => {
-  const result = extractDomains(SEVEN_SECTIONS)
+  const result = extractDomains(ALL_SECTIONS)
 
   expect(result.ok).toBe(true)
   expect(result.domains).toEqual({
@@ -250,7 +267,7 @@ describe("A5: ドメインマップの検証 4 項目", () => {
 
       // stage も拒否する(壊れたブロックは stage すらできない)。
       const body = doc("```json metatron:domains", content, "```", "")
-      const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      const result = prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "ドメインマップ", body }
       ])
       expect(result.ok).toBe(false)
@@ -269,19 +286,19 @@ describe("A5: ドメインマップの検証 4 項目", () => {
       ""
     )
     const result = expectOk(
-      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "ドメインマップ", body }
       ])
     )
     expect(extractDomains(result.text).domains).toEqual({ generic: ["**"] })
     expect(untouchedBytes(result.text, "ドメインマップ")).toBe(
-      untouchedBytes(SEVEN_SECTIONS, "ドメインマップ")
+      untouchedBytes(ALL_SECTIONS, "ドメインマップ")
     )
   })
 })
 
 test("A6: 未知の見出しを stage → エラー", () => {
-  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+  const result = prepareArchitectureUpdate(ALL_SECTIONS, [
     { heading: "パフォーマンス方針", body: "本文" }
   ])
 
@@ -363,14 +380,12 @@ test("A9: システム概要の更新 — Mermaid を含んでも分割が壊れ
   )
 
   const result = expectOk(
-    prepareArchitectureUpdate(SEVEN_SECTIONS, [
-      { heading: "システム概要", body }
-    ])
+    prepareArchitectureUpdate(ALL_SECTIONS, [{ heading: "システム概要", body }])
   )
 
   expect(headings(result.text)).toEqual([...ARCHITECTURE_HEADINGS])
   expect(untouchedBytes(result.text, "システム概要")).toBe(
-    untouchedBytes(SEVEN_SECTIONS, "システム概要")
+    untouchedBytes(ALL_SECTIONS, "システム概要")
   )
   expect(result.text).toContain("  CLI[## CLI] --> Hook")
   expect(parseArchitecture(result.text).error).toBeNull()
@@ -378,7 +393,7 @@ test("A9: システム概要の更新 — Mermaid を含んでも分割が壊れ
 
 test("A10: overview 疑似キーを指定 → エラー(廃止済み)", () => {
   for (const key of ["overview", "Overview", " overview "]) {
-    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+    const result = prepareArchitectureUpdate(ALL_SECTIONS, [
       { heading: key, body: "本文" }
     ])
     expect(result.ok).toBe(false)
@@ -416,7 +431,7 @@ test("A11: タイトルと最初の ## の間に本文 → stage は成功し警
 
 describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧)", () => {
   test("他と同じ規則で分割される", () => {
-    const parsed = parseArchitecture(SEVEN_SECTIONS)
+    const parsed = parseArchitecture(ALL_SECTIONS)
     expect(findSection(parsed, "レイヤー構造")?.body).toContain(
       "ドメイン層は UI 層を参照しない。"
     )
@@ -424,22 +439,22 @@ describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧
       "### ADR-001: 最初の判断"
     )
     // `###` は節内の小見出しであり、セクション見出しにしない。
-    expect(headings(SEVEN_SECTIONS)).not.toContain("ADR-001: 最初の判断")
+    expect(headings(ALL_SECTIONS)).not.toContain("ADR-001: 最初の判断")
   })
 
   test("レイヤー構造は stage-architecture で置換できる", () => {
     const result = expectOk(
-      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "レイヤー構造", body: "- 1 層のみ" }
       ])
     )
     expect(untouchedBytes(result.text, "レイヤー構造")).toBe(
-      untouchedBytes(SEVEN_SECTIONS, "レイヤー構造")
+      untouchedBytes(ALL_SECTIONS, "レイヤー構造")
     )
   })
 
   test("ADR 一覧は低位 API(adr.ts 用)で置換できる", () => {
-    const result = applySectionChanges(SEVEN_SECTIONS, [
+    const result = applySectionChanges(ALL_SECTIONS, [
       {
         heading: "ADR 一覧",
         body: doc(
@@ -458,7 +473,7 @@ describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(untouchedBytes(result.text, "ADR 一覧")).toBe(
-      untouchedBytes(SEVEN_SECTIONS, "ADR 一覧")
+      untouchedBytes(ALL_SECTIONS, "ADR 一覧")
     )
     expect(result.text).toContain("### ADR-002: 次の判断")
   })
@@ -487,7 +502,7 @@ test("A13: Mermaid ブロック内の ## を見出しにしない", () => {
 })
 
 test("A14: heading に ADR 一覧 → エラー。stage-adr へ誘導する", () => {
-  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+  const result = prepareArchitectureUpdate(ALL_SECTIONS, [
     { heading: "ADR 一覧", body: "### ADR-999: 差し替え" }
   ])
 
@@ -668,7 +683,7 @@ test("A19: 同名の ## 見出しが 2 つ → 最初を採り、stage は警告
 
 describe("追加: 契約 §4-2 の行の正規化", () => {
   test("CRLF の文書でも判定が割れず、改行コードが保たれる", () => {
-    const crlf = SEVEN_SECTIONS.replace(/\n/g, "\r\n")
+    const crlf = ALL_SECTIONS.replace(/\n/g, "\r\n")
     const parsed = parseArchitecture(crlf)
 
     expect(parsed.error).toBeNull()
@@ -847,67 +862,66 @@ describe("追加: metatron:domains の位置と多重定義", () => {
   })
 })
 
-test("A25: ARCHITECTURE_HEADINGS は 7 要素で、移行した 3 節を含まない", () => {
-  expect(ARCHITECTURE_HEADINGS).toHaveLength(7)
-  for (const moved of ["テスト方針", "保護パス", "規約"]) {
-    expect([...ARCHITECTURE_HEADINGS]).not.toContain(moved)
-  }
+test("A25: ARCHITECTURE_HEADINGS は 9 要素で、保護パス・テスト方針が ADR 一覧の前に並び、規約を含まない", () => {
+  expect(ARCHITECTURE_HEADINGS).toHaveLength(9)
+  expect([...ARCHITECTURE_HEADINGS]).not.toContain("規約")
+  expect(ARCHITECTURE_HEADINGS.slice(6)).toStrictEqual([
+    "保護パス",
+    "テスト方針",
+    "ADR 一覧"
+  ])
 })
 
-test("A24: 移行した 3 節へ body を書こうとすると unknown_heading。メッセージが移行先を示す", () => {
-  for (const [heading, file] of Object.entries(MOVED_HEADINGS)) {
-    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
-      { heading, body: "本文" }
-    ])
-    expect(result.ok, heading).toBe(false)
-    if (result.ok) continue
-    expect(result.error, heading).toBe("unknown_heading")
-    expect(result.message, heading).toContain(file)
-    expect(result.message, heading).toContain("stage-rules")
+test("A24: 保護パス・テスト方針へ body を書ける。無いセクションは ADR 一覧の前に差し込む", () => {
+  for (const heading of ["保護パス", "テスト方針"]) {
+    const result = expectOk(
+      prepareArchitectureUpdate(ALL_SECTIONS, [{ heading, body: "- 変更後" }])
+    )
+    expect(findSection(parseArchitecture(result.text), heading)?.body).toBe(
+      "\n- 変更後\n\n"
+    )
   }
+  const withoutRules = expectOk(
+    prepareArchitectureUpdate(ALL_SECTIONS, [
+      { heading: "保護パス", remove: true },
+      { heading: "テスト方針", remove: true }
+    ])
+  ).text
+  const added = expectOk(
+    prepareArchitectureUpdate(withoutRules, [
+      { heading: "保護パス", body: "- 追加" }
+    ])
+  )
+  const order = headings(added.text)
+  expect(order.indexOf("保護パス")).toBe(order.indexOf("ADR 一覧") - 1)
+  expect(order.indexOf("保護パス")).toBe(order.indexOf("コマンド定義") + 1)
 })
 
 // ---------------------------------------------------------------------------
 // 節の削除(設計書 §6-2)
 // ---------------------------------------------------------------------------
 
-// SEVEN_SECTIONS の末尾へ、移行対象の 3 節を組み直したフィクスチャ。
-const WITH_MOVED = doc(
-  SEVEN_SECTIONS.replace(/\n$/, ""),
-  "",
-  "## テスト方針",
-  "",
-  "- ユニットテストは vitest で書く。",
-  "",
-  "## 保護パス",
-  "",
-  "- `dist/` を手で編集しない。",
-  "",
-  "## 規約",
-  "",
-  "- ブランチを切らない。",
-  ""
-)
-
 test("A20: remove: true で既存セクションが消え、他のセクションはバイト単位で不変", () => {
-  const result = prepareArchitectureUpdate(WITH_MOVED, [
-    { heading: "規約", remove: true }
+  const result = prepareArchitectureUpdate(WITH_UNLISTED, [
+    { heading: "保護パス", remove: true }
   ])
   expect(result.ok).toBe(true)
   if (!result.ok) return
-  expect(result.applied).toStrictEqual([{ heading: "規約", mode: "removed" }])
-  expect(headings(result.text)).not.toContain("規約")
+  expect(result.applied).toStrictEqual([
+    { heading: "保護パス", mode: "removed" }
+  ])
+  expect(headings(result.text)).not.toContain("保護パス")
   // 残ったセクションはそれぞれバイト単位で不変。
   for (const heading of headings(result.text)) {
     expect(sectionRaw(result.text, heading), heading).toBe(
-      sectionRaw(WITH_MOVED, heading)
+      sectionRaw(WITH_UNLISTED, heading)
     )
   }
 })
 
 test("A21: 存在しないセクションの remove は section_not_found で拒否する", () => {
-  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
-    { heading: "規約", remove: true }
+  const result = prepareArchitectureUpdate(ALL_SECTIONS, [
+    { heading: "旧メモ", remove: true }
   ])
   expect(result.ok).toBe(false)
   if (result.ok) return
@@ -915,24 +929,30 @@ test("A21: 存在しないセクションの remove は section_not_found で拒
 })
 
 test("A22: body と remove の同時指定は invalid_input で拒否する", () => {
-  const result = prepareArchitectureUpdate(WITH_MOVED, [
-    { heading: "規約", body: "本文", remove: true }
+  const result = prepareArchitectureUpdate(WITH_UNLISTED, [
+    { heading: "保護パス", body: "本文", remove: true }
   ])
   expect(result.ok).toBe(false)
   if (result.ok) return
   expect(result.error).toBe("invalid_input")
 })
 
-test("A23: 許可リストに無い見出しでも remove できる(移行の要)", () => {
-  expect([...ARCHITECTURE_HEADINGS]).not.toContain("規約")
+test("A23: 許可リストに無い見出しでも remove できる", () => {
+  expect([...ARCHITECTURE_HEADINGS]).not.toContain("旧メモ")
+  const result = prepareArchitectureUpdate(WITH_UNLISTED, [
+    { heading: "旧メモ", body: "本文" }
+  ])
+  expect(result.ok).toBe(false)
+  if (!result.ok) expect(result.error).toBe("unknown_heading")
   expect(
-    prepareArchitectureUpdate(WITH_MOVED, [{ heading: "規約", remove: true }])
-      .ok
+    prepareArchitectureUpdate(WITH_UNLISTED, [
+      { heading: "旧メモ", remove: true }
+    ]).ok
   ).toBe(true)
 })
 
 test("A26: remove: true でも ADR 一覧 は adr_heading で拒否する", () => {
-  const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+  const result = prepareArchitectureUpdate(ALL_SECTIONS, [
     { heading: "ADR 一覧", remove: true }
   ])
   expect(result.ok).toBe(false)
@@ -940,11 +960,11 @@ test("A26: remove: true でも ADR 一覧 は adr_heading で拒否する", () =
   expect(result.error).toBe("adr_heading")
 })
 
-test("A27: 3 節をまとめて 1 回の remove で消せる(移行の実形)", () => {
-  const result = prepareArchitectureUpdate(WITH_MOVED, [
+test("A27: 複数のセクションをまとめて 1 回の remove で消せる", () => {
+  const result = prepareArchitectureUpdate(WITH_UNLISTED, [
     { heading: "テスト方針", remove: true },
     { heading: "保護パス", remove: true },
-    { heading: "規約", remove: true }
+    { heading: "旧メモ", remove: true }
   ])
   expect(result.ok).toBe(true)
   if (!result.ok) return
@@ -953,22 +973,21 @@ test("A27: 3 節をまとめて 1 回の remove で消せる(移行の実形)", 
     "removed",
     "removed"
   ])
-  expect(headings(result.text)).toStrictEqual(headings(SEVEN_SECTIONS))
-  // 残った 7 節の中身はバイト単位で不変。
-  // (末尾の 3 節を消したため、節を隔てていた区切りの空行 1 行だけが直前の節の
-  //  末尾に残る。節の追加が境界へ空行を 1 行入れるのと対称の挙動である。)
-  const trimTrailingBlank = (text: string | undefined): string =>
-    (text ?? "").replace(/(\r?\n)+$/, "\n")
+  expect(headings(result.text)).toStrictEqual(
+    headings(WITH_UNLISTED).filter(
+      (h) => !["テスト方針", "保護パス", "旧メモ"].includes(h)
+    )
+  )
   for (const heading of headings(result.text)) {
-    expect(trimTrailingBlank(sectionRaw(result.text, heading)), heading).toBe(
-      trimTrailingBlank(sectionRaw(SEVEN_SECTIONS, heading))
+    expect(sectionRaw(result.text, heading), heading).toBe(
+      sectionRaw(WITH_UNLISTED, heading)
     )
   }
 })
 
 test("A28: 末尾のセクションを remove しても末尾の改行が壊れない", () => {
-  const result = prepareArchitectureUpdate(WITH_MOVED, [
-    { heading: "規約", remove: true }
+  const result = prepareArchitectureUpdate(WITH_UNLISTED, [
+    { heading: "旧メモ", remove: true }
   ])
   expect(result.ok).toBe(true)
   if (!result.ok) return
@@ -977,7 +996,7 @@ test("A28: 末尾のセクションを remove しても末尾の改行が壊れ�
 })
 
 test("A29: フェンス内に ## を持つ節の隣を remove しても巻き込まない", () => {
-  const result = prepareArchitectureUpdate(WITH_MOVED, [
+  const result = prepareArchitectureUpdate(WITH_UNLISTED, [
     { heading: "技術スタック", remove: true }
   ])
   expect(result.ok).toBe(true)
@@ -985,14 +1004,14 @@ test("A29: フェンス内に ## を持つ節の隣を remove しても巻き込
   expect(headings(result.text)).toContain("システム概要")
   expect(result.text).toContain("A[## これは見出しではない] --> B")
   expect(sectionRaw(result.text, "システム概要")).toBe(
-    sectionRaw(WITH_MOVED, "システム概要")
+    sectionRaw(WITH_UNLISTED, "システム概要")
   )
 })
 
 test("A30: remove に true 以外の値を渡すと invalid_input で拒否する", () => {
   for (const bad of [false, "true", 1]) {
-    const result = prepareArchitectureUpdate(WITH_MOVED, [
-      { heading: "規約", remove: bad } as unknown as {
+    const result = prepareArchitectureUpdate(WITH_UNLISTED, [
+      { heading: "保護パス", remove: bad } as unknown as {
         heading: string
         remove?: boolean
       }
@@ -1005,7 +1024,7 @@ test("A30: remove に true 以外の値を渡すと invalid_input で拒否す�
 
 describe("A31: 組み上げた後の全文を読み直し、壊れた文書を stage しない", () => {
   test("body に `## ADR 一覧` を入れると invalid_body で拒否する", () => {
-    for (const current of [SEVEN_SECTIONS, MINIMAL_DOMAINS_ONLY, null]) {
+    for (const current of [ALL_SECTIONS, MINIMAL_DOMAINS_ONLY, null]) {
       const result = prepareArchitectureUpdate(current, [
         {
           heading: "システム概要",
@@ -1019,7 +1038,7 @@ describe("A31: 組み上げた後の全文を読み直し、壊れた文書を s
   })
 
   test("body に閉じていないフェンスを入れると unclosed_fence で拒否する", () => {
-    for (const current of [SEVEN_SECTIONS, null]) {
+    for (const current of [ALL_SECTIONS, null]) {
       const result = prepareArchitectureUpdate(current, [
         { heading: "技術スタック", body: "```ts\nconst a = 1" }
       ])
@@ -1031,7 +1050,7 @@ describe("A31: 組み上げた後の全文を読み直し、壊れた文書を s
 
   test("ドメインマップ以外の body に不正なドメインマップを入れると invalid_domains で拒否する", () => {
     // ドメインマップのセクションより前に置くと、文書の最初のブロックになる。
-    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+    const result = prepareArchitectureUpdate(ALL_SECTIONS, [
       {
         heading: "技術スタック",
         body: "```json metatron:domains\n{ 壊れた JSON\n```"
@@ -1057,18 +1076,18 @@ describe("A31: 組み上げた後の全文を読み直し、壊れた文書を s
 
     // ADR 一覧が末尾にある文書へ、順序の外の見出しを足す経路は ADR 一覧の末尾に空行を足す。
     const seven = expectOk(
-      prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "技術スタック", body: "| 言語 | Go |" }
       ])
     )
     expect(sectionRaw(seven.text, "ADR 一覧")).toBe(
-      sectionRaw(SEVEN_SECTIONS, "ADR 一覧")
+      sectionRaw(ALL_SECTIONS, "ADR 一覧")
     )
   })
 })
 
 test("A32: 回帰: 変更前からドメインマップが壊れた文書でも、他のセクションの更新と、ドメインマップの差し替えは通る", () => {
-  const broken = SEVEN_SECTIONS.replace(
+  const broken = ALL_SECTIONS.replace(
     '  "backend": ["src/server/**"]',
     '  "backend": []'
   )
@@ -1094,7 +1113,7 @@ test("A32: 回帰: 変更前からドメインマップが壊れた文書でも�
 
 describe("A33: 単独の CR と CRLF は検証の前に LF へ揃え、検証と保存で同じ行の構造を使う", () => {
   test("再現: CR で区切った閉じフェンスは、検証でも開いたフェンスとして拒否する", () => {
-    const result = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+    const result = prepareArchitectureUpdate(ALL_SECTIONS, [
       { heading: "システム概要", body: "overview\r```" },
       { heading: "技術スタック", body: "stack\r```" }
     ])
@@ -1105,18 +1124,18 @@ describe("A33: 単独の CR と CRLF は検証の前に LF へ揃え、検証と
 
   test("LF・CR・CRLF で同じ判定になる", () => {
     for (const eol of ["\n", "\r", "\r\n"]) {
-      const bad = prepareArchitectureUpdate(SEVEN_SECTIONS, [
+      const bad = prepareArchitectureUpdate(ALL_SECTIONS, [
         { heading: "システム概要", body: `overview${eol}\`\`\`` }
       ])
       expect(bad.ok, JSON.stringify(eol)).toBe(false)
 
       const good = expectOk(
-        prepareArchitectureUpdate(SEVEN_SECTIONS, [
+        prepareArchitectureUpdate(ALL_SECTIONS, [
           { heading: "システム概要", body: `一行目${eol}二行目` }
         ])
       )
       expect(good.text, JSON.stringify(eol)).toContain("一行目\n二行目")
-      expect(headings(good.text)).toEqual(headings(SEVEN_SECTIONS))
+      expect(headings(good.text)).toEqual(headings(ALL_SECTIONS))
     }
   })
 })
