@@ -7,6 +7,17 @@
 
 環境構築やその他開発手法などは[ここ](ONBOARDING.md)に記載してあります。
 
+作業中のテストは、変更したプラグインに絞って実行できます。
+
+```bash
+pnpm run test:changed           # main からの差分があるプラグインと、それに依存するプラグインだけ
+pnpm run test:changed <branch>  # 基準のブランチを変える
+```
+
+ルートの設定ファイル(`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`tsconfig.json`・`biome.json`・`vitest.config.ts`)に差分があるときは、全プラグインのテストを実行します。コミットの前には `pnpm run test` で全体を確かめてください。
+
+テストが他のプラグインの `src` を相対パスで import するときは、そのプラグインを `package.json` の `devDependencies` に `workspace:*` で宣言してください。宣言が無いと、依存先を変更したときにテストが選ばれません。
+
 ## 利用方法
 
 ここには簡易的に利用方法を記載します。詳しくは[公式のドキュメント](https://code.claude.com/docs/ja/discover-plugins)を参照してください。

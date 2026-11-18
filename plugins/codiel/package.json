@@ -3,5 +3,11 @@
   "version": "1.1.1",
   "private": true,
   "type": "module",
-  "scripts": { "build": "tsx build.ts" }
+  "scripts": {
+    "build": "tsx build.ts"
+  },
+  "devDependencies": {
+    "metatron-scripts": "workspace:*",
+    "raguel-mcp": "workspace:*"
+  }
 }
