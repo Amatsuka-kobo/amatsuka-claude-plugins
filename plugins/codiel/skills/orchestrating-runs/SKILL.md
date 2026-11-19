@@ -43,8 +43,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 0. 前提確認と実行モードの決定
 
-run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決め、連携モードと画像添付・ADR の
-書き先を判定する。ドメインマップの不在それ自体は初期化の欠落に当たらない。
+run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決め、連携モードと画像添付・`knowledgeTarget` を
+判定する。ドメインマップの不在それ自体は初期化の欠落に当たらない。
 
 手順 1・2 の 4 つのコマンドは run ごとに 1 回だけ実行し、以降は得た値を各所へ渡す。解決した値は作業の
 契約で渡し、作業者に解決させない。`<plugin-root>` は絶対パスに展開して実行する。
@@ -60,7 +60,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    ```
 
 2. 続けて次の 3 つを実行する。
-   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget`・候補の有効無効の判定材料を得る。
+   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget` の判定材料を得る。
    - `codiel-state.mjs config`: テストの仕様の置き場(testsDir)と run の文書の置き場(runsDir)を得る。
    - `codiel-state.mjs gitignore`: `.gitignore` に足りない行(出力の `missing`)を得る。判定 D に使う。
 
@@ -83,11 +83,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | `imageUpload.ghAttach` | 連携モードが `local` なら `false`。`github` では `ghAttachSupported` が true のとき `true` |
    | `imageUpload.chrome` | 連携モードが `local` なら `false`。`github` ではセッションで `mcp__claude-in-chrome__*` のツールが使えるとき `true` |
    | `knowledgeTarget` | `projectDocs.architecture` が null でなく、かつ `projectDocs.metatronConfig` が true なら `metatron`、それ以外は `intents` |
-   | ADR 候補 | `knowledgeRecording.adr` が true なら `on`、false なら `off` |
-   | GOTCHAS 候補 | `knowledgeRecording.gotchas` が true なら `on`、false なら `off` |
-
    これらの値と手順 6 で決めた実行モードは run の開始時に決めて固定し、intent フェーズ(`capturing-intent`)が
-   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--adr-candidates` / `--gotcha-candidates` / `--domain-mode` の値になる。
+   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--domain-mode` の値になる。
    再開時の再判定は `references/resume.md` に従う。
 4. 初期化の外形は B + C + D の 3 点で確認する。
 
@@ -171,12 +168,12 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | [test-code] | 仕様のディレクトリごとの成果物を書く単位(worktree で作業し、並列に進めてよい)。`spec.md` / `cases.md` → テストコード | scripting-tests | `spec.md` / `cases.md`、`design.md`(軽量では intent)、`dev-plan.md` | テストコード(ユニットと E2E)、`spec.md` の `tests`、`report.md`(作業者の報告からオーケストレーターが書く) | 全ディレクトリのマージ後に pass-gate(`evaluate_code`)を 1 回 |
 | [implement] | dev-plan のステップごとの成果物を書く単位(`codiel-state waves` の順。`parallel` グループは worktree で作業し、並列に進めてよい)と、ステップごとのタスクレビューの単位。グループのマージの後に、そのグループの通すテストのうちプロジェクトの test コマンドと `units/` のテストをオーケストレーターが実行し、`e2e/` のテストは仕様のディレクトリごとの実行の単位にする | implementing + fixing-failures | `dev-plan.md`(該当ステップ)、test-code のテスト(ユニットと E2E) | テストを通すコード diff | 全 wave の後に pass-gate(`evaluate_code`)を 1 回 |
 | [test-loop] | 回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は仕様のディレクトリごとの実行の単位)と、仕様のディレクトリごとの NG の修正の単位(worktree で作業し、並列に進めてよい) | running-regression-tests + fixing-failures | 全 `spec.md` の `tests`、プロジェクトの test コマンド | `test-run-<n>.md`(自分の実行結果と `e2e/` の単位の報告を合わせてオーケストレーターが書く)、修正 diff | pass-gate(`evaluate_code`) |
-| [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、関係する領域の持続層への取り込み、run の変更の設計資料への書き込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md`、`docs/intents/design/<種別>.md` | pass-gate(`evaluate_design`) |
+| [intent-sync] | オーケストレーター本体が書く。承認済みの受け入れ基準変更と、intent-sync より前に追記された原文の要望 → 派生文のセクションと `## 変更履歴` への反映、carry-over の修正判断の `## 合意済み事項` への追記、関係する領域の持続層への取り込みと失敗の記録の写し、run の変更の設計資料への書き込み | syncing-intents | intent、承認済みの受け入れ基準変更、追記された原文の要望、持続層 | intent の派生文のセクションと `## 変更履歴`、`docs/intents/domains/<領域>.md`、`docs/intents/design/<種別>.md` | pass-gate(`evaluate_design`) |
 | [pr] | オーケストレーター本体が、github では PR を作り、local では state に記録する | なし | `design.md`、`dev-plan.md`、`cases.md`、diff | github: PR / local: state の記録だけ | complete-phase(github のときだけ `--pr-url` 必須) |
 | [review] | 観点ごとの読み取りだけの単位(並列に進めてよい)。契約の前提「diff の範囲」の `git diff <範囲>` + intent + `design.md` → 指定観点の所見一覧(テキスト) | reviewing-diffs | `git diff <範囲>`(契約の前提「diff の範囲」の値)、intent、`design.md`(軽量では intent と `dev-plan.md`)、`<testsDir>/**` と記録されたテスト、持続層、ARCHITECTURE(§0 で解決したパス。無ければ「なし」) | `reports/review-<m>.md`(全観点の待ちが消えてから書く。§3)+ PR コメント(github のみ) | complete-phase |
 | [fix-loop] | 修正の成果物を書く単位、回帰の実行(プロジェクトの test コマンドと `units/` のテストはオーケストレーター本体、`e2e/` は実行の単位)、観点ごとの再レビューの読み取りだけの単位。レビュー所見 → コード修正 diff / `test-run-<n+1>.md` / `review-<m+1>.md` | fixing-review-findings + running-regression-tests + reviewing-diffs | `reports/review-<m>.md` の critical/high、再レビューの diff の範囲(契約の前提「diff の範囲」の値)、ARCHITECTURE(再レビューの単位のとき。§0 で解決したパス。無ければ「なし」) | コード修正 diff、`test-run-<n+1>.md`、`review-<m+1>.md` | pass-gate(`evaluate_code`。回数と通過の時点は `references/phase-fix-loop.md`) |
 | [triage] | オーケストレーター本体。`reports/review-<m>.md` の medium/low → github: 起票された Issue 番号 / local: `status: proposed` の intent 草案 | filing-followup-issues | `reports/review-<m>.md` の medium/low | github: 起票された Issue 番号(`review-<m>.md` と PR コメントに追記)/ local: `docs/intents/` の intent 草案 | complete-phase(Raguel ゲートなし) |
-| [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | なし | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status` | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(`complete-phase` ではない) |
+| [finalize] | オーケストレーター本体。全フェーズの成果物、intent の原文のセクション → 結果レポート | なし | 全フェーズの成果物、intent の原文のセクション | 結果レポート(原文の要望ごとの「達成 / 未達 / 要確認 / 持ち越し」を含む)、intent の `status`、fix-loop の修正判断を加えた intent の `## 合意済み事項`、失敗の記録を写した領域ファイル | `node <plugin-root>/scripts/codiel-state.mjs finalize --slug <slug>`(`complete-phase` ではない) |
 
 - 単位同士を並列に進めるかは運用方針に任せる。並列に進める場合は、`references/delegation-env.md` の「並列に進める場合」の条件を満たす単位に限る。
 - 軽量の経路(`scale: light`)では discuss と design を `skip-phase` で飛ばす。`SKIPPABLE` はこの 2 フェーズと
@@ -216,15 +213,14 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき。carry-over で修正の単位を始める前 |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの単位を始める前 |
 | `references/e2e.md` | E2E を実行する単位を始める前 |
-| `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
-| `references/adr-candidates.md` | intent-sync で取り込み先の分岐を決める前。fix-loop で設計を変える修正を採ったときの fix-loop の pass-gate の前。finalize で候補を写す前と、結果レポートに一覧する前 |
+| `references/failure-records.md` | 失敗の記録を書くとき(STOP を妥当と裁定した・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。intent-sync で取り込み先の分岐を決める前。finalize で記録を写す前と、結果レポートに一覧する前 |
 | `references/resume.md` | run を再開するとき |
 
 手順ファイルは次の 4 つの時点で読む。
 
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
-2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`gotcha-candidates.md`・`adr-candidates.md`)を使う手順に入る前。読む時点は
+2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`failure-records.md`)を使う手順に入る前。読む時点は
    上の表に従う。fix-loop の再レビューでは、単位を始める前に `review-common.md` を読む。
 3. run を再開するとき。`resume.md` を読み、待ちの処理や単位のやり直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の
@@ -309,7 +305,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   `stop` は待ちが残っていると失敗する。`--abandon-waits` は、今のセッションの委譲を止めず完了も待たずに止めると人が決めたときだけ付ける。
   E2E のレポートが残っていれば、`stop` の前に `references/e2e.md` のコミットの手順に従う。
   `waits` が空になってから、残っている worktree とブランチをすべて削除する。委譲が止まる前に、書き込み中の worktree を消さないためである。
-  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち未写しのもの(`references/gotcha-candidates.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書き、候補の種別が無効(環境変数が有効な値でない)のときはその旨を添える。
+  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/failure-records.md` のエントリのうち未写しのもの(`references/failure-records.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に失敗の記録を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書く。同じ slug のすべての try の `reports/fix-decisions.md` に行があれば、intent へ写していない修正判断として合わせて一覧する。
 
 ## 3. 作業の単位と契約
 

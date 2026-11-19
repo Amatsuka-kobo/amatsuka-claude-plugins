@@ -120,7 +120,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
    応答の本文だけに書いて質問文を短くしない。所見の原文(`message` や `evidence` の全文)は質問文に添えない。
    選択肢は「修正して再提出」「このまま承認」「中止」である。
 4. 裁定はオーケストレーターが選ばない。「多分大丈夫」の代理判断は自己承認なので、選択肢の回答を待つ。
-   「中止」なら、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason ask-aborted` で止める。`gotcha-candidates.md` の Read も GOTCHAS 候補の記録も行わない。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。`raguel-stop` は次の try の `init` に `--human-approved` を要求する値なので使わない(ASK のフェーズは STOP の verdict を持たず、`init` は止まらない)。
+   「中止」なら、`waits` を片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)`stop --slug <slug> --reason ask-aborted` で止める。`failure-records.md` を Read せず、失敗の記録も書かない。完了報告の失敗の記録の一覧は `orchestrating-runs` の 2.4 に従う。`raguel-stop` は次の try の `init` に `--human-approved` を要求する値なので使わない(ASK のフェーズは STOP の verdict を持たず、`init` は止まらない)。
 
 #### 裁定 A: 修正して再提出
 
@@ -160,7 +160,7 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 3. 通常の ASK の手順 3 と同じ規則で質問文を書き、選択肢を「再評価」「そのまま承認」「止める」にする。
 4. 再評価が選ばれたら、`resume` してフェーズを `in_progress` に戻し、evaluate を呼び直す。
 5. そのまま承認が選ばれたら、裁定 B と同じ手順(record_outcome の `ruling: "as-is"` から pass-gate まで)で通す。
-6. 止めるが選ばれたら、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-degraded` で止める。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
+6. 止めるが選ばれたら、`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-degraded` で止める。完了報告の失敗の記録の一覧は `orchestrating-runs` の 2.4 に従う。
 
 ### STOP
 
@@ -174,7 +174,7 @@ verdict を上書きしない。carry-over は手順 4 の例外とする。
    で run を `awaiting_human` にする。フェーズの `verdict` に `STOP` が残る。
    所見に `casefile/tampered` があるときは、記録の改竄であり覆せないので、手順 2 に進まず、AskUserQuestion を使わずに止める。
    応答の本文で、止めた理由(改竄の所見の要約と `decisionPoint`)を報告する(AskUserQuestion の選択肢は 2 件以上が要り、「止める」だけの質問にできないため)。
-   止め方は手順 5 と違い、`waits` を片付けてから `stop --slug <slug> --reason raguel-stop` を呼ぶだけで、GOTCHAS 候補は書かない(改竄は対象プロジェクトの失敗ではない)。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。STOP のフェーズが残るので、次の try の `init` には人の承認が要る。
+   止め方は手順 5 と違い、`waits` を片付けてから `stop --slug <slug> --reason raguel-stop` を呼ぶだけで、失敗の記録は書かない(改竄は対象プロジェクトの失敗ではない)。完了報告の失敗の記録の一覧は `orchestrating-runs` の 2.4 に従う。STOP のフェーズが残るので、次の try の `init` には人の承認が要る。
 2. 通常の ASK の手順 3 と同じ規則で質問文を書き、AskUserQuestion で「誤検知として続ける」か「妥当として止める」かを聞く。オーケストレーターはどちらも選ばない。
 3. 誤検知として続けるときは、次の順に行う。
    1. `mcp__plugin_codiel_raguel__record_outcome`(`outcome: "approved"`、`ruling: "false-positive"`、STOP の `evaluationId`、
@@ -184,7 +184,7 @@ verdict を上書きしない。carry-over は手順 4 の例外とする。
       で通す。フェーズの `verdict` は `STOP` のまま残り、`humanApproved` が記録される。
    3. 次のフェーズへ、所見を「人が誤検知と裁定した指摘」として引き継ぐ。
 4. carry-over で妥当と裁定されたときだけ、「修正して再提出」と「止める」を人に選ばせる。「修正して再提出」は、修正の前に `resume` してから `<plugin-root>/skills/orchestrating-runs/references/phase-carry-over.md` の手順 5 に従い、止めない。ほかのフェーズは手順 5 へ進む。
-5. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/gotcha-candidates.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で GOTCHAS 候補を書く。完了報告の候補の一覧は `orchestrating-runs` の 2.4 に従う。
+5. 妥当として止めるときは、先に `<plugin-root>/skills/orchestrating-runs/references/failure-records.md` を Read する。`waits` に残っている待ちを片付けてから(`orchestrating-runs` の 2.4 の片付け方に従う)、`node <plugin-root>/scripts/codiel-state.mjs stop --slug <slug> --reason raguel-stop` で止める。止めたら、その手順で失敗の記録を書く。完了報告の失敗の記録の一覧は `orchestrating-runs` の 2.4 に従う。
 
 ## findings の引き継ぎ
 

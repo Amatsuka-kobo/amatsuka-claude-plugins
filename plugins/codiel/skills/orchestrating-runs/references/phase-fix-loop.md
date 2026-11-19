@@ -18,5 +18,8 @@
 - 所見がテストに向くと `fixing-review-findings` の検証で確かめたら、`set-test-edit --slug <slug>` を実行してからテスト側の修正の単位を始める。その単位が終わった直後(委譲したときは `wait-done` の直後)に `clear-test-edit --slug <slug>` を実行し、その後でコードの修正の単位を始める。
 - github モードでは、修正のコミットが済んだ後、再レビューの単位を始める前に `git push` して PR ブランチを最新化する。
 - 再レビューの単位を始める前に `references/review-common.md` を Read し、その規則で観点を選び直し、「レビューの単位の前の準備」を行う。返った所見のうち反論済み一覧と同じ指摘は、本文 §3 のとおり `review-<m+1>.md` に書く前に除く。統合した報告は `review-<m+1>.md` に書く。
-- 直した所見に、設計時に想定していなかった仕様漏れ・考慮漏れがあったときは、fix-loop の `pass-gate` の前に `references/gotcha-candidates.md` を Read する。`pass-gate` の後に、その手順で漏れごとに GOTCHAS 候補を書く。
-- 設計を変える修正を採ったときは、fix-loop の `pass-gate` の前に `references/adr-candidates.md` を Read する。`pass-gate` の後に、その手順で ADR の 3 条件を判定し、満たす判断ごとに ADR 候補を書く。
+- 直した所見に、設計時に想定していなかった仕様漏れ・考慮漏れがあったときは、fix-loop の `pass-gate` の前に `references/failure-records.md` を Read する。`pass-gate` の後に、その手順で漏れごとに失敗の記録を書く。
+- 設計を変える修正を採ったときは、fix-loop の `pass-gate` の後に、修正ごとの論点・決定・理由を `.codiel/runs/<slug>/try-<n>/reports/fix-decisions.md` へ 1 件ずつ追記する。
+  - 1 件は、intent の `## 合意済み事項` の表の行と同じ `| <論点> | <決定> | <理由> |` の形で書く。
+  - ファイルが無ければ、先頭行を `# 修正判断(<slug> try-<n>)` にして作る。
+  - このファイルはコミットしない。intent へは finalize が写す(`references/phase-finalize.md` の手順 4)。

@@ -62,7 +62,6 @@ function readState(p) {
       ...rest
     };
   }
-  st.candidates ??= { adr: false, gotchas: false };
   return st;
 }
 function runDir(root, slug) {

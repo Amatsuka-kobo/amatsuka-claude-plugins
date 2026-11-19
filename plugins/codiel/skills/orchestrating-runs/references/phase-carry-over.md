@@ -12,8 +12,8 @@
    3. `mapped` では、所見のパスから担当タグを決め、§4 の規則(`set-domain`・担当範囲)に従う。`unscoped` では担当範囲を「なし」にする。
    4. 修正の単位のコミットが済んでから、`evaluate_code` をやり直す。`startHead` は変えない。
    5. 再評価の verdict は手順 2〜4 で扱う。ASK や STOP が返るたびに人が選ぶので、回数の上限は置かない。
-   6. STOP 由来で選んだときだけ、`gotcha-candidates.md` を Read し、その手順で GOTCHAS 候補を 1 件書く。実行は、番号に関わらず手順 1 の `resume` の直後、手順 2 の単位を始める前に行う。ASK 由来のときは書かない。
+   6. STOP 由来で選んだときだけ、`failure-records.md` を Read し、その手順で失敗の記録を 1 件書く。実行は、番号に関わらず手順 1 の `resume` の直後、手順 2 の単位を始める前に行う。ASK 由来のときは書かない。
 6. 「stop」が選ばれたら、由来で分ける。
-   - STOP 由来: `raguel-gating` の STOP の手順 5 に従う。`stop --reason raguel-stop` で止め、`gotcha-candidates.md` の手順で GOTCHAS 候補を書く。
-   - ASK 由来: `raguel-gating` の ASK の中止の手順に従う。`waits` を片付けてから `stop --reason ask-aborted` で止め、GOTCHAS 候補は書かない。
+   - STOP 由来: `raguel-gating` の STOP の手順 5 に従う。`stop --reason raguel-stop` で止め、`failure-records.md` の手順で失敗の記録を書く。
+   - ASK 由来: `raguel-gating` の ASK の中止の手順に従う。`waits` を片付けてから `stop --reason ask-aborted` で止め、失敗の記録は書かない。
 7. 修正の単位では、テストと `<testsDir>/**` の仕様を保護対象として扱う。書き換えが要る所見は直さずに報告し、報告を人への確認に回す。

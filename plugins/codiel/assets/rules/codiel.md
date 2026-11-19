@@ -6,10 +6,7 @@
   書いた・語った言葉の記録である。記録は要約も言い換えもせず、原文のまま残す。言葉を足すときは、
   日付・話者・出所の行を添えて末尾に追記する。
 - 持続層(要件と意図的な制約の `docs/intents/domains/`、システムの今の姿の `docs/intents/design/`)は
-  長く残す資産であり、intent-sync フェーズの外では書き換えない。例外は `docs/intents/domains/` への次の作業だけである。
-  - finalize の作業中に、ADR 候補を `## 意図的な制約` へ、GOTCHAS 候補を `## GOTCHAS 候補` へ書き足す。
-  - metatron が、ADR にした `[ADR 候補]` のエントリを参照形へ縮め、台帳へ移した `[GOTCHAS 候補]` の
-    エントリを消す。
+  長く残す資産であり、intent-sync フェーズの外では書き換えない。例外は、finalize の作業中に `docs/intents/domains/` の `## 失敗の記録` へ記録を書き足す作業だけである。
 - テスト仕様書は `<testsDir>/`(既定は `docs/codiel/tests`。`.codiel/config.json` の `testsDir` で決める)に
   置く。振る舞いを変えたら、対応する仕様のディレクトリの `spec.md` と `cases.md` を直し、テストコードを
   追随させる。

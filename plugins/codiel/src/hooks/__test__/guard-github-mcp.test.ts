@@ -75,10 +75,6 @@ function setupRun(slug = "ghmcp-test"): string {
     "standard",
     "--knowledge-target",
     "intents",
-    "--adr-candidates",
-    "on",
-    "--gotcha-candidates",
-    "on",
     "--image-upload",
     "none"
   ])
@@ -269,10 +265,6 @@ function setupRunWithWorktree(): string {
     "standard",
     "--knowledge-target",
     "intents",
-    "--adr-candidates",
-    "on",
-    "--gotcha-candidates",
-    "on",
     "--image-upload",
     "none"
   ])

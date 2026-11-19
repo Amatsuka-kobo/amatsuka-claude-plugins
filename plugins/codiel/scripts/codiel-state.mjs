@@ -454,7 +454,6 @@ function readState(p) {
       ...rest
     };
   }
-  st.candidates ??= { adr: false, gotchas: false };
   return st;
 }
 function writeState(p, state) {
@@ -577,9 +576,6 @@ function parseArgs(argv) {
     }
   }
   return { pos, flags, bools };
-}
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function expandBraces(glob) {
   const open = glob.indexOf("{");
@@ -845,10 +841,6 @@ function main(argv, root = process.cwd()) {
       "metatron",
       "intents"
     ]);
-    const candidates = {
-      adr: oneOf(flags, "adr-candidates", ["on", "off"]) === "on",
-      gotchas: oneOf(flags, "gotcha-candidates", ["on", "off"]) === "on"
-    };
     const upload = imageUpload(flags, integration);
     const domainMode = "domain-mode" in flags ? oneOf(flags, "domain-mode", ["mapped", "unscoped"]) : void 0;
     const latest = latestTry(root, slug);
@@ -908,8 +900,7 @@ function main(argv, root = process.cwd()) {
       integration,
       scale,
       imageUpload: upload,
-      knowledgeTarget,
-      candidates
+      knowledgeTarget
     });
     if (baseBranch) state.baseBranch = baseBranch;
     if (tryN === 1)
@@ -1338,25 +1329,6 @@ function main(argv, root = process.cwd()) {
       });
     writeState(latest.statePath, latest.state);
     return ok({ statePath: latest.statePath, state: latest.state });
-  }
-  if (cmd === "next-adr-candidate-id") {
-    const file = flags.file;
-    if (!file) fail("--file \u304C\u5FC5\u8981\u3067\u3059");
-    const domain = flags.domain;
-    if (!domain) fail("--domain \u304C\u5FC5\u8981\u3067\u3059");
-    const filePath = path3.isAbsolute(file) ? file : path3.join(root, file);
-    let max = 0;
-    if (fs3.existsSync(filePath)) {
-      const content = fs3.readFileSync(filePath, "utf8");
-      const domainRe = new RegExp(`^${escapeRegExp(domain)}-([0-9]+)$`);
-      const idRe = /\[ADR 候補: ([^\]]+)\]|\(候補 ID: ([^)]+)\)/g;
-      for (const m of content.matchAll(idRe)) {
-        const id = m[1] ?? m[2];
-        const digits = id.match(domainRe)?.[1];
-        if (digits) max = Math.max(max, Number(digits));
-      }
-    }
-    return ok({ candidateId: `${domain}-${max + 1}` });
   }
   if (cmd === "step-add") {
     const kind = stepKind(flags);

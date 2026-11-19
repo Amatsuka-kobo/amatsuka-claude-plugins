@@ -26,12 +26,6 @@ export const mockEnv = (binDir: string) => ({
 
 // スクリプトを起動し stdout の JSON を返す。pathDirs 指定時は PATH を差し替える
 // (gh / git の有無を擬似するため)
-// 継承した env から ADR・GOTCHAS の 2 変数を消し、呼び出し側が extra で明示する
-export const KNOWLEDGE_VARS = [
-  "AMATSUKA_METATRON_ENABLE_ADR",
-  "AMATSUKA_METATRON_ENABLE_GOTCHAS"
-]
-
 export function runScript(
   cwd: string,
   pathDirs?: string[],
@@ -42,7 +36,6 @@ export function runScript(
   const dirs = pathDirs ?? [defaultBin()]
   const base = mockEnv(dirs.join(path.delimiter))
   const env: NodeJS.ProcessEnv = { ...base }
-  for (const k of KNOWLEDGE_VARS) delete env[k]
   Object.assign(env, extra)
   const stdout = runTs(SCRIPT, [cwd], { env })
   return JSON.parse(stdout)
