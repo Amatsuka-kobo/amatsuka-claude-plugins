@@ -77,11 +77,11 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
 パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (1.0.0) — intent-driven orchestrator gated by the bundled `raguel` MCP
+- **codiel** (1.1.3) — intent-driven orchestrator gated by the bundled `raguel` MCP
   server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.6.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新する。両文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。
+- **metatron** (0.6.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新する。両文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。codiel は 1.1.3(2026-11-19)からどちらの候補も書かない。この 2 つの走査と ADR・GOTCHAS 機能は Issue #46 で削除する予定。
   共有ライブラリ + CLI + hook(SessionStart の案内と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
 - **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →

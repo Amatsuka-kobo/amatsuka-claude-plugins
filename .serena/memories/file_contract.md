@@ -88,6 +88,8 @@
   要る最小限(印の形、候補 ID の書式、エントリの範囲、5 つの小見出しの名前、参照形、ADR の背景に書く
   「ADR 候補 ID: <候補 ID>」の行)だけを写す。書式を変えたら両プラグインの `format-change-checklist.md` に沿って追随させる。
   書き込みは metatron の `scan-adr-candidates` / `shrink-adr-candidate`(`mem:metatron/core`)。
+  codiel 1.1.3(2026-11-19、PR #59)で `intent-format.md` から `[ADR 候補]` の書式と参照形を削除し、codiel は候補を書かなくなった。
+  metatron 側の写しと走査・縮約は #46 で削除するまで残る。codiel の `format-change-checklist.md` から metatron の写しを追随させる項目も削除済み。
 - §14 実装間の一致検証(上記の 2 者比較)。`paths.rulesDir` と `injection` は 0.6.0 で撤去し、両実装とも未知キーとして無視する。
 
 ## 各実装の場所
