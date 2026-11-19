@@ -21,10 +21,6 @@ const INIT_FLAGS = [
   "standard",
   "--knowledge-target",
   "metatron",
-  "--adr-candidates",
-  "on",
-  "--gotcha-candidates",
-  "on",
   "--image-upload",
   "gh-attach,chrome"
 ]
@@ -38,10 +34,6 @@ const INIT_FLAGS_LIGHT = [
   "light",
   "--knowledge-target",
   "metatron",
-  "--adr-candidates",
-  "on",
-  "--gotcha-candidates",
-  "on",
   "--image-upload",
   "gh-attach,chrome"
 ]
