@@ -81,6 +81,85 @@ pnpm build       # 各プラグインの src/ から scripts/*.mjs を再生成
 
 `plugins/*/scripts/*.mjs` はビルド生成物ですが git 管理の対象です。`plugins/*/src/` を変更した場合は `pnpm build` を実行し、生成された差分もあわせてコミットしてください。
 
+### Docker Engine と Docker Sandboxes
+
+一部のプラグインは改修時に前後比較の計測をします。その際 Docker Sandboxes による隔離環境で行うことになります。
+
+### WSL を使っている場合
+
+1. (Windows 側のユーザーフォルダ内) .wslconfig
+```
+[wsl2]
+nestedVirtualization=true
+```
+
+2. (WSL 内で) /etc/wsl.conf
+```
+[boot]
+systemd=true
+```
+
+3. (PowerShell で) WSL 再起動
+```bash
+wsl --shutdown
+wsl ~
+```
+
+4. (WSL 内で) KVM の設定
+```bash
+# KVMが見えているか確認: 正常なら「crw-rw---- 1 root kvm 10, 232 ... /dev/kvm」のように表示される
+ls -l /dev/kvm
+
+# KVMモジュールを確認: Intel CPUなら「kvm_intel」「kvm」が表示されれば問題ない
+lsmod | grep kvm
+
+# 診断ツールで確認: 正常なら「INFO: /dev/kvm exists」「KVM acceleration can be used」のように表示される
+sudo apt update && sudo apt install -y cpu-checker
+kvm-ok
+
+# ユーザーを kvm グループに追加
+sudo usermod -aG kvm $USER
+newgrp kvm
+```
+
+5. (PowerShell で) WSL 再起動
+```bash
+wsl --shutdown
+wsl ~
+```
+
+6. (WSL 内で) ユーザーが kvm グループに追加されていることを確認
+```bash
+# groupsコマンドの実行結果に「kvm」とが含まれていれば、問題ない
+groups
+```
+
+### Docker のインストール
+
+```bash
+# Docker Engine
+sudo apt update && sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Docker Sandboxes
+curl -fsSL https://get.docker.com | sudo REPO_ONLY=1 sh
+sudo apt update && sudo apt install docker-sbx
+sbx login # Docker アカウントにログイン
+sbx policy ls # Balanced を選択
+```
+
+WSL の場合は以下の設定も必要です。
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
 ### VSCode での Biome 拡張機能
 
 VSCode を使用する場合、コード保守の観点から Biome 拡張機能をインストールしてください。
