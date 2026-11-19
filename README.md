@@ -105,14 +105,14 @@ AI による上記文書への書き込み口を CLI に一本化し、書式の
 
 `/metatron:audit` は既存の文書を書式と執筆規律の現行の規定に照らして監査し、合わない箇所を書き直します。
 
-`/metatron:{init,update}` は、どちらも Codiel の持続層にある `[ADR 候補]` と `[GOTCHAS 候補]` を走査し、承認されたものを ADR と GOTCHAS として記録します。
+`/metatron:{init,update}` は、どちらも Codiel 1.1.2 以前が持続層に書いた `[ADR 候補]` と `[GOTCHAS 候補]` を走査し、承認されたものを ADR と GOTCHAS として記録します。Codiel 1.1.3 以降は候補を書きません。
 
 #### 環境変数
 
 ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` のいずれかなら有効になり、未設定やそれ以外の値なら無効です。
 
-- `AMATSUKA_METATRON_ENABLE_ADR`: ADR の記録と、Codiel の `[ADR 候補]` を有効にします。
-- `AMATSUKA_METATRON_ENABLE_GOTCHAS`: GOTCHAS の記録と、Codiel の `[GOTCHAS 候補]` を有効にします。
+- `AMATSUKA_METATRON_ENABLE_ADR`: ADR の記録を有効にします。
+- `AMATSUKA_METATRON_ENABLE_GOTCHAS`: GOTCHAS の記録を有効にします。
 
 チームで設定を揃えるため、プロジェクトの `.claude/settings.json` の `env` に書いてコミットすることを推奨します。値を変えたら新しいセッションを始めてください。
 
@@ -127,7 +127,7 @@ ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` �
 
 この 2 つのプラグインは連携することができます。(それぞれ独立して使用することも可)
 
-Codiel は、重要な技術選定や設計判断などを `[ADR 候補]` として、失敗知識は `[GOTCHAS 候補]` として、intent の持続層に全文で残します。候補を残すのは、Metatron の環境変数(`AMATSUKA_METATRON_ENABLE_ADR` / `AMATSUKA_METATRON_ENABLE_GOTCHAS`)が有効な種別だけです。後から Metatron を導入すると、`/metatron:init` と `/metatron:update` がそれを ADR と GOTCHAS へ移動させます。
+Codiel は、intent をまたいで効き続ける意図的な制約と、run で起きた失敗の記録を、intent の持続層に残します。Metatron の有無や環境変数によらず、すべての run で残します。
 
 Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS を管理するプラグインとして単体でハーネス資産を提供します。
 

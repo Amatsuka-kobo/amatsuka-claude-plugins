@@ -31,9 +31,7 @@ ARCHITECTURE と実装の食い違いを見ることの 2 つだけです。パ�
 Codiel 自身は失敗を GOTCHAS へ記録しません。
 
 Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに 1 ファイルで、intent をまたいで効き続ける
-意図的な制約を蓄積します。metatron が無い環境では、ADR の条件を満たす判断も `[ADR 候補]` の印を付けて
-持続層に全文を残します。metatron を導入すると、`/metatron:init` と `/metatron:update` がこの印を ADR へ移し、
-持続層を参照形に縮めます。
+意図的な制約と、run で起きた失敗の記録を蓄積します。
 
 Codiel は `docs/intents/design/` にも持続層を持ちます。run で決まった設計を、データモデル(`data-model.md`)・API 一覧(`api.md`)・画面遷移(`screen-flow.md`)・システム構成(`architecture.md`)・シーケンス(`sequence.md`)・非機能要件(`nfr.md`)の種別ごとに 1 ファイルで残します。intent-sync でオーケストレーターが run の差分から今の姿を書き、図は Mermaid で描き、ゲートを通った直後にコミットします。ファイルは、その種別に当たる変更を初めて含んだ run で作られ、当たる変更を含まない run では更新されません。
 
@@ -41,12 +39,23 @@ basic-design プラグインの設計資料が既にあるプロジェクトで�
 
 GitHub と連携する run では、Codiel が対応する Issue と PR にラベル `codiel` を付けます。ラベルは `/codiel:init`、intent の確定時、pr フェーズの push の前のどこかで、承認を得て作ります。Issue 番号から始めた run では、ラベルがあれば Issue に聞かずに付けます。run の中の PR は `gh pr create --label codiel` で作り、ラベルの無い PR の作成と GitHub MCP での PR の作成は hooks が拒否します。pr フェーズでラベルが無ければ、作るか、自分で用意してから続けるか、run を中止するかを聞き、Codiel の手順にラベルの無いまま PR を作る道はありません。hooks の検査は `gh pr create` と GitHub MCP の PR 作成に当たり、`gh api` で PR を作る経路は検査しません(既知の抜け道)。後続の作業として triage で起票する Issue には付けません。
 
-ADR 候補と GOTCHAS 候補は、環境変数が有効な種別だけ残します。ADR 候補は `AMATSUKA_METATRON_ENABLE_ADR`、
-GOTCHAS 候補は `AMATSUKA_METATRON_ENABLE_GOTCHAS` に従い、metatron と同じ変数です。値は前後の空白を除いて小文字にし、
-`1` / `true` / `on` のどれかなら有効で、未設定・空・それ以外の値は無効です。run の開始時に値を決めて state に保存するので、
-変数を変えたら新しい run を始めてください。ADR 候補が無効の run では、ADR の 3 条件を満たす判断を
-持続層へ取り込まないまま、手元の記録にも書きません。その判断はどこにも残らず、元の記述が intent 文書と
-`design.md` に残るだけです。
+run で起きた失敗は、領域ファイルの `## 失敗の記録` に残します。記録するのは、Raguel の STOP を妥当と裁定したとき、
+完了後に不具合を incident として申告したとき、review で設計時に想定していなかった漏れが見つかったときです。
+記録はまず git に入らない手元のファイル(`.codiel/runs/<slug>/try-<n>/reports/failure-records.md`)に書き、
+intent-sync と finalize で領域ファイルへ写してコミットします。写す領域が決まらない記録は手元に残り、
+結果レポートに一覧されます。
+
+carry-over と fix-loop で採った修正判断は、intent 文書の `## 合意済み事項` に 1 行ずつ残します。
+
+1.1.3 で、ADR 候補と GOTCHAS 候補を廃止しました。1.1.2 以前から使っているプロジェクトでは、次の点に注意してください。
+
+- `/codiel:init` をもう一度実行し、`.claude/rules/codiel.md` を新しい文面に更新してください。
+- 環境変数 `AMATSUKA_METATRON_ENABLE_ADR` と `AMATSUKA_METATRON_ENABLE_GOTCHAS` は読まれません。
+- 領域ファイルに残る `## GOTCHAS 候補` と、手元の `reports/gotcha-candidates.md`・`reports/adr-candidates.md` は
+  読まれません。残したい記録は、手で `## 失敗の記録` へ移してください。書式は `references/intent-format.md` の
+  「持続層」にあります。
+- 領域ファイルの制約のキーは `constraint`・`reason`・`sourceIntent` になりました。日本語のキーで書かれた
+  既存の制約と、`[ADR 候補]` の印が付いた制約は、そのまま通常の制約として読まれます。
 
 ### `/codiel:run [<Issue番号> | <intentパス>]`
 
