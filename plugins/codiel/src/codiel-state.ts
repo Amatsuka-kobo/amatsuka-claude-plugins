@@ -78,10 +78,8 @@ export interface RunState {
   scale: "standard" | "light"
   // 画像を GitHub に載せる手段が使えるか。integration が local なら両方 false
   imageUpload: { ghAttach: boolean; chrome: boolean }
-  // ADR の 3 条件を満たす判断の書き先
+  // プロジェクトが metatron.config.json を持ち、metatron が構造の文書を管理しているか
   knowledgeTarget: "metatron" | "intents"
-  // ADR 候補と GOTCHAS 候補を書くか。run の開始時に決めて固定する
-  candidates: { adr: boolean; gotchas: boolean }
   status: RunStatus
   phase: string | null
   phases: Record<string, PhaseState>
@@ -292,8 +290,6 @@ export function readState(p: string): RunState {
       ...rest
     }
   }
-  // candidates の導入前に作った state は、両方 false(候補を書かない)として扱う
-  st.candidates ??= { adr: false, gotchas: false }
   return st
 }
 export function writeState(p: string, state: RunState): void {
@@ -498,11 +494,6 @@ function parseArgs(argv: string[]): {
     }
   }
   return { pos, flags, bools }
-}
-
-// 候補 ID の照合に使う。領域名に正規表現の特殊文字が来ても安全に扱う
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 // glob の中括弧を展開する(設計書 §6.6.2 の重なりの判定 1)。入れ子も展開し、
@@ -715,7 +706,6 @@ function newState(
     | "scale"
     | "imageUpload"
     | "knowledgeTarget"
-    | "candidates"
   >
 ): RunState {
   const phases: Record<string, PhaseState> = {}
@@ -872,11 +862,6 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       "metatron",
       "intents"
     ] as const)
-    const candidates = {
-      adr: oneOf(flags, "adr-candidates", ["on", "off"] as const) === "on",
-      gotchas:
-        oneOf(flags, "gotcha-candidates", ["on", "off"] as const) === "on"
-    }
     const upload = imageUpload(flags, integration)
     const domainMode =
       "domain-mode" in flags
@@ -963,8 +948,7 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       integration,
       scale,
       imageUpload: upload,
-      knowledgeTarget,
-      candidates
+      knowledgeTarget
     })
     if (baseBranch) state.baseBranch = baseBranch
     // try-1 には引き継ぐコードが無いので、carry-over を通した扱いにする
@@ -1484,30 +1468,6 @@ export function main(argv: string[], root: string = process.cwd()): undefined {
       })
     writeState(latest.statePath, latest.state)
     return ok({ statePath: latest.statePath, state: latest.state })
-  }
-
-  // 持続層ファイルの ADR 候補 ID を採番する。run 状態を持たないので loadRun は使わない
-  // (計画書 §2、設計書 §6.4.2)。
-  if (cmd === "next-adr-candidate-id") {
-    const file = flags.file
-    if (!file) fail("--file が必要です")
-    const domain = flags.domain
-    if (!domain) fail("--domain が必要です")
-    const filePath = path.isAbsolute(file) ? file : path.join(root, file)
-    let max = 0
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8")
-      // 完全一致のトークンとして読む。frontend-1 が frontend-10 の一部として
-      // 拾われないよう、抽出した ID 全体を領域名の正規表現に照合する。
-      const domainRe = new RegExp(`^${escapeRegExp(domain)}-([0-9]+)$`)
-      const idRe = /\[ADR 候補: ([^\]]+)\]|\(候補 ID: ([^)]+)\)/g
-      for (const m of content.matchAll(idRe)) {
-        const id = m[1] ?? m[2]
-        const digits = id.match(domainRe)?.[1]
-        if (digits) max = Math.max(max, Number(digits))
-      }
-    }
-    return ok({ candidateId: `${domain}-${max + 1}` })
   }
 
   // 並列実装のステップ(--kind step)と、test-code・test-loop の仕様のディレクトリ

@@ -38,10 +38,6 @@ function mainWithRun(slug = "demo"): string {
     "standard",
     "--knowledge-target",
     "metatron",
-    "--adr-candidates",
-    "on",
-    "--gotcha-candidates",
-    "on",
     "--image-upload",
     "gh-attach,chrome"
   ])
