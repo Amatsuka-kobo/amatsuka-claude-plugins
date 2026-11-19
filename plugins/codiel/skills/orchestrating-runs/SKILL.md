@@ -43,8 +43,8 @@ node <plugin-root>/scripts/codiel-state.mjs <command> [引数...] --slug <slug>
 
 ## 0. 前提確認と実行モードの決定
 
-run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決め、連携モードと画像添付・ADR の
-書き先を判定する。ドメインマップの不在それ自体は初期化の欠落に当たらない。
+run を開始する前に、初期化の外形とドメインマップの状態から実行モードを決め、連携モードと画像添付・`knowledgeTarget` を
+判定する。ドメインマップの不在それ自体は初期化の欠落に当たらない。
 
 手順 1・2 の 4 つのコマンドは run ごとに 1 回だけ実行し、以降は得た値を各所へ渡す。解決した値は作業の
 契約で渡し、作業者に解決させない。`<plugin-root>` は絶対パスに展開して実行する。
@@ -60,7 +60,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    ```
 
 2. 続けて次の 3 つを実行する。
-   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget`・候補の有効無効の判定材料を得る。
+   - `check-intent-env.mjs`: 連携モードと `imageUpload`・`knowledgeTarget` の判定材料を得る。
    - `codiel-state.mjs config`: テストの仕様の置き場(testsDir)と run の文書の置き場(runsDir)を得る。
    - `codiel-state.mjs gitignore`: `.gitignore` に足りない行(出力の `missing`)を得る。判定 D に使う。
 
@@ -83,11 +83,8 @@ run を開始する前に、初期化の外形とドメインマップの状態�
    | `imageUpload.ghAttach` | 連携モードが `local` なら `false`。`github` では `ghAttachSupported` が true のとき `true` |
    | `imageUpload.chrome` | 連携モードが `local` なら `false`。`github` ではセッションで `mcp__claude-in-chrome__*` のツールが使えるとき `true` |
    | `knowledgeTarget` | `projectDocs.architecture` が null でなく、かつ `projectDocs.metatronConfig` が true なら `metatron`、それ以外は `intents` |
-   | ADR 候補 | `knowledgeRecording.adr` が true なら `on`、false なら `off` |
-   | GOTCHAS 候補 | `knowledgeRecording.gotchas` が true なら `on`、false なら `off` |
-
    これらの値と手順 6 で決めた実行モードは run の開始時に決めて固定し、intent フェーズ(`capturing-intent`)が
-   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--adr-candidates` / `--gotcha-candidates` / `--domain-mode` の値になる。
+   `codiel-state init` へ渡す `--integration` / `--image-upload` / `--knowledge-target` / `--domain-mode` の値になる。
    再開時の再判定は `references/resume.md` に従う。
 4. 初期化の外形は B + C + D の 3 点で確認する。
 
@@ -216,15 +213,14 @@ run を開始する前に、初期化の外形とドメインマップの状態�
 | `references/delegation-env.md` | test-code・implement・test-loop・fix-loop に入ったとき。carry-over で修正の単位を始める前 |
 | `references/review-common.md` | review に入ったとき。fix-loop で再レビューの単位を始める前 |
 | `references/e2e.md` | E2E を実行する単位を始める前 |
-| `references/gotcha-candidates.md` | GOTCHAS 候補を書くとき(STOP を妥当と裁定した・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。`intents` の run の intent-sync と finalize で候補を写す前 |
-| `references/adr-candidates.md` | intent-sync で取り込み先の分岐を決める前。fix-loop で設計を変える修正を採ったときの fix-loop の pass-gate の前。finalize で候補を写す前と、結果レポートに一覧する前 |
+| `references/failure-records.md` | 失敗の記録を書くとき(STOP を妥当と裁定した・incident・fix-loop で見つかった設計の漏れ)の手順に入る前。intent-sync で取り込み先の分岐を決める前。finalize で記録を写す前と、結果レポートに一覧する前 |
 | `references/resume.md` | run を再開するとき |
 
 手順ファイルは次の 4 つの時点で読む。
 
 1. フェーズの作業を始める前。`start-phase` を呼ぶフェーズでは、その直後に読む。finalize は `start-phase` を
    呼ばないので、triage を終えた時点で読む。
-2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`gotcha-candidates.md`・`adr-candidates.md`)を使う手順に入る前。読む時点は
+2. 共有の手順(`delegation-env.md`・`review-common.md`・`e2e.md`・`failure-records.md`)を使う手順に入る前。読む時点は
    上の表に従う。fix-loop の再レビューでは、単位を始める前に `review-common.md` を読む。
 3. run を再開するとき。`resume.md` を読み、待ちの処理や単位のやり直しより前に、続行する run の slug で
    `codiel-state get --slug <slug>` を呼んで state を読む。`status` が `in_progress` か `awaiting_human` の
@@ -309,7 +305,7 @@ run を開始する前に、初期化の外形とドメインマップの状態�
   `stop` は待ちが残っていると失敗する。`--abandon-waits` は、今のセッションの委譲を止めず完了も待たずに止めると人が決めたときだけ付ける。
   E2E のレポートが残っていれば、`stop` の前に `references/e2e.md` のコミットの手順に従う。
   `waits` が空になってから、残っている worktree とブランチをすべて削除する。委譲が止まる前に、書き込み中の worktree を消さないためである。
-  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/adr-candidates.md` と `reports/gotcha-candidates.md` のエントリのうち未写しのもの(`references/gotcha-candidates.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に GOTCHAS 候補を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書き、候補の種別が無効(環境変数が有効な値でない)のときはその旨を添える。
+  止めた理由によらず、完了報告には、同じ slug のすべての try の `reports/failure-records.md` のエントリのうち未写しのもの(`references/failure-records.md` の「手元の記録」の定義)を、タイトルと手元の記録のパスで一覧する。止めた後に失敗の記録を書く経路では、書き終えてから一覧する。該当が無ければ「なし」と書く。同じ slug のすべての try の `reports/fix-decisions.md` に行があれば、intent へ写していない修正判断として合わせて一覧する。
 
 ## 3. 作業の単位と契約
 

@@ -17,7 +17,6 @@ run を再開するときに読む。
    - `state.branch` が `null` の run(`--intent-only` の run)は、開始時のブランチの作業ツリーで intent フェーズの続きを行う。
 4. §0 の判定をやり直し、記録と違えば人に確かめる。
    - 連携モードの判断が `state.integration` と違えば、どちらで続けるかを人に確かめる。記録を変えるときは `codiel-state set-integration --slug <slug> --integration <github|local> --image-upload <値>` を実行する。
-   - ADR 候補と GOTCHAS 候補の有効無効は、run の開始時に固定した `state.candidates` を使い、判定し直さない。
    - 実行モードは、§0 の分岐表の行 3・行 4 のとおり `state.domainMode` の記録を使う。記録が無ければ行 5〜7 で判定し直す。
 5. `state.phase` から続行する前に、待ちを次の順に処理する。前のセッションの委譲は失われたものとして扱う。この手順は委譲していた単位だけに当てる。自分で作業していた単位は、worktree とブランチを消さず、その単位のコミットと未コミットの変更から続きを判断する。委譲していたか自分で作業していたかは、前のセッションの会話の要約と報告のファイルで決める。下の手順 1 の `wait-clear` の後で、`cleared` に待ちがあった単位と `waits/*.md` を持つ単位は、委譲していた単位とする。決まらない単位は、worktree とブランチを消す前に、`mark-ask <phase> --slug <slug> --kind confirm` の後に人に確かめる。
    1. 最初に `codiel-state wait-clear --slug <slug>` を 1 回だけ呼び、出力の `cleared`(前のセッションで残った待ちの一覧)を控える。出し直した委譲の待ちを後から消さないよう、出し直しより先に呼ぶ。
@@ -29,7 +28,7 @@ run を再開するときに読む。
    - `steps/` の下の、状態が `running` か `reviewing` の要素の `report.md`
    - implement では全グループの `steps/merge-test-<g>/report.md` と `steps/merge-fix-<g>/report.md`、test-loop では `steps/test-loop-project/report.md`
    - test-loop では最新の `test-run-<n>.md`、fix-loop では最新の `test-run-<n+1>.md`
-   - intent-sync では `steps/intent-sync/report.md`。このファイルに `設計資料:` で始まる行があれば、取り込み・ADR 候補の書き残し・設計資料の更新は済んでいる。ファイルがあってその行が無ければ、領域ファイルへの取り込みは済んでいるので、設計資料の更新(`syncing-intents` の手順 7)から続ける。
+   - intent-sync では `steps/intent-sync/report.md`。このファイルに `設計資料:` で始まる行があれば、取り込み・設計資料の更新は済んでいる。ファイルがあってその行が無ければ、領域ファイルへの取り込みは済んでいるので、設計資料の更新(`syncing-intents` の手順 7)から続ける。
 
    discuss で中断していたときの再開位置(アジェンダ作成から/未決論点から/最終確認から)は、`facilitating-design-discussions` の「中断再開」に従う。design で `design.md` が既にあるときは、ウォークスルーの再提示から再開する。
 7. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。
