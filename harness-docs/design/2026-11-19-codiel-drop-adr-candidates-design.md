@@ -147,7 +147,7 @@ intent 文書の表(`## 意図的な制約` の「制約 | 理由」、`## 合�
 
 | 置き場 | 書ける時点 | 評価 |
 | --- | --- | --- |
-| intent 文書の `## 合意済み事項` | intent-sync と finalize。guard-write が intent 文書への書き込みを通す | 採る。「論点 | 決定 | 理由」の表が判断を書く形に合う |
+| intent 文書の `## 合意済み事項` | 全フェーズ。guard-write は run の intent 文書への書き込みを通す。コミットできるのは intent-sync と finalize | 採る。「論点 | 決定 | 理由」の表が判断を書く形に合う |
 | 領域ファイルの失敗の記録の `countermeasure` | intent-sync と finalize | 失敗をきっかけにしない修正判断を書けない。領域が決まらない run では git に入らない |
 | 設計資料 `docs/intents/design/` | intent-sync だけ。fix-loop はその後に走る | 書式が変更の経緯を書かないと決めている |
 | run の `design.md` | 未確認 | 判断の理由を書く見出しが無い |
@@ -155,7 +155,7 @@ intent 文書の表(`## 意図的な制約` の「制約 | 理由」、`## 合�
 手順は次のとおりにする。ADR の 3 条件のような選別は行わず、該当する修正をすべて書く。
 
 - carry-over で「修正して再提出」を選んだ try では、intent-sync の書き戻しの中で、修正方針 1 つにつき 1 行を intent の `## 合意済み事項` に加える。材料は、`startHead` からの `codiel(carry-over):` のコミットと carry-over の所見である。今の手順 8 が ADR 候補の判定に使っていた材料と同じである。
-- fix-loop で設計を変える修正を採ったときは、pass-gate の後に、論点・決定・理由を手元の `reports/fix-decisions.md` へ 1 件ずつ書く。fix-loop の間は guard-write が intent 文書への書き込みを通さないので、手元に置く。
+- fix-loop で設計を変える修正を採ったときは、pass-gate の後に、論点・決定・理由を手元の `reports/fix-decisions.md` へ 1 件ずつ書く。fix-loop の pass-gate の後は次のフェーズまでコミットできないので、手元に置き、finalize の intent のコミットにまとめる。
 - finalize は、同じ slug のすべての try の `reports/fix-decisions.md` を読み、intent の `## 合意済み事項` に無い論点を 1 行ずつ加える。intent を更新する今の手順(手順 2・3)の変更と同じコミットに入れる。
 - どちらも、加えた行を intent の `## 変更履歴` に 1 行で記録する。
 - `reports/fix-decisions.md` は `.codiel/runs/` の下にあり、コミットしない。
