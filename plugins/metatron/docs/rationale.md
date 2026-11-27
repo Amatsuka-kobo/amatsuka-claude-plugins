@@ -176,7 +176,7 @@ metatron の hook が守るのは 1 回の直接編集であり、見逃して�
 
 ### ARCHITECTURE と CLAUDE.md の境界は「成果物の決まりか、作業の進め方か」で分ける
 
-境界は `references/document-boundary.md` に置いた。成果物の構成・成果物同士の関係・成果物を守る禁止は、誰が作業しても同じなので ARCHITECTURE に書く。ツールの選び方・Issue とブランチの運用・作業の順序・完了の判定・コーディング規約は、作業の進め方なので CLAUDE.md に書く。両方に読める内容は文の主語で決める。主語が成果物なら ARCHITECTURE、作業なら CLAUDE.md である。
+境界は `references/document-boundary.md` に置いた。成果物の構成・成果物同士の関係・成果物を守る禁止は、誰が作業しても同じなので ARCHITECTURE に書く。ツールの選び方・Issue とブランチの運用・作業の順序・完了の判定・コーディング規約・作業に使う参照先は、作業の進め方なので CLAUDE.md に書く。両方に読める内容は文の主語で決める。主語が成果物なら ARCHITECTURE、作業なら CLAUDE.md である。
 
 境界を「パスを名指しするか」で分ける案も検討し、採らなかった。パスを名指しする決まりを ARCHITECTURE に集めると、「`plugins/*/src/` を変更したらビルドを実行する」のような CLAUDE.md の完了条件まで ARCHITECTURE へ移る。そのうえ、`paths` 付きの rules に当たる内容がどちらの文書にも残らない。文の主語で分ける定義なら、完了の判定は CLAUDE.md に残り、成果物を変えたときに揃えるものだけが ARCHITECTURE に入る。
 

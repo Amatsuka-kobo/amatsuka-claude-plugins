@@ -100,6 +100,20 @@ test("I1: 文書の本文は注入せず、CLI の絶対パスと更新・委譲
   expect(content).not.toContain("CLAUDE.md に @")
 })
 
+test("I16: ARCHITECTURE の有無に関わらず、置き場を決めるスキルの案内を 1 行出す", () => {
+  const withArch = mustInject(
+    project({ "docs/ARCHITECTURE.md": ARCH, "CLAUDE.md": LINKED_CLAUDE_MD })
+  )
+  const withoutArch = mustInject(project({}))
+  for (const content of [withArch, withoutArch]) {
+    const hits = content
+      .split("\n")
+      .filter((line) => line.includes("metatron:placing-instructions"))
+    expect(hits).toHaveLength(1)
+    expect(hits[0]).toContain("書く前に")
+  }
+})
+
 test("I2: ARCHITECTURE が無ければ init へ誘導し、CLI の案内も出す", () => {
   const root = project({})
   const content = mustInject(root)

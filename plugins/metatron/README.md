@@ -38,6 +38,15 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 
 ARCHITECTURE は毎セッション読み込まれるため、行数の目安を 200 行にしています。`get architecture` と `stage-architecture` は行数(`lineCount`)と目安(`lineLimit`)を返し、超えたときは警告を出します。
 
+## 指示の置き場の判定
+
+「今後はこうして」「覚えておいて」のように、置き場を指定せずに今後の振る舞いを残すよう頼まれたとき、`placing-instructions` スキルが置き場を判定して案を示します。AI がユーザーの訂正を受けて自分で memory などに残そうとするときも、書く前にこのスキルを起動します。
+
+- 置き場は CLAUDE.md・`paths` 付きの rules・スキル・memory・ユーザー単位の `~/.claude/CLAUDE.md`・ARCHITECTURE と、書かない、の中から決めます。チーム全員が使う参照先は CLAUDE.md、期限のように古くなる事実は memory に置きます。判定表は `references/instruction-placement.md` にあります。
+- 例外なく守らせる決まりには、hook・permissions の deny・検査による強制の案も添えます。
+- 案はユーザーの承認を得てから進めます。ARCHITECTURE に当たる内容だけを `/metatron:update` の手順で書き込み、それ以外の書き込みはセッションに任せます。
+- 承認された置き場が memory 以外の内容は、memory に重ねて保存しません。既に memory にあれば、消す案を示します。置き場を名指しした依頼は、その置き場に従います。
+
 ## ARCHITECTURE のセクション構成
 
 見出しの名前と順序は次の 8 つに固定されています。すべて任意で、欠けていても構いません。
@@ -53,7 +62,7 @@ ARCHITECTURE は毎セッション読み込まれるため、行数の目安を 
 | 7 | `## 禁止事項` | 禁止する依存方向・触らないパス・読まないパス。代わりの手段を同じ項目に併記する |
 | 8 | `## 変更時の追随` | パスを変更したときに確かめること・同時に直すもの |
 
-書くのは成果物の決まりです。ツールの選び方・Issue とブランチの運用・完了の判定・コーディング規約のような作業の進め方は、`CLAUDE.md` に書きます。記入例は [`docs/ARCHITECTURE.example.md`](./docs/ARCHITECTURE.example.md) にあります。
+書くのは成果物の決まりです。ツールの選び方・Issue とブランチの運用・完了の判定・コーディング規約・作業に使う参照先のような作業の進め方は、`CLAUDE.md` に書きます。記入例は [`docs/ARCHITECTURE.example.md`](./docs/ARCHITECTURE.example.md) にあります。
 
 ### 旧構成の移行
 
@@ -98,7 +107,7 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 
 | hook | 役割 |
 | --- | --- |
-| **SessionStart**(`scripts/inject-context.mjs`) | CLI の絶対パスと、委譲の依頼文への注意を案内します。ARCHITECTURE の更新は、CLI の書き込み手順を示さず `updating-architecture` スキルの起動へ誘導します。旧 rules が残っているときと、`CLAUDE.md` に @メンションが欠けているときは、`/metatron:update` での対応を促します。文書の本文は注入しません |
+| **SessionStart**(`scripts/inject-context.mjs`) | CLI の絶対パスと、委譲の依頼文への注意を案内します。ARCHITECTURE の更新は、CLI の書き込み手順を示さず `updating-architecture` スキルの起動へ誘導します。旧 rules が残っているときと、`CLAUDE.md` に @メンションが欠けているときは、`/metatron:update` での対応を促します。今後の振る舞いを残す前に `placing-instructions` スキルを起動するよう 1 行で案内します。文書の本文は注入しません |
 | **PreToolUse**(`scripts/guard-docs.mjs`) | ARCHITECTURE への直接編集を拒否します。`updating-architecture` スキルの起動へ誘導し、どの拒否にも CLI の絶対パスが載ります |
 
 ### 拒否の範囲(正直な限界)

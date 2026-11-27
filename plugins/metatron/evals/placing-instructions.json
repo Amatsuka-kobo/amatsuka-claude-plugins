@@ -1,0 +1,82 @@
+[
+  {
+    "query": "今後 PR を出すときは本文に必ず close #番号 を書いてほしい。どこかに残しておいて",
+    "should_trigger": true
+  },
+  {
+    "query": "次から plugins/*/scripts/ のバンドルは手で触らないで。毎回 src 直して build して",
+    "should_trigger": true
+  },
+  {
+    "query": "覚えておいて: うちのチームはコミットメッセージを日本語で書く。英語で書かれると困る",
+    "should_trigger": true
+  },
+  {
+    "query": "それルールにしといて。テストは対象と同じディレクトリの __test__ に置くってやつ",
+    "should_trigger": true
+  },
+  {
+    "query": "さっきの指摘、毎回言うの面倒だから今後は結論を先に書くようにしてくれる?私の好みなんだけど",
+    "should_trigger": true
+  },
+  {
+    "query": "リリースの手順(タグ付け→changelog→npm publish→GitHub Release)、次回も同じようにやって。どっかにまとめといて",
+    "should_trigger": true
+  },
+  {
+    "query": "staging のダッシュボードは grafana.internal/d/abc にある。次に障害を調べるときのために控えておいてほしい",
+    "should_trigger": true
+  },
+  {
+    "query": "legacy/ 配下を触るときだけは eslint の旧設定を使うこと、これを残しておいて。他のディレクトリには関係ない",
+    "should_trigger": true
+  },
+  {
+    "query": "rm -rf は今後絶対に実行しないでほしい。どう残すのがいいか考えて",
+    "should_trigger": true
+  },
+  {
+    "query": "vitest の設定は vitest.config.ts を見ればわかるけど、念のため今後のために記録しておいてくれる?",
+    "should_trigger": true
+  },
+  {
+    "query": "harness-docs/ARCHITECTURE.md の禁止事項に「dist/ を手で編集しない」を足して、実装と突き合わせて更新して",
+    "should_trigger": false
+  },
+  {
+    "query": "CLAUDE.md の「作業の仕方」の文章が冗長なので、意味を変えずに短く推敲してほしい",
+    "should_trigger": false
+  },
+  {
+    "query": ".claude/settings.json に PreToolUse の hook を追加して、git push --force をブロックするよう設定して",
+    "should_trigger": false
+  },
+  {
+    "query": "いま memory に何が保存されてる?一覧を見せて、古そうなのがあれば教えて",
+    "should_trigger": false
+  },
+  {
+    "query": "今回だけ、テストは飛ばしていいから先に PR を出して",
+    "should_trigger": false
+  },
+  {
+    "query": "これ memory に保存しといて: PR の本文には close #番号 を書く。置き場はそこでいいから",
+    "should_trigger": false
+  },
+  {
+    "query": "ARCHITECTURE が古くなってるので、実装に合わせて直して。死んだ glob もあるはず",
+    "should_trigger": false
+  },
+  {
+    "query": "CLAUDE.md の完了条件に「pnpm run build を通す」を一行追加して。場所は既存の箇条書きの末尾で",
+    "should_trigger": false
+  },
+  {
+    "query": "rules ファイルの paths frontmatter ってどう書くんだっけ?compaction 後にも読まれる?",
+    "should_trigger": false
+  },
+  {
+    "query": "このリポジトリの ARCHITECTURE をまだ作ってないので、コードを解析して初版を作って",
+    "should_trigger": false
+  }
+]
