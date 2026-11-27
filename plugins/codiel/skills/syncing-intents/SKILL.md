@@ -19,7 +19,7 @@ intent-sync フェーズでオーケストレーターが使うスキルであ�
 
 - 書き戻す範囲を洗い出し、`codiel-state mark-ask intent-sync --slug <slug> --kind confirm` で run を `awaiting_human` にして、反映内容をユーザーに確認する。確認を終えたら `codiel-state resume --slug <slug>` で `in_progress` に戻す。
 - 書き戻しと領域ファイルへの取り込みで書くのは、確認済みの反映内容だけである。確認の無い内容に気づいたら、書かずにユーザーへ確認する。設計資料は run の差分と、intent・`design.md` で決まった内容から書くので、この確認の規則を当てない。carry-over の修正判断の行(手順 3)も、コミットと所見から書くので、この確認の規則を当てない。
-- 原文のセクション(`## ASIS` / `## TOBE`)は読むだけで、書き換えない。
+- 原文のセクション(`## ASIS` / `## TOBE`)は読むだけで、書き換えない。例外は、`references/persistent-layer.md` の違反の確認で、ユーザーの答えを `## TOBE` の末尾に追記するときだけである。
 - このスキルで呼ぶ `codiel-state` は、確認のための `mark-ask` と `resume`、state を読む `get` に限る。
 - 書き戻し後の intent 文書・領域ファイル・設計資料のコミットは、ゲート通過直後に行う。
 
