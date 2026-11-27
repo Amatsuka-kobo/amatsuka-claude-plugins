@@ -103,7 +103,7 @@ export function globToRegExp(glob: string): RegExp {
 // ソースを共有せず同じ規則を独立に実装する。ここを変えたら契約 §14 の実装間一致テストを通す。
 //
 // codiel は基準の異なる 2 つのルート概念を持つ。関数名で区別し、混同しない。
-// 文書(ARCHITECTURE / GOTCHAS)の解決には findDocRoot を、codiel 固有資産
+// 文書(ARCHITECTURE)の解決には findDocRoot を、codiel 固有資産
 // (`.codiel/runs` 等)の解決には findProjectRoot を使う。どちらを使うかは
 // 「探しているものが文書か codiel 資産か」で決まる。同じ「ルート」という語で
 // 2 つの異なる基準を指していたことが、パス解決の不整合の温床であった。
@@ -112,15 +112,12 @@ export function globToRegExp(glob: string): RegExp {
 export const DOC_CONFIG_FILENAME = "metatron.config.json"
 export const DOC_CONFIG_SUPPORTED_VERSION = 1
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
-export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
 
 export interface DocPaths {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
   docRoot: string
   /** ARCHITECTURE の絶対パス。 */
   architecture: string
-  /** GOTCHAS の絶対パス。 */
-  gotchas: string
   /**
    * 既定値へ落とした理由・設定を読めなかった理由(契約 §2・§3 規則 3)。
    * 空配列が正常。「設定ファイルが無い」は正常な状態なので警告にしない。
@@ -364,7 +361,8 @@ function loadPathsConfig(startDir?: string): {
  * 契約 §2・§3: 文書パスの解決。
  *
  * 内部で findDocRoot を呼び、`metatron.config.json` の `paths` を解釈して
- * ARCHITECTURE / GOTCHAS の絶対パスを返す。設定が無ければ既定値。
+ * ARCHITECTURE の絶対パスを返す。設定が無ければ既定値。
+ * 廃止した `paths.gotchas` は未知キーと同じく無視する(契約 §2)。
  * 解決結果はキャッシュしない(契約 §3 規則 4)。
  * 例外を投げない。読めない設定・壊れた設定はすべて既定値へ落とす。
  * 既定値へ落としたときは**理由を warnings で返す**(契約 §3 規則 3)。
@@ -379,13 +377,6 @@ export function resolveDocPaths(startDir?: string): DocPaths {
       paths?.architecture,
       DEFAULT_ARCHITECTURE_PATH,
       "architecture",
-      warnings
-    ),
-    gotchas: resolveConfiguredPath(
-      docRoot,
-      paths?.gotchas,
-      DEFAULT_GOTCHAS_PATH,
-      "gotchas",
       warnings
     ),
     warnings
@@ -602,7 +593,7 @@ export function readDomains(startDir: string): Record<string, string[]> | null {
 // 見つかればそのディレクトリを、見つからなければ startDir をそのまま返す(フォールバック)。
 // cwd がプロジェクトルートのサブディレクトリの場合でも、run 探索やフェーズ制御を
 // プロジェクトルート基準で行えるようにするためのもの。
-// 探しているものが**文書**(ARCHITECTURE / GOTCHAS)であれば、基準が異なるため findDocRoot を使う。
+// 探しているものが**文書**(ARCHITECTURE)であれば、基準が異なるため findDocRoot を使う。
 export function findProjectRoot(startDir: string): string {
   let dir = startDir
   while (true) {

@@ -18,7 +18,6 @@ export const CONFIG_FILENAME = "metatron.config.json"
 export const SUPPORTED_VERSION = 1
 
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
-export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
 
 export interface ResolvedConfig {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -29,12 +28,8 @@ export interface ResolvedConfig {
   configExists: boolean
   /** ARCHITECTURE の絶対パス。 */
   architecturePath: string
-  /** GOTCHAS の絶対パス。 */
-  gotchasPath: string
   /** ARCHITECTURE の docRoot からの相対パス(区切りは常に "/")。 */
   architectureRelative: string
-  /** GOTCHAS の docRoot からの相対パス(区切りは常に "/")。 */
-  gotchasRelative: string
   /** 既定値へ落とした理由・設定を読めなかった理由。空配列が正常。 */
   warnings: string[]
 }
@@ -201,9 +196,7 @@ function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
     configPath: path.join(docRoot, CONFIG_FILENAME),
     configExists: false,
     architecturePath: path.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
-    gotchasRelative: DEFAULT_GOTCHAS_PATH,
     warnings
   }
 }
@@ -266,23 +259,13 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     "architecture",
     warnings
   )
-  const gotchas = resolveConfiguredPath(
-    docRoot,
-    paths?.gotchas,
-    DEFAULT_GOTCHAS_PATH,
-    "gotchas",
-    warnings
-  )
-
-  // 未知キー($schema を含む)は無視する。エラーにしない(契約 §2)。
+  // 未知キー($schema と、廃止した paths.gotchas を含む)は無視する。エラーにしない(契約 §2)。
   return {
     docRoot,
     configPath,
     configExists,
     architecturePath: architecture.absolute,
-    gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
-    gotchasRelative: gotchas.relative,
     warnings
   }
 }

@@ -32,7 +32,7 @@ function insideGitRepo(dir: string): boolean {
 }
 
 /**
- * 同一構成に対して metatron と codiel を走らせ、docRoot と解決した ARCHITECTURE / GOTCHAS の
+ * 同一構成に対して metatron と codiel を走らせ、docRoot と解決した ARCHITECTURE の
  * パス、既定値へ落とした理由(warnings)、ドメインマップの可読性・値・件数がすべて一致する
  * ことを検証する(契約 §14)。codiel は lib.ts の関数と check-intent-env の出力の両方を比べる。
  *
@@ -74,7 +74,7 @@ test("ケース 16f: サブディレクトリから実行し祖先に metatron.c
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "arch/MAIN.md", gotchas: "arch/TRAPS.md" }
+      paths: { architecture: "arch/MAIN.md" }
     })
   )
   const sub = mkdir(dir, "a/b")
@@ -113,7 +113,7 @@ test("ケース 16f: paths が絶対パス / ルート脱出", () => {
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "C:/GOTCHAS.md" }
+      paths: { architecture: "/etc/ARCHITECTURE.md" }
     })
   )
   expectTwoWayMatch(abs, "絶対パス")
@@ -124,7 +124,7 @@ test("ケース 16f: paths が絶対パス / ルート脱出", () => {
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "../outside/ARCHITECTURE.md", gotchas: ".." }
+      paths: { architecture: "../outside/ARCHITECTURE.md" }
     })
   )
   expectTwoWayMatch(esc, "ルート脱出")

@@ -23,7 +23,7 @@ import { findDocRoot } from "./config.js"
 // ---------------------------------------------------------------------------
 
 /**
- * 契約 §4-1 の 9 セクション。見出し名と順序を固定する。
+ * 契約 §4-1 の 8 セクション。見出し名と順序を固定する。
  *
  * `architecture.ts` の `ARCHITECTURE_HEADINGS` の独立複製である。片方だけを
  * 変えると「stage-architecture は通るが diff-architecture が見落とす」非対称と、
@@ -37,9 +37,13 @@ export const ARCHITECTURE_SECTIONS = [
   "ドメインマップ",
   "コマンド定義",
   "保護パス",
-  "テスト方針",
-  "ADR 一覧"
+  "テスト方針"
 ] as const
+
+/**
+ * 廃止した ADR 機能のセクション。残っていれば `legacy_section` の所見を出す。
+ */
+export const LEGACY_ADR_HEADING = "ADR 一覧"
 
 /**
  * 走査から除外するディレクトリ名。
@@ -348,6 +352,7 @@ export interface ScanResult {
 
 export type DiffFindingKind =
   | "section_missing"
+  | "legacy_section"
   | "domain_gap"
   | "domain_dead_glob"
 
@@ -395,11 +400,6 @@ export interface DiffArchitectureInput {
    * どちらもドメイン関連の検出を行わない。
    */
   domains?: Record<string, string[]> | null
-  /**
-   * ADR の記録が有効か。既定は `true`。`false` のときは `## ADR 一覧` が無くても
-   * `section_missing` にしない(ADR を記録しないプロジェクトでは欠落が正常な姿である)。
-   */
-  adrEnabled?: boolean
 }
 
 export interface DiffArchitectureResult {
@@ -1409,6 +1409,7 @@ export function scan(startDir?: string, options: ScanOptions = {}): ScanResult {
 
 const FINDING_ORDER: Record<DiffFindingKind, number> = {
   section_missing: 0,
+  legacy_section: 1,
   domain_gap: 7,
   domain_dead_glob: 8
 }
@@ -1710,7 +1711,6 @@ function diffArchitectureInner(
   const exists = input.architectureExists ?? sections.size > 0
 
   for (const heading of ARCHITECTURE_SECTIONS) {
-    if (heading === "ADR 一覧" && input.adrEnabled === false) continue
     if (exists && sections.has(heading)) continue
     findings.push({
       kind: "section_missing",
@@ -1719,6 +1719,15 @@ function diffArchitectureInner(
       detail: exists
         ? `## ${heading} が ARCHITECTURE にありません。`
         : `ARCHITECTURE が無いため ## ${heading} もありません。`
+    })
+  }
+
+  if (exists && sections.has(LEGACY_ADR_HEADING)) {
+    findings.push({
+      kind: "legacy_section",
+      section: LEGACY_ADR_HEADING,
+      subject: LEGACY_ADR_HEADING,
+      detail: `## ${LEGACY_ADR_HEADING} が残っています。metatron は ADR 機能を廃止したため、このセクションを管理しません。本文を残すなら別のファイルへ写してから、stage-architecture の { "heading": "${LEGACY_ADR_HEADING}", "remove": true } で削除できます。`
     })
   }
 
@@ -1733,9 +1742,6 @@ function diffArchitectureInner(
   // 決定的に検出できないため、この関数では扱わない項目(設計書 §9-3)。
   skipped.push(
     "保護パスの不整合: Raguel の設定の解析を伴うため、この関数では検出しません。"
-  )
-  skipped.push(
-    "ADR の状態の陳腐化: ADR の解析(adr.ts)を伴うため、この関数では検出しません。"
   )
 
   findings.sort(

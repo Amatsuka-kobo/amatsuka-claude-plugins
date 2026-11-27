@@ -27,11 +27,11 @@ export const STAGING_RECORD_VERSION = 2
 export const DEFAULT_STAGING_TTL_MS = 30 * 60 * 1000
 
 /**
- * stage の対象。`architecture` と `adr` は ARCHITECTURE ファイルを書き換える経路である。
- * `gotchas` は GOTCHAS 台帳の既存エントリのフィールドを書き換える経路である。
- * いずれも 1 つの staging が書き換えるファイルは 1 本だけである(契約 §11)。
+ * stage の対象。`architecture` は ARCHITECTURE ファイルを書き換える経路である。
+ * 1 つの staging が書き換えるファイルは 1 本だけである(契約 §11)。
+ * 廃止した `adr`・`gotchas` の staging は読めないレコードとして扱う。
  */
-export type StagingKind = "architecture" | "adr" | "gotchas"
+export type StagingKind = "architecture"
 
 export interface StagingRecord {
   version: number
@@ -47,7 +47,7 @@ export interface StagingRecord {
   expiresAt: number
   /** 消費済みなら消費時刻。未消費は null。 */
   usedAt: number | null
-  /** 呼び出し元が持たせる付随情報(ADR の assignedId など)。 */
+  /** 呼び出し元が持たせる付随情報。 */
   meta: Record<string, unknown>
   /**
    * recordHash 以外の全フィールドから算出した、このレコード自身の内容ハッシュ。
@@ -218,7 +218,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isStagingKind(value: unknown): value is StagingKind {
-  return value === "architecture" || value === "adr" || value === "gotchas"
+  return value === "architecture"
 }
 
 // キー順に依存しない表現へ落とす。オブジェクトのキーを再帰的に並べ替える。

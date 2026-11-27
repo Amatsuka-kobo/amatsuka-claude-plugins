@@ -1,11 +1,9 @@
-// `link-claude-md`: CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記し、
+// `link-claude-md`: CLAUDE.md へ ARCHITECTURE の @メンションを追記し、
 // metatron.config.json が無ければ作る。
-// GOTCHAS は記録が有効で、台帳に中身があるときだけ対象にする(SessionStart の案内と同じ条件)。
 
 import fs from "node:fs"
 import { isMentionablePath, linkClaudeMd } from "../lib/claude-md.js"
 import { loadConfig } from "../lib/config.js"
-import type { Features } from "../lib/features.js"
 import {
   emitResult,
   emitWriteFailure,
@@ -15,7 +13,6 @@ import {
 
 export interface LinkContext {
   cwd: string
-  features: Features
 }
 
 function hasContent(filePath: string): boolean {
@@ -38,12 +35,7 @@ export function runLinkClaudeMd(ctx: LinkContext): void {
     )
     return
   }
-  const candidates = [
-    config.architectureRelative,
-    ...(ctx.features.gotchas && hasContent(config.gotchasPath)
-      ? [config.gotchasRelative]
-      : [])
-  ]
+  const candidates = [config.architectureRelative]
   // 空白か制御文字を含むパスは @メンションにできないので、残りだけを追記する。
   const relatives = candidates.filter(isMentionablePath)
   const skipped = candidates.filter((rel) => !isMentionablePath(rel))

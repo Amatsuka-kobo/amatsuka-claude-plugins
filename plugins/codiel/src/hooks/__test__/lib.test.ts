@@ -76,7 +76,6 @@ function expectSameResolution(startDir: string, label: string): void {
   expect(mine.architecture, `${label}: architecture`).toBe(
     theirs.architecturePath
   )
-  expect(mine.gotchas, `${label}: gotchas`).toBe(theirs.gotchasPath)
   // 既定値へ落とした理由も揃える。文言の完全一致は求めず(2 実装の同期コストが上がる)、
   // 警告が出るか出ないかと件数を見る(契約 §3 規則 3)。
   expect(mine.warnings.length > 0, `${label}: 警告の有無`).toBe(
@@ -162,7 +161,7 @@ test("R3: 設定ファイルでパスを変えた ARCHITECTURE を読む", () =>
   const root = mkTmp("lib-domains-config-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "arch/MAIN.md", gotchas: "arch/GOTCHAS.md" }
+    paths: { architecture: "arch/MAIN.md" }
   })
   // 既定パスにはダミーを置き、設定側が優先されることを確かめる
   writeFile(
@@ -684,26 +683,23 @@ test("R10: paths が絶対パスなら既定値に落ち、理由を warnings �
   const root = mkTmp("lib-warn-abs-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "C:/GOTCHAS.md" }
+    paths: { architecture: "/etc/ARCHITECTURE.md" }
   })
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
-  expect(resolved.warnings.length).toBe(2)
+  expect(resolved.warnings.length).toBe(1)
   expect(resolved.warnings.join("\n")).toContain("paths.architecture")
-  expect(resolved.warnings.join("\n")).toContain("paths.gotchas")
 })
 
 test("R10: paths がルート脱出なら既定値に落ち、理由を warnings で返す", () => {
   const root = mkTmp("lib-warn-escape-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "../outside/ARCHITECTURE.md", gotchas: ".." }
+    paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
-  expect(resolved.warnings.length).toBe(2)
+  expect(resolved.warnings.length).toBe(1)
 })
 
 test("R10: 壊れた JSON なら全項目が既定値になり、理由を warnings で返す", () => {
@@ -711,7 +707,6 @@ test("R10: 壊れた JSON なら全項目が既定値になり、理由を warni
   writeFile(path.join(root, "metatron.config.json"), "{ not json")
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
   expect(resolved.warnings.length).toBe(1)
 
   // トップレベルがオブジェクトでない場合も「壊れた JSON」に含める(契約 §2)。
@@ -730,11 +725,22 @@ test("R10: 未知の version なら全項目が既定値になり、理由を wa
 
 test("R10: paths の型不整合はその項目だけ既定値に落とし、理由を返す", () => {
   const root = mkTmp("lib-warn-typed-")
-  writeConfig(root, { version: 1, paths: { architecture: 42, gotchas: "" } })
+  writeConfig(root, { version: 1, paths: { architecture: 42 } })
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
-  expect(resolved.warnings.length).toBe(2)
+  expect(resolved.warnings.length).toBe(1)
+})
+
+test("R10: paths.gotchas は警告も解決への影響も無く無視される(metatron と一致)", () => {
+  const root = mkTmp("lib-warn-gotchas-")
+  writeConfig(root, {
+    version: 1,
+    paths: { architecture: "arch/MAIN.md", gotchas: "arch/TRAPS.md" }
+  })
+  const resolved = resolveDocPaths(root)
+  expect(resolved.architecture).toBe(path.join(root, "arch", "MAIN.md"))
+  expect(resolved.warnings.length).toBe(0)
+  expectSameResolution(root, "paths.gotchas の無視")
 })
 
 test("R10: 設定ファイルが無いことは警告にしない(正常な状態)", () => {
@@ -812,7 +818,7 @@ test("R4: paths が絶対パス / ルート脱出のとき既定値に落ちて�
   const abs = mkTmp("lib-cmp-abs-")
   writeConfig(abs, {
     version: 1,
-    paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "C:/GOTCHAS.md" }
+    paths: { architecture: "/etc/ARCHITECTURE.md" }
   })
   expectSameResolution(abs, "絶対パス")
   expect(resolveDocPaths(abs).architecture).toBe(
@@ -822,12 +828,9 @@ test("R4: paths が絶対パス / ルート脱出のとき既定値に落ちて�
   const esc = mkTmp("lib-cmp-escape-")
   writeConfig(esc, {
     version: 1,
-    paths: { architecture: "../outside/ARCHITECTURE.md", gotchas: ".." }
+    paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   expectSameResolution(esc, "ルート脱出")
-  expect(resolveDocPaths(esc).gotchas).toBe(
-    path.join(esc, "docs", "GOTCHAS.md")
-  )
 })
 
 test("R4: 壊れた設定・未知の version・型不整合で一致する", () => {
@@ -847,7 +850,7 @@ test("R4: 壊れた設定・未知の version・型不整合で一致する", ()
   expectSameResolution(unknown, "未知の version")
 
   const typed = mkTmp("lib-cmp-typed-")
-  writeConfig(typed, { version: 1, paths: { architecture: 42, gotchas: "" } })
+  writeConfig(typed, { version: 1, paths: { architecture: 42 } })
   expectSameResolution(typed, "paths の型不整合")
 })
 
@@ -855,9 +858,16 @@ test("R4: Windows 形式の区切りを含む paths で一致する", () => {
   const root = mkTmp("lib-cmp-winsep-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "docs\\arch\\MAIN.md", gotchas: "..\\outside.md" }
+    paths: { architecture: "..\\outside.md" }
   })
-  expectSameResolution(root, "Windows 形式の区切り")
+  expectSameResolution(root, "Windows 形式の区切り(ルート脱出)")
+
+  const ok = mkTmp("lib-cmp-winsep-ok-")
+  writeConfig(ok, {
+    version: 1,
+    paths: { architecture: "docs\\arch\\MAIN.md" }
+  })
+  expectSameResolution(ok, "Windows 形式の区切り")
 })
 
 test("R4: シンボリックリンク経由の開始ディレクトリで一致する", () => {

@@ -65,7 +65,6 @@ import path2 from "node:path";
 var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
-var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -158,9 +157,7 @@ function defaultsFor(docRoot, warnings) {
     configPath: path2.join(docRoot, CONFIG_FILENAME),
     configExists: false,
     architecturePath: path2.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path2.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
-    gotchasRelative: DEFAULT_GOTCHAS_PATH,
     warnings
   };
 }
@@ -213,21 +210,12 @@ function loadConfigInner(startDir) {
     "architecture",
     warnings
   );
-  const gotchas = resolveConfiguredPath(
-    docRoot,
-    paths?.gotchas,
-    DEFAULT_GOTCHAS_PATH,
-    "gotchas",
-    warnings
-  );
   return {
     docRoot,
     configPath,
     configExists,
     architecturePath: architecture.absolute,
-    gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
-    gotchasRelative: gotchas.relative,
     warnings
   };
 }
@@ -259,17 +247,6 @@ function injectContext(content, systemMessage) {
     })}
 `
   );
-}
-
-// src/lib/features.ts
-var ADR_ENV = "AMATSUKA_METATRON_ENABLE_ADR";
-var GOTCHAS_ENV = "AMATSUKA_METATRON_ENABLE_GOTCHAS";
-function enabled(value) {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "on";
-}
-function readFeatures(env) {
-  return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
 }
 
 // src/inject-context.ts
@@ -304,45 +281,17 @@ function hasContent(filePath) {
     return false;
   }
 }
-function cliLines(cli, features) {
-  const reads = [
-    features.gotchas ? "node M get gotchas --query <\u8A9E>" : null,
-    features.adr ? "node M get adr" : null,
-    "node M get architecture"
-  ].filter((part) => part !== null);
+function cliLines(cli) {
   return [
-    `\u8A18\u9332\u30FB\u5168\u6587\u53D6\u5F97\u306F\u6B21\u306E CLI \u3092\u4F7F\u3046(\u7D76\u5BFE\u30D1\u30B9\u3002M = ${cli}):`,
-    `  \u8AAD\u3080:     ${reads.join(" / ")}`,
-    ...features.gotchas ? [
-      "  \u8A18\u9332:     node M append-gotcha --input <\u4E00\u6642\u30D5\u30A1\u30A4\u30EB>",
-      '  \u30BF\u30B0:     node M tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F --reason "..."'
-    ] : [],
+    `\u5168\u6587\u53D6\u5F97\u306F\u6B21\u306E CLI \u3092\u4F7F\u3046(\u7D76\u5BFE\u30D1\u30B9\u3002M = ${cli}):`,
+    "  \u8AAD\u3080:     node M get architecture",
     "\u203B\u9577\u3044\u5165\u529B\u306F\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u3078\u66F8\u304D\u3001--input <path> \u3067\u6E21\u3059(CLI \u306E\u547C\u3073\u51FA\u3057\u898F\u7D04)\u3002"
   ];
 }
-function updateLines(features) {
-  const targets = features.adr ? "ARCHITECTURE\u30FBADR" : "ARCHITECTURE";
+function updateLines() {
   return [
-    `${targets} \u306E\u66F4\u65B0\u306F\u3001Skill \u30C4\u30FC\u30EB\u3067 metatron:updating-architecture \u3092\u8D77\u52D5\u3057\u3066\u884C\u3046\u3002`,
+    "ARCHITECTURE \u306E\u66F4\u65B0\u306F\u3001Skill \u30C4\u30FC\u30EB\u3067 metatron:updating-architecture \u3092\u8D77\u52D5\u3057\u3066\u884C\u3046\u3002",
     "\u8A08\u753B\u66F8\u306B stage-* \u306E\u624B\u9806\u304C\u66F8\u304B\u308C\u3066\u3044\u3066\u3082\u3001\u5148\u306B\u30B9\u30AD\u30EB\u3092\u8D77\u52D5\u3059\u308B\u3002"
-  ];
-}
-function recordingLines(features) {
-  if (!features.adr && !features.gotchas) return [];
-  const head = features.adr ? features.gotchas ? [
-    "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5224\u65AD\u3068\u5931\u6557\u306B ADR\u30FBGOTCHAS \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
-    "\u6B8B\u3059\u306A\u3089 updating-architecture \u304B recording-gotchas \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002"
-  ] : [
-    "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5224\u65AD\u306B ADR \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
-    "\u6B8B\u3059\u306A\u3089 updating-architecture \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002"
-  ] : [
-    "\u4F9D\u983C\u306E\u5B8C\u4E86\u5831\u544A\u306E\u524D\u306B\u3001\u5931\u6557\u306B GOTCHAS \u3078\u6B8B\u3059\u3082\u306E\u304C\u7121\u3044\u304B\u78BA\u304B\u3081\u308B\u3002",
-    "\u6B8B\u3059\u306A\u3089 recording-gotchas \u306E\u627F\u8A8D\u624B\u9806\u3067\u8A18\u9332\u3059\u308B\u3002"
-  ];
-  return [
-    ...head,
-    "codiel run \u306E\u5831\u544A\u306B\u51FA\u305F\u5019\u88DC\u306F\u3001run \u306E\u4E2D\u3067\u306A\u304F\u6B21\u306E\u30BF\u30FC\u30F3\u306E\u521D\u3081\u306B\u78BA\u304B\u3081\u308B\u3002",
-    "docs/intents/domains/ \u306E\u5019\u88DC\u306F /metatron:update \u3067\u53D6\u308A\u8FBC\u3081\u308B\u3002"
   ];
 }
 function migrationLines(config, docs, hasArchitecture) {
@@ -378,26 +327,20 @@ function migrationLines(config, docs, hasArchitecture) {
   return lines;
 }
 function build(config, env) {
-  const features = readFeatures(env);
   const cli = metatronCliPath(env);
   const hasArchitecture = hasContent(config.architecturePath);
-  const hasGotchas = features.gotchas && hasContent(config.gotchasPath);
-  const docs = [
-    config.architectureRelative,
-    ...hasGotchas ? [config.gotchasRelative] : []
-  ];
+  const docs = [config.architectureRelative];
   const lines = ["# metatron: \u6848\u5185", ""];
   if (!hasArchitecture) {
     lines.push(
       "\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u306F\u307E\u3060 ARCHITECTURE \u304C\u7121\u3044\u3002**`/metatron:init` \u3067\u4F5C\u6210\u3059\u308B\u3002**",
-      ...cliLines(cli, features)
+      ...cliLines(cli)
     );
   } else {
     lines.push(
       `${docs.join(" \u3068 ")} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001CLAUDE.md \u306E @\u30E1\u30F3\u30B7\u30E7\u30F3\u3067\u8AAD\u307F\u8FBC\u307E\u308C\u308B\u3002**\u76F4\u63A5\u7DE8\u96C6\u306F PreToolUse hook \u304C\u62D2\u5426\u3059\u308B\u3002**`,
-      ...cliLines(cli, features),
-      ...updateLines(features),
-      ...recordingLines(features),
+      ...cliLines(cli),
+      ...updateLines(),
       "\u30B5\u30D6\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u3082 CLAUDE.md \u7D4C\u7531\u3067\u540C\u3058\u6587\u66F8\u3092\u8AAD\u3080\u3002\u59D4\u8B72\u306E\u4F9D\u983C\u6587\u306B\u306F\u3001\u6587\u66F8\u306E\u539F\u6587\u3082\u8981\u7D04\u3082\u66F8\u304D\u5199\u3055\u306A\u3044\u3002"
     );
   }

@@ -9,7 +9,6 @@ import path from "node:path"
 import { afterAll, expect, test } from "vitest"
 import {
   DEFAULT_ARCHITECTURE_PATH,
-  DEFAULT_GOTCHAS_PATH,
   findDocRoot,
   loadConfig
 } from "../config.js"
@@ -65,11 +64,9 @@ test("C1: 設定ファイル無し → 全項目が既定値", () => {
 
   expect(cfg.configExists).toBe(false)
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.architecturePath).toBe(
     path.join(cfg.docRoot, "docs", "ARCHITECTURE.md")
   )
-  expect(cfg.gotchasPath).toBe(path.join(cfg.docRoot, "docs", "GOTCHAS.md"))
   // 「設定ファイルが無い」は正常な状態であり、警告にしない
   expect(cfg.warnings).toStrictEqual([])
 })
@@ -86,7 +83,6 @@ test("C2: paths のみ指定 → 指定分だけ上書き、他は既定値", ()
   expect(cfg.configExists).toBe(true)
   expect(cfg.architectureRelative).toBe("documents/ARCH.md")
   expect(cfg.architecturePath).toBe(path.join(dir, "documents", "ARCH.md"))
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings).toStrictEqual([])
 })
 
@@ -98,7 +94,6 @@ test("C3: 壊れた JSON → 既定値 + 警告、例外を投げない", () => 
   expect(cfg.docRoot).toBe(dir)
   expect(cfg.configExists).toBe(true)
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings.length).toBeGreaterThanOrEqual(1)
 })
 
@@ -106,12 +101,11 @@ test("C4: 未知の version → 全項目既定値 + 警告", () => {
   const dir = mkTmp()
   writeConfig(dir, {
     version: 99,
-    paths: { architecture: "documents/ARCH.md", gotchas: "documents/G.md" }
+    paths: { architecture: "documents/ARCH.md" }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings.filter((w) => w.includes("version"))).toHaveLength(1)
 })
 
@@ -119,27 +113,27 @@ test("C5: 絶対パス指定 → 拒否され既定値、理由を返す", () =>
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "docs/G.md" }
+    paths: { architecture: "/etc/ARCHITECTURE.md" }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.architecturePath).toBe(path.join(dir, "docs", "ARCHITECTURE.md"))
-  // 拒否は項目単位。gotchas は生き残る
-  expect(cfg.gotchasRelative).toBe("docs/G.md")
-  expect(cfg.warnings.some((w) => w.includes("絶対パス"))).toBe(true)
+  // 拒否された項目は警告 1 行になる
+  expect(cfg.warnings).toHaveLength(1)
+  expect(cfg.warnings[0]).toContain("絶対パス")
 })
 
 test("C6: ../ でルート外を指す → 拒否され既定値、理由を返す", () => {
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { gotchas: "../outside/GOTCHAS.md" }
+    paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   const cfg = loadConfig(dir)
 
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
-  expect(cfg.gotchasPath).toBe(path.join(dir, "docs", "GOTCHAS.md"))
+  expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
+  expect(cfg.architecturePath).toBe(path.join(dir, "docs", "ARCHITECTURE.md"))
   expect(cfg.warnings.some((w) => w.includes("ルート外"))).toBe(true)
 })
 
@@ -202,8 +196,20 @@ test("C11: $schema キーを含む設定 → 未知キーとして無視され�
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe("docs/A.md")
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings).toStrictEqual([])
+})
+
+test("C14: 廃止した paths.gotchas は未知キーとして警告なしで無視される", () => {
+  const dir = mkTmp()
+  writeConfig(dir, {
+    version: 1,
+    paths: { architecture: "docs/A.md", gotchas: "docs/G.md" }
+  })
+  const cfg = loadConfig(dir)
+
+  expect(cfg.architectureRelative).toBe("docs/A.md")
+  expect(cfg.warnings).toHaveLength(0)
+  expect("gotchasRelative" in cfg).toBe(false)
 })
 
 test("C12: 旧キー injection は無視し、警告も出さない", () => {
@@ -310,11 +316,11 @@ test("R4-f: Windows 形式の区切りでのルート脱出も拒否される", 
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { gotchas: "..\\outside\\GOTCHAS.md" }
+    paths: { architecture: "..\\outside\\ARCHITECTURE.md" }
   })
   const cfg = loadConfig(dir)
 
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
+  expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.warnings.some((w) => w.includes("ルート外"))).toBe(true)
 })
 
@@ -332,7 +338,7 @@ test("トップレベルが null の JSON も壊れた JSON として扱う", ()
   writeConfig(dir, "null")
   const cfg = loadConfig(dir)
 
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
+  expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.warnings.length).toBeGreaterThanOrEqual(1)
 })
 
@@ -340,12 +346,11 @@ test("個別キーの型不整合はその項目だけ既定値に落ちる", ()
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { architecture: 42, gotchas: "docs/G.md" }
+    paths: { architecture: 42 }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe("docs/G.md")
   expect(cfg.warnings).toHaveLength(1)
 })
 

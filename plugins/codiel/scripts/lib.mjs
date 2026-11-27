@@ -62,7 +62,6 @@ function globToRegExp(glob) {
 var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
-var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -212,13 +211,6 @@ function resolveDocPaths(startDir) {
       "architecture",
       warnings
     ),
-    gotchas: resolveConfiguredPath(
-      docRoot,
-      paths?.gotchas,
-      DEFAULT_GOTCHAS_PATH,
-      "gotchas",
-      warnings
-    ),
     warnings
   };
 }
@@ -337,7 +329,6 @@ function findMainRoot(startDir) {
 }
 export {
   DEFAULT_ARCHITECTURE_PATH,
-  DEFAULT_GOTCHAS_PATH,
   DOC_CONFIG_FILENAME,
   DOC_CONFIG_SUPPORTED_VERSION,
   DOMAINS_MARKER,

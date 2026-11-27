@@ -174,9 +174,6 @@ export function expectTwoWayMatch(
     codiel.architecture,
     `${label}: metatron と codiel の architecture`
   ).toBe(metatron.architecturePath)
-  expect(codiel.gotchas, `${label}: metatron と codiel の gotchas`).toBe(
-    metatron.gotchasPath
-  )
   expect(
     codiel.warnings.length > 0,
     `${label}: metatron と codiel の警告の有無`
@@ -191,7 +188,6 @@ export function expectTwoWayMatch(
   if (opts.architecture !== undefined)
     writeAt(metatron.architecturePath, opts.architecture)
   else ensureFile(metatron.architecturePath)
-  ensureFile(metatron.gotchasPath)
 
   // 2 実装が同じ ARCHITECTURE から同じドメイン定義を読むか(契約 §1・§4-2)。
   // **「読めたか」の真偽だけでは足りない。** 検証 4 項目のどれかを 1 実装だけが
@@ -226,10 +222,6 @@ export function expectTwoWayMatch(
     script.projectDocs.architecture,
     `${label}: check-intent-env の architecture`
   ).toBe(metatron.architecturePath)
-  expect(
-    script.projectDocs.gotchas,
-    `${label}: check-intent-env の gotchas`
-  ).toBe(metatron.gotchasPath)
   // check-intent-env は設定の警告と文書構造の警告を configWarnings の 1 本で返すため、
   // 比較相手も metatron の両方(loadConfig + extractDomains)の合計にする。
   const expectedWarnings =
