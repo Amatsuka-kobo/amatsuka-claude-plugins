@@ -717,6 +717,55 @@ test("S15: 残った ## ADR 一覧 は diff-architecture が legacy_section を�
   expect(after.replace(/\n+$/, "")).toBe(original.replace(/\n+$/, ""))
 })
 
+test("S16: get architecture と stage-architecture は行数を返し、200 行を超えたときだけ警告する", () => {
+  for (const eol of ["\n", "\r\n"]) {
+    for (const total of [200, 201]) {
+      const root = project()
+      // タイトル・空行・見出し・空行で 4 行。残りを本文の行で埋める。
+      const body = Array.from(
+        { length: total - 4 },
+        (_, i) => `- 行 ${String(i)}`
+      )
+      const text = [
+        "# ARCHITECTURE",
+        "",
+        "## テスト方針",
+        "",
+        ...body,
+        ""
+      ].join(eol)
+      writeFile(root, "docs/ARCHITECTURE.md", text)
+      const over = total > 200
+
+      const got = runCli(["get", "architecture"], root).json as Record<
+        string,
+        unknown
+      >
+      expect(got.lineCount, eol).toBe(total)
+      expect(got.lineLimit).toBe(200)
+      const getWarnings = got.warnings as string[]
+      expect(getWarnings.some((w) => w.includes("目安の 200 行"))).toBe(over)
+
+      const input = writeFile(
+        root,
+        "same.json",
+        JSON.stringify({
+          sections: [{ heading: "テスト方針", body: body.join("\n") }]
+        })
+      )
+      const staged = runCli(["stage-architecture", "--input", input], root)
+        .json as Record<string, unknown>
+      expect(staged.lineCount, eol).toBe(total)
+      expect(
+        (staged.diff as Record<string, unknown>).afterLines,
+        "diff と同じ数え方"
+      ).toBe(total)
+      const stageWarnings = staged.warnings as string[]
+      expect(stageWarnings.some((w) => w.includes("目安の 200 行"))).toBe(over)
+    }
+  }
+})
+
 test("S10: get config は rules を返さず、stage-rules / commit-rules / get rules は未知のコマンドになる", () => {
   const root = project()
   const config = runCli(["get", "config"], root)

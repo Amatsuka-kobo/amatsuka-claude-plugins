@@ -51,6 +51,25 @@ export const LEGACY_HEADINGS: Readonly<Record<string, string>> = {
 
 export type ArchitectureHeading = (typeof ARCHITECTURE_HEADINGS)[number]
 
+/** ARCHITECTURE の行数の目安。超えたら(201 行以上で)警告する。 */
+export const ARCHITECTURE_LINE_LIMIT = 200
+
+/**
+ * 行数。CRLF も 1 行と数え、末尾の改行の後ろの空要素は数えない。
+ * `cli/diff.ts` の `afterLines` と同じ数え方である。
+ */
+export function countArchitectureLines(text: string): number {
+  if (text === "") return 0
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length
+}
+
+/** 行数が目安を超えたときの警告。超えていなければ null。 */
+export function lineLimitWarning(lineCount: number): string | null {
+  if (lineCount <= ARCHITECTURE_LINE_LIMIT) return null
+  return `ARCHITECTURE が ${String(lineCount)} 行あり、目安の ${String(ARCHITECTURE_LINE_LIMIT)} 行を超えています。削れる内容(writing-discipline.md の「削れる内容」)を洗い出してください。`
+}
+
 export const DOMAINS_HEADING = "ドメインマップ"
 
 /** 契約 §1。旧マーカー `codiel:domains` は読まない。 */

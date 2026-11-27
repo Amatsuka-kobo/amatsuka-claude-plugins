@@ -17,6 +17,16 @@ var LEGACY_HEADINGS = {
   \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9: "\u300C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u300D",
   \u4FDD\u8B77\u30D1\u30B9: "\u89E6\u3089\u306A\u3044\u30D1\u30B9\u306F\u300C\u7981\u6B62\u4E8B\u9805\u300D\u3001\u5909\u66F4\u306B\u614E\u91CD\u3092\u8981\u3059\u308B\u30D1\u30B9\u306F\u300C\u5909\u66F4\u6642\u306E\u8FFD\u968F\u300D"
 };
+var ARCHITECTURE_LINE_LIMIT = 200;
+function countArchitectureLines(text) {
+  if (text === "") return 0;
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+}
+function lineLimitWarning(lineCount) {
+  if (lineCount <= ARCHITECTURE_LINE_LIMIT) return null;
+  return `ARCHITECTURE \u304C ${String(lineCount)} \u884C\u3042\u308A\u3001\u76EE\u5B89\u306E ${String(ARCHITECTURE_LINE_LIMIT)} \u884C\u3092\u8D85\u3048\u3066\u3044\u307E\u3059\u3002\u524A\u308C\u308B\u5185\u5BB9(writing-discipline.md \u306E\u300C\u524A\u308C\u308B\u5185\u5BB9\u300D)\u3092\u6D17\u3044\u51FA\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
+}
 var DOMAINS_HEADING = "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7";
 var DOMAINS_MARKER = "metatron:domains";
 var RETIRED_PSEUDO_KEYS = /* @__PURE__ */ new Set(["overview"]);
@@ -2941,10 +2951,18 @@ function runGetArchitecture(ctx) {
     });
     return;
   }
+  const lineCount = countArchitectureLines(file.text);
+  const lineWarning = lineLimitWarning(lineCount);
+  if (lineWarning !== null) {
+    warnings.push(lineWarning);
+    noteWarnings([lineWarning]);
+  }
   emitResult(command, {
     ok: true,
     path: config.architecturePath,
     exists: true,
+    lineCount,
+    lineLimit: ARCHITECTURE_LINE_LIMIT,
     eol: doc.eol === "\r\n" ? "crlf" : "lf",
     preamble: doc.preamble,
     headings: doc.sections.map((s) => s.heading),
@@ -3237,6 +3255,12 @@ function runStageArchitecture(ctx) {
     fromLabel: `${config.architectureRelative} (\u73FE\u884C)`,
     toLabel: `${config.architectureRelative} (stage)`
   });
+  const lineCount = countArchitectureLines(update.text);
+  const lineWarning = lineLimitWarning(lineCount);
+  if (lineWarning !== null) {
+    warnings.push(lineWarning);
+    noteWarnings([lineWarning]);
+  }
   emitResult(command, {
     ok: true,
     valid: true,
@@ -3245,6 +3269,8 @@ function runStageArchitecture(ctx) {
     baseExists: file.exists,
     created: update.created,
     applied: update.applied,
+    lineCount,
+    lineLimit: ARCHITECTURE_LINE_LIMIT,
     diff: diffPayload(
       diff,
       sectionDiffs(file.text, update.text, update.applied)
