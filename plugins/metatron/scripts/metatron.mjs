@@ -1,5 +1,420 @@
 #!/usr/bin/env node
 
+// src/lib/checks.ts
+import fs from "node:fs";
+import path from "node:path";
+var CHECKS_MARKER = "metatron:checks";
+var MAX_CHECK_FILES = 2e4;
+var ECMASCRIPT_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs"
+]);
+var SKIPPED_DIRECTORIES = /* @__PURE__ */ new Set(["node_modules", ".git"]);
+var CAPTURE_RE = /^<([A-Za-z][A-Za-z0-9_-]*)>$/;
+function globError(glob, allowCaptures) {
+  if (glob === "") return "\u7A7A\u306E glob \u306F\u66F8\u3051\u307E\u305B\u3093\u3002";
+  if (glob.startsWith("/")) return `glob\u300C${glob}\u300D\u306F / \u3067\u59CB\u3081\u3089\u308C\u307E\u305B\u3093\u3002`;
+  const segments = glob.split("/");
+  if (segments.includes(".."))
+    return `glob\u300C${glob}\u300D\u306B .. \u306E\u533A\u9593\u306F\u66F8\u3051\u307E\u305B\u3093\u3002`;
+  if (segments.some((segment) => segment === "" || segment === ".")) {
+    return `glob\u300C${glob}\u300D\u306B\u7A7A\u306E\u533A\u9593\u304B . \u306E\u533A\u9593\u304C\u3042\u308A\u307E\u3059\u3002`;
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const segment of segments) {
+    if (!segment.includes("<") && !segment.includes(">")) continue;
+    const match = CAPTURE_RE.exec(segment);
+    if (match === null) {
+      return `glob\u300C${glob}\u300D\u306E <\u540D\u524D> \u306F\u533A\u9593\u306E\u5168\u4F53\u3092\u5360\u3081\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`;
+    }
+    if (!allowCaptures) return `glob\u300C${glob}\u300D\u306B\u306F <\u540D\u524D> \u3092\u7F6E\u3051\u307E\u305B\u3093\u3002`;
+    if (seen.has(match[1])) {
+      return `glob\u300C${glob}\u300D\u306B <${match[1]}> \u304C 2 \u56DE\u3042\u308A\u307E\u3059\u3002`;
+    }
+    seen.add(match[1]);
+  }
+  return null;
+}
+function escapeRe(text) {
+  return text.replace(/[.+^${}()|[\]\\*?]/g, "\\$&");
+}
+function compileGlob(glob) {
+  const names = [];
+  const segments = glob.split("/").filter((segment, i, all) => !(segment === "**" && all[i - 1] === "**"));
+  let re = "";
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const last = i === segments.length - 1;
+    if (segment === "**") {
+      if (last) {
+        re += i === 0 ? ".*" : "(?:/.*)?";
+      } else {
+        re += i === 0 ? "(?:.*/)?" : "(?:/.*)?/";
+      }
+      continue;
+    }
+    if (i > 0 && segments[i - 1] !== "**") re += "/";
+    const capture = CAPTURE_RE.exec(segment);
+    if (capture !== null) {
+      names.push(capture[1]);
+      re += "([^/]+)";
+      continue;
+    }
+    re += segment.split("").map((c) => c === "*" ? "[^/]*" : c === "?" ? "[^/]" : escapeRe(c)).join("");
+  }
+  return { re: new RegExp(`^${re}$`), names };
+}
+function bindGlob(glob, values) {
+  const segments = glob.split("/").map((segment) => {
+    const capture = CAPTURE_RE.exec(segment);
+    return capture === null ? segment : `\0${capture[1]}\0`;
+  });
+  const compiled = compileGlob(segments.join("/"));
+  let source = compiled.re.source;
+  for (const [name, value] of Object.entries(values)) {
+    source = source.split(escapeRe(`\0${name}\0`)).join(escapeRe(value));
+  }
+  return new RegExp(source);
+}
+function literalPrefix(glob) {
+  const out = [];
+  for (const segment of glob.split("/")) {
+    if (/[*?<>]/.test(segment)) break;
+    out.push(segment);
+  }
+  return out.join("/");
+}
+function isStringArray(value, allowEmpty) {
+  return Array.isArray(value) && (allowEmpty || value.length > 0) && value.every((v) => typeof v === "string");
+}
+function validateCheck(value, index, ids) {
+  const at = `${String(index + 1)} \u4EF6\u76EE\u306E\u691C\u67FB`;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ok: false, message: `${at}\u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002` };
+  }
+  const v = value;
+  if (typeof v.id !== "string" || v.id === "") {
+    return { ok: false, message: `${at}\u306E id \u304C\u7A7A\u304B\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002` };
+  }
+  if (ids.has(v.id)) {
+    return { ok: false, message: `id\u300C${v.id}\u300D\u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059\u3002` };
+  }
+  ids.add(v.id);
+  if (v.kind !== "no-import") {
+    return {
+      ok: false,
+      message: `\u691C\u67FB\u300C${v.id}\u300D\u306E kind\u300C${String(v.kind)}\u300D\u306F\u672A\u77E5\u3067\u3059\u3002\u4F7F\u3048\u308B\u306E\u306F no-import \u3060\u3051\u3067\u3059\u3002`
+    };
+  }
+  if (typeof v.message !== "string" || v.message === "") {
+    return { ok: false, message: `\u691C\u67FB\u300C${v.id}\u300D\u306E message \u304C\u3042\u308A\u307E\u305B\u3093\u3002` };
+  }
+  if (!isStringArray(v.from, false) || !isStringArray(v.to, false)) {
+    return {
+      ok: false,
+      message: `\u691C\u67FB\u300C${v.id}\u300D\u306E from \u3068 to \u306F 1 \u8981\u7D20\u4EE5\u4E0A\u306E\u6587\u5B57\u5217\u306E\u914D\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  for (const key of ["exceptFrom", "exceptTo"]) {
+    if (v[key] !== void 0 && !isStringArray(v[key], true)) {
+      return {
+        ok: false,
+        message: `\u691C\u67FB\u300C${v.id}\u300D\u306E ${key} \u306F\u6587\u5B57\u5217\u306E\u914D\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+      };
+    }
+  }
+  const exceptFrom = v.exceptFrom ?? [];
+  const exceptTo = v.exceptTo ?? [];
+  let bound = null;
+  for (const glob of v.from) {
+    const error = globError(glob, true);
+    if (error !== null)
+      return { ok: false, message: `\u691C\u67FB\u300C${v.id}\u300D: ${error}` };
+    const names = [...compileGlob(glob).names].sort();
+    if (bound !== null && bound.join("/") !== names.join("/")) {
+      return {
+        ok: false,
+        message: `\u691C\u67FB\u300C${v.id}\u300D\u306E from \u306E\u5404\u8981\u7D20\u306F\u540C\u3058\u7D44\u306E <\u540D\u524D> \u3092\u6301\u3064\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`
+      };
+    }
+    bound = names;
+  }
+  for (const glob of v.to) {
+    const error = globError(glob, false);
+    if (error !== null)
+      return { ok: false, message: `\u691C\u67FB\u300C${v.id}\u300D: ${error}` };
+  }
+  for (const glob of [...exceptFrom, ...exceptTo]) {
+    const error = globError(glob, true);
+    if (error !== null)
+      return { ok: false, message: `\u691C\u67FB\u300C${v.id}\u300D: ${error}` };
+    for (const name of compileGlob(glob).names) {
+      if (!(bound ?? []).includes(name)) {
+        return {
+          ok: false,
+          message: `\u691C\u67FB\u300C${v.id}\u300D\u306E <${name}> \u306F from \u3067\u899A\u3048\u3066\u3044\u307E\u305B\u3093\u3002`
+        };
+      }
+    }
+  }
+  return {
+    ok: true,
+    check: {
+      id: v.id,
+      kind: "no-import",
+      from: v.from,
+      exceptFrom,
+      to: v.to,
+      exceptTo,
+      message: v.message
+    }
+  };
+}
+function parseChecksContent(content) {
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return {
+      ok: false,
+      reason: "invalid_checks",
+      message: `\`${CHECKS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u6709\u52B9\u306A JSON \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`
+    };
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    return {
+      ok: false,
+      reason: "invalid_checks",
+      message: `\`${CHECKS_MARKER}\` \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F 1 \u4EF6\u4EE5\u4E0A\u306E\u8981\u7D20\u3092\u6301\u3064\u914D\u5217\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  const ids = /* @__PURE__ */ new Set();
+  const checks = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const result = validateCheck(parsed[i], i, ids);
+    if (!result.ok) {
+      return { ok: false, reason: "invalid_checks", message: result.message };
+    }
+    checks.push(result.check);
+  }
+  return { ok: true, checks };
+}
+var FROM_RE = /(?:^|;)[ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*(["'])([^"'\n]*)\1/gm;
+var BARE_RE = /(?:^|;)[ \t]*import\s*(["'])([^"'\n]*)\1/gm;
+var CALL_RE = /(?<![.\w$])(?:import|require)\s*\(\s*(["'])([^"'\n]*)\1\s*\)/g;
+function maskSource(text) {
+  const out = text.split("");
+  const blank = (from, to, fill) => {
+    for (let i2 = from; i2 < to; i2++) if (out[i2] !== "\n") out[i2] = fill;
+  };
+  if (out[0] === "\uFEFF") out[0] = " ";
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === "/" && next === "/") {
+      const end = text.indexOf("\n", i);
+      const stop = end === -1 ? text.length : end;
+      blank(i, stop, " ");
+      i = stop;
+    } else if (c === "/" && next === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      blank(i, stop, " ");
+      i = stop;
+    } else if (c === "`") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== "`") j += text[j] === "\\" ? 2 : 1;
+      const stop = Math.min(j + 1, text.length);
+      blank(i, stop, " ");
+      i = stop;
+    } else if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c && text[j] !== "\n") {
+        j += text[j] === "\\" ? 2 : 1;
+      }
+      blank(i + 1, Math.min(j, text.length), "x");
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return out.join("");
+}
+function lineAt(text, index) {
+  let line = 1;
+  for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
+  return line;
+}
+function extractImports(text) {
+  const masked = maskSource(text);
+  const found = /* @__PURE__ */ new Map();
+  for (const re of [FROM_RE, BARE_RE, CALL_RE]) {
+    re.lastIndex = 0;
+    for (let m = re.exec(masked); m !== null; m = re.exec(masked)) {
+      const close = m.index + m[0].lastIndexOf(m[1]);
+      const open = close - m[2].length - 1;
+      const specifier = text.slice(open + 1, close);
+      if (!found.has(open)) {
+        found.set(open, { specifier, line: lineAt(text, open + 1) });
+      }
+    }
+  }
+  return [...found.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+function toPosix(p) {
+  return p.split(path.sep).join("/");
+}
+function walk(root, start, out) {
+  const absolute = path.join(root, start);
+  let entries;
+  try {
+    entries = fs.readdirSync(absolute, { withFileTypes: true });
+  } catch {
+    return "unreadable";
+  }
+  for (const entry of entries) {
+    const rel = start === "" ? entry.name : `${start}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
+      const result = walk(root, rel, out);
+      if (result !== "ok") return result;
+    } else if (entry.isFile()) {
+      out.push(rel);
+      if (out.length > MAX_CHECK_FILES) return "too_many";
+    }
+  }
+  return "ok";
+}
+function startDirectories(globs) {
+  const prefixes = [...new Set(globs.map(literalPrefix))].sort();
+  return prefixes.filter(
+    (p) => !prefixes.some((q) => q !== p && (q === "" || p.startsWith(`${q}/`)))
+  );
+}
+function runChecks(root, checks) {
+  const violations = [];
+  const checkedFiles = /* @__PURE__ */ new Set();
+  let skipped = 0;
+  const realRoot = fs.realpathSync(root);
+  for (const check of checks) {
+    const files = [];
+    for (const start of startDirectories(check.from)) {
+      const startPath = path.join(root, start);
+      let stat;
+      try {
+        stat = fs.lstatSync(startPath);
+      } catch {
+        continue;
+      }
+      let real;
+      try {
+        real = fs.realpathSync(startPath);
+      } catch {
+        continue;
+      }
+      if (real !== realRoot && !real.startsWith(`${realRoot}${path.sep}`)) {
+        return {
+          ok: false,
+          reason: "outside_root",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u306E\u958B\u59CB\u70B9 ${start} \u304C docRoot \u306E\u5916\u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002`
+        };
+      }
+      if (stat.isFile()) {
+        files.push(start);
+        continue;
+      }
+      if (!stat.isDirectory()) continue;
+      const walked = walk(root, start, files);
+      if (walked === "too_many") {
+        return {
+          ok: false,
+          reason: "too_many_files",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u304C ${String(MAX_CHECK_FILES)} \u4EF6\u3092\u8D85\u3048\u305F\u305F\u3081\u6253\u3061\u5207\u308A\u307E\u3057\u305F\u3002from \u306E glob \u3092\u56FA\u5B9A\u306E\u63A5\u982D\u8F9E\u3067\u7D5E\u3063\u3066\u304F\u3060\u3055\u3044\u3002`
+        };
+      }
+      if (walked === "unreadable") {
+        return {
+          ok: false,
+          reason: "unreadable",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u3067\u8AAD\u3081\u306A\u3044\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u304C\u3042\u308A\u307E\u3057\u305F\u3002\u6A29\u9650\u3092\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
+        };
+      }
+    }
+    const fromGlobs = check.from.map(compileGlob);
+    let readable = 0;
+    for (const file of files) {
+      let values = null;
+      for (const glob of fromGlobs) {
+        const m = glob.re.exec(file);
+        if (m === null) continue;
+        values = {};
+        glob.names.forEach((name, i) => {
+          if (values !== null) values[name] = m[i + 1];
+        });
+        break;
+      }
+      if (values === null) continue;
+      const bound = values;
+      if (check.exceptFrom.some((g) => bindGlob(g, bound).test(file))) continue;
+      if (!ECMASCRIPT_EXTENSIONS.has(path.extname(file))) {
+        skipped++;
+        continue;
+      }
+      let text;
+      try {
+        text = fs.readFileSync(path.join(root, file), "utf8");
+      } catch {
+        return {
+          ok: false,
+          reason: "unreadable",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u5BFE\u8C61 ${file} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
+        };
+      }
+      readable++;
+      checkedFiles.add(file);
+      const toRes = check.to.map((g) => compileGlob(g).re);
+      const exceptToRes = check.exceptTo.map((g) => bindGlob(g, bound));
+      for (const imp of extractImports(text)) {
+        const spec = imp.specifier;
+        const relative = spec === "." || spec === ".." || spec.startsWith("./") || spec.startsWith("../");
+        if (!relative) continue;
+        const target = toPosix(
+          path.normalize(path.join(path.dirname(file), imp.specifier))
+        );
+        if (target === ".." || target.startsWith("../")) continue;
+        if (!toRes.some((re) => re.test(target))) continue;
+        if (exceptToRes.some((re) => re.test(target))) continue;
+        violations.push({
+          check: check.id,
+          file,
+          line: imp.line,
+          specifier: imp.specifier,
+          target,
+          message: check.message
+        });
+      }
+    }
+    if (readable === 0) {
+      return {
+        ok: false,
+        reason: "no_match",
+        message: `\u691C\u67FB\u300C${check.id}\u300D\u306E from \u306B\u4E00\u81F4\u3059\u308B ECMAScript \u306E\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\u3002glob \u304C\u53E4\u304F\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
+      };
+    }
+  }
+  violations.sort(
+    (a, b) => a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1
+  );
+  return { ok: true, violations, checked: checkedFiles.size, skipped };
+}
+
 // src/lib/architecture.ts
 var ARCHITECTURE_TITLE = "# ARCHITECTURE";
 var ARCHITECTURE_HEADINGS = [
@@ -205,11 +620,14 @@ function validateHeadingKey(heading, options = {}) {
   }
   return { ok: true, heading: value };
 }
-function isDomainsInfo(info) {
+function isMarkerInfo(info, marker) {
   const tokens = info.trim().split(/[ \t]+/).filter(Boolean);
-  return tokens.length === 2 && tokens[0] === "json" && tokens[1] === DOMAINS_MARKER;
+  return tokens.length === 2 && tokens[0] === "json" && tokens[1] === marker;
 }
 function findDomainsBlock(text) {
+  return findMarkedBlock(text, DOMAINS_MARKER);
+}
+function findMarkedBlock(text, marker) {
   const lines = splitLines(text);
   const blocks = [];
   const warnings = [];
@@ -236,7 +654,7 @@ function findDomainsBlock(text) {
     if (open) {
       fence = open;
       openIndex = i;
-      isTarget = isDomainsInfo(open.info);
+      isTarget = isMarkerInfo(open.info, marker);
     }
   }
   if (fence && isTarget) {
@@ -248,16 +666,16 @@ function findDomainsBlock(text) {
   }
   if (blocks.length > 1) {
     warnings.push(
-      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C ${blocks.length} \u500B\u3042\u308A\u307E\u3059\u3002\u6700\u521D\u306E\u3082\u306E\u3060\u3051\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
+      `\`${marker}\` \u30D6\u30ED\u30C3\u30AF\u304C ${blocks.length} \u500B\u3042\u308A\u307E\u3059\u3002\u6700\u521D\u306E\u3082\u306E\u3060\u3051\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
     );
   }
   if (blocks.length > 0 && !blocks[0].closed) {
     warnings.push(
-      `\`${DOMAINS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u9589\u3058\u3066\u3044\u307E\u305B\u3093\u3002\u30D5\u30A1\u30A4\u30EB\u7D42\u7AEF\u307E\u3067\u3092\u5185\u5BB9\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002`
+      `\`${marker}\` \u30D6\u30ED\u30C3\u30AF\u304C\u9589\u3058\u3066\u3044\u307E\u305B\u3093\u3002\u30D5\u30A1\u30A4\u30EB\u7D42\u7AEF\u307E\u3067\u3092\u5185\u5BB9\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002`
     );
   } else if (fence !== null) {
     warnings.push(
-      `\`${DOMAINS_MARKER}\` \u306E\u8D70\u67FB\u4E2D\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u691C\u51FA\u3057\u307E\u3057\u305F\u3002\u30DE\u30FC\u30AB\u30FC\u304C\u30D5\u30A7\u30F3\u30B9\u5185\u306B\u53D6\u308A\u8FBC\u307E\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+      `\`${marker}\` \u306E\u8D70\u67FB\u4E2D\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u691C\u51FA\u3057\u307E\u3057\u305F\u3002\u30DE\u30FC\u30AB\u30FC\u304C\u30D5\u30A7\u30F3\u30B9\u5185\u306B\u53D6\u308A\u8FBC\u307E\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
     );
   }
   return { block: blocks[0] ?? null, warnings };
@@ -498,6 +916,21 @@ function rejectBrokenResult(before, text, warnings) {
       warnings
     };
   }
+  const checksError = (doc) => {
+    const { block } = findMarkedBlock(doc, CHECKS_MARKER);
+    if (block === null) return null;
+    const parsed = parseChecksContent(block.content);
+    return parsed.ok ? null : parsed.message;
+  };
+  const afterChecks = checksError(text);
+  if (afterChecks !== null && checksError(before) === null) {
+    return {
+      ok: false,
+      error: "invalid_checks",
+      message: `\u5DEE\u3057\u66FF\u3048\u305F\u5F8C\u306E\u6587\u66F8\u306E \`${CHECKS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u3092\u8AAD\u3081\u307E\u305B\u3093: ${afterChecks}`,
+      warnings
+    };
+  }
   return null;
 }
 function prepareArchitectureUpdate(current, changes) {
@@ -633,11 +1066,23 @@ function prepareArchitectureUpdate(current, changes) {
   const result = applySectionChanges(current, normalizedChanges);
   return { ...result, warnings: [...warnings, ...result.warnings] };
 }
+function extractChecks(text) {
+  const { block, warnings } = findMarkedBlock(text, CHECKS_MARKER);
+  if (block === null) {
+    return {
+      ok: false,
+      reason: "block_not_found",
+      message: `\`${CHECKS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002`,
+      warnings
+    };
+  }
+  return { ...parseChecksContent(block.content), warnings };
+}
 
 // src/lib/config.ts
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
+import fs2 from "node:fs";
+import path2 from "node:path";
 var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
@@ -646,21 +1091,21 @@ function isPlainObject(value) {
 }
 function realpathOrSelf(dir) {
   try {
-    return fs.realpathSync(dir);
+    return fs2.realpathSync(dir);
   } catch {
     return dir;
   }
 }
 function hasConfigFile(dir) {
   try {
-    return fs.existsSync(path.join(dir, CONFIG_FILENAME));
+    return fs2.existsSync(path2.join(dir, CONFIG_FILENAME));
   } catch {
     return false;
   }
 }
 function existsGit(dir) {
   try {
-    return fs.existsSync(path.join(dir, ".git"));
+    return fs2.existsSync(path2.join(dir, ".git"));
   } catch {
     return false;
   }
@@ -676,20 +1121,20 @@ function gitToplevel(cwd) {
     if (res.status !== 0) return null;
     const out = res.stdout?.trim();
     if (!out) return null;
-    return path.resolve(out);
+    return path2.resolve(out);
   } catch {
     return null;
   }
 }
 function findDocRoot(startDir) {
-  const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  const start = realpathOrSelf(path2.resolve(startDir ?? process.cwd()));
   if (hasConfigFile(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
     if (top ? dir === top : existsGit(dir)) break;
-    const parent = path.dirname(dir);
+    const parent = path2.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -700,15 +1145,15 @@ function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
 }
 function looksAbsolute(value) {
-  return path.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+  return path2.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
 }
-function toPosix(value) {
-  return value.split(path.sep).join("/");
+function toPosix2(value) {
+  return value.split(path2.sep).join("/");
 }
 function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   const useFallback = () => ({
     relative: fallback,
-    absolute: path.resolve(docRoot, fallback)
+    absolute: path2.resolve(docRoot, fallback)
   });
   if (raw === void 0) return useFallback();
   if (typeof raw !== "string" || raw.trim() === "") {
@@ -724,23 +1169,23 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
     );
     return useFallback();
   }
-  const absolute = path.resolve(docRoot, value);
-  const relative = path.relative(docRoot, absolute);
-  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  const absolute = path2.resolve(docRoot, value);
+  const relative = path2.relative(docRoot, absolute);
+  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative);
   if (escapes) {
     warnings.push(
       `paths.${label} \u304C\u30EB\u30FC\u30C8\u5916(${raw})\u3092\u6307\u3059\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
     );
     return useFallback();
   }
-  return { relative: toPosix(relative), absolute };
+  return { relative: toPosix2(relative), absolute };
 }
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
-    configPath: path.join(docRoot, CONFIG_FILENAME),
+    configPath: path2.join(docRoot, CONFIG_FILENAME),
     configExists: false,
-    architecturePath: path.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
+    architecturePath: path2.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
     warnings
   };
@@ -748,14 +1193,14 @@ function defaultsFor(docRoot, warnings) {
 function loadConfigInner(startDir) {
   const warnings = [];
   const docRoot = findDocRoot(startDir);
-  const configPath = path.join(docRoot, CONFIG_FILENAME);
+  const configPath = path2.join(docRoot, CONFIG_FILENAME);
   let configExists = false;
   let parsed;
   let parseOk = false;
   try {
-    if (fs.existsSync(configPath)) {
+    if (fs2.existsSync(configPath)) {
       configExists = true;
-      parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      parsed = JSON.parse(fs2.readFileSync(configPath, "utf8"));
       parseOk = true;
     }
   } catch {
@@ -809,7 +1254,7 @@ function loadConfig(startDir) {
   } catch {
     let docRoot;
     try {
-      docRoot = path.resolve(startDir ?? process.cwd());
+      docRoot = path2.resolve(startDir ?? process.cwd());
     } catch {
       docRoot = startDir ?? ".";
     }
@@ -821,8 +1266,8 @@ function loadConfig(startDir) {
 
 // src/lib/scan.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 var ARCHITECTURE_SECTIONS = [
   "\u30B7\u30B9\u30C6\u30E0\u6982\u8981",
   "\u6280\u8853\u30B9\u30BF\u30C3\u30AF",
@@ -952,14 +1397,14 @@ function compareStrings(a, b) {
 }
 function readTextFile(file) {
   try {
-    return fs2.readFileSync(file, "utf8");
+    return fs3.readFileSync(file, "utf8");
   } catch {
     return null;
   }
 }
 function fileExists(file) {
   try {
-    return fs2.statSync(file).isFile();
+    return fs3.statSync(file).isFile();
   } catch {
     return false;
   }
@@ -1159,7 +1604,7 @@ function isIgnored(ignored, rel, isDirectory) {
   return ignored.has(isDirectory ? `${rel}/` : rel);
 }
 function rootFile(root, ignored, rel) {
-  return ignored.has(rel) ? null : path2.join(root, rel);
+  return ignored.has(rel) ? null : path3.join(root, rel);
 }
 function readRootText(root, ignored, rel) {
   const file = rootFile(root, ignored, rel);
@@ -1197,7 +1642,7 @@ function walkDirectory(state, dir, rel, depth) {
   if (state.truncation.walk) return;
   let dirents;
   try {
-    dirents = fs2.readdirSync(dir, { withFileTypes: true });
+    dirents = fs3.readdirSync(dir, { withFileTypes: true });
   } catch {
     state.unreadable.push(rel === "" ? "." : rel);
     return;
@@ -1215,7 +1660,7 @@ function walkDirectory(state, dir, rel, depth) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       if (depth + 1 <= 2) state.dirs.add(childRel);
       pushTree(state, childRel, depth + 1, "directory");
-      walkDirectory(state, path2.join(dir, dirent.name), childRel, depth + 1);
+      walkDirectory(state, path3.join(dir, dirent.name), childRel, depth + 1);
     } else if (dirent.isFile()) {
       recordFile(state, childRel);
       pushTree(state, childRel, depth + 1, "file");
@@ -1465,7 +1910,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit, ignored) {
   if (depth > maxDepth || out.length >= limit) return;
   let dirents;
   try {
-    dirents = fs2.readdirSync(dir, { withFileTypes: true });
+    dirents = fs3.readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
@@ -1477,7 +1922,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit, ignored) {
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       collectMarkdownFiles(
-        path2.join(dir, dirent.name),
+        path3.join(dir, dirent.name),
         childRel,
         depth + 1,
         maxDepth,
@@ -1494,7 +1939,7 @@ function scanDocuments(root, limits, truncation, ignored) {
   const targets = [];
   let rootEntries = [];
   try {
-    rootEntries = fs2.readdirSync(root, { withFileTypes: true });
+    rootEntries = fs3.readdirSync(root, { withFileTypes: true });
   } catch {
     rootEntries = [];
   }
@@ -1505,7 +1950,7 @@ function scanDocuments(root, limits, truncation, ignored) {
     if (lower === "readme.md" || lower === "claude.md")
       targets.push(dirent.name);
   }
-  const docsDir = path2.join(root, "docs");
+  const docsDir = path3.join(root, "docs");
   const docsFiles = [];
   if (!isIgnored(ignored, "docs", true)) {
     collectMarkdownFiles(
@@ -1525,7 +1970,7 @@ function scanDocuments(root, limits, truncation, ignored) {
       truncation.documents = true;
       break;
     }
-    const text = readTextFile(path2.join(root, rel));
+    const text = readTextFile(path3.join(root, rel));
     if (text === null) continue;
     const { headings, truncated } = extractHeadings(
       text,
@@ -1537,7 +1982,7 @@ function scanDocuments(root, limits, truncation, ignored) {
 }
 function scanInner(startDir, options) {
   const limits = { ...DEFAULT_SCAN_LIMITS, ...options.limits };
-  const root = options.root !== void 0 ? path2.resolve(options.root) : findDocRoot(startDir);
+  const root = options.root !== void 0 ? path3.resolve(options.root) : findDocRoot(startDir);
   const warnings = [];
   const truncation = {
     walk: false,
@@ -1645,7 +2090,7 @@ function scan(startDir, options = {}) {
   } catch (error) {
     let root;
     try {
-      root = options.root ?? path2.resolve(startDir ?? process.cwd());
+      root = options.root ?? path3.resolve(startDir ?? process.cwd());
     } catch {
       root = options.root ?? startDir ?? ".";
     }
@@ -1777,14 +2222,14 @@ function pathStateFromRoot(root, relative) {
   for (const segment of relative.split("/")) {
     let names;
     try {
-      names = fs2.readdirSync(current);
+      names = fs3.readdirSync(current);
     } catch {
       return "missing";
     }
     if (!names.includes(segment)) return "missing";
-    current = path2.join(current, segment);
+    current = path3.join(current, segment);
     try {
-      if (fs2.lstatSync(current).isSymbolicLink()) return "link";
+      if (fs3.lstatSync(current).isSymbolicLink()) return "link";
     } catch {
       return "missing";
     }
@@ -1955,39 +2400,39 @@ function diffArchitecture(input) {
 }
 
 // src/cli/input.ts
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 
 // src/lib/staging.ts
 import crypto2 from "node:crypto";
-import fs4 from "node:fs";
+import fs5 from "node:fs";
 import os from "node:os";
-import path4 from "node:path";
+import path5 from "node:path";
 
 // src/lib/atomic-write.ts
 import crypto from "node:crypto";
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs4 from "node:fs";
+import path4 from "node:path";
 var MAX_LINK_HOPS = 40;
 function errnoCode(error) {
   return error?.code;
 }
 function resolveWriteTarget(target) {
   try {
-    return fs3.realpathSync(target);
+    return fs4.realpathSync(target);
   } catch (error) {
     if (errnoCode(error) !== "ENOENT") throw error;
   }
-  let current = path3.resolve(target);
+  let current = path4.resolve(target);
   for (let hop = 0; hop < MAX_LINK_HOPS; hop++) {
     let link;
     try {
-      link = fs3.readlinkSync(current);
+      link = fs4.readlinkSync(current);
     } catch (error) {
       const code = errnoCode(error);
       if (code === "ENOENT" || code === "EINVAL") return current;
       throw error;
     }
-    current = path3.resolve(path3.dirname(current), link);
+    current = path4.resolve(path4.dirname(current), link);
   }
   const err = new Error(
     `ELOOP: too many symbolic links encountered, '${target}'`
@@ -1997,7 +2442,7 @@ function resolveWriteTarget(target) {
 }
 function existingMode(filePath) {
   try {
-    return fs3.statSync(filePath).mode & 4095;
+    return fs4.statSync(filePath).mode & 4095;
   } catch (error) {
     if (errnoCode(error) === "ENOENT") return null;
     throw error;
@@ -2005,16 +2450,16 @@ function existingMode(filePath) {
 }
 function writeFileAtomic(target, data) {
   const dest = resolveWriteTarget(target);
-  fs3.mkdirSync(path3.dirname(dest), { recursive: true });
+  fs4.mkdirSync(path4.dirname(dest), { recursive: true });
   const mode = existingMode(dest);
   const tmp = `${dest}.tmp-${crypto.randomUUID()}`;
   try {
-    fs3.writeFileSync(tmp, data);
-    if (mode !== null) fs3.chmodSync(tmp, mode);
-    fs3.renameSync(tmp, dest);
+    fs4.writeFileSync(tmp, data);
+    if (mode !== null) fs4.chmodSync(tmp, mode);
+    fs4.renameSync(tmp, dest);
   } catch (error) {
     try {
-      fs3.rmSync(tmp, { force: true });
+      fs4.rmSync(tmp, { force: true });
     } catch {
     }
     throw error;
@@ -2034,7 +2479,7 @@ function hashContent(content) {
 }
 function hashFileOrNull(filePath) {
   try {
-    return hashBuffer(fs4.readFileSync(filePath));
+    return hashBuffer(fs5.readFileSync(filePath));
   } catch {
     return null;
   }
@@ -2042,22 +2487,22 @@ function hashFileOrNull(filePath) {
 function projectKey(projectRoot) {
   let resolved;
   try {
-    resolved = path4.resolve(projectRoot);
+    resolved = path5.resolve(projectRoot);
   } catch {
     resolved = projectRoot;
   }
   let real = resolved;
   try {
-    real = fs4.realpathSync(resolved);
+    real = fs5.realpathSync(resolved);
   } catch {
   }
-  return hashContent(real.split(path4.sep).join("/")).slice(0, 16);
+  return hashContent(real.split(path5.sep).join("/")).slice(0, 16);
 }
 function stagingRootDir() {
-  return path4.join(os.tmpdir(), STAGING_DIR_NAME);
+  return path5.join(os.tmpdir(), STAGING_DIR_NAME);
 }
 function stagingDirFor(projectRoot) {
-  return path4.join(stagingRootDir(), projectKey(projectRoot));
+  return path5.join(stagingRootDir(), projectKey(projectRoot));
 }
 var STAGING_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 function isSafeStagingId(stagingId) {
@@ -2065,12 +2510,12 @@ function isSafeStagingId(stagingId) {
 }
 function stagingRecordPath(projectRoot, stagingId) {
   if (!isSafeStagingId(stagingId)) return null;
-  return path4.join(stagingDirFor(projectRoot), `${stagingId}.json`);
+  return path5.join(stagingDirFor(projectRoot), `${stagingId}.json`);
 }
 function isInside(root, target) {
-  const rel = path4.relative(root, target);
+  const rel = path5.relative(root, target);
   if (rel === "" || rel === "..") return false;
-  return !rel.startsWith(`..${path4.sep}`) && !path4.isAbsolute(rel);
+  return !rel.startsWith(`..${path5.sep}`) && !path5.isAbsolute(rel);
 }
 function isPlainObject3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -2132,24 +2577,24 @@ function loadRecord(projectRoot, stagingId) {
   const recordPath = stagingRecordPath(projectRoot, stagingId);
   if (recordPath === null) return null;
   try {
-    const text = fs4.readFileSync(recordPath, "utf8");
+    const text = fs5.readFileSync(recordPath, "utf8");
     return parseRecord(JSON.parse(text), stagingId);
   } catch {
     return null;
   }
 }
 function writeRecord(recordPath, record) {
-  const dir = path4.dirname(recordPath);
-  fs4.mkdirSync(dir, { recursive: true });
+  const dir = path5.dirname(recordPath);
+  fs5.mkdirSync(dir, { recursive: true });
   const tmpPath = `${recordPath}.tmp-${crypto2.randomUUID()}`;
   const body = `${JSON.stringify(record, null, 2)}
 `;
-  fs4.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 384 });
+  fs5.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 384 });
   try {
-    fs4.renameSync(tmpPath, recordPath);
+    fs5.renameSync(tmpPath, recordPath);
   } catch (err) {
     try {
-      fs4.rmSync(tmpPath, { force: true });
+      fs5.rmSync(tmpPath, { force: true });
     } catch {
     }
     throw err;
@@ -2160,8 +2605,8 @@ function createStaging(input) {
   if (errors.length > 0) {
     return { ok: false, error: "invalid", reasons: [...errors] };
   }
-  const projectRoot = path4.resolve(input.projectRoot);
-  const targetPath = path4.resolve(projectRoot, input.targetPath);
+  const projectRoot = path5.resolve(input.projectRoot);
+  const targetPath = path5.resolve(projectRoot, input.targetPath);
   if (!isInside(projectRoot, targetPath)) {
     return {
       ok: false,
@@ -2187,7 +2632,7 @@ function createStaging(input) {
     usedAt: null,
     meta: input.meta ?? {}
   };
-  const recordPath = path4.join(stagingDirFor(projectRoot), `${stagingId}.json`);
+  const recordPath = path5.join(stagingDirFor(projectRoot), `${stagingId}.json`);
   try {
     writeRecord(recordPath, { ...draft, recordHash: computeRecordHash(draft) });
   } catch (err) {
@@ -2226,7 +2671,7 @@ function readStaging(projectRoot, stagingId) {
   return { ok: true, record };
 }
 function commitStaging(input) {
-  const projectRoot = path4.resolve(input.projectRoot);
+  const projectRoot = path5.resolve(input.projectRoot);
   const now = input.now ?? Date.now();
   const record = loadRecord(projectRoot, input.stagingId);
   if (record === null) {
@@ -2388,7 +2833,7 @@ function messageOf(error) {
 function readStdinSync() {
   if (process.stdin.isTTY === true) return null;
   try {
-    return fs5.readFileSync(0, "utf8");
+    return fs6.readFileSync(0, "utf8");
   } catch {
     return null;
   }
@@ -2400,7 +2845,7 @@ function loadInputJson(flags) {
   if (inputPath !== void 0) {
     source = inputPath;
     try {
-      raw = fs5.readFileSync(inputPath, "utf8");
+      raw = fs6.readFileSync(inputPath, "utf8");
     } catch (error) {
       return {
         ok: false,
@@ -2435,7 +2880,7 @@ function isPlainObject4(value) {
 }
 function readDocument(filePath) {
   try {
-    const buf = fs5.readFileSync(filePath);
+    const buf = fs6.readFileSync(filePath);
     return {
       path: filePath,
       exists: true,
@@ -2513,16 +2958,63 @@ function runDiffArchitecture(ctx) {
   }
 }
 
+// src/cli/check.ts
+var EXIT_VIOLATIONS = 1;
+var EXIT_CHECK_UNUSABLE = 2;
+var EXIT_INTERNAL = 3;
+function fail(error, message, warnings) {
+  emitResult("check", { ok: false, error, message, warnings });
+  noteWarnings(warnings);
+  note(message);
+  process.exitCode = EXIT_CHECK_UNUSABLE;
+}
+function runCheck(ctx) {
+  const config = loadConfig(ctx.cwd);
+  const file = readDocument(config.architecturePath);
+  const warnings = [...config.warnings, ...file.warnings];
+  if (!file.exists) {
+    fail(
+      "architecture_missing",
+      `${config.architecturePath} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`,
+      warnings
+    );
+    return;
+  }
+  const parsed = extractChecks(file.text);
+  warnings.push(...parsed.warnings);
+  if (!parsed.ok) {
+    fail(parsed.reason, parsed.message, warnings);
+    return;
+  }
+  const result = runChecks(config.docRoot, parsed.checks);
+  if (!result.ok) {
+    fail(result.reason, result.message, warnings);
+    return;
+  }
+  emitResult("check", {
+    ok: result.violations.length === 0,
+    violations: result.violations,
+    checked: result.checked,
+    skipped: result.skipped,
+    warnings
+  });
+  noteWarnings(warnings);
+  for (const v of result.violations) {
+    note(`${v.file}:${String(v.line)}: ${v.message}(${v.specifier})`);
+  }
+  if (result.violations.length > 0) process.exitCode = EXIT_VIOLATIONS;
+}
+
 // src/cli/claude-md.ts
-import fs7 from "node:fs";
+import fs8 from "node:fs";
 
 // src/lib/claude-md.ts
-import fs6 from "node:fs";
-import path5 from "node:path";
+import fs7 from "node:fs";
+import path6 from "node:path";
 var CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
 function readOrNull(filePath) {
   try {
-    return fs6.readFileSync(filePath, "utf8");
+    return fs7.readFileSync(filePath, "utf8");
   } catch {
     return null;
   }
@@ -2551,7 +3043,7 @@ function mentions(text) {
     const outsideCode = line.replace(/`[^`]*`/g, " ");
     for (const match of outsideCode.matchAll(/(?:^|\s)@(\S+)/g)) {
       const token = match[1].replace(/[.,;:)\]、。」]+$/, "");
-      if (token !== "") found.add(path5.posix.normalize(token));
+      if (token !== "") found.add(path6.posix.normalize(token));
     }
   }
   return found;
@@ -2559,11 +3051,11 @@ function mentions(text) {
 function existingMentions(docRoot) {
   const existing = /* @__PURE__ */ new Set();
   for (const rel of CLAUDE_MD_CANDIDATES) {
-    const text = readOrNull(path5.join(docRoot, rel));
+    const text = readOrNull(path6.join(docRoot, rel));
     if (text === null) continue;
     for (const m of mentions(text)) {
       existing.add(
-        rel === "CLAUDE.md" ? m : path5.posix.normalize(`.claude/${m}`)
+        rel === "CLAUDE.md" ? m : path6.posix.normalize(`.claude/${m}`)
       );
     }
   }
@@ -2576,10 +3068,10 @@ function linkClaudeMd(docRoot, relatives) {
       `\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u30D1\u30B9\u306F @\u30E1\u30F3\u30B7\u30E7\u30F3\u306B\u3067\u304D\u307E\u305B\u3093: ${JSON.stringify(unsafe)}`
     );
   }
-  const rootText = readOrNull(path5.join(docRoot, "CLAUDE.md"));
-  const dotText = readOrNull(path5.join(docRoot, ".claude/CLAUDE.md"));
+  const rootText = readOrNull(path6.join(docRoot, "CLAUDE.md"));
+  const dotText = readOrNull(path6.join(docRoot, ".claude/CLAUDE.md"));
   const useDot = rootText === null && dotText !== null;
-  const target = path5.join(docRoot, useDot ? ".claude/CLAUDE.md" : "CLAUDE.md");
+  const target = path6.join(docRoot, useDot ? ".claude/CLAUDE.md" : "CLAUDE.md");
   const created = (useDot ? dotText : rootText) === null;
   const current = (useDot ? dotText : rootText) ?? "";
   const existing = existingMentions(docRoot);
@@ -2599,7 +3091,7 @@ function linkClaudeMd(docRoot, relatives) {
 // src/cli/claude-md.ts
 function hasContent(filePath) {
   try {
-    return fs7.readFileSync(filePath, "utf8").trim() !== "";
+    return fs8.readFileSync(filePath, "utf8").trim() !== "";
   } catch {
     return false;
   }
@@ -2628,7 +3120,7 @@ function runLinkClaudeMd(ctx) {
     let configRemoveError;
     if (configCreated) {
       try {
-        fs7.rmSync(config.configPath, { force: true });
+        fs8.rmSync(config.configPath, { force: true });
         configCreated = false;
       } catch (removeError) {
         configRemoveError = messageOf(removeError);
@@ -2657,25 +3149,25 @@ function runLinkClaudeMd(ctx) {
 function createConfigIfMissing(configPath) {
   let fd;
   try {
-    fd = fs7.openSync(configPath, "wx");
+    fd = fs8.openSync(configPath, "wx");
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
   }
   try {
-    fs7.writeFileSync(fd, '{\n  "version": 1\n}\n');
+    fs8.writeFileSync(fd, '{\n  "version": 1\n}\n');
   } catch (error) {
-    fs7.closeSync(fd);
-    fs7.rmSync(configPath, { force: true });
+    fs8.closeSync(fd);
+    fs8.rmSync(configPath, { force: true });
     throw error;
   }
-  fs7.closeSync(fd);
+  fs8.closeSync(fd);
   return true;
 }
 
 // src/lib/file-lock.ts
-import fs8 from "node:fs";
-import path6 from "node:path";
+import fs9 from "node:fs";
+import path7 from "node:path";
 var LOCK_RETRY_INTERVAL_MS = 50;
 var LOCK_MAX_RETRIES = 20;
 var LOCK_STALE_MS = 6e4;
@@ -2698,12 +3190,12 @@ function errnoCode2(error) {
 }
 function tryCreateLock(lockPath) {
   try {
-    const fd = fs8.openSync(lockPath, "wx");
+    const fd = fs9.openSync(lockPath, "wx");
     try {
-      fs8.writeSync(fd, `${process.pid} ${(/* @__PURE__ */ new Date()).toISOString()}
+      fs9.writeSync(fd, `${process.pid} ${(/* @__PURE__ */ new Date()).toISOString()}
 `);
     } finally {
-      fs8.closeSync(fd);
+      fs9.closeSync(fd);
     }
     return true;
   } catch (error) {
@@ -2713,7 +3205,7 @@ function tryCreateLock(lockPath) {
 }
 function statMtimeMs(lockPath) {
   try {
-    return fs8.statSync(lockPath).mtimeMs;
+    return fs9.statSync(lockPath).mtimeMs;
   } catch {
     return null;
   }
@@ -2723,7 +3215,7 @@ function tryStealStaleLock(lockPath) {
   if (mtimeMs === null) return tryCreateLock(lockPath);
   if (Date.now() - mtimeMs <= LOCK_STALE_MS) return false;
   try {
-    fs8.unlinkSync(lockPath);
+    fs9.unlinkSync(lockPath);
   } catch (error) {
     if (errnoCode2(error) !== "ENOENT") return false;
   }
@@ -2732,7 +3224,7 @@ function tryStealStaleLock(lockPath) {
 function withFileLock(targetPath, fn) {
   const lockPath = lockPathFor(targetPath);
   try {
-    fs8.mkdirSync(path6.dirname(lockPath), { recursive: true });
+    fs9.mkdirSync(path7.dirname(lockPath), { recursive: true });
   } catch {
   }
   let acquired = tryCreateLock(lockPath);
@@ -2754,7 +3246,7 @@ function withFileLock(targetPath, fn) {
     return fn();
   } finally {
     try {
-      fs8.rmSync(lockPath, { force: true });
+      fs9.rmSync(lockPath, { force: true });
     } catch {
     }
   }
@@ -2837,13 +3329,13 @@ function runCommitArchitecture(ctx) {
 }
 
 // src/cli/paths.ts
-import path7 from "node:path";
+import path8 from "node:path";
 import { fileURLToPath } from "node:url";
 function metatronCliPath() {
   const here = fileURLToPath(import.meta.url);
-  if (path7.basename(here) === "metatron.mjs") return here;
-  const pluginRoot = path7.resolve(path7.dirname(here), "..", "..");
-  return path7.join(pluginRoot, "scripts", "metatron.mjs");
+  if (path8.basename(here) === "metatron.mjs") return here;
+  const pluginRoot = path8.resolve(path8.dirname(here), "..", "..");
+  return path8.join(pluginRoot, "scripts", "metatron.mjs");
 }
 function commandLine(args) {
   return `node ${metatronCliPath()} ${args}`;
@@ -2870,7 +3362,10 @@ var USAGE_LINES = [
   "",
   "\u66F8\u304D\u8FBC\u307F(\u62D2\u5426\u30FB\u5931\u6557\u306F\u975E 0):",
   "  commit-architecture --staging-id <id>",
-  "  link-claude-md"
+  "  link-claude-md",
+  "",
+  "\u691C\u67FB(\u9055\u53CD 1\u3001\u5B9A\u7FA9\u3084\u8D70\u67FB\u306E\u554F\u984C 2\u3001\u5185\u90E8\u30A8\u30E9\u30FC 3):",
+  "  check"
 ];
 
 // src/cli/get.ts
@@ -3289,12 +3784,17 @@ var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "commit-architecture",
   "link-claude-md"
 ]);
+var CHECK_SUBCOMMANDS = /* @__PURE__ */ new Set(["check"]);
 function emitUsage(command, message, exitCode) {
   emitResult(command, {
     ok: false,
     error: "unknown_subcommand",
     message,
-    subcommands: [...READ_SUBCOMMANDS, ...WRITE_SUBCOMMANDS]
+    subcommands: [
+      ...READ_SUBCOMMANDS,
+      ...WRITE_SUBCOMMANDS,
+      ...CHECK_SUBCOMMANDS
+    ]
   });
   for (const line of USAGE_LINES) note(line);
   process.exitCode = exitCode;
@@ -3304,7 +3804,8 @@ function main(argv, cwd = process.cwd()) {
   const subcommand = positionals[0];
   const isRead = subcommand !== void 0 && READ_SUBCOMMANDS.has(subcommand);
   const isWrite = subcommand !== void 0 && WRITE_SUBCOMMANDS.has(subcommand);
-  if (subcommand === void 0 || !isRead && !isWrite) {
+  const isCheck = subcommand !== void 0 && CHECK_SUBCOMMANDS.has(subcommand);
+  if (subcommand === void 0 || !isRead && !isWrite && !isCheck) {
     emitUsage(
       "metatron",
       subcommand === void 0 ? "\u30B5\u30D6\u30B3\u30DE\u30F3\u30C9\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002" : `\u4E0D\u660E\u306A\u30B5\u30D6\u30B3\u30DE\u30F3\u30C9: ${subcommand}`,
@@ -3342,6 +3843,9 @@ function main(argv, cwd = process.cwd()) {
       case "commit-architecture":
         runCommitArchitecture(ctx);
         return;
+      case "check":
+        runCheck(ctx);
+        return;
       default:
         emitUsage("metatron", `\u4E0D\u660E\u306A\u30B5\u30D6\u30B3\u30DE\u30F3\u30C9: ${subcommand}`, EXIT_USAGE);
         return;
@@ -3349,6 +3853,16 @@ function main(argv, cwd = process.cwd()) {
   } catch (error) {
     if (isRead) {
       emitReadFailure(subcommand, "internal_error", messageOf(error));
+      return;
+    }
+    if (isCheck) {
+      emitWriteFailure(
+        subcommand,
+        "internal_error",
+        messageOf(error),
+        {},
+        EXIT_INTERNAL
+      );
       return;
     }
     emitWriteFailure(subcommand, "internal_error", messageOf(error), {

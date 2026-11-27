@@ -56,5 +56,8 @@ export const USAGE_LINES: readonly string[] = [
   "",
   "書き込み(拒否・失敗は非 0):",
   "  commit-architecture --staging-id <id>",
-  "  link-claude-md"
+  "  link-claude-md",
+  "",
+  "検査(違反 1、定義や走査の問題 2、内部エラー 3):",
+  "  check"
 ]

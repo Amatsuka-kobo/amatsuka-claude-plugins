@@ -104,6 +104,8 @@ AI による上記文書への書き込み口を CLI に一本化し、書式の
 
 `/metatron:audit` は既存の文書を書式と執筆規律の現行の規定に照らして監査し、合わない箇所を書き直します。CLAUDE.md との重複や設定ファイルの写しのような削れる内容も洗い出し、200 行の目安を超えたら知らせます。
 
+`## 禁止事項` に `metatron:checks` の定義を添えると、`metatron check` が ECMAScript の相対パスの import の禁止を LLM なしで検査し、違反をファイルと行番号つきで返します。`pnpm run lint` などに組み込めます。
+
 「今後はこうして」「覚えておいて」と頼まれたときは、`placing-instructions` スキルが CLAUDE.md・rules・スキル・hook・memory・ARCHITECTURE のどこに置くかを判定して案を示します。
 
 この文書は、ルートの `metatron.config.json` で置き場所を設定できます。既定値は以下の通りです。
