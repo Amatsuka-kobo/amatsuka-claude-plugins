@@ -14,7 +14,7 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 | `get architecture [--section <見出し>]` | 読 | 全文と見出し一覧、または指定セクションの本文 |
 | `get domains` | 読 | `metatron:domains` を構造化したもの。読めないときは理由 |
 | `scan` | 読 | コードベース解析の事実 |
-| `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補(`findings`)と、技術スタックとコマンドの定義が置かれうるファイルの一覧(`sources`)。残った `## ADR 一覧` は `legacy_section` の所見として返す |
+| `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補(`findings`)と、技術スタックとコマンドの定義が置かれうるファイルの一覧(`sources`)。残った旧見出し(`## レイヤー構造`・`## ディレクトリ構成と責務`・`## 保護パス`・`## ADR 一覧`)は、見出しごとに移し先を載せた `legacy_section` の所見として返す |
 | `stage-architecture --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
 | `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE の @メンションを追記し、`metatron.config.json` が無ければ作る。追記したもの(`added`)・既にあったもの(`present`)・飛ばしたもの(`skipped`)・設定ファイルを作ったか(`configCreated`)を返す |
@@ -44,11 +44,11 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 ### stage-architecture
 
 ```json
-{ "sections": [{ "heading": "レイヤー構造", "body": "..." }], "reason": "更新の理由" }
+{ "sections": [{ "heading": "ディレクトリ構成", "body": "..." }], "reason": "更新の理由" }
 ```
 
 - `heading` は ARCHITECTURE の見出しキーのいずれか。一覧は `get config` の `inputSchemas["stage-architecture"].headings` から取る。未知の見出しは拒否される。
-- 許可リストに無い見出し(残った `## ADR 一覧` を含む)は、本文の差し替えが `unknown_heading` で拒否される。削除だけを受け付ける。
+- 許可リストに無い見出し(残った旧見出しと `## ADR 一覧` を含む)は、本文の差し替えが `unknown_heading` で拒否される。削除だけを受け付ける。旧見出しのときは、`message` に本文の移し先が載る。
 - `body` は見出し行を含まない本文。同じ `heading` を 2 回書くと拒否される。
 - 差し替えた後の全文に閉じていないフェンスがあれば `unclosed_fence`、読めない `metatron:domains` ブロックがあれば `invalid_domains`(変更前から読めない文書では拒否しない)で拒否される。
 - `reason` は任意。

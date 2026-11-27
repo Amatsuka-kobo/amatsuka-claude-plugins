@@ -1,6 +1,6 @@
 ---
 name: capturing-architecture
-description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジェクトで初版を作るとき、ドメインマップだけの最小構成にセクションを足して通常の構成へ育てるときに必ず使用する。「アーキ文書を作って」「初期化したい」「全体像の文書が無い」「この構成をドキュメントに起こして」のような依頼が該当する。保護パス・テスト方針も併せて作る。既にある文書と実装の乖離を直す依頼は別のスキルが担当する。
+description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジェクトで初版を作るとき、ドメインマップだけの最小構成にセクションを足して通常の構成へ育てるときに必ず使用する。「アーキ文書を作って」「初期化したい」「全体像の文書が無い」「この構成をドキュメントに起こして」のような依頼が該当する。禁止事項・変更時の追随・テスト方針も併せて作る。既にある文書と実装の乖離を直す依頼は別のスキルが担当する。
 ---
 
 # ARCHITECTURE の初回生成
@@ -14,6 +14,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - CLI の呼び出しは `../../references/cli-usage.md` に従う。
 - ARCHITECTURE のセクション構成と書式は `../../references/architecture-format.md` に従う。
 - ドラフトの文体は `../../references/writing-discipline.md` に従い草案を書いたのち、サブエージェントに同じ規律を守った上でより簡潔にさせる。
+- ARCHITECTURE と CLAUDE.md のどちらに書くかは `../../references/document-boundary.md` に従う。
 
 ## CLI の呼び出し
 
@@ -46,6 +47,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - 既存の内容は「既存の内容」としてウォークスルーに載せ、残りの単位を埋める。
 - 既存の内容を勝手に上書きしない。書き換えが要ると判断したときは、変更案を提示してその単位単独で承認を得る。
 - 対象の 8 単位(下記)がすべて埋まっているときは初回生成ではない。`/metatron:update` を案内して終了する。
+- 既存の ARCHITECTURE に旧見出し(`## レイヤー構造`・`## ディレクトリ構成と責務`・`## 保護パス`)のどれかがあるときも初回生成ではない。旧構成の移行として `/metatron:update` を案内して終了する。
 
 ## 2. 事実の収集
 
@@ -62,17 +64,17 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 | --- | --- |
 | ARCHITECTURE `## システム概要` | `documents` と `tree` と `dependencies`。散文 1 段落と、必要な場合は Mermaid 図 |
 | ARCHITECTURE `## 技術スタック` | `languages` / `packageManager` / `dependencies`。依存の全件を載せず、役割ごとの技術に絞る |
-| ARCHITECTURE `## レイヤー構造` | `tree` / `domainCandidates` |
-| ARCHITECTURE `## ディレクトリ構成と責務` | `tree` / `fileCount` |
+| ARCHITECTURE `## ディレクトリ構成` | `tree` / `fileCount` / `domainCandidates` |
 | ARCHITECTURE `## ドメインマップ` | `domainCandidates` |
 | ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。全件を載せず、よく使うものと使い分けの答えに絞る |
-| ARCHITECTURE `## 保護パス` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
 | ARCHITECTURE `## テスト方針` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の文書 |
+| ARCHITECTURE `## 禁止事項` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
+| ARCHITECTURE `## 変更時の追随` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
 
-- `## 保護パス` と `## テスト方針` を `scan` の事実から起草しない。`../../docs/ARCHITECTURE.example.md` の該当セクションの記入例を型にして既定のドラフトを作り、指摘を受けて直す。
-- docRoot に旧 rules の `.claude/rules/metatron/` が残っているときは、その `protected-paths.md` と `testing-policy.md` の本文を `## 保護パス` と `## テスト方針` の材料にする。本文中の `##` 以下の見出しは 1 段下げて使う。
+- `## 禁止事項`・`## 変更時の追随`・`## テスト方針` を `scan` の事実から起草しない。`../../docs/ARCHITECTURE.example.md` の該当セクションの記入例を型にして既定のドラフトを作り、指摘を受けて直す。
+- docRoot に旧 rules の `.claude/rules/metatron/` が残っているときは、その `protected-paths.md` の触らないパスを `## 禁止事項`、変更に慎重を要するパスを `## 変更時の追随`、`testing-policy.md` の本文を `## テスト方針` の材料にする。
 - 旧ファイルの移行と削除はこのスキルで行わず、手順 9 で `/metatron:update` を案内する。
-- コーディング規約・ブランチ運用・DoD は起草しない。ARCHITECTURE ではなくプロジェクトの CLAUDE.md に書く内容である。
+- `document-boundary.md` で CLAUDE.md に当たる内容は起草しない。
 - `## システム概要` に Mermaid 図を置くかどうかを含めてウォークスルーで問う。置く場合は解析結果から起草し、粒度も問う。
 - ARCHITECTURE の各セクションの起草は `../../references/architecture-format.md` の該当節の要件を満たす形で行う。
 - 情報が足りずドラフトを書けない単位は推測で埋めない。その単位だけ質問形式に切り替える。

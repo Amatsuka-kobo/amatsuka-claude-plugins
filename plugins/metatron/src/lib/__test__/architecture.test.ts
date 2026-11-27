@@ -8,11 +8,13 @@ import {
   applySectionChanges,
   extractDomains,
   findSection,
+  LEGACY_HEADINGS,
   parseArchitecture,
   parseArchitectureForRead,
   parseArchitectureForWrite,
   parseDomainsContent,
   prepareArchitectureUpdate,
+  type SectionChange,
   UNCLOSED_FENCE_WARNING,
   validateHeadingKey
 } from "../architecture.js"
@@ -40,14 +42,10 @@ const ALL_SECTIONS = doc(
   "| --- | --- |",
   "| 言語 | TypeScript |",
   "",
-  "## レイヤー構造",
-  "",
-  "- UI 層 → ドメイン層 → データ層",
-  "- ドメイン層は UI 層を参照しない。",
-  "",
-  "## ディレクトリ構成と責務",
+  "## ディレクトリ構成",
   "",
   "- `src/` 実装",
+  "- UI 層 → ドメイン層 → データ層",
   "",
   "## ドメインマップ",
   "",
@@ -64,13 +62,18 @@ const ALL_SECTIONS = doc(
   "| --- | --- |",
   "| test | pnpm test |",
   "",
-  "## 保護パス",
-  "",
-  "- `dist/` を手で編集しない。",
-  "",
   "## テスト方針",
   "",
   "- ユニットテストは vitest で書く。",
+  "",
+  "## 禁止事項",
+  "",
+  "- ドメイン層は UI 層を参照しない。",
+  "- `dist/` を手で編集しない。",
+  "",
+  "## 変更時の追随",
+  "",
+  "- `src/` を変更したらビルドする。",
   ""
 )
 
@@ -166,8 +169,8 @@ test("A1: 8 セクションの分解 — 見出し単位に正しく分割され
     ALL_SECTIONS
   )
   expect(parsed.preamble).toBe("# ARCHITECTURE\n\n")
-  expect(findSection(parsed, "ディレクトリ構成と責務")?.body).toBe(
-    "\n- `src/` 実装\n\n"
+  expect(findSection(parsed, "ディレクトリ構成")?.body).toBe(
+    "\n- `src/` 実装\n- UI 層 → ドメイン層 → データ層\n\n"
   )
 })
 
@@ -207,11 +210,11 @@ describe("A2: セクション置換 — 対象セクション以外がバイト�
   test("複数セクションの同時差し替えでも他は不変", () => {
     const result = expectOk(
       prepareArchitectureUpdate(ALL_SECTIONS, [
-        { heading: "ディレクトリ構成と責務", body: "- 変更後" },
+        { heading: "ディレクトリ構成", body: "- 変更後" },
         { heading: "技術スタック", body: "- 変更後" }
       ])
     )
-    const skip = new Set(["ディレクトリ構成と責務", "技術スタック"])
+    const skip = new Set(["ディレクトリ構成", "技術スタック"])
     const before = parseArchitecture(ALL_SECTIONS)
     const after = parseArchitecture(result.text)
     expect(after.preamble).toBe(before.preamble)
@@ -435,10 +438,10 @@ test("A11: タイトルと最初の ## の間に本文 → stage は成功し警
   expect(parseArchitecture(result.text).preamble).toBe(parsed.preamble)
 })
 
-describe("A12: 新設 2 節(システム概要 / レイヤー構造)", () => {
+describe("A12: 禁止事項と ### の小見出し", () => {
   test("他と同じ規則で分割される", () => {
     const parsed = parseArchitecture(ALL_SECTIONS)
-    expect(findSection(parsed, "レイヤー構造")?.body).toContain(
+    expect(findSection(parsed, "禁止事項")?.body).toContain(
       "ドメイン層は UI 層を参照しない。"
     )
     // `###` は節内の小見出しであり、セクション見出しにしない。
@@ -449,14 +452,14 @@ describe("A12: 新設 2 節(システム概要 / レイヤー構造)", () => {
     expect(headings(WITH_LEGACY_ADR)).not.toContain("ADR-001: 最初の判断")
   })
 
-  test("レイヤー構造は stage-architecture で置換できる", () => {
+  test("禁止事項は stage-architecture で置換できる", () => {
     const result = expectOk(
       prepareArchitectureUpdate(ALL_SECTIONS, [
-        { heading: "レイヤー構造", body: "- 1 層のみ" }
+        { heading: "禁止事項", body: "- なし" }
       ])
     )
-    expect(untouchedBytes(result.text, "レイヤー構造")).toBe(
-      untouchedBytes(ALL_SECTIONS, "レイヤー構造")
+    expect(untouchedBytes(result.text, "禁止事項")).toBe(
+      untouchedBytes(ALL_SECTIONS, "禁止事項")
     )
   })
 })
@@ -665,13 +668,13 @@ describe("追加: 契約 §4-2 の行の正規化", () => {
 
     const result = expectOk(
       prepareArchitectureUpdate(crlf, [
-        { heading: "ディレクトリ構成と責務", body: "- 変更後" }
+        { heading: "ディレクトリ構成", body: "- 変更後" }
       ])
     )
     expect(result.text).toContain("\r\n- 変更後\r\n")
     expect(result.text).not.toMatch(/[^\r]\n/)
-    expect(untouchedBytes(result.text, "ディレクトリ構成と責務")).toBe(
-      untouchedBytes(crlf, "ディレクトリ構成と責務")
+    expect(untouchedBytes(result.text, "ディレクトリ構成")).toBe(
+      untouchedBytes(crlf, "ディレクトリ構成")
     )
   })
 
@@ -833,18 +836,19 @@ describe("追加: metatron:domains の位置と多重定義", () => {
   })
 })
 
-test("A25: ARCHITECTURE_HEADINGS は 8 要素で、保護パス・テスト方針が末尾に並び、規約と ADR 一覧を含まない", () => {
+test("A25: ARCHITECTURE_HEADINGS は 8 要素で、禁止事項・変更時の追随が末尾に並び、旧見出し・規約・ADR 一覧を含まない", () => {
   expect(ARCHITECTURE_HEADINGS).toHaveLength(8)
-  expect([...ARCHITECTURE_HEADINGS]).not.toContain("規約")
-  expect([...ARCHITECTURE_HEADINGS]).not.toContain("ADR 一覧")
+  for (const retired of ["規約", "ADR 一覧", ...Object.keys(LEGACY_HEADINGS)]) {
+    expect([...ARCHITECTURE_HEADINGS]).not.toContain(retired)
+  }
   expect(ARCHITECTURE_HEADINGS.slice(6)).toStrictEqual([
-    "保護パス",
-    "テスト方針"
+    "禁止事項",
+    "変更時の追随"
   ])
 })
 
-test("A24: 保護パス・テスト方針へ body を書ける。無いセクションは順序の位置に差し込む", () => {
-  for (const heading of ["保護パス", "テスト方針"]) {
+test("A24: 禁止事項・変更時の追随へ body を書ける。無いセクションは順序の位置に差し込む", () => {
+  for (const heading of ["禁止事項", "変更時の追随"]) {
     const result = expectOk(
       prepareArchitectureUpdate(ALL_SECTIONS, [{ heading, body: "- 変更後" }])
     )
@@ -854,17 +858,17 @@ test("A24: 保護パス・テスト方針へ body を書ける。無いセクシ
   }
   const withoutRules = expectOk(
     prepareArchitectureUpdate(ALL_SECTIONS, [
-      { heading: "保護パス", remove: true },
+      { heading: "禁止事項", remove: true },
       { heading: "テスト方針", remove: true }
     ])
   ).text
   const added = expectOk(
     prepareArchitectureUpdate(withoutRules, [
-      { heading: "保護パス", body: "- 追加" }
+      { heading: "禁止事項", body: "- 追加" }
     ])
   )
   const order = headings(added.text)
-  expect(order.indexOf("保護パス")).toBe(order.indexOf("コマンド定義") + 1)
+  expect(order.indexOf("禁止事項")).toBe(order.indexOf("コマンド定義") + 1)
 })
 
 // ---------------------------------------------------------------------------
@@ -873,14 +877,14 @@ test("A24: 保護パス・テスト方針へ body を書ける。無いセクシ
 
 test("A20: remove: true で既存セクションが消え、他のセクションはバイト単位で不変", () => {
   const result = prepareArchitectureUpdate(WITH_UNLISTED, [
-    { heading: "保護パス", remove: true }
+    { heading: "禁止事項", remove: true }
   ])
   expect(result.ok).toBe(true)
   if (!result.ok) return
   expect(result.applied).toStrictEqual([
-    { heading: "保護パス", mode: "removed" }
+    { heading: "禁止事項", mode: "removed" }
   ])
-  expect(headings(result.text)).not.toContain("保護パス")
+  expect(headings(result.text)).not.toContain("禁止事項")
   // 残ったセクションはそれぞれバイト単位で不変。
   for (const heading of headings(result.text)) {
     expect(sectionRaw(result.text, heading), heading).toBe(
@@ -900,7 +904,7 @@ test("A21: 存在しないセクションの remove は section_not_found で拒
 
 test("A22: body と remove の同時指定は invalid_input で拒否する", () => {
   const result = prepareArchitectureUpdate(WITH_UNLISTED, [
-    { heading: "保護パス", body: "本文", remove: true }
+    { heading: "禁止事項", body: "本文", remove: true }
   ])
   expect(result.ok).toBe(false)
   if (result.ok) return
@@ -956,10 +960,145 @@ test("A34: ADR 一覧 の差し替え(body)は unknown_heading で拒否する",
   }
 })
 
+// 0.6.4 より前の構成の文書。旧見出し 3 つを持ち、保護パスが最後のセクションにある。
+const LEGACY_LAYOUT = doc(
+  "# ARCHITECTURE",
+  "",
+  "## システム概要",
+  "",
+  "概要。",
+  "",
+  "## レイヤー構造",
+  "",
+  "- UI 層 → ドメイン層",
+  "",
+  "## ディレクトリ構成と責務",
+  "",
+  "- `src/` 実装",
+  "",
+  "## ドメインマップ",
+  "",
+  "```json metatron:domains",
+  '{ "generic": ["**"] }',
+  "```",
+  "",
+  "## テスト方針",
+  "",
+  "- vitest",
+  "",
+  "## 保護パス",
+  "",
+  "- `dist/` を手で編集しない。",
+  ""
+)
+
+test("A40: 旧見出しの body 付き stage は unknown_heading で拒否し、移し先と削除の方法を添える", () => {
+  for (const [heading, destination] of Object.entries(LEGACY_HEADINGS)) {
+    const result = prepareArchitectureUpdate(LEGACY_LAYOUT, [
+      { heading, body: "- 変更後" }
+    ])
+    expect(result.ok).toBe(false)
+    if (result.ok) continue
+    expect(result.error).toBe("unknown_heading")
+    expect(result.message).toContain(destination)
+    expect(result.message).toContain(`"remove": true`)
+  }
+  // 旧見出しでない未知の見出しには移し先を添えない。
+  const other = prepareArchitectureUpdate(LEGACY_LAYOUT, [
+    { heading: "旧メモ", body: "- a" }
+  ])
+  expect(!other.ok && other.message.includes("旧見出し")).toBe(false)
+})
+
+test("A41: 新しい見出しの追加と旧見出しの削除を 1 回で stage すると、新構成の順に並び、空行が崩れない", () => {
+  const result = expectOk(
+    prepareArchitectureUpdate(LEGACY_LAYOUT, [
+      { heading: "ディレクトリ構成", body: "- `src/` 実装" },
+      { heading: "禁止事項", body: "- `dist/` を手で編集しない。" },
+      { heading: "変更時の追随", body: "- `src/` を変更したらビルドする。" },
+      { heading: "レイヤー構造", remove: true },
+      { heading: "ディレクトリ構成と責務", remove: true },
+      { heading: "保護パス", remove: true }
+    ])
+  )
+  expect(headings(result.text)).toStrictEqual([
+    "システム概要",
+    "ディレクトリ構成",
+    "ドメインマップ",
+    "テスト方針",
+    "禁止事項",
+    "変更時の追随"
+  ])
+  expectSeparatedByOneBlank(result.text)
+  expect(result.text.endsWith("ビルドする。\n")).toBe(true)
+})
+
+// 見出しの前にはちょうど 1 行の空行があり、空行は 2 行以上続かず、末尾の改行は 1 つ。
+function expectSeparatedByOneBlank(text: string): void {
+  const lf = text.replace(/\r\n/g, "\n")
+  expect(lf).not.toMatch(/\n\n\n/)
+  expect(lf).not.toMatch(/[^\n]\n## /)
+  expect(lf.startsWith("\n")).toBe(false)
+  expect(lf.endsWith("\n\n")).toBe(false)
+}
+
+test("A42: 末尾へ複数のセクションを足しても、区切りの空行は 1 行になる", () => {
+  const lastRemoved =
+    "# ARCHITECTURE\n\n## システム概要\n\nS\n\n## コマンド定義\n\nC\n\n## 保護パス\n\nP\n"
+  const cases: { text: string; changes: SectionChange[] }[] = [
+    {
+      text: lastRemoved,
+      changes: [
+        { heading: "禁止事項", body: "NF" },
+        { heading: "変更時の追随", body: "CF" },
+        { heading: "保護パス", remove: true }
+      ]
+    },
+    {
+      text: lastRemoved.replace(/\n/g, "\r\n"),
+      changes: [
+        { heading: "禁止事項", body: "NF" },
+        { heading: "変更時の追随", body: "CF" },
+        { heading: "保護パス", remove: true }
+      ]
+    },
+    {
+      text: lastRemoved,
+      changes: [
+        { heading: "禁止事項", body: "" },
+        { heading: "変更時の追随", body: "" },
+        { heading: "保護パス", remove: true }
+      ]
+    },
+    {
+      text: "# ARCHITECTURE\n\n## システム概要\n\nT\n\n",
+      changes: [
+        { heading: "変更時の追随", body: "CF" },
+        { heading: "禁止事項", body: "NF" }
+      ]
+    },
+    {
+      text: "## 保護パス\n\nP\n",
+      changes: [
+        { heading: "禁止事項", body: "NF" },
+        { heading: "保護パス", remove: true }
+      ]
+    }
+  ]
+  for (const { text, changes } of cases) {
+    const result = expectOk(prepareArchitectureUpdate(text, changes))
+    expectSeparatedByOneBlank(result.text)
+    const order = headings(result.text)
+    if (order.includes("変更時の追随")) {
+      expect(order.indexOf("変更時の追随")).toBe(order.indexOf("禁止事項") + 1)
+    }
+  }
+})
+
 test("A27: 複数のセクションをまとめて 1 回の remove で消せる", () => {
   const result = prepareArchitectureUpdate(WITH_UNLISTED, [
     { heading: "テスト方針", remove: true },
-    { heading: "保護パス", remove: true },
+    { heading: "禁止事項", remove: true },
     { heading: "旧メモ", remove: true }
   ])
   expect(result.ok).toBe(true)
@@ -971,7 +1110,7 @@ test("A27: 複数のセクションをまとめて 1 回の remove で消せる"
   ])
   expect(headings(result.text)).toStrictEqual(
     headings(WITH_UNLISTED).filter(
-      (h) => !["テスト方針", "保護パス", "旧メモ"].includes(h)
+      (h) => !["テスト方針", "禁止事項", "旧メモ"].includes(h)
     )
   )
   const remaining = headings(result.text)
@@ -1013,7 +1152,7 @@ test("A29: フェンス内に ## を持つ節の隣を remove しても巻き込
 test("A30: remove に true 以外の値を渡すと invalid_input で拒否する", () => {
   for (const bad of [false, "true", 1]) {
     const result = prepareArchitectureUpdate(WITH_UNLISTED, [
-      { heading: "保護パス", remove: bad } as unknown as {
+      { heading: "禁止事項", remove: bad } as unknown as {
         heading: string
         remove?: boolean
       }
@@ -1144,13 +1283,13 @@ describe("A33: 単独の CR と CRLF は検証の前に LF へ揃え、検証と
 
 test("A32: body に ## の見出しがあれば invalid_body で拒否し、フェンスの中の ## は通す", () => {
   const bad = prepareArchitectureUpdate(ALL_SECTIONS, [
-    { heading: "保護パス", body: "## 触らないパス\n\n- a" }
+    { heading: "禁止事項", body: "## 触らないパス\n\n- a" }
   ])
   expect(bad.ok).toBe(false)
   if (!bad.ok) expect(bad.error).toBe("invalid_body")
   expect(
     prepareArchitectureUpdate(ALL_SECTIONS, [
-      { heading: "保護パス", body: "### 触らないパス\n\n```\n## 例\n```" }
+      { heading: "禁止事項", body: "### 触らないパス\n\n```\n## 例\n```" }
     ]).ok
   ).toBe(true)
 })

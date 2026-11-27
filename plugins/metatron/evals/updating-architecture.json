@@ -12,7 +12,7 @@
     "should_trigger": true
   },
   {
-    "query": "`.claude/settings.json` の設定を変更する相談に見えますが、`plugins/*/dist/` を直接変更できない運用へ切り替えました。`harness-docs/ARCHITECTURE.md` の `## 保護パス` と各領域の責務を、実装と突き合わせて見直し、必要な記述を更新してください。",
+    "query": "`.claude/settings.json` の設定を変更する相談に見えますが、`plugins/*/dist/` を直接変更できない運用へ切り替えました。`harness-docs/ARCHITECTURE.md` の `## 禁止事項` と各領域の責務を、実装と突き合わせて見直し、必要な記述を更新してください。",
     "should_trigger": true
   },
   {
@@ -24,7 +24,7 @@
     "should_trigger": true
   },
   {
-    "query": "`infra/terraform/` は運用上、直接変更を受け付けない範囲になったのに、ARCHITECTURE の `## 保護パス` に反映されていません。実際の管理方法と他の一覧を確認し、変更を制限する領域の記述を整合させてください。",
+    "query": "`infra/terraform/` は運用上、直接変更を受け付けない範囲になったのに、ARCHITECTURE の `## 禁止事項` に反映されていません。実際の管理方法と他の一覧を確認し、変更を制限する領域の記述を整合させてください。",
     "should_trigger": true
   },
   {
@@ -36,7 +36,7 @@
     "should_trigger": false
   },
   {
-    "query": "`/codiel:init` が生成した ARCHITECTURE がドメインマップ 1 節だけの最小構成です。ここから技術スタック・レイヤー構造・テスト方針まで一気に起こして、まともなアーキ文書に育てたい。",
+    "query": "`/codiel:init` が生成した ARCHITECTURE がドメインマップ 1 節だけの最小構成です。ここから技術スタック・ディレクトリ構成・テスト方針まで一気に起こして、まともなアーキ文書に育てたい。",
     "should_trigger": false
   },
   {
@@ -62,5 +62,9 @@
   {
     "query": "`.raphael/antibodies/` に抗体を synthesize したいです。今回の Stop reason から蒸留して、再発防止の接種まで相談させてください。",
     "should_trigger": false
+  },
+  {
+    "query": "うちの `docs/ARCHITECTURE.md` はまだ `## レイヤー構造` と `## 保護パス` がある古い見出しのままです。中身は活かしつつ、今の metatron の見出しの構成へ移し替えてください。",
+    "should_trigger": true
   }
 ]

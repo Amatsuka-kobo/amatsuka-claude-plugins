@@ -733,7 +733,7 @@ test("S10: get config は rules を返さず、stage-rules / commit-rules / get 
   expect((get.json as Record<string, unknown>).error).toBe("unknown_target")
 })
 
-test("S11: 保護パス・テスト方針が無い ARCHITECTURE で diff-architecture が section_missing を出し、規約は出さない", () => {
+test("S11: 禁止事項・テスト方針が無い ARCHITECTURE で diff-architecture が section_missing を出し、規約は出さない", () => {
   const root = project()
   writeFile(
     root,
@@ -750,9 +750,11 @@ test("S11: 保護パス・テスト方針が無い ARCHITECTURE で diff-archite
   const missing = findings
     .filter((f) => f.kind === "section_missing")
     .map((f) => f.section)
-  expect(missing).toContain("保護パス")
+  expect(missing).toContain("禁止事項")
+  expect(missing).toContain("変更時の追随")
   expect(missing).toContain("テスト方針")
   expect(missing).not.toContain("規約")
+  expect(missing).not.toContain("保護パス")
 })
 
 test("LC1: link-claude-md は ARCHITECTURE が無ければ拒否し、あれば CLAUDE.md へ追記する", () => {

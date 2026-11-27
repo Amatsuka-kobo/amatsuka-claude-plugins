@@ -1,5 +1,5 @@
 ---
-description: 既存の ARCHITECTURE と実装の乖離を検出し、更新する箇所を選んで反映する。ARCHITECTURE をまだ持たないプロジェクトで初めて生成するときは /metatron:init を使う
+description: 既存の ARCHITECTURE と実装の乖離を検出し、更新する箇所を選んで反映する。旧構成の見出しは新しい構成へ移す。ARCHITECTURE をまだ持たないプロジェクトで初めて生成するときは /metatron:init を使う
 ---
 
 metatron プラグインの updating-architecture スキルを Skill ツールで起動し、その手順に厳密に従って

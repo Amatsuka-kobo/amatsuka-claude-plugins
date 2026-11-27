@@ -1,5 +1,5 @@
 {
   "name": "metatron",
   "description": "プロジェクトの技術的前提(ARCHITECTURE)を記録・更新し、CLAUDE.md の @メンションで毎セッション読ませる",
-  "version": "0.6.3-dev"
+  "version": "0.6.4-dev"
 }

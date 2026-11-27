@@ -23,7 +23,7 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 が未初期化と判定します。そのときは `/codiel:init` をもう一度実行すると、`.claude/rules/codiel.md`
 などの不足分が追記されます。内部では `initializing-harness` スキルの手順に従います。
 
-Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
+Codiel は単体で完結します。技術スタック・ディレクトリ構成・禁止事項・変更時の追随といった、より豊かな
 前提をプロジェクトに持たせたい場合は、ARCHITECTURE を専門に扱う metatron の併用を
 検討してください。ARCHITECTURE は metatron の資産で、読み方と更新の仕方は metatron が伝えます。
 Codiel が使うのは、ARCHITECTURE のドメインマップ(ドメインごとの境界の判定に使う)と、review で
