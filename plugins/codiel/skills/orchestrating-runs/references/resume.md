@@ -24,11 +24,17 @@ run を再開するときに読む。
    3. `cleared` に無くても、委譲していた単位のうち、state の要素(`implement.steps`・`testCode.units`・`testLoop.units`)が `running` か `reviewing` のままで、その要素の `waits/*.md` が無いものは、起動から `wait-add` までの間に失われた委譲として出し直す。続投していた修正ラウンドも、新しい委譲に切り替える。
    4. worktree の中の委譲を出し直すときは、`references/delegation-env.md` の worktree の規則どおり、残っている worktree とそのブランチを削除し、新しい HEAD で作り直す。
    5. 委譲を出し直す判断はこの手順に一本化する。フェーズごとの再開の分岐(test-spec など)は、この手順の後に、受け取り済みの返答でゲートへ進むかだけを決める。
-6. `state.phase` から続行する。すでに `passed` のフェーズはやり直さず、`in_progress` のフェーズから再開する。中断していた単位があれば、次の報告の末尾の `## 実行し直し` のセクションの有無で、環境の失敗の実行し直しが済んだかを判断する。済んでいれば実行し直さない。
+6. `state.status` が `awaiting_human` で、`awaiting_human` のフェーズの `askKind` が `confirm` なら、Raguel の ASK の手順へ送らない。`resume --slug <slug>` で戻してから、この手順の判定で決まった位置から続け、その位置より後の確認(intent-sync では `persistent-layer.md` の手順 5 など)をやり直す。前のセッションで受けた答えは使わない。
+
+   `state.phase` から続行する。すでに `passed` のフェーズはやり直さず、`in_progress` のフェーズから再開する。中断していた単位があれば、次の報告の末尾の `## 実行し直し` のセクションの有無で、環境の失敗の実行し直しが済んだかを判断する。済んでいれば実行し直さない。
    - `steps/` の下の、状態が `running` か `reviewing` の要素の `report.md`
    - implement では全グループの `steps/merge-test-<g>/report.md` と `steps/merge-fix-<g>/report.md`、test-loop では `steps/test-loop-project/report.md`
    - test-loop では最新の `test-run-<n>.md`、fix-loop では最新の `test-run-<n+1>.md`
-   - intent-sync では `steps/intent-sync/report.md`。このファイルに `設計資料:` で始まる行があれば、取り込み・設計資料の更新は済んでいる。ファイルがあってその行が無ければ、領域ファイルへの取り込みは済んでいるので、設計資料の更新(`syncing-intents` の手順 7)から続ける。
+   - intent-sync では、次の順に判定する。
+     - `steps/intent-sync/report.md` が無ければ、`syncing-intents` の手順 1 から始める。ただし書き戻し(手順 2〜5)は、intent の `## 変更履歴` に HEAD の intent に無い(未コミットの)行があるかで済みを判定し、済んでいれば飛ばす。
+     - report.md があれば、`設計資料:` で始まる行があるとき、取り込み・設計資料の更新は済んでいる。
+     - report.md があり `設計資料:` の行が無いとき、intent の `domains` が空なら、設計資料の更新(`syncing-intents` の手順 7)から続ける。
+     - report.md があり `設計資料:` の行が無く、`domains` が空でないときは、領域ファイルへの取り込みを `syncing-intents` の `references/persistent-layer.md` の「再開」に従って領域ごとに判定する。取り込み先の全領域の `取り込み:` の行がそろっていれば、設計資料の更新(手順 7)から続ける。
 
    discuss で中断していたときの再開位置(アジェンダ作成から/未決論点から/最終確認から)は、`facilitating-design-discussions` の「中断再開」に従う。design で `design.md` が既にあるときは、ウォークスルーの再提示から再開する。
-7. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。
+7. `state.status` が `awaiting_human` で、`askKind` が `confirm` でない(Raguel の ASK の)ときは、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。

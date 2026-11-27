@@ -4,7 +4,7 @@
 
 intent-sync を書く前に、intent の frontmatter `domains` と `## 意図的な制約` を読み、取り込み先を次の分岐で決める。人の確認で止まった後に再開するときは、書く直前に intent をもう一度読み、`domains` をこの時点の値に置き換えてから分岐を決める。
 
-分岐を決める前に `references/failure-records.md` を Read し、同じ slug の手元の記録に未写しの失敗の記録があるかを確かめる。`failure-records.md` の範囲で他の slug の incident の記録を集めたときも、同じ扱いにする。未写しの記録があれば、下の分岐では `## 意図的な制約` に行があるときと同じに扱う。取り込みを行うときは、その手順で記録を領域ファイルへ写す。
+分岐を決める前に `references/failure-records.md` を Read し、同じ slug の手元の記録に未写しの失敗の記録があるかを確かめる。`failure-records.md` の範囲で他の slug の incident の記録を集めたときも、同じ扱いにする。未写しの記録があれば、下の分岐では `## 意図的な制約` に行があるときと同じに扱う。取り込みを行うときは、`syncing-intents` の `references/persistent-layer.md` の手順の中で、古い記述の洗い出しの前に、`failure-records.md` の規則で記録を領域ファイルへ写す。
 
 - `domains` が空で、`## 意図的な制約` の表に 1 行以上ある(「なし」でない)ときは、次の順に進める。
   1. `mark-ask intent-sync --slug <slug> --kind confirm` で `awaiting_human` にする。

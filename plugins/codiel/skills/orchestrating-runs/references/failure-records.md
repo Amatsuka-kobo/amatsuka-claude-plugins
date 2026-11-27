@@ -39,6 +39,7 @@ run の中で次のいずれかが起きたら、失敗の記録を書き残す�
 写す時点は intent-sync と finalize の 2 つである。
 
 - intent-sync: 同じ slug のすべての try の `reports/failure-records.md` から、未写しのエントリを集めて写す。stop で終わった前の try の記録も、人に確かめずに対象に入れる。
+  - 写すのは、`syncing-intents` の `references/persistent-layer.md` の手順 3(古い記述の洗い出しの前)である。
   - 写し先の領域は、`references/phase-intent-sync.md` の分岐で決めた取り込み先から選ぶ。取り込みを行わないときは写さない。
   - 写した領域ファイルは、intent-sync の評価の `paths` に含め、ゲート通過の直後の intent-sync のコミットに入れる。
   - 加えて、incident の記録を次のとおり集める。走査は Glob と Read で行う。
@@ -48,7 +49,7 @@ run の中で次のいずれかが起きたら、失敗の記録を書き残す�
     - 写し先の領域は、エントリの `task` と `mistake` から既存の `docs/intents/domains/*.md` の 1 つを選ぶ。今の run の取り込み先でなくてよい。選べないときは写さず、手元に残し、結果レポートに理由を添えて一覧する。
     - 写した領域ファイルは、同じく intent-sync の評価の `paths` に含め、ゲート通過の直後のコミットに入れる。コミットの後に、元の手元の記録のエントリへ `写し先` の行を書く。
 - finalize: 同じ slug のすべての try の `reports/failure-records.md` から、未写しのエントリを写す。最後の intent-sync より後に出た記録と、前の try で写されなかった記録が当たる。
-  - 写し先の領域は、`steps/intent-sync/report.md` に記録された、この try の intent-sync が取り込んだ領域ファイルから選ぶ。
+  - 写し先の領域は、`steps/intent-sync/report.md` の `取り込み:` の行に記録された、この try の intent-sync が取り込んだ領域ファイルから選ぶ。`取り込み:` の行が無い改修前の report.md では、そこに書かれた領域ファイルのパスを使う。
   - 取り込んだ領域ファイルが無いときは写さず、手元の記録に残す。
   - 写した領域ファイルは、`references/phase-finalize.md` の intent の変更をコミットする手順のコミットに入れる。
 
