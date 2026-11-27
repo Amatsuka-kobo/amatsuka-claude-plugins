@@ -10,8 +10,8 @@ ARCHITECTURE には成果物の決まりを書き、CLAUDE.md には作業の進
 
 | 内容 | 置き場 |
 | --- | --- |
-| `tools/` には Python、`scripts/` には ShellScript を置く | ARCHITECTURE `## ディレクトリ構成` |
-| プラグインを改修したら `plugin.json` のパッチバージョンを上げる | ARCHITECTURE `## 変更時の追随` |
+| テストは対象と同じディレクトリの `__test__/` に置く | ARCHITECTURE `## テスト方針` |
+| 依存を追加したらロックファイルを同じコミットに含める | ARCHITECTURE `## 変更時の追随` |
 | TypeScript は strict を有効にする | ARCHITECTURE `## 技術スタック` |
 | コードベースの探索は特定の MCP のシンボルツールで行う | CLAUDE.md |
 | lint とテストが通ってから完了とする | CLAUDE.md |
