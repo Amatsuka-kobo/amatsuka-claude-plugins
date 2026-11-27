@@ -32,18 +32,28 @@ import { findDocRoot } from "./config.js"
 export const ARCHITECTURE_SECTIONS = [
   "システム概要",
   "技術スタック",
-  "レイヤー構造",
-  "ディレクトリ構成と責務",
+  "ディレクトリ構成",
   "ドメインマップ",
   "コマンド定義",
-  "保護パス",
-  "テスト方針"
+  "テスト方針",
+  "禁止事項",
+  "変更時の追随"
 ] as const
 
 /**
- * 廃止した ADR 機能のセクション。残っていれば `legacy_section` の所見を出す。
+ * 廃止したセクションと、残っていたときの `legacy_section` の detail。
+ * 見出しと移し先は `architecture.ts` の `LEGACY_HEADINGS` と対応させる。
  */
-export const LEGACY_ADR_HEADING = "ADR 一覧"
+export const LEGACY_SECTIONS: Readonly<Record<string, string>> = {
+  レイヤー構造:
+    '## レイヤー構造 は 0.6.4 で廃止した旧見出しです。レイヤーと許される依存方向は ## ディレクトリ構成 へ、禁止する依存方向は ## 禁止事項 へ移し、旧見出しは stage-architecture の { "heading": "レイヤー構造", "remove": true } で削除します。',
+  ディレクトリ構成と責務:
+    '## ディレクトリ構成と責務 は 0.6.4 で廃止した旧見出しです。本文を ## ディレクトリ構成 へ移し、旧見出しは stage-architecture の { "heading": "ディレクトリ構成と責務", "remove": true } で削除します。',
+  保護パス:
+    '## 保護パス は 0.6.4 で廃止した旧見出しです。触らないパスは ## 禁止事項 へ、変更に慎重を要するパスは ## 変更時の追随 へ移し、旧見出しは stage-architecture の { "heading": "保護パス", "remove": true } で削除します。',
+  "ADR 一覧":
+    '## ADR 一覧 が残っています。metatron は ADR 機能を廃止したため、このセクションを管理しません。本文を残すなら別のファイルへ写してから、stage-architecture の { "heading": "ADR 一覧", "remove": true } で削除できます。'
+}
 
 /**
  * 走査から除外するディレクトリ名。
@@ -1567,10 +1577,10 @@ function segmentMayMatchExcluded(segment: string): boolean {
 
 function diffDirectories(
   result: ScanResult,
+  section: string,
   body: string | undefined,
   skipped: string[]
 ): void {
-  const section = "ディレクトリ構成と責務"
   if (body === undefined) return
 
   // 書式は全ディレクトリの網羅を求めない。書かれていないディレクトリは乖離にせず、
@@ -1598,7 +1608,7 @@ function diffDirectories(
     const token = raw.replace(/\/+$/, "")
     if (token === "" || seen.has(token)) continue
     seen.add(token)
-    // ワイルドカードを含むものは保護パス等の glob なので見ない。
+    // ワイルドカードを含むものはディレクトリではなく glob なので見ない。
     if (/[*?[\]{}]/.test(token)) continue
     if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(token)) continue
     // `/` を含まない 1 語はパスかどうかを区別できないため見ない。
@@ -1722,12 +1732,13 @@ function diffArchitectureInner(
     })
   }
 
-  if (exists && sections.has(LEGACY_ADR_HEADING)) {
+  for (const [heading, detail] of Object.entries(LEGACY_SECTIONS)) {
+    if (!exists || !sections.has(heading)) continue
     findings.push({
       kind: "legacy_section",
-      section: LEGACY_ADR_HEADING,
-      subject: LEGACY_ADR_HEADING,
-      detail: `## ${LEGACY_ADR_HEADING} が残っています。metatron は ADR 機能を廃止したため、このセクションを管理しません。本文を残すなら別のファイルへ写してから、stage-architecture の { "heading": "${LEGACY_ADR_HEADING}", "remove": true } で削除できます。`
+      section: heading,
+      subject: heading,
+      detail
     })
   }
 
@@ -1736,13 +1747,17 @@ function diffArchitectureInner(
     "技術スタック / コマンド定義の突き合わせ: 要約として書く節のため機械的には検出しません。書かれた技術とコマンドが sources に残っているかを読んで確かめてください。"
   )
 
-  diffDirectories(input.scan, sections.get("ディレクトリ構成と責務"), skipped)
-  diffDomains(input.scan, input.domains, findings, skipped)
-
-  // 決定的に検出できないため、この関数では扱わない項目(設計書 §9-3)。
-  skipped.push(
-    "保護パスの不整合: Raguel の設定の解析を伴うため、この関数では検出しません。"
+  // 新しい見出しを正とし、移行前の文書だけ旧見出しの本文で突き合わせる。
+  const directorySection = sections.has("ディレクトリ構成")
+    ? "ディレクトリ構成"
+    : "ディレクトリ構成と責務"
+  diffDirectories(
+    input.scan,
+    directorySection,
+    sections.get(directorySection),
+    skipped
   )
+  diffDomains(input.scan, input.domains, findings, skipped)
 
   findings.sort(
     (a, b) =>

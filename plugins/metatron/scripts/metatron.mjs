@@ -5,13 +5,18 @@ var ARCHITECTURE_TITLE = "# ARCHITECTURE";
 var ARCHITECTURE_HEADINGS = [
   "\u30B7\u30B9\u30C6\u30E0\u6982\u8981",
   "\u6280\u8853\u30B9\u30BF\u30C3\u30AF",
-  "\u30EC\u30A4\u30E4\u30FC\u69CB\u9020",
-  "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9",
+  "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210",
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
-  "\u4FDD\u8B77\u30D1\u30B9",
-  "\u30C6\u30B9\u30C8\u65B9\u91DD"
+  "\u30C6\u30B9\u30C8\u65B9\u91DD",
+  "\u7981\u6B62\u4E8B\u9805",
+  "\u5909\u66F4\u6642\u306E\u8FFD\u968F"
 ];
+var LEGACY_HEADINGS = {
+  \u30EC\u30A4\u30E4\u30FC\u69CB\u9020: "\u30EC\u30A4\u30E4\u30FC\u3068\u8A31\u3055\u308C\u308B\u4F9D\u5B58\u65B9\u5411\u306F\u300C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u300D\u3001\u7981\u6B62\u3059\u308B\u4F9D\u5B58\u65B9\u5411\u306F\u300C\u7981\u6B62\u4E8B\u9805\u300D",
+  \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9: "\u300C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u300D",
+  \u4FDD\u8B77\u30D1\u30B9: "\u89E6\u3089\u306A\u3044\u30D1\u30B9\u306F\u300C\u7981\u6B62\u4E8B\u9805\u300D\u3001\u5909\u66F4\u306B\u614E\u91CD\u3092\u8981\u3059\u308B\u30D1\u30B9\u306F\u300C\u5909\u66F4\u6642\u306E\u8FFD\u968F\u300D"
+};
 var DOMAINS_HEADING = "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7";
 var DOMAINS_MARKER = "metatron:domains";
 var RETIRED_PSEUDO_KEYS = /* @__PURE__ */ new Set(["overview"]);
@@ -176,10 +181,12 @@ function validateHeadingKey(heading, options = {}) {
   }
   if (options.allowUnlisted === true) return { ok: true, heading: value };
   if (!isArchitectureHeading(value)) {
+    const destination = Object.hasOwn(LEGACY_HEADINGS, value) ? LEGACY_HEADINGS[value] : void 0;
+    const legacyHint = destination === void 0 ? "" : ` \u300C${value}\u300D\u306F\u5EC3\u6B62\u3057\u305F\u65E7\u898B\u51FA\u3057\u3067\u3059\u3002\u672C\u6587\u306E\u79FB\u3057\u5148\u306F ${destination} \u3067\u3059\u3002\u65E7\u898B\u51FA\u3057\u306F { "heading": "${value}", "remove": true } \u3067\u524A\u9664\u3067\u304D\u307E\u3059\u3002`;
     return {
       ok: false,
       error: "unknown_heading",
-      message: `\u672A\u77E5\u306E\u898B\u51FA\u3057\u300C${value}\u300D\u3067\u3059\u3002\u6307\u5B9A\u3067\u304D\u308B\u306E\u306F ${ARCHITECTURE_HEADINGS.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3067\u3059\u3002`
+      message: `\u672A\u77E5\u306E\u898B\u51FA\u3057\u300C${value}\u300D\u3067\u3059\u3002\u6307\u5B9A\u3067\u304D\u308B\u306E\u306F ${ARCHITECTURE_HEADINGS.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3067\u3059\u3002${legacyHint}`
     };
   }
   return { ok: true, heading: value };
@@ -382,6 +389,8 @@ function applySectionChanges(current, changes) {
   const chunks = lines.map((l) => l.raw);
   const ops = [];
   const applied = [];
+  const removedRanges = changes.filter((c) => c.remove === true).map((c) => findSection(doc, c.heading)).filter((s) => s !== void 0);
+  const isRemovedLine = (index) => removedRanges.some((s) => index >= s.startLine && index < s.endLine);
   for (const change of changes) {
     const order = canonicalIndex(change.heading);
     const section = findSection(doc, change.heading);
@@ -418,7 +427,9 @@ function applySectionChanges(current, changes) {
         order
       });
     } else {
-      const last = lines[lines.length - 1];
+      let lastIndex = lines.length - 1;
+      while (lastIndex > 0 && isRemovedLine(lastIndex)) lastIndex--;
+      const last = lines[lastIndex];
       let prefix = "";
       if (!last.raw.endsWith("\n")) prefix += eol;
       if (last.text.trim() !== "") prefix += eol;
@@ -793,14 +804,19 @@ import path2 from "node:path";
 var ARCHITECTURE_SECTIONS = [
   "\u30B7\u30B9\u30C6\u30E0\u6982\u8981",
   "\u6280\u8853\u30B9\u30BF\u30C3\u30AF",
-  "\u30EC\u30A4\u30E4\u30FC\u69CB\u9020",
-  "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9",
+  "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210",
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
-  "\u4FDD\u8B77\u30D1\u30B9",
-  "\u30C6\u30B9\u30C8\u65B9\u91DD"
+  "\u30C6\u30B9\u30C8\u65B9\u91DD",
+  "\u7981\u6B62\u4E8B\u9805",
+  "\u5909\u66F4\u6642\u306E\u8FFD\u968F"
 ];
-var LEGACY_ADR_HEADING = "ADR \u4E00\u89A7";
+var LEGACY_SECTIONS = {
+  \u30EC\u30A4\u30E4\u30FC\u69CB\u9020: '## \u30EC\u30A4\u30E4\u30FC\u69CB\u9020 \u306F 0.6.4 \u3067\u5EC3\u6B62\u3057\u305F\u65E7\u898B\u51FA\u3057\u3067\u3059\u3002\u30EC\u30A4\u30E4\u30FC\u3068\u8A31\u3055\u308C\u308B\u4F9D\u5B58\u65B9\u5411\u306F ## \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210 \u3078\u3001\u7981\u6B62\u3059\u308B\u4F9D\u5B58\u65B9\u5411\u306F ## \u7981\u6B62\u4E8B\u9805 \u3078\u79FB\u3057\u3001\u65E7\u898B\u51FA\u3057\u306F stage-architecture \u306E { "heading": "\u30EC\u30A4\u30E4\u30FC\u69CB\u9020", "remove": true } \u3067\u524A\u9664\u3057\u307E\u3059\u3002',
+  \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9: '## \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9 \u306F 0.6.4 \u3067\u5EC3\u6B62\u3057\u305F\u65E7\u898B\u51FA\u3057\u3067\u3059\u3002\u672C\u6587\u3092 ## \u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210 \u3078\u79FB\u3057\u3001\u65E7\u898B\u51FA\u3057\u306F stage-architecture \u306E { "heading": "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9", "remove": true } \u3067\u524A\u9664\u3057\u307E\u3059\u3002',
+  \u4FDD\u8B77\u30D1\u30B9: '## \u4FDD\u8B77\u30D1\u30B9 \u306F 0.6.4 \u3067\u5EC3\u6B62\u3057\u305F\u65E7\u898B\u51FA\u3057\u3067\u3059\u3002\u89E6\u3089\u306A\u3044\u30D1\u30B9\u306F ## \u7981\u6B62\u4E8B\u9805 \u3078\u3001\u5909\u66F4\u306B\u614E\u91CD\u3092\u8981\u3059\u308B\u30D1\u30B9\u306F ## \u5909\u66F4\u6642\u306E\u8FFD\u968F \u3078\u79FB\u3057\u3001\u65E7\u898B\u51FA\u3057\u306F stage-architecture \u306E { "heading": "\u4FDD\u8B77\u30D1\u30B9", "remove": true } \u3067\u524A\u9664\u3057\u307E\u3059\u3002',
+  "ADR \u4E00\u89A7": '## ADR \u4E00\u89A7 \u304C\u6B8B\u3063\u3066\u3044\u307E\u3059\u3002metatron \u306F ADR \u6A5F\u80FD\u3092\u5EC3\u6B62\u3057\u305F\u305F\u3081\u3001\u3053\u306E\u30BB\u30AF\u30B7\u30E7\u30F3\u3092\u7BA1\u7406\u3057\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u6B8B\u3059\u306A\u3089\u5225\u306E\u30D5\u30A1\u30A4\u30EB\u3078\u5199\u3057\u3066\u304B\u3089\u3001stage-architecture \u306E { "heading": "ADR \u4E00\u89A7", "remove": true } \u3067\u524A\u9664\u3067\u304D\u307E\u3059\u3002'
+};
 var EXCLUDED_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
   ".git",
   "node_modules",
@@ -1770,8 +1786,7 @@ function segmentMayMatchExcluded(segment) {
   );
   return [...EXCLUDED_DIRECTORY_NAMES].some((name) => re.test(name));
 }
-function diffDirectories(result, body, skipped) {
-  const section = "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
+function diffDirectories(result, section, body, skipped) {
   if (body === void 0) return;
   const unlisted = result.tree.filter(
     (entry) => entry.type === "directory" && entry.depth === 1 && !body.includes(entry.path)
@@ -1877,23 +1892,27 @@ function diffArchitectureInner(input) {
       detail: exists ? `## ${heading} \u304C ARCHITECTURE \u306B\u3042\u308A\u307E\u305B\u3093\u3002` : `ARCHITECTURE \u304C\u7121\u3044\u305F\u3081 ## ${heading} \u3082\u3042\u308A\u307E\u305B\u3093\u3002`
     });
   }
-  if (exists && sections.has(LEGACY_ADR_HEADING)) {
+  for (const [heading, detail] of Object.entries(LEGACY_SECTIONS)) {
+    if (!exists || !sections.has(heading)) continue;
     findings.push({
       kind: "legacy_section",
-      section: LEGACY_ADR_HEADING,
-      subject: LEGACY_ADR_HEADING,
-      detail: `## ${LEGACY_ADR_HEADING} \u304C\u6B8B\u3063\u3066\u3044\u307E\u3059\u3002metatron \u306F ADR \u6A5F\u80FD\u3092\u5EC3\u6B62\u3057\u305F\u305F\u3081\u3001\u3053\u306E\u30BB\u30AF\u30B7\u30E7\u30F3\u3092\u7BA1\u7406\u3057\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u6B8B\u3059\u306A\u3089\u5225\u306E\u30D5\u30A1\u30A4\u30EB\u3078\u5199\u3057\u3066\u304B\u3089\u3001stage-architecture \u306E { "heading": "${LEGACY_ADR_HEADING}", "remove": true } \u3067\u524A\u9664\u3067\u304D\u307E\u3059\u3002`
+      section: heading,
+      subject: heading,
+      detail
     });
   }
   const sources = collectSources(input.scan, skipped);
   skipped.push(
     "\u6280\u8853\u30B9\u30BF\u30C3\u30AF / \u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9\u306E\u7A81\u304D\u5408\u308F\u305B: \u8981\u7D04\u3068\u3057\u3066\u66F8\u304F\u7BC0\u306E\u305F\u3081\u6A5F\u68B0\u7684\u306B\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002\u66F8\u304B\u308C\u305F\u6280\u8853\u3068\u30B3\u30DE\u30F3\u30C9\u304C sources \u306B\u6B8B\u3063\u3066\u3044\u308B\u304B\u3092\u8AAD\u3093\u3067\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002"
   );
-  diffDirectories(input.scan, sections.get("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9"), skipped);
-  diffDomains(input.scan, input.domains, findings, skipped);
-  skipped.push(
-    "\u4FDD\u8B77\u30D1\u30B9\u306E\u4E0D\u6574\u5408: Raguel \u306E\u8A2D\u5B9A\u306E\u89E3\u6790\u3092\u4F34\u3046\u305F\u3081\u3001\u3053\u306E\u95A2\u6570\u3067\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002"
+  const directorySection = sections.has("\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210") ? "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210" : "\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u69CB\u6210\u3068\u8CAC\u52D9";
+  diffDirectories(
+    input.scan,
+    directorySection,
+    sections.get(directorySection),
+    skipped
   );
+  diffDomains(input.scan, input.domains, findings, skipped);
   findings.sort(
     (a, b) => FINDING_ORDER[a.kind] - FINDING_ORDER[b.kind] || compareStrings(a.subject, b.subject)
   );

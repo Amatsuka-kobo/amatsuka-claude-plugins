@@ -796,6 +796,53 @@ test("legacy_section: ARCHITECTURE に ## ADR 一覧 が残っていれば 1 件
   expect(subjectsOf(diff.findings, "section_missing")).not.toContain("ADR 一覧")
 })
 
+test("legacy_section: 0.6.4 より前の旧見出しは見出しごとに移し先付きで出す", () => {
+  const { result } = scanFixture()
+
+  const diff = diffArchitecture({
+    scan: result,
+    sections: {
+      レイヤー構造: "- UI 層 → ドメイン層",
+      ディレクトリ構成と責務: "- `src/` 実装",
+      ドメインマップ: "",
+      保護パス: "- `dist/`"
+    }
+  })
+
+  const legacy = diff.findings.filter((f) => f.kind === "legacy_section")
+  expect(legacy.map((f) => f.subject).sort()).toEqual(
+    ["ディレクトリ構成と責務", "レイヤー構造", "保護パス"].sort()
+  )
+  const detail = (subject: string) =>
+    legacy.find((f) => f.subject === subject)?.detail ?? ""
+  expect(detail("レイヤー構造")).toContain("## ディレクトリ構成")
+  expect(detail("レイヤー構造")).toContain("## 禁止事項")
+  expect(detail("ディレクトリ構成と責務")).toContain("## ディレクトリ構成 へ")
+  expect(detail("保護パス")).toContain("## 禁止事項")
+  expect(detail("保護パス")).toContain("## 変更時の追随")
+  // 移し先の新しい見出しは欠落として出る(update が旧構成の移行にまとめる)。
+  expect(subjectsOf(diff.findings, "section_missing")).toEqual(
+    expect.arrayContaining(["ディレクトリ構成", "禁止事項", "変更時の追随"])
+  )
+})
+
+test("ディレクトリ構成: 新旧の見出しが両方あれば新しい方を突き合わせる", () => {
+  const { result } = scanFixture()
+
+  const diff = diffArchitecture({
+    scan: result,
+    sections: {
+      ディレクトリ構成: "- `src/new-only`: 新",
+      ディレクトリ構成と責務: "- `src/old-only`: 旧"
+    }
+  })
+
+  const line = unconfirmedLine(diff.skipped)
+  expect(line).toContain("## ディレクトリ構成 に")
+  expect(line).toContain("src/new-only")
+  expect(line).not.toContain("src/old-only")
+})
+
 test("legacy_section: ## ADR 一覧 が無ければ出さない", () => {
   const { result } = scanFixture()
 
@@ -831,14 +878,14 @@ test("ディレクトリ構成: findings には出さず、未記載のトップ
   const diff = diffArchitecture({
     scan: result,
     sections: {
-      ディレクトリ構成と責務:
+      ディレクトリ構成:
         "- src: 実装\n- `src/legacy`: 旧実装\n- `gone/`: 消えた\n- `src/app/`: 画面\n"
     }
   })
 
-  expect(
-    diff.findings.filter((f) => f.section === "ディレクトリ構成と責務")
-  ).toEqual([])
+  expect(diff.findings.filter((f) => f.section === "ディレクトリ構成")).toEqual(
+    []
+  )
   const unlisted = diff.skipped.find((s) =>
     s.startsWith("ディレクトリ構成の未記載")
   )
@@ -960,7 +1007,8 @@ test("決定的に検出できない項目は理由つきで skipped に入る",
 
   const diff = diffArchitecture({ scan: result, sections: {} })
 
-  expect(diff.skipped.some((s) => s.includes("保護パス"))).toBe(true)
+  expect(diff.skipped.some((s) => s.includes("技術スタック"))).toBe(true)
+  expect(diff.skipped.some((s) => s.includes("保護パス"))).toBe(false)
   expect(diff.skipped.some((s) => s.includes("ADR"))).toBe(false)
 })
 

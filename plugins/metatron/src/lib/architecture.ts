@@ -23,19 +23,31 @@ export const ARCHITECTURE_TITLE = "# ARCHITECTURE"
 /**
  * 契約 §4-1 の 8 セクション。見出し名と順序を固定する。
  *
- * `保護パス` / `テスト方針` は rules から ARCHITECTURE へ戻した。規約は ARCHITECTURE で扱わない。
+ * 規約は ARCHITECTURE で扱わない(境界は references/document-boundary.md)。
  * この許可リストは書き込みの検証と、新しいセクションを差し込む位置の決定に使う。
  */
 export const ARCHITECTURE_HEADINGS = [
   "システム概要",
   "技術スタック",
-  "レイヤー構造",
-  "ディレクトリ構成と責務",
+  "ディレクトリ構成",
   "ドメインマップ",
   "コマンド定義",
-  "保護パス",
-  "テスト方針"
+  "テスト方針",
+  "禁止事項",
+  "変更時の追随"
 ] as const
+
+/**
+ * 0.6.4 で廃止した旧見出しと、その本文の移し先。
+ * `scan.ts` の `LEGACY_SECTIONS` と対応させる。
+ */
+export const LEGACY_HEADINGS: Readonly<Record<string, string>> = {
+  レイヤー構造:
+    "レイヤーと許される依存方向は「ディレクトリ構成」、禁止する依存方向は「禁止事項」",
+  ディレクトリ構成と責務: "「ディレクトリ構成」",
+  保護パス:
+    "触らないパスは「禁止事項」、変更に慎重を要するパスは「変更時の追随」"
+}
 
 export type ArchitectureHeading = (typeof ARCHITECTURE_HEADINGS)[number]
 
@@ -406,10 +418,17 @@ export function validateHeadingKey(
   // 許可リストに載っている必要がない。許可リストに無い古いセクションもこれで消せる。
   if (options.allowUnlisted === true) return { ok: true, heading: value }
   if (!isArchitectureHeading(value)) {
+    const destination = Object.hasOwn(LEGACY_HEADINGS, value)
+      ? LEGACY_HEADINGS[value]
+      : undefined
+    const legacyHint =
+      destination === undefined
+        ? ""
+        : ` 「${value}」は廃止した旧見出しです。本文の移し先は ${destination} です。旧見出しは { "heading": "${value}", "remove": true } で削除できます。`
     return {
       ok: false,
       error: "unknown_heading",
-      message: `未知の見出し「${value}」です。指定できるのは ${ARCHITECTURE_HEADINGS.join(" / ")} のいずれかです。`
+      message: `未知の見出し「${value}」です。指定できるのは ${ARCHITECTURE_HEADINGS.join(" / ")} のいずれかです。${legacyHint}`
     }
   }
   return { ok: true, heading: value }
@@ -784,6 +803,12 @@ export function applySectionChanges(
   const chunks = lines.map((l) => l.raw)
   const ops: SpliceOp[] = []
   const applied: AppliedChange[] = []
+  const removedRanges = changes
+    .filter((c) => c.remove === true)
+    .map((c) => findSection(doc, c.heading))
+    .filter((s): s is ArchitectureSection => s !== undefined)
+  const isRemovedLine = (index: number): boolean =>
+    removedRanges.some((s) => index >= s.startLine && index < s.endLine)
 
   for (const change of changes) {
     const order = canonicalIndex(change.heading)
@@ -824,7 +849,11 @@ export function applySectionChanges(
         order
       })
     } else {
-      const last = lines[lines.length - 1]
+      // 同じ stage で末尾のセクションを消すときは、消した後に最後になる行で区切りを決める。
+      // 消すセクションの行で決めると、残るセクションの区切りの空行に空行が重なる。
+      let lastIndex = lines.length - 1
+      while (lastIndex > 0 && isRemovedLine(lastIndex)) lastIndex--
+      const last = lines[lastIndex]
       let prefix = ""
       if (!last.raw.endsWith("\n")) prefix += eol
       if (last.text.trim() !== "") prefix += eol
