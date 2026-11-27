@@ -424,7 +424,7 @@ export function validateHeadingKey(
     const legacyHint =
       destination === undefined
         ? ""
-        : ` 「${value}」は廃止した旧見出しです。本文の移し先は ${destination} です。旧見出しは { "heading": "${value}", "remove": true } で削除できます。`
+        : ` 「${value}」は廃止した旧見出しです。本文の移し先は ${destination} です。/metatron:update の旧構成の移行で新しい見出しへ移してから、{ "heading": "${value}", "remove": true } で旧見出しを削除してください。`
     return {
       ok: false,
       error: "unknown_heading",

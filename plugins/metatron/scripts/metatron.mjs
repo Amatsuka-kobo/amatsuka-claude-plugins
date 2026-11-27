@@ -182,7 +182,7 @@ function validateHeadingKey(heading, options = {}) {
   if (options.allowUnlisted === true) return { ok: true, heading: value };
   if (!isArchitectureHeading(value)) {
     const destination = Object.hasOwn(LEGACY_HEADINGS, value) ? LEGACY_HEADINGS[value] : void 0;
-    const legacyHint = destination === void 0 ? "" : ` \u300C${value}\u300D\u306F\u5EC3\u6B62\u3057\u305F\u65E7\u898B\u51FA\u3057\u3067\u3059\u3002\u672C\u6587\u306E\u79FB\u3057\u5148\u306F ${destination} \u3067\u3059\u3002\u65E7\u898B\u51FA\u3057\u306F { "heading": "${value}", "remove": true } \u3067\u524A\u9664\u3067\u304D\u307E\u3059\u3002`;
+    const legacyHint = destination === void 0 ? "" : ` \u300C${value}\u300D\u306F\u5EC3\u6B62\u3057\u305F\u65E7\u898B\u51FA\u3057\u3067\u3059\u3002\u672C\u6587\u306E\u79FB\u3057\u5148\u306F ${destination} \u3067\u3059\u3002/metatron:update \u306E\u65E7\u69CB\u6210\u306E\u79FB\u884C\u3067\u65B0\u3057\u3044\u898B\u51FA\u3057\u3078\u79FB\u3057\u3066\u304B\u3089\u3001{ "heading": "${value}", "remove": true } \u3067\u65E7\u898B\u51FA\u3057\u3092\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
     return {
       ok: false,
       error: "unknown_heading",
