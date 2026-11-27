@@ -126,8 +126,8 @@ def run(args):
     prompt_ids = check_ids(prompts, "題材")
     # 採取の後で止まらないように、型と目安が指す題材の id を先に確かめる
     for item in patterns:
-        if [i for i in item.get("prompts", []) if i not in prompt_ids]:
-            sys.exit(f"型 {item['id']} の prompts に、台帳の題材に無い id がある")
+        if [i for i in scope_ids(item) if i not in prompt_ids]:
+            sys.exit(f"型 {item['id']} の prompts か exclude に、台帳の題材に無い id がある")
     if args.targets:
         check_targets(json.loads(Path(args.targets).read_text()), patterns, prompt_ids)
     if out.exists() and not out.is_dir():
@@ -216,10 +216,18 @@ def prompt_id(path):
     return path.stem.rsplit("-", 1)[0]
 
 
+SCOPE_KEYS = ("prompts", "exclude")
+
+
+def scope_ids(item):
+    """型や目安が prompts と exclude に書いた題材の id を返す。"""
+    return [i for key in SCOPE_KEYS for i in item.get(key, [])]
+
+
 def targets_of(item, texts):
-    """型が prompts で題材を絞っていれば、その題材の応答だけを返す。"""
-    only = item.get("prompts")
-    return [(p, t) for p, t in texts if not only or prompt_id(p) in only]
+    """prompts があればその題材だけに絞り、exclude の題材を除いた応答を返す。型にも目安にも使う。"""
+    only, skip = item.get("prompts"), item.get("exclude", [])
+    return [(p, t) for p, t in texts if (not only or prompt_id(p) in only) and prompt_id(p) not in skip]
 
 
 def count(texts, patterns):
@@ -265,15 +273,14 @@ def measure(target, texts, skills, by_id):
     none = (None, "測れない")
     if kind == "skill":
         return (100 * skills / len(texts), f"{skills}/{len(texts)}") if texts else none
-    only = target.get("prompts")
-    mine = [(p, t) for p, t in texts if not only or prompt_id(p) in only]
+    mine = targets_of(target, texts)
     if kind == "touten":
         body = "".join(prose(t) for _, t in mine)
         chars = len(re.sub(r"\s", "", body))
         value = 100 * body.count("、") / chars if chars else None
         return (value, f"{value:.2f}") if chars else none
-    # 題材の絞り込みは目安の prompts で決めるので、型の prompts は外して当てる
-    types = [{k: v for k, v in by_id[i].items() if k != "prompts"} for i in target["patterns"]]
+    # 題材の絞り込みは目安の prompts と exclude で決めるので、型の側の 2 つは外して当てる
+    types = [{k: v for k, v in by_id[i].items() if k not in SCOPE_KEYS} for i in target["patterns"]]
     per_doc = [[len(matches(item, text)) for item in types] for _, text in mine]
     totals = [sum(col) for col in zip(*per_doc)] if per_doc else [0] * len(types)
     if kind in ("share", "ratio"):
@@ -338,7 +345,7 @@ def check_targets(targets, patterns, prompt_ids):
     units = {item["id"]: item.get("unit", "text") for item in patterns}
     for t in targets:
         kind, used = t["metric"], t.get("patterns", [])
-        bad = [i for i in used if i not in units] + [i for i in t.get("prompts", []) if i not in prompt_ids]
+        bad = [i for i in used if i not in units] + [i for i in scope_ids(t) if i not in prompt_ids]
         if kind not in METRICS or t.get("op", "以下") not in ("以下", "以上"):
             bad.append("metric か op")
         elif kind in ("skill", "touten"):
@@ -366,8 +373,8 @@ def check_patterns(patterns):
         sys.exit("型には id と regex を書く")
     ids = check_ids(patterns, "型")
     for item in patterns:
-        if not isinstance(item.get("prompts", []), list):
-            sys.exit(f"型の prompts は題材の id の配列にする: {item['id']}")
+        if any(not isinstance(item.get(key, []), list) for key in SCOPE_KEYS):
+            sys.exit(f"型の prompts と exclude は題材の id の配列にする: {item['id']}")
         if item.get("unit", "text") not in UNITS:
             sys.exit(f"型の unit は {UNITS} のどれかにする: {item['id']}")
         re.compile(item["regex"])
@@ -382,9 +389,9 @@ def report(args):
     patterns = json.loads(Path(args.patterns).read_text())
     ids = check_patterns(patterns)
     for item in patterns:
-        unknown = [i for i in item.get("prompts", []) if i not in meta["prompts"]]
+        unknown = [i for i in scope_ids(item) if i not in meta["prompts"]]
         if unknown:
-            sys.exit(f"型 {item['id']} の prompts に、採取した題材に無い id がある: {unknown}")
+            sys.exit(f"型 {item['id']} の prompts か exclude に、採取した題材に無い id がある: {unknown}")
     targets = json.loads(Path(args.targets).read_text()) if getattr(args, "targets", None) else None
     if targets is not None:
         check_targets(targets, patterns, meta["prompts"])
@@ -465,8 +472,8 @@ def self_check():
     raw = {"id": "r", "regex": "設定は、"}
     a, b = Path("m/p01-x-1.jsonl"), Path("m/p02-1.jsonl")
     assert prompt_id(a) == "p01-x"
-    rows = count([(a, text), (b, "言い切ります。")], [head, raw, dict(raw, prompts=["p02"])])
-    assert rows == [(1, 1, 2, 2), (3, 1, 2, 0), (0, 0, 1, 0)], rows
+    rows = count([(a, text), (b, "言い切ります。")], [head, raw, dict(raw, prompts=["p02"]), dict(raw, exclude=["p02"])])
+    assert rows == [(1, 1, 2, 2), (3, 1, 2, 0), (0, 0, 1, 0), (3, 1, 1, 0)], rows
     assert cell(rows[0]) == "1 / 1 / 2、文の 50.0%"
     assert matches(raw, "お手伝いします。\n\n") == [] and matches({"regex": r"お手伝い[^。\n]*。?\s*\Z"}, "a\nお手伝いします。\n\n") == ["お手伝いします。"]
 
