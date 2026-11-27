@@ -7,7 +7,7 @@ const DISCIPLINE = fs.readFileSync(
   "utf8"
 )
 
-const TRANSLATION_IDS = ["koto-dekiru", "dash-insert"]
+const TRANSLATION_IDS = ["koto-dekiru", "dash-insert", "gawa-choice"]
 
 // テスト側で表を読み直し、実装の読み取りと突き合わせる
 function avoidTable(): { category: string; words: string[] }[] {
@@ -182,7 +182,7 @@ describe("避ける語", () => {
       expect(r.advice).toBe("語を消して具体的な事実・数値・条件を書く")
   })
 
-  test("避ける語の表が無い本文では、翻訳調と冗長の 2 型だけを返す", () => {
+  test("避ける語の表が無い本文では、このファイルに定義した 3 型だけを返す", () => {
     const only = buildRules("# 見出し\n\n本文だけ。\n")
     expect(only.map((r) => r.id).sort()).toEqual([...TRANSLATION_IDS].sort())
   })
