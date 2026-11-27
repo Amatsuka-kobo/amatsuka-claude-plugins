@@ -74,7 +74,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - `## 禁止事項`・`## 変更時の追随`・`## テスト方針` を `scan` の事実から起草しない。`../../docs/ARCHITECTURE.example.md` の該当セクションの記入例を型にして既定のドラフトを作り、指摘を受けて直す。
 - docRoot に旧 rules の `.claude/rules/metatron/` が残っているときは、その `protected-paths.md` の触らないパスを `## 禁止事項`、変更に慎重を要するパスを `## 変更時の追随`、`testing-policy.md` の本文を `## テスト方針` の材料にする。
 - 旧ファイルの移行と削除はこのスキルで行わず、手順 9 で `/metatron:update` を案内する。
-- `document-boundary.md` で CLAUDE.md に当たる内容は起草しない。材料の中に見つけたときは、CLAUDE.md へ移す案として手順 9 で示す。CLAUDE.md は書き換えない。
+- `document-boundary.md` で CLAUDE.md に当たる内容は起草しない。材料の中に見つけたときは、CLAUDE.md へ移す案として手順 9 で示す。CLAUDE.md は、手順 9 で頼まれて承認を得たとき以外は書き換えない。
 - `## システム概要` に Mermaid 図を置くかどうかを含めてウォークスルーで問う。置く場合は解析結果から起草し、粒度も問う。
 - ARCHITECTURE の各セクションの起草は `../../references/architecture-format.md` の該当節の要件を満たす形で行う。
 - `../../references/writing-discipline.md` の「削れる内容」の 4 種類は起草しない。
