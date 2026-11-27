@@ -1,6 +1,6 @@
 Repo root **is** the build system — a pnpm workspace covering every plugin.
 
-- Runtime: Node >= 26 (Volta-pinned: node 26.3.1, pnpm 11.8.0 — root `package.json`).
+- Runtime: Node 26 (pinned by `mise.toml`: node 26.12.1, pnpm 12.15.0; Volta is no longer used).
   Plugin READMEs state a lower **consumer** floor (Node >= 22); prompt-smith's bundles moved from
   node26 to the common node22 target in 0.3.2-dev. The >= 26 requirement is for building this repo.
 - Package manager: **pnpm** only. `pnpm-workspace.yaml` now lists **15 members** — every plugin
@@ -34,4 +34,4 @@ Repo root **is** the build system — a pnpm workspace covering every plugin.
   and basic-design (`elkjs`, pinned exact at 0.11.1). Every other plugin is Node stdlib
   (+ `git`/`gh`/`claude` CLI).
 
-Commands: `mem:suggested_commands`. Definition of done: `harness-docs/ARCHITECTURE.md` §規約.
+Commands: `mem:suggested_commands`. Definition of done: the root `CLAUDE.md` 「完了条件」.

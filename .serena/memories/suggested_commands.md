@@ -33,6 +33,6 @@ No CI. A markdown/JSON-only plugin change (skills/agents/commands/hooks/marketpl
 `plugin-dev:plugin-validator`) was removed in commit ea72cbc, and the mdbase frontmatter schema
 check was retired in commit 9ed55dd. Do not cite either as a validation step.
 
-Linux/WSL2 dev machine. Env setup (Volta, uv/Serena, Context7, LSPs, optional
+Linux/WSL2 dev machine. Env setup (mise, uv/Serena, Context7, LSPs, optional
 CLIProxyAPI): `docs/ONBOARDING.md` (moved down from the repo root in the 2026-08-14 docs split;
 its `CLAUDE.example.md` copy step is stale — see `mem:core`).

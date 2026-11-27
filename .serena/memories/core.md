@@ -4,9 +4,9 @@
 sources that build each plugin's bundled scripts.
 
 Technical preconditions and operating conventions are canonical in
-`harness-docs/ARCHITECTURE.md`, which was added in 2026-08. metatron's SessionStart hook injects
-its full text at the start of each session in this repository; the root `CLAUDE.md` now contains
-only the repository overview and that pointer.
+`harness-docs/ARCHITECTURE.md`, which was added in 2026-08. The root `CLAUDE.md` reads it through
+its `@harness-docs/ARCHITECTURE.md` line (metatron does not inject the text). Since 2026-11-28
+(#54) ARCHITECTURE holds artifact rules and `CLAUDE.md` holds how the AI works.
 
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
   listed here (name/source/description). 14 entries (better-agentics added 2026-10-26; the former upstream intent
@@ -21,7 +21,7 @@ only the repository overview and that pointer.
   validates only Raphael antibodies and is unrelated.)
 - Root `.mcp.json` — two servers: `github` (http, `https://api.githubcopilot.com/mcp/`, bearer from
   env `GITHUB_PERSONAL_ACCESS_TOKEN`) and `serena` (stdio, `uvx --from git+…/serena
-  start-mcp-server`, context `claude-code`, dashboard off). `harness-docs/ARCHITECTURE.md` records
+  start-mcp-server`, context `claude-code`, dashboard off). The root `CLAUDE.md` 「探索と編集」 records
   the Context7 requirement for library documentation and Serena for codebase exploration + TS/MD
   editing.
 - `.claude/settings.json` (tracked) — model `claude-opus-5[1m]`, `outputStyle: EnhancedClaude5`,
@@ -204,6 +204,6 @@ the negation, to carry per-user state into `git worktree` checkouts.
   individual `setup-agents` path and pass `--mcp-deny` (the old GOTCHA-001, now in `docs/old/metatron/GOTCHAS.md`, records why). SessionStart reads them
   into the marker table it injects; **the hook writes nothing**. The agent-policy plugin itself ships **no** agent definitions since
   0.14.0-dev, and the `AMATSUKA_AGENT_*_ALIAS` env vars are no longer read.
-- The protected-path treatment of `CLAUDE.md` is defined in `harness-docs/ARCHITECTURE.md`.
+- What to check when `CLAUDE.md` changes is defined in `harness-docs/ARCHITECTURE.md` 「変更時の追随」.
 - `private/` holds the user's own scratch (`context-map/`, story drafts); `.superpowers/sdd/` holds
   hundreds of historical task briefs/reports/review diffs. Both are noise for code work.
