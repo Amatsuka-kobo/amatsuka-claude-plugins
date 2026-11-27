@@ -52,6 +52,7 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 - `body` は見出し行を含まない本文。同じ `heading` を 2 回書くと拒否される。
 - 差し替えた後の全文に閉じていないフェンスがあれば `unclosed_fence`、読めない `metatron:domains` ブロックがあれば `invalid_domains`(変更前から読めない文書では拒否しない)で拒否される。
 - `reason` は任意。
+- 最後のセクションを削除または差し替えると、文書の末尾の改行は 1 つにそろう。ほかのセクションのバイト列は変わらない。
 
 セクションを消すときは `body` の代わりに `remove: true` を書く。
 

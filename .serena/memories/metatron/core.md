@@ -1,5 +1,5 @@
-`plugins/metatron` (0.6.2-dev) — ARCHITECTURE を**独立資産**として記録・更新するプラグイン。
-2026-08-16 新規追加(commit 1e4508b)。0.6.0(2026-11-19、PR #41)で、扱う文書を ARCHITECTURE と GOTCHAS だけにした。
+`plugins/metatron` (0.6.3-dev) — ARCHITECTURE を**独立資産**として記録・更新するプラグイン。
+2026-08-16 新規追加(commit 1e4508b)。0.6.0(2026-11-19、PR #41)で、扱う文書を当時の ARCHITECTURE と GOTCHAS の 2 つに絞った(GOTCHAS は 0.6.1-dev で廃止)。
 旧 rules 3 ファイル(`.claude/rules/metatron/`)と、その CLI・config(`paths.rulesDir`)・guard・書式は撤去済み。
 0.6.1-dev(2026-11-27、Issue #46、PR #61)で ADR 機能と GOTCHAS 機能を削除し、扱う文書を ARCHITECTURE だけにした。
 保護パスとテスト方針は ARCHITECTURE のセクション、規約は CLAUDE.md に書く。
@@ -97,8 +97,10 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 読: `get config` / `get architecture [--section]` / `get domains` / `scan` / `diff-architecture`。
 段階: `stage-architecture --input`。書: `commit-architecture --staging-id` / `link-claude-md`。以上の 8 個だけ(`get` の 3 対象を数える)。
-0.6.1-dev で消した ADR・GOTCHAS 用の 13 個は `unknown_subcommand`(終了コード 2)、`get` の ADR・GOTCHAS 用の対象は
-`unknown_target`(終了コード 0)を返す。
+0.6.1-dev で消したトップレベルの 10 個(`stage-adr`・`stage-gotcha`・`commit-gotchas`・`init-gotchas`・`append-gotcha`・
+`tag-gotcha`・`scan-adr-candidates`・`shrink-adr-candidate`・`scan-gotcha-candidates`・`remove-gotcha-candidate`)は
+`unknown_subcommand`(終了コード 2)、`get` の `adr`・`gotchas`・`gotchas-template` の 3 対象は `unknown_target`(終了コード 0)を返す。
+0.6.3-dev から、最後のセクションを削除または差し替えると、文書の末尾の改行を 1 つにそろえる。
 
 `diff-architecture` は技術スタックとコマンドを機械的に照合せず、定義のありかを `sources` で返す(2026-11-12)。ディレクトリの消失も断定しない(どこを基準にした相対パスかを決められないため)。インラインコードの `/` を含むパスのうち、ルートから実在を確かめられないもの(リンクはたどらない)を skipped の「ディレクトリの実在の未確認」に並べ、AI が確かめる。ツリーの中と 1 語は並べない。
 
