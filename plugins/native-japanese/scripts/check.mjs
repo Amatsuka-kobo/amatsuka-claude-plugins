@@ -624,7 +624,7 @@ var TRANSLATION = [
     // 動詞に続く「側」(失敗した側)と「高い側」「低い側」は、立場や位置を指す形と区別できないので拾わない
     id: "gawa-choice",
     category: "\u7FFB\u8A33\u8ABF",
-    pattern: /(古い|新しい|多い|少ない)側/u,
+    pattern: /(古い|新しい|多い|少ない)側(?![面近溝])/u,
     advice: "\u6BD4\u3079\u305F\u4E00\u65B9\u3092\u6307\u3059\u3068\u304D\u306F\u300C\u65B9\u300D\u3068\u66F8\u304F(\u53E4\u3044\u65B9)\u3002\u7ACB\u5834\u3084\u4F4D\u7F6E\u3092\u6307\u3059\u300C\u5074\u300D\u306F\u305D\u306E\u307E\u307E\u6B8B\u3059"
   }
 ];
