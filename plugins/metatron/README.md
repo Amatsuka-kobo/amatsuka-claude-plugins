@@ -42,7 +42,7 @@ ARCHITECTURE は毎セッション読み込まれるため、行数の目安を 
 
 「今後はこうして」「覚えておいて」のように、置き場を指定せずに今後の振る舞いを残すよう頼まれたとき、`placing-instructions` スキルが置き場を判定して案を示します。AI がユーザーの訂正を受けて自分で memory などに残そうとするときも、書く前にこのスキルを起動します。
 
-- 置き場は CLAUDE.md・`paths` 付きの rules・スキル・memory・ARCHITECTURE と、書かない、の中から決めます。判定表は `references/instruction-placement.md` にあります。
+- 置き場は CLAUDE.md・`paths` 付きの rules・スキル・memory・ユーザー単位の `~/.claude/CLAUDE.md`・ARCHITECTURE と、書かない、の中から決めます。チーム全員が使う参照先は CLAUDE.md、期限のように古くなる事実は memory に置きます。判定表は `references/instruction-placement.md` にあります。
 - 例外なく守らせる決まりには、hook・permissions の deny・検査による強制の案も添えます。
 - 案はユーザーの承認を得てから進めます。ARCHITECTURE に当たる内容だけを `/metatron:update` の手順で書き込み、それ以外の書き込みはセッションに任せます。
 - 承認された置き場が memory 以外の内容は、memory に重ねて保存しません。既に memory にあれば、消す案を示します。置き場を名指しした依頼は、その置き場に従います。

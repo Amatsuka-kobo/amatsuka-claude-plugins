@@ -7,73 +7,44 @@ Issue: #53(親 Story #49)
 判定表は新しい `references/instruction-placement.md` に置く。`references/document-boundary.md` には入れない。
 
 - `document-boundary.md` は、`updating-architecture`・`capturing-architecture`・`architecture-format.md`・`writing-discipline.md` が「ARCHITECTURE か CLAUDE.md か」の 2 択として読んでいる。7 つの置き場の表を入れると、「置き場でない方から消す」の読みが崩れる。
-- Issue #53 は「同じ文書にあるか、その定義を参照している」を求めている。判定表の ARCHITECTURE と CLAUDE.md の行は、`document-boundary.md` を参照し、基準を書き写さない。
+- Issue #53 は「同じ文書にあるか、その定義を参照している」を求めている。判定表の ARCHITECTURE と CLAUDE.md の行は `document-boundary.md` を参照し、基準を書き写さない。
 
 ## 判定表は文面の置き場を決め、強制の案は別に示す
 
-### 文面の置き場
-
-上から順に当て、最初に当たった行の置き場を採る。
+判定表の正本は `references/instruction-placement.md` である。要点は次のとおり。
 
 | 順 | 内容の性質 | 置き場 |
 | --- | --- | --- |
-| 1 | 設定ファイルやコードの 1 か所から全部得られ、方針・使い分け・前提を何も加えていない | 書かない |
-| 2 | 利用者 1 人だけの好みや環境の事情(応答の口調、手元の環境のパス) | memory |
-| 3 | 成果物の決まり(`document-boundary.md` の ARCHITECTURE の側) | ARCHITECTURE |
-| 4 | 特定のパスを触るときだけ要り、compaction の後に一時的に読まれなくなっても困らない決まり | `paths` 付きの rules |
-| 5 | 作業の進め方の決まり(`document-boundary.md` の CLAUDE.md の側)。たまにしか行わない作業に付く決まりも含む | CLAUDE.md |
-| 6 | ときどき行う作業の手順そのもの(ステップの列) | スキル |
-| 7 | 上のどれにも当たらない事実や参照先(期限、外部のダッシュボードの場所) | memory |
+| 1 | 設定ファイルやコードの 1 か所から全部得られ、方針などを何も加えていない | 書かない |
+| 2 | 利用者 1 人だけに当てる好みや環境の事情 | memory、全リポジトリならユーザー単位の `~/.claude/CLAUDE.md` |
+| 3 | 成果物の決まり | ARCHITECTURE |
+| 4 | 特定のパスを触るときだけ要り、compaction の後に読まれなくなっても困らない決まり | `paths` 付きの rules |
+| 5 | ときどき行う作業の手順そのもの | スキル |
+| 6 | 作業の進め方の決まりと、作業に使う参照先 | CLAUDE.md |
+| 7 | 上のどれにも当たらない、古くなる事実 | memory |
 
-- 1 行目は `writing-discipline.md` の「設定ファイルの写し」と同じ 2 条件にする。導けるだけでは「書かない」にしない。読まずに誤る内容は残す。
-- 2 行目の memory は、worktree をまたいで共有される。`CLAUDE.local.md` は作った worktree にしか無いので、ユーザーが名指ししたときだけ置き場にする。
+決めた理由:
+
+- 1 行目は `writing-discipline.md` の「設定ファイルの写し」と同じ 2 条件にする。導けるだけでは書かないにしない。
+- 2 行目は、本人だけに当てると述べた好みと、成果物に現れない好みに限る。「私の好み」と言われても、他の人も従うことになるコミットや PR の決まりは 3 行目以降に当てる。Issue の背景の事例(PR の出し方が memory に入った件)を防ぐためである。
 - 2 行目を 3 行目より先に置くので、「全員に当たるか」で上書きする規定は要らない。
-- 4 行目の補足: `paths` 付きの rules は、compaction の後、該当するファイルに次に触れるまでコンテキストから消える。消えると困る決まりは rules に置かない。rules に残すなら `paths` を外す(毎セッション読まれる)か、5 行目の CLAUDE.md に置く。
-- 5 行目と 6 行目の分け方: 「PR の本文に close を書く」のような手順に付く決まりは 5 行目の CLAUDE.md、「リリースの 8 つのステップ」のような手順の列そのものは 6 行目のスキルとする。
+- memory は worktree をまたいで読まれる。`CLAUDE.local.md` は作った worktree にしか無いので、名指しされたときだけ置き場にする。
+- 5 行目(手順の列)を 6 行目(決まり)より先に置く。手順の列は作業の順序でもあるので、後に置くと 6 行目で確定し、ときどき使う手順が毎セッション読まれる。
+- 作業に使う参照先(ダッシュボードの場所など)は全員が使うので、`document-boundary.md` の作業の進め方に含めて CLAUDE.md に置く。期限のように古くなる事実は CLAUDE.md に置かない。
+- `paths` 付きの rules は compaction の後に消えるので、消えると困る決まりは `paths` を外すか CLAUDE.md に置く。
 
-### 強制の案
+強制の案は、ユーザーが例外を認めないと述べた決まりと、違反すると取り消せない損害が出る決まりに当てる。手段は hook・permissions の deny・lint などの検査・Stop hook とし、文面の置き場に加えて示す。文面を置き換えない。構造の決まりの手段は、#52 で ARCHITECTURE の検査の定義ができたら差し替える(チェックリストに項目を置く)。
 
-文面の置き場とは別に、例外なく守らせる決まりかを判定する。当たるときは、文面の置き場に加えて強制の手段を案として示す。
+## スキル `placing-instructions`
 
-| 決まりの形 | 強制の手段 |
-| --- | --- |
-| 特定のツールの呼び出しやパスへの書き込みを止める | hook または permissions の deny |
-| 構造の決まり(import の方向など) | ARCHITECTURE の検査の定義(#52 で作る。それまでは hook か lint) |
-| 完了の前に必ず行う検査 | Stop hook など |
+置き場: `plugins/metatron/skills/placing-instructions/SKILL.md`。手順の正本は SKILL.md である。
 
-- 強制の手段は文面を置き換えない。文面が無いと、AI は止められた理由と代わりの手段を知らない。
-- hook や permissions の設定の手順は、このスキルでは書かない。案として示し、書き込みはセッションに任せる。
-
-## スキル `placing-instructions` を新設する
-
-置き場: `plugins/metatron/skills/placing-instructions/SKILL.md`
-
-### 発火
-
-- ユーザーが今後の振る舞いを残すよう頼み、置き場を名指ししていないとき(「今後はこうして」「覚えておいて」「ルールにして」「次から〜しないで」)。
-- AI が自分で今後の振る舞いを残そうとしたとき(ユーザーの訂正を受けて memory に保存しようとしたときを含む)。
-- 置き場を名指しした依頼(「ARCHITECTURE の禁止事項に足して」「CLAUDE.md に書いて」)は、このスキルではなく、その置き場を扱う手順が担う。
-
-### 手順
-
-1. 残す内容を、1 つの決まりまたは 1 つの事実ごとに分ける。
-2. 1 件ずつ「文面の置き場」の表に上から当て、置き場・当たった行・理由を示す。強制の案に当たるときは併せて示す。
-3. 置き場の案をユーザーに示し、承認を得る。AI が自分で残そうとした経路でも同じく承認を得る。
-4. 承認された置き場ごとに次のとおり進める。
-   - ARCHITECTURE: ARCHITECTURE があれば `updating-architecture` スキルを起動し、承認済みの依頼された変更として渡す。無ければ、初回生成(`capturing-architecture`)で作るかを尋ね、作らないと決まったら CLAUDE.md を代わりの置き場として示す。
-   - それ以外: スキルは案を示して終え、書き込みはセッションに任せる。
-5. 判定が memory でない内容は memory に保存しない。セッションの自動 memory の規則が保存を促していても、判定を優先する。
-
-出力の形(例示であり、値は実際の内容に置き換える):
-
-```
-1. 「PR の本文に close #<番号> を書く」 → CLAUDE.md(5 行目: 作業の進め方の決まり)
-2. 「plugins/*/scripts/ を手で編集しない」 → ARCHITECTURE の禁止事項(3 行目) / 強制の案: hook で Edit を止める
-```
-
-### 担わないこと
-
-指示書の文面を書く規律、hook の設定の手順、codiel と gh-utility を除く他のプラグインの名前。指示層の規則に従う。
+- 発火: 置き場を名指しせずに今後の振る舞いを残すよう頼まれたときと、AI が訂正を受けて自分で残そうとするとき。置き場の名前を挙げた依頼(「memory に保存して」「CLAUDE.md に書いて」)は発火の対象外とし、スキルの中でも表に当てない。「覚えておいて」「ルールにして」は置き場の名前ではない。
+- 件ごとに判定し、置き場の案を示して承認を得る。否認された件は示し直すか残さないかを尋ね、ユーザーが選んだ置き場はそのまま採る。
+- memory に保存してよいのは、承認された置き場が memory の件だけとする。判定から承認までの間と、残さないと決まった件も保存しない。
+- 既に memory にある内容の置き場が別に決まったら、`MEMORY.md` の索引から項目を探し、その内容の部分だけを消す案を示して承認を得る。Issue の事例は保存した後の訂正だったので、予防だけでは足りない。
+- ARCHITECTURE の件は、memory の整理と他の件を済ませた後に回す。ARCHITECTURE があれば `updating-architecture` に承認済みの依頼された変更として渡す。無ければ初版を作るかを尋ね、作ったら同じ件を `updating-architecture` に渡す。作らないと決まったら CLAUDE.md を示し直す。
+- ARCHITECTURE 以外の書き込みはセッションに任せる。指示書の文面の規律、hook の設定の手順、codiel と gh-utility を除く他のプラグインの名前は持たない。
 
 ## SessionStart の案内に 1 行を加える
 
@@ -82,14 +53,19 @@ ARCHITECTURE の有無に関わらず、次の 1 行を案内文に加える。
 「今後の振る舞いを残すとき(頼まれたときも、自分で memory などに残そうとするときも)は、書く前に Skill ツールで metatron:placing-instructions を起動し、置き場を決める。」
 
 - 注入文は毎セッション読まれる。1 行に留め、判定表の中身は書かない。
-- 順序を保証するのはこの 1 行とスキルの description の文面だけである。memory の保存は Write で行われ、スキルが選ばれない経路が残る。hook で memory への書き込みを止める案は、正当な保存まで止めるので採らない。
+- 順序を保証するのはこの 1 行とスキルの文面だけである。memory の保存は Write で行われ、スキルが選ばれない経路と、スキルが終わった後に自動 memory が同じ内容を保存する経路が残る。hook で memory への書き込みを止める案は、正当な保存まで止めるので採らない。
+
+## `document-boundary.md` の変更
+
+- 作業の進め方に「作業に使う参照先」を加える。判定表の 6 行目が参照するためである。
+- 判定例の「TypeScript は strict を有効にする → ARCHITECTURE」を「ビルド出力は `dist/` に置く → ARCHITECTURE」に差し替える。strict は `tsconfig.json` の 1 項目から全部得られ、判定表の 1 行目(書かない)と食い違っていた。
 
 ## evals
 
-- `plugins/metatron/evals/placing-instructions.json` に 20 問を置く。`should_trigger: true` は 10 問、`false` は 10 問とする。
-- true には、置き場を名指ししない残す依頼、AI の提案への回答(「ルールにしておいて」)、memory に保存しかけた訂正を入れる。
-- false の near-miss は、置き場を名指しした ARCHITECTURE や CLAUDE.md の更新、CLAUDE.md の文面の推敲、hook の設定の依頼、memory の一覧を見る依頼、一回限りの作業指示とする。
-- `updating-architecture.json` の true のうち、ARCHITECTURE を名指しした問は、新しいスキルの false の側と重ならない。
+- `plugins/metatron/evals/placing-instructions.json` に 20 問を置く(true 10・false 10)。
+- true には、置き場を名指ししない残す依頼、AI の提案への回答、memory に保存しかけた訂正を入れる。
+- false の near-miss は、置き場を名指しした更新(ARCHITECTURE・CLAUDE.md・memory)、CLAUDE.md の文面の推敲、hook の設定、memory の一覧を見る依頼、一回限りの作業指示とする。
+- evals は発火だけを測る。どの行に当たるかの正しさは測らない。
 - 本来は eval セットの HTML でユーザーの承認を得てから保存する。ユーザーの不在中に進めるため、承認は PR のレビューで代え、description の改善ループは回さない。
 
 ## 変更するファイル
@@ -97,27 +73,18 @@ ARCHITECTURE の有無に関わらず、次の 1 行を案内文に加える。
 | ファイル | 変更 |
 | --- | --- |
 | `references/instruction-placement.md` | 新規。判定表と強制の案 |
+| `references/document-boundary.md` | 参照先の追加と判定例の差し替え |
 | `skills/placing-instructions/SKILL.md` | 新規 |
 | `evals/placing-instructions.json` | 新規 |
 | `src/inject-context.ts`・`src/__test__/inject-context.test.ts` | 案内の 1 行 |
 | `scripts/inject-context.mjs` | ビルドの差分(`src/` と同じコミット) |
 | `hooks/hooks.json` | description に置き場の案内を加える |
 | `README.md`(metatron・ルート) | スキルの説明と SessionStart の行 |
-| `docs/format-change-checklist.md` | 判定表を変えたときと、`document-boundary.md` を変えたときに判定表を見直す項目 |
+| `docs/format-change-checklist.md` | 判定表を変えたとき、境界を変えたとき、検査の定義ができたときの見直し |
 
 - SKILL.md と references は、編集の前に `prompt-smith:prompt-smith` を起動する。スキルの新設は `prompt-smith:skill-creator` に従う。
 - `.serena/memories/metatron/core.md` の SessionStart の案内とスキルの数は、マージ後に main で更新する。
 - バージョンは `0.6.4-dev` のまま据え置く。origin/main は `0.6.3-dev`、origin/dev は `0.6.4-dev` で、dev に main へ未反映の metatron のバージョンアップがある。Issue の「パッチバージョンを上げ」は CLAUDE.md の規則が優先する。
-
-## PR のレビューで改めた点
-
-- 判定表の 2 行目は成果物に現れないものに限り、どのリポジトリにも当てる好みはユーザー単位の CLAUDE.md に置く。「私の好み」と言われた PR やコミットの決まりが memory に落ちるのを防ぐ。
-- スキル(手順の列)の行を CLAUDE.md(決まり)の行より先に置く。手順の列は作業の進め方でもあり、後に置くと CLAUDE.md で確定する。
-- 事実や参照先は、リポジトリの全員が使うなら CLAUDE.md、1 人だけなら memory とする。
-- ユーザーが置き場を名指しした件は表に当てない。memory に保存しない条件は、判定ではなく承認された置き場で決める。
-- 否認された件と選び直された件の扱い、ARCHITECTURE の件を最後に回す順序、初版の作成後に `updating-architecture` へ渡す経路、既に memory にある内容を消す案を手順に加えた。
-- 強制の案を当てる条件を「ユーザーが例外を認めないと述べた」「違反すると取り消せない損害が出る」とした。
-- スキルが終わった後に自動 memory が同じ内容を保存する経路は、文面では塞げない限界として残る。
 
 ## 完了の条件
 
