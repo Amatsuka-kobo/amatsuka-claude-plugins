@@ -761,7 +761,7 @@ test("ドメインマップ: ファイル走査が打ち切られたら死んだ
   expect(diff.skipped.some((s) => s.includes("死んだ glob"))).toBe(true)
 })
 
-test("セクションの欠落: 7 セクションのうち存在しないものを返す", () => {
+test("セクションの欠落: 8 セクションのうち存在しないものを返す", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({
@@ -773,11 +773,41 @@ test("セクションの欠落: 7 セクションのうち存在しないもの�
   expect(missing).not.toContain("ドメインマップ")
   expect(missing).not.toContain("技術スタック")
   expect(missing.length).toBe(ARCHITECTURE_SECTIONS.length - 2)
-  expect(missing).toContain("ADR 一覧")
+  expect(missing).not.toContain("ADR 一覧")
   expect(missing).toContain("システム概要")
 })
 
-test("セクションの欠落: ARCHITECTURE が無ければ 7 セクションすべて", () => {
+test("legacy_section: ARCHITECTURE に ## ADR 一覧 が残っていれば 1 件出す", () => {
+  const { result } = scanFixture()
+
+  const diff = diffArchitecture({
+    scan: result,
+    sections: {
+      ドメインマップ: "",
+      "ADR 一覧": "### ADR-001: 最初の判断\n\n- 状態: 採用"
+    }
+  })
+
+  const legacy = diff.findings.filter((f) => f.kind === "legacy_section")
+  expect(legacy).toHaveLength(1)
+  expect(legacy[0]?.section).toBe("ADR 一覧")
+  expect(legacy[0]?.subject).toBe("ADR 一覧")
+  // 未記載のセクションとしては数えない。
+  expect(subjectsOf(diff.findings, "section_missing")).not.toContain("ADR 一覧")
+})
+
+test("legacy_section: ## ADR 一覧 が無ければ出さない", () => {
+  const { result } = scanFixture()
+
+  const diff = diffArchitecture({
+    scan: result,
+    sections: { ドメインマップ: "", 技術スタック: "`zod`" }
+  })
+
+  expect(subjectsOf(diff.findings, "legacy_section")).toEqual([])
+})
+
+test("セクションの欠落: ARCHITECTURE が無ければ 8 セクションすべて", () => {
   const { result } = scanFixture()
 
   const diff = diffArchitecture({
@@ -931,7 +961,7 @@ test("決定的に検出できない項目は理由つきで skipped に入る",
   const diff = diffArchitecture({ scan: result, sections: {} })
 
   expect(diff.skipped.some((s) => s.includes("保護パス"))).toBe(true)
-  expect(diff.skipped.some((s) => s.includes("ADR"))).toBe(true)
+  expect(diff.skipped.some((s) => s.includes("ADR"))).toBe(false)
 })
 
 test("diffArchitecture は壊れた入力でも例外を投げない", () => {

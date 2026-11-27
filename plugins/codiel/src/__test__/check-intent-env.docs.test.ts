@@ -27,11 +27,10 @@ test("T14 回帰 7: ドメインマップの読み取り事実は従来どおり
   expect(unreadableOut.projectDocs.domainCount).toBe(0)
 })
 
-test("ケース 11: ARCHITECTURE と GOTCHAS が無ければ projectDocs のパスは null", () => {
+test("ケース 11: ARCHITECTURE が無ければ projectDocs のパスは null", () => {
   const dir = gitRepo()
   const out = runScript(dir)
   expect(out.projectDocs.architecture).toBe(null)
-  expect(out.projectDocs.gotchas).toBe(null)
   expect(out.projectDocs.domainCount).toBe(0)
 })
 
@@ -71,17 +70,15 @@ test("ケース 16b: metatron.config.json で文書パスを変更できる", ()
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "arch/MAIN.md", gotchas: "arch/TRAPS.md" }
+      paths: { architecture: "arch/MAIN.md" }
     })
   )
   write(dir, "arch/MAIN.md", DOMAINS_ARCHITECTURE)
-  write(dir, "arch/TRAPS.md", "# GOTCHAS\n")
   write(dir, "docs/ARCHITECTURE.md", "既定パスの方は使われない\n")
 
   const out = runScript(dir)
   expect(out.docRoot).toBe(dir)
   expect(out.projectDocs.architecture).toBe(path.join(dir, "arch/MAIN.md"))
-  expect(out.projectDocs.gotchas).toBe(path.join(dir, "arch/TRAPS.md"))
   expect(out.projectDocs.domainsReadable).toBe(true)
   expect(out.configWarnings).toEqual([])
 })
@@ -89,12 +86,10 @@ test("ケース 16b: metatron.config.json で文書パスを変更できる", ()
 test("ケース 16c: metatron.config.json が無ければ既定値で解決する", () => {
   const dir = gitRepo()
   write(dir, "docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
-  write(dir, "docs/GOTCHAS.md", "# GOTCHAS\n")
   const out = runScript(dir)
   expect(out.projectDocs.architecture).toBe(
     path.join(dir, "docs/ARCHITECTURE.md")
   )
-  expect(out.projectDocs.gotchas).toBe(path.join(dir, "docs/GOTCHAS.md"))
   // 設定ファイルが無いことはエラーではなく、報告もしない(契約 §2)
   expect(out.configWarnings).toEqual([])
 })
@@ -126,20 +121,17 @@ test("ケース 16e: paths が絶対パス / ルート脱出なら既定値に�
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "../GOTCHAS.md" }
+      paths: { architecture: "/etc/ARCHITECTURE.md" }
     })
   )
   write(dir, "docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
-  write(dir, "docs/GOTCHAS.md", "# GOTCHAS\n")
 
   const out = runScript(dir)
   expect(out.projectDocs.architecture).toBe(
     path.join(dir, "docs/ARCHITECTURE.md")
   )
-  expect(out.projectDocs.gotchas).toBe(path.join(dir, "docs/GOTCHAS.md"))
-  expect(out.configWarnings.length).toBe(2)
+  expect(out.configWarnings.length).toBe(1)
   expect(out.configWarnings[0]).toContain("architecture")
-  expect(out.configWarnings[1]).toContain("gotchas")
 })
 
 // ---------------------------------------------------------------------------

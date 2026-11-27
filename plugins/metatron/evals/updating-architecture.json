@@ -1,9 +1,5 @@
 [
   {
-    "query": "`ADR-0015` として、単一クライアント化に伴い GraphQL から REST へ移行する選択を後から追える形に残したいです。関連する `ADR-0004` は根拠が失われているため、理由を整理して廃止扱いへ変更し、ARCHITECTURE との整合も確認してください。",
-    "should_trigger": true
-  },
-  {
     "query": "ドメインマップの `src/legacy/**` は削除済みで、`src/billing/` はどの区分にも載っていません。実在しない参照先と分類漏れを調べ、現在のディレクトリ構成が正しく表れるよう ARCHITECTURE の該当箇所を改めてください。",
     "should_trigger": true
   },
@@ -28,10 +24,6 @@
     "should_trigger": true
   },
   {
-    "query": "ADR に残して。前提だった方は廃止で",
-    "should_trigger": true
-  },
-  {
     "query": "`infra/terraform/` は運用上、直接変更を受け付けない範囲になったのに、ARCHITECTURE の `## 保護パス` に反映されていません。実際の管理方法と他の一覧を確認し、変更を制限する領域の記述を整合させてください。",
     "should_trigger": true
   },
@@ -45,14 +37,6 @@
   },
   {
     "query": "`/codiel:init` が生成した ARCHITECTURE がドメインマップ 1 節だけの最小構成です。ここから技術スタック・レイヤー構造・テスト方針まで一気に起こして、まともなアーキ文書に育てたい。",
-    "should_trigger": false
-  },
-  {
-    "query": "さっき CLI の絶対パスを推測で組み立てて 3 回失敗しました。次に触るエージェントも踏むので、この罠を台帳に残しておいてください。",
-    "should_trigger": false
-  },
-  {
-    "query": "`docs/GOTCHAS.md` に同じ種類の失敗が 6 件たまっています。スキルか Hook に昇格させるべきか検討して、候補を絞り込んでほしい。",
     "should_trigger": false
   },
   {

@@ -17,8 +17,7 @@
 {
   "version": 1,
   "paths": {
-    "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md"
+    "architecture": "docs/ARCHITECTURE.md"
   }
 }
 ```
@@ -27,9 +26,8 @@
 | --- | --- | --- | --- |
 | `version` | number | `1` | スキーマバージョン |
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
-| `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
 
-未知キーは無視する。`$schema` が書かれていても未知キーとして無視する。この規則により、`paths` にキーを足しても、そのキーを知らない他プラグインの config 実装は追随を要さない。
+未知キーは無視する。`$schema` が書かれていても未知キーとして無視する。廃止したキーの `paths.gotchas` も未知キーと同じく、警告を出さずに無視する。この規則により、`paths` にキーを足しても、そのキーを知らない他プラグインの config 実装は追随を要さない。
 
 ## 壊れた設定の扱い
 
@@ -64,7 +62,7 @@
 
 ## パス解決
 
-- `paths.architecture` / `paths.gotchas` は `docRoot` からの相対パスとして解決する。
+- `paths.architecture` は `docRoot` からの相対パスとして解決する。
 - 判定の前に区切り文字を `/` へ正規化する。
 - 絶対パスは拒否する。POSIX の先頭 `/`、Windows のドライブレター、UNC のいずれも絶対パスとみなす。
 - `..` で `docRoot` の外へ出るパスは拒否する。`docRoot` 自身を指すパスも拒否する。
@@ -76,8 +74,7 @@
 | 文書 | 既定パス | 基準 |
 | --- | --- | --- |
 | ARCHITECTURE | `docs/ARCHITECTURE.md` | `docRoot`。設定で変更できる |
-| GOTCHAS | `docs/GOTCHAS.md` | `docRoot`。設定で変更できる |
 | intent 文書 | `docs/intents/YYYY-MM-DD-<slug>.md` | `repoRoot`(git ルート)。設定を持たない |
 | 持続層 | `docs/intents/domains/<領域>.md` | `repoRoot`(git ルート)。設定を持たない。置き場の正本は codiel `references/intent-format.md` |
 
-ARCHITECTURE と GOTCHAS のパスを固定と前提にしない。参照するときは `get config` の出力から取る。
+ARCHITECTURE のパスを固定と前提にしない。参照するときは `get config` の出力から取る。

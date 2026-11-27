@@ -22,7 +22,6 @@ test("ケース 16f: CRLF 改行の ARCHITECTURE", () => {
     "docs/ARCHITECTURE.md",
     DOMAINS_ARCHITECTURE.replace(/\n/g, "\r\n")
   )
-  write(dir, "docs/GOTCHAS.md", "# GOTCHAS\r\n\r\n## 失敗パターン一覧\r\n")
   expectTwoWayMatch(dir, "CRLF 改行の ARCHITECTURE")
 
   // 2 実装が同じドメイン定義を読めていること(可読性だけでなく中身も確認する)。
@@ -40,7 +39,7 @@ test("ケース 16f: CRLF 改行 + 設定でパスを変えた ARCHITECTURE", ()
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "arch/MAIN.md", gotchas: "arch/TRAPS.md" }
+      paths: { architecture: "arch/MAIN.md" }
     })
   )
   write(dir, "arch/MAIN.md", DOMAINS_ARCHITECTURE.replace(/\n/g, "\r\n"))
@@ -59,14 +58,14 @@ test("ケース 16f: Windows 形式のパス区切り", () => {
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "docs\\arch\\MAIN.md", gotchas: "..\\outside.md" }
+      paths: { architecture: "..\\outside.md" }
     })
   )
   expectTwoWayMatch(dir, "Windows 形式の区切り")
 })
 
 test("ケース 16f: 正当な Windows 形式のパス区切り(ルート脱出を含まない)", () => {
-  // 直前のケースは gotchas が `..\outside.md`(ルート脱出)なので、「正当な区切りでは
+  // 直前のケースは architecture が `..\outside.md`(ルート脱出)なので、「正当な区切りでは
   // 警告が出ない」ことを 2 者で突き合わせていない。1 実装だけが正当な相対パスへ
   // 余計な警告を出しても担保をすり抜ける(契約 §14)。
   const dir = gitRepo()
@@ -75,10 +74,7 @@ test("ケース 16f: 正当な Windows 形式のパス区切り(ルート脱出�
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: {
-        architecture: "docs\\arch\\MAIN.md",
-        gotchas: "docs\\arch\\TRAPS.md"
-      }
+      paths: { architecture: "docs\\arch\\MAIN.md" }
     })
   )
   expectTwoWayMatch(dir, "正当な Windows 形式の区切り")
@@ -92,7 +88,23 @@ test("ケース 16f: 正当な Windows 形式のパス区切り(ルート脱出�
   expect(loadConfig(dir).architecturePath).toBe(
     path.join(dir, "docs/arch/MAIN.md")
   )
-  expect(loadConfig(dir).gotchasPath).toBe(path.join(dir, "docs/arch/TRAPS.md"))
+})
+
+test("ケース 16f: paths.gotchas を含む設定は警告も解決への影響も無い", () => {
+  const dir = gitRepo()
+  write(
+    dir,
+    "metatron.config.json",
+    JSON.stringify({
+      version: 1,
+      paths: { architecture: "arch/MAIN.md", gotchas: "..\\outside.md" }
+    })
+  )
+  expectTwoWayMatch(dir, "paths.gotchas の無視")
+  expect(loadConfig(dir).warnings, "metatron の警告").toEqual([])
+  expect(resolveDocPaths(dir).warnings, "codiel の警告").toEqual([])
+  expect(runScript(dir).configWarnings, "check-intent-env の警告").toEqual([])
+  expect(resolveDocPaths(dir).architecture).toBe(path.join(dir, "arch/MAIN.md"))
 })
 
 test("ケース 16f: 壊れた設定・未知の version・型不整合", () => {
@@ -116,7 +128,7 @@ test("ケース 16f: 壊れた設定・未知の version・型不整合", () => 
   write(
     typed,
     "metatron.config.json",
-    JSON.stringify({ version: 1, paths: { architecture: 42, gotchas: "" } })
+    JSON.stringify({ version: 1, paths: { architecture: 42 } })
   )
   expectTwoWayMatch(typed, "paths の型不整合")
 })

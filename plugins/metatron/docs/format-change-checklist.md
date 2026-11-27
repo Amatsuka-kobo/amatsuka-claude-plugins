@@ -9,31 +9,9 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] セクションを追加・削除したら、`docs/ARCHITECTURE.example.md` に記入例と記入ガイドを置き、`skills/capturing-architecture/SKILL.md` の起草の単位を揃える
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4
 - [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`、`src/check-intent-env.ts`、`references/handoff-contract.md`
-- [ ] ADR エントリの書式はこの節ではなく「ADR の書式」の節を見る(正本は契約 §4 ではなく §6)
-- [ ] `plugins/metatron/src/lib/architecture.ts` の全文の読み直し(`rejectBrokenResult` と、`prepareArchitectureUpdate` の `## ADR 一覧` の照合)と、`references/cli-usage.md` の `stage-architecture` のエラーコード
+- [ ] `plugins/metatron/src/lib/architecture.ts` の全文の読み直し(`rejectBrokenResult`)と、`references/cli-usage.md` の `stage-architecture` のエラーコード
 - [ ] `## 技術スタック` と `## コマンド定義` の規定を変えたら、`src/lib/scan.ts` の `SOURCE_FILE_RES`(`diff-architecture` の `sources`)、`src/lib/__test__/scan.test.ts` の sources のテスト、`skills/updating-architecture/SKILL.md` の手順 2 の sources の読み方、`skills/capturing-architecture/SKILL.md` の起草の材料、`docs/ARCHITECTURE.example.md` を揃える
 - [ ] 書式や執筆規律を変えたら、利用者の既存の文書は `/metatron:audit` で追随させる。README の `/metatron:audit` の説明が変更後の規定と食い違わないかを確かめる
-
-## ADR の書式(`references/architecture-format.md` の `## ADR 一覧`)
-
-- [ ] `plugins/metatron/src/lib/adr.ts` の `ENTRY_HEADING_RE` / `STATUS_LINE_RE` / `STATUS_CHANGE_RE` / `ADR_SEPARATOR` / `ADR_SEPARATOR_LINE_RE` / `normalizeAdrSeparators` / `renderAdrEntryLines`
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の **§6**(ADR の正本は §4 ではない)
-- [ ] `plugins/metatron/references/architecture-format.md` の `## ADR 一覧` の節
-- [ ] `plugins/metatron/docs/ARCHITECTURE.example.md` の `## ADR 一覧`(記入例は 2 件以上を保ち、区切りの見本を含める)
-- [ ] metatron 設計書 `harness-docs/design/2026-08-16-metatron-design.md` §6-6 の書式の写し
-- [ ] `plugins/metatron/src/lib/__test__/adr.test.ts` の固定データ(`THREE_ADRS` / `THREE_ADRS_SEPARATED`)
-- [ ] `plugins/metatron/src/lib/adr.ts` の散文の検査(`rejectStructuralLines`)と全文の読み直し(`verifyAdrResult`)、`references/cli-usage.md` の `stage-adr` のエラーコード
-- [ ] `plugins/metatron/scripts/` を `pnpm run build` で再生成する
-
-## GOTCHAS の書式(`references/gotchas-format.md`)
-
-- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §7
-- [ ] `plugins/metatron/skills/capturing-architecture/SKILL.md` の GOTCHAS の承認節
-- [ ] `plugins/metatron/references/cli-usage.md` の `init-gotchas` と `append-gotcha` の項目
-- [ ] `plugins/metatron/src/lib/gotchas.ts` の `buildAppendedText` の読み直し(追記したエントリのタグとタイトル)
-- [ ] `plugins/metatron/docs/GOTCHAS.example.md` の冒頭の記入ガイド
-- [ ] `plugins/metatron/skills/recording-gotchas/SKILL.md` の `description` と `## 1. 記録の可否`
-- [ ] `plugins/raphael/skills/raphael/SKILL.md` と `plugins/raphael/agents/antibody-synthesizer.md`(棲み分けの節を変えたときだけ確認する)
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
@@ -52,27 +30,6 @@ prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂�
 最後に追随した prompt-smith のコミット: `e12d5736`(2026-11-12)。次の見直しでは、`git log e12d5736..HEAD -- plugins/prompt-smith/skills/prompt-smith/SKILL.md` で差分を確かめる。
 
 - [ ] 削る基準・残す基準・書き方の基準・引くための記述の例外を、prompt-smith の現行規律に追随させる
-- [ ] ARCHITECTURE・GOTCHAS・ADR 向けの特化(適用の強さ、例外の範囲、GOTCHAS エントリを 1〜3 文に収めること、ADR の 3 条件、図の基準)は変えない
-- [ ] 引くための記述の例外は ARCHITECTURE の値を引く先のブロックにだけ当て、GOTCHAS エントリには当てない
-- [ ] `skills/{capturing-architecture,updating-architecture,recording-gotchas}/SKILL.md`、`references/gotchas-format.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
+- [ ] ARCHITECTURE 向けの特化(適用の強さ、図の基準)は変えない
+- [ ] `skills/{capturing-architecture,updating-architecture}/SKILL.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
 - [ ] `plugins/metatron/references/writing-discipline.md` の既存の `##` 見出しの行を変えない
-
-## ADR の 3 条件(`references/writing-discipline.md` の「何を ADR にするか」セクション)
-
-- [ ] `plugins/codiel/references/intent-format.md` に置いた ADR の 3 条件の写しを追随させる
-
-## ADR 候補の取り込み(`references/architecture-format.md` の「ADR 候補の取り込み」セクション)
-
-`[ADR 候補]` の書式と参照形の正本は codiel にある。
-
-- [ ] `plugins/codiel/references/intent-format.md` の「## 持続層」セクションと揃っているかを確かめる
-- [ ] `plugins/metatron/src/lib/adr-candidates.ts` の印・範囲・参照形・縮約の照合(`hash` と書き込み直前の読み直し)・`ADR 候補 ID:` の行の数え方(コードフェンスの外だけ)の実装
-- [ ] `plugins/metatron/references/cli-usage.md` の `### shrink-adr-candidate` に並べたエラーコード
-
-## GOTCHAS 候補の取り込み(`references/gotchas-format.md` の「GOTCHAS 候補の取り込み」セクション)
-
-`[GOTCHAS 候補]` の書式の正本は codiel にある。
-
-- [ ] `plugins/codiel/references/intent-format.md` の「### GOTCHAS 候補」と揃っているかを確かめる
-- [ ] `plugins/metatron/src/lib/gotcha-candidates.ts` の印・範囲・キー・削除の範囲の実装
-- [ ] `plugins/metatron/skills/recording-gotchas/SKILL.md` の「持続層の GOTCHAS 候補の取り込み」

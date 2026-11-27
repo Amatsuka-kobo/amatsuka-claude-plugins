@@ -71,6 +71,12 @@ const ALL_SECTIONS = doc(
   "## テスト方針",
   "",
   "- ユニットテストは vitest で書く。",
+  ""
+)
+
+// ADR 機能の廃止前に作られた文書。末尾に許可リストへ無い `## ADR 一覧` が残る。
+const WITH_LEGACY_ADR = doc(
+  ALL_SECTIONS.replace(/\n$/, ""),
   "",
   "## ADR 一覧",
   "",
@@ -147,7 +153,7 @@ function expectOk(
   return result
 }
 
-test("A1: 9 セクションの分解 — 見出し単位に正しく分割される", () => {
+test("A1: 8 セクションの分解 — 見出し単位に正しく分割される", () => {
   const parsed = parseArchitecture(ALL_SECTIONS)
 
   expect(parsed.error).toBeNull()
@@ -429,17 +435,18 @@ test("A11: タイトルと最初の ## の間に本文 → stage は成功し警
   expect(parseArchitecture(result.text).preamble).toBe(parsed.preamble)
 })
 
-describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧)", () => {
+describe("A12: 新設 2 節(システム概要 / レイヤー構造)", () => {
   test("他と同じ規則で分割される", () => {
     const parsed = parseArchitecture(ALL_SECTIONS)
     expect(findSection(parsed, "レイヤー構造")?.body).toContain(
       "ドメイン層は UI 層を参照しない。"
     )
-    expect(findSection(parsed, "ADR 一覧")?.body).toContain(
+    // `###` は節内の小見出しであり、セクション見出しにしない。
+    const legacy = parseArchitecture(WITH_LEGACY_ADR)
+    expect(findSection(legacy, "ADR 一覧")?.body).toContain(
       "### ADR-001: 最初の判断"
     )
-    // `###` は節内の小見出しであり、セクション見出しにしない。
-    expect(headings(ALL_SECTIONS)).not.toContain("ADR-001: 最初の判断")
+    expect(headings(WITH_LEGACY_ADR)).not.toContain("ADR-001: 最初の判断")
   })
 
   test("レイヤー構造は stage-architecture で置換できる", () => {
@@ -451,31 +458,6 @@ describe("A12: 新設 3 節(システム概要 / レイヤー構造 / ADR 一覧
     expect(untouchedBytes(result.text, "レイヤー構造")).toBe(
       untouchedBytes(ALL_SECTIONS, "レイヤー構造")
     )
-  })
-
-  test("ADR 一覧は低位 API(adr.ts 用)で置換できる", () => {
-    const result = applySectionChanges(ALL_SECTIONS, [
-      {
-        heading: "ADR 一覧",
-        body: doc(
-          "### ADR-001: 最初の判断",
-          "",
-          "- 状態: 採用",
-          "- 決定日: 2026-08-16",
-          "",
-          "### ADR-002: 次の判断",
-          "",
-          "- 状態: 提案"
-        )
-      }
-    ])
-
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(untouchedBytes(result.text, "ADR 一覧")).toBe(
-      untouchedBytes(ALL_SECTIONS, "ADR 一覧")
-    )
-    expect(result.text).toContain("### ADR-002: 次の判断")
   })
 })
 
@@ -499,17 +481,6 @@ test("A13: Mermaid ブロック内の ## を見出しにしない", () => {
 
   expect(headings(withFakeHeading)).toEqual(["システム概要", "規約"])
   expect(parseArchitecture(withFakeHeading).error).toBeNull()
-})
-
-test("A14: heading に ADR 一覧 → エラー。stage-adr へ誘導する", () => {
-  const result = prepareArchitectureUpdate(ALL_SECTIONS, [
-    { heading: "ADR 一覧", body: "### ADR-999: 差し替え" }
-  ])
-
-  expect(result.ok).toBe(false)
-  if (result.ok) return
-  expect(result.error).toBe("adr_heading")
-  expect(result.message).toContain("stage-adr")
 })
 
 test("A15: ~~~ フェンス内の ## も見出しとして扱わない", () => {
@@ -625,9 +596,9 @@ test("A17: 未閉フェンス → 書き込み経路は unclosed_fence で拒否
   if (staged.ok) return
   expect(staged.error).toBe("unclosed_fence")
 
-  // adr.ts が使う低位 API も同様に拒否する(stage-adr の経路)。
+  // 低位 API も同様に拒否する。
   const applied = applySectionChanges(UNCLOSED, [
-    { heading: "ADR 一覧", body: "### ADR-001: x" }
+    { heading: "技術スタック", body: "- biome" }
   ])
   expect(applied.ok).toBe(false)
 })
@@ -862,24 +833,24 @@ describe("追加: metatron:domains の位置と多重定義", () => {
   })
 })
 
-test("A25: ARCHITECTURE_HEADINGS は 9 要素で、保護パス・テスト方針が ADR 一覧の前に並び、規約を含まない", () => {
-  expect(ARCHITECTURE_HEADINGS).toHaveLength(9)
+test("A25: ARCHITECTURE_HEADINGS は 8 要素で、保護パス・テスト方針が末尾に並び、規約と ADR 一覧を含まない", () => {
+  expect(ARCHITECTURE_HEADINGS).toHaveLength(8)
   expect([...ARCHITECTURE_HEADINGS]).not.toContain("規約")
+  expect([...ARCHITECTURE_HEADINGS]).not.toContain("ADR 一覧")
   expect(ARCHITECTURE_HEADINGS.slice(6)).toStrictEqual([
     "保護パス",
-    "テスト方針",
-    "ADR 一覧"
+    "テスト方針"
   ])
 })
 
-test("A24: 保護パス・テスト方針へ body を書ける。無いセクションは ADR 一覧の前に差し込む", () => {
+test("A24: 保護パス・テスト方針へ body を書ける。無いセクションは順序の位置に差し込む", () => {
   for (const heading of ["保護パス", "テスト方針"]) {
     const result = expectOk(
       prepareArchitectureUpdate(ALL_SECTIONS, [{ heading, body: "- 変更後" }])
     )
-    expect(findSection(parseArchitecture(result.text), heading)?.body).toBe(
-      "\n- 変更後\n\n"
-    )
+    expect(
+      findSection(parseArchitecture(result.text), heading)?.body
+    ).toContain("\n- 変更後\n")
   }
   const withoutRules = expectOk(
     prepareArchitectureUpdate(ALL_SECTIONS, [
@@ -893,7 +864,6 @@ test("A24: 保護パス・テスト方針へ body を書ける。無いセクシ
     ])
   )
   const order = headings(added.text)
-  expect(order.indexOf("保護パス")).toBe(order.indexOf("ADR 一覧") - 1)
   expect(order.indexOf("保護パス")).toBe(order.indexOf("コマンド定義") + 1)
 })
 
@@ -951,13 +921,33 @@ test("A23: 許可リストに無い見出しでも remove できる", () => {
   ).toBe(true)
 })
 
-test("A26: remove: true でも ADR 一覧 は adr_heading で拒否する", () => {
-  const result = prepareArchitectureUpdate(ALL_SECTIONS, [
-    { heading: "ADR 一覧", remove: true }
+test("A26: ADR 一覧 の削除(remove: true)は通り、他のセクションのバイト列は変わらない", () => {
+  const result = expectOk(
+    prepareArchitectureUpdate(WITH_LEGACY_ADR, [
+      { heading: "ADR 一覧", remove: true }
+    ])
+  )
+
+  expect(result.applied).toStrictEqual([
+    { heading: "ADR 一覧", mode: "removed" }
   ])
-  expect(result.ok).toBe(false)
-  if (result.ok) return
-  expect(result.error).toBe("adr_heading")
+  expect(headings(result.text)).toEqual([...ARCHITECTURE_HEADINGS])
+  for (const heading of headings(result.text)) {
+    expect(sectionRaw(result.text, heading), heading).toBe(
+      sectionRaw(WITH_LEGACY_ADR, heading)
+    )
+  }
+})
+
+test("A34: ADR 一覧 の差し替え(body)は unknown_heading で拒否する", () => {
+  for (const current of [WITH_LEGACY_ADR, ALL_SECTIONS]) {
+    const result = prepareArchitectureUpdate(current, [
+      { heading: "ADR 一覧", body: "### ADR-999: 差し替え" }
+    ])
+    expect(result.ok).toBe(false)
+    if (result.ok) continue
+    expect(result.error).toBe("unknown_heading")
+  }
 })
 
 test("A27: 複数のセクションをまとめて 1 回の remove で消せる", () => {
@@ -1061,7 +1051,7 @@ describe("A31: 組み上げた後の全文を読み直し、壊れた文書を s
     expect(result.error).toBe("invalid_domains")
   })
 
-  test("回帰: ADR 一覧の無い既存文書の更新と、ADR 一覧の後ろへの追加は通る", () => {
+  test("回帰: ADR 一覧の無い既存文書の更新と、ADR 一覧が残る文書の他セクションの更新は通る", () => {
     const minimal = expectOk(
       prepareArchitectureUpdate(MINIMAL_DOMAINS_ONLY, [
         { heading: "システム概要", body: "概要。" },
@@ -1074,14 +1064,14 @@ describe("A31: 組み上げた後の全文を読み直し、壊れた文書を s
       "コマンド定義"
     ])
 
-    // ADR 一覧が末尾にある文書へ、順序の外の見出しを足す経路は ADR 一覧の末尾に空行を足す。
-    const seven = expectOk(
-      prepareArchitectureUpdate(ALL_SECTIONS, [
+    // ADR 一覧が末尾に残る文書でも、他のセクションの更新で ADR 一覧は変わらない。
+    const legacy = expectOk(
+      prepareArchitectureUpdate(WITH_LEGACY_ADR, [
         { heading: "技術スタック", body: "| 言語 | Go |" }
       ])
     )
-    expect(sectionRaw(seven.text, "ADR 一覧")).toBe(
-      sectionRaw(ALL_SECTIONS, "ADR 一覧")
+    expect(sectionRaw(legacy.text, "ADR 一覧")).toBe(
+      sectionRaw(WITH_LEGACY_ADR, "ADR 一覧")
     )
   })
 })

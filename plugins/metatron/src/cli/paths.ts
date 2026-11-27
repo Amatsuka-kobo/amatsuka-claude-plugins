@@ -37,31 +37,7 @@ export const INPUT_SCHEMAS = {
     input:
       "{ sections: [{ heading, body } | { heading, remove: true }], reason? }",
     headings: [...ARCHITECTURE_HEADINGS],
-    note: "`ADR 一覧` は指定できません。ADR の追加・状態変更は stage-adr を使ってください。remove: true の削除は見出し許可リストの制限を受けません(body との同時指定は拒否)。"
-  },
-  "stage-adr": {
-    add: '{ mode: "add", title, status?, decidedOn?, decidedBy, background, options: [...], conclusion, rationale, impact }',
-    status:
-      '{ mode: "status", id: "ADR-003", status: "採用" | "提案" | "廃止", reason, changedOn? }',
-    note: "採番は CLI が行う。書き込みは commit-architecture --staging-id <id>。"
-  },
-  "append-gotcha": {
-    input:
-      '{ title, date?, task, mistake, cause, countermeasure, promotionCandidate: "Yes" | "No" }',
-    note: "採番は CLI が行う。`## 失敗パターン一覧` の直下(先頭)に挿入する。"
-  },
-  "init-gotchas": {
-    usage: "init-gotchas",
-    note: "入力を取らない。雛形だけの台帳を新規作成する。内容のある台帳があるときは already_exists で拒否する。実行の前にユーザーの承認を得ること。"
-  },
-  "stage-gotcha": {
-    input:
-      '{ id: "GOTCHA-003", title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?: "Yes" | "No", reason? }',
-    note: "既存エントリのフィールドを書き換える差分を作る。id 以外は省略したフィールドの現行の値を保ち、1 つも変わらない入力は拒否する。見出しの日付・番号・タグ、タグの理由行は保つ。title をタグで始められない。書き換える値と title に文字か数字が 1 つも無い(空・記号だけ・ゼロ幅スペースだけ)入力は拒否する。台帳の構造が崩れている(閉じていないコードフェンス、フェンスが複数のエントリにまたがる、崩れて飲み込まれた見出し)ときも拒否する。書き込みは commit-gotchas --staging-id <id>。"
-  },
-  "tag-gotcha": {
-    usage: "tag-gotcha --id GOTCHA-003 --tag 解決済み|対象外 --reason <理由>",
-    note: "見出しへのタグ挿入と末尾の理由行の追記だけを行う。本文は書き換えない。"
+    note: "remove: true の削除は見出し許可リストの制限を受けません(body との同時指定は拒否)。書き込みは commit-architecture --staging-id <id>。"
   }
 } as const
 
@@ -72,26 +48,13 @@ export const USAGE_LINES: readonly string[] = [
   "  get config",
   "  get architecture [--section <見出し>]",
   "  get domains",
-  "  get gotchas [--recent N | --id <ID> | --query <語>] [--exclude-tagged] [--promotion-candidates]",
-  "  get gotchas-template",
-  "  get adr [--id <ID> | --status <状態>]",
   "  scan",
   "  diff-architecture",
-  "  scan-adr-candidates",
-  "  scan-gotcha-candidates",
   "",
   "段階(拒否は非 0):",
   "  stage-architecture --input <path>",
-  "  stage-adr --input <path>",
-  "  stage-gotcha --input <path>",
   "",
   "書き込み(拒否・失敗は非 0):",
   "  commit-architecture --staging-id <id>",
-  "  commit-gotchas --staging-id <id>",
-  "  init-gotchas",
-  "  link-claude-md",
-  "  append-gotcha --input <path>",
-  "  tag-gotcha --id <ID> --tag <解決済み|対象外> --reason <理由>",
-  "  shrink-adr-candidate --file <path> --candidate-id <候補 ID> --adr <ADR-NNN> --hash <走査の hash>",
-  "  remove-gotcha-candidate --file <path> --hash <走査の hash> --file-hash <走査の fileHash>"
+  "  link-claude-md"
 ]

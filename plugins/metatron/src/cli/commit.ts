@@ -1,28 +1,22 @@
-// `commit-architecture --staging-id <id>` と `commit-gotchas --staging-id <id>`
-// (契約 §11、設計書 §7-3・§7-4・§6-3)。
+// `commit-architecture --staging-id <id>`(契約 §12、設計書 §7-3・§7-4)。
 //
-// staging を消費して書き込む処理は 1 つで、受け入れる `kind` だけが違う。
-// `commit-architecture` は stage-architecture と stage-adr の staging を、
-// `commit-gotchas` は stage-gotcha の staging を受ける。取り違えは
-// `staging_kind_mismatch` で拒否し、**staging を消費しない**。
+// stage-architecture の staging を消費して書き込む。staging の種別は `architecture`
+// だけで、廃止した種別の記録は readStaging が読めないものとして拒否する。
 //
-// 書き込みは対象ファイルの `.lock` の下で行う(契約 §11 のロック表)。
-// stagingId 無しでは失敗する ——「差分を見せずにいきなり書く」経路をコマンド体系から
+// 書き込みは対象ファイルの `.lock` の下で行う(契約 §12「書き込みの排他」)。
+// stagingId 無しでは失敗する。「差分を見せずにいきなり書く」経路をコマンド体系から
 // 無くすことが、この 2 段階の目的である。
 
 import { loadConfig } from "../lib/config.js"
-import type { Features } from "../lib/features.js"
-import { GotchaError, withFileLock } from "../lib/gotchas.js"
+import { FileLockError, withFileLock } from "../lib/file-lock.js"
 import {
   type CommitStagingResult,
   commitStaging,
-  readStaging,
-  type StagingKind
+  readStaging
 } from "../lib/staging.js"
 import { stringFlag } from "./args.js"
 import {
   EXIT_USAGE,
-  emitFeatureDisabled,
   emitResult,
   emitWriteFailure,
   messageOf,
@@ -32,14 +26,11 @@ import {
 export interface CommitContext {
   flags: Record<string, string | true>
   cwd: string
-  /** 2 変数の判定結果。main.ts が実行ごとに 1 回読んで渡す。 */
-  features: Features
 }
 
 interface CommitSpec {
-  command: "commit-architecture" | "commit-gotchas"
-  acceptedKinds: readonly StagingKind[]
-  /** missing_staging_id と staging_kind_mismatch のメッセージに載せる案内。 */
+  command: "commit-architecture"
+  /** missing_staging_id のメッセージに載せる案内。 */
   stageHint: string
 }
 
@@ -68,30 +59,6 @@ function runCommit(ctx: CommitContext, spec: CommitSpec): void {
     return
   }
 
-  // kind の照合は staging を消費する前に行う。取り違えた staging は
-  // 消費されないまま残り、正しいコマンドで改めて commit できる。
-  if (!spec.acceptedKinds.includes(found.record.kind)) {
-    emitWriteFailure(
-      command,
-      "staging_kind_mismatch",
-      `この stagingId は kind: "${found.record.kind}" です。${command} が受けるのは ${spec.acceptedKinds.map((kind) => `"${kind}"`).join(" / ")} です。${spec.stageHint}`,
-      {
-        written: false,
-        stagingId: stagingId.trim(),
-        kind: found.record.kind,
-        acceptedKinds: [...spec.acceptedKinds]
-      }
-    )
-    return
-  }
-
-  // ADR の記録が無効なら、stage-adr の staging は消費せずに拒否する。
-  // staging は残るので、変数を有効にしてから同じ id で commit できる。
-  if (found.record.kind === "adr" && !ctx.features.adr) {
-    emitFeatureDisabled(command, "adr")
-    return
-  }
-
   const targetPath = found.record.targetPath
   let result: CommitStagingResult
   try {
@@ -102,7 +69,7 @@ function runCommit(ctx: CommitContext, spec: CommitSpec): void {
       })
     )
   } catch (error) {
-    if (error instanceof GotchaError) {
+    if (error instanceof FileLockError) {
       emitWriteFailure(command, error.code, error.message, {
         written: false,
         stagingId: stagingId.trim(),
@@ -143,16 +110,6 @@ function runCommit(ctx: CommitContext, spec: CommitSpec): void {
 export function runCommitArchitecture(ctx: CommitContext): void {
   runCommit(ctx, {
     command: "commit-architecture",
-    acceptedKinds: ["architecture", "adr"],
-    stageHint:
-      "stage-architecture または stage-adr が返した stagingId を渡してください。"
-  })
-}
-
-export function runCommitGotchas(ctx: CommitContext): void {
-  runCommit(ctx, {
-    command: "commit-gotchas",
-    acceptedKinds: ["gotchas"],
-    stageHint: "stage-gotcha が返した stagingId を渡してください。"
+    stageHint: "stage-architecture が返した stagingId を渡してください。"
   })
 }
