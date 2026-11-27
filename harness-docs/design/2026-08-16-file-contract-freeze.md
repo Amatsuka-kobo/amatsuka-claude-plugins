@@ -253,7 +253,6 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 - `overview` 疑似キーは**廃止**した。冒頭の概要は `システム概要` に統合する。
 - `# ARCHITECTURE` と最初の `##` の間に本文を置かない。既存ファイルにそこへ本文がある場合、
   書き込み経路は**警告を返す**(拒否しない)。
-- `heading` に `ADR 一覧` を指定した場合は**エラー**にし、`stage-adr` を使うようメッセージで誘導する。
 - `## 保護パス` / `## テスト方針` は rules から ARCHITECTURE へ戻した。`## 規約` は ARCHITECTURE で扱わず、プロジェクトの CLAUDE.md に書く。
 - 表に無い見出しのセクションは、`stage-architecture` の `{ heading, remove: true }` で削除できる。`remove: true` は見出し許可リストではなく、対象ファイルにそのセクションがあるかで検証する。ただし `## ADR 一覧` は `remove: true` でも `adr_heading` で拒否する。表に無い見出しを `body` 付きで渡すと `unknown_heading` で拒否する。
 
@@ -292,7 +291,7 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 | 経路 | 挙動 |
 | --- | --- |
-| **ARCHITECTURE の書き込み経路**(`stage-architecture` / `stage-adr`) | **拒否**し `stagingId` を発行しない |
+| **ARCHITECTURE の書き込み経路**(`stage-architecture`) | **拒否**し `stagingId` を発行しない |
 | **rules の書き込み経路**(`stage-rules` / `commit-rules`) | `unclosed_fence` の判定を適用しない。rules の本文は Markdown だがセクション分割の対象ではなく、`prepareRulesUpdate` はフェンスの状態機械を持たない |
 | **読み取り・注入経路** | 処理を続け、未閉フェンス以降を 1 セクション扱いにしたうえで警告を 1 行添える |
 
@@ -301,8 +300,8 @@ Mermaid 図やコードブロックの中の `##` を見出しと誤認しない
 
 | 経路 | 該当するもの |
 | --- | --- |
-| 書き込み経路(第 1 層・フェイルクローズド) | `stage-architecture` / `stage-adr` / `commit-architecture` / `stage-rules` / `commit-rules` / `append-gotcha` / `tag-gotcha` / `stage-gotcha` / `commit-gotchas` |
-| 読み取り・注入経路(第 2 層・フェイルオープン) | `get config` / `get architecture` / `get domains` / `get gotchas` / `get adr` / `scan` / `diff-architecture` / SessionStart 注入 hook / PreToolUse deny hook |
+| 書き込み経路(第 1 層・フェイルクローズド) | `stage-architecture` / `commit-architecture` / `stage-rules` / `commit-rules` / `link-claude-md` |
+| 読み取り・注入経路(第 2 層・フェイルオープン) | `get config` / `get architecture` / `get domains` / `scan` / `diff-architecture` / SessionStart 注入 hook / PreToolUse deny hook |
 
 ### 4-4. `## システム概要` と `## レイヤー構造` の要件
 
@@ -699,22 +698,11 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 | `get config` | 読 |
 | `get architecture [--section <見出し>]` | 読 |
 | `get domains` | 読 |
-| `get gotchas [--recent N \| --id <ID> \| --query <語>] [--exclude-tagged] [--promotion-candidates]` | 読 |
-| `get gotchas-template` | 読 |
-| `get adr [--id <ID> \| --status <状態>]` | 読 |
-| `get rules [--name <名前>]` | 読 |
 | `scan` | 読 |
 | `diff-architecture` | 読 |
 | `stage-architecture --input <path>` | 段階 |
-| `stage-adr --input <path>` | 段階 |
-| `stage-rules --input <path>` | 段階 |
 | `commit-architecture --staging-id <id>` | 書 |
-| `commit-rules --staging-id <id>` | 書 |
-| `init-gotchas` | 書 |
-| `append-gotcha --input <path>` | 書 |
-| `tag-gotcha --id <ID> --tag <解決済み\|対象外> --reason <理由> [--date <YYYY-MM-DD>]` | 書 |
-| `stage-gotcha --input <path>` | 段階 |
-| `commit-gotchas --staging-id <id>` | 書 |
+| `link-claude-md` | 書 |
 
 ### 規約
 
@@ -730,7 +718,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 1. **diff を計算せずに書き込むことはできない。** `commit-architecture` / `commit-rules` は `stagingId` 無しでは失敗する。
 2. **staging は単回使用かつ有効期限つき**(既定 30 分)。
 3. **stage 後に対象ファイルが変化していたら commit は失敗する**(ハッシュ照合、`file_changed`)。
-4. `commit-architecture` は `architecture` / `adr`、`commit-rules` は `rules` の staging だけを受ける。不一致は `staging_kind_mismatch` で拒否する。
+4. `commit-architecture` は `architecture` の staging だけを受ける。不一致は `staging_kind_mismatch` で拒否する。
 
 保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json`。
 プロジェクト内には置かない。
@@ -762,12 +750,11 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 
 フェンシングが要ると判断する材料が出たら、そのときに設計書へ差し戻して決める。
 
+ロックの取得と解放は `plugins/metatron/src/lib/file-lock.ts` の `withFileLock` が行う。
+
 | ロック | 取得するサブコマンド |
 | --- | --- |
-| `<gotchas パス>.lock` | `init-gotchas` / `append-gotcha` / `tag-gotcha` / `commit-gotchas` |
-| `<architecture パス>.lock` | `stage-adr`(採番の読み取り) / `commit-architecture`(書き込み) |
-
-2 文書のロックは独立しており、互いをブロックしない。
+| `<architecture パス>.lock` | `commit-architecture`(書き込み) |
 
 ---
 
@@ -814,9 +801,7 @@ process.exit(0)
 - 組み立て方は、**hook 自身の位置(`import.meta.url`)からプラグインルートを求め、
   その配下の `scripts/metatron.mjs` を連結する**。これにより、AI は metatron が
   どこにインストールされているかを知らなくても CLI を呼べる。
-- 拒否メッセージには必ずこの絶対パスを含める。対象が ARCHITECTURE か GOTCHAS かで
-  案内するサブコマンドを出し分け、ARCHITECTURE の場合は
-  「ADR の追加・状態変更は `stage-adr` を使う(`stage-architecture` では拒否される)」を 1 行添える。
+- 拒否メッセージには必ずこの絶対パスを含める。ARCHITECTURE への直接編集は `updating-architecture` スキルの起動へ誘導する。
 
 ### 失敗時の方針(プラグインごとに異なる。混同しない)
 
