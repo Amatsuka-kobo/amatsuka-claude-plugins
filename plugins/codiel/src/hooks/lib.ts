@@ -148,6 +148,15 @@ function existsSafe(target: string): boolean {
   }
 }
 
+function hasDocConfig(dir: string): boolean {
+  return existsSafe(path.join(dir, DOC_CONFIG_FILENAME))
+}
+
+// git を実行できないときの境界。worktree の `.git` はファイルなので、種別を問わない。
+function existsGit(dir: string): boolean {
+  return existsSafe(path.join(dir, ".git"))
+}
+
 // 契約 §3 規則 1 の段 2。必ず `git rev-parse --show-toplevel` を実行して得る。
 // `.git` の手作業探索で代替しない(worktree の .git ファイル形式や
 // GIT_CEILING_DIRECTORIES の挙動を再現できず、実装間で結果が割れるため)。
@@ -183,20 +192,26 @@ function gitToplevel(cwd: string): string | null {
  *
  * 段 1 の探索は git の toplevel(段 2 の値)で打ち切る。親リポジトリの中に置いた
  * worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
+ * リポジトリの外に置いた設定ファイルは拾わない。
+ * git を実行できないときは、`.git`(ディレクトリかファイル)を持つディレクトリを境界にする。
+ * 開始ディレクトリに設定ファイルがあれば、git を実行せずにそこを返す。
  *
  * codiel 固有資産のルートを探すときは findProjectRoot を使う(基準が異なる)。
  */
 export function findDocRoot(startDir?: string): string {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()))
 
+  // 段 1 の最初の候補で決まるときは git を実行しない。
+  if (hasDocConfig(start)) return start
+
   const top = gitToplevel(start)
 
-  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。git の toplevel 自身も候補に含め、
-  // その先へは進まない。git 管理外ならファイルシステムのルートまで辿る。
+  // 段 1: 開始ディレクトリから祖先を辿る。git の toplevel 自身も候補に含め、その先へは
+  // 進まない。git を実行できないときは `.git` を持つディレクトリで打ち切る。
   let dir = start
   while (true) {
-    if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir
-    if (top && dir === top) break
+    if (hasDocConfig(dir)) return dir
+    if (top ? dir === top : existsGit(dir)) break
     const parent = path.dirname(dir)
     // ファイルシステムのルートに達したら打ち切る。
     if (parent === dir) break

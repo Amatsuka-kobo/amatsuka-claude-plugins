@@ -182,6 +182,8 @@ test("I13: metatron.config.json が無ければ作るよう促す", () => {
   write(root, "docs/ARCHITECTURE.md", ARCH)
   write(root, "CLAUDE.md", "@docs/ARCHITECTURE.md\n")
   expect(mustInject(root)).toContain("metatron.config.json が無く")
+  // 文書の読み込みには影響しないので、画面には出さない
+  expect(systemMessageOf(root)).toBe(undefined)
 })
 
 test("I9: 旧 config の paths.rulesDir に残る rules も移行を促し、画面にも出す", () => {
@@ -197,6 +199,24 @@ test("I9: 旧 config の paths.rulesDir に残る rules も移行を促し、画
   )
   expect(mustInject(root)).toContain("廃止した rules(ai/rules/)が残っている。")
   expect(systemMessageOf(root)).toContain("ai/rules/")
+})
+
+test('I15: 旧版が拒否した paths.rulesDir("." など)なら、既定の置き場の旧 rules を移行の対象にする', () => {
+  for (const rulesDir of [".", "./", "", "/etc/rules", "../outside"]) {
+    const root = project({
+      "docs/ARCHITECTURE.md": ARCH,
+      "CLAUDE.md": LINKED_CLAUDE_MD,
+      ".claude/rules/metatron/conventions.md": "# 規約\n"
+    })
+    write(
+      root,
+      "metatron.config.json",
+      JSON.stringify({ version: 1, paths: { rulesDir } })
+    )
+    expect(mustInject(root), rulesDir).toContain(
+      "廃止した rules(.claude/rules/metatron/)が残っている。"
+    )
+  }
 })
 
 test("I10: 移行が要らなければ画面への表示は出さない", () => {

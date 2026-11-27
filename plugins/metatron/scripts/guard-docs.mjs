@@ -29,6 +29,13 @@ function hasConfigFile(dir) {
     return false;
   }
 }
+function existsGit(dir) {
+  try {
+    return fs.existsSync(path.join(dir, ".git"));
+  } catch {
+    return false;
+  }
+}
 function gitToplevel(cwd) {
   try {
     const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
@@ -47,11 +54,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  if (hasConfigFile(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    if (top && dir === top) break;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;

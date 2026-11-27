@@ -43,7 +43,7 @@ export function runLinkClaudeMd(ctx: LinkContext): void {
   try {
     // codiel は metatron.config.json の有無で metatron の利用を判定する。既定のパスのまま
     // 使うプロジェクトにも目印を残すため、無ければ最小の設定を作る。既存の設定は上書きしない。
-    // CLAUDE.md より先に作り、失敗したときは何も書き換えずに終える。
+    // CLAUDE.md より先に作り、CLAUDE.md の書き込みに失敗したときは作った設定ファイルを消す。
     configCreated = createConfigIfMissing(config.configPath)
     const result = linkClaudeMd(config.docRoot, relatives)
     emitResult(command, {
@@ -56,9 +56,25 @@ export function runLinkClaudeMd(ctx: LinkContext): void {
       warnings: config.warnings
     })
   } catch (error) {
+    // この実行で作った設定ファイルだけを戻す。既存の設定は触らない。
+    let configRemoveError: string | undefined
+    if (configCreated) {
+      try {
+        fs.rmSync(config.configPath, { force: true })
+        configCreated = false
+      } catch (removeError) {
+        configRemoveError = messageOf(removeError)
+      }
+    }
     emitWriteFailure(command, "write_failed", messageOf(error), {
       written: configCreated,
-      configCreated
+      configCreated,
+      ...(configRemoveError === undefined
+        ? {}
+        : {
+            configRemoveFailed: true,
+            configRemoveError: `作った設定ファイル ${config.configPath} を消せませんでした: ${configRemoveError}`
+          })
     })
   }
 }

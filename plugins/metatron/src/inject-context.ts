@@ -39,13 +39,25 @@ function legacyRulesDir(config: ResolvedConfig): string {
       paths?: { rulesDir?: unknown }
     }
     const dir = raw?.paths?.rulesDir
-    if (
-      typeof dir === "string" &&
-      dir !== "" &&
-      !path.isAbsolute(dir) &&
-      !dir.split(/[\\/]/).includes("..")
-    ) {
-      return dir.replace(/\/+$/, "")
+    // 旧版の解決(契約 §3 規則 2・3)が受け付けた値だけを使う。旧版が拒否した値
+    // (空文字列・絶対パス・"." のように docRoot そのものを指す値・ルート外)のときは、
+    // 旧版と同じく既定の置き場を見る。
+    if (typeof dir === "string" && dir.trim() !== "") {
+      const value = dir.replace(/\\/g, "/")
+      const looksAbsolute =
+        path.isAbsolute(value) ||
+        /^[A-Za-z]:\//.test(value) ||
+        value.startsWith("//")
+      const relative = path.relative(
+        config.docRoot,
+        path.resolve(config.docRoot, value)
+      )
+      const escapes =
+        relative === "" ||
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative)
+      if (!looksAbsolute && !escapes) return relative.split(path.sep).join("/")
     }
   } catch {
     // 設定が無い・読めないときは既定の置き場を見る。
@@ -96,7 +108,7 @@ function migrationLines(
   config: ResolvedConfig,
   docs: string[],
   hasArchitecture: boolean
-): string[] {
+): { lines: string[]; screen: string[] } {
   const lines: string[] = []
   const rulesDir = legacyRulesDir(config)
   if (
@@ -108,7 +120,13 @@ function migrationLines(
       `廃止した rules(${rulesDir}/)が残っている。/metatron:update で ARCHITECTURE と CLAUDE.md へ移行する。`
     )
   }
-  if (!hasArchitecture) return lines
+  if (!hasArchitecture) return { lines, screen: lines }
+  // 設定ファイルが無いことは文書の読み込みに影響しないので、画面には出さずモデルにだけ伝える。
+  const screen = [...lines]
+  const both = (line: string): void => {
+    lines.push(line)
+    screen.push(line)
+  }
   if (!fs.existsSync(config.configPath)) {
     lines.push(
       "metatron.config.json が無く、codiel が metatron の利用を判定できない。/metatron:update で作る。"
@@ -119,16 +137,16 @@ function migrationLines(
   const unlinkable = missing.filter((rel) => !isMentionablePath(rel))
   const linkable = missing.filter((rel) => isMentionablePath(rel))
   if (linkable.length > 0) {
-    lines.push(
+    both(
       `CLAUDE.md に ${linkable.map((rel) => `@${rel}`).join(" と ")} が無く、文書が読み込まれない。/metatron:update で追記する。`
     )
   }
   if (unlinkable.length > 0) {
-    lines.push(
+    both(
       `${unlinkable.join(" と ")} は空白か制御文字を含むため、@メンションで読み込めない。metatron.config.json の paths を空白の無いパスに変える。`
     )
   }
-  return lines
+  return { lines, screen }
 }
 
 function build(
@@ -154,17 +172,17 @@ function build(
     )
   }
   const migration = migrationLines(config, docs, hasArchitecture)
-  lines.push(...migration)
+  lines.push(...migration.lines)
   // 設定由来の理由(壊れた設定・未知 version・パス不正)は伏せない(契約 §2)。
   for (const warning of config.warnings.slice(0, MAX_WARNING_LINES)) {
     lines.push(`※注意: ${warning}`)
   }
-  // 移行が要る状態は文書が読み込まれない状態なので、モデル経由でなく画面にも出す。
+  // 文書が読み込まれない状態(旧 rules・@メンションの欠落)は、モデル経由でなく画面にも出す。
   return {
     content: `${lines.join("\n")}\n`,
-    ...(migration.length === 0
+    ...(migration.screen.length === 0
       ? {}
-      : { systemMessage: `metatron: ${migration.join(" ")}` })
+      : { systemMessage: `metatron: ${migration.screen.join(" ")}` })
   }
 }
 

@@ -1042,3 +1042,34 @@ test("R4: 親の設定ファイルを git の境界を越えて拾わず、metat
   expectSameResolution(sub, "親の中の worktree")
   expect(resolveDocPaths(sub).docRoot).toBe(inner)
 })
+
+// git を実行できない環境を作る。PATH を空にすると spawnSync("git") が失敗する。
+function withoutGit<T>(fn: () => T): T {
+  const saved = process.env.PATH
+  process.env.PATH = ""
+  try {
+    return fn()
+  } finally {
+    process.env.PATH = saved
+  }
+}
+
+test("R1-g: git を実行できないときの探索の境界が metatron と一致する", () => {
+  // 開始ディレクトリに設定がある
+  const own = mkTmp("lib-nogit-own-")
+  const pkg = path.join(own, "pkg")
+  fs.mkdirSync(pkg, { recursive: true })
+  writeConfig(pkg, { version: 1 })
+  withoutGit(() => expectSameResolution(pkg, "開始ディレクトリの設定"))
+  expect(withoutGit(() => findDocRoot(pkg))).toBe(fs.realpathSync(pkg))
+
+  // .git(ファイル)を持つ worktree の外側に設定がある
+  const outer = mkTmp("lib-nogit-wt-")
+  writeConfig(outer, { version: 1 })
+  const wt = path.join(outer, "worktrees", "wt")
+  const start = path.join(wt, "src")
+  fs.mkdirSync(start, { recursive: true })
+  fs.writeFileSync(path.join(wt, ".git"), "gitdir: /nonexistent\n")
+  withoutGit(() => expectSameResolution(start, ".git の境界"))
+  expect(withoutGit(() => findDocRoot(start))).toBe(fs.realpathSync(start))
+})

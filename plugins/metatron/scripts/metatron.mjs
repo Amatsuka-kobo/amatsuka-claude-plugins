@@ -619,6 +619,13 @@ function hasConfigFile(dir) {
     return false;
   }
 }
+function existsGit(dir) {
+  try {
+    return fs.existsSync(path.join(dir, ".git"));
+  } catch {
+    return false;
+  }
+}
 function gitToplevel(cwd) {
   try {
     const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
@@ -637,11 +644,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  if (hasConfigFile(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    if (top && dir === top) break;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -2480,7 +2488,7 @@ function isMentionablePath(rel) {
 }
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
-  const withoutComments = text.replace(/^\uFEFF/, "").replace(/<!--[\s\S]*?-->/g, " ");
+  const withoutComments = text.replace(/^\uFEFF/, "").replace(/`[^`\n]*`|<!--[\s\S]*?-->/g, (m) => m[0] === "`" ? m : " ");
   let fence = null;
   for (const line of withoutComments.split(/\r?\n/)) {
     const marker = /^\s*(`{3,}|~{3,})/.exec(line);
@@ -2488,7 +2496,8 @@ function mentions(text) {
       const char = marker[1][0];
       const length = marker[1].length;
       if (fence === null) fence = { char, length };
-      else if (char === fence.char && length >= fence.length) fence = null;
+      else if (char === fence.char && length >= fence.length && line.trim() === marker[1])
+        fence = null;
       continue;
     }
     if (fence !== null) continue;
@@ -2577,9 +2586,22 @@ function runLinkClaudeMd(ctx) {
       warnings: config.warnings
     });
   } catch (error) {
+    let configRemoveError;
+    if (configCreated) {
+      try {
+        fs7.rmSync(config.configPath, { force: true });
+        configCreated = false;
+      } catch (removeError) {
+        configRemoveError = messageOf(removeError);
+      }
+    }
     emitWriteFailure(command, "write_failed", messageOf(error), {
       written: configCreated,
-      configCreated
+      configCreated,
+      ...configRemoveError === void 0 ? {} : {
+        configRemoveFailed: true,
+        configRemoveError: `\u4F5C\u3063\u305F\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB ${config.configPath} \u3092\u6D88\u305B\u307E\u305B\u3093\u3067\u3057\u305F: ${configRemoveError}`
+      }
     });
   }
 }

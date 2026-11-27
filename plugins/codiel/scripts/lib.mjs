@@ -79,6 +79,12 @@ function existsSafe(target) {
     return false;
   }
 }
+function hasDocConfig(dir) {
+  return existsSafe(path.join(dir, DOC_CONFIG_FILENAME));
+}
+function existsGit(dir) {
+  return existsSafe(path.join(dir, ".git"));
+}
 function gitToplevel(cwd) {
   try {
     const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
@@ -97,11 +103,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  if (hasDocConfig(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
-    if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir;
-    if (top && dir === top) break;
+    if (hasDocConfig(dir)) return dir;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
