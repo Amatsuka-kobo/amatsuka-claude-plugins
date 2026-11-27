@@ -16,6 +16,11 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] ARCHITECTURE と CLAUDE.md の境界(`references/document-boundary.md`)を変えたら、`skills/capturing-architecture/SKILL.md` と `skills/updating-architecture/SKILL.md` の参照と起草の規律を揃える
 - [ ] 行数の目安(`src/lib/architecture.ts` の `ARCHITECTURE_LINE_LIMIT`)を変えたら、`references/cli-usage.md` の `get architecture`・`stage-architecture`、README の行数の説明、CLI のテスト S16 を揃える
 
+## 指示の置き場の判定表(`references/instruction-placement.md`)
+
+- [ ] 判定表の行を変えたら、`skills/placing-instructions/SKILL.md` の提示の形の例と、README の「指示の置き場の判定」を揃える
+- [ ] `references/document-boundary.md` の境界を変えたら、判定表の 3 行目と 5 行目が参照する区別と食い違わないかを確かめる
+
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
 この規則を変更したら、次をすべて更新して 2 者比較テストを通す。
