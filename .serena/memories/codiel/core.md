@@ -1,4 +1,4 @@
-`plugins/codiel` (1.1.6) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+`plugins/codiel` (1.1.7) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
 design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
 ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
 local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
@@ -19,6 +19,7 @@ local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/
 - 1.1.4(2026-11-27、Issue #46、PR #61): metatron の ADR 機能と GOTCHAS 機能の削除に追随した。`check-intent-env` の `projectDocs` は `architecture`・`metatronConfig`・`domainsReadable`・`domainCount` だけになり、`hooks/lib.ts` から `DEFAULT_GOTCHAS_PATH`・`DocPaths.gotchas`・`projectDocs.gotchas` を消した。`paths.gotchas` は未知キーとして警告なしで無視する。metatron との 2 者比較テストは gotchas を比べない。README・DESIGN・`/codiel:init`・`initializing-harness` から「GOTCHAS は metatron の台帳」の記述を消した。
 - 1.1.5(2026-11-27、Issue #47、PR #62): intent-sync が持続層の領域ファイルの古い記述を洗い出し、承認を得て改訂・削除する。手順は `skills/syncing-intents/references/persistent-layer.md`(洗い出し=手順 4、`mark-ask --kind confirm` での確認=手順 5、書き込み=手順 6)、設計書は `harness-docs/design/2026-11-27-codiel-intent-sync-revision-design.md`。対象は取り込み先の領域の `## 目的`・`## 意図的な制約`・`## 非ゴール`・`## 失敗の記録`。制約は今回の intent と design.md で合意した内容だけで古さを判定し、run の差分とだけ食い違うものは「違反」として別に聞く。結果は report.md の行(`写し`・`取り込み`・`改訂`・`削除`・`見送り`・`書かずに終えた矛盾`・`違反`)と領域ファイルの `## 由来` の添え書きに残す。残った指摘は Issue #67。
 - 1.1.6(2026-11-27、Issue #43、PR #69): 契約 §3 規則 1 の変更を `findDocRoot` に写した。開始ディレクトリに `metatron.config.json` があれば git を実行しない。git を実行できないときは `.git` を持つディレクトリで探索を打ち切る。`hooks/__test__/lib.test.ts` にケースを足し、metatron との一致は 2 者比較テストが見る。
+- 1.1.7(2026-11-27、Issue #67): PR #62 の 3 回目のレビューで残った指摘を直した。report.md の領域の行は `取り込み` を最後にして 1 回の追記で書く。違反の答えは `## 合意済み事項`・`## 変更履歴`・`## TOBE` へ反映し(制約の表には足さない)、制約の改訂を断ったら合意の行だけ消して履歴に取り消しの行を足す。incident の除外は同じ slug の全 try の `写し:` の行で見る。箇条書きへの移行を断ったセクションは `## 由来` に `見送り:` を添え、後の run は案を出さない。
 
 ## run のブランチは `codiel/<slug>` の 1 本(2026-10-05)
 
