@@ -14,7 +14,6 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] `## 技術スタック` と `## コマンド定義` の規定を変えたら、`src/lib/scan.ts` の `SOURCE_FILE_RES`(`diff-architecture` の `sources`)、`src/lib/__test__/scan.test.ts` の sources のテスト、`skills/updating-architecture/SKILL.md` の手順 2 の sources の読み方、`skills/capturing-architecture/SKILL.md` の起草の材料、`docs/ARCHITECTURE.example.md` を揃える
 - [ ] 書式や執筆規律を変えたら、利用者の既存の文書を追随させる。見出しの変更は `/metatron:update` の旧構成の移行で、書き方の変更は `/metatron:audit` で追随させる。見出しを廃止したら `LEGACY_HEADINGS` と `LEGACY_SECTIONS` に旧見出しを足し、`skills/updating-architecture/SKILL.md` の旧構成の移行と README の `/metatron:update` と `/metatron:audit` の説明が変更後の規定と食い違わないかを確かめる
 - [ ] ARCHITECTURE と CLAUDE.md の境界(`references/document-boundary.md`)を変えたら、`skills/capturing-architecture/SKILL.md` と `skills/updating-architecture/SKILL.md` の参照と起草の規律を揃える
-
 - [ ] 行数の目安(`src/lib/architecture.ts` の `ARCHITECTURE_LINE_LIMIT`)を変えたら、`references/cli-usage.md` の `get architecture`・`stage-architecture`、README の行数の説明、CLI のテスト S16 を揃える
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
