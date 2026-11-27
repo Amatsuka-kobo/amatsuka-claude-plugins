@@ -24,11 +24,10 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 などの不足分が追記されます。内部では `initializing-harness` スキルの手順に従います。
 
 Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
-前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
-検討してください。ARCHITECTURE と GOTCHAS は metatron の資産で、読み方と記録の仕方は metatron が伝えます。
+前提をプロジェクトに持たせたい場合は、ARCHITECTURE を専門に扱う metatron の併用を
+検討してください。ARCHITECTURE は metatron の資産で、読み方と更新の仕方は metatron が伝えます。
 Codiel が使うのは、ARCHITECTURE のドメインマップ(ドメインごとの境界の判定に使う)と、review で
 ARCHITECTURE と実装の食い違いを見ることの 2 つだけです。パスは `metatron.config.json` で変更できます。
-Codiel 自身は失敗を GOTCHAS へ記録しません。
 
 Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに 1 ファイルで、intent をまたいで効き続ける
 意図的な制約と、run で起きた失敗の記録を蓄積します。intent-sync は、今回の run の変更で古くなった

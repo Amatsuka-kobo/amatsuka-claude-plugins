@@ -1,6 +1,6 @@
-// プロジェクトの CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記する。
+// プロジェクトの CLAUDE.md へ ARCHITECTURE の @メンションを追記する。
 //
-// 両文書は CLAUDE.md の @メンションで毎セッション読み込まれる(SessionStart の hook は本文を注入しない)。
+// ARCHITECTURE は CLAUDE.md の @メンションで毎セッション読み込まれる(SessionStart の hook は本文を注入しない)。
 // 既に書かれている @メンションは足さない。CLAUDE.md の他の行は書き換えない。
 // 判定の対象は docRoot の CLAUDE.md と .claude/CLAUDE.md だけである。
 // 他のファイル経由の import・CLAUDE.local.md・親ディレクトリの CLAUDE.md は見ない。

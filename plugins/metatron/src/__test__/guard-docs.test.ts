@@ -7,7 +7,6 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { expect, test } from "vitest"
-import { ADR_ENV, type Features, GOTCHAS_ENV } from "../lib/features.js"
 import { runTs } from "../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../guard-docs.ts", import.meta.url))
@@ -16,7 +15,6 @@ const CLI = path.join(PLUGIN_ROOT, "scripts", "metatron.mjs")
 // 実装と同じ文面を独立に持つ。書き込みの CLI 手順の代わりに、スキルへ誘導する。
 const SKILL_LINE =
   "更新は Skill ツールで metatron:updating-architecture を起動し、その手順で行ってください。"
-const ADR_SKILL_LINE = "ADR の追加・状態変更も同じスキルで行ってください。"
 
 interface HookOutput {
   hookEventName: string
@@ -24,27 +22,9 @@ interface HookOutput {
   permissionDecisionReason: string
 }
 
-const BOTH_ON: Features = { adr: true, gotchas: true }
-
-// 2 変数はテストを起動したシェルから継承せず、呼び出し側が features で明示する。無効な側は未設定にする。
-function hookEnv(features: Features): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  delete env[ADR_ENV]
-  delete env[GOTCHAS_ENV]
-  if (features.adr) env[ADR_ENV] = "1"
-  if (features.gotchas) env[GOTCHAS_ENV] = "1"
-  return env
-}
-
 // stdout が空 = 素通し。deny のときだけ hookSpecificOutput を返す。
-function hook(
-  payload: unknown,
-  features: Features = BOTH_ON
-): HookOutput | null {
-  const out = runTs(HOOK, [], {
-    input: JSON.stringify(payload),
-    env: hookEnv(features)
-  })
+function hook(payload: unknown): HookOutput | null {
+  const out = runTs(HOOK, [], { input: JSON.stringify(payload) })
   if (out.trim() === "") return null
   return (JSON.parse(out) as { hookSpecificOutput: HookOutput })
     .hookSpecificOutput
@@ -100,41 +80,20 @@ test("D1: ARCHITECTURE への Write は deny。理由はスキルへ誘導し、
   // 書き込みの CLI 手順を見せると、スキルを起動せずに直行する。
   expect(reason).not.toContain("stage-architecture")
   expect(reason).not.toContain("commit-architecture")
-  // ADR の誘導を必ず添える(これが無いと二度目の拒否に当たる)。
-  expect(reason).toContain(ADR_SKILL_LINE)
+  // ADR・GOTCHAS の案内は出さない(機能ごと廃止した)。
+  expect(reason).not.toContain("ADR")
+  expect(reason.replaceAll(CLI, "")).not.toMatch(/gotcha/i)
   expect(reason).toContain("/metatron:init")
   expect(reason).toContain("docs/ARCHITECTURE.md")
 })
 
-test("D2: GOTCHAS への Edit は deny。理由に append-gotcha --input と tag-gotcha を含む", () => {
-  const root = project()
-  const r = edit(root, path.join(root, "docs/GOTCHAS.md"))
+test("D3: ARCHITECTURE への NotebookEdit は notebook_path を見て deny", () => {
+  const root = project(
+    '{"version":1,"paths":{"architecture":"docs/ARCH.ipynb"}}'
+  )
+  const r = notebookEdit(root, path.join(root, "docs/ARCH.ipynb"))
   expect(r?.permissionDecision).toBe("deny")
-  const reason = r?.permissionDecisionReason ?? ""
-  expect(reason).toContain(`node ${CLI} append-gotcha --input`)
-  expect(reason).toContain(`node ${CLI} tag-gotcha --id`)
-  expect(reason).toContain("--tag")
-  expect(reason).toContain("--reason")
-  expect(reason).toContain("docs/GOTCHAS.md")
-  // GOTCHAS の案内に ARCHITECTURE の 2 段階コミットを混ぜない。
-  expect(reason).not.toContain("stage-architecture")
-})
-
-test("D2b: GOTCHAS の拒否理由に init-gotchas と append-gotcha の両方を含む", () => {
-  const root = project()
-  const reason =
-    write(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecisionReason ??
-    ""
-
-  expect(reason).toContain(`node ${CLI} init-gotchas`)
-  expect(reason).toContain(`node ${CLI} append-gotcha --input`)
-})
-
-test("D3: GOTCHAS への NotebookEdit は notebook_path を見て deny", () => {
-  const root = project('{"version":1,"paths":{"gotchas":"docs/GOTCHAS.ipynb"}}')
-  const r = notebookEdit(root, path.join(root, "docs/GOTCHAS.ipynb"))
-  expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).toContain("append-gotcha --input")
+  expect(r?.permissionDecisionReason).toContain(SKILL_LINE)
 })
 
 // NotebookEdit は file_path と notebook_path の両方を持ちうる。片方だけを見ると
@@ -152,21 +111,25 @@ function notebookEditBoth(
 }
 
 test("D3b: NotebookEdit で file_path が空文字列でも notebook_path が正本なら deny", () => {
-  const root = project('{"version":1,"paths":{"gotchas":"docs/GOTCHAS.ipynb"}}')
-  const r = notebookEditBoth(root, "", path.join(root, "docs/GOTCHAS.ipynb"))
+  const root = project(
+    '{"version":1,"paths":{"architecture":"docs/ARCH.ipynb"}}'
+  )
+  const r = notebookEditBoth(root, "", path.join(root, "docs/ARCH.ipynb"))
   expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).toContain("append-gotcha --input")
+  expect(r?.permissionDecisionReason).toContain(SKILL_LINE)
 })
 
 test("D3c: NotebookEdit で file_path が無関係でも notebook_path が正本なら deny", () => {
-  const root = project('{"version":1,"paths":{"gotchas":"docs/GOTCHAS.ipynb"}}')
+  const root = project(
+    '{"version":1,"paths":{"architecture":"docs/ARCH.ipynb"}}'
+  )
   const r = notebookEditBoth(
     root,
     path.join(root, "scratch.ipynb"),
-    path.join(root, "docs/GOTCHAS.ipynb")
+    path.join(root, "docs/ARCH.ipynb")
   )
   expect(r?.permissionDecision).toBe("deny")
-  expect(r?.permissionDecisionReason).toContain("append-gotcha --input")
+  expect(r?.permissionDecisionReason).toContain(SKILL_LINE)
 })
 
 test("D3d: file_path が正本で notebook_path が無関係でも deny(逆方向)", () => {
@@ -178,17 +141,15 @@ test("D3d: file_path が正本で notebook_path が無関係でも deny(逆方�
   )
   expect(r?.permissionDecision).toBe("deny")
   expect(r?.permissionDecisionReason).toContain(SKILL_LINE)
-  expect(r?.permissionDecisionReason).toContain(ADR_SKILL_LINE)
 
-  // 2 つのフィールドが別々の正本に当たる場合は ARCHITECTURE の案内を出す
-  // (実装側のコメントに選択理由を残してある)。
+  // 片方が GOTCHAS のパスでも、ARCHITECTURE に当たる側で deny する。
   const both = notebookEditBoth(
     root,
     path.join(root, "docs/ARCHITECTURE.md"),
     path.join(root, "docs/GOTCHAS.md")
   )
   expect(both?.permissionDecision).toBe("deny")
-  expect(both?.permissionDecisionReason).toContain(ADR_SKILL_LINE)
+  expect(both?.permissionDecisionReason).toContain(SKILL_LINE)
 })
 
 test("D4: 無関係なファイルへの Write は素通し(permissionDecision を出さない)", () => {
@@ -200,43 +161,39 @@ test("D4: 無関係なファイルへの Write は素通し(permissionDecision �
 
 test("D5: 設定でパスを変更した正本は変更後のパスが deny される", () => {
   const root = project(
-    '{"version":1,"paths":{"architecture":"internal/ARCH.md","gotchas":"internal/GOT.md"}}'
+    '{"version":1,"paths":{"architecture":"internal/ARCH.md"}}'
   )
   expect(
     write(root, path.join(root, "internal/ARCH.md"))?.permissionDecision
   ).toBe("deny")
-  expect(
-    write(root, path.join(root, "internal/GOT.md"))?.permissionDecision
-  ).toBe("deny")
   // 既定パスはもはや正本ではないので素通しする。
   expect(write(root, path.join(root, "docs/ARCHITECTURE.md"))).toBe(null)
-  expect(write(root, path.join(root, "docs/GOTCHAS.md"))).toBe(null)
 })
 
 test("D6: 相対パス指定は cwd 基準で解決してから判定され deny される", () => {
   const root = project()
-  expect(write(root, "docs/GOTCHAS.md")?.permissionDecision).toBe("deny")
+  expect(write(root, "docs/ARCHITECTURE.md")?.permissionDecision).toBe("deny")
   expect(write(root, "./docs/ARCHITECTURE.md")?.permissionDecision).toBe("deny")
   // cwd がサブディレクトリでも、そこからの相対で正本に届けば deny。
   const sub = path.join(root, "sub")
   fs.mkdirSync(sub, { recursive: true })
-  expect(write(sub, "../docs/GOTCHAS.md")?.permissionDecision).toBe("deny")
+  expect(write(sub, "../docs/ARCHITECTURE.md")?.permissionDecision).toBe("deny")
 })
 
 test("D7: シンボリックリンク経由の書き込みは realpath 解決後に一致し deny される", () => {
   const root = project()
-  fs.writeFileSync(path.join(root, "docs/GOTCHAS.md"), "# GOTCHAS\n")
+  fs.writeFileSync(path.join(root, "docs/ARCHITECTURE.md"), "# ARCHITECTURE\n")
 
   // (a) ディレクトリのシンボリックリンク越し。
   const linkDir = path.join(root, "link-docs")
   fs.symlinkSync(path.join(root, "docs"), linkDir, "dir")
   expect(
-    write(root, path.join(linkDir, "GOTCHAS.md"))?.permissionDecision
+    write(root, path.join(linkDir, "ARCHITECTURE.md"))?.permissionDecision
   ).toBe("deny")
 
   // (b) ファイル自体のシンボリックリンク越し。
   const alias = path.join(root, "alias.md")
-  fs.symlinkSync(path.join(root, "docs/GOTCHAS.md"), alias)
+  fs.symlinkSync(path.join(root, "docs/ARCHITECTURE.md"), alias)
   expect(write(root, alias)?.permissionDecision).toBe("deny")
 
   // (c) リンク先が正本でなければ素通しのまま。
@@ -251,44 +208,42 @@ test("D7: シンボリックリンク経由の書き込みは realpath 解決後
 // リンク先への直接 Write が別パスに見えて素通りしていた。
 // lstat + readlink はリンク先が未作成でも辿れるので、そこまで解決して比較する。
 test("D7b: 正本が dangling symlink のとき、リンク先の絶対パスへの Write が deny される", () => {
-  const root = project()
-  fs.mkdirSync(path.join(root, "real"), { recursive: true })
-  // (a) 相対リンク。リンク自身のディレクトリ基準で解決される。
-  fs.symlinkSync("../real/GOTCHAS.md", path.join(root, "docs/GOTCHAS.md"))
-  // (b) 絶対リンク。
-  fs.symlinkSync(
-    path.join(root, "real/ARCH.md"),
-    path.join(root, "docs/ARCHITECTURE.md")
-  )
-  // 前提: リンク先はどちらも未作成(存在すると realpath が効いてしまい検証にならない)。
-  expect(fs.existsSync(path.join(root, "real/GOTCHAS.md"))).toBe(false)
-  expect(fs.existsSync(path.join(root, "real/ARCH.md"))).toBe(false)
+  // (a) 相対リンク(リンク自身のディレクトリ基準で解決される)と (b) 絶対リンク。
+  for (const mode of ["relative", "absolute"] as const) {
+    const root = project()
+    fs.mkdirSync(path.join(root, "real"), { recursive: true })
+    const finalPath = path.join(root, "real/ARCHITECTURE.md")
+    fs.symlinkSync(
+      mode === "relative" ? "../real/ARCHITECTURE.md" : finalPath,
+      path.join(root, "docs/ARCHITECTURE.md")
+    )
+    // 前提: リンク先は未作成(存在すると realpath が効いてしまい検証にならない)。
+    expect(fs.existsSync(finalPath)).toBe(false)
 
-  expect(
-    write(root, path.join(root, "real/GOTCHAS.md"))?.permissionDecision
-  ).toBe("deny")
-  expect(write(root, path.join(root, "real/ARCH.md"))?.permissionDecision).toBe(
-    "deny"
-  )
-  // 正本パスそのものへの Write は引き続き deny。
-  expect(
-    write(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecision
-  ).toBe("deny")
-  // リンク先と同じディレクトリの別ファイルは素通し(部分一致・前方一致はしない)。
-  expect(write(root, path.join(root, "real/OTHER.md"))).toBe(null)
-  expect(write(root, path.join(root, "real/GOTCHAS.md.bak"))).toBe(null)
+    expect(write(root, finalPath)?.permissionDecision, mode).toBe("deny")
+    // 正本パスそのものへの Write も deny。
+    expect(
+      write(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision,
+      mode
+    ).toBe("deny")
+    // リンク先と同じディレクトリの別ファイルは素通し(部分一致・前方一致はしない)。
+    expect(write(root, path.join(root, "real/OTHER.md")), mode).toBe(null)
+    expect(write(root, path.join(root, "real/ARCHITECTURE.md.bak")), mode).toBe(
+      null
+    )
+  }
 })
 
 test("D7c: 正本が 2 段の dangling symlink でも最終的なリンク先が deny される", () => {
   const root = project()
   fs.mkdirSync(path.join(root, "real"), { recursive: true })
-  // docs/GOTCHAS.md -> hop.md -> real/GOTCHAS.md(実体は未作成)
-  fs.symlinkSync("../hop.md", path.join(root, "docs/GOTCHAS.md"))
-  fs.symlinkSync("real/GOTCHAS.md", path.join(root, "hop.md"))
-  expect(fs.existsSync(path.join(root, "real/GOTCHAS.md"))).toBe(false)
+  // docs/ARCHITECTURE.md -> hop.md -> real/ARCHITECTURE.md(実体は未作成)
+  fs.symlinkSync("../hop.md", path.join(root, "docs/ARCHITECTURE.md"))
+  fs.symlinkSync("real/ARCHITECTURE.md", path.join(root, "hop.md"))
+  expect(fs.existsSync(path.join(root, "real/ARCHITECTURE.md"))).toBe(false)
 
   expect(
-    write(root, path.join(root, "real/GOTCHAS.md"))?.permissionDecision
+    write(root, path.join(root, "real/ARCHITECTURE.md"))?.permissionDecision
   ).toBe("deny")
   // 中間の hop も同じ実体を指すので deny。
   expect(write(root, path.join(root, "hop.md"))?.permissionDecision).toBe(
@@ -302,12 +257,12 @@ test("D7d: symlink が循環していても例外を投げず素通しする(フ
   const root = project()
   fs.symlinkSync(path.join(root, "loop-b.md"), path.join(root, "loop-a.md"))
   fs.symlinkSync(path.join(root, "loop-a.md"), path.join(root, "loop-b.md"))
-  fs.symlinkSync("../loop-a.md", path.join(root, "docs/GOTCHAS.md"))
+  fs.symlinkSync("../loop-a.md", path.join(root, "docs/ARCHITECTURE.md"))
 
   // 辿り切れないので実体を確定できない。停止も例外も起こさず素通しへ倒す。
   expect(write(root, path.join(root, "loop-a.md"))).toBe(null)
   expect(write(root, path.join(root, "loop-b.md"))).toBe(null)
-  // 循環していない側の判定は壊れない。
+  // 正本パスそのものへの判定は壊れない。
   expect(
     write(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision
   ).toBe("deny")
@@ -324,7 +279,9 @@ test("D7g: symlink の後ろの `..` はリンク先の親として解決し den
   expect(
     write(root, `${root}/alias/../ARCHITECTURE.md`)?.permissionDecision
   ).toBe("deny")
-  expect(write(root, "alias/../GOTCHAS.md")?.permissionDecision).toBe("deny")
+  expect(write(root, "alias/../ARCHITECTURE.md")?.permissionDecision).toBe(
+    "deny"
+  )
   // 字句で畳んだ先(<root>/ARCHITECTURE.md)は正本ではないので素通しのまま。
   expect(write(root, path.join(root, "ARCHITECTURE.md"))).toBe(null)
 })
@@ -343,7 +300,7 @@ test("D7g2: 字句では正本に当たり、実体では当たらない `alias/
   expect(
     write(root, `${root}/alias/../docs/ARCHITECTURE.md`)?.permissionDecision
   ).toBe("deny")
-  expect(write(root, "alias/../docs/GOTCHAS.md")?.permissionDecision).toBe(
+  expect(write(root, "alias/../docs/ARCHITECTURE.md")?.permissionDecision).toBe(
     "deny"
   )
   // どちらの解釈でも正本に当たらなければ素通しする。
@@ -365,7 +322,7 @@ test("D7h: 親ディレクトリが未作成の正本へ、symlink を通した 
   expect(write(root, path.join(root, "link-docs/new/OTHER.md"))).toBe(null)
 })
 
-// 段数の境界。docs/GOTCHAS.md -> chain/n1.md -> ... -> chain/n<hops-1>.md -> real/GOTCHAS.md
+// 段数の境界。docs/ARCHITECTURE.md -> chain/n1.md -> ... -> chain/n<hops-1>.md -> real/ARCHITECTURE.md
 // と張り、symlink がちょうど hops 本になるチェーンを作る。最終リンク先は未作成のまま
 // (存在すると realpath が効いてしまい dangling の検証にならない)。
 // 張れなかった場合は lstat / expect でテストを失敗させる(黙って飛ばさない)。
@@ -373,8 +330,8 @@ function buildDanglingChain(root: string, hops: number): string {
   fs.mkdirSync(path.join(root, "chain"), { recursive: true })
   fs.mkdirSync(path.join(root, "real"), { recursive: true })
   const node = (i: number): string => {
-    if (i === 0) return path.join(root, "docs/GOTCHAS.md")
-    if (i === hops) return path.join(root, "real/GOTCHAS.md")
+    if (i === 0) return path.join(root, "docs/ARCHITECTURE.md")
+    if (i === hops) return path.join(root, "real/ARCHITECTURE.md")
     return path.join(root, "chain", `n${i}.md`)
   }
   for (let i = 0; i < hops; i++) fs.symlinkSync(node(i + 1), node(i))
@@ -403,7 +360,7 @@ test("D7f: 41 段(上限超え)は入力へフォールバックして素通し�
   expect(write(root, final)).toBe(null)
   // フォールバック先は正本パスそのものなので、そこへの Write は引き続き deny。
   expect(
-    write(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecision
+    write(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision
   ).toBe("deny")
 })
 
@@ -437,7 +394,7 @@ test("D8: 非区別 FS を模した構成では大文字小文字違いが deny 
       write(root, path.join(root, "docs/architecture.md"))?.permissionDecision
     ).toBe("deny")
     expect(
-      write(root, path.join(root, "docs/gotchas.MD"))?.permissionDecision
+      write(root, path.join(root, "docs/Architecture.MD"))?.permissionDecision
     ).toBe("deny")
     // 非区別 FS でも部分一致はしない。
     expect(write(root, path.join(root, "docs/architecture.md.bak"))).toBe(null)
@@ -449,7 +406,7 @@ test("D8: 非区別 FS を模した構成では大文字小文字違いが deny 
 test("D9: ./ や .. を含む冗長なパスは正規化後に一致し deny される", () => {
   const root = project()
   expect(
-    write(root, path.join(root, "docs/../docs/./GOTCHAS.md"))
+    write(root, path.join(root, "docs/../docs/./ARCHITECTURE.md"))
       ?.permissionDecision
   ).toBe("deny")
   expect(
@@ -459,9 +416,9 @@ test("D9: ./ や .. を含む冗長なパスは正規化後に一致し deny さ
 
 test("D10: 区切り文字が \\ のパスは正規化後に一致し deny される", () => {
   const root = project()
-  expect(write(root, `${root}\\docs\\GOTCHAS.md`)?.permissionDecision).toBe(
-    "deny"
-  )
+  expect(
+    write(root, `${root}\\docs\\ARCHITECTURE.md`)?.permissionDecision
+  ).toBe("deny")
   expect(write(root, "docs\\ARCHITECTURE.md")?.permissionDecision).toBe("deny")
 })
 
@@ -469,7 +426,7 @@ test("D11: 正本と似た名前(.bak / .orig)は素通し(前方一致・部分
   const root = project()
   expect(write(root, path.join(root, "docs/ARCHITECTURE.md.bak"))).toBe(null)
   expect(write(root, path.join(root, "docs/ARCHITECTURE.md.orig"))).toBe(null)
-  expect(write(root, path.join(root, "docs/GOTCHAS.md.bak"))).toBe(null)
+  expect(write(root, path.join(root, "docs/ARCHITECTURE.md.bak"))).toBe(null)
   expect(write(root, path.join(root, "docs/ARCHITECTURE.mdx"))).toBe(null)
   // 逆向きの部分一致(正本パスが対象パスを含む形)も拒否しない。
   expect(write(root, path.join(root, "docs"))).toBe(null)
@@ -482,7 +439,7 @@ test("D12: 設定が壊れていても既定パスで判定を継続する", () 
       write(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision
     ).toBe("deny")
     expect(
-      edit(root, path.join(root, "docs/GOTCHAS.md"))?.permissionDecision
+      edit(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision
     ).toBe("deny")
     expect(write(root, path.join(root, "src/index.ts"))).toBe(null)
   }
@@ -494,8 +451,10 @@ test("D13: 内部エラーは素通し(フェイルオープン。codiel の gua
   // 設定解決を意図的に失敗させる。cwd が文字列でないと loadConfig 内の
   // findDocRoot → path.resolve が TypeError を投げ、既定値へのフォールバックも
   // path.join で再度投げる。hook 側の catch がそれを素通しへ倒すことを確認する。
-  expect(edit(12345, path.join(root, "docs/GOTCHAS.md"))).toBe(null)
-  expect(edit({ nested: true }, path.join(root, "docs/GOTCHAS.md"))).toBe(null)
+  expect(edit(12345, path.join(root, "docs/ARCHITECTURE.md"))).toBe(null)
+  expect(edit({ nested: true }, path.join(root, "docs/ARCHITECTURE.md"))).toBe(
+    null
+  )
 
   // stdin が JSON でない(readStdin が投げる)。
   expect(runTs(HOOK, [], { input: "これは JSON ではない" }).trim()).toBe("")
@@ -518,7 +477,7 @@ test("D14: NFD 表記のパスと NFC 表記の設定値が同一ファイルを
   const root = project(
     JSON.stringify({
       version: 1,
-      paths: { gotchas: relative.normalize("NFC") }
+      paths: { architecture: relative.normalize("NFC") }
     })
   )
   const target = path.join(root, relative.normalize("NFD"))
@@ -530,7 +489,7 @@ test("D14: NFD 表記のパスと NFC 表記の設定値が同一ファイルを
   const root2 = project(
     JSON.stringify({
       version: 1,
-      paths: { gotchas: relative.normalize("NFD") }
+      paths: { architecture: relative.normalize("NFD") }
     })
   )
   expect(
@@ -547,7 +506,7 @@ test("フェイルオープンの exit code は常に 0(拒否時も含む)", ()
       input: JSON.stringify({
         cwd: root,
         tool_name: "Write",
-        tool_input: { file_path: path.join(root, "docs/GOTCHAS.md") }
+        tool_input: { file_path: path.join(root, "docs/ARCHITECTURE.md") }
       })
     })
   ).not.toThrow()
@@ -565,77 +524,21 @@ test("D15: 旧 rules 3 ファイルと .claude/rules/ 配下は Write・Edit・N
   expect(write(root, path.join(root, ".claude/rules/my-own.md"))).toBe(null)
 })
 
-// --- 2 変数が無効なときの理由文(設計書 2026-10-08 の 3-3)-----------------------
+// --- GOTCHAS 機能の廃止後(設計書 2026-11-27)-----------------------------------
 
-test("D21: ADR が無効でも ARCHITECTURE への Write は deny。理由は ADR へ誘導せず、有効にする変数を示す", () => {
-  const root = project()
-  const target = path.join(root, "docs/ARCHITECTURE.md")
-  for (const features of [
-    { adr: false, gotchas: true },
-    { adr: false, gotchas: false }
-  ]) {
-    const r = hook(
-      { cwd: root, tool_name: "Write", tool_input: { file_path: target } },
-      features
-    )
-    expect(r?.permissionDecision).toBe("deny")
-    const reason = r?.permissionDecisionReason ?? ""
-    expect(reason).toContain(SKILL_LINE)
-    expect(reason).not.toContain(ADR_SKILL_LINE)
-    expect(reason).not.toContain("stage-adr")
-    expect(reason).toContain(`${ADR_ENV}=1`)
-  }
-})
-
-test("D22: GOTCHAS が無効でも GOTCHAS への Edit は deny。理由は書き込み CLI へ誘導せず、有効にする変数を示す", () => {
+test("D24: 既定の docs/GOTCHAS.md への Write・Edit・NotebookEdit は素通しする", () => {
   const root = project()
   const target = path.join(root, "docs/GOTCHAS.md")
-  for (const features of [
-    { adr: true, gotchas: false },
-    { adr: false, gotchas: false }
-  ]) {
-    const r = hook(
-      { cwd: root, tool_name: "Edit", tool_input: { file_path: target } },
-      features
-    )
-    expect(r?.permissionDecision).toBe("deny")
-    const reason = r?.permissionDecisionReason ?? ""
-    expect(reason).toContain("docs/GOTCHAS.md")
-    expect(reason).toContain(`${GOTCHAS_ENV}=1`)
-    for (const command of ["append-gotcha", "init-gotchas", "tag-gotcha"]) {
-      expect(reason).not.toContain(command)
-    }
-  }
+  expect(write(root, target)).toBe(null)
+  expect(edit(root, target)).toBe(null)
+  expect(notebookEdit(root, target)).toBe(null)
 })
 
-test("D23: 無効なのが他方だけなら、理由文は従来どおり", () => {
-  const root = project()
-  const arch = hook(
-    {
-      cwd: root,
-      tool_name: "Write",
-      tool_input: { file_path: path.join(root, "docs/ARCHITECTURE.md") }
-    },
-    { adr: true, gotchas: false }
-  )
-  expect(arch?.permissionDecisionReason).toBe(
-    hook({
-      cwd: root,
-      tool_name: "Write",
-      tool_input: { file_path: path.join(root, "docs/ARCHITECTURE.md") }
-    })?.permissionDecisionReason
-  )
-  expect(arch?.permissionDecisionReason).toContain(ADR_SKILL_LINE)
-  const gotchas = hook(
-    {
-      cwd: root,
-      tool_name: "Edit",
-      tool_input: { file_path: path.join(root, "docs/GOTCHAS.md") }
-    },
-    { adr: false, gotchas: true }
-  )
-  expect(gotchas?.permissionDecisionReason).toContain(
-    `node ${CLI} append-gotcha --input`
-  )
-  expect(gotchas?.permissionDecisionReason).not.toContain(ADR_ENV)
+test("D25: 設定の paths.gotchas に書いたパスへの書き込みも素通しする", () => {
+  const root = project('{"version":1,"paths":{"gotchas":"internal/GOT.md"}}')
+  expect(write(root, path.join(root, "internal/GOT.md"))).toBe(null)
+  // 未知キーは無視され、ARCHITECTURE の拒否は変わらない。
+  expect(
+    write(root, path.join(root, "docs/ARCHITECTURE.md"))?.permissionDecision
+  ).toBe("deny")
 })

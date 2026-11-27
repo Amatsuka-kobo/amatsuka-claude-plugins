@@ -1,31 +1,23 @@
-// `stage-architecture` / `stage-adr` / `stage-gotcha`(設計書 §7-3・§7-4・§6-1)。
+// `stage-architecture`(設計書 §7-3・§7-4)。
 //
-// いずれも**書き込みを行わない**。diff と stagingId を返すだけで、確定は
-// `commit-architecture` / `commit-gotchas --staging-id <id>` が行う。契約 §4-3 の分類では
+// **書き込みを行わない**。diff と stagingId を返すだけで、確定は
+// `commit-architecture --staging-id <id>` が行う。契約 §4-3 の分類では
 // 書き込み経路(第 1 層・フェイルクローズド)であり、拒否は非 0 終了で返す。
 
-import { AdrError, type AdrInput, stageAdr } from "../lib/adr.js"
 import {
-  ADR_HEADING,
   findSection,
   parseArchitectureForRead,
   prepareArchitectureUpdate,
   type SectionChange
 } from "../lib/architecture.js"
 import { loadConfig } from "../lib/config.js"
-import {
-  buildRewrittenText,
-  GotchaError,
-  type RewriteGotchaInput
-} from "../lib/gotchas.js"
-import { createStaging, hashContent } from "../lib/staging.js"
+import { createStaging } from "../lib/staging.js"
 import { type UnifiedDiffResult, unifiedDiff } from "./diff.js"
 import { isPlainObject, loadInputJson, readDocument } from "./input.js"
 import {
   EXIT_USAGE,
   emitResult,
   emitWriteFailure,
-  messageOf,
   noteWarnings
 } from "./output.js"
 import { commandLine } from "./paths.js"
@@ -173,237 +165,6 @@ export function runStageArchitecture(ctx: StageContext): void {
     reminder: withTruncationNote(
       diff,
       "diff を全文提示してユーザーの承認を得るまで commit-architecture を実行しないこと。CLI は承認の有無を判定できない。"
-    )
-  })
-}
-
-// ---------------------------------------------------------------------------
-// stage-adr
-// ---------------------------------------------------------------------------
-
-export function runStageAdr(ctx: StageContext): void {
-  const command = "stage-adr"
-
-  const input = loadInputJson(ctx.flags)
-  if (!input.ok) {
-    emitWriteFailure(
-      command,
-      input.error,
-      input.message,
-      { valid: false },
-      EXIT_USAGE
-    )
-    return
-  }
-  if (!isPlainObject(input.value)) {
-    emitWriteFailure(
-      command,
-      "invalid_input",
-      `${input.source} のトップレベルは { mode: "add" | "status", ... } のオブジェクトである必要があります。`,
-      { valid: false },
-      EXIT_USAGE
-    )
-    return
-  }
-
-  const config = loadConfig(ctx.cwd)
-
-  let result: ReturnType<typeof stageAdr>
-  try {
-    // 値の検証は adr.ts が行う(CLI は形の主張だけを渡し、判断を持たない)。
-    result = stageAdr(
-      config.architecturePath,
-      input.value as unknown as AdrInput
-    )
-  } catch (error) {
-    if (error instanceof AdrError) {
-      emitWriteFailure(command, error.code, error.message, {
-        valid: false,
-        stagingId: null,
-        path: config.architecturePath,
-        details: error.details,
-        warnings: config.warnings
-      })
-      return
-    }
-    emitWriteFailure(command, "internal_error", messageOf(error), {
-      valid: false,
-      stagingId: null,
-      path: config.architecturePath
-    })
-    return
-  }
-
-  const warnings = [...config.warnings, ...result.warnings]
-  noteWarnings(warnings)
-
-  const staged = createStaging({
-    projectRoot: config.docRoot,
-    kind: "adr",
-    targetPath: config.architecturePath,
-    nextContent: result.nextText,
-    // stageAdr が採番のために読んだ本文をそのまま照合対象にする。
-    baseHash: result.baseExists ? hashContent(result.baseText) : null,
-    meta: {
-      mode: result.mode,
-      id: result.id,
-      assignedId: result.assignedId,
-      status: result.status,
-      date: result.date
-    }
-  })
-  if (!staged.ok) {
-    emitWriteFailure(command, staged.error, staged.reasons.join(" / "), {
-      valid: false,
-      stagingId: null,
-      path: config.architecturePath,
-      warnings
-    })
-    return
-  }
-
-  const diff = unifiedDiff(result.baseText, result.nextText, {
-    fromLabel: `${config.architectureRelative} (現行)`,
-    toLabel: `${config.architectureRelative} (stage)`
-  })
-
-  emitResult(command, {
-    ok: true,
-    valid: true,
-    stagingId: staged.stagingId,
-    mode: result.mode,
-    path: config.architecturePath,
-    baseExists: result.baseExists,
-    id: result.id,
-    number: result.number,
-    assignedId: result.assignedId,
-    previousStatus: result.previousStatus,
-    status: result.status,
-    date: result.date,
-    created: result.created,
-    sectionCreated: result.sectionCreated,
-    diff: diffPayload(
-      diff,
-      sectionDiffs(result.baseText, result.nextText, [
-        {
-          heading: ADR_HEADING,
-          mode: result.sectionCreated ? "added" : "replaced"
-        }
-      ])
-    ),
-    expiresAt: new Date(staged.expiresAt).toISOString(),
-    warnings,
-    next: commandLine(`commit-architecture --staging-id ${staged.stagingId}`),
-    reminder: withTruncationNote(
-      diff,
-      "ADR の追加・状態変更は設計判断の宣言である。diff を全文提示して承認を得るまで commit-architecture を実行しないこと。"
-    )
-  })
-}
-
-// ---------------------------------------------------------------------------
-// stage-gotcha
-// ---------------------------------------------------------------------------
-
-export function runStageGotcha(ctx: StageContext): void {
-  const command = "stage-gotcha"
-
-  const input = loadInputJson(ctx.flags)
-  if (!input.ok) {
-    emitWriteFailure(
-      command,
-      input.error,
-      input.message,
-      { valid: false },
-      EXIT_USAGE
-    )
-    return
-  }
-  if (!isPlainObject(input.value)) {
-    emitWriteFailure(
-      command,
-      "invalid_input",
-      `${input.source} のトップレベルは { id, title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?, reason? } のオブジェクトである必要があります。`,
-      { valid: false },
-      EXIT_USAGE
-    )
-    return
-  }
-
-  const config = loadConfig(ctx.cwd)
-  const file = readDocument(config.gotchasPath)
-  const failure = (
-    error: string,
-    message: string,
-    extra: Record<string, unknown> = {}
-  ): void =>
-    emitWriteFailure(command, error, message, {
-      valid: false,
-      stagingId: null,
-      path: config.gotchasPath,
-      warnings: config.warnings,
-      ...extra
-    })
-
-  if (!file.exists) {
-    failure("not_found", `${config.gotchasPath} が存在しません。`)
-    return
-  }
-
-  const rewrite = input.value as unknown as RewriteGotchaInput
-  let built: ReturnType<typeof buildRewrittenText>
-  try {
-    // 値の検証と組み立ては gotchas.ts が行う(CLI は形の主張だけを渡し、判断を持たない)。
-    built = buildRewrittenText(file.text, rewrite)
-  } catch (error) {
-    if (error instanceof GotchaError) {
-      failure(error.code, error.message, { details: error.details })
-      return
-    }
-    failure("internal_error", messageOf(error))
-    return
-  }
-
-  const warnings = [...config.warnings, ...file.warnings, ...built.warnings]
-  noteWarnings(warnings)
-
-  const staged = createStaging({
-    projectRoot: config.docRoot,
-    kind: "gotchas",
-    targetPath: config.gotchasPath,
-    nextContent: built.text,
-    baseHash: file.hash,
-    meta: {
-      id: built.id,
-      changed: built.changed,
-      reason: typeof rewrite.reason === "string" ? rewrite.reason : null
-    }
-  })
-  if (!staged.ok) {
-    failure(staged.error, staged.reasons.join(" / "), { warnings })
-    return
-  }
-
-  const diff = unifiedDiff(file.text, built.text, {
-    fromLabel: `${config.gotchasRelative} (現行)`,
-    toLabel: `${config.gotchasRelative} (stage)`
-  })
-
-  emitResult(command, {
-    ok: true,
-    valid: true,
-    stagingId: staged.stagingId,
-    id: built.id,
-    changed: built.changed,
-    path: config.gotchasPath,
-    relative: config.gotchasRelative,
-    diff: diffPayload(diff, []),
-    expiresAt: new Date(staged.expiresAt).toISOString(),
-    warnings,
-    next: commandLine(`commit-gotchas --staging-id ${staged.stagingId}`),
-    reminder: withTruncationNote(
-      diff,
-      "diff を全文提示してユーザーの承認を得るまで commit-gotchas を実行しないこと。CLI は承認の有無を判定できない。"
     )
   })
 }

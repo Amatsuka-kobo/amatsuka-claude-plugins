@@ -648,7 +648,7 @@ dev-plan のドメインも同じ考え方である。hooks はエージェン�
 旧セクション「## Codiel ハーネス運用ルール」があれば承認を得て取り除く)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
-GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
+GOTCHAS は `/codiel:init` の対象ではない。codiel は台帳を作らない。
 `/codiel:run` は資産配置を行わず、B + C + D が揃っていることを初期化済みと判定する。B は `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に行全体が(前後の空白を除き)`## Codiel` と一致する行があること。C は `.codiel/config.json` が JSON のオブジェクトとして読め、`raguel` がオブジェクトであること(空のオブジェクトでよい)。D は `.codiel/runs` / `.codiel/reports` の 2 ディレクトリが存在し、`codiel-state gitignore` の `missing` が空であること。C と D は `/codiel:run` と `/codiel:init` で同じ条件にする。テストの仕様の置き場と run の文書の置き場(`testsDir`・`runsDir`)は、キーが無くても既定値(`docs/codiel/tests`・`docs/codiel/runs`)で動くため、C の判定には含めない。いずれかが揃っていないときは未初期化として、欠けた項目を名指しして `/codiel:init` を案内して終了する。以前の版で初期化したプロジェクトは C と D を満たさないので、`/codiel:init` をやり直す(§3)。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
@@ -746,8 +746,8 @@ K12 の直後の codiel は、run の中で起きた失敗を何も残さなか�
 
 ### `.claude/rules/codiel.md`(← `assets/rules/codiel.md`)
 
-Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
-codiel はこの 2 つに触れないので、rules にも書かない。metatron が有る環境では、これらの
+Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE は metatron の資産であり、
+codiel はこれに触れないので、rules にも書かない。metatron が有る環境では、この
 存在と扱い方は CLAUDE.md の @メンションと SessionStart の案内文を通して伝わる。
 
 文書の扱い:
@@ -904,7 +904,7 @@ Codiel は ARCHITECTURE のドメイン定義を読めないときも、`unscope
 ドメイン定義の可読性を委譲候補の条件に含めると、Codiel が受け入れられる正当な委譲経路まで塞ぐ。
 `codielHandoffCandidate` と `codielHarness.dirExists` の同値は、委譲判断用の事実と生の検出事実を分けるために残していた。
 
-文書と Codiel 固有資産をフィールドとして分けたのも同じ理由による。ARCHITECTURE / GOTCHAS は Codiel 専属の
+文書と Codiel 固有資産をフィールドとして分けたのも同じ理由による。ARCHITECTURE は Codiel 専属の
 資産ではなく、metatron が管理し Codiel 単体環境でも最小構成が存在しうるプロジェクトの文書である。
 `codielHarness` に文書の可読性を混ぜると、metatron だけを使う環境で「Codiel のハーネス」という名前の
 フィールドが文書の有無を語ることになる。

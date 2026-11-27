@@ -48,18 +48,6 @@
     "should_trigger": false
   },
   {
-    "query": "ADR を 1 件足したいです。GraphQL をやめて REST に戻した判断を残して、その前提だった ADR-0004 は廃止の状態にしてほしい。理由も添えます。",
-    "should_trigger": false
-  },
-  {
-    "query": "さっき `--input` に JSON を直接埋め込んで CLI に 3 回弾かれました。同じことを次のエージェントもやると思うので、この罠を台帳に残しておいてください。",
-    "should_trigger": false
-  },
-  {
-    "query": "codiel の run で Raguel STOP が出ました。原因になった設計漏れを GOTCHAS へ追記してから run を再開したい。",
-    "should_trigger": false
-  },
-  {
     "query": "`README.md` にセットアップ手順とローカル起動のコマンドを書き足してください。初学者向けに丁寧に、スクショの置き場所も相談したいです。",
     "should_trigger": false
   },

@@ -8,14 +8,14 @@
 //
 // 使い方: node check-intent-env.mjs [projectDir]
 //
-// 文書のルート(docRoot)と ARCHITECTURE / GOTCHAS のパスの解決、ドメインマップの読み取りは
+// 文書のルート(docRoot)と ARCHITECTURE のパスの解決、ドメインマップの読み取りは
 // `hooks/lib.ts` の findDocRoot / resolveDocPaths / readDomainsResult に任せ、ここに写しを持たない。
 // 規則の正本は metatron の `src/lib/config.ts` と `src/lib/architecture.ts` で、
 // lib.ts との一致は契約 §14 の 2 者比較テストが確かめる。
 //
 // 基準は 2 つあり、どちらか一方に寄せない。
 //   - intent 文書(docs/intents/)と Issue テンプレート : repoRoot(git ルート)
-//   - ARCHITECTURE / GOTCHAS のパスと contextDocs      : docRoot(契約 §3 規則 1)
+//   - ARCHITECTURE のパスと contextDocs                : docRoot(契約 §3 規則 1)
 // 2 つが別のディレクトリを指すのは正常な状態であり、フィールド名で区別する。
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -249,7 +249,6 @@ const docRoot = docPaths.docRoot
 const architecturePath = isFile(docPaths.architecture)
   ? docPaths.architecture
   : null
-const gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null
 // docRoot に metatron.config.json があるか。knowledgeTarget の判定に使う。
 const metatronConfig = isFile(path.join(docRoot, DOC_CONFIG_FILENAME))
 
@@ -320,7 +319,7 @@ if (intentsDir) {
 }
 
 // ---------------------------------------------------------------------------
-// ASIS 探索の初期材料(docRoot 直下の CLAUDE.md / README.md。ARCHITECTURE / GOTCHAS は含めない)
+// ASIS 探索の初期材料(docRoot 直下の CLAUDE.md / README.md。ARCHITECTURE は含めない)
 // ---------------------------------------------------------------------------
 
 // 並びは capturing-intent の読む順(CLAUDE.md → README.md)に合わせる。
@@ -351,7 +350,6 @@ console.log(
       configWarnings,
       projectDocs: {
         architecture: architecturePath,
-        gotchas: gotchasPath,
         metatronConfig,
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0
