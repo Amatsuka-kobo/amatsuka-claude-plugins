@@ -16,6 +16,7 @@
 // (または既に解決済みの絶対パス)だけを受け取る。
 
 import fs from "node:fs"
+import { CHECKS_MARKER, parseChecksContent } from "./checks.js"
 
 /** 契約 §4-1。ファイルタイトルの行。 */
 export const ARCHITECTURE_TITLE = "# ARCHITECTURE"
@@ -475,14 +476,12 @@ export interface DomainsBlock {
 // 開始行は ```json metatron:domains に固定する(契約 §1)。
 // info string の空白の量は契約 §4-2 の正規化に従って許容するが、
 // トークンの構成は固定する。`codiel:domains` は一致しない。
-function isDomainsInfo(info: string): boolean {
+function isMarkerInfo(info: string, marker: string): boolean {
   const tokens = info
     .trim()
     .split(/[ \t]+/)
     .filter(Boolean)
-  return (
-    tokens.length === 2 && tokens[0] === "json" && tokens[1] === DOMAINS_MARKER
-  )
+  return tokens.length === 2 && tokens[0] === "json" && tokens[1] === marker
 }
 
 export interface DomainsBlockLookup {
@@ -495,6 +494,17 @@ export interface DomainsBlockLookup {
  * 規則で行う(独自のフェンス判定を書かない。契約 §1)。
  */
 export function findDomainsBlock(text: string): DomainsBlockLookup {
+  return findMarkedBlock(text, DOMAINS_MARKER)
+}
+
+/**
+ * `json <marker>` で始まるフェンスのブロックを探す。ドメインマップと検査の定義が使う。
+ * 最初のブロックを採り、複数あるときと閉じていないときは警告を返す。
+ */
+export function findMarkedBlock(
+  text: string,
+  marker: string
+): DomainsBlockLookup {
   const lines = splitLines(text)
   const blocks: DomainsBlock[] = []
   const warnings: string[] = []
@@ -523,7 +533,7 @@ export function findDomainsBlock(text: string): DomainsBlockLookup {
     if (open) {
       fence = open
       openIndex = i
-      isTarget = isDomainsInfo(open.info)
+      isTarget = isMarkerInfo(open.info, marker)
     }
   }
 
@@ -538,12 +548,12 @@ export function findDomainsBlock(text: string): DomainsBlockLookup {
   if (blocks.length > 1) {
     // 契約 §1 に未確定として残っている点。最初のものを採り、そのことを警告する。
     warnings.push(
-      `\`${DOMAINS_MARKER}\` ブロックが ${blocks.length} 個あります。最初のものだけを使用します。`
+      `\`${marker}\` ブロックが ${blocks.length} 個あります。最初のものだけを使用します。`
     )
   }
   if (blocks.length > 0 && !blocks[0].closed) {
     warnings.push(
-      `\`${DOMAINS_MARKER}\` ブロックが閉じていません。ファイル終端までを内容として扱いました。`
+      `\`${marker}\` ブロックが閉じていません。ファイル終端までを内容として扱いました。`
     )
   } else if (fence !== null) {
     // 契約 §1: 開始マーカーが他のフェンスに取り込まれ、ブロックとして認識されない
@@ -552,7 +562,7 @@ export function findDomainsBlock(text: string): DomainsBlockLookup {
     // ARCHITECTURE のような正当な状態である。黙って null を返すと、書き手は自分の
     // ブロックが読まれていないことに気づけない。経路を問わず返す(拒否はしない)。
     warnings.push(
-      `\`${DOMAINS_MARKER}\` の走査中に閉じていないコードフェンスを検出しました。マーカーがフェンス内に取り込まれていないか確認してください。`
+      `\`${marker}\` の走査中に閉じていないコードフェンスを検出しました。マーカーがフェンス内に取り込まれていないか確認してください。`
     )
   }
 
@@ -693,6 +703,7 @@ export type ArchitectureUpdateError =
   | "duplicate_heading"
   | "invalid_body"
   | "invalid_domains"
+  | "invalid_checks"
   | "invalid_input"
   | "section_not_found"
 
@@ -955,6 +966,21 @@ function rejectBrokenResult(
       ok: false,
       error: "invalid_domains",
       message: `差し替えた後の文書の \`${DOMAINS_MARKER}\` ブロックを読めません: ${domains.message}`,
+      warnings
+    }
+  }
+  const checksError = (doc: string): string | null => {
+    const { block } = findMarkedBlock(doc, CHECKS_MARKER)
+    if (block === null) return null
+    const parsed = parseChecksContent(block.content)
+    return parsed.ok ? null : parsed.message
+  }
+  const afterChecks = checksError(text)
+  if (afterChecks !== null && checksError(before) === null) {
+    return {
+      ok: false,
+      error: "invalid_checks",
+      message: `差し替えた後の文書の \`${CHECKS_MARKER}\` ブロックを読めません: ${afterChecks}`,
       warnings
     }
   }

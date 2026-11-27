@@ -1,17 +1,19 @@
 // metatron CLI のディスパッチ本体(契約 §12)。
 //
-// 経路は 2 層に分かれる(契約 §4-3、設計書 §12-1)。
+// 経路は 3 層に分かれる(契約 §4-3、設計書 §12-1)。
 //
 // - 読み取り・注入経路(第 2 層・フェイルオープン): get / scan / diff-architecture。
 //   **常に exit 0**。読めなかったことも事実として JSON で返す。
 // - 書き込み経路(第 1 層・フェイルクローズド): stage-architecture /
 //   commit-architecture / link-claude-md。拒否・失敗は非 0 終了。
+// - 検査経路: check。違反 1、定義や走査の問題 2、想定外の内部エラー 3。
 //
 // この分岐を 1 箇所に集めているのは、サブコマンドを足したときに層の判断が
 // 各ファイルへ散らばらないようにするためである。
 
 import { runDiffArchitecture, runScan } from "./analysis.js"
 import { parseArgs } from "./args.js"
+import { EXIT_INTERNAL, runCheck } from "./check.js"
 import { runLinkClaudeMd } from "./claude-md.js"
 import { runCommitArchitecture } from "./commit.js"
 import { runGet } from "./get.js"
@@ -35,12 +37,19 @@ export const WRITE_SUBCOMMANDS = new Set([
   "link-claude-md"
 ])
 
+/** 違反と内部エラーを終了コードで分けるサブコマンド。 */
+export const CHECK_SUBCOMMANDS = new Set(["check"])
+
 function emitUsage(command: string, message: string, exitCode: number): void {
   emitResult(command, {
     ok: false,
     error: "unknown_subcommand",
     message,
-    subcommands: [...READ_SUBCOMMANDS, ...WRITE_SUBCOMMANDS]
+    subcommands: [
+      ...READ_SUBCOMMANDS,
+      ...WRITE_SUBCOMMANDS,
+      ...CHECK_SUBCOMMANDS
+    ]
   })
   for (const line of USAGE_LINES) note(line)
   process.exitCode = exitCode
@@ -54,8 +63,9 @@ export function main(
   const subcommand = positionals[0]
   const isRead = subcommand !== undefined && READ_SUBCOMMANDS.has(subcommand)
   const isWrite = subcommand !== undefined && WRITE_SUBCOMMANDS.has(subcommand)
+  const isCheck = subcommand !== undefined && CHECK_SUBCOMMANDS.has(subcommand)
 
-  if (subcommand === undefined || (!isRead && !isWrite)) {
+  if (subcommand === undefined || (!isRead && !isWrite && !isCheck)) {
     emitUsage(
       "metatron",
       subcommand === undefined
@@ -98,6 +108,9 @@ export function main(
       case "commit-architecture":
         runCommitArchitecture(ctx)
         return
+      case "check":
+        runCheck(ctx)
+        return
       default:
         emitUsage("metatron", `不明なサブコマンド: ${subcommand}`, EXIT_USAGE)
         return
@@ -107,6 +120,16 @@ export function main(
     // 層ごとの方針は変えない(読み取りは通し、書き込みは止める)。
     if (isRead) {
       emitReadFailure(subcommand, "internal_error", messageOf(error))
+      return
+    }
+    if (isCheck) {
+      emitWriteFailure(
+        subcommand,
+        "internal_error",
+        messageOf(error),
+        {},
+        EXIT_INTERNAL
+      )
       return
     }
     emitWriteFailure(subcommand, "internal_error", messageOf(error), {
