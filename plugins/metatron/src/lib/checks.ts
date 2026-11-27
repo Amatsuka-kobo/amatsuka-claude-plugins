@@ -441,7 +441,13 @@ export function runChecks(root: string, checks: CheckDefinition[]): ChecksRun {
         continue
       }
       // 途中の区間のリンクで docRoot の外へ出ていないかを、実体のパスで確かめる。
-      const real = fs.realpathSync(startPath)
+      let real: string
+      try {
+        real = fs.realpathSync(startPath)
+      } catch {
+        // 壊れたリンクなど。開始点として扱わず、一致するファイルが無ければ no_match になる。
+        continue
+      }
       if (real !== realRoot && !real.startsWith(`${realRoot}${path.sep}`)) {
         return {
           ok: false,
@@ -505,12 +511,13 @@ export function runChecks(root: string, checks: CheckDefinition[]): ChecksRun {
       const toRes = check.to.map((g) => compileGlob(g).re)
       const exceptToRes = check.exceptTo.map((g) => bindGlob(g, bound))
       for (const imp of extractImports(text)) {
-        if (
-          !imp.specifier.startsWith("./") &&
-          !imp.specifier.startsWith("../")
-        ) {
-          continue
-        }
+        const spec = imp.specifier
+        const relative =
+          spec === "." ||
+          spec === ".." ||
+          spec.startsWith("./") ||
+          spec.startsWith("../")
+        if (!relative) continue
         const target = toPosix(
           path.normalize(path.join(path.dirname(file), imp.specifier))
         )

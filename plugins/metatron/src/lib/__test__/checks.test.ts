@@ -282,6 +282,27 @@ describe("C6: レビューで見つかった入力", () => {
     expect(result.ok).toBe(false)
   })
 
+  test("指定子 . と .. も解決して違反にする", () => {
+    const root = project({
+      "src/lib/deep/a.ts": 'import x from ".."\nimport y from "."\n',
+      "src/lib/x.ts": ""
+    })
+    const result = runChecks(root, [
+      {
+        id: "dot",
+        kind: "no-import",
+        from: ["src/lib/deep/**"],
+        exceptFrom: [],
+        to: ["src/lib/**"],
+        exceptTo: ["src/lib/deep/**"],
+        message: "m"
+      }
+    ])
+    expect(result.ok && result.violations.map((v) => v.target)).toEqual([
+      "src/lib"
+    ])
+  })
+
   test("連続する ** は 1 つにまとめる", () => {
     expect(compileGlob("a/**/**/b").re.test("a/b")).toBe(true)
   })

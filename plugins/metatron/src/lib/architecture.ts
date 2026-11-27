@@ -497,9 +497,6 @@ export interface MarkedBlockLookup {
  * `metatron:domains` ブロックを探す。フェンスの判定は §4-2 の状態機械と同一の
  * 規則で行う(独自のフェンス判定を書かない。契約 §1)。
  */
-/** 互換のための別名。 */
-export type DomainsBlockLookup = MarkedBlockLookup
-
 export function findDomainsBlock(text: string): MarkedBlockLookup {
   return findMarkedBlock(text, DOMAINS_MARKER)
 }

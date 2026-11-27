@@ -313,7 +313,12 @@ function runChecks(root, checks) {
       } catch {
         continue;
       }
-      const real = fs.realpathSync(startPath);
+      let real;
+      try {
+        real = fs.realpathSync(startPath);
+      } catch {
+        continue;
+      }
       if (real !== realRoot && !real.startsWith(`${realRoot}${path.sep}`)) {
         return {
           ok: false,
@@ -377,9 +382,9 @@ function runChecks(root, checks) {
       const toRes = check.to.map((g) => compileGlob(g).re);
       const exceptToRes = check.exceptTo.map((g) => bindGlob(g, bound));
       for (const imp of extractImports(text)) {
-        if (!imp.specifier.startsWith("./") && !imp.specifier.startsWith("../")) {
-          continue;
-        }
+        const spec = imp.specifier;
+        const relative = spec === "." || spec === ".." || spec.startsWith("./") || spec.startsWith("../");
+        if (!relative) continue;
         const target = toPosix(
           path.normalize(path.join(path.dirname(file), imp.specifier))
         );
