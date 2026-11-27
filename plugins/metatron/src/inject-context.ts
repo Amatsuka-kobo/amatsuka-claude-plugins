@@ -105,7 +105,7 @@ function updateLines(): string[] {
 
 // 今後の振る舞いを残す前に置き場を決めさせる。判定表の中身は毎セッション読ませない。
 const PLACEMENT_LINE =
-  "今後の振る舞いを残すとき(頼まれたときも、自分で memory などに残そうとするときも)は、書く前に Skill ツールで metatron:placing-instructions を起動し、置き場を決める。"
+  "今後の振る舞いを残すとき(置き場を指定されたときを除き、頼まれたときも、自分で memory などに残そうとするときも)は、書く前に Skill ツールで metatron:placing-instructions を起動し、置き場を決める。"
 
 // 移行が要る状態の案内。旧 rules が残っている、または CLAUDE.md に @メンションが無い。
 function migrationLines(
