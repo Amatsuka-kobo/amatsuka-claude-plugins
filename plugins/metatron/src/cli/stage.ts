@@ -5,7 +5,10 @@
 // 書き込み経路(第 1 層・フェイルクローズド)であり、拒否は非 0 終了で返す。
 
 import {
+  ARCHITECTURE_LINE_LIMIT,
+  countArchitectureLines,
   findSection,
+  lineLimitWarning,
   parseArchitectureForRead,
   prepareArchitectureUpdate,
   type SectionChange
@@ -146,6 +149,12 @@ export function runStageArchitecture(ctx: StageContext): void {
     fromLabel: `${config.architectureRelative} (現行)`,
     toLabel: `${config.architectureRelative} (stage)`
   })
+  const lineCount = countArchitectureLines(update.text)
+  const lineWarning = lineLimitWarning(lineCount)
+  if (lineWarning !== null) {
+    warnings.push(lineWarning)
+    noteWarnings([lineWarning])
+  }
 
   emitResult(command, {
     ok: true,
@@ -155,6 +164,8 @@ export function runStageArchitecture(ctx: StageContext): void {
     baseExists: file.exists,
     created: update.created,
     applied: update.applied,
+    lineCount,
+    lineLimit: ARCHITECTURE_LINE_LIMIT,
     diff: diffPayload(
       diff,
       sectionDiffs(file.text, update.text, update.applied)

@@ -4,8 +4,11 @@
 // **常に exit 0** で「読めなかった」という事実を JSON で返す。
 
 import {
+  ARCHITECTURE_LINE_LIMIT,
+  countArchitectureLines,
   extractDomains,
   findSection,
+  lineLimitWarning,
   parseArchitectureForRead
 } from "../lib/architecture.js"
 import { loadConfig, type ResolvedConfig } from "../lib/config.js"
@@ -119,10 +122,18 @@ export function runGetArchitecture(ctx: GetContext): void {
     return
   }
 
+  const lineCount = countArchitectureLines(file.text)
+  const lineWarning = lineLimitWarning(lineCount)
+  if (lineWarning !== null) {
+    warnings.push(lineWarning)
+    noteWarnings([lineWarning])
+  }
   emitResult(command, {
     ok: true,
     path: config.architecturePath,
     exists: true,
+    lineCount,
+    lineLimit: ARCHITECTURE_LINE_LIMIT,
     eol: doc.eol === "\r\n" ? "crlf" : "lf",
     preamble: doc.preamble,
     headings: doc.sections.map((s) => s.heading),

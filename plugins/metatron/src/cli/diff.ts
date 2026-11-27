@@ -2,6 +2,8 @@
 // できない」保証を成り立たせるため、stage が返す diff は CLI が自前で計算する
 // (外部ライブラリを追加しない方針のため LCS を直接書く)。
 
+import { splitTextLines } from "../lib/architecture.js"
+
 /** これを超える行数の文書は LCS を諦め、セクション単位の before/after に委ねる。 */
 export const MAX_DIFF_LINES = 1500
 
@@ -43,14 +45,6 @@ export interface UnifiedDiffResult {
   afterLines: number
   /** 省略の判定に使った上限行数。 */
   maxLines: number
-}
-
-function splitLines(text: string): string[] {
-  if (text === "") return []
-  const unified = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-  const lines = unified.split("\n")
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop()
-  return lines
 }
 
 // 最長共通部分列を後ろから積み上げ、前から辿って操作列に落とす。
@@ -117,8 +111,8 @@ export function unifiedDiff(
   const fromLabel = options.fromLabel ?? "a"
   const toLabel = options.toLabel ?? "b"
 
-  const a = splitLines(beforeText)
-  const b = splitLines(afterText)
+  const a = splitTextLines(beforeText)
+  const b = splitTextLines(afterText)
   const base = {
     truncated: false as boolean,
     truncatedReason: null as string | null,

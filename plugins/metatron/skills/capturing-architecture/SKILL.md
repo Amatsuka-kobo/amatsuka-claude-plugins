@@ -63,10 +63,10 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 | ドラフト単位 | ドラフトの主な材料 |
 | --- | --- |
 | ARCHITECTURE `## システム概要` | `documents` と `tree` と `dependencies`。散文 1 段落と、必要な場合は Mermaid 図 |
-| ARCHITECTURE `## 技術スタック` | `languages` / `packageManager` / `dependencies`。依存の全件を載せず、役割ごとの技術に絞る |
+| ARCHITECTURE `## 技術スタック` | `languages` / `dependencies`。言語・ランタイム・フレームワーク・データ層の技術だけを載せる |
 | ARCHITECTURE `## ディレクトリ構成` | `tree` / `fileCount` / `domainCandidates` |
 | ARCHITECTURE `## ドメインマップ` | `domainCandidates` |
-| ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。全件を載せず、よく使うものと使い分けの答えに絞る |
+| ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。定義の名前から読めない使い分け・前提・引数の付け方だけを載せる |
 | ARCHITECTURE `## テスト方針` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の文書 |
 | ARCHITECTURE `## 禁止事項` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
 | ARCHITECTURE `## 変更時の追随` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
@@ -74,9 +74,10 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - `## 禁止事項`・`## 変更時の追随`・`## テスト方針` を `scan` の事実から起草しない。`../../docs/ARCHITECTURE.example.md` の該当セクションの記入例を型にして既定のドラフトを作り、指摘を受けて直す。
 - docRoot に旧 rules の `.claude/rules/metatron/` が残っているときは、その `protected-paths.md` の触らないパスを `## 禁止事項`、変更に慎重を要するパスを `## 変更時の追随`、`testing-policy.md` の本文を `## テスト方針` の材料にする。
 - 旧ファイルの移行と削除はこのスキルで行わず、手順 9 で `/metatron:update` を案内する。
-- `document-boundary.md` で CLAUDE.md に当たる内容は起草しない。
+- `document-boundary.md` で CLAUDE.md に当たる内容は起草しない。材料の中に見つけたときは、CLAUDE.md へ移す案として手順 9 で示す。CLAUDE.md は、手順 9 で頼まれて承認を得たとき以外は書き換えない。
 - `## システム概要` に Mermaid 図を置くかどうかを含めてウォークスルーで問う。置く場合は解析結果から起草し、粒度も問う。
 - ARCHITECTURE の各セクションの起草は `../../references/architecture-format.md` の該当節の要件を満たす形で行う。
+- `../../references/writing-discipline.md` の「削れる内容」の 4 種類は起草しない。
 - 情報が足りずドラフトを書けない単位は推測で埋めない。その単位だけ質問形式に切り替える。
 - 質問しても材料が得られないときは、その単位を生成対象から外し、未記入であることを完了報告に載せる。
 
@@ -147,6 +148,7 @@ ARCHITECTURE がまだ無いとき(手順 6 で否認されたとき)は、こ�
 
 ## 9. 完了報告
 
+- CLAUDE.md へ移す案があれば、その文面を示す。CLAUDE.md への追記は、ユーザーに頼まれたときだけ、追記する位置を示して承認を得てから Edit で行う。
 - 書き込んだファイルのパスと、確定した単位の一覧を報告する。
 - 未記入のまま残した単位があれば一覧で報告する。
 - CLAUDE.md に追記した行、既にあった行、追記しなかったときはその理由を報告する。

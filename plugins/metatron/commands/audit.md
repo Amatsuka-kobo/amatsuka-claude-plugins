@@ -1,5 +1,5 @@
 ---
-description: 既存の ARCHITECTURE を、書式と執筆規律の現行の規定に照らして監査し、合わない箇所を選んで書き直す。実装との乖離を直すときは /metatron:update を使う
+description: 既存の ARCHITECTURE を、書式と執筆規律の現行の規定に照らして監査し、合わない箇所と削れる内容を選んで書き直す。実装との乖離を直すときは /metatron:update を使う
 ---
 
 metatron プラグインの updating-architecture スキルを Skill ツールで起動する。対象は、カレントディレクトリのプロジェクトの ARCHITECTURE である。
