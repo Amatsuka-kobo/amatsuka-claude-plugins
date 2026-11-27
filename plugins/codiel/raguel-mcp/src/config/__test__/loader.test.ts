@@ -266,7 +266,7 @@ describe("loadConfig - 厳格なスキーマ(A14)", () => {
   })
 })
 
-describe("loadConfig - 撤去したキー(ADR-012)", () => {
+describe("loadConfig - 撤去したキー(run の高速化の設計書 2026-10-01)", () => {
   it("judge・weight・panel・contextJudge.enabled は読み込みエラーにせず取り除き、retiredKeys に挙げる", () => {
     const loaded = loadRaguel({
       judge: { provider: "codex", canStop: false, deadlineMs: 1 },

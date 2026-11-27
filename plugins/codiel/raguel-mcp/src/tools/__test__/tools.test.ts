@@ -328,7 +328,7 @@ describe("list_rules(設計書 §6.2.8)", () => {
   })
 })
 
-describe("撤去した設定キー(ADR-012)", () => {
+describe("撤去した設定キー(run の高速化の設計書 2026-10-01)", () => {
   it("judge・weight・panel・contextJudge.enabled が残る設定でも起動して評価し、警告を reasons に 1 件だけ出す", async () => {
     const h = harness({
       raguel: {

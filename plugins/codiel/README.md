@@ -251,7 +251,7 @@ Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウ�
 
 ### 撤去した設定キーは警告付きで無視される
 
-LLM パネルと重さ判定の撤去(ADR-012)で、`judge`・`weight`・`panel` の全体と `contextJudge.enabled` は廃止しました。`.codiel/config.json` に残っていても、読み込みエラーにはならず、無視されます。評価のたびに、無視したキーを並べた警告が `reasons` に 1 件出るので、設定から削除してください。
+LLM パネルと重さ判定の撤去(設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md`)で、`judge`・`weight`・`panel` の全体と `contextJudge.enabled` は廃止しました。`.codiel/config.json` に残っていても、読み込みエラーにはならず、無視されます。評価のたびに、無視したキーを並べた警告が `reasons` に 1 件出るので、設定から削除してください。
 
 ### 保護パスの既定の除外と生成物の宣言は、使い終えたら戻す
 

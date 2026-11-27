@@ -569,7 +569,7 @@ codiel が書くのは各フェーズの作業の単位・入出力・書いて�
 宣言し、hooks が書き込み制御に使う。
 
 以前は frontmatter の `tools` で権限を最小化した Agent を同梱し、「できないことは暴走もできない」を
-原則としていた。ADR-004(2026-09-23)で同梱を 2 体に絞り、intent 駆動化(2026-09-27)で残る
+原則としていた。2026-09-23 の決定(`docs/old/metatron/ADR.md` の ADR-004)で同梱を 2 体に絞り、intent 駆動化(2026-09-27)で残る
 `codiel-analyst`(init フェーズの廃止に伴い削除)と `codiel-test-designer` も撤去した。
 test-designer の「Bash を持たず、テスト仕様のディレクトリの spec.md と cases.md だけを書く」という
 権限は、test-spec の契約の tools 限定条項と `writing-test-specs` 本文の規律が代わりに担う。

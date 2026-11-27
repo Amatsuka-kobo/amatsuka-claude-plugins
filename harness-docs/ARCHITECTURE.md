@@ -141,7 +141,7 @@
 ## テスト方針
 
 - ユニットテストは vitest で書く。E2E テストは持たない。
-- テストは対象ソースと同じディレクトリの `__test__/` に `<対象ファイル名>.test.ts` として置く(`src/lib/adr.ts` のテストは `src/lib/__test__/adr.test.ts`)。
+- テストは対象ソースと同じディレクトリの `__test__/` に `<対象ファイル名>.test.ts` として置く(`src/lib/architecture.ts` のテストは `src/lib/__test__/architecture.test.ts`)。
 - 複数のモジュールにまたがる統合テストは、入口のあるディレクトリの `__test__/` に置く。
 - 複数のテストから使うヘルパーは `__test__/helpers/` に置き、`.test.ts` を付けない。
 - 子プロセスとして起動するエントリポイントと故障注入は `src/testing/` に置く。lint と型検査の対象外にするものは拡張子を `.mjs` にする。
