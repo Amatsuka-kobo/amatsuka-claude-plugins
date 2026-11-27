@@ -81,7 +81,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.6.3-dev) — ARCHITECTURE を独立資産として記録・更新する。文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。ADR 機能と GOTCHAS 機能は 0.6.1-dev(2026-11-27、Issue #46)で削除した。このリポジトリの ADR 一覧と GOTCHAS の台帳は `docs/old/metatron/` にあり、AI は読まない。
+- **metatron** (0.6.4-dev) — ARCHITECTURE を独立資産として記録・更新する。文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。ADR 機能と GOTCHAS 機能は 0.6.1-dev(2026-11-27、Issue #46)で削除した。このリポジトリの ADR 一覧と GOTCHAS の台帳は `docs/old/metatron/` にあり、AI は読まない。
   共有ライブラリ + CLI + hook(SessionStart の案内と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
 - **basic-design** (0.6.4-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
