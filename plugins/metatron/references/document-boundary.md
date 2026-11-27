@@ -1,0 +1,20 @@
+# ARCHITECTURE と CLAUDE.md の境界
+
+ARCHITECTURE には成果物の決まりを書き、CLAUDE.md には作業の進め方を書く。同じ内容を両方に書かない。
+
+- 成果物の決まりは、成果物の構成(何がどこにあり、どの技術で作られているか)、成果物同士の関係(依存方向、何を変えたら何を揃えるか)、成果物を守る禁止である。
+- 作業の進め方は、ツールの選び方、Issue とブランチの運用、作業の順序、完了の判定、コーディング規約である。
+- 1 つの内容が両方に読めるときは、文の主語で決める。主語が成果物なら ARCHITECTURE、作業なら CLAUDE.md とする。
+
+判定の例(例示であり、ここに無い内容も同じ基準で判定する):
+
+| 内容 | 置き場 |
+| --- | --- |
+| `tools/` には Python、`scripts/` には ShellScript を置く | ARCHITECTURE `## ディレクトリ構成` |
+| プラグインを改修したら `plugin.json` のパッチバージョンを上げる | ARCHITECTURE `## 変更時の追随` |
+| TypeScript は strict を有効にする | ARCHITECTURE `## 技術スタック` |
+| コードベースの探索は特定の MCP のシンボルツールで行う | CLAUDE.md |
+| lint とテストが通ってから完了とする | CLAUDE.md |
+| Issue に Project のフィールドを設定する | CLAUDE.md |
+
+- ARCHITECTURE を書くときに作業の進め方に当たる内容を見つけたら、ARCHITECTURE に書かず、CLAUDE.md に書く内容であることをユーザーに伝える。
