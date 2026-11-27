@@ -109,6 +109,16 @@ ARCHITECTURE の有無に関わらず、次の 1 行を案内文に加える。
 - `.serena/memories/metatron/core.md` の SessionStart の案内とスキルの数は、マージ後に main で更新する。
 - バージョンは `0.6.4-dev` のまま据え置く。origin/main は `0.6.3-dev`、origin/dev は `0.6.4-dev` で、dev に main へ未反映の metatron のバージョンアップがある。Issue の「パッチバージョンを上げ」は CLAUDE.md の規則が優先する。
 
+## PR のレビューで改めた点
+
+- 判定表の 2 行目は成果物に現れないものに限り、どのリポジトリにも当てる好みはユーザー単位の CLAUDE.md に置く。「私の好み」と言われた PR やコミットの決まりが memory に落ちるのを防ぐ。
+- スキル(手順の列)の行を CLAUDE.md(決まり)の行より先に置く。手順の列は作業の進め方でもあり、後に置くと CLAUDE.md で確定する。
+- 事実や参照先は、リポジトリの全員が使うなら CLAUDE.md、1 人だけなら memory とする。
+- ユーザーが置き場を名指しした件は表に当てない。memory に保存しない条件は、判定ではなく承認された置き場で決める。
+- 否認された件と選び直された件の扱い、ARCHITECTURE の件を最後に回す順序、初版の作成後に `updating-architecture` へ渡す経路、既に memory にある内容を消す案を手順に加えた。
+- 強制の案を当てる条件を「ユーザーが例外を認めないと述べた」「違反すると取り消せない損害が出る」とした。
+- スキルが終わった後に自動 memory が同じ内容を保存する経路は、文面では塞げない限界として残る。
+
 ## 完了の条件
 
 - `pnpm run lint`・`pnpm run typecheck`・`pnpm run test`・`pnpm run build` が通り、`scripts/` の差分が `src/` と同じコミットにある。

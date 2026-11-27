@@ -12,7 +12,7 @@ ARCHITECTURE には成果物の決まりを書き、CLAUDE.md には作業の進
 | --- | --- |
 | テストは対象と同じディレクトリの `__test__/` に置く | ARCHITECTURE `## テスト方針` |
 | 依存を追加したらロックファイルを同じコミットに含める | ARCHITECTURE `## 変更時の追随` |
-| TypeScript は strict を有効にする | ARCHITECTURE `## 技術スタック` |
+| 依存は pnpm で追加し、npm を併用しない | ARCHITECTURE `## 技術スタック` |
 | コードベースの探索は特定の MCP のシンボルツールで行う | CLAUDE.md |
 | lint とテストが通ってから完了とする | CLAUDE.md |
 | Issue に Project のフィールドを設定する | CLAUDE.md |

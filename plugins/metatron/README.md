@@ -45,7 +45,7 @@ ARCHITECTURE は毎セッション読み込まれるため、行数の目安を 
 - 置き場は CLAUDE.md・`paths` 付きの rules・スキル・memory・ARCHITECTURE と、書かない、の中から決めます。判定表は `references/instruction-placement.md` にあります。
 - 例外なく守らせる決まりには、hook・permissions の deny・検査による強制の案も添えます。
 - 案はユーザーの承認を得てから進めます。ARCHITECTURE に当たる内容だけを `/metatron:update` の手順で書き込み、それ以外の書き込みはセッションに任せます。
-- memory 以外の置き場と判定した内容は、memory に重ねて保存しません。
+- 承認された置き場が memory 以外の内容は、memory に重ねて保存しません。既に memory にあれば、消す案を示します。置き場を名指しした依頼は、その置き場に従います。
 
 ## ARCHITECTURE のセクション構成
 

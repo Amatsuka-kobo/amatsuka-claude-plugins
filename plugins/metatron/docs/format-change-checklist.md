@@ -19,7 +19,8 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 ## 指示の置き場の判定表(`references/instruction-placement.md`)
 
 - [ ] 判定表の行を変えたら、`skills/placing-instructions/SKILL.md` の提示の形の例と、README の「指示の置き場の判定」を揃える
-- [ ] `references/document-boundary.md` の境界を変えたら、判定表の 3 行目と 5 行目が参照する区別と食い違わないかを確かめる
+- [ ] `references/document-boundary.md` の境界を変えたら、判定表の 3 行目と 6 行目が参照する区別と食い違わないかを確かめる
+- [ ] ARCHITECTURE に機械で確かめられる検査の定義ができたら、「強制の案」の構造の決まりの行の手段を、その定義に差し替える
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
