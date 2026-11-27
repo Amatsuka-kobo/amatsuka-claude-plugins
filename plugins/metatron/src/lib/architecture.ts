@@ -809,6 +809,7 @@ export function applySectionChanges(
     .filter((s): s is ArchitectureSection => s !== undefined)
   const isRemovedLine = (index: number): boolean =>
     removedRanges.some((s) => index >= s.startLine && index < s.endLine)
+  const appended: SectionChange[] = []
 
   for (const change of changes) {
     const order = canonicalIndex(change.heading)
@@ -849,24 +850,33 @@ export function applySectionChanges(
         order
       })
     } else {
-      // 同じ stage で末尾のセクションを消すときは、消した後に最後になる行で区切りを決める。
-      // 消すセクションの行で決めると、残るセクションの区切りの空行に空行が重なる。
-      let lastIndex = lines.length - 1
-      while (lastIndex > 0 && isRemovedLine(lastIndex)) lastIndex--
-      const last = lines[lastIndex]
-      let prefix = ""
-      if (!last.raw.endsWith("\n")) prefix += eol
-      if (last.text.trim() !== "") prefix += eol
-      ops.push({
-        start: lines.length,
-        end: lines.length,
-        text:
-          prefix +
-          buildSectionText(change.heading, change.body ?? "", eol, false),
-        order
-      })
+      appended.push(change)
     }
     applied.push({ heading: change.heading, mode: "added" })
+  }
+
+  // 末尾へ足すセクションは、契約 §4-1 の順にまとめて 1 つの差し込みにする。
+  // 区切りは、同じ stage で消すセクションを除いた最後の行で決める。
+  if (appended.length > 0) {
+    let lastIndex = lines.length - 1
+    while (lastIndex >= 0 && isRemovedLine(lastIndex)) lastIndex--
+    const last = lastIndex >= 0 ? lines[lastIndex] : undefined
+    let prefix = ""
+    if (last !== undefined) {
+      if (!last.raw.endsWith("\n")) prefix += eol
+      if (last.text.trim() !== "") prefix += eol
+    }
+    const body = [...appended]
+      .sort((a, b) => canonicalIndex(a.heading) - canonicalIndex(b.heading))
+      .map((c) => buildSectionText(c.heading, c.body ?? "", eol, true))
+      .join("")
+    ops.push({
+      start: lines.length,
+      end: lines.length,
+      text: prefix + body,
+      order: Number.MAX_SAFE_INTEGER,
+      touchesEnd: true
+    })
   }
 
   // 後ろから適用して行番号のずれを避ける。同じ位置に複数を差し込む場合は、

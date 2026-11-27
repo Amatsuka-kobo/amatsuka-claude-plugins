@@ -391,6 +391,7 @@ function applySectionChanges(current, changes) {
   const applied = [];
   const removedRanges = changes.filter((c) => c.remove === true).map((c) => findSection(doc, c.heading)).filter((s) => s !== void 0);
   const isRemovedLine = (index) => removedRanges.some((s) => index >= s.startLine && index < s.endLine);
+  const appended = [];
   for (const change of changes) {
     const order = canonicalIndex(change.heading);
     const section = findSection(doc, change.heading);
@@ -427,20 +428,27 @@ function applySectionChanges(current, changes) {
         order
       });
     } else {
-      let lastIndex = lines.length - 1;
-      while (lastIndex > 0 && isRemovedLine(lastIndex)) lastIndex--;
-      const last = lines[lastIndex];
-      let prefix = "";
-      if (!last.raw.endsWith("\n")) prefix += eol;
-      if (last.text.trim() !== "") prefix += eol;
-      ops.push({
-        start: lines.length,
-        end: lines.length,
-        text: prefix + buildSectionText(change.heading, change.body ?? "", eol, false),
-        order
-      });
+      appended.push(change);
     }
     applied.push({ heading: change.heading, mode: "added" });
+  }
+  if (appended.length > 0) {
+    let lastIndex = lines.length - 1;
+    while (lastIndex >= 0 && isRemovedLine(lastIndex)) lastIndex--;
+    const last = lastIndex >= 0 ? lines[lastIndex] : void 0;
+    let prefix = "";
+    if (last !== void 0) {
+      if (!last.raw.endsWith("\n")) prefix += eol;
+      if (last.text.trim() !== "") prefix += eol;
+    }
+    const body = [...appended].sort((a, b) => canonicalIndex(a.heading) - canonicalIndex(b.heading)).map((c) => buildSectionText(c.heading, c.body ?? "", eol, true)).join("");
+    ops.push({
+      start: lines.length,
+      end: lines.length,
+      text: prefix + body,
+      order: Number.MAX_SAFE_INTEGER,
+      touchesEnd: true
+    });
   }
   ops.sort((a, b) => b.start - a.start || b.order - a.order);
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text);

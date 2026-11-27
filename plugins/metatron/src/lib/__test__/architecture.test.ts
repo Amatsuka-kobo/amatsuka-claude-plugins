@@ -14,6 +14,7 @@ import {
   parseArchitectureForWrite,
   parseDomainsContent,
   prepareArchitectureUpdate,
+  type SectionChange,
   UNCLOSED_FENCE_WARNING,
   validateHeadingKey
 } from "../architecture.js"
@@ -1028,8 +1029,70 @@ test("A41: 新しい見出しの追加と旧見出しの削除を 1 回で stage
     "禁止事項",
     "変更時の追随"
   ])
-  expect(result.text).not.toMatch(/\n\n\n/)
+  expectSeparatedByOneBlank(result.text)
   expect(result.text.endsWith("ビルドする。\n")).toBe(true)
+})
+
+// 見出しの前にはちょうど 1 行の空行があり、空行は 2 行以上続かず、末尾の改行は 1 つ。
+function expectSeparatedByOneBlank(text: string): void {
+  const lf = text.replace(/\r\n/g, "\n")
+  expect(lf).not.toMatch(/\n\n\n/)
+  expect(lf).not.toMatch(/[^\n]\n## /)
+  expect(lf.startsWith("\n")).toBe(false)
+  expect(lf.endsWith("\n\n")).toBe(false)
+}
+
+test("A42: 末尾へ複数のセクションを足しても、区切りの空行は 1 行になる", () => {
+  const lastRemoved =
+    "# ARCHITECTURE\n\n## システム概要\n\nS\n\n## コマンド定義\n\nC\n\n## 保護パス\n\nP\n"
+  const cases: { text: string; changes: SectionChange[] }[] = [
+    {
+      text: lastRemoved,
+      changes: [
+        { heading: "禁止事項", body: "NF" },
+        { heading: "変更時の追随", body: "CF" },
+        { heading: "保護パス", remove: true }
+      ]
+    },
+    {
+      text: lastRemoved.replace(/\n/g, "\r\n"),
+      changes: [
+        { heading: "禁止事項", body: "NF" },
+        { heading: "変更時の追随", body: "CF" },
+        { heading: "保護パス", remove: true }
+      ]
+    },
+    {
+      text: lastRemoved,
+      changes: [
+        { heading: "禁止事項", body: "" },
+        { heading: "変更時の追随", body: "" },
+        { heading: "保護パス", remove: true }
+      ]
+    },
+    {
+      text: "# ARCHITECTURE\n\n## システム概要\n\nT\n\n",
+      changes: [
+        { heading: "変更時の追随", body: "CF" },
+        { heading: "禁止事項", body: "NF" }
+      ]
+    },
+    {
+      text: "## 保護パス\n\nP\n",
+      changes: [
+        { heading: "禁止事項", body: "NF" },
+        { heading: "保護パス", remove: true }
+      ]
+    }
+  ]
+  for (const { text, changes } of cases) {
+    const result = expectOk(prepareArchitectureUpdate(text, changes))
+    expectSeparatedByOneBlank(result.text)
+    const order = headings(result.text)
+    if (order.includes("変更時の追随")) {
+      expect(order.indexOf("変更時の追随")).toBe(order.indexOf("禁止事項") + 1)
+    }
+  }
 })
 
 test("A27: 複数のセクションをまとめて 1 回の remove で消せる", () => {
