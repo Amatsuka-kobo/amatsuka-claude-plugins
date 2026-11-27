@@ -3,10 +3,10 @@
 `amatsuka-claude-plugins` — a Claude Code plugin **marketplace** (not an app), plus the TypeScript
 sources that build each plugin's bundled scripts.
 
-Technical preconditions and operating conventions are canonical in
-`harness-docs/ARCHITECTURE.md`, which was added in 2026-08. metatron's SessionStart hook injects
-its full text at the start of each session in this repository; the root `CLAUDE.md` now contains
-only the repository overview and that pointer.
+Technical preconditions are canonical in
+`harness-docs/ARCHITECTURE.md`, which was added in 2026-08. The root `CLAUDE.md` reads it through
+its `@harness-docs/ARCHITECTURE.md` line (metatron does not inject the text). Since 2026-11-28
+(#54) ARCHITECTURE holds artifact rules and `CLAUDE.md` holds how the AI works.
 
 - `.claude-plugin/marketplace.json` — marketplace manifest; a plugin is only distributable once
   listed here (name/source/description). 14 entries (better-agentics added 2026-10-26; the former upstream intent
@@ -21,7 +21,7 @@ only the repository overview and that pointer.
   validates only Raphael antibodies and is unrelated.)
 - Root `.mcp.json` — two servers: `github` (http, `https://api.githubcopilot.com/mcp/`, bearer from
   env `GITHUB_PERSONAL_ACCESS_TOKEN`) and `serena` (stdio, `uvx --from git+…/serena
-  start-mcp-server`, context `claude-code`, dashboard off). `harness-docs/ARCHITECTURE.md` records
+  start-mcp-server`, context `claude-code`, dashboard off). The root `CLAUDE.md` 「探索と編集」 records
   the Context7 requirement for library documentation and Serena for codebase exploration + TS/MD
   editing.
 - `.claude/settings.json` (tracked) — model `claude-opus-5[1m]`, `outputStyle: EnhancedClaude5`,
@@ -81,7 +81,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.6.3-dev) — ARCHITECTURE を独立資産として記録・更新する。文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。ADR 機能と GOTCHAS 機能は 0.6.1-dev(2026-11-27、Issue #46)で削除した。このリポジトリの ADR 一覧と GOTCHAS の台帳は `docs/old/metatron/` にあり、AI は読まない。
+- **metatron** (0.6.4-dev) — ARCHITECTURE を独立資産として記録・更新する。文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。ADR 機能と GOTCHAS 機能は 0.6.1-dev(2026-11-27、Issue #46)で削除した。このリポジトリの ADR 一覧と GOTCHAS の台帳は `docs/old/metatron/` にあり、AI は読まない。
   共有ライブラリ + CLI + hook(SessionStart の案内と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
 - **basic-design** (0.6.4-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
@@ -204,6 +204,6 @@ the negation, to carry per-user state into `git worktree` checkouts.
   individual `setup-agents` path and pass `--mcp-deny` (the old GOTCHA-001, now in `docs/old/metatron/GOTCHAS.md`, records why). SessionStart reads them
   into the marker table it injects; **the hook writes nothing**. The agent-policy plugin itself ships **no** agent definitions since
   0.14.0-dev, and the `AMATSUKA_AGENT_*_ALIAS` env vars are no longer read.
-- The protected-path treatment of `CLAUDE.md` is defined in `harness-docs/ARCHITECTURE.md`.
+- What to check when `CLAUDE.md` changes is defined in `harness-docs/ARCHITECTURE.md` 「変更時の追随」.
 - `private/` holds the user's own scratch (`context-map/`, story drafts); `.superpowers/sdd/` holds
   hundreds of historical task briefs/reports/review diffs. Both are noise for code work.

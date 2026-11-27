@@ -77,6 +77,7 @@
   規約は ARCHITECTURE で扱わず CLAUDE.md に書く。body に `## ` 見出しを含む `stage-architecture` は `invalid_body`。
   **2026-11-27(metatron 0.6.1-dev、Issue #46)に §6 ADR と §7 GOTCHAS を廃止した。** 凍結文書には廃止前の書式が記録として残るだけで、実装の基準ではない。
   `## ADR 一覧` は許可リストに無いセクションとして扱う。`paths.gotchas` は未知キーとして警告なしで無視する。
+  **2026-11-28(metatron 0.6.4-dev、Issue #50)に §4-1 の 8 見出しを差し替えた。** レイヤー構造・ディレクトリ構成と責務・保護パスは廃止し、ディレクトリ構成・禁止事項・変更時の追随を加えた。
 - §9-§10 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
   完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表(`analyzing-issues` と `issue.md` は 2026-09-27 に廃止。
   intent 書式 v2 と上書きの記録は `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.5)。**要約を伴う抽出をしない。**

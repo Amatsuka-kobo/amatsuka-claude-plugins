@@ -5,7 +5,7 @@
   Claude Code component dirs, present only if needed.
 - `references/*.md` — AI-read shared discipline / reference fragments (agent-policy, prompt-smith,
   gh-utility). `docs/` — human-read design & rationale. `README.md` — only what a **user** must read
-  to use the plugin. This three-way split is defined in `harness-docs/ARCHITECTURE.md`.
+  to use the plugin. This three-way split is defined in `harness-docs/ARCHITECTURE.md` 「ディレクトリ構成」.
   Plugin-level design docs are inconsistent by design: some live at the plugin root (`raphael/DESIGN.md`,
   `guidepost/DESIGN.md`), some under `docs/` (`codiel/docs/DESIGN.md`), and the older ones only in `harness-docs/superpowers/specs/`.
 - `package.json` (`build` script only, `private: true`, `type: module`) + `build.ts` (esbuild) +
@@ -39,14 +39,17 @@ are in `src/testing/` (use `.mjs` when excluded from lint/typecheck); fixed test
 `src/fixtures/`. `src/testing/run-ts.ts` is the shared pre-build CLI/hook child-process helper;
 copies exist in agent-policy, codiel, chat-history, and gh-utility.
 
-## Versioning (`harness-docs/ARCHITECTURE.md`)
+## Versioning (`harness-docs/ARCHITECTURE.md` 「変更時の追随」)
+
+The rule is canonical in ARCHITECTURE: bump only the patch when changing a plugin; bump major/minor
+only when the user says so; keep the version when dev already has an unreleased bump of the same
+plugin. The notes below are history; where they disagree, ARCHITECTURE wins.
 
 Each plugin versions independently: bump the changed plugin's
-`plugins/<plugin>/.claude-plugin/plugin.json` proportionally to the change. Format `n1.n2.n3`, with
-`-dev` (or `-alpha.n4`) for prereleases — everything is `-dev` except pitcrew (0.10.2) and
+`plugins/<plugin>/.claude-plugin/plugin.json`. Format `n1.n2.n3`, with
+`-dev` for prereleases — everything is `-dev` except pitcrew (0.10.2) and
 chat-history (0.7.0). A doc-only fix inside a plugin (e.g. correcting a README path) still counts
-as a change: bump the patch of that plugin. Bump minor/patch/pre autonomously; **a major (n1) bump always requires asking
-the human**. Keep the sibling `package.json` version in sync — this drifts in practice (codiel sat
+as a change: bump the patch of that plugin. Keep the sibling `package.json` version in sync — this drifts in practice (codiel sat
 at 0.2.1-dev in `package.json` while the manifest said 0.4.0-dev until commit 8e6e3e0), so check
 both; all 11 pairs were in sync as of 2026-08-16. A plugin change must also be reflected in the root `README.md` plugin table (which lists
 リリース/開発中 status, not version numbers).

@@ -1,6 +1,6 @@
-The canonical definition of done is `harness-docs/ARCHITECTURE.md` §規約. In this repository,
-metatron's SessionStart hook injects the full ARCHITECTURE document, while the root `CLAUDE.md`
-only identifies the repository and points to that document. The available commands are recorded in
+The canonical definition of done is the root `CLAUDE.md` 「完了条件」. `harness-docs/ARCHITECTURE.md`
+is read through the `@harness-docs/ARCHITECTURE.md` line in `CLAUDE.md` (metatron no longer injects
+its text); its 「変更時の追随」 lists what to update together when a path changes. The available commands are recorded in
 `mem:suggested_commands`; source-to-bundle facts are in `mem:conventions`.
 
 No CI runs these checks. Markdown/JSON-only changes also have no automated validation: `plugin-dev`

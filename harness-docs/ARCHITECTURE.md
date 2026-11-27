@@ -2,92 +2,50 @@
 
 ## システム概要
 
-あまつか工房が開発する Claude Code プラグインを配布する pnpm workspace のモノレポである。利用者は Claude Code のユーザーであり、提供するマーケットプレイスを通じてプラグインを導入する。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして `scripts/` へ出力し git 管理下に置く。ネイティブコードと辞書はバンドルにも git にも含めず、初回に取得して `${CLAUDE_PLUGIN_DATA}` に置いてよい。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が必要になる処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。開発環境の用意とローカルプロキシの起動はルートの `scripts/` が担い、コードベース探索は Serena MCP が `.serena/` の設定とメモリを通じて担う。
+あまつか工房が開発する Claude Code プラグインを、Claude Code のユーザーへマーケットプレイスで配布するモノレポである。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして git 管理下に置く。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が要る処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。
 
 ## 技術スタック
 
 | 区分 | 採用技術 |
 | --- | --- |
-| ランタイム | Node.js >=26 |
-| パッケージマネージャ | pnpm 11.8.0 |
-| 言語 | TypeScript ^6.0.3 |
-| モジュール形式 | ESM |
-| バンドラ | esbuild ^0.28.1 |
-| スクリプト実行 | tsx ^4.22.4 |
-| Lint / Format | @biomejs/biome ^2.5.0 |
-| テスト | vitest ^4.1.10 |
-| 型定義 | @types/node ^26.0.0 |
+| 言語 | TypeScript 6.0(ESM) |
+| ランタイム | Node.js 26.12 |
 
-- Node.js と pnpm のバージョンは volta で固定する。Node は 26.3.1、pnpm は 11.8.0 とする。
-- TypeScript は strict と `noEmit` を有効にする。
-- esbuild の target は node22 に揃える。出力は ESM とし、拡張子は `.mjs` とする。
-- 共通の開発依存はルートの package.json に置く。
-- プラグイン固有のランタイム依存は、そのプラグインの package.json に置く。
-- 初回に取得するネイティブコードと辞書は package.json に置かず、取得元の URL と sha256 をコードに固定する。
+- Node.js と pnpm のバージョンは `mise.toml` で固定する。
+- バンドルの出力は ESM、拡張子は `.mjs`、esbuild の target は node22 に揃える。
+- 共通の開発依存はルートの `package.json` に、プラグイン固有のランタイム依存はそのプラグインの `package.json` に置く。
 
-## レイヤー構造
-
-| 層 | 責務 |
-| --- | --- |
-| 配布宣言 | プラグインの配布単位・名前・バージョンを宣言する(`.claude-plugin/`) |
-| 指示 | AI が読んで従う手順を置く(`skills/` `commands/` `agents/`) |
-| 参照 | 複数の指示から共有する規律と断片を置く(`references/`) |
-| フック | Claude Code のイベントと実行スクリプトを結びつける(`hooks/`) |
-| 配布物 | 実行されるバンドル。単発実行は `scripts/`、常駐プロセスは `dist/` に置く |
-| 実装 | 配布物の元になる TypeScript ソース(`src/`) |
-
-依存の許される方向:
-
-- 指示層は参照層を読む。
-- 指示層とフック層は配布物層を実行する。
-- 配布物層は参照層を実行時に読む。
-- 配布物層は同じプラグインの指示層の本文を実行時に読む。
-- 実装層はビルドを通じて配布物層を生成する。
-- 配布宣言層は他のどの層にも依存しない。
-
-禁止される依存方向:
-
-- 実装層は他プラグインの `src/` を import しない。同じ規則が複数のプラグインに要るときは、各プラグインで独立に実装し、規則を変えたときは同じ規則を持つ全プラグインの実装を追随させる。
-- 配布物層を手で編集しない。実装層を変更し、`pnpm run build` で再生成する。
-- 指示層と参照層に、リポジトリルート固有のパスや他プラグインの名前を書かない。参照が要る内容は、プラグイン内に閉じた表現へ書き換える。例外は、プラグイン間の連携を前提に設計された `codiel` `metatron` `gh-utility` の 3 プラグイン同士の言及のみ。
-
-## ディレクトリ構成と責務
+## ディレクトリ構成
 
 ```
 .
-├── .claude-plugin/marketplace.json  配布するプラグインの一覧を宣言する
-├── harness-docs/                    設計書・実装計画書と ARCHITECTURE を置く
-├── scripts/                         ターミナルで手動実行するための ShellScript を置く
-├── tools/                           AI が使用する Python スクリプトツールを置く
-├── docs/                            人間向けの文書と会話記録を置く
-│   └── prompts/                     別セッションの起動プロンプトを置く
-├── .serena/                         Serena のプロジェクト設定とメモリを置く
+├── harness-docs/              設計書・実装計画書と ARCHITECTURE
+├── scripts/                   ターミナルで手動実行する ShellScript
+├── tools/                     AI がセッション内で使う Python のツール(一時スクリプトを除く)
+├── docs/                      人間向けの文書と会話記録
+│   └── prompts/               別セッションの起動プロンプト
 └── plugins/<plugin>/
-    ├── .claude-plugin/plugin.json   プラグイン名とバージョンを宣言する
-    ├── .mcp.json                    MCP サーバーの起動方法を宣言する
-    ├── build.ts                     esbuild のバンドル定義を置く
-    ├── src/                         TypeScript ソースを置く
-    │   └── __test__/                vitest のテストを置く
-    ├── scripts/                     単発実行のバンドル出力を置く
-    ├── dist/                        常駐プロセスのバンドル出力を置く
-    ├── skills/                      AI が読む手順を置く
-    ├── commands/                    スラッシュコマンドの定義を置く
-    ├── agents/                      サブエージェントの定義を置く
-    ├── assets/                      指示層が読み込んで合成する素材を置く
-    ├── hooks/hooks.json             Claude Code のイベントと実行スクリプトの対応を置く
-    ├── references/                  複数の指示から共有する規律を置く
-    ├── docs/                        設計・背景・経緯・不採用案と、開発時のチェックリストを置く
-    ├── evals/                       スキルとエージェント定義の評価セットを置く
-    └── README.md                    利用者が読まないと使えない情報を置く
+    ├── .claude-plugin/        [配布宣言] プラグイン名とバージョン
+    ├── skills/ commands/ agents/  [指示] AI が読む手順
+    ├── references/            [参照] 複数の指示から共有する規律
+    ├── assets/                [参照] 指示層が実行時に読む素材と、Agent 定義へ合成する断片。言語別は assets/<種別>/<言語>/
+    ├── hooks/                 [フック] イベントと実行スクリプトの対応
+    ├── scripts/ dist/         [配布物] 単発実行は scripts/、常駐プロセスは dist/
+    ├── src/                   [実装] TypeScript ソース
+    ├── docs/                  設計・経緯・不採用案と、開発時のチェックリスト
+    ├── evals/                 スキルとエージェント定義の評価セット
+    └── README.md              利用者が読まないと使えない情報
 ```
 
-- `plugins/codiel/raguel-mcp/` は codiel 内の独立した pnpm workspace であり、MCP サーバーとして `dist/` へ出力する。
-- `assets/` に置くのは、指示層が実行時に読み込む素材と、実装層が Agent 定義へ合成する断片である。言語別に分けるときは `assets/<種別>/<言語>/` とする。
-- `docs/` は読まない。`docs/chat/` と `docs/prompts/` だけが例外である。
-- `docs/chat/**/*.md` は chat-recorder エージェントと chat-reader エージェントだけが読む。
-- `docs/prompts/**/*.md` は、依頼文で名指しされたときだけ読む。
-- 過去の記録が必要なときは `chat-history:recall` を使う。
-- 前回セッションの再開には `chat-history:resume` を使う。
+- `plugins/codiel/raguel-mcp/` は codiel 内の独立した pnpm workspace で、MCP サーバーとして `dist/` へ出力する。
+
+許される依存方向:
+
+- 指示層は参照層を読む。
+- 指示層とフック層は配布物層を実行する。
+- 配布物層は、参照層と、同じプラグインの指示層の本文を実行時に読む。
+- 実装層はビルドを通じて配布物層を生成する。
+- 配布宣言層は他のどの層にも依存しない。
 
 ## ドメインマップ
 
@@ -101,42 +59,11 @@
 }
 ```
 
-- `impl` は TypeScript の実装を指す。
-- `prompt` は AI が読む指示書と、そこへ合成される素材を指す。`.claude/` の output style・rules・skills を含む。
-- `bundle` は手で編集しない。
-- `manifest` は配布宣言・ワークスペース設定・エディタ設定・環境構築スクリプト・Issue テンプレートを指す。
-- `docs` は実行されない資産を指す。人間向けの文書、AI 向けの知識、Serena のメモリを含む。
-
 ## コマンド定義
 
-| 種別 | コマンド |
-| --- | --- |
-| build | `pnpm run build` |
-| lint | `pnpm run lint` |
-| lint(自動修正) | `pnpm run lint:fix` |
-| typecheck | `pnpm run typecheck` |
-| test | `pnpm run test` |
-
-- いずれも `pnpm install` が済んでいることを前提とする。
-- 単一のプラグインだけをビルドするときは `pnpm --filter <plugin>-scripts build` を使う。
-
-## 保護パス
-
-### 触らないパス
-
-- `plugins/*/scripts/` と `plugins/*/dist/` と `plugins/codiel/raguel-mcp/dist/` — バンドル出力。対応する `src/` を変更し、`pnpm run build` で再生成する。ただし ShellScript で書かれた `plugins/codiel/scripts/install-harness.sh` は直接編集してよい。
-- `.serena/memories/` — Serena の `write_memory` / `edit_memory` で変更する。
-
-### 変更に慎重を要するパス
-
-- `.claude-plugin/marketplace.json` — プラグインを追加または削除するときだけ変更する。変更後に対応する `plugins/<plugin>/.claude-plugin/plugin.json` があることを確認する。
-- `plugins/*/.claude-plugin/plugin.json` — 改修したらバージョンを上げる。上げ方は CLAUDE.md の「プラグインのバージョン」に従う。`package.json` を持つプラグインは `version` を同じ値に揃える。
-- `plugins/*/hooks/hooks.json` — 全セッションの挙動が変わる。変更後に新しいセッションで発火することを確認する。
-- `pnpm-workspace.yaml` — スクリプトを持つプラグインを追加または削除するときだけ変更する。変更後に `pnpm install` を実行し、`pnpm run build` を通す。
-- `tsconfig.json` と `biome.json` と `vitest.config.ts` — 全プラグインに影響する。変更後に `pnpm run typecheck` と `pnpm run lint` と `pnpm run test` をすべて通す。
-- `CLAUDE.md` — 全セッションで読み込まれる。ARCHITECTURE と内容が重ならないことを確認する。
-- `plugins/metatron/references/architecture-format.md` と `config-schema.md` — 書式と規則の契約。変更したら `plugins/metatron/docs/format-change-checklist.md` の該当セクションの項目をすべて追随させる。`config-schema.md` を変更したときは、metatron と codiel の独立実装を追随させ、2者比較テストを通す。
-- `plugins/codiel/references/intent-format.md` — intent 文書の書式契約。変更したら `plugins/codiel/docs/format-change-checklist.md` の項目をすべて追随させる。
+| 用途 | コマンド | 前提 |
+| --- | --- | --- |
+| 1 つのプラグインだけをビルドする | `pnpm --filter "./plugins/<plugin>" build` | `pnpm install` 済み |
 
 ## テスト方針
 
@@ -146,3 +73,27 @@
 - 複数のテストから使うヘルパーは `__test__/helpers/` に置き、`.test.ts` を付けない。
 - 子プロセスとして起動するエントリポイントと故障注入は `src/testing/` に置く。lint と型検査の対象外にするものは拡張子を `.mjs` にする。
 - テストが読み込む固定データは `src/fixtures/` に置く。
+
+## 禁止事項
+
+- 実装層は他プラグインの `src/` を import しない。同じ規則が複数のプラグインに要るときは各プラグインで独立に実装し、規則を変えたら同じ規則を持つ全プラグインの実装を追随させる。
+- 指示層と参照層に、リポジトリルート固有のパスや他プラグインの名前を書かない。参照が要る内容は、プラグイン内に閉じた表現へ書き換える。例外は `codiel` `metatron` `gh-utility` の 3 プラグイン同士の言及だけである。
+- 配布物層(`plugins/*/scripts/`・`plugins/*/dist/`・`plugins/codiel/raguel-mcp/dist/`)を手で編集しない。`src/` を変更して `pnpm run build` で再生成する。例外は ShellScript で書かれた `plugins/codiel/scripts/install-harness.sh` で、直接編集してよい。
+- `.serena/memories/` を直接編集しない。Serena の `write_memory` / `edit_memory` で変更する。
+- ネイティブコードと辞書を、バンドル・git・`package.json` に入れない。初回に取得して `${CLAUDE_PLUGIN_DATA}` に置き、取得元の URL と sha256 をコードに固定する。
+- ルートの `docs/` は読まない。ただし `docs/chat/**/*.md` は chat-recorder と chat-reader のエージェントだけが読み、過去の記録が要るときは `chat-history:recall`、前回セッションの再開には `chat-history:resume` を使う。`docs/prompts/**/*.md` は依頼文で名指しされたときだけ読む。
+
+## 変更時の追随
+
+- `plugins/*/src/`・`plugins/codiel/raguel-mcp/src/`: `pnpm run build` を実行し、`scripts/` と `dist/` の差分を同じコミットに入れる。
+- `plugins/*/.claude-plugin/plugin.json`: 改修したらバージョンを上げる。`package.json` を持つプラグインは `version` を同じ値に揃える。
+  - 形式は `x1.x2.x3`(メジャー・マイナー・パッチ)で、開発中は末尾に `-dev` を付け、付けないものはリリース済みである。
+  - 改修ではパッチだけを上げる。メジャーとマイナーはユーザーの指示があったときだけ上げる。
+  - dev から main にまだ出ていない同じプラグインのバージョンアップがあれば、据え置く。
+- `.claude-plugin/marketplace.json`(配布するプラグインの一覧): プラグインを追加・削除するときだけ変える。変えたら対応する `plugins/<plugin>/.claude-plugin/plugin.json` があることを確かめる。
+- `plugins/*/hooks/hooks.json`: 全セッションの挙動が変わる。変えたら新しいセッションで発火することを確かめる。
+- `pnpm-workspace.yaml`: スクリプトを持つプラグインを追加・削除するときだけ変える。変えたら `pnpm install` を実行し、`pnpm run build` を通す。
+- `tsconfig.json`・`biome.json`・`vitest.config.ts`: 全プラグインに影響する。変えたら全プラグインで検査が通ることを確かめる。
+- `CLAUDE.md`: 全セッションで読まれる。ARCHITECTURE と内容が重ならないことを確かめる。
+- `plugins/metatron/references/architecture-format.md`・`document-boundary.md`・`config-schema.md`・`writing-discipline.md`・`instruction-placement.md`(書式と規則の契約): `plugins/metatron/docs/format-change-checklist.md` の該当セクションの項目をすべて追随させる。`config-schema.md` を変えたら metatron と codiel の独立実装を追随させ、2 者比較テストを通す。
+- `plugins/codiel/references/intent-format.md`(intent 文書の書式契約): `plugins/codiel/docs/format-change-checklist.md` の項目をすべて追随させる。

@@ -1,8 +1,9 @@
-`plugins/metatron` (0.6.3-dev) — ARCHITECTURE を**独立資産**として記録・更新するプラグイン。
+`plugins/metatron` (0.6.4-dev) — ARCHITECTURE を**独立資産**として記録・更新するプラグイン。
 2026-08-16 新規追加(commit 1e4508b)。0.6.0(2026-11-19、PR #41)で、扱う文書を当時の ARCHITECTURE と GOTCHAS の 2 つに絞った(GOTCHAS は 0.6.1-dev で廃止)。
 旧 rules 3 ファイル(`.claude/rules/metatron/`)と、その CLI・config(`paths.rulesDir`)・guard・書式は撤去済み。
 0.6.1-dev(2026-11-27、Issue #46、PR #61)で ADR 機能と GOTCHAS 機能を削除し、扱う文書を ARCHITECTURE だけにした。
-保護パスとテスト方針は ARCHITECTURE のセクション、規約は CLAUDE.md に書く。
+0.6.4-dev(2026-11-28、Story #49 の #50・#51・#53)で、見出しを システム概要・技術スタック・ディレクトリ構成・ドメインマップ・コマンド定義・テスト方針・禁止事項・変更時の追随 の 8 つにした(旧 レイヤー構造・ディレクトリ構成と責務・保護パス は廃止)。
+ARCHITECTURE と CLAUDE.md の境界は `references/document-boundary.md`(成果物の決まりか、作業の進め方か)。指示の置き場の判定表は `references/instruction-placement.md`。
 文書は CLAUDE.md の行頭の `@<パス>` で読み込ませ、hook で本文を注入しない(SubagentStart は撤去)。
 組み込みの Explore・Plan と `omitClaudeMd` のサブエージェントには ARCHITECTURE が届かないが、対応しないと決定済み。
 codiel が持っていた `docs/ARCHITECTURE.md` の管理をここへ切り出したもの。
@@ -40,7 +41,7 @@ CLI が無価値という意味ではない。deny hook は「直接書かせな
 
 | hook | スクリプト | 挙動 |
 | --- | --- | --- |
-| SessionStart | `scripts/inject-context.mjs` | 文書の本文は注入しない。CLI の絶対パス、更新時の `updating-architecture` スキルの起動、委譲の注意だけを案内する。移行が要る状態(旧 rules の 3 ファイルが残る・CLAUDE.md の @メンションの欠け)は `systemMessage` で画面にも出す。`metatron.config.json` が無い案内は画面に出さず注入だけ(0.6.2-dev)。フェイルオープン |
+| SessionStart | `scripts/inject-context.mjs` | 文書の本文は注入しない。CLI の絶対パス、更新時の `updating-architecture` スキルの起動、委譲の注意と、振る舞いを残す前に `placing-instructions` スキルを起動する 1 行だけを案内する。移行が要る状態(旧 rules の 3 ファイルが残る・CLAUDE.md の @メンションの欠け)は `systemMessage` で画面にも出す。`metatron.config.json` が無い案内は画面に出さず注入だけ(0.6.2-dev)。フェイルオープン |
 | PreToolUse (`Edit\|Write\|NotebookEdit`) | `scripts/guard-docs.mjs` | ARCHITECTURE への直接編集を拒否し、`updating-architecture` スキルへ誘導する。CLI の絶対パスを載せる。保護する文書は ARCHITECTURE だけ。フェイルオープン |
 
 **案内文と deny の理由文は、ARCHITECTURE の書き込み手順(stage → commit)を載せず、`updating-architecture` スキルの起動へ誘導する**(2026-11-07、0.5.2-dev。`updateLines` と guard-docs の `SKILL_LINE`)。
@@ -104,8 +105,9 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 `diff-architecture` は技術スタックとコマンドを機械的に照合せず、定義のありかを `sources` で返す(2026-11-12)。ディレクトリの消失も断定しない(どこを基準にした相対パスかを決められないため)。インラインコードの `/` を含むパスのうち、ルートから実在を確かめられないもの(リンクはたどらない)を skipped の「ディレクトリの実在の未確認」に並べ、AI が確かめる。ツリーの中と 1 語は並べない。
 
-**残った `## ADR 一覧`**: 見出しの許可リストは 8 セクションで、`ADR 一覧` は外れた。既存の ARCHITECTURE に残っていれば `diff-architecture` が
-`legacy_section` の所見で示し(`scan.ts` の `LEGACY_ADR_HEADING`)、`stage-architecture` の `{ "heading": "ADR 一覧", "remove": true }` で消せる。
+**旧見出しと `## ADR 一覧`**: 既存の ARCHITECTURE に残っていれば `diff-architecture` が見出しごとに移し先付きの
+`legacy_section` の所見で示し(`scan.ts` の `LEGACY_SECTIONS`、`architecture.ts` の `LEGACY_HEADINGS`)、`stage-architecture` の `{ heading, remove: true }` で消せる。旧見出しへの body 付き stage は移し先付きの `unknown_heading`。`/metatron:update` は旧見出しと旧 rules を 1 件の「旧構成の移行」で移す。
+`get architecture` と `stage-architecture` は `lineCount`・`lineLimit`(200)を返し、超えたら警告する(#51)。監査と更新は writing-discipline の「削れる内容」4 種類を洗い出す。
 `updating-architecture` は削除の前に、本文の退避先をユーザーに確かめる。
 
 - 出力は**常に JSON を stdout**。読み取り系は「読めなかった」も事実として返すため**常に exit 0**、
@@ -148,11 +150,11 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 ## skills / commands / references
 
-- skills 2: `capturing-architecture`(初回生成)、`updating-architecture`(乖離検出と更新)。
-  `evals/` に 2 本の JSON。**agents は持たない。**
-- commands 3: `/metatron:init`(scan の事実からセクション単位で確認しながら ARCHITECTURE(保護パス・テスト方針を含む)を初回生成し、`link-claude-md` で CLAUDE.md に @メンションを追記する。規約は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示し、旧 rules の移行と @メンション・設定ファイルの欠けも扱う)、`/metatron:audit`。
-- `references/` 4 本(AI が実行時に読む正本): `architecture-format.md` / `config-schema.md` /
-  `cli-usage.md` / `writing-discipline.md`。
+- skills 3: `capturing-architecture`(初回生成)、`updating-architecture`(乖離検出と更新)、`placing-instructions`(指示の置き場の判定)。
+  `evals/` に 3 本の JSON。**agents は持たない。**
+- commands 3: `/metatron:init`(scan の事実からセクション単位で確認しながら ARCHITECTURE(禁止事項・変更時の追随・テスト方針を含む)を初回生成し、`link-claude-md` で CLAUDE.md に @メンションを追記する。規約は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示し、旧 rules の移行と @メンション・設定ファイルの欠けも扱う)、`/metatron:audit`。
+- `references/` 6 本(AI が実行時に読む正本): `architecture-format.md` / `config-schema.md` /
+  `cli-usage.md` / `writing-discipline.md` / `document-boundary.md` / `instruction-placement.md`。
 - `docs/format-change-checklist.md` is the developer checklist for format changes. It was moved out
   of `references/` because it names repository-root-specific paths.
 - `docs/ARCHITECTURE.example.md` はここへ移設された(codiel から削除)。
