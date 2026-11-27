@@ -47,10 +47,10 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)を更新す�
 - [ ] 5. 起草(セクションを足すときは `scan`)
 - [ ] 6. サブエージェントによる簡潔化
 - [ ] 7. 草案の提示
+- [ ] CLAUDE.md の変更(手順 4 で選ばれたときだけ)
 - [ ] 8. stage(`stage-architecture`)
 - [ ] 9. diff の提示と承認
 - [ ] 10. 書き込み(`commit-architecture`)
-- [ ] CLAUDE.md の変更(手順 4 で選ばれたときだけ)
 - [ ] 11. 旧構成の移行(手順 4 で選ばれたときだけ)
 - [ ] 12. CLAUDE.md への @メンションの追記(`link-claude-md`)
 - [ ] 13. 報告
@@ -133,7 +133,7 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)を更新す�
 - セクションごとに書く内容は `../../references/architecture-format.md` に合わせる。
 - 欠けているセクションを足すときは `scan` を実行し、その事実で埋まる範囲だけを草案にする。埋まらない箇所は推測せずユーザーに聞く。
 - `## 禁止事項`・`## 変更時の追随`・`## テスト方針` の草案を `scan` の事実から起こさない。移す元が無く、セクションが欠けているときは `../../docs/ARCHITECTURE.example.md` の該当セクションの記入例を型にし、既存の設定ファイルと文書から既定の草案を作る。
-- `document-boundary.md` で CLAUDE.md に当たる内容は ARCHITECTURE に書かない。求められたときは、CLAUDE.md へ移す候補として手順 4 に加え、「CLAUDE.md の変更」で扱う。
+- `document-boundary.md` で CLAUDE.md に当たる内容は ARCHITECTURE に書かない。起草中に気づいたとき(依頼された変更に含まれるときを含む)は、起草から外し、CLAUDE.md へ移す候補として手順 4 の一覧に戻して選ばせる。
 - `## ADR 一覧` を削除する候補を選ばれたときは、種別(「旧 ADR 一覧」「監査」)を問わず、本文を退避するかをユーザーに確かめる。
   - 退避するときは、ユーザーが選んだパスへ `## ADR 一覧` の本文を Write で写す。決まった置き場が無いときは、移動先を提案してから写す。
   - 写し終えてから、手順 8 で `{ "heading": "ADR 一覧", "remove": true }` を stage する。
@@ -149,6 +149,16 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)を更新す�
 
 - 1 セクションにつき、草案と確認してほしい点 1〜3 個を 1 メッセージで示す。
 - 残す部分と差し替える部分を、提示の時点で分けて示す。
+
+## CLAUDE.md の変更
+
+手順 4 で CLAUDE.md から消す候補か、CLAUDE.md へ移す候補が選ばれたときだけ、手順 7 の後、手順 8 の stage より前に行う。CLAUDE.md へ先に書くので、否認されても内容は ARCHITECTURE に残る。
+
+- 書き換える先は、docRoot の `CLAUDE.md` とする。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` とする。どちらも無いときに移す候補が選ばれたら、承認を得てから Write で `CLAUDE.md` を作る。
+- 消す候補は、消す行とパスを示す。移す候補は、追記する文面と追記する位置を示す。移す文面の見出しは CLAUDE.md の見出しの階層に合わせ、既存の行と重なる部分は外す。
+- 書き換えてよいかの明示的な承認を得てから、Edit で書き換える。示した行の他は書き換えない。
+- 移す候補の ARCHITECTURE 側の削除は、CLAUDE.md へ追記した後に、手順 8〜10 の stage と承認で行う。追記を否認された候補は、ARCHITECTURE 側の削除を stage に含めない。
+- 消した行と追記した行を手順 13 の報告に使う。
 
 ## 8. stage
 
@@ -171,16 +181,6 @@ description: 既にあるアーキテクチャ文書(ARCHITECTURE)を更新す�
 
 - 手順 9 で承認を得た staging だけを `commit-architecture --staging-id <id>` で書き込む。
 - staging の期限切れや `file_changed` で commit が失敗したときは、現行を読み直して手順 8 からやり直す。
-
-## CLAUDE.md の変更
-
-手順 4 で CLAUDE.md から消す候補か、CLAUDE.md へ移す候補が選ばれたときだけ、手順 10 の後に行う。
-
-- 書き換える先は、docRoot の `CLAUDE.md` とする。それが無く `.claude/CLAUDE.md` だけがあるときは `.claude/CLAUDE.md` とする。どちらも無いときに移す候補が選ばれたら、承認を得てから Write で `CLAUDE.md` を作る。
-- 消す候補は、消す行とパスを示す。移す候補は、追記する文面と追記する位置を示す。移す文面の見出しは CLAUDE.md の見出しの階層に合わせ、既存の行と重なる部分は外す。
-- 書き換えてよいかの明示的な承認を得てから、Edit で書き換える。示した行の他は書き換えない。
-- 移す候補の ARCHITECTURE 側の削除は、手順 8〜10 の stage と承認で行う。CLAUDE.md への追記を否認されたときは、ARCHITECTURE から消したかどうかを手順 13 で報告する。
-- 消した行と追記した行を手順 13 の報告に使う。
 
 ## 11. 旧構成の移行
 
