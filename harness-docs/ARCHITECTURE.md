@@ -76,12 +76,48 @@
 
 ## 禁止事項
 
-- 実装層は他プラグインの `src/` を import しない。同じ規則が複数のプラグインに要るときは各プラグインで独立に実装し、規則を変えたら同じ規則を持つ全プラグインの実装を追随させる。
+- 実装層は他プラグインの `src/` を import しない。同じ規則が複数のプラグインに要るときは各プラグインで独立に実装し、規則を変えたら同じ規則を持つ全プラグインの実装を追随させる。テスト(`__test__/`)は 2 者比較テストのために除く。
 - 指示層と参照層に、リポジトリルート固有のパスや他プラグインの名前を書かない。参照が要る内容は、プラグイン内に閉じた表現へ書き換える。例外は `codiel` `metatron` `gh-utility` の 3 プラグイン同士の言及だけである。
 - 配布物層(`plugins/*/scripts/`・`plugins/*/dist/`・`plugins/codiel/raguel-mcp/dist/`)を手で編集しない。`src/` を変更して `pnpm run build` で再生成する。例外は ShellScript で書かれた `plugins/codiel/scripts/install-harness.sh` で、直接編集してよい。
 - `.serena/memories/` を直接編集しない。Serena の `write_memory` / `edit_memory` で変更する。
 - ネイティブコードと辞書を、バンドル・git・`package.json` に入れない。初回に取得して `${CLAUDE_PLUGIN_DATA}` に置き、取得元の URL と sha256 をコードに固定する。
 - ルートの `docs/` は読まない。ただし `docs/chat/**/*.md` は chat-recorder と chat-reader のエージェントだけが読み、過去の記録が要るときは `chat-history:recall`、前回セッションの再開には `chat-history:resume` を使う。`docs/prompts/**/*.md` は依頼文で名指しされたときだけ読む。
+
+```json metatron:checks
+[
+  {
+    "id": "no-cross-plugin-src-import",
+    "kind": "no-import",
+    "from": [
+      "plugins/<plugin>/src/**"
+    ],
+    "exceptFrom": [
+      "plugins/*/src/**/__test__/**"
+    ],
+    "to": [
+      "plugins/*/src/**"
+    ],
+    "exceptTo": [
+      "plugins/<plugin>/src/**"
+    ],
+    "message": "他プラグインの src/ を import しない。同じ規則は各プラグインで独立に実装する"
+  },
+  {
+    "id": "no-raguel-to-plugin-src-import",
+    "kind": "no-import",
+    "from": [
+      "plugins/codiel/raguel-mcp/src/**"
+    ],
+    "exceptFrom": [
+      "plugins/codiel/raguel-mcp/src/**/__test__/**"
+    ],
+    "to": [
+      "plugins/*/src/**"
+    ],
+    "message": "raguel-mcp は独立した実装であり、プラグインの src/ を import しない"
+  }
+]
+```
 
 ## 変更時の追随
 
@@ -95,5 +131,5 @@
 - `pnpm-workspace.yaml`: スクリプトを持つプラグインを追加・削除するときだけ変える。変えたら `pnpm install` を実行し、`pnpm run build` を通す。
 - `tsconfig.json`・`biome.json`・`vitest.config.ts`: 全プラグインに影響する。変えたら全プラグインで検査が通ることを確かめる。
 - `CLAUDE.md`: 全セッションで読まれる。ARCHITECTURE と内容が重ならないことを確かめる。
-- `plugins/metatron/references/architecture-format.md`・`document-boundary.md`・`config-schema.md`・`writing-discipline.md`・`instruction-placement.md`(書式と規則の契約): `plugins/metatron/docs/format-change-checklist.md` の該当セクションの項目をすべて追随させる。`config-schema.md` を変えたら metatron と codiel の独立実装を追随させ、2 者比較テストを通す。
+- `plugins/metatron/references/architecture-format.md`・`document-boundary.md`・`config-schema.md`・`writing-discipline.md`・`instruction-placement.md`・`check-format.md`(書式と規則の契約): `plugins/metatron/docs/format-change-checklist.md` の該当セクションの項目をすべて追随させる。`config-schema.md` を変えたら metatron と codiel の独立実装を追随させ、2 者比較テストを通す。
 - `plugins/codiel/references/intent-format.md`(intent 文書の書式契約): `plugins/codiel/docs/format-change-checklist.md` の項目をすべて追随させる。
