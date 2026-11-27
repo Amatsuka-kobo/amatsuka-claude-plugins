@@ -38,7 +38,7 @@ const ABOLISHED_KEYS: readonly { path: string; reason: string }[] = [
 ]
 
 /**
- * LLM パネルと重さ判定とともに撤去したキー(ADR-012)。path の書き方は ABOLISHED_KEYS と同じ。
+ * LLM パネルと重さ判定とともに撤去したキー(run の高速化の設計書 2026-10-01)。path の書き方は ABOLISHED_KEYS と同じ。
  * 既存の設定ファイルで run が止まらないよう、読み込みエラーにせず取り除き、評価のたびに警告する
  */
 const RETIRED_KEYS: readonly string[] = [
