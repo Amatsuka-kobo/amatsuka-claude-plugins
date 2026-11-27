@@ -1,5 +1,5 @@
 {
-  "description": "metatron: SessionStart で CLI の絶対パスと更新の案内を出し、PreToolUse で ARCHITECTURE への直接編集を拒否する",
+  "description": "metatron: SessionStart で CLI の絶対パス・更新の案内・指示の置き場を決めるスキルの案内を出し、PreToolUse で ARCHITECTURE への直接編集を拒否する",
   "hooks": {
     "SessionStart": [
       {
