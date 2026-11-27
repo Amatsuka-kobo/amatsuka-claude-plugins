@@ -55,13 +55,19 @@ export type ArchitectureHeading = (typeof ARCHITECTURE_HEADINGS)[number]
 export const ARCHITECTURE_LINE_LIMIT = 200
 
 /**
- * 行数。CRLF も 1 行と数え、末尾の改行の後ろの空要素は数えない。
- * `cli/diff.ts` の `afterLines` と同じ数え方である。
+ * 改行コードを揃えて行に分ける。末尾の改行の後ろの空要素は含めない。
+ * `cli/diff.ts` の diff と行数も、この分け方を使う。
  */
-export function countArchitectureLines(text: string): number {
-  if (text === "") return 0
+export function splitTextLines(text: string): string[] {
+  if (text === "") return []
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
-  return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length
+  if (lines[lines.length - 1] === "") lines.pop()
+  return lines
+}
+
+/** 行数。CRLF も 1 行と数える。 */
+export function countArchitectureLines(text: string): number {
+  return splitTextLines(text).length
 }
 
 /** 行数が目安を超えたときの警告。超えていなければ null。 */

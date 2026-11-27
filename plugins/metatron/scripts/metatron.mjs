@@ -18,10 +18,14 @@ var LEGACY_HEADINGS = {
   \u4FDD\u8B77\u30D1\u30B9: "\u89E6\u3089\u306A\u3044\u30D1\u30B9\u306F\u300C\u7981\u6B62\u4E8B\u9805\u300D\u3001\u5909\u66F4\u306B\u614E\u91CD\u3092\u8981\u3059\u308B\u30D1\u30B9\u306F\u300C\u5909\u66F4\u6642\u306E\u8FFD\u968F\u300D"
 };
 var ARCHITECTURE_LINE_LIMIT = 200;
-function countArchitectureLines(text) {
-  if (text === "") return 0;
+function splitTextLines(text) {
+  if (text === "") return [];
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+function countArchitectureLines(text) {
+  return splitTextLines(text).length;
 }
 function lineLimitWarning(lineCount) {
   if (lineCount <= ARCHITECTURE_LINE_LIMIT) return null;
@@ -3033,13 +3037,6 @@ function runGet(target, ctx) {
 // src/cli/diff.ts
 var MAX_DIFF_LINES = 1500;
 var DEFAULT_CONTEXT = 3;
-function splitLines2(text) {
-  if (text === "") return [];
-  const unified = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = unified.split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return lines;
-}
 function diffOps(a, b) {
   const n = a.length;
   const m = b.length;
@@ -3089,8 +3086,8 @@ function unifiedDiff(beforeText, afterText, options = {}) {
   const context = options.context ?? DEFAULT_CONTEXT;
   const fromLabel = options.fromLabel ?? "a";
   const toLabel = options.toLabel ?? "b";
-  const a = splitLines2(beforeText);
-  const b = splitLines2(afterText);
+  const a = splitTextLines(beforeText);
+  const b = splitTextLines(afterText);
   const base = {
     truncated: false,
     truncatedReason: null,
