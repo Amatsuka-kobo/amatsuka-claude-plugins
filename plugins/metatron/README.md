@@ -59,7 +59,7 @@ ARCHITECTURE は毎セッション読み込まれるため、行数の目安を 
 | 4 | `## ドメインマップ` | ドメインごとのパスの glob(`metatron:domains` のブロック) |
 | 5 | `## コマンド定義` | build・lint・typecheck・test などのコマンド |
 | 6 | `## テスト方針` | テストの役割分担・配置・命名 |
-| 7 | `## 禁止事項` | 禁止する依存方向・触らないパス・読まないパス。代わりの手段を同じ項目に併記する |
+| 7 | `## 禁止事項` | 禁止する依存方向・触らないパス・読まないパス。代わりの手段を同じ項目に併記する。検査にできる禁止には `metatron:checks` の定義を添える |
 | 8 | `## 変更時の追随` | パスを変更したときに確かめること・同時に直すもの |
 
 書くのは成果物の決まりです。ツールの選び方・Issue とブランチの運用・完了の判定・コーディング規約・作業に使う参照先のような作業の進め方は、`CLAUDE.md` に書きます。記入例は [`docs/ARCHITECTURE.example.md`](./docs/ARCHITECTURE.example.md) にあります。
@@ -94,6 +94,7 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 | `stage-architecture --input <path>` | 段階 | セクション更新案を受け取り、書かずに差分と `stagingId` を返す。セクションの削除は `remove: true` で指定する。旧見出しに `body` を付けると `unknown_heading` で拒否し、移し先を添える |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して書き込む |
 | `link-claude-md` | 書 | `CLAUDE.md` へ ARCHITECTURE の @メンションを追記し(既にあれば何もしない)、`metatron.config.json` が無ければ作る |
+| `check` | 検査 | `## 禁止事項` の `metatron:checks` の定義を LLM なしで実行し、違反を返す。違反があれば exit 1 |
 
 ### なぜ CLI を通すのか
 
@@ -102,6 +103,44 @@ node <metatron のプラグインルート>/scripts/metatron.mjs <サブコマ�
 ### 長い入力は `--input <path>` で渡す
 
 書き込み系サブコマンドの入力 JSON は、一時ファイルに書いてパスで渡します。引数に直接埋めると引数長の上限に当たり、本文中の引用符・バッククォート・`$`・改行がシェルに解釈されて壊れるためです。ファイルへの書き込みは Write ツールが担うのでシェルを一切通らず、CLI に渡るのはパス 1 個だけになります。CLI は読み取り後に一時ファイルを削除しません(失敗時に内容を確認できるようにするためです)。出力は常に JSON を stdout へ返します。読み取り系は「読めなかった」も事実として返すため常に exit 0、書き込み系は拒否・失敗で非 0 になり、理由は JSON の `error` に入ります。
+
+## 検査(`check`)
+
+禁止事項のうち、ECMAScript の相対パスの import で判定できるものには、検査の定義を添えられます。定義は `## 禁止事項` に `json metatron:checks` のフェンスで書きます。`check` は定義を LLM なしで実行し、違反をファイルと行番号つきで返します。
+
+````
+```json metatron:checks
+[
+  {
+    "id": "no-cross-package-src-import",
+    "kind": "no-import",
+    "from": ["packages/<pkg>/src/**"],
+    "to": ["packages/*/src/**"],
+    "exceptTo": ["packages/<pkg>/src/**"],
+    "message": "他パッケージの src/ を import しない。共有する処理は packages/shared に置く"
+  }
+]
+```
+````
+
+種類は `no-import` だけです。`from` に一致するファイルが、相対パスで `to` に一致するファイルを import すると違反になります。`from` の `<pkg>` はその区間の値を覚え、`exceptTo` の `<pkg>` を覚えた値に置き換えて照合します。項目と glob の規則は `references/check-format.md` にあります。文書に書いたコマンドは実行しません。
+
+`pnpm run lint` などに組み込むときは、既存の lint の後に `check` をつなぎます。CLI の絶対パスは `get config` の `cli.path` が返します。プラグインの入る場所はバージョンで変わるので、絶対パスを設定に固定したときは、更新のたびに直してください。検査の定義を持たないプロジェクトは、lint に `check` を入れません。ブロックが無いと exit 2 になります。
+
+| 終了コード | 意味 |
+| --- | --- |
+| 0 | 違反が無い |
+| 1 | 違反がある |
+| 2 | ARCHITECTURE が無い、`metatron:checks` のブロックが無い、定義が読めない、`from` に一致するファイルが無い、走査が 20,000 件を超えた |
+| 3 | 想定外の内部エラー |
+
+標準出力に JSON、標準エラーに `<file>:<line>: <message>(<specifier>)` の形の違反を 1 件 1 行で出します。hook からは実行しません。
+
+限界は次のとおりです。
+
+- 見るのは ECMAScript(`.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs`)の相対パス(`./` か `../`)の import だけです。他の言語のファイルは `skipped` に数えます。
+- パッケージ名(workspace の名前や tsconfig の paths)を経由した import は見ません。
+- 拡張子の補完とディレクトリの index の解決はしません。`vi.mock("x")` のような import でない参照も見ません。
 
 ## 2 つのイベントに掛ける 2 つのスクリプト
 

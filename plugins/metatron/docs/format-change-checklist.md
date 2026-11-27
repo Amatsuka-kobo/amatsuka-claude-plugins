@@ -20,7 +20,14 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 
 - [ ] 判定表の行を変えたら、`skills/placing-instructions/SKILL.md` の提示の形の例と、README の「指示の置き場の判定」を揃える
 - [ ] `references/document-boundary.md` の境界を変えたら、判定表の 3 行目と 6 行目が参照する区別と食い違わないかを確かめる
-- [ ] ARCHITECTURE に機械で確かめられる検査の定義ができたら、「強制の案」の構造の決まりの行の手段を、その定義に差し替える
+
+## 検査の定義の書式(`references/check-format.md`)
+
+- [ ] `plugins/metatron/src/lib/checks.ts`(定義の検証・glob の照合・`no-import` の判定)と、`src/lib/__test__/checks.test.ts`、`src/cli/__test__/check.test.ts`
+- [ ] `references/architecture-format.md` の `## 禁止事項` と、書き込み経路が拒否する条件(`invalid_checks`)
+- [ ] `skills/updating-architecture/SKILL.md` の起草の手順(禁止事項の文が `no-import` に当たるときの定義の案)
+- [ ] `docs/ARCHITECTURE.example.md` の `## 禁止事項` の記入例
+- [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §1・§4・§12
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 

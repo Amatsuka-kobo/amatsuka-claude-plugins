@@ -107,7 +107,8 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 
 **旧見出しと `## ADR 一覧`**: 既存の ARCHITECTURE に残っていれば `diff-architecture` が見出しごとに移し先付きの
 `legacy_section` の所見で示し(`scan.ts` の `LEGACY_SECTIONS`、`architecture.ts` の `LEGACY_HEADINGS`)、`stage-architecture` の `{ heading, remove: true }` で消せる。旧見出しへの body 付き stage は移し先付きの `unknown_heading`。`/metatron:update` は旧見出しと旧 rules を 1 件の「旧構成の移行」で移す。
-`get architecture` と `stage-architecture` は `lineCount`・`lineLimit`(200)を返し、超えたら警告する(#51)。監査と更新は writing-discipline の「削れる内容」4 種類を洗い出す。
+`get architecture` と `stage-architecture` は `lineCount`・`lineLimit`(200)を返し、超えたら警告する(#51)。
+`check`(#52、`src/lib/checks.ts`・`src/cli/check.ts`)は ARCHITECTURE の `json metatron:checks` の定義(今は `no-import` だけ)を LLM なしで実行する検査の層で、終了コードは 0 違反なし・1 違反あり・2 定義や走査の問題・3 内部エラー。書式は `references/check-format.md`。このリポジトリは `pnpm run lint` で実行する。監査と更新は writing-discipline の「削れる内容」4 種類を洗い出す。
 `updating-architecture` は削除の前に、本文の退避先をユーザーに確かめる。
 
 - 出力は**常に JSON を stdout**。読み取り系は「読めなかった」も事実として返すため**常に exit 0**、
@@ -153,8 +154,8 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 - skills 3: `capturing-architecture`(初回生成)、`updating-architecture`(乖離検出と更新)、`placing-instructions`(指示の置き場の判定)。
   `evals/` に 3 本の JSON。**agents は持たない。**
 - commands 3: `/metatron:init`(scan の事実からセクション単位で確認しながら ARCHITECTURE(禁止事項・変更時の追随・テスト方針を含む)を初回生成し、`link-claude-md` で CLAUDE.md に @メンションを追記する。規約は対象外)、`/metatron:update`(決定的に検出できる乖離候補だけを提示し、旧 rules の移行と @メンション・設定ファイルの欠けも扱う)、`/metatron:audit`。
-- `references/` 6 本(AI が実行時に読む正本): `architecture-format.md` / `config-schema.md` /
-  `cli-usage.md` / `writing-discipline.md` / `document-boundary.md` / `instruction-placement.md`。
+- `references/` 7 本(AI が実行時に読む正本): `architecture-format.md` / `config-schema.md` /
+  `cli-usage.md` / `writing-discipline.md` / `document-boundary.md` / `instruction-placement.md` / `check-format.md`。
 - `docs/format-change-checklist.md` is the developer checklist for format changes. It was moved out
   of `references/` because it names repository-root-specific paths.
 - `docs/ARCHITECTURE.example.md` はここへ移設された(codiel から削除)。
