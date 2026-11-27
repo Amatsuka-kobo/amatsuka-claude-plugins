@@ -2,7 +2,7 @@
 
 ## システム概要
 
-あまつか工房が開発する Claude Code プラグインを、Claude Code のユーザーへマーケットプレイスで配布するモノレポである。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして git 管理下に置く。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が要る処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。ネイティブコードと辞書は、初回に取得して `${CLAUDE_PLUGIN_DATA}` に置いてよい。
+あまつか工房が開発する Claude Code プラグインを、Claude Code のユーザーへマーケットプレイスで配布するモノレポである。各プラグインは Claude Code が読む宣言(skills / agents / commands / hooks)と TypeScript ソースを持ち、ソースは esbuild でバンドルして git 管理下に置く。Anthropic API を使えないユーザーも全プラグインを使えることを必須要件とし、Anthropic API が要る処理は Claude Code の機構か `claude` CLI のヘッドレス実行に閉じる。Anthropic 以外の外部 API は、利用者が環境変数に設定する API キーを前提に必須依存としてよい。
 
 ## 技術スタック
 

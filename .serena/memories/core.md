@@ -3,7 +3,7 @@
 `amatsuka-claude-plugins` — a Claude Code plugin **marketplace** (not an app), plus the TypeScript
 sources that build each plugin's bundled scripts.
 
-Technical preconditions and operating conventions are canonical in
+Technical preconditions are canonical in
 `harness-docs/ARCHITECTURE.md`, which was added in 2026-08. The root `CLAUDE.md` reads it through
 its `@harness-docs/ARCHITECTURE.md` line (metatron does not inject the text). Since 2026-11-28
 (#54) ARCHITECTURE holds artifact rules and `CLAUDE.md` holds how the AI works.

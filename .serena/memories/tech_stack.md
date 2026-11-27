@@ -1,6 +1,6 @@
 Repo root **is** the build system — a pnpm workspace covering every plugin.
 
-- Runtime: Node 26 (pinned by `mise.toml`: node 26.12.1, pnpm 12.15.0; Volta is no longer used).
+- Runtime: Node 26 (pinned by `mise.toml`: node 26.12.1, pnpm 12.15.0; `scripts/install-toolchain.sh` still installs Volta and is stale).
   Plugin READMEs state a lower **consumer** floor (Node >= 22); prompt-smith's bundles moved from
   node26 to the common node22 target in 0.3.2-dev. The >= 26 requirement is for building this repo.
 - Package manager: **pnpm** only. `pnpm-workspace.yaml` now lists **15 members** — every plugin
