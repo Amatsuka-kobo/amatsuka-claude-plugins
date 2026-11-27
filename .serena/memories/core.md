@@ -63,7 +63,7 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 
 ## Distributed plugins (14 incl. better-agentics since 2026-10-26, see `.claude-plugin/marketplace.json`)
 
-Only **codiel (1.1.6)** and **chat-history (0.8.5)** are released; every other plugin is `-dev`.
+Only **codiel (1.1.7)** and **chat-history (0.8.5)** are released; every other plugin is `-dev`.
 Manifest and sibling `package.json` versions were all in sync as of 2026-11-27.
 
 **metatron / codiel の連携** — 願い → intent → 実装という一続きの流れは codiel が受け持ち
@@ -77,7 +77,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
 パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (1.1.6) — intent-driven orchestrator gated by the bundled `raguel` MCP
+- **codiel** (1.1.7) — intent-driven orchestrator gated by the bundled `raguel` MCP
   server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
