@@ -16,7 +16,11 @@
 // (または既に解決済みの絶対パス)だけを受け取る。
 
 import fs from "node:fs"
-import { CHECKS_MARKER, parseChecksContent } from "./checks.js"
+import {
+  CHECKS_MARKER,
+  type ChecksParse,
+  parseChecksContent
+} from "./checks.js"
 
 /** 契約 §4-1。ファイルタイトルの行。 */
 export const ARCHITECTURE_TITLE = "# ARCHITECTURE"
@@ -484,7 +488,7 @@ function isMarkerInfo(info: string, marker: string): boolean {
   return tokens.length === 2 && tokens[0] === "json" && tokens[1] === marker
 }
 
-export interface DomainsBlockLookup {
+export interface MarkedBlockLookup {
   block: DomainsBlock | null
   warnings: string[]
 }
@@ -493,7 +497,10 @@ export interface DomainsBlockLookup {
  * `metatron:domains` ブロックを探す。フェンスの判定は §4-2 の状態機械と同一の
  * 規則で行う(独自のフェンス判定を書かない。契約 §1)。
  */
-export function findDomainsBlock(text: string): DomainsBlockLookup {
+/** 互換のための別名。 */
+export type DomainsBlockLookup = MarkedBlockLookup
+
+export function findDomainsBlock(text: string): MarkedBlockLookup {
   return findMarkedBlock(text, DOMAINS_MARKER)
 }
 
@@ -504,7 +511,7 @@ export function findDomainsBlock(text: string): DomainsBlockLookup {
 export function findMarkedBlock(
   text: string,
   marker: string
-): DomainsBlockLookup {
+): MarkedBlockLookup {
   const lines = splitLines(text)
   const blocks: DomainsBlock[] = []
   const warnings: string[] = []
@@ -1185,4 +1192,20 @@ export function readArchitectureFile(filePath: string): ArchitectureFile {
     doc,
     warnings: [...warnings, ...doc.warnings]
   }
+}
+
+/** 文書から検査の定義(`metatron:checks`)を読む。 */
+export function extractChecks(
+  text: string
+): ChecksParse & { warnings: string[] } {
+  const { block, warnings } = findMarkedBlock(text, CHECKS_MARKER)
+  if (block === null) {
+    return {
+      ok: false,
+      reason: "block_not_found",
+      message: `\`${CHECKS_MARKER}\` ブロックが見つかりません。`,
+      warnings
+    }
+  }
+  return { ...parseChecksContent(block.content), warnings }
 }

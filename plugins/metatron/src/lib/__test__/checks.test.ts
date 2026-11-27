@@ -2,11 +2,10 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, describe, expect, test } from "vitest"
-import { prepareArchitectureUpdate } from "../architecture.js"
+import { extractChecks, prepareArchitectureUpdate } from "../architecture.js"
 import {
   type CheckDefinition,
   compileGlob,
-  extractChecks,
   extractImports,
   parseChecksContent,
   runChecks
@@ -225,5 +224,101 @@ describe("C5: 書き込み経路", () => {
       { heading: "テスト方針", body: "- vitest" }
     ])
     expect(result.ok).toBe(true)
+  })
+})
+
+describe("C6: レビューで見つかった入力", () => {
+  test("コメントの中の引用符・同じ行の 2 つ目・BOM の後の import を拾う", () => {
+    const text = [
+      '﻿import a from "./a"',
+      "import {",
+      "  b, // don't",
+      "  c",
+      '} from "../x"',
+      'import d from "./d"; import e from "../e"',
+      'import f from "."'
+    ].join("\n")
+    expect(extractImports(text).map((i) => i.specifier)).toEqual([
+      "./a",
+      "../x",
+      "./d",
+      "../e",
+      "."
+    ])
+  })
+
+  test("コメント・ブロックコメント・テンプレート・文字列・プロパティの中の import は拾わない", () => {
+    const text = [
+      "export const A = 1",
+      '// copied from "../b/src/x"',
+      "/*",
+      'import x from "../b"',
+      "*/",
+      "const t = `",
+      'import y from "../c"',
+      "`",
+      'const s = "await import(\\"../d\\")"',
+      '// const r = require("../b/src/y")',
+      'a.import("../z")'
+    ].join("\n")
+    expect(extractImports(text)).toEqual([])
+  })
+
+  test.each([
+    ["空の区間", "a//b"],
+    [". の区間", "b/./c"]
+  ])("%s を持つ glob は読めない定義になる", (_, glob) => {
+    const result = parseChecksContent(
+      block([
+        {
+          id: "a",
+          kind: "no-import",
+          from: ["src/**"],
+          to: [glob],
+          message: "m"
+        }
+      ])
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  test("連続する ** は 1 つにまとめる", () => {
+    expect(compileGlob("a/**/**/b").re.test("a/b")).toBe(true)
+  })
+
+  test("from に一致するのが ECMAScript 以外だけなら no_match", () => {
+    const root = project({ "src/a.py": "import os\n" })
+    const result = runChecks(root, [
+      {
+        id: "py",
+        kind: "no-import",
+        from: ["src/**"],
+        exceptFrom: [],
+        to: ["lib/**"],
+        exceptTo: [],
+        message: "m"
+      }
+    ])
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe("no_match")
+  })
+
+  test("途中の区間のリンクで docRoot の外へ出る開始点は outside_root", () => {
+    const outside = project({ "src/a.ts": 'import x from "../lib/x"\n' })
+    const root = project({})
+    fs.symlinkSync(outside, path.join(root, "linked"))
+    const result = runChecks(root, [
+      {
+        id: "out",
+        kind: "no-import",
+        from: ["linked/src/**"],
+        exceptFrom: [],
+        to: ["**"],
+        exceptTo: [],
+        message: "m"
+      }
+    ])
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe("outside_root")
   })
 })

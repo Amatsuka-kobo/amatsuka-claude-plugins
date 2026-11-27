@@ -6,7 +6,6 @@
 
 import fs from "node:fs"
 import path from "node:path"
-import { findMarkedBlock } from "./architecture.js"
 
 export const CHECKS_MARKER = "metatron:checks"
 
@@ -60,6 +59,9 @@ export function globError(glob: string, allowCaptures: boolean): string | null {
   const segments = glob.split("/")
   if (segments.includes(".."))
     return `glob「${glob}」に .. の区間は書けません。`
+  if (segments.some((segment) => segment === "" || segment === ".")) {
+    return `glob「${glob}」に空の区間か . の区間があります。`
+  }
   const seen = new Set<string>()
   for (const segment of segments) {
     if (!segment.includes("<") && !segment.includes(">")) continue
@@ -86,7 +88,9 @@ function escapeRe(text: string): string {
  */
 export function compileGlob(glob: string): CompiledGlob {
   const names: string[] = []
-  const segments = glob.split("/")
+  const segments = glob
+    .split("/")
+    .filter((segment, i, all) => !(segment === "**" && all[i - 1] === "**"))
   let re = ""
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
@@ -270,22 +274,6 @@ export function parseChecksContent(content: string): ChecksParse {
   return { ok: true, checks }
 }
 
-/** 文書から検査の定義を読む。 */
-export function extractChecks(
-  text: string
-): ChecksParse & { warnings: string[] } {
-  const { block, warnings } = findMarkedBlock(text, CHECKS_MARKER)
-  if (block === null) {
-    return {
-      ok: false,
-      reason: "block_not_found",
-      message: `\`${CHECKS_MARKER}\` ブロックが見つかりません。`,
-      warnings
-    }
-  }
-  return { ...parseChecksContent(block.content), warnings }
-}
-
 // ---------------------------------------------------------------------------
 // import の抽出
 // ---------------------------------------------------------------------------
@@ -295,13 +283,58 @@ export interface ImportSpecifier {
   line: number
 }
 
-// 行頭の import / export から、引用符とセミコロンを挟まずに続く from "x"。
+// 文の始まり(行頭かセミコロンの後)の import / export から、引用符を挟まずに続く from "x"。
 const FROM_RE =
-  /^[ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*(["'])([^"'\n]+)\1/gm
-// 行頭の import "x"(副作用だけの import)。
-const BARE_RE = /^[ \t]*import\s*(["'])([^"'\n]+)\1/gm
-// import("x") と require("x")。
-const CALL_RE = /\b(?:import|require)\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g
+  /(?:^|;)[ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*(["'])([^"'\n]*)\1/gm
+// 文の始まりの import "x"(副作用だけの import)。
+const BARE_RE = /(?:^|;)[ \t]*import\s*(["'])([^"'\n]*)\1/gm
+// import("x") と require("x")。プロパティ(a.import)は除く。
+const CALL_RE = /(?<![.\w$])(?:import|require)\s*\(\s*(["'])([^"'\n]*)\1\s*\)/g
+
+/**
+ * 照合用の写しを作る。長さと改行の位置は元のまま保つ。
+ * コメントとテンプレートリテラルは空白に、文字列の中身は `x` に置き換える。
+ * 指定子は、写しで見つけた位置の元の文字列から取る。
+ */
+export function maskSource(text: string): string {
+  const out = text.split("")
+  const blank = (from: number, to: number, fill: string) => {
+    for (let i = from; i < to; i++) if (out[i] !== "\n") out[i] = fill
+  }
+  if (out[0] === "﻿") out[0] = " "
+  let i = 0
+  while (i < text.length) {
+    const c = text[i]
+    const next = text[i + 1]
+    if (c === "/" && next === "/") {
+      const end = text.indexOf("\n", i)
+      const stop = end === -1 ? text.length : end
+      blank(i, stop, " ")
+      i = stop
+    } else if (c === "/" && next === "*") {
+      const end = text.indexOf("*/", i + 2)
+      const stop = end === -1 ? text.length : end + 2
+      blank(i, stop, " ")
+      i = stop
+    } else if (c === "`") {
+      let j = i + 1
+      while (j < text.length && text[j] !== "`") j += text[j] === "\\" ? 2 : 1
+      const stop = Math.min(j + 1, text.length)
+      blank(i, stop, " ")
+      i = stop
+    } else if (c === '"' || c === "'") {
+      let j = i + 1
+      while (j < text.length && text[j] !== c && text[j] !== "\n") {
+        j += text[j] === "\\" ? 2 : 1
+      }
+      blank(i + 1, Math.min(j, text.length), "x")
+      i = j + 1
+    } else {
+      i++
+    }
+  }
+  return out.join("")
+}
 
 function lineAt(text: string, index: number): number {
   let line = 1
@@ -311,14 +344,17 @@ function lineAt(text: string, index: number): number {
 
 /** ファイルの全文から import の指定子を取る。 */
 export function extractImports(text: string): ImportSpecifier[] {
+  const masked = maskSource(text)
   const found = new Map<number, ImportSpecifier>()
   for (const re of [FROM_RE, BARE_RE, CALL_RE]) {
     re.lastIndex = 0
-    for (let m = re.exec(text); m !== null; m = re.exec(text)) {
-      const specifier = m[2]
-      const position = m.index + m[0].lastIndexOf(specifier)
-      if (!found.has(position)) {
-        found.set(position, { specifier, line: lineAt(text, position) })
+    for (let m = re.exec(masked); m !== null; m = re.exec(masked)) {
+      // 閉じる引用符の位置から、伏せる前の文字列の中の指定子の位置を求める。
+      const close = m.index + m[0].lastIndexOf(m[1])
+      const open = close - m[2].length - 1
+      const specifier = text.slice(open + 1, close)
+      if (!found.has(open)) {
+        found.set(open, { specifier, line: lineAt(text, open + 1) })
       }
     }
   }
@@ -345,32 +381,39 @@ export type ChecksRun =
       checked: number
       skipped: number
     }
-  | { ok: false; reason: "no_match" | "too_many_files"; message: string }
+  | {
+      ok: false
+      reason: "no_match" | "too_many_files" | "unreadable" | "outside_root"
+      message: string
+    }
 
 function toPosix(p: string): string {
   return p.split(path.sep).join("/")
 }
 
+type WalkResult = "ok" | "too_many" | "unreadable"
+
 /** 開始ディレクトリの下のファイルを、リンクをたどらずに集める。 */
-function walk(root: string, start: string, out: string[]): boolean {
+function walk(root: string, start: string, out: string[]): WalkResult {
   const absolute = path.join(root, start)
   let entries: fs.Dirent[]
   try {
     entries = fs.readdirSync(absolute, { withFileTypes: true })
   } catch {
-    return true
+    return "unreadable"
   }
   for (const entry of entries) {
     const rel = start === "" ? entry.name : `${start}/${entry.name}`
     if (entry.isDirectory()) {
       if (SKIPPED_DIRECTORIES.has(entry.name)) continue
-      if (!walk(root, rel, out)) return false
+      const result = walk(root, rel, out)
+      if (result !== "ok") return result
     } else if (entry.isFile()) {
       out.push(rel)
-      if (out.length > MAX_CHECK_FILES) return false
+      if (out.length > MAX_CHECK_FILES) return "too_many"
     }
   }
-  return true
+  return "ok"
 }
 
 function startDirectories(globs: string[]): string[] {
@@ -386,6 +429,7 @@ export function runChecks(root: string, checks: CheckDefinition[]): ChecksRun {
   const violations: CheckViolation[] = []
   const checkedFiles = new Set<string>()
   let skipped = 0
+  const realRoot = fs.realpathSync(root)
   for (const check of checks) {
     const files: string[] = []
     for (const start of startDirectories(check.from)) {
@@ -396,21 +440,38 @@ export function runChecks(root: string, checks: CheckDefinition[]): ChecksRun {
       } catch {
         continue
       }
+      // 途中の区間のリンクで docRoot の外へ出ていないかを、実体のパスで確かめる。
+      const real = fs.realpathSync(startPath)
+      if (real !== realRoot && !real.startsWith(`${realRoot}${path.sep}`)) {
+        return {
+          ok: false,
+          reason: "outside_root",
+          message: `検査「${check.id}」の走査の開始点 ${start} が docRoot の外を指しています。`
+        }
+      }
       if (stat.isFile()) {
         files.push(start)
         continue
       }
       if (!stat.isDirectory()) continue
-      if (!walk(root, start, files)) {
+      const walked = walk(root, start, files)
+      if (walked === "too_many") {
         return {
           ok: false,
           reason: "too_many_files",
-          message: `検査「${check.id}」の走査が ${String(MAX_CHECK_FILES)} 件を超えたため打ち切りました。from の glob を絞ってください。`
+          message: `検査「${check.id}」の走査が ${String(MAX_CHECK_FILES)} 件を超えたため打ち切りました。from の glob を固定の接頭辞で絞ってください。`
+        }
+      }
+      if (walked === "unreadable") {
+        return {
+          ok: false,
+          reason: "unreadable",
+          message: `検査「${check.id}」の走査で読めないディレクトリがありました。権限を確かめてください。`
         }
       }
     }
     const fromGlobs = check.from.map(compileGlob)
-    let matched = 0
+    let readable = 0
     for (const file of files) {
       let values: Record<string, string> | null = null
       for (const glob of fromGlobs) {
@@ -425,18 +486,22 @@ export function runChecks(root: string, checks: CheckDefinition[]): ChecksRun {
       if (values === null) continue
       const bound = values
       if (check.exceptFrom.some((g) => bindGlob(g, bound).test(file))) continue
-      matched++
       if (!ECMASCRIPT_EXTENSIONS.has(path.extname(file))) {
         skipped++
         continue
       }
-      checkedFiles.add(file)
       let text: string
       try {
         text = fs.readFileSync(path.join(root, file), "utf8")
       } catch {
-        continue
+        return {
+          ok: false,
+          reason: "unreadable",
+          message: `検査「${check.id}」の対象 ${file} を読めませんでした。`
+        }
       }
+      readable++
+      checkedFiles.add(file)
       const toRes = check.to.map((g) => compileGlob(g).re)
       const exceptToRes = check.exceptTo.map((g) => bindGlob(g, bound))
       for (const imp of extractImports(text)) {
@@ -462,11 +527,11 @@ export function runChecks(root: string, checks: CheckDefinition[]): ChecksRun {
         })
       }
     }
-    if (matched === 0) {
+    if (readable === 0) {
       return {
         ok: false,
         reason: "no_match",
-        message: `検査「${check.id}」の from に一致するファイルがありません。glob が古くなっていないか確かめてください。`
+        message: `検査「${check.id}」の from に一致する ECMAScript のファイルがありません。glob が古くなっていないか確かめてください。`
       }
     }
   }

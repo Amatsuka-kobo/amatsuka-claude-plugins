@@ -23,6 +23,9 @@ function globError(glob, allowCaptures) {
   const segments = glob.split("/");
   if (segments.includes(".."))
     return `glob\u300C${glob}\u300D\u306B .. \u306E\u533A\u9593\u306F\u66F8\u3051\u307E\u305B\u3093\u3002`;
+  if (segments.some((segment) => segment === "" || segment === ".")) {
+    return `glob\u300C${glob}\u300D\u306B\u7A7A\u306E\u533A\u9593\u304B . \u306E\u533A\u9593\u304C\u3042\u308A\u307E\u3059\u3002`;
+  }
   const seen = /* @__PURE__ */ new Set();
   for (const segment of segments) {
     if (!segment.includes("<") && !segment.includes(">")) continue;
@@ -43,7 +46,7 @@ function escapeRe(text) {
 }
 function compileGlob(glob) {
   const names = [];
-  const segments = glob.split("/");
+  const segments = glob.split("/").filter((segment, i, all) => !(segment === "**" && all[i - 1] === "**"));
   let re = "";
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
@@ -202,35 +205,64 @@ function parseChecksContent(content) {
   }
   return { ok: true, checks };
 }
-function extractChecks(text) {
-  const { block, warnings } = findMarkedBlock(text, CHECKS_MARKER);
-  if (block === null) {
-    return {
-      ok: false,
-      reason: "block_not_found",
-      message: `\`${CHECKS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002`,
-      warnings
-    };
+var FROM_RE = /(?:^|;)[ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*(["'])([^"'\n]*)\1/gm;
+var BARE_RE = /(?:^|;)[ \t]*import\s*(["'])([^"'\n]*)\1/gm;
+var CALL_RE = /(?<![.\w$])(?:import|require)\s*\(\s*(["'])([^"'\n]*)\1\s*\)/g;
+function maskSource(text) {
+  const out = text.split("");
+  const blank = (from, to, fill) => {
+    for (let i2 = from; i2 < to; i2++) if (out[i2] !== "\n") out[i2] = fill;
+  };
+  if (out[0] === "\uFEFF") out[0] = " ";
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === "/" && next === "/") {
+      const end = text.indexOf("\n", i);
+      const stop = end === -1 ? text.length : end;
+      blank(i, stop, " ");
+      i = stop;
+    } else if (c === "/" && next === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      blank(i, stop, " ");
+      i = stop;
+    } else if (c === "`") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== "`") j += text[j] === "\\" ? 2 : 1;
+      const stop = Math.min(j + 1, text.length);
+      blank(i, stop, " ");
+      i = stop;
+    } else if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c && text[j] !== "\n") {
+        j += text[j] === "\\" ? 2 : 1;
+      }
+      blank(i + 1, Math.min(j, text.length), "x");
+      i = j + 1;
+    } else {
+      i++;
+    }
   }
-  return { ...parseChecksContent(block.content), warnings };
+  return out.join("");
 }
-var FROM_RE = /^[ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*(["'])([^"'\n]+)\1/gm;
-var BARE_RE = /^[ \t]*import\s*(["'])([^"'\n]+)\1/gm;
-var CALL_RE = /\b(?:import|require)\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g;
 function lineAt(text, index) {
   let line = 1;
   for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
   return line;
 }
 function extractImports(text) {
+  const masked = maskSource(text);
   const found = /* @__PURE__ */ new Map();
   for (const re of [FROM_RE, BARE_RE, CALL_RE]) {
     re.lastIndex = 0;
-    for (let m = re.exec(text); m !== null; m = re.exec(text)) {
-      const specifier = m[2];
-      const position = m.index + m[0].lastIndexOf(specifier);
-      if (!found.has(position)) {
-        found.set(position, { specifier, line: lineAt(text, position) });
+    for (let m = re.exec(masked); m !== null; m = re.exec(masked)) {
+      const close = m.index + m[0].lastIndexOf(m[1]);
+      const open = close - m[2].length - 1;
+      const specifier = text.slice(open + 1, close);
+      if (!found.has(open)) {
+        found.set(open, { specifier, line: lineAt(text, open + 1) });
       }
     }
   }
@@ -245,19 +277,20 @@ function walk(root, start, out) {
   try {
     entries = fs.readdirSync(absolute, { withFileTypes: true });
   } catch {
-    return true;
+    return "unreadable";
   }
   for (const entry of entries) {
     const rel = start === "" ? entry.name : `${start}/${entry.name}`;
     if (entry.isDirectory()) {
       if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
-      if (!walk(root, rel, out)) return false;
+      const result = walk(root, rel, out);
+      if (result !== "ok") return result;
     } else if (entry.isFile()) {
       out.push(rel);
-      if (out.length > MAX_CHECK_FILES) return false;
+      if (out.length > MAX_CHECK_FILES) return "too_many";
     }
   }
-  return true;
+  return "ok";
 }
 function startDirectories(globs) {
   const prefixes = [...new Set(globs.map(literalPrefix))].sort();
@@ -269,6 +302,7 @@ function runChecks(root, checks) {
   const violations = [];
   const checkedFiles = /* @__PURE__ */ new Set();
   let skipped = 0;
+  const realRoot = fs.realpathSync(root);
   for (const check of checks) {
     const files = [];
     for (const start of startDirectories(check.from)) {
@@ -279,21 +313,37 @@ function runChecks(root, checks) {
       } catch {
         continue;
       }
+      const real = fs.realpathSync(startPath);
+      if (real !== realRoot && !real.startsWith(`${realRoot}${path.sep}`)) {
+        return {
+          ok: false,
+          reason: "outside_root",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u306E\u958B\u59CB\u70B9 ${start} \u304C docRoot \u306E\u5916\u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002`
+        };
+      }
       if (stat.isFile()) {
         files.push(start);
         continue;
       }
       if (!stat.isDirectory()) continue;
-      if (!walk(root, start, files)) {
+      const walked = walk(root, start, files);
+      if (walked === "too_many") {
         return {
           ok: false,
           reason: "too_many_files",
-          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u304C ${String(MAX_CHECK_FILES)} \u4EF6\u3092\u8D85\u3048\u305F\u305F\u3081\u6253\u3061\u5207\u308A\u307E\u3057\u305F\u3002from \u306E glob \u3092\u7D5E\u3063\u3066\u304F\u3060\u3055\u3044\u3002`
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u304C ${String(MAX_CHECK_FILES)} \u4EF6\u3092\u8D85\u3048\u305F\u305F\u3081\u6253\u3061\u5207\u308A\u307E\u3057\u305F\u3002from \u306E glob \u3092\u56FA\u5B9A\u306E\u63A5\u982D\u8F9E\u3067\u7D5E\u3063\u3066\u304F\u3060\u3055\u3044\u3002`
+        };
+      }
+      if (walked === "unreadable") {
+        return {
+          ok: false,
+          reason: "unreadable",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u8D70\u67FB\u3067\u8AAD\u3081\u306A\u3044\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u304C\u3042\u308A\u307E\u3057\u305F\u3002\u6A29\u9650\u3092\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
         };
       }
     }
     const fromGlobs = check.from.map(compileGlob);
-    let matched = 0;
+    let readable = 0;
     for (const file of files) {
       let values = null;
       for (const glob of fromGlobs) {
@@ -308,18 +358,22 @@ function runChecks(root, checks) {
       if (values === null) continue;
       const bound = values;
       if (check.exceptFrom.some((g) => bindGlob(g, bound).test(file))) continue;
-      matched++;
       if (!ECMASCRIPT_EXTENSIONS.has(path.extname(file))) {
         skipped++;
         continue;
       }
-      checkedFiles.add(file);
       let text;
       try {
         text = fs.readFileSync(path.join(root, file), "utf8");
       } catch {
-        continue;
+        return {
+          ok: false,
+          reason: "unreadable",
+          message: `\u691C\u67FB\u300C${check.id}\u300D\u306E\u5BFE\u8C61 ${file} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
+        };
       }
+      readable++;
+      checkedFiles.add(file);
       const toRes = check.to.map((g) => compileGlob(g).re);
       const exceptToRes = check.exceptTo.map((g) => bindGlob(g, bound));
       for (const imp of extractImports(text)) {
@@ -342,11 +396,11 @@ function runChecks(root, checks) {
         });
       }
     }
-    if (matched === 0) {
+    if (readable === 0) {
       return {
         ok: false,
         reason: "no_match",
-        message: `\u691C\u67FB\u300C${check.id}\u300D\u306E from \u306B\u4E00\u81F4\u3059\u308B\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\u3002glob \u304C\u53E4\u304F\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
+        message: `\u691C\u67FB\u300C${check.id}\u300D\u306E from \u306B\u4E00\u81F4\u3059\u308B ECMAScript \u306E\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\u3002glob \u304C\u53E4\u304F\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u304B\u3081\u3066\u304F\u3060\u3055\u3044\u3002`
       };
     }
   }
@@ -1006,6 +1060,18 @@ function prepareArchitectureUpdate(current, changes) {
   }
   const result = applySectionChanges(current, normalizedChanges);
   return { ...result, warnings: [...warnings, ...result.warnings] };
+}
+function extractChecks(text) {
+  const { block, warnings } = findMarkedBlock(text, CHECKS_MARKER);
+  if (block === null) {
+    return {
+      ok: false,
+      reason: "block_not_found",
+      message: `\`${CHECKS_MARKER}\` \u30D6\u30ED\u30C3\u30AF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002`,
+      warnings
+    };
+  }
+  return { ...parseChecksContent(block.content), warnings };
 }
 
 // src/lib/config.ts

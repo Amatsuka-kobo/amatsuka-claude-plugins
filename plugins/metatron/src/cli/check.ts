@@ -3,7 +3,8 @@
 // 読み取りの層(常に exit 0)にも書き込みの層にも当たらない。lint と CI に組み込むため、
 // 違反は 1、定義や走査の問題は 2、想定外の内部エラーは 3 で終える。
 
-import { extractChecks, runChecks } from "../lib/checks.js"
+import { extractChecks } from "../lib/architecture.js"
+import { runChecks } from "../lib/checks.js"
 import { loadConfig } from "../lib/config.js"
 import { readDocument } from "./input.js"
 import { emitResult, note, noteWarnings } from "./output.js"
