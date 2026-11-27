@@ -390,7 +390,7 @@ export interface DiffArchitectureInput {
   sections: ArchitectureSections
   /**
    * ARCHITECTURE が存在したか。既定は `sections` が 1 つ以上あるかで判定する。
-   * `false` のときは 9 セクションすべてを `section_missing` として返す。
+   * `false` のときは 8 セクションすべてを `section_missing` として返す。
    */
   architectureExists?: boolean
   /**

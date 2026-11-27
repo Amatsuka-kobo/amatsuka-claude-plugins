@@ -453,7 +453,7 @@ export function readStaging(
  * 消費の印を書き戻す巻き戻しは行わない。巻き戻し自体が同じ理由で失敗しうるうえ、
  * 「印が付いていない staging が存在しうる」状態を残すと保証が条件付きに戻る。
  *
- * ロック(契約 §11「採番と挿入の原子性」)はこの関数の外側で取る。
+ * ロック(契約 §12「書き込みの排他」)はこの関数の外側で取る。
  */
 export function commitStaging(input: CommitStagingInput): CommitStagingResult {
   const projectRoot = path.resolve(input.projectRoot)

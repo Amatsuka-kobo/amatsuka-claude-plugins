@@ -103,7 +103,6 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
   "version": 1,
   "paths": {
     "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md",
     "rulesDir": ".claude/rules/metatron"
   },
   "injection": {
@@ -118,12 +117,12 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
 | --- | --- | --- | --- |
 | `version` | number | `1` | スキーマバージョン。未知の値なら**全項目を既定値として扱い**、警告を 1 行添える(読み手を止めない) |
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
-| `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
 | `paths.rulesDir` | string | `.claude/rules/metatron` | metatron が管理する rules の置き場 |
 | `injection.enabled` | boolean | `true` | SessionStart 注入の有効/無効 |
 | `injection.gotchasRecentCount` | number | `5` | 全文で注入する直近エントリ数 |
 | `injection.maxChars` | number | `9000` | 注入全体の文字数上限 |
 
+- `paths.gotchas` は 2026-11-27 に廃止した。残っていても未知キーとして無視し、警告を出さない。
 - `$schema` キーは定義しない。利用者が独自に書いた場合は**未知キーとして無視する**(エラーにしない)。
 - 未知キー全般をエラーにしない。
 - 壊れた JSON のときは全項目を既定値として扱い、理由を呼び出し元へ返す。例外を投げない。
@@ -174,14 +173,14 @@ metatron / codiel / sandalphon の 3 プラグインは、互いのインスト�
 
 ### 規則 2: パスの解決
 
-`paths.architecture` / `paths.gotchas` を `docRoot` からの**相対パス**として解決する。
+`paths.architecture` を `docRoot` からの**相対パス**として解決する。
 
 ### 規則 3: 拒否
 
 **絶対パスと、ルートの外へ出るパス(`..` による脱出)は拒否する。**
 拒否した場合はその項目だけ既定値に落とし、理由を `warnings` へ積んで呼び出し元へ返す。
 
-`paths.architecture` / `paths.gotchas` / `paths.rulesDir` は空文字列または文字列でない値も、同じ扱いで拒否する。
+`paths.architecture` / `paths.rulesDir` は空文字列または文字列でない値も、同じ扱いで拒否する。
 
 ### 規則 4: キャッシュしない
 
@@ -201,7 +200,7 @@ codiel は用途の異なる 2 つのルートを持つ。**関数名で区別�
 
 | 関数 | 基準 | 用途 |
 | --- | --- | --- |
-| `findDocRoot(startDir)` | 本書 §3 の規則 1(config 祖先 → git ルート → 開始ディレクトリ) | **文書**(ARCHITECTURE / GOTCHAS)の解決 |
+| `findDocRoot(startDir)` | 本書 §3 の規則 1(config 祖先 → git ルート → 開始ディレクトリ) | **文書**(ARCHITECTURE)の解決 |
 | `findProjectRoot(startDir)` | `.codiel` を持つ祖先(現行のまま) | **codiel 固有資産**(`.codiel/runs` 等)の解決 |
 
 どちらを使うかは「探しているものが文書か codiel 資産か」で決まる。
@@ -212,7 +211,7 @@ sandalphon は 3 つの基準を使い分ける。**どれか 1 つに寄せな�
 | 対象 | 基準 |
 | --- | --- |
 | intent 文書(`docs/intents/`) | `repoRoot`(git ルート) |
-| ARCHITECTURE / GOTCHAS | `docRoot`(本書 §3 の規則 1) |
+| ARCHITECTURE | `docRoot`(本書 §3 の規則 1) |
 | `.codiel/` の有無と `runDirs` | **開始ディレクトリからの上方向探索**(codiel の `findProjectRoot` と同じ基準) |
 
 3 者が別ディレクトリを指すのは正常な状態である。
@@ -232,7 +231,7 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 
 ## 4. ARCHITECTURE の書式
 
-### 4-1. セクション構成(9 セクション)
+### 4-1. セクション構成(8 セクション)
 
 見出し名と順序を固定する。CLI はこのキー列以外の見出しに `body` を伴う変更を受け付けない。
 
@@ -246,7 +245,6 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 | 6 | `## コマンド定義` | `コマンド定義` | △ |
 | 7 | `## 保護パス` | `保護パス` | — |
 | 8 | `## テスト方針` | `テスト方針` | — |
-| 9 | `## ADR 一覧` | `ADR 一覧` | △(採番) |
 
 - **すべてのセクションは任意である。** 存在しないセクションがあってもエラーにしない。
   `## ドメインマップ` だけを持つ最小ファイルも正当な ARCHITECTURE として扱う。
@@ -254,7 +252,7 @@ sandalphon は「無い」と判定し、正当な委譲経路を塞ぐ。
 - `# ARCHITECTURE` と最初の `##` の間に本文を置かない。既存ファイルにそこへ本文がある場合、
   書き込み経路は**警告を返す**(拒否しない)。
 - `## 保護パス` / `## テスト方針` は rules から ARCHITECTURE へ戻した。`## 規約` は ARCHITECTURE で扱わず、プロジェクトの CLAUDE.md に書く。
-- 表に無い見出しのセクションは、`stage-architecture` の `{ heading, remove: true }` で削除できる。`remove: true` は見出し許可リストではなく、対象ファイルにそのセクションがあるかで検証する。ただし `## ADR 一覧` は `remove: true` でも `adr_heading` で拒否する。表に無い見出しを `body` 付きで渡すと `unknown_heading` で拒否する。
+- 表に無い見出しのセクションは、`stage-architecture` の `{ heading, remove: true }` で削除できる。`remove: true` は見出し許可リストではなく、対象ファイルにそのセクションがあるかで検証する。表に無い見出しを `body` 付きで渡すと `unknown_heading` で拒否する。
 
 ### 4-2. セクション分割の規範アルゴリズム
 
@@ -353,6 +351,9 @@ metatron が管理する rules は次の 3 ファイルに固定する。ファ�
 
 ## 6. ADR の書式
 
+metatron の ADR 機能は 2026-11-27 に廃止した。この章は廃止前の書式の記録であり、実装の基準ではない。
+`## ADR 一覧` は許可リストに無いセクションとして扱い、`remove: true` で削除できる。`diff-architecture` は残った `## ADR 一覧` を `legacy_section` の所見で示す。
+
 ### 6-1. エントリ書式
 
 ````markdown
@@ -407,6 +408,8 @@ metatron が管理する rules は次の 3 ファイルに固定する。ファ�
 ---
 
 ## 7. GOTCHAS の書式
+
+metatron の GOTCHAS 機能は 2026-11-27 に廃止した。この章は廃止前の書式の記録であり、実装の基準ではない。
 
 **旧書式(発生フェーズ / 症状 / 根本原因 / 予防策 / 関連ファイル)は廃止し、新書式へ全面置換する。**
 互換読みは設けない。
@@ -520,11 +523,10 @@ metatron が管理する rules は次の 3 ファイルに固定する。ファ�
 | 文書 | 既定パス |
 | --- | --- |
 | ARCHITECTURE | `docs/ARCHITECTURE.md` |
-| GOTCHAS | `docs/GOTCHAS.md` |
 | `rulesDir` | `.claude/rules/metatron`(**`docRoot` 基準、設定変更可**) |
 | intent 文書 | `docs/intents/YYYY-MM-DD-<slug>.md`(**`repoRoot` 基準**) |
 
-- ARCHITECTURE / GOTCHAS / `rulesDir` は `docRoot` 基準で、設定により変更されうる。**固定パスを前提にしない。**
+- ARCHITECTURE / `rulesDir` は `docRoot` 基準で、設定により変更されうる。**固定パスを前提にしない。**
 - intent 文書は `repoRoot` 基準で固定。設定による変更を持たない。
 
 ---
@@ -723,10 +725,10 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json`。
 プロジェクト内には置かない。
 
-### 採番と挿入の原子性
+### 書き込みの排他
 
 1. `<対象文書パス>.lock` を **`fs.open` の `wx` フラグ**で作成してロックを取る。
-2. 取得できたら「最大値の読み取り → 挿入 → ロック削除」を行う。
+2. 取得できたら「書き込み → ロック削除」を行う。
 3. 取得できなければ **50ms 間隔で最大 20 回リトライ**(合計約 1 秒)。
    それでも取れなければ非 0 終了し `{ error: "lock_timeout" }` を返す。
 4. ロックファイルの**更新時刻が 60 秒より古ければ死んだロックとみなして奪う**。
@@ -863,10 +865,9 @@ metatron がフェイルオープンなのは、metatron の不具合でセッ�
 
 本書の内容を変更したときは、次をすべて更新する。
 
-- [ ] `plugins/metatron/src/lib/config.ts`(および関連する `architecture.ts` / `gotchas.ts` / `adr.ts`)
-- [ ] `plugins/metatron/references/config-schema.md` / `architecture-format.md` / `gotchas-format.md`
+- [ ] `plugins/metatron/src/lib/config.ts`(および関連する `architecture.ts` / `file-lock.ts`)
+- [ ] `plugins/metatron/references/config-schema.md` / `architecture-format.md`
 - [ ] `plugins/codiel/src/hooks/lib.ts` の `findDocRoot` / `resolveDocPaths` / `readDomains`
-- [ ] `plugins/codiel/skills/recording-gotchas/SKILL.md` の書式の写し
 - [ ] `plugins/sandalphon/src/check-intent-env.ts`
 - [ ] `plugins/sandalphon/references/intent-format.md` / `handoff-contract.md`
 - [ ] `plugins/gh-utility/skills/issue-craft/SKILL.md` の持ち込みモードの写し
