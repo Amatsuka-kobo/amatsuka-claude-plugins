@@ -15,6 +15,8 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 - [ ] 書式や執筆規律を変えたら、利用者の既存の文書を追随させる。見出しの変更は `/metatron:update` の旧構成の移行で、書き方の変更は `/metatron:audit` で追随させる。見出しを廃止したら `LEGACY_HEADINGS` と `LEGACY_SECTIONS` に旧見出しを足し、`skills/updating-architecture/SKILL.md` の旧構成の移行と README の `/metatron:update` と `/metatron:audit` の説明が変更後の規定と食い違わないかを確かめる
 - [ ] ARCHITECTURE と CLAUDE.md の境界(`references/document-boundary.md`)を変えたら、`skills/capturing-architecture/SKILL.md` と `skills/updating-architecture/SKILL.md` の参照と起草の規律を揃える
 
+- [ ] 行数の目安(`src/lib/architecture.ts` の `ARCHITECTURE_LINE_LIMIT`)を変えたら、`references/cli-usage.md` の `get architecture`・`stage-architecture`、README の行数の説明、CLI のテスト S16 を揃える
+
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
 この規則を変更したら、次をすべて更新して 2 者比較テストを通す。
@@ -32,6 +34,6 @@ prompt-smith の `plugins/prompt-smith/skills/prompt-smith/SKILL.md` を改訂�
 最後に追随した prompt-smith のコミット: `e12d5736`(2026-11-12)。次の見直しでは、`git log e12d5736..HEAD -- plugins/prompt-smith/skills/prompt-smith/SKILL.md` で差分を確かめる。
 
 - [ ] 削る基準・残す基準・書き方の基準・引くための記述の例外を、prompt-smith の現行規律に追随させる
-- [ ] ARCHITECTURE 向けの特化(適用の強さ、図の基準)は変えない
+- [ ] ARCHITECTURE 向けの特化(適用の強さ、図の基準、削れる内容)は変えない
 - [ ] `skills/{capturing-architecture,updating-architecture}/SKILL.md` の writing-discipline への参照が、見出し名と揃っているかを確認する
 - [ ] `plugins/metatron/references/writing-discipline.md` の既存の `##` 見出しの行を変えない

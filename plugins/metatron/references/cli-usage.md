@@ -11,11 +11,11 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 | サブコマンド | 種別 | 返すもの |
 | --- | --- | --- |
 | `get config` | 読 | `docRoot`・文書の絶対パス・既定値を適用した理由・CLI の絶対パス・入力書式 |
-| `get architecture [--section <見出し>]` | 読 | 全文と見出し一覧、または指定セクションの本文 |
+| `get architecture [--section <見出し>]` | 読 | 全文と見出し一覧と行数(`lineCount`・`lineLimit`)、または指定セクションの本文。全文の行数が `lineLimit` を超えると `warnings` に 1 行が加わる |
 | `get domains` | 読 | `metatron:domains` を構造化したもの。読めないときは理由 |
 | `scan` | 読 | コードベース解析の事実 |
 | `diff-architecture` | 読 | `scan` と現行 ARCHITECTURE の乖離候補(`findings`)と、技術スタックとコマンドの定義が置かれうるファイルの一覧(`sources`)。残った旧見出し(`## レイヤー構造`・`## ディレクトリ構成と責務`・`## 保護パス`・`## ADR 一覧`)は、見出しごとに移し先を載せた `legacy_section` の所見として返す |
-| `stage-architecture --input <path>` | 段階 | diff と `stagingId`。書き込みはしない |
+| `stage-architecture --input <path>` | 段階 | diff と `stagingId` と書き込み後の行数(`lineCount`・`lineLimit`)。書き込みはしない。行数が `lineLimit` を超えると `warnings` に 1 行が加わる |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
 | `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE の @メンションを追記し、`metatron.config.json` が無ければ作る。追記したもの(`added`)・既にあったもの(`present`)・飛ばしたもの(`skipped`)・設定ファイルを作ったか(`configCreated`)を返す |
 

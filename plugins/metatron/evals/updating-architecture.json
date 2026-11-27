@@ -66,5 +66,9 @@
   {
     "query": "うちの `docs/ARCHITECTURE.md` はまだ `## レイヤー構造` と `## 保護パス` がある古い見出しのままです。中身は活かしつつ、今の metatron の見出しの構成へ移し替えてください。",
     "should_trigger": true
+  },
+  {
+    "query": "ARCHITECTURE が長くなってきて毎セッションの読み込みが重い。CLAUDE.md と同じことを書いている箇所や、package.json を見れば分かる表を洗い出して、削る案を出してほしい。",
+    "should_trigger": true
   }
 ]

@@ -17,4 +17,4 @@ ARCHITECTURE には成果物の決まりを書き、CLAUDE.md には作業の進
 | lint とテストが通ってから完了とする | CLAUDE.md |
 | Issue に Project のフィールドを設定する | CLAUDE.md |
 
-- ARCHITECTURE を書くときに作業の進め方に当たる内容を見つけたら、ARCHITECTURE に書かず、CLAUDE.md に書く内容であることをユーザーに伝える。
+- ARCHITECTURE を書くときに作業の進め方に当たる内容を見つけたら、ARCHITECTURE に書かず、CLAUDE.md へ移す案を示す。

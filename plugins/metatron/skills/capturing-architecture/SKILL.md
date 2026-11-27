@@ -63,10 +63,10 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 | ドラフト単位 | ドラフトの主な材料 |
 | --- | --- |
 | ARCHITECTURE `## システム概要` | `documents` と `tree` と `dependencies`。散文 1 段落と、必要な場合は Mermaid 図 |
-| ARCHITECTURE `## 技術スタック` | `languages` / `packageManager` / `dependencies`。依存の全件を載せず、役割ごとの技術に絞る |
+| ARCHITECTURE `## 技術スタック` | `languages` / `dependencies`。言語・ランタイム・フレームワーク・データ層の技術だけを載せる |
 | ARCHITECTURE `## ディレクトリ構成` | `tree` / `fileCount` / `domainCandidates` |
 | ARCHITECTURE `## ドメインマップ` | `domainCandidates` |
-| ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。全件を載せず、よく使うものと使い分けの答えに絞る |
+| ARCHITECTURE `## コマンド定義` | `commands` / `scripts`。定義の名前から読めない使い分け・前提・引数の付け方だけを載せる |
 | ARCHITECTURE `## テスト方針` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の文書 |
 | ARCHITECTURE `## 禁止事項` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
 | ARCHITECTURE `## 変更時の追随` | `../../docs/ARCHITECTURE.example.md` の記入例と既存の設定ファイル |
@@ -77,6 +77,7 @@ description: アーキテクチャ文書(ARCHITECTURE)がまだ無いプロジ�
 - `document-boundary.md` で CLAUDE.md に当たる内容は起草しない。
 - `## システム概要` に Mermaid 図を置くかどうかを含めてウォークスルーで問う。置く場合は解析結果から起草し、粒度も問う。
 - ARCHITECTURE の各セクションの起草は `../../references/architecture-format.md` の該当節の要件を満たす形で行う。
+- `../../references/writing-discipline.md` の「削れる内容」の 4 種類は起草しない。
 - 情報が足りずドラフトを書けない単位は推測で埋めない。その単位だけ質問形式に切り替える。
 - 質問しても材料が得られないときは、その単位を生成対象から外し、未記入であることを完了報告に載せる。
 
