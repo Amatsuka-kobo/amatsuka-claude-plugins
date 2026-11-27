@@ -695,6 +695,8 @@ interface SpliceOp {
   end: number
   text: string
   order: number
+  /** 文書の最後のセクションを消すか差し替えるか。 */
+  touchesEnd?: boolean
 }
 
 // 契約 §4-1 の順序に従って、新しいセクションを差し込む位置を決める。
@@ -731,9 +733,12 @@ function createArchitecture(changes: SectionChange[], eol: string): string {
  * - 見出し行そのものも書き換えない。差し替えるのは本文だけである。
  * - `current` が `null` または空白のみのときは新規作成として全文を組み立てる。
  * - 未閉フェンスは拒否する(書き込み経路・第 1 層)。
- * - 例外は**節の追加**のみ。新しい節を差し込む境界には区切りの空行が 1 行入る
- *   (末尾へ追加した場合、その空行は直前の節の末尾に付く)。既存の本文の
- *   バイト列は変わらない。
+ * - 例外は 2 つある。
+ *   - **節の追加**。新しい節を差し込む境界には区切りの空行が 1 行入る
+ *     (末尾へ追加した場合、その空行は直前の節の末尾に付く)。既存の本文の
+ *     バイト列は変わらない。
+ *   - **最後のセクションの削除と差し替え**。文書の末尾の空行(空白だけの行を含む)を除き、
+ *     改行を 1 つにそろえる。削除では、新しく最後になったセクションの末尾の空行も消える。
  *
  * CLI の `stage-architecture` は `prepareArchitectureUpdate` を使うこと。
  */
@@ -792,7 +797,8 @@ export function applySectionChanges(
         start: section.startLine,
         end: section.endLine,
         text: "",
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       })
       applied.push({ heading: change.heading, mode: "removed" })
       continue
@@ -803,7 +809,8 @@ export function applySectionChanges(
         start: section.startLine + 1,
         end: section.contentEndLine,
         text: body === "" ? "" : `${eol}${body}${eol}`,
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       })
       applied.push({ heading: change.heading, mode: "replaced" })
       continue
@@ -838,7 +845,14 @@ export function applySectionChanges(
   ops.sort((a, b) => b.start - a.start || b.order - a.order)
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text)
 
-  const next = chunks.join("")
+  let next = chunks.join("")
+  // 最後のセクションを消すと、その前のセクションの区切りの空行が文書の末尾に残る。
+  // 最後のセクションを消すか差し替えたときだけ、文書の末尾の改行を 1 つにそろえる。
+  if (ops.some((op) => op.touchesEnd === true)) {
+    // 改行コードは元の文書の末尾のものを保つ(混在する文書で書き換えない)。
+    const endEol = /\r\n$/.test(text) ? "\r\n" : /\n$/.test(text) ? "\n" : eol
+    next = next.replace(/(?:[ \t]*\r?\n)+$/, endEol)
+  }
   return (
     rejectBrokenResult(text, next, warnings) ?? {
       ok: true,

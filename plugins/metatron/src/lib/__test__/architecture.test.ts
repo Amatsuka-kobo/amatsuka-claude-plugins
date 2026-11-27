@@ -932,9 +932,15 @@ test("A26: ADR 一覧 の削除(remove: true)は通り、他のセクション�
     { heading: "ADR 一覧", mode: "removed" }
   ])
   expect(headings(result.text)).toEqual([...ARCHITECTURE_HEADINGS])
-  for (const heading of headings(result.text)) {
-    expect(sectionRaw(result.text, heading), heading).toBe(
-      sectionRaw(WITH_LEGACY_ADR, heading)
+  const remaining = headings(result.text)
+  for (const heading of remaining) {
+    // 最後のセクションを消すと、新しく最後になったセクションの末尾の空行だけが消える(A35)。
+    // それ以外のセクションはバイト単位で比べる。
+    const isLast = heading === remaining[remaining.length - 1]
+    const trim = (raw: string | undefined) =>
+      isLast ? raw?.replace(/\n+$/, "") : raw
+    expect(trim(sectionRaw(result.text, heading)), heading).toBe(
+      trim(sectionRaw(WITH_LEGACY_ADR, heading))
     )
   }
 })
@@ -968,9 +974,15 @@ test("A27: 複数のセクションをまとめて 1 回の remove で消せる"
       (h) => !["テスト方針", "保護パス", "旧メモ"].includes(h)
     )
   )
-  for (const heading of headings(result.text)) {
-    expect(sectionRaw(result.text, heading), heading).toBe(
-      sectionRaw(WITH_UNLISTED, heading)
+  const remaining = headings(result.text)
+  for (const heading of remaining) {
+    // 最後のセクションを消すと、新しく最後になったセクションの末尾の空行だけが消える(A35)。
+    // それ以外のセクションはバイト単位で比べる。
+    const isLast = heading === remaining[remaining.length - 1]
+    const trim = (raw: string | undefined) =>
+      isLast ? raw?.replace(/\n+$/, "") : raw
+    expect(trim(sectionRaw(result.text, heading)), heading).toBe(
+      trim(sectionRaw(WITH_UNLISTED, heading))
     )
   }
 })
@@ -1141,4 +1153,113 @@ test("A32: body に ## の見出しがあれば invalid_body で拒否し、フ�
       { heading: "保護パス", body: "### 触らないパス\n\n```\n## 例\n```" }
     ]).ok
   ).toBe(true)
+})
+
+test("A35: 最後のセクションを消すと、文書の末尾の改行は 1 つになる", () => {
+  for (const eol of ["\n", "\r\n"]) {
+    const doc = [
+      "# ARCHITECTURE",
+      "",
+      "## システム概要",
+      "",
+      "概要。",
+      "",
+      "## ADR 一覧",
+      "",
+      "### ADR-001: 古い判断",
+      ""
+    ].join(eol)
+    const result = prepareArchitectureUpdate(doc, [
+      { heading: "ADR 一覧", remove: true }
+    ])
+    expect(result.ok, JSON.stringify(eol)).toBe(true)
+    if (!result.ok) continue
+    expect(result.text).toBe(
+      ["# ARCHITECTURE", "", "## システム概要", "", "概要。", ""].join(eol)
+    )
+  }
+})
+
+test("A36: 最後でないセクションを消しても、文書の末尾は変えない", () => {
+  const doc =
+    "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## 独自\n\n本文。\n\n## テスト方針\n\n- vitest\n\n"
+  const removed = prepareArchitectureUpdate(doc, [
+    { heading: "独自", remove: true }
+  ])
+  expect(removed.ok).toBe(true)
+  if (removed.ok) {
+    expect(removed.text).toBe(
+      "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## テスト方針\n\n- vitest\n\n"
+    )
+  }
+})
+
+test("A37: 最後のセクションを差し替えると、文書の末尾の余分な空行が 1 つの改行にそろう", () => {
+  const doc =
+    "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## テスト方針\n\n- vitest\n\n"
+  const result = prepareArchitectureUpdate(doc, [
+    { heading: "テスト方針", body: "- vitest" }
+  ])
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.text).toBe(
+    "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## テスト方針\n\n- vitest\n"
+  )
+  // 最後でないセクションの差し替えは、末尾を変えない
+  const other = prepareArchitectureUpdate(doc, [
+    { heading: "システム概要", body: "新しい概要。" }
+  ])
+  expect(other.ok).toBe(true)
+  if (other.ok) expect(other.text.endsWith("- vitest\n\n")).toBe(true)
+})
+
+test("A38: 最後のセクションの差し替えの CRLF、削除と差し替えの組み合わせ、空の本文", () => {
+  const crlf =
+    "# ARCHITECTURE\r\n\r\n## システム概要\r\n\r\n概要。\r\n\r\n## テスト方針\r\n\r\n- vitest\r\n\r\n"
+  const r1 = prepareArchitectureUpdate(crlf, [
+    { heading: "テスト方針", body: "- vitest" }
+  ])
+  expect(r1.ok && r1.text.endsWith("- vitest\r\n")).toBe(true)
+  expect(r1.ok && r1.text.endsWith("\r\n\r\n")).toBe(false)
+
+  const lf =
+    "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## 保護パス\n\n- なし\n\n## テスト方針\n\n- vitest\n\n"
+  const r2 = prepareArchitectureUpdate(lf, [
+    { heading: "システム概要", body: "新しい概要。" },
+    { heading: "テスト方針", remove: true }
+  ])
+  expect(r2.ok).toBe(true)
+  if (r2.ok) {
+    expect(r2.text).toBe(
+      "# ARCHITECTURE\n\n## システム概要\n\n新しい概要。\n\n## 保護パス\n\n- なし\n"
+    )
+  }
+
+  const r3 = prepareArchitectureUpdate(lf, [
+    { heading: "テスト方針", body: "" }
+  ])
+  expect(r3.ok).toBe(true)
+  if (r3.ok) expect(r3.text.endsWith("## テスト方針\n")).toBe(true)
+})
+
+test("A39: 末尾の空白だけの行も除き、混在する文書では末尾の改行コードを保つ", () => {
+  const spaces =
+    "# ARCHITECTURE\n\n## システム概要\n\n概要。\n\n## テスト方針\n\n- a\n  \n"
+  const r1 = prepareArchitectureUpdate(spaces, [
+    { heading: "テスト方針", body: "- b" }
+  ])
+  expect(r1.ok && r1.text.endsWith("- b\n")).toBe(true)
+
+  // CRLF を含むが末尾は LF の文書
+  const mixed =
+    "# ARCHITECTURE\r\n\r\n## システム概要\r\n\r\n概要。\r\n\r\n## テスト方針\n\n- a\n\n"
+  const r2 = prepareArchitectureUpdate(mixed, [
+    { heading: "テスト方針", body: "- b" }
+  ])
+  expect(r2.ok).toBe(true)
+  if (r2.ok) {
+    expect(r2.text.endsWith("\n")).toBe(true)
+    expect(r2.text.endsWith("\r\n")).toBe(false)
+    expect(r2.text.endsWith("\n\n")).toBe(false)
+  }
 })

@@ -391,7 +391,8 @@ function applySectionChanges(current, changes) {
         start: section.startLine,
         end: section.endLine,
         text: "",
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       });
       applied.push({ heading: change.heading, mode: "removed" });
       continue;
@@ -402,7 +403,8 @@ function applySectionChanges(current, changes) {
         start: section.startLine + 1,
         end: section.contentEndLine,
         text: body === "" ? "" : `${eol}${body}${eol}`,
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       });
       applied.push({ heading: change.heading, mode: "replaced" });
       continue;
@@ -431,7 +433,11 @@ function applySectionChanges(current, changes) {
   }
   ops.sort((a, b) => b.start - a.start || b.order - a.order);
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text);
-  const next = chunks.join("");
+  let next = chunks.join("");
+  if (ops.some((op) => op.touchesEnd === true)) {
+    const endEol = /\r\n$/.test(text) ? "\r\n" : /\n$/.test(text) ? "\n" : eol;
+    next = next.replace(/(?:[ \t]*\r?\n)+$/, endEol);
+  }
   return rejectBrokenResult(text, next, warnings) ?? {
     ok: true,
     text: next,
@@ -2616,7 +2622,7 @@ function createConfigIfMissing(configPath) {
     throw error;
   }
   try {
-    fs7.writeSync(fd, '{\n  "version": 1\n}\n');
+    fs7.writeFileSync(fd, '{\n  "version": 1\n}\n');
   } catch (error) {
     fs7.closeSync(fd);
     fs7.rmSync(configPath, { force: true });

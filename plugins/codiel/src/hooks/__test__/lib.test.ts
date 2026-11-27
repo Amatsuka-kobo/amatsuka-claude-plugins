@@ -1067,12 +1067,11 @@ function gitCalledDuring(fn: () => void): boolean {
   process.env.PATH = bin
   try {
     fn()
+    return fs.existsSync(marker)
   } finally {
     process.env.PATH = saved
+    fs.rmSync(bin, { recursive: true, force: true })
   }
-  const called = fs.existsSync(marker)
-  fs.rmSync(bin, { recursive: true, force: true })
-  return called
 }
 
 test("R1-g0: 開始ディレクトリに設定があれば、codiel も git を呼ばない", () => {
@@ -1116,4 +1115,15 @@ test("R1-g: git を実行できないときの探索の境界が metatron と一
   fs.writeFileSync(path.join(wt, ".git"), "gitdir: /nonexistent\n")
   withoutGit(() => expectSameResolution(start, ".git の境界"))
   expect(withoutGit(() => findDocRoot(start))).toBe(fs.realpathSync(start))
+})
+
+test("R4-h: git 管理外のワークスペースの直下の設定ファイルは、その中のリポジトリから拾わない(metatron と一致)", () => {
+  const ws = mkTmp("lib-ws-")
+  writeConfig(ws, { version: 1 })
+  const repo = path.join(ws, "repo")
+  const sub = path.join(repo, "sub")
+  fs.mkdirSync(sub, { recursive: true })
+  execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" })
+  expectSameResolution(sub, "ワークスペースの直下の設定")
+  expect(findDocRoot(sub)).toBe(fs.realpathSync(repo))
 })
