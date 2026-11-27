@@ -1,6 +1,5 @@
 {
   "paths": {
-    "architecture": "harness-docs/ARCHITECTURE.md",
-    "gotchas": "harness-docs/GOTCHAS.md"
+    "architecture": "harness-docs/ARCHITECTURE.md"
   }
 }
