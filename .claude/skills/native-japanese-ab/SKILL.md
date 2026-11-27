@@ -57,7 +57,7 @@ description: native-japanese の規律(japanese-writing の SKILL.md、reminder.
 | `touten` | 読点の 100 字あたりの数。字数は `prose` の本文から空白を除いて数える | なし |
 | `share` | `unit` が `sentence` の型に当たった文が、対象の文に占める割合(%) | `patterns` |
 | `ratio` | 1 つ目の型の件数が、1 つ目と 2 つ目の合計に占める割合(%) | `patterns` に 2 つ |
-| `mixed` | 1 本の中で 2 つの型が混ざる応答の割合(%)。少ない側の型の件数が、2 つの型の件数の合計に占める割合を出し、`limit`(%)を超える応答を数える。`limit` を省くと 10 | `patterns` に 2 つ |
+| `mixed` | 1 本の中で 2 つの型が混ざる応答の割合(%)。少ない方の型の件数が、2 つの型の件数の合計に占める割合を出し、`limit`(%)を超える応答を数える。`limit` を省くと 10 | `patterns` に 2 つ |
 | `per10k` | 型の件数の、1 万字あたりの数。字数は全文から空白を除いて数える | `patterns` |
 | `per100` | 型の件数の、応答 100 本あたりの数 | `patterns` |
 | `in_range` | 型の件数の合計が `min` 以上 `max` 以下の応答の割合(%) | `patterns`、`min` か `max` |
