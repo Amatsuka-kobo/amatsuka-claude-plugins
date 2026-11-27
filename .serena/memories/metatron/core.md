@@ -100,7 +100,7 @@ deny hook は **CLI を実行しない**。`import.meta.url` からプラグイ�
 0.6.1-dev で消したトップレベルの 10 個(`stage-adr`・`stage-gotcha`・`commit-gotchas`・`init-gotchas`・`append-gotcha`・
 `tag-gotcha`・`scan-adr-candidates`・`shrink-adr-candidate`・`scan-gotcha-candidates`・`remove-gotcha-candidate`)は
 `unknown_subcommand`(終了コード 2)、`get` の `adr`・`gotchas`・`gotchas-template` の 3 対象は `unknown_target`(終了コード 0)を返す。
-0.6.3-dev から、最後のセクションを削除または差し替えると、文書の末尾の改行を 1 つにそろえる。
+0.6.3-dev(2026-11-27、Issue #68、PR #75)から、最後のセクションを削除または差し替えると、文書の末尾の空行を除いて改行を 1 つにそろえる。削除では、新しく最後になるセクションの末尾の空行も消える。それ以外の変更では、指定していないセクションのバイト列は変わらない。
 
 `diff-architecture` は技術スタックとコマンドを機械的に照合せず、定義のありかを `sources` で返す(2026-11-12)。ディレクトリの消失も断定しない(どこを基準にした相対パスかを決められないため)。インラインコードの `/` を含むパスのうち、ルートから実在を確かめられないもの(リンクはたどらない)を skipped の「ディレクトリの実在の未確認」に並べ、AI が確かめる。ツリーの中と 1 語は並べない。
 

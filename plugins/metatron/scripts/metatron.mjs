@@ -435,7 +435,8 @@ function applySectionChanges(current, changes) {
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text);
   let next = chunks.join("");
   if (ops.some((op) => op.touchesEnd === true)) {
-    next = next.replace(/(?:\r?\n)+$/, eol);
+    const endEol = /\r\n$/.test(text) ? "\r\n" : /\n$/.test(text) ? "\n" : eol;
+    next = next.replace(/(?:[ \t]*\r?\n)+$/, endEol);
   }
   return rejectBrokenResult(text, next, warnings) ?? {
     ok: true,
