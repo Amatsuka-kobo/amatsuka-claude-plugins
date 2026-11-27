@@ -386,3 +386,86 @@ test("存在しない開始ディレクトリでも例外を投げない", () =>
   expect(() => loadConfig(dir)).not.toThrow()
   expect(loadConfig(dir).architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
 })
+
+// git を実行できない環境を作る。PATH を空にすると spawnSync("git") が失敗する。
+function withoutGit<T>(fn: () => T): T {
+  const saved = process.env.PATH
+  process.env.PATH = ""
+  try {
+    return fn()
+  } finally {
+    process.env.PATH = saved
+  }
+}
+
+// 呼ばれたら印を残して失敗する偽の git を PATH の先頭に置き、git が呼ばれたかを返す。
+function gitCalledDuring(fn: () => void): boolean {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"))
+  const marker = path.join(bin, "called")
+  fs.writeFileSync(
+    path.join(bin, "git"),
+    `#!/bin/sh\necho called > "${marker}"\nexit 128\n`,
+    { mode: 0o755 }
+  )
+  const saved = process.env.PATH
+  process.env.PATH = bin
+  try {
+    fn()
+  } finally {
+    process.env.PATH = saved
+  }
+  const called = fs.existsSync(marker)
+  fs.rmSync(bin, { recursive: true, force: true })
+  return called
+}
+
+test("R1-g0: PATH を空にすると git を起動できない(以降のテストの前提)", () => {
+  const res = withoutGit(() => spawnSync("git", ["--version"]))
+  expect(res.error).toBeDefined()
+})
+
+test("R1-g1b: 開始ディレクトリに設定があれば git を呼ばない。無ければ呼ぶ", () => {
+  const dir = mkTmp()
+  const sub = mkSub(dir, "pkg")
+  writeConfig(sub, { version: 1 })
+  expect(gitCalledDuring(() => findDocRoot(sub))).toBe(false)
+  const other = mkSub(dir, "other")
+  expect(gitCalledDuring(() => findDocRoot(other))).toBe(true)
+})
+
+test("R1-g2b: 境界は git の toplevel ではなく .git から決まる(git を実行できないとき)", () => {
+  const outer = mkTmp()
+  writeConfig(outer, { version: 1 })
+  const repo = mkSub(outer, "repo")
+  gitInit(repo)
+  const start = mkSub(repo, "src")
+  // git が使えれば段 2 の toplevel を返す
+  expect(findDocRoot(start)).toBe(repo)
+  // git を実行できなければ .git で打ち切り、段 3 の開始ディレクトリを返す
+  expect(withoutGit(() => findDocRoot(start))).toBe(start)
+})
+
+test("R1-g1: 開始ディレクトリに設定があれば、git を実行できなくてもそこを返す", () => {
+  const dir = mkTmp()
+  gitInit(dir)
+  const sub = mkSub(dir, "pkg")
+  writeConfig(sub, { version: 1 })
+  expect(withoutGit(() => findDocRoot(sub))).toBe(sub)
+})
+
+test("R1-g2: git を実行できないときは .git を持つディレクトリで探索を打ち切る", () => {
+  const outer = mkTmp()
+  writeConfig(outer, { version: 1 })
+  const wt = mkSub(outer, "worktrees", "wt")
+  // worktree の .git はファイルである
+  fs.writeFileSync(path.join(wt, ".git"), "gitdir: /nonexistent\n")
+  const start = mkSub(wt, "src")
+  expect(withoutGit(() => findDocRoot(start))).toBe(start)
+})
+
+test("R1-g3: git も .git も無ければファイルシステムのルートまで辿る", () => {
+  const outer = mkTmp()
+  writeConfig(outer, { version: 1 })
+  const start = mkSub(outer, "a", "b")
+  expect(withoutGit(() => findDocRoot(start))).toBe(outer)
+})

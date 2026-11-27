@@ -24,7 +24,7 @@ function isMentionablePath(rel) {
 }
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
-  const withoutComments = text.replace(/^\uFEFF/, "").replace(/<!--[\s\S]*?-->/g, " ");
+  const withoutComments = text.replace(/^\uFEFF/, "").replace(/`[^`\n]*`|<!--[\s\S]*?-->/g, (m) => m[0] === "`" ? m : " ");
   let fence = null;
   for (const line of withoutComments.split(/\r?\n/)) {
     const marker = /^\s*(`{3,}|~{3,})/.exec(line);
@@ -32,7 +32,8 @@ function mentions(text) {
       const char = marker[1][0];
       const length = marker[1].length;
       if (fence === null) fence = { char, length };
-      else if (char === fence.char && length >= fence.length) fence = null;
+      else if (char === fence.char && length >= fence.length && line.trim() === marker[1])
+        fence = null;
       continue;
     }
     if (fence !== null) continue;
@@ -82,6 +83,13 @@ function hasConfigFile(dir) {
     return false;
   }
 }
+function existsGit(dir) {
+  try {
+    return fs2.existsSync(path2.join(dir, ".git"));
+  } catch {
+    return false;
+  }
+}
 function gitToplevel(cwd) {
   try {
     const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
@@ -100,11 +108,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path2.resolve(startDir ?? process.cwd()));
+  if (hasConfigFile(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    if (top && dir === top) break;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path2.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -262,8 +271,15 @@ function legacyRulesDir(config) {
   try {
     const raw = JSON.parse(fs3.readFileSync(config.configPath, "utf8"));
     const dir = raw?.paths?.rulesDir;
-    if (typeof dir === "string" && dir !== "" && !path3.isAbsolute(dir) && !dir.split(/[\\/]/).includes("..")) {
-      return dir.replace(/\/+$/, "");
+    if (typeof dir === "string" && dir.trim() !== "") {
+      const value = dir.replace(/\\/g, "/");
+      const looksAbsolute2 = path3.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+      const relative = path3.relative(
+        config.docRoot,
+        path3.resolve(config.docRoot, value)
+      );
+      const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path3.sep}`) || path3.isAbsolute(relative);
+      if (!looksAbsolute2 && !escapes) return relative.split(path3.sep).join("/");
     }
   } catch {
   }
@@ -304,7 +320,12 @@ function migrationLines(config, docs, hasArchitecture) {
       `\u5EC3\u6B62\u3057\u305F rules(${rulesDir}/)\u304C\u6B8B\u3063\u3066\u3044\u308B\u3002/metatron:update \u3067 ARCHITECTURE \u3068 CLAUDE.md \u3078\u79FB\u884C\u3059\u308B\u3002`
     );
   }
-  if (!hasArchitecture) return lines;
+  if (!hasArchitecture) return { lines, screen: lines };
+  const screen = [...lines];
+  const both = (line) => {
+    lines.push(line);
+    screen.push(line);
+  };
   if (!fs3.existsSync(config.configPath)) {
     lines.push(
       "metatron.config.json \u304C\u7121\u304F\u3001codiel \u304C metatron \u306E\u5229\u7528\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002/metatron:update \u3067\u4F5C\u308B\u3002"
@@ -315,16 +336,16 @@ function migrationLines(config, docs, hasArchitecture) {
   const unlinkable = missing.filter((rel) => !isMentionablePath(rel));
   const linkable = missing.filter((rel) => isMentionablePath(rel));
   if (linkable.length > 0) {
-    lines.push(
+    both(
       `CLAUDE.md \u306B ${linkable.map((rel) => `@${rel}`).join(" \u3068 ")} \u304C\u7121\u304F\u3001\u6587\u66F8\u304C\u8AAD\u307F\u8FBC\u307E\u308C\u306A\u3044\u3002/metatron:update \u3067\u8FFD\u8A18\u3059\u308B\u3002`
     );
   }
   if (unlinkable.length > 0) {
-    lines.push(
+    both(
       `${unlinkable.join(" \u3068 ")} \u306F\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u305F\u3081\u3001@\u30E1\u30F3\u30B7\u30E7\u30F3\u3067\u8AAD\u307F\u8FBC\u3081\u306A\u3044\u3002metatron.config.json \u306E paths \u3092\u7A7A\u767D\u306E\u7121\u3044\u30D1\u30B9\u306B\u5909\u3048\u308B\u3002`
     );
   }
-  return lines;
+  return { lines, screen };
 }
 function build(config, env) {
   const cli = metatronCliPath(env);
@@ -345,14 +366,14 @@ function build(config, env) {
     );
   }
   const migration = migrationLines(config, docs, hasArchitecture);
-  lines.push(...migration);
+  lines.push(...migration.lines);
   for (const warning of config.warnings.slice(0, MAX_WARNING_LINES)) {
     lines.push(`\u203B\u6CE8\u610F: ${warning}`);
   }
   return {
     content: `${lines.join("\n")}
 `,
-    ...migration.length === 0 ? {} : { systemMessage: `metatron: ${migration.join(" ")}` }
+    ...migration.screen.length === 0 ? {} : { systemMessage: `metatron: ${migration.screen.join(" ")}` }
   };
 }
 function readHookInput() {

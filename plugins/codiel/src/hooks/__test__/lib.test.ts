@@ -1042,3 +1042,78 @@ test("R4: 親の設定ファイルを git の境界を越えて拾わず、metat
   expectSameResolution(sub, "親の中の worktree")
   expect(resolveDocPaths(sub).docRoot).toBe(inner)
 })
+
+// git を実行できない環境を作る。PATH を空にすると spawnSync("git") が失敗する。
+function withoutGit<T>(fn: () => T): T {
+  const saved = process.env.PATH
+  process.env.PATH = ""
+  try {
+    return fn()
+  } finally {
+    process.env.PATH = saved
+  }
+}
+
+// 呼ばれたら印を残して失敗する偽の git を PATH の先頭に置き、git が呼ばれたかを返す。
+function gitCalledDuring(fn: () => void): boolean {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"))
+  const marker = path.join(bin, "called")
+  fs.writeFileSync(
+    path.join(bin, "git"),
+    `#!/bin/sh\necho called > "${marker}"\nexit 128\n`,
+    { mode: 0o755 }
+  )
+  const saved = process.env.PATH
+  process.env.PATH = bin
+  try {
+    fn()
+  } finally {
+    process.env.PATH = saved
+  }
+  const called = fs.existsSync(marker)
+  fs.rmSync(bin, { recursive: true, force: true })
+  return called
+}
+
+test("R1-g0: 開始ディレクトリに設定があれば、codiel も git を呼ばない", () => {
+  const own = mkTmp("lib-fakegit-")
+  const pkg = path.join(own, "pkg")
+  fs.mkdirSync(pkg, { recursive: true })
+  writeConfig(pkg, { version: 1 })
+  expect(gitCalledDuring(() => findDocRoot(pkg))).toBe(false)
+  const other = path.join(own, "other")
+  fs.mkdirSync(other, { recursive: true })
+  expect(gitCalledDuring(() => findDocRoot(other))).toBe(true)
+})
+
+test("R1-g1: git を実行できないときの .git ディレクトリの境界が metatron と一致する", () => {
+  expect(withoutGit(() => spawnSync("git", ["--version"])).error).toBeDefined()
+  const outer = mkTmp("lib-nogit-repo-")
+  writeConfig(outer, { version: 1 })
+  const repo = path.join(outer, "repo")
+  const start = path.join(repo, "src")
+  fs.mkdirSync(start, { recursive: true })
+  execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" })
+  withoutGit(() => expectSameResolution(start, ".git ディレクトリの境界"))
+  expect(withoutGit(() => findDocRoot(start))).toBe(fs.realpathSync(start))
+})
+
+test("R1-g: git を実行できないときの探索の境界が metatron と一致する", () => {
+  // 開始ディレクトリに設定がある
+  const own = mkTmp("lib-nogit-own-")
+  const pkg = path.join(own, "pkg")
+  fs.mkdirSync(pkg, { recursive: true })
+  writeConfig(pkg, { version: 1 })
+  withoutGit(() => expectSameResolution(pkg, "開始ディレクトリの設定"))
+  expect(withoutGit(() => findDocRoot(pkg))).toBe(fs.realpathSync(pkg))
+
+  // .git(ファイル)を持つ worktree の外側に設定がある
+  const outer = mkTmp("lib-nogit-wt-")
+  writeConfig(outer, { version: 1 })
+  const wt = path.join(outer, "worktrees", "wt")
+  const start = path.join(wt, "src")
+  fs.mkdirSync(start, { recursive: true })
+  fs.writeFileSync(path.join(wt, ".git"), "gitdir: /nonexistent\n")
+  withoutGit(() => expectSameResolution(start, ".git の境界"))
+  expect(withoutGit(() => findDocRoot(start))).toBe(fs.realpathSync(start))
+})

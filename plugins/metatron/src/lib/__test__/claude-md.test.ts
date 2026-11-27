@@ -91,6 +91,17 @@ test("L4: .claude/CLAUDE.md だけがあればそこへ ../ 付きで書き、�
   expect(fs.existsSync(path.join(dir, "CLAUDE.md"))).toBe(false)
 })
 
+test("L9: info string 付きのフェンス行は閉じにならず、インラインコードの <!-- はコメントにならない", () => {
+  const fenced = "```\n```ts\n@docs/ARCHITECTURE.md\n```\n@docs/GOTCHAS.md\n"
+  // ARCHITECTURE はフェンスの中なので足し、閉じの後の GOTCHAS は書かれたものとして数える。
+  expect(
+    linkClaudeMd(mkTmp({ "CLAUDE.md": fenced }), DOCS).added
+  ).toStrictEqual(["docs/ARCHITECTURE.md"])
+  const inline = "`<!--` は始まりの記号\n@docs/ARCHITECTURE.md\n`-->`\n"
+  const result = linkClaudeMd(mkTmp({ "CLAUDE.md": inline }), DOCS)
+  expect(result.present).toStrictEqual(["docs/ARCHITECTURE.md"])
+})
+
 test("L8: 長いフェンス・字下げしたフェンス・HTML コメントの中の @ は数えない", () => {
   for (const text of [
     "````\n```\n@docs/ARCHITECTURE.md\n```\n@docs/GOTCHAS.md\n````\n",

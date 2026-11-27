@@ -789,6 +789,18 @@ test("LC2: link-claude-md は metatron.config.json が無ければ最小の設�
   ).toStrictEqual({ version: 1 })
 })
 
+test("LC4: CLAUDE.md の書き込みに失敗したら、作った設定ファイルを消す", () => {
+  const root = mkTmp()
+  fs.mkdirSync(path.join(root, ".git"))
+  writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
+  // CLAUDE.md がディレクトリだと書き込みに失敗する。
+  fs.mkdirSync(path.join(root, "CLAUDE.md"))
+  const r = runCli(["link-claude-md"], root)
+  expect(r.status).not.toBe(0)
+  expect(r.json).toMatchObject({ error: "write_failed", configCreated: false })
+  expect(fs.existsSync(path.join(root, "metatron.config.json"))).toBe(false)
+})
+
 test("LC3: 空白を含むパスは飛ばし、既存の設定は上書きしない", () => {
   const root = project()
   const config = '{"version":1,"paths":{"architecture":"my docs/A.md"}}'

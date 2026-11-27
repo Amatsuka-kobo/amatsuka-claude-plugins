@@ -330,7 +330,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 - マージは、オブジェクトは再帰、配列は置換とする。例外は、ルールの `params` のスキーマが「和集合」と宣言した配列(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)で、既定値との和集合にする。
 - sealed ルールの無効化・severity の引き下げ、stop にできないルールの `severity: stop`、不正な正規表現や広すぎる `allowPatterns`(空文字列に一致する、内蔵の見本の秘密情報に一致する)、`excludeDefaults` の既定に無い文字列、固定部が空の `generated` と、固定部が空の `subject.ignoreUncommitted`(作業ツリー全体を未コミットの検査から外す宣言を防ぐ)は読み込みエラーにする。`subject.ignoreUncommitted` にソースのパスを宣言すると、未コミットのコードの変更が評価に入らないままテストの結果に効く。宣言は毎回応答に出て、run の間は guard が `.codiel/config.json` への書き込みを拒む。README には、run と関係の無いファイルの置き場だけを書くと記す。`allowPatterns` は行ではなくトークンに当てる。
 - `contextJudge.timeoutMs` が 1800000 を超える、`contextJudge.thresholds` の `lower` が `raise` 以上か 0〜1 の外、`resubmission-loop.similarityThreshold` が 0.95 を超える、も読み込みエラーである。
-- 撤去した `judge`・`weight`・`panel` の全体と `contextJudge.enabled` は、読み込みエラーにせず取り除き、取り除いたキーを並べた警告を評価のたびに `reasons` に 1 件残す。既存の利用者の設定ファイルで run が止まらないようにするためである(設計書の §2)。
+- 撤去した `judge`・`weight`・`panel` の全体と `contextJudge.enabled` は、読み込みエラーにせず取り除き、取り除いたキーを並べた警告を評価のたびに `reasons` に 1 件残す。既存の利用者の設定ファイルで run が止まらないようにするためである(設計書の §4.1)。
 
 ### 14.4 設定が壊れていても起動し、次の評価で直る
 
